@@ -93,6 +93,9 @@ export function createApi() {
     $._wrapper = Wrapper;
     $._node = Node;
     ctx.$ = $;
+    // Подсистемы (например $.window.on) сообщают об ошибках игрового кода
+    // сюда: reportError печатает стек, а не только текст.
+    ctx.reportError = reportError;
 
     // --- Подсистемы ---------------------------------------------------------
     installWorld($);

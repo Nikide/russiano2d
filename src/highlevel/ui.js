@@ -106,7 +106,9 @@ function makeDoc(id, path) {
         path,
         show() { engine.ui.show(id); return this; },
         hide() { engine.ui.hide(id); return this; },
-        unload() { engine.ui.unload(id); return this; },
+        // Снимаем документ и выкидываем его из кэша: иначе $.ui.doc(path)
+        // после unload() вернул бы ту же обёртку с мёртвым id.
+        unload() { engine.ui.unload(id); docs.delete(path); return this; },
         visible() { return engine.ui.visible(id); },
         text(element, text) { engine.ui.setText(id, element, String(text)); return this; },
         html(element, html) { engine.ui.setHtml(id, element, html); return this; },

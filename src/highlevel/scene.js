@@ -109,7 +109,9 @@ export function installScene($) {
                     tr.phase = 'in';
                     tr.t = 0;
                     state.pending = tr.to;
-                    state.pending_opts = { transition: 'none' };
+                    // Опции load() нельзя терять: иначе keepUI пропадал бы при
+                    // переходе с анимацией и интерфейс сносило бы вместе с миром.
+                    state.pending_opts = Object.assign({}, state.pending_opts, { transition: 'none' });
                 } else if (tr.phase === 'in' && tr.t >= tr.ms) {
                     state.transition = null;
                 }

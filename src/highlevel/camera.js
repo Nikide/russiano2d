@@ -22,7 +22,6 @@ const cam = {
     shake_amp: 0,
     shake_x: 0,
     shake_y: 0,
-    follow_target: null,
 };
 
 function clampToLimits() {
@@ -62,15 +61,20 @@ export function installCamera($) {
 
         follow(selector, opts) {
             const o = opts || {};
-            cam.target = typeof selector === 'string' || typeof selector === 'number' ? selector : null;
-            cam.follow_target = selector;
+            // Селектор и индекс храним как есть — узел может появиться позже,
+            // а узел или обёртку принимаем объектом: resolveTarget умеет и то,
+            // и другое. Раньше объект молча давал cam.target = null, и камера
+            // не двигалась, хотя follow() возвращал себя для цепочки.
+            const known = typeof selector === 'string' || typeof selector === 'number' ||
+                (selector && (selector.tag || selector.nodes));
+            cam.target = known ? selector : null;
             cam.offset = { x: o.offset ? o.offset[0] : (o.x || 0), y: o.offset ? o.offset[1] : (o.y || 0) };
             cam.smooth = o.smooth === undefined ? 0.12 : o.smooth;
             if (o.zoom !== undefined) cam.zoom = o.zoom;
             return camera;
         },
 
-        unfollow() { cam.target = null; cam.follow_target = null; cam.smooth = 0; return camera; },
+        unfollow() { cam.target = null; cam.smooth = 0; return camera; },
 
         /** Узел, за которым следим сейчас (или null). */
         followed() {

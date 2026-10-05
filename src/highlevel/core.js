@@ -66,8 +66,10 @@ export function packColor(value, alpha) {
         return alpha === undefined ? engine.WHITE : engine.rgba(255, 255, 255, Math.round(alpha * 255));
     }
     if (typeof value === 'number') {
-        // Уже упакованный цвет либо 0..1 альфа — второе отсекаем по диапазону.
-        return value;
+        // Уже упакованный цвет. Раньше alpha здесь молча терялась, из-за чего
+        // .alpha() не действовал на ui.* с цветом-числом (панели, кнопки,
+        // картинки): drawUINode передаёт alpha вторым аргументом.
+        return alpha === undefined ? value : withAlpha(value, alpha);
     }
     if (typeof value === 'string') {
         const named = NAMED_COLORS[value.toLowerCase()];
@@ -750,7 +752,24 @@ export function boundsOverlap(a, b) {
 
 const texture_cache = new Map();
 const sprite_cache = new Map();
+// Размер кадра по id спрайта. Движок умеет отдавать размер текстуры
+// (engine.textureSize), но не размер уже созданного спрайта, поэтому кадры
+// запоминаются здесь в момент создания — иначе spriteSize() всегда давал бы
+// [0,0], и .sprite('hero.png') молча оставлял узел 32×32.
+const sprite_sizes = new Map();
 let dot_sprite = -1;
+
+/** Запомнить размер созданного кадра и вернуть его id (для цепочек). */
+function rememberSprite(id, w, h) {
+    if (id >= 0 && w > 0 && h > 0) sprite_sizes.set(id, [w, h]);
+    return id;
+}
+
+/** Размер текстуры с запасом на отказ загрузки: всегда [w, h], не undefined. */
+function textureSizeSafe(tex) {
+    const size = tex >= 0 ? engine.textureSize(tex) : null;
+    return size ? [Number(size[0]) || 0, Number(size[1]) || 0] : [0, 0];
+}
 
 /** Белый спрайт 1×1 из ядра — им рисуются rect/circle/частицы и полосы UI. */
 export function dotSprite() {
@@ -763,18 +782,29 @@ export function resolveSprite(value) {
     if (typeof value === 'number') return value;
     if (Array.isArray(value)) {
         const key = 'arr' + value.join(',');
-        if (!sprite_cache.has(key)) sprite_cache.set(key, engine.createSprite(value[0], value[1], value[2], value[3], value[4]));
+        if (!sprite_cache.has(key)) {
+            const tex = value[0];
+            // w/h <= 0 означают «весь кадр текстуры» — так же, как в C.
+            const full = textureSizeSafe(tex);
+            const id = rememberSprite(
+                engine.createSprite(tex, value[1], value[2], value[3], value[4]),
+                value[3] > 0 ? value[3] : full[0],
+                value[4] > 0 ? value[4] : full[1],
+            );
+            sprite_cache.set(key, id);
+        }
         return sprite_cache.get(key);
     }
     if (typeof value === 'string') {
         if (sprite_cache.has('path:' + value)) return sprite_cache.get('path:' + value);
-        let id = engine.loadTexture(value);
-        if (id < 0) {
+        const tex = engine.loadTexture(value);
+        if (tex < 0) {
             ctx.log(`$: не удалось загрузить "${value}"`);
             sprite_cache.set('path:' + value, -1);
             return -1;
         }
-        id = engine.createSprite(id, 0, 0, 0, 0);
+        const size = textureSizeSafe(tex);
+        const id = rememberSprite(engine.createSprite(tex, 0, 0, 0, 0), size[0], size[1]);
         sprite_cache.set('path:' + value, id);
         return id;
     }
@@ -796,7 +826,9 @@ export function resolveSheet(spec) {
     const frames = [];
     for (let r = 0; r < spec.rows; r++) {
         for (let c = 0; c < spec.cols; c++) {
-            frames.push(engine.createSprite(tex, c * spec.cw, r * spec.ch, spec.cw, spec.ch));
+            frames.push(rememberSprite(
+                engine.createSprite(tex, c * spec.cw, r * spec.ch, spec.cw, spec.ch),
+                spec.cw, spec.ch));
         }
     }
     sprite_cache.set(key, frames);
@@ -809,13 +841,11 @@ export function sheetFrames(spec) {
     return sprite_cache.get(key) || null;
 }
 
+/** Размер кадра спрайта: [w, h] или [0, 0], если он неизвестен. */
 export function spriteSize(id) {
     if (id < 0) return [0, 0];
-    for (const entry of sprite_cache.values()) {
-        const frames = Array.isArray(entry) ? entry : null;
-        if (frames) continue;
-    }
-    return [0, 0];
+    const size = sprite_sizes.get(id);
+    return size ? [size[0], size[1]] : [0, 0];
 }
 
 export function textureSizeOf(path) {

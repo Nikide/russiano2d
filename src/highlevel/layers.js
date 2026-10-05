@@ -405,8 +405,10 @@ function renderLayer(node, t, cam) {
 function tickFade(dt) {
     if (!(fade.ms > 0)) return;
     // Игровое время ($.time), чтобы переходы уважали паузу и масштаб времени.
-    const raw = (ctx.time && typeof ctx.time.rawDelta === 'function') ? ctx.time.rawDelta() : dt;
-    fade.t += raw * 1000;
+    // rawDelta() здесь был ошибкой: при $.time.pause() затемнение продолжало
+    // ползти, хотя комментарий обещал обратное.
+    const step = (ctx.time && typeof ctx.time.delta === 'function') ? ctx.time.delta() : dt;
+    fade.t += step * 1000;
     const p = Math.min(1, fade.t / fade.ms);
     fade.alpha = fade.from + (fade.to - fade.from) * p;
     if (p >= 1) {

@@ -29,7 +29,9 @@ const state = {
     warned: new Set(),     // ключи, о которых уже предупредили (не спамить)
     version: 0,            // растёт при смене словарей/языка
     node_version: -1,      // версия, уже применённая к узлам
-    nodes: new Set(),      // узлы с attrs.tr, которым текст уже подставлен
+    // WeakSet, а не Set: обычный набор держал бы уничтоженные узлы вечно —
+    // чистился он только при смене языка, поэтому утечка была бесконечной.
+    nodes: new WeakSet(),  // узлы с attrs.tr, которым текст уже подставлен
 };
 
 // ---------------------------------------------------------------------------
@@ -309,7 +311,7 @@ export function tickI18n() {
     if (!state.auto) return;
     const fresh = state.node_version !== state.version;
     if (fresh) {
-        state.nodes.clear();
+        state.nodes = new WeakSet();   // у WeakSet нет clear()
         state.node_version = state.version;
     }
     for (const node of ctx.nodes) {

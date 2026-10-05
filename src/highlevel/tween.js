@@ -865,6 +865,8 @@ export function installTween($) {
     $.tween = create;
     $.tweenOf = (object) => create.of(object);
     $.tweens = () => activeTweenObjects();
+    // Счётчик для $.debug.stats()/.counters(): без него они всегда показывали 0.
+    ctx.tweens_active = activeTweenCount;
     return $;
 }
 

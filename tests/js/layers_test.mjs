@@ -302,4 +302,25 @@ test('fade/fadeTo/fadeOut меняют альфу по кадрам', () => {
     $.layers.fade('#000000', 0);
 });
 
+test('fadeTo уважает паузу игрового времени', () => {
+    // Раньше tickFade брал rawDelta(), поэтому при $.time.pause() затемнение
+    // продолжало ползти. Теперь шаг берётся из ctx.time.delta().
+    const saved = ctx.time;
+    let paused = false;
+    ctx.time = { delta: () => (paused ? 0 : 0.1), rawDelta: () => 0.1 };
+    try {
+        $.layers.fade('#000000', 0);
+        $.layers.fadeTo('#000000', 1, 1000);
+        paused = true;
+        tickLayers(0.1);
+        near($.layers.fade().alpha, 0, 1e-9, 'на паузе альфа не растёт');
+        paused = false;
+        tickLayers(0.1);
+        near($.layers.fade().alpha, 0.1, 1e-6, 'после снятия паузы растёт дальше');
+    } finally {
+        if (saved === undefined) delete ctx.time; else ctx.time = saved;
+        $.layers.fade('#000000', 0);
+    }
+});
+
 finish();

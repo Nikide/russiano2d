@@ -30,7 +30,13 @@ function fire(name, data) {
         try {
             fn(data);
         } catch (err) {
-            if (api && api.ctx) api.ctx.reportError(err, `$.window.on('${name}')`);
+            // Раньше здесь вызывался несуществующий ctx.reportError(err, …):
+            // catch падал сам, и исключение из обработчика окна валило кадр.
+            if (api && api.ctx && typeof api.ctx.reportError === 'function') {
+                api.ctx.reportError(`$.window.on('${name}')`, err);
+            } else if (api && api.ctx) {
+                api.ctx.log(`$: ошибка в $.window.on('${name}'): ${err}`);
+            }
         }
     }
 }

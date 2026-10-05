@@ -87,9 +87,13 @@ export function installSound($) {
 
         mute(flag) {
             if (flag === undefined) return sound._muted || false;
-            sound._muted = !!flag;
-            engine.audio.setMasterVolume(flag ? 0 : (sound._saved_volume === undefined ? 1 : sound._saved_volume));
-            if (!flag && sound._saved_volume === undefined) sound._saved_volume = 1;
+            const on = !!flag;
+            // Перед первым приглушением запоминаем текущую громкость: без этого
+            // mute(false) всегда возвращал ровно 1.0 и стирал выставленный
+            // игроком уровень (например, $.sound.volume(0.4)).
+            if (on && !sound._muted) sound._saved_volume = engine.audio.getMasterVolume();
+            sound._muted = on;
+            engine.audio.setMasterVolume(on ? 0 : (sound._saved_volume === undefined ? 1 : sound._saved_volume));
             return sound;
         },
 
