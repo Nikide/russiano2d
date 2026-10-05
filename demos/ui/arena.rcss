@@ -1,0 +1,178 @@
+/* Арена: HUD и экран проигрыша. Фон и арену рисует сама сцена, поэтому
+   body и #hud прозрачные — виден игровой кадр под интерфейсом. */
+
+body {
+    font-family: Noto Sans;
+    font-size: 16px;
+    color: #eef2f8;
+    width: 100%;
+    height: 100%;
+}
+
+#hud {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    width: 100%;
+    height: 100%;
+}
+
+/* --- Здоровье (слева сверху) -------------------------------------------- */
+
+#hud-left {
+    position: absolute;
+    top: 16px;
+    left: 18px;
+    width: 260px;
+    padding: 10px 12px 6px 12px;
+    background-color: rgba(9, 13, 21, 184);
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: rgba(255, 216, 115, 76);
+}
+
+.lbl {
+    font-size: 12px;
+    color: #93a4bb;
+}
+
+#hp-track {
+    display: block;
+    width: 236px;
+    height: 18px;
+    margin-top: 4px;
+    background-color: rgba(30, 20, 26, 242);
+    border-width: 1px;
+    border-color: #5a3a44;
+    border-radius: 5px;
+}
+
+#hp-fill {
+    display: block;
+    width: 100%;
+    height: 16px;
+    background-color: #d8433f;
+    border-radius: 4px;
+}
+
+#hp-text {
+    font-size: 14px;
+    color: #ffd873;
+    text-align: right;
+    margin-top: 4px;
+}
+
+/* --- Счётчики (справа сверху) ------------------------------------------- */
+
+#hud-right {
+    position: absolute;
+    top: 16px;
+    right: 18px;
+    width: 190px;
+    padding: 10px 14px 8px 14px;
+    background-color: rgba(9, 13, 21, 184);
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: rgba(255, 216, 115, 76);
+}
+
+.stat {
+    display: block;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    font-size: 15px;
+    text-align: right;
+}
+
+.stat .lbl {
+    display: inline-block;
+    float: left;
+    margin-top: 3px;
+}
+
+.val {
+    font-size: 19px;
+    color: #ffd873;
+}
+
+/* --- Подсказка снизу ----------------------------------------------------- */
+
+#hint {
+    position: absolute;
+    left: 18px;
+    bottom: 12px;
+    width: 900px;
+    font-size: 12px;
+    color: #8b9bb2;
+}
+
+/* --- Экран «Игра окончена» ----------------------------------------------- */
+
+#gameover {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(4, 6, 10, 168);
+}
+
+#go-panel {
+    display: block;
+    width: 360px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 170px;
+    padding: 22px 28px 24px 28px;
+    background-color: rgba(12, 16, 26, 245);
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: rgba(255, 216, 115, 128);
+    text-align: center;
+}
+
+#go-panel h1 {
+    font-size: 30px;
+    color: #ffd873;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+#go-panel p {
+    font-size: 17px;
+    color: #cfe3f5;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    text-align: center;
+}
+
+button {
+    font-family: Noto Sans;
+    font-size: 16px;
+    color: #eef2f8;
+    background-color: rgba(38, 54, 76, 242);
+    border-width: 1px;
+    border-color: #34536f;
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: center;
+}
+
+button:hover {
+    background-color: rgba(58, 84, 116, 242);
+    border-color: #ffd873;
+}
+
+button:active {
+    background-color: rgba(78, 108, 148, 242);
+}
+
+.wide {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+}
+
+.hidden {
+    display: none;
+}

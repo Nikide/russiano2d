@@ -1,0 +1,16 @@
+Asset : menu.ogg
+Pack  : 5 Chiptunes (Action)
+Author: Juhani Junkala (SubspaceAudio)
+Page  : https://opengameart.org/content/5-chiptunes-action
+Direct: https://opengameart.org/sites/default/files/5%20Action%20Chiptunes%20By%20Juhani%20Junkala.zip
+License: CC0 1.0 Universal - https://creativecommons.org/publicdomain/zero/1.0/
+
+--- INFO.txt shipped inside the original pack ---
+
+Hi, I'm Juhani Junkala, the author of this music collection. I'm a classically trained composer, producer and a sound designer with over 20 years of experience.
+
+These music tracks have been released under CC0 creative commons license. You can do anything you want with these tunes.
+
+Check out my game music portfolio: https://www.youtube.com/watch?v=dbACpSy9FWY
+
+If you need music or sound effects for your game, contact me: juhani.junkala@musician.org

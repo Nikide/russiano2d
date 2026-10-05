@@ -1,0 +1,494 @@
+{
+  "characters": [
+    {
+      "name": "ak12_anime_girl_hands_sprite_sheet",
+      "file": "characters/ak12_anime_girl_hands_sprite_sheet.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "anime_girl_ak_doom_sprite_sheet_8x9",
+      "file": "characters/anime_girl_ak_doom_sprite_sheet_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "catgirl_green_ak_sprite_sheet",
+      "file": "characters/catgirl_green_ak_sprite_sheet.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "catgirl_lilac_pistol_sprite_sheet",
+      "file": "characters/catgirl_lilac_pistol_sprite_sheet.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "catgirl_small_minigun_sprite_sheet",
+      "file": "characters/catgirl_small_minigun_sprite_sheet.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "catgirl_white_scout_shotgun_sprite_sheet",
+      "file": "characters/catgirl_white_scout_shotgun_sprite_sheet.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_01_armored_soldier_8x9",
+      "file": "characters/enemy_01_armored_soldier_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_02_catgirl_scout_8x9",
+      "file": "characters/enemy_02_catgirl_scout_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_03_zombie_girl_8x9",
+      "file": "characters/enemy_03_zombie_girl_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_04_heavy_machinegunner_8x9",
+      "file": "characters/enemy_04_heavy_machinegunner_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_05_fire_demoness_8x9",
+      "file": "characters/enemy_05_fire_demoness_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_06_ninja_assassin_8x9",
+      "file": "characters/enemy_06_ninja_assassin_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_07_combat_medic_8x9",
+      "file": "characters/enemy_07_combat_medic_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_08_shield_lancer_8x9",
+      "file": "characters/enemy_08_shield_lancer_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_09_sniper_girl_8x9",
+      "file": "characters/enemy_09_sniper_girl_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_10_cyber_mage_8x9",
+      "file": "characters/enemy_10_cyber_mage_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "green_hair_red_glasses_doom_hud_portrait_sheet",
+      "file": "characters/green_hair_red_glasses_doom_hud_portrait_sheet.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "mio_kuro_saki_neon_homeroom_sprite_sheet",
+      "file": "characters/mio_kuro_saki_neon_homeroom_sprite_sheet.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    }
+  ],
+  "weapons": [
+    {
+      "name": "ak_first_person_anime_girl_hands_doom_sheet_8x9",
+      "file": "weapons/ak_first_person_anime_girl_hands_doom_sheet_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "ak_first_person_anime_schoolgirl_hands_doom_sheet_8x9",
+      "file": "weapons/ak_first_person_anime_schoolgirl_hands_doom_sheet_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "anime_schoolgirl_fists_first_person_doom_sheet_8x9",
+      "file": "weapons/anime_schoolgirl_fists_first_person_doom_sheet_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "minigun_anime_schoolgirl_hands_doom_sheet_8x9",
+      "file": "weapons/minigun_anime_schoolgirl_hands_doom_sheet_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "pm_makarov_anime_schoolgirl_hands_doom_sheet_8x9",
+      "file": "weapons/pm_makarov_anime_schoolgirl_hands_doom_sheet_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "rpk_drum_anime_schoolgirl_hands_doom_sheet_8x9",
+      "file": "weapons/rpk_drum_anime_schoolgirl_hands_doom_sheet_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "saiga12_anime_schoolgirl_hands_doom_sheet_8x9",
+      "file": "weapons/saiga12_anime_schoolgirl_hands_doom_sheet_8x9.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "soviet_russian_player_weapon_arsenal_sheet_01",
+      "file": "weapons/soviet_russian_player_weapon_arsenal_sheet_01.png",
+      "width": 384,
+      "height": 576,
+      "grid": {
+        "cols": 8,
+        "rows": 9,
+        "cell_w": 48,
+        "cell_h": 64
+      },
+      "source_size": [
+        1536,
+        2304
+      ]
+    }
+  ],
+  "portraits": [
+    {
+      "name": "enemy_01_armored_soldier_girl",
+      "file": "portraits/enemy_01_armored_soldier_girl.png",
+      "width": 341,
+      "height": 512,
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_02_catgirl_scout",
+      "file": "portraits/enemy_02_catgirl_scout.png",
+      "width": 341,
+      "height": 512,
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_03_zombie_girl",
+      "file": "portraits/enemy_03_zombie_girl.png",
+      "width": 341,
+      "height": 512,
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_04_heavy_machinegunner_girl",
+      "file": "portraits/enemy_04_heavy_machinegunner_girl.png",
+      "width": 341,
+      "height": 512,
+      "source_size": [
+        1536,
+        2304
+      ]
+    },
+    {
+      "name": "enemy_05_fire_demoness",
+      "file": "portraits/enemy_05_fire_demoness.png",
+      "width": 341,
+      "height": 512,
+      "source_size": [
+        1536,
+        2304
+      ]
+    }
+  ],
+  "posters": [
+    {
+      "name": "menu",
+      "file": "posters/menu.png",
+      "width": 1280,
+      "height": 720,
+      "source_size": [
+        2560,
+        1440
+      ]
+    }
+  ],
+  "sheet_layout": {
+    "cols": 8,
+    "rows": 9,
+    "cell_w": 48,
+    "cell_h": 64,
+    "notes": "столбцы — фазы анимации; ряд 4 — выстрел со вспышкой; ряд 8 — смерть"
+  },
+  "source": "/Users/nikitademcev/Documents/22/outputs"
+}

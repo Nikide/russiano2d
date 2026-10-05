@@ -1,0 +1,144 @@
+/* Меню-лаунчер демо. Фон рисует сама сцена (постер), поэтому body прозрачный. */
+
+body {
+    font-family: Noto Sans;
+    font-size: 18px;
+    color: #eef2f8;
+    width: 100%;
+    height: 100%;
+}
+
+#panel {
+    display: block;
+    width: 660px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 40px;
+    padding: 22px 30px 18px 30px;
+    background-color: rgba(9, 13, 21, 224);
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: rgba(127, 209, 255, 89);
+}
+
+h1 {
+    display: block;
+    width: 100%;
+    font-size: 38px;
+    color: #7fd1ff;
+    margin-bottom: 2px;
+    text-align: center;
+}
+
+#tagline {
+    display: block;
+    width: 100%;
+    font-size: 14px;
+    color: #93a4bb;
+    text-align: center;
+    margin-bottom: 14px;
+}
+
+/* --- Кнопки демо ------------------------------------------------------- */
+
+.demo {
+    display: block;
+    width: 100%;
+    margin-top: 7px;
+    padding: 9px 16px;
+    background-color: rgba(28, 40, 58, 242);
+    border-width: 1px;
+    border-color: #2c4a6e;
+    border-radius: 9px;
+    color: #eef2f8;
+    text-align: left;
+}
+
+/* Иконка из встроенного шрифта Material Design: engine.ui.icon(...) */
+.demo .ico {
+    display: inline-block;
+    width: 40px;
+    font-family: Material Icons;
+    font-size: 26px;
+    color: #7fd1ff;
+    vertical-align: middle;
+}
+
+.demo:hover {
+    background-color: rgba(44, 82, 124, 246);
+    border-color: #7fd1ff;
+}
+
+.demo:active {
+    background-color: rgba(64, 118, 176, 246);
+}
+
+.demo .t {
+    display: inline-block;
+    font-size: 19px;
+    color: #7fd1ff;
+}
+
+.demo .s {
+    display: block;
+    margin-left: 40px;
+    font-size: 13px;
+    color: #94a6bd;
+}
+
+/* --- Громкость --------------------------------------------------------- */
+
+#footer {
+    display: block;
+    margin-top: 18px;
+    text-align: center;
+}
+
+#footer .label {
+    color: #94a6bd;
+    font-size: 15px;
+    margin-right: 8px;
+}
+
+#footer button.small {
+    display: inline-block;
+    width: 52px;
+    padding: 3px 6px;
+    font-family: Material Icons;
+    font-size: 20px;
+    background-color: rgba(38, 54, 76, 242);
+    color: #cfe3f5;
+    border-width: 1px;
+    border-color: #34536f;
+    border-radius: 6px;
+    text-align: center;
+}
+
+#footer button.small:hover {
+    background-color: rgba(58, 84, 116, 242);
+    border-color: #7fd1ff;
+}
+
+#vol-value {
+    display: inline-block;
+    width: 92px;
+    text-align: center;
+    color: #ffd873;
+    font-size: 15px;
+}
+
+/* --- Подсказки --------------------------------------------------------- */
+
+#hint {
+    margin-top: 16px;
+    font-size: 13px;
+    color: #7c8ca3;
+    text-align: center;
+}
+
+#selected {
+    margin-top: 4px;
+    font-size: 14px;
+    color: #ffd873;
+    text-align: center;
+}

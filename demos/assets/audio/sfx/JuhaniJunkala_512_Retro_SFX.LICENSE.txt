@@ -1,0 +1,14 @@
+Assets: shoot_01.ogg, shoot_02.ogg, explosion_01.ogg, jump_01.ogg, pickup_01.ogg,
+        hurt_01.ogg, step_01.ogg, ui_click.ogg, enemy_hit.ogg, enemy_die.ogg, reload.ogg
+Pack  : The Essential Retro Video Game Sound Effects Collection [512 sounds]
+Author: Juhani Junkala (SubspaceAudio)
+Page  : https://opengameart.org/content/512-sound-effects-8-bit-style
+Direct: https://opengameart.org/sites/default/files/The%20Essential%20Retro%20Video%20Game%20Sound%20Effects%20Collection%20%5B512%20sounds%5D.zip
+License: CC0 1.0 Universal - https://creativecommons.org/publicdomain/zero/1.0/
+
+The pack is distributed under CC0 (declared by the author on the OpenGameArt page
+and confirmed in the page comments). No separate license file is shipped inside the
+original ZIP archive; this note records the license of record.
+
+The delivered .ogg files are Ogg Vorbis transcodes of the original .wav files
+from the pack (durations unchanged).

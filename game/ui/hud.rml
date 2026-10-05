@@ -1,0 +1,13 @@
+<rml>
+<head>
+    <link type="text/rcss" href="hud.rcss"/>
+    <title>HUD</title>
+</head>
+<body>
+    <div id="hud">
+        <span class="label">Очки</span> <span id="score">0</span>
+        <span class="label">Монет</span> <span id="coins">0</span>
+    </div>
+    <div id="help">A / D или стрелки — идти &nbsp;·&nbsp; Space — прыжок &nbsp;·&nbsp; Esc — меню</div>
+</body>
+</rml>

@@ -1,0 +1,28 @@
+# ---------------------------------------------------------------------------
+# Высокоуровневое API ($) внутри бинарника.
+#
+# src/highlevel/*.js — обычные ES-модули, но игровой код получает их без
+# файлов на диске: движок отдаёт их загрузчику модулей прямо из памяти.
+# Поэтому $ работает и в релизной сборке (R2D_EMBED_SCRIPTS), где скриптов на
+# диске нет вообще.
+#
+# Генератор читает каталог и пишет таблицу «имя → исходник»; экранирование
+# делается в C, а не в CMake, иначе произвольный JS легко превратить в
+# неверный C-литерал.
+# ---------------------------------------------------------------------------
+
+set(R2D_HIGHLEVEL_DIR "${CMAKE_SOURCE_DIR}/src/highlevel")
+set(R2D_JS_HEADER "${CMAKE_BINARY_DIR}/generated/r2d_js_data.h")
+
+file(GLOB R2D_HIGHLEVEL_SOURCES CONFIGURE_DEPENDS "${R2D_HIGHLEVEL_DIR}/*.js")
+
+add_executable(r2d_embed_js "${CMAKE_SOURCE_DIR}/tools/r2d_embed_js.c")
+
+add_custom_command(
+    OUTPUT "${R2D_JS_HEADER}"
+    COMMAND r2d_embed_js "${R2D_HIGHLEVEL_DIR}" "${R2D_JS_HEADER}"
+    DEPENDS r2d_embed_js ${R2D_HIGHLEVEL_SOURCES}
+    COMMENT "Встраиваю высокоуровневое API ($) в бинарник"
+    VERBATIM)
+
+add_custom_target(r2d_js DEPENDS "${R2D_JS_HEADER}")

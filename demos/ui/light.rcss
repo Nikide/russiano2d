@@ -1,0 +1,77 @@
+/* Панель демо света. Фон рисует сцена, поэтому body прозрачный. */
+
+body {
+    font-family: Noto Sans;
+    font-size: 18px;
+    color: #eef2f8;
+}
+
+#panel {
+    display: block;
+    width: 350px;
+    margin: 14px;
+    padding: 14px 18px;
+    background-color: rgba(6, 9, 15, 214);
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: rgba(255, 214, 140, 76);
+}
+
+h1 {
+    display: block;
+    width: 100%;
+    font-size: 22px;
+    color: #ffd873;
+    margin-bottom: 2px;
+}
+
+.sub {
+    display: block;
+    width: 100%;
+    font-size: 12px;
+    color: #9aa7b8;
+    margin-bottom: 10px;
+}
+
+.row {
+    display: block;
+    width: 100%;
+    margin-bottom: 2px;
+}
+
+.row .k {
+    color: #9aa7b8;
+    font-size: 14px;
+}
+
+.row .v {
+    display: block;
+    float: right;
+    color: #ffe6a8;
+    font-size: 17px;
+}
+
+button {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    padding: 7px 10px;
+    font-size: 15px;
+    color: #1a1206;
+    background-color: #ffd873;
+    border-width: 0px;
+    border-radius: 7px;
+    text-align: center;
+}
+
+button:hover {
+    background-color: #ffe9ad;
+}
+
+#hint {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    font-size: 12px;
+    color: #8794a8;
+}

@@ -1,0 +1,192 @@
+// ===========================================================================
+// Физика Box2D v3.
+//
+// По ТЗ (п. 4.2) мир Box2D живёт целиком в C. JS не считает коллизии и
+// векторы — он лишь создаёт тела по числовому id и раз в кадр забирает
+// готовые трансформы для отрисовки.
+// ===========================================================================
+#pragma once
+
+#include "r2d.h"
+
+#include <box2d/box2d.h>
+
+// Соглашение о масштабе.
+//
+// Игровой код (JS) и рендер работают в пикселях, но Box2D настроена на метры:
+// его допуски (linearSlop, максимальная скорость за шаг и т.д.) подобраны под
+// объекты размером порядка единицы. Поэтому на границе C ↔ Box2D координаты
+// делятся на R2D_PX_PER_M, а результаты умножаются обратно.
+//
+// 32 пикселя = 1 метр — стандартный выбор для тайловых игр: тайл 32x32
+// превращается в квадрат 1x1 м с массой 1 кг при плотности 1.
+#define R2D_PX_PER_M 32.0f
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef enum R2DBodyType {
+    R2D_BODY_STATIC    = 0,
+    R2D_BODY_KINEMATIC = 1,
+    R2D_BODY_DYNAMIC   = 2,
+} R2DBodyType;
+
+// --- Формы тел --------------------------------------------------------------
+// Раньше тело всегда было прямоугольником. Теперь форма выбирается: круг
+// катится, капсула не застревает на стыках тайлов, полигон повторяет силуэт.
+typedef enum R2DShapeKind {
+    R2D_SHAPE_BOX     = 0,
+    R2D_SHAPE_CIRCLE  = 1,
+    R2D_SHAPE_CAPSULE = 2,
+    R2D_SHAPE_POLYGON = 3,
+} R2DShapeKind;
+
+#define R2D_MAX_POLY_POINTS 8
+
+// Описание тела: то, что приходит из JS одним объектом.
+typedef struct R2DBodyDesc {
+    float x, y, angle;
+    int   type;                 // R2DBodyType
+    float density, friction, restitution;
+    bool  fixed_rotation;
+    int   shape;                // R2DShapeKind
+    float half_w, half_h;       // прямоугольник / половина капсулы
+    float radius;               // круг / капсула
+    float points[R2D_MAX_POLY_POINTS * 2];   // полигон, локальные пиксели
+    int   point_count;
+    float poly_radius;          // скругление полигона
+    bool  one_way;              // односторонняя платформа
+    float one_way_angle;        // куда смотрит «лицевая» сторона (радианы)
+    bool  sensor;               // зона без отталкивания
+    bool  contacts;             // присылать события контакта
+} R2DBodyDesc;
+
+// Событие контакта за прошедший шаг. Координаты — пиксели.
+typedef enum R2DContactKind {
+    R2D_CONTACT_BEGIN = 0,
+    R2D_CONTACT_END   = 1,
+    R2D_CONTACT_HIT   = 2,
+} R2DContactKind;
+
+typedef struct R2DContactEvent {
+    int   kind;        // R2DContactKind
+    int   a, b;        // id тел; -1 — тело не опознано (например, уже удалено)
+    float nx, ny;      // нормаль от A к B
+    float px, py;      // точка контакта
+    float speed;       // скорость сближения для hit, иначе 0
+} R2DContactEvent;
+
+#define R2D_MAX_CONTACT_EVENTS 128
+#define R2D_MAX_JOINTS         64
+
+typedef enum R2DJointKind {
+    R2D_JOINT_REVOLUTE = 0,
+    R2D_JOINT_DISTANCE = 1,
+    R2D_JOINT_WELD     = 2,
+} R2DJointKind;
+
+typedef struct R2DPhysics {
+    b2WorldId world;
+    b2BodyId  bodies[R2D_MAX_BODIES];
+    bool      alive[R2D_MAX_BODIES];
+    float     transforms[R2D_MAX_BODIES * 3];   // x, y, angle — читает JS
+    int       live_count;
+    bool      world_valid;
+
+    // --- Односторонние платформы -------------------------------------------
+    // Нормаль «рабочей» стороны в системе тела: тело проходит сквозь платформу
+    // с обратной стороны и встаёт на неё с лицевой. Хранится локально, чтобы
+    // повёрнутая платформа работала правильно.
+    bool  one_way[R2D_MAX_BODIES];
+    float one_way_nx[R2D_MAX_BODIES];
+    float one_way_ny[R2D_MAX_BODIES];
+
+    // --- События контакта (читает JS через engine.contacts()) ---------------
+    R2DContactEvent contacts[R2D_MAX_CONTACT_EVENTS];
+    int             contact_count;
+    bool            overflow_logged;
+
+    // --- Суставы ------------------------------------------------------------
+    b2JointId joints[R2D_MAX_JOINTS];
+    bool      joint_alive[R2D_MAX_JOINTS];
+} R2DPhysics;
+
+void r2d_physics_init(R2DPhysics *p, float gravity_x, float gravity_y);
+void r2d_physics_shutdown(R2DPhysics *p);
+void r2d_physics_step(R2DPhysics *p, float dt);
+void r2d_physics_sync(R2DPhysics *p);
+
+// Возвращает id тела (>= 0) или -1.
+int  r2d_physics_create_box(R2DPhysics *p, float x, float y, float half_w, float half_h,
+                             float angle, int type, float density, float friction,
+                             float restitution, bool fixed_rotation);
+
+// Общее создание тела по описанию: форма, one-way, сенсор, события контакта.
+// Вся новая функциональность идёт через неё; create_box остаётся обёрткой.
+int  r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *desc);
+void r2d_physics_destroy(R2DPhysics *p, int id);
+bool r2d_physics_is_alive(const R2DPhysics *p, int id);
+int  r2d_physics_live_count(const R2DPhysics *p);
+
+void  r2d_physics_set_velocity(R2DPhysics *p, int id, float vx, float vy);
+void  r2d_physics_get_velocity(const R2DPhysics *p, int id, float *vx, float *vy);
+void  r2d_physics_set_angular_velocity(R2DPhysics *p, int id, float w);
+float r2d_physics_get_angular_velocity(const R2DPhysics *p, int id);
+void  r2d_physics_set_position(R2DPhysics *p, int id, float x, float y, float angle);
+void  r2d_physics_apply_impulse(R2DPhysics *p, int id, float ix, float iy);
+void  r2d_physics_set_gravity(R2DPhysics *p, float gx, float gy);
+void  r2d_physics_get_gravity(const R2DPhysics *p, float *gx, float *gy);
+void  r2d_physics_set_awake(R2DPhysics *p, int id, bool awake);
+// Множитель гравитации для конкретного тела: 0 — тело не падает (снаряды,
+// парящие объекты), 1 — обычное поведение, отрицательное — «вверх».
+void  r2d_physics_set_gravity_scale(R2DPhysics *p, int id, float scale);
+bool  r2d_physics_is_awake(const R2DPhysics *p, int id);
+float r2d_physics_get_mass(const R2DPhysics *p, int id);
+
+// --- Запросы к миру (высокоуровневое API: $.world.raycast/query) -----------
+
+// Максимум тел, которые вернёт один запрос.
+#define R2D_MAX_QUERY 256
+
+// Результат луча. Координаты — пиксели, нормаль — единичный вектор.
+typedef struct R2DRayHit {
+    bool  hit;
+    int   body;        // наш id тела или -1, если тело не опознано
+    float x, y;        // точка попадания
+    float nx, ny;      // нормаль поверхности
+    float fraction;    // доля пройденного отрезка 0..1
+} R2DRayHit;
+
+// Ближайшее препятствие на отрезке. false — ничего не задето.
+bool r2d_physics_raycast(const R2DPhysics *p, float x1, float y1, float x2, float y2, R2DRayHit *out);
+
+// Тела, чьи формы накрывают точку / попадают в прямоугольник (x, y — центр).
+// Возвращают число записанных id (не больше max_ids).
+int r2d_physics_query_point(const R2DPhysics *p, float x, float y, int *ids, int max_ids);
+int r2d_physics_query_box(const R2DPhysics *p, float x, float y, float w, float h,
+                          int *ids, int max_ids);
+
+// --- События контакта -------------------------------------------------------
+// Заполняются на каждом шаге мира; JS читает их через engine.contacts().
+// begin/end приходят только для форм, созданных с desc.contacts = true.
+const R2DContactEvent *r2d_physics_contacts(const R2DPhysics *p, int *count);
+void r2d_physics_clear_contacts(R2DPhysics *p);
+
+// --- Суставы ----------------------------------------------------------------
+// a/b — id тел, ax/ay и bx/by — точки крепления в мировых пикселях
+// (пересчитываются в локальные координаты тела). type — R2DJointKind.
+// Дополнительные параметры: для distance — length (0 = по текущему
+// расстоянию); для revolute — limits/motor. Возвращает id сустава или -1.
+int  r2d_physics_create_joint(R2DPhysics *p, int type, int a, int b,
+                              float ax, float ay, float bx, float by,
+                              bool collide_connected, float length,
+                              bool enable_limit, float lower_angle, float upper_angle,
+                              bool enable_motor, float motor_speed, float max_motor_torque);
+void r2d_physics_destroy_joint(R2DPhysics *p, int id);
+bool r2d_physics_joint_alive(const R2DPhysics *p, int id);
+int  r2d_physics_joint_count(const R2DPhysics *p);
+
+#ifdef __cplusplus
+}
+#endif

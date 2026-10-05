@@ -1,0 +1,13 @@
+<rml>
+<head>
+    <link type="text/rcss" href="stub.rcss"/>
+    <title>Демо</title>
+</head>
+<body>
+    <div id="stub">
+        <h1 id="stub-title">Демо</h1>
+        <p id="stub-subtitle">в разработке</p>
+        <p id="stub-hint">Esc — назад в меню</p>
+    </div>
+</body>
+</rml>

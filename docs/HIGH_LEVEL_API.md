@@ -1,0 +1,807 @@
+# Russiano2D — высокоуровневое API `$`
+
+Полный справочник по игровому API движка. Всё, что нужно игре, живёт на одном
+объекте `$`: он доступен **глобально**, импортировать ничего не нужно.
+
+```js
+// game/main.js — целиком
+$.ready(() => {
+    $.world.gravity(0, 1200).color('#101820').bounds(0, 0, 4000, 1200);
+
+    $('<player>', { id: 'hero' })
+        .at(100, 300).size(32, 48).health(100).speed(250)
+        .controls('wasd')
+        .on('death', () => $.scene.load('gameOver'))
+        .appendTo($.world);
+
+    $.camera.follow('#hero').zoom(1.5);
+});
+
+$.update(dt => {
+    $('.goblin').each(e => { if (e.distanceTo('#hero') < 200) e.moveTowards('#hero', 120); });
+});
+```
+
+Низкоуровневый объект `engine` (текстуры, тела, батчинг, RmlUi, BSP, свет)
+никуда не исчез — см. [API.md](API.md). `$` построен поверх него, и оба доступны
+одновременно.
+
+---
+
+## 1. Философия
+
+* **`$` — единственная точка входа.** Один объект, одно пространство имён.
+* **Всё возвращает обёртку** (`wrapper`) — поэтому работают цепочки.
+* **Создание — как в HTML:** `$('<player>', { id: 'hero', hp: 100 })`.
+* **Поиск — как в CSS:** `$('#hero')`, `$('.enemy')`, `$('enemy:alive')`.
+* **Неявная итерация:** `$('.enemy').damage(10)` бьёт всех найденных.
+* **Никаких `new`, `extends`, `this`** в игровом коде. `$.fn` — если нужно
+  добавить свой метод.
+* **Асинхронность — через `Promise`:** `.moveTo(...)` возвращает `Promise`,
+  который разрешается по завершении анимации.
+
+---
+
+## 2. Жизненный цикл
+
+| Хук | Когда вызывается |
+|---|---|
+| `$.ready(fn)` | один раз, на первом кадре (после `$` создан) |
+| `$.update(fn)` | каждый кадр; `fn(dt, $)` |
+| `$.render(fn)` | каждый кадр перед отрисовкой мира |
+| `$.exit(fn)` | при завершении движка |
+
+```js
+$.ready(() => { /* построить мир */ });
+$.update(dt => { /* логика */ });
+$.render(() => { /* поверх сцены, до интерфейса */ });
+$.exit(() => { $.store.save(); });
+```
+
+Порядок одного кадра внутри `$`:
+`$world.sync` (свежие трансформы из физики) → смена сцены → время (твины,
+таймеры, камера, события ввода) → `$.ready` → `update` сцены → `$.update` →
+спрайт-анимации → встроенное управление → наведение интерфейса →
+`render` сцены → `$.render` → отрисовка.
+
+---
+
+## 3. Создание узлов
+
+```js
+$('<player>', { id: 'hero' })        // атрибуты — вторым аргументом
+$('<enemy>', { class: 'goblin boss' })
+$('<ui.button>', { id: 'play', text: 'Играть' })
+```
+
+Атрибуты применяются по имени свойства. Знакомые имена (`id`, `x`, `y`, `w`,
+`h`, `hp`, `speed`, `sprite`, `color`, `alpha`, `visible`, `layer`, `team`,
+`body`, `text`, `size`, `value`, `max`, `radius`, `intensity`, `gravity`,
+`controls`, `collision`, `hoverColor`, `textColor`, `fillColor`) попадают в
+поля узла и действуют сразу. Всё остальное складывается в `attrs` и доступно
+через `.attr('ключ')` — то есть свой атрибут всегда можно завести, не трогая
+движок.
+
+### Теги
+
+| Тег | Тело | Назначение |
+|---|---|---|
+| `<player>` | динамическое | игрок: 28×40, 100 HP, скорость 250, класс `player` |
+| `<enemy>` | динамическое | враг: 28×40, 30 HP, скорость 90, `team` 2 |
+| `<npc>` | динамическое | нейтральный персонаж |
+| `<pickup>` | нет | подбираемый предмет |
+| `<bullet>` | динамическое | снаряд (гравитация выключена) |
+| `<sprite>` | нет | картинка |
+| `<rect>` | нет | прямоугольник (белый спрайт 1×1) |
+| `<circle>` | нет | круг (рисуется треугольниками) |
+| `<text>` | нет | текст в мировых координатах |
+| `<light>` | нет | мягкое свечение радиусом `radius` |
+| `<wall>` | статическое | препятствие |
+| `<tilemap>` | нет | карта из тайлов: слои, автотайл, коллизии (раздел 30) |
+| `<particles>` | нет | CPU-частицы: эмиттер, рампы, пресеты (раздел 30) |
+| `<layer>` | нет | канвас-слой: порядок, параллакс, затемнение (раздел 30) |
+| `<trigger>` | нет | зона, событие `enter` / `leave` |
+| `<area>` | нет | невидимая зона без отрисовки |
+| `<ui.panel>`, `<ui.label>`, `<ui.button>`, `<ui.bar>`, `<ui.image>` | нет | базовые элементы интерфейса в координатах окна |
+| `<ui.row>`, `<ui.col>`, `<ui.grid>` | нет | контейнеры раскладки (раздел 30) |
+| `<ui.scroll>`, `<ui.list>`, `<ui.checkbox>`, `<ui.slider>`, `<ui.input>`, `<ui.dialog>` | нет | контролы с вводом и фокусом (раздел 30) |
+
+Теги `ui.panel`, `ui.label`, `ui.button`, `ui.bar`, `ui.image` живут в
+координатах окна: камера на них не влияет, в `$.world.count()` они не входят.
+
+---
+
+## 4. Селекторы
+
+| Селектор | Что находит |
+|---|---|
+| `'#hero'` | по `id` |
+| `'.enemy'` | по классу |
+| `'enemy'` | по тегу |
+| `'*'` | все узлы |
+| `'#hero, .boss'` | объединение |
+| `'#hero .weapon'` | потомок |
+| `'#hero > .weapon'` | прямой потомок |
+| `'enemy.goblin'` | тег + класс |
+| `'[hp<20]'`, `'[team=1]'`, `'[speed>=100]'` | условие на свойство |
+| `':alive'` / `':dead'` | по здоровью |
+| `':visible'` / `':hidden'` | по видимости |
+| `':onScreen'` / `':offScreen'` | в кадре камеры |
+| `':first'`, `':last'`, `':eq(n)'`, `':even'`, `':odd'` | по позиции в реестре |
+| `':has(.item)'`, `':parent'`, `':empty'` | по детям |
+| `':paused'` | когда время на паузе |
+| `':picked'` | под курсором |
+
+Свои фильтры:
+
+```js
+$.selectors.register(':boss', node => node.attrs.rank === 'boss');
+$(':boss').hp(1000);
+```
+
+---
+
+## 5. Обёртка (коллекция)
+
+Всё, что возвращает `$`, — коллекция узлов с общими методами.
+
+```js
+$('.enemy').length          // сколько нашлось (свойство)
+$('.enemy').get(0)          // узел-объект
+$('.enemy').toArray()       // массив узлов
+$('.enemy').each((i, e) => { })      // e — обёртка одного узла
+$('.enemy').map(e => e.hp())         // массив значений
+$('.enemy').filter(e => e.hp() < 10)
+$('.enemy').filter('.goblin')        // фильтр селектором
+$('.enemy').not('.boss')
+$('.enemy').first() / .last() / .eq(2) / .slice(1, 3)
+$('.enemy').add('.boss')             // объединить
+$('.enemy').is('.goblin')            // bool: все подходят
+$('.enemy').has('.weapon')           // bool: есть такой потомок
+$('.enemy').every(e => e.alive())    // bool
+$('.enemy').some(e => e.hp() < 5)    // bool
+$('.enemy').reduce((sum, e) => sum + e.hp(), 0)
+$('.enemy').index()                  // позиция первого узла в реестре мира
+```
+
+**Массовые операции работают всегда:** `$('.enemy').damage(10)`, `.stopAll()`,
+`.at(0, 0)` (телепорт всей толпы), `.remove()`.
+
+---
+
+## 6. Трансформ и геометрия
+
+```js
+.at(x, y)                  // задать позицию (и переместить тело)
+.move(dx, dy)              // сдвинуть
+.moveTo(x, y, ms, ease?)   // плавно переехать → Promise (без ms — мгновенно)
+.moveTo('#hero', speed)    // двигаться к цели со скоростью, px/с
+.moveTowards('#hero', 120) // то же, но явным методом
+.pos()                     // → { x, y }
+.size(w, h) / .size(w)     // размер
+.width(w) / .height(h)     // по одной стороне
+.rotate(deg)               // довернуть (градусы)
+.angle(rad)                // задать угол в радианах
+.rotation()                // → радианы
+.scale(1.5) / .scale(sx, sy)
+.lookAt('#hero')           // повернуться к цели
+.flip(true, false)         // отразить по осям
+.layer(2) .depth(z)        // порядок отрисовки
+.distanceTo('#enemy')      // → число
+.directionTo('#enemy')     // → { x, y } единичный вектор
+.angleTo('#enemy')         // → радианы
+.rayTo('#enemy')           // → { hit, point, normal, distance } | null
+.toGlobal({x,y}) .toLocal({x,y})   // мировые ↔ экранные
+```
+
+## 7. Визуал
+
+```js
+.sprite('demos/assets/art/hero.png')      // путь к картинке (расширение обязательно)
+.sprite({ src: 'sheet.png', cols: 8, rows: 4, cw: 176, ch: 176 })
+.frames({ src: 'sheet.png', cols: 8, rows: 4, cw: 176, ch: 176 })
+.frame(3)                                 // показать конкретный кадр
+.animate({ from: 0, to: 5, speed: 12, loop: true })
+.stopAnim() .playing(false)
+.color('#ff0000') .alpha(0.5) .opacity(0.5)
+.visible(false) .show() .hide()
+.fadeIn(200) .fadeOut(300)                // → Promise
+.region(x, y, w, h)                        // вырезать область из текстуры узла
+.outline(2, '#000')                       // рамка вокруг спрайта (по хитбоксу)
+.shadow({ x: 4, y: 4, color: 'rgba(0,0,0,0.4)' })   // смещённая копия под спрайтом
+.fontSize(24)                             // кегль текста у <text> и <ui.label>
+.radius(200) .intensity(1)                // свет: радиус и яркость у <light>
+```
+
+Цвет принимает `'#f00'`, `'#ff0000'`, `'#ff0000cc'`, `'red'`, `'rgba(255,0,0,0.5)'`,
+`[255, 0, 0, 128]` или число от `$.color(...)`.
+
+`.blend('alpha' | 'add' | 'multiply' | 'none')` задаёт режим смешивания узла,
+`$.blend(name)` — режим по умолчанию для всего кадра. Пользовательские шейдеры
+движок не поддерживает (конвейеры фиксированные): `.shader()` безопасен, но
+пишет предупреждение в журнал.
+
+## 8. Физика
+
+```js
+.body('dynamic' | 'static' | 'kinematic')   // создать/сменить тело
+.velocity(vx, vy) .velocity()               // задать / прочитать, px/с
+.applyImpulse(ix, iy) .applyForce(fx, fy)
+.gravity(false)                             // выключить гравитацию узла
+.collision(w, h) .collisionCircle(r)        // хитбокс (и пересоздать тело)
+.shape('box' | 'circle' | 'capsule' | 'polygon')   // форма тела
+.oneWay(true)                               // односторонняя платформа
+.sensor(true)                               // зона: ловит, но не толкает
+.contacts(true | false)                     // события контакта
+.joint('#other', { type: 'revolute' })      // сустав, → id
+.onFloor() .onWall()                        // → bool (луч вниз/вбок)
+.jump(640)                                  // импульс вверх с гашением падения
+.moveAndSlide(vx, vy)                       // синоним .velocity() — скольжение делает Box2D
+.stopAll() .pause() .wake()
+.overlaps('.wall')                          // → bool по пересечению прямоугольников
+.overlaps('.wall', (hit, self) => { })      // колбэк каждый кадр (hit | null)
+.inside('#zone')                            // → bool
+```
+
+**Формы.** `box` — прямоугольник по хитбоксу (по умолчанию); `circle` —
+настоящий круг (`.collisionCircle(r)` включает его сам); `capsule` — капсула,
+не цепляется за стыки тайлов; `polygon` — силуэт до 8 точек
+(`.shape('polygon', [x0,y0,x1,y1,…])`, локальные пиксели). Смена формы
+пересоздаёт тело; скорость при этом сохраняется.
+
+**Односторонние платформы.** `.oneWay(true)` — тело проходит сквозь снизу и
+встаёт сверху. Второй аргумент задаёт направление лицевой стороны
+(`.oneWay(true, -Math.PI / 2)` — вверх по умолчанию).
+
+**Суставы.** `.joint(цель, opts)` возвращает id; `opts` — как в
+[API.md](API.md#enginecreatejointopts--engineestroyjointid), плюс сокращения:
+`a`/`b` — точки крепления в мировых пикселях. Для `revolute` и `weld` вторая
+точка по умолчанию совпадает с первой (крепление в одну точку), для
+`distance` — берутся центры тел. Уничтожение: `$.world.destroyJoint(id)`,
+состояние: `$.world.jointAlive(id)`, `$.world.jointCount()`.
+
+### События контакта
+
+Динамическим телам события включены сразу; `.contacts(true)` включает их и
+остальным (например, стене, которая хочет знать, что в неё врезались).
+
+```js
+$('#hero').on('collide', e => {          // начали касаться
+    $.log(`столкнулся с ${e.data.other ? e.data.other.tag : '?'}, скорость ${e.data.speed}`);
+});
+$('#hero').on('separate', e => { });     // перестали касаться
+$('#hero').on('hit', e => {              // удар быстрее порога Box2D
+    $.camera.shake(Math.min(6, e.data.speed / 40), 120);
+});
+```
+
+В `e.data`: `kind` (`'begin'`/`'end'`/`'hit'`), `self`, `other` (обёртки или
+`null`, если узла уже нет), точка контакта `x`/`y`, нормаль `nx`/`ny` и
+`speed` (скорость сближения, для `hit`). Сырой список за кадр —
+`$.world.contacts()`.
+
+Встроенное управление: `.controls('wasd')`, `.controls('arrows')`,
+`.controls({ axis: 'both', jump: 'space' })` — двигает узел или его тело,
+прыжок по `space`/`w`/`↑` только когда узел на земле.
+
+## 9. Здоровье
+
+```js
+.health(100)        // задать максимум и текущее
+.hp() / .hp(50)     // прочитать / задать
+.maxHp(120)
+.damage(10) .heal(5) .kill() .respawn(x, y)
+.alive()            // → bool
+.team(2)            // своя команда
+.invulnerable(500)  // неуязвимость на 500 мс
+```
+
+При изменении здоровья мир сам рассылает события `hit`, `heal`, `death`,
+`respawn`, `show`/`hide`.
+
+## 10. События
+
+```js
+$('#hero').on('hit', e => { /* e.self, e.data, e.stop() */ });
+$('#hero').off('hit');            // снять все
+$('#hero').off('hit', handler);   // снять конкретный
+$('#hero').emit('custom:foo', { });  // локальное событие
+$.on('kill', e => { });              // глобальное
+$.on('entity:enemy:death', e => { }); // по тегу и событию
+$.emit('score:+', { points: 10 });    // своё глобальное событие
+```
+
+Встроенные события узла: `hit`, `heal`, `death`, `respawn`, `remove`, `show`,
+`hide`, `enter`/`leave` (для `<trigger>`), `jump`, `fire`, `arrived`, `animEnd`,
+`click`, `mouseenter`, `mouseleave`, `mousedown`, `mouseup`.
+
+Объект события: `{ self, target, source, name, data, dt, frame, stop() }`.
+
+## 11. Твины и эффекты
+
+```js
+await $('#hero').moveTo(400, 200, 600);         // Promise
+$('#hero').tween({ alpha: 0, y: 100 }, 300, 'easeOutBack');
+$('#hero').rotateTo(90, 400).scaleTo(2, 200).fadeTo(0, 300);
+$('#hero').shake(6, 250);                       // тряска картинки
+$('#hero').flash('#ff0000', 120);               // вспышка цвета
+await $('#hero').bounce(20, 300);
+await $('#hero').delay(200);
+$('#hero').pauseTweens().resumeTweens().clearTweens();
+await $.sequence([() => step1(), 300, () => step2()]);
+```
+
+Плавности: `linear`, `ease`, `easeIn`, `easeOut`, `easeInOut`, `easeInCubic`,
+`easeOutCubic`, `easeInOutCubic`, `easeInQuad`, `easeOutQuad`, `easeInQuart`,
+`easeOutQuart`, `easeInBack`, `easeOutBack`, `easeInOutBack`,
+`easeOutElastic`, `easeInElastic`, `easeOutBounce`, `easeInBounce`,
+`easeInSine`, `easeOutSine`, `step`.
+
+## 12. Звук на узле
+
+```js
+$('#hero').sound('jump.wav').playSound();   // привязать и проиграть
+.sound('hit.wav', { max: 500 })
+```
+
+## 13. Иерархия
+
+```js
+$('<weapon>').appendTo('#hero');       // стать ребёнком узла
+$('#hero').append($('<weapon>'));      // добавить ребёнка
+$('#hero').prepend(child)
+$('#hero').children('.weapon')         // обёртка детей
+$('#hero').find('.grip')               // поиск среди потомков
+$('#hero').closest('player')           // ближайший подходящий предок
+$('#hero').siblings()                  // соседи
+$('#hero').parent()
+$('#hero').detach()                    // отсоединить, оставив живым
+$('#hero').remove()                    // уничтожить узел и его детей
+```
+
+`.appendTo($.world)` — «в мир» (родителя нет, узел и так в реестре мира).
+
+## 14. Данные, классы, теги
+
+```js
+.data('hp', 100) .data('hp') .data({ a: 1 })   // своё хранилище
+.attr('speed', 120) .attr('speed') .attr({ })  // свойства
+.addClass('boss') .removeClass('boss') .toggleClass('boss') .hasClass('boss')
+.tag('friendly') .addTag('x') .removeTag('x')
+.text('Привет') .value(0.5) .max(1)            // для текста и полос
+```
+
+---
+
+## 15. `$.world` — мир
+
+```js
+$.world.gravity(0, 1200)          // ускорение свободного падения, px/с²
+$.world.bounds(0, 0, 4000, 1200)  // границы: ставит четыре стены (класс world-bound)
+$.world.clearBounds()
+$.world.color('#101820')          // цвет очистки кадра
+$.world.background('bg.png', { parallax: 0.2 })
+$.world.pause() .resume() .isPaused()   // «мир без гравитации» — для космоса и аркад сверху
+$.world.freeze() .thaw()                // остановить все тела, не трогая гравитацию
+$.world.timeScale(0.5)
+$.world.spawn('<enemy>', 100, 200)          // → обёртка
+$.world.all()                               // все узлы (обёртка)
+$.world.count(sel?)                         // узлов в мире (без интерфейса и границ)
+$.world.query(x, y, r?)                     // узлы в точке или радиусе
+$.world.bodyAt(x, y)                        // узлы тел в точке
+$.world.bodiesIn(x, y, w, h)                // узлы тел в прямоугольнике
+$.world.raycast({x,y}, {x,y})               // → { hit, point, normal, distance, body, self } | null
+$.world.raycastAll(from, to)                // → [{ node, t, point, self }, …]
+$.world.lineOfSight(from, to)               // → bool
+$.world.sort('layer' | 'y' | 'z')           // порядок отрисовки
+$.world.sortWith((a, b) => a.y - b.y)       // свой порядок
+```
+
+Лучи и запросы принимают точку, узел-объект, обёртку или селектор:
+`$.world.raycast($('#hero'), '#enemy')`. В результате `raycast` есть и `node`
+(узел-владелец тела), и `self` — та же обёртка для удобства.
+
+> **`$.world.pause()` — это не пауза игры.** Он выключает гравитацию мира (тела
+> продолжают лететь по инерции); пауза игры — `$.time.pause()`, полная остановка
+> тел — `$.world.freeze()`. Гравитация и масштаб времени — глобальные: при смене
+> сцены `$` возвращает их сам, но если сцена выключала гравитацию, полагаться на
+> это в своём `exit()` не нужно — состояние уже сброшено.
+
+## 16. `$.camera` — камера
+
+```js
+$.camera.follow('#hero', { smooth: 0.15, offset: [0, -50], zoom: 1.5 })
+$.camera.unfollow() .followed()
+$.camera.zoom(1.5) .zoomTo(2, 300)
+$.camera.panTo(x, y, 500)
+$.camera.shake(6, 300)
+$.camera.limits(0, 0, 4000, 1200) .limits(null)
+$.camera.deadzone(200, 120)
+$.camera.at(x, y) .pos()
+$.camera.worldToScreen(p) .screenToWorld(p)
+$.camera.isOnScreen('#hero') .viewport()
+```
+
+## 17. `$.input` — ввод
+
+```js
+$.input.down('space') .pressed('space') .released('space')
+$.input.axis('a', 'd')                 // -1..1
+$.input.vec('wasd' | 'arrows' | 'both')// { x, y } с учётом геймпада
+$.input.mouse() .mouseDelta() .mouseWorld()
+$.input.mouseDown('left') .mousePressed('left')
+$.input.wheel()                        // { x: 0, y: wheel }
+$.input.padAxis('leftx') .padDown('a')
+$.input.gamepad(0).button('a') .axis('leftx') .connected()
+$.input.bind('jump', ['space', 'w', 'gamepad.a'])
+$.input.unbind('jump') .bindings()
+$.input.down('jump')                   // имён действий тоже работает
+$.input.on('key', e => { })            // e.key, e.pressed, e.shift/ctrl/alt
+$.input.on('mouse', e => { }) .on('wheel', e => { }) .on('gamepadOn', e => { })
+$.input.off()
+$.input.text()                         // символы, набранные за этот кадр
+```
+
+`$.input.text()` отдаёт готовый UTF-8 с учётом раскладки и IME — из него
+построен контрол `<ui.input>` (см. [widgets.md](highlevel/widgets.md)). Скан-коды
+для текстовых полей не годятся: они не знают ни раскладки, ни compose.
+В агентском режиме текст набирается командой `text` (см. [AGENT_API.md](AGENT_API.md)).
+
+Имена клавиш человеческие: `'space'`, `'w'`, `'left'`, `'escape'`, `'f1'`,
+`'enter'` (=Return), `'leftshift'`. Регистр не важен.
+
+## 18. `$.sound` — звук
+
+```js
+$.sound.play('hit.wav', { volume: 0.7, loop: false })
+$.sound.playAt('boom.wav', x, y, { max: 700 })     // позиционно
+$.sound.playAt('boom.wav', '#hero')                // от узла
+$.sound.music('theme.ogg', { loop: true, volume: 0.5 })
+$.sound.crossfade('boss.ogg', 1000) .stopMusic(500)
+$.sound.volume(0.8) .mute(true) .sfxVolume(0.5) .musicVolume(0.5)
+$.sound.stopAll() .playing(ch) .activeChannels() .duration('x.ogg') .preload(['a.ogg'])
+```
+
+Расширение можно не писать: движок сам ищет `.wav`, `.ogg`, `.mp3`, `.flac`.
+
+## 19. `$.scene` — сцены
+
+```js
+$.scene.add('menu', { enter($) {}, exit() {}, update(dt, $) {}, render($) {} });
+$.scene.add('level1', $ => { /* построить мир */ });   // сцена-функция
+$.scene.load('level1', { transition: 'fade', ms: 300 });
+$.scene.restart();
+$.scene.push('pause') .pop() .stack();
+$.scene.current()          // имя или null
+$.scene.names() .has('x') .remove('x');
+$.scene.transition('fade', 300) .busy();
+```
+
+Смена сцены **отложена на начало следующего кадра** — поэтому её можно
+вызывать прямо из обработчика клика. При смене мир очищается (узлы, тела,
+твины, таймеры), кроме узлов с классом `scene-persistent` и интерфейса при
+`{ keepUI: true }`.
+
+## 20. `$.ui` — интерфейс
+
+```js
+$('<ui.bar>', { id: 'hp', value: 100, max: 100 }).at(120, 30).appendTo($.ui);
+$.ui.bar('#hp', 50, 100);
+$.ui.label('#score', 'Очки: 120');
+$('<ui.button>', { id: 'play', text: 'Играть' }).at(640, 400);
+$('#play').on('click', () => $.scene.load('level1'));
+```
+
+Документы RmlUi (для сложной вёрстки и стилей):
+
+```js
+const menu = $.ui.doc('ui/menu.rml').show();
+menu.text('score', '120').cls('panel', 'hidden', true).style('bar', 'width', '50%');
+menu.on('btn-play', 'click', () => $.scene.load('level1'));   // вешается один раз
+menu.hide() .visible() .unload();
+$.ui.icon('directions_run')    // иконка Material Design (2235 штук встроены)
+$.ui.hasIcon('home') .iconNames() .iconCount() .fps()
+```
+
+## 20.1. `$.window` — окно
+
+Окно игры целиком: имя, размер, режим, курсор и события. Значения по
+умолчанию берутся из `project.json` рядом с точкой входа (см. `docs/BUILD.md`),
+флаги `--title/--width/--height` их перекрывают, а из игры всё меняется на ходу.
+
+```js
+$.window.title('Моя игра');        // заголовок окна и подпись в доке
+$.window.title();                  // → 'Моя игра'
+
+$.window.size();                   // { w, h } в точках
+$.window.pixels();                 // { w, h } в пикселях (Retina: вдвое больше)
+$.window.resize(1600, 900);        // высоту можно не указывать — сохраним пропорции
+
+$.window.fullscreen(true);         // во весь экран
+$.window.fullscreen();             // → true
+$.window.toggleFullscreen();
+
+$.window.cursor('hidden');         // спрятать курсор (для прицела)
+$.window.cursor('crosshair');      // 'normal' | 'hidden' | 'crosshair' | 'hand' | 'text' | 'wait'
+$.window.cursor();                 // → 'hidden'
+
+$.window.vsync(false);             // больше кадров, но возможен разрыв
+$.window.resizable(false);         // запретить менять размер мышью
+
+$.window.minimize(); $.window.maximize(); $.window.restore();
+$.window.show(); $.window.hide(); $.window.focus();
+$.window.visible(); $.window.focused();
+
+$.window.position();               // { x, y } на экране
+$.window.move(100, 80);
+$.window.center();
+```
+
+События: `resize`, `focus`, `blur`, `show`, `hide`, `fullscreen`. Движок
+опрашивает состояние окна раз в кадр, поэтому событие приходит с точностью до
+кадра — для интерфейса этого достаточно.
+
+```js
+$.window.on('resize', ({ w, h }) => {
+    $('#menu').size(w * 0.6, h * 0.5);      // переложить интерфейс
+});
+
+$.window.on('blur', () => $.time.pause());   // ушли в другое окно — пауза
+$.window.on('focus', () => $.time.resume());
+```
+
+Полное состояние окна — `$.window.state()`, оно же лежит в снимке агента
+(`state.window`: имя, размер, режим, курсор, фокус), поэтому автотест может
+проверить и имя окна, и реакцию на разворот.
+
+## 21. `$.time` — время
+
+```js
+$.time.delta()      // секунды с прошлого кадра (с учётом паузы и scale)
+$.time.rawDelta()   // без масштабирования
+$.time.now()        // игровое время в секундах
+$.time.realNow()    // время с запуска движка
+$.time.fps() .frame()
+$.time.scale(0.5) .pause() .resume() .toggle() .isPaused()
+await $.time.wait(500)
+const id = $.time.after(200, fn) / $.time.every(1000, fn)
+$.time.cancel(id) .cancelAll()
+```
+
+## 22. `$.store` и `$.fs` — сохранения и файлы
+
+```js
+$.store.set('highscore', 1200).get('highscore', 0)
+$.store.has('x') .remove('x') .clear() .keys() .all() .setAll({ … })
+$.store.file('save2.json').save() .load()
+$.store.autoSave(30000) .stopAutoSave()
+
+$.fs.readText('data/level.json')      // строка или null
+$.fs.readJSON('data/level.json', {})  // объект или значение по умолчанию
+$.fs.write('out.txt', 'текст') .writeJSON('out.json', obj)
+$.fs.exists('x') .list('data') .remove('x') .basePath()
+```
+
+Пути — от корня запуска; абсолютные принимаются как есть.
+
+## 23. `$.gfx` — графика и отладочный слой
+
+```js
+$.gfx.color('#101820')          // цвет очистки
+$.gfx.size() { w, h }
+$.gfx.rgba(255, 0, 0, 128)
+$.gfx.color4('#ff0000', 0.5)
+$.gfx.culling(false)            // рисовать всё, даже за экраном
+$.gfx.stats()                   // { sprites, triangles, texts, nodes }
+$.gfx.text('Привет', 100, 640, { size: 20, color: '#fff', align: 'center' })
+$.gfx.measureText('Привет', 20) // → [ширина, высота]
+$.gfx.textureSize('art/hero.png')// → [ширина, высота] картинки
+$.gfx.draw.line(x1, y1, x2, y2, color, width)
+$.gfx.draw.rect(x, y, w, h, color)
+$.gfx.draw.circle(x, y, r, color)
+$.gfx.draw.ring(x, y, r, color, width)
+$.gfx.draw.text('hi', x, y, color, size)
+$.gfx.draw.arrow(x1, y1, x2, y2, color)
+$.gfx.draw.clear()
+```
+
+Всё из `$.gfx.draw` и `$.gfx.text` рисуется **поверх сцены**, в координатах окна,
+и попадает на скриншот агента.
+
+## 24. `$.debug` и `$.console`
+
+```js
+$.debug.on() .off() .toggle() .isOn()      // оверлей движка (F1)
+$.debug.stats()                            // { fps, frame_ms, sprites, nodes, bodies, … }
+$.debug.draw.line('#hero', '#exit', 'yellow')   // принимает селекторы и узлы
+$.debug.draw.rect('#zone', '#door', 'red')
+$.debug.watch('hp', () => $('#hero').hp())
+$.debug.unwatch('hp') .watches()
+$.debug.profiler.start('ai') .end('ai') .report() .reset()
+
+$.console.register('spawn', (args) => $('<enemy>').at(args[0], args[1]), 'spawn x y')
+$.console.run('spawn 100 200') .list() .help('spawn') .toggle()
+```
+
+## 25. `$.agent` и `$.test` — доступ для программы
+
+```js
+$.agent.active      // true в режиме --agent
+$.agent.headless .seed .frame() .time()
+$.agent.node('#hero')      // краткое описание узла
+$.agent.nodes('.enemy')    // список описаний
+$.agent.snapshot()         // полный снимок мира (уходит агенту в ответе на state)
+$.agent.expose('score', () => Global.score)   // своё поле в снимке
+$.agent.describe()         // строка для лога
+
+$.test.check($('.enemy').length === 5, 'врагов пятеро')
+$.test.equal($('#hero').hp(), 100, 'здоровье целое')
+$.test.near(x, 100, 0.5, 'игрок у отметки')
+$.test.truthy(...) .falsy(...)
+$.test.reset() .results() .report()
+```
+
+Снимок содержит `frame`, `time`, `fps`, `scene`, `window`, `camera`, `world`,
+`entities` (массив узлов с позицией, здоровьем, видимостью), `ui`, `player` и
+всё, что добавлено через `.expose()`.
+
+## 26. Расширение
+
+```js
+$.fn.flashAndDie = function () {
+    return this.flash('#fff', 100).fadeOut(200).remove();
+};
+$('.enemy').flashAndDie();
+```
+
+Внутри `$.fn`-метода `this` — обёртка; чтобы применить что-то к каждому узлу,
+используйте `this.each((i, e) => { … })`.
+
+## 27. Прочее в `$`
+
+```js
+$.color('#f00')        // упакованный цвет
+$.alpha(color, 0.5)    // сменить альфу
+$.vec(1, 0)            // { x, y }
+$.random               // ГПСЧ с зерном из --seed: .next() .range(a,b) .int(a,b) .pick(list) .chance(p)
+$.find(sel) .count(sel)
+$.log('текст')         // в журнал движка
+$.quit()
+$.isAgent()            // true в режиме агента
+$.fn .selectors .ctx   // внутренности для расширений
+```
+
+---
+
+## 28. Ограничения (честно)
+
+| Чего нет | Почему / что делать |
+|---|---|
+| Своих шейдеров на узел | Конвейер движка общий. `.shader()` пишет предупреждение |
+| Пользовательских шейдеров | Конвейеры фиксированные; `.shader()` пишет предупреждение. Режимы смешивания (`add`, `multiply`, `none`) при этом есть |
+| DSP-эффектов кроме `lowpass`/`echo` | В SDL_mixer 3.2 нет готовых эффектов, движок обрабатывает сэмплы сам; реверба нет |
+| Изменения `pitch` звука | SDL_mixer не умеет; `{ pitch }` игнорируется с предупреждением |
+| Виброотклика | `$.input.rumble()` пока не подключён к SDL_RumbleGamepad |
+| Произвольных (не AABB) браш-форм | `<circle>` рисуется кругом, но хитбокс прямоугольный |
+| Коллизий внутри `<tilemap>` по габариту агента | Сетка тайлов помечает тайлы, а не объём: для тела нужен `agentRadius` у `$.nav` |
+| Частиц как тел физики | `<particles>` не участвуют в `raycast`/`query` |
+| Соединений тел (joints) | В `physics.c` их нет: только отдельные тела Box2D |
+| `.width()` как геттер | Используйте `.size()` |
+
+Ошибки в игровом коде не роняют движок: они уходят в журнал вместе со стеком
+(`$: ошибка в $.update: …`) и в отладочный оверлей.
+
+---
+
+## 29. Полный пример
+
+```js
+// game/main.js — платформер на 60 строк
+const MASCOT = { src: 'demos/assets/art/mascot/russiano_mascot_sheet.png',
+                 cols: 8, rows: 4, cw: 176, ch: 176 };
+
+$.ready(() => {
+    $.world.gravity(0, 1600).color('#0d1117').bounds(-200, -400, 4000, 1600);
+
+    $('<player>', { id: 'hero' })
+        .at(200, 400).size(48, 64)
+        .frames(MASCOT).animate({ from: 0, to: 7, speed: 10 })
+        .health(100).controls('both').collision(40, 60)
+        .appendTo($.world);
+
+    for (let i = 0; i < 6; i++) {
+        $('<sprite>', { class: 'coin' })
+            .at(400 + i * 120, 300).size(24, 24).color('#ffd54a')
+            .on('pickup', e => { e.self.remove(); $.sound.play('pickup.ogg'); })
+            .appendTo($.world);
+    }
+
+    $('<wall>').at(0, 620).size(4000, 40).color('#2a3240').appendTo($.world);
+    $('<ui.bar>', { id: 'hp', value: 100, max: 100 }).at(120, 28).appendTo($.ui);
+
+    $.camera.follow('#hero', { smooth: 0.2 }).limits(-200, -400, 4000, 1600);
+});
+
+$.update(() => {
+    $.ui.bar('#hp', $('#hero').hp(), 100);
+    $('.coin').each(c => {
+        if (c.distanceTo('#hero') < 40) c.emit('pickup');
+    });
+    if ($('#hero').hp() <= 0) $.scene.restart();
+});
+```
+
+---
+
+## 30. Подсистемы после аудита API
+
+Эти подсистемы добавлены по итогам сверки с Godot 4.x (2D) — разбор пробелов
+и приоритетов в [GAP_ANALYSIS.md](GAP_ANALYSIS.md). Каждая живёт в своём файле
+`src/highlevel/<имя>.js`, ставится из `api.js` и обновляется в кадре своей
+`tick`-функцией.
+
+| Подсистема | Пространство имён | Теги | Подробно |
+|---|---|---|---|
+| Анимация клипами и машина состояний | `$.anim` | — | [anim.md](highlevel/anim.md) |
+| TileMap: слои, автотайл, террейны, Y-sort | `$.tilemap` | `<tilemap>` | [tilemap.md](highlevel/tilemap.md) |
+| CPU-частицы | `$.particles` | `<particles>` | [particles.md](highlevel/particles.md) |
+| Навигация: A*, агент, navmesh | `$.nav` | — | [nav.md](highlevel/nav.md) |
+| Prefab и сериализация сцен | `$.prefab` | — | [prefab.md](highlevel/prefab.md) |
+| Аудио-шины и эффекты | `$.audio` | — | [audiobus.md](highlevel/audiobus.md) |
+| Канвас-слои, параллакс, fade | `$.layers` | `<layer>` | [layers.md](highlevel/layers.md) |
+| UI-контролы: контейнеры, ввод, якоря, темы | `$.ui` (дополнение) | `<ui.row>` и др. | [widgets.md](highlevel/widgets.md) |
+| Tween в стиле Godot | `$.tween` | — | [tween.md](highlevel/tween.md) |
+| Зоны `enter`/`leave` | `$.triggers` | `<trigger>` | [triggers.md](highlevel/triggers.md) |
+| Локализация | `$.i18n`, `$.tr` | — | [i18n.md](highlevel/i18n.md) |
+| Пул объектов | `$.pool` | — | [pool.md](highlevel/pool.md) |
+| HTTP-запросы | `$.http` | — | [http.md](highlevel/http.md) |
+| Blend-режимы и подвьюпорты | `$.blend`, `$.gfx.blend`, `$.viewport` | — | [render.md](highlevel/render.md) |
+
+Физика в этой таблице не отдельной подсистемой, а частью ядра: формы тел,
+односторонние платформы, события контакта и суставы описаны в разделе 8 выше
+и в [API.md](API.md).
+
+Короткий пример, где заняты сразу несколько:
+
+```js
+$.ready(() => {
+    $.anim.define('hit', {
+        duration: 160, loop: 'once',
+        tracks: [{ prop: 'scale_x', keys: [{ t: 0, v: 1 }, { t: 1, v: 1.5, ease: 'quadOut' }] }],
+    });
+
+    $.tilemap.fromASCII(['###......', '###..###.'], { '#': 1, '.': 0 },
+                        { src: 'tiles.png', tile: 32, solid: true })
+        .at(0, 0).appendTo($.world);
+
+    const boom = $('<particles>', { amount: 24, lifetime: 500, speed: [60, 180] })
+        .at(200, 200).appendTo($.world);
+
+    const grid = $.nav.grid({ x: 0, y: 0, w: 1280, h: 720, cell: 32, agentRadius: 16 });
+    grid.buildFromWalls({ tags: ['wall'], agentRadius: 16 });
+
+    $('#hero').navigateTo('#goal', { speed: 240, onArrive: () => boom.burst(24) });
+    $('#hero').playClip('hit');
+});
+```
+
+Ключевые правила:
+
+* **`agentRadius` у навигационной сетки** — запас на габарит агента. Без него
+  путь идёт вплотную к стене, и тело в неё упирается: сетка описывает точки, а
+  не объём.
+* **Коллизии TileMap** пересобираются по позиции узла на момент `.rebuild()`:
+  подвинули карту — вызовите `.rebuild()`.
+* **`<particles>` и `<tilemap>` рисуются модулями** через реестр
+  `registerNodeRenderer` и общий батч `$.gfx.push`, поэтому лишних draw call'ов
+  не появляется.
+* **Аудио-шины** пересчитывают громкость живых каналов через новые
+  `engine.audio.setChannelVolume/setChannelEffect` (см. [API.md](API.md)).
+* **Blend-режимы** работают на уровне узла (`.blend('add')`) и кадра
+  (`$.blend('add')`); движок сам режет батч на участки с одинаковым режимом,
+  так что порядок отрисовки не меняется.
+* **Текст в `<ui.input>`** приходит через `$.input.text()`
+  (`engine.textInput()`), в агентском режиме — командой `text`.
+
+Дальше: [AGENT_API.md](AGENT_API.md) — как этим управлять программой,
+[RECIPES](tutorial-platformer.md) и [API.md](API.md) — низкий уровень.

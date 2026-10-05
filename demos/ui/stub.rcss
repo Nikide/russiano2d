@@ -1,0 +1,38 @@
+body {
+    font-family: Noto Sans;
+    font-size: 18px;
+    color: #eef2f8;
+    width: 100%;
+    height: 100%;
+}
+
+#stub {
+    display: block;
+    width: 560px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 240px;
+    padding: 28px;
+    background-color: rgba(9, 13, 21, 217);
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: rgba(127, 209, 255, 76);
+    text-align: center;
+}
+
+h1 {
+    font-size: 34px;
+    color: #7fd1ff;
+    margin-bottom: 2px;
+}
+
+#stub-subtitle {
+    font-size: 16px;
+    color: #9fb0c8;
+    margin-bottom: 18px;
+}
+
+#stub-hint {
+    font-size: 14px;
+    color: #7c8ca3;
+}

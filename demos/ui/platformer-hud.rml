@@ -1,0 +1,27 @@
+<rml>
+<head>
+    <link type="text/rcss" href="platformer-hud.rcss"/>
+    <title>HUD платформера</title>
+</head>
+<body>
+    <div id="hud">
+        <div class="cell">
+            <span class="label">Очки</span>
+            <span class="value" id="hud-score">0</span>
+        </div>
+        <div class="cell">
+            <span class="label">Жизни</span>
+            <span class="value" id="hud-lives">3</span>
+        </div>
+        <div class="cell">
+            <span class="label">Монет</span>
+            <span class="value" id="hud-coins">0</span>
+        </div>
+    </div>
+
+    <p id="hud-hint">
+        A / D или стрелки — идти &nbsp;·&nbsp; Space — прыжок &nbsp;·&nbsp;
+        Прыжок сверху убивает врага &nbsp;·&nbsp; P — пауза &nbsp;·&nbsp; Esc — меню
+    </p>
+</body>
+</rml>

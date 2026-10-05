@@ -1,0 +1,12 @@
+Assets: platformer_tileset_16x16.png (256x144, 16x16 px uniform grid, 16x9)
+        bg_mountains.png (256x144, horizontally tileable background)
+        bg_clouds.png    (256x144, horizontally tileable background)
+Title : Generic Platformer Tileset (16x16) + Background
+Author: etqws3
+Page  : https://opengameart.org/content/generic-platformer-tileset-16x16-background
+Direct: https://opengameart.org/sites/default/files/2015-02-26%20%5BDB32%5D%28Generic%20Platformer%29%28Tileset%29.png
+        https://opengameart.org/sites/default/files/2015-02-26%20%5BDB32%5D%28Generic%20Platformer%29%28Mountains%29.png
+        https://opengameart.org/sites/default/files/2015-02-26%20%5BDB32%5D%28Generic%20Platformer%29%28Clouds%29.png
+License: CC0 1.0 Universal - https://creativecommons.org/publicdomain/zero/1.0/
+Palette: DawnBringer 32 (DB32). Drawn as a one-day prototype tileset.
+No separate license file is shipped by the author; license stated on the asset page.

@@ -1,0 +1,92 @@
+# ===========================================================================
+# Атрибуты Git для russiano2d.
+#
+# Зачем это нужно:
+#   * переводы строк нормализуются, чтобы diff'ы не «прыгали» между
+#     Windows и Unix, а рабочие копии на разных ОС совпадали байт в байт;
+#   * бинарные ассеты помечены как binary — Git не пытается их сливать
+#     и не тратит время на построение текстового diff;
+#   * git archive (архив исходников в GitLab) не тянет
+#     build/, dist/ и скриншоты;
+#   * linguist не считает сгенерированные ассеты и шрифты кодом проекта.
+# ===========================================================================
+
+# --- Нормализация переводов строк -----------------------------------------
+# По умолчанию весь текст — LF и в репозитории, и в рабочей копии.
+* text=auto eol=lf
+
+# --- Исходники: явно текст, чтобы не зависеть от эвристики Git ------------
+*.c               text eol=lf
+*.h               text eol=lf
+*.cpp             text eol=lf
+*.hpp             text eol=lf
+*.js              text eol=lf
+*.mjs             text eol=lf
+*.json            text eol=lf
+*.py              text eol=lf
+*.sh              text eol=lf
+*.cmake           text eol=lf
+CMakeLists.txt    text eol=lf
+*.yml             text eol=lf
+*.yaml            text eol=lf
+*.md              text eol=lf
+*.txt             text eol=lf
+*.rml             text eol=lf
+*.rcss            text eol=lf
+*.glsl            text eol=lf
+*.vert            text eol=lf
+*.frag            text eol=lf
+
+# --- Бинарные ассеты ------------------------------------------------------
+# binary == -diff -merge -text: без попыток слияния и текстового diff.
+*.png             binary
+*.jpg             binary
+*.jpeg            binary
+*.bmp             binary
+*.tga             binary
+*.qoi             binary
+*.gif             binary
+*.ico             binary
+*.ogg             binary
+*.wav             binary
+*.mp3             binary
+*.flac            binary
+*.ttf             binary
+*.otf             binary
+*.woff            binary
+*.woff2           binary
+*.zip             binary
+*.7z              binary
+*.gz              binary
+*.spv             binary
+*.metallib        binary
+*.dxil            binary
+
+# --- Что не попадает в архивы исходников (git archive) -------------------
+# Артефакты сборки и релиза воспроизводятся из исходников, а скриншоты
+# весят больше всего остального.
+/build/               export-ignore
+/build-*/             export-ignore
+/out/                 export-ignore
+/bin/                 export-ignore
+/dist/                export-ignore
+/docs/screenshots/    export-ignore
+/.gitlab-ci.yml       export-ignore
+/.gitattributes       export-ignore
+/.gitignore           export-ignore
+/.DS_Store            export-ignore
+
+# --- Linguist: статистика языков ------------------------------------------
+# ES-модули — это JavaScript, а не что-то своё.
+*.mjs             linguist-language=JavaScript
+# Разметка и стили RmlUi — родственники HTML/CSS.
+*.rml             linguist-language=HTML
+*.rcss            linguist-language=CSS
+# Шейдеры — GLSL.
+*.glsl            linguist-language=GLSL
+# Скрипты и высокоуровневое API $ — JavaScript.
+src/highlevel/*.js linguist-language=JavaScript
+game/*.js         linguist-language=JavaScript
+# Сгенерированные артефакты не должны раздувать статистику.
+demos/assets/art/** linguist-generated
+src/generated/**  linguist-generated

@@ -1,0 +1,7 @@
+Asset : kenney_16x16.png  (1024x1728, 16x16 px uniform grid, 64 cols x 108 rows)
+Title : Kenney 16x16
+Author: surt (rework of Kenney's pixel tiles)
+Page  : https://opengameart.org/content/kenney-16x16
+Direct: https://opengameart.org/sites/default/files/kenney_16x16.png
+License: CC0 1.0 Universal - https://creativecommons.org/publicdomain/zero/1.0/
+No separate license file is shipped by the author; license stated on the asset page.

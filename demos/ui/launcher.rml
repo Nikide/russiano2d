@@ -1,0 +1,30 @@
+<rml>
+<head>
+    <link type="text/rcss" href="launcher.rcss"/>
+    <title>Демо russiano2d</title>
+</head>
+<body>
+    <div id="panel">
+        <h1>RUSSIANO2D</h1>
+        <p id="tagline">Пять демо: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi</p>
+
+        <!-- Кнопки демо строятся из JS: engine.ui.setHtml(doc, 'demo-list', ...) -->
+        <div id="demo-list"></div>
+
+        <div id="footer">
+            <span class="label">Звук</span>
+            <!-- Иконки подставляются из JS: engine.ui.icon(...) -->
+            <button id="vol-down" class="small">-</button>
+            <span id="vol-value">80%</span>
+            <button id="vol-up" class="small">+</button>
+            <button id="vol-mute" class="small">x</button>
+        </div>
+
+        <p id="hint">
+            Стрелки или A/D — выбор &nbsp;·&nbsp; Enter — запустить &nbsp;·&nbsp;
+            Esc внутри демо — назад в меню &nbsp;·&nbsp; F1 — отладочный оверлей
+        </p>
+        <p id="selected">Выбрано:</p>
+    </div>
+</body>
+</rml>

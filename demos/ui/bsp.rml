@@ -1,0 +1,24 @@
+<rml>
+<head>
+    <link type="text/rcss" href="bsp.rcss"/>
+    <title>BSP</title>
+</head>
+<body>
+    <div id="panel">
+        <h1>2D BSP-дерево</h1>
+        <p class="sub">Порядок отрисовки без z-буфера на произвольной геометрии</p>
+
+        <div class="row"><span class="k">Отрезков</span><span class="v" id="bsp-segments">0</span></div>
+        <div class="row"><span class="k">Узлов</span><span class="v" id="bsp-nodes">0</span></div>
+        <div class="row"><span class="k">Глубина</span><span class="v" id="bsp-depth">0</span></div>
+
+        <button id="bsp-splits">разрезы: скрыты</button>
+        <button id="bsp-order">порядок: целиком</button>
+
+        <p id="hint">
+            WASD — идти &nbsp;·&nbsp; Tab — показать разрезы &nbsp;·&nbsp;
+            Space — обход по шагам &nbsp;·&nbsp; Esc — меню
+        </p>
+    </div>
+</body>
+</rml>

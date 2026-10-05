@@ -1,0 +1,41 @@
+# --- Build output ---
+build/
+build-*/
+out/
+bin/
+dist/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.pdb
+
+# --- CMake ---
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+_deps/
+compile_commands.json
+
+# --- Generated shader / bytecode artifacts ---
+src/generated/
+*.spv
+*.metallib
+*.dxil
+qjsc_out/
+
+# --- IDE / editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# --- Logs / runtime ---
+*.log
+imgui.ini
+__pycache__/

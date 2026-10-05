@@ -1,0 +1,15 @@
+<rml>
+<head>
+    <link type="text/rcss" href="platformer-pause.rcss"/>
+    <title>Пауза</title>
+</head>
+<body>
+    <div id="pause">
+        <h1>Пауза</h1>
+        <p id="pause-info">Очки: <span id="pause-score">0</span></p>
+        <button id="pause-resume">Продолжить</button>
+        <button id="pause-menu">В меню</button>
+        <p id="pause-hint">P — снять паузу</p>
+    </div>
+</body>
+</rml>

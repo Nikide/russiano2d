@@ -1,0 +1,40 @@
+/* HUD платформера. Фон body прозрачный — сцена должна быть видна. */
+
+body {
+    font-family: Noto Sans;
+    font-size: 18px;
+    color: #ffffff;
+}
+
+#hud {
+    display: block;
+    width: 430px;
+    margin: 14px;
+    padding: 8px 16px;
+    background-color: rgba(8, 12, 20, 153);
+    border-radius: 9px;
+}
+
+#hud .cell {
+    display: inline-block;
+    width: 130px;
+}
+
+#hud .label {
+    color: #9fb0c8;
+    font-size: 14px;
+}
+
+#hud .value {
+    display: block;
+    font-size: 26px;
+    color: #ffd873;
+}
+
+#hud-hint {
+    position: absolute;
+    left: 16px;
+    bottom: 12px;
+    font-size: 14px;
+    color: #93a4bb;
+}

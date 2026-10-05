@@ -1,0 +1,26 @@
+<rml>
+<head>
+    <link type="text/rcss" href="light.rcss"/>
+    <title>Свет и тени</title>
+</head>
+<body>
+    <div id="panel">
+        <h1>Свет и тени</h1>
+        <p class="sub">Полигоны видимости: sweep-line по отрезкам</p>
+
+        <div class="row"><span class="k">Источников</span><span class="v" id="light-count">0</span></div>
+        <div class="row"><span class="k">Вершин полигона</span><span class="v" id="light-verts">0</span></div>
+        <div class="row"><span class="k">Отрезков-стен</span><span class="v" id="light-walls">0</span></div>
+        <div class="row"><span class="k">Мс на кадр света</span><span class="v" id="light-ms">0.0</span></div>
+
+        <button id="light-shadows">тени: включены</button>
+        <button id="light-fill">заливка полигонов: видна</button>
+        <button id="light-rays">лучи: скрыты</button>
+
+        <p id="hint">
+            WASD — идти &nbsp;·&nbsp; мышь — подвижный факел &nbsp;·&nbsp;
+            T — тени &nbsp;·&nbsp; F — заливка &nbsp;·&nbsp; R — лучи &nbsp;·&nbsp; Esc — меню
+        </p>
+    </div>
+</body>
+</rml>

@@ -1,0 +1,57 @@
+body {
+    font-family: Noto Sans;
+    font-size: 18px;
+    color: #f2e6e6;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(30, 4, 6, 184);
+}
+
+#over {
+    display: block;
+    width: 440px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 190px;
+    padding: 28px;
+    background-color: rgba(24, 8, 10, 240);
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: rgba(255, 122, 122, 115);
+    text-align: center;
+}
+
+h1 {
+    font-size: 36px;
+    color: #ff7a7a;
+    margin-bottom: 10px;
+}
+
+.stat {
+    color: #d8bcbc;
+    margin-bottom: 4px;
+}
+
+#death-score, #death-kills {
+    color: #ffd873;
+    font-size: 22px;
+}
+
+button {
+    display: block;
+    width: 260px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 14px;
+    padding: 12px;
+    font-size: 18px;
+    color: #1a0d0d;
+    background-color: #ff9a9a;
+    border-width: 0px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+button:hover {
+    background-color: #ffbcbc;
+}

@@ -1,0 +1,34 @@
+<rml>
+<head>
+    <link type="text/rcss" href="shooter-hud.rcss"/>
+    <title>HUD шутера</title>
+</head>
+<body>
+    <!-- Подсказка живёт внутри панели: absolute с bottom в RmlUi кладёт
+         элемент относительно непредсказуемой коробки и налезает на счётчики. -->
+    <div id="bar">
+        <div id="stats">
+            <div class="cell">
+                <span class="label">Здоровье</span>
+                <span class="value" id="hud-health">100</span>
+            </div>
+            <div class="cell">
+                <span class="label">Патроны</span>
+                <span class="value" id="hud-ammo">48</span>
+            </div>
+            <div class="cell">
+                <span class="label">Очки</span>
+                <span class="value" id="hud-score">0</span>
+            </div>
+            <div class="cell">
+                <span class="label">Убито</span>
+                <span class="value" id="hud-kills">0 / 0</span>
+            </div>
+        </div>
+        <p id="help">
+            W / S — идти &nbsp;·&nbsp; A / D — поворот &nbsp;·&nbsp; Q / E — шаг вбок &nbsp;·&nbsp;
+            ЛКМ или Space — огонь &nbsp;·&nbsp; R — перезарядка &nbsp;·&nbsp; Esc — меню
+        </p>
+    </div>
+</body>
+</rml>

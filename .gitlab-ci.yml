@@ -1,0 +1,297 @@
+# ===========================================================================
+# CI/CD для зеркала на hub.mos.ru (GitLab) — ОСНОВНОЙ хост сборки.
+#
+# Пайплайн: lint → build → test → package → release.
+# Матрица сборок:
+#   * Linux  — gcc и clang, docker-executor (образ ubuntu:24.04);
+#   * Windows — MSVC (Visual Studio Build Tools 2022) + Ninja,
+#               shell-executor в PowerShell.
+#
+# Почему Windows именно MSVC, а не MSYS2/MinGW:
+#   * SDL_GPU на Windows работает через DirectX 12 и требует Windows SDK
+#     (d3d12.h, dxgi.h) — MSVC получает его вместе с Build Tools;
+#   * glslang и SPIRV-Cross (они собираются из исходников на этапе build,
+#     чтобы компилировать шейдеры) — официально тестируемые под MSVC
+#     CMake-проекты, у MinGW их сборка периодически ломается;
+#   * Ninja даёт одноконфигурационную сборку, поэтому пути к артефактам
+#     совпадают с Linux: build/russiano2d.exe, build/tests/*.exe,
+#     build/_deps/quickjs-build/qjs.exe.
+#
+# ЧТО ДОЛЖЕН ПРЕДОСТАВИТЬ WINDOWS-РАННЕР (настраивается вручную, см.
+# docs/RELEASING.md, раздел «CI/CD»):
+#   * GitLab Runner, зарегистрированный с тегами `windows` и `msvc`,
+#     executor = shell (по умолчанию PowerShell). Docker-образа в
+#     Windows-job нет — default.image действует только на Linux.
+#   * Visual Studio 2022 Build Tools с workload
+#     «Desktop development with C++» (MSVC + Windows SDK).
+#   * В PATH: git, cmake (>= 3.24), ninja, python3.
+#   * Сетевой доступ к репозиториям зависимостей: CMake FetchContent тянет
+#     оттуда SDL3, QuickJS-ng, Box2D, RmlUi, Dear ImGui, glslang, SPIRV-Cross.
+#     Если у раннера нет прямого выхода в интернет, нужен прокси или локальное
+#     зеркало (переменные окружения HTTP_PROXY/HTTPS_PROXY).
+# Пока такого раннера нет, job'ы build_windows / test_windows /
+# package_windows остаются в пайплайне, но висят в статусе «pending».
+# Чтобы временно отключить их, задайте в настройках проекта переменную
+# R2D_WINDOWS_CI=false — правила rules ниже это учитывают.
+#
+# Чего в CI НЕТ и почему: оконные и агентские тесты (tests/agent/*_test.py)
+# требуют реального SDL_GPU-устройства (Vulkan / Metal / DirectX 12), которого
+# на раннере нет; они гоняются локально: python3 tools/run_tests.py.
+# Сборка игр в один файл (./russiano2d build) — тоже локальный шаг: он шифрует
+# груз и на macOS переподписывает бинарник.
+#
+# Кэш: каталоги build*/_deps с исходниками FetchContent-зависимостей.
+# ===========================================================================
+
+stages:
+  - lint
+  - build
+  - test
+  - package
+  - release
+
+variables:
+  DEBIAN_FRONTEND: noninteractive
+  GIT_DEPTH: "1"
+
+# --- Общие настройки ------------------------------------------------------
+default:
+  interruptible: true
+  timeout: 120m
+  cache:
+    key:
+      files:
+        - CMakeLists.txt
+        - cmake/Dependencies.cmake
+        - cmake/Shaders.cmake
+    paths:
+      - build*/_deps/
+
+# ===========================================================================
+# 1. LINT — быстро и без сборки
+# ===========================================================================
+lint:
+  stage: lint
+  image: ubuntu:24.04
+  timeout: 15m
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-yaml git
+  script:
+    - python3 -m compileall -q tools tests
+    # Сухой прогон релиза печатает план и ничего не пишет.
+    - python3 tools/release.py --dry-run
+    - |
+      if [ -n "$(git status --porcelain)" ]; then
+        echo "dry-run изменил рабочее дерево:"
+        git status --porcelain
+        exit 1
+      fi
+    # Синтаксис CI-файлов (в том числе самого этого).
+    - |
+      python3 - <<'PY'
+      import sys
+      import yaml
+
+      bad = False
+      for path in (".gitlab-ci.yml",):
+          try:
+              with open(path, encoding="utf-8") as handle:
+                  yaml.safe_load(handle)
+              print("ok   " + path)
+          except Exception as exc:
+              bad = True
+              print("FAIL " + path + ": " + str(exc))
+      sys.exit(1 if bad else 0)
+      PY
+    - git check-attr -a -- CMakeLists.txt assets/fonts/NotoSans-Regular.ttf README.md
+
+# ===========================================================================
+# 2. BUILD — Linux (gcc/clang) и Windows (MSVC)
+# ===========================================================================
+build_linux:
+  stage: build
+  image: ubuntu:24.04
+  tags: [docker]
+  parallel:
+    matrix:
+      - R2D_CC: [gcc, clang]
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends
+        build-essential clang cmake ninja-build pkg-config git ca-certificates
+        libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev
+        libxfixes-dev libxss-dev libxkbcommon-dev libwayland-dev
+        libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev
+        libudev-dev libdbus-1-dev
+  script:
+    - export CC="$R2D_CC"
+    - export CXX="$([ "$R2D_CC" = clang ] && echo clang++ || echo g++)"
+    - cmake -S . -B "build-$R2D_CC" -G Ninja -DCMAKE_BUILD_TYPE=Debug
+    - cmake --build "build-$R2D_CC" -j 2
+  artifacts:
+    name: "linux-$R2D_CC"
+    expire_in: 1 week
+    paths:
+      - build-$R2D_CC/russiano2d
+      - build-$R2D_CC/tests/r2d_json_test
+      - build-$R2D_CC/tests/r2d_crypto_test
+      - build-$R2D_CC/_deps/quickjs-build/qjs
+
+build_windows:
+  stage: build
+  tags: [windows, msvc]
+  timeout: 150m
+  # Docker-образа нет: shell-executor в PowerShell.
+  rules:
+    - if: $R2D_WINDOWS_CI == "false"
+      when: never
+    - when: always
+  before_script:
+    # Подхватить окружение MSVC. vswhere есть в составе Build Tools.
+    - |
+      $ErrorActionPreference = "Stop"
+      $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+      if (-not (Test-Path $vswhere)) { throw "vswhere не найден: установите VS 2022 Build Tools" }
+      $vs = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+      if (-not $vs) { throw "MSVC не найден: нет workload 'Desktop development with C++'" }
+      Import-Module "$vs\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+      Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
+      Write-Host "MSVC: $vs"
+  script:
+    - cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+    - cmake --build build -j 2
+  artifacts:
+    name: "windows-msvc"
+    expire_in: 1 week
+    paths:
+      - build/russiano2d.exe
+      - build/tests/r2d_json_test.exe
+      - build/tests/r2d_crypto_test.exe
+      - build/_deps/quickjs-build/qjs.exe
+
+# ===========================================================================
+# 3. TEST — C-тесты без окна и юнит-тесты $ под qjs
+# ===========================================================================
+test_linux:
+  stage: test
+  image: ubuntu:24.04
+  tags: [docker]
+  needs: [build_linux]
+  script:
+    - BIN="$(find build-gcc -maxdepth 3 -type f -name russiano2d | head -n 1)"
+    - if [ -z "$BIN" ]; then echo "не нашёл бинарник в build-gcc"; exit 1; fi
+    # --- C-тесты без окна ---
+    - find build-gcc/tests -maxdepth 1 -type f -name 'r2d_*_test' -exec {} \;
+    # --- Юнит-тесты логики $ ---
+    - |
+      QJS="$(find build-gcc/_deps -type f -name qjs | head -n 1)"
+      if [ -z "$QJS" ]; then echo "не нашёл qjs"; exit 1; fi
+      echo "qjs: $QJS"
+      fail=0
+      for test in tests/js/*_test.mjs; do
+        echo "── $test"
+        "$QJS" "$test" || fail=1
+      done
+      if [ "$fail" -ne 0 ]; then echo "часть qjs-тестов провалилась"; exit 1; fi
+      echo "все qjs-тесты прошли"
+    - echo "Оконные/агентские тесты не запускаются: нужен SDL_GPU-драйвер (Vulkan/D3D12)."
+
+test_windows:
+  stage: test
+  tags: [windows, msvc]
+  needs: [build_windows]
+  rules:
+    - if: $R2D_WINDOWS_CI == "false"
+      when: never
+    - when: always
+  script:
+    - |
+      $ErrorActionPreference = "Stop"
+      $json = Get-ChildItem -Recurse -Filter r2d_json_test.exe | Select-Object -First 1
+      $crypto = Get-ChildItem -Recurse -Filter r2d_crypto_test.exe | Select-Object -First 1
+      if (-not $json) { throw "не найден r2d_json_test.exe" }
+      & $json.FullName; if ($LASTEXITCODE -ne 0) { throw "r2d_json_test провален" }
+      & $crypto.FullName; if ($LASTEXITCODE -ne 0) { throw "r2d_crypto_test провален" }
+    - |
+      $ErrorActionPreference = "Stop"
+      $qjs = Get-ChildItem -Recurse -Filter qjs.exe | Select-Object -First 1
+      if (-not $qjs) { throw "не найден qjs.exe — проверь таргет QuickJS-ng" }
+      Write-Host "qjs: $($qjs.FullName)"
+      $failed = @()
+      foreach ($test in Get-ChildItem tests/js -Filter '*_test.mjs') {
+        Write-Host "── $($test.Name)"
+        & $qjs.FullName $test.FullName
+        if ($LASTEXITCODE -ne 0) { $failed += $test.Name }
+      }
+      if ($failed.Count -gt 0) { throw "провалены qjs-тесты: $($failed -join ', ')" }
+      Write-Host "все qjs-тесты прошли"
+    - Write-Host "Оконные/агентские тесты не запускаются: нужен SDL_GPU-драйвер (Vulkan/D3D12)."
+
+# ===========================================================================
+# 4. PACKAGE — dist/<os>-<arch>/ + SHA256SUMS.txt
+# ===========================================================================
+package_linux:
+  stage: package
+  image: ubuntu:24.04
+  tags: [docker]
+  needs: [build_linux, test_linux]
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 zip ca-certificates
+  script:
+    - python3 tools/release.py --package-only --platform linux-x86_64 --binary build-gcc/russiano2d --out dist
+  artifacts:
+    name: "russiano2d-linux-x86_64"
+    expire_in: 4 weeks
+    paths:
+      - dist/linux-x86_64/
+      - dist/russiano2d-linux-x86_64.tar.gz
+      - dist/SHA256SUMS.txt
+
+package_windows:
+  stage: package
+  tags: [windows, msvc]
+  needs: [build_windows, test_windows]
+  rules:
+    - if: $R2D_WINDOWS_CI == "false"
+      when: never
+    - when: always
+  script:
+    - |
+      $ErrorActionPreference = "Stop"
+      python tools/release.py --package-only --platform windows-x86_64 --binary build/russiano2d.exe --out dist
+  artifacts:
+    name: "russiano2d-windows-x86_64"
+    expire_in: 4 weeks
+    paths:
+      - dist/windows-x86_64/
+      - dist/russiano2d-windows-x86_64.zip
+      - dist/SHA256SUMS.txt
+
+# ===========================================================================
+# 5. RELEASE — по тегу v*: GitLab Release со ссылками на артефакты
+# ===========================================================================
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  tags: [docker]
+  needs: [package_linux]
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/
+  script:
+    - echo "публикую релиз $CI_COMMIT_TAG на hub.mos.ru"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: "Russiano2D $CI_COMMIT_TAG"
+    description: "Сборки под Linux и Windows, контрольные суммы — во вложении SHA256SUMS.txt. Полный список изменений — в CHANGELOG.md."
+    assets:
+      links:
+        - name: "Linux x86_64 (tar.gz)"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/dist/russiano2d-linux-x86_64.tar.gz?job=package_linux"
+        - name: "Windows x86_64 (zip)"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/dist/russiano2d-windows-x86_64.zip?job=package_windows"
+        - name: "Контрольные суммы SHA256"
+          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/dist/SHA256SUMS.txt?job=package_linux"

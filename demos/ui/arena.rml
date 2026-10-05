@@ -1,0 +1,40 @@
+<rml>
+<head>
+    <link type="text/rcss" href="arena.rcss"/>
+    <title>Арена</title>
+</head>
+<body>
+    <!-- HUD: прозрачный слой поверх сцены, клики по кнопкам не блокирует. -->
+    <div id="hud">
+        <div id="hud-left">
+            <p class="lbl">Здоровье</p>
+            <div id="hp-track">
+                <div id="hp-fill"></div>
+            </div>
+            <p id="hp-text">100 / 100</p>
+        </div>
+
+        <div id="hud-right">
+            <p class="stat"><span class="lbl">Очки</span><span id="score" class="val">0</span></p>
+            <p class="stat"><span class="lbl">Волна</span><span id="wave" class="val">1</span></p>
+            <p class="stat"><span class="lbl">Врагов</span><span id="enemies" class="val">0</span></p>
+        </div>
+
+        <p id="hint">
+            WASD или стрелки — движение, мышь — прицел, ЛКМ или Space — огонь,
+            Esc — в меню. Не подпускай врагов вплотную.
+        </p>
+    </div>
+
+    <!-- Экран проигрыша: показывается снятием класса hidden. -->
+    <div id="gameover" class="hidden">
+        <div id="go-panel">
+            <h1>ИГРА ОКОНЧЕНА</h1>
+            <p id="go-score">Очки: 0</p>
+            <p id="go-wave">Волна: 1</p>
+            <button id="restart" class="wide">Заново</button>
+            <button id="to-menu" class="wide">В меню</button>
+        </div>
+    </div>
+</body>
+</rml>
