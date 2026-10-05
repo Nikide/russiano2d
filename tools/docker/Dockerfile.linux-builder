@@ -20,6 +20,7 @@ ARG FREETYPE_VERSION=2.13.3
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential clang cmake ninja-build pkg-config git ca-certificates \
         python3 zip unzip curl \
+        glslang-tools spirv-cross \
         libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
         libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev \
         libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev \

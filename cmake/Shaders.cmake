@@ -48,8 +48,26 @@ FetchContent_Declare(SPIRV-Cross
 FetchContent_MakeAvailable(SPIRV-Cross)
 
 # glslang 16.x называет CLI-таргет `glslang-standalone` (готовый бинарь — `glslang`).
-set(R2D_GLSLANG     "$<TARGET_FILE:glslang-standalone>")
-set(R2D_SPIRV_CROSS "$<TARGET_FILE:spirv-cross>")
+#
+# Под кросс-сборкой эти инструменты обязаны работать на ХОСТЕ: собранные под
+# Windows .exe на Linux не запускаются («Exec format error»), и генерация
+# шейдеров падает. В образе-сборщике стоят системные glslang-tools и
+# spirv-cross — берём их.
+if(CMAKE_CROSSCOMPILING)
+    find_program(R2D_GLSLANG NAMES glslangValidator glslang)
+    find_program(R2D_SPIRV_CROSS NAMES spirv-cross)
+    if(NOT R2D_GLSLANG OR NOT R2D_SPIRV_CROSS)
+        message(FATAL_ERROR
+            "для кросс-сборки нужны хост-инструменты glslangValidator и "
+            "spirv-cross (пакеты glslang-tools и spirv-cross)")
+    endif()
+    message(STATUS "[shaders] хост-инструменты: ${R2D_GLSLANG}, ${R2D_SPIRV_CROSS}")
+    set(R2D_SHADER_TOOL_DEPS "")
+else()
+    set(R2D_GLSLANG     "$<TARGET_FILE:glslang-standalone>")
+    set(R2D_SPIRV_CROSS "$<TARGET_FILE:spirv-cross>")
+    set(R2D_SHADER_TOOL_DEPS glslang-standalone spirv-cross)
+endif()
 
 # --- Генерация --------------------------------------------------------------
 set(R2D_SHADER_DIR "${CMAKE_BINARY_DIR}/generated/shaders")
@@ -74,7 +92,7 @@ function(r2d_add_shader name stage source)
                 --msl-version 20100
                 --msl-decoration-binding
                 --output "${msl}"
-        DEPENDS "${source}" glslang-standalone spirv-cross
+        DEPENDS "${source}" ${R2D_SHADER_TOOL_DEPS}
         COMMENT "Шейдер ${basename}: GLSL → SPIR-V → MSL"
         VERBATIM)
 

@@ -236,6 +236,11 @@ def build_in_container(platform_name: str, build_type: str, jobs: int,
         + collect_libs
     )
 
+    docker_args = ["docker", "run", "--rm"]
+    container_platform = CONTAINER_PLATFORM.get(platform_name)
+    if container_platform:
+        docker_args += ["--platform", container_platform]
+
     result = run_capture(docker_args + [
         "--user", "%d:%d" % (os.getuid(), os.getgid()),
         "-e", "HOME=/tmp",

@@ -13,6 +13,16 @@ if(R2D_RPATH)
     set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
 endif()
 
+# DT_RPATH вместо DT_RUNPATH: старый формат применяется и к транзитивным
+# зависимостям, поэтому libfreetype из пакета находит свои libpng и
+# libbrotlidec рядом с собой. С RUNPATH они остаются «not found».
+#
+# Условие строго по целевой системе: у MinGW-линкера такой опции нет, и он
+# падает с «unrecognized option '--disable-new-dtags'».
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_link_options("-Wl,--disable-new-dtags")
+endif()
+
 project(russiano2d
     VERSION 0.1.0
     DESCRIPTION "Легковесный кроссплатформенный 2D-движок: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi"
