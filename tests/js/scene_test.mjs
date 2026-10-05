@@ -67,4 +67,11 @@ test('scene-persistent узлы переживают смену сцены', () 
     hero.destroy();
 });
 
+test('load(name, { ms: 0 }) переключает мгновенно', () => {
+    scene.load('b', { ms: 0 });
+    scene._tick(0);                 // перехода ждать не нужно
+    eq(scene.current(), 'b');
+    falsy(scene.busy(), 'перехода нет');
+});
+
 finish();

@@ -12,7 +12,7 @@
 // отдаётся в C одним submitSprites().
 // ===========================================================================
 
-import { ctx, wrap, packColor, withAlpha } from './core.js';
+import { ctx, wrap, packColor, withAlpha, fxRandom } from './core.js';
 import { cameraTransform } from './camera.js';
 
 const MAX_SPRITES = 16384;
@@ -192,8 +192,8 @@ function nodeTransform(node, cam) {
     if (node.shake_timer > 0) {
         const p = node.shake_total > 0 ? node.shake_timer / node.shake_total : 1;
         const amp = node.shake_amount * p;
-        sx += (Math.random() * 2 - 1) * amp;
-        sy += (Math.random() * 2 - 1) * amp;
+        sx += (fxRandom() * 2 - 1) * amp;
+        sy += (fxRandom() * 2 - 1) * amp;
     }
     return {
         x: sx,

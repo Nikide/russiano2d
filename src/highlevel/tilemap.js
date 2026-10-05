@@ -16,7 +16,7 @@
 // их проверяет qjs-харнесс без движка.
 // ===========================================================================
 
-import { ctx, Wrapper, TAGS, wrapOne, query, def, defGet, withAlpha } from './core.js';
+import { ctx, Wrapper, TAGS, wrapOne, query, def, defGet, withAlpha, fxRandom } from './core.js';
 import { registerNodeRenderer } from './render.js';
 import { cameraTransform } from './camera.js';
 
@@ -730,8 +730,8 @@ function tileScreenPoint(tm, cam, tile) {
     if (node.shake_timer > 0) {
         const p = node.shake_total > 0 ? node.shake_timer / node.shake_total : 1;
         const amp = node.shake_amount * p;
-        sx += (Math.random() * 2 - 1) * amp;
-        sy += (Math.random() * 2 - 1) * amp;
+        sx += (fxRandom() * 2 - 1) * amp;
+        sy += (fxRandom() * 2 - 1) * amp;
     }
     return { x: sx, y: sy, zoom };
 }

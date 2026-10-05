@@ -47,7 +47,11 @@ export function installScene($) {
                 return scene;
             }
             const o = opts || {};
-            if (o.transition === 'none' || (o.ms || state.transition_ms) === 0) {
+            // ms: 0 — это «без перехода», а не «взять длительность по
+            // умолчанию»: раньше ноль был falsy и тихо превращался в 300 мс,
+            // хотя игрок просил мгновенную смену.
+            const ms = o.ms === undefined ? state.transition_ms : o.ms;
+            if (o.transition === 'none' || ms <= 0) {
                 state.pending = name;
                 state.pending_opts = o;
                 return scene;
@@ -56,7 +60,7 @@ export function installScene($) {
             state.pending_opts = o;
             state.transition = {
                 type: o.transition || state.transition_type,
-                ms: o.ms || state.transition_ms,
+                ms,
                 t: 0,
                 phase: 'out',
                 to: name,

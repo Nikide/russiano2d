@@ -7,7 +7,7 @@
 // экранные получаются через $.camera.worldToScreen().
 // ===========================================================================
 
-import { ctx, query, wrapOne } from './core.js';
+import { ctx, query, wrapOne, fxRandom } from './core.js';
 
 const cam = {
     x: 0, y: 0,          // центр камеры в мировых координатах
@@ -181,8 +181,8 @@ export function installCamera($) {
                 cam.shake_t -= dt;
                 const p = Math.max(0, cam.shake_t / cam.shake_total);
                 const amp = cam.shake_amp * p;
-                cam.shake_x = (Math.random() * 2 - 1) * amp;
-                cam.shake_y = (Math.random() * 2 - 1) * amp;
+                cam.shake_x = (fxRandom() * 2 - 1) * amp;
+                cam.shake_y = (fxRandom() * 2 - 1) * amp;
             } else {
                 cam.shake_x = 0;
                 cam.shake_y = 0;

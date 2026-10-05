@@ -854,6 +854,15 @@ export function textureSizeOf(path) {
     return engine.textureSize(tex);
 }
 
+// Отдельный генератор для визуальных эффектов (тряска кадра, узлов, тайлов).
+// Он не трогает игровой поток $.random, но делает картинку воспроизводимой:
+// при --seed и --fixed-dt прогон даёт одинаковые кадры, а Math.random() этого
+// не обещал.
+const fx_random = makeRandom(0x2d5eed);
+
+/** Случайное число 0..1 для эффектов — детерминировано при фиксированном шаге. */
+export function fxRandom() { return fx_random.next(); }
+
 /** Случайная последовательность с зерном — для $.random и тестов. */
 export function makeRandom(seed) {
     let s = (seed >>> 0) || 0x9e3779b9;
