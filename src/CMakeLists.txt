@@ -162,7 +162,7 @@ target_include_directories(russiano2d PRIVATE
 
 target_compile_definitions(russiano2d PRIVATE ${R2D_DEFINES})
 
-target_link_libraries(russiano2d PRIVATE
+target_link_libraries(russiano2d PRIVATE ${R2D_WIN_LIBS}
     SDL3::SDL3
     SDL3_image::SDL3_image
     qjs

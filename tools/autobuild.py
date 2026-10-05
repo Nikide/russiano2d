@@ -213,21 +213,29 @@ def build_in_container(platform_name: str, build_type: str, jobs: int,
             "-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY",
         ]
 
-    inner = (
-        "set -e; "
-        "cmake -S /src -B /src/{build} -G Ninja {flags} {extra}; "
-        "cmake --build /src/{build} -j {jobs}"
-    ).format(
-        build=build_dir_name,
-        flags=" ".join(cmake_flags(build_type)),
-        extra=" ".join(cmake_extra),
-        jobs=jobs,
+    binary_rel = build_dir_name + ("/russiano2d.exe" if windows else "/russiano2d")
+    flags = " ".join(cmake_flags(build_type))
+    extra_flags = " ".join(cmake_extra)
+
+    # После сборки собираем внешние .so рядом с бинарником: пакет должен
+    # работать на системе, где этих библиотек нет. Бинарник ищет их в lib/
+    # через rpath $ORIGIN/lib, заданный в CMakeLists.txt.
+    skip_system = "lib(c|m|pthread|dl|rt|gcc_s|stdc" + chr(43) + chr(43) + ").so"
+    collect_libs = (
+        "mkdir -p /src/" + build_dir_name + "/lib; "
+        "ldd /src/" + binary_rel + " 2>/dev/null | awk '{print $3}' "
+        "| grep -E '^/' "
+        "| grep -vE '" + skip_system + "' "
+        "| xargs -r -I{} cp -L {} /src/" + build_dir_name + "/lib/ 2>/dev/null || true"
     )
 
-    docker_args = ["docker", "run", "--rm"]
-    container_platform = CONTAINER_PLATFORM.get(platform_name)
-    if container_platform:
-        docker_args += ["--platform", container_platform]
+    inner = (
+        "set -e; "
+        "cmake -S /src -B /src/" + build_dir_name + " -G Ninja " + flags + " " + extra_flags + "; "
+        "cmake --build /src/" + build_dir_name + " -j " + str(jobs) + "; "
+        + collect_libs
+    )
+
     result = run_capture(docker_args + [
         "--user", "%d:%d" % (os.getuid(), os.getgid()),
         "-e", "HOME=/tmp",

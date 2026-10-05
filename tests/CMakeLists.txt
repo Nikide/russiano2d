@@ -49,7 +49,7 @@ add_executable(r2d_payload_test "${CMAKE_SOURCE_DIR}/tests/payload/payload_test.
                                 "${CMAKE_SOURCE_DIR}/src/payload.c"
                                 "${CMAKE_SOURCE_DIR}/src/crypto.c")
 target_include_directories(r2d_payload_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(r2d_payload_test PRIVATE SDL3::SDL3)
+target_link_libraries(r2d_payload_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_payload_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_payload_test PRIVATE -fsanitize=address,undefined)

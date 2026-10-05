@@ -47,6 +47,15 @@ if(R2D_SANITIZE AND NOT MSVC)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
+# Windows: BCryptGenRandom живёт в bcrypt.lib. MSVC подключает её сама
+# (pragma в заголовке), а MinGW — нет, и линковка падает с
+# «undefined reference to BCryptGenRandom».
+if(WIN32)
+    set(R2D_WIN_LIBS bcrypt)
+else()
+    set(R2D_WIN_LIBS "")
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(Dependencies)
