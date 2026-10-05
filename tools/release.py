@@ -405,6 +405,105 @@ def platform_runtime_note(platform_name: str, binary: str) -> Tuple[str, str, st
     )
 
 
+def _macos_deps(path: str) -> List[str]:
+    """Внешние (не системные) dylib'ы, от которых зависит файл."""
+    result = subprocess.run(["otool", "-L", path], stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL)
+    if result.returncode != 0:
+        return []
+    deps: List[str] = []
+    for line in result.stdout.decode("utf-8", "replace").splitlines()[1:]:
+        dep = line.strip().split(" ")[0]
+        # /usr/lib и /System — часть системы, их тащить не нужно.
+        if dep.startswith(("/opt/homebrew", "/usr/local")) and os.path.exists(dep):
+            deps.append(dep)
+    return deps
+
+
+def _rpaths(path: str) -> List[str]:
+    """Список LC_RPATH файла."""
+    result = subprocess.run(["otool", "-l", path], stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL)
+    if result.returncode != 0:
+        return []
+    return re.findall(r"LC_RPATH\s+cmdsize \d+\s+path (\S+)",
+                      result.stdout.decode("utf-8", "replace"))
+
+
+def _normalize_rpaths(path: str, keep: str) -> None:
+    """Оставить только rpath пакета.
+
+    Иначе динамический загрузчик находит библиотеку по чужому пути раньше
+    (например /opt/homebrew/lib) и тянет её из Homebrew, а не из пакета —
+    на чужой машине это «Library not loaded».
+    """
+    for rpath in _rpaths(path):
+        if rpath != keep:
+            subprocess.run(["install_name_tool", "-delete_rpath", rpath, path],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if keep not in _rpaths(path):
+        subprocess.run(["install_name_tool", "-add_rpath", keep, path],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def bundle_macos_libs(target: str, binaries: Sequence[str]) -> None:
+    """Положить внешние dylib'ы в пакет и переписать пути на @rpath.
+
+    Без этого собранный движок запускается только на машине, где уже стоит
+    Homebrew с теми же библиотеками: «Library not loaded: /opt/homebrew/...».
+    Целевой rpath (@loader_path/lib) задан при сборке в CMakeLists.txt.
+    """
+    if not shutil.which("otool") or not shutil.which("install_name_tool"):
+        log("    внимание: нет otool/install_name_tool — библиотеки не упакованы")
+        return
+    deps: List[str] = []
+    for binary_path in binaries:
+        for dep in _macos_deps(binary_path):
+            if dep not in deps:
+                deps.append(dep)
+    if not deps:
+        return
+
+    lib_dir = os.path.join(target, "lib")
+    os.makedirs(lib_dir, exist_ok=True)
+    copied: List[str] = []
+    pending = list(deps)
+    seen = set()
+    while pending:
+        dep = pending.pop()
+        name = os.path.basename(dep)
+        if name in seen:
+            continue
+        seen.add(name)
+        dest = os.path.join(lib_dir, name)
+        shutil.copy2(dep, dest)
+        copied.append(dest)
+        # Библиотека ссылается на свои зависимости по @rpath и ищет их рядом.
+        subprocess.run(["install_name_tool", "-id", "@rpath/" + name, dest],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _normalize_rpaths(dest, "@loader_path")
+        for sub in _macos_deps(dep):
+            subprocess.run(["install_name_tool", "-change", sub,
+                            "@rpath/" + os.path.basename(sub), dest],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if os.path.basename(sub) not in seen:
+                pending.append(sub)
+
+    for binary_path in binaries:
+        # Бинарник должен искать библиотеки рядом с собой, а не в Homebrew.
+        _normalize_rpaths(binary_path, "@loader_path/lib")
+        for dep in _macos_deps(binary_path):
+            subprocess.run(["install_name_tool", "-change", dep,
+                            "@rpath/" + os.path.basename(dep), binary_path],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # Правка бинарника сбрасывает подпись — подписываем заново (ad-hoc).
+    for path in list(binaries) + copied:
+        subprocess.run(["codesign", "--force", "--sign", "-", path],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    log("    библиотек в пакет: %d" % len(copied))
+
+
 def render_platform_docs(target: str, platform_name: str, version: str) -> None:
     """Положить в пакет README.md и AGENTS.md именно для этой платформы."""
     if not os.path.isdir(TEMPLATE_DIR):
@@ -506,6 +605,17 @@ def package_platform(
         shutil.copy2(extra_path, extra_dest)
         os.chmod(extra_dest, 0o755)
         log("    дополнительно: %s" % os.path.basename(extra))
+
+    if PLATFORMS[platform_name][0] == "macos":
+        executables = []
+        for name in sorted(os.listdir(target)):
+            path = os.path.join(target, name)
+            if os.path.isfile(path) and os.access(path, os.X_OK):
+                head = subprocess.run(["file", "-b", path], stdout=subprocess.PIPE,
+                                      stderr=subprocess.DEVNULL)
+                if b"Mach-O" in head.stdout:
+                    executables.append(path)
+        bundle_macos_libs(target, executables)
 
     render_platform_docs(target, platform_name, version)
 

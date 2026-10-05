@@ -16,8 +16,9 @@
 
 include(FetchContent)
 
-# Движок — приложение: статические библиотеки зависимостей удобнее, чем
-# разъезжающиеся dylib'ы. SDL3 остаётся системным (shared) — это нормально.
+# Движок — приложение: все зависимости собираются статически, чтобы готовый
+# пакет был самодостаточным (системный SDL3, если найден, всё равно берётся
+# как есть — это выбор того, кто собирает).
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Собирать зависимости статически" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 
@@ -28,8 +29,11 @@ find_package(SDL3 3.2 CONFIG QUIET)
 
 if(NOT SDL3_FOUND)
     message(STATUS "[deps] SDL3 не найден в системе — собираю из исходников")
-    set(SDL_SHARED ON  CACHE BOOL "" FORCE)
-    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+    # Статически: пакет должен быть самодостаточным. С shared-сборкой
+    # бинарник требует libSDL3.so.0 / libSDL3.0.dylib рядом, и скачавший
+    # архив получал «cannot open shared object file».
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON  CACHE BOOL "" FORCE)
     set(SDL_TESTS OFF  CACHE BOOL "" FORCE)
     set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(SDL_INSTALL OFF CACHE BOOL "" FORCE)

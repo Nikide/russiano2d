@@ -1,0 +1,40 @@
+/* HUD поверх игры. Фон body не задаём — сцена должна быть видна. */
+
+body {
+    font-family: Noto Sans;
+    font-size: 20px;
+    color: #ffffff;
+}
+
+#hud {
+    display: block;
+    width: 400px;
+    margin: 16px;
+    padding: 10px 18px;
+    background-color: rgba(10, 14, 22, 158);
+    border-radius: 8px;
+}
+
+.label {
+    color: #9fb0c8;
+    font-size: 16px;
+}
+
+#score {
+    color: #ffd873;
+    font-size: 24px;
+    margin-right: 22px;
+}
+
+#coins {
+    color: #ffd873;
+    font-size: 24px;
+}
+
+#help {
+    position: absolute;
+    left: 16px;
+    bottom: 12px;
+    font-size: 15px;
+    color: #8f9db0;
+}

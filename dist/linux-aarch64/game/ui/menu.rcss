@@ -1,0 +1,63 @@
+/* Оформление главного меню. Шрифт LatoLatin подхватывается движком
+   из assets/fonts при старте. */
+
+body {
+    font-family: Noto Sans;
+    font-size: 18px;
+    color: #eef2f8;
+    background-color: rgba(12, 16, 24, 224);
+    width: 100%;
+    height: 100%;
+}
+
+#menu {
+    display: block;
+    width: 560px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 110px;
+    padding: 32px;
+    text-align: center;
+}
+
+h1 {
+    font-size: 46px;
+    color: #7fd1ff;
+    margin-bottom: 2px;
+}
+
+#subtitle {
+    color: #9fb0c8;
+    font-size: 17px;
+    margin-bottom: 34px;
+}
+
+button {
+    display: block;
+    width: 320px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 12px;
+    margin-bottom: 12px;
+    padding: 14px;
+    font-size: 20px;
+    color: #0d1220;
+    background-color: #7fd1ff;
+    border-width: 0px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+button:hover {
+    background-color: #a9e0ff;
+}
+
+button:active {
+    background-color: #4fb6ef;
+}
+
+#hint {
+    color: #6c7d94;
+    font-size: 15px;
+    margin-top: 26px;
+}

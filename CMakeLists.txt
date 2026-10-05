@@ -1,5 +1,18 @@
 cmake_minimum_required(VERSION 3.24)
 
+# Бинарник ищет библиотеки рядом с собой: если что-то осталось динамическим,
+# пакет всё равно переносим (lib/ рядом с исполняемым файлом).
+set(R2D_RPATH "")
+if(APPLE)
+    set(R2D_RPATH "@loader_path/lib")
+elseif(UNIX)
+    set(R2D_RPATH "$ORIGIN/lib")
+endif()
+if(R2D_RPATH)
+    set(CMAKE_INSTALL_RPATH "${R2D_RPATH}")
+    set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+endif()
+
 project(russiano2d
     VERSION 0.1.0
     DESCRIPTION "Легковесный кроссплатформенный 2D-движок: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi"
