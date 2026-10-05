@@ -80,6 +80,9 @@ default:
 lint:
   stage: lint
   image: ubuntu:24.04
+  # Тег обязателен: без него задание требует раннера с «Run untagged jobs»,
+  # а такой по умолчанию выключен — пайплайн просто завис бы на lint.
+  tags: [docker]
   timeout: 15m
   before_script:
     - apt-get update
