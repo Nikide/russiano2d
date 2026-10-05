@@ -273,17 +273,44 @@ def build_in_container(platform_name: str, build_type: str, jobs: int,
     return binary
 
 
-def package(platform_name: str, binary: Path, out_dir: Path) -> None:
+def build_game(platform_name: str, engine: Path) -> Optional[Path]:
+    """Собрать игру по умолчанию в один файл — если движок запускается локально.
+
+    Для Linux и Windows движок собирается в контейнере под чужую архитектуру,
+    запустить его здесь нельзя, поэтому игра собирается только для платформы
+    текущей машины. Без этого переупаковка «съедала» игру из пакета.
+    """
+    entry = ROOT / "game" / "main.js"
+    if not entry.exists():
+        return None
+    out = BUILD_ROOT / ("russiano2d-platformer-" + platform_name)
+    try:
+        run([str(engine), "build", "--project", str(ROOT),
+             "--entry", "game/main.js", "--out", str(out)])
+    except SystemExit as exc:
+        log("    игру собрать не удалось: %s" % exc)
+        return None
+    if out.exists() and platform_name.startswith("macos"):
+        subprocess.run(["codesign", "--force", "--sign", "-", str(out)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return out if out.exists() else None
+
+
+def package(platform_name: str, binary: Path, out_dir: Path,
+            extras: Sequence[Path] = ()) -> None:
     """Упаковать собранный бинарник штатным релизным кодом."""
     log("[%s] упаковка в %s" % (platform_name, out_dir))
-    run([
+    cmd = [
         sys.executable, str(ROOT / "tools" / "release.py"),
         "--package-only",
         "--force",
         "--platform", platform_name,
         "--binary", str(binary.relative_to(ROOT)),
         "--out", str(out_dir.relative_to(ROOT)),
-    ], cwd=ROOT)
+    ]
+    for extra in extras:
+        cmd += ["--extra", str(extra.relative_to(ROOT))]
+    run(cmd, cwd=ROOT)
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -369,7 +396,12 @@ def main(argv: List[str]) -> int:
                     image = ensure_builder_image("windows-x86_64" in platforms)
                 windows = platform_name == "windows-x86_64"
                 binary = build_in_container(platform_name, build_type, jobs, image, windows)
-            package(platform_name, binary, out_dir)
+            extras = []
+            if platform_name == host:
+                game = build_game(platform_name, binary)
+                if game:
+                    extras.append(game)
+            package(platform_name, binary, out_dir, extras)
             built.append(platform_name)
             log("   готово: %s" % binary.relative_to(ROOT))
         except SystemExit as exc:
