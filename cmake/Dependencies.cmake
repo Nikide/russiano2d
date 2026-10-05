@@ -168,10 +168,14 @@ endif()
 if(R2D_ENABLE_IMGUI)
     # У upstream-репозитория ImGui нет своего CMakeLists.txt. Пустой
     # SOURCE_SUBDIR заставляет FetchContent только скачать исходники.
+    # Глубокий клон обязателен: пин указывает на коммит ветки `docking`, а
+    # shallow-клон главной ветки его не содержит — checkout падает с
+    # «reference is not a tree». На машине, где _deps уже был, ошибка не
+    # видна; в чистом контейнере или CI она есть.
     FetchContent_Declare(imgui
         GIT_REPOSITORY https://github.com/ocornut/imgui.git
         GIT_TAG        64944b4520b30772de8dbf0b37d0311746477a32  # docking
-        GIT_SHALLOW    TRUE
+        GIT_SHALLOW    FALSE
         SOURCE_SUBDIR  "cmake/нет-здесь-CMakeLists")
     FetchContent_MakeAvailable(imgui)
 endif()

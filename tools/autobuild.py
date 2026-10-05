@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
@@ -46,7 +47,17 @@ BUILD_ROOT = ROOT / "build-autobuild"
 #: «failed to update builder last activity time».
 DOCKER_CONFIG_DIR = "/tmp/russiano2d-docker-config"
 
-ALL_PLATFORMS = ("macos-arm64", "macos-x86_64", "linux-x86_64", "windows-x86_64")
+ALL_PLATFORMS = ("macos-arm64", "macos-x86_64", "linux-x86_64",
+                 "linux-aarch64", "windows-x86_64")
+
+#: Какую платформу контейнера просить у Docker. На Apple Silicon контейнеры по
+#: умолчанию arm64, поэтому для linux-x86_64 нужна эмуляция (--platform
+#: linux/amd64) — иначе получится arm64-бинарник под именем x86_64.
+CONTAINER_PLATFORM = {
+    "linux-x86_64": "linux/amd64",
+    "linux-aarch64": "linux/arm64",
+    "windows-x86_64": None,   # кросс-компиляция, архитектура контейнера не важна
+}
 
 
 def log(message: str = "") -> None:
@@ -65,6 +76,53 @@ def run(cmd: Sequence[str], cwd: Optional[Path] = None, quiet: bool = False) -> 
     )
     if result.returncode != 0:
         raise SystemExit("команда завершилась с кодом %d:\n  %s" % (result.returncode, shown))
+
+
+def run_capture(cmd: Sequence[str]) -> subprocess.CompletedProcess:
+    """Запустить команду, показать её и вернуть результат (без падения)."""
+    log("  $ " + " ".join(str(part) for part in cmd))
+    return subprocess.run([str(part) for part in cmd],
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+
+def build_via_context(platform_name: str, image: str, inner: str, windows: bool,
+                      container_platform: Optional[str]) -> Path:
+    """Собрать без общих папок: исходники уезжают в контейнер контекстом.
+
+    Нужен, когда Docker не видит каталог проекта (Resources → File sharing).
+    Сборка идёт в ``docker build``, готовый бинарник достаётся через
+    ``docker cp`` — общие папки не участвуют вообще.
+    """
+    build_dir_name = "build-autobuild/" + platform_name
+    binary_rel = build_dir_name + ("/russiano2d.exe" if windows else "/russiano2d")
+
+    dockerfile = BUILD_ROOT / ("Dockerfile.%s" % platform_name)
+    dockerfile.parent.mkdir(parents=True, exist_ok=True)
+    dockerfile.write_text(
+        "FROM %s\nCOPY . /src/\nWORKDIR /src\nRUN bash -lc %s\n"
+        % (image, shlex.quote(inner)),
+        encoding="utf-8",
+    )
+
+    tag = "r2d-artifact:" + platform_name
+    build_cmd = ["docker", "build", "-f", str(dockerfile), "-t", tag]
+    if container_platform:
+        build_cmd += ["--platform", container_platform]
+    build_cmd.append(str(ROOT))
+    run(build_cmd)
+
+    name = "r2d-copy-" + platform_name
+    subprocess.run(["docker", "rm", "-f", name],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    run(["docker", "create", "--name", name, tag])
+
+    binary = ROOT / build_dir_name / ("russiano2d.exe" if windows else "russiano2d")
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    run(["docker", "cp", "%s:/src/%s" % (name, binary_rel), str(binary)])
+    run(["docker", "rm", "-f", name], quiet=True)
+    subprocess.run(["docker", "rmi", "-f", tag],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return binary
 
 
 def host_platform() -> str:
@@ -166,8 +224,11 @@ def build_in_container(platform_name: str, build_type: str, jobs: int,
         jobs=jobs,
     )
 
-    run([
-        "docker", "run", "--rm",
+    docker_args = ["docker", "run", "--rm"]
+    container_platform = CONTAINER_PLATFORM.get(platform_name)
+    if container_platform:
+        docker_args += ["--platform", container_platform]
+    result = run_capture(docker_args + [
         "--user", "%d:%d" % (os.getuid(), os.getgid()),
         "-e", "HOME=/tmp",
         "-v", "%s:/src" % ROOT,
@@ -175,8 +236,21 @@ def build_in_container(platform_name: str, build_type: str, jobs: int,
         image,
         "bash", "-lc", inner,
     ])
+    output = result.stdout.decode("utf-8", "replace")
+    if result.returncode != 0:
+        print(output, flush=True)
 
     binary = ROOT / build_dir_name / ("russiano2d.exe" if windows else "russiano2d")
+
+    if result.returncode != 0:
+        # Самая частая причина на macOS — каталог проекта не расшарен Docker'у.
+        if "mounts denied" in output or "is not shared" in output:
+            log("[%s] общие папки не настроены — собираю через контекст "
+                "(исходники копируются в контейнер)" % platform_name)
+            return build_via_context(platform_name, image, inner, windows,
+                                     container_platform)
+        raise SystemExit("сборка упала с кодом %d" % result.returncode)
+
     if not binary.exists():
         raise SystemExit("не найден бинарник после сборки: %s" % binary)
     return binary
@@ -229,7 +303,7 @@ def main(argv: List[str]) -> int:
     if options.platforms == "auto":
         platforms = [host]
         if docker:
-            platforms.append("linux-x86_64")
+            platforms.append("linux-aarch64" if host == "macos-arm64" else "linux-x86_64")
         if options.with_windows and docker:
             platforms.append("windows-x86_64")
     else:

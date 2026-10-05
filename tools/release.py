@@ -298,30 +298,42 @@ def collect_runtime_files(
     return files
 
 
-#: Вся документация движка вшивается в AGENTS.md пакета: модель, скачавшая одну
-#: папку, не должна ничего искать в интернете.
-AGENTS_DOC_FILES = (
+#: Порядок, в котором документы идут в приложении; остальные — по алфавиту.
+AGENTS_DOC_ORDER = (
     "docs/ARCHITECTURE.md",
     "docs/HIGH_LEVEL_API.md",
     "docs/API.md",
     "docs/AGENT_API.md",
     "docs/BUILD.md",
-    "docs/GAP_ANALYSIS.md",
     "docs/tutorial-first-game.md",
     "docs/tutorial-platformer.md",
     "docs/tutorial-menus.md",
     "docs/demos.md",
+    "docs/GAP_ANALYSIS.md",
 )
+
+
+def agents_doc_files() -> List[str]:
+    """Все документы движка: ``docs/*.md`` и ``docs/highlevel/*.md``.
+
+    Список не задаётся руками: новый файл в docs/ попадёт в AGENTS.md сам,
+    поэтому документ не может разойтись с документацией.
+    """
+    found = [
+        os.path.relpath(path, ROOT)
+        for path in (
+            glob.glob(os.path.join(ROOT, "docs", "*.md"))
+            + glob.glob(os.path.join(ROOT, "docs", "highlevel", "*.md"))
+        )
+    ]
+    preferred = [name for name in AGENTS_DOC_ORDER if name in found]
+    rest = sorted(name for name in found if name not in preferred)
+    return preferred + rest
 
 
 def agents_docs_appendix() -> str:
     """Собрать приложение со всей документацией движка целиком."""
-    files = [name for name in AGENTS_DOC_FILES
-             if os.path.exists(os.path.join(ROOT, name))]
-    files += sorted(
-        "docs/highlevel/" + os.path.basename(path)
-        for path in glob.glob(os.path.join(ROOT, "docs", "highlevel", "*.md"))
-    )
+    files = agents_doc_files()
     if not files:
         return ""
 
@@ -342,6 +354,29 @@ def agents_docs_appendix() -> str:
             % (title, name, text)
         )
     return "".join(toc) + "".join(bodies)
+
+
+def render_agents_doc(platform_name: str, version: str) -> str:
+    """Полный текст AGENTS.md для платформы: шаблон + вся документация."""
+    binary = binary_name(platform_name)
+    run, run_note, build_note = platform_runtime_note(platform_name, binary)
+    values = {
+        "VERSION": version,
+        "PLATFORM": platform_name,
+        "PLATFORM_TITLE": PLATFORM_TITLES.get(platform_name, platform_name),
+        "BINARY": binary,
+        "RUN": run,
+        "RUN_NOTE": run_note,
+        "BUILD_NOTE": build_note,
+    }
+    template_path = os.path.join(TEMPLATE_DIR, "AGENTS-platform.md")
+    if not os.path.exists(template_path):
+        return ""
+    with open(template_path, encoding="utf-8") as handle:
+        text = handle.read()
+    for key, value in values.items():
+        text = re.sub(r"\{\{\s*" + key + r"\s*\}\}", lambda _m, v=value: v, text)
+    return text + agents_docs_appendix()
 
 
 def platform_runtime_note(platform_name: str, binary: str) -> Tuple[str, str, str]:
@@ -398,9 +433,9 @@ def render_platform_docs(target: str, platform_name: str, version: str) -> None:
         for key, value in values.items():
             text = re.sub(r"\{\{\s*" + key + r"\s*\}\}", lambda _m, v=value: v, text)
         if out_name == "AGENTS.md":
-            appendix = agents_docs_appendix()
-            text += appendix
-            log("    документация вшита: %d КБ" % (len(appendix.encode("utf-8")) // 1024))
+            text = render_agents_doc(platform_name, version)
+            if not text:
+                continue
         with open(os.path.join(target, out_name), "w", encoding="utf-8") as handle:
             handle.write(text)
         log("    документ: %s" % out_name)

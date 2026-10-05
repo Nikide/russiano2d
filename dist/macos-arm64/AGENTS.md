@@ -143,11 +143,13 @@ call(cmd="quit")
 * russiano2d — справочник по JavaScript API — `docs/API.md`
 * russiano2d — агентский интерфейс (низкий уровень) — `docs/AGENT_API.md`
 * Сборка игры в один файл — `docs/BUILD.md`
-* Russiano2D — аудит высокоуровневого API `$` и пробелы относительно Godot 4.x (2D) — `docs/GAP_ANALYSIS.md`
 * Моя первая игра: платформер с маскотом — `docs/tutorial-first-game.md`
 * Туториал: первая игра на `$` — `docs/tutorial-platformer.md`
 * Туториал: меню, пауза и смена сцен — `docs/tutorial-menus.md`
 * Russiano2D — демо-проект — `docs/demos.md`
+* Russiano2D — аудит высокоуровневого API `$` и пробелы относительно Godot 4.x (2D) — `docs/GAP_ANALYSIS.md`
+* Выпуск релиза — `docs/RELEASING.md`
+* Раннер GitLab для hub.mos.ru — `docs/RUNNER.md`
 * Контракт модуля подсистемы `$` — `docs/highlevel/_CONTRACT.md`
 * `$.anim` — анимация клипами и машина состояний — `docs/highlevel/anim.md`
 * Аудио-шины и эффекты — `$.audio` — `docs/highlevel/audiobus.md`
@@ -3847,246 +3849,6 @@ russiano2d build ... --no-encrypt                                         # вы
 
 ---
 
-## Russiano2D — аудит высокоуровневого API `$` и пробелы относительно Godot 4.x (2D)
-
-<sub>источник: `docs/GAP_ANALYSIS.md`</sub>
-
-# Russiano2D — аудит высокоуровневого API `$` и пробелы относительно Godot 4.x (2D)
-
-Дата: 2026-10-05. Ориентир: игровой API Godot 4.x, только 2D-часть
-(`Node2D`, `CanvasItem`, `AnimationPlayer`, `TileMapLayer`, `CPUParticles2D`,
-`NavigationRegion2D`, `AudioStreamPlayer2D`, `Control` и сопутствующее).
-
-Документ отвечает на три вопроса:
-
-1. что **уже есть** в `$` и низкоуровневом `engine`;
-2. чего **не хватает** нормальному 2D-движку;
-3. что из этого **реализуется** в рамках текущей работы (и в каком порядке).
-
-Реализованное по итогам документа сразу описывается в
-[HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) и в `docs/highlevel/*.md`.
-
----
-
-## 1. Как устроен API сегодня
-
-| Слой | Файл | Роль |
-|---|---|---|
-| Ядро `$` | `src/highlevel/core.js` | узел, обёртка, селекторы, теги, цвет |
-| Сборка | `src/highlevel/api.js` | `createApi()`, цепочные методы узла, кадровый цикл |
-| Подсистемы | `world/camera/time/input/sound/scene/ui/store/debug/window/render/tween/agent.js` | пространства имён `$.xxx` |
-| Низкий уровень | `src/script.c` → `engine.*` | текстуры, батчинг, Box2D, RmlUi, BSP, свет, файлы |
-| Ядро C | `src/render.c`, `src/physics.c`, `src/audio.c`, `src/light.cpp`, `src/bsp.c` | SDL_GPU, Box2D, SDL3_mixer, видимость, BSP |
-
-Ключевые свойства текущего API, которые важно сохранить:
-
-* **HTML/CSS-подобный DSL**: создание `$('<player>', {...})`, поиск `$('#hero')`,
-  неявная итерация по коллекции, цепочки, `Promise` для анимаций.
-* **Пакетный кадр**: игра не вызывает отрисовку на спрайт, `$.gfx` собирает
-  массивы и отдаёт их одним `engine.submitSprites`.
-* **Физика целиком в C**: JS работает с телами по числовому id.
-* **Всё возвращает обёртку** — `$.fn` открыт для расширения игры.
-
-Ниже «есть» означает «работает и документировано», «частично» — работает с
-оговорками, «нет» — отсутствует.
-
----
-
-## 2. Сводная таблица пробелов
-
-Приоритет: **P1** — без этого движок нельзя назвать полноценным 2D-движком,
-**P2** — сильно ожидаемо в жанре, **P3** — нишевое.
-
-| Область Godot 2D | Аналог в Godot | Состояние в `$` | Чего не хватает | Приор. |
-|---|---|---|---|---|
-| Трансформ, иерархия | `Node2D` | есть | `z_as_relative`, наследование `visible`/`modulate` родителем | P2 |
-| Спрайты | `Sprite2D`, `AnimatedSprite2D` | есть | `region` есть; нет `NinePatchRect`, атласа-импорта | P2 |
-| **Анимация** | `AnimationPlayer`, `AnimationTree`, `AnimationMixer` | **есть** ([anim.md](highlevel/anim.md)) | клипы, дорожки свойств, `one-shot`/`loop`/`ping-pong`, события в кадрах, машина состояний и переходы | **P1** |
-| **Тайлы** | `TileMapLayer`, `TileSet`, террейны | **есть** ([tilemap.md](highlevel/tilemap.md)) | сетка, слои, тайлсет из текстуры, автотайл по битовой маске, коллизии, `y-sort` внутри слоя | **P1** |
-| **Частицы** | `CPUParticles2D`, `GPUParticles2D` | **есть** ([particles.md](highlevel/particles.md)) | эмиттер, `one-shot`/`burst`, гравитация, разброс, кривые цвета/размера, `local`/`global` | **P1** |
-| **Навигация** | `NavigationRegion2D`, `NavigationAgent2D`, `AStarGrid2D` | **есть** ([nav.md](highlevel/nav.md)) | сетка/полигон, A*, сглаживание пути, обход препятствий | **P1** |
-| **Сцены и prefab** | `PackedScene`, наследование сцен, `.tres` | **есть** ([prefab.md](highlevel/prefab.md)) | `$.scene` — это машина смены сцен, а не сериализация узлов; нет инстанцирования из данных, сохранения сцены, наследования | **P1** |
-| **Аудио** | `AudioStreamPlayer2D`, шины `AudioServer`, эффекты | **есть** ([audiobus.md](highlevel/audiobus.md)) | мастер/`sfx`/`music` + панорама есть; нет шин, эффектов (reverb/echo/фильтр), приоритетов голосов, позиционного затухания | **P1** |
-| **Слои и parallax** | `CanvasLayer`, `ParallaxBackground`, `CanvasModulate` | **есть** ([layers.md](highlevel/layers.md)) | один фон с `parallax` есть; нет дополнительных канвас-слоёв, `CanvasModulate`, `z_index`-групп | **P1** |
-| **Шейдеры** | `canvas_item` шейдер, `ShaderMaterial`, `ShaderParam` | **частично** (`.shader()` — заглушка; blend-режимы `alpha`/`add`/`multiply`/`none` есть) | пользовательских шейдеров нет: конвейеры фиксированные | P2 |
-| **UI-контролы** | `Control`: контейнеры, `ScrollContainer`, `LineEdit`, `CheckBox`, `OptionButton`, `Slider`, фокус | **есть** ([widgets.md](highlevel/widgets.md)) | есть `panel/label/button/bar/image`; нет контейнеров, скролла, фокуса, ввода текста, чекбоксов, слайдеров, диалогов | **P1** |
-| Физика: формы | `CollisionShape2D` | **есть** | прямоугольник, настоящий круг, капсула, полигон, `one-way` | — |
-| Физика: соединения | `PinJoint2D`, `DampedSpringJoint2D`, `GrooveJoint2D` | **есть** | `revolute`, `distance`, `weld` (+ лимиты и мотор) | — |
-| Физика: области | `Area2D` | **есть** | зоны `<trigger>` (`enter`/`leave`), сенсоры и события контакта `collide`/`separate`/`hit` | — |
-| Физика: фильтры | collision layers/masks | частично | `layerBits`/`mask` есть у тел; нет именованных слоёв и матрицы | P3 |
-| Запросы | `RayCast2D`, `ShapeCast2D` | частично | луч и точечный/боксовый запрос есть; нет фигурного свипа | P2 |
-| Свет | `PointLight2D`, тени | есть | полигоны видимости, `<light>` | — |
-| Порядок отрисовки | `YSort`, `z_index` | есть | `layer`, `depth`, `$.world.sort('y')`, BSP | — |
-| Таймеры | `Timer`, `SceneTreeTimer` | есть | `$.time.after/every`, твины | — |
-| Сигналы, группы | `signal`, группы | есть | `on/emit`, классы, теги, селекторы | — |
-| Твины | `Tween` | **есть** | Promise-API + `Tween` в стиле Godot: `property/chain/loops/trans × ease` | — |
-| Ввод | `InputMap`, действия, ребинд | **есть** | `deadzone`, `rebind`, `saveBindings`/`loadBindings`, `actions`/`describe` | — |
-| Кривые/интерполяция | `Curve`, `Gradient` | нет | нужны для частиц и анимации | P2 |
-| Локализация | `TranslationServer` | **есть** | `$.i18n` + `$.tr()`, плюрализация, автоподстановка в узлы | — |
-| Сеть | `MultiplayerAPI` | нет | вне текущей области | P3 |
-| Скелет/IK | `Skeleton2D` | нет | вне текущей области | P3 |
-| Отладка | удалённое дерево сцены | частично | `$.debug`, оверлей ImGui, агентский снапшот, `$.debug.counters()` | P2 |
-
----
-
-## 3. Подробно по P1-областям
-
-### 3.1. Анимация и состояния — нет
-
-Есть только покадровая анимация спрайт-листов (`.frames()`, `.frame()`,
-`.animate()`) и твины свойств (`.tween()`, `.tweenTo()`, `$.sequence()`).
-Этого не хватает для: появления/смерти, атаки, дверей, UI-переходов.
-
-Нужно: `AnimationPlayer`-аналог с клипами (несколько дорожек, у каждой своя
-цель и кривая), режимы `once`/`loop`/`ping-pong`, скорость, события в
-процентах клипа, машина состояний с переходами по условию и событиями
-`entered`/`exited`.
-
-### 3.2. TileMap — нет
-
-Тег `tilemap` уже объявлен в `core.js` (`TAGS.tilemap`), но рендера нет.
-Нужно: размер тайла, тайлсет из текстуры (в том числе сеткой), несколько
-слоёв, автотайл по 4/8-битной маске соседей, статические тела для
-непроходимых тайлов, `y-sort` внутри слоя, запись/чтение карты как данных.
-
-### 3.3. Частицы — нет
-
-Нужно: CPU-эмиттер на существующем батче `$.gfx`, время жизни, скорость и
-разброс, гравитация, вращение, кривые размера/цвета/прозрачности, `one-shot`
-и `burst`, `local`/`global` режимы, лимит частиц.
-
-### 3.4. Навигация и поиск пути — нет
-
-Есть только `$.world.raycast`. Нужно: A* по сетке (в том числе построенной по
-препятствиям), сглаживание пути, `NavigationAgent`-аналог с движением к цели,
-перестроение при изменении мира.
-
-### 3.5. Prefab и сериализация сцен — частично
-
-`$.scene.load/push/pop/transition` управляет сменой сцен, но не умеет
-сериализовать дерево узлов. Нужно: сохранение узла/поддерева в данные
-(JSON-совместимые), инстанцирование из данных, наследование prefab с
-переопределением свойств, сохранение/загрузка сцены целиком через `$.store`.
-
-### 3.6. Аудио: шины и эффекты — частично
-
-Есть мастер-громкость, `sfx`/`music`, панорама, петли, затухания. Нет
-именованных шин (например `master → music → ui`), эффектов на шине и
-маршрутизации звука в шину. Часть реализуется в JS поверх существующих
-`volume/pan`, эффекты требуют C (`MIX_SetTrackEffects`).
-
-### 3.7. Слои, parallax, шейдеры — частично
-
-Есть один фон с коэффициентом `parallax`. Нет дополнительных канвас-слоёв
-(UI поверх мира, оверлеи, мини-карта), `CanvasModulate` и режимов смешивания.
-Полноценные пользовательские GPU-шейдеры упираются в один общий пайплайн
-`render.c`; в отчёте они остаются честно помеченными как незакрытые, а
-слои/parallax/затемнение реализуются.
-
-### 3.8. UI-контролы — частично
-
-Есть `ui.panel/label/button/bar/image` в координатах окна и RmlUi-документы
-через `$.ui`. Нет контейнеров (колонка/строка/сетка), скролла, фокуса и
-навигации с клавиатуры, `checkbox`/`slider`/`input`/`dialog`.
-
----
-
-## 4. Что сделано в этой итерации
-
-| № | Подсистема | Файлы | Документация |
-|---|---|---|---|
-| 1 | Анимация и состояния | `src/highlevel/anim.js` | [anim.md](highlevel/anim.md) |
-| 2 | TileMap | `src/highlevel/tilemap.js` | [tilemap.md](highlevel/tilemap.md) |
-| 3 | Частицы | `src/highlevel/particles.js` | [particles.md](highlevel/particles.md) |
-| 4 | Навигация и A* | `src/highlevel/nav.js` | [nav.md](highlevel/nav.md) |
-| 5 | Prefab и сериализация | `src/highlevel/prefab.js` | [prefab.md](highlevel/prefab.md) |
-| 6 | Аудио-шины и эффекты | `src/highlevel/audiobus.js`, `src/audio.c/h`, `src/script.c` | [audiobus.md](highlevel/audiobus.md) |
-| 7 | Слои, parallax, затемнение | `src/highlevel/layers.js` | [layers.md](highlevel/layers.md) |
-| 8 | UI-контролы | `src/highlevel/widgets.js` | [widgets.md](highlevel/widgets.md) |
-
-Точки расширения, добавленные в существующие файлы (единственный писатель —
-интегратор, чтобы модули не конфликтовали):
-
-* `src/highlevel/render.js` — реестр `registerNodeRenderer(tag, fn)`,
-  `registerUINodeRenderer` и публичный батч `$.gfx.push.*` для новых тегов;
-* `src/highlevel/api.js` — импорт и установка восьми модулей, вызов
-  tick-функций в кадровом цикле;
-* `src/highlevel/input.js` — `$.input.text()` поверх нового `engine.textInput()`;
-* `src/app.c/h`, `src/agent.c`, `src/script.c` — текстовый ввод
-  (`SDL_EVENT_TEXT_INPUT` → `engine.textInput()`, агентская команда `text`);
-* `src/audio.c/h`, `src/audio_stub.c`, `src/script.c` — громкость и панорама
-  живого канала, DSP-эффекты `lowpass`/`echo` через `MIX_SetTrackRawCallback`;
-* `src/script.c` — биндинги `engine.audio.setChannelVolume`, `setChannelPan`,
-  `setChannelEffect` и `engine.textInput`.
-
-### Что изменилось по сравнению с исходным планом
-
-* Пользовательские GPU-шейдеры не реализованы: конвейер `render.c` один, а
-  честная поддержка требует SPIR-V-компиляции в рантайме. `.shader()` и
-  `.shader()` по-прежнему заглушка с предупреждением; вместо пользовательских
-  шейдеров появились слои, параллакс, полноэкранный `modulate`/`fade` и
-  blend-режимы (`$.blend`, `.blend`).
-* `agentRadius` у навигационной сетки добавлен как обязательная страховка:
-  без запаса на габарит агента A* ведёт путь вплотную к стене и тело
-  застревает (это выявил интеграционный тест).
-
-## 5. Вторая итерация: починка врущего и добивание P1
-
-Первая итерация закрыла восемь крупных дыр, но проверка показала места, где
-документация обещала больше, чем было в коде, и оставшиеся P2-пробелы.
-
-### Починено (документация врала)
-
-| Что было заявлено | Что было на самом деле | Как исправлено |
-|---|---|---|
-| `<trigger>` шлёт `enter`/`leave` | Тег был обычным узлом, `trigger()` — алиасом `emit` | Подсистема [triggers.md](highlevel/triggers.md): зоны с диффом пересечений |
-| `.overlaps(sel, cb)` | Подписка на событие `'tick'`, которое никто не шлёт | `watchOverlap` из `triggers.js`, покадровый наблюдатель |
-| `<circle>` — круг | Тело было `b2MakeBox` | Настоящая форма `circle` (`b2CreateCircleShape`) |
-
-Найден и закрыт ещё один баг: пересоздание тела (`.size()`, `.collision()`,
-`.appendTo()`) теряло скорость — цепочка `.velocity(...).appendTo(...)`
-обнуляла разгон.
-
-### Добавлено во второй итерации
-
-| Что | Где | Документация |
-|---|---|---|
-| Формы тел: круг, капсула, полигон; one-way; события `collide`/`separate`/`hit`; суставы `revolute`/`distance`/`weld` | `src/physics.c/h`, `src/script.c` | [API.md](API.md), раздел 8 |
-| `Tween` в стиле Godot: `property`, `chain`, `loops`, `trans × ease`, `finished` | `src/highlevel/tween.js` | [tween.md](highlevel/tween.md) |
-| Зоны `enter`/`leave` | `src/highlevel/triggers.js` | [triggers.md](highlevel/triggers.md) |
-| Локализация `$.i18n` + `$.tr()` | `src/highlevel/i18n.js` | [i18n.md](highlevel/i18n.md) |
-| Пул объектов и счётчики отладки | `src/highlevel/pool.js`, `debug.js` | [pool.md](highlevel/pool.md) |
-| Ввод: deadzone, ребинд с сохранением | `src/highlevel/input.js` | [i18n.md](highlevel/i18n.md) (раздел про ввод) |
-| UI: якоря, проценты, пресеты, темы | `src/highlevel/widgets.js` | [widgets.md](highlevel/widgets.md) |
-| TileMap: Y-sort с сущностями и террейны | `src/highlevel/tilemap.js` | [tilemap.md](highlevel/tilemap.md) |
-| Релизная обвязка: CI на Windows и Linux, changelog, release-скрипт, двойной хостинг | `.gitlab-ci.yml`, `tools/release.py` | [RELEASING.md](RELEASING.md) |
-| Мини-гайд «Моя первая игра» | `docs/tutorial-first-game.md` | — |
-
-## 6. Третья итерация: тяжёлые куски и сервисы
-
-| Что | Где | Документация |
-|---|---|---|
-| Blend-режимы (`alpha`/`add`/`multiply`/`none`) — узел и кадр | `src/render.c`, `src/highlevel/render.js`, `viewport.js` | [render.md](highlevel/render.md) |
-| HTTP-запросы из игры: `$.http.get/post/json/download` | `src/http.c`, `src/highlevel/http.js` | [http.md](highlevel/http.md) |
-| Навигационный меш (прямоугольная декомпозиция + воронка) | `src/highlevel/nav.js` | [nav.md](highlevel/nav.md), §4 |
-| Тест-страж гайда: листинг из документа запускается в движке | `tests/agent/highlevel_guide_test.py` | — |
-
-Render target (рисование в offscreen-текстуру) остаётся заглушкой: `render pass`
-открывается в `main.c`, и честная поддержка требует отдельного прохода и списка
-целей. В [render.md](highlevel/render.md) описано, что именно перестроить —
-API при вызове бросает понятную ошибку, а не рисует неправильно.
-
-## 7. Что остаётся в бэклоге
-
-Пользовательские GPU-шейдеры (нужна компиляция SPIR-V в рантайме),
-`NinePatchRect`, сетевая игра (HTTP уже есть, но это не мультиплеер),
-скелет/IK, кривые и градиенты как отдельные ресурсы, render target для
-мини-карт и порталов. Они не входят в текущие итерации и перечислены здесь, чтобы не
-потерять.
-
-
----
-
 ## Моя первая игра: платформер с маскотом
 
 <sub>источник: `docs/tutorial-first-game.md`</sub>
@@ -5483,6 +5245,841 @@ python3 tests/agent/demos_test.py light        # только выбранные
 
 Тест открывает каждую сцену, шагает кадры, проверяет журнал на ошибки
 и сохраняет скриншот в `build/test_demo_<имя>.png`.
+
+
+---
+
+## Russiano2D — аудит высокоуровневого API `$` и пробелы относительно Godot 4.x (2D)
+
+<sub>источник: `docs/GAP_ANALYSIS.md`</sub>
+
+# Russiano2D — аудит высокоуровневого API `$` и пробелы относительно Godot 4.x (2D)
+
+Дата: 2026-10-05. Ориентир: игровой API Godot 4.x, только 2D-часть
+(`Node2D`, `CanvasItem`, `AnimationPlayer`, `TileMapLayer`, `CPUParticles2D`,
+`NavigationRegion2D`, `AudioStreamPlayer2D`, `Control` и сопутствующее).
+
+Документ отвечает на три вопроса:
+
+1. что **уже есть** в `$` и низкоуровневом `engine`;
+2. чего **не хватает** нормальному 2D-движку;
+3. что из этого **реализуется** в рамках текущей работы (и в каком порядке).
+
+Реализованное по итогам документа сразу описывается в
+[HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) и в `docs/highlevel/*.md`.
+
+---
+
+## 1. Как устроен API сегодня
+
+| Слой | Файл | Роль |
+|---|---|---|
+| Ядро `$` | `src/highlevel/core.js` | узел, обёртка, селекторы, теги, цвет |
+| Сборка | `src/highlevel/api.js` | `createApi()`, цепочные методы узла, кадровый цикл |
+| Подсистемы | `world/camera/time/input/sound/scene/ui/store/debug/window/render/tween/agent.js` | пространства имён `$.xxx` |
+| Низкий уровень | `src/script.c` → `engine.*` | текстуры, батчинг, Box2D, RmlUi, BSP, свет, файлы |
+| Ядро C | `src/render.c`, `src/physics.c`, `src/audio.c`, `src/light.cpp`, `src/bsp.c` | SDL_GPU, Box2D, SDL3_mixer, видимость, BSP |
+
+Ключевые свойства текущего API, которые важно сохранить:
+
+* **HTML/CSS-подобный DSL**: создание `$('<player>', {...})`, поиск `$('#hero')`,
+  неявная итерация по коллекции, цепочки, `Promise` для анимаций.
+* **Пакетный кадр**: игра не вызывает отрисовку на спрайт, `$.gfx` собирает
+  массивы и отдаёт их одним `engine.submitSprites`.
+* **Физика целиком в C**: JS работает с телами по числовому id.
+* **Всё возвращает обёртку** — `$.fn` открыт для расширения игры.
+
+Ниже «есть» означает «работает и документировано», «частично» — работает с
+оговорками, «нет» — отсутствует.
+
+---
+
+## 2. Сводная таблица пробелов
+
+Приоритет: **P1** — без этого движок нельзя назвать полноценным 2D-движком,
+**P2** — сильно ожидаемо в жанре, **P3** — нишевое.
+
+| Область Godot 2D | Аналог в Godot | Состояние в `$` | Чего не хватает | Приор. |
+|---|---|---|---|---|
+| Трансформ, иерархия | `Node2D` | есть | `z_as_relative`, наследование `visible`/`modulate` родителем | P2 |
+| Спрайты | `Sprite2D`, `AnimatedSprite2D` | есть | `region` есть; нет `NinePatchRect`, атласа-импорта | P2 |
+| **Анимация** | `AnimationPlayer`, `AnimationTree`, `AnimationMixer` | **есть** ([anim.md](highlevel/anim.md)) | клипы, дорожки свойств, `one-shot`/`loop`/`ping-pong`, события в кадрах, машина состояний и переходы | **P1** |
+| **Тайлы** | `TileMapLayer`, `TileSet`, террейны | **есть** ([tilemap.md](highlevel/tilemap.md)) | сетка, слои, тайлсет из текстуры, автотайл по битовой маске, коллизии, `y-sort` внутри слоя | **P1** |
+| **Частицы** | `CPUParticles2D`, `GPUParticles2D` | **есть** ([particles.md](highlevel/particles.md)) | эмиттер, `one-shot`/`burst`, гравитация, разброс, кривые цвета/размера, `local`/`global` | **P1** |
+| **Навигация** | `NavigationRegion2D`, `NavigationAgent2D`, `AStarGrid2D` | **есть** ([nav.md](highlevel/nav.md)) | сетка/полигон, A*, сглаживание пути, обход препятствий | **P1** |
+| **Сцены и prefab** | `PackedScene`, наследование сцен, `.tres` | **есть** ([prefab.md](highlevel/prefab.md)) | `$.scene` — это машина смены сцен, а не сериализация узлов; нет инстанцирования из данных, сохранения сцены, наследования | **P1** |
+| **Аудио** | `AudioStreamPlayer2D`, шины `AudioServer`, эффекты | **есть** ([audiobus.md](highlevel/audiobus.md)) | мастер/`sfx`/`music` + панорама есть; нет шин, эффектов (reverb/echo/фильтр), приоритетов голосов, позиционного затухания | **P1** |
+| **Слои и parallax** | `CanvasLayer`, `ParallaxBackground`, `CanvasModulate` | **есть** ([layers.md](highlevel/layers.md)) | один фон с `parallax` есть; нет дополнительных канвас-слоёв, `CanvasModulate`, `z_index`-групп | **P1** |
+| **Шейдеры** | `canvas_item` шейдер, `ShaderMaterial`, `ShaderParam` | **частично** (`.shader()` — заглушка; blend-режимы `alpha`/`add`/`multiply`/`none` есть) | пользовательских шейдеров нет: конвейеры фиксированные | P2 |
+| **UI-контролы** | `Control`: контейнеры, `ScrollContainer`, `LineEdit`, `CheckBox`, `OptionButton`, `Slider`, фокус | **есть** ([widgets.md](highlevel/widgets.md)) | есть `panel/label/button/bar/image`; нет контейнеров, скролла, фокуса, ввода текста, чекбоксов, слайдеров, диалогов | **P1** |
+| Физика: формы | `CollisionShape2D` | **есть** | прямоугольник, настоящий круг, капсула, полигон, `one-way` | — |
+| Физика: соединения | `PinJoint2D`, `DampedSpringJoint2D`, `GrooveJoint2D` | **есть** | `revolute`, `distance`, `weld` (+ лимиты и мотор) | — |
+| Физика: области | `Area2D` | **есть** | зоны `<trigger>` (`enter`/`leave`), сенсоры и события контакта `collide`/`separate`/`hit` | — |
+| Физика: фильтры | collision layers/masks | частично | `layerBits`/`mask` есть у тел; нет именованных слоёв и матрицы | P3 |
+| Запросы | `RayCast2D`, `ShapeCast2D` | частично | луч и точечный/боксовый запрос есть; нет фигурного свипа | P2 |
+| Свет | `PointLight2D`, тени | есть | полигоны видимости, `<light>` | — |
+| Порядок отрисовки | `YSort`, `z_index` | есть | `layer`, `depth`, `$.world.sort('y')`, BSP | — |
+| Таймеры | `Timer`, `SceneTreeTimer` | есть | `$.time.after/every`, твины | — |
+| Сигналы, группы | `signal`, группы | есть | `on/emit`, классы, теги, селекторы | — |
+| Твины | `Tween` | **есть** | Promise-API + `Tween` в стиле Godot: `property/chain/loops/trans × ease` | — |
+| Ввод | `InputMap`, действия, ребинд | **есть** | `deadzone`, `rebind`, `saveBindings`/`loadBindings`, `actions`/`describe` | — |
+| Кривые/интерполяция | `Curve`, `Gradient` | нет | нужны для частиц и анимации | P2 |
+| Локализация | `TranslationServer` | **есть** | `$.i18n` + `$.tr()`, плюрализация, автоподстановка в узлы | — |
+| Сеть | `MultiplayerAPI` | нет | вне текущей области | P3 |
+| Скелет/IK | `Skeleton2D` | нет | вне текущей области | P3 |
+| Отладка | удалённое дерево сцены | частично | `$.debug`, оверлей ImGui, агентский снапшот, `$.debug.counters()` | P2 |
+
+---
+
+## 3. Подробно по P1-областям
+
+### 3.1. Анимация и состояния — нет
+
+Есть только покадровая анимация спрайт-листов (`.frames()`, `.frame()`,
+`.animate()`) и твины свойств (`.tween()`, `.tweenTo()`, `$.sequence()`).
+Этого не хватает для: появления/смерти, атаки, дверей, UI-переходов.
+
+Нужно: `AnimationPlayer`-аналог с клипами (несколько дорожек, у каждой своя
+цель и кривая), режимы `once`/`loop`/`ping-pong`, скорость, события в
+процентах клипа, машина состояний с переходами по условию и событиями
+`entered`/`exited`.
+
+### 3.2. TileMap — нет
+
+Тег `tilemap` уже объявлен в `core.js` (`TAGS.tilemap`), но рендера нет.
+Нужно: размер тайла, тайлсет из текстуры (в том числе сеткой), несколько
+слоёв, автотайл по 4/8-битной маске соседей, статические тела для
+непроходимых тайлов, `y-sort` внутри слоя, запись/чтение карты как данных.
+
+### 3.3. Частицы — нет
+
+Нужно: CPU-эмиттер на существующем батче `$.gfx`, время жизни, скорость и
+разброс, гравитация, вращение, кривые размера/цвета/прозрачности, `one-shot`
+и `burst`, `local`/`global` режимы, лимит частиц.
+
+### 3.4. Навигация и поиск пути — нет
+
+Есть только `$.world.raycast`. Нужно: A* по сетке (в том числе построенной по
+препятствиям), сглаживание пути, `NavigationAgent`-аналог с движением к цели,
+перестроение при изменении мира.
+
+### 3.5. Prefab и сериализация сцен — частично
+
+`$.scene.load/push/pop/transition` управляет сменой сцен, но не умеет
+сериализовать дерево узлов. Нужно: сохранение узла/поддерева в данные
+(JSON-совместимые), инстанцирование из данных, наследование prefab с
+переопределением свойств, сохранение/загрузка сцены целиком через `$.store`.
+
+### 3.6. Аудио: шины и эффекты — частично
+
+Есть мастер-громкость, `sfx`/`music`, панорама, петли, затухания. Нет
+именованных шин (например `master → music → ui`), эффектов на шине и
+маршрутизации звука в шину. Часть реализуется в JS поверх существующих
+`volume/pan`, эффекты требуют C (`MIX_SetTrackEffects`).
+
+### 3.7. Слои, parallax, шейдеры — частично
+
+Есть один фон с коэффициентом `parallax`. Нет дополнительных канвас-слоёв
+(UI поверх мира, оверлеи, мини-карта), `CanvasModulate` и режимов смешивания.
+Полноценные пользовательские GPU-шейдеры упираются в один общий пайплайн
+`render.c`; в отчёте они остаются честно помеченными как незакрытые, а
+слои/parallax/затемнение реализуются.
+
+### 3.8. UI-контролы — частично
+
+Есть `ui.panel/label/button/bar/image` в координатах окна и RmlUi-документы
+через `$.ui`. Нет контейнеров (колонка/строка/сетка), скролла, фокуса и
+навигации с клавиатуры, `checkbox`/`slider`/`input`/`dialog`.
+
+---
+
+## 4. Что сделано в этой итерации
+
+| № | Подсистема | Файлы | Документация |
+|---|---|---|---|
+| 1 | Анимация и состояния | `src/highlevel/anim.js` | [anim.md](highlevel/anim.md) |
+| 2 | TileMap | `src/highlevel/tilemap.js` | [tilemap.md](highlevel/tilemap.md) |
+| 3 | Частицы | `src/highlevel/particles.js` | [particles.md](highlevel/particles.md) |
+| 4 | Навигация и A* | `src/highlevel/nav.js` | [nav.md](highlevel/nav.md) |
+| 5 | Prefab и сериализация | `src/highlevel/prefab.js` | [prefab.md](highlevel/prefab.md) |
+| 6 | Аудио-шины и эффекты | `src/highlevel/audiobus.js`, `src/audio.c/h`, `src/script.c` | [audiobus.md](highlevel/audiobus.md) |
+| 7 | Слои, parallax, затемнение | `src/highlevel/layers.js` | [layers.md](highlevel/layers.md) |
+| 8 | UI-контролы | `src/highlevel/widgets.js` | [widgets.md](highlevel/widgets.md) |
+
+Точки расширения, добавленные в существующие файлы (единственный писатель —
+интегратор, чтобы модули не конфликтовали):
+
+* `src/highlevel/render.js` — реестр `registerNodeRenderer(tag, fn)`,
+  `registerUINodeRenderer` и публичный батч `$.gfx.push.*` для новых тегов;
+* `src/highlevel/api.js` — импорт и установка восьми модулей, вызов
+  tick-функций в кадровом цикле;
+* `src/highlevel/input.js` — `$.input.text()` поверх нового `engine.textInput()`;
+* `src/app.c/h`, `src/agent.c`, `src/script.c` — текстовый ввод
+  (`SDL_EVENT_TEXT_INPUT` → `engine.textInput()`, агентская команда `text`);
+* `src/audio.c/h`, `src/audio_stub.c`, `src/script.c` — громкость и панорама
+  живого канала, DSP-эффекты `lowpass`/`echo` через `MIX_SetTrackRawCallback`;
+* `src/script.c` — биндинги `engine.audio.setChannelVolume`, `setChannelPan`,
+  `setChannelEffect` и `engine.textInput`.
+
+### Что изменилось по сравнению с исходным планом
+
+* Пользовательские GPU-шейдеры не реализованы: конвейер `render.c` один, а
+  честная поддержка требует SPIR-V-компиляции в рантайме. `.shader()` и
+  `.shader()` по-прежнему заглушка с предупреждением; вместо пользовательских
+  шейдеров появились слои, параллакс, полноэкранный `modulate`/`fade` и
+  blend-режимы (`$.blend`, `.blend`).
+* `agentRadius` у навигационной сетки добавлен как обязательная страховка:
+  без запаса на габарит агента A* ведёт путь вплотную к стене и тело
+  застревает (это выявил интеграционный тест).
+
+## 5. Вторая итерация: починка врущего и добивание P1
+
+Первая итерация закрыла восемь крупных дыр, но проверка показала места, где
+документация обещала больше, чем было в коде, и оставшиеся P2-пробелы.
+
+### Починено (документация врала)
+
+| Что было заявлено | Что было на самом деле | Как исправлено |
+|---|---|---|
+| `<trigger>` шлёт `enter`/`leave` | Тег был обычным узлом, `trigger()` — алиасом `emit` | Подсистема [triggers.md](highlevel/triggers.md): зоны с диффом пересечений |
+| `.overlaps(sel, cb)` | Подписка на событие `'tick'`, которое никто не шлёт | `watchOverlap` из `triggers.js`, покадровый наблюдатель |
+| `<circle>` — круг | Тело было `b2MakeBox` | Настоящая форма `circle` (`b2CreateCircleShape`) |
+
+Найден и закрыт ещё один баг: пересоздание тела (`.size()`, `.collision()`,
+`.appendTo()`) теряло скорость — цепочка `.velocity(...).appendTo(...)`
+обнуляла разгон.
+
+### Добавлено во второй итерации
+
+| Что | Где | Документация |
+|---|---|---|
+| Формы тел: круг, капсула, полигон; one-way; события `collide`/`separate`/`hit`; суставы `revolute`/`distance`/`weld` | `src/physics.c/h`, `src/script.c` | [API.md](API.md), раздел 8 |
+| `Tween` в стиле Godot: `property`, `chain`, `loops`, `trans × ease`, `finished` | `src/highlevel/tween.js` | [tween.md](highlevel/tween.md) |
+| Зоны `enter`/`leave` | `src/highlevel/triggers.js` | [triggers.md](highlevel/triggers.md) |
+| Локализация `$.i18n` + `$.tr()` | `src/highlevel/i18n.js` | [i18n.md](highlevel/i18n.md) |
+| Пул объектов и счётчики отладки | `src/highlevel/pool.js`, `debug.js` | [pool.md](highlevel/pool.md) |
+| Ввод: deadzone, ребинд с сохранением | `src/highlevel/input.js` | [i18n.md](highlevel/i18n.md) (раздел про ввод) |
+| UI: якоря, проценты, пресеты, темы | `src/highlevel/widgets.js` | [widgets.md](highlevel/widgets.md) |
+| TileMap: Y-sort с сущностями и террейны | `src/highlevel/tilemap.js` | [tilemap.md](highlevel/tilemap.md) |
+| Релизная обвязка: CI на Windows и Linux, changelog, release-скрипт, двойной хостинг | `.gitlab-ci.yml`, `tools/release.py` | [RELEASING.md](RELEASING.md) |
+| Мини-гайд «Моя первая игра» | `docs/tutorial-first-game.md` | — |
+
+## 6. Третья итерация: тяжёлые куски и сервисы
+
+| Что | Где | Документация |
+|---|---|---|
+| Blend-режимы (`alpha`/`add`/`multiply`/`none`) — узел и кадр | `src/render.c`, `src/highlevel/render.js`, `viewport.js` | [render.md](highlevel/render.md) |
+| HTTP-запросы из игры: `$.http.get/post/json/download` | `src/http.c`, `src/highlevel/http.js` | [http.md](highlevel/http.md) |
+| Навигационный меш (прямоугольная декомпозиция + воронка) | `src/highlevel/nav.js` | [nav.md](highlevel/nav.md), §4 |
+| Тест-страж гайда: листинг из документа запускается в движке | `tests/agent/highlevel_guide_test.py` | — |
+
+Render target (рисование в offscreen-текстуру) остаётся заглушкой: `render pass`
+открывается в `main.c`, и честная поддержка требует отдельного прохода и списка
+целей. В [render.md](highlevel/render.md) описано, что именно перестроить —
+API при вызове бросает понятную ошибку, а не рисует неправильно.
+
+## 7. Что остаётся в бэклоге
+
+Пользовательские GPU-шейдеры (нужна компиляция SPIR-V в рантайме),
+`NinePatchRect`, сетевая игра (HTTP уже есть, но это не мультиплеер),
+скелет/IK, кривые и градиенты как отдельные ресурсы, render target для
+мини-карт и порталов. Они не входят в текущие итерации и перечислены здесь, чтобы не
+потерять.
+
+
+---
+
+## Выпуск релиза
+
+<sub>источник: `docs/RELEASING.md`</sub>
+
+# Выпуск релиза
+
+Как выпускать Russiano2D: что проверить, как собрать, упаковать, подписать
+контрольными суммами и опубликовать сразу в **двух** местах.
+
+Два хоста — две роли:
+
+Проект живёт на одном хосте:
+
+| Хост | Remote | Доступ | Роль |
+|---|---|---|---|
+| **hub.mos.ru** | `origin` | **публичный** | единственный хост: исходники, GitLab CI/CD, релизы и артефакты |
+
+* ссылки в README, ссылки в документации и бейджи ведут только на hub.mos.ru;
+* релиз выпускается там же: GitLab Release + архивы Linux и Windows + SHA256SUMS;
+* резервная копия — это клоны и бэкапы самого hub.mos.ru, а не второй хостинг;
+* весь CI — один GitLab-пайплайн, `.gitlab-ci.yml`.
+
+---
+
+## 0. Блокеры публичного релиза
+
+Пока не закрыты эти пункты, публичный релиз выпускать нельзя.
+
+### 0.1. Лицензия выбрана (закрыто)
+
+В корне лежит `LICENSE` — авторская лицензия: использовать, менять,
+распространять и продавать свободно, без отчислений; если выпустишь игру на
+движке — скажи спасибо автору (необязательно). Уведомления зависимостей
+сохраняются отдельно, в `THIRD_PARTY_NOTICES.md`.
+
+`tools/release.py` в настоящем (не `--dry-run`) режиме требует наличия
+`LICENSE` — теперь файл есть, блокер снят. Карта вариантов осталась в
+разделе 3 как справка: если владелец решит сменить лицензию на стандартную
+(MIT, Apache-2.0 и т. п.), порядок действий там же.
+
+### 0.2. Права на демо-ассеты не подтверждены
+
+`demos/assets/art/**` собраны `tools/make_demo_assets.py` из исходников,
+лежащих **вне** репозитория (`R2D_SOURCE_ART`), а происхождение
+`assets/audio/**` в репозитории не зафиксировано. До релиза владелец должен
+подтвердить права либо исключить эти файлы из поставки. Подробнее —
+`THIRD_PARTY_NOTICES.md`, раздел «Ассеты».
+
+### 0.3. Путь до репозитория уточнён (закрыто)
+
+Проект живёт по адресу <https://hub.mos.ru/dem4ev48/russiano2d>, remote настроен:
+
+```bash
+git remote -v
+# origin  git@hub.mos.ru:dem4ev48/russiano2d.git
+```
+
+---
+
+## 1. Версия
+
+Версия живёт в одном месте — `project(... VERSION x.y.z ...)` в
+`CMakeLists.txt`. Скрипт релиза читает и меняет именно её.
+
+Схема — семантическое версионирование:
+
+| Что изменилось | Какую цифру поднимать |
+|---|---|
+| ломающее изменение API | `MAJOR` (0.x — пока не обещаем стабильность) |
+| новая возможность | `MINOR` |
+| исправление | `PATCH` |
+
+Одновременно дополнить `CHANGELOG.md`: записи из `[Unreleased]` переезжают в
+раздел новой версии с датой.
+
+---
+
+## 2. Сборка и тесты
+
+### 2.1. Debug — для проверок локально
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
+```
+
+### 2.2. Release — для поставки
+
+```bash
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
+cmake --build build-release -j
+```
+
+Для сборки скриптов внутрь бинарника (байткод QuickJS):
+
+```bash
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
+      -DR2D_EMBED_SCRIPTS=ON -DR2D_EMBED_DIR=demos
+```
+
+Полезные переключатели: `R2D_ENABLE_IMGUI`, `R2D_ENABLE_RMLUI`,
+`R2D_ENABLE_AUDIO`, `R2D_ENABLE_HOTRELOAD`, `R2D_SANITIZE`.
+
+### 2.3. Что прогоняется
+
+| Набор | Чем | Нужен GPU |
+|---|---|---|
+| C-тесты JSON и ChaCha20-Poly1305 | `build/tests/r2d_json_test`, `build/tests/r2d_crypto_test` | нет |
+| Юнит-тесты логики `$` | `qjs tests/js/*_test.mjs` (см. `docs/AGENT_API.md`) | нет |
+| Агентские тесты движка | `python3 tools/run_tests.py` (`--fast` — быстрый набор) | **да** |
+| Сборка игры в один файл | `tests/agent/build_test.py` | **да** |
+
+Полный прогон:
+
+```bash
+python3 tools/run_tests.py
+```
+
+Быстрый (около минуты) и понятный локально:
+
+```bash
+python3 tools/run_tests.py --fast
+```
+
+Важно: раннер различает `ok`, `fail` и `skip`: пропуск (нет дисплея, нет
+ассета) **не считается успехом**. Если релизная проверка дала `skip`, это
+надо объяснить, а не «зачесть».
+
+---
+
+## 3. Выбор лицензии (справка)
+
+Лицензия уже выбрана и лежит в `LICENSE` — авторская, максимально
+либеральная. Этот раздел оставлен на случай, если владелец захочет перейти
+на стандартную лицензию. Важное
+обстоятельство: движок **статически линкует** MIT/Apache/zlib-зависимости
+(см. `THIRD_PARTY_NOTICES.md`), ни одна из них не требует открывать код
+проекта.
+
+| Кандидат | Плюсы | Минусы |
+|---|---|---|
+| **MIT** | максимально коротко и привычно для игровых движков; совместима со всеми зависимостями; легко читается | нет явного патентного гранта; нет условия делиться улучшениями |
+| **Apache-2.0** | явный патентный грант и защита от патентных исков; хорошо для корпоративного использования | длиннее и «юридичнее»; требует сохранять NOTICE; несовместима с GPLv2 |
+| **BSD-2/3-Clause** | почти как MIT, вариант с запретом использовать имя проекта в рекламе | патентный вопрос тоже не покрыт |
+| **zlib** | как у SDL; очень либеральна, коротка | мало кто читает её как «бренд»; патентного гранта нет |
+| **MPL-2.0** | файловый копилефт: правки самих файлов открываются, остальное можно закрывать | сложнее для пользователей; не «просто игру возьми» |
+| **GPL-2.0/3.0** | гарантирует открытость производных | несовместима с проприетарными играми на движке; закрывает коммерческие форки |
+| **Проприетарная / «все права защищены»** | полный контроль | публичный репозиторий становится почти бесполезен для сообщества; часть зависимостей всё равно требует уведомлений |
+| **Двойная (например, MIT + коммерческая)** | открытость для сообщества и платный вариант для компаний | нужен CLA и юридическая работа; пугает часть контрибьюторов |
+
+Что учесть при выборе:
+
+* zlib/MIT/Apache-2.0/BSD — «отпускают» код, но требуют сохранить уведомления
+  зависимостей (они уже собраны в `THIRD_PARTY_NOTICES.md`).
+* Если хочется, чтобы улучшения движка возвращались в общий код — MPL-2.0 или
+  GPL, но это ограничит использование в проприетарных играх.
+* Шрифты (SIL OFL) и ассеты — отдельные лицензии, лицензия кода их не
+  заменяет.
+
+После выбора:
+
+1. положить полный текст в `LICENSE` в корне;
+2. добавить строку о лицензии в `README.md` (правит владелец);
+3. добавить `LICENSE` в поставку — `tools/release.py` копирует его
+   автоматически, если файл есть.
+
+---
+
+## 4. Упаковка
+
+```bash
+python3 tools/release.py --dry-run          # план, ничего не меняется
+python3 tools/release.py --version 0.2.0    # реальный выпуск
+```
+
+Скрипт:
+
+1. поднимает версию в `CMakeLists.txt` (если задан `--version`);
+2. собирает Release в `build-release/`;
+3. гоняет C-тесты и qjs-тесты;
+4. раскладывает `dist/<os>-<arch>/`: бинарник, `assets/`, `game/`,
+   `README.md`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`, `LICENSE` (если есть);
+5. пишет `SHA256SUMS.txt` внутри пакета и сводный `dist/SHA256SUMS.txt`
+   по архивам;
+6. делает архивы `.tar.gz` (Linux/macOS) или `.zip` (Windows);
+7. ставит аннотированный тег `vX.Y.Z`.
+
+Полезные ключи:
+
+| Ключ | Смысл |
+|---|---|
+| `--dry-run`, `-n` | печатает план, не пишет и не собирает |
+| `--yes` | не спрашивать подтверждение (для скриптов) |
+| `--platform linux-x86_64,windows-x86_64` | какие платформы упаковать |
+| `--build-dir DIR` | каталог сборки (по умолчанию `build-release`) |
+| `--out DIR` | каталог артефактов (по умолчанию `dist`) |
+| `--with-demos` | положить в пакет ещё и `demos/` |
+| `--force` | пересобрать непустой `dist/<os>-<arch>/` |
+| `--skip-build` / `--skip-tests` / `--skip-tag` | осознанно пропустить шаг |
+
+Проверка контрольных сумм перед публикацией:
+
+```bash
+cd dist && shasum -a 256 -c SHA256SUMS.txt
+```
+
+**Push и теги скрипт не делает.** Их публикует человек (раздел 6) — чтобы
+случайный запуск не отправил недоделанный релиз в оба хоста.
+
+---
+
+## 5. CI/CD
+
+### 5.1. Что где стоит
+
+| | hub.mos.ru (GitLab) |
+|---|---|
+| Файл | `.gitlab-ci.yml` |
+| Роль | **единственный** пайплайн проекта |
+| Стадии | `lint → build → test → package → release` |
+| Платформы | Linux (gcc и clang) + Windows (MSVC) |
+| Артефакты | бинарники + архивы `dist/` + SHA256SUMS |
+
+Пайплайн гоняет такой набор:
+
+* `lint` / `tools-check`: `python3 -m compileall tools tests`, сухой прогон
+  `tools/release.py --dry-run`, проверка, что dry-run не изменил рабочее
+  дерево, разбор YAML и `git check-attr`;
+* `build`: конфигурация + сборка **Debug** (платформы из матрицы);
+* `test`: `r2d_json_test`, `r2d_crypto_test` и все `qjs tests/js/*_test.mjs`;
+* `package`: `tools/release.py --package-only` собирает `dist/<os>-<arch>/`,
+  архив и `SHA256SUMS.txt`;
+* `release`: только по тегу `v*` — GitLab Release со ссылками на архивы
+  обеих платформ.
+
+Артефакты (что реально скачивается):
+
+| Файл | Откуда | Размер (ориентир) |
+|---|---|---|
+| `russiano2d` / `russiano2d.exe` | build-job | ~6 МБ |
+| `russiano2d-linux-x86_64.tar.gz` | package-job | ~10 МБ |
+| `russiano2d-windows-x86_64.zip` | package-job | ~10 МБ |
+| `SHA256SUMS.txt` | package-job | байты |
+
+### 5.2. Windows-тулчейн: почему MSVC
+
+Выбран **MSVC** (Visual Studio 2022 Build Tools) + **Ninja**, а не
+MSYS2/MinGW:
+
+* SDL_GPU на Windows работает через DirectX 12 и требует Windows SDK
+  (`d3d12.h`, `dxgi.h`) — MSVC получает его вместе с Build Tools;
+* glslang и SPIRV-Cross (собираются из исходников, чтобы компилировать
+  шейдеры) официально тестируются под MSVC; MinGW у них периодически
+  спотыкается;
+* Ninja даёт одноконфигурационную сборку, и пути к артефактам совпадают с
+  Linux: `build/russiano2d.exe`, `build/tests/*.exe`,
+  `build/_deps/quickjs-build/qjs.exe`.
+
+### 5.3. Как настроить раннер на hub.mos.ru
+
+**Сейчас раннера нет**: защита hub.mos.ru отдаёт `403` (HTML-страница WAF) на
+запросы с наших машин, поэтому регистрация не проходит, а бинарник раннера
+скачивается как страница ошибки. Пайплайн готов и проходит линтер GitLab, но
+запускать его некому — до появления доступа **релизы выпускаются локально**
+(`python3 tools/release.py --version x.y.z`), затем тег уходит в `origin`.
+
+Разбор ситуации и варианты обхода — в [RUNNER.md](RUNNER.md), раздел «Статус».
+Пошаговая инструкция для Linux-VPS (на будущее) — там же, ниже.
+
+Linux (docker-executor) — проще всего:
+
+```bash
+gitlab-runner register \
+  --url https://hub.mos.ru/ \
+  --registration-token <ТОКЕН_ПРОЕКТА> \
+  --executor docker \
+  --docker-image ubuntu:24.04 \
+  --tag-list docker \
+  --description "russiano2d linux"
+```
+
+Windows (shell-executor) настраивается **вручную**, и это нормально:
+
+1. Установить GitLab Runner на Windows-машину/ВМ.
+2. Установить **Visual Studio 2022 Build Tools** с workload
+   «Desktop development with C++» (MSVC + Windows SDK).
+3. Убедиться, что в `PATH` есть `git`, `cmake` (≥ 3.24), `ninja`, `python3`.
+4. Зарегистрировать раннер с тегами `windows` и `msvc`:
+
+```powershell
+gitlab-runner register `
+  --url https://hub.mos.ru/ `
+  --registration-token <ТОКЕН_ПРОЕКТА> `
+  --executor shell `
+  --tag-list "windows,msvc" `
+  --description "russiano2d windows msvc"
+```
+
+5. Проверить сетевой доступ к репозиториям зависимостей: CMake FetchContent
+   тянет оттуда SDL3, SDL3_image, SDL3_mixer, QuickJS-ng, Box2D, RmlUi,
+   Dear ImGui, glslang и SPIRV-Cross. За прокси задать `HTTP_PROXY` /
+   `HTTPS_PROXY` в переменных проекта.
+
+`build_windows`, `test_windows` и `package_windows` используют эти теги.
+Пока раннера нет, job'ы висят в `pending`. Чтобы временно их отключить,
+задать в настройках проекта переменную `R2D_WINDOWS_CI=false` — правила
+`rules` в `.gitlab-ci.yml` это учитывают.
+
+Если у инстанса вообще нет раннеров, пайплайн не стартует: тогда сборки
+делаются локально по разделу 4, а GitLab Release выпускается вручную, когда
+раннер появится.
+
+### 5.4. Кэш зависимостей
+
+FetchContent — самое долгое в сборке. Оба CI кэшируют `build*/_deps`
+(ключ — хеш `CMakeLists.txt`, `cmake/Dependencies.cmake`,
+`cmake/Shaders.cmake`). Без кэша первый конфиг занимает десятки минут.
+Кэш не «залипает»: при смене пина зависимостей ключ меняется.
+
+### 5.5. Чего в CI не бывает и почему
+
+* **Агентские тесты** (`tests/agent/*_test.py`) не запускаются нигде в CI.
+  Они поднимают движок с `--headless`, но движок всё равно создаёт
+  SDL_GPU-устройство (Vulkan / Metal / DirectX 12). На раннере GPU-драйвера
+  нет — прогон либо падает, либо уходит в `skip`. Это локальный шаг:
+  `python3 tools/run_tests.py`.
+* **Сборка игры в один файл** (`./russiano2d build ...`) не проверяется в CI:
+  она шифрует груз и на macOS переподписывает бинарник (`codesign`).
+  Локально: `tests/agent/build_test.py`.
+* **GPU-скриншоты и рендер-проверки** — та же причина. Проверяются глазами
+  и локальными агентскими тестами.
+
+Честная формулировка для релизных заметок: CI подтверждает, что движок
+**собирается и проходит тесты без окна** на Linux и Windows; всё, что
+касается GPU и окна, проверено локально на машине разработчика.
+
+### 5.6. Как выпускается релиз через CI
+
+1. Убедиться, что закрыты блокеры раздела 0 и обновлён `CHANGELOG.md`.
+2. Поднять версию и поставить тег локально:
+
+   ```bash
+   python3 tools/release.py --version 0.2.0
+   ```
+
+3. Отправить всё на hub.mos.ru (раздел 6). По тегу `v0.2.0` запустится
+   `release`-job и создаст GitLab Release со ссылками на архивы Linux и
+   Windows и `SHA256SUMS.txt`.
+
+---
+
+## 6. Публикация
+
+Remote один:
+
+```bash
+git remote -v
+# origin  git@hub.mos.ru:dem4ev48/russiano2d.git
+```
+
+Отправка ветки и тега:
+
+```bash
+git push origin main          # основная ветка
+git push origin --all         # все ветки
+git push origin --tags        # теги
+git push origin v0.2.0        # конкретный тег
+```
+
+`--mirror` для публикации не используйте: он удаляет на сервере всё, чего нет
+локально. Для полной копии есть `git clone --mirror` в отдельный каталог —
+резервная копия делается им, а не вторым хостингом: две площадки неизбежно
+расходятся, и тогда непонятно, какая из них настоящая.
+
+---
+
+## 7. Расхождение историй
+
+Симптом: `git push origin main` отклонён (`non-fast-forward`), потому что на
+зеркале есть коммиты, которых нет локально (например, при инициализации
+репозитория через веб-интерфейс GitLab).
+
+Что делать — по порядку:
+
+1. Посмотреть, что именно разошлось:
+
+   ```bash
+   git fetch mos
+   git log --oneline --left-right --graph main...mos/main
+   ```
+
+2. Если на зеркале осмысленная история (README, `.gitignore`) — слить, не
+   перезаписывая:
+
+   ```bash
+   git merge --allow-unrelated-histories mos/main
+   # разрулить конфликты, закоммитить
+   git push origin main
+   ```
+
+3. Если история на зеркале — мусор от неудачной инициализации и владелец
+   согласен её заменить:
+
+   ```bash
+   git push --force-with-lease origin main
+   ```
+
+   `--force-with-lease` безопаснее `--force`: push пройдёт, только если
+   зеркало не изменилось с последнего `fetch`.
+
+4. Никогда не делать `git push --force` «на всякий случай» в `origin`:
+   перезапись публичной истории ломает форки и PR. Принудительный push —
+   только после явного решения владельца.
+
+Тег, указывающий на уже удалённый коммит, после перезаписи истории лучше
+пересоздать осознанно:
+
+```bash
+git push --delete mos v0.2.0   # если тег успел уехать
+git tag -d v0.2.0
+python3 tools/release.py --version 0.2.0 --skip-build --skip-tests
+```
+
+---
+
+## 8. Чек-лист релиза
+
+- [x] Лицензия выбрана, `LICENSE` лежит в корне, упомянута в `README.md`
+- [ ] Права на демо-арт и звук подтверждены (или файлы исключены)
+- [x] Путь до репозитория уточнён: <https://hub.mos.ru/dem4ev48/russiano2d>
+- [ ] `CHANGELOG.md` обновлён, `[Unreleased]` разобран
+- [ ] Версия поднята в `CMakeLists.txt` (`tools/release.py --version ...`)
+- [ ] Локально: `python3 tools/run_tests.py` — без `fail`; `skip` объяснены
+- [ ] Локально: собраны Release-бинарники (при необходимости — игры в один файл)
+- [ ] `python3 tools/release.py --version x.y.z` — собран `dist/`
+- [ ] `dist/*/SHA256SUMS.txt` проверен (`shasum -a 256 -c`)
+- [ ] `THIRD_PARTY_NOTICES.md` актуален; тексты лицензий в поставке
+- [ ] Тег `vX.Y.Z` поставлен и отправлен на hub.mos.ru
+- [ ] CI на hub.mos.ru зелёный; GitLab Release создан, архивы приложены
+- [ ] Локальный mirror-бэкап обновлён (`git clone --mirror` или бэкап инстанса)
+
+
+---
+
+## Раннер GitLab для hub.mos.ru
+
+<sub>источник: `docs/RUNNER.md`</sub>
+
+# Раннер GitLab для hub.mos.ru
+
+> **Статус: раннера нет.** Защита hub.mos.ru отдаёт `403` на запросы с наших
+> машин, поэтому раннер не регистрируется, а его бинарник скачивается как
+> HTML-страница ошибки. Пайплайн готов, но запускать его некому — движок и
+> релизы собираются локально, `python3 tools/release.py --version x.y.z`.
+> Подробности и варианты обхода — в разделе «Статус» ниже.
+
+Как поднять сборочный раннер на Linux-VPS. Задания конвейера выполняются в
+контейнерах (`image: ubuntu:24.04`), поэтому нужен именно **docker-executor** —
+shell-executor их не запустит.
+
+## Статус: почему CI не работает
+
+Поднять раннер не удалось — и не из-за конфигурации. Защита hub.mos.ru (WAF)
+отдаёт `403 Forbidden` на любой запрос с наших машин. Разница видна по ответу:
+
+| Запрос | Откуда | Ответ |
+|---|---|---|
+| `POST /api/v4/runners` | обычная рабочая машина | `403`, `content-type: application/json`, тело `{"message":"403 Forbidden"}` — **это отвечает GitLab** |
+| тот же запрос | VPS (Россия, Москва, AS208427) | `403`, **HTML**: `<h1>Forbidden</h1><pre>Request ID: 2026-10-05-32-53-3F2468181E30BDE:95.182.122.198</pre>` — **это отвечает WAF** |
+
+GitLab всегда отвечает JSON. HTML-страница с `Request ID` и IP в конце — подпись
+защиты. Тем же ответом WAF подменила и бинарник раннера при скачивании: `curl`
+без флага `-f` сохранил эту страницу в `/usr/local/bin/gitlab-runner`, а bash
+потом пытался её исполнить («Syntax error: redirection unexpected»).
+
+Скорее всего дело в том, что IP относится к дата-центровому диапазону
+(`hosting: true`) — антиботы фильтруют такие сети почти всегда, независимо
+от страны.
+
+Что можно сделать, если CI нужен:
+
+* написать в поддержку hub.mos.ru (кнопка «Написать в поддержку») и попросить
+  разрешить трафик с этого IP, приложив `Request ID` из ответа;
+* пустить раннер через прокси с разрешённого адреса
+  (`systemctl edit gitlab-runner` → `Environment="HTTPS_PROXY=..."`);
+* поднять раннер на машине, которая не в дата-центре: с домашнего интернета
+  API отвечает нормально (проверено — приходит JSON, а не HTML).
+
+Инструкция ниже остаётся рабочей — она понадобится, когда доступ появится.
+
+## 0. Что должно быть
+
+* Linux **x86_64** — проверить: `uname -m` (должно быть `x86_64`);
+* **4 ГБ RAM и ~20 ГБ диска**: сборка тянет SDL3, QuickJS-ng, Box2D, RmlUi,
+  Dear ImGui, glslang и SPIRV-Cross из исходников;
+* root или `sudo`;
+* интернет: раннер общается с hub.mos.ru, а контейнер — с репозиториями
+  зависимостей.
+
+## 1. Установка
+
+```bash
+uname -m    # ждём x86_64
+
+sudo curl -L --output /usr/local/bin/gitlab-runner \
+  https://hub.mos.ru/gitlab/runner/-/package_files/1185/download
+sudo chmod +x /usr/local/bin/gitlab-runner
+gitlab-runner --version
+
+sudo useradd --comment 'GitLab Runner' --create-home gitlab-runner --shell /bin/bash
+sudo gitlab-runner install --user=gitlab-runner --working-directory=/home/gitlab-runner
+sudo gitlab-runner start
+```
+
+Проверить, что скачался настоящий бинарник, а не страница:
+
+```bash
+file /usr/local/bin/gitlab-runner
+# Mach-O быть не должно: на VPS ожидаем ELF 64-bit ... x86-64
+```
+
+Если `uname -m` вернул `aarch64`, файл по ссылке выше не запустится — нужен
+`gitlab-runner-linux-arm64`.
+
+## 2. Docker
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker.io
+sudo usermod -aG docker gitlab-runner
+sudo systemctl restart gitlab-runner
+
+# Раннер должен видеть демон:
+sudo -u gitlab-runner docker info | head -3
+```
+
+## 3. Регистрация
+
+Токен берётся в **Settings → CI/CD → Runners → New project runner**.
+Тег указывается ровно **`docker`** — его требуют все Linux-задания конвейера
+(включая `lint`). «Run untagged jobs» включать не нужно.
+
+```bash
+sudo gitlab-runner register \
+  --url https://hub.mos.ru/ \
+  --registration-token <ТОКЕН_ИЗ_UI> \
+  --executor docker \
+  --docker-image ubuntu:24.04 \
+  --tag-list docker \
+  --description "vps-linux docker" \
+  --non-interactive
+
+sudo gitlab-runner verify
+```
+
+Если в UI показан токен вида `glrt-…`, это новый порядок регистрации:
+используйте `--token glrt-…` вместо `--registration-token`.
+
+**Токен — секрет.** Он даёт право регистрировать раннеры, которые получают
+исходники проекта. Не публикуйте его; после настройки сбросьте:
+Settings → CI/CD → Runners → ⋮ → Reset registration token.
+
+## 4. Что ещё настроить в проекте
+
+Windows-заданиям (`build_windows`, `test_windows`, `package_windows`) нужна
+отдельная машина с тегом `windows,msvc`. Пока её нет, добавьте переменную,
+иначе они будут вечно висеть в `pending`:
+
+**Settings → CI/CD → Variables → `R2D_WINDOWS_CI` = `false`**
+
+## 5. Проверка
+
+```bash
+systemctl status gitlab-runner --no-pager     # служба запущена
+sudo gitlab-runner verify                     # раннер виден серверу
+sudo journalctl -u gitlab-runner -n 50        # если что-то не так
+```
+
+Дальше достаточно запушить в `main` — конвейер подхватится сам. Готовые файлы
+(`dist/`) собирает стадия `package`, релиз выпускается тегом `v*`.
+
+## 6. Если не работает
+
+| Симптом | Причина и что делать |
+|---|---|
+| Задания `pending`, раннер есть | Тег не совпал: у раннера должен быть `docker`. Проверить: `sudo gitlab-runner list` |
+| `Cannot connect to the Docker daemon` | `sudo usermod -aG docker gitlab-runner && sudo systemctl restart gitlab-runner` |
+| `fork/exec ... exec format error` | Скачан бинарник под другую архитектуру — сверьте `uname -m` и `file /usr/local/bin/gitlab-runner` |
+| Сборка падает по памяти | Нужно ≥4 ГБ RAM; снизить параллелизм: в `.gitlab-ci.yml` у job'ов стоит `-j 2` |
+| `No space left on device` | Нужно ~20 ГБ; чистить: `docker system prune -af` |
+| Конвейер не создаётся вовсе | Конфиг не проходит линтер: CI/CD → Editor → Lint |
 
 
 ---
