@@ -283,7 +283,8 @@ def build_game(platform_name: str, engine: Path) -> Optional[Path]:
     entry = ROOT / "game" / "main.js"
     if not entry.exists():
         return None
-    out = BUILD_ROOT / ("russiano2d-platformer-" + platform_name)
+    # Имя без платформы: файл лежит внутри dist/<платформа>/ и так.
+    out = BUILD_ROOT / "russiano2d-platformer"
     try:
         run([str(engine), "build", "--project", str(ROOT),
              "--entry", "game/main.js", "--out", str(out)])
