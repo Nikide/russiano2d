@@ -54,6 +54,7 @@ int r2d_gui_load_document(R2DGui *g, const char *path)
 void r2d_gui_show(R2DGui *g, int doc) { R2D_UNUSED(g); R2D_UNUSED(doc); }
 void r2d_gui_hide(R2DGui *g, int doc) { R2D_UNUSED(g); R2D_UNUSED(doc); }
 void r2d_gui_unload(R2DGui *g, int doc) { R2D_UNUSED(g); R2D_UNUSED(doc); }
+void r2d_gui_unload_all(R2DGui *g) { R2D_UNUSED(g); }
 
 bool r2d_gui_document_visible(const R2DGui *g, int doc)
 {

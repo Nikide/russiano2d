@@ -119,6 +119,16 @@ static void r2d__capture_error(R2DScript *s)
     JS_FreeValue(ctx, exc);
 }
 
+// Запоминает ошибку в last_error и журнале, НЕ забирая исключение из ctx.
+// Нужно там, где исключение бросаем мы сами: r2d__capture_error() его бы
+// забрал, и в JS прилетело бы исключение без значения (QuickJS показывал
+// «[uninitialized]»), а причина осталась бы только в C-журнале.
+static void r2d__note_error(R2DScript *s, const char *text)
+{
+    SDL_snprintf(s->last_error, sizeof s->last_error, "%s", text ? text : "неизвестная ошибка");
+    R2D_ERROR("JS: %s", s->last_error);
+}
+
 // ---------------------------------------------------------------------------
 // Модули
 //
@@ -193,8 +203,10 @@ static JSModuleDef *r2d__module_loader(JSContext *ctx, const char *module_name, 
 
     const R2dEmbeddedModule *mod = r2d__find_embedded(module_name);
     if (!mod) {
-        JS_ThrowReferenceError(ctx, "модуль '%s' не встроен в бинарник", module_name);
-        r2d__capture_error(s);
+        char msg[512];
+        SDL_snprintf(msg, sizeof msg, "модуль '%s' не встроен в бинарник", module_name);
+        JS_ThrowReferenceError(ctx, "%s", msg);
+        r2d__note_error(s, msg);
         return NULL;
     }
 
@@ -205,8 +217,10 @@ static JSModuleDef *r2d__module_loader(JSContext *ctx, const char *module_name, 
     }
     if (JS_VALUE_GET_TAG(val) != JS_TAG_MODULE) {
         JS_FreeValue(ctx, val);
-        JS_ThrowInternalError(ctx, "'%s' не является модулем", module_name);
-        r2d__capture_error(s);
+        char msg[512];
+        SDL_snprintf(msg, sizeof msg, "'%s' не является модулем", module_name);
+        JS_ThrowInternalError(ctx, "%s", msg);
+        r2d__note_error(s, msg);
         return NULL;
     }
 
@@ -235,8 +249,10 @@ static JSModuleDef *r2d__module_loader(JSContext *ctx, const char *module_name, 
         }
         if (JS_VALUE_GET_TAG(val) != JS_TAG_MODULE) {
             JS_FreeValue(ctx, val);
-            JS_ThrowInternalError(ctx, "в грузе '%s' не модуль", module_name);
-            r2d__capture_error(s);
+            char msg[512];
+            SDL_snprintf(msg, sizeof msg, "в грузе '%s' не модуль", module_name);
+            JS_ThrowInternalError(ctx, "%s", msg);
+            r2d__note_error(s, msg);
             return NULL;
         }
         return (JSModuleDef *)JS_VALUE_GET_PTR(val);
@@ -248,9 +264,11 @@ static JSModuleDef *r2d__module_loader(JSContext *ctx, const char *module_name, 
     size_t size = 0;
     char *buf = (char *)SDL_LoadFile(full_path, &size);
     if (!buf) {
-        JS_ThrowReferenceError(ctx, "не удалось прочитать модуль '%s': %s",
-                               full_path, SDL_GetError());
-        r2d__capture_error(s);
+        char msg[1024];
+        SDL_snprintf(msg, sizeof msg, "не удалось прочитать модуль '%s': %s",
+                     full_path, SDL_GetError());
+        JS_ThrowReferenceError(ctx, "%s", msg);
+        r2d__note_error(s, msg);
         return NULL;
     }
 
@@ -570,6 +588,12 @@ static JSValue r2d__js_create_body(JSContext *ctx, JSValueConst this_val, int ar
     R2D_UNUSED(this_val);
     R2DScript *s = r2d__script_of(ctx);
     if (!s || !s->physics || argc < 1) return JS_NewInt32(ctx, -1);
+    // opts разбирается через JS_GetPropertyStr: для null/undefined это бросает
+    // TypeError, а хелперы исключение игнорировали — биндинг возвращал «успех»
+    // с висящим в контексте исключением. Проверяем тип сами.
+    if (!JS_IsObject(argv[0])) {
+        return JS_ThrowTypeError(ctx, "engine.createBody: нужен объект параметров тела");
+    }
 
     JSValueConst opts = argv[0];
     R2DBodyDesc d;
@@ -663,6 +687,9 @@ static JSValue r2d__js_create_joint(JSContext *ctx, JSValueConst this_val, int a
     R2D_UNUSED(this_val);
     R2DScript *s = r2d__script_of(ctx);
     if (!s || !s->physics || argc < 1) return JS_NewInt32(ctx, -1);
+    if (!JS_IsObject(argv[0])) {
+        return JS_ThrowTypeError(ctx, "engine.createJoint: нужен объект параметров сустава");
+    }
 
     JSValueConst opts = argv[0];
     int type = R2D_JOINT_REVOLUTE;
@@ -2564,21 +2591,10 @@ static bool r2d__load_highlevel_api(R2DScript *s)
     JSValue result = JS_Eval(s->ctx, bootstrap, SDL_strlen(bootstrap), "r2d/entry.js",
                              JS_EVAL_TYPE_MODULE);
     if (JS_IsException(result)) {
-        // Ошибку видно в журнале сразу: без этого при отладке видно только
-        // «$ не загрузился», а причина остаётся за кадром.
-        JSValue exc = JS_GetException(s->ctx);
-        const char *text = JS_ToCString(s->ctx, exc);
-        R2D_ERROR("высокоуровневое API ($): %s", text ? text : "неизвестная ошибка");
-        if (text) JS_FreeCString(s->ctx, text);
-        if (!JS_IsNull(exc) && !JS_IsUndefined(exc)) {
-            JSValue stack = JS_GetPropertyStr(s->ctx, exc, "stack");
-            if (!JS_IsUndefined(stack)) {
-                const char *trace = JS_ToCString(s->ctx, stack);
-                if (trace) { R2D_ERROR("%s", trace); JS_FreeCString(s->ctx, trace); }
-            }
-            JS_FreeValue(s->ctx, stack);
-        }
-        JS_FreeValue(s->ctx, exc);
+        // r2d__capture_error() сам забирает исключение, печатает текст и стек
+        // и кладёт всё в last_error. Раньше здесь исключение уже было забрано
+        // через JS_GetException, и capture_error получал JS_UNINITIALIZED —
+        // в last_error попадало «неизвестная ошибка» вместо настоящей причины.
         r2d__capture_error(s);
         JS_FreeValue(s->ctx, result);
         return false;
@@ -3003,6 +3019,12 @@ bool r2d_script_reload(R2DScript *s)
     s->has_update = false;
     s->has_render = false;
     s->loaded = false;
+
+    // Документы RmlUi переживают перезагрузку, а их слушатели держат числовые
+    // id колбэков старого контекста: после пересоздания контекста тот же id
+    // указывал бы на чужой обработчик (или ни на какой). Снимаем документы
+    // вместе с контекстом — JS-сторона после перезагрузки всё равно пуста.
+    if (s->gui) r2d_gui_unload_all(s->gui);
 
     r2d__destroy_context(s);
 

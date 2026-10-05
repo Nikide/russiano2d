@@ -92,6 +92,7 @@ typedef struct R2DApp {
 
     // --- Служебное ---
     const char *base_path;   // каталог, относительно которого ищутся game/ и assets/
+    bool  base_path_owned;   // base_path выделен нами и освобождается в shutdown
     const char *start_scene; // сцена, которую просят открыть сразу (--scene), или NULL
 
     // Снимок кадра по расписанию (--screenshot / --screenshot-at). Агентский

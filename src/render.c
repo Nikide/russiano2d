@@ -872,6 +872,9 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
             R2D_ERROR("SDL_CreateGPUGraphicsPipeline (blend=%d): %s", m, SDL_GetError());
             SDL_ReleaseGPUShader(device, vs);
             SDL_ReleaseGPUShader(device, fs);
+            // Освобождаем уже созданные конвейеры: main.c не вызывает
+            // r2d_render_shutdown при неудачной инициализации.
+            r2d_render_shutdown(r);
             return false;
         }
     }
@@ -889,6 +892,7 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     r->sampler = SDL_CreateGPUSampler(device, &si);
     if (!r->sampler) {
         R2D_ERROR("SDL_CreateGPUSampler: %s", SDL_GetError());
+        r2d_render_shutdown(r);
         return false;
     }
 
@@ -899,6 +903,7 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
         if (!white || !r2d__upload_pixels(r, white, &pixel, 1, 1, 4)) {
             R2D_ERROR("не удалось создать белую текстуру");
             if (white) SDL_ReleaseGPUTexture(device, white);
+            r2d_render_shutdown(r);
             return false;
         }
         const int id = r->texture_count++;

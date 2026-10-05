@@ -316,6 +316,9 @@ function toPoint(v) {
         const node = query(v)[0];
         return node ? { x: node.x, y: node.y } : { x: 0, y: 0 };
     }
+    // [x, y] — та же форма, что принимает $.sound.playAt и $.gfx.draw.*.
+    // Без неё массив молча превращался в (0,0): луч уходил из угла мира.
+    if (Array.isArray(v)) return { x: v[0] || 0, y: v[1] || 0 };
     if (typeof v === 'object' && v.nodes) {
         const node = v.nodes[0];
         return node ? { x: node.x, y: node.y } : { x: 0, y: 0 };

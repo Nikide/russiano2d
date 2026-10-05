@@ -439,6 +439,39 @@ static int r2d__body_of_shape(const R2DPhysics *p, b2ShapeId shape)
     return -1;
 }
 
+typedef struct R2DRayCtx {
+    const R2DPhysics *p;
+    R2DRayHit        *out;
+} R2DRayCtx;
+
+// Колбэк луча: сенсоры (триггеры, зоны, подбираемые предметы) пропускаем,
+// ближайшее настоящее препятствие запоминаем и обрезаем луч до него.
+//
+// b2World_CastRayClosest этого не умеет: Box2D v3 не исключает сенсоры ни в
+// b2DefaultQueryFilter, ни в своём RayCastCallback, поэтому зона-триггер
+// останавливала луч и блокировала линию видимости и проверку «стою на земле».
+static float r2d__on_ray(b2ShapeId shape, b2Vec2 point, b2Vec2 normal,
+                         float fraction, void *context)
+{
+    R2DRayCtx *ctx = (R2DRayCtx *)context;
+    if (b2Shape_IsSensor(shape)) return -1.0f;   // не препятствие — идём дальше
+    // Начальное перекрытие игнорируем — ровно как встроенный
+    // b2RayCastClosestFcn. Иначе луч, пущенный из центра узла, попадал бы в
+    // собственное тело (fraction == 0), и onFloor()/onWall() всегда были бы
+    // false: игрок не прыгал бы и не цеплялся за стены.
+    if (fraction == 0.0f) return -1.0f;
+
+    R2DRayHit *out = ctx->out;
+    out->hit = true;
+    out->body = r2d__body_of_shape(ctx->p, shape);
+    out->x = R2D_TO_PX(point.x);
+    out->y = R2D_TO_PX(point.y);
+    out->nx = normal.x;
+    out->ny = normal.y;
+    out->fraction = fraction;
+    return fraction;   // обрезаем: следующее попадание должно быть ближе
+}
+
 bool r2d_physics_raycast(const R2DPhysics *p, float x1, float y1, float x2, float y2, R2DRayHit *out)
 {
     if (!out) return false;
@@ -450,18 +483,10 @@ bool r2d_physics_raycast(const R2DPhysics *p, float x1, float y1, float x2, floa
     const b2Vec2 origin = { R2D_TO_M(x1), R2D_TO_M(y1) };
     const b2Vec2 translation = { R2D_TO_M(x2 - x1), R2D_TO_M(y2 - y1) };
     // Датчики (триггеры) не должны останавливать лучи: они не препятствия.
-    b2QueryFilter filter = b2DefaultQueryFilter();
-    const b2RayResult r = b2World_CastRayClosest(p->world, origin, translation, filter);
-    if (!r.hit) return false;
-
-    out->hit = true;
-    out->body = r2d__body_of_shape(p, r.shapeId);
-    out->x = R2D_TO_PX(r.point.x);
-    out->y = R2D_TO_PX(r.point.y);
-    out->nx = r.normal.x;
-    out->ny = r.normal.y;
-    out->fraction = r.fraction;
-    return true;
+    R2DRayCtx ctx = { p, out };
+    const b2QueryFilter filter = b2DefaultQueryFilter();
+    b2World_CastRay(p->world, origin, translation, filter, r2d__on_ray, &ctx);
+    return out->hit;
 }
 
 typedef struct R2DQueryCtx {

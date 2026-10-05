@@ -17,9 +17,15 @@ static void r2d__pick_base_path(R2DApp *app)
 {
     // Порядок поиска: переменная окружения → текущий каталог (удобно при
     // запуске из корня проекта) → каталог исполняемого файла (релиз).
+    // Во всех случаях base_path — наша копия: строку окружения освобождать
+    // нельзя, а r2d_app_shutdown() освобождает base_path единообразно.
     const char *env = SDL_getenv("R2D_GAME_DIR");
     if (env && *env) {
-        app->base_path = env;
+        char *copy = SDL_strdup(env);
+        if (copy) {
+            app->base_path = copy;
+            app->base_path_owned = true;
+        }
         return;
     }
 
@@ -31,13 +37,15 @@ static void r2d__pick_base_path(R2DApp *app)
         SDL_snprintf(probe, sizeof probe, "%s/game/main.js", cwd);
         if (SDL_GetPathInfo(probe, &info) && info.type == SDL_PATHTYPE_FILE) {
             app->base_path = cwd;
+            app->base_path_owned = true;
             return;
         }
         SDL_free(cwd);
     }
 
-    // SDL_GetBasePath() возвращает строку, которой владеет SDL.
+    // SDL_GetBasePath() возвращает строку, которую нужно освободить SDL_free().
     app->base_path = SDL_GetBasePath();
+    app->base_path_owned = app->base_path != NULL;
 }
 
 bool r2d_app_init(R2DApp *app, const char *title, int width, int height, bool vsync, bool headless)
@@ -329,6 +337,9 @@ const char *r2d_app_cursor(const R2DApp *app)
 void r2d_app_shutdown(R2DApp *app)
 {
     free_cursors();
+    if (app->base_path_owned) SDL_free((void *)app->base_path);
+    app->base_path = NULL;
+    app->base_path_owned = false;
     if (app->gamepad) {
         SDL_CloseGamepad(app->gamepad);
         app->gamepad = NULL;
@@ -553,12 +564,17 @@ bool r2d_key_released(const R2DApp *app, SDL_Scancode sc)
 
 bool r2d_mouse_down(const R2DApp *app, int button)
 {
+    // SDL_BUTTON_MASK — это 1u << (button-1): при button вне диапазона сдвиг
+    // формально UB, а на практике проверяется чужой бит (button=0 читал бы X2).
+    // Кнопка приходит из JS, поэтому проверяем её здесь.
+    if (button < SDL_BUTTON_LEFT || button > SDL_BUTTON_X2) return false;
     const uint32_t mask = SDL_BUTTON_MASK(button);
     return (app->mouse_cur & mask) != 0;
 }
 
 bool r2d_mouse_pressed(const R2DApp *app, int button)
 {
+    if (button < SDL_BUTTON_LEFT || button > SDL_BUTTON_X2) return false;
     const uint32_t mask = SDL_BUTTON_MASK(button);
     return (app->mouse_cur & mask) != 0 && (app->mouse_prev & mask) == 0;
 }
@@ -642,6 +658,7 @@ void r2d_app_virtual_release_all(R2DApp *app)
 
 void r2d_app_virtual_mouse(R2DApp *app, int button, bool down)
 {
+    if (button < SDL_BUTTON_LEFT || button > SDL_BUTTON_X2) return;
     const uint32_t mask = SDL_BUTTON_MASK(button);
     if (down) app->mouse_virt |= mask;
     else      app->mouse_virt &= ~mask;

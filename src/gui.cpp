@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -35,27 +36,18 @@ constexpr int kMaxDocuments = 64;
 // игры, а не относительно текущего каталога процесса.
 // ---------------------------------------------------------------------------
 // Открытый файл из груза: данные лежат в памяти движка, поэтому «дескриптор» —
-// это просто позиция чтения. Магия нужна, чтобы отличить такой дескриптор от
-// обычного FILE* в одной и той же паре Open/Read/Close.
+// это просто позиция чтения. Отличать его от обычного FILE* нужно явно: раньше
+// признаком служило поле magic_ внутри MemoryFile, но его читали через
+// reinterpret_cast даже у FILE* — формально UB с чтением за объектом (у MSVC
+// FILE — это 8-байтовый _iobuf, а magic_ лежит на смещении 24).
 class MemoryFile {
 public:
-    static constexpr uint32_t kMagic = 0x4D454D46u;   // "MEMF"
-
     MemoryFile(const unsigned char *data, size_t size) : data_(data), size_(size) {}
 
     const unsigned char *data_;
     size_t size_;
     size_t pos_ = 0;
-    uint32_t magic_ = kMagic;
 };
-
-inline MemoryFile *as_memory(Rml::FileHandle handle)
-{
-    if (handle == 0) return nullptr;
-    auto *file = reinterpret_cast<MemoryFile *>(handle);
-    if (!file || file->magic_ != MemoryFile::kMagic) return nullptr;
-    return file;
-}
 
 inline Rml::FileHandle to_handle(MemoryFile *file)
 {
@@ -72,12 +64,27 @@ public:
         if (r2d_vfs_has(path.c_str())) {
             size_t size = 0;
             uint8_t *data = r2d_vfs_read(path.c_str(), &size);
-            if (data) return to_handle(new MemoryFile(data, size));
+            if (data) {
+                auto *mem = new MemoryFile(data, size);
+                memory_files_.insert(mem);
+                return to_handle(mem);
+            }
         }
         return OpenOnDisk(path);
     }
 
 private:
+    // Явный набор дескрипторов из груза: только по нему и отличаем свои файлы
+    // от FILE* (см. комментарий у MemoryFile).
+    std::unordered_set<MemoryFile *> memory_files_;
+
+    MemoryFile *as_memory(Rml::FileHandle handle)
+    {
+        if (handle == 0) return nullptr;
+        auto *file = reinterpret_cast<MemoryFile *>(handle);
+        return memory_files_.count(file) ? file : nullptr;
+    }
+
     Rml::FileHandle OpenOnDisk(const Rml::String &path)
     {
         // Пути документов RmlUi отсчитываются от каталога игры: в проекте это
@@ -104,6 +111,7 @@ private:
     void Close(Rml::FileHandle file) override
     {
         if (MemoryFile *mem = as_memory(file)) {
+            memory_files_.erase(mem);
             delete mem;
             return;
         }
@@ -466,6 +474,23 @@ void r2d_gui_unload(R2DGui *g, int doc)
         g->docs[doc] = nullptr;
     }
     g->doc_paths[doc].clear();
+}
+
+// Снимает все документы и освобождает их слоты. Вызывается при горячей
+// перезагрузке: документ живёт дольше JS-контекста, а его слушатель хранит
+// числовой id колбэка, который после перезагрузки указывает на чужой (или
+// уже не существующий) обработчик.
+void r2d_gui_unload_all(R2DGui *g)
+{
+    if (!g || !g->context) return;
+    for (int i = 0; i < g->doc_count; ++i) {
+        if (g->docs[i]) {
+            g->context->UnloadDocument(g->docs[i]);
+            g->docs[i] = nullptr;
+        }
+        g->doc_paths[i].clear();
+    }
+    g->doc_count = 0;
 }
 
 bool r2d_gui_document_visible(const R2DGui *g, int doc)

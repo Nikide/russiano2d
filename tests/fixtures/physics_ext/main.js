@@ -66,6 +66,30 @@ $.ready(() => {
     $('<rect>', { id: 'bar1' }).at(1500, 200).size(20, 20).body('dynamic').appendTo($.world);
     $('<rect>', { id: 'bar2' }).at(1500, 320).size(20, 20).body('dynamic').appendTo($.world);
     $.store.set('distJoint', $.world.joint('#bar1', '#bar2', { type: 'distance' }));
+
+    // --- 5. Луч и сенсоры ----------------------------------------------------
+    // Сенсор (зона-триггер) не препятствие: луч обязан пройти сквозь него,
+    // но упереться в настоящую стену за ним. Сами лучи пускаем в $.update:
+    // до первого шага мира broadphase Box2D ещё не построен.
+    $('<rect>', { id: 'sensor-zone' }).at(1800, 300).size(80, 80)
+        .body('static').appendTo($.world);
+    $('#sensor-zone').sensor(true);
+    $('<wall>', { id: 'ray-wall' }).at(1800, 600).size(200, 40).appendTo($.world);
+});
+
+let rays_checked = false;
+
+// Луч сквозь сенсор и луч в стену за ним — после первого шага мира.
+$.update(() => {
+    if (rays_checked) return;
+    rays_checked = true;
+
+    const blocked = $.world.raycast({ x: 1800, y: 100 }, { x: 1800, y: 400 });
+    $.store.set('sensorBlocksRay', !!blocked);
+
+    const wall = $.world.raycast({ x: 1800, y: 100 }, { x: 1800, y: 700 });
+    $.store.set('rayHitIsWall', !!(wall && wall.node && wall.node.id === 'ray-wall'));
+    $.store.set('rayHitY', wall && wall.point ? Math.round(wall.point.y) : -1);
 });
 
 // Отмечаем момент, когда прыгун оказался выше платформы.

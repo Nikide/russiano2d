@@ -72,6 +72,7 @@ static void state_add(BuildState *st, const char *path, uint8_t *data, size_t si
         fprintf(stderr, "russiano2d build: слишком много файлов (лимит %d)\n",
                 (int)(sizeof st->files / sizeof st->files[0]));
         st->failed = true;
+        SDL_free(data);   // файл уже прочитан, но места в списке нет
         return;
     }
     PackedFile *f = &st->files[st->file_count++];
@@ -297,6 +298,19 @@ static bool looks_like_asset(const char *name)
     return true;
 }
 
+// Кладёт один файл в груз (если его там ещё нет). rel — путь относительно
+// корня проекта. Используется и обходом каталогов, и явным --add.
+static void state_add_file(BuildState *st, const char *full, const char *rel)
+{
+    if (state_has(st, rel)) return;
+
+    size_t size = 0;
+    uint8_t *data = (uint8_t *)SDL_LoadFile(full, &size);
+    if (!data) return;
+    state_add(st, rel, data, size);
+    printf("  ассет   %-34s %7zu байт\n", rel, size);
+}
+
 static SDL_EnumerationResult SDLCALL asset_scan_cb(void *userdata, const char *dirname,
                                                    const char *fname)
 {
@@ -324,27 +338,32 @@ static SDL_EnumerationResult SDLCALL asset_scan_cb(void *userdata, const char *d
     SDL_snprintf(rel, sizeof rel, "%s", full + root_len);
     normalize_rel(rel);
 
-    if (state_has(st, rel)) return SDL_ENUM_CONTINUE;
-
-    size_t size = 0;
-    uint8_t *data = (uint8_t *)SDL_LoadFile(full, &size);
-    if (!data) return SDL_ENUM_CONTINUE;
-    state_add(st, rel, data, size);
-    printf("  ассет   %-34s %7zu байт\n", rel, size);
+    state_add_file(st, full, rel);
     return SDL_ENUM_CONTINUE;
 }
 
-static void collect_assets(BuildState *st, const char *rel_dir)
+static void collect_assets(BuildState *st, const char *rel)
 {
     char full[4096];
-    SDL_snprintf(full, sizeof full, "%s/%s", st->root, rel_dir);
+    SDL_snprintf(full, sizeof full, "%s/%s", st->root, rel);
 
     SDL_PathInfo info;
-    if (!SDL_GetPathInfo(full, &info) || info.type != SDL_PATHTYPE_DIRECTORY) return;
+    if (!SDL_GetPathInfo(full, &info)) return;
+
+    if (info.type == SDL_PATHTYPE_FILE) {
+        // --add документирован и для отдельного файла: раньше здесь принимались
+        // только каталоги, и `--add data/levels.json` молча ничего не добавлял.
+        char rel_norm[4096];
+        SDL_snprintf(rel_norm, sizeof rel_norm, "%s", rel);
+        normalize_rel(rel_norm);
+        state_add_file(st, full, rel_norm);
+        return;
+    }
+    if (info.type != SDL_PATHTYPE_DIRECTORY) return;
 
     AssetScan scan;
     scan.st = st;
-    scan.dir_path = rel_dir;
+    scan.dir_path = rel;
     SDL_EnumerateDirectory(full, asset_scan_cb, &scan);
 }
 
@@ -706,9 +725,15 @@ int r2d_build_main(int argc, char **argv)
     // --- 1. Скрипты в байткоде --------------------------------------------
     printf("\nСкрипты:\n");
     JSRuntime *rt = JS_NewRuntime();
-    JSContext *ctx = JS_NewContext(rt);
-    if (!rt || !ctx) {
+    if (!rt) {
         fprintf(stderr, "russiano2d build: не удалось создать рантайм QuickJS\n");
+        return 1;
+    }
+    JSContext *ctx = JS_NewContext(rt);
+    if (!ctx) {
+        // Без контекста рантайм нужно освободить: QuickJS не принимает NULL.
+        fprintf(stderr, "russiano2d build: не удалось создать контекст QuickJS\n");
+        JS_FreeRuntime(rt);
         return 1;
     }
     JS_SetMaxStackSize(rt, 2u * 1024u * 1024u);

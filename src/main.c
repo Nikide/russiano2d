@@ -326,6 +326,8 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
     SDL_GPUFence *fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
     if (!fence) {
         R2D_ERROR("SDL_SubmitGPUCommandBuffer: %s", SDL_GetError());
+        // Командный буфер не отправлен — transfer-буфер снимка тоже освобождаем.
+        if (shot_tb) SDL_ReleaseGPUTransferBuffer(app->device, shot_tb);
         app->running = false;
         return false;
     }
@@ -574,6 +576,7 @@ int main(int argc, char **argv)
         r2d_http_shutdown();
         r2d_audio_shutdown(&audio);
         r2d_app_shutdown(&app);
+        r2d_payload_shutdown();   // в обычном режиме это делается ниже
         return 0;
     }
 

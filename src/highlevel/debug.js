@@ -104,7 +104,18 @@ export function installDebug($) {
 
         /** Профайлер по кадрам: меряет время между start и end. */
         profiler: {
-            start(name) { timers.set(name, { at: engine.time, total: 0, calls: 0, max: 0 }); },
+            start(name) {
+                // Раньше запись создавалась заново на каждом start(), а start()
+                // зовут каждый кадр — total/calls/max обнулялись, и report()
+                // показывал только последний кадр. Теперь статистика копится,
+                // а сбрасывает её только reset().
+                const existing = timers.get(name);
+                if (existing) {
+                    existing.at = engine.time;
+                    return;
+                }
+                timers.set(name, { at: engine.time, total: 0, calls: 0, max: 0 });
+            },
             end(name) {
                 const t = timers.get(name);
                 if (!t) return;
