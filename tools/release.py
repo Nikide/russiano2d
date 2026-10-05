@@ -12,8 +12,8 @@
 * без ``--dry-run`` нужен либо ввод слова ``да`` в терминале, либо ключ
   ``--yes`` (для неинтерактивных сценариев).
 
-Лицензии у проекта пока нет — это блокер публичного релиза. Настоящий запуск
-без файла ``LICENSE`` в корне останавливается; см. ``docs/RELEASING.md``.
+Лицензия проекта (авторская) лежит в ``LICENSE``; настоящий запуск без этого
+файла останавливается — см. ``docs/RELEASING.md``.
 
 Использование::
 
@@ -34,6 +34,7 @@
 
 from __future__ import annotations
 
+import glob
 import hashlib
 import os
 import platform
@@ -59,7 +60,10 @@ DEFAULT_BUILD_DIR = "build-release"
 DEFAULT_OUT_DIR = "dist"
 
 #: Файлы, которые кладутся в каждый пакет рядом с бинарником.
-DOC_FILES = ("README.md", "CHANGELOG.md", "THIRD_PARTY_NOTICES.md", "LICENSE")
+DOC_FILES = ("CHANGELOG.md", "THIRD_PARTY_NOTICES.md", "LICENSE")
+
+#: Шаблоны README.md и AGENTS.md для пакета платформы.
+TEMPLATE_DIR = os.path.join(ROOT, "tools", "templates")
 
 #: Известные платформы: имя пакета → (система, исполняемый суффикс, формат архива).
 PLATFORMS: Dict[str, Tuple[str, str, str]] = {
@@ -294,6 +298,114 @@ def collect_runtime_files(
     return files
 
 
+#: Вся документация движка вшивается в AGENTS.md пакета: модель, скачавшая одну
+#: папку, не должна ничего искать в интернете.
+AGENTS_DOC_FILES = (
+    "docs/ARCHITECTURE.md",
+    "docs/HIGH_LEVEL_API.md",
+    "docs/API.md",
+    "docs/AGENT_API.md",
+    "docs/BUILD.md",
+    "docs/GAP_ANALYSIS.md",
+    "docs/tutorial-first-game.md",
+    "docs/tutorial-platformer.md",
+    "docs/tutorial-menus.md",
+    "docs/demos.md",
+)
+
+
+def agents_docs_appendix() -> str:
+    """Собрать приложение со всей документацией движка целиком."""
+    files = [name for name in AGENTS_DOC_FILES
+             if os.path.exists(os.path.join(ROOT, name))]
+    files += sorted(
+        "docs/highlevel/" + os.path.basename(path)
+        for path in glob.glob(os.path.join(ROOT, "docs", "highlevel", "*.md"))
+    )
+    if not files:
+        return ""
+
+    toc = ["\n\n---\n\n# Приложение: вся документация движка\n",
+           "\nНиже — полные тексты справочников, чтобы не искать их в интернете.\n\n"]
+    bodies = []
+    for name in files:
+        with open(os.path.join(ROOT, name), encoding="utf-8") as handle:
+            text = handle.read()
+        title = name
+        for line in text.splitlines():
+            if line.startswith("# "):
+                title = line[2:].strip()
+                break
+        toc.append("* %s — `%s`\n" % (title, name))
+        bodies.append(
+            "\n\n---\n\n## %s\n\n<sub>источник: `%s`</sub>\n\n%s"
+            % (title, name, text)
+        )
+    return "".join(toc) + "".join(bodies)
+
+
+def platform_runtime_note(platform_name: str, binary: str) -> Tuple[str, str, str]:
+    """Вернуть (команда запуска, подсказка к запуску, подсказка к сборке)."""
+    system = PLATFORMS[platform_name][0]
+    if system == "macos":
+        return (
+            "./" + binary,
+            "**macOS:** если система откажется запускать файл — переподпиши его: "
+            "`codesign --force --sign - %s`" % binary,
+            "**macOS:** собранную игру тоже подпиши (`codesign --force --sign - mygame-release`). "
+            "Груз по умолчанию не шифруется — включить: `--encrypt`.",
+        )
+    if system == "windows":
+        return (
+            ".\\" + binary,
+            "**Windows:** запускать из PowerShell или cmd в этой папке: `.\\%s`" % binary,
+            "**Windows:** собранная игра — такой же `.exe`, дописывать ничего не нужно. "
+            "Груз шифруется по умолчанию.",
+        )
+    return (
+        "./" + binary,
+        "**Linux:** если файл не запускается — `chmod +x %s`" % binary,
+        "**Linux:** собранная игра самодостаточна: `chmod +x mygame-release` и запускай. "
+        "Груз шифруется по умолчанию.",
+    )
+
+
+def render_platform_docs(target: str, platform_name: str, version: str) -> None:
+    """Положить в пакет README.md и AGENTS.md именно для этой платформы."""
+    if not os.path.isdir(TEMPLATE_DIR):
+        log("    шаблоны не найдены (%s) — README/AGENTS в пакет не попали" % TEMPLATE_DIR)
+        return
+    binary = binary_name(platform_name)
+    run, run_note, build_note = platform_runtime_note(platform_name, binary)
+    values = {
+        "VERSION": version,
+        "PLATFORM": platform_name,
+        "PLATFORM_TITLE": PLATFORM_TITLES.get(platform_name, platform_name),
+        "BINARY": binary,
+        "RUN": run,
+        "RUN_NOTE": run_note,
+        "BUILD_NOTE": build_note,
+    }
+    for template_name, out_name in (
+        ("README-platform.md", "README.md"),
+        ("AGENTS-platform.md", "AGENTS.md"),
+    ):
+        template_path = os.path.join(TEMPLATE_DIR, template_name)
+        if not os.path.exists(template_path):
+            continue
+        with open(template_path, encoding="utf-8") as handle:
+            text = handle.read()
+        for key, value in values.items():
+            text = re.sub(r"\{\{\s*" + key + r"\s*\}\}", lambda _m, v=value: v, text)
+        if out_name == "AGENTS.md":
+            appendix = agents_docs_appendix()
+            text += appendix
+            log("    документация вшита: %d КБ" % (len(appendix.encode("utf-8")) // 1024))
+        with open(os.path.join(target, out_name), "w", encoding="utf-8") as handle:
+            handle.write(text)
+        log("    документ: %s" % out_name)
+
+
 def package_platform(
     runner: Runner,
     platform_name: str,
@@ -302,8 +414,13 @@ def package_platform(
     with_demos: bool,
     version: str,
     force: bool = False,
+    extras: Sequence[str] = (),
 ) -> None:
-    """Упаковать одну платформу: dist/<os>-<arch>/ + архив + SHA256SUMS."""
+    """Упаковать одну платформу: dist/<os>-<arch>/ + архив + SHA256SUMS.
+
+    ``extras`` — дополнительные готовые файлы (например, собранная игра),
+    которые кладутся в тот же каталог платформы до подсчёта контрольных сумм.
+    """
     log("")
     log("4. Упаковка %s" % platform_name)
     target = os.path.join(ROOT, out_dir, platform_name)
@@ -344,6 +461,18 @@ def package_platform(
             shutil.copy2(source_path, dest_path)
             if source == binary:
                 os.chmod(dest_path, 0o755)
+
+    for extra in extras:
+        extra_path = os.path.join(ROOT, extra)
+        if not os.path.exists(extra_path):
+            log("    пропускаю отсутствующий %s" % extra)
+            continue
+        extra_dest = os.path.join(target, os.path.basename(extra))
+        shutil.copy2(extra_path, extra_dest)
+        os.chmod(extra_dest, 0o755)
+        log("    дополнительно: %s" % os.path.basename(extra))
+
+    render_platform_docs(target, platform_name, version)
 
     # Предупреждения о лицензиях: полные тексты должны лежать в пакете.
     if not any(os.path.exists(os.path.join(target, name)) for name in ("LICENSE", "LICENSE.md")):
@@ -425,6 +554,7 @@ class Options:
         self.yes = False
         self.version: Optional[str] = None
         self.platforms: List[str] = []
+        self.extras: List[str] = []
         self.build_dir = DEFAULT_BUILD_DIR
         self.out_dir = DEFAULT_OUT_DIR
         self.binary: Optional[str] = None
@@ -483,6 +613,11 @@ def parse_args(argv: List[str]) -> Options:
             options.package_only = True
         elif arg == "--with-demos":
             options.with_demos = True
+        elif arg == "--extra":
+            index += 1
+            if index >= len(argv):
+                raise SystemExit("ошибка: --extra требует значение")
+            options.extras.append(argv[index])
         elif arg == "--force":
             options.force = True
         elif arg == "--skip-build":
@@ -585,7 +720,7 @@ def main(argv: List[str]) -> int:
         )
         package_platform(
             plan, name, binary, options.out_dir, options.with_demos, version,
-            force=options.force,
+            force=options.force, extras=options.extras,
         )
 
     tag_steps(plan, version, options.skip_tag)
@@ -620,7 +755,7 @@ def main(argv: List[str]) -> int:
         binary = options.binary or os.path.join(options.build_dir, binary_name(name))
         package_platform(
             real, name, binary, options.out_dir,
-            options.with_demos, version, force=options.force,
+            options.with_demos, version, force=options.force, extras=options.extras,
         )
 
     tag_steps(real, version, options.skip_tag)
@@ -656,7 +791,7 @@ def run_package_only(options: Options, version: str) -> int:
             raise SystemExit("ошибка: не нашёл бинарник %s" % binary)
         package_platform(
             runner, name, binary, options.out_dir, options.with_demos, version,
-            force=options.force,
+            force=options.force, extras=options.extras,
         )
     log("")
     log("Упаковка завершена." if not options.dry_run else "Сухой прогон упаковки.")

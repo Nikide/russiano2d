@@ -613,6 +613,7 @@ static void print_usage(void)
         "  --out <файл>        куда положить собранный бинарник (режим --append)\n"
         "  --add <путь>        добавить в груз файл или каталог (можно повторять)\n"
         "  --no-assets         не добавлять ассеты, только скрипты\n"
+        "  --encrypt           шифровать груз (по умолчанию: да, кроме macOS)\n"
         "  --no-encrypt        не шифровать груз (байткод всё равно нечитаем)\n"
         "  --engine <файл>     какой движок взять за основу (по умолчанию — этот же файл)\n"
         "  --relink <папка>    вместо приписывания сгенерировать C-файл для пересборки\n"
@@ -633,7 +634,14 @@ int r2d_build_main(int argc, char **argv)
     const char *adds[64];
     int add_count = 0;
     bool with_assets = true;
+    // Груз шифруется по умолчанию везде, кроме macOS: там собранный файл всё
+    // равно переподписывают (codesign), и шифрование — лишний шаг. Явно
+    // выбирается флагом --encrypt или --no-encrypt.
+#if defined(__APPLE__)
+    bool encrypt = false;
+#else
     bool encrypt = true;
+#endif
     bool list_only = false;
 
     for (int i = 2; i < argc; ++i) {
@@ -645,6 +653,7 @@ int r2d_build_main(int argc, char **argv)
         else if (SDL_strcmp(a, "--relink") == 0 && i + 1 < argc) relink_dir = argv[++i];
         else if (SDL_strcmp(a, "--add") == 0 && i + 1 < argc && add_count < 64) adds[add_count++] = argv[++i];
         else if (SDL_strcmp(a, "--no-assets") == 0) with_assets = false;
+        else if (SDL_strcmp(a, "--encrypt") == 0) encrypt = true;
         else if (SDL_strcmp(a, "--no-encrypt") == 0) encrypt = false;
         else if (SDL_strcmp(a, "--list") == 0) list_only = true;
         else if (SDL_strcmp(a, "--help") == 0 || SDL_strcmp(a, "-h") == 0) { print_usage(); return 0; }
@@ -870,7 +879,12 @@ int r2d_build_main(int argc, char **argv)
 
     printf("\nИтого: скриптов %zu байт, ассетов %zu байт, контейнер %zu байт, файлов %d\n",
            scripts, assets, container_size, st.file_count);
-    printf("Шифрование: %s\n", encrypt ? "ChaCha20-Poly1305 (RFC 8439)" : "выключено");
+    printf("Шифрование: %s\n", encrypt ? "ChaCha20-Poly1305 (RFC 8439)"
+#if defined(__APPLE__)
+                                        : "выключено (на macOS так по умолчанию; включить — --encrypt)");
+#else
+                                        : "выключено");
+#endif
 
     if (list_only) {
         printf("\n--list: файлы не записаны\n");

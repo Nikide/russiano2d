@@ -5,26 +5,47 @@
 # Используется tools/autobuild.py — вручную собирать не нужно:
 #   python3 tools/autobuild.py --platforms linux-x86_64
 #
-# WITH_MINGW=1 добавляет mingw-w64, тогда тот же образ умеет собирать
-# windows-x86_64 кросс-компиляцией.
+# WITH_MINGW=1 добавляет mingw-w64 и собирает под него Freetype (его требует
+# RmlUi, а готового пакета под MinGW в Ubuntu нет), после чего тот же образ
+# умеет собирать windows-x86_64 кросс-компиляцией.
 # ---------------------------------------------------------------------------
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 ARG WITH_MINGW=0
+ARG FREETYPE_VERSION=2.13.3
 
+# libxtst-dev — SDL3 требует XTEST на Linux; libfreetype-dev — RmlUi.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential clang cmake ninja-build pkg-config git ca-certificates \
-        python3 zip unzip \
+        python3 zip unzip curl \
         libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
-        libxfixes-dev libxss-dev libxkbcommon-dev libwayland-dev \
+        libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev \
         libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev \
         libudev-dev libdbus-1-dev \
-    && if [ "$WITH_MINGW" = "1" ]; then \
-        apt-get install -y --no-install-recommends mingw-w64; \
-    fi \
+        libfreetype-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Freetype под Windows: ставим прямо в кросс-корень (/usr/x86_64-w64-mingw32),
+# чтобы find_package(Freetype) находил его без плясок с CMAKE_PREFIX_PATH.
+RUN if [ "$WITH_MINGW" = "1" ]; then \
+        set -eux; \
+        apt-get update; \
+        apt-get install -y --no-install-recommends mingw-w64 xz-utils; \
+        rm -rf /var/lib/apt/lists/*; \
+        curl -fL -o /tmp/freetype.tar.xz \
+            "https://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.xz"; \
+        mkdir -p /tmp/freetype; \
+        tar -xJf /tmp/freetype.tar.xz -C /tmp/freetype --strip-components=1; \
+        cd /tmp/freetype; \
+        ./configure --host=x86_64-w64-mingw32 --prefix=/usr/x86_64-w64-mingw32 \
+            --without-harfbuzz --without-bzip2 --without-brotli \
+            --without-png --without-zlib --enable-static --disable-shared; \
+        make -j"$(nproc)"; \
+        make install; \
+        rm -rf /tmp/freetype /tmp/freetype.tar.xz; \
+    fi
 
 # Домашний каталог сборщика берём из /tmp: контейнер запускается от имени
 # хостового пользователя (--user uid:gid), а писать в /root он не может.
