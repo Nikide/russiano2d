@@ -254,6 +254,8 @@ MSYS2/MinGW:
 
 ### 5.3. Как настроить раннер на hub.mos.ru
 
+Пошаговая инструкция для Linux-VPS — в [RUNNER.md](RUNNER.md). Кратко ниже.
+
 Linux (docker-executor) — проще всего:
 
 ```bash
