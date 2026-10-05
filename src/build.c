@@ -22,6 +22,10 @@
 
 #include <SDL3/SDL.h>
 
+#ifdef _WIN32
+#include <windows.h>   // GetModuleFileNameA, DWORD
+#endif
+
 #include <quickjs.h>
 
 #include <stdio.h>
@@ -564,9 +568,11 @@ static bool write_relink(const char *dir, const uint8_t *container, size_t conta
     char tail[256];
     const int tail_len = SDL_snprintf(tail, sizeof tail,
         "\nconst unsigned char *r2d_embedded_payload = payload_data;\n"
-        "const unsigned long r2d_embedded_payload_size = %zuUL;\n"
+        // %zu понимает не всякий printf (в частности, msvcrt под MinGW),
+        // поэтому печатаем как unsigned long long и явно приводим.
+        "const unsigned long r2d_embedded_payload_size = %lluUL;\n"
         "const unsigned char *r2d_embedded_footer = payload_footer;\n",
-        container_size);
+        (unsigned long long)container_size);
     SDL_WriteIO(io, tail, (size_t)tail_len);
     SDL_CloseIO(io);
 

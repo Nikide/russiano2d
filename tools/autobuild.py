@@ -226,7 +226,11 @@ def build_in_container(platform_name: str, build_type: str, jobs: int,
         "ldd /src/" + binary_rel + " 2>/dev/null | awk '{print $3}' "
         "| grep -E '^/' "
         "| grep -vE '" + skip_system + "' "
-        "| xargs -r -I{} cp -L {} /src/" + build_dir_name + "/lib/ 2>/dev/null || true"
+        "| xargs -r -I{} cp -L {} /src/" + build_dir_name + "/lib/ 2>/dev/null || true; "
+        # RUNPATH не действует на транзитивные зависимости, поэтому библиотекам
+        # прописываем свой: libfreetype находит libpng рядом с собой.
+        "for so in /src/" + build_dir_name + "/lib/*.so*; do "
+        "[ -e \"$so\" ] && patchelf --set-rpath '$ORIGIN' \"$so\" 2>/dev/null || true; done"
     )
 
     inner = (

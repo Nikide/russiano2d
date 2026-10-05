@@ -20,7 +20,7 @@ ARG FREETYPE_VERSION=2.13.3
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential clang cmake ninja-build pkg-config git ca-certificates \
         python3 zip unzip curl \
-        glslang-tools spirv-cross \
+        glslang-tools spirv-cross patchelf \
         libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
         libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev \
         libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev \
@@ -35,7 +35,9 @@ RUN if [ "$WITH_MINGW" = "1" ]; then \
         apt-get update; \
         apt-get install -y --no-install-recommends mingw-w64 xz-utils; \
         rm -rf /var/lib/apt/lists/*; \
-        curl -fL -o /tmp/freetype.tar.xz \
+        # Зеркала savannah периодически отваливаются — пробуем несколько раз
+        # и падаем с понятной ошибкой, если не вышло.
+        curl -fL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/freetype.tar.xz \
             "https://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.xz"; \
         mkdir -p /tmp/freetype; \
         tar -xJf /tmp/freetype.tar.xz -C /tmp/freetype --strip-components=1; \

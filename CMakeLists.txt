@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 
+project(russiano2d
+    VERSION 0.1.0
+    DESCRIPTION "Легковесный кроссплатформенный 2D-движок: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi"
+    LANGUAGES C CXX)
 # Бинарник ищет библиотеки рядом с собой: если что-то осталось динамическим,
 # пакет всё равно переносим (lib/ рядом с исполняемым файлом).
 set(R2D_RPATH "")
@@ -23,10 +27,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_link_options("-Wl,--disable-new-dtags")
 endif()
 
-project(russiano2d
-    VERSION 0.1.0
-    DESCRIPTION "Легковесный кроссплатформенный 2D-движок: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi"
-    LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # Стандарты и глобальные настройки
@@ -57,11 +57,14 @@ if(R2D_SANITIZE AND NOT MSVC)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
-# Windows: BCryptGenRandom живёт в bcrypt.lib. MSVC подключает её сама
-# (pragma в заголовке), а MinGW — нет, и линковка падает с
-# «undefined reference to BCryptGenRandom».
+# Windows: bcrypt нужна для BCryptGenRandom (MSVC подключает её pragma'ой,
+# MinGW — нет), ws2_32 — для сокетов в src/http.c (WSAStartup, select,
+# closesocket). Без них линковка падает с undefined reference.
 if(WIN32)
-    set(R2D_WIN_LIBS bcrypt)
+    # Рантайм MinGW статически: иначе .exe требует libstdc++-6.dll и
+    # libgcc_s_seh-1.dll, которых на чистой Windows нет.
+    add_link_options(-static-libgcc -static-libstdc++)
+    set(R2D_WIN_LIBS bcrypt ws2_32)
 else()
     set(R2D_WIN_LIBS "")
 endif()
