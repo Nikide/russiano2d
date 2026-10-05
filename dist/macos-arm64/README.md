@@ -110,26 +110,6 @@ Box2D, RmlUi, Dear ImGui, glslang и SPIRV-Cross. Дальше сборка ин
 подхватит его и не будет собирать заново. Так же подхватывается системный
 libcurl — с ним `$.http` умеет и `https`.
 
-### Автосборка всех платформ в `dist/`
-
-Одной командой — что можно собрать на этой машине:
-
-```bash
-python3 tools/autobuild.py --with-windows
-```
-
-* **macOS** собирается нативно;
-* **Linux** — в контейнере `ubuntu:24.04` (образ-сборщик:
-  `tools/docker/Dockerfile.linux-builder`), репозиторий монтируется внутрь,
-  поэтому артефакты остаются на диске рядом с проектом;
-* **Windows** — кросс-компиляция MinGW в том же контейнере;
-* каждая платформа упаковывается штатным релизным кодом в `dist/<платформа>/`
-  вместе с архивом, и рядом пишется общий `dist/SHA256SUMS.txt`.
-
-Полезные флаги: `--debug`, `--jobs N`, `--platforms macos-arm64,linux-x86_64`,
-`--with-windows`, `--out DIR`. Нужен запущенный Docker Desktop — без него
-соберётся только платформа текущей машины.
-
 ### Опции CMake
 
 | Опция | По умолчанию | Что делает |
@@ -485,23 +465,11 @@ tests/
   fixtures/                 маленькие игры для тестов
 docs/
   HIGH_LEVEL_API.md         полный справочник по $
-  API.md                    низкоуровневые вызовы engine.*
   AGENT_API.md              протокол агента
-  ARCHITECTURE.md           замысел движка и философия API $
-  GAP_ANALYSIS.md           аудит API и пробелы относительно Godot 4.x
-  tutorial-first-game.md    «Моя первая игра»: от hello world до сборки
-  tutorial-platformer.md    разбор платформера
+  API.md                    низкоуровневые вызовы engine.*
+  tutorial-platformer.md    первая игра
   tutorial-menus.md         меню, сцены и переходы
-  BUILD.md                  сборка игры в один файл
-  RELEASING.md              выпуск релиза
-  RUNNER.md                 раннер CI на Linux-VPS
-  highlevel/                справочники подсистем по отдельности
-dist/                       готовые сборки: dist/<платформа>/ + архив + SHA256SUMS.txt
 ```
-
-Четыре главные папки: **`src/`** — код движка, **`demos/`** — демо-проекты,
-**`docs/`** — документация, **`dist/`** — собранные бинарники. Остальное —
-инфраструктура сборки (`cmake/`, `tools/`, `tests/`, `assets/`, `shaders/`).
 
 ### Релизная сборка: скрипты внутри бинарника
 
@@ -567,7 +535,6 @@ JavaScript. Текстуры (`assets/`), шрифты и разметка ин�
 * [docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md) — всё, что умеет `$`
 * [docs/AGENT_API.md](docs/AGENT_API.md) — как управлять движком программой
 * [docs/API.md](docs/API.md) — низкоуровневые вызовы `engine.*`
-* [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — замысел движка и философия API `$`
 * [docs/GAP_ANALYSIS.md](docs/GAP_ANALYSIS.md) — аудит API и пробелы относительно Godot 4.x (2D)
 * [docs/highlevel/](docs/highlevel/) — подсистемы по отдельности: анимация, TileMap,
   частицы, навигация (сетка и navmesh), prefab, аудио-шины, слои, UI-контролы

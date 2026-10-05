@@ -3,7 +3,10 @@ build/
 build-*/
 out/
 bin/
-dist/
+# dist/ СОЗНАТЕЛЬНО не игнорируется: CI на hub.mos.ru не работает, поэтому
+# готовые сборки раздаются прямо из репозитория (их кладёт tools/autobuild.py
+# или локальный build_and_push.sh).
+save.json
 cmake-build-*/
 *.o
 *.a
