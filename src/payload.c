@@ -13,8 +13,10 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#else
+#elif defined(__APPLE__)
 #include <mach-o/dyld.h>   // _NSGetExecutablePath (macOS)
+#else
+#include <unistd.h>        // readlink("/proc/self/exe")
 #endif
 
 // ---------------------------------------------------------------------------

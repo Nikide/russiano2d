@@ -49,14 +49,23 @@ r2d_download_once("${R2D_MDI_BASE}/font/MaterialIcons-Regular.codepoints"
                    "${R2D_ICON_CODEPOINTS}" "${R2D_MDI_CODEPOINTS_SHA256}" "таблица имён иконок")
 
 # --- Генератор заголовка ----------------------------------------------------
-add_executable(r2d_embed_icons "${CMAKE_SOURCE_DIR}/tools/r2d_embed_icons.c")
+# При кросс-сборке генератор обязан работать на ХОСТЕ: собранный под Windows
+# .exe на Linux не запускается, и генерация падает с «r2d_embed_icons: not
+# found». Поэтому в кросс-сборке компилируем его хост-компилятором.
+if(CMAKE_CROSSCOMPILING)
+    include("${CMAKE_CURRENT_LIST_DIR}/HostTool.cmake")
+    r2d_host_tool(R2D_ICON_TOOL "${CMAKE_SOURCE_DIR}/tools/r2d_embed_icons.c")
+else()
+    add_executable(r2d_embed_icons "${CMAKE_SOURCE_DIR}/tools/r2d_embed_icons.c")
+    set(R2D_ICON_TOOL r2d_embed_icons)
+endif()
 
 set(R2D_ICONS_HEADER "${CMAKE_BINARY_DIR}/generated/r2d_icons_data.h")
 
 add_custom_command(
     OUTPUT "${R2D_ICONS_HEADER}"
-    COMMAND r2d_embed_icons "${R2D_ICON_FONT}" "${R2D_ICON_CODEPOINTS}" "${R2D_ICONS_HEADER}"
-    DEPENDS r2d_embed_icons "${R2D_ICON_FONT}" "${R2D_ICON_CODEPOINTS}"
+    COMMAND "${R2D_ICON_TOOL}" "${R2D_ICON_FONT}" "${R2D_ICON_CODEPOINTS}" "${R2D_ICONS_HEADER}"
+    DEPENDS "${R2D_ICON_TOOL}" "${R2D_ICON_FONT}" "${R2D_ICON_CODEPOINTS}"
     COMMENT "Встраиваю шрифт иконок Material Design"
     VERBATIM)
 

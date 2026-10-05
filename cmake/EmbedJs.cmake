@@ -16,12 +16,19 @@ set(R2D_JS_HEADER "${CMAKE_BINARY_DIR}/generated/r2d_js_data.h")
 
 file(GLOB R2D_HIGHLEVEL_SOURCES CONFIGURE_DEPENDS "${R2D_HIGHLEVEL_DIR}/*.js")
 
-add_executable(r2d_embed_js "${CMAKE_SOURCE_DIR}/tools/r2d_embed_js.c")
+# Под кросс-сборкой генератор собирается хост-компилятором: см. HostTool.cmake.
+if(CMAKE_CROSSCOMPILING)
+    include("${CMAKE_CURRENT_LIST_DIR}/HostTool.cmake")
+    r2d_host_tool(R2D_EMBED_JS_TOOL "${CMAKE_SOURCE_DIR}/tools/r2d_embed_js.c")
+else()
+    add_executable(r2d_embed_js "${CMAKE_SOURCE_DIR}/tools/r2d_embed_js.c")
+    set(R2D_EMBED_JS_TOOL r2d_embed_js)
+endif()
 
 add_custom_command(
     OUTPUT "${R2D_JS_HEADER}"
-    COMMAND r2d_embed_js "${R2D_HIGHLEVEL_DIR}" "${R2D_JS_HEADER}"
-    DEPENDS r2d_embed_js ${R2D_HIGHLEVEL_SOURCES}
+    COMMAND "${R2D_EMBED_JS_TOOL}" "${R2D_HIGHLEVEL_DIR}" "${R2D_JS_HEADER}"
+    DEPENDS "${R2D_EMBED_JS_TOOL}" ${R2D_HIGHLEVEL_SOURCES}
     COMMENT "Встраиваю высокоуровневое API ($) в бинарник"
     VERBATIM)
 
