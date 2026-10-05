@@ -45,7 +45,9 @@ typedef struct R2dPayload {
     bool            encrypted;
 } R2dPayload;
 
-// Разбирает контейнер из памяти. buffer переходит во владение груза.
+// Разбирает контейнер из памяти. При успехе buffer переходит во владение
+// груза (r2d_payload_free его освободит); при ошибке (NULL) буфер остаётся
+// вызывающему — освобождать его дважды нельзя.
 R2dPayload *r2d_payload_parse(uint8_t *buffer, size_t size, char *err, size_t err_size);
 
 void r2d_payload_free(R2dPayload *payload);

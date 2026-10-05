@@ -2523,7 +2523,16 @@ static void r2d__drain_jobs(R2DScript *s)
     if (!s->rt) return;
     JSContext *ctx = NULL;
     int guard = 0;
-    while (JS_ExecutePendingJob(s->rt, &ctx) > 0) {
+    for (;;) {
+        const int ret = JS_ExecutePendingJob(s->rt, &ctx);
+        if (ret == 0) break;               // очередь пуста
+        if (ret < 0) {                     // задание бросило исключение
+            // Раньше цикл молча выходил: исключение оставалось в контексте,
+            // утекало и потом подменяло собой чужую ошибку у следующего
+            // потребителя JS_GetException. Забираем и логируем его.
+            r2d__capture_error(s);
+            break;
+        }
         if (++guard > 10000) {
             R2D_WARN("очередь заданий QuickJS не заканчивается — прерываю");
             break;

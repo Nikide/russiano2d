@@ -412,9 +412,20 @@ int r2d_gui_load_document(R2DGui *g, const char *path)
     for (int i = 0; i < g->doc_count; ++i) {
         if (g->doc_paths[i] == path && g->docs[i]) return i;
     }
-    if (g->doc_count >= kMaxDocuments) {
-        R2D_ERROR("RmlUi: достигнут лимит документов (%d)", kMaxDocuments);
-        return -1;
+
+    // Ищем свободный слот: unload() обнуляет docs[i], но doc_count не
+    // уменьшает — иначе 64 цикла «открыть/закрыть» навсегда исчерпывали лимит
+    // и после этого ни один документ не грузился.
+    int id = -1;
+    for (int i = 0; i < g->doc_count; ++i) {
+        if (!g->docs[i]) { id = i; break; }
+    }
+    if (id < 0) {
+        if (g->doc_count >= kMaxDocuments) {
+            R2D_ERROR("RmlUi: достигнут лимит документов (%d)", kMaxDocuments);
+            return -1;
+        }
+        id = g->doc_count++;
     }
 
     Rml::ElementDocument *doc = g->context->LoadDocument(path);
@@ -426,7 +437,6 @@ int r2d_gui_load_document(R2DGui *g, const char *path)
     // По умолчанию документ скрыт: сцена сама решает, когда его показать.
     doc->Hide();
 
-    const int id = g->doc_count++;
     g->docs[id] = doc;
     g->doc_paths[id] = path;
     return id;

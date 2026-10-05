@@ -279,6 +279,12 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
     r2d_gui_render(fc->gui, cmd, swapchain, swap_w, swap_h);
 #endif
 
+#ifndef R2D_ENABLE_IMGUI
+    // Очередь текста разбирает только оверлей (r2d_debug_ui_draw). Без ImGui
+    // её не чистит никто: строки копились бы до лимита и висели в памяти.
+    r2d_text_clear();
+#endif
+
     // Снимок кадра: копируем swapchain в transfer-буфер тем же командным
     // буфером, а читаем уже после fence.
     const char *shot_to = shot_path;
@@ -329,7 +335,10 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
         SDL_WaitForGPUFences(app->device, true, fences, 1);
         r2d__save_screenshot(app, shot_tb, swap_w, swap_h, shot_to);
         SDL_ReleaseGPUTransferBuffer(app->device, shot_tb);
-        if (shot_to == shot_path) fc->auto_shot_taken = true;
+        // Автоматический снимок (--screenshot) делается один раз. Раньше здесь
+        // сравнивалось shot_to == shot_path, что верно только для агентского
+        // пути: кадр снимался каждый кадр, с ожиданием GPU-fence и записью PNG.
+        if (!shot_path) fc->auto_shot_taken = true;
     }
 
     SDL_ReleaseGPUFence(app->device, fence);

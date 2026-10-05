@@ -440,7 +440,15 @@ double r2d_json_num(const R2dJson *v, double def)
 int r2d_json_int(const R2dJson *v, int def)
 {
     if (!v) return def;
-    if (v->type == R2D_JSON_NUM) return (int)v->number;
+    if (v->type == R2D_JSON_NUM) {
+        // Приведение double → int вне диапазона — UB, а из JSON приходит что
+        // угодно (1e300, inf). Ограничиваем, NaN считаем мусором.
+        const double n = v->number;
+        if (!(n == n)) return def;
+        if (n >= 2147483647.0) return 2147483647;
+        if (n <= -2147483648.0) return (-2147483647 - 1);
+        return (int)n;
+    }
     if (v->type == R2D_JSON_BOOL) return v->boolean ? 1 : 0;
     return def;
 }

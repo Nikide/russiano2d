@@ -284,6 +284,19 @@ bool r2d_app_vsync(const R2DApp *app)
     return app ? app->vsync : false;
 }
 
+// Кэш системных курсоров. SDL_CreateSystemCursor() выделяет ресурс, а
+// SDL_SetCursor() владение не забирает; раньше курсор создавался на каждый
+// вызов, и $.window.cursor() в цикле копил SDL_Cursor/NSCursor без предела.
+static SDL_Cursor *g_cursors[SDL_SYSTEM_CURSOR_COUNT];
+
+static void free_cursors(void)
+{
+    for (int i = 0; i < SDL_SYSTEM_CURSOR_COUNT; ++i) {
+        if (g_cursors[i]) SDL_DestroyCursor(g_cursors[i]);
+        g_cursors[i] = NULL;
+    }
+}
+
 void r2d_app_set_cursor(R2DApp *app, const char *kind)
 {
     if (!app || !app->window || !kind) return;
@@ -298,7 +311,11 @@ void r2d_app_set_cursor(R2DApp *app, const char *kind)
         else if (SDL_strcmp(kind, "wait") == 0) shape = SDL_SYSTEM_CURSOR_WAIT;
         else if (SDL_strcmp(kind, "text") == 0) shape = SDL_SYSTEM_CURSOR_TEXT;
 
-        SDL_Cursor *cursor = SDL_CreateSystemCursor(shape);
+        SDL_Cursor *cursor = g_cursors[shape];
+        if (!cursor) {
+            cursor = SDL_CreateSystemCursor(shape);
+            g_cursors[shape] = cursor;
+        }
         if (cursor) SDL_SetCursor(cursor);
     }
     SDL_snprintf(app->cursor, sizeof app->cursor, "%s", kind);
@@ -311,6 +328,7 @@ const char *r2d_app_cursor(const R2DApp *app)
 
 void r2d_app_shutdown(R2DApp *app)
 {
+    free_cursors();
     if (app->gamepad) {
         SDL_CloseGamepad(app->gamepad);
         app->gamepad = NULL;
@@ -394,6 +412,11 @@ void r2d_app_begin_frame(R2DApp *app)
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
         case SDL_EVENT_WINDOW_RESIZED:
             SDL_GetWindowSizeInPixels(app->window, &app->pixel_width, &app->pixel_height);
+            // Логический размер тоже меняется, а main.c берёт его для
+            // ортопроекции кадра, и его же видят engine.width/height. Без
+            // этого после ресайза сцена растягивалась, а попадание мыши
+            // расходилось с нарисованным.
+            SDL_GetWindowSize(app->window, &app->width, &app->height);
             break;
 
         case SDL_EVENT_MOUSE_MOTION:

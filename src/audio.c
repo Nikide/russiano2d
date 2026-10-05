@@ -82,12 +82,17 @@ static void SDLCALL r2d__fx_process(void *userdata, MIX_Track *track,
         if (delay < 1) delay = 1;
         if (delay >= cap) delay = cap - 1;
         const float feedback = fx->p2;
+        // Линия задержки выделена на два канала (см. r2d_audio_init), а
+        // spec->channels приходит от декодера и может быть больше — например
+        // 6 у 5.1. Индексировать её по ch нельзя: запись уходила бы далеко за
+        // конец буфера. Обрабатываем максимум два канала с их же шагом.
+        const int line_ch = ch > 2 ? 2 : ch;
         for (int f = 0; f < frames; ++f) {
             int rd = fx->pos - delay;
             if (rd < 0) rd += cap;
-            const int wr_base = fx->pos * ch;
-            const int rd_base = rd * ch;
-            for (int c = 0; c < ch && c < 2; ++c) {
+            const int wr_base = fx->pos * line_ch;
+            const int rd_base = rd * line_ch;
+            for (int c = 0; c < line_ch; ++c) {
                 float *s = &pcm[f * ch + c];
                 const float out = *s + fx->line[rd_base + c] * feedback;
                 fx->line[wr_base + c] = out;

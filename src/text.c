@@ -66,3 +66,17 @@ bool r2d_text_measure(const char *text, float size, float *w, float *h)
     if (h) *h = size;
     return false;
 }
+
+#ifndef R2D_ENABLE_IMGUI
+// Без Dear ImGui точное измерение недоступно: r2d_text_measure() сам оценит
+// ширину по числу глифов. Заглушка нужна для линковки — настоящая реализация
+// живёт в debug_ui.cpp, который при R2D_ENABLE_IMGUI=OFF не собирается.
+bool r2d_text_measure_ui(const char *text, float size, float *w, float *h)
+{
+    (void)text;
+    (void)size;
+    (void)w;
+    (void)h;
+    return false;
+}
+#endif

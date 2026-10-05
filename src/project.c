@@ -71,7 +71,11 @@ static int read_int(const R2dJson *root, const char *key, int fallback)
 {
     const R2dJson *value = r2d_json_get(root, key);
     if (!value || value->type != R2D_JSON_NUM) return fallback;
-    const int number = (int)(value->number + 0.5);
+    // Округление с проверкой диапазона: в манифесте может оказаться inf или
+    // 1e400, а приведение такого double к int — undefined behavior.
+    const double n = value->number;
+    if (!(n == n) || n >= 2000000000.0) return fallback;
+    const int number = (int)(n + 0.5);
     return number > 0 ? number : fallback;
 }
 

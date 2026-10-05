@@ -75,6 +75,17 @@ static bool read_bytes(Reader *r, const uint8_t **out, size_t len)
     return true;
 }
 
+// Ошибка разбора: буфер контейнера остаётся собственностью вызывающего (он
+// его и освобождает, см. r2d_payload_parse в payload.h). Раньше r2d_payload_free
+// освобождал и его, а вызывающий освобождал повторно — на битом грузе это
+// давало двойное освобождение кучи (ловилось AddressSanitizer).
+static void parse_fail(R2dPayload *payload)
+{
+    payload->buffer = NULL;
+    payload->buffer_size = 0;
+    r2d_payload_free(payload);
+}
+
 R2dPayload *r2d_payload_parse(uint8_t *buffer, size_t size, char *err, size_t err_size)
 {
     if (err && err_size) err[0] = '\0';
@@ -114,6 +125,13 @@ R2dPayload *r2d_payload_parse(uint8_t *buffer, size_t size, char *err, size_t er
     payload->buffer_size = size;
     payload->file_count = (int)count;
     payload->files = (R2dPayloadFile *)SDL_calloc(count ? count : 1, sizeof(R2dPayloadFile));
+    if (!payload->files) {
+        if (err) SDL_snprintf(err, err_size, "груз: нет памяти");
+        // Таблицы ещё нет: r2d_payload_free по ней не пройдёт. Буфер не
+        // трогаем — его освободит вызывающий.
+        SDL_free(payload);
+        return NULL;
+    }
 
     SDL_snprintf(payload->entry, sizeof payload->entry, "%.*s", (int)entry_len, (const char *)entry);
 
@@ -123,7 +141,7 @@ R2dPayload *r2d_payload_parse(uint8_t *buffer, size_t size, char *err, size_t er
 
         if (!read_u32(&r, &path_len) || path_len == 0 || path_len > 4000) {
             if (err) SDL_snprintf(err, err_size, "груз: файл %u — плохой путь", i);
-            r2d_payload_free(payload);
+            parse_fail(payload);
             return NULL;
         }
         if (!read_bytes(&r, &path, path_len)) goto truncated;
@@ -142,11 +160,11 @@ R2dPayload *r2d_payload_parse(uint8_t *buffer, size_t size, char *err, size_t er
 
     truncated:
         if (err) SDL_snprintf(err, err_size, "груз: файл %u обрезан", i);
-        r2d_payload_free(payload);
+        parse_fail(payload);
         return NULL;
     no_memory:
         if (err) SDL_snprintf(err, err_size, "груз: нет памяти");
-        r2d_payload_free(payload);
+        parse_fail(payload);
         return NULL;
     }
 
@@ -167,7 +185,7 @@ void r2d_payload_free(R2dPayload *payload)
 
 const R2dPayloadFile *r2d_payload_find(const R2dPayload *payload, const char *path)
 {
-    if (!payload || !path) return NULL;
+    if (!payload || !path || !*path) return NULL;
 
     for (int i = 0; i < payload->file_count; ++i) {
         if (SDL_strcmp(payload->files[i].path, path) == 0) return &payload->files[i];
@@ -334,7 +352,10 @@ bool r2d_payload_attach_self(void)
                            ((uint32_t)footer[86] << 16) | ((uint32_t)footer[87] << 24);
     const bool encrypted = (flags & 1u) != 0;
 
-    if (offset + size > file_size - R2D_FOOTER_SIZE || size == 0) {
+    // Проверяем без переполнения: offset и size приходят из футера, и их сумма
+    // могла обернуться по модулю 2^64 — тогда memcpy читал бы до буфера.
+    if (size == 0 || offset > file_size - R2D_FOOTER_SIZE ||
+        size > file_size - R2D_FOOTER_SIZE - offset) {
         R2D_ERROR("груз: размеры в футере не сходятся с файлом");
         SDL_free(bytes);
         return false;

@@ -31,3 +31,17 @@ if(NOT MSVC)
     target_compile_options(r2d_crypto_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_crypto_test PRIVATE -fsanitize=address,undefined)
 endif()
+
+# --- Разбор груза игры -------------------------------------------------------
+# Контейнер разбирается из памяти, поэтому тесту достаточно SDL; crypto.c нужен
+# для символов расшифровки, которые тянет payload.c. Санитайзеры обязательны:
+# именно здесь двойное освобождение и выход за границу буфера.
+add_executable(r2d_payload_test "${CMAKE_SOURCE_DIR}/tests/payload/payload_test.c"
+                                "${CMAKE_SOURCE_DIR}/src/payload.c"
+                                "${CMAKE_SOURCE_DIR}/src/crypto.c")
+target_include_directories(r2d_payload_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_payload_test PRIVATE SDL3::SDL3)
+if(NOT MSVC)
+    target_compile_options(r2d_payload_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_payload_test PRIVATE -fsanitize=address,undefined)
+endif()

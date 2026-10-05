@@ -35,6 +35,12 @@
 #include <sys/stat.h>
 #endif
 
+#ifdef __APPLE__
+#include <spawn.h>
+#include <sys/wait.h>
+extern char **environ;   // нужен posix_spawn: без оболочки
+#endif
+
 // Билдеру нужен тот же ключ, что и рантайму, — функция объявлена в payload.c.
 void r2d_payload_wrap_key(const uint8_t key[R2D_KEY_SIZE], const uint8_t nonce[12],
                           uint8_t out_blob[R2D_KEY_SIZE]);
@@ -433,11 +439,19 @@ static bool self_executable_path(char *out, size_t out_size)
 static void resign_macos(const char *path)
 {
 #ifdef __APPLE__
-    char command[4200];
-    SDL_snprintf(command, sizeof command,
-                 "codesign --force --sign - '%s' >/dev/null 2>&1", path);
-    const int rc = system(command);
-    if (rc == 0) {
+    // Без system(): путь к собранному файлу приходит из --out и может
+    // содержать кавычки и метасимволы оболочки, а system() выполнил бы их как
+    // отдельные команды. posix_spawn передаёт аргументы напрямую.
+    char *argv[] = {
+        (char *)"/usr/bin/codesign", (char *)"--force", (char *)"--sign",
+        (char *)"-", (char *)path, NULL,
+    };
+    pid_t pid = 0;
+    int status = 0;
+    const int spawned = posix_spawn(&pid, "/usr/bin/codesign", NULL, NULL, argv, environ);
+    const bool ok = spawned == 0 && waitpid(pid, &status, 0) >= 0 &&
+                    WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    if (ok) {
         printf("  подпись пересоздана (ад-хок), иначе macOS отказалась бы запускать файл\n");
     } else {
         printf("  ВНИМАНИЕ: переподписать не удалось — на macOS запустите вручную:\n"

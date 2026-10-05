@@ -74,6 +74,10 @@ typedef socklen_t r2d_socklen_t;
 // Таймаут по умолчанию, если игра не задала свой (мс).
 #define R2D_HTTP_DEFAULT_TIMEOUT_MS 15000.0
 
+// Предел размера ответа для сокетного бэкенда: защита от бесконечного потока
+// и от роста памяти, которым управляет удалённый сервер.
+#define R2D_HTTP_MAX_RESPONSE (64u * 1024u * 1024u)
+
 // ===========================================================================
 // Время и память
 // ===========================================================================
@@ -291,10 +295,14 @@ static R2DHttpEntry *r2d__entry_new(void)
 static void r2d__entry_fail(R2DHttpEntry *e, const char *msg)
 {
     if (e->done) return;
+    // Длину тела запоминаем до take: иначе на ошибке частично принятое тело
+    // возвращалось в JS пустой строкой (body_len оставался нулевым).
+    const size_t body_len = e->body.len;
     e->res.status = 0;
     free(e->res.error);
     e->res.error = r2d__strdup(msg ? msg : "неизвестная ошибка");
     e->res.body = r2d__buf_take(&e->body);
+    e->res.body_len = e->res.body ? body_len : 0;
     e->res.headers = r2d__buf_take(&e->headers);
     e->res.time_ms = r2d__now_ms() - e->start_ms;
     e->done = true;
@@ -464,6 +472,18 @@ static void r2d__sock_set_nonblock(r2d_socket_t fd)
 #endif
 }
 
+// Строки запроса уходят в сокет дословно. CR/LF в них позволили бы вклеить
+// лишние заголовки или второй запрос (request splitting), поэтому проверяем
+// всё, что подставляется в текст запроса.
+static bool r2d__no_crlf(const char *s)
+{
+    if (!s) return true;
+    for (; *s; ++s) {
+        if (*s == '\r' || *s == '\n') return false;
+    }
+    return true;
+}
+
 // http://host[:port]/path → host/port/path. Порт по умолчанию 80.
 static bool r2d__parse_http_url(const char *url, char **host_out, int *port_out, char **path_out)
 {
@@ -504,7 +524,18 @@ static bool r2d__sock_start(R2DHttpEntry *e, const char *method, const char *url
                             const char *const *names, const char *const *values,
                             int header_count)
 {
+    for (int i = 0; i < header_count; ++i) {
+        if (!names[i] || !values[i]) continue;
+        if (!r2d__no_crlf(names[i]) || !r2d__no_crlf(values[i])) return false;
+    }
+    if (!r2d__no_crlf(method)) return false;
+
     if (!r2d__parse_http_url(url, &e->host, &e->port, &e->path)) return false;
+    if (!r2d__no_crlf(e->host) || !r2d__no_crlf(e->path)) {
+        free(e->host); e->host = NULL;
+        free(e->path); e->path = NULL;
+        return false;
+    }
 
     char port_text[8];
     snprintf(port_text, sizeof port_text, "%d", e->port);
@@ -676,7 +707,9 @@ static void r2d__sock_parse(R2DHttpEntry *e)
 
     long status = 0;
     if (r2d__starts_with_ci(raw, "HTTP/")) {
-        const char *sp = strchr(raw, ' ');
+        // raw не терминирован нулём (это накопитель байтов), поэтому strchr
+        // мог уйти за конец буфера. Ищем пробел в известных границах.
+        const char *sp = (const char *)memchr(raw, ' ', len);
         if (sp) status = atol(sp + 1);
     }
     if (status <= 0) { r2d__entry_fail(e, "не удалось разобрать HTTP-статус"); return; }
@@ -692,9 +725,12 @@ static void r2d__sock_parse(R2DHttpEntry *e)
     if (te && r2d__starts_with_ci(te, "chunked")) {
         R2DBuf decoded = {0};
         r2d__decode_chunked(&decoded, body, body_len);
+        // Тело может быть бинарным: strlen() обрывал бы его на первом 0x00,
+        // тогда как обычный (не chunked) путь передаёт body_len. Берём длину
+        // до take — take очищает буфер.
+        const size_t decoded_len = decoded.len;
         char *text = r2d__buf_take(&decoded);
-        const size_t text_len = text ? strlen(text) : 0;
-        r2d__buf_append(&e->body, text ? text : "", text_len);
+        r2d__buf_append(&e->body, text ? text : "", text ? decoded_len : 0);
         free(text);
     } else {
         r2d__buf_append(&e->body, body, body_len);
@@ -735,6 +771,16 @@ static void r2d__sock_update(R2DHttpEntry *e)
         if (!r2d__wait_readable(e->fd, 0)) return;
         char chunk[8192];
         for (;;) {
+            // Предел нужен, чтобы сервер не мог залить игру бесконечным
+            // потоком: раньше размер ответа ничем не ограничивался.
+            if (e->raw.len > R2D_HTTP_MAX_RESPONSE) {
+                r2d__entry_fail(e, "ответ сервера слишком большой");
+                return;
+            }
+            if (r2d__now_ms() - e->start_ms >= e->timeout_ms) {
+                r2d__entry_fail(e, "таймаут запроса");
+                return;
+            }
             const int n = recv(e->fd, chunk, (int)sizeof chunk, 0);
             if (n > 0) {
                 if (!r2d__buf_append(&e->raw, chunk, (size_t)n)) {

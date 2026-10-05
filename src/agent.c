@@ -70,7 +70,14 @@ void r2d_agent_write_line(const char *line)
     const size_t len = SDL_strlen(line);
 
     if (g_stdout_fd >= 0) {
-        r2d__write(g_stdout_fd, line, (unsigned)len);
+        // write() вправе записать меньше запрошенного (длинный ответ в трубу):
+        // раньше короткая запись молча оставляла обрезанный JSON.
+        size_t off = 0;
+        while (off < len) {
+            const long n = (long)r2d__write(g_stdout_fd, line + off, (unsigned)(len - off));
+            if (n <= 0) break;
+            off += (size_t)n;
+        }
         r2d__write(g_stdout_fd, "\n", 1);
         return;
     }
@@ -488,17 +495,50 @@ static bool command_reload(R2DAgent *a, const R2dJson *req)
 // Цикл
 // ---------------------------------------------------------------------------
 
+// Буфер строки команды живёт до следующего вызова: он растёт по мере чтения.
+static char  *g_line = NULL;
+static size_t g_line_cap = 0;
+
+// Читает строку команды произвольной длины. Возвращает NULL на конце ввода.
+//
+// fgets() с фиксированным буфером разрезал бы команду >= 64 КиБ на две: движок
+// ответил бы дважды («одна строка — один ответ» ломается), и следующий ответ
+// доставался бы не тому запросу. Поэтому читаем посимвольно и растём.
+static char *read_command_line(void)
+{
+    size_t len = 0;
+    bool got = false;
+    int c;
+
+    while ((c = fgetc(stdin)) != EOF) {
+        got = true;
+        if (c == '\n') break;
+        if (len + 2 > g_line_cap) {
+            const size_t cap = g_line_cap ? g_line_cap * 2 : 4096;
+            char *grown = (char *)SDL_realloc(g_line, cap);
+            if (!grown) return NULL;
+            g_line = grown;
+            g_line_cap = cap;
+        }
+        g_line[len++] = (char)c;
+    }
+    if (!got) return NULL;
+    if (!g_line) return NULL;
+    g_line[len] = '\0';
+    return g_line;
+}
+
 bool r2d_agent_serve(R2DAgent *a, const R2DAgentHooks *hooks)
 {
     if (!a || !hooks || !hooks->frame) return false;
 
-    char line[1 << 16];
     bool running = true;
 
     while (running) {
         // Блокирующее чтение: в агентском режиме ждать команду — норма, и это
         // то, что делает прогон детерминированным (кадры не идут сами).
-        if (!fgets(line, (int)sizeof line, stdin)) {
+        char *line = read_command_line();
+        if (!line) {
             R2D_LOG("stdin закрыт — завершаю агентский режим");
             break;
         }
@@ -579,5 +619,8 @@ bool r2d_agent_serve(R2DAgent *a, const R2DAgentHooks *hooks)
         if (!a->app->running) break;
     }
 
+    SDL_free(g_line);
+    g_line = NULL;
+    g_line_cap = 0;
     return a->app->running;
 }
