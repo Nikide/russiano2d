@@ -113,7 +113,7 @@ def main():
         reloads_before = a.eval("engine.reloads")
         a.reload()
         a.step(1)
-        check(a.eval("engine.reloads") >= reloads_before, "reload перезапускает скрипты")
+        check(a.eval("engine.reloads") > reloads_before, "reload перезапускает скрипты")
 
     print("\nВсе проверки пройдены" if not FAILURES else f"\nПРОВАЛЕНО: {len(FAILURES)}")
     return 1 if FAILURES else 0

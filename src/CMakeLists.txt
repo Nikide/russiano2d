@@ -177,6 +177,10 @@ if(R2D_ENABLE_HTTP)
     if(CURL_FOUND)
         target_link_libraries(russiano2d PRIVATE CURL::libcurl)
         list(APPEND R2D_DEFINES R2D_HTTP_WITH_CURL=1)
+        # R2D_DEFINES уже отдан таргету выше (до блока HTTP), поэтому define
+        # добавляем напрямую: иначе libcurl линкуется, а http.c всегда собирает
+        # сокетный бэкенд, и https молча не работает (README обещает обратное).
+        target_compile_definitions(russiano2d PRIVATE R2D_HTTP_WITH_CURL=1)
         message(STATUS "  HTTP ............ libcurl ${CURL_VERSION_STRING} (http + https)")
     else()
         message(STATUS "  HTTP ............ встроенный сокетный бэкенд (только http://)")

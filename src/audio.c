@@ -334,7 +334,12 @@ const char *r2d_audio_name(const R2DAudio *a, int id)
 double r2d_audio_duration(const R2DAudio *a, int id)
 {
     if (id < 0 || id >= a->sound_count || !a->sounds[id]) return -1.0;
-    const Sint64 ms = MIX_GetAudioDuration(a->sounds[id]);
+    // MIX_GetAudioDuration отдаёт длину в СЭМПЛ-КАДРАХ, а не в миллисекундах:
+    // без пересчёта файл на 74 с показывал 3274 с (кадры / 1000).
+    const Sint64 frames = MIX_GetAudioDuration(a->sounds[id]);
+    if (frames == MIX_DURATION_UNKNOWN || frames == MIX_DURATION_INFINITE) return -1.0;
+    if (frames < 0) return -1.0;
+    const Sint64 ms = MIX_AudioFramesToMS(a->sounds[id], frames);
     return ms >= 0 ? (double)ms / 1000.0 : -1.0;
 }
 

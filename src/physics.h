@@ -158,8 +158,11 @@ typedef struct R2DRayHit {
     float fraction;    // доля пройденного отрезка 0..1
 } R2DRayHit;
 
-// Ближайшее препятствие на отрезке. false — ничего не задето.
-bool r2d_physics_raycast(const R2DPhysics *p, float x1, float y1, float x2, float y2, R2DRayHit *out);
+// Ближайшее препятствие на отрезке. ignore/ignore_count — тела, которые луч
+// пропускает (например, тело стрелка): callback перебирает попадания дальше.
+// false — ничего не задето.
+bool r2d_physics_raycast(const R2DPhysics *p, float x1, float y1, float x2, float y2,
+                         const int *ignore, int ignore_count, R2DRayHit *out);
 
 // Тела, чьи формы накрывают точку / попадают в прямоугольник (x, y — центр).
 // Возвращают число записанных id (не больше max_ids).

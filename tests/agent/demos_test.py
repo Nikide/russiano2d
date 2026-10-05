@@ -33,6 +33,15 @@ SCENES = {
 
 FAILURES = []
 
+# Документ RmlUi → кнопки, у каждой из которых обязан быть свой слушатель.
+# $.ui.doc().on() подписывает конкретный элемент, поэтому «один обработчик на
+# документ с ветвлением по id» оставлял часть кнопок мёртвыми.
+DOC_BUTTONS = {
+    "light": ("demos/ui/light.rml", ["light-shadows", "light-fill", "light-rays"]),
+    "bsp": ("demos/ui/bsp.rml", ["bsp-splits", "bsp-order"]),
+    "shooter25d": ("demos/ui/shooter-death.rml", ["death-retry", "death-menu"]),
+}
+
 
 def check(condition, message):
     print(("  ok   " if condition else "  FAIL ") + message)
@@ -73,6 +82,16 @@ def run_scene(name, minimum):
 
             state = a.state()
             check(isinstance(state.get("entities"), list), f"{name}: снимок узлов доступен")
+
+            buttons = DOC_BUTTONS.get(name)
+            if buttons:
+                path, elements = buttons
+                listeners = a.eval(
+                    "$.ui.doc(%r).listeners().map(s => s.split('\\u0000')[0])" % path)
+                missing = [e for e in elements if e not in listeners]
+                check(not missing,
+                      f"{name}: кнопки документа подписаны ({', '.join(elements)})"
+                      + (f"; без слушателя: {missing}" if missing else ""))
     except Exception as error:   # движок не поднялся или не ответил
         check(False, f"{name}: запуск не удался — {error}")
 

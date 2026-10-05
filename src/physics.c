@@ -442,10 +442,13 @@ static int r2d__body_of_shape(const R2DPhysics *p, b2ShapeId shape)
 typedef struct R2DRayCtx {
     const R2DPhysics *p;
     R2DRayHit        *out;
+    const int        *ignore;        // тела, которые луч пропускает
+    int               ignore_count;
 } R2DRayCtx;
 
-// Колбэк луча: сенсоры (триггеры, зоны, подбираемые предметы) пропускаем,
-// ближайшее настоящее препятствие запоминаем и обрезаем луч до него.
+// Колбэк луча: сенсоры (триггеры, зоны, подбираемые предметы) и явно
+// указанные тела пропускаем, ближайшее настоящее препятствие запоминаем и
+// обрезаем луч до него.
 //
 // b2World_CastRayClosest этого не умеет: Box2D v3 не исключает сенсоры ни в
 // b2DefaultQueryFilter, ни в своём RayCastCallback, поэтому зона-триггер
@@ -461,9 +464,14 @@ static float r2d__on_ray(b2ShapeId shape, b2Vec2 point, b2Vec2 normal,
     // false: игрок не прыгал бы и не цеплялся за стены.
     if (fraction == 0.0f) return -1.0f;
 
+    const int body = r2d__body_of_shape(ctx->p, shape);
+    for (int i = 0; i < ctx->ignore_count; ++i) {
+        if (ctx->ignore[i] == body) return -1.0f;   // это тело не считаем
+    }
+
     R2DRayHit *out = ctx->out;
     out->hit = true;
-    out->body = r2d__body_of_shape(ctx->p, shape);
+    out->body = body;
     out->x = R2D_TO_PX(point.x);
     out->y = R2D_TO_PX(point.y);
     out->nx = normal.x;
@@ -472,7 +480,8 @@ static float r2d__on_ray(b2ShapeId shape, b2Vec2 point, b2Vec2 normal,
     return fraction;   // обрезаем: следующее попадание должно быть ближе
 }
 
-bool r2d_physics_raycast(const R2DPhysics *p, float x1, float y1, float x2, float y2, R2DRayHit *out)
+bool r2d_physics_raycast(const R2DPhysics *p, float x1, float y1, float x2, float y2,
+                         const int *ignore, int ignore_count, R2DRayHit *out)
 {
     if (!out) return false;
     out->hit = false;
@@ -483,7 +492,7 @@ bool r2d_physics_raycast(const R2DPhysics *p, float x1, float y1, float x2, floa
     const b2Vec2 origin = { R2D_TO_M(x1), R2D_TO_M(y1) };
     const b2Vec2 translation = { R2D_TO_M(x2 - x1), R2D_TO_M(y2 - y1) };
     // Датчики (триггеры) не должны останавливать лучи: они не препятствия.
-    R2DRayCtx ctx = { p, out };
+    R2DRayCtx ctx = { p, out, ignore, ignore_count };
     const b2QueryFilter filter = b2DefaultQueryFilter();
     b2World_CastRay(p->world, origin, translation, filter, r2d__on_ray, &ctx);
     return out->hit;

@@ -46,7 +46,7 @@ def main():
         hit_speed = a.eval("$.store.get('hitSpeed')")
         check(hit_speed is not None and hit_speed > 0,
               f"событие hit принесло скорость сближения ({hit_speed})")
-        check(a.eval("$.world.contacts().length") >= 0, "$.world.contacts() доступен")
+        check(isinstance(a.eval("$.world.contacts()"), list), "$.world.contacts() доступен")
 
         # --- Односторонняя платформа ------------------------------------------
         check(a.eval("$('#oneway').oneWay()") is True, "платформа помечена односторонней")
@@ -87,6 +87,12 @@ def main():
               "сенсор не останавливает луч")
         check(a.eval("$.store.get('rayHitIsWall')") is True,
               "луч упирается в настоящую стену за сенсором")
+        check(a.eval("$.store.get('rayNearestIsFirst')") is True,
+              "без ignore луч попадает в ближайшую стену")
+        check(a.eval("$.store.get('rayIgnoreSkipsFirst')") is True,
+              "ignore пропускает первую стену и находит вторую")
+        check(a.eval("$.store.get('rayIgnoreAllNull')") is True,
+              "ignore всех стен даёт null, а не исключение")
 
         # --- Движок жив --------------------------------------------------------
         a.step(30)

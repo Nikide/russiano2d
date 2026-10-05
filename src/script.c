@@ -1652,12 +1652,33 @@ static JSValue r2d__js_set_render(JSContext *ctx, JSValueConst this_val, int arg
 // Биндинги: запросы к миру, файлы, текст, агент
 // ---------------------------------------------------------------------------
 
-// engine.raycast(x1, y1, x2, y2) → { hit, x, y, nx, ny, body, fraction } | null
+// engine.raycast(x1, y1, x2, y2[, ignore_ids]) →
+//   { hit, x, y, nx, ny, body, fraction } | null
+// ignore_ids — необязательный массив id тел, которые луч пропускает
+// (например, тело стрелка): поиск продолжается за ними.
 static JSValue r2d__js_raycast(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
     R2DScript *s = r2d__script_of(ctx);
     if (!s || !s->physics) return JS_NULL;
+
+    // Список игнорируемых тел ограничен: он нужен для «не считать себя» и
+    // пары соседей, а не для сотен записей.
+    int ignore[64];
+    int ignore_count = 0;
+    if (argc >= 5 && JS_IsArray(argv[4])) {
+        JSValue len_val = JS_GetPropertyStr(ctx, argv[4], "length");
+        int32_t len = 0;
+        if (JS_ToInt32(ctx, &len, len_val) == 0) {
+            for (int32_t i = 0; i < len && ignore_count < (int)(sizeof ignore / sizeof ignore[0]); ++i) {
+                JSValue item = JS_GetPropertyUint32(ctx, argv[4], (uint32_t)i);
+                int32_t id = -1;
+                if (JS_ToInt32(ctx, &id, item) == 0 && id >= 0) ignore[ignore_count++] = (int)id;
+                JS_FreeValue(ctx, item);
+            }
+        }
+        JS_FreeValue(ctx, len_val);
+    }
 
     R2DRayHit hit;
     if (!r2d_physics_raycast(s->physics,
@@ -1665,6 +1686,7 @@ static JSValue r2d__js_raycast(JSContext *ctx, JSValueConst this_val, int argc, 
                              (float)r2d__arg_num(ctx, argc, argv, 1, 0.0),
                              (float)r2d__arg_num(ctx, argc, argv, 2, 0.0),
                              (float)r2d__arg_num(ctx, argc, argv, 3, 0.0),
+                             ignore_count ? ignore : NULL, ignore_count,
                              &hit)) {
         return JS_NULL;
     }
@@ -2465,7 +2487,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
 
     // Запросы к миру: лучи и пересечения. Нужны высокоуровневому API
     // ($.world.raycast/query) и проверке «стоит ли на земле».
-    r2d__set_fn(ctx, engine, "raycast", r2d__js_raycast, 4);
+    r2d__set_fn(ctx, engine, "raycast", r2d__js_raycast, 5);
     r2d__set_fn(ctx, engine, "queryPoint", r2d__js_query_point, 2);
     r2d__set_fn(ctx, engine, "queryBox", r2d__js_query_box, 4);
 

@@ -75,6 +75,8 @@ $.ready(() => {
         .body('static').appendTo($.world);
     $('#sensor-zone').sensor(true);
     $('<wall>', { id: 'ray-wall' }).at(1800, 600).size(200, 40).appendTo($.world);
+    // Вторая стена — чтобы проверить opts.ignore: луч должен пропустить первую.
+    $('<wall>', { id: 'ray-wall-2' }).at(1800, 800).size(200, 40).appendTo($.world);
 });
 
 let rays_checked = false;
@@ -90,6 +92,18 @@ $.update(() => {
     const wall = $.world.raycast({ x: 1800, y: 100 }, { x: 1800, y: 700 });
     $.store.set('rayHitIsWall', !!(wall && wall.node && wall.node.id === 'ray-wall'));
     $.store.set('rayHitY', wall && wall.point ? Math.round(wall.point.y) : -1);
+
+    // ignore пропускает первую стену, а не «гасит» луч целиком.
+    const near = $.world.raycast({ x: 1800, y: 100 }, { x: 1800, y: 900 });
+    $.store.set('rayNearestIsFirst', !!(near && near.node && near.node.id === 'ray-wall'));
+    const skipped = $.world.raycast({ x: 1800, y: 100 }, { x: 1800, y: 900 },
+                                    { ignore: '#ray-wall' });
+    $.store.set('rayIgnoreSkipsFirst',
+                !!(skipped && skipped.node && skipped.node.id === 'ray-wall-2'));
+    // Игнорировать обе стены — луч не находит ничего.
+    $.store.set('rayIgnoreAllNull',
+                $.world.raycast({ x: 1800, y: 100 }, { x: 1800, y: 900 },
+                                { ignore: '#ray-wall, #ray-wall-2' }) === null);
 });
 
 // Отмечаем момент, когда прыгун оказался выше платформы.

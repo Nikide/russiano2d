@@ -93,11 +93,15 @@ function enter(s, $) {
     // на букву клавиши ('up', 'r', 'f') в движке зацикливают разрешение
     // привязок (см. отчёт о API), поэтому обходимся именами клавиш.
     s.doc = $.ui.doc('demos/ui/bsp.rml').show();
-    // Один слушатель на документ: $.ui.doc() отдаёт один обработчик, а кнопок
-    // три — различаем их по id элемента, который приходит в аргументе.
-    s.doc.on('bsp-splits', 'click', (element) => {
-        if (element === 'bsp-splits') s.showSplits = !s.showSplits;
-        else if (element === 'bsp-order') { s.stepping = !s.stepping; s.orderStep = 0; }
+    // Каждая кнопка подписывается на свой id: $.ui.doc().on() вешает слушателя
+    // на конкретный элемент, а не на документ целиком.
+    s.doc.on('bsp-splits', 'click', () => {
+        s.showSplits = !s.showSplits;
+        $.sound.play('demos/assets/audio/sfx/ui_click.ogg', { volume: 0.35 });
+        refreshInfo(s);
+    }).on('bsp-order', 'click', () => {
+        s.stepping = !s.stepping;
+        s.orderStep = 0;
         $.sound.play('demos/assets/audio/sfx/ui_click.ogg', { volume: 0.35 });
         refreshInfo(s);
     });

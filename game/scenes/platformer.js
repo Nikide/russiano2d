@@ -155,19 +155,19 @@ export default function installLevel($) {
             $('#hud-coins').text(`Монет: ${this.coins} из ${this.total_coins}`);
 
             // Патрулирующие враги: идут в свою сторону и разворачиваются у стены.
+            // Касание вредит один раз за кадр: врагов много, а урон должен
+            // быть один. Флаг считаем на кадр, а не храним отметку у каждого
+            // врага — иначе два рядом стоящих врага били бы по 10 HP каждый.
+            let touching_hero = false;
             $('.walker').each((i, e) => {
                 if (!e.alive()) { e.remove(); return; }
                 if (e.onWall()) e.attr('dir', -e.attr('dir'));
                 e.velocity(e.attr('dir') * 45, e.velocity().y);
                 e.flip(e.attr('dir') < 0, false);
 
-                // Касание вредит один раз за кадр: врагов много, а урон должен
-                // быть один. Счётчик кадров берём из самого $.
-                if (e.distanceTo('#hero') < 34 && e.attr('touch-ok') !== $.time.frame()) {
-                    e.attr('touch-ok', $.time.frame());
-                    $('#hero').damage(10);
-                }
+                if (e.distanceTo('#hero') < 34) touching_hero = true;
             });
+            if (touching_hero) $('#hero').damage(10);
 
             // Монеты подбираются при близком касании.
             $('.coin').each((i, c) => {

@@ -126,6 +126,7 @@ function enter(s, $) {
 
     s.walls = [];
     s.enemies = [];
+    s.crosshairNode = null;   // при повторном входе прицел создаётся заново
     s.spawn = { x: 5.5, y: 16.5, angle: -Math.PI / 2 };
 
     // Разбор карты: стены и точки появления врагов.
@@ -211,28 +212,32 @@ function enter(s, $) {
 
     // Ввод: имена действий — чтобы раскладку можно было переопределить
     // в одном месте, а не искать engine.scancode по сцене.
-    $.input.bind('forward', ['w', 'up']);
-    $.input.bind('back', ['s', 'down']);
+    // Стрелки вверх/вниз намеренно НЕ привязаны к forward/back: их уже
+    // собирает $.input.vec('arrows'), и двойная привязка давала двойную
+    // скорость (Up вёл вперёд в два раза быстрее W).
+    $.input.bind('forward', ['w']);
+    $.input.bind('back', ['s']);
     $.input.bind('turnLeft', ['a', 'left']);
     $.input.bind('turnRight', ['d', 'right']);
     $.input.bind('strafeLeft', ['q']);
     $.input.bind('strafeRight', ['e']);
-    $.input.bind('fire', ['space', 'left']);
+    // 'left' в bind() — это клавиша Стрелка влево, а не кнопка мыши: input
+    // сначала ищет scancode и лишь потом кнопку. Огонь с ЛКМ проверяем явно.
+    $.input.bind('fire', ['space']);
     $.input.bind('reload', ['r']);
     $.input.bind('menu', ['escape']);
 
-    // HUD и экран смерти — документы RmlUi; кнопки обрабатываются по id
-    // элемента, потому что $.ui.doc() даёт один слушатель на документ.
+    // HUD и экран смерти — документы RmlUi. Подписка идёт на каждый id:
+    // $.ui.doc().on() вешает слушателя на конкретный элемент, а не на
+    // документ целиком.
     s.hudDoc = $.ui.doc('demos/ui/shooter-hud.rml').show();
     s.deathDoc = $.ui.doc('demos/ui/shooter-death.rml');
-    s.deathDoc.on('death-retry', 'click', (element) => {
-        if (element === 'death-retry') {
-            $.sound.play(SFX.click, { volume: 0.5 });
-            $.scene.restart();
-        } else if (element === 'death-menu') {
-            $.sound.play(SFX.click, { volume: 0.5 });
-            $.scene.load('launcher');
-        }
+    s.deathDoc.on('death-retry', 'click', () => {
+        $.sound.play(SFX.click, { volume: 0.5 });
+        $.scene.restart();
+    }).on('death-menu', 'click', () => {
+        $.sound.play(SFX.click, { volume: 0.5 });
+        $.scene.load('launcher');
     });
 
     $.sound.music('demos/assets/audio/music/action.ogg', { loop: true, volume: 0.45 });
@@ -339,8 +344,8 @@ function update(s, dt, $) {
     const turn = $.input.axis('turnLeft', 'turnRight');
     p.angle += turn * TURN_SPEED * dt;
 
-    // Шаг вперёд-назад и вбок — вектором: vec() собирает стрелки, а боковые
-    // клавиши и пробел с ним не пересекаются, поэтому двойного учёта нет.
+    // Шаг вперёд-назад и вбок — вектором: vec() собирает стрелки, W/S и Q/E
+    // добавляются как действия и со стрелками не пересекаются.
     const vec = $.input.vec('arrows');
     const forward = -vec.y + (input1($.input, 'forward') - input1($.input, 'back'));
     const strafe = vec.x + (input1($.input, 'strafeRight') - input1($.input, 'strafeLeft'));
@@ -360,7 +365,8 @@ function update(s, dt, $) {
     if (p.fireAnim > 0) p.fireAnim -= dt;
 
     // --- Стрельба и перезарядка ---
-    if ($.input.pressed('fire') && p.ammo > 0) fire(s, $);
+    // Space или ЛКМ (мышь проверяем отдельно, см. привязки ввода).
+    if (($.input.pressed('fire') || $.input.mousePressed('left')) && p.ammo > 0) fire(s, $);
     if ($.input.pressed('reload')) {
         p.ammo = MAG_SIZE;
         $.sound.play(SFX.reload, { volume: 0.8 });
@@ -747,8 +753,8 @@ function render(s, $) {
 
 /**
  * Прицел: линии — примитивы $.gfx.draw (рисуются поверх сцены), подпись —
- * узел <text> в координатах окна, поэтому она видна агенту в снимке
- * ($.agent.snapshot().ui) и на скриншоте.
+ * узел <ui.label> в координатах окна: у world-тега <text> не было признака
+ * ui, поэтому подпись уезжала вместе с камерой и не попадала в снимок агента.
  */
 function drawCrosshair(s, $) {
     const p = s.player;
@@ -764,8 +770,8 @@ function drawCrosshair(s, $) {
     $.gfx.draw.line(cx, cy + 4, cx, cy + 12, color, 2);
 
     if (!s.crosshairNode) {
-        s.crosshairNode = $('<text>', { id: 'hud-crosshair', text: '·', size: 14 })
-            .at(cx, cy - 28).size(160, 20).layer(900).appendTo($.ui);
+        s.crosshairNode = $('<ui.label>', { id: 'hud-crosshair', text: '·', size: 14 })
+            .at(cx, cy - 28).size(160, 20).appendTo($.ui);
     }
     s.crosshairNode.at(cx, cy - 28).color(color).text(hot ? '· цель ·' : '·');
 }

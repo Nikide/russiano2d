@@ -192,8 +192,11 @@ export default function installPhysics($) {
         },
 
         emitSparks(x, y, count) {
-            if (this.sparks.length > MAX_SPARKS) return;
-            for (let i = 0; i < count; i++) {
+            // Считаем свободное место, а не «уже больше лимита»: иначе одна
+            // вспышка добавляла бы сразу count искр поверх предела.
+            const room = MAX_SPARKS - this.sparks.length;
+            const n = Math.min(count, Math.max(0, room));
+            for (let i = 0; i < n; i++) {
                 const ang = $.random.range(0, Math.PI * 2);
                 const speed = $.random.range(160, 620);
                 this.sparks.push({

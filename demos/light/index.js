@@ -109,11 +109,11 @@ function enter(s, $) {
     // действий, совпадающие с буквой клавиши ('t', 'f', 'r'), в движке
     // зацикливают разрешение привязок (см. отчёт о API).
     s.doc = $.ui.doc('demos/ui/light.rml').show();
-    s.doc.on('light-shadows', 'click', (element) => {
-        if (element === 'light-shadows') toggle(s, 'showShadows', 'light-shadows', 'тени', $);
-        else if (element === 'light-fill') toggle(s, 'showFill', 'light-fill', 'заливка полигонов', $);
-        else if (element === 'light-rays') toggle(s, 'showRays', 'light-rays', 'лучи', $);
-    });
+    // Подписка идёт на каждый элемент отдельно: $.ui.doc().on() вешает
+    // слушателя на конкретный id, а обработчик всегда получает именно его.
+    s.doc.on('light-shadows', 'click', () => toggle(s, 'showShadows', 'light-shadows', 'тени', $))
+         .on('light-fill', 'click', () => toggle(s, 'showFill', 'light-fill', 'заливка полигонов', $))
+         .on('light-rays', 'click', () => toggle(s, 'showRays', 'light-rays', 'лучи', $));
     s.doc.text('light-walls', s.segmentCount);
 
     $.sound.music('demos/assets/audio/music/menu.ogg', { loop: true, volume: 0.35 });

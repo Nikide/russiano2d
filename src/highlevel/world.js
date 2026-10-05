@@ -161,24 +161,21 @@ export function installWorld($) {
             return wrap(out);
         },
 
-        /** Ближайшее физическое препятствие на отрезке. */
+        /**
+         * Ближайшее физическое препятствие на отрезке.
+         *
+         * opts.ignore — узел, селектор или обёртка, которые луч не считает
+         * препятствием. Раньше при первом попадании в игнорируемое тело луч
+         * возвращал null (будто за ним ничего нет); список уходит в движок, и
+         * луч ищет следующее настоящее препятствие.
+         */
         raycast(from, to, opts) {
             const a = toPoint(from);
             const b = toPoint(to);
-            const hit = engine.raycast(a.x, a.y, b.x, b.y);
-            if (!hit || !hit.hit) return null;
-            const ignore = (opts && opts.ignore) ? query(opts.ignore).toArray() : [];
-            if (ignore.length && ignore.some((n) => n.body === hit.body)) return null;
-            const node = ctx.byBody.get(hit.body) || null;
-            return {
-                hit: true,
-                point: { x: hit.x, y: hit.y },
-                normal: { x: hit.nx, y: hit.ny },
-                distance: Math.hypot(hit.x - a.x, hit.y - a.y),
-                body: hit.body,
-                node,
-                self: node ? wrapOne(node) : null,
-            };
+            const ignore = (opts && opts.ignore)
+                ? query(opts.ignore).map((n) => n.body).filter((id) => id >= 0)
+                : [];
+            return describeRaycast(engine.raycast(a.x, a.y, b.x, b.y, ignore), a);
         },
 
         /** Все узлы, которые пересекает отрезок (по их прямоугольникам). */
@@ -309,6 +306,21 @@ export function installWorld($) {
 // ---------------------------------------------------------------------------
 // Вспомогательное
 // ---------------------------------------------------------------------------
+
+/** Результат engine.raycast в форме, которую ждёт $.world.raycast. */
+function describeRaycast(hit, origin) {
+    if (!hit || !hit.hit) return null;
+    const node = ctx.byBody.get(hit.body) || null;
+    return {
+        hit: true,
+        point: { x: hit.x, y: hit.y },
+        normal: { x: hit.nx, y: hit.ny },
+        distance: Math.hypot(hit.x - origin.x, hit.y - origin.y),
+        body: hit.body,
+        node,
+        self: node ? wrapOne(node) : null,
+    };
+}
 
 function toPoint(v) {
     if (v === null || v === undefined) return { x: 0, y: 0 };
