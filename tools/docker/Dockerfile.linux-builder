@@ -1,0 +1,33 @@
+# ---------------------------------------------------------------------------
+# Образ-сборщик для автосборки Russiano2D под Linux (и, при желании, под
+# Windows кросс-компилятором MinGW).
+#
+# Используется tools/autobuild.py — вручную собирать не нужно:
+#   python3 tools/autobuild.py --platforms linux-x86_64
+#
+# WITH_MINGW=1 добавляет mingw-w64, тогда тот же образ умеет собирать
+# windows-x86_64 кросс-компиляцией.
+# ---------------------------------------------------------------------------
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ARG WITH_MINGW=0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential clang cmake ninja-build pkg-config git ca-certificates \
+        python3 zip unzip \
+        libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+        libxfixes-dev libxss-dev libxkbcommon-dev libwayland-dev \
+        libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev \
+        libudev-dev libdbus-1-dev \
+    && if [ "$WITH_MINGW" = "1" ]; then \
+        apt-get install -y --no-install-recommends mingw-w64; \
+    fi \
+    && rm -rf /var/lib/apt/lists/*
+
+# Домашний каталог сборщика берём из /tmp: контейнер запускается от имени
+# хостового пользователя (--user uid:gid), а писать в /root он не может.
+ENV HOME=/tmp
+
+WORKDIR /src

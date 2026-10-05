@@ -39,3 +39,7 @@ qjsc_out/
 *.log
 imgui.ini
 __pycache__/
+
+# Локальный скрипт автосборки и публикации (только на этой машине)
+build_and_push.sh
+build_and_push.log
