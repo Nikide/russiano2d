@@ -78,6 +78,20 @@ test('sanitize выбрасывает функции и разрывает ци�
     eq(clean.d, 'ok');
 });
 
+test('sanitize разрывает цикл и в массиве', () => {
+    const a = [];
+    a.push(a);
+    eq(JSON.stringify(sanitize(a, new Set())), '[null]', 'самоссылающийся массив');
+
+    const b = [];
+    const c = [b];
+    b.push(c);
+    eq(JSON.stringify(sanitize(b, new Set())), '[[null]]', 'цикл массив↔массив');
+
+    // Обычный массив без циклов не должен пострадать.
+    eq(JSON.stringify(sanitize([1, [2, 3]], new Set())), '[1,[2,3]]');
+});
+
 test('applyOverrides понимает size, pos, class и attrs', () => {
     const data = { w: 10, h: 10, x: 0, y: 0, class: 'a', attrs: {} };
     applyOverrides(data, { size: [40, 60], pos: [5, 6], class: 'b c', speed: 300 });

@@ -151,10 +151,16 @@ export function eventsBetween(events, fromU, toU) {
     if (!Array.isArray(events) || !(toU > fromU)) return out;
     for (const ev of events) {
         const at = ev.at;
+        if (!Number.isFinite(at)) continue;
         let n = Math.ceil(fromU - at + 1e-9);
         if (n < 0) n = 0;
-        const moment = at + n;
-        if (moment > fromU + 1e-9 && moment <= toU + 1e-9) out.push({ ev, moment });
+        // Один кадр может накрыть несколько циклов (лагающий кадр), поэтому
+        // перебираем ВСЕ повторы в интервале, а не только первый. Потолок —
+        // предохранитель от мусорного at вроде -1e9.
+        let moment = at + n;
+        for (let guard = 0; guard < 1000 && moment <= toU + 1e-9; ++guard, moment += 1) {
+            if (moment > fromU + 1e-9) out.push({ ev, moment });
+        }
     }
     out.sort((a, b) => a.moment - b.moment);
     return out.map((entry) => entry.ev);
@@ -452,7 +458,14 @@ function setupMachine(node, spec) {
     const initial = spec.initial && states[spec.initial] ? spec.initial : names[0];
     const transitions = Array.isArray(spec.transitions) ? spec.transitions.slice() : [];
     const player = playerOf(node);
-    const machine = { states, transitions, current: null, time: 0, pending: new Set(), spec };
+    // Повторный .stateMachine() не должен копить обработчики: снимаем подписки
+    // прошлой машины. Иначе после семи вызовов на узле висело бы семь
+    // обработчиков одного события (docs обещают, что подписка одна).
+    const previous = player.machine;
+    if (previous && previous.subs) {
+        for (const sub of previous.subs) node.off(sub.event, sub.fn);
+    }
+    const machine = { states, transitions, current: null, time: 0, pending: new Set(), spec, subs: [] };
     player.machine = machine;
 
     // Событийные переходы слушаем один раз при объявлении: подписываться и
@@ -460,7 +473,9 @@ function setupMachine(node, spec) {
     for (const tr of transitions) {
         const event = transitionEvent(tr);
         if (!event) continue;
-        node.on(event, () => { machine.pending.add(event); });
+        const fn = () => { machine.pending.add(event); };
+        machine.subs.push({ event, fn });
+        node.on(event, fn);
     }
     enterState(node, player, initial);
     return machine;

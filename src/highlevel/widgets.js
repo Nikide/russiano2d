@@ -553,16 +553,30 @@ export function mergeTheme(base, spec) {
 }
 
 /** Разбор темы с наследованием (extends) и кэшированием. */
+const theme_resolving = new Set();
+
 export function resolveTheme(name) {
     const key = name === undefined || name === null ? 'default' : String(name);
     if (theme_cache.has(key)) return theme_cache.get(key);
-    const raw = themes.get(key) || {};
-    let parent = raw.extends ? String(raw.extends) : (key === 'default' ? null : 'default');
-    if (parent === key) parent = null;   // защита от самоссылки
-    const base = parent ? resolveTheme(parent) : emptyTheme();
-    const resolved = mergeTheme(base, raw);
-    theme_cache.set(key, resolved);
-    return resolved;
+    // Цикл extends (a→b→a) раньше уводил рекурсию в бесконечность: кэш
+    // заполняется только после возврата, поэтому вторая встреча имени его не
+    // находила. Помечаем тему «в работе» и рвём цикл пустой темой.
+    if (theme_resolving.has(key)) {
+        ctx.log(`$.ui: тема "${key}" наследует себя по цепочке extends — беру пустую`);
+        return emptyTheme();
+    }
+    theme_resolving.add(key);
+    try {
+        const raw = themes.get(key) || {};
+        let parent = raw.extends ? String(raw.extends) : (key === 'default' ? null : 'default');
+        if (parent === key) parent = null;   // защита от самоссылки
+        const base = parent ? resolveTheme(parent) : emptyTheme();
+        const resolved = mergeTheme(base, raw);
+        theme_cache.set(key, resolved);
+        return resolved;
+    } finally {
+        theme_resolving.delete(key);
+    }
 }
 
 function defineTheme(name, spec) {

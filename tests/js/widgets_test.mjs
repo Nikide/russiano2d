@@ -397,4 +397,11 @@ test('ui.scroll ограничивает прокрутку содержимым
     eq(sc.get(0).attrs.scroll, 100);
 });
 
+test('циклический extends тем не вешает движок', () => {
+    $.ui.theme('cyc-a', { extends: 'cyc-b', size: 10 });
+    $.ui.theme('cyc-b', { extends: 'cyc-a', size: 12 });
+    truthy($.ui.theme('cyc-a'), 'тема a разобрана без RangeError');
+    truthy($.ui.theme('cyc-b'), 'тема b разобрана');
+});
+
 finish();

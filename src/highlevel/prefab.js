@@ -149,10 +149,17 @@ export function sanitize(value, seen) {
     if (type === 'number') return isFinite(value) ? value : null;
     if (type === 'undefined' || type === 'function' || type === 'symbol' || type === 'bigint') return undefined;
     if (Array.isArray(value)) {
-        return value.map((item) => {
-            const clean = sanitize(item, seen);
+        // Массивы тоже надо охранять: [a, a] или самоссылающийся массив иначе
+        // уводили рекурсию в бесконечность (RangeError на $.prefab.save).
+        const guard = seen || new Set();
+        if (guard.has(value)) return undefined;   // цикл — молча рвём
+        guard.add(value);
+        const out = value.map((item) => {
+            const clean = sanitize(item, guard);
             return clean === undefined ? null : clean;
         });
+        guard.delete(value);
+        return out;
     }
     if (value instanceof Set) return sanitize([...value], seen);
     if (value instanceof Map) return sanitize(Object.fromEntries(value), seen);

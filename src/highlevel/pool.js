@@ -139,6 +139,11 @@ function newPoolNode(st) {
     // Конструктор Node регистрирует узел в ctx.nodes; у пула узел попадает
     // в мир только на время между spawn() и release().
     detachNode(node);
+    // Конструктор успел создать тело (у <bullet>, <enemy>, <wall> оно есть по
+    // тегу). У свободного узла тела быть не должно: иначе предсозданные узлы
+    // пула висят в мире в точке (0,0), сталкиваются и тратят физику, хотя их
+    // нет ни в ctx.nodes, ни в счётчиках. Тело вернёт restoreBody() на spawn.
+    if (node.body >= 0) node.setBody(null);
     if (!st.baseline) {
         st.baseline = {
             x: node.x, y: node.y, color: node.color, layer: node.layer,

@@ -17,6 +17,7 @@ import {
     autotileMask, autotileTile, blob47Index, BLOB47_LAYOUT,
     NEIGHBOURS47, asciiToData, normalizeTileData, solidRuns,
     pixelToTile, tileToPixel, tileIndexAt,
+    tilemapStates, tilemapLayerFrames,
 } from '../../src/highlevel/tilemap.js';
 
 // Минимальный $: умеет только создавать узлы по '<тег>' и искать по селектору.
@@ -239,6 +240,37 @@ test('отрисовка отсекает тайлы по камере', () => {
     const stats = ctx.gfx.push.stats();
     truthy(stats.sprites > 0, 'тайлы видимого диапазона нарисованы');
     truthy(stats.sprites < 2000, 'карта 100×100 не рисуется целиком: ' + stats.sprites);
+});
+
+test('tileSize сбрасывает вычисленные cols/rows и режет лист заново', () => {
+    const saved = { load: engine.loadTexture, size: engine.textureSize, sprite: engine.createSprite };
+    engine.loadTexture = () => 7;
+    engine.textureSize = () => [128, 64];
+    engine.createSprite = () => 100;
+    try {
+        installGfx($);
+        $.gfx = ctx.gfx;
+
+        const t = $.tilemap.create({
+            id: 'sheet', src: 'sheet.png', tile: 32, cols: 0, rows: 0,
+            data: [1, 2, 3, 4], mapW: 2, mapH: 2,
+        });
+        const node = t.get(0);
+        ctx.gfx._render();                       // первый рендер считает cols/rows
+        const layer = tilemapStates.get(node).layers[0];
+        eq(layer.cols, 4, 'при тайле 32 колонок 4');
+        eq(layer.frames.length, 8, 'кадров 8 (4×2)');
+
+        t.tileSize(16);
+        tilemapLayerFrames(layer);
+        eq(layer.cols, 8, 'после tileSize(16) колонок 8');
+        eq(layer.rows, 4, 'строк 4');
+        eq(layer.frames.length, 32, 'кадров 32, а не старые 8');
+    } finally {
+        engine.loadTexture = saved.load;
+        engine.textureSize = saved.size;
+        engine.createSprite = saved.sprite;
+    }
 });
 
 finish();

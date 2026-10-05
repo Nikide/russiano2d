@@ -451,7 +451,15 @@ class Tweener {
     /** `to` — приращение к начальному значению, а не абсолютная цель. */
     asRelative() { this.relative = true; return this._touch(); }
     /** Задержка перед началом этого твинера, секунды. */
-    delay(seconds) { this.delay_time = Math.max(0, Number(seconds) || 0); return this; }
+    delay(seconds) {
+        this.delay_time = Math.max(0, Number(seconds) || 0);
+        // Мгновенный property-твинер применяется прямо в _add(), то есть до
+        // этого вызова. Если задержку задали после, откатываем значение и
+        // отдаём твинер обычному тику — иначе .delay(1) молча терялся.
+        // delay(0) ничего не откладывает, поэтому поведение не меняем.
+        if (this.delay_time > 0 && this._instant && this._tween) this._tween._rearmInstant(this);
+        return this;
+    }
     /** Переход именно для этого твинера (иначе — общий у Tween). */
     trans(name) { this.trans_name = name; return this._touch(); }
     /** Плавность именно для этого твинера (in/out/in_out/out_in). */
@@ -515,17 +523,36 @@ export class Tween {
         this._current.push(tweener);
         // Нулевая длительность в первом шаге — значение ставится сразу, без
         // ожидания кадра (совместимость со старым tweenProps(ms = 0)).
+        // method сюда не входит: его нельзя «откатить», если .delay() зададут
+        // после, поэтому он всегда идёт через обычный тик.
         if (this._valid && !this._finished && this._steps.length === 1 && tweener.duration <= 0
-            && (tweener.kind === 'property' || tweener.kind === 'method')) {
+            && tweener.delay_time <= 0 && tweener.kind === 'property') {
             this._applyInstant(tweener);
         }
         return tweener;
+    }
+
+    /**
+     * Возврат мгновенно применённого tweener'а в обычный тик: значение
+     * откатывается к исходному, и задержка (.delay), заданная ПОСЛЕ
+     * .property(...), снова имеет смысл. Без этого .delay(1) молча терялся,
+     * потому что значение уже было записано во время добавления.
+     */
+    _rearmInstant(tw) {
+        if (!tw || !tw._instant) return;
+        if (tw.kind === 'property') writeTarget(this.target, tw.prop, tw.from_cache);
+        tw._instant = false;
+        tw.done = false;
+        tw.fired = false;
+        tw.started = false;
+        this._finished = false;
     }
 
     _applyInstant(tweener) {
         if (!tweener._tween || !this._valid || this._finished) return;
         if (tweener.kind !== 'property' && tweener.kind !== 'method') return;
         if (tweener.duration > 0) return;          // не мгновенный — сыграет в тике
+        if (tweener.delay_time > 0) return;        // ждёт задержки — применит applyStepAt
         if (this._steps.length !== 1) return;      // мгновенно только первый шаг
         prepareTweener(this, tweener, true);
         applyTweenerValue(this, tweener, 1);

@@ -397,6 +397,37 @@ test('состояние с next уходит дальше, когда клип 
     eq(w.state(), 'two');
 });
 
+test('eventsBetween отдаёт все повторы внутри интервала', () => {
+    const ev = { at: 0.5 };
+    eq(eventsBetween([ev], 0, 3).length, 3, 'три цикла в интервале');
+    eq(eventsBetween([ev], 0.4, 0.6).length, 1, 'один повтор');
+    eq(eventsBetween([ev], 0.6, 0.9).length, 0, 'после события — пусто');
+    eq(eventsBetween([{ at: 0 }, { at: 0.5 }], 0, 1).length, 2, 'два разных события');
+    // Мусорный at не должен зацикливать перебор: перебор идёт по интервалу,
+    // а не от at, и ограничен предохранителем.
+    eq(eventsBetween([{ at: -1e9 }], 0, 3).length, 3, 'огромный отрицательный at не зацикливает');
+    eq(eventsBetween([{ at: NaN }], 0, 3).length, 0, 'NaN в at пропускается');
+});
+
+test('повторный stateMachine не копит обработчики', () => {
+    const { node, w } = makeNode('rect');
+    const spec = {
+        initial: 'a',
+        states: { a: { clip: 'idle-clip' }, b: { clip: 'walk-clip' } },
+        transitions: [{ from: 'a', to: 'b', on: 'hurt' }],
+    };
+    w.stateMachine(spec);
+    eq((node.listeners.get('hurt') || []).length, 1, 'один обработчик после первого вызова');
+    w.stateMachine(spec);
+    eq((node.listeners.get('hurt') || []).length, 1, 'повторный вызов не добавляет');
+    for (let i = 0; i < 5; i++) w.stateMachine(spec);
+    eq((node.listeners.get('hurt') || []).length, 1, 'семь вызовов — по-прежнему один');
+
+    node.emit('hurt', {});
+    tickAnim(1 / 60);
+    eq(w.state(), 'b', 'переход по событию всё ещё работает');
+});
+
 test('toState без машины не падает', () => {
     const { w } = makeNode('rect');
     w.toState('куда-то');

@@ -331,4 +331,27 @@ test('collectCounters считает тела и зоны', () => {
     truthy(c.world_nodes >= 2);
 });
 
+test('свободные (предсозданные) узлы пула не держат тел', () => {
+    clearPools();
+    const saved_create = engine.createBody;
+    const saved_destroy = engine.destroyBody;
+    let created = 0;
+    let destroyed = 0;
+    engine.createBody = () => 100 + created++;
+    engine.destroyBody = () => { destroyed++; };
+    try {
+        const p = $stub.pool.create({ name: 'bullets', tag: 'bullet', max: 4, initial: 3 });
+        eq(created, 3, 'предсоздание создало три тела');
+        eq(destroyed, 3, 'у свободных узлов тела сняты');
+        eq(p.stats().free, 3, 'узлы лежат в пуле');
+
+        const node = p.spawn().nodes[0];
+        eq(node.body, 103, 'на spawn тело создаётся заново');
+    } finally {
+        engine.createBody = saved_create;
+        engine.destroyBody = saved_destroy;
+        clearPools();
+    }
+});
+
 finish();

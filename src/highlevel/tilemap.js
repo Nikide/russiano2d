@@ -482,6 +482,11 @@ function addLayer(tm, spec, base) {
         src: d.src || a.src || null,
         cols: num(d.cols, num(a.cols, 0)),
         rows: num(d.rows, num(a.rows, 0)),
+        // Помним, заданы ли cols/rows явно: layerFrames() пишет в те же поля
+        // вычисленные значения, и без этого флага .tileSize() после первого
+        // рендера принимал бы их за override и резал лист по старому тайлу.
+        explicit_cols: num(d.cols, num(a.cols, 0)) > 0,
+        explicit_rows: num(d.rows, num(a.rows, 0)) > 0,
         solid: d.solid === undefined ? false : d.solid,
         depth: num(d.depth, 0),
         autotile: null,
@@ -898,7 +903,15 @@ export function installTilemap($) {
     def('tileSize', function (n) {
         for (const node of this.nodes) {
             const tm = ensureTilemap(node);
-            for (const layer of tm.layers) { layer.tile = n; layer.frames = null; }
+            for (const layer of tm.layers) {
+                layer.tile = n;
+                layer.frames = null;
+                // Сбрасываем только ВЫЧИСЛЕННЫЕ cols/rows: явно заданные
+                // остаются, а иначе после первого рендера лист резался бы по
+                // старому размеру тайла (см. explicit_cols в addLayer).
+                if (!layer.explicit_cols) layer.cols = 0;
+                if (!layer.explicit_rows) layer.rows = 0;
+            }
             syncNodeSize(tm);
             tm.dirty = true;
         }
@@ -1276,4 +1289,4 @@ export function tickTilemap(dt) {
     void dt;
 }
 
-export { STATES as tilemapStates };
+export { STATES as tilemapStates, layerFrames as tilemapLayerFrames };
