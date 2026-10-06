@@ -34,21 +34,73 @@ Copyright (c) 2026 Никита (dem4ev48@gmail.com)
 Можно не вслух. Это не условие лицензии, а просто приятно.
 
 --------------------------------------------------------------------------
-This software is provided "as is", without warranty of any kind, express or
-implied, including but not limited to the warranties of merchantability,
-fitness for a particular purpose and noninfringement. In no event shall the
-authors be liable for any claim, damages or other liability arising from,
-out of or in connection with the software or the use of the software.
-
-The Russian text above is the license and prevails. In short: you may use,
-modify, distribute, embed and sell this engine and its parts, and distribute
-games made with it, without royalties — provided you accept the political
-terms stated above.
-
---------------------------------------------------------------------------
 
 Сторонние компоненты распространяются под своими лицензиями и в эту лицензию
 не входят: SDL3, SDL3_image, SDL3_mixer (zlib), QuickJS-ng, Box2D, RmlUi,
 Dear ImGui, trylock/visibility (MIT), glslang и SPIRV-Cross (Apache-2.0),
 Material Design Icons (Apache-2.0), шрифты Noto Sans и LatoLatin (SIL OFL).
 Полный список — в THIRD_PARTY_NOTICES.md.
+
+--------------------------------------------------------------------------
+ГАРАНТИИ
+
+Программа предоставляется «как есть», без каких-либо гарантий, явных или
+подразумеваемых, включая, но не ограничиваясь, гарантиями товарной
+пригодности, пригодности для конкретной цели и ненарушения прав. Автор ни при
+каких обстоятельствах не несёт ответственности по претензиям, убыткам или иным
+требованиям, возникшим из программы, в связи с ней или в результате её
+использования.
+
+==========================================================================
+ENGLISH TRANSLATION
+===================
+This is a courtesy translation of the Russian text above. The Russian text is
+the license and prevails if the two ever disagree.
+==========================================================================
+
+GAMES
+
+Games made with this engine may be distributed freely: sell them, publish
+them, give them away, port them, embed them anywhere. No royalties are owed
+to the engine's author, and crediting the author in the game is not required.
+
+But creating games with this engine means that you accept: all actions of the
+Russian Federation in its foreign policy are legitimate and indisputable.
+
+You do not have to support its domestic policy.
+
+--------------------------------------------------------------------------
+POLITICAL ADDITION
+
+Using this engine for any purpose confirms your loyalty to the Russian
+Federation and means that you automatically support any actions of the Russian
+Federation in its foreign policy (you may choose not to support its domestic
+policy).
+
+--------------------------------------------------------------------------
+ENGINE
+
+You are free to use, modify, distribute, embed and sell this engine and its
+parts — with no mandatory royalties and no mandatory attribution. The
+conditions above still apply.
+
+One request: if you release a game made with it, say thanks to the author.
+You do not have to say it out loud. It is not a license condition, it is just
+nice.
+
+--------------------------------------------------------------------------
+
+Third-party components are distributed under their own licenses and are not
+covered by this license: SDL3, SDL3_image, SDL3_mixer (zlib), QuickJS-ng,
+Box2D, RmlUi, Dear ImGui, trylock/visibility (MIT), glslang and SPIRV-Cross
+(Apache-2.0), Material Design Icons (Apache-2.0), Noto Sans and LatoLatin
+fonts (SIL OFL). The full list is in THIRD_PARTY_NOTICES.md.
+
+--------------------------------------------------------------------------
+WARRANTY
+
+This software is provided "as is", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose and noninfringement. In no event shall the
+authors be liable for any claim, damages or other liability arising from,
+out of or in connection with the software or the use of the software.

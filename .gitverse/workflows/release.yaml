@@ -115,7 +115,10 @@ jobs:
     name: Windows x86_64 (MinGW)
     runs-on: ubuntu-latest
     env:
-      FREETYPE_VERSION: 2.13.3
+      # Тот же источник, что в tools/docker/Dockerfile.linux-builder: savannah
+      # недоступен из РФ, а в пуле Ubuntu лежит идентичный upstream-тарболл.
+      FREETYPE_URL: https://archive.ubuntu.com/ubuntu/pool/main/f/freetype/freetype_2.13.2+dfsg.orig.tar.xz
+      FREETYPE_SHA256: 48c78a4194adfcd15a4d089f3206dab8454c311f5577f3ef7eaef95f777f86e6
       MINGW_ROOT: /usr/x86_64-w64-mingw32
     steps:
       - name: Checkout
@@ -135,9 +138,10 @@ jobs:
       - name: Freetype под MinGW
         run: |
           set -eux
-          curl -fL --retry 5 --retry-delay 3 --retry-all-errors \
-            -o /tmp/freetype.tar.xz \
-            "https://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.xz"
+          curl -fL --connect-timeout 10 --max-time 300 \
+            --retry 5 --retry-delay 3 --retry-all-errors \
+            -o /tmp/freetype.tar.xz "$FREETYPE_URL"
+          echo "$FREETYPE_SHA256  /tmp/freetype.tar.xz" | sha256sum -c -
           mkdir -p /tmp/freetype
           tar -xJf /tmp/freetype.tar.xz -C /tmp/freetype --strip-components=1
           cd /tmp/freetype
