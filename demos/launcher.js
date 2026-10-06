@@ -12,9 +12,9 @@
 const TITLES = {
     platformer: { title: 'Платформер', icon: 'directions_run',
                   hint: 'Box2D, анимация, монеты, враги, HUD' },
-    // «Ведьма» — две сцены: меню-интро и сам бой. Кнопка ведёт в меню, а
+    // «Типичная ночь в Мытищинском лесу» — две сцены: меню-интро и сам бой. Кнопка ведёт в меню, а
     // shooter_witch остаётся сценой для тестов и агента (--scene shooter_witch).
-    shooter_witch: { title: 'Ведьма', icon: 'auto_awesome',
+    shooter_witch: { title: 'Типичная ночь в Мытищинском лесу', icon: 'auto_awesome',
                      hint: 'Ночной лес, свет от фонарей, волны врагов',
                      art: 'demos/assets/art/menu/witch_menu.png',
                      enter: 'witch_menu' },
@@ -23,7 +23,7 @@ const TITLES = {
 };
 
 // Сцены, которые не показываются в меню: под-сцены других демо, куда попадают
-// изнутри (меню «Ведьмы» открывается её же кнопкой, см. enter выше).
+// изнутри (меню демо открывается его же кнопкой, см. enter выше).
 const HIDDEN_SCENES = ['witch_menu'];
 
 export default function installLauncher($) {
