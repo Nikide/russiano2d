@@ -11,7 +11,7 @@
 // ===========================================================================
 
 import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
-import { fxSpec, fxKinds } from '../../src/highlevel/render.js';
+import { fxSpec, fxKinds, userShaderBodyError } from '../../src/highlevel/render.js';
 
 test('список видов эффектов совпадает с шейдером', () => {
     const kinds = fxKinds();
@@ -73,6 +73,37 @@ test('мусор в параметрах не превращается в NaN', 
     truthy(Number.isFinite(s.p2), 'частота — число');
     near(s.p1, 0.03, 1e-9);
     near(s.p2, 24, 1e-9);
+});
+
+test('пользовательский шейдер отличается полем user, а не видом', () => {
+    const users = new Map([['scanline', 3]]);
+    const s = fxSpec('scanline', { p1: 0.5, p2: 2, p3: 0.25, color: '#00ff00' }, users);
+    eq(s.kind, 0, 'вид не встроенный');
+    eq(s.user, 3, 'слот пользовательского шейдера');
+    near(s.p1, 0.5);
+    near(s.p2, 2);
+    near(s.p3, 0.25);
+    eq(s.color, '#00ff00');
+
+    // Тот же шейдер без реестра — уже «нет эффекта»: без слота рисовать нечем.
+    eq(fxSpec('scanline', {}).kind, 0);
+    falsy(fxSpec('scanline', {}).user, 'без реестра слот не выдумывается');
+
+    const d = fxSpec('scanline', {}, users);
+    near(d.p1, 0, 1e-9, 'не заданные параметры — нули');
+});
+
+test('тело шейдера проверяется до компилятора', () => {
+    eq(userShaderBodyError(''), 'пустой исходник шейдера');
+    eq(userShaderBodyError(undefined), 'пустой исходник шейдера');
+    truthy(userShaderBodyError('#version 450\nvoid main(){ o_color = vec4(1.0); }').includes('#version'),
+           'своя #version запрещена — шапку даёт движок');
+    truthy(userShaderBodyError('void render() { o_color = vec4(1.0); }').includes('main'),
+           'нужна точка входа main');
+    truthy(userShaderBodyError('void main() { }').includes('o_color'),
+           'нужен результат в o_color');
+    eq(userShaderBodyError('void main() { o_color = texture(u_texture, v_texcoord) * v_color; }'),
+       '', 'корректное тело проходит');
 });
 
 finish();

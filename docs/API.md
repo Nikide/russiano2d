@@ -516,7 +516,7 @@ engine.drawRect(0, 0, 1280, 720, engine.rgba(20, 24, 34, 255));   // фон
 engine.setClearColor(0.06, 0.08, 0.11, 1.0);
 ```
 
-### `engine.submitSprites(transforms, colors, count, blend?)`
+### `engine.submitSprites(transforms, colors, count, blend?, fx?)`
 
 Главный путь отрисовки: одним вызовом отдаёт в C массив спрайтов на весь кадр.
 
@@ -526,6 +526,7 @@ engine.setClearColor(0.06, 0.08, 0.11, 1.0);
 | `colors` | `Uint32Array \| null` | Цвета по одному на спрайт; можно `null` |
 | `count` | `number` (необязательно) | Сколько спрайтов рисовать |
 | `blend` | `string` (необязательно) | Режим смешивания: `'alpha'` (по умолчанию), `'add'`, `'multiply'`, `'none'` |
+| `fx` | `Int32Array \| null` (необязательно) | Индекс шейдера узла на каждый спрайт (см. `engine.defineSpriteFx`) |
 
 **Возвращает:** `number` — сколько команд реально добавлено (может быть меньше
 `count`, если спрайты невалидны).
@@ -539,7 +540,48 @@ engine.setClearColor(0.06, 0.08, 0.11, 1.0);
 ```js
 engine.submitSprites(xf, col, n);              // альфа
 engine.submitSprites(glow_xf, glow_col, gn, 'add');   // свечение складывается
+engine.submitSprites(xf, col, n, 'alpha', fx); // у части спрайтов свой шейдер
 ```
+
+### `engine.defineSpriteFx(index, kind, p1, p2, p3, color, userShader?)`
+
+Запись в таблицу шейдеров узлов: по индексу (от 1, ноль — «обычный спрайт»)
+движок запоминает эффект на текущий кадр. Таблица сбрасывается каждый кадр.
+
+| Параметр | Тип | Описание |
+|---|---|---|
+| `kind` | `number` | Встроенный эффект: 1 flash, 2 dissolve, 3 chroma, 4 wave |
+| `p1`, `p2`, `p3` | `number` | Параметры эффекта (см. `docs/highlevel/render.md`) |
+| `color` | `number` | Упакованный RGBA (обычно из `$.color.pack`) |
+| `userShader` | `number` (необязательно) | Слот пользовательского шейдера: конвейер берётся из него, а не из `kind` |
+
+### `engine.defineUserShader(name, source)`
+
+Компилирует фрагментный шейдер в рантайме (glslang → SPIR-V, spirv-cross →
+MSL) и создаёт конвейеры на все режимы смешивания.
+
+| Параметр | Тип | Описание |
+|---|---|---|
+| `name` | `string` | Имя шейдера (для журнала и повторной компиляции) |
+| `source` | `string` | Тело шейдера **без** `#version` и без объявлений привязок |
+
+**Возвращает:** `number` — слот (>= 1) или `-1` при ошибке. Текст ошибки —
+`engine.userShaderError()`. Повторный вызов с тем же именем перекомпилирует
+шейдер (удобно для hot reload).
+
+Сопутствующие вызовы: `engine.userShaderError()`, `engine.userShaderCount()`,
+`engine.userShaderPreamble()` (шапка, которую движок подставляет),
+`engine.userShadersSupported()` (есть ли компилятор в сборке —
+`-DR2D_ENABLE_LIVE_SHADERS=OFF` его выключает).
+
+```js
+const slot = engine.defineUserShader('scanline', `
+    void main() {
+        vec4 c = texture(u_texture, v_texcoord) * v_color;
+        o_color = vec4(c.rgb * step(0.5, fract(v_texcoord.y * 60.0)), c.a);
+    }`);
+```
+
 
 #### Формат `transforms` (stride 6)
 

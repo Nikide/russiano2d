@@ -96,11 +96,22 @@ typedef struct R2DDrawCmd {
 // раскладка совпадает с push-константами в render.c.
 typedef struct R2DNodeFx {
     int      kind;     // 0 — нет эффекта, 1 flash, 2 dissolve, 3 chroma, 4 wave
+    int      user;     // индекс пользовательского шейдера, 0 — встроенный
     float    p1, p2, p3;
     uint32_t color;
 } R2DNodeFx;
 
 #define R2D_MAX_NODE_FX 64
+
+// Пользовательский шейдер: имя (для справки и логов) и конвейеры под каждый
+// режим смешивания. Фрагментный шейдер компилируется в рантайме, вершинный
+// берётся встроенный — интерфейс у них общий.
+typedef struct R2DUserShader {
+    bool                     used;
+    char                     name[32];
+    SDL_GPUShader           *fragment;
+    SDL_GPUGraphicsPipeline *pipelines[R2D_BLEND_COUNT];
+} R2DUserShader;
 
 // --- Render target игры (viewport) -------------------------------------------
 // Кадр можно рисовать не в swapchain, а в свою текстуру: так делают шлейфы,
@@ -108,6 +119,13 @@ typedef struct R2DNodeFx {
 // текущий кадр, вторая хранит прошлый — игрушка читает её как спрайт и не
 // получает чтение-запись одной и той же текстуры в одном проходе.
 #define R2D_MAX_VIEWPORTS 8
+
+// --- Пользовательские шейдеры узлов ------------------------------------------
+// Игра компилирует свой фрагментный шейдер в рантайме (glslang + spirv-cross)
+// и получает конвейеры под каждый режим смешивания. Встроенные эффекты узла
+// (flash/dissolve/chroma/wave) остаются отдельным конвейером: у них одна общая
+// таблица параметров, а у пользовательских шейдеров — своя на каждый.
+#define R2D_MAX_USER_SHADERS 16
 
 typedef struct R2DViewport {
     bool            used;
@@ -178,6 +196,11 @@ typedef struct R2DRenderer {
     // поэтому команда хранит не сами параметры, а индекс сюда.
     R2DNodeFx fx[R2D_MAX_NODE_FX];
     int       fx_count;
+
+    // --- Пользовательские шейдеры -------------------------------------------
+    R2DUserShader user_shaders[R2D_MAX_USER_SHADERS];
+    int           user_shader_count;
+    char          user_shader_error[1024];
     uint8_t   batch_fx;      // индекс для следующей r2d_batch_add
 
     // --- Render target игры -------------------------------------------------
@@ -263,7 +286,16 @@ void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float 
 // заполняет её JS вызовом engine.defineSpriteFx(index, kind, p1, p2, p3, color).
 // Индекс — от 1: ноль означает «обычный спрайт» и в таблице не хранится.
 bool r2d_render_fx_define(R2DRenderer *r, int index, int kind,
-                          float p1, float p2, float p3, uint32_t color);
+                          float p1, float p2, float p3, uint32_t color,
+                          int user_shader);
+
+// --- Пользовательские шейдеры -----------------------------------------------
+// Компиляция GLSL в рантайме (недоступна при R2D_ENABLE_LIVE_SHADERS=OFF).
+int  r2d_render_user_shader_define(R2DRenderer *r, const char *name, const char *source);
+const char *r2d_render_user_shader_error(const R2DRenderer *r);
+int  r2d_render_user_shader_count(const R2DRenderer *r);
+bool r2d_render_user_shader_supported(void);
+const char *r2d_render_user_shader_preamble(void);
 // Пакет спрайтов с эффектом: fx — массив индексов на каждый спрайт (может
 // быть NULL — тогда весь пакет идёт обычным конвейером).
 int r2d_batch_submit_fx(R2DRenderer *r, const float *transforms, const uint32_t *colors,

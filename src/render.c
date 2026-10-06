@@ -1,4 +1,5 @@
 #include "render.h"
+#include "shader_live.h"
 
 #include <quickjs.h>
 #include "payload.h"
@@ -571,17 +572,185 @@ void r2d_batch_triangles(R2DRenderer *r, const float *verts, int vertex_count)
 // Заполняет запись таблицы шейдеров узла. Индекс даёт JS: он же ведёт
 // таблицу на своей стороне, поэтому ноль всегда «обычный спрайт».
 bool r2d_render_fx_define(R2DRenderer *r, int index, int kind,
-                          float p1, float p2, float p3, uint32_t color)
+                          float p1, float p2, float p3, uint32_t color,
+                          int user_shader)
 {
     if (!r || index <= 0 || index >= R2D_MAX_NODE_FX) return false;
+    if (user_shader < 0 || user_shader >= R2D_MAX_USER_SHADERS) user_shader = 0;
+    if (user_shader > 0 && !r->user_shaders[user_shader].used) user_shader = 0;
     R2DNodeFx *fx = &r->fx[index];
     fx->kind = kind;
+    fx->user = user_shader;
     fx->p1 = p1;
     fx->p2 = p2;
     fx->p3 = p3;
     fx->color = color;
     if (index > r->fx_count) r->fx_count = index;
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// Пользовательские шейдеры
+//
+// Компиляция — glslang (GLSL → SPIR-V) и spirv-cross (SPIR-V → MSL), см.
+// shader_live.cpp. Здесь только конвейеры: вершинный шейдер берём встроенный
+// (интерфейс общий), фрагментный — скомпилированный игрой. Конвейер нужен на
+// каждый режим смешивания, как и у встроенных эффектов.
+// ---------------------------------------------------------------------------
+
+bool r2d_render_user_shader_supported(void) { return r2d_live_shader_supported(); }
+
+const char *r2d_render_user_shader_preamble(void) { return r2d_live_shader_preamble(); }
+
+static void r2d__user_shader_destroy(R2DRenderer *r, R2DUserShader *us)
+{
+    if (us->fragment) {
+        SDL_ReleaseGPUShader(r->device, us->fragment);
+        us->fragment = NULL;
+    }
+    for (int m = 0; m < R2D_BLEND_COUNT; ++m) {
+        if (us->pipelines[m]) {
+            SDL_ReleaseGPUGraphicsPipeline(r->device, us->pipelines[m]);
+            us->pipelines[m] = NULL;
+        }
+    }
+    us->used = false;
+    us->name[0] = '\0';
+}
+
+int r2d_render_user_shader_define(R2DRenderer *r, const char *name, const char *source)
+{
+    if (!r || !r->device || !name || !source) return -1;
+    if (!r2d_live_shader_supported()) {
+        SDL_snprintf(r->user_shader_error, sizeof r->user_shader_error,
+                     "эта сборка без компилятора шейдеров (R2D_ENABLE_LIVE_SHADERS=OFF)");
+        return -1;
+    }
+
+    // Один и тот же шейдер перекомпилируется на месте: так работает hot reload
+    // и правка эффекта в консоли.
+    int slot = 0;
+    for (int i = 1; i < R2D_MAX_USER_SHADERS; ++i) {
+        if (r->user_shaders[i].used && SDL_strcmp(r->user_shaders[i].name, name) == 0) {
+            slot = i;
+            break;
+        }
+        if (slot == 0 && !r->user_shaders[i].used) slot = i;
+    }
+    if (slot == 0) {
+        SDL_snprintf(r->user_shader_error, sizeof r->user_shader_error,
+                     "достигнут лимит пользовательских шейдеров (%d)", R2D_MAX_USER_SHADERS - 1);
+        return -1;
+    }
+
+    R2DLiveShader live;
+    if (!r2d_live_shader_compile(source, &live)) {
+        SDL_snprintf(r->user_shader_error, sizeof r->user_shader_error, "%s", live.error);
+        r2d_live_shader_free(&live);
+        return -1;
+    }
+
+    const SDL_GPUShaderFormat formats = SDL_GetGPUShaderFormats(r->device);
+    SDL_GPUShaderCreateInfo info;
+    SDL_zero(info);
+    info.stage               = SDL_GPU_SHADERSTAGE_FRAGMENT;
+    info.num_uniform_buffers = 1;
+    info.num_samplers        = 1;
+    if ((formats & SDL_GPU_SHADERFORMAT_MSL) && live.msl) {
+        info.format     = SDL_GPU_SHADERFORMAT_MSL;
+        info.code       = (const Uint8 *)live.msl;
+        info.code_size  = live.msl_size;
+        info.entrypoint = "main0";
+    } else if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
+        info.format     = SDL_GPU_SHADERFORMAT_SPIRV;
+        info.code       = (const Uint8 *)live.spirv;
+        info.code_size  = live.spirv_size;
+        info.entrypoint = "main";
+    } else {
+        SDL_snprintf(r->user_shader_error, sizeof r->user_shader_error,
+                     "бэкенд не принимает ни MSL, ни SPIR-V: %s", live.error);
+        r2d_live_shader_free(&live);
+        return -1;
+    }
+
+    SDL_GPUShader *fragment = SDL_CreateGPUShader(r->device, &info);
+    r2d_live_shader_free(&live);
+    if (!fragment) {
+        SDL_snprintf(r->user_shader_error, sizeof r->user_shader_error,
+                     "SDL_CreateGPUShader: %s", SDL_GetError());
+        return -1;
+    }
+
+    SDL_GPUShader *vertex = r2d__make_shader(r->device, &r2d_shader_sprite_vert,
+                                             SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
+    if (!vertex) {
+        SDL_ReleaseGPUShader(r->device, fragment);
+        SDL_snprintf(r->user_shader_error, sizeof r->user_shader_error,
+                     "нет вершинного шейдера спрайтов: %s", SDL_GetError());
+        return -1;
+    }
+
+    SDL_GPUVertexBufferDescription vb;
+    SDL_zero(vb);
+    vb.slot = 0;
+    vb.pitch = sizeof(R2DVertex);
+    vb.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+    SDL_GPUVertexAttribute attrs[3];
+    SDL_zero(attrs);
+    attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[0].offset = 0;
+    attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[1].offset = sizeof(float) * 2;
+    attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[2].offset = sizeof(float) * 4;
+
+    SDL_GPUGraphicsPipeline *pipes[R2D_BLEND_COUNT];
+    SDL_zero(pipes);
+    bool ok = true;
+    for (int m = 0; m < R2D_BLEND_COUNT && ok; ++m) {
+        pipes[m] = r2d__create_pipeline(r->device, r->window, vertex, fragment, &vb, attrs,
+                                        (R2DBlendMode)m);
+        if (!pipes[m]) {
+            SDL_snprintf(r->user_shader_error, sizeof r->user_shader_error,
+                         "конвейер для режима %d не создался: %s", m, SDL_GetError());
+            ok = false;
+        }
+    }
+    SDL_ReleaseGPUShader(r->device, vertex);
+
+    if (!ok) {
+        for (int m = 0; m < R2D_BLEND_COUNT; ++m) {
+            if (pipes[m]) SDL_ReleaseGPUGraphicsPipeline(r->device, pipes[m]);
+        }
+        SDL_ReleaseGPUShader(r->device, fragment);
+        return -1;
+    }
+
+    R2DUserShader *us = &r->user_shaders[slot];
+    r2d__user_shader_destroy(r, us);   // перекомпиляция поверх старого
+    us->used = true;
+    SDL_snprintf(us->name, sizeof us->name, "%s", name);
+    us->fragment = fragment;
+    for (int m = 0; m < R2D_BLEND_COUNT; ++m) us->pipelines[m] = pipes[m];
+    if (slot > r->user_shader_count) r->user_shader_count = slot;
+
+    r->user_shader_error[0] = '\0';
+    R2D_WARN("пользовательский шейдер \"%s\" скомпилирован (слот %d)", name, slot);
+    return slot;
+}
+
+const char *r2d_render_user_shader_error(const R2DRenderer *r)
+{
+    return r ? r->user_shader_error : "";
+}
+
+int r2d_render_user_shader_count(const R2DRenderer *r)
+{
+    int n = 0;
+    if (r) {
+        for (int i = 1; i < R2D_MAX_USER_SHADERS; ++i) {
+            if (r->user_shaders[i].used) n++;
+        }
+    }
+    return n;
 }
 
 int r2d_batch_submit_fx(R2DRenderer *r, const float *transforms, const uint32_t *colors,
@@ -832,7 +1001,12 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
             // юниформы с видом эффекта и его параметрами.
             const R2DNodeFx *node_fx = &r->fx[fx_index];
             const uint8_t pipe_mode = mode < R2D_BLEND_COUNT ? mode : R2D_BLEND_ALPHA;
-            SDL_GPUGraphicsPipeline *pipe = r->fx_pipelines[pipe_mode];
+            // Пользовательский шейдер — свой конвейер на каждый режим
+            // смешивания; встроенные эффекты живут на общем конвейере.
+            SDL_GPUGraphicsPipeline *pipe =
+                node_fx->user > 0
+                    ? r->user_shaders[node_fx->user].pipelines[pipe_mode]
+                    : r->fx_pipelines[pipe_mode];
             if (pipe) {
                 SDL_BindGPUGraphicsPipeline(pass, pipe);
                 SDL_GPUBufferBinding vb;
@@ -845,7 +1019,9 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
                 SDL_BindGPUIndexBuffer(pass, &ib, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
                 struct { float p[4]; float c[4]; } uni;
-                uni.p[0] = (float)node_fx->kind;
+                // Для встроенного шейдера первый параметр — вид эффекта;
+                // пользовательский вид не различает (у него свой конвейер).
+                uni.p[0] = node_fx->user > 0 ? 0.0f : (float)node_fx->kind;
                 uni.p[1] = node_fx->p1;
                 uni.p[2] = node_fx->p2;
                 uni.p[3] = node_fx->p3;
@@ -1601,6 +1777,9 @@ void r2d_render_shutdown(R2DRenderer *r)
         if (r->pipelines[m]) SDL_ReleaseGPUGraphicsPipeline(r->device, r->pipelines[m]);
         if (r->fx_pipelines[m]) SDL_ReleaseGPUGraphicsPipeline(r->device, r->fx_pipelines[m]);
     }
+    for (int i = 1; i < R2D_MAX_USER_SHADERS; ++i) {
+        if (r->user_shaders[i].used) r2d__user_shader_destroy(r, &r->user_shaders[i]);
+    }
     if (r->post_pipeline) SDL_ReleaseGPUGraphicsPipeline(r->device, r->post_pipeline);
     if (r->bloom_pre_pipeline)  SDL_ReleaseGPUGraphicsPipeline(r->device, r->bloom_pre_pipeline);
     if (r->bloom_blur_pipeline) SDL_ReleaseGPUGraphicsPipeline(r->device, r->bloom_blur_pipeline);
@@ -1906,7 +2085,8 @@ static JSValue r2d__js_define_sprite_fx(JSContext *ctx, JSValueConst this_val,
                                          (float)r2d__js_arg_float(ctx, argc, argv, 2, 0.0),
                                          (float)r2d__js_arg_float(ctx, argc, argv, 3, 0.0),
                                          (float)r2d__js_arg_float(ctx, argc, argv, 4, 0.0),
-                                         (uint32_t)r2d__js_arg_int(ctx, argc, argv, 5, 0xFFFFFFFF));
+                                         (uint32_t)r2d__js_arg_int(ctx, argc, argv, 5, 0xFFFFFFFF),
+                                         r2d__js_arg_int(ctx, argc, argv, 6, 0));
     return JS_NewBool(ctx, ok);
 }
 
@@ -2047,6 +2227,55 @@ static JSValue r2d__js_viewport_count(JSContext *ctx, JSValueConst this_val,
     return JS_NewInt32(ctx, n);
 }
 
+// engine.defineUserShader(name, source) → слот (>= 1) или -1.
+static JSValue r2d__js_define_user_shader(JSContext *ctx, JSValueConst this_val,
+                                          int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    if (!s || !s->renderer) return JS_NewInt32(ctx, -1);
+    const char *name = argc > 0 ? JS_ToCString(ctx, argv[0]) : NULL;
+    const char *source = argc > 1 ? JS_ToCString(ctx, argv[1]) : NULL;
+    int id = -1;
+    if (name && source) id = r2d_render_user_shader_define(s->renderer, name, source);
+    else if (s && s->renderer) SDL_snprintf(s->renderer->user_shader_error,
+                                            sizeof s->renderer->user_shader_error,
+                                            "defineUserShader(имя, исходник): нужен исходник");
+    if (name) JS_FreeCString(ctx, name);
+    if (source) JS_FreeCString(ctx, source);
+    return JS_NewInt32(ctx, id);
+}
+
+static JSValue r2d__js_user_shader_error(JSContext *ctx, JSValueConst this_val,
+                                         int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    return JS_NewString(ctx, r2d_render_user_shader_error(s ? s->renderer : NULL));
+}
+
+static JSValue r2d__js_user_shader_count(JSContext *ctx, JSValueConst this_val,
+                                         int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    return JS_NewInt32(ctx, r2d_render_user_shader_count(s ? s->renderer : NULL));
+}
+
+static JSValue r2d__js_user_shader_preamble(JSContext *ctx, JSValueConst this_val,
+                                            int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    return JS_NewString(ctx, r2d_render_user_shader_preamble());
+}
+
+static JSValue r2d__js_user_shader_supported(JSContext *ctx, JSValueConst this_val,
+                                             int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    return JS_NewBool(ctx, r2d_render_user_shader_supported());
+}
+
 void r2d_render_register_js(JSContext *ctx, JSValue engine)
 {
     // Рендерер достаём из opaque контекста: r2d_render_register_js зовётся из
@@ -2063,7 +2292,14 @@ void r2d_render_register_js(JSContext *ctx, JSValue engine)
         r2d__js_set_fn(ctx, engine, "submitTriangles", r2d__js_submit_triangles, 3);
         // Шейдер узла: JS ведёт таблицу эффектов на своей стороне, поэтому
         // запись в таблицу движка — явный вызов с индексом.
-        r2d__js_set_fn(ctx, engine, "defineSpriteFx",  r2d__js_define_sprite_fx, 6);
+        r2d__js_set_fn(ctx, engine, "defineSpriteFx",  r2d__js_define_sprite_fx, 7);
+        // Пользовательские шейдеры: компиляция GLSL в рантайме (glslang +
+        // spirv-cross). Имя ведёт JS-сторона, сюда приходит и оно, и исходник.
+        r2d__js_set_fn(ctx, engine, "defineUserShader",      r2d__js_define_user_shader, 2);
+        r2d__js_set_fn(ctx, engine, "userShaderError",       r2d__js_user_shader_error, 0);
+        r2d__js_set_fn(ctx, engine, "userShaderCount",       r2d__js_user_shader_count, 0);
+        r2d__js_set_fn(ctx, engine, "userShaderPreamble",    r2d__js_user_shader_preamble, 0);
+        r2d__js_set_fn(ctx, engine, "userShadersSupported",  r2d__js_user_shader_supported, 0);
     }
 
     // --- Пост-обработка ------------------------------------------------------

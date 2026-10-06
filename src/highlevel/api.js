@@ -728,9 +728,16 @@ function installNodeMethods($) {
             const node = this.nodes[0];
             return node && node.shader_name ? node.shader_name : 'none';
         }
-        if (value !== null && !FX_NAMES.has(String(value))) {
+        const custom = value !== null && ctx.gfx && typeof ctx.gfx.userShaders === 'function'
+            && ctx.gfx.userShaders().indexOf(String(value)) >= 0;
+        if (value !== null && !FX_NAMES.has(String(value)) && !custom) {
+            const known = Array.from(FX_NAMES);
+            if (ctx.gfx && typeof ctx.gfx.userShaders === 'function') {
+                known.push(...ctx.gfx.userShaders());
+            }
             ctx.log(`$: .shader("${value}") — неизвестный эффект; доступны: `
-                  + `${Array.from(FX_NAMES).join(', ')}. Вызов проигнорирован`);
+                  + `${known.join(', ')} (свой шейдер регистрирует $.gfx.defineShader). `
+                  + 'Вызов проигнорирован');
             return this;
         }
         return this.eachNode((_, node) => {

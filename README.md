@@ -146,6 +146,7 @@ python3 tools/autobuild.py --with-windows
 | `R2D_ENABLE_HOTRELOAD` | `ON` | перезапуск скриптов при изменении `.js` (F5) |
 | `R2D_EMBED_SCRIPTS` | `ON` в Release | упаковка скриптов игры в байткод QuickJS |
 | `R2D_ENABLE_HTTP` | `ON` | `$.http`; без libcurl остаётся сокетный бэкенд для `http://` |
+| `R2D_ENABLE_LIVE_SHADERS` | `ON` | компиляция своих шейдеров в рантайме (`$.gfx.defineShader`); `OFF` — только встроенные эффекты и бинарник на пару мегабайт легче |
 
 ### Сборка под Windows и Linux
 
@@ -474,6 +475,13 @@ GLSL компилируется в SPIR-V, оттуда — в Metal Shading Lan
 
 DXIL (для DirectX 12) пока не генерируется — для него нужен компилятор DXC.
 На macOS и Linux всё работает как есть; подробности в `cmake/Shaders.cmake`.
+
+Свои шейдеры игра может компилировать и во время работы:
+`$.gfx.defineShader('scanline', '...GLSL...')` — те же glslang и SPIRV-Cross,
+что собирают встроенные шейдеры, линкуются в движок и вызываются из игры.
+Шапку с привязками движок подставляет сам (`$.gfx.shaderPreamble()`), дальше
+имя шейдера работает как встроенный эффект: `.shader('scanline', { p1: 0.5 })`.
+Нужна минимальная сборка — `-DR2D_ENABLE_LIVE_SHADERS=OFF`.
 
 ---
 

@@ -116,6 +116,11 @@ const MAX_NODE_FX = 60;
 let fx_map = new Map();
 let fx_count = 0;
 
+// Пользовательские шейдеры: имя → слот в движке. Компилируются один раз при
+// регистрации (glslang + spirv-cross), дальше это обычный конвейер.
+const user_shaders = new Map();
+let user_shader_error = '';
+
 /** Виды эффектов шейдера узла: имя → номер в шейдере sprite_fx.frag.glsl. */
 const FX_KINDS = {
     none: 0,
@@ -134,9 +139,23 @@ const FX_KINDS = {
  * chroma   — `{ offset }`: расхождение каналов (глитч, удар)
  * wave     — `{ amplitude, frequency, phase }`: волна по UV (жар, вода)
  */
-export function fxSpec(name, params) {
+export function fxSpec(name, params, users) {
     const p = params || {};
-    const kind = FX_KINDS[String(name)] || 0;
+    const key_name = String(name);
+    // Пользовательский шейдер: вид не встроенный, но конвейер свой, поэтому
+    // в таблице эффектов он отличается полем user, а не номером вида.
+    const user = users && users.get ? users.get(key_name) : undefined;
+    if (user !== undefined) {
+        return {
+            kind: 0,
+            user,
+            p1: fxNumber(p.p1, 0),
+            p2: fxNumber(p.p2, 0),
+            p3: fxNumber(p.p3, 0),
+            color: p.color,
+        };
+    }
+    const kind = FX_KINDS[key_name] || 0;
     const num = (value, fallback) => {
         // null/пустая строка — это «параметр не задан», а не ноль: иначе
         // `{ frequency: null }` дал бы частоту 0 и волна исчезла бы.
@@ -171,6 +190,32 @@ export function fxSpec(name, params) {
 /** Список доступных видов эффектов — для документации и проверок. */
 export function fxKinds() { return Object.keys(FX_KINDS); }
 
+/** Число из параметра: нечисло и «не задано» превращаются в значение по умолчанию. */
+function fxNumber(value, fallback) {
+    if (value === null || value === undefined || value === '') return fallback;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * Проверяет тело пользовательского шейдера до отправки в компилятор: так
+ * ошибка видна сразу в JS (`$: ...`), а не только в журнале glslang.
+ * Возвращает текст проблемы или пустую строку, если всё в порядке.
+ */
+export function userShaderBodyError(body) {
+    if (typeof body !== 'string' || body.trim() === '') return 'пустой исходник шейдера';
+    if (body.includes('#version')) {
+        return 'не пишите #version: шапку с версией и привязками подставляет движок '
+             + '(см. $.gfx.shaderPreamble())';
+    }
+    if (!/void\s+main\s*\(/.test(body)) return 'нет точки входа void main()';
+    if (!/o_color/.test(body)) {
+        return 'результат нужно записать в o_color (например, '
+             + 'o_color = texture(u_texture, v_texcoord) * v_color;)';
+    }
+    return '';
+}
+
 function clamp01(v) {
     const n = Number(v);
     if (!Number.isFinite(n)) return 0;
@@ -185,11 +230,12 @@ function clamp01(v) {
 function fxIndexOf(node) {
     const name = node && node.shader_name;
     if (!name || name === 'none') return 0;
-    const spec = fxSpec(name, node.shader_params);
-    if (spec.kind === 0) return 0;
+    const spec = fxSpec(name, node.shader_params, user_shaders);
+    if (spec.kind === 0 && !spec.user) return 0;
     // Для волны фаза меняется каждый кадр — она и делает параметры разными.
     const phase = spec.phase === undefined ? '' : String(spec.phase);
-    const key = spec.kind + '|' + spec.p1 + '|' + spec.p2 + '|' + spec.p3 + '|' + phase
+    const key = spec.kind + '|' + (spec.user || 0) + '|' + spec.p1 + '|' + spec.p2
+              + '|' + spec.p3 + '|' + phase
               + '|' + (spec.color === undefined ? '' : String(spec.color));
     const cached = fx_map.get(key);
     if (cached !== undefined) return cached;
@@ -197,7 +243,7 @@ function fxIndexOf(node) {
     const index = ++fx_count;
     if (typeof engine.defineSpriteFx === 'function') {
         engine.defineSpriteFx(index, spec.kind, spec.p1, spec.p2, spec.p3,
-                              packColorSafe(spec.color));
+                              packColorSafe(spec.color), spec.user || 0);
     }
     fx_map.set(key, index);
     return index;
@@ -1251,6 +1297,72 @@ export function installGfx($) {
 
         /** Виды шейдеров узла: flash, dissolve, chroma, wave (+ none). */
         fxKinds() { return fxKinds(); },
+
+        /**
+         * Скомпилировать свой фрагментный шейдер прямо в игре.
+         *
+         *   $.gfx.defineShader('scanline', `
+         *       void main() {
+         *           vec2 uv = v_texcoord;
+         *           float g = step(0.5, fract(uv.y * 60.0));
+         *           o_color = texture(u_texture, uv) * v_color * (0.6 + 0.4 * g);
+         *       }`);
+         *   $('#tv').shader('scanline');
+         *
+         * Шапку с привязками движок подставляет сам (см. shaderPreamble()).
+         * Параметры передаются через .shaderParam / .shader(name, params) как
+         * `p1`, `p2`, `p3` (vec4 u.p) и `color` (vec4 u.c). Возвращает `true`,
+         * если шейдер скомпилировался; причину отказа видно в shaderError().
+         */
+        defineShader(name, source) {
+            // Встроенные имена заняты: иначе свой шейдер молча перекрыл бы
+            // 'flash' и разница была бы видна только по картинке.
+            if (FX_KINDS[String(name)] !== undefined) {
+                user_shader_error = `$.gfx.defineShader("${name}"): имя занято встроенным эффектом`;
+                ctx.log('$: ' + user_shader_error);
+                return false;
+            }
+            const problem = userShaderBodyError(source);
+            if (problem) {
+                user_shader_error = `$.gfx.defineShader("${name}"): ${problem}`;
+                ctx.log('$: ' + user_shader_error);
+                return false;
+            }
+            if (typeof engine.defineUserShader !== 'function') {
+                user_shader_error = 'движок без компилятора шейдеров';
+                ctx.log('$: ' + user_shader_error);
+                return false;
+            }
+            const id = Number(engine.defineUserShader(String(name), source));
+            if (!(id > 0)) {
+                user_shader_error = String(engine.userShaderError ? engine.userShaderError() : '');
+                ctx.log(`$: шейдер "${name}" не скомпилировался — ${user_shader_error}`);
+                return false;
+            }
+            user_shaders.set(String(name), id);
+            user_shader_error = '';
+            return true;
+        },
+
+        /** Имена зарегистрированных пользовательских шейдеров. */
+        userShaders() { return Array.from(user_shaders.keys()); },
+
+        /** Последняя ошибка компиляции шейдера (пустая строка — ошибок нет). */
+        shaderError() { return user_shader_error; },
+
+        /** Поддерживает ли сборка компиляцию шейдеров в рантайме. */
+        shadersSupported() {
+            return typeof engine.userShadersSupported === 'function'
+                ? !!engine.userShadersSupported()
+                : false;
+        },
+
+        /** Шапка, которую движок подставляет перед телом шейдера. */
+        shaderPreamble() {
+            return typeof engine.userShaderPreamble === 'function'
+                ? String(engine.userShaderPreamble())
+                : '';
+        },
 
         // --- Примитивы поверх всего (в координатах окна) --------------------
         draw: {

@@ -58,6 +58,8 @@ if(R2D_ENABLE_IMGUI)
     list(APPEND R2D_SOURCES
         debug_ui.h
         debug_ui.cpp
+        shader_live.cpp
+        shader_live.h
         "${imgui_SOURCE_DIR}/imgui.cpp"
         "${imgui_SOURCE_DIR}/imgui_draw.cpp"
         "${imgui_SOURCE_DIR}/imgui_tables.cpp"
@@ -190,6 +192,29 @@ if(R2D_ENABLE_HTTP)
     target_compile_definitions(russiano2d PRIVATE R2D_ENABLE_HTTP=1)
 else()
     message(STATUS "  HTTP ............ выключен")
+endif()
+
+# --- Пользовательские шейдеры ($.gfx.defineShader) --------------------------
+# Компилируем GLSL в игре: glslang (GLSL → SPIR-V) и spirv-cross (SPIR-V → MSL
+# для Metal). Обе библиотеки уже собираются как зависимости движка — те же,
+# которыми cmake/Shaders.cmake компилирует встроенные шейдеры на этапе сборки.
+# Опция выключаема: компилятор весит пару мегабайт в бинарнике.
+option(R2D_ENABLE_LIVE_SHADERS "Компиляция пользовательских шейдеров в рантайме" ON)
+if(R2D_ENABLE_LIVE_SHADERS)
+    target_include_directories(russiano2d PRIVATE
+        "${glslang_SOURCE_DIR}"
+        "${glslang_BINARY_DIR}"
+        "${spirv-cross_SOURCE_DIR}")
+    target_link_libraries(russiano2d PRIVATE
+        glslang
+        glslang::glslang-default-resource-limits
+        spirv-cross-core
+        spirv-cross-msl
+        spirv-cross-c)
+    target_compile_definitions(russiano2d PRIVATE R2D_ENABLE_LIVE_SHADERS=1)
+    message(STATUS "  Шейдеры ......... пользовательские шейдеры в рантайме (glslang + spirv-cross)")
+else()
+    message(STATUS "  Шейдеры ......... только встроенные (R2D_ENABLE_LIVE_SHADERS=OFF)")
 endif()
 
 if(R2D_ENABLE_AUDIO)

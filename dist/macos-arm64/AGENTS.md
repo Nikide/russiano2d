@@ -1,4 +1,4 @@
-# Russiano2D 0.1.10 — macOS Apple Silicon: инструкция для ИИ-агента
+# Russiano2D 0.1.11 — macOS Apple Silicon: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"0.1.10","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"0.1.11","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -1583,6 +1583,36 @@ $('#lava').shader('wave', { amplitude: 0.04, frequency: 30, phase: $.time.now() 
 $.gfx.fxKinds();   // ['none', 'flash', 'dissolve', 'chroma', 'wave']
 ```
 
+**Свой шейдер.** `$.gfx.defineShader(имя, исходник)` компилирует фрагментный
+шейдер прямо в игре (glslang → SPIR-V, spirv-cross → MSL для Metal), после
+чего имя работает везде, где работают встроенные эффекты: `.shader(имя)`,
+`.shader(имя, { p1, p2, p3, color })`, `.shaderParam(...)`. Шапку с привязками
+движок подставляет сам — `$.gfx.shaderPreamble()` её показывает:
+
+```glsl
+#version 450
+layout(set = 2, binding = 0) uniform sampler2D u_texture;   // спрайт узла
+layout(set = 3, binding = 0) uniform NodeParams { vec4 p; vec4 c; } u;
+layout(location = 0) in vec2 v_texcoord;                    // UV внутри спрайта
+layout(location = 1) in vec4 v_color;                       // цвет узла
+layout(location = 0) out vec4 o_color;                      // результат
+```
+
+```js
+$.gfx.defineShader('scanline', `
+    void main() {
+        vec4 c = texture(u_texture, v_texcoord) * v_color;
+        float g = step(0.5, fract(v_texcoord.y * 60.0 + u.p.x));
+        o_color = vec4(c.rgb * (0.6 + 0.4 * g), c.a);
+    }`);
+$('#tv').shader('scanline', { p1: $.time.now() * 2 });   // p1 → u.p.y
+
+$.gfx.shadersSupported();   // есть ли компилятор в этой сборке
+$.gfx.userShaders();        // ['scanline']
+$.gfx.shaderError();        // текст ошибки компилятора или ''
+$.gfx.defineShader('плохой', 'void main() { o_color = broken(); }');   // false
+```
+
 **Render target игры (`.viewport`).** Кадр можно рисовать не в окно, а в свою
 текстуру: `.bind(vp)` делает её целью кадра, `.sprite(vp)` отдаёт спрайт
 прошлого кадра, который игра рисует как обычную картинку (шлейфы, накопление,
@@ -1692,9 +1722,21 @@ $.fn .selectors .ctx   // внутренности для расширений
 
 ## 28. Ограничения (честно)
 
-| Чего нет | Почему / что делать |
+Таблица, которая здесь была, закрыта: слои и маски коллизий, виброотклик,
+игровое время для клипов, свип формы, частицы в запросах, габарит агента у
+tilemap, шейдеры на узел, свои шейдеры, render target игры, честный bloom,
+DSP-эффекты и реверб-шины — всё это есть (см. §7, §8, §15, §17, §22, §23 и
+`docs/highlevel/*.md`).
+
+Ограничения, которые остались, — не «не сделано», а устройство движка:
+
+| Ограничение | Почему так и что делать |
 |---|---|
-| Рантайм-компиляции шейдеров | `$.gfx.shader()` пока нет: набор эффектов узла (`.shader('flash' / 'dissolve' / 'chroma' / 'wave')`) встроен в движок и собирается вместе с ним. Свой эффект добавляется правкой `shaders/sprite_fx.frag.glsl` и пересборкой — GLSL в рантайме не компилируется (нет ни glslang, ни SDL_shadercross в зависимостях) |
+| DXIL не генерируется (Windows/D3D12) | Встроенные и пользовательские шейдеры собираются в SPIR-V и MSL; для DXIL нужен DXC, которого в зависимостях нет. На D3D12 движок честно пишет об этом в журнал — используйте Vulkan-бэкенд |
+| Свой шейдер — только фрагментный | Вершинный шейдер общий (спрайтовый конвейер: позиция, UV, цвет), у шейдера один сэмплер (`u_texture`) и один блок параметров (`u`, два vec4). Этого хватает для эффектов поверхности; своя геометрия — правкой `shaders/sprite_vert.glsl` и пересборкой |
+| Компилятор шейдеров занимает место в бинарнике | glslang и SPIRV-Cross линкуются статически. Нужна минимальная сборка — `-DR2D_ENABLE_LIVE_SHADERS=OFF`: тогда `.shader()` работает только со встроенными эффектами, а `$.gfx.shadersSupported()` вернёт `false` |
+| Render target — цель всего кадра | Произвольный проход посреди кадра из JS не начать: проходы открывает `main.c`. Связали viewport — пост-обработка в этом кадре не считается (см. §23) |
+| Компиляция шейдера синхронная | `$.gfx.defineShader()` компилирует в вызывающем кадре (десятки миллисекунд). Регистрируйте шейдеры на загрузке уровня, а не в игровом цикле |
 
 Формы тел, суставы (`revolute`/`distance`/`weld`), события контакта,
 `.width()`/`.height()` как геттеры — всё это есть, см. разделы 6–8.
@@ -2717,7 +2759,7 @@ engine.drawRect(0, 0, 1280, 720, engine.rgba(20, 24, 34, 255));   // фон
 engine.setClearColor(0.06, 0.08, 0.11, 1.0);
 ```
 
-### `engine.submitSprites(transforms, colors, count, blend?)`
+### `engine.submitSprites(transforms, colors, count, blend?, fx?)`
 
 Главный путь отрисовки: одним вызовом отдаёт в C массив спрайтов на весь кадр.
 
@@ -2727,6 +2769,7 @@ engine.setClearColor(0.06, 0.08, 0.11, 1.0);
 | `colors` | `Uint32Array \| null` | Цвета по одному на спрайт; можно `null` |
 | `count` | `number` (необязательно) | Сколько спрайтов рисовать |
 | `blend` | `string` (необязательно) | Режим смешивания: `'alpha'` (по умолчанию), `'add'`, `'multiply'`, `'none'` |
+| `fx` | `Int32Array \| null` (необязательно) | Индекс шейдера узла на каждый спрайт (см. `engine.defineSpriteFx`) |
 
 **Возвращает:** `number` — сколько команд реально добавлено (может быть меньше
 `count`, если спрайты невалидны).
@@ -2740,7 +2783,48 @@ engine.setClearColor(0.06, 0.08, 0.11, 1.0);
 ```js
 engine.submitSprites(xf, col, n);              // альфа
 engine.submitSprites(glow_xf, glow_col, gn, 'add');   // свечение складывается
+engine.submitSprites(xf, col, n, 'alpha', fx); // у части спрайтов свой шейдер
 ```
+
+### `engine.defineSpriteFx(index, kind, p1, p2, p3, color, userShader?)`
+
+Запись в таблицу шейдеров узлов: по индексу (от 1, ноль — «обычный спрайт»)
+движок запоминает эффект на текущий кадр. Таблица сбрасывается каждый кадр.
+
+| Параметр | Тип | Описание |
+|---|---|---|
+| `kind` | `number` | Встроенный эффект: 1 flash, 2 dissolve, 3 chroma, 4 wave |
+| `p1`, `p2`, `p3` | `number` | Параметры эффекта (см. `docs/highlevel/render.md`) |
+| `color` | `number` | Упакованный RGBA (обычно из `$.color.pack`) |
+| `userShader` | `number` (необязательно) | Слот пользовательского шейдера: конвейер берётся из него, а не из `kind` |
+
+### `engine.defineUserShader(name, source)`
+
+Компилирует фрагментный шейдер в рантайме (glslang → SPIR-V, spirv-cross →
+MSL) и создаёт конвейеры на все режимы смешивания.
+
+| Параметр | Тип | Описание |
+|---|---|---|
+| `name` | `string` | Имя шейдера (для журнала и повторной компиляции) |
+| `source` | `string` | Тело шейдера **без** `#version` и без объявлений привязок |
+
+**Возвращает:** `number` — слот (>= 1) или `-1` при ошибке. Текст ошибки —
+`engine.userShaderError()`. Повторный вызов с тем же именем перекомпилирует
+шейдер (удобно для hot reload).
+
+Сопутствующие вызовы: `engine.userShaderError()`, `engine.userShaderCount()`,
+`engine.userShaderPreamble()` (шапка, которую движок подставляет),
+`engine.userShadersSupported()` (есть ли компилятор в сборке —
+`-DR2D_ENABLE_LIVE_SHADERS=OFF` его выключает).
+
+```js
+const slot = engine.defineUserShader('scanline', `
+    void main() {
+        vec4 c = texture(u_texture, v_texcoord) * v_color;
+        o_color = vec4(c.rgb * step(0.5, fract(v_texcoord.y * 60.0)), c.a);
+    }`);
+```
+
 
 #### Формат `transforms` (stride 6)
 
@@ -13538,6 +13622,60 @@ $.ready(() => {
 * `begin/end` и `capture` из прежней заглушки остались неподдержанными: их
   семантика — «нарисовать кусок сцены в текстуру», а это и есть тот самый
   второй проход посреди кадра.
+
+---
+
+### 3.3. Свои шейдеры узла
+
+`.shader()` понимает не только встроенные эффекты: `$.gfx.defineShader(имя,
+исходник)` компилирует фрагментный шейдер прямо в игре.
+
+```
+исходник игрока
+      │  + шапка движка (#version, привязки)
+      ▼
+   glslang ──► SPIR-V ──► spirv-cross ──► MSL (для Metal)
+      │                        │
+      └────────┬───────────────┘
+               ▼
+     SDL_CreateGPUShader + конвейеры на все 4 режима смешивания
+```
+
+Компиляторы (`glslang` и `SPIRV-Cross`) уже собираются как зависимости проекта
+— ими же `cmake/Shaders.cmake` собирает встроенные шейдеры на этапе сборки;
+в рантайме те же библиотеки линкуются в движок. Сборка без них —
+`-DR2D_ENABLE_LIVE_SHADERS=OFF`: тогда `$.gfx.shadersSupported()` вернёт
+`false`, а `.shader()` останется только со встроенными эффектами.
+
+Контракт шейдера фиксирован (шапка — `$.gfx.shaderPreamble()`):
+
+| Что | Где | Зачем |
+|---|---|---|
+| `sampler2D u_texture` | set 2, binding 0 | текстура спрайта узла |
+| `NodeParams { vec4 p; vec4 c; } u` | set 3, binding 0 | `u.p = (0, p1, p2, p3)`, `u.c` — цвет из `.shader(имя, { color })` |
+| `v_texcoord`, `v_color` | location 0, 1 | UV внутри спрайта и цвет узла |
+| `o_color` | location 0 | результат |
+
+```js
+$.gfx.defineShader('heat', `
+    void main() {
+        vec4 c = texture(u_texture, v_texcoord) * v_color;
+        float w = sin(v_texcoord.y * u.p.y + u.p.z) * u.p.x;
+        o_color = texture(u_texture, v_texcoord + vec2(w, 0.0)) * v_color;
+    }`);
+$('#lava').shader('heat', { p1: 0.01, p2: 30, p3: $.time.now() * 2 });
+```
+
+Ограничения честные:
+
+* компилируется только фрагментный шейдер: вершинный общий (спрайтовый
+  конвейер), у шейдера один сэмплер и один блок параметров;
+* DXIL (Windows/D3D12) не генерируется — нужен DXC, поэтому на D3D12 свой
+  шейдер не создастся, и об этом будет строка в журнале;
+* компиляция синхронная и занимает десятки миллисекунд: регистрируйте шейдеры
+  при загрузке уровня или экрана, а не в игровом цикле;
+* ошибка компиляции возвращает `false` и текст glslang в `$.gfx.shaderError()`
+  — игра может показать его прямо на экране.
 
 ---
 

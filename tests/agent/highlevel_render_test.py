@@ -308,6 +308,66 @@ def main():
                   "вокруг источника стало светлее: %.3f → %.3f" % (off_halo, on_halo))
             check(on_halo > 0.5, "ореол свечения виден в пикселях (%.3f)" % on_halo)
 
+        # --- Пользовательские шейдеры ($.gfx.defineShader) ---------------------
+        # Рантайм-компиляция GLSL: glslang (GLSL → SPIR-V) и spirv-cross
+        # (SPIR-V → MSL). Раньше это была последняя строка таблицы §28.
+        check(a.eval("$.gfx.shadersSupported()") is True,
+              "компиляция шейдеров в рантайме поддержана")
+        preamble = a.eval("$.gfx.shaderPreamble()")
+        check(isinstance(preamble, str) and "u_texture" in preamble and "v_texcoord" in preamble,
+              "шапка шейдера объясняет привязки (%d байт)" % len(preamble or ""))
+        check(a.eval("$.gfx.userShaders()") == [], "своих шейдеров пока нет")
+
+        user_src = ("void main() {\n"
+                    "    vec4 c = texture(u_texture, v_texcoord) * v_color;\n"
+                    "    o_color = vec4(c.r * 0.1, 1.0, c.b * 0.1, c.a);\n"
+                    "}")
+        check(a.eval("$.gfx.defineShader('greenish', %r)" % user_src) is True,
+              "свой шейдер скомпилировался")
+        check(a.eval("$.gfx.userShaders()") == ["greenish"], "шейдер попал в список")
+        check(a.eval("$.gfx.shaderError()") == "", "ошибок компиляции нет")
+
+        check(a.eval("$.gfx.defineShader('flash', 'void main() { o_color = vec4(1.0); }')") is False,
+              "встроенное имя занять нельзя")
+        check(a.eval("$.gfx.defineShader('broken', 'void main() { o_color = broken(); }')") is False,
+              "сломанный шейдер не компилируется")
+        broken_error = a.eval("$.gfx.shaderError()")
+        check(isinstance(broken_error, str) and "broken" in broken_error,
+              "текст ошибки компилятора доступен игре (%s...)" % (broken_error or "")[:60])
+
+        # Свой шейдер идёт тем же путём отрисовки, что встроенные эффекты.
+        a.eval("""
+            $.gfx.postOff();
+            $.world.color('#000000');
+            $('#base, #fxprobe, #userprobe').remove();
+            globalThis.__cam = $.camera.pos();
+            $('<rect>', { id: 'userprobe' }).at(__cam.x, __cam.y).size(80, 80)
+                .color('#ffffff').appendTo($.world);
+            $('#userprobe').shader('greenish');
+            'ok'
+        """)
+        a.step(3)
+        info = a.eval("engine.renderInfo()")
+        check(isinstance(info, dict) and info.get("fx_cmds", 0) >= 1,
+              "узел нарисован пользовательским шейдером (fx_cmds=%s)" % (info or {}).get("fx_cmds"))
+
+        user_shot = a.screenshot(os.path.join(ROOT, "build", "render_user_shader.png"))
+        check(os.path.getsize(user_shot) > 0, "кадр со своим шейдером сохранён")
+        try:
+            from PIL import Image   # noqa: PLC0415
+        except ImportError:
+            print("  skip пиксельная проверка своего шейдера: нет Pillow")
+        else:
+            img = Image.open(user_shot).convert("RGB")
+            w, h = img.size
+            pix = img.load()
+            green = sum(1 for y in range(h) for x in range(w)
+                        if pix[x, y][1] > 200 and pix[x, y][0] < 60)
+            check(green > 3000, "свой шейдер перекрасил узел в зелёный (%d px)" % green)
+
+        a.eval("$('#userprobe').shader(null); 'ok'")
+        a.step(2)
+
         # --- Вспышка шейдером узла видна в пикселях ---------------------------
         try:
             from PIL import Image   # noqa: PLC0415
