@@ -1923,6 +1923,30 @@ static JSValue r2d__js_submit_triangles(JSContext *ctx, JSValueConst this_val, i
 // Пересекающиеся отрезки разрезаются внутри — можно отдавать любую геометрию.
 // ---------------------------------------------------------------------------
 
+// Копия вершин полигона в Float32Array. В QuickJS-ng нет
+// JS_NewFloat32Array: собираем через ArrayBuffer, а конструктор типизированного
+// массива читает argv[1] и argv[2], поэтому аргументов ровно три.
+static JSValue r2d__js_float32_copy(JSContext *ctx, const float *data, int floats)
+{
+    if (!data || floats <= 0) return JS_NULL;
+
+    JSValue ab = JS_NewArrayBufferCopy(ctx, (const uint8_t *)data,
+                                       (size_t)floats * sizeof(float));
+    if (JS_IsException(ab)) return JS_NULL;
+
+    JSValue targs[3];
+    targs[0] = ab;
+    targs[1] = JS_NewInt32(ctx, 0);
+    targs[2] = JS_NewInt32(ctx, floats);
+
+    JSValue result = JS_NewTypedArray(ctx, 3, targs, JS_TYPED_ARRAY_FLOAT32);
+
+    JS_FreeValue(ctx, targs[1]);
+    JS_FreeValue(ctx, targs[2]);
+    JS_FreeValue(ctx, ab);
+    return result;
+}
+
 static JSValue r2d__js_light_visibility(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -1964,24 +1988,7 @@ static JSValue r2d__js_light_visibility(JSContext *ctx, JSValueConst this_val, i
 
     JSValue result = JS_NULL;
     if (count > 0) {
-        // В QuickJS-ng нет JS_NewFloat32Array: собираем через ArrayBuffer с
-        // копированием и типизированный массив поверх него. Конструктор
-        // типизированного массива читает argv[1] и argv[2], поэтому аргументов
-        // ровно три, а не один.
-        JSValue ab2 = JS_NewArrayBufferCopy(ctx, (const uint8_t *)out,
-                                            (size_t)count * 2 * sizeof(float));
-        if (!JS_IsException(ab2)) {
-            JSValue targs[3];
-            targs[0] = ab2;
-            targs[1] = JS_NewInt32(ctx, 0);
-            targs[2] = JS_NewInt32(ctx, count * 2);
-
-            result = JS_NewTypedArray(ctx, 3, targs, JS_TYPED_ARRAY_FLOAT32);
-
-            JS_FreeValue(ctx, targs[1]);
-            JS_FreeValue(ctx, targs[2]);
-            JS_FreeValue(ctx, ab2);
-        }
+        result = r2d__js_float32_copy(ctx, out, count * 2);
     }
 
     SDL_free(out);
@@ -1996,6 +2003,78 @@ static JSValue r2d__js_light_max_points(JSContext *ctx, JSValueConst this_val, i
     R2D_UNUSED(this_val);
     const int n = r2d__arg_int(ctx, argc, argv, 0, 0);
     return JS_NewInt32(ctx, r2d_visibility_max_points(n));
+}
+
+// engine.light.prepare(segments) — разрезает препятствия ОДИН раз и запоминает
+// набор: дальше visibilityPrepared() считает полигон без O(n^2) на каждый
+// вызов, а буфер оценивается линейно. Возвращает число подотрезков.
+static JSValue r2d__js_light_prepare(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 1) {
+        JS_ThrowTypeError(ctx, "light.prepare(segments: Float32Array)");
+        return JS_EXCEPTION;
+    }
+
+    size_t off = 0, len = 0, bpe = 0;
+    JSValue ab = JS_GetTypedArrayBuffer(ctx, argv[0], &off, &len, &bpe);
+    if (JS_IsException(ab)) return JS_EXCEPTION;
+
+    size_t size = 0;
+    uint8_t *base = JS_GetArrayBuffer(ctx, &size, ab);
+    if (!base) {
+        JS_FreeValue(ctx, ab);
+        JS_ThrowTypeError(ctx, "первый аргумент должен быть Float32Array");
+        return JS_EXCEPTION;
+    }
+
+    const int segment_count = (int)(len / sizeof(float) / 4);
+    const int prepared = r2d_visibility_prepare((const float *)(base + off), segment_count);
+
+    JS_FreeValue(ctx, ab);
+    return JS_NewInt32(ctx, prepared);
+}
+
+// engine.light.preparedCount() — сколько подотрезков в подготовленном наборе.
+static JSValue r2d__js_light_prepared_count(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2D_UNUSED(argc);
+    R2D_UNUSED(argv);
+    return JS_NewInt32(ctx, r2d_visibility_prepared_count());
+}
+
+// engine.light.preparedMaxPoints() — верхняя оценка вершин по набору.
+static JSValue r2d__js_light_prepared_max_points(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2D_UNUSED(argc);
+    R2D_UNUSED(argv);
+    return JS_NewInt32(ctx, r2d_visibility_prepared_max_points());
+}
+
+// engine.light.visibilityPrepared(x, y) — полигон видимости по набору из
+// prepare(). Возвращает Float32Array вершин [x, y, ...] или null.
+static JSValue r2d__js_light_visibility_prepared(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    const double ox = r2d__arg_num(ctx, argc, argv, 0, 0);
+    const double oy = r2d__arg_num(ctx, argc, argv, 1, 0);
+
+    int max_points = r2d_visibility_prepared_max_points();
+    if (max_points < 16) max_points = 16;
+
+    float *out = (float *)SDL_malloc((size_t)max_points * 2 * sizeof(float));
+    if (!out) {
+        JS_ThrowOutOfMemory(ctx);
+        return JS_EXCEPTION;
+    }
+
+    const int count = r2d_visibility_polygon_prepared((float)ox, (float)oy, out, max_points);
+    JSValue result = r2d__js_float32_copy(ctx, out, count * 2);
+
+    SDL_free(out);
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -2984,6 +3063,10 @@ static JSValue r2d__make_engine(JSContext *ctx)
     JSValue light = JS_NewObject(ctx);
     r2d__set_fn(ctx, light, "visibility", r2d__js_light_visibility, 3);
     r2d__set_fn(ctx, light, "maxPoints", r2d__js_light_max_points, 1);
+    r2d__set_fn(ctx, light, "prepare", r2d__js_light_prepare, 1);
+    r2d__set_fn(ctx, light, "preparedCount", r2d__js_light_prepared_count, 0);
+    r2d__set_fn(ctx, light, "preparedMaxPoints", r2d__js_light_prepared_max_points, 0);
+    r2d__set_fn(ctx, light, "visibilityPrepared", r2d__js_light_visibility_prepared, 2);
     JS_SetPropertyStr(ctx, engine, "light", light);
 
     // Запросы к миру: лучи и пересечения. Нужны высокоуровневому API

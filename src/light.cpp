@@ -260,6 +260,86 @@ void append_bounding_box(std::vector<segment> &segs, float ox, float oy)
 
 }  // namespace
 
+// Подготовленный набор: разрезаем один раз, полигон считаем много раз.
+// Определён вне анонимного namespace, потому что им пользуются extern "C"
+// функции ниже, а типы берём полностью квалифицированными.
+static std::vector<geometry::line_segment<geometry::vec2>> g_prepared;
+
+extern "C" int r2d_visibility_prepare(const float *segments, int segment_count)
+{
+    g_prepared.clear();
+    if (segment_count < 0) return 0;
+    if (segment_count > 0 && !segments) return 0;
+
+#ifdef __cpp_exceptions
+    try
+#endif
+    {
+        g_prepared = build_split_segments(segments, segment_count);
+    }
+#ifdef __cpp_exceptions
+    catch (...)
+    {
+        g_prepared.clear();
+        return 0;
+    }
+#endif
+    return static_cast<int>(g_prepared.size());
+}
+
+extern "C" int r2d_visibility_prepared_count(void)
+{
+    return static_cast<int>(g_prepared.size());
+}
+
+extern "C" int r2d_visibility_prepared_max_points(void)
+{
+    // Набор уже разрезан, пересечений в нём нет, поэтому полигон линеен по
+    // числу подотрезков: на каждый — два события и не больше двух вершин.
+    const long long m = static_cast<long long>(g_prepared.size()) + 4;  // + рамка
+    const long long bound = 4 * m + 8;
+    if (bound > 2147483647LL) return 2147483647;
+    return static_cast<int>(bound);
+}
+
+extern "C" int r2d_visibility_polygon_prepared(float ox, float oy,
+                                                float *out_points, int max_points)
+{
+    if (!out_points || max_points <= 0) return 0;
+    if (!finite(ox) || !finite(oy)) return 0;
+    if (g_prepared.empty()) return 0;
+
+#ifdef __cpp_exceptions
+    try
+#endif
+    {
+        // Копия нужна из-за рамки: она зависит от наблюдателя, а сам
+        // подготовленный набор обязан остаться неизменным.
+        std::vector<geometry::line_segment<geometry::vec2>> obstacles = g_prepared;
+        append_bounding_box(obstacles, ox, oy);
+
+        const geometry::vec2 observer{ox, oy};
+        std::vector<geometry::vec2> polygon = geometry::visibility_polygon(
+            observer, obstacles.begin(), obstacles.end());
+
+        if (polygon.empty()) return 0;
+        if (static_cast<int>(polygon.size()) > max_points) return 0;
+
+        for (std::size_t i = 0; i < polygon.size(); ++i) {
+            if (!finite(polygon[i].x) || !finite(polygon[i].y)) return 0;
+            out_points[2 * i]     = polygon[i].x;
+            out_points[2 * i + 1] = polygon[i].y;
+        }
+        return static_cast<int>(polygon.size());
+    }
+#ifdef __cpp_exceptions
+    catch (...)
+    {
+        return 0;
+    }
+#endif
+}
+
 extern "C" int r2d_visibility_polygon(const float *segments, int segment_count,
                                        float ox, float oy,
                                        float *out_points, int max_points)

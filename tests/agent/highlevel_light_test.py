@@ -196,6 +196,50 @@ def main():
         check(control_on > control_off * 0.8,
               "вне тени свет не погас (%.0f → %.0f)" % (control_off, control_on))
 
+        # --- Кэш границ и отсечение по радиусу --------------------------------
+        # Сцена статична: если бы границы считались каждый кадр, built был бы
+        # ненулевым. Ноль здесь — это и есть проверка кэша.
+        a.step(3)
+        a.eval("$.gfx.light.resetStats()")
+        a.step(1)
+        stats = a.eval("$.gfx.light.stats()")
+        check(isinstance(stats, dict) and stats.get("built", -1) == 0,
+              "границы теней берутся из кэша (посчитано за кадр: %s)"
+              % (stats.get("built") if isinstance(stats, dict) else stats))
+        check(isinstance(stats, dict) and stats.get("cached", 0) > 0,
+              "кэш границ используется (%s попаданий)"
+              % (stats.get("cached") if isinstance(stats, dict) else stats))
+
+        a.eval("$.gfx.light.addOccluders([{ x: 3000, y: 3000, w: 100, h: 100 },"
+               " { x: 5000, y: 100, w: 100, h: 100 }])")
+        a.step(2)
+        a.eval("$.gfx.light.resetStats()")
+        a.step(1)
+        far = a.eval("$.gfx.light.stats()")
+        check(isinstance(far, dict) and far.get("culled", 0) < far.get("considered", 0),
+              "далёкие препятствия отсекаются по радиусу (%s из %s дошло)"
+              % (far.get("culled") if isinstance(far, dict) else "?",
+                 far.get("considered") if isinstance(far, dict) else "?"))
+        a.eval("$.gfx.light.occluders([{ x: 408, y: 180, w: 24, h: 240 }])")
+
+        # --- Мягкая кромка тени ------------------------------------------------
+        # Край тени проходит около y=190 при x=400: с мягкостью туда попадает
+        # часть подлучей, а в глубине тени (400, 300) по-прежнему темно.
+        a.step(2)
+        crisp, scale_x, scale_y = shot("light_soft_1.png")
+        crisp_edge = mean_luma(crisp, 400, 195, 5, scale_x, scale_y)
+        a.eval("$('#lamp').shadowSoft(8, 12)")
+        check(a.eval("$('#lamp').shadowSoft()") == 8, ".shadowSoft(rays, deg) сохранил число лучей")
+        a.step(2)
+        soft, scale_x, scale_y = shot("light_soft_8.png")
+        soft_edge = mean_luma(soft, 400, 195, 5, scale_x, scale_y)
+        soft_deep = mean_luma(soft, 400, 300, 10, scale_x, scale_y)
+        check(soft_edge > crisp_edge * 2,
+              "мягкая кромка подсвечивает полутень (%.1f → %.1f)" % (crisp_edge, soft_edge))
+        check(soft_deep < soft_edge * 0.5,
+              "в глубине тени мягкость не светит (%.1f против %.1f)" % (soft_deep, soft_edge))
+        a.eval("$('#lamp').shadowSoft(1)")
+
         # --- Конус -------------------------------------------------------------
         a.eval("$('#lamp').shadows(false).cone(90)")
         a.step(2)
@@ -235,9 +279,67 @@ def main():
               "узел <fog> осветлил кадр (%.0f → %.0f)" % (dark, mist_luma))
         a.eval("$('#mist').hide()")
 
+        # --- Темнота и свет, который её прорезает ------------------------------
+        # Темнота — multiply поверх кадра: обычный свет гаснет, а свет с
+        # .punch(true) рисуется после неё и остаётся ярким.
+        a.eval("$('#lamp').shadows(false).cone(0)")
+        a.step(2)
+        lit, scale_x, scale_y = shot("light_ambient_off.png")
+        lamp_before = mean_luma(lit, 200, 300, 10, scale_x, scale_y)
+        torch_before = mean_luma(lit, 150, 120, 10, scale_x, scale_y)
+        check(a.eval("$.gfx.light.ambient.on()") is False,
+              "темнота по умолчанию выключена")
+
+        a.eval("$.gfx.light.ambient({ level: 0.7, color: '#000000' })")
+        params = a.eval("$.gfx.light.ambient.params()")
+        check(isinstance(params, dict) and abs(params.get("level", 0) - 0.7) < 1e-9,
+              "$.gfx.light.ambient() приняла уровень")
+        a.step(2)
+        dark, scale_x, scale_y = shot("light_ambient_on.png")
+        lamp_after = mean_luma(dark, 200, 300, 10, scale_x, scale_y)
+        torch_after = mean_luma(dark, 150, 120, 10, scale_x, scale_y)
+        check(lamp_before > 40, "до темноты фонарь светит (яркость %.0f)" % lamp_before)
+        check(lamp_after < lamp_before * 0.5,
+              "темнота гасит обычный свет (%.0f → %.0f)" % (lamp_before, lamp_after))
+        check(torch_after > torch_before * 0.75,
+              "свет с .punch(true) темноту прорезает (%.0f → %.0f)" % (torch_before, torch_after))
+
+        a.eval("$.gfx.light.ambient.off()")
+        check(a.eval("$.gfx.light.ambient.on()") is False,
+              "$.gfx.light.ambient.off() выключает темноту")
+        check(a.eval("$.gfx.light.ambient.params()") is None,
+              "после выключения параметров темноты нет")
+        a.step(2)
+        back, scale_x, scale_y = shot("light_ambient_back.png")
+        lamp_back = mean_luma(back, 200, 300, 10, scale_x, scale_y)
+        check(abs(lamp_back - lamp_before) < lamp_before * 0.1,
+              "выключение темноты возвращает картинку (%.0f → %.0f)"
+              % (lamp_before, lamp_back))
+
         # --- Точный полигон из C и отладка ------------------------------------
         check(a.eval("$.gfx.light.polygon(200, 300) ? $.gfx.light.polygon(200, 300).length : -1") > 6,
               "engine.light.visibility() вернул полигон")
+
+        # Подготовленный набор: разрезание O(n^2) делается один раз на версию
+        # реестра, поэтому и оценка буфера становится линейной.
+        check(a.eval("typeof engine.light.prepare") == "function",
+              "engine.light.prepare() доступно")
+        prepared_count = a.eval("engine.light.preparedCount()")
+        check(isinstance(prepared_count, int) and prepared_count > 0,
+              "подготовленный набор не пуст (подотрезков: %s)" % prepared_count)
+        same = a.eval("(function () {"
+                      " const raw = engine.light.visibility("
+                      "Float32Array.from($.gfx.light.segments()), 200, 300);"
+                      " const prep = engine.light.visibilityPrepared(200, 300);"
+                      " if (!raw || !prep || raw.length !== prep.length) return false;"
+                      " for (let i = 0; i < raw.length; i++)"
+                      "   if (Math.abs(raw[i] - prep[i]) > 1e-3) return false;"
+                      " return true; })()")
+        check(same is True, "полигон по подготовленному набору совпадает с обычным")
+        prep_max = a.eval("engine.light.preparedMaxPoints()")
+        raw_max = a.eval("engine.light.maxPoints($.gfx.light.count())")
+        check(isinstance(prep_max, int) and isinstance(raw_max, int) and prep_max < raw_max,
+              "оценка буфера по набору линейна (%s против %s)" % (prep_max, raw_max))
         a.eval("$.gfx.light.debug(true)")
         a.step(2)
         check(a.eval("$.gfx.light.debugOn()") is True, "отладка препятствий включается")

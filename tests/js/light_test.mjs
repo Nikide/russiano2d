@@ -12,7 +12,7 @@
 import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
 import {
     occluderSegments, tileOccluders, rayDistance, circleAngles, sectorAngles,
-    lightBoundary, coneAlpha, fogBands,
+    lightBoundary, coneAlpha, fogBands, buildLightIndex, lightIndexPick,
 } from '../../src/highlevel/render.js';
 
 // --- Пересечение луча с отрезком -------------------------------------------
@@ -217,6 +217,94 @@ test('приземный туман гуще внизу, чем вверху', (
 
 test('число полос ограничено сверху', () => {
     eq(fogBands({ layers: 99 }, 0, 800, 600).length, 12);
+});
+
+// --- Индекс препятствий по клеткам ------------------------------------------
+
+test('индекс отдаёт только отрезки рядом со светом', () => {
+    // Три стенки: у света, далеко и длинная через несколько клеток.
+    const segs = [
+        0, 0, 20, 0,
+        400, 400, 420, 400,
+        0, 300, 300, 300,
+    ];
+    const index = buildLightIndex(segs, 100);
+    const near_light = lightIndexPick(index, 10, 10, 50);
+    eq(near_light.length, 1);
+    eq(near_light[0], 0);
+    const far = lightIndexPick(index, 410, 390, 60);
+    eq(far.length, 2);
+    truthy(far.indexOf(0) < 0);
+});
+
+test('длинный отрезок не теряется: он лежит во всех своих клетках', () => {
+    const index = buildLightIndex([0, 300, 500, 300], 100);
+    eq(lightIndexPick(index, 50, 300, 20).length, 1);
+    eq(lightIndexPick(index, 250, 300, 20)[0], 0);
+    eq(lightIndexPick(index, 450, 300, 20).length, 1);
+});
+
+test('отрезок из нескольких клеток выборки приходит один раз', () => {
+    const index = buildLightIndex([0, 50, 300, 50], 100);
+    eq(lightIndexPick(index, 150, 50, 250).length, 1);
+});
+
+test('далёкий свет не видит ни одного отрезка', () => {
+    const index = buildLightIndex([0, 0, 10, 0], 100);
+    eq(lightIndexPick(index, 5000, 5000, 50).length, 0);
+});
+
+test('пустой реестр даёт пустой индекс', () => {
+    const index = buildLightIndex([], 100);
+    eq(lightIndexPick(index, 0, 0, 100).length, 0);
+});
+
+// --- Отсечение и мягкая кромка ----------------------------------------------
+
+test('count ограничивает набор отрезков для луча', () => {
+    const angles = new Float64Array([0]);
+    const segs = [100, -10, 100, 10, 50, -10, 50, 10];
+    near(lightBoundary(0, 0, angles, segs, 400)[0], 50);
+    near(lightBoundary(0, 0, angles, segs, 400, 1)[0], 100);
+});
+
+test('мягкая кромка: подлучи обходят узкую стену', () => {
+    const angles = circleAngles(8);
+    const i = 4;                       // circleAngles начинает с −π, значит 0 — это середина
+    near(angles[i], 0);
+    // Стенка ровно перед лучом и уже, чем разброс подлучей.
+    const segs = [100, -0.05, 100, 0.05];
+    const crisp = lightBoundary(0, 0, angles, segs, 400, 1, 1);
+    const soft = lightBoundary(0, 0, angles, segs, 400, 1, 4);
+    near(crisp[i], 100);
+    truthy(soft[i] > crisp[i]);
+    truthy(soft[i] <= 400);
+});
+
+test('мягкая кромка не меняет сплошную стену', () => {
+    const angles = circleAngles(8);
+    const i = 4;
+    const segs = [100, -50, 100, 50];
+    const crisp = lightBoundary(0, 0, angles, segs, 400, 1, 1);
+    const soft = lightBoundary(0, 0, angles, segs, 400, 1, 4);
+    near(crisp[i], 100);
+    near(soft[i], crisp[i], 1);
+});
+
+test('один луч: мягкость не ломает расчёт', () => {
+    const one = new Float64Array([0]);
+    near(lightBoundary(0, 0, one, [100, -10, 100, 10], 400, 1, 6)[0], 100);
+});
+
+test('spread задаёт ширину полутени', () => {
+    const angles = circleAngles(64);
+    const i = 32;                                  // ровно 0 рад
+    near(angles[i], 0);
+    const segs = [100, -0.05, 100, 0.05];          // узкая стенка на пути
+    const narrow = lightBoundary(0, 0, angles, segs, 400, 1, 4, 0.0002);
+    const wide = lightBoundary(0, 0, angles, segs, 400, 1, 4, 0.05);
+    near(narrow[i], 100, 0.1);                     // подлучи ещё попадают
+    truthy(wide[i] > 300);                         // широкий разброс уводит мимо
 });
 
 finish();
