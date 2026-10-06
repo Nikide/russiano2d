@@ -511,6 +511,8 @@ assets/
 tools/
   agent_client.py           клиент протокола агента на Python
   run_tests.py              раннер агентских тестов
+  bench_highlevel.py        стенд производительности $ (docs/HIGH_LEVEL_API_PERF.md)
+  bench_storage.mjs         микрозамер раскладки данных массовых сущностей (qjs)
   r2d_embed_js.c            генератор таблицы встроенных JS-модулей
   r2d_pack.c                упаковщик скриптов в байткод QuickJS
 tests/
