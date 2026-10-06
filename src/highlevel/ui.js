@@ -11,7 +11,7 @@
 // Узлы интерфейса живут в координатах окна: камера на них не влияет.
 // ===========================================================================
 
-import { ctx, query, packColor, registrySummary, countUiNodes } from './core.js';
+import { ctx, query, packColor, nodesWithFacet } from './core.js';
 
 // Кэш обёрток документов RmlUi: путь → обёртка (см. ui.doc()).
 const docs = new Map();
@@ -83,15 +83,16 @@ export function installUi($) {
 
         /** Внутреннее: обработка наведения и кликов по ui-узлам. */
         _tick() {
-            // Нет ui-узлов — нет и наведения: полный обход реестра впустую
-            // (docs/HIGH_LEVEL_API_PERF.md §3.3).
-            if (registrySummary('ui_nodes', countUiNodes) === 0) return;
+            // Срез ui-узлов держит индекс реестра: нет узлов — цикл пуст, и
+            // полного обхода мира здесь больше нет (§5, P2 отчёта).
+            const nodes = nodesWithFacet('ui');
+            if (nodes.length === 0) return;
             const mx = engine.mouseX;
             const my = engine.mouseY;
             const down = engine.mouseDown(1);
             const pressed = engine.mousePressed(1);
-            for (const node of ctx.nodes) {
-                if (!node.attrs.ui) continue;
+            for (let i = 0; i < nodes.length; i++) {
+                const node = nodes[i];
                 const inside = node.visible &&
                     mx >= node.x - node.w / 2 && mx <= node.x + node.w / 2 &&
                     my >= node.y - node.h / 2 && my <= node.y + node.h / 2;

@@ -5,7 +5,8 @@
 // кадр позиции тел из C перекладываются в узлы, а удалённые тела убираются.
 // ===========================================================================
 
-import { ctx, Node, wrap, wrapOne, query, TAGS, packColor, resolveSprite, nodeBounds } from './core.js';
+import { ctx, Node, wrap, wrapOne, query, TAGS, packColor, resolveSprite, nodeBounds,
+         nodesWithFacet } from './core.js';
 
 const state = {
     gravity: { x: 0, y: 2000 },
@@ -281,17 +282,21 @@ export function installWorld($) {
         // --- Служебное ------------------------------------------------------
         sync(dt) {
             const t = engine.getTransforms();
-            for (let i = ctx.nodes.length - 1; i >= 0; i--) {
-                const node = ctx.nodes[i];
-                if (node.body >= 0) {
-                    if (!engine.bodyAlive(node.body)) {
-                        node.body = -1;
-                        continue;
-                    }
-                    node.x = t[node.body * 3];
-                    node.y = t[node.body * 3 + 1];
-                    node.angle = t[node.body * 3 + 2];
+            // Только узлы с живым телом: срез body держит индекс реестра, и в
+            // сцене без физики цикл пуст, хотя раньше проходил весь мир
+            // (§5, P2 отчёта).
+            const bodies = nodesWithFacet('body');
+            for (let i = 0; i < bodies.length; i++) {
+                const node = bodies[i];
+                if (node.removed) continue;
+                if (node.body < 0) continue;   // тело умерло — запись уже мертва
+                if (!engine.bodyAlive(node.body)) {
+                    node.body = -1;
+                    continue;
                 }
+                node.x = t[node.body * 3];
+                node.y = t[node.body * 3 + 1];
+                node.angle = t[node.body * 3 + 2];
             }
             worldEvents(dt);
         },

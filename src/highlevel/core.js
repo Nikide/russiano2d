@@ -81,6 +81,174 @@ export function registrySummary(key, compute) {
 }
 
 // ---------------------------------------------------------------------------
+// Индекс реестра: один проход вместо N (docs/HIGH_LEVEL_API_PERF.md §5, P2)
+// ---------------------------------------------------------------------------
+//
+// Подсистемы каждый кадр спрашивают «есть ли в мире мои узлы?». Через
+// registrySummary() ответ кэшируется на версию реестра, но в сцене, где узлы
+// рождаются и умирают каждый кадр, версия меняется каждый кадр — и десяток
+// подсистем делает десяток независимых полных проходов по ctx.nodes.
+//
+// Здесь проход один: по узлам строятся карты byTag/byClass и срезы по
+// признакам (ui, tr, controls, anim, clip, parallax, зоны). Всё живёт на
+// версию реестра: touchRegistry() обесценивает индекс, первый запрос после
+// изменения его перестраивает. Подсистема читает готовый срез: O(1) на кадр.
+//
+// Срезы — снимки: при перестройке создаются НОВЫЕ массивы, старые не
+// переиспользуются. Иначе обход среза, внутри которого узел создаётся или
+// удаляется (а это обычное дело), ронял бы итерацию.
+
+/** Пустой срез: у тега/класса/признака нет узлов. */
+const EMPTY_NODES = [];
+Object.freeze(EMPTY_NODES);
+
+let registry_index = null;
+
+function buildRegistryIndex() {
+    const by_tag = new Map();
+    const by_class = new Map();
+    const facets = {
+        ui: [], tr: [], controls: [], anim: [], clip: [], parallax: [], zones: [], body: [],
+    };
+    const counts = {
+        ui: 0, tr: 0, controls: 0, anim: 0, clip: 0, parallax: 0, zones: 0, body: 0,
+    };
+    const all = [];
+
+    // Одноэлементный кэш «имя → список»: в типичной сцене подряд идут узлы
+    // одного тега и одного класса (1000 спрайтов, 5000 'rect'), а Map по
+    // строке в QuickJS стоит до микросекунды — на 5000 узлов это миллисекунды.
+    // Кэш убирает почти все обращения к Map в однородной сцене.
+    // Сентинел, а не null: у узла-заглушки тега может не быть вовсе.
+    const NO_NAME = {};
+    let last_tag = NO_NAME;
+    let last_tag_list = null;
+    let last_class = NO_NAME;
+    let last_class_list = null;
+
+    const nodes = ctx.nodes;
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        // null в реестре — не норма, но triggers.js исторически проверяет его,
+        // поэтому индекс тоже не падает на дырке.
+        if (node === null || node === undefined || node.removed) continue;
+        all.push(node);
+
+        const tag = node.tag;
+        if (tag !== last_tag) {
+            last_tag = tag;
+            last_tag_list = by_tag.get(tag);
+            if (last_tag_list === undefined) by_tag.set(tag, last_tag_list = []);
+        }
+        last_tag_list.push(node);
+
+        const classes = node.classes;
+        if (classes !== undefined && classes.size !== 0) {
+            for (const name of classes) {
+                if (name !== last_class) {
+                    last_class = name;
+                    last_class_list = by_class.get(name);
+                    if (last_class_list === undefined) by_class.set(name, last_class_list = []);
+                }
+                last_class_list.push(node);
+            }
+        }
+
+        // Признак зоны — тот же предикат, что у triggers.js (isZoneNode):
+        // тег <trigger>, класс "trigger" или attrs.trigger === true.
+        // Класс здесь не проверяем: Set.has на каждом узле — самая дорогая
+        // строка прохода, а класс добирается после цикла по готовому срезу.
+        let zone = tag === 'trigger';
+        const attrs = node.attrs;
+        if (attrs !== undefined) {
+            if (attrs.ui) { facets.ui.push(node); counts.ui++; }
+            if (attrs.tr !== undefined) { facets.tr.push(node); counts.tr++; }
+            if (attrs.controls) { facets.controls.push(node); counts.controls++; }
+            if (attrs.trigger === true) zone = true;
+        }
+        if (zone) { facets.zones.push(node); counts.zones++; }
+
+        if (node.anim) { facets.anim.push(node); counts.anim++; }
+        if (node.__clip) { facets.clip.push(node); counts.clip++; }
+        if (node.body >= 0) { facets.body.push(node); counts.body++; }
+        const parallax = node.parallax_factor;
+        if (parallax !== undefined && parallax !== null) {
+            facets.parallax.push(node);
+            counts.parallax++;
+        }
+    }
+
+    // Зоны по классу "trigger" (третий случай isZoneNode). Их порядок в срезе —
+    // после зон по тегу и attrs: движку нужен только счётчик для раннего
+    // выхода, а список зон триггеры собирают сами, в порядке реестра.
+    const trigger_class = by_class.get('trigger');
+    if (trigger_class !== undefined) {
+        for (let i = 0; i < trigger_class.length; i++) {
+            const node = trigger_class[i];
+            if (node.tag === 'trigger') continue;
+            const attrs = node.attrs;
+            if (attrs !== undefined && attrs.trigger === true) continue;
+            facets.zones.push(node);
+            counts.zones++;
+        }
+    }
+
+    registry_index = {
+        version: registry_version,
+        all,
+        by_tag,
+        by_class,
+        facets,
+        counts,
+        // Кэш выборок по структурным селекторам ('.mob', 'enemy.mob'): живёт
+        // на версию реестра, поэтому не может устареть.
+        selects: new Map(),
+    };
+    return registry_index;
+}
+
+/**
+ * Индекс реестра на текущую версию. Строится при первом запросе после
+ * изменения реестра, дальше отдаётся как есть.
+ */
+export function registryIndex() {
+    if (registry_index === null || registry_index.version !== registry_version) {
+        return buildRegistryIndex();
+    }
+    return registry_index;
+}
+
+/** Срез по тегу: живой массив индекса, только для чтения. */
+export function nodesByTag(tag) {
+    const list = registryIndex().by_tag.get(tag);
+    return list === undefined ? EMPTY_NODES : list;
+}
+
+/** Срез по классу: живой массив индекса, только для чтения. */
+export function nodesByClass(name) {
+    const list = registryIndex().by_class.get(name);
+    return list === undefined ? EMPTY_NODES : list;
+}
+
+/**
+ * Срез по признаку. Имена: `ui`, `tr`, `controls`, `anim`, `clip`,
+ * `parallax`, `zones`, `body`. Живой массив индекса, только для чтения.
+ */
+export function nodesWithFacet(name) {
+    const list = registryIndex().facets[name];
+    return list === undefined ? EMPTY_NODES : list;
+}
+
+/** Сколько узлов с признаком (см. nodesWithFacet). */
+export function facetCount(name) {
+    const count = registryIndex().counts[name];
+    return count === undefined ? 0 : count;
+}
+
+/** Все узлы реестра, кроме помеченных на удаление. Только для чтения. */
+export function liveNodes() { return registryIndex().all; }
+
+// ---------------------------------------------------------------------------
 // Пакетные операции ($.batch)
 // ---------------------------------------------------------------------------
 //
@@ -635,6 +803,9 @@ export class Node {
         }
 
         ctx.byBody.set(this.body, this);
+        // Узел вошёл в срез body индекса реестра: кадровый синк физики ходит
+        // только по нему, а не по всему миру (§5, P2 отчёта).
+        touchRegistry();
 
         // Возвращаем скорость, снятую до пересоздания тела.
         if (had_velocity) {
@@ -1035,7 +1206,7 @@ function readAttr(node, key) {
 export function query(sel) {
     if (sel === null || sel === undefined) return [];
     if (typeof sel !== 'string') return [];
-    if (sel === '*') return ctx.nodes.filter((n) => !n.removed);
+    if (sel === '*') return liveNodes().slice();
 
     // Быстрый путь: '#hero' — один id, без запятых, комбинаторов и условий.
     // Раньше и он перебирал весь реестр: 14,2 мс на 1000 узлов (§3.2 отчёта).
@@ -1043,6 +1214,14 @@ export function query(sel) {
     if (id !== null) {
         const node = ctx.byId.get(id);
         return node && !node.removed ? [node] : [];
+    }
+
+    // Одна структурная ветка ('.mob', 'enemy', 'enemy.mob') — готовая выборка
+    // из индекса: ни предиката, ни прохода по реестру (P2, §5 отчёта).
+    // Возвращаем копию: вызывающий вправе менять полученный массив.
+    if (sel.indexOf(',') < 0) {
+        const whole = structuralSelect(sel.trim());
+        if (whole !== null) return whole.slice();
     }
 
     const branches = sel.split(',');
@@ -1082,11 +1261,15 @@ function querySingle(sel) {
     const parts = sel.split(/\s*(>)\s*|\s+/).filter((s) => s !== undefined && s !== '');
     if (parts.length === 1) {
         const match = compileSelector(parts[0]);
-        return ctx.nodes.filter(match);
+        // Якорь — ведущий тег/классы терма: '.mob:alive' проверяется только по
+        // узлам класса mob, а не по всему реестру (P2, §5 отчёта).
+        const anchor = anchorList(parts[0]);
+        return (anchor === null ? ctx.nodes : anchor).filter(match);
     }
 
     const first = compileSelector(parts[0]);
-    let current = ctx.nodes.filter(first);
+    const first_anchor = anchorList(parts[0]);
+    let current = (first_anchor === null ? ctx.nodes : first_anchor).filter(first);
     let direct = false;
     for (let i = 1; i < parts.length; i++) {
         const part = parts[i];
@@ -1101,6 +1284,77 @@ function querySingle(sel) {
         direct = false;
     }
     return current;
+}
+
+// ---------------------------------------------------------------------------
+// Структурные селекторы: выборка из индекса, без прохода по реестру
+// ---------------------------------------------------------------------------
+//
+// Структурный терм — это тег и/или классы: 'enemy', '.mob', 'enemy.mob'.
+// Он не зависит ни от чего, кроме состава реестра и классов, а оба меняют
+// версию реестра. Поэтому выборку можно кэшировать на версию — как и делает
+// registryIndex().selects. Условия ([hp<5]), псевдоклассы (:alive) и
+// комбинаторы в структурный терм не входят: такие селекторы идут обычным
+// путём, но по якорю (см. anchorList), то есть без полного прохода.
+
+const STRUCTURAL_RE = /^(?:([a-zA-Z][\w-]*))?((?:\.[\w-]+)*)$/;
+
+/** 'enemy.mob' → { tag: 'enemy', classes: ['mob'] }; не структурный — null. */
+function structuralTerms(compound) {
+    const m = STRUCTURAL_RE.exec(compound);
+    if (m === null) return null;
+    const tag = m[1] === undefined ? null : m[1];
+    const classes = m[2] === '' ? [] : m[2].slice(1).split('.');
+    if (tag === null && classes.length === 0) return null;   // '*' и пустая строка
+    return { tag, classes };
+}
+
+/** Пересечение двух срезов с сохранением порядка base. */
+function intersectLists(base, other) {
+    const keep = new Set(other);
+    const out = [];
+    for (let i = 0; i < base.length; i++) if (keep.has(base[i])) out.push(base[i]);
+    return out;
+}
+
+/** Выборка по структурным термам: срез индекса или новое пересечение. */
+function listForTerms(terms) {
+    let list = terms.tag === null ? null : nodesByTag(terms.tag);
+    for (let i = 0; i < terms.classes.length; i++) {
+        const by_class = nodesByClass(terms.classes[i]);
+        list = list === null ? by_class : intersectLists(list, by_class);
+    }
+    return list === null ? EMPTY_NODES : list;
+}
+
+/**
+ * Готовая выборка по чисто структурному селектору — или null, если селектор
+ * сложнее (условия, псевдоклассы, комбинаторы, несколько веток).
+ */
+function structuralSelect(sel) {
+    const terms = structuralTerms(sel);
+    if (terms === null) return null;
+    const index = registryIndex();
+    let list = index.selects.get(sel);
+    if (list === undefined) {
+        list = listForTerms(terms);
+        index.selects.set(sel, list);
+    }
+    return list;
+}
+
+/**
+ * Якорь для сложного терма: ведущие тег/классы до первого условия,
+ * псевдокласса или комбинатора. '.mob:alive' → срез класса mob;
+ * '[hp<5]' и ':first' → null (якоря нет, нужен полный проход).
+ */
+function anchorList(compound) {
+    const cut = compound.search(/[:[>]/);
+    const head = cut < 0 ? compound : compound.slice(0, cut);
+    if (head === '' || head === '*') return null;
+    const terms = structuralTerms(head);
+    if (terms === null) return null;
+    return listForTerms(terms);
 }
 
 function descendants(node) {

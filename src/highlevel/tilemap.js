@@ -17,7 +17,7 @@
 // ===========================================================================
 
 import { ctx, Wrapper, TAGS, wrapOne, query, def, defGet, withAlpha, fxRandom,
-         registrySummary } from './core.js';
+         nodesByTag } from './core.js';
 import { registerNodeRenderer } from './render.js';
 import { cameraTransform } from './camera.js';
 
@@ -1279,12 +1279,14 @@ export function installTilemap($) {
  */
 export function tickTilemap(dt) {
     void dt;
-    // Ни одной карты в реестре и ни одного живого состояния — шагу нечего
-    // делать: проход по реестру был чистой потерей (§3.3 отчёта).
-    if (registrySummary('tilemaps', countTilemapNodes) === 0 && STATES.size === 0) return;
+    // Срез по тегу из индекса реестра: и счёт, и обход — без полного прохода
+    // (§5, P2 отчёта). Живые состояния держим отдельно: карта, удалённая до
+    // первого tick, обязана освободить ресурсы.
+    const maps = nodesByTag('tilemap');
+    if (maps.length === 0 && STATES.size === 0) return;
 
     const stale = [];
-    for (const node of ctx.nodes) if (node.tag === 'tilemap') ensureTilemap(node);
+    for (let i = 0; i < maps.length; i++) ensureTilemap(maps[i]);
     for (const [node, tm] of STATES) {
         if (node.removed || !node.in_registry) { stale.push(node); continue; }
         if (tm.dirty) rebuildTilemap(tm);
@@ -1292,13 +1294,6 @@ export function tickTilemap(dt) {
     // Узлы, удалённые до первого tick, снимаем здесь (destroy() не всегда
     // успевает вызвать слушателя, если карта ещё ни разу не строилась).
     for (const node of stale) releaseTilemap(node);
-}
-
-/** Сколько в реестре узлов-карт: единственное, что ищет кадровый шаг. */
-function countTilemapNodes(nodes) {
-    let count = 0;
-    for (let i = 0; i < nodes.length; i++) if (nodes[i].tag === 'tilemap') count++;
-    return count;
 }
 
 export { STATES as tilemapStates, layerFrames as tilemapLayerFrames };

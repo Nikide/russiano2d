@@ -23,7 +23,7 @@
 // движка и не создаёт скрытых тел/телепортов из анимации.
 // ===========================================================================
 
-import { ctx, def, registrySummary, touchRegistry } from './core.js';
+import { ctx, def, facetCount, nodesWithFacet, touchRegistry } from './core.js';
 import { easeFunction, easeNames } from './tween.js';
 
 // ---------------------------------------------------------------------------
@@ -281,13 +281,6 @@ function playerOf(node) {
     return node.__clip;
 }
 
-/** Сколько узлов играют клип: единственное, что ищет кадровый шаг. */
-function countClipNodes(nodes) {
-    let count = 0;
-    for (let i = 0; i < nodes.length; i++) if (nodes[i].__clip) count++;
-    return count;
-}
-
 /**
  * Обход узлов обёртки. Не полагаемся на Wrapper.prototype.each из api.js:
  * модуль должен работать и в юнит-тесте qjs, где api.js не поднимается.
@@ -523,24 +516,19 @@ function updateMachine(node, player, dt) {
  * в кадр (как tickTweens); отдельный $.anim.step не нужен и не заводится в
  * угоду одной точке входа в кадр.
  *
- * Список играющих берём снимком в переиспользуемый массив: onEnd и
- * обработчики событий могут удалять узлы прямо во время обхода, а мутация
- * ctx.nodes в for-of сдвигала бы индексы и «съедала» соседей.
+ * Список играющих приходит снимком из индекса реестра: onEnd и обработчики
+ * событий могут удалять узлы прямо во время обхода, а мутация ctx.nodes в
+ * for-of сдвигала бы индексы и «съедала» соседей.
  */
-const tick_list = [];
 
 export function tickAnim(dt) {
     if (!(dt > 0)) return;
-    // Клипов нет ни у кого — обход реестра не нужен (§3.3 отчёта). Счётчик
-    // растёт в clipFor(): там единственное место, где появляется node.__clip.
-    if (registrySummary('anim_clips', countClipNodes) === 0) return;
-    tick_list.length = 0;
-    const nodes = ctx.nodes;
+    // Ни одного клипа — шагу нечего делать: признак считает индекс реестра
+    // (docs/HIGH_LEVEL_API_PERF.md §5, P2), отдельного прохода по ctx.nodes нет.
+    if (facetCount('clip') === 0) return;
+    const nodes = nodesWithFacet('clip');
     for (let i = 0; i < nodes.length; i++) {
-        if (nodes[i].__clip) tick_list.push(nodes[i]);
-    }
-    for (let i = 0; i < tick_list.length; i++) {
-        const node = tick_list[i];
+        const node = nodes[i];
         const player = node.__clip;
         if (!player || node.removed) continue;
         if (player.machine) updateMachine(node, player, dt);

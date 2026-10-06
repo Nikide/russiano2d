@@ -13,7 +13,7 @@ import {
     ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
     packColor, withAlpha, registerSelector, nodeBounds, boundsOverlap,
     makeRandom, dotSprite, resolveSprite, sheetFrames,
-    registrySummary, touchRegistry, beginBatch, endBatch,
+    nodesWithFacet, touchRegistry, beginBatch, endBatch,
 } from './core.js';
 import { installWorld } from './world.js';
 import { installCamera } from './camera.js';
@@ -1415,21 +1415,12 @@ function stepTowards(node, target, speed) {
 
 // --- Встроенное управление (.controls('wasd')) ------------------------------
 
-/** Сколько узлов со схемой управления: единственное, что ищет applyControls. */
-function countControlledNodes(nodes) {
-    let count = 0;
+function applyControls(dt) {
+    // Срез управляемых узлов держит индекс реестра: при пустом срезе нет ни
+    // обхода мира, ни опроса ввода (§5, P2 отчёта).
+    const nodes = nodesWithFacet('controls');
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
-        if (node.attrs && node.attrs.controls) count++;
-    }
-    return count;
-}
-
-function applyControls(dt) {
-    // Ни одного управляемого узла — обход реестра и опрос ввода не нужны
-    // (docs/HIGH_LEVEL_API_PERF.md §3.3).
-    if (registrySummary('controlled_nodes', countControlledNodes) === 0) return;
-    for (const node of ctx.nodes) {
         const scheme = node.attrs.controls;
         if (!scheme || node.cur_hp <= 0) continue;
         const cfg = typeof scheme === 'string' ? { axis: scheme } : scheme;
@@ -1504,19 +1495,15 @@ function dispatchContacts() {
     }
 }
 
-/** Сколько узлов со спрайт-анимацией: единственное, что ищет animateSprites. */
-function countAnimatedNodes(nodes) {
-    let count = 0;
-    for (let i = 0; i < nodes.length; i++) if (nodes[i].anim) count++;
-    return count;
-}
-
+/** Кадровый шаг спрайт-анимаций: ходит по срезу `anim` из индекса реестра. */
 function animateSprites() {
     const dt = ctx.time.delta();
     if (dt <= 0) return;
-    // Ни одной спрайт-анимации — обход реестра не нужен.
-    if (registrySummary('sprite_anims', countAnimatedNodes) === 0) return;
-    for (const node of ctx.nodes) {
+    // Срез узлов со спрайт-анимацией держит индекс реестра: ни счётчика, ни
+    // полного обхода мира (§5, P2 отчёта).
+    const nodes = nodesWithFacet('anim');
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         if (!node.anim || !node.anim.playing || !node.frames) continue;
         const anim = node.anim;
         anim.t += dt * anim.speed;

@@ -10,7 +10,7 @@
 // ===========================================================================
 
 import { test, eq, truthy, falsy, finish } from './_harness.mjs';
-import { ctx } from '../../src/highlevel/core.js';
+import { ctx, touchRegistry } from '../../src/highlevel/core.js';
 import { format, pluralIndex, lookup, installI18n, tickI18n } from '../../src/highlevel/i18n.js';
 
 // $.store подменяем простым словарём: i18n пишет язык и читает его при старте.
@@ -126,8 +126,12 @@ test('запасной язык: неизвестный текущий пада�
 // --- Автоподстановка в узлы --------------------------------------------------
 
 test('auto: tickI18n переводит узлы с attrs.tr при смене языка', () => {
+    // Узлы здесь — заглушки без Node: реестр об их появлении не знает, поэтому
+    // отмечаем его вручную. Настоящий узел делает это в конструкторе, а
+    // tickI18n читает срез узлов с attrs.tr из индекса реестра (P2).
     const title = { attrs: { tr: 'menu.play' }, text: 'Текст' };
     ctx.nodes.push(title);
+    touchRegistry();
     i18n.lang('ru');
     i18n.auto(true);
     tickI18n();
@@ -140,12 +144,14 @@ test('auto: tickI18n переводит узлы с attrs.tr при смене �
     // Новый узел подхватывается на следующем кадре.
     const late = { attrs: { tr: 'menu.play' }, text: '' };
     ctx.nodes.push(late);
+    touchRegistry();
     tickI18n();
     eq(late.text, 'Play');
 
     // { tr: { key, n } } — плюральная форма.
     const counter = { attrs: { tr: { key: 'kills', n: 3 } }, text: '' };
     ctx.nodes.push(counter);
+    touchRegistry();
     tickI18n();
     eq(counter.text, '3 items');
 

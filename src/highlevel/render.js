@@ -13,7 +13,7 @@
 // ===========================================================================
 
 import { ctx, wrap, def, TAGS, packColor, withAlpha, fxRandom,
-         registrySummary, registryVersion, countUiNodes } from './core.js';
+         facetCount, nodesWithFacet, registryVersion } from './core.js';
 import { cameraTransform } from './camera.js';
 
 const MAX_SPRITES = 16384;
@@ -911,20 +911,6 @@ function nodeTransform(node, cam, out) {
 /** Копия прямоугольника для тех, кто оставляет его себе (отложенный свет). */
 function copyTransform(t) { return { x: t.x, y: t.y, w: t.w, h: t.h }; }
 
-/**
- * Список ui-узлов для отрисовки интерфейса. Считается один раз на версию
- * реестра (см. registrySummary): массив кэша только читается.
- */
-function collectUiNodes(nodes) {
-    const out = [];
-    for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-        // removed — узел удалён внутри $.batch и ждёт уборки реестра.
-        if (!node.removed && node.attrs && node.attrs.ui) out.push(node);
-    }
-    return out;
-}
-
 function baseColor(node) {
     let color = node.tint && node.tint_timer > 0 ? node.tint : node.color;
     if (node.alpha < 1) color = withAlpha(color, node.alpha);
@@ -1089,7 +1075,7 @@ function sortedNodes() {
     const world = ctx.world;
     const mode = world ? world._state.sort_mode : 'layer';
     const fn = world ? world._state.sort_fn : null;
-    const ui = registrySummary('ui_nodes', countUiNodes);
+    const ui = facetCount('ui');
     const total = ctx.nodes.length - ui;
 
     // Кэш годится, если состав реестра не менялся и массив всё ещё неубывающий.
@@ -1413,11 +1399,11 @@ export function installGfx($) {
             // Сцена: спрайты одним вызовом, затем треугольники (они поверх).
             if (count > 0) submitSprites(0, count);
 
-            // Интерфейс — в координатах окна, камера не влияет. Список ui-узлов
-            // кэширован на версию реестра: раньше это был второй за кадр полный
-            // проход по ctx.nodes (§3.4, пункт 11).
+            // Интерфейс — в координатах окна, камера не влияет. Срез ui-узлов
+            // держит индекс реестра: второго полного прохода за кадр нет
+            // (§3.4, пункт 11 и §5, P2 отчёта).
             const ui_start = count;
-            const ui_list = registrySummary('ui_list', collectUiNodes);
+            const ui_list = nodesWithFacet('ui');
             for (let i = 0; i < ui_list.length; i++) drawUINode(ui_list[i]);
             if (count > ui_start) {
                 // UI идёт после треугольников, поэтому отдаём его отдельным

@@ -19,7 +19,7 @@
 // ===========================================================================
 
 import { ctx, Node, TAGS, wrapOne, def, packColor, withAlpha,
-         resolveSprite, makeRandom, registrySummary } from './core.js';
+         resolveSprite, makeRandom, nodesByTag } from './core.js';
 import { registerNodeRenderer } from './render.js';
 
 // Предел батча спрайтов движка (см. render.js). Один эмиттер не должен
@@ -552,24 +552,13 @@ function tickEmitter(node, dt) {
     }
 }
 
-/** Сколько в реестре эмиттеров: единственное, что ищет кадровый шаг. */
-function countEmitters(nodes) {
-    let count = 0;
-    for (let i = 0; i < nodes.length; i++) if (nodes[i].tag === 'particles') count++;
-    return count;
-}
-
 /** Кадровый шаг всех эмиттеров. Вызывается из игрового цикла (api.js). */
 export function tickParticles(dt) {
     if (!(dt > 0)) return;
-    // Нет эмиттеров — проход по реестру не нужен (docs/HIGH_LEVEL_API_PERF.md
-    // §3.3). Тег неизменен, поэтому счётчик точен.
-    if (registrySummary('particle_emitters', countEmitters) === 0) return;
-    const nodes = ctx.nodes;
-    for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-        if (node.tag === 'particles') tickEmitter(node, dt);
-    }
+    // Нет эмиттеров — шагу нечего делать, и прохода по реестру тоже нет:
+    // срез по тегу держит индекс реестра (§5, P2 отчёта).
+    const nodes = nodesByTag('particles');
+    for (let i = 0; i < nodes.length; i++) tickEmitter(nodes[i], dt);
 }
 
 // ---------------------------------------------------------------------------

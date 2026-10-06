@@ -23,7 +23,7 @@
 //     (см. _CONTRACT.md §4); модуль не обращается к engine на верхнем уровне.
 // ===========================================================================
 
-import { ctx, Node, wrapOne, query, registrySummary } from './core.js';
+import { ctx, Node, wrapOne, query, facetCount } from './core.js';
 
 // ---------------------------------------------------------------------------
 // Чистые функции (экспортируются — тестируются qjs)
@@ -266,19 +266,12 @@ function pruneWatchers() {
  */
 export function tickTriggers(dt) {
     void dt;
-    // Ни зон, ни наблюдателей — снимок мира (полный проход по реестру) не
-    // нужен никому (§3.3 отчёта). Сводка кэшируется на версию реестра.
-    if (watchers.length === 0 && registrySummary('trigger_zones', countZoneNodes) === 0) return;
+    // Ни зон, ни наблюдателей — снимок мира не нужен никому. Признак зоны
+    // считает индекс реестра, одним проходом на изменение (§5, P2 отчёта).
+    if (watchers.length === 0 && facetCount('zones') === 0) return;
     collectFrame();
     for (let i = 0; i < zone_list.length; i++) updateZone(zone_list[i], all_list, body_list);
     updateWatchers();
-}
-
-/** Сколько в реестре узлов-зон (тот же предикат, что у collectFrame). */
-function countZoneNodes(nodes) {
-    let count = 0;
-    for (let i = 0; i < nodes.length; i++) if (isZoneNode(nodes[i])) count++;
-    return count;
 }
 
 // ---------------------------------------------------------------------------

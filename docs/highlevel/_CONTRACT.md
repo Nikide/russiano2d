@@ -33,6 +33,7 @@ export function tick<Имя>(dt) { /* необязательно: шаг кад�
 import { ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
          packColor, withAlpha, nodeBounds, boundsOverlap, makeRandom,
          resolveSprite, sheetFrames,
+         nodesByTag, nodesByClass, nodesWithFacet, facetCount, liveNodes,
          registrySummary, registryVersion, touchRegistry, countUiNodes } from './core.js';
 import { registerNodeRenderer, registerUINodeRenderer } from './render.js';
 import { cameraTransform } from './camera.js';
@@ -54,8 +55,39 @@ import { cameraTransform } from './camera.js';
 
 Тик-функция обязана выходить на первой строке, если её узлов в мире нет:
 полный обход `ctx.nodes` в каждой подсистеме — это ≈20 проходов за кадр
-(`docs/HIGH_LEVEL_API_PERF.md` §3.3). Для этого в ядре есть сводка с кэшем на
-версию реестра:
+(`docs/HIGH_LEVEL_API_PERF.md` §3.3). Для этого в ядре есть **индекс реестра**
+(§5, P2 того же отчёта): один проход по узлам на версию реестра, из которого
+подсистема берёт готовый срез.
+
+```js
+import { nodesByTag, nodesWithFacet } from './core.js';
+
+export function tickMine(dt) {
+    // Готовый срез: на кадр нет ни прохода по ctx.nodes, ни предиката.
+    const nodes = nodesWithFacet('clip');        // или nodesByTag('particles')
+    if (nodes.length === 0) return;              // ни одного — выходим сразу
+    for (let i = 0; i < nodes.length; i++) step(nodes[i], dt);
+}
+```
+
+Что даёт индекс:
+
+* `nodesByTag(tag)` — срез по тегу (`particles`, `tilemap`, `layer`…);
+* `nodesByClass(name)` — срез по классу (на нём же стоит `query('.mob')`);
+* `nodesWithFacet(name)` — срез по признаку: `ui`, `tr`, `controls`, `anim`,
+  `clip`, `parallax`, `zones`, `body`; `facetCount(name)` — их число;
+* `liveNodes()` — все узлы реестра, кроме помеченных на удаление;
+* `query(sel)` — `#id` и структурные селекторы (`.mob`, `enemy.mob`) берутся
+  из индекса целиком; сложные идут по якорю (ведущий тег/класс терма), а поля,
+  которые меняются без изменения реестра (`:alive`, `[hp<5]`), по-прежнему
+  считаются по узлам, а не по кэшу.
+
+Срезы — **снимки**: во время обхода можно создавать и удалять узлы, массив от
+этого не сломается (индекс при перестройке делает новые массивы). Держать срез
+между кадрами нельзя — он устареет на первом же изменении реестра.
+
+Если признака в списке нет — считайте его сами через `registrySummary(key,
+compute)` (кэш на версию реестра) или заведите срез в ядре:
 
 ```js
 // Предикат живёт в своём модуле; ядро лишь кэширует его результат
@@ -75,7 +107,7 @@ export function tickMine(dt) {
 
 Если признак узла меняется в обход `Node.set()` (прямая запись в `attrs` или
 своё поле вроде `node.parallax_factor`) — после изменения зовите
-`touchRegistry()`, иначе подсистема с нулевым счётчиком не заметит новый узел.
+`touchRegistry()`, иначе и срез, и сводка не заметят новый узел.
 Для ui-узлов готовый предикат — `countUiNodes` (ключ `'ui_nodes'`).
 `registryVersion()` нужен, если модуль держит собственный кэш на версию реестра
 (так сделана сортировка в `render.js`).

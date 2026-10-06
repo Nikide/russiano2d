@@ -26,7 +26,8 @@
 // ===========================================================================
 
 import { ctx, Node, TAGS, wrap, wrapOne, query, def,
-         packColor, withAlpha, registrySummary, touchRegistry } from './core.js';
+         packColor, withAlpha, facetCount, nodesByTag, nodesWithFacet,
+         touchRegistry } from './core.js';
 import { registerNodeRenderer } from './render.js';
 import { cameraTransform } from './camera.js';
 
@@ -668,19 +669,16 @@ export function installLayers($) {
  */
 /**
  * Сводка подсистемы: сколько в реестре слоёв и параллакс-узлов. Оба признака
- * ищутся в узле, так что полный проход нужен только при изменении реестра
- * (docs/HIGH_LEVEL_API_PERF.md §3.3).
+ * держит индекс реестра — отдельного прохода по ctx.nodes нет
+ * (docs/HIGH_LEVEL_API_PERF.md §5, P2). Объект переиспользуется: сводка живёт
+ * до конца кадра и её читают сразу.
  */
+const layer_summary = { layers: 0, parallax: 0 };
+
 function layersSummary() {
-    return registrySummary('layers', (nodes) => {
-        let layers = 0, parallax = 0;
-        for (let i = 0; i < nodes.length; i++) {
-            const node = nodes[i];
-            if (node.tag === 'layer') layers++;
-            if (node.parallax_factor !== undefined && node.parallax_factor !== null) parallax++;
-        }
-        return { layers, parallax };
-    });
+    layer_summary.layers = nodesByTag('layer').length;
+    layer_summary.parallax = facetCount('parallax');
+    return layer_summary;
 }
 
 export function tickLayers(dt) {
@@ -691,9 +689,10 @@ export function tickLayers(dt) {
     const cam = cameraTransform();
 
     // 1. Слои: порядок по умолчанию, распространение порядка и видимости.
-    for (let i = 0; i < ctx.nodes.length; i++) {
-        const node = ctx.nodes[i];
-        if (node.tag !== 'layer' || node.removed) continue;
+    const layers = nodesByTag('layer');
+    for (let i = 0; i < layers.length; i++) {
+        const node = layers[i];
+        if (node.removed) continue;
         initLayerNode(node);
         // Прямое .layer(n) на слое (цепочный метод ядра) тоже считаем сменой
         // порядка: иначе tick вернул бы старое значение.
@@ -704,10 +703,10 @@ export function tickLayers(dt) {
 
     // 2. Параллакс — после распространения, иначе добавленный в кадре ребёнок
     //    слоя сдвинулся бы только на следующем кадре.
-    for (let i = 0; i < ctx.nodes.length; i++) {
-        const node = ctx.nodes[i];
+    const parallax = nodesWithFacet('parallax');
+    for (let i = 0; i < parallax.length; i++) {
+        const node = parallax[i];
         if (node.removed) continue;
-        if (node.parallax_factor === undefined || node.parallax_factor === null) continue;
         stepParallax(node, cam);
     }
 

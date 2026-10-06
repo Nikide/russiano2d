@@ -29,7 +29,7 @@
 // ===========================================================================
 
 import { ctx, TAGS, def, defGet, query, wrapOne, packColor, withAlpha,
-         registrySummary, touchRegistry } from './core.js';
+         nodesWithFacet, registryVersion, touchRegistry } from './core.js';
 import { registerUINodeRenderer } from './render.js';
 
 // ---------------------------------------------------------------------------
@@ -678,8 +678,10 @@ function themeSig(node) {
 
 /** Применяет темы к «грязным» узлам: подпись меняется при смене темы/стиля. */
 function applyThemes() {
-    for (const node of ctx.nodes) {
-        if (!node.attrs || !node.attrs.ui) continue;
+    // Только ui-узлы: срез держит индекс реестра, полного обхода мира нет.
+    const nodes = nodesWithFacet('ui');
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         if (!inheritThemeName(node) && !node.attrs._style) {
             node.attrs._styleStates = null;
             continue;
@@ -1438,8 +1440,11 @@ function layoutScrollbar(node, box) {
 
 function activeDialog() {
     let found = null;
-    for (const node of ctx.nodes) {
-        if (node.tag === 'ui.dialog' && node.attrs.ui && node.visible !== false) found = node;
+    // Последний по реестру видимый диалог: срез ui-узлов — из индекса.
+    const nodes = nodesWithFacet('ui');
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (node.tag === 'ui.dialog' && node.visible !== false) found = node;
     }
     return found;
 }
@@ -1563,8 +1568,10 @@ function tickMouse(input, modal) {
     // Прокрутка колесом — контейнеру под курсором.
     const wheel = num((input.wheel() || {}).y, 0);
     if (wheel !== 0) {
-        for (const node of ctx.nodes) {
-            if (node.tag !== 'ui.scroll' || !node.attrs.ui || node.visible === false) continue;
+        const ui_nodes = nodesWithFacet('ui');
+        for (let i = 0; i < ui_nodes.length; i++) {
+            const node = ui_nodes[i];
+            if (node.tag !== 'ui.scroll' || node.visible === false) continue;
             if (pointInNode(node, mx, my)) {
                 node.attrs.scroll = Math.min(num(node.attrs.maxScroll, 0),
                     Math.max(0, num(node.attrs.scroll, 0) - wheel * 40));
@@ -1572,8 +1579,12 @@ function tickMouse(input, modal) {
         }
     }
 
-    for (const node of ctx.nodes.slice()) {
-        if (!node.attrs.ui || node.visible === false || node.attrs.disabled) continue;
+    // Срез ui-узлов — уже снимок реестра: обработчики вправе удалять узлы
+    // прямо во время обхода (раньше здесь для этого копировался ctx.nodes).
+    const ui_nodes = nodesWithFacet('ui');
+    for (let i = 0; i < ui_nodes.length; i++) {
+        const node = ui_nodes[i];
+        if (node.visible === false || node.attrs.disabled) continue;
         const tag = node.tag;
         if (tag === 'ui.list') listHover(node, mx, my);
         // Фокус — любому контролу под курсором (в том числе кнопке).
@@ -1763,18 +1774,22 @@ function cancelDialog(node) {
 // Кадр
 // ---------------------------------------------------------------------------
 
-/** Сводка подсистемы: ui-узлы и якорные узлы. Пересчитывается при изменении
- *  реестра, а не каждый кадр (docs/HIGH_LEVEL_API_PERF.md §3.3). */
+/** Сводка подсистемы: ui-узлы и якорные узлы. Пересчитывается на версию
+ *  реестра (как и прежний registrySummary), но ходит только по срезу ui-узлов
+ *  из индекса, а не по всему миру (docs/HIGH_LEVEL_API_PERF.md §5, P2).
+ *  Объект переиспользуется: сводку читают сразу после вызова. */
+const widget_summary = { ui: 0, anchored: 0 };
+let widget_summary_version = -1;
+
 function widgetsSummary() {
-    return registrySummary('widgets', (nodes) => {
-        let ui = 0, anchored = 0;
-        for (let i = 0; i < nodes.length; i++) {
-            const node = nodes[i];
-            if (node.attrs && node.attrs.ui) ui++;
-            if (isAnchored(node)) anchored++;
-        }
-        return { ui, anchored };
-    });
+    if (widget_summary_version === registryVersion()) return widget_summary;
+    const ui_nodes = nodesWithFacet('ui');
+    let anchored = 0;
+    for (let i = 0; i < ui_nodes.length; i++) if (isAnchored(ui_nodes[i])) anchored++;
+    widget_summary.ui = ui_nodes.length;
+    widget_summary.anchored = anchored;
+    widget_summary_version = registryVersion();
+    return widget_summary;
 }
 
 export function tickWidgets(dt) {
@@ -1801,7 +1816,9 @@ export function tickWidgets(dt) {
     }
     if (anchors_dirty) {
         // Контейнеры под якорями должны пересобрать раскладку детей.
-        for (const node of ctx.nodes) {
+        const ui_nodes = nodesWithFacet('ui');
+        for (let i = 0; i < ui_nodes.length; i++) {
+            const node = ui_nodes[i];
             if (isAnchored(node) && isContainer(node)) node.attrs._wsig = null;
         }
         anchors_dirty = false;
@@ -1811,8 +1828,10 @@ export function tickWidgets(dt) {
     layoutTree();
     applyThemes();
 
-    for (const node of ctx.nodes) {
-        if (node.tag === 'ui.input' && node.attrs.ui) syncInput(node);
+    const ui_nodes = nodesWithFacet('ui');
+    for (let i = 0; i < ui_nodes.length; i++) {
+        const node = ui_nodes[i];
+        if (node.tag === 'ui.input') syncInput(node);
     }
 
     const modal = activeDialog();
