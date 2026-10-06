@@ -56,3 +56,16 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_payload_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_payload_test PRIVATE -fsanitize=address,undefined)
 endif()
+
+# --- Реверберация помещения (Freeverb) --------------------------------------
+# На разнице хвоста держится звук «комната 5×5 против зала 20×20», поэтому
+# проверяем именно её, а не факт вызова функции. Санитайзеры — как у crypto:
+# вся работа идёт с кольцевыми буферами вручную.
+add_executable(r2d_reverb_test "${CMAKE_SOURCE_DIR}/tests/audio/reverb_test.c"
+                               "${CMAKE_SOURCE_DIR}/src/audio_reverb.c")
+target_include_directories(r2d_reverb_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_reverb_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_reverb_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_reverb_test PRIVATE -fsanitize=address,undefined)
+endif()

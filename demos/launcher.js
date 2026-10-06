@@ -17,6 +17,9 @@ const TITLES = {
     physics:    { title: 'Физика',       icon: 'science',               hint: 'песочница Box2D: ящики, взрывы, гравитация' },
     bsp:        { title: 'BSP',          icon: 'account_tree',          hint: 'порядок отрисовки без z-буфера' },
     light:      { title: 'Свет и тени',  icon: 'lightbulb',             hint: 'полигоны видимости, тени из геометрии' },
+    shooter_witch: { title: 'Ведьма',    icon: 'auto_awesome',
+                     hint: 'ночной лес, фонари, кровь, авто-стрельба, апгрейды',
+                     art: 'demos/assets/art/menu/witch_menu.png' },
 };
 
 export default function installLauncher($) {
@@ -24,6 +27,16 @@ export default function installLauncher($) {
         enter($) {
             const names = $.scene.names().filter((n) => n !== 'launcher');
             const icon = (name) => ($.ui.hasIcon(name) ? $.ui.icon(name) : '');
+
+            // Фон меню: арт того демо, у которого он есть. Картинка лежит под
+            // кнопками, поэтому создаётся первой; затемнение — панелью поверх.
+            const backdrop = Object.values(TITLES).find((t) => t.art);
+            if (backdrop) {
+                $('<ui.image>', { id: 'menu_bg' })
+                    .at(640, 360).size(1280, 720)
+                    // Арт притемняем им же: панель поверх съедала картинку целиком.
+                    .sprite(backdrop.art).alpha(0.55).appendTo($.ui);
+            }
 
             $('<ui.label>', { id: 'title', text: 'Russiano2D', size: 46, color: '#e8f0ff' })
                 .at(80, 60).appendTo($.ui);

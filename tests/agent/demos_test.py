@@ -12,23 +12,29 @@
 # ===========================================================================
 
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent, ROOT   # noqa: E402
 
-# Сцена → (минимум узлов мира, минимум узлов интерфейса).
+# Сцена → (минимум узлов мира, минимум узлов интерфейса, сколько кадров шагать).
 # Ноль там, где сцена обходится без соответствующего слоя: меню целиком
 # собрано из узлов <ui.*> и в счёт мира не попадает.
+#
+# Кадры важны для игровых сцен: у «Ведьмы» интересные пути (смерть зомби,
+# сбор опыта) включаются только через несколько секунд боя, поэтому ей даём
+# длинный прогон — иначе ошибка в этих ветках не поймается.
 SCENES = {
-    "platformer": (2, 0),
-    "shooter25d": (2, 0),
-    "gallery": (2, 0),
-    "arena": (3, 0),
-    "physics": (3, 0),
-    "bsp": (2, 0),
-    "light": (2, 0),
-    "launcher": (0, 5),
+    "platformer": (2, 0, 20),
+    "shooter25d": (2, 0, 20),
+    "gallery": (2, 0, 20),
+    "arena": (3, 0, 20),
+    "physics": (3, 0, 20),
+    "bsp": (2, 0, 20),
+    "light": (2, 0, 20),
+    "shooter_witch": (4, 6, 900),
+    "launcher": (0, 5, 20),
 }
 
 FAILURES = []
@@ -52,20 +58,26 @@ def check(condition, message):
 def run_scene(name, minimum):
     """Открывает сцену, шагает кадры и проверяет, что она живая."""
     shot = os.path.join(ROOT, "build", f"test_demo_{name}.png")
+    world_min, ui_min, steps = minimum[0], minimum[1], (minimum[2] if len(minimum) > 2 else 20)
     try:
         with Agent(game="demos", scene=name, seed=11) as a:
-            a.step(20)
+            # Шагаем порциями: одна большая команда не укладывается в таймаут
+            # агентского клиента, и тест падал бы на «приложение остановилось».
+            left = steps
+            while left > 0:
+                portion = min(150, left)
+                a.step(portion)
+                left -= portion
 
             current = a.eval("$.scene.current()")
             check(current == name, f"{name}: сцена открылась ({current})")
 
-            min_world, min_ui = minimum
             count = a.eval("$.world.count()")
-            check(count >= min_world,
-                  f"{name}: мир построен ({count} узлов, ждали ≥ {min_world})")
+            check(count >= world_min,
+                  f"{name}: мир построен ({count} узлов, ждали ≥ {world_min})")
 
             ui = a.eval("$.ctx.nodes.filter(n => n.attrs.ui).length")
-            check(ui >= min_ui, f"{name}: интерфейс собран ({ui} узлов ui, ждали ≥ {min_ui})")
+            check(ui >= ui_min, f"{name}: интерфейс собран ({ui} узлов ui, ждали ≥ {ui_min})")
 
             # Ввод и кадры не должны ломать демо.
             a.keys(["D"]); a.step(20); a.keys([])
@@ -82,6 +94,15 @@ def run_scene(name, minimum):
 
             state = a.state()
             check(isinstance(state.get("entities"), list), f"{name}: снимок узлов доступен")
+
+            # Игровой прогон: у «Ведьмы» за длинный прогон обязаны погибнуть
+            # враги — так проверяются ветки смерти, добычи и крови.
+            if name == "shooter_witch":
+                stats = a.eval("$('#stats').text()") or ""
+                match = re.search(r"[Уу]бито\D*(\d+)", stats)
+                kills = int(match.group(1)) if match else -1
+                check(kills > 0,
+                      f"{name}: бой идёт, враги гибнут (убито {kills}, HUD: {stats.strip()})")
 
             buttons = DOC_BUTTONS.get(name)
             if buttons:

@@ -345,4 +345,49 @@ test('конструктор $("<particles>", …) принимает масси
     eq(p.gravity.y, 50);
 });
 
+// ---------------------------------------------------------------------------
+// Суб-эмиттеры: искры → дым
+// ---------------------------------------------------------------------------
+
+test('on_death заводит дочерний эмиттер и стреляет из точки смерти', () => {
+    const parent = new Node('particles', {
+        amount: 4, lifetime: 60, speed: 10, rate: 0,
+        one_shot: true, max_particles: 32,
+        on_death: { amount: 3, lifetime: 200, speed: 5 },
+    });
+    const [w] = freshWorld(parent);
+    w.burst(4);
+    tickParticles(1 / 60);
+    eq(parent.child_nodes.length, 0, 'пока частицы живы, суб-эмиттера нет');
+
+    // Даём частицам умереть: lifetime 60 мс — хватит нескольких кадров.
+    for (let i = 0; i < 6; i++) tickParticles(1 / 60);
+    eq(parent.child_nodes.length, 1, 'дочерний эмиттер создан и привязан к родителю');
+
+    const sub = parent.child_nodes[0];
+    const sub_w = wrapOne(sub);
+    truthy(sub_w.count() > 0, `суб-эмиттер выбросил частицы (${sub_w.count()})`);
+});
+
+test('суб-эмиттер не плодит бесконечную цепочку', () => {
+    const parent = new Node('particles', {
+        amount: 3, lifetime: 40, speed: 5, rate: 0, one_shot: true, max_particles: 32,
+        on_death: { amount: 2, lifetime: 40, on_death: { amount: 2, lifetime: 40 } },
+    });
+    const [w] = freshWorld(parent);
+    w.burst(3);
+    for (let i = 0; i < 10; i++) tickParticles(1 / 60);
+    const sub = parent.child_nodes[0];
+    truthy(sub, 'суб-эмиттер есть');
+    eq(sub.child_nodes.length, 0, 'у суб-эмиттера детей нет — глубина ровно один');
+});
+
+test('эмиттер без on_death детей не заводит', () => {
+    const parent = new Node('particles', { amount: 3, lifetime: 40, rate: 0, one_shot: true });
+    const [w] = freshWorld(parent);
+    w.burst(3);
+    for (let i = 0; i < 5; i++) tickParticles(1 / 60);
+    eq(parent.child_nodes.length, 0);
+});
+
 finish();

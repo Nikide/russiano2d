@@ -354,6 +354,112 @@ test('переиспользованный движком канал не ост
 });
 
 // ---------------------------------------------------------------------------
+// Настоящие шины: группы микшера и 3D-позиция
+// ---------------------------------------------------------------------------
+
+/** Добавляет моку методы групп/3D — как у движка с MIX_CreateGroup. */
+function addGroupApi() {
+    const groups = new Map();
+    let next_group = 1;
+    const assigned = new Map();
+    const spatial = new Map();
+    globalThis.engine.audio.group = (name) => {
+        if (!groups.has(name)) groups.set(name, next_group++);
+        return groups.get(name);
+    };
+    globalThis.engine.audio.groupCount = () => groups.size;
+    globalThis.engine.audio.setChannelGroup = (ch, g) => { assigned.set(ch, g); return true; };
+    globalThis.engine.audio.setGroupEffect = (g, kind, p1, p2) => { groups.set('fx:' + g, { kind, p1, p2 }); return true; };
+    globalThis.engine.audio.groupEffect = (g) => { const r = groups.get('fx:' + g); return r ? r.kind : 'none'; };
+    globalThis.engine.audio.setChannel3D = (ch, x, y, z, on) => { spatial.set(ch, { x, y, z, on }); return true; };
+    return { groups, assigned, spatial };
+}
+
+function removeGroupApi() {
+    for (const name of ['group', 'groupCount', 'setChannelGroup', 'setGroupEffect',
+                        'groupEffect', 'setChannel3D']) {
+        delete globalThis.engine.audio[name];
+    }
+}
+
+test('шина создаёт группу микшера и приписывает канал к ней', () => {
+    const raw = addGroupApi();
+    const A = fresh(makeApi());
+    A.bus('reverbbus', { volume: 1 });
+    const h = A.play('x.ogg', { bus: 'reverbbus' });
+    const g = raw.groups.get('reverbbus');
+    truthy(g !== undefined, 'группа создана в движке');
+    eq(raw.assigned.get(h.channel), g, 'канал приписан к группе шины');
+    h.stop();
+    removeGroupApi();
+});
+
+test('эффект шины уходит на пост-микс группы, а не на канал', () => {
+    const raw = addGroupApi();
+    const A = fresh(makeApi());
+    A.bus('echobus', { volume: 1 });
+    A.effect('echobus', 'lowpass', { freq: 800 });
+    const g = raw.groups.get('echobus');
+    eq(raw.groups.get('fx:' + g).kind, 'lowpass', 'эффект поставлен группе');
+
+    const h = A.play('y.ogg', { bus: 'echobus' });
+    eq(globalThis.engine.audio.channelEffect(h.channel), 'none',
+       'на канале эффекта нет — иначе обработка была бы двойной');
+    h.stop();
+    removeGroupApi();
+});
+
+test('личный эффект handle всё равно живёт на канале', () => {
+    addGroupApi();
+    const A = fresh(makeApi());
+    A.bus('bus2', { volume: 1 });
+    const h = A.play('z.ogg', { bus: 'bus2' });
+    h.effect('echo', { delay: 90 });
+    eq(globalThis.engine.audio.channelEffect(h.channel), 'echo');
+    h.stop();
+    removeGroupApi();
+});
+
+test('без групп в движке эффект шины остаётся на каналах (запасной путь)', () => {
+    const A = fresh(makeApi());
+    A.bus('bus3', { volume: 1 });
+    const h = A.play('w.ogg', { bus: 'bus3' });
+    A.effect('bus3', 'echo');
+    eq(globalThis.engine.audio.channelEffect(h.channel), 'echo');
+    h.stop();
+});
+
+test('spatial("sdl"): playAt отдаёт координаты относительно слушателя', () => {
+    const raw = addGroupApi();
+    const A = fresh(makeApi());
+    A.listener(100, 50);
+    A.spatial('sdl');
+    eq(A.spatial(), 'sdl', 'режим читается');
+
+    const h = A.playAt('p.ogg', 400, -50, { volume: 1 });
+    const p = raw.spatial.get(h.channel);
+    truthy(p && p.on, 'для канала включён 3D');
+    eq(p.x, 300, 'x относительно слушателя');
+    eq(p.y, 0, 'плоскость карты лежит в X/Z');
+    eq(p.z, -100, 'y мира уходит в z');
+    h.stop();
+
+    A.spatial('js');
+    eq(A.spatial(), 'js');
+    removeGroupApi();
+});
+
+test('spatial: неизвестный режим не меняет текущий', () => {
+    addGroupApi();
+    const A = fresh(makeApi());
+    A.spatial('sdl');
+    A.spatial('чепуха');
+    eq(A.spatial(), 'sdl');
+    A.spatial('js');
+    removeGroupApi();
+});
+
+// ---------------------------------------------------------------------------
 // Деградация без звука в сборке
 // ---------------------------------------------------------------------------
 

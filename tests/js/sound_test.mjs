@@ -15,12 +15,15 @@ import { installSound } from '../../src/highlevel/sound.js';
 // Мок аудио: хранит мастер-громкость, считает загрузки и проигрывания.
 let master = 1;
 const played = [];
+const pitches = [];
 engine.audio = {
     getMasterVolume: () => master,
     setMasterVolume: (v) => { master = v; },
     load: (path) => (path === 'нет.wav' ? -1 : 7),
     play: (id, volume, pan, loop) => { played.push({ id, volume, pan, loop }); return 1; },
+    setChannelPitch: (channel, ratio) => { pitches.push({ channel, ratio }); },
     music: () => {}, stopMusic: () => {}, pauseMusic: () => {}, musicPlaying: () => false,
+    setMusicPitch: () => {},
     stopAll: () => {}, stop: () => {}, playing: () => false, activeChannels: () => 0,
     duration: () => 0, count: () => 1,
 };
@@ -63,6 +66,17 @@ test('play() передаёт громкость и панораму в движ
 
 test('play() несуществующего файла возвращает -1, а не падает', () => {
     eq(sound.play('нет.wav'), -1);
+});
+
+test('play() передаёт pitch и сбрасывает его, когда параметра нет', () => {
+    pitches.length = 0;
+    sound.play('hit.wav', { pitch: 1.5 });
+    eq(pitches.length, 1, 'pitch применён к каналу');
+    near(pitches[0].ratio, 1.5, 1e-6);
+
+    pitches.length = 0;
+    sound.play('hit.wav');
+    near(pitches[0].ratio, 1, 1e-6, 'без pitch канал возвращается к 1.0, а не наследует чужой');
 });
 
 finish();

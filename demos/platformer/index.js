@@ -142,8 +142,8 @@ export default function install($) {
     // --- Мелкие помощники ------------------------------------------------
 
     /**
-     * Текст интерфейса. Размер шрифта приходится ставить полю узла напрямую:
-     * $.attr('size', n) уходит в attrs, а рисуется node.size.
+     * Текст интерфейса. Размер шрифта — поле узла: его же ставит
+     * .attr('size', n) или { size } в конструкторе, но здесь короче напрямую.
      */
     function text(id, x, y, value, size, color, align) {
         const node = $('<ui.label>', { id, text: value, color: color || '#e8f0ff' })

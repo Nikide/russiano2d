@@ -79,6 +79,72 @@ def main():
         check(isinstance(error, str) and "не поддержан" in error,
               "draw() объясняет, что render target не поддержан")
 
+        # --- Пост-обработка ---------------------------------------------------
+        supported = a.eval("engine.postSupported()")
+        check(isinstance(supported, bool), "postSupported() отвечает да/нет")
+        check(a.eval("typeof $.gfx.post") == "function", "$.gfx.post доступно")
+        check(a.eval("$.gfx.postSupported()") == supported,
+              "$.gfx.postSupported() совпадает с движком")
+
+        a.step(3)
+        clean = a.screenshot(os.path.join(ROOT, "build", "render_post_off.png"))
+        check(os.path.getsize(clean) > 0, "кадр без поста сохранён")
+
+        a.eval("$.gfx.post({ vignette: 0.9, glow: 0.4, grain: 0.2, chromatic: 0.004 })")
+        now = a.eval("$.gfx.post()")
+        check(isinstance(now, dict) and abs(now.get("vignette", 0) - 0.9) < 1e-6,
+              "параметры поста читаются обратно (%s)" % now)
+        a.step(3)
+        tinted = a.screenshot(os.path.join(ROOT, "build", "render_post_on.png"))
+        check(os.path.getsize(tinted) > 0, "кадр с пост-обработкой сохранён")
+
+        if supported:
+            check(open(clean, "rb").read() != open(tinted, "rb").read(),
+                  "пост-обработка меняет картинку кадра")
+        else:
+            print("  пропуск: сборка без пост-обработки (шейдер не поднялся)")
+
+        # Линза — экранное искажение: главный эффект для взрывов и чёрной дыры.
+        a.eval("$.gfx.post({ lens: 1.1, centerX: 0.5, centerY: 0.5, radius: 0.3 })")
+        a.step(3)
+        check(a.ping().get("pong") is True, "движок жив после кадра с линзой")
+
+        a.eval("$.gfx.post({ on: false })")
+        a.step(2)
+        check(a.eval("$.gfx.post().enabled") == 0, "пост выключается")
+
+        # --- Камерные пресеты: от мультика до хоррора -------------------------
+        names = a.eval("$.gfx.postPresets()")
+        check(isinstance(names, list) and "horror" in names and "adventure" in names,
+              "список камерных пресетов (%s)" % names)
+
+        a.eval("$.gfx.postPreset('horror')")
+        a.step(3)
+        horror = a.eval("$.gfx.post()")
+        check(isinstance(horror, dict) and horror.get("saturation", 1) < 0.5,
+              "хоррор обесцвечивает кадр (saturation=%s)" % (horror or {}).get("saturation"))
+        check((horror or {}).get("vignette", 0) > 0.5, "хоррор сильно вигнетирует")
+        check((horror or {}).get("blood", 0) > 0, "у хоррора кровавые края")
+
+        a.eval("$.gfx.postPreset('adventure', { ms: 400 })")
+        a.step(1)
+        mid = a.eval("$.gfx.post()")
+        check(isinstance(mid, dict) and mid.get("saturation", 0) > (horror or {}).get("saturation", 0),
+              "переход идёт плавно, а не рывком (saturation=%s)"
+              % (mid or {}).get("saturation"))
+        a.step(40)
+        warm = a.eval("$.gfx.post()")
+        check(isinstance(warm, dict) and warm.get("saturation", 0) > 1.1,
+              "мультяшный пресет досчитался (saturation=%s)" % (warm or {}).get("saturation"))
+        check((warm or {}).get("enabled", 0) == 1, "пресет включает пост сам")
+
+        a.eval("$.gfx.postPreset('нейвероятный-пресет')")
+        check(a.eval("$.gfx.post().saturation") == (warm or {}).get("saturation"),
+              "неизвестный пресет ничего не меняет")
+
+        shot = a.screenshot(os.path.join(ROOT, "build", "render_post_horror.png"))
+        check(os.path.getsize(shot) > 0, "кадр в хорроре сохранён")
+
         # --- Скриншот кадра со смешиванием ------------------------------------
         shot = a.screenshot(os.path.join(ROOT, "build", "render_blend_test.png"))
         check(os.path.getsize(shot) > 0, "скриншот кадра сохранён: " + shot)

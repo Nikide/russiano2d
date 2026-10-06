@@ -26,6 +26,7 @@ const MODULES = [
     './physics/index.js',
     './bsp/index.js',
     './light/index.js',
+    './shooter_witch/index.js',
 ];
 
 $.ready(async ($) => {
