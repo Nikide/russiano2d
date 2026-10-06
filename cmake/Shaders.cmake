@@ -103,6 +103,10 @@ endfunction()
 r2d_add_shader(sprite vert "${CMAKE_SOURCE_DIR}/shaders/sprite.vert.glsl")
 r2d_add_shader(sprite frag "${CMAKE_SOURCE_DIR}/shaders/sprite.frag.glsl")
 
+# Пост-обработка: полноэкранный проход по offscreen-текстуре сцены.
+r2d_add_shader(post vert "${CMAKE_SOURCE_DIR}/shaders/post.vert.glsl")
+r2d_add_shader(post frag "${CMAKE_SOURCE_DIR}/shaders/post.frag.glsl")
+
 add_custom_command(
     OUTPUT "${R2D_SHADER_HEADER}"
     COMMAND ${CMAKE_COMMAND}

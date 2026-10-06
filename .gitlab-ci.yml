@@ -151,6 +151,7 @@ build_linux_gcc:
       - build-gcc/tests/r2d_json_test
       - build-gcc/tests/r2d_crypto_test
       - build-gcc/tests/r2d_payload_test
+      - build-gcc/tests/r2d_reverb_test
       - build-gcc/_deps/quickjs-build/qjs
 
 build_linux_clang:
@@ -183,6 +184,7 @@ build_linux_clang:
       - build-clang/tests/r2d_json_test
       - build-clang/tests/r2d_crypto_test
       - build-clang/tests/r2d_payload_test
+      - build-clang/tests/r2d_reverb_test
       - build-clang/_deps/quickjs-build/qjs
 
 build_windows:
@@ -222,6 +224,7 @@ build_windows:
       - build/tests/r2d_json_test.exe
       - build/tests/r2d_crypto_test.exe
       - build/tests/r2d_payload_test.exe
+      - build/tests/r2d_reverb_test.exe
       - build/_deps/quickjs-build/qjs.exe
 
 # ===========================================================================
@@ -273,11 +276,14 @@ test_windows:
       $json = Get-ChildItem -Recurse -Filter r2d_json_test.exe | Select-Object -First 1
       $crypto = Get-ChildItem -Recurse -Filter r2d_crypto_test.exe | Select-Object -First 1
       $payload = Get-ChildItem -Recurse -Filter r2d_payload_test.exe | Select-Object -First 1
+      $reverb = Get-ChildItem -Recurse -Filter r2d_reverb_test.exe | Select-Object -First 1
       if (-not $json) { throw "не найден r2d_json_test.exe" }
       & $json.FullName; if ($LASTEXITCODE -ne 0) { throw "r2d_json_test провален" }
       & $crypto.FullName; if ($LASTEXITCODE -ne 0) { throw "r2d_crypto_test провален" }
       if (-not $payload) { throw "не найден r2d_payload_test.exe" }
       & $payload.FullName; if ($LASTEXITCODE -ne 0) { throw "r2d_payload_test провален" }
+      if (-not $reverb) { throw "не найден r2d_reverb_test.exe" }
+      & $reverb.FullName; if ($LASTEXITCODE -ne 0) { throw "r2d_reverb_test провален" }
     - |
       $ErrorActionPreference = "Stop"
       $qjs = Get-ChildItem -Recurse -Filter qjs.exe | Select-Object -First 1
