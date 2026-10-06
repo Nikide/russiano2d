@@ -116,3 +116,47 @@ Tileset & parallax backgrounds: "Generic Platformer Tileset (16x16) + Background
 | `art/mascot/russiano_mascot_sheet.jpg` | тёмный, но не чисто чёрный фон (15,15,17) | игровой код использует `_a.png` — версию с вырезанным фоном |
 
 Чинить сами файлы не стали: это исходные упаковки, а обход дешевле и виден в коде.
+
+---
+
+## ВН «Руси-тян» (`demos/russi_vn`)
+
+Демо-новелла: позы героини, локации, музыка и звуки.
+
+### Позы героини — `art/vn/russi/`
+
+| Файл | Источник | Лицензия |
+|---|---|---|
+| `russi_neutral.png`, `russi_happy.png`, `russi_blush.png`, `russi_shy.png`, `russi_angry.png`, `russi_jealous.png`, `russi_caring.png` | Присланные автором проекта картинки Руси-тян | CC0 (автор — автор проекта) |
+
+Обработка: `tools/make_vn_sprites.py` — альфа сохранена, кадры обрезаны по
+**общей** рамке (1272×2304 → 636×1152, ×0.5), чтобы смена позы не двигала
+героиню. Инструмент исходники не меняет.
+
+### Локации — `art/vn/bg/`
+
+| Файл | Название | Автор | Лицензия | Источник (URL) |
+|---|---|---|---|---|
+| `classroom_day.png` | Classroom 002 (кадр `classroom01_0.jpg`, кадрирован и подкрашен) | Midnight68 | CC0 | https://opengameart.org/content/classroom-002 |
+| `rooftop_sunset.png` | 40 game backgrounds, painted style (кадр `bg-13.JPG` как небо заката + процедурная крыша) | rubberduck | CC0 | https://opengameart.org/content/40-game-backgrounds-1-painted-style-and-photorealistic |
+| `bedroom_night.png`, `city_night.png`, `schoolyard_day.png` | Процедурная графика проекта | автор проекта | CC0 | генерируется `tools/make_vn_backgrounds.py` |
+
+Исходные кадры CC0 лежат в `art/vn/src/` (`classroom.jpg`, `sky_sunset.jpg`):
+без них инструмент не пересобрать, а весят они 300 КБ на двоих. Что именно
+взято из каждого файла — в шапке `tools/make_vn_backgrounds.py`.
+
+### Музыка и звук
+
+| Файл | Название | Автор | Права | Источник |
+|---|---|---|---|---|
+| `audio/music/vn_tension.mp3` | bedroom-tension | автор проекта | его собственная работа (не CC0-ассет) | прислан автором, `[usesuno.com]` |
+| `audio/music/vn_afternoon.mp3` | 静谧的午后 («Тихий полдень») | автор проекта | его собственная работа (не CC0-ассет) | прислан автором, `[usesuno.com]` |
+
+Оба трека сжаты из WAV (28 и 29 МБ) в MP3 `libmp3lame q4` — иначе репозиторий
+потолстел бы на 57 МБ. Рядом с каждым лежит `.LICENSE.txt` с подробностями.
+
+Остальное — уже лежащие в демо-проекте CC0 записи Juhani Junkala (`audio/music/menu.ogg`, `action.ogg`,
+`audio/sfx/ui_click.ogg`, `jump_01.ogg`, `pickup_01.ogg`, `enemy_hit.ogg`,
+`explosion_01.ogg`). Выбор файла — в `demos/russi_vn/index.js`, расширения
+проверяются через `$.fs.exists`, поэтому подмена любого файла на CC0-аналог
+не ломает демо.

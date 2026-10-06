@@ -12,6 +12,8 @@ bin/
 dist-ci/
 dist-ci-*/
 save.json
+# Прогресс демо-новеллы: у неё свой файл, чтобы не путаться с save.json игры.
+demos/vn_save.json
 cmake-build-*/
 *.o
 *.a

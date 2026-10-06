@@ -10,22 +10,27 @@
 // ===========================================================================
 
 const TITLES = {
-    platformer: { title: 'Платформер',   icon: 'directions_run',        hint: 'Box2D, анимация, монеты, враги, HUD' },
-    shooter25d: { title: '2.5D шутер',   icon: 'my_location',           hint: 'рейкастинг, билборды, оружие от первого лица' },
-    gallery:    { title: 'Галерея',      icon: 'collections',           hint: 'все анимационные листы с управлением' },
-    arena:      { title: 'Арена',        icon: 'sports_martial_arts',   hint: 'волны врагов, стрельба, экран проигрыша' },
-    physics:    { title: 'Физика',       icon: 'science',               hint: 'песочница Box2D: ящики, взрывы, гравитация' },
-    bsp:        { title: 'BSP',          icon: 'account_tree',          hint: 'порядок отрисовки без z-буфера' },
-    light:      { title: 'Свет и тени',  icon: 'lightbulb',             hint: 'полигоны видимости, тени из геометрии' },
-    shooter_witch: { title: 'Ведьма',    icon: 'auto_awesome',
-                     hint: 'ночной лес, фонари, кровь, авто-стрельба, апгрейды',
-                     art: 'demos/assets/art/menu/witch_menu.png' },
+    platformer: { title: 'Платформер', icon: 'directions_run',
+                  hint: 'Box2D, анимация, монеты, враги, HUD' },
+    // «Ведьма» — две сцены: меню-интро и сам бой. Кнопка ведёт в меню, а
+    // shooter_witch остаётся сценой для тестов и агента (--scene shooter_witch).
+    shooter_witch: { title: 'Ведьма', icon: 'auto_awesome',
+                     hint: 'Ночной лес, свет от фонарей, волны врагов',
+                     art: 'demos/assets/art/menu/witch_menu.png',
+                     enter: 'witch_menu' },
+    russi_vn: { title: 'Руси-тян (ВН)', icon: 'favorite',
+                hint: 'ВН: RmlUi, озвучка, выбор и две концовки' },
 };
+
+// Сцены, которые не показываются в меню: под-сцены других демо, куда попадают
+// изнутри (меню «Ведьмы» открывается её же кнопкой, см. enter выше).
+const HIDDEN_SCENES = ['witch_menu'];
 
 export default function installLauncher($) {
     $.scene.add('launcher', {
         enter($) {
-            const names = $.scene.names().filter((n) => n !== 'launcher');
+            const names = $.scene.names()
+                .filter((n) => n !== 'launcher' && HIDDEN_SCENES.indexOf(n) < 0);
             const icon = (name) => ($.ui.hasIcon(name) ? $.ui.icon(name) : '');
 
             // Фон меню: арт того демо, у которого он есть. Картинка лежит под
@@ -62,12 +67,13 @@ export default function installLauncher($) {
 
                 button.on('click', () => {
                     $.sound.play('demos/assets/audio/sfx/ui_click.ogg', { volume: 0.4 });
-                    $.scene.load(name);
+                    $.scene.load(info.enter || name);
                 });
             });
 
             $('<ui.label>', { id: 'keys', size: 15, color: '#63758d',
-                              text: 'A/D или ←/→ — идти · Space/W/↑ — прыжок · мышь — стрельба · F1 — оверлей' })
+                              text: 'A/D или ←/→ — идти · Space/W/↑ — прыжок, стрельба · мышь — стрельба и выбор · '
+                                    + 'Space — дальше по реплике · A — авто в новелле · F1 — оверлей' })
                 .at(84, 668).appendTo($.ui);
 
             $.world.color('#0e1420');

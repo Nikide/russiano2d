@@ -110,9 +110,26 @@ export function resolveFontStyle(style) {
 }
 
 /** Ширина строки в пикселях. Без движка (qjs) возвращает 0 — это не ошибка. */
+/**
+ * Ширина строки в пикселях: единственный правильный путь к engine.measureText.
+ *
+ * Движок отдаёт ПАРУ `[ширина, высота]` (см. r2d__js_measure_text), а не число.
+ * Раньше результат прогонялся через num(): Number([830, 34]) — это NaN, то есть
+ * функция возвращала 0. Из-за нуля `$.dialog` считал, что любая строка помещается
+ * в панель, и перенос по словам не срабатывал вовсе — реплики уезжали за рамку
+ * ({@link wrapDialogText}). Поэтому форму ответа разбираем здесь, а не у вызова.
+ */
+export function measureTextWidth(result) {
+    if (Array.isArray(result)) return num(result[0], 0);
+    if (result && typeof result === 'object') {
+        return num(result.w !== undefined ? result.w : result.width, 0);
+    }
+    return num(result, 0);
+}
+
 export function measureFontText(text, size) {
     if (typeof engine === 'undefined' || !engine || typeof engine.measureText !== 'function') return 0;
-    return num(engine.measureText(String(text), num(size, FONT_DEFAULTS.size)), 0);
+    return measureTextWidth(engine.measureText(String(text), num(size, FONT_DEFAULTS.size)));
 }
 
 // ---------------------------------------------------------------------------

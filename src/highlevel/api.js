@@ -47,6 +47,7 @@ import { installFlow, tickFlow } from './flow.js';
 import { installFont } from './font.js';
 import { installScreen, tickScreen } from './screen.js';
 import { installDialog, tickDialog } from './dialog.js';
+import { installTimeline, tickTimeline } from './timeline.js';
 import { installSave } from './save.js';
 import { installResource } from './resource.js';
 import { installTilemap, tickTilemap } from './tilemap.js';
@@ -331,6 +332,9 @@ export function createApi() {
     installFont($);
     installScreen($);
     installDialog($);
+    // Таймлайн-сцены (диалоги и визуальные новеллы) — после диалогов: они
+    // листают реплики через $.dialog и подписываются на его события.
+    installTimeline($);
     installSave($);
     installResource($);
 
@@ -1282,6 +1286,7 @@ function installFrameHooks($) {
         prof('последовательности'); tickFlow(dt);
         prof('экраны'); tickScreen(dt);
         prof('диалоги'); tickDialog(dt);
+        prof('таймлайн'); tickTimeline(dt);
         prof('tilemap'); tickTilemap(dt);
         prof('vfx'); tickFx(dt);
         prof('частицы'); tickParticles(dt);

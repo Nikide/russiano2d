@@ -5,6 +5,10 @@
 // демо экспортирует install($) и регистрирует свою сцену; всё остальное (мир,
 // камера, звук, сохранения, отладка) уже есть в $.
 //
+// Демо три, и каждое показывает свой слой движка: платформер — Box2D и анимацию,
+// «Ведьма» — свет, частицы и волны врагов, новелла — $.timeline и RmlUi.
+// У каждого в папке лежит README: что внутри и как собрать такое же.
+//
 // Запуск:
 //   ./build/russiano2d --game demos
 //   ./build/russiano2d --game demos --scene shooter25d
@@ -20,13 +24,8 @@
 const MODULES = [
     './launcher.js',
     './platformer/index.js',
-    './shooter25d/index.js',
-    './gallery/index.js',
-    './arena/index.js',
-    './physics/index.js',
-    './bsp/index.js',
-    './light/index.js',
     './shooter_witch/index.js',
+    './russi_vn/index.js',
 ];
 
 $.ready(async ($) => {

@@ -275,9 +275,9 @@ R2D_TEST_TIMEOUT=120 python3 tools/run_tests.py
 | `tests/agent/game_test.py` | игра по умолчанию: меню → уровень, ходьба, прыжок, монеты, пауза |
 | `tests/agent/demos_test.py` | все демо: сцена открывается, рисуется и не пишет ошибок |
 | `tests/agent/build_test.py` | сборка игры в один файл: запуск без проекта, шифрование, защита от подмены |
-| `tests/agent/highlevel_*_test.py` | подсистемы `$` по отдельности: `anim`, `tilemap`, `tilemap_ysort`, `particles`, `nav`, `navmesh`, `prefab`, `audiobus`, `layers`, `widgets`, `widgets_anchor`, `tween`, `triggers`, `i18n`, `pool`, `physics`, `http`, `render` |
+| `tests/agent/highlevel_*_test.py` | подсистемы `$` по отдельности: `anim`, `tilemap`, `tilemap_ysort`, `particles`, `nav`, `navmesh`, `prefab`, `audiobus`, `layers`, `widgets`, `widgets_anchor`, `tween`, `triggers`, `i18n`, `pool`, `physics`, `http`, `render`, `timeline` |
 | `tests/agent/highlevel_guide_test.py` | страж документации: достаёт листинг из `docs/tutorial-first-game.md` и запускает его |
-| `tests/js/*_test.mjs` | юнит-тесты логики модулей под `qjs` — без движка и без сборки (18 наборов) |
+| `tests/js/*_test.mjs` | юнит-тесты логики модулей под `qjs` — без движка и без сборки (46 наборов) |
 | `tests/fixtures/*` | маленькие игры для тестов (`hello`, `bare`, `spawn`, `dynimport`, по одной на подсистему) |
 
 ```bash

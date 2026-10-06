@@ -1,0 +1,81 @@
+# ===========================================================================
+# CI для gitverse.ru: взять архивы из dist/ и положить их в релиз.
+#
+# СБОРКИ ЗДЕСЬ НЕТ И НЕ БУДЕТ. Движок собирается локально на маке
+# (tools/autobuild.py), архивы коммитятся в dist/ вместе с тегом. Этот workflow
+# только публикует: ни образа, ни зависимостей, ни компиляции — десяток секунд
+# работы раннера.
+#
+# Список файлов берётся из содержимого dist/ — set glob'ом, поэтому новая
+# платформа попадает в релиз сама, без правки файла.
+#
+# ПРО СЕКРЕТ. GitVerse не выдаёт CI автоматический токен на релизы, поэтому
+# actions/create-release@v1 просит api_key. Если секрета RELEASE_API_KEY нет,
+# job не падает: пишет, что публиковать нечем, и завершается успешно — архивы
+# всё равно лежат в dist/, а релиз можно выпустить руками во вкладке «Релизы».
+#   Настройки репозитория → «Секреты и переменные» → RELEASE_API_KEY —
+#   публичный API-ключ с правом «Репозитории → Запись». Префикс GITVERSE_
+#   в имени секрета платформа запрещает.
+#
+# Триггер: тег вида v0.2.0 (`git push origin v0.2.0`) или ручной запуск.
+#
+# Второй workflow — .gitverse/workflows/release.yaml — СТАРАЯ сборка на раннере
+# (Linux + Windows). Она выключена (только ручной запуск), потому что сборка
+# теперь локальная: этот файл её не касается.
+# ===========================================================================
+
+name: Publish dist
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Архивы из dist/ в релиз
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Единственная проверка: файлы вообще есть. Всё остальное — копирование.
+      - name: Показать, что публикуем
+        run: |
+          set -eu
+          ls -la dist/*.tar.gz dist/*.zip dist/SHA256SUMS.txt
+
+      - name: Есть ли чем публиковать
+        id: gate
+        run: |
+          if [ -n "${{ secrets.RELEASE_API_KEY }}" ]; then
+            echo "ready=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=no" >> "$GITHUB_OUTPUT"
+            echo "::notice::RELEASE_API_KEY не задан — релиз не создаётся; архивы остаются в dist/ и доступны из репозитория"
+          fi
+
+      - name: Создать релиз на GitVerse
+        if: steps.gate.outputs.ready == 'yes'
+        uses: actions/create-release@v1
+        with:
+          api_key: ${{ secrets.RELEASE_API_KEY }}
+          title: Russiano2D ${{ gitverse.ref_name }}
+          body: |
+            Сборки Russiano2D ${{ gitverse.ref_name }} — те самые файлы, что
+            лежат в `dist/` этого тега.
+
+            Внутри архива: движок, игра по умолчанию (`game/`, `assets/`),
+            документация (`README.md`, `AGENTS.md`) и внешние библиотеки в `lib/`.
+
+            Собрать самому: `python3 tools/autobuild.py --help`.
+            Что нового: `CHANGELOG.md`.
+          # Маски: файлов ровно столько, сколько собрано в dist/. Если
+          # платформаactions не раскрывает маски — перечислите архивы по именам.
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          draft: false
+          pre_release: false

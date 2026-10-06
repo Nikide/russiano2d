@@ -1,4 +1,4 @@
-# Russiano2D 0.1.1 — macOS Apple Silicon
+# Russiano2D 0.1.4 — macOS Apple Silicon
 
 Готовый движок и всё, что нужно, чтобы начать на нём первый проект.
 

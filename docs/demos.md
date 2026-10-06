@@ -1,7 +1,8 @@
 # Russiano2D — демо-проект
 
-`demos/` — отдельная игра на движке: семь сцен-демо, каждая показывает свою
-часть движка. Запускается тем же бинарником, что и `game/`, и выбирается
+`demos/` — отдельная игра на движке: три сцены-демо, каждая показывает свой
+слой движка — платформер (Box2D и анимация), «Ведьма» (свет, частицы, волны)
+и новелла «Руси-тян» (`$.timeline` и интерфейс на RmlUi). Запускается тем же бинарником, что и `game/`, и выбирается
 флагом `--game`.
 
 ![Меню демо](screenshots/launcher.png)
@@ -11,7 +12,7 @@
 ```bash
 ./build/russiano2d --game demos                      # меню выбора
 ./build/russiano2d --game demos --scene platformer   # сразу конкретная сцена
-./build/russiano2d --game demos --scene shooter25d \
+./build/russiano2d --game demos --scene russi_vn \
     --screenshot /tmp/s.png --screenshot-at 3 --seconds 5
 ```
 
@@ -44,11 +45,10 @@ export default function install($) {
 }
 ```
 
-Три демо (`bsp`, `light`, `shooter25d`) сознательно остаются «низкоуровневыми»:
-их суть — рейкастинг, BSP-дерево и полигоны видимости, то есть прямые вызовы
-`engine.bsp.*`, `engine.light.visibility()` и `engine.submitTriangles()`.
-Обвязка (сцена, HUD, ввод, камера) в них всё равно написана на `$`, а математика
-вызывается из неё.
+Низкоуровневые подсистемы (BSP-порядок, полигоны видимости, рейкастинг) никуда
+не делись — их показывает «Ведьма»: свет считается через
+`engine.light.visibility()`, геометрия уходит в общий батч. Отдельные демо под
+них убраны, чтобы не дублировать то же самое на пустых прямоугольниках.
 
 Добавить своё демо: положить `demos/имя/index.js` с `install($)` и дописать
 строку в список `MODULES` в `demos/main.js` — кнопка в меню появится сама
@@ -59,13 +59,16 @@ export default function install($) {
 | Сцена | Что показывает | Ключевые вызовы |
 |---|---|---|
 | `platformer` | Box2D, листы анимации, монеты, враги, параллакс, HUD, пауза | `.controls`, `.frames`, `.animate`, `.on('death')`, `<ui.*>` |
-| `shooter25d` | настоящий рейкастинг (DDA-обход сетки), билборды врагов, оружие от первого лица | `engine.raycast`, `$.gfx`, `$.camera` |
-| `gallery` | все анимационные листы персонажей с управлением воспроизведением | `.frames`, `.animate`, `.playing`, `$.input` |
-| `arena` | волны врагов, стрельба, здоровье, экран проигрыша | `$.world.raycast`, `$('<bullet>')`, `$.scene.restart` |
-| `physics` | песочница Box2D: ящики, взрывы, гравитация, контуры тел | `.body('dynamic')`, `.applyImpulse`, `$.world.query` |
-| `bsp` | порядок отрисовки без z-буфера на наклонных стенах, пошаговый обход дерева | `engine.bsp.build/order` |
-| `light` | 2D-свет через полигоны видимости: источники, тени, градиент по цвету вершин | `engine.light.visibility`, `engine.submitTriangles` |
-| `shooter_witch` | **ночной лес**: зомби-шутер в духе Vampire Survivors — авто-стрельба по ближайшему, волны, опыт, карты апгрейдов, фонари как единственный свет, тени от стволов, кровь и лужи | `<tilemap>` + `.autotile()` (террейн тропы), `engine.light.visibility`, `$.audio.zone/obstacles/damping`, `$.fx.*`, `$.gfx.postPreset` |
+| `shooter_witch` | **ночной лес**: зомби-шутер в духе Vampire Survivors — авто-стрельба по ближайшему, волны, опыт, карты апгрейдов, фонари как единственный свет, тени от стволов, кровь и лужи | `<tilemap>` + `.autotile()`, `engine.light.visibility`, `$.audio.zone/obstacles/damping`, `$.fx.*`, `$.gfx.postPreset` |
+| `russi_vn` | **визуальная новелла «Руси-тян: Бака!»**: цундэрэ-маскот объясняет, чем JS лучше Python; интерфейс на RmlUi, пять локаций, тряска экрана, семь поз, озвучка реплик, три выбора и две концовки | `$.animatedTimelineScene2d`, `$.timeline.state`, `$.ui.doc`, `$.camera.shake`, `{ ending }` с флагом в `$.store` |
+
+![Меню демо](screenshots/launcher.png)
+
+| Платформер | Ведьма | Руси-тян |
+|---|---|---|
+| ![Платформер](screenshots/platformer.png) | ![Ведьма](screenshots/shooter_witch.png) | ![Руси-тян](screenshots/russi_vn.png) |
+
+Скриншоты обновляются одной командой: `python3 tools/make_screenshots.py`.
 
 ## Управление
 

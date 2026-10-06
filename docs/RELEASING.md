@@ -128,6 +128,7 @@ cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
 |---|---|---|
 | C-тесты JSON и ChaCha20-Poly1305 | `build/tests/r2d_json_test`, `build/tests/r2d_crypto_test` | нет |
 | Юнит-тесты логики `$` | `qjs tests/js/*_test.mjs` (см. `docs/AGENT_API.md`) | нет |
+| Публикация релиза из `dist/` | `.gitlab-ci.yml` (hub.mos.ru) и `.gitverse/workflows/publish-dist.yaml` — только выгрузка файлов, без сборки | секрет `RELEASE_API_KEY` нужен только на GitVerse |
 | Агентские тесты движка | `python3 tools/run_tests.py` (`--fast` — быстрый набор) | **да** |
 | Сборка игры в один файл | `tests/agent/build_test.py` | **да** |
 

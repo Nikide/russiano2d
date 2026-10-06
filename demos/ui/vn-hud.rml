@@ -1,0 +1,24 @@
+<rml>
+<head>
+    <link type="text/rcss" href="vn-hud.rcss"/>
+    <title>Руси-тян: HUD</title>
+</head>
+<body>
+    <!--
+        HUD новеллы: «руси-метр», индикатор авто-режима, подсказка управления
+        и табличка локации. Всё — RmlUi: раскладка, шрифт и цвета в CSS,
+        игра только пишет значения (см. demos/russi_vn/index.js).
+    -->
+    <div id="vn-hud">
+        <div id="vn-meter">
+            <span id="vn-meter-label">Руси-метр</span>
+            <div id="vn-meter-track">
+                <div id="vn-meter-fill"></div>
+            </div>
+        </div>
+        <div id="vn-auto" class="off">АВТО</div>
+        <div id="vn-place"></div>
+        <div id="vn-hint">Space — дальше · Ctrl — пропустить · A — авто · R — заново · Esc — меню</div>
+    </div>
+</body>
+</rml>

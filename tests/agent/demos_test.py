@@ -27,13 +27,8 @@ from agent_client import Agent, ROOT   # noqa: E402
 # длинный прогон — иначе ошибка в этих ветках не поймается.
 SCENES = {
     "platformer": (2, 0, 20),
-    "shooter25d": (2, 0, 20),
-    "gallery": (2, 0, 20),
-    "arena": (3, 0, 20),
-    "physics": (3, 0, 20),
-    "bsp": (2, 0, 20),
-    "light": (2, 0, 20),
     "shooter_witch": (4, 6, 900),
+    "russi_vn": (3, 4, 300),
     "launcher": (0, 5, 20),
 }
 
@@ -43,9 +38,9 @@ FAILURES = []
 # $.ui.doc().on() подписывает конкретный элемент, поэтому «один обработчик на
 # документ с ветвлением по id» оставлял часть кнопок мёртвыми.
 DOC_BUTTONS = {
-    "light": ("demos/ui/light.rml", ["light-shadows", "light-fill", "light-rays"]),
-    "bsp": ("demos/ui/bsp.rml", ["bsp-splits", "bsp-order"]),
-    "shooter25d": ("demos/ui/shooter-death.rml", ["death-retry", "death-menu"]),
+    # Новелла — единственное демо, интерфейс которого целиком на RmlUi:
+    # документ реплики обязан подниматься и прятать штатную панель $.dialog.
+    "russi_vn": ("demos/ui/vn-dialog.rml", ["vn-choice-0", "vn-choice-1", "vn-choice-2"]),
 }
 
 

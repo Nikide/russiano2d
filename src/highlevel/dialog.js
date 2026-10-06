@@ -34,6 +34,7 @@
 // ===========================================================================
 
 import { ctx, packColor, wrapOne } from './core.js';
+import { measureFontText } from './font.js';
 
 // ---------------------------------------------------------------------------
 // Настройки по умолчанию
@@ -334,10 +335,9 @@ export function installDialog($) {
         if (font && state && state.style && typeof font.measure === 'function') {
             return num(font.measure(text, state.style), 0);
         }
-        if (typeof engine !== 'undefined' && engine && typeof engine.measureText === 'function') {
-            return num(engine.measureText(String(text), size), 0);
-        }
-        return 0;
+        // Запасной путь, когда стиля нет: та же нормализация ответа движка
+        // ([ширина, высота] → ширина), иначе перенос строк молча ломается.
+        return measureFontText(text, size);
     }
 
     /** Видимые выборы текущей реплики (условия уже применены). */
