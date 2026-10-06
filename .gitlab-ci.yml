@@ -3,7 +3,7 @@
 #
 # Пайплайн: lint → build → test → package → release.
 # Матрица сборок:
-#   * Linux  — gcc и clang, docker-executor (образ ubuntu:24.04);
+#   * Linux  — gcc и clang, appsechub-executor (образ ubuntu:24.04);
 #   * Windows — MSVC (Visual Studio Build Tools 2022) + Ninja,
 #               shell-executor в PowerShell.
 #
@@ -20,7 +20,7 @@
 # ЧТО ДОЛЖЕН ПРЕДОСТАВИТЬ WINDOWS-РАННЕР (настраивается вручную, см.
 # docs/RELEASING.md, раздел «CI/CD»):
 #   * GitLab Runner, зарегистрированный с тегами `windows` и `msvc`,
-#     executor = shell (по умолчанию PowerShell). Docker-образа в
+#     executor = shell (по умолчанию PowerShell). appsechub-образа в
 #     Windows-job нет — default.image действует только на Linux.
 #   * Visual Studio 2022 Build Tools с workload
 #     «Desktop development with C++» (MSVC + Windows SDK).
@@ -82,7 +82,7 @@ lint:
   image: ubuntu:24.04
   # Тег обязателен: без него задание требует раннера с «Run untagged jobs»,
   # а такой по умолчанию выключен — пайплайн просто завис бы на lint.
-  tags: [docker]
+  tags: [appsechub]
   timeout: 15m
   before_script:
     - apt-get update
@@ -124,7 +124,7 @@ lint:
 build_linux_gcc:
   stage: build
   image: ubuntu:24.04
-  tags: [docker]
+  tags: [appsechub]
   variables:
     R2D_CC: gcc
   cache:
@@ -157,7 +157,7 @@ build_linux_gcc:
 build_linux_clang:
   stage: build
   image: ubuntu:24.04
-  tags: [docker]
+  tags: [appsechub]
   variables:
     R2D_CC: clang
   cache:
@@ -191,7 +191,7 @@ build_windows:
   stage: build
   tags: [windows, msvc]
   timeout: 150m
-  # Docker-образа нет: shell-executor в PowerShell.
+  # appsechub-образа нет: shell-executor в PowerShell.
   rules:
     - if: $R2D_WINDOWS_CI == "false"
       when: never
@@ -233,7 +233,7 @@ build_windows:
 test_linux:
   stage: test
   image: ubuntu:24.04
-  tags: [docker]
+  tags: [appsechub]
   needs: [build_linux_gcc]
   cache:
     key: "$R2D_DEPS_CACHE"
@@ -305,7 +305,7 @@ test_windows:
 package_linux:
   stage: package
   image: ubuntu:24.04
-  tags: [docker]
+  tags: [appsechub]
   needs: [build_linux_gcc, test_linux]
   before_script:
     - apt-get update
@@ -346,7 +346,7 @@ package_windows:
 release:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
-  tags: [docker]
+  tags: [appsechub]
   # package_windows необязателен: при R2D_WINDOWS_CI=false этих job'ов в
   # пайплайне нет, но релиз обязан собираться и без них. Иначе ссылка на
   # windows-архив появлялась бы до готовности артефакта (или вела в никуда).
