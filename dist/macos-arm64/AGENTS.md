@@ -154,17 +154,31 @@ call(cmd="quit")
 * Russiano2D — план VFX для 2D — `docs/VFX_PLAN.md`
 * Контракт модуля подсистемы `$` — `docs/highlevel/_CONTRACT.md`
 * `$.anim` — анимация клипами и машина состояний — `docs/highlevel/anim.md`
+* `$.anim.player` — анимационный плеер: таймлайны, события, микширование — `docs/highlevel/animplayer.md`
 * Аудио-шины и эффекты — `$.audio` — `docs/highlevel/audiobus.md`
+* `$.csv` — CSV/TSV и безопасный JSON — `docs/highlevel/csv.md`
+* Диалоги — `$.dialog` — `docs/highlevel/dialog.md`
+* Потоки и таймеры — `$.flow` — `docs/highlevel/flow.md`
+* Текстовые стили — `$.font` — `docs/highlevel/font.md`
 * VFX своими руками — `$.fx` — `docs/highlevel/fx.md`
+* `$.grid` — сеточные помощники — `docs/highlevel/grid.md`
 * HTTP-запросы — `$.http` — `docs/highlevel/http.md`
 * Локализация и ввод — `$.i18n`, `$.tr` и дополнения `$.input` — `docs/highlevel/i18n.md`
 * `$.layers` — канвас-слои, параллакс и затемнение — `docs/highlevel/layers.md`
 * Экран загрузки — `$.loading` — `docs/highlevel/loading.md`
+* `$.math` — математика для игровой логики — `docs/highlevel/mathx.md`
 * `$.nav` — навигация и поиск пути — `docs/highlevel/nav.md`
 * Частицы — `$('<particles>')` и `$.particles` — `docs/highlevel/particles.md`
 * Пул объектов — `$.pool` — `docs/highlevel/pool.md`
 * `$.prefab` — prefab, наследование сцен и сериализация узлов — `docs/highlevel/prefab.md`
+* `$.random` — детерминированная случайность — `docs/highlevel/random.md`
 * `$.blend` и `$.viewport` — смешивание и render target — `docs/highlevel/render.md`
+* Реестр ресурсов — `$.resource` — `docs/highlevel/resource.md`
+* Русские имена API (`$.ru`) — `docs/highlevel/ru.md`
+* Сохранения игры — `$.save` — `docs/highlevel/save.md`
+* Экраны и меню — `$.screen` — `docs/highlevel/screen.md`
+* Сигналы — `$.signal` — `docs/highlevel/signal.md`
+* Машина состояний — `$.state` и `.fsm()` — `docs/highlevel/state.md`
 * TileMap — тайловые карты `$('<tilemap>')` — `docs/highlevel/tilemap.md`
 * Зоны-триггеры — `$.triggers` и тег `<trigger>` — `docs/highlevel/triggers.md`
 * `$.tween` — Tween-объекты в стиле Godot 4 — `docs/highlevel/tween.md`
@@ -881,7 +895,7 @@ $('<sprite>', { frames: { src: 'sheet.png', cols: 8, rows: 4, cw: 16, ch: 16 } }
 
 | Тег | Тело | Назначение |
 |---|---|---|
-| `<player>` | динамическое | игрок: 28×40, 100 HP, скорость 250, класс `player` |
+| `<player>` | динамическое | игрок: 28×40, 100 HP, скорость 250 (выбор — `$('player')`; класс появляется только после `.addClass()`) |
 | `<enemy>` | динамическое | враг: 28×40, 30 HP, скорость 90, `team` 2 |
 | `<npc>` | динамическое | нейтральный персонаж |
 | `<pickup>` | нет | подбираемый предмет |
@@ -1117,7 +1131,13 @@ $.emit('score:+', { points: 10 });    // своё глобальное собы�
 ```js
 await $('#hero').moveTo(400, 200, 600);         // Promise
 $('#hero').tween({ alpha: 0, y: 100 }, 300, 'easeOutBack');
-$('#hero').rotateTo(90, 400).scaleTo(2, 200).fadeTo(0, 300);
+// rotateTo/scaleTo/fadeTo возвращают Promise, поэтому цепочкой их не соединить:
+// ждём все три сразу. (В прежнем примере была цепочка — она падала с TypeError.)
+await Promise.all([
+    $('#hero').rotateTo(90, 400),
+    $('#hero').scaleTo(2, 200),
+    $('#hero').fadeTo(0, 300),
+]);
 $('#hero').shake(6, 250);                       // тряска картинки
 $('#hero').flash('#ff0000', 120);               // вспышка цвета
 await $('#hero').bounce(20, 300);
@@ -1142,10 +1162,10 @@ $('#hero').sound('jump.wav').playSound();   // привязать и проиг�
 ## 13. Иерархия
 
 ```js
-$('<weapon>').appendTo('#hero');       // стать ребёнком узла
-$('#hero').append($('<weapon>'));      // добавить ребёнка
+$('<sprite>').appendTo('#hero');       // стать ребёнком узла
+$('#hero').append($('<sprite>'));      // добавить ребёнка
 $('#hero').prepend(child)
-$('#hero').children('.weapon')         // обёртка детей
+$('#hero').children('.limb')           // обёртка детей по классу
 $('#hero').find('.grip')               // поиск среди потомков
 $('#hero').closest('player')           // ближайший подходящий предок
 $('#hero').siblings()                  // соседи
@@ -1166,11 +1186,12 @@ $('#hero').remove()                    // уничтожить узел и ег�
 .text('Привет') .value(0.5) .max(1)            // для текста и полос
 ```
 
-`.attr('имя')` читает и свойства узла, и свободные атрибуты: `.attr('id')`,
-`.attr('hp')`, `.attr('x')` возвращают то же, что `.id()`, `.hp()`, `.pos()`,
-а неизвестный ключ — значение из `attrs`. `.attr()` без аргумента отдаёт
-только свободные атрибуты. `.attr('имя', значение)` пишет так же, как
-одноимённый атрибут в `$('<тег>', { … })`.
+`.attr('имя')` читает и свойства узла, и свободные атрибуты: `.attr('id')` и
+`.attr('hp')` возвращают то же, что `.id()` и `.hp()`, а `.attr('x')` — число
+(тогда как `.pos()` отдаёт сразу `{ x, y }`). Неизвестный ключ — значение из
+`attrs`. `.attr()` без аргумента отдаёт только свободные атрибуты.
+`.attr('имя', значение)` пишет так же, как одноимённый атрибут в
+`$('<тег>', { … })`.
 
 ---
 
@@ -1501,8 +1522,10 @@ $.test.reset() .results() .report()
 ## 26. Расширение
 
 ```js
+// fadeOut возвращает Promise, поэтому цепочкой за ним не пойти: собираем шаги.
 $.fn.flashAndDie = function () {
-    return this.flash('#fff', 100).fadeOut(200).remove();
+    this.flash('#fff', 100);
+    return this.fadeOut(200).then(() => this.remove());
 };
 $('.enemy').flashAndDie();
 ```
@@ -1617,6 +1640,8 @@ $.update(() => {
 | Подсистема | Пространство имён | Теги | Подробно |
 |---|---|---|---|
 | Анимация клипами и машина состояний | `$.anim` | — | [anim.md](highlevel/anim.md) |
+| Анимационный плеер: таймлайны в мс, события, микширование | `$.anim.player`, `$.anim.clip` | — | [animplayer.md](highlevel/animplayer.md) |
+| Свет в стиле Candle: тени, конус, площадной свет, туман | `$.gfx.light`, `$.gfx.fog` | `<light>`, `<lightarea>`, `<fog>` | [render.md](highlevel/render.md) §3.0 |
 | TileMap: слои, автотайл, террейны, Y-sort | `$.tilemap` | `<tilemap>` | [tilemap.md](highlevel/tilemap.md) |
 | CPU-частицы | `$.particles` | `<particles>` | [particles.md](highlevel/particles.md) |
 | Навигация: A*, агент, navmesh | `$.nav` | — | [nav.md](highlevel/nav.md) |
@@ -1632,10 +1657,74 @@ $.update(() => {
 | Пул объектов | `$.pool` | — | [pool.md](highlevel/pool.md) |
 | HTTP-запросы | `$.http` | — | [http.md](highlevel/http.md) |
 | Blend-режимы и подвьюпорты | `$.blend`, `$.gfx.blend`, `$.viewport` | — | [render.md](highlevel/render.md) |
+| Сохранения: слоты, версии, миграции, автосейв | `$.save` | — | [save.md](highlevel/save.md) |
+| Реестр ресурсов: ленивая загрузка, ссылки, выгрузка | `$.resource` | — | [resource.md](highlevel/resource.md) |
+| Математика, векторы, прямоугольники | `$.math` | — | [mathx.md](highlevel/mathx.md) |
+| Детерминированный ГПСЧ и шум | `$.random` | — | [random.md](highlevel/random.md) |
+| Сеточные помощники: клетки, линии, заливка | `$.grid` | — | [grid.md](highlevel/grid.md) |
+| CSV/TSV и безопасный JSON | `$.csv` | — | [csv.md](highlevel/csv.md) |
+| Русские имена API: теги, атрибуты, методы | `$.ru` | `<свет>` и др. | [ru.md](highlevel/ru.md) |
+| Машина состояний игры | `$.state`, `.fsm()`, `.fsmSend()` | — | [state.md](highlevel/state.md) |
+| Сигналы: шина событий | `$.signal` | — | [signal.md](highlevel/signal.md) |
+| Потоки и таймеры на игровом времени | `$.flow` | — | [flow.md](highlevel/flow.md) |
+| Диалоги: ветки, условия, печатная машинка | `$.dialog` | `<ui.dialog>` | [dialog.md](highlevel/dialog.md) |
+| Экраны и меню: раскладка, фокус | `$.screen` | `<ui.row>` и др. | [screen.md](highlevel/screen.md) |
+| Именованные текстовые стили | `$.font` | — | [font.md](highlevel/font.md) |
 
 Физика в этой таблице не отдельной подсистемой, а частью ядра: формы тел,
 односторонние платформы, события контакта и суставы описаны в разделе 8 выше
 и в [API.md](API.md).
+
+### Свет в стиле Candle (`<light>`, `<lightarea>`, `<fog>`)
+
+Узел `<light>` умеет не только мягкое пятно, но и честные тени: из центра
+выпускаются лучи, каждый упирается в препятствие, и по этим расстояниям
+строится концентрический веер — градиент мягкий, кромка тени резкая.
+
+```js
+$.gfx.light.occluders([{ x: 400, y: 200, w: 32, h: 200 }]);   // или .tiles(...)
+
+$('<light>', { radius: 320, color: '#ffd9a0' })
+    .at(200, 300).blend('add')
+    .shadows(true)            // тени от препятствий
+    .cone(70, 0.3)            // конус 70° с растушёвкой кромки
+    .flicker(0.18, 9)         // дрожание, как у свечи
+    .appendTo($.world);
+
+$('<lightarea>', { radius: 150, samples: 4, shadows: true })
+    .at(620, 480).size(220, 12).blend('add').appendTo($.world);
+
+$('<fog>', { color: '#8899bb', density: 0.4, layers: 4 })
+    .at(400, 300).size(800, 600).appendTo($.world);
+$.gfx.fog({ color: '#8899bb', density: 0.25, ground: 0.6 });   // экранный слой
+```
+
+Свет с `.punch(true)` рисуется поверх тумана: фонарь «прорезает» дымку.
+Подробности, таблицы полей и ограничения — [render.md](highlevel/render.md) §3.0.
+
+### Анимационный плеер (`$.anim.player`)
+
+Дополняет `$.anim` (anim.js), ничего в ней не заменяя: клипы-таймлайны с
+дорожками `position`/`scale`/`rotation`/`alpha`/`color`/`sprite`/`value`,
+время ключей в миллисекундах, события-ключи (`call` и подписки), собственные
+часы (`play`, `stop`, `seek`, `speed`, `loop`, `pause`) и микширование клипов.
+
+```js
+$.anim.clip('run', {
+    duration: 600, loop: 'loop',
+    tracks: [
+        { type: 'sprite', fps: 12, from: 0, to: 5 },
+        { type: 'value', name: 'stamina', keys: [{ t: 0, v: 100 }, { t: 600, v: 40 }] },
+        { type: 'event', keys: [{ t: 300, name: 'step', call: () => $.sound.play('step') }] },
+    ],
+});
+$.anim.target('#hero').play('run').speed(1.5);
+$.anim.player('hero').blend('walk', 'run', 0.5);   // кроссфейд
+$.anim.player('hero').on('step', () => $.log('шаг'));
+```
+
+Время берётся только из `dt` кадра (детерминизм в `--fixed-dt`), реестр клипов
+плеера отдельный от `$.anim.define`. Подробно — [animplayer.md](highlevel/animplayer.md).
 
 Короткий пример, где заняты сразу несколько:
 
@@ -1711,6 +1800,263 @@ $.fx.shockwave(x, y, { radius: 420, ms: 520, width: 16, color: '#c9a6ff' });
   тела тянут обычными силами;
 * эффекты принадлежат сцене: при `$.scene.load()` они сбрасываются сами;
 * `<light>` теперь рисуется мягким радиальным пятном, а не плоским кругом.
+
+## 32. Утилиты, данные и русские имена
+
+Подсистемы ниже добавлены после аудита: закрывают то, что каждая игра писала
+себе сама. Каждая живёт в своём файле `src/highlevel/<имя>.js`.
+
+### `$.math` — математика, векторы и прямоугольники
+
+Чистые функции для игровой логики: интерполяция, сглаживание, углы, векторы
+и прямоугольники. Состояния нет, к движку не обращается.
+
+```js
+const k   = $.math.clamp(hp / maxHp, 0, 1);
+const t   = $.math.smoothstep(0, 0.4, elapsed);
+cam.x     = $.math.approach(cam.x, target.x, 12, $.time.delta());
+const dir = $.math.vecNormalize($.math.vecSub(hero.pos(), enemy.pos()));
+const hit = $.math.rectOverlap(view, $.math.rect(node.x, node.y, 32, 32));
+```
+
+Числа: `clamp lerp inverseLerp remap moveTowards smoothstep approach wrap
+pingPong snap angleDiff deg rad sign roundTo`. Векторы: `vec2 vecLength
+vecLengthSq vecNormalize vecAdd vecSub vecScale vecDot vecDist vecLerp
+vecRotate vecFromAngle vecAngle`. Прямоугольники: `rect rectContains
+rectOverlap rectIntersect rectCenter rectGrow`.
+Подробности — [mathx.md](highlevel/mathx.md).
+
+### `$.random` — детерминированный ГПСЧ и шум
+
+Тот же генератор, что и раньше (`next/range/int/pick/chance`), плюс
+`shuffle gaussian weighted noise1D noise2D`. Один seed → одна
+последовательность: воспроизводимость тестов и `--fixed-dt` сохраняется.
+
+```js
+$.random.seed(level.seed);
+const type = $.random.weighted([{ value: 'goblin', weight: 10 }, { value: 'dragon', weight: 1 }]);
+const x    = $.random.range(0, arena.w);
+const h    = 0.6 * $.random.noise2D(x / 64, y / 64) + 0.4 * $.random.noise2D(x / 16, y / 16, 777);
+```
+
+`$.random.seed(n)` перезапускает серию, `seed()` без аргумента возвращает
+текущее зерно. Шум — чистая функция координаты, от состояния ГПСЧ не
+зависит. Подробности — [random.md](highlevel/random.md).
+
+### `$.grid` — сеточные помощники
+
+Плоский массив значений + явная система координат (левый верхний угол, размер
+клетки). Не заменяет `$.nav`: путь ищет `$.nav`, а `$.grid` — «что под
+курсором», заливка, линии, соседи.
+
+```js
+const g = $.grid.make({ x: 0, y: 0, cell: 16, cols: 40, rows: 30, fill: 0 });
+const c = $.grid.toCell(g, mouse.x, mouse.y);
+if ($.grid.inBounds(g, c.cx, c.cy)) $.grid.set(g, c.cx, c.cy, 'wall');
+$.grid.line(g, 0, 0, 39, 29, 'ray');          // Брезенхэм
+$.grid.flood(g, 10, 10, 'water');             // заливка, 4/8 связная
+```
+
+Полный список: `make toCell toWorld cellRect bounds inBounds at set fill clear
+count rect line bresenham flood forEach neighbors`.
+Подробности — [grid.md](highlevel/grid.md).
+
+### `$.csv` — CSV/TSV и безопасный JSON
+
+```js
+const weapons = $.csv.parseTable($.fs.readText('data/weapons.csv'));   // [{ name, damage }, …]
+const rows    = $.csv.parse('a,"b,c"\n1,2');                          // [['a','b,c'], ['1','2']]
+const text    = $.csv.stringify(rows, { delimiter: '\t', eol: '\r\n' });
+const cfg     = $.csv.jsonParse($.fs.readText('config.json'), { volume: 1 });   // битый файл → запасное
+$.fs.write('config.json', $.csv.jsonStringify(cfg, true));
+```
+
+`parse` понимает кавычки, `""`, переводы строк внутри поля и CRLF, сам
+определяет разделитель (`detectDelimiter`), `parseTable` берёт ключи из первой
+строки. `jsonParse`/`jsonStringify` не бросают исключений: ошибка уходит в
+журнал, наружу — запасное значение или `null`.
+Подробности — [csv.md](highlevel/csv.md).
+
+### `$.save` — сохранения: слоты, версии, миграции, автосейв
+
+Снимок состояния игры в файл-слот: данные `$.store`, мир в формате `$.prefab`
+и метаданные (кадр, время, сцена). У слота есть версия, старые сохранения
+доезжают через миграции, а `export()`/`import()` дают ту же запись строкой —
+для `$.http`, буфера обмена и тестов.
+
+```js
+$.save.dir('saves');                        // каталог слотов (по умолчанию saves)
+$('#save-1').on('click', () => $.save.slot(1).save());
+$('#load-1').on('click', () => $.save.slot(1).load());
+$.save.autosave(60000);                     // автосейв в слот 0, текущий не трогает
+
+const text = $.save.export();               // та же запись строкой
+$.save.import(text, { store: 'merge' });    // дополнить данные, не заменяя
+```
+
+| Функция | Назначение |
+|---|---|
+| `$.save.save(slotOrOpts?, opts?)` / `.load(...)` | записать / прочитать слот |
+| `$.save.slot(n)` / `.dir(path?)` / `.path(slot?)` | текущий слот, каталог, путь |
+| `$.save.exists(slot?)` / `.list(opts?)` / `.info(slot?)` / `.remove(slot?)` | слоты каталога |
+| `$.save.snapshot(opts?)` / `.apply(payload, opts?)` | снимок и его применение без диска |
+| `$.save.export(opts?)` / `.import(text, opts?)` | строка JSON |
+| `$.save.autosave(ms?, slot?)` / `.stopAutosave()` | автосейв по игровому времени |
+| `$.save.counter(key, delta?)` | счётчик в `$.store` |
+| `$.save.stats()` | сводка модуля и `last_error` |
+
+`opts` записи: `world`, `store`, `speeds`, `meta`; загрузки — те же плюс
+`clear` (чистить мир перед восстановлением) и `store: 'merge'`.
+Формат слота, миграции и ограничения — [save.md](highlevel/save.md).
+
+### `$.resource` — реестр ресурсов
+
+Имена для ассетов: текстуры, спрайты, кадры листов, звуки, json/text и
+значения из кода. Загрузка ленивая, значения кэшируются по имени, у каждого
+ресурса счётчик ссылок, а `free()` выгружает его, когда ссылок не осталось.
+
+```js
+const tiles = $.resource.load('tiles', 'assets/tiles.png');          // ссылок 1
+$.resource.define('shot', { kind: 'sound', path: 'sfx/shot.wav' }); // лениво
+$.resource.get('shot');                                             // загрузка здесь
+$.resource.get('hero-sheet');                                       // массив кадров
+$.resource.preload();                                               // экран загрузки
+$.resource.free('tiles');                                           // 0 → выгружен
+```
+
+| Функция | Назначение |
+|---|---|
+| `$.resource.define(name, spec)` | описать ресурс, не загружая |
+| `$.resource.load(name, spec?)` | взять ресурс (+1 ссылка), кэш по имени |
+| `$.resource.get(name, fallback?)` | значение без ссылки (ленивая загрузка) |
+| `$.resource.reload(name)` / `.free(name)` / `.freeAll()` | перезагрузить, отпустить, выгрузить |
+| `$.resource.preload(names?)` | прогреть кэш → `{ loaded, failed, total }` |
+| `$.resource.has/names/list/stats/info/error` | состояние реестра |
+| `$.resource.remove(name)` / `.clear()` | забыть ресурс(ы) |
+
+Виды: `texture`, `sprite`, `sheet`, `sound`, `json`, `text`, `data`
+(`inferKind` выводит вид по расширению). Ограничения (движок не отдаёт API
+выгрузки текстур и звуков) — [resource.md](highlevel/resource.md).
+
+### `$.ru` — русские имена API
+
+Второй полноценный набор имён: теги, атрибуты конструктора, методы узлов и
+пространства имён. Латиница остаётся основным набором, русский — надстройкой,
+причём это **ссылки**, а не копии: `$.мир === $.world`, а `.цвет()` — та же
+функция, что `.color()`.
+
+```js
+$.мир.gravity(0, 0).bounds(0, 0, 800, 600);
+
+$('<свет>', { 'радиус': 280, 'цвет': '#ffd9a0', 'тени': true })
+    .в(200, 300).смешать('add').конус(70).добавитьВ($.мир);
+
+$('<игрок>', { id: 'герой' }).в(100, 300).скорость(220).управление('wasd')
+    .на('смерть', () => $.сцена.load('конец')).добавитьВ($.мир);
+
+$('игрок').цвет('#ffd9a0');          // селектор тоже по-русски
+```
+
+Узел при этом создаётся с **каноническим** тегом: отрисовка, селекторы,
+префабы и снимок для агента видят обычный `<light>`. Свои псевдонимы —
+`$.aliasTag('камень', 'wall')`. Таблицы имён и ограничения —
+[ru.md](highlevel/ru.md).
+
+### `$.state`, `$.signal`, `$.flow` — логика и состояния
+
+Три подсистемы про «что происходит в игре»: машина состояний, шина событий и
+сценарные последовательности. Они ничего не рисуют и не зависят от физики,
+поэтому проверяются юнит-тестами без движка.
+
+* `$.state` — FSM для узлов и игры: переходы по событиям, `guard`-условия,
+  `can()` без побочных эффектов, составные состояния, история и хуки
+  `onEnter/onExit/onTransition`. Привязка к узлу — `.fsm('hero')`, текущее
+  состояние — `$('#hero').fsm()`, событие — `$('#hero').fsmSend('jump')`.
+* `$.signal` — именованные сигналы: `on/once/off/emit/clear`, приоритеты,
+  отложенная доставка (`emit` внутри `emit` встаёт в очередь) и
+  `waitFor('x').then(...)`.
+* `$.flow` — `series/parallel/delay/after/repeat/cancel/cancelAll` поверх
+  игрового времени: пауза и `$.time.scale` на них действуют, а при
+  `--fixed-dt` прогон детерминирован.
+
+```js
+$.ready(() => {
+    $.state.create({
+        name: 'hero', initial: 'idle',
+        states: {
+            idle: { on: { jump: 'air', move: { target: 'run', guard: (m) => m.data.moving } } },
+            run:  { on: { stop: 'idle', jump: 'air' } },
+            air:  { initial: 'up', states: { up: { on: { land: 'down' } },
+                                            down: { on: { land: 'idle' } } } },
+        },
+    });
+    $('#hero').fsm('hero').fsmSend('jump');                 // сейчас air.up
+    $.state.get('#hero').onEnter('air', () => $.sound.play('whoosh'));
+
+    $.signal.on('enemy:died', (enemy, score) => {
+        $.store.set('score', ($.store.get('score') || 0) + score);
+    }, { priority: 100 });
+
+    const intro = $.flow.series([
+        400,
+        () => $.sound.play('rumble'),
+        () => $.flow.parallel([$.flow.delay(600), () => $.camera.shake(6, 300)]),
+    ]).then(() => $.log('дверь открыта'));
+
+    $.signal.on('player:died', () => intro.cancel());
+});
+```
+
+Что помнить:
+
+* **`.fsm()` — метод узла, а не `.state()`**: `.state()`/`.stateMachine()`
+  заняты анимацией клипов (`$.anim`); это разные машины, они не конфликтуют.
+* **`guard` и динамическая цель вызываются в `can()`** — побочные эффекты
+  держите в `action`/`enter`/`exit`.
+* **Потоки идут по игровому времени**, `Date.now()` нигде не используется.
+* **Сигналы живут дольше сцены**: чистите их `$.signal.clear()` при смене
+  сцены, иначе старые замыкания будут держать удалённые узлы.
+
+Подробности — [state.md](highlevel/state.md), [signal.md](highlevel/signal.md),
+[flow.md](highlevel/flow.md).
+
+### `$.dialog`, `$.screen`, `$.font` — диалоги, экраны и текст
+
+* `$.dialog` — ветвящиеся диалоги: реплики описываются данными
+  (`nodes: { start: { text, speaker, choices: [{ text, to, if, do }] } }`),
+  есть выбор по индексу и по тексту, условия на ветках, эффект печатной машинки
+  (`speed`, `skip()`), портреты, события `start/end/choice` и работа с ключами
+  `$.i18n` вместо готового текста.
+* `$.screen` — вёрстка экрана из `ui.*`-узлов без ручных координат: строки,
+  колонки, сетка, отступы, якоря, навигация фокусом с клавиатуры
+  (`next/prev/activate`) и мышью.
+* `$.font` — именованные текстовые стили (`$.font.define('hud', { size, color,
+  align })`, `$.font.apply(node, 'hud')`), чтобы не повторять одни и те же
+  параметры текста по коду. Существующие `$.gfx.text`, `.fontSize()` и `.text()`
+  не заменяются — это надстройка.
+
+```js
+$.ready(() => {
+    $.font.define('speech', { size: 22, color: '#f4e9d0', align: 'left' });
+    $.dialog.define({
+        start: { speaker: 'Ведьма', text: 'Кто здесь?',
+                 choices: [{ text: 'Я', to: 'me', do: () => $.sound.play('ui') },
+                           { text: 'Уйти', to: 'end', if: (s) => !s.flags.brave }] },
+        me:    { text: 'Свои.', to: 'end' },
+    });
+    $.dialog.play('start');
+    $.dialog.on('end', () => $.screen.open('pause'));
+
+    $.screen.define('pause', { center: true, rows: [
+        { text: 'Пауза' },
+        { text: 'Продолжить', action: () => $.screen.close() },
+        { text: 'Выход', action: () => $.scene.load('menu') },
+    ] });
+});
+```
+
+Подробности — [dialog.md](highlevel/dialog.md),
+[screen.md](highlevel/screen.md), [font.md](highlevel/font.md).
 
 Дальше: [AGENT_API.md](AGENT_API.md) — как этим управлять программой,
 [RECIPES](tutorial-platformer.md) и [API.md](API.md) — низкий уровень.
@@ -6972,22 +7318,40 @@ no-op) и даёт `test/eq/near/truthy/falsy/joined/finish`. Поэтому м�
 Уже занятые имена методов обёртки (переопределять **нельзя**):
 
 ```
-add addClass addTag alpha angle animate append appendTo applyForce applyImpulse
-at attr blend body bounce clearTweens collidesWith collision collisionCircle
-color controls damage data delay depth detach each emit every fadeIn fadeOut
-fadeTo filter first flash flip fontSize frame frames gravity has heal health
-height hide hp html intensity invulnerable is jump kill last layer layerBits
-lookAt map mask max maxHp move moveAndSlide moveTo moveTowards mute not off on
-opacity outline overlaps pause pauseTweens playSound playing prepend prependTo
-radius reduce region remove removeClass removeTag respawn resumeTweens rotate
-rotateTo scale scaleTo sequence shader shaderParam shadow shake show size slice
-some sound sprite stopAll stopAnim tag team text toggleClass trigger tween
-tweenTo value velocity visible volume wake width
+add addClass addTag align alive alpha anchor anchorPreset anchorRect anchors angle
+angleTo animate append appendTo applyForce applyImpulse at attr autotile blend blur
+body bounce burst checked children clear clearTiles clearTweens clipProgress
+clipSpeed clipTime clone closeDialog closest collidesWith collision collisionCircle
+collisions color cone contacts controls count damage data delay depth detach
+directionTo disabled distanceTo each emit emitting eq every fadeIn fadeOut fadeTo
+fill filter find first flash flicker flip focus fontSize frame frames gap get
+globalPos gravity has hasClass heal health height hide hp html index inputValue
+inside intensity invulnerable is isEmitting isNavigating isPlayingClip isVisible
+items joint jump kill last layer layerBits lookAt map mask max maxHp maxLength min
+move moveAndSlide moveTo moveTowards mute navPath navTarget navigateTo not occluders
+off offset on onFloor onWall oneWay opacity openDialog outline overlaps padding
+parallax params parent particleAt pause pauseClip pauseTweens placeholder playClip
+playSound playing pos prefab prefabClone prepend prependTo punch radius rayTo
+rebuild rect reduce region release remove removeClass removeTag repath reset respawn
+restart resumeClip resumeTweens rotate rotateTo rotation savePrefab scale scaleTo
+selectedIndex selectedItem sensor sequence setTile shader shaderParam shadow shadows
+shake shape show siblings size sizePercent slice sliderValue some sound speed sprite
+start state stateMachine stateTime states step stop stopAll stopAnim stopClip stopNav
+style tag team terrainData text theme tileAt tileLayer tileSize tilesData tilesList
+toArray toData toGlobal toLocal toState toggleClass trigger tween tweenTo value
+velocity visible volume wake width ysort
 ```
+
+> Список снят с живого движка, а не перепечатан: **227 имён**, команда —
+> `Object.getOwnPropertyNames(Object.getPrototypeOf($('<rect>'))).filter(n => n !== 'constructor')`
+> в агентском режиме. Он устаревает вместе с кодом, поэтому перед добавлением
+> своего метода сверяйтесь с ним, а не с памятью: прежняя версия этого списка
+> отставала на 86 имён, и автор подсистемы мог занять уже занятое.
 
 Геттеры: `alive angleTo children closest directionTo distanceTo find globalPos
 hasClass inside isVisible onFloor onWall parent pos rayTo rotation siblings
-toGlobal toLocal`.
+toGlobal toLocal` (плюс `state`, `stateTime`, `states`, `size` и другие —
+полный перечень выше).
 
 Правила:
 
@@ -7375,6 +7739,372 @@ build/_deps/quickjs-build/qjs tests/js/anim_test.mjs
 
 ---
 
+## `$.anim.player` — анимационный плеер: таймлайны, события, микширование
+
+<sub>источник: `docs/highlevel/animplayer.md`</sub>
+
+# `$.anim.player` — анимационный плеер: таймлайны, события, микширование
+
+Подсистема добавляет к `$` **анимационный плеер** — аналог `AnimationPlayer` в
+Godot 4.x, но 2D и в духе `$`. Она живёт в `src/highlevel/animplayer.js`,
+дополняет уже существующее пространство `$.anim` (см. [anim.md](anim.md)) и не
+заменяет ни один его метод.
+
+Что умеет:
+
+* клипы с дорожками `position`, `scale`, `rotation`, `alpha`, `color`,
+  `sprite` (кадры листа) и произвольной `value`-дорожкой (число для игры);
+* ключи со временем **в миллисекундах** и плавностью (`ease`) теми же кривыми,
+  что у твинов и клипов `anim.js`;
+* события-ключи: колбэк (`call`) или подписка (`on`) — аналог Call Method Track;
+* собственные часы плеера: `play`, `stop`, `pause/resume`, `seek`, `speed`,
+  `loop`, режимы `once` / `loop` / `pingpong`;
+* микширование двух клипов (`blend(a, b, t)`) и ручной кроссфейд по весам;
+* детерминизм: время идёт только от `dt` игрового кадра, поэтому прогон в
+  `--fixed-dt` повторяется кадр в кадр.
+
+```js
+$.ready(() => {
+    $.anim.clip('run', {
+        duration: 600,
+        loop: 'loop',
+        tracks: [
+            { type: 'position', keys: [{ t: 0, v: { x: 0, y: 0 } },
+                                       { t: 600, v: { x: 120, y: 0 }, ease: 'quadOut' }] },
+            { type: 'sprite', fps: 12, from: 0, to: 5 },
+            { type: 'event', keys: [{ t: 300, name: 'step', call: () => $.sound.play('step') }] },
+        ],
+    });
+
+    $('<sprite>', { id: 'hero' }).frames(HERO).at(0, 0).appendTo($.world);
+    $.anim.player('hero').target('#hero').play('run');
+    $.anim.player('hero').on('step', () => $.log('шаг'));
+});
+```
+
+---
+
+## Чем это отличается от `$.anim.define()` (anim.js)
+
+| | `anim.js` (`$.anim.define` / `.playClip`) | `animplayer.js` (`$.anim.clip` / `$.anim.player`) |
+|---|---|---|
+| Время ключа | доля клипа `0..1` | миллисекунды от начала |
+| Дорожка | имя свойства узла (`prop: 'x'`) | тип (`type: 'position'`) |
+| Владелец времени | узел (`node.__clip`) | плеер (часы + слоты) |
+| Перемотка | нет | `seek(ms)` |
+| Микширование | нет (есть машина состояний) | `blend(a, b, t)` |
+| События | `events: [{ at: 0..1 }]` | ключи `t` в мс, `call` и подписки |
+| Произвольное значение | `fn`-дорожка | `value`-дорожка + `player.value()` |
+| Реестр клипов | `$.anim.define/get/list` | `$.anim.clip/clipGet/clips` |
+
+Реестры **разные**: `$.anim.has('run')` не увидит клип, объявленный через
+`$.anim.clip`. Обе подсистемы можно использовать в одной игре, но не стоит
+анимировать ими одно и то же свойство одного узла — выигрывает та, что
+тикает позже (`tickAnimPlayer` идёт сразу после `tickAnim`).
+
+---
+
+## Формат клипа
+
+`$.anim.clip(name, spec)` — объявить (или переобъявить) клип. Возвращает `$`.
+Некорректное объявление бросает исключение: лучше упасть при загрузке, чем
+молча показывать неживую анимацию.
+
+| Поле | Тип | По умолчанию | Смысл |
+|---|---|---|---|
+| `duration` | число, мс | — (обязательно, `> 0`) | длина клипа |
+| `loop` | `'once' \| 'loop' \| 'pingpong'` | `'once'` | режим воспроизведения |
+| `speed` | число `>= 0` | `1` | темп клипа по умолчанию |
+| `tracks` | массив | `[]` | дорожки (см. ниже) |
+| `events` | массив | `[]` | события: `{ at, name, data, call }` |
+
+Дорожка-событие может быть и отдельным элементом `tracks`
+(`{ type: 'event', keys: [{ t, name, data, call }] }`) — такие ключи попадают
+в общий список событий клипа.
+
+### Дорожки
+
+| `type` | Значение ключа `v` | Куда пишется |
+|---|---|---|
+| `position` | `{x, y}`, `[x, y]`, число (по обеим осям) | `node.x`, `node.y` |
+| `position` + `axis: 'x' \| 'y'` | число | только `node.x` или `node.y` |
+| `scale` | `{x, y}` или число (равномерно) | `node.scale_x`, `node.scale_y` |
+| `rotation` (он же `angle`) | число, радианы | `node.angle` |
+| `alpha` (он же `opacity`) | число `0..1` | `node.alpha` |
+| `color` (он же `tint`) | `'#rgb'`, `'#rrggbb'`, `'#rrggbbaa'`, `'red'`, `[r,g,b,a]` | `node.color` |
+| `sprite` | индекс кадра | `node.sprite`, `node.frame_index` |
+| `value` | число | в плеер (`player.value(name)`) |
+| `event` | — (ключ с `name`) | колбэк `call` и подписки |
+
+Поля дорожки:
+
+| Поле | Для чего | Смысл |
+|---|---|---|
+| `keys` | все | массив `{ t, v, ease }`, `t` — **миллисекунды** |
+| `axis` | `position` | `'x'` или `'y'` — писать одну ось |
+| `name` / `key` / `prop` | `value` | имя значения в `player.value(name)` |
+| `attr` | `value` | `true` — писать ещё и в `node.attrs[name]` |
+| `from`, `to` | `sprite` | диапазон кадров листа (`to: -1` — последний) |
+| `fps` | `sprite` | кадры листаются по кругу со скоростью `fps` |
+| `once` | `sprite` | `true` — без зацикливания, встать на `to` |
+
+Сокращения при объявлении: тип можно не писать, если указан привычный
+`prop` (`x`, `y`, `scale`, `angle`, `alpha`, `color`, `sprite`); `prop` с любым
+другим именем (`prop: 'hp'`) — это `value`-дорожка с записью в `node.attrs`.
+Ключ с `name` вместо `v` считается ключом-событием.
+
+### Плавности (`ease`)
+
+Те же кривые, что у твинов (`tween.js`) и клипов `anim.js`: `linear`, `quadIn`,
+`quadOut`, `quadInOut`, `cubicIn/Out/InOut`, `quartIn/Out/InOut`,
+`sineIn/Out/InOut`, `backIn/Out/InOut`, `elasticIn/Out`, `bounceIn/Out`, `in`,
+`out`, `inOut`, `step` и длинные имена (`easeOutQuad`, …). Своей таблицы кривых
+модуль не заводит: короткие имена переводит `chooseEase` из `anim.js`, а сами
+кривые — `easeFunction` из `tween.js`.
+
+Плавность берётся у ключа-назначения (правого), а если её там нет — у левого:
+
+```js
+[{ t: 0, v: 0 }, { t: 600, v: 100, ease: 'quadOut' }]   // ease «на приезде»
+[{ t: 0, v: 0, ease: 'quadIn' }, { t: 600, v: 100 }]    // ease «на выезде»
+```
+
+### События
+
+```js
+$.anim.clip('attack', {
+    duration: 400,
+    events: [
+        { at: 0,   name: 'swing' },                                   // сработает сразу в play()
+        { at: 200, name: 'hit', data: { power: 7 },
+          call: (e) => $.log('удар', e.data.power) },                 // прямой вызов
+    ],
+});
+```
+
+* событие срабатывает ровно один раз — когда время плеера пересекает его
+  момент в интервале `(прошлое, текущее]`;
+* в `loop`/`pingpong` событие повторяется каждый проход (его моменты —
+  `at + n * duration`); событие `at: 0` — на каждом стыке циклов;
+* у подписчика приходит `{ name, data, at, clip, clipName, player }`;
+* сообщение приходит и как общее `'event'`, и под своим именем;
+* `seek()` события **не** вызывает: это прыжок. Нужно доиграть — `seek(ms, { fire: true })`;
+* `stop()` отменяет всё: после остановки события не приходят.
+
+---
+
+## Плееры
+
+### `$.anim.player(name)`
+
+Плеер по имени (создаётся при первом обращении). Без имени — плеер по
+умолчанию (`'main'`), тот же, на который смотрит фасад `$.anim.play/stop/…`.
+
+### Методы плеера
+
+| Метод | Что делает |
+|---|---|
+| `.target(узел \| '#id' \| селектор \| обёртка)` | привязать цель; без аргумента — геттер |
+| `.play(clip, opts)` | играть клип; `opts`: `slot`, `weight`, `loop`, `speed`, `restart`, `time`, `offset`, `onEnd` |
+| `.blend(a, b, t, opts)` | кроссфейд: `t = 0` — только `a`, `t = 1` — только `b` |
+| `.stop(clipName?)` | без имени — остановить всё и сбросить часы; с именем — один клип |
+| `.pause()` / `.resume()` / `.paused()` | пауза часов |
+| `.seek(ms, { fire })` | перемотка на `ms` от начала клипа |
+| `.speed(x)` / `.speed()` | множитель скорости часов (`x >= 0`) |
+| `.loop(true \| false \| 'once' \| 'loop' \| 'pingpong' \| null)` | режим повтора; без аргумента — геттер |
+| `.playing()` | играет ли что-нибудь (на паузе — тоже `true`) |
+| `.time()` | время внутри клипа, мс `0..duration` |
+| `.total()` | часы плеера целиком, мс (со всеми проходами) |
+| `.clip()` / `.clipNames()` | имя основного клипа / всех играющих |
+| `.value(name, fallback?)` | значение `value`-дорожки (`0`, если её нет) |
+| `.values()` | все значения последнего кадра |
+| `.weight(slot, x?)` | вес слота: геттер/сеттер для ручного кроссфейда |
+| `.on(event, fn)` | подписка; возвращает **функцию отписки** |
+| `.off(event, fn?)` | снять обработчик(и) |
+| `.destroy()` | плеер больше не тикает, подписки снимаются |
+
+Повторный `.play()` того же клипа не сбрасывает время (как `.playClip()` в
+`anim.js`): игровой код может звать его каждый кадр без «дёрганья». Нужен
+сброс — `{ restart: true }`.
+
+### Фасад `$.anim.*` (плеер по умолчанию)
+
+| Метод | Что делает |
+|---|---|
+| `$.anim.target(x)` | задать цель плеера по умолчанию |
+| `$.anim.play(name, opts)` | играть клип |
+| `$.anim.blend(a, b, t, opts)` | кроссфейд |
+| `$.anim.stop(clipName?)` / `$.anim.stopAll()` | остановить клип / все плееры |
+| `$.anim.pause()` / `$.anim.resume()` / `$.anim.paused()` | пауза часов |
+| `$.anim.seek(ms, opts)` | перемотка |
+| `$.anim.speed(x?)` | скорость: сеттер (цепочка) или геттер |
+| `$.anim.loop(v?)` | режим повтора: сеттер или геттер |
+| `$.anim.playing()` / `$.anim.time()` / `$.anim.totalTime()` | состояние |
+| `$.anim.clipName()` | имя играющего клипа |
+| `$.anim.value(name, fallback?)` / `$.anim.values()` | значения дорожек |
+| `$.anim.on(event, fn)` / `$.anim.off(event, fn?)` | подписки (возвращают отписку / `$.anim`) |
+
+Методы-сеттеры возвращают `$.anim`, поэтому цепочки работают:
+
+```js
+$.anim.target('#hero').play('run').speed(2);
+```
+
+### Реестр клипов плеера
+
+| Метод | Что делает |
+|---|---|
+| `$.anim.clip(name, spec)` | объявить клип, возвращает `$` |
+| `$.anim.clipGet(name)` | нормализованный клип или `null` |
+| `$.anim.clips()` | имена клипов плеера |
+| `$.anim.removeClip(name)` | удалить клип, `true` если он был |
+| `$.anim.clearClips()` | очистить реестр, возвращает `$` |
+| `$.anim.players()` | имена созданных плееров |
+| `$.anim.defaultPlayer()` | плеер по умолчанию |
+| `$.anim.clearPlayers()` | остановить и забыть все плееры |
+
+---
+
+## Примеры
+
+### 1. Ходьба с событием шага и сменой кадров
+
+```js
+$.ready(() => {
+    $.anim.clip('walk', {
+        duration: 800,
+        loop: 'loop',
+        tracks: [
+            { type: 'sprite', fps: 10, from: 0, to: 7 },
+            { type: 'position', axis: 'x', keys: [{ t: 0, v: 0 }, { t: 800, v: 160 }] },
+        ],
+        events: [{ at: 400, name: 'step' }],
+    });
+
+    $('<sprite>', { id: 'hero' }).frames({ src: 'hero.png', cols: 8, rows: 1, cw: 32, ch: 32 })
+        .at(0, 200).appendTo($.world);
+
+    const hero = $.anim.player('hero').target('#hero').play('walk');
+    hero.on('step', () => $.sound.play('step'));
+});
+```
+
+### 2. Одноразовая анимация двери + value-дорожка
+
+```js
+$.anim.clip('door', {
+    duration: 500,
+    tracks: [{ type: 'rotation', keys: [{ t: 0, v: 0 }, { t: 500, v: -1.57, ease: 'quadOut' }] }],
+    events: [{ at: 500, name: 'opened' }],
+});
+
+$.anim.clip('stamina', {
+    duration: 1000,
+    loop: 'loop',
+    tracks: [{ type: 'value', name: 'energy', attr: true,
+               keys: [{ t: 0, v: 100 }, { t: 1000, v: 0 }] }],
+});
+
+$.anim.player('door').target('#door').play('door', {
+    onEnd: () => $.log('дверь открыта'),
+});
+
+const hud = $.anim.player('stamina').target('#hud').play('stamina');
+$.update(() => { $('#bar').value(hud.value('energy') / 100); });
+```
+
+### 3. Кроссфейд ходьбы и бега
+
+```js
+const p = $.anim.player('hero').target('#hero');
+p.play('walk', { slot: 'walk' });
+p.play('run', { slot: 'run', weight: 0 });
+
+$.update((dt) => {
+    const speed = Math.abs($('#hero').velocity().x);
+    const t = Math.max(0, Math.min(1, (speed - 60) / 140));
+    p.weight('walk', 1 - t);
+    p.weight('run', t);
+    // или одной строкой, с обнулением часов:
+    // p.blend('walk', 'run', t);
+});
+```
+
+---
+
+## Чистые функции (для тестов и инструментов)
+
+Экспортируются из `src/highlevel/animplayer.js`, движка не требуют:
+
+| Функция | Что делает |
+|---|---|
+| `normalizeTimeline(name, spec)` | проверка и нормализация объявления клипа |
+| `normalizeTimelineTrack(raw, duration, clipName)` | одна дорожка в каноническом виде |
+| `normalizeTimelineKeys(keys, duration, type, raw)` | ключи: мс, сортировка, зажим, канонизация |
+| `normalizeEvent(raw, duration)` | событие `{ at, name, data, call }` |
+| `trackType(raw)` | тип дорожки (с синонимами и выводом по `prop`) |
+| `canonicalKeyValue(type, axis, key)` | значение ключа нужного вида |
+| `playerEase(ease)` | функция плавности по имени/функции |
+| `sampleKeysAt(keys, ms)` | значение дорожки на момент (число, вектор, цвет) |
+| `spriteFrameAt(track, ms, frameCount)` | индекс кадра для дорожки `sprite` |
+| `timelineValuesAt(clip, ms, frameCount)` | значения всех дорожек клипа |
+| `playheadState(ms, duration, loop)` | `{ position, phase, cycle, ended }` |
+| `eventsBetweenTimes(events, from, to, duration, loop)` | события интервала `(from, to]` |
+| `blendValues(entries, discrete)` | смешивание значений по весам |
+| `writeTrackValue(node, track, value)` | запись значения дорожки в узел |
+| `lerpValue(a, b, k)` / `cloneValue(v)` | интерполяция и копия значения |
+| `unpackRgba(packed)` / `packRgba(rgba)` | цвет ↔ `[r,g,b,a]` |
+| `resolveTarget(value)` | узел/обёртка/селектор → узел |
+| `getPlayer(name)` / `advancePlayer(player, ms)` | плеер по имени / шаг одного плеера |
+| `tickAnimPlayer(dt)` | шаг всех плееров (вызывается из `api.js`) |
+| `installAnimPlayer($)` | установка подсистемы |
+
+Проверка без сборки движка (36 проверок):
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/animplayer_test.mjs
+```
+
+---
+
+## Подключение
+
+Модуль ставится в `api.js` (это делает интегратор, один писатель на файл):
+
+```js
+import { installAnimPlayer, tickAnimPlayer } from './animplayer.js';
+// …
+installAnim($);
+installAnimPlayer($);          // сразу после installAnim: дополняет $.anim
+// …
+tickAnim(dt);
+tickAnimPlayer(dt);            // сразу после tickAnim
+```
+
+Интеграционная проверка — `tests/agent/highlevel_animplayer_test.py`
+(фикстура `tests/fixtures/animplayer`).
+
+---
+
+## Ограничения (честно)
+
+| Чего нет | Почему / что делать |
+|---|---|
+| Обратного хода часов | `speed(x)` принимает только `x >= 0`: реверс ломает «событие ровно один раз». Для движения туда-обратно — `loop: 'pingpong'` |
+| Кроссфейда кадров спрайта | Кадр дискретен: в `blend()` он берётся у клипа с большим весом, промежуточного кадра не бывает |
+| Аддитивного/слоёного смешивания | Микширование — взвешенное среднее по весам; режимов `add`/`mix` как в `AnimationTree` нет |
+| Вложенных плееров и IK | Не реализованы: один плеер = одна цель-узел |
+| Вложенных дорожек (sub-tracks) и кривых Безье | Интерполяция линейная между ключами + `ease`; своих кривых у ключа нет |
+| Точности события внутри кадра | Событие срабатывает в кадре, где время его пересекло; внутри одного клипа порядок — по времени события, между клипами кроссфейда — по порядку слотов |
+| Автоматического переноса тела Box2D | `position` пишет `node.x/node.y` напрямую, как в `anim.js`: анимация не телепортирует физику |
+| Остановки вместе с `$.time.pause()` | Плеер тикает по сырому `dt` кадра (как `anim.js`): пауза времени на него не действует, для паузы есть `player.pause()` |
+| Своего отрисовщика/тега | Подсистема не рисует ничего своего: пишет поля узла, которые читает общая отрисовка |
+| Отмены отдельных событий клипа | Отписка (`off`/функция от `on`) или `stop()` целиком |
+| Спрайтов без листа | Дорожка `sprite` работает с `node.frames` (`.frames(...)`); если кадров нет, индекс считается, но `node.sprite` не меняется |
+
+
+---
+
 ## Аудио-шины и эффекты — `$.audio`
 
 <sub>источник: `docs/highlevel/audiobus.md`</sub>
@@ -7749,6 +8479,775 @@ $.audio.damping({ radius: 34, strength: 0.2, max: 0.85,
 
 ---
 
+## `$.csv` — CSV/TSV и безопасный JSON
+
+<sub>источник: `docs/highlevel/csv.md`</sub>
+
+# `$.csv` — CSV/TSV и безопасный JSON
+
+Разбор и сборка таблиц: баланс оружия, диалоги, уровни, локализация — всё это
+удобно держать в CSV рядом с игрой. Разборщик самодостаточный: кавычки,
+удвоенные кавычки, переводы строк внутри поля, автовыбор разделителя и
+первая строка как заголовки.
+
+Заодно здесь живут JSON-помощники, которые **не бросают исключений**: битый
+файл даёт запасное значение и понятную запись в журнал. Движок JSON умеет
+(`JSON.parse`), но выразить «разобрать или вернуть запасное» из игры нечем.
+
+```js
+const text = $.fs.readText('data/weapons.csv');
+const weapons = $.csv.parseTable(text);          // [{ name: 'меч', damage: '10' }, …]
+$.csv.parse(text);                               // [[...], [...]] — как есть, с заголовком
+$.csv.stringify(rows, { delimiter: '\t' });      // собрать TSV обратно
+
+const save = $.csv.jsonParse($.fs.readText('save.json'), { level: 1, hp: 100 });
+$.fs.write('save.json', $.csv.jsonStringify(save, true));
+```
+
+Проверка без движка:
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/csv_test.mjs
+```
+
+---
+
+## 1. Разбор
+
+### `$.csv.parse(text, opts?) → string[][]`
+
+Возвращает все строки, каждая строка — массив полей (всегда строки).
+
+| Опция | По умолчанию | Смысл |
+|---|---|---|
+| `delimiter` | автоопределение | Один символ-разделитель: `,`, `;`, `\t`, `|` |
+| `trim` | `false` | Обрезать пробелы у полей |
+| `skipEmptyLines` | `false` | Выбросить полностью пустые строки |
+
+Правила разбора:
+
+* `"` в начале поля открывает кавычки; внутри кавычек разделители и переводы
+  строк не действуют, а `""` превращается в одну кавычку;
+* `\n`, `\r\n` и одиночный `\r` считаются одним переводом строки;
+* последний перевод строки не создаёт лишнюю пустую запись, а настоящая
+  пустая строка в середине (`a\n\nb`) — создаёт;
+* пустой текст даёт `[]`;
+* незакрытая кавычка не ошибка: поле берётся как есть — битый файл лучше
+  показать целиком, чем потерять данные.
+
+```js
+$.csv.parse('a,"b,c"\n1,2');
+// → [['a', 'b,c'], ['1', '2']]
+
+$.csv.parse('первая,"строка\nвнутри"');
+// → [['первая', 'строка\nвнутри']]      — одна запись, а не две
+```
+
+### `$.csv.detectDelimiter(text) → string`
+
+Определяет разделитель по первой строке, **не считая вхождения внутри
+кавычек**. Кандидаты: `,`, `;`, `\t`, `|` (при равенстве побеждает запятая).
+Если разделителей нет — возвращает запятую.
+
+```js
+$.csv.detectDelimiter('a;b;c');       // ';'
+$.csv.detectDelimiter('"a,b";c');     // ';' — запятая внутри кавычек не считается
+```
+
+### `$.csv.parseTable(text, opts?) → object[]`
+
+Первая строка — имена полей, остальные — данные. Недостающие поля
+добиваются пустой строкой, поэтому у всех объектов один набор ключей.
+Опции те же, что у `parse`, плюс:
+
+* `keys` — свой список имён: тогда первая строка тоже считается данными;
+* пустой заголовок получает имя `col1`, `col2`…, повтор — суффикс `_2`.
+
+```js
+$.csv.parseTable('name,damage\nмеч,10\nщит,5');
+// → [{ name: 'меч', damage: '10' }, { name: 'щит', damage: '5' }]
+
+$.csv.parseTable('1,2\n3,4', { keys: ['x', 'y'] });
+// → [{ x: '1', y: '2' }, { x: '3', y: '4' }]
+```
+
+## 2. Сборка
+
+### `$.csv.stringify(rows, opts?) → string`
+
+| Опция | По умолчанию | Смысл |
+|---|---|---|
+| `delimiter` | `','` | Разделитель (`'\t'` — для TSV) |
+| `eol` | `'\n'` | Перевод строки (`'\r\n'` — для Excel) |
+| `header` | — | Массив имён: печатается первой строкой |
+
+Строки могут быть массивами или объектами. Если задан `header`, объекты
+берут значения по этим именам (иначе — по своим ключам).
+
+Кавычки ставятся только когда нужны: внутри разделитель, кавычка, перевод
+строки или пробелы по краям. `null`/`undefined` → пустое поле, объект → JSON,
+остальное → `String`. `parse(stringify(rows))` возвращает исходные строки.
+
+```js
+$.csv.stringify([['a,b', 'c"d']]);                     // '"a,b","c""d"'
+$.csv.stringify([{ name: 'меч', damage: 10 }], { header: ['name', 'damage'] });
+// 'name,damage\nмеч,10'
+```
+
+### `$.csv.quoteField(value, delimiter?) → string`
+
+Экранирует одно поле — полезно, когда таблица собирается по частям вручную.
+
+## 3. JSON без исключений
+
+| Функция | Назначение |
+|---|---|
+| `$.csv.jsonParse(text, fallback?) → any` | Разобрать JSON; при ошибке вернуть `fallback` (по умолчанию `null`) |
+| `$.csv.jsonStringify(value, pretty?) → string \| null` | Собрать JSON; при невозможности — `null` |
+
+Оба пишут в журнал движка, что именно не так (с началом текста или причиной),
+и никогда не роняют игру. `pretty` — `true` или число пробелов отступа.
+`jsonStringify` возвращает `null`, если в данных ссылка на себя, `BigInt`,
+функция или `undefined`.
+
+```js
+const cfg = $.csv.jsonParse($.fs.readText('config.json'), { volume: 1 });
+$.fs.write('config.json', $.csv.jsonStringify(cfg, true));
+```
+
+## 4. Установка
+
+```js
+import { installCsv } from './csv.js';
+installCsv($);       // $.csv = { parse, parseTable, stringify, … }
+```
+
+Чистые функции экспортируются наружу и проверяются qjs без движка: `parse`,
+`parseTable`, `stringify`, `detectDelimiter`, `quoteField`, `jsonParse`,
+`jsonStringify`.
+
+## 5. Ограничения
+
+| Чего нет | Почему / что делать |
+|---|---|
+| Чтения и записи файлов | Это `$.fs`; `$.csv` работает с текстом — так его можно проверить без диска |
+| Комментариев (`#`) и произвольных кавычек (`'`) | RFC 4180 знает только `"`; комментарии отфильтруйте до разбора |
+| Типизации значений | Все поля — строки: `'10'`, а не `10`. Преобразуйте сами (`Number(row.damage)`) или через `$.csv.jsonParse` |
+| Вложенных структур в CSV | Для сложных данных берите JSON: `$.csv.jsonParse`/`jsonStringify` |
+| Потокового разбора огромных файлов | Текст читается целиком; для мегабайтных таблиц лучше бинарный формат |
+| Автоопределения кодировки | Только UTF-8, как везде в движке |
+
+
+---
+
+## Диалоги — `$.dialog`
+
+<sub>источник: `docs/highlevel/dialog.md`</sub>
+
+# Диалоги — `$.dialog`
+
+Подсистема `dialog.js` — ветвящиеся диалоги и квестовые реплики: реплики NPC,
+выборы игрока, условия на ветках, печатная машинка и панель с портретом,
+именем и кнопками выбора. Диалог описывается данными, состояние ведёт модуль:
+
+```js
+$.ready(() => {
+    $.dialog.define('guard', {
+        start: 'hello',
+        nodes: {
+            hello: {
+                speaker: 'Стражник', portrait: 'art/guard.png',
+                text: 'Стой! Кто идёт?',
+                choices: [
+                    { text: 'Я свой', to: 'pass', if: 'has_pass' },
+                    { text: 'Уйти', to: null, do: () => $.store.set('left', true) },
+                ],
+            },
+            pass: { text: 'Проходи.', to: 'bye' },
+            bye:  { text: 'Не задерживайся.', to: null },
+        },
+    });
+
+    $.dialog.play('guard');
+    $.dialog.on('end', (e) => $.store.set('talking', false));
+});
+```
+
+---
+
+## 1. Формат данных
+
+`$.dialog.define(id, spec)`:
+
+| Поле | Тип | По умолчанию | Смысл |
+|---|---|---|---|
+| `nodes` | объект | — (обязательно) | реплики: `id → описание` |
+| `start` | string | `'start'`, иначе первый ключ `nodes` | с какой реплики начинать |
+| `speaker` | string | — | имя говорящего для всех реплик |
+| `portrait` | string | — | путь к портрету для всех реплик |
+| `speed` | number | 40 | скорость печатной машинки (символов в секунду) |
+| `style` | string | — | стиль `$.font` для текста диалога |
+
+Описание реплики (`nodes[id]`):
+
+| Поле | Тип | Смысл |
+|---|---|---|
+| `text` | string \| string[] \| функция | текст; массив — страницы (`next()` листает), функция вызывается при входе в реплику |
+| `speaker` | string | имя говорящего (переводится, если это ключ `$.i18n`) |
+| `portrait` | string | путь к портрету |
+| `choices` | массив | варианты ответа (§2) |
+| `to` | string \| null | куда идти после реплики; `null` — конец диалога |
+| `next` | string | то же, что `to`, но слабее: используется, если `to` не задан |
+| `if` / `when` | функция \| bool \| string | условие показа реплики; ложь — реплика пропускается, переход по её `to`/`next` |
+| `do` / `onEnter` | функция | что выполнить при входе в реплику |
+| `speed` | number | своя скорость печати этой реплики |
+| `style` | string | свой стиль `$.font` |
+
+Вариант ответа (`choices[i]`):
+
+| Поле | Тип | Смысл |
+|---|---|---|
+| `text` | string | подпись кнопки (ключ `$.i18n` переводится) |
+| `to` | string \| null | куда идти после выбора; `null` или отсутствие — конец диалога |
+| `if` / `when` | функция \| bool \| string | условие видимости варианта |
+| `do` | функция | что выполнить при выборе |
+| `action` | string | метка для события `choice` |
+
+## 2. Условия
+
+`if` понимает три формы:
+
+```js
+if: () => $.store.get('level') > 3      // предикат: исключение = ложь + лог
+if: true                                 // константа
+if: 'has_pass'                           // флаг: $.dialog.flag('has_pass') → $.store.get('has_pass')
+```
+
+Строка-флаг ищется сначала среди `$.dialog.flag()`, затем в `$.store`. Условие
+на реплике, если оно ложно, **не показывает** её: переход идёт по `to`/`next`
+этой же реплики (цепочка пропусков ограничена 32 шагами — на случай цикла).
+
+## 3. Функции `$.dialog`
+
+| Функция | Назначение |
+|---|---|
+| `$.dialog.define(id, spec)` | объявить диалог |
+| `$.dialog.has(id)` / `list()` / `remove(id)` | реестр диалогов |
+| `$.dialog.play(id, nodeId?)` | начать диалог или конкретную реплику; `true`, если реплика открылась |
+| `$.dialog.next()` | дальше: допечатать / следующая страница / `to`/`next` / конец |
+| `$.dialog.choose(i)` | выбрать вариант по номеру **видимого** списка (с нуля) |
+| `$.dialog.chooseByText(text)` | выбрать по подписи (точное совпадение, затем без учёта регистра) |
+| `$.dialog.skip()` | допечатать текущую страницу целиком |
+| `$.dialog.close()` | закрыть диалог (`end` с reason `manual`) |
+| `$.dialog.isOpen()` / `isTyping()` | открыт ли диалог и печатается ли текст |
+| `$.dialog.node()` / `definition()` | id текущей реплики и диалога |
+| `$.dialog.page()` / `pageCount()` | номер страницы (с нуля) и их число |
+| `$.dialog.text()` | видимый (напечатанный) текст страницы |
+| `$.dialog.fullText()` | полный текст страницы |
+| `$.dialog.speaker()` / `portrait()` | имя говорящего и путь к портрету |
+| `$.dialog.choices()` | `[{ index, text, to, action }]` — только видимые; `index` — позиция в исходном массиве |
+| `$.dialog.choiceFocus()` / `focusChoice(step)` | подсвеченный вариант и его сдвиг по кругу |
+| `$.dialog.speed(v)` | скорость печатной машинки: геттер/сеттер |
+| `$.dialog.vars(obj)` | параметры подстановки переводов: `{name}`, `{n}` |
+| `$.dialog.flag(name, value)` | свой флаг для условий; без значения — снять, без аргументов — все флаги |
+| `$.dialog.visibleChoices()` | видимые варианты «как есть» (с `do`); для тестов и агента |
+| `$.dialog.panel()` | обёртка панели диалога или `null` |
+| `$.dialog.on(name, fn)` / `off(name, fn)` | подписки на события |
+| `$.dialog.listenerCount(name)` | сколько подписчиков (для тестов) |
+
+`play()` с одним аргументом: если имя совпало с объявленным диалогом — играем с
+его `start`, иначе это id реплики последнего открытого диалога.
+
+## 4. События
+
+| Событие | Когда | `data` |
+|---|---|---|
+| `start` | `play()` открыл диалог | `{ definition, node }` |
+| `line` | показана реплика или её новая страница | `{ id, text, fullText, page, pages, speaker, portrait, definition }` |
+| `typed` | страница допечатана (сама или через `skip()`) | `{ id, text }` |
+| `choice` | игрок выбрал вариант | `{ index, text, to, action }` |
+| `end` | диалог закончился: `reason` = `'end'` (дошли до конца), `'missing'` (нет реплики), `'skipped'`, `'loop'`, `'manual'` (закрыли), `'restart'`, `'removed'` | `{ reason, definition, node }` |
+| `close` | сразу после `end` | то же |
+
+Состояние сбрасывается **до** событий, поэтому обработчик `end` может сразу
+начать новый диалог.
+
+## 5. Печатная машинка
+
+* скорость — символов в секунду: у реплики `speed` → у диалога → `$.dialog.speed()`
+  (по умолчанию 40);
+* текст печатается в `tickDialog(dt)` — его вызывает кадровый цикл `api.js`;
+* `skip()` допечатывает страницу, `next()` сначала допечатывает, а следующим
+  вызовом идёт дальше (защита от «пролистывания» случайным Enter);
+* подсчёт идёт по кодпойнтам, поэтому эмодзи и суррогатные пары не рвутся;
+* когда печатать нечего (`text: ''`), событие `typed` приходит сразу.
+
+## 6. Переводы (`$.i18n`)
+
+Текст, имя говорящего и подписи вариантов переводится, **если строка совпала с
+ключом словаря** (`$.i18n.has(str)`); иначе строка остаётся как есть:
+
+```js
+$.i18n.add('ru', { 'dlg.greet': 'Привет, {name}!' });
+$.dialog.define('greet', { nodes: { start: { text: 'dlg.greet', to: null } } });
+
+$.dialog.vars({ name: 'Игрок' });
+$.dialog.play('greet');       // «Привет, Игрок!»
+```
+
+Подстановка `{name}` — штатная `i18n.tr(key, params)`, поэтому имена параметров
+те же, что и в остальном API.
+
+## 7. Как выглядит диалог
+
+Модуль сам создаёт узлы интерфейса (на `play()`, уничтожает при закрытии):
+
+| id узла | Тег | Назначение |
+|---|---|---|
+| `__dialog` | `ui.panel` | панель внизу окна по центру |
+| `__dialog_portrait` | `ui.image` | портрет 96×96 слева (скрыт, если портрета нет) |
+| `__dialog_speaker` | `ui.label` | имя говорящего |
+| `__dialog_line0…3` | `ui.label` | до четырёх строк текста с переносом по словам |
+| `__dialog_choice0…5` | `ui.button` | до шести кнопок выбора |
+
+Панель растёт под число видимых вариантов; подсвеченный вариант рисуется
+цветом `hoverColor`. Размеры берутся из окна, при смене размера панель
+пересчитывается на следующем кадре.
+
+## 8. Клавиатура и мышь
+
+* `↑`/`↓` — подсветка варианта по кругу, `Enter`/`Space` — выбрать подсвеченный
+  (а если вариантов нет — следующая реплика);
+* `Escape` — закрыть диалог;
+* клик мышью по кнопке выбора шлёт обычный `click` (его обрабатывает `ui.js`),
+  `tickDialog` только переводит на неё подсветку;
+* при `play()` снимается фокус `widgets.js` (`$.ui.blur()`), иначе Enter нажал
+  бы и вариант диалога, и узел, оставшийся в фокусе.
+
+## 9. Ограничения
+
+* диалог **не сохраняется**: `save.js` о нём не знает — состояние разговора
+  нужно восстанавливать игрой (`$.dialog.play(id, nodeId)` для возврата к реплике);
+* текст рисуется максимум четырьмя строками без прокрутки; длинный текст лучше
+  резать на страницы массивом;
+* анимации портрета нет: спрайт грузится через `setSprite` один раз на реплику;
+* функция в `text` вызывается в момент входа в реплику, а не каждый кадр;
+* `choose(i)` нумерует **видимые** варианты; исходные индексы отдаёт
+  `$.dialog.choices()[i].index`;
+* диалог один на процесс: `play()` при открытом диалоге закрывает прежний
+  (`end` с reason `'restart'`);
+* ввод мира диалог не блокирует — это забота игры (`$.time.pause()`);
+* печатную машинку двигает `tickDialog(dt)`: если его не подключить в
+  `api.js`, текст просто не будет печататься по кадрам (всё остальное
+  работает).
+
+## 10. Проверка
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/dialog_test.mjs
+python3 tests/agent/highlevel_dialog_test.py    # интеграция, после сборки
+```
+
+Покрыто: чистое ветвление и условия (функция/bool/флаг), индексы выборов,
+печатная машинка и `skip()`, страницы текста, ветки `to`/`next`/`null`,
+`choose`/`chooseByText`, события `start/line/typed/choice/end/close`, перевод
+ключей, портрет и имя, пропуск реплики с ложным условием, клавиатура и
+раскладка панели.
+
+
+---
+
+## Потоки и таймеры — `$.flow`
+
+<sub>источник: `docs/highlevel/flow.md`</sub>
+
+# Потоки и таймеры — `$.flow`
+
+`flow.js` — сценарные последовательности поверх игрового времени: «подожди,
+открой дверь, подожди, закрой», «запусти три волны параллельно», «повтори
+пять раз с паузой». Всё расписание живёт на `$.time`, поэтому пауза
+останавливает потоки, а `$.time.scale` их ускоряет. `Date.now()` и `setTimeout`
+не используются: при `--fixed-dt` прогон детерминирован — одни и те же кадры
+дают один и тот же порядок вызовов.
+
+```js
+$.ready(() => {
+    $.flow.series([
+        () => $.sound.play('rumble'),           // шаг
+        400,                                     // пауза 400 мс игрового времени
+        () => doorOpen(),                        // ещё шаг
+        () => $.flow.parallel([                  // шаг, который ждёт параллель
+            $.flow.delay(600),
+            () => $.camera.shake(6, 300),
+        ]),
+    ]).then(() => $.log('дверь открыта'));
+
+    // Отмена по условию — одной строкой:
+    $.signal.on('player:died', () => $.flow.cancelAll());
+});
+```
+
+---
+
+## 1. Чем отличается от `$.time.after` / `$.time.every` / `$.sequence`
+
+| | `$.time.after/every` | `$.sequence([...])` | `$.flow` |
+|---|---|---|---|
+| Отмена | по id таймера | нет | хендл отменяет поток **вместе с вложенными** |
+| Результат / цепочки | нет | нет | `then()` возвращает новый хендл |
+| Параллельность | вручную | нет | `parallel` |
+| Повторы | `every(ms, fn)` | нет | `repeat(n, fn)` |
+| Шаг «не раньше кадра» | — | шаги слипаются в один кадр | каждый шаг — отдельный кадр |
+| Время | игровое | игровое | игровое |
+
+`$.time.after` и `$.time.every` никуда не делись — они про «просто таймер».
+`$.flow` нужен там, где таймеров становится несколько и их надо отменять
+вместе.
+
+---
+
+## 2. Хендл потока
+
+`series`, `parallel`, `delay`, `after`, `repeat` возвращают **хендл**:
+
+| Метод / поле | Смысл |
+|---|---|
+| `.then(onOk, onErr)` | новый хендл; `onOk(value, handle)` — когда поток завершился |
+| `.catch(onErr)` | только ошибка |
+| `.cancel(reason?)` | отменить поток |
+| `.done()` | поток завершён (успех, ошибка или отмена) |
+| `.isPending()` / `.isDone()` / `.isFailed()` / `.isCancelled()` | состояние |
+| `.value` | значение результата (у `series`/`parallel` — массив) |
+| `.error` | `Error` при провале или отмене |
+| `.state` | `'pending' \| 'done' \| 'failed' \| 'cancelled'` |
+| `.toJSON()` | сводка `{ kind, state }` — хендлы ссылаются друг на друга, поэтому без неё `JSON.stringify` падал бы |
+
+Правила отмены:
+
+* отмена родителя отменяет **вложенные** потоки, которые он запустил;
+* отмена хвоста цепочки (`delay(100).then(f).cancel()`) отменяет и её начало —
+  иначе таймер дожил бы до конца «в пустоту»;
+* `cancel()` безопасен: повторный вызов и отмена завершённого дают `false`;
+* `$.flow.cancelAll()` снимает всё расписание (и потоки, и отдельные задержки).
+
+---
+
+## 3. Шаги
+
+Шагом может быть:
+
+| Шаг | Пример | Поведение |
+|---|---|---|
+| число | `250` | пауза в мс игрового времени |
+| функция | `() => door.open()` | вызывается сразу; результат обрабатывается (см. ниже) |
+| хендл | `$.flow.delay(100)` | поток ждёт его завершения |
+| `Promise` | `fetch(...)` | ждёт (завершится в микротаске, вне кадра) |
+
+Результат функции-шага:
+
+| Вернула | Что делает поток |
+|---|---|
+| число | пауза на это число мс (в `value` не попадает) |
+| хендл / `Promise` | ждёт завершения |
+| что угодно ещё | шаг завершён, значение попадает в `value` |
+| `undefined` / `null` | шаг завершён |
+
+```js
+const h = $.flow.series([
+    () => 'раз',            // value: ['раз']
+    100,                    // пауза
+    () => $.flow.delay(50), // ждём вложенный поток
+    () => 42,               // это ПАУЗА 42 мс, а не значение
+]);
+h.then((values) => $.log(values));   // ['раз']
+```
+
+В `then` число — это **значение** (задержку оформляйте `$.flow.delay(n)`), в
+шагах — **пауза**. Это разные вещи, и путать их не стоит.
+
+---
+
+## 4. Публичное API
+
+| Функция | Возвращает | Назначение |
+|---|---|---|
+| `$.flow.series(steps)` | хендл | шаги по очереди; `value` — массив результатов |
+| `$.flow.parallel(steps)` | хендл | все шаги сразу; `value` — результаты в порядке шагов |
+| `$.flow.delay(ms)` | хендл | задержка; `delay(0)` завершается сразу |
+| `$.flow.after(ms, fn)` | хендл | однократный вызов через `ms` (то же, что `delay(ms).then(fn)`) |
+| `$.flow.repeat(n, fn)` | хендл | `n` повторов `fn(i)`; `n < 0` — бесконечно, `n = 0` — ничего |
+| `$.flow.cancel(handle)` | bool | отменить поток |
+| `$.flow.cancelAll()` | число отмен | отменить всё расписание |
+| `$.flow.active()` | число | сколько потоков в работе |
+| `$.flow.now()` | мс | игровое время расписания (не `Date.now()`) |
+| `$.flow.scheduler()` | объект | планировщик — для отладки и юнит-тестов |
+
+Провал шага переводит хендл в `failed`:
+
+* ошибку видно в `.error`, состояние — `.isFailed()`;
+* `.catch(onErr)` / `.then(ok, onErr)` её получают;
+* если обработчика нет, ошибка уходит в `$.log` (`$.flow: …`) — тихой она не
+  остаётся;
+* провал ветки `parallel` отменяет остальные ветки: работа, которую никто не
+  ждёт, — это забытые таймеры и звуки, которые доиграют без сцены.
+
+---
+
+## 5. Время и кадровый шаг
+
+| Вызов | Назначение |
+|---|---|
+| `tickFlow(dt)` | кадровый шаг; время берётся из `$.time.delta()` — пауза и `$.time.scale` действуют сами |
+| `tickFlowMs(ms)` | явный шаг в миллисекундах: юнит-тесты и пошаговые прогоны |
+| `advanceScheduler(sched, ms)` | шаг конкретного расписания (чистая функция) |
+
+Дисциплина кадра: **следующая ступень потока стартует не раньше следующего
+`tickFlow`**. Это защищает от «слипания» длинной серии в один кадр и от
+бесконечного цикла `repeat(-1, fn)` без кадров. Первый шаг при создании потока
+выполняется сразу.
+
+Без `$.time` (юнит-тест) `tickFlow(dt)` понимает `dt` в секундах — как и все
+остальные `tick*` в подсистеме.
+
+Модуль экспортирует `installFlow($)` (ставит `$.flow`), `tickFlow(dt)` и
+`tickFlowMs(ms)` — их вызывает `api.js` при сборке API и в кадровом цикле.
+`tickFlow` надо звать **без аргумента** (или с `dt` — он всё равно берёт время
+из `$.time`): тогда пауза и `$.time.scale` действуют на потоки.
+
+---
+
+## 6. Чистое ядро (для тестов без движка)
+
+Планировщик не знает ни про `$`, ни про движок:
+
+| Экспорт | Назначение |
+|---|---|
+| `createScheduler()` | пустое расписание `{ tasks, now, seq, on_error }` |
+| `scheduleAfter(sched, delayMs, fn, periodMs?)` | поставить задачу (с `periodMs` — периодическую) |
+| `advanceScheduler(sched, ms)` | продвинуть время и выполнить созревшее |
+| `cancelTask(sched, task)` / `cancelAllTasks(sched)` | снять задачу / все |
+| `schedulerSize(sched)` | сколько живых задач |
+| `flowSeries` / `flowParallel` / `flowDelay` / `flowRepeat` | потоки без `$` |
+| `cancelFlow(handle)` / `isFlowHandle(value)` / `activeFlowCount()` | хендлы |
+| `settleHandle(handle, value)` / `failHandle(handle, error)` | ручное завершение (тесты, внешние события) |
+
+Порядок в планировщике детерминирован: по сроку (`at`), при равных сроках — по
+порядку постановки. Задача, поставленная **внутри** шага, срабатывает не
+раньше следующего вызова `advanceScheduler` — так расписание не зацикливается
+само на себя.
+
+---
+
+## 7. Примеры
+
+### Катсцена с отменой
+
+```js
+let scene = null;
+
+function playIntro() {
+    scene = $.flow.series([
+        () => $.camera.at(400, 300),
+        800,
+        () => $.sound.play('thunder'),
+        200,
+        () => $('#hero').show(),
+        () => $.flow.repeat(3, (i) => {
+            $.fx.pulse(100 + i * 40, 300, { radius: 30 });
+            return 200;                       // пауза между вспышками
+        }),
+    ]).then(() => $.log('катсцена закончилась'));
+}
+
+$.input.on('key', (e) => { if (e.key === 'Escape') scene.cancel('игрок пропустил'); });
+```
+
+### Волны врагов
+
+```js
+$.flow.repeat(3, (wave) => {
+    for (let i = 0; i < 4; i++) $.world.spawn('enemy', 100 + i * 60, 80, { wave });
+    return $.flow.series([
+        1500,                                                   // пауза до следующей волны
+        () => $.log(`волна ${wave + 1} закончилась`),
+    ]);
+}).then(() => $.log('все волны отбиты'));
+```
+
+### Одноразовый таймер, который можно отменить
+
+```js
+const bomb = $.flow.after(3000, () => { $.fx.shockwave(x, y, { radius: 300 }); boom(); });
+$('#defuser').on('use', () => { if (bomb.cancel()) $.log('обезврежено'); });
+```
+
+---
+
+## 8. Ограничения
+
+* **Потоки не сериализуются.** После загрузки сейва сценарные последовательности
+  надо запускать заново.
+* **Шаг-`Promise` завершается в микротаске**, а не в кадре: порядок
+  относительно других шагов в этом случае не гарантирован. Для
+  детерминированных сценариев используйте `delay`/`series`.
+* **`repeat(-1, fn)` без паузы** прокручивает одну итерацию за кадр: это
+  безопасно, но это не «мгновенный» цикл — для настоящего цикла берите
+  обычный `for`.
+* **Ошибка шага останавливает поток.** Продолжить после ошибки можно только
+  снаружи: `h.catch(...)` и новый поток.
+* **`cancelAll()` глобальный.** Он снимает и чужие потоки (например, таймер
+  интерфейса) — если это нежелательно, отменяйте конкретные хендлы.
+* **Точность — кадр.** `delay(16)` при 60 FPS может сработать в том же кадре,
+  а может в следующем; расписание считает время, а не «спит».
+
+---
+
+## 9. Тесты
+
+| Файл | Что проверяет |
+|---|---|
+| `tests/js/flow_test.mjs` | планировщик, порядок шагов, отмену вложенных потоков, `parallel`, `repeat`, `then`, ошибки, привязку к `$.time` |
+| `tests/agent/highlevel_state_test.py` | `$.flow` в живом движке (вместе с `$.state` и `$.signal`) |
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/flow_test.mjs
+python3 tests/agent/highlevel_state_test.py     # после сборки движка
+```
+
+
+---
+
+## Текстовые стили — `$.font`
+
+<sub>источник: `docs/highlevel/font.md`</sub>
+
+# Текстовые стили — `$.font`
+
+Подсистема `font.js` — именованные наборы параметров текста: размер, цвет,
+выравнивание, межстрочный интервал. Один стиль описывается один раз и
+применяется к любому числу узлов — правка в одном месте меняет весь HUD,
+подписи меню и реплики диалогов:
+
+```js
+$.ready(() => {
+    $.font.define('hud',   { size: 20, color: '#ffffff', align: 'left' });
+    $.font.define('title', { base: 'hud', size: 40, color: '#ffd166' });
+
+    $('<ui.label>', { id: 'score', text: 'Счёт: 0' }).at(120, 40).size(240, 30);
+    $.font.apply('#score', 'hud');
+    $('#score').textStyle('title');        // то же самое методом узла
+});
+```
+
+Модуль — **только надстройка**: он не заменяет `$.gfx.text()`, `.fontSize()` и
+`.text()`, а раскладывает готовый набор по уже существующим свойствам узла
+(`size`, `color`/`text_color`, `attrs.align`, `attrs.lineHeight`), которые
+читает отрисовка.
+
+---
+
+## 1. Поля стиля
+
+| Поле | Тип | По умолчанию | Смысл |
+|---|---|---|---|
+| `size` | number | 20 | размер шрифта в пикселях |
+| `color` | цвет | `'#ffffff'` | цвет текста (см. §2 — у контролов он уезжает в `text_color`) |
+| `align` | `'left'`\|`'center'`\|`'right'` | `'left'` | выравнивание (`attrs.align`) |
+| `lineHeight` | number | 1.25 | множитель межстрочного интервала (`attrs.lineHeight`) |
+| `base` | string | — | имя родительского стиля (§4) |
+
+Любые **другие** поля описания копируются в `attrs` узла как есть: `$.font` о
+них ничего не знает, но их может читать другая подсистема
+(`$.font.define('glow', { size: 20, letterSpacing: 3 })` → `attrs.letterSpacing`).
+
+## 2. Куда попадает цвет
+
+У контролов свойство `color` — это **фон**, а цвет подписи лежит в
+`text_color`. `apply()` выбирает свойство сам, иначе стиль перекрашивал бы фон
+кнопки:
+
+| Теги | Свойство цвета |
+|---|---|
+| `ui.button`, `ui.bar`, `ui.checkbox`, `ui.slider`, `ui.input`, `ui.list`, `ui.dialog` | `text_color` |
+| `text`, `ui.label`, `ui.panel`, остальные | `color` |
+
+Чистая функция для проверки правила — `textColorTarget(tag)` → `'text'` | `'color'`.
+
+## 3. Функции `$.font`
+
+| Функция | Назначение |
+|---|---|
+| `$.font.define(name, spec)` | объявить стиль; `spec.base` — наследование |
+| `$.font.get(name)` | разобранный стиль (копия) или `null`, если стиля нет |
+| `$.font.has(name)` | есть ли такой стиль |
+| `$.font.list()` | имена стилей по алфавиту |
+| `$.font.remove(name)` | удалить стиль |
+| `$.font.apply(target, name)` | применить стиль к узлу, обёртке `$(…)`, селектору или массиву |
+| `$.font.of(target)` | имя стиля, последним применённого к узлу (или `null`) |
+| `$.font.styleOf(target)` | что реально читает отрисовка: `{ font, size, align, lineHeight, color }` |
+| `$.font.measure(text, name)` | ширина строки в пикселях этим стилем |
+| `$.font.defaults()` | значения по умолчанию (копия) |
+
+```js
+$.font.apply('#score', 'hud');       // селектор
+$.font.apply($('#score'), 'hud');    // обёртка
+$.font.apply($('#score').get(0), 'hud');   // сам узел
+$.font.apply($('ui.button'), 'hud');       // все кнопки
+```
+
+## 4. Метод узла `.textStyle()`
+
+| Вызов | Что делает |
+|---|---|
+| `.textStyle('hud')` | применить объявленный стиль |
+| `.textStyle({ size: 30, color: '#f00' })` | разовый набор без регистрации (имя не запоминается) |
+| `.textStyle()` | имя действующего стиля или `null` |
+
+## 5. Наследование
+
+Цепочка: `default` (если объявлен) → `base` → сам стиль. Незаданные поля
+наследуются, заданные — перекрывают:
+
+```js
+$.font.define('default', { size: 18, color: '#c8d4e8' });   // база для всех
+$.font.define('hud', { align: 'left' });                     // size/color из default
+$.font.define('title', { base: 'hud', size: 40 });           // + свой размер
+$.font.get('title');   // { size: 40, color: '#c8d4e8', align: 'left', lineHeight: 1.25 }
+```
+
+Цикл в `base` (`a → b → a`) разбор не вешает: повторное имя просто
+пропускается. Ссылка на несуществующую базу — предупреждение в лог один раз,
+стиль продолжает работать без неё.
+
+## 6. Ограничения
+
+* кроме `size`/`color`/`align`/`lineHeight` движок ничего у текста не умеет:
+  жирный, курсив, свои файлы шрифтов и перенос строк стилем не задать;
+* `apply()` пишет в `attrs.align` — у тега `<text>` это то же поле, что и у
+  `<ui.label>`, поэтому стиль с `align` действует на оба;
+* `align` вне `left/center/right` подменяется на `left` с предупреждением;
+* неизвестный стиль: `get()` → `null`, `apply()` пишет в лог и **не меняет**
+  узел; `measure()` берёт размер по умолчанию;
+* `.textStyle()` — метод обёртки `$`, его имя уникально и не пересекается со
+  списком §5 контракта (`fontSize` при этом остаётся отдельным методом);
+* реестр стилей живёт в замыкании `installFont()`: повторная установка
+  (перезагрузка игры) начинает с чистого списка;
+* `$.font.measure()` без движка (qjs) возвращает 0 — тесты проверяют логику,
+  а не метрики шрифта.
+
+## 7. Проверка
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/font_test.mjs
+```
+
+Покрыто: разбор и слияние стилей, наследование (`base`, неявный `default`),
+циклы, выбор свойства для цвета, копия из `get()`, неизвестный стиль,
+`.textStyle()`, `measure()`, `styleOf()`.
+
+
+---
+
 ## VFX своими руками — `$.fx`
 
 <sub>источник: `docs/highlevel/fx.md`</sub>
@@ -7877,6 +9376,176 @@ $.time.after(2800, () => $.fx.shockwave(x, y, { radius: 420, ms: 520, width: 16,
 `tests/js/fx_test.mjs` (qjs, без движка) проверяет времена жизни, привязку
 ленты к цели, поля сил, отсечение по камере и сброс. Демо-проверка —
 `tests/agent/demos_test.py shooter_witch`.
+
+
+---
+
+## `$.grid` — сеточные помощники
+
+<sub>источник: `docs/highlevel/grid.md`</sub>
+
+# `$.grid` — сеточные помощники
+
+Инструменты для работы с двумерными данными: «какой тайл под курсором»,
+«залить комнату», «провести линию», «обойти соседей». Это **не** навигация:
+`$.nav` ищет путь по препятствиям, а `$.grid` — просто арифметика над
+плоским массивом. Аналог `TileMap`-утилит и `GridContainer`-математики из
+Godot, но без привязки к тайлсету.
+
+Сетка — обычный объект с полем `data` (плоский массив значений), поэтому её
+можно заполнить чем угодно (числа, строки, объекты), сохранить в JSON,
+нарисовать или передать в `$.nav`.
+
+```js
+const g = $.grid.make({ x: 0, y: 0, cell: 16, cols: 40, rows: 30, fill: 0 });
+
+const c = $.grid.toCell(g, mouse.x, mouse.y);
+if ($.grid.inBounds(g, c.cx, c.cy)) {
+    $.grid.set(g, c.cx, c.cy, 1);              // поставить блок
+    $.grid.flood(g, c.cx, c.cy, 2);            // залить комнату
+}
+```
+
+Проверка без движка:
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/grid_test.mjs
+```
+
+---
+
+## 1. Система координат
+
+Она задана явно, чтобы не было «полклетки» на глаз:
+
+| Величина | Смысл |
+|---|---|
+| `x`, `y` | Левый верхний угол сетки в **мировых пикселях** |
+| `cell` | Сторона клетки в пикселях |
+| `cx`, `cy` | Номер клетки: `0..cols-1`, `0..rows-1` |
+| `toCell(g, wx, wy)` | Мировая точка → клетка (может быть за границей) |
+| `toWorld(g, cx, cy)` | Клетка → **центр** клетки в мире |
+| `cellRect(g, cx, cy)` | Клетка → прямоугольник `{x, y, w, h}` для отрисовки |
+| `bounds(g)` | Вся сетка в мире: `{x, y, w: cols*cell, h: rows*cell}` |
+
+Клетка `(cx, cy)` занимает мир `[x + cx*cell, x + (cx+1)*cell)` по X и так же
+по Y. Точка ровно на левой границе попадает в левую клетку.
+
+```js
+const r = $.grid.bounds(g);                     // куда поставить камеру-ограничитель
+for (const { cx, cy, value } of $.grid.neighbors(g, 4, 4, true)) { ... }
+```
+
+## 2. Создание
+
+### `$.grid.make(opts) → grid | null`
+
+| Поле | Тип | По умолчанию | Смысл |
+|---|---|---|---|
+| `x`, `y` | число | `0` | Левый верхний угол в мире |
+| `cell` | число | `32` | Сторона клетки; мусор и `0` заменяются на `32` |
+| `cols`, `rows` | число | — | Размер в клетках |
+| `w`, `h` | число | — | Размер в пикселях: `cols = ceil(w / cell)` |
+| `fill` | любое | `0` | Значение всех клеток при создании |
+
+Размер можно задать либо в клетках (`cols`/`rows`), либо в пикселях
+(`w`/`h`). Если не задано ни то, ни другое — возвращается `null`: молча
+создавать сетку 0×0 опаснее, чем сообщить об ошибке.
+
+Поля готовой сетки: `x`, `y`, `cell`, `cols`, `rows`, `fill`, `data`
+(плоский массив длиной `cols * rows`, индекс — `cy * cols + cx`), `version`
+(растёт при каждом изменении — удобно для кэшей отрисовки).
+
+## 3. Чтение и запись
+
+| Функция | Назначение |
+|---|---|
+| `inBounds(g, cx, cy) → bool` | Клетка внутри сетки |
+| `at(g, cx, cy, fallback?) → any` | Значение клетки; за границей — `fallback` (`undefined`) |
+| `set(g, cx, cy, value) → g` | Записать; за границей — тихо игнорируется |
+| `fill(g, value) → g` | Залить всю сетку |
+| `clear(g, value?) → g` | Вернуть к `g.fill` или к указанному значению |
+| `count(g, value) → number` | Сколько клеток равны значению |
+| `rect(g, cx, cy, w, h, value) → g` | Прямоугольник `w×h` **в клетках**, обрезается по границе |
+
+`set` меняет `version` только когда значение действительно изменилось.
+
+```js
+$.grid.rect(g, 2, 2, 5, 3, 'стена');       // 5 клеток в ширину, 3 в высоту
+$.grid.count(g, 'стена');                  // → 15
+```
+
+## 4. Линии и заливка
+
+| Функция | Назначение |
+|---|---|
+| `bresenham(x0, y0, x1, y1) → [{cx,cy}, …]` | Клетки отрезка (чистая функция, без сетки) |
+| `line(g, x0, y0, x1, y1, value) → g` | Провести линию по сетке |
+| `flood(g, cx, cy, value, opts?) → number` | Заливка «ведром»; возвращает число изменённых клеток |
+
+`flood` заменяет все соседние клетки со значением, как в стартовой:
+
+* `opts.diagonal` — заливать и по диагонали (по умолчанию только 4 стороны);
+* `opts.limit` — предохранитель на размер заливки.
+
+Реализация итеративная (без рекурсии), поэтому заливка большого поля не
+переполняет стек. Если стартовая клетка уже равна `value`, возвращается `0`.
+
+```js
+const room = $.grid.flood(g, 10, 10, 'пол');        // 4-связная комната
+if (room > 400) $.log('комната большая');
+$.grid.line(g, 0, 0, 39, 29, 'стена');              // диагональ через всю карту
+```
+
+## 5. Обход
+
+| Функция | Назначение |
+|---|---|
+| `forEach(g, fn) → number` | `fn(value, cx, cy)` по всем клеткам, в порядке строк; возвращает число вызовов |
+| `neighbors(g, cx, cy, diagonal?) → [{cx, cy, value}, …]` | Соседи: 4 (вправо, влево, вниз, вверх) или 8 |
+
+Соседи за границей сетки не возвращаются, поэтому цикл по ним не требует
+проверок.
+
+```js
+$.grid.forEach(g, (value, cx, cy) => {
+    if (value === 'вода') drawWater($.grid.cellRect(g, cx, cy));
+});
+
+let open = 0;
+for (const n of $.grid.neighbors(g, cx, cy)) if (n.value === 0) open++;
+```
+
+## 6. Установка и связь с `$.nav`
+
+```js
+import { installGrid, makeGrid } from './grid.js';
+installGrid($);      // $.grid = { make, toCell, toWorld, … }
+```
+
+Все методы — те же чистые функции: сетка передаётся первым аргументом,
+поэтому две и более сетки в игре не мешают друг другу.
+
+`$.grid` не подменяет `$.nav` и не знает про препятствия. Если нужен путь,
+сетку навигации создавайте отдельно (`$.nav.grid`), а `$.grid` используйте
+для данных. Переносить значения между ними можно вручную:
+
+```js
+const nav = $.nav.grid({ x: 0, y: 0, w: 640, h: 480, cell: 16 });
+const g = $.grid.make({ x: 0, y: 0, cell: 16, cols: nav.cols, rows: nav.rows });
+$.grid.forEach(g, (value, cx, cy) => { if (value === 'стена') nav.setBlocked(cx, cy, true); });
+```
+
+## 7. Ограничения
+
+| Чего нет | Почему / что делать |
+|---|---|
+| Отрисовки | Сетка — данные; рисуйте через `$.gfx.push` или `$.tilemap`, координаты даёт `cellRect`/`bounds` |
+| Тайлсета и слоёв | Это `$.tilemap`; `$.grid` про значения, а не про картинки |
+| `flood` по своему условию (например, «по всем тайлам воды») | Фильтра нет; сделайте свой обход через `neighbors` + `set` |
+| Хранения сетки в сохранении «из коробки» | `g.data` — обычный массив, `$.fs.write`/`$.store` сериализуют его как есть (для больших карт лучше RLE) |
+| Разреженных и бесконечных сеток | Модель плотная: `cols * rows` ячеек в памяти |
+| Копирования/сравнения сеток | `copy`/`equals` нет: `g.data.slice()` и сравнение массивов вручную |
 
 
 ---
@@ -8301,7 +9970,7 @@ $.ready(() => {
 
     // Слой поверх мира.
     const hud = $.layers.create({ name: 'hud', order: 20 });
-    $('<label>', { text: 'HP' }).at(40, 24).appendTo(hud);
+    $('<ui.label>', { text: 'HP' }).at(40, 24).appendTo(hud);
 
     // Ночной оттенок и переход в чёрное.
     $.layers.modulate('#0a1430', 0.35);
@@ -8554,6 +10223,152 @@ $.loading.run([
 - Экран не переживает смену сцены сам по себе: его нужно показать до
   `$.scene.load(...)` и убрать в новой сцене (`$.loading.hide()`).
 - Повторный `show()` перерисовывает экран с нуля — старые узлы удаляются.
+
+
+---
+
+## `$.math` — математика для игровой логики
+
+<sub>источник: `docs/highlevel/mathx.md`</sub>
+
+# `$.math` — математика для игровой логики
+
+Набор чистых функций, которых обычно не хватает в игре: ограничение и
+интерполяция чисел, сглаживание, работа с углами, векторы и прямоугольники.
+Аналог `@GlobalScope`-функций Godot (`clamp`, `lerp`, `move_toward`,
+`smoothstep`, `wrapf`, `pingpong`, `snapped`, `angle_difference`) плюс
+минимум векторной арифметики.
+
+Подсистема не обращается к движку: это **чистые функции**. Всё, что ниже,
+можно вызвать из игры (`$.math.clamp(...)`), а можно импортировать из
+`src/highlevel/mathx.js` и проверить без сборки движка:
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/mathx_test.mjs
+```
+
+```js
+$.math.clamp(hp, 0, maxHp);
+$.math.approach(camera.x, target.x, 8, dt);          // плавно, без рывков
+$.math.moveTowards(angle, targetAngle, 3 * dt);      // поворот с ограничением
+const dir = $.math.vecNormalize($.math.vecSub(hero.pos(), enemy.pos()));
+```
+
+Соглашения:
+
+* углы — в радианах; на экране ось Y смотрит вниз, поэтому положительный
+  поворот идёт **по часовой стрелке**;
+* функции не меняют переданные объекты, а возвращают новые;
+* вектор — обычный объект `{ x, y }`, прямоугольник — `{ x, y, w, h }`
+  (левый верхний угол + размеры — как у `$.grid` и `$.nav`), так что их
+  можно класть в JSON и передавать в методы узлов как есть.
+
+---
+
+## 1. Числа
+
+| Функция | Назначение |
+|---|---|
+| `clamp(v, lo, hi) → number` | Ограничить значение диапазоном `[lo, hi]` |
+| `lerp(a, b, t) → number` | Линейная интерполяция; `t` может выходить за `[0,1]` |
+| `inverseLerp(a, b, v) → number` | Доля пути от `a` к `b`; при `a === b` → `0` |
+| `remap(v, inMin, inMax, outMin, outMax) → number` | Пересчёт значения из одного диапазона в другой |
+| `moveTowards(cur, target, maxDelta) → number` | Шаг к цели не больше `maxDelta`, без перелёта |
+| `smoothstep(edge0, edge1, x) → number` | S-кривая 0…1 между границами |
+| `approach(cur, target, rate, dt) → number` | Экспоненциальное сглаживание, не зависящее от FPS |
+| `wrap(v, min, max) → number` | Завернуть в `[min, max)` |
+| `pingPong(v, len) → number` | «Туда-обратно» 0…len…0 с периодом `2*len` |
+| `snap(v, step) → number` | Притянуть к шагу сетки (`snap(37, 16)` → `32`) |
+| `angleDiff(from, to) → number` | Кратчайшая разница углов в `[-π, π]` |
+| `deg(radians) → number` | Радианы → градусы |
+| `rad(degrees) → number` | Градусы → радианы |
+| `sign(v) → number` | `-1`, `0` или `1` |
+| `roundTo(v, digits) → number` | Округлить до `digits` знаков (`digits < 0` — до десятков) |
+
+Особые случаи, на которые опираются тесты:
+
+* `clamp` терпит перепутанные границы (`clamp(5, 10, 0)` → `5`);
+* `inverseLerp` и `remap` не делят на ноль при нулевом диапазоне;
+* `wrap` с `max <= min` возвращает `min`; `snap` с `step <= 0` — значение
+  без изменений;
+* ровно половина шага в `snap` округляется вверх (`snap(40, 16)` → `48`),
+  потому что внутри `Math.round`;
+* `angleDiff(from, to)` для разворота ровно на π даёт `-π`: `+π` и `-π` —
+  один и тот же поворот, выбрано одно соглашение.
+
+```js
+// Полоска здоровья: 100 → 0 превращается в 0 → 1 для шейдера/альфы.
+const k = $.math.remap(hp, 0, maxHp, 0, 1);
+
+// Прицел «догоняет» курсор, скорость не зависит от частоты кадров.
+cam.x = $.math.approach(cam.x, mouse.x, 12, $.time.delta());
+
+// Плавное появление: t идёт 0 → 1, анимация — по S-кривой.
+const fade = $.math.smoothstep(0, 0.4, t);
+```
+
+## 2. Векторы
+
+| Функция | Назначение |
+|---|---|
+| `vec2(x, y) → {x,y}` | Вектор из двух чисел |
+| `vecLength(v) → number` | Длина |
+| `vecLengthSq(v) → number` | Квадрат длины — дешевле для сравнений |
+| `vecNormalize(v) → {x,y}` | Единичный вектор; нулевой остаётся нулевым |
+| `vecAdd(a, b)`, `vecSub(a, b) → {x,y}` | Сумма и разность (`a - b`) |
+| `vecScale(v, s) → {x,y}` | Умножение на число |
+| `vecDot(a, b) → number` | Скалярное произведение |
+| `vecDist(a, b) → number` | Расстояние между точками |
+| `vecLerp(a, b, t) → {x,y}` | Интерполяция между векторами |
+| `vecRotate(v, angle) → {x,y}` | Поворот на угол (радианы) |
+| `vecFromAngle(angle, length) → {x,y}` | Вектор из угла, длина по умолчанию `1` |
+| `vecAngle(v) → number` | Угол вектора, `atan2(y, x)` |
+
+```js
+const toHero = $.math.vecSub(hero.pos(), turret.pos());
+if ($.math.vecLength(toHero) < 300 && $.math.vecDot(aim, $.math.vecNormalize(toHero)) > 0.7) {
+    shoot($.math.vecAngle(toHero));
+}
+```
+
+## 3. Прямоугольники
+
+| Функция | Назначение |
+|---|---|
+| `rect(x, y, w, h) → {x,y,w,h}` | Прямоугольник по левому верхнему углу |
+| `rectContains(r, point)` / `rectContains(r, x, y) → bool` | Точка внутри; границы включительно |
+| `rectOverlap(a, b) → bool` | Пересекаются ли (касание краями — нет) |
+| `rectIntersect(a, b) → {x,y,w,h}` \| `null` | Пересечение или `null` |
+| `rectCenter(r) → {x,y}` | Центр |
+| `rectGrow(r, amount) → {x,y,w,h}` | Расширить (`amount < 0` — сжать) |
+
+```js
+const view = $.math.rect(cam.x - cam.w / 2, cam.y - cam.h / 2, cam.w, cam.h);
+if ($.math.rectOverlap(view, $.math.rect(node.x, node.y, 32, 32))) {
+    draw(node);                       // рисуем только то, что видно
+}
+```
+
+## 4. Установка
+
+```js
+import { installMath } from './mathx.js';
+installMath($);          // $.math = { …все функции выше… }
+```
+
+`$.math` — те же самые функции, без обёрток и копий (`$.math.clamp === clamp`),
+поэтому накладных расходов на вызов нет. Отдельного `tick` у подсистемы нет:
+это библиотека, а не служба.
+
+## 5. Ограничения
+
+| Чего нет | Почему / что делать |
+|---|---|
+| Матриц, кватернионов, 3D | Движок двумерный; для сложной линейной алгебры считайте вручную или через `$.gfx`-трансформации |
+| Кривых Безье и сплайнов | Есть `lerp` и `smoothstep`; для плавных траекторий — `$.tween` или своя функция |
+| Методов у векторов (`v.add()`) | Вектор намеренно оставлен «просто данными»: JSON, сравнение, передача в любой метод узла |
+| Перегрузок по типу аргумента | Всегда порядок `(a, b, t)`, а не «умный» разбор аргументов |
+| Оптимизации на `Float32Array` | Функции работают с обычными объектами; для тысяч частиц считайте пачками сами |
 
 
 ---
@@ -9014,7 +10829,7 @@ $.ready(() => {
 |---|---|---|---|
 | `emitting` | bool | `true` | идёт ли эмиссия (живые частицы остаются) |
 | `amount` | число | `32` | сколько частиц держит непрерывная эмиссия |
-| `max_particles` | число | `max(amount·4, 256)` | жёсткий потолок пула (≤ 16384) |
+| `max_particles` | число | `min(4096, max(amount·4, 256))` | жёсткий потолок пула (≤ 16384) |
 | `rate` | число | `amount / среднее lifetime` | частиц в секунду |
 | `interval` | число (мс) | — | пауза между частицами; альтернатива `rate` |
 | `lifetime` | число / `[min,max]` (мс) | `1000` | время жизни |
@@ -9556,7 +11371,8 @@ $.prefab.register('child', {
 | `hp`, `maxHp`, `color`, `alpha`, `speed`, … | переопределяют поле или `attrs` |
 
 Поля, которых нет в формате данных (например `speed`), попадают в `attrs` и
-применяются через обычный `$.attr()`. `extend` разрешается рекурсивно; цикл
+применяются через обычный `.attr()` (это метод обёртки: `$.attr()` не
+существует). `extend` разрешается рекурсивно; цикл
 не роняет игру — в журнал уходит предупреждение, а `instantiate` вернёт
 пустую обёртку.
 
@@ -9688,6 +11504,148 @@ build/_deps/quickjs-build/qjs tests/js/prefab_test.mjs
   `.sprite('путь')`, `.frames({src, ...})` или `attrs.src`.
 * Имя `$.prefab` и методы `.toData()`, `.clone()`, `.savePrefab()`,
   `.prefab()` не пересекаются с именами ядра.
+
+
+---
+
+## `$.random` — детерминированная случайность
+
+<sub>источник: `docs/highlevel/random.md`</sub>
+
+# `$.random` — детерминированная случайность
+
+Генератор случайных чисел с зерном («seed») и шум значений для рельефа,
+биомов и дрожания. Аналог `RandomNumberGenerator` + `FastNoiseLite` из Godot 4.
+
+Детерминизм — главное требование: одна и та же последовательность вызовов
+после `$.random.seed(n)` даёт одну и ту же последовательность чисел. На этом
+стоят юнит-тесты, повторные прогоны и режим `--fixed-dt`: два запуска с одним
+`--seed` обязаны совпасть кадр в кадр.
+
+База — `makeRandom()` из ядра (mulberry32), тот же генератор, которым уже
+пользуются демки через `$.random.range/int/next/chance`. Подсистема расширяет
+его, а не заменяет: последовательности существующих игр не меняются.
+
+```js
+$.random.seed(7);
+$.random.int(1, 6);                       // кубик, 1..6 включительно
+$.random.pick(['меч', 'щит', 'зелье']);
+$.random.shuffle(deck);
+$.random.chance(0.25);                    // четверть случаев — true
+$.random.weighted([{ value: 'меч', weight: 1 }, { value: 'мусор', weight: 9 }]);
+```
+
+Проверка без движка:
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/random_test.mjs
+```
+
+---
+
+## 1. Генератор
+
+### `$.random.seed(n) → $.random`; `$.random.seed() → number`
+
+Ставит зерно и перезапускает последовательность с начала. Без аргумента
+возвращает текущее зерно. `$.random.seed(7).next()` работает цепочкой.
+
+Зерно 0 ядро подменяет константой `0x9e3779b9` — это по-прежнему
+детерминированно, но если нужен именно «нулевой» отсчёт, берите `seed(1)`.
+
+| Метод | Назначение |
+|---|---|
+| `next() → number` | Следующее число в `[0, 1)` |
+| `range(a, b) → number` | Число в `[a, b)`; при `a > b` диапазон переворачивается |
+| `int(a, b) → number` | Целое в `[a, b]` — **обе границы включительно** |
+| `pick(list) → any` | Случайный элемент; пустой список → `undefined` |
+| `chance(p) → bool` | `true` с вероятностью `p` (`chance(1)` — всегда, `chance(0)` — никогда) |
+| `shuffle(list) → array` | Копия списка в случайном порядке (исходный не меняется) |
+| `gaussian() → number` | Нормальное распределение: среднее 0, отклонение 1 |
+| `weighted(list) → any` | Выбор с весами (форматы ниже) |
+| `noise1D(x, seed?) → number` | Значение-шум 1D в `[0, 1)` |
+| `noise2D(x, y, seed?) → number` | Значение-шум 2D в `[0, 1)` |
+
+```js
+// Волна врагов: состав и позиции воспроизводимы при одном --seed.
+$.random.seed(level.seed);
+const type = $.random.weighted([
+    { value: 'goblin', weight: 10 },
+    { value: 'orc', weight: 4 },
+    { value: 'dragon', weight: 1 },
+]);
+const x = $.random.range(0, arena.w);
+```
+
+### `$.random.weighted(list)`
+
+Форматы элемента списка:
+
+| Запись | Значение | Вес |
+|---|---|---|
+| `{ value: 'меч', weight: 3 }` | `'меч'` | `3` |
+| `{ v: 'меч', w: 3 }` | `'меч'` | `3` (короткая запись) |
+| `['меч', 3]` | `'меч'` | `3` |
+| `'меч'` | `'меч'` | `1` |
+
+Веса `<= 0` не участвуют в выборе. Если сумма всех весов нулевая, выбор
+равномерный — функция не делит на ноль и не падает. Пустой список даёт
+`undefined`.
+
+## 2. Шум значений
+
+`noise1D`/`noise2D` — это **значение-шум** (value noise) на целочисленной
+решётке со сглаживанием: гладкие холмы и биомы без таблиц и без внешних
+файлов. Возвращают число в `[0, 1)`.
+
+Важное свойство: шум — **чистая функция координаты**, он не зависит от
+состояния `$.random` и от порядка вызовов. Иначе мир менялся бы от того,
+сколько раз за кадр кто-то кинул кубик. Необязательный второй аргумент
+(`seed`) сдвигает решётку — из него делают разные слои и «континенты».
+
+```js
+// Рельеф: высота клетки — сумма двух октав шума.
+const h = 0.6 * $.random.noise2D(x / 64, y / 64)
+        + 0.4 * $.random.noise2D(x / 16, y / 16, 777);
+
+// Дрожание камеры на «шторме» — тоже шум, а не случайность.
+cam.shake_x = ($.random.noise1D(time * 3) - 0.5) * 4;
+```
+
+## 3. Совместимость и советы
+
+* Существующие вызовы `$.random.next()`, `.range()`, `.int()`, `.pick()`,
+  `.chance()` продолжают работать без изменений — это методы того же
+  генератора ядра.
+* Один seed — одна последовательность: не подмешивайте `Math.random()` в
+  игровую логику, иначе воспроизводимость теряется.
+* Для независимых потоков случайности (например, генерация уровня и бой)
+  заводите свои генераторы: `makeGenerator(seed)` экспортируется из
+  `random.js` и не трогает общий `$.random`.
+* Зерно по умолчанию берётся из `engine.seed` (его задаёт ключ `--seed`),
+  без него — `12345`.
+
+## 4. Установка
+
+```js
+import { installRandom, makeGenerator } from './random.js';
+installRandom($);       // $.random = makeGenerator(engine.seed ?? 12345)
+```
+
+Чистые функции экспортируются наружу и проверяются qjs без движка:
+`makeGenerator`, `shuffle`, `gaussian`, `weightedPick`, `hash01`, `noise1D`,
+`noise2D`. `shuffle(list, rng)` и `weightedPick(list, rng)` принимают
+генератор явно — так их можно проверить на фиксированном зерне.
+
+## 5. Ограничения
+
+| Чего нет | Почему / что делать |
+|---|---|
+| `Math.random()` как источник | Он невоспроизводим; для «настоящей» случайности берите `Date.now()` как зерно: `$.random.seed(Date.now())` |
+| Симплекс-шума и fBm «из коробки» | Есть только value noise; октавы складывайте сами (см. пример) |
+| Сохранения состояния ГПСЧ (`save`/`restore`) | Состояние не сериализуется: сохраняйте зерно и номер вызова либо генерируйте всё заранее |
+| Гарантий криптостойкости | Генератор игровой (mulberry32), для паролей и токенов не годится |
+| Взвешенного выбора без замены | `weighted` всегда с заменой; для «выдать 3 разных предмета» — `shuffle` + `weighted` по остатку |
 
 
 ---
@@ -9873,9 +11831,105 @@ $.gfx.draw.glow(x, y, 160, '#ffd9a0', { blend: 'add', falloff: 2.4 });
 правки режим складывал цвет как есть, и полупрозрачное свечение выжигало кадр
 в белое.
 
-Теней у `<light>` пока нет: полигоны видимости живут отдельно
-(`engine.light.visibility`, демо `light`). Тени от окклюдеров внутри узла
-света — следующий шаг (см. [VFX_PLAN.md](../VFX_PLAN.md)).
+Теней у `<light>` раньше не было: полигоны видимости жили отдельно
+(`engine.light.visibility`, демо `light`). Теперь свет умеет тени, конус и
+площадной источник — см. §3.0.1–3.0.3.
+
+### 3.0.1. Тени, конус и площадной свет (стиль Candle)
+
+Свет с `.shadows(true)` перестаёт быть плоским пятном: из центра выпускаются
+лучи, каждый упирается в ближайшее препятствие, и по этим расстояниям строится
+концентрический веер. Градиент остаётся мягким, а кромка тени — резкой.
+
+```js
+// Препятствия: коробки, отрезки, готовая геометрия тайлмапа.
+$.gfx.light.occluders([
+    { x: 400, y: 200, w: 32, h: 200 },   // x/y — левый верхний угол
+    { cx: 700, cy: 300, w: 40, h: 40 },  // или центр
+    [100, 500, 300, 500],                // или отрезок [x1,y1,x2,y2]
+]);
+
+$('<light>', { radius: 320, color: '#ffd9a0' })
+    .at(200, 300).blend('add')
+    .shadows(true)          // тени от препятствий
+    .cone(70, 0.3)          // конус 70°, растушёвка кромки 30 % полуугла
+    .rotate(0)              // направление конуса — угол узла (0° = вправо)
+    .occluders([{ x: 380, y: 280, w: 24, h: 60 }])   // свои препятствия
+    .flicker(0.18, 9)       // дрожание, как у свечи
+    .appendTo($.world);
+```
+
+| Метод / поле | Значение |
+|---|---|
+| `.shadows(on)` | тени от препятствий; по умолчанию выключены |
+| `.cone(deg, soft)` | угол конуса в градусах (0 — полный круг) и растушёвка кромки 0..1 |
+| `.occluders(list)` | препятствия только этого источника (плюс общий реестр) |
+| `.flicker(amount, speed)` | детерминированное мерцание, доля яркости и скорость |
+| `.punch(on)` | рисовать свет поверх тумана (§3.0.3) |
+| `angle` / `.rotate(deg)` | направление конуса |
+
+Площадной источник — отдельный тег: свет идёт не из точки, а из полосы (окно,
+лампа дневного света, костёр), поэтому тени считаются из нескольких точек.
+
+```js
+$('<lightarea>', { radius: 150, intensity: 0.9, color: '#88bbff',
+                   samples: 4, shadows: true })
+    .at(620, 480).size(220, 12).blend('add').appendTo($.world);
+```
+
+| Поле | Значение |
+|---|---|
+| `radius`, `intensity`, `color`, `falloff`, `inner` | как у `<light>` |
+| `samples` | сколько точек вдоль площадки (1..8, по умолчанию 3) |
+| `shadows` | считать тени из каждой точки |
+| `core` | рисовать саму полосу источника (`true` по умолчанию) |
+| `.size(w, h)` | размер площадки; свет идёт вдоль длинной стороны |
+
+Реестр препятствий и утилиты:
+
+| Вызов | Назначение |
+|---|---|
+| `$.gfx.light.occluders(list)` | заменить реестр; возвращает число отрезков |
+| `$.gfx.light.addOccluders(list)` | добавить к реестру |
+| `$.gfx.light.clearOccluders()` | очистить |
+| `$.gfx.light.count()` / `.segments()` | сколько отрезков / копия списка |
+| `$.gfx.light.tiles(cols, rows, isSolid, { cell, x, y })` | рёбра непроходимых тайлов: внутренние рёбра стен пропускаются |
+| `$.gfx.light.polygon(x, y)` | точный полигон видимости из C (`engine.light.visibility`) |
+| `$.gfx.light.debug(true)` | показать препятствия красными отрезками |
+
+### 3.0.2. Туман
+
+Два способа: узел `<fog>` (прямоугольник в мире) и экранный слой
+`$.gfx.fog({...})`. Оба рисуются дрейфующими полосами с мягкими краями; туман
+идёт поверх сцены, но под интерфейсом.
+
+```js
+$('<fog>', { color: '#8899bb', density: 0.4, layers: 4 })
+    .at(400, 300).size(800, 600).appendTo($.world);
+
+$.gfx.fog({ color: '#8899bb', density: 0.25, layers: 5, ground: 0.6 });
+$.gfx.fog.off();              // выключить экранный туман
+$.gfx.fog.params();           // текущие параметры (или null)
+```
+
+| Поле | Значение |
+|---|---|
+| `color`, `density` | цвет и плотность (0..1); альфа узла умножает плотность |
+| `layers` | число полос (1..12): больше — мягче, но дороже |
+| `speed`, `amp` | скорость и размах вертикального дрейфа |
+| `thickness` | толщина полосы относительно шага |
+| `ground` | приземность: 0 — ровная дымка, 1 — гуще внизу |
+
+Свет с `.punch(true)` рисуется **после** тумана: фонарь «прорезает» дымку,
+а не тонет в ней. Порядок внутри кадра: сцена → `<fog>`-узлы → экранный
+`$.gfx.fog()` → свет с `.punch(true)` → примитивы `$.gfx.draw.*`.
+
+**Ограничения.** Тени считаются трассировкой лучей по отрезкам в JS, а не
+точным полигоном видимости: на 96 образцах и сотнях отрезков это заметно, но
+предсказуемо. Свет и туман — треугольники, а они в движке рисуются после
+спрайтов кадра и **до** интерфейса (HUD не засвечивается). Дрожание
+(`flicker`) детерминировано от игрового времени, поэтому повторяется в
+`--fixed-dt` прогоне.
 
 ### 3.1. Пост-обработка: offscreen-проход уже есть
 
@@ -10038,6 +12092,1353 @@ main.c:
 | `src/render.c` | конвейеры по режимам, `blend_state`, переключение в `r2d_render_draw`, биндинги `submitSprites`/`submitTriangles`, заглушка `engine.viewport` |
 | `src/highlevel/viewport.js` | `$.blend`, `$.viewport`, чистые хелперы `normalizeBlend`/`nodeBlendMode`/`resolveBlend`/`blendRuns` |
 | `tests/fixtures/render/` | фикстура агентского теста |
+
+
+---
+
+## Реестр ресурсов — `$.resource`
+
+<sub>источник: `docs/highlevel/resource.md`</sub>
+
+# Реестр ресурсов — `$.resource`
+
+Подсистема даёт ассетам имена: текстуры, спрайты, кадры листов, звуки,
+JSON-данные и просто значения из кода регистрируются один раз, грузятся
+**лениво** и переиспользуются по имени. Значения кэшируются, у каждого есть
+счётчик ссылок, а `free()` освобождает ресурс, когда на него никто не
+ссылается.
+
+```js
+$.ready(() => {
+    // Загрузилось сразу: ссылок 1.
+    const tiles = $.resource.load('tiles', 'assets/tiles.png');
+
+    // Описали заранее — загрузится при первом обращении.
+    $.resource.define('shot', { kind: 'sound', path: 'sfx/shot.wav' });
+    $.resource.define('hero-sheet', { kind: 'sheet', src: 'art/hero.png', cols: 4, rows: 2, cw: 16, ch: 24 });
+
+    $.resource.get('shot');          // здесь и только здесь читается файл
+    $.resource.get('hero-sheet');    // массив из 8 кадров (общий кэш ядра)
+
+    // Экран загрузки: прогреваем всё, что описано.
+    const { loaded, failed } = $.resource.preload();
+
+    // Уровень закончился — отпускаем ссылки.
+    $.resource.free('tiles');
+});
+```
+
+Три правила, из которых растёт весь модуль:
+
+1. **Имя — это кэш.** Повторный `load('tiles', …)` не перезагружает файл, а
+   добавляет ссылку. Другое описание под уже занятым именем не побеждает:
+   первое остаётся, в журнал уходит предупреждение.
+2. **Загрузка ленивая.** `define()` ничего не читает с диска; файл трогают
+   `get()`, `load()`, `reload()` и `preload()`.
+3. **Ссылки считаются.** `load()` берёт ресурс (`+1`), `get()` — только
+   смотрит (`0`), `free()` отпускает (`−1`); на нуле значение выгружается и
+   при следующем обращении грузится заново.
+
+---
+
+## 1. Виды ресурсов
+
+| `kind` | Что возвращает `get`/`load` | Откуда берётся |
+|---|---|---|
+| `texture` | `number` — id текстуры | `engine.loadTexture(path)` |
+| `sprite` | `number` — id спрайта | общий кэш ядра или `engine.createSprite` для кадра |
+| `sheet` | `number[]` — кадры листа | `.frames({ src, cols, rows, cw, ch })` |
+| `sound` | `number` — id звука | `engine.audio.load(path)` |
+| `json` | объект | `$.fs.readJSON(path, fallback)` |
+| `text` | строка | `$.fs.readText(path)` |
+| `data` | что угодно | `value` или `build()` из кода |
+
+Вид выводится из расширения, если не указан явно: `.png/.jpg/.bmp/.gif/.webp`
+→ `texture`, `.wav/.ogg/.mp3/.flac` → `sound`, `.json` → `json`,
+`.txt/.md/.csv/.ini` → `text`, всё остальное → `texture`.
+
+---
+
+## 2. Пространство имён `$.resource`
+
+| Функция | Возвращает | Назначение |
+|---|---|---|
+| `$.resource.define(name, spec)` | описание / `null` | описать ресурс, не загружая |
+| `$.resource.load(name, spec?)` | значение / `null` | взять ресурс: описать (если нужно), загрузить, `+1` ссылка |
+| `$.resource.get(name, fallback?)` | значение / `fallback` | получить значение (лениво), ссылку **не** держать |
+| `$.resource.reload(name)` | значение / `null` | перезагрузить с диска мимо кэша |
+| `$.resource.free(name)` | остаток ссылок (`-1` — нет ресурса) | отпустить ссылку; на нуле — выгрузка |
+| `$.resource.freeAll()` | число выгруженных | отпустить все ссылки (описания остаются) |
+| `$.resource.preload(names?)` | `{ loaded, failed, total }` | прогреть кэш (без ссылок) |
+| `$.resource.has(name)` / `names()` | `bool` / `string[]` | что зарегистрировано |
+| `$.resource.info(name)` | описание / `null` | состояние, ссылки, размер текстуры, кадры, длительность звука |
+| `$.resource.list()` | массив описаний | все записи без значений (годится в JSON) |
+| `$.resource.stats()` | объект | `{ total, ready, defined, failed, refs, loads, fails, kinds }` |
+| `$.resource.error(name)` | строка / `null` | последняя ошибка ресурса |
+| `$.resource.remove(name)` | `bool` | забыть ресурс вместе со значением |
+| `$.resource.clear()` | число | забыть все ресурсы |
+
+`spec` — либо строка-путь, либо объект:
+
+```js
+$.resource.define('tiles', 'assets/tiles.png');                 // texture
+$.resource.define('shot', { kind: 'sound', path: 'sfx/shot.wav' });
+$.resource.define('coin', { kind: 'sprite', src: 'art/coin.png', x: 16, w: 16, h: 16 });
+$.resource.define('hero-sheet', { kind: 'sheet', src: 'art/hero.png', cols: 4, rows: 2, cw: 16, ch: 24 });
+$.resource.define('config', { kind: 'json', path: 'data/config.json', fallback: {} });
+$.resource.define('tuning', { kind: 'data', value: { jump: 640 } });
+$.resource.define('wave', { kind: 'data', build: () => makeWave(3) });   // считается один раз
+```
+
+`data` — единственный вид, которому не нужны ни движок, ни файлы: значение
+берётся из `value` или считается `build()` при первой загрузке и потом
+кэшируется. У любого описания может быть `dispose(value)` — он вызывается при
+выгрузке (закрыть файл, вернуть что-то движку).
+
+---
+
+## 3. Счётчик ссылок
+
+| Вызов | Ссылки | Что происходит |
+|---|---|---|
+| `load(name, spec)` | `+1` | грузит, если ещё не загружено; возвращает значение |
+| `load(name)` | `+1` | то же для уже описанного ресурса |
+| `get(name)` | без изменений | грузит лениво, но не удерживает |
+| `reload(name)` | без изменений | выгружает и грузит заново, ссылки сохраняются |
+| `free(name)` | `−1` | на нуле: `dispose(value)` (если есть) и значение забыто |
+| `freeAll()` | `0` у всех | выгружает всё готовое, описания остаются |
+| `remove(name)` / `clear()` | — | забывают ресурс даже при живых ссылках (с предупреждением) |
+
+```js
+$.resource.load('tiles', 'assets/tiles.png');   // ссылок 1
+$.resource.free('tiles');                       // 0 → значение выгружено
+$.resource.get('tiles');                        // снова 0 ссылок, но значение загружено
+```
+
+Важно: `get()` не владеет ресурсом. Если `get()`-потребитель держит значение,
+а владелец вызвал `free()`, ресурс выгрузится и следующий `get()` загрузит его
+заново. Кто грузит надолго — тот и зовёт `load()`.
+
+| Поле `$.resource.info(name)` | Смысл |
+|---|---|
+| `state` | `defined` (описан), `ready` (загружен), `failed` (не загрузился) |
+| `refs` / `loads` / `fails` | ссылок сейчас / успешных загрузок / провалов |
+| `path`, `kind` | что и откуда |
+| `width`, `height` | размер текстуры (для `texture`) |
+| `frames` | число кадров (для `sheet`) |
+| `duration` | длительность звука (для `sound`) |
+| `error` | текст последней ошибки или `null` |
+
+---
+
+## 4. Ошибки
+
+Провал не бросает исключение: `get()` возвращает `fallback` (по умолчанию
+`null`), `load()` — `null`, а в журнал и в `error(name)` уходит сообщение, по
+которому понятно, что делать:
+
+```
+$.resource: не удалось загрузить "tiles" (texture assets/tiles.png) — текстура "assets/tiles.png" не загрузилась — файл на месте?
+$.resource: "shot" не описан — укажите путь: $.resource.load('shot', 'assets/...')
+$.resource: не удалось загрузить "config" (json data/config.json) — файл "data/config.json" не найден
+```
+
+Упавшая запись остаётся в состоянии `failed` — следующая попытка снова идёт к
+загрузчику (файл могли доложить на диск). Число провалов видно в `stats().fails`.
+
+---
+
+## 5. Ограничения
+
+* **Движок не умеет выгружать текстуры и звуки.** `engine.loadTexture()`
+  кэширует по пути внутри рендера, обратной функции в API нет. Поэтому
+  `free()` честно забывает значение у себя, но повторная загрузка получит от
+  движка ту же текстуру. Для спрайтов, вырезанных через `createSprite`, и для
+  данных `free()` освобождает именно нашу запись.
+* **Реестр не знает про сцены.** `$.scene.load()` ресурсы не выгружает —
+  вызывайте `freeAll()`/`clear()` сами, когда уровень закончился.
+* **`preload()` не держит ссылок.** Прогрели кэш — он останется, пока кто-то
+  не вызовет `free()`/`remove()`; `freeAll()` после `preload()` тоже выгрузит
+  (ссылок нет, `refs = 0`).
+* **Имя ресурса — строка.** Регистр учитывается (`Tiles` и `tiles` — разные),
+  пробелы по краям срезаются.
+* **Кадр (`sprite`) без обрезки идёт через общий кэш ядра.** Это тот же
+  спрайт, что у `.sprite('path')`; с обрезкой (`x/y/w/h`) создаётся свой
+  спрайт на текстуре.
+* **`json`/`text` требуют `$.fs`** (модуль `store.js`). Без него ресурс
+  останется в состоянии `failed` с подсказкой «нет $.fs».
+
+---
+
+## 6. Чистые функции (тесты без движка)
+
+Ядро реестра не касается `engine` — его можно проверить под qjs
+(`tests/js/resource_test.mjs`):
+
+| Функция | Смысл |
+|---|---|
+| `inferKind(path)` | вид ресурса по расширению |
+| `normalizeSpec(name, spec)` | строка/объект → нормализованное описание |
+| `specKey(spec)` / `describeSpec(spec)` | ключ сравнения и текст «что это» |
+| `makeEntry(spec)` | новая запись реестра |
+| `errorText(entry, reason)` | текст ошибки с именем и путём |
+| `ensureLoaded(entry, loader, now)` | ленивая загрузка с кэшем (повторно не грузит) |
+| `acquireEntry(entry, loader, now)` | загрузить и добавить ссылку |
+| `releaseEntry(entry, onError)` | отпустить ссылку, на нуле — выгрузить |
+| `unloadEntry(entry, onError)` | выгрузить значение (вызывает `dispose`) |
+| `createRegistry(loader, opts)` | реестр целиком: `define/acquire/peek/free/…` |
+
+
+---
+
+## Русские имена API (`$.ru`)
+
+<sub>источник: `docs/highlevel/ru.md`</sub>
+
+# Русские имена API (`$.ru`)
+
+Движок русский, документация русская — а писать игру приходилось латиницей.
+`$.ru` добавляет **второй полноценный набор имён**: русские теги, атрибуты,
+методы узлов и пространства имён. Латиница остаётся основным набором, русский —
+надстройкой: код можно писать вперемешку, оба варианта ссылаются на одни и те же
+объекты и функции.
+
+```js
+$.ready(() => {
+    $.мир.gravity(0, 0).bounds(0, 0, 800, 600);
+
+    $('<свет>', { 'радиус': 280, 'яркость': 1, 'цвет': '#ffd9a0', 'тени': true })
+        .в(200, 300).смешать('add').конус(70).добавитьВ($.мир);
+
+    $('<игрок>', { id: 'герой' }).в(100, 300).скорость(220)
+        .управление('wasd')
+        .на('смерть', () => $.сцена.load('конец'))
+        .добавитьВ($.мир);
+
+    $('игрок').цвет('#ffd9a0');          // селектор тоже по-русски
+});
+```
+
+## 1. Как это устроено
+
+| Слой | Механизм | Что важно |
+|---|---|---|
+| Теги | `$.aliasTag('свет', 'light')` | Узел создаётся с **каноническим** тегом: отрисовка, селекторы, префабы и снимок для агента видят обычный `<light>`. Русское имя живёт только на входе |
+| Селекторы | Перевод слов словарём до `query()` | Переводятся только известные слова: `#герой`, `.босс` и атрибуты остаются как есть |
+| Атрибуты | `translateAttrs({ 'радиус': 200 })` | Переводятся **до** создания узла: подсистемы знают только латинские ключи |
+| Методы узлов | Псевдоним на ту же функцию (`Wrapper.prototype['в'] = Wrapper.prototype.at`) | Не копия, а ссылка: поведение и исправления общие, своих багов у псевдонима быть не может |
+| Пространства имён | Ссылки: `$.мир === $.world` | Это тот же объект, а не обёртка |
+
+## 2. Теги
+
+| Русский | Канонический | Русский | Канонический |
+|---|---|---|---|
+| `<игрок>` | `player` | `<свет>` | `light` |
+| `<враг>` | `enemy` | `<светплощадка>` | `lightarea` |
+| `<нпс>` | `npc` | `<туман>` | `fog` |
+| `<предмет>` | `pickup` | `<частицы>` | `particles` |
+| `<пуля>` | `bullet` | `<тайлмап>` | `tilemap` |
+| `<спрайт>` | `sprite` | `<слой>` | `layer` |
+| `<прямоугольник>` | `rect` | `<зона>` | `trigger` |
+| `<круг>` | `circle` | `<область>` | `area` |
+| `<текст>` | `text` | `<стена>` | `wall` |
+
+Интерфейс: `<панель>` (`ui.panel`), `<надпись>` (`ui.label`), `<кнопка>`
+(`ui.button`), `<полоса>` (`ui.bar`), `<картинка>` (`ui.image`), `<строка>`
+(`ui.row`), `<колонка>` (`ui.col`), `<сетка>` (`ui.grid`), `<прокрутка>`
+(`ui.scroll`), `<флажок>` (`ui.checkbox`), `<ползунок>` (`ui.slider`),
+`<поле>` (`ui.input`), `<список>` (`ui.list`), `<диалог>` (`ui.dialog`).
+
+## 3. Атрибуты конструктора
+
+| Русский | Латинский | Русский | Латинский |
+|---|---|---|---|
+| `радиус` | `radius` | `тени` | `shadows` |
+| `яркость` | `intensity` | `конус` | `cone` |
+| `цвет` | `color` | `мерцание` | `flicker` |
+| `скорость` | `speed` | `препятствия` | `occluders` |
+| `здоровье` | `hp` | `плотность` | `density` |
+| `прозрачность` | `alpha` | `полосы` | `layers` |
+| `затухание`, `светимость` | `falloff` | `источник` | `src` |
+| `текст` | `text` | `размер` | `tile` |
+
+Если заданы оба ключа, побеждает тот, что написан позже в литерале: русский
+переводится в латинский и затирает прежний.
+
+## 4. Методы узлов
+
+`в`→`at`, `размер`→`size`, `ширина`/`высота`, `цвет`→`color`,
+`прозрачность`→`alpha`, `скорость`→`speed`, `поворот`→`rotate`, `угол`→`angle`,
+`позиция`→`pos`, `видимый`/`показать`/`скрыть`, `текст`, `радиус`, `яркость`,
+`тени`→`shadows`, `конус`→`cone`, `мерцание`→`flicker`,
+`препятствия`→`occluders`, `добавить`→`append`, `добавитьВ`→`appendTo`,
+`удалить`→`remove`, `каждый`→`each`, `на`→`on`, `снять`→`off`,
+`испустить`→`emit`, `класс`/`убратьКласс`/`естьКласс`, `здоровье`, `урон`,
+`лечить`, `убить`, `жив`, `смотретьНа`→`lookAt`, `идтиК`→`moveTo`, `прыжок`,
+`управление`→`controls`, `столкновение`→`collision`, `игратьЗвук`→`playSound`,
+`кадр`/`кадры`, `тень`→`shadow` (тень-копия спрайта), `контур`→`outline`,
+`слой`, `глубина`, `данные`, `смешать`→`blend`, `анимация`→`animate`,
+`остановитьАнимацию`→`stopAnim`.
+
+Полный список — таблица `RU_METHODS` в `src/highlevel/ru.js`; она же
+экспортируется наружу, её проверяет `tests/js/ru_test.mjs`.
+
+## 5. Пространства имён
+
+`$.мир`→`world`, `$.камера`→`camera`, `$.время`→`time`, `$.ввод`→`input`,
+`$.сцена`→`scene`, `$.звук`→`sound`, `$.графика`→`gfx`, `$.интерфейс`→`ui`,
+`$.навигация`→`nav`, `$.частицы`→`particles`, `$.анимация`→`anim`,
+`$.отладка`→`debug`, `$.сеть`→`http`, `$.пул`→`pool`, `$.сохранение`→`store`,
+`$.переводы`→`tr`, `$.слои`→`layers`, `$.триггеры`→`triggers`,
+`$.префаб`→`prefab`, `$.твин`→`tween`.
+
+## 6. Свои псевдонимы
+
+```js
+$.aliasTag('камень', 'wall');        // $('<камень>') и $('камень') заработают
+```
+
+Метод-псевдоним добавляется обычным `def`-ом — см.
+[_CONTRACT.md](_CONTRACT.md) §5 (там же список занятых имён).
+
+## 7. Ограничения
+
+* Псевдонимы методов — **ссылки** на существующие функции: свой набор из
+  русского модуля не вырастет, он только называет уже существующее.
+* Русский тег в префабах и сценах сериализуется каноническим — при чтении
+  данных разницы нет, но в сохранённом виде вы увидите `player`, а не `игрок`.
+* Если подсистемы нет (сборка без неё), её псевдоним пропускается с одной
+  записью в журнал: игра не падает из-за имени.
+* Смешивать наборы в одном файле можно, но читаемость страдает — выберите
+  один для проекта.
+
+## 8. Тесты
+
+| Что | Файл | Запуск |
+|---|---|---|
+| Таблицы, перевод атрибутов, иммутабельность | `tests/js/ru_test.mjs` | `build/_deps/quickjs-build/qjs tests/js/ru_test.mjs` |
+| Русская сцена целиком: теги, селекторы, методы, пространства имён | `tests/agent/highlevel_ru_test.py`, фикстура `tests/fixtures/ru/` | `python3 tests/agent/highlevel_ru_test.py` (после сборки) |
+
+
+---
+
+## Сохранения игры — `$.save`
+
+<sub>источник: `docs/highlevel/save.md`</sub>
+
+# Сохранения игры — `$.save`
+
+Подсистема сохраняет состояние игры целиком и по частям: данные `$.store`,
+мир (узлы со всем поддеревом через `$.prefab`) и метаданные — в **слоты**,
+файлы `saves/slot-<имя>.json`. Слот знает свою версию, поэтому старые
+сохранения доезжают до текущего формата сами, а строки `export()`/`import()`
+годятся для `$.http`, буфера обмена и тестов.
+
+```js
+$.ready(() => {
+    $.save.dir('saves');            // где лежат слоты (по умолчанию saves)
+
+    // Меню: три слота + автосейв в слоте 0.
+    $('#save-1').on('click', () => $.save.slot(1).save());
+    $('#load-2').on('click', () => $.save.slot(2).load());
+
+    // Автосейв раз в минуту, не трогая текущий слот.
+    $.save.autosave(60000);
+
+    // Обмен строкой: облако, буфер обмена, тесты.
+    const text = $.save.export();
+    $.http.post('https://example.com/save', text);
+});
+```
+
+Три правила, из которых растёт весь модуль:
+
+1. **Ничего своего про узлы и key-value.** Мир описывает `$.prefab.save()`,
+   данные берёт `$.store.all()`, файлы пишет `$.fs` — `$.save` только собирает
+   из них слот, добавляет версию и миграции.
+2. **Версия обязательна.** Формат всегда пишется с `version`; загрузка
+   прогоняет данные через миграции и отказывается открывать сохранение
+   «из будущего» (понятным сообщением, а не исключением).
+3. **Слот — это файл.** `slot-1.json`, `slot-quick.json`, `slot-0.json` —
+   сколько угодно слотов в каталоге `saves/`; `list()` показывает их меню.
+
+---
+
+## 1. Что внутри слота
+
+```json
+{
+  "format": "r2d.save",
+  "version": 2,
+  "saved_at": 1730000000000,
+  "saved_frame": 1234,
+  "time": 20.5,
+  "scene": "level1",
+  "store": { "highscore": 1200, "kills": 7 },
+  "world": [ { "tag": "player", "id": "hero", "x": 100, "y": 200, "children": [] } ],
+  "speeds": [ [0, 0] ],
+  "meta": {}
+}
+```
+
+| Поле | Смысл |
+|---|---|
+| `format` | всегда `'r2d.save'` — по нему видно, что это наш слот, а не чужой JSON |
+| `version` | версия формата: `1` — запись `$.store.save()` / сцена `$.prefab`, `2` — слот |
+| `saved_at` | `Date.now()` в момент сохранения (для меню: «12 минут назад») |
+| `saved_frame`, `time` | кадр и игровое время на момент снимка |
+| `scene` | имя активной сцены (`$.scene.current()`), **справочно** — см. §9 |
+| `store` | данные `$.store.all()` — счётчики, инвентарь, настройки |
+| `world` | корневые узлы `ctx.nodes` в формате `$.prefab` (или `null`) |
+| `speeds` | скорости тел в порядке обхода узлов, `null` — если тел нет |
+| `meta` | что положит игра: `$.save.save({ meta: { chapter: 2 } })` |
+
+Поля `format`, `version`, `store`, `world`, `speeds`, `meta`, `saved_at`,
+`saved_frame`, `time`, `scene` **зарезервированы**. Объект без них считается
+«сырыми» данными `$.store` (как в `$.store.load()`), поэтому старый файл
+`save.json` тоже открывается как слот.
+
+---
+
+## 2. Пространство имён `$.save`
+
+| Функция | Возвращает | Назначение |
+|---|---|---|
+| `$.save.slot(name?)` | слот / `$.save` | текущий слот или переключение (`slot(2)`) |
+| `$.save.dir(path?)` | каталог / `$.save` | каталог слотов (`'saves'` по умолчанию) |
+| `$.save.path(slot?)` | строка | путь к файлу слота |
+| `$.save.version()` | число | текущая версия формата (`2`) |
+| `$.save.save(slotOrOpts?, opts?)` | `bool` | записать состояние в слот |
+| `$.save.load(slotOrOpts?, opts?)` | `bool` | прочитать слот и применить |
+| `$.save.read(slot?)` | объект / `null` | данные слота **без** применения |
+| `$.save.write(payload, slot?)` | `bool` | записать готовый снимок |
+| `$.save.exists(slot?)` | `bool` | есть ли файл слота |
+| `$.save.list(opts?)` | массив | слоты каталога (`{ meta: false }` — без чтения файлов) |
+| `$.save.info(slot?)` | объект / `null` | метаданные одного слота |
+| `$.save.remove(slot?)` | `bool` | удалить файл слота |
+| `$.save.snapshot(opts?)` | объект | снимок состояния без записи на диск |
+| `$.save.storeData()` | объект | только данные `$.store` |
+| `$.save.worldData()` | массив / `null` | только узлы мира |
+| `$.save.apply(payload, opts?)` | `bool` | применить снимок (объект) |
+| `$.save.applyStore(data, mode?)` | `bool` | применить данные (`'merge'` — дополнить) |
+| `$.save.applyWorld(nodes, opts?)` | число | собрать мир, вернуть число корней |
+| `$.save.export(opts?)` | строка | снимок строкой JSON |
+| `$.save.import(text, opts?)` | `bool` | применить строку JSON |
+| `$.save.autosave(ms?, slot?)` | id | автосейв по таймеру (слот `0`) |
+| `$.save.stopAutosave()` | `$.save` | выключить автосейв |
+| `$.save.counter(key, delta?)` | число | счётчик в `$.store` |
+| `$.save.stats()` | объект | сводка модуля и `last_error` |
+
+`slotOrOpts` — либо номер/имя слота, либо сразу объект настроек:
+`$.save.save()`, `$.save.save(3)`, `$.save.save('quick')`,
+`$.save.save({ world: false, meta: { chapter: 2 } })` — всё одно и то же.
+
+`opts` у `save/snapshot/export`: `world` (true), `store` (true), `speeds`
+(true), `meta`.
+`opts` у `load/import/apply`: `world` (true), `store` (`true` — заменить всё,
+`'merge'` — дополнить, `false` — не трогать), `clear` (true), `speeds` (true).
+
+---
+
+## 3. Слоты
+
+```js
+$.save.slot(2).save();        // saves/slot-2.json
+$.save.exists(2);             // true
+$.save.info(2).store_keys;    // сколько ключей в данных
+$.save.info(2).world_nodes;   // сколько узлов в мире (с детьми)
+$.save.list();                // [{ slot, path, size, version, saved_at, scene, … }]
+$.save.remove(2);
+$.save.load(2);               // текущий слот переключается на 2
+```
+
+`list()` по умолчанию читает и разбирает каждый файл — это нужно меню
+сохранений (версия, время, размер). Для дешёвого списка есть
+`$.save.list({ meta: false })`: только `{ slot, path, file }` без чтения.
+
+Слоты сортируются по-человечески: числовые сначала и по возрастанию
+(`2` раньше `10`), затем именованные по алфавиту.
+
+---
+
+## 4. Снимок по частям
+
+```js
+// Только инвентарь и счётчики, без мира.
+const data = $.save.snapshot({ world: false });
+$.save.apply(data, { world: false });
+
+// Только мир, данные не трогаем.
+$.save.save({ store: false });
+$.save.load(1, { store: false });
+
+// Дополнить текущие данные данными из слота.
+$.save.load(1, { store: 'merge' });
+
+// Добавить мир из слота поверх текущего (не удаляя узлы).
+$.save.applyWorld($.save.read(1).world, { clear: false });
+```
+
+`applyWorld()` по умолчанию **чистит** текущий мир (`clear: true`), чтобы
+загруженный слот не смешивался с недоигранной партией. С `clear: false` узлы
+добавляются к существующим. Скорости тел (`speeds`) применяются к новым телам
+по порядку обхода — сохранённая в полёте пуля продолжает лететь.
+
+---
+
+## 5. Строки: `export()` и `import()`
+
+Строка — тот же слот, только без файла. Это основной путь для `$.http`,
+буфера обмена, облачных сохранений и тестов без движка.
+
+```js
+const text = $.save.export();                    // мир + данные
+await $.http.post('https://example.com/save', text);
+
+const remote = await $.http.text('https://example.com/save');
+if (!$.save.import(remote)) $.log('сохранение не подошло: ' + $.save.stats().last_error);
+
+$.save.export({ world: false });                 // только данные
+$.save.import(text, { store: 'merge' });         // дополнить, а не заменить
+```
+
+`import()` никогда не бросает исключение: битый JSON, пустая строка, массив
+вместо объекта и «версия из будущего» возвращают `false`, а причина остаётся
+в `$.save.stats().last_error` и уходит в журнал.
+
+---
+
+## 6. Версии и миграции
+
+| Версия | Что это | Как читается |
+|---|---|---|
+| `1` | `$.store.save()`: `{ version: 1, saved_frame, data: {...} }` | данные → `store`, мир пустой |
+| `1` | сцена `$.prefab.saveScene()`: `{ version: 1, name, nodes: [...] }` | `nodes` → `world` |
+| без версии | «сырой» объект данных `$.store` | весь объект → `store` |
+| `2` | слот `$.save` | читается как есть |
+
+Миграция помечается полем `migrated_from`: игра может показать «сохранение
+из старой версии» и перезаписать слот уже в новом формате.
+
+```js
+const info = $.save.info(1);
+if (info.legacy) $.log('слот из версии ' + info.version);
+```
+
+Сохранение с `version` больше текущей не открывается: `read()`/`load()`
+возвращают `null`/`false`, `info()` — `null`, а `last_error` объясняет причину.
+
+---
+
+## 7. Автосейв
+
+```js
+$.save.autosave(60000);        // каждую минуту игрового времени в слот 0
+$.save.autosave(30000, 'auto');// или в свой слот
+$.save.stopAutosave();
+$.save.list();                 // слот '0' видно как обычный слот
+```
+
+Автосейв идёт через `$.time.every()`, поэтому уважает `$.time.pause()` и
+`$.time.scale()`, и **не** переключает текущий слот: игрок может сохраняться
+руками в слот 1, пока автосейв пишет в 0. Если `$.time` нет (модульный тест
+без движка), `autosave()` вернёт `0` и объяснит это в журнале.
+
+---
+
+## 8. Счётчики
+
+Всё, что лежит в `$.store` (убийства, собранное золото, открытые двери),
+уезжает в слот автоматически. Для типового случая «просто счётчик» есть
+короткая форма:
+
+```js
+$.save.counter('kills', 1);    // увеличить и вернуть новое значение
+$.save.counter('kills');       // прочитать (0, если счётчика ещё нет)
+$.store.set('inventory', ['меч', 'щит']);   // инвентарь — обычные данные $.store
+```
+
+---
+
+## 9. Ограничения
+
+* **Сцены не переключаются сами.** Поле `scene` справочное: `load()` не зовёт
+  `$.scene.load()`, иначе поверх сцены из кода лёг бы ещё и мир из слота.
+  Хотите начать с сохранённой сцены — вызовите `$.scene.load($.save.read(1).scene)`.
+* **Мир восстанавливается через `$.prefab`.** Если `$.prefab` не установлен
+  (или модуль собран без него), `worldData()` вернёт `null`, слот сохранит
+  только данные `$.store`, а в журнале будет объяснение.
+* **Скрипты узлов не сохраняются** — `$.prefab` хранит данные, а не функции.
+  После загрузки узлы создаются заново: подписки, таймеры и твины нужно
+  навесить самому (обычно в `$.ready`/сцене).
+* **Скорости — по порядку обхода.** `speeds` сопоставляются узлам
+  «узел → дети» на момент снимка; если игра сама удаляет узлы между
+  сохранением и загрузкой, соответствие может сбиться (это не ошибка загрузки,
+  а цена «дешёвого» формата).
+* **`list()` читает файлы.** Десятки больших слотов — это десятки чтений;
+  для частого обновления меню используйте `list({ meta: false })`.
+* **Текстуры движок не выгружает** (см. `resource.md`): у `$.save` своей
+  выгрузки нет вообще — он пишет файлы и ничего не кэширует, кроме строки
+  текущего каталога и слота.
+* **Бинарных слотов нет.** Всё, что не переживает `JSON.stringify` (функции,
+  `Map`/`Set`, ссылки на живые объекты), срезается при сохранении — так же,
+  как в `$.prefab`.
+
+---
+
+## 10. Чистые функции (тесты без движка)
+
+Экспортируются для `tests/js/save_test.mjs` — их можно звать без движка:
+
+| Функция | Смысл |
+|---|---|
+| `normalizeSlot(slot)` / `normalizeDir(dir)` | каноническое имя слота и каталога |
+| `slotFileName(slot)` / `slotPath(dir, slot)` / `slotFromFile(file)` | файлы слотов |
+| `compareSlots(a, b)` / `sortSlots(list)` | человеческая сортировка |
+| `makeSave(raw)` / `serializeSave(raw)` | канонический снимок и его JSON |
+| `migrateSave(raw)` | миграция любой версии к текущей (`null` — не сохранение) |
+| `parseSaveJson(text)` | строка → `{ ok, data, raw, error }` без исключений (`raw` — объект файла, нужен для `saveInfo`) |
+| `flattenNodes(data)` | обход узлов и детей в порядке `nodeToData()` |
+| `saveInfo(raw, extra)` | метаданные слота для `list()`/`info()` |
+
+
+---
+
+## Экраны и меню — `$.screen`
+
+<sub>источник: `docs/highlevel/screen.md`</sub>
+
+# Экраны и меню — `$.screen`
+
+Подсистема `screen.js` собирает экран (пауза, главное меню, настройки) из
+обычных `ui.*`-узлов, но **без ручных координат**: экран описывается данными —
+строками/колонками, отступами и выравниванием, — а `.at()` считает раскладка:
+
+```js
+$.ready(() => {
+    $.screen.define('pause', {
+        anchor: 'center', gap: 10, padding: 16, backdrop: true,
+        rows: [
+            { id: 'title', tag: 'ui.label', text: 'Пауза', style: 'title', h: 40 },
+            { id: 'resume', text: 'Продолжить' },
+            { id: 'quit',   text: 'В меню', action: 'quit' },
+        ],
+    });
+
+    $.screen.on('activate', (e) => {
+        if (e.id === 'resume') $.screen.close();
+        if (e.id === 'quit') $.scene.load('menu');
+    });
+
+    $.input.bind('pause', ['escape']);
+    $.update(() => { if ($.input.pressed('pause')) $.screen.open('pause'); });
+});
+```
+
+Узлы живут в координатах окна (`attrs.ui = true`), камера на них не влияет, и в
+`$.world.count()` они не попадают.
+
+---
+
+## 1. Описание экрана
+
+| Поле | Тип | По умолчанию | Смысл |
+|---|---|---|---|
+| `rows` | массив | — | элементы сверху вниз (главная ось — вертикаль) |
+| `columns` | массив | — | элементы слева направо |
+| `anchor` | строка/объект | `'center'` | положение панели: `'center'`, `'top'`, `'bottom-right'`, `'top left'`, `'full'`, `{ x: 'left', y: 'bottom' }` |
+| `margin` | number | 8 | отступ панели от края окна |
+| `w` / `h` | number | по содержимому | размер панели; без них панель обнимает содержимое |
+| `gap` | number | 10 | расстояние между элементами |
+| `padding` | number | 16 | отступ от края панели |
+| `align` | `'start'`\|`'center'`\|`'end'`\|`'stretch'` | `rows` → `'stretch'`, `columns` → `'center'` | выравнивание по поперечной оси |
+| `style` | string | — | стиль `$.font` для всех элементов (§4) |
+| `color` | цвет | `'#101722ee'` | фон панели |
+| `backdrop` | bool | `true` | затемняющая подложка на всё окно |
+| `backdropColor` | цвет | `'#00000088'` | цвет подложки |
+| `id` | string | — | имя панели: узел `#__screen_<id>` |
+
+Элемент — либо **лист** (становится узлом), либо **вложенная группа**
+(`rows`/`columns` внутри элемента):
+
+| Поле листа | Тип | По умолчанию | Смысл |
+|---|---|---|---|
+| `id` | string | — | id узла и адрес для `$.screen.focus/item/rect` |
+| `tag` | string | `'ui.button'` | тег узла; подпись — `'ui.label'` |
+| `text` | string | — | текст узла |
+| `tr` | string | — | ключ `$.i18n` (узел попадёт в автоподстановку `tickI18n`) |
+| `size` | number | тег | размер шрифта |
+| `color` | цвет | тег | цвет (у контролов — фон, см. `font.md` §2) |
+| `w` / `h` | number | таблица ниже | размер; при `align: 'stretch'` растягивается |
+| `grow` | number | 0 | делит остаток главной оси пропорционально весу |
+| `align` | строка | у группы | своё выравнивание по поперечной оси |
+| `style` | string | — | стиль `$.font` именно для этого элемента |
+| `action` | string | — | что передать в событие `activate` |
+| `on` | объект | — | подписки узла: `{ click: () => … }` |
+| `attrs` | объект | — | прочие атрибуты узла как есть |
+| `focusable` | bool | по тегу | берёт ли элемент фокус экрана |
+| `disabled` | bool | `false` | узел с `attrs.disabled`, фокус не берёт |
+
+Размеры листа по умолчанию (`SCREEN_LEAF_DEFAULTS`):
+
+| Тег | w × h | Тег | w × h |
+|---|---|---|---|
+| `ui.button` | 200 × 44 | `ui.input` | 240 × 32 |
+| `ui.label` | 160 × 28 | `ui.checkbox` | 200 × 28 |
+| `ui.panel` | 200 × 100 | `ui.slider` | 240 × 28 |
+| `ui.image` | 64 × 64 | `ui.list` / `ui.scroll` | 220 × 160 / 240 × 160 |
+| `ui.bar` | 200 × 16 | прочие | 160 × 32 |
+
+## 2. Как считается раскладка
+
+* главная ось группы: `rows` — сумма высот, `columns` — сумма ширин; плюс
+  `gap` между элементами и `padding` по краям;
+* поперечная ось — максимум поперечных размеров; `align: 'stretch'`
+  растягивает элемент на всю внутреннюю ширину (поэтому пункты меню в `rows`
+  по умолчанию одной ширины), `center`/`end`/`start` сдвигают его;
+* панель без `w`/`h` обнимает содержимое, с `w`/`h` — фиксирована;
+* `grow` делит свободное место главной оси: `grow: 1` и `grow: 3` получат
+  остаток в отношении 1:3;
+* `anchor: 'full'` растягивает панель на всё окно (удобно для настроек);
+* вложенная группа **без** `tag` своего узла не создаёт — её дети просто
+  оказываются внутри ближайшего родителя с узлом; с `tag` группа становится
+  отдельным узлом (её `id` тоже доступен в `focus`/`rect`);
+* координаты в раскладке — левый верхний угол (как в CSS), в узлы они
+  переводятся центром (`x + w/2`): `ui.*`-узлы позиционируются центром.
+
+Чистые функции (проверяются qjs без движка):
+
+| Функция | Результат |
+|---|---|
+| `layoutScreen(spec, viewport)` | `{ panel: {x,y,w,h}, items: [{ id, tag, x, y, w, h, parent, focusable }] }` |
+| `normalizeScreen(spec)` | нормализованное дерево описания |
+| `anchorPosition(anchor, w, h, viewport, margin)` | левый верхний угол панели |
+| `parseScreenAnchor(spec)` | `{ hx, vy, full }` |
+| `isFocusableTag(tag)` | может ли тег получить фокус |
+| `SCREEN_LEAF_DEFAULTS` | размеры листа по умолчанию |
+
+## 3. Функции `$.screen`
+
+| Функция | Назначение |
+|---|---|
+| `$.screen.define(id, spec)` | объявить экран |
+| `$.screen.has(id)` / `list()` / `remove(id)` | реестр экранов |
+| `$.screen.open(idOrSpec)` | открыть по имени или по описанию; возвращает обёртку панели или `null` |
+| `$.screen.close()` | закрыть и уничтожить узлы (`true`, если было что закрывать) |
+| `$.screen.isOpen()` / `current()` | открыт ли экран и его имя |
+| `$.screen.panel()` | обёртка панели или `null` |
+| `$.screen.item(id)` | обёртка узла элемента или `null` |
+| `$.screen.rect(id)` | `{ x, y, w, h }` элемента (левый верхний угол) |
+| `$.screen.panelRect()` | прямоугольник панели |
+| `$.screen.items()` | id всех элементов в порядке раскладки |
+| `$.screen.focus(id)` | поставить фокус (неизвестный/нефокусируемый id → `false` + лог) |
+| `$.screen.focused()` / `focusedNode()` | id и обёртка узла в фокусе |
+| `$.screen.next()` / `prev()` | фокус по кругу |
+| `$.screen.activate()` | «нажать» на элементе в фокусе |
+| `$.screen.on(name, fn)` / `off(name, fn)` | подписка на события экрана |
+| `$.screen.listenerCount(name)` | сколько подписчиков (для тестов) |
+
+## 4. События
+
+| Событие | Когда | `data` |
+|---|---|---|
+| `open` | экран открыт | `{ id, node }` |
+| `focus` | фокус перешёл на элемент (мышью, стрелками или `focus()`) | `{ id, node, index }` |
+| `activate` | `activate()` или Enter/Space | `{ id, action, node, index }` |
+| `close` | экран закрыт (в том числе Escape) | `{ id }` |
+
+Узел при активации получает обычный `click` (`{ button: 'left', keyboard: true, id, action }`),
+поэтому подписки `on: { click }` из описания работают и с клавиатуры, и от мыши.
+
+## 5. Клавиатура, мышь и фокус
+
+* **стрелки** `↑`/`←` — предыдущий элемент, `↓`/`→` — следующий (по кругу);
+* **Enter** / **Space** — активация элемента в фокусе;
+* **Escape** — закрыть экран;
+* **Tab** экран не перехватывает: это обход контролов в `widgets.js`;
+* **мышь**: фокус переходит на элемент под курсором. Клик по узлу отправляет
+  уже существующий ui-слой (`ui.js`, `_tick`), поэтому `activate()` из мыши не
+  вызывается — иначе одно нажатие приходило бы в игру дважды.
+
+Фокус виден: узлу ставится класс `screen-focus`, `attrs.screenFocus = true` и
+подсветка цветом `hover_color` (у `ui.button` это и есть «наведённый» вид).
+Цветом, а не только `.hovered`, потому что `tickScreen()` выполняется раньше
+`ctx.ui._tick()`, и та в конце кадра сбрасывает `.hovered` по положению мыши.
+При уходе фокуса исходный цвет возвращается.
+
+## 6. Ограничения
+
+* экран **не модален**: мир и другие подсистемы продолжают получать ввод.
+  Нужна пауза — `$.time.pause()` или своё состояние игры;
+* экран один на процесс: `open()` при открытом экране сначала закрывает
+  прежний (событие `close` с его id);
+* узлы создаются заново на каждый `open()` и уничтожаются в `close()` —
+  обёртки, взятые до закрытия, становятся мёртвыми;
+* при `open()` снимается фокус `widgets.js` (`$.ui.blur()`), поэтому
+  `$.ui.focusedId()` не показывает элемент экрана: у экрана свой фокус
+  (`$.screen.focused()`);
+* не используйте `ui.row`/`ui.col`/`ui.grid`/`ui.scroll` как `tag` группы:
+  `widgets.js` пересчитает их раскладку и затрёт координаты. Для визуальной
+  группы берите `ui.panel`;
+* при смене размера окна раскладка пересчитывается в `tickScreen()`: узлы
+  элементов пересоздаются (панель и подложка остаются), порядок и id
+  сохраняются;
+* настройки (слайдеры, поля ввода) внутрь экрана ставить можно, но ввод
+  текста и Tab остаются за `widgets.js` — экран их не перехватывает.
+
+## 7. Проверка
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/screen_test.mjs
+python3 tests/agent/highlevel_dialog_test.py    # интеграция, после сборки
+```
+
+Покрыто: строки/колонки/вложенность/`grow`/якоря, построение узлов и подложки,
+фокус по кругу, стрелки/Enter/Space/Escape, мышь без двойного `click`,
+подсветка фокуса, пересчёт при resize, неизвестный экран.
+
+
+---
+
+## Сигналы — `$.signal`
+
+<sub>источник: `docs/highlevel/signal.md`</sub>
+
+# Сигналы — `$.signal`
+
+`signal.js` — именованная шина событий в духе Godot: `on` / `once` / `off` /
+`emit` / `waitFor`, с приоритетами, отложенной доставкой и счётчиками
+подписчиков. Это «радио» игры: один объект крикнул — все, кому надо, услышали,
+и никто ни о ком не знает.
+
+```js
+$.ready(() => {
+    $.signal.on('enemy:died', (enemy, score) => {
+        $.store.set('score', ($.store.get('score') || 0) + score);   // система очков
+    }, { priority: 10 });                            // сработает раньше остальных
+
+    $.signal.once('level:start', () => $.sound.play('intro'));
+
+    $('#hero').on('collision', (e) => {
+        const other = e.data.other.get(0);
+        if (other.tag === 'enemy') {
+            other.kill();
+            $.signal.emit('enemy:died', other, 10);  // аргументов сколько угодно
+        }
+    });
+});
+```
+
+---
+
+## 1. Чем отличается от `$.on` и `.on()` у узла
+
+| | `$.on` / `$.emit` | `.on()` у узла | `$.signal` |
+|---|---|---|---|
+| Кто адресат | глобальные подписки | конкретный узел | имя события |
+| Приоритеты | нет | нет | есть (`{ priority }`) |
+| `emit` внутри `emit` | вклинивается | вклинивается | встаёт в очередь |
+| Ожидание (`then`) | нет | нет | `waitFor` |
+| Счётчик подписчиков | нет | нет | `count`/`list`/`names` |
+| Одноразовая подписка | вручную | вручную | `once` |
+
+События узла (`node.emit('hit')`) шину не задевают и наоборот — это разные
+миры. Мост между ними ставится одной строкой, если нужен:
+
+```js
+$('#door').on('enter', (e) => $.signal.emit('door:enter', e.data.other));
+```
+
+---
+
+## 2. Публичное API
+
+Модуль экспортирует `installSignal($)` — её вызывает `api.js` при сборке API
+(кадрового шага у шины нет: рассылка идёт в момент `emit`).
+
+| Функция | Возвращает | Назначение |
+|---|---|---|
+| `$.signal.on(name, fn, opts?)` | `id` | подписка; `opts`: `{ priority, once }` |
+| `$.signal.once(name, fn, opts?)` | `id` | подписка на одно срабатывание |
+| `$.signal.off(name, fnOrId?)` | число снятых | без второго аргумента снимает всех подписчиков имени |
+| `$.signal.emit(name, ...args)` | число вызовов | рассылка; `0` — если доставка отложена |
+| `$.signal.clear(name?)` | число снятых | снять подписки имени или все |
+| `$.signal.count(name?)` | число | подписчиков у имени; без имени — всего |
+| `$.signal.has(name)` | bool | есть ли живые подписчики |
+| `$.signal.names()` | массив | имена с подписчиками или ожиданиями |
+| `$.signal.list(name)` | массив | `{ id, priority, once }` — для отладки и тестов |
+| `$.signal.waitFor(name, opts?)` | ожидание | `opts.timeout` — мс игрового времени |
+| `$.signal.waiters(name?)` | число | сколько ожиданий висит |
+| `$.signal.bus()` | объект шины | для отладки и юнит-тестов |
+
+Имя сигнала — любая непустая строка; договоритесь о схеме (`enemy:died`,
+`ui:open`) — это единственный «контракт» между отправителем и получателем.
+
+---
+
+## 3. Порядок и приоритеты
+
+```js
+$.signal.on('hit', () => $.log('третий'));                    // priority 0
+$.signal.on('hit', () => $.log('первый'), { priority: 100 });
+$.signal.on('hit', () => $.log('второй'), { priority: 100 });
+```
+
+* больше `priority` — раньше вызов; приоритет по умолчанию — `0`
+  (`DEFAULT_PRIORITY`), дробные и `NaN` тоже становятся нулём;
+* при равном приоритете — порядок подписки (не «как повезёт»: список
+  поддерживается вставкой в нужное место, а не пересортировкой).
+
+Порядок важен, когда один обработчик готовит данные для другого: урон должен
+примениться раньше, чем HUD перерисуется.
+
+---
+
+## 4. Отложенная доставка: `emit` внутри `emit`
+
+```js
+$.signal.on('outer', () => {
+    $.log('outer:1');
+    $.signal.emit('inner');       // встанет в очередь, вернёт 0
+    $.log('outer:2');
+});
+$.signal.on('inner', () => $.log('inner'));
+
+$.signal.emit('outer');
+// outer:1 → outer:2 → inner
+```
+
+Вложенное событие **не вклинивается** в текущую рассылку: получатель не видит
+«полусобытие». Очередь разбирается в порядке поступления (FIFO), сколько бы
+уровней вложенности ни было.
+
+Во время рассылки можно подписываться и отписываться:
+
+* отписавшийся до своей очереди обработчик не вызывается;
+* новый подписчик получит только следующие события (текущая рассылка идёт по
+  снимку списка);
+* `once` снимается **до** вызова, поэтому `emit` из обработчика не вызовет его
+  второй раз.
+
+Ошибка в обработчике не рвёт рассылку: она уходит в `$.log`
+(`$.signal: ошибка в обработчике "имя": …`), остальные подписчики получают
+событие.
+
+---
+
+## 5. Ожидание сигнала: `waitFor`
+
+```js
+const [enemy] = await $.signal.waitFor('enemy:died');
+
+// или без await — тогда ждём по-походному:
+const door = $.signal.waitFor('door:open', { timeout: 3000 });
+door.then(() => $.log('открылась'), (error) => $.log('не дождались: ' + error.message));
+```
+
+| Метод ожидания | Смысл |
+|---|---|
+| `.then(onOk, onErr)` | `onOk(...args)` при сигнале; `onErr(error, waiter)` при отмене/таймауте |
+| `.catch(onErr)` | только ошибка |
+| `.cancel(reason?)` | снять ожидание (сигнал его больше не разбудит) |
+| `.done()` | сработало/отменено? |
+| `.value()` | массив аргументов сигнала или `null` |
+
+Особенности:
+
+* если сигнал **уже пришёл**, `then` вызывает обработчик синхронно (в том же
+  кадре) — сценарный код не зависит от микротасков;
+* если нет — возвращается настоящий `Promise`, поэтому `await` работает;
+* `timeout` требует `$.time` (в юнит-тестах без движка таймаут не ставится и в
+  лог уходит предупреждение); при срабатывании ожидание отменяется с ошибкой
+  `$.signal.waitFor("имя"): истёк таймаут …`;
+* ожидание не считается подписчиком: `count()` его не видит, а `waiters()` —
+  видит.
+
+---
+
+## 6. Чистое ядро (для тестов без движка)
+
+`tests/js/signal_test.mjs` проверяет шину напрямую, без `$` и движка:
+
+| Экспорт | Назначение |
+|---|---|
+| `createBus()` | пустая шина |
+| `subscribe(bus, name, fn, opts)` | подписка → запись подписки |
+| `unsubscribe(bus, name, fnOrSub)` | отписка → число снятых |
+| `emit(bus, name, args)` | рассылка; `args` — массив |
+| `clearBus(bus, name?)` | снятие подписок |
+| `subscriberCount(bus, name?)`, `subscribersOf(bus, name)`, `busNames(bus)` | счётчики и списки |
+| `waitFor(bus, name)`, `waiterCount(bus, name?)` | ожидания |
+| `pendingEmits(bus)` | длина очереди отложенных рассылок |
+| `signalName(name)` | проверка имени (бросает с подсказкой) |
+
+---
+
+## 7. Пример: смерть врага без единой связи между системами
+
+```js
+// Система очков
+$.signal.on('enemy:died', (enemy, score) => {
+    $.store.set('score', ($.store.get('score') || 0) + score);
+}, { priority: 100 });
+
+// Звук — после очков, чтобы не тормозить счёт
+$.signal.on('enemy:died', () => $.sound.play('die'), { priority: 0 });
+
+// Интерфейс — одноразовая подписка на первую смерть
+$.signal.once('enemy:died', () => $.log('Первый!'));
+```
+
+---
+
+## 8. Ограничения
+
+* **Подписки не переживают смену сцены сами.** Шина модульная: чистите её
+  `$.signal.clear()` в обработчике смены сцены, иначе старые замыкания будут
+  держать удалённые узлы.
+* **`emit` синхронный.** Он не «размазывает» работу по кадрам: тяжёлые
+  обработчики тормозят кадр — уносите работу в `$.flow`.
+* **Аргументы не копируются.** Передавайте значения или immutability сами:
+  обработчик получает те же объекты.
+* **Нет wildcard-подписок.** `$.signal.on('*', …)` — это буквальное имя `'*'`,
+  а не «все события»; для глобального перехвата есть `$.on('*')`.
+* **Приоритеты — целые числа.** Дробные и `NaN` превращаются в 0.
+* **Порядок `waitFor`-ожиданий** — порядок постановки; они срабатывают после
+  обычных подписчиков этого имени.
+
+---
+
+## 9. Тесты
+
+| Файл | Что проверяет |
+|---|---|
+| `tests/js/signal_test.mjs` | приоритеты, отложенную доставку, once, отписку во время рассылки, ошибки, waitFor |
+| `tests/agent/highlevel_state_test.py` | `$.signal` в живом движке (вместе с `$.state` и `$.flow`) |
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/signal_test.mjs
+python3 tests/agent/highlevel_state_test.py     # после сборки движка
+```
+
+
+---
+
+## Машина состояний — `$.state` и `.fsm()`
+
+<sub>источник: `docs/highlevel/state.md`</sub>
+
+# Машина состояний — `$.state` и `.fsm()`
+
+`state.js` — машина состояний (FSM) для **логики игры**: `idle → run → air →
+land`, фазы босса, режимы двери, состояния экрана. Это не то же самое, что
+`$.anim.stateMachine()`: та машина выбирает **клип** (какая анимация играет), а
+`$.state` — **смысл** происходящего. Обе спокойно живут на одном узле.
+
+```js
+$.ready(() => {
+    $.state.create({
+        name: 'hero',
+        initial: 'idle',
+        states: {
+            idle: { on: { jump: 'air', move: { target: 'run', guard: (m) => m.data.moving } } },
+            run:  { on: { stop: 'idle', jump: 'air' } },
+            air:  {
+                initial: 'up',                                     // составное состояние
+                states: {
+                    up:   { on: { land: 'down' } },                // цель-сосед: air.down
+                    down: { on: { land: 'idle' } },                // цель от корня
+                },
+            },
+        },
+    });
+
+    $('#hero').fsm('hero');                                    // привязка к узлу
+    $('#hero').on('collision', () => { if ($('#hero').fsm() === 'air.up') $('#hero').fsmSend('land'); });
+
+    $.state.get('#hero').onEnter('air', () => $.sound.play('whoosh'));
+});
+```
+
+Метод узла называется **`.fsm()`**, а не `.state()`: `.state()`, `.states()`,
+`.toState()`, `.stateMachine()` и `.stateTime()` уже заняты анимацией
+(`src/highlevel/anim.js`, см. `_CONTRACT.md` §5) — переопределять их нельзя.
+
+---
+
+## 1. Спецификация машины
+
+```js
+const machine = $.state.create({
+    name: 'door',          // имя в реестре ($.state.byName)
+    initial: 'closed',     // стартовое состояние; по умолчанию — первое в states
+    history: true,         // вести историю (по умолчанию true)
+    historyLimit: 64,      // сколько записей хранить
+    data: { locked: true },// произвольные данные машины, видны в guard/action
+    node: '#door',         // сразу привязать к узлу (необязательно)
+    states: { /* … */ },
+});
+```
+
+Спецификация проверяется **один раз при создании**: опечатка в имени состояния
+или в цели перехода бросает исключение с перечнем доступных состояний, а не
+всплывает в бою.
+
+| Поле состояния | Тип | Смысл |
+|---|---|---|
+| `enter` | `(machine, data, event) => void` | вошли в состояние |
+| `exit` | `(machine, data, event) => void` | вышли из состояния |
+| `update` | `(machine, dt) => void` | покадровое обновление активного состояния |
+| `on` | `{ событие: цель }` | таблица переходов (см. §2) |
+| `initial` | строка | стартовое подсостояние (для составных) |
+| `states` | объект | вложенные состояния |
+
+Ошибка внутри `enter`/`exit`/`update`/`guard`/`action` **не роняет игру**: она
+уходит в `$.log` (`$: ошибка в …`), а машина продолжает работать.
+
+---
+
+## 2. Переходы
+
+| Форма записи | Пример | Смысл |
+|---|---|---|
+| строка | `on: { jump: 'air' }` | безусловный переход |
+| объект | `on: { move: { target: 'run', guard, action } }` | с условием и действием |
+| функция | `on: { go: (m, data) => data.where \|\| false }` | цель вычисляется на месте |
+| ловушка | `on: { '*': 'idle' }` | любое необработанное событие |
+
+Правила:
+
+* **Цель** ищется сначала от корня (`'air.down'`), затем среди соседей
+  исходного состояния: `down` из `air.up` — это `air.down`.
+* **Событие всплывает**: если его не обработал лист (`air.up`), смотрим `air`,
+  потом корень. Одно событие — один переход, дальше всплытие прекращается.
+* **`guard(machine, data)`** решает, состоится ли переход. `can(event, data)`
+  проверяет то же самое, но **без побочных эффектов**: `action`, `enter` и
+  `exit` не вызываются.
+* **`action(machine, data, event)`** выполняется до входа в новое состояние
+  (звук, счётчик, запись в `machine.data`).
+* **Неизвестное событие** — не ошибка: `send()` возвращает `false`, состояние
+  не меняется. Падение `guard` трактуется как отказ.
+* **Переход в текущее состояние перезапускает его** (`exit` → `enter`): так
+  «сбросить» атаку или таймер состояния без отдельного события.
+* `set(name)` — принудительный переход без события; неизвестное имя бросает
+  исключение (это ошибка программиста, а не игровая ситуация).
+
+---
+
+## 3. Составные состояния (минимально, но честно)
+
+Поддержано:
+
+* у состояния может быть `states` и `initial` — вход в родителя автоматически
+  входит в `initial` (и так до листа);
+* активный путь — массив: `['air', 'up']`, `is('air')` истинно и для листа
+  `air.up`, `is('air.up')` — только для него;
+* события ищутся от листа к родителям;
+* относительные цели (`down` из `air.up` → `air.down`);
+* `enter`/`exit` и хуки вызываются по каждому уровню пути: вход от корня к
+  листу, выход от листа к корню. Родитель, который остался активным, `exit` не
+  получает;
+* имена состояний в API **полные**: `current()`, `is()`, `onEnter()`,
+  `history()` работают со строками вида `air.up`. Точка — разделитель, в самих
+  именах состояний её использовать нельзя.
+
+Не поддержано (осознанно): параллельные состояния (несколько активных веток
+одновременно), «исторические» узлы-псевдосостояния Godot, вход в состояние с
+конкретной глубины, отдельный контекст на подсостояние. Если нужно
+параллельное поведение — заведите две машины: они друг о друге не знают.
+
+---
+
+## 4. История
+
+| Вызов | Что возвращает |
+|---|---|
+| `machine.history()` | имена листьев в порядке входа; первый — стартовое состояние |
+| `machine.previous()` | состояние до текущего (или `null`) |
+| `machine.back(data)` | переход в предыдущее состояние; `false`, если его нет |
+| `machine.transitions()` | журнал `{ from, to, event }`; стартовый вход имеет `from: null` |
+
+`history: false` отключает запись (и `back()` вместе с ней). Длина
+ограничена `historyLimit`.
+
+---
+
+## 5. Чистое ядро (для тестов без движка)
+
+Граф переходов не знает ни про `$`, ни про движок — `tests/js/state_test.mjs`
+проверяет его напрямую:
+
+| Экспорт | Назначение |
+|---|---|
+| `normalizeStateSpec(spec)` | проверка и канонизация спецификации; бросает с перечнем доступных состояний |
+| `createMachine(spec, hooks?)` | машина без реестра и узла |
+| `stateExists(states, name)` | есть ли состояние (`'air.jump'` или `['air','jump']`) |
+| `statePathOf(states, name)` | путь до состояния; бросает, если его нет |
+| `flatStateNames(states, prefix?)` | плоский список имён, включая вложенные |
+| `defAtPath(states, path)` | описание состояния по пути или `null` |
+| `findTransition(states, path, event)` | переход с учётом всплытия и `'*'` |
+| `resolveTransitionTarget(states, scope, target)` | абсолютная и относительная цель → путь |
+| `descendToLeaf(states, path)` | достройка пути до `initial` составных состояний |
+| `enterExitPlan(fromPath, toPath)` | `{ common, exit, enter }` для перехода |
+| `pathHas(path, name)` | активен ли предок или сам лист |
+| `isMachine(value)` | машина ли это (а не узел) |
+
+---
+
+## 6. Публичное API
+
+### Пространство имён `$.state`
+
+| Функция | Назначение |
+|---|---|
+| `create(spec)` | создать машину; она попадает в реестр и тикает в кадре |
+| `get(nodeOrSelector)` | машина узла или `null` |
+| `attach(nodeOrSelector, machineOrName)` | привязать машину к узлу |
+| `detach(nodeOrSelector)` | отвязать (машина продолжает жить) |
+| `send(nodeOrSelector, event, data)` | отправить событие → `true`, если переход состоялся |
+| `set(nodeOrSelector, name, data)` | принудительный переход |
+| `is(nodeOrSelector, name)` | активно ли состояние (с учётом вложенности) |
+| `can(nodeOrSelector, event, data)` | возможен ли переход (guard'ы проверяются) |
+| `current(nodeOrSelector)` | полное имя активного листа |
+| `byName(name)` | машина из реестра по `spec.name` |
+| `list()` | все живые машины |
+| `destroy(machineOrName)` | уничтожить машину |
+| `clear()` | уничтожить все машины (например, при смене сцены) |
+
+Первым аргументом везде принимается узел, обёртка `$('#hero')` или селектор.
+
+### Машина
+
+| Метод | Назначение |
+|---|---|
+| `send(event, data)` / `can(event, data)` | переход по событию / проверка без побочных эффектов |
+| `set(name, data)` | принудительный переход |
+| `is(name)` / `has(name)` | состояние активно / существует в графе |
+| `current()` / `path()` | полное имя листа / массив активного пути |
+| `states()` / `events()` | все имена состояний / события, доступные сейчас |
+| `history()` / `previous()` / `back(data)` / `transitions()` | история (§4) |
+| `onEnter(name, fn)` / `onExit(name, fn)` | хуки; `'*'` — любое состояние; `fn(machine, state, event, data)` |
+| `onTransition(fn)` | `fn(machine, from, to, event)` после каждого перехода |
+| `update(dt)` | шаг машины: `update` активных состояний от корня к листу |
+| `time()` / `totalTime()` | секунды в текущем листе / всего |
+| `attach(node)` / `detach()` / `node()` | привязка к узлу |
+| `destroy()` | погасить машину (дальше `send()` → `false`) |
+| `toJSON()` | сводка `{ name, current, path, data }` — для агента, логов и `$.store` |
+| `data` | пользовательские данные (видны в guard/action) |
+
+### Методы узла
+
+| Метод | Назначение |
+|---|---|
+| `.fsm()` | имя текущего состояния (геттер) или `null` |
+| `.fsm(machine \| name \| spec)` | привязать машину, машину из реестра или создать из `{ initial, states }` |
+| `.fsm(null)` | отвязать |
+| `.fsmSend(event, data)` | отправить событие (цепочный, результат — через `$.state.send`) |
+
+---
+
+## 7. Кадровый шаг
+
+Модуль экспортирует `installState($)` (ставит `$.state`, методы узла `.fsm()` и
+`.fsmSend()`) и `tickState(dt)` — их вызывает `api.js` при сборке API и в
+кадровом цикле.
+
+`tickState(dt)`:
+
+* зовёт `machine.update(dt)` у всех машин реестра;
+* отвязывает машины от удалённых узлов (`node.removed`) — сама машина остаётся
+  жить, её может держать игровой код.
+
+Машина, не привязанная ни к какому узлу (машина игры: экран, волна, глава),
+тикает точно так же.
+
+---
+
+## 8. Примеры
+
+### Дверь с замком и историей
+
+```js
+$.state.create({
+    name: 'door',
+    initial: 'closed',
+    data: { locked: true },
+    states: {
+        closed: {
+            on: {
+                open: { target: 'opening', guard: (m) => !m.data.locked },
+                unlock: { target: 'closed', action: (m) => { m.data.locked = false; } },
+            },
+        },
+        opening: { enter: () => $.sound.play('door'), on: { done: 'open' } },
+        open: { on: { close: 'closed' } },
+    },
+});
+$('#door').fsm('door');
+$.flow.after(400, () => $.state.send('#door', 'done'));   // анимация доиграла
+```
+
+### Фазы босса и машина боя — две разные машины
+
+```js
+// Машина фаз живёт на узле босса.
+const phases = $.state.create({ initial: 'idle', states: { idle: {}, rage: {}, dying: {} } });
+phases.onTransition((m, from, to) => $.log(`босс: ${from} → ${to}`));
+$('#boss').fsm(phases);
+
+// Машина боя — на игроке, они друг о друге не знают.
+$.state.create({
+    name: 'player',
+    initial: 'calm',
+    states: {
+        calm: { on: { aggro: { target: 'fight', guard: (m) => m.data.threat > 0 } } },
+        fight: { on: { '*': 'calm' } },
+    },
+    node: '#hero',
+});
+
+$.signal.on('boss:hp', (hp) => {
+    if (hp < 50 && $.state.is('#boss', 'idle')) $.state.send('#boss', 'rage');
+    $.state.get('#hero').data.threat = 1;
+});
+```
+
+Одна машина на узел: `attrs.fsm` хранит одну привязку, повторный `.fsm(...)`
+заменяет её. Вторую машину того же узла держите в переменной и работайте с ней
+напрямую (`machine.send(...)`), а не через `$.state.get(node)`.
+
+---
+
+## 9. Ограничения
+
+* **Одна машина на узел.** Привязка живёт в `node.attrs.fsm`; повторный
+  `.fsm(...)` заменяет предыдущую машину (старая остаётся в реестре).
+* **Нет параллельных состояний** и псевдосостояний истории Godot — см. §3.
+* **`can()` вызывает функции-цели и `guard`** (иначе не проверить условие).
+  Побочные эффекты должны быть только в `action`/`enter`/`exit`.
+* **Машины не сериализуются.** `$.prefab.toData()` не сохраняет состояние
+  машины: сохраняйте `machine.current()` и `machine.data` сами.
+* **Имена состояний — плоские строки с точкой-разделителем.** Точка внутри
+  имени сломает и `is()`, и историю.
+* **`tickState` идёт после игровой логики кадра** (как и остальные подсистемы):
+  `update` состояний видит мир уже обновлённым в этом кадре.
+
+---
+
+## 10. Тесты
+
+| Файл | Что проверяет |
+|---|---|
+| `tests/js/state_test.mjs` | граф, порядок enter/exit, guard'ы, история, привязка к узлу |
+| `tests/agent/highlevel_state_test.py` | то же в живом движке: `$.state.*`, `.fsm()`/`.fsmSend()` |
+| `tests/fixtures/state/` | игра-фикстура для интеграционного теста |
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/state_test.mjs
+python3 tests/agent/highlevel_state_test.py     # после сборки движка
+```
 
 
 ---
@@ -10835,7 +14236,9 @@ $.ready(() => {
 const t = $.tween(node);
 t.property('x', '+120', 0.4).asRelative().trans('back').ease('out');
 t.property('scale', 1.4, 0.2).delay(0.4);
-t.chain().interval(0.1).callback(() => $.log('пауза кончилась'));
+// interval() возвращает Tweener, а callback() живёт на твине: двумя строками.
+t.chain().interval(0.1);
+t.callback(() => $.log('пауза кончилась'));
 t.method((v) => bar.value = v, 0, 1, 0.5).trans('sine').ease('in_out');
 ```
 
@@ -10919,8 +14322,10 @@ await t.finished();
 | Плавность | `easeInOutQuad` и т. п. (`EASES`) | `trans` × `ease` (`transitionFunction`) |
 | Задержка | `await $.wait(ms)` | `.delay(seconds)` |
 
-Старые имена плавностей (`easeFunction`, `easeNames`, `EASES`) сохранены без
-изменений — на них стоят демо и `$.anim`.
+Старые имена плавностей сохранены без изменений — на них стоят демо и `$.anim`:
+`easeFunction` и `easeNames` (обе экспортируются из `src/highlevel/tween.js`).
+Таблица `EASES` — внутренняя, наружу не отдаётся: тянуть её из модуля не нужно,
+список имён даёт `easeNames()`.
 
 ## Ограничения
 
@@ -10992,7 +14397,7 @@ $.ready(() => {
 
 | Параметр | Тип | По умолчанию | Смысл |
 |---|---|---|---|
-| `gap` | number | 8 | расстояние между детьми |
+| `gap` | number | 8 (у `<ui.scroll>` — 6) | расстояние между детьми |
 | `padding` | number | 8 | отступ от края контейнера |
 | `align` | `'start'`\|`'center'`\|`'end'`\|`'stretch'` | `'start'` | выравнивание по поперечной оси |
 | `columns` | number | 2 | число колонок `<ui.grid>` |
