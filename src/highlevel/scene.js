@@ -32,6 +32,14 @@ export function installScene($) {
          *   $.scene.add('level1', ($) => { ... построить мир ... });
          */
         add(name, definition) {
+            // Отложенный запрос (см. load): как только сцена появилась —
+            // выполняем его.
+            if (state.deferred && state.deferred.name === name) {
+                const req = state.deferred;
+                state.deferred = null;
+                scenes.set(name, definition);
+                return scene.load(req.name, req.opts);
+            }
             scenes.set(name, definition);
             return scene;
         },
@@ -45,7 +53,10 @@ export function installScene($) {
         /** Перейти на сцену. opts: { transition, ms, keepUI } */
         load(name, opts) {
             if (!scenes.has(name)) {
-                ctx.log(`$: неизвестная сцена "${name}"`);
+                // Сцена может быть ещё не зарегистрирована: модули грузятся
+                // асинхронно, а --scene или стартовый load приходят раньше.
+                // Держим запрос до регистрации, иначе переход молча терялся.
+                state.deferred = { name, opts: opts || {} };
                 return scene;
             }
             const o = opts || {};

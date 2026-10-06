@@ -299,9 +299,12 @@ export default function installWitchShooter($) {
             screen: 'game', menu_nodes: [], music_vol: 0.3, menu_sel: 0,
         };
         startRunMusic();
-        // Мир готов — экран загрузки больше не нужен.
-        $.loading.progress(1, 'готово');
-        $.loading.hide();
+        // Мир готов — экран загрузки больше не нужен. Проверка нужна для
+        // прямого запуска сцены (--scene shooter_witch): экран мог не включаться.
+        if ($.loading && $.loading.visible()) {
+            $.loading.progress(1, 'готово');
+            $.loading.hide();
+        }
         return game;
     }
 

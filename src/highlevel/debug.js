@@ -129,8 +129,17 @@ export function installDebug($) {
         /** Профайлер по кадрам: меряет время между start и end. */
         profiler: {
             /** Текущее время для замеров: монотонные мс от движка. */
+            /**
+             * Миллисекунды. В движке это монотонные engine.now(); в хосте и
+             * тестах его заглушка возвращает ноль, поэтому тогда берём время
+             * кадра — иначе замеры внутри кадра выходили нулевыми.
+             */
             now() {
-                return typeof engine.now === 'function' ? engine.now() : engine.time * 1000;
+                if (typeof engine.now === 'function') {
+                    const v = engine.now();
+                    if (typeof v === 'number' && v > 0) return v;
+                }
+                return (engine.time || 0) * 1000;
             },
             start(name) {
                 // Раньше запись создавалась заново на каждом start(), а start()
@@ -154,7 +163,7 @@ export function installDebug($) {
             },
             /** Записать готовое измерение (когда время считает сам вызов). */
             record(name, ms) {
-                const t = timers.get(name) || { at: engine.time, total: 0, calls: 0, max: 0 };
+                const t = timers.get(name) || { at: debug.profiler.now(), total: 0, calls: 0, max: 0 };
                 timers.set(name, t);
                 t.total += ms;
                 t.calls++;

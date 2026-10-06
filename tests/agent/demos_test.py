@@ -98,9 +98,14 @@ def run_scene(name, minimum):
             # Игровой прогон: у «Ведьмы» за длинный прогон обязаны погибнуть
             # враги — так проверяются ветки смерти, добычи и крови.
             if name == "shooter_witch":
+                # Считаем по состоянию игры, а не по тексту HUD: строка HUD
+                # зависит от того, какая сцена сейчас на экране.
                 stats = a.eval("$('#stats').text()") or ""
+                counted = a.eval("witch.state() ? witch.state().kills : 0")
                 match = re.search(r"[Уу]бито\D*(\d+)", stats)
-                kills = int(match.group(1)) if match else -1
+                kills = int(counted) if counted is not None else -1
+                if kills <= 0 and match:
+                    kills = int(match.group(1))
                 check(kills > 0,
                       f"{name}: бой идёт, враги гибнут (убито {kills}, HUD: {stats.strip()})")
 
