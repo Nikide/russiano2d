@@ -444,6 +444,18 @@ const RESERVED = new Set([
 
 let next_uid = 1;
 
+/**
+ * Проставляет фильтр коллизий живому телу узла. Менять фильтр можно без
+ * пересоздания тела: Box2D хранит его на форме, а .setBody() при следующем
+ * пересоздании возьмёт те же поля узла.
+ */
+function applyFilter(node) {
+    if (node.body >= 0 && typeof engine.setBodyFilter === 'function') {
+        engine.setBodyFilter(node.body, node.layer_bits, node.collision_mask, node.collision_group);
+    }
+    return node;
+}
+
 // Псевдонимы событий: в документации контакт исторически называли 'collision'
 // (и так же писали в примерах про пул пуль), а движок шлёт 'collide'. Приводим
 // оба имени к каноническому в on/off/emit — иначе канонический пример
@@ -518,7 +530,13 @@ export class Node {
         // режим отдельно от текущего значения.
         this.contacts_mode = defaults.contacts !== undefined ? !!defaults.contacts : null;
         this.contacts_enabled = false;
-        this.collision_mask = 0xffff;
+        // Слои и маски коллизий (b2Filter). layer_bits — «в каком слое лежит
+        // тело», collision_mask — «с какими слоями сталкивается». Умолчания
+        // повторяют прежнее поведение движка: слой 1, сталкивается со всеми.
+        // Маски 32-битные: побитовые операторы JS всё равно 32-битные.
+        this.layer_bits = defaults.layerBits !== undefined ? defaults.layerBits >>> 0 : 0x1;
+        this.collision_mask = defaults.mask !== undefined ? defaults.mask >>> 0 : 0xffffffff;
+        this.collision_group = defaults.group !== undefined ? defaults.group | 0 : 0;
         this.velocity_cache = { x: 0, y: 0 };
 
         // Здоровье
@@ -642,6 +660,17 @@ export class Node {
             this.attrs.controls = value;
             return this;
         case 'body':    this.setBody(value); return this;
+        // Слои и маски коллизий. Псевдонимов у имён нет намеренно: `layer`
+        // уже занят порядком отрисовки, а `mask` — маска столкновений.
+        case 'layerBits':
+            this.layer_bits = Number(value) >>> 0;
+            return applyFilter(this);
+        case 'mask':
+            this.collision_mask = Number(value) >>> 0;
+            return applyFilter(this);
+        case 'group':
+            this.collision_group = Number(value) | 0;
+            return applyFilter(this);
         case 'collision': this.hitbox = Array.isArray(value) ? { w: value[0], h: value[1] } : { w: value, h: value }; return this;
         case 'src':
             // Грабли: { src } в конструкторе раньше оседал в attrs и картинку
@@ -691,6 +720,9 @@ export class Node {
         case 'radius':  return this.radius;
         case 'intensity': return this.intensity;
         case 'body':    return this.body_kind;
+        case 'layerBits': return this.layer_bits;
+        case 'mask':    return this.collision_mask;
+        case 'group':   return this.collision_group;
         case 'collision': return this.hitbox ? this.hitbox.w : this.w;
         case 'class':   return Array.from(this.classes).join(' ');
         case 'tag': case 'tags': return this.tags_extra === null ? '' : Array.from(this.tags_extra).join(' ');
@@ -766,6 +798,11 @@ export class Node {
             friction: this.attrs.friction !== undefined ? this.attrs.friction : 0.3,
             restitution: this.attrs.restitution !== undefined ? this.attrs.restitution : 0.0,
             fixedRotation: this.attrs.fixedRotation !== undefined ? this.attrs.fixedRotation : true,
+            // Слои и маски: тело создаётся сразу с нужным фильтром, иначе
+            // первый кадр оно сталкивалось бы со всеми подряд.
+            layerBits: this.layer_bits,
+            mask: this.collision_mask,
+            group: this.collision_group,
         };
 
         // Форма. Круг и капсула задают радиус, полигон — точки в локальных

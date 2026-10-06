@@ -93,6 +93,32 @@ def main():
         a.eval("$('#spinner').stopClip()")
         check(a.eval("$('#spinner').isPlayingClip()") is False, "stopClip останавливает клип")
 
+        # --- Пауза и масштаб времени ($.time) действуют на клипы ---------------
+        # До этой проверки клипы тикали сырым dt: пауза останавливала твины,
+        # но персонаж продолжал махать руками (docs/HIGH_LEVEL_API.md §28).
+        a.eval("$('#spinner').playClip('spin', { restart: true })")
+        a.step(5)
+        before_pause = a.eval("$('#spinner').clipTime()")
+        a.eval("$.time.pause()")
+        a.step(10)
+        check(abs(a.eval("$('#spinner').clipTime()") - before_pause) < 1,
+              "на паузе время клипа стоит")
+        a.eval("$.time.resume()")
+        a.step(5)
+        check(a.eval("$('#spinner').clipTime()") > before_pause, "после resume клип идёт дальше")
+
+        a.eval("$('#spinner').playClip('spin', { restart: true })")
+        a.eval("$.time.scale(0.5)")
+        a.step(20)
+        half_speed = a.eval("$('#spinner').clipTime()")
+        a.eval("$('#spinner').playClip('spin', { restart: true })")
+        a.eval("$.time.scale(1)")
+        a.step(20)
+        full_speed = a.eval("$('#spinner').clipTime()")
+        check(full_speed > 0 and abs(half_speed * 2 - full_speed) < 40,
+              "масштаб 0.5 замедляет клип вдвое (%.0f мс против %.0f мс)"
+              % (half_speed, full_speed))
+
         # --- Машина состояний -------------------------------------------------
         check(a.eval("$('#walker').state()") == "idle", "машина стартует с initial")
         check(a.eval("$('#walker').states().length") == 2, "$.states() перечисляет состояния")

@@ -517,6 +517,9 @@ function ensureTilemap(node) {
         ysortCursor: 0,      // сколько из них уже нарисовано в этом кадре
         ysortHookFrame: -1,  // кадр, в котором сработал хук рендера (см. ниже)
         terrains: Object.create(null),   // имя → нормализованный набор
+        // Габарит агента для проверок «пролезу ли»: 0 — как раньше, по клетке.
+        agent_w: agentSizeOf(a, 0),
+        agent_h: agentSizeOf(a, 1),
     };
     STATES.set(node, tm);
 
@@ -601,6 +604,88 @@ function solidPredicate(layer) {
         return (x, y) => set.has(data[y * w + x]);
     }
     return (x, y) => data[y * w + x] > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Габарит агента: коллизии «по объёму», а не по клетке
+//
+// Сетка тайлов помечает клетки, а не объём, поэтому вопрос «пролезу ли я сюда
+// телом 28×40» клетка не решает — нужен размер агента. $.nav это умеет для
+// путей (agentRadius), а у самой карты проверки по габариту не было.
+// ---------------------------------------------------------------------------
+
+/**
+ * Индексы клеток сетки с шагом `tile` и началом `origin`, которые пересекает
+ * отрезок `[lo, hi]`. Касание границы клеткой не считается: тело, стоящее
+ * ровно на стыке, соседнюю клетку не задевает. Для точки ровно на границе
+ * берётся клетка справа/снизу — иначе вырожденный габарит не попал бы никуда.
+ *
+ * Чистая функция — её проверяет qjs-харнесс без движка.
+ */
+export function cellRange(lo, hi, origin, tile) {
+    if (!(tile > 0)) return null;
+    const min = Math.floor((lo - origin) / tile);
+    let max = Math.ceil((hi - origin) / tile) - 1;
+    if (max < min) max = min;
+    return [min, max];
+}
+
+/**
+ * Пересекает ли прямоугольник агента (центр x, y, полуразмеры hw/hh)
+ * непроходимые клетки слоя. isSolid(tx, ty) — предикат слоя, left/top —
+ * мировые координаты левого верхнего угла карты.
+ *
+ * Чистая функция: ни узлов, ни движка — проверяется qjs-харнессом.
+ */
+export function boxBlocked(layer, isSolid, left, top, x, y, hw, hh) {
+    const rx = cellRange(x - hw, x + hw, left, layer.tile);
+    const ry = cellRange(y - hh, y + hh, top, layer.tile);
+    if (!rx || !ry) return false;
+    for (let ty = ry[0]; ty <= ry[1]; ty++) {
+        for (let tx = rx[0]; tx <= rx[1]; tx++) {
+            if (isSolid(tx, ty)) return true;
+        }
+    }
+    return false;
+}
+
+/** Габарит агента из атрибутов карты: agentSize (число или [w, h]) | agentRadius. */
+function agentSizeOf(attrs, axis) {
+    const size = attrs.agentSize;
+    if (Array.isArray(size)) return Math.max(0, num(size[axis], 0));
+    if (size !== undefined && size !== null) return Math.max(0, num(size, 0));
+    return Math.max(0, num(attrs.agentRadius, 0) * 2);
+}
+
+/** Полуразмеры габарита агента: opts → настройки карты → ноль. */
+function agentFootprint(tm, opts) {    const o = opts || {};
+    if (o.radius !== undefined) {
+        const r = Math.max(0, num(o.radius, 0));
+        return { hw: r, hh: r };
+    }
+    if (o.w !== undefined || o.h !== undefined) {
+        return { hw: Math.max(0, num(o.w, tm.agent_w) / 2),
+                 hh: Math.max(0, num(o.h, tm.agent_h) / 2) };
+    }
+    if (o.halfW !== undefined || o.halfH !== undefined) {
+        return { hw: Math.max(0, num(o.halfW, tm.agent_w / 2)),
+                 hh: Math.max(0, num(o.halfH, tm.agent_h / 2)) };
+    }
+    return { hw: tm.agent_w / 2, hh: tm.agent_h / 2 };
+}
+
+/** Влезает ли габарит агента в позицию (x, y), не задевая твёрдые тайлы. */
+function fitsAt(tm, x, y, foot) {
+    const node = tm.node;
+    const left = node.x - node.w / 2;
+    const top = node.y - node.h / 2;
+    for (const layer of tm.layers) {
+        if (!layer.solid) continue;
+        if (boxBlocked(layer, solidPredicate(layer), left, top, x, y, foot.hw, foot.hh)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 function releaseLayerBodies(layer) {
@@ -1001,6 +1086,76 @@ export function installTilemap($) {
         }
         return this;
     });
+
+    /**
+     * Габарит агента для проверок «пролезу ли»: `.agentRadius(r)` (круг) или
+     * `.agentSize(w, h)`. Ноль (по умолчанию) — проверка по клетке, как раньше.
+     */
+    def('agentRadius', function (value) {
+        if (value === undefined && this.nodes.length) {
+            return ensureTilemap(this.nodes[0]).agent_w / 2;
+        }
+        const r = Math.max(0, num(value, 0));
+        for (const node of this.nodes) {
+            const tm = ensureTilemap(node);
+            tm.agent_w = r * 2;
+            tm.agent_h = r * 2;
+        }
+        return this;
+    });
+
+    def('agentSize', function (w, h) {
+        if (w === undefined && this.nodes.length) {
+            const tm = ensureTilemap(this.nodes[0]);
+            return { w: tm.agent_w, h: tm.agent_h };
+        }
+        const aw = Math.max(0, num(w, 0));
+        const ah = h === undefined ? aw : Math.max(0, num(h, 0));
+        for (const node of this.nodes) {
+            const tm = ensureTilemap(node);
+            tm.agent_w = aw;
+            tm.agent_h = ah;
+        }
+        return this;
+    });
+
+    /**
+     * Влезает ли габарит агента в позицию (x, y), не задевая непроходимые
+     * тайлы. Размер берётся из `.agentSize()`/`.agentRadius()`, а его можно
+     * перебить в opts (`radius`, `w`/`h`, `halfW`/`halfH`).
+     */
+    defGet('fitsAt', function (node, x, y, opts) {
+        const tm = ensureTilemap(node);
+        return fitsAt(tm, num(x, node.x), num(y, node.y), agentFootprint(tm, opts));
+    }, false);
+
+    /**
+     * Ближайшая позиция, где габарит агента помещается: ищет кольцами от
+     * (x, y) до `opts.maxDistance` с шагом `opts.step`. Нужна телепортам и
+     * спавнам: «поставь рядом, но не в стену». Детерминирована.
+     */
+    defGet('sample', function (node, x, y, opts) {
+        const tm = ensureTilemap(node);
+        const o = opts || {};
+        const px = num(x, node.x);
+        const py = num(y, node.y);
+        const foot = agentFootprint(tm, o);
+        if (fitsAt(tm, px, py, foot)) return { x: px, y: py, found: true, distance: 0 };
+
+        const maxDist = Math.max(0, num(o.maxDistance, 64));
+        const base = Math.max(4, Math.min(foot.hw, foot.hh) || 8);
+        const step = Math.max(1, num(o.step, base));
+        for (let r = step; r <= maxDist + 1e-9; r += step) {
+            const n = Math.max(8, Math.round((2 * Math.PI * r) / step));
+            for (let i = 0; i < n; i++) {
+                const a = (i / n) * Math.PI * 2;
+                const cx = px + Math.cos(a) * r;
+                const cy = py + Math.sin(a) * r;
+                if (fitsAt(tm, cx, cy, foot)) return { x: cx, y: cy, found: true, distance: r };
+            }
+        }
+        return { x: px, y: py, found: false, distance: 0 };
+    }, { x: 0, y: 0, found: false, distance: 0 });
 
     def('rebuild', function () {
         for (const node of this.nodes) rebuildTilemap(ensureTilemap(node));

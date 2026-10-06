@@ -495,6 +495,41 @@ static JSValue r2d__js_pad_axis(JSContext *ctx, JSValueConst this_val, int argc,
     return JS_NewFloat64(ctx, s ? (double)r2d_pad_axis(s->app, (SDL_GamepadAxis)a) : 0.0);
 }
 
+// engine.padConnected() → bool: открыт ли геймпад. Раньше JS угадывал это по
+// нажатым кнопкам и осям, и «геймпад подключён, но не тронут» считался
+// отсутствующим.
+static JSValue r2d__js_pad_connected(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewBool(ctx, s && r2d_pad_connected(s->app));
+}
+
+// engine.padRumble(low, high, ms) → bool. Силы 0..1; false — геймпада нет
+// или он не умеет вибрировать (SDL_RumbleGamepad вернул ошибку).
+static JSValue r2d__js_pad_rumble(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_FALSE;
+    const float low = (float)r2d__arg_num(ctx, argc, argv, 0, 0.0);
+    const float high = (float)r2d__arg_num(ctx, argc, argv, 1, 0.0);
+    const uint32_t ms = (uint32_t)r2d__arg_int(ctx, argc, argv, 2, 200);
+    return JS_NewBool(ctx, r2d_pad_rumble(s->app, low, high, ms));
+}
+
+// engine.padRumbleTriggers(left, right, ms) → bool: вибрация курков.
+static JSValue r2d__js_pad_rumble_triggers(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_FALSE;
+    const float left = (float)r2d__arg_num(ctx, argc, argv, 0, 0.0);
+    const float right = (float)r2d__arg_num(ctx, argc, argv, 1, 0.0);
+    const uint32_t ms = (uint32_t)r2d__arg_int(ctx, argc, argv, 2, 200);
+    return JS_NewBool(ctx, r2d_pad_rumble_triggers(s->app, left, right, ms));
+}
+
 // ---------------------------------------------------------------------------
 // Биндинги: ресурсы и отрисовка
 // ---------------------------------------------------------------------------
@@ -707,6 +742,29 @@ static JSValue r2d__js_create_body(JSContext *ctx, JSValueConst this_val, int ar
     d.sensor = r2d__obj_bool(ctx, opts, "sensor", false);
     d.contacts = r2d__obj_bool(ctx, opts, "contacts", false);
 
+    // Слои и маски коллизий. Опции необязательные: если их нет вовсе, тело
+    // встаёт в слой 1 и сталкивается со всеми (filter_set остаётся false).
+    // Проверяем именно наличие ключа: mask = 0 — законное значение «не
+    // сталкиваться ни с кем», и подменять его умолчанием нельзя.
+    {
+        JSValueConst keys[3] = { JS_UNDEFINED, JS_UNDEFINED, JS_UNDEFINED };
+        const char *names[3] = { "layerBits", "mask", "group" };
+        bool present[3] = { false, false, false };
+        for (int i = 0; i < 3; ++i) {
+            keys[i] = JS_GetPropertyStr(ctx, opts, names[i]);
+            present[i] = !JS_IsUndefined(keys[i]) && !JS_IsNull(keys[i]);
+        }
+        if (present[0] || present[1] || present[2]) {
+            d.filter_set = true;
+            d.category_bits = present[0] ? (uint64_t)r2d__obj_num(ctx, opts, "layerBits", 1.0)
+                                         : R2D_FILTER_DEFAULT_CATEGORY;
+            d.mask_bits = present[1] ? (uint64_t)r2d__obj_num(ctx, opts, "mask", 0.0)
+                                     : R2D_FILTER_DEFAULT_MASK;
+            d.group_index = present[2] ? (int)r2d__obj_num(ctx, opts, "group", 0.0) : 0;
+        }
+        for (int i = 0; i < 3; ++i) JS_FreeValue(ctx, keys[i]);
+    }
+
     // Форма задаётся строкой: читаемо в игровом коде и не требует констант.
     JSValue shape = JS_GetPropertyStr(ctx, opts, "shape");
     if (JS_IsString(shape)) {
@@ -791,6 +849,40 @@ static JSValue r2d__js_set_body_enabled(JSContext *ctx, JSValueConst this_val, i
                                 r2d__arg_bool(ctx, argc, argv, 1, true));
     }
     return JS_UNDEFINED;
+}
+
+// engine.setBodyFilter(body, layerBits, mask, group) — слои и маски коллизий
+// уже созданного тела. Возвращает false, если тела нет.
+static JSValue r2d__js_set_body_filter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_FALSE;
+    const int id = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const uint64_t category = (uint64_t)r2d__arg_num(ctx, argc, argv, 1, 1.0);
+    const uint64_t mask = (uint64_t)r2d__arg_num(ctx, argc, argv, 2, -1.0);
+    const int group = r2d__arg_int(ctx, argc, argv, 3, 0);
+    return JS_NewBool(ctx, r2d_physics_set_filter(s->physics, id, category, mask, group));
+}
+
+// engine.getBodyFilter(body) → { layerBits, mask, group } или null.
+static JSValue r2d__js_get_body_filter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NULL;
+
+    uint64_t category = 0, mask = 0;
+    int group = 0;
+    if (!r2d_physics_get_filter(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1),
+                                &category, &mask, &group)) {
+        return JS_NULL;
+    }
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "layerBits", JS_NewFloat64(ctx, (double)category));
+    JS_SetPropertyStr(ctx, obj, "mask", JS_NewFloat64(ctx, (double)mask));
+    JS_SetPropertyStr(ctx, obj, "group", JS_NewInt32(ctx, group));
+    return obj;
 }
 
 // engine.createJoint({ type, a, b, ax, ay, bx, by, ... }) — сустав между телами.
@@ -1387,6 +1479,23 @@ static JSValue r2d__js_audio_channel_pan(JSContext *ctx, JSValueConst this_val, 
     return JS_NewFloat64(ctx, (double)v);
 }
 
+// engine.audio.setChannelReverb(channel, send, room, damp, width) — реверб-шина
+// на канале: доля сигнала уходит в собственный хвост, сухой остаётся.
+static JSValue r2d__js_audio_set_channel_reverb(JSContext *ctx, JSValueConst this_val,
+                                                int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_audio_set_channel_reverb(
+        s->audio,
+        r2d__arg_int(ctx, argc, argv, 0, -1),
+        (float)r2d__arg_num(ctx, argc, argv, 1, 0.35),
+        (float)r2d__arg_num(ctx, argc, argv, 2, 0.5),
+        (float)r2d__arg_num(ctx, argc, argv, 3, 0.4),
+        (float)r2d__arg_num(ctx, argc, argv, 4, 0.8)));
+}
+
 static JSValue r2d__js_audio_set_effect(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -1525,6 +1634,23 @@ static JSValue r2d__js_audio_set_channel_group(JSContext *ctx, JSValueConst this
                                            r2d__arg_int(ctx, argc, argv, 0, -1),
                                            r2d__arg_int(ctx, argc, argv, 1, -1));
     return JS_NewBool(ctx, ok);
+}
+
+// engine.audio.setGroupReverb(group, send, room, damp, width) — реверб-шина
+// с посылом: хвост считается для микса группы, остальные шины его не слышат.
+static JSValue r2d__js_audio_set_group_reverb(JSContext *ctx, JSValueConst this_val,
+                                              int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_audio_set_group_reverb(
+        s->audio,
+        r2d__arg_int(ctx, argc, argv, 0, -1),
+        (float)r2d__arg_num(ctx, argc, argv, 1, 0.35),
+        (float)r2d__arg_num(ctx, argc, argv, 2, 0.5),
+        (float)r2d__arg_num(ctx, argc, argv, 3, 0.4),
+        (float)r2d__arg_num(ctx, argc, argv, 4, 0.8)));
 }
 
 static JSValue r2d__js_audio_set_group_effect(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -1917,6 +2043,22 @@ static JSValue r2d__js_set_render(JSContext *ctx, JSValueConst this_val, int arg
 // Биндинги: запросы к миру, файлы, текст, агент
 // ---------------------------------------------------------------------------
 
+// Общий вид результата запроса (луч и свип формы): поля одинаковые, чтобы
+// $.world.raycast и $.world.castShape возвращали один и тот же дескриптор.
+static JSValue r2d__hit_object(JSContext *ctx, float x, float y, float nx, float ny,
+                               int body, float fraction)
+{
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "hit", JS_TRUE);
+    JS_SetPropertyStr(ctx, obj, "x", JS_NewFloat64(ctx, x));
+    JS_SetPropertyStr(ctx, obj, "y", JS_NewFloat64(ctx, y));
+    JS_SetPropertyStr(ctx, obj, "nx", JS_NewFloat64(ctx, nx));
+    JS_SetPropertyStr(ctx, obj, "ny", JS_NewFloat64(ctx, ny));
+    JS_SetPropertyStr(ctx, obj, "body", JS_NewInt32(ctx, body));
+    JS_SetPropertyStr(ctx, obj, "fraction", JS_NewFloat64(ctx, fraction));
+    return obj;
+}
+
 // engine.raycast(x1, y1, x2, y2[, ignore_ids]) →
 //   { hit, x, y, nx, ny, body, fraction } | null
 // ignore_ids — необязательный массив id тел, которые луч пропускает
@@ -1946,25 +2088,82 @@ static JSValue r2d__js_raycast(JSContext *ctx, JSValueConst this_val, int argc, 
     }
 
     R2DRayHit hit;
+    // Шестой аргумент — маска слоёв: какие слои луч вообще принимает.
+    // Не передан или 0 — все слои (см. r2d__query_filter в physics.c).
+    const uint64_t mask = argc >= 6 ? (uint64_t)r2d__arg_num(ctx, argc, argv, 5, 0.0) : 0;
     if (!r2d_physics_raycast(s->physics,
                              (float)r2d__arg_num(ctx, argc, argv, 0, 0.0),
                              (float)r2d__arg_num(ctx, argc, argv, 1, 0.0),
                              (float)r2d__arg_num(ctx, argc, argv, 2, 0.0),
                              (float)r2d__arg_num(ctx, argc, argv, 3, 0.0),
                              ignore_count ? ignore : NULL, ignore_count,
+                             mask,
                              &hit)) {
         return JS_NULL;
     }
 
-    JSValue obj = JS_NewObject(ctx);
-    JS_SetPropertyStr(ctx, obj, "hit", JS_TRUE);
-    JS_SetPropertyStr(ctx, obj, "x", JS_NewFloat64(ctx, hit.x));
-    JS_SetPropertyStr(ctx, obj, "y", JS_NewFloat64(ctx, hit.y));
-    JS_SetPropertyStr(ctx, obj, "nx", JS_NewFloat64(ctx, hit.nx));
-    JS_SetPropertyStr(ctx, obj, "ny", JS_NewFloat64(ctx, hit.ny));
-    JS_SetPropertyStr(ctx, obj, "body", JS_NewInt32(ctx, hit.body));
-    JS_SetPropertyStr(ctx, obj, "fraction", JS_NewFloat64(ctx, hit.fraction));
-    return obj;
+    return r2d__hit_object(ctx, hit.x, hit.y, hit.nx, hit.ny, hit.body, hit.fraction);
+}
+
+// engine.castShape({ x1, y1, x2, y2, shape, halfW, halfH, radius, angle,
+//                    ignore: [id,…], mask }) — свип формы (ShapeCast2D).
+// Отличие от луча: едет объём, поэтому видно, пролезет ли персонаж в проём.
+static JSValue r2d__js_cast_shape(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics || argc < 1 || !JS_IsObject(argv[0])) return JS_NULL;
+
+    JSValueConst opts = argv[0];
+
+    // Форма — строкой, как в createBody.
+    int shape = R2D_SHAPE_BOX;
+    JSValue kind = JS_GetPropertyStr(ctx, opts, "shape");
+    if (JS_IsString(kind)) {
+        const char *text = JS_ToCString(ctx, kind);
+        if (text) {
+            if (SDL_strcmp(text, "circle") == 0)       shape = R2D_SHAPE_CIRCLE;
+            else if (SDL_strcmp(text, "capsule") == 0) shape = R2D_SHAPE_CAPSULE;
+            JS_FreeCString(ctx, text);
+        }
+    }
+    JS_FreeValue(ctx, kind);
+
+    int ignore[64];
+    int ignore_count = 0;
+    JSValue list = JS_GetPropertyStr(ctx, opts, "ignore");
+    if (JS_IsArray(list)) {
+        JSValue len_val = JS_GetPropertyStr(ctx, list, "length");
+        int32_t len = 0;
+        if (JS_ToInt32(ctx, &len, len_val) == 0) {
+            for (int32_t i = 0; i < len && ignore_count < (int)(sizeof ignore / sizeof ignore[0]); ++i) {
+                JSValue item = JS_GetPropertyUint32(ctx, list, (uint32_t)i);
+                int32_t id = -1;
+                if (JS_ToInt32(ctx, &id, item) == 0 && id >= 0) ignore[ignore_count++] = (int)id;
+                JS_FreeValue(ctx, item);
+            }
+        }
+        JS_FreeValue(ctx, len_val);
+    }
+    JS_FreeValue(ctx, list);
+
+    R2DCastShape hit;
+    if (!r2d_physics_cast_shape(s->physics, shape,
+                                (float)r2d__obj_num(ctx, opts, "halfW", 16.0),
+                                (float)r2d__obj_num(ctx, opts, "halfH", 16.0),
+                                (float)r2d__obj_num(ctx, opts, "radius", 0.0),
+                                (float)r2d__obj_num(ctx, opts, "x1", 0.0),
+                                (float)r2d__obj_num(ctx, opts, "y1", 0.0),
+                                (float)r2d__obj_num(ctx, opts, "x2", 0.0),
+                                (float)r2d__obj_num(ctx, opts, "y2", 0.0),
+                                (float)r2d__obj_num(ctx, opts, "angle", 0.0),
+                                ignore_count ? ignore : NULL, ignore_count,
+                                (uint64_t)r2d__obj_num(ctx, opts, "mask", 0.0),
+                                &hit)) {
+        return JS_NULL;
+    }
+
+    return r2d__hit_object(ctx, hit.x, hit.y, hit.nx, hit.ny, hit.body, hit.fraction);
 }
 
 static JSValue r2d__ids_to_array(JSContext *ctx, const int *ids, int count)
@@ -1976,7 +2175,7 @@ static JSValue r2d__ids_to_array(JSContext *ctx, const int *ids, int count)
     return arr;
 }
 
-// engine.queryPoint(x, y) → Int32Array идентификаторов тел
+// engine.queryPoint(x, y, mask) → Int32Array идентификаторов тел
 static JSValue r2d__js_query_point(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -1987,11 +2186,12 @@ static JSValue r2d__js_query_point(JSContext *ctx, JSValueConst this_val, int ar
     const int count = r2d_physics_query_point(s->physics,
                                               (float)r2d__arg_num(ctx, argc, argv, 0, 0.0),
                                               (float)r2d__arg_num(ctx, argc, argv, 1, 0.0),
+                                              (uint64_t)r2d__arg_num(ctx, argc, argv, 2, 0.0),
                                               ids, R2D_MAX_QUERY);
     return r2d__ids_to_array(ctx, ids, count);
 }
 
-// engine.queryBox(x, y, w, h) → Int32Array (x, y — центр)
+// engine.queryBox(x, y, w, h, mask) → Int32Array (x, y — центр)
 static JSValue r2d__js_query_box(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -2004,6 +2204,7 @@ static JSValue r2d__js_query_box(JSContext *ctx, JSValueConst this_val, int argc
                                             (float)r2d__arg_num(ctx, argc, argv, 1, 0.0),
                                             (float)r2d__arg_num(ctx, argc, argv, 2, 0.0),
                                             (float)r2d__arg_num(ctx, argc, argv, 3, 0.0),
+                                            (uint64_t)r2d__arg_num(ctx, argc, argv, 4, 0.0),
                                             ids, R2D_MAX_QUERY);
     return r2d__ids_to_array(ctx, ids, count);
 }
@@ -2657,6 +2858,9 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "mousePressed", r2d__js_mouse_pressed, 1);
     r2d__set_fn(ctx, engine, "padDown", r2d__js_pad_down, 1);
     r2d__set_fn(ctx, engine, "padAxis", r2d__js_pad_axis, 1);
+    r2d__set_fn(ctx, engine, "padConnected", r2d__js_pad_connected, 0);
+    r2d__set_fn(ctx, engine, "padRumble", r2d__js_pad_rumble, 3);
+    r2d__set_fn(ctx, engine, "padRumbleTriggers", r2d__js_pad_rumble_triggers, 3);
 
     // Ресурсы и отрисовка
     r2d__set_fn(ctx, engine, "loadTexture", r2d__js_load_texture, 1);
@@ -2684,6 +2888,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "getGravity", r2d__js_get_gravity, 0);
     r2d__set_fn(ctx, engine, "setAwake", r2d__js_set_awake, 2);
     r2d__set_fn(ctx, engine, "setBodyEnabled", r2d__js_set_body_enabled, 2);
+    r2d__set_fn(ctx, engine, "setBodyFilter", r2d__js_set_body_filter, 4);
+    r2d__set_fn(ctx, engine, "getBodyFilter", r2d__js_get_body_filter, 1);
     r2d__set_fn(ctx, engine, "setGravityScale", r2d__js_set_gravity_scale, 2);
     r2d__set_fn(ctx, engine, "bodyMass", r2d__js_body_mass, 1);
     r2d__set_fn(ctx, engine, "bodyCount", r2d__js_body_count, 0);
@@ -2757,6 +2963,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, audio, "groupCount", r2d__js_audio_group_count, 0);
     r2d__set_fn(ctx, audio, "setChannelGroup", r2d__js_audio_set_channel_group, 2);
     r2d__set_fn(ctx, audio, "setGroupEffect", r2d__js_audio_set_group_effect, 4);
+    r2d__set_fn(ctx, audio, "setChannelReverb", r2d__js_audio_set_channel_reverb, 5);
+    r2d__set_fn(ctx, audio, "setGroupReverb", r2d__js_audio_set_group_reverb, 5);
     r2d__set_fn(ctx, audio, "groupEffect", r2d__js_audio_group_effect, 1);
     r2d__set_fn(ctx, audio, "setChannel3D", r2d__js_audio_set_channel_3d, 5);
     JS_SetPropertyStr(ctx, engine, "audio", audio);
@@ -2780,10 +2988,11 @@ static JSValue r2d__make_engine(JSContext *ctx)
 
     // Запросы к миру: лучи и пересечения. Нужны высокоуровневому API
     // ($.world.raycast/query) и проверке «стоит ли на земле».
-    r2d__set_fn(ctx, engine, "raycast", r2d__js_raycast, 5);
-    r2d__set_fn(ctx, engine, "queryPoint", r2d__js_query_point, 2);
-    r2d__set_fn(ctx, engine, "queryBox", r2d__js_query_box, 4);
-
+    // Последний аргумент каждого — маска слоёв (0 или отсутствие = все слои).
+    r2d__set_fn(ctx, engine, "raycast", r2d__js_raycast, 6);
+    r2d__set_fn(ctx, engine, "castShape", r2d__js_cast_shape, 1);
+    r2d__set_fn(ctx, engine, "queryPoint", r2d__js_query_point, 3);
+    r2d__set_fn(ctx, engine, "queryBox", r2d__js_query_box, 5);
     // Ввод: фронты нажатий пакетом (для $.input.on('key')) и мелочи.
     r2d__set_fn(ctx, engine, "keysPressed", r2d__js_keys_pressed, 0);
     r2d__set_fn(ctx, engine, "keysReleased", r2d__js_keys_released, 0);

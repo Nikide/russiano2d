@@ -6,14 +6,6 @@
 #include <SDL3_mixer/SDL_mixer.h>
 
 // ---------------------------------------------------------------------------
-// Предварительные объявления: шины и каналы настраиваются одним и тем же
-// кодом эффектов, который описан ниже по файлу.
-static void SDLCALL r2d__fx_process(void *userdata, MIX_Track *track,
-                                    const SDL_AudioSpec *spec, float *pcm, int samples);
-static bool r2d__fx_set(R2DAudio *a, R2DAudioChannelFx *fx, const char *kind,
-                        float p1, float p2);
-
-// ---------------------------------------------------------------------------
 
 static float r2d__clamp01(float v)
 {
@@ -87,7 +79,7 @@ static void SDLCALL r2d__group_fx(void *userdata, MIX_Group *group,
                                   const SDL_AudioSpec *spec, float *pcm, int samples)
 {
     R2D_UNUSED(group);
-    r2d__fx_process(userdata, NULL, spec, pcm, samples);
+    r2d_audio_fx_process((R2DAudioFx *)userdata, spec, pcm, samples);
 }
 
 int r2d_audio_group(R2DAudio *a, const char *name)
@@ -135,17 +127,22 @@ bool r2d_audio_set_group_effect(R2DAudio *a, int group_id, const char *kind,
                                 float p1, float p2)
 {
     if (!a || !a->ready || group_id < 0 || group_id >= a->group_count) return false;
-    return r2d__fx_set(a, &a->groups[group_id].fx, kind, p1, p2);
+    return r2d_audio_fx_set(&a->groups[group_id].fx, a->fx_freq, kind, p1, p2);
+}
+
+// Реверб-шина: у группы свой хвост, в который уходит доля `send` её микса.
+// Это и есть «посыл»: остальные шины и мастер хвоста не получают.
+bool r2d_audio_set_group_reverb(R2DAudio *a, int group_id, float send, float room,
+                                float damp, float width)
+{
+    if (!a || !a->ready || group_id < 0 || group_id >= a->group_count) return false;
+    return r2d_audio_fx_set_reverb(&a->groups[group_id].fx, a->fx_freq, send, room, damp, width);
 }
 
 const char *r2d_audio_group_effect(const R2DAudio *a, int group_id)
 {
     if (!a || group_id < 0 || group_id >= a->group_count) return "none";
-    switch (a->groups[group_id].fx.kind) {
-    case R2D_AUDIO_FX_LOWPASS: return "lowpass";
-    case R2D_AUDIO_FX_ECHO:    return "echo";
-    default:                   return "none";
-    }
+    return r2d_audio_fx_kind_name(a->groups[group_id].fx.kind);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,126 +181,49 @@ bool r2d_audio_set_channel_3d(R2DAudio *a, int channel, float x, float y, float 
 // выделять память и нельзя трогать сам трек — только pcm.
 // ---------------------------------------------------------------------------
 
-static const char *const r2d__fx_names[] = { "none", "lowpass", "echo" };
+// ---------------------------------------------------------------------------
+// Эффекты: список имён, включение, обработка
+//
+// DSP живёт в src/audio_fx.c (он же собирается в офлайн-тест), здесь — только
+// мост к шинам и каналам SDL_mixer: найти буфер эффекта и отдать его модулю.
+// ---------------------------------------------------------------------------
 
 int r2d_audio_effect_count(void)
 {
-    return (int)(sizeof(r2d__fx_names) / sizeof(r2d__fx_names[0]));
+    return r2d_audio_fx_count();
 }
 
 const char *r2d_audio_effect_name(int index)
 {
-    if (index < 0 || index >= r2d_audio_effect_count()) return "none";
-    return r2d__fx_names[index];
+    return r2d_audio_fx_name(index);
 }
 
-static void SDLCALL r2d__fx_process(void *userdata, MIX_Track *track,
-                                    const SDL_AudioSpec *spec, float *pcm, int samples)
+static void SDLCALL r2d__track_fx(void *userdata, MIX_Track *track,
+                                  const SDL_AudioSpec *spec, float *pcm, int samples)
 {
     R2D_UNUSED(track);
-    R2DAudioChannelFx *fx = (R2DAudioChannelFx *)userdata;
-    if (!fx || fx->kind == R2D_AUDIO_FX_NONE || !pcm || samples <= 0) return;
-
-    const int ch = spec->channels > 0 ? spec->channels : 1;
-    const int frames = samples / ch;
-    if (frames <= 0) return;
-
-    if (fx->kind == R2D_AUDIO_FX_LOWPASS) {
-        // p1 уже коэффициент сглаживания: y += a * (x - y).
-        const float alpha = fx->p1;
-        for (int f = 0; f < frames; ++f) {
-            for (int c = 0; c < ch && c < 2; ++c) {
-                float *s = &pcm[f * ch + c];
-                fx->z[c] += alpha * (*s - fx->z[c]);
-                *s = fx->z[c];
-            }
-        }
-        return;
-    }
-
-    if (fx->kind == R2D_AUDIO_FX_ECHO && fx->line) {
-        const int cap = R2D_AUDIO_FX_FRAMES;
-        int delay = (int)(fx->p1 * (float)spec->freq / 1000.0f);
-        if (delay < 1) delay = 1;
-        if (delay >= cap) delay = cap - 1;
-        const float feedback = fx->p2;
-        // Линия задержки выделена на два канала (см. r2d_audio_init), а
-        // spec->channels приходит от декодера и может быть больше — например
-        // 6 у 5.1. Индексировать её по ch нельзя: запись уходила бы далеко за
-        // конец буфера. Обрабатываем максимум два канала с их же шагом.
-        const int line_ch = ch > 2 ? 2 : ch;
-        for (int f = 0; f < frames; ++f) {
-            int rd = fx->pos - delay;
-            if (rd < 0) rd += cap;
-            const int wr_base = fx->pos * line_ch;
-            const int rd_base = rd * line_ch;
-            for (int c = 0; c < line_ch; ++c) {
-                float *s = &pcm[f * ch + c];
-                const float out = *s + fx->line[rd_base + c] * feedback;
-                fx->line[wr_base + c] = out;
-                *s = out;
-            }
-            fx->pos = (fx->pos + 1) % cap;
-        }
-    }
-}
-
-// Общая настройка эффекта: и для канала, и для шины (группы). Возвращает
-// false, если эффект неизвестен. Линия задержки для эха выделяется лениво:
-// держать 190 КБ на каждую шину, где эхо не нужно, незачем.
-static bool r2d__fx_set(R2DAudio *a, R2DAudioChannelFx *fx, const char *kind,
-                        float p1, float p2)
-{
-    if (!kind || SDL_strcmp(kind, "none") == 0) {
-        fx->kind = R2D_AUDIO_FX_NONE;
-        return true;
-    }
-
-    if (SDL_strcmp(kind, "lowpass") == 0) {
-        float fc = p1 > 0.0f ? p1 : 800.0f;
-        const float nyquist = (float)a->fx_freq * 0.45f;
-        if (fc > nyquist) fc = nyquist;
-        fx->p1 = 1.0f - SDL_expf(-2.0f * SDL_PI_F * fc / (float)a->fx_freq);
-        fx->kind = R2D_AUDIO_FX_LOWPASS;
-        return true;
-    }
-
-    if (SDL_strcmp(kind, "echo") == 0) {
-        if (!fx->line) {
-            fx->line = (float *)SDL_calloc((size_t)R2D_AUDIO_FX_FRAMES * 2, sizeof(float));
-            if (!fx->line) {
-                R2D_ERROR("не удалось выделить линию задержки эха");
-                return false;
-            }
-        }
-        fx->p1 = p1 > 0.0f ? p1 : 180.0f;                  // задержка, мс
-        float fb = p2 > 0.0f ? p2 : 0.35f;                 // доля повтора
-        if (fb > 0.9f) fb = 0.9f;
-        fx->p2 = fb;
-        SDL_memset(fx->line, 0, sizeof(float) * 2 * R2D_AUDIO_FX_FRAMES);
-        fx->pos = 0;
-        fx->kind = R2D_AUDIO_FX_ECHO;
-        return true;
-    }
-
-    return false;
+    r2d_audio_fx_process((R2DAudioFx *)userdata, spec, pcm, samples);
 }
 
 bool r2d_audio_set_channel_effect(R2DAudio *a, int channel, const char *kind,
                                   float p1, float p2)
 {
     if (!a || !a->ready || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return false;
-    return r2d__fx_set(a, &a->fx[channel], kind, p1, p2);
+    return r2d_audio_fx_set(&a->fx[channel], a->fx_freq, kind, p1, p2);
+}
+
+// Реверб-шина на канале: посыл (доля в хвост), размер, глухость, ширина.
+bool r2d_audio_set_channel_reverb(R2DAudio *a, int channel, float send, float room,
+                                  float damp, float width)
+{
+    if (!a || !a->ready || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return false;
+    return r2d_audio_fx_set_reverb(&a->fx[channel], a->fx_freq, send, room, damp, width);
 }
 
 const char *r2d_audio_channel_effect(const R2DAudio *a, int channel)
 {
     if (!a || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return "none";
-    switch (a->fx[channel].kind) {
-    case R2D_AUDIO_FX_LOWPASS: return "lowpass";
-    case R2D_AUDIO_FX_ECHO:    return "echo";
-    default:                   return "none";
-    }
+    return r2d_audio_fx_kind_name(a->fx[channel].kind);
 }
 
 void r2d_audio_set_channel_volume(R2DAudio *a, int channel, float v)
@@ -439,16 +359,12 @@ bool r2d_audio_init(R2DAudio *a)
     }
     a->reverb_on = false;
 
-    // Буферы эффектов и колбэк ставим один раз: подмена колбэка на лету
-    // гонялась бы с аудиопотоком, а сам эффект задаётся полем kind.
+    // Колбэк ставим один раз на канал: подмена на лету гонялась бы с
+    // аудиопотоком, а сам эффект задаётся полем kind. Буферы (линия задержки,
+    // хвост реверба) выделяет модуль эффектов лениво — при включении эффекта.
     for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
-        a->fx[i].line = (float *)SDL_calloc((size_t)R2D_AUDIO_FX_FRAMES * 2, sizeof(float));
-        if (!a->fx[i].line) {
-            R2D_ERROR("не удалось выделить буфер эффекта канала %d", i);
-            return false;
-        }
         a->fx[i].kind = R2D_AUDIO_FX_NONE;
-        MIX_SetTrackRawCallback(a->channels[i], r2d__fx_process, &a->fx[i]);
+        MIX_SetTrackRawCallback(a->channels[i], r2d__track_fx, &a->fx[i]);
     }
     return true;
 }
@@ -466,23 +382,17 @@ void r2d_audio_shutdown(R2DAudio *a)
     for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
         if (a->channels[i]) MIX_DestroyTrack(a->channels[i]);
         a->channels[i] = NULL;
-        if (a->fx[i].line) {
-            SDL_free(a->fx[i].line);
-            a->fx[i].line = NULL;
-        }
+        r2d_audio_fx_shutdown(&a->fx[i]);
     }
 
-    // Шины: снимаем колбэк и освобождаем линии задержки до уничтожения микшера.
+    // Шины: снимаем колбэк и освобождаем буферы эффектов до уничтожения микшера.
     for (int i = 0; i < a->group_count; ++i) {
         if (a->groups[i].handle) {
             MIX_SetGroupPostMixCallback(a->groups[i].handle, NULL, NULL);
             MIX_DestroyGroup(a->groups[i].handle);
             a->groups[i].handle = NULL;
         }
-        if (a->groups[i].fx.line) {
-            SDL_free(a->groups[i].fx.line);
-            a->groups[i].fx.line = NULL;
-        }
+        r2d_audio_fx_shutdown(&a->groups[i].fx);
     }
     a->group_count = 0;
     if (a->music_track) {

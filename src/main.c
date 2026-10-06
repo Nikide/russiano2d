@@ -274,10 +274,15 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
 
         // Пост-обработка: если включена, сцена идёт в offscreen-текстуру, а на
         // экран её накладывает отдельный полноэкранный проход.
-        const bool post = r2d_render_post_enabled(fc->renderer);
-        SDL_GPUTexture *scene = post
-            ? r2d_render_scene_target(fc->renderer, (int)swap_w, (int)swap_h)
-            : NULL;
+        // Render target игры важнее поста: если кадр связан с текстурой игры,
+        // мир рисуется туда, а на экран он попадает отдельным блитом
+        // (r2d_render_viewport_present). Пост при этом не применяется — его
+        // пришлось бы считать по чужой текстуре.
+        SDL_GPUTexture *user_target = r2d_render_viewport_target(fc->renderer);
+        const bool post = !user_target && r2d_render_post_enabled(fc->renderer);
+        SDL_GPUTexture *scene = user_target
+            ? user_target
+            : (post ? r2d_render_scene_target(fc->renderer, (int)swap_w, (int)swap_h) : NULL);
 
         SDL_GPUColorTargetInfo target;
         SDL_zero(target);
@@ -291,9 +296,9 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
         if (pass) {
             // С постом в offscreen уходит только мир: HUD метится JS-стороной
             // (engine.markUI) и рисуется в отдельном проходе поверх обработки.
-            r2d_render_draw_world(fc->renderer, pass);
+            r2d_render_draw_world(fc->renderer, cmd, pass);
             if (!scene) {
-                r2d_render_draw_ui(fc->renderer, pass);
+                r2d_render_draw_ui(fc->renderer, cmd, pass);
 #ifdef R2D_ENABLE_IMGUI
                 r2d_debug_ui_draw(fc->debug, cmd, pass);
 #endif
@@ -301,7 +306,37 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
             SDL_EndGPURenderPass(pass);
         }
 
-        if (scene) {
+        if (user_target) {
+            // Кадр в текстуре игры: показываем его и сохраняем в историю.
+            if (!r2d_render_viewport_present(fc->renderer, cmd, swapchain,
+                                             (int)swap_w, (int)swap_h)) {
+                R2D_WARN("viewport: не удалось показать кадр");
+            }
+            SDL_GPURenderPass *upass = NULL;
+            SDL_GPUColorTargetInfo hud;
+            SDL_zero(hud);
+            hud.texture = swapchain;
+            hud.load_op  = SDL_GPU_LOADOP_LOAD;      // кадр уже на экране
+            hud.store_op = SDL_GPU_STOREOP_STORE;
+            upass = SDL_BeginGPURenderPass(cmd, &hud, 1, NULL);
+            if (upass) {
+                r2d_render_draw_ui(fc->renderer, cmd, upass);
+#ifdef R2D_ENABLE_IMGUI
+                r2d_debug_ui_draw(fc->debug, cmd, upass);
+#endif
+                SDL_EndGPURenderPass(upass);
+            }
+        } else if (scene) {
+            // Свечение считается отдельными проходами: проход нельзя вложить в
+            // другой проход, поэтому bloom идёт между сценой и пост-обработкой.
+            // Не вышло (нет буферов, нет пайплайна) — флаг bloom_ready остаётся
+            // нулём, и шейдер поста берёт запасную ветку с восемью выборками.
+            float bloomed = 0.0f;
+            if (fc->renderer->post.glow > 0.0001f) {
+                bloomed = r2d_render_bloom(fc->renderer, cmd) ? 1.0f : 0.0f;
+            }
+            fc->renderer->post.bloom_ready = bloomed;
+
             SDL_GPUColorTargetInfo out;
             SDL_zero(out);
             out.texture = swapchain;
@@ -313,7 +348,7 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
             SDL_GPURenderPass *ppass = SDL_BeginGPURenderPass(cmd, &out, 1, NULL);
             if (ppass) {
                 r2d_render_post(fc->renderer, cmd, ppass);
-                r2d_render_draw_ui(fc->renderer, ppass);
+                r2d_render_draw_ui(fc->renderer, cmd, ppass);
 #ifdef R2D_ENABLE_IMGUI
                 r2d_debug_ui_draw(fc->debug, cmd, ppass);
 #endif

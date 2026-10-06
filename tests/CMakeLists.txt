@@ -70,6 +70,19 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_reverb_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# --- DSP-эффекты каналов и шин ----------------------------------------------
+# Фильтры, тремоло, bitcrush, кольцевая модуляция и реверб-шина с посылом:
+# математика без SDL_mixer, поэтому проверяется офлайн, вместе с ревербом.
+add_executable(r2d_audio_fx_test "${CMAKE_SOURCE_DIR}/tests/audio/fx_test.c"
+                               "${CMAKE_SOURCE_DIR}/src/audio_fx.c"
+                               "${CMAKE_SOURCE_DIR}/src/audio_reverb.c")
+target_include_directories(r2d_audio_fx_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_audio_fx_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_audio_fx_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_audio_fx_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # --- Профайлер кадра ---------------------------------------------------------
 # Модель строк (сначала CPU-зоны, затем GPU) и тихий фолбэк без GPU-устройства.
 # Профайлеру хватает таймеров и потоков SDL: GPU-устройство не нужно, поэтому

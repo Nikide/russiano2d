@@ -44,6 +44,18 @@ typedef enum R2DShapeKind {
 
 #define R2D_MAX_POLY_POINTS 8
 
+// --- Слои и маски коллизий (b2Filter) ---------------------------------------
+// Семантика как в Box2D и Godot: category (слой) — «в каком слое лежит тело»,
+// mask — «с какими слоями оно сталкивается». Тела A и B сталкиваются, если
+// (A.mask & B.category) и (B.mask & A.category) непусты. Маски 64-битные —
+// столько же, сколько в Box2D v3, но JS-сторона работает с 32 младшими
+// битами: побитовые операторы JavaScript всё равно 32-битные.
+#define R2D_FILTER_DEFAULT_CATEGORY 0x1ULL
+#define R2D_FILTER_DEFAULT_MASK     0xFFFFFFFFFFFFFFFFULL
+// Индекс группы: > 0 — тела группы всегда сталкиваются между собой, минуя
+// маски; < 0 — никогда не сталкиваются (Box2D).
+#define R2D_FILTER_GROUP_NONE       0
+
 // Описание тела: то, что приходит из JS одним объектом.
 typedef struct R2DBodyDesc {
     float x, y, angle;
@@ -60,6 +72,14 @@ typedef struct R2DBodyDesc {
     float one_way_angle;        // куда смотрит «лицевая» сторона (радианы)
     bool  sensor;               // зона без отталкивания
     bool  contacts;             // присылать события контакта
+    // Слои и маски. filter_set = false (значение по SDL_zero) означает
+    // «умолчания движка»: category 1 (слой 1), mask — все слои. Отдельный
+    // флаг нужен потому, что mask = 0 — законное значение («не сталкиваться
+    // ни с кем»), и отличить его от «поле не заполнено» иначе нельзя.
+    uint64_t category_bits;
+    uint64_t mask_bits;
+    int      group_index;
+    bool     filter_set;
 } R2DBodyDesc;
 
 // Событие контакта за прошедший шаг. Координаты — пиксели.
@@ -149,6 +169,16 @@ void  r2d_physics_set_gravity_scale(R2DPhysics *p, int id, float scale);
 bool  r2d_physics_is_awake(const R2DPhysics *p, int id);
 float r2d_physics_get_mass(const R2DPhysics *p, int id);
 
+// --- Слои и маски коллизий ---------------------------------------------------
+// Меняет фильтр уже созданного тела (все его формы). Выключенное тело
+// (r2d_physics_set_enabled) фильтр сохраняет: при включении он вернётся.
+// false — тела нет.
+bool  r2d_physics_set_filter(R2DPhysics *p, int id, uint64_t category_bits,
+                             uint64_t mask_bits, int group_index);
+// Читает фильтр тела. false — тела нет.
+bool  r2d_physics_get_filter(const R2DPhysics *p, int id, uint64_t *category_bits,
+                             uint64_t *mask_bits, int *group_index);
+
 // --- Запросы к миру (высокоуровневое API: $.world.raycast/query) -----------
 
 // Максимум тел, которые вернёт один запрос.
@@ -165,15 +195,41 @@ typedef struct R2DRayHit {
 
 // Ближайшее препятствие на отрезке. ignore/ignore_count — тела, которые луч
 // пропускает (например, тело стрелка): callback перебирает попадания дальше.
-// false — ничего не задето.
+// mask — слои, которые запрос принимает; 0 = все слои (у запроса нет своего
+// слоя, поэтому маска тела на него не влияет — как collision_mask у RayCast2D
+// в Godot). false — ничего не задето.
 bool r2d_physics_raycast(const R2DPhysics *p, float x1, float y1, float x2, float y2,
-                         const int *ignore, int ignore_count, R2DRayHit *out);
+                         const int *ignore, int ignore_count, uint64_t mask, R2DRayHit *out);
+
+// --- Свип формы (аналог ShapeCast2D) -----------------------------------------
+// Форма едет из (x1,y1) в (x2,y2) и останавливается на первом препятствии.
+// Отличие от луча принципиальное: луч — точка, свип — объём. Поэтому
+// «пролезу ли я в проём» и «не задену ли плечом угол» решаются только свипом.
+typedef struct R2DCastShape {
+    bool  hit;
+    int   body;        // наш id тела или -1
+    float x, y;        // точка касания, пиксели
+    float nx, ny;      // нормаль поверхности
+    float fraction;    // доля пройденного пути 0..1 (0 — перекрытие в начале)
+} R2DCastShape;
+
+// shape — R2DShapeKind; для круга берётся radius, для капсулы — radius и
+// half_h (половина отрезка), для прямоугольника — half_w/half_h. angle —
+// поворот формы (радианы). Датчики (зоны) свип не останавливают: они не
+// препятствия. false — на пути ничего не было.
+bool r2d_physics_cast_shape(const R2DPhysics *p, int shape,
+                            float half_w, float half_h, float radius,
+                            float x1, float y1, float x2, float y2, float angle,
+                            const int *ignore, int ignore_count, uint64_t mask,
+                            R2DCastShape *out);
 
 // Тела, чьи формы накрывают точку / попадают в прямоугольник (x, y — центр).
-// Возвращают число записанных id (не больше max_ids).
-int r2d_physics_query_point(const R2DPhysics *p, float x, float y, int *ids, int max_ids);
+// mask — слои, которые принимает запрос; 0 = все слои. Возвращают число
+// записанных id (не больше max_ids).
+int r2d_physics_query_point(const R2DPhysics *p, float x, float y, uint64_t mask,
+                            int *ids, int max_ids);
 int r2d_physics_query_box(const R2DPhysics *p, float x, float y, float w, float h,
-                          int *ids, int max_ids);
+                          uint64_t mask, int *ids, int max_ids);
 
 // --- События контакта -------------------------------------------------------
 // Заполняются на каждом шаге мира; JS читает их через engine.contacts().

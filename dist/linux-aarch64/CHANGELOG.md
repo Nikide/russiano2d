@@ -1,4 +1,109 @@
 # История изменений
+## Честный bloom, шейдеры узлов, render target, DSP-эффекты и реверб-шины
+
+Закрыты оставшиеся пункты таблицы «Ограничения (честно)» из
+`docs/HIGH_LEVEL_API.md` §28: свечение, шейдеры на узел, render target игры и
+канальные DSP-эффекты с реверб-шинами. В таблице осталась одна строка —
+рантайм-компиляция произвольного GLSL.
+
+### Добавлено
+- **Честный bloom** (`shaders/bloom_pre.frag.glsl`, `shaders/bloom_blur.frag.glsl`):
+  яркий проход с понижением разрешения (порог с мягким коленом), два
+  разделяемых размытия и композит в пост-обработке. Раньше свечение было
+  восемью выборками в одном проходе и потому выглядело контуром, а не светом.
+  Параметры `bloom_threshold` и `bloom_radius` у `$.gfx.post({...})`,
+  признаки `bloom_ready`/`bloom_buffers` у `engine.getPost()` и
+  `engine.renderInfo()`. Если буферы не создались, движок честно откатывается
+  на прежний однопроходный вариант.
+- **Шейдеры узлов** (`.shader('flash' | 'dissolve' | 'chroma' | 'wave', {…})`,
+  `.shaderParam(имя[, значение])`, `$.gfx.fxKinds()`): эффекты поверх спрайта
+  отдельными конвейерами (`shaders/sprite_fx.frag.glsl`) и таблицей параметров
+  на кадр. Узлы с одинаковым эффектом и параметрами рисуются одним вызовом;
+  узлы без шейдера идут прежним конвейером.
+- **Render target игры** (`$.viewport`): `create/size/bind/bound/sprite/draw/
+  destroy/count`, `engine.viewport.*`. Кадр рисуется в свою текстуру (target),
+  прошлый кадр остаётся в history-текстуре и доступен как спрайт — так делают
+  шлейфы, накопление и порталы.
+- **DSP-эффекты каналов и шин** (`src/audio_fx.c`): кроме `lowpass` и `echo`
+  появились `highpass`, `tremolo`, `bitcrush`, `ringmod` и `reverb`.
+  `$.audio.effects()` берёт список из движка.
+- **Реверб-шина с посылом**: у шины (группы) или канала может быть свой хвост,
+  в который уходит доля `send` её микса; остальные шины и мастер остаются
+  сухими (`engine.audio.setGroupReverb/setChannelReverb`,
+  `$.audio.effect(name, 'reverb', { send, room, damp, width })`).
+- **Тесты**: офлайн-тест DSP `tests/audio/fx_test.c` (29 проверок, собирается в
+  `r2d_audio_fx_test`), юнит-тесты `tests/js/sprite_fx_test.mjs` и
+  `tests/js/shape_spec_test.mjs`, пиксельные проверки bloom и шейдера узла в
+  `tests/agent/highlevel_render_test.py`, проверки эффектов и реверб-шин в
+  `tests/agent/highlevel_audiobus_test.py`, render target там же.
+
+### Изменено
+- **`r2d_render_draw_world/draw_ui/draw` принимают командный буфер**: юниформы
+  шейдеров узлов пушатся во время отрисовки, а не после.
+- **`engine.submitSprites(transforms, colors, count, blend, fx)`**: пятый
+  аргумент — индексы шейдеров узлов; без него поведение прежнее.
+- **`bootstrap.js` показывает настоящую причину падения установки `$`**:
+  раньше исключение внутри `createApi()` уносило контекст, и в журнале
+  оставалось «bootstrap.js не выставил globalThis.$».
+
+---
+
+## Коллизии по слоям, свип формы, частицы-цели и игровое время (§28 справочника)
+
+Закрыты шесть пунктов таблицы «Ограничения (честно)» из
+`docs/HIGH_LEVEL_API.md` §28: слои и маски коллизий, свип формы, частицы как
+цели, габарит агента у `<tilemap>`, виброотклик, пауза и масштаб времени для
+клипов. Остались шейдеры, render target, bloom и DSP-шины — это этап C.
+
+### Добавлено
+- **Слои и маски коллизий** (`b2Filter`): `.layerBits(bits)`, `.mask(bits |
+  узел | селектор)`, `.collidesWith(цель[, true|false])` — раньше это были
+  заглушки в `api.js`, которые возвращали обёртку и ничего не делали. Маски и
+  группа Box2D живут на теле, меняются без пересоздания (`r2d_physics_set_filter`,
+  `engine.setBodyFilter/getBodyFilter`), переживают `.size()` и prefab.
+  Запросы получили слои: `$.world.raycast/bodyAt/bodiesIn/raycastAll/lineOfSight`
+  и `engine.raycast/queryPoint/queryBox` принимают `mask`; `.onFloor()`/`.onWall()`
+  уважают маску узла.
+- **Свип формы (аналог `ShapeCast2D`)**: `r2d_physics_cast_shape` на
+  `b2World_CastShape`, `engine.castShape(opts)`, `$.world.castShape(from, to,
+  {w,h} | {radius} | {capsule:[r,halfH]})` и метод узла `.sweepTo(цель, opts)`.
+  Луч отвечает «что на линии», свип — «пролезет ли объём»: им проверяют проёмы
+  и задевание углов плечом.
+- **Частицы как цели**: `$.particles.at/inBox/raycast/hit`,
+  `$.world.particlesAt/particlesIn` и флаг `{ particles: true }` у
+  `$.world.raycast`. Попадание убивает частицу (`hit(..., {kill:false})` —
+  если судьбу решает игра).
+- **Габарит агента у `<tilemap>`**: `.agentRadius(r)`, `.agentSize(w, h)`,
+  `.fitsAt(x, y, opts)` и `.sample(x, y, opts)` — проверка «пролезу ли я сюда
+  телом» по сетке, без физики; тела коллизий остаются клетка в клетку.
+- **Виброотклик**: `engine.padConnected/padRumble/padRumbleTriggers` на
+  `SDL_RumbleGamepad`, `$.input.rumble(opts)`/`stopRumble()`/`rumbleSupported()`.
+  Вызов возвращает `false`, если геймпада нет: игра узнаёт, что тряска ушла в
+  пустоту, а не считает, что игрока тряхнуло.
+- **Юнит-тесты** (qjs): `tests/js/shape_spec_test.mjs`,
+  `tests/js/particle_hit_test.mjs`, `tests/js/tilemap_agent_test.mjs`,
+  `tests/js/input_rumble_test.mjs`.
+- **Агентские тесты**: `tests/agent/highlevel_collision_test.py` (слои, маски,
+  свип, prefab), `tests/agent/highlevel_rumble_test.py`; проверки частиц-целей
+  в `highlevel_particles_test.py`, габарита — в `highlevel_tilemap_test.py`,
+  времени — в `highlevel_anim_test.py` и `highlevel_animplayer_test.py`.
+
+### Изменено
+- **Клипы, машины состояний и таймлайны тикают игровым временем**
+  (`$.time.delta()`), а не сырым `dt`: `$.time.pause()` и `$.time.scale()`
+  теперь останавливают и ускоряют анимацию персонажа, а не только твины.
+  Интерфейс (экраны, диалоги, виджеты) остался на реальном времени — кнопки
+  обязаны работать на паузе.
+- **`opts.ignore` у лучей и свипов** наконец принимает узел, обёртку и массив,
+  а не только селектор: прежний код прогонял аргумент через `query()`, который
+  понимает лишь строку, поэтому `ignore: $('#hero')` молча давал пустой список.
+- **`$.world`**: `bodyAt`/`bodiesIn` принимают `opts.mask`,
+  `raycastAll` фильтрует узлы по слоям.
+- **prefab/save**: `layerBits`, `collisionMask` и `collisionGroup` пишутся и
+  читаются через `set()`, поэтому фильтр доезжает и до тела.
+
+---
+
 ## Индекс реестра: один проход вместо двадцати (P2 аудита `$`)
 
 ### Изменено

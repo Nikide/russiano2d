@@ -600,6 +600,34 @@ float r2d_pad_axis(const R2DApp *app, SDL_GamepadAxis axis)
     return (axis >= 0 && axis < SDL_GAMEPAD_AXIS_COUNT) ? app->pad_axes[axis] : 0.0f;
 }
 
+// Сила вибрации: 0..1 из JS → 0..65535 для SDL. Значения за диапазоном
+// зажимаем: отрицательную «тряску» SDL понял бы как почти максимальную.
+static Uint16 r2d__rumble_amount(float value)
+{
+    if (!(value > 0.0f)) return 0;                 // NaN и отрицательные — в ноль
+    if (value > 1.0f) value = 1.0f;
+    return (Uint16)(value * 65535.0f + 0.5f);
+}
+
+bool r2d_pad_connected(const R2DApp *app)
+{
+    return app && app->gamepad != NULL;
+}
+
+bool r2d_pad_rumble(R2DApp *app, float low, float high, uint32_t duration_ms)
+{
+    if (!app || !app->gamepad) return false;
+    return SDL_RumbleGamepad(app->gamepad, r2d__rumble_amount(low), r2d__rumble_amount(high),
+                             duration_ms);
+}
+
+bool r2d_pad_rumble_triggers(R2DApp *app, float left, float right, uint32_t duration_ms)
+{
+    if (!app || !app->gamepad) return false;
+    return SDL_RumbleGamepadTriggers(app->gamepad, r2d__rumble_amount(left),
+                                     r2d__rumble_amount(right), duration_ms);
+}
+
 void r2d_app_resolve_path(const R2DApp *app, char *out, size_t out_size, const char *relative)
 {
     // Абсолютный путь берём как есть: агент и тесты передают именно такие

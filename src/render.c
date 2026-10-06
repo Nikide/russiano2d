@@ -428,12 +428,21 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
     r->tri_batch_count  = 0;
     r->tri_index_start  = 0;
     r->batch_blend      = R2D_BLEND_ALPHA;
+    r->batch_fx         = 0;
+    r->fx_count         = 0;
+    // Связывание viewport'а живёт кадр: игра вызывает bind() в своём кадре.
+    r->bound_viewport   = -1;
     // -1 — «интерфейс ещё не помечен»: тогда все спрайты считаются миром.
     r->ui_cmd_start     = -1;
     r->stat_draws     = 0;
+    r->stat_passes    = 0;
+    r->stat_fx_cmds   = 0;
     r->stat_sprites   = 0;
     r->stat_vertices  = 0;
     r->stat_upload_bytes = 0;
+    // Буферы свечения живут между кадрами, но результат — нет: если в этом
+    // кадре свечение не считалось, пост обязан получить чёрную заглушку.
+    r->bloom_result   = NULL;
 }
 
 void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float h,
@@ -453,6 +462,7 @@ void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float 
     // Режим фиксируем на момент добавления: submitSprites с 4-м аргументом
     // проставляет его только на время своего пакета.
     c->blend = r->batch_blend;
+    c->fx    = r->batch_fx;
 
     const R2DSprite *sp = &r->sprites[sprite];
     const uint8_t cr = (uint8_t)(color & 0xFF);
@@ -558,8 +568,24 @@ void r2d_batch_triangles(R2DRenderer *r, const float *verts, int vertex_count)
     r2d_batch_triangles_blend(r, verts, vertex_count, R2D_BLEND_ALPHA);
 }
 
-int r2d_batch_submit_blend(R2DRenderer *r, const float *transforms, const uint32_t *colors,
-                           int count, int blend)
+// Заполняет запись таблицы шейдеров узла. Индекс даёт JS: он же ведёт
+// таблицу на своей стороне, поэтому ноль всегда «обычный спрайт».
+bool r2d_render_fx_define(R2DRenderer *r, int index, int kind,
+                          float p1, float p2, float p3, uint32_t color)
+{
+    if (!r || index <= 0 || index >= R2D_MAX_NODE_FX) return false;
+    R2DNodeFx *fx = &r->fx[index];
+    fx->kind = kind;
+    fx->p1 = p1;
+    fx->p2 = p2;
+    fx->p3 = p3;
+    fx->color = color;
+    if (index > r->fx_count) r->fx_count = index;
+    return true;
+}
+
+int r2d_batch_submit_fx(R2DRenderer *r, const float *transforms, const uint32_t *colors,
+                        const int32_t *fx, int count, int blend)
 {
     if (count <= 0) return 0;
     if (!transforms) {
@@ -568,20 +594,31 @@ int r2d_batch_submit_blend(R2DRenderer *r, const float *transforms, const uint32
     }
     if (blend < 0 || blend >= R2D_BLEND_COUNT) blend = R2D_BLEND_ALPHA;
 
-    // Режим действует только на этот пакет: после цикла возвращаем прежний
-    // (обычно ALPHA), чтобы старые drawSprite/drawRect не подхватили чужой.
-    const uint8_t prev = r->batch_blend;
+    // Режим и эффект действуют только на этот пакет: после цикла возвращаем
+    // прежние (обычно ALPHA и «без эффекта»), чтобы старые drawSprite/drawRect
+    // не подхватили чужой конвейер.
+    const uint8_t prev_blend = r->batch_blend;
+    const uint8_t prev_fx = r->batch_fx;
     r->batch_blend = (uint8_t)blend;
 
     const int before = r->cmd_count;
     for (int i = 0; i < count; ++i) {
         const float *t = transforms + (size_t)i * 6;
         const uint32_t color = colors ? colors[i] : R2D_WHITE;
+        const int32_t index = fx ? fx[i] : 0;
+        r->batch_fx = (uint8_t)((index > 0 && index < R2D_MAX_NODE_FX) ? index : 0);
         r2d_batch_add(r, (int)t[0], t[1], t[2], t[3], t[4], t[5], color);
     }
 
-    r->batch_blend = prev;
+    r->batch_blend = prev_blend;
+    r->batch_fx = prev_fx;
     return r->cmd_count - before;
+}
+
+int r2d_batch_submit_blend(R2DRenderer *r, const float *transforms, const uint32_t *colors,
+                           int count, int blend)
+{
+    return r2d_batch_submit_fx(r, transforms, colors, NULL, count, blend);
 }
 
 int r2d_batch_submit(R2DRenderer *r, const float *transforms, const uint32_t *colors, int count)
@@ -768,23 +805,63 @@ static void r2d__bind_pipeline(R2DRenderer *r, SDL_GPURenderPass *pass, uint8_t 
 // одним режимом смешивания склеиваются в один draw call. bound_blend — «что
 // уже привязано» (-1 — ничего), состояние переживает вызовы, потому что
 // диапазоны рисуются в разных проходах и конвейер всё равно перепривяжется.
-static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPURenderPass *pass,
+static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
+                                   SDL_GPURenderPass *pass,
                                    int from, int to, int *bound_blend)
 {
     if (to <= from) return;
 
     int run_start = from;
     for (int i = from + 1; i <= to; ++i) {
+        // Участок — это непрерывные команды с одной текстурой, режимом
+        // смешивания и шейдером узла: только между ними можно не переключать
+        // конвейер и не пушить юниформы.
         const bool end_of_run =
             (i == to) ||
             (r->sprites[r->cmds[i].sprite].texture != r->sprites[r->cmds[run_start].sprite].texture) ||
-            (r->cmds[i].blend != r->cmds[run_start].blend);
+            (r->cmds[i].blend != r->cmds[run_start].blend) ||
+            (r->cmds[i].fx != r->cmds[run_start].fx);
 
         if (!end_of_run) continue;
 
         const int texture = r->sprites[r->cmds[run_start].sprite].texture;
         const uint8_t mode = r->cmds[run_start].blend;
-        if ((int)mode != *bound_blend) {
+        const uint8_t fx_index = r->cmds[run_start].fx;
+        if (fx_index > 0) {
+            // Шейдер узла: свой конвейер на каждый режим смешивания и
+            // юниформы с видом эффекта и его параметрами.
+            const R2DNodeFx *node_fx = &r->fx[fx_index];
+            const uint8_t pipe_mode = mode < R2D_BLEND_COUNT ? mode : R2D_BLEND_ALPHA;
+            SDL_GPUGraphicsPipeline *pipe = r->fx_pipelines[pipe_mode];
+            if (pipe) {
+                SDL_BindGPUGraphicsPipeline(pass, pipe);
+                SDL_GPUBufferBinding vb;
+                SDL_zero(vb);
+                vb.buffer = r->vertex_buffer;
+                SDL_BindGPUVertexBuffers(pass, 0, &vb, 1);
+                SDL_GPUBufferBinding ib;
+                SDL_zero(ib);
+                ib.buffer = r->index_buffer;
+                SDL_BindGPUIndexBuffer(pass, &ib, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+
+                struct { float p[4]; float c[4]; } uni;
+                uni.p[0] = (float)node_fx->kind;
+                uni.p[1] = node_fx->p1;
+                uni.p[2] = node_fx->p2;
+                uni.p[3] = node_fx->p3;
+                uni.c[0] = (float)(node_fx->color & 0xFF) / 255.0f;
+                uni.c[1] = (float)((node_fx->color >> 8) & 0xFF) / 255.0f;
+                uni.c[2] = (float)((node_fx->color >> 16) & 0xFF) / 255.0f;
+                uni.c[3] = (float)((node_fx->color >> 24) & 0xFF) / 255.0f;
+                SDL_PushGPUFragmentUniformData(cmd, 0, &uni, (Uint32)sizeof uni);
+                *bound_blend = -1;      // следующий обычный участок перебиндит пайплайн
+            } else {
+                if ((int)mode != *bound_blend) {
+                    r2d__bind_pipeline(r, pass, mode);
+                    *bound_blend = (int)mode;
+                }
+            }
+        } else if ((int)mode != *bound_blend) {
             r2d__bind_pipeline(r, pass, mode);
             *bound_blend = (int)mode;
         }
@@ -800,11 +877,13 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPURenderPass *pass,
         SDL_DrawGPUIndexedPrimitives(pass, num_indices, 1, first_index, 0, 0);
 
         r->stat_draws++;
+        if (fx_index > 0) r->stat_fx_cmds += (i - run_start);
         run_start = i;
     }
 }
 
-void r2d_render_draw_world(R2DRenderer *r, SDL_GPURenderPass *pass)
+void r2d_render_draw_world(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
+                           SDL_GPURenderPass *pass)
 {
     if (r->cmd_count == 0 && r->tri_batch_count == 0) return;
 
@@ -813,7 +892,7 @@ void r2d_render_draw_world(R2DRenderer *r, SDL_GPURenderPass *pass)
     const int ui_from = r->ui_cmd_start >= 0 ? r->ui_cmd_start : r->cmd_count;
 
     int bound_blend = -1;
-    r2d__draw_sprite_range(r, pass, 0, ui_from, &bound_blend);
+    r2d__draw_sprite_range(r, cmd, pass, 0, ui_from, &bound_blend);
 
     r->stat_sprites = r->cmd_count;
 
@@ -840,17 +919,17 @@ void r2d_render_draw_world(R2DRenderer *r, SDL_GPURenderPass *pass)
     }
 }
 
-void r2d_render_draw_ui(R2DRenderer *r, SDL_GPURenderPass *pass)
+void r2d_render_draw_ui(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass)
 {
     if (r->ui_cmd_start < 0) return;
     int bound_blend = -1;
-    r2d__draw_sprite_range(r, pass, r->ui_cmd_start, r->cmd_count, &bound_blend);
+    r2d__draw_sprite_range(r, cmd, pass, r->ui_cmd_start, r->cmd_count, &bound_blend);
 }
 
-void r2d_render_draw(R2DRenderer *r, SDL_GPURenderPass *pass)
+void r2d_render_draw(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass)
 {
-    r2d_render_draw_world(r, pass);
-    r2d_render_draw_ui(r, pass);
+    r2d_render_draw_world(r, cmd, pass);
+    r2d_render_draw_ui(r, cmd, pass);
 }
 
 // ---------------------------------------------------------------------------
@@ -870,7 +949,7 @@ static SDL_GPUGraphicsPipeline *r2d__create_post_pipeline(R2DRenderer *r)
     SDL_GPUShader *vs = r2d__make_shader(r->device, &r2d_shader_post_vert,
                                           SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
     SDL_GPUShader *fs = r2d__make_shader(r->device, &r2d_shader_post_frag,
-                                          SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1);
+                                          SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 2);
     if (!vs || !fs) {
         if (vs) SDL_ReleaseGPUShader(r->device, vs);
         if (fs) SDL_ReleaseGPUShader(r->device, fs);
@@ -888,6 +967,46 @@ static SDL_GPUGraphicsPipeline *r2d__create_post_pipeline(R2DRenderer *r)
     pipe.fragment_shader = fs;
     pipe.primitive_type  = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
     // Вершинного буфера нет: треугольник строится из gl_VertexIndex.
+    pipe.vertex_input_state.num_vertex_buffers    = 0;
+    pipe.vertex_input_state.num_vertex_attributes = 0;
+    pipe.target_info.num_color_targets         = 1;
+    pipe.target_info.color_target_descriptions = &target;
+    pipe.rasterizer_state.fill_mode  = SDL_GPU_FILLMODE_FILL;
+    pipe.rasterizer_state.cull_mode  = SDL_GPU_CULLMODE_NONE;
+    pipe.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+    pipe.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    SDL_GPUGraphicsPipeline *result = SDL_CreateGPUGraphicsPipeline(r->device, &pipe);
+    SDL_ReleaseGPUShader(r->device, vs);
+    SDL_ReleaseGPUShader(r->device, fs);
+    return result;
+}
+
+// Полноэкранный конвейер для проходов свечения: тот же вершинный шейдер, что у
+// пост-обработки, один сэмплер и один блок юниформов во фрагментной стадии.
+static SDL_GPUGraphicsPipeline *r2d__create_fullscreen_pipeline(R2DRenderer *r,
+                                                                const R2DShaderBlob *frag)
+{
+    SDL_GPUShader *vs = r2d__make_shader(r->device, &r2d_shader_post_vert,
+                                          SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
+    SDL_GPUShader *fs = r2d__make_shader(r->device, frag,
+                                          SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1);
+    if (!vs || !fs) {
+        if (vs) SDL_ReleaseGPUShader(r->device, vs);
+        if (fs) SDL_ReleaseGPUShader(r->device, fs);
+        return NULL;
+    }
+
+    SDL_GPUColorTargetDescription target;
+    SDL_zero(target);
+    target.format = SDL_GetGPUSwapchainTextureFormat(r->device, r->window);
+    target.blend_state.enable_blend = false;
+
+    SDL_GPUGraphicsPipelineCreateInfo pipe;
+    SDL_zero(pipe);
+    pipe.vertex_shader   = vs;
+    pipe.fragment_shader = fs;
+    pipe.primitive_type  = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
     pipe.vertex_input_state.num_vertex_buffers    = 0;
     pipe.vertex_input_state.num_vertex_attributes = 0;
     pipe.target_info.num_color_targets         = 1;
@@ -971,16 +1090,317 @@ void r2d_render_post(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPas
 
     SDL_BindGPUGraphicsPipeline(pass, r->post_pipeline);
 
-    SDL_GPUTextureSamplerBinding binding;
+    // binding 0 — сцена, binding 1 — готовая размытая яркая часть (bloom).
+    // Если свечения не было, туда уходит чёрная текстура 1×1 и вклад нулевой,
+    // а флаг bloom_ready заставляет шейдер взять запасную ветку.
+    SDL_GPUTextureSamplerBinding binding[2];
     SDL_zero(binding);
-    binding.texture = r->scene_target;
-    binding.sampler = r->sampler;
-    SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+    binding[0].texture = r->scene_target;
+    binding[0].sampler = r->sampler;
+    binding[1].texture = r->bloom_result ? r->bloom_result : r->black_texture;
+    binding[1].sampler = r->linear_sampler ? r->linear_sampler : r->sampler;
+    SDL_BindGPUFragmentSamplers(pass, 0, binding, 2);
 
-    // Push-константы: три vec4, раскладка совпадает с R2DPostParams.
+    // Push-константы: шесть vec4, раскладка совпадает с R2DPostParams.
     SDL_PushGPUFragmentUniformData(cmd, 0, &r->post, (Uint32)sizeof(R2DPostParams));
     SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
     r->stat_draws++;
+    r->stat_passes++;
+}
+
+// ---------------------------------------------------------------------------
+// Свечение (bloom)
+//
+// Три прохода после сцены и до пост-обработки:
+//   1. яркий проход с понижением разрешения (порог с мягким коленом);
+//   2. размытие по горизонтали;
+//   3. размытие по вертикали.
+// Результат лежит в bloom_a и уходит в пост-обработку как u_bloom. Разделяемое
+// размытие — 5 выборок на пиксель вместо 25 у двумерного.
+//
+// Буферы — половинного разрешения сцены: свечение по своей природе мягкое,
+// точность ему не нужна, а стоимость падает вчетверо.
+// ---------------------------------------------------------------------------
+
+static SDL_GPUTexture *r2d__create_bloom_texture(R2DRenderer *r, int w, int h)
+{
+    SDL_GPUTextureCreateInfo info;
+    SDL_zero(info);
+    info.type   = SDL_GPU_TEXTURETYPE_2D;
+    // Формат совпадает с swapchain: конвейеры полноэкранных проходов общие.
+    info.format = SDL_GetGPUSwapchainTextureFormat(r->device, r->window);
+    info.usage  = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    info.width              = (Uint32)w;
+    info.height             = (Uint32)h;
+    info.layer_count_or_depth = 1;
+    info.num_levels         = 1;
+    info.sample_count       = SDL_GPU_SAMPLECOUNT_1;
+    return SDL_CreateGPUTexture(r->device, &info);
+}
+
+bool r2d_render_bloom_ready(R2DRenderer *r, int w, int h)
+{
+    if (!r || !r->device || w <= 0 || h <= 0) return false;
+
+    if (!r->bloom_pre_pipeline) {
+        r->bloom_pre_pipeline  = r2d__create_fullscreen_pipeline(r, &r2d_shader_bloom_pre_frag);
+        r->bloom_blur_pipeline = r2d__create_fullscreen_pipeline(r, &r2d_shader_bloom_blur_frag);
+    }
+    if (!r->bloom_pre_pipeline || !r->bloom_blur_pipeline) return false;
+
+    // Половинное разрешение, но не меньше 8 пикселей: на крошечных целях
+    // размытие превратилось бы в один тексель и свечение исчезло бы.
+    const int bw = w / 2 > 8 ? w / 2 : 8;
+    const int bh = h / 2 > 8 ? h / 2 : 8;
+    if (r->bloom_a && r->bloom_b && r->bloom_w == bw && r->bloom_h == bh) return true;
+
+    if (r->bloom_a) { SDL_ReleaseGPUTexture(r->device, r->bloom_a); r->bloom_a = NULL; }
+    if (r->bloom_b) { SDL_ReleaseGPUTexture(r->device, r->bloom_b); r->bloom_b = NULL; }
+    r->bloom_result = NULL;
+
+    r->bloom_a = r2d__create_bloom_texture(r, bw, bh);
+    r->bloom_b = r2d__create_bloom_texture(r, bw, bh);
+    if (!r->bloom_a || !r->bloom_b) {
+        R2D_ERROR("SDL_CreateGPUTexture (свечение): %s", SDL_GetError());
+        if (r->bloom_a) { SDL_ReleaseGPUTexture(r->device, r->bloom_a); r->bloom_a = NULL; }
+        if (r->bloom_b) { SDL_ReleaseGPUTexture(r->device, r->bloom_b); r->bloom_b = NULL; }
+        return false;
+    }
+    r->bloom_w = bw;
+    r->bloom_h = bh;
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Render target игры (viewport)
+//
+// Игра создаёт текстуру нужного размера, связывает её на кадр (bind) — и мир
+// рисуется в неё, а не в swapchain. Прошлый кадр остаётся отдельной текстурой:
+// его игра рисует как обычный спрайт (шлейф, накопление, портал), поэтому
+// чтения и записи одной текстуры в одном проходе не возникает.
+//
+// Пост-обработка при связанном viewport'е не применяется: кадр показывается
+// как есть (иначе пришлось бы гонять эффекты по чужой текстуре).
+// ---------------------------------------------------------------------------
+
+SDL_GPUTexture *r2d_render_viewport_target(R2DRenderer *r)
+{
+    if (!r || r->bound_viewport < 0 || r->bound_viewport >= R2D_MAX_VIEWPORTS) return NULL;
+    R2DViewport *vp = &r->viewports[r->bound_viewport];
+    return vp->used ? vp->target : NULL;
+}
+
+int r2d_render_viewport_create(R2DRenderer *r, int w, int h)
+{
+    if (!r || !r->device || w <= 0 || h <= 0) return -1;
+    if (w > 16384 || h > 16384) {
+        R2D_ERROR("viewport.create: размер %dx%d слишком велик", w, h);
+        return -1;
+    }
+    int slot = -1;
+    for (int i = 0; i < R2D_MAX_VIEWPORTS; ++i) {
+        if (!r->viewports[i].used) { slot = i; break; }
+    }
+    if (slot < 0) {
+        R2D_ERROR("viewport.create: достигнут лимит (%d)", R2D_MAX_VIEWPORTS);
+        return -1;
+    }
+
+    SDL_GPUTexture *target = r2d__create_bloom_texture(r, w, h);
+    SDL_GPUTexture *history = r2d__create_bloom_texture(r, w, h);
+    if (!target || !history) {
+        if (target) SDL_ReleaseGPUTexture(r->device, target);
+        if (history) SDL_ReleaseGPUTexture(r->device, history);
+        R2D_ERROR("viewport.create: %s", SDL_GetError());
+        return -1;
+    }
+
+    // История должна быть спрайтом: игра рисует её как обычную картинку.
+    const int tex_id = r->texture_count++;
+    r->textures[tex_id].handle = history;
+    r->textures[tex_id].width  = w;
+    r->textures[tex_id].height = h;
+    r->textures[tex_id].alive  = true;
+    SDL_snprintf(r->textures[tex_id].name, sizeof r->textures[tex_id].name,
+                 "<viewport %d>", slot);
+    const int sprite = r2d_sprite_create(r, tex_id, 0, 0, (float)w, (float)h);
+
+    R2DViewport *vp = &r->viewports[slot];
+    vp->used = true;
+    vp->target = target;
+    vp->history = history;
+    vp->w = w;
+    vp->h = h;
+    vp->sprite = sprite;
+    return slot;
+}
+
+bool r2d_render_viewport_destroy(R2DRenderer *r, int id)
+{
+    if (!r || id < 0 || id >= R2D_MAX_VIEWPORTS) return false;
+    R2DViewport *vp = &r->viewports[id];
+    if (!vp->used) return false;
+    if (r->bound_viewport == id) r->bound_viewport = -1;
+    if (vp->target) SDL_ReleaseGPUTexture(r->device, vp->target);
+    if (vp->history) {
+        // Текстура зарегистрирована в таблице — освобождаем её один раз.
+        for (int i = 0; i < r->texture_count; ++i) {
+            if (r->textures[i].alive && r->textures[i].handle == vp->history) {
+                r->textures[i].alive = false;
+                r->textures[i].handle = NULL;
+                break;
+            }
+        }
+        SDL_ReleaseGPUTexture(r->device, vp->history);
+    }
+    SDL_zero(*vp);
+    return true;
+}
+
+bool r2d_render_viewport_bind(R2DRenderer *r, int id)
+{
+    if (!r) return false;
+    if (id < 0) { r->bound_viewport = -1; return true; }
+    if (id >= R2D_MAX_VIEWPORTS || !r->viewports[id].used) return false;
+    r->bound_viewport = id;
+    return true;
+}
+
+int r2d_render_viewport_sprite(const R2DRenderer *r, int id)
+{
+    if (!r || id < 0 || id >= R2D_MAX_VIEWPORTS || !r->viewports[id].used) return -1;
+    return r->viewports[id].sprite;
+}
+
+int r2d_render_viewport_size(const R2DRenderer *r, int id, int *w, int *h)
+{
+    if (!r || id < 0 || id >= R2D_MAX_VIEWPORTS || !r->viewports[id].used) return -1;
+    if (w) *w = r->viewports[id].w;
+    if (h) *h = r->viewports[id].h;
+    return 0;
+}
+
+/** Полноэкранный блит текстуры в цель: пост-конвейер с нулевыми эффектами. */
+static void r2d__blit_texture(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
+                              SDL_GPUTexture *src, SDL_GPUTexture *dst, int w, int h)
+{
+    if (!src || !dst) return;
+    SDL_GPUColorTargetInfo target;
+    SDL_zero(target);
+    target.texture = dst;
+    target.clear_color = (SDL_FColor){ 0, 0, 0, 1 };
+    target.load_op  = SDL_GPU_LOADOP_DONT_CARE;
+    target.store_op = SDL_GPU_STOREOP_STORE;
+
+    SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
+    if (!pass) return;
+    SDL_BindGPUGraphicsPipeline(pass, r->post_pipeline);
+
+    SDL_GPUTextureSamplerBinding binding;
+    SDL_zero(binding);
+    binding.texture = src;
+    binding.sampler = r->linear_sampler ? r->linear_sampler : r->sampler;
+    SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+
+    // Все эффекты выключены — проход работает как копия кадра.
+    R2DPostParams params;
+    SDL_zero(params);
+    params.center_x = 0.5f;
+    params.center_y = 0.5f;
+    params.radius = 0.35f;
+    params.tint_r = params.tint_g = params.tint_b = 1.0f;
+    params.saturation = 1.0f;
+    params.contrast = 1.0f;
+    SDL_PushGPUFragmentUniformData(cmd, 0, &params, (Uint32)sizeof params);
+    SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+    SDL_EndGPURenderPass(pass);
+    r->stat_draws++;
+    r->stat_passes++;
+}
+
+bool r2d_render_viewport_present(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
+                                 SDL_GPUTexture *swapchain, int w, int h)
+{
+    if (!r || !cmd || !swapchain) return false;
+    SDL_GPUTexture *target = r2d_render_viewport_target(r);
+    if (!target) return false;
+    R2DViewport *vp = &r->viewports[r->bound_viewport];
+    // Показываем кадр на экране и сохраняем его в историю для следующего кадра.
+    r2d__blit_texture(r, cmd, target, swapchain, w, h);
+    if (vp->history) r2d__blit_texture(r, cmd, target, vp->history, vp->w, vp->h);
+    return true;
+}
+
+bool r2d_render_bloom(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
+{
+    if (!r || !cmd || !r->scene_target) return false;
+    if (!r2d_render_bloom_ready(r, r->scene_w, r->scene_h)) return false;
+
+    const float threshold = r->post.bloom_threshold > 0.0f ? r->post.bloom_threshold : 0.75f;
+    const float radius    = r->post.bloom_radius > 0.0f ? r->post.bloom_radius : 1.0f;
+
+    // --- 1. Яркий проход: сцена → bloom_a (половинное разрешение).
+    const struct { float threshold, knee, texel_x, texel_y; } pre = {
+        threshold, 0.35f,
+        r->scene_w > 0 ? 1.0f / (float)r->scene_w : 0.0f,
+        r->scene_h > 0 ? 1.0f / (float)r->scene_h : 0.0f,
+    };
+    {
+        SDL_GPUColorTargetInfo target;
+        SDL_zero(target);
+        target.texture = r->bloom_a;
+        target.clear_color = (SDL_FColor){ 0, 0, 0, 1 };
+        target.load_op  = SDL_GPU_LOADOP_CLEAR;
+        target.store_op = SDL_GPU_STOREOP_STORE;
+
+        SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
+        if (!pass) return false;
+        SDL_BindGPUGraphicsPipeline(pass, r->bloom_pre_pipeline);
+        SDL_GPUTextureSamplerBinding b;
+        SDL_zero(b);
+        b.texture = r->scene_target;
+        b.sampler = r->linear_sampler ? r->linear_sampler : r->sampler;
+        SDL_BindGPUFragmentSamplers(pass, 0, &b, 1);
+        SDL_PushGPUFragmentUniformData(cmd, 0, &pre, (Uint32)sizeof pre);
+        SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+        SDL_EndGPURenderPass(pass);
+        r->stat_draws++;
+        r->stat_passes++;
+    }
+
+    // --- 2 и 3. Размытие: горизонталь (a → b), затем вертикаль (b → a).
+    const struct { float dir_x, dir_y, strength, _pad; } dirs[2] = {
+        { 1.0f / (float)r->bloom_w, 0.0f, radius, 0.0f },
+        { 0.0f, 1.0f / (float)r->bloom_h, radius, 0.0f },
+    };
+    SDL_GPUTexture *src[2] = { r->bloom_a, r->bloom_b };
+    SDL_GPUTexture *dst[2] = { r->bloom_b, r->bloom_a };
+
+    for (int i = 0; i < 2; ++i) {
+        SDL_GPUColorTargetInfo target;
+        SDL_zero(target);
+        target.texture = dst[i];
+        target.clear_color = (SDL_FColor){ 0, 0, 0, 1 };
+        target.load_op  = SDL_GPU_LOADOP_DONT_CARE;
+        target.store_op = SDL_GPU_STOREOP_STORE;
+
+        SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
+        if (!pass) return false;
+        SDL_BindGPUGraphicsPipeline(pass, r->bloom_blur_pipeline);
+        SDL_GPUTextureSamplerBinding b;
+        SDL_zero(b);
+        b.texture = src[i];
+        b.sampler = r->linear_sampler ? r->linear_sampler : r->sampler;
+        SDL_BindGPUFragmentSamplers(pass, 0, &b, 1);
+        SDL_PushGPUFragmentUniformData(cmd, 0, &dirs[i], (Uint32)sizeof dirs[i]);
+        SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+        SDL_EndGPURenderPass(pass);
+        r->stat_draws++;
+        r->stat_passes++;
+    }
+
+    r->bloom_result = r->bloom_a;   // результат вертикального прохода
+    return true;
 }
 
 bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
@@ -1061,6 +1481,17 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
         return false;
     }
 
+    // Линейный сэмплер для свечения: размытие берёт соседние тексели, и без
+    // линейной фильтрации «dual filter» превращался бы в выборку одного пикселя.
+    si.min_filter = SDL_GPU_FILTER_LINEAR;
+    si.mag_filter = SDL_GPU_FILTER_LINEAR;
+    r->linear_sampler = SDL_CreateGPUSampler(device, &si);
+    if (!r->linear_sampler) {
+        R2D_ERROR("SDL_CreateGPUSampler (линейный): %s", SDL_GetError());
+        r2d_render_shutdown(r);
+        return false;
+    }
+
     // Белая текстура 1x1 — основа для engine.drawRect().
     {
         SDL_GPUTexture *white = r2d__create_texture(r, 1, 1);
@@ -1081,6 +1512,19 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
         r->white_sprite  = r2d_sprite_create(r, id, 0, 0, 1, 1);
     }
 
+    // Чёрная текстура 1x1 — заглушка для сэмплера свечения: когда bloom не
+    // считался, шейдер поста обязан получить валидную привязку.
+    {
+        SDL_GPUTexture *black = r2d__create_texture(r, 1, 1);
+        const Uint32 pixel = 0x000000FFu;   // RGBA little-endian: чёрный, alpha 1
+        if (black && r2d__upload_pixels(r, black, &pixel, 1, 1, 4)) {
+            r->black_texture = black;
+        } else {
+            R2D_WARN("не удалось создать чёрную текстуру для свечения");
+            if (black) SDL_ReleaseGPUTexture(device, black);
+        }
+    }
+
     // Пост-обработка. Если шейдер не собрался или бэкенд его не принял,
     // движок просто рисует кадр напрямую в swapchain — это не фатально.
     r->post_pipeline = r2d__create_post_pipeline(r);
@@ -1094,6 +1538,46 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     r->post.tint_r = r->post.tint_g = r->post.tint_b = 1.0f;
     r->post.saturation = 1.0f;
     r->post.contrast   = 1.0f;
+    r->post.bloom_threshold = 0.75f;
+    r->post.bloom_radius    = 1.0f;
+
+    // Конвейеры шейдеров узла: тот же вершинный шейдер, но фрагментный с
+    // юниформами. По одному на режим смешивания.
+    for (int mode = 0; mode < R2D_BLEND_COUNT; ++mode) {
+        SDL_GPUShader *fx_vs = r2d__make_shader(device, &r2d_shader_sprite_vert,
+                                                 SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
+        SDL_GPUShader *fx_fs = r2d__make_shader(device, &r2d_shader_sprite_fx_frag,
+                                                 SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1);
+        if (fx_vs && fx_fs) {
+            SDL_GPUVertexBufferDescription vb;
+            SDL_zero(vb);
+            vb.slot = 0;
+            vb.pitch = sizeof(R2DVertex);
+            vb.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+            SDL_GPUVertexAttribute attrs[3];
+            SDL_zero(attrs);
+            attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[0].offset = 0;
+            attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[1].offset = sizeof(float) * 2;
+            attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[2].offset = sizeof(float) * 4;
+
+            r->fx_pipelines[mode] = r2d__create_pipeline(device, window, fx_vs, fx_fs, &vb, attrs,
+                                                          (R2DBlendMode)mode);
+            if (!r->fx_pipelines[mode]) {
+                R2D_WARN("шейдер узла недоступен для режима %d: %s", mode, SDL_GetError());
+            }
+        }
+        if (fx_vs) SDL_ReleaseGPUShader(device, fx_vs);
+        if (fx_fs) SDL_ReleaseGPUShader(device, fx_fs);
+    }
+
+    // Конвейеры свечения создаём сразу: буферы появятся под размер окна, а
+    // компиляция пайплайна в первом кадре со свечением дала бы заметный рывок.
+    r->bloom_pre_pipeline  = r2d__create_fullscreen_pipeline(r, &r2d_shader_bloom_pre_frag);
+    r->bloom_blur_pipeline = r2d__create_fullscreen_pipeline(r, &r2d_shader_bloom_blur_frag);
+    if (!r->bloom_pre_pipeline || !r->bloom_blur_pipeline) {
+        R2D_WARN("свечение недоступно, пост возьмёт запасную ветку: %s", SDL_GetError());
+    }
 
     return true;
 }
@@ -1111,10 +1595,17 @@ void r2d_render_shutdown(R2DRenderer *r)
         }
     }
     if (r->sampler)  SDL_ReleaseGPUSampler(r->device, r->sampler);
+    if (r->linear_sampler) SDL_ReleaseGPUSampler(r->device, r->linear_sampler);
+    if (r->black_texture)  SDL_ReleaseGPUTexture(r->device, r->black_texture);
     for (int m = 0; m < R2D_BLEND_COUNT; ++m) {
         if (r->pipelines[m]) SDL_ReleaseGPUGraphicsPipeline(r->device, r->pipelines[m]);
+        if (r->fx_pipelines[m]) SDL_ReleaseGPUGraphicsPipeline(r->device, r->fx_pipelines[m]);
     }
     if (r->post_pipeline) SDL_ReleaseGPUGraphicsPipeline(r->device, r->post_pipeline);
+    if (r->bloom_pre_pipeline)  SDL_ReleaseGPUGraphicsPipeline(r->device, r->bloom_pre_pipeline);
+    if (r->bloom_blur_pipeline) SDL_ReleaseGPUGraphicsPipeline(r->device, r->bloom_blur_pipeline);
+    if (r->bloom_a) SDL_ReleaseGPUTexture(r->device, r->bloom_a);
+    if (r->bloom_b) SDL_ReleaseGPUTexture(r->device, r->bloom_b);
     if (r->scene_target)  SDL_ReleaseGPUTexture(r->device, r->scene_target);
 
     SDL_free(r->sprites);
@@ -1193,6 +1684,10 @@ static JSValue r2d__js_set_post(JSContext *ctx, JSValueConst this_val,
     p.contrast   = r2d__js_arg_float(ctx, argc, argv, 17, p.contrast);
     p.brightness = r2d__js_arg_float(ctx, argc, argv, 18, p.brightness);
     p.blood      = r2d__js_arg_float(ctx, argc, argv, 19, p.blood);
+    // Параметры свечения: порог яркости и сила размытия. bloom_ready заполняет
+    // движок каждый кадр — из JS он не приходит.
+    p.bloom_threshold = r2d__js_arg_float(ctx, argc, argv, 20, p.bloom_threshold);
+    p.bloom_radius    = r2d__js_arg_float(ctx, argc, argv, 21, p.bloom_radius);
 
     r2d_render_set_post(r, &p);
     return JS_TRUE;
@@ -1227,6 +1722,44 @@ static JSValue r2d__js_get_post(JSContext *ctx, JSValueConst this_val,
     JS_SetPropertyStr(ctx, o, "contrast",  JS_NewFloat64(ctx, p ? (double)p->contrast : 1.0));
     JS_SetPropertyStr(ctx, o, "brightness", JS_NewFloat64(ctx, p ? (double)p->brightness : 0.0));
     JS_SetPropertyStr(ctx, o, "blood",     JS_NewFloat64(ctx, p ? (double)p->blood : 0.0));
+    JS_SetPropertyStr(ctx, o, "bloom_threshold",
+                      JS_NewFloat64(ctx, p ? (double)p->bloom_threshold : 0.75));
+    JS_SetPropertyStr(ctx, o, "bloom_radius",
+                      JS_NewFloat64(ctx, p ? (double)p->bloom_radius : 1.0));
+    // bloom_ready — факт этого кадра: считалось ли свечение отдельными
+    // проходами (иначе пост берёт запасную ветку с восемью выборками).
+    JS_SetPropertyStr(ctx, o, "bloom_ready",
+                      JS_NewBool(ctx, r && p && p->bloom_ready > 0.5f));
+    JS_SetPropertyStr(ctx, o, "bloom_buffers",
+                      JS_NewBool(ctx, r && r->bloom_a != NULL && r->bloom_b != NULL));
+    return o;
+}
+
+// engine.renderInfo() → что происходило в кадре: пост, свечение, размеры
+// буферов и число полноэкранных проходов. Нужен тестам и отладке: по одним
+// параметрам поста не видно, действительно ли свечение считалось.
+static JSValue r2d__js_render_info(JSContext *ctx, JSValueConst this_val,
+                                   int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DRenderer *r = s ? s->renderer : NULL;
+
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "post", JS_NewBool(ctx, r && r->post_pipeline != NULL));
+    JS_SetPropertyStr(ctx, o, "bloom", JS_NewBool(ctx, r && r->bloom_a != NULL));
+    JS_SetPropertyStr(ctx, o, "bloom_ready", JS_NewBool(ctx, r && r->post.bloom_ready > 0.5f));
+    JS_SetPropertyStr(ctx, o, "bloom_w", JS_NewInt32(ctx, r ? r->bloom_w : 0));
+    JS_SetPropertyStr(ctx, o, "bloom_h", JS_NewInt32(ctx, r ? r->bloom_h : 0));
+    JS_SetPropertyStr(ctx, o, "scene_w", JS_NewInt32(ctx, r ? r->scene_w : 0));
+    JS_SetPropertyStr(ctx, o, "scene_h", JS_NewInt32(ctx, r ? r->scene_h : 0));
+    JS_SetPropertyStr(ctx, o, "passes", JS_NewInt32(ctx, r ? r->stat_passes : 0));
+    // Сколько шейдеров узлов записала JS-сторона в этом кадре, и поднялись
+    // ли конвейеры для них.
+    JS_SetPropertyStr(ctx, o, "fx", JS_NewInt32(ctx, r ? r->fx_count : 0));
+    JS_SetPropertyStr(ctx, o, "fx_pipelines", JS_NewBool(ctx, r && r->fx_pipelines[0] != NULL));
+    JS_SetPropertyStr(ctx, o, "fx_cmds", JS_NewInt32(ctx, r ? r->stat_fx_cmds : 0));
+    JS_SetPropertyStr(ctx, o, "draws", JS_NewInt32(ctx, r ? r->stat_draws : 0));
     return o;
 }
 
@@ -1330,12 +1863,51 @@ static JSValue r2d__js_submit_sprites(JSContext *ctx, JSValueConst this_val,
         count = (int)colors_len;
     }
 
+    // Пятый аргумент — индексы шейдеров узла (Int32Array), по одному на спрайт.
+    // Без него пакет идёт обычным конвейером: старые игры ничего не заметят.
+    const int32_t *fx = NULL;
+    JSValue fx_ab = JS_UNDEFINED;
+    if (argc >= 5 && !JS_IsUndefined(argv[4]) && !JS_IsNull(argv[4])) {
+        size_t foff = 0, flen = 0, fbpe = 0;
+        fx_ab = JS_GetTypedArrayBuffer(ctx, argv[4], &foff, &flen, &fbpe);
+        if (!JS_IsException(fx_ab)) {
+            size_t fsize = 0;
+            uint8_t *fbase = JS_GetArrayBuffer(ctx, &fsize, fx_ab);
+            if (fbase && flen / sizeof(int32_t) >= (size_t)count) {
+                fx = (const int32_t *)(fbase + foff);
+            }
+        } else {
+            JS_FreeValue(ctx, fx_ab);
+            fx_ab = JS_UNDEFINED;
+        }
+    }
+
     const int blend = r2d__js_blend_arg(ctx, argc, argv, 3);
-    const int drawn = r2d_batch_submit_blend(s->renderer, transforms, colors, count, blend);
+    const int drawn = r2d_batch_submit_fx(s->renderer, transforms, colors, fx, count, blend);
 
     if (!JS_IsUndefined(colors_ab)) JS_FreeValue(ctx, colors_ab);
+    if (!JS_IsUndefined(fx_ab)) JS_FreeValue(ctx, fx_ab);
     JS_FreeValue(ctx, ab);
     return JS_NewInt32(ctx, drawn);
+}
+
+// engine.defineSpriteFx(index, kind, p1, p2, p3, color) — запись шейдера узла.
+// Индекс ведёт JS-сторона (она же решает, какие узлы попадают в один участок),
+// ноль зарезервирован под «обычный спрайт».
+static JSValue r2d__js_define_sprite_fx(JSContext *ctx, JSValueConst this_val,
+                                        int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    if (!s || !s->renderer) return JS_FALSE;
+    const bool ok = r2d_render_fx_define(s->renderer,
+                                         r2d__js_arg_int(ctx, argc, argv, 0, 0),
+                                         r2d__js_arg_int(ctx, argc, argv, 1, 0),
+                                         (float)r2d__js_arg_float(ctx, argc, argv, 2, 0.0),
+                                         (float)r2d__js_arg_float(ctx, argc, argv, 3, 0.0),
+                                         (float)r2d__js_arg_float(ctx, argc, argv, 4, 0.0),
+                                         (uint32_t)r2d__js_arg_int(ctx, argc, argv, 5, 0xFFFFFFFF));
+    return JS_NewBool(ctx, ok);
 }
 
 // engine.submitTriangles(vertices, count?, blend?) — произвольные
@@ -1388,26 +1960,91 @@ static JSValue r2d__js_submit_triangles(JSContext *ctx, JSValueConst this_val,
 // молча неверной картинки. Что нужно перестроить — docs/highlevel/render.md.
 // ---------------------------------------------------------------------------
 
-static JSValue r2d__js_viewport_unsupported(JSContext *ctx, JSValueConst this_val,
-                                            int argc, JSValueConst *argv)
+// engine.viewport.create(w, h) → id или -1.
+static JSValue r2d__js_viewport_create(JSContext *ctx, JSValueConst this_val,
+                                       int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
-    R2D_UNUSED(argc);
-    R2D_UNUSED(argv);
-    return JS_ThrowTypeError(ctx,
-        "render target не поддержан в этой сборке: кадр рисуется напрямую в swapchain, "
-        "а render pass открывает main.c. Что нужно перестроить — docs/highlevel/render.md");
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    if (!s || !s->renderer) return JS_NewInt32(ctx, -1);
+    return JS_NewInt32(ctx, r2d_render_viewport_create(s->renderer,
+                                                       r2d__js_arg_int(ctx, argc, argv, 0, 0),
+                                                       r2d__js_arg_int(ctx, argc, argv, 1, 0)));
 }
 
-// count() — единственный запрос, который безопасно отвечает нулём: он нужен
-// коду игры для проверки, есть ли вообще буферы.
+static JSValue r2d__js_viewport_destroy(JSContext *ctx, JSValueConst this_val,
+                                        int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    if (!s || !s->renderer) return JS_FALSE;
+    return JS_NewBool(ctx, r2d_render_viewport_destroy(s->renderer,
+                                                       r2d__js_arg_int(ctx, argc, argv, 0, -1)));
+}
+
+// engine.viewport.bind(id) — рисовать кадр в эту текстуру; bind(-1) — как обычно.
+static JSValue r2d__js_viewport_bind(JSContext *ctx, JSValueConst this_val,
+                                     int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    if (!s || !s->renderer) return JS_FALSE;
+    return JS_NewBool(ctx, r2d_render_viewport_bind(s->renderer,
+                                                    r2d__js_arg_int(ctx, argc, argv, 0, -1)));
+}
+
+static JSValue r2d__js_viewport_size(JSContext *ctx, JSValueConst this_val,
+                                     int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    int w = 0, h = 0;
+    if (!s || !s->renderer
+        || r2d_render_viewport_size(s->renderer, r2d__js_arg_int(ctx, argc, argv, 0, -1),
+                                    &w, &h) != 0) {
+        return JS_NULL;
+    }
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "w", JS_NewInt32(ctx, w));
+    JS_SetPropertyStr(ctx, o, "h", JS_NewInt32(ctx, h));
+    return o;
+}
+
+// engine.viewport.sprite(id) — спрайт прошлого кадра: игра рисует его как
+// обычную картинку и получает шлейф/накопление.
+static JSValue r2d__js_viewport_sprite(JSContext *ctx, JSValueConst this_val,
+                                       int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    if (!s || !s->renderer) return JS_NewInt32(ctx, -1);
+    return JS_NewInt32(ctx, r2d_render_viewport_sprite(s->renderer,
+                                                       r2d__js_arg_int(ctx, argc, argv, 0, -1)));
+}
+
+// engine.viewport.bound() → id связанного viewport'а или -1.
+static JSValue r2d__js_viewport_bound(JSContext *ctx, JSValueConst this_val,
+                                      int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DRenderer *r = s ? s->renderer : NULL;
+    return JS_NewInt32(ctx, r ? r->bound_viewport : -1);
+}
+
 static JSValue r2d__js_viewport_count(JSContext *ctx, JSValueConst this_val,
                                       int argc, JSValueConst *argv)
 {
-    R2D_UNUSED(this_val);
-    R2D_UNUSED(argc);
-    R2D_UNUSED(argv);
-    return JS_NewInt32(ctx, 0);
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DRenderer *r = s ? s->renderer : NULL;
+    int n = 0;
+    if (r) {
+        for (int i = 0; i < R2D_MAX_VIEWPORTS; ++i) {
+            if (r->viewports[i].used) n++;
+        }
+    }
+    return JS_NewInt32(ctx, n);
 }
 
 void r2d_render_register_js(JSContext *ctx, JSValue engine)
@@ -1422,29 +2059,33 @@ void r2d_render_register_js(JSContext *ctx, JSValue engine)
     // общая точка сборки, править её нельзя. Без 4-го аргумента поведение
     // прежнее (alpha), поэтому старые игры не замечают подмены.
     if (r) {
-        r2d__js_set_fn(ctx, engine, "submitSprites",   r2d__js_submit_sprites, 4);
+        r2d__js_set_fn(ctx, engine, "submitSprites",   r2d__js_submit_sprites, 5);
         r2d__js_set_fn(ctx, engine, "submitTriangles", r2d__js_submit_triangles, 3);
+        // Шейдер узла: JS ведёт таблицу эффектов на своей стороне, поэтому
+        // запись в таблицу движка — явный вызов с индексом.
+        r2d__js_set_fn(ctx, engine, "defineSpriteFx",  r2d__js_define_sprite_fx, 6);
     }
 
     // --- Пост-обработка ------------------------------------------------------
     // Позиционные аргументы: отсутствующие сохраняют текущее значение, чтобы
     // игра могла менять один эффект, не переписывая остальные. Последний
     // аргумент — время (нужно зерну).
-    r2d__js_set_fn(ctx, engine, "setPost", r2d__js_set_post, 20);
+    r2d__js_set_fn(ctx, engine, "setPost", r2d__js_set_post, 22);
     r2d__js_set_fn(ctx, engine, "getPost", r2d__js_get_post, 0);
     r2d__js_set_fn(ctx, engine, "postSupported", r2d__js_post_supported, 0);
+    r2d__js_set_fn(ctx, engine, "renderInfo", r2d__js_render_info, 0);
     r2d__js_set_fn(ctx, engine, "markUI", r2d__js_mark_ui, 0);
 
-    // --- engine.viewport.*: честная заглушка -------------------------------
+    // --- engine.viewport.*: render target игры ------------------------------
     JSValue vp = JS_NewObject(ctx);
-    JS_SetPropertyStr(ctx, vp, "supported", JS_FALSE);
-    r2d__js_set_fn(ctx, vp, "create",  r2d__js_viewport_unsupported, 2);
-    r2d__js_set_fn(ctx, vp, "destroy", r2d__js_viewport_unsupported, 1);
-    r2d__js_set_fn(ctx, vp, "size",    r2d__js_viewport_unsupported, 1);
-    r2d__js_set_fn(ctx, vp, "begin",   r2d__js_viewport_unsupported, 1);
-    r2d__js_set_fn(ctx, vp, "end",     r2d__js_viewport_unsupported, 0);
-    r2d__js_set_fn(ctx, vp, "draw",    r2d__js_viewport_unsupported, 7);
-    r2d__js_set_fn(ctx, vp, "capture", r2d__js_viewport_unsupported, 1);
+    JS_SetPropertyStr(ctx, vp, "supported", JS_NewBool(ctx, r != NULL));
+    r2d__js_set_fn(ctx, vp, "create",  r2d__js_viewport_create, 2);
+    r2d__js_set_fn(ctx, vp, "destroy", r2d__js_viewport_destroy, 1);
+    r2d__js_set_fn(ctx, vp, "bind",    r2d__js_viewport_bind, 1);
+    r2d__js_set_fn(ctx, vp, "unbind",  r2d__js_viewport_bind, 0);
+    r2d__js_set_fn(ctx, vp, "size",    r2d__js_viewport_size, 1);
+    r2d__js_set_fn(ctx, vp, "sprite",  r2d__js_viewport_sprite, 1);
+    r2d__js_set_fn(ctx, vp, "bound",   r2d__js_viewport_bound, 0);
     r2d__js_set_fn(ctx, vp, "count",   r2d__js_viewport_count, 0);
     JS_SetPropertyStr(ctx, engine, "viewport", vp);
 }

@@ -5,7 +5,7 @@
 // кадр позиции тел из C перекладываются в узлы, а удалённые тела убираются.
 // ===========================================================================
 
-import { ctx, Node, wrap, wrapOne, query, TAGS, packColor, resolveSprite, nodeBounds,
+import { ctx, Node, Wrapper, wrap, wrapOne, query, TAGS, packColor, resolveSprite, nodeBounds,
          nodesWithFacet } from './core.js';
 
 const state = {
@@ -169,25 +169,61 @@ export function installWorld($) {
          * препятствием. Раньше при первом попадании в игнорируемое тело луч
          * возвращал null (будто за ним ничего нет); список уходит в движок, и
          * луч ищет следующее настоящее препятствие.
+         *
+         * opts.mask — биты слоёв, которые луч принимает (как collision_mask у
+         * RayCast2D в Godot). Не задана или 0 — все слои.
          */
         raycast(from, to, opts) {
             const a = toPoint(from);
             const b = toPoint(to);
-            const ignore = (opts && opts.ignore)
-                ? query(opts.ignore).map((n) => n.body).filter((id) => id >= 0)
-                : [];
-            return describeRaycast(engine.raycast(a.x, a.y, b.x, b.y, ignore), a);
+            const mask = opts && opts.mask ? (opts.mask >>> 0) : 0;
+            const hit = describeRaycast(
+                engine.raycast(a.x, a.y, b.x, b.y, ignoreBodies(opts && opts.ignore), mask), a);
+            // opts.particles — луч видит ещё и частицы: искры, брызги, дым.
+            // Возвращается то, что ближе; у попадания в частицу body = -1,
+            // а подробности лежат в поле particle.
+            if (!(opts && opts.particles)) return hit;
+            const fx = particlesAPI();
+            if (!fx) return hit;
+            const ph = fx.raycast(a, b, opts);
+            if (!ph || (hit && hit.distance <= ph.distance)) return hit;
+            return {
+                hit: true,
+                point: ph.point,
+                normal: { x: 0, y: 0 },
+                distance: ph.distance,
+                fraction: ph.fraction,
+                body: -1,
+                node: ph.node,
+                self: ph.self,
+                particle: { index: ph.index, size: ph.size, x: ph.point.x, y: ph.point.y },
+            };
+        },
+
+        /** Частицы, накрывающие точку — тонкая обёртка над $.particles.at. */
+        particlesAt(x, y, opts) {
+            const fx = particlesAPI();
+            return fx ? fx.at(x, y, opts) : [];
+        },
+
+        /** Частицы в прямоугольнике — тонкая обёртка над $.particles.inBox. */
+        particlesIn(x, y, w, h, opts) {
+            const fx = particlesAPI();
+            return fx ? fx.inBox(x, y, w, h, opts) : [];
         },
 
         /** Все узлы, которые пересекает отрезок (по их прямоугольникам). */
         raycastAll(from, to, opts) {
             const a = toPoint(from);
             const b = toPoint(to);
+            const mask = opts && opts.mask ? (opts.mask >>> 0) : 0;
             const out = [];
             const dx = b.x - a.x, dy = b.y - a.y;
             for (const node of ctx.nodes) {
                 if (node.attrs.ui) continue;
                 if (node.body_kind === null && !opts?.all) continue;
+                // Слои: узел, чей слой луч не принимает, для него не существует.
+                if (mask !== 0 && (mask & (node.layer_bits >>> 0)) === 0) continue;
                 const box = nodeBounds(node);
                 const t = rayBox(a.x, a.y, dx, dy, box);
                 if (t !== null) out.push({ node, t, point: { x: a.x + dx * t, y: a.y + dy * t }, self: wrapOne(node) });
@@ -202,9 +238,41 @@ export function installWorld($) {
             return hit === null;
         },
 
-        /** Кто под точкой в мире (по физике). */
-        bodyAt(x, y) {
-            const ids = engine.queryPoint(x, y);
+        /**
+         * Свип формы: объём едет из `from` в `to` и останавливается на первом
+         * препятствии. Луч отвечает «что на линии», свип — «пролезет ли мой
+         * объём»: им проверяют проёмы и задевание углов плечом.
+         *
+         * opts:
+         *   `w`, `h`        — прямоугольник (по умолчанию 32×32);
+         *   `radius`        — круг радиуса radius;
+         *   `capsule: [r, halfH]` — капсула;
+         *   `shape` + `halfW`/`halfH`/`radius` — то же в явном виде;
+         *   `angle`         — поворот формы, радианы;
+         *   `mask`          — слои, которые свип принимает;
+         *   `ignore`        — узел/селектор/обёртка, которых свип не считает.
+         *
+         * Возвращает `{ hit, point, normal, distance, fraction, body, node, self }`
+         * или null. `fraction` — доля пройденного пути: если 0, объём уже
+         * перекрывается с препятствием и никуда не поедет.
+         */
+        castShape(from, to, opts) {
+            const a = toPoint(from);
+            const b = toPoint(to);
+            const o = opts || {};
+            const spec = shapeSpec(o);
+            const hit = engine.castShape({
+                x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+                shape: spec.shape, halfW: spec.half_w, halfH: spec.half_h,
+                radius: spec.radius, angle: o.angle || 0,
+                ignore: ignoreBodies(o.ignore), mask: o.mask ? (o.mask >>> 0) : 0,
+            });
+            return describeRaycast(hit, a);
+        },
+
+        /** Кто под точкой в мире (по физике). opts.mask — слои запроса. */
+        bodyAt(x, y, opts) {
+            const ids = engine.queryPoint(x, y, opts && opts.mask ? (opts.mask >>> 0) : 0);
             const out = [];
             for (let i = 0; i < ids.length; i++) {
                 const node = ctx.byBody.get(ids[i]);
@@ -213,9 +281,9 @@ export function installWorld($) {
             return wrap(out);
         },
 
-        /** Все тела в прямоугольнике. */
-        bodiesIn(x, y, w, h) {
-            const ids = engine.queryBox(x, y, w, h);
+        /** Все тела в прямоугольнике. opts.mask — слои запроса. */
+        bodiesIn(x, y, w, h, opts) {
+            const ids = engine.queryBox(x, y, w, h, opts && opts.mask ? (opts.mask >>> 0) : 0);
             const out = [];
             for (let i = 0; i < ids.length; i++) {
                 const node = ctx.byBody.get(ids[i]);
@@ -312,8 +380,35 @@ export function installWorld($) {
 // Вспомогательное
 // ---------------------------------------------------------------------------
 
-/** Результат engine.raycast в форме, которую ждёт $.world.raycast. */
-function describeRaycast(hit, origin) {
+/**
+ * Тела, которые запрос не считает препятствиями. Понимает селектор, узел,
+ * обёртку и массив любого из них.
+ *
+ * До этого список прогонялся через `query()`, а он принимает только строку:
+ * `ignore: $('#hero')` молча давал пустой список, и луч упирался в собственное
+ * тело стрелка — хотя документация обещала обратное.
+ */
+export function ignoreBodies(value) {
+    const out = [];
+    const push = (item) => {
+        if (item === null || item === undefined) return;
+        if (Array.isArray(item)) { for (const one of item) push(one); return; }
+        if (item instanceof Wrapper) { for (const n of item.nodes) push(n); return; }
+        if (typeof item === 'string') { for (const n of query(item)) push(n); return; }
+        if (item.body !== undefined && item.body >= 0) out.push(item.body);
+    };
+    push(value);
+    return out;
+}
+
+/** Подсистема частиц, если она уже установлена (иначе запросы по ним пусты). */
+function particlesAPI() {
+    const api = ctx.$ || null;
+    return api && api.particles && typeof api.particles.raycast === 'function'
+        ? api.particles : null;
+}
+
+/** Результат engine.raycast в форме, которую ждёт $.world.raycast. */function describeRaycast(hit, origin) {
     if (!hit || !hit.hit) return null;
     const node = ctx.byBody.get(hit.body) || null;
     return {
@@ -321,10 +416,55 @@ function describeRaycast(hit, origin) {
         point: { x: hit.x, y: hit.y },
         normal: { x: hit.nx, y: hit.ny },
         distance: Math.hypot(hit.x - origin.x, hit.y - origin.y),
+        fraction: hit.fraction,
         body: hit.body,
         node,
         self: node ? wrapOne(node) : null,
     };
+}
+
+/**
+ * Разбирает описание формы для свипа в вид, который ждёт движок:
+ * `{ shape, half_w, half_h, radius }`. Чистая функция — её проверяет
+ * qjs-харнесс без движка.
+ *
+ * Понимает четыре записи:
+ *   `{ w, h }`            — прямоугольник (умолчание 32×32);
+ *   `{ radius }`          — круг;
+ *   `{ capsule: [r, hh] }`— капсула;
+ *   `{ shape, halfW, halfH, radius }` — всё явно.
+ */
+export function shapeSpec(opts) {
+    const o = opts || {};
+    const num = (v, fallback) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : fallback;
+    };
+
+    let shape = typeof o.shape === 'string' ? o.shape : null;
+    let radius = num(o.radius, 0);
+    let half_w = num(o.halfW, num(o.w, 32) / 2);
+    let half_h = num(o.halfH, num(o.h, 32) / 2);
+
+    if (Array.isArray(o.capsule)) {
+        shape = 'capsule';
+        radius = num(o.capsule[0], radius);
+        half_h = num(o.capsule[1], half_h);
+    } else if (o.capsule !== undefined && o.capsule !== null && typeof o.capsule !== 'object') {
+        shape = 'capsule';
+        radius = num(o.capsule, radius);
+    } else if (shape === null) {
+        shape = radius > 0 ? 'circle' : 'box';
+    }
+
+    if (shape === 'circle') {
+        if (radius <= 0) radius = half_w > 0 ? half_w : 16;
+        half_w = radius;
+        half_h = radius;
+    } else if (shape === 'capsule' && radius <= 0) {
+        radius = half_w > 0 ? half_w : 16;
+    }
+    return { shape, half_w, half_h, radius };
 }
 
 function toPoint(v) {

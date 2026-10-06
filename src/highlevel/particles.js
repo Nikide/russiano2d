@@ -19,7 +19,7 @@
 // ===========================================================================
 
 import { ctx, Node, TAGS, wrapOne, def, packColor, withAlpha,
-         resolveSprite, makeRandom, nodesByTag } from './core.js';
+         resolveSprite, makeRandom, nodesByTag, query } from './core.js';
 import { registerNodeRenderer } from './render.js';
 
 // Предел батча спрайтов движка (см. render.js). Один эмиттер не должен
@@ -715,6 +715,114 @@ function firstNode(wrapper) {
     return wrapper.nodes.length ? wrapper.nodes[0] : null;
 }
 
+// ---------------------------------------------------------------------------
+// Частицы как цели (чистые помощники + выборка)
+// ---------------------------------------------------------------------------
+
+/** Попадает ли точка в круг. Чистая функция — её проверяет qjs-харнесс. */
+export function pointInCircle(px, py, cx, cy, r) {
+    const dx = px - cx, dy = py - cy;
+    return dx * dx + dy * dy <= r * r;
+}
+
+/**
+ * Доля пути, на которой отрезок (x1,y1)→(x2,y2) входит в круг (cx,cy,r),
+ * или null. Чистая функция: по ней работает $.particles.raycast.
+ *
+ * Если начало отрезка уже внутри круга — 0: для «выстрела по облаку» важно
+ * именно касание, а не точка выхода.
+ */
+export function segmentCircle(x1, y1, x2, y2, cx, cy, r) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const fx = x1 - cx, fy = y1 - cy;
+    const c = fx * fx + fy * fy - r * r;
+    if (c <= 0) return 0;                       // начало внутри круга
+    const a = dx * dx + dy * dy;
+    if (a < 1e-12) return null;                 // отрезок нулевой длины
+    const b = 2 * (fx * dx + fy * dy);
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return null;
+    const t = (-b - Math.sqrt(disc)) / (2 * a);
+    return t >= 0 && t <= 1 ? t : null;
+}
+
+/** Текущий размер частицы в мировых единицах — та же формула, что при отрисовке. */
+function currentSize(st, p) {
+    const ratio = p.life > 0 ? p.age / p.life : 1;
+    return st.params.ramp_size
+        ? rampAt(st.params.ramp_size, ratio)
+        : p.size + (p.end_size - p.size) * ratio;
+}
+
+/** Мировая позиция частицы: локальные частицы поворачиваются вместе с узлом. */
+function particleWorld(st, node, p, out) {
+    if (st.local) {
+        const c = Math.cos(node.angle), s = Math.sin(node.angle);
+        out.x = node.x + p.x * c - p.y * s;
+        out.y = node.y + p.x * s + p.y * c;
+    } else {
+        out.x = p.x;
+        out.y = p.y;
+    }
+    return out;
+}
+
+/** Эмиттеры для запроса: все или только подходящие под селектор. */
+function emitterList(sel) {
+    if (typeof sel === 'string' && sel) {
+        return query(sel).filter((n) => n && n.tag === 'particles');
+    }
+    return nodesByTag('particles');
+}
+
+/** Точка/узел/обёртка/массив → { x, y }. */
+function resolve2(v) {
+    if (v === null || v === undefined) return { x: 0, y: 0 };
+    if (typeof v === 'string') {
+        const n = query(v)[0];
+        return n ? { x: n.x, y: n.y } : { x: 0, y: 0 };
+    }
+    if (Array.isArray(v)) return { x: num(v[0], 0), y: num(v[1], 0) };
+    if (v.nodes) {
+        const n = v.nodes[0];
+        return n ? { x: n.x, y: n.y } : { x: 0, y: 0 };
+    }
+    return { x: num(v.x, 0), y: num(v.y, 0) };
+}
+
+/** Общая выборка попаданий по частицам: точка (круг) или прямоугольник. */
+function collectHits(x, y, opts, kind, w, h) {
+    const o = opts || {};
+    const extra = Math.max(0, num(o.r !== undefined ? o.r : o.radius, 0));
+    const limit = o.limit !== undefined ? Math.max(0, Math.floor(num(o.limit, 0))) : Infinity;
+    const hw = Math.abs(num(w, 0)) / 2;
+    const hh = Math.abs(num(h, 0)) / 2;
+    const emitters = emitterList(o.sel);
+    const out = [];
+    const pos = { x: 0, y: 0 };
+    for (let e = 0; e < emitters.length; e++) {
+        const node = emitters[e];
+        const st = states.get(node);
+        if (!st || st.parts.length === 0) continue;
+        for (let i = 0; i < st.parts.length && out.length < limit; i++) {
+            const p = st.parts[i];
+            if (p.dead) continue;
+            particleWorld(st, node, p, pos);
+            const size = currentSize(st, p);
+            const r = size / 2 + extra;
+            const inside = kind === 'box'
+                ? (Math.abs(pos.x - x) <= hw + r && Math.abs(pos.y - y) <= hh + r)
+                : pointInCircle(pos.x, pos.y, x, y, r);
+            if (!inside) continue;
+            out.push({
+                node, self: wrapOne(node), index: i,
+                x: pos.x, y: pos.y, size, r, particle: p,
+            });
+        }
+    }
+    return out;
+}
+
 /** Пройти по узлам обёртки, не завязываясь на .each() из api.js. */
 function eachNode(wrapper, fn) {
     const list = wrapper.nodes;
@@ -751,6 +859,80 @@ export function installParticles($) {
 
         /** Список имён встроенных пресетов. */
         presets() { return Object.keys(PRESETS); },
+
+        // --- Частицы как цели: попадания и запросы ---------------------------
+        // Частица не тело Box2D, но у неё есть мировая позиция и текущий
+        // размер. Этого достаточно, чтобы по ней попадать: искры от выстрела,
+        // брызги под пулей, «выстрели в облако дыма».
+
+        /**
+         * Частицы, накрывающие точку (opts.r добавляет радиус вокруг точки).
+         * Возвращает попадания: { node, self, index, x, y, size, r, particle }.
+         */
+        at(x, y, opts) { return collectHits(x, y, opts, 'circle'); },
+
+        /** Частицы в прямоугольнике с центром (x, y). */
+        inBox(x, y, w, h, opts) { return collectHits(x, y, opts, 'box', w, h); },
+
+        /**
+         * Ближайшая частица на отрезке — как $.world.raycast, только по
+         * частицам. Возвращает { node, self, index, point, distance, fraction,
+         * size, particle } или null.
+         */
+        raycast(from, to, opts) {
+            const a = resolve2(from);
+            const b = resolve2(to);
+            const o = opts || {};
+            const emitters = emitterList(o.sel);
+            let best = null;
+            const pos = { x: 0, y: 0 };
+            for (let e = 0; e < emitters.length; e++) {
+                const node = emitters[e];
+                const st = states.get(node);
+                if (!st || st.parts.length === 0) continue;
+                for (let i = 0; i < st.parts.length; i++) {
+                    const p = st.parts[i];
+                    if (p.dead) continue;
+                    particleWorld(st, node, p, pos);
+                    const t = segmentCircle(a.x, a.y, b.x, b.y, pos.x, pos.y, currentSize(st, p) / 2);
+                    if (t === null) continue;
+                    if (best && t >= best.fraction) continue;
+                    best = {
+                        node,
+                        self: wrapOne(node),
+                        index: i,
+                        point: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t },
+                        distance: Math.hypot((b.x - a.x) * t, (b.y - a.y) * t),
+                        fraction: t,
+                        size: currentSize(st, p),
+                        particle: p,
+                    };
+                }
+            }
+            return best;
+        },
+
+        /**
+         * Выстрел по частицам: накрытые точкой (или радиусом `r`) частицы
+         * возвращаются и по умолчанию умирают. `kill: false` оставляет их
+         * живыми, а `limit` ограничивает число попаданий за раз.
+         */
+        hit(x, y, opts) {
+            const hits = collectHits(x, y, opts, 'circle');
+            const o = opts || {};
+            const limit = o.limit === undefined ? hits.length
+                                                : Math.max(0, Math.floor(num(o.limit, 0)));
+            let killed = 0;
+            if (o.kill !== false) {
+                for (let i = 0; i < hits.length && i < limit; i++) {
+                    if (!hits[i].particle.dead) {
+                        hits[i].particle.dead = true;
+                        killed++;
+                    }
+                }
+            }
+            return { hits, killed };
+        },
     };
 
     // --- Методы узла --------------------------------------------------------

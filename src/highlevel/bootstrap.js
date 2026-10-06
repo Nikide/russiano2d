@@ -13,7 +13,21 @@
 
 import { createApi } from './api.js';
 
-const $ = createApi();
+// Ошибку установки показываем как есть: раньше исключение внутри createApi()
+// уносило контекст, и движок писал «bootstrap.js не выставил globalThis.$» —
+// по такому сообщению причину не найти.
+let $;
+try {
+    $ = createApi();
+} catch (error) {
+    try {
+        const where = error && error.stack ? String(error.stack) : String(error);
+        if (typeof engine !== 'undefined' && engine && typeof engine.log === 'function') {
+            engine.log('$: установка высокоуровневого API упала — ' + where);
+        }
+    } catch (e) { /* журнала может не быть */ }
+    throw error;
+}
 
 globalThis.$ = $;
 globalThis.nk = $;      // короткий алиас: $.world === nk.world

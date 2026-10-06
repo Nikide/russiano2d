@@ -138,6 +138,65 @@ def main():
         check(after >= base + 4,
               "частицы попали в батч спрайтов (base=%s, after=%s)" % (base, after))
 
+        # --- Частицы как цели: запросы и попадания ----------------------------
+        # Неподвижное облако из фикстуры: 5 частиц размером 24 в точке (600, 500).
+        a.step(3)
+        check(a.eval("$('#target').count()") == 5, "облако из 5 частиц поднялось")
+        check(a.eval("typeof $.particles.at") == "function", "$.particles.at есть")
+        check(a.eval("typeof $.particles.raycast") == "function", "$.particles.raycast есть")
+        check(a.eval("typeof $.particles.hit") == "function", "$.particles.hit есть")
+
+        hits = a.eval("$.particles.at(600, 500)")
+        check(isinstance(hits, list) and len(hits) == 5,
+              "at() находит все пять частиц (%s)" % (len(hits) if isinstance(hits, list) else hits))
+        check(isinstance(hits, list) and hits[0].get("size") == 24, "попадание знает размер частицы")
+        check(a.eval("$.particles.at(600, 620).length") == 0, "at() в стороне — пусто")
+        check(a.eval("$.particles.at(600, 610, { r: 100 }).length") == 5,
+              "радиус расширяет область попадания")
+
+        check(a.eval("$.particles.inBox(600, 500, 40, 40).length") == 5,
+              "inBox() находит частицы в прямоугольнике")
+        check(a.eval("$.particles.inBox(600, 560, 4, 4).length") == 0,
+              "inBox() в стороне от облака — пусто")
+
+        ray = a.eval("$.particles.raycast({x:500,y:500},{x:700,y:500})")
+        check(isinstance(ray, dict) and 0.4 < ray.get("fraction", 0) < 0.6,
+              "raycast() по частицам находит облако (fraction=%.2f)"
+              % (ray.get("fraction", -1) if isinstance(ray, dict) else -1))
+        check(a.eval("$.particles.raycast({x:500,y:600},{x:700,y:600})") is None,
+              "raycast() мимо облака — null")
+
+        # Мировые запросы видят частицы только по флагу: обычный луч частицы
+        # не замечает (они не тела), а с { particles: true } — замечает.
+        check(a.eval("$.world.raycast({x:500,y:500},{x:700,y:500})") is None,
+              "обычный луч частиц не видит")
+        fx_hit = a.eval("$.world.raycast({x:500,y:500},{x:700,y:500},{particles:true})")
+        check(isinstance(fx_hit, dict) and fx_hit.get("body") == -1
+              and isinstance(fx_hit.get("particle"), dict),
+              "с { particles: true } луч попадает в частицу: %s"
+              % (fx_hit.get("particle") if isinstance(fx_hit, dict) else fx_hit))
+        check(a.eval("$.world.particlesAt(600, 500).length") == 5,
+              "$.world.particlesAt() делегирует в $.particles.at()")
+        check(a.eval("$.world.particlesIn(600, 500, 40, 40).length") == 5,
+              "$.world.particlesIn() делегирует в $.particles.inBox()")
+
+        # Попадание убивает частицы и возвращает их список.
+        result = a.eval("$.particles.hit(600, 500)")
+        check(isinstance(result, dict) and result.get("killed") == 5,
+              "hit() убил все пять частиц (%s)" % (result.get("killed") if isinstance(result, dict) else result))
+        a.step(2)
+        check(a.eval("$('#target').count()") == 0, "после попадания облако пусто")
+        check(a.eval("$.particles.at(600, 500).length") == 0, "и at() больше ничего не находит")
+
+        # kill: false оставляет частицы живыми — игра сама решает их судьбу.
+        a.eval("$('#target').reset(); 'ok'")
+        a.step(2)
+        kept = a.eval("$.particles.hit(600, 500, { kill: false })")
+        check(isinstance(kept, dict) and kept.get("killed") == 0
+              and len(kept.get("hits", [])) == 5,
+              "hit({ kill: false }) только сообщает о попаданиях")
+        check(a.eval("$('#target').count()") == 5, "частицы остались живы")
+
         # --- Движок жив ---------------------------------------------------------
         check(a.ping().get("pong") is True, "движок отвечает после работы частиц")
         check(a.eval("engine.frame") > 0, "кадры идут")

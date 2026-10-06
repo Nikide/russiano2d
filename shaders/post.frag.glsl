@@ -15,6 +15,9 @@
 // ---------------------------------------------------------------------------
 
 layout(set = 2, binding = 0) uniform sampler2D u_scene;
+// Готовая размытая яркая часть кадра (bloom_pre + два прохода bloom_blur).
+// Когда свечения нет, сюда привязана чёрная текстура 1×1 — вклад нулевой.
+layout(set = 2, binding = 1) uniform sampler2D u_bloom;
 
 layout(set = 3, binding = 0) uniform PostParams {
     vec4 p0;   // x = свечение, y = вигнетка, z = хроматика, w = линза
@@ -22,6 +25,7 @@ layout(set = 3, binding = 0) uniform PostParams {
     vec4 p2;   // x = скан-линии, y = время, z = включено, w = постеризация
     vec4 p3;   // xyz = оттенок (множитель каналов), w = доля оттенка
     vec4 p4;   // x = насыщенность, y = контраст, z = яркость, w = кровь по краям
+    vec4 p5;   // x = порог bloom, y = сила размытия, z = bloom готов (1/0)
 } u;
 
 layout(location = 0) in vec2 v_uv;
@@ -72,21 +76,27 @@ void main()
         col = texture(u_scene, lens_uv);
     }
 
-    // --- Свечение: восемь выборок по кругу с яркостным порогом. Честный bloom
-    // делается отдельным проходом размытия; здесь важно, что он вообще есть,
-    // и стоит один проход.
+    // --- Свечение. Честный bloom приходит готовой размытой текстурой
+    // (порог → два размытия, см. bloom_pre/bloom_blur): здесь только
+    // сложение. Запасная ветка — восемь выборок в одном проходе: она нужна,
+    // если буферы свечения не создались (слабый GPU, конец памяти), и как
+    // поведение старых сборок.
     if (glow > 0.0001) {
-        const float s = 0.0045;
-        vec3 acc = vec3(0.0);
-        acc += max(texture(u_scene, lens_uv + vec2( s,  0.0)).rgb - 0.55, 0.0);
-        acc += max(texture(u_scene, lens_uv + vec2(-s,  0.0)).rgb - 0.55, 0.0);
-        acc += max(texture(u_scene, lens_uv + vec2( 0.0, s )).rgb - 0.55, 0.0);
-        acc += max(texture(u_scene, lens_uv + vec2( 0.0,-s )).rgb - 0.55, 0.0);
-        acc += max(texture(u_scene, lens_uv + vec2( s,  s )).rgb - 0.55, 0.0);
-        acc += max(texture(u_scene, lens_uv + vec2(-s,  s )).rgb - 0.55, 0.0);
-        acc += max(texture(u_scene, lens_uv + vec2( s, -s )).rgb - 0.55, 0.0);
-        acc += max(texture(u_scene, lens_uv + vec2(-s, -s )).rgb - 0.55, 0.0);
-        col.rgb += acc * (glow * 0.4);
+        if (u.p5.z > 0.5) {
+            col.rgb += texture(u_bloom, lens_uv).rgb * glow;
+        } else {
+            const float s = 0.0045;
+            vec3 acc = vec3(0.0);
+            acc += max(texture(u_scene, lens_uv + vec2( s,  0.0)).rgb - 0.55, 0.0);
+            acc += max(texture(u_scene, lens_uv + vec2(-s,  0.0)).rgb - 0.55, 0.0);
+            acc += max(texture(u_scene, lens_uv + vec2( 0.0, s )).rgb - 0.55, 0.0);
+            acc += max(texture(u_scene, lens_uv + vec2( 0.0,-s )).rgb - 0.55, 0.0);
+            acc += max(texture(u_scene, lens_uv + vec2( s,  s )).rgb - 0.55, 0.0);
+            acc += max(texture(u_scene, lens_uv + vec2(-s,  s )).rgb - 0.55, 0.0);
+            acc += max(texture(u_scene, lens_uv + vec2( s, -s )).rgb - 0.55, 0.0);
+            acc += max(texture(u_scene, lens_uv + vec2(-s, -s )).rgb - 0.55, 0.0);
+            col.rgb += acc * (glow * 0.4);
+        }
     }
 
     // --- Вигнетка.

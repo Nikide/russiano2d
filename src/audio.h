@@ -12,6 +12,7 @@
 #pragma once
 
 #include "r2d.h"
+#include "audio_fx.h"
 #include "audio_reverb.h"
 
 #include <stdbool.h>
@@ -27,32 +28,18 @@ typedef struct MIX_Group MIX_Group;
 #define R2D_AUDIO_MAX_SOUNDS 128
 #define R2D_AUDIO_CHANNELS   16
 
-// --- Эффекты на канале ------------------------------------------------------
+// --- Эффекты на канале и на шине --------------------------------------------
 //
 // SDL_mixer 3.2 не даёт готовых DSP-эффектов: единственная точка входа в
-// сэмплы — MIX_SetTrackRawCallback. Через неё реализованы простые эффекты,
-// которых хватает игре: фильтр низких частот и эхо. Обработка идёт в
-// аудиопотоке, поэтому:
-//   * буфер задержки выделяется один раз в init (аллокация в потоке запрещена);
-//   * параметры только читаются в колбэке, меняются они из потока игры.
-typedef enum R2DAudioFx {
-    R2D_AUDIO_FX_NONE    = 0,
-    R2D_AUDIO_FX_LOWPASS = 1,   // p1 — частота среза в Гц (мягкая, one-pole)
-    R2D_AUDIO_FX_ECHO    = 2,   // p1 — задержка в мс, p2 — доля повтора 0..1
-} R2DAudioFx;
-
-// Сколько кадров вмещает линия задержки эха. 0.5 с при 48 кГц — компромисс
-// между памятью (16 каналов × 2 канала × 24000 float ≈ 3 МБ) и слышимым эхом.
-#define R2D_AUDIO_FX_FRAMES 24000
-
-typedef struct R2DAudioChannelFx {
-    int    kind;    // R2DAudioFx
-    float  p1;      // параметр эффекта: срез (Гц) либо задержка (мс)
-    float  p2;      // доля повтора для эха
-    float  z[2];    // состояние фильтра, по одному на аудиоканал
-    float *line;    // буфер задержки, interleaved
-    int    pos;     // текущий кадр в буфере задержки
-} R2DAudioChannelFx;
+// сэмплы — PostMix-колбэк трека или группы. Через него реализованы эффекты,
+// которых хватает игре: фильтры (ФНЧ/ФВЧ), эхо, тремоло, bitcrush, кольцевая
+// модуляция и реверб-шина с посылом. Сам DSP живёт в src/audio_fx.c — без
+// SDL_mixer, чтобы его можно было проверить офлайн (tests/audio/fx_test.c).
+//
+// Обработка идёт в аудиопотоке, поэтому:
+//   * буферы (линия задержки, хвост реверба) выделяются лениво при включении
+//     эффекта — в потоке аллокаций нет;
+//   * параметры в колбэке только читаются, меняются они из потока игры.
 
 // Шина микшера: настоящая группа SDL_mixer. Треки одной шины микшируются
 // вместе, и эффект шины (MIX_SetGroupPostMixCallback) обрабатывает уже
@@ -64,7 +51,7 @@ typedef struct R2DAudioChannelFx {
 typedef struct R2DAudioGroup {
     MIX_Group *handle;
     char       name[32];
-    R2DAudioChannelFx fx;   // эффект шины (обрабатывает буфер группы)
+    R2DAudioFx fx;          // эффект шины (обрабатывает буфер группы)
 } R2DAudioGroup;
 
 typedef struct R2DAudio {
@@ -98,7 +85,7 @@ typedef struct R2DAudio {
     R2DAudioGroup groups[R2D_AUDIO_MAX_GROUPS];
     int    group_count;
 
-    R2DAudioChannelFx fx[R2D_AUDIO_CHANNELS];
+    R2DAudioFx fx[R2D_AUDIO_CHANNELS];
     int    fx_freq;        // частота микшера, нужна для пересчёта мс → кадры
     int    fx_channels;    // 1 или 2, из формата микшера
 
@@ -142,6 +129,9 @@ float r2d_audio_get_channel_pan(const R2DAudio *a, int channel);
 // Возвращает false, если эффект неизвестен или аудио не поднято.
 bool r2d_audio_set_channel_effect(R2DAudio *a, int channel, const char *kind,
                                   float p1, float p2);
+// Реверб-шина на канале: send — доля сигнала в хвост, room/damp/width — сам хвост.
+bool r2d_audio_set_channel_reverb(R2DAudio *a, int channel, float send, float room,
+                                  float damp, float width);
 const char *r2d_audio_channel_effect(const R2DAudio *a, int channel);
 
 // Список встроенных эффектов — игра показывает его в подсказке.
@@ -169,6 +159,9 @@ int  r2d_audio_group(R2DAudio *a, const char *name);
 int  r2d_audio_group_count(const R2DAudio *a);
 bool r2d_audio_group_assign(R2DAudio *a, int channel, int group_id);
 bool r2d_audio_set_group_effect(R2DAudio *a, int group_id, const char *kind, float p1, float p2);
+// Реверб-шина с посылом: у группы свой хвост, доля send её микса уходит в него.
+bool r2d_audio_set_group_reverb(R2DAudio *a, int group_id, float send, float room,
+                                float damp, float width);
 const char *r2d_audio_group_effect(const R2DAudio *a, int group_id);
 
 // --- 3D-позиция канала ------------------------------------------------------

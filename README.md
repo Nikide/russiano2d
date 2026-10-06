@@ -57,7 +57,7 @@ JavaScript; всё общение с движком идёт через одну
   * **игра сама о себе рассказывает**: `$.agent.expose('score', …)`,
     `$.agent.snapshot()`, встроенные самотесты через `$.test`;
   * **готовые инструменты**: Python-клиент `tools/agent_client.py`, раннер
-    `tools/run_tests.py` и 24 агентских теста. Этим движком так и пользовались:
+    `tools/run_tests.py` и 35 агентских тестов. Этим движком так и пользовались:
     агенты писали код, а движок их же и проверял — протокол описан в
     [docs/AGENT_API.md](docs/AGENT_API.md).
 
@@ -493,27 +493,42 @@ src/
   bsp.c/.h                  2D BSP-дерево: порядок отрезков без z-буфера
   light.cpp/.h              полигоны видимости (C-обёртка над trylock/visibility)
   physics.c/.h              обёртка над Box2D v3 + лучи и запросы
+  audio.c/.h                SDL3_mixer, шины, эффекты (audio_reverb.c, audio_stub.c)
   script.c/.h               QuickJS-ng: объект engine, модули, hot reload
   agent.c/.h                протокол агента: JSON-строки на stdin/stdout
   json.c/.h                 минимальный JSON для протокола
+  http.c/.h                 $.http: libcurl или встроенный сокетный бэкенд
+  crypto.c/.h               ChaCha20-Poly1305 для собранной игры
+  payload.c/.h, build.c     упаковка игры в один исполняемый файл
+  project.c/.h              project.json: имя окна, стартовый размер
+  icons.c/.h                таблица 2235 иконок Material Design
+  profile.c/.h              профилировка кадра
   text.c/.h                 очередь текста поверх сцены
-  gui.cpp/.h                игровой GUI на RmlUi
+  gui.cpp/.h                игровой GUI на RmlUi (gui_stub.c — сборка без UI)
   debug_ui.cpp/.h           отладочный оверлей на Dear ImGui
   highlevel/*.js            высокоуровневое API $ (встраивается в бинарник)
 game/                       игровой код на JavaScript (ES-модули)
-demos/                      семь демо и меню-лаунчер
+demos/                      три демо, набор UI-контролов и меню-лаунчер
 assets/
   icons/russiano2d.png      иконка приложения
   fonts/                    Noto Sans, LatoLatin
 tools/
   agent_client.py           клиент протокола агента на Python
   run_tests.py              раннер агентских тестов
+  autobuild.py              сборка всех платформ в dist/ (Linux и Windows — в контейнере)
+  release.py                выпуск релиза: версия, сборка, тесты, упаковка, тег
+  agents_doc.py             сборка AGENTS.md и README.md для dist/ из docs/
   bench_highlevel.py        стенд производительности $ (docs/HIGH_LEVEL_API_PERF.md)
   bench_storage.mjs         микрозамер раскладки данных массовых сущностей (qjs)
+  make_*.py                 генераторы ассетов демо (тайлсеты, спрайты, звуки, скриншоты)
+  vn_*.py                   озвучка и прогон визуальной новеллы
+  docker/                   образ-сборщик для Linux и Windows
+  templates/                шаблоны README и AGENTS для dist/
   r2d_embed_js.c            генератор таблицы встроенных JS-модулей
+  r2d_embed_icons.c         встраивание шрифта иконок
   r2d_pack.c                упаковщик скриптов в байткод QuickJS
 tests/
-  agent/                    тесты, которые гоняет агент
+  agent/                    тесты, которые гоняет агент (35 файлов *_test.py)
   fixtures/                 маленькие игры для тестов
 docs/
   HIGH_LEVEL_API.md         полный справочник по $
@@ -522,9 +537,12 @@ docs/
   ARCHITECTURE.md           замысел движка и философия API $
   GAP_ANALYSIS.md           аудит API и пробелы относительно Godot 4.x
   HIGH_LEVEL_API_PERF.md    производительность $: замеры, причины, план правок
+  TUTORIAL.md               туториал по демо «Типичная ночь в Мытищинском лесу»
   tutorial-first-game.md    «Моя первая игра»: от hello world до сборки
   tutorial-platformer.md    разбор платформера
   tutorial-menus.md         меню, сцены и переходы
+  demos.md                  разбор всех демо
+  VFX_PLAN.md               план по VFX: взрывы, ударные волны, render target
   BUILD.md                  сборка игры в один файл
   RELEASING.md              выпуск релиза
   highlevel/                справочники подсистем по отдельности
@@ -539,7 +557,7 @@ dist/
 
 Сборка кладётся в `dist/<платформа>/` целиком: бинарники, ассеты, `README.md`
 с инструкцией «первый проект» и `AGENTS.md` — самодостаточный файл для
-ИИ-агентов, в который вшита вся документация движка (около 480 КБ), чтобы
+ИИ-агентов, в который вшита вся документация движка (около 900 КБ), чтобы
 модель, скачавшая одну папку, ничего не искала в интернете.
 
 Четыре главные папки: **`src/`** — код движка, **`demos/`** — демо-проекты,

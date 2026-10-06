@@ -1,7 +1,5 @@
 // ===========================================================================
-// Подсистема $.viewport и глобальный режим смешивания $.blend.
-//
-// Две вещи, разные по готовности:
+// Подсистема $.viewport — render target игры — и глобальный $.blend.
 //
 //   * Режимы смешивания — работают по-настоящему. Сами конвейеры живут в
 //     render.c (alpha/add/multiply/none, порядок = BLEND_NAMES в render.js),
@@ -9,11 +7,15 @@
 //     4-м аргументом submitSprites. Здесь — только $.blend(name), тонкая
 //     обёртка над $.gfx.blend(name), и чистые хелперы для проверок.
 //
-//   * Render target (рисование в offscreen-текстуру) — НЕ поддержан. Кадр
-//     идёт прямо в swapchain, а render pass открывает main.c; из JS начать
-//     второй проход внутрь текстуры нельзя. Пространство имён всё равно
-//     создаётся, но запросы возвращают внятную ошибку, а не молча ломают
-//     картинку. Что именно нужно перестроить — docs/highlevel/render.md.
+//   * Render target — кадр можно рисовать не в swapchain, а в свою текстуру.
+//     Так делают шлейфы, накопление, порталы и «буфер прошлого кадра»:
+//     `bind(vp)` — мир рисуется в текстуру, `sprite(vp)` — спрайт прошлого
+//     кадра, который игра рисует как обычную картинку. Текстур у viewport'а
+//     две (текущий кадр и история), поэтому чтения и записи одной текстуры в
+//     одном проходе не бывает.
+//
+//     Ограничение честное: это цель всего кадра, а не произвольный проход
+//     посреди кадра. Пост-обработка при связанном viewport'е не применяется.
 // ===========================================================================
 
 import { ctx } from './core.js';
@@ -23,10 +25,9 @@ import { ctx } from './core.js';
 export const BLEND_MODES = ['alpha', 'add', 'multiply', 'none'];
 export const DEFAULT_BLEND = 'alpha';
 
-/** Текст ошибки для всех вызовов render target. */
+/** Текст ошибки, если сборка без рендерера (юнит-тесты, заглушка). */
 export const UNSUPPORTED =
-    'render target не поддержан в этой сборке: viewport рисует только в swapchain, ' +
-    'render target требует отдельного render pass и offscreen-текстуры ' +
+    'render target недоступен: эта сборка без графического рендерера ' +
     '(см. docs/highlevel/render.md)';
 
 // Запасной режим по умолчанию: используется, только если ctx.gfx ещё нет
@@ -80,15 +81,13 @@ export function blendRuns(items, modeOf) {
     return runs;
 }
 
-// Движок отдаёт engine.viewport; в юнит-тестах без движка его нет, поэтому
-// поддержку проверяем по объекту с явным supported === true.
-function engineViewport() {
-    const vp = typeof engine === 'undefined' ? null : engine.viewport;
-    return vp && typeof vp === 'object' ? vp : null;
+// Низкоуровневые вызовы render target'а: в юнит-тестах без движка их нет.
+function vpApi() {
+    return (typeof engine === 'undefined' || !engine) ? null : (engine.viewport || null);
 }
 
 function viewportSupported() {
-    const vp = engineViewport();
+    const vp = vpApi();
     return !!(vp && vp.supported === true);
 }
 
@@ -109,30 +108,86 @@ function fallbackBlend(name) {
  */
 export function installViewport($) {
     const vp = {
-        /** Render target в этой сборке не поддержан — всегда false. */
+        /** Поддержан ли render target в этой сборке. */
         get supported() { return viewportSupported(); },
 
-        /** Создать offscreen-буфер. id не выдаётся: бросает понятную ошибку. */
+        /**
+         * Создать offscreen-текстуру размера w×h. Возвращает id (>= 0) или
+         * `null`, если рендерера нет или текстуры кончились.
+         */
         create(w, h) {
-            if (viewportSupported()) return engineViewport().create(w, h);
-            throw new Error(UNSUPPORTED);
+            const api = vpApi();
+            if (!api || !viewportSupported()) {
+                ctx.log('$: $.viewport.create — ' + UNSUPPORTED);
+                return null;
+            }
+            const id = api.create(Math.max(1, Math.round(Number(w) || 0)),
+                                  Math.max(1, Math.round(Number(h) || 0)));
+            return id >= 0 ? id : null;
         },
-        /** Буфер по id либо null, если render target не поддержан. */
-        get(id) {
-            return viewportSupported() ? engineViewport().get(id) : null;
+
+        /** Удалить текстуру (связывание снимается автоматически). */
+        destroy(id) {
+            const api = vpApi();
+            return !!(api && viewportSupported() && api.destroy(id | 0));
         },
-        /** Удалить буфер; false, если render target не поддержан. */
-        remove(id) {
-            return viewportSupported() ? engineViewport().remove(id) : false;
+
+        /** Размер текстуры: `{ w, h }` или null. */
+        size(id) {
+            const api = vpApi();
+            if (!api || !viewportSupported()) return null;
+            return api.size(id | 0);
         },
-        /** Список буферов; пустой массив, если render target не поддержан. */
-        list() {
-            return viewportSupported() ? engineViewport().list() : [];
+
+        /**
+         * Связать кадр с текстурой: мир рисуется в неё, а на экран движок
+         * показывает её блитом. `bind(null)` / `.unbind()` возвращают кадр.
+         */
+        bind(id) {
+            const api = vpApi();
+            if (!api || !viewportSupported()) return false;
+            return !!api.bind(id === null || id === undefined ? -1 : (id | 0));
         },
-        /** Нарисовать буфер как спрайт. Без поддержки — понятная ошибка. */
-        draw(...args) {
-            if (viewportSupported()) return engineViewport().draw(...args);
-            throw new Error(UNSUPPORTED);
+
+        /** Вернуть кадр в swapchain. */
+        unbind() {
+            const api = vpApi();
+            return !!(api && viewportSupported() && api.bind(-1));
+        },
+
+        /** Какой viewport связан сейчас (id или null). */
+        bound() {
+            const api = vpApi();
+            if (!api || !viewportSupported() || typeof api.bound !== 'function') return null;
+            const id = api.bound();
+            return id >= 0 ? id : null;
+        },
+
+        /**
+         * Спрайт прошлого кадра: игра рисует его как обычную картинку —
+         * так делается шлейф (`.draw(vp, 0, 0, w, h, { alpha: 0.92 })`).
+         */
+        sprite(id) {
+            const api = vpApi();
+            if (!api || !viewportSupported()) return -1;
+            return api.sprite(id | 0);
+        },
+
+        /** Нарисовать прошлый кадр текстуры как спрайт. */
+        draw(id, x, y, w, h, opts) {
+            const sprite = vp.sprite(id);
+            if (sprite < 0) return false;
+            const size = vp.size(id);
+            return !!$.gfx.draw.sprite(sprite, x, y,
+                                       w === undefined && size ? size.w : w,
+                                       h === undefined && size ? size.h : h,
+                                       opts || {});
+        },
+
+        /** Сколько текстур создано. */
+        count() {
+            const api = vpApi();
+            return (api && viewportSupported()) ? (Number(api.count()) || 0) : 0;
         },
     };
     $.viewport = vp;
@@ -150,7 +205,7 @@ export function installViewport($) {
     return $;
 }
 
-/** Шаг кадра подсистемы. Render target не поддержан — делать нечего. */
+/** Шаг кадра подсистемы. Render target живёт в C — тикать нечего. */
 export function tickViewport(dt) {
     void dt;
 }

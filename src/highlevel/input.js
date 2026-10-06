@@ -331,18 +331,32 @@ export function installInput($) {
         },
 
         /**
-         * Виброотклик: трясёт первый подключённый геймпад. Пока заглушка —
-         * движок не пробрасывает SDL_RumbleGamepad, поэтому вызов один раз
-         * предупреждает и ничего не делает: притворяться, что виброаппарат
-         * работает, хуже, чем честно сказать. Адресно — `$.input.gamepad(i).rumble()`.
+         * Виброотклик: трясёт первый подключённый геймпад и возвращает true,
+         * если тряска действительно ушла в устройство. Без геймпада (или если
+         * он не умеет вибрировать) — false: игра должна узнать, что её тряска
+         * ушла в пустоту, а не считать, что игрока тряхнуло.
+         *
+         *   $.input.rumble();                                    // импульс 0.5/0.5, 250 мс
+         *   $.input.rumble({ weak: 0.3, strong: 0.8, duration: 400 });
+         *   $.input.rumble({ triggers: [0.5, 0.5] });            // вибрация курков
+         *   $.input.rumble(0);                                   // остановить
+         *
+         * weak — слабый (высокочастотный) мотор, strong — сильный
+         * (низкочастотный), duration — миллисекунды. Адресно —
+         * `$.input.gamepad(i).rumble(...)`.
          */
         rumble(opts) {
             for (let i = 0; i < 8; i++) {
-                if (pad_connected(i)) { rumble(i, opts); return true; }
+                if (pad_connected(i)) return rumble(i, opts);
             }
-            rumble(0, opts);
             return false;
         },
+
+        /** Есть ли геймпад, которому можно адресовать виброотклик. */
+        rumbleSupported() { return pad_connected(0); },
+
+        /** Остановить вибрацию — то же, что `$.input.rumble(0)`. */
+        stopRumble() { return rumble(0, 0); },
     };
 
     ctx.input = input;
@@ -356,8 +370,11 @@ export function installInput($) {
 const pad_prev = new Array(32).fill(false);
 
 function pad_connected(index) {
-    // Различить «нет геймпада» и «геймпад подключён, кнопки не нажаты» можно
-    // только по осям: обе оси нулевые и все кнопки отпущены — считаем, что нет.
+    // Движок открывает первый геймпад и умеет честно сказать, есть ли он.
+    // Прежняя догадка «нет осей и кнопок — значит геймпада нет» ошибалась на
+    // подключённом, но не тронутом геймпаде, а он вибрировать умеет.
+    if (index > 0) return false;
+    if (typeof engine.padConnected === 'function') return engine.padConnected() === true;
     return engine.padDown(0) || engine.padDown(1) || engine.padDown(2) ||
            engine.padDown(3) || engine.padAxis(0) !== 0 || engine.padAxis(1) !== 0;
 }
@@ -369,13 +386,71 @@ function padPressed(index) {
     return now && !was;
 }
 
-function rumble() {
-    // SDL3 умеет SDL_RumbleGamepad, но в биндингах движка этого пока нет.
-    // Не притворяемся, что виброаппарат работает: предупреждаем один раз.
-    if (!rumble.warned) {
-        rumble.warned = true;
-        ctx.log('$: $.input.rumble() пока не подключён к SDL_RumbleGamepad — вызов игнорируется');
+/**
+ * Приводит аргумент виброотклика к виду { weak, strong, duration, triggers }.
+ * Чистая функция — её проверяет qjs-харнесс без движка.
+ *
+ * Понимает: ничего (умолчания), `0`/`false` (стоп), число (обе силы), объект
+ * с `weak`/`strong` (плюс псевдонимы `high`/`low`, как у моторов SDL) и
+ * `triggers: [left, right]` для вибрации курков. Силы зажимаются в 0..1:
+ * значение вне диапазона — почти всегда опечатка вида `{ strong: 100 }`.
+ */
+export function normalizeRumble(opts) {
+    const clamp01 = (v) => {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n <= 0) return 0;
+        return n > 1 ? 1 : n;
+    };
+    const dur = (v, fallback) => {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n < 0) return fallback;
+        return Math.min(60000, Math.round(n));
+    };
+
+    if (opts === 0 || opts === false) return { weak: 0, strong: 0, duration: 0, triggers: null };
+    if (opts === undefined || opts === null || opts === true) {
+        return { weak: 0.5, strong: 0.5, duration: 250, triggers: null };
     }
+    if (typeof opts === 'number') {
+        return { weak: clamp01(opts), strong: clamp01(opts), duration: 250, triggers: null };
+    }
+    if (typeof opts !== 'object') {
+        return { weak: 0.5, strong: 0.5, duration: 250, triggers: null };
+    }
+
+    let triggers = null;
+    if (Array.isArray(opts.triggers)) {
+        triggers = [clamp01(opts.triggers[0]), clamp01(opts.triggers[1])];
+    }
+
+    const weak = opts.weak !== undefined ? opts.weak : opts.high;
+    const strong = opts.strong !== undefined ? opts.strong : opts.low;
+    return {
+        weak: clamp01(weak === undefined ? 0.5 : weak),
+        strong: clamp01(strong === undefined ? 0.5 : strong),
+        duration: dur(opts.duration, 250),
+        triggers,
+    };
+}
+
+/**
+ * Виброотклик: переводит opts в вызовы C и возвращает true, только если
+ * тряска действительно ушла в устройство. Движок открывает один геймпад,
+ * поэтому адресные вызовы для pad > 0 честно возвращают false.
+ */
+function rumble(pad, opts) {
+    if (pad > 0) return false;
+    const o = normalizeRumble(opts);
+    let sent = false;
+
+    if (o.triggers && typeof engine.padRumbleTriggers === 'function') {
+        sent = engine.padRumbleTriggers(o.triggers[0], o.triggers[1], o.duration) === true || sent;
+    }
+    // Нулевая длительность — это «стоп»: её тоже надо отправить в SDL.
+    if (o.weak > 0 || o.strong > 0 || o.duration === 0) {
+        sent = engine.padRumble(o.strong, o.weak, o.duration) === true || sent;
+    }
+    return sent;
 }
 
 function emit(name, payload) {

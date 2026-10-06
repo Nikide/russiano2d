@@ -124,20 +124,24 @@ test('blendRuns поддерживает свой modeOf и пустой спи�
 // $.viewport и $.blend
 // ---------------------------------------------------------------------------
 
-test('$.viewport без поддержки отдаёт пустые результаты и понятную ошибку', () => {
+test('$.viewport без рендерера отвечает null/false, а не бросает', () => {
+    // В qjs движка нет: render target живёт в C, поэтому запросы возвращают
+    // «нет», а не ломают игру исключением.
     const $ = {};
     installViewport($);
 
     eq(typeof $.viewport, 'object');
-    falsy($.viewport.supported, 'render target не поддержан');
-    truthy(Array.isArray($.viewport.list()), 'list() — массив');
-    eq($.viewport.list().length, 0, 'буферов нет');
-    eq($.viewport.get(1), null, 'get() — null');
-    eq($.viewport.remove(1), false, 'remove() — false');
-
-    throws(() => $.viewport.create(64, 64), 'render target не поддержан');
-    throws(() => $.viewport.draw(1, 0, 0, 64, 64, 1), 'render target не поддержан');
-    truthy(UNSUPPORTED.includes('не поддержан'), 'текст ошибки понятен');
+    falsy($.viewport.supported, 'рендерера нет — render target не поддержан');
+    eq($.viewport.count(), 0, 'textур нет');
+    eq($.viewport.size(0), null, 'size() — null');
+    eq($.viewport.create(64, 64), null, 'create() — null');
+    eq($.viewport.destroy(0), false, 'destroy() — false');
+    eq($.viewport.bind(0), false, 'bind() — false');
+    eq($.viewport.unbind(), false, 'unbind() — false');
+    eq($.viewport.bound(), null, 'bound() — null');
+    eq($.viewport.sprite(0), -1, 'sprite() — -1');
+    eq($.viewport.draw(0, 0, 0, 64, 64, {}), false, 'draw() — false');
+    truthy(UNSUPPORTED.includes('недоступен'), 'текст ошибки понятен');
 });
 
 test('$.blend делегирует в $.gfx.blend, когда gfx уже есть', () => {

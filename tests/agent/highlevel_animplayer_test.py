@@ -77,6 +77,29 @@ def main():
         steps = a.eval("$.store.get('steps')")
         check(1 <= steps <= 2, f"событие клипа сработало раз за проход (steps={steps})")
 
+        # --- Пауза и масштаб времени ($.time) действуют и на плеер ------------
+        # Плеер тикал сырым dt: $.time.pause() останавливал твины, но не клипы.
+        before_pause = a.eval("$.anim.player('hero').total()")
+        a.eval("$.time.pause()")
+        a.step(10)
+        check(abs(a.eval("$.anim.player('hero').total()") - before_pause) < 1,
+              "на паузе часы плеера стоят")
+        a.eval("$.time.resume()")
+        a.step(10)
+        check(a.eval("$.anim.player('hero').total()") > before_pause,
+              "после resume плеер идёт дальше")
+
+        start = a.eval("$.anim.player('hero').total()")
+        a.eval("$.time.scale(0.5)")
+        a.step(20)
+        half = a.eval("$.anim.player('hero').total()") - start
+        start = a.eval("$.anim.player('hero').total()")
+        a.eval("$.time.scale(1)")
+        a.step(20)
+        full = a.eval("$.anim.player('hero').total()") - start
+        check(full > 0 and abs(half * 2 - full) < 40,
+              "масштаб 0.5 замедляет плеер вдвое (%.0f мс против %.0f мс)" % (half, full))
+
         # --- Один проход: конец, finished, конечный кадр ----------------------
         check(a.eval("$.anim.player('door').playing()") is False,
               "once-клип завершился сам")

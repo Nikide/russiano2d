@@ -212,6 +212,18 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
     // и для пары, где хотя бы одна форма его просила.
     sd.enablePreSolveEvents = d->one_way;
 
+    // Слои и маски: без filter_set тело встаёт в слой 1 и сталкивается со
+    // всеми — так вели себя все тела до появления фильтров, старые игры не
+    // меняют поведение.
+    sd.filter.categoryBits = d->filter_set ? d->category_bits : R2D_FILTER_DEFAULT_CATEGORY;
+    sd.filter.maskBits     = d->filter_set ? d->mask_bits     : R2D_FILTER_DEFAULT_MASK;
+    sd.filter.groupIndex   = d->filter_set ? d->group_index   : R2D_FILTER_GROUP_NONE;
+    if (sd.filter.categoryBits == 0) {
+        // Тело вне всех слоёв не сталкивается ни с кем и не находится
+        // запросами — это почти всегда опечатка, а не замысел.
+        R2D_WARN("тело создано с categoryBits = 0 (вне всех слоёв) — оно ни с чем не столкнётся");
+    }
+
     b2ShapeId shape;
     switch (d->shape) {
     case R2D_SHAPE_CIRCLE: {
@@ -433,6 +445,49 @@ float r2d_physics_get_mass(const R2DPhysics *p, int id)
     return b2Body_GetMass(p->bodies[id]);
 }
 
+// --- Слои и маски коллизий ---------------------------------------------------
+
+bool r2d_physics_set_filter(R2DPhysics *p, int id, uint64_t category_bits,
+                            uint64_t mask_bits, int group_index)
+{
+    if (!r2d_physics_is_alive(p, id)) return false;
+
+    b2ShapeId shapes[8];
+    // У тела движка ровно одна форма, но API Box2D возвращает список: читаем
+    // столько, сколько влезет, — если форма когда-нибудь станет составной,
+    // фильтр доедет до всех частей.
+    const int count = b2Body_GetShapes(p->bodies[id], shapes, (int)(sizeof shapes / sizeof shapes[0]));
+    if (count <= 0) return false;
+
+    for (int i = 0; i < count; ++i) {
+        b2Filter f = b2Shape_GetFilter(shapes[i]);
+        f.categoryBits = category_bits;
+        f.maskBits     = mask_bits;
+        f.groupIndex   = group_index;
+        b2Shape_SetFilter(shapes[i], f);
+    }
+    // Смена фильтра — это смена набора пар: разбуженное тело немедленно
+    // пересчитает контакты, спящее может «проспать» пропажу пары.
+    b2Body_SetAwake(p->bodies[id], true);
+    return true;
+}
+
+bool r2d_physics_get_filter(const R2DPhysics *p, int id, uint64_t *category_bits,
+                            uint64_t *mask_bits, int *group_index)
+{
+    if (!r2d_physics_is_alive(p, id)) return false;
+
+    b2ShapeId shapes[8];
+    const int count = b2Body_GetShapes(p->bodies[id], shapes, (int)(sizeof shapes / sizeof shapes[0]));
+    if (count <= 0) return false;
+
+    const b2Filter f = b2Shape_GetFilter(shapes[0]);
+    if (category_bits) *category_bits = f.categoryBits;
+    if (mask_bits)     *mask_bits     = f.maskBits;
+    if (group_index)   *group_index   = f.groupIndex;
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Запросы к миру
 //
@@ -467,6 +522,18 @@ typedef struct R2DRayCtx {
 // b2World_CastRayClosest этого не умеет: Box2D v3 не исключает сенсоры ни в
 // b2DefaultQueryFilter, ни в своём RayCastCallback, поэтому зона-триггер
 // останавливала луч и блокировала линию видимости и проверку «стою на земле».
+// Фильтр запроса. Свой слой запроса — «все слои»: у луча нет слоя, поэтому
+// решает только его маска (collision_mask у RayCast2D в Godot). mask == 0
+// означает «любой слой»: ноль — это значение по умолчанию у необязательного
+// аргумента, и трактовать его как «не принимать ничего» было бы ловушкой.
+static b2QueryFilter r2d__query_filter(uint64_t mask)
+{
+    b2QueryFilter f = b2DefaultQueryFilter();
+    f.categoryBits = R2D_FILTER_DEFAULT_MASK;
+    f.maskBits = mask == 0 ? R2D_FILTER_DEFAULT_MASK : mask;
+    return f;
+}
+
 static float r2d__on_ray(b2ShapeId shape, b2Vec2 point, b2Vec2 normal,
                          float fraction, void *context)
 {
@@ -495,7 +562,7 @@ static float r2d__on_ray(b2ShapeId shape, b2Vec2 point, b2Vec2 normal,
 }
 
 bool r2d_physics_raycast(const R2DPhysics *p, float x1, float y1, float x2, float y2,
-                         const int *ignore, int ignore_count, R2DRayHit *out)
+                         const int *ignore, int ignore_count, uint64_t mask, R2DRayHit *out)
 {
     if (!out) return false;
     out->hit = false;
@@ -507,8 +574,109 @@ bool r2d_physics_raycast(const R2DPhysics *p, float x1, float y1, float x2, floa
     const b2Vec2 translation = { R2D_TO_M(x2 - x1), R2D_TO_M(y2 - y1) };
     // Датчики (триггеры) не должны останавливать лучи: они не препятствия.
     R2DRayCtx ctx = { p, out, ignore, ignore_count };
-    const b2QueryFilter filter = b2DefaultQueryFilter();
+    const b2QueryFilter filter = r2d__query_filter(mask);
     b2World_CastRay(p->world, origin, translation, filter, r2d__on_ray, &ctx);
+    return out->hit;
+}
+
+// ---------------------------------------------------------------------------
+// Свип формы (аналог ShapeCast2D)
+//
+// Луч отвечает на вопрос «что на линии», свип — «пролезет ли объём». Box2D
+// даёт для этого b2World_CastShape: облако точек с радиусом едет по миру и
+// сообщает первое касание. Круг — одна точка с радиусом, капсула — две,
+// прямоугольник — четыре угла без радиуса.
+// ---------------------------------------------------------------------------
+
+typedef struct R2DCastCtx {
+    const R2DPhysics *p;
+    R2DCastShape *out;
+    const int *ignore;
+    int ignore_count;
+} R2DCastCtx;
+
+static float r2d__on_cast(b2ShapeId shape, b2Vec2 point, b2Vec2 normal,
+                          float fraction, void *context)
+{
+    R2DCastCtx *c = (R2DCastCtx *)context;
+    if (b2Shape_IsSensor(shape)) return -1.0f;   // зона — не препятствие
+
+    const int body = r2d__body_of_shape(c->p, shape);
+    for (int i = 0; i < c->ignore_count; ++i) {
+        if (c->ignore[i] == body) return -1.0f;   // это тело не считаем
+    }
+
+    R2DCastShape *out = c->out;
+    out->hit = true;
+    out->body = body;
+    out->x = R2D_TO_PX(point.x);
+    out->y = R2D_TO_PX(point.y);
+    out->nx = normal.x;
+    out->ny = normal.y;
+    out->fraction = fraction;
+    return fraction;   // обрезаем: следующее касание должно быть ближе
+}
+
+bool r2d_physics_cast_shape(const R2DPhysics *p, int shape,
+                            float half_w, float half_h, float radius,
+                            float x1, float y1, float x2, float y2, float angle,
+                            const int *ignore, int ignore_count, uint64_t mask,
+                            R2DCastShape *out)
+{
+    if (!out) return false;
+    out->hit = false;
+    out->body = -1;
+    out->x = out->y = out->nx = out->ny = out->fraction = 0.0f;
+    if (!p->world_valid) return false;
+
+    b2Vec2 pts[B2_MAX_POLYGON_VERTICES];
+    int count = 0;
+    float proxy_radius = 0.0f;
+
+    switch (shape) {
+    case R2D_SHAPE_CIRCLE: {
+        const float r = radius > 0.0f ? radius : (half_w > 0.0f ? half_w : 16.0f);
+        pts[0] = (b2Vec2){ 0.0f, 0.0f };
+        count = 1;
+        proxy_radius = R2D_TO_M(r);
+        break;
+    }
+    case R2D_SHAPE_CAPSULE: {
+        const float hh = half_h > 0.0f ? half_h : 0.0f;
+        const float r = radius > 0.0f ? radius : (half_w > 0.0f ? half_w : 16.0f);
+        pts[0] = (b2Vec2){ 0.0f, -R2D_TO_M(hh) };
+        pts[1] = (b2Vec2){ 0.0f,  R2D_TO_M(hh) };
+        count = 2;
+        proxy_radius = R2D_TO_M(r);
+        break;
+    }
+    default: {
+        const float hw = R2D_TO_M(half_w > 0.0f ? half_w : 16.0f);
+        const float hh = R2D_TO_M(half_h > 0.0f ? half_h : 16.0f);
+        const float c = cosf(angle), s = sinf(angle);
+        const b2Vec2 corners[4] = { { -hw, -hh }, { hw, -hh }, { hw, hh }, { -hw, hh } };
+        for (int i = 0; i < 4; ++i) {
+            pts[i] = (b2Vec2){ c * corners[i].x - s * corners[i].y,
+                               s * corners[i].x + c * corners[i].y };
+        }
+        count = 4;
+        proxy_radius = 0.0f;
+        break;
+    }
+    }
+
+    const b2ShapeProxy proxy = b2MakeProxy(pts, count, proxy_radius);
+    const b2Vec2 translation = { R2D_TO_M(x2 - x1), R2D_TO_M(y2 - y1) };
+    R2DCastCtx c = { p, out, ignore, ignore_count };
+    // Начальная точка — центр формы в мире: b2World_CastShape принимает
+    // облако точек в мировых координатах, а не в локальных.
+    b2ShapeProxy world_proxy = proxy;
+    for (int i = 0; i < count; ++i) {
+        world_proxy.points[i].x += R2D_TO_M(x1);
+        world_proxy.points[i].y += R2D_TO_M(y1);
+    }
+    b2World_CastShape(p->world, &world_proxy, translation, r2d__query_filter(mask),
+                      r2d__on_cast, &c);
     return out->hit;
 }
 
@@ -536,7 +704,7 @@ static bool r2d__on_overlap(b2ShapeId shape, void *context)
 }
 
 static int r2d__query_aabb(const R2DPhysics *p, float cx, float cy, float hw, float hh,
-                           int *ids, int max_ids)
+                           uint64_t mask, int *ids, int max_ids)
 {
     if (!p->world_valid || !ids || max_ids <= 0) return 0;
 
@@ -550,20 +718,21 @@ static int r2d__query_aabb(const R2DPhysics *p, float cx, float cy, float hw, fl
     aabb.lowerBound = (b2Vec2){ R2D_TO_M(cx - hw), R2D_TO_M(cy - hh) };
     aabb.upperBound = (b2Vec2){ R2D_TO_M(cx + hw), R2D_TO_M(cy + hh) };
 
-    b2World_OverlapAABB(p->world, aabb, b2DefaultQueryFilter(), r2d__on_overlap, &q);
+    b2World_OverlapAABB(p->world, aabb, r2d__query_filter(mask), r2d__on_overlap, &q);
     return q.count;
 }
 
-int r2d_physics_query_point(const R2DPhysics *p, float x, float y, int *ids, int max_ids)
+int r2d_physics_query_point(const R2DPhysics *p, float x, float y, uint64_t mask,
+                            int *ids, int max_ids)
 {
     // Точка — вырожденный прямоугольник; Box2D честно вернёт накрывающие формы.
-    return r2d__query_aabb(p, x, y, 0.5f, 0.5f, ids, max_ids);
+    return r2d__query_aabb(p, x, y, 0.5f, 0.5f, mask, ids, max_ids);
 }
 
 int r2d_physics_query_box(const R2DPhysics *p, float x, float y, float w, float h,
-                          int *ids, int max_ids)
+                          uint64_t mask, int *ids, int max_ids)
 {
-    return r2d__query_aabb(p, x, y, w * 0.5f, h * 0.5f, ids, max_ids);
+    return r2d__query_aabb(p, x, y, w * 0.5f, h * 0.5f, mask, ids, max_ids);
 }
 
 // ---------------------------------------------------------------------------

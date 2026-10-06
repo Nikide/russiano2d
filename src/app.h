@@ -167,6 +167,15 @@ bool  r2d_pad_down(const R2DApp *app, SDL_GamepadButton button);
 bool  r2d_pad_pressed(const R2DApp *app, SDL_GamepadButton button);
 float r2d_pad_axis(const R2DApp *app, SDL_GamepadAxis axis);
 
+// --- Виброотклик -------------------------------------------------------------
+// low/high и left/right — сила 0..1 (SDL принимает 0..65535). false означает
+// «геймпада нет или он не умеет вибрировать» — притворяться, что виброаппарат
+// работает, нельзя: игра должна узнать, что её тряска ушла в пустоту.
+// duration_ms = 0 останавливает вибрацию.
+bool r2d_pad_rumble(R2DApp *app, float low, float high, uint32_t duration_ms);
+bool r2d_pad_rumble_triggers(R2DApp *app, float left, float right, uint32_t duration_ms);
+bool r2d_pad_connected(const R2DApp *app);
+
 // Текст, введённый с клавиатуры за текущий кадр (UTF-8, уже с учётом
 // раскладки и IME). Пустая строка, если ввода не было. Указатель жив до
 // следующего r2d_app_begin_frame.

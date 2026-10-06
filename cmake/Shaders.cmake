@@ -103,9 +103,16 @@ endfunction()
 r2d_add_shader(sprite vert "${CMAKE_SOURCE_DIR}/shaders/sprite.vert.glsl")
 r2d_add_shader(sprite frag "${CMAKE_SOURCE_DIR}/shaders/sprite.frag.glsl")
 
+# Шейдер узла: эффекты поверх спрайта (вспышка, растворение, глитч, волна).
+r2d_add_shader(sprite_fx frag "${CMAKE_SOURCE_DIR}/shaders/sprite_fx.frag.glsl")
+
 # Пост-обработка: полноэкранный проход по offscreen-текстуре сцены.
 r2d_add_shader(post vert "${CMAKE_SOURCE_DIR}/shaders/post.vert.glsl")
 r2d_add_shader(post frag "${CMAKE_SOURCE_DIR}/shaders/post.frag.glsl")
+
+# Bloom: яркий проход с понижением разрешения и разделяемое размытие.
+r2d_add_shader(bloom_pre frag "${CMAKE_SOURCE_DIR}/shaders/bloom_pre.frag.glsl")
+r2d_add_shader(bloom_blur frag "${CMAKE_SOURCE_DIR}/shaders/bloom_blur.frag.glsl")
 
 add_custom_command(
     OUTPUT "${R2D_SHADER_HEADER}"

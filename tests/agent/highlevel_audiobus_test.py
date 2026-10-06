@@ -142,6 +142,39 @@ def main():
         a.eval("$.audio.clear()")
         check(a.eval("$.audio.buses().length") == 0, "clear снимает все шины")
 
+        # --- DSP-эффекты: список из движка и реверб-шина с посылом -------------
+        # Раньше кроме lowpass и echo эффектов не было, а реверб был один на
+        # весь микс. Теперь список знает фильтры, тремоло, bitcrush, кольцевую
+        # модуляцию и реверб, а у шины может быть свой хвост с посылом.
+        effects = a.eval("$.audio.effects()")
+        check(isinstance(effects, list), "effects() отдаёт список")
+        for name in ("lowpass", "highpass", "echo", "tremolo", "bitcrush", "ringmod", "reverb"):
+            check(name in (effects or []), "в списке эффектов есть '%s'" % name)
+
+        a.eval("$.audio.bus('fx', { volume: 0.5 }); 'ok'")
+        a.eval("$.audio.effect('fx', 'highpass', { freq: 400 }); 'ok'")
+        check(a.eval("$.audio.effect('fx')") == "highpass", "highpass доехал до движка")
+        a.eval("$.audio.effect('fx', 'tremolo', { rate: 6, depth: 0.8 }); 'ok'")
+        check(a.eval("$.audio.effect('fx')") == "tremolo", "tremolo доехал до движка")
+        a.eval("$.audio.effect('fx', 'bitcrush', { bits: 4, downsample: 2 }); 'ok'")
+        check(a.eval("$.audio.effect('fx')") == "bitcrush", "bitcrush доехал до движка")
+        a.eval("$.audio.effect('fx', 'ringmod', { freq: 300, mix: 0.5 }); 'ok'")
+        check(a.eval("$.audio.effect('fx')") == "ringmod", "ringmod доехал до движка")
+
+        a.eval("$.audio.effect('fx', 'reverb', { send: 0.45, room: 0.7 }); 'ok'")
+        check(a.eval("$.audio.effect('fx')") == "reverb", "реверб-шина включилась")
+
+        # Полные параметры хвоста: send — посыл, room/damp/width — сам хвост.
+        check(a.eval("engine.audio.setGroupReverb(0, 0.3, 0.6, 0.2, 0.9)") in (True, False),
+              "setGroupReverb отвечает булевым")
+        check(a.eval("engine.audio.setChannelReverb(0, 0.5, 0.6, 0.4, 0.8)") in (True, False),
+              "setChannelReverb отвечает булевым")
+        check(a.eval("engine.audio.channelEffect(0)") in ("none", "reverb", "lowpass", "echo"),
+              "состояние канала читается обратно")
+
+        a.eval("$.audio.effect('fx', 'none'); 'ok'")
+        check(a.eval("$.audio.effect('fx')") == "none", "эффект шины выключается")
+
         # --- Движок жив и ошибок нет -------------------------------------------
         a.step(2)
         check(a.eval("engine.frame") > 0, "кадры идут после операций с шинами")

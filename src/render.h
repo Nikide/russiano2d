@@ -61,8 +61,12 @@ typedef struct R2DPostParams {
     float contrast;   // 1 — как есть
     float brightness; // 0 — как есть
     float blood;      // красная пелена по краям (урон)
-    // p5 — запас под будущие эффекты, чтобы не менять размер блока
-    float _pad[4];
+    // p5 — свечение (bloom). Порог и сила размытия приходят из JS,
+    // bloom_ready заполняет C: 1 — размытая текстура готова и привязана.
+    float bloom_threshold;  // порог яркости; <= 0 — 0.75 по умолчанию
+    float bloom_radius;     // сила размытия; <= 0 — 1 по умолчанию
+    float bloom_ready;      // только чтение: буферы свечения готовы
+    float _pad;
 } R2DPostParams;
 
 typedef struct R2DTexture {
@@ -85,7 +89,33 @@ typedef struct R2DDrawCmd {
     float    x, y, w, h, angle;
     uint32_t color;
     uint8_t  blend;    // R2DBlendMode, зафиксированный на момент добавления
+    uint8_t  fx;       // индекс в таблице шейдеров узла; 0 — обычный спрайт
 } R2DDrawCmd;
+
+// Шейдер узла: вид эффекта и его параметры. Юниформа шейдера — два vec4,
+// раскладка совпадает с push-константами в render.c.
+typedef struct R2DNodeFx {
+    int      kind;     // 0 — нет эффекта, 1 flash, 2 dissolve, 3 chroma, 4 wave
+    float    p1, p2, p3;
+    uint32_t color;
+} R2DNodeFx;
+
+#define R2D_MAX_NODE_FX 64
+
+// --- Render target игры (viewport) -------------------------------------------
+// Кадр можно рисовать не в swapchain, а в свою текстуру: так делают шлейфы,
+// накопление, порталы и «буфер прошлого кадра». Текстур две: в одну рисуется
+// текущий кадр, вторая хранит прошлый — игрушка читает её как спрайт и не
+// получает чтение-запись одной и той же текстуры в одном проходе.
+#define R2D_MAX_VIEWPORTS 8
+
+typedef struct R2DViewport {
+    bool            used;
+    SDL_GPUTexture *target;   // куда рисуется текущий кадр
+    SDL_GPUTexture *history;  // прошлый кадр: его игра рисует как спрайт
+    int             w, h;
+    int             sprite;   // спрайт всей history-текстуры
+} R2DViewport;
 
 // Один вызов r2d_batch_triangles: диапазон в общем индексном буфере и его
 // режим смешивания. Диапазоны хранятся раздельно, потому что треугольники
@@ -109,6 +139,9 @@ typedef struct R2DRenderer {
 
     // По конвейеру на каждый режим смешивания; индекс — R2DBlendMode.
     SDL_GPUGraphicsPipeline *pipelines[R2D_BLEND_COUNT];
+    // Конвейеры шейдеров узла: по одному на режим смешивания. Включаются,
+    // только когда у спрайта есть эффект (.shader()).
+    SDL_GPUGraphicsPipeline *fx_pipelines[R2D_BLEND_COUNT];
     SDL_GPUSampler          *sampler;
 
     R2DTexture textures[R2D_MAX_TEXTURES];
@@ -140,6 +173,17 @@ typedef struct R2DRenderer {
     // drawSprite/drawRect (без режима) ведут себя как раньше.
     uint8_t     batch_blend;
 
+    // --- Шейдеры узлов ------------------------------------------------------
+    // Таблица на кадр: узлов с эффектом мало, а параметры у них разные,
+    // поэтому команда хранит не сами параметры, а индекс сюда.
+    R2DNodeFx fx[R2D_MAX_NODE_FX];
+    int       fx_count;
+    uint8_t   batch_fx;      // индекс для следующей r2d_batch_add
+
+    // --- Render target игры -------------------------------------------------
+    R2DViewport viewports[R2D_MAX_VIEWPORTS];
+    int         bound_viewport;   // -1 — кадр идёт как обычно
+
     R2DVertex *vertices;
     int         vertex_count;
     int         vertex_cap;
@@ -164,12 +208,27 @@ typedef struct R2DRenderer {
     SDL_GPUTexture          *scene_target;
     int    scene_w, scene_h;
     R2DPostParams post;
+
+    // --- Свечение (bloom) ---------------------------------------------------
+    // Честный bloom: яркий проход в половинном разрешении, затем разделяемое
+    // размытие (горизонталь и вертикаль) и композит в пост-обработке.
+    SDL_GPUGraphicsPipeline *bloom_pre_pipeline;   // порог + даунсэмпл
+    SDL_GPUGraphicsPipeline *bloom_blur_pipeline;  // размытие по одной оси
+    SDL_GPUTexture          *bloom_a;
+    SDL_GPUTexture          *bloom_b;
+    int    bloom_w, bloom_h;
+    SDL_GPUTexture          *bloom_result;    // что уходит в пост как u_bloom
+    SDL_GPUSampler          *linear_sampler;  // линейная фильтрация для размытия
+    SDL_GPUTexture          *black_texture;   // 1×1 чёрная заглушка для u_bloom
+
     // Граница интерфейса в списке команд: JS помечает её перед отдачей
     // ui-спрайтов, чтобы с постом HUD рисовался поверх обработки, а не под ней.
     int ui_cmd_start;
 
     // Статистика текущего кадра
     int    stat_draws;
+    int    stat_passes;    // полноэкранных проходов (пост + свечение)
+    int    stat_fx_cmds;   // спрайтов, нарисованных шейдером узла
     int    stat_sprites;
     int    stat_vertices;
     size_t stat_upload_bytes;
@@ -198,6 +257,17 @@ bool r2d_sprite_alive(const R2DRenderer *r, int id);
 void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h);
 void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float h,
                     float angle, uint32_t color);
+
+// --- Шейдеры узлов ----------------------------------------------------------
+// Таблица эффектов сбрасывается каждый кадр (r2d_render_begin_frame), а
+// заполняет её JS вызовом engine.defineSpriteFx(index, kind, p1, p2, p3, color).
+// Индекс — от 1: ноль означает «обычный спрайт» и в таблице не хранится.
+bool r2d_render_fx_define(R2DRenderer *r, int index, int kind,
+                          float p1, float p2, float p3, uint32_t color);
+// Пакет спрайтов с эффектом: fx — массив индексов на каждый спрайт (может
+// быть NULL — тогда весь пакет идёт обычным конвейером).
+int r2d_batch_submit_fx(R2DRenderer *r, const float *transforms, const uint32_t *colors,
+                        const int32_t *fx, int count, int blend);
 void r2d_batch_rect(R2DRenderer *r, float x, float y, float w, float h, uint32_t color);
 
 // Добавляет треугольники одним вызовом. verts — stride 6:
@@ -222,15 +292,15 @@ int  r2d_blend_from_name(const char *name);
 // Заливает накопленный батч в GPU-буферы (copy pass). Вызывать ДО render pass.
 void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd);
 // Рисует батч внутри уже открытого render pass.
-void r2d_render_draw(R2DRenderer *r, SDL_GPURenderPass *pass);
+void r2d_render_draw(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass);
 // Пометить границу интерфейса: всё, что добавлено после, считается ui-слоем.
 // Нужно, чтобы с пост-обработкой HUD рисовался поверх неё, а не под ней.
 void r2d_render_mark_ui(R2DRenderer *r);
 // Рисует только ui-слой (спрайты после границы). Треугольники (свет, VFX) —
 // часть мира и в ui-слой не попадают.
-void r2d_render_draw_ui(R2DRenderer *r, SDL_GPURenderPass *pass);
+void r2d_render_draw_ui(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass);
 // Рисует только мир: спрайты до границы интерфейса и все треугольники.
-void r2d_render_draw_world(R2DRenderer *r, SDL_GPURenderPass *pass);
+void r2d_render_draw_world(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass);
 
 // --- Пост-обработка ---------------------------------------------------------
 // Включён ли пост: если да, кадр надо рисовать в offscreen-текстуру
@@ -243,6 +313,24 @@ const R2DPostParams *r2d_render_get_post(const R2DRenderer *r);
 SDL_GPUTexture *r2d_render_scene_target(R2DRenderer *r, int w, int h);
 // Полноэкранный проход на swapchain: сэмплирует текстуру сцены с эффектами.
 void r2d_render_post(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass);
+
+// --- Свечение (bloom) -------------------------------------------------------
+// Свечение — отдельные проходы, а не выборки в пост-обработке: яркий проход
+// с понижением разрешения (порог с мягким коленом), затем разделяемое
+// размытие по горизонтали и вертикали. Результат уходит в пост как u_bloom.
+//
+// r2d_render_bloom вызывается между проходом сцены и проходом пост-обработки:
+// вложить проходы друг в друга нельзя, поэтому буферы и пайплайны готовятся
+// заранее (r2d_render_bloom_ready), а рисует их эта функция.
+bool r2d_render_bloom_ready(R2DRenderer *r, int w, int h);
+bool r2d_render_bloom(R2DRenderer *r, SDL_GPUCommandBuffer *cmd);
+
+// --- Render target игры -----------------------------------------------------
+// Текстура связанного viewport'а (NULL — кадр идёт как обычно) и функция
+// «показать кадр»: копирует его в swapchain и в историю для следующего кадра.
+SDL_GPUTexture *r2d_render_viewport_target(R2DRenderer *r);
+bool r2d_render_viewport_present(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
+                                 SDL_GPUTexture *swapchain, int w, int h);
 
 // --- JS-биндинги, которые живут в render.c ---------------------------------
 // Вызывается из script.c при сборке объекта engine: сюда переезжают вызовы,

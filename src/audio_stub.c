@@ -94,6 +94,14 @@ float r2d_audio_get_channel_pan(const R2DAudio *a, int channel)
     return 0.0f;
 }
 
+bool r2d_audio_set_channel_reverb(R2DAudio *a, int channel, float send, float room,
+                                  float damp, float width)
+{
+    R2D_UNUSED(a); R2D_UNUSED(channel); R2D_UNUSED(send);
+    R2D_UNUSED(room); R2D_UNUSED(damp); R2D_UNUSED(width);
+    return false;
+}
+
 bool r2d_audio_set_channel_effect(R2DAudio *a, int channel, const char *kind,
                                   float p1, float p2)
 {
@@ -179,6 +187,14 @@ int r2d_audio_group_count(const R2DAudio *a) { R2D_UNUSED(a); return 0; }
 bool r2d_audio_group_assign(R2DAudio *a, int channel, int group_id)
 {
     R2D_UNUSED(a); R2D_UNUSED(channel); R2D_UNUSED(group_id);
+    return false;
+}
+
+bool r2d_audio_set_group_reverb(R2DAudio *a, int group_id, float send, float room,
+                                float damp, float width)
+{
+    R2D_UNUSED(a); R2D_UNUSED(group_id); R2D_UNUSED(send);
+    R2D_UNUSED(room); R2D_UNUSED(damp); R2D_UNUSED(width);
     return false;
 }
 

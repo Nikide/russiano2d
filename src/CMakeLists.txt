@@ -44,7 +44,8 @@ endif()
 
 # --- Звук -------------------------------------------------------------------
 if(R2D_ENABLE_AUDIO)
-    list(APPEND R2D_SOURCES audio.h audio.c audio_reverb.h audio_reverb.c)
+    list(APPEND R2D_SOURCES audio.h audio.c audio_fx.h audio_fx.c
+                            audio_reverb.h audio_reverb.c)
     list(APPEND R2D_DEFINES R2D_ENABLE_AUDIO=1)
 else()
     # Без SDL_mixer остаётся тот же интерфейс audio.h, но с пустыми

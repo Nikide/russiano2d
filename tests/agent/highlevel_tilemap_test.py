@@ -106,6 +106,54 @@ def main():
         # --- Полосы коллизий через публичный помощник -------------------------
         check(a.eval("$.tilemap.runsOf('#level', 0).length") > 0, "runsOf отдаёт полосы непроходимых тайлов")
 
+        # --- Коллизии по габариту агента --------------------------------------
+        # Карта #level: 10×5 клеток по 32 px с центром в (0,0), то есть
+        # x -160..160, y -80..80. Клетка (2,1) свободна: её центр (-80,-32);
+        # клетка (3,2) — стена: её центр (-48, 0).
+        check(a.eval("typeof $('#level').fitsAt") == "function", ".fitsAt() есть")
+        check(a.eval("typeof $('#level').agentSize") == "function", ".agentSize() есть")
+        check(a.eval("typeof $('#level').sample") == "function", ".sample() есть")
+
+        # Без габарита проверка идёт по клетке: центр в стене — не помещается.
+        check(a.eval("$('#level').fitsAt(-80, -32)") is True, "точка в свободной клетке помещается")
+        check(a.eval("$('#level').fitsAt(-48, 0)") is False, "точка в стене — нет")
+
+        a.eval("$('#level').agentSize(24, 24); 'ok'")
+        check(a.eval("$('#level').agentSize().w") == 24, "agentSize(24, 24) запоминает габарит")
+        check(a.eval("$('#level').fitsAt(-80, -32)") is True, "агент 24×24 влезает в свободную клетку")
+
+        # Свободная полоса — ровно одна клетка высотой: 24 px влезает, 40 — нет.
+        a.eval("$('#level').agentSize(24, 40); 'ok'")
+        check(a.eval("$('#level').fitsAt(-80, -32)") is False,
+              "агент 40 px высотой в 32-пиксельную полосу не влезает")
+        check(a.eval("$('#level').fitsAt(-80, -32, { h: 24 })") is True,
+              "габарит можно передать и в самом вызове")
+        a.eval("$('#level').agentSize(24, 24); 'ok'")
+
+        check(a.eval("$('#level').agentRadius()") == 12, "agentRadius читается после agentSize")
+        a.eval("$('#level').agentRadius(16); 'ok'")
+        check(a.eval("$('#level').agentSize().w") == 32, "agentRadius(16) даёт габарит 32×32")
+        a.eval("$('#level').agentSize(24, 24); 'ok'")
+
+        # sample(): «поставь рядом, но не в стену».
+        spot = a.eval("$('#level').sample(-48, 0)")
+        check(isinstance(spot, dict) and spot.get("found") is True,
+              "sample() нашёл свободное место рядом со стеной")
+        check(isinstance(spot, dict) and (spot.get("x") != -48 or spot.get("y") != 0),
+              "найденная позиция отличается от исходной")
+        check(a.eval("$('#level').fitsAt(%r, %r)" % (spot.get("x"), spot.get("y"))) is True,
+              "в найденной позиции габарит действительно помещается")
+        check(a.eval("$('#level').sample(0, 0, { maxDistance: 4 }).found") is False,
+              "в пределах maxDistance свободного места нет — found = false")
+
+        # Габарит не меняет физику: тела коллизий остаются по клеткам.
+        bodies = a.eval("engine.bodyCount()")
+        a.eval("$('#level').agentRadius(64); 'ok'")
+        a.step(1)
+        check(a.eval("engine.bodyCount()") == bodies,
+              "габарит агента не пересоздаёт тела коллизий")
+        a.eval("$('#level').agentRadius(0); 'ok'")
+
         check(a.ping().get("pong") is True, "движок жив после работы с TileMap")
 
     print("\nВсе проверки пройдены" if not FAILURES else f"\nПРОВАЛЕНО: {len(FAILURES)}")

@@ -73,20 +73,64 @@ function audio() {
     return (typeof engine !== 'undefined' && engine && engine.audio) ? engine.audio : null;
 }
 
-/** Нормализует параметры эффекта в пару (p1, p2) для setChannelEffect. */
+/**
+ * Нормализует параметры эффекта в пару (p1, p2) для setChannelEffect и
+ * setGroupEffect. Список видов — из движка (`$.audio.effects()`), здесь только
+ * разбор понятных игроку имён в числа.
+ */
 function effectArgs(kind, params) {
     const p = params || {};
-    if (kind === 'lowpass') {
-        const cutoff = p.freq !== undefined ? p.freq : (p.cutoff !== undefined ? p.cutoff : 1200);
-        return [Number(cutoff) || 1200, 0];
+    const num = (value, fallback) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : fallback;
+    };
+    if (kind === 'lowpass' || kind === 'highpass') {
+        const def = kind === 'lowpass' ? 1200 : 200;
+        const cutoff = p.freq !== undefined ? p.freq : (p.cutoff !== undefined ? p.cutoff : def);
+        return [num(cutoff, def), 0];
     }
     if (kind === 'echo') {
         const delay = p.delay !== undefined ? p.delay : 250;
         const feedback = p.feedback !== undefined ? p.feedback : (p.repeat !== undefined ? p.repeat : 0.35);
         // Доля повтора ограничена движком: 0..0.9, иначе эхо уходит в разнос.
-        return [Number(delay) || 250, Math.max(0, Math.min(0.9, Number(feedback) || 0))];
+        return [num(delay, 250), Math.max(0, Math.min(0.9, num(feedback, 0)))];
+    }
+    if (kind === 'tremolo') {
+        // rate — колебаний в секунду, depth — глубина 0..1.
+        return [num(p.rate !== undefined ? p.rate : p.freq, 5),
+                Math.max(0, Math.min(1, num(p.depth, 0.5)))];
+    }
+    if (kind === 'bitcrush') {
+        // bits — разрядность квантования, downsample — во сколько раз реже брать отсчёт.
+        return [num(p.bits !== undefined ? p.bits : p.amount, 6),
+                Math.max(1, Math.min(64, num(p.downsample !== undefined ? p.downsample : p.step, 1)))];
+    }
+    if (kind === 'ringmod') {
+        return [num(p.freq !== undefined ? p.freq : p.rate, 220),
+                Math.max(0, Math.min(1, num(p.mix, 1)))];
+    }
+    if (kind === 'reverb') {
+        // Посыл: send — доля сигнала, уходящая в хвост, room — размер помещения.
+        // Полные параметры хвоста берёт setGroupReverb/setChannelReverb.
+        const send = p.send !== undefined ? p.send : (p.wet !== undefined ? p.wet : 0.35);
+        return [Math.max(0, Math.min(1, num(send, 0.35))),
+                Math.max(0, Math.min(1, num(p.room, 0.5)))];
     }
     return [0, 0];
+}
+
+/** Параметры хвоста для setGroupReverb/setChannelReverb. */
+function reverbArgs(params) {
+    const p = params || {};
+    const num = (value, fallback) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : fallback;
+    };
+    const send = p.send !== undefined ? p.send : (p.wet !== undefined ? p.wet : 0.35);
+    return [Math.max(0, Math.min(1, num(send, 0.35))),
+            Math.max(0, Math.min(1, num(p.room, 0.5))),
+            Math.max(0, Math.min(1, num(p.damp, 0.4))),
+            Math.max(0, Math.min(1, num(p.width, 0.8)))];
 }
 
 /** Единый доступ к шине: Map и обычный объект-словарь обрабатываются одинаково. */
@@ -308,6 +352,12 @@ function applyBusEffect(name) {
     const [p1, p2] = effectArgs(bus.effect, bus.effectParams);
 
     if (a && typeof a.setGroupEffect === 'function' && bus.group >= 0) {
+        if (bus.effect === 'reverb' && typeof a.setGroupReverb === 'function') {
+            // Реверб-шина: у группы свой хвост, доля send её микса уходит в него.
+            const [send, room, damp, width] = reverbArgs(bus.effectParams);
+            try { a.setGroupReverb(bus.group, send, room, damp, width); } catch (e) { /* шина могла исчезнуть */ }
+            return;
+        }
         try { a.setGroupEffect(bus.group, bus.effect, p1, p2); } catch (e) { /* шина могла исчезнуть */ }
         return;
     }
@@ -329,6 +379,11 @@ function applyEffectToHandle(handle) {
     const busOnGroup = !!bus && bus.group >= 0 && typeof a.setGroupEffect === 'function';
     const kind = handle.fx !== null ? handle.fx : (busOnGroup ? 'none' : (bus ? bus.effect : 'none'));
     const params = handle.fx !== null ? handle.fxParams : (busOnGroup ? {} : (bus ? bus.effectParams : {}));
+    if (kind === 'reverb' && typeof a.setChannelReverb === 'function') {
+        const [send, room, damp, width] = reverbArgs(params);
+        try { a.setChannelReverb(handle.channel, send, room, damp, width); } catch (e) { /* канал свободен */ }
+        return;
+    }
     const [p1, p2] = effectArgs(kind, params);
     try { a.setChannelEffect(handle.channel, kind, p1, p2); } catch (e) { /* канал мог освободиться */ }
 }
@@ -656,7 +711,8 @@ export function installAudiobus($) {
 
         // --- Эффекты --------------------------------------------------------
 
-        /** kind: 'none' | 'lowpass' | 'echo'. Без kind — текущий эффект шины. */
+        /** kind: 'none' | 'lowpass' | 'highpass' | 'echo' | 'tremolo' | 'bitcrush' |
+ *  'ringmod' | 'reverb' (см. $.audio.effects()). Без kind — текущий эффект шины. */
         effect(name, kind, params) {
             const n = String(name);
             let bus = buses.get(n);

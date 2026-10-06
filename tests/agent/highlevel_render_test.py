@@ -4,9 +4,9 @@
 #
 # Гоняет фикстуру tests/fixtures/render и проверяет то, что видит игра:
 # $.blend()/node.blend_mode доходят до батча, все четыре режима рисуются в
-# одном кадре и не ломают вывод, а $.viewport честно сообщает, что render
-# target в этой сборке не поддержан. Картинку целиком не сверяем — только
-# размер скриншота и живые счётчики кадра.
+# одном кадре и не ломают вывод, а $.viewport даёт игре свою текстуру
+# (render target) и режим смешивания. Картинку целиком не сверяем — только
+# размер скриншота, пиксельные проверки эффектов и живые счётчики кадра.
 #
 # Запуск (после сборки):
 #   python3 tests/agent/highlevel_render_test.py
@@ -57,27 +57,48 @@ def main():
               % (stats.get("sprites") if isinstance(stats, dict) else stats))
         check(a.eval("engine.frame") > 0, "кадры идут")
 
-        # --- $.viewport: честная заглушка -------------------------------------
+        # --- $.viewport: render target игры ------------------------------------
+        # Раньше здесь была заглушка, которая бросала «не поддержано». Теперь
+        # кадр можно рисовать в свою текстуру: bind() — цель кадра, sprite() —
+        # прошлый кадр для шлейфов.
         check(a.eval("typeof $.viewport") == "object", "$.viewport доступно")
-        check(a.eval("$.viewport.supported") is False,
-              "render target помечен как не поддержанный")
-        check(a.eval("$.viewport.list().length") == 0, "list() пуст")
-        check(a.eval("$.viewport.get(1)") is None, "get() вернул null")
-        check(a.eval("$.viewport.remove(1)") is False, "remove() вернул false")
+        check(a.eval("$.viewport.supported") is True, "render target поддержан")
+        check(a.eval("$.viewport.count()") == 0, "текстур пока нет")
 
-        error = a.eval(
-            "(() => { try { $.viewport.create(64, 64); return 'no-error'; }"
-            " catch (e) { return String(e.message); } })()"
-        )
-        check(isinstance(error, str) and "не поддержан" in error,
-              "create() объясняет, что render target не поддержан (%s)" % error)
+        vp = a.eval("globalThis.__vp = $.viewport.create(320, 240)")
+        check(isinstance(vp, int) and vp >= 0, "create() вернул id (%s)" % vp)
+        check(a.eval("$.viewport.count()") == 1, "текстура учтена")
+        size = a.eval("$.viewport.size(globalThis.__vp)")
+        check(isinstance(size, dict) and size.get("w") == 320 and size.get("h") == 240,
+              "размер текстуры читается обратно (%s)" % size)
+        check(a.eval("$.viewport.sprite(globalThis.__vp)") >= 0,
+              "у текстуры есть спрайт прошлого кадра")
 
-        error = a.eval(
-            "(() => { try { $.viewport.draw(1, 0, 0, 64, 64, 1); return 'no-error'; }"
-            " catch (e) { return String(e.message); } })()"
-        )
-        check(isinstance(error, str) and "не поддержан" in error,
-              "draw() объясняет, что render target не поддержан")
+        bound = a.eval("""
+            (() => {
+                const ok = $.viewport.bind(globalThis.__vp);
+                const id = $.viewport.bound();
+                return [ok, id];
+            })()
+        """)
+        check(isinstance(bound, list) and bound[0] is True and bound[1] == vp,
+              "bind() связывает кадр с текстурой (%s)" % bound)
+
+        # Кадр уходит в текстуру, а на экран движок показывает его блитом:
+        # значит, снимок кадра обязан остаться непустым.
+        a.step(3)
+        shot = a.screenshot(os.path.join(ROOT, "build", "render_viewport_test.png"))
+        check(os.path.getsize(shot) > 0, "кадр со связанным viewport сохранён")
+
+        # Привязка живёт один кадр: игра вызывает bind() в своём кадре заново.
+        check(a.eval("$.viewport.bound()") is None, "привязка сбрасывается после кадра")
+        check(a.eval("$.viewport.unbind()") is True, "unbind() возвращает кадр на экран")
+        check(a.eval("$.viewport.bind(-5)") in (True, False), "bind(-5) отвечает булевым")
+
+        check(a.eval("$.viewport.destroy(globalThis.__vp)") is True, "destroy() удаляет текстуру")
+        check(a.eval("$.viewport.count()") == 0, "после destroy текстур нет")
+        a.step(2)
+        check(a.ping().get("pong") is True, "движок жив после render target")
 
         # --- Пост-обработка ---------------------------------------------------
         supported = a.eval("engine.postSupported()")
@@ -144,6 +165,194 @@ def main():
 
         shot = a.screenshot(os.path.join(ROOT, "build", "render_post_horror.png"))
         check(os.path.getsize(shot) > 0, "кадр в хорроре сохранён")
+
+        # --- Честный bloom: отдельные проходы, а не выборки в посте ------------
+        # Раньше свечение было восемью выборками в одном проходе пост-обработки.
+        # Теперь это яркий проход с понижением разрешения и два размытия:
+        # их видно по счётчику проходов и по буферам половинного разрешения.
+        a.eval("$.gfx.post({ on: false }); 'ok'")
+        a.step(2)
+        info = a.eval("engine.renderInfo()")
+        check(isinstance(info, dict) and "bloom_ready" in info,
+              "engine.renderInfo() отвечает полями свечения: %s" % info)
+        check(isinstance(info, dict) and info.get("passes") == 0,
+              "без поста полноэкранных проходов нет")
+
+        a.eval("$.gfx.post({ glow: 1.2, bloom_threshold: 0.45, bloom_radius: 1.5 }); 'ok'")
+        a.step(2)
+        info = a.eval("engine.renderInfo()")
+        check(isinstance(info, dict) and info.get("bloom_ready") is True,
+              "свечение посчиталось отдельными проходами")
+        check(isinstance(info, dict) and info.get("passes") >= 4,
+              "проходов не меньше четырёх: порог, два размытия и композит (%s)"
+              % (info or {}).get("passes"))
+        check(isinstance(info, dict) and info.get("bloom_w") == info.get("scene_w") // 2
+              and info.get("bloom_h") == info.get("scene_h") // 2,
+              "буферы свечения половинного разрешения: %sx%s при сцене %sx%s"
+              % ((info or {}).get("bloom_w"), (info or {}).get("bloom_h"),
+                 (info or {}).get("scene_w"), (info or {}).get("scene_h")))
+
+        post = a.eval("engine.getPost()")
+        check(isinstance(post, dict) and abs(post.get("bloom_threshold", 0) - 0.45) < 1e-6,
+              "порог свечения доехал до движка (%s)" % (post or {}).get("bloom_threshold"))
+        check(isinstance(post, dict) and post.get("bloom_ready") is True,
+              "getPost() сообщает, что свечение готово")
+        js_post = a.eval("$.gfx.post()")
+        check(isinstance(js_post, dict) and abs(js_post.get("bloom_radius", 0) - 1.5) < 1e-6,
+              "$.gfx.post() отдаёт параметры свечения обратно")
+
+        shot = a.screenshot(os.path.join(ROOT, "build", "render_bloom_test.png"))
+        check(os.path.getsize(shot) > 0, "кадр со свечением сохранён: " + shot)
+
+        # --- Шейдер узла (.shader) ---------------------------------------------
+        # Раньше .shader() писал предупреждение и ничего не делал: пайплайн был
+        # один на все узлы. Теперь есть конвейеры шейдеров узла и таблица
+        # эффектов на кадр.
+        check(a.eval("typeof $('#base').shader") == "function", ".shader() существует")
+        check(a.eval("typeof $('#base').shaderParam") == "function", ".shaderParam() существует")
+        kinds = a.eval("$.gfx.fxKinds()")
+        check(isinstance(kinds, list) and "flash" in kinds and "dissolve" in kinds
+              and "chroma" in kinds and "wave" in kinds,
+              "виды эффектов перечисляются: %s" % kinds)
+        check(a.eval("$('#base').shader()") == "none", "по умолчанию шейдера нет")
+
+        a.eval("$.gfx.postOff(); 'ok'")
+        a.step(2)
+        check(a.eval("engine.renderInfo().fx_cmds") == 0,
+              "без шейдеров команд с эффектом нет")
+
+        a.eval("$('#base').shader('flash', { color: '#ff0000', amount: 1 }); 'ok'")
+        check(a.eval("$('#base').shader()") == "flash", ".shader() читается обратно")
+        params = a.eval("$('#base').shaderParam()")
+        check(isinstance(params, dict) and params.get("amount") == 1,
+              "параметры шейдера доступны через .shaderParam()")
+        a.step(2)
+        info = a.eval("engine.renderInfo()")
+        check(isinstance(info, dict) and info.get("fx_cmds", 0) >= 1,
+              "кадр нарисовал узел шейдером узла (fx_cmds=%s)" % (info or {}).get("fx_cmds"))
+        check(isinstance(info, dict) and info.get("fx", 0) >= 1,
+              "таблица эффектов кадра не пуста")
+
+        a.eval("$('#base').shaderParam('amount', 0.25); 'ok'")
+        check(abs(a.eval("$('#base').shaderParam('amount')") - 0.25) < 1e-6,
+              ".shaderParam() меняет один параметр")
+
+        a.eval("$('#base').shader('нет-такого-эффекта'); 'ok'")
+        check(a.eval("$('#base').shader()") == "flash",
+              "неизвестный эффект не сбивает текущий")
+        a.eval("$('#base').shader(null); 'ok'")
+        a.step(2)
+        check(a.eval("$('#base').shader()") == "none", "shader(null) выключает эффект")
+        check(a.eval("engine.renderInfo().fx_cmds") == 0, "и команд с эффектом больше нет")
+
+        # --- Ореол свечения в пикселях ----------------------------------------
+        # Сцена приводится к тёмному фону с одной яркой вспышкой: на большом
+        # светлом пятне «ярче вокруг» не измерить — там всё яркое.
+        # Pillow может отсутствовать — тогда проверка пропускается, а не валит тест.
+        try:
+            from PIL import Image   # noqa: PLC0415
+        except ImportError:
+            print("  skip пиксельная проверка свечения: нет Pillow")
+        else:
+            a.eval("""
+                $.world.color('#000000');
+                $('#base, #b_alpha, #b_add, #b_multiply, #b_none, #b_bad, #bright').remove();
+                $('<rect>', { id: 'bright' }).at(400, 300).size(40, 40)
+                    .color('#ffffff').appendTo($.world);
+                'ok'
+            """)
+            a.eval("$.gfx.post({ on: false }); 'ok'")
+            a.step(3)
+            off_path = a.screenshot(os.path.join(ROOT, "build", "render_bloom_off.png"))
+            a.eval("$.gfx.post({ glow: 1.5, bloom_threshold: 0.35, bloom_radius: 1.5 }); 'ok'")
+            a.step(3)
+            on_path = a.screenshot(os.path.join(ROOT, "build", "render_bloom_on.png"))
+
+            def bright_box(path):
+                """Прямоугольник самой яркой области кадра — источника свечения."""
+                img = Image.open(path).convert("RGB")
+                w, h = img.size
+                pix = img.load()
+                xs, ys = [], []
+                for y in range(h):
+                    for x in range(w):
+                        if sum(pix[x, y]) / 3.0 > 200:
+                            xs.append(x)
+                            ys.append(y)
+                if not xs:
+                    return None
+                return (min(xs), min(ys), max(xs), max(ys))
+
+            def halo(path, box):
+                """Средняя яркость кольца 12..70 px вокруг источника."""
+                img = Image.open(path).convert("RGB")
+                w, h = img.size
+                pix = img.load()
+                x0, y0, x1, y1 = box
+                total, count = 0.0, 0
+                for y in range(max(0, y0 - 70), min(h, y1 + 71)):
+                    for x in range(max(0, x0 - 70), min(w, x1 + 71)):
+                        dx = max(x0 - x, 0, x - x1)
+                        dy = max(y0 - y, 0, y - y1)
+                        if dx * dx + dy * dy < 12 * 12:
+                            continue        # сам источник и его кромка
+                        total += sum(pix[x, y]) / 3.0
+                        count += 1
+                return total / max(1, count)
+
+            probe = bright_box(off_path)
+            check(probe is not None, "во вспышке есть яркие пиксели")
+            off_halo = halo(off_path, probe) if probe else 0.0
+            on_halo = halo(on_path, probe) if probe else 0.0
+            check(on_halo > off_halo + 0.5,
+                  "вокруг источника стало светлее: %.3f → %.3f" % (off_halo, on_halo))
+            check(on_halo > 0.5, "ореол свечения виден в пикселях (%.3f)" % on_halo)
+
+        # --- Вспышка шейдером узла видна в пикселях ---------------------------
+        try:
+            from PIL import Image   # noqa: PLC0415
+        except ImportError:
+            print("  skip пиксельная проверка шейдера узла: нет Pillow")
+        else:
+            # Проверяем на одном узле перед камерой: после блока свечения
+            # сцена уже перестроена, а яркая вспышка была за кадром.
+            a.eval("""
+                $.gfx.postOff();
+                $.world.color('#000000');
+                $('#base, #b_alpha, #b_add, #b_multiply, #b_none, #b_bad, #bright, #fxprobe').remove();
+                globalThis.__cam = $.camera.pos();
+                $('<rect>', { id: 'fxprobe' }).at(__cam.x, __cam.y).size(80, 80)
+                    .color('#ffffff').appendTo($.world);
+                'ok'
+            """)
+            a.step(3)
+            off_path = a.screenshot(os.path.join(ROOT, "build", "render_fx_off.png"))
+            a.eval("$('#fxprobe').shader('flash', { color: '#ff0000', amount: 1 }); 'ok'")
+            a.step(3)
+            on_path = a.screenshot(os.path.join(ROOT, "build", "render_fx_flash.png"))
+
+            def red_and_white(path):
+                img = Image.open(path).convert("RGB")
+                w, h = img.size
+                pix = img.load()
+                red = white = 0
+                for y in range(h):
+                    for x in range(w):
+                        r, g, b = pix[x, y]
+                        if r > 200 and g < 80 and b < 80:
+                            red += 1
+                        elif r > 200 and g > 200 and b > 200:
+                            white += 1
+                return red, white
+
+            off_red, off_white = red_and_white(off_path)
+            on_red, on_white = red_and_white(on_path)
+            check(off_white > 0, "до эффекта вспышка белая (%d px)" % off_white)
+            check(on_red > off_white // 2,
+                  "после flash узел красный (%d px против %d белых)" % (on_red, on_white))
+            check(on_white < off_white, "белых пикселей стало меньше (%d → %d)"
+                  % (off_white, on_white))
+            a.eval("$('#fxprobe').shader(null); 'ok'")
 
         # --- Скриншот кадра со смешиванием ------------------------------------
         shot = a.screenshot(os.path.join(ROOT, "build", "render_blend_test.png"))

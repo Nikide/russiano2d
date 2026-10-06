@@ -394,6 +394,9 @@ function dispatchGlobal(node, name, data) {
 // Цепочные методы узлов
 // ---------------------------------------------------------------------------
 
+// Виды шейдеров узла — тот же список, что в render.js (FX_KINDS).
+const FX_NAMES = new Set(['none', 'flash', 'dissolve', 'chroma', 'wave']);
+
 function installNodeMethods($) {
     // === Коллекция ==========================================================
 
@@ -571,6 +574,35 @@ function installNodeMethods($) {
         return ctx.world.raycast({ x: node.x, y: node.y }, p);
     }, null);
 
+    /**
+     * Ищет препятствие для хитбокса узла на пути к цели: свип формы из центра
+     * узла в точку цели. Возвращает тот же дескриптор, что
+     * `$.world.castShape`, либо null. Размеры берутся из хитбокса узла, их
+     * можно перебить через `opts` (`w`, `h`, `capsule`, `mask`, `ignore`).
+     */
+    defGet('sweepTo', function (node, target, opts) {
+        const p = resolvePoint(target);
+        const o = opts || {};
+        // Явная форма в opts важнее хитбокса узла: иначе `{ w, h }` из opts
+        // перебивалось бы halfW/halfH, подставленными из узла.
+        const explicit = o.w !== undefined || o.h !== undefined ||
+                         o.halfW !== undefined || o.halfH !== undefined ||
+                         o.radius !== undefined || o.capsule !== undefined ||
+                         o.shape !== undefined;
+        const spec = explicit ? Object.assign({}, o) : Object.assign({
+            halfW: (node.hitbox ? node.hitbox.w : node.w) / 2,
+            halfH: (node.hitbox ? node.hitbox.h : node.h) / 2,
+            shape: node.shape_kind === 'circle' ? 'circle'
+                 : (node.shape_kind === 'capsule' ? 'capsule' : 'box'),
+            radius: node.circle_hitbox > 0 ? node.circle_hitbox : 0,
+            angle: node.angle,
+        }, o);
+        // Своё тело свип пропускает всегда: без этого он «находил» бы сам
+        // себя в начальной точке (fraction = 0) и не двигался бы с места.
+        spec.ignore = o.ignore ? [node, o.ignore] : node;
+        return ctx.world.castShape({ x: node.x, y: node.y }, p, spec);
+    }, null);
+
     defGet('toGlobal', function (node, local) {
         if (!ctx.camera) return { x: node.x + (local.x || 0), y: node.y + (local.y || 0) };
         return ctx.camera.worldToScreen({ x: node.x + (local.x || 0), y: node.y + (local.y || 0) });
@@ -678,14 +710,59 @@ function installNodeMethods($) {
             (el).blend_mode = known ? mode : 'alpha';
         });
     });
-    def('shader', function (path) {
-        if (!Wrapper.prototype.shader.warned) {
-            Wrapper.prototype.shader.warned = true;
-            ctx.log(`$: .shader("${path}") — свои шейдеры на узел движок не поддерживает (пайплайн общий); вызов проигнорирован`);
+    /**
+     * Шейдер узла: эффект поверх спрайта. Виды — flash, dissolve, chroma, wave
+     * (см. `$.gfx.fxKinds()`), параметры — объектом. Имя читается без
+     * аргументов; `null`/`'none'` выключают эффект.
+     *
+     *   $('#hero').shader('flash', { color: '#ff8080', amount: 0.7 });
+     *   $('#ghost').shader('dissolve', { threshold: 0.4 });
+     *   $('#hero').shader('chroma', { offset: 0.006 });
+     *   $('#lava').shader('wave', { amplitude: 0.05, frequency: 30, phase: t });
+     *
+     * Эффект рисуется тем же батчем: узлы с одинаковым эффектом и одинаковыми
+     * параметрами идут одним вызовом. Узлы без шейдера — прежним конвейером.
+     */
+    def('shader', function (value, params) {
+        if (value === undefined) {
+            const node = this.nodes[0];
+            return node && node.shader_name ? node.shader_name : 'none';
         }
-        return this;
+        if (value !== null && !FX_NAMES.has(String(value))) {
+            ctx.log(`$: .shader("${value}") — неизвестный эффект; доступны: `
+                  + `${Array.from(FX_NAMES).join(', ')}. Вызов проигнорирован`);
+            return this;
+        }
+        return this.eachNode((_, node) => {
+            if (value === null || String(value) === 'none') {
+                node.shader_name = null;
+                node.shader_params = null;
+                return;
+            }
+            node.shader_name = String(value);
+            node.shader_params = params === undefined ? {} : Object.assign({}, params);
+        });
     });
-    def('shaderParam', function () { return this; });
+
+    /** Один параметр шейдера узла: `.shaderParam('threshold', 0.6)`. */
+    def('shaderParam', function (name, value) {
+        // Без аргументов — все параметры, с одним — конкретный, с двумя —
+        // установка: иначе `.shaderParam('amount')` молча обнулял бы параметр.
+        if (arguments.length === 0) {
+            const node = this.nodes[0];
+            return node && node.shader_params ? Object.assign({}, node.shader_params) : {};
+        }
+        if (arguments.length === 1) {
+            const node = this.nodes[0];
+            const params = node && node.shader_params;
+            return params ? params[String(name)] : undefined;
+        }
+        return this.eachNode((_, node) => {
+            if (!node.shader_name) return;
+            if (!node.shader_params) node.shader_params = {};
+            node.shader_params[String(name)] = value;
+        });
+    });
 
     def('outline', function (width, color) {
         return this.eachNode((_, el) => {
@@ -851,9 +928,58 @@ function installNodeMethods($) {
         return id;
     });
 
-    def('mask', function () { return this; });
-    def('layerBits', function () { return this; });
-    def('collidesWith', function () { return this; });
+    // --- Слои и маски коллизий ---------------------------------------------
+    // Тело лежит в слое (layerBits) и сталкивается с теми слоями, что
+    // перечислены в маске (mask). Числа 32-битные: побитовые операторы JS
+    // всё равно 32-битные, а старшие биты b2Filter остаются доступны только
+    // C-стороне. Значения по умолчанию — слой 1 и «сталкиваться со всеми»,
+    // то есть ровно прежнее поведение движка.
+
+    /** .mask() — текущая маска; .mask(bits|узел|селектор) — задать. */
+    def('mask', function (value) {
+        if (arguments.length === 0) {
+            const node = this.nodes[0];
+            return node ? node.collision_mask : 0xffffffff;
+        }
+        const bits = layerBitsOf(value);
+        return this.eachNode((_, node) => { node.set('mask', bits); });
+    });
+
+    /** .layerBits() — слой тела; .layerBits(bits|узел|селектор) — задать. */
+    def('layerBits', function (value) {
+        if (arguments.length === 0) {
+            const node = this.nodes[0];
+            return node ? node.layer_bits : 1;
+        }
+        const bits = layerBitsOf(value);
+        return this.eachNode((_, node) => { node.set('layerBits', bits); });
+    });
+
+    /**
+     * .collidesWith(цель) — сталкиваются ли узлы с учётом слоёв, масок и
+     * групп; .collidesWith(цель, true|false) — добавить или убрать слои цели
+     * из своей маски. Логика та же, что у Box2D при выборе пар.
+     */
+    def('collidesWith', function (target, on) {
+        const self = this.nodes[0];
+        if (!self) return arguments.length < 2 ? false : this;
+
+        if (arguments.length < 2) {
+            const other = resolveNodeArg(target);
+            if (!other) return false;
+            if (self.collision_group !== 0 && self.collision_group === other.collision_group) {
+                return self.collision_group > 0;
+            }
+            return ((self.collision_mask & (other.layer_bits >>> 0)) !== 0) &&
+                   ((other.collision_mask & (self.layer_bits >>> 0)) !== 0);
+        }
+
+        const bits = layerBitsOf(target);
+        return this.eachNode((_, node) => {
+            const next = on === false ? (node.collision_mask & ~bits) : (node.collision_mask | bits);
+            node.set('mask', next >>> 0);
+        });
+    });
 
     /**
      * Стоит ли узел на земле. Луч идёт из центра узла вниз: начинать его у
@@ -863,15 +989,18 @@ function installNodeMethods($) {
      */
     defGet('onFloor', function (node) {
         const b = nodeBounds(node);
-        const hit = ctx.world.raycast({ x: node.x, y: node.y }, { x: node.x, y: b.y1 + 8 });
+        // Маска узла: с чем тело не сталкивается, на том и не стоит.
+        const hit = ctx.world.raycast({ x: node.x, y: node.y }, { x: node.x, y: b.y1 + 8 },
+                                      { mask: node.collision_mask });
         return hit !== null && hit.body !== node.body;
     }, false);
 
     /** Касается ли стены слева или справа — луч тоже из центра узла. */
     defGet('onWall', function (node) {
         const b = nodeBounds(node);
-        const left = ctx.world.raycast({ x: node.x, y: node.y }, { x: b.x0 - 8, y: node.y });
-        const right = ctx.world.raycast({ x: node.x, y: node.y }, { x: b.x1 + 8, y: node.y });
+        const opts = { mask: node.collision_mask };
+        const left = ctx.world.raycast({ x: node.x, y: node.y }, { x: b.x0 - 8, y: node.y }, opts);
+        const right = ctx.world.raycast({ x: node.x, y: node.y }, { x: b.x1 + 8, y: node.y }, opts);
         return !!((left && left.body !== node.body) || (right && right.body !== node.body));
     }, false);
 
@@ -1280,13 +1409,18 @@ function installFrameHooks($) {
         //    интерфейс, последней — шины звука (затухания громкости).
         //    Имя метки — это имя СВОЕГО отрезка: метка ставится до вызова.
         prof('анимация+ввод'); animateSprites(); applyControls(dt);
-        prof('анимация'); tickAnim(dt);
-        prof('плеер анимации'); tickAnimPlayer(dt);
-        prof('состояния'); tickState(dt);
+        // Клипы, машины состояний и таймлайны тикают игровым временем, а не
+        // сырым dt: иначе пауза и масштаб времени двигали твины, но не
+        // анимацию персонажа. Интерфейс (экраны, диалоги, виджеты) остаётся
+        // на реальном времени — кнопки обязаны работать и на паузе.
+        const game_dt = ctx.time.delta();
+        prof('анимация'); tickAnim(game_dt);
+        prof('плеер анимации'); tickAnimPlayer(game_dt);
+        prof('состояния'); tickState(game_dt);
         prof('последовательности'); tickFlow(dt);
         prof('экраны'); tickScreen(dt);
         prof('диалоги'); tickDialog(dt);
-        prof('таймлайн'); tickTimeline(dt);
+        prof('таймлайн'); tickTimeline(game_dt);
         prof('tilemap'); tickTilemap(dt);
         prof('vfx'); tickFx(dt);
         prof('частицы'); tickParticles(dt);
@@ -1385,6 +1519,34 @@ function resolvePoint(target) {
     if (Array.isArray(target)) return { x: target[0], y: target[1] };
     if (target && typeof target === 'object') return { x: target.x || 0, y: target.y || 0 };
     return { x: 0, y: 0 };
+}
+
+/** Один узел из аргумента: узел, обёртка или селектор. */
+function resolveNodeArg(target) {
+    if (!target) return null;
+    if (target instanceof Wrapper) return target.nodes[0] || null;
+    if (target && target.tag) return target;
+    if (typeof target === 'string') return query(target)[0] || null;
+    return null;
+}
+
+/**
+ * Биты слоёв из аргумента: число, узел, обёртка или селектор. Для нескольких
+ * узлов биты складываются по ИЛИ — так .mask('.wall') означает «сталкиваться
+ * со всеми слоями, в которых есть стены».
+ */
+function layerBitsOf(value) {
+    if (typeof value === 'number') return value >>> 0;
+    if (value === null || value === undefined) return 0;
+    let list;
+    if (value instanceof Wrapper) list = value.nodes;
+    else if (value && value.tag) list = [value];
+    else if (typeof value === 'string') list = query(value);
+    else return 0;
+
+    let bits = 0;
+    for (let i = 0; i < list.length; i++) bits |= (list[i].layer_bits >>> 0);
+    return bits >>> 0;
 }
 
 function vectorOf(list) { return { x: list[0], y: list[1] }; }

@@ -272,7 +272,9 @@ export function nodeToData(node) {
         body: bodyField(node),
         gravity: node.gravity_on !== false,
         hitbox: node.hitbox ? [num(node.hitbox.w, 0), num(node.hitbox.h, 0)] : null,
-        collisionMask: num(node.collision_mask, 0xffff),
+        collisionMask: num(node.collision_mask, 0xffffffff),
+        layerBits: num(node.layer_bits, 1),
+        collisionGroup: num(node.collision_group, 0),
 
         sprite: spriteField(node),
         frame: num(node.frame_index, 0),
@@ -396,7 +398,11 @@ export function applyData(data, parent) {
     if (data.hp !== undefined) node.cur_hp = num(data.hp, 0);
 
     if (data.hitbox) node.hitbox = { w: num(data.hitbox[0], node.w), h: num(data.hitbox[1], node.h) };
-    if (data.collisionMask !== undefined) node.collision_mask = num(data.collisionMask, 0xffff);
+    // Слои и маски: пишем через set(), чтобы фильтр доехал и до уже
+    // созданного тела (ниже тело всё равно пересоздаётся — поля успеют).
+    if (data.layerBits !== undefined) node.set('layerBits', num(data.layerBits, 1));
+    if (data.collisionMask !== undefined) node.set('mask', num(data.collisionMask, 0xffffffff));
+    if (data.collisionGroup !== undefined) node.set('group', num(data.collisionGroup, 0));
     if (data.gravity !== undefined) node.gravity_on = data.gravity !== false;
 
     // Тело: строка — тип, false — выключено, null — как в теге. Пересоздаём

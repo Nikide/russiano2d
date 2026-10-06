@@ -22,6 +22,7 @@ const MAX_TRIS = 8192;
 let xf = null;          // Float32Array(max * 6)
 let col = null;         // Uint32Array(max)
 let blend = null;       // Uint8Array(max) — режим смешивания каждого спрайта
+let fx = null;          // Int32Array(max) — индекс шейдера узла (0 — обычный)
 let count = 0;
 
 // Порядок обязан совпадать с порядком конвейеров в render.c.
@@ -107,11 +108,113 @@ const state = {
     stats: { sprites: 0, triangles: 0, texts: 0, nodes: 0 },
 };
 
+// --- Шейдеры узлов -----------------------------------------------------------
+// Узлов с эффектом обычно единицы, а параметры у них разные, поэтому на кадр
+// собирается таблица: ключ (вид + параметры) → индекс в таблице движка.
+// Ноль зарезервирован под «обычный спрайт», поэтому индексы идут с единицы.
+const MAX_NODE_FX = 60;
+let fx_map = new Map();
+let fx_count = 0;
+
+/** Виды эффектов шейдера узла: имя → номер в шейдере sprite_fx.frag.glsl. */
+const FX_KINDS = {
+    none: 0,
+    flash: 1,
+    dissolve: 2,
+    chroma: 3,
+    wave: 4,
+};
+
+/**
+ * Приводит имя эффекта и его параметры к тому, что ждёт движок:
+ * `{ kind, p1, p2, p3, color }`. Чистая функция — её проверяет qjs-харнесс.
+ *
+ * flash    — `{ color, amount }`: подсветка цветом (попадание, урон)
+ * dissolve — `{ threshold, scale, color }`: растворение с кромкой
+ * chroma   — `{ offset }`: расхождение каналов (глитч, удар)
+ * wave     — `{ amplitude, frequency, phase }`: волна по UV (жар, вода)
+ */
+export function fxSpec(name, params) {
+    const p = params || {};
+    const kind = FX_KINDS[String(name)] || 0;
+    const num = (value, fallback) => {
+        // null/пустая строка — это «параметр не задан», а не ноль: иначе
+        // `{ frequency: null }` дал бы частоту 0 и волна исчезла бы.
+        if (value === null || value === undefined || value === '') return fallback;
+        const n = Number(value);
+        return Number.isFinite(n) ? n : fallback;
+    };
+    if (kind === FX_KINDS.flash) {
+        // p1 — сила подсветки, цвет — отдельным vec4.
+        return { kind, p1: clamp01(num(p.amount, 0.8)), p2: 0, p3: 0, color: p.color };
+    }
+    if (kind === FX_KINDS.dissolve) {
+        // p1 — порог, p2 — масштаб шума (частота дыр).
+        return { kind, p1: clamp01(num(p.threshold, 0.5)),
+                 p2: Math.max(1, num(p.scale, 64)), p3: 0,
+                 color: p.color === undefined ? '#ff8844' : p.color };
+    }
+    if (kind === FX_KINDS.chroma) {
+        return { kind, p1: num(p.offset, 0.01), p2: 0, p3: 0, color: p.color };
+    }
+    if (kind === FX_KINDS.wave) {
+        // p1 — амплитуда, p2 — частота, p3 — фаза (время).
+        return { kind,
+                 p1: num(p.amplitude !== undefined ? p.amplitude : p.amount, 0.03),
+                 p2: Math.max(1, num(p.frequency, 24)),
+                 p3: num(p.phase !== undefined ? p.phase : p.time, 0),
+                 color: p.color };
+    }
+    return { kind: 0, p1: 0, p2: 0, p3: 0, color: undefined };
+}
+
+/** Список доступных видов эффектов — для документации и проверок. */
+export function fxKinds() { return Object.keys(FX_KINDS); }
+
+function clamp01(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 0;
+    return n < 0 ? 0 : (n > 1 ? 1 : n);
+}
+
+/**
+ * Индекс шейдера узла в таблице кадра. Узлы с одинаковым эффектом и
+ * одинаковыми параметрами делят один индекс — тогда они рисуются одним
+ * вызовом, как и раньше (участок не рвётся).
+ */
+function fxIndexOf(node) {
+    const name = node && node.shader_name;
+    if (!name || name === 'none') return 0;
+    const spec = fxSpec(name, node.shader_params);
+    if (spec.kind === 0) return 0;
+    // Для волны фаза меняется каждый кадр — она и делает параметры разными.
+    const phase = spec.phase === undefined ? '' : String(spec.phase);
+    const key = spec.kind + '|' + spec.p1 + '|' + spec.p2 + '|' + spec.p3 + '|' + phase
+              + '|' + (spec.color === undefined ? '' : String(spec.color));
+    const cached = fx_map.get(key);
+    if (cached !== undefined) return cached;
+    if (fx_count >= MAX_NODE_FX) return 0;
+    const index = ++fx_count;
+    if (typeof engine.defineSpriteFx === 'function') {
+        engine.defineSpriteFx(index, spec.kind, spec.p1, spec.p2, spec.p3,
+                              packColorSafe(spec.color));
+    }
+    fx_map.set(key, index);
+    return index;
+}
+
+/** Цвет эффекта в упакованный RGBA; без цвета — белый с полной альфой. */
+function packColorSafe(color) {
+    if (color === undefined || color === null) return 0xFFFFFFFF;
+    return packColor(color, 1);
+}
+
 // Параметры пост-обработки. Держим их на JS-стороне, а в движок отправляем
 // каждый кадр: зерну нужно текущее время. Раскладка совпадает с setPost().
 const POST_KEYS = ['glow', 'vignette', 'chromatic', 'lens', 'center_x', 'center_y', 'radius',
                    'grain', 'scanline', 'posterize', 'tint_r', 'tint_g', 'tint_b',
-                   'tint_amount', 'saturation', 'contrast', 'brightness', 'blood'];
+                   'tint_amount', 'saturation', 'contrast', 'brightness', 'blood',
+                   'bloom_threshold', 'bloom_radius'];
 
 const post_params = {
     glow: 0, vignette: 0, chromatic: 0, lens: 0,
@@ -120,6 +223,9 @@ const post_params = {
     posterize: 0,
     tint_r: 1, tint_g: 1, tint_b: 1, tint_amount: 0,
     saturation: 1, contrast: 1, brightness: 0, blood: 0,
+    // Свечение: порог яркости и сила размытия. Само свечение — отдельные
+    // проходы (bright-pass + размытие), а не выборки в пост-обработке.
+    bloom_threshold: 0.75, bloom_radius: 1,
 };
 
 // Наборы камерных эффектов: от «тёплого мультика» до хоррора. Значения —
@@ -220,7 +326,8 @@ function pushPost() {
                    engine.time || 0,
                    post_params.posterize,
                    post_params.tint_r, post_params.tint_g, post_params.tint_b, post_params.tint_amount,
-                   post_params.saturation, post_params.contrast, post_params.brightness, post_params.blood);
+                   post_params.saturation, post_params.contrast, post_params.brightness, post_params.blood,
+                   post_params.bloom_threshold, post_params.bloom_radius);
 }
 
 function ensureBuffers() {
@@ -228,12 +335,13 @@ function ensureBuffers() {
         xf = new Float32Array(MAX_SPRITES * 6);
         col = new Uint32Array(MAX_SPRITES);
         blend = new Uint8Array(MAX_SPRITES);
+        fx = new Int32Array(MAX_SPRITES);
         tri = new Float32Array(MAX_TRIS * 3 * 6);
         tri_blend = new Uint8Array(MAX_TRIS);
     }
 }
 
-function pushSprite(sprite, x, y, w, h, angle, color, blend_name) {
+function pushSprite(sprite, x, y, w, h, angle, color, blend_name, fx_index) {
     if (count >= MAX_SPRITES || sprite < 0) return;
     if (view) { x = viewX(x); y = viewY(y); w = viewScale(w); h = viewScale(h); }
     const o = count * 6;
@@ -241,6 +349,8 @@ function pushSprite(sprite, x, y, w, h, angle, color, blend_name) {
     xf[o + 3] = w; xf[o + 4] = h; xf[o + 5] = angle;
     col[count] = color;
     blend[count] = blendId(blend_name === undefined || blend_name === null ? default_blend : blend_name);
+    // Индекс шейдера узла: 0 — обычный спрайт (конвейер без юниформ).
+    fx[count] = fx_index === undefined ? 0 : fx_index;
     count++;
 }
 
@@ -253,9 +363,13 @@ function submitSprites(start, end) {
     let i = start;
     while (i < end) {
         const b = blend[i];
+        const f = fx[i];
         let j = i + 1;
-        while (j < end && blend[j] === b) j++;
-        engine.submitSprites(xf.subarray(i * 6, j * 6), col.subarray(i, j), j - i, BLEND_NAMES[b]);
+        // Участок рвётся и по режиму смешивания, и по шейдеру узла: у разных
+        // шейдеров разные юниформы, а без разрыва они бы «протекли» на соседей.
+        while (j < end && blend[j] === b && fx[j] === f) j++;
+        engine.submitSprites(xf.subarray(i * 6, j * 6), col.subarray(i, j), j - i,
+                             BLEND_NAMES[b], f > 0 ? fx.subarray(i, j) : null);
         i = j;
     }
 }
@@ -984,7 +1098,8 @@ function drawWorldNode(node, cam) {
                        node.angle, withAlpha(node.outline.color, node.alpha));
         }
 
-        pushSprite(sprite, t.x, t.y, t.w, t.h, node.angle, baseColor(node), node.blend_mode);
+        pushSprite(sprite, t.x, t.y, t.w, t.h, node.angle, baseColor(node), node.blend_mode,
+                   fxIndexOf(node));
         break;
     }
     }
@@ -1134,6 +1249,9 @@ export function installGfx($) {
         /** Сколько спрайтов/треугольников ушло в кадр — для $.debug.stats(). */
         stats() { return { ...state.stats }; },
 
+        /** Виды шейдеров узла: flash, dissolve, chroma, wave (+ none). */
+        fxKinds() { return fxKinds(); },
+
         // --- Примитивы поверх всего (в координатах окна) --------------------
         draw: {
             /**
@@ -1268,7 +1386,8 @@ export function installGfx($) {
             }
             const keys = ['glow', 'vignette', 'chromatic', 'lens', 'grain', 'scanline',
                           'posterize', 'tint_r', 'tint_g', 'tint_b', 'tint_amount',
-                          'saturation', 'contrast', 'brightness', 'blood'];
+                          'saturation', 'contrast', 'brightness', 'blood',
+                          'bloom_threshold', 'bloom_radius'];
             for (const key of keys) {
                 if (o[key] !== undefined) {
                     post_params[key] = Number(o[key]) || 0;
@@ -1329,6 +1448,10 @@ export function installGfx($) {
             count = 0;
             tri_count = 0;
             tri_blend_cur = 0;
+            // Таблица шейдеров узлов собирается заново: параметры (например,
+            // фаза волны) меняются каждый кадр.
+            fx_map.clear();
+            fx_count = 0;
 
             // Фон рисуется первым и не двигается с камерой при parallax=0.
             const bg = ctx.world ? ctx.world.getBackground() : null;
