@@ -244,6 +244,30 @@ typedef struct R2DRenderer {
     SDL_GPUSampler          *linear_sampler;  // линейная фильтрация для размытия
     SDL_GPUTexture          *black_texture;   // 1×1 чёрная заглушка для u_bloom
 
+    // --- Lightmap -----------------------------------------------------------
+    // Свет копится в отдельной текстуре половинного разрешения, при желании
+    // размывается и накладывается на сцену одним полноэкранным проходом.
+    // Порядок отрисовки света перестаёт зависеть от порядка сцены, а половинное
+    // разрешение с линейной фильтрацией само даёт мягкую кромку.
+    bool            lightmap_on;
+    float           lightmap_intensity;   // множитель силы света в композите
+    float           lightmap_soft;        // сила размытия карты света
+    bool            lightmap_used;        // в этом кадре свет ушёл в текстуру
+    SDL_GPUTexture *light_target;         // накопленный свет
+    SDL_GPUTexture *light_blur;           // второй буфер для размытия
+    int             light_w, light_h;
+    SDL_GPUGraphicsPipeline *light_blur_pipeline;
+    SDL_GPUGraphicsPipeline *light_composite_pipeline;
+
+    // Треугольники света: тот же формат вершин, но свой список и свой проход.
+    R2DVertex   *light_vertices;
+    int          light_vertex_count;
+    int          light_vertex_cap;
+    R2DTriBatch *light_batches;
+    int          light_batch_count;
+    int          light_batch_cap;
+    int          light_index_start;   // первый индекс диапазона в общем IB
+
     // Граница интерфейса в списке команд: JS помечает её перед отдачей
     // ui-спрайтов, чтобы с постом HUD рисовался поверх обработки, а не под ней.
     int ui_cmd_start;
@@ -307,6 +331,12 @@ void r2d_batch_rect(R2DRenderer *r, float x, float y, float w, float h, uint32_t
 // vertex_count должен быть кратен 3.
 void r2d_batch_triangles(R2DRenderer *r, const float *verts, int vertex_count);
 
+// То же, но для света lightmap: треугольники копятся в отдельном списке и
+// рисуются не в сцену, а в текстуру света (r2d_render_draw_lights).
+void r2d_batch_light_triangles(R2DRenderer *r, const float *verts, int vertex_count);
+void r2d_batch_light_triangles_blend(R2DRenderer *r, const float *verts,
+                                     int vertex_count, int blend);
+
 // Разбор плоского JS-массива: transforms — stride 6 (sprite,x,y,w,h,angle),
 // colors — stride 1. Один вызов на весь кадр.
 int  r2d_batch_submit(R2DRenderer *r, const float *transforms, const uint32_t *colors, int count);
@@ -356,6 +386,21 @@ void r2d_render_post(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPas
 // заранее (r2d_render_bloom_ready), а рисует их эта функция.
 bool r2d_render_bloom_ready(R2DRenderer *r, int w, int h);
 bool r2d_render_bloom(R2DRenderer *r, SDL_GPUCommandBuffer *cmd);
+
+// --- Lightmap ---------------------------------------------------------------
+// Свет (аддитивные треугольники) копится в отдельной текстуре половинного
+// разрешения, при желании размывается и накладывается на сцену одним
+// полноэкранным проходом. Так порядок света перестаёт зависеть от порядка
+// сцены, а половинное разрешение даёт мягкую кромку.
+//
+// Порядок вызовов в кадре: r2d_render_draw_lights — отдельным проходом ПОСЛЕ
+// r2d_render_upload и до прохода сцены; r2d_render_light_composite — в конце
+// прохода сцены, после мира и до интерфейса.
+bool r2d_render_lightmap_enabled(const R2DRenderer *r);
+void r2d_render_lightmap_set(R2DRenderer *r, bool on, float intensity, float soft);
+bool r2d_render_draw_lights(R2DRenderer *r, SDL_GPUCommandBuffer *cmd);
+void r2d_render_light_composite(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
+                                SDL_GPURenderPass *pass);
 
 // --- Render target игры -----------------------------------------------------
 // Текстура связанного viewport'а (NULL — кадр идёт как обычно) и функция

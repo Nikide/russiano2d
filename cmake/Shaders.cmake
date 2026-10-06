@@ -114,6 +114,9 @@ r2d_add_shader(post frag "${CMAKE_SOURCE_DIR}/shaders/post.frag.glsl")
 r2d_add_shader(bloom_pre frag "${CMAKE_SOURCE_DIR}/shaders/bloom_pre.frag.glsl")
 r2d_add_shader(bloom_blur frag "${CMAKE_SOURCE_DIR}/shaders/bloom_blur.frag.glsl")
 
+# Lightmap: композит накопленного света на сцену (аддитивное смешивание).
+r2d_add_shader(light_map frag "${CMAKE_SOURCE_DIR}/shaders/light_map.frag.glsl")
+
 add_custom_command(
     OUTPUT "${R2D_SHADER_HEADER}"
     COMMAND ${CMAKE_COMMAND}

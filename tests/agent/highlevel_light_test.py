@@ -316,6 +316,61 @@ def main():
               "выключение темноты возвращает картинку (%.0f → %.0f)"
               % (lamp_before, lamp_back))
 
+        # --- Lightmap: свет в отдельной текстуре -------------------------------
+        # С включённой картой света свет копится в текстуре половинного
+        # разрешения и накладывается на сцену одним проходом. Картинка при этом
+        # должна остаться той же, а кромка — стать мягче.
+        check(a.eval("$.gfx.light.mapSupported()") is True, "световая карта доступна")
+        check(a.eval("$.gfx.light.map()")["on"] is False,
+              "по умолчанию световая карта выключена")
+
+        a.eval("$('#lamp').shadows(true).cone(0).flicker(0)")
+        a.eval("$.gfx.light.occluders([{ x: 408, y: 180, w: 24, h: 240 }])")
+        a.step(3)
+        plain, scale_x, scale_y = shot("light_map_off.png")
+        plain_lit = mean_luma(plain, 200, 300, 10, scale_x, scale_y)
+        plain_edge = mean_luma(plain, 400, 193, 4, scale_x, scale_y)
+
+        a.eval("$.gfx.light.map({ on: true, intensity: 1, soft: 0 })")
+        params = a.eval("$.gfx.light.map()")
+        check(isinstance(params, dict) and params.get("on") is True,
+              "$.gfx.light.map({on:true}) включается")
+        a.step(3)
+        mapped, scale_x, scale_y = shot("light_map_on.png")
+        mapped_lit = mean_luma(mapped, 200, 300, 10, scale_x, scale_y)
+        mapped_shadow = mean_luma(mapped, 400, 300, 10, scale_x, scale_y)
+        check(mapped_lit > plain_lit * 0.7,
+              "карта света не теряет свет (%.0f против %.0f)" % (plain_lit, mapped_lit))
+        check(mapped_shadow < mapped_lit * 0.2,
+              "тени в карте света работают (%.0f против %.0f)" % (mapped_shadow, mapped_lit))
+        info = a.eval("engine.renderInfo()")
+        check(isinstance(info, dict) and info.get("passes", 0) >= 1,
+              "проход световой карты считается (%s)"
+              % (info.get("passes") if isinstance(info, dict) else info))
+
+        # Размытие карты: свет размазывается, полутень на кромке растёт.
+        a.eval("$.gfx.light.map({ soft: 2 })")
+        a.step(3)
+        soft_map, scale_x, scale_y = shot("light_map_soft.png")
+        soft_edge = mean_luma(soft_map, 400, 193, 4, scale_x, scale_y)
+        soft_lit = mean_luma(soft_map, 200, 300, 10, scale_x, scale_y)
+        check(soft_edge > plain_edge * 1.3,
+              "размытие карты смягчает кромку тени (%.1f → %.1f)" % (plain_edge, soft_edge))
+        check(soft_lit > plain_lit * 0.6,
+              "после размытия свет не пропал (%.0f против %.0f)" % (plain_lit, soft_lit))
+
+        # С картой света свет ложится уже после темноты — фонарь её прорезает.
+        a.eval("$.gfx.light.ambient({ level: 0.7, color: '#000000' })")
+        a.step(3)
+        dark_map, scale_x, scale_y = shot("light_map_dark.png")
+        dark_lit = mean_luma(dark_map, 200, 300, 10, scale_x, scale_y)
+        check(dark_lit > soft_lit * 0.8,
+              "карта света прорезает темноту (%.0f → %.0f)" % (soft_lit, dark_lit))
+        a.eval("$.gfx.light.ambient.off()")
+        a.eval("$.gfx.light.map({ on: false })")
+        a.step(2)
+        check(a.eval("$.gfx.light.map()")["on"] is False, "световая карта выключается")
+
         # --- Точный полигон из C и отладка ------------------------------------
         check(a.eval("$.gfx.light.polygon(200, 300) ? $.gfx.light.polygon(200, 300).length : -1") > 6,
               "engine.light.visibility() вернул полигон")

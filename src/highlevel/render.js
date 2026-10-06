@@ -49,6 +49,8 @@ let tri = null;         // Float32Array(max * 3 * 6)
 let tri_count = 0;      // число вершин (кратно 3)
 let tri_blend = null;   // Uint8Array(max) — режим смешивания каждого треугольника
 let tri_blend_cur = 0;  // режим, который получит следующий треугольник
+let tri_layer = null;   // Uint8Array(max) — 1, если треугольник это свет lightmap
+let tri_layer_cur = 0;  // слой, который получит следующий треугольник (0 — сцена)
 
 // Мировой слой. Батч движка принимает ЭКРАННЫЕ координаты (узлы и частицы
 // переводят их сами через камеру), но VFX и $.gfx.draw.* работают в мировых.
@@ -384,6 +386,7 @@ function ensureBuffers() {
         fx = new Int32Array(MAX_SPRITES);
         tri = new Float32Array(MAX_TRIS * 3 * 6);
         tri_blend = new Uint8Array(MAX_TRIS);
+        tri_layer = new Uint8Array(MAX_TRIS);
     }
 }
 
@@ -437,7 +440,10 @@ function pushTriangle(x1, y1, x2, y2, x3, y3, color) {
     pushVertex(x1, y1, color);
     pushVertex(x2, y2, color);
     pushVertex(x3, y3, color);
-    if (index < MAX_TRIS) tri_blend[index] = tri_blend_cur;
+    if (index < MAX_TRIS) {
+        tri_blend[index] = tri_blend_cur;
+        tri_layer[index] = tri_layer_cur;
+    }
 }
 
 /** Треугольник, у которого своя альфа на каждой вершине (градиенты, свет). */
@@ -446,7 +452,10 @@ function pushTriangleGrad(x1, y1, c1, x2, y2, c2, x3, y3, c3) {
     pushVertex(x1, y1, c1);
     pushVertex(x2, y2, c2);
     pushVertex(x3, y3, c3);
-    if (index < MAX_TRIS) tri_blend[index] = tri_blend_cur;
+    if (index < MAX_TRIS) {
+        tri_blend[index] = tri_blend_cur;
+        tri_layer[index] = tri_layer_cur;
+    }
 }
 
 /**
@@ -511,17 +520,26 @@ function pushGlow(cx, cy, radius, color, opts) {
 }
 
 /**
- * Отдаёт треугольники в C участками с одинаковым режимом смешивания —
- * так же, как submitSprites для спрайтов.
+ * Отдаёт треугольники в C участками с одинаковым режимом смешивания и слоем.
+ * Слой 1 — свет lightmap: он уходит своим вызовом и рисуется не в сцену, а в
+ * текстуру света.
  */
 function submitTriangles() {
     const total = Math.floor(tri_count / 3);
+    const light_ok = typeof engine.submitLightTriangles === 'function';
     let i = 0;
     while (i < total) {
         const b = tri_blend[i];
+        const layer = tri_layer[i];
         let j = i + 1;
-        while (j < total && tri_blend[j] === b) j++;
-        engine.submitTriangles(tri.subarray(i * 18, j * 18), (j - i) * 3, BLEND_NAMES[b]);
+        while (j < total && tri_blend[j] === b && tri_layer[j] === layer) j++;
+        const part = tri.subarray(i * 18, j * 18);
+        const n = (j - i) * 3;
+        if (layer && light_ok) {
+            engine.submitLightTriangles(part, n, BLEND_NAMES[b]);
+        } else {
+            engine.submitTriangles(part, n, BLEND_NAMES[b]);
+        }
         i = j;
     }
 }
@@ -596,6 +614,10 @@ const deferred_lights = [];
 let fog_params = null;
 /** Экранная темнота: $.gfx.light.ambient({...}), null — выключена. */
 let ambient_params = null;
+/** Lightmap: свет копится в отдельной текстуре и накладывается одним проходом. */
+let lightmap_on = false;
+let lightmap_intensity = 1;
+let lightmap_soft = 1;
 
 // --- Кэш границ теней и индекс препятствий ----------------------------------
 // Раньше каждый свет каждый кадр перебирал ВЕСЬ реестр препятствий, хотя
@@ -1115,6 +1137,12 @@ function drawLightNode(node, t, cam) {
     const power = node.alpha * Math.max(0, Math.min(2, node.intensity)) * flickerFactor(node);
     if (power <= 0.001) return;
 
+    // С включённым lightmap свет уходит в свой слой: C копит его в текстуре
+    // света и накладывает одним проходом, поэтому порядок света перестаёт
+    // зависеть от порядка сцены.
+    const prev_layer = tri_layer_cur;
+    if (lightmap_on) tri_layer_cur = 1;
+
     const zoom = cam.zoom;
     const radius_world = Math.max(0.5, node.radius);
     const radius = Math.max(2, radius_world * zoom);
@@ -1138,6 +1166,7 @@ function drawLightNode(node, t, cam) {
             alphaAt: (k) => power * curve(k),
         });
         tri_blend_cur = prev_blend;
+        tri_layer_cur = prev_layer;
         return;
     }
 
@@ -1171,6 +1200,7 @@ function drawLightNode(node, t, cam) {
         edge: has_cone ? (a) => coneAlpha(a, a0, a1, cone_soft) : null,
     });
     tri_blend_cur = prev_blend;
+    tri_layer_cur = prev_layer;
 }
 
 /** Площадной свет: несколько точек вдоль площадки, у каждой свой контур тени. */
@@ -1178,6 +1208,10 @@ function drawLightAreaNode(node, t, cam) {
     const attrs = node.attrs || {};
     const power = node.alpha * Math.max(0, Math.min(2, node.intensity)) * flickerFactor(node);
     if (power <= 0.001) return;
+
+    // Как и у <light>: с включённым lightmap свет уходит в свой слой.
+    const prev_layer = tri_layer_cur;
+    if (lightmap_on) tri_layer_cur = 1;
 
     const zoom = cam.zoom;
     const radius_world = Math.max(0.5, node.radius);
@@ -1219,6 +1253,7 @@ function drawLightAreaNode(node, t, cam) {
         });
     }
     tri_blend_cur = prev_blend;
+    tri_layer_cur = prev_layer;
 
     // Сам источник: полоса по площади — видно, откуда идёт свет.
     if (attrs.core !== false) {
@@ -1360,6 +1395,34 @@ const light_api = {
     debugOn() { return light_debug; },
     /** Темнота поверх кадра: ambient({ level, color }), ambient.off(). */
     ambient,
+    /**
+     * Световая карта: { on, intensity, soft }. Свет копится в отдельной
+     * текстуре половинного разрешения и накладывается на сцену одним проходом,
+     * поэтому порядок света перестаёт зависеть от порядка сцены, а половинное
+     * разрешение с размытием даёт мягкую кромку тени.
+     */
+    map(opts) {
+        if (opts === undefined) {
+            return { on: lightmap_on, intensity: lightmap_intensity, soft: lightmap_soft };
+        }
+        if (opts === null || opts.on === false) {
+            lightmap_on = false;
+        } else {
+            lightmap_on = opts.on === undefined ? true : opts.on !== false;
+            if (opts.intensity !== undefined) {
+                lightmap_intensity = Math.max(0, Number(opts.intensity) || 0);
+            }
+            if (opts.soft !== undefined) {
+                lightmap_soft = Math.max(0, Number(opts.soft) || 0);
+            }
+        }
+        if (typeof engine.lightMap === 'function') {
+            engine.lightMap(lightmap_on, lightmap_intensity, lightmap_soft);
+        }
+        return light_api;
+    },
+    /** Доступна ли световая карта в этой сборке (наличие биндинга в C). */
+    mapSupported() { return typeof engine.lightMap === 'function'; },
     /** Счётчики света за кадр: посчитано границ, взято из кэша, отрезков в радиус. */
     stats() {
         return {
@@ -1945,6 +2008,11 @@ export function installGfx($) {
             // Зерну нужно текущее время, поэтому параметры поста уходят в
             // движок каждый кадр, даже если игра их не меняла.
             pushPost();
+            // Режим световой карты синхронизируем каждый кадр: по нему C решает,
+            // рисовать свет в текстуру или прямо в сцену.
+            if (typeof engine.lightMap === 'function') {
+                engine.lightMap(lightmap_on, lightmap_intensity, lightmap_soft);
+            }
             state.stats = { sprites: 0, triangles: 0, texts: 0, nodes: 0 };
             count = 0;
             tri_count = 0;

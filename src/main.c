@@ -272,6 +272,14 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
         r2d_debug_ui_prepare(fc->debug, cmd);
 #endif
 
+        // Lightmap: свет копится в отдельной текстуре и накладывается на сцену
+        // одним проходом. Считается до сцены — он от неё не зависит, а читает
+        // его композит в конце мирового прохода. Вложить проходы нельзя,
+        // поэтому это отдельный проход здесь.
+        if (r2d_render_lightmap_enabled(fc->renderer)) {
+            r2d_render_draw_lights(fc->renderer, cmd);
+        }
+
         // Пост-обработка: если включена, сцена идёт в offscreen-текстуру, а на
         // экран её накладывает отдельный полноэкранный проход.
         // Render target игры важнее поста: если кадр связан с текстурой игры,
@@ -297,6 +305,9 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
             // С постом в offscreen уходит только мир: HUD метится JS-стороной
             // (engine.markUI) и рисуется в отдельном проходе поверх обработки.
             r2d_render_draw_world(fc->renderer, cmd, pass);
+            // Композит световой карты: после мира и тумана, но до интерфейса,
+            // чтобы HUD не засвечивался светом.
+            r2d_render_light_composite(fc->renderer, cmd, pass);
             if (!scene) {
                 r2d_render_draw_ui(fc->renderer, cmd, pass);
 #ifdef R2D_ENABLE_IMGUI

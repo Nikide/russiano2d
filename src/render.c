@@ -428,6 +428,12 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
     r->tri_vertex_count = 0;
     r->tri_batch_count  = 0;
     r->tri_index_start  = 0;
+    r->light_vertex_count = 0;
+    r->light_batch_count  = 0;
+    r->light_index_start  = 0;
+    // Свет этого кадра ещё не ушёл в текстуру: если lightmap выключится или
+    // кадр окажется в чужом render target, свет дорисует проход сцены.
+    r->lightmap_used      = false;
     r->batch_blend      = R2D_BLEND_ALPHA;
     r->batch_fx         = 0;
     r->fx_count         = 0;
@@ -517,26 +523,26 @@ void r2d_batch_rect(R2DRenderer *r, float x, float y, float w, float h, uint32_t
     r2d_batch_add(r, r->white_sprite, x, y, w, h, 0.0f, color);
 }
 
-void r2d_batch_triangles_blend(R2DRenderer *r, const float *verts, int vertex_count, int blend)
+// Раскладка плоских треугольников (stride 6: x, y, r, g, b, a) в список вершин
+// вместе с записью диапазона-пакета. Общая для сцены и для света lightmap:
+// формат вершин и проекция у них одинаковые, различаются только списки.
+static void r2d__pack_triangles(R2DRenderer *r, const float *verts, int vertex_count,
+                                int blend, int fallback_blend,
+                                R2DVertex **vertices, int *count, int *cap,
+                                R2DTriBatch **batches, int *batch_count, int *batch_cap)
 {
     if (!verts || vertex_count <= 0) return;
     if (vertex_count % 3 != 0) {
-        R2D_ERROR("r2d_batch_triangles: vertex_count=%d не кратен 3", vertex_count);
+        R2D_ERROR("треугольники: vertex_count=%d не кратен 3", vertex_count);
         return;
     }
-    if (!r2d__grow((void **)&r->tri_vertices, &r->tri_cap,
-                    r->tri_vertex_count + vertex_count, sizeof(R2DVertex))) {
-        return;
-    }
-    if (!r2d__grow((void **)&r->tri_batches, &r->tri_batch_cap,
-                    r->tri_batch_count + 1, sizeof(R2DTriBatch))) {
-        return;
-    }
-    if (blend < 0 || blend >= R2D_BLEND_COUNT) blend = R2D_BLEND_ALPHA;
+    if (!r2d__grow((void **)vertices, cap, *count + vertex_count, sizeof(R2DVertex))) return;
+    if (!r2d__grow((void **)batches, batch_cap, *batch_count + 1, sizeof(R2DTriBatch))) return;
+    if (blend < 0 || blend >= R2D_BLEND_COUNT) blend = fallback_blend;
 
     // Запоминаем диапазон ДО раскладки: рисоваться он будет своим конвейером.
-    R2DTriBatch *batch = &r->tri_batches[r->tri_batch_count++];
-    batch->vertex_offset = r->tri_vertex_count;
+    R2DTriBatch *batch = &(*batches)[(*batch_count)++];
+    batch->vertex_offset = *count;
     batch->vertex_count  = vertex_count;
     batch->blend         = (uint8_t)blend;
 
@@ -545,15 +551,12 @@ void r2d_batch_triangles_blend(R2DRenderer *r, const float *verts, int vertex_co
     const float inv_w = 2.0f / (float)r->screen_w;
     const float inv_h = 2.0f / (float)r->screen_h;
 
-    R2DVertex *dst = &r->tri_vertices[r->tri_vertex_count];
+    R2DVertex *dst = &(*vertices)[*count];
     for (int i = 0; i < vertex_count; ++i) {
         const float *v = verts + (size_t)i * 6;
-        const float px = v[0];
-        const float py = v[1];
-
-        dst[i].x = px * inv_w - 1.0f;
-        dst[i].y = 1.0f - py * inv_h;   // экранный Y направлен вниз
-        dst[i].u = 0.5f;                // всё равно рисуем белой текстурой
+        dst[i].x = v[0] * inv_w - 1.0f;
+        dst[i].y = 1.0f - v[1] * inv_h;   // экранный Y направлен вниз
+        dst[i].u = 0.5f;                  // всё равно рисуем белой текстурой
         dst[i].v = 0.5f;
         dst[i].r = r2d__color_f32(v[2]);
         dst[i].g = r2d__color_f32(v[3]);
@@ -561,7 +564,29 @@ void r2d_batch_triangles_blend(R2DRenderer *r, const float *verts, int vertex_co
         dst[i].a = r2d__color_f32(v[5]);
     }
 
-    r->tri_vertex_count += vertex_count;
+    *count += vertex_count;
+}
+
+void r2d_batch_triangles_blend(R2DRenderer *r, const float *verts, int vertex_count, int blend)
+{
+    r2d__pack_triangles(r, verts, vertex_count, blend, R2D_BLEND_ALPHA,
+                        &r->tri_vertices, &r->tri_vertex_count, &r->tri_cap,
+                        &r->tri_batches, &r->tri_batch_count, &r->tri_batch_cap);
+}
+
+// Свет lightmap. Тот же формат, но свой список: рисуется он не в сцену, а в
+// текстуру света. Смешивание по умолчанию аддитивное — свет складывается.
+void r2d_batch_light_triangles_blend(R2DRenderer *r, const float *verts,
+                                     int vertex_count, int blend)
+{
+    r2d__pack_triangles(r, verts, vertex_count, blend, R2D_BLEND_ADD,
+                        &r->light_vertices, &r->light_vertex_count, &r->light_vertex_cap,
+                        &r->light_batches, &r->light_batch_count, &r->light_batch_cap);
+}
+
+void r2d_batch_light_triangles(R2DRenderer *r, const float *verts, int vertex_count)
+{
+    r2d_batch_light_triangles_blend(r, verts, vertex_count, R2D_BLEND_ADD);
 }
 
 void r2d_batch_triangles(R2DRenderer *r, const float *verts, int vertex_count)
@@ -878,7 +903,7 @@ void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
 {
     // Треугольники могут быть и без спрайтов: тогда r->index_count == 0,
     // но буферы всё равно должны быть созданы и залиты.
-    if (r->index_count == 0 && r->tri_vertex_count == 0) return;
+    if (r->index_count == 0 && r->tri_vertex_count == 0 && r->light_vertex_count == 0) return;
 
     // Дописываем треугольники в конец общего вершинного/индексного буфера.
     // tri_vertex_count обнуляем после раскладки, чтобы повторный upload в том
@@ -903,6 +928,27 @@ void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
         r->vertex_count    += r->tri_vertex_count;
         r->index_count     += r->tri_vertex_count;
         r->tri_vertex_count = 0;
+    }
+
+    // Свет идёт в тот же вершинный/индексный буфер, но своим диапазоном: его
+    // рисует отдельный проход в текстуру света, а не проход сцены.
+    if (r->light_vertex_count > 0) {
+        if (!r2d__grow((void **)&r->vertices, &r->vertex_cap,
+                        r->vertex_count + r->light_vertex_count, sizeof(R2DVertex))) return;
+        if (!r2d__grow((void **)&r->indices, &r->index_cap,
+                        r->index_count + r->light_vertex_count, sizeof(uint32_t))) return;
+
+        const int base = r->vertex_count;
+        SDL_memcpy(&r->vertices[base], r->light_vertices,
+                   (size_t)r->light_vertex_count * sizeof(R2DVertex));
+        for (int i = 0; i < r->light_vertex_count; ++i) {
+            r->indices[r->index_count + i] = (uint32_t)(base + i);
+        }
+
+        r->light_index_start  = r->index_count;
+        r->vertex_count      += r->light_vertex_count;
+        r->index_count       += r->light_vertex_count;
+        r->light_vertex_count = 0;
     }
 
     if (r->index_count == 0) return;
@@ -1058,10 +1104,39 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
     }
 }
 
+// Рисует пакеты треугольников в текущий проход: у каждого пакета свой конвейер
+// (режим смешивания), текстура всегда белая, потому что цвет приходит с вершин.
+// index_start — смещение диапазона в общем индексном буфере: у сцены и у света
+// lightmap диапазоны разные, а буфер один.
+static void r2d__draw_tri_batches(R2DRenderer *r, SDL_GPURenderPass *pass,
+                                  const R2DTriBatch *batches, int count,
+                                  int index_start, int *bound_blend)
+{
+    for (int b = 0; b < count; ++b) {
+        const R2DTriBatch *tb = &batches[b];
+        if (tb->vertex_count <= 0) continue;
+
+        if ((int)tb->blend != *bound_blend) {
+            r2d__bind_pipeline(r, pass, tb->blend);
+            *bound_blend = (int)tb->blend;
+        }
+
+        SDL_GPUTextureSamplerBinding tex_binding;
+        SDL_zero(tex_binding);
+        tex_binding.texture = r->textures[r->white_texture].handle;
+        tex_binding.sampler = r->sampler;
+        SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+
+        SDL_DrawGPUIndexedPrimitives(pass, (Uint32)tb->vertex_count, 1,
+                                     (Uint32)(index_start + tb->vertex_offset), 0, 0);
+        r->stat_draws++;
+    }
+}
+
 void r2d_render_draw_world(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
                            SDL_GPURenderPass *pass)
 {
-    if (r->cmd_count == 0 && r->tri_batch_count == 0) return;
+    if (r->cmd_count == 0 && r->tri_batch_count == 0 && r->light_batch_count == 0) return;
 
     // Интерфейс помечен JS-стороной; если метки нет — все спрайты считаются
     // миром (старое поведение, HUD тогда тоже под пост-обработкой).
@@ -1074,24 +1149,15 @@ void r2d_render_draw_world(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
 
     // Треугольники рисуем ПОСЛЕ всех спрайтов, белой текстурой, каждый свой
     // вызов со своим конвейером. Это осознанно: свет накладывается поверх сцены.
-    for (int b = 0; b < r->tri_batch_count; ++b) {
-        const R2DTriBatch *tb = &r->tri_batches[b];
-        if (tb->vertex_count <= 0) continue;
+    r2d__draw_tri_batches(r, pass, r->tri_batches, r->tri_batch_count,
+                          r->tri_index_start, &bound_blend);
 
-        if ((int)tb->blend != bound_blend) {
-            r2d__bind_pipeline(r, pass, tb->blend);
-            bound_blend = (int)tb->blend;
-        }
-
-        SDL_GPUTextureSamplerBinding tex_binding;
-        SDL_zero(tex_binding);
-        tex_binding.texture = r->textures[r->white_texture].handle;
-        tex_binding.sampler = r->sampler;
-        SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
-
-        SDL_DrawGPUIndexedPrimitives(pass, (Uint32)tb->vertex_count, 1,
-                                     (Uint32)(r->tri_index_start + tb->vertex_offset), 0, 0);
-        r->stat_draws++;
+    // Свет, который не ушёл в lightmap (он выключен, идёт чужой render target
+    // или не удалось создать текстуру), рисуем прямо в сцену — как до появления
+    // lightmap. Иначе свет просто исчез бы.
+    if (r->light_batch_count > 0 && !r->lightmap_used) {
+        r2d__draw_tri_batches(r, pass, r->light_batches, r->light_batch_count,
+                              r->light_index_start, &bound_blend);
     }
 }
 
@@ -1160,8 +1226,11 @@ static SDL_GPUGraphicsPipeline *r2d__create_post_pipeline(R2DRenderer *r)
 
 // Полноэкранный конвейер для проходов свечения: тот же вершинный шейдер, что у
 // пост-обработки, один сэмплер и один блок юниформов во фрагментной стадии.
-static SDL_GPUGraphicsPipeline *r2d__create_fullscreen_pipeline(R2DRenderer *r,
-                                                                const R2DShaderBlob *frag)
+// mode — режим смешивания (свечение и размытие рисуют без смешивания, композит
+// lightmap — аддитивно).
+static SDL_GPUGraphicsPipeline *r2d__create_fullscreen_pipeline_blend(R2DRenderer *r,
+                                                                      const R2DShaderBlob *frag,
+                                                                      R2DBlendMode mode)
 {
     SDL_GPUShader *vs = r2d__make_shader(r->device, &r2d_shader_post_vert,
                                           SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
@@ -1176,7 +1245,7 @@ static SDL_GPUGraphicsPipeline *r2d__create_fullscreen_pipeline(R2DRenderer *r,
     SDL_GPUColorTargetDescription target;
     SDL_zero(target);
     target.format = SDL_GetGPUSwapchainTextureFormat(r->device, r->window);
-    target.blend_state.enable_blend = false;
+    r2d__blend_state(&target.blend_state, mode);
 
     SDL_GPUGraphicsPipelineCreateInfo pipe;
     SDL_zero(pipe);
@@ -1196,6 +1265,13 @@ static SDL_GPUGraphicsPipeline *r2d__create_fullscreen_pipeline(R2DRenderer *r,
     SDL_ReleaseGPUShader(r->device, vs);
     SDL_ReleaseGPUShader(r->device, fs);
     return result;
+}
+
+// Прежнее имя: полноэкранные проходы свечения рисуют без смешивания.
+static SDL_GPUGraphicsPipeline *r2d__create_fullscreen_pipeline(R2DRenderer *r,
+                                                                const R2DShaderBlob *frag)
+{
+    return r2d__create_fullscreen_pipeline_blend(r, frag, R2D_BLEND_NONE);
 }
 
 bool r2d_render_post_enabled(const R2DRenderer *r)
@@ -1579,6 +1655,163 @@ bool r2d_render_bloom(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Lightmap: свет в отдельную текстуру
+//
+// Свет — аддитивные треугольники. Если рисовать их прямо в сцену, порядок
+// света зависит от порядка сцены (отсюда и .punch() как костыль). Здесь свет
+// копится в текстуре половинного разрешения, при желании размывается и
+// накладывается на сцену одним полноэкранным проходом: порядок перестаёт
+// иметь значение, а половинное разрешение с линейной фильтрацией само даёт
+// мягкую кромку тени.
+//
+// Проход света идёт ДО прохода сцены (он от неё не зависит), композит — в
+// конце прохода сцены: после мира и тумана, но до интерфейса.
+// ---------------------------------------------------------------------------
+
+bool r2d_render_lightmap_enabled(const R2DRenderer *r)
+{
+    return r && r->lightmap_on;
+}
+
+void r2d_render_lightmap_set(R2DRenderer *r, bool on, float intensity, float soft)
+{
+    if (!r) return;
+    r->lightmap_on = on;
+    if (intensity > 0.0f) r->lightmap_intensity = intensity;
+    r->lightmap_soft = soft >= 0.0f ? soft : 0.0f;
+}
+
+static bool r2d__lightmap_ready(R2DRenderer *r, int w, int h)
+{
+    if (!r || !r->device || w <= 0 || h <= 0) return false;
+
+    if (!r->light_blur_pipeline) {
+        // Размытие световой карты — тот же шейдер, что у свечения: он умеет
+        // любую силу размаха через юниформу.
+        r->light_blur_pipeline =
+            r2d__create_fullscreen_pipeline(r, &r2d_shader_bloom_blur_frag);
+    }
+    if (!r->light_composite_pipeline) {
+        r->light_composite_pipeline = r2d__create_fullscreen_pipeline_blend(
+            r, &r2d_shader_light_map_frag, R2D_BLEND_ADD);
+    }
+    if (!r->light_blur_pipeline || !r->light_composite_pipeline) return false;
+
+    // Половинное разрешение, но не меньше 8 пикселей: на крошечной цели свет
+    // превратился бы в один тексель.
+    const int lw = w / 2 > 8 ? w / 2 : 8;
+    const int lh = h / 2 > 8 ? h / 2 : 8;
+    if (r->light_target && r->light_blur && r->light_w == lw && r->light_h == lh) return true;
+
+    if (r->light_target) { SDL_ReleaseGPUTexture(r->device, r->light_target); r->light_target = NULL; }
+    if (r->light_blur)   { SDL_ReleaseGPUTexture(r->device, r->light_blur);   r->light_blur = NULL; }
+
+    r->light_target = r2d__create_bloom_texture(r, lw, lh);
+    r->light_blur   = r2d__create_bloom_texture(r, lw, lh);
+    if (!r->light_target || !r->light_blur) {
+        R2D_ERROR("SDL_CreateGPUTexture (lightmap): %s", SDL_GetError());
+        if (r->light_target) { SDL_ReleaseGPUTexture(r->device, r->light_target); r->light_target = NULL; }
+        if (r->light_blur)   { SDL_ReleaseGPUTexture(r->device, r->light_blur);   r->light_blur = NULL; }
+        return false;
+    }
+    r->light_w = lw;
+    r->light_h = lh;
+    return true;
+}
+
+bool r2d_render_draw_lights(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
+{
+    if (!r || !cmd || !r->lightmap_on) return false;
+    if (r->light_batch_count <= 0) return false;
+    // В render target игры формат цели может не совпасть с форматом
+    // полноэкранных конвейеров — тогда свет дорисует проход сцены (см.
+    // r2d_render_draw_world): терять свет нельзя ни при каких условиях.
+    if (r->bound_viewport >= 0) return false;
+    if (!r2d__lightmap_ready(r, r->screen_w, r->screen_h)) return false;
+
+    // 1. Накопление: чёрный фон, дальше свет складывается аддитивно.
+    {
+        SDL_GPUColorTargetInfo target;
+        SDL_zero(target);
+        target.texture = r->light_target;
+        target.clear_color = (SDL_FColor){ 0, 0, 0, 1 };
+        target.load_op  = SDL_GPU_LOADOP_CLEAR;
+        target.store_op = SDL_GPU_STOREOP_STORE;
+
+        SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
+        if (!pass) return false;
+
+        int bound_blend = -1;
+        r2d__draw_tri_batches(r, pass, r->light_batches, r->light_batch_count,
+                              r->light_index_start, &bound_blend);
+        SDL_EndGPURenderPass(pass);
+        r->stat_passes++;
+    }
+
+    // 2. Размытие: горизонталь (target → blur), затем вертикаль (blur → target).
+    //    Половинное разрешение уже даёт мягкость; размытие добавляет полутень
+    //    на кромке тени, там где источнику положено быть не точкой.
+    if (r->lightmap_soft > 0.01f) {
+        const struct { float dir_x, dir_y, strength, _pad; } dirs[2] = {
+            { 1.0f / (float)r->light_w, 0.0f, r->lightmap_soft, 0.0f },
+            { 0.0f, 1.0f / (float)r->light_h, r->lightmap_soft, 0.0f },
+        };
+        SDL_GPUTexture *src[2] = { r->light_target, r->light_blur };
+        SDL_GPUTexture *dst[2] = { r->light_blur, r->light_target };
+
+        for (int i = 0; i < 2; ++i) {
+            SDL_GPUColorTargetInfo target;
+            SDL_zero(target);
+            target.texture = dst[i];
+            target.clear_color = (SDL_FColor){ 0, 0, 0, 1 };
+            target.load_op  = SDL_GPU_LOADOP_DONT_CARE;
+            target.store_op = SDL_GPU_STOREOP_STORE;
+
+            SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
+            if (!pass) break;
+
+            SDL_BindGPUGraphicsPipeline(pass, r->light_blur_pipeline);
+            SDL_GPUTextureSamplerBinding b;
+            SDL_zero(b);
+            b.texture = src[i];
+            b.sampler = r->linear_sampler ? r->linear_sampler : r->sampler;
+            SDL_BindGPUFragmentSamplers(pass, 0, &b, 1);
+            SDL_PushGPUFragmentUniformData(cmd, 0, &dirs[i], (Uint32)sizeof dirs[i]);
+            SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+            SDL_EndGPURenderPass(pass);
+            r->stat_draws++;
+            r->stat_passes++;
+        }
+    }
+
+    r->lightmap_used = true;
+    return true;
+}
+
+void r2d_render_light_composite(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
+                                SDL_GPURenderPass *pass)
+{
+    if (!r || !cmd || !pass) return;
+    if (!r->lightmap_on || !r->lightmap_used || !r->light_target) return;
+    if (!r->light_composite_pipeline) return;
+
+    SDL_BindGPUGraphicsPipeline(pass, r->light_composite_pipeline);
+
+    SDL_GPUTextureSamplerBinding b;
+    SDL_zero(b);
+    b.texture = r->light_target;
+    b.sampler = r->linear_sampler ? r->linear_sampler : r->sampler;
+    SDL_BindGPUFragmentSamplers(pass, 0, &b, 1);
+
+    const struct { float power, _a, _b, _c; } params = {
+        r->lightmap_intensity, 0.0f, 0.0f, 0.0f
+    };
+    SDL_PushGPUFragmentUniformData(cmd, 0, &params, (Uint32)sizeof params);
+    SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+    r->stat_draws++;
+}
+
 bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
 {
     SDL_zero(*r);
@@ -1590,6 +1823,9 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     r->clear_g = 0.10f;
     r->clear_b = 0.13f;
     r->clear_a = 1.0f;
+    // Свет в lightmap по умолчанию не ослабляется: карта включается явно, и
+    // при включении свет должен выглядеть как раньше.
+    r->lightmap_intensity = 1.0f;
 
     SDL_GPUShader *vs = r2d__make_shader(device, &r2d_shader_sprite_vert,
                                           SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
@@ -1787,10 +2023,19 @@ void r2d_render_shutdown(R2DRenderer *r)
     if (r->bloom_b) SDL_ReleaseGPUTexture(r->device, r->bloom_b);
     if (r->scene_target)  SDL_ReleaseGPUTexture(r->device, r->scene_target);
 
+    if (r->light_blur_pipeline)
+        SDL_ReleaseGPUGraphicsPipeline(r->device, r->light_blur_pipeline);
+    if (r->light_composite_pipeline)
+        SDL_ReleaseGPUGraphicsPipeline(r->device, r->light_composite_pipeline);
+    if (r->light_target) SDL_ReleaseGPUTexture(r->device, r->light_target);
+    if (r->light_blur)   SDL_ReleaseGPUTexture(r->device, r->light_blur);
+
     SDL_free(r->sprites);
     SDL_free(r->cmds);
     SDL_free(r->tri_vertices);
     SDL_free(r->tri_batches);
+    SDL_free(r->light_vertices);
+    SDL_free(r->light_batches);
     SDL_free(r->vertices);
     SDL_free(r->indices);
     SDL_zero(*r);
@@ -2131,6 +2376,84 @@ static JSValue r2d__js_submit_triangles(JSContext *ctx, JSValueConst this_val,
 }
 
 // ---------------------------------------------------------------------------
+// engine.submitLightTriangles — свет для lightmap
+//
+// Формат тот же, что у submitTriangles (stride 6: x, y, r, g, b, a), но
+// треугольники попадают в отдельный список и рисуются не в сцену, а в текстуру
+// света (r2d_render_draw_lights). Порядок в списке задаёт порядок внутри карты
+// света; на сцену она ложится одним проходом.
+// ---------------------------------------------------------------------------
+
+static JSValue r2d__js_submit_light_triangles(JSContext *ctx, JSValueConst this_val,
+                                              int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    if (!s || !s->renderer) return JS_NewInt32(ctx, 0);
+    if (argc < 1) {
+        JS_ThrowTypeError(ctx, "submitLightTriangles(vertices: Float32Array, count?, blend?)");
+        return JS_EXCEPTION;
+    }
+
+    size_t off = 0, len = 0, bpe = 0;
+    JSValue ab = JS_GetTypedArrayBuffer(ctx, argv[0], &off, &len, &bpe);
+    if (JS_IsException(ab)) return JS_EXCEPTION;
+
+    size_t size = 0;
+    uint8_t *base = JS_GetArrayBuffer(ctx, &size, ab);
+    if (!base) {
+        JS_FreeValue(ctx, ab);
+        JS_ThrowTypeError(ctx, "первый аргумент должен быть Float32Array");
+        return JS_EXCEPTION;
+    }
+
+    const int available = (int)(len / sizeof(float) / 6);
+    int count = argc >= 2 ? r2d__js_arg_int(ctx, argc, argv, 1, available) : available;
+    if (count > available) count = available;
+    if (count < 0) count = 0;
+    count -= count % 3;   // неполный треугольник рисовать нечем
+
+    if (count > 0) {
+        const int blend = r2d__js_blend_arg(ctx, argc, argv, 2);
+        r2d_batch_light_triangles_blend(s->renderer, (const float *)(base + off), count, blend);
+    }
+
+    JS_FreeValue(ctx, ab);
+    return JS_NewInt32(ctx, count);
+}
+
+// ---------------------------------------------------------------------------
+// engine.lightMap(on?, intensity?, soft?) — режим lightmap
+//
+// Без аргументов возвращает текущее состояние (1/0). С аргументами включает или
+// выключает карту света: { on, intensity, soft } уходит в рендерер, который
+// решает, рисовать свет в текстуру или прямо в сцену.
+// ---------------------------------------------------------------------------
+
+static JSValue r2d__js_light_map(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    if (!s || !s->renderer) return JS_NewInt32(ctx, 0);
+
+    if (argc < 1) return JS_NewInt32(ctx, r2d_render_lightmap_enabled(s->renderer) ? 1 : 0);
+
+    const bool on = JS_ToBool(ctx, argv[0]) > 0;
+    float intensity = -1.0f, soft = -1.0f;
+    if (argc >= 2) {
+        double v = 0;
+        if (!JS_ToFloat64(ctx, &v, argv[1]) && v > 0) intensity = (float)v;
+    }
+    if (argc >= 3) {
+        double v = 0;
+        if (!JS_ToFloat64(ctx, &v, argv[2]) && v >= 0) soft = (float)v;
+    }
+
+    r2d_render_lightmap_set(s->renderer, on, intensity, soft);
+    return JS_NewInt32(ctx, on ? 1 : 0);
+}
+
+// ---------------------------------------------------------------------------
 // engine.viewport — render target
 //
 // В этой сборке render target не поддержан осознанно: r2d_render_draw()
@@ -2290,6 +2613,9 @@ void r2d_render_register_js(JSContext *ctx, JSValue engine)
     if (r) {
         r2d__js_set_fn(ctx, engine, "submitSprites",   r2d__js_submit_sprites, 5);
         r2d__js_set_fn(ctx, engine, "submitTriangles", r2d__js_submit_triangles, 3);
+        // Свет для lightmap: свой список, свой проход, тот же формат вершин.
+        r2d__js_set_fn(ctx, engine, "submitLightTriangles", r2d__js_submit_light_triangles, 3);
+        r2d__js_set_fn(ctx, engine, "lightMap",             r2d__js_light_map, 3);
         // Шейдер узла: JS ведёт таблицу эффектов на своей стороне, поэтому
         // запись в таблицу движка — явный вызов с индексом.
         r2d__js_set_fn(ctx, engine, "defineSpriteFx",  r2d__js_define_sprite_fx, 7);
