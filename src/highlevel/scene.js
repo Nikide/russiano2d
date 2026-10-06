@@ -8,6 +8,8 @@
 // ===========================================================================
 
 import { ctx, wrap } from './core.js';
+import { resetAcoustics } from './acoustics.js';
+import { resetFx } from './fx.js';
 
 const scenes = new Map();
 const stack = [];
@@ -181,6 +183,12 @@ function clearWorld(opts) {
     }
     ctx.timers.length = 0;
     ctx.animations.length = 0;
+    // Зоны, слушатель и живые источники принадлежат сцене: без сброса комната
+    // прошлого уровня звучала бы в следующем.
+    resetAcoustics();
+    // Ленты, молнии и поля сил — тоже сцена: иначе эффект смерти остался бы
+    // висеть на экране следующего уровня.
+    resetFx();
     if (ctx.time) { ctx.time.cancelAll(); ctx.time.resume(); }
     if (ctx.world) {
         ctx.world.clearBounds();

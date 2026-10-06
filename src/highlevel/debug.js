@@ -102,8 +102,36 @@ export function installDebug($) {
         },
         watches() { return watches.map((w) => ({ name: w.name, value: evalWatch(w) })); },
 
+        /**
+         * Снимок профайлера движка: время по зонам кадра (JS-логика, сборка
+         * батча, физика, ожидание swapchain, загрузка VB/IB, draw-команды,
+         * интерфейс), среднее и пик за последние 120 кадров.
+         *
+         * ```js
+         * const p = $.debug.profile();
+         * for (const z of p.zones) if (z.ms > 0.5) $.log(`${z.name}: ${z.ms.toFixed(2)} мс`);
+         * ```
+         */
+        profile() {
+            return typeof engine.profile === 'function' ? engine.profile() : null;
+        },
+
+        /** Сбросить накопленную статистику профайлера движка. */
+        profileReset() {
+            if (typeof engine.profileReset === 'function') engine.profileReset();
+        },
+
+        /** Включить/выключить профайлер движка; без аргумента — состояние. */
+        profiling(on) {
+            return typeof engine.profileEnabled === 'function' ? engine.profileEnabled(on) : false;
+        },
+
         /** Профайлер по кадрам: меряет время между start и end. */
         profiler: {
+            /** Текущее время для замеров: монотонные мс от движка. */
+            now() {
+                return typeof engine.now === 'function' ? engine.now() : engine.time * 1000;
+            },
             start(name) {
                 // Раньше запись создавалась заново на каждом start(), а start()
                 // зовут каждый кадр — total/calls/max обнулялись, и report()
@@ -111,18 +139,26 @@ export function installDebug($) {
                 // а сбрасывает её только reset().
                 const existing = timers.get(name);
                 if (existing) {
-                    existing.at = engine.time;
+                    existing.at = debug.profiler.now();
                     return;
                 }
-                timers.set(name, { at: engine.time, total: 0, calls: 0, max: 0 });
+                timers.set(name, { at: debug.profiler.now(), total: 0, calls: 0, max: 0 });
             },
             end(name) {
                 const t = timers.get(name);
                 if (!t) return;
-                const dt = (engine.time - t.at) * 1000;
+                const dt = debug.profiler.now() - t.at;
                 t.total += dt;
                 t.calls++;
                 t.max = Math.max(t.max, dt);
+            },
+            /** Записать готовое измерение (когда время считает сам вызов). */
+            record(name, ms) {
+                const t = timers.get(name) || { at: engine.time, total: 0, calls: 0, max: 0 };
+                timers.set(name, t);
+                t.total += ms;
+                t.calls++;
+                t.max = Math.max(t.max, ms);
             },
             report() {
                 const out = {};

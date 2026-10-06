@@ -305,8 +305,12 @@ static void free_cursors(void)
     }
 }
 
+// Последнее окно: курсором управляют из скриптов, а R2DApp* им не передать.
+static R2DApp *g_cursor_app = NULL;
+
 void r2d_app_set_cursor(R2DApp *app, const char *kind)
 {
+    if (app) g_cursor_app = app;
     if (!app || !app->window || !kind) return;
 
     if (SDL_strcmp(kind, "hidden") == 0) {
@@ -700,4 +704,43 @@ const char *r2d_app_text_input(const R2DApp *app)
 {
     if (!app) return "";
     return app->text_input;
+}
+
+// Обёртки для скриптов. Указателя на приложение может не быть (скрипты
+// вызывают до/вне кадра), поэтому форму ставим сами, а не через R2DApp.
+static char g_cursor_kind[32] = "arrow";
+
+void r2d_app_cursor_set(const char *kind)
+{
+    if (!kind || !*kind) kind = "arrow";
+    if (g_cursor_app) {
+        r2d_app_set_cursor(g_cursor_app, kind);
+        SDL_snprintf(g_cursor_kind, sizeof g_cursor_kind, "%s", kind);
+        return;
+    }
+
+    if (SDL_strcmp(kind, "hidden") == 0) { SDL_HideCursor(); }
+    else {
+        SDL_ShowCursor();
+        SDL_SystemCursor shape = SDL_SYSTEM_CURSOR_DEFAULT;
+        if (SDL_strcmp(kind, "crosshair") == 0) shape = SDL_SYSTEM_CURSOR_CROSSHAIR;
+        else if (SDL_strcmp(kind, "hand") == 0) shape = SDL_SYSTEM_CURSOR_POINTER;
+        else if (SDL_strcmp(kind, "wait") == 0) shape = SDL_SYSTEM_CURSOR_WAIT;
+        else if (SDL_strcmp(kind, "text") == 0) shape = SDL_SYSTEM_CURSOR_TEXT;
+        if (!g_cursors[shape]) g_cursors[shape] = SDL_CreateSystemCursor(shape);
+        if (g_cursors[shape]) SDL_SetCursor(g_cursors[shape]);
+    }
+    SDL_snprintf(g_cursor_kind, sizeof g_cursor_kind, "%s", kind);
+}
+
+void r2d_app_cursor_visible(bool on)
+{
+    if (on) SDL_ShowCursor();
+    else SDL_HideCursor();
+}
+
+const char *r2d_app_cursor_name(void)
+{
+    if (g_cursor_app && g_cursor_app->cursor[0]) return g_cursor_app->cursor;
+    return g_cursor_kind;
 }

@@ -8,6 +8,8 @@
 
 #include "script.h"
 
+#include "profile.h"
+
 #include "icons.h"
 #include "js_embed.h"
 
@@ -310,6 +312,86 @@ static JSValue r2d__js_log(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     }
     R2D_LOG("[js] %s", line);
     return JS_UNDEFINED;
+}
+
+// engine.now() — монотонное время в миллисекундах высокого разрешения.
+// Нужно профайлеру и любым замерам внутри кадра: engine.time обновляется
+// раз в кадр и для этого не годится.
+static JSValue r2d__js_now(JSContext *ctx, JSValueConst this_val,
+                           int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    static Uint64 freq = 0;
+    if (!freq) freq = SDL_GetPerformanceFrequency();
+    const double ms = (double)SDL_GetPerformanceCounter() * 1000.0 / (double)freq;
+    return JS_NewFloat64(ctx, ms);
+}
+
+// engine.profile() — снимок профайлера: время по зонам кадра, среднее и пик.
+// engine.setCursor(name) — системная форма курсора.
+static JSValue r2d__js_set_cursor(JSContext *ctx, JSValueConst this_val,
+                                  int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc >= 1 && !JS_IsUndefined(argv[0]) && !JS_IsNull(argv[0])) {
+        const char *name = JS_ToCString(ctx, argv[0]);
+        if (name) { r2d_app_cursor_set(name); JS_FreeCString(ctx, name); }
+    }
+    return JS_NewString(ctx, r2d_app_cursor_name());
+}
+
+// engine.cursorVisible(flag) — показать/скрыть курсор.
+static JSValue r2d__js_cursor_visible(JSContext *ctx, JSValueConst this_val,
+                                      int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    bool visible = SDL_ShowCursor() >= 0;
+    if (argc >= 1) {
+        visible = JS_ToBool(ctx, argv[0]) != 0;
+        r2d_app_cursor_visible(visible);
+    }
+    return JS_NewBool(ctx, visible);
+}
+
+static JSValue r2d__js_profile(JSContext *ctx, JSValueConst this_val,
+                               int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "frame_ms", JS_NewFloat64(ctx, r2d_prof_real_ms()));
+    JS_SetPropertyStr(ctx, o, "zones_ms", JS_NewFloat64(ctx, r2d_prof_frame_ms()));
+    JS_SetPropertyStr(ctx, o, "unaccounted_ms", JS_NewFloat64(ctx, r2d_prof_unaccounted_ms()));
+    JS_SetPropertyStr(ctx, o, "frames", JS_NewInt32(ctx, r2d_prof_frames()));
+    JS_SetPropertyStr(ctx, o, "enabled", JS_NewBool(ctx, r2d_prof_enabled()));
+
+    R2DProfileRow rows[R2D_PROF_COUNT];
+    const int count = r2d_prof_rows(rows, R2D_PROF_COUNT);
+    JSValue zones = JS_NewArray(ctx);
+    for (int i = 0; i < count; i++) {
+        JSValue row = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, row, "name", JS_NewString(ctx, rows[i].name));
+        JS_SetPropertyStr(ctx, row, "ms", JS_NewFloat64(ctx, rows[i].ms));
+        JS_SetPropertyStr(ctx, row, "peak", JS_NewFloat64(ctx, rows[i].peak));
+        JS_SetPropertyUint32(ctx, zones, (uint32_t)i, row);
+    }
+    JS_SetPropertyStr(ctx, o, "zones", zones);
+    return o;
+}
+
+static JSValue r2d__js_profile_reset(JSContext *ctx, JSValueConst this_val,
+                                     int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    r2d_prof_reset();
+    return JS_UNDEFINED;
+}
+
+static JSValue r2d__js_profile_enabled(JSContext *ctx, JSValueConst this_val,
+                                       int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc >= 1) r2d_prof_set_enabled(JS_ToBool(ctx, argv[0]) != 0);
+    return JS_NewBool(ctx, r2d_prof_enabled());
 }
 
 static JSValue r2d__js_rgba(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -1302,6 +1384,150 @@ static JSValue r2d__js_audio_effect_name(JSContext *ctx, JSValueConst this_val, 
 {
     R2D_UNUSED(this_val);
     return JS_NewString(ctx, r2d_audio_effect_name(r2d__arg_int(ctx, argc, argv, 0, 0)));
+}
+
+// --- Скорость (pitch) -------------------------------------------------------
+// MIX_SetTrackFrequencyRatio: 1.0 — как записано, 2.0 — вдвое быстрее и выше.
+static JSValue r2d__js_audio_set_channel_pitch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (s && s->audio) {
+        r2d_audio_set_channel_pitch(s->audio, r2d__arg_int(ctx, argc, argv, 0, -1),
+                                    (float)r2d__arg_num(ctx, argc, argv, 1, 1));
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue r2d__js_audio_channel_pitch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const float v = (s && s->audio)
+                        ? r2d_audio_get_channel_pitch(s->audio, r2d__arg_int(ctx, argc, argv, 0, -1))
+                        : 1.0f;
+    return JS_NewFloat64(ctx, (double)v);
+}
+
+static JSValue r2d__js_audio_set_music_pitch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (s && s->audio) {
+        r2d_audio_set_music_pitch(s->audio, (float)r2d__arg_num(ctx, argc, argv, 0, 1));
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue r2d__js_audio_music_pitch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewFloat64(ctx, s && s->audio ? (double)r2d_audio_get_music_pitch(s->audio) : 1.0);
+}
+
+// --- Реверберация помещения -------------------------------------------------
+// engine.audio.setRoom(wet, room, damp, width) — одна комната на весь микс.
+static JSValue r2d__js_audio_set_room(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    const bool on = r2d_audio_set_room(s->audio,
+                                       (float)r2d__arg_num(ctx, argc, argv, 0, 0),
+                                       (float)r2d__arg_num(ctx, argc, argv, 1, 0.5),
+                                       (float)r2d__arg_num(ctx, argc, argv, 2, 0.5),
+                                       (float)r2d__arg_num(ctx, argc, argv, 3, 1.0));
+    return JS_NewBool(ctx, on);
+}
+
+static JSValue r2d__js_audio_get_room(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    float wet = 0.0f, room = 0.0f, damp = 0.0f, width = 0.0f;
+    if (s && s->audio) r2d_audio_get_room(s->audio, &wet, &room, &damp, &width);
+
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "wet", JS_NewFloat64(ctx, (double)wet));
+    JS_SetPropertyStr(ctx, o, "room", JS_NewFloat64(ctx, (double)room));
+    JS_SetPropertyStr(ctx, o, "damp", JS_NewFloat64(ctx, (double)damp));
+    JS_SetPropertyStr(ctx, o, "width", JS_NewFloat64(ctx, (double)width));
+    return o;
+}
+
+// --- Шины и 3D --------------------------------------------------------------
+// engine.audio.group(name) — группа микшера (шина): треки одной группы
+// микшируются вместе, эффект шины идёт через MIX_SetGroupPostMixCallback.
+static JSValue r2d__js_audio_group(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const char *name = r2d__arg_str(ctx, argc, argv, 0);
+    int id = -1;
+    if (s && s->audio && name) id = r2d_audio_group(s->audio, name);
+    if (name) JS_FreeCString(ctx, name);
+    return JS_NewInt32(ctx, id);
+}
+
+static JSValue r2d__js_audio_group_count(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewInt32(ctx, s && s->audio ? r2d_audio_group_count(s->audio) : 0);
+}
+
+static JSValue r2d__js_audio_set_channel_group(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    const bool ok = r2d_audio_group_assign(s->audio,
+                                           r2d__arg_int(ctx, argc, argv, 0, -1),
+                                           r2d__arg_int(ctx, argc, argv, 1, -1));
+    return JS_NewBool(ctx, ok);
+}
+
+static JSValue r2d__js_audio_set_group_effect(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    const char *kind = r2d__arg_str(ctx, argc, argv, 1);
+    const bool ok = r2d_audio_set_group_effect(s->audio,
+                                               r2d__arg_int(ctx, argc, argv, 0, -1),
+                                               kind ? kind : "none",
+                                               (float)r2d__arg_num(ctx, argc, argv, 2, 0),
+                                               (float)r2d__arg_num(ctx, argc, argv, 3, 0));
+    if (kind) JS_FreeCString(ctx, kind);
+    return JS_NewBool(ctx, ok);
+}
+
+static JSValue r2d__js_audio_group_effect(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const char *name = (s && s->audio)
+                           ? r2d_audio_group_effect(s->audio, r2d__arg_int(ctx, argc, argv, 0, -1))
+                           : "none";
+    return JS_NewString(ctx, name);
+}
+
+// engine.audio.setChannel3D(channel, x, y, z[, on]) — координаты ОТНОСИТЕЛЬНО
+// слушателя: SDL_mixer держит слушателя в (0,0,0) и не даёт его двигать.
+static JSValue r2d__js_audio_set_channel_3d(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    const bool on = argc > 4 ? JS_ToBool(ctx, argv[4]) == 1 : true;
+    const bool ok = r2d_audio_set_channel_3d(s->audio,
+                                             r2d__arg_int(ctx, argc, argv, 0, -1),
+                                             (float)r2d__arg_num(ctx, argc, argv, 1, 0),
+                                             (float)r2d__arg_num(ctx, argc, argv, 2, 0),
+                                             (float)r2d__arg_num(ctx, argc, argv, 3, 0),
+                                             on);
+    return JS_NewBool(ctx, ok);
 }
 
 // --- Иконки Material Design (встроены в бинарник) ---------------------------
@@ -2362,6 +2588,12 @@ static JSValue r2d__make_engine(JSContext *ctx)
     // Базовое
     r2d__set_fn(ctx, engine, "log", r2d__js_log, 1);
     r2d__set_fn(ctx, engine, "rgba", r2d__js_rgba, 4);
+    r2d__set_fn(ctx, engine, "now", r2d__js_now, 0);
+    r2d__set_fn(ctx, engine, "setCursor", r2d__js_set_cursor, 1);
+    r2d__set_fn(ctx, engine, "cursorVisible", r2d__js_cursor_visible, 1);
+    r2d__set_fn(ctx, engine, "profile", r2d__js_profile, 0);
+    r2d__set_fn(ctx, engine, "profileReset", r2d__js_profile_reset, 0);
+    r2d__set_fn(ctx, engine, "profileEnabled", r2d__js_profile_enabled, 1);
     r2d__set_fn(ctx, engine, "quit", r2d__js_quit, 0);
     r2d__set_fn(ctx, engine, "scancode", r2d__js_scancode, 1);
     r2d__set_fn(ctx, engine, "setUpdate", r2d__js_set_update, 1);
@@ -2466,6 +2698,18 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, audio, "channelEffect", r2d__js_audio_channel_effect, 1);
     r2d__set_fn(ctx, audio, "effectCount", r2d__js_audio_effect_count, 0);
     r2d__set_fn(ctx, audio, "effectName", r2d__js_audio_effect_name, 1);
+    r2d__set_fn(ctx, audio, "setChannelPitch", r2d__js_audio_set_channel_pitch, 2);
+    r2d__set_fn(ctx, audio, "channelPitch", r2d__js_audio_channel_pitch, 1);
+    r2d__set_fn(ctx, audio, "setMusicPitch", r2d__js_audio_set_music_pitch, 1);
+    r2d__set_fn(ctx, audio, "musicPitch", r2d__js_audio_music_pitch, 0);
+    r2d__set_fn(ctx, audio, "setRoom", r2d__js_audio_set_room, 4);
+    r2d__set_fn(ctx, audio, "getRoom", r2d__js_audio_get_room, 0);
+    r2d__set_fn(ctx, audio, "group", r2d__js_audio_group, 1);
+    r2d__set_fn(ctx, audio, "groupCount", r2d__js_audio_group_count, 0);
+    r2d__set_fn(ctx, audio, "setChannelGroup", r2d__js_audio_set_channel_group, 2);
+    r2d__set_fn(ctx, audio, "setGroupEffect", r2d__js_audio_set_group_effect, 4);
+    r2d__set_fn(ctx, audio, "groupEffect", r2d__js_audio_group_effect, 1);
+    r2d__set_fn(ctx, audio, "setChannel3D", r2d__js_audio_set_channel_3d, 5);
     JS_SetPropertyStr(ctx, engine, "audio", audio);
 
     // 2D BSP-дерево: порядок отрисовки без z-буфера на произвольной геометрии.

@@ -12,6 +12,7 @@
 #pragma once
 
 #include "r2d.h"
+#include "audio_reverb.h"
 
 #include <stdbool.h>
 
@@ -21,6 +22,7 @@
 typedef struct MIX_Mixer MIX_Mixer;
 typedef struct MIX_Audio MIX_Audio;
 typedef struct MIX_Track MIX_Track;
+typedef struct MIX_Group MIX_Group;
 
 #define R2D_AUDIO_MAX_SOUNDS 128
 #define R2D_AUDIO_CHANNELS   16
@@ -52,6 +54,19 @@ typedef struct R2DAudioChannelFx {
     int    pos;     // текущий кадр в буфере задержки
 } R2DAudioChannelFx;
 
+// Шина микшера: настоящая группа SDL_mixer. Треки одной шины микшируются
+// вместе, и эффект шины (MIX_SetGroupPostMixCallback) обрабатывает уже
+// готовый микс этой шины — то есть действует и на звуки, запущенные позже.
+// Группы в SDL_mixer 3.2 плоские (без вложенности и без своего гейна), поэтому
+// громкость/mute/solo по-прежнему считает JS, а группа отвечает за DSP.
+#define R2D_AUDIO_MAX_GROUPS 8
+
+typedef struct R2DAudioGroup {
+    MIX_Group *handle;
+    char       name[32];
+    R2DAudioChannelFx fx;   // эффект шины (обрабатывает буфер группы)
+} R2DAudioGroup;
+
 typedef struct R2DAudio {
     MIX_Mixer *mixer;
 
@@ -72,10 +87,26 @@ typedef struct R2DAudio {
     // обратно и пересчитать при смене громкости шины.
     float channel_volume[R2D_AUDIO_CHANNELS];
     float channel_pan[R2D_AUDIO_CHANNELS];
+    // Скорость воспроизведения канала: 1.0 — как записано, 2.0 — вдвое
+    // быстрее и выше (MIX_SetTrackFrequencyRatio). Живёт здесь, чтобы
+    // переживать MIX_SetTrackAudio при повторном запуске звука.
+    float channel_pitch[R2D_AUDIO_CHANNELS];
+    // Канал в 3D-режиме: координаты задаются относительно слушателя (он у
+    // SDL_mixer всегда в нуле), SDL сам считает затухание и панораму.
+    bool  channel_3d[R2D_AUDIO_CHANNELS];
+
+    R2DAudioGroup groups[R2D_AUDIO_MAX_GROUPS];
+    int    group_count;
 
     R2DAudioChannelFx fx[R2D_AUDIO_CHANNELS];
     int    fx_freq;        // частота микшера, нужна для пересчёта мс → кадры
     int    fx_channels;    // 1 или 2, из формата микшера
+
+    // Реверберация помещения: одна на весь микс (MIX_SetPostMixCallback),
+    // как комната — она звучит для всех источников сразу.
+    R2DAudioReverb reverb;
+    bool  reverb_on;
+    float music_pitch;     // скорость воспроизведения музыки
 } R2DAudio;
 
 // Создаёт микшер. base_path не используется напрямую — пути сюда приходят уже
@@ -116,6 +147,34 @@ const char *r2d_audio_channel_effect(const R2DAudio *a, int channel);
 // Список встроенных эффектов — игра показывает его в подсказке.
 int         r2d_audio_effect_count(void);
 const char *r2d_audio_effect_name(int index);
+
+// Скорость воспроизведения канала: 1.0 — как записано, 2.0 — вдвое быстрее и
+// на октаву выше. Это то, чего не хватало для { pitch } в $.sound.play().
+void  r2d_audio_set_channel_pitch(R2DAudio *a, int channel, float ratio);
+float r2d_audio_get_channel_pitch(const R2DAudio *a, int channel);
+void  r2d_audio_set_music_pitch(R2DAudio *a, float ratio);
+float r2d_audio_get_music_pitch(const R2DAudio *a);
+
+// --- Реверберация помещения -------------------------------------------------
+// wet — доля хвоста (0 выключает обработку), room — длина хвоста (размер
+// помещения), damp — демпфирование высоких, width — стерео-ширина.
+bool r2d_audio_set_room(R2DAudio *a, float wet, float room, float damp, float width);
+void r2d_audio_get_room(const R2DAudio *a, float *wet, float *room, float *damp, float *width);
+
+// --- Шины (группы микшера) --------------------------------------------------
+// Группа ищется по имени и создаётся при первом обращении. Возвращает id >= 0
+// либо -1 (нет аудио/мест). group_id = -1 в assign — вернуть трек в группу по
+// умолчанию.
+int  r2d_audio_group(R2DAudio *a, const char *name);
+int  r2d_audio_group_count(const R2DAudio *a);
+bool r2d_audio_group_assign(R2DAudio *a, int channel, int group_id);
+bool r2d_audio_set_group_effect(R2DAudio *a, int group_id, const char *kind, float p1, float p2);
+const char *r2d_audio_group_effect(const R2DAudio *a, int group_id);
+
+// --- 3D-позиция канала ------------------------------------------------------
+// Координаты — относительно слушателя (SDL_mixer держит его в (0,0,0) и не
+// даёт двигать). on = false возвращает трек в обычный стерео-режим.
+bool r2d_audio_set_channel_3d(R2DAudio *a, int channel, float x, float y, float z, bool on);
 
 // --- Музыка -----------------------------------------------------------------
 void r2d_audio_play_music(R2DAudio *a, int id, float volume, bool loop, float fade_ms);

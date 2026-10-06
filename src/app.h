@@ -144,6 +144,9 @@ void        r2d_app_set_vsync(R2DApp *app, bool on);
 bool        r2d_app_vsync(const R2DApp *app);
 
 void        r2d_app_set_cursor(R2DApp *app, const char *kind);
+void        r2d_app_cursor_set(const char *kind);
+void        r2d_app_cursor_visible(bool on);
+const char *r2d_app_cursor_name(void);
 const char *r2d_app_cursor(const R2DApp *app);
 
 // Освобождает всё, что создал r2d_app_init.

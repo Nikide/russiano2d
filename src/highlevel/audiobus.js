@@ -16,15 +16,17 @@
 //   * `effectiveGain()` считает произведение громкостей по цепочке родителей,
 //     а шину `master`, если она есть в переданном наборе, тоже учитывает —
 //     поэтому функция пригодна и для чистых тестов, и для отладки;
-//   * эффектов в SDL_mixer 3.2 три: `none`, `lowpass`, `echo`. Реверба нет —
-//     эмулировать его эхом нельзя, поэтому шина реверба не заводится.
+//   * эффектов в SDL_mixer 3.2 три: `none`, `lowpass`, `echo`. Реверберация
+//     помещения живёт отдельно и глобально (Freeverb в C + модуль acoustics.js:
+//     $.audio.room/zone/listener) — комната звучит для всего микса сразу, а не
+//     для отдельной шины.
 //
 // Контракт модуля: installAudiobus($) и tickAudiobus(dt).
 // Чистые функции effectiveGain() и panAndGain() экспортируются наружу — их
 // гоняет qjs-харнесс без движка.
 // ===========================================================================
 
-import { ctx } from './core.js';
+import { ctx, query } from './core.js';
 import { tweenProps } from './tween.js';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +40,10 @@ const fades = [];             // активные затухания громк�
 let api_$ = null;             // ссылка на $, нужна для $.sound.play / $.sound.volume
 let manual_listener = null;   // ручной слушатель { x, y }; иначе — позиция камеры
 let installed = false;
+// Режим позиционирования: 'js' — панорама и громкость считает JS (по умолчанию),
+// 'sdl' — координаты отдаются SDL_mixer (MIX_SetTrack3DPosition), и затухание
+// с раскладкой по колонкам считает он сам.
+ctx.audio_spatial = ctx.audio_spatial || 'js';
 
 const DEFAULT_BUS = 'sfx';
 const DEFAULT_MAX_DISTANCE = 700;
@@ -206,9 +212,34 @@ function createBus(name, opts) {
         parent: o.parent === undefined ? 'master' : String(o.parent),
         effect: o.effect === undefined ? 'none' : String(o.effect),
         effectParams: Object.assign({}, o.effectParams),
+        // Настоящая шина движка: группа микшера. Её пост-микс обрабатывает DSP,
+        // поэтому эффект шины действует и на звуки, запущенные позже.
+        group: -1,
     };
+    const a = audio();
+    if (a && typeof a.group === 'function') {
+        try { bus.group = a.group(name); } catch (e) { bus.group = -1; }
+    }
     buses.set(name, bus);
     return bus;
+}
+
+/** Ставит канал в группу шины (если движок собрана с группами). */
+function assignGroup(channel, bus) {
+    const a = audio();
+    if (!a || typeof a.setChannelGroup !== 'function' || !bus || bus.group < 0) return;
+    try { a.setChannelGroup(channel, bus.group); } catch (e) { /* канал мог освободиться */ }
+}
+
+/**
+ * Отдаёт координаты канала SDL_mixer (относительно слушателя — он у него в нуле).
+ * Мир: X вправо, Y вниз. SDL: Y вверх, Z «вперёд-назад», поэтому плоскость
+ * карты переводится как (dx, 0, dy): влево-вправо по X, дистанция — по обоим.
+ */
+function applySpatial(channel, dx, dy) {
+    const a = audio();
+    if (!a || typeof a.setChannel3D !== 'function') return;
+    try { a.setChannel3D(channel, dx, 0, dy, true); } catch (e) { /* канал мог освободиться */ }
 }
 
 /** Создаёт цикл в дереве, если шине bus назначить родителя parent? */
@@ -269,13 +300,20 @@ function reapplyAll() {
     for (const handle of handles) applyChannel(handle);
 }
 
-/** Наложить эффект шины на каналы её живых звуков (личный эффект handle важнее). */
+/** Эффект шины. Если движок умеет группы — вешаем его на пост-микс группы. */
 function applyBusEffect(name) {
-    const a = audio();
-    if (!a || typeof a.setChannelEffect !== 'function') return;
     const bus = buses.get(name);
     if (!bus) return;
+    const a = audio();
     const [p1, p2] = effectArgs(bus.effect, bus.effectParams);
+
+    if (a && typeof a.setGroupEffect === 'function' && bus.group >= 0) {
+        try { a.setGroupEffect(bus.group, bus.effect, p1, p2); } catch (e) { /* шина могла исчезнуть */ }
+        return;
+    }
+
+    // Движок без групп (заглушка звука): запасной путь — по каналам, как раньше.
+    if (!a || typeof a.setChannelEffect !== 'function') return;
     for (const handle of handles) {
         if (handle.bus !== name || handle.channel < 0 || handle.fx !== null) continue;
         try { a.setChannelEffect(handle.channel, bus.effect, p1, p2); } catch (e) { /* канал мог освободиться */ }
@@ -283,11 +321,14 @@ function applyBusEffect(name) {
 }
 
 function applyEffectToHandle(handle) {
-    const bus = buses.get(handle.bus);
-    const kind = handle.fx !== null ? handle.fx : (bus ? bus.effect : 'none');
-    const params = handle.fx !== null ? handle.fxParams : (bus ? bus.effectParams : {});
     const a = audio();
     if (!a || typeof a.setChannelEffect !== 'function' || handle.channel < 0) return;
+    const bus = buses.get(handle.bus);
+    // Если шина — настоящая группа, её эффект уже применён к миксу шины, и
+    // дублировать его на канале нельзя: получится двойная обработка.
+    const busOnGroup = !!bus && bus.group >= 0 && typeof a.setGroupEffect === 'function';
+    const kind = handle.fx !== null ? handle.fx : (busOnGroup ? 'none' : (bus ? bus.effect : 'none'));
+    const params = handle.fx !== null ? handle.fxParams : (busOnGroup ? {} : (bus ? bus.effectParams : {}));
     const [p1, p2] = effectArgs(kind, params);
     try { a.setChannelEffect(handle.channel, kind, p1, p2); } catch (e) { /* канал мог освободиться */ }
 }
@@ -391,6 +432,8 @@ function spawn(what, busName, volume, pan, loop) {
     }
     handles.push(handle);
     if (channel >= 0) {
+        // Сначала шина: эффект живёт на группе, канал лишь приписан к ней.
+        assignGroup(channel, bus);
         applyChannel(handle);
         applyEffectToHandle(handle);
     }
@@ -463,9 +506,22 @@ export function installAudiobus($) {
     fades.length = 0;
     manual_listener = null;
 
-    /** Точка прослушивания: ручной слушатель или центр камеры. */
+    /** Точка прослушивания: ручной слушатель (точка, узел или селектор) или камера. */
     function listenerPoint() {
-        if (manual_listener) return manual_listener;
+        const m = manual_listener;
+        if (m) {
+            if (typeof m === 'string') {
+                const n = query(m)[0];
+                if (n) return { x: n.x, y: n.y };
+            } else if (m.nodes) {
+                const n = m.nodes[0];
+                if (n) return { x: n.x, y: n.y };
+            } else if (m.tag) {
+                return { x: m.x, y: m.y };
+            } else if (typeof m.x === 'number') {
+                return m;
+            }
+        }
         if (ctx.camera && typeof ctx.camera.pos === 'function') return ctx.camera.pos();
         return { x: 0, y: 0 };
     }
@@ -651,15 +707,58 @@ export function installAudiobus($) {
         /** Позиционный звук: панорама и затухание от слушателя/камеры. */
         playAt(what, x, y, opts) {
             const o = opts || {};
-            const pg = panAndGain(listenerPoint(), { x: Number(x) || 0, y: Number(y) || 0 }, o.falloff);
             const busName = o.bus === undefined ? DEFAULT_BUS : String(o.bus);
+            const px = Number(x) || 0;
+            const py = Number(y) || 0;
+
+            // 3D-режим: координаты уходят в SDL_mixer, он сам считает и
+            // затухание, и раскладку по колонкам.
+            if (ctx.audio_spatial === 'sdl') {
+                const l = listenerPoint();
+                const handle = spawn(what, busName, o.volume === undefined ? 1 : Number(o.volume), 0, o.loop);
+                if (handle.channel >= 0) applySpatial(handle.channel, px - l.x, py - l.y);
+                return handle;
+            }
+
+            const pg = panAndGain(listenerPoint(), { x: px, y: py }, o.falloff);
             const volume = (o.volume === undefined ? 1 : Number(o.volume)) * pg.gain;
             return spawn(what, busName, volume, pg.pan, o.loop);
         },
 
-        /** Слушатель: без аргументов — текущий, с координатами — ручной. */
+        /**
+         * Режим позиционирования.
+         *   'js'  — панорама и громкость считает JS (по умолчанию);
+         *   'sdl' — координаты отдаются SDL_mixer: слушатель у него всегда в
+         *           (0,0,0), поэтому передаются координаты относительно него.
+         */
+        spatial(mode) {
+            if (mode === undefined) return ctx.audio_spatial;
+            if (mode !== 'js' && mode !== 'sdl') {
+                log(`$.audio.spatial: неизвестный режим "${mode}" — остаётся ${ctx.audio_spatial}`);
+                return audioNs;
+            }
+            ctx.audio_spatial = mode;
+            if (mode === 'js') {
+                const a = audio();
+                if (a && typeof a.setChannel3D === 'function') {
+                    for (const handle of handles) {
+                        if (handle.channel >= 0) {
+                            try { a.setChannel3D(handle.channel, 0, 0, 0, false); } catch (e) { /* канал свободен */ }
+                        }
+                    }
+                }
+            }
+            return audioNs;
+        },
+
+        /**
+         * Слушатель: без аргументов — текущая точка { x, y }; с координатами —
+         * ручная точка; с узлом или селектором — слушатель едет вместе с ним.
+         */
         listener(x, y) {
             if (x === undefined) return listenerPoint();
+            if (typeof x === 'string') { manual_listener = x; return audioNs; }
+            if (x && (x.nodes || x.tag)) { manual_listener = x; return audioNs; }
             if (x && typeof x === 'object') manual_listener = { x: Number(x.x) || 0, y: Number(x.y) || 0 };
             else manual_listener = { x: Number(x) || 0, y: Number(y) || 0 };
             return audioNs;

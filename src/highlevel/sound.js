@@ -9,7 +9,6 @@
 import { ctx, query } from './core.js';
 
 const loaded = new Map();     // путь → id звука
-let warned_pitch = false;
 
 function soundId(what) {
     if (typeof what === 'number') return what;
@@ -24,32 +23,61 @@ function soundId(what) {
 
 export function installSound($) {
     const sound = {
-        /** play('hit.wav', { volume, pan, loop }) → id канала или -1. */
+        /**
+         * play('hit.wav', { volume, pan, loop, pitch }) → id канала или -1.
+         * pitch — скорость воспроизведения (1.0 обычная): и высота, и темп.
+         */
         play(what, opts) {
             const o = opts || {};
-            if (o.pitch !== undefined && !warned_pitch) {
-                warned_pitch = true;
-                ctx.log('$: $.sound.play({pitch}) не поддерживается SDL_mixer — параметр игнорируется');
-            }
             const id = soundId(what);
             if (id < 0) return -1;
-            return engine.audio.play(id, o.volume === undefined ? 1 : o.volume,
-                                     o.pan === undefined ? 0 : o.pan,
-                                     o.loop ? 1 : 0);
+            const channel = engine.audio.play(id, o.volume === undefined ? 1 : o.volume,
+                                              o.pan === undefined ? 0 : o.pan,
+                                              o.loop ? 1 : 0);
+            // Скорость — свойство канала, а каналы переиспользуются. Поэтому
+            // ставим её всегда: без этого следующий звук на том же канале
+            // унаследовал бы чужой pitch.
+            if (channel >= 0) engine.audio.setChannelPitch(channel, o.pitch === undefined ? 1 : o.pitch);
+            return channel;
         },
 
         /** Звук в точке мира: панорама по X относительно камеры, тише по Z. */
         playAt(what, where, opts) {
             const o = Object.assign({ max: 700 }, opts);
             const pos = toPoint(where);
-            const cam = ctx.camera ? ctx.camera.pos() : { x: 0, y: 0 };
+            const cam = listenerPoint();
             const dx = pos.x - cam.x;
             const dy = pos.y - cam.y;
             const dist = Math.hypot(dx, dy);
             if (dist > o.max) return -1;
-            const pan = Math.max(-1, Math.min(1, dx / (o.max * 0.5)));
-            const volume = (o.volume === undefined ? 1 : o.volume) * (1 - dist / o.max);
-            return sound.play(what, Object.assign({}, o, { pan, volume: Math.max(0, volume), loop: o.loop }));
+
+            let channel;
+            if (ctx.audio_spatial === 'sdl') {
+                // Координаты считает SDL_mixer: панораму и затухание отдаём ему.
+                channel = sound.play(what, { volume: o.volume, loop: o.loop, pitch: o.pitch });
+                if (channel >= 0 && engine.audio.setChannel3D) {
+                    // Слушатель у SDL_mixer в нуле, поэтому координаты — разница.
+                    engine.audio.setChannel3D(channel, dx, 0, dy, true);
+                }
+            } else {
+                const pan = Math.max(-1, Math.min(1, dx / (o.max * 0.5)));
+                const volume = (o.volume === undefined ? 1 : o.volume) * (1 - dist / o.max);
+                channel = sound.play(what, Object.assign({}, o, { pan, volume: Math.max(0, volume), loop: o.loop }));
+            }
+
+            // Запоминаем источник: модуль акустики будет двигать панораму вслед
+            // за узлом и глушить звук, ушедший за стену (docs/highlevel/audiobus.md).
+            if (channel >= 0) {
+                if (!ctx.sound_sources) ctx.sound_sources = new Map();
+                const trackable = (typeof where === 'string') || (where && where.nodes && where.nodes.length);
+                ctx.sound_sources.set(channel, {
+                    x: pos.x, y: pos.y,
+                    max: o.max,
+                    volume: o.volume === undefined ? 1 : o.volume,
+                    node: trackable ? where : null,
+                });
+            }
+            return channel;
         },
 
         /** Музыка. crossfadeMs — плавно заменить текущую дорожку. */
@@ -57,9 +85,17 @@ export function installSound($) {
             const o = opts || {};
             const id = soundId(what);
             if (id < 0) return sound;
+            engine.audio.setMusicPitch(o.pitch === undefined ? 1 : o.pitch);
             engine.audio.music(id, o.loop !== false, o.volume === undefined ? 1 : o.volume,
                                o.fade === undefined ? 0 : o.fade);
             ctx.state_music = { path: what, volume: o.volume === undefined ? 1 : o.volume };
+            return sound;
+        },
+
+        /** Скорость музыки: 1.0 — как записано, 0.5 — вдвое медленнее и ниже. */
+        musicPitch(value) {
+            if (value === undefined) return engine.audio.musicPitch();
+            engine.audio.setMusicPitch(value);
             return sound;
         },
 
@@ -113,6 +149,15 @@ export function installSound($) {
 
     ctx.sound = sound;
     return sound;
+}
+
+/** Точка прослушивания: слушатель $.audio, иначе центр камеры. */
+function listenerPoint() {
+    if (ctx.audio && typeof ctx.audio.listener === 'function') {
+        const p = ctx.audio.listener();
+        if (p && typeof p.x === 'number') return p;
+    }
+    return ctx.camera ? ctx.camera.pos() : { x: 0, y: 0 };
 }
 
 function toPoint(where) {

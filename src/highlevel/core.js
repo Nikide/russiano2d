@@ -313,9 +313,54 @@ export class Node {
         case 'controls': this.attrs.controls = value; return this;
         case 'body':    this.setBody(value); return this;
         case 'collision': this.hitbox = Array.isArray(value) ? { w: value[0], h: value[1] } : { w: value, h: value }; return this;
+        case 'src':
+            // Грабли: { src } в конструкторе раньше оседал в attrs и картинку
+            // не грузил, хотя .sprite(src) работал. У спрайтовых тегов src —
+            // псевдоним картинки. У <tilemap>/<particles> свойство src читают
+            // их собственные отрисовщики, и грузить им нечего.
+            this.attrs.src = value;
+            if (TAGS[this.tag] && 'sprite' in TAGS[this.tag]) this.setSprite(value);
+            return this;
         default:
             this.attrs[key] = value;
             return this;
+        }
+    }
+
+    /**
+     * Читает свойство по тому же имени, что принимает set(). Нужен для
+     * .attr(name): он смотрел только в attrs, поэтому .attr('id') возвращал
+     * undefined, хотя .attr('src') работал — свойства и атрибуты расходились.
+     */
+    get(key) {
+        switch (key) {
+        case 'id':      return this.id;
+        case 'x':       return this.x;
+        case 'y':       return this.y;
+        case 'w': case 'width':  return this.w;
+        case 'h': case 'height': return this.h;
+        case 'hp':      return this.cur_hp;
+        case 'maxHp':   return this.max_hp;
+        case 'team':    return this.team;
+        case 'speed':   return this.speed;
+        case 'sprite':  return this.attrs.sprite !== undefined ? this.attrs.sprite
+                             : (this.attrs.src !== undefined ? this.attrs.src : this.sprite);
+        case 'color':   return this.color;
+        case 'alpha': case 'opacity': return this.alpha;
+        case 'visible': return this.visible;
+        case 'layer':   return this.layer;
+        case 'depth': case 'z': return this.depth;
+        case 'text':    return this.text;
+        case 'size':    return this.size;
+        case 'value':   return this.value;
+        case 'max':     return this.max_value;
+        case 'radius':  return this.radius;
+        case 'intensity': return this.intensity;
+        case 'body':    return this.body_kind;
+        case 'collision': return this.hitbox ? this.hitbox.w : this.w;
+        case 'class':   return Array.from(this.classes).join(' ');
+        case 'tag': case 'tags': return Array.from(this.tags_extra).join(' ');
+        default:        return this.attrs[key];
         }
     }
 

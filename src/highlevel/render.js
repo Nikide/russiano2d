@@ -39,6 +39,23 @@ let tri_count = 0;      // число вершин (кратно 3)
 let tri_blend = null;   // Uint8Array(max) — режим смешивания каждого треугольника
 let tri_blend_cur = 0;  // режим, который получит следующий треугольник
 
+// Мировой слой. Батч движка принимает ЭКРАННЫЕ координаты (узлы и частицы
+// переводят их сами через камеру), но VFX и $.gfx.draw.* работают в мировых.
+// Пока view включён, push.* переводит world → screen сам — иначе лента,
+// вспышка или трассер уезжают в угол экрана на расстояние камеры.
+let view = null;
+function setView(cam) {
+    view = cam
+        ? { x: cam.x, y: cam.y, zoom: cam.zoom || 1,
+            cx: (cam.w !== undefined ? cam.w : engine.width) / 2,
+            cy: (cam.h !== undefined ? cam.h : engine.height) / 2,
+            sx: cam.shake_x || 0, sy: cam.shake_y || 0 }
+        : null;
+}
+function viewX(x) { return view ? (x - view.x) * view.zoom + view.cx + view.sx : x; }
+function viewY(y) { return view ? (y - view.y) * view.zoom + view.cy + view.sy : y; }
+function viewScale(v) { return view ? v * view.zoom : v; }
+
 // Отдельный односпрайтовый пакет для затемнения перехода между сценами:
 // так он не занимает слот в общем буфере кадра.
 const overlay_xf = new Float32Array(6);
@@ -80,6 +97,122 @@ const state = {
     stats: { sprites: 0, triangles: 0, texts: 0, nodes: 0 },
 };
 
+// Параметры пост-обработки. Держим их на JS-стороне, а в движок отправляем
+// каждый кадр: зерну нужно текущее время. Раскладка совпадает с setPost().
+const POST_KEYS = ['glow', 'vignette', 'chromatic', 'lens', 'center_x', 'center_y', 'radius',
+                   'grain', 'scanline', 'posterize', 'tint_r', 'tint_g', 'tint_b',
+                   'tint_amount', 'saturation', 'contrast', 'brightness', 'blood'];
+
+const post_params = {
+    glow: 0, vignette: 0, chromatic: 0, lens: 0,
+    center_x: 0.5, center_y: 0.5, radius: 0.35,
+    grain: 0, scanline: 0, enabled: 0,
+    posterize: 0,
+    tint_r: 1, tint_g: 1, tint_b: 1, tint_amount: 0,
+    saturation: 1, contrast: 1, brightness: 0, blood: 0,
+};
+
+// Наборы камерных эффектов: от «тёплого мультика» до хоррора. Значения —
+// это те же параметры, что принимает $.gfx.post().
+const POST_PRESETS = {
+    neutral: {},
+    // Сочная, тёплая картинка с мягким свечением — «как в хорошем аниме».
+    adventure: {
+        glow: 0.5, vignette: 0.2, chromatic: 0.0015, grain: 0.008,
+        saturation: 1.22, contrast: 1.06, brightness: 0.02,
+        tint_r: 1.06, tint_g: 1.0, tint_b: 0.94, tint_amount: 0.35,
+    },
+    // Ночной лес: холодная тень, заметная вигнетка, чуть больше зерна.
+    forest_night: {
+        glow: 0.34, vignette: 0.46, grain: 0.03,
+        saturation: 0.95, contrast: 1.08, brightness: -0.02,
+        tint_r: 0.88, tint_g: 1.02, tint_b: 1.05, tint_amount: 0.4,
+    },
+    // Хоррор: почти чёрно-белый, контрастный, с зерном и скан-линиями.
+    horror: {
+        glow: 0.22, vignette: 0.78, chromatic: 0.004, grain: 0.1, scanline: 0.05,
+        saturation: 0.22, contrast: 1.3, brightness: -0.06,
+        tint_r: 1.3, tint_g: 0.5, tint_b: 0.5, tint_amount: 0.35, blood: 0.18,
+    },
+    // Кровавая луна: тот же хоррор, но залитый красным.
+    bloodmoon: {
+        glow: 0.35, vignette: 0.7, chromatic: 0.006, grain: 0.07,
+        saturation: 0.5, contrast: 1.2,
+        tint_r: 1.65, tint_g: 0.42, tint_b: 0.42, tint_amount: 0.55, blood: 0.35,
+    },
+    // Ретро-консоль: постеризация и скан-линии.
+    retro: {
+        glow: 0.45, vignette: 0.3, scanline: 0.22, posterize: 6,
+        saturation: 0.92, contrast: 1.05,
+    },
+    // Ч/б нуар.
+    noir: { glow: 0.3, vignette: 0.62, grain: 0.07, saturation: 0, contrast: 1.35 },
+    // Мягкий сон: сильное свечение и минимум контраста.
+    dream: {
+        glow: 0.85, vignette: 0.12, chromatic: 0.003, grain: 0.02,
+        saturation: 1.15, contrast: 0.94, brightness: 0.06,
+        tint_r: 1.02, tint_g: 1.0, tint_b: 1.08, tint_amount: 0.3,
+    },
+};
+
+// Плавный переход между пресетами: снимок «от» и «до» плюс прогресс.
+let post_blend = null;
+
+function lerp(a, b, k) { return a + (b - a) * k; }
+
+function applyPreset(name, ms) {
+    const preset = POST_PRESETS[name];
+    if (!preset) {
+        ctx.log(`$: $.gfx.postPreset("${name}") — неизвестный пресет; есть: ${Object.keys(POST_PRESETS).join(', ')}`);
+        return false;
+    }
+    const target = Object.assign({}, preset);
+    if (target.tint) { target.tint_r = target.tint[0]; target.tint_g = target.tint[1]; target.tint_b = target.tint[2]; }
+    if (Array.isArray(target.tint) || target.tint) delete target.tint;
+
+    const from = {};
+    for (const key of POST_KEYS) from[key] = post_params[key];
+
+    if (!(ms > 0)) {
+        for (const key of POST_KEYS) if (target[key] !== undefined) post_params[key] = target[key];
+        post_params.enabled = 1;
+        post_blend = null;
+        return true;
+    }
+
+    post_blend = { from, to: target, t: 0, ms };
+    post_params.enabled = 1;
+    return true;
+}
+
+/** Двигает плавный переход между пресетами (вызывается из кадра). */
+function tickPostBlend(dt_ms) {
+    if (!post_blend) return;
+    post_blend.t += dt_ms;
+    const k = Math.min(1, post_blend.t / post_blend.ms);
+    const e = 1 - (1 - k) * (1 - k);            // ease-out
+    for (const key of POST_KEYS) {
+        const to = post_blend.to[key];
+        if (to === undefined) continue;
+        post_params[key] = lerp(post_blend.from[key], to, e);
+    }
+    if (k >= 1) post_blend = null;
+}
+
+/** Отправляет параметры поста в движок (с текущим временем для зерна). */
+function pushPost() {
+    if (typeof engine.setPost !== 'function') return;
+    if (typeof engine.postSupported === 'function' && !engine.postSupported()) return;
+    tickPostBlend((engine.dt || 0) * 1000);
+    engine.setPost(post_params.glow, post_params.vignette, post_params.chromatic, post_params.lens,
+                   post_params.center_x, post_params.center_y, post_params.radius,
+                   post_params.grain, post_params.scanline, post_params.enabled,
+                   engine.time || 0,
+                   post_params.posterize,
+                   post_params.tint_r, post_params.tint_g, post_params.tint_b, post_params.tint_amount,
+                   post_params.saturation, post_params.contrast, post_params.brightness, post_params.blood);
+}
+
 function ensureBuffers() {
     if (!xf) {
         xf = new Float32Array(MAX_SPRITES * 6);
@@ -92,6 +225,7 @@ function ensureBuffers() {
 
 function pushSprite(sprite, x, y, w, h, angle, color, blend_name) {
     if (count >= MAX_SPRITES || sprite < 0) return;
+    if (view) { x = viewX(x); y = viewY(y); w = viewScale(w); h = viewScale(h); }
     const o = count * 6;
     xf[o] = sprite; xf[o + 1] = x; xf[o + 2] = y;
     xf[o + 3] = w; xf[o + 4] = h; xf[o + 5] = angle;
@@ -118,6 +252,7 @@ function submitSprites(start, end) {
 
 function pushVertex(x, y, color) {
     if (tri_count >= MAX_TRIS * 3) return;
+    if (view) { x = viewX(x); y = viewY(y); }
     const o = tri_count * 6;
     tri[o] = x; tri[o + 1] = y;
     tri[o + 2] = color & 0xff;
@@ -133,6 +268,59 @@ function pushTriangle(x1, y1, x2, y2, x3, y3, color) {
     pushVertex(x2, y2, color);
     pushVertex(x3, y3, color);
     if (index < MAX_TRIS) tri_blend[index] = tri_blend_cur;
+}
+
+/** Треугольник, у которого своя альфа на каждой вершине (градиенты, свет). */
+function pushTriangleGrad(x1, y1, c1, x2, y2, c2, x3, y3, c3) {
+    const index = tri_count / 3;
+    pushVertex(x1, y1, c1);
+    pushVertex(x2, y2, c2);
+    pushVertex(x3, y3, c3);
+    if (index < MAX_TRIS) tri_blend[index] = tri_blend_cur;
+}
+
+/**
+ * Мягкое радиальное свечение: концентрические кольца, у которых альфа падает
+ * от центра к краю, а цвет задан на каждой вершине. Из этого собираются
+ * факелы, фонари, вспышки и ауры — одна фигура на все случаи.
+ *
+ * opts: `segments` (по умолчанию 24), `rings` (6), `falloff` (2 — степень
+ * затухания), `inner` (доля радиуса, где яркость ещё полная) и `alphaAt(k)`
+ * — своя кривая затухания, если нужно.
+ */
+function pushGlow(cx, cy, radius, color, opts) {
+    const o = opts || {};
+    const segs = Math.max(6, Math.min(64, o.segments || 24));
+    const rings = Math.max(1, Math.min(16, o.rings || 6));
+    const falloff = o.falloff === undefined ? 2 : o.falloff;
+    const inner = Math.max(0, Math.min(0.9, o.inner || 0));
+    const alphaOf = typeof o.alphaAt === 'function'
+        ? o.alphaAt
+        : (k) => {
+            if (k <= inner) return 1;
+            const t = (k - inner) / Math.max(1e-6, 1 - inner);
+            return Math.pow(1 - t, falloff);
+        };
+
+    for (let ring = 0; ring < rings; ring++) {
+        const k0 = ring / rings;
+        const k1 = (ring + 1) / rings;
+        const ca = withAlpha(color, alphaOf(k0));
+        const cb = withAlpha(color, alphaOf(k1));
+        for (let i = 0; i < segs; i++) {
+            const t0 = (i / segs) * Math.PI * 2;
+            const t1 = ((i + 1) / segs) * Math.PI * 2;
+            const c0 = Math.cos(t0), s0 = Math.sin(t0);
+            const c1 = Math.cos(t1), s1 = Math.sin(t1);
+            const r0 = radius * k0, r1 = radius * k1;
+            pushTriangleGrad(cx + c0 * r0, cy + s0 * r0, ca,
+                             cx + c1 * r0, cy + s1 * r0, ca,
+                             cx + c1 * r1, cy + s1 * r1, cb);
+            pushTriangleGrad(cx + c0 * r0, cy + s0 * r0, ca,
+                             cx + c1 * r1, cy + s1 * r1, cb,
+                             cx + c0 * r1, cy + s0 * r1, cb);
+        }
+    }
 }
 
 /**
@@ -153,6 +341,7 @@ function submitTriangles() {
 
 /** Радиальный «блин» — мягкое свечение и круг. */
 function pushDisc(cx, cy, radius, color, segments) {
+    radius = viewScale(radius);
     const n = segments || Math.max(8, Math.min(48, Math.round(radius / 4)));
     for (let i = 0; i < n; i++) {
         const a0 = (i / n) * Math.PI * 2;
@@ -166,6 +355,8 @@ function pushDisc(cx, cy, radius, color, segments) {
 
 /** Кольцо для .outline() и отладочных окружностей. */
 function pushRing(cx, cy, radius, width, color, segments) {
+    radius = viewScale(radius);
+    width = viewScale(width);
     const n = segments || Math.max(10, Math.min(64, Math.round(radius / 3)));
     const inner = Math.max(0, radius - width);
     for (let i = 0; i < n; i++) {
@@ -236,9 +427,24 @@ function drawWorldNode(node, cam) {
         break;
     }
     case 'light': {
-        const r = node.radius * cam.zoom * node.intensity;
-        const color = withAlpha(packColor(node.color), node.alpha * 0.35);
-        pushDisc(t.x, t.y, r, color, 32);
+        // Свет — мягкое радиальное свечение (pushGlow): цвет и альфа на
+        // каждой вершине, поэтому градиент гладкий на любом радиусе, а
+        // стоимость — одна фигура. Режим смешивания берём у узла: для света
+        // обычно .blend('add').
+        const r = Math.max(2, node.radius * cam.zoom);
+        const power = node.alpha * Math.max(0, Math.min(2, node.intensity));
+        if (power <= 0.001) break;
+        const attrs = node.attrs || {};
+        const prev_blend = tri_blend_cur;
+        tri_blend_cur = blendId(node.blend_mode);
+        pushGlow(t.x, t.y, r, packColor(node.color), {
+            segments: attrs.segments === undefined ? 26 : Math.round(attrs.segments),
+            rings: attrs.rings === undefined ? 7 : Math.round(attrs.rings),
+            falloff: attrs.falloff === undefined ? 2 : attrs.falloff,
+            inner: attrs.inner === undefined ? 0 : attrs.inner,
+            alphaAt: (k) => power * Math.pow(1 - k, attrs.falloff === undefined ? 2 : attrs.falloff),
+        });
+        tri_blend_cur = prev_blend;
         break;
     }
     case 'text': {
@@ -370,6 +576,27 @@ export function installGfx($) {
 
         // --- Примитивы поверх всего (в координатах окна) --------------------
         draw: {
+            /**
+             * Мягкое свечение в мировых координатах: `radius` в пикселях мира,
+             * `opts` — `segments`, `rings`, `falloff`, `inner`, `blend`
+             * (`'add'` даёт настоящее свечение).
+             *
+             * ```js
+             * $.gfx.draw.glow(x, y, 160, '#ffbe73', { blend: 'add', falloff: 2.2 });
+             * ```
+             */
+            glow(x, y, radius, color, opts) {
+                const o = opts || {};
+                const prev = tri_blend_cur;
+                const prev_view = view;
+                setView(cameraTransform());
+                tri_blend_cur = blendId(o.blend === undefined ? 'add' : o.blend);
+                pushGlow(x, y, radius, packColor(color === undefined ? '#ffffff' : color), o);
+                tri_blend_cur = prev;
+                view = prev_view;
+                return gfx;
+            },
+
             line(x1, y1, x2, y2, color, width) {
                 draw_calls.push({ kind: 'line', x1, y1, x2, y2, color: packColor(color), width: width || 1 });
             },
@@ -431,6 +658,8 @@ export function installGfx($) {
             },
             /** Круг/диск: cx/cy — центр, r — радиус. */
             circle(cx, cy, r, color, segments) { pushDisc(cx, cy, r, color, segments); },
+            /** Кольцо: cx/cy — центр, r — радиус, width — толщина обода. */
+            ring(cx, cy, r, width, color, segments) { pushRing(cx, cy, r, width || 2, color, segments); },
             /** Сколько спрайтов и треугольников уже набрано в этом кадре. */
             stats() { return { sprites: count, triangles: tri_count }; },
         },
@@ -446,6 +675,80 @@ export function installGfx($) {
             return default_blend;
         },
 
+        /**
+         * Пост-обработка кадра: свечение, вигнетка, хроматика, зерно,
+         * скан-линии и линза. Без аргумента — текущие параметры.
+         *
+         * Линза — экранное искажение: `{ lens, centerX, centerY, radius }`.
+         * Ею делаются «чёрная дыра», взрывная волна и любой warp; `glow` даёт
+         * свечение вспышек, `chromatic` — радужную кромку.
+         *
+         * ```js
+         * $.gfx.post({ glow: 0.6, vignette: 0.3 });
+         * $.gfx.post({ lens: 1.2, centerX: 0.5, centerY: 0.5, radius: 0.3 });
+         * $.gfx.post({ on: false });
+         * ```
+         */
+        post(opts) {
+            if (typeof engine.postSupported !== 'function' || !engine.postSupported()) {
+                return opts === undefined ? null : gfx;
+            }
+            if (opts === undefined) return Object.assign({}, post_params, engine.getPost());
+            const o = Object.assign({}, opts);
+            if (o.centerX !== undefined) { post_params.center_x = o.centerX; }
+            if (o.centerY !== undefined) { post_params.center_y = o.centerY; }
+            if (o.radius !== undefined) { post_params.radius = o.radius; }
+            if (o.on !== undefined) post_params.enabled = o.on === false ? 0 : 1;
+            if (o.enabled !== undefined) post_params.enabled = o.enabled ? 1 : 0;
+            if (Array.isArray(o.tint)) {
+                post_params.tint_r = Number(o.tint[0]);
+                post_params.tint_g = Number(o.tint[1]);
+                post_params.tint_b = Number(o.tint[2]);
+                if (o.on === undefined && o.enabled === undefined) post_params.enabled = 1;
+            }
+            const keys = ['glow', 'vignette', 'chromatic', 'lens', 'grain', 'scanline',
+                          'posterize', 'tint_r', 'tint_g', 'tint_b', 'tint_amount',
+                          'saturation', 'contrast', 'brightness', 'blood'];
+            for (const key of keys) {
+                if (o[key] !== undefined) {
+                    post_params[key] = Number(o[key]) || 0;
+                    // Задать эффект и не включить пост — почти всегда ошибка:
+                    // включаем сами, если игру это не оговорила.
+                    if (o.on === undefined && o.enabled === undefined) post_params.enabled = 1;
+                }
+            }
+            pushPost();
+            return gfx;
+        },
+
+        /**
+         * Готовый набор камерных эффектов: `'adventure'` (тёплый мультик),
+         * `'forest_night'`, `'horror'`, `'bloodmoon'`, `'retro'`, `'noir'`,
+         * `'dream'`, `'neutral'`. Второй аргумент — миллисекунды плавного
+         * перехода (`{ ms: 800 }`), без него эффект включается сразу.
+         */
+        postPreset(name, opts) {
+            if (name === undefined) return Object.keys(POST_PRESETS);
+            const ms = opts && opts.ms !== undefined ? Number(opts.ms) : 0;
+            applyPreset(String(name), ms);
+            return gfx;
+        },
+
+        /** Текущий пресет не отслеживаем, но список — вот он. */
+        postPresets() { return Object.keys(POST_PRESETS); },
+
+        /** Выключить пост-обработку (кадр идёт прямо на экран). */
+        postOff() {
+            post_params.enabled = 0;
+            pushPost();
+            return gfx;
+        },
+
+        /** Поддерживает ли сборка пост-обработку (нужен GPU-проход). */
+        postSupported() {
+            return typeof engine.postSupported === 'function' && !!engine.postSupported();
+        },
+
         /** Регистрация своего отрисовщика тега — см. registerNodeRenderer. */
         registerNodeRenderer,
         registerUINodeRenderer,
@@ -459,6 +762,9 @@ export function installGfx($) {
         // --- Кадр ------------------------------------------------------------
         _render() {
             const cam = cameraTransform();
+            // Зерну нужно текущее время, поэтому параметры поста уходят в
+            // движок каждый кадр, даже если игра их не меняла.
+            pushPost();
             state.stats = { sprites: 0, triangles: 0, texts: 0, nodes: 0 };
             count = 0;
             tri_count = 0;
@@ -506,6 +812,14 @@ export function installGfx($) {
             }
             draw_calls.length = 0;
 
+            // VFX-слой (ленты, молнии, ударные волны). Хук ставит модуль fx.js:
+            // рисовать нужно именно здесь — батч живёт только внутри кадра.
+            if (ctx.gfx._fxFlush) {
+                setView(cam);            // VFX приходят в мировых координатах
+                ctx.gfx._fxFlush(cam);
+                setView(null);
+            }
+
             // Сцена: спрайты одним вызовом, затем треугольники (они поверх).
             if (count > 0) submitSprites(0, count);
 
@@ -515,6 +829,9 @@ export function installGfx($) {
             if (count > ui_start) {
                 // UI идёт после треугольников, поэтому отдаём его отдельным
                 // пакетом: сначала сцена, потом интерфейс поверх.
+                // Метка нужна движку: с пост-обработкой HUD рисуется уже после
+                // неё, иначе вигнетка и линза затемняли бы интерфейс.
+                if (typeof engine.markUI === 'function') engine.markUI();
                 submitSprites(ui_start, count);
             }
 
@@ -539,11 +856,29 @@ export function installGfx($) {
         },
     };
 
+    // $.gfx.draw.* — мировой слой: оборачиваем методы, чтобы координаты
+    // переводились через текущую камеру. Иначе круг или стрелка, нарисованные
+    // в мировых координатах, уезжали на расстояние камеры.
+    for (const key of Object.keys(gfx.draw)) {
+        const fn = gfx.draw[key];
+        if (typeof fn !== 'function') continue;
+        gfx.draw[key] = function (...args) {
+            const prev = view;
+            setView(cameraTransform());
+            try {
+                return fn.apply(gfx.draw, args);
+            } finally {
+                view = prev;
+            }
+        };
+    }
+
     ctx.gfx = gfx;
     return gfx;
 }
 
 function pushLine(x1, y1, x2, y2, width, color) {
+    width = viewScale(width);
     const dx = x2 - x1, dy = y2 - y1;
     const len = Math.hypot(dx, dy);
     if (len < 0.001) return;

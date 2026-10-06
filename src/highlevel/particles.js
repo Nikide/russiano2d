@@ -255,6 +255,13 @@ export function buildParams(spec) {
     p.texture = s.texture !== undefined ? s.texture : s.src;
     p.alpha = Math.max(0, num(s.alpha, 1));
 
+    // Суб-эмиттер: залп другого эффекта из точки, где умерла частица
+    // (искры → дым → пепел). Глубина ровно один уровень, чтобы не было
+    // бесконечной цепочки; живёт в отдельном узле-эмиттере.
+    if (s.on_death !== undefined && s.on_death !== null) p.sub = s.on_death;
+    else if (s.onDeath !== undefined && s.onDeath !== null) p.sub = s.onDeath;
+    else if (s.sub !== undefined && s.sub !== null) p.sub = s.sub;
+
     // Режимы смешивания конвейер не умеет (см. .blend() в api.js): ругаемся
     // один раз на процесс, чтобы не спамить в журнал каждый кадр.
     if (s.blend !== undefined && !blend_warned) {
@@ -325,6 +332,31 @@ export function stepParticle(p, dt, params) {
     const g = params.gravity;
     p.vx += g.x * dt;
     p.vy += g.y * dt;
+
+    // Поля сил из $.fx.attractor (притяжение и вихрь). Частицы — единственное,
+    // что здесь двигается, поэтому и «чёрная дыра» тянет именно их: физика
+    // тел живёт в Box2D и тянется силами через $.world.
+    const fields = ctx.fx_fields;
+    if (fields && fields.length) {
+        for (let i = 0; i < fields.length; i++) {
+            const f = fields[i];
+            const dx = f.x - p.x;
+            const dy = f.y - p.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 > f.radius * f.radius || d2 < 1.0) continue;
+            const d = Math.sqrt(d2);
+            const falloff = 1 - d / f.radius;
+            // Делим на расстояние: у центра не должно быть бесконечности.
+            const k = f.strength * falloff * dt / Math.max(16, d);
+            p.vx += dx * k;
+            p.vy += dy * k;
+            if (f.swirl) {
+                p.vx += -dy * f.swirl * k;
+                p.vy += dx * f.swirl * k;
+            }
+        }
+    }
+
     if (params.damping > 0) {
         const f = Math.exp(-params.damping * dt);
         p.vx *= f;
@@ -430,6 +462,54 @@ function emitBurst(st, node, count) {
     return n;
 }
 
+/**
+ * Узел-суб-эмиттер для этого эмиттера: создаётся один раз и живёт ребёнком
+ * родителя (тогда remove() уносит и его). Сам он не эмитит — только бьёт
+ * залпом из точки смерти частицы.
+ */
+function subNodeFor(st, node) {
+    if (st.sub_node) return st.sub_node;
+    if (!st.params.sub) return null;
+
+    const spec = Object.assign({}, st.params.sub);
+    spec.one_shot = true;
+    spec.amount = 0;
+    spec.rate = 0;
+    delete spec.sub;
+    delete spec.on_death;
+    delete spec.onDeath;
+
+    const sub = new Node('particles', spec);
+    // Node, а не обёртка: цепные методы (appendTo/at) живут в api.js, поэтому
+    // привязываем вручную — так remove() родителя уносит и суб-эмиттер.
+    sub.parent_node = node;
+    node.child_nodes.push(sub);
+    st.sub_node = sub;
+    return sub;
+}
+
+/** Частица умерла — из её точки бьёт залп суб-эффекта. */
+function emitSub(st, node, p) {
+    const spec = st.params.sub;
+    if (!spec) return;
+    const amount = Math.max(1, Math.floor(num(spec.amount, 2)));
+
+    let wx = p.x;
+    let wy = p.y;
+    if (st.local) {
+        const cos = Math.cos(node.angle);
+        const sin = Math.sin(node.angle);
+        wx = node.x + p.x * cos - p.y * sin;
+        wy = node.y + p.x * sin + p.y * cos;
+    }
+
+    const sub = subNodeFor(st, node);
+    if (!sub) return;
+    sub.moveToX(wx);
+    sub.moveToY(wy);
+    emitBurst(states.get(sub) || ensureState(sub), sub, amount);
+}
+
 function tickEmitter(node, dt) {
     const st = ensureState(node);
 
@@ -463,6 +543,8 @@ function tickEmitter(node, dt) {
         stepParticle(parts[i], dt, params);
         if (parts[i].dead) {
             const dead = parts[i];
+            // Суб-эмиттер бьёт из точки смерти, пока частица ещё цела в памяти.
+            emitSub(st, node, dead);
             const last = parts.pop();
             if (i < parts.length) parts[i] = last;
             st.free.push(dead);

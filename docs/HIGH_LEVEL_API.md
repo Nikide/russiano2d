@@ -82,6 +82,18 @@ $('<ui.button>', { id: 'play', text: 'Играть' })
 через `.attr('ключ')` — то есть свой атрибут всегда можно завести, не трогая
 движок.
 
+Два ключа ведут себя как методы, потому что за ними стоит работа, а не поле:
+
+```js
+$('<sprite>', { src: 'art/hero.png' })          // то же, что .sprite('art/hero.png')
+$('<sprite>', { frames: { src: 'sheet.png', cols: 8, rows: 4, cw: 16, ch: 16 } })
+```
+
+`src` грузит текстуру у всех спрайтовых тегов (`<sprite>`, `<player>`,
+`<enemy>`, `<npc>`, `<pickup>`, `<bullet>`, `<ui.image>`) — и его же
+показывает `.attr('src')`. У `<tilemap>` и `<particles>` `src` остаётся
+обычным атрибутом: его читают их собственные отрисовщики.
+
 ### Теги
 
 | Тег | Тело | Назначение |
@@ -365,11 +377,17 @@ $('#hero').remove()                    // уничтожить узел и ег�
 
 ```js
 .data('hp', 100) .data('hp') .data({ a: 1 })   // своё хранилище
-.attr('speed', 120) .attr('speed') .attr({ })  // свойства
+.attr('speed', 120) .attr('speed') .attr({ })  // свойства и атрибуты
 .addClass('boss') .removeClass('boss') .toggleClass('boss') .hasClass('boss')
 .tag('friendly') .addTag('x') .removeTag('x')
 .text('Привет') .value(0.5) .max(1)            // для текста и полос
 ```
+
+`.attr('имя')` читает и свойства узла, и свободные атрибуты: `.attr('id')`,
+`.attr('hp')`, `.attr('x')` возвращают то же, что `.id()`, `.hp()`, `.pos()`,
+а неизвестный ключ — значение из `attrs`. `.attr()` без аргумента отдаёт
+только свободные атрибуты. `.attr('имя', значение)` пишет так же, как
+одноимённый атрибут в `$('<тег>', { … })`.
 
 ---
 
@@ -454,15 +472,33 @@ $.input.text()                         // символы, набранные з�
 
 ```js
 $.sound.play('hit.wav', { volume: 0.7, loop: false })
+$.sound.play('shot.wav', { pitch: 1.2, volume: 0.9 })   // выше и быстрее
 $.sound.playAt('boom.wav', x, y, { max: 700 })     // позиционно
 $.sound.playAt('boom.wav', '#hero')                // от узла
 $.sound.music('theme.ogg', { loop: true, volume: 0.5 })
+$.sound.music('theme.ogg', { pitch: 0.8 })         // музыка медленнее и ниже
+$.sound.musicPitch() .musicPitch(1.1)
 $.sound.crossfade('boss.ogg', 1000) .stopMusic(500)
 $.sound.volume(0.8) .mute(true) .sfxVolume(0.5) .musicVolume(0.5)
 $.sound.stopAll() .playing(ch) .activeChannels() .duration('x.ogg') .preload(['a.ogg'])
 ```
 
 Расширение можно не писать: движок сам ищет `.wav`, `.ogg`, `.mp3`, `.flac`.
+
+`{ pitch }` — скорость воспроизведения: `1.0` как записано, `2.0` вдвое быстрее
+и на октаву выше. Скорость — свойство канала, а каналы переиспользуются, поэтому
+без `pitch` она сбрасывается в `1.0`.
+
+**Комната.** Звук выстрела в комнате 5×5 и в зале 20×20 отличается хвостом
+реверберации. Комната задаётся зонами, а слушатель — точкой, узлом или
+селектором (см. [audiobus.md](highlevel/audiobus.md) §8):
+
+```js
+$.audio.zone('hall',   { rect: [0, 0, 640, 640], height: 6, material: 'concrete' });
+$.audio.zone('closet', { rect: [700, 0, 160, 160], height: 2.4, material: 'tile' });
+$.audio.listener('#hero');
+$.audio.room();          // { wet, room, damp, width } — что сейчас звучит
+```
 
 ## 19. `$.scene` — сцены
 
@@ -618,11 +654,35 @@ $.gfx.draw.clear()
 Всё из `$.gfx.draw` и `$.gfx.text` рисуется **поверх сцены**, в координатах окна,
 и попадает на скриншот агента.
 
+**Пост-обработка кадра** (сцена уходит в offscreen-текстуру, поверх неё —
+эффекты; HUD движок рисует уже после них, поэтому интерфейс остаётся чистым):
+
+```js
+$.gfx.post({ glow: 0.25, vignette: 0.3 })            // свечение и вигнетка
+$.gfx.post({ lens: 1.1, centerX: 0.5, centerY: 0.5 }) // линза: взрыв, чёрная дыра
+$.gfx.post({ chromatic: 0.005, grain: 0.08, scanline: 0.1 })
+$.gfx.post({ saturation: 0.3, contrast: 1.2, tint: [1.3, 0.5, 0.5], blood: 0.2 })
+$.gfx.post()          // текущие параметры
+$.gfx.postOff()       // выключить (кадр идёт прямо на экран)
+
+// Готовые камерные наборы: adventure, forest_night, horror, bloodmoon,
+// retro, noir, dream, neutral. Второй аргумент — плавный переход.
+$.gfx.postPreset('forest_night')
+$.gfx.postPreset('bloodmoon', { ms: 90 })
+$.gfx.postPresets()   // список имён
+```
+
+Подробности, ограничения и внутренности — [highlevel/render.md](highlevel/render.md) §3.1.
+
 ## 24. `$.debug` и `$.console`
 
 ```js
 $.debug.on() .off() .toggle() .isOn()      // оверлей движка (F1)
 $.debug.stats()                            // { fps, frame_ms, sprites, nodes, bodies, … }
+$.debug.profile()                          // { frame_ms, zones_ms, unaccounted_ms, zones: [{name, ms, peak}] }
+$.debug.profileReset()                     // сбросить накопленное
+$.debug.profiling(false)                   // выключить замеры (по умолчанию включены)
+$.debug.profiler.start('моё') / .end('моё') / .report()   // свои замеры, время — engine.now()
 $.debug.draw.line('#hero', '#exit', 'yellow')   // принимает селекторы и узлы
 $.debug.draw.rect('#zone', '#door', 'red')
 $.debug.watch('hp', () => $('#hero').hp())
@@ -689,17 +749,38 @@ $.fn .selectors .ctx   // внутренности для расширений
 |---|---|
 | Своих шейдеров на узел | Конвейер движка общий. `.shader()` пишет предупреждение |
 | Пользовательских шейдеров | Конвейеры фиксированные; `.shader()` пишет предупреждение. Режимы смешивания (`add`, `multiply`, `none`) при этом есть |
-| DSP-эффектов кроме `lowpass`/`echo` | В SDL_mixer 3.2 нет готовых эффектов, движок обрабатывает сэмплы сам; реверба нет |
-| Изменения `pitch` звука | SDL_mixer не умеет; `{ pitch }` игнорируется с предупреждением |
+| Канальных DSP-эффектов кроме `lowpass`/`echo` | Обработка своя, в C; список — `$.audio.effects()`. Реверберация есть, но она общая на микс (комната), а не эффект шины |
+| Реверб-шины с посылом | Комната одна на весь микс: отдельной шины реверба, куда шлётся часть сигнала конкретных звуков, нет (см. [audiobus.md](highlevel/audiobus.md) §8) |
 | Виброотклика | `$.input.rumble()` пока не подключён к SDL_RumbleGamepad |
-| Произвольных (не AABB) браш-форм | `<circle>` рисуется кругом, но хитбокс прямоугольный |
+| Слоёв и масок коллизий | `.mask()`, `.layerBits()`, `.collidesWith()` — заглушки и ничего не делают: фильтрация тел и запросов ещё не реализована |
+| Фигурного свипа (`ShapeCast2D`) | Есть луч и запрос точки/прямоугольника, свипа формы нет |
 | Коллизий внутри `<tilemap>` по габариту агента | Сетка тайлов помечает тайлы, а не объём: для тела нужен `agentRadius` у `$.nav` |
 | Частиц как тел физики | `<particles>` не участвуют в `raycast`/`query` |
-| Соединений тел (joints) | В `physics.c` их нет: только отдельные тела Box2D |
-| `.width()` как геттер | Используйте `.size()` |
+| Паузы и масштаба времени для клипов | `$.time.pause()`/`scale()` действуют на твины и таймеры, но клипы `$.anim` тикают по сырому `dt` |
+| Пользовательских render target | `$.viewport.create` по-прежнему заглушка: offscreen-текстура есть только у пост-обработки (`$.gfx.post`), игры в свои текстуры не рисуют (нужен список команд вместо прямых вызовов прохода) |
+| Честного bloom | Свечение — восемь выборок с порогом в одном проходе, без bright-pass и размытия (см. [VFX_PLAN.md](VFX_PLAN.md)) |
+
+Формы тел, суставы (`revolute`/`distance`/`weld`), события контакта,
+`.width()`/`.height()` как геттеры — всё это есть, см. разделы 6–8.
 
 Ошибки в игровом коде не роняют движок: они уходят в журнал вместе со стеком
 (`$: ошибка в $.update: …`) и в отладочный оверлей.
+
+### Грабли, на которых уже спотыкались
+
+Три штуки, которые «молча не работают», уже починены — но в старых сборках и
+примерах могут встречаться:
+
+| Как писали | Что было | Сейчас |
+|---|---|---|
+| `$('<sprite>', { src: 'hero.png' })` | `src` оседал в `attrs`, текстура не грузилась — работал только `.sprite()` | Грузится, как `.sprite()`; то же для `{ frames }` |
+| `.attr('id')`, `.attr('hp')`, `.attr('x')` | Возвращали `undefined`: `.attr()` смотрел только в `attrs`, хотя `.attr('src')` работал | Читают свойства узла, а если такого свойства нет — атрибут |
+| `.tag('friendly')` | Добавлял **класс**, а не тег | Добавляет тег, как и написано в разделе 14 |
+
+Ещё два места, где легко ошибиться уже сейчас:
+
+* `$.world.pause()` — это выключенная гравитация, а не пауза игры (пауза — `$.time.pause()`);
+* `.attr('имя')` и `.data('имя')` — разные хранилища: первое читает свойства и атрибуты узла, второе только собственный словарь `.data()`.
 
 ---
 
@@ -758,6 +839,8 @@ $.update(() => {
 | Навигация: A*, агент, navmesh | `$.nav` | — | [nav.md](highlevel/nav.md) |
 | Prefab и сериализация сцен | `$.prefab` | — | [prefab.md](highlevel/prefab.md) |
 | Аудио-шины и эффекты | `$.audio` | — | [audiobus.md](highlevel/audiobus.md) |
+| Комната и акустика помещений | `$.audio.room/zone/listener`, `$.sound.play({ pitch })` | — | [audiobus.md](highlevel/audiobus.md) §8 |
+| VFX: ленты, молнии, волны, поля сил | `$.fx` | — | [fx.md](highlevel/fx.md) |
 | Канвас-слои, параллакс, fade | `$.layers` | `<layer>` | [layers.md](highlevel/layers.md) |
 | UI-контролы: контейнеры, ввод, якоря, темы | `$.ui` (дополнение) | `<ui.row>` и др. | [widgets.md](highlevel/widgets.md) |
 | Tween в стиле Godot | `$.tween` | — | [tween.md](highlevel/tween.md) |
@@ -812,6 +895,39 @@ $.ready(() => {
   так что порядок отрисовки не меняется.
 * **Текст в `<ui.input>`** приходит через `$.input.text()`
   (`engine.textInput()`), в агентском режиме — командой `text`.
+
+---
+
+## 31. `$.fx` — эффекты своими руками
+
+Ленты, молнии, ударные волны, вспышки и поля сил. Всё рисуется тем же батчем,
+что и спрайты, поэтому эффекты попадают в кадр сцены и не добавляют draw call'ов.
+Подробности и параметры — [highlevel/fx.md](highlevel/fx.md).
+
+```js
+// Трассер и вспышка у дула
+$.fx.ribbon([muzzle, hitPoint], { ms: 90, width: 5, color: '#ffd27f', blend: 'add' });
+$.fx.pulse(muzzle.x, muzzle.y, { radius: 28, ms: 90, color: '#ffe0a0' });
+
+// Удар: волна + тряска камеры + микро-стоп кадра
+$.fx.impact(point.x, point.y, { radius: 60, shake: 4, hitStop: 60 });
+
+// Молния и лента за целью
+$.fx.lightning('#hero', '#enemy', { life: 120, jitter: 12, branches: 2 });
+const trail = $.fx.trail('#hero', { ms: 350, width: 10, color: '#8fd8ff' });
+trail.stop();
+
+// Чёрная дыра: поле тянет частицы, потом схлопывается
+$.fx.attractor(x, y, { radius: 280, strength: 1600, swirl: 1.2, life: 2800 });
+$.fx.shockwave(x, y, { radius: 420, ms: 520, width: 16, color: '#c9a6ff' });
+```
+
+Что важно помнить:
+
+* `$.fx.attractor` действует на **частицы** (`$.particles`), а не на тела Box2D —
+  тела тянут обычными силами;
+* эффекты принадлежат сцене: при `$.scene.load()` они сбрасываются сами;
+* `<light>` теперь рисуется мягким радиальным пятном, а не плоским кругом.
 
 Дальше: [AGENT_API.md](AGENT_API.md) — как этим управлять программой,
 [RECIPES](tutorial-platformer.md) и [API.md](API.md) — низкий уровень.

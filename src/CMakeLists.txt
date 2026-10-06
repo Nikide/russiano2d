@@ -12,6 +12,7 @@ set(R2D_SOURCES
     light.h    light.cpp
     app.h      app.c
     render.h   render.c
+    profile.h  profile.c
     physics.h  physics.c
     http.h     http.c
     script.h   script.c
@@ -43,7 +44,7 @@ endif()
 
 # --- Звук -------------------------------------------------------------------
 if(R2D_ENABLE_AUDIO)
-    list(APPEND R2D_SOURCES audio.h audio.c)
+    list(APPEND R2D_SOURCES audio.h audio.c audio_reverb.h audio_reverb.c)
     list(APPEND R2D_DEFINES R2D_ENABLE_AUDIO=1)
 else()
     # Без SDL_mixer остаётся тот же интерфейс audio.h, но с пустыми

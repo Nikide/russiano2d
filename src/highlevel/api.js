@@ -22,6 +22,7 @@ import { installSound } from './sound.js';
 import { installScene } from './scene.js';
 import { installUi } from './ui.js';
 import { installDebug } from './debug.js';
+import { createLoading } from './loading.js';
 import { installGfx } from './render.js';
 import { installStore } from './store.js';
 import { installAgent } from './agent.js';
@@ -35,9 +36,11 @@ import { tweenProps, clearNodeTweens, pauseNodeTweens, shakeNode, flashNode, seq
 import { installAnim, tickAnim } from './anim.js';
 import { installTilemap, tickTilemap } from './tilemap.js';
 import { installParticles, tickParticles } from './particles.js';
+import { installFx, tickFx } from './fx.js';
 import { installNav, tickNav } from './nav.js';
 import { installPrefab, tickPrefab } from './prefab.js';
 import { installAudiobus, tickAudiobus } from './audiobus.js';
+import { installAcoustics, tickAcoustics } from './acoustics.js';
 import { installLayers, tickLayers } from './layers.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
@@ -65,6 +68,23 @@ const frame = {
 
 const globals = new Map();   // имя события → [обработчики]
 
+/**
+ * Общий код .frames() и $('<sprite>', { frames }) — один источник правды.
+ * Лист задаётся как { src, cols, rows, cw, ch }. Живёт на уровне модуля,
+ * потому что нужен и фабрике узлов, и методам узла (разные области видимости).
+ */
+function applyFrames(node, spec) {
+    if (spec && spec.src) {
+        resolveSprite(spec);
+        node.frames = sheetFrames(spec);
+        if (node.frames) node.setSprite(node.frames[0]);
+        node.anim = null;
+        node.attrs.src = spec.src;
+    } else if (Array.isArray(spec)) {
+        node.frames = spec;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Создание API
 // ---------------------------------------------------------------------------
@@ -82,7 +102,11 @@ export function createApi() {
             if (tag) {
                 const name = tag[1].trim();
                 if (!TAGS[name]) ctx.log(`$: неизвестный тег <${name}> — создаю пустой узел`);
-                return wrapOne(new Node(name, attrs));
+                const node = new Node(name, attrs);
+                // { frames } в конструкторе делал бы то же, что .frames():
+                // без этого лист молча превращался в обычный атрибут.
+                if (attrs && attrs.frames !== undefined) applyFrames(node, attrs.frames);
+                return wrapOne(node);
             }
             return wrap(query(arg));
         }
@@ -110,6 +134,11 @@ export function createApi() {
     installDebug($);
     installWindow($);
     installAgent($);
+
+    // Экран загрузки: полноэкранная панель с полосой прогресса для смены сцен
+    // и построения мира.
+    ctx.loading = createLoading(ctx);
+    $.loading = ctx.loading;
 
     $.world = ctx.world;
     $.camera = ctx.camera;
@@ -161,6 +190,7 @@ export function createApi() {
     // tickTime/tickWindow и вызывайте её из цикла ниже.
     $.ready = (fn) => { frame.ready.push(fn); return $; };
     $.update = (fn) => { frame.update.push(fn); return $; };
+
     $.render = (fn) => { frame.render.push(fn); return $; };
     $.exit = (fn) => { frame.exit.push(fn); return $; };
     $.fn = Wrapper.prototype;
@@ -184,9 +214,11 @@ export function createApi() {
     installAnim($);
     installTilemap($);
     installParticles($);
+    installFx($);
     installNav($);
     installPrefab($);
     installAudiobus($);
+    installAcoustics($);
     installLayers($);
     installWidgets($);
     installTriggers($);
@@ -423,21 +455,18 @@ function installNodeMethods($) {
             if (value && typeof value === 'object' && value.src) {
                 resolveSprite(value);                 // наполняет кэш листа
                 node.frames = sheetFrames(value);
+                node.attrs.src = value.src;
+            } else if (typeof value === 'string') {
+                // .region() читает путь из attrs.src: без синхронизации
+                // .sprite(path).region(...) молча ничего не вырезал.
+                node.attrs.src = value;
+            } else if (value === null || value === undefined) {
+                delete node.attrs.src;
             }
         });
     });
     def('frames', function (spec) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
-            if (spec && spec.src) {
-                resolveSprite(spec);
-                node.frames = sheetFrames(spec);
-                if (node.frames) node.setSprite(node.frames[0]);
-                node.anim = null;
-            } else if (Array.isArray(spec)) {
-                node.frames = spec;
-            }
-        });
+        return this.each((_, el) => applyFrames(el.nodes ? el.nodes[0] : el, spec));
     });
     def('region', function (x, y, w, h) {
         return this.each((_, el) => {
@@ -940,6 +969,7 @@ function installNodeMethods($) {
     });
 
     def('attr', function (key, value) {
+        // Без аргумента — только свободные атрибуты (совместимость).
         if (key === undefined) return this.nodes[0] ? { ...this.nodes[0].attrs } : {};
         if (typeof key === 'object') {
             return this.each((_, el) => {
@@ -947,9 +977,11 @@ function installNodeMethods($) {
                 for (const k of Object.keys(key)) node.set(k, key[k]);
             });
         }
+        // С аргументом — свойство или атрибут: .attr('id') читает id, а не
+        // пустой attrs (иначе свойства узла были не видны через .attr()).
         if (value === undefined) {
             const node = this.nodes[0];
-            return node ? node.attrs[key] : undefined;
+            return node ? node.get(key) : undefined;
         }
         return this.each((_, el) => { const n = el.nodes ? el.nodes[0] : el; n.set(key, value); });
     });
@@ -958,7 +990,7 @@ function installNodeMethods($) {
     def('removeClass', function (name) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).removeClass(name); }); });
     def('toggleClass', function (name, force) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).toggleClass(name, force); }); });
     defGet('hasClass', (n, name) => n.hasClass(name), false);
-    def('tag', function (name) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).addClass(name); }); });
+    def('tag', function (name) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).addTag(name); }); });
     def('addTag', function (name) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).addTag(name); }); });
     def('removeTag', function (name) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).removeTag(name); }); });
 
@@ -1020,19 +1052,40 @@ function installNodeMethods($) {
 // ---------------------------------------------------------------------------
 
 function installFrameHooks($) {
+    // Последовательный профайлер подсистем кадра: prof('имя') закрывает
+    // предыдущий отрезок и открывает следующий, prof(null) закрывает последний.
+    // Живёт здесь, а не в createApi: раньше функция оказалась в другой области
+    // видимости, каждый кадр падал ReferenceError, и весь блок подсистем
+    // (fx, частицы, акустика, интерфейс) не выполнялся вообще.
+    let prof_name = null;
+    let prof_at = 0;
+    function profilerMark(name) {
+        const now = typeof engine.now === 'function' ? engine.now() : engine.time * 1000;
+        if (prof_name !== null && $.debug && $.debug.profiler) {
+            $.debug.profiler.record(prof_name, now - prof_at);
+        }
+        prof_name = name;
+        prof_at = now;
+    }
+
     engine.setUpdate((dt) => {
+        // Замеры первой половины кадра: именно здесь раньше терялись десятки
+        // миллисекунд, а профайлер показывал только «JS: логика».
+        const prof = profilerMark;
+
         // 1. Свежие трансформы из физики.
-        ctx.world.sync(dt);
+        prof('синк физики'); ctx.world.sync(dt);
 
         // 2. События контакта за прошедший шаг физики: collide/separate/hit.
-        dispatchContacts();
+        prof('контакты'); dispatchContacts();
 
         // 3. Смена сцены — до логики, чтобы новая сцена прожила кадр целиком.
-        ctx.scene._tick(dt);
+        prof('сцена'); ctx.scene._tick(dt);
 
         // 4. Время: твины, таймеры, камера, события ввода.
-        tickTime();
+        prof('время'); tickTime();
         tickWindow();
+        prof('окно');
 
         // 5. $.ready — один раз, на первом кадре.
         if (!frame.started) {
@@ -1051,27 +1104,34 @@ function installFrameHooks($) {
             try { fn(dt, $); } catch (e) { reportError('$.update', e); }
         }
 
+        prof('логика игры');
         animateSprites();
         applyControls(dt);
+        prof('анимация+ввод');
 
         // 7. Подсистемы после аудита API. Порядок: сначала те, кто меняет
         //    состояние мира (анимация, частицы, навигация), затем слои и
         //    интерфейс, последней — шины звука (затухания громкости).
-        tickAnim(dt);
-        tickTilemap(dt);
-        tickParticles(dt);
-        tickNav(dt);
-        tickPrefab(dt);
-        tickLayers(dt);
-        tickWidgets(dt);
-        tickTriggers(dt);
-        tickI18n(dt);
-        tickPool(dt);
-        tickViewport(dt);
-        tickHttp(dt);
-        tickAudiobus(dt);
-
-        ctx.ui._tick();
+        // Замеры — для $.debug.profiler.report(): видно, какая подсистема
+        // съедает кадр, без внешних инструментов. prof('имя') закрывает
+        // предыдущий отрезок и открывает новый, prof(null) закрывает последний.
+        tickAnim(dt);   prof('анимация');
+        tickTilemap(dt); prof('tilemap');
+        tickFx(dt);      prof('vfx');
+        tickParticles(dt); prof('частицы');
+        tickNav(dt);     prof('навигация');
+        tickPrefab(dt);  prof('префабы');
+        tickLayers(dt);  prof('слои');
+        tickWidgets(dt); prof('виджеты');
+        tickTriggers(dt); prof('триггеры');
+        tickI18n(dt);    prof('i18n');
+        tickPool(dt);    prof('пулы');
+        tickViewport(dt); prof('вьюпорты');
+        tickHttp(dt);    prof('http');
+        tickAudiobus(dt); prof('шины звука');
+        tickAcoustics(dt); prof('акустика');
+        ctx.ui._tick();  prof('интерфейс');
+        prof(null);
     });
 
     engine.setRender(() => {

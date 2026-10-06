@@ -65,6 +65,7 @@ export default function install($) {
 | `physics` | песочница Box2D: ящики, взрывы, гравитация, контуры тел | `.body('dynamic')`, `.applyImpulse`, `$.world.query` |
 | `bsp` | порядок отрисовки без z-буфера на наклонных стенах, пошаговый обход дерева | `engine.bsp.build/order` |
 | `light` | 2D-свет через полигоны видимости: источники, тени, градиент по цвету вершин | `engine.light.visibility`, `engine.submitTriangles` |
+| `shooter_witch` | **ночной лес**: зомби-шутер в духе Vampire Survivors — авто-стрельба по ближайшему, волны, опыт, карты апгрейдов, фонари как единственный свет, тени от стволов, кровь и лужи | `<tilemap>` + `.autotile()` (террейн тропы), `engine.light.visibility`, `$.audio.zone/obstacles/damping`, `$.fx.*`, `$.gfx.postPreset` |
 
 ## Управление
 

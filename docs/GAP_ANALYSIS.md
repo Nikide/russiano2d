@@ -230,3 +230,77 @@ API при вызове бросает понятную ошибку, а не р
 скелет/IK, кривые и градиенты как отдельные ресурсы, render target для
 мини-карт и порталов. Они не входят в текущие итерации и перечислены здесь, чтобы не
 потерять.
+
+---
+
+## 8. Решение по аудио (2026-10-05): расширяем штатный стек
+
+Рассматривался перенос звука на [SoLoud](https://github.com/jarikomppa/soloud)
+(zlib/libpng, C API, Freeverb, шины, приоритеты голосов, pitch, стриминг).
+Спайк подтвердил, что он собирается и работает, но проверка пришпиленной
+версии SDL_mixer показала: **то, за чем мы шли в SoLoud, уже есть в нашем
+стеке** — просто не подключено.
+
+| Возможность | Где в SDL_mixer 3.2.4 (`release-3.2.4`) | Состояние в движке |
+|---|---|---|
+| Pitch / скорость | `MIX_SetTrackFrequencyRatio` | не подключено, `$.sound.play({pitch})` пишет предупреждение |
+| Шины с DSP | `MIX_CreateGroup`, `MIX_SetTrackGroup`, `MIX_SetGroupPostMixCallback` | шины эмулируются громкостью в `audiobus.js` |
+| Позиционный звук | `MIX_SetTrack3DPosition` | панорама считается вручную |
+| DSP на дорожке | `MIX_SetTrackRawCallback` | используется: `lowpass`/`echo` в `src/audio.c` |
+| Стриминг музыки | `MIX_LoadAudioNoCopy(..., predecode=false)` | уже используется |
+
+Поэтому решение: **не тащить SoLoud, а расширять штатный звук**. Из SoLoud
+берём алгоритмы, а не движок — в первую очередь Freeverb (алгоритм Jezar,
+public domain), который встаёт в `MIX_SetGroupPostMixCallback` как
+реверб-шина. SoLoud остаётся планом B на случай, если понадобится граф шин с
+send/return и свёртка с импульсными характеристиками.
+
+Этапы:
+
+1. **Pitch и реальные шины.** `MIX_SetTrackFrequencyRatio`,
+   `MIX_CreateGroup`/`MIX_SetTrackGroup` вместо JS-эмуляции, `MIX_SetTrack3DPosition`.
+   Файлы: `src/audio.{h,c}`, `src/script.c`, `src/highlevel/sound.js`,
+   `src/highlevel/audiobus.js`. Публичный API `$.sound`/`$.audio` не меняется.
+2. **Реверб.** Порт Freeverb в `src/audio_reverb.c` +
+   `$.audio.effect('reverb', { room, damp, wet, width })`.
+3. **Акустика помещений.** `$.audio.zone(name, { rect, height, material })`,
+   `$.audio.listener(...)`, зонд лучами → RT60/параметры реверба, окклюзия
+   через `$.world.lineOfSight` + lowpass, сглаживание на границах зон.
+4. **По потребности.** Приоритеты и stealing голосов, `seek`, новые эффекты.
+
+Правила поведения, которые не меняются: один публичный API (`$.sound`,
+`$.audio`), возможности — свойство бэкенда (`$.audio.supports('reverb')`), а
+не отдельное пространство имён вида `$.soloud.*`.
+
+### Сделано (2026-10-05)
+
+| Что | Где | Чем проверено |
+|---|---|---|
+| Pitch эффектов и музыки (`{ pitch }`, `$.sound.musicPitch`) | `src/audio.c`, `src/script.c`, `sound.js` | `tests/js/sound_test.mjs` |
+| Настоящие шины: `MIX_CreateGroup` + пост-микс группы для эффекта шины | `src/audio.c`, `audiobus.js` | `tests/js/audiobus_test.mjs` |
+| 3D-позиция канала (`MIX_SetTrack3DPosition`) как режим `$.audio.spatial('sdl')` | `src/audio.c`, `audiobus.js`, `sound.js` | `tests/js/audiobus_test.mjs` |
+| Реверберация помещения (Freeverb, сухой сигнал не ослабляется) | `src/audio_reverb.{h,c}`, post-mix колбэк в `audio.c` | C-тест `tests/audio/reverb_test.c`: зал держит хвост там, где комната уже молчит |
+| Комната и зоны: `$.audio.room/zone/removeZone/acoustics/occlusion/acousticsState` | `src/highlevel/acoustics.js` | `tests/js/acoustics_test.mjs` |
+| Слушатель-узел/селектор, окклюзия за стеной, живое позиционирование `$.sound.playAt` | `audiobus.js`, `sound.js`, `acoustics.js` | `tests/js/sound_test.mjs`, `tests/js/audiobus_test.mjs` |
+
+Отличия от плана, которые стоит помнить:
+
+* реверберация висит на `MIX_SetPostMixCallback` (одна комната на микс), а не на
+  `MIX_SetGroupPostMixCallback`: комната — свойство места, она слышна для всего
+  сразу. Шины при этом **настоящие группы** (`MIX_CreateGroup`), и канальный
+  эффект шины (`lowpass`/`echo`) идёт через пост-микс своей группы;
+* `MIX_SetTrack3DPosition` подключён как **опциональный** режим
+  (`$.audio.spatial('sdl')`): у SDL_mixer 3.2.4 слушатель всегда в `(0,0,0)` и
+  его нельзя двигать, поэтому координаты даются относительно слушателя, а трек
+  микшируется в моно. По умолчанию остаётся JS-панорама (`panAndGain`), потому
+  что она дешевле и не теряет стерео;
+* у групп SDL_mixer нет гейна и вложенности — `volume`/`mute`/`solo` и дерево шин
+  по-прежнему считает JS, движку достаётся DSP;
+* в GAP_ANALYSIS §2 строка «позиционного затухания нет» устарела — оно появилось
+  ещё в `audiobus.js`.
+
+## 9. VFX
+
+План по визуальным эффектам (взрывы, выстрелы, чёрная дыра) — в
+[VFX_PLAN.md](VFX_PLAN.md): что делается на текущем пайплайне, что требует
+render target, а что — рантайм-шейдеров и сторонних библиотек.

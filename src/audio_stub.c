@@ -138,3 +138,65 @@ void r2d_audio_set_sfx_volume(R2DAudio *a, float v) { R2D_UNUSED(a); R2D_UNUSED(
 float r2d_audio_get_sfx_volume(const R2DAudio *a) { R2D_UNUSED(a); return 0.0f; }
 void r2d_audio_set_music_volume(R2DAudio *a, float v) { R2D_UNUSED(a); R2D_UNUSED(v); }
 float r2d_audio_get_music_volume(const R2DAudio *a) { R2D_UNUSED(a); return 0.0f; }
+
+void r2d_audio_set_channel_pitch(R2DAudio *a, int channel, float ratio)
+{
+    R2D_UNUSED(a); R2D_UNUSED(channel); R2D_UNUSED(ratio);
+}
+
+float r2d_audio_get_channel_pitch(const R2DAudio *a, int channel)
+{
+    R2D_UNUSED(a); R2D_UNUSED(channel);
+    return 1.0f;
+}
+
+void r2d_audio_set_music_pitch(R2DAudio *a, float ratio) { R2D_UNUSED(a); R2D_UNUSED(ratio); }
+float r2d_audio_get_music_pitch(const R2DAudio *a) { R2D_UNUSED(a); return 1.0f; }
+
+bool r2d_audio_set_room(R2DAudio *a, float wet, float room, float damp, float width)
+{
+    R2D_UNUSED(a); R2D_UNUSED(wet); R2D_UNUSED(room); R2D_UNUSED(damp); R2D_UNUSED(width);
+    return false;
+}
+
+void r2d_audio_get_room(const R2DAudio *a, float *wet, float *room, float *damp, float *width)
+{
+    R2D_UNUSED(a);
+    if (wet) *wet = 0.0f;
+    if (room) *room = 0.0f;
+    if (damp) *damp = 0.0f;
+    if (width) *width = 0.0f;
+}
+
+int r2d_audio_group(R2DAudio *a, const char *name)
+{
+    R2D_UNUSED(a); R2D_UNUSED(name);
+    return -1;
+}
+
+int r2d_audio_group_count(const R2DAudio *a) { R2D_UNUSED(a); return 0; }
+
+bool r2d_audio_group_assign(R2DAudio *a, int channel, int group_id)
+{
+    R2D_UNUSED(a); R2D_UNUSED(channel); R2D_UNUSED(group_id);
+    return false;
+}
+
+bool r2d_audio_set_group_effect(R2DAudio *a, int group_id, const char *kind, float p1, float p2)
+{
+    R2D_UNUSED(a); R2D_UNUSED(group_id); R2D_UNUSED(kind); R2D_UNUSED(p1); R2D_UNUSED(p2);
+    return false;
+}
+
+const char *r2d_audio_group_effect(const R2DAudio *a, int group_id)
+{
+    R2D_UNUSED(a); R2D_UNUSED(group_id);
+    return "none";
+}
+
+bool r2d_audio_set_channel_3d(R2DAudio *a, int channel, float x, float y, float z, bool on)
+{
+    R2D_UNUSED(a); R2D_UNUSED(channel);
+    R2D_UNUSED(x); R2D_UNUSED(y); R2D_UNUSED(z); R2D_UNUSED(on);
+    return false;
+}

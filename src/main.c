@@ -16,6 +16,7 @@
 #include "json.h"
 #include "physics.h"
 #include "http.h"
+#include "profile.h"
 #include "render.h"
 #include "script.h"
 #include "text.h"
@@ -205,6 +206,7 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
     r2d_http_update();
 
     // --- Физика: фиксированный шаг, чтобы симуляция не зависела от FPS ---
+    r2d_prof_begin(R2D_PROF_PHYSICS);
     fc->accumulator += app->dt;
     int steps = 0;
     while (fc->accumulator >= R2D_FIXED_DT && steps < R2D_MAX_SUBSTEPS) {
@@ -218,12 +220,21 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
     if (steps == 0) {
         r2d_physics_sync(fc->physics);
     }
+    r2d_prof_end(R2D_PROF_PHYSICS);
 
     // --- Скрипты ---
+    r2d_prof_begin(R2D_PROF_OTHER);
     r2d_script_poll_hot_reload(fc->script, app->dt);
+    r2d_prof_end(R2D_PROF_OTHER);
+
+    r2d_prof_begin(R2D_PROF_UPDATE);
     r2d_script_call_update(fc->script, app->dt);
+    r2d_prof_end(R2D_PROF_UPDATE);
+
     r2d_render_begin_frame(fc->renderer, app->width, app->height);
+    r2d_prof_begin(R2D_PROF_RENDER_JS);
     r2d_script_call_render(fc->script);
+    r2d_prof_end(R2D_PROF_RENDER_JS);
 
     // --- GPU ---
     SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(app->device);
@@ -235,7 +246,10 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
 
     SDL_GPUTexture *swapchain = NULL;
     Uint32 swap_w = 0, swap_h = 0;
-    if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmd, app->window, &swapchain, &swap_w, &swap_h)) {
+    r2d_prof_begin(R2D_PROF_ACQUIRE);
+    const bool acquired = SDL_WaitAndAcquireGPUSwapchainTexture(cmd, app->window, &swapchain, &swap_w, &swap_h);
+    r2d_prof_end(R2D_PROF_ACQUIRE);
+    if (!acquired) {
         R2D_ERROR("SDL_WaitAndAcquireGPUSwapchainTexture: %s", SDL_GetError());
         SDL_SubmitGPUCommandBuffer(cmd);
         return app->running;   // кадр пропущен, но не повод выходить
@@ -250,14 +264,24 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
                            r2d__on_reload_requested, fc->script);
 #endif
         // Копирующие проходы обязаны идти до открытия render pass.
+        r2d_prof_begin(R2D_PROF_UPLOAD);
         r2d_render_upload(fc->renderer, cmd);
+        r2d_prof_end(R2D_PROF_UPLOAD);
+        r2d_prof_begin(R2D_PROF_DRAW);
 #ifdef R2D_ENABLE_IMGUI
         r2d_debug_ui_prepare(fc->debug, cmd);
 #endif
 
+        // Пост-обработка: если включена, сцена идёт в offscreen-текстуру, а на
+        // экран её накладывает отдельный полноэкранный проход.
+        const bool post = r2d_render_post_enabled(fc->renderer);
+        SDL_GPUTexture *scene = post
+            ? r2d_render_scene_target(fc->renderer, (int)swap_w, (int)swap_h)
+            : NULL;
+
         SDL_GPUColorTargetInfo target;
         SDL_zero(target);
-        target.texture = swapchain;
+        target.texture = scene ? scene : swapchain;
         target.clear_color = (SDL_FColor){ fc->renderer->clear_r, fc->renderer->clear_g,
                                            fc->renderer->clear_b, fc->renderer->clear_a };
         target.load_op  = SDL_GPU_LOADOP_CLEAR;
@@ -265,18 +289,47 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
 
         SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
         if (pass) {
-            r2d_render_draw(fc->renderer, pass);
+            // С постом в offscreen уходит только мир: HUD метится JS-стороной
+            // (engine.markUI) и рисуется в отдельном проходе поверх обработки.
+            r2d_render_draw_world(fc->renderer, pass);
+            if (!scene) {
+                r2d_render_draw_ui(fc->renderer, pass);
 #ifdef R2D_ENABLE_IMGUI
-            r2d_debug_ui_draw(fc->debug, cmd, pass);
+                r2d_debug_ui_draw(fc->debug, cmd, pass);
 #endif
+            }
             SDL_EndGPURenderPass(pass);
+        }
+
+        if (scene) {
+            SDL_GPUColorTargetInfo out;
+            SDL_zero(out);
+            out.texture = swapchain;
+            out.clear_color = (SDL_FColor){ fc->renderer->clear_r, fc->renderer->clear_g,
+                                            fc->renderer->clear_b, fc->renderer->clear_a };
+            out.load_op  = SDL_GPU_LOADOP_CLEAR;
+            out.store_op = SDL_GPU_STOREOP_STORE;
+
+            SDL_GPURenderPass *ppass = SDL_BeginGPURenderPass(cmd, &out, 1, NULL);
+            if (ppass) {
+                r2d_render_post(fc->renderer, cmd, ppass);
+                r2d_render_draw_ui(fc->renderer, ppass);
+#ifdef R2D_ENABLE_IMGUI
+                r2d_debug_ui_draw(fc->debug, cmd, ppass);
+#endif
+                SDL_EndGPURenderPass(ppass);
+            }
         }
     }
 
+    r2d_prof_end(R2D_PROF_DRAW);
+
 #ifdef R2D_ENABLE_RMLUI
     // RmlUi открывает собственный render pass с LOADOP_LOAD.
+    r2d_prof_begin(R2D_PROF_UI);
     r2d_gui_update(fc->gui, (int)swap_w, (int)swap_h);
     r2d_gui_render(fc->gui, cmd, swapchain, swap_w, swap_h);
+    r2d_prof_end(R2D_PROF_UI);
 #endif
 
 #ifndef R2D_ENABLE_IMGUI
@@ -351,6 +404,10 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
             r2d__log_stats(app, fc->renderer, fc->physics, fc->audio);
         }
     }
+
+    // Закрываем кадр профайлера: dt — реальное время кадра, разница с суммой
+    // зон показывает неучтённое (ожидание GPU, планировщик).
+    r2d_prof_frame_end(app->dt * 1000.0f);
 
     return app->running;
 }

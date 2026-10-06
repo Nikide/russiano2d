@@ -67,13 +67,14 @@ static void r2d__blend_state(SDL_GPUColorTargetBlendState *bs, R2DBlendMode mode
         return;
 
     case R2D_BLEND_ADD:
-        // src + dst. Альфу тоже складываем: свет поверх света не должен
-        // внезапно «гаснуть» из-за неучтённой альфы назначения.
+        // src * src_alpha + dst. Альфа вершины ОБЯЗАНА ослаблять вклад: без
+        // этого полупрозрачное свечение (фонарь, вспышка, трассер) било в
+        // полную яркость, и альфа вершин в режиме add просто не работала.
         bs->enable_blend          = true;
-        bs->src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+        bs->src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
         bs->dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
         bs->color_blend_op        = SDL_GPU_BLENDOP_ADD;
-        bs->src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+        bs->src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
         bs->dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
         bs->alpha_blend_op        = SDL_GPU_BLENDOP_ADD;
         return;
@@ -386,10 +387,20 @@ int r2d_sprite_create(R2DRenderer *r, int texture, float sx, float sy, float sw,
 
     R2DSprite *s = &r->sprites[r->sprite_count];
     s->texture = texture;
-    s->u0 = sx / tw;
-    s->v0 = sy / th;
-    s->u1 = (sx + sw) / tw;
-    s->v1 = (sy + sh) / th;
+    // Полтексельный отступ: край квада попадает ровно на границу текселя, и
+    // при выборке по центру пикселя затягивался соседний кадр атласа.
+    // Сдвиг внутрь на полтекселя убирает эту «протечку».
+    if (sw > 1.0f && sh > 1.0f) {
+        s->u0 = (sx + 0.5f) / tw;
+        s->v0 = (sy + 0.5f) / th;
+        s->u1 = (sx + sw - 0.5f) / tw;
+        s->v1 = (sy + sh - 0.5f) / th;
+    } else {
+        s->u0 = sx / tw;
+        s->v0 = sy / th;
+        s->u1 = (sx + sw) / tw;
+        s->v1 = (sy + sh) / th;
+    }
     s->width  = sw;
     s->height = sh;
     s->alive  = true;
@@ -417,6 +428,8 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
     r->tri_batch_count  = 0;
     r->tri_index_start  = 0;
     r->batch_blend      = R2D_BLEND_ALPHA;
+    // -1 — «интерфейс ещё не помечен»: тогда все спрайты считаются миром.
+    r->ui_cmd_start     = -1;
     r->stat_draws     = 0;
     r->stat_sprites   = 0;
     r->stat_vertices  = 0;
@@ -751,18 +764,19 @@ static void r2d__bind_pipeline(R2DRenderer *r, SDL_GPURenderPass *pass, uint8_t 
     SDL_BindGPUIndexBuffer(pass, &ib, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 }
 
-void r2d_render_draw(R2DRenderer *r, SDL_GPURenderPass *pass)
+// Рисует диапазон спрайтов [from, to): соседние команды с одной текстурой и
+// одним режимом смешивания склеиваются в один draw call. bound_blend — «что
+// уже привязано» (-1 — ничего), состояние переживает вызовы, потому что
+// диапазоны рисуются в разных проходах и конвейер всё равно перепривяжется.
+static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPURenderPass *pass,
+                                   int from, int to, int *bound_blend)
 {
-    if (r->cmd_count == 0 && r->tri_batch_count == 0) return;
+    if (to <= from) return;
 
-    // Идём по командам и группируем соседние с одинаковой текстурой И
-    // одинаковым режимом смешивания в один draw call. -1 — «ещё ничего не
-    // привязано»; первый же участок привяжет нужный конвейер.
-    int bound_blend = -1;
-    int run_start = 0;
-    for (int i = 1; i <= r->cmd_count; ++i) {
+    int run_start = from;
+    for (int i = from + 1; i <= to; ++i) {
         const bool end_of_run =
-            (i == r->cmd_count) ||
+            (i == to) ||
             (r->sprites[r->cmds[i].sprite].texture != r->sprites[r->cmds[run_start].sprite].texture) ||
             (r->cmds[i].blend != r->cmds[run_start].blend);
 
@@ -770,9 +784,9 @@ void r2d_render_draw(R2DRenderer *r, SDL_GPURenderPass *pass)
 
         const int texture = r->sprites[r->cmds[run_start].sprite].texture;
         const uint8_t mode = r->cmds[run_start].blend;
-        if ((int)mode != bound_blend) {
+        if ((int)mode != *bound_blend) {
             r2d__bind_pipeline(r, pass, mode);
-            bound_blend = (int)mode;
+            *bound_blend = (int)mode;
         }
 
         SDL_GPUTextureSamplerBinding tex_binding;
@@ -788,6 +802,18 @@ void r2d_render_draw(R2DRenderer *r, SDL_GPURenderPass *pass)
         r->stat_draws++;
         run_start = i;
     }
+}
+
+void r2d_render_draw_world(R2DRenderer *r, SDL_GPURenderPass *pass)
+{
+    if (r->cmd_count == 0 && r->tri_batch_count == 0) return;
+
+    // Интерфейс помечен JS-стороной; если метки нет — все спрайты считаются
+    // миром (старое поведение, HUD тогда тоже под пост-обработкой).
+    const int ui_from = r->ui_cmd_start >= 0 ? r->ui_cmd_start : r->cmd_count;
+
+    int bound_blend = -1;
+    r2d__draw_sprite_range(r, pass, 0, ui_from, &bound_blend);
 
     r->stat_sprites = r->cmd_count;
 
@@ -814,9 +840,148 @@ void r2d_render_draw(R2DRenderer *r, SDL_GPURenderPass *pass)
     }
 }
 
+void r2d_render_draw_ui(R2DRenderer *r, SDL_GPURenderPass *pass)
+{
+    if (r->ui_cmd_start < 0) return;
+    int bound_blend = -1;
+    r2d__draw_sprite_range(r, pass, r->ui_cmd_start, r->cmd_count, &bound_blend);
+}
+
+void r2d_render_draw(R2DRenderer *r, SDL_GPURenderPass *pass)
+{
+    r2d_render_draw_world(r, pass);
+    r2d_render_draw_ui(r, pass);
+}
+
 // ---------------------------------------------------------------------------
 // Жизненный цикл
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Пост-обработка
+//
+// Сцена уходит в offscreen-текстуру формата swapchain (чтобы конвейеры
+// спрайтов подходили без изменений), а на экран её накладывает полноэкранный
+// проход: свечение, вигнетка, хроматика, зерно, скан-линии и линза.
+// ---------------------------------------------------------------------------
+
+static SDL_GPUGraphicsPipeline *r2d__create_post_pipeline(R2DRenderer *r)
+{
+    SDL_GPUShader *vs = r2d__make_shader(r->device, &r2d_shader_post_vert,
+                                          SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
+    SDL_GPUShader *fs = r2d__make_shader(r->device, &r2d_shader_post_frag,
+                                          SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 1);
+    if (!vs || !fs) {
+        if (vs) SDL_ReleaseGPUShader(r->device, vs);
+        if (fs) SDL_ReleaseGPUShader(r->device, fs);
+        return NULL;
+    }
+
+    SDL_GPUColorTargetDescription target;
+    SDL_zero(target);
+    target.format = SDL_GetGPUSwapchainTextureFormat(r->device, r->window);
+    target.blend_state.enable_blend = false;
+
+    SDL_GPUGraphicsPipelineCreateInfo pipe;
+    SDL_zero(pipe);
+    pipe.vertex_shader   = vs;
+    pipe.fragment_shader = fs;
+    pipe.primitive_type  = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    // Вершинного буфера нет: треугольник строится из gl_VertexIndex.
+    pipe.vertex_input_state.num_vertex_buffers    = 0;
+    pipe.vertex_input_state.num_vertex_attributes = 0;
+    pipe.target_info.num_color_targets         = 1;
+    pipe.target_info.color_target_descriptions = &target;
+    pipe.rasterizer_state.fill_mode  = SDL_GPU_FILLMODE_FILL;
+    pipe.rasterizer_state.cull_mode  = SDL_GPU_CULLMODE_NONE;
+    pipe.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+    pipe.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    SDL_GPUGraphicsPipeline *result = SDL_CreateGPUGraphicsPipeline(r->device, &pipe);
+    SDL_ReleaseGPUShader(r->device, vs);
+    SDL_ReleaseGPUShader(r->device, fs);
+    return result;
+}
+
+bool r2d_render_post_enabled(const R2DRenderer *r)
+{
+    if (!r || !r->post_pipeline) return false;
+    const R2DPostParams *p = &r->post;
+    if (p->enabled <= 0.5f) return false;
+    return p->glow > 0.0001f || p->vignette > 0.0001f || p->chromatic > 0.0001f
+        || p->lens > 0.0001f || p->grain > 0.0001f || p->scanline > 0.0001f
+        || p->posterize > 1.5f || p->tint_amount > 0.0001f || p->blood > 0.0001f
+        || p->saturation < 0.999f || p->saturation > 1.001f
+        || p->contrast < 0.999f || p->contrast > 1.001f
+        || p->brightness > 0.001f || p->brightness < -0.001f;
+}
+
+void r2d_render_mark_ui(R2DRenderer *r)
+{
+    if (r) r->ui_cmd_start = r->cmd_count;
+}
+
+void r2d_render_set_post(R2DRenderer *r, const R2DPostParams *params)
+{
+    if (!r || !params) return;
+    r->post = *params;
+}
+
+const R2DPostParams *r2d_render_get_post(const R2DRenderer *r)
+{
+    return r ? &r->post : NULL;
+}
+
+SDL_GPUTexture *r2d_render_scene_target(R2DRenderer *r, int w, int h)
+{
+    if (!r || !r->device || w <= 0 || h <= 0) return NULL;
+    if (r->scene_target && r->scene_w == w && r->scene_h == h) return r->scene_target;
+
+    if (r->scene_target) {
+        SDL_ReleaseGPUTexture(r->device, r->scene_target);
+        r->scene_target = NULL;
+    }
+
+    SDL_GPUTextureCreateInfo info;
+    SDL_zero(info);
+    info.type   = SDL_GPU_TEXTURETYPE_2D;
+    // Формат обязан совпадать с swapchain: те же конвейеры спрайтов рисуют и
+    // туда, и туда, а менять формат на ходу нельзя.
+    info.format = SDL_GetGPUSwapchainTextureFormat(r->device, r->window);
+    info.usage  = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    info.width              = (Uint32)w;
+    info.height             = (Uint32)h;
+    info.layer_count_or_depth = 1;
+    info.num_levels         = 1;
+    info.sample_count       = SDL_GPU_SAMPLECOUNT_1;
+
+    r->scene_target = SDL_CreateGPUTexture(r->device, &info);
+    if (!r->scene_target) {
+        R2D_ERROR("SDL_CreateGPUTexture (сцена для поста): %s", SDL_GetError());
+        return NULL;
+    }
+    r->scene_w = w;
+    r->scene_h = h;
+    return r->scene_target;
+}
+
+void r2d_render_post(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass)
+{
+    if (!r || !r->post_pipeline || !r->scene_target || !cmd || !pass) return;
+
+    SDL_BindGPUGraphicsPipeline(pass, r->post_pipeline);
+
+    SDL_GPUTextureSamplerBinding binding;
+    SDL_zero(binding);
+    binding.texture = r->scene_target;
+    binding.sampler = r->sampler;
+    SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
+
+    // Push-константы: три vec4, раскладка совпадает с R2DPostParams.
+    SDL_PushGPUFragmentUniformData(cmd, 0, &r->post, (Uint32)sizeof(R2DPostParams));
+    SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
+    r->stat_draws++;
+}
 
 bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
 {
@@ -916,6 +1081,20 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
         r->white_sprite  = r2d_sprite_create(r, id, 0, 0, 1, 1);
     }
 
+    // Пост-обработка. Если шейдер не собрался или бэкенд его не принял,
+    // движок просто рисует кадр напрямую в swapchain — это не фатально.
+    r->post_pipeline = r2d__create_post_pipeline(r);
+    if (!r->post_pipeline) {
+        R2D_WARN("пост-обработка недоступна: %s", SDL_GetError());
+    }
+    SDL_zero(r->post);
+    r->post.center_x = 0.5f;
+    r->post.center_y = 0.5f;
+    r->post.radius   = 0.35f;
+    r->post.tint_r = r->post.tint_g = r->post.tint_b = 1.0f;
+    r->post.saturation = 1.0f;
+    r->post.contrast   = 1.0f;
+
     return true;
 }
 
@@ -935,6 +1114,8 @@ void r2d_render_shutdown(R2DRenderer *r)
     for (int m = 0; m < R2D_BLEND_COUNT; ++m) {
         if (r->pipelines[m]) SDL_ReleaseGPUGraphicsPipeline(r->device, r->pipelines[m]);
     }
+    if (r->post_pipeline) SDL_ReleaseGPUGraphicsPipeline(r->device, r->post_pipeline);
+    if (r->scene_target)  SDL_ReleaseGPUTexture(r->device, r->scene_target);
 
     SDL_free(r->sprites);
     SDL_free(r->cmds);
@@ -969,6 +1150,104 @@ static int r2d__js_arg_int(JSContext *ctx, int argc, JSValueConst *argv, int i, 
     int32_t value = 0;
     if (JS_ToInt32(ctx, &value, argv[i])) return def;
     return (int)value;
+}
+
+// Число с плавающей точкой; отсутствующий аргумент оставляет прежнее значение.
+static float r2d__js_arg_float(JSContext *ctx, int argc, JSValueConst *argv, int i, float def)
+{
+    if (i >= argc || JS_IsUndefined(argv[i]) || JS_IsNull(argv[i])) return def;
+    double value = def;
+    if (JS_ToFloat64(ctx, &value, argv[i])) return def;
+    return (float)value;
+}
+
+// --- Пост-обработка: engine.setPost/getPost/postSupported -------------------
+// Порядок аргументов: glow, vignette, chromatic, lens, cx, cy, radius, grain,
+// scanline, enabled.
+static JSValue r2d__js_set_post(JSContext *ctx, JSValueConst this_val,
+                                int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DRenderer *r = s ? s->renderer : NULL;
+    if (!r) return JS_FALSE;
+
+    R2DPostParams p = r->post;
+    p.glow      = r2d__js_arg_float(ctx, argc, argv, 0, p.glow);
+    p.vignette  = r2d__js_arg_float(ctx, argc, argv, 1, p.vignette);
+    p.chromatic = r2d__js_arg_float(ctx, argc, argv, 2, p.chromatic);
+    p.lens      = r2d__js_arg_float(ctx, argc, argv, 3, p.lens);
+    p.center_x  = r2d__js_arg_float(ctx, argc, argv, 4, p.center_x);
+    p.center_y  = r2d__js_arg_float(ctx, argc, argv, 5, p.center_y);
+    p.radius    = r2d__js_arg_float(ctx, argc, argv, 6, p.radius);
+    p.grain     = r2d__js_arg_float(ctx, argc, argv, 7, p.grain);
+    p.scanline  = r2d__js_arg_float(ctx, argc, argv, 8, p.scanline);
+    p.enabled   = r2d__js_arg_float(ctx, argc, argv, 9, 1.0f);
+    p.time      = r2d__js_arg_float(ctx, argc, argv, 10, p.time);
+    p.posterize = r2d__js_arg_float(ctx, argc, argv, 11, p.posterize);
+    p.tint_r    = r2d__js_arg_float(ctx, argc, argv, 12, p.tint_r);
+    p.tint_g    = r2d__js_arg_float(ctx, argc, argv, 13, p.tint_g);
+    p.tint_b    = r2d__js_arg_float(ctx, argc, argv, 14, p.tint_b);
+    p.tint_amount = r2d__js_arg_float(ctx, argc, argv, 15, p.tint_amount);
+    p.saturation = r2d__js_arg_float(ctx, argc, argv, 16, p.saturation);
+    p.contrast   = r2d__js_arg_float(ctx, argc, argv, 17, p.contrast);
+    p.brightness = r2d__js_arg_float(ctx, argc, argv, 18, p.brightness);
+    p.blood      = r2d__js_arg_float(ctx, argc, argv, 19, p.blood);
+
+    r2d_render_set_post(r, &p);
+    return JS_TRUE;
+}
+
+static JSValue r2d__js_get_post(JSContext *ctx, JSValueConst this_val,
+                                int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DRenderer *r = s ? s->renderer : NULL;
+    const R2DPostParams *p = r2d_render_get_post(r);
+
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "supported", JS_NewBool(ctx, r && r->post_pipeline != NULL));
+    JS_SetPropertyStr(ctx, o, "glow",      JS_NewFloat64(ctx, p ? (double)p->glow : 0.0));
+    JS_SetPropertyStr(ctx, o, "vignette",  JS_NewFloat64(ctx, p ? (double)p->vignette : 0.0));
+    JS_SetPropertyStr(ctx, o, "chromatic", JS_NewFloat64(ctx, p ? (double)p->chromatic : 0.0));
+    JS_SetPropertyStr(ctx, o, "lens",      JS_NewFloat64(ctx, p ? (double)p->lens : 0.0));
+    JS_SetPropertyStr(ctx, o, "center_x",  JS_NewFloat64(ctx, p ? (double)p->center_x : 0.5));
+    JS_SetPropertyStr(ctx, o, "center_y",  JS_NewFloat64(ctx, p ? (double)p->center_y : 0.5));
+    JS_SetPropertyStr(ctx, o, "radius",    JS_NewFloat64(ctx, p ? (double)p->radius : 0.35));
+    JS_SetPropertyStr(ctx, o, "grain",     JS_NewFloat64(ctx, p ? (double)p->grain : 0.0));
+    JS_SetPropertyStr(ctx, o, "scanline",  JS_NewFloat64(ctx, p ? (double)p->scanline : 0.0));
+    JS_SetPropertyStr(ctx, o, "enabled",   JS_NewFloat64(ctx, p ? (double)p->enabled : 0.0));
+    JS_SetPropertyStr(ctx, o, "posterize", JS_NewFloat64(ctx, p ? (double)p->posterize : 0.0));
+    JS_SetPropertyStr(ctx, o, "tint_r",    JS_NewFloat64(ctx, p ? (double)p->tint_r : 1.0));
+    JS_SetPropertyStr(ctx, o, "tint_g",    JS_NewFloat64(ctx, p ? (double)p->tint_g : 1.0));
+    JS_SetPropertyStr(ctx, o, "tint_b",    JS_NewFloat64(ctx, p ? (double)p->tint_b : 1.0));
+    JS_SetPropertyStr(ctx, o, "tint_amount", JS_NewFloat64(ctx, p ? (double)p->tint_amount : 0.0));
+    JS_SetPropertyStr(ctx, o, "saturation", JS_NewFloat64(ctx, p ? (double)p->saturation : 1.0));
+    JS_SetPropertyStr(ctx, o, "contrast",  JS_NewFloat64(ctx, p ? (double)p->contrast : 1.0));
+    JS_SetPropertyStr(ctx, o, "brightness", JS_NewFloat64(ctx, p ? (double)p->brightness : 0.0));
+    JS_SetPropertyStr(ctx, o, "blood",     JS_NewFloat64(ctx, p ? (double)p->blood : 0.0));
+    return o;
+}
+
+static JSValue r2d__js_post_supported(JSContext *ctx, JSValueConst this_val,
+                                      int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DRenderer *r = s ? s->renderer : NULL;
+    return JS_NewBool(ctx, r && r->post_pipeline != NULL);
+}
+
+// engine.markUI() — «дальше идёт интерфейс». С пост-обработкой HUD рисуется
+// после неё, поэтому вигнетка и линза его не затемняют.
+static JSValue r2d__js_mark_ui(JSContext *ctx, JSValueConst this_val,
+                               int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    if (s && s->renderer) r2d_render_mark_ui(s->renderer);
+    return JS_UNDEFINED;
 }
 
 // Имя режима из 4-го аргумента. Возвращает R2DBlendMode; неизвестное имя
@@ -1146,6 +1425,15 @@ void r2d_render_register_js(JSContext *ctx, JSValue engine)
         r2d__js_set_fn(ctx, engine, "submitSprites",   r2d__js_submit_sprites, 4);
         r2d__js_set_fn(ctx, engine, "submitTriangles", r2d__js_submit_triangles, 3);
     }
+
+    // --- Пост-обработка ------------------------------------------------------
+    // Позиционные аргументы: отсутствующие сохраняют текущее значение, чтобы
+    // игра могла менять один эффект, не переписывая остальные. Последний
+    // аргумент — время (нужно зерну).
+    r2d__js_set_fn(ctx, engine, "setPost", r2d__js_set_post, 20);
+    r2d__js_set_fn(ctx, engine, "getPost", r2d__js_get_post, 0);
+    r2d__js_set_fn(ctx, engine, "postSupported", r2d__js_post_supported, 0);
+    r2d__js_set_fn(ctx, engine, "markUI", r2d__js_mark_ui, 0);
 
     // --- engine.viewport.*: честная заглушка -------------------------------
     JSValue vp = JS_NewObject(ctx);

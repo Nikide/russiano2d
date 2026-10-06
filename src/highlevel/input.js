@@ -174,6 +174,18 @@ export function installInput($) {
 
         // --- Мышь ------------------------------------------------------------
         mouse() { return { x: engine.mouseX, y: engine.mouseY }; },
+
+        /**
+         * Системный курсор: `$.mouse.cursor('crosshair')`, формы — arrow, hand,
+         * crosshair, text, wait, hidden (без аргумента — текущая).
+         * `$.mouse.cursorVisible(false)` прячет курсор совсем.
+         */
+        cursor(shape) {
+            return typeof engine.setCursor === 'function' ? engine.setCursor(shape) : 'arrow';
+        },
+        cursorVisible(on) {
+            return typeof engine.cursorVisible === 'function' ? engine.cursorVisible(on) : true;
+        },
         mouseDelta() {
             const d = engine.mouseDelta();
             return { x: d[0], y: d[1] };

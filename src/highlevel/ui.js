@@ -63,6 +63,21 @@ export function installUi($) {
         /** Иконка Material Design по имени (2235 штук встроены в движок). */
         icon(name) { return engine.ui.icon(name); },
         hasIcon(name) { return engine.ui.hasIcon(name); },
+
+        /**
+         * Поставить иконку Material Design на узел: `$.ui.setIcon('#play', 'play_arrow')`.
+         * Отдельная метка с иконкой нужна там, где глиф клеится к тексту и
+         * строка перестаёт быть выровненной по центру кнопки.
+         */
+        setIcon(target, name) {
+            const glyph = engine.ui.hasIcon(name) ? engine.ui.icon(name) : '';
+            const nodes = typeof target === 'string' ? $(target) : target;
+            return nodes.each((_, el) => {
+                const node = el.nodes ? el.nodes[0] : el;
+                node.text = glyph;
+                node.size = node.size || 24;
+            });
+        },
         iconNames() { return engine.ui.iconNames(); },
         iconCount() { return engine.ui.iconCount(); },
 

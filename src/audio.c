@@ -6,6 +6,14 @@
 #include <SDL3_mixer/SDL_mixer.h>
 
 // ---------------------------------------------------------------------------
+// Предварительные объявления: шины и каналы настраиваются одним и тем же
+// кодом эффектов, который описан ниже по файлу.
+static void SDLCALL r2d__fx_process(void *userdata, MIX_Track *track,
+                                    const SDL_AudioSpec *spec, float *pcm, int samples);
+static bool r2d__fx_set(R2DAudio *a, R2DAudioChannelFx *fx, const char *kind,
+                        float p1, float p2);
+
+// ---------------------------------------------------------------------------
 
 static float r2d__clamp01(float v)
 {
@@ -29,6 +37,143 @@ static void r2d__apply_master(R2DAudio *a)
     if (a->mixer) {
         MIX_SetMixerGain(a->mixer, a->master_volume);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Реверберация помещения
+//
+// Комната звучит для всего сразу, поэтому реверб висит на последнем шаге
+// микшера (MIX_SetPostMixCallback), а не на отдельных каналах: одна модель на
+// микс и никаких шестнадцати копий хвоста. Колбэк работает в аудиопотоке —
+// только чтение параметров и запись в pcm.
+// ---------------------------------------------------------------------------
+
+static void SDLCALL r2d__post_mix(void *userdata, MIX_Mixer *mixer,
+                                  const SDL_AudioSpec *spec, float *pcm, int samples)
+{
+    R2D_UNUSED(mixer);
+    R2DAudio *a = (R2DAudio *)userdata;
+    if (!a || !a->reverb_on || !spec || !pcm || samples <= 0) return;
+    r2d_reverb_process(&a->reverb, pcm, samples, spec->channels);
+}
+
+bool r2d_audio_set_room(R2DAudio *a, float wet, float room, float damp, float width)
+{
+    if (!a) return false;
+    r2d_reverb_set_params(&a->reverb, wet, room, damp, width);
+    a->reverb_on = a->ready && a->reverb.ready && a->reverb.wet > 0.0f;
+    return a->reverb_on;
+}
+
+void r2d_audio_get_room(const R2DAudio *a, float *wet, float *room, float *damp, float *width)
+{
+    if (!a) return;
+    if (wet)   *wet   = a->reverb.wet;
+    if (room)  *room  = a->reverb.room;
+    if (damp)  *damp  = a->reverb.damp;
+    if (width) *width = a->reverb.width;
+}
+
+// ---------------------------------------------------------------------------
+// Шины: группы микшера
+//
+// Треки одной шины микшируются вместе, и MIX_SetGroupPostMixCallback отдаёт
+// готовый буфер группы: эффект шины действует на все её звуки, включая
+// запущенные позже. Гейна у группы в SDL_mixer 3.2 нет, поэтому громкость,
+// mute и solo по-прежнему считает JS на каналах.
+// ---------------------------------------------------------------------------
+
+static void SDLCALL r2d__group_fx(void *userdata, MIX_Group *group,
+                                  const SDL_AudioSpec *spec, float *pcm, int samples)
+{
+    R2D_UNUSED(group);
+    r2d__fx_process(userdata, NULL, spec, pcm, samples);
+}
+
+int r2d_audio_group(R2DAudio *a, const char *name)
+{
+    if (!a || !a->ready || !a->mixer || !name || !*name) return -1;
+
+    for (int i = 0; i < a->group_count; ++i) {
+        if (SDL_strcmp(a->groups[i].name, name) == 0) return i;
+    }
+    if (a->group_count >= R2D_AUDIO_MAX_GROUPS) {
+        R2D_ERROR("достигнут лимит аудио-шин (%d)", R2D_AUDIO_MAX_GROUPS);
+        return -1;
+    }
+
+    R2DAudioGroup *g = &a->groups[a->group_count];
+    SDL_zero(*g);
+    g->handle = MIX_CreateGroup(a->mixer);
+    if (!g->handle) {
+        R2D_ERROR("MIX_CreateGroup: %s", SDL_GetError());
+        return -1;
+    }
+    SDL_snprintf(g->name, sizeof g->name, "%s", name);
+    g->fx.kind = R2D_AUDIO_FX_NONE;
+    // Колбэк ставим сразу: при kind == NONE он выходит на первой строке.
+    if (!MIX_SetGroupPostMixCallback(g->handle, r2d__group_fx, &g->fx)) {
+        R2D_WARN("MIX_SetGroupPostMixCallback(%s): %s", g->name, SDL_GetError());
+    }
+    return a->group_count++;
+}
+
+int r2d_audio_group_count(const R2DAudio *a) { return a ? a->group_count : 0; }
+
+bool r2d_audio_group_assign(R2DAudio *a, int channel, int group_id)
+{
+    if (!a || !a->ready || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return false;
+    MIX_Group *g = NULL;
+    if (group_id >= 0) {
+        if (group_id >= a->group_count) return false;
+        g = a->groups[group_id].handle;
+    }
+    return MIX_SetTrackGroup(a->channels[channel], g);
+}
+
+bool r2d_audio_set_group_effect(R2DAudio *a, int group_id, const char *kind,
+                                float p1, float p2)
+{
+    if (!a || !a->ready || group_id < 0 || group_id >= a->group_count) return false;
+    return r2d__fx_set(a, &a->groups[group_id].fx, kind, p1, p2);
+}
+
+const char *r2d_audio_group_effect(const R2DAudio *a, int group_id)
+{
+    if (!a || group_id < 0 || group_id >= a->group_count) return "none";
+    switch (a->groups[group_id].fx.kind) {
+    case R2D_AUDIO_FX_LOWPASS: return "lowpass";
+    case R2D_AUDIO_FX_ECHO:    return "echo";
+    default:                   return "none";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 3D-позиция канала
+//
+// У SDL_mixer слушатель всегда в (0,0,0) и его нельзя двигать, поэтому игре
+// отдаются координаты ОТНОСИТЕЛЬНО слушателя. SDL сам считает затухание и
+// раскладку по колонкам; трек при этом микшируется в моно.
+// ---------------------------------------------------------------------------
+
+bool r2d_audio_set_channel_3d(R2DAudio *a, int channel, float x, float y, float z, bool on)
+{
+    if (!a || !a->ready || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return false;
+
+    MIX_Track *track = a->channels[channel];
+    a->channel_3d[channel] = on;
+
+    if (!on) {
+        // NULL выключает и 3D, и «принудительное стерео» — трек возвращается
+        // в обычный режим, панораму снова задаёт MIX_SetTrackStereo.
+        return MIX_SetTrack3DPosition(track, NULL);
+    }
+
+    MIX_Point3D p;
+    p.x = x;
+    p.y = y;
+    p.z = z;
+    return MIX_SetTrack3DPosition(track, &p);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,12 +248,12 @@ static void SDLCALL r2d__fx_process(void *userdata, MIX_Track *track,
     }
 }
 
-bool r2d_audio_set_channel_effect(R2DAudio *a, int channel, const char *kind,
-                                  float p1, float p2)
+// Общая настройка эффекта: и для канала, и для шины (группы). Возвращает
+// false, если эффект неизвестен. Линия задержки для эха выделяется лениво:
+// держать 190 КБ на каждую шину, где эхо не нужно, незачем.
+static bool r2d__fx_set(R2DAudio *a, R2DAudioChannelFx *fx, const char *kind,
+                        float p1, float p2)
 {
-    if (!a || !a->ready || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return false;
-
-    R2DAudioChannelFx *fx = &a->fx[channel];
     if (!kind || SDL_strcmp(kind, "none") == 0) {
         fx->kind = R2D_AUDIO_FX_NONE;
         return true;
@@ -124,19 +269,31 @@ bool r2d_audio_set_channel_effect(R2DAudio *a, int channel, const char *kind,
     }
 
     if (SDL_strcmp(kind, "echo") == 0) {
+        if (!fx->line) {
+            fx->line = (float *)SDL_calloc((size_t)R2D_AUDIO_FX_FRAMES * 2, sizeof(float));
+            if (!fx->line) {
+                R2D_ERROR("не удалось выделить линию задержки эха");
+                return false;
+            }
+        }
         fx->p1 = p1 > 0.0f ? p1 : 180.0f;                  // задержка, мс
         float fb = p2 > 0.0f ? p2 : 0.35f;                 // доля повтора
         if (fb > 0.9f) fb = 0.9f;
         fx->p2 = fb;
-        if (fx->line) {
-            SDL_memset(fx->line, 0, sizeof(float) * 2 * R2D_AUDIO_FX_FRAMES);
-        }
+        SDL_memset(fx->line, 0, sizeof(float) * 2 * R2D_AUDIO_FX_FRAMES);
         fx->pos = 0;
         fx->kind = R2D_AUDIO_FX_ECHO;
         return true;
     }
 
     return false;
+}
+
+bool r2d_audio_set_channel_effect(R2DAudio *a, int channel, const char *kind,
+                                  float p1, float p2)
+{
+    if (!a || !a->ready || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return false;
+    return r2d__fx_set(a, &a->fx[channel], kind, p1, p2);
 }
 
 const char *r2d_audio_channel_effect(const R2DAudio *a, int channel)
@@ -169,6 +326,10 @@ void r2d_audio_set_channel_pan(R2DAudio *a, int channel, float pan)
     if (pan > 1.0f) pan = 1.0f;
     a->channel_pan[channel] = pan;
 
+    // В 3D-режиме панораму считает SDL_mixer; MIX_SetTrackStereo здесь только
+    // выключил бы 3D (он сбрасывает и «принудительное стерео», и позицию).
+    if (a->channel_3d[channel]) return;
+
     MIX_StereoGains gains;
     r2d__stereo_from_pan(pan, &gains);
     MIX_SetTrackStereo(a->channels[channel], &gains);
@@ -180,6 +341,41 @@ float r2d_audio_get_channel_pan(const R2DAudio *a, int channel)
     return a->channel_pan[channel];
 }
 
+// Скорость воспроизведения: 1.0 — как записано. Границы выбраны так, чтобы
+// случайный ноль или мусор из игры не превратились в тишину или визг.
+static float r2d__clamp_pitch(float ratio)
+{
+    if (!(ratio > 0.0f)) return 1.0f;
+    if (ratio < 0.05f) return 0.05f;
+    if (ratio > 8.0f) return 8.0f;
+    return ratio;
+}
+
+void r2d_audio_set_channel_pitch(R2DAudio *a, int channel, float ratio)
+{
+    if (!a || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return;
+    a->channel_pitch[channel] = r2d__clamp_pitch(ratio);
+    if (a->ready) MIX_SetTrackFrequencyRatio(a->channels[channel], a->channel_pitch[channel]);
+}
+
+float r2d_audio_get_channel_pitch(const R2DAudio *a, int channel)
+{
+    if (!a || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return 1.0f;
+    return a->channel_pitch[channel];
+}
+
+void r2d_audio_set_music_pitch(R2DAudio *a, float ratio)
+{
+    if (!a) return;
+    a->music_pitch = r2d__clamp_pitch(ratio);
+    if (a->ready && a->music_track) MIX_SetTrackFrequencyRatio(a->music_track, a->music_pitch);
+}
+
+float r2d_audio_get_music_pitch(const R2DAudio *a)
+{
+    return a ? a->music_pitch : 1.0f;
+}
+
 bool r2d_audio_init(R2DAudio *a)
 {
     SDL_zero(*a);
@@ -188,6 +384,8 @@ bool r2d_audio_init(R2DAudio *a)
     a->music_volume  = 0.7f;
     a->fx_freq       = 48000;
     a->fx_channels   = 2;
+    a->music_pitch   = 1.0f;
+    for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) a->channel_pitch[i] = 1.0f;
 
     if (!MIX_Init()) {
         R2D_ERROR("MIX_Init: %s", SDL_GetError());
@@ -232,6 +430,15 @@ bool r2d_audio_init(R2DAudio *a)
         R2D_LOG("аудио готово (%d эффект-каналов)", R2D_AUDIO_CHANNELS);
     }
 
+    // Реверберация: буферы под частоту микшера и один колбэк на весь микс.
+    if (!r2d_reverb_init(&a->reverb, a->fx_freq)) {
+        R2D_WARN("не удалось подготовить реверберацию — комната будет сухой");
+    } else if (!MIX_SetPostMixCallback(a->mixer, r2d__post_mix, a)) {
+        R2D_WARN("MIX_SetPostMixCallback: %s", SDL_GetError());
+        r2d_reverb_shutdown(&a->reverb);
+    }
+    a->reverb_on = false;
+
     // Буферы эффектов и колбэк ставим один раз: подмена колбэка на лету
     // гонялась бы с аудиопотоком, а сам эффект задаётся полем kind.
     for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
@@ -250,6 +457,12 @@ void r2d_audio_shutdown(R2DAudio *a)
 {
     if (!a->mixer) return;
 
+    // Сначала снимаем колбэк: после уничтожения буферов реверба он бы читал
+    // освобождённую память, если микшер успел запустить ещё один блок.
+    MIX_SetPostMixCallback(a->mixer, NULL, NULL);
+    r2d_reverb_shutdown(&a->reverb);
+    a->reverb_on = false;
+
     for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
         if (a->channels[i]) MIX_DestroyTrack(a->channels[i]);
         a->channels[i] = NULL;
@@ -258,6 +471,20 @@ void r2d_audio_shutdown(R2DAudio *a)
             a->fx[i].line = NULL;
         }
     }
+
+    // Шины: снимаем колбэк и освобождаем линии задержки до уничтожения микшера.
+    for (int i = 0; i < a->group_count; ++i) {
+        if (a->groups[i].handle) {
+            MIX_SetGroupPostMixCallback(a->groups[i].handle, NULL, NULL);
+            MIX_DestroyGroup(a->groups[i].handle);
+            a->groups[i].handle = NULL;
+        }
+        if (a->groups[i].fx.line) {
+            SDL_free(a->groups[i].fx.line);
+            a->groups[i].fx.line = NULL;
+        }
+    }
+    a->group_count = 0;
     if (a->music_track) {
         MIX_DestroyTrack(a->music_track);
         a->music_track = NULL;
@@ -362,9 +589,13 @@ int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops)
 
     if (!MIX_SetTrackAudio(track, a->sounds[id])) return -1;
 
-    MIX_StereoGains gains;
-    r2d__stereo_from_pan(pan, &gains);
-    MIX_SetTrackStereo(track, &gains);
+    // Канал либо в обычном стерео-режиме (панорама), либо в 3D: задавать оба
+    // нельзя — MIX_SetTrackStereo выключает 3D и наоборот.
+    if (!a->channel_3d[channel]) {
+        MIX_StereoGains gains;
+        r2d__stereo_from_pan(pan, &gains);
+        MIX_SetTrackStereo(track, &gains);
+    }
 
     // Запоминаем, что поставила игра: шины пересчитывают громкость канала
     // позже, и им нужно знать исходное значение.
@@ -372,6 +603,9 @@ int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops)
     a->channel_pan[channel] = pan < -1.0f ? -1.0f : (pan > 1.0f ? 1.0f : pan);
 
     MIX_SetTrackGain(track, a->channel_volume[channel] * a->sfx_volume);
+    // Скорость (pitch) канала переживает повторный запуск: трек один и тот же,
+    // а MIX_SetTrackAudio её не сбрасывает — но применить всё равно надёжнее.
+    MIX_SetTrackFrequencyRatio(track, a->channel_pitch[channel]);
 
     SDL_PropertiesID props = SDL_CreateProperties();
     if (!props) return -1;
@@ -424,6 +658,7 @@ void r2d_audio_play_music(R2DAudio *a, int id, float volume, bool loop, float fa
 
     // Музыку не панорамируем — она играет по центру.
     MIX_SetTrackGain(a->music_track, r2d__clamp01(volume) * a->music_volume);
+    MIX_SetTrackFrequencyRatio(a->music_track, a->music_pitch);
 
     SDL_PropertiesID props = SDL_CreateProperties();
     if (!props) return;

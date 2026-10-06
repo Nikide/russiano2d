@@ -33,6 +33,38 @@ typedef enum R2DBlendMode {
     R2D_BLEND_COUNT
 } R2DBlendMode;
 
+// Параметры пост-обработки. Раскладка обязана совпадать с юниформой PostParams
+// в shaders/post.frag.glsl: шесть vec4 подряд, 24 float.
+typedef struct R2DPostParams {
+    // p0
+    float glow;       // сила свечения (0 — выключено)
+    float vignette;   // затемнение краёв
+    float chromatic;  // расхождение каналов (доли экрана)
+    float lens;       // сила линзы: UV тянется к центру
+    // p1
+    float center_x;   // центр искажения, 0..1
+    float center_y;
+    float radius;     // радиус искажения, доли высоты
+    float grain;      // зерно
+    // p2
+    float scanline;   // скан-линии
+    float time;       // время для зерна
+    float enabled;    // 0 — пост выключен, кадр идёт прямо в swapchain
+    float posterize;  // уровней квантования цвета; <= 1.5 — выключено
+    // p3
+    float tint_r;     // оттенок: множители каналов (1,1,1 — без сдвига)
+    float tint_g;
+    float tint_b;
+    float tint_amount;
+    // p4
+    float saturation; // 1 — как есть, 0 — ч/б
+    float contrast;   // 1 — как есть
+    float brightness; // 0 — как есть
+    float blood;      // красная пелена по краям (урон)
+    // p5 — запас под будущие эффекты, чтобы не менять размер блока
+    float _pad[4];
+} R2DPostParams;
+
 typedef struct R2DTexture {
     SDL_GPUTexture *handle;
     char            name[128];
@@ -125,6 +157,17 @@ typedef struct R2DRenderer {
 
     int    screen_w, screen_h;   // размер буфера кадра в пикселях
 
+    // --- Пост-обработка -----------------------------------------------------
+    // Сцена рисуется в offscreen-текстуру, а на swapchain идёт полноэкранный
+    // проход с эффектами. Когда пост выключен, всё как раньше: сразу в swapchain.
+    SDL_GPUGraphicsPipeline *post_pipeline;
+    SDL_GPUTexture          *scene_target;
+    int    scene_w, scene_h;
+    R2DPostParams post;
+    // Граница интерфейса в списке команд: JS помечает её перед отдачей
+    // ui-спрайтов, чтобы с постом HUD рисовался поверх обработки, а не под ней.
+    int ui_cmd_start;
+
     // Статистика текущего кадра
     int    stat_draws;
     int    stat_sprites;
@@ -180,6 +223,26 @@ int  r2d_blend_from_name(const char *name);
 void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd);
 // Рисует батч внутри уже открытого render pass.
 void r2d_render_draw(R2DRenderer *r, SDL_GPURenderPass *pass);
+// Пометить границу интерфейса: всё, что добавлено после, считается ui-слоем.
+// Нужно, чтобы с пост-обработкой HUD рисовался поверх неё, а не под ней.
+void r2d_render_mark_ui(R2DRenderer *r);
+// Рисует только ui-слой (спрайты после границы). Треугольники (свет, VFX) —
+// часть мира и в ui-слой не попадают.
+void r2d_render_draw_ui(R2DRenderer *r, SDL_GPURenderPass *pass);
+// Рисует только мир: спрайты до границы интерфейса и все треугольники.
+void r2d_render_draw_world(R2DRenderer *r, SDL_GPURenderPass *pass);
+
+// --- Пост-обработка ---------------------------------------------------------
+// Включён ли пост: если да, кадр надо рисовать в offscreen-текстуру
+// (r2d_render_scene_target), а затем наложить её на swapchain (r2d_render_post).
+bool r2d_render_post_enabled(const R2DRenderer *r);
+void r2d_render_set_post(R2DRenderer *r, const R2DPostParams *params);
+const R2DPostParams *r2d_render_get_post(const R2DRenderer *r);
+// Текстура сцены нужного размера; пересоздаётся при смене размера окна.
+// NULL — создать не удалось (тогда рисуем напрямую в swapchain).
+SDL_GPUTexture *r2d_render_scene_target(R2DRenderer *r, int w, int h);
+// Полноэкранный проход на swapchain: сэмплирует текстуру сцены с эффектами.
+void r2d_render_post(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass);
 
 // --- JS-биндинги, которые живут в render.c ---------------------------------
 // Вызывается из script.c при сборке объекта engine: сюда переезжают вызовы,
