@@ -396,7 +396,11 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
         if (!shot_path) fc->auto_shot_taken = true;
     }
 
-    SDL_ReleaseGPUFence(app->device, fence);
+    // Fence нужен профайлеру для GPU-замера: он опрашивает его в отдельном
+    // потоке и отпускает сам. Выключенный профайлер не получает ничего —
+    // никаких запросов к GPU не делается.
+    if (r2d_prof_enabled()) r2d_prof_gpu_submit(fence);
+    else SDL_ReleaseGPUFence(app->device, fence);
 
     if (fc->stats) {
         if (app->time - fc->stats_last >= 1.0) {
@@ -597,12 +601,17 @@ int main(int argc, char **argv)
 
     R2D_LOG("управление: F1 — оверлей, F5 — перезапуск скриптов, закрытие окна — выход");
 
+    // GPU-замер профайлера: fence'ы кадра уходят сюда (см. src/profile.c).
+    // Устройства нет — строки GPU в оверлее покажут «н/д».
+    r2d_prof_gpu_init(app.device);
+
     // --- Агентский режим ----------------------------------------------------
     if (opt_agent) {
         R2DAgent *agent = r2d_agent_create(&app, &script);
         if (!agent) {
             R2D_ERROR("не удалось включить агентский режим");
             r2d_script_shutdown(&script);
+            r2d_prof_gpu_shutdown();
             r2d_app_shutdown(&app);
             return 1;
         }
@@ -621,6 +630,7 @@ int main(int argc, char **argv)
         r2d_script_call_exit(&script);
         r2d_agent_destroy(agent);
         SDL_WaitForGPUIdle(app.device);
+        r2d_prof_gpu_shutdown();   // после WaitForGPUIdle: fence'ы уже сигнальны
         r2d_script_shutdown(&script);
 #ifdef R2D_ENABLE_IMGUI
         r2d_debug_ui_destroy(debug);
@@ -653,6 +663,7 @@ int main(int argc, char **argv)
 
     // --- Завершение ---
     SDL_WaitForGPUIdle(app.device);
+    r2d_prof_gpu_shutdown();   // после WaitForGPUIdle: fence'ы уже сигнальны
 
     r2d_script_call_exit(&script);
     r2d_script_shutdown(&script);

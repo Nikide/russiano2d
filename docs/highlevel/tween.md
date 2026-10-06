@@ -75,7 +75,9 @@ $.ready(() => {
 const t = $.tween(node);
 t.property('x', '+120', 0.4).asRelative().trans('back').ease('out');
 t.property('scale', 1.4, 0.2).delay(0.4);
-t.chain().interval(0.1).callback(() => $.log('пауза кончилась'));
+// interval() возвращает Tweener, а callback() живёт на твине: двумя строками.
+t.chain().interval(0.1);
+t.callback(() => $.log('пауза кончилась'));
 t.method((v) => bar.value = v, 0, 1, 0.5).trans('sine').ease('in_out');
 ```
 
@@ -159,8 +161,10 @@ await t.finished();
 | Плавность | `easeInOutQuad` и т. п. (`EASES`) | `trans` × `ease` (`transitionFunction`) |
 | Задержка | `await $.wait(ms)` | `.delay(seconds)` |
 
-Старые имена плавностей (`easeFunction`, `easeNames`, `EASES`) сохранены без
-изменений — на них стоят демо и `$.anim`.
+Старые имена плавностей сохранены без изменений — на них стоят демо и `$.anim`:
+`easeFunction` и `easeNames` (обе экспортируются из `src/highlevel/tween.js`).
+Таблица `EASES` — внутренняя, наружу не отдаётся: тянуть её из модуля не нужно,
+список имён даёт `easeNames()`.
 
 ## Ограничения
 

@@ -52,7 +52,12 @@ def main():
     standalone = os.path.join(work, "hello")
     try:
         # --- 1. Сборка -----------------------------------------------------
-        code, out = run_build(["--project", FIXTURE, "--out", standalone])
+        # --encrypt просим явно: на macOS билдер по умолчанию НЕ шифрует груз
+        # (собранный файл там всё равно переподписывают codesign, см. src/build.c
+        # и tools/release.py). Тест проверяет саму гарантию «груз зашифрован»,
+        # а не платформенное умолчание — иначе он валился на macOS и не проверял
+        # ничего на остальных системах. Умолчание проверяем отдельно ниже.
+        code, out = run_build(["--project", FIXTURE, "--out", standalone, "--encrypt"])
         check(code == 0, "билдер отработал без ошибок")
         check(os.path.exists(standalone), "собранный файл появился")
         if failures:
@@ -64,7 +69,18 @@ def main():
         check(built_size > engine_size, "в собранный файл что-то дописано (%d байт)"
               % (built_size - engine_size))
         check(os.access(standalone, os.X_OK), "собранный файл исполняемый")
-        check("ChaCha20" in out, "груз зашифрован (ChaCha20-Poly1305)")
+        check("ChaCha20" in out, "груз зашифрован по запросу --encrypt (ChaCha20-Poly1305)")
+
+        # Умолчание шифрования: везде включено, кроме macOS — там файл
+        # переподписывают, и шифрование сочли лишним шагом.
+        plain = os.path.join(work, "hello_plain")
+        code, out_plain = run_build(["--project", FIXTURE, "--out", plain])
+        check(code == 0, "сборка с умолчаниями отработала")
+        if sys.platform == "darwin":
+            check("выключено" in out_plain,
+                  "на macOS умолчание — без шифрования (см. release.py)")
+        else:
+            check("ChaCha20" in out_plain, "умолчание без флага шифрует груз")
 
         # --- 2. Запуск без папки проекта -----------------------------------
         # Файл лежит в отдельном каталоге: рядом нет ни скриптов, ни ассетов.

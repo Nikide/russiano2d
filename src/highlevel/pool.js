@@ -507,6 +507,11 @@ export function installPool($) {
         },
     };
 
+    // Кадровый шаг пула. Документация звала его `$.pool.tickPool()`, но функция
+    // жила только экспортом модуля — из игры её было не достать.
+    api.tick = tickPool;
+    api.tickPool = tickPool;
+
     $.pool = api;
     ctx.pool = api;
     return $;

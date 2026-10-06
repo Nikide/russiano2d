@@ -16,7 +16,7 @@ $.ready(() => {
 
     // Слой поверх мира.
     const hud = $.layers.create({ name: 'hud', order: 20 });
-    $('<label>', { text: 'HP' }).at(40, 24).appendTo(hud);
+    $('<ui.label>', { text: 'HP' }).at(40, 24).appendTo(hud);
 
     // Ночной оттенок и переход в чёрное.
     $.layers.modulate('#0a1430', 0.35);

@@ -329,6 +329,20 @@ export function installInput($) {
                 rumble: (opts) => rumble(pad, opts),
             };
         },
+
+        /**
+         * Виброотклик: трясёт первый подключённый геймпад. Пока заглушка —
+         * движок не пробрасывает SDL_RumbleGamepad, поэтому вызов один раз
+         * предупреждает и ничего не делает: притворяться, что виброаппарат
+         * работает, хуже, чем честно сказать. Адресно — `$.input.gamepad(i).rumble()`.
+         */
+        rumble(opts) {
+            for (let i = 0; i < 8; i++) {
+                if (pad_connected(i)) { rumble(i, opts); return true; }
+            }
+            rumble(0, opts);
+            return false;
+        },
     };
 
     ctx.input = input;

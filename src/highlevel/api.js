@@ -34,6 +34,20 @@ import { tweenProps, clearNodeTweens, pauseNodeTweens, shakeNode, flashNode, seq
 // только ставит их и вызывает tick в кадровом цикле. Порядок установки
 // важен: модули пользуются уже готовыми $.world/$.gfx/$.input.
 import { installAnim, tickAnim } from './anim.js';
+import { installAnimPlayer, tickAnimPlayer } from './animplayer.js';
+import { installRu } from './ru.js';
+import { installMath } from './mathx.js';
+import { installRandom } from './random.js';
+import { installGrid } from './grid.js';
+import { installCsv } from './csv.js';
+import { installSignal } from './signal.js';
+import { installState, tickState } from './state.js';
+import { installFlow, tickFlow } from './flow.js';
+import { installFont } from './font.js';
+import { installScreen, tickScreen } from './screen.js';
+import { installDialog, tickDialog } from './dialog.js';
+import { installSave } from './save.js';
+import { installResource } from './resource.js';
 import { installTilemap, tickTilemap } from './tilemap.js';
 import { installParticles, tickParticles } from './particles.js';
 import { installFx, tickFx } from './fx.js';
@@ -89,6 +103,29 @@ function applyFrames(node, spec) {
 // Создание API
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Русские имена: псевдонимы тегов и селекторов.
+//
+// Подсистема $.ru (src/highlevel/ru.js) объявляет «свет» → «light». Узел при
+// этом создаётся с КАНОНИЧЕСКИМ тегом: иначе его не узнают ни отрисовка, ни
+// селекторы, ни снимок для агента. Селектор переводим словарём, трогая только
+// известные слова — имена классов и id остаются как есть.
+// ---------------------------------------------------------------------------
+
+const tag_aliases = new Map();
+
+/** Канонический тег для русского имени (или имя как есть). */
+function resolveTagAlias(name) {
+    return tag_aliases.get(name) || name;
+}
+
+/** Перевод русских слов внутри селектора: 'игрок.boss' → 'player.boss'. */
+function translateSelector(selector) {
+    if (tag_aliases.size === 0 || typeof selector !== 'string') return selector;
+    return selector.replace(/[A-Za-z_\u0400-\u04FF][A-Za-z0-9_\u0400-\u04FF-]*/g,
+                            (word) => tag_aliases.get(word) || word);
+}
+
 export function createApi() {
     const $ = function (arg, attrs) {
         if (typeof arg === 'function') { $.ready(arg); return wrap([]); }
@@ -100,15 +137,23 @@ export function createApi() {
         if (typeof arg === 'string') {
             const tag = /^\s*<([^>]+)>\s*$/.exec(arg);
             if (tag) {
-                const name = tag[1].trim();
+                const raw = tag[1].trim();
+                // Русские имена тегов: подсистема $.ru регистрирует псевдонимы
+                // («свет» → «light»), но узел всегда создаётся с каноническим
+                // тегом — иначе его не узнают ни отрисовка, ни селекторы.
+                const name = resolveTagAlias(raw);
                 if (!TAGS[name]) ctx.log(`$: неизвестный тег <${name}> — создаю пустой узел`);
-                const node = new Node(name, attrs);
+                // Русские ключи атрибутов ({ радиус: 200 }) переводит $.ru —
+                // подсистемы знают только латинские имена.
+                const props = typeof ctx.translateAttrsHook === 'function'
+                    ? ctx.translateAttrsHook(attrs) : attrs;
+                const node = new Node(name, props);
                 // { frames } в конструкторе делал бы то же, что .frames():
                 // без этого лист молча превращался в обычный атрибут.
                 if (attrs && attrs.frames !== undefined) applyFrames(node, attrs.frames);
                 return wrapOne(node);
             }
-            return wrap(query(arg));
+            return wrap(query(translateSelector(arg)));
         }
         if (arg && arg.nodes) return arg;
         return wrap([]);
@@ -117,6 +162,22 @@ export function createApi() {
     $._wrapper = Wrapper;
     $._node = Node;
     ctx.$ = $;
+    // Псевдонимы тегов для $.ru: объявлять их может только подсистема,
+    // а читает — фабрика узлов выше.
+    ctx.tagAliases = tag_aliases;
+    /**
+     * Объявить русское имя тега: `$.aliasTag('свет', 'light')`. Дальше
+     * `$('<свет>')` и `$('свет')` работают как `<light>` и `light`.
+     */
+    $.aliasTag = function (alias, canonical) {
+        if (typeof alias !== 'string' || typeof canonical !== 'string') return $;
+        if (!TAGS[canonical]) {
+            ctx.log(`$.aliasTag: тега <${canonical}> нет — псевдоним "${alias}" пропущен`);
+            return $;
+        }
+        tag_aliases.set(alias, canonical);
+        return $;
+    };
     // Подсистемы (например $.window.on) сообщают об ошибках игрового кода
     // сюда: reportError печатает стек, а не только текст.
     ctx.reportError = reportError;
@@ -212,6 +273,7 @@ export function createApi() {
     // Ставятся здесь, а не рядом с остальными install*(): им нужны готовые
     // $.world/$.gfx/$.input/$.fn и определённые выше $.ready/$.update.
     installAnim($);
+    installAnimPlayer($);       // дополняет $.anim: таймлайны и микширование
     installTilemap($);
     installParticles($);
     installFx($);
@@ -227,11 +289,32 @@ export function createApi() {
     installViewport($);
     installHttp($);
 
+    // --- Утилиты, логика и данные --------------------------------------------
+    // Порядок важен: installRandom перекрывает $.random из ядра (там только
+    // базовый генератор), логика (signal → state → flow) ставится до диалогов
+    // и экранов, а сохранения и ресурсы — последними: они умеют сериализовать
+    // всё, что уже зарегистрировано.
+    installMath($);
+    installRandom($);
+    installGrid($);
+    installCsv($);
+    installSignal($);
+    installState($);
+    installFlow($);
+    installFont($);
+    installScreen($);
+    installDialog($);
+    installSave($);
+    installResource($);
+
     // --- Методы узлов ---------------------------------------------------------
     installNodeMethods($);
     // Tween-объекты (Godot-стиль) — после методов узлов: им нужны $.fn и $.time.
     installTween($);
     installFrameHooks($);
+    // Русские имена — последними: они ссылаются на уже собранные пространства
+    // имён и методы обёртки (см. src/highlevel/ru.js).
+    installRu($);
     return $;
 }
 
@@ -390,6 +473,18 @@ function installNodeMethods($) {
             const node = el.nodes ? el.nodes[0] : el;
             node.scale_x = sx;
             node.scale_y = sy === undefined ? sx : sy;
+        });
+    });
+
+    // Скорость в пикселях в секунду. Раньше её можно было задать только
+    // атрибутом в конструкторе, хотя справочник обещал цепочку `.speed(250)`
+    // (и это был первый же пример API, который падал с TypeError).
+    def('speed', function (value) {
+        if (value === undefined) return this.nodes.length ? this.nodes[0].speed : 0;
+        return this.each((_, el) => {
+            const node = el.nodes ? el.nodes[0] : el;
+            node.speed = Number(value) || 0;
+            node.attrs.speed = node.speed;
         });
     });
 
@@ -1116,6 +1211,11 @@ function installFrameHooks($) {
         // съедает кадр, без внешних инструментов. prof('имя') закрывает
         // предыдущий отрезок и открывает новый, prof(null) закрывает последний.
         tickAnim(dt);   prof('анимация');
+        tickAnimPlayer(dt); prof('плеер анимации');
+        tickState(dt);  prof('состояния');
+        tickFlow(dt);   prof('последовательности');
+        tickScreen(dt); prof('экраны');
+        tickDialog(dt); prof('диалоги');
         tickTilemap(dt); prof('tilemap');
         tickFx(dt);      prof('vfx');
         tickParticles(dt); prof('частицы');
@@ -1251,8 +1351,10 @@ function applyControls(dt) {
         const cfg = typeof scheme === 'string' ? { axis: scheme } : scheme;
         const axis_name = cfg.axis || 'both';
         const vec = ctx.input.vec(axis_name);
+        // Скорость: явный атрибут → умолчание тега из TAGS (player 250,
+        // enemy 90, npc 70) → запасное значение для тега без умолчания.
         const speed = node.attrs.speed !== undefined ? node.attrs.speed
-            : (node.tag === 'player' ? 250 : 150);
+            : (node.speed > 0 ? node.speed : (node.tag === 'player' ? 250 : 150));
 
         const jump_key = cfg.jump || 'space';
         const up_key = cfg.up || 'w';

@@ -7,6 +7,7 @@
 #include "app.h"
 #include "icons.h"
 #include "physics.h"
+#include "profile.h"
 #include "render.h"
 #include "script.h"
 #include "payload.h"
@@ -235,7 +236,12 @@ void r2d_debug_ui_begin(R2DDebugUI *ui, R2DApp *app, R2DRenderer *renderer,
 
     if (ui->visible && ui->show_stats && app) {
         ImGui::SetNextWindowPos(ImVec2(12, 12), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(290, 0), ImGuiCond_FirstUseEver);
+        // Чуть шире прежнего: в таблицу зон должно влезать имя зоны целиком.
+        // Размер задаётся каждый кадр (Cond_Always): высоту окно подбирает по
+        // содержимому, а таблица зон растёт, пока профайлер не наберёт окно.
+        // С Cond_FirstUseEver высота застывала на первых кадрах, и низ таблицы
+        // (строка GPU, итоги) уезжал под сгиб.
+        ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_Always);
         if (ImGui::Begin("russiano2d", &ui->show_stats)) {
             ImGui::Text("FPS: %.1f  (%.2f мс)", app->fps, app->dt * 1000.0f);
             ImGui::Text("Кадр: %llu   Время: %.1f с",
@@ -269,12 +275,70 @@ void r2d_debug_ui_begin(R2DDebugUI *ui, R2DApp *app, R2DRenderer *renderer,
                             script->has_update ? "да" : "нет",
                             script->has_render ? "да" : "нет");
             }
+
+            // --- Зоны кадра: CPU и GPU в одной таблице (см. src/profile.h) ---
+            // Доли считаются от реального времени кадра: GPU-строка идёт
+            // параллельно CPU-зонам, поэтому с суммой зон она не складывается.
+            ImGui::SeparatorText("Зоны кадра");
+            R2DProfileRow rows[R2D_PROF_ROW_MAX];
+            const int row_count = r2d_prof_rows(rows, R2D_PROF_ROW_MAX);
+            const float frame_ms = r2d_prof_real_ms();
+            if (row_count > 0) {
+                if (ImGui::BeginTable("profile_zones", 4,
+                                      ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                          ImGuiTableFlags_SizingStretchProp)) {
+                    // Имя зоны тянется по остатку ширины, числа — фиксированы:
+                    // так таблица влезает в окно целиком, без обрезки «доли %».
+                    ImGui::TableSetupColumn("зона", ImGuiTableColumnFlags_WidthStretch);
+                    ImGui::TableSetupColumn("среднее мс", ImGuiTableColumnFlags_WidthFixed, 74);
+                    ImGui::TableSetupColumn("пик мс", ImGuiTableColumnFlags_WidthFixed, 58);
+                    ImGui::TableSetupColumn("доля %", ImGuiTableColumnFlags_WidthFixed, 56);
+                    ImGui::TableHeadersRow();
+
+                    for (int i = 0; i < row_count; ++i) {
+                        const R2DProfileRow &row = rows[i];
+                        ImGui::TableNextRow();
+
+                        ImGui::TableNextColumn();
+                        // GPU-строка бледнее: она измерена не на CPU.
+                        if (row.gpu) ImGui::TextDisabled("%s", row.name);
+                        else ImGui::TextUnformatted(row.name);
+
+                        ImGui::TableNextColumn();
+                        if (row.valid) ImGui::Text("%.2f", row.ms);
+                        else ImGui::TextDisabled("н/д");
+
+                        ImGui::TableNextColumn();
+                        if (row.valid) ImGui::Text("%.2f", row.peak);
+                        else ImGui::TextDisabled("н/д");
+
+                        ImGui::TableNextColumn();
+                        if (row.valid && frame_ms > 0.0f)
+                            ImGui::Text("%.1f", row.ms * 100.0f / frame_ms);
+                        else
+                            ImGui::TextDisabled("—");
+                    }
+                    ImGui::EndTable();
+                }
+            } else {
+                ImGui::TextDisabled("нет данных: кадры ещё не прошли");
+            }
+            ImGui::Text("Итог кадра: %.2f мс (сумма зон)", r2d_prof_frame_ms());
+            ImGui::Text("Реальное время: %.2f мс", frame_ms);
+            ImGui::Text("Неучтённый остаток: %.2f мс", r2d_prof_unaccounted_ms());
+            ImGui::Text("Кадров в окне: %d", r2d_prof_frames());
+            ImGui::TextDisabled("GPU: %s", r2d_prof_gpu_note());
+            if (r2d_prof_gpu_available()) {
+                ImGui::TextDisabled("Замеров GPU в окне: %d", r2d_prof_gpu_frames());
+            }
+            if (ImGui::Button("Сбросить профайлер")) r2d_prof_reset();
         }
         ImGui::End();
     }
 
     if (ui->visible && ui->show_physics && physics) {
-        ImGui::SetNextWindowPos(ImVec2(320, 12), ImGuiCond_FirstUseEver);
+        // Правее окна статистики: оно стало шире из-за таблицы зон.
+        ImGui::SetNextWindowPos(ImVec2(424, 12), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Физика (Box2D)", &ui->show_physics)) {
             if (!ui->gravity_dirty) {
                 r2d_physics_get_gravity(physics, &ui->gravity[0], &ui->gravity[1]);
@@ -347,7 +411,9 @@ void r2d_debug_ui_begin(R2DDebugUI *ui, R2DApp *app, R2DRenderer *renderer,
     }
 
     if (ui->visible && ui->show_scripts && script) {
-        ImGui::SetNextWindowPos(ImVec2(320, 300), ImGuiCond_FirstUseEver);
+        // Правее и ниже окна статистики: оно стало шире из-за таблицы зон и
+        // иначе перекрывало бы колонку «доля %».
+        ImGui::SetNextWindowPos(ImVec2(424, 300), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Скрипты (QuickJS)", &ui->show_scripts)) {
             ImGui::TextWrapped("Точка входа: %s", script->entry_path);
             ImGui::Text("Перезагрузок: %llu", (unsigned long long)script->reload_count);

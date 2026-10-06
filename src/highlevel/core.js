@@ -154,6 +154,22 @@ const RESERVED = new Set([
 
 let next_uid = 1;
 
+// Псевдонимы событий: в документации контакт исторически называли 'collision'
+// (и так же писали в примерах про пул пуль), а движок шлёт 'collide'. Приводим
+// оба имени к каноническому в on/off/emit — иначе канонический пример
+// «пуля вернулась в пул» молча не срабатывает.
+const EVENT_ALIASES = {
+    collision: 'collide',
+    contact: 'collide',
+    separation: 'separate',
+};
+
+/** Каноническое имя события (или исходное, если псевдонима нет). */
+export function eventName(name) {
+    if (typeof name !== 'string') return name;
+    return EVENT_ALIASES[name.toLowerCase()] || name;
+}
+
 export class Node {
     constructor(tag, attrs) {
         const defaults = TAGS[tag] || {};
@@ -218,6 +234,10 @@ export class Node {
         // Здоровье
         this.max_hp = defaults.hp || 0;
         this.cur_hp = this.max_hp;
+        // Скорость из TAGS: без этого умолчания тегов (enemy 90, npc 70) не
+        // доходили ни до .controls(), ни до .attr('speed') — враг с
+        // управлением ехал 150, хотя справочник обещал 90.
+        this.speed = defaults.speed !== undefined ? defaults.speed : 0;
         this.team = defaults.team !== undefined ? defaults.team : 0;
         this.iframes = 0;
 
@@ -528,30 +548,33 @@ export class Node {
     // --- События -----------------------------------------------------------
 
     on(name, fn) {
-        if (!this.listeners.has(name)) this.listeners.set(name, []);
-        this.listeners.get(name).push(fn);
+        const key = eventName(name);
+        if (!this.listeners.has(key)) this.listeners.set(key, []);
+        this.listeners.get(key).push(fn);
         return this;
     }
 
     off(name, fn) {
         if (!name) { this.listeners.clear(); return this; }
-        if (!fn) { this.listeners.delete(name); return this; }
-        const list = this.listeners.get(name);
-        if (list) this.listeners.set(name, list.filter((f) => f !== fn));
+        const key = eventName(name);
+        if (!fn) { this.listeners.delete(key); return this; }
+        const list = this.listeners.get(key);
+        if (list) this.listeners.set(key, list.filter((f) => f !== fn));
         return this;
     }
 
     emit(name, data) {
-        const list = this.listeners.get(name);
+        const key = eventName(name);
+        const list = this.listeners.get(key);
         if (list && list.length) {
-            const event = makeEvent(this, name, data);
+            const event = makeEvent(this, key, data);
             for (const fn of list.slice()) {
-                try { fn(event); } catch (e) { ctx.log(`$: ошибка в обработчике "${name}": ${e}`); }
+                try { fn(event); } catch (e) { ctx.log(`$: ошибка в обработчике "${key}": ${e}`); }
                 if (event.stopped) break;
             }
         }
         // Глобальные подписки: $('*').on(...) и $.on('entity:...').
-        ctx.$._dispatchGlobal(this, name, data);
+        ctx.$._dispatchGlobal(this, key, data);
         return this;
     }
 

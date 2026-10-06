@@ -110,22 +110,40 @@ no-op) и даёт `test/eq/near/truthy/falsy/joined/finish`. Поэтому м�
 Уже занятые имена методов обёртки (переопределять **нельзя**):
 
 ```
-add addClass addTag alpha angle animate append appendTo applyForce applyImpulse
-at attr blend body bounce clearTweens collidesWith collision collisionCircle
-color controls damage data delay depth detach each emit every fadeIn fadeOut
-fadeTo filter first flash flip fontSize frame frames gravity has heal health
-height hide hp html intensity invulnerable is jump kill last layer layerBits
-lookAt map mask max maxHp move moveAndSlide moveTo moveTowards mute not off on
-opacity outline overlaps pause pauseTweens playSound playing prepend prependTo
-radius reduce region remove removeClass removeTag respawn resumeTweens rotate
-rotateTo scale scaleTo sequence shader shaderParam shadow shake show size slice
-some sound sprite stopAll stopAnim tag team text toggleClass trigger tween
-tweenTo value velocity visible volume wake width
+add addClass addTag align alive alpha anchor anchorPreset anchorRect anchors angle
+angleTo animate append appendTo applyForce applyImpulse at attr autotile blend blur
+body bounce burst checked children clear clearTiles clearTweens clipProgress
+clipSpeed clipTime clone closeDialog closest collidesWith collision collisionCircle
+collisions color cone contacts controls count damage data delay depth detach
+directionTo disabled distanceTo each emit emitting eq every fadeIn fadeOut fadeTo
+fill filter find first flash flicker flip focus fontSize frame frames gap get
+globalPos gravity has hasClass heal health height hide hp html index inputValue
+inside intensity invulnerable is isEmitting isNavigating isPlayingClip isVisible
+items joint jump kill last layer layerBits lookAt map mask max maxHp maxLength min
+move moveAndSlide moveTo moveTowards mute navPath navTarget navigateTo not occluders
+off offset on onFloor onWall oneWay opacity openDialog outline overlaps padding
+parallax params parent particleAt pause pauseClip pauseTweens placeholder playClip
+playSound playing pos prefab prefabClone prepend prependTo punch radius rayTo
+rebuild rect reduce region release remove removeClass removeTag repath reset respawn
+restart resumeClip resumeTweens rotate rotateTo rotation savePrefab scale scaleTo
+selectedIndex selectedItem sensor sequence setTile shader shaderParam shadow shadows
+shake shape show siblings size sizePercent slice sliderValue some sound speed sprite
+start state stateMachine stateTime states step stop stopAll stopAnim stopClip stopNav
+style tag team terrainData text theme tileAt tileLayer tileSize tilesData tilesList
+toArray toData toGlobal toLocal toState toggleClass trigger tween tweenTo value
+velocity visible volume wake width ysort
 ```
+
+> Список снят с живого движка, а не перепечатан: **227 имён**, команда —
+> `Object.getOwnPropertyNames(Object.getPrototypeOf($('<rect>'))).filter(n => n !== 'constructor')`
+> в агентском режиме. Он устаревает вместе с кодом, поэтому перед добавлением
+> своего метода сверяйтесь с ним, а не с памятью: прежняя версия этого списка
+> отставала на 86 имён, и автор подсистемы мог занять уже занятое.
 
 Геттеры: `alive angleTo children closest directionTo distanceTo find globalPos
 hasClass inside isVisible onFloor onWall parent pos rayTo rotation siblings
-toGlobal toLocal`.
+toGlobal toLocal` (плюс `state`, `stateTime`, `states`, `size` и другие —
+полный перечень выше).
 
 Правила:
 

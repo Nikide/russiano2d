@@ -12,7 +12,7 @@
 // отдаётся в C одним submitSprites().
 // ===========================================================================
 
-import { ctx, wrap, packColor, withAlpha, fxRandom } from './core.js';
+import { ctx, wrap, def, TAGS, packColor, withAlpha, fxRandom } from './core.js';
 import { cameraTransform } from './camera.js';
 
 const MAX_SPRITES = 16384;
@@ -280,27 +280,34 @@ function pushTriangleGrad(x1, y1, c1, x2, y2, c2, x3, y3, c3) {
 }
 
 /**
+ * Кривая затухания свечения: `falloff` (2 — степень), `inner` (доля радиуса,
+ * где яркость ещё полная) и своя `alphaAt(k)`, если нужно. Общая для мягкого
+ * пятна (pushGlow) и для света с тенями и конусом — чтобы оба светили одинаково.
+ */
+function glowAlphaCurve(o) {
+    const inner = Math.max(0, Math.min(0.9, o.inner || 0));
+    const falloff = o.falloff === undefined ? 2 : o.falloff;
+    if (typeof o.alphaAt === 'function') return o.alphaAt;
+    return (k) => {
+        if (k <= inner) return 1;
+        const t = (k - inner) / Math.max(1e-6, 1 - inner);
+        return Math.pow(1 - t, falloff);
+    };
+}
+
+/**
  * Мягкое радиальное свечение: концентрические кольца, у которых альфа падает
  * от центра к краю, а цвет задан на каждой вершине. Из этого собираются
  * факелы, фонари, вспышки и ауры — одна фигура на все случаи.
  *
- * opts: `segments` (по умолчанию 24), `rings` (6), `falloff` (2 — степень
- * затухания), `inner` (доля радиуса, где яркость ещё полная) и `alphaAt(k)`
- * — своя кривая затухания, если нужно.
+ * opts: `segments` (по умолчанию 24), `rings` (6), `falloff`, `inner`,
+ * `alphaAt(k)` — см. glowAlphaCurve().
  */
 function pushGlow(cx, cy, radius, color, opts) {
     const o = opts || {};
     const segs = Math.max(6, Math.min(64, o.segments || 24));
     const rings = Math.max(1, Math.min(16, o.rings || 6));
-    const falloff = o.falloff === undefined ? 2 : o.falloff;
-    const inner = Math.max(0, Math.min(0.9, o.inner || 0));
-    const alphaOf = typeof o.alphaAt === 'function'
-        ? o.alphaAt
-        : (k) => {
-            if (k <= inner) return 1;
-            const t = (k - inner) / Math.max(1e-6, 1 - inner);
-            return Math.pow(1 - t, falloff);
-        };
+    const alphaOf = glowAlphaCurve(o);
 
     for (let ring = 0; ring < rings; ring++) {
         const k0 = ring / rings;
@@ -373,6 +380,496 @@ function pushRing(cx, cy, radius, width, color, segments) {
     }
 }
 
+// ===========================================================================
+// Свет в стиле Candle: тени внутри <light>, конус, площадной свет и туман.
+//
+// Узел <light> умеет не только мягкое пятно (pushGlow), но и честную границу:
+// из центра выпускаются лучи, каждый упирается в ближайшее препятствие, и по
+// этим расстояниям строится концентрический веер. Градиент остаётся мягким, а
+// кромка тени — резкой, как в Candle.
+//
+// Препятствия берутся из общего реестра ($.gfx.light.occluders) и из
+// собственного списка узла (.occluders([...])). Реестр наполняется из тайлмапа
+// чистой функцией tileOccluders() — она не знает про движок и проверяется
+// qjs-тестом, как и остальная геометрия ниже.
+//
+// Туман — отдельный слой: <fog> (прямоугольник в мире) и $.gfx.fog() (экранный).
+// Свет с .punch(true) рисуется поверх тумана: фонарь «прорезает» дымку.
+// ===========================================================================
+
+/** Плоский список отрезков [x1,y1,x2,y2,…] в мировых координатах. */
+const light_segments = [];
+let light_segments_version = 0;
+let light_debug = false;
+
+// Умолчания тегов света и тумана объявляются здесь, а не в installGfx: это
+// статические данные, и они должны быть видны всем, кто импортирует модуль
+// (в том числе qjs-тестам без движка). Отрисовщики тегов ставит installGfx.
+TAGS.lightarea = { body: null, w: 96, h: 8, radius: 220, color: '#ffcc88', intensity: 1 };
+TAGS.fog = { body: null, w: 640, h: 260, color: '#9fb3c8', density: 0.4 };
+
+/** Свет, отложенный до отрисовки тумана (.punch(true)). */
+const deferred_lights = [];
+/** Экранный туман: $.gfx.fog({...}), null — выключен. */
+let fog_params = null;
+
+/** Четыре отрезка по периметру прямоугольника (x/y — левый верхний угол). */
+function boxSegments(out, x, y, w, h) {
+    const x2 = x + w, y2 = y + h;
+    out.push(x, y, x2, y, x2, y, x2, y2, x2, y2, x, y2, x, y2, x, y);
+    return out;
+}
+
+/**
+ * Приводит описание препятствий к плоскому списку отрезков.
+ * Понимает `[x1,y1,x2,y2]`, `{x1,y1,x2,y2}`, `{x,y,w,h}` (левый верхний угол),
+ * `{cx,cy,w,h}` (центр) и вложенные массивы. Чистая функция.
+ */
+export function occluderSegments(list, out) {
+    const dst = out || [];
+    if (!list) return dst;
+    // Плоский список чисел — это либо один отрезок [x1,y1,x2,y2], либо уже
+    // готовый набор отрезков (так их отдаёт tileOccluders). Различаем по
+    // длине: набор всегда кратен четырём, поэтому четвёрка читается однозначно.
+    if (Array.isArray(list) && list.length >= 4 && typeof list[0] === 'number') {
+        const count = list.length % 4 === 0 ? list.length / 4 : 1;
+        for (let s = 0; s < count; s++) {
+            const o = s * 4;
+            dst.push(list[o], list[o + 1], list[o + 2], list[o + 3]);
+        }
+        return dst;
+    }
+    const items = Array.isArray(list) ? list : [list];
+    for (const item of items) {
+        if (item === null || item === undefined) continue;
+        if (Array.isArray(item)) {
+            if (item.length >= 4 && typeof item[0] === 'number') {
+                dst.push(item[0], item[1], item[2], item[3]);
+            } else {
+                occluderSegments(item, dst);       // вложенный список
+            }
+            continue;
+        }
+        if (typeof item !== 'object') continue;
+        if (Array.isArray(item.box)) {
+            boxSegments(dst, item.box[0], item.box[1], item.box[2], item.box[3]);
+        } else if (item.x1 !== undefined && item.y1 !== undefined &&
+                   item.x2 !== undefined && item.y2 !== undefined) {
+            dst.push(item.x1, item.y1, item.x2, item.y2);
+        } else if (item.cx !== undefined && item.cy !== undefined) {
+            const w = item.w === undefined ? 0 : item.w;
+            const h = item.h === undefined ? 0 : item.h;
+            boxSegments(dst, item.cx - w / 2, item.cy - h / 2, w, h);
+        } else if (item.x !== undefined && item.y !== undefined) {
+            boxSegments(dst, item.x, item.y,
+                        item.w === undefined ? 0 : item.w,
+                        item.h === undefined ? 0 : item.h);
+        }
+    }
+    return dst;
+}
+
+/**
+ * Препятствия из тайлмапа: наружу выходят только те рёбра непроходимых
+ * тайлов, за которыми пусто. Внутренние рёбра (между двумя стенами) не нужны —
+ * луч всё равно упирается во внешнюю границу, — а отрезков становится меньше
+ * в разы. `isSolid(tx, ty)` — предикат непроходимости. Чистая функция.
+ */
+export function tileOccluders(cols, rows, isSolid, cell, ox, oy) {
+    const out = [];
+    const cs = cell === undefined || cell <= 0 ? 32 : cell;
+    const x0 = ox || 0, y0 = oy || 0;
+    const solidAt = (x, y) => (x < 0 || y < 0 || x >= cols || y >= rows) ? false : !!isSolid(x, y);
+    for (let ty = 0; ty < rows; ty++) {
+        for (let tx = 0; tx < cols; tx++) {
+            if (!solidAt(tx, ty)) continue;
+            const left = x0 + tx * cs, right = left + cs;
+            const top = y0 + ty * cs, bottom = top + cs;
+            if (!solidAt(tx, ty - 1)) out.push(left, top, right, top);
+            if (!solidAt(tx, ty + 1)) out.push(left, bottom, right, bottom);
+            if (!solidAt(tx - 1, ty)) out.push(left, top, left, bottom);
+            if (!solidAt(tx + 1, ty)) out.push(right, top, right, bottom);
+        }
+    }
+    return out;
+}
+
+/** Пересечение луча (px,py)+(dx,dy) с отрезком: расстояние или Infinity. */
+export function rayDistance(px, py, dx, dy, x1, y1, x2, y2) {
+    const ex = x2 - x1, ey = y2 - y1;
+    const den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-12) return Infinity;              // параллельны
+    const qx = x1 - px, qy = y1 - py;
+    const t = (qx * ey - qy * ex) / den;                     // вдоль луча
+    const u = (dy * qx - dx * qy) / den;                     // вдоль отрезка
+    if (t < 0 || u < 0 || u > 1) return Infinity;
+    return t;
+}
+
+/** Углы по кругу: последний не повторяет первый — веер замыкается сам. */
+export function circleAngles(count) {
+    const n = Math.max(6, Math.min(256, Math.round(count) || 6));
+    const out = new Float64Array(n);
+    for (let i = 0; i < n; i++) out[i] = (i / n) * Math.PI * 2 - Math.PI;
+    return out;
+}
+
+/** Углы сектора от a0 до a1: обе границы включены — это кромки конуса. */
+export function sectorAngles(a0, a1, count) {
+    const n = Math.max(2, Math.min(256, Math.round(count) || 2));
+    const out = new Float64Array(n);
+    for (let i = 0; i < n; i++) out[i] = a0 + (a1 - a0) * (i / (n - 1));
+    return out;
+}
+
+/** Расстояние до первого препятствия по каждому направлению. Чистая функция. */
+export function lightBoundary(cx, cy, angles, segments, max_dist) {
+    const n = angles.length;
+    const out = new Float64Array(n);
+    const count = segments ? Math.floor(segments.length / 4) : 0;
+    for (let i = 0; i < n; i++) {
+        const a = angles[i];
+        const dx = Math.cos(a), dy = Math.sin(a);
+        let best = max_dist;
+        for (let s = 0; s < count; s++) {
+            const o = s * 4;
+            const t = rayDistance(cx, cy, dx, dy,
+                                  segments[o], segments[o + 1], segments[o + 2], segments[o + 3]);
+            if (t < best) best = t;
+        }
+        out[i] = best;
+    }
+    return out;
+}
+
+/** Кромка конуса: 0 на границе, 1 внутри. `soft` — доля полуугла на растушёвку. */
+export function coneAlpha(angle, a0, a1, soft) {
+    const span = a1 - a0;
+    if (!(span > 0)) return 1;
+    const s = soft === undefined ? 0.25 : Math.max(0, Math.min(1, soft));
+    const feather = Math.max(1e-9, span * 0.5 * s);
+    const edge = Math.min(angle - a0, a1 - angle);
+    if (edge <= 0) return 0;
+    return Math.min(1, edge / feather);
+}
+
+/**
+ * Полосы тумана: положение, толщина и альфа каждой. Чистая функция — от неё
+ * зависит и вид тумана, и его плотность в точке, поэтому она вынесена наружу.
+ */
+export function fogBands(params, time, w, h) {
+    const p = params || {};
+    const layers = Math.max(1, Math.min(12, Math.round(p.layers === undefined ? 4 : p.layers)));
+    const density = Math.max(0, Math.min(1, p.density === undefined ? 0.35 : p.density));
+    const speed = p.speed === undefined ? 0.35 : p.speed;
+    const amp = (p.amp === undefined ? 0.10 : p.amp) * h;
+    const thickness = p.thickness === undefined ? 1.8 : p.thickness;
+    const ground = p.ground === undefined ? 0 : Math.max(0, Math.min(1, p.ground));
+    const bands = [];
+    for (let i = 0; i < layers; i++) {
+        // Золотой угол: полосы не совпадают по фазе и не «дышат» в такт.
+        const phase = i * 2.39996;
+        const base = ((i + 0.5) / layers) * h;
+        const y = base + Math.sin((time || 0) * speed + phase) * amp;
+        const bh = Math.max(1, (h / layers) * thickness);
+        let alpha = density / layers;
+        if (ground > 0) {
+            // Приземный туман: у земли плотность полная, выше — редеет.
+            const up = Math.min(1, Math.max(0, y / h));
+            alpha *= 1 - ground * (1 - up) * 0.85;
+        }
+        bands.push({ y, h: bh, alpha, phase });
+    }
+    return bands;
+}
+
+/**
+ * Световое пятно с границей: концентрические кольца, повторяющие контур тени.
+ * Без теней и конуса расстояния постоянны — получается то же, что pushGlow.
+ */
+function pushLightFan(cx, cy, angles, dist, color, opts) {
+    const o = opts || {};
+    const rings = Math.max(1, Math.min(16, Math.round(o.rings || 7)));
+    const power = o.alpha === undefined ? 1 : o.alpha;
+    const alphaOf = glowAlphaCurve(o);
+    const edge = typeof o.edge === 'function' ? o.edge : null;
+    const closed = o.closed === true;
+    const n = angles.length;
+    for (let ring = 0; ring < rings; ring++) {
+        const k0 = ring / rings;
+        const k1 = (ring + 1) / rings;
+        const a_in = power * alphaOf(k0);
+        const a_out = power * alphaOf(k1);
+        const last = closed ? n : n - 1;
+        for (let i = 0; i < last; i++) {
+            const j = (i + 1) % n;
+            const ang0 = angles[i], ang1 = angles[j];
+            const e0 = edge ? edge(ang0) : 1;
+            const e1 = edge ? edge(ang1) : 1;
+            const c_in0 = withAlpha(color, a_in * e0);
+            const c_in1 = withAlpha(color, a_in * e1);
+            const c_out0 = withAlpha(color, a_out * e0);
+            const c_out1 = withAlpha(color, a_out * e1);
+            const cos0 = Math.cos(ang0), sin0 = Math.sin(ang0);
+            const cos1 = Math.cos(ang1), sin1 = Math.sin(ang1);
+            const d0 = dist[i], d1 = dist[j];
+            pushTriangleGrad(cx + cos0 * d0 * k0, cy + sin0 * d0 * k0, c_in0,
+                             cx + cos1 * d1 * k0, cy + sin1 * d1 * k0, c_in1,
+                             cx + cos1 * d1 * k1, cy + sin1 * d1 * k1, c_out1);
+            pushTriangleGrad(cx + cos0 * d0 * k0, cy + sin0 * d0 * k0, c_in0,
+                             cx + cos1 * d1 * k1, cy + sin1 * d1 * k1, c_out1,
+                             cx + cos0 * d0 * k1, cy + sin0 * d0 * k1, c_out0);
+        }
+    }
+}
+
+/** Полоса тумана: мягкий вертикальный градиент, поэтому швов не видно. */
+function pushFogBand(x0, y0, w, h, color, alpha) {
+    if (alpha <= 0.001 || w <= 0 || h <= 0) return;
+    const clear = withAlpha(color, 0);
+    const solid = withAlpha(color, alpha);
+    const top = y0 - h / 2;
+    const bottom = y0 + h / 2;
+    pushTriangleGrad(x0, top, clear, x0 + w, top, clear, x0 + w, y0, solid);
+    pushTriangleGrad(x0, top, clear, x0 + w, y0, solid, x0, y0, solid);
+    pushTriangleGrad(x0, y0, solid, x0 + w, y0, solid, x0 + w, bottom, clear);
+    pushTriangleGrad(x0, y0, solid, x0 + w, bottom, clear, x0, bottom, clear);
+}
+
+/** Свеча дрожит: детерминированное мерцание от игрового времени. */
+function flickerFactor(node) {
+    const f = node.attrs ? node.attrs.flicker : null;
+    if (!f) return 1;
+    const t = engine.time || 0;
+    const speed = f.speed === undefined ? 7 : f.speed;
+    const noise = 0.5 + 0.5 * Math.sin(t * speed) * Math.sin(t * speed * 0.37 + 1.7);
+    const amount = f.amount === undefined ? 0.15 : Math.max(0, Math.min(1, f.amount));
+    return 1 - amount * noise;
+}
+
+/** Отрезки для узла: свои плюс общий реестр. Кэш — по версии реестра. */
+function lightSegmentsFor(node) {
+    const own = node.attrs ? node.attrs.occluders : null;
+    if (!own) return light_segments;
+    if (node._light_seg_own === own && node._light_seg_ver === light_segments_version) {
+        return node._light_seg_cache;
+    }
+    const segs = light_segments.slice();
+    occluderSegments(own, segs);
+    node._light_seg_own = own;
+    node._light_seg_ver = light_segments_version;
+    node._light_seg_cache = segs;
+    return segs;
+}
+
+/** Свет: мягкое пятно либо веер с тенями и конусом. */
+function drawLightNode(node, t, cam) {
+    const attrs = node.attrs || {};
+    const power = node.alpha * Math.max(0, Math.min(2, node.intensity)) * flickerFactor(node);
+    if (power <= 0.001) return;
+
+    const zoom = cam.zoom;
+    const radius_world = Math.max(0.5, node.radius);
+    const radius = Math.max(2, radius_world * zoom);
+    const color = packColor(node.color);
+    const cone_deg = attrs.cone === undefined ? 0 : Number(attrs.cone);
+    const has_cone = cone_deg > 0 && cone_deg < 360;
+    const shadows = attrs.shadows === true;
+    const samples = Math.max(6, Math.min(96, Math.round(attrs.segments === undefined ? 26 : attrs.segments)));
+    const rings = attrs.rings === undefined ? 7 : Math.round(attrs.rings);
+    const falloff = attrs.falloff === undefined ? 2 : attrs.falloff;
+    const inner = attrs.inner === undefined ? 0 : attrs.inner;
+    const curve = glowAlphaCurve({ falloff, inner });
+
+    const prev_blend = tri_blend_cur;
+    tri_blend_cur = blendId(node.blend_mode);
+
+    if (!has_cone && !shadows) {
+        // Прежний вид: мягкое пятно без геометрии теней.
+        pushGlow(t.x, t.y, radius, color, {
+            segments: samples, rings, falloff, inner,
+            alphaAt: (k) => power * curve(k),
+        });
+        tri_blend_cur = prev_blend;
+        return;
+    }
+
+    const half = (cone_deg * Math.PI / 180) / 2;
+    const a0 = has_cone ? node.angle - half : 0;
+    const a1 = has_cone ? node.angle + half : 0;
+    const angles = has_cone ? sectorAngles(a0, a1, samples) : circleAngles(samples);
+    const segments = shadows ? lightSegmentsFor(node) : null;
+    const world_dist = shadows ? lightBoundary(node.x, node.y, angles, segments, radius_world) : null;
+    const dist = new Float64Array(angles.length);
+    for (let i = 0; i < angles.length; i++) {
+        const d = world_dist ? Math.min(world_dist[i], radius_world) : radius_world;
+        dist[i] = d * zoom;
+    }
+    pushLightFan(t.x, t.y, angles, dist, color, {
+        rings, falloff, inner, alpha: power, closed: !has_cone,
+        edge: has_cone ? (a) => coneAlpha(a, a0, a1, attrs.coneSoft) : null,
+    });
+    tri_blend_cur = prev_blend;
+}
+
+/** Площадной свет: несколько точек вдоль площадки, у каждой свой контур тени. */
+function drawLightAreaNode(node, t, cam) {
+    const attrs = node.attrs || {};
+    const power = node.alpha * Math.max(0, Math.min(2, node.intensity)) * flickerFactor(node);
+    if (power <= 0.001) return;
+
+    const zoom = cam.zoom;
+    const radius_world = Math.max(0.5, node.radius);
+    const samples = Math.max(1, Math.min(8, Math.round(attrs.samples === undefined ? 3 : attrs.samples)));
+    const segments = attrs.shadows ? lightSegmentsFor(node) : null;
+    const w = Math.abs(node.w), h = Math.abs(node.h);
+    const horizontal = w >= h;
+    const span = horizontal ? w : h;
+    const angles = circleAngles(attrs.segments === undefined ? 20 : attrs.segments);
+    const rings = attrs.rings === undefined ? 7 : Math.round(attrs.rings);
+    const falloff = attrs.falloff === undefined ? 2 : attrs.falloff;
+    const inner = attrs.inner === undefined ? 0 : attrs.inner;
+
+    const prev_blend = tri_blend_cur;
+    tri_blend_cur = blendId(node.blend_mode);
+    const dist = new Float64Array(angles.length);
+    for (let i = 0; i < samples; i++) {
+        const u = samples === 1 ? 0.5 : i / (samples - 1);
+        const ox = horizontal ? (u - 0.5) * span : 0;
+        const oy = horizontal ? 0 : (u - 0.5) * span;
+        const world_dist = segments
+            ? lightBoundary(node.x + ox, node.y + oy, angles, segments, radius_world) : null;
+        for (let k = 0; k < angles.length; k++) {
+            const d = world_dist ? Math.min(world_dist[k], radius_world) : radius_world;
+            dist[k] = d * zoom;
+        }
+        pushLightFan(t.x + ox * zoom, t.y + oy * zoom, angles, dist, packColor(node.color), {
+            rings, falloff, inner, alpha: power / samples, closed: true,
+        });
+    }
+    tri_blend_cur = prev_blend;
+
+    // Сам источник: полоса по площади — видно, откуда идёт свет.
+    if (attrs.core !== false) {
+        pushSprite(engine.whiteSprite, t.x, t.y, Math.max(1, w * zoom), Math.max(1, h * zoom),
+                   node.angle, withAlpha(packColor(node.color), Math.min(1, power * 0.6)),
+                   attrs.blend === undefined ? 'add' : attrs.blend);
+    }
+}
+
+/** Узел <fog>: прямоугольник мира, затянутый дрейфующими полосами. */
+function drawFogNode(node, t, cam) {
+    const attrs = node.attrs || {};
+    const w = Math.abs(t.w), h = Math.abs(t.h);
+    if (w <= 0 || h <= 0 || node.alpha <= 0) return;
+    const color = packColor(node.color);
+    const density = (attrs.density === undefined ? 0.4 : attrs.density) * node.alpha;
+    const bands = fogBands({
+        density, layers: attrs.layers, speed: attrs.speed, amp: attrs.amp,
+        thickness: attrs.thickness, ground: attrs.ground,
+    }, engine.time || 0, w, h);
+    const left = t.x - w / 2;
+    const top = t.y - h / 2;
+    const prev_blend = tri_blend_cur;
+    tri_blend_cur = blendId(node.blend_mode);
+    for (const band of bands) pushFogBand(left, top + band.y, w, band.h, color, band.alpha);
+    tri_blend_cur = prev_blend;
+}
+
+/** Экранный туман: $.gfx.fog({...}) — полосы через весь кадр. */
+function drawGlobalFog() {
+    const p = fog_params;
+    const w = engine.width, h = engine.height;
+    const bands = fogBands(p, engine.time || 0, w, h);
+    const prev_blend = tri_blend_cur;
+    tri_blend_cur = 0;
+    for (const band of bands) pushFogBand(0, band.y, w, band.h, p.color, band.alpha);
+    tri_blend_cur = prev_blend;
+}
+
+/** Отладка: показать отрезки-препятствия, по которым считаются тени. */
+function drawLightDebug(cam) {
+    const count = Math.floor(light_segments.length / 4);
+    if (count <= 0) return;
+    const color = engine.rgba(255, 80, 80, 170);
+    for (let s = 0; s < count; s++) {
+        const o = s * 4;
+        const x1 = (light_segments[o] - cam.x) * cam.zoom + cam.w / 2 + cam.shake_x;
+        const y1 = (light_segments[o + 1] - cam.y) * cam.zoom + cam.h / 2 + cam.shake_y;
+        const x2 = (light_segments[o + 2] - cam.x) * cam.zoom + cam.w / 2 + cam.shake_x;
+        const y2 = (light_segments[o + 3] - cam.y) * cam.zoom + cam.h / 2 + cam.shake_y;
+        pushLine(x1, y1, x2, y2, 1, color);
+    }
+}
+
+/** Свет, отложенный до тумана: рисуется уже поверх дымки. */
+function flushDeferredLights() {
+    if (!deferred_lights.length) return;
+    for (const item of deferred_lights) drawLightNode(item.node, item.t, item.cam);
+    deferred_lights.length = 0;
+}
+
+/** Публичный API света: $.gfx.light. */
+const light_api = {
+    /** Заменить реестр препятствий. Возвращает число отрезков. */
+    occluders(list) {
+        light_segments.length = 0;
+        light_segments_version++;
+        return light_api.addOccluders(list);
+    },
+    /** Добавить препятствия к реестру. Возвращает число отрезков. */
+    addOccluders(list) {
+        occluderSegments(list, light_segments);
+        light_segments_version++;
+        return Math.floor(light_segments.length / 4);
+    },
+    /** Очистить реестр. */
+    clearOccluders() {
+        light_segments.length = 0;
+        light_segments_version++;
+        return 0;
+    },
+    /** Сколько отрезков сейчас в реестре. */
+    count() { return Math.floor(light_segments.length / 4); },
+    /** Копия отрезков — для отладки и тестов. */
+    segments() { return light_segments.slice(); },
+    /** Препятствия из тайлмапа: tileOccluders() + addOccluders(). */
+    tiles(cols, rows, isSolid, opts) {
+        const o = opts || {};
+        return light_api.addOccluders(tileOccluders(cols, rows, isSolid, o.cell, o.x, o.y));
+    },
+    /** Точный полигон видимости из C (engine.light.visibility), если доступен. */
+    polygon(x, y) {
+        if (!engine.light || typeof engine.light.visibility !== 'function') return null;
+        if (!light_segments.length) return null;
+        return engine.light.visibility(Float32Array.from(light_segments), x, y);
+    },
+    /** Показать препятствия красными отрезками. */
+    debug(on) { light_debug = on !== false; return light_api; },
+    debugOn() { return light_debug; },
+};
+
+/** Публичный API тумана: $.gfx.fog({...}), $.gfx.fog.off(), $.gfx.fog.params(). */
+function fog(opts) {
+    if (opts === undefined) return fog_params ? Object.assign({}, fog_params) : null;
+    if (opts === null || opts.on === false) { fog_params = null; return fog; }
+    const prev = fog_params || {};
+    const pick = (key) => (opts[key] === undefined ? prev[key] : opts[key]);
+    fog_params = {
+        color: packColor(opts.color === undefined ? (prev.color === undefined ? '#9fb3c8' : prev.color) : opts.color),
+        density: Math.max(0, Math.min(1, pick('density') === undefined ? 0.35 : pick('density'))),
+        layers: pick('layers') === undefined ? 4 : pick('layers'),
+        speed: pick('speed') === undefined ? 0.35 : pick('speed'),
+        amp: pick('amp') === undefined ? 0.10 : pick('amp'),
+        thickness: pick('thickness') === undefined ? 1.8 : pick('thickness'),
+        ground: pick('ground') === undefined ? 0 : pick('ground'),
+    };
+    return fog;
+}
+fog.off = function () { fog_params = null; return fog; };
+fog.params = function () { return fog_params ? Object.assign({}, fog_params) : null; };
+fog.on = function () { return fog_params !== null; };
+
 // ---------------------------------------------------------------------------
 // Отрисовка узла
 // ---------------------------------------------------------------------------
@@ -431,20 +928,14 @@ function drawWorldNode(node, cam) {
         // каждой вершине, поэтому градиент гладкий на любом радиусе, а
         // стоимость — одна фигура. Режим смешивания берём у узла: для света
         // обычно .blend('add').
-        const r = Math.max(2, node.radius * cam.zoom);
-        const power = node.alpha * Math.max(0, Math.min(2, node.intensity));
-        if (power <= 0.001) break;
-        const attrs = node.attrs || {};
-        const prev_blend = tri_blend_cur;
-        tri_blend_cur = blendId(node.blend_mode);
-        pushGlow(t.x, t.y, r, packColor(node.color), {
-            segments: attrs.segments === undefined ? 26 : Math.round(attrs.segments),
-            rings: attrs.rings === undefined ? 7 : Math.round(attrs.rings),
-            falloff: attrs.falloff === undefined ? 2 : attrs.falloff,
-            inner: attrs.inner === undefined ? 0 : attrs.inner,
-            alphaAt: (k) => power * Math.pow(1 - k, attrs.falloff === undefined ? 2 : attrs.falloff),
-        });
-        tri_blend_cur = prev_blend;
+        //
+        // С .shadows(true) и .cone(deg) пятно строится по границе теней
+        // (см. drawLightNode), а с .punch(true) — откладывается до тумана.
+        if (node.attrs.punch && fog_params) {
+            deferred_lights.push({ node, t, cam });
+            break;
+        }
+        drawLightNode(node, t, cam);
         break;
     }
     case 'text': {
@@ -789,6 +1280,13 @@ export function installGfx($) {
             }
             if (ctx.gfx._ysortFlushEnd) ctx.gfx._ysortFlushEnd(cam);
 
+            // Туман и отложенный свет. Узлы <fog> уже нарисованы в общем
+            // проходе, здесь — экранный $.gfx.fog(); поверх дымки идёт свет,
+            // помеченный .punch(true): фонарь «прорезает» туман.
+            if (light_debug) drawLightDebug(cam);
+            if (fog_params) drawGlobalFog();
+            flushDeferredLights();
+
             // Полосы, кольца и отладочные примитивы — треугольниками поверх сцены.
             for (const call of draw_calls) {
                 switch (call.kind) {
@@ -872,6 +1370,48 @@ export function installGfx($) {
             }
         };
     }
+
+    // --- Свет и туман -------------------------------------------------------
+    // Умолчания тегов <lightarea> и <fog> объявлены на уровне модуля (см.
+    // раздел «Свет в стиле Candle»): здесь только их отрисовщики.
+    registerNodeRenderer('lightarea', (node, t, cam) => drawLightAreaNode(node, t, cam));
+    registerNodeRenderer('fog', (node, t, cam) => drawFogNode(node, t, cam));
+
+    // Методы света на обёртке узла. Имена не пересекаются с ядром: у спрайта
+    // .shadow() — это тень-копия, а .shadows() — тени самого света.
+    def('shadows', function (on) {
+        if (on === undefined) return this.nodes.length ? !!this.nodes[0].attrs.shadows : false;
+        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).attrs.shadows = on !== false; });
+    });
+    def('cone', function (deg, soft) {
+        if (deg === undefined) return this.nodes.length ? this.nodes[0].attrs.cone : undefined;
+        return this.each((_, el) => {
+            const node = el.nodes ? el.nodes[0] : el;
+            node.attrs.cone = Math.max(0, Math.min(360, Number(deg) || 0));
+            if (soft !== undefined) node.attrs.coneSoft = Math.max(0, Math.min(1, Number(soft)));
+        });
+    });
+    def('punch', function (on) {
+        if (on === undefined) return this.nodes.length ? !!this.nodes[0].attrs.punch : false;
+        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).attrs.punch = on !== false; });
+    });
+    def('flicker', function (amount, speed) {
+        if (amount === undefined) return this.nodes.length ? this.nodes[0].attrs.flicker : null;
+        return this.each((_, el) => {
+            const node = el.nodes ? el.nodes[0] : el;
+            node.attrs.flicker = (amount === false || amount === null) ? null : {
+                amount: Math.max(0, Math.min(1, Number(amount))),
+                speed: speed === undefined ? 7 : Number(speed),
+            };
+        });
+    });
+    def('occluders', function (list) {
+        if (list === undefined) return this.nodes.length ? this.nodes[0].attrs.occluders : null;
+        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).attrs.occluders = list; });
+    });
+
+    gfx.light = light_api;
+    gfx.fog = fog;
 
     ctx.gfx = gfx;
     return gfx;

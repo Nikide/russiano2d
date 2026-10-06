@@ -363,18 +363,28 @@ static JSValue r2d__js_profile(JSContext *ctx, JSValueConst this_val,
     JS_SetPropertyStr(ctx, o, "unaccounted_ms", JS_NewFloat64(ctx, r2d_prof_unaccounted_ms()));
     JS_SetPropertyStr(ctx, o, "frames", JS_NewInt32(ctx, r2d_prof_frames()));
     JS_SetPropertyStr(ctx, o, "enabled", JS_NewBool(ctx, r2d_prof_enabled()));
+    // GPU-время кадра: среднее за окно, < 0 — замера нет (см. src/profile.h).
+    JS_SetPropertyStr(ctx, o, "gpu_ms", JS_NewFloat64(ctx, r2d_prof_gpu_ms()));
+    JS_SetPropertyStr(ctx, o, "gpu_available", JS_NewBool(ctx, r2d_prof_gpu_available()));
+    JS_SetPropertyStr(ctx, o, "gpu_frames", JS_NewInt32(ctx, r2d_prof_gpu_frames()));
 
-    R2DProfileRow rows[R2D_PROF_COUNT];
-    const int count = r2d_prof_rows(rows, R2D_PROF_COUNT);
+    // Строки: сначала CPU-зоны, затем GPU. Имена полей прежние (name/ms/peak),
+    // добавлены признаки gpu и valid; массив отдаётся и как zones (старое имя),
+    // и как rows — чтобы не ломать ни старые, ни новые скрипты.
+    R2DProfileRow rows[R2D_PROF_ROW_MAX];
+    const int count = r2d_prof_rows(rows, R2D_PROF_ROW_MAX);
     JSValue zones = JS_NewArray(ctx);
     for (int i = 0; i < count; i++) {
         JSValue row = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, row, "name", JS_NewString(ctx, rows[i].name));
         JS_SetPropertyStr(ctx, row, "ms", JS_NewFloat64(ctx, rows[i].ms));
         JS_SetPropertyStr(ctx, row, "peak", JS_NewFloat64(ctx, rows[i].peak));
+        JS_SetPropertyStr(ctx, row, "gpu", JS_NewBool(ctx, rows[i].gpu));
+        JS_SetPropertyStr(ctx, row, "valid", JS_NewBool(ctx, rows[i].valid));
         JS_SetPropertyUint32(ctx, zones, (uint32_t)i, row);
     }
     JS_SetPropertyStr(ctx, o, "zones", zones);
+    JS_SetPropertyStr(ctx, o, "rows", JS_DupValue(ctx, zones));
     return o;
 }
 
@@ -2173,6 +2183,14 @@ static JSValue r2d__js_fs_remove(JSContext *ctx, JSValueConst this_val, int argc
     char full[4096];
     r2d_app_resolve_path(s->app, full, sizeof full, path);
     JS_FreeCString(ctx, path);
+    // SDL_RemovePath сообщает успех и для несуществующего пути (проверено на
+    // SDL 3.4.16: missing → true, ошибка только на запрет доступа). Из-за этого
+    // $.fs.remove() врал, а $.save.remove() «удалял» пустые слоты. Спрашиваем
+    // о существовании сами — это и есть разница между «удалил» и «и так нет».
+    if (!SDL_GetPathInfo(full, NULL)) {
+        SDL_SetError("файла нет: %s", full);
+        return JS_FALSE;
+    }
     return SDL_RemovePath(full) ? JS_TRUE : JS_FALSE;
 }
 
