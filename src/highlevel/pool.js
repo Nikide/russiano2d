@@ -15,7 +15,8 @@
 // их гоняет qjs-харнесс без движка.
 // ===========================================================================
 
-import { ctx, Node, TAGS, wrap, wrapOne, def } from './core.js';
+import { ctx, Node, TAGS, wrap, wrapOne, def, touchRegistry, dropFromRegistry } from './core.js';
+import { noteNodeEffects } from './tween.js';
 
 // Ключи spec, которые описывают сам пул, а не атрибуты узла.
 const POOL_KEYS = new Set([
@@ -140,15 +141,20 @@ function newPoolNode(st) {
     // в мир только на время между spawn() и release().
     detachNode(node);
     // Конструктор успел создать тело (у <bullet>, <enemy>, <wall> оно есть по
-    // тегу). У свободного узла тела быть не должно: иначе предсозданные узлы
-    // пула висят в мире в точке (0,0), сталкиваются и тратят физику, хотя их
-    // нет ни в ctx.nodes, ни в счётчиках. Тело вернёт restoreBody() на spawn.
-    if (node.body >= 0) node.setBody(null);
+    // тегу). Свободный узел не должен участвовать в физике: иначе
+    // предсозданные узлы пула висят в мире в точке (0,0) и сталкиваются, хотя
+    // их нет ни в ctx.nodes, ни в счётчиках.
+    //
+    // Раньше тело уничтожалось, а на spawn создавалось заново — теперь оно
+    // остаётся живым, но выключенным (b2Body_Disable): выключенное тело не
+    // сталкивается и не попадает в запросы, зато spawn перестал стоить
+    // destroyBody + createBody (§3.6, пункт 15 плана).
+    if (node.body >= 0) disableBody(node);
     if (!st.baseline) {
         st.baseline = {
             x: node.x, y: node.y, color: node.color, layer: node.layer,
             classes: new Set(node.classes),
-            tags: new Set(node.tags_extra),
+            tags: new Set(node.tags_extra || []),
             attrs: Object.assign({}, node.attrs),
         };
     }
@@ -163,7 +169,7 @@ function newPoolNode(st) {
 function resetNode(node, st) {
     const b = st.baseline;
     node.classes = new Set(b.classes);
-    node.tags_extra = new Set(b.tags);
+    node.tags_extra = b.tags.size === 0 ? null : new Set(b.tags);
     node.attrs = Object.assign({}, b.attrs);
     node.x = b.x;
     node.y = b.y;
@@ -193,10 +199,24 @@ function applyAttrs(node, attrs) {
     }
 }
 
+/** Выключить тело свободного узла: физика его не видит, тело живо. */
+function disableBody(node) {
+    if (node.body < 0) return;
+    engine.setVelocity(node.body, 0, 0);
+    if (typeof engine.setBodyEnabled === 'function') engine.setBodyEnabled(node.body, false);
+}
+
 function restoreBody(node, st) {
     if (!st.body_kind) return;
     node.body_disabled = false;
     node.body_kind = st.body_kind;
+    // Тело из прошлой жизни узла: включаем обратно вместо пересоздания.
+    if (node.body >= 0 && typeof engine.bodyAlive === 'function' && engine.bodyAlive(node.body)) {
+        engine.setBodyEnabled(node.body, true);
+        engine.setVelocity(node.body, 0, 0);
+        engine.setGravityScale(node.body, node.gravity_on === false ? 0 : 1);
+        return;
+    }
     node.syncBody();
 }
 
@@ -209,7 +229,15 @@ function containerOf(parent) {
 }
 
 function attachNode(node, st) {
-    if (ctx.nodes.indexOf(node) < 0) ctx.nodes.push(node);
+    if (!node.in_registry) {
+        ctx.nodes.push(node);
+        node.in_registry = true;
+        touchRegistry();   // узел вернулся в реестр — сводки подсистем устарели
+        noteNodeEffects(node);   // эффекты, замершие вне реестра, надо досчитать
+    }
+    // Узел мог быть помечен на удаление тем же пакетом $.batch: уборка ещё не
+    // прошла, и возвращённый в мир узел исчез бы из реестра. Отменяем пометку.
+    node._drop_queued = false;
     const parent = containerOf(st.spec.parent);
     if (parent) {
         node.parent_node = parent;
@@ -220,8 +248,7 @@ function attachNode(node, st) {
 }
 
 function detachNode(node) {
-    const i = ctx.nodes.indexOf(node);
-    if (i >= 0) ctx.nodes.splice(i, 1);
+    dropFromRegistry(node);   // вне пакета — сразу, внутри $.batch — одной уборкой
     if (node.parent_node && node.parent_node.child_nodes) {
         const j = node.parent_node.child_nodes.indexOf(node);
         if (j >= 0) node.parent_node.child_nodes.splice(j, 1);
@@ -276,7 +303,9 @@ function releaseOne(st, node) {
         return true;
     }
 
-    if (node.body >= 0 || node.body_kind) node.setBody(null);
+    // Тело не уничтожаем, а выключаем — см. newPoolNode/restoreBody.
+    if (node.body >= 0) disableBody(node);
+    else if (node.body_kind) node.setBody(null);   // тела не было: сбросим вид
     node.visible = false;
     node.velocity_cache = { x: 0, y: 0 };
     if (node.id !== undefined && ctx.byId.get(node.id) === node) ctx.byId.delete(node.id);
@@ -517,8 +546,14 @@ export function installPool($) {
     return $;
 }
 
-/** Кадровый шаг: пулу симуляция не нужна, но счётчики обновляются здесь. */
+/**
+ * Кадровый шаг пула: симуляция пулу не нужна.
+ *
+ * Раньше здесь каждый кадр считался `collectCounters()` — полный обход реестра
+ * с объектом на выходе, результат клался в `ctx.counters`, который никто не
+ * читал (`$.debug.counters()` считает всё заново по запросу). Это была чистая
+ * потеря ~1 мс на 1000 узлов (docs/HIGH_LEVEL_API_PERF.md §3.3).
+ */
 export function tickPool(dt) {
     void dt;
-    ctx.counters = collectCounters();
 }

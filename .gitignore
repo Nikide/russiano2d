@@ -3,9 +3,14 @@ build/
 build-*/
 out/
 bin/
-# dist/ СОЗНАТЕЛЬНО не игнорируется: CI на hub.mos.ru не работает, поэтому
-# готовые сборки раздаются прямо из репозитория (их кладёт tools/autobuild.py
-# или локальный build_and_push.sh).
+# dist/ СОЗНАТЕЛЬНО не игнорируется: готовые сборки раздаются прямо из
+# репозитория (их кладёт tools/autobuild.py или локальный build_and_push.sh).
+#
+# dist-ci/ — каталог сборки CI на GitVerse (.gitverse/workflows/release.yaml).
+# Он тоже собирается в архив, но это временный артефакт прогона: в репозиторий
+# ему нельзя, иначе build_and_push.sh затащит его через `git add -A`.
+dist-ci/
+dist-ci-*/
 save.json
 cmake-build-*/
 *.o

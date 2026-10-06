@@ -18,7 +18,7 @@ $.ready(() => {
 });
 
 $.update(dt => {
-    $('.goblin').each(e => { if (e.distanceTo('#hero') < 200) e.moveTowards('#hero', 120); });
+    $('.goblin').each((i, e) => { if (e.distanceTo('#hero') < 200) e.moveTowards('#hero', 120); });
 });
 ```
 
@@ -56,6 +56,15 @@ $.ready(() => { /* построить мир */ });
 $.update(dt => { /* логика */ });
 $.render(() => { /* поверх сцены, до интерфейса */ });
 $.exit(() => { $.store.save(); });
+```
+
+Пачка узлов (очередь выстрелов, волна врагов) — одним вызовом:
+
+```js
+$.batch(() => {
+    for (let i = 0; i < 50; i++) $('<bullet>').at(x, y).appendTo($.world);
+    $('.bullet').filter(':dead').remove();   // K удалений — одна уборка реестра
+});
 ```
 
 Порядок одного кадра внутри `$`:
@@ -161,7 +170,9 @@ $(':boss').hp(1000);
 $('.enemy').length          // сколько нашлось (свойство)
 $('.enemy').get(0)          // узел-объект
 $('.enemy').toArray()       // массив узлов
-$('.enemy').each((i, e) => { })      // e — обёртка одного узла
+$('.enemy').each((i, e) => { })      // e — обёртка одного узла (методы-цепочки)
+$('.enemy').eachNode((i, n) => { })  // n — сам узел: быстрее, обёртка не создаётся
+$.batch(() => { … })                 // пачка спавна/удаления: реестр чистится один раз
 $('.enemy').map(e => e.hp())         // массив значений
 $('.enemy').filter(e => e.hp() < 10)
 $('.enemy').filter('.goblin')        // фильтр селектором
@@ -690,6 +701,7 @@ $.debug.profile()                          // { frame_ms, zones_ms, unaccounted_
 $.debug.profileReset()                     // сбросить накопленное
 $.debug.profiling(false)                   // выключить замеры (по умолчанию включены)
 $.debug.profiler.start('моё') / .end('моё') / .report()   // свои замеры, время — engine.now()
+$.debug.profiler.on(true) .isOn()          // покадровый профайлер подсистем (по умолчанию выключен)
 $.debug.draw.line('#hero', '#exit', 'yellow')   // принимает селекторы и узлы
 $.debug.draw.rect('#zone', '#door', 'red')
 $.debug.watch('hp', () => $('#hero').hp())
@@ -824,7 +836,7 @@ $.ready(() => {
 
 $.update(() => {
     $.ui.bar('#hp', $('#hero').hp(), 100);
-    $('.coin').each(c => {
+    $('.coin').each((i, c) => {
         if (c.distanceTo('#hero') < 40) c.emit('pickup');
     });
     if ($('#hero').hp() <= 0) $.scene.restart();

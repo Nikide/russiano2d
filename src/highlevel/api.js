@@ -13,6 +13,7 @@ import {
     ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
     packColor, withAlpha, registerSelector, nodeBounds, boundsOverlap,
     makeRandom, dotSprite, resolveSprite, sheetFrames,
+    registrySummary, touchRegistry, beginBatch, endBatch,
 } from './core.js';
 import { installWorld } from './world.js';
 import { installCamera } from './camera.js';
@@ -27,7 +28,7 @@ import { installGfx } from './render.js';
 import { installStore } from './store.js';
 import { installAgent } from './agent.js';
 import { installWindow, tickWindow } from './window.js';
-import { tweenProps, clearNodeTweens, pauseNodeTweens, shakeNode, flashNode, sequence, wait, activeTweenCount, easeFunction, installTween } from './tween.js';
+import { tweenProps, clearNodeTweens, pauseNodeTweens, shakeNode, flashNode, sequence, wait, activeTweenCount, easeFunction, installTween, noteEffect } from './tween.js';
 
 // --- Подсистемы, добавленные после аудита API (docs/GAP_ANALYSIS.md) --------
 // Каждый модуль сам регистрирует свои теги, методы и отрисовщики; api.js
@@ -237,6 +238,32 @@ export function createApi() {
         return $;
     };
 
+    /**
+     * Пакетная операция: массовый спавн и удаление внутри одного вызова.
+     *
+     *   $.batch(() => {
+     *       for (const b of bullets) $('<bullet>').at(...);   // вставки — как обычно
+     *       $('.bullet').remove();                            // K удалений — одна уборка
+     *   });
+     *
+     * Внутри пакета destroy() и возврат в пул только помечают узел, а реестр
+     * чистится одной компактификацией в конце: K удалений перестают стоить
+     * K × O(N) (docs/HIGH_LEVEL_API_PERF.md §3.6). Вложенные вызовы
+     * складываются, уборка одна — на выходе из внешнего.
+     */
+    $.batch = function (fn) {
+        if (typeof fn !== 'function') return $;
+        beginBatch();
+        try {
+            fn($);
+        } catch (e) {
+            reportError('$.batch', e);
+        } finally {
+            endBatch();
+        }
+        return $;
+    };
+
     $._dispatchGlobal = dispatchGlobal;
     $.selectors = {
         /** $.selectors[':boss'] = (node) => node.attrs.rank === 'boss'; */
@@ -319,6 +346,19 @@ export function createApi() {
 }
 
 function dispatchGlobal(node, name, data) {
+    // Ранний выход: глобальных подписок нет вовсе — самой частой ситуации в
+    // игре. Раньше объект события, три обёртки ($('*')-цели) и строки
+    // 'entity:…' строились на КАЖДОЕ событие каждого узла, даже когда слушать
+    // было некому (§3.5 отчёта). globals.size читается одним свойством.
+    if (globals.size === 0) return;
+
+    const direct = globals.get(name);
+    const wildcard = globals.get('*');
+    const entity = node ? globals.get('entity:' + name) : null;
+    const by_tag = node && node.tag ? globals.get('entity:' + node.tag + ':' + name) : null;
+    const any = (list) => list !== undefined && list.length !== 0;
+    if (!any(direct) && !any(wildcard) && !any(entity) && !any(by_tag)) return;
+
     const event = {
         self: node ? wrapOne(node) : null,
         target: node ? wrapOne(node) : null,
@@ -338,12 +378,12 @@ function dispatchGlobal(node, name, data) {
             if (event.stopped) return;
         }
     };
-    fire(globals.get(name));
+    fire(direct);
     if (!event.stopped && node) {
-        fire(globals.get('entity:' + name));
-        if (node.tag) fire(globals.get('entity:' + node.tag + ':' + name));
+        fire(entity);
+        fire(by_tag);
     }
-    if (!event.stopped) fire(globals.get('*'));
+    if (!event.stopped) fire(wildcard);
 }
 
 // ---------------------------------------------------------------------------
@@ -353,10 +393,8 @@ function dispatchGlobal(node, name, data) {
 function installNodeMethods($) {
     // === Коллекция ==========================================================
 
-    def('each', function (fn) {
-        this.nodes.forEach((node, i) => fn.call(this, i, wrapOne(node)));
-        return this;
-    });
+    // .each() и .eachNode() объявлены в ядре (core.js, класс Wrapper): их зовут
+    // и модули-подсистемы, а api.js в юнит-тестах qjs не поднимается.
     def('map', function (fn) {
         return this.nodes.map((node, i) => fn.call(this, i, wrapOne(node)));
     });
@@ -394,8 +432,8 @@ function installNodeMethods($) {
 
     def('at', function (x, y) {
         if (typeof x === 'object' && x !== null) { y = x.y; x = x.x; }
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.x = x;
             node.y = y;
             if (node.body >= 0) engine.setPosition(node.body, x, y, node.angle);
@@ -404,8 +442,8 @@ function installNodeMethods($) {
 
     def('move', function (dx, dy) {
         if (typeof dx === 'object') { dy = dx.y; dx = dx.x; }
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.x += dx; node.y += dy;
             if (node.body >= 0) engine.setPosition(node.body, node.x, node.y, node.angle);
         });
@@ -415,11 +453,11 @@ function installNodeMethods($) {
         if (typeof x === 'object') { ease = ms; ms = y; y = x.y; x = x.x; }
         if (typeof x === 'string' || (x && x.tag) || x instanceof Wrapper) {
             // .moveTo('#hero', speed) — двигаться к цели с этой скоростью.
-            return this.each((_, el) => stepTowards(el.nodes ? el.nodes[0] : el, x, y));
+            return this.eachNode((_, el) => stepTowards(el, x, y));
         }
         if (!(ms > 0)) return this.at(x, y);
         const promises = [];
-        this.each((_, el) => promises.push(tweenProps(el.nodes ? el.nodes[0] : el, { x, y }, ms, ease)));
+        this.eachNode((_, el) => promises.push(tweenProps(el, { x, y }, ms, ease)));
         // Promise разрешается тем же набором узлов: удобно продолжать цепочку
         // после ожидания (.moveTo(...).then(w => w.fadeOut(200))).
         return Promise.all(promises).then(() => this);
@@ -435,8 +473,8 @@ function installNodeMethods($) {
             return node ? { w: node.w, h: node.h } : { w: 0, h: 0 };
         }
         if (typeof w === 'object') { h = w.h; w = w.w; }
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.w = w;
             node.h = h === undefined ? w : h;
             if (node.body >= 0) node.syncBodySize();
@@ -444,23 +482,23 @@ function installNodeMethods($) {
     });
     def('width', function (value) {
         if (value === undefined) return this.nodes.length ? this.nodes[0].w : 0;
-        return this.each((_, el) => { const n = el.nodes ? el.nodes[0] : el; n.w = value; if (n.body >= 0) n.syncBodySize(); });
+        return this.eachNode((_, el) => { const n = el; n.w = value; if (n.body >= 0) n.syncBodySize(); });
     });
     def('height', function (value) {
         if (value === undefined) return this.nodes.length ? this.nodes[0].h : 0;
-        return this.each((_, el) => { const n = el.nodes ? el.nodes[0] : el; n.h = value; if (n.body >= 0) n.syncBodySize(); });
+        return this.eachNode((_, el) => { const n = el; n.h = value; if (n.body >= 0) n.syncBodySize(); });
     });
 
     def('rotate', function (deg) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.angle = (node.angle || 0) + deg * Math.PI / 180;
             if (node.body >= 0) engine.setPosition(node.body, node.x, node.y, node.angle);
         });
     });
     def('angle', function (rad) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.angle = rad;
             if (node.body >= 0) engine.setPosition(node.body, node.x, node.y, node.angle);
         });
@@ -469,8 +507,8 @@ function installNodeMethods($) {
 
     def('scale', function (sx, sy) {
         if (typeof sx === 'object') { sy = sx.y; sx = sx.x; }
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.scale_x = sx;
             node.scale_y = sy === undefined ? sx : sy;
         });
@@ -481,16 +519,16 @@ function installNodeMethods($) {
     // (и это был первый же пример API, который падал с TypeError).
     def('speed', function (value) {
         if (value === undefined) return this.nodes.length ? this.nodes[0].speed : 0;
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.speed = Number(value) || 0;
             node.attrs.speed = node.speed;
         });
     });
 
     def('lookAt', function (target) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             const p = resolvePoint(target);
             node.angle = Math.atan2(p.y - node.y, p.x - node.x);
             if (node.body >= 0) engine.setPosition(node.body, node.x, node.y, node.angle);
@@ -498,15 +536,15 @@ function installNodeMethods($) {
     });
 
     def('flip', function (x, y) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             if (x !== undefined) node.scale_x = Math.abs(node.scale_x) * (x ? -1 : 1);
             if (y !== undefined) node.scale_y = Math.abs(node.scale_y) * (y ? -1 : 1);
         });
     });
 
-    def('depth', function (z) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).depth = z; }); });
-    def('layer', function (n) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).layer = n; }); });
+    def('depth', function (z) { return this.eachNode((_, el) => { (el).depth = z; }); });
+    def('layer', function (n) { return this.eachNode((_, el) => { (el).layer = n; }); });
 
     defGet('distanceTo', function (node, target) {
         const p = resolvePoint(target);
@@ -542,8 +580,8 @@ function installNodeMethods($) {
     // === Визуал =============================================================
 
     def('sprite', function (value) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.setSprite(value);
             // Лист-объект задаёт ещё и набор кадров: иначе .frame(n) и
             // .animate() молча ничего не делали бы (кадры брать неоткуда).
@@ -561,17 +599,17 @@ function installNodeMethods($) {
         });
     });
     def('frames', function (spec) {
-        return this.each((_, el) => applyFrames(el.nodes ? el.nodes[0] : el, spec));
+        return this.eachNode((_, el) => applyFrames(el, spec));
     });
     def('region', function (x, y, w, h) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             if (node.attrs.src) node.sprite = engine.createSprite(engine.loadTexture(node.attrs.src), x, y, w, h);
         });
     });
     def('frame', function (index) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             if (node.frames && node.frames[index] !== undefined) node.sprite = node.frames[index];
         });
     });
@@ -579,8 +617,8 @@ function installNodeMethods($) {
     /** Анимация по кадрам листа: .animate({ from: 0, to: 5, speed: 12, loop: true }) */
     def('animate', function (spec) {
         const cfg = typeof spec === 'object' ? spec : { name: spec };
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             if (!node.frames) {
                 ctx.log('$: .animate() — у узла нет кадров; используйте .frames({src, cols, rows, cw, ch})');
                 return;
@@ -593,24 +631,30 @@ function installNodeMethods($) {
                 t: 0,
                 playing: true,
             };
+            touchRegistry();   // у узла появилась анимация — сводка кадра устарела
         });
     });
-    def('stopAnim', function () { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).anim = null; }); });
+    def('stopAnim', function () {
+        return this.eachNode((_, el) => {
+            const node = el;
+            if (node.anim) { node.anim = null; touchRegistry(); }
+        });
+    });
     def('playing', function (v) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             if (node.anim) node.anim.playing = v !== false;
         });
     });
 
-    def('color', function (value) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).color = packColor(value); }); });
+    def('color', function (value) { return this.eachNode((_, el) => { (el).color = packColor(value); }); });
     def('alpha', function (value) {
         if (value === undefined) return this.nodes.length ? this.nodes[0].alpha : 0;
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).alpha = Math.max(0, Math.min(1, value)); });
+        return this.eachNode((_, el) => { (el).alpha = Math.max(0, Math.min(1, value)); });
     });
     def('opacity', function (value) { return Wrapper.prototype.alpha.call(this, value); });
 
-    def('visible', function (flag) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).visible = flag !== false; }); });
+    def('visible', function (flag) { return this.eachNode((_, el) => { (el).visible = flag !== false; }); });
     def('show', function () { return this.visible(true); });
     def('hide', function () { return this.visible(false); });
     defGet('isVisible', (n) => n.visible, false);
@@ -626,8 +670,8 @@ function installNodeMethods($) {
             Wrapper.prototype.blend.warned = true;
             ctx.log(`$: .blend("${mode}") — неизвестный режим; доступны: alpha, add, multiply, none`);
         }
-        return this.each((_, el) => {
-            (el.nodes ? el.nodes[0] : el).blend_mode = known ? mode : 'alpha';
+        return this.eachNode((_, el) => {
+            (el).blend_mode = known ? mode : 'alpha';
         });
     });
     def('shader', function (path) {
@@ -640,14 +684,14 @@ function installNodeMethods($) {
     def('shaderParam', function () { return this; });
 
     def('outline', function (width, color) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.outline = { width: width || 2, color: packColor(color) };
         });
     });
     def('shadow', function (opts) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.shadow = Object.assign({ x: 4, y: 4, color: 'rgba(0,0,0,0.4)', blur: 0 }, opts || {});
             node.shadow.color_packed = packColor(node.shadow.color);
         });
@@ -661,8 +705,8 @@ function installNodeMethods($) {
             return node && node.body >= 0 ? vectorOf(engine.getVelocity(node.body)) : { x: 0, y: 0 };
         }
         if (typeof vx === 'object') { vy = vx.y; vx = vx.x; }
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             if (node.body >= 0) engine.setVelocity(node.body, vx, vy);
             node.velocity_cache = { x: vx, y: vy };
         });
@@ -677,15 +721,15 @@ function installNodeMethods($) {
 
     def('applyImpulse', function (ix, iy) {
         if (typeof ix === 'object') { iy = ix.y; ix = ix.x; }
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             if (node.body >= 0) engine.applyImpulse(node.body, ix, iy);
         });
     });
 
     def('gravity', function (on) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.gravity_on = on !== false;
             node.no_gravity = false;
             if (node.body >= 0) engine.setGravityScale(node.body, node.gravity_on ? 1 : 0);
@@ -695,20 +739,20 @@ function installNodeMethods($) {
     def('body', function (kind) {
         // kind === null — «без тела»: запоминаем запрет, чтобы узел не получил
         // тело обратно из TAGS при следующем пересчёте размера.
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).setBody(kind); });
+        return this.eachNode((_, el) => { (el).setBody(kind); });
     });
 
     def('collision', function (w, h) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.hitbox = { w, h: h === undefined ? w : h };
             if (node.body >= 0) node.syncBodySize();
         });
     });
 
     def('collisionCircle', function (r) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.circle_hitbox = r;
             node.hitbox = { w: r * 2, h: r * 2 };
             // Круг — это форма круга, а не «квадрат с нарисованным кругом»:
@@ -721,8 +765,8 @@ function installNodeMethods($) {
     /** Форма тела: 'box' | 'circle' | 'capsule' | 'polygon'. */
     def('shape', function (kind, extra) {
         if (kind === undefined) return this.nodes.length ? this.nodes[0].shape_kind : null;
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.shape_kind = kind;
             if (kind === 'polygon' && extra) node.poly_points = Array.isArray(extra) ? extra.slice() : null;
             if (kind === 'capsule' && extra) node.circle_hitbox = extra;
@@ -736,8 +780,8 @@ function installNodeMethods($) {
      */
     def('oneWay', function (on, angle) {
         if (on === undefined) return this.nodes.length ? this.nodes[0].one_way : false;
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.one_way = on !== false;
             if (angle !== undefined) node.one_way_angle = angle;
             if (node.body >= 0) node.syncBodySize();
@@ -747,8 +791,8 @@ function installNodeMethods($) {
     /** Сенсор: тело ловит пересечения, но не отталкивает. */
     def('sensor', function (on) {
         if (on === undefined) return this.nodes.length ? this.nodes[0].sensor : false;
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.sensor = on !== false;
             if (node.body >= 0) node.syncBodySize();
         });
@@ -761,8 +805,8 @@ function installNodeMethods($) {
      */
     def('contacts', function (on) {
         if (on === undefined) return this.nodes.length ? this.nodes[0].contacts_enabled : false;
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.contacts_enabled = on !== false;
             if (node.body >= 0) node.syncBodySize();
         });
@@ -829,7 +873,7 @@ function installNodeMethods($) {
 
     /** Двигаться в сторону цели со скоростью. dt не нужен: скорость в px/с. */
     def('moveTowards', function (target, speed) {
-        return this.each((_, el) => stepTowards(el.nodes ? el.nodes[0] : el, target, speed));
+        return this.eachNode((_, el) => stepTowards(el, target, speed));
     });
 
     /** В Box2D скольжение вдоль стен делает сам решатель — метод задаёт скорость. */
@@ -839,8 +883,8 @@ function installNodeMethods($) {
     });
 
     def('jump', function (force) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             if (node.body < 0) return;
             const [, vy] = engine.getVelocity(node.body);
             engine.setVelocity(node.body, engine.getVelocity(node.body)[0],
@@ -853,8 +897,8 @@ function installNodeMethods($) {
 
     def('health', function (value) {
         if (value === undefined) return this.nodes[0] ? this.nodes[0].cur_hp : 0;
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.max_hp = value;
             node.cur_hp = value;
             node.attrs.on_ground = value > 0;
@@ -863,37 +907,37 @@ function installNodeMethods($) {
 
     def('hp', function (value) {
         if (value === undefined) return this.nodes[0] ? this.nodes[0].cur_hp : 0;
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             if (node.max_hp <= 0) node.max_hp = Math.max(value, 1);
             node.cur_hp = Math.max(0, value);
         });
     });
 
-    def('maxHp', function (value) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).max_hp = value; }); });
+    def('maxHp', function (value) { return this.eachNode((_, el) => { (el).max_hp = value; }); });
 
     def('damage', function (amount, source) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             if (node.iframes > 0 || node.cur_hp <= 0) return;
             node.cur_hp = Math.max(0, node.cur_hp - amount);
         });
     });
 
     def('heal', function (amount) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.cur_hp = Math.min(node.max_hp, node.cur_hp + amount);
         });
     });
 
     def('kill', function () {
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).cur_hp = 0; });
+        return this.eachNode((_, el) => { (el).cur_hp = 0; });
     });
 
     def('respawn', function (x, y) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.cur_hp = node.max_hp;
             if (x !== undefined) {
                 node.x = x; node.y = y;
@@ -903,21 +947,25 @@ function installNodeMethods($) {
     });
 
     defGet('alive', (n) => n.cur_hp > 0 && !n.removed, false);
-    def('team', function (id) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).team = id; }); });
+    def('team', function (id) { return this.eachNode((_, el) => { (el).team = id; }); });
     def('invulnerable', function (ms) {
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).iframes = (ms || 0) / 1000; });
+        return this.eachNode((_, el) => {
+            const node = el;
+            node.iframes = (ms || 0) / 1000;
+            if (ms > 0) noteEffect(node);   // подсистема эффектов должна проснуться
+        });
     });
 
     // === События =============================================================
 
     def('on', function (name, fn) {
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).on(name, fn); });
+        return this.eachNode((_, el) => { (el).on(name, fn); });
     });
     def('off', function (name, fn) {
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).off(name, fn); });
+        return this.eachNode((_, el) => { (el).off(name, fn); });
     });
     def('emit', function (name, data) {
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).emit(name, data); });
+        return this.eachNode((_, el) => { (el).emit(name, data); });
     });
     def('trigger', function (name, data) { return Wrapper.prototype.emit.call(this, name, data); });
 
@@ -925,39 +973,39 @@ function installNodeMethods($) {
 
     def('tween', function (spec, ms, ease) {
         const promises = [];
-        this.each((_, el) => promises.push(tweenProps(el.nodes ? el.nodes[0] : el, spec, ms, ease)));
+        this.eachNode((_, el) => promises.push(tweenProps(el, spec, ms, ease)));
         return Promise.all(promises);
     });
     def('tweenTo', function (spec, ms, ease) { return Wrapper.prototype.tween.call(this, spec, ms, ease); });
 
     def('rotateTo', function (deg, ms, ease) {
         const promises = [];
-        this.each((_, el) => promises.push(tweenProps(el.nodes ? el.nodes[0] : el, { angle: deg * Math.PI / 180 }, ms, ease)));
+        this.eachNode((_, el) => promises.push(tweenProps(el, { angle: deg * Math.PI / 180 }, ms, ease)));
         return Promise.all(promises);
     });
     def('scaleTo', function (s, ms, ease) {
         const promises = [];
-        this.each((_, el) => promises.push(tweenProps(el.nodes ? el.nodes[0] : el, { scale: s }, ms, ease)));
+        this.eachNode((_, el) => promises.push(tweenProps(el, { scale: s }, ms, ease)));
         return Promise.all(promises);
     });
     def('fadeTo', function (value, ms, ease) {
         const promises = [];
-        this.each((_, el) => promises.push(tweenProps(el.nodes ? el.nodes[0] : el, { alpha: value }, ms, ease)));
+        this.eachNode((_, el) => promises.push(tweenProps(el, { alpha: value }, ms, ease)));
         return Promise.all(promises);
     });
     def('delay', function (ms) { return wait(ms); });
 
     def('shake', function (intensity, ms) {
-        return this.each((_, el) => shakeNode(el.nodes ? el.nodes[0] : el, intensity || 6, ms || 250));
+        return this.eachNode((_, el) => shakeNode(el, intensity || 6, ms || 250));
     });
     def('flash', function (color, ms) {
-        return this.each((_, el) => flashNode(el.nodes ? el.nodes[0] : el, packColor(color), ms || 120));
+        return this.eachNode((_, el) => flashNode(el, packColor(color), ms || 120));
     });
     def('bounce', function (height, ms) {
         const promises = [];
         const h = height || 20;
-        this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        this.eachNode((_, el) => {
+            const node = el;
             const y0 = node.y;
             promises.push((async () => {
                 await tweenProps(node, { y: y0 - h }, (ms || 300) / 2, 'easeOutQuad');
@@ -968,29 +1016,29 @@ function installNodeMethods($) {
     });
 
     def('sequence', function (steps) { return sequence(steps); });
-    def('pauseTweens', function () { return this.each((_, el) => pauseNodeTweens(el.nodes ? el.nodes[0] : el, true)); });
-    def('resumeTweens', function () { return this.each((_, el) => pauseNodeTweens(el.nodes ? el.nodes[0] : el, false)); });
-    def('clearTweens', function () { return this.each((_, el) => clearNodeTweens(el.nodes ? el.nodes[0] : el, true)); });
+    def('pauseTweens', function () { return this.eachNode((_, el) => pauseNodeTweens(el, true)); });
+    def('resumeTweens', function () { return this.eachNode((_, el) => pauseNodeTweens(el, false)); });
+    def('clearTweens', function () { return this.eachNode((_, el) => clearNodeTweens(el, true)); });
 
     // === Звук ================================================================
 
-    def('sound', function (path) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).attrs.sound = path; }); });
+    def('sound', function (path) { return this.eachNode((_, el) => { (el).attrs.sound = path; }); });
     def('playSound', function (opts) {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             if (!node.attrs.sound) return;
             ctx.sound.playAt(node.attrs.sound, node, opts);
         });
     });
-    def('mute', function (flag) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).attrs.muted = flag !== false; }); });
-    def('volume', function (v) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).attrs.sound_volume = v; }); });
+    def('mute', function (flag) { return this.eachNode((_, el) => { (el).attrs.muted = flag !== false; }); });
+    def('volume', function (v) { return this.eachNode((_, el) => { (el).attrs.sound_volume = v; }); });
 
     // === Иерархия ============================================================
 
     def('appendTo', function (parent) {
         const target = resolveContainer(parent);
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             detach(node);
             node.parent_node = target;
             if (target) target.child_nodes.push(node);
@@ -1001,8 +1049,8 @@ function installNodeMethods($) {
 
     def('append', function (child) {
         const nodes = child instanceof Wrapper ? child.nodes : (child && child.tag ? [child] : []);
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             for (const c of nodes) {
                 detach(c);
                 c.parent_node = node;
@@ -1012,11 +1060,11 @@ function installNodeMethods($) {
     });
     def('prepend', function (child) { return Wrapper.prototype.append.call(this, child); });
 
-    def('remove', function () { return this.each((_, el) => { const n = el.nodes ? el.nodes[0] : el; if (n) n.destroy(); }); });
+    def('remove', function () { return this.eachNode((_, el) => { const n = el; if (n) n.destroy(); }); });
 
     def('detach', function () {
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             detach(node);
             node.detached = true;
         });
@@ -1045,30 +1093,36 @@ function installNodeMethods($) {
 
     // === Data / классы / теги ================================================
 
+    // Хранилище узла ленивое (см. Node: пустой Map на каждый узел — лишний
+    // malloc), поэтому запись создаёт его, а чтение терпит null.
     def('data', function (key, value) {
         if (key === undefined) {
             const node = this.nodes[0];
-            return node ? Object.fromEntries(node.data_store) : {};
+            return node && node.data_store ? Object.fromEntries(node.data_store) : {};
         }
         if (typeof key === 'object') {
-            return this.each((_, el) => {
-                const node = el.nodes ? el.nodes[0] : el;
-                for (const k of Object.keys(key)) node.data_store.set(k, key[k]);
+            return this.eachNode((_, el) => {
+                const node = el;
+                const store = node.dataMap();
+                for (const k of Object.keys(key)) store.set(k, key[k]);
             });
         }
         if (value === undefined) {
             const node = this.nodes[0];
-            return node ? node.data_store.get(key) : undefined;
+            return node && node.data_store ? node.data_store.get(key) : undefined;
         }
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).data_store.set(key, value); });
+        return this.eachNode((_, el) => {
+            const node = el;
+            node.dataMap().set(key, value);
+        });
     });
 
     def('attr', function (key, value) {
         // Без аргумента — только свободные атрибуты (совместимость).
         if (key === undefined) return this.nodes[0] ? { ...this.nodes[0].attrs } : {};
         if (typeof key === 'object') {
-            return this.each((_, el) => {
-                const node = el.nodes ? el.nodes[0] : el;
+            return this.eachNode((_, el) => {
+                const node = el;
                 for (const k of Object.keys(key)) node.set(k, key[k]);
             });
         }
@@ -1078,58 +1132,64 @@ function installNodeMethods($) {
             const node = this.nodes[0];
             return node ? node.get(key) : undefined;
         }
-        return this.each((_, el) => { const n = el.nodes ? el.nodes[0] : el; n.set(key, value); });
+        return this.eachNode((_, el) => { const n = el; n.set(key, value); });
     });
 
-    def('addClass', function (name) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).addClass(name); }); });
-    def('removeClass', function (name) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).removeClass(name); }); });
-    def('toggleClass', function (name, force) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).toggleClass(name, force); }); });
+    def('addClass', function (name) { return this.eachNode((_, el) => { (el).addClass(name); }); });
+    def('removeClass', function (name) { return this.eachNode((_, el) => { (el).removeClass(name); }); });
+    def('toggleClass', function (name, force) { return this.eachNode((_, el) => { (el).toggleClass(name, force); }); });
     defGet('hasClass', (n, name) => n.hasClass(name), false);
-    def('tag', function (name) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).addTag(name); }); });
-    def('addTag', function (name) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).addTag(name); }); });
-    def('removeTag', function (name) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).removeTag(name); }); });
+    def('tag', function (name) { return this.eachNode((_, el) => { (el).addTag(name); }); });
+    def('addTag', function (name) { return this.eachNode((_, el) => { (el).addTag(name); }); });
+    def('removeTag', function (name) { return this.eachNode((_, el) => { (el).removeTag(name); }); });
 
     // === Интерфейс и текст ===================================================
 
     def('text', function (value) {
         if (value === undefined) return this.nodes[0] ? this.nodes[0].text : '';
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).text = String(value); });
+        return this.eachNode((_, el) => { (el).text = String(value); });
     });
     def('html', function (value) { return Wrapper.prototype.text.call(this, value); });
     /** Радиус и яркость источника света: $('<light>', { radius: 200 }). */
     def('radius', function (v) {
         if (v === undefined) return this.nodes.length ? this.nodes[0].radius : 0;
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).radius = v; });
+        return this.eachNode((_, el) => { (el).radius = v; });
     });
     def('intensity', function (v) {
         if (v === undefined) return this.nodes.length ? this.nodes[0].intensity : 1;
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).intensity = v; });
+        return this.eachNode((_, el) => { (el).intensity = v; });
     });
     /** Кегль текста: $('<text>', { text: 'Привет' }).size(24). */
     def('fontSize', function (v) {
         if (v === undefined) return this.nodes.length ? this.nodes[0].size : 0;
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).size = v; });
+        return this.eachNode((_, el) => { (el).size = v; });
     });
 
     def('value', function (v) {
         if (v === undefined) return this.nodes[0] ? this.nodes[0].value : 0;
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).value = v; });
+        return this.eachNode((_, el) => { (el).value = v; });
     });
-    def('max', function (v) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).max_value = v; }); });
-    def('controls', function (scheme) { return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).attrs.controls = scheme; }); });
+    def('max', function (v) { return this.eachNode((_, el) => { (el).max_value = v; }); });
+    def('controls', function (scheme) {
+        return this.eachNode((_, el) => {
+            const node = el;
+            if (!node.attrs.controls !== !scheme) touchRegistry();   // сводка кадра
+            node.attrs.controls = scheme;
+        });
+    });
 
     // === Массовые операции ===================================================
-    def('stopAll', function () { return this.each((_, el) => { const n = el.nodes ? el.nodes[0] : el; if (n.body >= 0) engine.setVelocity(n.body, 0, 0); }); });
-    def('pause', function () { return this.each((_, el) => { const n = el.nodes ? el.nodes[0] : el; if (n.body >= 0) engine.setAwake(n.body, false); }); });
-    def('wake', function () { return this.each((_, el) => { const n = el.nodes ? el.nodes[0] : el; if (n.body >= 0) engine.setAwake(n.body, true); }); });
+    def('stopAll', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engine.setVelocity(n.body, 0, 0); }); });
+    def('pause', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engine.setAwake(n.body, false); }); });
+    def('wake', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engine.setAwake(n.body, true); }); });
     def('overlaps', function (what, cb) {
         const other = typeof what === 'string' ? query(what) : (what instanceof Wrapper ? what.nodes : []);
         if (typeof cb === 'function') {
             // Раньше здесь была подписка на событие 'tick', которое никто не
             // шлёт, — колбэк не вызывался никогда. Теперь наблюдатель
             // покадровый и живёт в подсистеме триггеров.
-            return this.each((_, el) => {
-                const node = el.nodes ? el.nodes[0] : el;
+            return this.eachNode((_, el) => {
+                const node = el;
                 watchOverlap(node, other, cb);
             });
         }
@@ -1152,13 +1212,23 @@ function installFrameHooks($) {
     // Живёт здесь, а не в createApi: раньше функция оказалась в другой области
     // видимости, каждый кадр падал ReferenceError, и весь блок подсистем
     // (fx, частицы, акустика, интерфейс) не выполнялся вообще.
+    //
+    // Метка ставится ДО работы, которую меряет: иначе отрезок записывается под
+    // именем предыдущей подсистемы, и отчёт врёт на одну позицию (§1.3 отчёта).
+    //
+    // Профайлер выключен по умолчанию: 24 вызова engine.now() и 24 поиска в Map
+    // по строке за кадр — плата ни за что в релизной игре (§3.7). Включается
+    // явно: $.debug.profiler.on(true).
+    const profiler = ($.debug && $.debug.profiler) || null;
     let prof_name = null;
     let prof_at = 0;
     function profilerMark(name) {
-        const now = typeof engine.now === 'function' ? engine.now() : engine.time * 1000;
-        if (prof_name !== null && $.debug && $.debug.profiler) {
-            $.debug.profiler.record(prof_name, now - prof_at);
+        if (profiler === null || profiler.enabled !== true) {
+            prof_name = null;   // включили посреди кадра — начнём с чистого листа
+            return;
         }
+        const now = typeof engine.now === 'function' ? engine.now() : engine.time * 1000;
+        if (prof_name !== null) profiler.record(prof_name, now - prof_at);
         prof_name = name;
         prof_at = now;
     }
@@ -1180,9 +1250,11 @@ function installFrameHooks($) {
         // 4. Время: твины, таймеры, камера, события ввода.
         prof('время'); tickTime();
         tickWindow();
-        prof('окно');
 
-        // 5. $.ready — один раз, на первом кадре.
+        // 5. $.ready — один раз, на первом кадре; дальше — код самой игры.
+        //    Отрезок называется «логика игры», а не «окно»: под старым именем
+        //    он мерил tickWindow(), а теперь это честно код игры (§1.3 отчёта).
+        prof('логика игры');
         if (!frame.started) {
             frame.started = true;
             for (const fn of frame.ready) {
@@ -1199,38 +1271,32 @@ function installFrameHooks($) {
             try { fn(dt, $); } catch (e) { reportError('$.update', e); }
         }
 
-        prof('логика игры');
-        animateSprites();
-        applyControls(dt);
-        prof('анимация+ввод');
-
         // 7. Подсистемы после аудита API. Порядок: сначала те, кто меняет
         //    состояние мира (анимация, частицы, навигация), затем слои и
         //    интерфейс, последней — шины звука (затухания громкости).
-        // Замеры — для $.debug.profiler.report(): видно, какая подсистема
-        // съедает кадр, без внешних инструментов. prof('имя') закрывает
-        // предыдущий отрезок и открывает новый, prof(null) закрывает последний.
-        tickAnim(dt);   prof('анимация');
-        tickAnimPlayer(dt); prof('плеер анимации');
-        tickState(dt);  prof('состояния');
-        tickFlow(dt);   prof('последовательности');
-        tickScreen(dt); prof('экраны');
-        tickDialog(dt); prof('диалоги');
-        tickTilemap(dt); prof('tilemap');
-        tickFx(dt);      prof('vfx');
-        tickParticles(dt); prof('частицы');
-        tickNav(dt);     prof('навигация');
-        tickPrefab(dt);  prof('префабы');
-        tickLayers(dt);  prof('слои');
-        tickWidgets(dt); prof('виджеты');
-        tickTriggers(dt); prof('триггеры');
-        tickI18n(dt);    prof('i18n');
-        tickPool(dt);    prof('пулы');
-        tickViewport(dt); prof('вьюпорты');
-        tickHttp(dt);    prof('http');
-        tickAudiobus(dt); prof('шины звука');
-        tickAcoustics(dt); prof('акустика');
-        ctx.ui._tick();  prof('интерфейс');
+        //    Имя метки — это имя СВОЕГО отрезка: метка ставится до вызова.
+        prof('анимация+ввод'); animateSprites(); applyControls(dt);
+        prof('анимация'); tickAnim(dt);
+        prof('плеер анимации'); tickAnimPlayer(dt);
+        prof('состояния'); tickState(dt);
+        prof('последовательности'); tickFlow(dt);
+        prof('экраны'); tickScreen(dt);
+        prof('диалоги'); tickDialog(dt);
+        prof('tilemap'); tickTilemap(dt);
+        prof('vfx'); tickFx(dt);
+        prof('частицы'); tickParticles(dt);
+        prof('навигация'); tickNav(dt);
+        prof('префабы'); tickPrefab(dt);
+        prof('слои'); tickLayers(dt);
+        prof('виджеты'); tickWidgets(dt);
+        prof('триггеры'); tickTriggers(dt);
+        prof('i18n'); tickI18n(dt);
+        prof('пулы'); tickPool(dt);
+        prof('вьюпорты'); tickViewport(dt);
+        prof('http'); tickHttp(dt);
+        prof('шины звука'); tickAudiobus(dt);
+        prof('акустика'); tickAcoustics(dt);
+        prof('интерфейс'); ctx.ui._tick();
         prof(null);
     });
 
@@ -1344,7 +1410,20 @@ function stepTowards(node, target, speed) {
 
 // --- Встроенное управление (.controls('wasd')) ------------------------------
 
+/** Сколько узлов со схемой управления: единственное, что ищет applyControls. */
+function countControlledNodes(nodes) {
+    let count = 0;
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (node.attrs && node.attrs.controls) count++;
+    }
+    return count;
+}
+
 function applyControls(dt) {
+    // Ни одного управляемого узла — обход реестра и опрос ввода не нужны
+    // (docs/HIGH_LEVEL_API_PERF.md §3.3).
+    if (registrySummary('controlled_nodes', countControlledNodes) === 0) return;
     for (const node of ctx.nodes) {
         const scheme = node.attrs.controls;
         if (!scheme || node.cur_hp <= 0) continue;
@@ -1420,9 +1499,18 @@ function dispatchContacts() {
     }
 }
 
+/** Сколько узлов со спрайт-анимацией: единственное, что ищет animateSprites. */
+function countAnimatedNodes(nodes) {
+    let count = 0;
+    for (let i = 0; i < nodes.length; i++) if (nodes[i].anim) count++;
+    return count;
+}
+
 function animateSprites() {
     const dt = ctx.time.delta();
     if (dt <= 0) return;
+    // Ни одной спрайт-анимации — обход реестра не нужен.
+    if (registrySummary('sprite_anims', countAnimatedNodes) === 0) return;
     for (const node of ctx.nodes) {
         if (!node.anim || !node.anim.playing || !node.frames) continue;
         const anim = node.anim;

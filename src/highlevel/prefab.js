@@ -408,7 +408,8 @@ export function applyData(data, parent) {
 
     if (data.tags) for (const extra of [].concat(data.tags)) node.addTag(extra);
     if (data.data && typeof data.data === 'object') {
-        for (const key of Object.keys(data.data)) node.data_store.set(key, clonePlain(data.data[key]));
+        const store = node.dataMap();   // контейнер ленивый: создаётся при записи
+        for (const key of Object.keys(data.data)) store.set(key, clonePlain(data.data[key]));
     }
     if (data.frame) {
         node.frame_index = num(data.frame, 0);

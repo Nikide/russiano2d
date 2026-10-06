@@ -37,6 +37,128 @@ export const ctx = {
 };
 
 // ---------------------------------------------------------------------------
+// Версия реестра и сводки по нему
+// ---------------------------------------------------------------------------
+//
+// Кадр `$` был устроен так, что каждая подсистема сама обходила ВЕСЬ ctx.nodes,
+// проверяя «а есть ли тут мои?»: ≈20 полных проходов за кадр, ≈7 мс на 1000
+// узлов, причём почти вся работа — впустую (docs/HIGH_LEVEL_API_PERF.md §3.3).
+//
+// Здесь — общий механизм, чтобы подсистема могла выйти на первой строке:
+//
+//   * version растёт при любом изменении состава реестра и признаков, от
+//     которых зависят подсистемы (классы, attrs.ui, attrs.trigger);
+//   * registrySummary() пересчитывает сводку ТОЛЬКО когда версия изменилась,
+//     то есть один раз на пачку изменений, а не каждый кадр.
+//
+// Предикат остаётся в своём модуле (isZoneNode знает только triggers.js) —
+// сводка лишь кэширует его результат до следующего изменения реестра.
+
+let registry_version = 0;
+const registry_summaries = new Map();
+
+/** Версия реестра: меняется при добавлении/удалении узлов и смене признаков. */
+export function registryVersion() { return registry_version; }
+
+/** Отметить реестр изменённым (см. места вызова: конструктор, destroy, пул). */
+export function touchRegistry() { registry_version++; }
+
+/**
+ * Сводка по ctx.nodes с кэшем на версию реестра. `compute` вызывается не чаще,
+ * чем меняется реестр, и получает живой массив узлов.
+ */
+export function registrySummary(key, compute) {
+    let entry = registry_summaries.get(key);
+    if (entry === undefined) {
+        entry = { version: -1, value: null };
+        registry_summaries.set(key, entry);
+    }
+    if (entry.version !== registry_version) {
+        entry.version = registry_version;
+        entry.value = compute(ctx.nodes);
+    }
+    return entry.value;
+}
+
+// ---------------------------------------------------------------------------
+// Пакетные операции ($.batch)
+// ---------------------------------------------------------------------------
+//
+// Массовое удаление (очередь пуль, волна врагов, осколки) стоит K × O(N):
+// каждый destroy() ищет узел в реестре и сдвигает хвост массива, а возврат в
+// пул делает то же самое. Внутри пакета удаления только помечаются, а реестр
+// чистится одной компактификацией в конце — O(K + N) вместо O(K·N)
+// (docs/HIGH_LEVEL_API_PERF.md §3.6, пункты 14–15 плана).
+
+let batch_depth = 0;
+const drop_queue = [];
+
+/** Начало пакета — см. $.batch(fn). */
+export function beginBatch() { batch_depth++; }
+
+/** Конец пакета: на выходе из внешнего — одна уборка реестра. */
+export function endBatch() {
+    if (batch_depth === 0) return;
+    batch_depth--;
+    if (batch_depth === 0) flushDrops();
+}
+
+/** Идёт ли пакет прямо сейчас (нужно пулу: он тоже убирает узлы из реестра). */
+export function inBatch() { return batch_depth > 0; }
+
+/**
+ * Убрать узел из реестра. Внутри пакета — отложенно (одна уборка в конце),
+ * иначе — сразу, как было.
+ */
+export function dropFromRegistry(node) {
+    if (batch_depth > 0) {
+        if (!node._drop_queued) {
+            node._drop_queued = true;
+            drop_queue.push(node);
+            // Сводки подсистем (ui-узлы, зоны, карты…) должны увидеть удаление
+            // сразу: уборка реестра отложена, но версия — нет.
+            touchRegistry();
+        }
+        return;
+    }
+    const i = ctx.nodes.indexOf(node);
+    if (i >= 0) ctx.nodes.splice(i, 1);
+    node.in_registry = false;
+    touchRegistry();
+}
+
+/** Одна компактификация реестра вместо K сплайсов. */
+function flushDrops() {
+    if (drop_queue.length === 0) return;
+    const nodes = ctx.nodes;
+    let w = 0;
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (node._drop_queued === true) {
+            node._drop_queued = false;
+            node.in_registry = false;
+            continue;
+        }
+        nodes[w++] = node;
+    }
+    nodes.length = w;
+    drop_queue.length = 0;
+    touchRegistry();
+}
+
+/** Сколько узлов интерфейса (attrs.ui) в реестре. Общий предикат для $.ui,
+ *  виджетов и отрисовки: attrs.ui ставится тегом при создании и меняется
+ *  только через .attr('ui'), который отмечает реестр изменённым. */
+export function countUiNodes(nodes) {
+    let count = 0;
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (node.attrs && node.attrs.ui) count++;
+    }
+    return count;
+}
+
+// ---------------------------------------------------------------------------
 // Цвет
 // ---------------------------------------------------------------------------
 
@@ -177,7 +299,7 @@ export class Node {
         this.tag = tag;
         this.attrs = {};                 // всё, что не описано ниже
         this.classes = new Set();
-        this.tags_extra = new Set();
+        this.tags_extra = null;   // ленивый Set: см. addTag/removeTag
 
         // Узлы интерфейса живут в координатах окна: камера на них не влияет,
         // и в игровой мир они не попадают. Признак хранится в attrs, потому
@@ -234,6 +356,12 @@ export class Node {
         // Здоровье
         this.max_hp = defaults.hp || 0;
         this.cur_hp = this.max_hp;
+        // Прошлый кадр для автособытий мира (hit/heal/death/show/hide). Поля
+        // самого узла, а не Map по uid: числовой ключ в QuickJS стоит ~6 мкс,
+        // и эти четыре операции съедали половину кадра (см.
+        // docs/HIGH_LEVEL_API_PERF.md §3.1). undefined = «узел ещё не виден».
+        this._hp_seen = undefined;
+        this._vis_seen = undefined;
         // Скорость из TAGS: без этого умолчания тегов (enemy 90, npc 70) не
         // доходили ни до .controls(), ни до .attr('speed') — враг с
         // управлением ехал 150, хотя справочник обещал 90.
@@ -252,10 +380,16 @@ export class Node {
         this.child_nodes = [];
         this.removed = false;
         this.detached = false;
+        // Узел лежит в ctx.nodes. Флаг нужен там, где раньше был
+        // ctx.nodes.indexOf(node) — это O(N) на проверку (§3.3 отчёта).
+        this.in_registry = false;
 
-        // События
-        this.listeners = new Map();
-        this.data_store = new Map();
+        // События. Контейнеры ленивые: пустые Map/Set — это malloc на каждый
+        // узел, а подписки и data() есть у единиц узлов (§3.5, пункт 13).
+        this.listeners = null;
+        this.data_store = null;
+        // Узел помечен на удаление внутри $.batch (см. dropFromRegistry).
+        this._drop_queued = false;
 
         // Интерфейс
         this.hovered = false;
@@ -270,12 +404,16 @@ export class Node {
         this.intensity = defaults.intensity !== undefined ? defaults.intensity : 1;
 
         ctx.nodes.push(this);
+        this.in_registry = true;
         this.applyInitial(attrs);
 
         // Тело создаётся сразу после применения атрибутов: у тегов вроде
         // <player>/<enemy>/<wall> оно подразумевается, а размеры и позиция уже
         // известны. Дальнейшие .at() и .size() тело просто переносят.
         if (defaults.body) this.syncBody();
+
+        // Реестр изменился — в конце, чтобы attrs.ui из attrs уже был учтён.
+        touchRegistry();
     }
 
     // --- Служебное ---------------------------------------------------------
@@ -330,7 +468,11 @@ export class Node {
         case 'align':   this.attrs.align = String(value); return this;
         case 'gravity': this.gravity_on = value !== false;
                         this.no_gravity = !this.gravity_on && this.body >= 0; return this;
-        case 'controls': this.attrs.controls = value; return this;
+        case 'controls':
+            // Сводка кадра считает управляемые узлы — состав изменился.
+            if (!this.attrs.controls !== !value) touchRegistry();
+            this.attrs.controls = value;
+            return this;
         case 'body':    this.setBody(value); return this;
         case 'collision': this.hitbox = Array.isArray(value) ? { w: value[0], h: value[1] } : { w: value, h: value }; return this;
         case 'src':
@@ -342,6 +484,10 @@ export class Node {
             if (TAGS[this.tag] && 'sprite' in TAGS[this.tag]) this.setSprite(value);
             return this;
         default:
+            // Признаки, от которых зависят сводки подсистем (зоны, ui-узлы),
+            // можно сменить и через .attr(): отмечаем реестр изменённым, иначе
+            // подсистема с нулевым счётчиком не заметила бы новый узел.
+            if ((key === 'ui' || key === 'trigger' || key === 'tr') && this.attrs[key] !== value) touchRegistry();
             this.attrs[key] = value;
             return this;
         }
@@ -379,7 +525,7 @@ export class Node {
         case 'body':    return this.body_kind;
         case 'collision': return this.hitbox ? this.hitbox.w : this.w;
         case 'class':   return Array.from(this.classes).join(' ');
-        case 'tag': case 'tags': return Array.from(this.tags_extra).join(' ');
+        case 'tag': case 'tags': return this.tags_extra === null ? '' : Array.from(this.tags_extra).join(' ');
         default:        return this.attrs[key];
         }
     }
@@ -532,8 +678,11 @@ export class Node {
             this.body = -1;
         }
         this.removed = true;
-        const i = ctx.nodes.indexOf(this);
-        if (i >= 0) ctx.nodes.splice(i, 1);
+        // Раньше запись в byId оставалась жить: '#id' находил удалённый узел
+        // до ближайшего ленивого свипа (prefab/save/scene). Чистим сразу —
+        // иначе быстрый путь поиска по id в query() отдавал бы мертвеца.
+        if (this.id !== undefined && ctx.byId.get(this.id) === this) ctx.byId.delete(this.id);
+        dropFromRegistry(this);
         for (const child of this.child_nodes.slice()) child.destroy();
         // Родителем может быть только узел: «мир» — это отсутствие родителя
         // (см. resolveContainer в api.js), иначе здесь падало бы на строке.
@@ -549,12 +698,14 @@ export class Node {
 
     on(name, fn) {
         const key = eventName(name);
+        if (this.listeners === null) this.listeners = new Map();
         if (!this.listeners.has(key)) this.listeners.set(key, []);
         this.listeners.get(key).push(fn);
         return this;
     }
 
     off(name, fn) {
+        if (this.listeners === null) return this;
         if (!name) { this.listeners.clear(); return this; }
         const key = eventName(name);
         if (!fn) { this.listeners.delete(key); return this; }
@@ -565,7 +716,7 @@ export class Node {
 
     emit(name, data) {
         const key = eventName(name);
-        const list = this.listeners.get(key);
+        const list = this.listeners === null ? null : this.listeners.get(key);
         if (list && list.length) {
             const event = makeEvent(this, key, data);
             for (const fn of list.slice()) {
@@ -574,23 +725,56 @@ export class Node {
             }
         }
         // Глобальные подписки: $('*').on(...) и $.on('entity:...').
+        // Если их нет вовсе, dispatchGlobal выходит первой строкой — объекта
+        // события, трёх обёрток и строк 'entity:…' не будет (§3.5 отчёта).
         ctx.$._dispatchGlobal(this, key, data);
         return this;
     }
 
     // --- Классы и теги -----------------------------------------------------
 
-    addClass(name) { String(name).split(/\s+/).filter(Boolean).forEach((c) => this.classes.add(c)); return this; }
-    removeClass(name) { String(name).split(/\s+/).filter(Boolean).forEach((c) => this.classes.delete(c)); return this; }
+    addClass(name) {
+        const list = String(name).split(/\s+/).filter(Boolean);
+        let changed = false;
+        for (const c of list) if (!this.classes.has(c)) { this.classes.add(c); changed = true; }
+        // Классы читают селекторы и зоны (isZoneNode): сводки подсистем
+        // должны узнать об изменении.
+        if (changed) touchRegistry();
+        return this;
+    }
+    removeClass(name) {
+        const list = String(name).split(/\s+/).filter(Boolean);
+        let changed = false;
+        for (const c of list) if (this.classes.delete(c)) changed = true;
+        if (changed) touchRegistry();
+        return this;
+    }
     toggleClass(name, force) {
         const has = this.classes.has(name);
         const want = force === undefined ? !has : !!force;
         if (want) this.classes.add(name); else this.classes.delete(name);
+        if (want !== has) touchRegistry();
         return this;
     }
     hasClass(name) { return this.classes.has(name); }
-    addTag(name) { this.tags_extra.add(name); return this; }
-    removeTag(name) { this.tags_extra.delete(name); return this; }
+    /**
+     * Хранилище данных узла: создаётся при первой записи. Прямое обращение к
+     * полю `data_store` может вернуть null — используйте этот метод.
+     */
+    dataMap() {
+        if (this.data_store === null) this.data_store = new Map();
+        return this.data_store;
+    }
+
+    addTag(name) {
+        if (this.tags_extra === null) this.tags_extra = new Set();
+        this.tags_extra.add(name);
+        return this;
+    }
+    removeTag(name) {
+        if (this.tags_extra !== null) this.tags_extra.delete(name);
+        return this;
+    }
 
     matches(sel) { return matchesSelector(this, sel); }
 }
@@ -607,6 +791,28 @@ export class Wrapper {
 
     [Symbol.iterator]() { return this.nodes[Symbol.iterator](); }
     get(i) { return this.nodes[i]; }
+
+    /**
+     * Обход коллекции: колбэк получает `(i, обёртка)`. Живёт в ядре, а не в
+     * api.js: модули (слои, частицы, виджеты) зовут его из своих методов, а
+     * api.js в юнит-тесте qjs не поднимается.
+     */
+    each(fn) {
+        const nodes = this.nodes;
+        for (let i = 0; i < nodes.length; i++) fn.call(this, i, wrapOne(nodes[i]));
+        return this;
+    }
+
+    /**
+     * Обход без обёртки: колбэк получает сам узел — `(i, node)`. Цепочные
+     * методы ядра ходят этим путём: две аллокации на узел (обёртка и её
+     * массив) в горячем цикле не нужны (docs/HIGH_LEVEL_API_PERF.md §3.5).
+     */
+    eachNode(fn) {
+        const nodes = this.nodes;
+        for (let i = 0; i < nodes.length; i++) fn.call(this, i, nodes[i]);
+        return this;
+    }
     toArray() { return this.nodes.slice(); }
     index() {
         const first = this.nodes[0];
@@ -632,7 +838,19 @@ export function defGet(name, fn, defValue) {
 }
 
 export function wrap(nodes) { return new Wrapper(Array.isArray(nodes) ? nodes.slice() : Array.from(nodes)); }
-export function wrapOne(node) { return new Wrapper([node]); }
+
+/**
+ * Обёртка одного узла.
+ *
+ * Кэшировать её в самом узле нельзя: поле `_wrapper` замыкает цикл
+ * «узел → обёртка → узел», и JSON.stringify узла (агент, $.store, отладка)
+ * падает с «circular reference». Кэш в Map/WeakMap экономит всего ~0,1 мкс из
+ * 0,8 (замер в QuickJS), поэтому горячие циклы ядра ходят через
+ * `eachNode()` и не создают обёртку вовсе.
+ */
+export function wrapOne(node) {
+    return new Wrapper([node]);
+}
 
 function makeEvent(node, name, data) {
     const self = wrapOne(node);
@@ -657,77 +875,149 @@ function makeEvent(node, name, data) {
 
 const custom_selectors = new Map();
 
-export function registerSelector(name, fn) { custom_selectors.set(name, fn); }
+export function registerSelector(name, fn) {
+    custom_selectors.set(name, fn);
+    // Разобранные селекторы держат ссылку на пользовательский псевдокласс,
+    // поэтому новый регистр сбрасывает кэш (см. compileSelector).
+    selector_cache.clear();
+}
 
-function matchesSelector(node, sel) {
-    if (!sel || sel === '*') return true;
-    sel = sel.trim();
+// --- Компилятор селекторов -------------------------------------------------
+//
+// Раньше строка селектора разбиралась ЗАНОВО на каждом узле: до пяти regexp
+// (exec/replace/split) и столько же временных строк и массивов на узел. При
+// 1000 узлах один $('.mob') стоил 15,4 мс (docs/HIGH_LEVEL_API_PERF.md §3.2).
+// Теперь строка разбирается один раз на вызов, а по узлам идёт замыкание.
+
+const ATTR_EXTRACT = /\[([a-zA-Z_][\w.]*)\s*(<=|>=|!=|=|<|>)\s*([^\]]+)\]/;
+const PSEUDO_EXTRACT = /:([a-zA-Z][\w]*)(\(([^)]*)\))?/;
+const ATTR_STRIP = /\[[^\]]*\]/g;
+const PSEUDO_STRIP = /:[a-zA-Z][\w]*(\([^)]*\))?/g;
+const NUMERIC = /^-?\d+(\.\d+)?$/;
+
+/** Кэш «строка селектора → предикат». Ограничен: сцены редко имеют >512 видов. */
+const selector_cache = new Map();
+const SELECTOR_CACHE_MAX = 512;
+
+const alwaysTrue = () => true;
+const notRemoved = (node) => !node.removed;
+
+/** Собрать предикат из списка проверок: пустой список — «подходит всем». */
+function allOf(checks) {
+    if (checks.length === 0) return alwaysTrue;
+    if (checks.length === 1) return checks[0];
+    return (node) => {
+        for (let i = 0; i < checks.length; i++) if (!checks[i](node)) return false;
+        return true;
+    };
+}
+
+/** Предикат по строке селектора — один терм (без запятых и комбинаторов). */
+export function compileSelector(sel) {
+    // '*' и пустой селектор тоже не должны находить удалённые узлы (см. buildSelector).
+    if (!sel || sel === '*') return notRemoved;
+    const cached = selector_cache.get(sel);
+    if (cached !== undefined) return cached;
+    const compiled = buildSelector(sel.trim());
+    if (selector_cache.size >= SELECTOR_CACHE_MAX) selector_cache.clear();
+    selector_cache.set(sel, compiled);
+    return compiled;
+}
+
+function buildSelector(sel) {
+    // Удалённый узел не должен находиться селектором: вне пакета его в реестре
+    // уже нет, а внутри $.batch он лежит там до уборки.
+    const checks = [(node) => !node.removed];
 
     // Комбинирование через запятую живёт в query(), здесь — один терм.
     // Атрибутные условия: [hp<20], [team=1], [speed>100].
-    const attrMatch = /\[([a-zA-Z_][\w.]*)\s*(<=|>=|!=|=|<|>)\s*([^\]]+)\]/.exec(sel);
+    const attrMatch = ATTR_EXTRACT.exec(sel);
     if (attrMatch) {
-        const [, key, op, rawValue] = attrMatch;
-        const actual = readAttr(node, key);
-        const wanted = /^-?\d+(\.\d+)?$/.test(rawValue) ? parseFloat(rawValue) : rawValue.replace(/^['"]|['"]$/g, '');
+        const key = attrMatch[1];
+        const op = attrMatch[2];
+        const rawValue = attrMatch[3];
+        const wanted = NUMERIC.test(rawValue) ? parseFloat(rawValue)
+                                              : rawValue.replace(/^['"]|['"]$/g, '');
         switch (op) {
-        case '=':  if (actual != wanted) return false; break;
-        case '!=': if (actual == wanted) return false; break;
-        case '<':  if (!(actual < wanted)) return false; break;
-        case '>':  if (!(actual > wanted)) return false; break;
-        case '<=': if (!(actual <= wanted)) return false; break;
-        case '>=': if (!(actual >= wanted)) return false; break;
+        case '=':  checks.push((node) => readAttr(node, key) == wanted); break;
+        case '!=': checks.push((node) => readAttr(node, key) != wanted); break;
+        case '<':  checks.push((node) => readAttr(node, key) < wanted); break;
+        case '>':  checks.push((node) => readAttr(node, key) > wanted); break;
+        case '<=': checks.push((node) => readAttr(node, key) <= wanted); break;
+        case '>=': checks.push((node) => readAttr(node, key) >= wanted); break;
         }
     }
 
-    // Псевдоклассы.
-    const pseudo = /:([a-zA-Z][\w]*)(\(([^)]*)\))?/.exec(sel);
-    if (pseudo) {
-        const [, pname, , parg] = pseudo;
-        switch (pname) {
-        case 'alive':   if (!(node.cur_hp > 0 && !node.removed)) return false; break;
-        case 'dead':    if (!(node.cur_hp <= 0 || node.removed)) return false; break;
-        case 'visible': if (!node.visible) return false; break;
-        case 'hidden':  if (node.visible) return false; break;
-        case 'onScreen': if (!ctx.camera || !ctx.camera.isOnScreen(node)) return false; break;
-        case 'offScreen': if (ctx.camera && ctx.camera.isOnScreen(node)) return false; break;
-        case 'paused':  if (!(ctx.time && ctx.time.isPaused())) return false; break;
-        case 'picked':  if (!node.hovered) return false; break;
-        case 'first':   if (ctx.nodes.indexOf(node) !== 0) return false; break;
-        case 'last':    if (ctx.nodes.indexOf(node) !== ctx.nodes.length - 1) return false; break;
-        case 'even':    if (ctx.nodes.indexOf(node) % 2 !== 0) return false; break;
-        case 'odd':     if (ctx.nodes.indexOf(node) % 2 === 0) return false; break;
-        case 'eq':      if (ctx.nodes.indexOf(node) !== parseInt(parg, 10)) return false; break;
-        case 'has':     if (!node.child_nodes.some((c) => matchesSelector(c, parg))) return false; break;
-        case 'parent':  if (node.child_nodes.length === 0) return false; break;
-        case 'empty':   if (node.child_nodes.length !== 0) return false; break;
-        case 'not':     if (matchesSelector(node, parg)) return false; break;
-        default: {
-            const custom = custom_selectors.get(':' + pname);
-            if (custom && !custom(node, parg)) return false;
-            break;
-        }
-        }
-    }
+    // Псевдоклассы — как и раньше, учитывается первый.
+    const pseudo = PSEUDO_EXTRACT.exec(sel);
+    if (pseudo) checks.push(pseudoCheck(pseudo[1], pseudo[3]));
 
-    const cleaned = sel.replace(/\[[^\]]*\]/g, '').replace(/:[a-zA-Z][\w]*(\([^)]*\))?/g, '');
-    if (!cleaned) return true;
+    const cleaned = sel.replace(ATTR_STRIP, '').replace(PSEUDO_STRIP, '');
+    if (!cleaned) return allOf(checks);
 
     for (const part of cleaned.split(/(?=[.#])/)) {
         if (!part) continue;
         if (part[0] === '#') {
-            if (ctx.byId.get(part.slice(1)) !== node) return false;
+            const id = part.slice(1);
+            // node.id — дешёвая отсечка перед Map: id есть у единиц узлов.
+            checks.push((node) => node.id === id && ctx.byId.get(id) === node);
         } else if (part[0] === '.') {
-            if (!node.classes.has(part.slice(1))) return false;
+            const cls = part.slice(1);
+            checks.push((node) => node.classes.has(cls));
         } else {
             const tag = part.split('.').filter((s) => s && s[0] !== '.');
-            if (tag.length && node.tag !== tag[0]) return false;
+            if (tag.length) {
+                const name = tag[0];
+                checks.push((node) => node.tag === name);
+            }
             for (const cls of part.split('.').slice(1)) {
-                if (cls && !node.classes.has(cls)) return false;
+                if (cls) checks.push((node) => node.classes.has(cls));
             }
         }
     }
-    return true;
+    return allOf(checks);
+}
+
+function pseudoCheck(pname, parg) {
+    switch (pname) {
+    case 'alive':     return (node) => node.cur_hp > 0 && !node.removed;
+    case 'dead':      return (node) => node.cur_hp <= 0 || node.removed;
+    case 'visible':   return (node) => !!node.visible;
+    case 'hidden':    return (node) => !node.visible;
+    case 'onScreen':  return (node) => !!(ctx.camera && ctx.camera.isOnScreen(node));
+    case 'offScreen': return (node) => !(ctx.camera && ctx.camera.isOnScreen(node));
+    case 'paused':    return () => !!(ctx.time && ctx.time.isPaused());
+    case 'picked':    return (node) => !!node.hovered;
+    case 'first':     return (node) => ctx.nodes.indexOf(node) === 0;
+    case 'last':      return (node) => ctx.nodes.indexOf(node) === ctx.nodes.length - 1;
+    case 'even':      return (node) => ctx.nodes.indexOf(node) % 2 === 0;
+    case 'odd':       return (node) => ctx.nodes.indexOf(node) % 2 !== 0;
+    case 'eq': {
+        const want = parseInt(parg, 10);
+        return (node) => ctx.nodes.indexOf(node) === want;
+    }
+    case 'has': {
+        const inner = compileSelector(parg);
+        return (node) => node.child_nodes.some(inner);
+    }
+    case 'parent':    return (node) => node.child_nodes.length !== 0;
+    case 'empty':     return (node) => node.child_nodes.length === 0;
+    case 'not': {
+        const inner = compileSelector(parg);
+        return (node) => !inner(node);
+    }
+    default: {
+        const custom = custom_selectors.get(':' + pname);
+        if (!custom) return alwaysTrue;
+        return (node) => !custom(node, parg) ? false : true;
+    }
+    }
+}
+
+/** Совместимость: проверить один узел одним термом селектора. */
+function matchesSelector(node, sel) {
+    if (typeof sel !== 'string') return !sel;
+    return compileSelector(sel)(node);
 }
 
 function readAttr(node, key) {
@@ -745,35 +1035,67 @@ function readAttr(node, key) {
 export function query(sel) {
     if (sel === null || sel === undefined) return [];
     if (typeof sel !== 'string') return [];
-    if (sel === '*') return ctx.nodes.slice();
+    if (sel === '*') return ctx.nodes.filter((n) => !n.removed);
 
+    // Быстрый путь: '#hero' — один id, без запятых, комбинаторов и условий.
+    // Раньше и он перебирал весь реестр: 14,2 мс на 1000 узлов (§3.2 отчёта).
+    const id = plainId(sel);
+    if (id !== null) {
+        const node = ctx.byId.get(id);
+        return node && !node.removed ? [node] : [];
+    }
+
+    const branches = sel.split(',');
     const result = [];
-    const seen = new Set();
-    for (const branch of sel.split(',')) {
+    // Уникализация нужна только при нескольких ветках: одна ветка дублей не
+    // даёт, а Set — это аллокация на каждый вызов.
+    const seen = branches.length > 1 ? new Set() : null;
+    for (const branch of branches) {
         const trimmed = branch.trim();
         if (!trimmed) continue;
         for (const node of querySingle(trimmed)) {
+            if (seen === null) { result.push(node); continue; }
             if (!seen.has(node)) { seen.add(node); result.push(node); }
         }
     }
     return result;
 }
 
+/**
+ * '  #hero  ' → 'hero'; всё остальное (комбинаторы, условия, несколько термов)
+ * → null. Разделители — те же, что знает синтаксис селекторов: пробел, '.',
+ * ':', '[', ',', '>'.
+ */
+function plainId(sel) {
+    const s = sel.trim();
+    if (s.length < 2 || s[0] !== '#') return null;
+    for (let i = 1; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        if (c === 32 || c === 9 || c === 46 || c === 58 || c === 91 || c === 44 || c === 62) return null;
+    }
+    return s.slice(1);
+}
+
 function querySingle(sel) {
     // Разбиваем на «прямой потомок» и «любой потомок»: '#hero .weapon' и
     // '#hero > .weapon'.
     const parts = sel.split(/\s*(>)\s*|\s+/).filter((s) => s !== undefined && s !== '');
-    if (parts.length === 1) return ctx.nodes.filter((n) => matchesSelector(n, parts[0]));
+    if (parts.length === 1) {
+        const match = compileSelector(parts[0]);
+        return ctx.nodes.filter(match);
+    }
 
-    let current = ctx.nodes.filter((n) => matchesSelector(n, parts[0]));
+    const first = compileSelector(parts[0]);
+    let current = ctx.nodes.filter(first);
     let direct = false;
     for (let i = 1; i < parts.length; i++) {
         const part = parts[i];
         if (part === '>') { direct = true; continue; }
+        const match = compileSelector(part);
         const next = [];
         for (const node of current) {
             const pool = direct ? node.child_nodes : descendants(node);
-            for (const child of pool) if (matchesSelector(child, part)) next.push(child);
+            for (const child of pool) if (match(child)) next.push(child);
         }
         current = next;
         direct = false;

@@ -290,12 +290,13 @@ export function tickAcoustics(dt) {
         const target = hit ? reverbForZone(hit.zone) : OUTDOOR;
 
         state.active = hit ? hit.name : null;
-        state.target = {
-            wet: target.wet,
-            room: target.room,
-            damp: target.damp,
-            width: target.width,
-        };
+        // Объект цели переиспользуется: новый {wet, room, damp, width} каждый
+        // кадр — лишняя аллокация (§3.3 отчёта).
+        const goal = state.target || (state.target = { wet: 0, room: 0, damp: 0, width: 0 });
+        goal.wet = target.wet;
+        goal.room = target.room;
+        goal.damp = target.damp;
+        goal.width = target.width;
 
         // Экспоненциальное сглаживание: на границе зон параметры едут, а не щёлкают.
         const smooth = hit && hit.zone.smooth !== undefined ? hit.zone.smooth : state.smooth;

@@ -59,6 +59,26 @@ CONTAINER_PLATFORM = {
     "windows-x86_64": None,   # кросс-компиляция, архитектура контейнера не важна
 }
 
+#: Флаги кросс-компиляции под Windows (MinGW). Набор один на оба пути сборки —
+#: контейнерный (Docker) и нативный (Linux-раннер GitVerse, см. --no-docker),
+#: чтобы они не разъехались.
+#: R2D_MINGW_ROOT переопределяет кросс-корень: в CI freetype ставится не в
+#: системный /usr/x86_64-w64-mingw32, а в префикс сборки.
+MINGW_ROOT = os.environ.get("R2D_MINGW_ROOT", "/usr/x86_64-w64-mingw32")
+MINGW_CMAKE_FLAGS = [
+    "-DCMAKE_SYSTEM_NAME=Windows",
+    "-DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc",
+    "-DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++",
+    "-DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres",
+    "-DCMAKE_FIND_ROOT_PATH=" + MINGW_ROOT,
+    "-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER",
+    "-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY",
+    "-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY",
+]
+
+#: Библиотеки, которые в пакет не тащим: они есть в любой системе с glibc.
+SKIP_SYSTEM_LIBS = r"lib(c|m|pthread|dl|rt|gcc_s|stdc++).so"
+
 
 def log(message: str = "") -> None:
     print(message, flush=True)
@@ -181,16 +201,61 @@ def cmake_flags(build_type: str) -> List[str]:
     return ["-DCMAKE_BUILD_TYPE=" + build_type]
 
 
-def build_native(platform_name: str, build_type: str, jobs: int) -> Path:
-    """Собрать нативно (macOS или Linux без Docker). Вернуть путь к бинарнику."""
+def collect_native_libs(binary: Path) -> None:
+    """Собрать внешние .so рядом с бинарником — то же, что делает контейнер.
+
+    Бинарник ищет их через rpath ``$ORIGIN/lib`` (см. CMakeLists.txt), а самим
+    библиотекам прописываем ``$ORIGIN``: RUNPATH не действует на транзитивные
+    зависимости, поэтому libfreetype должен находить libpng рядом с собой.
+    """
+    lib_dir = binary.parent / "lib"
+    lib_dir.mkdir(parents=True, exist_ok=True)
+    # Путь бинарника приходит то абсолютным (из build_native), то относительным
+    # (если функцию позвали руками) — relative_to на относительном падает.
+    try:
+        shown = lib_dir.resolve().relative_to(ROOT)
+    except ValueError:
+        shown = lib_dir
+    log("  собираю внешние .so в %s" % shown)
+    pipe = (
+        "ldd %s 2>/dev/null | awk '{print $3}' | grep -E '^/' "
+        "| grep -vE '%s' | xargs -r -I{} cp -L {} %s/ 2>/dev/null || true"
+        % (shlex.quote(str(binary)), SKIP_SYSTEM_LIBS, shlex.quote(str(lib_dir)))
+    )
+    subprocess.run(["bash", "-lc", pipe], check=False)
+    libs = list(lib_dir.glob("*.so*"))
+    if not libs:
+        # Не падаем: у статической сборки внешних .so может не быть вовсе.
+        log("  ! внешних .so не нашлось — пакет будет без lib/")
+        return
+    patchelf = shutil.which("patchelf")
+    if patchelf is None:
+        # Без patchelf пакет соберётся, но транзитивные зависимости (libfreetype
+        # → libpng) могут не найтись на чужой системе. В CI он ставится из apt,
+        # локально — тоже; поэтому это предупреждение, а не ошибка.
+        log("  ! patchelf не найден — rpath у библиотек не поправлен "
+            "(apt-get install patchelf)")
+        return
+    for so in libs:
+        subprocess.run([patchelf, "--set-rpath", "$ORIGIN", str(so)],
+                       check=False)
+    log("  в lib/ уехало библиотек: %d" % len(libs))
+
+
+def build_native(platform_name: str, build_type: str, jobs: int,
+                 windows: bool = False) -> Path:
+    """Собрать нативно (macOS, Linux или кросс-сборка MinGW без Docker)."""
     build_dir = BUILD_ROOT / platform_name
     log("[%s] нативная сборка в %s" % (platform_name, build_dir.relative_to(ROOT)))
+    extra = list(MINGW_CMAKE_FLAGS) if windows else []
     run(["cmake", "-S", str(ROOT), "-B", str(build_dir), "-G", "Ninja",
-         *cmake_flags(build_type)])
+         *cmake_flags(build_type), *extra])
     run(["cmake", "--build", str(build_dir), "-j", str(jobs)])
-    binary = build_dir / "russiano2d"
+    binary = build_dir / ("russiano2d.exe" if windows else "russiano2d")
     if not binary.exists():
         raise SystemExit("не найден бинарник после сборки: %s" % binary)
+    if not windows and platform_name.startswith("linux"):
+        collect_native_libs(binary)
     return binary
 
 
@@ -200,18 +265,7 @@ def build_in_container(platform_name: str, build_type: str, jobs: int,
     build_dir_name = "build-autobuild/" + platform_name
     log("[%s] сборка в контейнере %s" % (platform_name, image))
 
-    cmake_extra: List[str] = []
-    if windows:
-        cmake_extra = [
-            "-DCMAKE_SYSTEM_NAME=Windows",
-            "-DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc",
-            "-DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++",
-            "-DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres",
-            "-DCMAKE_FIND_ROOT_PATH=/usr/x86_64-w64-mingw32",
-            "-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER",
-            "-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY",
-            "-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY",
-        ]
+    cmake_extra: List[str] = list(MINGW_CMAKE_FLAGS) if windows else []
 
     binary_rel = build_dir_name + ("/russiano2d.exe" if windows else "/russiano2d")
     flags = " ".join(cmake_flags(build_type))
@@ -220,7 +274,7 @@ def build_in_container(platform_name: str, build_type: str, jobs: int,
     # После сборки собираем внешние .so рядом с бинарником: пакет должен
     # работать на системе, где этих библиотек нет. Бинарник ищет их в lib/
     # через rpath $ORIGIN/lib, заданный в CMakeLists.txt.
-    skip_system = "lib(c|m|pthread|dl|rt|gcc_s|stdc" + chr(43) + chr(43) + ").so"
+    skip_system = SKIP_SYSTEM_LIBS
     collect_libs = (
         "mkdir -p /src/" + build_dir_name + "/lib; "
         "ldd /src/" + binary_rel + " 2>/dev/null | awk '{print $3}' "
@@ -229,8 +283,14 @@ def build_in_container(platform_name: str, build_type: str, jobs: int,
         "| xargs -r -I{} cp -L {} /src/" + build_dir_name + "/lib/ 2>/dev/null || true; "
         # RUNPATH не действует на транзитивные зависимости, поэтому библиотекам
         # прописываем свой: libfreetype находит libpng рядом с собой.
+        # Образ-сборщик переиспользуется по факту существования, а не по
+        # Dockerfile, поэтому patchelf в нём может отсутствовать (тогда шаг
+        # молча ничего не делал) — предупреждаем вслух.
+        "if command -v patchelf >/dev/null; then "
         "for so in /src/" + build_dir_name + "/lib/*.so*; do "
-        "[ -e \"$so\" ] && patchelf --set-rpath '$ORIGIN' \"$so\" 2>/dev/null || true; done"
+        "[ -e \"$so\" ] && patchelf --set-rpath '$ORIGIN' \"$so\" 2>/dev/null || true; done; "
+        "else echo '  ! в образе нет patchelf — rpath у .so не поправлен; "
+        "пересобери образ: docker rmi " + image + "'; fi"
     )
 
     inner = (
@@ -326,13 +386,18 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     parser.add_argument("--jobs", type=int, default=0, help="параллельных задач (по умолчанию — по числу ядер)")
     parser.add_argument("--with-windows", action="store_true",
                         help="добавить кросс-сборку windows-x86_64 (MinGW в контейнере)")
+    parser.add_argument("--no-docker", action="store_true",
+                        help="не использовать Docker: Linux собирается нативно, "
+                             "Windows — кросс-компиляцией MinGW на этой же машине "
+                             "(нужны mingw-w64 и freetype под него; так собирает CI)")
     parser.add_argument("--out", default="dist", help="каталог артефактов")
     return parser.parse_args(argv)
 
 
 def main(argv: List[str]) -> int:
     options = parse_args(argv)
-    prepare_docker_env()
+    if not options.no_docker:
+        prepare_docker_env()
     started = time.time()
 
     jobs = options.jobs or (os.cpu_count() or 2)
@@ -342,15 +407,22 @@ def main(argv: List[str]) -> int:
         out_dir = ROOT / out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    docker = docker_available()
+    # В режиме --no-docker Docker не нужен и не ищется: Linux собирается
+    # нативно, Windows — тем же кросс-компилятором MinGW, но прямо на машине.
+    docker = False if options.no_docker else docker_available()
     host = host_platform()
+    can_cross = host.startswith("linux") and shutil.which("x86_64-w64-mingw32-gcc") is not None
 
     if options.platforms == "auto":
         platforms = [host]
-        if docker:
-            platforms.append("linux-aarch64" if host == "macos-arm64" else "linux-x86_64")
-        if options.with_windows and docker:
-            platforms.append("windows-x86_64")
+        if options.no_docker:
+            if options.with_windows and can_cross:
+                platforms.append("windows-x86_64")
+        else:
+            if docker:
+                platforms.append("linux-aarch64" if host == "macos-arm64" else "linux-x86_64")
+            if options.with_windows and docker:
+                platforms.append("windows-x86_64")
     else:
         platforms = [item.strip() for item in options.platforms.split(",") if item.strip()]
         if options.with_windows and "windows-x86_64" not in platforms:
@@ -367,20 +439,37 @@ def main(argv: List[str]) -> int:
     log("  собираем         : %s" % ", ".join(platforms))
     log("  тип сборки       : %s" % build_type)
     log("  задач параллельно: %d" % jobs)
-    log("  Docker           : %s" % ("работает" if docker else "недоступен"))
+    if options.no_docker:
+        log("  Docker           : не используется (--no-docker)")
+        log("  кросс-компилятор : MinGW %s" % ("найден" if can_cross else "НЕ найден"))
+    else:
+        log("  Docker           : %s" % ("работает" if docker else "недоступен"))
     log("  артефакты        : %s" % out_dir)
     log("=" * 70)
 
-    if not docker and "windows-x86_64" in platforms:
-        raise SystemExit("windows-x86_64 собирается кросс-компиляцией в контейнере, "
-                         "а Docker не запущен — запусти Docker Desktop и повтори")
-
-    if not docker:
-        missing = [p for p in platforms if p != host]
-        if missing:
-            log("! Docker не запущен — пропускаю: %s" % ", ".join(missing))
-            log("  Запусти Docker Desktop и повтори, либо собери только %s." % host)
-            platforms = [p for p in platforms if p == host]
+    if options.no_docker:
+        if "windows-x86_64" in platforms and not can_cross:
+            raise SystemExit(
+                "windows-x86_64 требует кросс-компилятор MinGW, а "
+                "x86_64-w64-mingw32-gcc не найден.\n"
+                "Установи: sudo apt-get install -y mingw-w64 xz-utils "
+                "(и freetype под MinGW — см. tools/docker/Dockerfile.linux-builder)")
+        not_native = [p for p in platforms if p != host and p != "windows-x86_64"]
+        if not_native:
+            raise SystemExit(
+                "в режиме --no-docker на %s нельзя собрать: %s\n"
+                "Эти платформы доступны только в контейнере (без --no-docker)."
+                % (host, ", ".join(not_native)))
+    else:
+        if not docker and "windows-x86_64" in platforms:
+            raise SystemExit("windows-x86_64 собирается кросс-компиляцией в контейнере, "
+                             "а Docker не запущен — запусти Docker Desktop и повтори")
+        if not docker:
+            missing = [p for p in platforms if p != host]
+            if missing:
+                log("! Docker не запущен — пропускаю: %s" % ", ".join(missing))
+                log("  Запусти Docker Desktop и повтори, либо собери только %s." % host)
+                platforms = [p for p in platforms if p == host]
 
     built: List[str] = []
     failed: List[str] = []
@@ -390,7 +479,10 @@ def main(argv: List[str]) -> int:
         log("")
         log("── %s" % platform_name)
         try:
-            if platform_name == host:
+            if options.no_docker:
+                binary = build_native(platform_name, build_type, jobs,
+                                      windows=(platform_name == "windows-x86_64"))
+            elif platform_name == host:
                 binary = build_native(platform_name, build_type, jobs)
             else:
                 if image is None:

@@ -706,40 +706,44 @@ export default function installWitchShooter($) {
 
     function tickZombies(s, dt) {
         const hero = s.hero.pos();
-        for (let i = s.zombies.length - 1; i >= 0; i--) {
-            const z = s.zombies[i];
+        // Рядом с героем гибнут пачками: удаления копим в $.batch, чтобы
+        // реестр чистился одной уборкой (docs/HIGH_LEVEL_API_PERF.md §3.6).
+        $.batch(() => {
+            for (let i = s.zombies.length - 1; i >= 0; i--) {
+                const z = s.zombies[i];
 
-            if (z.dead) {
-                z.fade -= dt;
-                z.node.alpha(Math.max(0, z.fade / 0.9));
-                if (z.fade <= 0) { z.node.remove(); s.zombies.splice(i, 1); }
-                continue;
+                if (z.dead) {
+                    z.fade -= dt;
+                    z.node.alpha(Math.max(0, z.fade / 0.9));
+                    if (z.fade <= 0) { z.node.remove(); s.zombies.splice(i, 1); }
+                    continue;
+                }
+
+                const p = z.node.pos();
+                const angle = angleTo(p, hero);
+                z.dir = dirIndex(angle);
+                const speed = z.node.attr('speed');
+                z.node.velocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+                z.node.depth(p.y / 1000);
+                z.walk += dt * 5;
+                z.row = Math.floor(z.walk) % 3;
+                z.node.frame(frameIndex(ZOMBIE, z.row, z.dir));
+
+                if (z.hurt > 0) { z.hurt -= dt; z.node.flash('#ff5566', 70); }
+
+                z.bite -= dt;
+                if (Math.hypot(p.x - hero.x, p.y - hero.y) < 30 && z.bite <= 0) {
+                    z.bite = 0.9;
+                    s.hero.damage(7 + Math.floor(s.run / 60));
+                    s.hurt_t = 0.5;
+                    damageFrame(s);
+                    $.sound.playAt(SFX + 'hurt_01.ogg', p, { volume: 0.55, pitch: 1.0, max: 600 });
+                    $.camera.shake(5, 140);
+                    $.fx.shockwave(hero.x, hero.y, { radius: 60, ms: 200, color: '#ff4d6a', width: 4 });
+                    if (s.hero.hp() <= 0) { gameOver(s); return; }
+                }
             }
-
-            const p = z.node.pos();
-            const angle = angleTo(p, hero);
-            z.dir = dirIndex(angle);
-            const speed = z.node.attr('speed');
-            z.node.velocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-            z.node.depth(p.y / 1000);
-            z.walk += dt * 5;
-            z.row = Math.floor(z.walk) % 3;
-            z.node.frame(frameIndex(ZOMBIE, z.row, z.dir));
-
-            if (z.hurt > 0) { z.hurt -= dt; z.node.flash('#ff5566', 70); }
-
-            z.bite -= dt;
-            if (Math.hypot(p.x - hero.x, p.y - hero.y) < 30 && z.bite <= 0) {
-                z.bite = 0.9;
-                s.hero.damage(7 + Math.floor(s.run / 60));
-                s.hurt_t = 0.5;
-                damageFrame(s);
-                $.sound.playAt(SFX + 'hurt_01.ogg', p, { volume: 0.55, pitch: 1.0, max: 600 });
-                $.camera.shake(5, 140);
-                $.fx.shockwave(hero.x, hero.y, { radius: 60, ms: 200, color: '#ff4d6a', width: 4 });
-                if (s.hero.hp() <= 0) { gameOver(s); return; }
-            }
-        }
+        });
     }
 
     function damageZombie(s, z, amount, dir) {

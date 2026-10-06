@@ -16,7 +16,8 @@
 // их проверяет qjs-харнесс без движка.
 // ===========================================================================
 
-import { ctx, Wrapper, TAGS, wrapOne, query, def, defGet, withAlpha, fxRandom } from './core.js';
+import { ctx, Wrapper, TAGS, wrapOne, query, def, defGet, withAlpha, fxRandom,
+         registrySummary } from './core.js';
 import { registerNodeRenderer } from './render.js';
 import { cameraTransform } from './camera.js';
 
@@ -1277,16 +1278,27 @@ export function installTilemap($) {
  * тела пересоздаются здесь — один раз за кадр, а не на каждый тайл.
  */
 export function tickTilemap(dt) {
+    void dt;
+    // Ни одной карты в реестре и ни одного живого состояния — шагу нечего
+    // делать: проход по реестру был чистой потерей (§3.3 отчёта).
+    if (registrySummary('tilemaps', countTilemapNodes) === 0 && STATES.size === 0) return;
+
     const stale = [];
     for (const node of ctx.nodes) if (node.tag === 'tilemap') ensureTilemap(node);
     for (const [node, tm] of STATES) {
-        if (node.removed || ctx.nodes.indexOf(node) < 0) { stale.push(node); continue; }
+        if (node.removed || !node.in_registry) { stale.push(node); continue; }
         if (tm.dirty) rebuildTilemap(tm);
     }
     // Узлы, удалённые до первого tick, снимаем здесь (destroy() не всегда
     // успевает вызвать слушателя, если карта ещё ни разу не строилась).
     for (const node of stale) releaseTilemap(node);
-    void dt;
+}
+
+/** Сколько в реестре узлов-карт: единственное, что ищет кадровый шаг. */
+function countTilemapNodes(nodes) {
+    let count = 0;
+    for (let i = 0; i < nodes.length; i++) if (nodes[i].tag === 'tilemap') count++;
+    return count;
 }
 
 export { STATES as tilemapStates, layerFrames as tilemapLayerFrames };

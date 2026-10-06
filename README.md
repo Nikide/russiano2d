@@ -7,6 +7,7 @@
 
 <p align="center">
   <a href="https://hub.mos.ru/dem4ev48/russiano2d"><b>Исходники на hub.mos.ru</b></a> ·
+  <a href="https://gitverse.ru/Nikide/russiano2d"><b>Зеркало на GitVerse</b></a> ·
   <a href="docs/tutorial-first-game.md">Моя первая игра</a> ·
   <a href="docs/HIGH_LEVEL_API.md">Справочник API</a> ·
   <a href="CHANGELOG.md">Что нового</a>
@@ -15,11 +16,15 @@
 **Russiano2D** — настоящий российский 2D-игровой движок, готовый к дистрибуции
 и к тому, чтобы на нём делали игры. Ядро написано на C, игровая логика — на
 JavaScript; всё общение с движком идёт через одну точку входа — `$`.
-Репозиторий, релизы и CI/CD — на **[hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d)**.
+Основной репозиторий — **[hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d)**,
+зеркало кода — **[gitverse.ru/Nikide/russiano2d](https://gitverse.ru/Nikide/russiano2d)**.
+Готовые сборки под macOS, Linux и Windows лежат в самом репозитории, в
+[`dist/`](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/dist) — качайте оттуда.
 
-* **Полный опенсорс.** Лицензия короткая и человеческая: *«Скажи спасибо автору
-  (можно не вслух), если выпустишь на нём игру»*. Никаких юридических лабиринтов —
-  подробности в [LICENSE](LICENSE).
+* **Игры — твои, делай с ними что хочешь.** Продавай, выкладывай, дари,
+  портируй: отчислений автору движка не нужно, указывать его не обязательно.
+  Создание игр на движке означает принятие политических условий — они коротко
+  и целиком изложены в [LICENSE](LICENSE), прочитайте перед началом.
 * **Ядро — SDL3 и QuickJS-ng.** Графика через SDL_GPU (Vulkan / Metal / DirectX 12),
   физика на Box2D v3, звук на SDL3_mixer, интерфейс на RmlUi, отладка на Dear ImGui.
 * **Высокоуровневое API `$` в стиле jQuery.** Игра компилируется в один исполняемый
@@ -81,10 +86,10 @@ JavaScript; всё общение с движком идёт через одну
 
 ## Как собрать бинарник движка
 
-> **Готовых сборок нет — компилируйте у себя.** Пайплайн в репозитории есть,
-> но у hub.mos.ru для него нет раннера: их защита режет запросы с наших машин
-> (подробности с доказательствами — в [docs/RUNNER.md](docs/RUNNER.md)).
-> Поэтому движок собирается на своём железе, команды ниже.
+> **Хотите просто поиграть — забирайте готовое.** Под Linux и Windows сборки
+> собирает CI на GitVerse по тегу и кладёт в
+> [релизы](https://gitverse.ru/Nikide/russiano2d/releases); сборка под macOS
+> лежит в `dist/` репозитория. Ниже — как собрать самому из исходников.
 
 Нужны **CMake 3.24+**, компилятор с C11 и C++20 (AppleClang, GCC, Clang, MSVC) и
 Git: зависимости тянутся через CMake `FetchContent` при первой конфигурации.
@@ -143,25 +148,43 @@ python3 tools/autobuild.py --with-windows
 
 ### Сборка под Windows и Linux
 
-**Собираем сами.** Пайплайн лежит в репозитории ([.gitlab-ci.yml](.gitlab-ci.yml),
-Linux gcc/clang + Windows MSVC) и проходит линтер GitLab, но запускать его некому:
-раннер на hub.mos.ru завести не удалось — WAF отдаёт `403` на любой запрос
-с нашей стороны, включая скачивание самого раннера. Что именно происходило и
-как это обойти — в [docs/RUNNER.md](docs/RUNNER.md).
+**Готовые сборки лежат в [`dist/`](dist/) этого же репозитория** — отдельной
+выгрузки релизов нет, качать оттуда:
+
+* [dist/ на hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/dist)
+* [dist/ на GitVerse](https://gitverse.ru/Nikide/russiano2d/content/main/dist)
+
+Внутри — пакеты под macOS (arm64), Linux (aarch64) и Windows (x86_64):
+архивы `russiano2d-<платформа>.tar.gz` / `.zip`, распакованные каталоги и
+`SHA256SUMS.txt` для проверки. Собирает и кладёт их туда локальный
+`build_and_push.sh`; он же поднимает версию и ставит тег `vX.Y.Z`.
+
+CI на GitVerse написан ([.gitverse/workflows/release.yaml](.gitverse/workflows/release.yaml)),
+но **выключен** — автоматического запуска у него нет.
+
+Собрать руками:
+
+```bash
+python3 tools/autobuild.py --with-windows        # macOS + Linux + Windows (Docker)
+python3 tools/autobuild.py --no-docker \
+    --platforms linux-x86_64,windows-x86_64      # без Docker, кросс-компиляция MinGW
+```
 
 Под Windows нужен MSVC (или MSYS2/MinGW) и CMake — команды те же, что выше,
 из «x64 Native Tools Command Prompt». Под Linux — то же самое, `cmake` +
 компилятор.
 
-Релиз собирается локально одной командой, без CI:
+Выпуск версии целиком: `build_and_push.sh` поднимает патч-версию
+(`0.1.0 → 0.1.1`), собирает все платформы, коммитит, пушит ветку и тег на оба
+хостинга. Версию можно поднять и отдельно:
 
 ```bash
-python3 tools/release.py --dry-run              # посмотреть план
-python3 tools/release.py --version 0.2.0        # тесты, сборка, dist/, тег
-git push origin v0.2.0
+python3 tools/release.py --bump                 # 0.1.0 → 0.1.1
 ```
 
-**`dist/` в репозиторий не попадает** — это артефакт сборки, он в `.gitignore`.
+**`dist/` лежит в репозитории осознанно** — это и есть раздача готовых сборок
+(поэтому `build_and_push.sh` добавляет его через `git add -f`). Каталог
+исключён из `.gitignore` намеренно.
 
 ### Опции командной строки
 
@@ -269,6 +292,9 @@ $.update(dt => {
 Полный справочник — **[docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md)**,
 разбор подсистем — в **[docs/GAP_ANALYSIS.md](docs/GAP_ANALYSIS.md)** и
 **[docs/highlevel/](docs/highlevel/)**.
+Сколько стоит кадр `$` и что в нём узкое место —
+**[docs/HIGH_LEVEL_API_PERF.md](docs/HIGH_LEVEL_API_PERF.md)** (замеры,
+причины, план правок).
 Первая игра по шагам — **[docs/tutorial-first-game.md](docs/tutorial-first-game.md)**.
 
 Низкоуровневый `engine.*` (текстуры, тела, батчинг, RmlUi, BSP, свет) никуда не
@@ -490,12 +516,12 @@ docs/
   AGENT_API.md              протокол агента
   ARCHITECTURE.md           замысел движка и философия API $
   GAP_ANALYSIS.md           аудит API и пробелы относительно Godot 4.x
+  HIGH_LEVEL_API_PERF.md    производительность $: замеры, причины, план правок
   tutorial-first-game.md    «Моя первая игра»: от hello world до сборки
   tutorial-platformer.md    разбор платформера
   tutorial-menus.md         меню, сцены и переходы
   BUILD.md                  сборка игры в один файл
   RELEASING.md              выпуск релиза
-  RUNNER.md                 раннер CI на Linux-VPS
   highlevel/                справочники подсистем по отдельности
 dist/
   <платформа>/              движок, готовая игра, ассеты и контрольные суммы
@@ -591,6 +617,8 @@ JavaScript. Текстуры (`assets/`), шрифты и разметка ин�
 * [docs/API.md](docs/API.md) — низкоуровневые вызовы `engine.*`
 * [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — замысел движка и философия API `$`
 * [docs/GAP_ANALYSIS.md](docs/GAP_ANALYSIS.md) — аудит API и пробелы относительно Godot 4.x (2D)
+* [docs/HIGH_LEVEL_API_PERF.md](docs/HIGH_LEVEL_API_PERF.md) — сколько стоит кадр `$`: замеры
+  (`tools/bench_highlevel.py`), что влияет на производительность и как это исправить
 * [docs/VFX_PLAN.md](docs/VFX_PLAN.md) — план по VFX: взрывы, ударные волны, render target,
   рантайм-шейдеры, чёрная дыра
 * [docs/highlevel/fx.md](docs/highlevel/fx.md) — `$.fx`: ленты, молнии, ударные волны,
@@ -605,19 +633,53 @@ JavaScript. Текстуры (`assets/`), шрифты и разметка ин�
 * [docs/RELEASING.md](docs/RELEASING.md) — как выпускать релиз и как устроен CI/CD
 * [CHANGELOG.md](CHANGELOG.md) — что менялось по версиям
 
+## Правила проекта
+
+**Контрибьютить сюда нельзя: PR не принимаются.** Проект личный, пишет его
+только автор — не нравится, делайте форк, лицензия это разрешает.
+
+* [CONTRIBUTING.md](CONTRIBUTING.md) — почему так и что делать вместо этого
+  (коротко: форкать)
+* [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — позиция автора: баг-репорты
+  принимаются, пул-реквесты нет, критика мимо, движок пилится всегда
+* [SECURITY.md](SECURITY.md) — куда писать про уязвимости и что уязвимостью
+  не считается
+* [LICENSE](LICENSE) — используй, меняй, продавай свободно; политические
+  условия для тех, кто делает на движке игры
+
 ## Где живёт проект
 
 Проект целиком живёт на отечественном хостинге
-**[hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d)** — там исходники, релизы,
-сборки под Linux и Windows и вся история. Remote один:
+**[hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d)** — там исходники,
+сборки и вся история. Код зеркалится на
+**[gitverse.ru](https://gitverse.ru/Nikide/russiano2d)**.
+
+**Релизы лежат в [`dist/`](dist/) этого репозитория** — отдельной выгрузки нет:
+
+* [dist/ на hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/dist)
+* [dist/ на GitVerse](https://gitverse.ru/Nikide/russiano2d/content/main/dist)
+
+Собирает их туда `build_and_push.sh`: он поднимает версию, собирает все
+платформы, коммитит, пушит ветку и тег `vX.Y.Z` на оба хостинга.
+
+Пуш настроен мульти-пушем: у `origin` две push-цели, поэтому один `git push`
+уходит сразу на оба хостинга.
 
 ```bash
-git push -u origin --all     # ветки (первый раз — с -u)
-git push origin --tags       # теги
-git pull origin main
+git remote -v
+# origin    git@hub.mos.ru:dem4ev48/russiano2d.git  (fetch)
+# origin    git@hub.mos.ru:dem4ev48/russiano2d.git  (push)
+# origin    git@gitverse.ru:Nikide/russiano2d.git   (push)
+# gitverse  git@gitverse.ru:Nikide/russiano2d.git
+
+git push origin main         # ветка — сразу на оба хоста
+git push origin --tags       # теги — тоже на оба
+git push gitverse main       # только на GitVerse
+git pull origin main         # тянет с hub.mos.ru
 ```
 
-Подробности процесса — в [docs/RELEASING.md](docs/RELEASING.md).
+`--mirror` для публикации не используйте: он удаляет на сервере всё, чего нет
+локально. Подробности процесса — в [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Автор
 
@@ -626,11 +688,14 @@ git pull origin main
 
 * Почта: **dem4ev48@gmail.com**
 * Репозиторий: [hub.mos.ru/dem4ev48/russiano2d](https://hub.mos.ru/dem4ev48/russiano2d)
+* Зеркало: [gitverse.ru/Nikide/russiano2d](https://gitverse.ru/Nikide/russiano2d)
 
 ## Лицензия
 
-Лицензия авторская и очень короткая: **используй, меняй, распространяй и продавай
-свободно**; если выпустишь на движке игру — скажи спасибо автору, можно не вслух.
+Лицензия авторская: **используй, меняй, распространяй и продавай движок
+свободно**, игры на нём распространяй как хочешь. Создание игр означает
+принятие политических условий — они коротко изложены в лицензии; если выпустишь
+игру, скажи спасибо автору, можно не вслух.
 
 Полный текст — в [LICENSE](LICENSE). Сторонние компоненты (SDL3, QuickJS-ng, Box2D,
 RmlUi, Dear ImGui, glslang, SPIRV-Cross, шрифты, иконки) остаются под своими

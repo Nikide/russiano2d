@@ -28,7 +28,8 @@
 //     точечных правок. Тема наследуется детьми от родителя.
 // ===========================================================================
 
-import { ctx, TAGS, def, defGet, query, wrapOne, packColor, withAlpha } from './core.js';
+import { ctx, TAGS, def, defGet, query, wrapOne, packColor, withAlpha,
+         registrySummary, touchRegistry } from './core.js';
 import { registerUINodeRenderer } from './render.js';
 
 // ---------------------------------------------------------------------------
@@ -463,6 +464,9 @@ function anchorParentRect(node) {
 function setAnchorOnNode(node, anchors, offsets) {
     node.attrs._anchor = { anchors: { ...anchors }, offsets: { ...offsets } };
     anchors_dirty = true;
+    // Якорь можно повесить и на узел без ui-признака: сводка tickWidgets
+    // считает якорные узлы отдельно, поэтому состав изменился.
+    touchRegistry();
 }
 
 /**
@@ -1455,6 +1459,7 @@ function bringToFront(node) {
     if (i >= 0 && i !== ctx.nodes.length - 1) {
         ctx.nodes.splice(i, 1);
         ctx.nodes.push(node);
+        touchRegistry();   // порядок реестра тоже входит в сводки подсистем
     }
 }
 
@@ -1758,10 +1763,31 @@ function cancelDialog(node) {
 // Кадр
 // ---------------------------------------------------------------------------
 
+/** Сводка подсистемы: ui-узлы и якорные узлы. Пересчитывается при изменении
+ *  реестра, а не каждый кадр (docs/HIGH_LEVEL_API_PERF.md §3.3). */
+function widgetsSummary() {
+    return registrySummary('widgets', (nodes) => {
+        let ui = 0, anchored = 0;
+        for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            if (node.attrs && node.attrs.ui) ui++;
+            if (isAnchored(node)) anchored++;
+        }
+        return { ui, anchored };
+    });
+}
+
 export function tickWidgets(dt) {
     if (!api) return;
     const input = api.input || ctx.input;
     if (!input) return;
+
+    // Без ui-узлов и якорей подсистеме нечего делать: все её проходы (якоря,
+    // раскладка, темы, поля ввода, мышь) идут по ui-узлам, а фокус и модальный
+    // диалог без них невозможны. В сцене из одних спрайтов это 5 полных
+    // обходов реестра впустую.
+    const summary = widgetsSummary();
+    if (summary.ui === 0 && summary.anchored === 0) return;
 
     blink_time += num(dt, 0);
     cursor_visible = (blink_time % 1.06) < 0.53;

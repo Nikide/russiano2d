@@ -359,11 +359,16 @@ export default function installArena($) {
         },
 
         updateBullets(dt, $) {
-            $('.tracer').each((i, b) => {
-                const life = b.data('life') - dt;
-                if (life <= 0) { b.remove(); return; }
-                b.data('life', life);
-                b.move(b.data('vx') * dt, b.data('vy') * dt);
+            // Удаление отживших трассеров — пачкой: внутри $.batch реестр
+            // чистится одной уборкой вместо splice на каждый узел
+            // (см. docs/HIGH_LEVEL_API_PERF.md §3.6).
+            $.batch(() => {
+                $('.tracer').each((i, b) => {
+                    const life = b.data('life') - dt;
+                    if (life <= 0) { b.remove(); return; }
+                    b.data('life', life);
+                    b.move(b.data('vx') * dt, b.data('vy') * dt);
+                });
             });
         },
 

@@ -12,7 +12,8 @@
 // отдаётся в C одним submitSprites().
 // ===========================================================================
 
-import { ctx, wrap, def, TAGS, packColor, withAlpha, fxRandom } from './core.js';
+import { ctx, wrap, def, TAGS, packColor, withAlpha, fxRandom,
+         registrySummary, registryVersion, countUiNodes } from './core.js';
 import { cameraTransform } from './camera.js';
 
 const MAX_SPRITES = 16384;
@@ -26,9 +27,18 @@ let count = 0;
 // Порядок обязан совпадать с порядком конвейеров в render.c.
 const BLEND_NAMES = ['alpha', 'add', 'multiply', 'none'];
 const BLEND_IDS = new Map(BLEND_NAMES.map((n, i) => [n, i]));
+
+// Кэш на одно имя: режим у всех спрайтов кадра почти всегда один и тот же
+// (умолчание или .blend() конкретного узла), а Map.get по строке на КАЖДЫЙ
+// спрайт — это ≈0,5 мкс × 1000 (§3.4, пункт 11 плана).
+let blend_memo_name = null;
+let blend_memo_id = 0;
 function blendId(name) {
+    if (name === blend_memo_name) return blend_memo_id;
     const id = BLEND_IDS.get(name);
-    return id === undefined ? 0 : id;
+    blend_memo_name = name;
+    blend_memo_id = id === undefined ? 0 : id;
+    return blend_memo_id;
 }
 
 // Режим по умолчанию для всех спрайтов кадра: его задаёт $.blend(...)
@@ -874,7 +884,14 @@ fog.on = function () { return fog_params !== null; };
 // Отрисовка узла
 // ---------------------------------------------------------------------------
 
-function nodeTransform(node, cam) {
+// Переиспользуемый прямоугольник узла на экране. Объект {x,y,w,h} на каждый
+// узел каждый кадр — это 1000 malloc в QuickJS (§3.4, пункт 10 плана), поэтому
+// встроенные теги получают общий объект. Свой объект отдаётся только чужим
+// отрисовщикам (`registerNodeRenderer`) и отложенному свету — они вправе
+// сохранить его себе.
+const scratch_t = { x: 0, y: 0, w: 0, h: 0 };
+
+function nodeTransform(node, cam, out) {
     let sx = (node.x - cam.x) * cam.zoom + cam.w / 2 + cam.shake_x;
     let sy = (node.y - cam.y) * cam.zoom + cam.h / 2 + cam.shake_y;
     if (node.shake_timer > 0) {
@@ -883,12 +900,29 @@ function nodeTransform(node, cam) {
         sx += (fxRandom() * 2 - 1) * amp;
         sy += (fxRandom() * 2 - 1) * amp;
     }
-    return {
-        x: sx,
-        y: sy,
-        w: node.w * node.scale_x * cam.zoom,
-        h: node.h * node.scale_y * cam.zoom,
-    };
+    const t = out || { x: 0, y: 0, w: 0, h: 0 };
+    t.x = sx;
+    t.y = sy;
+    t.w = node.w * node.scale_x * cam.zoom;
+    t.h = node.h * node.scale_y * cam.zoom;
+    return t;
+}
+
+/** Копия прямоугольника для тех, кто оставляет его себе (отложенный свет). */
+function copyTransform(t) { return { x: t.x, y: t.y, w: t.w, h: t.h }; }
+
+/**
+ * Список ui-узлов для отрисовки интерфейса. Считается один раз на версию
+ * реестра (см. registrySummary): массив кэша только читается.
+ */
+function collectUiNodes(nodes) {
+    const out = [];
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        // removed — узел удалён внутри $.batch и ждёт уборки реестра.
+        if (!node.removed && node.attrs && node.attrs.ui) out.push(node);
+    }
+    return out;
 }
 
 function baseColor(node) {
@@ -900,12 +934,14 @@ function baseColor(node) {
 function drawWorldNode(node, cam) {
     if (!node.visible || node.alpha <= 0) return;
 
-    const t = nodeTransform(node, cam);
-
     // Свои теги рисует модуль. Проверяем до отсечения: у <tilemap> и
     // <particles> собственный габарит, который общий прямоугольник узла не
     // описывает, и модуль отсекает себя сам, если умеет.
+    // Чужой отрисовщик вправе сохранить прямоугольник — ему отдаём свой объект,
+    // встроенным тегам хватает переиспользуемого.
     const custom = node_renderers.get(node.tag);
+    const t = custom ? nodeTransform(node, cam) : nodeTransform(node, cam, scratch_t);
+
     if (custom) {
         state.stats.nodes++;
         custom(node, t, cam);
@@ -932,7 +968,7 @@ function drawWorldNode(node, cam) {
         // С .shadows(true) и .cone(deg) пятно строится по границе теней
         // (см. drawLightNode), а с .punch(true) — откладывается до тумана.
         if (node.attrs.punch && fog_params) {
-            deferred_lights.push({ node, t, cam });
+            deferred_lights.push({ node, t: copyTransform(t), cam });
             break;
         }
         drawLightNode(node, t, cam);
@@ -1019,19 +1055,66 @@ function drawUINode(node) {
 // Сортировка
 // ---------------------------------------------------------------------------
 
+// Список узлов мира переиспользуется между кадрами, а результат сортировки
+// живёт, пока заведомо верен: состав не менялся (версия реестра) и поpядок всё
+// ещё неубывающий. Проверка порядка — O(N) сравнений против O(N log N) сортировки
+// с интерпретируемым компаратором: на 1000 спрайтов это ≈2,7 мс кадра
+// (docs/HIGH_LEVEL_API_PERF.md §3.4, пункт 9 плана).
+let sorted_list = [];
+let sorted_version = -1;
+let sorted_total = -1;
+let sorted_mode = null;
+
+/** Компараторы уровня модуля: замыкание на кадр раньше аллоцировалось каждый раз. */
+function compareByLayer(a, b) {
+    if (a.layer !== b.layer) return a.layer - b.layer;
+    if (a.depth !== b.depth) return a.depth - b.depth;
+    return a.uid - b.uid;
+}
+
+function compareByY(a, b) {
+    if (a.layer !== b.layer) return a.layer - b.layer;
+    if (a.y !== b.y) return a.y - b.y;
+    return a.uid - b.uid;
+}
+
+function isOrdered(list, compare) {
+    for (let i = 1; i < list.length; i++) {
+        if (compare(list[i - 1], list[i]) > 0) return false;
+    }
+    return true;
+}
+
 function sortedNodes() {
     const world = ctx.world;
     const mode = world ? world._state.sort_mode : 'layer';
     const fn = world ? world._state.sort_fn : null;
-    const list = ctx.nodes.filter((n) => !n.attrs.ui);
-    if (fn) { list.sort(fn); return list; }
-    list.sort((a, b) => {
-        if (a.layer !== b.layer) return a.layer - b.layer;
-        if (mode === 'y') return a.y - b.y;
-        if (a.depth !== b.depth) return a.depth - b.depth;
-        return a.uid - b.uid;
-    });
-    return list;
+    const ui = registrySummary('ui_nodes', countUiNodes);
+    const total = ctx.nodes.length - ui;
+
+    // Кэш годится, если состав реестра не менялся и массив всё ещё неубывающий.
+    // Второе условие — полная проверка корректности: если порядок не нарушен,
+    // результат совпадает с тем, что дала бы сортировка (компаратор — полный
+    // порядок с добивкой по uid), а смена layer/depth без нарушения порядка
+    // ничего не меняет.
+    if (!fn && sorted_version === registryVersion() && sorted_total === total
+        && sorted_mode === mode) {
+        const compare = mode === 'y' ? compareByY : compareByLayer;
+        if (isOrdered(sorted_list, compare)) return sorted_list;
+    }
+
+    sorted_list.length = 0;
+    const nodes = ctx.nodes;
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (!node.removed && !node.attrs.ui) sorted_list.push(node);
+    }
+    if (fn) { sorted_list.sort(fn); }
+    else sorted_list.sort(mode === 'y' ? compareByY : compareByLayer);
+    sorted_version = registryVersion();
+    sorted_total = sorted_list.length;
+    sorted_mode = mode;
+    return sorted_list;
 }
 
 // ---------------------------------------------------------------------------
@@ -1274,9 +1357,18 @@ export function installGfx($) {
             // Y-sort карты: tilemap с включённым ysort дорисовывает свои полосы
             // по мере прохода по узлам, чтобы сущности вставали между тайлами.
             // Хуки ставит модуль tilemap; если его нет — цикл как раньше.
-            for (const node of list) {
-                if (ctx.gfx._ysortFlush) ctx.gfx._ysortFlush(cam, node.y);
-                drawWorldNode(node, cam);
+            // Обход по индексу и вынесенный хук: for-of заводит итератор, а
+            // ctx.gfx._ysortFlush читался бы на каждом узле.
+            const flush = ctx.gfx._ysortFlush;
+            const total = list.length;
+            if (flush) {
+                for (let i = 0; i < total; i++) {
+                    const node = list[i];
+                    flush(cam, node.y);
+                    drawWorldNode(node, cam);
+                }
+            } else {
+                for (let i = 0; i < total; i++) drawWorldNode(list[i], cam);
             }
             if (ctx.gfx._ysortFlushEnd) ctx.gfx._ysortFlushEnd(cam);
 
@@ -1321,9 +1413,12 @@ export function installGfx($) {
             // Сцена: спрайты одним вызовом, затем треугольники (они поверх).
             if (count > 0) submitSprites(0, count);
 
-            // Интерфейс — в координатах окна, камера не влияет.
+            // Интерфейс — в координатах окна, камера не влияет. Список ui-узлов
+            // кэширован на версию реестра: раньше это был второй за кадр полный
+            // проход по ctx.nodes (§3.4, пункт 11).
             const ui_start = count;
-            for (const node of ctx.nodes) if (node.attrs.ui) drawUINode(node);
+            const ui_list = registrySummary('ui_list', collectUiNodes);
+            for (let i = 0; i < ui_list.length; i++) drawUINode(ui_list[i]);
             if (count > ui_start) {
                 // UI идёт после треугольников, поэтому отдаём его отдельным
                 // пакетом: сначала сцена, потом интерфейс поверх.
@@ -1381,24 +1476,24 @@ export function installGfx($) {
     // .shadow() — это тень-копия, а .shadows() — тени самого света.
     def('shadows', function (on) {
         if (on === undefined) return this.nodes.length ? !!this.nodes[0].attrs.shadows : false;
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).attrs.shadows = on !== false; });
+        return this.eachNode((_, el) => { (el).attrs.shadows = on !== false; });
     });
     def('cone', function (deg, soft) {
         if (deg === undefined) return this.nodes.length ? this.nodes[0].attrs.cone : undefined;
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.attrs.cone = Math.max(0, Math.min(360, Number(deg) || 0));
             if (soft !== undefined) node.attrs.coneSoft = Math.max(0, Math.min(1, Number(soft)));
         });
     });
     def('punch', function (on) {
         if (on === undefined) return this.nodes.length ? !!this.nodes[0].attrs.punch : false;
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).attrs.punch = on !== false; });
+        return this.eachNode((_, el) => { (el).attrs.punch = on !== false; });
     });
     def('flicker', function (amount, speed) {
         if (amount === undefined) return this.nodes.length ? this.nodes[0].attrs.flicker : null;
-        return this.each((_, el) => {
-            const node = el.nodes ? el.nodes[0] : el;
+        return this.eachNode((_, el) => {
+            const node = el;
             node.attrs.flicker = (amount === false || amount === null) ? null : {
                 amount: Math.max(0, Math.min(1, Number(amount))),
                 speed: speed === undefined ? 7 : Number(speed),
@@ -1407,7 +1502,7 @@ export function installGfx($) {
     });
     def('occluders', function (list) {
         if (list === undefined) return this.nodes.length ? this.nodes[0].attrs.occluders : null;
-        return this.each((_, el) => { (el.nodes ? el.nodes[0] : el).attrs.occluders = list; });
+        return this.eachNode((_, el) => { (el).attrs.occluders = list; });
     });
 
     gfx.light = light_api;

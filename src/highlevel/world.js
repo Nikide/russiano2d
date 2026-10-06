@@ -364,41 +364,42 @@ function rayBox(ox, oy, dx, dy, box) {
 
 // --- Автоматические события мира -------------------------------------------
 // Мир сам рассылает hit/death/spawn: игра не обязана вешать их вручную.
-
-const prev_hp = new Map();
-const prev_visible = new Map();
+//
+// Прошлые hp/visible хранятся в полях самого узла (`_hp_seen`/`_vis_seen`), а
+// не в Map по uid. Числовой ключ в Map в QuickJS стоит ~6,2 мкс, и четыре такие
+// операции на узел съедали 20 мс кадра из 38 при 1000 узлах
+// (docs/HIGH_LEVEL_API_PERF.md §3.1). Карты прошлых значений и их ленивая чистка
+// больше не нужны: данные умирают вместе с узлом.
 
 function worldEvents(dt) {
-    for (const node of ctx.nodes) {
-        const key = node.uid;
-        const was = prev_hp.get(key);
+    void dt;
+    const nodes = ctx.nodes;
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        const was = node._hp_seen;
         if (was === undefined) {
-            prev_hp.set(key, node.cur_hp);
-            prev_visible.set(key, node.visible);
+            // Узел впервые попадает в обход: запоминаем состояние без событий.
+            node._hp_seen = node.cur_hp;
+            node._vis_seen = node.visible;
             continue;
         }
-        if (node.cur_hp < was) {
-            node.emit('hit', { damage: was - node.cur_hp, hp: node.cur_hp });
-        } else if (node.cur_hp > was) {
-            node.emit('heal', { amount: node.cur_hp - was, hp: node.cur_hp });
+        const now_hp = node.cur_hp;
+        if (now_hp < was) {
+            node.emit('hit', { damage: was - now_hp, hp: now_hp });
+        } else if (now_hp > was) {
+            node.emit('heal', { amount: now_hp - was, hp: now_hp });
         }
-        if (was > 0 && node.cur_hp <= 0) {
+        if (was > 0 && now_hp <= 0) {
             node.emit('death', { killer: null });
             node.emit('dead', { killer: null });
         }
-        if (was <= 0 && node.cur_hp > 0) node.emit('respawn', { hp: node.cur_hp });
+        if (was <= 0 && now_hp > 0) node.emit('respawn', { hp: now_hp });
 
-        const was_visible = prev_visible.get(key);
+        const was_visible = node._vis_seen;
         if (was_visible !== node.visible) {
-            prev_visible.set(key, node.visible);
+            node._vis_seen = node.visible;
             node.emit(node.visible ? 'show' : 'hide', {});
         }
-        prev_hp.set(key, node.cur_hp);
-    }
-    // Убираем записи исчезнувших узлов, чтобы карты не росли бесконечно.
-    if (prev_hp.size > ctx.nodes.length * 2 + 128) {
-        const alive = new Set(ctx.nodes.map((n) => n.uid));
-        for (const key of [...prev_hp.keys()]) if (!alive.has(key)) prev_hp.delete(key);
-        for (const key of [...prev_visible.keys()]) if (!alive.has(key)) prev_visible.delete(key);
+        node._hp_seen = now_hp;
     }
 }

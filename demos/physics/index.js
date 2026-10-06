@@ -107,31 +107,35 @@ export default function installPhysics($) {
 
             // Статика и персонаж пересоздаются с нуля: кнопка «Заново» зовёт
             // этот метод повторно, а вторые стены и второй персонаж в мире не
-            // нужны.
-            $('.ground, .edge, #pusher, .box').remove();
+            // нужны. Снос и постройка — одним пакетом: удаления внутри
+            // $.batch убираются из реестра одной уборкой, а не по сплайсу на
+            // узел (docs/HIGH_LEVEL_API_PERF.md §3.6).
+            $.batch(() => {
+                $('.ground, .edge, #pusher, .box').remove();
 
-            // Земля и стены: статичные тела, ящики об них останавливаются.
-            $('<wall>', { class: 'ground' }).at(w / 2, h - GROUND_H / 2).size(w, GROUND_H)
-                .color('#3a2f22').appendTo($.world);
-            $('<wall>', { class: 'edge' }).at(12, h / 2).size(24, h)
-                .color('#232d3d').appendTo($.world);
-            $('<wall>', { class: 'edge' }).at(w - 12, h / 2).size(24, h)
-                .color('#232d3d').appendTo($.world);
+                // Земля и стены: статичные тела, ящики об них останавливаются.
+                $('<wall>', { class: 'ground' }).at(w / 2, h - GROUND_H / 2).size(w, GROUND_H)
+                    .color('#3a2f22').appendTo($.world);
+                $('<wall>', { class: 'edge' }).at(12, h / 2).size(24, h)
+                    .color('#232d3d').appendTo($.world);
+                $('<wall>', { class: 'edge' }).at(w - 12, h / 2).size(24, h)
+                    .color('#232d3d').appendTo($.world);
 
-            // Персонаж: ходит и прыгает встроенным управлением, толкает ящики.
-            $('<player>', { id: 'pusher' })
-                .at(w * 0.28, h - 160).size(30, 44)
-                .frames(CHAR_FRAME).frame(0)
-                .controls('both')
-                .attr({ speed: 280, jumpForce: 640 })
-                .appendTo($.world);
+                // Персонаж: ходит и прыгает встроенным управлением, толкает ящики.
+                $('<player>', { id: 'pusher' })
+                    .at(w * 0.28, h - 160).size(30, 44)
+                    .frames(CHAR_FRAME).frame(0)
+                    .controls('both')
+                    .attr({ speed: 280, jumpForce: 640 })
+                    .appendTo($.world);
 
-            // Стартовая горка ящиков — чтобы физика была видна сразу.
-            for (let i = 0; i < 12; i++) {
-                const x = w * 0.62 + (i % 3) * (BOX + 4);
-                const y = h - GROUND_H - 30 - Math.floor(i / 3) * (BOX + 4);
-                this.spawnBox($, x, y, false);
-            }
+                // Стартовая горка ящиков — чтобы физика была видна сразу.
+                for (let i = 0; i < 12; i++) {
+                    const x = w * 0.62 + (i % 3) * (BOX + 4);
+                    const y = h - GROUND_H - 30 - Math.floor(i / 3) * (BOX + 4);
+                    this.spawnBox($, x, y, false);
+                }
+            });
         },
 
         spawnBox($, x, y, sound = true) {
@@ -152,16 +156,20 @@ export default function installPhysics($) {
         },
 
         addBoxes($, count) {
-            for (let i = 0; i < count; i++) {
-                const x = this.w / 2 + $.random.range(-160, 160);
-                const y = HUD_HEIGHT + 40 + i * 6;
-                this.spawnBox($, x, y, false);
-            }
+            // Пачка ящиков — одним пакетом: реестр и сводки подсистем
+            // пересчитываются один раз на всю пачку (docs/HIGH_LEVEL_API_PERF.md §3.6).
+            $.batch(() => {
+                for (let i = 0; i < count; i++) {
+                    const x = this.w / 2 + $.random.range(-160, 160);
+                    const y = HUD_HEIGHT + 40 + i * 6;
+                    this.spawnBox($, x, y, false);
+                }
+            });
             $.sound.play(SFX.put, { volume: 0.8 });
         },
 
         clearBoxes($) {
-            $('.box').remove();
+            $.batch(() => $('.box').remove());
         },
 
         clamp(x) { return Math.max(40, Math.min(this.w - 40, x)); },

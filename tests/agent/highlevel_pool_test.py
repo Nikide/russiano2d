@@ -84,11 +84,17 @@ def main():
         check(a.eval("globalThis.__s.length") == 1, "spawn физического пула сработал")
         check(a.eval("globalThis.__s.nodes[0].body") >= 0, "spawn создал тело")
         a.eval("globalThis.__s.release()")
-        check(a.eval("globalThis.__s.nodes[0].body") == -1, "release уничтожил тело")
+        # Тело больше не уничтожается: пул держит его выключенным и включает
+        # обратно на spawn (docs/HIGH_LEVEL_API_PERF.md §3.6, пункт 15 плана).
+        check(a.eval("globalThis.__s.nodes[0].body") >= 0, "тело осталось живым")
+        check(a.eval("engine.bodyEnabled(globalThis.__s.nodes[0].body)") is False,
+              "release выключил тело")
         a.eval("globalThis.__s2 = $.pool.spawn('shots')")
         check(a.eval("globalThis.__s2.nodes[0] === globalThis.__s.nodes[0]") is True,
               "узел с телом переиспользован")
-        check(a.eval("globalThis.__s2.nodes[0].body") >= 0, "тело создано заново")
+        check(a.eval("globalThis.__s2.nodes[0].body") >= 0, "тело живо")
+        check(a.eval("engine.bodyEnabled(globalThis.__s2.nodes[0].body)") is True,
+              "spawn включил тело обратно")
         a.eval("globalThis.__s2.release()")
 
         # --- Счётчики подсистем ------------------------------------------------

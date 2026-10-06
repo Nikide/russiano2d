@@ -41,12 +41,12 @@ function makeTree() {
     root.cur_hp = 90;
     root.team = 3;
     root.addTag('boss');
-    root.data_store.set('score', 7);
-    root.data_store.set('flags', { seen: true, notes: [1, 2, 3] });
+    root.dataMap().set('score', 7);
+    root.dataMap().set('flags', { seen: true, notes: [1, 2, 3] });
     root.color = packColor('#ff0000');
     root.setSprite('art/hero.png');
     root.attrs.script = () => {};        // функции обязаны исчезнуть
-    root.data_store.set('callback', () => {});
+    root.dataMap().set('callback', () => {});
 
     const child = new Node('rect', { class: 'hat' });
     child.x = 0;

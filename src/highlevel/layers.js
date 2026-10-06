@@ -26,7 +26,7 @@
 // ===========================================================================
 
 import { ctx, Node, TAGS, wrap, wrapOne, query, def,
-         packColor, withAlpha } from './core.js';
+         packColor, withAlpha, registrySummary, touchRegistry } from './core.js';
 import { registerNodeRenderer } from './render.js';
 import { cameraTransform } from './camera.js';
 
@@ -194,6 +194,7 @@ function setParallaxFactor(node, value) {
     if (value === null || value === undefined) {
         delete node.parallax_factor;
         parallax_state.delete(node);
+        touchRegistry();   // состав параллакс-узлов изменился — сводка устарела
         return;
     }
     const factor = Number(value);
@@ -209,6 +210,7 @@ function setParallaxFactor(node, value) {
     st.last_x = node.x;
     st.last_y = node.y;
     parallax_state.set(node, st);
+    touchRegistry();
 }
 
 /** Один шаг параллакса: применить ожидаемое смещение или перезакрепить якорь. */
@@ -664,7 +666,28 @@ export function installLayers($) {
  * Кадровый шаг подсистемы. Вызывается из игрового цикла (api.js) до отрисовки,
  * чтобы параллакс успел применить позиции к текущему кадру.
  */
+/**
+ * Сводка подсистемы: сколько в реестре слоёв и параллакс-узлов. Оба признака
+ * ищутся в узле, так что полный проход нужен только при изменении реестра
+ * (docs/HIGH_LEVEL_API_PERF.md §3.3).
+ */
+function layersSummary() {
+    return registrySummary('layers', (nodes) => {
+        let layers = 0, parallax = 0;
+        for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            if (node.tag === 'layer') layers++;
+            if (node.parallax_factor !== undefined && node.parallax_factor !== null) parallax++;
+        }
+        return { layers, parallax };
+    });
+}
+
 export function tickLayers(dt) {
+    const summary = layersSummary();
+    // Переход-затемнение живёт вне узлов: пока он идёт, шаг нужен всегда.
+    if (summary.layers === 0 && summary.parallax === 0 && !(fade.ms > 0)) return;
+
     const cam = cameraTransform();
 
     // 1. Слои: порядок по умолчанию, распространение порядка и видимости.

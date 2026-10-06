@@ -138,6 +138,11 @@ void  r2d_physics_apply_impulse(R2DPhysics *p, int id, float ix, float iy);
 void  r2d_physics_set_gravity(R2DPhysics *p, float gx, float gy);
 void  r2d_physics_get_gravity(const R2DPhysics *p, float *gx, float *gy);
 void  r2d_physics_set_awake(R2DPhysics *p, int id, bool awake);
+// Включение/выключение тела: выключенное не сталкивается и не попадает в
+// запросы, но остаётся живым. Нужно пулу объектов, чтобы не пересоздавать
+// тело на каждый spawn (docs/HIGH_LEVEL_API_PERF.md §3.6).
+void  r2d_physics_set_enabled(R2DPhysics *p, int id, bool enabled);
+bool  r2d_physics_is_enabled(const R2DPhysics *p, int id);
 // Множитель гравитации для конкретного тела: 0 — тело не падает (снаряды,
 // парящие объекты), 1 — обычное поведение, отрицательное — «вверх».
 void  r2d_physics_set_gravity_scale(R2DPhysics *p, int id, float scale);

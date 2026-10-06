@@ -760,15 +760,23 @@ export function installState($) {
     return $;
 }
 
+/** Снимок реестра машин, переиспользуемый между кадрами (Array.from — аллокация
+ *  на каждый кадр, docs/HIGH_LEVEL_API_PERF.md §3.3). */
+const tick_machines = [];
+
 /**
  * Шаг кадра: update() у всех машин реестра. Машины удалённых узлов
  * отвязываются, но не уничтожаются — их может держать игровой код.
  */
 export function tickState(dt) {
-    for (const machine of Array.from(machines)) {
+    tick_machines.length = 0;
+    for (const machine of machines) tick_machines.push(machine);
+    for (let i = 0; i < tick_machines.length; i++) {
+        const machine = tick_machines[i];
         if (!machine.alive) { machines.delete(machine); continue; }
         const node = machine.node();
         if (node && node.removed) machine.detach();
         machine.update(dt);
     }
+    tick_machines.length = 0;
 }

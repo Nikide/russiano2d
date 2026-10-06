@@ -32,7 +32,8 @@ export function tick<Имя>(dt) { /* необязательно: шаг кад�
 ```js
 import { ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
          packColor, withAlpha, nodeBounds, boundsOverlap, makeRandom,
-         resolveSprite, sheetFrames } from './core.js';
+         resolveSprite, sheetFrames,
+         registrySummary, registryVersion, touchRegistry, countUiNodes } from './core.js';
 import { registerNodeRenderer, registerUINodeRenderer } from './render.js';
 import { cameraTransform } from './camera.js';
 ```
@@ -48,6 +49,46 @@ import { cameraTransform } from './camera.js';
 * `engine` — глобальный низкоуровневый объект (`engine.whiteSprite`,
   `engine.width/height`, `engine.dt`, `engine.rgba`, `engine.createBody`,
   `engine.submitSprites`, `engine.raycast`, …).
+
+### Кадровый шаг не должен сканировать реестр
+
+Тик-функция обязана выходить на первой строке, если её узлов в мире нет:
+полный обход `ctx.nodes` в каждой подсистеме — это ≈20 проходов за кадр
+(`docs/HIGH_LEVEL_API_PERF.md` §3.3). Для этого в ядре есть сводка с кэшем на
+версию реестра:
+
+```js
+// Предикат живёт в своём модуле; ядро лишь кэширует его результат
+// до следующего изменения реестра (создание/удаление узлов, пул, классы,
+// .attr('ui'|'trigger'), .controls(), якорь, коэффициент параллакса).
+function countMyNodes(nodes) {
+    let n = 0;
+    for (let i = 0; i < nodes.length; i++) if (isMyNode(nodes[i])) n++;
+    return n;
+}
+
+export function tickMine(dt) {
+    if (registrySummary('my_nodes', countMyNodes) === 0) return;   // ни одного
+    ...
+}
+```
+
+Если признак узла меняется в обход `Node.set()` (прямая запись в `attrs` или
+своё поле вроде `node.parallax_factor`) — после изменения зовите
+`touchRegistry()`, иначе подсистема с нулевым счётчиком не заметит новый узел.
+Для ui-узлов готовый предикат — `countUiNodes` (ключ `'ui_nodes'`).
+`registryVersion()` нужен, если модуль держит собственный кэш на версию реестра
+(так сделана сортировка в `render.js`).
+
+Обход коллекции — `wrapper.each((i, el) => …)` (в `el` обёртка) и
+`wrapper.eachNode((i, node) => …)` (в `node` сам узел, без аллокаций). Оба
+объявлены в ядре (`core.js`, класс `Wrapper`), а не в `api.js`, поэтому
+доступны и в юнит-тесте qjs, где `api.js` не поднимается.
+
+Контейнеры узла ленивые: `node.listeners`, `node.data_store` и
+`node.tags_extra` могут быть `null` (создаются при первой записи). Пишите через
+`node.on(...)`, `node.addTag(...)` и `node.dataMap()`, а читайте с проверкой на
+`null` — `node.classes` создаётся всегда.
 
 ## 3. Отрисовка нового тега
 

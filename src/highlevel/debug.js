@@ -128,6 +128,13 @@ export function installDebug($) {
 
         /** Профайлер по кадрам: меряет время между start и end. */
         profiler: {
+            /**
+             * Покадровый профайлер подсистем включён? По умолчанию выключен:
+             * 24 метки за кадр — это 24 вызова engine.now() и 24 поиска в Map
+             * по строке, то есть плата в каждом кадре релизной игры ни за что
+             * (docs/HIGH_LEVEL_API_PERF.md §3.7).
+             */
+            enabled: false,
             /** Текущее время для замеров: монотонные мс от движка. */
             /**
              * Миллисекунды. В движке это монотонные engine.now(); в хосте и
@@ -141,6 +148,21 @@ export function installDebug($) {
                 }
                 return (engine.time || 0) * 1000;
             },
+            /**
+             * Включить/выключить покадровый профайлер подсистем; без аргумента
+             * просто включает. Возвращает сам profiler — для цепочек.
+             *
+             *   $.debug.profiler.on(true);   // начать мерить подсистемы кадра
+             *   …игра…
+             *   $.debug.profiler.report();   // { 'слои': { avg_ms, … }, … }
+             */
+            on(flag) {
+                debug.profiler.enabled = flag === undefined ? true : !!flag;
+                if (!debug.profiler.enabled) timers.clear();
+                return debug.profiler;
+            },
+            /** Включён ли покадровый профайлер. */
+            isOn() { return debug.profiler.enabled; },
             start(name) {
                 // Раньше запись создавалась заново на каждом start(), а start()
                 // зовут каждый кадр — total/calls/max обнулялись, и report()

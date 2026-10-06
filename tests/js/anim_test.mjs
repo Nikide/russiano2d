@@ -417,11 +417,11 @@ test('повторный stateMachine не копит обработчики', (
         transitions: [{ from: 'a', to: 'b', on: 'hurt' }],
     };
     w.stateMachine(spec);
-    eq((node.listeners.get('hurt') || []).length, 1, 'один обработчик после первого вызова');
+    eq((node.listeners ? (node.listeners.get('hurt') || []).length : 0), 1, 'один обработчик после первого вызова');
     w.stateMachine(spec);
-    eq((node.listeners.get('hurt') || []).length, 1, 'повторный вызов не добавляет');
+    eq((node.listeners ? (node.listeners.get('hurt') || []).length : 0), 1, 'повторный вызов не добавляет');
     for (let i = 0; i < 5; i++) w.stateMachine(spec);
-    eq((node.listeners.get('hurt') || []).length, 1, 'семь вызовов — по-прежнему один');
+    eq((node.listeners ? (node.listeners.get('hurt') || []).length : 0), 1, 'семь вызовов — по-прежнему один');
 
     node.emit('hurt', {});
     tickAnim(1 / 60);

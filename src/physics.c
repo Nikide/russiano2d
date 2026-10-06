@@ -401,6 +401,20 @@ void r2d_physics_set_awake(R2DPhysics *p, int id, bool awake)
     b2Body_SetAwake(p->bodies[id], awake);
 }
 
+void r2d_physics_set_enabled(R2DPhysics *p, int id, bool enabled)
+{
+    if (!r2d_physics_is_alive(p, id)) return;
+    if (b2Body_IsEnabled(p->bodies[id]) == enabled) return;
+    if (enabled) b2Body_Enable(p->bodies[id]);
+    else b2Body_Disable(p->bodies[id]);
+}
+
+bool r2d_physics_is_enabled(const R2DPhysics *p, int id)
+{
+    if (!r2d_physics_is_alive(p, id)) return false;
+    return b2Body_IsEnabled(p->bodies[id]);
+}
+
 void r2d_physics_set_gravity_scale(R2DPhysics *p, int id, float scale)
 {
     if (!r2d_physics_is_alive(p, id)) return;

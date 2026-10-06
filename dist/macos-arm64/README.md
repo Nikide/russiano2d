@@ -1,4 +1,4 @@
-# Russiano2D 0.1.0 — macOS Apple Silicon
+# Russiano2D 0.1.1 — macOS Apple Silicon
 
 Готовый движок и всё, что нужно, чтобы начать на нём первый проект.
 
@@ -87,3 +87,4 @@ $.ready(() => {
   локализация, HTTP.
 
 Репозиторий: <https://hub.mos.ru/dem4ev48/russiano2d>
+Зеркало: <https://gitverse.ru/Nikide/russiano2d>

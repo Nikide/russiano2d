@@ -23,7 +23,7 @@
 //     (см. _CONTRACT.md §4); модуль не обращается к engine на верхнем уровне.
 // ===========================================================================
 
-import { ctx, Node, wrapOne, query } from './core.js';
+import { ctx, Node, wrapOne, query, registrySummary } from './core.js';
 
 // ---------------------------------------------------------------------------
 // Чистые функции (экспортируются — тестируются qjs)
@@ -35,8 +35,9 @@ import { ctx, Node, wrapOne, query } from './core.js';
  * Повторяет правила nodeBounds из ядра, но не требует экземпляр Node:
  * хитбокс и масштаб учитываются, если заданы.
  */
-function rectOf(obj) {
-    if (!obj) return { x0: 0, y0: 0, x1: 0, y1: 0 };
+function rectOf(obj, out) {
+    const r = out || { x0: 0, y0: 0, x1: 0, y1: 0 };
+    if (!obj) { r.x0 = r.y0 = r.x1 = r.y1 = 0; return r; }
     const w = obj.hitbox ? obj.hitbox.w : obj.w;
     const h = obj.hitbox ? obj.hitbox.h : obj.h;
     const sx = Math.abs(obj.scale_x === undefined ? 1 : obj.scale_x);
@@ -45,8 +46,14 @@ function rectOf(obj) {
     const hh = ((h === undefined ? 0 : Number(h)) / 2) * (isFinite(sy) ? sy : 1);
     const x = Number(obj.x) || 0;
     const y = Number(obj.y) || 0;
-    return { x0: x - hw, y0: y - hh, x1: x + hw, y1: y + hh };
+    r.x0 = x - hw; r.y0 = y - hh; r.x1 = x + hw; r.y1 = y + hh;
+    return r;
 }
+
+// Переиспользуемые прямоугольники: пара «зона × цель» на каждом кадре давала
+// два новых объекта (docs/HIGH_LEVEL_API_PERF.md §3.3).
+const RECT_A = { x0: 0, y0: 0, x1: 0, y1: 0 };
+const RECT_B = { x0: 0, y0: 0, x1: 0, y1: 0 };
 
 /**
  * Пересекаются ли прямоугольники зоны и узла. Строгое пересечение: общий край
@@ -54,8 +61,8 @@ function rectOf(obj) {
  */
 export function zoneContains(zone, node) {
     if (!zone || !node) return false;
-    const a = rectOf(zone);
-    const b = rectOf(node);
+    const a = rectOf(zone, RECT_A);
+    const b = rectOf(node, RECT_B);
     return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
 }
 
@@ -259,9 +266,19 @@ function pruneWatchers() {
  */
 export function tickTriggers(dt) {
     void dt;
+    // Ни зон, ни наблюдателей — снимок мира (полный проход по реестру) не
+    // нужен никому (§3.3 отчёта). Сводка кэшируется на версию реестра.
+    if (watchers.length === 0 && registrySummary('trigger_zones', countZoneNodes) === 0) return;
     collectFrame();
     for (let i = 0; i < zone_list.length; i++) updateZone(zone_list[i], all_list, body_list);
     updateWatchers();
+}
+
+/** Сколько в реестре узлов-зон (тот же предикат, что у collectFrame). */
+function countZoneNodes(nodes) {
+    let count = 0;
+    for (let i = 0; i < nodes.length; i++) if (isZoneNode(nodes[i])) count++;
+    return count;
 }
 
 // ---------------------------------------------------------------------------

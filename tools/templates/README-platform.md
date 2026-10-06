@@ -87,3 +87,4 @@ $.ready(() => {
   локализация, HTTP.
 
 Репозиторий: <https://hub.mos.ru/dem4ev48/russiano2d>
+Зеркало: <https://gitverse.ru/Nikide/russiano2d>

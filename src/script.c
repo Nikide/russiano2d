@@ -747,15 +747,21 @@ static JSValue r2d__js_create_body(JSContext *ctx, JSValueConst this_val, int ar
 
 // engine.contacts() — события контакта за прошедший шаг: begin/end/hit с
 // нормалью, точкой и скоростью сближения. Копится в C на каждом шаге.
+// Когда событий нет (обычный кадр), отдаём JS_NULL: пустой массив — это
+// аллокация и работа сборщика каждый кадр ни за что (см.
+// docs/HIGH_LEVEL_API_PERF.md §3.3). JS-сторона проверяет на пустоту:
+// dispatchContacts() выходит по !list, $.world.contacts() приводит null к [].
 static JSValue r2d__js_contacts(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
     R2DScript *s = r2d__script_of(ctx);
-    JSValue arr = JS_NewArray(ctx);
-    if (!s || !s->physics) return arr;
+    if (!s || !s->physics) return JS_NULL;
 
     int n = 0;
     const R2DContactEvent *ev = r2d_physics_contacts(s->physics, &n);
+    if (n == 0) return JS_NULL;
+
+    JSValue arr = JS_NewArray(ctx);
     for (int i = 0; i < n; ++i) {
         JSValue o = JS_NewObject(ctx);
         const char *kind = ev[i].kind == R2D_CONTACT_BEGIN ? "begin"
@@ -771,6 +777,20 @@ static JSValue r2d__js_contacts(JSContext *ctx, JSValueConst this_val, int argc,
         JS_SetPropertyUint32(ctx, arr, (uint32_t)i, o);
     }
     return arr;
+}
+
+// engine.setBodyEnabled(body, on) — включить/выключить тело: выключенное не
+// сталкивается и не попадает в запросы, но остаётся живым. Так пул объектов
+// переиспользует тело вместо destroyBody+createBody на каждый spawn.
+static JSValue r2d__js_set_body_enabled(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (s && s->physics) {
+        r2d_physics_set_enabled(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1),
+                                r2d__arg_bool(ctx, argc, argv, 1, true));
+    }
+    return JS_UNDEFINED;
 }
 
 // engine.createJoint({ type, a, b, ax, ay, bx, by, ... }) — сустав между телами.
@@ -850,6 +870,15 @@ static JSValue r2d__js_body_alive(JSContext *ctx, JSValueConst this_val, int arg
     R2DScript *s = r2d__script_of(ctx);
     return JS_NewBool(ctx, s && s->physics &&
                               r2d_physics_is_alive(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+// engine.bodyEnabled(body) — включено ли тело (см. engine.setBodyEnabled).
+static JSValue r2d__js_body_enabled(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewBool(ctx, s && s->physics &&
+                              r2d_physics_is_enabled(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1)));
 }
 
 // Zero-copy: Float32Array смотрит прямо в массив трансформов в C.
@@ -2643,6 +2672,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "createBody", r2d__js_create_body, 1);
     r2d__set_fn(ctx, engine, "destroyBody", r2d__js_destroy_body, 1);
     r2d__set_fn(ctx, engine, "bodyAlive", r2d__js_body_alive, 1);
+    r2d__set_fn(ctx, engine, "bodyEnabled", r2d__js_body_enabled, 1);
     r2d__set_fn(ctx, engine, "getTransforms", r2d__js_get_transforms, 0);
     r2d__set_fn(ctx, engine, "setVelocity", r2d__js_set_velocity, 3);
     r2d__set_fn(ctx, engine, "getVelocity", r2d__js_get_velocity, 1);
@@ -2653,6 +2683,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "setGravity", r2d__js_set_gravity, 2);
     r2d__set_fn(ctx, engine, "getGravity", r2d__js_get_gravity, 0);
     r2d__set_fn(ctx, engine, "setAwake", r2d__js_set_awake, 2);
+    r2d__set_fn(ctx, engine, "setBodyEnabled", r2d__js_set_body_enabled, 2);
     r2d__set_fn(ctx, engine, "setGravityScale", r2d__js_set_gravity_scale, 2);
     r2d__set_fn(ctx, engine, "bodyMass", r2d__js_body_mass, 1);
     r2d__set_fn(ctx, engine, "bodyCount", r2d__js_body_count, 0);

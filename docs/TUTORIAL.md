@@ -290,6 +290,7 @@ $.loading.run([
 
 ```js
 $.debug.profile();          // { zones: [...], unaccounted_ms }
+$.debug.profiler.on(true);  // включить покадровый профайлер подсистем
 $.debug.profiler.report();  // по подсистемам $: сколько мс каждая
 $.debug.profiler.start('своё'); ... $.debug.profiler.end('своё');
 ```

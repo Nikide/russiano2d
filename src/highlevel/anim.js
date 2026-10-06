@@ -23,7 +23,7 @@
 // движка и не создаёт скрытых тел/телепортов из анимации.
 // ===========================================================================
 
-import { ctx, def } from './core.js';
+import { ctx, def, registrySummary, touchRegistry } from './core.js';
 import { easeFunction, easeNames } from './tween.js';
 
 // ---------------------------------------------------------------------------
@@ -274,8 +274,18 @@ function blankPlayer() {
 
 /** Ленивое поле игрока: не трогаем узел, пока анимация не понадобилась. */
 function playerOf(node) {
-    if (!node.__clip) node.__clip = blankPlayer();
+    if (!node.__clip) {
+        node.__clip = blankPlayer();
+        touchRegistry();   // у узла появился клип — сводка tickAnim устарела
+    }
     return node.__clip;
+}
+
+/** Сколько узлов играют клип: единственное, что ищет кадровый шаг. */
+function countClipNodes(nodes) {
+    let count = 0;
+    for (let i = 0; i < nodes.length; i++) if (nodes[i].__clip) count++;
+    return count;
 }
 
 /**
@@ -521,6 +531,9 @@ const tick_list = [];
 
 export function tickAnim(dt) {
     if (!(dt > 0)) return;
+    // Клипов нет ни у кого — обход реестра не нужен (§3.3 отчёта). Счётчик
+    // растёт в clipFor(): там единственное место, где появляется node.__clip.
+    if (registrySummary('anim_clips', countClipNodes) === 0) return;
     tick_list.length = 0;
     const nodes = ctx.nodes;
     for (let i = 0; i < nodes.length; i++) {

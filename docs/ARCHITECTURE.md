@@ -549,7 +549,7 @@ $.ready(() => {
 
 // каждый кадр — ИИ врагов
 $.update(dt => {
-  $('.goblin').each(e => {
+  $('.goblin').each((i, e) => {
     const dist = e.distanceTo('#hero');
     if (dist < 250) {
       e.moveTo('#hero', dt, { speed: 120 });

@@ -17,7 +17,7 @@
 // экспортируются наружу: их проверяет qjs-тест без движка.
 // ===========================================================================
 
-import { ctx } from './core.js';
+import { ctx, registrySummary } from './core.js';
 
 const LANG_KEY = 'i18n.lang';
 
@@ -309,6 +309,8 @@ export function installI18n($) {
  */
 export function tickI18n() {
     if (!state.auto) return;
+    // Ни одного узла с переводом — обход реестра не нужен (§3.3 отчёта).
+    if (registrySummary('i18n_nodes', countTrNodes) === 0) return;
     const fresh = state.node_version !== state.version;
     if (fresh) {
         state.nodes = new WeakSet();   // у WeakSet нет clear()
@@ -320,4 +322,14 @@ export function tickI18n() {
         state.nodes.add(node);
         applyToNode(node);
     }
+}
+
+/** Сколько узлов помечено переводом (attrs.tr): единственное, что ищет шаг. */
+function countTrNodes(nodes) {
+    let count = 0;
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (node.attrs && node.attrs.tr !== undefined) count++;
+    }
+    return count;
 }

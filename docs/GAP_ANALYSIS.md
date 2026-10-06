@@ -44,6 +44,12 @@
 Приоритет: **P1** — без этого движок нельзя назвать полноценным 2D-движком,
 **P2** — сильно ожидаемо в жанре, **P3** — нишевое.
 
+> Проверка от 2026-10-06: столбец «Чего не хватает» местами устарел — перечисленное
+> для анимации, тайлмапа, частиц, навигации, префаба, шин звука, слоёв и UI уже
+> реализовано и задокументировано в `docs/highlevel/`. Актуальный разбор полноты
+> (сколько биндингов `engine.*` обёрнуто, что осталось за бортом, какие пункты этой
+> таблицы всё ещё открыты) — в [HIGH_LEVEL_API_PERF.md](HIGH_LEVEL_API_PERF.md) §4.
+
 | Область Godot 2D | Аналог в Godot | Состояние в `$` | Чего не хватает | Приор. |
 |---|---|---|---|---|
 | Трансформ, иерархия | `Node2D` | есть | `z_as_relative`, наследование `visible`/`modulate` родителем | P2 |
@@ -206,7 +212,7 @@
 | Ввод: deadzone, ребинд с сохранением | `src/highlevel/input.js` | [i18n.md](highlevel/i18n.md) (раздел про ввод) |
 | UI: якоря, проценты, пресеты, темы | `src/highlevel/widgets.js` | [widgets.md](highlevel/widgets.md) |
 | TileMap: Y-sort с сущностями и террейны | `src/highlevel/tilemap.js` | [tilemap.md](highlevel/tilemap.md) |
-| Релизная обвязка: CI на Windows и Linux, changelog, release-скрипт, двойной хостинг | `.gitlab-ci.yml`, `tools/release.py` | [RELEASING.md](RELEASING.md) |
+| Релизная обвязка: CI на Linux и Windows, changelog, release-скрипт, двойной хостинг | `.gitverse/workflows/release.yaml`, `tools/release.py` | [RELEASING.md](RELEASING.md) |
 | Мини-гайд «Моя первая игра» | `docs/tutorial-first-game.md` | — |
 
 ## 6. Третья итерация: тяжёлые куски и сервисы

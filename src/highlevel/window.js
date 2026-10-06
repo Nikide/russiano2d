@@ -20,6 +20,7 @@ const CURSORS = ['normal', 'hidden', 'crosshair', 'hand', 'text', 'wait'];
 // их видит и установка подсистемы, и покадровый опрос (tickWindow).
 const handlers = new Map();
 let last = null;
+let subs = 0;      // живых подписок: handlers.size не годится — в нём остаются пустые массивы
 let api = null;   // ссылка на $, нужна fire() для сообщений об ошибках
 
 function fire(name, data) {
@@ -146,13 +147,29 @@ export function installWindow($) {
         on(name, fn) {
             if (!handlers.has(name)) handlers.set(name, []);
             handlers.get(name).push(fn);
+            subs++;
+            // Пока слушателей не было, состояние окна не опрашивалось, и
+            // сравнивать с устаревшим снимком нельзя: первый же кадр после
+            // подписки прислал бы ложный resize/focus. Берём свежий снимок
+            // «на момент подписки» — ровно то, что видела бы игра раньше.
+            if (last !== null) last = readState();
             return windowApi;
         },
 
         off(name, fn) {
-            if (!name) { handlers.clear(); return windowApi; }
-            if (!fn) { handlers.delete(name); return windowApi; }
-            handlers.set(name, (handlers.get(name) || []).filter((f) => f !== fn));
+            if (!name) { subs = 0; handlers.clear(); return windowApi; }
+            if (!fn) {
+                const list = handlers.get(name);
+                if (list) subs -= list.length;
+                handlers.delete(name);
+                return windowApi;
+            }
+            const list = handlers.get(name);
+            if (list) {
+                const kept = list.filter((f) => f !== fn);
+                subs -= list.length - kept.length;
+                handlers.set(name, kept);
+            }
             return windowApi;
         },
 
@@ -179,16 +196,18 @@ export function installWindow($) {
  */
 export function tickWindow() {
     if (!last) return;   // окно ещё не установлено
-    {
-        const now = readState();
-        if (now.w !== last.w || now.h !== last.h) {
-            fire('resize', { w: now.w, h: now.h, pixel_w: now.pixel_w, pixel_h: now.pixel_h });
-        }
-        if (now.focused !== last.focused) fire(now.focused ? 'focus' : 'blur', now);
-        if (now.visible !== last.visible) fire(now.visible ? 'show' : 'hide', now);
-        if (now.fullscreen !== last.fullscreen) fire('fullscreen', now);
-        last = now;
+    // Никто не слушает окно — не читаем его состояние (6 вызовов C за кадр) и
+    // не строим объект. Так в большинстве игр и бывает (§3.7 отчёта); снимок
+    // для сравнения обновляет сам on() в момент подписки.
+    if (subs === 0) return;
+    const now = readState();
+    if (now.w !== last.w || now.h !== last.h) {
+        fire('resize', { w: now.w, h: now.h, pixel_w: now.pixel_w, pixel_h: now.pixel_h });
     }
+    if (now.focused !== last.focused) fire(now.focused ? 'focus' : 'blur', now);
+    if (now.visible !== last.visible) fire(now.visible ? 'show' : 'hide', now);
+    if (now.fullscreen !== last.fullscreen) fire('fullscreen', now);
+    last = now;
 }
 
 /** Состояние окна для снимка агента (state.window). */

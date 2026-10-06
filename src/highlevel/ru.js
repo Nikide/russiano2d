@@ -172,6 +172,7 @@ export const RU_NAMESPACES = {
     'триггеры': 'triggers',
     'префаб': 'prefab',
     'твин': 'tween',
+    'пачка': 'batch',   // $.пачка(() => { … }) — то же, что $.batch
 };
 
 /**

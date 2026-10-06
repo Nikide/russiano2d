@@ -276,18 +276,38 @@ test('ошибка в обработчике пула не роняет spawn', 
     eq($stub.pool.get('b').active, 1);
 });
 
-test('узлы с телом: release уничтожает тело, spawn создаёт заново', () => {
+test('узлы с телом: release выключает тело, spawn включает его обратно', () => {
     clearPools();
-    const p = $stub.pool.create({ name: 'b', tag: 'bullet', max: 2 });
-    const node = p.spawn({ x: 5, y: 6 }).nodes[0];
-    truthy(node.body >= 0, 'тело создано при выдаче');
-    p.release(node);
-    eq(node.body, -1, 'тело уничтожено при возврате');
-    eq(node.body_kind, null);
-    p.spawn({ x: 8, y: 9 });
-    truthy(node.body >= 0, 'тело пересоздано при повторной выдаче');
-    near(node.x, 8);
-    near(node.y, 9);
+    // Тело больше не уничтожается: пул держит его выключенным (b2Body_Disable)
+    // и переиспользует — иначе каждый spawn стоил бы destroyBody+createBody
+    // (docs/HIGH_LEVEL_API_PERF.md §3.6, пункт 15 плана). Проверяем вызовы.
+    const saved_enabled = engine.setBodyEnabled;
+    const saved_alive = engine.bodyAlive;
+    const enabled = [];
+    engine.setBodyEnabled = (body, on) => { enabled.push([body, on]); };
+    engine.bodyAlive = () => true;
+    try {
+        const p = $stub.pool.create({ name: 'b', tag: 'bullet', max: 2 });
+        const node = p.spawn({ x: 5, y: 6 }).nodes[0];
+        truthy(node.body >= 0, 'тело создано при выдаче');
+        const body = node.body;
+        enabled.length = 0;
+
+        p.release(node);
+        eq(node.body, body, 'тело осталось тем же: переиспользуем');
+        truthy(enabled.some(([id, on]) => id === body && on === false),
+               'при возврате тело выключено');
+
+        enabled.length = 0;
+        p.spawn({ x: 8, y: 9 });
+        truthy(enabled.some(([id, on]) => id === body && on === true),
+               'при выдаче то же тело включено обратно');
+        near(node.x, 8);
+        near(node.y, 9);
+    } finally {
+        engine.setBodyEnabled = saved_enabled;
+        engine.bodyAlive = saved_alive;
+    }
 });
 
 test('spawn/release не падают на неизвестном пуле или чужом узле', () => {
@@ -301,22 +321,23 @@ test('spawn/release не падают на неизвестном пуле ил�
 // Счётчики подсистем
 // ---------------------------------------------------------------------------
 
-test('tickPool обновляет счётчики, $.debug их отдаёт', () => {
+test('tickPool не считает счётчики в кадре, $.debug их отдаёт по запросу', () => {
     clearPools();
     ctx.counters = null;
     const p = $stub.pool.create({ name: 'b', tag: 'rect', max: 4, initial: 1 });
     p.spawn();
     tickPool(1 / 60);
 
-    const c = ctx.counters;
-    truthy(c, 'tickPool записал снимок счётчиков');
+    // Кадровый шаг пула больше не обходит реестр ради счётчиков, которые никто
+    // не читает (docs/HIGH_LEVEL_API_PERF.md §3.3): снимок считается по запросу.
+    eq(ctx.counters, null, 'tickPool не пишет ctx.counters');
+    eq(typeof ctx.debug.counters, 'function');
+    const c = ctx.debug.counters();
     eq(c.pools, 1);
     eq(c.pool_created, 1);
     eq(c.pool_active, 1);
     eq(c.pool_free, 0);
     eq(c.nodes, 1, 'в world-реестре только выданный узел');
-    eq(typeof ctx.debug.counters, 'function');
-    eq(ctx.debug.counters().pool_active, 1);
     truthy(ctx.debug.stats().counters, 'stats() выводит счётчики');
     eq(ctx.debug.stats().counters.pools, 1);
 });
@@ -331,25 +352,35 @@ test('collectCounters считает тела и зоны', () => {
     truthy(c.world_nodes >= 2);
 });
 
-test('свободные (предсозданные) узлы пула не держат тел', () => {
+test('свободные (предсозданные) узлы пула держат выключенные тела', () => {
     clearPools();
     const saved_create = engine.createBody;
     const saved_destroy = engine.destroyBody;
+    const saved_enabled = engine.setBodyEnabled;
+    const saved_alive = engine.bodyAlive;
     let created = 0;
     let destroyed = 0;
+    const disabled = [];
     engine.createBody = () => 100 + created++;
     engine.destroyBody = () => { destroyed++; };
+    engine.setBodyEnabled = (body, on) => { if (!on) disabled.push(body); };
+    engine.bodyAlive = () => true;   // тело выключено, но живо
     try {
         const p = $stub.pool.create({ name: 'bullets', tag: 'bullet', max: 4, initial: 3 });
         eq(created, 3, 'предсоздание создало три тела');
-        eq(destroyed, 3, 'у свободных узлов тела сняты');
+        eq(destroyed, 0, 'тела свободных узлов не уничтожаются, а выключаются');
+        eq(disabled.length, 3, 'все три тела выключены');
         eq(p.stats().free, 3, 'узлы лежат в пуле');
 
         const node = p.spawn().nodes[0];
-        eq(node.body, 103, 'на spawn тело создаётся заново');
+        eq(created, 3, 'новых тел не появилось');
+        truthy(node.body >= 100 && node.body <= 102,
+               'на spawn переиспользовано предсозданное тело, а не создано новое');
     } finally {
         engine.createBody = saved_create;
         engine.destroyBody = saved_destroy;
+        engine.setBodyEnabled = saved_enabled;
+        engine.bodyAlive = saved_alive;
         clearPools();
     }
 });

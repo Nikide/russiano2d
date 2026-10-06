@@ -152,6 +152,35 @@ def check_version(value: str) -> bool:
     return bool(re.fullmatch(r"\d+\.\d+\.\d+", value or ""))
 
 
+def bump_version(current: str) -> str:
+    """Поднять патч-версию на единицу: 0.1.0 → 0.1.1."""
+    if not check_version(current):
+        raise SystemExit("ошибка: версия %r не похожа на x.y.z" % current)
+    major, minor, patch = current.split(".")
+    return "%s.%s.%d" % (major, minor, int(patch) + 1)
+
+
+def run_bump(options: "Options") -> int:
+    """Режим ``--bump``: поднять патч-версию в CMakeLists.txt.
+
+    В stdout уходит ТОЛЬКО новая версия — её подхватывает build_and_push.sh:
+    ``NEW=$(python3 tools/release.py --bump)``. Человеческое сообщение идёт в
+    stderr, чтобы не попасть в подстановку.
+    """
+    current = read_version()
+    new_version = bump_version(current)
+    if options.dry_run:
+        print("Сухой прогон: версия осталась бы %s → %s" % (current, new_version),
+              file=sys.stderr)
+        print(new_version)
+        return 0
+    write_version(new_version)
+    print("Версия в CMakeLists.txt: %s → %s" % (current, new_version),
+          file=sys.stderr)
+    print(new_version)
+    return 0
+
+
 class Runner:
     """Выполняет команды — или только печатает их в режиме ``--dry-run``."""
 
@@ -310,6 +339,7 @@ AGENTS_DOC_ORDER = (
     "docs/tutorial-menus.md",
     "docs/demos.md",
     "docs/GAP_ANALYSIS.md",
+    "docs/HIGH_LEVEL_API_PERF.md",
 )
 
 
@@ -687,7 +717,7 @@ def tag_steps(runner: Runner, version: str, skip_tag: bool) -> None:
         raise SystemExit("ошибка: тег %s уже существует" % tag)
     runner.run(["git", "tag", "-a", tag, "-m", "Russiano2D %s" % version])
     log("    push тегов не делается: это отдельное осознанное действие")
-    log("    git push origin %s && git push mos %s" % (tag, tag))
+    log("    git push origin %s   # уедет и на hub.mos.ru, и на gitverse.ru" % tag)
 
 
 def print_plan_header(args: "Options") -> None:
@@ -716,6 +746,7 @@ class Options:
         self.package_only = False
         self.with_demos = False
         self.force = False
+        self.bump = False
 
 
 def usage() -> str:
@@ -728,6 +759,9 @@ def usage() -> str:
         "                       проверка перед настоящим выпуском)\n"
         "  --package-only       только упаковать готовый бинарник (режим CI):\n"
         "                       без версии, сборки, тестов и тега\n"
+        "  --bump               поднять патч-версию в CMakeLists.txt на 1\n"
+        "                       (0.1.0 → 0.1.1) и напечатать её; больше ничего\n"
+        "                       не делает — этим пользуется build_and_push.sh\n"
         "  --yes                не спрашивать подтверждение (для скриптов)\n"
         "\n"
         "Ключи:\n"
@@ -763,6 +797,8 @@ def parse_args(argv: List[str]) -> Options:
             options.yes = True
         elif arg == "--package-only":
             options.package_only = True
+        elif arg == "--bump":
+            options.bump = True
         elif arg == "--with-demos":
             options.with_demos = True
         elif arg == "--extra":
@@ -819,6 +855,10 @@ def confirm(question: str, assume_yes: bool) -> None:
 def main(argv: List[str]) -> int:
     """Точка входа: собрать план, при необходимости выполнить его."""
     options = parse_args(argv)
+
+    # --bump ничего не собирает и не проверяет: только версия в CMakeLists.txt.
+    if options.bump:
+        return run_bump(options)
 
     current = read_version()
     version = options.version or current
@@ -915,8 +955,9 @@ def main(argv: List[str]) -> int:
     log("")
     log("Готово. Дальше вручную:")
     log("  git push origin main && git push origin v%s" % version)
-    log("  git push mos main && git push mos v%s" % version)
-    log("  проверить выгрузку релиза на hub.mos.ru")
+    log("  (origin пушит сразу на hub.mos.ru и gitverse.ru)")
+    log("  сверка: git ls-remote origin main && git ls-remote gitverse main")
+    log("  проверить релиз на gitverse.ru (его соберёт CI по тегу)")
     return 0
 
 

@@ -263,21 +263,40 @@ export function tickTweens(dt) {
 // Эффекты на узле (живут в самом узле, применяются при отрисовке)
 // ---------------------------------------------------------------------------
 
+// Сколько узлов живёт с активным эффектом (тряска, вспышка, кадры
+// неуязвимости). Точное значение пересчитывается в конце каждого прохода
+// tickEffects — так счётчик самолечится, а setter'ы лишь поднимают флаг
+// входа. Без него подсистема обходила весь реестр каждый кадр впустую
+// (docs/HIGH_LEVEL_API_PERF.md §3.3).
+let fx_live = 0;
+
+/** Сообщить, что у узла появился активный эффект (см. shakeNode/flashNode). */
+export function noteEffect(node) {
+    node._fx = true;
+    fx_live++;
+}
+
 /** Тряска: смещает картинку узла, не трогая его координаты. */
 export function shakeNode(node, intensity, ms) {
     node.shake_amount = intensity;
     node.shake_timer = Math.max(node.shake_timer, ms / 1000);
     node.shake_total = node.shake_timer;
+    if (ms > 0) noteEffect(node);
 }
 
 /** Вспышка цвета: временная подмена тона. */
 export function flashNode(node, color, ms) {
     node.tint = color;
     node.tint_timer = ms / 1000;
+    if (ms > 0) noteEffect(node);
 }
 
 export function tickEffects(dt) {
-    for (const node of ctx.nodes) {
+    if (fx_live === 0) return;
+    let live = 0;
+    const nodes = ctx.nodes;
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         if (node.shake_timer > 0) {
             node.shake_timer -= dt;
             if (node.shake_timer <= 0) { node.shake_timer = 0; node.shake_amount = 0; }
@@ -287,7 +306,20 @@ export function tickEffects(dt) {
             if (node.tint_timer <= 0) { node.tint_timer = 0; node.tint = null; }
         }
         if (node.iframes > 0) node.iframes -= dt;
+        if (node.shake_timer > 0 || node.tint_timer > 0 || node.iframes > 0) live++;
+        else if (node._fx === true) node._fx = false;
     }
+    // Пересчёт по факту: счётчик не может «залипнуть» из-за удалённых узлов,
+    // узлов в пуле или эффектов, поставленных мимо setter'ов.
+    fx_live = live;
+}
+
+/**
+ * Учесть эффекты узла, вернувшегося в реестр из пула: пока узел был снаружи,
+ * tickEffects его не видел и не мог списать счётчик.
+ */
+export function noteNodeEffects(node) {
+    if (node.shake_timer > 0 || node.tint_timer > 0 || node.iframes > 0) noteEffect(node);
 }
 
 /** Последовательность: массив функций, возвращающих Promise, или задержек. */
