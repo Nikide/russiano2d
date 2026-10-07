@@ -250,6 +250,14 @@ export function installInput($) {
             }
             return out;
         },
+        /**
+         * Модификаторы — доступны и из игры: `$.input.ctrlDown()`.
+         * Нужны для Ctrl+C/V/X/A в текстовых полях и для своих сокращений.
+         */
+        shiftDown() { return shiftDown(); },
+        ctrlDown() { return ctrlDown(); },
+        altDown() { return altDown(); },
+
         /** Сколько пальцев на экране. */
         touchCount() {
             const api = engineOf();

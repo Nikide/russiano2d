@@ -1351,6 +1351,75 @@ function editInsert(node, str) {
     return true;
 }
 
+/**
+ * Границы выделения: `{ from, to }` или null. Выделение нужно для Ctrl+A,
+ * Ctrl+C/X — без него «скопировать всё» и «вырезать» не из чего.
+ */
+function selectionOf(node) {
+    const value = inputText(node);
+    const from = num(node.attrs.sel_from, -1);
+    const to = num(node.attrs.sel_to, -1);
+    if (from < 0 || to < 0 || from === to) return null;
+    return { from: Math.min(from, to), to: Math.min(Math.max(from, to), value.length) };
+}
+
+/** Выделенный текст (или пустая строка). */
+function selectionText(node) {
+    const sel = selectionOf(node);
+    return sel ? inputText(node).slice(sel.from, sel.to) : '';
+}
+
+/** Удалить выделение (если есть) и поставить курсор на его место. */
+function editDeleteSelection(node) {
+    const sel = selectionOf(node);
+    if (!sel) return false;
+    const value = inputText(node);
+    node.text = value.slice(0, sel.from) + value.slice(sel.to);
+    node.attrs.cursor = sel.from;
+    node.attrs.sel_from = -1;
+    node.attrs.sel_to = -1;
+    textChanged(node);
+    return true;
+}
+
+/**
+ * Копирование, вырезание и вставка через системный буфер обмена.
+ * Возвращает false, если операция не применима (нет выделения, платформа
+ * отказала) — вызывающий не должен считать это ошибкой.
+ */
+function editClipboard(node, action) {
+    const sel = selectionOf(node);
+    if (action === 'copy') {
+        const text = sel ? selectionText(node) : inputText(node);
+        if (!text) return false;
+        if (typeof engine.setClipboard !== 'function') return false;
+        return !!engine.setClipboard(text);
+    }
+    if (action === 'cut') {
+        const text = sel ? selectionText(node) : inputText(node);
+        if (!text) return false;
+        if (typeof engine.setClipboard === 'function' && !engine.setClipboard(text)) return false;
+        if (sel) editDeleteSelection(node);
+        else { node.text = ''; node.attrs.cursor = 0; textChanged(node); }
+        return true;
+    }
+    if (action === 'paste') {
+        if (typeof engine.clipboard !== 'function') return false;
+        const text = engine.clipboard();
+        if (typeof text !== 'string' || !text) return false;
+        editDeleteSelection(node);          // вставка заменяет выделение
+        return editInsert(node, text);
+    }
+    if (action === 'selectAll') {
+        const value = inputText(node);
+        node.attrs.sel_from = 0;
+        node.attrs.sel_to = value.length;
+        node.attrs.cursor = value.length;
+        return value.length > 0;
+    }
+    return false;
+}
+
 function editEraseBefore(node) {
     const value = inputText(node);
     const cursor = Math.min(num(node.attrs.cursor, value.length), value.length);
@@ -1519,6 +1588,16 @@ function layoutScrollbar(node, box) {
  * который вызывается ПОСЛЕ `tickWidgets` и о диалоге ничего не знает. Без общей
  * проверки клик проходил в контролы под затемнением модального окна.
  */
+/**
+ * Предпросмотр композиции IME для активного поля: `{ text, start }`.
+ * Игра и отрисовка показывают его подчёркнутым. Без IME — пустая строка.
+ */
+export function imePreview() {
+    if (typeof engine.ime !== 'function') return { text: '', start: 0 };
+    const v = engine.ime();
+    return { text: v && v.text ? String(v.text) : '', start: num(v && v.start, 0) };
+}
+
 export function activeDialog() {
     let found = null;
     // Последний по реестру видимый диалог: срез ui-узлов — из индекса.
@@ -1585,21 +1664,64 @@ function tickInputField(node, input) {
     // Ввод за кадр отдаётся движком один раз — забирает его только активное
     // поле, иначе символы «размножились» бы по всем <ui.input>.
     const typed = input.text();
-    if (typed) editInsert(node, typed);
+    if (typed) { editDeleteSelection(node); editInsert(node, typed); }
 
-    if (input.pressed('backspace')) editEraseBefore(node);
-    if (input.pressed('delete')) editEraseAfter(node);
+    // Горячие клавиши буфера обмена. Раньше их не было вовсе: ни Ctrl+C/V/X/A,
+    // ни выделения (docs/TASKS.md §10).
+    const ctrl = input.ctrlDown ? input.ctrlDown() : false;
+    const shift = input.shiftDown ? input.shiftDown() : false;
+    if (ctrl && input.pressed('a')) editClipboard(node, 'selectAll');
+    else if (ctrl && input.pressed('c')) editClipboard(node, 'copy');
+    else if (ctrl && input.pressed('x')) editClipboard(node, 'cut');
+    else if (ctrl && input.pressed('v')) editClipboard(node, 'paste');
+    // Классические альтернативы: Shift+Insert / Shift+Delete / Ctrl+Insert.
+    else if (shift && input.pressed('insert')) editClipboard(node, 'paste');
+    else if (shift && input.pressed('delete')) editClipboard(node, 'cut');
+    else if (ctrl && input.pressed('insert')) editClipboard(node, 'copy');
+
+    if (input.pressed('backspace')) {
+        if (!editDeleteSelection(node)) editEraseBefore(node);
+    }
+    if (input.pressed('delete')) {
+        if (!editDeleteSelection(node)) editEraseAfter(node);
+    }
 
     const value = inputText(node);
     let cursor = Math.min(num(node.attrs.cursor, value.length), value.length);
-    if (input.pressed('left')) cursor = prevBoundary(value, cursor);
-    if (input.pressed('right')) cursor = nextBoundary(value, cursor);
-    if (input.pressed('home')) cursor = 0;
-    if (input.pressed('end')) cursor = value.length;
+
+    // Shift+стрелки выделяют: без этого выделить можно было только целиком
+    // (Ctrl+A). ЯКОРЬ выделения ставится при первом сдвиге с Shift: раньше
+    // sel_from оставался -1, то есть «выделения нет», и Backspace удалял один
+    // символ вместо выделенного куска — нашлось тестом.
+    const extend = (to) => {
+        if (num(node.attrs.sel_from, -1) < 0) node.attrs.sel_from = cursor;
+        node.attrs.sel_to = to;
+        node.attrs.cursor = to;
+        return to;
+    };
+    const collapse = (to) => {
+        node.attrs.sel_from = -1;
+        node.attrs.sel_to = -1;
+        node.attrs.cursor = to;
+        return to;
+    };
+
+    if (input.pressed('left')) cursor = shift ? extend(prevBoundary(value, cursor))
+                                              : collapse(prevBoundary(value, cursor));
+    if (input.pressed('right')) cursor = shift ? extend(nextBoundary(value, cursor))
+                                               : collapse(nextBoundary(value, cursor));
+    if (input.pressed('home')) cursor = shift ? extend(0) : collapse(0);
+    if (input.pressed('end')) cursor = shift ? extend(value.length) : collapse(value.length);
     node.attrs.cursor = cursor;
 
+    // Окно IME показывается у поля: без этого кандидаты всплывали в углу окна.
+    if (typeof engine.textInputArea === 'function') {
+        engine.textInputArea(Math.round(node.x - node.w / 2), Math.round(node.y - node.h / 2),
+                             Math.round(node.w), Math.round(node.h), 0);
+    }
+
     if (input.pressed('enter')) node.emit('submit', { value: value });
-    if (input.pressed('escape')) setFocus(null);
+    if (input.pressed('escape')) { node.attrs.sel_from = -1; node.attrs.sel_to = -1; setFocus(null); }
 }
 
 function tickSliderKeys(node, input) {

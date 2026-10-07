@@ -387,6 +387,10 @@ void r2d_app_shutdown(R2DApp *app)
             app->gamepad_ids[slot] = 0;
         }
     }
+    if (app->clipboard) {
+        SDL_free(app->clipboard);
+        app->clipboard = NULL;
+    }
     if (app->device) {
         if (app->window) {
             SDL_ReleaseWindowFromGPUDevice(app->device, app->window);
@@ -496,6 +500,11 @@ void r2d_app_begin_frame(R2DApp *app)
         app->text_input[0] = '\0';
         app->text_input_len = 0;
     }
+    // Композиция IME живёт до нового события или конца кадра: очищаем здесь,
+    // иначе подчёркнутый предпросмотр «залипал» бы на экране.
+    app->text_editing[0] = '\0';
+    app->text_editing_len = 0;
+    app->text_editing_start = 0;
 
     r2d__open_gamepads(app);
 
@@ -542,6 +551,21 @@ void r2d_app_begin_frame(R2DApp *app)
                 }
             }
             break;
+
+        case SDL_EVENT_TEXT_EDITING: {
+            // Незавершённая композиция IME: показываем подчёркнутой, но текст
+            // НЕ вставляем — он придёт событием TEXT_INPUT. Без этого
+            // пользователь не видел, что набирает на японском или китайском.
+            const char *editing = ev.edit.text ? ev.edit.text : "";
+            const size_t n = SDL_strlen(editing);
+            const size_t cap = sizeof app->text_editing - 1;
+            const size_t take = n > cap ? cap : n;
+            SDL_memcpy(app->text_editing, editing, take);
+            app->text_editing[take] = '\0';
+            app->text_editing_len = (int)take;
+            app->text_editing_start = ev.edit.start;
+            break;
+        }
 
         case SDL_EVENT_GAMEPAD_ADDED:
             r2d__open_gamepads(app);
@@ -851,6 +875,46 @@ bool r2d_pad_rumble_triggers(R2DApp *app, float left, float right, uint32_t dura
     if (!app || !app->gamepads[0]) return false;
     return SDL_RumbleGamepadTriggers(app->gamepads[0], r2d__rumble_amount(left),
                                      r2d__rumble_amount(right), duration_ms);
+}
+
+const char *r2d_app_text_editing(const R2DApp *app)
+{
+    return app ? app->text_editing : "";
+}
+
+int r2d_app_text_editing_start(const R2DApp *app)
+{
+    return app ? app->text_editing_start : 0;
+}
+
+void r2d_app_set_text_input_area(R2DApp *app, int x, int y, int w, int h, int cursor)
+{
+    if (!app || !app->window) return;
+    // SDL ждёт прямоугольник в координатах окна; курсор — смещение от начала
+    // строки в пикселях. Без этого окно кандидатов IME всплывает в углу.
+    const SDL_Rect area = { x, y, w, h };
+    SDL_SetTextInputArea(app->window, &area, cursor);
+}
+
+const char *r2d_app_clipboard(R2DApp *app)
+{
+    if (!app) return NULL;
+    // Копию отдаёт SDL, освобождает вызывающий. Храним её до следующего
+    // чтения: игра читает буфер несколько раз за кадр.
+    if (app->clipboard) {
+        SDL_free(app->clipboard);
+        app->clipboard = NULL;
+    }
+    char *text = SDL_GetClipboardText();
+    app->clipboard = text;
+    return text;
+}
+
+bool r2d_app_set_clipboard(R2DApp *app, const char *text)
+{
+    if (!app) return false;
+    // Пустая строка — законное значение (очистить буфер), NULL — тоже.
+    return SDL_SetClipboardText(text ? text : "");
 }
 
 void r2d_app_resolve_path(const R2DApp *app, char *out, size_t out_size, const char *relative)

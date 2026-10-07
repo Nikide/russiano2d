@@ -86,10 +86,20 @@ typedef struct R2DApp {
     // Виртуальный ввод (агентская команда text) приходит МЕЖДУ кадрами,
     // поэтому сначала попадает в text_pending, а в text_input переносится
     // на ближайшем begin_frame — иначе его стёрло бы очисткой буфера кадра.
-    char text_input[256];
+    char text_input[1024];
     int  text_input_len;
-    char text_pending[256];
+    char text_pending[1024];
     int  text_pending_len;
+    // Предпросмотр IME: незавершённая композиция («nihao» → 你好). Игра
+    // показывает её подчёркнутой, а сам текст приходит отдельным событием.
+    char text_editing[256];
+    int  text_editing_len;
+    int  text_editing_start;   // где началась композиция, в символах UTF-8
+
+    // Буфер обмена: SDL отдаёт копию, её надо освободить SDL_free. Храним
+    // последнее прочитанное значение, чтобы не выделять на каждый кадр.
+    char *clipboard;
+    bool  clipboard_owned;
 
     // --- Геймпады (до четырёх: одновременная игра вчетвером) ---
     //
@@ -238,6 +248,22 @@ bool r2d_pad_connected(const R2DApp *app);
 // раскладки и IME). Пустая строка, если ввода не было. Указатель жив до
 // следующего r2d_app_begin_frame.
 const char *r2d_app_text_input(const R2DApp *app);
+
+// Незавершённая композиция IME (предпросмотр). Пустая строка, если композиции
+// нет. Требует включённого текстового ввода (SDL_StartTextInput).
+const char *r2d_app_text_editing(const R2DApp *app);
+// Где начинается композиция (в байтах UTF-8) — для подчёркивания.
+int r2d_app_text_editing_start(const R2DApp *app);
+// Показать системное окно IME рядом с прямоугольником на экране: без этого
+// кандидаты всплывают в углу окна. Координаты — в логических точках окна.
+void r2d_app_set_text_input_area(R2DApp *app, int x, int y, int w, int h, int cursor);
+
+// --- Буфер обмена -----------------------------------------------------------
+// Текст из буфера обмена (или NULL, если буфера нет/он не текстовый). Указатель
+// жив до следующего чтения или shutdown.
+const char *r2d_app_clipboard(R2DApp *app);
+// Положить текст в буфер обмена. false — платформа отказала.
+bool r2d_app_set_clipboard(R2DApp *app, const char *text);
 
 // Абсолютный путь к файлу внутри каталога запуска (base_path).
 // Результат пишется в out и валиден, пока out не изменён.

@@ -1518,6 +1518,63 @@ static JSValue r2d__js_is_awake(JSContext *ctx, JSValueConst this_val, int argc,
     return JS_NewBool(ctx, r2d_physics_is_awake(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1)));
 }
 
+// --- Буфер обмена и IME -----------------------------------------------
+//
+// Без этого не было ни Ctrl+C/V в текстовых полях, ни предпросмотра
+// композиции: SDL_EVENT_TEXT_EDITING не обрабатывался, а буфер обмена движок
+// вообще не трогал (docs/TASKS.md §10/§12.6).
+
+// engine.clipboard() → string | null — текст из буфера обмена.
+static JSValue r2d__js_clipboard(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NULL;
+    const char *text = r2d_app_clipboard(s->app);
+    if (!text) return JS_NULL;
+    return JS_NewString(ctx, text);
+}
+
+// engine.setClipboard(text) → bool.
+static JSValue r2d__js_set_clipboard(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NewBool(ctx, false);
+    const char *text = argc > 0 ? JS_ToCString(ctx, argv[0]) : NULL;
+    const bool ok = r2d_app_set_clipboard(s->app, text ? text : "");
+    if (text) JS_FreeCString(ctx, text);
+    return JS_NewBool(ctx, ok);
+}
+
+// engine.ime() → { text, start } — незавершённая композиция IME.
+static JSValue r2d__js_ime(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "text",
+                      JS_NewString(ctx, s && s->app ? r2d_app_text_editing(s->app) : ""));
+    JS_SetPropertyStr(ctx, o, "start",
+                      JS_NewInt32(ctx, s && s->app ? r2d_app_text_editing_start(s->app) : 0));
+    return o;
+}
+
+// engine.textInputArea(x, y, w, h, cursor) — где показать окно IME.
+static JSValue r2d__js_text_input_area(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_UNDEFINED;
+    r2d_app_set_text_input_area(s->app,
+                                r2d__arg_int(ctx, argc, argv, 0, 0),
+                                r2d__arg_int(ctx, argc, argv, 1, 0),
+                                r2d__arg_int(ctx, argc, argv, 2, 0),
+                                r2d__arg_int(ctx, argc, argv, 3, 0),
+                                r2d__arg_int(ctx, argc, argv, 4, 0));
+    return JS_UNDEFINED;
+}
+
 // --- Геймпады по слотам и касания -----------------------------------------
 //
 // Слот 0 — «первый геймпад»: старые engine.padDown/padAxis остаются рабочими.
@@ -3720,6 +3777,11 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "setGravityScale", r2d__js_set_gravity_scale, 2);
     r2d__set_fn(ctx, engine, "setBullet", r2d__js_set_bullet, 2);
     // Геймпады по слотам и касания (мультигеймпад, тач-экраны).
+    // Буфер обмена и IME.
+    r2d__set_fn(ctx, engine, "clipboard", r2d__js_clipboard, 0);
+    r2d__set_fn(ctx, engine, "setClipboard", r2d__js_set_clipboard, 1);
+    r2d__set_fn(ctx, engine, "ime", r2d__js_ime, 0);
+    r2d__set_fn(ctx, engine, "textInputArea", r2d__js_text_input_area, 5);
     r2d__set_fn(ctx, engine, "padCount", r2d__js_pad_count, 0);
     r2d__set_fn(ctx, engine, "padSlots", r2d__js_pad_slots, 0);
     r2d__set_fn(ctx, engine, "padConnectedAt", r2d__js_pad_connected_at, 1);
