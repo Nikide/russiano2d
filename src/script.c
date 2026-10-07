@@ -1127,6 +1127,31 @@ static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, J
     return o;
 }
 
+// engine.setSpriteFilter(bool) → bool — фильтрация спрайтов.
+//
+// false (по умолчанию) — nearest: пиксель-арт без размытия. true — линейная:
+// сглаженный масштаб для текста, крупных спрайтов и сильного зума. Режим
+// глобальный, потому что сэмплер один на проход; смена режима разрывает
+// участок отрисовки.
+static JSValue r2d__js_set_sprite_filter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->renderer) return JS_NewBool(ctx, false);
+    const bool linear = r2d__arg_bool(ctx, argc, argv, 0, false);
+    r2d_render_set_filter(s->renderer, linear);
+    return JS_NewBool(ctx, r2d_render_filter(s->renderer));
+}
+
+// engine.spriteFilter() → bool — текущий режим фильтрации.
+static JSValue r2d__js_get_sprite_filter(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->renderer) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_render_filter(s->renderer));
+}
+
 // engine.freeTexture(id) → bool — выгрузить текстуру и вернуть слот.
 //
 // Раньше выгрузки не было вовсе: картинка, ставшая ненужной, занимала слот до
@@ -3151,6 +3176,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "setAwake", r2d__js_set_awake, 2);
     r2d__set_fn(ctx, engine, "isAwake", r2d__js_is_awake, 1);
     r2d__set_fn(ctx, engine, "freeTexture", r2d__js_free_texture, 1);
+    r2d__set_fn(ctx, engine, "setSpriteFilter", r2d__js_set_sprite_filter, 1);
+    r2d__set_fn(ctx, engine, "spriteFilter", r2d__js_get_sprite_filter, 0);
     r2d__set_fn(ctx, engine, "limits", r2d__js_limits, 0);
     r2d__set_fn(ctx, engine, "setBodyEnabled", r2d__js_set_body_enabled, 2);
     r2d__set_fn(ctx, engine, "setBodyFilter", r2d__js_set_body_filter, 4);

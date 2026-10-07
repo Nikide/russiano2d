@@ -1872,6 +1872,23 @@ export function installGfx($) {
         /** Сколько спрайтов/треугольников ушло в кадр — для $.debug.stats(). */
         stats() { return { ...state.stats }; },
 
+        /**
+         * Фильтрация спрайтов: `$.gfx.filter(true)` — линейная (сглаженный
+         * масштаб), `$.gfx.filter(false)` — nearest (пиксель-арт, по
+         * умолчанию), без аргумента — текущий режим.
+         *
+         * Режим глобальный: он выбирает сэмплер для всего прохода. Для
+         * пиксель-арта nearest обязателен, иначе спрайты «мылятся» при
+         * увеличении.
+         */
+        filter(linear) {
+            if (linear === undefined) {
+                return typeof engine.spriteFilter === 'function' ? engine.spriteFilter() : false;
+            }
+            if (typeof engine.setSpriteFilter === 'function') engine.setSpriteFilter(!!linear);
+            return !!linear;
+        },
+
         /** Виды шейдеров узла: flash, dissolve, chroma, wave (+ none). */
         fxKinds() { return fxKinds(); },
 

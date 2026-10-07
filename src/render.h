@@ -90,6 +90,7 @@ typedef struct R2DDrawCmd {
     uint32_t color;
     uint8_t  blend;    // R2DBlendMode, зафиксированный на момент добавления
     uint8_t  fx;       // индекс в таблице шейдеров узла; 0 — обычный спрайт
+    uint8_t  filter;   // 0 — nearest (по умолчанию), 1 — linear
 } R2DDrawCmd;
 
 // Шейдер узла: вид эффекта и его параметры. Юниформа шейдера — два vec4,
@@ -161,6 +162,7 @@ typedef struct R2DRenderer {
     // только когда у спрайта есть эффект (.shader()).
     SDL_GPUGraphicsPipeline *fx_pipelines[R2D_BLEND_COUNT];
     SDL_GPUSampler          *sampler;
+    bool                     filter_linear;  // спрайты с линейной фильтрацией
 
     R2DTexture textures[R2D_MAX_TEXTURES];
     int         texture_count;
@@ -304,6 +306,10 @@ int  r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h);
 // Выгрузка текстуры: GPU-ресурс освобождается, слот переиспользуется, спрайты
 // этой текстуры гасятся. Белую текстуру выгрузить нельзя (вернёт false).
 bool r2d_texture_free(R2DRenderer *r, int id);
+// Фильтрация спрайтов: false — nearest (пиксель-арт, как раньше), true —
+// линейная (сглаженный масштаб: текст, крупные спрайты, зум).
+void r2d_render_set_filter(R2DRenderer *r, bool linear);
+bool r2d_render_filter(const R2DRenderer *r);
 // Сколько живых текстур — для отчёта о лимитах.
 int  r2d_texture_live_count(const R2DRenderer *r);
 bool r2d_texture_upload_region(R2DRenderer *r, int id, int x, int y, int w, int h,

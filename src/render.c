@@ -481,6 +481,16 @@ int r2d_texture_load(R2DRenderer *r, const char *path)
 //
 // Белую текстуру (основа drawRect и nine-slice) выгружать нельзя: движок
 // рисует ею прямоугольники, и без неё развалится интерфейс.
+void r2d_render_set_filter(R2DRenderer *r, bool linear)
+{
+    if (r) r->filter_linear = linear;
+}
+
+bool r2d_render_filter(const R2DRenderer *r)
+{
+    return r ? r->filter_linear : false;
+}
+
 bool r2d_texture_free(R2DRenderer *r, int id)
 {
     if (!r || id < 0 || id >= r->texture_count) return false;
@@ -649,6 +659,7 @@ void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float 
     // проставляет его только на время своего пакета.
     c->blend = r->batch_blend;
     c->fx    = r->batch_fx;
+    c->filter = r->filter_linear ? 1 : 0;
 
     const R2DSprite *sp = &r->sprites[sprite];
     const uint8_t cr = (uint8_t)(color & 0xFF);
@@ -1214,6 +1225,7 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
             (i == to) ||
             (r->sprites[r->cmds[i].sprite].texture != r->sprites[r->cmds[run_start].sprite].texture) ||
             (r->cmds[i].blend != r->cmds[run_start].blend) ||
+            (r->cmds[i].filter != r->cmds[run_start].filter) ||
             (r->cmds[i].fx != r->cmds[run_start].fx);
 
         if (!end_of_run) continue;
@@ -1270,7 +1282,11 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
         SDL_GPUTextureSamplerBinding tex_binding;
         SDL_zero(tex_binding);
         tex_binding.texture = r->textures[texture].handle;
-        tex_binding.sampler = r->sampler;
+        // Фильтр переключается на лету: nearest — пиксель-арт без размытия,
+        // linear — сглаженный масштаб (текст, крупные спрайты). Сэмплер один
+        // на участок, поэтому разные режимы просто разрывают участок.
+        tex_binding.sampler = (r->filter_linear && r->linear_sampler)
+            ? r->linear_sampler : r->sampler;
         SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
 
         const Uint32 first_index = (Uint32)(run_start * 6);
