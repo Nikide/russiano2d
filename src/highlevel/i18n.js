@@ -17,7 +17,7 @@
 // экспортируются наружу: их проверяет qjs-тест без движка.
 // ===========================================================================
 
-import { ctx, nodesWithFacet } from './core.js';
+import { ctx, nodesWithFacet, engineOf } from './core.js';
 
 const LANG_KEY = 'i18n.lang';
 
@@ -65,6 +65,47 @@ export function pluralIndex(count, lang) {
     if (n % 10 === 1 && n % 100 !== 11) return 0;
     if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) return 1;
     return 2;
+}
+
+/**
+ * Выбор КЛИПА — варианта одного текста.
+ *
+ * Локализация — это не только перевод: одну и ту же фразу в озвучке и в
+ * субтитрах нужно уложить в разное время, а короткую подпись на кнопке взять
+ * иначе, чем длинную в диалоге. Поэтому значением ключа может быть СПИСОК
+ * вариантов, а не одна строка.
+ *
+ * `selector` — номер варианта или зерно: `clipIndex(seed, n)` превращает зерно
+ * в стабильный индекс (одно и то же зерно → один и тот же вариант, иначе
+ * реплика «дрожала» бы между кадрами).
+ */
+export function clipIndex(selector, count) {
+    const n = Math.max(1, Math.floor(Number(count) || 1));
+    if (n === 1) return 0;
+    const value = Number(selector);
+    if (!Number.isFinite(value)) return 0;
+    if (Number.isInteger(value) && value >= 0 && value < n) return value;
+    // Зерно перемешиваем: соседние значения иначе давали бы соседние варианты.
+    //
+    // ВАЖНО: Math.imul возвращает ЗНАКОВОЕ 32-битное число, поэтому после него
+    // обязателен `>>> 0`. Без него `h % n` давал отрицательные индексы
+    // (clipIndex(100, 3) → -2), и вариант выбирался за пределами списка —
+    // нашлось тестом на достижимость всех вариантов.
+    let h = Math.floor(value) >>> 0;
+    h ^= h >>> 16;
+    h = Math.imul(h, 0x7feb352d) >>> 0;
+    h = (h ^ (h >>> 15)) >>> 0;
+    return h % n;
+}
+
+/** Список клипов из значения словаря (или null, если это не клипы). */
+export function clipsOf(value) {
+    if (value === undefined || value === null) return null;
+    if (Array.isArray(value)) return value.length ? value : null;
+    if (typeof value === 'object' && Array.isArray(value.clip)) {
+        return value.clip.length ? value.clip : null;
+    }
+    return null;
 }
 
 /**
@@ -143,6 +184,33 @@ function translate(key, params, fallback) {
     return Array.isArray(value) ? format(value[0], params) : format(value, params);
 }
 
+/**
+ * Перевод КЛИПОМ: из списка вариантов берётся один.
+ * Выбор — `params.clip` или третий аргумент (номер или зерно).
+ */
+function translateClip(key, params, selector) {
+    const value = resolve(key);
+    if (value === undefined) {
+        warnMissing(key);
+        return { text: key, index: -1, total: 0 };
+    }
+    const list = clipsOf(value);
+    if (!list) {
+        const plain = Array.isArray(value) ? value[0] : value;
+        return { text: format(plain, params), index: 0, total: 1 };
+    }
+    const pick = selector !== undefined ? selector
+        : (params && params.clip !== undefined ? params.clip : 0);
+    const index = clipIndex(pick, list.length);
+    return { text: format(list[index], params), index, total: list.length };
+}
+
+/** Сколько клипов у ключа (0 — ключа нет или он не список). */
+function clipCount(key) {
+    const list = clipsOf(resolve(key));
+    return list ? list.length : 0;
+}
+
 function translatePlural(key, count, params) {
     const value = resolve(key);
     if (value === undefined) {
@@ -150,19 +218,22 @@ function translatePlural(key, count, params) {
         return key;
     }
     const merged = Object.assign({ n: count }, params || {});
-    if (Array.isArray(value)) {
+    // Формы могут лежать отдельно от клипов: `{ plural: [...], clip: [...] }`.
+    const forms = (value && !Array.isArray(value) && Array.isArray(value.plural))
+        ? value.plural : value;
+    if (Array.isArray(forms)) {
         let index = pluralIndex(count, state.lang);
-        if (index >= value.length) index = value.length - 1;
-        return format(value[index], merged);
+        if (index >= forms.length) index = forms.length - 1;
+        return format(forms[index], merged);
     }
-    return format(value, merged);
+    return format(forms, merged);
 }
 
 /** Прочитать JSON-словарь: через $.fs, а вне движка — напрямую движком. */
 function readJSON(path) {
     const fs = ctx.fs || (ctx.$ && ctx.$.fs);
     if (fs && typeof fs.readJSON === 'function') return fs.readJSON(path, null);
-    const text = engine.fs.readText(path);
+    const text = engineOf().fs.readText(path);
     if (typeof text !== 'string' || text.length === 0) return null;
     try { return JSON.parse(text); }
     catch (e) {
@@ -261,8 +332,33 @@ const i18n = {
     /** Коды всех загруженных языков (по алфавиту). */
     langs() { return [...state.dicts.keys()].sort(); },
 
-    /** Есть ли перевод ключа в текущем языке (или в запасном). */
+    /** Есть ли перевод ключа в текущем языке (или в запасе). */
     has(key) { return resolve(key) !== undefined; },
+
+    /** Перевод (обычный или плюральный): $.i18n.tr('item', 3, { n: 3 }). */
+    tr(key, count, params) {
+        return count === undefined ? translate(key, params)
+                                   : translatePlural(key, count, params);
+    },
+
+    /** Плюральная форма: $.i18n.plural('item', 3). */
+    plural(key, count, params) { return translatePlural(key, count, params); },
+
+    /**
+     * КЛИП: варианты одного текста.
+     *
+     *   $.i18n.add('ru', { 'npc.greet': ['Привет!', 'Здорово!', 'Ага.'] });
+     *   $.i18n.clip('npc.greet', 0)   // → 'Привет!'
+     *   $.i18n.clip('npc.greet', 7)   // → вариант по зерну 7 (всегда тот же)
+     *
+     * Возвращает `{ text, index, total }`: игры часто хотят знать, какой
+     * вариант выпал (озвучка идёт вместе с текстом), поэтому отдаём не только
+     * строку. Для текста — `.text`, для диагностики — остальное.
+     */
+    clip(key, selector, params) { return translateClip(key, selector, params); },
+
+    /** Сколько вариантов-клипов у ключа (0 — ключа нет или он не список). */
+    clipCount(key) { return clipCount(key); },
 
     /**
      * Автоподстановка текста в узлы с attrs.tr. Без аргумента — геттер.
@@ -298,6 +394,10 @@ export function installI18n($) {
         $.i18n = i18n;
         $.tr = (key, params, fallback) => translate(key, params, fallback);
         $.tr.plural = (key, count, params) => translatePlural(key, count, params);
+        // Клипы: текст варианта и НОМЕР варианта тоже — озвучка идёт вместе с
+        // текстом, игре нужно знать, какой файл проигрывать.
+        $.tr.clip = (key, selector, params) => translateClip(key, selector, params).text;
+        $.tr.clipInfo = (key, selector, params) => translateClip(key, selector, params);
     }
     return i18n;
 }
