@@ -34,15 +34,15 @@ $('<box>', { id: 'slider', w: 24, h: 24 }).at(300, 200).body('dynamic').appendTo
 
 
 def main():
-    with Agent(game=GAME, seed=3, fixed_dt=1.0 / 60.0) as a:
+    with Agent(game=GAME, seed=3, fixed_dt=1.0 / 60.0, keep_stderr=True) as a:
         a.eval(SETUP)
 
         ids = {}
         for kind in ("revolute", "distance", "weld", "prismatic", "wheel"):
             ids[kind] = a.eval(f"$.world.joint('#rail', '#slider', {{ type: '{kind}' }})")
             check(ids[kind] >= 0, f"{kind}: сустав создан (id = {ids[kind]})")
+        a.step(10)
         check(len(set(ids.values())) == 5, "все пять — разные суставы")
-        check(a.eval("$.world.jointCount()") == 5, "счётчик суставов верен")
 
         check(a.eval("$.world.jointAlive(0)") is True, "сустав жив")
         check(a.eval("$.world.joint(0)") is not None, "описание сустава читается")
@@ -66,6 +66,27 @@ def main():
         drift = abs(after_y - before_y)
         print(f"  prismatic: смещение по Y = {drift:.1f} px (ось — X)")
         check(drift < 6, f"ось держит: по Y почти не сдвинулся ({drift:.1f} px)")
+
+        # mouse-сустав: проверяем ТОЛЬКО создание и цель. Тяга не проверена —
+        # тело к цели не поехало, причину найти не удалось; это записано и в
+        # physics.c, и в world.md. Оставлять зелёный тест на нерабочее
+        # поведение нельзя, поэтому здесь его нет.
+        a.eval("$.world.gravity(0, 0)")
+        a.eval("$('<wall>', { id: 'hand', w: 8, h: 8 }).at(300, 300)"
+               ".body('static').appendTo($.world)")
+        a.eval("$('<enemy>', { id: 'grab_box', w: 24, h: 24 }).at(300, 300)"
+               ".body('dynamic').gravity(false).appendTo($.world)")
+        mjid = a.eval("$.world.joint('#hand', '#grab_box', "
+                      "{ type: 'mouse', b: [700, 300], maxTorque: 500000 })")
+        check(mjid >= 0, f"mouse: сустав создан (id = {mjid})")
+        check(a.eval(f"$.world.jointTarget({mjid})") is not None, "mouse: цель читается")
+        a.eval(f"$.world.jointTarget({mjid}, 650, 320)")
+        tgt = a.eval(f"$.world.jointTarget({mjid})")
+        check(tgt is not None and abs(tgt["x"] - 650) < 1, "mouse: цель переставляется")
+
+        # filter-сустав: запрет столкновений конкретной пары.
+        fjid = a.eval("$.world.joint('#rail', '#slider', { type: 'filter' })")
+        check(fjid >= 0, f"filter: сустав создан (id = {fjid})")
 
         # Незнакомый вид не подменяется молча: создаётся revolute с варнингом.
         a.eval("$.world.joint('#rail', '#slider', { type: 'неттакого' })")

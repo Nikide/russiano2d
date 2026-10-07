@@ -332,6 +332,17 @@ export function installWorld($) {
             return id;
         },
 
+        /**
+         * Цель mouse-сустава: `$.world.jointTarget(id, x, y)`.
+         * Так игра «тащит» тело мышью — сустав тянет его к точке с
+         * ограниченной силой, без телепортации. Без аргументов читает цель.
+         */
+        jointTarget(id, x, y) {
+            if (x === undefined) return engineOf().jointTarget(id | 0);
+            engineOf().setJointTarget(id | 0, x, y === undefined ? 0 : y);
+            return true;
+        },
+
         destroyJoint(id) {
             if (typeof engine.destroyJoint === 'function') engine.destroyJoint(id);
             return world;

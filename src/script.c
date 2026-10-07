@@ -950,6 +950,8 @@ static JSValue r2d__js_create_joint(JSContext *ctx, JSValueConst this_val, int a
             else if (SDL_strcmp(kind, "prismatic") == 0) type = R2D_JOINT_PRISMATIC;
             else if (SDL_strcmp(kind, "wheel") == 0)     type = R2D_JOINT_WHEEL;
             else if (SDL_strcmp(kind, "revolute") == 0)  type = R2D_JOINT_REVOLUTE;
+            else if (SDL_strcmp(kind, "mouse") == 0)     type = R2D_JOINT_MOUSE;
+            else if (SDL_strcmp(kind, "filter") == 0)    type = R2D_JOINT_FILTER;
             else R2D_WARN("engine.createJoint: неизвестный тип \"%s\" — беру revolute", kind);
             JS_FreeCString(ctx, kind);
         }
@@ -1498,6 +1500,33 @@ static JSValue r2d__js_is_awake(JSContext *ctx, JSValueConst this_val, int argc,
     R2DScript *s = r2d__script_of(ctx);
     if (!s || !s->physics) return JS_NewBool(ctx, false);
     return JS_NewBool(ctx, r2d_physics_is_awake(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+// engine.setJointTarget(id, x, y) / engine.jointTarget(id) — цель mouse-сустава.
+// Мировые пиксели: этим игра тащит тело мышью, не телепортируя его.
+static JSValue r2d__js_set_joint_target(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_UNDEFINED;
+    r2d_physics_set_joint_target(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1),
+                                 (float)r2d__arg_num(ctx, argc, argv, 1, 0),
+                                 (float)r2d__arg_num(ctx, argc, argv, 2, 0));
+    return JS_UNDEFINED;
+}
+
+static JSValue r2d__js_joint_target(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NULL;
+    float x = 0, y = 0;
+    if (!r2d_physics_get_joint_target(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1), &x, &y))
+        return JS_NULL;
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "x", JS_NewFloat64(ctx, x));
+    JS_SetPropertyStr(ctx, o, "y", JS_NewFloat64(ctx, y));
+    return o;
 }
 
 // engine.setBullet(id, on) / engine.isBullet(id) — CCD для тела.
@@ -3546,6 +3575,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "getBodyFilter", r2d__js_get_body_filter, 1);
     r2d__set_fn(ctx, engine, "setGravityScale", r2d__js_set_gravity_scale, 2);
     r2d__set_fn(ctx, engine, "setBullet", r2d__js_set_bullet, 2);
+    r2d__set_fn(ctx, engine, "setJointTarget", r2d__js_set_joint_target, 3);
+    r2d__set_fn(ctx, engine, "jointTarget", r2d__js_joint_target, 1);
     r2d__set_fn(ctx, engine, "isBullet", r2d__js_is_bullet, 1);
     r2d__set_fn(ctx, engine, "bodyMass", r2d__js_body_mass, 1);
     r2d__set_fn(ctx, engine, "bodyCount", r2d__js_body_count, 0);

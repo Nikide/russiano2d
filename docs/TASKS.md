@@ -758,8 +758,9 @@ bootstrap, index, script).
    `$.scene.loadAsync` (task.md); неблокирующий hot reload — `$.script`
    (перезапуск на границе кадра, script.md); выбор GPU-бэкенда и понятный отказ
    D3D12 без DXIL — `--gpu`/`--list-gpu`/`R2D_GPU` (BUILD.md).
-6. **Жанровое (P2):** CCD (`$.world.bullet`) и суставы prismatic/wheel — сделаны;
-   остались pulley/gear/mouse, контакты по
+6. **Жанровое (P2):** CCD (`$.world.bullet`) и суставы prismatic/wheel/mouse/
+   filter — сделаны (у mouse не проверена тяга). `pulley` и `gear` невозможны:
+   их нет в Box2D v3. Остались контакты по
    формам и импульсы, вращение камеры, мультикамерность, touch, мультигеймпад,
    clipboard/IME, клипы локализации и плюрализация, контролы и виртуализация
    списков, a11y и масштаб UI, реплеи.
