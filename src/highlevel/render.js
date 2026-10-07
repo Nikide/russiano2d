@@ -1798,7 +1798,24 @@ function drawWorldPassInner(cam) {
 }
 
 function drawWorldNode(node, cam) {
-    if (!node.visible || node.alpha <= 0) return;
+    // Видимость и прозрачность считаются С УЧЁТОМ родителей: скрытый контейнер
+    // скрывает содержимое, а его прозрачность умножается на детскую.
+    if (!inheritedVisible(node)) return;
+    const eff_alpha = inheritedAlpha(node);
+    if (eff_alpha <= 0) return;
+    // Подменяем alpha на время отрисовки узла: так ВСЕ внутренние ветки (свет,
+    // частицы, текст, контуры) видят эффективное значение, и не приходится
+    // править каждую из них.
+    const own_alpha = node.alpha;
+    if (eff_alpha !== own_alpha) node.alpha = eff_alpha;
+    try {
+        drawWorldNodeClipped(node, cam);
+    } finally {
+        node.alpha = own_alpha;
+    }
+}
+
+function drawWorldNodeClipped(node, cam) {
 
     // Обрезка самого узла: `<...>.clip(true)` или `.clip({x,y,w,h})`. Ставится
     // на время этого узла и возвращается как было — иначе обрезка «протекла» бы
@@ -1980,9 +1997,69 @@ let sorted_total = -1;
 let sorted_mode = null;
 
 /** Компараторы уровня модуля: замыкание на кадр раньше аллоцировалось каждый раз. */
+// ---------------------------------------------------------------------------
+// Наследование от родителя: видимость, прозрачность и глубина
+//
+// Дети в `$` — отдельные узлы плоского реестра, поэтому раньше скрытый
+// контейнер НЕ скрывал содержимое, а прозрачность родителя на детей не
+// влияла: гасишь панель — надписи остаются. Эти функции считают
+// ЭФФЕКТИВНЫЕ значения по цепочке parent_node.
+//
+// Считаем на ходу, а не кэшируем: цепочки короткие, а кэш пришлось бы
+// сбрасывать при каждом изменении любого предка.
+// ---------------------------------------------------------------------------
+
+/**
+ * Видим ли узел С УЧЁТОМ родителей.
+ *
+ * Родитель скрыт → скрыты и дети: иначе «скрыть контейнер» не работает, и это
+ * самая частая причина «почему надпись осталась на экране».
+ */
+export function inheritedVisible(node) {
+    for (let n = node; n; n = n.parent_node) {
+        if (n.visible === false) return false;
+    }
+    return true;
+}
+
+/**
+ * Прозрачность узла С УЧЁТОМ родителей: произведение по цепочке.
+ *
+ * Узел с alpha 0.5 внутри родителя с 0.5 даёт 0.25 — так же, как modulate в
+ * Godot: гасят контейнер, гаснет всё содержимое.
+ */
+export function inheritedAlpha(node) {
+    let a = 1;
+    for (let n = node; n; n = n.parent_node) {
+        const value = Number(n.alpha);
+        if (Number.isFinite(value)) a *= value;
+        if (a <= 0) return 0;
+    }
+    return a;
+}
+
+/**
+ * Глубина (порядок) узла с учётом РОДИТЕЛЯ, если узел помечен `depth_relative`.
+ *
+ * Абсолютная глубина (по умолчанию) — как было: узел сравнивается с другими по
+ * своему `depth`. Относительная складывается с глубиной родителя, поэтому
+ * весь контейнер можно поднять одним вызовом, не пересчитывая детей.
+ */
+export function effectiveDepth(node) {
+    if (!node || node.depth_relative !== true) return Number(node && node.depth) || 0;
+    let depth = 0;
+    for (let n = node; n; n = n.parent_node) {
+        depth += Number(n.depth) || 0;
+        if (n.depth_relative !== true) break;   // родитель абсолютен — он и есть база
+    }
+    return depth;
+}
+
 function compareByLayer(a, b) {
     if (a.layer !== b.layer) return a.layer - b.layer;
-    if (a.depth !== b.depth) return a.depth - b.depth;
+    const da = effectiveDepth(a);
+    const db = effectiveDepth(b);
+    if (da !== db) return da - db;
     return a.uid - b.uid;
 }
 
@@ -2114,6 +2191,14 @@ export function installGfx($) {
 
         /** Сколько разных обрезок было в кадре — для $.debug. */
         clipCount() { return clip_rects.length; },
+
+        // --- Наследование от родителя (для отладки и тестов) ---
+        /** Виден ли узел с учётом родителей. */
+        effectiveVisible(node) { return inheritedVisible(node); },
+        /** Прозрачность с учётом родителей (произведение). */
+        effectiveAlpha(node) { return inheritedAlpha(node); },
+        /** Глубина с учётом родителя, если узел помечен depthRelative. */
+        effectiveDepth(node) { return effectiveDepth(node); },
 
         /**
          * Экранный прямоугольник узла — для `$.gfx.clip(node)`.

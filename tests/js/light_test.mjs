@@ -13,6 +13,7 @@ import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
 import {
     occluderSegments, tileOccluders, rayDistance, circleAngles, sectorAngles,
     lightBoundary, coneAlpha, fogBands, buildLightIndex, lightIndexPick,
+    inheritedVisible, inheritedAlpha, effectiveDepth,
 } from '../../src/highlevel/render.js';
 
 // --- Пересечение луча с отрезком -------------------------------------------
@@ -305,6 +306,67 @@ test('spread задаёт ширину полутени', () => {
     const wide = lightBoundary(0, 0, angles, segs, 400, 1, 4, 0.05);
     near(narrow[i], 100, 0.1);                     // подлучи ещё попадают
     truthy(wide[i] > 300);                         // широкий разброс уводит мимо
+});
+
+// --- Наследование от родителя ---
+// Дети в `$` — отдельные узлы, поэтому раньше скрытый контейнер НЕ скрывал
+// содержимое, а прозрачность родителя на детей не влияла. Эти функции считают
+// эффективные значения по цепочке parent_node.
+
+function node(extra) {
+    return Object.assign({ visible: true, alpha: 1, depth: 0, parent_node: null,
+                           depth_relative: false }, extra);
+}
+
+test('inheritedVisible: родитель скрыт — ребёнок скрыт', () => {
+    const parent = node({ visible: false });
+    const child = node({ parent_node: parent });
+    falsy(inheritedVisible(child), 'скрытый родитель скрывает ребёнка');
+    // Скрытый узел невидим и сам: функция отвечает на вопрос «видно ли ЕГО».
+    falsy(inheritedVisible(parent), 'скрытый узел невидим сам по себе');
+    truthy(inheritedVisible(node({})), 'без родителя видимость своя');
+});
+
+test('inheritedVisible: скрыт ВНУК — важен любой предок', () => {
+    const grand = node({});
+    const parent = node({ parent_node: grand });
+    const child = node({ parent_node: parent });
+    truthy(inheritedVisible(child));
+    grand.visible = false;
+    falsy(inheritedVisible(child), 'скрытие деда скрывает внука');
+});
+
+test('inheritedAlpha: произведение по цепочке', () => {
+    const parent = node({ alpha: 0.5 });
+    const child = node({ alpha: 0.5, parent_node: parent });
+    near(inheritedAlpha(child), 0.25, 1e-9);
+    near(inheritedAlpha(parent), 0.5, 1e-9);
+    const none = node({ parent_node: node({ alpha: 0 }) });
+    eq(inheritedAlpha(none), 0, 'нулевая прозрачность родителя обнуляет всё');
+});
+
+test('effectiveDepth: относительная складывается с родителем', () => {
+    const parent = node({ depth: 10 });
+    const child = node({ depth: 5, parent_node: parent });
+    eq(effectiveDepth(child), 5, 'по умолчанию глубина абсолютная');
+    child.depth_relative = true;
+    eq(effectiveDepth(child), 15, 'относительная складывается с родителем');
+    eq(effectiveDepth(parent), 10, 'родитель остаётся абсолютным');
+});
+
+test('effectiveDepth: цепочка относительных складывается', () => {
+    const grand = node({ depth: 100, depth_relative: true });
+    const parent = node({ depth: 10, depth_relative: true, parent_node: grand });
+    const child = node({ depth: 1, depth_relative: true, parent_node: parent });
+    eq(effectiveDepth(child), 111, 'все три сложились');
+});
+
+test('effectiveDepth: абсолютный родитель — база, дальше не идём', () => {
+    const grand = node({ depth: 1000 });                 // абсолютный
+    const parent = node({ depth: 10, parent_node: grand });
+    const child = node({ depth: 1, depth_relative: true, parent_node: parent });
+    // Родитель абсолютен (depth_relative false) → 10 + 1, дед не учитывается.
+    eq(effectiveDepth(child), 11);
 });
 
 finish();

@@ -884,6 +884,27 @@ function installNodeMethods($) {
     defGet('clipRect', (n) => (n.attrs && n.attrs.clip) ? n.attrs.clip : null, null);
 
     /**
+     * Глубина ОТНОСИТЕЛЬНО родителя: `.depthRelative(true)`.
+     *
+     * Абсолютная (по умолчанию): узел сравнивается с другими по своему `depth`.
+     * Относительная: складывается с глубиной родителя, поэтому весь контейнер
+     * можно поднять одним вызовом, не пересчитывая детей.
+     */
+    def('depthRelative', function (on) {
+        return this.eachNode((_, el) => { (el).depth_relative = on !== false; });
+    });
+    defGet('isDepthRelative', (n) => n.depth_relative === true, false);
+
+    /** Эффективная глубина с учётом родителя — для отладки порядка. */
+    defGet('effectiveDepth', (n) => ctx.gfx.effectiveDepth(n), 0);
+
+    /** Эффективная прозрачность с учётом родителей. */
+    defGet('effectiveAlpha', (n) => ctx.gfx.effectiveAlpha(n), 1);
+
+    /** Виден ли узел с учётом родителей. */
+    defGet('effectivelyVisible', (n) => ctx.gfx.effectiveVisible(n), true);
+
+    /**
      * Добавить телу узла ещё одну ФОРМУ-ЗОНУ: `.zone({ type, w, h, tag })`.
      *
      * Несколько форм на тело — это «попал в голову, а не в ногу»: в

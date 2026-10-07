@@ -210,6 +210,7 @@ $('.enemy').index()                  // позиция первого узла �
 .lookAt('#hero')           // повернуться к цели
 .flip(true, false)         // отразить по осям
 .layer(2) .depth(z)        // порядок отрисовки
+.depthRelative(true)       // depth СКЛАДЫВАЕТСЯ с родителем
 .distanceTo('#enemy')      // → число
 .directionTo('#enemy')     // → { x, y } единичный вектор
 .angleTo('#enemy')         // → радианы
@@ -228,6 +229,8 @@ $('.enemy').index()                  // позиция первого узла �
 .animate({ from: 0, to: 5, speed: 12, loop: true })
 .stopAnim() .playing(false)
 .color('#ff0000') .alpha(0.5) .opacity(0.5)
+// alpha и visible НАСЛЕДУЮТСЯ: скрытый родитель скрывает детей,
+// прозрачности перемножаются (modulate)
 .visible(false) .show() .hide()
 .fadeIn(200) .fadeOut(300)                // → Promise
 .shader('flash', { color: '#ff8080', amount: 0.7 })   // шейдер узла (эффект)
