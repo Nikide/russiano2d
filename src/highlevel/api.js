@@ -13,7 +13,7 @@ import {
     ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
     packColor, withAlpha, registerSelector, nodeBounds, boundsOverlap,
     makeRandom, dotSprite, resolveSprite, sheetFrames, regionSprite,
-    nodesWithFacet, touchRegistry, beginBatch, endBatch,
+    nodesWithFacet, touchRegistry, beginBatch, endBatch, liveNodes,
 } from './core.js';
 import { installWorld } from './world.js';
 import { installCamera } from './camera.js';
@@ -57,7 +57,7 @@ import { installNav, tickNav } from './nav.js';
 import { installPrefab, tickPrefab } from './prefab.js';
 import { installAudiobus, tickAudiobus } from './audiobus.js';
 import { installAcoustics, tickAcoustics } from './acoustics.js';
-import { installLayers, tickLayers } from './layers.js';
+import { installLayers, tickLayers, nodeScreenPos } from './layers.js';
 import { installCollisionLayers } from './collision.js';
 import { installBsp } from './bsp.js';
 import { installWidgets, tickWidgets } from './widgets.js';
@@ -296,6 +296,56 @@ export function createApi() {
     $.sequence = (steps) => sequence(steps);
     $.find = (sel) => query(sel);
     $.count = (sel) => query(sel).length;
+    /**
+     * Верхний мировой узел под курсором (или под точкой `{x, y}`/`[x, y]`).
+     * Интерфейс не участвует: у ui-узлов свой обработчик (`$.ui`).
+     * Порядок — тот же, что у отрисовки: layer, depth, затем Y.
+     */
+    $.pick = function (point) {
+        // Без точки — просто то, что уже подсвечено курсором в этом кадре.
+        if (point === undefined) return ctx.hovered ? wrapOne(ctx.hovered) : wrap([]);
+        const world = resolvePoint(point);
+        // Точка приходит в МИРОВЫХ координатах (как $.input.mouseWorld()), а
+        // попадание считается по нарисованному месту: переводим её на экран.
+        const screen = ctx.camera ? ctx.camera.worldToScreen(world) : world;
+        const zoom = ctx.camera ? (ctx.camera.zoom() || 1) : 1;
+        const nodes = liveNodes();
+        let top = null;
+        let top_score = -Infinity;
+        for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            if (node.attrs && node.attrs.ui) continue;
+            if (!node.visible || node.alpha <= 0) continue;
+            if (node.w <= 0 || node.h <= 0) continue;
+            const np = nodeScreenPos(node);
+            const hw = Math.abs(node.w * (node.scale_x === undefined ? 1 : node.scale_x) * zoom) / 2;
+            const hh = Math.abs(node.h * (node.scale_y === undefined ? 1 : node.scale_y) * zoom) / 2;
+            if (Math.abs(screen.x - np.x) > hw || Math.abs(screen.y - np.y) > hh) continue;
+            const score = (node.layer || 0) * 1e6 + (node.depth || 0) * 1e3 + node.y;
+            if (score >= top_score) { top_score = score; top = node; }
+        }
+        return top ? wrapOne(top) : wrap([]);
+    };
+
+    /** Все мировые узлы под точкой (нижние первыми). */
+    $.pickAll = function (point) {
+        const world = resolvePoint(point);
+        const screen = ctx.camera ? ctx.camera.worldToScreen(world) : world;
+        const zoom = ctx.camera ? (ctx.camera.zoom() || 1) : 1;
+        const found = [];
+        for (const node of liveNodes()) {
+            if (node.attrs && node.attrs.ui) continue;
+            if (!node.visible || node.alpha <= 0 || node.w <= 0 || node.h <= 0) continue;
+            const np = nodeScreenPos(node);
+            const hw = Math.abs(node.w * (node.scale_x === undefined ? 1 : node.scale_x) * zoom) / 2;
+            const hh = Math.abs(node.h * (node.scale_y === undefined ? 1 : node.scale_y) * zoom) / 2;
+            if (Math.abs(screen.x - np.x) <= hw && Math.abs(screen.y - np.y) <= hh) found.push(node);
+        }
+        found.sort((a, b) => ((a.layer || 0) * 1e6 + (a.depth || 0) * 1e3 + a.y)
+                          - ((b.layer || 0) * 1e6 + (b.depth || 0) * 1e3 + b.y));
+        return wrap(found);
+    };
+
     $.isAgent = () => !!engine.agent;
     $.quit = () => engine.quit();
 
@@ -1501,7 +1551,7 @@ function installFrameHooks($) {
         //    состояние мира (анимация, частицы, навигация), затем слои и
         //    интерфейс, последней — шины звука (затухания громкости).
         //    Имя метки — это имя СВОЕГО отрезка: метка ставится до вызова.
-        prof('анимация+ввод'); animateSprites(); applyControls(dt);
+        prof('анимация+ввод'); animateSprites(); tickWorldHover(); applyControls(dt);
         // Клипы, машины состояний и таймлайны тикают игровым временем, а не
         // сырым dt: иначе пауза и масштаб времени двигали твины, но не
         // анимацию персонажа. Интерфейс (экраны, диалоги, виджеты) остаётся
@@ -1669,6 +1719,55 @@ function stepTowards(node, target, speed) {
 }
 
 // --- Встроенное управление (.controls('wasd')) ------------------------------
+
+/**
+ * Попадание курсора в мировые узлы.
+ *
+ * Раньше `:picked` был истиной только для ui-узлов (`hovered` ставил `ui._tick`),
+ * а `$.input.mouseWorld()` не знал о параллаксе: узел в параллакс-слое рисуется
+ * сдвинутым, и клик по нему промахивался на величину сдвига.
+ *
+ * Здесь обходим те узлы, у которых есть габарит и которых не рисует интерфейс:
+ * совпадение по экранному прямоугольнику (zoom учитывается), позиция берётся из
+ * `nodeScreenPos` — она верна и для параллакса.
+ */
+function tickWorldHover() {
+    const nodes = liveNodes();
+    const mx = engine.mouseX;
+    const my = engine.mouseY;
+    const zoom = ctx.camera ? (ctx.camera.zoom() || 1) : 1;
+    let top = null;
+    let top_score = -Infinity;
+
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (node.attrs && node.attrs.ui) continue;
+        if (!node.visible || node.alpha <= 0) continue;
+        if (node.w <= 0 || node.h <= 0) continue;
+
+        const p = nodeScreenPos(node);
+        const hw = Math.abs(node.w * (node.scale_x === undefined ? 1 : node.scale_x) * zoom) / 2;
+        const hh = Math.abs(node.h * (node.scale_y === undefined ? 1 : node.scale_y) * zoom) / 2;
+        const inside = !node._drop_queued &&
+            Math.abs(mx - p.x) <= hw && Math.abs(my - p.y) <= hh;
+        if (inside !== node.attrs.picked) {
+            node.attrs.picked = inside;
+            // :picked читает node.hovered (см. core.js) — держим его в курсе
+            // для мировых узлов; ui-узлами занимается ui._tick.
+            node.hovered = inside;
+            if (inside) node.emit('mouseenter', {});
+            else node.emit('mouseleave', {});
+        }
+        if (!inside) continue;
+
+        // Верхним считается то, что позже в порядке отрисовки: layer, depth, y.
+        const score = (node.layer || 0) * 1e6 + (node.depth || 0) * 1e3 + node.y;
+        if (score >= top_score) { top_score = score; top = node; }
+    }
+
+    ctx.hovered = top;
+    return top;
+}
 
 function applyControls(dt) {
     // Срез управляемых узлов держит индекс реестра: при пустом срезе нет ни

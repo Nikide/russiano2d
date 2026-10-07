@@ -226,6 +226,12 @@ function stepParallax(node, cam) {
     }
     const f = node.parallax_factor;
     const st = parallax_state.get(node) || {};
+    // Экранная позиция ДО сдвига: игровой код сдвигает якорь (телепорт,
+    // .moveTo), и по вычисленному node.x параллакс-узел «промахивался» бы при
+    // клике. Кладём сюда то, где узел нарисован в этом кадре.
+    st.screen_x = node.x;
+    st.screen_y = node.y;
+    st.screen_frame = ctx.time ? ctx.time.frame() : 0;
     if (!Number.isFinite(st.last_x)) { st.ax = node.x - cam.x * (1 - f); st.last_x = node.x; }
     if (!Number.isFinite(st.last_y)) { st.ay = node.y - cam.y * (1 - f); st.last_y = node.y; }
 
@@ -239,6 +245,42 @@ function stepParallax(node, cam) {
     st.last_x = node.x;
     st.last_y = node.y;
     parallax_state.set(node, st);
+}
+
+/**
+ * Экранная позиция узла в текущем кадре.
+ *
+ * Для параллакс-узлов `node.x` — не то, где узел нарисован: подсистема двигает
+ * его сама, а игровое смещение уходит в якорь. Поэтому храним позицию до
+ * сдвига (её пишет stepParallax) и отдаём её из текущего кадра — по ней
+ * работает и попадание курсора, и `:picked`.
+ */
+export function nodeScreenPos(node) {
+    if (!node) return { x: 0, y: 0 };
+    const st = parallax_state.get(node);
+    let scene_x = node.x;
+    let scene_y = node.y;
+    if (st && st.screen_frame !== undefined) {
+        const frame = ctx.time ? ctx.time.frame() : 0;
+        if (st.screen_frame === frame) {
+            scene_x = st.screen_x;
+            scene_y = st.screen_y;
+        }
+    }
+    // Нарисованное место = сцена → экран тем же преобразованием, что в
+    // render.js (nodeTransform): без него попадание считалось бы в мировых
+    // координатах, и клик по любому узлу при сдвинутой камере промахивался.
+    const cam = cameraTransform();
+    const zoom = cam.zoom || 1;
+    // Половина ВИДИМОЙ области — та же формула, что в render.js (nodeTransform),
+    // а не размер окна: параллакс считается от cam.w/cam.h, и если сравнивать с
+    // шириной окна, попадание уезжает ровно на разницу.
+    const half_w = cam.w && cam.w > 0 ? cam.w / 2 : engine.width / 2;
+    const half_h = cam.h && cam.h > 0 ? cam.h / 2 : engine.height / 2;
+    return {
+        x: (scene_x - cam.x) * zoom + half_w + (cam.shake_x || 0),
+        y: (scene_y - cam.y) * zoom + half_h + (cam.shake_y || 0),
+    };
 }
 
 /** Раздать коэффициент потомкам слоя (вложенные слои рулят собой сами). */
