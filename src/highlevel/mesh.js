@@ -54,6 +54,143 @@ export function normalizeAngle(a) {
  * Возвращает объект с `bones()` (имена в порядке родителей), `pose(angles)` и
  * `rest()`.
  */
+// ---------------------------------------------------------------------------
+// Обратная кинематика (IK)
+//
+// Прямая задача — «по углам найти конец» — уже есть в pose(). Обратная: «дай
+// такие углы, чтобы конец цепочки попал в ЦЕЛЬ» — нужна для ступни на
+// неровном полу, руки на рукояти, взгляда на игрока.
+//
+// Две функции, потому что задачи разные:
+//   * для ДВУХ костей есть точное решение (закон косинусов) — быстрое и
+//     предсказуемое, с выбором стороны сгиба;
+//   * для цепочки любой длины — CCD (покоординатный спуск): итеративно
+//     доворачиваем каждую кость, чтобы конец смотрел на цель. Не всегда
+//     оптимально, но сходится и не взрывается.
+// ---------------------------------------------------------------------------
+
+/**
+ * IK для ДВУХ костей: точное решение (закон косинусов).
+ *
+ * `len1`, `len2` — длины; `bend` — сторона сгиба: `+1`/`-1` (по умолчанию +1).
+ *
+ * Если цель дальше вытянутой руки, кости вытягиваются в сторону цели, а
+ * `reached` = false: игра видит, что не дотянулись, и решает сама (обычно —
+ * подвинуть тело). Молча «прилипать» к цели нельзя: это выглядит как рывок.
+ *
+ * Возвращает `{ a1, a2, elbow, reached }` — АБСОЛЮТНЫЕ углы костей, позицию
+ * локтя и признак достижимости.
+ */
+export function solveTwoBoneIK(startX, startY, len1, len2, targetX, targetY, bend) {
+    const dx = targetX - startX;
+    const dy = targetY - startY;
+    const dist = Math.hypot(dx, dy);
+    const reach_max = len1 + len2;
+    const reach_min = Math.abs(len1 - len2);
+    const base = Math.atan2(dy, dx);
+    const side = bend < 0 ? -1 : 1;
+
+    // Цель вне досягаемости: тянемся максимально в её сторону.
+    if (dist >= reach_max || len1 <= 0 || len2 <= 0) {
+        return { a1: base, a2: base, elbow: {
+            x: startX + Math.cos(base) * len1,
+            y: startY + Math.sin(base) * len1,
+        }, reached: dist <= reach_max };
+    }
+    // Цель слишком близко: кости складываются, и угол считается по минимуму.
+    const reach = Math.max(reach_min + 1e-6, dist);
+    const cos_a = (len1 * len1 + reach * reach - len2 * len2) / (2 * len1 * reach);
+    const a1_off = Math.acos(Math.max(-1, Math.min(1, cos_a)));
+    const a1 = base + side * a1_off;
+    const elbow = { x: startX + Math.cos(a1) * len1, y: startY + Math.sin(a1) * len1 };
+    const a2 = Math.atan2(targetY - elbow.y, targetX - elbow.x);
+    return { a1, a2, elbow, reached: true };
+}
+
+/**
+ * IK для цепочки любой длины — FABRIK (прямые и обратные проходы по позициям).
+ *
+ * ПОЧЕМУ НЕ CCD. Я сначала написал CCD (доворачивать каждую кость, чтобы конец
+ * смотрел на цель) — и он застревал намертво на КОЛЛИНЕАРНОМ старте: если все
+ * кости уже вытянуты в сторону цели, `toTip` и `toGoal` совпадают, поворот
+ * выходит нулевым, и цепочка не двигается, хотя конец не дотянулся. Тест это
+ * поймал сразу (промах не менялся вовсе). FABRIK работает с ПОЗИЦИЯМИ суставов
+ * и такой конфигурации не боится.
+ *
+ * `lengths` — длины костей от начала к концу; `opts.iterations` — проходов
+ * (по умолчанию 12); `opts.tolerance` — достаточный промах (по умолчанию 0.5).
+ *
+ * Возвращает `{ angles, reached, distance }`: `angles` — АБСОЛЮТНЫЕ углы.
+ */
+export function solveChainIK(startX, startY, lengths, targetX, targetY, opts) {
+    const o = opts || {};
+    const n = Array.isArray(lengths) ? lengths.length : 0;
+    if (n === 0) return { angles: [], reached: false, distance: Infinity };
+    const iterations = Number.isFinite(Number(o.iterations)) ? Math.max(1, Number(o.iterations)) : 12;
+    const tolerance = Number.isFinite(Number(o.tolerance)) ? Math.max(0, Number(o.tolerance)) : 0.5;
+    const total = lengths.reduce((sum, L) => sum + (Number(L) || 0), 0);
+
+    let distance = Math.hypot(targetX - startX, targetY - startY);
+
+    // Цель дальше вытянутой цепочки: вытягиваем её в сторону цели. Это не
+    // «неудача алгоритма», а честный ответ: reached = false, а игра решает,
+    // подвинуть тело или нет.
+    if (distance >= total) {
+        const a = Math.atan2(targetY - startY, targetX - startX);
+        const angles = new Array(n).fill(a);
+        return { angles, reached: false, distance: distance - total };
+    }
+    if (distance <= 1e-9) {
+        // Цель в самом начале: цепочка должна сложиться — складываем пополам.
+        const angles = new Array(n).fill(0);
+        for (let i = 0; i < n; i++) angles[i] = (i % 2 ? Math.PI : 0);
+        return { angles, reached: true, distance: 0 };
+    }
+
+    // Начальная раскладка: цепочка вытянута в сторону цели.
+    const px = new Array(n + 1);
+    const py = new Array(n + 1);
+    const dir = Math.atan2(targetY - startY, targetX - startX);
+    px[0] = startX; py[0] = startY;
+    for (let i = 0; i < n; i++) {
+        px[i + 1] = px[i] + Math.cos(dir) * lengths[i];
+        py[i + 1] = py[i] + Math.sin(dir) * lengths[i];
+    }
+
+    for (let it = 0; it < iterations; it++) {
+        // Обратный проход: конец в цель, тянем суставы назад.
+        px[n] = targetX;
+        py[n] = targetY;
+        for (let i = n - 1; i >= 0; i--) {
+            let dx = px[i] - px[i + 1];
+            let dy = py[i] - py[i + 1];
+            let len = Math.hypot(dx, dy);
+            if (len < 1e-9) { dx = 1; dy = 0; len = 1; }
+            px[i] = px[i + 1] + (dx / len) * lengths[i];
+            py[i] = py[i + 1] + (dy / len) * lengths[i];
+        }
+        // Прямой проход: начало на месте, тянем суставы вперёд.
+        px[0] = startX;
+        py[0] = startY;
+        for (let i = 0; i < n; i++) {
+            let dx = px[i + 1] - px[i];
+            let dy = py[i + 1] - py[i];
+            let len = Math.hypot(dx, dy);
+            if (len < 1e-9) { dx = Math.cos(dir); dy = Math.sin(dir); len = 1; }
+            px[i + 1] = px[i] + (dx / len) * lengths[i];
+            py[i + 1] = py[i] + (dy / len) * lengths[i];
+        }
+        distance = Math.hypot(targetX - px[n], targetY - py[n]);
+        if (distance <= tolerance) break;
+    }
+
+    const angles = new Array(n);
+    for (let i = 0; i < n; i++) {
+        angles[i] = Math.atan2(py[i + 1] - py[i], px[i + 1] - px[i]);
+    }
+    return { angles, reached: distance <= tolerance, distance };
+}
+
 export function createSkeleton(spec) {
     const raw = spec && typeof spec === 'object' ? spec : {};
     const names = Object.keys(raw);
@@ -255,6 +392,91 @@ export function installMesh($) {
 
         /** Описать часть: вершины, UV, треугольники, кости. */
         part(spec) { return createPart(spec); },
+
+        /**
+         * Обратная кинематика: `$.mesh.ik(rig, angles, target, { chain })`.
+         *
+         * Двигает ЦЕПОЧКУ костей так, чтобы её конец попал в цель: ступня на
+         * неровном полу, рука на рукояти, взгляд на игрока.
+         *
+         * ```js
+         * const rig = $.mesh.skeleton({
+         *     leg1: { x: 100, y: 100, length: 40 },
+         *     leg2: { parent: 'leg1', length: 40 },
+         * });
+         * const solved = $.mesh.ik(rig, {}, { x: 130, y: 170 },
+         *                          { chain: ['leg1', 'leg2'] });
+         * $.mesh.draw(shin, solved.angles, rig);   // нога достала до пола
+         * ```
+         *
+         * `chain` — имена от корня цепочки к концу (обязателен).
+         * `opts.bend` — сторона сгиба для двух костей (+1/-1).
+         * `opts.iterations`, `opts.tolerance` — для длинных цепочек.
+         *
+         * Возвращает `{ angles, reached, distance, tip }`: `angles` — готовый
+         * объект ДОБАВОЧНЫХ углов для `rig.pose()`/`$.mesh.draw()`, `tip` —
+         * куда встал конец.
+         */
+        ik(rig, angles, target, opts) {
+            const o = opts || {};
+            const chain = Array.isArray(o.chain) ? o.chain.slice() : [];
+            if (!rig || !chain.length) {
+                ctx.log('$.mesh.ik: нужен скелет и opts.chain (имена костей)');
+                return null;
+            }
+            const spec = typeof rig.spec === 'function' ? rig.spec() : {};
+            const pose_now = rig.pose(angles || {});
+            const head = pose_now[chain[0]];
+            if (!head) {
+                ctx.log(`$.mesh.ik: кости "${chain[0]}" нет в скелете`);
+                return null;
+            }
+
+            const lengths = chain.map((name) => {
+                const L = Number((spec[name] || {}).length);
+                return Number.isFinite(L) ? L : 0;
+            });
+            const goal = { x: Number(target.x) || 0, y: Number(target.y) || 0 };
+
+            // Две кости — точное решение; длиннее — CCD.
+            let abs;
+            let reached;
+            if (chain.length === 2) {
+                const r = solveTwoBoneIK(head.x, head.y, lengths[0], lengths[1],
+                                         goal.x, goal.y, o.bend);
+                abs = [r.a1, r.a2];
+                reached = r.reached;
+            } else {
+                const r = solveChainIK(head.x, head.y, lengths, goal.x, goal.y, o);
+                abs = r.angles;
+                reached = r.reached;
+            }
+
+            // Абсолютные углы → ДОБАВОЧНЫЕ для pose(): pose складывает угол с
+            // мировым углом родителя и углом покоя кости.
+            const out = {};
+            for (let i = 0; i < chain.length; i++) {
+                const name = chain[i];
+                const b = spec[name] || {};
+                const parent_name = b.parent;
+                const rest_local = Number(b.angle) || 0;
+                let parent_abs = 0;
+                if (i > 0 && parent_name === chain[i - 1]) {
+                    parent_abs = abs[i - 1];        // родитель — предыдущая кость цепочки
+                } else if (parent_name && pose_now[parent_name]) {
+                    parent_abs = pose_now[parent_name].angle;   // родитель вне цепочки
+                }
+                out[name] = normalizeAngle(abs[i] - parent_abs - rest_local);
+            }
+
+            // Куда встал конец: считаем по РЕШЁННЫМ углам, а не по цели — иначе
+            // игра не увидит, что нога не дотянулась, и «прилипнет» картинкой.
+            const last = chain[chain.length - 1];
+            const solved_pose = rig.pose(out);
+            const tip = typeof rig.tip === 'function' ? rig.tip(solved_pose, last) : null;
+            const distance = tip ? Math.hypot(goal.x - tip.x, goal.y - tip.y) : Infinity;
+            return { angles: out, reached, distance, tip };
+        },
 
         /**
          * Часть прямо из СЛАЙСА Aseprite: `$.mesh.fromSlice(sheet, 'hand', frame?)`.

@@ -10,7 +10,8 @@
 // ===========================================================================
 
 import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
-import { normalizeAngle, createSkeleton, createPart, deformPart, installMesh }
+import { normalizeAngle, createSkeleton, createPart, deformPart, installMesh,
+         solveTwoBoneIK, solveChainIK }
     from '../../src/highlevel/mesh.js';
 
 test('normalizeAngle приводит к (-π, π]', () => {
@@ -247,6 +248,105 @@ test('fromSlice: нет атласа или слайса — null, без пад
     eq(mesh.fromSlice({}, 'x'), null);
     eq(mesh.fromSlice({ slice: () => null, frames: () => [], info: () => null,
                         size: () => [1, 1] }, 'x'), null);
+});
+
+// --- обратная кинематика ---
+// Прямая задача («по углам найти конец») уже была; обратная — «дай углы, чтобы
+// конец попал в цель» — нужна для ступни на неровном полу и руки на рукояти.
+
+test('solveTwoBoneIK: дотягивается до цели точно', () => {
+    // Две кости по 40 из (0,0), цель прямо вправо на 60 — достижимо.
+    const r = solveTwoBoneIK(0, 0, 40, 40, 60, 0, 1);
+    truthy(r.reached, 'цель достижима');
+    // Конец второй кости = локоть + len2 в направлении a2.
+    const tipX = r.elbow.x + Math.cos(r.a2) * 40;
+    const tipY = r.elbow.y + Math.sin(r.a2) * 40;
+    near(tipX, 60, 1e-6);
+    near(tipY, 0, 1e-6);
+});
+
+test('solveTwoBoneIK: сторона сгиба меняет локоть, но не конец', () => {
+    const up = solveTwoBoneIK(0, 0, 40, 40, 60, 0, 1);
+    const down = solveTwoBoneIK(0, 0, 40, 40, 60, 0, -1);
+    truthy(Math.abs(up.elbow.y - down.elbow.y) > 1, 'локоть с другой стороны');
+    truthy(up.elbow.y * down.elbow.y < 0, 'локти по разные стороны от оси');
+    const tip = (r) => [r.elbow.x + Math.cos(r.a2) * 40, r.elbow.y + Math.sin(r.a2) * 40];
+    near(tip(up)[0], tip(down)[0], 1e-6);
+    near(tip(up)[1], tip(down)[1], 1e-6);
+});
+
+test('solveTwoBoneIK: цель дальше руки — reached=false, тянется к ней', () => {
+    const r = solveTwoBoneIK(0, 0, 40, 40, 500, 0, 1);
+    falsy(r.reached, 'не дотянулись — это видно игре');
+    near(r.a1, 0, 1e-6);
+    near(r.a2, 0, 1e-6);
+});
+
+test('solveTwoBoneIK: цель вплотную не даёт NaN', () => {
+    const r = solveTwoBoneIK(0, 0, 40, 40, 0, 0, 1);
+    truthy(Number.isFinite(r.a1) && Number.isFinite(r.a2), 'углы конечны');
+    truthy(Number.isFinite(r.elbow.x) && Number.isFinite(r.elbow.y), 'локоть конечен');
+});
+
+test('solveChainIK: цепочка из трёх костей достаёт до цели', () => {
+    const r = solveChainIK(0, 0, [40, 40, 40], 90, 40, { iterations: 30 });
+    truthy(r.distance < 1, `промах ${r.distance.toFixed(3)} пикселя`);
+    truthy(r.reached, 'reached выставлен');
+    eq(r.angles.length, 3);
+});
+
+test('solveChainIK: недостижимая цель — тянется, не ломается', () => {
+    const r = solveChainIK(0, 0, [10, 10], 500, 0, { iterations: 20 });
+    truthy(Number.isFinite(r.distance), 'расстояние конечно');
+    falsy(r.reached, 'видно, что не дотянулись');
+    // Конец должен быть на оси X и на вытянутой длине (≈20).
+    const tip = r.angles.reduce((acc, a) => [acc[0] + Math.cos(a) * 10,
+                                             acc[1] + Math.sin(a) * 10], [0, 0]);
+    near(tip[0], 20, 0.5);
+});
+
+test('solveChainIK: пустая цепочка — пустой ответ, без падения', () => {
+    const r = solveChainIK(0, 0, [], 10, 10, {});
+    eq(r.angles.length, 0);
+    falsy(r.reached);
+});
+
+test('$.mesh.ik: цепочка из двух костей достаёт до цели УГЛАМИ для pose()', () => {
+    const mesh = installMesh({});
+    const rig = createSkeleton({
+        leg1: { x: 0, y: 0, length: 40, angle: 0 },
+        leg2: { parent: 'leg1', length: 40, angle: 0 },
+    });
+    const solved = mesh.ik(rig, {}, { x: 50, y: 30 }, { chain: ['leg1', 'leg2'] });
+    truthy(solved !== null, 'решение есть');
+    truthy(solved.reached, 'цель достижима');
+    truthy(solved.distance < 1, `конец у цели (промах ${solved.distance.toFixed(3)})`);
+    // Конец, посчитанный по РЕШЁННЫМ добавочным углам, совпадает с tip.
+    const pose = rig.pose(solved.angles);
+    const tip = rig.tip(pose, 'leg2');
+    near(tip.x, solved.tip.x, 1e-6);
+    near(tip.y, solved.tip.y, 1e-6);
+    near(Math.hypot(50 - tip.x, 30 - tip.y), solved.distance, 1e-6);
+});
+
+test('$.mesh.ik: длинная цепочка решается FABRIK', () => {
+    const mesh = installMesh({});
+    const rig = createSkeleton({
+        a: { x: 0, y: 0, length: 30 },
+        b: { parent: 'a', length: 30 },
+        c: { parent: 'b', length: 30 },
+    });
+    const solved = mesh.ik(rig, {}, { x: 40, y: 60 },
+                           { chain: ['a', 'b', 'c'], iterations: 40 });
+    truthy(solved !== null);
+    truthy(solved.distance < 2, `дотянулись (промах ${solved.distance.toFixed(2)})`);
+});
+
+test('$.mesh.ik: без chain — null и запись в журнал', () => {
+    const mesh = installMesh({});
+    const rig = createSkeleton({ a: { x: 0, y: 0, length: 10 } });
+    eq(mesh.ik(rig, {}, { x: 5, y: 5 }), null);
+    eq(mesh.ik(null, {}, { x: 5, y: 5 }, { chain: ['a'] }), null);
 });
 
 finish();
