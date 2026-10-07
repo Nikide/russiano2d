@@ -37,12 +37,13 @@ def shot(a, path):
     return hashlib.sha256(open(path, "rb").read()).hexdigest()
 
 
-def check_mesh_guard(a):
+def check_mesh_draw(a):
     """
-    Меш заливается, но НЕ рисуется, и это осознанно: вызов отрисовки роняет
-    процесс (SIGSEGV) — проверено снятием защиты. Тест следит за тем, чтобы
-    защита не пропала случайно: если кто-то её снимет, движок умрёт на первом
-    же меше, и тест это поймает (процесс закроется).
+    Меш заливается И рисуется. Раньше здесь стояла защита: отрисовка якобы
+    роняла Metal. Причина была в отсутствии SDL_BindGPUIndexBuffer в
+    r2d_render_draw_mesh — меш рисуется первым в проходе, а индексный буфер
+    биндят участки спрайтов, то есть позже. Подробности и проверку по пикселям
+    держит tests/agent/highlevel_mesh_test.py.
     """
     a.eval("""$.update(() => engine.submitMesh(new Float32Array([
         300,200,0.5, 0,0, 1,0,0,
@@ -75,12 +76,12 @@ def main():
         check(again == on, "после возврата кадр тот же")
 
     with Agent(game=GAME, seed=5) as a:
-        info = check_mesh_guard(a)
+        info = check_mesh_draw(a)
         check(info["meshBuf"] is True, "GPU-буфер меша создан")
         check(info["peak"] >= 3, f"вершины доехали до заливки (peak = {info['peak']})")
         check(info["uploads"] >= 1, f"заливок: {info['uploads']}")
-        check(info["blocked"] >= 1,
-              f"отрисовка отключена защитой ({info['blocked']} батчей не нарисовано)")
+        check(info["meshFrames"] >= 1, f"проход отрисовки выполнен ({info['meshFrames']})")
+        check(info["blocked"] == 0, f"меш НЕ отключён защитой (blocked = {info['blocked']})")
 
     print()
     if FAILURES:
