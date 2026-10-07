@@ -69,6 +69,7 @@ import { installQuest } from './quest.js';
 import { installSoundBank } from './soundbank.js';
 import { installSteps, installBarks } from './steps.js';
 import { installItems } from './items.js';
+import { installCombat } from './combat.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
 import { installI18n, tickI18n } from './i18n.js';
@@ -383,6 +384,7 @@ export function createApi() {
     installSteps($);             // шаги по материалу: $.steps
     installBarks($);             // реплики NPC: $.barks
     installItems($);             // предметы и инвентарь: $.items, $.inv
+    installCombat($);            // здоровье по зонам: $.combat
     installWidgets($);
     installTriggers($);
     installI18n($);
