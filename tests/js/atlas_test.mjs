@@ -92,4 +92,55 @@ test('atlasImagePath: мета важнее, иначе рядом с JSON', () 
     eq(atlasImagePath('hero.json', null), 'hero.png');
 });
 
+// --- слайсы Aseprite: пивоты ---
+// В JSON слайса пивот задан АБСОЛЮТНО (в координатах спрайта), а для вращения
+// части нужен локальный — от левого верхнего угла слайса. Здесь и проверяем
+// оба: ошибка в этом месте выглядит как «персонаж крутится вокруг угла».
+test('parseAtlas: слайсы — прямоугольник и пивот', () => {
+    const data = {
+        frames: { 'a 0.aseprite': { frame: { x: 0, y: 0, w: 16, h: 16 } } },
+        meta: {
+            size: { w: 48, h: 16 },
+            slices: [{
+                name: 'hand',
+                keys: [
+                    { frame: 0, bounds: { x: 0, y: 0, w: 16, h: 16 },
+                      pivot: { x: 4, y: 12 } },
+                    { frame: 2, bounds: { x: 32, y: 0, w: 16, h: 16 },
+                      pivot: { x: 40, y: 8 } },
+                ],
+            }],
+        },
+    };
+    const p = parseAtlas(data);
+    eq(p.slices.hand.length, 2);
+    eq(p.slices.hand[0].pivotX, 4);
+    eq(p.slices.hand[0].pivotLx, 4);
+    eq(p.slices.hand[0].pivotLy, 12);
+    // Абсолютный пивот 40 при слайсе с x = 32 даёт локальный 8.
+    eq(p.slices.hand[1].pivotLx, 8);
+    eq(p.slices.hand[1].pivotLy, 8);
+});
+
+test('parseAtlas: пивот по умолчанию — центр слайса', () => {
+    const p = parseAtlas({
+        frames: { a: { frame: { x: 0, y: 0, w: 10, h: 10 } } },
+        meta: { slices: [{ name: 's', keys: [{ frame: 0, bounds: { x: 0, y: 0, w: 10, h: 10 } }] }] },
+    });
+    // ВНИМАНИЕ: p.slices[имя] — МАССИВ ключей по кадрам, а не объект.
+    eq(p.slices.s.length, 1);
+    eq(p.slices.s[0].pivotLx, 5);
+    eq(p.slices.s[0].pivotLy, 5);
+});
+
+test('parseAtlas: без slices поле не появляется, мусор пропускается', () => {
+    const none = parseAtlas({ frames: { a: { x: 0, y: 0, w: 4, h: 4 } } });
+    eq(none.slices, undefined);
+    const bad = parseAtlas({
+        frames: { a: { x: 0, y: 0, w: 4, h: 4 } },
+        meta: { slices: [{ name: '', keys: [] }, { name: 'x', keys: [{ frame: 0 }] }] },
+    });
+    truthy(!bad.slices || bad.slices.x === undefined);
+});
+
 finish();

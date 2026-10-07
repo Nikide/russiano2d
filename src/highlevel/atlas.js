@@ -92,6 +92,43 @@ export function parseAtlas(data) {
         if (data.meta.scale !== undefined) out.meta.scale = String(data.meta.scale);
     }
 
+    // Слайсы Aseprite: у каждого ключа прямоугольник и ПИВОТ. Пивот в JSON
+    // задан в координатах спрайта, поэтому храним и абсолютный, и локальный
+    // (от левого верхнего угла слайса) — второй нужен для вращения части.
+    const slices = data.meta && Array.isArray(data.meta.slices) ? data.meta.slices : null;
+    if (slices) {
+        out.slices = {};
+        for (const slice of slices) {
+            const name = String((slice && slice.name) || '').trim();
+            if (!name) continue;
+            const keys = Array.isArray(slice.keys) ? slice.keys : [];
+            const list = [];
+            for (const key of keys) {
+                const b = key && key.bounds;
+                if (!b) continue;
+                const w = Number(b.w);
+                const h = Number(b.h);
+                if (!(w > 0) || !(h > 0)) continue;
+                const x = Number(b.x) || 0;
+                const y = Number(b.y) || 0;
+                const pv = key.pivot || {};
+                const px = Number.isFinite(Number(pv.x)) ? Number(pv.x) : x + w / 2;
+                const py = Number.isFinite(Number(pv.y)) ? Number(pv.y) : y + h / 2;
+                list.push({
+                    frame: Number(key.frame) || 0,
+                    x, y, w, h,
+                    pivotX: px, pivotY: py,
+                    // Локальный пивот: сколько пикселей от левого верхнего угла.
+                    pivotLx: px - x, pivotLy: py - y,
+                });
+            }
+            if (list.length) {
+                list.sort((a, b) => a.frame - b.frame);
+                out.slices[name] = list;
+            }
+        }
+    }
+
     // Свой формат может нести теги отдельным полем.
     if (!tags && data.tags && typeof data.tags === 'object') {
         for (const name of Object.keys(data.tags)) {
@@ -174,6 +211,35 @@ function buildSheet(name, spec, data, json_path) {
 
         /** Имена тегов. */
         tags() { return Object.keys(parsed.tags); },
+
+        /** Имена слайсов Aseprite (или пустой массив). */
+        sliceNames() { return Object.keys(parsed.slices || {}); },
+
+        /**
+         * Слайс Aseprite: `{ frame, x, y, w, h, pivotX, pivotY, pivotLx, pivotLy }`.
+         *
+         * `frame` — номер кадра в листе (не имя). Без него берётся первый ключ.
+         * Слайс — это то, где Aseprite хранит ПИВОТ и рамку части.
+         * `null`, если слайса нет.
+         */
+        slice(slice_name, frame) {
+            const list = (parsed.slices || {})[String(slice_name)];
+            if (!list || !list.length) return null;
+            if (frame === undefined || frame === null) return { ...list[0] };
+            const f = Number(frame);
+            let best = list[0];
+            for (const k of list) {
+                if (k.frame <= f) best = k;
+                else break;
+            }
+            return { ...best };
+        },
+
+        /** Сколько ключей у слайса (по кадрам). */
+        sliceCount(slice_name) {
+            const list = (parsed.slices || {})[String(slice_name)];
+            return list ? list.length : 0;
+        },
 
         /** Массив спрайтов тега — готовый вход для `$.anim.clip`. */
         tagSprites(tag_name) {

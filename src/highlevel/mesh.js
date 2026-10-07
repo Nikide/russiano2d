@@ -257,6 +257,66 @@ export function installMesh($) {
         part(spec) { return createPart(spec); },
 
         /**
+         * Часть прямо из СЛАЙСА Aseprite: `$.mesh.fromSlice(sheet, 'hand', frame?)`.
+         *
+         * Aseprite хранит в слайсе прямоугольник И **пивот** — именно это нужно
+         * для вращения части: пивот становится началом координат части, поэтому
+         * `$.mesh.draw` крутит её вокруг сустава, а не вокруг угла картинки.
+         *
+         * `sheet` — атлас из `$.atlas`; `frame` — номер кадра в листе (у слайса
+         * ключи по кадрам). UV берутся из кадра атласа.
+         *
+         * `opts`: `bone` (кость для всех вершин), `bones` (по вершине), `depth`,
+         * `texture` (по умолчанию — текстура атласа).
+         */
+        fromSlice(sheet, slice_name, frame, opts) {
+            if (!sheet || typeof sheet.slice !== 'function') {
+                ctx.log('$.mesh.fromSlice: нужен атлас из $.atlas');
+                return null;
+            }
+            const sl = sheet.slice(slice_name, frame);
+            if (!sl) {
+                ctx.log(`$.mesh.fromSlice: слайса "${slice_name}" нет в атласе`);
+                return null;
+            }
+            const names = typeof sheet.frames === 'function' ? sheet.frames() : [];
+            const frame_name = names[sl.frame] !== undefined ? names[sl.frame] : names[0];
+            const info = typeof sheet.info === 'function' ? sheet.info(frame_name) : null;
+            if (!info) {
+                ctx.log(`$.mesh.fromSlice: кадра "${frame_name}" нет в атласе`);
+                return null;
+            }
+            const size = typeof sheet.size === 'function' ? sheet.size() : [1, 1];
+            const sw = size[0] > 0 ? size[0] : 1;
+            const sh = size[1] > 0 ? size[1] : 1;
+            const u0 = info.x / sw, v0 = info.y / sh;
+            const u1 = (info.x + info.w) / sw, v1 = (info.y + info.h) / sh;
+
+            // Пивот — начало координат части: тогда вращение идёт вокруг него.
+            const x0 = -sl.pivotLx, y0 = -sl.pivotLy;
+            const x1 = x0 + sl.w, y1 = y0 + sl.h;
+
+            const o = opts || {};
+            const bones = o.bones
+                ? o.bones
+                : (o.bone ? [o.bone, o.bone, o.bone, o.bone] : null);
+            const spec = {
+                verts: [x0, y0, x1, y0, x1, y1, x0, y1],
+                uv: [u0, v0, u1, v0, u1, v1, u0, v1],
+                tris: [0, 1, 2, 0, 2, 3],
+                texture: o.texture === undefined
+                    ? (sheet.texture === undefined ? -1 : sheet.texture)
+                    : Number(o.texture),
+                depth: o.depth,
+            };
+            if (bones) spec.bones = bones;
+            const part = createPart(spec);
+            part.slice = { name: String(slice_name), frame: sl.frame };
+            part.pivot = { x: sl.pivotLx, y: sl.pivotLy };
+            return part;
+        },
+
+        /**
          * Нарисовать часть в позе. `pose` может быть объектом углов
          * (`{ arm: 0.6 }`) или результатом `rig.pose(...)`.
          *

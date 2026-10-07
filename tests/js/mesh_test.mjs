@@ -10,7 +10,7 @@
 // ===========================================================================
 
 import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
-import { normalizeAngle, createSkeleton, createPart, deformPart }
+import { normalizeAngle, createSkeleton, createPart, deformPart, installMesh }
     from '../../src/highlevel/mesh.js';
 
 test('normalizeAngle приводит к (-π, π]', () => {
@@ -189,6 +189,64 @@ test('deformPart: пишет РОВНО в переданный буфер (бе
     const r = deformPart(part, null, null, buf);
     truthy(r.buffer === buf, 'вернулся тот же буфер');
     near(buf[0], 1, 1e-9);
+});
+
+// --- часть из слайса Aseprite ---
+// Aseprite хранит в слайсе прямоугольник И ПИВОТ. Пивот должен стать началом
+// координат части: иначе часть крутится вокруг угла картинки, а не вокруг
+// сустава — это и проверяем.
+test('fromSlice: пивот становится началом координат', () => {
+    const mesh = installMesh({});
+    const sheet = {
+        texture: 7,
+        frames: () => ['a 0.aseprite', 'a 1.aseprite'],
+        info: (n) => (n === 'a 0.aseprite'
+            ? { name: n, x: 0, y: 0, w: 16, h: 16 }
+            : { name: n, x: 16, y: 0, w: 16, h: 16 }),
+        size: () => [32, 16],
+        slice: (name) => (name === 'hand'
+            ? { frame: 0, x: 0, y: 0, w: 16, h: 16,
+                pivotX: 4, pivotY: 12, pivotLx: 4, pivotLy: 12 }
+            : null),
+    };
+    const part = mesh.fromSlice(sheet, 'hand', 0, { bone: 'arm' });
+    truthy(part !== null, 'часть создана');
+    eq(part.vertexCount, 4);
+    // Пивот (4,12) → левый верхний угол части в (-4,-12).
+    eq(JSON.stringify(part.verts), JSON.stringify([-4, -12, 12, -12, 12, 4, -4, 4]));
+    // UV из кадра 0 при атласе 32x16.
+    eq(JSON.stringify(part.uv.slice(0, 2)), JSON.stringify([0, 0]));
+    near(part.uv[2], 0.5, 1e-9);
+    eq(part.texture, 7);
+    eq(part.weights[0][0][0], 'arm');
+    eq(part.slice.name, 'hand');
+    near(part.pivot.x, 4, 1e-9);
+});
+
+test('fromSlice: второго кадра UV сдвигаются', () => {
+    const mesh = installMesh({});
+    const sheet = {
+        texture: 3,
+        frames: () => ['f0', 'f1'],
+        info: (n) => (n === 'f0' ? { x: 0, y: 0, w: 8, h: 8 }
+                                : { x: 24, y: 8, w: 8, h: 8 }),
+        size: () => [32, 16],
+        slice: () => ({ frame: 1, x: 0, y: 0, w: 8, h: 8,
+                        pivotX: 4, pivotY: 4, pivotLx: 4, pivotLy: 4 }),
+    };
+    const part = mesh.fromSlice(sheet, 'any', 1);
+    near(part.uv[0], 24 / 32, 1e-9);
+    near(part.uv[1], 8 / 16, 1e-9);
+    // Без bone костей нет — часть просто рисуется на месте.
+    falsy(part.skinned);
+});
+
+test('fromSlice: нет атласа или слайса — null, без падения', () => {
+    const mesh = installMesh({});
+    eq(mesh.fromSlice(null, 'x'), null);
+    eq(mesh.fromSlice({}, 'x'), null);
+    eq(mesh.fromSlice({ slice: () => null, frames: () => [], info: () => null,
+                        size: () => [1, 1] }, 'x'), null);
 });
 
 finish();
