@@ -316,8 +316,11 @@ export function installWorld($) {
             const pa = o.a || [na.x, na.y];
             // Шарнир и сварка крепятся в одну точку; distance — между центрами.
             const pb = o.b || ((o.type === 'distance') ? [nb.x, nb.y] : pa);
+            // Ось нужна prismatic и wheel; остальным видам она безразлична.
+            const axis = o.axis || [1, 0];
             const id = engine.createJoint({
                 type: o.type || 'revolute',
+                axis,
                 a: na.body, b: nb.body,
                 ax: pa[0], ay: pa[1], bx: pb[0], by: pb[1],
                 collide: !!o.collide,

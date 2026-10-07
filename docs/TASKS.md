@@ -758,8 +758,8 @@ bootstrap, index, script).
    `$.scene.loadAsync` (task.md); неблокирующий hot reload — `$.script`
    (перезапуск на границе кадра, script.md); выбор GPU-бэкенда и понятный отказ
    D3D12 без DXIL — `--gpu`/`--list-gpu`/`R2D_GPU` (BUILD.md).
-6. **Жанровое (P2):** CCD (`$.world.bullet` — сделан), суставы
-   prismatic/wheel/pulley/gear/mouse, контакты по
+6. **Жанровое (P2):** CCD (`$.world.bullet`) и суставы prismatic/wheel — сделаны;
+   остались pulley/gear/mouse, контакты по
    формам и импульсы, вращение камеры, мультикамерность, touch, мультигеймпад,
    clipboard/IME, клипы локализации и плюрализация, контролы и виртуализация
    списков, a11y и масштаб UI, реплеи.

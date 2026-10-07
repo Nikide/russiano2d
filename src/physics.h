@@ -108,6 +108,11 @@ typedef enum R2DJointKind {
     R2D_JOINT_REVOLUTE = 0,
     R2D_JOINT_DISTANCE = 1,
     R2D_JOINT_WELD     = 2,
+    // Направляющая: тело едет по оси и не вращается вокруг неё. Ось задаётся
+    // в мировых координатах, пределы — в метрах (для distance это длина).
+    R2D_JOINT_PRISMATIC = 3,
+    // Колесо/подвеска: тело крутится вокруг оси и может ходить вдоль неё.
+    R2D_JOINT_WHEEL    = 4,
 } R2DJointKind;
 
 typedef struct R2DPhysics {
@@ -138,6 +143,10 @@ typedef struct R2DPhysics {
     // --- Суставы ------------------------------------------------------------
     b2JointId joints[R2D_MAX_JOINTS];
     bool      joint_alive[R2D_MAX_JOINTS];
+    // Ось следующего prismatic/wheel-сустава (мировые координаты): параметров
+    // у create_joint уже слишком много, а ось нужна только этим двум видам.
+    float     joint_axis_x;
+    float     joint_axis_y;
 } R2DPhysics;
 
 void r2d_physics_init(R2DPhysics *p, float gravity_x, float gravity_y);
@@ -256,12 +265,18 @@ void r2d_physics_begin_contacts(R2DPhysics *p);
 // a/b — id тел, ax/ay и bx/by — точки крепления в мировых пикселях
 // (пересчитываются в локальные координаты тела). type — R2DJointKind.
 // Дополнительные параметры: для distance — length (0 = по текущему
-// расстоянию); для revolute — limits/motor. Возвращает id сустава или -1.
+// расстоянию); для revolute и prismatic — limits/motor (для prismatic пределы
+// в метрах, мотор — сила). Возвращает id сустава или -1.
+//
+// Ось сустава (prismatic, wheel) задаётся ДО вызова:
+// r2d_physics_set_joint_axis(p, x, y). Иначе берётся (1, 0).
 int  r2d_physics_create_joint(R2DPhysics *p, int type, int a, int b,
                               float ax, float ay, float bx, float by,
                               bool collide_connected, float length,
                               bool enable_limit, float lower_angle, float upper_angle,
                               bool enable_motor, float motor_speed, float max_motor_torque);
+// Ось для следующего prismatic/wheel-сустава в МИРОВЫХ координатах.
+void r2d_physics_set_joint_axis(R2DPhysics *p, float ax, float ay);
 void r2d_physics_destroy_joint(R2DPhysics *p, int id);
 bool r2d_physics_joint_alive(const R2DPhysics *p, int id);
 int  r2d_physics_joint_count(const R2DPhysics *p);

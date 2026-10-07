@@ -73,6 +73,9 @@ void r2d_physics_init(R2DPhysics *p, float gravity_x, float gravity_y)
     // События контактов и pre-solve включаются на конкретной форме
     // (b2ShapeDef), а не на мире: платим только за нужные тела.
     p->world = b2CreateWorld(&def);
+    // Ось сустава по умолчанию — вдоль X (для prismatic и wheel).
+    p->joint_axis_x = 1.0f;
+    p->joint_axis_y = 0.0f;
     p->world_valid = b2World_IsValid(p->world);
 
     if (!p->world_valid) {
@@ -771,6 +774,16 @@ int r2d_physics_query_box(const R2DPhysics *p, float x, float y, float w, float 
 // b2Body_GetLocalPoint.
 // ---------------------------------------------------------------------------
 
+void r2d_physics_set_joint_axis(R2DPhysics *p, float ax, float ay)
+{
+    if (!p) return;
+    // Нулевая ось недопустима: Box2D требует единичный вектор.
+    const float len = SDL_sqrtf(ax * ax + ay * ay);
+    if (len < 1e-6f) { p->joint_axis_x = 1.0f; p->joint_axis_y = 0.0f; return; }
+    p->joint_axis_x = ax / len;
+    p->joint_axis_y = ay / len;
+}
+
 int r2d_physics_create_joint(R2DPhysics *p, int type, int a, int b,
                              float ax, float ay, float bx, float by,
                              bool collide_connected, float length,
@@ -819,6 +832,53 @@ int r2d_physics_create_joint(R2DPhysics *p, int type, int a, int b,
             d.maxMotorForce = max_motor_torque;
         }
         joint = b2CreateDistanceJoint(p->world, &d);
+        break;
+    }
+    case R2D_JOINT_PRISMATIC: {
+        b2PrismaticJointDef d = b2DefaultPrismaticJointDef();
+        d.bodyIdA = p->bodies[a];
+        d.bodyIdB = p->bodies[b];
+        d.localAnchorA = b2Body_GetLocalPoint(p->bodies[a], wa);
+        d.localAnchorB = b2Body_GetLocalPoint(p->bodies[b], wb);
+        // Ось — в системе тела A: переводим мировую ось в локальную.
+        b2Vec2 axis = b2Body_GetLocalVector(p->bodies[a],
+                                            (b2Vec2){ p->joint_axis_x, p->joint_axis_y });
+        d.localAxisA = axis;
+        d.collideConnected = collide_connected;
+        if (enable_limit) {
+            d.enableLimit = true;
+            d.lowerTranslation = R2D_TO_M(lower_angle);
+            d.upperTranslation = R2D_TO_M(upper_angle);
+        }
+        if (enable_motor) {
+            d.enableMotor = true;
+            d.motorSpeed = motor_speed;
+            d.maxMotorForce = max_motor_torque;
+        }
+        joint = b2CreatePrismaticJoint(p->world, &d);
+        break;
+    }
+    case R2D_JOINT_WHEEL: {
+        b2WheelJointDef d = b2DefaultWheelJointDef();
+        d.bodyIdA = p->bodies[a];
+        d.bodyIdB = p->bodies[b];
+        d.localAnchorA = b2Body_GetLocalPoint(p->bodies[a], wa);
+        d.localAnchorB = b2Body_GetLocalPoint(p->bodies[b], wb);
+        b2Vec2 axis = b2Body_GetLocalVector(p->bodies[a],
+                                            (b2Vec2){ p->joint_axis_x, p->joint_axis_y });
+        d.localAxisA = axis;
+        d.collideConnected = collide_connected;
+        if (enable_limit) {
+            d.enableLimit = true;
+            d.lowerTranslation = R2D_TO_M(lower_angle);
+            d.upperTranslation = R2D_TO_M(upper_angle);
+        }
+        if (enable_motor) {
+            d.enableMotor = true;
+            d.motorSpeed = motor_speed;
+            d.maxMotorTorque = max_motor_torque;
+        }
+        joint = b2CreateWheelJoint(p->world, &d);
         break;
     }
     case R2D_JOINT_WELD: {

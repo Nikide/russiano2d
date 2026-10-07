@@ -945,12 +945,29 @@ static JSValue r2d__js_create_joint(JSContext *ctx, JSValueConst this_val, int a
     if (JS_IsString(tv)) {
         const char *kind = JS_ToCString(ctx, tv);
         if (kind) {
-            if (SDL_strcmp(kind, "distance") == 0)     type = R2D_JOINT_DISTANCE;
-            else if (SDL_strcmp(kind, "weld") == 0)    type = R2D_JOINT_WELD;
+            if (SDL_strcmp(kind, "distance") == 0)       type = R2D_JOINT_DISTANCE;
+            else if (SDL_strcmp(kind, "weld") == 0)      type = R2D_JOINT_WELD;
+            else if (SDL_strcmp(kind, "prismatic") == 0) type = R2D_JOINT_PRISMATIC;
+            else if (SDL_strcmp(kind, "wheel") == 0)     type = R2D_JOINT_WHEEL;
+            else if (SDL_strcmp(kind, "revolute") == 0)  type = R2D_JOINT_REVOLUTE;
+            else R2D_WARN("engine.createJoint: неизвестный тип \"%s\" — беру revolute", kind);
             JS_FreeCString(ctx, kind);
         }
     }
     JS_FreeValue(ctx, tv);
+
+    // Ось сустава — для prismatic и wheel (по умолчанию вдоль X).
+    {
+        JSValue av = JS_GetPropertyStr(ctx, opts, "axis");
+        if (JS_IsObject(av)) {
+            const double ax = r2d__obj_num(ctx, av, "0", 1.0);
+            const double ay = r2d__obj_num(ctx, av, "1", 0.0);
+            r2d_physics_set_joint_axis(s->physics, (float)ax, (float)ay);
+        } else {
+            r2d_physics_set_joint_axis(s->physics, 1.0f, 0.0f);
+        }
+        JS_FreeValue(ctx, av);
+    }
 
     const int id = r2d_physics_create_joint(
         s->physics, type,
