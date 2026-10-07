@@ -194,6 +194,7 @@ typedef struct R2DRenderer {
     R2DMeshVertex           *mesh_vertex_buffer;   // залитый буфер меша
     int                      mesh_vb_cap;
     int                      mesh_vertex_upload;   // сколько вершин уехало в буфер
+    int                      mesh_batch_upload;    // сколько батчей залито (их рисуем)
     SDL_GPUBuffer           *mesh_buffer;          // GPU-буфер вершин меша
     int                      mesh_vb_capacity;
     int                      stat_mesh_cmds;
@@ -319,6 +320,9 @@ typedef struct R2DRenderer {
     int    stat_mesh_draws;   // сколько раз вызвана отрисовка меша
     int    stat_mesh_built;   // сколько раз упакован меш
     int    stat_mesh_uploads; // сколько раз дошло до заливки
+    int    stat_mesh_peak;    // максимум ожидающих вершин в заливке
+    int    stat_mesh_blocked; // сколько батчей не нарисовано (защита)
+    bool   mesh_draw_blocked_logged;
     int    revision;          // номер начатого кадра (диагностика путей)
     size_t stat_upload_bytes;
 

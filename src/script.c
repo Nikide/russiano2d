@@ -1250,6 +1250,8 @@ static JSValue r2d__js_depth_info(JSContext *ctx, JSValueConst this_val, int arg
     JS_SetPropertyStr(ctx, obj, "meshDrawn",  JS_NewInt32(ctx, r->stat_mesh_draws));
     JS_SetPropertyStr(ctx, obj, "meshBuilt",  JS_NewInt32(ctx, r->stat_mesh_built));
     JS_SetPropertyStr(ctx, obj, "uploads",    JS_NewInt32(ctx, r->stat_mesh_uploads));
+    JS_SetPropertyStr(ctx, obj, "blocked",    JS_NewInt32(ctx, r->stat_mesh_blocked));
+    JS_SetPropertyStr(ctx, obj, "peak",        JS_NewInt32(ctx, r->stat_mesh_peak));
     JS_SetPropertyStr(ctx, obj, "revision",   JS_NewInt32(ctx, r->revision));
     return obj;
 }

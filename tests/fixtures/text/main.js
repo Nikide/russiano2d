@@ -19,6 +19,8 @@ $.ready(() => {
     $('<ui.button>', { id: 'go', text: 'Играть', w: 160, h: 44 })
         .at(320, 260).appendTo($.ui);
 
-    // Своё семейство шрифта у узла и наследование детьми.
-    window.__fontFamily = null;
+    // Своё семейство шрифта у узла и наследование детьми. Пишем в globalThis,
+    // а не в window: в QuickJS объекта window нет, и обращение к нему роняло
+    // весь $.ready (ошибка была видна только в stderr движка).
+    globalThis.__fontFamily = null;
 });

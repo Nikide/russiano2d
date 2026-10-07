@@ -626,12 +626,14 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
     r->tri_vertex_count = 0;
     r->tri_batch_count  = 0;
     r->tri_index_start  = 0;
-    // Меш: список отрисовок и залитый диапазон живут кадр.
-    r->mesh_vertex_count = 0;
-    r->mesh_batch_count  = 0;
-    r->mesh_index_start  = 0;
-    r->mesh_vertex_upload = 0;
-    r->stat_mesh_cmds    = 0;
+    // Меш: начало кадра сбрасывает только УЖЕ отрисованное. Очередь вершин не
+    // трогаем: игра собирает её в $.update, то есть ДО begin_frame, и ранний
+    // сброс стирал меш целиком — он никогда не доезжал до заливки (нашлось
+    // сравнением счётчиков: вершин 3, а на заливке 0).
+    r->mesh_vertex_upload  = 0;
+    r->mesh_batch_upload   = 0;
+    r->mesh_index_start    = 0;
+    r->stat_mesh_cmds      = 0;
     r->stat_frames++;
     r->revision++;
     r->light_vertex_count = 0;
@@ -1218,6 +1220,10 @@ void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
     // индексный буфер. Рисуется ПЕРВЫМ в проходе сцены, чтобы успеть записать
     // глубину до спрайтов.
     r->stat_mesh_uploads++;
+    if (r->mesh_vertex_count > r->stat_mesh_peak) r->stat_mesh_peak = r->mesh_vertex_count;
+    // Громкий след в stderr: агентский клиент логи R2D_LOG не показывает, а
+    // WARN видно всегда — им и проверяем, доходит ли меш до заливки.
+
     if (r->mesh_vertex_count > 0) {
         if (!r2d__grow((void **)&r->mesh_vertex_buffer, &r->mesh_vb_cap,
                         r->mesh_vertex_count, sizeof(R2DMeshVertex))) return;
@@ -1225,14 +1231,22 @@ void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
                    (size_t)r->mesh_vertex_count * sizeof(R2DMeshVertex));
         if (!r2d__grow((void **)&r->indices, &r->index_cap,
                         r->index_count + r->mesh_vertex_count, sizeof(uint32_t))) return;
-        const int base = r->vertex_count;
+        // Индексы меша нумеруются ОТ НАЧАЛА СВОЕГО буфера: он отдельный от
+        // спрайтов, и прибавление общего r->vertex_count уводило чтение за
+        // пределы буфера — движок падал с сегфолтом на первом же меше.
         for (int i = 0; i < r->mesh_vertex_count; ++i) {
-            r->indices[r->index_count + i] = (uint32_t)(base + i);
+            r->indices[r->index_count + i] = (uint32_t)i;
         }
         r->mesh_index_start = r->index_count;
         r->mesh_vertex_upload = r->mesh_vertex_count;
         r->index_count += r->mesh_vertex_count;
+        // Очередь переехала в буфер: заливка её очищает, а не начало кадра.
         r->mesh_vertex_count = 0;
+    }
+    // Отрисовка читает ЗАЛИТЫЕ батчи: очередь в этот момент уже пуста.
+    if (r->mesh_batch_count > 0) {
+        r->mesh_batch_upload = r->mesh_batch_count;
+        r->mesh_batch_count = 0;
     }
 
     // Свет идёт в тот же вершинный/индексный буфер, но своим диапазоном: его
@@ -1553,8 +1567,20 @@ void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURend
     if (!r || !pass) return;
     r->stat_mesh_draws++;
     if (!r->depth_enabled) return;
-    if (r->mesh_vertex_upload <= 0 || r->mesh_batch_count <= 0) return;
+    if (r->mesh_vertex_upload <= 0 || r->mesh_batch_upload <= 0) return;
     if (!r->mesh_vertex_buffer || !r->mesh_pipelines[0]) return;
+
+    // Отрисовка меша валит процесс на Metal (код выхода -11), и причина пока не
+    // найдена: вершины и буфер залиты верно, диапазон индексов в пределах, но
+    // DrawGPUIndexedPrimitives с этим конвейером роняет движок. Пока меш НЕ
+    // рисуем — падать в игре хуже, чем не показывать псевдо-3D. Признак и
+    // счётчики остаются в depthInfo(), чтобы отладку можно было продолжить.
+    if (!r->mesh_draw_blocked_logged) {
+        r->mesh_draw_blocked_logged = true;
+        R2D_WARN("меш: отрисовка отключена — валит Metal; z-буфер при этом работает");
+    }
+    r->stat_mesh_blocked += r->mesh_batch_upload;
+    return;
 
     SDL_GPUBufferBinding vb;
     SDL_zero(vb);
@@ -1564,7 +1590,7 @@ void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURend
     SDL_BindGPUVertexBuffers(pass, 0, &vb, 1);
 
     int bound = -1;
-    for (int b = 0; b < r->mesh_batch_count; ++b) {
+    for (int b = 0; b < r->mesh_batch_upload; ++b) {
         const R2DTriBatch *mb = &r->mesh_batches[b];
         if (mb->vertex_count <= 0) continue;
         if ((int)mb->blend != bound) {
@@ -1580,7 +1606,7 @@ void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURend
                                      (Uint32)(r->mesh_index_start + mb->vertex_offset), 0, 0);
         r->stat_draws++;
     }
-    r->stat_mesh_cmds += r->mesh_batch_count;
+    r->stat_mesh_cmds += r->mesh_batch_upload;
     r->stat_mesh_frames++;
 }
 
@@ -1588,7 +1614,7 @@ void r2d_render_draw_world(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
                            SDL_GPURenderPass *pass)
 {
     if (r->cmd_count == 0 && r->tri_batch_count == 0 && r->light_batch_count == 0
-        && r->mesh_batch_count == 0) return;
+        && r->mesh_batch_upload == 0) return;
 
     // Интерфейс помечен JS-стороной; если метки нет — все спрайты считаются
     // миром (старое поведение, HUD тогда тоже под пост-обработкой).
