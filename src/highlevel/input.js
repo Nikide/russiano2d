@@ -9,7 +9,7 @@
 // 'leftshift'. Регистр не важен.
 // ===========================================================================
 
-import { ctx, query } from './core.js';
+import { ctx, query, engineOf } from './core.js';
 
 // Псевдонимы: то, что пишет игрок → имя, которое понимает SDL.
 const ALIASES = {
@@ -172,6 +172,103 @@ export function installInput($) {
             return index < 0 ? false : engine.padDown(index);
         },
 
+        /**
+         * Геймпад по НОМЕРУ: `$.input.gamepad(1).down('a')` — для игры вдвоём-
+         * вчетвером. Слот 0 — тот же геймпад, что и у `$.input.padDown`.
+         */
+        gamepad(slot) {
+            const index = Math.max(0, Math.floor(Number(slot) || 0));
+            // В модуле НЕТ глобального `engine`: подсистемы берут движок через
+            // engineOf() (иначе ReferenceError и вся подсистема мертва —
+            // нашлось тестом).
+            const api = engineOf();
+            const has = typeof api.padDownAt === 'function';
+            return {
+                slot: index,
+                connected() {
+                    if (typeof api.padConnectedAt === 'function') return !!api.padConnectedAt(index);
+                    return index === 0 && !!api.padConnected();
+                },
+                /** Кнопка по имени ('a', 'leftTrigger') или номеру. */
+                button(name) { return this.down(name); },
+                down(button) {
+                    if (!has) return index === 0 && input.padDown(button);
+                    const b = typeof button === 'string'
+                        ? (GAMEPAD_BUTTONS[button.toLowerCase()] ?? -1) : button;
+                    if (b < 0) return false;
+                    return !!api.padDownAt(index, b);
+                },
+                pressed(button) {
+                    if (typeof api.padPressedAt !== 'function') return false;
+                    const b = typeof button === 'string'
+                        ? (GAMEPAD_BUTTONS[button.toLowerCase()] ?? -1) : button;
+                    return b < 0 ? false : !!api.padPressedAt(index, b);
+                },
+                axis(name) {
+                    if (typeof api.padAxisAt !== 'function') return 0;
+                    const a = typeof name === 'string' ? (GAMEPAD_AXES[name.toLowerCase()] ?? 0) : name;
+                    return api.padAxisAt(index, a);
+                },
+                rumble(opts) {
+                    if (typeof api.padRumbleAt !== 'function') return false;
+                    const o = opts || {};
+                    // Честно: виброаппарата может не быть — игра обязана узнать.
+                    return !!api.padRumbleAt(index,
+                        o.low === undefined ? 0.6 : o.low,
+                        o.high === undefined ? 0.6 : o.high,
+                        o.ms === undefined ? 220 : o.ms);
+                },
+                describe() {
+                    return `геймпад ${index}: ${this.connected() ? 'подключён' : 'нет'}`;
+                },
+            };
+        },
+
+        /** Сколько геймпадов подключено и сколько слотов всего. */
+        padCount() {
+            const api = engineOf();
+            return typeof api.padCount === 'function' ? api.padCount() : 0;
+        },
+        padSlots() {
+            const api = engineOf();
+            return typeof api.padSlots === 'function' ? api.padSlots() : 1;
+        },
+
+        /**
+         * Касания: `$.input.touches()` отдаёт список пальцев текущего кадра —
+         * `[{ id, x, y, dx, dy, pressure }]`. Пальцы приходят ОТДЕЛЬНО от мыши:
+         * подменять их мышью нельзя, мультитач так не сделать.
+         */
+        touches() {
+            const out = [];
+            const api = engineOf();
+            if (typeof api.touchCount !== 'function') return out;
+            const count = api.touchCount();
+            for (let i = 0; i < count; ++i) {
+                const one = input.touch(i);
+                if (one) out.push(one);
+            }
+            return out;
+        },
+        /** Сколько пальцев на экране. */
+        touchCount() {
+            const api = engineOf();
+            return typeof api.touchCount === 'function' ? api.touchCount() : 0;
+        },
+        /** Палец по индексу (или null). */
+        touch(index) {
+            const i = Math.floor(Number(index) || 0);
+            const api = engineOf();
+            if (typeof api.touchDown !== 'function' || !api.touchDown(i)) return null;
+            const at = api.touch(i);
+            if (!at) return null;
+            const d = api.touchDelta ? api.touchDelta(i) : null;
+            return { id: i, x: at.x, y: at.y, dx: d ? d.x : 0, dy: d ? d.y : 0,
+                     pressure: api.touchPressure ? api.touchPressure(i) : 1 };
+        },
+        /** Есть ли касание (любое). */
+        touched() { return input.touchCount() > 0; },
+
         // --- Мышь ------------------------------------------------------------
         mouse() { return { x: engine.mouseX, y: engine.mouseY }; },
 
@@ -312,23 +409,6 @@ export function installInput($) {
         /** Клавиши, нажатые в этом кадре (имена для $.input.on). */
         _pressedCodes() { return engine.keysPressed(); },
         _releasedCodes() { return engine.keysReleased(); },
-
-        gamepad(index) {
-            const pad = index || 0;
-            return {
-                axis: (name) => input.padAxis(name),
-                button: (name) => input.padDown(name),
-                down: (name) => input.padDown(name),
-                pressed: (name) => {
-                    // SDL не отдаёт «нажато в этом кадре» для геймпада — считаем сами.
-                    const index2 = GAMEPAD_BUTTONS[String(name).toLowerCase()];
-                    return index2 !== undefined ? padPressed(index2) : false;
-                },
-                released: () => false,
-                connected: () => pad_connected(pad),
-                rumble: (opts) => rumble(pad, opts),
-            };
-        },
 
         /**
          * Виброотклик: трясёт первый подключённый геймпад и возвращает true,

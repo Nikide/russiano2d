@@ -1501,6 +1501,129 @@ static JSValue r2d__js_is_awake(JSContext *ctx, JSValueConst this_val, int argc,
     return JS_NewBool(ctx, r2d_physics_is_awake(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1)));
 }
 
+// --- Геймпады по слотам и касания -----------------------------------------
+//
+// Слот 0 — «первый геймпад»: старые engine.padDown/padAxis остаются рабочими.
+// Мультигеймпад нужен локальной игре вдвоём-вчетвером, касания — тач-экранам:
+// SDL отдаёт пальцы отдельно от мыши, и подменять их мышью нельзя (мультитач
+// так не сделать).
+
+static int r2d__arg_pad_slot(JSContext *ctx, int argc, JSValueConst *argv, int index)
+{
+    return r2d__arg_int(ctx, argc, argv, index, 0);
+}
+
+static JSValue r2d__js_pad_count(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NewInt32(ctx, 0);
+    return JS_NewInt32(ctx, r2d_app_pad_count(s->app));
+}
+
+static JSValue r2d__js_pad_slots(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    return JS_NewInt32(ctx, r2d_pad_slot_count());
+}
+
+static JSValue r2d__js_pad_connected_at(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_app_pad_connected_at(s->app, r2d__arg_pad_slot(ctx, argc, argv, 0)));
+}
+
+static JSValue r2d__js_pad_down_at(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_pad_down_at(s->app, r2d__arg_pad_slot(ctx, argc, argv, 0),
+                                           r2d__arg_int(ctx, argc, argv, 1, -1)));
+}
+
+static JSValue r2d__js_pad_pressed_at(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_pad_pressed_at(s->app, r2d__arg_pad_slot(ctx, argc, argv, 0),
+                                              r2d__arg_int(ctx, argc, argv, 1, -1)));
+}
+
+static JSValue r2d__js_pad_axis_at(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NewFloat64(ctx, 0);
+    return JS_NewFloat64(ctx, r2d_pad_axis_at(s->app, r2d__arg_pad_slot(ctx, argc, argv, 0),
+                                              r2d__arg_int(ctx, argc, argv, 1, -1)));
+}
+
+static JSValue r2d__js_pad_rumble_at(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_pad_rumble_at(s->app, r2d__arg_pad_slot(ctx, argc, argv, 0),
+                                             (float)r2d__arg_num(ctx, argc, argv, 1, 0),
+                                             (float)r2d__arg_num(ctx, argc, argv, 2, 0),
+                                             (uint32_t)r2d__arg_num(ctx, argc, argv, 3, 200)));
+}
+
+static JSValue r2d__js_touch_count(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NewInt32(ctx, 0);
+    return JS_NewInt32(ctx, r2d_app_touch_count(s->app));
+}
+
+static JSValue r2d__js_touch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NULL;
+    float x = 0, y = 0;
+    if (!r2d_app_touch(s->app, r2d__arg_int(ctx, argc, argv, 0, 0), &x, &y)) return JS_NULL;
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "x", JS_NewFloat64(ctx, x));
+    JS_SetPropertyStr(ctx, o, "y", JS_NewFloat64(ctx, y));
+    return o;
+}
+
+static JSValue r2d__js_touch_delta(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NULL;
+    float dx = 0, dy = 0;
+    if (!r2d_app_touch_delta(s->app, r2d__arg_int(ctx, argc, argv, 0, 0), &dx, &dy)) return JS_NULL;
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "x", JS_NewFloat64(ctx, dx));
+    JS_SetPropertyStr(ctx, o, "y", JS_NewFloat64(ctx, dy));
+    return o;
+}
+
+static JSValue r2d__js_touch_pressure(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NewFloat64(ctx, 0);
+    return JS_NewFloat64(ctx, r2d_app_touch_pressure(s->app, r2d__arg_int(ctx, argc, argv, 0, 0)));
+}
+
+static JSValue r2d__js_touch_down(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_NewBool(ctx, false);
+    float x = 0, y = 0;
+    return JS_NewBool(ctx, r2d_app_touch(s->app, r2d__arg_int(ctx, argc, argv, 0, 0), &x, &y));
+}
+
 // engine.setSleeping(body, sleeping) / engine.isSleeping(body).
 //
 // Выключить сон нужно там, где игра двигает тело НАПРЯМУЮ скоростью:
@@ -3570,6 +3693,19 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "getBodyFilter", r2d__js_get_body_filter, 1);
     r2d__set_fn(ctx, engine, "setGravityScale", r2d__js_set_gravity_scale, 2);
     r2d__set_fn(ctx, engine, "setBullet", r2d__js_set_bullet, 2);
+    // Геймпады по слотам и касания (мультигеймпад, тач-экраны).
+    r2d__set_fn(ctx, engine, "padCount", r2d__js_pad_count, 0);
+    r2d__set_fn(ctx, engine, "padSlots", r2d__js_pad_slots, 0);
+    r2d__set_fn(ctx, engine, "padConnectedAt", r2d__js_pad_connected_at, 1);
+    r2d__set_fn(ctx, engine, "padDownAt", r2d__js_pad_down_at, 2);
+    r2d__set_fn(ctx, engine, "padPressedAt", r2d__js_pad_pressed_at, 2);
+    r2d__set_fn(ctx, engine, "padAxisAt", r2d__js_pad_axis_at, 2);
+    r2d__set_fn(ctx, engine, "padRumbleAt", r2d__js_pad_rumble_at, 4);
+    r2d__set_fn(ctx, engine, "touchCount", r2d__js_touch_count, 0);
+    r2d__set_fn(ctx, engine, "touch", r2d__js_touch, 1);
+    r2d__set_fn(ctx, engine, "touchDelta", r2d__js_touch_delta, 1);
+    r2d__set_fn(ctx, engine, "touchDown", r2d__js_touch_down, 1);
+    r2d__set_fn(ctx, engine, "touchPressure", r2d__js_touch_pressure, 1);
     r2d__set_fn(ctx, engine, "setSleeping", r2d__js_set_sleeping, 2);
     r2d__set_fn(ctx, engine, "isSleeping", r2d__js_is_sleeping, 1);
     r2d__set_fn(ctx, engine, "isBullet", r2d__js_is_bullet, 1);

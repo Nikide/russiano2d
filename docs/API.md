@@ -294,6 +294,21 @@ if (engine.keyPressed(engine.scancode('Space'))) { /* прыжок */ }
 
 `true` только в кадре отпускания клавиши.
 
+### Геймпады по слотам и касания
+
+| Вызов | Смысл |
+|---|---|
+| `engine.padCount()` / `engine.padSlots()` | подключено геймпадов / слотов всего |
+| `engine.padConnectedAt(slot)` | подключён ли геймпад в слоте |
+| `engine.padDownAt(slot, button)` / `engine.padPressedAt(slot, button)` | кнопка: удержание / фронт |
+| `engine.padAxisAt(slot, axis)` | ось геймпада |
+| `engine.padRumbleAt(slot, low, high, ms)` | вибрация конкретного геймпада (bool: ушла ли) |
+| `engine.touchCount()` | сколько пальцев на экране |
+| `engine.touch(i)` / `engine.touchDelta(i)` | `{x, y}` / сдвиг за кадр (или `null`) |
+| `engine.touchDown(i)` / `engine.touchPressure(i)` | есть ли палец / давление |
+
+Старые `engine.padDown/padAxis` читают слот 0 — остаются рабочими.
+
 ### `engine.mouseDown(button)`
 
 `true`, пока кнопка мыши удерживается.

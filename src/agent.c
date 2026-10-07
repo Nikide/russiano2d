@@ -156,6 +156,14 @@ static void send_ok_end(R2dSb *sb)
     r2d_sb_free(sb);
 }
 
+/** Короткий успешный ответ без данных: `{id, ok:true}`. */
+static void send_ok(const R2dJson *req)
+{
+    R2dSb sb;
+    begin_response(&sb, req, true);
+    send_ok_end(&sb);
+}
+
 // ---------------------------------------------------------------------------
 // Команды
 // ---------------------------------------------------------------------------
@@ -322,6 +330,53 @@ static bool command_keys(R2DAgent *a, const R2dJson *req)
     }
     r2d_sb_puts(&sb, "]");
     send_ok_end(&sb);
+    return true;
+}
+
+// touch {action: down|move|up, x, y, finger} — виртуальный палец.
+// SDL_EVENT_FINGER_* извне не синтезировать, а тач-интерфейс надо проверять
+// в CI без настоящего экрана.
+//
+// ВАЖНО: номер пальца идёт в поле `finger`, а НЕ `id`: клиент протокола
+// подставляет в `id` номер запроса, и `id: 0` превращался в 1 — палец
+// оказывался в слоте 1 (нашлось тестом: touchCount() = 1, но touchDown(0)
+// ложь, а touch(1) отдавал координаты).
+static bool command_touch(R2DAgent *a, const R2dJson *req)
+{
+    const char *action = r2d_json_str(r2d_json_get(req, "action"), "down");
+    const int id = r2d_json_int(r2d_json_get(req, "finger"), 0);
+    const float x = (float)r2d_json_num(r2d_json_get(req, "x"), 0);
+    const float y = (float)r2d_json_num(r2d_json_get(req, "y"), 0);
+
+    if (SDL_strcmp(action, "clear") == 0) {
+        r2d_app_virtual_touch_clear(a->app);
+        send_ok(req);
+        return true;
+    }
+    const bool down = SDL_strcmp(action, "up") != 0;
+    r2d_app_virtual_touch(a->app, id, x, y, down);
+    send_ok(req);
+    return true;
+}
+
+// pad {slot, button|axis, down|value} — виртуальный геймпад.
+static bool command_pad(R2DAgent *a, const R2dJson *req)
+{
+    const int slot = r2d_json_int(r2d_json_get(req, "slot"), 0);
+    const R2dJson *button = r2d_json_get(req, "button");
+    const R2dJson *axis = r2d_json_get(req, "axis");
+
+    if (button) {
+        r2d_app_virtual_gamepad(a->app, slot, r2d_json_int(button, -1),
+                                r2d_json_bool(r2d_json_get(req, "down"), true));
+    } else if (axis) {
+        r2d_app_virtual_gamepad_axis(a->app, slot, r2d_json_int(axis, -1),
+                                     (float)r2d_json_num(r2d_json_get(req, "value"), 0));
+    } else {
+        send_error(req, "pad: нужен button или axis");
+        return true;
+    }
+    send_ok(req);
     return true;
 }
 
@@ -589,6 +644,10 @@ bool r2d_agent_serve(R2DAgent *a, const R2DAgentHooks *hooks)
             command_key(a, req);
         } else if (SDL_strcmp(cmd, "keys") == 0) {
             command_keys(a, req);
+        } else if (SDL_strcmp(cmd, "touch") == 0) {
+            running = command_touch(a, req);
+        } else if (SDL_strcmp(cmd, "pad") == 0) {
+            running = command_pad(a, req);
         } else if (SDL_strcmp(cmd, "mouse") == 0) {
             command_mouse(a, req);
         } else if (SDL_strcmp(cmd, "mouseMove") == 0) {

@@ -11,6 +11,12 @@
 extern "C" {
 #endif
 
+// Сколько геймпадов поддерживаем одновременно (слоты). Больше четырёх в
+// локальной игре не нужно, а память на слот — пара килобайт.
+#define R2D_MAX_GAMEPADS 4
+// Сколько пальцев отслеживаем (SDL отдаёт до 10 мультитачей).
+#define R2D_MAX_TOUCHES 10
+
 typedef struct R2DApp {
     SDL_Window    *window;
     SDL_GPUDevice *device;
@@ -85,11 +91,41 @@ typedef struct R2DApp {
     char text_pending[256];
     int  text_pending_len;
 
-    // --- Геймпад (первый подключённый) ---
-    SDL_Gamepad *gamepad;
-    bool  pad_buttons_cur[SDL_GAMEPAD_BUTTON_COUNT];
-    bool  pad_buttons_prev[SDL_GAMEPAD_BUTTON_COUNT];
-    float pad_axes[SDL_GAMEPAD_AXIS_COUNT];
+    // --- Геймпады (до четырёх: одновременная игра вчетвером) ---
+    //
+    // Раньше был ОДИН геймпад: «подключён первый» — и всё. Для игры вдвоём-
+    // вчетвером этого мало, поэтому слоты: у каждого свои кнопки и оси.
+    // Слот 0 дублирует «первый геймпад» — им пользуются старые вызовы
+    // engine.padDown и $.input.padDown.
+    SDL_Gamepad *gamepads[R2D_MAX_GAMEPADS];
+    SDL_JoystickID gamepad_ids[R2D_MAX_GAMEPADS];
+    bool  pad_buttons_cur[R2D_MAX_GAMEPADS][SDL_GAMEPAD_BUTTON_COUNT];
+    bool  pad_buttons_prev[R2D_MAX_GAMEPADS][SDL_GAMEPAD_BUTTON_COUNT];
+    float pad_axes[R2D_MAX_GAMEPADS][SDL_GAMEPAD_AXIS_COUNT];
+    // Виртуальный геймпад (агент/CI): накладывается поверх настоящего ввода
+    // ПОСЛЕ опроса SDL. Если накладывать до, опрос обнулит состояние: на
+    // геймпаде, которого нет, SDL отдаёт «не нажато» (нашлось тестом — виртуальная
+    // кнопка исчезала сразу).
+    bool  pad_virt_buttons[R2D_MAX_GAMEPADS][SDL_GAMEPAD_BUTTON_COUNT];
+    float pad_virt_axes[R2D_MAX_GAMEPADS][SDL_GAMEPAD_AXIS_COUNT];
+    // Какие из них уже попали в «предыдущее» состояние. Первый кадр нажатия
+    // пропускаем: иначе фронт нажатия не виден (prev уже true).
+    bool  pad_virt_seen[R2D_MAX_GAMEPADS][SDL_GAMEPAD_BUTTON_COUNT];
+
+    // --- Касания (до десяти точек) ---
+    //
+    // Тач-экраны и трекпады отдают пальцы, а не мышь: для мобильных портов и
+    // «нарисуй жест» нужны именно они. Храним позицию, предыдущую позицию и
+    // сдвиг за кадр.
+    // Виртуальные касания отдельно от настоящих: агент задаёт их МЕЖДУ кадрами,
+    // а SDL-событий касаний в CI нет, и опрос их бы не перезаписал.
+    bool  touch_virt[R2D_MAX_TOUCHES];
+    bool  touch_active[R2D_MAX_TOUCHES];
+    float touch_x[R2D_MAX_TOUCHES], touch_y[R2D_MAX_TOUCHES];
+    float touch_prev_x[R2D_MAX_TOUCHES], touch_prev_y[R2D_MAX_TOUCHES];
+    float touch_dx[R2D_MAX_TOUCHES], touch_dy[R2D_MAX_TOUCHES];
+    float touch_pressure[R2D_MAX_TOUCHES];
+    int   touch_count;
 
     // --- Служебное ---
     const char *base_path;   // каталог, относительно которого ищутся game/ и assets/
@@ -170,6 +206,25 @@ bool  r2d_pad_down(const R2DApp *app, SDL_GamepadButton button);
 bool  r2d_pad_pressed(const R2DApp *app, SDL_GamepadButton button);
 float r2d_pad_axis(const R2DApp *app, SDL_GamepadAxis axis);
 
+// --- Геймпады по слотам ------------------------------------------------------
+// Слот 0 — «первый геймпад» (то же, что старые вызовы выше). Слоты
+// соответствуют порядку подключения; после отключения слот освобождается.
+int   r2d_pad_slot_count(void);                    // сколько слотов всего
+int   r2d_app_pad_count(const R2DApp *app);        // сколько подключено сейчас
+bool  r2d_app_pad_connected_at(const R2DApp *app, int slot);
+bool  r2d_pad_down_at(const R2DApp *app, int slot, SDL_GamepadButton button);
+bool  r2d_pad_pressed_at(const R2DApp *app, int slot, SDL_GamepadButton button);
+float r2d_pad_axis_at(const R2DApp *app, int slot, SDL_GamepadAxis axis);
+bool  r2d_pad_rumble_at(R2DApp *app, int slot, float low, float high, uint32_t duration_ms);
+
+// --- Касания -----------------------------------------------------------------
+// Возвращают false, если точки с таким индексом нет в этом кадре.
+bool  r2d_app_touch(const R2DApp *app, int index, float *x, float *y);
+bool  r2d_app_touch_delta(const R2DApp *app, int index, float *dx, float *dy);
+float r2d_app_touch_pressure(const R2DApp *app, int index);
+// Сколько пальцев на экране в этом кадре.
+int   r2d_app_touch_count(const R2DApp *app);
+
 // --- Виброотклик -------------------------------------------------------------
 // low/high и left/right — сила 0..1 (SDL принимает 0..65535). false означает
 // «геймпада нет или он не умеет вибрировать» — притворяться, что виброаппарат
@@ -205,6 +260,12 @@ void r2d_app_virtual_wheel(R2DApp *app, float amount);
 // Виртуальный ввод текста: нужен агентским тестам <ui.input>, потому что
 // синтезировать SDL_EVENT_TEXT_INPUT снаружи нельзя.
 void r2d_app_virtual_text(R2DApp *app, const char *utf8);
+// Виртуальные касания: агент не может синтезировать SDL_EVENT_FINGER_*, а
+// тач-интерфейс нужно проверять в CI без настоящего экрана.
+void r2d_app_virtual_touch(R2DApp *app, int id, float x, float y, bool down);
+void r2d_app_virtual_touch_clear(R2DApp *app);
+void r2d_app_virtual_gamepad(R2DApp *app, int slot, int button, bool down);
+void r2d_app_virtual_gamepad_axis(R2DApp *app, int slot, int axis, float value);
 
 #ifdef __cplusplus
 }

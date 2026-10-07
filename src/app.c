@@ -380,9 +380,12 @@ void r2d_app_shutdown(R2DApp *app)
     if (app->base_path_owned) SDL_free((void *)app->base_path);
     app->base_path = NULL;
     app->base_path_owned = false;
-    if (app->gamepad) {
-        SDL_CloseGamepad(app->gamepad);
-        app->gamepad = NULL;
+    for (int slot = 0; slot < R2D_MAX_GAMEPADS; ++slot) {
+        if (app->gamepads[slot]) {
+            SDL_CloseGamepad(app->gamepads[slot]);
+            app->gamepads[slot] = NULL;
+            app->gamepad_ids[slot] = 0;
+        }
     }
     if (app->device) {
         if (app->window) {
@@ -402,29 +405,78 @@ void r2d_app_shutdown(R2DApp *app)
 // Кадр
 // ---------------------------------------------------------------------------
 
-static void r2d__open_first_gamepad(R2DApp *app)
+static void r2d__open_gamepads(R2DApp *app)
 {
-    if (app->gamepad) return;
-
+    // Открываем до R2D_MAX_GAMEPADS подключённых. Уже открытые слоты не
+    // трогаем: иначе переподключение четвёртого закрывало бы первый.
     int count = 0;
     SDL_JoystickID *ids = SDL_GetGamepads(&count);
-    if (ids) {
-        for (int i = 0; i < count; ++i) {
-            app->gamepad = SDL_OpenGamepad(ids[i]);
-            if (app->gamepad) break;
+    if (!ids) return;
+
+    for (int i = 0; i < count; ++i) {
+        // Уже открыт в каком-то слоте?
+        bool known = false;
+        for (int slot = 0; slot < R2D_MAX_GAMEPADS; ++slot) {
+            if (app->gamepads[slot] && app->gamepad_ids[slot] == ids[i]) { known = true; break; }
         }
-        SDL_free(ids);
+        if (known) continue;
+
+        for (int slot = 0; slot < R2D_MAX_GAMEPADS; ++slot) {
+            if (app->gamepads[slot]) continue;
+            SDL_Gamepad *pad = SDL_OpenGamepad(ids[i]);
+            if (!pad) continue;
+            app->gamepads[slot] = pad;
+            app->gamepad_ids[slot] = ids[i];
+            R2D_LOG("подключён геймпад %d: %s", slot, SDL_GetGamepadName(pad));
+            break;
+        }
     }
-    if (app->gamepad) {
-        R2D_LOG("подключён геймпад: %s", SDL_GetGamepadName(app->gamepad));
+    SDL_free(ids);
+}
+
+/** Закрыть геймпад по id устройства (отключили физически). */
+static void r2d__close_gamepad_id(R2DApp *app, SDL_JoystickID id)
+{
+    for (int slot = 0; slot < R2D_MAX_GAMEPADS; ++slot) {
+        if (!app->gamepads[slot] || app->gamepad_ids[slot] != id) continue;
+        SDL_CloseGamepad(app->gamepads[slot]);
+        app->gamepads[slot] = NULL;
+        app->gamepad_ids[slot] = 0;
+        SDL_zero(app->pad_buttons_cur[slot]);
+        SDL_zero(app->pad_buttons_prev[slot]);
+        SDL_zero(app->pad_axes[slot]);
+        R2D_LOG("геймпад %d отключён", slot);
+        return;
+    }
+}
+
+// Конец разбора ввода: итоговое состояние геймпадов становится «предыдущим»
+// для следующего кадра. Делать это раньше нельзя — виртуальный ввод ложится
+// поверх опрошенного, и фронт нажатия иначе не виден.
+static void r2d__app_end_input(R2DApp *app)
+{
+    for (int slot = 0; slot < R2D_MAX_GAMEPADS; ++slot) {
+        for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; ++b) {
+            // Виртуальную кнопку пропускаем в первом кадре нажатия: иначе
+            // «предыдущее» станет true и фронт нажатия не будет виден.
+            if (app->pad_virt_buttons[slot][b] && !app->pad_virt_seen[slot][b]) {
+                app->pad_virt_seen[slot][b] = true;
+                app->pad_buttons_prev[slot][b] = false;
+                continue;
+            }
+            app->pad_buttons_prev[slot][b] = app->pad_buttons_cur[slot][b];
+        }
     }
 }
 
 void r2d_app_begin_frame(R2DApp *app)
 {
     // Предыдущее состояние ввода нужно для детекта фронтов нажатий.
+    //
+    // ВАЖНО: геймпад копируется НЕ здесь, а в конце кадра — после того, как
+    // поверх опрошенного состояния лёг виртуальный ввод. Иначе фронт нажатия
+    // виртуальной кнопки не виден: «предыдущее» уже было true (нашлось тестом).
     SDL_memcpy(app->keys_prev, app->keys_cur, sizeof app->keys_cur);
-    SDL_memcpy(app->pad_buttons_prev, app->pad_buttons_cur, sizeof app->pad_buttons_cur);
     app->mouse_prev = app->mouse_cur;
 
     app->mouse_dx = 0.0f;
@@ -445,9 +497,7 @@ void r2d_app_begin_frame(R2DApp *app)
         app->text_input_len = 0;
     }
 
-    if (!app->gamepad) {
-        r2d__open_first_gamepad(app);
-    }
+    r2d__open_gamepads(app);
 
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
@@ -494,15 +544,42 @@ void r2d_app_begin_frame(R2DApp *app)
             break;
 
         case SDL_EVENT_GAMEPAD_ADDED:
-            r2d__open_first_gamepad(app);
+            r2d__open_gamepads(app);
             break;
 
         case SDL_EVENT_GAMEPAD_REMOVED:
-            if (app->gamepad && ev.gdevice.which == SDL_GetGamepadID(app->gamepad)) {
-                SDL_CloseGamepad(app->gamepad);
-                app->gamepad = NULL;
+            r2d__close_gamepad_id(app, ev.gdevice.which);
+            break;
+
+        case SDL_EVENT_FINGER_DOWN:
+        case SDL_EVENT_FINGER_MOTION:
+        case SDL_EVENT_FINGER_UP: {
+            // SDL отдаёт позицию в НОРМАЛИЗОВАННЫХ координатах (0..1): переводим
+            // в логические точки окна — той же системы, что мышь и сцена.
+            const float fx = ev.tfinger.x * (float)app->width;
+            const float fy = ev.tfinger.y * (float)app->height;
+            const int index = (int)ev.tfinger.fingerID;
+            if (index >= 0 && index < R2D_MAX_TOUCHES) {
+                if (ev.type == SDL_EVENT_FINGER_UP) {
+                    app->touch_active[index] = false;
+                    app->touch_pressure[index] = 0.0f;
+                    app->touch_dx[index] = 0.0f;
+                    app->touch_dy[index] = 0.0f;
+                } else {
+                    if (app->touch_active[index]) {
+                        app->touch_dx[index] += fx - app->touch_x[index];
+                        app->touch_dy[index] += fy - app->touch_y[index];
+                    }
+                    app->touch_prev_x[index] = app->touch_x[index];
+                    app->touch_prev_y[index] = app->touch_y[index];
+                    app->touch_active[index] = true;
+                    app->touch_x[index] = fx;
+                    app->touch_y[index] = fy;
+                    app->touch_pressure[index] = ev.tfinger.pressure;
+                }
             }
             break;
+        }
 
         default:
             break;
@@ -522,17 +599,49 @@ void r2d_app_begin_frame(R2DApp *app)
     app->mouse_x = mx;
     app->mouse_y = my;
 
-    if (app->gamepad) {
+    for (int slot = 0; slot < R2D_MAX_GAMEPADS; ++slot) {
+        if (app->gamepads[slot]) {
+            for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; ++b) {
+                app->pad_buttons_cur[slot][b] =
+                    SDL_GetGamepadButton(app->gamepads[slot], (SDL_GamepadButton)b);
+            }
+            for (int a = 0; a < SDL_GAMEPAD_AXIS_COUNT; ++a) {
+                app->pad_axes[slot][a] =
+                    SDL_GetGamepadAxis(app->gamepads[slot], (SDL_GamepadAxis)a);
+            }
+        } else {
+            SDL_zero(app->pad_buttons_cur[slot]);
+            SDL_zero(app->pad_axes[slot]);
+        }
+    }
+    // Виртуальный геймпад накладывается поверх опрошенного состояния: у
+    // настоящего устройства SDL отдаёт «не нажато», и без этого шага
+    // виртуальная кнопка исчезала бы в том же кадре.
+    for (int slot = 0; slot < R2D_MAX_GAMEPADS; ++slot) {
         for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; ++b) {
-            app->pad_buttons_cur[b] = SDL_GetGamepadButton(app->gamepad, (SDL_GamepadButton)b);
+            if (app->pad_virt_buttons[slot][b]) app->pad_buttons_cur[slot][b] = true;
         }
         for (int a = 0; a < SDL_GAMEPAD_AXIS_COUNT; ++a) {
-            app->pad_axes[a] = SDL_GetGamepadAxis(app->gamepad, (SDL_GamepadAxis)a);
+            if (app->pad_virt_axes[slot][a] != 0.0f) app->pad_axes[slot][a] = app->pad_virt_axes[slot][a];
         }
-    } else {
-        SDL_zero(app->pad_buttons_cur);
-        SDL_zero(app->pad_axes);
     }
+
+    // Пальцы: активные точки начинают кадр с нулевым сдвигом. Виртуальные
+    // касания живут между кадрами, поэтому переносим их в состояние кадра.
+    for (int i = 0; i < R2D_MAX_TOUCHES; ++i) {
+        app->touch_dx[i] = 0.0f;
+        app->touch_dy[i] = 0.0f;
+        if (app->touch_virt[i]) {
+            if (app->touch_active[i]) {
+                app->touch_dx[i] = app->touch_x[i] - app->touch_prev_x[i];
+                app->touch_dy[i] = app->touch_y[i] - app->touch_prev_y[i];
+            }
+            app->touch_prev_x[i] = app->touch_x[i];
+            app->touch_prev_y[i] = app->touch_y[i];
+            app->touch_active[i] = true;
+        }
+    }
+    app->touch_count = r2d_app_touch_count(app);
 
     // Виртуальный ввод агента накладывается поверх настоящего: игра видит
     // единое состояние, а SDL и агент могут работать одновременно.
@@ -581,7 +690,9 @@ void r2d_app_begin_frame(R2DApp *app)
     app->mouse_virt_dx = 0.0f;
     app->mouse_virt_dy = 0.0f;
     app->wheel_virt = 0.0f;
+    r2d__app_end_input(app);
 }
+
 
 // ---------------------------------------------------------------------------
 // Ввод
@@ -619,21 +730,93 @@ bool r2d_mouse_pressed(const R2DApp *app, int button)
     return (app->mouse_cur & mask) != 0 && (app->mouse_prev & mask) == 0;
 }
 
+int r2d_pad_slot_count(void) { return R2D_MAX_GAMEPADS; }
+
+int r2d_app_pad_count(const R2DApp *app)
+{
+    if (!app) return 0;
+    int n = 0;
+    for (int slot = 0; slot < R2D_MAX_GAMEPADS; ++slot) {
+        if (app->gamepads[slot]) n++;
+    }
+    return n;
+}
+
+bool r2d_app_pad_connected_at(const R2DApp *app, int slot)
+{
+    if (!app || slot < 0 || slot >= R2D_MAX_GAMEPADS) return false;
+    return app->gamepads[slot] != NULL;
+}
+
+bool r2d_pad_down_at(const R2DApp *app, int slot, SDL_GamepadButton button)
+{
+    if (!app || slot < 0 || slot >= R2D_MAX_GAMEPADS) return false;
+    if (button < 0 || button >= SDL_GAMEPAD_BUTTON_COUNT) return false;
+    return app->pad_buttons_cur[slot][button];
+}
+
+bool r2d_pad_pressed_at(const R2DApp *app, int slot, SDL_GamepadButton button)
+{
+    if (!app || slot < 0 || slot >= R2D_MAX_GAMEPADS) return false;
+    if (button < 0 || button >= SDL_GAMEPAD_BUTTON_COUNT) return false;
+    return app->pad_buttons_cur[slot][button] && !app->pad_buttons_prev[slot][button];
+}
+
+float r2d_pad_axis_at(const R2DApp *app, int slot, SDL_GamepadAxis axis)
+{
+    if (!app || slot < 0 || slot >= R2D_MAX_GAMEPADS) return 0.0f;
+    if (axis < 0 || axis >= SDL_GAMEPAD_AXIS_COUNT) return 0.0f;
+    return app->pad_axes[slot][axis];
+}
+
+// Слот 0 — «первый геймпад»: старые вызовы остаются рабочими.
 bool r2d_pad_down(const R2DApp *app, SDL_GamepadButton button)
 {
-    return (button >= 0 && button < SDL_GAMEPAD_BUTTON_COUNT) ? app->pad_buttons_cur[button] : false;
+    return r2d_pad_down_at(app, 0, button);
 }
 
 bool r2d_pad_pressed(const R2DApp *app, SDL_GamepadButton button)
 {
-    return (button >= 0 && button < SDL_GAMEPAD_BUTTON_COUNT)
-               ? (app->pad_buttons_cur[button] && !app->pad_buttons_prev[button])
-               : false;
+    return r2d_pad_pressed_at(app, 0, button);
 }
 
 float r2d_pad_axis(const R2DApp *app, SDL_GamepadAxis axis)
 {
-    return (axis >= 0 && axis < SDL_GAMEPAD_AXIS_COUNT) ? app->pad_axes[axis] : 0.0f;
+    return r2d_pad_axis_at(app, 0, axis);
+}
+
+// --- Касания -----------------------------------------------------------------
+
+bool r2d_app_touch(const R2DApp *app, int index, float *x, float *y)
+{
+    if (!app || index < 0 || index >= R2D_MAX_TOUCHES || !app->touch_active[index]) return false;
+    if (x) *x = app->touch_x[index];
+    if (y) *y = app->touch_y[index];
+    return true;
+}
+
+bool r2d_app_touch_delta(const R2DApp *app, int index, float *dx, float *dy)
+{
+    if (!app || index < 0 || index >= R2D_MAX_TOUCHES || !app->touch_active[index]) return false;
+    if (dx) *dx = app->touch_dx[index];
+    if (dy) *dy = app->touch_dy[index];
+    return true;
+}
+
+float r2d_app_touch_pressure(const R2DApp *app, int index)
+{
+    if (!app || index < 0 || index >= R2D_MAX_TOUCHES || !app->touch_active[index]) return 0.0f;
+    return app->touch_pressure[index];
+}
+
+int r2d_app_touch_count(const R2DApp *app)
+{
+    if (!app) return 0;
+    int n = 0;
+    for (int i = 0; i < R2D_MAX_TOUCHES; ++i) {
+        if (app->touch_active[i]) n++;
+    }
+    return n;
 }
 
 // Сила вибрации: 0..1 из JS → 0..65535 для SDL. Значения за диапазоном
@@ -647,20 +830,26 @@ static Uint16 r2d__rumble_amount(float value)
 
 bool r2d_pad_connected(const R2DApp *app)
 {
-    return app && app->gamepad != NULL;
+    return r2d_app_pad_connected_at(app, 0);
 }
 
 bool r2d_pad_rumble(R2DApp *app, float low, float high, uint32_t duration_ms)
 {
-    if (!app || !app->gamepad) return false;
-    return SDL_RumbleGamepad(app->gamepad, r2d__rumble_amount(low), r2d__rumble_amount(high),
-                             duration_ms);
+    return r2d_pad_rumble_at(app, 0, low, high, duration_ms);
+}
+
+bool r2d_pad_rumble_at(R2DApp *app, int slot, float low, float high, uint32_t duration_ms)
+{
+    if (!app || slot < 0 || slot >= R2D_MAX_GAMEPADS) return false;
+    SDL_Gamepad *pad = app->gamepads[slot];
+    if (!pad) return false;
+    return SDL_RumbleGamepad(pad, r2d__rumble_amount(low), r2d__rumble_amount(high), duration_ms);
 }
 
 bool r2d_pad_rumble_triggers(R2DApp *app, float left, float right, uint32_t duration_ms)
 {
-    if (!app || !app->gamepad) return false;
-    return SDL_RumbleGamepadTriggers(app->gamepad, r2d__rumble_amount(left),
+    if (!app || !app->gamepads[0]) return false;
+    return SDL_RumbleGamepadTriggers(app->gamepads[0], r2d__rumble_amount(left),
                                      r2d__rumble_amount(right), duration_ms);
 }
 
@@ -722,6 +911,58 @@ void r2d_app_virtual_release_all(R2DApp *app)
     SDL_zero(app->keys_virt);
     SDL_zero(app->keys_tap);
     app->mouse_virt = 0;
+}
+
+void r2d_app_virtual_touch(R2DApp *app, int id, float x, float y, bool down)
+{
+    if (!app || id < 0 || id >= R2D_MAX_TOUCHES) return;
+    if (!down) {
+        app->touch_virt[id] = false;
+        app->touch_active[id] = false;
+        app->touch_pressure[id] = 0.0f;
+        return;
+    }
+    if (app->touch_virt[id]) {
+        app->touch_prev_x[id] = app->touch_x[id];
+        app->touch_prev_y[id] = app->touch_y[id];
+    }
+    app->touch_virt[id] = true;
+    app->touch_x[id] = x;
+    app->touch_y[id] = y;
+    // Виртуальный палец нажат «сильно»: у настоящих касаний давление 0..1, и
+    // проверка «палец есть» не должна зависеть от платформы.
+    app->touch_pressure[id] = 1.0f;
+}
+
+void r2d_app_virtual_touch_clear(R2DApp *app)
+{
+    if (!app) return;
+    for (int i = 0; i < R2D_MAX_TOUCHES; ++i) {
+        app->touch_virt[i] = false;
+        app->touch_active[i] = false;
+        app->touch_pressure[i] = 0.0f;
+        app->touch_dx[i] = 0.0f;
+        app->touch_dy[i] = 0.0f;
+    }
+    app->touch_count = 0;
+}
+
+void r2d_app_virtual_gamepad(R2DApp *app, int slot, int button, bool down)
+{
+    if (!app || slot < 0 || slot >= R2D_MAX_GAMEPADS) return;
+    if (button < 0 || button >= SDL_GAMEPAD_BUTTON_COUNT) return;
+    // Виртуальный геймпад отмечается в состоянии ВВОДА, а не как подключённое
+    // устройство: у CI нет настоящего геймпада, но поведение проверять надо.
+    // Хранится отдельно и накладывается ПОСЛЕ опроса SDL в начале кадра.
+    app->pad_virt_buttons[slot][button] = down;
+    if (!down) app->pad_virt_seen[slot][button] = false;
+}
+
+void r2d_app_virtual_gamepad_axis(R2DApp *app, int slot, int axis, float value)
+{
+    if (!app || slot < 0 || slot >= R2D_MAX_GAMEPADS) return;
+    if (axis < 0 || axis >= SDL_GAMEPAD_AXIS_COUNT) return;
+    app->pad_virt_axes[slot][axis] = value;
 }
 
 void r2d_app_virtual_mouse(R2DApp *app, int button, bool down)
