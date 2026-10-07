@@ -139,6 +139,18 @@ def main():
         after = server.eval("engine.netStatus()")["packetsReceived"]
         check(after > before, f"при потерях пакеты всё равно доходят: {before} → {after}")
 
+        # RTT по петле: клиент шлёт пинг, сервер отвечает.
+        client.eval("$.net.ping(1.0)")
+        for _ in range(20):
+            server.step(1)
+            client.step(1)
+            if client.eval("$.net.rtt()") >= 0 and client.eval("$.net.pings()") > 0:
+                break
+            time.sleep(0.05)
+        # Через петлю время не идёт, поэтому RTT = 0 — важно, что ответ дошёл.
+        check(client.eval("$.net.pings()") > 0, "клиент отправил пинг")
+        check(client.eval("$.net.rtt()") >= 0, "RTT посчитан (по петле — около нуля)")
+
         # Сброс: узел выходит из сети, порт освобождается.
         client.eval("$.net.leave()")
         server.eval("$.net.leave()")

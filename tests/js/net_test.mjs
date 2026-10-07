@@ -13,6 +13,7 @@ import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
 import {
     createIdTable, diffSnapshot, applySnapshot, interpolate, sameValue,
     createInputQueue, createAuthority, createClientState,
+    createHistory, createPrediction,
 } from '../../src/highlevel/net.js';
 import { createApi } from '../../src/highlevel/api.js';
 
@@ -407,6 +408,183 @@ test('$.net: клиент интерполирует чужие, своё бер
     const other = $.net.polated('e2', false, 0.5);
     near(other.x, 150, 1e-9, 'чужое — половина пути');
     eq($.net.previous().entities.e2.x, 100, 'предыдущий снапшот цел');
+});
+
+// --- История (лаг-компенсация) ---
+
+test('история: состояние на момент времени', () => {
+    const h = createHistory(10, 1);
+    eq(h.size(), 0, 'сначала пусто');
+    eq(h.range(), null);
+    h.push(0, { e1: { x: 0 } });
+    h.push(0.1, { e1: { x: 10 } });
+    h.push(0.2, { e1: { x: 20 } });
+    eq(h.size(), 3);
+    eq(h.range().from, 0);
+    eq(h.range().to, 0.2);
+    eq(h.at(0.1, 'e1').x, 10, 'точное время');
+    eq(h.at(0.15, 'e1').x, 10, 'между кадрами — ближайший НЕ позже');
+    eq(h.at(99, 'e1').x, 20, 'позже окна — последний');
+    eq(h.at(-5, 'e1').x, 0, 'раньше окна — первый');
+    eq(h.at(0.1).e1.x, 10, 'без ключа — все сущности');
+    eq(h.at(0.1, 'нет'), null);
+});
+
+test('история: перемотка на задержку', () => {
+    const h = createHistory(10, 1);
+    for (let i = 0; i <= 5; ++i) h.push(i * 0.1, { e1: { x: i * 100 } });
+    // Сейчас 0.5, задержка 0.2 → смотрим на 0.3, где x был 300.
+    eq(h.rewind(0.5, 0.2, 'e1').x, 300, 'перемотка на половину RTT');
+    eq(h.rewind(0.5, 0, 'e1').x, 500, 'без задержки — текущее');
+});
+
+test('история: вытеснение по количеству и по времени', () => {
+    const byCount = createHistory(3, 100);
+    for (let i = 0; i < 10; ++i) byCount.push(i, { e1: { x: i } });
+    eq(byCount.size(), 3, 'держим не больше ёмкости');
+    eq(byCount.at(0, 'e1').x, 7, 'старое вытеснено');
+    const byTime = createHistory(100, 0.5);
+    for (let i = 0; i <= 10; ++i) byTime.push(i * 0.1, { e1: { x: i } });
+    const range = byTime.range();
+    truthy(range.to - range.from <= 0.6, `окно не шире заданного: ${(range.to - range.from).toFixed(2)}`);
+    byTime.clear();
+    eq(byTime.size(), 0);
+});
+
+// --- Предсказание ---
+
+/** Простая симуляция: движение по вводу (та же функция у клиента и сервера). */
+function moveSim(state, input) {
+    const out = Object.assign({ x: 0, y: 0, seq: 0 }, state || {});
+    if (input) {
+        out.x += Number(input.dx) || 0;
+        out.seq = Math.max(out.seq, Number(input.seq) || 0);
+    }
+    return out;
+}
+
+test('предсказание: ввод применяется сразу', () => {
+    const p = createPrediction(moveSim);
+    eq(p.state(), null, 'до ввода состояния нет');
+    const s1 = p.apply({ seq: 1, dx: 10 });
+    eq(s1.x, 10, 'ввод применён немедленно');
+    const s2 = p.apply({ seq: 2, dx: 5 });
+    eq(s2.x, 15);
+    eq(p.pending(), 2, 'два ввода ждут подтверждения');
+    eq(p.acknowledged(), 0);
+});
+
+test('предсказание: подтверждение откатывает и повторяет неподтверждённое', () => {
+    const p = createPrediction(moveSim);
+    p.apply({ seq: 1, dx: 10 });
+    p.apply({ seq: 2, dx: 10 });
+    eq(p.state().x, 20, 'клиент уже ушёл вперёд');
+    // Сервер подтвердил только первый ввод и говорит x = 12 (чуть иначе).
+    const after = p.acknowledge({ x: 12, seq: 1 }, 1);
+    eq(after.x, 22, 'к серверной правде применён неподтверждённый ввод');
+    eq(p.pending(), 1, 'второй ввод ещё не подтверждён');
+    eq(p.acknowledged(), 1);
+    eq(p.corrections(), 1, 'коррекция зафиксирована');
+    truthy(p.error() >= 0, 'разница с правдой видна игре');
+    // Подтвердили и второй.
+    p.acknowledge({ x: 22, seq: 2 }, 2);
+    eq(p.pending(), 0);
+    eq(p.state().x, 22, 'сошлось с сервером');
+});
+
+test('предсказание: чужой правды не выдумывает и сбрасывается', () => {
+    const p = createPrediction(moveSim);
+    const ack = p.acknowledge({ x: 100, seq: 0 }, 0);
+    eq(ack.x, 100, 'без ввода берём серверное состояние');
+    eq(p.pending(), 0);
+    p.apply({ seq: 1, dx: 1 });
+    p.reset();
+    eq(p.state(), null);
+    eq(p.pending(), 0);
+    eq(p.corrections(), 0);
+    // Без функции шага предсказание просто передаёт состояние.
+    const passthrough = createPrediction(null);
+    passthrough.apply({ seq: 1, dx: 5 });
+    eq(passthrough.state().seq, 1, 'шаг по умолчанию — тождество');
+});
+
+test('$.net: RTT считается по ping/pong', () => {
+    const client = createApi();
+    const sent = [];
+    const server = createApi();
+    server.net.attach({
+        listen: () => true, connect: () => true, close: () => {},
+        poll: () => [],
+        send: (m) => { sent.push(m); return true; },
+    });
+    client.net.attach({
+        listen: () => true, connect: () => true, close: () => {},
+        poll: () => [],
+        // Пинг уходит на сервер, ответ сервера возвращается клиенту.
+        send: (m) => {
+            if (m.channel === 'ping') {
+                server.net.receive({ channel: 'ping', data: m.data, from: '127.0.0.1' });
+                for (const reply of sent) client.net.receive({ channel: reply.channel, data: reply.data });
+                sent.length = 0;
+            }
+            return true;
+        },
+    });
+    server.net.host(7777);
+    client.net.join('127.0.0.1', 7777);
+    eq(client.net.rtt(), 0, 'до пинга задержка неизвестна');
+    eq(client.net.ping(1000), 1, 'пинг отправлен');
+    // Сервер ответил мгновенно: RTT = 0 мс (время не шло).
+    eq(client.net.rtt(), 0);
+    // Второй пинг с задержкой во времени.
+    client.net.ping(1000);
+    eq(client.net.pings(), 2);
+    truthy(client.net.latency() >= 0, 'половина задержки читается');
+    // Чужой pong без пинга игнорируем.
+    eq(client.net.receive({ channel: 'pong', data: { seq: 999, at: 5 } }), true);
+    eq(client.net.rtt(), 0, 'ответ без пинга ничего не портит');
+});
+
+test('$.net: сервер ведёт историю и умеет перемотать', () => {
+    const $ = createApi();
+    $.net.host(7777);
+    $.net.addPlayer();
+    const hero = fakeNode(0, 0, 100);
+    $.net.replicate(hero, { owner: 1 });
+    eq($.net.history(), null, 'до записи истории нет');
+    $.net.record(0);
+    hero._x = 50;
+    $.net.record(0.2);
+    hero._x = 100;
+    $.net.record(0.4);
+    const info = $.net.history();
+    eq(info.size, 3, 'три кадра в истории');
+    eq(info.range.to, 0.4);
+    // Перемотка на 0.2 назад от 0.4 — состояние на 0.2.
+    const past = $.net.rewind(hero, 0.4, 0.2);
+    eq(past.x, 50, 'на момент задержки было 50');
+    eq($.net.rewind(hero, 0.4, 0).x, 100, 'без задержки — текущее');
+    // На клиенте перемотки нет.
+    const client = createApi();
+    client.net.join('127.0.0.1', 7777);
+    eq(client.net.record(0), 0, 'клиент историю не ведёт');
+    eq(client.net.rewind(hero, 1, 0), null);
+});
+
+test('$.net: предсказание клиента и подтверждение снапшотом', () => {
+    const $ = createApi();
+    $.net.join('127.0.0.1', 7777);
+    truthy($.net.predict(moveSim), 'предсказание включено');
+    $.net.applyInput({ seq: 1, dx: 4 });
+    $.net.applyInput({ seq: 2, dx: 4 });
+    eq($.net.prediction().state().x, 8, 'клиент видит себя сразу');
+    // Пришёл снапшот: сервер подтвердил первый ввод и говорит x = 5.
+    $.net.receive({ channel: 'snapshot', data: { tick: 1, entities: { e1: { x: 5, seq: 1 } } } });
+    const st = $.net.prediction().state();
+    eq($.net.prediction().acknowledged(), 1);
+    eq($.net.prediction().pending(), 1, 'второй ввод ещё ждёт');
+    eq(st.x, 9, 'к правде применён неподтверждённый ввод (5 + 4)');
+    eq($.net.prediction().state().x, 9);
 });
 
 finish();

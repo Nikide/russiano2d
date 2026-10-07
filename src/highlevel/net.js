@@ -389,6 +389,149 @@ export function decodeMessage(data) {
     }
 }
 
+/**
+ * История подтверждённых состояний — основа лаг-компенсации.
+ *
+ * Сервер хранит, где кто был в прошлом, и на выстрел проверяет попадание по
+ * состоянию с задержкой клиента, а не по «сейчас». Иначе по движущейся цели не
+ * попасть никогда: клиент стреляет по тому, кого ВИДЕЛ.
+ *
+ * Ядро чистое: времена и сущности, никаких сокетов.
+ */
+export function createHistory(capacity, seconds) {
+    const limit = Math.max(1, Math.floor(Number(capacity) || 120));
+    const window = Math.max(0.1, Number(seconds) || 1);
+    let frames = [];              // [{ time, entities }] от старых к новым
+
+    const history = {
+        /** Запомнить состояние на момент времени. */
+        push(time, entities) {
+            const t = Number(time) || 0;
+            frames.push({ time: t, entities: Object.assign({}, entities || {}) });
+            // Вытесняем по количеству и по времени — держим только окно.
+            while (frames.length > limit) frames.shift();
+            while (frames.length > 1 && t - frames[0].time > window) frames.shift();
+            return history;
+        },
+
+        /** Сколько записей. */
+        size() { return frames.length; },
+        /** Границы окна: `{ from, to }` (или null, если пусто). */
+        range() {
+            if (!frames.length) return null;
+            return { from: frames[0].time, to: frames[frames.length - 1].time };
+        },
+
+        /**
+         * Сущность на момент времени: берём ближайший кадр НЕ ПОЗЖЕ `time`
+         * (то, что сервер уже знал), и отдаём его состояние.
+         */
+        at(time, key) {
+            const t = Number(time) || 0;
+            let found = null;
+            // Сравнение с ДОПУСКОМ: время копится сложением кадров, и
+            // 0.1 + 0.1 + 0.1 в двоичных дробях больше 0.3 — без допуска
+            // перемотка «на 0.2 назад» находила предыдущий кадр (нашлось тестом).
+            const eps = 1e-6;
+            for (const frame of frames) {
+                if (frame.time <= t + eps) found = frame;
+                else break;
+            }
+            if (!found) found = frames[0] || null;
+            if (!found) return null;
+            if (key === undefined) return Object.assign({}, found.entities);
+            const e = found.entities[String(key)];
+            return e ? Object.assign({}, e) : null;
+        },
+
+        /**
+         * Перемотка: позиция сущности на момент «сейчас минус задержка».
+         * `delay` — половина RTT, то есть столько, сколько клиент ждал.
+         */
+        rewind(now, delay, key) {
+            return history.at((Number(now) || 0) - (Number(delay) || 0), key);
+        },
+
+        clear() { frames = []; return history; },
+        /** Снимок для сейва и тестов. */
+        frames() { return frames.map((f) => ({ time: f.time, entities: Object.assign({}, f.entities) })); },
+    };
+    return history;
+}
+
+/**
+ * Предсказание локального игрока: клиент применяет свой ввод сразу, а когда
+ * приходит подтверждение от сервера — откатывается к нему и ПОВТОРЯЕТ
+ * неподтверждённые вводы. Так отклик мгновенный, но правда всегда серверная.
+ *
+ * `simulate(state, input)` — чистая функция шага: она же используется сервером.
+ */
+export function createPrediction(simulate) {
+    // Шаг по умолчанию — «состояние плюс ввод»: чистое тождество по состоянию
+    // отбрасывало ввод, и предсказание возвращало пустой объект (нашлось тестом).
+    const step = typeof simulate === 'function'
+        ? simulate
+        : (state, input) => Object.assign({}, state || {}, input || {});
+    let predicted = null;         // наше состояние (уже с локальным вводом)
+    let acknowledged = 0;         // до какого номера сервер подтвердил
+    let pending = [];             // вводы, ещё не подтверждённые
+    let corrections = 0;          // сколько раз пришлось откатываться
+    let lastError = 0;            // насколько предсказание разошлось с правдой
+
+    const prediction = {
+        /** Запомнить подтверждённое сервером состояние (до номера `seq`). */
+        acknowledge(state, seq) {
+            acknowledged = Math.floor(Number(seq) || 0);
+            acknowledged_state = state;
+            // Неподтверждённые вводы: всё, что новее подтверждённого номера.
+            const keep = pending.filter((item) => item.seq > acknowledged);
+            predicted = Object.assign({}, state);
+            for (const item of keep) predicted = step(predicted, item.input);
+            // Коррекция: сравниваем, где мы оказались и где правда.
+            const before = predicted;
+            lastError = 0;
+            if (acknowledged_state && before) {
+                const a = Number(acknowledged_state.x);
+                const b = Number(before.x);
+                if (Number.isFinite(a) && Number.isFinite(b)) lastError = Math.abs(a - b);
+            }
+            if (keep.length !== pending.length) corrections++;
+            pending = keep;
+            return predicted;
+        },
+
+        /** Применить свой ввод немедленно (и запомнить для повтора). */
+        apply(input) {
+            pending.push({ seq: input && input.seq ? input.seq : pending.length + 1, input });
+            // Очередь неподтверждённых короткая: если связь пропала совсем,
+            // копить бесконечно нельзя.
+            while (pending.length > 128) pending.shift();
+            predicted = step(predicted || {}, input);
+            return predicted;
+        },
+
+        /** Наше состояние (с учётом локального ввода). */
+        state() { return predicted ? Object.assign({}, predicted) : null; },
+        /** Сколько вводов ещё не подтверждено. */
+        pending() { return pending.length; },
+        /** До какого номера сервер подтвердил. */
+        acknowledged() { return acknowledged; },
+        /** Сколько раз откатывались (диагностика «дёрганости»). */
+        corrections() { return corrections; },
+        /** Последняя разница между предсказанием и правдой. */
+        error() { return lastError; },
+
+        reset() {
+            predicted = null; acknowledged = 0; pending = []; corrections = 0; lastError = 0;
+            acknowledged_state = null;
+            return prediction;
+        },
+    };
+
+    let acknowledged_state = null;
+    return prediction;
+}
+
 // ---------------------------------------------------------------------------
 // Подсистема
 // ---------------------------------------------------------------------------
@@ -410,6 +553,15 @@ export function installNet($) {
     const peerByAddress = new Map();  // адрес пира → номер игрока (сервер)
     let tick = 0;
     let droppedInputs = 0;
+    // Задержка: клиент шлёт 'ping' с временем, сервер отвечает 'pong' тем же
+    // числом — по разнице и считаем RTT.
+    let rtt = 0;
+    let pingSeq = 0;
+    const pingSent = new Map();   // номер → время отправки
+    let pings = 0;
+    // Лаг-компенсация: история подтверждённых состояний на сервере.
+    let history = null;
+    let prediction = null;
     const stats = { sent: 0, received: 0, snapshots: 0, inputs: 0 };
 
     function emit(name, ...args) {
@@ -557,6 +709,92 @@ export function installNet($) {
 
         /** Сколько кадров сети прошло (номер тика). */
         tick() { return tick; },
+
+        // --- Задержка (RTT) ---
+
+        /**
+         * Отправить «пинг». Сервер отвечает тем же числом, и по разнице
+         * считается RTT. Игра зовёт раз в секунду-две, не каждый кадр.
+         */
+        ping(now) {
+            if (role !== 'client') return 0;
+            const seq = ++pingSeq;
+            pingSent.set(seq, Number(now) || 0);
+            api.send('ping', { seq, at: Number(now) || 0 });
+            pings++;
+            return seq;
+        },
+
+        /** Круговая задержка в МИЛЛИСЕКУНДАХ (0 — ещё не измерена). */
+        rtt() { return rtt; },
+        /** Половина задержки в секундах: столько клиент ждал подтверждения. */
+        latency() { return rtt / 2000; },
+        /** Сколько пингов отправлено. */
+        pings() { return pings; },
+
+        // --- Лаг-компенсация (только сервер) ---
+
+        /**
+         * История подтверждённых состояний: сервер зовёт её в своём кадре.
+         * `$.net.record(now)` — запомнить текущее подтверждённое состояние.
+         */
+        record(now) {
+            if (role !== 'server') return 0;
+            if (!history) history = createHistory(120, 1);
+            const entities = {};
+            for (const id of authority.ids.ids()) {
+                const node = authority.ids.nodeOf(id);
+                if (!node) continue;
+                const entry = { owner: authority.ownerOf(node) };
+                if (typeof node.pos === 'function') {
+                    try { const p = node.pos(); entry.x = p.x; entry.y = p.y; } catch (e) { /* без позиции */ }
+                }
+                entities[authority.ids.key(id)] = entry;
+            }
+            history.push(Number(now) || 0, entities);
+            return history.size();
+        },
+
+        /**
+         * Где был узел на момент «сейчас минус задержка» — по этому состоянию
+         * сервер проверяет попадание, а не по текущему.
+         */
+        rewind(what, now, delay) {
+            if (role !== 'server' || !history) return null;
+            const node = nodeOf(what);
+            if (!node) return null;
+            const key = authority.ids.key(authority.ids.idOf(node));
+            const d = delay === undefined ? api.latency() : Number(delay) || 0;
+            return history.rewind(Number(now) || 0, d, key);
+        },
+
+        /** История (или null): размер и окно — для интерфейса и тестов. */
+        history() {
+            if (!history) return null;
+            return { size: history.size(), range: history.range() };
+        },
+
+        // --- Предсказание клиента ---
+
+        /**
+         * Включить предсказание: `$.net.predict(simulate)`.
+         * `simulate(state, input)` — чистая функция шага (та же, что на сервере).
+         */
+        predict(simulate) {
+            prediction = createPrediction(simulate);
+            return prediction;
+        },
+        /** Предсказание (или null). */
+        prediction() { return prediction; },
+
+        /**
+         * Применить свой ввод немедленно: клиент зовёт перед отправкой.
+         * Возвращает предсказанное состояние (или null, если не включено).
+         */
+        applyInput(input) {
+            if (!prediction) return null;
+            return prediction.apply(input);
+        },
         /** Канал последнего принятого сообщения (диагностика). */
         lastChannel() { return lastChannel; },
         /** Адреса пиров, уже привязанные к игрокам (диагностика сервера). */
@@ -664,6 +902,19 @@ export function installNet($) {
             if (channel === 'snapshot') {
                 stats.snapshots++;
                 client.apply(message.data);
+                // Подтверждение предсказания: сервер присылает номер последнего
+                // обработанного ввода, и клиент откатывается к его состоянию.
+                if (prediction && message.data) {
+                    const entities = message.data.entities || {};
+                    let ack = 0;
+                    let own = null;
+                    for (const key of Object.keys(entities)) {
+                        const entry = entities[key];
+                        if (!entry || typeof entry.seq !== 'number') continue;
+                        if (entry.seq >= ack) { ack = entry.seq; own = entry; }
+                    }
+                    if (own) prediction.acknowledge(own, ack);
+                }
                 emit('snapshot', message.data);
                 return true;
             }
@@ -690,6 +941,23 @@ export function installNet($) {
                 if (!queue) return false;
                 queue.push(message.data);
                 emit('input', player, message.data);
+                return true;
+            }
+            if (channel === 'ping') {
+                // Сервер отвечает тем же числом: по разнице клиент считает RTT.
+                if (role !== 'server') return false;
+                api.send('pong', message.data);
+                return true;
+            }
+            if (channel === 'pong') {
+                if (role !== 'client') return false;
+                const data = message.data || {};
+                const at = pingSent.get(Math.floor(Number(data.seq) || 0));
+                if (at !== undefined) {
+                    pingSent.delete(Math.floor(Number(data.seq) || 0));
+                    rtt = Math.max(0, (Number(data.at) || 0) - at);
+                }
+                emit('pong', data);
                 return true;
             }
             if (channel === 'join' && role === 'server') {
@@ -743,8 +1011,9 @@ export function installNet($) {
 
         /** Строка состояния для отладки. */
         describe() {
+            const lag = rtt > 0 ? `, RTT ${rtt.toFixed(0)} мс` : '';
             return `${role}${port ? ` :${port}` : ''} — ${authority.describe()}, `
-                 + `снапшотов ${stats.snapshots}, вводов ${stats.inputs}`;
+                 + `снапшотов ${stats.snapshots}, вводов ${stats.inputs}${lag}`;
         },
 
         /** Сброс всей сети (новый мир, тесты). */
@@ -757,6 +1026,9 @@ export function installNet($) {
             authority.reset();
             peerByAddress.clear();
             stats.sent = 0; stats.received = 0; stats.snapshots = 0; stats.inputs = 0;
+            rtt = 0; pingSeq = 0; pings = 0; pingSent.clear();
+            history = null;
+            if (prediction) prediction.reset();
             droppedInputs = 0;
             tick = 0;
             return api;
@@ -769,6 +1041,8 @@ export function installNet($) {
         createAuthority,
         createClientState,
         createInputQueue,
+        createHistory,
+        createPrediction,
         diffSnapshot,
         applySnapshot,
         interpolate,
