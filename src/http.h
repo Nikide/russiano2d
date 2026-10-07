@@ -9,17 +9,17 @@
 //   * встроенный сокетный — только http://, без TLS (аварийный вариант,
 //     когда libcurl не нашлась).
 //
-// Заголовок намеренно не тянет QuickJS: биндинги живут в http.c.
+// Заголовок тянет только типы QuickJS (JSContext/JSValue) — биндинги живут в
+// http.c. Объявлять JSValue своими руками нельзя: при JS_NAN_BOXING (включён
+// для wasm32) это uint64_t, и самодельное `typedef struct JSValue JSValue;`
+// ломает сборку quickjs.h (подробнее — src/render.h).
 // ===========================================================================
 #pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
 
-// Только предварительные объявления: http.h не тянет quickjs.h, но умеет
-// объявить регистрацию engine.http.*.
-typedef struct JSContext JSContext;
-typedef struct JSValue JSValue;
+#include <quickjs.h>
 
 #ifdef __cplusplus
 extern "C" {

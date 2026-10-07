@@ -19,8 +19,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent, ROOT   # noqa: E402
 
 # Сцена → (минимум узлов мира, минимум узлов интерфейса, сколько кадров шагать).
-# Ноль там, где сцена обходится без соответствующего слоя: меню целиком
-# собрано из узлов <ui.*> и в счёт мира не попадает.
+# Ноль там, где сцена обходится без соответствующего слоя. Счётчик «узлов ui» —
+# это узлы <ui.*>: они остались у сцен, которые ещё не переведены на RmlUi.
+# Лаунчер уже на RmlUi (demos/ui/launcher.rml), поэтому у него ноль узлов ui, а
+# интерфейс проверяется подписками документа — см. DOC_BUTTONS.
 #
 # Кадры важны для игровых сцен: в «Типичная ночь в Мытищинском лесу» интересные пути (смерть зомби,
 # сбор опыта) включаются только через несколько секунд боя, поэтому ей даём
@@ -29,18 +31,21 @@ SCENES = {
     "platformer": (2, 0, 20),
     "shooter_witch": (4, 6, 900),
     "russi_vn": (3, 4, 300),
-    "launcher": (0, 5, 20),
+    "launcher": (0, 0, 20),
 }
 
 FAILURES = []
 
-# Документ RmlUi → кнопки, у каждой из которых обязан быть свой слушатель.
+# Документ RmlUi → кнопки, у каждой из которых обязан быть свой слушатель, и
+# признак «документ должен быть виден на этой сцене».
 # $.ui.doc().on() подписывает конкретный элемент, поэтому «один обработчик на
 # документ с ветвлением по id» оставлял часть кнопок мёртвыми.
 DOC_BUTTONS = {
-    # Новелла — единственное демо, интерфейс которого целиком на RmlUi:
-    # документ реплики обязан подниматься и прятать штатную панель $.dialog.
-    "russi_vn": ("demos/ui/vn-dialog.rml", ["vn-choice-0", "vn-choice-1", "vn-choice-2"]),
+    # Лаунчер целиком на RmlUi: проверяем, что документ поднят и слушает кнопки
+    # (узлов <ui.*> у него больше нет — они были прошлой реализацией меню).
+    "launcher": ("demos/ui/launcher.rml", ["demo-0", "demo-1", "vol-up", "vol-mute"], True),
+    # Новелла: документ реплики обязан подниматься и прятать штатную панель $.dialog.
+    "russi_vn": ("demos/ui/vn-dialog.rml", ["vn-choice-0", "vn-choice-1", "vn-choice-2"], False),
 }
 
 
@@ -106,13 +111,17 @@ def run_scene(name, minimum):
 
             buttons = DOC_BUTTONS.get(name)
             if buttons:
-                path, elements = buttons
+                path, elements, must_show = buttons
                 listeners = a.eval(
                     "$.ui.doc(%r).listeners().map(s => s.split('\\u0000')[0])" % path)
                 missing = [e for e in elements if e not in listeners]
                 check(not missing,
                       f"{name}: кнопки документа подписаны ({', '.join(elements)})"
                       + (f"; без слушателя: {missing}" if missing else ""))
+                if must_show:
+                    visible = a.eval("$.ui.doc(%r).visible()" % path)
+                    check(bool(visible),
+                          f"{name}: документ {path} показан на сцене")
     except Exception as error:   # движок не поднялся или не ответил
         check(False, f"{name}: запуск не удался — {error}")
 

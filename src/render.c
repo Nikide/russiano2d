@@ -120,6 +120,9 @@ static SDL_GPUShader *r2d__make_shader(SDL_GPUDevice *device,
     info.num_uniform_buffers = num_uniform_buffers;
     info.num_samplers        = num_samplers;
 
+    // Порядок предпочтений: сначала «родные» форматы бэкенда, WGSL — последним.
+    // Так нативный WebGPU (если появится) сможет взять SPIR-V, а браузерный,
+    // который отдаёт только WGSL, — встроенный WGSL-текст.
     if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
         info.format     = SDL_GPU_SHADERFORMAT_SPIRV;
         info.code       = blob->spirv;
@@ -135,8 +138,24 @@ static SDL_GPUShader *r2d__make_shader(SDL_GPUDevice *device,
         R2D_ERROR("бэкенд требует DXIL, но DXIL-вариант шейдеров не собирается "
                    "(нужен DXC). См. README, раздел «Шейдеры».");
         return NULL;
+#ifdef SDL_GPU_SHADERFORMAT_WGSL
+    } else if (formats & SDL_GPU_SHADERFORMAT_WGSL) {
+        // WebGPU не принимает ни SPIR-V, ни MSL — только WGSL. Текст встроен в
+        // блоб целиком (shaders/wgsl/*.wgsl), точка входа у всех наших — main.
+        // Константа есть только в SDL с WebGPU-бэкендом, поэтому ветка
+        // компилируется не везде.
+        if (!blob->wgsl) {
+            R2D_ERROR("бэкенд требует WGSL, но WGSL-вариант шейдера не собран "
+                       "(нужна сборка с -DR2D_SHADERS_WGSL_ONLY=ON)");
+            return NULL;
+        }
+        info.format     = SDL_GPU_SHADERFORMAT_WGSL;
+        info.code       = (const Uint8 *)blob->wgsl;
+        info.code_size  = blob->wgsl_size;
+        info.entrypoint = "main";
+#endif
     } else {
-        R2D_ERROR("GPU-бэкенд не поддерживает ни SPIR-V, ни MSL, ни DXIL");
+        R2D_ERROR("GPU-бэкенд не поддерживает ни одного из собранных форматов шейдеров");
         return NULL;
     }
 

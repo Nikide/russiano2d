@@ -1,67 +1,96 @@
-/* Меню-лаунчер демо. Фон рисует сама сцена (постер), поэтому body прозрачный. */
+/* ---------------------------------------------------------------------------
+   Меню-лаунчер демо.
+
+   Вёрстка АДАПТИВНАЯ. Сцена движка всегда 16:9 (в вебе это гарантирует
+   #stage в web/shell.html, нативно — окно), поэтому все размеры заданы в vh —
+   один процент высоты сцены. При любом размере окна интерфейс масштабируется
+   пропорционально: и в 1280×720, и в 1920×1080, и в маленьком окне выглядит
+   одинаково. Фиксированных пиксельных размеров здесь быть не должно —
+   именно из-за них меню раньше «рассыпалось» на других разрешениях.
+   --------------------------------------------------------------------------- */
 
 body {
-    font-family: Noto Sans;
-    font-size: 18px;
+    font-family: Open Sans;
+    font-size: 2.2vh;
     color: #eef2f8;
     width: 100%;
     height: 100%;
 }
 
+/* Фон и затемнение — на всю сцену, в процентах. z-index обязателен: фон
+   позиционирован абсолютно, а такой слой рисуется выше обычного потока —
+   без явных слоёв панель оказывается ПОД картинкой. */
+#bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+}
+
+#scrim {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(7, 10, 17, 130);
+}
+
 #panel {
-    display: block;
-    width: 660px;
-    margin-left: auto;
-    margin-right: auto;
-    margin-top: 40px;
-    padding: 22px 30px 18px 30px;
-    background-color: rgba(9, 13, 21, 224);
-    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 2;
+    width: 78vw;
+    max-width: 1600px;
+    margin: 5vh auto 0 auto;
+    padding: 3vh 4vh;
+    background-color: rgba(9, 13, 21, 234);
+    border-radius: 1.6vh;
     border-width: 1px;
-    border-color: rgba(127, 209, 255, 89);
+    border-color: rgba(127, 209, 255, 92);
 }
 
 h1 {
     display: block;
     width: 100%;
-    font-size: 38px;
+    font-size: 6.2vh;
     color: #7fd1ff;
-    margin-bottom: 2px;
     text-align: center;
+    margin-bottom: 0.6vh;
 }
 
 #tagline {
     display: block;
     width: 100%;
-    font-size: 14px;
+    font-size: 2.1vh;
     color: #93a4bb;
     text-align: center;
-    margin-bottom: 14px;
+    margin-bottom: 3vh;
 }
 
-/* --- Кнопки демо ------------------------------------------------------- */
+/* --- Карточки демо ------------------------------------------------------ */
+
+#demo-list {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 1.6vh;
+    justify-content: space-between;
+}
 
 .demo {
-    display: block;
-    width: 100%;
-    margin-top: 7px;
-    padding: 9px 16px;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 44%;
+    padding: 2.2vh 2.6vh;
     background-color: rgba(28, 40, 58, 242);
+    border-radius: 1.4vh;
     border-width: 1px;
     border-color: #2c4a6e;
-    border-radius: 9px;
-    color: #eef2f8;
-    text-align: left;
-}
-
-/* Иконка из встроенного шрифта Material Design: engine.ui.icon(...) */
-.demo .ico {
-    display: inline-block;
-    width: 40px;
-    font-family: Material Icons;
-    font-size: 26px;
-    color: #7fd1ff;
-    vertical-align: middle;
 }
 
 .demo:hover {
@@ -73,72 +102,88 @@ h1 {
     background-color: rgba(64, 118, 176, 246);
 }
 
-.demo .t {
-    display: inline-block;
-    font-size: 19px;
+/* Иконка из встроенного шрифта Material Design: engine.ui.icon(...) */
+.demo .ico {
+    display: block;
+    font-family: Material Icons;
+    font-size: 5.2vh;
     color: #7fd1ff;
+}
+
+.demo .t {
+    display: block;
+    font-size: 3.2vh;
+    color: #eaf4ff;
+    margin-top: 0.8vh;
 }
 
 .demo .s {
     display: block;
-    margin-left: 40px;
-    font-size: 13px;
-    color: #94a6bd;
+    font-size: 2.1vh;
+    color: #9fb2c9;
+    margin-top: 0.6vh;
 }
 
-/* --- Громкость --------------------------------------------------------- */
+/* --- Громкость ---------------------------------------------------------- */
 
 #footer {
-    display: block;
-    margin-top: 18px;
-    text-align: center;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 1.4vh;
+    margin-top: 3vh;
 }
 
 #footer .label {
-    color: #94a6bd;
-    font-size: 15px;
-    margin-right: 8px;
+    color: #93a4bb;
+    font-size: 2.1vh;
 }
 
 #footer button.small {
-    display: inline-block;
-    width: 52px;
-    padding: 3px 6px;
+    display: block;
+    width: 6.4vh;
+    padding: 0.6vh 0;
     font-family: Material Icons;
-    font-size: 20px;
+    font-size: 2.8vh;
     background-color: rgba(38, 54, 76, 242);
     color: #cfe3f5;
     border-width: 1px;
     border-color: #34536f;
-    border-radius: 6px;
+    border-radius: 1vh;
     text-align: center;
 }
 
 #footer button.small:hover {
-    background-color: rgba(58, 84, 116, 242);
+    background-color: rgba(58, 84, 116, 246);
     border-color: #7fd1ff;
 }
 
 #vol-value {
-    display: inline-block;
-    width: 92px;
+    display: block;
+    width: 8vh;
     text-align: center;
     color: #ffd873;
-    font-size: 15px;
+    font-size: 2.1vh;
 }
 
-/* --- Подсказки --------------------------------------------------------- */
+/* --- Подсказки ---------------------------------------------------------- */
 
 #hint {
-    margin-top: 16px;
-    font-size: 13px;
-    color: #7c8ca3;
+    display: block;
+    width: 100%;
+    margin-top: 2.6vh;
+    font-size: 1.9vh;
+    color: #8496ad;
     text-align: center;
+    line-height: 1.5;
 }
 
 #selected {
-    margin-top: 4px;
-    font-size: 14px;
+    display: block;
+    width: 100%;
+    margin-top: 1.2vh;
+    font-size: 2.4vh;
     color: #ffd873;
     text-align: center;
 }

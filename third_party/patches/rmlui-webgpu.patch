@@ -1,0 +1,55 @@
+diff --git a/Backends/RmlUi_Renderer_SDL_GPU.cpp b/Backends/RmlUi_Renderer_SDL_GPU.cpp
+--- a/Backends/RmlUi_Renderer_SDL_GPU.cpp
++++ b/Backends/RmlUi_Renderer_SDL_GPU.cpp
+@@ -5,8 +5,15 @@
+ #include <RmlUi/Core/Log.h>
+ #include <RmlUi/Core/Types.h>
+ #include <SDL3_image/SDL_image.h>
+ 
++#if defined(__EMSCRIPTEN__)
++// Веб-сборка: SDL_GPU на WebGPU принимает только WGSL, а таблица форматов ниже
++// его не знает. Тексты WGSL живут в движке (src/rmlui_wgsl.c) — правка к этому
++// файлу лежит в репозитории: third_party/patches/rmlui-webgpu.patch.
++#include "rmlui_wgsl.h"
++#endif
++
+ using namespace Rml;
+ 
+ enum ShaderType {
+ 	ShaderTypeColor,
+@@ -44,8 +51,16 @@
+ #undef X
+ 
+ static SDL_GPUShader* CreateShaderFromMemory(SDL_GPUDevice* device, ShaderType type)
+ {
++#if defined(__EMSCRIPTEN__)
++	// На WebGPU из трёх форматов в таблице ниже не работает ни один, поэтому
++	// шейдеры RmlUi берём из движка в виде WGSL.
++	if (SDL_GetGPUShaderFormats(device) & SDL_GPU_SHADERFORMAT_WGSL)
++	{
++		return r2d_rmlui_create_wgsl_shader(device, (int)type);
++	}
++#endif
+ 	SDL_GPUShaderFormat sdl_shader_format = SDL_GetGPUShaderFormats(device);
+ 	ShaderFormat format = ShaderFormatCount;
+ 	const char* entrypoint = nullptr;
+ 	if (sdl_shader_format & SDL_GPU_SHADERFORMAT_SPIRV)
+@@ -537,11 +552,17 @@
+ 		return 0;
+ 	}
+ 
+ 	SDL_UploadToGPUTexture(copy_pass, &transfer_info, &region, false);
+-	SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
+ 	SDL_EndGPUCopyPass(copy_pass);
+ 	SDL_SubmitGPUCommandBuffer(command_buffer);
++
++	// r2d: освобождать transfer-буфер можно только ПОСЛЕ отправки
++	// командного буфера. На WebGPU (SDL_GPU с бэкендом WebGPU) копирование
++	// кодируется при закрытии прохода, и освобождение раньше оставляет
++	// текстуру пустой — так «пропадал» атлас глифов: интерфейс рисовал
++	// геометрию, но без текста. Vulkan и Metal такой порядок прощали.
++	SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
+ 
+ 	return reinterpret_cast<TextureHandle>(texture);
+ }
+ 

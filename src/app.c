@@ -83,10 +83,17 @@ bool r2d_app_init(R2DApp *app, const char *title, int width, int height, bool vs
     // SDL_EVENT_TEXT_INPUT, и <ui.input> остаётся без символов.
     SDL_StartTextInput(app->window);
 
-    // Просим все три формата шейдеров — SDL выберет тот, что поддержит бэкенд.
-    // На macOS это MSL (Metal), на Linux — SPIR-V (Vulkan), на Windows — DXIL.
+    // Просим все форматы шейдеров, которые движок умеет собирать — SDL выберет
+    // тот, что поддержит бэкенд: на macOS это MSL (Metal), на Linux — SPIR-V
+    // (Vulkan), на Windows — DXIL, в браузере — WGSL (WebGPU).
     SDL_GPUShaderFormat formats =
-        SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL | SDL_GPU_SHADERFORMAT_DXIL;
+        SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL |
+        SDL_GPU_SHADERFORMAT_DXIL;
+#ifdef SDL_GPU_SHADERFORMAT_WGSL
+    // WGSL есть только в SDL с WebGPU-бэкендом (ветка PR libsdl-org/SDL#16020):
+    // в апстриме такого формата нет, и эта строка там просто не компилируется.
+    formats |= SDL_GPU_SHADERFORMAT_WGSL;
+#endif
 
 #ifdef NDEBUG
     const bool gpu_debug = false;

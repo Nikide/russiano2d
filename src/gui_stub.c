@@ -51,6 +51,16 @@ int r2d_gui_load_document(R2DGui *g, const char *path)
     return -1;
 }
 
+// Загрузка документа из строки (engine.ui.loadMarkup): без RmlUi документа
+// создать не из чего, поэтому «неудача», как и у загрузки из файла.
+int r2d_gui_load_markup(R2DGui *g, const char *name, const char *markup)
+{
+    R2D_UNUSED(g);
+    R2D_UNUSED(name);
+    R2D_UNUSED(markup);
+    return -1;
+}
+
 void r2d_gui_show(R2DGui *g, int doc) { R2D_UNUSED(g); R2D_UNUSED(doc); }
 void r2d_gui_hide(R2DGui *g, int doc) { R2D_UNUSED(g); R2D_UNUSED(doc); }
 void r2d_gui_unload(R2DGui *g, int doc) { R2D_UNUSED(g); R2D_UNUSED(doc); }

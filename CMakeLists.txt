@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(russiano2d
-    VERSION 0.1.16
-    DESCRIPTION "Легковесный кроссплатформенный 2D-движок: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi"
+    VERSION 0.1.17
+    DESCRIPTION "Легковесный кроссплатформенный 2D-движок: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi, экспорт в веб (WebGPU)"
     LANGUAGES C CXX)
 # Бинарник ищет библиотеки рядом с собой: если что-то осталось динамическим,
 # пакет всё равно переносим (lib/ рядом с исполняемым файлом).
@@ -72,6 +72,10 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+# Веб-сборка (Emscripten) включается ДО зависимостей: она решает, какие
+# подсистемы собирать и в каком виде готовить шейдеры (см. cmake/Web.cmake).
+include(Web)
+
 include(Dependencies)
 include(Light)      # полигоны видимости (trylock/visibility)
 include(Shaders)
@@ -79,7 +83,11 @@ include(Icons)
 include(EmbedJs)   # высокоуровневое API ($) внутри бинарника
 
 add_subdirectory(src)
-add_subdirectory(tests)
+# C-тесты (json/crypto/payload/bsp/…) — хостовые: в веб-сборке их место занимает
+# дымовой прогон страницы в браузере (tests/web/README.md).
+if(NOT EMSCRIPTEN)
+    add_subdirectory(tests)
+endif()
 
 message(STATUS "")
 message(STATUS "── russiano2d ${PROJECT_VERSION} ──────────────────────────────")

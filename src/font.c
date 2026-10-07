@@ -341,27 +341,73 @@ static int glyph_sprite(R2DGlyph *glyph)
 // Публичный API
 // ---------------------------------------------------------------------------
 
-// Первый найденный .ttf/.otf в каталоге: колбэк SDL_EnumerateDirectory.
-static SDL_EnumerationResult SDLCALL r2d__pick_font(void *userdata, const char *dirname,
-                                                    const char *fname)
+// Сколько шрифтов-кандидатов рассматриваем, выбирая семейство по умолчанию.
+enum { R2D_FONT_CANDIDATES = 16 };
+
+// Шрифты, которые движок предпочитает для семейства по умолчанию (ищутся
+// подстрокой в имени файла, без учёта регистра). Open Sans — выбор по
+// умолчанию: кириллица + латиница, лицензия OFL, файл лежит рядом. Дальше —
+// равнозначные альтернативы, чтобы замена шрифта была делом одного файла.
+static const char *const R2D_FONT_PREFERRED[] = {
+    "open sans", "opensans", "roboto", "noto sans", "notosans",
+};
+
+static struct {
+    char paths[R2D_FONT_CANDIDATES][1024];
+    int  count;
+} g_candidates;
+
+// Сравнение путей для SDL_qsort: нужен детерминированный выбор «первого».
+static int SDLCALL r2d__compare_paths(const void *a, const void *b)
 {
-    char *out = (char *)userdata;
-    if (out[0]) return SDL_ENUM_SUCCESS;   // уже нашли
+    return SDL_strcmp((const char *)a, (const char *)b);
+}
+
+// Собирает .ttf/.otf каталога: колбэк SDL_EnumerateDirectory.
+// Раньше здесь брался ПЕРВЫЙ файл по алфавиту, и в наборе движка это
+// оказывался LatoLatin-Regular.ttf — шрифт без кириллицы. Русский текст при
+// этом не «падал», а молча не рисовался (глифов нет — рисовать нечего).
+static SDL_EnumerationResult SDLCALL r2d__collect_font(void *userdata, const char *dirname,
+                                                       const char *fname)
+{
+    (void)userdata;
+    if (g_candidates.count >= R2D_FONT_CANDIDATES) return SDL_ENUM_SUCCESS;
+
     const size_t len = SDL_strlen(fname);
     if (len < 5) return SDL_ENUM_CONTINUE;
     const char *ext = fname + len - 4;
     if (SDL_strcasecmp(ext, ".ttf") != 0 && SDL_strcasecmp(ext, ".otf") != 0) {
         return SDL_ENUM_CONTINUE;
     }
-    SDL_snprintf(out, 4096, "%s/%s", dirname, fname);
-    return SDL_ENUM_SUCCESS;
+    SDL_snprintf(g_candidates.paths[g_candidates.count],
+                 sizeof g_candidates.paths[0], "%s/%s", dirname, fname);
+    g_candidates.count++;
+    return SDL_ENUM_CONTINUE;
 }
 
-// Ищет .ttf/.otf в грузе игры или на диске и грузит первый как «default».
+// Есть ли в текущем «default» кириллица. Проверяем по букве «А» (U+0410):
+// этого достаточно, чтобы отличить шрифт с русским набором от латинского.
+static bool font_has_cyrillic(void)
+{
+    for (R2DFont *f = g.fonts; f; f = f->next) {
+        if (SDL_strcmp(f->name, "default") == 0) {
+            return f->ready && stbtt_FindGlyphIndex(&f->info, 0x0410) != 0;
+        }
+    }
+    return false;
+}
+
+// Ищет .ttf/.otf в грузе игры или на диске и грузит один как «default».
 // Без этого игра обязана сама звать $.font.load (или engine.loadFont), а текст
 // до этого не рисуется вовсе — молчаливое «чёрное ничто» вместо подписи.
+//
+// Выбираем не первый по алфавиту, а первый, в котором ЕСТЬ кириллица: язык
+// интерфейса не должен зависеть от порядка файлов в каталоге. Если кириллицы
+// нет ни в одном шрифте — берём первый и честно предупреждаем в журнале.
 static void autoload_default_font(void)
 {
+    g_candidates.count = 0;
+
     // 1. Груз игры: перебираем его содержимое на assets/fonts/*.ttf|otf.
     const int files = r2d_vfs_count();
     for (int i = 0; i < files; ++i) {
@@ -372,19 +418,53 @@ static void autoload_default_font(void)
         if (!SDL_strstr(path, "assets/fonts/")) continue;
         const char *ext = path + len - 4;
         if (SDL_strcasecmp(ext, ".ttf") != 0 && SDL_strcasecmp(ext, ".otf") != 0) continue;
-        if (r2d_font_load("default", path)) return;
+        if (g_candidates.count >= R2D_FONT_CANDIDATES) break;
+        SDL_snprintf(g_candidates.paths[g_candidates.count],
+                     sizeof g_candidates.paths[0], "%s", path);
+        g_candidates.count++;
     }
 
     // 2. Диск: обычный случай разработки (assets/fonts рядом с игрой).
-    if (!g.base_path[0]) return;
-    char dir[4096];
-    SDL_snprintf(dir, sizeof dir, "%s/assets/fonts", g.base_path);
+    if (g.base_path[0]) {
+        char dir[4096];
+        SDL_snprintf(dir, sizeof dir, "%s/assets/fonts", g.base_path);
+        SDL_EnumerateDirectory(dir, r2d__collect_font, NULL);
+    }
 
-    // Каталог перебираем через SDL: файл нужен первый подходящий. Имя
-    // складывается в статический буфер, потому что колбэк не имеет контекста.
-    g.pick[0] = '\0';
-    SDL_EnumerateDirectory(dir, r2d__pick_font, g.pick);
-    if (g.pick[0]) r2d_font_load("default", g.pick);
+    if (g_candidates.count == 0) return;
+
+    // 1. Явное предпочтение движка. Roboto выбран как универсальный: он
+    // покрывает кириллицу и латиницу, распространяется по OFL и лежит в
+    // assets/fonts (лицензия — LICENSE-Roboto.txt). Имя ищем подстрокой без
+    // учёта регистра, поэтому подойдёт и Roboto-Regular.ttf, и вариативный
+    // Roboto.ttf, и OpenSans.
+    for (size_t p = 0; p < SDL_arraysize(R2D_FONT_PREFERRED); ++p) {
+        for (int i = 0; i < g_candidates.count; ++i) {
+            if (!SDL_strcasestr(g_candidates.paths[i], R2D_FONT_PREFERRED[p])) continue;
+            if (r2d_font_load("default", g_candidates.paths[i]) && font_has_cyrillic()) {
+                R2D_LOG("шрифт по умолчанию: %s", g_candidates.paths[i]);
+                return;
+            }
+        }
+    }
+
+    // 2. Любой шрифт с кириллицей — лишь бы русский текст рисовался.
+    for (int i = 0; i < g_candidates.count; ++i) {
+        if (!r2d_font_load("default", g_candidates.paths[i])) continue;
+        if (font_has_cyrillic()) {
+            R2D_LOG("шрифт по умолчанию: %s", g_candidates.paths[i]);
+            return;
+        }
+    }
+
+    // 3. Кириллицы нет нигде: берём первый по алфавиту. Порядок файлов в
+    // каталоге зависит от файловой системы, а шрифт по умолчанию — нет:
+    // сортировка делает выбор воспроизводимым.
+    SDL_qsort(g_candidates.paths, (size_t)g_candidates.count,
+              sizeof g_candidates.paths[0], r2d__compare_paths);
+    r2d_font_load("default", g_candidates.paths[0]);
+    R2D_WARN("ни в одном шрифте assets/fonts нет кириллицы — "
+             "русский текст рисоваться не будет");
 }
 
 bool r2d_font_init(R2DRenderer *renderer, const char *base_path)

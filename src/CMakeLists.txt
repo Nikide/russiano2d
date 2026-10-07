@@ -75,8 +75,6 @@ if(R2D_ENABLE_IMGUI)
     list(APPEND R2D_SOURCES
         debug_ui.h
         debug_ui.cpp
-        shader_live.cpp
-        shader_live.h
         "${imgui_SOURCE_DIR}/imgui.cpp"
         "${imgui_SOURCE_DIR}/imgui_draw.cpp"
         "${imgui_SOURCE_DIR}/imgui_tables.cpp"
@@ -84,6 +82,16 @@ if(R2D_ENABLE_IMGUI)
         "${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp"
         "${imgui_SOURCE_DIR}/backends/imgui_impl_sdlgpu3.cpp")
     list(APPEND R2D_DEFINES R2D_ENABLE_IMGUI=1)
+endif()
+
+# --- Компилятор живых шейдеров ($.gfx.defineShader) -------------------------
+# Выключенный компилятор больше не оставляет render.c без символов: вместо
+# shader_live.cpp компилируется заглушка с тем же интерфейсом (как audio_stub.c
+# и net_stub.c). Иначе сборка с -DR2D_ENABLE_LIVE_SHADERS=OFF не линковалась.
+if(R2D_ENABLE_LIVE_SHADERS)
+    list(APPEND R2D_SOURCES shader_live.h shader_live.cpp)
+else()
+    list(APPEND R2D_SOURCES shader_live.h shader_live_stub.c)
 endif()
 
 # --- RmlUi ------------------------------------------------------------------
@@ -96,6 +104,13 @@ if(R2D_ENABLE_RMLUI)
         "${R2D_RMLUI_BACKENDS_DIR}/RmlUi_Renderer_SDL_GPU.cpp"
         "${R2D_RMLUI_BACKENDS_DIR}/RmlUi_Platform_SDL.cpp")
     list(APPEND R2D_DEFINES R2D_ENABLE_RMLUI=1)
+
+    # Веб-сборка: у RmlUi нет WGSL-вариантов шейдеров, поэтому их тексты лежат
+    # в движке, а в его бэкенд ветку WGSL добавляет патч из репозитория
+    # (см. cmake/Dependencies.cmake и third_party/patches/).
+    if(EMSCRIPTEN)
+        list(APPEND R2D_SOURCES rmlui_wgsl.h rmlui_wgsl.c)
+    endif()
 else()
     # Без RmlUi остаётся тот же интерфейс gui.h, но с пустыми реализациями —
     # скриптовый слой не обрастает #ifdef.
@@ -162,6 +177,105 @@ add_executable(russiano2d ${R2D_SOURCES})
 # game/ и assets/, скопированные шагом POST_BUILD ниже.
 set_target_properties(russiano2d PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+# --- Веб-сборка (Emscripten) -------------------------------------------------
+# На выходе — russiano2d.html + .js + .wasm + .data: груз игры монтируется в
+# виртуальную ФС MEMFS, поэтому файлы читаются движком как обычные (SDL_GetPathInfo
+# и stdio работают поверх неё).
+if(EMSCRIPTEN)
+    set_target_properties(russiano2d PROPERTIES SUFFIX ".html")
+
+    # --preload-file разрешает путь от ТЕКУЩЕГО каталога линковки, а это каталог
+    # сборки, поэтому относительные пути переводим в абсолютные от корня
+    # репозитория: -DR2D_WEB_PRELOAD="web/game@/game;assets@/assets".
+    foreach(preload IN LISTS R2D_WEB_PRELOAD)
+        string(FIND "${preload}" "@" at_pos)
+        if(at_pos GREATER -1)
+            string(SUBSTRING "${preload}" 0 ${at_pos} preload_local)
+            math(EXPR mount_pos "${at_pos} + 1")
+            string(SUBSTRING "${preload}" ${mount_pos} -1 preload_mount)
+        else()
+            set(preload_local "${preload}")
+            set(preload_mount "/")
+        endif()
+        if(NOT IS_ABSOLUTE "${preload_local}")
+            get_filename_component(preload_local
+                "${CMAKE_SOURCE_DIR}/${preload_local}" ABSOLUTE)
+        endif()
+        target_link_options(russiano2d PRIVATE
+            "--preload-file=${preload_local}@${preload_mount}")
+    endforeach()
+
+    # --- Страница и её настройки (то, что называют «экспортом в веб») -------
+    #   R2D_WEB_SHELL         — своя HTML-оболочка (по умолчанию web/shell.html);
+    #   R2D_WEB_LOADER_IMAGE  — своя картинка экрана загрузки (по умолчанию
+    #                           маскот из README, docs/images/russiano2d-mascot.png);
+    #   R2D_WEB_FORCE_PLAY    — начинать игру сразу после загрузки, без кнопки
+    #                           «Играть» (она нужна браузеру для звука, поэтому
+    #                           по умолчанию показывается).
+    #
+    # Оболочка не копируется как есть, а конфигурируется: CMake подставляет в
+    # неё имя картинки и «начинать сразу», а Emscripten — скрипт на место
+    # {{{ SCRIPT }}}. Поэтому в шаблоне допустимы подстановки вида @ИМЯ@,
+    # и их же можно использовать в своей оболочке.
+    set(R2D_WEB_SHELL_TEMPLATE "${R2D_WEB_SHELL}")
+    if(NOT R2D_WEB_SHELL_TEMPLATE)
+        set(R2D_WEB_SHELL_TEMPLATE "${CMAKE_SOURCE_DIR}/web/shell.html")
+    endif()
+    if(NOT EXISTS "${R2D_WEB_SHELL_TEMPLATE}")
+        message(FATAL_ERROR "нет HTML-оболочки ${R2D_WEB_SHELL_TEMPLATE}")
+    endif()
+
+    set(R2D_WEB_LOADER_IMAGE_NAME "loader.png")
+    set(R2D_WEB_LOADER_IMAGE_SOURCE "${CMAKE_SOURCE_DIR}/docs/images/russiano2d-mascot.png")
+    if(R2D_WEB_LOADER_IMAGE)
+        if(NOT IS_ABSOLUTE "${R2D_WEB_LOADER_IMAGE}")
+            get_filename_component(R2D_WEB_LOADER_IMAGE
+                "${CMAKE_SOURCE_DIR}/${R2D_WEB_LOADER_IMAGE}" ABSOLUTE)
+        endif()
+        if(NOT EXISTS "${R2D_WEB_LOADER_IMAGE}")
+            message(FATAL_ERROR "нет картинки экрана загрузки ${R2D_WEB_LOADER_IMAGE}")
+        endif()
+        set(R2D_WEB_LOADER_IMAGE_SOURCE "${R2D_WEB_LOADER_IMAGE}")
+    endif()
+
+    if(R2D_WEB_FORCE_PLAY)
+        set(R2D_WEB_FORCE_PLAY_JS "true")
+    else()
+        set(R2D_WEB_FORCE_PLAY_JS "false")
+    endif()
+
+    set(R2D_WEB_SHELL_GENERATED "${CMAKE_BINARY_DIR}/web-shell.html")
+    # configure_file выполняется на конфигурации и сам перезапускает CMake,
+    # когда шаблон изменился, — отдельного шага сборки здесь не нужно.
+    configure_file("${R2D_WEB_SHELL_TEMPLATE}" "${R2D_WEB_SHELL_GENERATED}" @ONLY)
+
+    target_link_options(russiano2d PRIVATE "--shell-file=${R2D_WEB_SHELL_GENERATED}")
+    # Оболочка — вход линковки, а не просто опция: без этого её правка не
+    # пересобирала страницу ("ninja: no work to do").
+    set_property(TARGET russiano2d APPEND PROPERTY LINK_DEPENDS
+                 "${R2D_WEB_SHELL_GENERATED}")
+
+    # Картинки страницы: картинка экрана загрузки и иконка вкладки. Лежат рядом
+    # с .html, поэтому видны ДО загрузки .wasm и .data.
+    add_custom_command(
+        OUTPUT "${CMAKE_BINARY_DIR}/${R2D_WEB_LOADER_IMAGE_NAME}"
+               "${CMAKE_BINARY_DIR}/russiano2d.png"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${R2D_WEB_LOADER_IMAGE_SOURCE}"
+                "${CMAKE_BINARY_DIR}/${R2D_WEB_LOADER_IMAGE_NAME}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_SOURCE_DIR}/assets/icons/russiano2d.png"
+                "${CMAKE_BINARY_DIR}/russiano2d.png"
+        DEPENDS "${R2D_WEB_LOADER_IMAGE_SOURCE}"
+                "${CMAKE_SOURCE_DIR}/assets/icons/russiano2d.png"
+        COMMENT "Кладу картинки страницы рядом с веб-сборкой"
+        VERBATIM)
+    add_custom_target(r2d_web_page_assets DEPENDS
+        "${CMAKE_BINARY_DIR}/${R2D_WEB_LOADER_IMAGE_NAME}"
+        "${CMAKE_BINARY_DIR}/russiano2d.png")
+    add_dependencies(russiano2d r2d_web_page_assets)
+endif()
 
 # Заголовок шейдеров генерируется в области видимости корневого CMakeLists,
 # поэтому связываем таргеты зависимостью, а не подсовываем файл в список
@@ -279,6 +393,10 @@ endif()
 # файла. POST_BUILD выполняется только при перелинковке, поэтому правка одного
 # лишь .rml/.js не обновляла копию и можно было долго отлаживать «призрак»
 # старой версии файла.
+#
+# В веб-сборке копировать нечего: данные вшиваются в .data через
+# --preload-file (см. блок EMSCRIPTEN выше).
+if(NOT EMSCRIPTEN)
 file(GLOB_RECURSE R2D_DATA_FILES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/game/*"
     "${CMAKE_SOURCE_DIR}/assets/*"
@@ -298,3 +416,4 @@ foreach(R2D_DATA_DIR game assets demos)
     add_custom_target(r2d_copy_${R2D_DATA_DIR} ALL DEPENDS "${R2D_DATA_STAMP}")
     add_dependencies(russiano2d r2d_copy_${R2D_DATA_DIR})
 endforeach()
+endif()   # NOT EMSCRIPTEN

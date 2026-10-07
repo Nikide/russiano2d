@@ -10,10 +10,14 @@
 
 #include "r2d.h"
 
-// Предварительные объявления QuickJS: render.h не тянет quickjs.h целиком,
-// но объявляет регистрацию engine.*, которую реализует render.c.
-typedef struct JSContext JSContext;
-typedef struct JSValue JSValue;
+// QuickJS нужен не целиком, но объявить JSValue своими руками нельзя: в
+// QuickJS-ng это не всегда структура. При JS_NAN_BOXING (включён для wasm32)
+// JSValue — это uint64_t, при JS_CHECK_JSVALUE — указатель. Самодельное
+// `typedef struct JSValue JSValue;` разъезжается с quickjs.h, и сборка падает
+// на его inline-функциях («incomplete result type»). Ошибка нашлась на
+// веб-сборке (Emscripten), но касается любой конфигурации QuickJS с
+// nan-boxing.
+#include <quickjs.h>
 
 #include <SDL3/SDL_gpu.h>
 

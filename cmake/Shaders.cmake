@@ -16,6 +16,14 @@
 # DXIL (Windows/D3D12) пока не генерируется: для него нужен DXC. См. README.
 # ---------------------------------------------------------------------------
 
+# Веб-сборка (WebGPU) обходится БЕЗ glslang и spirv-cross: браузерный WebGPU
+# принимает только WGSL, а SPIR-V и MSL ему не нужны. Тогда источник шейдеров —
+# shaders/wgsl/<имя>.<стадия>.wgsl, и в бинарник попадает только он.
+# Ручной вариант нужен потому, что SPIRV-Cross в WGSL не умеет.
+option(R2D_SHADERS_WGSL_ONLY "Собирать шейдеры только в WGSL (веб-сборка)" OFF)
+
+if(NOT R2D_SHADERS_WGSL_ONLY)
+
 include(FetchContent)
 
 # --- Инструменты ------------------------------------------------------------
@@ -69,6 +77,8 @@ else()
     set(R2D_SHADER_TOOL_DEPS glslang-standalone spirv-cross)
 endif()
 
+endif()   # NOT R2D_SHADERS_WGSL_ONLY
+
 # --- Генерация --------------------------------------------------------------
 set(R2D_SHADER_DIR "${CMAKE_BINARY_DIR}/generated/shaders")
 set(R2D_SHADER_HEADER "${R2D_SHADER_DIR}/r2d_shaders.h")
@@ -78,6 +88,26 @@ set(R2D_SHADER_ENTRIES "")
 
 function(r2d_add_shader name stage source)
     set(basename "${name}_${stage}")
+
+    # Веб-путь: GLSL-инструментов нет, источник — рукописный WGSL.
+    if(R2D_SHADERS_WGSL_ONLY)
+        set(wgsl_src "${CMAKE_SOURCE_DIR}/shaders/wgsl/${name}.${stage}.wgsl")
+        if(NOT EXISTS "${wgsl_src}")
+            message(FATAL_ERROR
+                "веб-сборке нужен ${wgsl_src} — WGSL-вариант ${source}")
+        endif()
+        set(wgsl "${R2D_SHADER_DIR}/${basename}.wgsl")
+        add_custom_command(
+            OUTPUT "${wgsl}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${wgsl_src}" "${wgsl}"
+            DEPENDS "${wgsl_src}"
+            COMMENT "Шейдер ${basename}: WGSL"
+            VERBATIM)
+        set(R2D_SHADER_ENTRIES "${R2D_SHADER_ENTRIES}${basename}," PARENT_SCOPE)
+        set(R2D_SHADER_OUTPUTS "${R2D_SHADER_OUTPUTS};${wgsl}" PARENT_SCOPE)
+        return()
+    endif()
+
     set(spv "${R2D_SHADER_DIR}/${basename}.spv")
     set(msl "${R2D_SHADER_DIR}/${basename}.msl")
 
@@ -121,11 +151,18 @@ r2d_add_shader(bloom_blur frag "${CMAKE_SOURCE_DIR}/shaders/bloom_blur.frag.glsl
 # Lightmap: композит накопленного света на сцену (аддитивное смешивание).
 r2d_add_shader(light_map frag "${CMAKE_SOURCE_DIR}/shaders/light_map.frag.glsl")
 
+if(R2D_SHADERS_WGSL_ONLY)
+    set(R2D_SHADER_MODE "wgsl")
+else()
+    set(R2D_SHADER_MODE "glsl")
+endif()
+
 add_custom_command(
     OUTPUT "${R2D_SHADER_HEADER}"
     COMMAND ${CMAKE_COMMAND}
             -DSHADER_DIR=${R2D_SHADER_DIR}
             -DSHADER_ENTRIES=${R2D_SHADER_ENTRIES}
+            -DSHADER_MODE=${R2D_SHADER_MODE}
             -DOUTPUT=${R2D_SHADER_HEADER}
             -P "${CMAKE_CURRENT_LIST_DIR}/EmbedShader.cmake"
     DEPENDS ${R2D_SHADER_OUTPUTS}

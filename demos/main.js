@@ -11,7 +11,8 @@
 //
 // Запуск:
 //   ./build/russiano2d --game demos
-//   ./build/russiano2d --game demos --scene shooter25d
+//   ./build/russiano2d --game demos --scene shooter_witch   // бой
+//   ./build/russiano2d --game demos --scene witch_menu      // меню-интро
 //
 // Добавить своё демо: положить demos/имя/index.js с экспортом install($)
 // и дописать строку в MODULES — кнопка в меню появится сама.
@@ -23,6 +24,9 @@
 
 const MODULES = [
     './launcher.js',
+    // Платформер в меню не показывается (демо слабое), но остаётся рабочей
+    // сценой — его гоняет tests/agent/demos_test.py и запускают напрямую:
+    //   ./build/russiano2d --game demos --scene platformer
     './platformer/index.js',
     './shooter_witch/index.js',
     './russi_vn/index.js',

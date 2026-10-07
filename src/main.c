@@ -34,10 +34,19 @@
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
+
 #include <stdio.h>
 
 #define R2D_FIXED_DT      (1.0f / 60.0f)
 #define R2D_MAX_SUBSTEPS  5
+
+// Поле кадра для отладочного оверлея есть всегда (так меньше #ifdef вокруг
+// тела кадра), поэтому тип нужен и в сборке без ImGui — там оверлей просто не
+// создаётся. Повторное объявление совпадает с debug_ui.h и в C11 допустимо.
+typedef struct R2DDebugUI R2DDebugUI;
 
 // --- Мосты «событие SDL → подсистема» (нужны, чтобы не тащить контекст) ------
 
@@ -184,6 +193,11 @@ typedef struct FrameContext {
     double stats_last;
     bool   auto_shot_taken;   // снимок по --screenshot уже сделан
     R2DReplay *replay;        // --record / --replay (может быть NULL)
+    // Лимиты из командной строки: в нативном режиме их проверяет while в
+    // main(), в веб-режиме — кадровый колбэк Emscripten (он же завершает
+    // приложение: бесконечного цикла в браузере быть не может).
+    long   frame_limit;
+    double seconds_limit;
 } FrameContext;
 
 // shot_path != NULL — снять кадр в PNG (использует агент и --screenshot).
@@ -361,7 +375,14 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
             hud.texture = swapchain;
             hud.load_op  = SDL_GPU_LOADOP_LOAD;      // кадр уже на экране
             hud.store_op = SDL_GPU_STOREOP_STORE;
-            upass = SDL_BeginGPURenderPass(cmd, &hud, 1, NULL);
+            // Интерфейс рисуется спрайтовыми конвейерами, а они объявлены с
+            // форматом глубины. WebGPU требует, чтобы состояние вложения
+            // прохода совпадало с конвейером ТОЧНО (Vulkan и Metal такое
+            // прощали), поэтому HUD-проход обязан нести тот же z-буфер.
+            SDL_GPUDepthStencilTargetInfo hud_depth = depth;
+            hud_depth.load_op = SDL_GPU_LOADOP_LOAD;  // глубину уже посчитал мир
+            hud_depth.store_op = SDL_GPU_STOREOP_STORE;
+            upass = SDL_BeginGPURenderPass(cmd, &hud, 1, has_depth ? &hud_depth : NULL);
             if (upass) {
                 r2d_render_draw_ui(fc->renderer, cmd, upass);
 #ifdef R2D_ENABLE_IMGUI
@@ -390,12 +411,31 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
 
             SDL_GPURenderPass *ppass = SDL_BeginGPURenderPass(cmd, &out, 1, NULL);
             if (ppass) {
+                // В этом проходе — только пост-обработка: её конвейер объявлен
+                // БЕЗ глубины, и мешать его с HUD нельзя (см. ниже).
                 r2d_render_post(fc->renderer, cmd, ppass);
-                r2d_render_draw_ui(fc->renderer, cmd, ppass);
-#ifdef R2D_ENABLE_IMGUI
-                r2d_debug_ui_draw(fc->debug, cmd, ppass);
-#endif
                 SDL_EndGPURenderPass(ppass);
+            }
+
+            // Интерфейс — своим проходом, но с тем же z-буфером: конвейеры
+            // спрайтов объявлены с форматом глубины, а WebGPU требует точного
+            // совпадения состояния вложения прохода и конвейера.
+            SDL_GPUColorTargetInfo hud;
+            SDL_zero(hud);
+            hud.texture = swapchain;
+            hud.load_op  = SDL_GPU_LOADOP_LOAD;      // кадр уже обработан постом
+            hud.store_op = SDL_GPU_STOREOP_STORE;
+            SDL_GPUDepthStencilTargetInfo hud_depth = depth;
+            hud_depth.load_op = SDL_GPU_LOADOP_LOAD;
+            hud_depth.store_op = SDL_GPU_STOREOP_STORE;
+            SDL_GPURenderPass *hpass = SDL_BeginGPURenderPass(cmd, &hud, 1,
+                                                              has_depth ? &hud_depth : NULL);
+            if (hpass) {
+                r2d_render_draw_ui(fc->renderer, cmd, hpass);
+#ifdef R2D_ENABLE_IMGUI
+                r2d_debug_ui_draw(fc->debug, cmd, hpass);
+#endif
+                SDL_EndGPURenderPass(hpass);
             }
         }
     }
@@ -512,6 +552,106 @@ static bool r2d__agent_frame(void *user, const char *shot_path)
 {
     return r2d__run_frame((FrameContext *)user, shot_path);
 }
+
+// --- Завершение приложения --------------------------------------------------
+//
+// Один и тот же порядок для обоих режимов: нативного while и кадрового
+// колбэка Emscripten. Порядок важен — сначала ждём GPU и останавливаем
+// профайлер (его fence'ы должны быть сигнальны), потом уведомляем игру
+// ($.exit), и только затем освобождаем подсистемы.
+static void r2d__shutdown(FrameContext *fc)
+{
+    R2DApp *app = fc->app;
+
+#ifdef __EMSCRIPTEN__
+    // Шаги завершения отмечаем маячками: если страница «залипает» на выходе,
+    // по ним видно, на каком именно шаге (см. tests/web/smoke.py).
+#  define R2D_WEB_STEP(name) \
+    EM_ASM({ if (typeof window.__r2dReport === 'function') window.__r2dReport('shutdown', name); }, #name)
+    R2D_WEB_STEP("gpu-idle");
+#endif
+
+    SDL_WaitForGPUIdle(app->device);
+    r2d_prof_gpu_shutdown();
+#ifdef __EMSCRIPTEN__
+    R2D_WEB_STEP("script-exit");
+#endif
+    r2d_script_call_exit(fc->script);
+    r2d_script_shutdown(fc->script);
+    r2d_replay_destroy(fc->replay);
+#ifdef R2D_ENABLE_IMGUI
+    r2d_debug_ui_destroy(fc->debug);
+#endif
+#ifdef R2D_ENABLE_RMLUI
+    r2d_gui_destroy(fc->gui);
+#endif
+    r2d_font_shutdown();   // до рендера: атлас — его текстура
+    r2d_render_shutdown(fc->renderer);
+    r2d_physics_shutdown(fc->physics);
+    r2d_net_shutdown();
+    r2d_http_shutdown();
+#ifdef __EMSCRIPTEN__
+    R2D_WEB_STEP("audio");
+#endif
+    r2d_audio_shutdown(fc->audio);
+#ifdef __EMSCRIPTEN__
+    R2D_WEB_STEP("app");
+#endif
+    r2d_app_shutdown(app);
+    r2d_payload_shutdown();
+#ifdef __EMSCRIPTEN__
+    R2D_WEB_STEP("done");
+#endif
+}
+
+#ifdef __EMSCRIPTEN__
+// Один кадр браузерной сборки. Бесконечный while() здесь невозможен: он
+// заблокировал бы вкладку, поэтому кадры гонит requestAnimationFrame, а
+// завершение делает этот же колбэк.
+static void r2d__web_frame(void *user)
+{
+    FrameContext *fc = (FrameContext *)user;
+    R2DApp *app = fc->app;
+
+    bool alive = r2d__run_frame(fc, NULL);
+
+    // Первый отрисованный кадр: по этому признаку страница (web/shell.html)
+    // гасит экран загрузки и включает ввод. Раньше этого нельзя: пока движок
+    // поднимает GPU-устройство, он «спит» в Asyncify, и любое событие браузера
+    // (resize, движение мыши), зашедшее в wasm в этот момент, рушит кучу.
+    static bool first_frame_reported = false;
+    if (alive && !first_frame_reported) {
+        first_frame_reported = true;
+        EM_ASM({
+            if (typeof window !== 'undefined' && typeof window.__r2dOnFirstFrame === 'function') {
+                window.__r2dOnFirstFrame();
+            }
+        });
+    }
+
+    // --frames / --seconds работают и в браузере: на этом строится дымовой
+    // прогон веб-сборки из CI (кадры идут, потом приложение останавливается).
+    if (alive && fc->frame_limit > 0 && (long)app->frame >= fc->frame_limit) {
+        R2D_LOG("достигнут лимит --frames %ld — выходим", fc->frame_limit);
+        app->running = false;
+        alive = false;
+    }
+    if (alive && fc->seconds_limit > 0.0 && app->time >= fc->seconds_limit) {
+        R2D_LOG("достигнут лимит --seconds %.1f — выходим", fc->seconds_limit);
+        app->running = false;
+        alive = false;
+    }
+
+    if (!alive) {
+        emscripten_cancel_main_loop();
+        // Флаг для страницы/автотеста ставим ДО остановки подсистем: SDL_WaitForGPUIdle
+        // и закрытие аудиоустройства могут занять заметное время, а «движок
+        // остановился» уже истинно — ждать их незачем.
+        EM_ASM({ if (typeof window !== 'undefined') window.__r2dStopped = true; });
+        r2d__shutdown(fc);
+    }
+}
+#endif
 
 int main(int argc, char **argv)
 {
@@ -731,6 +871,8 @@ int main(int argc, char **argv)
     fc.gui = gui;
     fc.debug = debug;
     fc.stats = opt_stats;
+    fc.frame_limit = opt_frame_limit;
+    fc.seconds_limit = opt_seconds;
 
     // --- Запись и воспроизведение ввода -------------------------------------
     // Запись хранит ВВОД кадра, а не мир: воспроизведение при том же зерне и
@@ -805,6 +947,12 @@ int main(int argc, char **argv)
     }
 
     // --- Обычный режим ------------------------------------------------------
+#ifdef __EMSCRIPTEN__
+    // Кадры отдаём браузеру: simulate_infinite_loop = 1 — управление сюда уже
+    // не вернётся, завершением занимается r2d__web_frame.
+    emscripten_set_main_loop_arg(r2d__web_frame, &fc, 0, 1);
+    return 0;
+#else
     while (app.running) {
         if (!r2d__run_frame(&fc, NULL)) break;
 
@@ -818,26 +966,8 @@ int main(int argc, char **argv)
         }
     }
 
-    // --- Завершение ---
-    SDL_WaitForGPUIdle(app.device);
-    r2d_prof_gpu_shutdown();   // после WaitForGPUIdle: fence'ы уже сигнальны
-
-    r2d_script_call_exit(&script);
-    r2d_script_shutdown(&script);
-    r2d_replay_destroy(replay);
-#ifdef R2D_ENABLE_IMGUI
-    r2d_debug_ui_destroy(debug);
-#endif
-#ifdef R2D_ENABLE_RMLUI
-    r2d_gui_destroy(gui);
-#endif
-    r2d_font_shutdown();   // до рендера: атлас — его текстура
-    r2d_render_shutdown(&renderer);
-    r2d_physics_shutdown(&physics);
-    r2d_net_shutdown();
-    r2d_http_shutdown();
-    r2d_audio_shutdown(&audio);
-    r2d_app_shutdown(&app);
-    r2d_payload_shutdown();
+    // --- Завершение ---------------------------------------------------------
+    r2d__shutdown(&fc);
     return 0;
+#endif
 }

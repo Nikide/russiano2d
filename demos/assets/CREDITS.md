@@ -155,6 +155,16 @@ Tileset & parallax backgrounds: "Generic Platformer Tileset (16x16) + Background
 Оба трека сжаты из WAV (28 и 29 МБ) в MP3 `libmp3lame q4` — иначе репозиторий
 потолстел бы на 57 МБ. Рядом с каждым лежит `.LICENSE.txt` с подробностями.
 
+| `audio/music/lobby_groove.mp3` | Lobby Groove | автор проекта | его собственная работа (не CC0-ассет) | прислан автором, `[usesuno.com]` |
+
+`lobby_groove.mp3` — музыка меню-лаунчера (циклом, пока открыто меню). Сжат из
+WAV 36 МБ в MP3 `libmp3lame 128 kbps` (≈2,9 МБ); почему MP3, а не OGG —
+в `lobby_groove.mp3.LICENSE.txt` рядом с файлом.
+
+Фон лаунчера — `art/menu/witch_lobby.png` (1672×941, предоставлен автором
+проекта, подробности — в `witch_lobby.png.LICENSE.txt` рядом с файлом).
+Прежний `art/menu/witch_menu.png` оставлен в репозитории.
+
 Остальное — уже лежащие в демо-проекте CC0 записи Juhani Junkala (`audio/music/menu.ogg`, `action.ogg`,
 `audio/sfx/ui_click.ogg`, `jump_01.ogg`, `pickup_01.ogg`, `enemy_hit.ogg`,
 `explosion_01.ogg`). Выбор файла — в `demos/russi_vn/index.js`, расширения

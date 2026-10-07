@@ -4,27 +4,33 @@
     <title>Демо russiano2d</title>
 </head>
 <body>
-    <div id="panel">
-        <h1>RUSSIANO2D</h1>
-        <p id="tagline">Пять демо: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi</p>
+    <!-- Фон меню: арт демо растягивается на всю сцену (в процентах, а не в
+         пикселях — вёрстка обязана быть адаптивной). Затемнение — #scrim. -->
+    <img id="bg" src="../assets/art/menu/witch_lobby.png"/>
+    <div id="scrim"></div>
 
-        <!-- Кнопки демо строятся из JS: engine.ui.setHtml(doc, 'demo-list', ...) -->
+    <div id="panel">
+        <h1>Russiano2D</h1>
+        <p id="tagline">демо движка · SDL3 + SDL_GPU · QuickJS-ng · Box2D v3 · RmlUi</p>
+
+        <!-- Карточки демо строит demos/launcher.js: engine.ui.setHtml(doc, 'demo-list', …) -->
         <div id="demo-list"></div>
 
         <div id="footer">
             <span class="label">Звук</span>
-            <!-- Иконки подставляются из JS: engine.ui.icon(...) -->
-            <button id="vol-down" class="small">-</button>
+            <!-- Иконки подставляет JS: engine.ui.icon(...) -->
+            <button id="vol-down" class="small"></button>
             <span id="vol-value">80%</span>
-            <button id="vol-up" class="small">+</button>
-            <button id="vol-mute" class="small">x</button>
+            <button id="vol-up" class="small"></button>
+            <button id="vol-mute" class="small"></button>
         </div>
 
         <p id="hint">
-            Стрелки или A/D — выбор &nbsp;·&nbsp; Enter — запустить &nbsp;·&nbsp;
-            Esc внутри демо — назад в меню &nbsp;·&nbsp; F1 — отладочный оверлей
+            A/D или ←/→ — идти &nbsp;·&nbsp; Space/W/↑ — прыжок и стрельба &nbsp;·&nbsp;
+            мышь — стрельба и выбор &nbsp;·&nbsp; Space — дальше по реплике &nbsp;·&nbsp;
+            A — авто в новелле &nbsp;·&nbsp; Esc — назад в меню &nbsp;·&nbsp; F1 — оверлей
         </p>
-        <p id="selected">Выбрано:</p>
+        <p id="selected">Выбери демо</p>
     </div>
 </body>
 </rml>

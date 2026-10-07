@@ -1,86 +1,123 @@
 // ===========================================================================
-// Меню-лаунчер: выбор демо.
+// Меню-лаунчер демо.
 //
-// Кнопки строятся по списку сцен, которые зарегистрировали демо-модули, плюс
-// таблица подписей ниже. Добавить новое демо — положить demos/имя/index.js и
-// дописать одну строку регистрации в demos/main.js.
+// Интерфейс — документ RmlUi (demos/ui/launcher.rml + launcher.rcss): меню и
+// экраны в движке делаются только так (docs/UI_RMLUI_LAW.md). Список демо
+// строится из DEMOS и вставляется в #demo-list разметкой RML.
 //
-// Интерфейс — узлы <ui.*> высокоуровневого API: они рисуются самим движком,
-// работают без .rml-файлов и видны агенту через $.agent.snapshot().
+// Вёрстка адаптивная: сцена всегда 16:9 (см. #stage в web/shell.html), поэтому
+// размеры в RCSS заданы в vh — интерфейс масштабируется пропорционально любому
+// размеру окна, а карточки перестраиваются flex-wrap'ом.
+//
+// Платформер из меню убран (решение проекта): сам демо-модуль остаётся в
+// репозитории и запускается как раньше:
+//   ./build/russiano2d --game demos --scene platformer
 // ===========================================================================
 
-const TITLES = {
-    platformer: { title: 'Платформер', icon: 'directions_run',
-                  hint: 'Box2D, анимация, монеты, враги, HUD' },
-    // «Типичная ночь в Мытищинском лесу» — две сцены: меню-интро и сам бой. Кнопка ведёт в меню, а
-    // shooter_witch остаётся сценой для тестов и агента (--scene shooter_witch).
-    shooter_witch: { title: 'Типичная ночь в Мытищинском лесу', icon: 'auto_awesome',
-                     hint: 'Ночной лес, свет от фонарей, волны врагов',
-                     art: 'demos/assets/art/menu/witch_menu.png',
-                     enter: 'witch_menu' },
-    russi_vn: { title: 'Руси-тян (ВН)', icon: 'favorite',
-                hint: 'ВН: RmlUi, озвучка, выбор и две концовки' },
-};
+const DOC = 'demos/ui/launcher.rml';
+// Фон меню — арт лаунчера (в .rml), музыка — отдельным файлом: движок играет её
+// циклом, пока открыто меню, и глушит при переходе в демо.
+// Формат — MP3: в сборке движка MP3 включён (dr_mp3), а OGG-энкодер, который
+// оказался под рукой, писал битую длительность (движок видел 9039 с вместо 188).
+const MENU_MUSIC = 'demos/assets/audio/music/lobby_groove.mp3';
+const CLICK_SFX = 'demos/assets/audio/sfx/ui_click.ogg';
 
-// Сцены, которые не показываются в меню: под-сцены других демо, куда попадают
-// изнутри (меню демо открывается его же кнопкой, см. enter выше).
-const HIDDEN_SCENES = ['witch_menu'];
+const DEMOS = [
+    {
+        scene: 'shooter_witch',
+        // В меню ведём в интро демо; сам бой остаётся сценой для тестов и
+        // агента: --scene shooter_witch.
+        enter: 'witch_menu',
+        icon: 'auto_awesome',
+        title: 'Типичная ночь в Мытищинском лесу',
+        hint: 'Ночной лес, свет от фонарей, волны врагов',
+    },
+    {
+        scene: 'russi_vn',
+        icon: 'favorite',
+        title: 'Руси-тян (ВН)',
+        hint: 'Визуальная новелла: озвучка, выбор и две концовки',
+    },
+];
 
 export default function installLauncher($) {
+    // Разметку и подписки делаем один раз: документ RmlUi кэшируется по пути,
+    // а $.ui.doc(...).on() не вешает обработчик дважды на ту же пару.
+    let built = false;
+
+    function volume() {
+        const v = Number($.store.get('volume', 0.8));
+        return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.8;
+    }
+
+    function applyVolume($, value) {
+        const v = Math.max(0, Math.min(1, value));
+        $.store.set('volume', v);
+        $.sound.volume(v).mute(false);
+        return v;
+    }
+
+    function showVolume(doc) {
+        doc.text('vol-value', Math.round(volume() * 100) + '%');
+    }
+
+    function build($, doc) {
+        const icon = (name) => ($.ui.hasIcon(name) ? $.ui.icon(name) : '');
+
+        // Карточка демо: иконка, название, подпись. Разметка — RML, классы
+        // совпадают с launcher.rcss.
+        doc.html('demo-list', DEMOS.map((demo, i) => `
+            <div class="demo" id="demo-${i}">
+                <span class="ico">${icon(demo.icon)}</span>
+                <span class="t">${demo.title}</span>
+                <span class="s">${demo.hint}</span>
+            </div>`).join(''));
+
+        DEMOS.forEach((demo, i) => {
+            doc.on(`demo-${i}`, 'click', () => {
+                $.sound.play(CLICK_SFX, { volume: 0.4 });
+                $.scene.load(demo.enter || demo.scene);
+            });
+            doc.on(`demo-${i}`, 'mouseover', () => doc.text('selected', demo.title));
+        });
+
+        // Иконки Material Design подставляем из JS: глифы живут во встроенном
+        // шрифте, в .rml их не вписать.
+        doc.html('vol-down', icon('volume_down'));
+        doc.html('vol-up', icon('volume_up'));
+        doc.html('vol-mute', icon('volume_off'));
+        doc.on('vol-down', 'click', () => { applyVolume($, volume() - 0.1); showVolume(doc); });
+        doc.on('vol-up', 'click', () => { applyVolume($, volume() + 0.1); showVolume(doc); });
+        doc.on('vol-mute', 'click', () => {
+            const muted = !$.store.get('muted', false);
+            $.store.set('muted', muted);
+            $.sound.mute(muted);
+        });
+    }
+
     $.scene.add('launcher', {
         enter($) {
-            const names = $.scene.names()
-                .filter((n) => n !== 'launcher' && HIDDEN_SCENES.indexOf(n) < 0);
-            const icon = (name) => ($.ui.hasIcon(name) ? $.ui.icon(name) : '');
-
-            // Фон меню: арт того демо, у которого он есть. Картинка лежит под
-            // кнопками, поэтому создаётся первой; затемнение — панелью поверх.
-            const backdrop = Object.values(TITLES).find((t) => t.art);
-            if (backdrop) {
-                $('<ui.image>', { id: 'menu_bg' })
-                    .at(640, 360).size(1280, 720)
-                    // Арт притемняем им же: панель поверх съедала картинку целиком.
-                    .sprite(backdrop.art).alpha(0.55).appendTo($.ui);
+            const doc = $.ui.doc(DOC);
+            if (!doc || doc.id < 0) {
+                $.log('лаунчер: не удалось загрузить ' + DOC);
+                return;
             }
-
-            $('<ui.label>', { id: 'title', text: 'Russiano2D', size: 46, color: '#e8f0ff' })
-                .at(80, 60).appendTo($.ui);
-            $('<ui.label>', { id: 'subtitle', size: 18, color: '#8fa3bf',
-                              text: 'выбери демо · Esc внутри демо возвращает сюда' })
-                .at(84, 104).appendTo($.ui);
-
-            names.forEach((name, i) => {
-                const info = TITLES[name] || { title: name, icon: 'play_arrow', hint: '' };
-                const col = i % 2;
-                const row = Math.floor(i / 2);
-                const x = 80 + col * 380;
-                const y = 170 + row * 100;
-
-                const button = $('<ui.button>', {
-                    id: 'btn-' + name,
-                    text: `${icon(info.icon)}  ${info.title}`,
-                    size: 22,
-                }).at(x + 165, y + 30).size(330, 62).appendTo($.ui);
-
-                $('<ui.label>', { id: 'hint-' + name, size: 14, color: '#7d8fa8', text: info.hint })
-                    .at(x + 8, y + 70).appendTo($.ui);
-
-                button.on('click', () => {
-                    $.sound.play('demos/assets/audio/sfx/ui_click.ogg', { volume: 0.4 });
-                    $.scene.load(info.enter || name);
-                });
-            });
-
-            $('<ui.label>', { id: 'keys', size: 15, color: '#63758d',
-                              text: 'A/D или ←/→ — идти · Space/W/↑ — прыжок, стрельба · мышь — стрельба и выбор · '
-                                    + 'Space — дальше по реплике · A — авто в новелле · F1 — оверлей' })
-                .at(84, 668).appendTo($.ui);
+            if (!built) {
+                built = true;
+                build($, doc);
+                applyVolume($, volume());
+            }
+            showVolume(doc);
+            doc.text('selected', DEMOS[0].title);
+            doc.show();
 
             $.world.color('#0e1420');
-            $.sound.music('demos/assets/audio/music/menu.ogg', { loop: true, volume: 0.35 });
+            $.sound.music(MENU_MUSIC, { loop: true, volume: 0.35 });
         },
 
         exit() {
+            const doc = $.ui.doc(DOC);
+            if (doc) doc.hide();
             $.sound.stopMusic(400);
         },
 

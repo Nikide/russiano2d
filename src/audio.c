@@ -423,6 +423,10 @@ int r2d_audio_find(const R2DAudio *a, const char *path)
     return -1;
 }
 
+// Кадры микшера → секунды (определение ниже): нужен уже здесь, чтобы журнал
+// загрузки печатал длительность в секундах, а не в кадрах.
+static double r2d__frames_to_sec(const R2DAudio *a, Sint64 frames);
+
 int r2d_audio_load(R2DAudio *a, const char *path)
 {
     if (!a->ready || !path) return -1;
@@ -457,8 +461,12 @@ int r2d_audio_load(R2DAudio *a, const char *path)
     a->sounds[id] = audio;
     SDL_snprintf(a->names[id], sizeof a->names[id], "%s", path);
 
-    const Sint64 ms = MIX_GetAudioDuration(audio);
-    R2D_LOG("звук #%d: %s (%.1f с)", id, path, ms >= 0 ? (double)ms / 1000.0 : -1.0);
+    // MIX_GetAudioDuration отдаёт длину в СЭМПЛ-КАДРАХ, а не в миллисекундах:
+    // раньше журнал делил их на 1000 и показывал 9040 с вместо 188. Переводим
+    // тем же помощником, что и r2d_audio_duration/engine.audio.duration().
+    const Sint64 frames = MIX_GetAudioDuration(audio);
+    R2D_LOG("звук #%d: %s (%.1f с)", id, path,
+            frames >= 0 ? r2d__frames_to_sec(a, frames) : -1.0);
     return id;
 }
 

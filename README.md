@@ -1,7 +1,7 @@
 # Russiano2D (Руссиано 2D)
 
 <p align="center">
-  <img src="docs/images/russiano2d-mascot.jpg" width="760"
+  <img src="docs/images/russiano2d-mascot.png" width="760"
        alt="Девушка с вкусной порцией Руссиано">
 </p>
 
@@ -20,6 +20,9 @@ JavaScript; всё общение с движком идёт через одну
 зеркало кода — **[gitverse.ru/Nikide/russiano2d](https://gitverse.ru/Nikide/russiano2d)**.
 Готовые сборки под macOS, Linux и Windows лежат в самом репозитории, в
 [`dist/`](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/dist) — качайте оттуда.
+Играть можно и без установки: демо-меню работает **прямо в браузере** —
+[r2d.nikiniki.ru/play](https://r2d.nikiniki.ru/play/) (веб-сборка движка под
+WebGPU, см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
 
 * **Игры — твои, делай с ними что хочешь.** Продавай, выкладывай, дари,
   портируй: отчислений автору движка не нужно, указывать его не обязательно.
@@ -28,6 +31,8 @@ JavaScript; всё общение с движком идёт через одну
   [LICENSE](LICENSE).
 * **Ядро — SDL3 и QuickJS-ng.** Графика через SDL_GPU (Vulkan / Metal / DirectX 12),
   физика на Box2D v3, звук на SDL3_mixer, интерфейс на RmlUi, отладка на Dear ImGui.
+  Та же игра собирается и **в браузере**: Emscripten + WebGPU, интерфейс RmlUi,
+  одна команда — `python3 web/export.py` (см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
 * **Высокоуровневое API `$` в стиле jQuery.** Игра компилируется в один исполняемый
   файл, а пишется почти как веб-страница:
 
@@ -71,6 +76,7 @@ JavaScript; всё общение с движком идёт через одну
 |---|---|
 | Окно, ввод, платформа | **SDL3** 3.4 |
 | Графика | **SDL_GPU** (Vulkan / Metal / DirectX 12) |
+| Веб | **Emscripten + WebGPU** (SDL_GPU с бэкендом WebGPU, [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)) |
 | Скрипты | **QuickJS-ng** 0.10 (ES2023+, ES-модули) |
 | Физика | **Box2D v3.1** (чистый C) |
 | Звук и музыка | **SDL3_mixer** 3.2 (WAV / OGG / MP3) |

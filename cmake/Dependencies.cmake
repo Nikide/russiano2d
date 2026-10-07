@@ -177,11 +177,77 @@ if(R2D_ENABLE_RMLUI)
         GIT_REPOSITORY https://github.com/mikke89/RmlUi.git
         GIT_TAG        ba95ffe8bfb6370efb2cdcca927eaad4710c5413  # 6.3
         GIT_SHALLOW    TRUE)
+
+    # RmlUi везёт собственный FindFreetype для Emscripten (шрифт берётся из
+    # порта -sUSE_FREETYPE=1, системного FreeType в wasm нет), но каталог с
+    # этим модулем добавляет к CMAKE_MODULE_PATH только когда собирается как
+    # корневой проект. Мы встраиваем RmlUi через FetchContent, поэтому каталог
+    # добавляем сами — иначе конфигурация веб-сборки падает на
+    # «Freetype could not be found».
+    if(EMSCRIPTEN)
+        foreach(_r2d_rmlui_src "${FETCHCONTENT_SOURCE_DIR_RMLUI}"
+                               "${CMAKE_BINARY_DIR}/_deps/rmlui-src")
+            if(_r2d_rmlui_src AND EXISTS "${_r2d_rmlui_src}/CMake/Modules/Emscripten")
+                list(PREPEND CMAKE_MODULE_PATH "${_r2d_rmlui_src}/CMake/Modules/Emscripten")
+            endif()
+        endforeach()
+    endif()
+
     FetchContent_MakeAvailable(RmlUi)
     # Бэкенды RmlUi под SDL_GPU не собираются автоматически (каталог Backends/
     # подключается только вместе с сэмплами). Компилируем нужные файлы сами —
     # см. src/CMakeLists.txt.
     set(R2D_RMLUI_BACKENDS_DIR "${RmlUi_SOURCE_DIR}/Backends")
+
+    # --- Веб-сборка: WGSL-шейдеры интерфейса --------------------------------
+    # RmlUi 6.3 знает только SPIR-V, MSL и DXIL, а браузерный WebGPU принимает
+    # исключительно WGSL. Патч из репозитория добавляет его бэкенду ветку WGSL:
+    # тексты шейдеров живут в движке (src/rmlui_wgsl.c) и попадают в бинарник,
+    # так что в рантайме ничего не читается с диска.
+    #
+    # Патч применяется только для веб-сборки и один раз (по маркеру). Нативная
+    # сборка компилирует тот же файл, но ветка заперта под
+    # #if defined(__EMSCRIPTEN__) — её поведение не меняется.
+    if(EMSCRIPTEN)
+        set(R2D_RMLUI_PATCH
+            "${CMAKE_SOURCE_DIR}/third_party/patches/rmlui-webgpu.patch")
+        set(_r2d_rmlui_backend
+            "${R2D_RMLUI_BACKENDS_DIR}/RmlUi_Renderer_SDL_GPU.cpp")
+        file(READ "${_r2d_rmlui_backend}" _r2d_rmlui_backend_text LIMIT 262144)
+        # Маркер — из последней правки патча. Если его нет, файл либо чистый,
+        # либо остался с прошлой версией патча: в обоих случаях возвращаем его
+        # к состоянию из репозитория RmlUi и накладываем патч заново.
+        if(NOT _r2d_rmlui_backend_text MATCHES "r2d: освобождать transfer-буфер")
+            if(NOT EXISTS "${R2D_RMLUI_PATCH}")
+                message(FATAL_ERROR "нет файла патча ${R2D_RMLUI_PATCH}")
+            endif()
+            execute_process(
+                COMMAND git checkout -- Backends/RmlUi_Renderer_SDL_GPU.cpp
+                WORKING_DIRECTORY "${RmlUi_SOURCE_DIR}"
+                RESULT_VARIABLE _r2d_restore_rc
+                ERROR_VARIABLE _r2d_restore_err)
+            if(NOT _r2d_restore_rc EQUAL 0)
+                message(FATAL_ERROR
+                    "не удалось вернуть ${_r2d_rmlui_backend} к исходному виду: "
+                    "${_r2d_restore_err}")
+            endif()
+            execute_process(
+                COMMAND git apply "${R2D_RMLUI_PATCH}"
+                WORKING_DIRECTORY "${RmlUi_SOURCE_DIR}"
+                RESULT_VARIABLE _r2d_patch_rc
+                OUTPUT_VARIABLE _r2d_patch_out
+                ERROR_VARIABLE _r2d_patch_err)
+            if(NOT _r2d_patch_rc EQUAL 0)
+                message(FATAL_ERROR
+                    "патч не лёг на RmlUi (${RmlUi_SOURCE_DIR}): ${_r2d_patch_err}\n"
+                    "Скорее всего сместился пин RmlUi — обновите "
+                    "third_party/patches/rmlui-webgpu.patch")
+            endif()
+            message(STATUS "[rmlui] применён патч для WebGPU (WGSL + порядок заливки)")
+        else()
+            message(STATUS "[rmlui] патч для WebGPU уже применён")
+        endif()
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
