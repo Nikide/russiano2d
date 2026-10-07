@@ -6,25 +6,27 @@
 регресс-тест — в «проиграй запись и проверь, что мир пришёл туда же».
 
 ```js
-// Запись: один вызов на кадр, ровно то, что влияет на симуляцию.
-// Собирает ввод САМА игра — метода «сними весь ввод» в $.input нет.
-$.replay.start({ level: 'bunker' });
-const snapshotInput = () => ({ ax: $.input.axis('left', 'right'),
-                               jump: $.input.down('jump') });
-$.update(() => $.replay.record(snapshotInput()));
-
-// Сохранение и загрузка — обычный текст.
-$.fs.write('replay.json', $.replay.toText());
-$.replay.load($.fs.readText('replay.json'));
-
-// Воспроизведение: вместо клавиатуры читаем кадр записи.
-$.replay.play();
-$.update(() => {
-    const in_ = JSON.parse($.replay.tick() || '{"ax":0,"jump":false}');
+// Ввод кадра собирает ИГРА: готового «сними весь ввод» в $.input нет.
+const sampler = () => ({ ax: $.input.axis('left', 'right'),
+                         jump: $.input.down('jump') });
+// Применение ввода — ОДНА функция на запись и на проигрывание.
+const apply = (in_) => {
     hero.move(in_.ax * 200 * $.time.delta(), 0);
     if (in_.jump) hero.jump();
-});
+};
+
+$.replay.record(sampler, apply);   // запись «из коробки»: обвязку ставит движок
+// ... играем ...
+$.fs.write('replay.json', $.replay.toText());
+$.replay.stop();
+
+$.replay.load($.fs.readText('replay.json'));
+$.replay.play();                   // если apply не передать, возьмётся прежний
 ```
+
+Одна и та же пара `sampler`/`apply` работает в обе стороны — это не
+формальность: если записать одним способом, а применить другим, реплей
+разойдётся, и виноват будет уже не движок.
 
 ---
 
@@ -32,8 +34,11 @@ $.update(() => {
 
 | Вызов | Смысл |
 |---|---|
-| `start(extra?)` | начать запись (старая стирается); `extra` — свои поля в заголовок |
-| `record(value, frame?)` | записать ввод кадра; `frame` по умолчанию — `engine.frame` |
+| `record(sampler, apply)` | запись «из коробки»: обвязку `$.update` ставит движок |
+| `play(apply?)` | воспроизведение «из коробки»; `apply` — та же функция, что при записи |
+| `verify(sampler)` | сравнить текущий ввод с записью: `{ same, count, first }` |
+| `start(extra?)` | начать запись вручную (старая стирается); `extra` — поля в заголовок |
+| `record(value, frame?)` | записать кадр вручную (низкий уровень; см. `_push`) |
 | `stop()` | остановить запись или проигрывание |
 | `play(from?)` | начать воспроизведение (можно с кадра) |
 | `tick()` | ввод текущего кадра проигрывания; `null` — записи нет или кадр пуст |

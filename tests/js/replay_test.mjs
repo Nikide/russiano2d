@@ -171,6 +171,17 @@ test('сравнение двух записей находит расхожде
     eq(compareReplays(a, b).same, false, 'разная длина — расхождение');
 });
 
+test('_push пишет кадр в обход проверки режима (им пользуется обвязка)', () => {
+    const r = createReplay({});
+    r.start();
+    truthy(r._push({ a: 1 }, 3), 'кадр записан ядром');
+    eq(r.at(0).f, 3);
+    eq(r.at(0).d, '{"a":1}');
+    r.stop();
+    falsy(r._push({ a: 2 }, 4), 'в покое ядро тоже не пишет');
+    eq(r.length(), 1);
+});
+
 test('clear обнуляет запись и режим', () => {
     const r = createReplay({});
     r.start();

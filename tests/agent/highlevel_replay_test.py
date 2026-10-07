@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # ===========================================================================
-# Проверка реплеев в движке: запись идёт по кадрам вместе с движком.
+# Проверка реплеев в движке: запись, воспроизведение и совпадение позиции.
 #
 # Юнит-тесты (tests/js/replay_test.mjs) проверяют ядро без движка. Здесь —
-# то, что видно только в движке: номер кадра берётся из engine.frame, заголовок
-# содержит зерно ЗАПУСКА и шаг времени, а число записанных кадров совпадает с
-# числом прожитых кадров.
+# главное обещание реплея: ЗАПИСАННАЯ СЕССИЯ ВОСПРОИЗВОДИТСЯ В ТУ ЖЕ ПОЗИЦИЮ.
+# Фикстура tests/fixtures/replay/main.js двигает квадрат ровно по вводу, и
+# ничего, кроме ввода, на движение не влияет — поэтому расхождение означало бы
+# ошибку реплея, а не «мир сложный».
 #
 # Запуск после сборки:
 #   python3 tests/agent/highlevel_replay_test.py
@@ -18,7 +19,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent   # noqa: E402
 
-GAME = os.path.join("tests", "fixtures", "text")
+GAME = os.path.join("tests", "fixtures", "replay")
 FAILURES = []
 
 
@@ -28,55 +29,57 @@ def check(condition, message):
         FAILURES.append(message)
 
 
+def press(a, key, down):
+    a.key(key, "down" if down else "up")
+
+
 def main():
     with Agent(game=GAME, seed=777, fixed_dt=1.0 / 60.0) as a:
         check(a.eval("typeof $.replay") == "object", "$.replay подсистема есть")
         check(a.eval("$.replay.mode()") == "idle", "сначала без режима")
 
-        # Пишем ровно один кадр за кадр движка: так и должна работать игра.
-        a.eval("""
-            $.replay.start({ level: 'тест' });
-            let n = 0;
-            $.update(() => { $.replay.record({ step: ++n }); });
-        """)
-        a.step(6)
-        check(a.eval("$.replay.isRecording()") is True, "запись идёт")
-        eq_frames = a.eval("$.replay.length()")
-        check(eq_frames >= 5, f"записано кадров: {eq_frames} (ожидалось ≥ 5)")
+        # --- запись «из коробки»: движок сам ставит обвязку ---
+        a.eval("$.replay.record(globalThis.__input, globalThis.__apply)")
+        check(a.eval("$.replay.isRecording()") is True, "запись началась одним вызовом")
 
+        press(a, "Right", True)
+        a.step(9)
+        press(a, "Right", False)
+        a.step(3)
+        check(a.eval("$.replay.length()") >= 10, "кадры записаны")
+
+        recorded_x = a.eval("$('#hero').pos().x")
         head = json.loads(a.eval("JSON.stringify($.replay.header())"))
         check(head.get("seed") == 777, f"зерно запуска в заголовке: {head.get('seed')}")
         check(abs(head.get("dt", 0) - 1.0 / 60.0) < 1e-6, f"шаг времени: {head.get('dt')}")
-        check(head.get("level") == "тест", "поле игры сохранилось")
+        check(recorded_x > 20, f"во время записи герой уехал: x = {recorded_x:.1f}")
 
-        # Кадры идут по возрастанию и без пропусков: пропуск сломал бы реплей.
-        frames = json.loads(a.eval("JSON.stringify($.replay.frames())"))
-        numbers = [f["f"] for f in frames]
-        check(numbers == sorted(numbers), f"номера кадров по возрастанию: {numbers[:6]}")
-        check(all(numbers[i + 1] - numbers[i] <= 1 for i in range(len(numbers) - 1)),
-              "без пропусков в нумерации")
-
+        text = a.eval("$.replay.toText()")
         a.eval("$.replay.stop()")
         check(a.eval("$.replay.isRecording()") is False, "запись остановлена")
 
-        # Текст записи разбирается обратно и в нём те же кадры.
-        text = a.eval("$.replay.toText()")
-        check(isinstance(text, str) and len(text) > 20, f"текст записи получен ({len(text)} символов)")
-        parsed = json.loads(text)
-        check(len(parsed["frames"]) == eq_frames, "в тексте столько же кадров")
-        check(parsed["header"]["seed"] == 777, "в тексте зерно запуска")
-
-        # Загрузка своего же текста и проигрывание.
-        check(a.eval("$.replay.load($.replay.toText())") is True, "текст загружается обратно")
+        # --- воспроизведение: возвращаем мир в начало и играем ту же запись ---
+        a.eval("$('#hero').at(20, 180)")
+        a.eval("$.replay.load($.replay.toText())")
         a.eval("$.replay.play()")
         check(a.eval("$.replay.isPlaying()") is True, "проигрывание началось")
-        first = a.eval("$.replay.tick()")
-        check(first is not None, f"первый кадр проигрывания: {first}")
-        check(a.eval("$.replay.position()") == 1, "курсор сдвинулся")
+        # Клавишу НЕ жмём: если бы ввод брался с клавиатуры, герой не сдвинулся бы.
+        a.step(12)
+        played_x = a.eval("$('#hero').pos().x")
+        print(f"  записано: x = {recorded_x:.1f} | воспроизведено: x = {played_x:.1f}")
+        check(abs(played_x - recorded_x) < 1.0,
+              f"позиция совпала с записанной (разница {abs(played_x - recorded_x):.2f} px)")
 
-        # Сравнение записи с её копией: регресс-тест на «мир пришёл туда же».
-        check(a.eval("typeof $.replay.compare === 'function'") in (True, False),
-              "проверка сравнения доступна через модуль (compareReplays)")
+        # Регресс-проверка «мир пришёл туда же» сравнивает ввод, а не пиксели.
+        # Регресс-проверка «мир пришёл туда же» сравнивает ввод, а не пиксели:
+        # её удобно звать в своём тесте после проигрывания.
+        check(a.eval("typeof $.replay.verify") == "function",
+              "$.replay.verify доступна для регресс-проверок")
+
+        # Текст записи читается обратно и содержит те же кадры.
+        parsed = json.loads(text)
+        check(len(parsed["frames"]) >= 10, f"в тексте записи {len(parsed['frames'])} кадров")
+        check(parsed["header"]["seed"] == 777, "в тексте зерно запуска")
 
     print()
     if FAILURES:

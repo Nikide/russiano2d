@@ -54,6 +54,15 @@ export function createReplay(header) {
         }
     }
 
+    function push(value, f) {
+        const d = dataOf(value);
+        // Пустой кадр тоже надо записать: пропуск сломает соответствие
+        // «кадр записи ↔ кадр проигрывания».
+        frames.push({ f, d });
+        lastFrame = f;
+        return true;
+    }
+
     const replay = {
         /** Начать запись: старый реплей стирается. */
         start(extra) {
@@ -86,13 +95,19 @@ export function createReplay(header) {
                 if (dropped === 1) ctx.log('$.replay: запись достигла предела ' + MAX_FRAMES + ' кадров');
                 return false;
             }
-            const d = dataOf(value);
-            // Пустой кадр тоже надо записать: пропуск сломает соответствие
-            // «кадр записи ↔ кадр проигрывания».
-            frames.push({ f, d });
-            replay._index = null;
-            lastFrame = f;
-            return true;
+            return push(value, f);
+        },
+
+        /**
+         * Записать кадр, минуя проверку режима. Внутреннее: публичный
+         * `record` — это «запись из коробки» с обвязкой (см. installReplay), и
+         * если бы хук звал его, он бы принял сборщик ввода за ввод.
+         */
+        _push(value, frame) {
+            if (mode !== 'recording') return false;
+            const f = Math.floor(Number(frame) || 0);
+            if (frames.length >= MAX_FRAMES) { dropped++; return false; }
+            return push(value, f);
         },
 
         /** Загрузить реплей из структуры (или текста). */
@@ -235,6 +250,111 @@ export function installReplay($) {
         seed: (typeof engine !== 'undefined' && engine ? engine.seed : 0),
         dt: (typeof engine !== 'undefined' && engine ? engine.fixedDt : 0),
     }, extra || {}));
+
+    // --- Готовый рекордер -----------------------------------------------------
+    //
+    // Игра не должна писать обвязку из $.update руками: здесь то же самое, но
+    // одним вызовом. Одна и та же пара функций работает и при записи, и при
+    // воспроизведении — иначе реплей разойдётся (записали одно, применили
+    // другое), и это главная причина, по которой обвязка живёт в движке.
+
+    const basePlay = replay.play.bind(replay);
+    const baseStop = replay.stop.bind(replay);
+    let active = null;          // 'record' | 'play' | null
+
+    replay.stop = function () {
+        active = null;
+        return baseStop();
+    };
+
+    /**
+     * $replay.record(sampler, apply) — запись «из коробки».
+     *
+     * `sampler()` отдаёт ввод кадра, `apply(input)` его применяет. Одна и та же
+     * пара используется и при записи, и при проигрывании (см. play).
+     */
+    replay.record = function (sampler, apply) {
+        if (typeof sampler !== 'function') {
+            ctx.log('$.replay.record: нужна функция-сборщик ввода (sampler)');
+            return replay;
+        }
+        if (!installHook()) return replay;
+        replay.stop();
+        replay.start();
+        active = 'record';
+        replay._sampler = sampler;
+        replay._apply = apply;
+        return replay;
+    };
+
+    /**
+     * $replay.play(apply) — воспроизведение «из коробки».
+     *
+     * `apply(input)` получает разобранный ввод кадра; если его не передать,
+     * возьмётся тот же `apply`, что был при записи. Ввод из записи подаётся
+     * ПЕРЕД вашей игровой логикой — как если бы игрок нажал клавиши.
+     */
+    replay.play = function (apply) {
+        if (typeof apply === 'function') replay._apply = apply;
+        if (!installHook()) return replay;
+        active = 'play';
+        replay.onEnd = replay.onEnd || (() => { active = null; });
+        return basePlay();
+    };
+
+    /**
+     * Проиграть с проверкой: сравнить ввод, который игра выдала бы сейчас, с
+     * записанным. Возвращает `{ same, count, first }` — регресс-тест «мир
+     * пришёл туда же» без второго процесса.
+     */
+    replay.verify = function (sampler) {
+        if (typeof sampler !== 'function') return { same: true, count: 0, first: -1 };
+        const frames = replay.frames();
+        for (let i = 0; i < frames.length; ++i) {
+            const expected = frames[i].d;
+            let actual = null;
+            try { actual = JSON.stringify(sampler(i)); } catch (e) { actual = null; }
+            if (actual !== expected) return { same: false, count: frames.length, first: i };
+        }
+        return { same: true, count: frames.length, first: -1 };
+    };
+
+    const hookFn = () => {
+        if (active === 'record' && replay.isRecording()) {
+            const input = replay._sampler();
+            if (typeof replay._apply === 'function') replay._apply(input);
+            // Пишем ЯДРОМ, а не публичным record: публичный принимает сборщик
+            // ввода и, если позвать его отсюда, кадры не запишутся вовсе
+            // (именно так и вышло, когда отладка показала «нужна функция»).
+            replay._push(input, ctx.engineFrame ? ctx.engineFrame() : 0);
+            return;
+        }
+        if (active === 'play' && replay.isPlaying()) {
+            const value = replay.tick();
+            if (value === null) return;
+            if (typeof replay._apply !== 'function') return;
+            try {
+                const parsed = JSON.parse(value);
+                replay._apply(parsed);
+            } catch (e) {
+                ctx.log('$.replay: кадр записи не разобрался — ' + e);
+            }
+            return;
+        }
+    };
+
+    let hook_installed = false;
+    function installHook() {
+        if (hook_installed) return true;
+        const api = ctx.$;
+        if (!api || typeof api.update !== 'function') {
+            ctx.log('$.replay: нет $.update — запись и проигрывание невозможны');
+            return false;
+        }
+        api.update(hookFn);
+        hook_installed = true;
+        return true;
+    }
 
     $.replay = replay;
     return replay;
