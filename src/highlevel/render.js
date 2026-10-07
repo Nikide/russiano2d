@@ -80,6 +80,8 @@ function frameViewPoint(cam, x, y) {
 }
 
 let view = null;
+// Прозрачность текущего прохода мира (PIP-камера). 1 — обычная камера.
+let pass_alpha = 1;
 function setView(cam) {
     view = cam
         ? { x: cam.x, y: cam.y, zoom: cam.zoom || 1,
@@ -1583,6 +1585,9 @@ function copyTransform(t) { return { x: t.x, y: t.y, w: t.w, h: t.h }; }
 function baseColor(node) {
     let color = node.tint && node.tint_timer > 0 ? node.tint : node.color;
     if (node.alpha < 1) color = withAlpha(color, node.alpha);
+    // Прозрачность ВСЕГО прохода: у PIP-камеры кадр ложится поверх основного,
+    // и без этого «камера в текстуру» закрашивала бы экран наглухо.
+    if (pass_alpha < 1) color = withAlpha(color, pass_alpha);
     return color;
 }
 
@@ -1698,13 +1703,26 @@ function drawSlicedSprite(node, t, color) {
  * viewports.js), а не отдельной текстурой.
  */
 function drawWorldPass(cam) {
+    const prev_alpha = pass_alpha;
+    pass_alpha = cam.alpha === undefined ? 1 : cam.alpha;
+    try {
+        drawWorldPassInner(cam);
+    } finally {
+        pass_alpha = prev_alpha;
+    }
+}
+
+function drawWorldPassInner(cam) {
     // Фон рисуется первым и не двигается с камерой при parallax=0.
-    const bg = ctx.world ? ctx.world.getBackground() : null;
+    // Фон можно выключить (`bg: false`): у PIP-камеры он закрыл бы весь экран
+    // своим прямоугольником, и «камера в текстуру» стала бы заливкой.
+    const bg = cam.bg === false ? null : (ctx.world ? ctx.world.getBackground() : null);
     if (bg && bg.sprite >= 0) {
         const px = bg.parallax;
         const bx = engine.width / 2 - (cam.x * px * cam.zoom);
         const by = engine.height / 2 - (cam.y * px * cam.zoom) + bg.y;
-        pushSprite(bg.sprite, bx, by, engine.width * bg.scale, engine.height * bg.scale, 0, bg.color);
+        const bg_color = pass_alpha < 1 ? withAlpha(bg.color, pass_alpha) : bg.color;
+        pushSprite(bg.sprite, bx, by, engine.width * bg.scale, engine.height * bg.scale, 0, bg_color);
     }
 
     const list = sortedNodes();

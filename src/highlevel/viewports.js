@@ -27,6 +27,8 @@ const extra = new Map();
 // Порядок отрисовки. Основная камера идёт в списке обычным именем.
 let order = [];
 
+
+
 function num(value, fallback) {
     const v = Number(value);
     return Number.isFinite(v) ? v : fallback;
@@ -84,6 +86,10 @@ export function regionCamera(cam, r, width, height) {
         rotation: num(cam.rotation, 0),
         shake_x: num(cam.shake_x, 0),
         shake_y: num(cam.shake_y, 0),
+        // Прозрачность прохода и отказ от фона — для камеры ПОВЕРХ основного
+        // кадра (картинка в картинке); задаются через `add(..., { alpha, bg })`.
+        alpha: cam.alpha === undefined ? 1 : cam.alpha,
+        bg: cam.bg,
         w: W,
         h: H,
     };
@@ -97,14 +103,22 @@ export function viewCams(cam) {
     const out = [];
     const named = order.length ? order : ['', ...extra.keys()];
     for (const name of named) {
-        if (!name) { out.push(cam); continue; }
+        if (!name) { const c = { ...cam }; c._name = ''; c._rect = null; out.push(c); continue; }
         const view = extra.get(name);
         if (!view) continue;
-        out.push(regionCamera(view, view.rect, W, H));
+        const c = regionCamera(view, view.rect, W, H);
+        c._name = name;
+        c._rect = view.rect ? { ...view.rect } : null;
+        out.push(c);
     }
     // Главной в списке могло не оказаться (пользователь задал порядок) —
     // тогда добавляем её первой: без неё сплитскрин потерял бы камеру игрока.
-    if (!named.includes('')) out.unshift(cam);
+    if (!named.includes('')) {
+        const c = { ...cam };
+        c._name = '';
+        c._rect = null;
+        out.unshift(c);
+    }
     return out;
 }
 
@@ -209,21 +223,22 @@ export function installViewports($) {
             return view.rect ? { ...view.rect } : null;
         },
 
-        /** Снимок раскладки: что и где рисуется в этом кадре. */
+        /**
+         * Снимок раскладки: что и где рисуется в этом кадре.
+         *
+         * Читаем ИМЯ и РЕГИОН из тех же объектов, которые ушли в отрисовку
+         * (`viewCams` их помечает), а не пересчитываем: пересчёт по имени
+         * разошёлся с реальностью — PIP рисовался в своём прямоугольнике, а
+         * `views()` показывал половину окна.
+         */
         describe() {
             const W = engineOf() ? engineOf().width : 0;
             const H = engineOf() ? engineOf().height : 0;
-            const cams = viewCams(primary());
-            const out = [];
-            const layout = splitLayout(cams.length, W, H);
-            cams.forEach((c, i) => {
-                out.push({
-                    name: i === 0 ? '' : (order[i] || ('p' + (i + 1))),
-                    x: c.x, y: c.y, zoom: c.zoom,
-                    rect: layout[i],
-                });
-            });
-            return out;
+            return viewCams(primary()).map((c, i) => ({
+                name: c._name || '',
+                x: c.x, y: c.y, zoom: c.zoom,
+                rect: c._rect || (i === 0 ? { x: 0, y: 0, w: W, h: H } : null),
+            }));
         },
 
         // Внутренние: их зовёт render.js и камера.

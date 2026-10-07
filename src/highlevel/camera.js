@@ -108,6 +108,9 @@ export function installCamera($, viewports) {
         region(name, rect) { return viewports.region(name, rect); },
         views() { return viewports.describe(); },
 
+        // Картинка в картинке и миникарта (viewports.md §3.1).
+        minimap(rect, opts) { return viewports.minimap(rect, opts); },
+
         pos() { return { x: cam.x, y: cam.y }; },
         x() { return cam.x; },
         y() { return cam.y; },
