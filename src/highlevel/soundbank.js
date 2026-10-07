@@ -54,8 +54,15 @@ export function pickBankFile(files, history, avoids, rng) {
         const filtered = files.filter((f) => !recent.includes(f));
         if (filtered.length) pool = filtered;
     }
-    const random = typeof rng === 'function' ? rng : Math.random;
-    const chosen = pool[Math.floor(random() * pool.length) % pool.length];
+    let chosen;
+    if (typeof rng === 'function') {
+        chosen = pool[Math.floor(rng() * pool.length) % pool.length];
+    } else {
+        // Без генератора выбор ДЕТЕРМИНИРОВАН: функция чистая, и «случайный по
+        // умолчанию» означал бы, что один и тот же вызов даёт разные
+        // результаты — тест такого не проверит, а реплей разойдётся.
+        chosen = pool[history ? history.length % pool.length : 0];
+    }
     if (history) {
         history.push(chosen);
         const keep = Math.max(1, avoid) + 1;
@@ -67,7 +74,9 @@ export function pickBankFile(files, history, avoids, rng) {
 /** Громкость банка: число, диапазон `[min, max]` или одна пара. */
 export function bankVolume(spec, rng) {
     const raw = spec && spec.volume;
-    const random = typeof rng === 'function' ? rng : Math.random;
+    // Без генератора берём НИЖНЮЮ границу диапазона: воспроизводимо и
+    // предсказуемо. Нужен разброс — передайте fxRandom.
+    const random = typeof rng === 'function' ? rng : () => 0;
     if (Array.isArray(raw)) {
         const lo = Number(raw[0]);
         const hi = Number(raw[1] === undefined ? raw[0] : raw[1]);
@@ -84,7 +93,7 @@ export function bankVolume(spec, rng) {
  */
 export function bankPitch(spec, rng) {
     const raw = spec && spec.pitch;
-    const random = typeof rng === 'function' ? rng : Math.random;
+    const random = typeof rng === 'function' ? rng : () => 0;
     if (Array.isArray(raw)) {
         const lo = Number(raw[0]);
         const hi = Number(raw[1] === undefined ? raw[0] : raw[1]);

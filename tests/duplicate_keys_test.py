@@ -18,6 +18,7 @@
 #   python3 tests/duplicate_keys_test.py
 # ===========================================================================
 
+import os
 import re
 import sys
 
@@ -125,6 +126,28 @@ def find_duplicates(source):
     return bad
 
 
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+HL = os.path.join(ROOT, "src", "highlevel")
+
+
+def check_missing_math_random():
+    """
+    Ни один модуль высокоуровневого API не должен звать Math.random().
+
+    Причина: воспроизводимость. Движок детерминирован (--seed, --fixed-dt,
+    свой генератор в $.random/fxRandom), но один вызов Math.random() в кадре
+    ломает и реплей ($.replay), и разбор баг-репорта. Именно так было в
+    timeline.js (дыхание и фаза героев) — нашлось аудитом, а не тестом.
+    """
+    offenders = []
+    for name in sorted(f for f in os.listdir(HL) if f.endswith(".js")):
+        with open(os.path.join(HL, name), encoding="utf-8", errors="replace") as fh:
+            text = blank_out(fh.read())
+        if "Math.random" in text:
+            offenders.append(name)
+    return offenders
+
+
 def main():
     # Реальный случай, из-за которого страж появился.
     real = [
@@ -154,6 +177,13 @@ def main():
     # Тернарник не ключ.
     tern = "const o = { a: c ? 1 : 2, b: 3 };"
     check(not find_duplicates(tern), "тернарник не считается ключом")
+
+    # Ни один модуль не зовёт Math.random(): иначе ломается воспроизводимость.
+    offenders = check_missing_math_random()
+    check(not offenders, f"Math.random в модулях API нет (найдено: {offenders})")
+    # Страж должен уметь находить: подсовываем файл с вызовом.
+    sample = "const x = Math.random();"
+    check("Math.random" in blank_out(sample), "страж видит Math.random в коде")
 
     print()
     if FAILURES:

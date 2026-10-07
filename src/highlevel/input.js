@@ -609,14 +609,3 @@ export { scancodeOf };
 export function keyNameOf(code) { return keyName(code); }
 
 /** Управление узлом с клавиатуры: $('#hero').controls('wasd'). */
-export function installControls(def, defGet) {
-    def('controls', function (scheme) {
-        const cfg = typeof scheme === 'string'
-            ? { up: scheme, jump: 'space', fire: 'mouse' }
-            : (scheme || {});
-        return this.each((node) => {
-            node.attrs.controls = cfg;
-            node.attrs.speed_axis = (cfg.axis || (typeof scheme === 'string' && scheme !== 'wasd' && scheme !== 'arrows' ? scheme : 'both'));
-        });
-    });
-}

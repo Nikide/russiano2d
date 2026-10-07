@@ -99,10 +99,6 @@ static bool ensure_visit_capacity(R2DBsp *b, int need)
     if (!order) return false;
     b->visit_order = order;
 
-    int *mark = (int *)realloc(b->visit_mark, (size_t)cap * sizeof(int));
-    if (!mark) return false;
-    b->visit_mark = mark;
-
     b->visit_cap = cap;
     return true;
 }
@@ -295,7 +291,6 @@ void r2d_bsp_free(R2DBsp *b)
     free(b->segments);
     free(b->nodes);
     free(b->visit_order);
-    free(b->visit_mark);
     SDL_zero(*b);
     b->root = -1;
 }

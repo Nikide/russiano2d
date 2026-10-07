@@ -47,7 +47,6 @@ typedef struct R2DBsp {
     int          root;          // -1, если дерево пустое
 
     int *visit_order;           // результат обхода, индексы отрезков
-    int *visit_mark;            // служебный буфер для сортировки точек
     int  visit_cap;
 } R2DBsp;
 

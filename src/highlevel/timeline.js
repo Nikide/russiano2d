@@ -47,7 +47,7 @@
 // через `$.timeline.state()` — его видно тестам и агенту.
 // ===========================================================================
 
-import { ctx, wrap, wrapOne, query, spriteSize } from './core.js';
+import { ctx, wrap, wrapOne, query, spriteSize, fxRandom } from './core.js';
 
 // --- Реестр -----------------------------------------------------------------
 // Определения (то, что объявила игра) и подписки на события модуля. Прогон
@@ -1696,12 +1696,15 @@ function buildCast(def) {
                 bottom: size.h * member.bottom,
                 scale: 1, angle: 0, alpha: 0,
                 dx: 0, dy: 0, hop: 0,
-                breath: Math.random() * Math.PI * 2,
+                // fxRandom, а не Math.random: дыхание и фаза обязаны быть
+                // ВОСПРОИЗВОДИМЫМИ при --seed/--fixed-dt, иначе записанный
+                // реплей ($.replay) разойдётся на первом же кадре.
+                breath: fxRandom() * Math.PI * 2,
                 idle: member.idle,
                 pose: null, aspect: 0.55,
                 base_w: 0, base_h: 0,
                 tremor: 0, tremor_amp: 0, tremor_angle: 0,
-                phase: Math.random() * 6.28,
+                phase: fxRandom() * 6.28,
             };
             if (member.tint) node.color(member.tint);
             stage.rigs.set(key, rig);

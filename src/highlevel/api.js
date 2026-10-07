@@ -18,7 +18,7 @@ import {
 import { installWorld } from './world.js';
 import { installCamera } from './camera.js';
 import { installTime, tickTime } from './time.js';
-import { installInput, installControls, shiftDown, ctrlDown, altDown } from './input.js';
+import { installInput, shiftDown, ctrlDown, altDown } from './input.js';
 import { installSound } from './sound.js';
 import { installScene } from './scene.js';
 import { installUi } from './ui.js';

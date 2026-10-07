@@ -1820,15 +1820,24 @@ static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JS
     const char *element = r2d__arg_str(ctx, argc, argv, 1);
     const char *event = r2d__arg_str(ctx, argc, argv, 2);
 
-    const int id = s->callback_count++;
-    s->callbacks[id] = JS_DupValue(ctx, argv[3]);
-
-    const bool ok = element && r2d_gui_add_listener(s->gui, doc, element, event, id);
+    // Слот НЕ занимаем заранее: раньше id = callback_count++ брался до проверки
+    // ok, и неудачная подписка выжигала слот вместе с JS-функцией. На 256-й
+    // такой подписке движок падал с InternalError, хотя обработчиков было
+    // меньше лимита. Теперь слот освобождается, если слушателя не поставили.
+    const int slot = s->callback_count;
+    JSValue fn = JS_DupValue(ctx, argv[3]);
+    const bool ok = element && event && r2d_gui_add_listener(s->gui, doc, element, event, slot);
+    if (ok) {
+        s->callbacks[slot] = fn;
+        s->callback_count++;
+    } else {
+        JS_FreeValue(ctx, fn);
+    }
 
     if (element) JS_FreeCString(ctx, element);
     if (event) JS_FreeCString(ctx, event);
 
-    return JS_NewInt32(ctx, ok ? id : -1);
+    return JS_NewInt32(ctx, ok ? slot : -1);
 }
 
 // Мост RmlUi → JS: вызывается из gui.cpp при срабатывании слушателя.

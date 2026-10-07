@@ -24,7 +24,7 @@
 // без движка, их проверяет юнит-тест (tests/js/steps_test.mjs).
 // ===========================================================================
 
-import { ctx, query } from './core.js';
+import { ctx, query, fxRandom } from './core.js';
 
 // ---------------------------------------------------------------------------
 // Чистая часть: шаги
@@ -99,7 +99,10 @@ export function pickBark(lines, opts) {
     const pool = Array.isArray(lines) ? lines : [];
     const recent = spec.recent || [];
     const keep = Math.max(1, Number(spec.keep) || 24);
-    const random = typeof spec.rng === 'function' ? spec.rng : Math.random;
+    // Без своего генератора — fxRandom: он сеется движком (--seed), поэтому
+    // шаги воспроизводимы в реплее. Math.random() ломал и реплей, и
+    // разбор баг-репорта.
+    const random = typeof spec.rng === 'function' ? spec.rng : fxRandom;
     const fits = [];
     const own = [];
     for (const line of pool) {
@@ -180,8 +183,8 @@ export function installSteps($) {
             if (!player) return null;
             const volume = (o.volume === undefined ? 1 : Number(o.volume)) * stepVolume(!!o.run, !!o.crouching);
             const pitch = (o.pitch === undefined ? 1 : Number(o.pitch))
-                * (1 + (Math.random() * 2 - 1) * (Number(spec.pitch) || 0));
-            return player.play(spec.files[Math.floor(Math.random() * spec.files.length) % spec.files.length],
+                * (1 + (fxRandom() * 2 - 1) * (Number(spec.pitch) || 0));
+            return player.play(spec.files[Math.floor(fxRandom() * spec.files.length) % spec.files.length],
                                { volume, pitch });
         },
 
@@ -194,10 +197,10 @@ export function installSteps($) {
             if (!player) return null;
             // Файлы приземления описываются тем же материалом с суффиксом.
             const files = (spec.land && spec.land.length) ? spec.land : spec.files;
-            const file = files[Math.floor(Math.random() * files.length) % files.length];
+            const file = files[Math.floor(fxRandom() * files.length) % files.length];
             return player.play(file, {
                 volume: landVolume(fallSpeed),
-                pitch: 1 + (Math.random() * 2 - 1) * 0.05,
+                pitch: 1 + (fxRandom() * 2 - 1) * 0.05,
             });
         },
 
