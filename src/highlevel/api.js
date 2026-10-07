@@ -83,6 +83,7 @@ import { installI18n, tickI18n } from './i18n.js';
 import { installPool, tickPool } from './pool.js';
 import { installViewport, tickViewport } from './viewport.js';
 import { installHttp, tickHttp } from './http.js';
+import { installCutscene, tickCutscene } from './cutscene.js';
 
 // ---------------------------------------------------------------------------
 // Кадровые хуки
@@ -400,6 +401,7 @@ export function createApi() {
     installCels($);              // граф кадров (псевдо-3D): $.cels
     installProc($);              // процедурный пиксель-арт: $.proc
     installReplay($);            // реплеи: запись ввода и воспроизведение
+    installCutscene($, placeBody);   // катсцены в текущей сцене: $.cutscene
     installAlive($);             // психика NPC и режиссёр рейда: $.alive
     installNet($);               // сеть, только авторитарная: $.net
     installWidgets($);
@@ -1603,6 +1605,9 @@ function installFrameHooks($) {
         //    состояние мира (анимация, частицы, навигация), затем слои и
         //    интерфейс, последней — шины звука (затухания громкости).
         //    Имя метки — это имя СВОЕГО отрезка: метка ставится до вызова.
+        // Катсцена тикает ДО applyControls: иначе гейт ввода опоздает на кадр
+        // и герой «проползёт» лишние пиксели (docs/TASKS.md §3).
+        prof('катсцена'); tickCutscene(dt);
         prof('анимация+ввод'); animateSprites(); tickWorldHover(); applyControls(dt);
         // Клипы, машины состояний и таймлайны тикают игровым временем, а не
         // сырым dt: иначе пауза и масштаб времени двигали твины, но не
@@ -1821,7 +1826,19 @@ function tickWorldHover() {
     return top;
 }
 
+// Запись позиции узла в его тело: режиссёр катсцены двигает узлы, а узел с
+// телом каждый кадр перезаписывается из физики — без этой записи NPC стоит на
+// месте (нашлось тестом: он сдвинулся на один кадр и замер).
+function placeBody(node) {
+    if (!node || node.body < 0) return;
+    engineOf().setPosition(node.body, node.x, node.y, node.angle);
+}
+
 function applyControls(dt) {
+    // Гейт катсцены: пока ввод забран, игроком НЕ управляем. Иначе во время
+    // катсцены герой продолжал бы бегать под управлением игрока.
+    const cutscene = ctx.$ && ctx.$.cutscene;
+    const gated = !!(cutscene && typeof cutscene.blocking === 'function' && cutscene.blocking());
     // Срез управляемых узлов держит индекс реестра: при пустом срезе нет ни
     // обхода мира, ни опроса ввода (§5, P2 отчёта).
     const nodes = nodesWithFacet('controls');
@@ -1829,6 +1846,15 @@ function applyControls(dt) {
         const node = nodes[i];
         const scheme = node.attrs.controls;
         if (!scheme || node.cur_hp <= 0) continue;
+        // Забран ввод — гасим скорость управляемого тела, но не «замораживаем»
+        // узел: на время катсцены его ведёт режиссёр (walk и т.п.).
+        if (gated) {
+            if (node.body >= 0) {
+                const [junk_vx, vy] = engineOf().getVelocity(node.body);
+                engineOf().setVelocity(node.body, 0, node.gravity_on === false ? 0 : vy);
+            }
+            continue;
+        }
         const cfg = typeof scheme === 'string' ? { axis: scheme } : scheme;
         const axis_name = cfg.axis || 'both';
         const vec = ctx.input.vec(axis_name);

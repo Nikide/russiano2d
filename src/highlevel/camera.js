@@ -83,6 +83,37 @@ export function installCamera($) {
             return node ? wrapOne(node) : null;
         },
 
+        /**
+         * Снимок состояния камеры: цель слежения, сглаживание, границы,
+         * мёртвая зона, зум и смещение. Нужен катсценам: без него «вернуть как
+         * было» приходится в каждом месте вручную, и что-то обязательно
+         * теряется.
+         */
+        snapshot() {
+            return {
+                x: cam.x, y: cam.y, zoom: cam.zoom,
+                target: cam.target, offset: { x: cam.offset.x, y: cam.offset.y },
+                smooth: cam.smooth,
+                limits: cam.limits ? { x: cam.limits.x, y: cam.limits.y, w: cam.limits.w, h: cam.limits.h } : null,
+                deadzone: cam.deadzone ? { w: cam.deadzone.w, h: cam.deadzone.h } : null,
+            };
+        },
+
+        /** Вернуть камеру в снятое состояние (`snapshot()`). */
+        restore(state) {
+            if (!state) return camera;
+            cam.x = state.x; cam.y = state.y;
+            cam.zoom = Math.max(0.01, state.zoom);
+            cam.target = state.target || null;
+            cam.offset.x = state.offset ? state.offset.x : 0;
+            cam.offset.y = state.offset ? state.offset.y : 0;
+            cam.smooth = state.smooth || 0;
+            cam.limits = state.limits ? Object.assign({}, state.limits) : null;
+            cam.deadzone = state.deadzone ? Object.assign({}, state.deadzone) : null;
+            clampToLimits();
+            return camera;
+        },
+
         zoom(value) {
             if (value === undefined) return cam.zoom;
             cam.zoom = Math.max(0.01, value);
