@@ -199,7 +199,7 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
 #ifdef R2D_ENABLE_IMGUI
     if (fc->debug) {
         if (r2d_key_pressed(app, SDL_SCANCODE_F1)) r2d_debug_ui_toggle(fc->debug);
-        if (r2d_key_pressed(app, SDL_SCANCODE_F5)) r2d_script_reload(fc->script);
+        if (r2d_key_pressed(app, SDL_SCANCODE_F5)) r2d_script_request_reload(fc->script, "F5");
     }
 #endif
 
@@ -465,6 +465,19 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
     // Закрываем кадр профайлера: dt — реальное время кадра, разница с суммой
     // зон показывает неучтённое (ожидание GPU, планировщик).
     r2d_prof_frame_end(app->dt * 1000.0f);
+
+    // --- Перезапуск скриптов на границе кадра ---------------------------------
+    // Кадр уже отрисован, профайлер закрыт, JS-вызовов в этом кадре больше не
+    // будет. Только здесь безопасно уничтожить старый рантайм: иначе он
+    // разрушался бы прямо во время обработки события (F5, правка файла), и
+    // кадр оставался недоигранным.
+    const char *reload_reason = NULL;
+    if (r2d_script_take_reload_request(fc->script, &reload_reason)) {
+        R2D_LOG("перезапускаю QuickJS на границе кадра: %s", reload_reason);
+        if (!r2d_script_reload(fc->script)) {
+            R2D_ERROR("перезапуск скриптов не удался — продолжаю со старым рантаймом");
+        }
+    }
 
     return app->running;
 }

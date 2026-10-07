@@ -63,6 +63,7 @@ import { installBsp } from './bsp.js';
 import { installAtlas } from './atlas.js';
 import { installCurve } from './curve.js';
 import { installTask } from './task.js';
+import { installScript } from './script.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
 import { installI18n, tickI18n } from './i18n.js';
@@ -370,6 +371,7 @@ export function createApi() {
     installAtlas($);             // атласы из JSON: $.atlas
     installCurve($);             // кривые и градиенты: $.curve
     installTask($);              // работа кусками по кадрам: $.task
+    installScript($);            // перезапуск скриптов: $.script
     installWidgets($);
     installTriggers($);
     installI18n($);

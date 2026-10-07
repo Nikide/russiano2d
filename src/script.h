@@ -63,6 +63,8 @@ typedef struct R2DScript {
 
     // Hot reload
     bool   hot_reload;
+    bool   reload_requested;   // запрошен перезапуск на границе кадра
+    char   reload_reason[128]; // почему: правка файла, F5, запрос игры
     double reload_check_timer;
     double entry_mtime;
 
@@ -87,8 +89,20 @@ bool r2d_script_reload(R2DScript *s);
 void r2d_script_call_update(R2DScript *s, float dt);
 void r2d_script_call_render(R2DScript *s);
 
-// Раз в кадр: проверяет mtime файлов и при изменении перезапускает рантайм.
+// Раз в кадр: проверяет mtime файлов и при изменении ЗАПРАШИВАЕТ перезапуск
+// рантайма (сам перезапуск делает главный цикл на границе кадра).
 void r2d_script_poll_hot_reload(R2DScript *s, float dt);
+
+// Попросить перезапуск скриптов. Перезапуск случится на границе кадра, а не в
+// середине: иначе старый рантайм уничтожался бы прямо во время обработки
+// события, и кадр оставался недоигранным.
+void r2d_script_request_reload(R2DScript *s, const char *reason);
+
+// Забрать запрос перезапуска (true — был и снят) и причину.
+bool r2d_script_take_reload_request(R2DScript *s, const char **reason_out);
+
+// Разрешён ли следить за изменениями .js.
+bool r2d_script_hot_reload_enabled(const R2DScript *s);
 
 const char *r2d_script_last_error(const R2DScript *s);
 int  r2d_script_callback_count(const R2DScript *s);

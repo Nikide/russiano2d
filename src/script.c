@@ -1152,6 +1152,35 @@ static JSValue r2d__js_get_sprite_filter(JSContext *ctx, JSValueConst this_val, 
     return JS_NewBool(ctx, r2d_render_filter(s->renderer));
 }
 
+// engine.requestReload(reason?) — попросить перезапуск скриптов.
+// Перезапуск случится НА ГРАНИЦЕ КАДРА (см. src/main.c), а не сейчас.
+static JSValue r2d__js_request_reload(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s) return JS_FALSE;
+    const char *reason = r2d__arg_str(ctx, argc, argv, 0);
+    r2d_script_request_reload(s, reason ? reason : "запрос игры");
+    if (reason) JS_FreeCString(ctx, reason);
+    return JS_TRUE;
+}
+
+// engine.reloadPending() → bool — ждёт ли перезапуска.
+static JSValue r2d__js_reload_pending(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewBool(ctx, s && s->reload_requested);
+}
+
+// engine.hotReload() → bool — следит ли движок за изменениями файлов.
+static JSValue r2d__js_hot_reload(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewBool(ctx, r2d_script_hot_reload_enabled(s));
+}
+
 // engine.freeTexture(id) → bool — выгрузить текстуру и вернуть слот.
 //
 // Раньше выгрузки не было вовсе: картинка, ставшая ненужной, занимала слот до
@@ -3176,6 +3205,9 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "setAwake", r2d__js_set_awake, 2);
     r2d__set_fn(ctx, engine, "isAwake", r2d__js_is_awake, 1);
     r2d__set_fn(ctx, engine, "freeTexture", r2d__js_free_texture, 1);
+    r2d__set_fn(ctx, engine, "requestReload", r2d__js_request_reload, 1);
+    r2d__set_fn(ctx, engine, "reloadPending", r2d__js_reload_pending, 0);
+    r2d__set_fn(ctx, engine, "hotReload", r2d__js_hot_reload, 0);
     r2d__set_fn(ctx, engine, "setSpriteFilter", r2d__js_set_sprite_filter, 1);
     r2d__set_fn(ctx, engine, "spriteFilter", r2d__js_get_sprite_filter, 0);
     r2d__set_fn(ctx, engine, "limits", r2d__js_limits, 0);
@@ -3747,9 +3779,30 @@ void r2d_script_poll_hot_reload(R2DScript *s, float dt)
     }
     if (hash != s->entry_mtime) {
         s->entry_mtime = hash;
-        R2D_LOG("обнаружены изменения скриптов — перезапускаю QuickJS");
-        r2d_script_reload(s);
+        r2d_script_request_reload(s, "изменены файлы скриптов");
     }
+}
+
+void r2d_script_request_reload(R2DScript *s, const char *reason)
+{
+    if (!s) return;
+    if (s->reload_requested) return;   // первый запрос важнее: он и есть причина
+    s->reload_requested = true;
+    SDL_strlcpy(s->reload_reason, reason ? reason : "без причины", sizeof s->reload_reason);
+    R2D_LOG("запрошен перезапуск скриптов (%s) — на границе кадра", s->reload_reason);
+}
+
+bool r2d_script_take_reload_request(R2DScript *s, const char **reason_out)
+{
+    if (!s || !s->reload_requested) return false;
+    s->reload_requested = false;
+    if (reason_out) *reason_out = s->reload_reason;
+    return true;
+}
+
+bool r2d_script_hot_reload_enabled(const R2DScript *s)
+{
+    return s && s->hot_reload;
 }
 
 // ---------------------------------------------------------------------------
