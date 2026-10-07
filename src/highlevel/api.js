@@ -58,6 +58,8 @@ import { installPrefab, tickPrefab } from './prefab.js';
 import { installAudiobus, tickAudiobus } from './audiobus.js';
 import { installAcoustics, tickAcoustics } from './acoustics.js';
 import { installLayers, tickLayers } from './layers.js';
+import { installCollisionLayers } from './collision.js';
+import { installBsp } from './bsp.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
 import { installI18n, tickI18n } from './i18n.js';
@@ -310,6 +312,8 @@ export function createApi() {
     installAudiobus($);
     installAcoustics($);
     installLayers($);
+    installCollisionLayers($);   // именованные слои коллизий ($.collision)
+    installBsp($);               // BSP-дерево: $.world.bsp
     installWidgets($);
     installTriggers($);
     installI18n($);
@@ -1322,6 +1326,15 @@ function installNodeMethods($) {
     def('stopAll', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engine.setVelocity(n.body, 0, 0); }); });
     def('pause', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engine.setAwake(n.body, false); }); });
     def('wake', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engine.setAwake(n.body, true); }); });
+    /**
+     * .sleeping() — спит ли тело (Box2D усыпляет неподвижные). Спящее тело не
+     * считается физикой: полезно, чтобы не будить его лишней логикой.
+     */
+    defGet('sleeping', function (node) {
+        return node.body >= 0 && typeof engine.isAwake === 'function'
+            ? !engine.isAwake(node.body)
+            : false;
+    }, true);
     def('overlaps', function (what, cb) {
         const other = typeof what === 'string' ? query(what) : (what instanceof Wrapper ? what.nodes : []);
         if (typeof cb === 'function') {

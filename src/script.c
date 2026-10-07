@@ -1090,6 +1090,53 @@ static JSValue r2d__js_set_awake(JSContext *ctx, JSValueConst this_val, int argc
     return JS_UNDEFINED;
 }
 
+// engine.limits() → занятость таблиц движка и их потолки.
+//
+// Зачем: половина лимитов не была видна игре вообще, а поведение при
+// достижении разное — где-то возвращается -1, где-то бросается исключение,
+// где-то событие молча теряется. Теперь игре есть что показать в отладочном
+// оверлее и по чему принять решение.
+static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue o = JS_NewObject(ctx);
+
+    const int textures = (s && s->renderer) ? s->renderer->texture_count : 0;
+    const int sprites = (s && s->renderer) ? s->renderer->sprite_count : 0;
+    const int bodies = (s && s->physics) ? r2d_physics_live_count(s->physics) : 0;
+    const int joints = (s && s->physics) ? r2d_physics_joint_count(s->physics) : 0;
+    const int shaders = (s && s->renderer) ? r2d_render_user_shader_count(s->renderer) : 0;
+
+    JS_SetPropertyStr(ctx, o, "textures", JS_NewInt32(ctx, textures));
+    JS_SetPropertyStr(ctx, o, "textures_max", JS_NewInt32(ctx, R2D_MAX_TEXTURES));
+    JS_SetPropertyStr(ctx, o, "sprites", JS_NewInt32(ctx, sprites));
+    JS_SetPropertyStr(ctx, o, "bodies", JS_NewInt32(ctx, bodies));
+    JS_SetPropertyStr(ctx, o, "bodies_max", JS_NewInt32(ctx, R2D_MAX_BODIES));
+    JS_SetPropertyStr(ctx, o, "joints", JS_NewInt32(ctx, joints));
+    JS_SetPropertyStr(ctx, o, "joints_max", JS_NewInt32(ctx, 64));
+    JS_SetPropertyStr(ctx, o, "user_shaders", JS_NewInt32(ctx, shaders));
+    JS_SetPropertyStr(ctx, o, "user_shaders_max", JS_NewInt32(ctx, R2D_MAX_USER_SHADERS));
+    JS_SetPropertyStr(ctx, o, "node_fx_max", JS_NewInt32(ctx, R2D_MAX_NODE_FX));
+    JS_SetPropertyStr(ctx, o, "viewports_max", JS_NewInt32(ctx, R2D_MAX_VIEWPORTS));
+    JS_SetPropertyStr(ctx, o, "query_max", JS_NewInt32(ctx, R2D_MAX_QUERY));
+    JS_SetPropertyStr(ctx, o, "contact_events_max", JS_NewInt32(ctx, R2D_MAX_CONTACT_EVENTS));
+    JS_SetPropertyStr(ctx, o, "text_queue_max", JS_NewInt32(ctx, 2048));
+    JS_SetPropertyStr(ctx, o, "ui_callbacks_max", JS_NewInt32(ctx, 256));
+    JS_SetPropertyStr(ctx, o, "documents_max", JS_NewInt32(ctx, 64));
+    return o;
+}
+
+// engine.isAwake(id) → bool — спит ли тело (Box2D усыпляет неподвижные).
+// Нужен игре, чтобы не будить тела зря и не считать логику спящих.
+static JSValue r2d__js_is_awake(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_physics_is_awake(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
 // engine.setGravityScale(id, scale) — множитель гравитации для тела.
 static JSValue r2d__js_set_gravity_scale(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
@@ -3088,6 +3135,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "setGravity", r2d__js_set_gravity, 2);
     r2d__set_fn(ctx, engine, "getGravity", r2d__js_get_gravity, 0);
     r2d__set_fn(ctx, engine, "setAwake", r2d__js_set_awake, 2);
+    r2d__set_fn(ctx, engine, "isAwake", r2d__js_is_awake, 1);
+    r2d__set_fn(ctx, engine, "limits", r2d__js_limits, 0);
     r2d__set_fn(ctx, engine, "setBodyEnabled", r2d__js_set_body_enabled, 2);
     r2d__set_fn(ctx, engine, "setBodyFilter", r2d__js_set_body_filter, 4);
     r2d__set_fn(ctx, engine, "getBodyFilter", r2d__js_get_body_filter, 1);
