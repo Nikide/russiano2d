@@ -81,6 +81,61 @@ export function installScene($) {
             return scene;
         },
 
+        /**
+         * Переход с загрузкой: показывает экран, выполняет шаги кусками по
+         * кадрам и только потом уходит в сцену. Экран остаётся живым, ввод не
+         * блокируется до последнего кадра.
+         *
+         *   $.scene.loadAsync('level2', {
+         *       label: 'Уровень 2',
+         *       steps: [
+         *           { label: 'лес', work: (i) => plant(i), total: 900 },
+         *           { label: 'враги', work: () => spawnHorde() },
+         *       ],
+         *   });
+         *
+         * `steps` — массив шагов: у каждого либо `work` c `total` (кусками),
+         * либо простая функция (один вызов за кадр).
+         */
+        loadAsync(name, opts) {
+            const o = Object.assign({ transition: 'fade' }, opts || {});
+            const steps = Array.isArray(o.steps) ? o.steps.slice() : [];
+            const task = ctx.task;
+            if (!task || !steps.length) return scene.load(name, o);
+
+            const runStep = (index) => {
+                if (index >= steps.length) {
+                    if (ctx.loading && typeof ctx.loading.hide === 'function') ctx.loading.hide();
+                    return scene.load(name, o);
+                }
+                const step = steps[index] || {};
+                const label = step.label || `шаг ${index + 1} из ${steps.length}`;
+                const next = () => runStep(index + 1);
+                if (typeof step.work === 'function' && step.total > 0) {
+                    task.chunked({
+                        total: step.total,
+                        budget: step.budget,
+                        label,
+                        step: (i, n) => step.work(i, n),
+                        done: next,
+                    });
+                    return;
+                }
+                // Простой шаг: работа и сразу следующий — прогноз кадра делает
+                // планировщик, поэтому даже один вызов не «съедает» переход.
+                task.chunked({
+                    total: 1,
+                    budget: step.budget,
+                    label,
+                    step: () => { if (typeof step.work === 'function') step.work(); },
+                    done: next,
+                });
+            };
+
+            runStep(0);
+            return scene;
+        },
+
         /** Перезапустить текущую сцену (удобно для «ещё раз»). */
         restart() { return scene.load(state.current_name); },
 

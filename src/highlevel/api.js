@@ -62,6 +62,7 @@ import { installCollisionLayers } from './collision.js';
 import { installBsp } from './bsp.js';
 import { installAtlas } from './atlas.js';
 import { installCurve } from './curve.js';
+import { installTask } from './task.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
 import { installI18n, tickI18n } from './i18n.js';
@@ -368,6 +369,7 @@ export function createApi() {
     installBsp($);               // BSP-дерево: $.world.bsp
     installAtlas($);             // атласы из JSON: $.atlas
     installCurve($);             // кривые и градиенты: $.curve
+    installTask($);              // работа кусками по кадрам: $.task
     installWidgets($);
     installTriggers($);
     installI18n($);
