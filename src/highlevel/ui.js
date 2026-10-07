@@ -12,9 +12,21 @@
 // ===========================================================================
 
 import { ctx, query, packColor, nodesWithFacet } from './core.js';
+import { activeDialog } from './widgets.js';
 
 // Кэш обёрток документов RmlUi: путь → обёртка (см. ui.doc()).
 const docs = new Map();
+
+/**
+ * Узел внутри поддерева `ancestor`? Нужен, чтобы модальный диалог пропускал
+ * ввод своим детям (кнопкам окна), но блокировал всё остальное.
+ */
+function isInside(ancestor, node) {
+    for (let cur = node; cur; cur = cur.parent_node) {
+        if (cur === ancestor) return true;
+    }
+    return false;
+}
 
 export function installUi($) {
     const ui = {
@@ -87,12 +99,26 @@ export function installUi($) {
             // полного обхода мира здесь больше нет (§5, P2 отчёта).
             const nodes = nodesWithFacet('ui');
             if (nodes.length === 0) return;
+            // Модальный диалог забирает ввод целиком: этот проход идёт ПОСЛЕ
+            // tickWidgets (и после его проверки модальности), поэтому без
+            // своего гейта клик проходил в контролы под затемнением.
+            const modal = activeDialog();
             const mx = engine.mouseX;
             const my = engine.mouseY;
             const down = engine.mouseDown(1);
             const pressed = engine.mousePressed(1);
             for (let i = 0; i < nodes.length; i++) {
                 const node = nodes[i];
+                // Пока открыт диалог, чужие контролы не получают ни наведения,
+                // ни кликов — иначе кнопка под окном срабатывала бы «сквозь».
+                if (modal && node !== modal && !isInside(modal, node)) {
+                    if (node.hovered) {
+                        node.hovered = false;
+                        if (node.tag === 'ui.button') node.emit('mouseleave', {});
+                    }
+                    node.pressed = false;
+                    continue;
+                }
                 const inside = node.visible &&
                     mx >= node.x - node.w / 2 && mx <= node.x + node.w / 2 &&
                     my >= node.y - node.h / 2 && my <= node.y + node.h / 2;
