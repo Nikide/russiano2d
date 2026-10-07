@@ -13,7 +13,7 @@ import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
 import {
     createIdTable, diffSnapshot, applySnapshot, interpolate, sameValue,
     createInputQueue, createAuthority, createClientState,
-    createHistory, createPrediction,
+    createHistory, createPrediction, smoothState,
 } from '../../src/highlevel/net.js';
 import { createApi } from '../../src/highlevel/api.js';
 
@@ -585,6 +585,91 @@ test('$.net: предсказание клиента и подтверждени
     eq($.net.prediction().pending(), 1, 'второй ввод ещё ждёт');
     eq(st.x, 9, 'к правде применён неподтверждённый ввод (5 + 4)');
     eq($.net.prediction().state().x, 9);
+});
+
+// --- сглаживание откатов ---
+// Смысл: после отката клиент повторяет ввод, и `predicted` может прыгнуть.
+// Рисовать его напрямую — картинка дёргается. Визуал подтягивается плавно,
+// а при настоящем телепорте (расхождение больше snap) ставится сразу.
+
+test('smoothState: первый вызов берёт цель как есть', () => {
+    const v = smoothState(null, { x: 10, y: 20 }, 1 / 60, { rate: 12 });
+    eq(v.x, 10);
+    eq(v.y, 20);
+});
+
+test('smoothState: подтягивает к цели, но НЕ сразу', () => {
+    let v = { x: 0, y: 0 };
+    v = smoothState(v, { x: 100, y: 0 }, 1 / 60, { rate: 12 });
+    truthy(v.x > 0, `сдвинулось от нуля (${v.x})`);
+    truthy(v.x < 100, `но НЕ телепортировалось (${v.x})`);
+    // За секунду должно подойти близко.
+    for (let i = 0; i < 120; ++i) v = smoothState(v, { x: 100, y: 0 }, 1 / 60, { rate: 12 });
+    near(v.x, 100, 0.5);
+});
+
+test('smoothState: snap сдаётся и ставит значение сразу (телепорт)', () => {
+    const v = smoothState({ x: 0, y: 0 }, { x: 5000, y: 0 }, 1 / 60,
+                          { rate: 12, snap: 500 });
+    eq(v.x, 5000, 'дальний скачок ставится сразу');
+});
+
+test('smoothState: без snap телепорт тоже сглаживается', () => {
+    const v = smoothState({ x: 0, y: 0 }, { x: 5000, y: 0 }, 1 / 60, { rate: 12 });
+    truthy(v.x > 0 && v.x < 5000, `тянется, а не прыгает (${v.x})`);
+});
+
+test('smoothState: нечисловые поля берутся как есть', () => {
+    const v = smoothState({ pose: 'idle' }, { pose: 'run', x: 5 }, 1 / 60, {});
+    eq(v.pose, 'run', 'позу не интерполируем — она не число');
+    eq(v.x, 5);
+});
+
+test('smoothState: цели нет — значение не выдумывается', () => {
+    const v = smoothState({ x: 3 }, null, 1 / 60, {});
+    eq(Object.keys(v).length, 0, 'пустая цель даёт пустой результат');
+});
+
+test('prediction: первый visual ставит цель сразу (инициализация)', () => {
+    const p = createPrediction((st, input) => ({ x: (st.x || 0) + input.dx }));
+    p.apply({ seq: 1, dx: 100 });
+    // Иначе визуал «приползал» бы из нуля при появлении игрока.
+    eq(p.visual(1 / 60, { rate: 12 }).x, 100, 'первый вызов — без сглаживания');
+    eq(p.visualError(), 0, 'и отставания нет');
+});
+
+test('prediction: visual догоняет сдвинувшуюся цель', () => {
+    const p = createPrediction((st, input) => ({ x: (st.x || 0) + input.dx }));
+    p.apply({ seq: 1, dx: 100 });
+    p.visual(1 / 60, { rate: 12 });          // инициализация на 100
+    p.apply({ seq: 2, dx: 100 });            // цель уехала на 200
+    const v1 = p.visual(1 / 60, { rate: 12 });
+    truthy(v1.x > 100 && v1.x < 200, `визуал между 100 и 200 (${v1.x})`);
+    truthy(p.visualError() > 0, 'отставание видно');
+    for (let i = 0; i < 120; ++i) p.visual(1 / 60, { rate: 12 });
+    truthy(p.visualError() < 1, `догнал (${p.visualError()})`);
+});
+
+test('prediction: откат НЕ сбрасывает визуал (в этом и смысл)', () => {
+    const p = createPrediction((st, input) => ({ x: (st.x || 0) + input.dx }));
+    p.apply({ seq: 1, dx: 100 });
+    p.visual(1 / 60, { rate: 12 });
+    const before = p.visual(1 / 60, { rate: 12 }).x;
+    // Сервер прислал правду: она ближе к нулю, чем предсказание.
+    p.acknowledge({ x: 0 }, 1);
+    const v = p.visual(1 / 60, { rate: 12 });
+    truthy(v.x <= before + 1e-9, `после отката визуал не прыгнул вверх (${v.x} <= ${before})`);
+});
+
+test('prediction: resetVisual забывает визуал', () => {
+    const p = createPrediction((st, input) => ({ x: (st.x || 0) + input.dx }));
+    p.apply({ seq: 1, dx: 10 });
+    p.visual(1 / 60, {});                    // инициализация
+    p.apply({ seq: 2, dx: 90 });             // цель уехала — визуал отстал
+    p.visual(1 / 60, {});
+    truthy(p.visualError() > 0, 'отставание есть до сброса');
+    p.resetVisual();
+    eq(p.visualError(), 0, 'после сброса отставания нет');
 });
 
 finish();

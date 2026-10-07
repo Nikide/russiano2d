@@ -466,6 +466,58 @@ export function createHistory(capacity, seconds) {
  *
  * `simulate(state, input)` — чистая функция шага: она же используется сервером.
  */
+/**
+ * Плавно подтянуть `visual` к `target` — сглаживание откатов.
+ *
+ * ЗАЧЕМ. Клиент откатывается к серверному состоянию и повторяет ввод; если
+ * рисовать `predicted` напрямую, при каждой коррекции картинка ДЁРГАЕТСЯ.
+ * Сглаживание держит отдельное «визуальное» состояние и подтягивает его к
+ * симуляционному — игрок видит плавное движение, а не телепорт.
+ *
+ * Сглаживаются только ЧИСЛОВЫЕ поля; остальные (`pose`, флаги) берутся как
+ * есть: интерполировать позу бессмысленно, а флаг — невозможно.
+ *
+ * `opts`:
+ *   * `rate` — скорость догона, 1/с (по умолчанию 12): доля пути за секунду;
+ *   * `snap` — расхождение, с которого сглаживание сдаётся и ставит значение
+ *     сразу (по умолчанию 0 — никогда). Нужно для настоящих телепортов:
+ *     игрока перенесло — тянуть его через полкарты нельзя;
+ *   * `fields` — какие поля сглаживать (по умолчанию все числовые).
+ *
+ * Возвращает НОВЫЙ объект: `visual` не мутируется, поэтому вызывающий может
+ * хранить его сам.
+ */
+export function smoothState(visual, target, dt, opts) {
+    const o = opts || {};
+    const rate = Number.isFinite(Number(o.rate)) ? Math.max(0, Number(o.rate)) : 12;
+    const snap = Number.isFinite(Number(o.snap)) ? Math.max(0, Number(o.snap)) : 0;
+    const only = Array.isArray(o.fields) ? o.fields : null;
+    const src = target && typeof target === 'object' ? target : {};
+    const prev = visual && typeof visual === 'object' ? visual : null;
+    const out = {};
+
+    // Доля пути за кадр: экспонента, а не rate*dt — иначе при большом dt
+    // (просадка) значение перескакивало бы цель.
+    const step = dt > 0 ? 1 - Math.exp(-rate * dt) : 1;
+
+    for (const key of Object.keys(src)) {
+        const value = src[key];
+        if (typeof value !== 'number' || !Number.isFinite(value)
+            || (only && !only.includes(key)) || !prev) {
+            out[key] = value;
+            continue;
+        }
+        const from = Number(prev[key]);
+        if (!Number.isFinite(from)) { out[key] = value; continue; }
+        const gap = value - from;
+        // Слишком далеко — это телепорт, а не коррекция: ставим сразу.
+        if (snap > 0 && Math.abs(gap) > snap) { out[key] = value; continue; }
+        out[key] = from + gap * step;
+    }
+    // Поля, которых нет в цели, но были в визуале, НЕ переносим: цель — истина.
+    return out;
+}
+
 export function createPrediction(simulate) {
     // Шаг по умолчанию — «состояние плюс ввод»: чистое тождество по состоянию
     // отбрасывало ввод, и предсказание возвращало пустой объект (нашлось тестом).
@@ -512,6 +564,38 @@ export function createPrediction(simulate) {
 
         /** Наше состояние (с учётом локального ввода). */
         state() { return predicted ? Object.assign({}, predicted) : null; },
+
+        /**
+         * Визуальное состояние: плавно догоняет `state()`.
+         *
+         * ```js
+         * const view = $.net.prediction().visual(dt, { rate: 14, snap: 200 });
+         * hero.at(view.x, view.y);
+         * ```
+         *
+         * Сглаживание нужно ПОСЛЕ отката: без него каждая коррекция дёргает
+         * картинку. `snap` — расхождение, с которого сглаживание сдаётся
+         * (настоящий телепорт).
+         */
+        visual(dt, opts) {
+            visual_state = smoothState(visual_state, predicted, dt === undefined ? 1 / 60 : dt, opts);
+            return visual_state ? Object.assign({}, visual_state) : null;
+        },
+
+        /** Насколько визуал отстал от симуляции — для отладки дёрганости. */
+        visualError() {
+            if (!visual_state || !predicted) return 0;
+            let worst = 0;
+            for (const key of Object.keys(predicted)) {
+                if (typeof predicted[key] !== 'number') continue;
+                const d = Math.abs(Number(visual_state[key]) - Number(predicted[key]));
+                if (Number.isFinite(d) && d > worst) worst = d;
+            }
+            return worst;
+        },
+
+        /** Сбросить визуал (например, при переходе между сценами). */
+        resetVisual() { visual_state = null; return prediction; },
         /** Сколько вводов ещё не подтверждено. */
         pending() { return pending.length; },
         /** До какого номера сервер подтвердил. */
@@ -524,11 +608,13 @@ export function createPrediction(simulate) {
         reset() {
             predicted = null; acknowledged = 0; pending = []; corrections = 0; lastError = 0;
             acknowledged_state = null;
+            visual_state = null;
             return prediction;
         },
     };
 
     let acknowledged_state = null;
+    let visual_state = null;
     return prediction;
 }
 
