@@ -225,16 +225,23 @@ void r2d_debug_ui_begin(R2DDebugUI *ui, R2DApp *app, R2DRenderer *renderer,
                          R2DDebugReloadFn reload_fn, void *reload_user)
 {
     if (!ui) return;
-    // Кадр ImGui начинается всегда, независимо от видимости оверлея: в нём
-    // живёт текст игрового слоя. Окна оверлея строятся только когда он виден,
-    // иначе в draw data попал бы только background draw list с текстом.
+
+    // Пока оверлей скрыт, кадр ImGui не начинается вовсе: обычный интерфейс
+    // движка — RmlUi (docs/UI_RMLUI_LAW.md), а ImGui остаётся отладочным
+    // инструментом и не стоит ни одного вызова, пока его не открыли по F1.
+    if (!ui->visible) {
+        ui->frame_active = false;
+        g_frame_started = false;
+        return;
+    }
+
     ImGui_ImplSDLGPU3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
     ui->frame_active = true;
     g_frame_started = true;
 
-    if (ui->visible && ui->show_stats && app) {
+    if (ui->show_stats && app) {
         ImGui::SetNextWindowPos(ImVec2(12, 12), ImGuiCond_FirstUseEver);
         // Чуть шире прежнего: в таблицу зон должно влезать имя зоны целиком.
         // Размер задаётся каждый кадр (Cond_Always): высоту окно подбирает по
@@ -434,8 +441,10 @@ void r2d_debug_ui_begin(R2DDebugUI *ui, R2DApp *app, R2DRenderer *renderer,
         ImGui::End();
     }
 
-    // Текст игрового слоя ($.gfx.text, узлы <text>) — в background draw list:
-    // он рисуется под окнами оверлея и под интерфейсом RmlUi, но поверх сцены.
+    // Очередь текста (src/text.c) — рудимент прежней отрисовки: игровой текст
+    // давно идёт спрайтами глифов (engine.drawText → r2d_font_draw), и в очередь
+    // никто не пишет. Вызов оставлен, потому что он ничего не стоит при пустой
+    // очереди; если понадобится — очередь можно снять целиком.
     draw_scene_text();
 
     ImGui::Render();
@@ -490,7 +499,7 @@ bool r2d_text_measure_ui(const char *text, float size, float *w, float *h)
 
 void r2d_debug_ui_prepare(R2DDebugUI *ui, SDL_GPUCommandBuffer *cmd)
 {
-    if (!ui) return;
+    if (!ui || !r2d_debug_ui_has_frame()) return;
     ImDrawData *draw_data = ImGui::GetDrawData();
     if (!draw_data || draw_data->CmdListsCount == 0) return;
     // Внутри открывается copy pass — вызывать строго до SDL_BeginGPURenderPass.
@@ -499,7 +508,7 @@ void r2d_debug_ui_prepare(R2DDebugUI *ui, SDL_GPUCommandBuffer *cmd)
 
 void r2d_debug_ui_draw(R2DDebugUI *ui, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass)
 {
-    if (!ui) return;
+    if (!ui || !r2d_debug_ui_has_frame()) return;
 
     ImDrawData *draw_data = ImGui::GetDrawData();
     if (!draw_data || draw_data->CmdListsCount == 0) return;

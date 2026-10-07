@@ -20,6 +20,7 @@ set(R2D_SOURCES
     text.h     text.c
     font.h     font.c
     agent.h    agent.c
+    replay.h   replay.c
     crypto.h   crypto.c
     payload.h  payload.c
     project.h  project.c
@@ -27,6 +28,11 @@ set(R2D_SOURCES
     main.c)
 
 set(R2D_DEFINES "")
+
+# Версия движка одна на проект: строку берём из PROJECT_VERSION, чтобы usage,
+# заголовок окна, событие `ready` агента и User-Agent HTTP не отставали от
+# CHANGELOG (раньше в r2d.h была зашита «0.1.0» при проекте 0.1.14).
+list(APPEND R2D_DEFINES R2D_VERSION_STRING="${PROJECT_VERSION}")
 
 # Диагностика утечек QuickJS: -DR2D_JS_LEAK_DEBUG=ON
 option(R2D_JS_LEAK_DEBUG "Печатать утечки объектов QuickJS при выходе" OFF)

@@ -295,6 +295,17 @@ int r2d_physics_query_point(const R2DPhysics *p, float x, float y, uint64_t mask
 int r2d_physics_query_box(const R2DPhysics *p, float x, float y, float w, float h,
                           uint64_t mask, int *ids, int max_ids);
 
+// Тела, чей ЦЕНТР не дальше radius от точки (x, y): кандидатов даёт broadphase
+// Box2D (прямоугольник вокруг круга), затем они отсеиваются по расстоянию между
+// центрами. ids отсортированы по расстоянию (при равенстве — по id), потому что
+// порядок обхода broadphase не определён, а результат запроса обязан быть
+// воспроизводимым (реплеи, тесты, `$('.enemy').within(...)`).
+//
+// candidates (необязательный, может быть NULL) — сколько кандидатов вернул
+// broadphase до отсева; это диагностика запроса (ROADMAP, фаза 2).
+int r2d_physics_query_circle(const R2DPhysics *p, float x, float y, float radius,
+                             uint64_t mask, int *ids, int max_ids, int *candidates);
+
 // --- События контакта -------------------------------------------------------
 // Заполняются на каждом шаге мира; JS читает их через engine.contacts().
 // begin/end приходят только для форм, созданных с desc.contacts = true.

@@ -183,35 +183,43 @@ no-op) и даёт `test/eq/near/truthy/falsy/joined/finish`. Поэтому м�
 Уже занятые имена методов обёртки (переопределять **нельзя**):
 
 ```
-add addClass addTag align alive alpha anchor anchorPreset anchorRect anchors angle
-angleTo animate append appendTo applyForce applyImpulse at attr autotile blend blur
-body bounce burst checked children clear clearTiles clearTweens clipProgress
-clipSpeed clipTime clone closeDialog closest collidesWith collision collisionCircle
-collisions color cone contacts controls count damage data delay depth detach
-directionTo disabled distanceTo each emit emitting eq every fadeIn fadeOut fadeTo
-fill filter find first flash flicker flip focus fontSize frame frames gap get
-globalPos gravity has hasClass heal health height hide hp html index inputValue
-inside intensity invulnerable is isEmitting isNavigating isPlayingClip isVisible
-items joint jump kill last layer layerBits lookAt map mask max maxHp maxLength min
-move moveAndSlide moveTo moveTowards mute navPath navTarget navigateTo not occluders
-off offset on onFloor onWall oneWay opacity openDialog outline overlaps padding
-parallax params parent particleAt pause pauseClip pauseTweens placeholder playClip
+add addClass addTag agentRadius agentSize align alive alpha anchor
+anchorPreset anchorRect anchors angle angleTo animate append appendTo
+applyForce applyImpulse at attr autotile blend blur body bounce bullet burst
+checked children clear clearTiles clearTweens clip clipProgress clipRect
+clipSpeed clipTime clone closeDialog closest collidesWith collision
+collisionCircle collisions color cone contacts controls count damage data
+delay depth depthRelative detach directionTo disabled distanceTo each
+eachNode effectiveAlpha effectiveDepth effectivelyVisible emit emitting eq
+every fadeIn fadeOut fadeTo fill filter find first fitsAt flash flicker flip
+focus font fontSize frame frames fsm fsmSend gap get globalPos gravity has
+hasClass heal health height hide hp html index inputValue inside intensity
+invulnerable is isDepthRelative isEmitting isNavigating isPlayingClip
+isVisible items joint jump kill last layer layerBits layerName lookAt map
+mask maskBy max maxHp maxLength min move moveAndSlide moveTo moveTowards mute
+navPath navTarget navigateTo not occluders off offset on onFloor onWall
+oneWay opacity openDialog outline overlaps padding parallax params parent
+particleAt pause pauseClip pauseTweens pivot pivotAt placeholder playClip
 playSound playing pos prefab prefabClone prepend prependTo punch radius rayTo
-rebuild rect reduce region release remove removeClass removeTag repath reset respawn
-restart resumeClip resumeTweens rotate rotateTo rotation savePrefab scale scaleTo
-selectedIndex selectedItem sensor sequence setTile shader shaderParam shadow shadows
-shake shape show siblings size sizePercent slice sliderValue some sound speed sprite
-start state stateMachine stateTime states step stop stopAll stopAnim stopClip stopNav
-style tag team terrainData text theme tileAt tileLayer tileSize tilesData tilesList
-toArray toData toGlobal toLocal toState toggleClass trigger tween tweenTo value
-velocity visible volume wake width ysort
+rebuild rect reduce region release remove removeClass removeTag repath reset
+respawn restart resumeClip resumeTweens rotate rotateTo rotation sample
+savePrefab scale scaleTo selectedIndex selectedItem sensor sequence setTile
+shader shaderParam shadow shadowSoft shadows shake shape show siblings size
+sizePercent sleeping slice sliderValue some sound speed sprite start state
+stateMachine stateTime states step stop stopAll stopAnim stopClip stopNav
+style sweepTo tag team terrainData text textStyle theme tileAnimation tileAt
+tileLayer tileSize tilesData tilesList tileset toArray toData toGlobal
+toLocal toState toggleClass trigger tween tweenTo value velocity visible
+volume wake width within ysort zone zoneCount
 ```
 
-> Список снят с живого движка, а не перепечатан: **227 имён**, команда —
+> Список снят с живого движка, а не перепечатан: **256 имён**, команда —
 > `Object.getOwnPropertyNames(Object.getPrototypeOf($('<rect>'))).filter(n => n !== 'constructor')`
-> в агентском режиме. Он устаревает вместе с кодом, поэтому перед добавлением
-> своего метода сверяйтесь с ним, а не с памятью: прежняя версия этого списка
-> отставала на 86 имён, и автор подсистемы мог занять уже занятое.
+> в агентском режиме. Это объединение `def()`/`defGet()` из `src/highlevel/*.js`
+> с методами класса `Wrapper` (`each`, `eachNode`, `eq`, `get`, `index`,
+> `toArray`, `within`). Список устаревает вместе с кодом, поэтому перед
+> добавлением своего метода сверяйтесь с ним, а не с памятью: прежняя версия
+> этого списка отставала на 86 имён, и автор подсистемы мог занять уже занятое.
 
 Геттеры: `alive angleTo children closest directionTo distanceTo find globalPos
 hasClass inside isVisible onFloor onWall parent pos rayTo rotation siblings

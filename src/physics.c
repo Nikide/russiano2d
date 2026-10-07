@@ -955,6 +955,50 @@ int r2d_physics_query_box(const R2DPhysics *p, float x, float y, float w, float 
     return r2d__query_aabb(p, x, y, w * 0.5f, h * 0.5f, mask, ids, max_ids);
 }
 
+// Тела в радиусе от точки: broadphase даёт кандидатов, расстояние между
+// центрами отсеивает лишних. Порядок — по расстоянию, при равенстве по id:
+// результат запроса должен быть воспроизводим (реплеи и тесты), а обход
+// broadphase такого порядка не обещает.
+int r2d_physics_query_circle(const R2DPhysics *p, float x, float y, float radius,
+                             uint64_t mask, int *ids, int max_ids, int *candidates)
+{
+    if (candidates) *candidates = 0;
+    if (!p->world_valid || !ids || max_ids <= 0 || !(radius > 0.0f)) return 0;
+
+    int cand[R2D_MAX_QUERY];
+    const int cap = max_ids < R2D_MAX_QUERY ? max_ids : R2D_MAX_QUERY;
+    const int n = r2d__query_aabb(p, x, y, radius, radius, mask, cand, cap);
+    if (candidates) *candidates = n;
+
+    const float r2 = radius * radius;
+    float dist[R2D_MAX_QUERY];
+    int m = 0;
+    for (int i = 0; i < n; ++i) {
+        const int id = cand[i];
+        if (id < 0 || id >= R2D_MAX_BODIES) continue;
+        if (!b2Body_IsValid(p->bodies[id])) continue;
+
+        const b2Vec2 center = b2Body_GetPosition(p->bodies[id]);
+        const float dx = center.x * R2D_PX_PER_M - x;
+        const float dy = center.y * R2D_PX_PER_M - y;
+        const float d2 = dx * dx + dy * dy;
+        if (d2 > r2) continue;
+
+        // Сортировка вставками: список короткий (лимит запроса), зато результат
+        // детерминирован и не зависит от порядка обхода broadphase.
+        int at = m;
+        while (at > 0 && (dist[at - 1] > d2 || (dist[at - 1] == d2 && ids[at - 1] > id))) {
+            ids[at] = ids[at - 1];
+            dist[at] = dist[at - 1];
+            --at;
+        }
+        ids[at] = id;
+        dist[at] = d2;
+        ++m;
+    }
+    return m;
+}
+
 // ---------------------------------------------------------------------------
 // Суставы
 //

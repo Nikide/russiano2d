@@ -49,6 +49,7 @@ typedef struct R2DScript {
     JSValue render_fn;
     JSValue exit_fn;              // engine.setExit(fn) — хук завершения
     JSValue snapshot_fn;          // engine.setSnapshot(fn) — снимок для агента
+    JSValue agent_query_fn;       // engine.setAgentQuery(fn) — query/inspect агента
     bool    has_exit;
 
     // Параметры запуска, видимые из JS как engine.agent/headless/seed/fixedDt.
@@ -70,6 +71,15 @@ typedef struct R2DScript {
 
     uint64_t reload_count;
     char     last_error[1024];
+
+    // Диагностика последнего нативного запроса (engine.queryStats): сколько
+    // кандидатов дал broadphase, сколько дошло до результата и сколько это
+    // заняло. Нужна, чтобы `$('.enemy').within(...)` можно было измерить, а не
+    // оценивать на глаз (ROADMAP, фаза 2).
+    int    query_calls;
+    int    query_candidates;
+    int    query_results;
+    double query_ms;
 } R2DScript;
 
 // Создаёт рантайм и загружает game/<entry>. Возвращает false, если скрипт
@@ -118,6 +128,14 @@ bool r2d_script_eval(R2DScript *s, const char *code, char **out_json, char **out
 // Снимок состояния: вызывает провайдер, зарегистрированный игрой через
 // engine.setSnapshot(fn). Если провайдера нет — возвращает false.
 bool r2d_script_snapshot(R2DScript *s, char **out_json, char **out_error);
+
+// Агентская инспекция для команд `query`/`inspect`/`profile`: зовёт JS-функцию,
+// зарегистрированную игрой через `engine.setAgentQuery(fn)`. `sel` — селектор
+// `$`, `mode` — `"list"` (массив узлов), `"one"` (узел или null) или `"count"`
+// (число узлов), `limit` — предел списка (0 — без предела). Результат —
+// JSON-текст. false — функция не зарегистрирована (игра без `$`).
+bool r2d_script_agent_query(R2DScript *s, const char *sel, const char *mode, int limit,
+                            char **out_json, char **out_error);
 
 // Вызывает engine.setExit-хук (если игра его поставила).
 void r2d_script_call_exit(R2DScript *s);

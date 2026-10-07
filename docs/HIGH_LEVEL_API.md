@@ -39,6 +39,12 @@ $.update(dt => {
   добавить свой метод.
 * **Асинхронность — через `Promise`:** `.moveTo(...)` возвращает `Promise`,
   который разрешается по завершении анимации.
+* **Весь интерфейс — только RmlUi.** Меню, HUD, диалоги, экраны и оверлеи —
+  документы `.rml` + `.rcss` (`$.ui.doc('ui/menu.rml')`, §20); низкий уровень —
+  `engine.ui.*` ([API.md](API.md) §9). Другого UI-пути у движка нет: узлы
+  `<ui.*>` — быстрый рисователь HUD в координатах окна, а не интерфейсный слой,
+  поэтому новые меню и экраны на них не строятся. Полностью —
+  [UI_RMLUI_LAW.md](UI_RMLUI_LAW.md).
 
 ---
 
@@ -173,19 +179,32 @@ $('.enemy').toArray()       // массив узлов
 $('.enemy').each((i, e) => { })      // e — обёртка одного узла (методы-цепочки)
 $('.enemy').eachNode((i, n) => { })  // n — сам узел: быстрее, обёртка не создаётся
 $.batch(() => { … })                 // пачка спавна/удаления: реестр чистится один раз
-$('.enemy').map(e => e.hp())         // массив значений
-$('.enemy').filter(e => e.hp() < 10)
+$('.enemy').map((i, e) => e.hp())    // массив значений; колбэк — (индекс, обёртка)
+$('.enemy').filter((i, e) => e.hp() < 10)
 $('.enemy').filter('.goblin')        // фильтр селектором
 $('.enemy').not('.boss')
 $('.enemy').first() / .last() / .eq(2) / .slice(1, 3)
 $('.enemy').add('.boss')             // объединить
 $('.enemy').is('.goblin')            // bool: все подходят
 $('.enemy').has('.weapon')           // bool: есть такой потомок
-$('.enemy').every(e => e.alive())    // bool
-$('.enemy').some(e => e.hp() < 5)    // bool
+$('.enemy').every((i, e) => e.alive())    // bool; колбэк — (индекс, обёртка)
+$('.enemy').some((i, e) => e.hp() < 5)    // bool
 $('.enemy').reduce((sum, e) => sum + e.hp(), 0)
 $('.enemy').index()                  // позиция первого узла в реестре мира
+$('.enemy').within('#hero', 500)     // кто ближе 500 px: нативный запрос broadphase
+$('.enemy').within({ x: 0, y: 0 }, 200)   // цель — точка, узел, обёртка или селектор
 ```
+
+`.within(цель, радиус)` считает расстояние **по центру узла**. Узлы с телом
+отбирает `engine.queryCircle` (broadphase Box2D) — перебора всех узлов в JS нет;
+узлы без тела (спрайты, зоны, свет) проверяются по координатам, поэтому не
+теряются. Порядок результата — порядок выборки. Диагностика запроса —
+`$.debug.queryStats()` (§24).
+
+Предел нативного запроса — 256 тел (`R2D_MAX_QUERY`, §14 в
+[API.md](API.md)). Если кандидатов больше, выборка обрезана: признак виден в
+`$.debug.queryStats().truncated`. Для очень плотных сцен это значит, что
+`within()` — про «кто рядом», а не про полный перебор мира.
 
 **Массовые операции работают всегда:** `$('.enemy').damage(10)`, `.stopAll()`,
 `.at(0, 0)` (телепорт всей толпы), `.remove()`.
@@ -268,6 +287,8 @@ $.gfx.filter(true)                        // линейная фильтраци
 .oneWay(true)                               // односторонняя платформа
 .sensor(true)                               // зона: ловит, но не толкает
 .contacts(true | false)                     // события контакта
+.sleeping()                                 // → bool: усыпил ли Box2D тело
+.bullet(true | false)                       // CCD для быстрых тел (см. API.md §8)
 .joint('#other', { type: 'revolute' })      // сустав, → id
 .onFloor() .onWall()                        // → bool (луч вниз/вбок)
 .jump(640)                                  // импульс вверх с гашением падения
@@ -475,7 +496,7 @@ $.world.particlesAt(x, y, { r })             // частицы под точко
 $.world.particlesIn(x, y, w, h, { r })       // частицы в прямоугольнике
 $.world.raycastAll(from, to, { mask })       // → [{ node, t, point, self }, …]
 $.world.lineOfSight(from, to, { mask })      // → bool
-$.world.sort('layer' | 'y' | 'z')           // порядок отрисовки
+$.world.sort('layer' | 'y')                 // порядок отрисовки ('layer' = 'z')
 $.world.sortWith((a, b) => a.y - b.y)       // свой порядок
 ```
 
@@ -619,6 +640,12 @@ $.scene.transition('fade', 300) .busy();
 
 ## 20. `$.ui` — интерфейс
 
+**Весь интерфейс — RmlUi** (§1): меню, экраны, диалоги и оверлеи делаются
+документами `.rml` + `.rcss` через `$.ui.doc(...)` — это основной путь.
+Узлы `<ui.*>` ниже — быстрый рисователь HUD в координатах окна, а не
+интерфейсный слой; они остаются рабочими, но новые меню и экраны на них не
+строятся.
+
 ```js
 $('<ui.bar>', { id: 'hp', value: 100, max: 100 }).at(120, 30).appendTo($.ui);
 $.ui.bar('#hp', 50, 100);
@@ -627,7 +654,7 @@ $('<ui.button>', { id: 'play', text: 'Играть' }).at(640, 400);
 $('#play').on('click', () => $.scene.load('level1'));
 ```
 
-Документы RmlUi (для сложной вёрстки и стилей):
+Документы RmlUi — интерфейс игры (вёрстка, стили, шрифты):
 
 ```js
 const menu = $.ui.doc('ui/menu.rml').show();
@@ -725,7 +752,8 @@ $.time.cancel(id) .cancelAll()
 ```js
 $.store.set('highscore', 1200).get('highscore', 0)
 $.store.has('x') .remove('x') .clear() .keys() .all() .setAll({ … })
-$.store.file('save2.json').save() .load()
+$.store.file('save2.json').save()       // запись файла (→ bool, не цепочка)
+$.store.file('save2.json').load()       // чтение файла (→ bool)
 $.store.autoSave(30000) .stopAutoSave()
 
 $.fs.readText('data/level.json')      // строка или null
@@ -865,6 +893,7 @@ engine.renderInfo();             // { post, bloom, bloom_w, bloom_h, passes, …
 $.debug.on() .off() .toggle() .isOn()      // оверлей движка (F1)
 $.debug.stats()                            // { fps, frame_ms, sprites, nodes, bodies, … }
 $.debug.profile()                          // { frame_ms, zones_ms, unaccounted_ms, zones: [{name, ms, peak}] }
+$.debug.queryStats()                       // { calls, candidates, results, ms, cap, truncated } — последний $().within()
 $.debug.profileReset()                     // сбросить накопленное
 $.debug.profiling(false)                   // выключить замеры (по умолчанию включены)
 $.debug.profiler.start('моё') / .end('моё') / .report()   // свои замеры, время — engine.now()
@@ -886,7 +915,9 @@ $.agent.active      // true в режиме --agent
 $.agent.headless .seed .frame() .time()
 $.agent.node('#hero')      // краткое описание узла
 $.agent.nodes('.enemy')    // список описаний
+$.agent.nodes('.enemy', 10)  // …с пределом (его же использует команда query)
 $.agent.snapshot()         // полный снимок мира (уходит агенту в ответе на state)
+$.agent.install()          // зарегистрировать снимок и инспекцию в движке (зовётся сам)
 $.agent.expose('score', () => Global.score)   // своё поле в снимке
 $.agent.describe()         // строка для лога
 
@@ -1019,6 +1050,12 @@ $.update(() => {
 и приоритетов в [GAP_ANALYSIS.md](GAP_ANALYSIS.md). Каждая живёт в своём файле
 `src/highlevel/<имя>.js`, ставится из `api.js` и обновляется в кадре своей
 `tick`-функцией.
+
+> **Про интерфейсные подсистемы ниже** (`$.ui`-контролы, `$.screen`, `$.dialog`,
+> `$.story`, `$.timeline`, `$.loading`): они работают на узлах `<ui.*>` и
+> остаются для существующих игр, но закон интерфейса — RmlUi
+> ([UI_RMLUI_LAW.md](UI_RMLUI_LAW.md)): новые меню, экраны и диалоги делаются
+> документами `.rml` + `.rcss` через `$.ui.doc`.
 
 | Подсистема | Пространство имён | Теги | Подробно |
 |---|---|---|---|

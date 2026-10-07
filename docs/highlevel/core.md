@@ -8,6 +8,7 @@
 const hero = $('<player>', { id: 'hero' }).at(100, 200).appendTo($.world);
 $('#hero').hp(100).speed(180);          // цепочка возвращает тот же узел
 $('.enemy:alive').each((i, el) => el.flash('#f00'));
+$('.enemy').within('#hero', 500);       // выборка в радиусе (нативный broadphase)
 ```
 
 ---
@@ -21,6 +22,7 @@ $('.enemy:alive').each((i, el) => el.flash('#f00'));
 | Реестр | `registryIndex`, `nodesByTag`, `nodesByClass`, `nodesWithFacet`, `facetCount`, `liveNodes`, `dropFromRegistry`, `touchRegistry`, `registryVersion`, `registrySummary` |
 | Пакетная правка | `beginBatch`, `endBatch`, `inBatch` |
 | Выборки | `registerSelector`, `compileSelector`, `TAGS` |
+| Радиус | `withinRadius` — чистая фильтрация «центр в радиусе» (метод обёртки `.within()`) |
 | Геометрия | `halfExtents`, `nodeBounds`, `boundsOverlap` |
 | Спрайты | `dotSprite`, `resolveSprite`, `resolveSheet`, `sheetFrames`, `spriteSize`, `forgetTexture`, `textureSizeOf`, `regionSprite` |
 | Цвет | `packColor`, `withAlpha` |
@@ -54,7 +56,12 @@ Facet — общий признак узлов (`hp`, `body`, …): `nodesWithFa
 ## 5. Свойства тела у узла
 
 Тело узла настраивается цепочкой: `.body(kind)`, `.bullet(on)` (CCD),
-`.gravity(on)`, `.collisionLayer(...)`. Флаги хранятся на узле
-(`bullet_on`, `gravity_on`), поэтому тело, пересозданное после смены размера,
-получает те же настройки.
+`.gravity(on)`, `.layerBits(bits)` (слой тела) и `.mask(bits)` (с какими слоями
+сталкиваться). Флаги хранятся на узле (`bullet_on`, `gravity_on`), поэтому тело,
+пересозданное после смены размера, получает те же настройки.
+
+Слоям можно давать имена — `$.collision` (`collision.js`): после
+`$.collision.define('walls', 0x1)` работают `.layerName('walls')`,
+`.maskBy('walls|enemies')` и `$.collision.mask('all|!enemies')`; список имён —
+`$.collision.names()`.
 

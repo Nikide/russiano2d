@@ -58,6 +58,7 @@ function makeEngine() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'russiano2d-docs-')))
   const files = {
     'docs/ARCHITECTURE.md': 12,
+    'docs/AGENT_IMPLEMENTATION_RULES.md': 20,
     'docs/API.md': 40,
     'docs/HIGH_LEVEL_API.md': 25,
     'docs/highlevel/vfx.md': 8,
@@ -122,6 +123,7 @@ function execFor(name, args, agent) {
 
 function readCore(handlers, agent, files) {
   readFile(handlers, agent, 'docs/ARCHITECTURE.md', files['docs/ARCHITECTURE.md'])
+  readFile(handlers, agent, 'docs/AGENT_IMPLEMENTATION_RULES.md', files['docs/AGENT_IMPLEMENTATION_RULES.md'])
   readFile(handlers, agent, 'docs/API.md', files['docs/API.md'])
   readFile(handlers, agent, 'docs/HIGH_LEVEL_API.md', files['docs/HIGH_LEVEL_API.md'])
 }
@@ -184,12 +186,14 @@ test('requiredDocs добавляет контракт и doc подсистем
   const core = policy.requiredDocs(root, 'src/core/render.c', [], settings, fs.existsSync)
   assert.deepEqual(core.map((doc) => doc.path), [
     'docs/ARCHITECTURE.md',
+    'docs/AGENT_IMPLEMENTATION_RULES.md',
     'docs/API.md',
     'docs/HIGH_LEVEL_API.md',
   ])
   const highlevel = policy.requiredDocs(root, 'src/highlevel/vfx.js', [], settings, fs.existsSync)
   assert.deepEqual(highlevel.map((doc) => doc.path), [
     'docs/ARCHITECTURE.md',
+    'docs/AGENT_IMPLEMENTATION_RULES.md',
     'docs/API.md',
     'docs/HIGH_LEVEL_API.md',
     'docs/highlevel/_CONTRACT.md',
@@ -266,6 +270,7 @@ test('чтение несколькими окнами складывается'
   readFile(handlers, freshAgent, 'docs/ARCHITECTURE.md', total, { lines: 5 })
   assert.ok(guardReason(guards, execFor('write', { file_path: 'src/core/render.c' }, freshAgent)))
   readFile(handlers, freshAgent, 'docs/ARCHITECTURE.md', total, { lines: total - 5, offset: 6 })
+  readFile(handlers, freshAgent, 'docs/AGENT_IMPLEMENTATION_RULES.md', fresh.files['docs/AGENT_IMPLEMENTATION_RULES.md'])
   readFile(handlers, freshAgent, 'docs/API.md', files['docs/API.md'])
   readFile(handlers, freshAgent, 'docs/HIGH_LEVEL_API.md', files['docs/HIGH_LEVEL_API.md'])
   assert.equal(guardReason(guards, execFor('write', { file_path: 'src/core/render.c' }, freshAgent)), undefined)
@@ -346,6 +351,7 @@ test('секция промпта пустая вне движка и содер
   const text = section.text({ agent: makeAgent('p2', root) })
   assert.match(text, /обязательный порядок/)
   assert.match(text, /docs\/ARCHITECTURE\.md/)
+  assert.match(text, /docs\/AGENT_IMPLEMENTATION_RULES\.md/)
   assert.match(text, /write\/edit/)
   assert.match(text, /docs\/highlevel\/_CONTRACT\.md/)
 })

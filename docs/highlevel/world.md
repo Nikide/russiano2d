@@ -7,7 +7,7 @@
 ```js
 $.world.gravity(0, 900).color('#1a1d24').bounds(0, 0, 4000, 800);
 const hit = $.world.raycast({ x: 0, y: 0 }, { x: 300, y: 0 }, { mask: LAYER_SOLID });
-$.world.spawn('#enemy', { x: 800, y: 200, body: 'dynamic' });
+$.world.spawn('enemy', 800, 200, { body: 'dynamic' });
 $.world.sort((a, b) => a.y - b.y);          // порядок отрисовки по глубине
 ```
 
@@ -21,7 +21,7 @@ $.world.sort((a, b) => a.y - b.y);          // порядок отрисовки
 | `clearBounds()` | убрать стены, поставленные `bounds()` |
 | `pause()` / `resume()` / `freeze()` / `thaw()` / `isPaused()` | остановка физики |
 | `timeScale(value?)` / `getTimeScale()` | скорость мира |
-| `spawn(node, opts)` / `all()` / `count()` | создание и перечисление |
+| `spawn(tag, x, y, attrs?)` / `all()` / `count(sel?)` | создание и перечисление |
 
 **`all()` отдаёт ВСЕ узлы контекста, включая интерфейс.** Для «убрать мир и
 начать заново» он не годится: `$.world.all().remove()` сносит и HUD — в срезе
@@ -60,9 +60,53 @@ $.world.clearBounds();                 // убрать стены совсем
 |---|---|
 | `raycast(from, to, opts?)` | первый луч |
 | `raycastAll(from, to, opts?)` | все пересечения |
-| `castShape(spec, from, to, opts?)` | фигурный свип (луч «толщиной») |
+| `castShape(from, to, opts?)` | фигурный свип (луч «толщиной») |
 | `lineOfSight(from, to, opts?)` | есть ли прямая видимость |
 | `particlesAt(x, y)` / `particlesIn(x, y, w, h)` | частицы под точкой и в прямоугольнике |
+
+Порядок аргументов у свипа — **сначала путь, потом форма**: `from` и `to` — точка,
+узел, обёртка или селектор, а форма задаётся в `opts` — `w`/`h` (прямоугольник),
+`radius` (круг), `capsule: [радиус, половина отрезка]` или явно (`shape` +
+`halfW`/`halfH`/`radius`); `angle` поворачивает форму, `mask` и `ignore` работают
+как у луча. Возвращает `{ hit, point, normal, distance, fraction, body, node, self }`
+или `null`; `fraction = 0` значит «объём уже перекрывается с препятствием».
+
+```js
+// Пролезет ли ящик 48×48 в проём: у луча и у объёма ответы разные.
+const hit = $.world.castShape({ x: 0, y: 0 }, { x: 200, y: 0 }, { w: 48, h: 48, mask: 0x1 });
+```
+
+### 2.3. Зоны
+
+Зона — **вторая форма** на теле узла («голова», «ноги», «щит»): она не заменяет
+основной хитбокс, а добавляется к нему, поэтому в контакте видно, **куда** попали
+(`contactBetween().tagA`/`tagB`).
+
+| Вызов | Смысл |
+|---|---|
+| `$('#hero').zone({ type, w, h, x, y, tag })` | добавить форму-зону → индекс (0 — основная) |
+| `$('#hero').zoneCount()` | сколько форм у тела |
+| `$.world.zone(what, opts)` | то же из скрипта → индекс формы или `-1` |
+| `$.world.zoneTag(what, index)` | имя зоны по индексу формы (`null`, если имени нет) |
+| `$.world.zoneCount(what)` | сколько форм у тела |
+| `$.world.zonesTouching(what, other)` | имена **всех** зон, которых касается другой узел |
+
+`what` — узел, обёртка или селектор (как у лучей). `opts`: `type`
+(`'box'`/`'circle'`/`'capsule'`/`'polygon'`), `w`/`h` (по умолчанию
+32×32), `radius`, `x`/`y` — **смещение зоны от центра тела** (голова выше, ноги
+ниже), `tag` — имя зоны для игры, плюс `sensor`, `contacts`, `density`, `friction`,
+`restitution`, `layer`, `mask`, `group`. Предел — 8 форм на тело
+(`R2D_MAX_SHAPES_PER_BODY`), лишние не добавляются.
+
+```js
+$('#hero').zone({ type: 'box', w: 40, h: 24, y: -34, tag: 'head' });
+$('#hero').zoneCount();                          // 2: основная форма + голова
+
+const hit = $.world.contactBetween('#hero', '#spike');
+if (hit && hit.tagA === 'head') headshot();
+// Зоны перекрываются, и contactBetween отдаёт первую: все разом — через zonesTouching.
+if ($.world.zonesTouching('#hero', '#spike').includes('head')) headshot();
+```
 
 ### 2.4. Видимость: `lineOfSight` и `ignore`
 
@@ -158,8 +202,13 @@ $.world.tug('#crate', x, y, { speed: 400, snap: 4 });       // медленне�
 | Вызов | Смысл |
 |---|---|
 | `sort(fn)` / `sortWith(...)` | порядок отрисовки |
-| `background(color)` / `getBackground()` / `clearBackground()` | фон |
-| `query(selector)` | поиск узлов (то же, что `$(...)`) |
+| `background(path, opts?)` / `getBackground()` / `clearBackground()` | фон-картинка (`parallax`, `scale`, `y`, `color`) |
+| `query(x, y, r?)` | узлы, чьи границы накрывают точку (или центр в радиусе `r`) |
+
+Цвет фона задаётся не `background()`, а `$.world.color(c)` (цвет очистки кадра).
+`query()` — **пространственный** запрос по координатам, а не поиск по селектору:
+селектор — это `$(...)` или `$.find(sel)`, счётчик — `$.count(sel)` /
+`$.world.count(sel)`.
 
 `$.world.bsp` — порядок отрезков «от дальних к ближним» (см. [bsp.md](bsp.md)),
 `$.world.ignoreBodies` — тела, которых не касается мир.

@@ -100,7 +100,8 @@ engine.setRender(() => {
 
 ### 1.5. Командная строка
 
-Опции разбираются в `r2d__print_usage` ([`src/main.c`](../src/main.c)):
+Опции разбираются в цикле аргументов `main` ([`src/main.c`](../src/main.c));
+справку печатает `r2d__print_usage` там же:
 
 | Опция | Действие |
 |---|---|
@@ -111,6 +112,8 @@ engine.setRender(() => {
 | `--overlay` | Показать отладочный оверлей сразу; иначе он скрыт до `F1` |
 | `--stats` | Печатать раз в секунду статистику кадра (FPS, спрайты, тела, звук) |
 | `--seconds N` | Выйти автоматически через N секунд — для дымовых тестов |
+| `--record <файл>` | Записать ввод кадров в файл `.r2replay` (см. [RECORD_REPLAY.md](RECORD_REPLAY.md)) |
+| `--replay <файл>` | Воспроизвести записанный ввод вместо настоящего |
 | `--no-hot-reload` | Не следить за изменениями `.js` |
 | `--help`, `-h` | Справка |
 
@@ -1377,6 +1380,10 @@ engine.ui.setProperty(hud, 'panel', 'background-color', 'rgba(0,0,0,0.6)');
 **Возвращает:** `number` — id обработчика (`>= 0`) или `-1`, если элемент не
 найден. Тип callback обязателен — иначе будет выброшено исключение.
 
+Если все **256** слотов заняты, вызов **бросает `InternalError`** («слишком
+много обработчиков UI»), а не возвращает `-1`: молча потерять подписку хуже,
+чем упасть в момент настройки интерфейса.
+
 Всего можно зарегистрировать до **256** обработчиков за жизнь рантайма. Внутри
 RmlUi владеет слушателем и удаляет его вместе с элементом.
 
@@ -1514,6 +1521,17 @@ if (engine.ui.hasIcon('volume_up')) {
 | `engine.audio.channelEffect(channel)` | `string` | Имя активного эффекта канала |
 | `engine.audio.effectCount()` | `number` | Сколько встроенных эффектов |
 | `engine.audio.effectName(i)` | `string` | Имя эффекта по индексу |
+| `engine.audio.setChannelPitch(channel, ratio)` / `channelPitch(channel)` | `undefined` / `number` | Скорость канала: `1` — как записано, `2` — вдвое быстрее и на октаву выше |
+| `engine.audio.setMusicPitch(ratio)` / `musicPitch()` | `undefined` / `number` | То же для музыкальной дорожки |
+| `engine.audio.setChannel3D(channel, x, y, z?)` | `undefined` | Позиция источника для объёмного звука |
+| `engine.audio.setRoom(...)` / `getRoom()` | `undefined` / `object` | Акустика помещения (см. [highlevel/audiobus.md](highlevel/audiobus.md) §8) |
+| `engine.audio.group(name)` / `groupCount()` / `setChannelGroup(channel, name)` | `number` / `number` / `undefined` | Группы звука: своя громкость и эффект на группу |
+| `engine.audio.setGroupEffect(name, kind, p1?, p2?)` / `groupEffect(name)` | `boolean` / `string` | Эффект группы |
+| `engine.audio.setChannelReverb(channel, ...)` / `setGroupReverb(name, ...)` | `undefined` | Реверб канала и группы |
+
+> Обратите внимание: **эффекты канала** (`setChannelEffect`) и **реверб/комната**
+> (`setRoom`, `setChannelReverb`) — разные вещи: первый меняет сам сэмпл
+> (`lowpass`/`echo`), второй добавляет объём помещения.
 
 **Эффекты.** SDL_mixer 3.2 не содержит готовых DSP-эффектов, поэтому движок
 обрабатывает сэмплы сам через `MIX_SetTrackRawCallback`:
@@ -1523,8 +1541,11 @@ if (engine.ui.hasIcon('volume_up')) {
 | `'lowpass'` | частота среза, Гц (по умолчанию 800) | — | однополюсный фильтр низких частот (приглушение) |
 | `'echo'` | задержка, мс (по умолчанию 180) | доля повтора 0..0.9 (по умолчанию 0.35) | эхо с обратной связью |
 
-Реверба, хоруса и компрессора нет — это ограничение текущей реализации, а не
-настройка. Обработка идёт в аудиопотоке: буфер задержки выделяется один раз
+Реверба, хоруса и компрессора в **эффектах канала** нет (только `'lowpass'` и
+`'echo'`) — но объём помещения есть отдельно: `setRoom`/`getRoom`,
+`setChannelReverb`/`setGroupReverb` и зоны акустики в высокоуровневом
+`$.audio.zone/room` (см. [highlevel/audiobus.md](highlevel/audiobus.md) §8).
+Это ограничение списка DSP-эффектов канала, а не отсутствие реверба в движке. Обработка идёт в аудиопотоке: буфер задержки выделяется один раз
 при инициализации, поэтому переключение эффекта на лету безопасно.
 
 ### Параметры
@@ -1598,7 +1619,9 @@ engine.log('звуков загружено:', engine.audio.count(),
 ### Важные детали
 
 * **Каналов эффектов ровно 16** (`R2D_AUDIO_CHANNELS`). Если все заняты,
-  движок вытесняет нулевой канал — лучше потерять старый звук, чем новый.
+  движок вытесняет **самый неважный** канал (с наименьшим приоритетом) и только
+  если новый звук не менее важен; иначе `play` вернёт `-1` — лучше не играть,
+  чем заглушить важное ([src/audio.c](../src/audio.c), `r2d_audio_play`).
 * **До 128 уникальных звуков** (`R2D_AUDIO_MAX_SOUNDS`); при переполнении
   `load` вернёт `-1` и запишет ошибку в лог.
 * **Повторный `load()` с тем же путём возвращает тот же id.** Звуки живут в C и
@@ -1906,10 +1929,10 @@ for (const i of order) {
 | Render target'ов (`$.viewport`) | 8 (`R2D_MAX_VIEWPORTS`) | `create` возвращает `-1`; слоты берутся из общего бюджета текстур (256) |
 | Событий контакта за кадр | 128 (`R2D_MAX_CONTACT_EVENTS`) | **варнинг один раз за процесс**, события теряются |
 | Очередь текста | 2048 строк | излишек **молча отбрасывается** |
-| Результатов `$.world.raycastAll`/`bodiesIn` | 256 (`R2D_MAX_QUERY`) | список **молча обрезается** |
+| Результатов нативных запросов к физике (`$.world.bodyAt`/`bodiesIn`, `engine.queryBox`/`queryPoint`) | 256 (`R2D_MAX_QUERY`) | список **молча обрезается**; у `$.world.raycastAll` лимита нет — это перебор в JS |
 | Групп звука | 8 (`R2D_AUDIO_MAX_GROUPS`) | — |
 | Подписчиков SDL | 8 (`event_listeners[8]`) | варнинг, подписка теряется |
-| Обработчиков `ui.on` | 256 | слот занимается ТОЛЬКО при успешной подписке; иначе `-1` |
+| Обработчиков `ui.on` | 256 | слот занимается ТОЛЬКО при успешной подписке; при переполнении — `InternalError`, при ненайденном элементе — `-1` |
 | Буфер обмена | системный, размера нет | `engine.clipboard()` / `engine.setClipboard(text)` |
 | Очередь текста | 1024 байта на кадр (было 256) | длинная вставка обрезается по буферу кадра |
 | Документов RmlUi | 64 | слоты **переиспользуются**, «лимит» почти не достигается |
@@ -2021,6 +2044,8 @@ const wall = engine.raycast(100, 300, 500, 300, null, 0x1);
 `mask` — слои, которые принимает запрос (`0` или отсутствие — все слои).
 
 **Возвращает:** `Int32Array` идентификаторов тел (не больше `R2D_MAX_QUERY` = 256).
+Если физика недоступна (движок без физического мира), вернётся пустой обычный
+массив — тип на этом вырожденном пути не гарантируется.
 
 ```js
 const ids = engine.queryBox(400, 300, 120, 120);
@@ -2028,6 +2053,54 @@ for (let i = 0; i < ids.length; i++) engine.log('тело', ids[i]);
 
 const enemies = engine.queryPoint(400, 300, 0x2);   // только слой врагов
 ```
+
+### `engine.queryCircle(x, y, radius, mask)`
+
+Тела, чей **центр** не дальше `radius` от точки `(x, y)`. Кандидатов даёт
+broadphase Box2D (прямоугольник вокруг круга), затем они отсеиваются по
+расстоянию между центрами — перебора всех узлов в JS не требуется.
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `x`, `y` | `number` | `0` | Центр круга, пиксели |
+| `radius` | `number` | `0` | Радиус, пиксели; `<= 0` → пустой результат |
+| `mask` | `number` | `0` | Слои, которые принимает запрос (`0` — все слои) |
+
+**Возвращает:** `Int32Array` идентификаторов тел (не больше `R2D_MAX_QUERY` = 256),
+**отсортированный по расстоянию** (при равенстве — по id): порядок обхода
+broadphase не определён, а результат запроса должен быть воспроизводим
+(тесты, реплеи).
+
+```js
+// Кто рядом с героем: тот же запрос, на котором стоит $('.enemy').within(...).
+const ids = engine.queryCircle(100, 100, 500, 0);
+```
+
+Высокоуровневая обёртка — `$('.enemy').within('#hero', 500)`
+([HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §5).
+
+### `engine.queryStats()`
+
+Диагностика **последнего** вызова `engine.queryCircle`: что реально сделал
+движок, без догадок.
+
+| Поле | Тип | Значение |
+|---|---|---|
+| `calls` | `number` | Сколько нативных запросов было с запуска |
+| `candidates` | `number` | Сколько тел вернул broadphase до отсева по расстоянию |
+| `results` | `number` | Сколько тел прошло отсев (их и вернул запрос) |
+| `ms` | `number` | Время последнего вызова, миллисекунды |
+| `cap` | `number` | Предел запроса — `R2D_MAX_QUERY` (256) |
+| `truncated` | `boolean` | `candidates` упёрлись в предел: часть тел не попала в ответ |
+
+```js
+$('.enemy').within('#hero', 500);
+const q = engine.queryStats();     // { calls, candidates, results, ms, cap, truncated }
+if (q.truncated) engine.log('кандидатов больше предела:', q.candidates, 'из', q.cap);
+```
+
+Высокоуровневая обёртка — `$.debug.queryStats()`
+([HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §24).
 
 ### `engine.castShape(opts)`
 
@@ -2169,7 +2242,7 @@ if (typed) name += typed;
 | `engine.fs.remove(path)` | `boolean` | Удалить файл |
 | `engine.fs.list(dir)` | `string[]` | Имена файлов в каталоге (без подкаталогов) |
 
-### `engine.setExit(fn)` и `engine.setSnapshot(fn)`
+### `engine.setExit(fn)`, `engine.setSnapshot(fn)` и `engine.setAgentQuery(fn)`
 
 * `setExit(fn)` — функция, которую движок вызовет при завершении (в том числе в
   агентском режиме). Игра сохраняет в ней прогресс.
@@ -2177,10 +2250,22 @@ if (typed) name += typed;
   уходит агенту в ответ на команду `state`. Высокоуровневое API вызывает её
   автоматически (`$.agent.install()`), игра может добавить свои поля через
   `$.agent.expose(имя, функция)`.
+* `setAgentQuery(fn)` — функция `(селектор, режим, предел) → значение` для
+  команд `query`, `inspect` и `profile`
+  ([AGENT_API.md](AGENT_API.md) §3.3.1–3.3.3). Режимы: `'list'` — массив
+  описаний узлов, `'one'` — узел или `null`, `'count'` — число узлов.
+  Высокоуровневое API ставит её само и отдаёт тот же код, что
+  `$.agent.node/nodes` — второй реализации инспекции быть не должно
+  ([DEVTOOLS.md](DEVTOOLS.md) §7).
 
 ```js
 engine.setExit(() => engine.fs.write('save.json', JSON.stringify(progress)));
 engine.setSnapshot(() => ({ score, level, enemies: 3 }));
+engine.setAgentQuery((sel, mode, limit) => {
+    if (mode === 'count') return $(sel).length;
+    if (mode === 'one') return $.agent.node(sel);
+    return $.agent.nodes(sel, limit);
+});
 ```
 
 ### Свойства запуска
@@ -2191,10 +2276,29 @@ engine.setSnapshot(() => ({ score, level, enemies: 3 }));
 |---|---|---|
 | `engine.agent` | `bool` | `true`, если движок запущен с `--agent` |
 | `engine.headless` | `bool` | `true`, если окно скрыто (`--headless`) |
-| `engine.seed` | `number` | Зерно из `--seed` (для `$.random`) |
+| `engine.seed` | `number` | Зерно ГПСЧ: значение `--seed`, по умолчанию `12345` — ровно то, от чего работает `$.random` |
 | `engine.fixedDt` | `number` | Шаг времени из `--fixed-dt` (0 — реальное время) |
 | `engine.basePath` | `string` | Каталог запуска (от него считаются пути к ассетам) |
 | `engine.mouseDX`, `engine.mouseDY` | `number` | Смещение мыши за кадр |
+
+### Что ещё есть в `engine`
+
+API.md описывает то, на чём стоит `$`; часть вызовов живёт в подсистемах и
+подробно описана в их справочниках. Чтобы не искать наугад:
+
+| Группа | Где описана |
+|---|---|
+| `engine.window.*` — заголовок, размер, режим, курсор, фокус | [highlevel/window.md](highlevel/window.md), `$.window` в [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §20.1 |
+| `engine.viewport.*` — render target игры | [highlevel/viewport.md](highlevel/viewport.md), [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §23 |
+| `engine.http.*` — HTTP-запросы | [highlevel/http.md](highlevel/http.md), `$.http` |
+| `engine.post`/`setPost`/`getPost`/`renderInfo`/`markUI` | [highlevel/render.md](highlevel/render.md) §3, §5 |
+| `engine.profile`/`profileReset`/`profileEnabled` | §15 выше, `$.debug.profile()` |
+| `engine.freeTexture`, `setSpriteFilter`/`spriteFilter`, `textureFromPixels` | [highlevel/resource.md](highlevel/resource.md), [highlevel/sprite.md](highlevel/sprite.md) |
+| `engine.setDepth`/`depth`, `engine.depthInfo` | [highlevel/depth.md](highlevel/depth.md), `$.gfx.depth` |
+| `engine.bodyEnabled`/`isAwake`/`setAwake`/`setGravityScale`, `contactsOf`, `contactBetween` | §8 выше |
+| `engine.netHost`/`netJoin`/`netClose`/`netMode`/`netStatus`/`netSend`/`netPoll` | [highlevel/net.md](highlevel/net.md), `$.net` |
+| `engine.setCursor`/`cursorVisible`, `requestReload`/`reloadPending`/`hotReload` | [highlevel/window.md](highlevel/window.md), [highlevel/script.md](highlevel/script.md) |
+| `engine.audio.*` — шины, комнаты, группы, 3D | §10 выше, [highlevel/audiobus.md](highlevel/audiobus.md) |
 
 ### Командная строка (дополнение к 1.5)
 
@@ -2203,8 +2307,13 @@ engine.setSnapshot(() => ({ score, level, enemies: 3 }));
 | `--agent` | Режим агента: JSON-команды со stdin, ответы в stdout (см. [AGENT_API.md](AGENT_API.md)) |
 | `--headless` | Скрытое окно: рендер и скриншоты работают, на экране ничего нет |
 | `--fixed-dt <сек>` | Детерминированный шаг времени |
-| `--seed <N>` | Зерно случайных чисел |
+| `--seed <N>` | Зерно случайных чисел (по умолчанию `12345`) |
 | `--frames <N>` | Выйти ровно после N кадров |
+| `--record <файл>` / `--replay <файл>` | Запись и воспроизведение ввода ([RECORD_REPLAY.md](RECORD_REPLAY.md)) |
+| `--gpu <имя>` / `--list-gpu` | Выбрать GPU-бэкенд / показать доступные |
+| `--title <текст>` | Имя окна (иначе из `project.json`) |
+| `--width <N>` / `--height <N>` | Размер окна в точках |
+| `--version` | Версия движка и выход |
 
 > В агентском режиме весь журнал движка переключается в **stderr** (даже то,
 > что печатают RmlUi и ImGui), чтобы stdout оставался чистым потоком JSON.

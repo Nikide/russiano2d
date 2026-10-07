@@ -521,6 +521,40 @@ class Agent:
         """Вернуть поле ``state`` ответа — снимок мира от игрового кода."""
         return self.cmd("state").get("state", {})
 
+    def query(self, sel: str = "*", limit: Optional[int] = None) -> list:
+        """Список сущностей по селектору ``$`` (запрос ``query``).
+
+        Тот же код, что у ``$.agent.nodes(sel)``: DevTools, агент и игра видят
+        одинаковые описания узлов. ``limit`` обрезает список.
+        """
+        params: Dict[str, Any] = {"sel": sel}
+        if limit is not None:
+            params["limit"] = int(limit)
+        return self.cmd("query", **params).get("nodes", [])
+
+    def inspect(self, sel: str) -> Optional[Dict[str, Any]]:
+        """Описание одной сущности по селектору (запрос ``inspect``).
+
+        ``None`` — селектор ничего не нашёл; это не ошибка.
+        """
+        return self.cmd("inspect", sel=sel).get("node")
+
+    def profile(self, sel: Optional[str] = None,
+                x: Optional[float] = None, y: Optional[float] = None,
+                radius: Optional[float] = None) -> Dict[str, Any]:
+        """Профиль запроса и кадра (запрос ``profile``).
+
+        ``count`` — сколько узлов подходит под ``sel``, ``query`` — статистика
+        нативного поиска в круге ``(x, y, radius)``, ``frame`` — зоны кадра,
+        ``allocations`` — всегда ``None`` (не измеряются).
+        """
+        params: Dict[str, Any] = {}
+        if sel is not None:
+            params["sel"] = sel
+        if x is not None and y is not None and radius is not None:
+            params.update({"x": float(x), "y": float(y), "radius": float(radius)})
+        return self.cmd("profile", **params).get("profile", {})
+
     def eval(self, code: str) -> Any:
         """Выполнить JS-код в контексте игры и вернуть ``result``.
 

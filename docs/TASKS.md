@@ -7,12 +7,13 @@
 `docs/HIGH_LEVEL_API_PERF.md` (полнота и цена кадра, 2026-10-06) и три
 независимых аудита по коду от 2026-10-07 (рендер/ресурсы/анимация спрайтов; UI,
 ввод, локализация; C-ядро и биндинги). Все пункты ниже подтверждены чтением
-кода на HEAD `7c6f8ae` (v0.1.13), а не пересказом документации. Где проверка
+кода на HEAD `c8fc514` (v0.1.14), а не пересказом документации. Где проверка
 была сомнительной — пункт помечен как непроверенный явно.
 
-**Масштаб того, что уже есть:** 43 подсистемы `$`, ~31 150 строк JS
-(`src/highlevel/*.js`), ~19 750 строк C/C++ (`src/`), 52 юнит-теста
-(`tests/js`) и 37 агентских тестов (`tests/agent`). Полноценно работают:
+**Масштаб того, что уже есть:** 71 подсистема `$`, ~44 570 строк JS
+(`src/highlevel/*.js`), ~24 875 строк C/C++ (`src/*.c`, `src/*.h`,
+`src/*.cpp`), 79 юнит-тестов (`tests/js`) и 79 агентских тестов
+(`tests/agent`). Полноценно работают:
 трансформ и иерархия, CSS-селекторы с индексами реестра, Box2D (box / circle /
 capsule / polygon, one-way, суставы revolute / distance / weld, контакты),
 тайлмапы (слои, автотайл, террейны, Y-sort), CPU-частицы, навигация A* и
@@ -696,7 +697,7 @@ API (по числу упоминаний `Node`/`Resource`/`Vector2`/`signal`/`
 | Устаревший комментарий «`engine.width` замирает при старте» | комментарий исправлен: все три источника обновляются при resize; это про точность, а не про замирание |
 | Устаревший комментарий «render target не поддержан» в `render.c` | комментарий переписан: ниже рабочая реализация, `supported = true` |
 | `ui.on` съедал слот обработчика при ненайденном элементе | слот занимается ТОЛЬКО после успешной подписки, JS-функция освобождается при отказе; на 256 неудачных попытках движок больше не падает |
-| `r2d_physics_is_awake` «не используется» | используется: `engine.isAwake()` и `$.world.awake()` |
+| `r2d_physics_is_awake` «не используется» | используется: `engine.isAwake()` и геттер `.sleeping()`/метод `.wake()` у узла |
 | `visit_mark` в BSP выделялся и не использовался | поле и выделение удалены (мёртвая память на каждый рост дерева) |
 
 ## 10. Лимиты — **закрыто**
@@ -753,9 +754,8 @@ API (по числу упоминаний `Node`/`Resource`/`Vector2`/`signal`/`
 | [HIGH_LEVEL_API_PERF.md:67-69](HIGH_LEVEL_API_PERF.md#L67), [:906-915](HIGH_LEVEL_API_PERF.md#L906) | шейдеры, слои коллизий, CastShape, render target — «дыры/заглушки/пустышки» | все четыре реализованы: [api.js:946-990](../src/highlevel/api.js#L946), [world.js:259-270](../src/highlevel/world.js#L259), [script.c:3076](../src/script.c#L3076), [render.c:1445-1533](../src/render.c#L1445) |
 | [PERF:861](HIGH_LEVEL_API_PERF.md#L861), [:891-893](HIGH_LEVEL_API_PERF.md#L891) | «`engine.viewport` (заглушка) | 0/8 обёрнуто» | `supported = true` ([render.c:2643](../src/render.c#L2643)), `$.viewport` рабочий |
 | [HIGH_LEVEL_API_PERF.md:869-872](HIGH_LEVEL_API_PERF.md#L869) | «`engine.keyName`… биндинга нет» | Биндинг есть ([script.c:3082](../src/script.c#L3082)); неверна только часть про C, а вот JS им не пользуется — правда |
-| [render.md:8-10](highlevel/render.md#L8), [:126-147](highlevel/render.md#L126), [:567-619](highlevel/render.md#L567), [:632](highlevel/render.md#L632), [:650](highlevel/render.md#L650) | «render target не поддержан осознанно», таблица `supported → false`, раздел «почему не сделан» | Реализовано: [render.c:1445-1533](../src/render.c#L1445), [main.c:289-339](../src/main.c#L289), [viewport.js:109-193](../src/highlevel/viewport.js#L109) |
 | [render.md:106-109](highlevel/render.md#L106) | «`$.gfx.push.triangle` отдаёт треугольники без режима — значит в `alpha`» | Режим прокинут ([render.js:538-542](../src/highlevel/render.js#L538), [:1892-1896](../src/highlevel/render.js#L1892)) |
-| [render.md:482](highlevel/render.md#L482), [:489](highlevel/render.md#L489) | пример `$.gfx.draw.sprite(...)` | Такого метода нет ([render.js:1830-1862](../src/highlevel/render.js#L1830)) — см. дефект 0.2 |
+| [render.md:482](highlevel/render.md#L482), [:489](highlevel/render.md#L489) | пример `$.gfx.draw.sprite(...)` | Тогда метода не было; **сейчас есть** ([render.js](../src/highlevel/render.js), дефект 0.2 закрыт) |
 | [GAP_ANALYSIS.md:64](GAP_ANALYSIS.md#L64), [:177-181](GAP_ANALYSIS.md#L177), [:227-230](GAP_ANALYSIS.md#L227), [:236](GAP_ANALYSIS.md#L236) | «шейдеры-заглушка», «render target остаётся заглушкой», «нет фигурного свипа» | Всё три закрыты |
 | [layers.md:192](highlevel/layers.md#L192) | «`.shader()` в ядре — заглушка» | Работает |
 | [VFX_PLAN.md:42-49](VFX_PLAN.md#L42) | «render target всё ещё заглушка… нет компиляции шейдеров в рантайме» | Противоречит §7 того же файла ([:201-203](VFX_PLAN.md#L201)) и коду |
@@ -774,7 +774,7 @@ API (по числу упоминаний `Node`/`Resource`/`Vector2`/`signal`/`
 | [HIGH_LEVEL_API.md:533](HIGH_LEVEL_API.md#L533) | `e.key` в `$.input.on('key')` | `String(scancode)` — `KEY_NAMES` не заполняется ([input.js:465-469](../src/highlevel/input.js#L465)) |
 | [HIGH_LEVEL_API.md:891-893](HIGH_LEVEL_API.md#L891) | снимок содержит `ui` | Это `nodeBrief` без текста и значения ([agent.js:23-42](../src/highlevel/agent.js#L23), [:98](../src/highlevel/agent.js#L98)) |
 | [API.md:873-874](API.md#L873) | контакты «живут до следующего шага» | По шагу, а не по кадру — при нескольких подшагах события теряются (дефект 0.4) |
-| [HIGH_LEVEL_API.md:21](HIGH_LEVEL_API.md#L21), [README.md](README.md) | `.each(e => …)`, где `e` — индекс | В README пример молча ничего не делает; верная форма — `.each((i, el) => …)` ([HIGH_LEVEL_API.md:164](HIGH_LEVEL_API.md#L164)) |
+| [HIGH_LEVEL_API.md:21](HIGH_LEVEL_API.md#L21), [README.md](../README.md) | `.each(e => …)`, где `e` — индекс | В README пример молча ничего не делает; верная форма — `.each((i, el) => …)` ([HIGH_LEVEL_API.md:164](HIGH_LEVEL_API.md#L164)) |
 | [ARCHITECTURE.md:363](ARCHITECTURE.md#L363) | `$.scene.preload(['level2','level3'])` | Заглушка: греет только звуки ([scene.js:112-118](../src/highlevel/scene.js#L112)) |
 
 ### 6.3. Доки обещают меньше, чем есть
@@ -783,12 +783,12 @@ API (по числу упоминаний `Node`/`Resource`/`Vector2`/`signal`/`
   реализованы ([input.js:249-310](../src/highlevel/input.js#L249), [:131-140](../src/highlevel/input.js#L131));
 * `<ui.list>` шлёт ещё и `activate` по Enter ([widgets.js:1542](../src/highlevel/widgets.js#L1542)),
   которого нет в таблице событий ([widgets.md:74-81](highlevel/widgets.md#L74));
-* README перечисляет DirectX 12 как поддержанный, а [README.md:476](README.md#L476)
+* README перечисляет DirectX 12 как поддержанный, а [README.md:476](../README.md#L476)
   сам же признаёт, что DXIL не генерируется — путь нерабочий.
 
 ### 6.4. Инфраструктурная дыра в документации — **закрыто**
 
-**Состояние:** у всех 67 модулей `src/highlevel/*.js` есть страница
+**Состояние:** у всех 71 модуля `src/highlevel/*.js` есть страница
 `docs/highlevel/<имя>.md`, и у каждого — своя проверка. На это поставлен страж
 `tests/doc_coverage_test.py`: он падает, если появился модуль без страницы, без
 проверки или со страницей-пустышкой (меньше 12 строк).
@@ -812,6 +812,10 @@ bootstrap, index, script).
 ---
 
 ## 12. Предлагаемый порядок работ
+
+Порядок работ по **расширению** движка (фазы, критерии перехода) — в
+[ROADMAP.md](ROADMAP.md); здесь — порядок закрытия найденных пробелов и
+дефектов.
 
 1. **P0 целиком** (§0): семь правок, каждая S. Убирают порчу памяти, падение
    документированной функции, неограниченный рост таблицы спрайтов, потерю

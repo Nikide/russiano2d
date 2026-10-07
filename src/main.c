@@ -19,6 +19,7 @@
 #include "net.h"
 #include "profile.h"
 #include "render.h"
+#include "replay.h"
 #include "script.h"
 #include "text.h"
 #include "font.h"
@@ -95,9 +96,12 @@ static void r2d__print_usage(const char *exe)
         "  --agent            читать JSON-команды со stdin и отвечать в stdout\n"
         "  --headless         скрытое окно: рендер и скриншоты работают, экран чист\n"
         "  --fixed-dt <сек>   детерминированный шаг времени (например 0.0166666667)\n"
-        "  --seed <N>         зерно случайных чисел для $.random\n"
+        "  --seed <N>         зерно случайных чисел для $.random (по умолчанию 12345)\n"
+        "  --record <файл>    записать ввод в файл (.r2replay), см. docs/RECORD_REPLAY.md\n"
+        "  --replay <файл>    воспроизвести записанный ввод вместо настоящего\n"
         "\n"
         "  --help             эта справка\n"
+        "  --version          версия движка и выход\n"
         "\n"
         "  --title <текст>    имя окна (иначе берётся из project.json проекта)\n"
         "  --width  <N>       ширина окна, точек\n"
@@ -179,6 +183,7 @@ typedef struct FrameContext {
     bool   stats;
     double stats_last;
     bool   auto_shot_taken;   // снимок по --screenshot уже сделан
+    R2DReplay *replay;        // --record / --replay (может быть NULL)
 } FrameContext;
 
 // shot_path != NULL — снять кадр в PNG (использует агент и --screenshot).
@@ -187,7 +192,15 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
     R2DApp *app = fc->app;
     if (!app->running) return false;
 
+    // Воспроизведение подставляет ввод ДО начала кадра: агентский виртуальный
+    // ввод накладывается внутри begin_frame, поэтому игра увидит записанное
+    // ровно так же, как увидела в первый раз.
+    if (fc->replay) r2d_replay_apply(fc->replay, app);
+
     r2d_app_begin_frame(app);
+
+    // Запись снимает ввод ПОСЛЕ наложения: пишем то, что реально увидела игра.
+    if (fc->replay) r2d_replay_capture(fc->replay, app);
 
     // ВАЖНО: движок не перехватывает Esc и другие игровые клавиши —
     // раскладку ввода определяет игра. Выход — кнопка закрытия окна,
@@ -523,8 +536,13 @@ int main(int argc, char **argv)
     double opt_screenshot_at = 2.0;
     bool   opt_overlay = false;
     double opt_fixed_dt = 0.0;
-    unsigned opt_seed = 0;
+    // Зерно по умолчанию то же, что DEFAULT_SEED в $.random (random.js): иначе
+    // engine.seed показывал бы 0, а генератор работал бы от 12345, и заголовок
+    // реплея расходился бы с фактическим миром.
+    unsigned opt_seed = 12345;
     long   opt_frame_limit = 0;
+    const char *opt_record = NULL;     // --record: файл записи ввода
+    const char *opt_replay = NULL;     // --replay: файл воспроизведения
 
     for (int i = 1; i < argc; ++i) {
         if (SDL_strcmp(argv[i], "--stats") == 0) {
@@ -551,6 +569,10 @@ int main(int argc, char **argv)
             opt_fixed_dt = SDL_atof(argv[++i]);
         } else if (SDL_strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
             opt_seed = (unsigned)SDL_strtoul(argv[++i], NULL, 10);
+        } else if (SDL_strcmp(argv[i], "--record") == 0 && i + 1 < argc) {
+            opt_record = argv[++i];
+        } else if (SDL_strcmp(argv[i], "--replay") == 0 && i + 1 < argc) {
+            opt_replay = argv[++i];
         } else if (SDL_strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
             opt_frame_limit = SDL_strtol(argv[++i], NULL, 10);
         } else if (SDL_strcmp(argv[i], "--seconds") == 0 && i + 1 < argc) {
@@ -571,6 +593,9 @@ int main(int argc, char **argv)
             opt_screenshot_at = SDL_atof(argv[++i]);
         } else if (SDL_strcmp(argv[i], "--overlay") == 0) {
             opt_overlay = true;
+        } else if (SDL_strcmp(argv[i], "--version") == 0) {
+            printf("Russiano2D " R2D_VERSION_STRING "\n");
+            return 0;
         } else if (SDL_strcmp(argv[i], "--help") == 0 || SDL_strcmp(argv[i], "-h") == 0) {
             r2d__print_usage(argv[0]);
             return 0;
@@ -707,6 +732,27 @@ int main(int argc, char **argv)
     fc.debug = debug;
     fc.stats = opt_stats;
 
+    // --- Запись и воспроизведение ввода -------------------------------------
+    // Запись хранит ВВОД кадра, а не мир: воспроизведение при том же зерне и
+    // шаге обязано привести симуляцию туда же (docs/RECORD_REPLAY.md).
+    R2DReplay *replay = NULL;
+    char replay_err[256];
+    if (opt_record && opt_replay) {
+        R2D_WARN("--record и --replay одновременно не имеют смысла: запись отменена");
+        opt_record = NULL;
+    }
+    if (opt_replay) {
+        replay = r2d_replay_play(opt_replay, replay_err, sizeof replay_err);
+        if (replay) R2D_LOG("replay: %d кадров ввода из %s", r2d_replay_frames(replay), opt_replay);
+        else R2D_WARN("%s", replay_err);
+    } else if (opt_record) {
+        replay = r2d_replay_record(opt_record, R2D_VERSION_STRING, opt_game, &app,
+                                   opt_seed, replay_err, sizeof replay_err);
+        if (replay) R2D_LOG("record: ввод пишется в %s", opt_record);
+        else R2D_WARN("%s", replay_err);
+    }
+    fc.replay = replay;
+
     R2D_LOG("управление: F1 — оверлей, F5 — перезапуск скриптов, закрытие окна — выход");
 
     // GPU-замер профайлера: fence'ы кадра уходят сюда (см. src/profile.c).
@@ -737,6 +783,7 @@ int main(int argc, char **argv)
 
         r2d_script_call_exit(&script);
         r2d_agent_destroy(agent);
+        r2d_replay_destroy(replay);
         SDL_WaitForGPUIdle(app.device);
         r2d_prof_gpu_shutdown();   // после WaitForGPUIdle: fence'ы уже сигнальны
         r2d_script_shutdown(&script);
@@ -777,6 +824,7 @@ int main(int argc, char **argv)
 
     r2d_script_call_exit(&script);
     r2d_script_shutdown(&script);
+    r2d_replay_destroy(replay);
 #ifdef R2D_ENABLE_IMGUI
     r2d_debug_ui_destroy(debug);
 #endif

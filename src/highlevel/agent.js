@@ -61,9 +61,13 @@ export function installAgent($) {
             return node ? nodeBrief(node) : null;
         },
 
-        /** Список узлов, подходящих под селектор. */
-        nodes(sel) {
-            return query(sel || '*').map(nodeBrief);
+        /**
+         * Список узлов, подходящих под селектор. `limit > 0` обрезает список —
+         * так команда `query` агентского протокола не гонит в JSON весь мир.
+         */
+        nodes(sel, limit) {
+            const list = query(sel || '*').map(nodeBrief);
+            return limit > 0 && list.length > limit ? list.slice(0, limit) : list;
         },
 
         /** Своё поле в снимке состояния. */
@@ -119,9 +123,24 @@ export function installAgent($) {
             return snap;
         },
 
-        /** Регистрирует снимок в движке: он уйдёт в ответе на `state`. */
+        /**
+         * Регистрирует снимок и инспекцию в движке: снимок уйдёт в ответе на
+         * `state`, а функция поиска обслужит команды `query`, `inspect` и
+         * `profile` (режимы `list`, `one`, `count`).
+         *
+         * Один и тот же код отдаёт сущности игре, агенту и DevTools — второй
+         * реализации поиска быть не должно (docs/DEVTOOLS.md §7).
+         */
         install() {
-            engineOf().setSnapshot(() => agent.snapshot());
+            const eng = engineOf();
+            eng.setSnapshot(() => agent.snapshot());
+            if (typeof eng.setAgentQuery === 'function') {
+                eng.setAgentQuery((sel, mode, limit) => {
+                    if (mode === 'count') return query(sel || '*').length;
+                    if (mode === 'one') return agent.node(sel);
+                    return agent.nodes(sel, limit);
+                });
+            }
             return agent;
         },
 

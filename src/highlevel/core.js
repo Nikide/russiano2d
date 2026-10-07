@@ -1045,6 +1045,57 @@ export class Node {
 // Обёртка-коллекция (то, что возвращает $)
 // ---------------------------------------------------------------------------
 
+/**
+ * Точка из селектора, узла, обёртки или `{ x, y }`; null — цель не найдена
+ * (пустой селектор) или на точку не похожа. Благодаря этому `.within()`
+ * никогда не бросает исключений: пустая цель даёт пустую выборку.
+ */
+function targetPoint(target) {
+    if (target === null || target === undefined) return null;
+    if (typeof target === 'string') {
+        const node = query(target)[0];
+        return node ? { x: node.x, y: node.y } : null;
+    }
+    if (target instanceof Wrapper) {
+        const node = target.nodes[0];
+        return node ? { x: node.x, y: node.y } : null;
+    }
+    if (target instanceof Node) return { x: target.x, y: target.y };
+    if (typeof target === 'object' && Number.isFinite(target.x) && Number.isFinite(target.y)) {
+        return { x: target.x, y: target.y };
+    }
+    return null;
+}
+
+/**
+ * Узлы, чей центр не дальше `radius` от точки `(x, y)`.
+ *
+ * `body_ids` — ответ нативного запроса `engine.queryCircle` (список id тел):
+ * узлы с телом проверяются по нему, узлы без тела (спрайты, зоны, свет) —
+ * по координатам, иначе они молча выпадали бы из выборки. Без `body_ids`
+ * (юнит-тест без движка) по координатам считаются все узлы.
+ *
+ * Чистая функция: реестр не трогает, к движку не обращается.
+ */
+export function withinRadius(nodes, x, y, radius, body_ids) {
+    const r = Number(radius);
+    if (!(r > 0)) return [];
+    const r2 = r * r;
+    const native = body_ids ? new Set(body_ids) : null;
+    const out = [];
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (native && node.body >= 0) {
+            if (native.has(node.body)) out.push(node);
+            continue;
+        }
+        const dx = node.x - x;
+        const dy = node.y - y;
+        if (dx * dx + dy * dy <= r2) out.push(node);
+    }
+    return out;
+}
+
 export class Wrapper {
     constructor(nodes) {
         this.nodes = nodes || [];
@@ -1081,6 +1132,31 @@ export class Wrapper {
         return first ? ctx.nodes.indexOf(first) : -1;
     }
     eq(i) { return new Wrapper(this.nodes[i] === undefined ? [] : [this.nodes[i]]); }
+
+    /**
+     * Узлы выборки в радиусе от цели: `$('.enemy').within('#hero', 500)`.
+     *
+     * Цель — селектор, узел, обёртка или точка `{ x, y }`; радиус — пиксели.
+     * Расстояние считается по ЦЕНТРУ узла. Для узлов с телом кандидатов даёт
+     * нативный запрос `engine.queryCircle` (broadphase Box2D): полного перебора
+     * узлов в JS не нужно, а для сотен врагов это и есть горячий путь. Узлы без
+     * тела проверяются по координатам — иначе спрайты и зоны выпадали бы.
+     *
+     * Результат сохраняет порядок выборки (порядок реестра) — на него можно
+     * положиться в тестах и реплеях.
+     */
+    within(target, radius) {
+        const point = targetPoint(target);
+        const r = Number(radius);
+        if (!point || !(r > 0)) return new Wrapper([]);
+
+        const eng = engineOf();
+        let body_ids = null;
+        if (eng && typeof eng.queryCircle === 'function') {
+            body_ids = eng.queryCircle(point.x, point.y, r, 0);
+        }
+        return new Wrapper(withinRadius(this.nodes, point.x, point.y, r, body_ids));
+    }
 }
 
 let wrapper_proto_ready = false;

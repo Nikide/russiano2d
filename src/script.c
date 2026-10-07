@@ -3162,12 +3162,26 @@ static JSValue r2d__js_cast_shape(JSContext *ctx, JSValueConst this_val, int arg
     return r2d__hit_object(ctx, hit.x, hit.y, hit.nx, hit.ny, hit.body, hit.fraction);
 }
 
+// Копия списка id тел в Int32Array. В QuickJS-ng нет JS_NewInt32Array:
+// собираем через ArrayBuffer, как и Float32Array-полигон (см. ниже).
 static JSValue r2d__ids_to_array(JSContext *ctx, const int *ids, int count)
 {
-    JSValue arr = JS_NewArray(ctx);
-    for (int i = 0; i < count; ++i) {
-        JS_SetPropertyUint32(ctx, arr, (uint32_t)i, JS_NewInt32(ctx, ids[i]));
-    }
+    if (count < 0) count = 0;
+    const uint8_t *src = count > 0 ? (const uint8_t *)ids : (const uint8_t *)"";
+
+    JSValue ab = JS_NewArrayBufferCopy(ctx, src, (size_t)count * sizeof(int));
+    if (JS_IsException(ab)) return JS_NewArray(ctx);
+
+    JSValue targs[3];
+    targs[0] = ab;
+    targs[1] = JS_NewInt32(ctx, 0);
+    targs[2] = JS_NewInt32(ctx, count);
+
+    JSValue arr = JS_NewTypedArray(ctx, 3, targs, JS_TYPED_ARRAY_INT32);
+
+    JS_FreeValue(ctx, targs[1]);
+    JS_FreeValue(ctx, targs[2]);
+    JS_FreeValue(ctx, ab);
     return arr;
 }
 
@@ -3205,6 +3219,60 @@ static JSValue r2d__js_query_box(JSContext *ctx, JSValueConst this_val, int argc
     return r2d__ids_to_array(ctx, ids, count);
 }
 
+// engine.queryCircle(x, y, radius, mask) → Int32Array тел, чей центр в радиусе,
+// отсортированный по расстоянию. Кандидатов даёт broadphase Box2D, поэтому
+// перебора всех узлов в JS не требуется (ROADMAP, фаза 1).
+static JSValue r2d__js_query_circle(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewArray(ctx);
+
+    int ids[R2D_MAX_QUERY];
+    int candidates = 0;
+    const uint64_t t0 = SDL_GetPerformanceCounter();
+    const int count = r2d_physics_query_circle(s->physics,
+                                               (float)r2d__arg_num(ctx, argc, argv, 0, 0.0),
+                                               (float)r2d__arg_num(ctx, argc, argv, 1, 0.0),
+                                               (float)r2d__arg_num(ctx, argc, argv, 2, 0.0),
+                                               (uint64_t)r2d__arg_num(ctx, argc, argv, 3, 0.0),
+                                               ids, R2D_MAX_QUERY, &candidates);
+    const uint64_t t1 = SDL_GetPerformanceCounter();
+    const uint64_t freq = SDL_GetPerformanceFrequency();
+
+    s->query_calls += 1;
+    s->query_candidates = candidates;
+    s->query_results = count;
+    s->query_ms = freq > 0 ? (double)(t1 - t0) * 1000.0 / (double)freq : 0.0;
+
+    return r2d__ids_to_array(ctx, ids, count);
+}
+
+// engine.queryStats() → диагностика последнего engine.queryCircle:
+// { calls, candidates, results, ms, cap, truncated }. Только факты: сколько
+// кандидатов дал broadphase, сколько тел прошло отсев по расстоянию, сколько
+// времени занял вызов. Никаких «вероятных причин» — их не знает движок.
+static JSValue r2d__js_query_stats(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2D_UNUSED(argc);
+    R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+
+    JSValue obj = JS_NewObject(ctx);
+    const int calls = s ? s->query_calls : 0;
+    const int candidates = s ? s->query_candidates : 0;
+    const int results = s ? s->query_results : 0;
+    JS_SetPropertyStr(ctx, obj, "calls", JS_NewInt32(ctx, calls));
+    JS_SetPropertyStr(ctx, obj, "candidates", JS_NewInt32(ctx, candidates));
+    JS_SetPropertyStr(ctx, obj, "results", JS_NewInt32(ctx, results));
+    JS_SetPropertyStr(ctx, obj, "ms", JS_NewFloat64(ctx, s ? s->query_ms : 0.0));
+    JS_SetPropertyStr(ctx, obj, "cap", JS_NewInt32(ctx, R2D_MAX_QUERY));
+    JS_SetPropertyStr(ctx, obj, "truncated",
+                      JS_NewBool(ctx, candidates >= R2D_MAX_QUERY));
+    return obj;
+}
+
 // engine.keysPressed() / engine.keysReleased() → Int32Array скан-кодов.
 // Пакетно, а не по одному: $.input.on('key') должен получать фронты нажатий,
 // а обойти 512 клавиш из JS — это 512 переходов через границу языка на кадр.
@@ -3213,14 +3281,14 @@ static JSValue r2d__keys_event(JSContext *ctx, bool pressed)
     R2DScript *s = r2d__script_of(ctx);
     if (!s || !s->app) return JS_NewArray(ctx);
 
-    JSValue arr = JS_NewArray(ctx);
-    uint32_t n = 0;
+    int codes[SDL_SCANCODE_COUNT];
+    int n = 0;
     for (int sc = 0; sc < SDL_SCANCODE_COUNT; ++sc) {
         const bool hit = pressed ? r2d_key_pressed(s->app, (SDL_Scancode)sc)
                                  : r2d_key_released(s->app, (SDL_Scancode)sc);
-        if (hit) JS_SetPropertyUint32(ctx, arr, n++, JS_NewInt32(ctx, sc));
+        if (hit) codes[n++] = sc;
     }
-    return arr;
+    return r2d__ids_to_array(ctx, codes, n);
 }
 
 static JSValue r2d__js_keys_pressed(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -3565,6 +3633,23 @@ static JSValue r2d__js_set_snapshot(JSContext *ctx, JSValueConst this_val, int a
     return JS_UNDEFINED;
 }
 
+// engine.setAgentQuery(fn) — функция для команд `query`/`inspect`: получает
+// (селектор, one, limit) и возвращает узел (one) или массив узлов. Так
+// инспекция агента и `$.agent` — один и тот же код, а не две реализации.
+static JSValue r2d__js_set_agent_query(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s) return JS_UNDEFINED;
+    if (argc < 1 || !JS_IsFunction(ctx, argv[0])) {
+        JS_ThrowTypeError(ctx, "setAgentQuery(fn) — нужна функция");
+        return JS_EXCEPTION;
+    }
+    JS_FreeValue(ctx, s->agent_query_fn);
+    s->agent_query_fn = JS_DupValue(ctx, argv[0]);
+    return JS_UNDEFINED;
+}
+
 // Превращает значение JS в строку JSON. Объекты сериализуются JSON.stringify,
 // поэтому циклические структуры дают понятную ошибку, а не мусор.
 static bool r2d__value_to_json(R2DScript *s, JSValue value, char **out, char **out_error)
@@ -3709,6 +3794,39 @@ bool r2d_script_snapshot(R2DScript *s, char **out_json, char **out_error)
         JSValue exc = JS_GetException(s->ctx);
         const char *text = JS_ToCString(s->ctx, exc);
         if (out_error) *out_error = SDL_strdup(text ? text : "ошибка снимка состояния");
+        if (text) JS_FreeCString(s->ctx, text);
+        JS_FreeValue(s->ctx, exc);
+        return false;
+    }
+
+    const bool ok = r2d__value_to_json(s, value, out_json, out_error);
+    JS_FreeValue(s->ctx, value);
+    return ok;
+}
+
+// Агентская инспекция: `query` (список), `inspect` (одна сущность) и `count`
+// для `profile`. Селектор разбирает JS-сторона (`$.agent`), C только передаёт
+// строку и упаковывает ответ — так у DevTools, агента и игры одна реализация
+// поиска (DEVTOOLS.md §7).
+bool r2d_script_agent_query(R2DScript *s, const char *sel, const char *mode, int limit,
+                            char **out_json, char **out_error)
+{
+    if (out_json) *out_json = NULL;
+    if (out_error) *out_error = NULL;
+    if (!s || !s->ctx || JS_IsUndefined(s->agent_query_fn)) return false;
+
+    JSValue args[3];
+    args[0] = JS_NewString(s->ctx, sel ? sel : "*");
+    args[1] = JS_NewString(s->ctx, mode ? mode : "list");
+    args[2] = JS_NewInt32(s->ctx, limit);
+
+    JSValue value = JS_Call(s->ctx, s->agent_query_fn, JS_UNDEFINED, 3, args);
+    for (int i = 0; i < 3; ++i) JS_FreeValue(s->ctx, args[i]);
+
+    if (JS_IsException(value)) {
+        JSValue exc = JS_GetException(s->ctx);
+        const char *text = JS_ToCString(s->ctx, exc);
+        if (out_error) *out_error = SDL_strdup(text ? text : "ошибка инспекции");
         if (text) JS_FreeCString(s->ctx, text);
         JS_FreeValue(s->ctx, exc);
         return false;
@@ -3966,6 +4084,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__install_window(ctx, engine);
     r2d__set_fn(ctx, engine, "setExit", r2d__js_set_exit, 1);
     r2d__set_fn(ctx, engine, "setSnapshot", r2d__js_set_snapshot, 1);
+    r2d__set_fn(ctx, engine, "setAgentQuery", r2d__js_set_agent_query, 1);
 
     // Ввод
     r2d__set_fn(ctx, engine, "keyDown", r2d__js_key_down, 1);
@@ -4174,6 +4293,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "castShape", r2d__js_cast_shape, 1);
     r2d__set_fn(ctx, engine, "queryPoint", r2d__js_query_point, 3);
     r2d__set_fn(ctx, engine, "queryBox", r2d__js_query_box, 5);
+    r2d__set_fn(ctx, engine, "queryCircle", r2d__js_query_circle, 4);
+    r2d__set_fn(ctx, engine, "queryStats", r2d__js_query_stats, 0);
     // Ввод: фронты нажатий пакетом (для $.input.on('key')) и мелочи.
     r2d__set_fn(ctx, engine, "keysPressed", r2d__js_keys_pressed, 0);
     r2d__set_fn(ctx, engine, "keysReleased", r2d__js_keys_released, 0);
@@ -4182,7 +4303,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "textInput", r2d__js_text_input, 0);
 
     // Текст поверх сцены: $.gfx.text, $('<text>'), $.debug.watch.
-    r2d__set_fn(ctx, engine, "drawText", r2d__js_draw_text, 6);
+    r2d__set_fn(ctx, engine, "drawText", r2d__js_draw_text, 9);
     r2d__set_fn(ctx, engine, "measureText", r2d__js_measure_text, 3);
     r2d__set_fn(ctx, engine, "loadFont", r2d__js_load_font, 2);
     r2d__set_fn(ctx, engine, "fontDefault", r2d__js_font_default, 0);
@@ -4227,6 +4348,7 @@ static void r2d__free_js_values(R2DScript *s)
     JS_FreeValue(s->ctx, s->render_fn);
     JS_FreeValue(s->ctx, s->exit_fn);
     JS_FreeValue(s->ctx, s->snapshot_fn);
+    JS_FreeValue(s->ctx, s->agent_query_fn);
     JS_FreeValue(s->ctx, s->engine_obj);
     if (s->transforms_valid) JS_FreeValue(s->ctx, s->transforms_array);
 
@@ -4234,6 +4356,7 @@ static void r2d__free_js_values(R2DScript *s)
     s->render_fn = JS_UNDEFINED;
     s->exit_fn = JS_UNDEFINED;
     s->snapshot_fn = JS_UNDEFINED;
+    s->agent_query_fn = JS_UNDEFINED;
     s->has_exit = false;
     s->engine_obj = JS_UNDEFINED;
     s->transforms_array = JS_UNDEFINED;
@@ -4354,6 +4477,7 @@ static bool r2d__create_context(R2DScript *s)
     s->render_fn = JS_UNDEFINED;
     s->exit_fn = JS_UNDEFINED;
     s->snapshot_fn = JS_UNDEFINED;
+    s->agent_query_fn = JS_UNDEFINED;
     s->has_exit = false;
     s->engine_obj = JS_UNDEFINED;
     s->transforms_array = JS_UNDEFINED;
@@ -4448,6 +4572,10 @@ static void r2d__refresh_engine_props(R2DScript *s)
     // знать про Retina — 1280x720 остаётся 1280x720.
     JS_SetPropertyStr(ctx, e, "width", JS_NewInt32(ctx, s->app->width));
     JS_SetPropertyStr(ctx, e, "height", JS_NewInt32(ctx, s->app->height));
+    // Физический размер буфера кадра (Retina/HiDPI). Нужен только операциям над
+    // самим изображением — например, снимку кадра (docs/API.md §11).
+    JS_SetPropertyStr(ctx, e, "pixel_width", JS_NewInt32(ctx, s->app->pixel_width));
+    JS_SetPropertyStr(ctx, e, "pixel_height", JS_NewInt32(ctx, s->app->pixel_height));
     JS_SetPropertyStr(ctx, e, "mouseX", JS_NewFloat64(ctx, s->app->mouse_x));
     JS_SetPropertyStr(ctx, e, "mouseY", JS_NewFloat64(ctx, s->app->mouse_y));
     JS_SetPropertyStr(ctx, e, "wheel", JS_NewFloat64(ctx, s->app->wheel_y));

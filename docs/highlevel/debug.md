@@ -4,7 +4,7 @@
 $.debug.on();                                     // оверлей движка (то же, что F1)
 $.debug.draw.rect(10, 10, 40, 40, 'red');
 $.debug.watch('hp', () => $('#hero').hp());       // значение в оверлее
-$.debug.profile('бой');                           // замер участка кадра
+$.debug.profile();                                // зоны кадра: UPDATE/RENDER_JS/PHYSICS/…
 $.console.register('spawn', (args) => $('<enemy>').at(args[0], args[1]));
 $.console.run('spawn 100 200');
 ```
@@ -16,18 +16,20 @@ $.console.run('spawn 100 200');
 | Вызов | Смысл |
 |---|---|
 | `on()` / `off()` / `toggle()` / `isOn()` | оверлей |
-| `draw.rect/line/circle/text(...)` | рисование поверх кадра |
+| `draw.rect/line/circle/ring/text/arrow(...)` | рисование поверх кадра |
 | `watch(name, fn)` / `unwatch(name)` / `watches()` | значения в оверлее |
-| `profile(name)` / `profileReset()` / `profiling()` | замеры |
-| `stats()` / `counters()` / `limits()` | счётчики и лимиты |
-| `register(name, fn)` / `unregister(name)` / `list()` | свои пункты меню |
-| `run(name)` / `help()` | выполнить пункт и показать справку |
+| `profile()` / `profileReset()` / `profiling(on)` | замеры кадра: зоны, GPU, пики (у `profile()` аргументов нет) |
+| `queryStats()` | диагностика последнего нативного запроса (`$().within`, `engine.queryCircle`) |
+| `stats()` / `counters()` / `limits()` | счётчики, занятость и потолки таблиц |
+| `profiler.on(on?)` / `isOn()` | покадровый профайлер подсистем: включить (без аргумента), выключить `on(false)`, прочитать состояние |
+| `profiler.start/end/record/report/reset` | свои замеры; время — `engine.now()` |
 
 ## 2. Методы `$.console`
 
 | Вызов | Смысл |
 |---|---|
-| `register(name, fn)` | своя команда: получает массив аргументов |
+| `register(name, fn, help?)` | своя команда: получает массив аргументов |
+| `unregister(name)` / `list()` / `help(name)` | снять команду, перечислить, показать справку |
 | `run(text)` | выполнить строку как команду |
 
 Команды — свой мини-терминал: `$.console.run('spawn 100 200')` разбирает строку

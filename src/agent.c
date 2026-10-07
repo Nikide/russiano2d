@@ -12,6 +12,8 @@
 
 #include "app.h"
 #include "json.h"
+#include "physics.h"
+#include "profile.h"
 #include "script.h"
 
 #include <SDL3/SDL.h>
@@ -222,6 +224,177 @@ static void cmd_state(R2DAgent *a, const R2dJson *req)
 
     SDL_free(json);
     SDL_free(err);
+}
+
+// `query`: список сущностей по селектору `$`. Селектор разбирает JS-сторона
+// (`$.agent`), C только перевозит строку и упаковывает ответ: у DevTools,
+// агента и игры одна реализация поиска (docs/DEVTOOLS.md §7).
+static void cmd_query(R2DAgent *a, const R2dJson *req)
+{
+    const char *sel = r2d_json_str(r2d_json_get(req, "sel"), "*");
+    const R2dJson *limit_node = r2d_json_get(req, "limit");
+    const int limit = (limit_node && limit_node->type == R2D_JSON_NUM && limit_node->number > 0)
+                          ? (int)limit_node->number : 0;
+
+    char *json = NULL;
+    char *err = NULL;
+    if (!r2d_script_agent_query(a->script, sel, "list", limit, &json, &err)) {
+        send_error(req, err ? err : "query недоступен: игра не вызвала $.agent.install()");
+        SDL_free(json);
+        SDL_free(err);
+        return;
+    }
+
+    R2dSb sb;
+    begin_response(&sb, req, true);
+    r2d_sb_puts(&sb, ",\"sel\":");
+    r2d_sb_put_json_string(&sb, sel);
+    r2d_sb_puts(&sb, ",\"nodes\":");
+    r2d_sb_puts(&sb, json ? json : "[]");
+    send_ok_end(&sb);
+
+    SDL_free(json);
+    SDL_free(err);
+}
+
+// `inspect`: описание одной сущности; null — селектор ничего не нашёл.
+static void cmd_inspect(R2DAgent *a, const R2dJson *req)
+{
+    const char *sel = r2d_json_str(r2d_json_get(req, "sel"), NULL);
+    if (!sel) { send_error(req, "inspect: не передан параметр sel"); return; }
+
+    char *json = NULL;
+    char *err = NULL;
+    if (!r2d_script_agent_query(a->script, sel, "one", 0, &json, &err)) {
+        send_error(req, err ? err : "inspect недоступен: игра не вызвала $.agent.install()");
+        SDL_free(json);
+        SDL_free(err);
+        return;
+    }
+
+    R2dSb sb;
+    begin_response(&sb, req, true);
+    r2d_sb_puts(&sb, ",\"sel\":");
+    r2d_sb_put_json_string(&sb, sel);
+    r2d_sb_puts(&sb, ",\"node\":");
+    r2d_sb_puts(&sb, json ? json : "null");
+    send_ok_end(&sb);
+
+    SDL_free(json);
+    SDL_free(err);
+}
+
+// `profile`: что стоит запрос, без догадок. Отдаёт число тел, статистику
+// нативного поиска (кандидаты broadphase, отсев по расстоянию, время) и зоны
+// кадра. `allocations` — null: движок их не измеряет и притворяться не станет
+// (AGENT_IMPLEMENTATION_RULES.md, правило 9).
+static void cmd_profile(R2DAgent *a, const R2dJson *req)
+{
+    const char *sel = r2d_json_str(r2d_json_get(req, "sel"), NULL);
+    const R2dJson *x_node = r2d_json_get(req, "x");
+    const R2dJson *y_node = r2d_json_get(req, "y");
+    const R2dJson *r_node = r2d_json_get(req, "radius");
+    const bool has_circle = x_node && y_node && r_node
+                            && x_node->type == R2D_JSON_NUM
+                            && y_node->type == R2D_JSON_NUM
+                            && r_node->type == R2D_JSON_NUM
+                            && r_node->number > 0.0;
+
+    // Число сущностей по селектору считает игровой JS — тот же код поиска,
+    // что у query/inspect. Нет хука — честная ошибка, а не молчаливый ноль.
+    char *count_json = NULL;
+    char *count_err = NULL;
+    if (sel && !r2d_script_agent_query(a->script, sel, "count", 0, &count_json, &count_err)) {
+        send_error(req, count_err ? count_err : "profile: инспекция недоступна");
+        SDL_free(count_json);
+        SDL_free(count_err);
+        return;
+    }
+
+    int candidates = 0;
+    int results = 0;
+    double query_ms = 0.0;
+    if (has_circle && a->script && a->script->physics) {
+        int ids[R2D_MAX_QUERY];
+        const uint64_t t0 = SDL_GetPerformanceCounter();
+        results = r2d_physics_query_circle(a->script->physics,
+                                           (float)x_node->number, (float)y_node->number,
+                                           (float)r_node->number, 0,
+                                           ids, R2D_MAX_QUERY, &candidates);
+        const uint64_t t1 = SDL_GetPerformanceCounter();
+        const uint64_t freq = SDL_GetPerformanceFrequency();
+        query_ms = freq > 0 ? (double)(t1 - t0) * 1000.0 / (double)freq : 0.0;
+    }
+
+    R2DProfileRow rows[R2D_PROF_ROW_MAX];
+    const int row_count = r2d_prof_rows(rows, R2D_PROF_ROW_MAX);
+
+    R2dSb sb;
+    begin_response(&sb, req, true);
+    r2d_sb_puts(&sb, ",\"profile\":{\"allocations\":null");
+
+    if (sel) {
+        r2d_sb_puts(&sb, ",\"sel\":");
+        r2d_sb_put_json_string(&sb, sel);
+        r2d_sb_puts(&sb, ",\"count\":");
+        r2d_sb_puts(&sb, count_json ? count_json : "0");
+    }
+
+    r2d_sb_puts(&sb, ",\"bodies\":");
+    r2d_sb_put_json_number(&sb, (a->script && a->script->physics)
+                                    ? (double)r2d_physics_live_count(a->script->physics) : 0.0);
+
+    r2d_sb_puts(&sb, ",\"query\":");
+    if (has_circle) {
+        r2d_sb_puts(&sb, "{\"native\":true,\"x\":");
+        r2d_sb_put_json_number(&sb, x_node->number);
+        r2d_sb_puts(&sb, ",\"y\":");
+        r2d_sb_put_json_number(&sb, y_node->number);
+        r2d_sb_puts(&sb, ",\"radius\":");
+        r2d_sb_put_json_number(&sb, r_node->number);
+        r2d_sb_puts(&sb, ",\"candidates\":");
+        r2d_sb_put_json_number(&sb, candidates);
+        r2d_sb_puts(&sb, ",\"results\":");
+        r2d_sb_put_json_number(&sb, results);
+        r2d_sb_puts(&sb, ",\"ms\":");
+        r2d_sb_put_json_number(&sb, query_ms);
+        r2d_sb_puts(&sb, ",\"cap\":");
+        r2d_sb_put_json_number(&sb, R2D_MAX_QUERY);
+        r2d_sb_puts(&sb, ",\"truncated\":");
+        r2d_sb_puts(&sb, candidates >= R2D_MAX_QUERY ? "true" : "false");
+        r2d_sb_puts(&sb, "}");
+    } else {
+        r2d_sb_puts(&sb, "null");
+    }
+
+    r2d_sb_puts(&sb, ",\"frame\":{\"frame_ms\":");
+    r2d_sb_put_json_number(&sb, r2d_prof_frame_ms());
+    r2d_sb_puts(&sb, ",\"real_ms\":");
+    r2d_sb_put_json_number(&sb, r2d_prof_real_ms());
+    r2d_sb_puts(&sb, ",\"unaccounted_ms\":");
+    r2d_sb_put_json_number(&sb, r2d_prof_unaccounted_ms());
+    r2d_sb_puts(&sb, ",\"frames\":");
+    r2d_sb_put_json_number(&sb, r2d_prof_frames());
+    r2d_sb_puts(&sb, ",\"zones\":[");
+    for (int i = 0; i < row_count; ++i) {
+        if (i > 0) r2d_sb_putc(&sb, ',');
+        r2d_sb_puts(&sb, "{\"name\":");
+        r2d_sb_put_json_string(&sb, rows[i].name ? rows[i].name : "");
+        r2d_sb_puts(&sb, ",\"ms\":");
+        r2d_sb_put_json_number(&sb, rows[i].ms);
+        r2d_sb_puts(&sb, ",\"peak\":");
+        r2d_sb_put_json_number(&sb, rows[i].peak);
+        r2d_sb_puts(&sb, ",\"gpu\":");
+        r2d_sb_puts(&sb, rows[i].gpu ? "true" : "false");
+        r2d_sb_puts(&sb, ",\"valid\":");
+        r2d_sb_puts(&sb, rows[i].valid ? "true" : "false");
+        r2d_sb_puts(&sb, "}");
+    }
+    r2d_sb_puts(&sb, "]}}");
+    send_ok_end(&sb);
+
+    SDL_free(count_json);
+    SDL_free(count_err);
 }
 
 static void cmd_eval(R2DAgent *a, const R2dJson *req)
@@ -634,6 +807,12 @@ bool r2d_agent_serve(R2DAgent *a, const R2DAgentHooks *hooks)
             cmd_frames(a, req);
         } else if (SDL_strcmp(cmd, "state") == 0) {
             cmd_state(a, req);
+        } else if (SDL_strcmp(cmd, "query") == 0) {
+            cmd_query(a, req);
+        } else if (SDL_strcmp(cmd, "inspect") == 0) {
+            cmd_inspect(a, req);
+        } else if (SDL_strcmp(cmd, "profile") == 0) {
+            cmd_profile(a, req);
         } else if (SDL_strcmp(cmd, "eval") == 0) {
             cmd_eval(a, req);
         } else if (SDL_strcmp(cmd, "step") == 0) {

@@ -136,6 +136,23 @@ export function installDebug($) {
             if (typeof engine.profileReset === 'function') engine.profileReset();
         },
 
+        /**
+         * Диагностика последнего нативного запроса — `$('.enemy').within(...)`,
+         * который идёт через `engine.queryCircle`.
+         *
+         * ```js
+         * $('.enemy').within('#hero', 500);
+         * $.debug.queryStats();   // { calls, candidates, results, ms, cap, truncated }
+         * ```
+         *
+         * `candidates` — сколько тел дал broadphase Box2D, `results` — сколько
+         * прошло отсев по расстоянию, `ms` — время последнего вызова, `cap` —
+         * предел (256), `truncated` — упёрлись ли в предел. Только факты.
+         */
+        queryStats() {
+            return typeof engine.queryStats === 'function' ? engine.queryStats() : null;
+        },
+
         /** Включить/выключить профайлер движка; без аргумента — состояние. */
         profiling(on) {
             return typeof engine.profileEnabled === 'function' ? engine.profileEnabled(on) : false;

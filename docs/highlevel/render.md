@@ -127,26 +127,18 @@ Render target **работает**: кадр можно увести в offscree
 | Метод | Поведение |
 |---|---|
 | `$.viewport.supported` | `true`, когда сборка собрана с render target |
-| `$.viewport.create(w, h)` | создать текстуру и получить её `id` |
-| `$.viewport.get(id)` | описание текстуры или `null` |
-| `$.viewport.bind(id)` | привязать на кадр: сцена рисуется в текстуру |
+| `$.viewport.create(w, h)` | создать текстуру, вернуть `id` (или `null`) |
+| `$.viewport.destroy(id)` | удалить текстуру (связывание снимается само) |
+| `$.viewport.size(id)` | `{ w, h }` или `null` |
+| `$.viewport.bind(id)` / `unbind()` / `bound()` | связать кадр с текстурой / вернуть в swapchain / что связано |
 | `$.viewport.sprite(id)` | спрайт **прошлого** кадра (его рисует игра) |
-| `$.viewport.draw(id, …)` | нарисовать прошлый кадр как спрайт |
-| `$.viewport.remove(id)` | `false` |
-| `$.viewport.list()` | `[]` |
-| `$.viewport.draw(id, x, y, w, h, alpha)` | бросает `Error` с тем же текстом |
+| `$.viewport.draw(id, x, y, w, h, opts)` | нарисовать прошлый кадр как спрайт |
+| `$.viewport.count()` | сколько текстур создано |
 
-То же и на низком уровне: `engine.viewport.supported === false`, а
-`create/destroy/size/begin/end/draw/capture` бросают `TypeError` с понятным
-текстом; `engine.viewport.count()` честно возвращает `0`.
-
-```js
-try {
-    const id = $.viewport.create(256, 256);
-} catch (error) {
-    $.log(error.message);   // что случилось и куда смотреть
-}
-```
+Без render target в сборке (`supported === false`) методы возвращают
+безопасные значения: `create` → `null`, `bind`/`destroy` → `false`, `size` →
+`null`, а в журнал уходит строка с причиной. Ни один вызов не бросает
+исключение: игра на слабой сборке продолжает работать.
 
 ### 3.0. Свет: узел `<light>` и `$.gfx.draw.glow`
 

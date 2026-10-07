@@ -329,6 +329,9 @@ def collect_runtime_files(
 
 #: Порядок, в котором документы идут в приложении; остальные — по алфавиту.
 AGENTS_DOC_ORDER = (
+    "docs/AGENT_IMPLEMENTATION_RULES.md",
+    "docs/PHILOSOPHY.md",
+    "docs/UI_RMLUI_LAW.md",
     "docs/ARCHITECTURE.md",
     "docs/HIGH_LEVEL_API.md",
     "docs/API.md",
