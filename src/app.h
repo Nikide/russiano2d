@@ -140,6 +140,13 @@ typedef struct R2DApp {
     // --- Служебное ---
     const char *base_path;   // каталог, относительно которого ищутся game/ и assets/
     bool  base_path_owned;   // base_path выделен нами и освобождается в shutdown
+    // Каталог ИГРЫ (--game). Относительные пути ассетов ищутся СНАЧАЛА в нём,
+    // и только потом в base_path: игра лежит в своей папке и грузит свои
+    // картинки/звуки, а встроенные ассеты движка (шрифты, иконки) остаются в
+    // base_path. Без этого игра из другого каталога не находила НИ ОДНОГО
+    // своего файла — пути уходили в каталог движка.
+    char  game_path[4096];
+    bool  game_path_set;
     const char *start_scene; // сцена, которую просят открыть сразу (--scene), или NULL
 
     // Снимок кадра по расписанию (--screenshot / --screenshot-at). Агентский
@@ -165,6 +172,10 @@ bool r2d_app_init(R2DApp *app, const char *title, int width, int height, bool vs
 
 void        r2d_app_set_title(R2DApp *app, const char *title);
 const char *r2d_app_title(const R2DApp *app);
+
+// Каталог игры для поиска ассетов (--game). Относительный путь делается
+// абсолютным от текущего каталога. NULL или "" — вернуться к base_path.
+void r2d_app_set_game_path(R2DApp *app, const char *dir);
 
 void r2d_app_set_size(R2DApp *app, int width, int height);
 void r2d_app_get_size(const R2DApp *app, int *width, int *height);

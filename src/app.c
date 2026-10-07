@@ -917,6 +917,31 @@ bool r2d_app_set_clipboard(R2DApp *app, const char *text)
     return SDL_SetClipboardText(text ? text : "");
 }
 
+void r2d_app_set_game_path(R2DApp *app, const char *dir)
+{
+    if (!app) return;
+    app->game_path[0] = '\0';
+    app->game_path_set = false;
+    if (!dir || !*dir) return;
+
+    if (dir[0] == '/' || dir[0] == '\\') {
+        SDL_snprintf(app->game_path, sizeof app->game_path, "%s", dir);
+    } else {
+        // Относительный --game (например, `--game demos`) считается от
+        // текущего каталога: так же, как его понимает оболочка.
+        char *cwd = SDL_GetCurrentDirectory();
+        if (!cwd) return;
+        SDL_snprintf(app->game_path, sizeof app->game_path, "%s/%s", cwd, dir);
+        SDL_free(cwd);
+    }
+    // Хвостовой слэш убираем: дальше к пути приклеивается "/".
+    size_t len = SDL_strlen(app->game_path);
+    while (len > 1 && (app->game_path[len - 1] == '/' || app->game_path[len - 1] == '\\')) {
+        app->game_path[--len] = '\0';
+    }
+    app->game_path_set = true;
+}
+
 void r2d_app_resolve_path(const R2DApp *app, char *out, size_t out_size, const char *relative)
 {
     // Абсолютный путь берём как есть: агент и тесты передают именно такие
@@ -931,6 +956,19 @@ void r2d_app_resolve_path(const R2DApp *app, char *out, size_t out_size, const c
     if (absolute) {
         SDL_snprintf(out, out_size, "%s", relative);
         return;
+    }
+
+    // Сначала каталог игры: там лежат ЕЁ ассеты. Проверяем существование
+    // файла, а не просто склеиваем путь, — иначе первый же промах увёл бы от
+    // встроенных ассетов движка (шрифтов), которые живут в base_path.
+    if (app->game_path_set && *app->game_path) {
+        char probe[4096];
+        SDL_snprintf(probe, sizeof probe, "%s/%s", app->game_path, relative);
+        SDL_PathInfo info;
+        if (SDL_GetPathInfo(probe, &info)) {
+            SDL_snprintf(out, out_size, "%s", probe);
+            return;
+        }
     }
 
     if (app->base_path && *app->base_path) {

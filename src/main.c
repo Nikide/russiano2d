@@ -622,6 +622,10 @@ int main(int argc, char **argv)
         r2d_app_shutdown(&app);
         return 1;
     }
+    // Каталог игры для поиска ЕЁ ассетов: относительные пути сначала ищутся
+    // здесь, и только потом в base_path (там встроенные шрифты движка).
+    r2d_app_set_game_path(&app, opt_game);
+
     app.start_scene = opt_scene;   // читается скриптовым слоем как engine.startScene
     app.fixed_dt = (float)opt_fixed_dt;
     app.take_screenshot = (opt_screenshot != NULL);
