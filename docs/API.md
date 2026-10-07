@@ -744,6 +744,31 @@ engine.submitTriangles(tri, v);   // → число принятых верши�
 * Смешивать с `drawSprite`/`drawRect`/`submitSprites` можно свободно: всё
   попадает в общий кадр отрисовки.
 
+### `engine.setClip(x, y, w, h)` / `engine.clearClip()`
+
+Обрезка вывода (scissor). Действует на всё, что рисуется **после** вызова, пока
+не сменена или не снята. Размер `<= 0` снимает обрезку.
+
+**Обрезка на команду, а не на кадр**: каждая команда батча помнит свою
+(`R2DDrawCmd.clip`), поэтому один кадр может обрезать разные узлы по-разному.
+Больше 256 разных обрезок за кадр — лишние игнорируются с предупреждением.
+
+| Функция | Возвращает |
+|---|---|
+| `engine.setClip(x, y, w, h)` | `undefined` |
+| `engine.clearClip()` | `undefined` |
+| `engine.getClip()` | `{x, y, w, h}` или `null` |
+| `engine.clipCount()` | сколько разных обрезок было в последнем кадре |
+
+```js
+engine.setClip(0, 0, 400, 300);
+engine.drawSprite(sprite, 200, 150, 64, 64);   // обрезано
+engine.clearClip();
+```
+
+В высокоуровневом API — `$.gfx.clip` / `clipOff` / `clipRect` и `.clip()` у узла
+(см. [highlevel/render.md](highlevel/render.md) §5.1).
+
 ### `engine.submitMesh(vertices, count?, texture?)`
 
 Меш псевдо-3D: вершины с глубиной. 8 float на вершину —

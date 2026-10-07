@@ -624,6 +624,54 @@ bool r2d_sprite_alive(const R2DRenderer *r, int id)
 // Батч
 // ---------------------------------------------------------------------------
 
+// Обрезка вывода: прямоугольник экрана (scissor). Нужна там, где содержимое
+// выходит за свои рамки — прокрутка списка, портрет в рамке, миникарта.
+//
+// Прямоугольников на кадр несколько: игра может обрезать разные узлы
+// по-разному, поэтому каждая команда помнит СВОЙ (R2DDrawCmd.clip), а проход
+// сменяет scissor на границе участков.
+void r2d_render_set_clip(R2DRenderer *r, int x, int y, int w, int h)
+{
+    if (!r) return;
+    if (w <= 0 || h <= 0) { r->clip_cur = -1; return; }
+    // Повтор той же обрезки не занимает новый слот: скролл ставит её каждый
+    // кадр, и таблица иначе переполнилась бы за пару секунд.
+    if (r->clip_cur >= 0) {
+        const SDL_Rect *c = &r->clips[r->clip_cur];
+        if (c->x == x && c->y == y && c->w == w && c->h == h) return;
+    }
+    if (r->clip_count >= R2D_MAX_CLIPS) {
+        // Не роняем кадр: игра теряет обрезку, но получает след в журнале.
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            R2D_WARN("обрезок за кадр больше %d — лишние игнорируются", R2D_MAX_CLIPS);
+        }
+        r->clip_cur = -1;
+        return;
+    }
+    SDL_Rect *c = &r->clips[r->clip_count];
+    c->x = x; c->y = y; c->w = w; c->h = h;
+    r->clip_cur = r->clip_count++;
+}
+
+void r2d_render_clear_clip(R2DRenderer *r)
+{
+    if (r) r->clip_cur = -1;
+}
+
+bool r2d_render_get_clip(const R2DRenderer *r, SDL_Rect *out)
+{
+    if (!r || r->clip_cur < 0) return false;
+    if (out) *out = r->clips[r->clip_cur];
+    return true;
+}
+
+int r2d_render_clip_count(const R2DRenderer *r)
+{
+    return r ? r->clip_count : 0;
+}
+
 void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
 {
     r->screen_w       = screen_w > 0 ? screen_w : 1;
@@ -657,6 +705,9 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
     r->bound_viewport   = -1;
     // -1 — «интерфейс ещё не помечен»: тогда все спрайты считаются миром.
     r->ui_cmd_start     = -1;
+    // Обрезки живут кадр: игра задаёт их заново.
+    r->clip_count       = 0;
+    r->clip_cur         = -1;
     r->stat_draws     = 0;
     r->stat_passes    = 0;
     r->stat_fx_cmds   = 0;
@@ -689,6 +740,7 @@ void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float 
     c->blend = r->batch_blend;
     c->fx    = r->batch_fx;
     c->filter = r->filter_linear ? 1 : 0;
+    c->clip   = (int16_t)r->clip_cur;
 
     const R2DSprite *sp = &r->sprites[sprite];
     const uint8_t cr = (uint8_t)(color & 0xFF);
@@ -1407,7 +1459,10 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
             (r->sprites[r->cmds[i].sprite].texture != r->sprites[r->cmds[run_start].sprite].texture) ||
             (r->cmds[i].blend != r->cmds[run_start].blend) ||
             (r->cmds[i].filter != r->cmds[run_start].filter) ||
-            (r->cmds[i].fx != r->cmds[run_start].fx);
+            (r->cmds[i].fx != r->cmds[run_start].fx) ||
+            // Обрезка тоже разрывает участок: scissor ставится на проход, а не
+            // на команду, поэтому внутри участка он должен быть одинаков.
+            (r->cmds[i].clip != r->cmds[run_start].clip);
 
         if (!end_of_run) continue;
 
@@ -1458,6 +1513,17 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
         } else if ((int)mode != *bound_blend) {
             r2d__bind_pipeline(r, pass, mode);
             *bound_blend = (int)mode;
+        }
+
+        // Обрезка участка: scissor ставится на ПРОХОД, поэтому его надо задать
+        // перед рисованием и снять после. Без обрезки — полный кадр, иначе
+        // осталась бы обрезка предыдущего участка.
+        const int16_t clip = r->cmds[run_start].clip;
+        if (clip >= 0 && clip < r->clip_count) {
+            SDL_SetGPUScissor(pass, &r->clips[clip]);
+        } else {
+            const SDL_Rect full = { 0, 0, r->screen_w, r->screen_h };
+            SDL_SetGPUScissor(pass, &full);
         }
 
         SDL_GPUTextureSamplerBinding tex_binding;

@@ -91,6 +91,10 @@ typedef struct R2DDrawCmd {
     uint8_t  blend;    // R2DBlendMode, зафиксированный на момент добавления
     uint8_t  fx;       // индекс в таблице шейдеров узла; 0 — обычный спрайт
     uint8_t  filter;   // 0 — nearest (по умолчанию), 1 — linear
+    // Обрезка (scissor) на момент добавления: 0 — без обрезки, иначе индекс
+    // прямоугольника в таблице кадра. Нужна, чтобы разные узлы одного кадра
+    // обрезались по-разному (скролл, рамка, миникарта).
+    int16_t  clip;     // индекс в r->clips; -1 — без обрезки
 } R2DDrawCmd;
 
 // Шейдер узла: вид эффекта и его параметры. Юниформа шейдера — два vec4,
@@ -162,9 +166,19 @@ typedef struct R2DVertex {
     uint8_t  r, g, b, a;
 } R2DVertex;
 
+// Таблица обрезок кадра: каждая команда помнит свой прямоугольник, потому что
+// игра может обрезать разные узлы по-разному (скролл, рамка, миникарта).
+#define R2D_MAX_CLIPS 256
+
 typedef struct R2DRenderer {
     SDL_GPUDevice *device;
     SDL_Window    *window;
+
+    // Обрезка: `clips` — таблица прямоугольников кадра, `clip_count` — сколько
+    // занято, `clip_cur` — индекс действующего (или -1).
+    SDL_Rect clips[R2D_MAX_CLIPS];
+    int      clip_count;
+    int      clip_cur;
 
     // По конвейеру на каждый режим смешивания; индекс — R2DBlendMode.
     SDL_GPUGraphicsPipeline *pipelines[R2D_BLEND_COUNT];
@@ -389,6 +403,15 @@ bool r2d_render_depth_target(R2DRenderer *r, int w, int h, SDL_GPUDepthStencilTa
 // собираются в отдельный список и рисуются ПЕРВЫМИ в проходе сцены, чтобы
 // успеть записать глубину до спрайтов.
 // texture < 0 — белая текстура (как было); иначе меш сэмплит её по u/v.
+// Обрезка вывода прямоугольником экрана (scissor). Действует на всё, что
+// рисуется ПОСЛЕ вызова в этом кадре, пока не сменена или не снята.
+void r2d_render_set_clip(R2DRenderer *r, int x, int y, int w, int h);
+void r2d_render_clear_clip(R2DRenderer *r);
+// Действующая обрезка: `out` — прямоугольник, возвращает false, если её нет.
+bool r2d_render_get_clip(const R2DRenderer *r, SDL_Rect *out);
+// Сколько обрезок было в последнем кадре (диагностика).
+int  r2d_render_clip_count(const R2DRenderer *r);
+
 void r2d_batch_mesh(R2DRenderer *r, const float *verts, int vertex_count, int texture);
 // Рисует накопленный меш в проход (зовётся рендерером до спрайтов).
 void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass);

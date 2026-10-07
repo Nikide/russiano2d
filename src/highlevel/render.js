@@ -125,6 +125,18 @@ const overlay_col = new Uint32Array(1);
 const draw_calls = [];  // $.gfx.draw.* — чистятся каждый кадр
 
 // ---------------------------------------------------------------------------
+// Обрезка (scissor) на команду
+//
+// Батч кадра один, а обрезать разные узлы надо по-разному (скролл, рамка,
+// миникарта). Поэтому каждый спрайт помнит СВОЙ прямоугольник обрезки, а
+// `submitSprites` рвёт отправку по клипу и перед участком зовёт
+// engine.setClip — C записывает действующий клип в команду.
+const CLIPS_MAX = 256;
+const clip_rects = [];        // {x, y, w, h} на кадр
+let clip_of = new Int16Array(MAX_SPRITES);   // индекс клипа на спрайт, -1 — нет
+let clip_cur = -1;
+
+// ---------------------------------------------------------------------------
 // Реестр отрисовщиков для тегов, которые заводят модули подсистем.
 //
 // Ядро не знает про <tilemap>, <particles> и подобные теги: каждый модуль
@@ -441,6 +453,32 @@ function ensureBuffers() {
     }
 }
 
+/**
+ * Разобрать аргументы обрезки: числа, `{x, y, w, h}` или узел.
+ * Узел берём по его ЭКРАННОМУ прямоугольнику на этот кадр — так рамка и скролл
+ * обрезаются ровно по своей коробке, не считая её руками.
+ */
+function clipRectOf(a, b, c, d) {
+    if (typeof a === 'number') {
+        const w = Number(c), h = Number(d);
+        if (!(w > 0) || !(h > 0)) return null;
+        return { x: Math.round(Number(a) || 0), y: Math.round(Number(b) || 0),
+                 w: Math.round(w), h: Math.round(h) };
+    }
+    if (a && typeof a === 'object') {
+        // Узел: у него есть x/y/w/h и признак tag — берём по камере.
+        if (a.tag !== undefined && typeof a.x === 'number') {
+            const r = ctx.gfx && ctx.gfx._nodeClip ? ctx.gfx._nodeClip(a) : null;
+            if (r) return r;
+        }
+        const w = Number(a.w), h = Number(a.h);
+        if (!(w > 0) || !(h > 0)) return null;
+        return { x: Math.round(Number(a.x) || 0), y: Math.round(Number(a.y) || 0),
+                 w: Math.round(w), h: Math.round(h) };
+    }
+    return null;
+}
+
 function pushSprite(sprite, x, y, w, h, angle, color, blend_name, fx_index) {
     if (count >= MAX_SPRITES || sprite < 0) return;
     if (view) {
@@ -456,6 +494,7 @@ function pushSprite(sprite, x, y, w, h, angle, color, blend_name, fx_index) {
     blend[count] = blendId(blend_name === undefined || blend_name === null ? default_blend : blend_name);
     // Индекс шейдера узла: 0 — обычный спрайт (конвейер без юниформ).
     fx[count] = fx_index === undefined ? 0 : fx_index;
+    clip_of[count] = clip_cur;
     count++;
 }
 
@@ -469,10 +508,18 @@ function submitSprites(start, end) {
     while (i < end) {
         const b = blend[i];
         const f = fx[i];
+        const cl = clip_of[i];
         let j = i + 1;
-        // Участок рвётся и по режиму смешивания, и по шейдеру узла: у разных
-        // шейдеров разные юниформы, а без разрыва они бы «протекли» на соседей.
-        while (j < end && blend[j] === b && fx[j] === f) j++;
+        // Участок рвётся по режиму смешивания, шейдеру узла И обрезке: scissor
+        // ставится на проход, поэтому внутри участка он должен быть одинаков.
+        while (j < end && blend[j] === b && fx[j] === f && clip_of[j] === cl) j++;
+        // Обрезка участка — до отрисовки: C запоминает её в каждой команде.
+        if (cl >= 0 && cl < clip_rects.length) {
+            const c = clip_rects[cl];
+            engine.setClip(c.x, c.y, c.w, c.h);
+        } else {
+            engine.clearClip();
+        }
         engine.submitSprites(xf.subarray(i * 6, j * 6), col.subarray(i, j), j - i,
                              BLEND_NAMES[b], f > 0 ? fx.subarray(i, j) : null);
         i = j;
@@ -1753,6 +1800,31 @@ function drawWorldPassInner(cam) {
 function drawWorldNode(node, cam) {
     if (!node.visible || node.alpha <= 0) return;
 
+    // Обрезка самого узла: `<...>.clip(true)` или `.clip({x,y,w,h})`. Ставится
+    // на время этого узла и возвращается как было — иначе обрезка «протекла» бы
+    // на всех, кто рисуется после.
+    const prev_clip = clip_cur;
+    if (node.attrs && node.attrs.clip) {
+        const r = clipRectOf(node.attrs.clip === true ? node : node.attrs.clip);
+        if (r) {
+            let idx = clip_rects.findIndex((c) => c.x === r.x && c.y === r.y &&
+                                                  c.w === r.w && c.h === r.h);
+            if (idx < 0 && clip_rects.length < CLIPS_MAX) {
+                clip_rects.push(r);
+                idx = clip_rects.length - 1;
+            }
+            if (idx >= 0) clip_cur = idx;
+        }
+    }
+    try {
+        drawWorldNodeInner(node, cam);
+    } finally {
+        clip_cur = prev_clip;
+    }
+}
+
+function drawWorldNodeInner(node, cam) {
+
     // Тексту нечего рисовать, кроме строки: его габарит считаем до отсечения.
     if (node.tag === 'text' && node.text) syncTextBounds(node);
 
@@ -1982,6 +2054,87 @@ export function installGfx($) {
 
         /** Размер окна в логических точках. */
         size() { return { w: engine.width, h: engine.height }; },
+
+        // --- Обрезка (scissor) ------------------------------------------
+        /**
+         * Обрезать всё, что рисуется ПОСЛЕ этого вызова, прямоугольником.
+         *
+         * ```js
+         * $.gfx.clip(0, 0, 400, 300);      // обрезать левым верхом
+         * $.gfx.draw.rect(...);            // это и последующее — внутри
+         * $.gfx.clipOff();                 // снять
+         * ```
+         *
+         * Принимает числа, `{x, y, w, h}` или узел (обрезка по его экранному
+         * прямоугольнику — так делают рамку и скролл).
+         *
+         * Обрезка действует на КОМАНДУ, а не на кадр: разные узлы одного кадра
+         * могут обрезаться по-разному.
+         */
+        clip(a, b, c, d) {
+            const rect = clipRectOf(a, b, c, d);
+            if (!rect) { clip_cur = -1; return gfx; }
+            // Повтор той же обрезки не занимает новый слот: скролл ставит её
+            // каждый кадр, и таблица иначе переполнилась бы.
+            if (clip_cur >= 0) {
+                const cur = clip_rects[clip_cur];
+                if (cur && cur.x === rect.x && cur.y === rect.y &&
+                    cur.w === rect.w && cur.h === rect.h) return gfx;
+            }
+            let idx = -1;
+            for (let i = 0; i < clip_rects.length; i++) {
+                const r = clip_rects[i];
+                if (r.x === rect.x && r.y === rect.y && r.w === rect.w && r.h === rect.h) {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx < 0) {
+                if (clip_rects.length >= CLIPS_MAX) {
+                    ctx.log('$.gfx.clip: обрезок за кадр больше ' + CLIPS_MAX);
+                    return gfx;
+                }
+                clip_rects.push(rect);
+                idx = clip_rects.length - 1;
+            }
+            clip_cur = idx;
+            return gfx;
+        },
+
+        /** Снять обрезку. */
+        clipOff() { clip_cur = -1; return gfx; },
+
+        /** Сбросить таблицу обрезок — зовётся в начале кадра (см. api.js). */
+        clipReset() { clip_rects.length = 0; clip_cur = -1; },
+
+        /** Действующая обрезка или null. */
+        clipRect() {
+            return clip_cur >= 0 && clip_rects[clip_cur] ? { ...clip_rects[clip_cur] } : null;
+        },
+
+        /** Сколько разных обрезок было в кадре — для $.debug. */
+        clipCount() { return clip_rects.length; },
+
+        /**
+         * Экранный прямоугольник узла — для `$.gfx.clip(node)`.
+         *
+         * Считаем по ГЛАВНОЙ камере: у вторичных камер своя проекция, и
+         * обрезать узел «по второй камере» — редкий случай, для него передайте
+         * прямоугольник числами.
+         */
+        _nodeClip(node) {
+            if (!node) return null;
+            const cam = ctx.camera;
+            const z = cam && cam.zoom ? (cam.zoom() || 1) : 1;
+            const p = cam && cam.worldToScreen
+                ? cam.worldToScreen({ x: node.x, y: node.y })
+                : { x: node.x, y: node.y };
+            const w = Math.abs(node.w * (node.scale_x === undefined ? 1 : node.scale_x)) * z;
+            const h = Math.abs(node.h * (node.scale_y === undefined ? 1 : node.scale_y)) * z;
+            if (!(w > 0) || !(h > 0)) return null;
+            return { x: Math.round(p.x - w / 2), y: Math.round(p.y - h / 2),
+                     w: Math.round(w), h: Math.round(h) };
+        },
 
         /** Цвет-утилита, чтобы не тянуть engine.rgba в игре. */
         rgba(r, g, b, a) { return engine.rgba(r, g, b, a === undefined ? 255 : a); },

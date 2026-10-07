@@ -1205,6 +1205,55 @@ static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, J
     return o;
 }
 
+// engine.setClip(x, y, w, h) / engine.clearClip() — обрезка вывода.
+//
+// Scissor действует на всё, что рисуется ПОСЛЕ вызова в этом кадре. Каждая
+// команда батча помнит свою обрезку, поэтому один кадр может обрезать разные
+// узлы по-разному (скролл, рамка, миникарта).
+static JSValue r2d__js_set_clip(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->renderer) return JS_UNDEFINED;
+    r2d_render_set_clip(s->renderer,
+                        r2d__arg_int(ctx, argc, argv, 0, 0),
+                        r2d__arg_int(ctx, argc, argv, 1, 0),
+                        r2d__arg_int(ctx, argc, argv, 2, 0),
+                        r2d__arg_int(ctx, argc, argv, 3, 0));
+    return JS_UNDEFINED;
+}
+
+static JSValue r2d__js_clear_clip(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    if (s && s->renderer) r2d_render_clear_clip(s->renderer);
+    return JS_UNDEFINED;
+}
+
+// engine.getClip() → {x, y, w, h} | null.
+static JSValue r2d__js_get_clip(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    SDL_Rect c;
+    if (!s || !s->renderer || !r2d_render_get_clip(s->renderer, &c)) return JS_NULL;
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "x", JS_NewInt32(ctx, c.x));
+    JS_SetPropertyStr(ctx, o, "y", JS_NewInt32(ctx, c.y));
+    JS_SetPropertyStr(ctx, o, "w", JS_NewInt32(ctx, c.w));
+    JS_SetPropertyStr(ctx, o, "h", JS_NewInt32(ctx, c.h));
+    return o;
+}
+
+// engine.clipCount() → сколько разных обрезок было в последнем кадре.
+static JSValue r2d__js_clip_count(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewInt32(ctx, (s && s->renderer) ? r2d_render_clip_count(s->renderer) : 0);
+}
+
 // engine.submitMesh(vertices, count?, texture?) → число вершин.
 //
 // Меш псевдо-3D: 8 float на вершину — x, y (ЭКРАННЫЕ пиксели), z (глубина
@@ -3765,6 +3814,11 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "setSpriteFilter", r2d__js_set_sprite_filter, 1);
     r2d__set_fn(ctx, engine, "setDepth", r2d__js_set_depth, 1);
     r2d__set_fn(ctx, engine, "submitMesh", r2d__js_submit_mesh, 3);
+    // Обрезка (scissor).
+    r2d__set_fn(ctx, engine, "setClip", r2d__js_set_clip, 4);
+    r2d__set_fn(ctx, engine, "clearClip", r2d__js_clear_clip, 0);
+    r2d__set_fn(ctx, engine, "getClip", r2d__js_get_clip, 0);
+    r2d__set_fn(ctx, engine, "clipCount", r2d__js_clip_count, 0);
     r2d__set_fn(ctx, engine, "depth", r2d__js_get_depth, 0);
     r2d__set_fn(ctx, engine, "depthInfo", r2d__js_depth_info, 0);
     r2d__set_fn(ctx, engine, "netHost", r2d__js_net_host, 1);

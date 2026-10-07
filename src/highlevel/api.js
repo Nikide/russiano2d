@@ -864,6 +864,24 @@ function installNodeMethods($) {
     def('opacity', function (value) { return Wrapper.prototype.alpha.call(this, value); });
 
     def('visible', function (flag) { return this.eachNode((_, el) => { (el).visible = flag !== false; }); });
+
+    /**
+     * Обрезать узел прямоугольником: `.clip(true)` — по своей коробке,
+     * `.clip({x, y, w, h})` — по экранным координатам, `.clip(false)` — снять.
+     *
+     * Обрезка действует ТОЛЬКО на этот узел: после него клип возвращается как
+     * был, поэтому соседи не обрезаются. Для контейнера с детьми поставьте
+     * обрезку каждому ребёнку (дети — отдельные узлы, они не наследуют).
+     */
+    def('clip', function (value) {
+        return this.eachNode((_, el) => {
+            const n = el;
+            if (value === undefined || value === true) n.attrs.clip = true;
+            else if (value === false || value === null) delete n.attrs.clip;
+            else n.attrs.clip = value;
+        });
+    });
+    defGet('clipRect', (n) => (n.attrs && n.attrs.clip) ? n.attrs.clip : null, null);
     def('show', function () { return this.visible(true); });
     def('hide', function () { return this.visible(false); });
     defGet('isVisible', (n) => n.visible, false);
@@ -1647,6 +1665,10 @@ function installFrameHooks($) {
 
     engineOf().setRender(() => {
         if (!frame.running) return;
+        // Обрезки живут кадр и задаются заново. Сброс ЗДЕСЬ, а не в _render:
+        // игра ставит клип в $.render / scene.render, которые идут раньше, и
+        // сброс внутри _render стирал бы его перед самой отрисовкой.
+        ctx.gfx.clipReset();
         const scene = ctx.scene._state.current;
         if (scene && typeof scene.render === 'function') {
             try { scene.render($); } catch (e) { reportError('render сцены', e); }
