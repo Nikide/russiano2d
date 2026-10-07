@@ -48,3 +48,6 @@ test('packColor(undefined, alpha) — белый с заданной альфо�
     eq(c & 0x00ffffff, 0x00ffffff);
     near(alphaByte(c), 128, 0);
 });
+
+finish();
+
