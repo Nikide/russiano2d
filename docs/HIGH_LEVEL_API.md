@@ -1050,6 +1050,7 @@ $.update(() => {
 | Экраны и меню: раскладка, фокус | `$.screen` | `<ui.row>` и др. | [screen.md](highlevel/screen.md) |
 | Именованные текстовые стили | `$.font` | — | [font.md](highlevel/font.md) |
 | Спрайтовые атласы из JSON (Aseprite, TexturePacker) | `$.atlas` | — | [atlas.md](highlevel/atlas.md) |
+| Кривые плавности и градиенты (общий `ease` для твинов) | `$.curve` | — | [curve.md](highlevel/curve.md) |
 | Текст в сцене и шрифты: растеризация глифов, атлас, семейства | `$.font.load`, `.font()`, `<text>` | — | [text.md](highlevel/text.md) |
 
 Физика в этой таблице не отдельной подсистемой, а частью ядра: формы тел,
