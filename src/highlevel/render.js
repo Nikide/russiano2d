@@ -1839,6 +1839,45 @@ export function installGfx($) {
                 return gfx;
             },
 
+            /**
+             * Спрайт поверх всего: `x`/`y` — ЛЕВЫЙ ВЕРХНИЙ угол в координатах
+             * окна, как у `rect`/`line`/`circle` этого же объекта.
+             *
+             * `opts`: `alpha`, `color`, `angle` (радианы), `blend`
+             * (`'alpha'` по умолчанию), `w`/`h` — синонимы размеров.
+             *
+             * ```js
+             * const trail = $.viewport.create(800, 600);
+             * $.gfx.draw.sprite($.viewport.sprite(trail), 0, 0, 800, 600, { alpha: 0.9 });
+             * ```
+             */
+            sprite(sprite, x, y, w, h, opts) {
+                const o = opts || {};
+                const nn = (value, fallback) => {
+                    if (value === null || value === undefined || value === '') return fallback;
+                    const v = Number(value);
+                    return Number.isFinite(v) ? v : fallback;
+                };
+                const id = nn(sprite, -1);
+                if (id < 0) return false;
+                // Размер не задан — отдаём 0, C подставит размер самого спрайта
+                // (см. `engine.submitSprites`: `w <= 0` → размер спрайта).
+                const sw = nn(o.w !== undefined ? o.w : w, 0);
+                const sh = nn(o.h !== undefined ? o.h : h, 0);
+                const color = o.color !== undefined
+                    ? packColor(o.color, o.alpha)
+                    : (o.alpha !== undefined ? packColor('#ffffff', o.alpha) : 0xffffffff);
+                const blend = o.blend === undefined ? default_blend : o.blend;
+                // Как glow: примитивы этого объекта живут в координатах окна,
+                // а pushSprite ожидает мировые — подменяем вид на камеру.
+                const prev_view = view;
+                setView(cameraTransform());
+                pushSprite(id, nn(x, 0) + sw / 2, nn(y, 0) + sh / 2,
+                           sw, sh, nn(o.angle, 0), color, blend);
+                view = prev_view;
+                return true;
+            },
+
             line(x1, y1, x2, y2, color, width) {
                 draw_calls.push({ kind: 'line', x1, y1, x2, y2, color: packColor(color), width: width || 1 });
             },
