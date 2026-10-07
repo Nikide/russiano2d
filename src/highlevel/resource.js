@@ -489,7 +489,10 @@ function loadData(spec) {
 
 function loadTexture(spec) {
     if (typeof engine.loadTexture !== 'function') return fail('движок не умеет loadTexture');
-    const id = engine.loadTexture(spec.path);
+    // `mipmaps: true` в описании ресурса: уровни для УМЕНЬШЕННЫХ спрайтов,
+    // иначе они мерцают. Обычным текстурам это не нужно.
+    const id = engine.loadTexture(spec.path, spec.mipmaps === true
+        ? { mipmaps: true } : undefined);
     if (!(id >= 0)) return fail(`текстура "${spec.path}" не загрузилась — файл на месте?`);
     return ok(id);
 }

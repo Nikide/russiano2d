@@ -43,7 +43,7 @@ $.ready(() => {
 
 | `kind` | Что возвращает `get`/`load` | Откуда берётся |
 |---|---|---|
-| `texture` | `number` — id текстуры | `engine.loadTexture(path)` |
+| `texture` | `number` — id текстуры | `engine.loadTexture(path)`, поле `mipmaps: true` — уровни для уменьшенных спрайтов |
 | `sprite` | `number` — id спрайта | общий кэш ядра или `engine.createSprite` для кадра |
 | `sheet` | `number[]` — кадры листа | `.frames({ src, cols, rows, cw, ch })` |
 | `sound` | `number` — id звука | `engine.audio.load(path)` |

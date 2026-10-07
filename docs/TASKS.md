@@ -817,8 +817,14 @@ bootstrap, index, script).
    параллакс), `$.world.bsp`, чтение сна и мирового переключателя, отчёт о
    лимитах `$.debug.limits()`, nine-slice, пивот, кэш `.region()`, анимация
    тайлов, blend в `layers/tilemap`.
-4. **Ресурсы:** выгрузка текстур и слотов, импорт атласов, фильтрация/мипмапы,
-   Curve/Gradient как ресурсы.
+4. **Ресурсы:** выгрузка текстур и слотов **сделана** (`$.resource.free`,
+   `engine.freeTexture`), импорт атласов **сделан** (`$.atlas`, включая слайсы
+   Aseprite с пивотами), фильтрация **сделана** (nearest/linear), **мипмапы
+   сделаны**: `engine.loadTexture(path, { mipmaps: true })` — уровни строит
+   `SDL_GenerateMipmapsForGPUTexture`; проверено
+   tests/agent/highlevel_mipmap_test.py. **Не сделано: Curve/Gradient как
+   ресурсы** (`$.curve` умеет кривые и градиенты, но в `$.resource` их видов
+   нет).
 5. **Платформа и асинхронность:** **закрыто.** Фоновая загрузка — `$.task` +
    `$.scene.loadAsync` (task.md); неблокирующий hot reload — `$.script`
    (перезапуск на границе кадра, script.md); выбор GPU-бэкенда и понятный отказ

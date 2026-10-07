@@ -232,17 +232,38 @@ static SDL_GPUTexture *r2d__create_texture_usage(R2DRenderer *r, int w, int h,
     return tex;
 }
 
+/** Сколько уровней у текстуры w×h, если строить полную пирамиду. */
+static SDL_GPUTexture *r2d__create_texture_levels(R2DRenderer *r, int w, int h,
+                                                  Uint32 levels);
+static Uint32 r2d__mip_levels(int w, int h)
+{
+    Uint32 levels = 1;
+    int size = w > h ? w : h;
+    while (size > 1) { size /= 2; levels++; }
+    return levels > 16 ? 16 : levels;   // предел SDL_GPU
+}
+
 static SDL_GPUTexture *r2d__create_texture(R2DRenderer *r, int w, int h)
+{
+    return r2d__create_texture_levels(r, w, h, 1);
+}
+
+/** Создать текстуру с нужным числом уровней (мипмапы — если больше 1). */
+static SDL_GPUTexture *r2d__create_texture_levels(R2DRenderer *r, int w, int h,
+                                                  Uint32 levels)
 {
     SDL_GPUTextureCreateInfo info;
     SDL_zero(info);
     info.type         = SDL_GPU_TEXTURETYPE_2D;
     info.format       = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    // Мипмапы SDL строит, РИСУЯ уровни, поэтому текстуре нужен COLOR_TARGET.
+    // Для одноуровневых он ни к чему — не просим лишнего.
     info.usage        = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    if (levels > 1) info.usage |= SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
     info.width              = (Uint32)w;
     info.height             = (Uint32)h;
     info.layer_count_or_depth = 1;
-    info.num_levels         = 1;
+    info.num_levels         = levels;
     info.sample_count       = SDL_GPU_SAMPLECOUNT_1;
 
     SDL_GPUTexture *tex = SDL_CreateGPUTexture(r->device, &info);
@@ -254,7 +275,8 @@ static SDL_GPUTexture *r2d__create_texture(R2DRenderer *r, int w, int h)
 
 // Заливает RGBA8-пиксели в текстуру через одноразовый command buffer.
 static bool r2d__upload_pixels(R2DRenderer *r, SDL_GPUTexture *tex,
-                                const void *pixels, int w, int h, int pitch)
+                                const void *pixels, int w, int h, int pitch,
+                                bool mipmaps)
 {
     const Uint32 row_bytes = (Uint32)w * 4u;
     const Uint32 total     = row_bytes * (Uint32)h;
@@ -310,6 +332,10 @@ static bool r2d__upload_pixels(R2DRenderer *r, SDL_GPUTexture *tex,
     SDL_UploadToGPUTexture(cp, &src_loc, &region, false);
     SDL_EndGPUCopyPass(cp);
 
+    // Мипмапы: SDL строит пирамиду сам. Вызывать ВНЕ проходов — copy pass уже
+    // закрыт, а командный буфер ещё не отправлен.
+    if (mipmaps && tex) SDL_GenerateMipmapsForGPUTexture(cmd, tex);
+
     SDL_GPUFence *fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
     if (fence) {
         SDL_GPUFence *fences[1] = { fence };
@@ -348,7 +374,7 @@ int r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h)
     SDL_GPUTexture *tex = r2d__create_texture_usage(
         r, w, h, SDL_GPU_TEXTUREUSAGE_SAMPLER);
     if (!tex) return -1;
-    if (pixels && !r2d__upload_pixels(r, tex, pixels, w, h, w * 4)) {
+    if (pixels && !r2d__upload_pixels(r, tex, pixels, w, h, w * 4, false)) {
         SDL_ReleaseGPUTexture(r->device, tex);
         return -1;
     }
@@ -428,7 +454,19 @@ bool r2d_texture_upload_region(R2DRenderer *r, int id, int x, int y, int w, int 
     return true;
 }
 
+static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps);
+
 int r2d_texture_load(R2DRenderer *r, const char *path)
+{
+    return r2d_texture_load_ex(r, path, false);
+}
+
+int r2d_texture_load_mipped(R2DRenderer *r, const char *path)
+{
+    return r2d_texture_load_ex(r, path, true);
+}
+
+static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps)
 {
     const int existing = r2d_texture_find(r, path);
     if (existing >= 0) return existing;
@@ -470,8 +508,9 @@ int r2d_texture_load(R2DRenderer *r, const char *path)
 
     const int w = rgba->w;
     const int h = rgba->h;
-    SDL_GPUTexture *tex = r2d__create_texture(r, w, h);
-    if (!tex || !r2d__upload_pixels(r, tex, rgba->pixels, w, h, rgba->pitch)) {
+    const Uint32 levels = mipmaps ? r2d__mip_levels(w, h) : 1;
+    SDL_GPUTexture *tex = r2d__create_texture_levels(r, w, h, levels);
+    if (!tex || !r2d__upload_pixels(r, tex, rgba->pixels, w, h, rgba->pitch, mipmaps)) {
         if (tex) SDL_ReleaseGPUTexture(r->device, tex);
         if (rgba != loaded) SDL_DestroySurface(rgba);
         SDL_DestroySurface(loaded);
@@ -2527,7 +2566,7 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     {
         SDL_GPUTexture *white = r2d__create_texture(r, 1, 1);
         const Uint32 pixel = 0xFFFFFFFFu;
-        if (!white || !r2d__upload_pixels(r, white, &pixel, 1, 1, 4)) {
+        if (!white || !r2d__upload_pixels(r, white, &pixel, 1, 1, 4, false)) {
             R2D_ERROR("не удалось создать белую текстуру");
             if (white) SDL_ReleaseGPUTexture(device, white);
             r2d_render_shutdown(r);
@@ -2548,7 +2587,7 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     {
         SDL_GPUTexture *black = r2d__create_texture(r, 1, 1);
         const Uint32 pixel = 0x000000FFu;   // RGBA little-endian: чёрный, alpha 1
-        if (black && r2d__upload_pixels(r, black, &pixel, 1, 1, 4)) {
+        if (black && r2d__upload_pixels(r, black, &pixel, 1, 1, 4, false)) {
             r->black_texture = black;
         } else {
             R2D_WARN("не удалось создать чёрную текстуру для свечения");

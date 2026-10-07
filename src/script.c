@@ -550,7 +550,18 @@ static JSValue r2d__js_load_texture(JSContext *ctx, JSValueConst this_val, int a
     r2d_app_resolve_path(s->app, full, sizeof full, rel);
     JS_FreeCString(ctx, rel);
 
-    return JS_NewInt32(ctx, r2d_texture_load(s->renderer, full));
+    // Второй аргумент — опции: { mipmaps: true }. Мипмапы нужны, когда спрайт
+    // рисуется УМЕНЬШЕННЫМ; без них он мерцает. Для пиксель-арта в натуральную
+    // величину они только съедают память, поэтому это опция.
+    bool mipmaps = false;
+    if (argc > 1 && JS_IsObject(argv[1])) {
+        mipmaps = r2d__obj_bool(ctx, argv[1], "mipmaps", false);
+    } else if (argc > 1) {
+        mipmaps = JS_ToBool(ctx, argv[1]) != 0;
+    }
+
+    return JS_NewInt32(ctx, mipmaps ? r2d_texture_load_mipped(s->renderer, full)
+                                    : r2d_texture_load(s->renderer, full));
 }
 
 // engine.textureFromPixels(w, h, pixels: Uint8Array|Uint8ClampedArray) → id.

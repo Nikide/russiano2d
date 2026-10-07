@@ -351,6 +351,11 @@ void r2d_render_shutdown(R2DRenderer *r);
 // Загружает PNG (или другой формат, который понимает SDL_image).
 // Возвращает id >= 0 либо -1. Второй вызов с тем же путём вернёт тот же id.
 int  r2d_texture_load(R2DRenderer *r, const char *path);
+// С мипмапами: уровни генерирует SDL_GenerateMipmapsForGPUTexture. Нужны,
+// когда спрайт рисуется УМЕНЬШЕННЫМ — без них он мерцает. Для пиксель-арта в
+// натуральную величину мипмапы только съедают память, поэтому это опция, а не
+// поведение по умолчанию.
+int  r2d_texture_load_mipped(R2DRenderer *r, const char *path);
 int  r2d_texture_find(const R2DRenderer *r, const char *path);
 void r2d_texture_info(const R2DRenderer *r, int id, int *w, int *h);
 const char *r2d_texture_name(const R2DRenderer *r, int id);
