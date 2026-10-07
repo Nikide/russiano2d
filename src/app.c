@@ -48,9 +48,13 @@ static void r2d__pick_base_path(R2DApp *app)
     app->base_path_owned = app->base_path != NULL;
 }
 
-bool r2d_app_init(R2DApp *app, const char *title, int width, int height, bool vsync, bool headless)
+bool r2d_app_init(R2DApp *app, const char *title, int width, int height, bool vsync,
+                  bool headless, const char *gpu_driver)
 {
     SDL_zero(*app);
+    // Имя бэкенда задаётся СРАЗУ: SDL_zero обнуляет структуру, поэтому
+    // записать его до вызова было бы недостаточно.
+    if (gpu_driver) SDL_strlcpy(app->gpu_driver, gpu_driver, sizeof app->gpu_driver);
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_AUDIO)) {
         R2D_ERROR("SDL_Init: %s", SDL_GetError());
@@ -90,9 +94,41 @@ bool r2d_app_init(R2DApp *app, const char *title, int width, int height, bool vs
     const bool gpu_debug = true;
 #endif
 
-    app->device = SDL_CreateGPUDevice(formats, gpu_debug, NULL);
+    // Выбор бэкенда: `--gpu vulkan` или R2D_GPU. Без явного выбора SDL берёт
+    // первый подходящий — обычно это и нужно; при отладке важно уметь назвать
+    // бэкенд и получить понятный отказ вместо пустого окна.
+    const char *requested = (app->gpu_driver[0] != '\0') ? app->gpu_driver
+                                                          : SDL_getenv("R2D_GPU");
+    if (requested && requested[0] == '\0') requested = NULL;
+    if (requested && SDL_strcasecmp(requested, "d3d12") == 0) requested = "direct3d12";
+
+    if (requested) {
+        app->device = SDL_CreateGPUDevice(formats, gpu_debug, requested);
+        if (!app->device) {
+            // Не «неизвестное имя», а «этот бэкенд здесь не работает»: SDL
+            // знает имя (оно есть в списке), но создать устройство не смог.
+            R2D_ERROR("SDL_CreateGPUDevice(\"%s\"): %s", requested, SDL_GetError());
+            const int count = SDL_GetNumGPUDrivers();
+            char list[256] = "";
+            for (int i = 0; i < count; ++i) {
+                const char *name = SDL_GetGPUDriver(i);
+                if (!name) continue;
+                SDL_strlcat(list, name, sizeof list);
+                if (i + 1 < count) SDL_strlcat(list, ", ", sizeof list);
+            }
+            R2D_ERROR("бэкенд \"%s\" недоступен в этой сборке или на этой машине. "
+                      "Собранные бэкенды: %s", requested, count > 0 ? list : "(ни одного)");
+            if (SDL_strcasecmp(requested, "direct3d12") == 0) {
+                R2D_ERROR("D3D12 работает только с DXIL: нужна сборка движка с поддержкой "
+                          "DXIL (DXC) либо другой бэкенд — --gpu vulkan или --gpu metal");
+            }
+        }
+    } else {
+        app->device = SDL_CreateGPUDevice(formats, gpu_debug, NULL);
+    }
+
     if (!app->device) {
-        R2D_ERROR("SDL_CreateGPUDevice: %s", SDL_GetError());
+        if (!requested) R2D_ERROR("SDL_CreateGPUDevice: %s", SDL_GetError());
         return false;
     }
 

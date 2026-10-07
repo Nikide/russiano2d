@@ -87,6 +87,8 @@ static void r2d__print_usage(const char *exe)
         "  --seconds <N>      выйти автоматически через N секунд (для тестов)\n"
         "  --frames <N>       выйти ровно после N кадров\n"
         "  --no-hot-reload    не следить за изменениями .js\n"
+        "  --gpu <имя>        GPU-бэкенд: vulkan, d3d12, metal\n"
+        "  --list-gpu         показать доступные бэкенды и выйти\n"
         "\n"
         "  --- Режим агента (см. docs/AGENT_API.md) ---\n"
         "  --agent            читать JSON-команды со stdin и отвечать в stdout\n"
@@ -506,6 +508,7 @@ int main(int argc, char **argv)
     const char *opt_title = NULL;      // --title: своё имя окна
     int         opt_width = 0;         // --width/--height: свой размер окна
     int         opt_height = 0;
+    const char *opt_gpu = NULL;        // --gpu: выбрать бэкенд вручную
     const char *opt_screenshot = NULL;
     double opt_screenshot_at = 2.0;
     bool   opt_overlay = false;
@@ -522,6 +525,18 @@ int main(int argc, char **argv)
             opt_agent = true;
         } else if (SDL_strcmp(argv[i], "--headless") == 0) {
             opt_headless = true;
+        } else if (SDL_strcmp(argv[i], "--gpu") == 0 && i + 1 < argc) {
+            opt_gpu = argv[++i];
+        } else if (SDL_strcmp(argv[i], "--list-gpu") == 0) {
+            // Печатаем бэкенды и выходим: полезно, когда окно не открывается.
+            const int count = SDL_GetNumGPUDrivers();
+            SDL_Log("GPU-бэкенды этой сборки:");
+            for (int d = 0; d < count; ++d) {
+                const char *name = SDL_GetGPUDriver(d);
+                if (name) SDL_Log("  %s", name);
+            }
+            if (count == 0) SDL_Log("  (ни одного)");
+            return 0;
         } else if (SDL_strcmp(argv[i], "--fixed-dt") == 0 && i + 1 < argc) {
             opt_fixed_dt = SDL_atof(argv[++i]);
         } else if (SDL_strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
@@ -590,7 +605,10 @@ int main(int argc, char **argv)
     const int window_width  = opt_width  > 0 ? opt_width  : project.width;
     const int window_height = opt_height > 0 ? opt_height : project.height;
 
-    if (!r2d_app_init(&app, window_title, window_width, window_height, true, opt_headless)) {
+    // Имя бэкенда передаём в инициализацию: там структура обнуляется, и
+    // записать его заранее было бы недостаточно.
+    if (!r2d_app_init(&app, window_title, window_width, window_height, true, opt_headless,
+                      opt_gpu)) {
         r2d_app_shutdown(&app);
         return 1;
     }

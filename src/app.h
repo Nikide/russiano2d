@@ -24,6 +24,7 @@ typedef struct R2DApp {
     char title[256];     // текущее имя окна (его можно менять на ходу)
     bool vsync;          // вертикальная синхронизация презентации
     char cursor[16];     // вид курсора: normal | hidden | crosshair | hand
+    char gpu_driver[32]; // запрошенный GPU-бэкенд ("" — выбрать автоматически)
 
     int  width;   // логический размер (в точках)
     int  height;
@@ -105,7 +106,9 @@ typedef struct R2DApp {
 // Создаёт окно и GPU-устройство. Возвращает false и печатает причину при ошибке.
 // headless — окно создаётся скрытым (агентский режим, CI): рендер, GPU-проход и
 // скриншоты работают, но на экране ничего не появляется.
-bool r2d_app_init(R2DApp *app, const char *title, int width, int height, bool vsync, bool headless);
+// gpu_driver — имя бэкенда ("vulkan", "metal", "d3d12", "" — автоматически).
+bool r2d_app_init(R2DApp *app, const char *title, int width, int height, bool vsync,
+                  bool headless, const char *gpu_driver);
 
 // --- Окно -------------------------------------------------------------------
 //
