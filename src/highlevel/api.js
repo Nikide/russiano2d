@@ -882,6 +882,25 @@ function installNodeMethods($) {
         });
     });
     defGet('clipRect', (n) => (n.attrs && n.attrs.clip) ? n.attrs.clip : null, null);
+
+    /**
+     * Добавить телу узла ещё одну ФОРМУ-ЗОНУ: `.zone({ type, w, h, tag })`.
+     *
+     * Несколько форм на тело — это «попал в голову, а не в ногу»: в
+     * `$.world.contactBetween` приходят `shapeA`/`shapeB` и теги зон.
+     *
+     * ```js
+     * $('#hero').zone({ type: 'box', w: 40, h: 24, tag: 'head' });
+     * ```
+     *
+     * Имя `zone`, а не `shape`: `.shape()` уже занято формой хитбокса.
+     */
+    def('zone', function (opts) {
+        const out = [];
+        this.eachNode((_, el) => out.push(ctx.world.zone(el, opts)));
+        return out.length === 1 ? out[0] : out;
+    });
+    defGet('zoneCount', (n) => ctx.world.zoneCount(n), 0);
     def('show', function () { return this.visible(true); });
     def('hide', function () { return this.visible(false); });
     defGet('isVisible', (n) => n.visible, false);

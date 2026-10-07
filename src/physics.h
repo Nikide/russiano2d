@@ -44,6 +44,10 @@ typedef enum R2DShapeKind {
 
 #define R2D_MAX_POLY_POINTS 8
 
+// Сколько форм может быть у одного тела. Основная плюс добавленные через
+// `r2d_physics_add_shape`: «голова», «нога», «щит» — по форме на зону.
+#define R2D_MAX_SHAPES_PER_BODY 8
+
 // --- Слои и маски коллизий (b2Filter) ---------------------------------------
 // Семантика как в Box2D и Godot: category (слой) — «в каком слое лежит тело»,
 // mask — «с какими слоями оно сталкивается». Тела A и B сталкиваются, если
@@ -196,26 +200,37 @@ void  r2d_physics_set_bullet(R2DPhysics *p, int id, bool bullet);
 bool  r2d_physics_is_bullet(const R2DPhysics *p, int id);
 bool  r2d_physics_is_awake(const R2DPhysics *p, int id);
 
+// Добавить телу ещё одну форму (второй зоной: голова, нога, щит). Описание —
+// тот же R2DBodyDesc: важны поля формы. Возвращает индекс формы или -1.
+// `dx`/`dy` — СМЕЩЕНИЕ формы от центра тела в пикселях: «голова» выше центра
+// (`dy` отрицательный), «ноги» ниже. Отдельные параметры, а не поля описания:
+// описание описывает ТЕЛО, а смещение относится только к добавочной форме.
+int  r2d_physics_add_shape(R2DPhysics *p, int id, const R2DBodyDesc *d, float dx, float dy);
+// Сколько форм у тела (0 — тела нет).
+int  r2d_physics_shape_count(const R2DPhysics *p, int id);
+
 // --- Контакты: импульс, точки, «касаются ли сейчас» ------------------------
 //
 // События (begin/end/hit) говорят, что СТОЛКНУЛОСЬ, но не дают импульса: он
 // считается солвером ПОСЛЕ события. Поэтому сила удара читается отдельно —
 // b2Body_GetContactData отдаёт манифолд с импульсом предыдущего шага.
 //
-// «Форм» здесь нет: у тела движка ОДНА форма (см. r2d_physics_create_body),
-// поэтому «попал в голову, а не в ногу» пока недостижимо — нужны несколько
-// форм на тело, и это отдельная работа.
+// У тела может быть НЕСКОЛЬКО форм (r2d_physics_add_shape), и тогда
+// `out_shape_a`/`out_shape_b` говорят, какая именно столкнулась: по ним игра
+// понимает «попал в голову, а не в ногу».
 //
 // `out_impulse` — наибольший нормальный импульс по точкам (Н·с);
 // `out_points` — число точек контакта; `out_normal` — нормаль (x, y).
 // Возвращает false, если тела не касаются ПРЯМО СЕЙЧАС.
 bool r2d_physics_contact_between(const R2DPhysics *p, int a, int b,
                                  float *out_impulse, int *out_points,
-                                 float *out_normal_x, float *out_normal_y);
+                                 float *out_normal_x, float *out_normal_y,
+                                 int *out_shape_a, int *out_shape_b);
 // Контакты тела: сколько нашлось (до `cap`), с кем и с каким импульсом.
 // Возвращает число записанных; `others[i]` — тело, `impulses[i]` — импульс.
 int  r2d_physics_contacts_of(const R2DPhysics *p, int id, int *others,
-                             float *impulses, int *points, int cap);
+                             float *impulses, int *points,
+                             int *shape_self, int *shape_other, int cap);
 float r2d_physics_get_mass(const R2DPhysics *p, int id);
 
 // --- Слои и маски коллизий ---------------------------------------------------

@@ -374,6 +374,79 @@ export function installWorld($) {
         },
 
         /**
+         * Добавить телу узла ЕЩЁ ОДНУ форму — вторую зону: «голова», «ногы»,
+         * «щит». Тогда видно, КУДА попали:
+         *
+         * ```js
+         * $('#hero').shape({ type: 'box', w: 40, h: 30, y: -34, tag: 'head' });
+         * const hit = $.world.contactBetween('#hero', '#spike');
+         * if (hit && hit.tagA === 'head') урон_в_голову();
+         * ```
+         *
+         * `opts`: `type` (`'box'|'circle'|'capsule'|'polygon'`), `w`/`h`,
+         * `radius`, `tag` (имя зоны для игры), плюс `sensor`, `density`,
+         * `friction`, `restitution`, `layer`, `mask`, `group`.
+         *
+         * Возвращает индекс формы (0 — основная, дальше добавленные) или -1.
+         * Формы смещаются от центра тела через `.at()` узла: отдельного
+         * смещения формы нет, зона ставится на теле целиком.
+         */
+        zone(what, opts) {
+            const node = nodeOf(what);
+            if (!node || node.body < 0) return -1;
+            if (typeof engineOf().addShape !== 'function') return -1;
+            const o = opts || {};
+            const num = (v, fallback) => {
+                const n = Number(v);
+                return Number.isFinite(n) ? n : fallback;
+            };
+            const kind = { box: 0, circle: 1, capsule: 2, polygon: 3 }[
+                String(o.type === undefined ? 'box' : o.type).toLowerCase()];
+            const desc = {
+                shape: kind === undefined ? 0 : kind,
+                // x/y — смещение зоны от центра тела: голова выше, ноги ниже.
+                x: num(o.x, 0),
+                y: num(o.y, 0),
+                halfW: num(o.w, 32) / 2,
+                halfH: num(o.h, 32) / 2,
+                radius: num(o.radius, 0),
+                polyRadius: num(o.polyRadius, 0),
+                density: num(o.density, 1),
+                friction: num(o.friction, 0.3),
+                restitution: num(o.restitution, 0),
+                sensor: o.sensor === true,
+                contacts: o.contacts === true,
+            };
+            if (o.layer !== undefined || o.mask !== undefined || o.group !== undefined) {
+                desc.layerBits = num(o.layer, 1);
+                desc.mask = num(o.mask, 0xffffffff);
+                desc.group = num(o.group, 0);
+            }
+            const index = engineOf().addShape(node.body, desc);
+            if (index >= 0) {
+                if (!node.attrs.shapes) node.attrs.shapes = [];
+                node.attrs.shapes[index] = String(o.tag === undefined ? index : o.tag);
+            }
+            return index;
+        },
+
+        /** Тег формы-зоны по индексу (для читаемых проверок «куда попал»). */
+        zoneTag(what, index) {
+            const node = nodeOf(what);
+            if (!node || !node.attrs.shapes) return null;
+            const tag = node.attrs.shapes[index];
+            return tag === undefined ? null : tag;
+        },
+
+        /** Сколько форм у тела узла. */
+        zoneCount(what) {
+            const node = nodeOf(what);
+            if (!node || node.body < 0) return 0;
+            if (typeof engineOf().shapeCount !== 'function') return 0;
+            return engineOf().shapeCount(node.body);
+        },
+
+        /**
          * Касаются ли два узла ПРЯМО СЕЙЧАС: `$.world.touching('#a', '#b')`.
          *
          * События (`$.world.on('contact')`) говорят, что СТОЛКНУЛОСЬ; этот
@@ -397,13 +470,40 @@ export function installWorld($) {
             const na = nodeOf(a), nb = nodeOf(b);
             if (!na || !nb || na.body < 0 || nb.body < 0) return null;
             if (typeof engineOf().contactBetween !== 'function') return null;
-            return engineOf().contactBetween(na.body, nb.body);
+            const hit = engineOf().contactBetween(na.body, nb.body);
+            if (!hit) return null;
+            // Теги зон: по ним игра решает, куда попали («в голову, а не в ногу»).
+            hit.tagA = world.zoneTag(na, hit.shapeA);
+            hit.tagB = world.zoneTag(nb, hit.shapeB);
+            return hit;
         },
 
         /** Импульс контакта (0, если не касаются) — короткая запись. */
         contactImpulse(a, b) {
             const c = world.contactBetween(a, b);
             return c ? c.impulse : 0;
+        },
+
+        /**
+         * Какие ЗОНЫ узла касаются другого узла СЕЙЧАС:
+         * `$.world.zonesTouching('#hero', '#spike')` → `['head']`.
+         *
+         * Зачем отдельный вызов: зоны часто ПЕРЕКРЫВАЮТСЯ (голова заходит на
+         * тело), и тогда пара касается нескольких форм сразу. `contactBetween`
+         * отдаёт первый контакт, а этот вызов — ВСЕ зоны, которых коснулись.
+         */
+        zonesTouching(what, other) {
+            const node = nodeOf(what);
+            const peer = nodeOf(other);
+            if (!node || !peer || peer.body < 0) return [];
+            const out = [];
+            for (const c of world.contactsOf(what)) {
+                if (c.other !== peer.body) continue;
+                const tag = world.zoneTag(node, c.shape);
+                const name = tag === null ? 'shape' + c.shape : tag;
+                if (!out.includes(name)) out.push(name);
+            }
+            return out;
         },
 
         /**

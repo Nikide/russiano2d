@@ -1218,11 +1218,11 @@ static JSValue r2d__js_contact_between(JSContext *ctx, JSValueConst this_val, in
     R2DScript *s = r2d__script_of(ctx);
     if (!s || !s->physics) return JS_NULL;
     float impulse = 0.0f, nx = 0.0f, ny = 0.0f;
-    int points = 0;
+    int points = 0, shape_a = -1, shape_b = -1;
     if (!r2d_physics_contact_between(s->physics,
                                      r2d__arg_int(ctx, argc, argv, 0, -1),
                                      r2d__arg_int(ctx, argc, argv, 1, -1),
-                                     &impulse, &points, &nx, &ny)) {
+                                     &impulse, &points, &nx, &ny, &shape_a, &shape_b)) {
         return JS_NULL;
     }
     JSValue o = JS_NewObject(ctx);
@@ -1230,6 +1230,9 @@ static JSValue r2d__js_contact_between(JSContext *ctx, JSValueConst this_val, in
     JS_SetPropertyStr(ctx, o, "points", JS_NewInt32(ctx, points));
     JS_SetPropertyStr(ctx, o, "nx", JS_NewFloat64(ctx, nx));
     JS_SetPropertyStr(ctx, o, "ny", JS_NewFloat64(ctx, ny));
+    // Какая ИМЕННО форма столкнулась: 0 — основная, дальше — добавленные.
+    JS_SetPropertyStr(ctx, o, "shapeA", JS_NewInt32(ctx, shape_a));
+    JS_SetPropertyStr(ctx, o, "shapeB", JS_NewInt32(ctx, shape_b));
     return o;
 }
 
@@ -1244,17 +1247,80 @@ static JSValue r2d__js_contacts_of(JSContext *ctx, JSValueConst this_val, int ar
     int cap = r2d__arg_int(ctx, argc, argv, 1, 16);
     if (cap <= 0) cap = 1;
     if (cap > 64) cap = 64;
-    int others[64], points[64];
+    int others[64], points[64], shape_self[64], shape_other[64];
     float impulses[64];
-    const int n = r2d_physics_contacts_of(s->physics, id, others, impulses, points, cap);
+    const int n = r2d_physics_contacts_of(s->physics, id, others, impulses, points,
+                                          shape_self, shape_other, cap);
     for (int i = 0; i < n; ++i) {
         JSValue o = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, o, "other", JS_NewInt32(ctx, others[i]));
         JS_SetPropertyStr(ctx, o, "impulse", JS_NewFloat64(ctx, impulses[i]));
         JS_SetPropertyStr(ctx, o, "points", JS_NewInt32(ctx, points[i]));
+        JS_SetPropertyStr(ctx, o, "shape", JS_NewInt32(ctx, shape_self[i]));
+        JS_SetPropertyStr(ctx, o, "shapeOther", JS_NewInt32(ctx, shape_other[i]));
         JS_SetPropertyUint32(ctx, arr, (uint32_t)i, o);
     }
     return arr;
+}
+
+// engine.addShape(body, {type, w?, h?, radius?, points?, sensor?, ...}) → индекс.
+//
+// Вторая зона на теле: «голова» сверху, «ноги» снизу. Индекс приходит в
+// contactBetween/contactsOf как shapeA/shapeB.
+static JSValue r2d__js_add_shape(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewInt32(ctx, -1);
+    const int body = r2d__arg_int(ctx, argc, argv, 0, -1);
+    if (argc < 2 || !JS_IsObject(argv[1])) {
+        return JS_ThrowTypeError(ctx, "engine.addShape: нужен объект с описанием формы");
+    }
+    const JSValueConst opts = argv[1];
+    R2DBodyDesc d;
+    SDL_zero(d);
+    // Разбираем только то, что относится к ФОРМЕ: тип, размеры, точки,
+    // сенсорность, материал. Положение и тип тела уже заданы телом.
+    d.shape = (int)r2d__obj_num(ctx, opts, "shape", R2D_SHAPE_BOX);
+    d.half_w = (float)r2d__obj_num(ctx, opts, "halfW", 16);
+    d.half_h = (float)r2d__obj_num(ctx, opts, "halfH", 16);
+    d.radius = (float)r2d__obj_num(ctx, opts, "radius", 0);
+    d.poly_radius = (float)r2d__obj_num(ctx, opts, "polyRadius", 0);
+    d.density = (float)r2d__obj_num(ctx, opts, "density", 1.0);
+    d.friction = (float)r2d__obj_num(ctx, opts, "friction", 0.3);
+    d.restitution = (float)r2d__obj_num(ctx, opts, "restitution", 0.0);
+    d.sensor = r2d__obj_bool(ctx, opts, "sensor", false);
+    d.contacts = r2d__obj_bool(ctx, opts, "contacts", false);
+    {
+        JSValueConst keys[3] = { JS_UNDEFINED, JS_UNDEFINED, JS_UNDEFINED };
+        const char *names[3] = { "layerBits", "mask", "group" };
+        for (int i = 0; i < 3; ++i) keys[i] = JS_GetPropertyStr(ctx, opts, names[i]);
+        const bool any = (!JS_IsUndefined(keys[0]) && !JS_IsNull(keys[0]))
+                      || (!JS_IsUndefined(keys[1]) && !JS_IsNull(keys[1]))
+                      || (!JS_IsUndefined(keys[2]) && !JS_IsNull(keys[2]));
+        if (any) {
+            d.filter_set = true;
+            d.category_bits = (uint64_t)r2d__obj_num(ctx, opts, "layerBits", 1);
+            // -1 как «не задано»: UINT64_MAX в double теряет точность,
+            // а маска по умолчанию — это ВСЕ слои.
+            const double mask_v = r2d__obj_num(ctx, opts, "mask", -1);
+            d.mask_bits = mask_v < 0 ? R2D_FILTER_DEFAULT_MASK : (uint64_t)mask_v;
+            d.group_index = r2d__obj_num(ctx, opts, "group", 0);
+        }
+        for (int i = 0; i < 3; ++i) JS_FreeValue(ctx, keys[i]);
+    }
+    return JS_NewInt32(ctx, r2d_physics_add_shape(s->physics, body, &d,
+                                                   (float)r2d__obj_num(ctx, opts, "x", 0),
+                                                   (float)r2d__obj_num(ctx, opts, "y", 0)));
+}
+
+// engine.shapeCount(body) → сколько форм у тела.
+static JSValue r2d__js_shape_count(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewInt32(ctx, 0);
+    return JS_NewInt32(ctx, r2d_physics_shape_count(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1)));
 }
 
 // engine.touching(a, b) → bool — касаются ли прямо сейчас.
@@ -1266,7 +1332,7 @@ static JSValue r2d__js_touching(JSContext *ctx, JSValueConst this_val, int argc,
     return JS_NewBool(ctx, r2d_physics_contact_between(s->physics,
                                                        r2d__arg_int(ctx, argc, argv, 0, -1),
                                                        r2d__arg_int(ctx, argc, argv, 1, -1),
-                                                       NULL, NULL, NULL, NULL));
+                                                       NULL, NULL, NULL, NULL, NULL, NULL));
 }
 
 // engine.setClip(x, y, w, h) / engine.clearClip() — обрезка вывода.
@@ -3893,6 +3959,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "contactBetween", r2d__js_contact_between, 2);
     r2d__set_fn(ctx, engine, "contactsOf", r2d__js_contacts_of, 2);
     r2d__set_fn(ctx, engine, "touching", r2d__js_touching, 2);
+    r2d__set_fn(ctx, engine, "addShape", r2d__js_add_shape, 2);
+    r2d__set_fn(ctx, engine, "shapeCount", r2d__js_shape_count, 1);
     r2d__set_fn(ctx, engine, "setClip", r2d__js_set_clip, 4);
     r2d__set_fn(ctx, engine, "clearClip", r2d__js_clear_clip, 0);
     r2d__set_fn(ctx, engine, "getClip", r2d__js_get_clip, 0);

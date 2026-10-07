@@ -18,11 +18,27 @@
 // ---------------------------------------------------------------------------
 
 // Наш id тела по форме: кладём его в user data формы при создании.
+// user data формы кодирует И тело, И номер формы: (id + 1) << 8 | index.
+// Так у одного тела может быть несколько форм, и в событиях контакта видно,
+// КАКАЯ форма столкнулась («попал в голову, а не в ногу»). Младшие 8 бит —
+// индекс формы, поэтому форм на тело не больше 256 (нам хватает 16).
+#define R2D__SHAPE_TAG(body_id, index) \
+    ((void *)(intptr_t)((((intptr_t)(body_id) + 1) << 8) | ((index) & 0xff)))
+
 static int r2d__body_id_of_shape(b2ShapeId shape)
 {
     if (!b2Shape_IsValid(shape)) return -1;
     void *ud = b2Shape_GetUserData(shape);
-    return (int)(intptr_t)ud - 1;
+    return (int)(((intptr_t)ud >> 8) - 1);
+}
+
+/** Номер формы в теле (0 — основная). -1, если форма не наша. */
+static int r2d__shape_index_of_shape(b2ShapeId shape)
+{
+    if (!b2Shape_IsValid(shape)) return -1;
+    void *ud = b2Shape_GetUserData(shape);
+    if (!ud) return -1;
+    return (int)((intptr_t)ud & 0xff);
 }
 
 static bool r2d__pre_solve(b2ShapeId shape_a, b2ShapeId shape_b,
@@ -188,6 +204,64 @@ void r2d_physics_sync(R2DPhysics *p)
     }
 }
 
+// Создать форму по описанию. Общий код для основной формы тела и добавочных:
+// так «голова» и «нога» описываются одним и тем же R2DBodyDesc.
+static b2ShapeId r2d__make_shape(b2BodyId body, const b2ShapeDef *sd, const R2DBodyDesc *d,
+                                 float dx, float dy)
+{
+    b2ShapeId shape;
+    switch (d->shape) {
+    case R2D_SHAPE_CIRCLE: {
+        const b2Circle c = { { R2D_TO_M(dx), R2D_TO_M(dy) },
+                             R2D_TO_M(d->radius > 0.0f ? d->radius : 16.0f) };
+        shape = b2CreateCircleShape(body, sd, &c);
+        break;
+    }
+    case R2D_SHAPE_CAPSULE: {
+        // Капсула растёт вдоль оси Y: half_h — половина отрезка, radius — скругление.
+        const float hh = R2D_TO_M(d->half_h);
+        const float r  = R2D_TO_M(d->radius > 0.0f ? d->radius : (d->half_w > 0.0f ? d->half_w : 16.0f));
+        const b2Capsule cap = { { R2D_TO_M(dx), -hh + R2D_TO_M(dy) },
+                                { R2D_TO_M(dx),  hh + R2D_TO_M(dy) }, r };
+        shape = b2CreateCapsuleShape(body, sd, &cap);
+        break;
+    }
+    case R2D_SHAPE_POLYGON: {
+        const int n = d->point_count < 3 ? 0
+                     : (d->point_count > R2D_MAX_POLY_POINTS ? R2D_MAX_POLY_POINTS : d->point_count);
+        if (n >= 3) {
+            b2Vec2 pts[R2D_MAX_POLY_POINTS];
+            for (int i = 0; i < n; ++i) {
+                pts[i] = (b2Vec2){ R2D_TO_M(d->points[i * 2] + dx),
+                                   R2D_TO_M(d->points[i * 2 + 1] + dy) };
+            }
+            const b2Hull hull = b2ComputeHull(pts, n);
+            if (hull.count >= 3) {
+                const b2Polygon poly = b2MakePolygon(&hull, R2D_TO_M(d->poly_radius));
+                shape = b2CreatePolygonShape(body, sd, &poly);
+                break;
+            }
+            R2D_WARN("полигон вырожден (точек %d) — тело создано прямоугольником", n);
+        }
+        const b2Polygon box = b2MakeBox(R2D_TO_M(d->half_w > 0.0f ? d->half_w : 16.0f),
+                                        R2D_TO_M(d->half_h > 0.0f ? d->half_h : 16.0f));
+        shape = b2CreatePolygonShape(body, sd, &box);
+        break;
+    }
+    default: {
+        // Смещение задаёт зону: «голова» выше центра, «ноги» ниже.
+        const float hx = R2D_TO_M(d->half_w > 0.0f ? d->half_w : 16.0f);
+        const float hy = R2D_TO_M(d->half_h > 0.0f ? d->half_h : 16.0f);
+        const b2Polygon box = (dx != 0.0f || dy != 0.0f)
+            ? b2MakeOffsetBox(hx, hy, (b2Vec2){ R2D_TO_M(dx), R2D_TO_M(dy) }, b2Rot_identity)
+            : b2MakeBox(hx, hy);
+        shape = b2CreatePolygonShape(body, sd, &box);
+        break;
+    }
+    }
+    return shape;
+}
+
 int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
 {
     if (!p->world_valid || !d) return -1;
@@ -243,60 +317,15 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
         R2D_WARN("тело создано с categoryBits = 0 (вне всех слоёв) — оно ни с чем не столкнётся");
     }
 
-    b2ShapeId shape;
-    switch (d->shape) {
-    case R2D_SHAPE_CIRCLE: {
-        const b2Circle c = { { 0.0f, 0.0f },
-                             R2D_TO_M(d->radius > 0.0f ? d->radius : 16.0f) };
-        shape = b2CreateCircleShape(body, &sd, &c);
-        break;
-    }
-    case R2D_SHAPE_CAPSULE: {
-        // Капсула растёт вдоль оси Y: half_h — половина отрезка, radius — скругление.
-        const float hh = R2D_TO_M(d->half_h);
-        const float r  = R2D_TO_M(d->radius > 0.0f ? d->radius : (d->half_w > 0.0f ? d->half_w : 16.0f));
-        const b2Capsule cap = { { 0.0f, -hh }, { 0.0f, hh }, r };
-        shape = b2CreateCapsuleShape(body, &sd, &cap);
-        break;
-    }
-    case R2D_SHAPE_POLYGON: {
-        const int n = d->point_count < 3 ? 0
-                     : (d->point_count > R2D_MAX_POLY_POINTS ? R2D_MAX_POLY_POINTS : d->point_count);
-        if (n >= 3) {
-            b2Vec2 pts[R2D_MAX_POLY_POINTS];
-            for (int i = 0; i < n; ++i) {
-                pts[i] = (b2Vec2){ R2D_TO_M(d->points[i * 2]), R2D_TO_M(d->points[i * 2 + 1]) };
-            }
-            const b2Hull hull = b2ComputeHull(pts, n);
-            if (hull.count >= 3) {
-                const b2Polygon poly = b2MakePolygon(&hull, R2D_TO_M(d->poly_radius));
-                shape = b2CreatePolygonShape(body, &sd, &poly);
-                break;
-            }
-            R2D_WARN("полигон вырожден (точек %d) — тело создано прямоугольником", n);
-        }
-        const b2Polygon box = b2MakeBox(R2D_TO_M(d->half_w > 0.0f ? d->half_w : 16.0f),
-                                        R2D_TO_M(d->half_h > 0.0f ? d->half_h : 16.0f));
-        shape = b2CreatePolygonShape(body, &sd, &box);
-        break;
-    }
-    default: {
-        const b2Polygon box = b2MakeBox(R2D_TO_M(d->half_w > 0.0f ? d->half_w : 16.0f),
-                                        R2D_TO_M(d->half_h > 0.0f ? d->half_h : 16.0f));
-        shape = b2CreatePolygonShape(body, &sd, &box);
-        break;
-    }
-    }
-
+    b2ShapeId shape = r2d__make_shape(body, &sd, d, 0.0f, 0.0f);
     if (!b2Shape_IsValid(shape)) {
         R2D_ERROR("не удалось создать форму тела (kind=%d)", d->shape);
         b2DestroyBody(body);
         return -1;
     }
+    b2Shape_SetUserData(shape, R2D__SHAPE_TAG(id, 0));
 
-    // user data = id + 1: 0 означает «формы нет», а id 0 — валидное тело.
-    b2Shape_SetUserData(shape, (void *)(intptr_t)(id + 1));
-
+    p->one_way[id]  = d->one_way;
     p->one_way[id]  = d->one_way;
     if (d->one_way) {
         // Лицевая нормаль в системе тела: из мировой поворачиваем на -angle.
@@ -317,6 +346,58 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
     p->transforms[id * 3 + 1] = d->y;
     p->transforms[id * 3 + 2] = d->angle;
     return id;
+}
+
+/**
+ * Добавить телу ЕЩЁ ОДНУ форму.
+ *
+ * Зачем: у тела может быть несколько зон — «голова» сверху, «тело» посередине,
+ * «ноги» снизу. Тогда в событиях контакта видно, КУДА попали: индекс формы
+ * приходит в `contactBetween`/`contactsOf` и в полях события.
+ *
+ * Описание — тот же `R2DBodyDesc`: важны только поля формы (`shape`, размеры,
+ * точки, `sensor`). Возвращает индекс новой формы или -1.
+ */
+int r2d_physics_add_shape(R2DPhysics *p, int id, const R2DBodyDesc *d, float dx, float dy)
+{
+    if (!p || !p->world_valid || !d) return -1;
+    if (id < 0 || id >= R2D_MAX_BODIES || !p->alive[id]) return -1;
+
+    const int index = b2Body_GetShapeCount(p->bodies[id]);
+    if (index >= R2D_MAX_SHAPES_PER_BODY) {
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            R2D_WARN("у тела уже %d форм — лишние не добавляются (R2D_MAX_SHAPES_PER_BODY)",
+                     R2D_MAX_SHAPES_PER_BODY);
+        }
+        return -1;
+    }
+
+    b2ShapeDef sd = b2DefaultShapeDef();
+    sd.density = d->density > 0.0f ? d->density : 1.0f;
+    sd.material.friction    = d->friction    >= 0.0f ? d->friction    : 0.2f;
+    sd.material.restitution = d->restitution >= 0.0f ? d->restitution : 0.0f;
+    sd.isSensor = d->sensor;
+    sd.enableContactEvents = d->contacts;
+    sd.filter.categoryBits = d->filter_set ? d->category_bits : R2D_FILTER_DEFAULT_CATEGORY;
+    sd.filter.maskBits     = d->filter_set ? d->mask_bits     : R2D_FILTER_DEFAULT_MASK;
+    sd.filter.groupIndex   = d->filter_set ? d->group_index   : R2D_FILTER_GROUP_NONE;
+
+    const b2ShapeId shape = r2d__make_shape(p->bodies[id], &sd, d, dx, dy);
+    if (!b2Shape_IsValid(shape)) {
+        R2D_WARN("не удалось добавить форму телу %d (kind=%d)", id, d->shape);
+        return -1;
+    }
+    b2Shape_SetUserData(shape, R2D__SHAPE_TAG(id, index));
+    return index;
+}
+
+/** Сколько форм у тела (0 — тела нет). */
+int r2d_physics_shape_count(const R2DPhysics *p, int id)
+{
+    if (!p || id < 0 || id >= R2D_MAX_BODIES || !p->alive[id]) return 0;
+    return b2Body_GetShapeCount(p->bodies[id]);
 }
 
 int r2d_physics_create_box(R2DPhysics *p, float x, float y, float half_w, float half_h,
@@ -496,7 +577,8 @@ bool r2d_physics_is_bullet(const R2DPhysics *p, int id)
 /** Манифолд между двумя телами прямо сейчас: импульс, точки, нормаль. */
 static bool r2d__contact_between(const R2DPhysics *p, int a, int b,
                                  float *out_impulse, int *out_points,
-                                 float *out_nx, float *out_ny)
+                                 float *out_nx, float *out_ny,
+                                 int *out_shape_a, int *out_shape_b)
 {
     if (!p || !p->world_valid) return false;
     if (!r2d_physics_is_alive(p, a)) return false;
@@ -522,6 +604,10 @@ static bool r2d__contact_between(const R2DPhysics *p, int a, int b,
         if (out_points) *out_points = data[i].manifold.pointCount;
         if (out_nx) *out_nx = data[i].manifold.normal.x;
         if (out_ny) *out_ny = data[i].manifold.normal.y;
+        // Какая ИМЕННО форма столкнулась: по ней игра понимает «попал в
+        // голову, а не в ногу».
+        if (out_shape_a) *out_shape_a = r2d__shape_index_of_shape(data[i].shapeIdA);
+        if (out_shape_b) *out_shape_b = r2d__shape_index_of_shape(data[i].shapeIdB);
         return true;
     }
     return false;
@@ -529,14 +615,16 @@ static bool r2d__contact_between(const R2DPhysics *p, int a, int b,
 
 bool r2d_physics_contact_between(const R2DPhysics *p, int a, int b,
                                  float *out_impulse, int *out_points,
-                                 float *out_normal_x, float *out_normal_y)
+                                 float *out_normal_x, float *out_normal_y,
+                                 int *out_shape_a, int *out_shape_b)
 {
     return r2d__contact_between(p, a, b, out_impulse, out_points,
-                                out_normal_x, out_normal_y);
+                                out_normal_x, out_normal_y, out_shape_a, out_shape_b);
 }
 
 int r2d_physics_contacts_of(const R2DPhysics *p, int id, int *others,
-                            float *impulses, int *points, int cap)
+                            float *impulses, int *points,
+                            int *shape_self, int *shape_other, int cap)
 {
     if (!p || !p->world_valid || !r2d_physics_is_alive(p, id) || cap <= 0) return 0;
     b2ContactData data[16];
@@ -555,6 +643,11 @@ int r2d_physics_contacts_of(const R2DPhysics *p, int id, int *others,
         if (others) others[out] = peer;
         if (impulses) impulses[out] = best;
         if (points) points[out] = data[i].manifold.pointCount;
+        // Форма на НАШЕМ теле и форма на чужом: «щит коснулся шипа».
+        const int idx_a = r2d__shape_index_of_shape(data[i].shapeIdA);
+        const int idx_b = r2d__shape_index_of_shape(data[i].shapeIdB);
+        if (shape_self)  shape_self[out]  = (self == id) ? idx_a : idx_b;
+        if (shape_other) shape_other[out] = (self == id) ? idx_b : idx_a;
         out++;
     }
     return out;

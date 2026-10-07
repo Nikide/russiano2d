@@ -761,6 +761,26 @@ engine.submitTriangles(tri, v);   // → число принятых верши�
 `$.net.simulation()`, `$.net.delayed()`, `$.net.simulateOff()`
 (см. [highlevel/net.md](highlevel/net.md) §8).
 
+### `engine.addShape(body, desc)` / `engine.shapeCount(body)`
+
+Добавить телу **ещё одну форму** — вторую зону. Нужно для «попал в голову, а не в
+ногу»: у тела одна основная форма плюс добавленные, и в контактах видно, КАКАЯ
+столкнулась.
+
+`desc`: `shape` (`0` box, `1` circle, `2` capsule, `3` polygon), `halfW`/`halfH`,
+`radius`, `points` (полигон), `polyRadius`, `density`, `friction`, `restitution`,
+`sensor`, `contacts`, `layerBits`/`mask`/`group`.
+
+**`x`/`y` в описании добавочной формы — это СМЕЩЕНИЕ от центра тела**, а не
+позиция: голова ставится выше (`y` отрицательный), ноги ниже.
+
+Возвращает индекс формы (`0` — основная, дальше добавленные) или `-1`. Предел —
+`R2D_MAX_SHAPES_PER_BODY` (8): лишние не добавляются, в журнал уходит одно
+предупреждение. `engine.shapeCount(body)` — сколько форм у тела.
+
+В высокоуровневом API — `.zone({...})`, `$.world.zone/zoneTag/zoneCount/
+zonesTouching` (см. [highlevel/world.md](highlevel/world.md) §2.3).
+
 ### `engine.contactBetween(a, b)` / `engine.touching(a, b)` / `engine.contactsOf(id, cap?)`
 
 Импульс и точки контакта **прямо сейчас**. События `engine.contacts()` говорят,
@@ -786,9 +806,13 @@ if (engine.touching(hero, spike)) {
 момент ещё `false` (манифолд появляется на следующем шаге). Для «пика удара»
 читайте импульс каждый кадр.
 
-**Чего нет:** нескольких форм на тело. У тела движка ОДНА форма, поэтому «попал в
-голову, а не в ногу» пока недостижимо — это отдельная работа; в событиях контакта
-формы тоже не различаются.
+`contactBetween` возвращает ещё `shapeA`/`shapeB` — **индексы форм**, которые
+столкнулись (см. `engine.addShape`). `contactsOf` — `shape` (форма на
+запрошенном теле) и `shapeOther` (форма на другом).
+
+**Формы перекрываются**: пара может касаться сразу нескольких форм, а
+`contactBetween` отдаёт первую. Если нужно «куда попали» надёжно — смотрите все
+контакты через `contactsOf`.
 
 ### `engine.setClip(x, y, w, h)` / `engine.clearClip()`
 
