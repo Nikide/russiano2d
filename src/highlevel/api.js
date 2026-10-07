@@ -72,6 +72,7 @@ import { installItems } from './items.js';
 import { installCombat } from './combat.js';
 import { installWeapons } from './weapons.js';
 import { installRaid } from './raid.js';
+import { installCels } from './cels.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
 import { installI18n, tickI18n } from './i18n.js';
@@ -389,6 +390,7 @@ export function createApi() {
     installCombat($);            // здоровье по зонам: $.combat
     installWeapons($);           // оружие и баллистика: $.weapons
     installRaid($);              // генерация рейда: $.raid
+    installCels($);              // граф кадров (псевдо-3D): $.cels
     installWidgets($);
     installTriggers($);
     installI18n($);
