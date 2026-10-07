@@ -148,7 +148,7 @@ UI-виджеты, локализация, сохранения, префабы,
 | Пробел | Доказательство | S/M |
 |---|---|---|
 | Нет выгрузки текстур/спрайтов; `R2D_MAX_TEXTURES = 256` — стена | [render.c:284-287](../src/render.c#L284), релиза нет (только shutdown, [:2004-2007](../src/render.c#L2004)), `$.resource.free()` лишь забывает JS-значение ([resource.js:216-244](../src/highlevel/resource.js#L216)); промах → белый прямоугольник ([render.js:1580](../src/highlevel/render.js#L1580)) | M (free), L (async upload) |
-| Нет импорта атласов: листы только равномерной сеткой `cols×rows×cw×ch` | [core.js:1502-1518](../src/highlevel/core.js#L1502); `grep atlas/TexturePacker` = 0; спрайт-дорожка плеера — равномерный fps ([animplayer.js:435-437](../src/highlevel/animplayer.js#L435)) | M |
+| ~~Нет импорта атласов~~ **сделано**: `$.atlas` читает Aseprite/TexturePacker/свой JSON | [core.js:1502-1518](../src/highlevel/core.js#L1502); `grep atlas/TexturePacker` = 0; спрайт-дорожка плеера — равномерный fps ([animplayer.js:435-437](../src/highlevel/animplayer.js#L435)) | M |
 | Нет nine-slice | `grep nine/ninePatch/9slice/patch` = 0; `ui.panel` — один белый спрайт ([render.js:1614-1616](../src/highlevel/render.js#L1614)), рамки из четырёх спрайтов вручную ([widgets.js:1864-1870](../src/highlevel/widgets.js#L1864)) | M |
 | Нет scissor/clip | `grep scissor/SetScissor/clipRect` = 0; обрезка UI — целоузловой тест ([widgets.js:1846-1851](../src/highlevel/widgets.js#L1846)), текст её минует | M |
 | Нет пивота спрайта | вращение всегда вокруг центра ([render.js:1599](../src/highlevel/render.js#L1599)); поля `pivot/origin` не читаются нигде | S |

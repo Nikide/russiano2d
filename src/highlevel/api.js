@@ -60,6 +60,7 @@ import { installAcoustics, tickAcoustics } from './acoustics.js';
 import { installLayers, tickLayers, nodeScreenPos } from './layers.js';
 import { installCollisionLayers } from './collision.js';
 import { installBsp } from './bsp.js';
+import { installAtlas } from './atlas.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
 import { installI18n, tickI18n } from './i18n.js';
@@ -364,6 +365,7 @@ export function createApi() {
     installLayers($);
     installCollisionLayers($);   // именованные слои коллизий ($.collision)
     installBsp($);               // BSP-дерево: $.world.bsp
+    installAtlas($);             // атласы из JSON: $.atlas
     installWidgets($);
     installTriggers($);
     installI18n($);
