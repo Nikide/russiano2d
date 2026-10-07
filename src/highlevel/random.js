@@ -214,7 +214,10 @@ export function noise2D(x, y, seed) {
  * него — DEFAULT_SEED, как раньше делал api.js.
  */
 export function installRandom($) {
-    const seed = engine.seed === undefined ? DEFAULT_SEED : engine.seed;
+    // Без движка — свой постоянный сид: подсистема ставится при создании API, и
+    // обращение к engine роняло весь bootstrap.
+    const seed = (typeof engine !== 'undefined' && engine && engine.seed !== undefined)
+        ? engine.seed : DEFAULT_SEED;
     const random = makeGenerator(seed);
     $.random = random;
     ctx.random = random;

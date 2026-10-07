@@ -67,6 +67,42 @@ let registry_version = 0;
 const registry_summaries = new Map();
 
 /** Версия реестра: меняется при добавлении/удалении узлов и смене признаков. */
+/**
+ * Движок, если он есть, иначе безопасная заглушка.
+ *
+ * Высокоуровневое API обязано ставиться и БЕЗ движка: его подсистемы
+ * импортируются в модульных тестах, где globalThis.engine нет. Обращение к
+ * engine прямо в установке роняло весь bootstrap — в игре это выглядело как
+ * «$ не определён». Возвращаем заглушку с теми же методами: вызовы ничего не
+ * делают, свойства читаются нулями.
+ */
+export function engineOf() {
+    if (typeof engine !== 'undefined' && engine) return engine;
+    if (!globalThis.__r2d_engine_stub) {
+        const noop = () => undefined;
+        globalThis.__r2d_engine_stub = {
+            time: 0, dt: 0, frame: 0, fps: 0, seed: 12345,
+            agent: false, headless: false, paused: false,
+            now: () => 0,
+            log: () => undefined,
+            setUpdate: noop, setRender: noop, setSnapshot: noop, quit: noop,
+            setExit: noop, markUI: noop, setErrorHandler: noop, requestReload: noop,
+            reloadPending: () => false, hotReload: noop,
+            // Общие для подсистем: рисование, физика, окно, ввод.
+            window: {
+                size: () => [0, 0], pixelSize: () => [0, 0], focused: () => false,
+                visible: () => false, fullscreen: () => false, on: noop,
+            },
+            setPosition: noop, setAngle: noop,
+            bodyCount: () => 0,
+            getVelocity: () => [0, 0], setVelocity: noop, setPosition: noop,
+            applyImpulse: noop, setGravityScale: noop, createJoint: () => -1,
+            destroyJoint: noop, createBody: () => -1, destroyBody: noop,
+        };
+    }
+    return globalThis.__r2d_engine_stub;
+}
+
 export function registryVersion() { return registry_version; }
 
 /** Отметить реестр изменённым (см. места вызова: конструктор, destroy, пул). */

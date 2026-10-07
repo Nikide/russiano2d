@@ -1217,6 +1217,7 @@ void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
     // Меш идёт своим диапазоном: свой формат вершины (с глубиной), но тот же
     // индексный буфер. Рисуется ПЕРВЫМ в проходе сцены, чтобы успеть записать
     // глубину до спрайтов.
+    r->stat_mesh_uploads++;
     if (r->mesh_vertex_count > 0) {
         if (!r2d__grow((void **)&r->mesh_vertex_buffer, &r->mesh_vb_cap,
                         r->mesh_vertex_count, sizeof(R2DMeshVertex))) return;

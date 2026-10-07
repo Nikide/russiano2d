@@ -1,0 +1,23 @@
+# Патч бандла Russiano2D docs-gate.
+#
+# Ставит в композицию профиля один хост-плагин. Страж регистрируется в глобальном
+# слое реестра инструментов, поэтому действует на всех агентов профиля —
+# включая сабагентов, тимейтов и детей workflow: делегирование правило не отменяет.
+#
+# Настройки можно переопределить в cordis.patch.yml профиля, адресуя строку по id:
+#
+#   - id: russiano2d-docs-gate
+#     name: 'dsh-russiano2d-docs-gate'
+#     config:
+#       enabled: true
+#       minCoverage: 1
+#       docs:
+#         - { id: philosophy, path: docs/ARCHITECTURE.md, title: "Философия API $" }
+#         - { id: lowlevel, path: docs/API.md, title: "Низкоуровневые вызовы engine.*" }
+#         - { id: highlevel, path: docs/HIGH_LEVEL_API.md, title: "Высокоуровневое API $" }
+#
+# Список документов, шаблоны «команда пишет файлы» и тексты отказов живут в
+# lib/policy.cjs и перечитываются с диска при каждой загрузке композиции.
+- insert:
+    - id: russiano2d-docs-gate
+      name: 'dsh-russiano2d-docs-gate'

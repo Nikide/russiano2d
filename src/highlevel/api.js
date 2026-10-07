@@ -13,7 +13,7 @@ import {
     ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
     packColor, withAlpha, registerSelector, nodeBounds, boundsOverlap,
     makeRandom, dotSprite, resolveSprite, sheetFrames, regionSprite,
-    nodesWithFacet, touchRegistry, beginBatch, endBatch, liveNodes,
+    nodesWithFacet, touchRegistry, beginBatch, endBatch, liveNodes, engineOf,
 } from './core.js';
 import { installWorld } from './world.js';
 import { installCamera } from './camera.js';
@@ -73,6 +73,7 @@ import { installCombat } from './combat.js';
 import { installWeapons } from './weapons.js';
 import { installRaid } from './raid.js';
 import { installCels } from './cels.js';
+import { installProc } from './proc.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
 import { installI18n, tickI18n } from './i18n.js';
@@ -234,7 +235,10 @@ export function createApi() {
     $.time = ctx.time;
     $.logger = ctx.log;
     $.easing = easeFunction;
-    $.random = makeRandom(engine.seed === undefined ? 12345 : engine.seed);
+    // Сид движка, если он есть: без движка (модульные тесты) — свой постоянный.
+    const bootSeed = (typeof engine !== 'undefined' && engine && engineOf().seed !== undefined)
+        ? engineOf().seed : 12345;
+    $.random = makeRandom(bootSeed);
     $.ctx = ctx;
 
     // --- Глобальные события --------------------------------------------------
@@ -359,8 +363,8 @@ export function createApi() {
         return wrap(found);
     };
 
-    $.isAgent = () => !!engine.agent;
-    $.quit = () => engine.quit();
+    $.isAgent = () => !!engineOf().agent;
+    $.quit = () => engineOf().quit();
 
     // --- Подсистемы после аудита API ------------------------------------------
     // Ставятся здесь, а не рядом с остальными install*(): им нужны готовые
@@ -391,6 +395,7 @@ export function createApi() {
     installWeapons($);           // оружие и баллистика: $.weapons
     installRaid($);              // генерация рейда: $.raid
     installCels($);              // граф кадров (псевдо-3D): $.cels
+    installProc($);              // процедурный пиксель-арт: $.proc
     installWidgets($);
     installTriggers($);
     installI18n($);
@@ -451,8 +456,8 @@ function dispatchGlobal(node, name, data) {
         name,
         type: name,
         data: data === undefined ? {} : data,
-        dt: engine.dt,
-        frame: engine.frame,
+        dt: engineOf().dt,
+        frame: engineOf().frame,
         stopped: false,
         stop() { this.stopped = true; },
         preventDefault() {},
@@ -524,7 +529,7 @@ function installNodeMethods($) {
             const node = el;
             node.x = x;
             node.y = y;
-            if (node.body >= 0) engine.setPosition(node.body, x, y, node.angle);
+            if (node.body >= 0) engineOf().setPosition(node.body, x, y, node.angle);
         });
     });
 
@@ -533,7 +538,7 @@ function installNodeMethods($) {
         return this.eachNode((_, el) => {
             const node = el;
             node.x += dx; node.y += dy;
-            if (node.body >= 0) engine.setPosition(node.body, node.x, node.y, node.angle);
+            if (node.body >= 0) engineOf().setPosition(node.body, node.x, node.y, node.angle);
         });
     });
 
@@ -581,14 +586,14 @@ function installNodeMethods($) {
         return this.eachNode((_, el) => {
             const node = el;
             node.angle = (node.angle || 0) + deg * Math.PI / 180;
-            if (node.body >= 0) engine.setPosition(node.body, node.x, node.y, node.angle);
+            if (node.body >= 0) engineOf().setPosition(node.body, node.x, node.y, node.angle);
         });
     });
     def('angle', function (rad) {
         return this.eachNode((_, el) => {
             const node = el;
             node.angle = rad;
-            if (node.body >= 0) engine.setPosition(node.body, node.x, node.y, node.angle);
+            if (node.body >= 0) engineOf().setPosition(node.body, node.x, node.y, node.angle);
         });
     });
     defGet('rotation', (n) => n.angle, 0);
@@ -619,7 +624,7 @@ function installNodeMethods($) {
             const node = el;
             const p = resolvePoint(target);
             node.angle = Math.atan2(p.y - node.y, p.x - node.x);
-            if (node.body >= 0) engine.setPosition(node.body, node.x, node.y, node.angle);
+            if (node.body >= 0) engineOf().setPosition(node.body, node.x, node.y, node.angle);
         });
     });
 
@@ -944,12 +949,12 @@ function installNodeMethods($) {
     def('velocity', function (vx, vy) {
         if (vx === undefined) {
             const node = this.nodes[0];
-            return node && node.body >= 0 ? vectorOf(engine.getVelocity(node.body)) : { x: 0, y: 0 };
+            return node && node.body >= 0 ? vectorOf(engineOf().getVelocity(node.body)) : { x: 0, y: 0 };
         }
         if (typeof vx === 'object') { vy = vx.y; vx = vx.x; }
         return this.eachNode((_, el) => {
             const node = el;
-            if (node.body >= 0) engine.setVelocity(node.body, vx, vy);
+            if (node.body >= 0) engineOf().setVelocity(node.body, vx, vy);
             node.velocity_cache = { x: vx, y: vy };
         });
     });
@@ -957,7 +962,7 @@ function installNodeMethods($) {
     def('applyForce', function (fx, fy) {
         // Box2D v3 в обёртке движка отдаёт только импульс — для 2D этого хватает:
         // сила = импульс / dt, чтобы поведение совпадало по ощущениям.
-        const k = 1 / Math.max(engine.dt, 1 / 240);
+        const k = 1 / Math.max(engineOf().dt, 1 / 240);
         return Wrapper.prototype.applyImpulse.call(this, fx * k * 0.02, fy * k * 0.02);
     });
 
@@ -965,7 +970,7 @@ function installNodeMethods($) {
         if (typeof ix === 'object') { iy = ix.y; ix = ix.x; }
         return this.eachNode((_, el) => {
             const node = el;
-            if (node.body >= 0) engine.applyImpulse(node.body, ix, iy);
+            if (node.body >= 0) engineOf().applyImpulse(node.body, ix, iy);
         });
     });
 
@@ -974,7 +979,7 @@ function installNodeMethods($) {
             const node = el;
             node.gravity_on = on !== false;
             node.no_gravity = false;
-            if (node.body >= 0) engine.setGravityScale(node.body, node.gravity_on ? 1 : 0);
+            if (node.body >= 0) engineOf().setGravityScale(node.body, node.gravity_on ? 1 : 0);
         });
     });
 
@@ -1076,7 +1081,7 @@ function installNodeMethods($) {
         // обе стороны крепятся в ОДНУ мировую точку. Для distance наоборот —
         // стержень между центрами, иначе длина окажется нулевой.
         const b = o.b || ((o.type === 'distance') ? [target.x, target.y] : a);
-        const id = engine.createJoint({
+        const id = engineOf().createJoint({
             type: o.type || 'revolute',
             a: self.body, b: target.body,
             ax: a[0], ay: a[1], bx: b[0], by: b[1],
@@ -1180,8 +1185,8 @@ function installNodeMethods($) {
         return this.eachNode((_, el) => {
             const node = el;
             if (node.body < 0) return;
-            const [, vy] = engine.getVelocity(node.body);
-            engine.setVelocity(node.body, engine.getVelocity(node.body)[0],
+            const [, vy] = engineOf().getVelocity(node.body);
+            engineOf().setVelocity(node.body, engineOf().getVelocity(node.body)[0],
                                -(force === undefined ? 640 : force) + Math.min(0, vy));
             node.emit('jump', { force });
         });
@@ -1235,7 +1240,7 @@ function installNodeMethods($) {
             node.cur_hp = node.max_hp;
             if (x !== undefined) {
                 node.x = x; node.y = y;
-                if (node.body >= 0) { engine.setPosition(node.body, x, y, 0); engine.setVelocity(node.body, 0, 0); }
+                if (node.body >= 0) { engineOf().setPosition(node.body, x, y, 0); engineOf().setVelocity(node.body, 0, 0); }
             }
         });
     });
@@ -1473,16 +1478,16 @@ function installNodeMethods($) {
     });
 
     // === Массовые операции ===================================================
-    def('stopAll', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engine.setVelocity(n.body, 0, 0); }); });
-    def('pause', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engine.setAwake(n.body, false); }); });
-    def('wake', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engine.setAwake(n.body, true); }); });
+    def('stopAll', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engineOf().setVelocity(n.body, 0, 0); }); });
+    def('pause', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engineOf().setAwake(n.body, false); }); });
+    def('wake', function () { return this.eachNode((_, el) => { const n = el; if (n.body >= 0) engineOf().setAwake(n.body, true); }); });
     /**
      * .sleeping() — спит ли тело (Box2D усыпляет неподвижные). Спящее тело не
      * считается физикой: полезно, чтобы не будить его лишней логикой.
      */
     defGet('sleeping', function (node) {
-        return node.body >= 0 && typeof engine.isAwake === 'function'
-            ? !engine.isAwake(node.body)
+        return node.body >= 0 && typeof engineOf().isAwake === 'function'
+            ? !engineOf().isAwake(node.body)
             : false;
     }, true);
     def('overlaps', function (what, cb) {
@@ -1519,7 +1524,7 @@ function installFrameHooks($) {
     // Метка ставится ДО работы, которую меряет: иначе отрезок записывается под
     // именем предыдущей подсистемы, и отчёт врёт на одну позицию (§1.3 отчёта).
     //
-    // Профайлер выключен по умолчанию: 24 вызова engine.now() и 24 поиска в Map
+    // Профайлер выключен по умолчанию: 24 вызова engineOf().now() и 24 поиска в Map
     // по строке за кадр — плата ни за что в релизной игре (§3.7). Включается
     // явно: $.debug.profiler.on(true).
     const profiler = ($.debug && $.debug.profiler) || null;
@@ -1530,13 +1535,13 @@ function installFrameHooks($) {
             prof_name = null;   // включили посреди кадра — начнём с чистого листа
             return;
         }
-        const now = typeof engine.now === 'function' ? engine.now() : engine.time * 1000;
+        const now = typeof engineOf().now === 'function' ? engineOf().now() : engineOf().time * 1000;
         if (prof_name !== null) profiler.record(prof_name, now - prof_at);
         prof_name = name;
         prof_at = now;
     }
 
-    engine.setUpdate((dt) => {
+    engineOf().setUpdate((dt) => {
         // Замеры первой половины кадра: именно здесь раньше терялись десятки
         // миллисекунд, а профайлер показывал только «JS: логика».
         const prof = profilerMark;
@@ -1609,21 +1614,21 @@ function installFrameHooks($) {
         prof(null);
     });
 
-    engine.setRender(() => {
+    engineOf().setRender(() => {
         if (!frame.running) return;
         const scene = ctx.scene._state.current;
         if (scene && typeof scene.render === 'function') {
             try { scene.render($); } catch (e) { reportError('render сцены', e); }
         }
         for (const fn of frame.render) {
-            try { fn(engine.dt, $); } catch (e) { reportError('$.render', e); }
+            try { fn(engineOf().dt, $); } catch (e) { reportError('$.render', e); }
         }
         ctx.gfx._render();
         ctx.debug._render();
     });
 
-    // engine.quit() перехватывать нечем — выход обрабатывает движок.
-    engine.setExit(() => {
+    // engineOf().quit() перехватывать нечем — выход обрабатывает движок.
+    engineOf().setExit(() => {
         for (const fn of frame.exit) {
             try { fn($); } catch (e) { reportError('$.exit', e); }
         }
@@ -1730,15 +1735,15 @@ function stepTowards(node, target, speed) {
     const v = (typeof speed === 'object' && speed !== null && speed.speed !== undefined) ? speed.speed : (speed || 100);
 
     if (d <= 1) {
-        if (node.body >= 0) engine.setVelocity(node.body, 0, 0);
+        if (node.body >= 0) engineOf().setVelocity(node.body, 0, 0);
         node.emit('arrived', {});
         return;
     }
     if (node.body >= 0) {
-        engine.setVelocity(node.body, (dx / d) * v, (dy / d) * v);
+        engineOf().setVelocity(node.body, (dx / d) * v, (dy / d) * v);
     } else {
         // У узла без тела нет инерции: двигаем ровно на шаг кадра.
-        const dt = engine.dt;
+        const dt = engineOf().dt;
         node.x += (dx / d) * v * dt;
         node.y += (dy / d) * v * dt;
         if (d <= v * dt) node.emit('arrived', {});
@@ -1760,8 +1765,8 @@ function stepTowards(node, target, speed) {
  */
 function tickWorldHover() {
     const nodes = liveNodes();
-    const mx = engine.mouseX;
-    const my = engine.mouseY;
+    const mx = engineOf().mouseX;
+    const my = engineOf().mouseY;
     const zoom = ctx.camera ? (ctx.camera.zoom() || 1) : 1;
     let top = null;
     let top_score = -Infinity;
@@ -1817,8 +1822,8 @@ function applyControls(dt) {
         const jump_pressed = ctx.input.pressed(jump_key) || ctx.input.pressed(up_key);
 
         if (node.body >= 0) {
-            const [vx, vy] = engine.getVelocity(node.body);
-            engine.setVelocity(node.body, vec.x * speed, node.gravity_on === false ? 0 : vy);
+            const [vx, vy] = engineOf().getVelocity(node.body);
+            engineOf().setVelocity(node.body, vec.x * speed, node.gravity_on === false ? 0 : vy);
             if (jump_pressed && Wrapper.prototype.onFloor.call(wrapOne(node))) {
                 Wrapper.prototype.jump.call(wrapOne(node), cfg.jumpForce || 640);
             }
@@ -1843,8 +1848,8 @@ function applyControls(dt) {
  * Godot. Событие приходит в том кадре, в котором контакт начался/кончился.
  */
 function dispatchContacts() {
-    if (typeof engine.contacts !== 'function') return;
-    const list = engine.contacts();
+    if (typeof engineOf().contacts !== 'function') return;
+    const list = engineOf().contacts();
     if (!list || list.length === 0) return;
 
     for (let i = 0; i < list.length; i++) {

@@ -318,6 +318,7 @@ typedef struct R2DRenderer {
     int    stat_mesh_frames;  // сколько кадров рисовало меш (диагностика)
     int    stat_mesh_draws;   // сколько раз вызвана отрисовка меша
     int    stat_mesh_built;   // сколько раз упакован меш
+    int    stat_mesh_uploads; // сколько раз дошло до заливки
     int    revision;          // номер начатого кадра (диагностика путей)
     size_t stat_upload_bytes;
 

@@ -1,3 +1,4 @@
+import { engineOf } from './core.js';
 // ===========================================================================
 // Агент: $.agent — мост между игрой и программой, которая ей управляет.
 //
@@ -44,12 +45,12 @@ function nodeBrief(node) {
 export function installAgent($) {
     const agent = {
         /** Запущен ли движок в агентском режиме (--agent). */
-        active: !!engine.agent,
-        headless: !!engine.headless,
-        seed: engine.seed === undefined ? 0 : engine.seed,
+        active: !!engineOf().agent,
+        headless: !!engineOf().headless,
+        seed: engineOf().seed === undefined ? 0 : engineOf().seed,
 
-        frame() { return engine.frame; },
-        time() { return round2(engine.time); },
+        frame() { return engineOf().frame; },
+        time() { return round2(engineOf().time); },
 
         /** Краткое описание узла по селектору (или null). */
         node(sel) {
@@ -75,10 +76,10 @@ export function installAgent($) {
             const ui_nodes = ctx.nodes.filter((n) => n.attrs.ui);
 
             const snap = {
-                frame: engine.frame,
-                time: round2(engine.time),
-                dt: round2(engine.dt * 1000) / 1000,
-                fps: Math.round(engine.fps * 10) / 10,
+                frame: engineOf().frame,
+                time: round2(engineOf().time),
+                dt: round2(engineOf().dt * 1000) / 1000,
+                fps: Math.round(engineOf().fps * 10) / 10,
                 paused: ctx.time ? ctx.time.isPaused() : false,
                 scene: ctx.scene ? ctx.scene.current() : null,
                 window: windowSnapshot(),
@@ -92,8 +93,8 @@ export function installAgent($) {
                     count: entities.length,
                     gravity: world.gravity,
                     bounds: world.bounds,
-                    bodies: engine.bodyCount(),
-                } : { count: entities.length, bodies: engine.bodyCount() },
+                    bodies: engineOf().bodyCount(),
+                } : { count: entities.length, bodies: engineOf().bodyCount() },
                 entities: entities.map(nodeBrief),
                 ui: ui_nodes.map(nodeBrief),
                 tests: { total: tests.total, failed: tests.failed, failures: tests.failures.slice(0, 20) },
@@ -101,7 +102,7 @@ export function installAgent($) {
 
             const player = ctx.nodes.find((n) => n.tag === 'player' || n.classes.has('player'));
             if (player) {
-                const vel = player.body >= 0 ? engine.getVelocity(player.body) : [0, 0];
+                const vel = player.body >= 0 ? engineOf().getVelocity(player.body) : [0, 0];
                 snap.player = Object.assign(nodeBrief(player), {
                     vx: round2(vel[0]), vy: round2(vel[1]),
                     on_ground: player.attrs.on_ground === true,
@@ -117,7 +118,7 @@ export function installAgent($) {
 
         /** Регистрирует снимок в движке: он уйдёт в ответе на `state`. */
         install() {
-            engine.setSnapshot(() => agent.snapshot());
+            engineOf().setSnapshot(() => agent.snapshot());
             return agent;
         },
 

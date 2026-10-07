@@ -86,7 +86,15 @@ int main(int argc, char **argv)
     const char *dir = argv[1];
     const char *out_path = argv[2];
 
-    Entry entries[64];
+    // Модулей может стать больше: раньше здесь стоял жёсткий предел 64, и
+    // 65-й файл (acoustics.js) МОЛЧА не попадал в бинарник — движок падал на
+    // импорте, а «$» оставался неопределённым. Список растёт по мере чтения.
+    size_t cap = 128;
+    Entry *entries = (Entry *)calloc(cap, sizeof(Entry));
+    if (!entries) {
+        fprintf(stderr, "не хватило памяти под список модулей\n");
+        return 1;
+    }
     int count = 0;
 
 #ifndef _WIN32
@@ -96,9 +104,19 @@ int main(int argc, char **argv)
         return 1;
     }
     struct dirent *de;
-    while ((de = readdir(d)) != NULL && count < 64) {
+    while ((de = readdir(d)) != NULL) {
         const size_t len = strlen(de->d_name);
         if (len < 4 || strcmp(de->d_name + len - 3, ".js") != 0) continue;
+        if ((size_t)count + 1 >= cap) {
+            cap *= 2;
+            Entry *grown = (Entry *)realloc(entries, cap * sizeof(Entry));
+            if (!grown) {
+                fprintf(stderr, "не хватило памяти под список модулей\n");
+                closedir(d);
+                return 1;
+            }
+            entries = grown;
+        }
 
         entries[count].name = strdup(de->d_name);
         char full[4096];
@@ -114,9 +132,18 @@ int main(int argc, char **argv)
     HANDLE h = FindFirstFileA(pattern, &fd);
     if (h != INVALID_HANDLE_VALUE) {
         do {
-            if (count >= 64) break;
             const size_t len = strlen(fd.cFileName);
             if (len < 4) continue;
+            if ((size_t)count + 1 >= cap) {
+                cap *= 2;
+                Entry *grown = (Entry *)realloc(entries, cap * sizeof(Entry));
+                if (!grown) {
+                    fprintf(stderr, "не хватило памяти под список модулей\n");
+                    FindClose(h);
+                    return 1;
+                }
+                entries = grown;
+            }
             entries[count].name = _strdup(fd.cFileName);
             char full[4096];
             snprintf(full, sizeof full, "%s\\%s", dir, fd.cFileName);

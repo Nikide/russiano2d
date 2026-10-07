@@ -1,3 +1,4 @@
+import { engineOf } from './core.js';
 // ===========================================================================
 // $.window — окно игры: имя, размер, режим, курсор и события окна.
 //
@@ -42,16 +43,27 @@ function fire(name, data) {
     }
 }
 
-/** Текущее состояние окна одним объектом. */
+/**
+ * Текущее состояние окна одним объектом.
+ *
+ * Без движка (модульные тесты) отдаём нули: подсистема ставится при создании
+ * API, и обращение к engine здесь роняло ВЕСЬ bootstrap — в игре это выглядело
+ * как «$ не определён» (та же ошибка, что была у ctx.log).
+ */
 function readState() {
-    const size = engine.window.size();
-    const pixels = engine.window.pixelSize();
+    const env = engineOf();
+    if (!env || typeof env.window.size !== 'function') {
+        return { w: 0, h: 0, pixel_w: 0, pixel_h: 0,
+                 focused: false, visible: false, fullscreen: false };
+    }
+    const size = env.window.size();
+    const pixels = env.window.pixelSize();
     return {
         w: size[0], h: size[1],
         pixel_w: pixels[0], pixel_h: pixels[1],
-        focused: engine.window.focused(),
-        visible: engine.window.visible(),
-        fullscreen: engine.window.fullscreen(),
+        focused: env.window.focused(),
+        visible: env.window.visible(),
+        fullscreen: env.window.fullscreen(),
     };
 }
 
@@ -60,86 +72,86 @@ export function installWindow($) {
     const windowApi = {
         /** Имя окна: без аргумента — прочитать, с аргументом — задать. */
         title(text) {
-            if (text === undefined) return engine.window.title();
-            engine.window.setTitle(String(text));
+            if (text === undefined) return engineOf().window.title();
+            engineOf().window.setTitle(String(text));
             return windowApi;
         },
 
         /** Размер окна в точках: { w, h }. */
         size() {
-            const s = engine.window.size();
+            const s = engineOf().window.size();
             return { w: s[0], h: s[1] };
         },
 
         /** Размер в пикселях — на Retina он вдвое больше точек. */
         pixels() {
-            const s = engine.window.pixelSize();
+            const s = engineOf().window.pixelSize();
             return { w: s[0], h: s[1] };
         },
 
         /** Задать размер. Высота необязательна: сохраним пропорции. */
         resize(w, h) {
-            const cur = engine.window.size();
+            const cur = engineOf().window.size();
             const height = h === undefined
                 ? Math.round(w * (cur[1] / Math.max(1, cur[0])))
                 : h;
-            engine.window.setSize(w, height);
+            engineOf().window.setSize(w, height);
             return windowApi;
         },
 
         /** Полноэкранный режим: без аргумента — прочитать, с аргументом — задать. */
         fullscreen(on) {
-            if (on === undefined) return engine.window.fullscreen();
-            engine.window.setFullscreen(!!on);
+            if (on === undefined) return engineOf().window.fullscreen();
+            engineOf().window.setFullscreen(!!on);
             return windowApi;
         },
 
         toggleFullscreen() {
-            engine.window.setFullscreen(!engine.window.fullscreen());
+            engineOf().window.setFullscreen(!engineOf().window.fullscreen());
             return windowApi;
         },
 
         /** Положение окна на экране: { x, y }. */
         position() {
-            const p = engine.window.position();
+            const p = engineOf().window.position();
             return { x: p[0], y: p[1] };
         },
 
-        move(x, y) { engine.window.move(x, y); return windowApi; },
-        center() { engine.window.center(); return windowApi; },
+        move(x, y) { engineOf().window.move(x, y); return windowApi; },
+        center() { engineOf().window.center(); return windowApi; },
 
-        minimize() { engine.window.minimize(); return windowApi; },
-        maximize() { engine.window.maximize(); return windowApi; },
-        restore() { engine.window.restore(); return windowApi; },
-        show() { engine.window.show(); return windowApi; },
-        hide() { engine.window.hide(); return windowApi; },
-        focus() { engine.window.focus(); return windowApi; },
-        visible() { return engine.window.visible(); },
-        focused() { return engine.window.focused(); },
+        minimize() { engineOf().window.minimize(); return windowApi; },
+        maximize() { engineOf().window.maximize(); return windowApi; },
+        restore() { engineOf().window.restore(); return windowApi; },
+        show() { engineOf().window.show(); return windowApi; },
+        hide() { engineOf().window.hide(); return windowApi; },
+        focus() { engineOf().window.focus(); return windowApi; },
+        visible() { return engineOf().window.visible(); },
+        focused() { return engineOf().window.focused(); },
 
         /** Можно ли менять размер мышью. */
         resizable(on) {
-            if (on === undefined) return engine.window.resizable();
-            engine.window.setResizable(!!on);
+            if (on === undefined) return engineOf().window.resizable();
+            engineOf().window.setResizable(!!on);
             return windowApi;
         },
 
         /** Вертикальная синхронизация: false — максимум кадров, но возможен разрыв. */
         vsync(on) {
-            if (on === undefined) return engine.window.vsync();
-            engine.window.setVsync(!!on);
+            if (on === undefined) return engineOf().window.vsync();
+            engineOf().window.setVsync(!!on);
             return windowApi;
         },
 
         /** Курсор: normal | hidden | crosshair | hand | text | wait. */
         cursor(kind) {
-            if (kind === undefined) return engine.window.cursor();
+            if (kind === undefined) return engineOf().window.cursor();
             const name = String(kind);
             if (CURSORS.indexOf(name) < 0) {
                 $.ctx.log(`$: неизвестный курсор "${name}" — оставляю как есть`);
                 return windowApi;
             }
-            engine.window.setCursor(name);
+            engineOf().window.setCursor(name);
             return windowApi;
         },
 
@@ -212,17 +224,17 @@ export function tickWindow() {
 
 /** Состояние окна для снимка агента (state.window). */
 export function windowSnapshot() {
-    const size = engine.window.size();
-    const pixels = engine.window.pixelSize();
+    const size = engineOf().window.size();
+    const pixels = engineOf().window.pixelSize();
     return {
-        title: engine.window.title(),
+        title: engineOf().window.title(),
         w: size[0], h: size[1],
         pixel_w: pixels[0], pixel_h: pixels[1],
-        fullscreen: engine.window.fullscreen(),
-        resizable: engine.window.resizable(),
-        visible: engine.window.visible(),
-        focused: engine.window.focused(),
-        vsync: engine.window.vsync(),
-        cursor: engine.window.cursor(),
+        fullscreen: engineOf().window.fullscreen(),
+        resizable: engineOf().window.resizable(),
+        visible: engineOf().window.visible(),
+        focused: engineOf().window.focused(),
+        vsync: engineOf().window.vsync(),
+        cursor: engineOf().window.cursor(),
     };
 }

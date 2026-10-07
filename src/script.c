@@ -552,6 +552,46 @@ static JSValue r2d__js_load_texture(JSContext *ctx, JSValueConst this_val, int a
     return JS_NewInt32(ctx, r2d_texture_load(s->renderer, full));
 }
 
+// engine.textureFromPixels(w, h, pixels: Uint8Array|Uint8ClampedArray) → id.
+//
+// Текстура из готовых пикселей RGBA: нужна процедурному арту ($.proc) — спрайт
+// выращивается в памяти и уезжает в GPU без файла. Порядок аргументов —
+// (w, h, pixels), потому что размер известен игре заранее.
+static JSValue r2d__js_texture_from_pixels(JSContext *ctx, JSValueConst this_val,
+                                           int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->renderer) return JS_NewInt32(ctx, -1);
+    const int w = r2d__arg_int(ctx, argc, argv, 0, 0);
+    const int h = r2d__arg_int(ctx, argc, argv, 1, 0);
+    if (w <= 0 || h <= 0) {
+        JS_ThrowTypeError(ctx, "textureFromPixels(w, h, pixels)");
+        return JS_EXCEPTION;
+    }
+
+    size_t off = 0, len = 0, bpe = 0;
+    JSValue ab = JS_GetTypedArrayBuffer(ctx, argc > 2 ? argv[2] : JS_UNDEFINED, &off, &len, &bpe);
+    if (JS_IsException(ab)) return JS_EXCEPTION;
+    size_t size = 0;
+    uint8_t *base = JS_GetArrayBuffer(ctx, &size, ab);
+    if (!base) {
+        JS_FreeValue(ctx, ab);
+        JS_ThrowTypeError(ctx, "третий аргумент должен быть Uint8Array");
+        return JS_EXCEPTION;
+    }
+    const size_t need = (size_t)w * (size_t)h * 4u;
+    if (len < need) {
+        JS_FreeValue(ctx, ab);
+        JS_ThrowRangeError(ctx, "пикселей меньше, чем w*h*4");
+        return JS_EXCEPTION;
+    }
+
+    const int id = r2d_texture_create_rgba(s->renderer, base + off, w, h);
+    JS_FreeValue(ctx, ab);
+    return JS_NewInt32(ctx, id);
+}
+
 static JSValue r2d__js_texture_size(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -1209,6 +1249,7 @@ static JSValue r2d__js_depth_info(JSContext *ctx, JSValueConst this_val, int arg
     JS_SetPropertyStr(ctx, obj, "meshBuf",    JS_NewBool(ctx, r->mesh_buffer != NULL));
     JS_SetPropertyStr(ctx, obj, "meshDrawn",  JS_NewInt32(ctx, r->stat_mesh_draws));
     JS_SetPropertyStr(ctx, obj, "meshBuilt",  JS_NewInt32(ctx, r->stat_mesh_built));
+    JS_SetPropertyStr(ctx, obj, "uploads",    JS_NewInt32(ctx, r->stat_mesh_uploads));
     JS_SetPropertyStr(ctx, obj, "revision",   JS_NewInt32(ctx, r->revision));
     return obj;
 }
@@ -3275,6 +3316,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     // Ресурсы и отрисовка
     r2d__set_fn(ctx, engine, "loadTexture", r2d__js_load_texture, 1);
     r2d__set_fn(ctx, engine, "textureSize", r2d__js_texture_size, 1);
+    r2d__set_fn(ctx, engine, "textureFromPixels", r2d__js_texture_from_pixels, 3);
     r2d__set_fn(ctx, engine, "createSprite", r2d__js_create_sprite, 5);
     r2d__set_fn(ctx, engine, "drawSprite", r2d__js_draw_sprite, 7);
     r2d__set_fn(ctx, engine, "drawRect", r2d__js_draw_rect, 5);
