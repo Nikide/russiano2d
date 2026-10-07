@@ -57,18 +57,57 @@ let tri_layer_cur = 0;  // слой, который получит следую�
 // переводят их сами через камеру), но VFX и $.gfx.draw.* работают в мировых.
 // Пока view включён, push.* переводит world → screen сам — иначе лента,
 // вспышка или трассер уезжают в угол экрана на расстояние камеры.
+/**
+ * Мировая точка → экранная по параметрам камеры. Та же математика, что в
+ * camera.js (frameWorldToScreen): отрисовка и $.camera.worldToScreen обязаны
+ * совпадать, иначе при повороте кадра картинка и пикинг разъезжаются.
+ */
+function frameViewPoint(cam, x, y) {
+    const zoom = cam.zoom || 1;
+    const dx = (x - cam.x) * zoom;
+    const dy = (y - cam.y) * zoom;
+    const a = cam.rotation || 0;
+    if (a === 0) {
+        return { x: dx + (cam.w !== undefined ? cam.w : engine.width) / 2,
+                 y: dy + (cam.h !== undefined ? cam.h : engine.height) / 2 };
+    }
+    const c = Math.cos(a), s = Math.sin(a);
+    return {
+        x: dx * c - dy * s + (cam.w !== undefined ? cam.w : engine.width) / 2,
+        y: dx * s + dy * c + (cam.h !== undefined ? cam.h : engine.height) / 2,
+    };
+}
+
 let view = null;
 function setView(cam) {
     view = cam
         ? { x: cam.x, y: cam.y, zoom: cam.zoom || 1,
             cx: (cam.w !== undefined ? cam.w : engine.width) / 2,
             cy: (cam.h !== undefined ? cam.h : engine.height) / 2,
-            sx: cam.shake_x || 0, sy: cam.shake_y || 0 }
+            sx: cam.shake_x || 0, sy: cam.shake_y || 0,
+            // Поворот кадра. Храним готовые cos/sin: их считают для каждой
+            // вершины кадра, а не один раз.
+            rot: cam.rotation || 0,
+            cos: Math.cos(cam.rotation || 0),
+            sin: Math.sin(cam.rotation || 0) }
         : null;
 }
-function viewX(x) { return view ? (x - view.x) * view.zoom + view.cx + view.sx : x; }
-function viewY(y) { return view ? (y - view.y) * view.zoom + view.cy + view.sy : y; }
+// Мировая точка → экранная. Обязательно ПАРОЙ (x, y): при повороте кадра
+// координаты перемешиваются, и «по одной» их посчитать нельзя.
+function viewPoint(x, y) {
+    if (!view) return { x, y };
+    const dx = (x - view.x) * view.zoom;
+    const dy = (y - view.y) * view.zoom;
+    return {
+        x: dx * view.cos - dy * view.sin + view.cx + view.sx,
+        y: dx * view.sin + dy * view.cos + view.cy + view.sy,
+    };
+}
+function viewX(x, y) { return viewPoint(x, y).x; }
+function viewY(y, x) { return viewPoint(x, y).y; }
 function viewScale(v) { return view ? v * view.zoom : v; }
+/** Угол рисунка в кадре: поворот кадра складывается с углом самого спрайта. */
+function viewAngle(a) { return view ? a + view.rot : a; }
 
 // Отдельный односпрайтовый пакет для затемнения перехода между сценами:
 // так он не занимает слот в общем буфере кадра.
@@ -393,7 +432,12 @@ function ensureBuffers() {
 
 function pushSprite(sprite, x, y, w, h, angle, color, blend_name, fx_index) {
     if (count >= MAX_SPRITES || sprite < 0) return;
-    if (view) { x = viewX(x); y = viewY(y); w = viewScale(w); h = viewScale(h); }
+    if (view) {
+        const wx = x, wy = y;
+        x = viewX(wx, wy); y = viewY(wy, wx);
+        w = viewScale(w); h = viewScale(h);
+        angle = viewAngle(angle);
+    }
     const o = count * 6;
     xf[o] = sprite; xf[o + 1] = x; xf[o + 2] = y;
     xf[o + 3] = w; xf[o + 4] = h; xf[o + 5] = angle;
@@ -426,7 +470,7 @@ function submitSprites(start, end) {
 
 function pushVertex(x, y, color) {
     if (tri_count >= MAX_TRIS * 3) return;
-    if (view) { x = viewX(x); y = viewY(y); }
+    if (view) { const wx = x, wy = y; x = viewX(wx, wy); y = viewY(wy, wx); }
     const o = tri_count * 6;
     tri[o] = x; tri[o + 1] = y;
     tri[o + 2] = color & 0xff;
@@ -1505,8 +1549,16 @@ ambient.on = function () { return ambient_params !== null; };
 const scratch_t = { x: 0, y: 0, w: 0, h: 0 };
 
 function nodeTransform(node, cam, out) {
-    let sx = (node.x - cam.x) * cam.zoom + cam.w / 2 + cam.shake_x;
-    let sy = (node.y - cam.y) * cam.zoom + cam.h / 2 + cam.shake_y;
+    // ВАЖНО: позиция узла считается ТОЙ ЖЕ математикой кадра, что и
+    // $.camera.worldToScreen (frameViewPoint). Раньше здесь была своя формула
+    // без поворота, и поворот камеры сдвигал только то, что идёт через view
+    // (свет, VFX), а сами узлы оставались на месте — картинка не менялась.
+    let sx = 0, sy = 0;
+    {
+        const v = frameViewPoint(cam, node.x, node.y);
+        sx = v.x + cam.shake_x;
+        sy = v.y + cam.shake_y;
+    }
     if (node.shake_timer > 0) {
         const p = node.shake_total > 0 ? node.shake_timer / node.shake_total : 1;
         const amp = node.shake_amount * p;

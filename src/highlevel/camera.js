@@ -12,6 +12,10 @@ import { ctx, query, wrapOne, fxRandom } from './core.js';
 const cam = {
     x: 0, y: 0,          // центр камеры в мировых координатах
     zoom: 1,
+    // Поворот кадра в РАДИАНАХ вокруг центра камеры. Мир при этом не
+    // меняется: поворот применяется в момент отрисовки (render.js), поэтому
+    // .pos() у узлов по-прежнему мировые координаты, а физика и лучи — как были.
+    rotation: 0,
     target: null,        // узел, за которым следим
     offset: { x: 0, y: 0 },
     smooth: 0,           // 0 — мгновенно, 1 — «прилипание» без движения
@@ -37,9 +41,42 @@ function clampToLimits() {
     cam.y = Math.max(min_y, Math.min(max_y, cam.y));
 }
 
+
+// ---------------------------------------------------------------------------
+// Математика кадра: поворот + зум + сдвиг. Одна на всех — иначе отрисовка и
+// $.camera.worldToScreen() разъехались бы при повороте (проверено тестом).
+// ---------------------------------------------------------------------------
+
+/** Мировая точка → экранная (в логических точках окна). */
+export function frameWorldToScreen(cam_state, x, y, width, height) {
+    const dx = (x - cam_state.x) * cam_state.zoom;
+    const dy = (y - cam_state.y) * cam_state.zoom;
+    const a = cam_state.rotation || 0;
+    const c = Math.cos(a), s = Math.sin(a);
+    return {
+        // Знак минус у sin: положительный угол поворачивает МИР по часовой
+        // стрелке на экране (как в 2D-играх), а не кадр против неё.
+        x: dx * c - dy * s + width / 2,
+        y: dx * s + dy * c + height / 2,
+    };
+}
+
+/** Экранная точка → мировая. */
+export function frameScreenToWorld(cam_state, x, y, width, height) {
+    const px = x - width / 2;
+    const py = y - height / 2;
+    const a = cam_state.rotation || 0;
+    const c = Math.cos(a), s = Math.sin(a);
+    // Обратный поворот — транспонированная матрица.
+    const dx = px * c + py * s;
+    const dy = -px * s + py * c;
+    return { x: dx / cam_state.zoom + cam_state.x, y: dy / cam_state.zoom + cam_state.y };
+}
+
 export function cameraTransform() {
     return {
         x: cam.x, y: cam.y, zoom: cam.zoom,
+        rotation: cam.rotation,
         shake_x: cam.shake_x, shake_y: cam.shake_y,
         w: engine.width, h: engine.height,
     };
@@ -91,7 +128,7 @@ export function installCamera($) {
          */
         snapshot() {
             return {
-                x: cam.x, y: cam.y, zoom: cam.zoom,
+                x: cam.x, y: cam.y, zoom: cam.zoom, rotation: cam.rotation,
                 target: cam.target, offset: { x: cam.offset.x, y: cam.offset.y },
                 smooth: cam.smooth,
                 limits: cam.limits ? { x: cam.limits.x, y: cam.limits.y, w: cam.limits.w, h: cam.limits.h } : null,
@@ -104,6 +141,7 @@ export function installCamera($) {
             if (!state) return camera;
             cam.x = state.x; cam.y = state.y;
             cam.zoom = Math.max(0.01, state.zoom);
+            cam.rotation = Number(state.rotation) || 0;
             cam.target = state.target || null;
             cam.offset.x = state.offset ? state.offset.x : 0;
             cam.offset.y = state.offset ? state.offset.y : 0;
@@ -111,6 +149,29 @@ export function installCamera($) {
             cam.limits = state.limits ? Object.assign({}, state.limits) : null;
             cam.deadzone = state.deadzone ? Object.assign({}, state.deadzone) : null;
             clampToLimits();
+            return camera;
+        },
+
+        /**
+         * Поворот кадра: `$.camera.rotation(Math.PI / 4)`.
+         *
+         * Вращается ВСЁ, что рисуется миром: спрайты, треугольники, слои,
+         * частицы. Координаты узлов остаются мировыми — меняется только
+         * картинка, поэтому физика, лучи и пикинг работают как обычно.
+         * Без аргумента — геттер.
+         */
+        rotation(value) {
+            if (value === undefined) return cam.rotation;
+            cam.rotation = Number(value) || 0;
+            return camera;
+        },
+
+        /** Плавный поворот к углу (радианы) за `ms` миллисекунд. */
+        rotateTo(value, ms) {
+            const from = cam.rotation;
+            const to = Number(value) || 0;
+            if (!(ms > 0)) { cam.rotation = to; return camera; }
+            animate(ms, (p) => { cam.rotation = from + (to - from) * p; });
             return camera;
         },
 
@@ -151,18 +212,19 @@ export function installCamera($) {
 
         worldToScreen(p) {
             const pt = toPoint(p);
-            return {
-                x: (pt.x - cam.x) * cam.zoom + engine.width / 2 + cam.shake_x,
-                y: (pt.y - cam.y) * cam.zoom + engine.height / 2 + cam.shake_y,
-            };
+            const state = { x: cam.x, y: cam.y, zoom: cam.zoom, rotation: cam.rotation };
+            const out = frameWorldToScreen(state, pt.x, pt.y, engine.width, engine.height);
+            // Тряска — поверх всего: она сдвигает кадр, а не мир.
+            out.x += cam.shake_x;
+            out.y += cam.shake_y;
+            return out;
         },
 
         screenToWorld(p) {
             const pt = toPoint(p);
-            return {
-                x: (pt.x - engine.width / 2 - cam.shake_x) / cam.zoom + cam.x,
-                y: (pt.y - engine.height / 2 - cam.shake_y) / cam.zoom + cam.y,
-            };
+            const state = { x: cam.x, y: cam.y, zoom: cam.zoom, rotation: cam.rotation };
+            return frameScreenToWorld(state, pt.x - cam.shake_x, pt.y - cam.shake_y,
+                                      engine.width, engine.height);
         },
 
         /** Видно ли то, что передали (узел, селектор или точка). */
