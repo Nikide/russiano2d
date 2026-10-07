@@ -491,6 +491,75 @@ bool r2d_physics_is_bullet(const R2DPhysics *p, int id)
     return b2Body_IsBullet(p->bodies[id]);
 }
 
+// --- Контакты: импульс, точки, «касаются ли сейчас» -----------------------
+
+/** Манифолд между двумя телами прямо сейчас: импульс, точки, нормаль. */
+static bool r2d__contact_between(const R2DPhysics *p, int a, int b,
+                                 float *out_impulse, int *out_points,
+                                 float *out_nx, float *out_ny)
+{
+    if (!p || !p->world_valid) return false;
+    if (!r2d_physics_is_alive(p, a)) return false;
+    // `b` < 0 — «с кем угодно»: нужен для contacts_of.
+    if (b >= 0 && !r2d_physics_is_alive(p, b)) return false;
+
+    b2ContactData data[16];
+    const int n = b2Body_GetContactData(p->bodies[a], data, 16);
+    for (int i = 0; i < n; ++i) {
+        const int other = r2d__body_id_of_shape(data[i].shapeIdB);
+        const int self = r2d__body_id_of_shape(data[i].shapeIdA);
+        const int peer = (self == a) ? other : self;
+        if (b >= 0 && peer != b) continue;
+
+        // Импульс: солвер пишет его на точках манифолда. Берём НАИБОЛЬШИЙ —
+        // «сила удара» это удар, а не сумма касаний.
+        float best = 0.0f;
+        for (int k = 0; k < data[i].manifold.pointCount; ++k) {
+            const float imp = data[i].manifold.points[k].normalImpulse;
+            if (imp > best) best = imp;
+        }
+        if (out_impulse) *out_impulse = best;
+        if (out_points) *out_points = data[i].manifold.pointCount;
+        if (out_nx) *out_nx = data[i].manifold.normal.x;
+        if (out_ny) *out_ny = data[i].manifold.normal.y;
+        return true;
+    }
+    return false;
+}
+
+bool r2d_physics_contact_between(const R2DPhysics *p, int a, int b,
+                                 float *out_impulse, int *out_points,
+                                 float *out_normal_x, float *out_normal_y)
+{
+    return r2d__contact_between(p, a, b, out_impulse, out_points,
+                                out_normal_x, out_normal_y);
+}
+
+int r2d_physics_contacts_of(const R2DPhysics *p, int id, int *others,
+                            float *impulses, int *points, int cap)
+{
+    if (!p || !p->world_valid || !r2d_physics_is_alive(p, id) || cap <= 0) return 0;
+    b2ContactData data[16];
+    const int n = b2Body_GetContactData(p->bodies[id], data, 16);
+    int out = 0;
+    for (int i = 0; i < n && out < cap; ++i) {
+        const int other = r2d__body_id_of_shape(data[i].shapeIdB);
+        const int self = r2d__body_id_of_shape(data[i].shapeIdA);
+        const int peer = (self == id) ? other : self;
+        if (peer < 0) continue;
+        float best = 0.0f;
+        for (int k = 0; k < data[i].manifold.pointCount; ++k) {
+            const float imp = data[i].manifold.points[k].normalImpulse;
+            if (imp > best) best = imp;
+        }
+        if (others) others[out] = peer;
+        if (impulses) impulses[out] = best;
+        if (points) points[out] = data[i].manifold.pointCount;
+        out++;
+    }
+    return out;
+}
+
 bool r2d_physics_is_awake(const R2DPhysics *p, int id)
 {
     if (!r2d_physics_is_alive(p, id)) return false;

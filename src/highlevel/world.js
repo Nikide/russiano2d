@@ -373,6 +373,50 @@ export function installWorld($) {
             return true;
         },
 
+        /**
+         * Касаются ли два узла ПРЯМО СЕЙЧАС: `$.world.touching('#a', '#b')`.
+         *
+         * События (`$.world.on('contact')`) говорят, что СТОЛКНУЛОСЬ; этот
+         * вызов отвечает «касаются ли в этот кадр» — по манифолду Box2D.
+         */
+        touching(a, b) {
+            const na = nodeOf(a), nb = nodeOf(b);
+            if (!na || !nb || na.body < 0 || nb.body < 0) return false;
+            if (typeof engineOf().touching !== 'function') return false;
+            return !!engineOf().touching(na.body, nb.body);
+        },
+
+        /**
+         * Контакт двух узлов: `{ impulse, points, nx, ny }` или `null`.
+         *
+         * `impulse` — наибольший нормальный импульс по точкам (Н·с): это «сила
+         * удара», по ней считают урон. События контакта импульса не несут —
+         * солвер считает его ПОСЛЕ события, поэтому сила читается отдельно.
+         */
+        contactBetween(a, b) {
+            const na = nodeOf(a), nb = nodeOf(b);
+            if (!na || !nb || na.body < 0 || nb.body < 0) return null;
+            if (typeof engineOf().contactBetween !== 'function') return null;
+            return engineOf().contactBetween(na.body, nb.body);
+        },
+
+        /** Импульс контакта (0, если не касаются) — короткая запись. */
+        contactImpulse(a, b) {
+            const c = world.contactBetween(a, b);
+            return c ? c.impulse : 0;
+        },
+
+        /**
+         * С кем узел касается сейчас: `[{ other, impulse, points }]`, где
+         * `other` — id ТЕЛА (не узла).
+         */
+        contactsOf(what, cap) {
+            const node = nodeOf(what);
+            if (!node || node.body < 0) return [];
+            if (typeof engineOf().contactsOf !== 'function') return [];
+            return engineOf().contactsOf(node.body, cap === undefined ? 16 : cap);
+        },
+
         destroyJoint(id) {
             if (typeof engine.destroyJoint === 'function') engine.destroyJoint(id);
             return world;

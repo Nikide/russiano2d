@@ -1205,6 +1205,70 @@ static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, J
     return o;
 }
 
+// --- Контакты: импульс, точки, «касаются ли сейчас» -----------------------
+//
+// События contacts() говорят, ЧТО столкнулось, но импульса в них нет: солвер
+// считает его после события. Поэтому сила удара читается отдельно — эти
+// вызовы смотрят ТЕКУЩИЙ контакт и его импульс.
+
+// engine.contactBetween(a, b) → { impulse, points, nx, ny } | null.
+static JSValue r2d__js_contact_between(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NULL;
+    float impulse = 0.0f, nx = 0.0f, ny = 0.0f;
+    int points = 0;
+    if (!r2d_physics_contact_between(s->physics,
+                                     r2d__arg_int(ctx, argc, argv, 0, -1),
+                                     r2d__arg_int(ctx, argc, argv, 1, -1),
+                                     &impulse, &points, &nx, &ny)) {
+        return JS_NULL;
+    }
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "impulse", JS_NewFloat64(ctx, impulse));
+    JS_SetPropertyStr(ctx, o, "points", JS_NewInt32(ctx, points));
+    JS_SetPropertyStr(ctx, o, "nx", JS_NewFloat64(ctx, nx));
+    JS_SetPropertyStr(ctx, o, "ny", JS_NewFloat64(ctx, ny));
+    return o;
+}
+
+// engine.contactsOf(id, cap?) → [{ other, impulse, points }].
+static JSValue r2d__js_contacts_of(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue arr = JS_NewArray(ctx);
+    if (!s || !s->physics) return arr;
+    const int id = r2d__arg_int(ctx, argc, argv, 0, -1);
+    int cap = r2d__arg_int(ctx, argc, argv, 1, 16);
+    if (cap <= 0) cap = 1;
+    if (cap > 64) cap = 64;
+    int others[64], points[64];
+    float impulses[64];
+    const int n = r2d_physics_contacts_of(s->physics, id, others, impulses, points, cap);
+    for (int i = 0; i < n; ++i) {
+        JSValue o = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, o, "other", JS_NewInt32(ctx, others[i]));
+        JS_SetPropertyStr(ctx, o, "impulse", JS_NewFloat64(ctx, impulses[i]));
+        JS_SetPropertyStr(ctx, o, "points", JS_NewInt32(ctx, points[i]));
+        JS_SetPropertyUint32(ctx, arr, (uint32_t)i, o);
+    }
+    return arr;
+}
+
+// engine.touching(a, b) → bool — касаются ли прямо сейчас.
+static JSValue r2d__js_touching(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_physics_contact_between(s->physics,
+                                                       r2d__arg_int(ctx, argc, argv, 0, -1),
+                                                       r2d__arg_int(ctx, argc, argv, 1, -1),
+                                                       NULL, NULL, NULL, NULL));
+}
+
 // engine.setClip(x, y, w, h) / engine.clearClip() — обрезка вывода.
 //
 // Scissor действует на всё, что рисуется ПОСЛЕ вызова в этом кадре. Каждая
@@ -3815,6 +3879,10 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "setDepth", r2d__js_set_depth, 1);
     r2d__set_fn(ctx, engine, "submitMesh", r2d__js_submit_mesh, 3);
     // Обрезка (scissor).
+    // Контакты: импульс, точки, «касаются ли сейчас».
+    r2d__set_fn(ctx, engine, "contactBetween", r2d__js_contact_between, 2);
+    r2d__set_fn(ctx, engine, "contactsOf", r2d__js_contacts_of, 2);
+    r2d__set_fn(ctx, engine, "touching", r2d__js_touching, 2);
     r2d__set_fn(ctx, engine, "setClip", r2d__js_set_clip, 4);
     r2d__set_fn(ctx, engine, "clearClip", r2d__js_clear_clip, 0);
     r2d__set_fn(ctx, engine, "getClip", r2d__js_get_clip, 0);

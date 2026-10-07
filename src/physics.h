@@ -195,6 +195,27 @@ void  r2d_physics_set_gravity_scale(R2DPhysics *p, int id, float scale);
 void  r2d_physics_set_bullet(R2DPhysics *p, int id, bool bullet);
 bool  r2d_physics_is_bullet(const R2DPhysics *p, int id);
 bool  r2d_physics_is_awake(const R2DPhysics *p, int id);
+
+// --- Контакты: импульс, точки, «касаются ли сейчас» ------------------------
+//
+// События (begin/end/hit) говорят, что СТОЛКНУЛОСЬ, но не дают импульса: он
+// считается солвером ПОСЛЕ события. Поэтому сила удара читается отдельно —
+// b2Body_GetContactData отдаёт манифолд с импульсом предыдущего шага.
+//
+// «Форм» здесь нет: у тела движка ОДНА форма (см. r2d_physics_create_body),
+// поэтому «попал в голову, а не в ногу» пока недостижимо — нужны несколько
+// форм на тело, и это отдельная работа.
+//
+// `out_impulse` — наибольший нормальный импульс по точкам (Н·с);
+// `out_points` — число точек контакта; `out_normal` — нормаль (x, y).
+// Возвращает false, если тела не касаются ПРЯМО СЕЙЧАС.
+bool r2d_physics_contact_between(const R2DPhysics *p, int a, int b,
+                                 float *out_impulse, int *out_points,
+                                 float *out_normal_x, float *out_normal_y);
+// Контакты тела: сколько нашлось (до `cap`), с кем и с каким импульсом.
+// Возвращает число записанных; `others[i]` — тело, `impulses[i]` — импульс.
+int  r2d_physics_contacts_of(const R2DPhysics *p, int id, int *others,
+                             float *impulses, int *points, int cap);
 float r2d_physics_get_mass(const R2DPhysics *p, int id);
 
 // --- Слои и маски коллизий ---------------------------------------------------

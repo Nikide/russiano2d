@@ -744,6 +744,35 @@ engine.submitTriangles(tri, v);   // → число принятых верши�
 * Смешивать с `drawSprite`/`drawRect`/`submitSprites` можно свободно: всё
   попадает в общий кадр отрисовки.
 
+### `engine.contactBetween(a, b)` / `engine.touching(a, b)` / `engine.contactsOf(id, cap?)`
+
+Импульс и точки контакта **прямо сейчас**. События `engine.contacts()` говорят,
+что столкнулось, но импульса не несут: солвер считает его ПОСЛЕ события.
+
+| Функция | Возвращает |
+|---|---|
+| `engine.touching(a, b)` | `bool` — касаются ли сейчас |
+| `engine.contactBetween(a, b)` | `{ impulse, points, nx, ny }` или `null` |
+| `engine.contactsOf(id, cap?)` | `[{ other, impulse, points }]` — `other` это id **тела** |
+
+`impulse` — наибольший нормальный импульс по точкам (Н·с); `nx`/`ny` — нормаль
+(Y вверх, как в Box2D).
+
+```js
+if (engine.touching(hero, spike)) {
+    const hit = engine.contactBetween(hero, spike);
+    if (hit && hit.impulse > 0.5) engine.log('сильный удар');
+}
+```
+
+**Момент чтения:** импульс удара виден на кадре столкновения, а `touching` в этот
+момент ещё `false` (манифолд появляется на следующем шаге). Для «пика удара»
+читайте импульс каждый кадр.
+
+**Чего нет:** нескольких форм на тело. У тела движка ОДНА форма, поэтому «попал в
+голову, а не в ногу» пока недостижимо — это отдельная работа; в событиях контакта
+формы тоже не различаются.
+
 ### `engine.setClip(x, y, w, h)` / `engine.clearClip()`
 
 Обрезка вывода (scissor). Действует на всё, что рисуется **после** вызова, пока
