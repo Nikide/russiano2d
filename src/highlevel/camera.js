@@ -8,6 +8,7 @@
 // ===========================================================================
 
 import { ctx, query, wrapOne, fxRandom } from './core.js';
+import { setPrimaryCameraSource } from './viewports.js';
 
 const cam = {
     x: 0, y: 0,          // центр камеры в мировых координатах
@@ -82,7 +83,10 @@ export function cameraTransform() {
     };
 }
 
-export function installCamera($) {
+export function installCamera($, viewports) {
+    // Модуль мультикамерности не должен сам лезть в $.camera: он спрашивает
+    // главную камеру через эту функцию, поэтому порядок установки любой.
+    setPrimaryCameraSource(() => cameraTransform());
     const camera = {
         at(x, y) {
             if (x === undefined) return { x: cam.x, y: cam.y };
@@ -91,6 +95,18 @@ export function installCamera($) {
             clampToLimits();
             return camera;
         },
+
+        // --- Несколько камер (сплитскрин) ----------------------------------
+        // Подробности и ограничения — docs/highlevel/camera.md §1.2.
+        add(name, opts) { return viewports.add(name, opts); },
+        remove(name) { return viewports.remove(name); },
+        list() { return viewports.list(); },
+        camCount() { return viewports.count(); },
+        split(count, opts) { return viewports.split(count, opts); },
+        viewAt(name, x, y) { return viewports.at(name, x, y); },
+        viewZoom(name, value) { return viewports.zoom(name, value); },
+        region(name, rect) { return viewports.region(name, rect); },
+        views() { return viewports.describe(); },
 
         pos() { return { x: cam.x, y: cam.y }; },
         x() { return cam.x; },

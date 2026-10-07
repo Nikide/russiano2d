@@ -16,6 +16,7 @@ import { ctx, wrap, def, TAGS, packColor, withAlpha, fxRandom,
          facetCount, nodesWithFacet, registryVersion, spriteSize,
          regionSprite } from './core.js';
 import { cameraTransform } from './camera.js';
+import { viewCams } from './viewports.js';
 
 const MAX_SPRITES = 16384;
 const MAX_TRIS = 8192;
@@ -1687,6 +1688,45 @@ function drawSlicedSprite(node, t, color) {
     }
 }
 
+/**
+ * Проход мира для ОДНОЙ камеры: фон, узлы, Y-sort.
+ *
+ * Вынесено из `_render`, потому что камер может быть несколько (сплитскрин):
+ * `_render` вызывает это на каждую, и все камеры рисуют в ОДИН батч кадра —
+ * регионы не пересекаются, поэтому более поздняя камера просто ложится поверх.
+ * Своя цель на камеру не нужна: регион выражается центром и зумом (см.
+ * viewports.js), а не отдельной текстурой.
+ */
+function drawWorldPass(cam) {
+    // Фон рисуется первым и не двигается с камерой при parallax=0.
+    const bg = ctx.world ? ctx.world.getBackground() : null;
+    if (bg && bg.sprite >= 0) {
+        const px = bg.parallax;
+        const bx = engine.width / 2 - (cam.x * px * cam.zoom);
+        const by = engine.height / 2 - (cam.y * px * cam.zoom) + bg.y;
+        pushSprite(bg.sprite, bx, by, engine.width * bg.scale, engine.height * bg.scale, 0, bg.color);
+    }
+
+    const list = sortedNodes();
+    // Y-sort карты: tilemap с включённым ysort дорисовывает свои полосы
+    // по мере прохода по узлам, чтобы сущности вставали между тайлами.
+    // Хуки ставит модуль tilemap; если его нет — цикл как раньше.
+    // Обход по индексу и вынесенный хук: for-of заводит итератор, а
+    // ctx.gfx._ysortFlush читался бы на каждом узле.
+    const flush = ctx.gfx._ysortFlush;
+    const total = list.length;
+    if (flush) {
+        for (let i = 0; i < total; i++) {
+            const node = list[i];
+            flush(cam, node.y);
+            drawWorldNode(node, cam);
+        }
+    } else {
+        for (let i = 0; i < total; i++) drawWorldNode(list[i], cam);
+    }
+    if (ctx.gfx._ysortFlushEnd) ctx.gfx._ysortFlushEnd(cam);
+}
+
 function drawWorldNode(node, cam) {
     if (!node.visible || node.alpha <= 0) return;
 
@@ -2303,33 +2343,14 @@ export function installGfx($) {
             fx_map.clear();
             fx_count = 0;
 
-            // Фон рисуется первым и не двигается с камерой при parallax=0.
-            const bg = ctx.world ? ctx.world.getBackground() : null;
-            if (bg && bg.sprite >= 0) {
-                const px = bg.parallax;
-                const bx = engine.width / 2 - (cam.x * px * cam.zoom);
-                const by = engine.height / 2 - (cam.y * px * cam.zoom) + bg.y;
-                pushSprite(bg.sprite, bx, by, engine.width * bg.scale, engine.height * bg.scale, 0, bg.color);
-            }
-
-            const list = sortedNodes();
-            // Y-sort карты: tilemap с включённым ysort дорисовывает свои полосы
-            // по мере прохода по узлам, чтобы сущности вставали между тайлами.
-            // Хуки ставит модуль tilemap; если его нет — цикл как раньше.
-            // Обход по индексу и вынесенный хук: for-of заводит итератор, а
-            // ctx.gfx._ysortFlush читался бы на каждом узле.
-            const flush = ctx.gfx._ysortFlush;
-            const total = list.length;
-            if (flush) {
-                for (let i = 0; i < total; i++) {
-                    const node = list[i];
-                    flush(cam, node.y);
-                    drawWorldNode(node, cam);
-                }
-            } else {
-                for (let i = 0; i < total; i++) drawWorldNode(list[i], cam);
-            }
-            if (ctx.gfx._ysortFlushEnd) ctx.gfx._ysortFlushEnd(cam);
+            // Камер может быть несколько (сплитскрин): каждая рисует свой
+            // регион в общий батч кадра.
+            // ВАЖНО: view здесь остаётся null. Узлы переводятся в экранные
+            // координаты САМИ (nodeTransform), поэтому view применил бы камеру
+            // ВТОРОЙ раз: при сплитскрине спрайт второй камеры уезжал на
+            // x = −6000 вместо 600. view нужен только $.gfx.draw.*, которые
+            // принимают мировые координаты, — они выставляют его у себя.
+            for (const vcam of viewCams(cam)) drawWorldPass(vcam);
 
             // Туман и отложенный свет. Узлы <fog> уже нарисованы в общем
             // проходе, здесь — экранный $.gfx.fog(); поверх дымки идёт свет,

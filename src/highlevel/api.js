@@ -17,6 +17,7 @@ import {
 } from './core.js';
 import { installWorld } from './world.js';
 import { installCamera } from './camera.js';
+import { installViewports } from './viewports.js';
 import { installTime, tickTime } from './time.js';
 import { installInput, shiftDown, ctrlDown, altDown } from './input.js';
 import { installSound } from './sound.js';
@@ -206,7 +207,10 @@ export function createApi() {
 
     // --- Подсистемы ---------------------------------------------------------
     installWorld($);
-    installCamera($);
+    // Мультикамерность ставится ДО камеры: камера публикует её методы у себя
+    // ($.camera.add/split/...), потому что для игры это одна подсистема.
+    const viewports = installViewports($);
+    installCamera($, viewports);
     installTime($);
     installInput($);
     installSound($);
