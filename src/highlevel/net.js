@@ -362,6 +362,33 @@ export function createClientState() {
     };
 }
 
+/**
+ * Сообщение → байты. Обычный JSON в UTF-8-подобной записи: снапшоты и ввод
+ * небольшие, а разбирать их в C незачем — модель живёт в JS.
+ */
+export function encodeMessage(message) {
+    const text = JSON.stringify(message || {});
+    const bytes = new Uint8Array(text.length);
+    for (let i = 0; i < text.length; ++i) {
+        const code = text.charCodeAt(i);
+        bytes[i] = code < 256 ? code : 63;   // «?» вместо не-латиницы
+    }
+    return bytes;
+}
+
+/** Байты → сообщение (или null, если разобрать не удалось). */
+export function decodeMessage(data) {
+    if (!data || data.length === 0) return null;
+    let text = '';
+    for (let i = 0; i < data.length; ++i) text += String.fromCharCode(data[i]);
+    try {
+        const parsed = JSON.parse(text);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (e) {
+        return null;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Подсистема
 // ---------------------------------------------------------------------------
@@ -378,6 +405,9 @@ export function installNet($) {
     const authority = createAuthority();
     const client = createClientState();
     let transport = null;            // ставят снаружи через attach()
+    let bound = null;                 // транспорт движка (SDL3_net), если есть
+    let lastChannel = '';             // канал последнего принятого сообщения
+    const peerByAddress = new Map();  // адрес пира → номер игрока (сервер)
     let tick = 0;
     let droppedInputs = 0;
     const stats = { sent: 0, received: 0, snapshots: 0, inputs: 0 };
@@ -454,9 +484,60 @@ export function installNet($) {
          */
         attach(value) {
             transport = value || null;
+            bound = null;
             return api;
         },
         transport() { return transport; },
+
+        /**
+         * Транспорт ДВИЖКА на SDL3_net, если он собран (R2D_ENABLE_NET).
+         *
+         * Работает бинарными пакетами: $.net сериализует сообщение в байты
+         * (JSON), движок возит их датаграммами. Возвращает false, если сети в
+         * сборке нет — тогда игра ставит свой транспорт через `attach`.
+         */
+        bindEngine() {
+            if (typeof engine === 'undefined' || !engine
+                || typeof engine.netStatus !== 'function') {
+                return false;
+            }
+            const status = engine.netStatus();
+            if (!status || !status.available) return false;
+            bound = {
+                engine: true,
+                listen(port) { return !!engine.netHost(port); },
+                connect(host, port) { return !!engine.netJoin(host, port); },
+                send(message) {
+                    return !!engine.netSend(encodeMessage(message), '', 0);
+                },
+                poll() {
+                    const raw = engine.netPoll() || [];
+                    const out = [];
+                    for (const packet of raw) {
+                        const decoded = decodeMessage(packet.data);
+                        if (!decoded) continue;
+                        // Адрес отправителя нужен серверу, чтобы связать пира с
+                        // игроком: клиент не должен называть себя сам.
+                        decoded.from = packet.from;
+                        decoded.fromPort = packet.fromPort;
+                        out.push(decoded);
+                    }
+                    return out;
+                },
+                close() { engine.netClose(); },
+                status() { return engine.netStatus(); },
+                simulate(loss, delay, seed) {
+                    if (typeof engine.netSimulate === 'function') {
+                        engine.netSimulate(loss, delay, seed);
+                    }
+                },
+            };
+            transport = bound;
+            return true;
+        },
+
+        /** Подключён ли транспорт движка (а не свой через attach). */
+        engineBound() { return !!(bound && transport === bound); },
 
         /** Опрос транспорта: движок зовёт раз в кадр. */
         poll() {
@@ -476,6 +557,10 @@ export function installNet($) {
 
         /** Сколько кадров сети прошло (номер тика). */
         tick() { return tick; },
+        /** Канал последнего принятого сообщения (диагностика). */
+        lastChannel() { return lastChannel; },
+        /** Адреса пиров, уже привязанные к игрокам (диагностика сервера). */
+        peers() { return [...peerByAddress.keys()]; },
         /** Счётчики для интерфейса: отправлено, получено, снапшотов, вводов. */
         stats() { return Object.assign({}, stats, { dropped: droppedInputs }); },
 
@@ -516,6 +601,9 @@ export function installNet($) {
             const p = Math.floor(Number(player) || 0);
             if (!authority.inputOf(p)) return false;
             authority.removePlayer(p);
+            for (const [address, known] of [...peerByAddress]) {
+                if (known === p) peerByAddress.delete(address);
+            }
             emit('leave', p);
             return true;
         },
@@ -567,6 +655,7 @@ export function installNet($) {
         receive(message) {
             if (!message || typeof message !== 'object') return false;
             const channel = String(message.channel || '');
+            lastChannel = channel;   // диагностика: видно, что дошло
             stats.received++;
             if (channel === 'snapshot') {
                 stats.snapshots++;
@@ -577,7 +666,22 @@ export function installNet($) {
             if (channel === 'input') {
                 // Ввод применяет ТОЛЬКО сервер, и только к своему игроку.
                 if (role !== 'server') return false;
-                const player = Math.floor(Number(message.player) || 0);
+                // Игрок определяется АДРЕСОМ пира, а не тем, что он о себе
+                // написал: клиент не может назваться чужим номером. Первый
+                // пакет с нового адреса заводит игрока.
+                let player = Math.floor(Number(message.player) || 0);
+                if (player > 0 && authority.inputOf(player)) {
+                    // Номер назван и он есть в столе — принимаем.
+                } else {
+                    const address = String(message.from || '');
+                    player = peerByAddress.get(address) || 0;
+                    if (!player) {
+                        if (authority.playerCount() >= maxPlayers) return false;
+                        player = authority.addPlayer();
+                        peerByAddress.set(address, player);
+                        emit('join', player);
+                    }
+                }
                 const queue = authority.inputOf(player);
                 if (!queue) return false;
                 queue.push(message.data);
@@ -647,6 +751,7 @@ export function installNet($) {
             listeners.clear();
             client.reset();
             authority.reset();
+            peerByAddress.clear();
             stats.sent = 0; stats.received = 0; stats.snapshots = 0; stats.inputs = 0;
             droppedInputs = 0;
             tick = 0;
@@ -654,6 +759,8 @@ export function installNet($) {
         },
 
         /** Чистые ядра — для тестов и своей реализации транспорта. */
+        encodeMessage,
+        decodeMessage,
         createIdTable,
         createAuthority,
         createClientState,

@@ -54,6 +54,16 @@ else()
     list(APPEND R2D_SOURCES audio.h audio_stub.c)
 endif()
 
+# --- Сеть -------------------------------------------------------------------
+if(R2D_ENABLE_NET)
+    list(APPEND R2D_SOURCES net.h net.c)
+    list(APPEND R2D_DEFINES R2D_ENABLE_NET=1)
+else()
+    # Тот же интерфейс net.h, но без сокетов: скриптовый слой не обрастает
+    # #ifdef, а сборка не тянет SDL3_net.
+    list(APPEND R2D_SOURCES net.h net_stub.c)
+endif()
+
 # --- Dear ImGui -------------------------------------------------------------
 if(R2D_ENABLE_IMGUI)
     list(APPEND R2D_SOURCES
@@ -221,6 +231,18 @@ endif()
 
 if(R2D_ENABLE_AUDIO)
     target_link_libraries(russiano2d PRIVATE SDL3_mixer::SDL3_mixer)
+endif()
+
+if(R2D_ENABLE_NET)
+    # Цель может называться SDL3_net::SDL3_net (современный SDL_net 3) или
+    # SDL3_net::SDL3_net-static — берём ту, что объявила зависимость.
+    if(TARGET SDL3_net::SDL3_net)
+        target_link_libraries(russiano2d PRIVATE SDL3_net::SDL3_net)
+    elseif(TARGET SDL3_net::SDL3_net-static)
+        target_link_libraries(russiano2d PRIVATE SDL3_net::SDL3_net-static)
+    else()
+        message(FATAL_ERROR "[deps] SDL3_net собран, но цель не найдена")
+    endif()
 endif()
 
 if(R2D_ENABLE_IMGUI)

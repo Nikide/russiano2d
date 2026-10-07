@@ -145,6 +145,24 @@ if(R2D_ENABLE_AUDIO)
 endif()
 
 # ---------------------------------------------------------------------------
+# SDL3_net — сеть (только авторитарная модель, см. docs/highlevel/net.md)
+#
+# Канал — датаграммы: сервер отвечает на адрес отправителя, не заводя
+# соединений на каждого игрока, а потеря пакета не блокирует остальных.
+# Минимум: без R2D_ENABLE_NET остаётся net_stub.c с тем же интерфейсом.
+# ---------------------------------------------------------------------------
+if(R2D_ENABLE_NET)
+    set(SDLNET_TESTS    OFF CACHE BOOL "" FORCE)
+    set(SDLNET_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SDLNET_INSTALL  OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(SDL3_net
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL_net.git
+        GIT_TAG        30dd38a36b487b60847a8bb9832e94b124802e2f
+        GIT_SHALLOW    TRUE)
+    FetchContent_MakeAvailable(SDL3_net)
+endif()
+
+# ---------------------------------------------------------------------------
 # RmlUi — игровой GUI (HUD, меню, инвентарь) на HTML/CSS-подобной разметке
 # ---------------------------------------------------------------------------
 if(R2D_ENABLE_RMLUI)

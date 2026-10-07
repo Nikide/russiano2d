@@ -19,6 +19,7 @@
 #include "light.h"
 #include "module_path.h"
 #include "http.h"
+#include "net.h"
 #include "payload.h"
 #include "r2d.h"
 #include "text.h"
@@ -1206,6 +1207,144 @@ static JSValue r2d__js_submit_mesh(JSContext *ctx, JSValueConst this_val, int ar
     }
     JS_FreeValue(ctx, ab);
     return JS_NewInt32(ctx, count);
+}
+
+// --- Сеть (транспорт SDL3_net) ---------------------------------------------
+//
+// Движок даёт только сокеты: поднять сервер, подключиться, отправить и принять
+// датаграмму. Владение узлами, снапшоты и дельту считает $.net (src/highlevel/
+// net.js) — транспорт от модели не зависит.
+
+// engine.netHost(port) → bool — слушать порт (сервер авторитет).
+static JSValue r2d__js_net_host(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    const int port = r2d__arg_int(ctx, argc, argv, 0, 0);
+    return JS_NewBool(ctx, r2d_net_listen(port));
+}
+
+// engine.netJoin(host, port) → bool — подключиться (клиент).
+static JSValue r2d__js_net_join(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    const char *host = argc > 0 ? JS_ToCString(ctx, argv[0]) : NULL;
+    const int port = r2d__arg_int(ctx, argc, argv, 1, 0);
+    const bool ok = r2d_net_connect(host ? host : "", port);
+    if (host) JS_FreeCString(ctx, host);
+    return JS_NewBool(ctx, ok);
+}
+
+// engine.netClose() → undefined; engine.netMode() → 0|1|2.
+static JSValue r2d__js_net_close(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    r2d_net_close();
+    return JS_UNDEFINED;
+}
+
+static JSValue r2d__js_net_mode(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    return JS_NewInt32(ctx, r2d_net_mode());
+}
+
+// engine.netStatus() → { available, mode, connected, error, address, port,
+//                        sent, received, packetsSent, packetsReceived }
+static JSValue r2d__js_net_status(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "available",  JS_NewBool(ctx, r2d_net_available()));
+    JS_SetPropertyStr(ctx, obj, "mode",       JS_NewInt32(ctx, r2d_net_mode()));
+    JS_SetPropertyStr(ctx, obj, "connected",  JS_NewBool(ctx, r2d_net_connected()));
+    JS_SetPropertyStr(ctx, obj, "error",      JS_NewString(ctx, r2d_net_error()));
+    JS_SetPropertyStr(ctx, obj, "address",    JS_NewString(ctx, r2d_net_local_address()));
+    JS_SetPropertyStr(ctx, obj, "port",       JS_NewInt32(ctx, r2d_net_local_port()));
+    JS_SetPropertyStr(ctx, obj, "sent",       JS_NewFloat64(ctx, (double)r2d_net_bytes_sent()));
+    JS_SetPropertyStr(ctx, obj, "received",   JS_NewFloat64(ctx, (double)r2d_net_bytes_received()));
+    JS_SetPropertyStr(ctx, obj, "packetsSent", JS_NewFloat64(ctx, (double)r2d_net_packets_sent()));
+    JS_SetPropertyStr(ctx, obj, "packetsReceived", JS_NewFloat64(ctx, (double)r2d_net_packets_received()));
+    return obj;
+}
+
+// engine.netSend(data: Uint8Array, to?: string, toPort?: number) → bool
+//
+// Отправка бинарная: снапшот сериализует $.net, транспорт возит байты.
+static JSValue r2d__js_net_send(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 1) {
+        JS_ThrowTypeError(ctx, "netSend(data: Uint8Array, to?, toPort?)");
+        return JS_EXCEPTION;
+    }
+    size_t off = 0, len = 0, bpe = 0;
+    JSValue ab = JS_GetTypedArrayBuffer(ctx, argv[0], &off, &len, &bpe);
+    if (JS_IsException(ab)) return JS_EXCEPTION;
+    size_t size = 0;
+    uint8_t *base = JS_GetArrayBuffer(ctx, &size, ab);
+    if (!base) {
+        JS_FreeValue(ctx, ab);
+        JS_ThrowTypeError(ctx, "первый аргумент должен быть Uint8Array");
+        return JS_EXCEPTION;
+    }
+    const char *to = argc > 1 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])
+        ? JS_ToCString(ctx, argv[1]) : NULL;
+    const int to_port = r2d__arg_int(ctx, argc, argv, 2, 0);
+
+    const bool ok = len > 0
+        ? r2d_net_send(to, to_port, base + off, (int)len)
+        : false;
+    if (to) JS_FreeCString(ctx, to);
+    JS_FreeValue(ctx, ab);
+    return JS_NewBool(ctx, ok);
+}
+
+// Освободитель памяти пакета для JS_NewUint8Array: массив забирает владение
+// буфером, и освобождать его должна та же куча, что выделила.
+static void r2d__net_free_packet(JSRuntime *rt, void *opaque, void *ptr)
+{
+    R2D_UNUSED(rt); R2D_UNUSED(opaque);
+    SDL_free(ptr);
+}
+
+// engine.netPoll() → [{ from, fromPort, data: Uint8Array }, …]
+//
+// Забираем все пакеты разом: игра сама решает, сколько обрабатывать за кадр.
+static JSValue r2d__js_net_poll(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DNetPacket packets[32];
+    SDL_zero(packets);
+    const int count = r2d_net_poll(packets, 32);
+    JSValue out = JS_NewArray(ctx);
+    for (int i = 0; i < count; ++i) {
+        JSValue item = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, item, "from",     JS_NewString(ctx, packets[i].from));
+        JS_SetPropertyStr(ctx, item, "fromPort", JS_NewInt32(ctx, packets[i].from_port));
+        // Отдаём Uint8Array, а не ArrayBuffer: игра читает .length и режет
+        // срез, а у ArrayBuffer этого нет — в игре data приходил undefined.
+        // Память пакета передаём массиву вместе с освободителем: лишней копии
+        // нет, а r2d_net_free_packets её уже не трогает.
+        const size_t bytes = (size_t)(packets[i].size > 0 ? packets[i].size : 0);
+        JSValue buf = JS_NewUint8Array(ctx, packets[i].data, bytes,
+                                       r2d__net_free_packet, NULL, false);
+        packets[i].data = NULL;
+        JS_SetPropertyStr(ctx, item, "data", buf);
+        JS_SetPropertyUint32(ctx, out, (uint32_t)i, item);
+    }
+    r2d_net_free_packets(packets, count);
+    return out;
+}
+
+// engine.netSimulate(lossPercent, delayMs?, seed?) — воспроизводимые потери.
+static JSValue r2d__js_net_simulate(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    const int loss = r2d__arg_int(ctx, argc, argv, 0, 0);
+    const int delay = r2d__arg_int(ctx, argc, argv, 1, 0);
+    const int seed = r2d__arg_int(ctx, argc, argv, 2, 1);
+    r2d_net_simulate(loss, delay, seed);
+    return JS_UNDEFINED;
 }
 
 // engine.setDepth(bool) → bool — тест глубины (z-буфер).
@@ -3351,6 +3490,14 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "submitMesh", r2d__js_submit_mesh, 2);
     r2d__set_fn(ctx, engine, "depth", r2d__js_get_depth, 0);
     r2d__set_fn(ctx, engine, "depthInfo", r2d__js_depth_info, 0);
+    r2d__set_fn(ctx, engine, "netHost", r2d__js_net_host, 1);
+    r2d__set_fn(ctx, engine, "netJoin", r2d__js_net_join, 2);
+    r2d__set_fn(ctx, engine, "netClose", r2d__js_net_close, 0);
+    r2d__set_fn(ctx, engine, "netMode", r2d__js_net_mode, 0);
+    r2d__set_fn(ctx, engine, "netStatus", r2d__js_net_status, 0);
+    r2d__set_fn(ctx, engine, "netSend", r2d__js_net_send, 3);
+    r2d__set_fn(ctx, engine, "netPoll", r2d__js_net_poll, 0);
+    r2d__set_fn(ctx, engine, "netSimulate", r2d__js_net_simulate, 3);
     r2d__set_fn(ctx, engine, "spriteFilter", r2d__js_get_sprite_filter, 0);
     r2d__set_fn(ctx, engine, "limits", r2d__js_limits, 0);
     r2d__set_fn(ctx, engine, "setBodyEnabled", r2d__js_set_body_enabled, 2);

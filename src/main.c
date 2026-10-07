@@ -16,6 +16,7 @@
 #include "json.h"
 #include "physics.h"
 #include "http.h"
+#include "net.h"
 #include "profile.h"
 #include "render.h"
 #include "script.h"
@@ -661,6 +662,12 @@ int main(int argc, char **argv)
         R2D_LOG("HTTP недоступен ($.http сообщит об этом игре)");
     }
 
+    // Сеть: транспорт поднимается сразу, порт слушает игра через $.net.host.
+    // Без R2D_ENABLE_NET движок просто сообщит об этом $.net.
+    if (!r2d_net_init()) {
+        R2D_LOG("сеть недоступна ($.net скажет об этом игре)");
+    }
+
 #ifdef R2D_ENABLE_IMGUI
     // Оверлей по умолчанию скрыт, чтобы не закрывать демо; F1 показывает его.
     R2DDebugUI *debug = r2d_debug_ui_create(app.device, app.window, app.base_path, opt_overlay);
@@ -738,6 +745,7 @@ int main(int argc, char **argv)
         r2d_font_shutdown();
         r2d_render_shutdown(&renderer);
         r2d_physics_shutdown(&physics);
+        r2d_net_shutdown();
         r2d_http_shutdown();
         r2d_audio_shutdown(&audio);
         r2d_app_shutdown(&app);
@@ -774,6 +782,7 @@ int main(int argc, char **argv)
     r2d_font_shutdown();   // до рендера: атлас — его текстура
     r2d_render_shutdown(&renderer);
     r2d_physics_shutdown(&physics);
+    r2d_net_shutdown();
     r2d_http_shutdown();
     r2d_audio_shutdown(&audio);
     r2d_app_shutdown(&app);
