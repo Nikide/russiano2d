@@ -1102,7 +1102,7 @@ static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, J
     R2DScript *s = r2d__script_of(ctx);
     JSValue o = JS_NewObject(ctx);
 
-    const int textures = (s && s->renderer) ? s->renderer->texture_count : 0;
+    const int textures = (s && s->renderer) ? r2d_texture_live_count(s->renderer) : 0;
     const int sprites = (s && s->renderer) ? s->renderer->sprite_count : 0;
     const int bodies = (s && s->physics) ? r2d_physics_live_count(s->physics) : 0;
     const int joints = (s && s->physics) ? r2d_physics_joint_count(s->physics) : 0;
@@ -1125,6 +1125,20 @@ static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, J
     JS_SetPropertyStr(ctx, o, "ui_callbacks_max", JS_NewInt32(ctx, 256));
     JS_SetPropertyStr(ctx, o, "documents_max", JS_NewInt32(ctx, 64));
     return o;
+}
+
+// engine.freeTexture(id) → bool — выгрузить текстуру и вернуть слот.
+//
+// Раньше выгрузки не было вовсе: картинка, ставшая ненужной, занимала слот до
+// конца процесса, а лимит — 256 текстур. Теперь игре есть чем освободить
+// память, и слот переиспользуется следующим loadTexture.
+static JSValue r2d__js_free_texture(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->renderer) return JS_NewBool(ctx, false);
+    const int id = r2d__arg_int(ctx, argc, argv, 0, -1);
+    return JS_NewBool(ctx, r2d_texture_free(s->renderer, id));
 }
 
 // engine.isAwake(id) → bool — спит ли тело (Box2D усыпляет неподвижные).
@@ -3136,6 +3150,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "getGravity", r2d__js_get_gravity, 0);
     r2d__set_fn(ctx, engine, "setAwake", r2d__js_set_awake, 2);
     r2d__set_fn(ctx, engine, "isAwake", r2d__js_is_awake, 1);
+    r2d__set_fn(ctx, engine, "freeTexture", r2d__js_free_texture, 1);
     r2d__set_fn(ctx, engine, "limits", r2d__js_limits, 0);
     r2d__set_fn(ctx, engine, "setBodyEnabled", r2d__js_set_body_enabled, 2);
     r2d__set_fn(ctx, engine, "setBodyFilter", r2d__js_set_body_filter, 4);

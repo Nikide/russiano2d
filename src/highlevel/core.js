@@ -1529,6 +1529,24 @@ export function spriteSize(id) {
     return size ? [size[0], size[1]] : [0, 0];
 }
 
+/**
+ * Забыть кэши текстуры и её спрайтов.
+ *
+ * Нужно после выгрузки: в C слот возвращается движку и будет использован
+ * следующей загрузкой, а у нас остались бы старые id — `loadTexture` вернул бы
+ * чужую текстуру, а `.sprite()` — мёртвый спрайт.
+ */
+export function forgetTexture(path) {
+    const key = String(path);
+    texture_cache.delete(key);
+    for (const cache_key of [...sprite_cache.keys()]) {
+        if (cache_key === 'path:' + key || cache_key.startsWith(`region:${key}|`)
+            || cache_key.startsWith(`sheet:${key}|`)) {
+            sprite_cache.delete(cache_key);
+        }
+    }
+}
+
 export function textureSizeOf(path) {
     const tex = texture_cache.get(path) || engine.loadTexture(path);
     texture_cache.set(path, tex);

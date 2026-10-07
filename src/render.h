@@ -301,6 +301,11 @@ SDL_GPUTexture *r2d_texture_handle(const R2DRenderer *r, int id);
 // `r2d_texture_upload_region` пишет прямоугольник (x, y, w, h) из буфера с
 // шагом строк pitch байт.
 int  r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h);
+// Выгрузка текстуры: GPU-ресурс освобождается, слот переиспользуется, спрайты
+// этой текстуры гасятся. Белую текстуру выгрузить нельзя (вернёт false).
+bool r2d_texture_free(R2DRenderer *r, int id);
+// Сколько живых текстур — для отчёта о лимитах.
+int  r2d_texture_live_count(const R2DRenderer *r);
 bool r2d_texture_upload_region(R2DRenderer *r, int id, int x, int y, int w, int h,
                                const void *pixels, int pitch);
 

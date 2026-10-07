@@ -474,6 +474,49 @@ int r2d_texture_load(R2DRenderer *r, const char *path)
     return id;
 }
 
+// Выгрузка текстуры: GPU-ресурс освобождается, слот помечается мёртвым и
+// переиспользуется следующим loadTexture/createTexture. Спрайты, ссылающиеся
+// на эту текстуру, тоже гасятся — иначе в батч попадёт команда с невалидным
+// спрайтом.
+//
+// Белую текстуру (основа drawRect и nine-slice) выгружать нельзя: движок
+// рисует ею прямоугольники, и без неё развалится интерфейс.
+bool r2d_texture_free(R2DRenderer *r, int id)
+{
+    if (!r || id < 0 || id >= r->texture_count) return false;
+    if (id == r->white_texture) {
+        R2D_WARN("freeTexture: белую текстуру выгружать нельзя");
+        return false;
+    }
+    R2DTexture *t = &r->textures[id];
+    if (!t->alive) return false;
+
+    if (t->handle) SDL_ReleaseGPUTexture(r->device, t->handle);
+    t->handle = NULL;
+    t->alive = false;
+    t->width = 0;
+    t->height = 0;
+    t->name[0] = '\0';
+
+    for (int i = 0; i < r->sprite_count; ++i) {
+        if (r->sprites[i].alive && r->sprites[i].texture == id) {
+            r->sprites[i].alive = false;
+        }
+    }
+    return true;
+}
+
+// Сколько живых текстур сейчас (для отладочного отчёта о лимитах).
+int r2d_texture_live_count(const R2DRenderer *r)
+{
+    int live = 0;
+    if (!r) return 0;
+    for (int i = 0; i < r->texture_count; ++i) {
+        if (r->textures[i].alive) live++;
+    }
+    return live;
+}
+
 int r2d_texture_find(const R2DRenderer *r, const char *path)
 {
     for (int i = 0; i < r->texture_count; ++i) {

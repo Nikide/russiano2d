@@ -27,7 +27,7 @@
 //   data    — значение из кода (value) или фабрика (build) — без движка и файлов.
 // ===========================================================================
 
-import { ctx, resolveSprite, sheetFrames } from './core.js';
+import { ctx, resolveSprite, sheetFrames, forgetTexture } from './core.js';
 
 export const RESOURCE_KINDS = ['texture', 'sprite', 'sheet', 'sound', 'json', 'text', 'data'];
 
@@ -89,7 +89,10 @@ export function normalizeSpec(name, spec) {
     if (key === '') return null;
 
     if (typeof spec === 'string') {
-        return spec.trim() === '' ? null : { name: key, kind: inferKind(spec), path: spec, src: spec };
+        if (spec.trim() === '') return null;
+        // Строка — это тоже полноценное описание: вид выводится из расширения,
+        // и dispose для текстуры ставится так же, как для объекта.
+        return withDefaultDispose({ name: key, kind: inferKind(spec), path: spec, src: spec });
     }
     if (!plainObject(spec)) return null;
 
@@ -124,7 +127,26 @@ export function normalizeSpec(name, spec) {
         if (typeof spec.build === 'function') out.build = spec.build;
     }
     if (typeof spec.dispose === 'function') out.dispose = spec.dispose;
-    return out;
+    return withDefaultDispose(out);
+}
+
+/**
+ * Выгрузка по умолчанию: текстура возвращает слот движку.
+ *
+ * Без этого free() только забывал значение у себя, а GPU-память и слот
+ * оставались занятыми до конца процесса (лимит — 256 текстур). Заодно просим
+ * ядро забыть кэш пути: в C слот переиспользуется, и старый id стал бы чужой
+ * текстурой (см. docs/highlevel/resource.md §5).
+ */
+function withDefaultDispose(spec) {
+    if (!spec || spec.dispose || spec.kind !== 'texture') return spec;
+    if (typeof engine === 'undefined' || !engine || typeof engine.freeTexture !== 'function') return spec;
+    const path = spec.path || '';
+    spec.dispose = (value) => {
+        if (value >= 0) engine.freeTexture(value);
+        if (path) forgetTexture(path);
+    };
+    return spec;
 }
 
 /** Ключ описания: по нему видно, то же самое описали повторно или другое. */
