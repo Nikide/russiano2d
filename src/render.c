@@ -188,6 +188,31 @@ static SDL_GPUGraphicsPipeline *r2d__create_pipeline(
 // Текстуры
 // ---------------------------------------------------------------------------
 
+// Текстура с явным набором применений. Загрузка пикселей возможна только в
+// текстуру с флагом COPY_DST: без него SDL_UploadToGPUTexture молча ничего не
+// делает, и спрайты остаются прозрачными (именно так «не рисовался» атлас
+// глифов — данные лежали в памяти, но в GPU не попадали).
+static SDL_GPUTexture *r2d__create_texture_usage(R2DRenderer *r, int w, int h,
+                                                 SDL_GPUTextureUsageFlags usage)
+{
+    SDL_GPUTextureCreateInfo info;
+    SDL_zero(info);
+    info.type         = SDL_GPU_TEXTURETYPE_2D;
+    info.format       = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    info.usage        = usage;
+    info.width              = (Uint32)w;
+    info.height             = (Uint32)h;
+    info.layer_count_or_depth = 1;
+    info.num_levels         = 1;
+    info.sample_count       = SDL_GPU_SAMPLECOUNT_1;
+
+    SDL_GPUTexture *tex = SDL_CreateGPUTexture(r->device, &info);
+    if (!tex) {
+        R2D_ERROR("SDL_CreateGPUTexture: %s", SDL_GetError());
+    }
+    return tex;
+}
+
 static SDL_GPUTexture *r2d__create_texture(R2DRenderer *r, int w, int h)
 {
     SDL_GPUTextureCreateInfo info;
@@ -289,6 +314,99 @@ static int r2d__texture_slot_alloc(R2DRenderer *r)
     }
     if (r->texture_count < R2D_MAX_TEXTURES) return r->texture_count++;
     return -1;
+}
+
+int r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h)
+{
+    if (!r || !r->device || w <= 0 || h <= 0 || w > 16384 || h > 16384) return -1;
+
+    const int slot = r2d__texture_slot_alloc(r);
+    if (slot < 0) {
+        R2D_ERROR("достигнут лимит текстур (%d)", R2D_MAX_TEXTURES);
+        return -1;
+    }
+
+    SDL_GPUTexture *tex = r2d__create_texture_usage(
+        r, w, h, SDL_GPU_TEXTUREUSAGE_SAMPLER);
+    if (!tex) return -1;
+    if (pixels && !r2d__upload_pixels(r, tex, pixels, w, h, w * 4)) {
+        SDL_ReleaseGPUTexture(r->device, tex);
+        return -1;
+    }
+
+    R2DTexture *t = &r->textures[slot];
+    t->handle = tex;
+    t->width  = w;
+    t->height = h;
+    t->alive  = true;
+    SDL_snprintf(t->name, sizeof t->name, "<memory %dx%d>", w, h);
+    return slot;
+}
+
+bool r2d_texture_upload_region(R2DRenderer *r, int id, int x, int y, int w, int h,
+                               const void *pixels, int pitch)
+{
+    if (!r || !pixels || id < 0 || id >= r->texture_count) return false;
+    if (!r->textures[id].alive || w <= 0 || h <= 0) return false;
+
+    const Uint32 row_bytes = (Uint32)w * 4u;
+    const Uint32 total     = row_bytes * (Uint32)h;
+
+    SDL_GPUTransferBufferCreateInfo tb_info;
+    SDL_zero(tb_info);
+    tb_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    tb_info.size  = total;
+    SDL_GPUTransferBuffer *tb = SDL_CreateGPUTransferBuffer(r->device, &tb_info);
+    if (!tb) return false;
+
+    void *dst = SDL_MapGPUTransferBuffer(r->device, tb, false);
+    if (!dst) {
+        SDL_ReleaseGPUTransferBuffer(r->device, tb);
+        return false;
+    }
+    const Uint8 *src = (const Uint8 *)pixels;
+    for (int row = 0; row < h; ++row) {
+        SDL_memcpy((Uint8 *)dst + (size_t)row * row_bytes,
+                   src + (size_t)row * (size_t)pitch, row_bytes);
+    }
+    SDL_UnmapGPUTransferBuffer(r->device, tb);
+
+    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(r->device);
+    if (!cmd) {
+        SDL_ReleaseGPUTransferBuffer(r->device, tb);
+        return false;
+    }
+
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
+
+    SDL_GPUTextureTransferInfo src_loc;
+    SDL_zero(src_loc);
+    src_loc.transfer_buffer = tb;
+    src_loc.offset          = 0;
+
+    SDL_GPUTextureRegion region;
+    SDL_zero(region);
+    region.texture = r->textures[id].handle;
+    region.x       = (Uint32)x;
+    region.y       = (Uint32)y;
+    region.w       = (Uint32)w;
+    region.h       = (Uint32)h;
+    region.d       = 1;
+
+    SDL_UploadToGPUTexture(cp, &src_loc, &region, false);
+    SDL_EndGPUCopyPass(cp);
+
+    SDL_GPUFence *fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+    if (fence) {
+        SDL_GPUFence *fences[1] = { fence };
+        SDL_WaitForGPUFences(r->device, true, fences, 1);
+        SDL_ReleaseGPUFence(r->device, fence);
+    }
+    SDL_ReleaseGPUTransferBuffer(r->device, tb);
+
+    // Байты нового региона обязаны попасть на GPU до того, как их увидит
+    // отрисовка следующего кадра: атлас глифов дорисовывается по ходу игры.
+    return true;
 }
 
 int r2d_texture_load(R2DRenderer *r, const char *path)
@@ -471,7 +589,9 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
 void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float h,
                     float angle, uint32_t color)
 {
-    if (!r2d_sprite_alive(r, sprite)) return;
+    if (!r2d_sprite_alive(r, sprite)) {
+        return;
+    }
     if (!r2d__grow((void **)&r->cmds, &r->cmd_cap, r->cmd_count + 1, sizeof(R2DDrawCmd))) return;
     if (!r2d__grow((void **)&r->vertices, &r->vertex_cap, r->vertex_count + 4, sizeof(R2DVertex))) return;
     if (!r2d__grow((void **)&r->indices, &r->index_cap, r->index_count + 6, sizeof(uint32_t))) return;

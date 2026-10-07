@@ -1529,8 +1529,38 @@ function baseColor(node) {
     return color;
 }
 
+/**
+ * Габарит текстового узла: у <text> нет спрайта, поэтому w/h равны нулю, и
+ * отсечение по камере (и сортировка) считали бы его невидимым. Меряем строку
+ * тем же шрифтом, которым рисуем, и запоминаем — пересчёт только при смене
+ * текста, кегля или семейства.
+ */
+function syncTextBounds(node) {
+    const size = numOf(node.size, 20);
+    const family = nodeFontFamily(node) || '';
+    const key = node.text + '|' + size + '|' + family;
+    if (node._text_measure_key === key) return;
+    node._text_measure_key = key;
+
+    const measured = typeof engine.measureText === 'function'
+        ? engine.measureText(String(node.text), size, family)
+        : null;
+    const w = measured ? Number(measured[0]) || 0 : 0;
+    const h = measured ? Number(measured[1]) || 0 : size;
+    node.w = w;
+    node.h = h;
+}
+
+function numOf(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
 function drawWorldNode(node, cam) {
     if (!node.visible || node.alpha <= 0) return;
+
+    // Тексту нечего рисовать, кроме строки: его габарит считаем до отсечения.
+    if (node.tag === 'text' && node.text) syncTextBounds(node);
 
     // Свои теги рисует модуль. Проверяем до отсечения: у <tilemap> и
     // <particles> собственный габарит, который общий прямоугольник узла не
@@ -1573,7 +1603,9 @@ function drawWorldNode(node, cam) {
         break;
     }
     case 'text': {
-        ctx.gfx._queueText(node.text, t.x, t.y, node.size * cam.zoom, baseColor(node), node.attrs.align || 'left');
+        ctx.gfx._queueTextScaled(node.text, t.x, t.y, node.size, baseColor(node),
+                                 node.attrs.align || 'left', nodeFontFamily(node),
+                                 node.angle, cam.zoom);
         break;
     }
     default: {
@@ -1603,6 +1635,15 @@ function drawWorldNode(node, cam) {
     }
 }
 
+/** Семейство шрифта узла: сам узел, ближайший предок или шрифт по умолчанию. */
+function nodeFontFamily(node) {
+    for (let cur = node; cur; cur = cur.parent_node) {
+        const family = cur.attrs && cur.attrs.font;
+        if (family) return family;
+    }
+    return undefined;
+}
+
 function drawUINode(node) {
     if (!node.visible || node.alpha <= 0) return;
     const p = packColor(node.color, node.alpha);
@@ -1625,7 +1666,8 @@ function drawUINode(node) {
                        node.y, node.w * ratio, node.h, 0, fill);
         }
         if (node.text) {
-            ctx.gfx._queueText(node.text, node.x, node.y, node.size, node.text_color, 'center');
+            ctx.gfx._queueText(node.text, node.x, node.y, node.size, node.text_color, 'center',
+                               nodeFontFamily(node));
         }
         break;
     }
@@ -1637,7 +1679,7 @@ function drawUINode(node) {
     }
     case 'ui.label':
         ctx.gfx._queueText(node.text, node.x, node.y, node.size, withAlpha(packColor(node.color), node.alpha),
-                           node.attrs.align || 'left');
+                           node.attrs.align || 'left', nodeFontFamily(node));
         break;
     case 'ui.image':
         pushSprite(node.sprite >= 0 ? node.sprite : engine.whiteSprite,
@@ -1905,7 +1947,8 @@ export function installGfx($) {
         text(text, x, y, opts) {
             const o = opts || {};
             gfx._queueText(String(text), x, y, (o.size || 20) * state.text_scale,
-                           packColor(o.color, o.alpha), o.align || 'left');
+                           packColor(o.color, o.alpha), o.align || 'left',
+                           o.font, o.angle);
             return gfx;
         },
 
@@ -2036,9 +2079,30 @@ export function installGfx($) {
         registerUINodeRenderer,
 
         /** Дублирует отрисовку узлов вручную (нужно редко). */
-        _queueText(text, x, y, size, color, align) {
+        /**
+         * Текст в общий батч кадра. `family` — имя семейства шрифта (см.
+         * `$.font`), `angle` — поворот вокруг точки привязки в радианах.
+         * Текст идёт обычными спрайтами, поэтому подчиняется порядку
+         * отрисовки, режимам смешивания и пост-обработке.
+         */
+        _queueText(text, x, y, size, color, align, family, angle) {
             state.stats.texts++;
-            engine.drawText(text, x, y, size, color, align || 'left');
+            engine.drawText(text, x, y, size, color, align || 'left',
+                            family || nodeFontFamily(null),
+                            angle || 0);
+        },
+
+        /**
+         * Текст в сцене: ядро рисует строку спрайтами, но растеризует глифы
+         * под МИРОВОЙ кегль, а зум камеры применяет как масштаб. Иначе каждый
+         * пиксель зума пёк бы новый кегль в атлас (см. src/font.c).
+         */
+        _queueTextScaled(text, x, y, size, color, align, family, angle, scale) {
+            state.stats.texts++;
+            const zoom = scale && scale > 0 ? scale : 1;
+            engine.drawText(text, x, y, size, color, align || 'left',
+                            family || nodeFontFamily(null),
+                            angle || 0, zoom);
         },
 
         // --- Кадр ------------------------------------------------------------
@@ -2123,7 +2187,8 @@ export function installGfx($) {
                     break;
                 }
                 case 'text':
-                    ctx.gfx._queueText(call.text, call.x, call.y, call.size, call.color, call.align);
+                    ctx.gfx._queueText(call.text, call.x, call.y, call.size, call.color, call.align,
+                                       call.font);
                     break;
                 default: break;
                 }
@@ -2174,6 +2239,8 @@ export function installGfx($) {
 
             state.stats.sprites = count;
             state.stats.triangles = tri_count;
+            state.stats.raw_count = count;
+            state.stats.raw_texts = state.stats.texts;
         },
     };
 

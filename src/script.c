@@ -22,6 +22,7 @@
 #include "payload.h"
 #include "r2d.h"
 #include "text.h"
+#include "font.h"
 
 #ifdef R2D_EMBED_SCRIPTS
 #include "embed.h"
@@ -2384,16 +2385,79 @@ static JSValue r2d__js_draw_text(JSContext *ctx, JSValueConst this_val, int argc
     const uint32_t packed = (uint32_t)color;
 
     const char *align = (argc > 5) ? JS_ToCString(ctx, argv[5]) : NULL;
-    int a = R2D_TEXT_LEFT;
+    int a = R2D_TEXT_ALIGN_LEFT;
     if (align) {
-        if (SDL_strcmp(align, "center") == 0) a = R2D_TEXT_CENTER;
-        else if (SDL_strcmp(align, "right") == 0) a = R2D_TEXT_RIGHT;
+        if (SDL_strcmp(align, "center") == 0) a = R2D_TEXT_ALIGN_CENTER;
+        else if (SDL_strcmp(align, "right") == 0) a = R2D_TEXT_ALIGN_RIGHT;
         JS_FreeCString(ctx, align);
     }
+    // argv[6] — имя семейства шрифта, argv[7] — поворот в радианах.
+    const char *family = (argc > 6 && !JS_IsUndefined(argv[6]) && !JS_IsNull(argv[6]))
+        ? JS_ToCString(ctx, argv[6]) : NULL;
+    const float angle = (float)r2d__arg_num(ctx, argc, argv, 7, 0.0);
+    // argv[8] — масштаб глифов: текст в сцене растеризуется под мировой кегль,
+    // а зум камеры применяется как масштаб спрайтов (см. src/font.c).
+    const float scale = (float)r2d__arg_num(ctx, argc, argv, 8, 1.0);
 
-    r2d_text_queue(text, x, y, size, packed, a);
+    // Текст рисуется в общий батч кадра: он подчиняется порядку отрисовки,
+    // режимам смешивания и пост-обработке — в отличие от прежней очереди
+    // поверх сцены (см. src/font.h).
+    const int drawn = r2d_font_draw(text, x, y, size, packed, a, family, angle, scale);
+
+    if (family) JS_FreeCString(ctx, family);
     JS_FreeCString(ctx, text);
-    return JS_UNDEFINED;
+    return JS_NewInt32(ctx, drawn);
+}
+
+// engine.loadFont(name, path) → bool
+//
+// Шрифт для текста в сцене. Путь — как у loadTexture (от корня игры), имя
+// семейства потом используется в engine.drawText(..., family) и в $.font.
+static JSValue r2d__js_load_font(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    const char *name = r2d__arg_str(ctx, argc, argv, 0);
+    const char *path = r2d__arg_str(ctx, argc, argv, 1);
+    const bool ok = (name && path) ? r2d_font_load(name, path) : false;
+    if (name) JS_FreeCString(ctx, name);
+    if (path) JS_FreeCString(ctx, path);
+    return JS_NewBool(ctx, ok);
+}
+
+// engine.fontDefault() → имя семейства по умолчанию или null
+static JSValue r2d__js_font_default(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    const char *name = r2d_font_default();
+    return name ? JS_NewString(ctx, name) : JS_NULL;
+}
+
+// engine.fontList() → [имена семейств]
+static JSValue r2d__js_font_list(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    const int n = r2d_font_count();
+    JSValue arr = JS_NewArray(ctx);
+    for (int i = 0; i < n; ++i) {
+        const char *name = r2d_font_name_at(i);
+        if (name) JS_SetPropertyUint32(ctx, arr, (uint32_t)i, JS_NewString(ctx, name));
+    }
+    return arr;
+}
+
+// engine.fontStats() → { glyphs, atlas_w, atlas_h }
+static JSValue r2d__js_font_stats(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    int glyphs = 0, aw = 0, ah = 0;
+    r2d_font_stats(&glyphs, &aw, &ah);
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "glyphs", JS_NewInt32(ctx, glyphs));
+    JS_SetPropertyStr(ctx, obj, "atlas_w", JS_NewInt32(ctx, aw));
+    JS_SetPropertyStr(ctx, obj, "atlas_h", JS_NewInt32(ctx, ah));
+    JS_SetPropertyStr(ctx, obj, "drawn", JS_NewInt32(ctx, r2d_font_drawn_total()));
+    JS_SetPropertyStr(ctx, obj, "first_sprite", JS_NewInt32(ctx, r2d_font_first_sprite()));
+    return obj;
 }
 
 // engine.measureText(text, size) → [ширина, высота]
@@ -2403,8 +2467,11 @@ static JSValue r2d__js_measure_text(JSContext *ctx, JSValueConst this_val, int a
     const char *text = r2d__arg_str(ctx, argc, argv, 0);
     const float size = (float)r2d__arg_num(ctx, argc, argv, 1, 18.0);
 
+    const char *family = (argc > 2 && !JS_IsUndefined(argv[2]) && !JS_IsNull(argv[2]))
+        ? JS_ToCString(ctx, argv[2]) : NULL;
     float w = 0.0f, h = 0.0f;
-    if (text) r2d_text_measure(text, size, &w, &h);
+    if (text) r2d_font_measure(text, size, family, &w, &h);
+    if (family) JS_FreeCString(ctx, family);
     if (text) JS_FreeCString(ctx, text);
 
     JSValue arr = JS_NewArray(ctx);
@@ -2632,6 +2699,61 @@ static bool r2d__value_to_json(R2DScript *s, JSValue value, char **out, char **o
     return ok;
 }
 
+// Превращает значение в JSON. Если JSON.stringify не смог (циклическая
+// ссылка — например, обёртка $ со ссылкой на узел, а узел на обёртку), отдаём
+// ОПИСАНИЕ значения, а не ошибку: агент вызывает методы $ и не должен падать
+// от того, что цепочка возвращает саму себя.
+static bool r2d__value_to_json_safe(R2DScript *s, JSValue value, char **out, char **out_error)
+{
+    if (r2d__value_to_json(s, value, out, out_error)) return true;
+
+    JSContext *ctx = s->ctx;
+    if (out_error) {
+        SDL_free(*out_error);
+        *out_error = NULL;
+    }
+
+    // Описание обязано быть валидным JSON (строкой): протокол агента — JSON,
+    // поэтому кавычки и экранирование делает сам JSON.stringify.
+    char buffer[256];
+    if (JS_IsObject(value)) {
+        JSValue length = JS_GetPropertyStr(ctx, value, "length");
+        int32_t len = -1;
+        const bool has_len = JS_IsNumber(length) && JS_ToInt32(ctx, &len, length) == 0;
+        JS_FreeValue(ctx, length);
+        if (has_len && len >= 0) {
+            SDL_snprintf(buffer, sizeof buffer,
+                         "<объект с циклом в ссылках: length=%d>", (int)len);
+        } else {
+            SDL_snprintf(buffer, sizeof buffer, "<объект с циклом в ссылках>");
+        }
+    } else {
+        SDL_snprintf(buffer, sizeof buffer, "<значение не сериализуется>");
+    }
+
+    if (out) {
+        JSValue str = JS_NewString(ctx, buffer);
+        const char *text = JS_ToCString(ctx, str);
+        // Экранирование: собираем JSON-строку вручную поверх готового
+        // JS-значения — так кавычки и юникод не разъезжаются.
+        JSValue global = JS_GetGlobalObject(ctx);
+        JSValue json_fn = JS_GetPropertyStr(ctx, global, "JSON");
+        JSValue stringify = JS_GetPropertyStr(ctx, json_fn, "stringify");
+        JSValue args[1] = { str };
+        JSValue json = JS_Call(ctx, stringify, json_fn, 1, args);
+        const char *json_text = JS_ToCString(ctx, json);
+        *out = SDL_strdup(json_text ? json_text : "\"<значение>\"");
+        if (json_text) JS_FreeCString(ctx, json_text);
+        if (text) JS_FreeCString(ctx, text);
+        JS_FreeValue(ctx, json);
+        JS_FreeValue(ctx, stringify);
+        JS_FreeValue(ctx, json_fn);
+        JS_FreeValue(ctx, global);
+        JS_FreeValue(ctx, str);
+    }
+    return true;
+}
+
 bool r2d_script_eval(R2DScript *s, const char *code, char **out_json, char **out_error)
 {
     if (out_json) *out_json = NULL;
@@ -2655,7 +2777,7 @@ bool r2d_script_eval(R2DScript *s, const char *code, char **out_json, char **out
         return false;
     }
 
-    const bool ok = r2d__value_to_json(s, value, out_json, out_error);
+    const bool ok = r2d__value_to_json_safe(s, value, out_json, out_error);
     JS_FreeValue(s->ctx, value);
     return ok;
 }
@@ -3085,7 +3207,11 @@ static JSValue r2d__make_engine(JSContext *ctx)
 
     // Текст поверх сцены: $.gfx.text, $('<text>'), $.debug.watch.
     r2d__set_fn(ctx, engine, "drawText", r2d__js_draw_text, 6);
-    r2d__set_fn(ctx, engine, "measureText", r2d__js_measure_text, 2);
+    r2d__set_fn(ctx, engine, "measureText", r2d__js_measure_text, 3);
+    r2d__set_fn(ctx, engine, "loadFont", r2d__js_load_font, 2);
+    r2d__set_fn(ctx, engine, "fontDefault", r2d__js_font_default, 0);
+    r2d__set_fn(ctx, engine, "fontList", r2d__js_font_list, 0);
+    r2d__set_fn(ctx, engine, "fontStats", r2d__js_font_stats, 0);
 
     // Отладочный оверлей и завершение.
     r2d__set_fn(ctx, engine, "setOverlay", r2d__js_set_overlay, 1);

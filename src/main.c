@@ -20,6 +20,7 @@
 #include "render.h"
 #include "script.h"
 #include "text.h"
+#include "font.h"
 
 #ifdef R2D_ENABLE_IMGUI
 #include "debug_ui.h"
@@ -235,6 +236,9 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
     r2d_prof_end(R2D_PROF_UPDATE);
 
     r2d_render_begin_frame(fc->renderer, app->width, app->height);
+    // Атлас глифов, дорисованный в прошлом кадре, уезжает в GPU до того, как
+    // начнётся сборка батча: иначе первые кадры нового кегля были бы пустыми.
+    r2d_font_begin_frame();
     r2d_prof_begin(R2D_PROF_RENDER_JS);
     r2d_script_call_render(fc->script);
     r2d_prof_end(R2D_PROF_RENDER_JS);
@@ -590,6 +594,10 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    // Шрифты: свой растеризатор глифов (stb_truetype) и атлас. Инициализируем
+    // сразу после рендера — текстура атласа создаётся в рендерере.
+    r2d_font_init(&renderer, app.base_path);
+
     R2DPhysics physics;
     // Экранные координаты: +y направлен вниз, поэтому и гравитация «вниз».
     // Значение в пикселях на секунду в квадрате.
@@ -687,6 +695,7 @@ int main(int argc, char **argv)
 #ifdef R2D_ENABLE_RMLUI
         r2d_gui_destroy(gui);
 #endif
+        r2d_font_shutdown();
         r2d_render_shutdown(&renderer);
         r2d_physics_shutdown(&physics);
         r2d_http_shutdown();
@@ -722,6 +731,7 @@ int main(int argc, char **argv)
 #ifdef R2D_ENABLE_RMLUI
     r2d_gui_destroy(gui);
 #endif
+    r2d_font_shutdown();   // до рендера: атлас — его текстура
     r2d_render_shutdown(&renderer);
     r2d_physics_shutdown(&physics);
     r2d_http_shutdown();

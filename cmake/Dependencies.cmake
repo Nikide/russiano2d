@@ -203,3 +203,27 @@ FetchContent_Declare(visibility
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  "cmake/нет-здесь-CMakeLists")
 FetchContent_MakeAvailable(visibility)
+
+# ---------------------------------------------------------------------------
+# stb_truetype — растеризатор глифов для текста в сцене (src/font.c).
+#
+# Зачем своя зависимость, если stb уже лежит внутри ImGui. ImGui подключает
+# свою копию со стандартным stb-двойным включением (реализация — только в
+# imgui_draw.cpp). Если движок определит STB_TRUETYPE_IMPLEMENTATION и
+# подключит ту же копию, символы продублируются на линковке. Поэтому берём
+# оригинальный заголовок из отдельного репозитория: у него свой guard, и он
+# не конфликтует с копией ImGui.
+#
+# Версия 1.26 — та же, что внутри ImGui, так что метрики совпадают.
+# ---------------------------------------------------------------------------
+FetchContent_Declare(stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        2c980bb59875b0d32144a71867fbdebb2f77cd20  # master, stb_truetype 1.26
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR  "cmake/нет-здесь-CMakeLists")
+FetchContent_MakeAvailable(stb)
+
+# Интерфейсный таргет только с путём к заголовкам: сборку stb не проверяем
+# строгими предупреждениями движка — чужой код.
+add_library(r2d_stb INTERFACE)
+target_include_directories(r2d_stb SYSTEM INTERFACE "${stb_SOURCE_DIR}")

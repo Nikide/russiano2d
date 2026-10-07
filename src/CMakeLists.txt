@@ -18,6 +18,7 @@ set(R2D_SOURCES
     script.h   script.c
     json.h     json.c
     text.h     text.c
+    font.h     font.c
     agent.h    agent.c
     crypto.h   crypto.c
     payload.h  payload.c
@@ -170,7 +171,8 @@ target_link_libraries(russiano2d PRIVATE ${R2D_WIN_LIBS}
     SDL3::SDL3
     SDL3_image::SDL3_image
     qjs
-    box2d::box2d)
+    box2d::box2d
+    r2d_stb)   # stb_truetype: растеризатор глифов для src/font.c
 
 # --- HTTP ($.http) ----------------------------------------------------------
 # Ищем libcurl: с ней работают и http, и https. Если её нет — собираем

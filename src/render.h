@@ -295,6 +295,15 @@ void r2d_texture_info(const R2DRenderer *r, int id, int *w, int *h);
 const char *r2d_texture_name(const R2DRenderer *r, int id);
 SDL_GPUTexture *r2d_texture_handle(const R2DRenderer *r, int id);
 
+// Текстура из пикселей в памяти (RGBA8). Нужна подсистемам, которые рисуют
+// сами: атлас глифов (src/font.c), процедурный пиксель-арт. Возвращает id
+// текстуры (>= 0) или -1. Уже созданную текстуру можно обновить частично —
+// `r2d_texture_upload_region` пишет прямоугольник (x, y, w, h) из буфера с
+// шагом строк pitch байт.
+int  r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h);
+bool r2d_texture_upload_region(R2DRenderer *r, int id, int x, int y, int w, int h,
+                               const void *pixels, int pitch);
+
 // --- Спрайты ----------------------------------------------------------------
 // Регистрирует прямоугольник внутри текстуры и возвращает его id.
 int  r2d_sprite_create(R2DRenderer *r, int texture, float sx, float sy, float sw, float sh);

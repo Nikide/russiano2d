@@ -42,7 +42,7 @@ const ALIGNS = new Set(['left', 'center', 'right']);
 // Поля, которые модуль раскладывает по свойствам узла. Всё остальное из
 // описания стиля попадает в attrs как есть: так стиль может нести, например,
 // letterSpacing для другой подсистемы, а $.font о нём знать не обязан.
-const KNOWN_FIELDS = new Set(['size', 'color', 'align', 'lineHeight', 'base']);
+const KNOWN_FIELDS = new Set(['size', 'color', 'align', 'lineHeight', 'base', 'font']);
 
 /**
  * Теги, у которых цвет подписи лежит в text_color, а `color` — фон контрола.
@@ -76,6 +76,8 @@ export function normalizeFontStyle(name, spec) {
         if (!ALIGNS.has(s.align)) out.badAlign = String(s.align);
     }
     if (s.lineHeight !== undefined) out.set.lineHeight = Math.max(0.5, num(s.lineHeight, FONT_DEFAULTS.lineHeight));
+    // Семейство шрифта: пустая строка и null означают «шрифт по умолчанию».
+    if (s.font !== undefined) out.set.font = s.font ? String(s.font) : '';
     for (const key of Object.keys(s)) {
         if (!KNOWN_FIELDS.has(key)) out.extra[key] = s[key];
     }
@@ -105,6 +107,7 @@ export function resolveFontStyle(style) {
         color: set.color === undefined ? FONT_DEFAULTS.color : set.color,
         align: set.align === undefined ? FONT_DEFAULTS.align : set.align,
         lineHeight: set.lineHeight === undefined ? FONT_DEFAULTS.lineHeight : set.lineHeight,
+        font: set.font === undefined ? '' : set.font,
         extra: { ...(s.extra || {}) },
     };
 }
@@ -127,9 +130,9 @@ export function measureTextWidth(result) {
     return num(result, 0);
 }
 
-export function measureFontText(text, size) {
+export function measureFontText(text, size, family) {
     if (typeof engine === 'undefined' || !engine || typeof engine.measureText !== 'function') return 0;
-    return measureTextWidth(engine.measureText(String(text), num(size, FONT_DEFAULTS.size)));
+    return measureTextWidth(engine.measureText(String(text), num(size, FONT_DEFAULTS.size), family));
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +190,9 @@ export function installFont($) {
         if (textColorTarget(node.tag) === 'text') node.text_color = packed;
         else node.color = packed;
         for (const key of Object.keys(style.extra)) node.attrs[key] = style.extra[key];
+        // Семейство шрифта: стиль может задавать его, но не обязан — тогда
+        // узел остаётся на шрифте родителя или на шрифте по умолчанию.
+        if (style.font) node.attrs.font = style.font;
         node.attrs._font = style.name;
     }
 
@@ -198,6 +204,9 @@ export function installFont($) {
         if (target.tag) return [target];                   // сам узел
         return [];
     }
+
+    /** Семейства, загруженные через $.font.load() — для подсказок и тестов. */
+    const loaded = [];
 
     const font = {
         /** Объявить стиль: имя → { size, color, align, lineHeight, base }. */
@@ -268,11 +277,60 @@ export function installFont($) {
         measure(text, name) {
             const style = resolve(name);
             if (!style) ctx.log(`$.font.measure: неизвестный стиль "${name}" — беру размер по умолчанию`);
-            return measureFontText(text, style ? style.size : FONT_DEFAULTS.size);
+            return measureFontText(text, style ? style.size : FONT_DEFAULTS.size, style && style.font);
         },
 
         /** Значения по умолчанию (копия) — для расчётов игры и подсказок агенту. */
         defaults() { return { ...FONT_DEFAULTS }; },
+
+        // --- Файлы шрифтов и семейства ---------------------------------------
+        /**
+         * Загрузить .ttf/.otf как семейство: `$.font.load('title', 'fonts/Bold.ttf')`.
+         * Путь — от корня игры, как у `.sprite()`. Без имени берётся имя файла.
+         */
+        load(name, path) {
+            if (typeof name === 'object' && name) {
+                path = name.src || name.path || name.file;
+                name = name.name || name.family || name.id;
+            }
+            if (!path) {
+                ctx.log('$.font.load: нужен путь к .ttf/.otf');
+                return false;
+            }
+            const family = String(name || String(path).replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, ''));
+            const ok = typeof engine.loadFont === 'function' && engine.loadFont(family, String(path));
+            if (!ok) {
+                ctx.log(`$.font.load: не удалось загрузить шрифт "${family}" из ${path}`);
+                return false;
+            }
+            loaded.push(family);
+            return true;
+        },
+
+        /** Семейства, загруженные через это API (не весь список движка). */
+        uploaded() { return loaded.slice(); },
+
+        /** Семейство по умолчанию: первый загруженный шрифт или null. */
+        default() {
+            return typeof engine.fontDefault === 'function' ? engine.fontDefault() : null;
+        },
+
+        /** Все семейства, известные движку. */
+        families() {
+            return typeof engine.fontList === 'function' ? engine.fontList() : [];
+        },
+
+        /** Состояние атласа глифов: `{ glyphs, atlas_w, atlas_h }`. */
+        atlas() {
+            return typeof engine.fontStats === 'function'
+                ? engine.fontStats()
+                : { glyphs: 0, atlas_w: 0, atlas_h: 0 };
+        },
+
+        /** Ширина строки независимо от стиля: `$.font.width('HP', 24, 'hud')`. */
+        width(text, size, family) {
+            return measureFontText(text, num(size, FONT_DEFAULTS.size), family);
+        },
     };
 
     api.font = font;
@@ -301,6 +359,27 @@ export function installFont($) {
             applyToNode(node, style);
         });
         return this;
+    });
+
+    /**
+     * Метод узла: `.font('title')` — семейство шрифта для текста этого узла и
+     * его детей. Без аргумента — чтение (своё или унаследованное от родителя).
+     */
+    def('font', function (name) {
+        if (name === undefined) {
+            const node = this.nodes[0];
+            for (let cur = node; cur; cur = cur.parent_node) {
+                const family = cur.attrs && cur.attrs.font;
+                if (family) return family;
+            }
+            return typeof engine.fontDefault === 'function' ? engine.fontDefault() : null;
+        }
+        if (name === null || name === false) name = '';
+        return this.eachNode((_, el) => {
+            const node = el;
+            if (name) node.attrs.font = String(name);
+            else delete node.attrs.font;
+        });
     });
 
     return font;
