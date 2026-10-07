@@ -78,9 +78,14 @@ static int add_node(R2DBsp *b)
         b->node_cap = cap;
     }
     R2DBspNode *n = &b->nodes[b->node_count];
+    // Обнуляем целиком: у узла есть поля хвоста листа, и ноль для них —
+    // корректное «хвоста нет».
+    memset(n, 0, sizeof *n);
     n->splitter = -1;
     n->front = -1;
     n->back = -1;
+    n->leftover_first = -1;
+    n->leftover_count = 0;
     return b->node_count++;
 }
 
@@ -148,6 +153,10 @@ static int build_node(R2DBsp *b, int *indices, int n, int depth)
     const size_t list_cap = (size_t)(n * 2 + 16);
     int *front = (int *)malloc(list_cap * sizeof(int));
     int *back = (int *)malloc(list_cap * sizeof(int));
+    // Индексы отрезков в списках ОТДЕЛЬНЫЕ от координат: разрезание создаёт
+    // новые отрезки, а исходные индексы остаются валидными и после realloc.
+    // Мутировать отрезок «на месте» нельзя: тот же индекс может лежать в
+    // списках родителя, и подмена координат ломала уже принятые решения.
     if (!front || !back) {
         free(front);
         free(back);
@@ -161,65 +170,94 @@ static int build_node(R2DBsp *b, int *indices, int n, int depth)
         const int idx = indices[i];
         if (idx == best) continue;
 
-        const R2DSegment *seg = &b->segments[idx];
-        const float d1 = side_of(sp.x1, sp.y1, sp.x2, sp.y2, seg->x1, seg->y1);
-        const float d2 = side_of(sp.x1, sp.y1, sp.x2, sp.y2, seg->x2, seg->y2);
+        // Копия по значению: add_segment ниже перевыделяет массив отрезков.
+        const R2DSegment seg = b->segments[idx];
+        const float d1 = side_of(sp.x1, sp.y1, sp.x2, sp.y2, seg.x1, seg.y1);
+        const float d2 = side_of(sp.x1, sp.y1, sp.x2, sp.y2, seg.x2, seg.y2);
 
         if (d1 >= 0.0f && d2 >= 0.0f) {
             front[nf++] = idx;
         } else if (d1 <= 0.0f && d2 <= 0.0f) {
             back[nb++] = idx;
-        } else {
-            // Отрезок пересекает разделитель — режем и раскладываем половины.
+        } else if (d1 > 0.0f && d2 < 0.0f) {
+            // Отрезок пересекает разделитель: обе половины — НОВЫЕ отрезки,
+            // исходный больше не используется никем.
+            if (nf >= (int)list_cap || nb >= (int)list_cap) {
+                free(front); free(back);
+                return -1;
+            }
             R2DSegment f;
             R2DSegment bk;
-            if (split_segment(seg, sp.x1, sp.y1, sp.x2, sp.y2, &f, &bk)) {
-                const int ni = add_segment(b, bk.x1, bk.y1, bk.x2, bk.y2, bk.user, true);
-                if (ni < 0) { free(front); free(back); return -1; }
-
-                R2DSegment *orig = &b->segments[idx];
-                orig->x1 = f.x1; orig->y1 = f.y1;
-                orig->x2 = f.x2; orig->y2 = f.y2;
-                orig->split = true;
-
-                front[nf++] = idx;
-                back[nb++] = ni;
-            } else {
-                front[nf++] = idx;
+            if (!split_segment(&seg, sp.x1, sp.y1, sp.x2, sp.y2, &f, &bk)) {
+                front[nf++] = idx;      // вырожденный случай — как есть
+                continue;
             }
+            const int fi = add_segment(b, f.x1, f.y1, f.x2, f.y2, seg.user, true);
+            const int bi = add_segment(b, bk.x1, bk.y1, bk.x2, bk.y2, seg.user, true);
+            if (fi < 0 || bi < 0) { free(front); free(back); return -1; }
+            front[nf++] = fi;
+            back[nb++] = bi;
+        } else {
+            // Касается разделителя концом (одна из сторон ровно 0) — целиком в
+            // переднюю половину. Так «±0» не попадает сразу в оба списка:
+            // пересекающиеся множества ломали дерево.
+            front[nf++] = idx;
         }
     }
 
+    // Узел занимаем ДО рекурсии: add_node может перевыделить массив узлов, и
+    // сохранённый индекс `node` после этого остаётся валидным, а указатель на
+    // элемент — нет. Пишем поля только после возврата детей.
     const int node = add_node(b);
     if (node < 0) { free(front); free(back); return -1; }
-
     b->nodes[node].splitter = best;
 
-    // ВАЖНО: сначала считаем детей в локальные переменные и только потом
-    // пишем их в узел. Если записать результат прямо в b->nodes[node].front,
-    // адрес поля вычислится ДО рекурсивного вызова, а тот может перевыделить
-    // массив узлов — и присваивание уйдёт в освобождённую память.
     int front_node = -1;
     int back_node = -1;
+    int leftover_first = -1;
+    int leftover_count = 0;
 
     if (depth < R2D_BSP_MAX_DEPTH) {
         front_node = build_node(b, front, nf, depth + 1);
         back_node  = build_node(b, back, nb, depth + 1);
     } else {
-        // Слишком глубоко — сваливаем остаток сюда, чтобы не переполнить
-        // стек на вырожденной геометрии.
+        // Слишком глубоко — остаток уходит в ЛИСТ. Отрезки копируются в общий
+        // массив, а узел помнит свой диапазон, чтобы обход порядка их отдал:
+        // раньше они дублировались «в никуда» и пропадали из order() — часть
+        // стен молча исчезала из кадра.
+        // Список покрытия: каждый отрезок листа обязан оказаться в хвосте
+        // ровно один раз, иначе он недостижим из order().
+        unsigned char *covered = (unsigned char *)calloc((size_t)b->segment_count + 12, 1);
+        if (!covered) { free(front); free(back); return -1; }
+        leftover_first = b->segment_count;
         for (int i = 0; i < nf; i++) {
-            const R2DSegment s2 = b->segments[front[i]];
-            add_segment(b, s2.x1, s2.y1, s2.x2, s2.y2, s2.user, true);
+            const int src = front[i];
+            const R2DSegment s2 = b->segments[src];
+            if (src >= leftover_first && covered[src - leftover_first]) continue;
+            if (src >= leftover_first) covered[src - leftover_first] = 1;
+            if (add_segment(b, s2.x1, s2.y1, s2.x2, s2.y2, s2.user, true) < 0) {
+                free(covered); free(front); free(back); return -1;
+            }
+            leftover_count++;
         }
         for (int i = 0; i < nb; i++) {
-            const R2DSegment s2 = b->segments[back[i]];
-            add_segment(b, s2.x1, s2.y1, s2.x2, s2.y2, s2.user, true);
+            const int src = back[i];
+            const R2DSegment s2 = b->segments[src];
+            if (src >= leftover_first && covered[src - leftover_first]) continue;
+            if (src >= leftover_first) covered[src - leftover_first] = 1;
+            if (add_segment(b, s2.x1, s2.y1, s2.x2, s2.y2, s2.user, true) < 0) {
+                free(covered); free(front); free(back); return -1;
+            }
+            leftover_count++;
         }
+        free(covered);
+        if (leftover_count == 0) leftover_first = -1;
     }
 
     b->nodes[node].front = front_node;
     b->nodes[node].back = back_node;
+    b->nodes[node].leftover_first = leftover_first;
+    b->nodes[node].leftover_count = leftover_count;
 
     free(front);
     free(back);
@@ -298,6 +336,17 @@ static void traverse_node(R2DBsp *b, int node, float px, float py,
     const int near_child = (side >= 0.0f) ? n->front : n->back;
     const int far_child  = (side >= 0.0f) ? n->back : n->front;
 
+    // Хвост листа на предельной глубине: его отрезки тоже часть геометрии,
+    // поэтому отдаём их сразу после разделителя узла.
+    if (n->leftover_count > 0) {
+        for (int i = 0; i < n->leftover_count; ++i) {
+            if (*count < b->visit_cap) {
+                b->visit_order[(*count)++] = n->leftover_first + i;
+            }
+        }
+        return;
+    }
+
     if (far_to_near) {
         traverse_node(b, far_child, px, py, far_to_near, count);
         if (*count < b->visit_cap) b->visit_order[(*count)++] = n->splitter;
@@ -313,6 +362,8 @@ const int *r2d_bsp_traverse(R2DBsp *b, float x, float y, bool far_to_near, int *
 {
     if (out_count) *out_count = 0;
     if (!b || b->root < 0) return NULL;
+    // Порядок содержит каждый отрезок дерева ровно один раз: разделители — в
+    // узлах, хвосты листьев — в своих диапазонах. Запас +1 на всякий случай.
     if (!ensure_visit_capacity(b, b->segment_count + 1)) return NULL;
 
     int count = 0;

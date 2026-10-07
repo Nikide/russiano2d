@@ -28,6 +28,12 @@ typedef struct R2DBspNode {
     int splitter;    // индекс отрезка-разделителя или -1
     int front;       // индекс узла или -1
     int back;
+    // Хвост, «свалившийся» в лист на предельной глубине: отрезки, которым не
+    // хватило depth < R2D_BSP_MAX_DEPTH. Раньше они дублировались в общий
+    // массив и становились невидимыми для обхода (order() их не отдавал),
+    // хотя count()/segment() их считали.
+    int leftover_first;
+    int leftover_count;
 } R2DBspNode;
 
 typedef struct R2DBsp {

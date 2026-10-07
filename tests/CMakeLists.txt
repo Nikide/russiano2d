@@ -95,3 +95,16 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_profile_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_profile_test PRIVATE -fsanitize=address,undefined)
 endif()
+
+# --- 2D BSP-дерево -----------------------------------------------------------
+# Инвариант полноты: обход обязан вернуть каждый отрезок дерева ровно один раз.
+# Ловит случай предельной глубины, когда остаток геометрии «сваливался» в лист
+# и пропадал из порядка отрисовки.
+add_executable(r2d_bsp_test "${CMAKE_SOURCE_DIR}/tests/bsp/bsp_test.c"
+                            "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_bsp_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_bsp_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_bsp_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_bsp_test PRIVATE -fsanitize=address,undefined)
+endif()
