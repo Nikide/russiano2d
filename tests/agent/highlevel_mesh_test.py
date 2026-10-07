@@ -91,6 +91,11 @@ def bbox(path, pred):
     return (min(xs), max(xs), min(ys), max(ys), len(pts))
 
 
+def quad_uv(x0, y0, x1, y1, z):
+    """Тот же квадрат, но цвет вершин белый — чтобы была видна ТЕКСТУРА."""
+    return quad(x0, y0, x1, y1, z, 255, 255, 255)
+
+
 # Квадрат из двух треугольников: (x0,y0)-(x1,y1), цвет r/g/b, глубина z.
 def quad(x0, y0, x1, y1, z, r, g, b):
     def v(x, y, u, vv):
@@ -105,11 +110,31 @@ def main():
     with Agent(game=GAME, seed=5, fixed_dt=1.0 / 60.0) as a:
         a.eval("$.world.gravity(0,0).color('#000000').bounds(0,0,4000,2000);"
                "$.camera.at(0,0)")
-        a.eval("$.update(() => engine.submitMesh(new Float32Array(["
-               + quad(100, 100, 300, 300, 0.5, 255, 0, 0) + "])));")
-        a.step(4)
+        # ОДИН обработчик на весь тест: $.update накапливает функции, и каждый
+        # новый кадр рисовал бы все меши сразу — более поздний перекрыл бы
+        # предыдущий (на этом я и обжёгся).
+        a.eval("""
+            globalThis.__mesh = null;
+            globalThis.__tex = -1;
+            $.update(() => {
+                const m = globalThis.__mesh;
+                if (!m) return;
+                // count считаем САМИ: второй аргумент `undefined` движок
+                // читает как 0, и меш молча не рисуется.
+                const n = Math.floor(m.length / 8);
+                engine.submitMesh(m, n, globalThis.__tex);
+            });
+        """)
+
+        def draw(a, verts, tex=-1, steps=3):
+            a.eval(f"globalThis.__mesh = new Float32Array([{verts}]);"
+                   f"globalThis.__tex = {tex};")
+            a.step(steps)
+
+        # --- меш рисуется там, где заданы вершины ---
+        draw(a, quad(100, 100, 300, 300, 0.5, 255, 0, 0))
         info = a.eval("JSON.stringify(engine.depthInfo())")
-        print(f"  depthInfo: {info}")
+        print(f"  depthInfo: {info[:110]}")
         check('"blocked":0' in info, "меш НЕ отключён защитой")
         check('"meshFrames"' in info, "проход отрисовки меша выполняется")
         a.cmd("screenshot", path="/tmp/mesh_one.png")
@@ -122,50 +147,57 @@ def main():
                   f"меш ровно там, где заданы вершины: {got}")
 
         # --- z-буфер: ближний ПЕРВЫМ, дальний ВТОРЫМ ---
-        a.eval("$.update(() => engine.submitMesh(new Float32Array(["
-               + quad(100, 100, 300, 300, 0.2, 255, 0, 0) + ", "
-               + quad(100, 100, 300, 300, 0.8, 0, 255, 0) + "])));")
-        a.step(3)
+        draw(a, quad(100, 100, 300, 300, 0.2, 255, 0, 0) + ", " +
+                 quad(100, 100, 300, 300, 0.8, 0, 255, 0))
         a.cmd("screenshot", path="/tmp/mesh_z.png")
         red = bbox("/tmp/mesh_z.png", RED)
         green = bbox("/tmp/mesh_z.png", GREEN)
-        print(f"  ближний красный (первым): {red}")
-        print(f"  дальний зелёный (вторым): {green}")
+        print(f"  ближний красный (первым): {red} | дальний зелёный (вторым): {green}")
         check(red is not None, "ближний треугольник виден")
-        check(green is None,
-              "дальний треугольник ОТСЕЧЁН z-буфером, хотя нарисован позже")
+        check(green is None, "дальний ОТСЕЧЁН z-буфером, хотя нарисован позже")
 
         # --- обратный порядок: результат тот же ---
-        a.eval("$.update(() => engine.submitMesh(new Float32Array(["
-               + quad(100, 100, 300, 300, 0.8, 0, 255, 0) + ", "
-               + quad(100, 100, 300, 300, 0.2, 255, 0, 0) + "])));")
-        a.step(3)
+        draw(a, quad(100, 100, 300, 300, 0.8, 0, 255, 0) + ", " +
+                 quad(100, 100, 300, 300, 0.2, 255, 0, 0))
         a.cmd("screenshot", path="/tmp/mesh_z2.png")
         red2 = bbox("/tmp/mesh_z2.png", RED)
         green2 = bbox("/tmp/mesh_z2.png", GREEN)
-        print(f"  дальний первым: зелёный {green2}, ближний вторым: красный {red2}")
+        print(f"  дальний первым: зелёный {green2} | ближний вторым: красный {red2}")
         check(red2 is not None and green2 is None,
               "порядок отрисовки не важен: z решает")
 
+        # --- текстура и UV ---
+        # Раньше меш всегда биндил БЕЛУЮ текстуру, и u/v были мертвы:
+        # текстурированный псевдо-3D был невозможен.
+        a.eval("globalThis.__texid = engine.textureFromPixels("
+               "2, 1, new Uint8Array([255,0,0,255, 0,255,0,255]));")
+        tex = a.eval("globalThis.__texid")
+        print(f"  текстура: id {tex} (2x1: красный | зелёный)")
+        check(tex >= 0, "textureFromPixels отдал id текстуры")
+        draw(a, quad_uv(100, 100, 300, 300, 0.5), tex)
+        a.cmd("screenshot", path="/tmp/mesh_tex.png")
+        left = bbox("/tmp/mesh_tex.png", RED)
+        right = bbox("/tmp/mesh_tex.png", GREEN)
+        print(f"  u=0 (красный): {left} | u=1 (зелёный): {right}")
+        check(left is not None and right is not None,
+              "текстура сэмплится по u/v, а не белой")
+        if left and right:
+            check(left[1] <= 205, f"u=0 слева: первая половина текстуры ({left})")
+            check(right[0] >= 195, f"u=1 справа: вторая половина ({right})")
+
         # --- стресс: 100 треугольников ---
-        a.eval("""
-            $.update(() => {
-                const v = new Float32Array(300 * 8);
-                for (let i = 0; i < 100; ++i) {
-                    const x = (i % 10) * 40 + 20, y = Math.floor(i / 10) * 40 + 20;
-                    const z = 0.1 + (i % 7) * 0.1;
-                    const o = i * 24;
-                    v[o]=x; v[o+1]=y; v[o+2]=z; v[o+3]=0; v[o+4]=0; v[o+5]=255; v[o+6]=0; v[o+7]=0;
-                    v[o+8]=x+32; v[o+9]=y; v[o+10]=z; v[o+11]=1; v[o+12]=0; v[o+13]=0; v[o+14]=255; v[o+15]=0;
-                    v[o+16]=x; v[o+17]=y+32; v[o+18]=z; v[o+19]=0; v[o+20]=1; v[o+21]=0; v[o+22]=0; v[o+23]=255;
-                }
-                engine.submitMesh(v);
-            });
-        """)
-        a.step(10)
+        verts = []
+        for i in range(100):
+            x = (i % 10) * 40 + 20
+            y = (i // 10) * 40 + 20
+            z = 0.1 + (i % 7) * 0.1
+            verts.append(f"{x},{y},{z}, 0,0, 255,0,0")
+            verts.append(f"{x+32},{y},{z}, 1,0, 255,0,0")
+            verts.append(f"{x},{y+32},{z}, 0,1, 255,0,0")
+        draw(a, ", ".join(verts), -1, steps=10)
         stress = a.eval("JSON.stringify(engine.depthInfo())")
-        print(f"  стресс 100 треугольников: {stress[:90]}")
-        check('"pending":0' in stress, "стресс 100 треугольников прошёл без падения")
+        print(f"  стресс: {stress[:90]}")
+        check('"pending":0' in stress, "100 треугольников без падения")
 
     print()
     if FAILURES:

@@ -143,6 +143,7 @@ typedef struct R2DTriBatch {
     int     vertex_offset;   // смещение в tri_vertices (оно же — в индексах)
     int     vertex_count;
     uint8_t blend;
+    int     texture;         // id текстуры пакета; -1 — белая (без текстуры)
 } R2DTriBatch;
 
 // Вершина меша псевдо-3D: позиция в clip-space, текстура, цвет и ГЛУБИНА.
@@ -387,7 +388,8 @@ bool r2d_render_depth_target(R2DRenderer *r, int w, int h, SDL_GPUDepthStencilTa
 // (x, y, z, u, v, r, g, b) — rgba байтами, как у спрайтов. Треугольники
 // собираются в отдельный список и рисуются ПЕРВЫМИ в проходе сцены, чтобы
 // успеть записать глубину до спрайтов.
-void r2d_batch_mesh(R2DRenderer *r, const float *verts, int vertex_count);
+// texture < 0 — белая текстура (как было); иначе меш сэмплит её по u/v.
+void r2d_batch_mesh(R2DRenderer *r, const float *verts, int vertex_count, int texture);
 // Рисует накопленный меш в проход (зовётся рендерером до спрайтов).
 void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass);
 

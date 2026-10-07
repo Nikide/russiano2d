@@ -793,7 +793,7 @@ static void r2d__pack_triangles(R2DRenderer *r, const float *verts, int vertex_c
  * (ближе — меньше), u/v — текстурные координаты, цвет — 0..1. Вершины идут в
  * общий буфер: формат совпадает с байтами, отличается только конвейер.
  */
-void r2d_batch_mesh(R2DRenderer *r, const float *verts, int vertex_count)
+void r2d_batch_mesh(R2DRenderer *r, const float *verts, int vertex_count, int texture)
 {
     if (!r || !verts || vertex_count <= 0) return;
     if (vertex_count % 3 != 0) {
@@ -809,6 +809,10 @@ void r2d_batch_mesh(R2DRenderer *r, const float *verts, int vertex_count)
     batch->vertex_offset = r->mesh_vertex_count;
     batch->vertex_count  = vertex_count;
     batch->blend         = (uint8_t)R2D_BLEND_ALPHA;
+    // Текстура ПАКЕТА: раньше меш всегда сэмплил белую, и u/v были мертвы —
+    // текстурированный псевдо-3D был невозможен (§4.1 TASKS). Сюда приходит
+    // id ТЕКСТУРЫ (engine.loadTexture), а не спрайта.
+    batch->texture       = texture;
 
     const float inv_w = 2.0f / (float)r->screen_w;
     const float inv_h = 2.0f / (float)r->screen_h;
@@ -1608,7 +1612,12 @@ void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURend
         }
         SDL_GPUTextureSamplerBinding tex;
         SDL_zero(tex);
-        tex.texture = r->textures[r->white_texture].handle;
+        // Текстура ПАКЕТА. У «белого» меша (texture < 0) — белая текстура, как
+        // было раньше; иначе сэмплим по u/v ту, что просила игра.
+        const int ti = (mb->texture >= 0 && mb->texture < R2D_MAX_TEXTURES
+                        && r->textures[mb->texture].handle)
+                           ? mb->texture : r->white_texture;
+        tex.texture = r->textures[ti].handle;
         tex.sampler = r->sampler;
         SDL_BindGPUFragmentSamplers(pass, 0, &tex, 1);
         SDL_DrawGPUIndexedPrimitives(pass, (Uint32)mb->vertex_count, 1,

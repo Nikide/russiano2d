@@ -1205,20 +1205,23 @@ static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, J
     return o;
 }
 
-// engine.submitMesh(vertices: Float32Array, count?) → число вершин.
+// engine.submitMesh(vertices, count?, texture?) → число вершин.
 //
-// Меш псевдо-3D: 8 float на вершину — x, y (мировые пиксели экрана), z
-// (глубина 0..1, ближе — меньше), u, v, r, g, b (цвет 0..1). Треугольники
-// собираются своим батчем и рисуются ПЕРВЫМИ в проходе сцены: меш записывает
-// глубину, и спрайты проверяются по ней — поэтому плоский спрайт не рисуется
-// поверх выпуклости персонажа.
+// Меш псевдо-3D: 8 float на вершину — x, y (ЭКРАННЫЕ пиксели), z (глубина
+// 0..1, ближе — меньше), u, v, r, g, b (цвет 0..255, как у drawRect).
+// Треугольники собираются
+// своим батчем и рисуются ПЕРВЫМИ в проходе сцены: меш записывает глубину,
+// между собой треугольники сортирует z-буфер.
+//
+// `texture` — id текстуры (engine.loadTexture / $.atlas), по которой сэмплится
+// u/v. Без него меш рисуется белой текстурой — цвет вершин, как раньше.
 static JSValue r2d__js_submit_mesh(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
     R2DScript *s = r2d__script_of(ctx);
     if (!s || !s->renderer) return JS_NewInt32(ctx, 0);
     if (argc < 1) {
-        JS_ThrowTypeError(ctx, "submitMesh(vertices: Float32Array, count?)");
+        JS_ThrowTypeError(ctx, "submitMesh(vertices: Float32Array, count?, texture?)");
         return JS_EXCEPTION;
     }
 
@@ -1239,8 +1242,11 @@ static JSValue r2d__js_submit_mesh(JSContext *ctx, JSValueConst this_val, int ar
     if (count < 0) count = 0;
     count -= count % 3;   // неполный треугольник рисовать нечем
 
+    // Текстура: -1 — белая (прежнее поведение), иначе id текстуры игры.
+    const int texture = argc >= 3 ? r2d__arg_int(ctx, argc, argv, 2, -1) : -1;
+
     if (count > 0) {
-        r2d_batch_mesh(s->renderer, (const float *)(base + off), count);
+        r2d_batch_mesh(s->renderer, (const float *)(base + off), count, texture);
     }
     JS_FreeValue(ctx, ab);
     return JS_NewInt32(ctx, count);
@@ -3758,7 +3764,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "hotReload", r2d__js_hot_reload, 0);
     r2d__set_fn(ctx, engine, "setSpriteFilter", r2d__js_set_sprite_filter, 1);
     r2d__set_fn(ctx, engine, "setDepth", r2d__js_set_depth, 1);
-    r2d__set_fn(ctx, engine, "submitMesh", r2d__js_submit_mesh, 2);
+    r2d__set_fn(ctx, engine, "submitMesh", r2d__js_submit_mesh, 3);
     r2d__set_fn(ctx, engine, "depth", r2d__js_get_depth, 0);
     r2d__set_fn(ctx, engine, "depthInfo", r2d__js_depth_info, 0);
     r2d__set_fn(ctx, engine, "netHost", r2d__js_net_host, 1);
