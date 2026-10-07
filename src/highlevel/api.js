@@ -66,6 +66,8 @@ import { installTask } from './task.js';
 import { installScript } from './script.js';
 import { installStory } from './story.js';
 import { installQuest } from './quest.js';
+import { installSoundBank } from './soundbank.js';
+import { installSteps, installBarks } from './steps.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
 import { installI18n, tickI18n } from './i18n.js';
@@ -376,6 +378,9 @@ export function createApi() {
     installScript($);            // перезапуск скриптов: $.script
     installStory($);             // сценки: $.story (DSL)
     installQuest($);             // задания: $.quest
+    installSoundBank($);         // банки звуков: $.sound.playBank
+    installSteps($);             // шаги по материалу: $.steps
+    installBarks($);             // реплики NPC: $.barks
     installWidgets($);
     installTriggers($);
     installI18n($);
