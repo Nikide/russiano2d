@@ -1206,6 +1206,10 @@ static JSValue r2d__js_depth_info(JSContext *ctx, JSValueConst this_val, int arg
     JS_SetPropertyStr(ctx, obj, "meshFrames", JS_NewInt32(ctx, r->stat_mesh_frames));
     JS_SetPropertyStr(ctx, obj, "meshDraws",  JS_NewInt32(ctx, r->stat_mesh_draws));
     JS_SetPropertyStr(ctx, obj, "meshBatches",JS_NewInt32(ctx, r->mesh_batch_count));
+    JS_SetPropertyStr(ctx, obj, "meshBuf",    JS_NewBool(ctx, r->mesh_buffer != NULL));
+    JS_SetPropertyStr(ctx, obj, "meshDrawn",  JS_NewInt32(ctx, r->stat_mesh_draws));
+    JS_SetPropertyStr(ctx, obj, "meshBuilt",  JS_NewInt32(ctx, r->stat_mesh_built));
+    JS_SetPropertyStr(ctx, obj, "revision",   JS_NewInt32(ctx, r->revision));
     return obj;
 }
 

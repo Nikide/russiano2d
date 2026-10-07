@@ -633,6 +633,7 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
     r->mesh_vertex_upload = 0;
     r->stat_mesh_cmds    = 0;
     r->stat_frames++;
+    r->revision++;
     r->light_vertex_count = 0;
     r->light_batch_count  = 0;
     r->light_index_start  = 0;
@@ -816,6 +817,7 @@ void r2d_batch_mesh(R2DRenderer *r, const float *verts, int vertex_count)
         dst[i].a = 255;
     }
     r->mesh_vertex_count += vertex_count;
+    r->stat_mesh_built += vertex_count;
 }
 
 void r2d_batch_triangles_blend(R2DRenderer *r, const float *verts, int vertex_count, int blend)
