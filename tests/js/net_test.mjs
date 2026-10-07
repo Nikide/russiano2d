@@ -262,6 +262,36 @@ test('$.net: сервер считает мир, клиент рисует по�
     eq(client.net.get('e1', 'x'), 100, 'ввод клиента не меняет авторитетное');
 });
 
+test('$.net: сервер тоже ОТПРАВЛЯЕТ (регрессия на односторонний обмен)', () => {
+    // Раньше send работал только у клиента, и серверный ответ не уходил в
+    // транспорт вовсе: обратного пути не было, хотя модель его предполагает.
+    const sent = [];
+    const transport = { listen: () => true, connect: () => true, poll: () => [],
+                        send: (m) => { sent.push(m); return true; }, close: () => {} };
+
+    const server = createApi();
+    server.net.attach(transport);
+    server.net.host(7777);
+    server.net.send('snapshot', { tick: 1, entities: { e1: { x: 1 } } });
+    eq(sent.length, 1, 'сервер отправил снапшот');
+    eq(sent[0].channel, 'snapshot');
+    eq(sent[0].data.entities.e1.x, 1);
+
+    const client = createApi();
+    client.net.attach(transport);
+    client.net.join('127.0.0.1', 7777);
+    client.net.send('input', { seq: 1 });
+    eq(sent.length, 2, 'клиент тоже отправил');
+    eq(sent[1].channel, 'input');
+
+    // Вне сети отправлять некуда.
+    const offline = createApi();
+    offline.net.attach(transport);
+    offline.net.send('snapshot', { tick: 2 });
+    eq(sent.length, 2, 'вне сети отправки нет');
+    eq(server.net.stats().lastSendOk, true, 'результат отправки виден игре');
+});
+
 test('$.net: клиент не может применить чужой ввод', () => {
     const $ = createApi();
     $.net.join('127.0.0.1', 7777);

@@ -7,9 +7,8 @@
 # пира с игроком по АДРЕСУ, счётчики считают байты, а симуляция потерь не
 # ломает приём.
 #
-# ЧЕСТНО: обратный путь (ответ сервера клиенту) пока не работает — это
-# записано в docs/highlevel/net.md. Тест проверяет то, что работает, и не
-# выдаёт неработающее за работающее.
+# Проверяем ОБА направления: сервер получает ввод клиента, клиент получает
+# подтверждённый снапшот сервера — то есть петля замкнута.
 #
 # Запуск после сборки:
 #   python3 tests/agent/net_loopback_test.py
@@ -38,14 +37,20 @@ SERVER_SETUP = """
 globalThis.__log = [];
 $.net.bindEngine();
 $.net.host(%d, { maxPlayers: 4 });
-$.net.on('input', (player, data) => __log.push('input:' + player + ':' + data.seq));
+$.net.on('input', (player, data) => {
+    __log.push('input:' + player + ':' + data.seq);
+    // Ответ сервера: клиент должен получить подтверждённый снапшот.
+    $.net.send('snapshot', { tick: data.seq, entities: { e1: { x: 42, y: 7, owner: player } } });
+});
 $.net.on('join', (p) => __log.push('join:' + p));
 $.update(() => { $.net.poll(); });
 """
 
 CLIENT_SETUP = """
+globalThis.__log = [];
 $.net.bindEngine();
 $.net.join('127.0.0.1', %d);
+$.net.on('snapshot', (s) => __log.push('snapshot:' + JSON.stringify(s.entities.e1)));
 $.update(() => { $.net.poll(); });
 """
 
@@ -103,6 +108,22 @@ def main():
             client.step(1)
         log = server.eval("__log.join('|')")
         check("input:1:5" in log, f"дошёл последний номер ввода: {log}")
+
+        # Обратный путь: клиент применяет подтверждённое сервером состояние.
+        got_snapshot = False
+        for _ in range(40):
+            server.step(1)
+            client.step(1)
+            if "snapshot:" in client.eval("__log.join('|')"):
+                got_snapshot = True
+                break
+            time.sleep(0.05)
+        client_log = client.eval("__log.join('|')")
+        check(got_snapshot, f"клиент получил ответ сервера по петле: {client_log}")
+        check(client.eval("$.net.get('e1', 'x')") == 42,
+              "клиент применил подтверждённое состояние")
+        check(client.eval("engine.netStatus()")["packetsReceived"] > 0,
+              "счётчик принятых пакетов на клиенте вырос")
 
         # Симуляция потерь: приём не должен сломаться (часть пакетов теряется).
         before = server.eval("engine.netStatus()")["packetsReceived"]

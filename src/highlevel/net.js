@@ -639,8 +639,12 @@ export function installNet($) {
         send(channel, data) {
             const name = String(channel);
             stats.sent++;
-            if (role === 'client' && transport && typeof transport.send === 'function') {
-                transport.send({ channel: name, data });
+            // Отправлять может И СЕРВЕР: именно он рассылает снапшоты и
+            // события. Раньше здесь стояло `role === 'client'`, и серверный
+            // ответ не уходил в транспорт вовсе — обратного пути не было.
+            if (transport && typeof transport.send === 'function' && role !== 'offline') {
+                const ok = transport.send({ channel: name, data });
+                stats.lastSendOk = !!ok;
             }
             if (name === 'input') {
                 stats.inputs++;
