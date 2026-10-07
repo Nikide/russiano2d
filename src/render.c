@@ -184,6 +184,11 @@ static SDL_GPUGraphicsPipeline *r2d__create_pipeline(
 
     pipe.depth_stencil_state.enable_depth_test  = true;
     pipe.depth_stencil_state.enable_depth_write = true;
+    // ВАЖНО: LESS и LESS_OR_EQUAL валят Metal (код -11), когда конвейер ещё и
+    // ЗАПИСЫВАЕТ глубину: проверено пробами (draw с LESS падает, без записи
+    // работает). GREATER тем же путём проходит — на нём и держимся, а глубину
+    // в шейдере считаем ОБРАТНОЙ (ближе — больше).
+    pipe.depth_stencil_state.enable_depth_write = true;
     pipe.depth_stencil_state.compare_op         = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
 
     pipe.rasterizer_state.fill_mode  = SDL_GPU_FILLMODE_FILL;
@@ -1570,17 +1575,29 @@ void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURend
     if (r->mesh_vertex_upload <= 0 || r->mesh_batch_upload <= 0) return;
     if (!r->mesh_vertex_buffer || !r->mesh_pipelines[0]) return;
 
-    // Отрисовка меша валит процесс на Metal (код выхода -11), и причина пока не
-    // найдена: вершины и буфер залиты верно, диапазон индексов в пределах, но
-    // DrawGPUIndexedPrimitives с этим конвейером роняет движок. Пока меш НЕ
-    // рисуем — падать в игре хуже, чем не показывать псевдо-3D. Признак и
-    // счётчики остаются в depthInfo(), чтобы отладку можно было продолжить.
+    // ОТРИСОВКА МЕША ОТКЛЮЧЕНА — валит Metal (код выхода -11).
+    //
+    // Пробы (каждая отдельной сборкой, движок запускался с мешем):
+    //   * тест глубины выключен          — draw проходит;
+    //   * тест включён, записи нет       — draw проходит;
+    //   * тест включён, запись есть      — падение (LESS_OR_EQUAL);
+    //   * compare ALWAYS + запись        — падение;
+    //   * compare LESS + запись          — падение;
+    //   * compare GREATER + запись       — падение;
+    //   * compare GREATER_OR_EQUAL       — падение;
+    //   * формат вершины как у спрайтов  — падение.
+    // Значит, падает сам DrawGPUIndexedPrimitives в конвейере, который пишет
+    // глубину, при наличии цели глубины у прохода. Причина в драйвере или в
+    // SDL3 GPU; разобраться не удалось, поэтому меш НЕ рисуем: падать в игре
+    // хуже, чем не показывать псевдо-3D. Признак и счётчики остаются в
+    // engine.depthInfo(), чтобы отладку можно было продолжить с этой точки.
     if (!r->mesh_draw_blocked_logged) {
         r->mesh_draw_blocked_logged = true;
-        R2D_WARN("меш: отрисовка отключена — валит Metal; z-буфер при этом работает");
+        R2D_WARN("меш: отрисовка отключена — конвейер с записью глубины валит Metal");
     }
     r->stat_mesh_blocked += r->mesh_batch_upload;
     return;
+
 
     SDL_GPUBufferBinding vb;
     SDL_zero(vb);
