@@ -324,24 +324,42 @@ export function createHealth(opts) {
         /** Множитель прыжка. */
         jumpMultiplier() { return state.blacked('legs') ? BLACKED.jump : 1; },
 
-        /** Сумма по нелетальным зонам — «здоровье» для HUD. */
+        /**
+         * Сумма по нелетальным зонам. В оригинале это «число для старых
+         * потребителей current_health»: голова и грудь в него не входят, у них
+         * своя цена (смерть).
+         *
+         * ВНИМАНИЕ: для полоски здоровья это НЕ подходит — попадание в грудь
+         * не меняло бы её вовсе (так и вышло при проверке в движке). Полоска
+         * использует `sum()`.
+         */
         total() {
             let sum = 0;
             for (const zone of ZONES) if (!LETHAL.includes(zone)) sum += hp[zone];
             return sum;
         },
 
-        /** Полное здоровье в сумме (для полоски). */
-        totalMax() {
+        /** Сумма по ВСЕМ зонам — это и есть полоска здоровья бойца. */
+        sum() {
             let sum = 0;
-            for (const zone of ZONES) if (!LETHAL.includes(zone)) sum += max[zone];
+            for (const zone of ZONES) sum += hp[zone];
             return sum;
         },
 
-        /** Доля здоровья 0..1 для полоски. */
+        /** Полный максимум по всем зонам. */
+        sumMax() {
+            let sum = 0;
+            for (const zone of ZONES) sum += max[zone];
+            return sum;
+        },
+
+        /** Полное здоровье в сумме — по всем зонам (для полоски). */
+        totalMax() { return state.sumMax(); },
+
+        /** Доля здоровья 0..1 для полоски — по всем зонам. */
         fraction() {
-            const m = state.totalMax();
-            return m > 0 ? state.total() / m : 0;
+            const m = state.sumMax();
+            return m > 0 ? state.sum() / m : 0;
         },
 
         /** Строка для отладки: «Голова 35/35, Грудь 45/85…». */
@@ -408,9 +426,10 @@ export function installCombat($) {
 
         const health = createHealth({
             onZone: (info) => {
-                // Полоска узла — сумма по нелетальным зонам, как в оригинале.
-                node.max_hp = Math.max(1, health.totalMax());
-                node.cur_hp = health.total();
+                // Полоска узла — сумма по ВСЕМ зонам: с нелетальными она не
+                // двигалась от попадания в грудь (проверено в движке).
+                node.max_hp = Math.max(1, health.sumMax());
+                node.cur_hp = health.sum();
                 if ($.signal) $.signal.emit('combat:zone', Object.assign({ node }, info));
             },
             onBlacked: (info) => {
@@ -426,8 +445,8 @@ export function installCombat($) {
         });
         models.set(node, health);
         // Начальная полоска: узлу сразу видно здоровье.
-        node.max_hp = Math.max(1, health.totalMax());
-        node.cur_hp = health.total();
+        node.max_hp = Math.max(1, health.sumMax());
+        node.cur_hp = health.sum();
         return health;
     }
 

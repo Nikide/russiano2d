@@ -19,16 +19,21 @@ test('createHealth: зоны начинаются с максимума', () => 
     for (const zone of ZONES) eq(hp.get(zone), MAX_HP[zone], `зона ${zone}`);
     eq(hp.dead, false);
     eq(hp.total(), MAX_HP.arms + MAX_HP.stomach + MAX_HP.legs, 'сумма без смертельных');
+    eq(hp.sum(), MAX_HP.head + MAX_HP.chest + MAX_HP.arms + MAX_HP.stomach + MAX_HP.legs,
+       'полная сумма по всем зонам');
     eq(hp.fraction(), 1);
 });
 
 test('hit: урон вычитается из своей зоны', () => {
     const hp = createHealth();
+    const total_before = hp.sum();
     const r = hp.hit('chest', 40);
     eq(hp.get('chest'), MAX_HP.chest - 40);
     eq(r.died, false);
     eq(r.amount, 40);
     eq(hp.get('head'), MAX_HP.head, 'другие зоны не тронуты');
+    eq(hp.sum(), total_before - 40, 'полная сумма двигается от попадания в грудь');
+    truthy(hp.fraction() < 1, 'доля здоровья упала');
 });
 
 test('hit: ноль в голове или груди — смерть, и только один раз', () => {
