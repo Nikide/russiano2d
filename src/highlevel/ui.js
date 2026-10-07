@@ -17,6 +17,10 @@ import { activeDialog } from './widgets.js';
 // Кэш обёрток документов RmlUi: путь → обёртка (см. ui.doc()).
 const docs = new Map();
 
+// Текущий масштаб интерфейса. Живёт в модуле, а не в подсистеме: масштаб —
+// настройка игрока, и он не должен сбрасываться при createApi().
+let state_scale = 1;
+
 /**
  * Узел внутри поддерева `ancestor`? Нужен, чтобы модальный диалог пропускал
  * ввод своим детям (кнопкам окна), но блокировал всё остальное.
@@ -53,6 +57,65 @@ export function installUi($) {
 
         /** Частота кадров для HUD. */
         fps() { return Math.round(engine.fps); },
+
+        /**
+         * Масштаб интерфейса: `$.ui.scale(1.5)` — крупнее для большого экрана
+         * или для слабого зрения. Без аргумента читает текущий.
+         *
+         * Масштабируются узлы <ui.*> — положение, размер и кегль текста.
+         * Масштаб применяется ОДИН РАЗ: повторный `scale(1.5)` не увеличит
+         * вдвое, а поставит ровно 1.5 (пересчёт от текущего к новому).
+         */
+        scale(value) {
+            if (value === undefined) return state_scale;
+            const next = Math.max(0.25, Math.min(4, Number(value) || 1));
+            const ratio = next / state_scale;
+            if (ratio !== 1) {
+                const nodes = nodesWithFacet('ui');
+                for (const node of nodes) {
+                    node.x *= ratio;
+                    node.y *= ratio;
+                    node.w *= ratio;
+                    node.h *= ratio;
+                    if (node.size) node.size *= ratio;
+                }
+            }
+            state_scale = next;
+            return ui;
+        },
+
+        /** Прочитать масштаб без изменения. */
+        scaleValue() { return state_scale; },
+
+        /**
+         * Семантика для ассистивных технологий: `$.ui.aria('#play', { role: 'button',
+         * label: 'Начать игру' })`.
+         *
+         * Свойства лежат на узле (`node.aria`) и попадают в снимок агента,
+         * поэтому доступность интерфейса проверяется автотестом. Сам движок
+         * ничего не произносит: озвучивает оболочка, читающая снимок.
+         */
+        aria(sel, props) {
+            const list = typeof sel === 'string' ? query(sel) : sel;
+            if (!props) return list.length ? (list[0].aria || null) : null;
+            for (const node of list) {
+                node.aria = Object.assign({}, node.aria || {}, props);
+            }
+            return ui;
+        },
+
+        /** Сколько ui-узлов имеют семантику. */
+        ariaCount() {
+            let n = 0;
+            for (const node of nodesWithFacet('ui')) if (node.aria) n++;
+            return n;
+        },
+
+        /** Семантика узла (или null) — удобно в проверках. */
+        ariaOf(sel) {
+            const list = typeof sel === 'string' ? query(sel) : sel;
+            return list.length ? (list[0].aria || null) : null;
+        },
 
         // --- Документы RmlUi --------------------------------------------------
         /**

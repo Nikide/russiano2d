@@ -162,7 +162,7 @@ UI-виджеты, локализация, сохранения, префабы,
 |---|---|---|
 | Фокус невидим у кнопок/списка/скролла, глобальный, без trap, переживает `destroy()` | индикация только у checkbox/slider/input ([widgets.js:1939](../src/highlevel/widgets.js#L1939), [:1962](../src/highlevel/widgets.js#L1962), [:1971](../src/highlevel/widgets.js#L1971)); Tab встаёт и на кнопку ([:43](../src/highlevel/widgets.js#L43), [:1495-1497](../src/highlevel/widgets.js#L1495)) → Enter вслепую; `core.js:882-903` не уведомляет widgets, `setFocus` не смотрит на `removed` ([:897-903](../src/highlevel/widgets.js#L897)) → ввод уходит в убитый узел | M |
 | Нет gamepad-навигации по UI и экранам | [widgets.js:1471-1501](../src/highlevel/widgets.js#L1471), [screen.js:784-787](../src/highlevel/screen.js#L784); слово «gamepad» в widgets.js отсутствует | M |
-| Нет a11y-семантики и масштаба UI | `grep aria/accessib/role=/rtl` по `src` = 0; `grep uiScale/textScale/fontScale` = 0 | M |
+| **a11y-семантика и масштаб UI сделаны** (было: `grep aria/accessib/role=` = 0) | `$.ui.scale()` масштабирует узлы (абсолютно и идемпотентно), `$.ui.aria()` хранит role/label/live и кладёт их в снимок агента (ui.md §3–4) | M |
 | Нет clipboard и предпросмотра IME | [widgets.js:1503-1522](../src/highlevel/widgets.js#L1503) — нет Ctrl+C/V/X/A и выделения; `SDL_EVENT_TEXT_EDITING`/`SDL_SetTextInputArea` = 0 (только `TEXT_INPUT`, [app.c:444-456](../src/app.c#L444)); буфер 256 байт ([app.h:82](../src/app.h#L82)) | M |
 | Нет raw/relative-мыши; deadzone только пороговая | `RelativeMouseMode/MouseGrab` = 0, дельты из `xrel` ([app.c:437-439](../src/app.c#L437)); `$.input.wheel()` всегда `{x: 0}` ([input.js:195](../src/highlevel/input.js#L195)) | M |
 | Нет touch/мультитача; геймпад ровно один; нет отпусканий кнопок пада | `FINGER/touch` = 0 ([app.c:422-472](../src/app.c#L422)); один `SDL_Gamepad*` ([app.h:88](../src/app.h#L88)); `released: () => false` ([input.js:327](../src/highlevel/input.js#L327)) | M |
@@ -763,8 +763,8 @@ bootstrap, index, script).
    их нет в Box2D v3. Остались контакты по
    формам и импульсы, вращение камеры, мультикамерность, clipboard/IME, клипы
    локализации и плюрализация (плюрализация уже есть — i18n.md), контролы и
-   виртуализация списков, a11y и масштаб UI. **touch и мультигеймпад сделаны**
-   (input.md), **реплеи сделаны** (replay.md).
+   виртуализация списков. **touch и мультигеймпад сделаны** (input.md),
+   **реплеи сделаны** (replay.md), **a11y и масштаб UI сделаны** (ui.md §3–4).
 7. **Катсцены (§3):** **сделано** — `src/highlevel/cutscene.js` + интеграция в
    `api.js` до `applyControls`: `take`/`give` ввода (с запоминанием прежних
    признаков управления и гашением скорости), ведение любых узлов (`walk` с

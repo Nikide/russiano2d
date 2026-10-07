@@ -39,6 +39,9 @@ function nodeBrief(node) {
         visible: node.visible,
         body: node.body,
         ui: !!node.attrs.ui,
+        // Семантика для ассистивных технологий (role/label/…): она нужна в
+        // снимке, чтобы автотест мог проверить доступность интерфейса.
+        aria: node.aria || null,
     };
 }
 
