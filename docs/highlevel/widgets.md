@@ -42,7 +42,7 @@ $.ready(() => {
 | `<ui.checkbox>` | флажок | `checked`, `text`, `color`, `hoverColor`, `fillColor`, `textColor` |
 | `<ui.slider>` | ползунок | `min`, `max`, `step`, `value`, `fillColor`, `color` |
 | `<ui.input>` | текстовое поле | `text`/`value`, `maxLength`, `placeholder`, `textColor` |
-| `<ui.list>` | вертикальный список | `items`, `index`, `itemHeight`, `fillColor` |
+| `<ui.list>` | вертикальный список (прокрутка и виртуализация) | `items`, `index`, `itemHeight`, `fillColor`, `itemRender` |
 | `<ui.dialog>` | модальное окно | `title`, `text`, `buttons`, `closeOnAction` |
 
 **Параметры раскладки**
@@ -388,3 +388,50 @@ build/_deps/quickjs-build/qjs tests/js/widgets_anchor_test.mjs
 Интеграционный прогон в движке — `tests/agent/highlevel_widgets_test.py`
 (фикстура `tests/fixtures/widgets/`) и `tests/agent/highlevel_widgets_anchor_test.py`
 (фикстура `tests/fixtures/widgets_anchor/`); их запускает интегратор после сборки.
+
+
+---
+
+## Виртуализация списка `<ui.list>`
+
+Список рисует **только видимые строки**: в кадре обходятся не все элементы, а те,
+что попали в окно. Список в 100 000 строк рисует ~12 строк за кадр (проверено
+`tests/agent/highlevel_list_test.py`), в 100 000 — не «потом», а сразу.
+
+```js
+$('<ui.list>', { id: 'inv', itemHeight: 20 }).at(160, 120).size(300, 200)
+    .appendTo($.ui);
+
+$.ui.listItems('#inv', items, { index: 0 });   // строки или объекты
+$.ui.listScroll('#inv', 400);                  // без аргумента — прочитать
+$.ui.listScrollBy('#inv', -40);                // сдвинуть
+$.ui.listRange('#inv');                        // { first, last, drawn, total }
+$.ui.listIndex('#inv', 3);                     // выбрать (и показать)
+```
+
+| Вызов | Смысл |
+|---|---|
+| `listItems(sel, items, opts?)` | задать строки; `opts.index`, `opts.itemHeight` |
+| `listScroll(sel, value?)` | прокрутка в пикселях (зажимается содержимым) |
+| `listScrollBy(sel, delta)` | сдвинуть прокрутку |
+| `listIndex(sel, value?)` | прочитать или выбрать строку |
+| `listRange(sel)` | `{ first, last, drawn, total }` — что реально нарисовано |
+
+**Элементы.** Строка — это строка или объект:
+
+```js
+{ text: 'Меч', sub: 'x1', color: '#ffcc00' }
+```
+
+`sub` рисуется справа мелким шрифтом, `color` — цвет строки. Свой рендер —
+атрибут `itemRender(item, i)`, возвращающий `{ text, sub, color, size }`;
+`itemIndex(item, i)` — если текстом элемента служит не само значение.
+
+**Прокрутка.** Колесо мыши прокручивает список под курсором (как `<ui.scroll>`);
+стрелки вверх/вниз и `Home`/`End` двигают выборку, и выбранная строка
+**удерживается на экране** — иначе стрелка «выбирала» бы то, чего не видно.
+Полоса прокрутки рисуется только когда содержимое не помещается.
+
+**Ограничения.** Виртуализация считает строки **одинаковой высоты**
+(`itemHeight`); строки разной высоты не поддержаны — для них нужен список
+своих узлов внутри `<ui.scroll>`. Горизонтальной прокрутки нет.

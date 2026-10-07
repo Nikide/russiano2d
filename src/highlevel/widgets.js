@@ -769,9 +769,78 @@ function registerRenderers() {
 // Публичный API $.ui
 // ---------------------------------------------------------------------------
 
+/** Все узлы-списки по селектору (или сам узел/обёртка). */
+function resolveList(sel) {
+    const list = typeof sel === 'string' ? query(sel) : [resolveNode(sel)];
+    return list.filter((n) => n && n.tag === 'ui.list');
+}
+
 function installUiApi($) {
     const ui = $.ui || ctx.ui || {};
     $.ui = ui;
+
+    /**
+     * Задать строки списка: `$.ui.listItems('#inv', items, { index: 0 })`.
+     * Принимает строки или объекты `{ text, sub, color }`.
+     */
+    ui.listItems = function (sel, items, opts) {
+        const o = opts || {};
+        for (const node of resolveList(sel)) {
+            node.attrs.items = Array.isArray(items) ? items.slice() : [];
+            if (o.index !== undefined) selectIndex(node, num(o.index, 0), true);
+            if (o.itemHeight !== undefined) node.attrs.itemHeight = num(o.itemHeight, 24);
+            // Прокрутку зажимаем: после смены набора она может выйти за предел.
+            node.attrs.scroll = Math.min(listMaxScroll(node), listScroll(node));
+        }
+        return ui;
+    };
+
+    /** Прокрутка списка: `$.ui.listScroll('#inv', 120)` или прочитать (без аргумента). */
+    ui.listScroll = function (sel, value) {
+        if (value === undefined) {
+            const first = resolveList(sel)[0];
+            return first ? listScroll(first) : 0;
+        }
+        for (const node of resolveList(sel)) {
+            node.attrs.scroll = Math.min(listMaxScroll(node), Math.max(0, num(value, 0)));
+        }
+        return ui;
+    };
+
+    /** Сдвинуть прокрутку на `delta` пикселей (положительное — вниз). */
+    ui.listScrollBy = function (sel, delta) {
+        for (const node of resolveList(sel)) {
+            node.attrs.scroll = Math.min(listMaxScroll(node),
+                Math.max(0, listScroll(node) + num(delta, 0)));
+        }
+        return ui;
+    };
+
+    /**
+     * Что список РЕАЛЬНО нарисовал в прошлом кадре:
+     * `{ first, last, drawn, total }`. На этом стоит проверка виртуализации:
+     * для 100 000 строк `drawn` обязан быть размером окна, а не всего списка.
+     */
+    ui.listRange = function (sel) {
+        const node = resolveList(sel)[0];
+        if (!node) return { first: 0, last: -1, drawn: 0, total: 0 };
+        const items = Array.isArray(node.attrs.items) ? node.attrs.items : [];
+        return { first: num(node.attrs._range ? node.attrs._range[0] : 0, 0),
+                 last: num(node.attrs._range ? node.attrs._range[1] : -1, -1),
+                 drawn: num(node.attrs._drawn, 0), total: items.length };
+    };
+
+    /** Выбранный индекс списка (без аргумента — прочитать). */
+    ui.listIndex = function (sel, value) {
+        const node = resolveList(sel)[0];
+        if (!node) return -1;
+        if (value === undefined) return listIndex(node);
+        for (const one of resolveList(sel)) {
+            selectIndex(one, num(value, 0));
+            listEnsureVisible(one, listIndex(one));
+        }
+        return ui;
+    };
 
     /** Поставить фокус: узел, обёртка или селектор. */
     ui.focus = function (target) { setFocus(resolveNode(target)); return ui; };
@@ -1547,6 +1616,9 @@ function tickListKeys(node, input) {
     if (input.pressed('home')) i = 0;
     if (input.pressed('end')) i = items.length - 1;
     selectIndex(node, i);
+    // Выбранная строка обязана быть видна: иначе стрелка «выбирает» то, чего
+    // на экране нет.
+    listEnsureVisible(node, listIndex(node));
     if (input.pressed('enter')) node.emit('activate', { index: listIndex(node), item: items[listIndex(node)] });
 }
 
@@ -1579,9 +1651,13 @@ function tickMouse(input, modal) {
         const ui_nodes = nodesWithFacet('ui');
         for (let i = 0; i < ui_nodes.length; i++) {
             const node = ui_nodes[i];
-            if (node.tag !== 'ui.scroll' || node.visible === false) continue;
+            const scrollable = node.tag === 'ui.scroll' || node.tag === 'ui.list';
+            if (!scrollable || node.visible === false) continue;
             if (pointInNode(node, mx, my)) {
-                node.attrs.scroll = Math.min(num(node.attrs.maxScroll, 0),
+                const limit = node.tag === 'ui.list'
+                    ? listMaxScroll(node)
+                    : num(node.attrs.maxScroll, 0);
+                node.attrs.scroll = Math.min(limit,
                     Math.max(0, num(node.attrs.scroll, 0) - wheel * 40));
             }
         }
@@ -1661,12 +1737,61 @@ function listItemHeight(node) {
     return Math.max(1, num(node.attrs.itemHeight, 24));
 }
 
+/** Прокрутка списка в пикселях, зажатая в допустимый диапазон. */
+function listScroll(node) {
+    const max = listMaxScroll(node);
+    return Math.min(max, Math.max(0, num(node.attrs.scroll, 0)));
+}
+
+/** Сколько пикселей содержимого НЕ помещается в окно списка. */
+function listMaxScroll(node) {
+    const items = Array.isArray(node.attrs.items) ? node.attrs.items : [];
+    const content = items.length * listItemHeight(node);
+    return Math.max(0, content - node.h);
+}
+
+/**
+ * Границы видимых элементов: `[first, last]` включительно. Здесь и живёт
+ * виртуализация: список НЕ перебирает все элементы, а сразу считает, какие
+ * попали в окно. Для списка в 100 000 строк это разница между «мгновенно» и
+ * «кадр не влезает».
+ */
+function listRange(node) {
+    const items = Array.isArray(node.attrs.items) ? node.attrs.items : [];
+    if (!items.length) return { first: 0, last: -1 };
+    const h = listItemHeight(node);
+    const scroll = listScroll(node);
+    const first = Math.max(0, Math.floor(scroll / h));
+    // Полтора элемента запаса снизу: иначе половина строки на границе окна
+    // пропадала бы при дробной прокрутке.
+    const last = Math.min(items.length - 1, Math.floor((scroll + node.h) / h) + 1);
+    return { first, last };
+}
+
 function listIndexAt(node, my) {
     const items = Array.isArray(node.attrs.items) ? node.attrs.items : [];
     if (!items.length) return 0;
     const h = listItemHeight(node);
     const top = node.y - node.h / 2;
-    return Math.min(items.length - 1, Math.max(0, Math.floor((my - top) / h)));
+    // Прокрутка сдвигает содержимое вверх, поэтому индекс считается от
+    // «виртуального» верха содержимого.
+    const scroll = listScroll(node);
+    const local = my - top + scroll;
+    return Math.min(items.length - 1, Math.max(0, Math.floor(local / h)));
+}
+
+/** Прокрутить список так, чтобы элемент `index` был виден целиком. */
+function listEnsureVisible(node, index) {
+    const h = listItemHeight(node);
+    const items = Array.isArray(node.attrs.items) ? node.attrs.items : [];
+    if (!items.length) return;
+    const i = Math.min(items.length - 1, Math.max(0, Math.floor(num(index, 0))));
+    const top = i * h;
+    const bottom = top + h;
+    let scroll = listScroll(node);
+    if (top < scroll) scroll = top;
+    else if (bottom > scroll + node.h) scroll = bottom - node.h;
+    node.attrs.scroll = Math.min(listMaxScroll(node), Math.max(0, scroll));
 }
 
 function listHover(node, mx, my) {
@@ -2004,10 +2129,17 @@ function drawList(node) {
     const item_h = listItemHeight(node);
     const top = node.y - node.h / 2;
     const index = listIndex(node);
-    for (let i = 0; i < items.length; i++) {
-        const cy = top + i * item_h + item_h / 2;
-        if (cy + item_h / 2 < node.y - node.h / 2) continue;
+    const scroll = listScroll(node);
+    const range = listRange(node);
+    const index_of = typeof node.attrs.itemIndex === 'function' ? node.attrs.itemIndex : null;
+    const render = typeof node.attrs.itemRender === 'function' ? node.attrs.itemRender : null;
+
+    // ВИРТУАЛИЗАЦИЯ: обходим только видимые элементы, а не весь список.
+    for (let i = range.first; i <= range.last; i++) {
+        const cy = top - scroll + i * item_h + item_h / 2;
+        if (cy + item_h / 2 < top) continue;
         if (cy - item_h / 2 > node.y + node.h / 2) break;
+        const item = items[i];
         if (i === index) {
             push().sprite(engine.whiteSprite, node.x, cy, node.w - 4, item_h - 2, 0,
                           withAlpha(node.fill_color, node.alpha));
@@ -2015,9 +2147,47 @@ function drawList(node) {
             push().sprite(engine.whiteSprite, node.x, cy, node.w - 4, item_h - 2, 0,
                           surfaceColor(node));
         }
-        queueText(items[i], node.x - node.w / 2 + 10, cy, node.size,
-                  i === index ? packColor('#ffffff') : textColorOf(node), 'left');
+        // Свой рендер строки: игра может вернуть текст и цвет, а сложное —
+        // нарисовать сама (хотя рисовать в этом проходе нельзя).
+        if (render) {
+            const spec = render(item, i) || {};
+            const label = spec.text === undefined ? String(item) : String(spec.text);
+            if (label) {
+                queueText(label, node.x - node.w / 2 + 10, cy, spec.size || node.size,
+                          spec.color !== undefined ? packColor(spec.color)
+                              : (i === index ? packColor('#ffffff') : textColorOf(node)), 'left');
+            }
+            if (spec.sub) {
+                queueText(String(spec.sub), node.x + node.w / 2 - 10, cy, (spec.size || node.size) - 4,
+                          packColor('#8fa0bb'), 'right');
+            }
+            continue;
+        }
+        const text = index_of ? index_of(item, i) : (item && item.text !== undefined ? item.text : item);
+        const color = (item && typeof item === 'object' && item.color)
+            ? packColor(item.color)
+            : (i === index ? packColor('#ffffff') : textColorOf(node));
+        queueText(String(text), node.x - node.w / 2 + 10, cy, node.size, color, 'left');
+        if (item && typeof item === 'object' && item.sub) {
+            queueText(String(item.sub), node.x + node.w / 2 - 10, cy, node.size - 4,
+                      packColor('#8fa0bb'), 'right');
+        }
     }
+
+    // Полоса прокрутки: тонкая, только когда содержимое не помещается.
+    const max_scroll = listMaxScroll(node);
+    if (max_scroll > 0) {
+        const track_h = node.h - 6;
+        const thumb_h = Math.max(18, track_h * (node.h / (node.h + max_scroll)));
+        const t = scroll / max_scroll;
+        const thumb_y = top + 3 + t * (track_h - thumb_h) + thumb_h / 2;
+        push().sprite(engine.whiteSprite, node.x + node.w / 2 - 4, thumb_y, 3, thumb_h, 0,
+                      withAlpha(packColor('#8fa0bb'), num(node.alpha, 1) * 0.8));
+    }
+
+    // Сколько строк реально нарисовано — для проверок виртуализации.
+    node.attrs._drawn = range.last >= range.first ? range.last - range.first + 1 : 0;
+    node.attrs._range = [range.first, range.last];
 }
 
 function drawDialog(node) {

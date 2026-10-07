@@ -167,7 +167,7 @@ UI-виджеты, локализация, сохранения, префабы,
 | Нет raw/relative-мыши; deadzone только пороговая | `RelativeMouseMode/MouseGrab` = 0, дельты из `xrel` ([app.c:437-439](../src/app.c#L437)); `$.input.wheel()` всегда `{x: 0}` ([input.js:195](../src/highlevel/input.js#L195)) | M |
 | Нет touch/мультитача; геймпад ровно один; нет отпусканий кнопок пада | `FINGER/touch` = 0 ([app.c:422-472](../src/app.c#L422)); один `SDL_Gamepad*` ([app.h:88](../src/app.h#L88)); `released: () => false` ([input.js:327](../src/highlevel/input.js#L327)) | M |
 | Контролов мало: нет таблицы, дерева, табов, тултипа, select, radio, spinbox, textarea, контекстного меню, drag&drop | 13 ui-тегов ([core.js:429-435](../src/highlevel/core.js#L429), [widgets.js:729-753](../src/highlevel/widgets.js#L729)); `grep tooltip/dropdown/radio/spinbox/textarea/contextmenu/virtualiz` = 0 | L |
-| `<ui.list>` без прокрутки, виртуализации и рендера элементов | [widgets.js:1992-2013](../src/highlevel/widgets.js#L1992) — перебор всех items, `break` за границей, элемент — голая строка ([:2010](../src/highlevel/widgets.js#L2010)) | M |
+| **`<ui.list>`: прокрутка, виртуализация и рендер элементов — сделаны** (было: перебор всех items и голая строка) | `$.ui.listItems/listScroll/listScrollBy/listRange/listIndex`, `itemRender`/`itemIndex`; обход только видимых строк (видны 12 из 100 000 за кадр) | M |
 | Контейнеры без flex-grow и горизонтальной прокрутки | `grow` есть только в `screen.js:63`, в widgets = 0 ([widgets.js:105-185](../src/highlevel/widgets.js#L105)); прокрутка только вертикальная ([:1381-1389](../src/highlevel/widgets.js#L1381)) | M |
 | Плюрализация только ru/en; длинный перевод молча обрезается; нет истории и сейва диалога | [i18n.js:59-68](../src/highlevel/i18n.js#L59), [:143](../src/highlevel/i18n.js#L143); `maxLines: 4`/`maxChoices: 6` ([dialog.js:52-53](../src/highlevel/dialog.js#L52)); в `save.js` нет ни `dialog`, ни `timeline`; RTL нет | L |
 
@@ -762,8 +762,8 @@ bootstrap, index, script).
    filter — сделаны (у mouse не проверена тяга). `pulley` и `gear` невозможны:
    их нет в Box2D v3. Остались контакты по
    формам и импульсы, вращение камеры, мультикамерность, clipboard/IME, клипы
-   локализации и плюрализация (плюрализация уже есть — i18n.md), контролы и
-   виртуализация списков. **touch и мультигеймпад сделаны** (input.md),
+   локализации и плюрализация (плюрализация уже есть — i18n.md).
+   **Виртуализация списков сделана** (widgets.md), **touch и мультигеймпад сделаны** (input.md),
    **реплеи сделаны** (replay.md), **a11y и масштаб UI сделаны** (ui.md §3–4).
 7. **Катсцены (§3):** **сделано** — `src/highlevel/cutscene.js` + интеграция в
    `api.js` до `applyControls`: `take`/`give` ввода (с запоминанием прежних
