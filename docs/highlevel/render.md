@@ -715,6 +715,6 @@ $('#panel').clip(false);         // снять
 | Файл | Что там |
 |---|---|
 | `src/render.h` | `R2DBlendMode`, `pipelines[]`, поля `blend` у команд и диапазонов треугольников |
-| `src/render.c` | конвейеры по режимам, `blend_state`, переключение в `r2d_render_draw`, биндинги `submitSprites`/`submitTriangles`, заглушка `engine.viewport` |
+| `src/render.c` | конвейеры по режимам, `blend_state`, переключение в `r2d_render_draw`, биндинги `submitSprites`/`submitTriangles`, обрезка (scissor) и `engine.viewport` |
 | `src/highlevel/viewport.js` | `$.blend`, `$.viewport`, чистые хелперы `normalizeBlend`/`nodeBlendMode`/`resolveBlend`/`blendRuns` |
 | `tests/fixtures/render/` | фикстура агентского теста |
