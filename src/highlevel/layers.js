@@ -231,7 +231,7 @@ function stepParallax(node, cam) {
     // клике. Кладём сюда то, где узел нарисован в этом кадре.
     st.screen_x = node.x;
     st.screen_y = node.y;
-    st.screen_frame = ctx.time ? ctx.time.frame() : 0;
+    st.screen_frame = ctx.time && typeof ctx.time.frame === 'function' ? ctx.time.frame() : -1;
     if (!Number.isFinite(st.last_x)) { st.ax = node.x - cam.x * (1 - f); st.last_x = node.x; }
     if (!Number.isFinite(st.last_y)) { st.ay = node.y - cam.y * (1 - f); st.last_y = node.y; }
 
@@ -260,12 +260,12 @@ export function nodeScreenPos(node) {
     const st = parallax_state.get(node);
     let scene_x = node.x;
     let scene_y = node.y;
-    if (st && st.screen_frame !== undefined) {
-        const frame = ctx.time ? ctx.time.frame() : 0;
-        if (st.screen_frame === frame) {
-            scene_x = st.screen_x;
-            scene_y = st.screen_y;
-        }
+    // frame() есть только у настоящего $.time: мок в тестах отдаёт заглушку,
+    // и вызов без проверки ронял отрисовку слоёв.
+    const frame = ctx.time && typeof ctx.time.frame === 'function' ? ctx.time.frame() : -1;
+    if (st && st.screen_frame !== undefined && st.screen_frame === frame) {
+        scene_x = st.screen_x;
+        scene_y = st.screen_y;
     }
     // Нарисованное место = сцена → экран тем же преобразованием, что в
     // render.js (nodeTransform): без него попадание считалось бы в мировых
