@@ -33,7 +33,16 @@ export const ctx = {
     agent: null,
     gfx: null,
     frame: { hooks: [], renderHooks: [], ready: [], exit: [] },
-    log: (msg) => engine.log(msg),
+    // Журнал безопасен вне движка: модульные тесты под qjs не имеют `engine`,
+    // и любое предупреждение внутри подсистемы роняло весь тест (так и вышло
+    // с предметами: add() писал предупреждение — и тест падал «не влезло»).
+    log: (msg) => {
+        if (typeof engine !== 'undefined' && engine && typeof engine.log === 'function') {
+            engine.log(msg);
+        } else if (typeof console !== 'undefined' && console && typeof console.log === 'function') {
+            console.log(msg);
+        }
+    },
 };
 
 // ---------------------------------------------------------------------------

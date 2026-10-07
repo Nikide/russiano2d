@@ -1056,6 +1056,7 @@ $.update(() => {
 | Сценки и катсцены: текстовый DSL, реплики, выборы, флаги | `$.story` | — | [story.md](highlevel/story.md) |
 | Задания: цели, условия открытия, события рейда, награда | `$.quest` | — | [quest.md](highlevel/quest.md) |
 | Банки звуков, шаги по материалу, реплики NPC | `$.sound.playBank`, `$.steps`, `$.barks` | — | [sound_bank.md](highlevel/sound_bank.md) |
+| Предметы и инвентарь: клетки, стопки, вес, ношение | `$.items`, `$.inv` | — | [items.md](highlevel/items.md) |
 | Текст в сцене и шрифты: растеризация глифов, атлас, семейства | `$.font.load`, `.font()`, `<text>` | — | [text.md](highlevel/text.md) |
 
 Физика в этой таблице не отдельной подсистемой, а частью ядра: формы тел,
