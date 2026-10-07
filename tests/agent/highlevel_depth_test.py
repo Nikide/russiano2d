@@ -14,11 +14,14 @@
 # ===========================================================================
 
 import hashlib
+import json
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent   # noqa: E402
+
+GAME = os.path.join("tests", "fixtures", "text")
 
 FAILURES = []
 
@@ -32,6 +35,22 @@ def check(condition, message):
 def shot(a, path):
     a.cmd("screenshot", path=path)
     return hashlib.sha256(open(path, "rb").read()).hexdigest()
+
+
+def check_mesh_guard(a):
+    """
+    Меш заливается, но НЕ рисуется, и это осознанно: вызов отрисовки роняет
+    процесс (SIGSEGV) — проверено снятием защиты. Тест следит за тем, чтобы
+    защита не пропала случайно: если кто-то её снимет, движок умрёт на первом
+    же меше, и тест это поймает (процесс закроется).
+    """
+    a.eval("""$.update(() => engine.submitMesh(new Float32Array([
+        300,200,0.5, 0,0, 1,0,0,
+        500,200,0.5, 1,0, 0,1,0,
+        400,400,0.5, 0.5,1, 0,0,1])));""")
+    a.step(3)
+    info = json.loads(a.eval("JSON.stringify(engine.depthInfo())"))
+    return info
 
 
 def main():
@@ -54,6 +73,14 @@ def main():
         a.step(3)
         again = shot(a, "/tmp/depth_again.png")
         check(again == on, "после возврата кадр тот же")
+
+    with Agent(game=GAME, seed=5) as a:
+        info = check_mesh_guard(a)
+        check(info["meshBuf"] is True, "GPU-буфер меша создан")
+        check(info["peak"] >= 3, f"вершины доехали до заливки (peak = {info['peak']})")
+        check(info["uploads"] >= 1, f"заливок: {info['uploads']}")
+        check(info["blocked"] >= 1,
+              f"отрисовка отключена защитой ({info['blocked']} батчей не нарисовано)")
 
     print()
     if FAILURES:
