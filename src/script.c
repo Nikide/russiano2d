@@ -2178,8 +2178,56 @@ static JSValue r2d__js_audio_play(JSContext *ctx, JSValueConst this_val, int arg
     const double pan = r2d__arg_num(ctx, argc, argv, 2, 0.0);
     const bool loop = r2d__arg_bool(ctx, argc, argv, 3, false);
 
-    return JS_NewInt32(ctx, r2d_audio_play(s->audio, id,
-                                            (float)volume, (float)pan, loop ? -1 : 0));
+    // Шестой аргумент — приоритет: при нехватке каналов вытесняется самый
+    // неважный звук, а не всегда нулевой канал.
+    const int priority = (int)r2d__arg_num(ctx, argc, argv, 4, 0);
+    return JS_NewInt32(ctx, r2d_audio_play(s->audio, id, (float)volume, (float)pan,
+                                            loop ? -1 : 0, priority));
+}
+
+// engine.audio.channelCount() → сколько эффект-каналов всего.
+static JSValue r2d__js_audio_channel_count(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    return JS_NewInt32(ctx, R2D_AUDIO_CHANNELS);
+}
+
+// engine.audio.seek(channel, seconds) → bool — перемотать проигрываемый звук.
+static JSValue r2d__js_audio_seek(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_audio_seek(s->audio,
+                                          r2d__arg_int(ctx, argc, argv, 0, -1),
+                                          r2d__arg_num(ctx, argc, argv, 1, 0)));
+}
+
+// engine.audio.position(channel) → секунды (-1, если канал не играет).
+static JSValue r2d__js_audio_position(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_NewFloat64(ctx, -1);
+    return JS_NewFloat64(ctx, r2d_audio_position(s->audio, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+// engine.audio.channelDuration(channel) → длительность звука в секундах.
+static JSValue r2d__js_audio_channel_duration(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_NewFloat64(ctx, -1);
+    return JS_NewFloat64(ctx, r2d_audio_channel_duration(s->audio, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+// engine.audio.channelPriority(channel) → приоритет запуска (-1, если не играет).
+static JSValue r2d__js_audio_channel_priority(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_NewInt32(ctx, -1);
+    return JS_NewInt32(ctx, r2d_audio_channel_priority(s->audio, r2d__arg_int(ctx, argc, argv, 0, -1)));
 }
 
 static JSValue r2d__js_audio_stop(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -4054,7 +4102,12 @@ static JSValue r2d__make_engine(JSContext *ctx)
     // Звук и музыка
     JSValue audio = JS_NewObject(ctx);
     r2d__set_fn(ctx, audio, "load", r2d__js_audio_load, 1);
-    r2d__set_fn(ctx, audio, "play", r2d__js_audio_play, 4);
+    r2d__set_fn(ctx, audio, "play", r2d__js_audio_play, 5);
+    r2d__set_fn(ctx, audio, "channelCount", r2d__js_audio_channel_count, 0);
+    r2d__set_fn(ctx, audio, "seek", r2d__js_audio_seek, 2);
+    r2d__set_fn(ctx, audio, "position", r2d__js_audio_position, 1);
+    r2d__set_fn(ctx, audio, "channelDuration", r2d__js_audio_channel_duration, 1);
+    r2d__set_fn(ctx, audio, "channelPriority", r2d__js_audio_channel_priority, 1);
     r2d__set_fn(ctx, audio, "stop", r2d__js_audio_stop, 2);
     r2d__set_fn(ctx, audio, "stopAll", r2d__js_audio_stop_all, 1);
     r2d__set_fn(ctx, audio, "playing", r2d__js_audio_playing, 1);

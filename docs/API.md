@@ -1467,7 +1467,12 @@ if (engine.ui.hasIcon('volume_up')) {
 | Функция | Возвращает | Описание |
 |---|---|---|
 | `engine.audio.load(path)` | `number` | Загружает звук; id `>= 0` или `-1` |
-| `engine.audio.play(id, volume?, pan?, loop?)` | `number` | Играет эффект; номер канала `0..15` или `-1` |
+| `engine.audio.play(id, volume?, pan?, loop?, priority?)` | `number` | Играет эффект; номер канала `0..15` или `-1` |
+| `engine.audio.seek(channel, seconds)` | `boolean` | Перемотать проигрываемый звук |
+| `engine.audio.position(channel)` | `number` | Позиция в секундах (`-1`, если не играет) |
+| `engine.audio.channelDuration(channel)` | `number` | Длительность звука на канале |
+| `engine.audio.channelPriority(channel)` | `number` | Приоритет запуска (`-1`, если не играет) |
+| `engine.audio.channelCount()` | `number` | Сколько эффект-каналов всего (16) |
 | `engine.audio.stop(channel, fadeMs?)` | `undefined` | Останавливает канал; по умолчанию `fadeMs = 0` |
 | `engine.audio.stopAll(fadeMs?)` | `undefined` | Останавливает все каналы эффектов |
 | `engine.audio.playing(channel)` | `boolean` | Играет ли сейчас этот канал |
@@ -1555,7 +1560,14 @@ const shoot = engine.audio.load('demos/assets/audio/sfx/shoot_01.ogg');
 const music = engine.audio.load('demos/assets/audio/music/action.ogg');
 
 // Выстрел: чуть тише и со сдвигом вправо от центра.
-const ch = engine.audio.play(shoot, 0.8, 0.3, false);
+const ch = engine.audio.play(shoot, 0.8, 0.3, false, 5);   // 5 — приоритет
+
+// Приоритет решает, кого вытеснить, когда все 16 каналов заняты: глушится
+// САМЫЙ НЕВАЖНЫЙ звук, и только если новый не менее важен. Иначе play вернёт
+// -1 — лучше не играть, чем заглушить важное.
+
+engine.audio.seek(ch, 0.4);        // перемотать на 0.4 с
+engine.audio.position(ch);         // где играет сейчас
 if (ch >= 0 && engine.audio.playing(ch)) engine.audio.stop(ch, 150);
 
 // Фоновая музыка с плавным входом.

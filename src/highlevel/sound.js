@@ -24,8 +24,16 @@ function soundId(what) {
 export function installSound($) {
     const sound = {
         /**
-         * play('hit.wav', { volume, pan, loop, pitch }) → id канала или -1.
-         * pitch — скорость воспроизведения (1.0 обычная): и высота, и темп.
+         * play('hit.wav', { volume, pan, loop, pitch, priority }) → id канала
+         * или -1.
+         *
+         * `pitch` — скорость воспроизведения (1.0 обычная): и высота, и темп.
+         *
+         * `priority` — насколько звук важен (больше — важнее, 0 по умолчанию).
+         * Когда все каналы заняты, движок вытесняет САМЫЙ НЕВАЖНЫЙ звук и
+         * только если новый не менее важен; иначе возвращает -1. Раньше
+         * жертвой всегда был канал 0, поэтому важная реплика глушилась первым
+         * же шагом по траве.
          */
         play(what, opts) {
             const o = opts || {};
@@ -33,7 +41,8 @@ export function installSound($) {
             if (id < 0) return -1;
             const channel = engine.audio.play(id, o.volume === undefined ? 1 : o.volume,
                                               o.pan === undefined ? 0 : o.pan,
-                                              o.loop ? 1 : 0);
+                                              o.loop ? 1 : 0,
+                                              o.priority === undefined ? 0 : o.priority);
             // Скорость — свойство канала, а каналы переиспользуются. Поэтому
             // ставим её всегда: без этого следующий звук на том же канале
             // унаследовал бы чужой pitch.
@@ -136,6 +145,48 @@ export function installSound($) {
         stopAll(fadeMs) { engine.audio.stopAll(fadeMs === undefined ? 0 : fadeMs); return sound; },
         stop(channel, fadeMs) { engine.audio.stop(channel, fadeMs === undefined ? 0 : fadeMs); return sound; },
         playing(channel) { return engine.audio.playing(channel); },
+
+        /**
+         * Перемотать проигрываемый звук: `$.sound.seek(channel, seconds)`.
+         *
+         * Возвращает `false`, если канал не играет или перемотка не удалась.
+         */
+        seek(channel, seconds) {
+            if (typeof engine.audio.seek !== 'function') return false;
+            return !!engine.audio.seek(channel, seconds === undefined ? 0 : seconds);
+        },
+
+        /** Позиция канала в секундах (-1, если не играет). */
+        position(channel) {
+            if (typeof engine.audio.position !== 'function') return -1;
+            return engine.audio.position(channel);
+        },
+
+        /** Длительность звука на канале в секундах (-1, если неизвестна). */
+        durationOf(channel) {
+            if (typeof engine.audio.channelDuration !== 'function') return -1;
+            return engine.audio.channelDuration(channel);
+        },
+
+        /** С каким приоритетом запущен канал (-1, если не играет). */
+        priorityOf(channel) {
+            if (typeof engine.audio.channelPriority !== 'function') return -1;
+            return engine.audio.channelPriority(channel);
+        },
+
+        /**
+         * Сколько каналов занято: `$.sound.busy()`.
+         *
+         * `active` — общее число играющих каналов из `engine.audio.activeChannels()`,
+         * `free` — сколько осталось (лимит движка, обычно 16 эффект-каналов).
+         */
+        busy() {
+            const active = typeof engine.audio.activeChannels === 'function'
+                ? engine.audio.activeChannels() : 0;
+            const total = typeof engine.audio.channelCount === 'function'
+                ? engine.audio.channelCount() : 16;
+            return { active, free: Math.max(0, total - active), total };
+        },
         activeChannels() { return engine.audio.activeChannels(); },
         duration(what) { return engine.audio.duration(soundId(what)); },
         count() { return engine.audio.count(); },

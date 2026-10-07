@@ -48,11 +48,20 @@ double r2d_audio_duration(const R2DAudio *a, int id)
     return -1.0;
 }
 
-int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops)
+int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops, int priority)
 {
-    R2D_UNUSED(a); R2D_UNUSED(id); R2D_UNUSED(volume); R2D_UNUSED(pan); R2D_UNUSED(loops);
+    R2D_UNUSED(a); R2D_UNUSED(id); R2D_UNUSED(volume); R2D_UNUSED(pan);
+    R2D_UNUSED(loops); R2D_UNUSED(priority);
     return -1;
 }
+bool r2d_audio_seek(R2DAudio *a, int channel, double seconds)
+{ R2D_UNUSED(a); R2D_UNUSED(channel); R2D_UNUSED(seconds); return false; }
+double r2d_audio_position(const R2DAudio *a, int channel)
+{ R2D_UNUSED(a); R2D_UNUSED(channel); return -1; }
+double r2d_audio_channel_duration(const R2DAudio *a, int channel)
+{ R2D_UNUSED(a); R2D_UNUSED(channel); return -1; }
+int r2d_audio_channel_priority(const R2DAudio *a, int channel)
+{ R2D_UNUSED(a); R2D_UNUSED(channel); return -1; }
 
 void r2d_audio_stop_channel(R2DAudio *a, int channel, float fade_ms)
 {

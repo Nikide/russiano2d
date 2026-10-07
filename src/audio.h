@@ -81,6 +81,9 @@ typedef struct R2DAudio {
     // Канал в 3D-режиме: координаты задаются относительно слушателя (он у
     // SDL_mixer всегда в нуле), SDL сам считает затухание и панораму.
     bool  channel_3d[R2D_AUDIO_CHANNELS];
+    // Приоритет канала: когда свободных нет, движок вытесняет САМЫЙ НЕВАЖНЫЙ
+    // звук, а не всегда нулевой. Больше — важнее (0 по умолчанию).
+    int   channel_priority[R2D_AUDIO_CHANNELS];
 
     R2DAudioGroup groups[R2D_AUDIO_MAX_GROUPS];
     int    group_count;
@@ -110,7 +113,20 @@ double r2d_audio_duration(const R2DAudio *a, int id);   // секунды, -1 е
 
 // --- Эффекты ----------------------------------------------------------------
 // Возвращает номер канала (0..R2D_AUDIO_CHANNELS-1) либо -1.
-int  r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops);
+// `priority` — насколько звук важен: при нехватке каналов вытесняется канал с
+// НАИМЕНЬШИМ приоритетом, и только если новый не менее важен. Возвращает -1,
+// если каналов нет и вытеснять некого (звук не проигрывается — это честнее,
+// чем глушить важное).
+int  r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops,
+                    int priority);
+// Перемотать канал: `seconds` от начала звука.
+bool   r2d_audio_seek(R2DAudio *a, int channel, double seconds);
+// Текущая позиция канала в секундах (-1, если канал не играет).
+double r2d_audio_position(const R2DAudio *a, int channel);
+// Длительность проигрываемого на канале звука в секундах (-1, если неизвестна).
+double r2d_audio_channel_duration(const R2DAudio *a, int channel);
+// Приоритет, с которым канал запущен (-1, если канал не играет).
+int  r2d_audio_channel_priority(const R2DAudio *a, int channel);
 void r2d_audio_stop_channel(R2DAudio *a, int channel, float fade_ms);
 void r2d_audio_stop_all(R2DAudio *a, float fade_ms);
 bool r2d_audio_channel_playing(const R2DAudio *a, int channel);

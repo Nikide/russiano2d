@@ -484,16 +484,28 @@ double r2d_audio_duration(const R2DAudio *a, int id)
 // Эффекты
 // ---------------------------------------------------------------------------
 
-int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops)
+int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops,
+                   int priority)
 {
     if (!a->ready || id < 0 || id >= a->sound_count) return -1;
 
-    // Ищем свободный канал; если все заняты — переиспользуем нулевой, чтобы
-    // звук всё равно был слышен (лучше вытеснить старый, чем потерять новый).
-    int channel = 0;
+    // Ищем свободный канал. Если все заняты — вытесняем САМЫЙ НЕВАЖНЫЙ, а не
+    // всегда нулевой: раньше важный звук (реплика, удар) глушился первым же
+    // шагом по траве, потому что жертвой всегда был канал 0.
+    int channel = -1;
     for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
         if (!MIX_TrackPlaying(a->channels[i])) { channel = i; break; }
     }
+    if (channel < 0) {
+        int victim = -1;
+        for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
+            if (victim < 0 || a->channel_priority[i] < a->channel_priority[victim]) victim = i;
+        }
+        // Вытесняем только если новый звук НЕ МЕНЕЕ важен: иначе лучше не
+        // играть вовсе, чем глушить то, что игрок должен слышать.
+        if (victim >= 0 && priority >= a->channel_priority[victim]) channel = victim;
+    }
+    if (channel < 0) return -1;
 
     MIX_Track *track = a->channels[channel];
 
@@ -511,6 +523,7 @@ int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops)
     // позже, и им нужно знать исходное значение.
     a->channel_volume[channel] = r2d__clamp01(volume);
     a->channel_pan[channel] = pan < -1.0f ? -1.0f : (pan > 1.0f ? 1.0f : pan);
+    a->channel_priority[channel] = priority;
 
     MIX_SetTrackGain(track, a->channel_volume[channel] * a->sfx_volume);
     // Скорость (pitch) канала переживает повторный запуск: трек один и тот же,
@@ -524,6 +537,47 @@ int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops)
     SDL_DestroyProperties(props);
 
     return ok ? channel : -1;
+}
+
+/** Кадры → секунды по частоте микшера. */
+static double r2d__frames_to_sec(const R2DAudio *a, Sint64 frames)
+{
+    const int freq = a->fx_freq > 0 ? a->fx_freq : 44100;
+    return (double)frames / (double)freq;
+}
+
+bool r2d_audio_seek(R2DAudio *a, int channel, double seconds)
+{
+    if (!a->ready || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return false;
+    if (!MIX_TrackPlaying(a->channels[channel])) return false;
+    const int freq = a->fx_freq > 0 ? a->fx_freq : 44100;
+    Sint64 frames = (Sint64)(seconds * (double)freq);
+    if (frames < 0) frames = 0;
+    return MIX_SetTrackPlaybackPosition(a->channels[channel], frames);
+}
+
+double r2d_audio_position(const R2DAudio *a, int channel)
+{
+    if (!a->ready || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return -1;
+    if (!MIX_TrackPlaying(a->channels[channel])) return -1;
+    return r2d__frames_to_sec(a, MIX_GetTrackPlaybackPosition(a->channels[channel]));
+}
+
+double r2d_audio_channel_duration(const R2DAudio *a, int channel)
+{
+    if (!a->ready || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return -1;
+    const MIX_Audio *audio = MIX_GetTrackAudio(a->channels[channel]);
+    if (!audio) return -1;
+    const Sint64 frames = MIX_GetAudioDuration(audio);
+    if (frames <= 0) return -1;
+    return r2d__frames_to_sec(a, frames);
+}
+
+int r2d_audio_channel_priority(const R2DAudio *a, int channel)
+{
+    if (!a->ready || channel < 0 || channel >= R2D_AUDIO_CHANNELS) return -1;
+    if (!MIX_TrackPlaying(a->channels[channel])) return -1;
+    return a->channel_priority[channel];
 }
 
 void r2d_audio_stop_channel(R2DAudio *a, int channel, float fade_ms)
