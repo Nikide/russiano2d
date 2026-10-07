@@ -1053,6 +1053,7 @@ $.update(() => {
 | Кривые плавности и градиенты (общий `ease` для твинов) | `$.curve` | — | [curve.md](highlevel/curve.md) |
 | Работа кусками по кадрам (генерация, тёплая загрузка) | `$.task`, `$.scene.loadAsync` | — | [task.md](highlevel/task.md) |
 | Перезапуск скриптов на границе кадра (hot reload) | `$.script` | — | [script.md](highlevel/script.md) |
+| Сценки и катсцены: текстовый DSL, реплики, выборы, флаги | `$.story` | — | [story.md](highlevel/story.md) |
 | Текст в сцене и шрифты: растеризация глифов, атлас, семейства | `$.font.load`, `.font()`, `<text>` | — | [text.md](highlevel/text.md) |
 
 Физика в этой таблице не отдельной подсистемой, а частью ядра: формы тел,

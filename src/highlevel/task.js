@@ -173,7 +173,18 @@ export function installTask($) {
         let off = null;
         const stop = () => { if (off) { off(); off = null; } active.delete(task); };
 
-        off = ctx.update(() => {
+        // Хук ставит $.update (в ctx.update его нет — этой ошибкой задача
+        // падала на первом же шаге).
+        const addUpdate = ($ && typeof $.update === 'function')
+            ? (fn) => { $.update(fn); return () => {}; }
+            : () => {
+                if (typeof ctx !== 'undefined' && ctx && typeof ctx.log === 'function') {
+                    ctx.log('$.task: нет $.update — задача не запущена');
+                }
+                return () => {};
+            };
+
+        off = addUpdate(() => {
             const finished = scheduler.tick();
             if (label && loading && typeof loading.progress === 'function') {
                 loading.progress(scheduler.progress(), label);

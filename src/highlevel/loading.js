@@ -115,7 +115,15 @@ export function createLoading(ctx) {
             const list = (steps || []).slice();
             const total = Math.max(1, list.length);
             let index = 0;
-            const off = ctx.update(() => {
+            // Хук ставит $.update: в ctx.update его нет, и run() падал
+            // («ctx.update is not a function»).
+            const addUpdate = ($ && typeof $.update === 'function')
+                ? (fn) => { $.update(fn); return () => {}; }
+                : () => {
+                    ctx.log('$.loading.run: нет $.update — шаги не будут выполнены');
+                    return () => {};
+                };
+            const off = addUpdate(() => {
                 if (index >= list.length) {
                     off();
                     if (typeof done === 'function') done();
