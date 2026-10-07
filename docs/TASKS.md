@@ -714,14 +714,28 @@ API (по числу упоминаний `Node`/`Resource`/`Vector2`/`signal`/`
 * README перечисляет DirectX 12 как поддержанный, а [README.md:476](README.md#L476)
   сам же признаёт, что DXIL не генерируется — путь нерабочий.
 
-### 6.4. Инфраструктурная дыра в документации
+### 6.4. Инфраструктурная дыра в документации — **закрыто**
 
-У 17 модулей нет своей страницы `docs/highlevel/<имя>.md`: `acoustics`, `agent`,
-`api`, `bootstrap`, `camera`, `core`, `debug`, `index`, `input`, `scene`, `sound`,
-`store`, `time`, `ui`, `viewport`, `window`, `world` (проверено скриптом: `md`
-без `js` нет, то есть страницы не «висят» — их просто не написали). У десяти
-модулей нет юнит-теста: `agent`, `api`, `bootstrap`, `core`, `index`, `input`,
-`loading`, `render`, `store`, `time`, `world`.
+**Состояние:** у всех 67 модулей `src/highlevel/*.js` есть страница
+`docs/highlevel/<имя>.md`, и у каждого — своя проверка. На это поставлен страж
+`tests/doc_coverage_test.py`: он падает, если появился модуль без страницы, без
+проверки или со страницей-пустышкой (меньше 12 строк).
+
+Написаны страницы для 21 модуля, которых не было: `acoustics`, `agent`, `api`,
+`bootstrap`, `bsp`, `camera`, `core`, `debug`, `index`, `input`, `scene`, `sound`,
+`soundbank`, `steps`, `store`, `story_script`, `time`, `ui`, `viewport`,
+`window`, `world`. У каждой — методы, пример, раздел ограничений и ссылка на
+тест.
+
+Добавлены проверки для модулей, у которых их не было:
+`tests/js/bsp_test.mjs` (8 проверок, перевод данных), `tests/js/loading_test.mjs`
+(11 проверок, экран загрузки) и `tests/js/small_modules_test.mjs` (4 проверки:
+bootstrap, index, script).
+
+Во время написания теста экрана загрузки найден настоящий баг: `$.loading.run()`
+обращался к голому `$` внутри модуля (там его нет) и падал с «$ is not defined»,
+а его хук `$.update` невозможно было снять — список шагов крутился каждый кадр.
+Исправлено в `loading.js`.
 
 ---
 

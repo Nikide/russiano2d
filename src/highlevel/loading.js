@@ -115,27 +115,31 @@ export function createLoading(ctx) {
             const list = (steps || []).slice();
             const total = Math.max(1, list.length);
             let index = 0;
-            // Хук ставит $.update: в ctx.update его нет, и run() падал
-            // («ctx.update is not a function»).
-            const addUpdate = ($ && typeof $.update === 'function')
-                ? (fn) => { $.update(fn); return () => {}; }
-                : () => {
-                    ctx.log('$.loading.run: нет $.update — шаги не будут выполнены');
-                    return () => {};
-                };
-            const off = addUpdate(() => {
+            // Хук ставится через ctx.$ (в модуле нет глобального `$` — раньше
+            // здесь было голое `$`, и run() падал с «$ is not defined»).
+            const api = ctx.$;
+            if (!api || typeof api.update !== 'function') {
+                ctx.log('$.loading.run: нет $.update — шаги не будут выполнены');
+                return loading;
+            }
+            // $.update не отдаёт функцию снятия, поэтому шаги выключаем флагом:
+            // раньше «off()» ничего не снимал, и список крутился каждый кадр.
+            let finished = false;
+            api.update(() => {
+                if (finished) return;
                 if (index >= list.length) {
-                    off();
+                    finished = true;
+                    loading.progress(1);
                     if (typeof done === 'function') done();
                     return;
                 }
                 const step = list[index];
-                loading.progress(index / total, step.label || '');
+                loading.progress(index / total, step && step.label ? step.label : '');
                 try {
-                    if (typeof step.work === 'function') step.work();
+                    if (step && typeof step.work === 'function') step.work();
                     else if (typeof step === 'function') step();
                 } catch (e) {
-                    ctx.log(`$: ошибка на шаге загрузки "${step.label || index}": ${e}`);
+                    ctx.log(`$: ошибка на шаге загрузки "${(step && step.label) || index}": ${e}`);
                 }
                 index++;
                 if (index >= list.length) loading.progress(1);
