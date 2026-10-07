@@ -126,6 +126,10 @@ typedef struct R2DPhysics {
     R2DContactEvent contacts[R2D_MAX_CONTACT_EVENTS];
     int             contact_count;
     bool            overflow_logged;
+    // Буфер копится за все подшаги кадра: события одного шага живут до
+    // следующего вызова Box2D, а за кадр шагов бывает до пяти, и раньше
+    // выживали только события последнего.
+    bool            contact_accumulating;
 
     // --- Суставы ------------------------------------------------------------
     b2JointId joints[R2D_MAX_JOINTS];
@@ -236,6 +240,10 @@ int r2d_physics_query_box(const R2DPhysics *p, float x, float y, float w, float 
 // begin/end приходят только для форм, созданных с desc.contacts = true.
 const R2DContactEvent *r2d_physics_contacts(const R2DPhysics *p, int *count);
 void r2d_physics_clear_contacts(R2DPhysics *p);
+// Начать кадр сбора событий контакта: обнуляет буфер и включает накопление,
+// которое держится до r2d_physics_clear_contacts(). Звать один раз за кадр,
+// ДО цикла подшагов (см. main.c).
+void r2d_physics_begin_contacts(R2DPhysics *p);
 
 // --- Суставы ----------------------------------------------------------------
 // a/b — id тел, ax/ay и bx/by — точки крепления в мировых пикселях

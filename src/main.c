@@ -207,6 +207,9 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
 
     // --- Физика: фиксированный шаг, чтобы симуляция не зависела от FPS ---
     r2d_prof_begin(R2D_PROF_PHYSICS);
+    // Буфер событий контакта копится за все подшаги этого кадра: JS читает его
+    // один раз (engine.contacts()), поэтому обнуляем строго здесь.
+    r2d_physics_begin_contacts(fc->physics);
     fc->accumulator += app->dt;
     int steps = 0;
     while (fc->accumulator >= R2D_FIXED_DT && steps < R2D_MAX_SUBSTEPS) {

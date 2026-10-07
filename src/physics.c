@@ -98,9 +98,11 @@ void r2d_physics_step(R2DPhysics *p, float dt)
     b2World_Step(p->world, dt, 4);
     r2d_physics_sync(p);
 
-    // События контактов живут один шаг: переносим во внутренний буфер,
-    // откуда их забирает JS (engine.contacts()).
-    p->contact_count = 0;
+    // События контактов: за кадр физика делает до пяти подшагов, а JS читает
+    // буфер один раз. Поэтому за кадр буфер НЕ обнуляем (это делает
+    // r2d_physics_begin_contacts), а копим события всех подшагов — иначе
+    // выживали бы только события последнего и урон «через раз» терялся.
+    if (!p->contact_accumulating) p->contact_count = 0;
     if (!p->world_valid) return;
     const b2ContactEvents ev = b2World_GetContactEvents(p->world);
 
@@ -155,7 +157,18 @@ const R2DContactEvent *r2d_physics_contacts(const R2DPhysics *p, int *count)
 
 void r2d_physics_clear_contacts(R2DPhysics *p)
 {
-    if (p) p->contact_count = 0;
+    if (p) {
+        p->contact_count = 0;
+        p->contact_accumulating = false;
+    }
+}
+
+void r2d_physics_begin_contacts(R2DPhysics *p)
+{
+    if (p) {
+        p->contact_count = 0;
+        p->contact_accumulating = true;
+    }
 }
 
 void r2d_physics_sync(R2DPhysics *p)
