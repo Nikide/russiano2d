@@ -494,6 +494,8 @@ function addLayer(tm, spec, base) {
         frames: null,
         tex: -1,
         bodies: [],
+        // Анимация тайлов: { ids, tiles, interval, time, frame, random, offset }
+        anim: null,
     };
     tm.layers.push(layer);
     return layer;
@@ -590,6 +592,102 @@ function layerFrames(layer) {
     layer.cols = cols;
     layer.rows = rows;
     return frames;
+}
+
+// ---------------------------------------------------------------------------
+// Анимация тайлов
+// ---------------------------------------------------------------------------
+
+/**
+ * Нормализует спецификацию анимации: разные имена полей и формы входа.
+ * `tiles` — сколько КАДРОВ занимает один анимированный тайл в листе, то есть
+ * как резать текстуру по строкам. `ids` — какие id анимировать (по умолчанию
+ * все, чей кадр существует).
+ */
+export function normalizeTilesetAnim(spec) {
+    if (!spec) return null;
+    const frames = Math.max(1, Math.floor(num(spec.frames, 1)));
+    const fps = num(spec.fps, 0);
+    const interval = num(spec.interval, fps > 0 ? 1000 / fps : num(spec.ms, 200));
+    const ids = spec.ids === undefined
+        ? null
+        : (Array.isArray(spec.ids) ? spec.ids.map((v) => Number(v) | 0) : [Number(spec.ids) | 0]);
+    return {
+        frames,
+        interval: Math.max(1, interval),
+        ids,
+        random: !!spec.random,
+        offset: num(spec.offset, 0),
+    };
+}
+
+/** Индекс кадра анимации слоя: из времени и интервала (чистая функция). */
+export function tilesetFrame(time, interval, frames, random, seed) {
+    if (frames <= 1 || interval <= 0) return 0;
+    if (random) {
+        // Детерминированно от времени и зерна тайла: соседние тайлы «дышат»
+        // вразнобой, но картинка воспроизводима при --fixed-dt.
+        const n = Math.floor((time + (seed || 0) * interval) / interval);
+        return ((n % frames) + frames) % frames;
+    }
+    // Остаток приводим к неотрицательному: время бывает отрицательным (сдвиг
+    // фазы `offset`), а индекс кадра вне 0..frames-1 — это неверный спрайт.
+    const step = Math.floor(time / interval);
+    return ((step % frames) + frames) % frames;
+}
+
+/**
+ * Раскладка кадров анимации: для каждого кадра `[тайл id 1 … id N]` добавляет
+ * следующие `frames` строк листа. Кадр `f` тайла с id `i` — это элемент
+ * `i - 1 + f * row_len`, где `row_len` — число тайлов в исходной строке.
+ */
+function layerAnimFrames(layer) {
+    const anim = layer.anim;
+    if (!anim) return null;
+    if (anim.sprites) return anim.sprites;
+    const base = layer.frames || layerFrames(layer);
+    if (!base || !base.length) return null;
+    const rowLen = Math.max(1, layer.cols | 0);
+    const sprites = new Array(rowLen * anim.frames);
+    for (let i = 0; i < rowLen; ++i) {
+        for (let f = 0; f < anim.frames; ++f) {
+            const src = base[i + f * rowLen];
+            sprites[i + f * rowLen] = src === undefined ? (base[i] === undefined ? -1 : base[i]) : src;
+        }
+    }
+    anim.sprites = sprites;
+    anim.row_len = rowLen;
+    return sprites;
+}
+
+/** Спрайт тайла с учётом анимации; -1 — рисовать нечего. */
+function animatedTileSprite(layer, id, time) {
+    const base = layerFrames(layer);
+    if (!base || !base.length) return -1;
+    const anim = layer.anim;
+    if (!anim || id <= 0 || id > (base.length | 0)) return spriteOr(base, id);
+    if (anim.ids && anim.ids.indexOf(id) < 0) return spriteOr(base, id);
+    const sprites = layerAnimFrames(layer);
+    if (!sprites) return spriteOr(base, id);
+    const frame = tilesetFrame(time + anim.offset, anim.interval, anim.frames,
+                               anim.random, anim.random ? (id * 2654435761) % 1000 : 0);
+    const index = (id - 1) + frame * (anim.row_len || 1);
+    const sprite = sprites[index];
+    return sprite === undefined || sprite < 0 ? spriteOr(base, id) : sprite;
+}
+
+function spriteOr(base, id) {
+    const sprite = base[id - 1];
+    return sprite === undefined ? -1 : sprite;
+}
+
+/** Продвигает время анимации всех слоёв карты. */
+function tickTileAnimations(tm, dt) {
+    for (let i = 0; i < tm.layers.length; ++i) {
+        const layer = tm.layers[i];
+        if (!layer || !layer.anim) continue;
+        layer.anim.time += dt;
+    }
 }
 
 /** Предикат «тайл непроходим» для слоя. solid: true | число | массив | функция. */
@@ -833,7 +931,8 @@ function drawYsortTile($, tm, tile, cam) {
     if (!layer) return false;
     const frames = layerFrames(layer);
     if (!frames || !frames.length) return false;
-    const sprite = frames[tile.id - 1];
+    const sprite = layer.anim ? animatedTileSprite(layer, tile.id, layer.anim.time)
+                              : frames[tile.id - 1];
     if (sprite === undefined || sprite < 0) return false;
     const p = tileScreenPoint(tm, cam, tile);
     const node = tm.node;
@@ -949,6 +1048,49 @@ export function installTilemap($) {
         }
         return this;
     });
+
+    /**
+     * Анимация тайлов: `.tileset({ frames, fps | interval, ids?, random?, offset? })`.
+     *
+     * `frames` — сколько КАДРОВ занимает один анимированный тайл в листе
+     * (кадры идут строками: кадр 0 — первая строка, кадр 1 — вторая). `fps`
+     * или `interval` (мс) задаёт темп, `ids` ограничивает набор тайлов
+     * (по умолчанию — все, у кого кадр существует), `random` разводит
+     * соседние тайлы по фазе. `.tileset(null)` — выключить.
+     *
+     *   $('#water').tileset({ frames: 4, fps: 6 });          // вода
+     *   $('#torch').tileset({ frames: 3, interval: 120, ids: [12, 13] });
+     *
+     * Время анимации идёт от `tickTilemap` (игровое время), поэтому пауза
+     * `$.time.pause()` её останавливает, а `--fixed-dt` делает воспроизводимой.
+     */
+    def('tileset', function (spec, layerIndex) {
+        for (const node of this.nodes) {
+            const tm = ensureTilemap(node);
+            const layer = activeLayer(tm, layerIndex);
+            if (!layer) continue;
+            if (!spec) { layer.anim = null; continue; }
+            const anim = normalizeTilesetAnim(spec);
+            if (!anim) { layer.anim = null; continue; }
+            anim.time = 0;
+            anim.sprites = null;
+            layer.anim = anim;
+        }
+        return this;
+    });
+
+    defGet('tileAnimation', function (node, layerIndex) {
+        const tm = ensureTilemap(node);
+        const layer = activeLayer(tm, layerIndex);
+        if (!layer || !layer.anim) return null;
+        return {
+            frames: layer.anim.frames,
+            interval: layer.anim.interval,
+            ids: layer.anim.ids ? layer.anim.ids.slice() : null,
+            random: !!layer.anim.random,
+            time: layer.anim.time,
+        };
+    }, null);
 
     defGet('tileAt', function (node, x, y, layerIndex) {
         const tm = ensureTilemap(node);
@@ -1243,7 +1385,9 @@ export function installTilemap($) {
                 for (let tx = x0; tx <= x1; tx++) {
                     const id = layer.data[row + tx];
                     if (id <= 0) continue;                 // id 0 и <0 — пусто
-                    const sprite = frames[id - 1];
+                    const sprite = layer.anim
+                        ? animatedTileSprite(layer, id, layer.anim.time)
+                        : frames[id - 1];
                     if (sprite === undefined || sprite < 0) continue;
                     $.gfx.push.sprite(sprite, ox + (tx + 0.5) * tile_w, sy, tile_w, tile_h, 0, color,
                                       node.blend_mode);
@@ -1435,7 +1579,6 @@ export function installTilemap($) {
  * тела пересоздаются здесь — один раз за кадр, а не на каждый тайл.
  */
 export function tickTilemap(dt) {
-    void dt;
     // Срез по тегу из индекса реестра: и счёт, и обход — без полного прохода
     // (§5, P2 отчёта). Живые состояния держим отдельно: карта, удалённая до
     // первого tick, обязана освободить ресурсы.
@@ -1446,6 +1589,7 @@ export function tickTilemap(dt) {
     for (let i = 0; i < maps.length; i++) ensureTilemap(maps[i]);
     for (const [node, tm] of STATES) {
         if (node.removed || !node.in_registry) { stale.push(node); continue; }
+        tickTileAnimations(tm, dt);
         if (tm.dirty) rebuildTilemap(tm);
     }
     // Узлы, удалённые до первого tick, снимаем здесь (destroy() не всегда

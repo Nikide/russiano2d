@@ -13,7 +13,8 @@
 // ===========================================================================
 
 import { ctx, wrap, def, TAGS, packColor, withAlpha, fxRandom,
-         facetCount, nodesWithFacet, registryVersion } from './core.js';
+         facetCount, nodesWithFacet, registryVersion, spriteSize,
+         regionSprite } from './core.js';
 import { cameraTransform } from './camera.js';
 
 const MAX_SPRITES = 16384;
@@ -1556,6 +1557,81 @@ function numOf(value, fallback) {
     return Number.isFinite(n) ? n : fallback;
 }
 
+/**
+ * Сдвигает прямоугольник узла под его пивот. Спрайт в C вращается вокруг
+ * СВОЕГО центра, поэтому чтобы вращение шло вокруг пивота (например, у ног
+ * персонажа), центр квада уезжает на (0.5 − pivot) от точки узла.
+ *
+ * Без пивота (0.5, 0.5 — значение по умолчанию) сдвига нет, то есть прежнее
+ * поведение сохраняется.
+ */
+function applyPivot(node, t) {
+    const px = node.pivot_x === undefined ? 0.5 : node.pivot_x;
+    const py = node.pivot_y === undefined ? 0.5 : node.pivot_y;
+    if (px === 0.5 && py === 0.5) return;
+    t.x += (0.5 - px) * t.w;
+    t.y += (0.5 - py) * t.h;
+}
+
+
+/**
+ * Nine-slice: спрайт режется на 9 частей по `insets` и растягивается под
+ * размер узла — углы остаются целыми, края тянутся, центр заполняет.
+ * Применяется к стенам, панелям, рамкам кнопок и любым «резиновым» картинкам.
+ */
+function drawSlicedSprite(node, t, color) {
+    const spec = node.nine_slice;
+    const sprite = node.sprite >= 0 ? node.sprite : engine.whiteSprite;
+    const size = spriteSize(sprite);
+    const srcW = size[0] > 0 ? size[0] : t.w;
+    const srcH = size[1] > 0 ? size[1] : t.h;
+
+    const clamp = (v, lo, hi) => (v < lo ? lo : (v > hi ? hi : v));
+    // Инсеты: числа 0..1 — доля стороны, больше 1 — пиксели исходного спрайта.
+    const pick = (value, along) => {
+        const v = Number(value) || 0;
+        return v > 0 && v <= 1 ? v * along : v;
+    };
+    const l = Math.min(clamp(pick(spec.left, srcW), 0, srcW / 2), srcW / 2);
+    const r = Math.min(clamp(pick(spec.right, srcW), 0, srcW / 2), srcW / 2);
+    const top = Math.min(clamp(pick(spec.top, srcH), 0, srcH / 2), srcH / 2);
+    const bot = Math.min(clamp(pick(spec.bottom, srcH), 0, srcH / 2), srcH / 2);
+
+    // Размеры кусков вдоль каждой оси: [начало, середина, конец].
+    const cols = [l, Math.max(0, srcW - l - r), r];
+    const rows = [top, Math.max(0, srcH - top - bot), bot];
+    const sx = [0, l, srcW - r];
+    const sy = [0, top, srcH - bot];
+
+    // Размеры назначения: края в пикселях, середина — остаток. Если места
+    // меньше суммы краёв, они ужимаются пропорционально (иначе части налезут).
+    const needX = l + r;
+    const needY = top + bot;
+    const dstW = Math.abs(t.w);
+    const dstH = Math.abs(t.h);
+    const kx = needX > 0 && needX > dstW ? dstW / needX : 1;
+    const ky = needY > 0 && needY > dstH ? dstH / needY : 1;
+    const dw = [cols[0] * kx, Math.max(0, dstW - (l + r) * kx), cols[2] * kx];
+    const dh = [rows[0] * ky, Math.max(0, dstH - (top + bot) * ky), rows[2] * ky];
+
+    const x0 = t.x - dstW / 2;
+    const y0 = t.y - dstH / 2;
+
+    for (let row = 0; row < 3; ++row) {
+        if (dh[row] <= 0 && rows[row] > 0) continue;
+        for (let col = 0; col < 3; ++col) {
+            if (dw[col] <= 0 && cols[col] > 0) continue;
+            const part = regionSprite(node.attrs.src, sx[col], sy[row], cols[col], rows[row]);
+            if (part < 0) continue;
+            const px = col === 0 ? x0 : (col === 1 ? x0 + dw[0] : x0 + dw[0] + dw[1]);
+            const py = row === 0 ? y0 : (row === 1 ? y0 + dh[0] : y0 + dh[0] + dh[1]);
+            pushSprite(part, px + dw[col] / 2, py + dh[row] / 2,
+                       dw[col], dh[row], t.angle || 0, color, node.blend_mode,
+                       fxIndexOf(node));
+        }
+    }
+}
+
 function drawWorldNode(node, cam) {
     if (!node.visible || node.alpha <= 0) return;
 
@@ -1575,6 +1651,8 @@ function drawWorldNode(node, cam) {
         custom(node, t, cam);
         return;
     }
+
+    applyPivot(node, t);
 
     if (state.culling) {
         if (t.x + Math.abs(t.w) < -64 || t.x - Math.abs(t.w) > cam.w + 64 ||
@@ -1626,6 +1704,11 @@ function drawWorldNode(node, cam) {
             const w = node.outline.width * cam.zoom;
             pushSprite(engine.whiteSprite, t.x, t.y, t.w + w * 2, t.h + w * 2,
                        node.angle, withAlpha(node.outline.color, node.alpha));
+        }
+
+        if (node.nine_slice) {
+            drawSlicedSprite(node, t, baseColor(node));
+            break;
         }
 
         pushSprite(sprite, t.x, t.y, t.w, t.h, node.angle, baseColor(node), node.blend_mode,

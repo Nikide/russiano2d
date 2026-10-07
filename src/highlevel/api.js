@@ -554,6 +554,42 @@ function installNodeMethods($) {
         });
     });
 
+    /**
+     * Пивот: точка узла, вокруг которой идёт вращение и масштаб.
+     * `.pivot(0.5, 1)` — «ноги» (низ по центру), `.pivot(0, 0)` — левый верх,
+     * `.pivot()` — вернуть текущий, `.pivot(0.5, 0.5)` — снова центр.
+     *
+     * Значения 0..1 — доля размера узла; больше 1 — пиксели от левого верхнего
+     * угла. Без явного пивота спрайт вращается вокруг центра, как раньше.
+     */
+    def('pivot', function (x, y) {
+        if (x === undefined) {
+            const node = this.nodes[0];
+            return {
+                x: node && node.pivot_x !== undefined ? node.pivot_x : 0.5,
+                y: node && node.pivot_y !== undefined ? node.pivot_y : 0.5,
+            };
+        }
+        return this.eachNode((_, el) => {
+            const node = el;
+            node.pivot_x = Number(x) || 0;
+            node.pivot_y = y === undefined ? node.pivot_x : (Number(y) || 0);
+            touchRegistry();
+        });
+    });
+
+    /** Пивот в мировых координатах: `.pivotAt(x, y)` сам считает доли. */
+    def('pivotAt', function (x, y) {
+        return this.eachNode((_, el) => {
+            const node = el;
+            const w = node.w || 1;
+            const h = node.h || 1;
+            node.pivot_x = (Number(x) - node.x) / w + 0.5;
+            node.pivot_y = (Number(y) - node.y) / h + 0.5;
+            touchRegistry();
+        });
+    });
+
     def('depth', function (z) { return this.eachNode((_, el) => { (el).depth = z; }); });
     def('layer', function (n) { return this.eachNode((_, el) => { (el).layer = n; }); });
 
@@ -647,6 +683,43 @@ function installNodeMethods($) {
             if (node.attrs.src) node.sprite = regionSprite(node.attrs.src, x, y, w, h);
         });
     });
+    /**
+     * Nine-slice: `.slice({ left: 8, right: 8, top: 8, bottom: 8 })` — спрайт
+     * режется на девять частей и растягивается под размер узла: углы целые,
+     * края тянутся, центр заполняет. Числа 0..1 — доля стороны, больше 1 —
+     * пиксели исходного спрайта. `.slice(null)` — выключить.
+     *
+     * Требует `src` (или `.sprite()`), потому что части режутся из текстуры.
+     */
+    def('slice', function (insets) {
+        if (insets === undefined) {
+            const node = this.nodes[0];
+            return node ? (node.nine_slice || null) : null;
+        }
+        return this.eachNode((_, el) => {
+            const node = el;
+            if (!insets) { node.nine_slice = null; return; }
+            const spec = typeof insets === 'number'
+                ? { left: insets, right: insets, top: insets, bottom: insets }
+                : insets;
+            // Числа приводим на месте: у api.js нет своего num(), а тянуть
+            // его из ядра ради четырёх полей незачем.
+            const number = (value) => {
+                const n = Number(value);
+                return Number.isFinite(n) ? n : 0;
+            };
+            node.nine_slice = {
+                left: number(spec.left),
+                right: number(spec.right),
+                top: number(spec.top),
+                bottom: number(spec.bottom),
+            };
+            if (!node.attrs.src) {
+                ctx.log('$.slice: нужен src — nine-slice режет части из текстуры (см. .sprite())');
+            }
+        });
+    });
+
     def('frame', function (index) {
         return this.eachNode((_, el) => {
             const node = el;
