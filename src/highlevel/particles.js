@@ -174,8 +174,6 @@ function zoneOf(spec) {
     return { shape, w: Math.max(0, w), h: Math.max(0, h), radius: Math.max(0, radius) };
 }
 
-let blend_warned = false;
-
 /**
  * Сырой набор опций → нормализованные параметры эмиттера. Чистая функция:
  * не трогает узлы и не грузит текстуры — её гоняет qjs-харнесс напрямую.
@@ -262,12 +260,10 @@ export function buildParams(spec) {
     else if (s.onDeath !== undefined && s.onDeath !== null) p.sub = s.onDeath;
     else if (s.sub !== undefined && s.sub !== null) p.sub = s.sub;
 
-    // Режимы смешивания конвейер не умеет (см. .blend() в api.js): ругаемся
-    // один раз на процесс, чтобы не спамить в журнал каждый кадр.
-    if (s.blend !== undefined && !blend_warned) {
-        blend_warned = true;
-        ctx.log(`$: <particles>.blend("${s.blend}") — конвейер движка рисует только обычным альфа-смешиванием; режим проигнорирован`);
-    }
+    // Режим смешивания: у частиц он свой (искры и огонь обычно аддитивные), а
+    // если не задан — берём режим узла. Конвейеров в движке четыре, и
+    // `push.sprite` принимает режим, поэтому `blend` больше не игнорируется.
+    p.blend = s.blend !== undefined && s.blend !== null ? s.blend : null;
 
     return p;
 }
@@ -604,7 +600,11 @@ function renderParticles(node, t, cam) {
         let color = rampAt(params.ramp_color, ratio);
         color = withAlpha(color, rampAt(params.ramp_alpha, ratio) * alpha_base);
         const angle = local ? p.angle + node.angle : p.angle;
-        ctx.gfx.push.sprite(sprite, sx, sy, world_size * zoom, world_size * zoom, angle, color);
+        // Режим частицы важнее режима узла: искры аддитивны, даже если сам
+        // эмиттер обычный.
+        const blend = params.blend || node.blend_mode;
+        ctx.gfx.push.sprite(sprite, sx, sy, world_size * zoom, world_size * zoom,
+                            angle, color, blend);
         drawn++;
     }
 }

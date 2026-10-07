@@ -395,13 +395,18 @@ function renderLayer(node, t, cam) {
     const w = cam.w, h = cam.h;
     const color = node.modulate_color;
     const alpha = node.modulate_alpha || 0;
+    // Режим берём у узла: `multiply` — затемнение, `add` — засветка (вспышка,
+    // молния), `alpha` — обычная пелена. Раньше режим игнорировался.
+    const blend = node.blend_mode || 'alpha';
     if (color !== null && color !== undefined && alpha > 0) {
-        ctx.gfx.push.sprite(engine.whiteSprite, w / 2, h / 2, w, h, 0, withAlpha(color, alpha));
+        ctx.gfx.push.sprite(engine.whiteSprite, w / 2, h / 2, w, h, 0,
+                            withAlpha(color, alpha), blend);
     }
     // Глобальное затемнение перехода — поверх оттенка и всей сцены.
     if (node === overlay_node && fade.alpha > 0) {
         const fc = fade.color === null ? blackPacked() : fade.color;
-        ctx.gfx.push.sprite(engine.whiteSprite, w / 2, h / 2, w, h, 0, withAlpha(fc, fade.alpha));
+        ctx.gfx.push.sprite(engine.whiteSprite, w / 2, h / 2, w, h, 0,
+                            withAlpha(fc, fade.alpha), blend);
     }
 }
 

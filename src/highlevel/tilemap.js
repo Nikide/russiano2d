@@ -838,7 +838,8 @@ function drawYsortTile($, tm, tile, cam) {
     const p = tileScreenPoint(tm, cam, tile);
     const node = tm.node;
     const color = node.alpha < 1 ? withAlpha(node.color, node.alpha) : node.color;
-    $.gfx.push.sprite(sprite, p.x, p.y, tile.w * p.zoom, tile.h * p.zoom, 0, color);
+    $.gfx.push.sprite(sprite, p.x, p.y, tile.w * p.zoom, tile.h * p.zoom, 0, color,
+                      node.blend_mode);
     return true;
 }
 
@@ -1244,7 +1245,8 @@ export function installTilemap($) {
                     if (id <= 0) continue;                 // id 0 и <0 — пусто
                     const sprite = frames[id - 1];
                     if (sprite === undefined || sprite < 0) continue;
-                    $.gfx.push.sprite(sprite, ox + (tx + 0.5) * tile_w, sy, tile_w, tile_h, 0, color);
+                    $.gfx.push.sprite(sprite, ox + (tx + 0.5) * tile_w, sy, tile_w, tile_h, 0, color,
+                                      node.blend_mode);
                 }
             }
         }
