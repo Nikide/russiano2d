@@ -37,6 +37,14 @@ export function installWorld($) {
             state.bounds = { x, y, w, h };
             const solid = !opts || opts.solid !== false;
             state.bounds_solid = solid;
+            // СНАЧАЛА убираем прежние стены: каждый вызов добавлял ЕЩЁ четыре,
+            // а старые оставались на месте. Второй bounds() в другой сцене
+            // оставлял невидимые стены от первого, и тела упирались в воздух
+            // (нашлось тестом перетаскивания: тело замирало на x = 628 при
+            // полосе мира 0..4000 — это была стена ПРЕДЫДУЩЕЙ сцены).
+            for (const node of ctx.nodes.slice()) {
+                if (node.classes.has('world-bound')) node.destroy();
+            }
             if (solid) {
                 // Стены — обычные статические узлы, поэтому их видно в
                 // $.world.count() и их можно найти селектором .world-bound.
@@ -335,36 +343,24 @@ export function installWorld($) {
         /**
          * Потянуть узел к точке: `$.world.tug(узел, x, y, opts)`.
          *
-         * Это НЕ mouse-сустав Box2D: тот создаётся, но тело к цели не тянет
-         * (проверено отдельной пробой — тело стояло на месте при любой силе).
-         * Вместо мёртвого сустава — честный пружинный контроллер: тянет тело
-         * скоростью, поэтому его можно перебить столкновением, и он не
-         * телепортирует.
+         * Задаём скорость по направлению к цели — с ПОСТОЯННОЙ величиной, а не
+         * «направление × скорость»: пропорциональная скорость затухает и тело
+         * застревает, не доехав. У самой цели тяга гасится по `snap`.
          *
-         * opts: `speed` (предел скорости, по умолчанию 900), `snap` (расстояние,
-         * с которого считаем, что дошли), `hold` (секунды, в течение которых
-         * тело насильно не спит).
+         * Позицию не телепортируем: тело остаётся физическим, и столкновение
+         * тягу перебивает.
          *
-         * `hold` нужен по делу: Box2D засыпает тело после накопленного покоя, и
-         * перетаскивание обрывалось на полпути (тело замирало ровно там, где
-         * уснуло — нашлось тестом). Поэтому на время тяги будим тело явно.
+         * opts: `speed` (по умолчанию 900), `minSpeed` (60 — чтобы не
+         * затухала), `snap` (2 — с какого расстояния считаем, что дошли).
          */
         tug(what, x, y, opts) {
             const node = nodeOf(what);
             if (!node || node.body < 0) return false;
             const o = opts || {};
             const speed = o.speed === undefined ? 900 : Number(o.speed) || 0;
-            const snap = o.snap === undefined ? 4 : Number(o.snap) || 0;
-            const hold = o.hold === undefined ? 0.25 : Number(o.hold) || 0;
+            const min_speed = o.minSpeed === undefined ? 60 : Number(o.minSpeed) || 0;
+            const snap = o.snap === undefined ? 2 : Number(o.snap) || 0;
             const engine_ = engineOf();
-            // ВЫКЛЮЧАЕМ СОН на время перетаскивания. Одного setAwake мало:
-            // Box2D усыпит тело снова на накопленном покое, и setVelocity
-            // перестанет действовать — тело замирало на полпути (нашлось
-            // тестом, а причина — именно сон).
-            if (hold > 0 && typeof engine_.setSleeping === 'function') {
-                engine_.setSleeping(node.body, false);
-                engine_.setAwake(node.body, true);
-            }
             const dx = x - node.x;
             const dy = y - node.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
@@ -372,8 +368,8 @@ export function installWorld($) {
                 engine_.setVelocity(node.body, 0, 0);
                 return true;
             }
-            const k = Math.min(1, speed / Math.max(dist, 1e-6));
-            engine_.setVelocity(node.body, dx * k, dy * k);
+            const v = Math.max(min_speed, Math.min(speed, dist * 10));
+            engine_.setVelocity(node.body, (dx / dist) * v, (dy / dist) * v);
             return true;
         },
 

@@ -368,6 +368,13 @@ int r2d_physics_live_count(const R2DPhysics *p)
 void r2d_physics_set_velocity(R2DPhysics *p, int id, float vx, float vy)
 {
     if (!r2d_physics_is_alive(p, id)) return;
+    // БУДИМ тело. Box2D засыпает неподвижные тела, а у спящего
+    // b2Body_SetLinearVelocity меняет скорость в структуре, но НЕ оживляет
+    // тело: мир его не двигает, и игра видит «setVelocity перестал работать»
+    // после нескольких секунд покоя. Именно так замирало перетаскивание на
+    // x = 628 из 700, а прямой engine.setVelocity(body, 500, 0) давал 0.0009 px
+    // за кадр — тело просто спало (engine.isAwake() возвращал false).
+    b2Body_SetAwake(p->bodies[id], true);
     b2Body_SetLinearVelocity(p->bodies[id], (b2Vec2){ R2D_TO_M(vx), R2D_TO_M(vy) });
 }
 
@@ -400,6 +407,8 @@ void r2d_physics_set_position(R2DPhysics *p, int id, float x, float y, float ang
     p->transforms[id * 3 + 0] = x;
     p->transforms[id * 3 + 1] = y;
     p->transforms[id * 3 + 2] = angle;
+    // Тело, которому задают позицию, тоже обязано проснуться.
+    b2Body_SetAwake(p->bodies[id], true);
 }
 
 void r2d_physics_apply_impulse(R2DPhysics *p, int id, float ix, float iy)
