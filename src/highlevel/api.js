@@ -81,6 +81,8 @@ import { installNet } from './net.js';
 import { installReplay } from './replay.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
+import { installWatch, tickWatch } from './watch.js';
+import { installDevTools, tickDevTools } from './devtools.js';
 import { installI18n, tickI18n } from './i18n.js';
 import { installPool, tickPool } from './pool.js';
 import { installViewport, tickViewport } from './viewport.js';
@@ -222,6 +224,7 @@ export function createApi() {
     installDebug($);
     installWindow($);
     installAgent($);
+    installDevTools($);
 
     // Экран загрузки: полноэкранная панель с полосой прогресса для смены сцен
     // и построения мира.
@@ -241,6 +244,7 @@ export function createApi() {
     $.console = ctx.console;
     $.agent = ctx.agent;
     $.test = ctx.test;
+    $.expect = ctx.expect;
     $.time = ctx.time;
     $.logger = ctx.log;
     $.easing = easeFunction;
@@ -428,6 +432,7 @@ export function createApi() {
     installCsv($);
     installSignal($);
     installState($);
+    installWatch($);
     installFlow($);
     installFont($);
     installScreen($);
@@ -1693,6 +1698,8 @@ function installFrameHooks($) {
         prof('слои'); tickLayers(dt);
         prof('виджеты'); tickWidgets(dt);
         prof('триггеры'); tickTriggers(dt);
+        prof('наблюдения'); tickWatch();
+        prof('devtools'); tickDevTools();
         prof('i18n'); tickI18n(dt);
         prof('пулы'); tickPool(dt);
         prof('вьюпорты'); tickViewport(dt);

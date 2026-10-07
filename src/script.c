@@ -1992,6 +1992,22 @@ static JSValue r2d__js_ui_load(JSContext *ctx, JSValueConst this_val, int argc, 
     return JS_NewInt32(ctx, id);
 }
 
+// engine.ui.loadMarkup(name, markup) → id документа из строки разметки.
+// Нужно инструментам, которые строят интерфейс кодом (DevTools), не заводя
+// .rml-файл в игре.
+static JSValue r2d__js_ui_load_markup(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const char *name = r2d__arg_str(ctx, argc, argv, 0);
+    const char *markup = r2d__arg_str(ctx, argc, argv, 1);
+    int id = -1;
+    if (s && s->gui && name && markup) id = r2d_gui_load_markup(s->gui, name, markup);
+    if (name) JS_FreeCString(ctx, name);
+    if (markup) JS_FreeCString(ctx, markup);
+    return JS_NewInt32(ctx, id);
+}
+
 static JSValue r2d__js_ui_show(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -4199,6 +4215,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     // Игровой GUI
     JSValue ui = JS_NewObject(ctx);
     r2d__set_fn(ctx, ui, "load", r2d__js_ui_load, 1);
+    r2d__set_fn(ctx, ui, "loadMarkup", r2d__js_ui_load_markup, 2);
     r2d__set_fn(ctx, ui, "show", r2d__js_ui_show, 1);
     r2d__set_fn(ctx, ui, "hide", r2d__js_ui_hide, 1);
     r2d__set_fn(ctx, ui, "unload", r2d__js_ui_unload, 1);

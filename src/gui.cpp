@@ -450,6 +450,41 @@ int r2d_gui_load_document(R2DGui *g, const char *path)
     return id;
 }
 
+// Документ из строки разметки. Нужен инструментам, которые строят интерфейс
+// сами (например DevTools), не заводя .rml-файл в игре: имя служит и ключом
+// кэша, и именем источника в сообщениях RmlUi.
+int r2d_gui_load_markup(R2DGui *g, const char *name, const char *markup)
+{
+    if (!g || !g->context || !name || !markup) return -1;
+
+    for (int i = 0; i < g->doc_count; ++i) {
+        if (g->doc_paths[i] == name && g->docs[i]) return i;
+    }
+
+    int id = -1;
+    for (int i = 0; i < g->doc_count; ++i) {
+        if (!g->docs[i]) { id = i; break; }
+    }
+    if (id < 0) {
+        if (g->doc_count >= kMaxDocuments) {
+            R2D_ERROR("RmlUi: достигнут лимит документов (%d)", kMaxDocuments);
+            return -1;
+        }
+        id = g->doc_count++;
+    }
+
+    Rml::ElementDocument *doc = g->context->LoadDocumentFromMemory(markup, name);
+    if (!doc) {
+        R2D_ERROR("RmlUi: не удалось разобрать разметку документа '%s'", name);
+        return -1;
+    }
+
+    doc->Hide();
+    g->docs[id] = doc;
+    g->doc_paths[id] = name;
+    return id;
+}
+
 static Rml::ElementDocument *r2d__doc(R2DGui *g, int doc)
 {
     if (!g || doc < 0 || doc >= g->doc_count) return nullptr;

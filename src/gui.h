@@ -39,6 +39,9 @@ void r2d_gui_render(R2DGui *g, SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *swapch
 // --- Документы --------------------------------------------------------------
 // Возвращает id документа (>= 0) или -1 при ошибке.
 int  r2d_gui_load_document(R2DGui *g, const char *path);
+// То же, но документ задаётся строкой разметки, а не файлом. `name` — ключ
+// кэша и имя источника для RmlUi (DevTools строит интерфейс кодом).
+int  r2d_gui_load_markup(R2DGui *g, const char *name, const char *markup);
 void r2d_gui_show(R2DGui *g, int doc);
 void r2d_gui_hide(R2DGui *g, int doc);
 void r2d_gui_unload(R2DGui *g, int doc);

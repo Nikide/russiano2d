@@ -1307,6 +1307,21 @@ RmlUi рисует HTML/CSS-подобные документы (`.rml` + `.rcss
 
 Максимум 64 документа одновременно.
 
+### `engine.ui.loadMarkup(name, markup)`
+
+Создаёт документ **из строки разметки**, а не из файла. Нужно инструментам,
+которые строят интерфейс кодом и не хотят класть `.rml` в игру (DevTools,
+[highlevel/devtools.md](highlevel/devtools.md)).
+
+| Параметр | Тип | Описание |
+|---|---|---|
+| `name` | `string` | Ключ кэша и имя источника в сообщениях RmlUi |
+| `markup` | `string` | Разметка RML (`<rml><head>…</head><body>…</body></rml>`) |
+
+**Возвращает:** `number` — id документа (`>= 0`) или `-1`. Как и у `load`,
+документ создаётся **скрытым**: после загрузки нужен `engine.ui.show(doc)`.
+Повторный вызов с тем же `name` вернёт тот же id (кэш по имени).
+
 ```js
 const menu = engine.ui.load('ui/menu.rml');
 if (menu >= 0) engine.ui.show(menu);

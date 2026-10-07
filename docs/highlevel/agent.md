@@ -16,6 +16,32 @@ $.test.near($('#hero').pos().x, 100, 6, 'дошёл');
 ([HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) §25): `check/equal/near/truthy/falsy`
 и итог `reset/results/report`.
 
+Утверждения в понятиях мира — `$.expect(селектор)`: `exists()`, `count(n)`,
+`empty()`, `hp(n)`, `prop(имя, значение)`, `positionNear(x, y, eps)`,
+`state(значение)`.
+
+```js
+$.expect('#door').state('open');
+$.expect('.enemy').count(5);
+$.expect('#hero').positionNear(100, 300, 1);
+$.test.reset();          // перед прогоном
+$.test.report();         // «Все проверки пройдены (N)»
+```
+
+Каждое утверждение идёт через `$.test.check`, поэтому попадает и в общий
+счётчик, и в снимок агента. Провал приходит не только строкой, но и структурной
+деталью — `$.test.results().details[i]` и `state.tests.details`:
+
+```json
+{ "message": "#hero: hp = 1", "subject": "#hero",
+  "prop": "hp", "expected": 1, "actual": 100 }
+```
+
+Это и есть артефакт падающего теста: агент видит, **что** именно не совпало, и
+не разбирает текст лога. `state()` читает **свободный атрибут** `state`
+(`$('#door').attr('state', 'open')`), а не свойство узла: у анимации клипами своё
+`state`, путать их нельзя.
+
 ---
 
 ## 1. Методы

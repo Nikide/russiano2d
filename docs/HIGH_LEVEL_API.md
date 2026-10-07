@@ -926,11 +926,47 @@ $.test.equal($('#hero').hp(), 100, 'здоровье целое')
 $.test.near(x, 100, 0.5, 'игрок у отметки')
 $.test.truthy(...) .falsy(...)
 $.test.reset() .results() .report()
+
+// Утверждения в понятиях мира (§25.1): селектор вместо ручных проверок
+$.expect('#door').state('open')          // attr('state') игра ставит сама
+$.expect('.enemy').count(5)
+$.expect('#hero').hp(100)
+$.expect('#hero').positionNear(100, 300, 1)
+$.expect('#hero').prop('speed', 250)
+$.expect('.coin').empty()
 ```
 
 Снимок содержит `frame`, `time`, `fps`, `scene`, `window`, `camera`, `world`,
 `entities` (массив узлов с позицией, здоровьем, видимостью), `ui`, `player` и
 всё, что добавлено через `.expose()`.
+
+### 25.1. `$.expect(селектор)` — утверждения в понятиях мира
+
+`$.expect` избавляет тест от ручных проверок через `eval`: ожидание
+формулируется селектором и свойством, а результат идёт в тот же счётчик, что
+`$.test.*`.
+
+| Утверждение | Что проверяет |
+|---|---|
+| `.exists()` / `.empty()` | есть ли хоть один узел / нет ни одного |
+| `.count(n)` | сколько узлов подходит под селектор |
+| `.hp(n)` | здоровье (то же, что `.prop('hp', n)`) |
+| `.prop(имя, значение)` | свойство узла или свободный атрибут |
+| `.positionNear(x, y, eps?)` | позиция центра с допуском (по умолчанию 0.5 px) |
+| `.state(значение)` | **свободный атрибут** `state`, который ставит игра |
+
+```js
+$.test.reset();
+$.expect('#door').state('open');
+$.expect('.enemy').count(5);
+if (!$.test.report()) { /* оставить артефакты: screenshot/state */ }
+```
+
+Провал приходит не только строкой: `$.test.results().details` (и
+`state.tests.details` в снимке агента) содержит `{ message, subject, prop?,
+expected, actual }` — по нему видно, **что** именно не совпало, без разбора
+лога. Именно это делает падающий тест разбираемым артефактом
+([TESTING.md](TESTING.md) §5).
 
 ## 26. Расширение
 
@@ -1074,6 +1110,8 @@ $.update(() => {
 | Таймлайн-сцены: диалоги и визуальные новеллы | `$.timeline`, `$.animatedTimelineScene2d` | — | [timeline.md](highlevel/timeline.md) |
 | Tween в стиле Godot | `$.tween` | — | [tween.md](highlevel/tween.md) |
 | Зоны `enter`/`leave` | `$.triggers` | `<trigger>` | [triggers.md](highlevel/triggers.md) |
+| Реактивные запросы: вход/выход по составу выборки | `$.watch` | — | [watch.md](highlevel/watch.md) |
+| DevTools: инспектор сущностей на RmlUi | `$.devtools` | — | [devtools.md](highlevel/devtools.md) |
 | Локализация | `$.i18n`, `$.tr` | — | [i18n.md](highlevel/i18n.md) |
 | Пул объектов | `$.pool` | — | [pool.md](highlevel/pool.md) |
 | HTTP-запросы | `$.http` | — | [http.md](highlevel/http.md) |

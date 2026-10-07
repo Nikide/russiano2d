@@ -1,4 +1,4 @@
-# Russiano2D 0.1.15 — macOS Apple Silicon: инструкция для ИИ-агента
+# Russiano2D 0.1.16 — macOS Apple Silicon: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"0.1.15","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"0.1.16","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -182,6 +182,7 @@ call(cmd="quit")
 * Катсцены — `$.cutscene` — `docs/highlevel/cutscene.md`
 * Отладка — `$.debug` и `$.console` — `docs/highlevel/debug.md`
 * Z-буфер и псевдо-3D — `$.gfx.depth` — `docs/highlevel/depth.md`
+* DevTools — `$.devtools` — `docs/highlevel/devtools.md`
 * Диалоги — `$.dialog` — `docs/highlevel/dialog.md`
 * Потоки и таймеры — `$.flow` — `docs/highlevel/flow.md`
 * Текстовые стили — `$.font` — `docs/highlevel/font.md`
@@ -233,6 +234,7 @@ call(cmd="quit")
 * HUD и интерфейс — `$.ui` — `docs/highlevel/ui.md`
 * Render target — `$.viewport` — `docs/highlevel/viewport.md`
 * Несколько камер — `$.camera.add/split/views` — `docs/highlevel/viewports.md`
+* Реактивные запросы — `$.watch` — `docs/highlevel/watch.md`
 * Оружие и баллистика — `$.weapons` — `docs/highlevel/weapons.md`
 * UI-контролы — `$.ui` и теги `<ui.*>` — `docs/highlevel/widgets.md`
 * Окно — `$.window` — `docs/highlevel/window.md`
@@ -2236,11 +2238,47 @@ $.test.equal($('#hero').hp(), 100, 'здоровье целое')
 $.test.near(x, 100, 0.5, 'игрок у отметки')
 $.test.truthy(...) .falsy(...)
 $.test.reset() .results() .report()
+
+// Утверждения в понятиях мира (§25.1): селектор вместо ручных проверок
+$.expect('#door').state('open')          // attr('state') игра ставит сама
+$.expect('.enemy').count(5)
+$.expect('#hero').hp(100)
+$.expect('#hero').positionNear(100, 300, 1)
+$.expect('#hero').prop('speed', 250)
+$.expect('.coin').empty()
 ```
 
 Снимок содержит `frame`, `time`, `fps`, `scene`, `window`, `camera`, `world`,
 `entities` (массив узлов с позицией, здоровьем, видимостью), `ui`, `player` и
 всё, что добавлено через `.expose()`.
+
+### 25.1. `$.expect(селектор)` — утверждения в понятиях мира
+
+`$.expect` избавляет тест от ручных проверок через `eval`: ожидание
+формулируется селектором и свойством, а результат идёт в тот же счётчик, что
+`$.test.*`.
+
+| Утверждение | Что проверяет |
+|---|---|
+| `.exists()` / `.empty()` | есть ли хоть один узел / нет ни одного |
+| `.count(n)` | сколько узлов подходит под селектор |
+| `.hp(n)` | здоровье (то же, что `.prop('hp', n)`) |
+| `.prop(имя, значение)` | свойство узла или свободный атрибут |
+| `.positionNear(x, y, eps?)` | позиция центра с допуском (по умолчанию 0.5 px) |
+| `.state(значение)` | **свободный атрибут** `state`, который ставит игра |
+
+```js
+$.test.reset();
+$.expect('#door').state('open');
+$.expect('.enemy').count(5);
+if (!$.test.report()) { /* оставить артефакты: screenshot/state */ }
+```
+
+Провал приходит не только строкой: `$.test.results().details` (и
+`state.tests.details` в снимке агента) содержит `{ message, subject, prop?,
+expected, actual }` — по нему видно, **что** именно не совпало, без разбора
+лога. Именно это делает падающий тест разбираемым артефактом
+([TESTING.md](TESTING.md) §5).
 
 ## 26. Расширение
 
@@ -2384,6 +2422,8 @@ $.update(() => {
 | Таймлайн-сцены: диалоги и визуальные новеллы | `$.timeline`, `$.animatedTimelineScene2d` | — | [timeline.md](highlevel/timeline.md) |
 | Tween в стиле Godot | `$.tween` | — | [tween.md](highlevel/tween.md) |
 | Зоны `enter`/`leave` | `$.triggers` | `<trigger>` | [triggers.md](highlevel/triggers.md) |
+| Реактивные запросы: вход/выход по составу выборки | `$.watch` | — | [watch.md](highlevel/watch.md) |
+| DevTools: инспектор сущностей на RmlUi | `$.devtools` | — | [devtools.md](highlevel/devtools.md) |
 | Локализация | `$.i18n`, `$.tr` | — | [i18n.md](highlevel/i18n.md) |
 | Пул объектов | `$.pool` | — | [pool.md](highlevel/pool.md) |
 | HTTP-запросы | `$.http` | — | [http.md](highlevel/http.md) |
@@ -4125,6 +4165,21 @@ RmlUi рисует HTML/CSS-подобные документы (`.rml` + `.rcss
 раз в `onEnter` безопасно.
 
 Максимум 64 документа одновременно.
+
+### `engine.ui.loadMarkup(name, markup)`
+
+Создаёт документ **из строки разметки**, а не из файла. Нужно инструментам,
+которые строят интерфейс кодом и не хотят класть `.rml` в игру (DevTools,
+[highlevel/devtools.md](highlevel/devtools.md)).
+
+| Параметр | Тип | Описание |
+|---|---|---|
+| `name` | `string` | Ключ кэша и имя источника в сообщениях RmlUi |
+| `markup` | `string` | Разметка RML (`<rml><head>…</head><body>…</body></rml>`) |
+
+**Возвращает:** `number` — id документа (`>= 0`) или `-1`. Как и у `load`,
+документ создаётся **скрытым**: после загрузки нужен `engine.ui.show(doc)`.
+Повторный вызов с тем же `name` вернёт тот же id (кэш по имени).
 
 ```js
 const menu = engine.ui.load('ui/menu.rml');
@@ -8889,12 +8944,25 @@ transform/physics/state → скопировать селектор
 
 ## 9. Что уже есть в движке
 
-DevTools как **инспектора сущностей** нет: поиск по `src/`, `docs/`, `tools/`,
-`tests/`, `demos/`, `game/`, `witch_game/` не находит ни панели инспектора, ни
-выбора сущности. Из инструментов разработчика есть только отладочный оверлей
-Dear ImGui (F1, §9 ниже) — второй GUI, который закон UI запрещает расширять.
+**Первый срез DevTools сделан (2026-10-07): `$.devtools`** — панель
+«список сущностей → выбор → свойства → скопировать селектор», целиком на RmlUi
+(документ собирается кодом через `engine.ui.loadMarkup`, `.rml` в игре не
+нужен). Открывается по **F2**: [highlevel/devtools.md](highlevel/devtools.md).
 
-Есть заготовки, на которых DevTools нужно строить **без дублирования**:
+Что в нём уже есть:
+
+| Требование §8 | Состояние |
+|---|---|
+| Список сущностей | ✅ до 24 строк из `$.agent.nodes('*')` |
+| Выбор одной | ✅ клик по строке или `$.devtools.selectBy('#hero')` |
+| Инспекция базового состояния | ✅ transform, тело, здоровье, команда, живость, видимость, `aria` |
+| Метрики движка | ⬜ панель PERF пока не подключена (есть `$.debug.profile()`) |
+| Только RmlUi для обычного интерфейса | ✅ ImGui не используется |
+| Не источник истины | ✅ панель только читает и копирует селектор |
+
+Чего ещё нет: правки значений на лету, визуализации коллизий/BSP/навигации,
+таймлайна событий, панелей WORLD/EVENTS/AUDIO/RENDER, «Copy JS / Export
+override». Заготовки для них — ниже.
 
 | Заготовка | Что даёт | Где |
 |---|---|---|
@@ -8910,17 +8978,18 @@ Dear ImGui (F1, §9 ниже) — второй GUI, который закон UI
 | Курсор и выбор в мире | `attrs.picked`/`hovered` | [api.js:1851-1890](../src/highlevel/api.js#L1851-L1890) |
 | Оверлей Dear ImGui (F1) | статистика, физика, текстуры, скрипты, таблица зон | [debug_ui.cpp:237-434](../src/debug_ui.cpp#L237-L434) |
 
-**Чего нет:**
+**Чего ещё нет:**
 
-* панелей инспектора и DevTools вообще;
-* селектора из picking: клик/ховер по узлам интерфейса есть
-  ([ui.js:160-202](../src/highlevel/ui.js#L160-L202)), но наружу селектор не
-  отдаётся;
-* единой точки introspection: сегодня это разрозненные `$.agent.*`,
-  `$.debug.*` и `engine.*`;
-* сохранения/копирования значений (value / selector / JS / override);
+* правок значений на лету и их экспорта (value / JS / override);
+* picking из мира в панель: клик/ховер по узлам интерфейса есть
+  ([ui.js:160-202](../src/highlevel/ui.js#L160-L202)), но клик по спрайту в
+  сцене пока не превращается в селектор панели;
+* панелей WORLD / EVENTS / PHYSICS / BSP / NAV / AUDIO / RENDER / PERF —
+  сейчас только список сущностей и инспектор;
 * визуализации коллизий, BSP, навигации и зон видимости как инструмента
-  (есть только ручные примитивы `$.debug.draw`).
+  (есть только ручные примитивы `$.debug.draw`);
+* таймлайна событий — `$.watch` (реактивные запросы) даёт материал, но
+  панели на нём ещё нет.
 
 **Отдельное обстоятельство.** «Второй developer GUI» в движке уже существует:
 оверлей Dear ImGui, включённый в сборке по умолчанию
@@ -10025,17 +10094,22 @@ $('.enemy').within('#hero', 500);
 Экспортировать высокоуровневые утверждения: `exists`, `count`, `state`,
 `position`, `property`. Падающий тест должен оставлять полезные артефакты.
 
-**Состояние:** частично.
+**Состояние: реализовано (2026-10-07).**
 
-* есть `$.test.check/equal/near/truthy/falsy/reset/results/report`
-  ([agent.js:137-182](../src/highlevel/agent.js#L137-L182),
-  [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §25);
-* утверждений вида `t.expect('#door').state('open')` и `positionNear` нет;
-* сравнение состояния до/после — только вручную через `eval`/`$.test`;
-* расхождение доков и кода, найденное аудитом 2026-10-07 (agent.md приписывал
-  проверки `$.agent`, а не `$.test`), **закрыто** — документация приведена к
-  коду, а `$.agent.install()` теперь регистрирует и инспекцию для команд
-  `query`/`inspect`/`profile` (фазы 3–4).
+* **`$.expect(селектор)`** — утверждения в понятиях мира: `exists()`, `empty()`,
+  `count(n)`, `hp(n)`, `prop(имя, значение)`, `positionNear(x, y, eps?)`,
+  `state(значение)` ([agent.js](../src/highlevel/agent.js),
+  [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §25.1);
+* счётчик общий с `$.test.*`, поэтому `results()`/`report()` и снимок агента
+  видят и утверждения, и ручные проверки;
+* **артефакт падения**: `$.test.results().details` и `state.tests.details`
+  содержат `{ message, subject, prop?, expected, actual }` — агент видит, что
+  именно не совпало, не разбирая текст лога
+  ([TESTING.md](TESTING.md) §3, §5);
+* `state()` читает **свободный атрибут** `state` (игра ставит его сама), а не
+  свойство узла анимации — состояния движок не выдумывает;
+* проверки: `tests/js/expect_test.mjs` (5 наборов без движка) и
+  `tests/agent/expect_test.py` (в движке, фикстура `tests/fixtures/within`).
 
 ---
 
@@ -10044,12 +10118,21 @@ $('.enemy').within('#hero', 500);
 Реализовать минимум: `onEnter` / `onLeave`. Оптимизировать только после
 профилирования.
 
-**Состояние:** частично.
+**Состояние: реализовано (2026-10-07).**
 
-* зоны `<trigger>` с событиями `enter`/`leave` и подсистема `$.triggers` уже
-  есть ([triggers.js](../src/highlevel/triggers.js),
-  [highlevel/triggers.md](highlevel/triggers.md));
-* реакций на результат произвольного селекторного запроса нет.
+* **`$.watch(селектор, { onEnter, onLeave, immediate })`** — вход/выход по
+  составу выборки: узел попал под селектор или перестал подходить (сменил
+  класс, удалён, вышел из `within()`). Возвращает handle `{ stop, size, active,
+  selector }`; `$.watch.count/list/clear` — диагностика и снятие
+  ([watch.js](../src/highlevel/watch.js), [watch.md](highlevel/watch.md));
+* сравнение по `uid`: пересозданный узел — новое вхождение, удалённый не
+  путается с чужим; по умолчанию первый тик молчит (`immediate: true` — иначе);
+* шаг встроен в кадр `$` (`tickWatch` после триггеров); кадр без наблюдений
+  ничего не стоит;
+* зоны `<trigger>` с событиями `enter`/`leave` остаются для пересечений в мире
+  ([triggers.js](../src/highlevel/triggers.js), [highlevel/triggers.md](highlevel/triggers.md));
+* проверки: `tests/js/watch_test.mjs` (5 наборов без движка) и
+  `tests/agent/watch_test.py` (в движке).
 
 ---
 
@@ -10063,10 +10146,23 @@ $('.enemy').within('#hero', 500);
 transform/physics/state → копирование селектора
 ```
 
-**Состояние:** нет. Подробности, панели и критерии — [DEVTOOLS.md](DEVTOOLS.md).
-Мешает два обстоятельства: существующая инспекция разрознена, а «второй
-developer GUI» уже есть в виде ImGui-оверлея, включённого по умолчанию
-([CMakeLists.txt:46](../CMakeLists.txt#L46), [debug_ui.cpp](../src/debug_ui.cpp)).
+**Состояние: первый срез сделан (2026-10-07), `$.devtools`.**
+
+* панель — **RmlUi-документ, собранный кодом** (`engine.ui.loadMarkup`), без
+  `.rml` в игре и без ImGui: закон UI соблюдён
+  ([devtools.js](../src/highlevel/devtools.js), [devtools.md](highlevel/devtools.md));
+* список сущностей → выбор → инспекция (transform, тело, здоровье, команда,
+  живость, видимость, `aria`) → **копирование селектора** в буфер обмена;
+* открывается по **F2**, обновляется раз в 6 кадров, обработчики вешаются один
+  раз (RmlUi уносит слушателей вместе с элементами — разметка не
+  перерисовывается);
+* данные — из той же инспекции, что у агента (`$.agent.nodes('*')`): второй
+  реализации поиска нет ([DEVTOOLS.md](DEVTOOLS.md) §7);
+* **осталось**: правки значений и экспорт, picking из мира, панели
+  WORLD/EVENTS/PHYSICS/BSP/NAV/AUDIO/RENDER/PERF, таймлайн событий,
+  визуализация коллизий/BSP/навигации;
+* проверки: `tests/js/devtools_test.mjs` (3 набора без GUI) и
+  `tests/agent/devtools_test.py` (в движке: открытие, F2, выбор, обновление).
 
 ---
 
@@ -10075,6 +10171,12 @@ developer GUI» уже есть в виде ImGui-оверлея, включён
 Возможные будущие работы: визуализация BSP, визуализация навигации, таймлайн
 событий, визуализатор запросов, таймлайн реплея, flame/timeline
 производительности. Делать только когда это действительно полезно.
+
+**Состояние: сознательно не начиналась.** Всё перечисленное — инструменты
+поверх уже готовых данных (`$.world.bsp`, `$.nav`, `$.watch`, `$.replay`,
+`$.debug.profile`), поэтому их можно делать по потребности, не блокируя
+остальной роадмап. Условие входа то же, что у фазы 8: сначала полезный срез,
+потом расширение.
 
 ---
 
@@ -11111,31 +11213,36 @@ with Agent(game="tests/fixtures/door", seed=7) as a:
 
 ---
 
-## 3. Желаемый API (фаза 6)
+## 3. Утверждения в понятиях мира (фаза 6 сделана)
 
-Целевой вид теста — проверки в понятиях мира:
+Целевой вид проверок — селектор вместо ручных сравнений:
 
 ```js
-test('player opens door', async t => {
-    await t.load('tests/door.bscene');
-    t.expect('#door').state('closed');
-    t.keyDown('E'); t.step(1); t.keyUp('E'); t.step(30);
-    t.expect('#door').state('open');
-});
+$.test.reset();
+$.expect('.enemy').count(5);
+$.expect('#hero').positionNear(100, 300, 1);
+$.expect('#door').state('closed');
+// …команды протокола key/step…
+$.expect('#door').state('open');
+$.test.report();
 ```
 
-Сопоставление с тем, что есть:
+Сопоставление с тем, что было:
 
 | Пожелание | Сегодня |
 |---|---|
-| `t.expect(sel).count(n)` | `$.test.equal($(sel).length, n, …)` |
-| `t.expect(sel).exists()` | `$.test.truthy($(sel).length, …)` |
-| `t.expect(sel).state('open')` | нет; состояние отдаётся игрой через `$.agent.expose` или `attrs` |
-| `t.expect(sel).positionNear(x, y, eps)` | `$.test.near($(sel).pos().x, x, eps, …)` |
-| `t.expect(sel).within(other, dist)` | `$('.enemy').within('#hero', 500)` — метод обёртки ([ROADMAP.md](ROADMAP.md) фаза 1, реализовано); в тестовом DSL `t.expect(...).within` пока нет |
-| `t.expect(sel).health(100)` | `$.test.equal($(sel).hp(), 100, …)` |
+| `t.expect(sel).count(n)` | **есть**: `$.expect(sel).count(n)` |
+| `t.expect(sel).exists()` | **есть**: `$.expect(sel).exists()` / `.empty()` |
+| `t.expect(sel).state('open')` | **есть**: `$.expect(sel).state('open')` — читает свободный атрибут `state`, который игра ставит сама |
+| `t.expect(sel).positionNear(x, y, eps)` | **есть**: `$.expect(sel).positionNear(x, y, eps)`, допуск по умолчанию 0.5 px |
+| `t.expect(sel).health(100)` | **есть**: `$.expect(sel).hp(100)` (или `.prop('hp', 100)`) |
+| `t.expect(sel).prop(имя, значение)` | **есть**: свойство узла или свободный атрибут |
+| `t.expect(sel).within(other, dist)` | `$('.enemy').within('#hero', 500)` — метод обёртки ([ROADMAP.md](ROADMAP.md) фаза 1); в утверждениях пока нет |
 | `t.load('…bscene')` | загрузка сцены игрой (`$.scene.load`) или `--scene` |
 | `t.keyDown/t.keyUp/t.step` | команды протокола `key`/`keys`/`step` |
+
+`$.expect` и `$.test` пишут в один счётчик, поэтому итог (`results()`/`report()`)
+и снимок агента (`state.tests`) видят и то, и другое.
 
 ---
 
@@ -12124,6 +12231,32 @@ $.test.near($('#hero').pos().x, 100, 6, 'дошёл');
 ([HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) §25): `check/equal/near/truthy/falsy`
 и итог `reset/results/report`.
 
+Утверждения в понятиях мира — `$.expect(селектор)`: `exists()`, `count(n)`,
+`empty()`, `hp(n)`, `prop(имя, значение)`, `positionNear(x, y, eps)`,
+`state(значение)`.
+
+```js
+$.expect('#door').state('open');
+$.expect('.enemy').count(5);
+$.expect('#hero').positionNear(100, 300, 1);
+$.test.reset();          // перед прогоном
+$.test.report();         // «Все проверки пройдены (N)»
+```
+
+Каждое утверждение идёт через `$.test.check`, поэтому попадает и в общий
+счётчик, и в снимок агента. Провал приходит не только строкой, но и структурной
+деталью — `$.test.results().details[i]` и `state.tests.details`:
+
+```json
+{ "message": "#hero: hp = 1", "subject": "#hero",
+  "prop": "hp", "expected": 1, "actual": 100 }
+```
+
+Это и есть артефакт падающего теста: агент видит, **что** именно не совпало, и
+не разбирает текст лога. `state()` читает **свободный атрибут** `state`
+(`$('#door').attr('state', 'open')`), а не свойство узла: у анимации клипами своё
+`state`, путать их нельзя.
+
 ---
 
 ## 1. Методы
@@ -13074,7 +13207,10 @@ const $ = createApi();          // свой экземпляр API (тесты, 
 `installBsp` → `installAtlas` → `installCurve` → `installTask` → `installScript`
 → `installStory` → `installQuest` → `installSoundBank` → `installSteps` →
 `installBarks` → `installItems` → `installCombat` → `installWeapons` →
-`installRaid` → `installCels` → `installProc` → `installAlive` → `installNet`.
+`installRaid` → `installCels` → `installProc` → `installAlive` → `installNet`
+→ `installReplay`. Реактивные запросы (`installWatch`) ставятся рядом с
+сигналами и состояниями, а DevTools (`installDevTools`) — после `installAgent`:
+панель берёт данные из инспекции агента.
 
 ## 2. Кадровые хуки
 
@@ -14875,6 +15011,75 @@ SDL_BindGPUIndexBuffer(pass, &ib, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 ```bash
 # глубина включена, управляется, не меняет вид спрайтовой сцены
 python3 tests/agent/highlevel_depth_test.py
+```
+
+
+---
+
+## DevTools — `$.devtools`
+
+<sub>источник: `docs/highlevel/devtools.md`</sub>
+
+# DevTools — `$.devtools`
+
+Инспектор сущностей: список → выбор → свойства → «скопировать селектор»
+(ROADMAP, фаза 8; требования — [DEVTOOLS.md](../DEVTOOLS.md)).
+
+Панель — **RmlUi-документ**, собранный кодом (`engine.ui.loadMarkup`), а не
+`.rml`-файл в игре: инструмент обязан работать в любой игре и не требовать
+ассетов. ImGui здесь не используется — закон интерфейса
+([UI_RMLUI_LAW.md](../UI_RMLUI_LAW.md)).
+
+```js
+$.devtools.toggle();                 // или F2
+$.devtools.selectBy('#hero');        // выбрать сущность
+$.devtools.selector();               // '#hero' — то, что кладёт кнопка в буфер
+$.devtools.panel();                  // { open, doc, rows, entities, selected, selector, refreshed }
+```
+
+---
+
+## 1. Методы
+
+| Вызов | Смысл |
+|---|---|
+| `open()` / `close()` / `toggle()` / `isOpen()` | панель; в сборке без RmlUi `open()` честно вернёт `false` |
+| `select(uid)` / `selectBy(sel)` | выбрать сущность по uid или селектору |
+| `selector()` | селектор выбранной сущности (кнопка копирует его в буфер обмена) |
+| `panel()` | машиночитаемое состояние панели — факты для тестов и агента |
+| `refresh()` | перерисовать немедленно |
+
+Клавиша **F2** открывает и закрывает панель (F1 занята отладочным оверлеем
+движка, [debug.md](debug.md)).
+
+## 2. Что показывает
+
+* **Список** — до 24 сущностей из `$.agent.nodes('*')`: id (или `тег#uid`), тег,
+  здоровье; выбранная строка подсвечена;
+* **Инспектор** — transform (позиция, размер, угол), физика (тело), здоровье,
+  команда, живость, видимость, семантика `aria`;
+* **Кнопка «Скопировать селектор»** — кладёт `#id`, `.class` или тег в буфер
+  обмена (`engine.setClipboard`) и пишет строку в журнал.
+
+## 3. Источник истины
+
+Панель **только читает** мир. Она не сохраняет изменения и не становится
+каноническими данными проекта ([DEVTOOLS.md](../DEVTOOLS.md) §6): правки
+делаются кодом, DevTools — способ посмотреть и скопировать селектор.
+
+## 4. Цена
+
+* содержимое обновляется раз в 6 кадров (~10 Гц), а не каждый кадр;
+* обработчики вешаются **один раз** при открытии (24 строки + кнопка);
+  разметка не перерисовывается, иначе RmlUi унёс бы слушателей вместе с
+  элементами — обновляются только тексты и классы;
+* пока панель закрыта, кадровый шаг не делает ничего, кроме проверки F2.
+
+## 5. Проверка
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/devtools_test.mjs   # без GUI
+python3 tests/agent/devtools_test.py                        # в движке
 ```
 
 
@@ -24256,6 +24461,67 @@ python3 tests/agent/highlevel_viewports_test.py
 каждый попадает в свой регион; камеры независимы; регион и зум задаются;
 `split(4)` и возврат к одной камере работают; картинка одиночной камеры не
 испортилась.
+
+
+---
+
+## Реактивные запросы — `$.watch`
+
+<sub>источник: `docs/highlevel/watch.md`</sub>
+
+# Реактивные запросы — `$.watch`
+
+`watch` отвечает на **вхождение в выборку**: узел попал под селектор или
+перестал под него подходить. Это не то же, что `<trigger>` и `$.triggers`
+([triggers.md](triggers.md)): те срабатывают на **пересечение в мире**, а watch —
+на изменение состава выборки (удаление, смена класса, выход из `within()`).
+
+```js
+const w = $.watch('.enemy:dead', {
+    onEnter: (node) => $.sound.play('die.ogg'),
+    onLeave: (node) => $.log('враг ожил?'),
+});
+w.stop();
+```
+
+---
+
+## 1. Методы
+
+| Вызов | Смысл |
+|---|---|
+| `$.watch(sel, handlers)` | подписаться; `handlers` — функция (= `onEnter`) или `{ onEnter, onLeave, immediate }` |
+| `handle.stop()` | прекратить наблюдение (повторно — безопасно) |
+| `handle.size()` | сколько узлов в выборке по последнему тику |
+| `handle.active()` / `handle.selector()` | живо ли наблюдение / его селектор |
+| `$.watch.count()` / `.clear()` / `.list()` | сколько наблюдений, снять все, перечислить (`{ id, sel, size }`) |
+
+## 2. Когда срабатывает вход
+
+* по умолчанию вход **не** срабатывает для узлов, которые уже подходили под
+  селектор в момент подписки: «вошёл» значит «вошёл потом». Нужны они тоже —
+  `{ immediate: true }`;
+* вход для узла, который был удалён и создан заново, сработает: сравнение идёт
+  по `uid`, а не по id;
+* выход отдаёт **последнюю известную ссылку** на узел: он может быть уже
+  удалён, поэтому `.attr('id')` читается, а физика/отрисовка — нет;
+* шаг выполняется раз в кадр (`tickWatch()` в цикле `$`), после триггеров.
+
+## 3. Цена
+
+Кадр без наблюдений не стоит ничего: `tickWatch()` выходит на первой проверке.
+С каждым наблюдением — один запрос `query(sel)` в кадр: для структурных
+селекторов это готовая выборка из индекса реестра
+([core.md](core.md), `docs/highlevel/_CONTRACT.md` §2), для условий вроде
+`[hp<20]` — проход по якорю. Наблюдений должно быть немного (единицы), иначе
+дешевле переписать на события узла.
+
+## 4. Проверка
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/watch_test.mjs     # без движка
+python3 tests/agent/watch_test.py                          # в движке
+```
 
 
 ---

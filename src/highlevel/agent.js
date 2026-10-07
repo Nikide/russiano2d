@@ -17,7 +17,10 @@ import { ctx, query, wrapOne } from './core.js';
 import { windowSnapshot } from './window.js';
 
 const exposed = new Map();
-const tests = { total: 0, failed: 0, failures: [] };
+// failures — строки (совместимость с прежними тестами), details — те же провалы
+// структурой: субъект, ожидание, факт. Их забирает агент, чтобы падающий тест
+// оставлял разбираемый артефакт, а не только текст в логе.
+const tests = { total: 0, failed: 0, failures: [], details: [] };
 
 const round2 = (v) => Math.round(v * 100) / 100;
 
@@ -104,7 +107,12 @@ export function installAgent($) {
                 } : { count: entities.length, bodies: engineOf().bodyCount() },
                 entities: entities.map(nodeBrief),
                 ui: ui_nodes.map(nodeBrief),
-                tests: { total: tests.total, failed: tests.failed, failures: tests.failures.slice(0, 20) },
+                tests: {
+                    total: tests.total,
+                    failed: tests.failed,
+                    failures: tests.failures.slice(0, 20),
+                    details: tests.details.slice(0, 20),
+                },
             };
 
             const player = ctx.nodes.find((n) => n.tag === 'player' || n.classes.has('player'));
@@ -155,7 +163,7 @@ export function installAgent($) {
 
     const test = {
         /** Основная проверка. Возвращает результат — удобно для &&. */
-        check(condition, message) {
+        check(condition, message, detail) {
             tests.total++;
             if (condition) {
                 ctx.log(`  ok   ${message}`);
@@ -163,6 +171,7 @@ export function installAgent($) {
             }
             tests.failed++;
             tests.failures.push(message);
+            if (detail) tests.details.push(Object.assign({ message }, detail));
             ctx.log(`  FAIL ${message}`);
             return false;
         },
@@ -185,10 +194,18 @@ export function installAgent($) {
             tests.total = 0;
             tests.failed = 0;
             tests.failures.length = 0;
+            tests.details.length = 0;
             return test;
         },
 
-        results() { return { total: tests.total, failed: tests.failed, failures: tests.failures.slice() }; },
+        results() {
+            return {
+                total: tests.total,
+                failed: tests.failed,
+                failures: tests.failures.slice(),
+                details: tests.details.slice(),
+            };
+        },
 
         /** Печатает итог. Возвращает true, если всё зелено. */
         report() {
@@ -200,10 +217,106 @@ export function installAgent($) {
         },
     };
 
+    // --- $.expect ------------------------------------------------------------
+    //
+    // Утверждения в понятиях мира: селектор, а не внутренние структуры.
+    //
+    //   $.expect('#door').state('open');
+    //   $.expect('.enemy').count(5);
+    //   $.expect('#hero').hp(100);
+    //   $.expect('#hero').positionNear(100, 300, 1);
+    //
+    // Каждое утверждение идёт через $.test.check, поэтому попадает и в общий
+    // счётчик (results/report), и в снимок агента — вместе со структурной
+    // деталью провала (subject/expected/actual), чтобы падающий тест оставлял
+    // разбираемый артефакт (ROADMAP, фаза 6).
+
+    function subjectLabel(sel) {
+        if (typeof sel === 'string') return sel;
+        const node = (sel && Array.isArray(sel.nodes)) ? sel.nodes[0] : sel;
+        if (node && node.tag) return `#${node.id || node.tag}`;
+        return String(sel);
+    }
+
+    function subjectNodes(sel) {
+        if (typeof sel === 'string') return query(sel);
+        if (sel && Array.isArray(sel.nodes)) return sel.nodes;   // обёртка
+        if (sel && sel.tag) return [sel];                        // узел
+        return [];
+    }
+
+    function expect(sel) {
+        const label = subjectLabel(sel);
+        const nodes = subjectNodes(sel);
+        const first = nodes[0];
+
+        const need = () => {
+            if (first) return true;
+            test.check(false, `${label}: узел не найден`, { subject: label, actual: null });
+            return false;
+        };
+
+        return {
+            /** Сколько узлов нашлось: `$.expect('.enemy').count(5)`. */
+            count(n) {
+                return test.check(nodes.length === n, `${label}: узлов ${n}`,
+                                  { subject: label, expected: n, actual: nodes.length });
+            },
+
+            /** Есть ли хоть один узел. */
+            exists() {
+                return test.check(nodes.length > 0, `${label}: существует`,
+                                  { subject: label, expected: '>0', actual: nodes.length });
+            },
+
+            /** Ни одного узла. */
+            empty() {
+                return test.check(nodes.length === 0, `${label}: пусто`,
+                                  { subject: label, expected: 0, actual: nodes.length });
+            },
+
+            /** Свойство узла (или свободный атрибут): `.prop('speed', 250)`. */
+            prop(name, value) {
+                if (!need()) return false;
+                const actual = first.get(name);
+                return test.check(actual === value, `${label}: ${name} = ${JSON.stringify(value)}`,
+                                  { subject: label, prop: name, expected: value, actual });
+            },
+
+            /** Здоровье узла: `.hp(100)` (то же, что `.prop('hp', 100)`). */
+            hp(value) { return this.prop('hp', value); },
+
+            /** Позиция центра с допуском: `.positionNear(x, y, eps)`. */
+            positionNear(x, y, eps) {
+                if (!need()) return false;
+                const p = { x: first.x, y: first.y };
+                const tol = eps === undefined ? 0.5 : eps;
+                const ok = Math.abs(p.x - x) <= tol && Math.abs(p.y - y) <= tol;
+                return test.check(ok, `${label}: позиция (${p.x}, ${p.y}) ≈ (${x}, ${y})±${tol}`,
+                                  { subject: label, expected: [x, y], actual: [p.x, p.y], tol });
+            },
+
+            /**
+             * Игровое состояние: значение СВОБОДНОГО атрибута `state`, которое
+             * игра ставит сама (`$('#door').attr('state', 'open')`). Читаем
+             * именно атрибут, а не свойство узла: у анимации клипами своё
+             * `state`, и путать их нельзя. Движок не выдумывает состояний,
+             * которых не знает (правило 9 правил агентов).
+             */
+            state(value) {
+                if (!need()) return false;
+                const actual = first.attrs ? first.attrs.state : undefined;
+                return test.check(actual === value, `${label}: state = ${JSON.stringify(value)}`,
+                                  { subject: label, prop: 'state', expected: value, actual });
+            },
+        };
+    }
+
     ctx.agent = agent;
     ctx.test = test;
+    ctx.expect = expect;
     agent.install();
-    return { agent, test };
+    return { agent, test, expect };
 }
 
 function describeTarget(wrapper) {

@@ -59,31 +59,36 @@ with Agent(game="tests/fixtures/door", seed=7) as a:
 
 ---
 
-## 3. Желаемый API (фаза 6)
+## 3. Утверждения в понятиях мира (фаза 6 сделана)
 
-Целевой вид теста — проверки в понятиях мира:
+Целевой вид проверок — селектор вместо ручных сравнений:
 
 ```js
-test('player opens door', async t => {
-    await t.load('tests/door.bscene');
-    t.expect('#door').state('closed');
-    t.keyDown('E'); t.step(1); t.keyUp('E'); t.step(30);
-    t.expect('#door').state('open');
-});
+$.test.reset();
+$.expect('.enemy').count(5);
+$.expect('#hero').positionNear(100, 300, 1);
+$.expect('#door').state('closed');
+// …команды протокола key/step…
+$.expect('#door').state('open');
+$.test.report();
 ```
 
-Сопоставление с тем, что есть:
+Сопоставление с тем, что было:
 
 | Пожелание | Сегодня |
 |---|---|
-| `t.expect(sel).count(n)` | `$.test.equal($(sel).length, n, …)` |
-| `t.expect(sel).exists()` | `$.test.truthy($(sel).length, …)` |
-| `t.expect(sel).state('open')` | нет; состояние отдаётся игрой через `$.agent.expose` или `attrs` |
-| `t.expect(sel).positionNear(x, y, eps)` | `$.test.near($(sel).pos().x, x, eps, …)` |
-| `t.expect(sel).within(other, dist)` | `$('.enemy').within('#hero', 500)` — метод обёртки ([ROADMAP.md](ROADMAP.md) фаза 1, реализовано); в тестовом DSL `t.expect(...).within` пока нет |
-| `t.expect(sel).health(100)` | `$.test.equal($(sel).hp(), 100, …)` |
+| `t.expect(sel).count(n)` | **есть**: `$.expect(sel).count(n)` |
+| `t.expect(sel).exists()` | **есть**: `$.expect(sel).exists()` / `.empty()` |
+| `t.expect(sel).state('open')` | **есть**: `$.expect(sel).state('open')` — читает свободный атрибут `state`, который игра ставит сама |
+| `t.expect(sel).positionNear(x, y, eps)` | **есть**: `$.expect(sel).positionNear(x, y, eps)`, допуск по умолчанию 0.5 px |
+| `t.expect(sel).health(100)` | **есть**: `$.expect(sel).hp(100)` (или `.prop('hp', 100)`) |
+| `t.expect(sel).prop(имя, значение)` | **есть**: свойство узла или свободный атрибут |
+| `t.expect(sel).within(other, dist)` | `$('.enemy').within('#hero', 500)` — метод обёртки ([ROADMAP.md](ROADMAP.md) фаза 1); в утверждениях пока нет |
 | `t.load('…bscene')` | загрузка сцены игрой (`$.scene.load`) или `--scene` |
 | `t.keyDown/t.keyUp/t.step` | команды протокола `key`/`keys`/`step` |
+
+`$.expect` и `$.test` пишут в один счётчик, поэтому итог (`results()`/`report()`)
+и снимок агента (`state.tests`) видят и то, и другое.
 
 ---
 
