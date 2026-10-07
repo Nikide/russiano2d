@@ -556,6 +556,7 @@ export function installNet($) {
     // Задержка: клиент шлёт 'ping' с временем, сервер отвечает 'pong' тем же
     // числом — по разнице и считаем RTT.
     let rtt = 0;
+    let sim = { loss: 0, delay: 0, jitter: 0, seed: 1 };
     let pingSeq = 0;
     const pingSent = new Map();   // номер → время отправки
     let pings = 0;
@@ -731,6 +732,47 @@ export function installNet($) {
         latency() { return rtt / 2000; },
         /** Сколько пингов отправлено. */
         pings() { return pings; },
+
+        /**
+         * Симуляция плохой сети — для тестов и отладки: `$.net.simulate({
+         * loss: 10, delay: 150, jitter: 30, seed: 7 })`.
+         *
+         * Задержка делается ОЧЕРЕДЬЮ отложенных отправок, а не сном: спать в
+         * кадре нельзя. Пакет уходит из `poll()`, когда придёт его время.
+         *
+         * `loss` — процент потерь (`0..100`), `delay` — миллисекунды,
+         * `jitter` — случайная добавка `[0, jitter)`, `seed` — для
+         * воспроизводимости. Всё нулевое выключает симуляцию.
+         */
+        simulate(opts) {
+            const o = opts || {};
+            const pick = (v, fallback) => {
+                const n = Number(v);
+                return Number.isFinite(n) ? n : fallback;
+            };
+            const loss = pick(o.loss, 0);
+            const delay = pick(o.delay, 0);
+            const jitter = pick(o.jitter, 0);
+            const seed = pick(o.seed, 1);
+            if (transport && typeof transport.simulate === 'function') {
+                transport.simulate(loss, delay, seed, jitter);
+            }
+            sim = { loss, delay, jitter, seed };
+            return sim;
+        },
+
+        /** Настроенная симуляция сети (или нули). */
+        simulation() { return { ...sim }; },
+
+        /** Сколько пакетов ждёт своей задержки — видно, что она РАБОТАЕТ. */
+        delayed() {
+            if (typeof engine === 'undefined' || !engine
+                || typeof engine.netDelayed !== 'function') return 0;
+            return engine.netDelayed();
+        },
+
+        /** Выключить симуляцию. */
+        simulateOff() { return api.simulate({ loss: 0, delay: 0, jitter: 0 }); },
 
         // --- Лаг-компенсация (только сервер) ---
 

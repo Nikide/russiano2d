@@ -22,6 +22,8 @@
 #define R2D_NET_MAX_PACKET  1200      // безопасный размер датаграммы
 #define R2D_NET_MAX_PEERS   64
 #define R2D_NET_ERROR_MAX   256
+// Сколько отложенных отправок держим (симуляция задержки).
+#define R2D_NET_DELAY_MAX   64
 
 struct R2DNet {
     bool initialized;
@@ -47,7 +49,20 @@ struct R2DNet {
 
     // Симуляция потерь (тесты): 0 — выключена.
     int sim_loss;
+    int sim_delay;      // мс: через сколько отправить
+    int sim_jitter;     // мс: случайная добавка [0, jitter)
     uint32_t sim_state;
+    // Очередь отложенных отправок. Задержка делается ОЧЕРЕДЬЮ, а не сном:
+    // спать в кадре нельзя, поэтому пакет ждёт своего времени и уходит из
+    // r2d_net_tick.
+    struct {
+        uint64_t due_ms;
+        int      to_port;
+        char     to[64];
+        int      size;
+        uint8_t *data;
+    } delayed[R2D_NET_DELAY_MAX];
+    int delayed_count;
 };
 
 static R2DNet g_net;
@@ -228,24 +243,58 @@ static bool r2d__net_drop(void)
     return roll < g_net.sim_loss;
 }
 
-void r2d_net_simulate(int loss_percent, int delay_ms, int seed)
+static bool r2d__net_send_now(const char *to, int to_port, const void *data, int size);
+
+void r2d_net_simulate(int loss_percent, int delay_ms, int seed, int jitter_ms)
 {
-    R2D_UNUSED(delay_ms);   // задержку пока не откладываем: только потери
     g_net.sim_loss = loss_percent < 0 ? 0 : (loss_percent > 100 ? 100 : loss_percent);
+    g_net.sim_delay = delay_ms > 0 ? delay_ms : 0;
+    g_net.sim_jitter = jitter_ms > 0 ? jitter_ms : 0;
     g_net.sim_state = (uint32_t)(seed ? seed : 1);
-    if (g_net.sim_loss > 0) {
-        R2D_LOG("сеть: симуляция потерь %d%%, сид %d", g_net.sim_loss, seed);
+    if (g_net.sim_loss > 0 || g_net.sim_delay > 0 || g_net.sim_jitter > 0) {
+        R2D_LOG("сеть: симуляция потерь %d%%, задержка %d мс, разброс %d мс, сид %d",
+                g_net.sim_loss, g_net.sim_delay, g_net.sim_jitter, seed);
     }
 }
 
-bool r2d_net_send(const char *to, int to_port, const void *data, int size)
+int r2d_net_delayed_count(void) { return g_net.delayed_count; }
+
+/** Следующее случайное число симуляции (тот же xorshift, что и у потерь). */
+static uint32_t r2d__net_sim_rand(void)
+{
+    uint32_t x = g_net.sim_state ? g_net.sim_state : 1u;
+    x ^= x << 13; x ^= x >> 17; x ^= x << 5;
+    g_net.sim_state = x;
+    return x;
+}
+
+int r2d_net_tick(void)
+{
+    if (!g_net.initialized || g_net.delayed_count <= 0) return 0;
+    const uint64_t now = SDL_GetTicks();
+    int sent = 0;
+    for (int i = 0; i < g_net.delayed_count; ) {
+        if (g_net.delayed[i].due_ms > now) { ++i; continue; }
+        // Созрел: отправляем по-настоящему (потери уже решены при постановке).
+        const char *to = g_net.delayed[i].to[0] ? g_net.delayed[i].to : NULL;
+        r2d__net_send_now(to, g_net.delayed[i].to_port,
+                          g_net.delayed[i].data, g_net.delayed[i].size);
+        free(g_net.delayed[i].data);
+        g_net.delayed[i] = g_net.delayed[g_net.delayed_count - 1];
+        g_net.delayed_count--;
+        sent++;
+    }
+    return sent;
+}
+
+// РЕАЛЬНАЯ отправка: без симуляции. Потери и задержка решаются в r2d_net_send.
+static bool r2d__net_send_now(const char *to, int to_port, const void *data, int size)
 {
     if (!g_net.initialized || !g_net.sock || !data || size <= 0) return false;
     if (size > R2D_NET_MAX_PACKET) {
         r2d__net_error("пакет слишком велик: %d байт", size);
         return false;
     }
-    if (r2d__net_drop()) { g_net.packets_sent++; g_net.bytes_sent += (uint64_t)size; return true; }
 
     if (g_net.mode == 2) {
         // Клиент шлёт хосту. Адрес уже разрешён при подключении: звать
@@ -290,9 +339,58 @@ bool r2d_net_send(const char *to, int to_port, const void *data, int size)
     return any;
 }
 
+bool r2d_net_send(const char *to, int to_port, const void *data, int size)
+{
+    if (!g_net.initialized || !g_net.sock || !data || size <= 0) return false;
+    if (size > R2D_NET_MAX_PACKET) {
+        r2d__net_error("пакет слишком велик: %d байт", size);
+        return false;
+    }
+
+    // Потери: пакет считается отправленным, но не уходит. Так игру не отличить
+    // от честной отправки — это и нужно от симуляции.
+    if (r2d__net_drop()) {
+        g_net.packets_sent++;
+        g_net.bytes_sent += (uint64_t)size;
+        return true;
+    }
+
+    // Задержка: кладём в очередь, реально уйдёт из r2d_net_tick. Спать в кадре
+    // нельзя, поэтому задержка — это именно отложенная отправка.
+    if (g_net.sim_delay > 0 || g_net.sim_jitter > 0) {
+        if (g_net.delayed_count >= R2D_NET_DELAY_MAX) {
+            static bool logged = false;
+            if (!logged) {
+                logged = true;
+                R2D_WARN("сеть: очередь отложенных пакетов переполнена (%d) — "
+                         "задержка слишком велика для этого темпа",
+                         R2D_NET_DELAY_MAX);
+            }
+            return false;
+        }
+        uint8_t *copy = (uint8_t *)malloc((size_t)size);
+        if (!copy) return false;
+        SDL_memcpy(copy, data, (size_t)size);
+        const int slot = g_net.delayed_count++;
+        g_net.delayed[slot].size = size;
+        g_net.delayed[slot].data = copy;
+        g_net.delayed[slot].to_port = to_port;
+        SDL_snprintf(g_net.delayed[slot].to, sizeof g_net.delayed[slot].to, "%s",
+                     to ? to : "");
+        int wait_ms = g_net.sim_delay;
+        if (g_net.sim_jitter > 0) wait_ms += (int)(r2d__net_sim_rand() % (uint32_t)g_net.sim_jitter);
+        g_net.delayed[slot].due_ms = SDL_GetTicks() + (uint64_t)wait_ms;
+        return true;
+    }
+
+    return r2d__net_send_now(to, to_port, data, size);
+}
+
 int r2d_net_poll(R2DNetPacket *out, int max)
 {
     if (!g_net.initialized || !g_net.sock || !out || max <= 0) return 0;
+    // Созревшие отложенные отправки уходят здесь: poll зовётся раз в кадр.
+    r2d_net_tick();
     int count = 0;
     while (count < max) {
         NET_Datagram *dgram = NULL;

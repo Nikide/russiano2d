@@ -35,9 +35,12 @@ uint64_t r2d_net_bytes_sent(void) { return 0; }
 uint64_t r2d_net_bytes_received(void) { return 0; }
 uint64_t r2d_net_packets_sent(void) { return 0; }
 uint64_t r2d_net_packets_received(void) { return 0; }
-void r2d_net_simulate(int loss_percent, int delay_ms, int seed)
+void r2d_net_simulate(int loss_percent, int delay_ms, int seed, int jitter_ms)
 {
     R2D_UNUSED(loss_percent); R2D_UNUSED(delay_ms); R2D_UNUSED(seed);
+    R2D_UNUSED(jitter_ms);
 }
+int r2d_net_tick(void) { return 0; }
+int r2d_net_delayed_count(void) { return 0; }
 
 #endif // !R2D_ENABLE_NET

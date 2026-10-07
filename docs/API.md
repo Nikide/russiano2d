@@ -744,6 +744,23 @@ engine.submitTriangles(tri, v);   // → число принятых верши�
 * Смешивать с `drawSprite`/`drawRect`/`submitSprites` можно свободно: всё
   попадает в общий кадр отрисовки.
 
+### `engine.netSimulate(loss, delay?, seed?, jitter?)` / `engine.netDelayed()`
+
+Симуляция плохой сети для тестов. `loss` — процент потерь `0..100`,
+`delay` — задержка в мс, `seed` — сид (воспроизводимость), `jitter` — добавка
+к задержке `[0, jitter)` мс.
+
+**Задержка — очередь отложенных отправок, не сон**: пакет кладётся с временем
+«когда отправить» и уходит из `engine.netPoll()`, когда время придёт. Спать в
+кадре нельзя. Очередь на 64 пакета; при переполнении — предупреждение в журнал.
+
+`engine.netDelayed()` — сколько пакетов ждёт задержки (видно, что она работает).
+Потери применяются при постановке, поэтому потерянный пакет очередь не занимает.
+
+В высокоуровневом API — `$.net.simulate({loss, delay, jitter, seed})`,
+`$.net.simulation()`, `$.net.delayed()`, `$.net.simulateOff()`
+(см. [highlevel/net.md](highlevel/net.md) §8).
+
 ### `engine.contactBetween(a, b)` / `engine.touching(a, b)` / `engine.contactsOf(id, cap?)`
 
 Импульс и точки контакта **прямо сейчас**. События `engine.contacts()` говорят,

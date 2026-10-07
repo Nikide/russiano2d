@@ -1492,15 +1492,25 @@ static JSValue r2d__js_net_poll(JSContext *ctx, JSValueConst this_val, int argc,
     return out;
 }
 
-// engine.netSimulate(lossPercent, delayMs?, seed?) — воспроизводимые потери.
+// engine.netSimulate(lossPercent, delayMs?, seed?, jitterMs?) — воспроизводимая
+// сеть: потери, задержка и разброс. Задержка делается ОЧЕРЕДЬЮ отложенных
+// отправок (см. net.c), а не сном: спать в кадре нельзя.
 static JSValue r2d__js_net_simulate(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
     const int loss = r2d__arg_int(ctx, argc, argv, 0, 0);
     const int delay = r2d__arg_int(ctx, argc, argv, 1, 0);
     const int seed = r2d__arg_int(ctx, argc, argv, 2, 1);
-    r2d_net_simulate(loss, delay, seed);
+    const int jitter = r2d__arg_int(ctx, argc, argv, 3, 0);
+    r2d_net_simulate(loss, delay, seed, jitter);
     return JS_UNDEFINED;
+}
+
+// engine.netDelayed() → сколько пакетов ждёт своей задержки.
+static JSValue r2d__js_net_delayed(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    return JS_NewInt32(ctx, r2d_net_delayed_count());
 }
 
 // engine.setDepth(bool) → bool — тест глубины (z-буфер).
@@ -3896,7 +3906,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "netStatus", r2d__js_net_status, 0);
     r2d__set_fn(ctx, engine, "netSend", r2d__js_net_send, 3);
     r2d__set_fn(ctx, engine, "netPoll", r2d__js_net_poll, 0);
-    r2d__set_fn(ctx, engine, "netSimulate", r2d__js_net_simulate, 3);
+    r2d__set_fn(ctx, engine, "netSimulate", r2d__js_net_simulate, 4);
+    r2d__set_fn(ctx, engine, "netDelayed", r2d__js_net_delayed, 0);
     r2d__set_fn(ctx, engine, "spriteFilter", r2d__js_get_sprite_filter, 0);
     r2d__set_fn(ctx, engine, "limits", r2d__js_limits, 0);
     r2d__set_fn(ctx, engine, "setBodyEnabled", r2d__js_set_body_enabled, 2);
