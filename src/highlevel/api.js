@@ -978,6 +978,20 @@ function installNodeMethods($) {
         });
     });
 
+    /**
+     * CCD: `$('#bullet').bullet(true)`. Быстрое тело проверяется непрерывно —
+     * без этого пуля за подшаг проходит десятки пикселей и проскакивает тонкие
+     * стены (дефект §1.3). Box2D просит тратить bullets экономно.
+     */
+    def('bullet', function (on) {
+        this.eachNode((_, el) => {
+            const node = el;
+            node.bullet_on = on === undefined ? true : on !== false;
+            if (node.body >= 0) engineOf().setBullet(node.body, node.bullet_on);
+        });
+        return this;   // цепочка: $('...').bullet(true).velocity(…)
+    });
+
     def('gravity', function (on) {
         return this.eachNode((_, el) => {
             const node = el;

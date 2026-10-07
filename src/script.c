@@ -777,6 +777,8 @@ static JSValue r2d__js_create_body(JSContext *ctx, JSValueConst this_val, int ar
     d.friction = (float)r2d__obj_num(ctx, opts, "friction", 0.3);
     d.restitution = (float)r2d__obj_num(ctx, opts, "restitution", 0.0);
     d.fixed_rotation = r2d__obj_bool(ctx, opts, "fixedRotation", false);
+    // CCD: быстрое тело проверяется непрерывно (пули не проскакивают стены).
+    d.bullet = r2d__obj_bool(ctx, opts, "bullet", false);
     d.radius = (float)r2d__obj_num(ctx, opts, "radius", 0);
     d.poly_radius = (float)r2d__obj_num(ctx, opts, "polyRadius", 0);
     d.one_way = r2d__obj_bool(ctx, opts, "oneWay", false);
@@ -1479,6 +1481,28 @@ static JSValue r2d__js_is_awake(JSContext *ctx, JSValueConst this_val, int argc,
     R2DScript *s = r2d__script_of(ctx);
     if (!s || !s->physics) return JS_NewBool(ctx, false);
     return JS_NewBool(ctx, r2d_physics_is_awake(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+// engine.setBullet(id, on) / engine.isBullet(id) — CCD для тела.
+//
+// Быстрое тело (пуля) проверяется непрерывно: за шаг 1/60 при 1200 px/с оно
+// проходит около 20 px и без CCD проскакивает тонкие стены и врагов.
+static JSValue r2d__js_set_bullet(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_UNDEFINED;
+    const bool on = r2d__arg_bool(ctx, argc, argv, 1, true);
+    r2d_physics_set_bullet(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1), on);
+    return JS_UNDEFINED;
+}
+
+static JSValue r2d__js_is_bullet(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_physics_is_bullet(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1)));
 }
 
 // engine.setGravityScale(id, scale) — множитель гравитации для тела.
@@ -3504,6 +3528,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "setBodyFilter", r2d__js_set_body_filter, 4);
     r2d__set_fn(ctx, engine, "getBodyFilter", r2d__js_get_body_filter, 1);
     r2d__set_fn(ctx, engine, "setGravityScale", r2d__js_set_gravity_scale, 2);
+    r2d__set_fn(ctx, engine, "setBullet", r2d__js_set_bullet, 2);
+    r2d__set_fn(ctx, engine, "isBullet", r2d__js_is_bullet, 1);
     r2d__set_fn(ctx, engine, "bodyMass", r2d__js_body_mass, 1);
     r2d__set_fn(ctx, engine, "bodyCount", r2d__js_body_count, 0);
     r2d__set_fn(ctx, engine, "contacts", r2d__js_contacts, 0);

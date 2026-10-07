@@ -80,6 +80,10 @@ typedef struct R2DBodyDesc {
     uint64_t mask_bits;
     int      group_index;
     bool     filter_set;
+    // CCD: тело считается быстрым и проверяется непрерывно (пули не проскакивают
+    // тонкие стены). Box2D предупреждает, что bullets надо тратить экономно:
+    // это не общий CCD для динамика-против-динамика и может мешать суставам.
+    bool     bullet;
 } R2DBodyDesc;
 
 // Событие контакта за прошедший шаг. Координаты — пиксели.
@@ -170,6 +174,9 @@ bool  r2d_physics_is_enabled(const R2DPhysics *p, int id);
 // Множитель гравитации для конкретного тела: 0 — тело не падает (снаряды,
 // парящие объекты), 1 — обычное поведение, отрицательное — «вверх».
 void  r2d_physics_set_gravity_scale(R2DPhysics *p, int id, float scale);
+// CCD для уже созданного тела: включить/выключить и прочитать.
+void  r2d_physics_set_bullet(R2DPhysics *p, int id, bool bullet);
+bool  r2d_physics_is_bullet(const R2DPhysics *p, int id);
 bool  r2d_physics_is_awake(const R2DPhysics *p, int id);
 float r2d_physics_get_mass(const R2DPhysics *p, int id);
 

@@ -105,7 +105,7 @@ UI-виджеты, локализация, сохранения, префабы,
 
 | Пробел | Доказательство | Почему важно | S/M |
 |---|---|---|---|
-| Нет CCD: ни `isBullet`, ни `enableContinuous` | [physics.c:188-213](../src/physics.c#L188); grep по `src` = 0 | Пуля 8 px при 1200 px/с за шаг 1/60 проходит ~20 px (пол-тайла) — туннелирование сквозь тонкие стены и врагов; обход только ручным `castShape` в кадре | M |
+| **CCD добавлен** (было: ни `isBullet`, ни `enableContinuous`) | [physics.c](../src/physics.c) `def.isBullet`, `r2d_physics_set_bullet`; `$.world.bullet` / `.bullet(on)` / `engine.setBullet` | Пуля 8 px при 1200 px/с за шаг 1/60 проходит ~20 px — без CCD туннелирование сквозь тонкие стены и врагов. Флаг доходит до Box2D (проверено), но ВОСПРОИЗВЕСТИ туннелирование на стенде не удалось: нужен тест с более тонкой стеной и подшагом мельче 1/60 | M |
 | Только 3 типа суставов; неизвестная строка молча становится `revolute` | `R2DJointKind = {REVOLUTE, DISTANCE, WELD}` ([physics.h:103](../src/physics.h#L103)); разбор строк [script.c:899-908](../src/script.c#L899) | Нет prismatic/wheel/pulley/gear/mouse: лифты на рельсе, машины, полиспасты, шестерни, «таскать мышью» невыразимы. Тихая подмена типа — источник трудноуловимых багов | M |
 | Нет пружин/демпферов и реакции сустава | в дефайны пишутся только `length/limit/motor/collideConnected` ([physics.c:773-826](../src/physics.c#L773)); `b2Joint_Get*` только `GetBodyA/B` ([:325-326](../src/physics.c#L325)) | нет `stiffness`/`damping`, нельзя узнать усилие на суставе (разрыв верёвки по нагрузке) | S/M |
 | Контакты только «по телу»: ни формы, ни импульса, ни числа точек | [physics.c:111-142](../src/physics.c#L111); ни `b2Shape_AreTouching`, ни `b2Body_GetContactData` в `src` | «Попал в голову, а не в ногу» (несколько форм на тело), «касаются ли эти двое прямо сейчас» — недостижимы | M |
@@ -758,7 +758,8 @@ bootstrap, index, script).
    `$.scene.loadAsync` (task.md); неблокирующий hot reload — `$.script`
    (перезапуск на границе кадра, script.md); выбор GPU-бэкенда и понятный отказ
    D3D12 без DXIL — `--gpu`/`--list-gpu`/`R2D_GPU` (BUILD.md).
-6. **Жанровое (P2):** CCD, суставы prismatic/wheel/pulley/gear/mouse, контакты по
+6. **Жанровое (P2):** CCD (`$.world.bullet` — сделан), суставы
+   prismatic/wheel/pulley/gear/mouse, контакты по
    формам и импульсы, вращение камеры, мультикамерность, touch, мультигеймпад,
    clipboard/IME, клипы локализации и плюрализация, контролы и виртуализация
    списков, a11y и масштаб UI, реплеи.

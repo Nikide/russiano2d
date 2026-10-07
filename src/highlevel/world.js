@@ -6,7 +6,7 @@
 // ===========================================================================
 
 import { ctx, Node, Wrapper, wrap, wrapOne, query, TAGS, packColor, resolveSprite, nodeBounds,
-         nodesWithFacet } from './core.js';
+         nodesWithFacet, engineOf } from './core.js';
 
 const state = {
     gravity: { x: 0, y: 2000 },
@@ -344,6 +344,27 @@ export function installWorld($) {
 
         // --- Порядок отрисовки ---------------------------------------------
         /** 'layer' (по умолчанию), 'z' (по depth), 'y' (как в 2.5D). */
+        /**
+         * CCD для узла: `$.world.bullet('#bullet', true)`. Быстрое тело
+         * проверяется непрерывно, поэтому не проскакивает тонкие стены между
+         * подшагами. Box2D просит тратить это экономно: только пули и снаряды.
+         */
+        bullet(what, on) {
+            const node = nodeOf(what);
+            if (!node) { ctx.log('$.world.bullet: узел не найден'); return false; }
+            node.bullet_on = on === undefined ? true : on !== false;
+            if (node.body >= 0) engineOf().setBullet(node.body, node.bullet_on);
+            return node.bullet_on;
+        },
+
+        /** Включён ли CCD у узла. */
+        isBullet(what) {
+            const node = nodeOf(what);
+            if (!node) return false;
+            if (node.body >= 0) return !!engineOf().isBullet(node.body);
+            return !!node.bullet_on;
+        },
+
         sort(mode) { state.sort_mode = mode; return world; },
         sortWith(fn) { state.sort_fn = fn; return world; },
 
@@ -547,4 +568,15 @@ function worldEvents(dt) {
         }
         node._hp_seen = now_hp;
     }
+}
+
+/** Узел по обёртке, узлу или селектору (для своих методов мира). */
+function nodeOf(what) {
+    if (!what) return null;
+    if (typeof what === 'string') {
+        const found = query(what);
+        return found && found.length ? found[0] : null;
+    }
+    if (what.nodes) return what.nodes[0] || null;
+    return what.tag ? what : null;
 }

@@ -207,6 +207,9 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
     def.position      = (b2Vec2){ R2D_TO_M(d->x), R2D_TO_M(d->y) };
     def.rotation      = b2MakeRot(d->angle);
     def.fixedRotation = d->fixed_rotation;
+    // CCD: Box2D проверяет такое тело непрерывно, поэтому быстрая пуля не
+    // проскакивает тонкую стену между подшагами.
+    def.isBullet = d->bullet;
 
     b2BodyId body = b2CreateBody(p->world, &def);
     if (!b2Body_IsValid(body)) {
@@ -444,6 +447,18 @@ void r2d_physics_set_gravity_scale(R2DPhysics *p, int id, float scale)
 {
     if (!r2d_physics_is_alive(p, id)) return;
     b2Body_SetGravityScale(p->bodies[id], scale);
+}
+
+void r2d_physics_set_bullet(R2DPhysics *p, int id, bool bullet)
+{
+    if (!r2d_physics_is_alive(p, id)) return;
+    b2Body_SetBullet(p->bodies[id], bullet);
+}
+
+bool r2d_physics_is_bullet(const R2DPhysics *p, int id)
+{
+    if (!r2d_physics_is_alive(p, id)) return false;
+    return b2Body_IsBullet(p->bodies[id]);
 }
 
 bool r2d_physics_is_awake(const R2DPhysics *p, int id)

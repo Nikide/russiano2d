@@ -456,7 +456,8 @@ export const TAGS = {
     enemy:    { body: 'dynamic', w: 28, h: 40, hp: 30, speed: 90, team: 2, sprite: null },
     npc:      { body: 'dynamic', w: 28, h: 40, hp: 40, speed: 70, team: 3, sprite: null },
     pickup:   { body: null, w: 20, h: 20, hp: 1, sprite: null },
-    bullet:   { body: 'dynamic', w: 6, h: 6, hp: 1, gravity: false, sprite: null },
+    // <bullet> — снаряд: CCD включён по умолчанию, гравитация не тянет.
+    bullet:   { body: 'dynamic', w: 6, h: 6, hp: 1, gravity: false, bullet: true, sprite: null },
 
     // Геометрия и картинки
     sprite:   { body: null, w: 32, h: 32, sprite: null },
@@ -559,6 +560,9 @@ export class Node {
         this.body_kind = defaults.body || null;   // 'static' | 'dynamic' | 'kinematic'
         this.body = -1;
         this.gravity_on = defaults.gravity !== false;
+        // CCD: быстрое тело (пуля) проверяется непрерывно — иначе за шаг оно
+        // проходит десятки пикселей и проскакивает тонкие стены.
+        this.bullet_on = defaults.bullet === true;
         this.hitbox = null;               // {w, h} — если задан явно
         this.circle_hitbox = 0;
         // Форма тела: 'box' (по умолчанию) | 'circle' | 'capsule' | 'polygon'.
@@ -697,6 +701,9 @@ export class Node {
         case 'radius':  this.radius = Number(value); return this;
         case 'intensity': this.intensity = Number(value); return this;
         case 'align':   this.attrs.align = String(value); return this;
+        case 'bullet': this.bullet_on = value !== false;
+                       if (this.body >= 0) engine.setBullet(this.body, this.bullet_on);
+                       return this;
         case 'gravity': this.gravity_on = value !== false;
                         this.no_gravity = !this.gravity_on && this.body >= 0; return this;
         case 'controls':
@@ -870,6 +877,7 @@ export class Node {
             opts.oneWayAngle = this.one_way_angle;
         }
         if (this.sensor) opts.sensor = true;
+        if (this.bullet_on) opts.bullet = true;
         // Контакты: явный режим важнее автоматики, автоматика — «динамическим
         // телам по умолчанию». Иначе тело, созданное позже через .body(),
         // молча не присылало бы collide.
