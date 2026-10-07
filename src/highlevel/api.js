@@ -12,7 +12,7 @@
 import {
     ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
     packColor, withAlpha, registerSelector, nodeBounds, boundsOverlap,
-    makeRandom, dotSprite, resolveSprite, sheetFrames,
+    makeRandom, dotSprite, resolveSprite, sheetFrames, regionSprite,
     nodesWithFacet, touchRegistry, beginBatch, endBatch,
 } from './core.js';
 import { installWorld } from './world.js';
@@ -640,7 +640,7 @@ function installNodeMethods($) {
     def('region', function (x, y, w, h) {
         return this.eachNode((_, el) => {
             const node = el;
-            if (node.attrs.src) node.sprite = engine.createSprite(engine.loadTexture(node.attrs.src), x, y, w, h);
+            if (node.attrs.src) node.sprite = regionSprite(node.attrs.src, x, y, w, h);
         });
     });
     def('frame', function (index) {

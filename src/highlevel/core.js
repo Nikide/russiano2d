@@ -1535,6 +1535,29 @@ export function textureSizeOf(path) {
     return engine.textureSize(tex);
 }
 
+/**
+ * Спрайт области текстуры с кэшем: `regionSprite('sheet.png', 16, 0, 16, 16)`.
+ *
+ * Нужен `.region()`: раньше он звал `engine.createSprite` на каждый вызов, а
+ * таблица спрайтов в C не чистится — вызов в кадре (анимация, скролл) рос бы
+ * без предела. Ключ включает путь и прямоугольник, поэтому повторные вызовы с
+ * теми же аргументами возвращают тот же спрайт.
+ */
+export function regionSprite(path, x, y, w, h) {
+    const key = `region:${path}|${x},${y},${w},${h}`;
+    const cached = sprite_cache.get(key);
+    if (cached !== undefined) return cached;
+
+    const tex = engine.loadTexture(path);
+    if (tex < 0) {
+        sprite_cache.set(key, -1);
+        return -1;
+    }
+    const id = rememberSprite(engine.createSprite(tex, x, y, w, h), w, h);
+    sprite_cache.set(key, id);
+    return id;
+}
+
 // Отдельный генератор для визуальных эффектов (тряска кадра, узлов, тайлов).
 // Он не трогает игровой поток $.random, но делает картинку воспроизводимой:
 // при --seed и --fixed-dt прогон даёт одинаковые кадры, а Math.random() этого
