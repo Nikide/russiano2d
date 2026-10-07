@@ -75,6 +75,7 @@ import { installRaid } from './raid.js';
 import { installCels } from './cels.js';
 import { installProc } from './proc.js';
 import { installAlive } from './alive.js';
+import { installNet } from './net.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
 import { installI18n, tickI18n } from './i18n.js';
@@ -398,6 +399,7 @@ export function createApi() {
     installCels($);              // граф кадров (псевдо-3D): $.cels
     installProc($);              // процедурный пиксель-арт: $.proc
     installAlive($);             // психика NPC и режиссёр рейда: $.alive
+    installNet($);               // сеть, только авторитарная: $.net
     installWidgets($);
     installTriggers($);
     installI18n($);
