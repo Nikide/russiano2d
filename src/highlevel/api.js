@@ -65,6 +65,7 @@ import { installCurve } from './curve.js';
 import { installTask } from './task.js';
 import { installScript } from './script.js';
 import { installStory } from './story.js';
+import { installQuest } from './quest.js';
 import { installWidgets, tickWidgets } from './widgets.js';
 import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
 import { installI18n, tickI18n } from './i18n.js';
@@ -374,6 +375,7 @@ export function createApi() {
     installTask($);              // работа кусками по кадрам: $.task
     installScript($);            // перезапуск скриптов: $.script
     installStory($);             // сценки: $.story (DSL)
+    installQuest($);             // задания: $.quest
     installWidgets($);
     installTriggers($);
     installI18n($);
