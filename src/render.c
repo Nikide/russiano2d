@@ -276,12 +276,28 @@ static bool r2d__upload_pixels(R2DRenderer *r, SDL_GPUTexture *tex,
     return true;
 }
 
+// Занять слот в таблице текстур: сначала свободный из уже отжитых, потом новый.
+//
+// Раньше все вызывающие делали `texture_count++` напрямую, и таблица росла
+// только вверх: выгруженная текстура навсегда съедала слот, а viewport.create
+// вообще писал за границу массива (256 слотов) и портил поля рендерера.
+// Возвращает -1, только если свободных слотов нет вовсе.
+static int r2d__texture_slot_alloc(R2DRenderer *r)
+{
+    for (int i = 0; i < r->texture_count; ++i) {
+        if (!r->textures[i].alive) return i;
+    }
+    if (r->texture_count < R2D_MAX_TEXTURES) return r->texture_count++;
+    return -1;
+}
+
 int r2d_texture_load(R2DRenderer *r, const char *path)
 {
     const int existing = r2d_texture_find(r, path);
     if (existing >= 0) return existing;
 
-    if (r->texture_count >= R2D_MAX_TEXTURES) {
+    const int slot = r2d__texture_slot_alloc(r);
+    if (slot < 0) {
         R2D_ERROR("достигнут лимит текстур (%d)", R2D_MAX_TEXTURES);
         return -1;
     }
@@ -328,7 +344,7 @@ int r2d_texture_load(R2DRenderer *r, const char *path)
     if (rgba != loaded) SDL_DestroySurface(rgba);
     SDL_DestroySurface(loaded);
 
-    const int id = r->texture_count++;
+    const int id = slot;
     R2DTexture *t = &r->textures[id];
     t->handle = tex;
     t->width  = w;
@@ -1458,6 +1474,17 @@ int r2d_render_viewport_create(R2DRenderer *r, int w, int h)
         return -1;
     }
 
+    // Слот в таблице текстур занимаем ДО создания GPU-текстур: иначе при
+    // переполнении таблицы пришлось бы освобождать уже созданное. Раньше здесь
+    // стоял безусловный `texture_count++` — на 256-м вьюпорте он писал за
+    // границу массива R2DTexture и затирал поля рендерера.
+    const int tex_id = r2d__texture_slot_alloc(r);
+    if (tex_id < 0) {
+        R2D_ERROR("viewport.create: нет свободного слота текстуры (лимит %d)",
+                  R2D_MAX_TEXTURES);
+        return -1;
+    }
+
     SDL_GPUTexture *target = r2d__create_bloom_texture(r, w, h);
     SDL_GPUTexture *history = r2d__create_bloom_texture(r, w, h);
     if (!target || !history) {
@@ -1468,7 +1495,6 @@ int r2d_render_viewport_create(R2DRenderer *r, int w, int h)
     }
 
     // История должна быть спрайтом: игра рисует её как обычную картинку.
-    const int tex_id = r->texture_count++;
     r->textures[tex_id].handle = history;
     r->textures[tex_id].width  = w;
     r->textures[tex_id].height = h;
@@ -1496,16 +1522,25 @@ bool r2d_render_viewport_destroy(R2DRenderer *r, int id)
     if (vp->target) SDL_ReleaseGPUTexture(r->device, vp->target);
     if (vp->history) {
         // Текстура зарегистрирована в таблице — освобождаем её один раз.
+        // Слот помечается мёртвым и переиспользуется следующим
+        // loadTexture/viewport.create: иначе цикл create/destroy копил бы слоты
+        // до переполнения таблицы.
         for (int i = 0; i < r->texture_count; ++i) {
             if (r->textures[i].alive && r->textures[i].handle == vp->history) {
                 r->textures[i].alive = false;
                 r->textures[i].handle = NULL;
+                r->textures[i].name[0] = '\0';
                 break;
             }
         }
         SDL_ReleaseGPUTexture(r->device, vp->history);
     }
+    if (vp->sprite >= 0 && vp->sprite < r->sprite_count) {
+        r->sprites[vp->sprite].alive = false;
+    }
     SDL_zero(*vp);
+    vp->sprite = -1;
+    vp->used = false;
     return true;
 }
 
