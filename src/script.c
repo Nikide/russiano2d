@@ -1179,12 +1179,29 @@ static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, J
     JS_SetPropertyStr(ctx, o, "user_shaders", JS_NewInt32(ctx, shaders));
     JS_SetPropertyStr(ctx, o, "user_shaders_max", JS_NewInt32(ctx, R2D_MAX_USER_SHADERS));
     JS_SetPropertyStr(ctx, o, "node_fx_max", JS_NewInt32(ctx, R2D_MAX_NODE_FX));
+    // Занятость, а не только потолки: игра должна видеть, БЛИЗКО ли она к
+    // пределу. Раньше вьюпорты, обработчики UI, документы и контакты отдавали
+    // только максимум — то есть «где-то есть лимит», но не «сколько осталось».
+    const int viewports = (s && s->renderer) ? r2d_render_viewport_live_count(s->renderer) : 0;
+    const int contacts = (s && s->physics) ? s->physics->contact_count : 0;
+    const int callbacks = s ? r2d_script_callback_count(s) : 0;
+
+    JS_SetPropertyStr(ctx, o, "viewports", JS_NewInt32(ctx, viewports));
     JS_SetPropertyStr(ctx, o, "viewports_max", JS_NewInt32(ctx, R2D_MAX_VIEWPORTS));
     JS_SetPropertyStr(ctx, o, "query_max", JS_NewInt32(ctx, R2D_MAX_QUERY));
+    JS_SetPropertyStr(ctx, o, "contact_events", JS_NewInt32(ctx, contacts));
     JS_SetPropertyStr(ctx, o, "contact_events_max", JS_NewInt32(ctx, R2D_MAX_CONTACT_EVENTS));
     JS_SetPropertyStr(ctx, o, "text_queue_max", JS_NewInt32(ctx, 2048));
+    JS_SetPropertyStr(ctx, o, "ui_callbacks", JS_NewInt32(ctx, callbacks));
     JS_SetPropertyStr(ctx, o, "ui_callbacks_max", JS_NewInt32(ctx, 256));
     JS_SetPropertyStr(ctx, o, "documents_max", JS_NewInt32(ctx, 64));
+    // Слои: сколько эффектов узлов занято из бюджета C (R2D_MAX_NODE_FX).
+    JS_SetPropertyStr(ctx, o, "node_fx", JS_NewInt32(ctx,
+        (s && s->renderer) ? s->renderer->fx_count : 0));
+    // Геймпады: подключено и сколько слотов вообще.
+    JS_SetPropertyStr(ctx, o, "gamepads", JS_NewInt32(ctx, s ? r2d_app_pad_count(s->app) : 0));
+    JS_SetPropertyStr(ctx, o, "gamepads_max", JS_NewInt32(ctx, r2d_pad_slot_count()));
+    JS_SetPropertyStr(ctx, o, "touches_max", JS_NewInt32(ctx, R2D_MAX_TOUCHES));
     return o;
 }
 

@@ -355,6 +355,9 @@ bool r2d_texture_free(R2DRenderer *r, int id);
 void r2d_render_set_filter(R2DRenderer *r, bool linear);
 bool r2d_render_filter(const R2DRenderer *r);
 // Сколько живых текстур — для отчёта о лимитах.
+// Занято ли слотов вьюпорта: нужно $.debug.limits(), иначе игра видит
+// только потолок и не знает, близко ли к нему.
+int  r2d_render_viewport_live_count(const R2DRenderer *r);
 int  r2d_texture_live_count(const R2DRenderer *r);
 bool r2d_texture_upload_region(R2DRenderer *r, int id, int x, int y, int w, int h,
                                const void *pixels, int pitch);

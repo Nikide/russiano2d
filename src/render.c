@@ -3093,6 +3093,18 @@ static JSValue r2d__js_viewport_bound(JSContext *ctx, JSValueConst this_val,
     return JS_NewInt32(ctx, r ? r->bound_viewport : -1);
 }
 
+// Занято ли слотов вьюпорта (для $.debug.limits: игра должна видеть, близко ли
+// к потолку, а не только сам потолок).
+int r2d_render_viewport_live_count(const R2DRenderer *r)
+{
+    if (!r) return 0;
+    int n = 0;
+    for (int i = 0; i < R2D_MAX_VIEWPORTS; ++i) {
+        if (r->viewports[i].used) n++;
+    }
+    return n;
+}
+
 static JSValue r2d__js_viewport_count(JSContext *ctx, JSValueConst this_val,
                                       int argc, JSValueConst *argv)
 {
