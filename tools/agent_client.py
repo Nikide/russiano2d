@@ -241,7 +241,15 @@ class Agent:
 
     def _start(self, env: Optional[Dict[str, str]]) -> None:
         """Запустить процесс и дождаться стартового события ``ready``."""
+
         proc_env = dict(os.environ)
+        # Тесты не должны шуметь: подставляем беззвучный драйвер SDL, если
+        # драйвер не задан явно. Микшер при этом работает по-настоящему —
+        # проверки звука (каналы, громкость, воспроизведение) не ломаются,
+        # просто звук не идёт в колонки. Чтобы прогнать тест СО звуком:
+        #   R2D_TEST_AUDIO=real python3 tests/agent/<тест>.py
+        if proc_env.get("R2D_TEST_AUDIO") != "real" and not proc_env.get("SDL_AUDIODRIVER"):
+            proc_env["SDL_AUDIODRIVER"] = "dummy"
         if env:
             proc_env.update({str(k): str(v) for k, v in env.items()})
 
