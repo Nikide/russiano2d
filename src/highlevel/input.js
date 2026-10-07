@@ -462,10 +462,21 @@ function emit(name, payload) {
 
 function listeners_of(name) { return listeners.get(name) || []; }
 
+// Имена клавиш. Движок умеет их отдавать (engine.keyName), но раньше таблица
+// никем не заполнялась, и $.input.on('key') получал ЧИСЛО вместо «Space» —
+// значит, нельзя было показать «нажмите Пробел» и тяжело было делать ребинд.
 const KEY_NAMES = new Map();
 function keyName(code) {
-    if (KEY_NAMES.has(code)) return KEY_NAMES.get(code);
-    return String(code);
+    const key = Math.floor(Number(code) || 0);
+    if (KEY_NAMES.has(key)) return KEY_NAMES.get(key);
+    let name = '';
+    if (typeof engine !== 'undefined' && engine && typeof engine.keyName === 'function') {
+        try { name = String(engine.keyName(key) || ''); } catch (e) { name = ''; }
+    }
+    // Без движка (юнит-тесты) остаётся номер: лучше число, чем пустая строка.
+    if (!name || name === String(key)) name = String(key);
+    KEY_NAMES.set(key, name);
+    return name;
 }
 
 /** Вызывается из $.time каждый кадр: рассылает $.input.on('key'/'mouse'/'wheel'). */
@@ -511,7 +522,11 @@ function alt() { return altDown(); }
 export { scancodeOf };
 
 // Имена для сообщений: код → имя клавиши (для отладочного вывода).
-export function keyNameOf(name) { return name; }
+/**
+ * Имя клавиши по коду: `keyNameOf(32) === 'Space'`. Без движка отдаёт номер,
+ * поэтому функцию можно звать и в юнит-тестах.
+ */
+export function keyNameOf(code) { return keyName(code); }
 
 /** Управление узлом с клавиатуры: $('#hero').controls('wasd'). */
 export function installControls(def, defGet) {

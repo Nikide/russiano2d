@@ -858,7 +858,7 @@ QuickJS — интерпретатор с mark-sweep GC; каждый мелки
 | `engine.http` → `$.http` | 6 | 5 | 1 |
 | `engine.light` → `$.gfx.light` | 2 | 1 | 1 |
 | `engine.bsp` | 7 | 0 | 7 |
-| `engine.viewport` (заглушка) | 8 | 0 | 8 |
+| `engine.viewport` | 8 | 8 | 0 |
 | плоские `engine.*` | 65 | 59 | 6 |
 | **Итого** | **168** | **138** | **30** |
 
@@ -866,10 +866,9 @@ QuickJS — интерпретатор с mark-sweep GC; каждый мелки
 
 **P1 — нужно обычной игре:**
 
-* `engine.keyName` (`script.c:2759`). Таблица `KEY_NAMES` (`input.js:390-395`)
-  **никем не заполняется**, `keyNameOf()` — заглушка-тождество (`input.js:439`),
-  поэтому `$.input.on('key')` отдаёт **код числом**. Без этого нельзя показать
-  «нажмите Пробел» и нельзя сделать ребинд. Это единственная реально болезненная
+* `engine.keyName` — **закрыто**: `input.js` зовёт биндинг движка и кеширует
+  имена, поэтому `$.input.on('key')` отдаёт `'Space'`, а не число
+  (проверка `tests/agent/highlevel_keyname_test.py`). Ниже — что осталось:
   дыра в покрытии.
 
 **P2 — полезно:**
@@ -888,10 +887,9 @@ QuickJS — интерпретатор с mark-sweep GC; каждый мелки
 
 **P3 — служебное:** `drawSprite`/`drawRect` (вытеснены `$.gfx.push`),
 `getGravity`, `http.active`, `light.maxPoints`, `ui.iconCode`,
-`audio.groupCount/groupEffect`, `engine.viewport.*` (честная заглушка — render
-target не поддержан by design; `$.viewport` только проверяет
-`engine.viewport.supported`, `viewport.js:84-95`, и дальше работает на своей
-JS-реализации).
+`audio.groupCount/groupEffect`. Render target **реализован**:
+`$.viewport` работает поверх `engine.viewport.*` (привязка текстуры на кадр,
+спрайт прошлого кадра, блит на экран — см. [render.md](highlevel/render.md) §3).
 
 ### 4.3. Дыры как игрового API (сверка с Godot 4.x, 2D)
 
@@ -903,16 +901,16 @@ parallax, UI-контролы (контейнеры, скролл, фокус, �
 
 **Осталось незакрытым:**
 
-* **пользовательские шейдеры** — `.shader()`/`.shaderParam()` заглушки
-  (`api.js:633-640`), конвейеры фиксированные;
+* **пользовательские шейдеры** — **закрыто**: `$.gfx.defineShader(name, { frag })`
+  компилирует фрагментный шейдер в рантайме, `.shader(name)`/`.shaderParam()`
+  работают (при `R2D_ENABLE_LIVE_SHADERS=ON`);
 * **слои коллизий** — `.mask()/.layerBits()/.collidesWith()` пустышки
   (`api.js:806-808`); в `GAP_ANALYSIS.md` §2 при этом написано «layerBits/mask
   есть у тел» — неверно;
 * **фигурный свип/CastShape** — в биндингах нет (есть только луч и точечный
   запрос);
 * **`Curve`/`Gradient` как ресурсы** — рампы зашиты внутри `particles.js:226-228`;
-* **сеть/мультиплеер**, **скелет/IK**, **render target** (заглушка,
-  `render.c:1438-1448`), **NinePatchRect и импорт атласа**,
+* **скелет/IK**, **NinePatchRect и импорт атласа**,
   `z_as_relative` и наследование `visible`/`modulate` родителем, приоритеты и
   stealing голосов, `seek` у звука.
 

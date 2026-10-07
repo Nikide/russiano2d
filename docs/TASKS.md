@@ -658,8 +658,20 @@ API (по числу упоминаний `Node`/`Resource`/`Vector2`/`signal`/`
 
 ## 11. Документация: что уже неверно
 
-Доки отстали системно: закрытые пункты всё ещё описаны как заглушки, а часть
-guide-примеров не работает. Ниже — точные места.
+**Состояние (исправлено в этом проходе).** Шесть системных враний закрыты, и
+на них теперь стоит страж `tests/doc_claims_test.py`: он читает КОД и падает,
+если в доке снова написано «этого нет» про то, что реализовано.
+
+| Что было неверно | Куда поправлено |
+|---|---|
+| «пользовательские шейдеры не поддержаны» | [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md), [HIGH_LEVEL_API_PERF.md](HIGH_LEVEL_API_PERF.md), [GAP_ANALYSIS.md](GAP_ANALYSIS.md), [layers.md](highlevel/layers.md) |
+| «render target не поддержан осознанно» | [render.md](highlevel/render.md) (в т.ч. §3–4 и таблица), [PERF](HIGH_LEVEL_API_PERF.md), [GAP_ANALYSIS.md](GAP_ANALYSIS.md), [VFX_PLAN.md](VFX_PLAN.md) и комментарий в [render.c](../src/render.c) |
+| «треугольники без режима» | [render.md](highlevel/render.md) |
+| «KEY_NAMES никем не заполняется» | код [input.js](../src/highlevel/input.js) (зовёт `engine.keyName`), [PERF](HIGH_LEVEL_API_PERF.md), проверка [highlevel_keyname_test.py](../tests/agent/highlevel_keyname_test.py) |
+| «сетевая игра — не мультиплеер» | [GAP_ANALYSIS.md](GAP_ANALYSIS.md), [net.md](highlevel/net.md) |
+| «нет фигурного свипа» | [GAP_ANALYSIS.md](GAP_ANALYSIS.md) |
+
+Ниже — что ещё оставалось неверным на момент аудита (часть уже закрыта выше).
 
 ### 6.1. Описано как заглушка, а реализовано (v0.1.10–0.1.13)
 
