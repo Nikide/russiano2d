@@ -85,8 +85,13 @@ let pass_alpha = 1;
 function setView(cam) {
     view = cam
         ? { x: cam.x, y: cam.y, zoom: cam.zoom || 1,
-            cx: (cam.w !== undefined ? cam.w : engine.width) / 2,
-            cy: (cam.h !== undefined ? cam.h : engine.height) / 2,
+            // cx/cy — центр КАДРА, а не региона: региона камеры не знают, они
+            // получают уже готовые x/y/zoom (regionCamera). Раньше здесь
+            // подставлялся `cam.w`, которым regionCamera помечала РЕГИОН, и
+            // центр прохода уезжал на -регион/2: спрайт второй камеры попадал
+            // на (region.x - region.w/2, region.y - region.h/2).
+            cx: engine.width / 2,
+            cy: engine.height / 2,
             sx: cam.shake_x || 0, sy: cam.shake_y || 0,
             // Поворот кадра. Храним готовые cos/sin: их считают для каждой
             // вершины кадра, а не один раз.

@@ -18,7 +18,7 @@
 // поддерживается (см. docs/highlevel/camera.md §1.2).
 // ===========================================================================
 
-import { ctx, engineOf } from './core.js';
+import { ctx, engineOf, query } from './core.js';
 
 // Вторичные камеры: имя → состояние. Основная (одна) живёт в camera.js и
 // остаётся «главной» для $.camera: сплитскрин её не подменяет.
@@ -26,6 +26,11 @@ const extra = new Map();
 
 // Порядок отрисовки. Основная камера идёт в списке обычным именем.
 let order = [];
+
+// PIP («картинка в картинке»): камера ПОВЕРХ основного кадра в своём
+// прямоугольнике. Одна штука на игру — зеркало заднего вида, второй вид,
+// обзорная миникарта.
+let pip = null;
 
 
 
@@ -73,15 +78,19 @@ export function regionCamera(cam, r, width, height) {
     const W = Math.max(1, num(width, 1));
     const H = Math.max(1, num(height, 1));
     const zoom = W / Math.max(1, num(r.w, W));
-    const cx = r.x + r.w / 2;             // центр региона на экране
+    const cx = r.x + r.w / 2;             // куда регион должен попасть на экране
     const cy = r.y + r.h / 2;
-    // Центр камеры сдвигаем так, чтобы она смотрела в ту же точку мира, что и
-    // главная: главная ставит мир в центр ЭКРАНА, а нам нужен центр региона.
+    // Сдвиг считаем от центра КАДРА к центру РЕГИОНА и ВЫЧИТАЕМ его из позиции:
+    // камера ставит свою точку в центр кадра, значит, чтобы точка осталась
+    // на месте, саму камеру надо отодвинуть в противоположную сторону.
+    //
+    // Была ошибка знака: сдвиг прибавлялся, и спрайт уезжал на
+    // (region.x − region.w/2, region.y − region.h/2) — вчетверо мимо.
     const dx = (cx - W / 2) / zoom;
     const dy = (cy - H / 2) / zoom;
     return {
-        x: num(cam.x, 0) + dx,
-        y: num(cam.y, 0) + dy,
+        x: num(cam.x, 0) - dx,
+        y: num(cam.y, 0) - dy,
         zoom,
         rotation: num(cam.rotation, 0),
         shake_x: num(cam.shake_x, 0),
@@ -90,6 +99,9 @@ export function regionCamera(cam, r, width, height) {
         // кадра (картинка в картинке); задаются через `add(..., { alpha, bg })`.
         alpha: cam.alpha === undefined ? 1 : cam.alpha,
         bg: cam.bg,
+        // РЕГИОН едет в `_region`; `w`/`h` — размер КАДРА, как у главной
+        // камеры. Путать их нельзя: `w`/`h` читает setView как центр кадра.
+        _region: { ...r },
         w: W,
         h: H,
     };
@@ -98,6 +110,8 @@ export function regionCamera(cam, r, width, height) {
 /** Список камер для прохода кадра: главная, затем вторичные по порядку. */
 export function viewCams(cam) {
     if (!extra.size) return [cam];
+    // PIP следит за узлом в МИРОВЫХ координатах: подтягиваем его до прохода.
+    syncPip();
     const W = engineOf() ? engineOf().width : 0;
     const H = engineOf() ? engineOf().height : 0;
     const out = [];
@@ -120,6 +134,29 @@ export function viewCams(cam) {
         out.unshift(c);
     }
     return out;
+}
+
+/**
+ * Подтянуть PIP к узлу, за которым он следит. Координаты МИРОВЫЕ; узел берём из
+ * общего реестра, чтобы отрисовка не зависела от сцены.
+ */
+function syncPip() {
+    if (!pip || pip.at === null) return;
+    const view = extra.get('pip');
+    if (!view) return;
+    let x = null, y = null;
+    if (typeof pip.at === 'object' && pip.at !== null) {
+        x = num(pip.at.x, null);
+        y = num(pip.at.y, null);
+    } else {
+        // query() отдаёт МАССИВ узлов, а не узел.
+        const found = query(pip.at);
+        const node = Array.isArray(found) ? found[0] : found;
+        if (node) { x = num(node.x, null); y = num(node.y, null); }
+    }
+    if (x === null || y === null) return;
+    view.x = x;
+    view.y = y;
 }
 
 /** Текущее состояние главной камеры — без обращения к $.camera из модуля. */
@@ -246,7 +283,74 @@ export function installViewports($) {
         _layout: splitLayout,
         _regionCamera: regionCamera,
         _viewCams: viewCams,
-        _reset() { extra.clear(); order = []; },
+        /**
+         * Картинка в картинке: `$.camera.pip({x, y, w, h}, opts?)` рисует
+         * вторую камеру поверх основного кадра в указанном прямоугольнике.
+         *
+         * Это «камера в текстуру» без отдельной цели: регион выражен проекцией
+         * (зум + центр), а прозрачность и отказ от фона делают кадр наложением,
+         * а не заливкой.
+         *
+         * `opts`: `at` (узел или `{x, y}` — за кем следить), `zoom`, `alpha`
+         * (по умолчанию 0.9), `bg` (по умолчанию false).
+         */
+        pip(rect, opts) {
+            if (!rect) return pip ? { ...pip.rect } : null;
+            const o = opts || {};
+            const W = engineOf() ? engineOf().width : 800;
+            const H = engineOf() ? engineOf().height : 600;
+            pip = {
+                rect: { x: num(rect.x, 0), y: num(rect.y, 0),
+                        w: Math.max(8, num(rect.w, W / 4)),
+                        h: Math.max(8, num(rect.h, H / 4)) },
+                at: o.at === undefined ? null : o.at,
+                zoom: o.zoom === undefined ? 1 : Math.max(0.01, num(o.zoom, 1)),
+                alpha: o.alpha === undefined ? 0.9 : Math.max(0, Math.min(1, num(o.alpha, 0.9))),
+                bg: o.bg === undefined ? false : !!o.bg,
+            };
+            if (!extra.has('pip')) api.add('pip', { x: W / 2, y: H / 2 });
+            const view = extra.get('pip');
+            view.rect = { ...pip.rect };
+            view.zoom = pip.zoom;
+            view.alpha = pip.alpha;
+            view.bg = pip.bg;
+            // PIP идёт ПОСЛЕДНИМ: он рисуется поверх остальных камер.
+            order = order.filter((n) => n !== 'pip');
+            order.push('pip');
+            syncPip();
+            return { ...pip.rect };
+        },
+
+        /** Убрать PIP. */
+        pipClear() {
+            if (!pip) return false;
+            pip = null;
+            api.remove('pip');
+            return true;
+        },
+
+        /** Настроенный PIP: прямоугольник, зум, прозрачность, за кем следит. */
+        pipInfo() {
+            return pip ? { ...pip.rect, zoom: pip.zoom, alpha: pip.alpha, bg: pip.bg,
+                           at: pip.at === null ? null : String(pip.at) } : null;
+        },
+
+        /**
+         * Миникарта: PIP за узлом, без фона, с обзорным зумом.
+         *
+         * ```js
+         * $.camera.minimap({ x: 620, y: 20, w: 200, h: 150 },
+         *                  { at: '#hero', zoom: 0.6 });
+         * ```
+         */
+        minimap(rect, opts) {
+            const o = opts || {};
+            return api.pip(rect, { at: o.at, zoom: o.zoom === undefined ? 0.6 : o.zoom,
+                                   alpha: o.alpha === undefined ? 0.85 : o.alpha,
+                                   bg: o.bg === undefined ? false : o.bg });
+        },
+
+        _reset() { extra.clear(); order = []; pip = null; },
     };
     return api;
 }
