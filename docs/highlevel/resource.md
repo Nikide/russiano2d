@@ -43,6 +43,8 @@ $.ready(() => {
 
 | `kind` | Что возвращает `get`/`load` | Откуда берётся |
 |---|---|---|
+| `curve` | `function(t)` — кривая | `points` (числа или `{x, y}`), `mode`; `$.curve.makeCurve` |
+| `gradient` | `function(t)` — цвет | `stops` (цвета или `{at, color}`), `mode`; `$.curve.makeGradient` |
 | `texture` | `number` — id текстуры | `engine.loadTexture(path)`, поле `mipmaps: true` — уровни для уменьшенных спрайтов |
 | `sprite` | `number` — id спрайта | общий кэш ядра или `engine.createSprite` для кадра |
 | `sheet` | `number[]` — кадры листа | `.frames({ src, cols, rows, cw, ch })` |
@@ -56,6 +58,38 @@ $.ready(() => {
 `.txt/.md/.csv/.ini` → `text`, всё остальное → `texture`.
 
 ---
+
+### 1.1. Кривые и градиенты
+
+Кривые и градиенты — такие же ресурсы, как текстуры: описываются один раз и
+берутся по имени. Отличие одно: их значение задаётся **данными**, а не файлом,
+поэтому `path` им не нужен (как виду `data`).
+
+```js
+$.resource.define('damage', { kind: 'curve', points: [0, 1, 0.25, 0], mode: 'linear' });
+$.resource.define('fire',   { kind: 'gradient', stops: ['#fff2a8', '#ff6b1a', '#7a1f00'] });
+
+const dmg = $.resource.get('damage');   // function(t)
+dmg(0.5);          // значение кривой
+dmg.range(8);      // восемь отсчётов — для отрисовки или буфера
+dmg.at(0.25);      // с зажимом t в 0..1
+
+const fire = $.resource.get('fire');    // function(t) → упакованный цвет
+fire(0);           // 4289262335 — тот же формат, что engine.rgba
+```
+
+| Вид | Обязательное поле | Ещё принимается |
+|---|---|---|
+| `curve` | `points` | `values`, `value` (запасная точка), `mode` (`linear`/`step`/`spline`) |
+| `gradient` | `stops` | `colors`, `mode` |
+
+**Разные кривые — разные ресурсы.** Ключ описания включает сами данные
+(`points`/`values`/`stops`/`colors` и `mode`), поэтому две кривые с одинаковым
+видом не склеиваются в одну. Без этого вторая кривая считалась бы «тем же
+самым» и вернула бы значение первой — молча.
+
+Кривая без `points` не загружается: `get` вернёт `null`, а причина уйдёт в
+журнал (`$.resource.error('имя')`).
 
 ## 2. Пространство имён `$.resource`
 

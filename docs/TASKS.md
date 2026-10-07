@@ -822,9 +822,14 @@ bootstrap, index, script).
    Aseprite с пивотами), фильтрация **сделана** (nearest/linear), **мипмапы
    сделаны**: `engine.loadTexture(path, { mipmaps: true })` — уровни строит
    `SDL_GenerateMipmapsForGPUTexture`; проверено
-   tests/agent/highlevel_mipmap_test.py. **Не сделано: Curve/Gradient как
-   ресурсы** (`$.curve` умеет кривые и градиенты, но в `$.resource` их видов
-   нет).
+   tests/agent/highlevel_mipmap_test.py. **Curve/Gradient как ресурсы
+   сделаны**: виды `curve` и `gradient` в `$.resource` — значение задаётся
+   ДАННЫМИ (`points`/`stops`), а не файлом, поэтому `path` им не нужен; ключ
+   описания включает сами данные, иначе две разные кривые склеились бы в одну.
+   Грабли: normalizeSpec требовал path для всего, кроме `data` (кривые молча
+   отбрасывались), и собирает новый объект — `points`/`stops` надо переносить
+   явно. Проверено: tests/js/resource_test.mjs (22) и
+   tests/agent/highlevel_curve_resource_test.py (22).
 5. **Платформа и асинхронность:** **закрыто.** Фоновая загрузка — `$.task` +
    `$.scene.loadAsync` (task.md); неблокирующий hot reload — `$.script`
    (перезапуск на границе кадра, script.md); выбор GPU-бэкенда и понятный отказ

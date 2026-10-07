@@ -28,8 +28,10 @@
 // ===========================================================================
 
 import { ctx, resolveSprite, sheetFrames, forgetTexture } from './core.js';
+import { makeCurve, makeGradient } from './curve.js';
 
-export const RESOURCE_KINDS = ['texture', 'sprite', 'sheet', 'sound', 'json', 'text', 'data'];
+export const RESOURCE_KINDS = ['texture', 'sprite', 'sheet', 'sound', 'json', 'text', 'data',
+                              'curve', 'gradient'];
 
 const IMAGE_EXT = /\.(png|jpg|jpeg|bmp|gif|webp|tga|avif)$/i;
 const SOUND_EXT = /\.(wav|ogg|mp3|flac|opus|m4a|aac)$/i;
@@ -99,7 +101,11 @@ export function normalizeSpec(name, spec) {
     const source = spec.path !== undefined ? spec.path : spec.src;
     const kind = typeof spec.kind === 'string' ? spec.kind.trim().toLowerCase() : inferKind(source);
     if (!RESOURCE_KINDS.includes(kind)) return null;
-    if (kind !== 'data' && (source === undefined || source === null || String(source).trim() === '')) return null;
+    // Кривые и градиенты задаются ДАННЫМИ, а не файлом — как `data`, им путь
+    // не нужен. Раньше они молча отбрасывались: define возвращал null, а get
+    // потом отдавал null без внятной причины.
+    const data_like = kind === 'data' || kind === 'curve' || kind === 'gradient';
+    if (!data_like && (source === undefined || source === null || String(source).trim() === '')) return null;
 
     const out = { name: key, kind };
     if (source !== undefined && source !== null) {
@@ -125,6 +131,17 @@ export function normalizeSpec(name, spec) {
     if (kind === 'data') {
         if (spec.value !== undefined) out.value = spec.value;
         if (typeof spec.build === 'function') out.build = spec.build;
+    }
+    if (kind === 'curve') {
+        if (spec.points !== undefined) out.points = spec.points;
+        if (spec.values !== undefined) out.values = spec.values;
+        if (spec.value !== undefined) out.value = spec.value;
+        if (spec.mode !== undefined) out.mode = String(spec.mode);
+    }
+    if (kind === 'gradient') {
+        if (spec.stops !== undefined) out.stops = spec.stops;
+        if (spec.colors !== undefined) out.colors = spec.colors;
+        if (spec.mode !== undefined) out.mode = String(spec.mode);
     }
     if (typeof spec.dispose === 'function') out.dispose = spec.dispose;
     return withDefaultDispose(out);
@@ -159,6 +176,13 @@ export function specKey(spec) {
         spec.x || 0, spec.y || 0, spec.w || 0, spec.h || 0,
         spec.value === undefined ? '' : 'value',
         spec.build === undefined ? '' : 'build',
+        // У кривых и градиентов значение задаётся ДАННЫМИ, а не путём: без них
+        // две разные кривые с одинаковым видом считались бы одним ресурсом.
+        spec.points === undefined ? '' : 'p' + JSON.stringify(spec.points),
+        spec.values === undefined ? '' : 'v' + JSON.stringify(spec.values),
+        spec.stops === undefined ? '' : 's' + JSON.stringify(spec.stops),
+        spec.colors === undefined ? '' : 'c' + JSON.stringify(spec.colors),
+        spec.mode || '',
     ].join('|');
 }
 
@@ -477,8 +501,34 @@ function loadByKind(spec, $) {
         case 'sound': return loadSound(spec);
         case 'json': return loadJson($, spec);
         case 'text': return loadText($, spec);
+        case 'curve': return loadCurve(spec);
+        case 'gradient': return loadGradient(spec);
         default: return fail(`неизвестный вид ресурса "${spec.kind}"`);
     }
+}
+
+/**
+ * Кривая как ресурс: `{ kind: 'curve', points: [...], mode: 'linear' }`.
+ *
+ * Кривая — такая же ценность, как текстура: её описывают в манифесте один раз,
+ * а берут по имени (`$.resource.get('damage')`). Данные, а не файл: кривые
+ * задают прямо в коде.
+ */
+function loadCurve(spec) {
+    const values = spec.points !== undefined ? spec.points : spec.values;
+    if (values === undefined) {
+        return fail('для кривой нужны points (или values): массив чисел либо точек {x, y}');
+    }
+    return ok(makeCurve(values, spec));
+}
+
+/** Градиент как ресурс: `{ kind: 'gradient', stops: [...] }`. */
+function loadGradient(spec) {
+    const stops = spec.stops !== undefined ? spec.stops : spec.colors;
+    if (stops === undefined) {
+        return fail('для градиента нужны stops (или colors): массив цветов либо стопов {at, color}');
+    }
+    return ok(makeGradient(stops, spec));
 }
 
 function loadData(spec) {

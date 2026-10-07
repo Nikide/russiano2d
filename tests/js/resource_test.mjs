@@ -400,4 +400,40 @@ test('$.resource: без $.fs json и text объясняют, чего не х�
     }
 });
 
+// --- кривые и градиенты как ресурсы ---
+// У них значение задаётся ДАННЫМИ, а не путём. Два следствия, которые тут и
+// проверяем: (1) вид принимается без path; (2) ключ описания различает РАЗНЫЕ
+// кривые, иначе вторая считалась бы «тем же самым» и не загрузилась бы.
+
+test('normalizeSpec: curve и gradient принимаются без path', () => {
+    const c = normalizeSpec('damage', { kind: 'curve', points: [0, 1, 0] });
+    truthy(c !== null, 'кривая без path принимается');
+    eq(c.kind, 'curve');
+    eq(JSON.stringify(c.points), JSON.stringify([0, 1, 0]));
+
+    const g = normalizeSpec('fire', { kind: 'gradient', stops: ['#fff', '#000'] });
+    truthy(g !== null, 'градиент без path принимается');
+    eq(g.kind, 'gradient');
+    eq(JSON.stringify(g.stops), JSON.stringify(['#fff', '#000']));
+});
+
+test('normalizeSpec: у текстуры path по-прежнему ОБЯЗАТЕЛЕН', () => {
+    eq(normalizeSpec('t', { kind: 'texture' }), null, 'текстура без path отбрасывается');
+    truthy(normalizeSpec('t', { kind: 'texture', path: 'a.png' }) !== null);
+});
+
+test('specKey: разные кривые — разные ключи', () => {
+    const c1 = normalizeSpec('c1', { kind: 'curve', points: [0, 1] });
+    const c2 = normalizeSpec('c2', { kind: 'curve', points: [1, 0] });
+    truthy(specKey(c1) !== specKey(c2), 'разные points различаются ключом');
+    const c1b = normalizeSpec('c1b', { kind: 'curve', points: [0, 1] });
+    eq(specKey(c1), specKey(c1b), 'одинаковые points — один ключ');
+});
+
+test('specKey: разные градиенты — разные ключи', () => {
+    const g1 = normalizeSpec('g1', { kind: 'gradient', stops: ['#fff', '#000'] });
+    const g2 = normalizeSpec('g2', { kind: 'gradient', stops: ['#000', '#fff'] });
+    truthy(specKey(g1) !== specKey(g2), 'разные stops различаются');
+});
+
 finish();
