@@ -1127,6 +1127,96 @@ static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, J
     return o;
 }
 
+// engine.submitMesh(vertices: Float32Array, count?) → число вершин.
+//
+// Меш псевдо-3D: 8 float на вершину — x, y (мировые пиксели экрана), z
+// (глубина 0..1, ближе — меньше), u, v, r, g, b (цвет 0..1). Треугольники
+// собираются своим батчем и рисуются ПЕРВЫМИ в проходе сцены: меш записывает
+// глубину, и спрайты проверяются по ней — поэтому плоский спрайт не рисуется
+// поверх выпуклости персонажа.
+static JSValue r2d__js_submit_mesh(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->renderer) return JS_NewInt32(ctx, 0);
+    if (argc < 1) {
+        JS_ThrowTypeError(ctx, "submitMesh(vertices: Float32Array, count?)");
+        return JS_EXCEPTION;
+    }
+
+    size_t off = 0, len = 0, bpe = 0;
+    JSValue ab = JS_GetTypedArrayBuffer(ctx, argv[0], &off, &len, &bpe);
+    if (JS_IsException(ab)) return JS_EXCEPTION;
+    size_t size = 0;
+    uint8_t *base = JS_GetArrayBuffer(ctx, &size, ab);
+    if (!base) {
+        JS_FreeValue(ctx, ab);
+        JS_ThrowTypeError(ctx, "первый аргумент должен быть Float32Array");
+        return JS_EXCEPTION;
+    }
+
+    const int available = (int)(len / sizeof(float) / 8);
+    int count = argc >= 2 ? r2d__arg_int(ctx, argc, argv, 1, available) : available;
+    if (count > available) count = available;
+    if (count < 0) count = 0;
+    count -= count % 3;   // неполный треугольник рисовать нечем
+
+    if (count > 0) {
+        r2d_batch_mesh(s->renderer, (const float *)(base + off), count);
+    }
+    JS_FreeValue(ctx, ab);
+    return JS_NewInt32(ctx, count);
+}
+
+// engine.setDepth(bool) → bool — тест глубины (z-буфер).
+//
+// Включён по умолчанию. Спрайты пишут z = 0, поэтому порядок отрисовки между
+// ними сохраняется, а меш персонажа может закрывать собой спрайты. Выключение
+// возвращает прежнее поведение и освобождает текстуру глубины — это нужно
+// интерфейсу и пост-обработке, где порядок и так задан.
+static JSValue r2d__js_set_depth(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->renderer) return JS_NewBool(ctx, false);
+    const bool on = r2d__arg_bool(ctx, argc, argv, 0, true);
+    r2d_render_set_depth(s->renderer, on);
+    return JS_NewBool(ctx, r2d_render_depth(s->renderer));
+}
+
+// engine.depthInfo() → { enabled, meshCmds, meshVerts } — состояние z-буфера.
+//
+// Нужен не только игре, но и проверкам: конвейер меша может молча не
+// создаться (например, из-за пересечения атрибутов), и без чисел это
+// выглядит как «меш не рисуется».
+static JSValue r2d__js_depth_info(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue obj = JS_NewObject(ctx);
+    if (!s || !s->renderer) return obj;
+    R2DRenderer *r = s->renderer;
+    JS_SetPropertyStr(ctx, obj, "enabled",    JS_NewBool(ctx, r2d_render_depth(r)));
+    JS_SetPropertyStr(ctx, obj, "texture",    JS_NewBool(ctx, r->depth_texture != NULL));
+    JS_SetPropertyStr(ctx, obj, "pipeline",   JS_NewBool(ctx, r->mesh_pipelines[0] != NULL));
+    JS_SetPropertyStr(ctx, obj, "meshCmds",   JS_NewInt32(ctx, r->stat_mesh_cmds));
+    JS_SetPropertyStr(ctx, obj, "meshVerts",  JS_NewInt32(ctx, r->mesh_vertex_upload));
+    JS_SetPropertyStr(ctx, obj, "pending",    JS_NewInt32(ctx, r->mesh_vertex_count));
+    JS_SetPropertyStr(ctx, obj, "frames",     JS_NewInt32(ctx, r->stat_frames));
+    JS_SetPropertyStr(ctx, obj, "meshFrames", JS_NewInt32(ctx, r->stat_mesh_frames));
+    JS_SetPropertyStr(ctx, obj, "meshDraws",  JS_NewInt32(ctx, r->stat_mesh_draws));
+    JS_SetPropertyStr(ctx, obj, "meshBatches",JS_NewInt32(ctx, r->mesh_batch_count));
+    return obj;
+}
+
+// engine.depth() → bool — включён ли тест глубины.
+static JSValue r2d__js_get_depth(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewBool(ctx, s && s->renderer && r2d_render_depth(s->renderer));
+}
+
 // engine.setSpriteFilter(bool) → bool — фильтрация спрайтов.
 //
 // false (по умолчанию) — nearest: пиксель-арт без размытия. true — линейная:
@@ -3209,6 +3299,10 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "reloadPending", r2d__js_reload_pending, 0);
     r2d__set_fn(ctx, engine, "hotReload", r2d__js_hot_reload, 0);
     r2d__set_fn(ctx, engine, "setSpriteFilter", r2d__js_set_sprite_filter, 1);
+    r2d__set_fn(ctx, engine, "setDepth", r2d__js_set_depth, 1);
+    r2d__set_fn(ctx, engine, "submitMesh", r2d__js_submit_mesh, 2);
+    r2d__set_fn(ctx, engine, "depth", r2d__js_get_depth, 0);
+    r2d__set_fn(ctx, engine, "depthInfo", r2d__js_depth_info, 0);
     r2d__set_fn(ctx, engine, "spriteFilter", r2d__js_get_sprite_filter, 0);
     r2d__set_fn(ctx, engine, "limits", r2d__js_limits, 0);
     r2d__set_fn(ctx, engine, "setBodyEnabled", r2d__js_set_body_enabled, 2);

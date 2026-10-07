@@ -1873,6 +1873,21 @@ export function installGfx($) {
         stats() { return { ...state.stats }; },
 
         /**
+         * Z-буфер: `$.gfx.depth(true)` — включить тест глубины (по умолчанию
+         * включён), `$.gfx.depth(false)` — выключить, без аргумента — прочитать.
+         *
+         * Спрайты пишут z = 0, поэтому порядок отрисовки между ними не меняется:
+         * глубина нужна мешу псевдо-3D, который может закрывать собой спрайты.
+         */
+        depth(on) {
+            if (on === undefined) {
+                return typeof engine.depth === 'function' ? !!engine.depth() : false;
+            }
+            if (typeof engine.setDepth === 'function') engine.setDepth(!!on);
+            return !!on;
+        },
+
+        /**
          * Фильтрация спрайтов: `$.gfx.filter(true)` — линейная (сглаженный
          * масштаб), `$.gfx.filter(false)` — nearest (пиксель-арт, по
          * умолчанию), без аргумента — текущий режим.

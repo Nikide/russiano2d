@@ -154,6 +154,7 @@ static SDL_GPUGraphicsPipeline *r2d__create_pipeline(
         SDL_GPUShader *vs, SDL_GPUShader *fs,
         const SDL_GPUVertexBufferDescription *vbuf,
         const SDL_GPUVertexAttribute *attribs,
+        int attribute_count,
         R2DBlendMode mode)
 {
     SDL_GPUColorTargetDescription target;
@@ -169,11 +170,21 @@ static SDL_GPUGraphicsPipeline *r2d__create_pipeline(
 
     pipe.vertex_input_state.num_vertex_buffers    = 1;
     pipe.vertex_input_state.vertex_buffer_descriptions = vbuf;
-    pipe.vertex_input_state.num_vertex_attributes = 3;
+    pipe.vertex_input_state.num_vertex_attributes = attribute_count > 0 ? attribute_count : 3;
     pipe.vertex_input_state.vertex_attributes     = attribs;
 
     pipe.target_info.num_color_targets         = 1;
     pipe.target_info.color_target_descriptions = &target;
+    // Z-буфер: тот же формат, что у цели глубины сцены. Спрайты пишут z = 0
+    // (вершинный шейдер), то есть «ближе всего»; меш пишет свою глубину.
+    // Отдельного буфера у спрайтов нет: тест глубины здесь работает только
+    // против того, что записал меш.
+    pipe.target_info.has_depth_stencil_target      = true;
+    pipe.target_info.depth_stencil_format          = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+
+    pipe.depth_stencil_state.enable_depth_test  = true;
+    pipe.depth_stencil_state.enable_depth_write = true;
+    pipe.depth_stencil_state.compare_op         = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
 
     pipe.rasterizer_state.fill_mode  = SDL_GPU_FILLMODE_FILL;
     pipe.rasterizer_state.cull_mode  = SDL_GPU_CULLMODE_NONE;
@@ -615,6 +626,13 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
     r->tri_vertex_count = 0;
     r->tri_batch_count  = 0;
     r->tri_index_start  = 0;
+    // Меш: список отрисовок и залитый диапазон живут кадр.
+    r->mesh_vertex_count = 0;
+    r->mesh_batch_count  = 0;
+    r->mesh_index_start  = 0;
+    r->mesh_vertex_upload = 0;
+    r->stat_mesh_cmds    = 0;
+    r->stat_frames++;
     r->light_vertex_count = 0;
     r->light_batch_count  = 0;
     r->light_index_start  = 0;
@@ -755,6 +773,49 @@ static void r2d__pack_triangles(R2DRenderer *r, const float *verts, int vertex_c
     }
 
     *count += vertex_count;
+}
+
+/**
+ * Меш псевдо-3D: 8 float на вершину (x, y, z, u, v, r, g, b).
+ *
+ * x и y — в МИРОВЫХ пикселях экрана (как у треугольников), z — глубина 0..1
+ * (ближе — меньше), u/v — текстурные координаты, цвет — 0..1. Вершины идут в
+ * общий буфер: формат совпадает с байтами, отличается только конвейер.
+ */
+void r2d_batch_mesh(R2DRenderer *r, const float *verts, int vertex_count)
+{
+    if (!r || !verts || vertex_count <= 0) return;
+    if (vertex_count % 3 != 0) {
+        R2D_ERROR("меш: vertex_count=%d не кратен 3", vertex_count);
+        return;
+    }
+    if (!r2d__grow((void **)&r->mesh_vertices, &r->mesh_vertex_cap,
+                   r->mesh_vertex_count + vertex_count, sizeof(R2DMeshVertex))) return;
+    if (!r2d__grow((void **)&r->mesh_batches, &r->mesh_batch_cap,
+                   r->mesh_batch_count + 1, sizeof(R2DTriBatch))) return;
+
+    R2DTriBatch *batch = &r->mesh_batches[r->mesh_batch_count++];
+    batch->vertex_offset = r->mesh_vertex_count;
+    batch->vertex_count  = vertex_count;
+    batch->blend         = (uint8_t)R2D_BLEND_ALPHA;
+
+    const float inv_w = 2.0f / (float)r->screen_w;
+    const float inv_h = 2.0f / (float)r->screen_h;
+
+    R2DMeshVertex *dst = &r->mesh_vertices[r->mesh_vertex_count];
+    for (int i = 0; i < vertex_count; ++i) {
+        const float *v = verts + (size_t)i * 8;
+        dst[i].x = v[0] * inv_w - 1.0f;
+        dst[i].y = 1.0f - v[1] * inv_h;   // экранный Y направлен вниз
+        dst[i].z = v[2];                   // глубина уже в 0..1
+        dst[i].u = v[3];
+        dst[i].v = v[4];
+        dst[i].r = r2d__color_f32(v[5]);
+        dst[i].g = r2d__color_f32(v[6]);
+        dst[i].b = r2d__color_f32(v[7]);
+        dst[i].a = 255;
+    }
+    r->mesh_vertex_count += vertex_count;
 }
 
 void r2d_batch_triangles_blend(R2DRenderer *r, const float *verts, int vertex_count, int blend)
@@ -921,7 +982,7 @@ int r2d_render_user_shader_define(R2DRenderer *r, const char *name, const char *
     SDL_zero(pipes);
     bool ok = true;
     for (int m = 0; m < R2D_BLEND_COUNT && ok; ++m) {
-        pipes[m] = r2d__create_pipeline(r->device, r->window, vertex, fragment, &vb, attrs,
+        pipes[m] = r2d__create_pipeline(r->device, r->window, vertex, fragment, &vb, attrs, 3,
                                         (R2DBlendMode)m);
         if (!pipes[m]) {
             SDL_snprintf(r->user_shader_error, sizeof r->user_shader_error,
@@ -930,6 +991,36 @@ int r2d_render_user_shader_define(R2DRenderer *r, const char *name, const char *
         }
     }
     SDL_ReleaseGPUShader(r->device, vertex);
+
+    // Конвейер меша: свой формат вершины (глубина третьим компонентом
+    // позиции). Нужен один раз — при первой компиляции спрайтов.
+    if (ok && !r->mesh_pipelines[0]) {
+        SDL_GPUVertexBufferDescription mesh_vb;
+        SDL_zero(mesh_vb);
+        mesh_vb.slot = 0;
+        mesh_vb.pitch = sizeof(R2DMeshVertex);
+        mesh_vb.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+        SDL_GPUVertexAttribute mesh_attrs[3];
+        SDL_zero(mesh_attrs);
+        // Позиция — float3 (глубина третьим компонентом): так атрибуты не
+        // пересекаются. Отдельный float на нулевом смещении делил бы байты с
+        // позицией, и конвейер молча не создавался (нашлось проверкой).
+        mesh_attrs[0].location = 0; mesh_attrs[0].buffer_slot = 0; mesh_attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; mesh_attrs[0].offset = 0;
+        mesh_attrs[1].location = 1; mesh_attrs[1].buffer_slot = 0; mesh_attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; mesh_attrs[1].offset = sizeof(float) * 3;
+        mesh_attrs[2].location = 2; mesh_attrs[2].buffer_slot = 0; mesh_attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; mesh_attrs[2].offset = sizeof(float) * 5;
+
+        SDL_GPUShader *mesh_vs = r2d__make_shader(r->device, &r2d_shader_mesh_vert,
+                                                  SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
+        if (mesh_vs) {
+            for (int m = 0; m < R2D_BLEND_COUNT; ++m) {
+                r->mesh_pipelines[m] = r2d__create_pipeline(r->device, r->window, mesh_vs,
+                                                            fragment, &mesh_vb, mesh_attrs, 3,
+                                                            (R2DBlendMode)m);
+            }
+            SDL_ReleaseGPUShader(r->device, mesh_vs);
+        }
+    }
 
     if (!ok) {
         for (int m = 0; m < R2D_BLEND_COUNT; ++m) {
@@ -1093,7 +1184,8 @@ void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
 {
     // Треугольники могут быть и без спрайтов: тогда r->index_count == 0,
     // но буферы всё равно должны быть созданы и залиты.
-    if (r->index_count == 0 && r->tri_vertex_count == 0 && r->light_vertex_count == 0) return;
+    if (r->index_count == 0 && r->tri_vertex_count == 0 && r->light_vertex_count == 0
+        && r->mesh_vertex_count == 0) return;
 
     // Дописываем треугольники в конец общего вершинного/индексного буфера.
     // tri_vertex_count обнуляем после раскладки, чтобы повторный upload в том
@@ -1118,6 +1210,26 @@ void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
         r->vertex_count    += r->tri_vertex_count;
         r->index_count     += r->tri_vertex_count;
         r->tri_vertex_count = 0;
+    }
+
+    // Меш идёт своим диапазоном: свой формат вершины (с глубиной), но тот же
+    // индексный буфер. Рисуется ПЕРВЫМ в проходе сцены, чтобы успеть записать
+    // глубину до спрайтов.
+    if (r->mesh_vertex_count > 0) {
+        if (!r2d__grow((void **)&r->mesh_vertex_buffer, &r->mesh_vb_cap,
+                        r->mesh_vertex_count, sizeof(R2DMeshVertex))) return;
+        SDL_memcpy(r->mesh_vertex_buffer, r->mesh_vertices,
+                   (size_t)r->mesh_vertex_count * sizeof(R2DMeshVertex));
+        if (!r2d__grow((void **)&r->indices, &r->index_cap,
+                        r->index_count + r->mesh_vertex_count, sizeof(uint32_t))) return;
+        const int base = r->vertex_count;
+        for (int i = 0; i < r->mesh_vertex_count; ++i) {
+            r->indices[r->index_count + i] = (uint32_t)(base + i);
+        }
+        r->mesh_index_start = r->index_count;
+        r->mesh_vertex_upload = r->mesh_vertex_count;
+        r->index_count += r->mesh_vertex_count;
+        r->mesh_vertex_count = 0;
     }
 
     // Свет идёт в тот же вершинный/индексный буфер, но своим диапазоном: его
@@ -1146,17 +1258,47 @@ void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
 
     const Uint32 vertex_bytes = (Uint32)r->vertex_count * (Uint32)sizeof(R2DVertex);
     const Uint32 index_bytes  = (Uint32)r->index_count * (Uint32)sizeof(uint32_t);
-    if (!r2d__ensure_upload_buffer(r, vertex_bytes + index_bytes)) return;
+    if (!r2d__ensure_upload_buffer(r, vertex_bytes + index_bytes
+                                   + (uint32_t)(r->mesh_vertex_upload * (int)sizeof(R2DMeshVertex)))) return;
 
     // cycle=true — SDL сам ротирует внутренние ресурсы, поэтому не нужно
     // вручную следить за тем, что предыдущий кадр ещё читает эти данные.
+    // Буфер меша: свой, потому что формат вершины шире спрайтового.
+    const uint32_t mesh_bytes = (uint32_t)(r->mesh_vertex_upload * (int)sizeof(R2DMeshVertex));
+    if (r->mesh_vertex_upload > 0) {
+        if (r->mesh_buffer && r->mesh_vb_capacity >= r->mesh_vertex_upload) {
+            // Места хватает — переиспользуем.
+        } else {
+            if (r->mesh_buffer) {
+                SDL_ReleaseGPUBuffer(r->device, r->mesh_buffer);
+                r->mesh_buffer = NULL;
+                r->mesh_vb_capacity = 0;
+            }
+            uint32_t cap = 1024;
+            while (cap < (uint32_t)r->mesh_vertex_upload) cap *= 2;
+            SDL_GPUBufferCreateInfo mb;
+            SDL_zero(mb);
+            mb.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+            mb.size  = cap * (Uint32)sizeof(R2DMeshVertex);
+            r->mesh_buffer = SDL_CreateGPUBuffer(r->device, &mb);
+            if (!r->mesh_buffer) {
+                R2D_ERROR("не удалось создать GPU-буфер меша: %s", SDL_GetError());
+                return;
+            }
+            r->mesh_vb_capacity = cap;
+        }
+    }
+
     void *mapped = SDL_MapGPUTransferBuffer(r->device, r->upload_buffer, true);
     if (!mapped) {
         R2D_ERROR("SDL_MapGPUTransferBuffer: %s", SDL_GetError());
         return;
     }
     SDL_memcpy(mapped, r->vertices, vertex_bytes);
-    SDL_memcpy((Uint8 *)mapped + vertex_bytes, r->indices, index_bytes);
+    if (mesh_bytes > 0) {
+        SDL_memcpy((Uint8 *)mapped + vertex_bytes, r->mesh_vertex_buffer, mesh_bytes);
+    }
+    SDL_memcpy((Uint8 *)mapped + vertex_bytes + mesh_bytes, r->indices, index_bytes);
     SDL_UnmapGPUTransferBuffer(r->device, r->upload_buffer);
 
     SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
@@ -1173,7 +1315,17 @@ void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
     dst.size   = vertex_bytes;
     SDL_UploadToGPUBuffer(cp, &src, &dst, true);
 
-    src.offset = vertex_bytes;
+    if (mesh_bytes > 0 && r->mesh_buffer) {
+        src.offset = vertex_bytes;
+        SDL_GPUBufferRegion mdst;
+        SDL_zero(mdst);
+        mdst.buffer = r->mesh_buffer;
+        mdst.offset = 0;
+        mdst.size   = mesh_bytes;
+        SDL_UploadToGPUBuffer(cp, &src, &mdst, true);
+    }
+
+    src.offset = vertex_bytes + mesh_bytes;
     dst.buffer = r->index_buffer;
     dst.offset = 0;
     dst.size   = index_bytes;
@@ -1181,7 +1333,7 @@ void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
 
     SDL_EndGPUCopyPass(cp);
 
-    r->stat_upload_bytes = vertex_bytes + index_bytes;
+    r->stat_upload_bytes = vertex_bytes + mesh_bytes + index_bytes;
     r->stat_vertices     = r->vertex_count;
 }
 
@@ -1328,16 +1480,121 @@ static void r2d__draw_tri_batches(R2DRenderer *r, SDL_GPURenderPass *pass,
     }
 }
 
+/**
+ * Готовит z-буфер под размер кадра. Текстура создаётся один раз и
+ * пересоздаётся при смене размера: без неё тест глубины нечем делать, а
+ * пересоздавать каждый кадр — трата памяти и времени.
+ */
+bool r2d_render_depth_target(R2DRenderer *r, int w, int h, SDL_GPUDepthStencilTargetInfo *out)
+{
+    if (!r || !out) return false;
+    if (!r->depth_enabled) return false;
+    const int dw = w > 0 ? w : 1;
+    const int dh = h > 0 ? h : 1;
+    if (r->depth_texture && (r->depth_w != dw || r->depth_h != dh)) {
+        SDL_ReleaseGPUTexture(r->device, r->depth_texture);
+        r->depth_texture = NULL;
+    }
+    if (!r->depth_texture) {
+        SDL_GPUTextureCreateInfo info;
+        SDL_zero(info);
+        info.type                 = SDL_GPU_TEXTURETYPE_2D;
+        info.format               = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+        info.width                = (Uint32)dw;
+        info.height               = (Uint32)dh;
+        info.layer_count_or_depth = 1;
+        info.num_levels           = 1;
+        info.usage                = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+        r->depth_texture = SDL_CreateGPUTexture(r->device, &info);
+        if (!r->depth_texture) {
+            R2D_ERROR("z-буфер: SDL_CreateGPUTexture: %s", SDL_GetError());
+            r->depth_enabled = false;
+            return false;
+        }
+        r->depth_w = dw;
+        r->depth_h = dh;
+    }
+    SDL_zero(*out);
+    out->texture     = r->depth_texture;
+    out->clear_depth = 1.0f;                     // дальняя плоскость: ближе — меньше
+    out->load_op     = SDL_GPU_LOADOP_CLEAR;
+    out->store_op    = SDL_GPU_STOREOP_STORE;
+    return true;
+}
+
+void r2d_render_set_depth(R2DRenderer *r, bool enabled)
+{
+    if (!r) return;
+    r->depth_enabled = enabled;
+    // Выключение глубины освобождает текстуру: она нужна только тесту.
+    if (!enabled && r->depth_texture) {
+        SDL_ReleaseGPUTexture(r->device, r->depth_texture);
+        r->depth_texture = NULL;
+        r->depth_w = r->depth_h = 0;
+    }
+}
+
+bool r2d_render_depth(const R2DRenderer *r)
+{
+    return r ? (r->depth_enabled && r->depth_texture != NULL) : false;
+}
+
+/**
+ * Рисует накопленный меш. Вызывается ПЕРВЫМ в проходе сцены: меш записывает
+ * глубину, и спрайты, нарисованные после, проверяются по ней — поэтому плоский
+ * спрайт не рисуется поверх выпуклости персонажа.
+ */
+void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass)
+{
+    (void)cmd;
+    if (!r || !pass) return;
+    r->stat_mesh_draws++;
+    if (!r->depth_enabled) return;
+    if (r->mesh_vertex_upload <= 0 || r->mesh_batch_count <= 0) return;
+    if (!r->mesh_vertex_buffer || !r->mesh_pipelines[0]) return;
+
+    SDL_GPUBufferBinding vb;
+    SDL_zero(vb);
+    vb.buffer = r->mesh_buffer ? r->mesh_buffer : NULL;
+    if (!vb.buffer) return;
+    // Мешевый формат шире спрайтового, поэтому у него свой буфер.
+    SDL_BindGPUVertexBuffers(pass, 0, &vb, 1);
+
+    int bound = -1;
+    for (int b = 0; b < r->mesh_batch_count; ++b) {
+        const R2DTriBatch *mb = &r->mesh_batches[b];
+        if (mb->vertex_count <= 0) continue;
+        if ((int)mb->blend != bound) {
+            SDL_BindGPUGraphicsPipeline(pass, r->mesh_pipelines[mb->blend]);
+            bound = (int)mb->blend;
+        }
+        SDL_GPUTextureSamplerBinding tex;
+        SDL_zero(tex);
+        tex.texture = r->textures[r->white_texture].handle;
+        tex.sampler = r->sampler;
+        SDL_BindGPUFragmentSamplers(pass, 0, &tex, 1);
+        SDL_DrawGPUIndexedPrimitives(pass, (Uint32)mb->vertex_count, 1,
+                                     (Uint32)(r->mesh_index_start + mb->vertex_offset), 0, 0);
+        r->stat_draws++;
+    }
+    r->stat_mesh_cmds += r->mesh_batch_count;
+    r->stat_mesh_frames++;
+}
+
 void r2d_render_draw_world(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
                            SDL_GPURenderPass *pass)
 {
-    if (r->cmd_count == 0 && r->tri_batch_count == 0 && r->light_batch_count == 0) return;
+    if (r->cmd_count == 0 && r->tri_batch_count == 0 && r->light_batch_count == 0
+        && r->mesh_batch_count == 0) return;
 
     // Интерфейс помечен JS-стороной; если метки нет — все спрайты считаются
     // миром (старое поведение, HUD тогда тоже под пост-обработкой).
     const int ui_from = r->ui_cmd_start >= 0 ? r->ui_cmd_start : r->cmd_count;
 
     int bound_blend = -1;
+    // Меш первым: он пишет глубину, по которой проверяются спрайты.
+    r2d_render_draw_mesh(r, cmd, pass);
+
     r2d__draw_sprite_range(r, cmd, pass, 0, ui_from, &bound_blend);
 
     r->stat_sprites = r->cmd_count;
@@ -2037,6 +2294,10 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     r->clear_g = 0.10f;
     r->clear_b = 0.13f;
     r->clear_a = 1.0f;
+    // Z-буфер включён по умолчанию: спрайты пишут z = 0, поэтому порядок
+    // отрисовки между ними сохраняется, а меш может закрывать собой спрайты.
+    // Игра может выключить тест (r2d_render_set_depth) для интерфейса.
+    r->depth_enabled = true;
     // Свет в lightmap по умолчанию не ослабляется: карта включается явно, и
     // при включении свет должен выглядеть как раньше.
     r->lightmap_intensity = 1.0f;
@@ -2077,7 +2338,7 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     // Конвейер на каждый режим смешивания: рисовать разными режимами в одном
     // render pass можно, переключая пайплайн перед сменой режима у батча.
     for (int m = 0; m < R2D_BLEND_COUNT; ++m) {
-        r->pipelines[m] = r2d__create_pipeline(device, window, vs, fs, &vbuf, attribs,
+        r->pipelines[m] = r2d__create_pipeline(device, window, vs, fs, &vbuf, attribs, 3,
                                                 (R2DBlendMode)m);
         if (!r->pipelines[m]) {
             R2D_ERROR("SDL_CreateGPUGraphicsPipeline (blend=%d): %s", m, SDL_GetError());
@@ -2089,6 +2350,37 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
             return false;
         }
     }
+    // Конвейеры меша: свой формат вершины (глубина третьим компонентом) и
+    // свой вершинный шейдер; фрагментный общий со спрайтами.
+    {
+        SDL_GPUVertexAttribute mattrs[3];
+        SDL_zero(mattrs);
+        mattrs[0].location = 0; mattrs[0].buffer_slot = 0; mattrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; mattrs[0].offset = 0;
+        mattrs[1].location = 1; mattrs[1].buffer_slot = 0; mattrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; mattrs[1].offset = offsetof(R2DMeshVertex, u);
+        mattrs[2].location = 2; mattrs[2].buffer_slot = 0; mattrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; mattrs[2].offset = offsetof(R2DMeshVertex, r);
+
+        SDL_GPUVertexBufferDescription mvb;
+        SDL_zero(mvb);
+        mvb.slot       = 0;
+        mvb.pitch      = (Uint32)sizeof(R2DMeshVertex);
+        mvb.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+        SDL_GPUShader *mvs = r2d__make_shader(device, &r2d_shader_mesh_vert,
+                                              SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
+        if (mvs) {
+            for (int m = 0; m < R2D_BLEND_COUNT; ++m) {
+                r->mesh_pipelines[m] = r2d__create_pipeline(device, window, mvs, fs,
+                                                            &mvb, mattrs, 3, (R2DBlendMode)m);
+                if (!r->mesh_pipelines[m]) {
+                    R2D_ERROR("конвейер меша (blend=%d): %s", m, SDL_GetError());
+                }
+            }
+            SDL_ReleaseGPUShader(device, mvs);
+        } else {
+            R2D_WARN("нет вершинного шейдера меша: %s", SDL_GetError());
+        }
+    }
+
     SDL_ReleaseGPUShader(device, vs);
     SDL_ReleaseGPUShader(device, fs);
 
@@ -2187,7 +2479,7 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
             attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[1].offset = sizeof(float) * 2;
             attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[2].offset = sizeof(float) * 4;
 
-            r->fx_pipelines[mode] = r2d__create_pipeline(device, window, fx_vs, fx_fs, &vb, attrs,
+            r->fx_pipelines[mode] = r2d__create_pipeline(device, window, fx_vs, fx_fs, &vb, attrs, 3,
                                                           (R2DBlendMode)mode);
             if (!r->fx_pipelines[mode]) {
                 R2D_WARN("шейдер узла недоступен для режима %d: %s", mode, SDL_GetError());
@@ -2210,6 +2502,12 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
 
 void r2d_render_shutdown(R2DRenderer *r)
 {
+    // Z-буфер живёт вне кадра: освобождаем явно.
+    if (r->depth_texture) {
+        SDL_ReleaseGPUTexture(r->device, r->depth_texture);
+        r->depth_texture = NULL;
+        r->depth_w = r->depth_h = 0;
+    }
     if (!r->device) return;
 
     if (r->vertex_buffer) SDL_ReleaseGPUBuffer(r->device, r->vertex_buffer);

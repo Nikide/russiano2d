@@ -145,6 +145,15 @@ typedef struct R2DTriBatch {
     uint8_t blend;
 } R2DTriBatch;
 
+// Вершина меша псевдо-3D: позиция в clip-space, текстура, цвет и ГЛУБИНА.
+// Отдельный формат от R2DVertex: у спрайтов глубина не нужна, а общий формат
+// заставил бы переписывать спрайтовый путь (и ломать прежнее поведение).
+typedef struct R2DMeshVertex {
+    float    x, y, z;        // z — глубина 0..1, ближе — меньше
+    float    u, v;
+    uint8_t  r, g, b, a;
+} R2DMeshVertex;
+
 // Вершина: позиция уже в clip-space (проекция запекается на CPU).
 typedef struct R2DVertex {
     float    x, y;
@@ -163,6 +172,31 @@ typedef struct R2DRenderer {
     SDL_GPUGraphicsPipeline *fx_pipelines[R2D_BLEND_COUNT];
     SDL_GPUSampler          *sampler;
     bool                     filter_linear;  // спрайты с линейной фильтрацией
+
+    // --- Z-буфер ---------------------------------------------------------
+    // Глубина нужна псевдо-3D: меши персонажей пишут z, а спрайты сцены
+    // проверяются по нему, поэтому плоский спрайт не рисуется поверх
+    // выпуклости. Формат D32_FLOAT: без трафарета, только глубина.
+    SDL_GPUTexture          *depth_texture;
+    int                      depth_w, depth_h;
+    bool                     depth_enabled;   // проходит ли тест глубины
+
+    // Меш псевдо-3D: свой список отрисовок (треугольники с глубиной), общий
+    // вершинный/индексный буфер с батчем треугольников.
+    SDL_GPUGraphicsPipeline *mesh_pipelines[R2D_BLEND_COUNT];
+    R2DMeshVertex           *mesh_vertices;
+    int                      mesh_vertex_count;
+    int                      mesh_vertex_cap;
+    R2DTriBatch             *mesh_batches;
+    int                      mesh_batch_count;
+    int                      mesh_batch_cap;
+    int                      mesh_index_start;
+    R2DMeshVertex           *mesh_vertex_buffer;   // залитый буфер меша
+    int                      mesh_vb_cap;
+    int                      mesh_vertex_upload;   // сколько вершин уехало в буфер
+    SDL_GPUBuffer           *mesh_buffer;          // GPU-буфер вершин меша
+    int                      mesh_vb_capacity;
+    int                      stat_mesh_cmds;
 
     R2DTexture textures[R2D_MAX_TEXTURES];
     int         texture_count;
@@ -280,6 +314,9 @@ typedef struct R2DRenderer {
     int    stat_fx_cmds;   // спрайтов, нарисованных шейдером узла
     int    stat_sprites;
     int    stat_vertices;
+    int    stat_frames;    // сколько кадров начато (диагностика)
+    int    stat_mesh_frames;  // сколько кадров рисовало меш (диагностика)
+    int    stat_mesh_draws;   // сколько раз вызвана отрисовка меша
     size_t stat_upload_bytes;
 
     float clear_r, clear_g, clear_b, clear_a;
@@ -324,6 +361,25 @@ bool r2d_sprite_alive(const R2DRenderer *r, int id);
 void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h);
 void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float h,
                     float angle, uint32_t color);
+
+// --- Z-буфер и меш -----------------------------------------------------------
+
+// Включить или выключить тест глубины. Выключенный тест возвращает прежнее
+// поведение (чистая прозрачность по порядку отрисовки) — это нужно, если игра
+// рисует интерфейс или пост-обработку поверх сцены.
+void r2d_render_set_depth(R2DRenderer *r, bool enabled);
+bool r2d_render_depth(const R2DRenderer *r);
+// Готовит z-буфер под размер кадра и заполняет цель глубины прохода.
+// Возвращает false, если глубина выключена или текстуру создать не удалось.
+bool r2d_render_depth_target(R2DRenderer *r, int w, int h, SDL_GPUDepthStencilTargetInfo *out);
+
+// Батч меша: вершины в МИРОВЫХ координатах с глубиной, 8 float на вершину
+// (x, y, z, u, v, r, g, b) — rgba байтами, как у спрайтов. Треугольники
+// собираются в отдельный список и рисуются ПЕРВЫМИ в проходе сцены, чтобы
+// успеть записать глубину до спрайтов.
+void r2d_batch_mesh(R2DRenderer *r, const float *verts, int vertex_count);
+// Рисует накопленный меш в проход (зовётся рендерером до спрайтов).
+void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass);
 
 // --- Шейдеры узлов ----------------------------------------------------------
 // Таблица эффектов сбрасывается каждый кадр (r2d_render_begin_frame), а

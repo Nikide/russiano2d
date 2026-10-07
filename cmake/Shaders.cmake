@@ -103,6 +103,10 @@ endfunction()
 r2d_add_shader(sprite vert "${CMAKE_SOURCE_DIR}/shaders/sprite.vert.glsl")
 r2d_add_shader(sprite frag "${CMAKE_SOURCE_DIR}/shaders/sprite.frag.glsl")
 
+# Меш псевдо-3D: тот же вершинный формат плюс глубина. Фрагмент берём у
+# спрайтов (текстура × цвет) — новый не нужен.
+r2d_add_shader(mesh vert "${CMAKE_SOURCE_DIR}/shaders/mesh.vert.glsl")
+
 # Шейдер узла: эффекты поверх спрайта (вспышка, растворение, глитч, волна).
 r2d_add_shader(sprite_fx frag "${CMAKE_SOURCE_DIR}/shaders/sprite_fx.frag.glsl")
 

@@ -301,6 +301,8 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
             ? user_target
             : (post ? r2d_render_scene_target(fc->renderer, (int)swap_w, (int)swap_h) : NULL);
 
+        const Uint32 target_w = swap_w;
+        const Uint32 target_h = swap_h;
         SDL_GPUColorTargetInfo target;
         SDL_zero(target);
         target.texture = scene ? scene : swapchain;
@@ -309,7 +311,14 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
         target.load_op  = SDL_GPU_LOADOP_CLEAR;
         target.store_op = SDL_GPU_STOREOP_STORE;
 
-        SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
+        // Z-буфер: цель глубины создаётся под размер кадра один раз. Без неё
+        // тест глубины нечем делать, а конвейеры ждут формат D32_FLOAT.
+        SDL_GPUDepthStencilTargetInfo depth;
+        const bool has_depth = r2d_render_depth_target(fc->renderer, (int)target_w,
+                                                       (int)target_h, &depth);
+
+        SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1,
+                                                         has_depth ? &depth : NULL);
         if (pass) {
             // С постом в offscreen уходит только мир: HUD метится JS-стороной
             // (engine.markUI) и рисуется в отдельном проходе поверх обработки.
