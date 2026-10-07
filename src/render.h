@@ -85,6 +85,7 @@ typedef struct R2DSprite {
     int   texture;
     float u0, v0, u1, v1;
     float width, height;   // размер исходного прямоугольника в пикселях
+    bool  force_nearest;  // генерируемый пиксельный спрайт, независимо от режима кадра
     bool  alive;
 } R2DSprite;
 

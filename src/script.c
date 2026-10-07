@@ -9,6 +9,7 @@
 #include "script.h"
 
 #include "profile.h"
+#include "rotsprite.h"
 
 #include "icons.h"
 #include "js_embed.h"
@@ -4118,6 +4119,10 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "loadTexture", r2d__js_load_texture, 1);
     r2d__set_fn(ctx, engine, "textureSize", r2d__js_texture_size, 1);
     r2d__set_fn(ctx, engine, "textureFromPixels", r2d__js_texture_from_pixels, 3);
+    if (r2d_rotsprite_install(ctx, engine) < 0) {
+        JS_FreeValue(ctx, engine);
+        return JS_EXCEPTION;
+    }
     r2d__set_fn(ctx, engine, "createSprite", r2d__js_create_sprite, 5);
     r2d__set_fn(ctx, engine, "drawSprite", r2d__js_draw_sprite, 7);
     r2d__set_fn(ctx, engine, "drawRect", r2d__js_draw_rect, 5);

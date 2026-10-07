@@ -12,6 +12,7 @@ set(R2D_SOURCES
     light.h    light.cpp
     app.h      app.c
     render.h   render.c
+    rotsprite.h rotsprite.c rotsprite_math.h rotsprite_math.c
     profile.h  profile.c
     physics.h  physics.c
     http.h     http.c

@@ -75,6 +75,7 @@ import { installWeapons } from './weapons.js';
 import { installRaid } from './raid.js';
 import { installCels } from './cels.js';
 import { installProc } from './proc.js';
+import { installRotSprite } from './rotsprite.js';
 import { installMesh } from './mesh.js';
 import { installAlive } from './alive.js';
 import { installNet } from './net.js';
@@ -409,6 +410,7 @@ export function createApi() {
     installRaid($);              // генерация рейда: $.raid
     installCels($);              // граф кадров (псевдо-3D): $.cels
     installProc($);              // процедурный пиксель-арт: $.proc
+    installRotSprite($);         // развёртка всего персонажа: прототип головы
     $.mesh = installMesh($);     // меш со скелетом: $.mesh
     installReplay($);            // реплеи: запись ввода и воспроизведение
     installCutscene($, placeBody);   // катсцены в текущей сцене: $.cutscene

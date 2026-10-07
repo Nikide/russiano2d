@@ -30,6 +30,7 @@ const MODULES = [
     './platformer/index.js',
     './shooter_witch/index.js',
     './russi_vn/index.js',
+    './rotsprite/index.js',
 ];
 
 $.ready(async ($) => {

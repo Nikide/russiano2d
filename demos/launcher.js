@@ -24,6 +24,12 @@ const CLICK_SFX = 'demos/assets/audio/sfx/ui_click.ogg';
 
 const DEMOS = [
     {
+        scene: 'rotsprite',
+        icon: '360',
+        title: 'RotSprite · Руси-тян',
+        hint: 'Одна развёртка всего тела: прототип поворота головы',
+    },
+    {
         scene: 'shooter_witch',
         // В меню ведём в интро демо; сам бой остаётся сценой для тестов и
         // агента: --scene shooter_witch.
