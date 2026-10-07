@@ -718,6 +718,8 @@ let fog_params = null;
 /** Экранная темнота: $.gfx.light.ambient({...}), null — выключена. */
 let ambient_params = null;
 /** Lightmap: свет копится в отдельной текстуре и накладывается одним проходом. */
+// UI-текст, отложенный до конца ui-пакета: см. _queueText.
+let ui_text_pending = null;
 let lightmap_on = false;
 let lightmap_intensity = 1;
 let lightmap_soft = 1;
@@ -2558,6 +2560,16 @@ export function installGfx($) {
          */
         _queueText(text, x, y, size, color, align, family, angle) {
             state.stats.texts++;
+            // В UI-слое текст ОТКЛАДЫВАЕТСЯ до конца пакета: подложки
+            // (ui.panel, ui.bar, ui.button) копятся в JS-батче и уходят в C
+            // только в submitSprites(), а drawText пишет в C сразу. Без
+            // отсрочки подпись попадала в батч РАНЬШЕ своей подложки и
+            // закрашивалась ею — так пропадал экран исхода в игре.
+            if (ui_text_pending) {
+                ui_text_pending.push([text, x, y, size, color, align || 'left',
+                                      family || nodeFontFamily(null), angle || 0]);
+                return;
+            }
             engine.drawText(text, x, y, size, color, align || 'left',
                             family || nodeFontFamily(null),
                             angle || 0);
@@ -2663,6 +2675,8 @@ export function installGfx($) {
             // (§3.4, пункт 11 и §5, P2 отчёта).
             const ui_start = count;
             const ui_list = nodesWithFacet('ui');
+            // Текст собираем, а не рисуем: иначе он окажется под подложками.
+            ui_text_pending = [];
             for (let i = 0; i < ui_list.length; i++) drawUINode(ui_list[i]);
             if (count > ui_start) {
                 // UI идёт после треугольников, поэтому отдаём его отдельным
@@ -2671,6 +2685,15 @@ export function installGfx($) {
                 // неё, иначе вигнетка и линза затемняли бы интерфейс.
                 if (typeof engine.markUI === 'function') engine.markUI();
                 submitSprites(ui_start, count);
+            }
+            // Отложенный текст — ПОСЛЕ подложек и в том же ui-диапазоне:
+            // markUI() уже отмечен, поэтому HUD остаётся поверх пост-обработки.
+            if (ui_text_pending) {
+                for (let i = 0; i < ui_text_pending.length; i++) {
+                    const t = ui_text_pending[i];
+                    engine.drawText(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+                }
+                ui_text_pending = null;
             }
 
             if (tri_count > 0) submitTriangles();
