@@ -432,6 +432,24 @@ void r2d_physics_set_awake(R2DPhysics *p, int id, bool awake)
     b2Body_SetAwake(p->bodies[id], awake);
 }
 
+void r2d_physics_set_sleeping(R2DPhysics *p, int id, bool sleeping)
+{
+    if (!r2d_physics_is_alive(p, id)) return;
+    // Выключенный сон означает «тело всегда бодрое»: его двигает не только
+    // импульс, но и прямое управление скоростью из игры (перетаскивание,
+    // конвейер, скриптовый телекинез). Проснувшееся тело Box2D усыпит снова
+    // через накопленный покой, и setVelocity перестанет действовать — это
+    // нашлось тестом: тело замирало ровно там, где уснуло.
+    b2Body_EnableSleep(p->bodies[id], !sleeping);
+    if (!sleeping) b2Body_SetAwake(p->bodies[id], true);
+}
+
+bool r2d_physics_is_sleeping_enabled(const R2DPhysics *p, int id)
+{
+    if (!r2d_physics_is_alive(p, id)) return true;
+    return b2Body_IsSleepEnabled(p->bodies[id]);
+}
+
 void r2d_physics_set_enabled(R2DPhysics *p, int id, bool enabled)
 {
     if (!r2d_physics_is_alive(p, id)) return;
@@ -858,31 +876,6 @@ int r2d_physics_create_joint(R2DPhysics *p, int type, int a, int b,
         joint = b2CreatePrismaticJoint(p->world, &d);
         break;
     }
-    case R2D_JOINT_MOUSE: {
-        b2MouseJointDef d = b2DefaultMouseJointDef();
-        // Тело A у mouse-сустава СТАТИЧЕСКОЕ (Box2D так требует): это «рука»,
-        // которая тянет тело B к точке. Если игра передала динамическое тело A,
-        // оно всё равно не должно двигаться — Box2D этого не проверяет, и
-        // предупредить честнее, чем молча получить странную физику.
-        d.bodyIdA = p->bodies[a];
-        d.bodyIdB = p->bodies[b];
-        if (b2Body_GetType(p->bodies[a]) != b2_staticBody) {
-            R2D_WARN("mouse-сустав: тело A (%d) не статическое — тянуть будет оно", a);
-        }
-        d.target = wb;                       // куда тянем (мировые метры)
-        // Сила по умолчанию — из массы тела: иначе значение Box2D (1 Н) не
-        // поднимет даже килограмм, и «перетаскивание» просто не работало бы.
-        const float mass = b2Body_GetMass(p->bodies[b]);
-        d.maxForce = max_motor_torque > 0.0f ? max_motor_torque : mass * 1000.0f;
-        d.collideConnected = collide_connected;
-        // ВНИМАНИЕ: сустав создаётся и цель читается, но ТЯГА НЕ ПРОВЕРЕНА —
-        // тело к цели не поехало ни в тесте, ни в отдельной пробе, и причину
-        // найти не удалось (параметры проверены: A статическое, B динамическое,
-        // масса и сила ненулевые). Пока это не выяснено, mouse-сустав не
-        // обещаем в документации: см. docs/highlevel/world.md.
-        joint = b2CreateMouseJoint(p->world, &d);
-        break;
-    }
     case R2D_JOINT_FILTER: {
         b2FilterJointDef d = b2DefaultFilterJointDef();
         d.bodyIdA = p->bodies[a];
@@ -950,31 +943,16 @@ int r2d_physics_create_joint(R2DPhysics *p, int type, int a, int b,
         return -1;
     }
 
-    // Сустав НЕ будит уснувшие тела (Box2D v3), поэтому только что созданный
-    // сустав не действовал: тело спало и стояло на месте. Это нашлось тестом
-    // на mouse-сустав («тело тянется к цели» — не тянулось) и касается всех
-    // видов: игра вправе ждать, что новый сустав начнёт работать сразу.
-    if (!b2Body_IsAwake(p->bodies[a])) b2Body_SetAwake(p->bodies[a], true);
-    if (!b2Body_IsAwake(p->bodies[b])) b2Body_SetAwake(p->bodies[b], true);
+    // Сустав НЕ будит уснувшие тела сам (Box2D v3), поэтому только что
+    // созданный сустав не действовал: тело спало и стояло на месте. Это
+    // нашлось тестом на mouse-сустав («тело тянется к цели» — не тянулось) и
+    // касается всех видов: игра вправе ждать, что новый сустав заработает
+    // сразу. Для этого у Box2D есть штатный вызов.
+    b2Joint_WakeBodies(joint);
 
     p->joints[id] = joint;
     p->joint_alive[id] = true;
     return id;
-}
-
-void r2d_physics_set_joint_target(R2DPhysics *p, int id, float x, float y)
-{
-    if (!p || id < 0 || id >= R2D_MAX_JOINTS || !p->joint_alive[id]) return;
-    b2MouseJoint_SetTarget(p->joints[id], (b2Vec2){ R2D_TO_M(x), R2D_TO_M(y) });
-}
-
-bool r2d_physics_get_joint_target(const R2DPhysics *p, int id, float *x, float *y)
-{
-    if (!p || id < 0 || id >= R2D_MAX_JOINTS || !p->joint_alive[id]) return false;
-    const b2Vec2 t = b2MouseJoint_GetTarget(p->joints[id]);
-    if (x) *x = R2D_TO_PX(t.x);
-    if (y) *y = R2D_TO_PX(t.y);
-    return true;
 }
 
 void r2d_physics_destroy_joint(R2DPhysics *p, int id)

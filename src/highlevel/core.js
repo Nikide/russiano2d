@@ -97,6 +97,7 @@ export function engineOf() {
             bodyCount: () => 0,
             getVelocity: () => [0, 0], setVelocity: noop, setPosition: noop,
             applyImpulse: noop, setGravityScale: noop, createJoint: () => -1,
+            setAwake: noop, setBullet: noop, isBullet: () => false,
             destroyJoint: noop, createBody: () => -1, destroyBody: noop,
         };
     }

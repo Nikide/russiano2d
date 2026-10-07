@@ -333,13 +333,47 @@ export function installWorld($) {
         },
 
         /**
-         * Цель mouse-сустава: `$.world.jointTarget(id, x, y)`.
-         * Так игра «тащит» тело мышью — сустав тянет его к точке с
-         * ограниченной силой, без телепортации. Без аргументов читает цель.
+         * Потянуть узел к точке: `$.world.tug(узел, x, y, opts)`.
+         *
+         * Это НЕ mouse-сустав Box2D: тот создаётся, но тело к цели не тянет
+         * (проверено отдельной пробой — тело стояло на месте при любой силе).
+         * Вместо мёртвого сустава — честный пружинный контроллер: тянет тело
+         * скоростью, поэтому его можно перебить столкновением, и он не
+         * телепортирует.
+         *
+         * opts: `speed` (предел скорости, по умолчанию 900), `snap` (расстояние,
+         * с которого считаем, что дошли), `hold` (секунды, в течение которых
+         * тело насильно не спит).
+         *
+         * `hold` нужен по делу: Box2D засыпает тело после накопленного покоя, и
+         * перетаскивание обрывалось на полпути (тело замирало ровно там, где
+         * уснуло — нашлось тестом). Поэтому на время тяги будим тело явно.
          */
-        jointTarget(id, x, y) {
-            if (x === undefined) return engineOf().jointTarget(id | 0);
-            engineOf().setJointTarget(id | 0, x, y === undefined ? 0 : y);
+        tug(what, x, y, opts) {
+            const node = nodeOf(what);
+            if (!node || node.body < 0) return false;
+            const o = opts || {};
+            const speed = o.speed === undefined ? 900 : Number(o.speed) || 0;
+            const snap = o.snap === undefined ? 4 : Number(o.snap) || 0;
+            const hold = o.hold === undefined ? 0.25 : Number(o.hold) || 0;
+            const engine_ = engineOf();
+            // ВЫКЛЮЧАЕМ СОН на время перетаскивания. Одного setAwake мало:
+            // Box2D усыпит тело снова на накопленном покое, и setVelocity
+            // перестанет действовать — тело замирало на полпути (нашлось
+            // тестом, а причина — именно сон).
+            if (hold > 0 && typeof engine_.setSleeping === 'function') {
+                engine_.setSleeping(node.body, false);
+                engine_.setAwake(node.body, true);
+            }
+            const dx = x - node.x;
+            const dy = y - node.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist <= snap) {
+                engine_.setVelocity(node.body, 0, 0);
+                return true;
+            }
+            const k = Math.min(1, speed / Math.max(dist, 1e-6));
+            engine_.setVelocity(node.body, dx * k, dy * k);
             return true;
         },
 

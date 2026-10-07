@@ -113,9 +113,6 @@ typedef enum R2DJointKind {
     R2D_JOINT_PRISMATIC = 3,
     // Колесо/подвеска: тело крутится вокруг оси и может ходить вдоль неё.
     R2D_JOINT_WHEEL    = 4,
-    // Перетаскивание к цели: тело тянется к точке с ограниченной силой. Так
-    // делают «схватил мышью и тащу» — без телепортации и без ручного импульса.
-    R2D_JOINT_MOUSE    = 5,
     // Запрет столкновений между двумя конкретными телами (Box2D filter joint).
     // Это надёжнее масок: работает для пары, не трогая слои остальных.
     R2D_JOINT_FILTER   = 6,
@@ -181,6 +178,11 @@ void  r2d_physics_apply_impulse(R2DPhysics *p, int id, float ix, float iy);
 void  r2d_physics_set_gravity(R2DPhysics *p, float gx, float gy);
 void  r2d_physics_get_gravity(const R2DPhysics *p, float *gx, float *gy);
 void  r2d_physics_set_awake(R2DPhysics *p, int id, bool awake);
+// Разрешение засыпать. false — тело всегда бодрое: нужно там, где игра
+// двигает тело напрямую скоростью (перетаскивание), иначе Box2D усыпит его
+// на накопленном покое и управление перестанет действовать.
+void  r2d_physics_set_sleeping(R2DPhysics *p, int id, bool sleeping);
+bool  r2d_physics_is_sleeping_enabled(const R2DPhysics *p, int id);
 // Включение/выключение тела: выключенное не сталкивается и не попадает в
 // запросы, но остаётся живым. Нужно пулу объектов, чтобы не пересоздавать
 // тело на каждый spawn (docs/HIGH_LEVEL_API_PERF.md §3.6).
@@ -283,9 +285,6 @@ int  r2d_physics_create_joint(R2DPhysics *p, int type, int a, int b,
                               bool enable_motor, float motor_speed, float max_motor_torque);
 // Ось для следующего prismatic/wheel-сустава в МИРОВЫХ координатах.
 void r2d_physics_set_joint_axis(R2DPhysics *p, float ax, float ay);
-// Цель mouse-сустава (мировые пиксели): этим игра и «тащит» тело.
-void r2d_physics_set_joint_target(R2DPhysics *p, int id, float x, float y);
-bool r2d_physics_get_joint_target(const R2DPhysics *p, int id, float *x, float *y);
 void r2d_physics_destroy_joint(R2DPhysics *p, int id);
 bool r2d_physics_joint_alive(const R2DPhysics *p, int id);
 int  r2d_physics_joint_count(const R2DPhysics *p);
