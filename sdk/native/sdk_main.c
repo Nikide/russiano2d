@@ -30,6 +30,9 @@ static const Command k_commands[] = {
     { "project",  sdk_cmd_project,  "сведения о проекте (project.json, main.js)" },
     { "projects", sdk_cmd_projects, "найти проекты под каталогом" },
     { "validate", sdk_cmd_validate, "проверить ассет, структурная диагностика" },
+    { "atlas-grid",   sdk_cmd_atlas_grid,   "создать атлас спрайтов сеткой из картинки" },
+    { "atlas-format", sdk_cmd_atlas_format, "привести атлас к каноническому виду" },
+    { "atlas-info",   sdk_cmd_atlas_info,   "кадры, теги, слайсы и проверка атласа" },
     { "run",      sdk_cmd_run,      "запустить игру движком" },
     { "build",    sdk_cmd_build,    "собрать игру в один файл" },
 };

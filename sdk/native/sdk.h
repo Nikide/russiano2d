@@ -163,6 +163,37 @@ void sdk_proc_free(SdkProcResult *res);
 // Путь к бинарнику движка: --engine, R2D_ENGINE, рядом с r2d-sdk.
 bool sdk_find_engine(const char *override_path, char *out, size_t cap);
 
+typedef struct SdkArgs {
+    int          argc;
+    const char **argv;   // без имени программы и команды
+} SdkArgs;
+
+// ---------------------------------------------------------------------------
+// JSON и изображения
+// ---------------------------------------------------------------------------
+// Компактная запись произвольного JSON в каноническом виде SDK: пробел после
+// «:» и «,», объекты и массивы в одну строку. Порядок ключей сохраняется.
+void sdk_json_put_compact(R2dSb *sb, const R2dJson *v);
+
+// Размер изображения (PNG/JPG/BMP…) без полной декодировки.
+bool sdk_image_info(const char *path, int *w, int *h);
+// RGBA8 целиком; освобождать sdk_image_free(). NULL при ошибке.
+uint8_t *sdk_image_load_rgba(const char *path, int *w, int *h);
+void sdk_image_free(uint8_t *pixels);
+// Запись RGBA8 в PNG.
+bool sdk_image_write_png(const char *path, const uint8_t *rgba, int w, int h);
+
+// ---------------------------------------------------------------------------
+// Атласы спрайтов (формат Aseprite-совместимый, читается $.atlas — docs/SDK.md §7)
+// ---------------------------------------------------------------------------
+void sdk_validate_atlas(const char *path, SdkReport *rep);
+// Приводит JSON атласа к каноническому виду (одна строка на кадр, тег, слайс).
+// Возвращает malloc'нутый текст или NULL (ошибка — в rep).
+char *sdk_atlas_canonical(const R2dJson *root, SdkReport *rep, const char *asset);
+int sdk_cmd_atlas_grid(const SdkArgs *a);
+int sdk_cmd_atlas_format(const SdkArgs *a);
+int sdk_cmd_atlas_info(const SdkArgs *a);
+
 // ---------------------------------------------------------------------------
 // Валидация ассетов (docs/SDK.md §6): один реестр проверяющих функций.
 // ---------------------------------------------------------------------------
@@ -178,11 +209,6 @@ const char *sdk_validator_type(int i);
 // ---------------------------------------------------------------------------
 // Команды CLI (каждая печатает JSON и возвращает код выхода)
 // ---------------------------------------------------------------------------
-typedef struct SdkArgs {
-    int          argc;
-    const char **argv;   // без имени программы и команды
-} SdkArgs;
-
 const char *sdk_arg_value(const SdkArgs *a, const char *flag);   // --flag value
 bool        sdk_arg_flag(const SdkArgs *a, const char *flag);    // --flag
 // n-й позиционный аргумент (не флаг и не значение флага).

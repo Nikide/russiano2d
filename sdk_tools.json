@@ -25,6 +25,26 @@
       "entry": "diagnostics",
       "binary": "build/r2d-sdk",
       "category": "backend"
+    },
+    {
+      "id": "sprite-studio",
+      "name": "Sprite Studio",
+      "description": "Кадры, пивоты, длительности и метаданные атласа спрайтов (*.atlas.json, формат читает $.atlas). Нарезка картинки сеткой.",
+      "last_updated": "2026-10-08T20:00:00+03:00",
+      "entry": "sprite-studio",
+      "category": "classic-2d",
+      "assets": [
+        "*.atlas.json",
+        "*.png"
+      ]
+    },
+    {
+      "id": "animation-studio",
+      "name": "Animation Studio",
+      "description": "Анимации спрайтов как теги атласа: диапазон кадров, направление, цикл, длительность. Просмотр настоящим рантаймом.",
+      "last_updated": "2026-10-08T20:00:00+03:00",
+      "entry": "animation-studio",
+      "category": "classic-2d"
     }
   ]
 }

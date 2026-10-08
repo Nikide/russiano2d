@@ -4919,8 +4919,14 @@ static SDL_EnumerationResult SDLCALL r2d__scan_cb(void *userdata, const char *di
         return SDL_ENUM_CONTINUE;
     }
 
+    // Следим за скриптами и за атласами спрайтов (*.atlas.json): их правит SDK
+    // (Sprite Studio), а игра читает при старте — перезапуск подхватывает
+    // новые кадры без ручного F5. Прочий JSON (сохранения, данные) не трогаем:
+    // игра сама пишет его на ходу, и перезапуск превратился бы в петлю.
     const size_t len = SDL_strlen(fname);
-    if (len < 3 || SDL_strcasecmp(fname + len - 3, ".js") != 0) return SDL_ENUM_CONTINUE;
+    const bool is_script = len >= 3 && SDL_strcasecmp(fname + len - 3, ".js") == 0;
+    const bool is_atlas = len >= 11 && SDL_strcasecmp(fname + len - 11, ".atlas.json") == 0;
+    if (!is_script && !is_atlas) return SDL_ENUM_CONTINUE;
 
     // Складываем времена правки и размеры — достаточно, чтобы заметить
     // сохранение файла, и не зависит от точности часов файловой системы.

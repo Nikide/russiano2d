@@ -235,6 +235,121 @@ static void test_validate(void)
     sdk_report_free(&rep);
 }
 
+// Записывает PNG w×h и возвращает путь.
+static const char *put_png(const char *rel, int w, int h)
+{
+    uint8_t *px = (uint8_t *)calloc((size_t)w * h, 4);
+    for (int i = 0; i < w * h; ++i) { px[i * 4] = (uint8_t)(i * 7); px[i * 4 + 3] = 255; }
+    const char *path = p(rel);
+    char dir[1024];
+    sdk_dirname(path, dir, sizeof dir);
+    SDL_CreateDirectory(dir);
+    sdk_image_write_png(path, px, w, h);
+    free(px);
+    return path;
+}
+
+static void test_image(void)
+{
+    const char *png = put_png("img/a.png", 64, 32);
+    int w = 0, h = 0;
+    CHECK(sdk_image_info(png, &w, &h) && w == 64 && h == 32, "PNG: размер читается без декодировки");
+    uint8_t *px = sdk_image_load_rgba(png, &w, &h);
+    CHECK(px && w == 64 && h == 32 && px[3] == 255 && px[4] == 7, "PNG: RGBA загружен");
+    sdk_image_free(px);
+    CHECK(!sdk_image_info(p("img/none.png"), &w, &h), "нет файла картинки");
+    put("img/bad.png", "это не PNG");
+    CHECK(!sdk_image_info(p("img/bad.png"), &w, &h), "битый PNG отвергнут");
+}
+
+static void atlas_codes(const char *rel, const char *text, const char *const *want, int nwant, const char *msg)
+{
+    put(rel, text);
+    SdkReport rep;
+    sdk_report_init(&rep);
+    sdk_validate_atlas(p(rel), &rep);
+    for (int i = 0; i < nwant; ++i) {
+        if (!has_code(&rep, want[i])) {
+            ++g_fail;
+            printf("  FAIL %s: нет кода %s в %s (%s:%d)\n", msg, want[i], rep.items.data ? rep.items.data : "", __FILE__, __LINE__);
+        } else {
+            ++g_ok;
+        }
+    }
+    CHECK(report_is_json(&rep), "диагностика атласа — JSON");
+    sdk_report_free(&rep);
+}
+
+static void test_atlas(void)
+{
+    put_png("atl/hero.png", 64, 32);
+    // Корректный атлас.
+    SdkReport rep;
+    put("atl/ok.atlas.json",
+        "{\"meta\":{\"image\":\"hero.png\",\"size\":{\"w\":64,\"h\":32},"
+        "\"frameTags\":[{\"name\":\"idle\",\"from\":0,\"to\":1,\"direction\":\"forward\",\"loop\":true}],"
+        "\"slices\":[{\"name\":\"a\",\"keys\":[{\"frame\":0,\"bounds\":{\"x\":0,\"y\":0,\"w\":32,\"h\":32},\"pivot\":{\"x\":16,\"y\":31}}]}]},"
+        "\"frames\":{\"a\":{\"frame\":{\"x\":0,\"y\":0,\"w\":32,\"h\":32},\"duration\":100},"
+        "\"b\":{\"frame\":{\"x\":32,\"y\":0,\"w\":32,\"h\":32},\"duration\":100}}}");
+    sdk_report_init(&rep);
+    sdk_validate_atlas(p("atl/ok.atlas.json"), &rep);
+    CHECK(rep.count == 0, "корректный атлас: ноль диагностик");
+    sdk_report_free(&rep);
+
+    // Канонический вид: идемпотентен, один кадр на строку, пивот сохранён.
+    SdkReport r2;
+    sdk_report_init(&r2);
+    R2dJson *root = sdk_load_json(p("atl/ok.atlas.json"), &r2);
+    char *text = sdk_atlas_canonical(root, &r2, "x");
+    CHECK(text && strstr(text, "\"a\": {\"frame\": {\"x\": 0, \"y\": 0, \"w\": 32, \"h\": 32}, \"duration\": 100},"), "канонический вид: кадр в одну строку");
+    CHECK(text && strstr(text, "{\"name\": \"idle\", \"from\": 0, \"to\": 1, \"direction\": \"forward\", \"loop\": true}"), "канонический вид: тег в одну строку");
+    char err[128];
+    R2dJson *again = text ? r2d_json_parse(text, err, sizeof err) : NULL;
+    char *text2 = again ? sdk_atlas_canonical(again, &r2, "x") : NULL;
+    CHECK(text && text2 && strcmp(text, text2) == 0, "канонический вид идемпотентен");
+    free(text); free(text2);
+    r2d_json_free(root); r2d_json_free(again);
+    sdk_report_free(&r2);
+
+    // TexturePacker-массив не переписывается молча.
+    put("atl/arr.atlas.json", "{\"frames\":[{\"filename\":\"a\",\"frame\":{\"x\":0,\"y\":0,\"w\":8,\"h\":8}}]}");
+    sdk_report_init(&r2);
+    root = sdk_load_json(p("atl/arr.atlas.json"), &r2);
+    text = sdk_atlas_canonical(root, &r2, "x");
+    CHECK(!text && has_code(&r2, "SDK_ATLAS_FORMAT_UNSUPPORTED"), "массивный вид: SDK_ATLAS_FORMAT_UNSUPPORTED");
+    r2d_json_free(root);
+    sdk_report_free(&r2);
+
+    // Ошибки.
+    const char *c1[] = { "SDK_ATLAS_FRAME_BOUNDS", "SDK_ATLAS_FRAME_RECT" };
+    atlas_codes("atl/e1.atlas.json",
+        "{\"meta\":{\"image\":\"hero.png\"},\"frames\":{\"far\":{\"frame\":{\"x\":60,\"y\":0,\"w\":32,\"h\":32}},"
+        "\"zero\":{\"frame\":{\"x\":0,\"y\":0,\"w\":0,\"h\":4}}}}", c1, 2, "границы и размер");
+    const char *c2[] = { "SDK_ATLAS_IMAGE_MISSING" };
+    atlas_codes("atl/e2.atlas.json", "{\"meta\":{\"image\":\"net.png\"},\"frames\":{\"a\":{\"frame\":{\"x\":0,\"y\":0,\"w\":4,\"h\":4}}}}", c2, 1, "нет картинки");
+    const char *c3[] = { "SDK_ATLAS_TAG_RANGE", "SDK_ATLAS_TAG_DUPLICATE", "SDK_ATLAS_TAG", "SDK_ATLAS_TAG_PINGPONG" };
+    atlas_codes("atl/e3.atlas.json",
+        "{\"meta\":{\"image\":\"hero.png\",\"frameTags\":["
+        "{\"name\":\"x\",\"from\":0,\"to\":9},{\"name\":\"x\",\"from\":0,\"to\":0},"
+        "{\"name\":\"d\",\"from\":0,\"to\":0,\"direction\":\"sideways\"},"
+        "{\"name\":\"p\",\"from\":0,\"to\":0,\"direction\":\"pingpong\"}]},"
+        "\"frames\":{\"a\":{\"frame\":{\"x\":0,\"y\":0,\"w\":4,\"h\":4}}}}", c3, 4, "теги");
+    const char *c4[] = { "SDK_ATLAS_DURATION", "SDK_ATLAS_ROTATED", "SDK_ATLAS_FRAME_FRACTIONAL" };
+    atlas_codes("atl/e4.atlas.json",
+        "{\"meta\":{\"image\":\"hero.png\"},\"frames\":{"
+        "\"a\":{\"frame\":{\"x\":0,\"y\":0,\"w\":4,\"h\":4},\"duration\":-5},"
+        "\"b\":{\"frame\":{\"x\":0.5,\"y\":0,\"w\":4,\"h\":4},\"rotated\":true}}}", c4, 3, "длительность и поворот");
+    const char *c5[] = { "SDK_ATLAS_SLICE", "SDK_ATLAS_SIZE_MISMATCH" };
+    atlas_codes("atl/e5.atlas.json",
+        "{\"meta\":{\"image\":\"hero.png\",\"size\":{\"w\":99,\"h\":99},\"slices\":[{\"name\":\"s\",\"keys\":[{\"frame\":0,\"bounds\":{\"x\":0,\"y\":0,\"w\":0,\"h\":4}}]}]},"
+        "\"frames\":{\"a\":{\"frame\":{\"x\":0,\"y\":0,\"w\":4,\"h\":4}}}}", c5, 2, "слайсы и размер");
+    const char *c6[] = { "SDK_ATLAS_FRAMES" };
+    atlas_codes("atl/e6.atlas.json", "{\"meta\":{\"image\":\"hero.png\"},\"frames\":{}}", c6, 1, "пустой атлас");
+    const char *c7[] = { "SDK_ATLAS_TAG_FRAME" };
+    atlas_codes("atl/e7.atlas.json",
+        "{\"image\":\"hero.png\",\"frames\":{\"a\":{\"x\":0,\"y\":0,\"w\":4,\"h\":4}},\"tags\":{\"idle\":[\"a\",\"zzz\"]}}", c7, 1, "простые теги");
+}
+
 static void test_args(void)
 {
     const char *argv[] = { "dir", "--registry", "r.json", "--headless", "second" };
@@ -259,6 +374,8 @@ int main(void)
     test_registry();
     test_assets();
     test_validate();
+    test_image();
+    test_atlas();
     test_args();
 
     SDL_RemovePath(g_tmp);

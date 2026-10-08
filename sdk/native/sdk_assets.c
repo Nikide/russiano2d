@@ -22,7 +22,6 @@ static const TypeRule k_rules[] = {
     { ".animations.json", "re2dsprite.animations" },
     { ".surface.json",    "re2d.surface" },
     { ".atlas.json",      "sprite.atlas" },
-    { ".anim.json",       "animation" },
     { ".tilemap.json",    "tilemap" },
     { ".particles.json",  "particles" },
     { ".bake.json",       "re2d.bake" },

@@ -11,6 +11,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -115,6 +116,44 @@ def main():
     check(rc == 0 and "SDK_NO_VALIDATOR" in codes(d), "validate: нет проверки — info, не ошибка")
     rc, d = sdk("validate", os.path.join(FIX, "нет.json"))
     check(rc == 1 and "SDK_FILE_NOT_FOUND" in codes(d), "validate: нет файла")
+
+    # --- атласы: atlas-grid / atlas-format / atlas-info --------------------------------
+    png = os.path.join(ROOT, "tests", "fixtures", "sdk", "sprite_proj", "hero.png")
+    out_dir = os.path.join(ROOT, "build", "sdk_cli_atlas")
+    os.makedirs(out_dir, exist_ok=True)
+    out = os.path.join(out_dir, "hero.atlas.json")
+    rc, d = sdk("atlas-grid", png, "--out", out, "--cell", "32x32", "--prefix", "h", "--duration", "80",
+                "--tags", "idle:0-3,walk:4-7")
+    check(rc == 0 and d["ok"] and d["frames"] == 8 and d["cols"] == 4 and d["rows"] == 2, "atlas-grid: сетка 4×2 из клеток 32×32")
+    text = open(out, encoding="utf-8").read()
+    check('"h_7": {"frame": {"x": 96, "y": 32, "w": 32, "h": 32}, "duration": 80}' in text, "atlas-grid: канонический вид, кадр в одну строку")
+    check('"image": "' in text and 'hero.png"' in text, "atlas-grid: путь картинки относительно JSON")
+    rc, d = sdk("atlas-format", out)
+    check(rc == 0 and d["ok"] and d["changed"] is False, "atlas-format: канонический файл не меняется")
+    open(out, "w", encoding="utf-8").write(json.dumps(json.loads(text)))   # однострочный JSON
+    rc, d = sdk("atlas-format", out, "--write")
+    check(rc == 0 and d["changed"] and d["written"], "atlas-format --write: приводит однострочный JSON к каноническому виду")
+    check(open(out, encoding="utf-8").read() == text, "atlas-format: результат совпал с тем, что создал atlas-grid")
+    rc, d = sdk("atlas-info", out)
+    check(rc == 0 and [f["name"] for f in d["frames"]][:2] == ["h_0", "h_1"] and len(d["tags"]) == 2
+          and d["image"]["exists"] and d["image"]["w"] == 128, "atlas-info: кадры, теги и картинка")
+    rc, d = sdk("validate", out)
+    check(rc == 0 and d["type"] == "sprite.atlas" and d["errors"] == 0, "validate: тип sprite.atlas, ошибок нет")
+    rc, d = sdk("atlas-grid", png, "--out", out, "--cell", "30x30")
+    check(rc == 0 and "SDK_ATLAS_GRID_REMAINDER" in codes(d), "atlas-grid: остаток картинки — предупреждение")
+    rc, d = sdk("atlas-grid", png, "--out", out, "--cell", "32x32", "--tags", "idle:0-99")
+    check(rc == 1 and "SDK_ATLAS_TAG_RANGE" in codes(d), "atlas-grid: тег вне диапазона отвергнут")
+    rc, d = sdk("atlas-grid", png, "--out", out)
+    check(rc == 2 and "SDK_USAGE" in codes(d), "atlas-grid без сетки — SDK_USAGE")
+    rc, d = sdk("atlas-grid", os.path.join(FIX, "нет.png"), "--out", out, "--cell", "8x8")
+    check(rc == 2 and "SDK_ATLAS_IMAGE_MISSING" in codes(d), "atlas-grid: нет картинки")
+    bad = os.path.join(out_dir, "bad.atlas.json")
+    open(bad, "w", encoding="utf-8").write('{"meta":{"image":"../../tests/fixtures/sdk/sprite_proj/hero.png"},"frames":{"far":{"frame":{"x":100,"y":0,"w":64,"h":64}}}}')
+    rc, d = sdk("validate", bad)
+    check(rc == 1 and "SDK_ATLAS_FRAME_BOUNDS" in codes(d), "validate: кадр за пределами картинки")
+    diag = [x for x in d["diagnostics"] if x["code"] == "SDK_ATLAS_FRAME_BOUNDS"][0]
+    check(diag["location"]["frame"] == "far" and diag["details"]["image"] == [128, 64], "validate: location и details указывают на кадр и размер картинки")
+    shutil.rmtree(out_dir, ignore_errors=True)
 
     # --- ошибки использования ---------------------------------------------------
     rc, d = sdk("unknown-command")

@@ -1,5 +1,15 @@
 # История изменений
 
+## SDK: Sprite Studio и Animation Studio, Classic 2D срез (Phase 2)
+
+- Sprite Studio и Animation Studio в `sdk/`: атлас `*.atlas.json` (Aseprite-
+  совместимый формат `$.atlas`): кадры, пивот-слайсы, длительности, теги-
+  анимации, метаданные, undo/redo, просмотр настоящим рантаймом.
+- `r2d-sdk`: `atlas-grid`, `atlas-format`, `atlas-info`, валидатор `sprite.atlas`
+  (стабильные коды `SDK_ATLAS_*`); канонический вид файла — одна строка на кадр.
+- Движок: hot reload теперь следит и за `*.atlas.json` в каталоге игры
+  (раньше — только `.js`).
+
 ## SDK: оболочка, реестр инструментов и нативный бэкенд (Phase 1)
 
 - `sdk/` — приложение SDK на R2D (RmlUi): проекты, Asset Browser, каталог

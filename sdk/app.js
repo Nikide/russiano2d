@@ -14,6 +14,7 @@ import {
     findTool, summarize,
 } from './lib/model.js';
 import * as views from './lib/views.js';
+import * as atlasModel from './lib/atlas_model.js';
 
 const DOC = 'sdk/ui/shell.rml';
 const STATE_FILE = 'sdk/state.local.json';
@@ -261,6 +262,12 @@ export function createApp($) {
             showView(view);
             return { id: tool.id, entry: tool.entry };
         }
+        // Без явного файла инструмент получает выбранный в Asset Browser ассет.
+        const toolArgs = Object.assign({}, args || {});
+        if (!toolArgs.assetAbs && state.project && state.selected) {
+            toolArgs.asset = state.selected;
+            toolArgs.assetAbs = joinPath(state.project.abs, state.selected);
+        }
         // Экран инструмента — модуль sdk/tools/<entry>.js с экспортом open(app, args).
         try {
             let mod = toolModules.get(tool.entry);
@@ -268,7 +275,7 @@ export function createApp($) {
                 mod = await import('./tools/' + tool.entry + '.js');
                 toolModules.set(tool.entry, mod);
             }
-            const session = await mod.open(app, Object.assign({ tool }, args || {}));
+            const session = await mod.open(app, Object.assign({ tool }, toolArgs));
             state.tool = { id: tool.id, entry: tool.entry };
             setStatus('открыт инструмент: ' + tool.name, '');
             return session || state.tool;
@@ -499,6 +506,10 @@ export function createApp($) {
                            codes: state.diagnostics.map((d) => d.code) },
             run: state.run ? { running: state.run.running, exitCode: state.run.exitCode } : null,
             tool: state.tool,
+            studios: {
+                sprite: app.studios && app.studios.sprite ? app.studios.sprite.snapshot() : null,
+                animation: app.studios && app.studios.animation ? app.studios.animation.snapshot() : null,
+            },
         };
     }
 
@@ -510,6 +521,9 @@ export function createApp($) {
         runProject, stopProject, buildProject, showDoc, showView, snapshot,
         setStatus, setDiagnostics, addDiagnostic, backend,
         visibleAssets,
+        atlasModel,                       // чистая модель атласа: агент правит данные теми же функциями, что студия
+        studios: {},
+        atlasSessions: new Map(),
         get doc() { return doc; },
         renderAll,
     };

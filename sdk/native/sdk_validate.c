@@ -84,6 +84,7 @@ static const Validator k_validators[] = {
     { "project",      validate_project },
     { "sdk.registry", validate_registry },
     { "json",         validate_json },
+    { "sprite.atlas", sdk_validate_atlas },
 };
 
 int sdk_validator_count(void) { return (int)(sizeof k_validators / sizeof k_validators[0]); }

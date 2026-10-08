@@ -1,0 +1,81 @@
+<rml>
+<head>
+    <link type="text/rcss" href="studio.rcss"/>
+    <title>Sprite Studio</title>
+</head>
+<body>
+<div class="studio">
+    <div class="bar top">
+        <button id="ss-back" class="btn small">К SDK</button>
+        <span class="title">Sprite Studio</span>
+        <span id="ss-file" class="sub">файл не открыт</span>
+        <span id="ss-dirty" class="dirty"></span>
+    </div>
+
+    <div class="bar">
+        <button id="ss-save" class="btn primary">Сохранить</button>
+        <button id="ss-undo" class="btn">Отменить</button>
+        <button id="ss-redo" class="btn">Повторить</button>
+        <button id="ss-validate" class="btn">Проверить</button>
+        <button id="ss-tool-select" class="btn on">Кадры</button>
+        <button id="ss-tool-pivot" class="btn">Пивот</button>
+        <button id="ss-zoom-out" class="btn">−</button>
+        <button id="ss-zoom-in" class="btn">+</button>
+        <button id="ss-fit" class="btn">Вписать</button>
+        <button id="ss-grid" class="btn on">Сетка пикселей</button>
+        <button id="ss-to-anim" class="btn">Анимации</button>
+    </div>
+
+    <div class="body-row">
+        <div class="side left">
+            <h4>Кадры</h4>
+            <div id="ss-frames" class="list grow"></div>
+            <div id="ss-image-info" class="hint"></div>
+        </div>
+
+        <div class="center">
+            <div id="ss-view" class="viewport"></div>
+            <div id="ss-overlay" class="overlay"></div>
+            <div id="ss-hud" class="hud-text">—</div>
+        </div>
+
+        <div class="side right">
+            <div id="ss-create">
+                <h4>Нарезка сеткой</h4>
+                <div class="hint">Картинка без атласа: нарезка делается нативным r2d-sdk atlas-grid.</div>
+                <div class="field-row"><label>Столбцов</label><input id="g-cols" type="text" value="4" class="field"/></div>
+                <div class="field-row"><label>Строк</label><input id="g-rows" type="text" value="1" class="field"/></div>
+                <div class="field-row"><label>Длит., мс</label><input id="g-dur" type="text" value="100" class="field"/></div>
+                <div class="field-row"><button id="ss-make-atlas" class="btn primary">Создать атлас</button></div>
+            </div>
+
+            <div id="ss-edit">
+                <h4>Кадр</h4>
+                <div class="field-row"><label>Имя</label><input id="f-name" type="text" value="" class="field"/></div>
+                <div class="field-row"><label>X, Y</label>
+                    <div class="pair"><input id="f-x" type="text" value="" class="field"/><input id="f-y" type="text" value="" class="field"/></div></div>
+                <div class="field-row"><label>Ш, В</label>
+                    <div class="pair"><input id="f-w" type="text" value="" class="field"/><input id="f-h" type="text" value="" class="field"/></div></div>
+                <div class="field-row"><label>Пивот</label>
+                    <div class="pair"><input id="f-px" type="text" value="" class="field"/><input id="f-py" type="text" value="" class="field"/></div></div>
+                <div class="field-row"><label>Длит., мс</label><input id="f-dur" type="text" value="" class="field"/></div>
+                <div class="field-row">
+                    <button id="ss-apply" class="btn primary">Применить</button>
+                    <button id="ss-pivot-clear" class="btn">Без пивота</button>
+                    <button id="ss-delete" class="btn">Удалить</button>
+                </div>
+                <div class="hint">Ctrl+Z / Ctrl+Shift+Z — отмена и повтор; стрелки двигают кадр на 1 px (Shift — 8).</div>
+
+                <h4>Метаданные</h4>
+                <div id="ss-meta" class="list"></div>
+                <div class="field-row"><label>Ключ</label><input id="m-key" type="text" value="" class="field"/></div>
+                <div class="field-row"><label>Значение</label><input id="m-val" type="text" value="" class="field"/></div>
+                <div class="field-row"><button id="ss-meta-set" class="btn">Записать</button></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="ss-diag" class="diag-strip"></div>
+</div>
+</body>
+</rml>

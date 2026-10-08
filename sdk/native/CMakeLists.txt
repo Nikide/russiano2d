@@ -11,6 +11,9 @@ set(R2D_SDK_SOURCES
     sdk_registry.c
     sdk_assets.c
     sdk_validate.c
+    sdk_json.c
+    sdk_image.c
+    sdk_atlas.c
     sdk_cmds.c
     "${CMAKE_SOURCE_DIR}/src/json.c")
 
@@ -18,7 +21,8 @@ add_library(r2d_sdk_core STATIC ${R2D_SDK_SOURCES})
 target_include_directories(r2d_sdk_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(r2d_sdk_core PUBLIC SDL3::SDL3 ${R2D_WIN_LIBS})
+target_link_libraries(r2d_sdk_core PUBLIC SDL3::SDL3 r2d_stb ${R2D_WIN_LIBS})
+set_source_files_properties(sdk_image.c PROPERTIES COMPILE_OPTIONS "-w")
 if(NOT MSVC)
     target_link_libraries(r2d_sdk_core PUBLIC m)
     target_compile_options(r2d_sdk_core PRIVATE -Wall -Wextra -Wno-unused-parameter)
