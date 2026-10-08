@@ -1,6 +1,6 @@
 // ===========================================================================
 // Демо Re2D: 2.5D мир-коробка. Игрок ходит от первого лица, мышь крутит взгляд
-// куда угодно, а в комнате стоят три добрых маскота — Руся в трёх костюмах.
+// куда угодно, а в комнате стоят три добрых маскота — три экземпляра базовой модели Руси.
 //
 // Что показывает демо:
 //   * Re2D — вид на тот же плоский мир: `$.camera.kind(Re2D)` и `.kind(Re2D)` на
@@ -37,11 +37,11 @@ const NOTICE = 420;
 const TALK = 230;
 
 const NPCS = [
-    { id: 'maid', costume: 'maid', name: 'Руся · горничная', x: 400, y: 620, home: Math.PI / 2,
+    { id: 'maid', name: 'Руся · хозяйка', x: 400, y: 620, home: Math.PI / 2,
       line: 'Добро пожаловать! Чай ещё горячий.' },
-    { id: 'swim', costume: 'swim', name: 'Руся · на пляже', x: 920, y: 520, home: Math.PI / 2,
+    { id: 'swim', name: 'Руся · гостья', x: 920, y: 520, home: Math.PI / 2,
       line: 'Тут так тепло, будто лето не кончается!' },
-    { id: 'police', costume: 'police', name: 'Руся · полиция РФ', x: 640, y: 820, home: -Math.PI / 2,
+    { id: 'police', name: 'Руся · хранительница', x: 640, y: 820, home: -Math.PI / 2,
       line: 'Всё спокойно. Проходите, не задерживайтесь.' },
 ];
 
@@ -108,7 +108,7 @@ export default function install($) {
             for (const cfg of NPCS) {
                 cfg.mood = 'neutral';
                 $.re2dSprite.from(CHARACTER, { id: cfg.id })
-                    .re2dStyle('pixel').re2dVariant('costume', cfg.costume).re2dMotion('idle')
+                    .re2dStyle('pixel').re2dMotion('idle')
                     .at(cfg.x, cfg.y).size(150, 150).collision(44, 44).body('static')
                     .attr('state', 'idle').angle(cfg.home).kind(Re2D);
             }

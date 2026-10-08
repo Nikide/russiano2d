@@ -84,3 +84,6 @@ id_rsa*
 !dist/**/*.dylib
 !dist/**/*.so
 !dist/**/*.so.*
+
+# Local Claude configuration
+.claude/

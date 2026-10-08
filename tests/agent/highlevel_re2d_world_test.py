@@ -9,12 +9,14 @@
 # 3. Маскоты реагируют на расстояние: idle → notice → smile, поворачиваются к
 #    игроку, меняют эмоцию; реплика появляется рядом с ближним.
 # 4. Esc возвращает в меню и отдаёт камеру и мышь обратно в 2D.
-# 5. Запись и воспроизведение: прогулка с мышью приходит в ту же точку.
+# 5. Запись и воспроизведение: прогулка с мышью приходит в ту же точку
+#    и даёт побайтово одинаковый PNG комнаты, маскотов и RmlUi.
 #
 # Запуск (после сборки):
 #   python3 tests/agent/highlevel_re2d_world_test.py
 # ===========================================================================
 
+import hashlib
 import json
 import math
 import os
@@ -159,7 +161,7 @@ def main():
         check(a.eval("$.window.mouseLock()") is False, "захват мыши снят")
 
     # --- Запись и воспроизведение прогулки --------------------------------------
-    def run(extra, record):
+    def run(extra, record, shot):
         with Agent(**kw, extra_args=extra) as b:
             b.step(5)
             for frame in range(60):
@@ -175,16 +177,20 @@ def main():
                 b.step(1)
             p = b.eval("$('#hero').pos()")
             y = b.eval("$.camera.info().yaw")
-            return p["x"], p["y"], y
+            b.screenshot(shot)
+            with open(shot, "rb") as image:
+                frame_hash = hashlib.sha256(image.read()).hexdigest()
+            return (p["x"], p["y"], y), frame_hash
 
     with tempfile.TemporaryDirectory(prefix="r2d-world-") as tmp:
         path = os.path.join(tmp, "walk.r2replay")
-        rec = run(["--record", path], True)
+        rec, rec_frame = run(["--record", path], True, os.path.join(tmp, "record.png"))
         lines = open(path, encoding="utf-8").read().splitlines()
         check(any('"dx"' in ln for ln in lines[1:]), "в записи есть сдвиг мыши")
-        rep = run(["--replay", path], False)
+        rep, rep_frame = run(["--replay", path], False, os.path.join(tmp, "replay.png"))
         check(abs(rep[0] - rec[0]) < 0.05 and abs(rep[1] - rec[1]) < 0.05 and abs(rep[2] - rec[2]) < 0.01,
               "воспроизведение пришло в ту же точку и угол: %s против %s" % (tuple(round(v, 3) for v in rep), tuple(round(v, 3) for v in rec)))
+        check(rep_frame == rec_frame, "воспроизведение даёт тот же кадр: комната, маскоты и RmlUi")
         check(rec[1] < 1100, "и прогулка была настоящей: игрок ушёл от старта (y = %.1f)" % rec[1])
 
     if FAILURES:
