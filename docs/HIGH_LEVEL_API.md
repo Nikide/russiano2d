@@ -740,6 +740,7 @@ $.time.delta()      // секунды с прошлого кадра (с учё�
 $.time.rawDelta()   // без масштабирования
 $.time.now()        // игровое время в секундах
 $.time.realNow()    // время с запуска движка
+$.time.perfNow()    // монотонные мс высокой точности (замеры)
 $.time.fps() .frame()
 $.time.scale(0.5) .pause() .resume() .toggle() .isPaused()
 await $.time.wait(500)
