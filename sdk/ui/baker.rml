@@ -27,7 +27,7 @@
                 <button id="bk-type-weapon" class="btn small off">Weapon</button>
                 <button id="bk-type-env" class="btn small off">Environment</button>
             </div>
-            <div class="hint">Сейчас запекается только Prop; остальные пресеты — по фазам плана (Character/VRM — Phase 5).</div>
+            <div class="hint">Prop и Character / VRM поддержаны. Weapon и Environment пока не реализованы.</div>
 
             <h4>UV</h4>
             <div class="field-row">
@@ -48,6 +48,9 @@
                 <button id="bk-origin-feet" class="btn small">ноги (Feet)</button>
             </div>
 
+            <h4>Выражение VRM</h4>
+            <input id="bk-expression" type="text" value="" class="field"/>
+            <div class="hint">Пусто — исходная поза лица. Имя из отчёта, например happy, запекает эмоцию для варианта.</div>
             <h4>Масштаб</h4>
             <div class="field-row"><label>Scale</label><input id="bk-scale" type="text" value="" class="field"/></div>
             <div class="hint">Пусто — вписать автоматически с запасом 2%.</div>

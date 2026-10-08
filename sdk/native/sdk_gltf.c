@@ -5,7 +5,8 @@
 // Поддержано: GLB и .gltf (внешние .bin и data:-URI), иерархия узлов (матрицы
 // и TRS), TRIANGLES/STRIP/FAN, индексы u8/u16/u32, POSITION/TEXCOORD_0 с
 // нормализованными целыми и byteStride, baseColorFactor/baseColorTexture,
-// alphaMode. Не поддержано (и сообщается кодом): sparse-аксессоры, Draco,
+// alphaMode, KHR_texture_transform, dense/sparse POSITION morph для выражений.
+// Не поддержано (и сообщается кодом): sparse базовой геометрии, Draco,
 // meshopt, KHR_texture_basisu. Скины (JOINTS_0/WEIGHTS_0 + inverseBind) дают позу, VRM 0.x/1.0 — humanoid и выражения; анимации не переносятся.
 // ===========================================================================
 #include "sdk_bake.h"
@@ -34,6 +35,8 @@ typedef struct Gltf {
     int       *tex_loaded;        // кэш: индекс текстуры glTF → индекс в scene->texs (-2 не пробовали, -1 ошибка)
     BkScene   *scene;
     int        depth;
+    const R2dJson *expression;
+    bool expression_v1;
     float    **skin_jm;           // на скин: матрицы суставов (мир * inverseBind), 16 float на сустав
     int        cur_node, cur_skin;
 } Gltf;
@@ -339,7 +342,12 @@ static void load_materials(Gltf *g)
     s->mats = (BkMaterial *)calloc((size_t)s->nmat, sizeof(BkMaterial));
     for (int i = 0; i < n; ++i) {
         BkMaterial *m = &s->mats[i];
+        m->uv_scale[0] = m->uv_scale[1] = 1;
         const R2dJson *jm = mats->items[i];
+        if (r2d_json_get(r2d_json_get(jm,"extensions"),"VRMC_materials_mtoon")) {
+            char loc[64]; snprintf(loc,sizeof loc,"{\"material\":%d}",i);
+            sdk_diag(g->rep,SDK_INFO,"SDK_BAKE_MATERIAL_FLATTENED",g->path,loc,NULL,"MToon конвертируется в цвет и текстуру: освещение, rim и outline не переносятся");
+        }
         snprintf(m->name, sizeof m->name, "%s", r2d_json_str(r2d_json_get(jm, "name"), ""));
         if (!m->name[0]) snprintf(m->name, sizeof m->name, "material%d", i);
         m->base[0] = m->base[1] = m->base[2] = m->base[3] = 1.0f;
@@ -349,7 +357,8 @@ static void load_materials(Gltf *g)
         for (int c = 0; bc && bc->type == R2D_JSON_ARR && c < 4 && c < bc->count; ++c) m->base[c] = (float)r2d_json_num(bc->items[c], 1);
         const R2dJson *bt = r2d_json_get(pbr, "baseColorTexture");
         if (bt) {
-            m->tex_coord = r2d_json_int(r2d_json_get(bt, "texCoord"), 0);
+            const R2dJson *texture_transform=r2d_json_get(r2d_json_get(bt,"extensions"),"KHR_texture_transform");
+            m->tex_coord = r2d_json_int(r2d_json_get(texture_transform,"texCoord"), r2d_json_int(r2d_json_get(bt, "texCoord"), 0));
             m->tex = load_texture(g, r2d_json_int(r2d_json_get(bt, "index"), -1));
             if (m->tex_coord != 0) {
                 char loc[64];
@@ -359,23 +368,102 @@ static void load_materials(Gltf *g)
                 m->tex = -1;
             }
             const R2dJson *ext = r2d_json_get(bt, "extensions");
-            if (ext && r2d_json_get(ext, "KHR_texture_transform")) {
-                char loc[64];
-                snprintf(loc, sizeof loc, "{\"material\":%d}", i);
-                sdk_diag(g->rep, SDK_WARNING, "SDK_BAKE_TEXTURE_TRANSFORM", g->path, loc, NULL,
-                         "Материал «%s»: KHR_texture_transform игнорируется — UV читаются как есть", m->name);
+            const R2dJson *tr = r2d_json_get(ext, "KHR_texture_transform");
+            if (tr) {
+                const R2dJson *scale=r2d_json_get(tr,"scale"),*off=r2d_json_get(tr,"offset");
+                for(int k=0;k<2;k++){m->uv_scale[k]=(float)r2d_json_num(r2d_json_at(scale,k),1);m->uv_offset[k]=(float)r2d_json_num(r2d_json_at(off,k),0);}
+                m->uv_rotation=(float)r2d_json_num(r2d_json_get(tr,"rotation"),0);
             }
         }
         const char *am = r2d_json_str(r2d_json_get(jm, "alphaMode"), "OPAQUE");
         m->alpha = !strcmp(am, "MASK") ? BK_ALPHA_MASK : !strcmp(am, "BLEND") ? BK_ALPHA_BLEND : BK_ALPHA_OPAQUE;
         m->cutoff = (float)r2d_json_num(r2d_json_get(jm, "alphaCutoff"), 0.5);
+        bool finite=isfinite(m->cutoff)&&isfinite(m->uv_rotation);
+        for(int k=0;k<4;k++)finite=finite&&isfinite(m->base[k]);
+        for(int k=0;k<2;k++)finite=finite&&isfinite(m->uv_scale[k])&&isfinite(m->uv_offset[k]);
+        if(!finite)sdk_diag(g->rep,SDK_ERROR,"SDK_BAKE_MATERIAL",g->path,NULL,NULL,"Материал %d содержит неконечные числа",i);
     }
     BkMaterial *d = &s->mats[n];
     snprintf(d->name, sizeof d->name, "default");
     d->base[0] = d->base[1] = d->base[2] = 0.8f;
     d->base[3] = 1.0f;
     d->tex = -1;
+    d->uv_scale[0]=d->uv_scale[1]=1;
     d->cutoff = 0.5f;
+}
+
+// Named VRM expressions become source geometry/materials before normal baking.
+static void select_expression(Gltf *g,const char *name)
+{
+    if(!name || !name[0])return;
+    const R2dJson *ext=r2d_json_get(g->root,"extensions"),*v1=r2d_json_get(ext,"VRMC_vrm");
+    if(v1){const R2dJson *ex=r2d_json_get(v1,"expressions");g->expression=r2d_json_get(r2d_json_get(ex,"preset"),name);if(!g->expression)g->expression=r2d_json_get(r2d_json_get(ex,"custom"),name);g->expression_v1=true;}
+    else {const R2dJson *groups=r2d_json_get(r2d_json_get(r2d_json_get(ext,"VRM"),"blendShapeMaster"),"blendShapeGroups");
+        for(int i=0;i<r2d_json_size(groups);i++){const R2dJson *ex=groups->items[i];if(!strcmp(r2d_json_str(r2d_json_get(ex,"presetName"),""),name)||!strcmp(r2d_json_str(r2d_json_get(ex,"name"),""),name)){g->expression=ex;break;}}
+    }
+    if(!g->expression){sdk_diag(g->rep,SDK_ERROR,"SDK_BAKE_EXPRESSION_UNKNOWN",g->path,NULL,NULL,"Выражение VRM «%s» отсутствует",name);return;}
+    if(g->expression_v1){
+        const R2dJson *uv=r2d_json_get(g->expression,"textureTransformBinds"),*colors=r2d_json_get(g->expression,"materialColorBinds");
+        for(int i=0;i<r2d_json_size(uv);i++){const R2dJson *b=uv->items[i];int m=r2d_json_int(r2d_json_get(b,"material"),-1);if(m<0||m>=g->scene->nmat-1)continue;
+            for(int k=0;k<2;k++){g->scene->mats[m].uv_offset[k]=(float)r2d_json_num(r2d_json_at(r2d_json_get(b,"offset"),k),0);g->scene->mats[m].uv_scale[k]=(float)r2d_json_num(r2d_json_at(r2d_json_get(b,"scale"),k),1);}}
+        for(int i=0;i<r2d_json_size(colors);i++){const R2dJson *b=colors->items[i];int m=r2d_json_int(r2d_json_get(b,"material"),-1);const char *type=r2d_json_str(r2d_json_get(b,"type"),"");
+            if(m>=0&&m<g->scene->nmat-1&&!strcmp(type,"color"))for(int k=0;k<4;k++)g->scene->mats[m].base[k]=(float)r2d_json_num(r2d_json_at(r2d_json_get(b,"targetValue"),k),1);
+            else sdk_diag(g->rep,SDK_WARNING,"SDK_BAKE_EXPRESSION_MATERIAL",g->path,NULL,NULL,"Выражение: материал %d, канал %s не имеет аналога в baked baseColor",m,type);}
+    } else {
+        const R2dJson *values=r2d_json_get(g->expression,"materialValues");
+        for(int i=0;i<r2d_json_size(values);i++){const R2dJson *b=values->items[i];const char *mn=r2d_json_str(r2d_json_get(b,"materialName"),""),*key=r2d_json_str(r2d_json_get(b,"propertyName"),"");
+            for(int m=0;m<g->scene->nmat-1;m++)if(!strcmp(g->scene->mats[m].name,mn)){
+                if(!strcmp(key,"_Color"))for(int k=0;k<4;k++)g->scene->mats[m].base[k]=(float)r2d_json_num(r2d_json_at(r2d_json_get(b,"targetValue"),k),1);
+                else if(!strcmp(key,"_MainTex_ST"))for(int k=0;k<2;k++){g->scene->mats[m].uv_scale[k]=(float)r2d_json_num(r2d_json_at(r2d_json_get(b,"targetValue"),k),1);g->scene->mats[m].uv_offset[k]=(float)r2d_json_num(r2d_json_at(r2d_json_get(b,"targetValue"),k+2),0);}
+                else sdk_diag(g->rep,SDK_WARNING,"SDK_BAKE_EXPRESSION_MATERIAL",g->path,NULL,NULL,"Выражение: %s не имеет аналога в baseColor",key);
+            }}
+    }
+    for(int i=0;i<g->scene->nmat;i++) {
+        const BkMaterial *m=&g->scene->mats[i];bool finite=isfinite(m->uv_rotation);
+        for(int k=0;k<4;k++)finite=finite&&isfinite(m->base[k]);
+        for(int k=0;k<2;k++)finite=finite&&isfinite(m->uv_scale[k])&&isfinite(m->uv_offset[k]);
+        if(!finite)sdk_diag(g->rep,SDK_ERROR,"SDK_BAKE_MATERIAL",g->path,NULL,NULL,"Expression material %d содержит неконечные числа",i);
+    }
+    sdk_diag(g->rep,SDK_INFO,"SDK_BAKE_EXPRESSION",g->path,NULL,NULL,"Выражение «%s» запечено как геометрия / baseColor / UV (вес 1)",name);
+}
+
+// Sparse morph POSITION: expand only this accessor, with explicit byte/index bounds.
+static const uint8_t *view_bytes(Gltf *g,const R2dJson *spec,size_t bytes)
+{
+    const R2dJson *v=r2d_json_at(r2d_json_get(g->root,"bufferViews"),r2d_json_int(r2d_json_get(spec,"bufferView"),-1));
+    int b=r2d_json_int(r2d_json_get(v,"buffer"),-1);double start=r2d_json_num(r2d_json_get(v,"byteOffset"),0),off=r2d_json_num(r2d_json_get(spec,"byteOffset"),0),len=r2d_json_num(r2d_json_get(v,"byteLength"),-1);
+    if(!v||b<0||b>=g->nbuf||!g->bufs[b].data||!isfinite(start)||!isfinite(off)||!isfinite(len)||floor(start)!=start||floor(off)!=off||floor(len)!=len||start<0||off<0||len<0||start>g->bufs[b].size||len>g->bufs[b].size-(size_t)start||off>len||bytes>(size_t)len-(size_t)off)return NULL;
+    return g->bufs[b].data+(size_t)start+(size_t)off;
+}
+static float *morph_positions(Gltf *g,int index,int count)
+{
+    const R2dJson *a=r2d_json_at(r2d_json_get(g->root,"accessors"),index),*sparse=r2d_json_get(a,"sparse");
+    if(!a||r2d_json_num(r2d_json_get(a,"count"),-1)!=count||r2d_json_int(r2d_json_get(a,"componentType"),0)!=5126||strcmp(r2d_json_str(r2d_json_get(a,"type"),""),"VEC3"))goto bad;
+    float *out=calloc((size_t)count*3,sizeof(float));if(!out)goto bad;
+    if(r2d_json_get(a,"bufferView")){
+        if(!sparse){AccView v;if(!acc_view(g,index,&v,"morph POSITION")){free(out);return NULL;}for(int i=0;i<count;i++)for(int k=0;k<3;k++)out[i*3+k]=acc_float(&v,i,k);return out;}
+        // Base may be dense even when sparse corrections follow.
+        const R2dJson *bv=r2d_json_at(r2d_json_get(g->root,"bufferViews"),r2d_json_int(r2d_json_get(a,"bufferView"),-1));
+        int stride=r2d_json_int(r2d_json_get(bv,"byteStride"),12);
+        const uint8_t *base=view_bytes(g,a,count?(size_t)(count-1)*stride+12:0);if(stride<12||stride%4||!base){free(out);goto bad;}for(int i=0;i<count;i++)memcpy(out+i*3,base+(size_t)i*stride,12);
+    }
+    if(sparse){int n=r2d_json_int(r2d_json_get(sparse,"count"),-1);const R2dJson *is=r2d_json_get(sparse,"indices"),*vs=r2d_json_get(sparse,"values");int ct=r2d_json_int(r2d_json_get(is,"componentType"),0),size=comp_size(ct);
+        if(n<0||n>count||(ct!=5121&&ct!=5123&&ct!=5125)){free(out);goto bad;}
+        const uint8_t *inds=view_bytes(g,is,(size_t)n*size),*vals=view_bytes(g,vs,(size_t)n*12);
+        if(!inds||!vals){free(out);goto bad;}uint32_t prev=0;
+        for(int i=0;i<n;i++){uint32_t ix=0;memcpy(&ix,inds+(size_t)i*size,size);if(ix>=(uint32_t)count||(i&&ix<=prev)){free(out);goto bad;}prev=ix;memcpy(out+(size_t)ix*3,vals+(size_t)i*12,12);}
+    }
+    return out;
+bad: sdk_diag(g->rep,SDK_ERROR,"SDK_BAKE_MORPH_ACCESSOR",g->path,NULL,NULL,"Некорректный POSITION morph accessor %d",index);return NULL;
+}
+static float expression_weight(Gltf *g,int mesh,int target)
+{
+    float weight=0;const R2dJson *bs=r2d_json_get(g->expression,g->expression_v1?"morphTargetBinds":"binds");
+    for(int i=0;i<r2d_json_size(bs);i++){const R2dJson *b=bs->items[i];if(r2d_json_int(r2d_json_get(b,"index"),-1)!=target)continue;
+        int obj=r2d_json_int(r2d_json_get(b,g->expression_v1?"node":"mesh"),-1);
+        if(obj==(g->expression_v1?g->cur_node:mesh))weight+=(float)r2d_json_num(r2d_json_get(b,"weight"),0)/(g->expression_v1?1.f:100.f);
+    }
+    return weight;
 }
 
 // ---------------------------------------------------------------------------
@@ -454,8 +542,18 @@ static void load_primitive(Gltf *g, const R2dJson *prim, const M4 *xf, int mesh_
     float *wp = (float *)malloc((size_t)pos.count * 3 * sizeof(float));
     uint16_t (*vj)[4] = skinned ? (uint16_t (*)[4])malloc((size_t)pos.count * sizeof *vj) : NULL;
     float (*vw)[4] = skinned ? (float (*)[4])malloc((size_t)pos.count * sizeof *vw) : NULL;
+    if(!wp || (skinned && (!vj || !vw))){sdk_diag(g->rep,SDK_ERROR,"SDK_BAKE_MEMORY",g->path,loc,NULL,"Не хватило памяти для вершин");free(wp);free(vj);free(vw);return;}
+    float *delta=NULL;
+    const R2dJson *targets=r2d_json_get(prim,"targets");
+    if(g->expression && r2d_json_size(targets)){
+        delta=calloc((size_t)pos.count*3,sizeof(float));
+        if(!delta){sdk_diag(g->rep,SDK_ERROR,"SDK_BAKE_MEMORY",g->path,loc,NULL,"Не хватило памяти под morph");free(wp);free(vj);free(vw);return;}
+        for(int t=0;t<targets->count;t++){float weight=expression_weight(g,mesh_index,t);const R2dJson *pa=r2d_json_get(targets->items[t],"POSITION");if(weight==0||!pa)continue;
+            float *values=morph_positions(g,r2d_json_int(pa,-1),pos.count);if(values){for(int i=0;i<pos.count*3;i++)delta[i]+=values[i]*weight;free(values);}}
+    }
     for (int i = 0; i < pos.count; ++i) {
-        const float p[3] = { acc_float(&pos, i, 0), acc_float(&pos, i, 1), acc_float(&pos, i, 2) };
+        float p[3] = { acc_float(&pos, i, 0), acc_float(&pos, i, 1), acc_float(&pos, i, 2) };
+        if(delta)for(int k=0;k<3;k++)p[k]+=delta[i*3+k];
         if (!skinned) { m4_point(xf, p, wp + i * 3); continue; }
         float wsum = 0, acc[3] = { 0, 0, 0 };
         for (int k = 0; k < 4; ++k) {
@@ -475,6 +573,10 @@ static void load_primitive(Gltf *g, const R2dJson *prim, const M4 *xf, int mesh_
         }
         if (wsum <= 0) m4_point(xf, p, acc);
         memcpy(wp + i * 3, acc, sizeof acc);
+    }
+    free(delta);
+    for(int i=0;i<pos.count*3;i++)if(!isfinite(wp[i])){
+        sdk_diag(g->rep,SDK_ERROR,"SDK_BAKE_POSITION",g->path,loc,NULL,"POSITION после morph/skinning не является конечным числом");free(wp);free(vj);free(vw);return;
     }
     const int tri_count = mode == 4 ? n / 3 : (n >= 3 ? n - 2 : 0);
     for (int t = 0; t < tri_count; ++t) {
@@ -497,7 +599,10 @@ static void load_primitive(Gltf *g, const R2dJson *prim, const M4 *xf, int mesh_
         float p[3][3], uv[3][2];
         for (int k = 0; k < 3; ++k) {
             memcpy(p[k], wp + vi[k] * 3, sizeof p[k]);
-            if (has_uv) { uv[k][0] = acc_float(&uvv, (int)vi[k], 0); uv[k][1] = acc_float(&uvv, (int)vi[k], 1); }
+            if (has_uv) { const BkMaterial *m=&s->mats[material];float u=acc_float(&uvv,(int)vi[k],0)*m->uv_scale[0],v=acc_float(&uvv,(int)vi[k],1)*m->uv_scale[1];float co=cosf(m->uv_rotation),si=sinf(m->uv_rotation);uv[k][0]=co*u-si*v+m->uv_offset[0];uv[k][1]=si*u+co*v+m->uv_offset[1]; }
+        }
+        if(has_uv)for(int k=0;k<3;k++)if(!isfinite(uv[k][0])||!isfinite(uv[k][1])){
+            sdk_diag(g->rep,SDK_ERROR,"SDK_BAKE_UV_RANGE",g->path,loc,NULL,"UV после преобразования не является конечным числом");free(wp);free(vj);free(vw);return;
         }
         BkTri *nt = push_tri(s, p, uv, has_uv, material);
         if (!nt) continue;
@@ -654,7 +759,7 @@ static void load_vrm(Gltf *g)
 // ---------------------------------------------------------------------------
 // Вход
 // ---------------------------------------------------------------------------
-bool bk_load(const char *path, BkScene *scene, SdkReport *rep)
+bool bk_load_expression(const char *path, const char *expression, BkScene *scene, SdkReport *rep)
 {
     memset(scene, 0, sizeof *scene);
     size_t size = 0;
@@ -762,6 +867,8 @@ bool bk_load(const char *path, BkScene *scene, SdkReport *rep)
     g.tex_loaded = (int *)malloc((size_t)(r2d_json_size(r2d_json_get(g.root, "textures")) + 1) * sizeof(int));
     for (int i = 0; i <= r2d_json_size(r2d_json_get(g.root, "textures")); ++i) g.tex_loaded[i] = -2;
     load_materials(&g);
+    select_expression(&g, expression);
+    if(rep->errors)goto done;
 
     // Узлы (иерархия, мировые матрицы), скины, VRM — до мешей.
     {
@@ -850,3 +957,5 @@ void bk_free(BkScene *s)
     free(s->skin_list);
     memset(s, 0, sizeof *s);
 }
+
+bool bk_load(const char *path, BkScene *scene, SdkReport *rep) { return bk_load_expression(path,NULL,scene,rep); }

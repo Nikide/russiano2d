@@ -108,7 +108,13 @@ char *sdk_read_file(const char *path, size_t *size)
 
 bool sdk_write_file(const char *path, const void *data, size_t size)
 {
-    return SDL_SaveFile(path, data, size);
+    // Readers (including live reload) see either the old complete file or the new one.
+    R2dSb temporary; r2d_sb_init(&temporary);
+    r2d_sb_printf(&temporary,"%s.sdk-%llu-%llu.tmp",path,(unsigned long long)SDL_GetTicksNS(),(unsigned long long)SDL_GetCurrentThreadID());
+    bool ok=SDL_SaveFile(temporary.data,data,size);
+    if(ok)ok=SDL_RenamePath(temporary.data,path);
+    if(!ok)SDL_RemovePath(temporary.data);
+    r2d_sb_free(&temporary);return ok;
 }
 
 bool sdk_file_exists(const char *path)
@@ -332,6 +338,8 @@ static bool takes_value(const char *flag)
     static const char *const names[] = {
         "--registry", "--engine", "--type", "--depth", "--out", "--output", "--entry",
         "--scene", "--frames", "--project", "--seed", "--preset", "--name", "--tool",
+        "--expression", "--uv", "--origin", "--size", "--scale", "--style", "--first-id", "--mode", "--x", "--y",
+        "--cell", "--cols", "--rows", "--prefix", "--duration", "--tags",
         "--root", "--game", "--fixed-dt", "--format", "--width", "--height", NULL,
     };
     for (int i = 0; names[i]; ++i) {

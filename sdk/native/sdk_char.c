@@ -4,7 +4,7 @@
 // Владение частями: каждый треугольник принадлежит одной кости Re2D (root, head,
 // arm*, forearm*, hip*, knee*) по доминирующему влиянию скина через humanoid-
 // соответствие. Неоднозначность (кости делят вес примерно поровну) считается и
-// сообщается, а не прячется. Выражения VRM (blendshape) в PNG не переносятся:
+// сообщается, а не прячется. Выражения VRM запекаются с --expression; без выбора
 // отчёт даёт сопоставление с эмоциями Re2DSprite.
 // ===========================================================================
 #include "sdk_bake.h"
@@ -284,7 +284,16 @@ void ch_report_json(R2dSb *o, const ChRig *rig, const BkScene *s)
         r2d_sb_put_json_string(o, rig->name[b]);
         r2d_sb_printf(o, ",\"triangles\":%d}", rig->pair[a][b]);
     }
-    r2d_sb_puts(o, "]},\"expressions\":[");
+    r2d_sb_puts(o, "]},\"mapping\":[");
+    for (int i = 0; i < s->vrm.nbones; ++i) {
+        int b = bone_of_node(s, s->vrm.bone_node[i]);
+        r2d_sb_printf(o, "%s{\"humanoid\":", i ? "," : "");
+        r2d_sb_put_json_string(o, s->vrm.bone_name[i]);
+        r2d_sb_printf(o, ",\"node\":%d,\"re2d\":", s->vrm.bone_node[i]);
+        if (b >= 0) r2d_sb_put_json_string(o, rig->name[b]); else r2d_sb_puts(o, "null");
+        r2d_sb_putc(o, '}');
+    }
+    r2d_sb_puts(o, "],\"expressions\":[");
     for (int i = 0; i < s->vrm.nexpr; ++i) {
         const char *e = emotion_of(s->vrm.expr[i]);
         r2d_sb_printf(o, "%s{\"vrm\":", i ? "," : "");

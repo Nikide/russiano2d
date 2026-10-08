@@ -79,6 +79,7 @@ export function createBaker(app) {
                       '--uv', s.uv, '--size', String(s.size), '--origin', s.origin];
         const scale = parseFloat(String(doc.value('bk-scale') || '').replace(',', '.'));
         if (Number.isFinite(scale) && scale > 0) args.push('--scale', String(scale));
+        const expression=String(doc.value('bk-expression')||'').trim();if(expression)args.push('--expression',expression);
         return args;
     }
 
@@ -155,6 +156,7 @@ export function createBaker(app) {
             (ch.vrm.rotated180 ? ' · повёрнут на 180°' : '') + '</div>' +
             '<div class="kv">Владение: ' + ch.ownership.triangles + ' треугольников, неоднозначных ' + ch.ownership.ambiguous +
             (ch.ownership.pairs.length ? ' (' + ch.ownership.pairs.map((p) => escapeHtml(p.a + '/' + p.b) + ' ' + p.triangles).join(', ') + ')' : '') + '</div>' +
+            '<div class="kv">Humanoid → Re2D: '+(ch.mapping||[]).map(m=>escapeHtml(m.humanoid)+' → '+escapeHtml(m.re2d||'не сопоставлено')).join(', ')+'</div>'+
             '<div class="kv">Выражения: ' + (ch.expressions.length ? ch.expressions.map((e) => escapeHtml(e.vrm) + '→' + escapeHtml(e.re2d || '—')).join(', ') : 'нет') + '</div>';
         return chHtml + '<div class="kv">Треугольников: ' + r.source.triangles + ' · материалов: ' + r.source.materials + ' · текстур: ' + r.source.textures + '</div>' +
             '<div class="kv">Частей: ' + r.parts + ' · отсчётов: ' + r.samples + ' (' + Math.round(r.atlasUsage * 1000) / 10 + '% атласа)</div>' +

@@ -391,7 +391,13 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
         sdk_diag(rep, SDK_ERROR, "SDK_BAKE_SIZE", source, NULL, NULL, "--size должен быть 1024, 2048 или 4096");
         return early_fail(res, opt, rep, NULL);
     }
-    if (!bk_load(source, &scene, rep)) {
+    if (!isfinite(opt->scale) || opt->scale < 0 || opt->scale > 1e6 ||
+        (opt->style && strcmp(opt->style, "anime") && strcmp(opt->style, "pixel")) ||
+        (opt->name && (!opt->name[0] || strlen(opt->name) >= sizeof name || strchr(opt->name, '/') || strchr(opt->name, '\\') || !strcmp(opt->name, ".") || !strcmp(opt->name, "..")))) {
+        sdk_diag(rep, SDK_ERROR, "SDK_BAKE_OPTIONS", source, NULL, NULL, "Неверные scale, style или имя файла результата");
+        return early_fail(res, opt, rep, NULL);
+    }
+    if (!bk_load_expression(source, opt->expression, &scene, rep)) {
         const bool r = early_fail(res, opt, rep, &scene);
         bk_free(&scene);
         return r;
@@ -787,9 +793,9 @@ files_done:
             snprintf(d, sizeof d, "{\"joints\":%d}", rig.unmapped_joints);
             sdk_diag(rep, SDK_INFO, "SDK_BAKE_JOINT_UNMAPPED", source, NULL, d, "%d суставов скина без humanoid-предка отнесены к root", rig.unmapped_joints);
         }
-        if (scene.vrm.nexpr) {
+        if (scene.vrm.nexpr && !opt->expression) {
             sdk_diag(rep, SDK_INFO, "SDK_BAKE_EXPRESSIONS_NOT_BAKED", source, NULL, NULL,
-                     "Выражения VRM (%d) — blendshape: в PNG не переносятся, в отчёте дано сопоставление с эмоциями Re2DSprite; лицо правится в Re2DSprite Studio", scene.vrm.nexpr);
+                     "Выражения VRM (%d) — blendshape: выберите --expression <имя>, чтобы запечь морфы и материалы в отдельный ассет / донор варианта; сопоставление имён — в отчёте", scene.vrm.nexpr);
         }
     }
 
@@ -808,7 +814,11 @@ done:
         R2dSb rj;
         r2d_sb_init(&rj);
         bk_report_json(res, opt, &scene, rep, &rj);
-        if (ok && res->report_path[0]) sdk_write_file(res->report_path, rj.data, rj.len);
+        if (ok && res->report_path[0] && !sdk_write_file(res->report_path, rj.data, rj.len)) {
+            sdk_diag(rep, SDK_ERROR, "SDK_WRITE_FAILED", res->report_path, NULL, NULL, "Не удалось записать отчёт bake");
+            ok = false; res->ok = false;
+            r2d_sb_clear(&rj); bk_report_json(res, opt, &scene, rep, &rj);
+        }
         res->report_json = r2d_sb_take(&rj);
     }
     bk_free(&scene);
@@ -871,6 +881,7 @@ int sdk_cmd_bake_re2d(const SdkArgs *a)
     BkOptions opt;
     bk_default_options(&opt);
     const char *v;
+    if ((v = sdk_arg_value(a, "--expression"))) opt.expression = v;
     if ((v = sdk_arg_value(a, "--type"))) opt.type = v;
     if ((v = sdk_arg_value(a, "--name"))) opt.name = v;
     if ((v = sdk_arg_value(a, "--style"))) opt.style = v;
@@ -884,6 +895,18 @@ int sdk_cmd_bake_re2d(const SdkArgs *a)
             return rc;
         }
     }
+    for (int i=0; i<3; ++i) {
+        const char *flag = i==0 ? "--size" : i==1 ? "--scale" : "--first-id";
+        const char *raw=sdk_arg_value(a,flag); if(!raw)continue;
+        char *end; double number=strtod(raw,&end);
+        if(!raw[0] || *end || !isfinite(number) || (i!=1 && floor(number)!=number) ||
+           (i==0 && number!=1024 && number!=2048 && number!=4096) ||
+           (i==1 && (number<0 || number>1e6)) || (i==2 && (number<1 || number>254))) {
+            int rc=sdk_fail(&rep,"SDK_BAKE_OPTIONS","%s: недопустимое числовое значение",flag);sdk_report_free(&rep);return rc;
+        }
+    }
+    v=sdk_arg_value(a,"--origin");
+    if(v && strcmp(v,"feet") && strcmp(v,"center")) {int rc=sdk_fail(&rep,"SDK_BAKE_OPTIONS","--origin: center или feet");sdk_report_free(&rep);return rc;}
     if ((v = sdk_arg_value(a, "--origin"))) opt.origin = !strcmp(v, "feet") ? BK_ORIGIN_FEET : BK_ORIGIN_CENTER;
     if ((v = sdk_arg_value(a, "--size"))) opt.size = atoi(v);
     if ((v = sdk_arg_value(a, "--scale"))) opt.scale = (float)atof(v);

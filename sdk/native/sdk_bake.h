@@ -27,6 +27,7 @@ typedef struct BkMaterial {
     int     tex_coord;      // номер набора UV (поддержан 0)
     BkAlpha alpha;
     float   cutoff;
+    float   uv_scale[2], uv_offset[2], uv_rotation;
 } BkMaterial;
 
 // Треугольник в мировых координатах glTF (после матриц узлов).
@@ -86,6 +87,7 @@ typedef struct BkScene {
     char        source_kind[8];      // "glb" / "gltf"
 } BkScene;
 
+bool bk_load_expression(const char *path, const char *expression, BkScene *scene, SdkReport *rep);
 bool bk_load(const char *path, BkScene *scene, SdkReport *rep);
 void bk_free(BkScene *scene);
 
@@ -94,7 +96,8 @@ typedef enum BkUvMode { BK_UV_AUTO = 0, BK_UV_EXISTING } BkUvMode;
 typedef enum BkOrigin { BK_ORIGIN_CENTER = 0, BK_ORIGIN_FEET } BkOrigin;
 
 typedef struct BkOptions {
-    const char *type;       // "prop"
+    const char *expression; // VRM expression baked into geometry/materials
+    const char *type;       // "prop" or "character"
     const char *name;       // базовое имя ассета
     BkUvMode    uv;
     BkOrigin    origin;
