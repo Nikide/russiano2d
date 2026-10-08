@@ -155,7 +155,9 @@ def main(argv: list[str]) -> int:
     # autostart=1 — нажать «Играть» без человека: оболочка ждёт клика, потому
     # что без жеста пользователя браузер не открывает аудиоустройство. С
     # --no-autostart кнопку жмёт человек, и сцена стартует только тогда.
-    url = f"http://127.0.0.1:{port}/{args.page}?args={','.join(engine_args)}"
+    # beacon=1 — слать маячки /__r2d_progress: без него страница молчит (на живом
+    # сайте у хостинга такого адреса нет).
+    url = f"http://127.0.0.1:{port}/{args.page}?args={','.join(engine_args)}&beacon=1"
     if not args.no_autostart:
         url += "&autostart=1"
 

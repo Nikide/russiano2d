@@ -2309,6 +2309,7 @@ API.md описывает то, на чём стоит `$`; часть вызо�
 | `engine.post`/`setPost`/`getPost`/`renderInfo`/`markUI` | [highlevel/render.md](highlevel/render.md) §3, §5 |
 | `engine.profile`/`profileReset`/`profileEnabled` | §15 выше, `$.debug.profile()` |
 | `engine.freeTexture`, `setSpriteFilter`/`spriteFilter`, `textureFromPixels` | [highlevel/resource.md](highlevel/resource.md), [highlevel/sprite.md](highlevel/sprite.md) |
+| `engine.rotSpriteLoad/Pose/Style/Rig/Part/Info/Dispose` — синтез 2D-персонажа из общего PNG | [highlevel/re2dsprite.md](highlevel/re2dsprite.md), [RE2DSPRITE_V2.md](RE2DSPRITE_V2.md) |
 | `engine.setDepth`/`depth`, `engine.depthInfo` | [highlevel/depth.md](highlevel/depth.md), `$.gfx.depth` |
 | `engine.bodyEnabled`/`isAwake`/`setAwake`/`setGravityScale`, `contactsOf`, `contactBetween` | §8 выше |
 | `engine.netHost`/`netJoin`/`netClose`/`netMode`/`netStatus`/`netSend`/`netPoll` | [highlevel/net.md](highlevel/net.md), `$.net` |
@@ -2332,3 +2333,9 @@ API.md описывает то, на чём стоит `$`; часть вызо�
 
 > В агентском режиме весь журнал движка переключается в **stderr** (даже то,
 > что печатают RmlUi и ImGui), чтобы stdout оставался чистым потоком JSON.
+
+Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](RE2DSPRITE_V2.md),
+[API `$`](highlevel/re2dsprite.md). Демо `rotsprite` — переключение костюмов,
+моргание, ходьба/бег на месте и перетаскивание кистей.
+
+Re2DSprite JSON, пользовательские модели/анимации и сокеты: [RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md). High-level `$.re2dSprite.from`, `$.re2dSprite.equip`, `.re2dAttach`, `.re2dDetach`, `.re2dBone`, `.re2dLayer`, `.re2dSeek`, `.re2dVariant`.

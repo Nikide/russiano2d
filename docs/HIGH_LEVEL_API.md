@@ -1143,6 +1143,7 @@ $.update(() => {
 | Граф кадров персонажа (псевдо-3D): водители, узлы, зеркало | `$.cels` | — | [cels.md](highlevel/cels.md) |
 | Z-буфер и псевдо-3D: глубина, меш, управление тестом | `$.gfx.depth` | — | [depth.md](highlevel/depth.md) |
 | Процедурный пиксель-арт: палитры, силуэт, свет, лист | `$.proc` | — | [proc.md](highlevel/proc.md) |
+| Re2DSprite v2: один PNG, тело, мимика, смена частей и anime/pixel проекция | `$.re2dSprite` | `<rotsprite>` | [rotsprite.md](highlevel/re2dsprite.md) |
 | Психика NPC и режиссёр рейда: страх, срывы, давление | `$.alive` | — | [alive.md](highlevel/alive.md) |
 | Сеть, только авторитарная: id, владение, снапшоты | `$.net` | — | [net.md](highlevel/net.md) |
 | Время, окно, файлы, сцены, ввод, мир, камера, интерфейс, звук, BSP | `$.time`, `$.window`, `$.fs`, `$.scene`, `$.input`, `$.world`, `$.camera`, `$.ui`, `$.sound`, `$.world.bsp` | — | [time](highlevel/time.md), [window](highlevel/window.md), [store](highlevel/store.md), [scene](highlevel/scene.md), [input](highlevel/input.md), [world](highlevel/world.md), [camera](highlevel/camera.md), [ui](highlevel/ui.md), [sound](highlevel/sound.md), [bsp](highlevel/bsp.md), [replay](highlevel/replay.md) |
@@ -1537,3 +1538,9 @@ $.ready(() => {
 
 Дальше: [AGENT_API.md](AGENT_API.md) — как этим управлять программой,
 [RECIPES](tutorial-platformer.md) и [API.md](API.md) — низкий уровень.
+
+Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](RE2DSPRITE_V2.md),
+[API `$`](highlevel/re2dsprite.md). Демо `rotsprite` — переключение костюмов,
+моргание, ходьба/бег на месте и перетаскивание кистей.
+
+Re2DSprite JSON, пользовательские модели/анимации и сокеты: [RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md). High-level `$.re2dSprite.from`, `$.re2dSprite.equip`, `.re2dAttach`, `.re2dDetach`, `.re2dBone`, `.re2dLayer`, `.re2dSeek`, `.re2dVariant`.

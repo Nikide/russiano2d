@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "atlas": "animal.png",
+  "style": "anime",
+  "rig": {
+    "bones": [
+      {
+        "name": "body",
+        "pivot": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "head",
+        "parent": "body",
+        "pivot": [
+          -13,
+          -5,
+          0
+        ]
+      },
+      {
+        "name": "tail",
+        "parent": "body",
+        "pivot": [
+          15,
+          -3,
+          0
+        ]
+      },
+      {
+        "name": "paw0",
+        "parent": "body",
+        "pivot": [
+          -11,
+          4,
+          6
+        ]
+      },
+      {
+        "name": "paw1",
+        "parent": "body",
+        "pivot": [
+          -11,
+          4,
+          -6
+        ]
+      },
+      {
+        "name": "paw2",
+        "parent": "body",
+        "pivot": [
+          11,
+          4,
+          6
+        ]
+      },
+      {
+        "name": "paw3",
+        "parent": "body",
+        "pivot": [
+          11,
+          4,
+          -6
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "id": 90,
+        "bone": "body"
+      },
+      {
+        "id": 91,
+        "bone": "head"
+      },
+      {
+        "id": 96,
+        "bone": "tail"
+      },
+      {
+        "id": 92,
+        "bone": "paw0"
+      },
+      {
+        "id": 93,
+        "bone": "paw1"
+      },
+      {
+        "id": 94,
+        "bone": "paw2"
+      },
+      {
+        "id": 95,
+        "bone": "paw3"
+      }
+    ],
+    "joints": [
+      {
+        "name": "body",
+        "bone": "body",
+        "point": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "head",
+        "bone": "head",
+        "point": [
+          -13,
+          -5,
+          0
+        ]
+      },
+      {
+        "name": "tail",
+        "bone": "tail",
+        "point": [
+          15,
+          -3,
+          0
+        ]
+      },
+      {
+        "name": "paw0",
+        "bone": "paw0",
+        "point": [
+          -11,
+          4,
+          6
+        ]
+      },
+      {
+        "name": "paw1",
+        "bone": "paw1",
+        "point": [
+          -11,
+          4,
+          -6
+        ]
+      },
+      {
+        "name": "paw2",
+        "bone": "paw2",
+        "point": [
+          11,
+          4,
+          6
+        ]
+      },
+      {
+        "name": "paw3",
+        "bone": "paw3",
+        "point": [
+          11,
+          4,
+          -6
+        ]
+      }
+    ]
+  },
+  "groups": {
+    "body": [
+      90
+    ],
+    "head": [
+      91
+    ],
+    "legs": [
+      92,
+      93,
+      94,
+      95
+    ],
+    "tail": [
+      96
+    ]
+  },
+  "defaults": {
+    "body": true,
+    "motion": "walk"
+  },
+  "animations": "animal.animations.json"
+}

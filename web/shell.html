@@ -12,6 +12,7 @@
   Аргументы движка берутся из адресной строки:
       /russiano2d.html?args=--frames,120,маска
       /russiano2d.html?autostart=1          — сразу «Играть» (для автотестов)
+      /russiano2d.html?beacon=1             — слать маячки /__r2d_progress (отладка)
 
   Страница ещё и «рассказывает» о прогрессе: маячки /__r2d_progress уходят на
   сервер дымового прогона (tests/web/smoke.py), поэтому при зависшем кадре
@@ -132,15 +133,15 @@
 <body>
     <div id="boot">
         <img id="boot-logo" src="@R2D_WEB_LOADER_IMAGE_NAME@" alt="Маскот Russiano2D">
-        <div id="boot-bar"><div id="boot-fill"></div></div>
-        <div id="boot-status">Инициализация P2D</div>
+        <div id="boot-bar" role="progressbar" aria-label="Загрузка движка" aria-valuemin="0" aria-valuemax="100"><div id="boot-fill"></div></div>
+        <div id="boot-status" role="status" aria-live="polite">Инициализация P2D</div>
         <button id="boot-start" disabled>Играть</button>
-        <div id="boot-error"></div>
+        <div id="boot-error" role="alert"></div>
     </div>
 
     <div id="stage-wrap">
         <div id="stage">
-            <canvas id="canvas" tabindex="0"></canvas>
+            <canvas id="canvas" tabindex="0" aria-label="Игра Russiano2D"></canvas>
         </div>
     </div>
 
@@ -177,7 +178,12 @@
     // --- Маячки прогресса -----------------------------------------------------
     // Нужны дымовому прогону: если кадр виснет, DOM уже не прочитать, а по этим
     // меткам видно, докуда движок дошёл. Ответ не нужен, ошибки глотаем.
+    // Только для дымового прогона (?autostart=1) или явного ?beacon=1: на живом
+    // сайте у статического хостинга такого адреса нет, и каждая строка журнала
+    // превращалась бы в запрос с ответом 404.
+    var beacon = query.get('autostart') === '1' || query.get('beacon') === '1';
     function report(stage, detail) {
+        if (!beacon) return;
         try {
             var url = '/__r2d_progress?stage=' + encodeURIComponent(stage)
                     + '&detail=' + encodeURIComponent(String(detail || '').slice(0, 300));
@@ -201,7 +207,9 @@
         } else {
             barEl.classList.remove('indeterminate');
             fillEl.style.width = Math.max(0, Math.min(100, percent)).toFixed(1) + '%';
+            barEl.setAttribute('aria-valuenow', Math.round(percent));
         }
+        if (percent === null) barEl.removeAttribute('aria-valuenow');
         // Постоянная подпись под полосой — «Инициализация P2D»; подробности
         // загрузки дописываются к ней, а не затирают её.
         statusEl.textContent = text ? 'Инициализация P2D — ' + text : 'Инициализация P2D';
@@ -265,6 +273,16 @@
     });
 
     // --- Модуль Emscripten ----------------------------------------------------
+    // Без WebGPU движок не поднимется: SDL_GPU в браузере работает только поверх
+    // него. Говорим об этом сразу, а не после минуты загрузки 50+ МБ.
+    var noWebGPU = !('gpu' in navigator);
+    if (noWebGPU) {
+        fail('Браузер не поддерживает WebGPU. Нужен Chrome или Edge 113+, '
+           + 'Safari 26+ либо Firefox 141+ (на Linux и Android — с включённым WebGPU).');
+        document.getElementById('boot-bar').style.display = 'none';
+        statusEl.textContent = 'Игру нельзя запустить в этом браузере';
+    }
+
     var Module = {
         arguments: args,
         canvas: canvasEl,
@@ -273,7 +291,7 @@
         // Emscripten зовёт это с текстом вида
         // «Downloading data... (1234/5678)» — отсюда берём проценты.
         setStatus: function (text) {
-            if (!text) return;
+            if (!text || noWebGPU) return;
             var m = text.match(/\((\d+)\s*\/\s*(\d+)\)/);
             if (m && Number(m[2]) > 0) {
                 var percent = 100 * Number(m[1]) / Number(m[2]);
@@ -285,9 +303,11 @@
             report('status', text);
         },
         onRuntimeInitialized: function () {
+            if (noWebGPU) return;
             setProgress(100, 'готово. Нажмите «Играть».');
             startEl.disabled = false;
             startEl.classList.add('shown');
+            if (!autostart) startEl.focus();
             report('ready', '');
             if (autostart) setTimeout(startGame, 0);
         },
@@ -295,7 +315,7 @@
             fail('движок прервал работу: ' + what);
         },
         monitorRunDependencies: function (left) {
-            if (left === 0) {
+            if (left === 0 && !noWebGPU) {
                 setProgress(null, 'Запускаю движок…');
                 report('wasm-ready', '');
             }

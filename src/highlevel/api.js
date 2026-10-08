@@ -75,7 +75,7 @@ import { installWeapons } from './weapons.js';
 import { installRaid } from './raid.js';
 import { installCels } from './cels.js';
 import { installProc } from './proc.js';
-import { installRotSprite } from './rotsprite.js';
+import { installRotSprite, tickRotSprite } from './rotsprite.js';
 import { installMesh } from './mesh.js';
 import { installAlive } from './alive.js';
 import { installNet } from './net.js';
@@ -1685,7 +1685,7 @@ function installFrameHooks($) {
         // анимацию персонажа. Интерфейс (экраны, диалоги, виджеты) остаётся
         // на реальном времени — кнопки обязаны работать и на паузе.
         const game_dt = ctx.time.delta();
-        prof('анимация'); tickAnim(game_dt);
+        prof('анимация'); tickAnim(game_dt); tickRotSprite(dt,game_dt);
         prof('плеер анимации'); tickAnimPlayer(game_dt);
         prof('состояния'); tickState(game_dt);
         prof('последовательности'); tickFlow(dt);

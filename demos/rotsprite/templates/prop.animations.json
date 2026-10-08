@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "clips": {
+    "spin": {
+      "duration": 4,
+      "loop": true,
+      "tracks": [
+        {
+          "target": "object",
+          "channel": "rotation.y",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              4,
+              360
+            ]
+          ]
+        }
+      ]
+    }
+  }
+}

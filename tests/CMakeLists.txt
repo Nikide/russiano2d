@@ -11,6 +11,17 @@
 # ---------------------------------------------------------------------------
 
 set(R2D_SANITIZE_FLAGS_AVAILABLE TRUE)
+
+# RotSprite: математика и границы буфера, без GPU и окна.
+add_executable(r2d_rotsprite_test rotsprite/rotsprite_test.c "${CMAKE_SOURCE_DIR}/src/rotsprite_math.c")
+target_include_directories(r2d_rotsprite_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+if(NOT MSVC)
+    target_link_libraries(r2d_rotsprite_test PRIVATE m)
+endif()
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_rotsprite_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_rotsprite_test PRIVATE -fsanitize=address,undefined)
+endif()
 if(MSVC OR CMAKE_CROSSCOMPILING)
     set(R2D_SANITIZE_FLAGS_AVAILABLE FALSE)
 endif()

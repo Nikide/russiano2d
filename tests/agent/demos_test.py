@@ -32,6 +32,7 @@ SCENES = {
     "shooter_witch": (4, 6, 900),
     "russi_vn": (3, 4, 300),
     "launcher": (0, 0, 20),
+    "rotsprite": (5, 0, 60),
 }
 
 FAILURES = []
@@ -43,7 +44,8 @@ FAILURES = []
 DOC_BUTTONS = {
     # Лаунчер целиком на RmlUi: проверяем, что документ поднят и слушает кнопки
     # (узлов <ui.*> у него больше нет — они были прошлой реализацией меню).
-    "launcher": ("demos/ui/launcher.rml", ["demo-0", "demo-1", "vol-up", "vol-mute"], True),
+    "launcher": ("demos/ui/launcher.rml", ["demo-0", "demo-1", "demo-2", "vol-up", "vol-mute"], True),
+    "rotsprite": ("demos/rotsprite/rotsprite.rml", ["front", "profile", "back", "auto", "menu"], True),
     # Новелла: документ реплики обязан подниматься и прятать штатную панель $.dialog.
     "russi_vn": ("demos/ui/vn-dialog.rml", ["vn-choice-0", "vn-choice-1", "vn-choice-2"], False),
 }

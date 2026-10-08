@@ -1,8 +1,9 @@
 # Russiano2D — демо-проект
 
-`demos/` — отдельная игра на движке: три сцены-демо, каждая показывает свой
+`demos/` — отдельная игра на движке: четыре сцены-демо, каждая показывает свой
 слой движка — платформер (Box2D и анимация), «Типичная ночь в Мытищинском лесу»
-(свет, частицы, волны) и новелла «Руси-тян» (`$.timeline` и интерфейс на RmlUi).
+(свет, частицы, волны), новелла «Руси-тян» (`$.timeline` и интерфейс на RmlUi)
+и Re2DSprite (поворот головы из одной развёртки всего персонажа).
 Запускается тем же бинарником, что и `game/`, и выбирается флагом `--game`.
 
 ## Запуск
@@ -10,6 +11,7 @@
 ```bash
 ./build/russiano2d --game demos                      # меню выбора
 ./build/russiano2d --game demos --scene platformer   # сразу конкретная сцена
+./build/russiano2d --game demos --scene re2dsprite    # маскот из одной развёртки
 ./build/russiano2d --game demos --scene russi_vn \
     --screenshot /tmp/s.png --screenshot-at 3 --seconds 5
 ```
@@ -56,6 +58,7 @@ export default function install($) {
 
 | Сцена | Что показывает | Ключевые вызовы |
 |---|---|---|
+| `re2dsprite` | **один атлас всего тела Руси-тян**: прототип головы, yaw −180..180°, pitch, nearest и привязка к пикселям. Стрелки — вращение, пробел — авто, Esc — меню. Базовый PNG и описание — [README](../demos/rotsprite/README.md) | `$.re2dSprite.create`, `.re2dPose`, `$.ui.doc` |
 | `platformer` | Box2D, листы анимации, монеты, враги, параллакс, HUD, пауза | `.controls`, `.frames`, `.animate`, `.on('death')`, `<ui.*>` |
 | `shooter_witch` | **ночной лес**: зомби-шутер в духе Vampire Survivors — авто-стрельба по ближайшему, волны, опыт, карты апгрейдов, фонари как единственный свет, тени от стволов, кровь и лужи | `<tilemap>` + `.autotile()`, `engine.light.visibility`, `$.audio.zone/obstacles/damping`, `$.fx.*`, `$.gfx.postPreset` |
 | `russi_vn` | **визуальная новелла «Руси-тян: Бака!»**: цундэрэ-маскот объясняет, чем JS лучше Python; интерфейс на RmlUi, пять локаций, тряска экрана, семь поз, озвучка реплик, три выбора и две концовки | `$.animatedTimelineScene2d`, `$.timeline.state`, `$.ui.doc`, `$.camera.shake`, `{ ending }` с флагом в `$.store` |
@@ -102,3 +105,7 @@ python3 tests/agent/demos_test.py light        # только выбранные
 Как собрать такое же демо с нуля — [TUTORIAL.md](TUTORIAL.md): модуль и
 сцены, мир с автотайлом и светом, герой с 8 направлениями, волны, кровь,
 карточки апгрейдов, HUD на якорях, меню со своей музыкой и профилирование.
+
+Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](RE2DSPRITE_V2.md),
+[API `$`](highlevel/re2dsprite.md). Демо `rotsprite` — переключение костюмов,
+моргание, ходьба/бег на месте и перетаскивание кистей.

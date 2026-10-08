@@ -1,15 +1,10 @@
-<rml>
-<head><title>RotSprite · Руси-тян</title><link type="text/rcss" href="rotsprite.rcss" /></head>
-<body>
-    <div id="heading"><div id="kicker">R2D / ЭКСПЕРИМЕНТ 01</div><h1>Один атлас. Любой поворот.</h1>
-        <p>RotSprite · Руси-тян · математический синтез пикселей</p></div>
-    <div id="atlas-caption"><h2>«Страшная развёртка» всего тела</h2>
-        <p>Голова · уши · волосы · торс · руки · юбка · ноги · хвост</p></div>
-    <div id="head-caption"><h2>Голова из этого же PNG</h2><p id="pose">yaw 0° · pitch 0°</p></div>
-    <div id="note">Первый milestone проецирует голову и уши. Области тела уже в общем атласе; их проекция — следующий этап.</div>
-    <div id="pitch-caption">Один материал поверхности · pitch −45° / 0° / +45°</div>
-    <div id="controls"><button id="front">Фронт</button><button id="profile">Профиль</button>
-        <button id="back">Затылок</button><button id="auto">Автоповорот</button><button id="menu">В меню</button>
-        <span>← → yaw · ↑ ↓ pitch · пробел пауза · Esc меню</span></div>
-</body>
-</rml>
+<rml><head><title>Re2DSprite · Руси-тян</title><link type="text/rcss" href="rotsprite.rcss" /></head><body>
+<div id="heading"><div id="kicker">R2D / RE2DSPRITE LAB</div><h1>Один атлас. Живой персонаж.</h1><p>Руси-тян · поворот · мимика · костюмы · суставы</p></div>
+<div id="atlas-caption"><h2>«Страшная развёртка» 4096×4096</h2><p>Материалы сверху · ID / глубина / покрытие / координаты снизу</p></div>
+<div id="head-caption"><h2>Персонаж + предмет из своих PNG</h2><p id="pose"/><p id="status"/></div>
+<div id="note">Потяни за кисть мышью, чтобы поднять руку.<br/>«Движение» переключает стойку, ходьбу и бег.<br/>JSON и PNG обновляются на лету; R — перечитать вручную.<p id="error"/></div>
+<div id="handLeft"></div><div id="handRight"></div>
+<div id="pitch-caption">Та же голова · pitch −45° / 0° / +45°</div>
+<div id="controls-extra"><button id="body">Голова / тело</button><button id="costume">Костюм</button><button id="hair">Причёска</button><button id="motion">Движение</button><button id="equipment">Предмет</button><button id="reset">Сброс рук</button><button id="reload">Перечитать</button><span>G предмет · C костюм · L движение · R обновить</span></div>
+<div id="controls"><button id="front">Фронт</button><button id="profile">Профиль</button><button id="back">Затылок</button><button id="auto">Автоповорот</button><button id="emotion">Эмоция</button><button id="eyes">Глаза</button><button id="mouth">Рот</button><button id="blink">Моргание</button><button id="talk">Речь</button><button id="menu">В меню</button><span>← → yaw · ↑ ↓ pitch · V эмоция · E глаза · M рот · B моргать · T речь</span></div>
+</body></rml>

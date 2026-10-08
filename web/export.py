@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import os
 import shutil
 import subprocess
@@ -36,6 +37,46 @@ REPO = Path(__file__).resolve().parent.parent
 # Что копировать в --out: страница, загрузчик, движок и груз.
 ARTIFACTS = ["russiano2d.html", "russiano2d.js", "russiano2d.wasm",
              "russiano2d.data", "loader.png", "russiano2d.png"]
+
+
+def optimize_loader_png(path: Path) -> None:
+    """Сжимает картинку экрана загрузки без видимой потери (палитра 256 цветов).
+
+    Это пиксель-арт с прозрачностью: полноцветный PNG весит мегабайт и грузится
+    раньше полосы прогресса. Нужен Pillow; если его нет или результат не меньше —
+    файл остаётся как был.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+    before = path.stat().st_size
+    img = Image.open(path).convert("RGBA")
+    packed = img.quantize(colors=256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
+    tmp = path.with_suffix(".tmp.png")
+    packed.save(tmp, optimize=True)
+    if tmp.stat().st_size < before * 0.8:
+        tmp.replace(path)
+        print(f"[export] {path.name}: {before / 1024:.0f} -> {path.stat().st_size / 1024:.0f} КБ", flush=True)
+    else:
+        tmp.unlink()
+
+
+def precompress(path: Path) -> list[Path]:
+    """Кладёт рядом .gz (и .br, если есть модуль brotli) для nginx gzip_static/brotli_static."""
+    made = []
+    raw = path.read_bytes()
+    gz = path.with_name(path.name + ".gz")
+    gz.write_bytes(gzip.compress(raw, compresslevel=9, mtime=0))
+    made.append(gz)
+    try:
+        import brotli  # type: ignore
+        br = path.with_name(path.name + ".br")
+        br.write_bytes(brotli.compress(raw, quality=11))
+        made.append(br)
+    except ImportError:
+        pass
+    return made
 
 
 def die(message: str) -> "None":
@@ -89,6 +130,9 @@ def main(argv: list[str]) -> int:
                     help="каталог сборки (по умолчанию <репозиторий>/build-web)")
     ap.add_argument("--out", default=None,
                     help="куда положить готовые файлы (по умолчанию только собрать)")
+    ap.add_argument("--precompress", action="store_true",
+                    help="рядом с .wasm/.js/.html/.data положить .gz (и .br при наличии brotli) "
+                         "для серверов со статическим сжатием")
     ap.add_argument("--debug", action="store_true",
                     help="RelWithDebInfo вместо Release (быстрее собирается, .wasm больше)")
     ap.add_argument("--clean", action="store_true", help="снести каталог сборки перед сборкой")
@@ -157,10 +201,20 @@ def main(argv: list[str]) -> int:
         for name in ARTIFACTS:
             target = "index.html" if (args.index and name == "russiano2d.html") else name
             shutil.copy2(build_dir / name, out / target)
-        total = sum((out / ("index.html" if args.index and n == "russiano2d.html" else n)).stat().st_size
-                    for n in ARTIFACTS)
+        optimize_loader_png(out / "loader.png")
+        names = ["index.html" if (args.index and n == "russiano2d.html") else n for n in ARTIFACTS]
+        if args.precompress:
+            for name in names:
+                if name.endswith((".wasm", ".js", ".html", ".data")):
+                    precompress(out / name)
+        total = sum((out / n).stat().st_size for n in names)
         print(f"[export] готово: {out} ({total / 1048576:.1f} МБ, "
               f"{len(ARTIFACTS)} файлов)", flush=True)
+        for name in names:
+            size = (out / name).stat().st_size
+            gz = out / (name + ".gz")
+            extra = f"  (gzip {gz.stat().st_size / 1048576:.1f} МБ)" if gz.exists() else ""
+            print(f"[export]   {name:<18} {size / 1048576:7.2f} МБ{extra}", flush=True)
         print(f"[export] запуск: python3 -m http.server -d {out} 8080", flush=True)
     else:
         print(f"[export] собрано в {build_dir}", flush=True)

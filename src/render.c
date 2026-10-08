@@ -669,6 +669,7 @@ int r2d_sprite_create(R2DRenderer *r, int texture, float sx, float sy, float sw,
     s->width  = sw;
     s->height = sh;
     s->force_nearest = false;
+    s->force_linear = false;
     s->alive  = true;
 
     return r->sprite_count++;
@@ -798,7 +799,7 @@ void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float 
     // проставляет его только на время своего пакета.
     c->blend = r->batch_blend;
     c->fx    = r->batch_fx;
-    c->filter = r->filter_linear && !r->sprites[sprite].force_nearest ? 1 : 0;
+    c->filter = !r->sprites[sprite].force_nearest && (r->filter_linear || r->sprites[sprite].force_linear) ? 1 : 0;
     c->clip   = (int16_t)r->clip_cur;
 
     const R2DSprite *sp = &r->sprites[sprite];
@@ -1591,7 +1592,7 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
         // Фильтр переключается на лету: nearest — пиксель-арт без размытия,
         // linear — сглаженный масштаб (текст, крупные спрайты). Сэмплер один
         // на участок, поэтому разные режимы просто разрывают участок.
-        tex_binding.sampler = (r->filter_linear && r->linear_sampler)
+        tex_binding.sampler = (r->cmds[run_start].filter && r->linear_sampler)
             ? r->linear_sampler : r->sampler;
         SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
 

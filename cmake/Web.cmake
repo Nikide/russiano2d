@@ -72,6 +72,8 @@ set(R2D_SHADERS_WGSL_ONLY   ON  CACHE BOOL "" FORCE)
 # Байткод-упаковщик — хост-инструмент; в веб-сборке скрипты кладутся в MEMFS.
 set(R2D_EMBED_SCRIPTS       OFF CACHE BOOL "" FORCE)
 
+option(R2D_WEB_PROFILING_FUNCS "Веб-сборка: имена функций в wasm-стеке и в Release" OFF)
+
 # --- Память и стек ----------------------------------------------------------
 # Стек Emscripten по умолчанию мал (64 КиБ), а у движка крупные кадровые
 # буферы и разбор аргументов; QuickJS отдельно просит 2 МБ под свой стек.
@@ -114,9 +116,10 @@ add_link_options(
     -sINVOKE_RUN=0
     -sEXPORTED_RUNTIME_METHODS=callMain
     # Имена функций в стеке: без них wasm-ловушка ("RuntimeError: unreachable")
-    # не говорит, ГДЕ упало — только номера функций. Собираем с именами, пока
-    # веб-сборка молодая; на релиз это можно снять (флаг увеличивает .wasm).
-    --profiling-funcs
+    # не говорит, ГДЕ упало — только номера функций. Нужны отладке, а не игроку:
+    # в Release (так собирает web/export.py) флаг не ставится — .wasm меньше;
+    # вернуть имена в Release можно -DR2D_WEB_PROFILING_FUNCS=ON.
+    "$<$<OR:$<NOT:$<CONFIG:Release>>,$<BOOL:${R2D_WEB_PROFILING_FUNCS}>>:--profiling-funcs>"
 )
 
 # --- Груз для браузера ------------------------------------------------------
@@ -125,6 +128,18 @@ add_link_options(
 # в /game, а встроенные ассеты движка — в /assets.
 set(R2D_WEB_PRELOAD "" CACHE STRING
     "Каталоги для --preload-file, вид: каталог@точка-монтирования")
+
+# Что НЕ класть в груз: заметки и исходники художника движку не нужны, а в
+# браузер уезжают целиком. Шаблоны — как у `emcc --exclude-file` (fnmatch по
+# полному пути). Каталоги с данными, которые читает игра (например,
+# demos/rotsprite/source/*.surface.json), сюда добавлять нельзя.
+set(R2D_WEB_PRELOAD_EXCLUDE
+    "*.md" "*.py" "*.psd" "*.kra" "*.xcf" "*.aseprite" "*.blend"
+    "*.bak" "*.orig" "*~" "*/.DS_Store" "*/Thumbs.db"
+    CACHE STRING "Шаблоны emcc --exclude-file для груза веб-сборки")
+foreach(pattern IN LISTS R2D_WEB_PRELOAD_EXCLUDE)
+    add_link_options("--exclude-file=${pattern}")
+endforeach()
 
 # --- Настройки экспорта (страница и её экран загрузки) ----------------------
 #   R2D_WEB_SHELL        — своя HTML-оболочка вместо web/shell.html. Внутри

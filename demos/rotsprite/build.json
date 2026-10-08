@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "surface": "source/russi_maid.surface.json",
+      "material": "../assets/art/mascot/russi_rotsprite_v2.png",
+      "output": "../assets/art/mascot/russi_model_maid.png",
+      "segments": true,
+      "size": 4096
+    },
+    {
+      "surface": "source/russi_swim.surface.json",
+      "material": "../assets/art/mascot/russi_rotsprite_swim.png",
+      "output": "../assets/art/mascot/russi_model_swim.png",
+      "segments": true,
+      "size": 4096
+    },
+    {
+      "surface": "source/russi_police.surface.json",
+      "material": "../assets/art/mascot/russi_rotsprite_police.png",
+      "output": "../assets/art/mascot/russi_model_police.png",
+      "segments": true,
+      "size": 4096
+    },
+    {
+      "surface": "source/russi_short.surface.json",
+      "material": "../assets/art/mascot/russi_rotsprite_short.png",
+      "output": "../assets/art/mascot/russi_model_short.png",
+      "segments": true,
+      "size": 4096
+    }
+  ]
+}

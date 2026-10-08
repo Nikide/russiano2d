@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "clips": {
+    "walk": {
+      "duration": 1,
+      "loop": true,
+      "tracks": [
+        {
+          "target": "paw0",
+          "channel": "rotation.z",
+          "keys": [
+            [
+              0,
+              -18
+            ],
+            [
+              0.5,
+              18
+            ],
+            [
+              1,
+              -18
+            ]
+          ]
+        },
+        {
+          "target": "paw1",
+          "channel": "rotation.z",
+          "keys": [
+            [
+              0,
+              18
+            ],
+            [
+              0.5,
+              -18
+            ],
+            [
+              1,
+              18
+            ]
+          ]
+        },
+        {
+          "target": "paw2",
+          "channel": "rotation.z",
+          "keys": [
+            [
+              0,
+              18
+            ],
+            [
+              0.5,
+              -18
+            ],
+            [
+              1,
+              18
+            ]
+          ]
+        },
+        {
+          "target": "paw3",
+          "channel": "rotation.z",
+          "keys": [
+            [
+              0,
+              -18
+            ],
+            [
+              0.5,
+              18
+            ],
+            [
+              1,
+              -18
+            ]
+          ]
+        },
+        {
+          "target": "tail",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              -12
+            ],
+            [
+              0.5,
+              12
+            ],
+            [
+              1,
+              -12
+            ]
+          ]
+        }
+      ]
+    }
+  }
+}

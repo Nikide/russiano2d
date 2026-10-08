@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "atlas": "pistol.png",
+  "style": "anime",
+  "surface": "pistol.surface.json",
+  "rig": {
+    "bones": [
+      {
+        "name": "object",
+        "pivot": [
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "id": 110,
+        "bone": "object"
+      },
+      {
+        "id": 111,
+        "bone": "object"
+      },
+      {
+        "id": 112,
+        "bone": "object"
+      },
+      {
+        "id": 113,
+        "bone": "object"
+      },
+      {
+        "id": 114,
+        "bone": "object"
+      }
+    ],
+    "sockets": [
+      {
+        "name": "trigger",
+        "bone": "object",
+        "point": [
+          0,
+          3,
+          0
+        ]
+      },
+      {
+        "name": "foregrip",
+        "bone": "object",
+        "point": [
+          0,
+          3,
+          0
+        ]
+      },
+      {
+        "name": "muzzle",
+        "bone": "object",
+        "point": [
+          9,
+          -2,
+          0
+        ]
+      }
+    ]
+  },
+  "groups": {
+    "all": [
+      110,
+      111,
+      112,
+      113,
+      114
+    ]
+  },
+  "defaults": {
+    "body": true
+  },
+  "animations": {
+    "version": 1,
+    "clips": {}
+  }
+}

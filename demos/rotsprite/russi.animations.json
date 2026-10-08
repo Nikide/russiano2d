@@ -1,0 +1,677 @@
+{
+  "version": 1,
+  "clips": {
+    "idle": {
+      "duration": 2,
+      "loop": true,
+      "tracks": [
+        {
+          "target": "root",
+          "channel": "translation.y",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              -0.2
+            ],
+            [
+              2,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    "walk": {
+      "duration": 1.2,
+      "loop": true,
+      "tracks": [
+        {
+          "target": "hipLeft",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.3,
+              22
+            ],
+            [
+              0.6,
+              0
+            ],
+            [
+              0.8999999999999999,
+              -22
+            ],
+            [
+              1.2,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "armLeft",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.3,
+              -18
+            ],
+            [
+              0.6,
+              0
+            ],
+            [
+              0.8999999999999999,
+              18
+            ],
+            [
+              1.2,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "kneeLeft",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.3,
+              14.3
+            ],
+            [
+              0.6,
+              0
+            ],
+            [
+              0.8999999999999999,
+              0
+            ],
+            [
+              1.2,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "hipRight",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.3,
+              -22
+            ],
+            [
+              0.6,
+              0
+            ],
+            [
+              0.8999999999999999,
+              22
+            ],
+            [
+              1.2,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "armRight",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.3,
+              18
+            ],
+            [
+              0.6,
+              0
+            ],
+            [
+              0.8999999999999999,
+              -18
+            ],
+            [
+              1.2,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "kneeRight",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.3,
+              0
+            ],
+            [
+              0.6,
+              0
+            ],
+            [
+              0.8999999999999999,
+              14.3
+            ],
+            [
+              1.2,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "tail",
+          "channel": "rotation.y",
+          "keys": [
+            [
+              0,
+              -6
+            ],
+            [
+              0.6,
+              6
+            ],
+            [
+              1.2,
+              -6
+            ]
+          ]
+        }
+      ]
+    },
+    "run": {
+      "duration": 0.65,
+      "loop": true,
+      "tracks": [
+        {
+          "target": "hipLeft",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.1625,
+              38
+            ],
+            [
+              0.325,
+              0
+            ],
+            [
+              0.48750000000000004,
+              -38
+            ],
+            [
+              0.65,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "armLeft",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.1625,
+              -30
+            ],
+            [
+              0.325,
+              0
+            ],
+            [
+              0.48750000000000004,
+              30
+            ],
+            [
+              0.65,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "kneeLeft",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.1625,
+              24.7
+            ],
+            [
+              0.325,
+              0
+            ],
+            [
+              0.48750000000000004,
+              0
+            ],
+            [
+              0.65,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "hipRight",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.1625,
+              -38
+            ],
+            [
+              0.325,
+              0
+            ],
+            [
+              0.48750000000000004,
+              38
+            ],
+            [
+              0.65,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "armRight",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.1625,
+              30
+            ],
+            [
+              0.325,
+              0
+            ],
+            [
+              0.48750000000000004,
+              -30
+            ],
+            [
+              0.65,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "kneeRight",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              0.1625,
+              0
+            ],
+            [
+              0.325,
+              0
+            ],
+            [
+              0.48750000000000004,
+              24.7
+            ],
+            [
+              0.65,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "tail",
+          "channel": "rotation.y",
+          "keys": [
+            [
+              0,
+              -6
+            ],
+            [
+              0.325,
+              6
+            ],
+            [
+              0.65,
+              -6
+            ]
+          ]
+        }
+      ]
+    },
+    "blink": {
+      "duration": 4,
+      "loop": true,
+      "tracks": [
+        {
+          "target": "face",
+          "channel": "eyes",
+          "interpolation": "step",
+          "keys": [
+            [
+              0,
+              "half"
+            ],
+            [
+              3.7,
+              "half"
+            ],
+            [
+              3.8,
+              "closed"
+            ],
+            [
+              3.94,
+              "half"
+            ],
+            [
+              4,
+              "half"
+            ]
+          ]
+        }
+      ]
+    },
+    "talk": {
+      "duration": 0.4,
+      "loop": true,
+      "tracks": [
+        {
+          "target": "face",
+          "channel": "mouth",
+          "interpolation": "step",
+          "keys": [
+            [
+              0,
+              "closed"
+            ],
+            [
+              0.1,
+              "talk"
+            ],
+            [
+              0.2,
+              "open"
+            ],
+            [
+              0.3,
+              "talk"
+            ],
+            [
+              0.4,
+              "closed"
+            ]
+          ]
+        }
+      ]
+    },
+    "holdRifle": {
+      "duration": 1,
+      "loop": true,
+      "tracks": [
+        {
+          "target": "armRight",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              -4.842265136876508
+            ],
+            [
+              1,
+              -4.842265136876508
+            ]
+          ]
+        },
+        {
+          "target": "armRight",
+          "channel": "rotation.y",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "armRight",
+          "channel": "rotation.z",
+          "keys": [
+            [
+              0,
+              -1.213547442508321
+            ],
+            [
+              1,
+              -1.213547442508321
+            ]
+          ]
+        },
+        {
+          "target": "forearmRight",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              48.381694054287486
+            ],
+            [
+              1,
+              48.381694054287486
+            ]
+          ]
+        },
+        {
+          "target": "forearmRight",
+          "channel": "rotation.y",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "forearmRight",
+          "channel": "rotation.z",
+          "keys": [
+            [
+              0,
+              163.5922060514175
+            ],
+            [
+              1,
+              163.5922060514175
+            ]
+          ]
+        },
+        {
+          "target": "armLeft",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              51.008437699704956
+            ],
+            [
+              1,
+              51.008437699704956
+            ]
+          ]
+        },
+        {
+          "target": "armLeft",
+          "channel": "rotation.y",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "armLeft",
+          "channel": "rotation.z",
+          "keys": [
+            [
+              0,
+              -67.88830213068292
+            ],
+            [
+              1,
+              -67.88830213068292
+            ]
+          ]
+        },
+        {
+          "target": "forearmLeft",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              2.0405386527160556
+            ],
+            [
+              1,
+              2.0405386527160556
+            ]
+          ]
+        },
+        {
+          "target": "forearmLeft",
+          "channel": "rotation.y",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "forearmLeft",
+          "channel": "rotation.z",
+          "keys": [
+            [
+              0,
+              -6.478248217207182
+            ],
+            [
+              1,
+              -6.478248217207182
+            ]
+          ]
+        }
+      ]
+    },
+    "holdPistol": {
+      "duration": 1,
+      "loop": true,
+      "tracks": [
+        {
+          "target": "armRight",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              55
+            ],
+            [
+              1,
+              55
+            ]
+          ]
+        },
+        {
+          "target": "armLeft",
+          "channel": "rotation.x",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ]
+        },
+        {
+          "target": "armLeft",
+          "channel": "rotation.z",
+          "keys": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ]
+        }
+      ]
+    }
+  }
+}

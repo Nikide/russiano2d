@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "surface": "../source/russi_maid.surface.json",
+      "material": "../../../assets/rotsprite/rotsprite_v2_template.png",
+      "output": "../../../assets/rotsprite/rotsprite_v2_model_template.png",
+      "segments": true,
+      "size": 4096
+    }
+  ]
+}
