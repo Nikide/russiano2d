@@ -29,7 +29,8 @@
     X(body) X(cur_hp) X(_hp_seen) X(_vis_seen) X(picked) X(hovered) X(_drop_queued)  \
     X(kind) X(tag) X(clip) X(shadow) X(outline) X(nine_slice) X(shake_timer)         \
     X(pivot_x) X(pivot_y) X(shader_name) X(blend_mode) X(sprite) X(color) X(tint)    \
-    X(tint_timer) X(_scr_x) X(_scr_y) X(_scr_frame) X(_rk)
+    X(tint_timer) X(_scr_x) X(_scr_y) X(_scr_frame) X(_rk)                         \
+    X(class_list) X(tr) X(controls) X(trigger) X(anim) X(__clip) X(parallax_factor)
 
 typedef struct {
 #define R2D_DECL_ATOM(name) JSAtom name;
@@ -709,6 +710,176 @@ static JSValue js_draw_world(JSContext *ctx, JSValueConst this_val, int argc, JS
     return JS_NewInt32(ctx, count);
 }
 
+
+// ---------------------------------------------------------------------------
+// engine.nodes.buildIndex(nodes) — buildRegistryIndex() из core.js
+// ---------------------------------------------------------------------------
+//
+// Один проход по реестру: все живые узлы, карты «тег → узлы» и
+// «класс → узлы» (Map, порядок реестра) и срезы по признакам. Срезы — новые
+// массивы на каждую перестройку: обход старого среза не ломается, если узел
+// рождается или умирает посреди него. Классы узла C читает из
+// `node.class_list` — массива, который ядро ведёт рядом с Set `classes`.
+
+typedef struct { JSAtom atom; JSValue list; uint32_t len; } IndexGroup;
+
+typedef struct {
+    IndexGroup *items;
+    int count, cap;
+    int last;   // одноэлементный кэш: подряд обычно идут узлы одного тега/класса
+} IndexGroups;
+
+static IndexGroup *group_of(JSContext *ctx, IndexGroups *g, JSAtom atom)
+{
+    if (g->last >= 0 && g->items[g->last].atom == atom) return &g->items[g->last];
+    for (int i = 0; i < g->count; ++i) {
+        if (g->items[i].atom == atom) { g->last = i; return &g->items[i]; }
+    }
+    if (g->count == g->cap) {
+        const int cap = g->cap ? g->cap * 2 : 16;
+        IndexGroup *grown = (IndexGroup *)SDL_realloc(g->items, sizeof(IndexGroup) * (size_t)cap);
+        if (!grown) return NULL;
+        g->items = grown;
+        g->cap = cap;
+    }
+    IndexGroup *it = &g->items[g->count];
+    it->atom = JS_DupAtom(ctx, atom);
+    it->list = JS_NewArray(ctx);
+    it->len = 0;
+    g->last = g->count++;
+    return it;
+}
+
+static inline void push_node(JSContext *ctx, JSValue list, uint32_t *len, JSValueConst node)
+{
+    JS_SetPropertyUint32(ctx, list, (*len)++, JS_DupValue(ctx, node));
+}
+
+// Группы → Map (порядок групп — порядок первого появления, как в JS).
+static JSValue groups_to_map(JSContext *ctx, IndexGroups *g, JSValueConst map_ctor)
+{
+    JSValue map = JS_CallConstructor(ctx, map_ctor, 0, NULL);
+    if (JS_IsException(map)) return map;
+    JSValue set = JS_GetPropertyStr(ctx, map, "set");
+    for (int i = 0; i < g->count; ++i) {
+        JSValue args[2] = { JS_AtomToString(ctx, g->items[i].atom), g->items[i].list };
+        JSValue r = JS_Call(ctx, set, map, 2, args);
+        JS_FreeValue(ctx, r);
+        JS_FreeValue(ctx, args[0]);
+        JS_FreeValue(ctx, g->items[i].list);
+        JS_FreeAtom(ctx, g->items[i].atom);
+    }
+    JS_FreeValue(ctx, set);
+    SDL_free(g->items);
+    g->items = NULL;
+    g->count = g->cap = 0;
+    return map;
+}
+
+enum { F_UI, F_TR, F_CONTROLS, F_ANIM, F_CLIP, F_PARALLAX, F_ZONES, F_BODY, F_COUNT };
+static const char *const facet_names[F_COUNT] = {
+    "ui", "tr", "controls", "anim", "clip", "parallax", "zones", "body",
+};
+
+static JSValue js_build_index(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 1) return JS_ThrowTypeError(ctx, "nodes.buildIndex(nodes)");
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue map_ctor = JS_GetPropertyStr(ctx, global, "Map");
+    JS_FreeValue(ctx, global);
+
+    const JSAtom atom_trigger_tag = A.trigger;   // и тег, и класс, и attrs.trigger
+    JSValue all = JS_NewArray(ctx);
+    uint32_t all_len = 0;
+    JSValue facets[F_COUNT];
+    uint32_t facet_len[F_COUNT];
+    for (int f = 0; f < F_COUNT; ++f) { facets[f] = JS_NewArray(ctx); facet_len[f] = 0; }
+    IndexGroups tags = { NULL, 0, 0, -1 }, classes = { NULL, 0, 0, -1 };
+
+    const uint32_t n = list_length(ctx, argv[0]);
+    for (uint32_t i = 0; i < n; ++i) {
+        JSValue node = JS_GetPropertyUint32(ctx, argv[0], i);
+        if (!JS_IsObject(node) || truthy_prop(ctx, node, A.removed)) { JS_FreeValue(ctx, node); continue; }
+        push_node(ctx, all, &all_len, node);
+
+        JSValue tag = prop(ctx, node, A.tag);
+        const JSAtom tag_atom = JS_ValueToAtom(ctx, tag);
+        JS_FreeValue(ctx, tag);
+        IndexGroup *tg = group_of(ctx, &tags, tag_atom);
+        if (tg) push_node(ctx, tg->list, &tg->len, node);
+        bool zone = tag_atom == atom_trigger_tag;
+        JS_FreeAtom(ctx, tag_atom);
+
+        JSValue cls = prop(ctx, node, A.class_list);
+        const uint32_t nc = JS_IsArray(cls) ? list_length(ctx, cls) : 0;
+        for (uint32_t c = 0; c < nc; ++c) {
+            JSValue name = JS_GetPropertyUint32(ctx, cls, c);
+            const JSAtom a = JS_ValueToAtom(ctx, name);
+            JS_FreeValue(ctx, name);
+            IndexGroup *cg = group_of(ctx, &classes, a);
+            if (cg) push_node(ctx, cg->list, &cg->len, node);
+            JS_FreeAtom(ctx, a);
+        }
+        JS_FreeValue(ctx, cls);
+
+        JSValue attrs = prop(ctx, node, A.attrs);
+        if (JS_IsObject(attrs)) {
+            if (truthy_prop(ctx, attrs, A.ui)) push_node(ctx, facets[F_UI], &facet_len[F_UI], node);
+            JSValue tr = prop(ctx, attrs, A.tr);
+            if (!JS_IsUndefined(tr)) push_node(ctx, facets[F_TR], &facet_len[F_TR], node);
+            JS_FreeValue(ctx, tr);
+            if (truthy_prop(ctx, attrs, A.controls)) push_node(ctx, facets[F_CONTROLS], &facet_len[F_CONTROLS], node);
+            if (strictly_true(ctx, attrs, A.trigger)) zone = true;
+        }
+        JS_FreeValue(ctx, attrs);
+        if (zone) push_node(ctx, facets[F_ZONES], &facet_len[F_ZONES], node);
+        if (truthy_prop(ctx, node, A.anim)) push_node(ctx, facets[F_ANIM], &facet_len[F_ANIM], node);
+        if (truthy_prop(ctx, node, A.__clip)) push_node(ctx, facets[F_CLIP], &facet_len[F_CLIP], node);
+        if (num_prop(ctx, node, A.body) >= 0) push_node(ctx, facets[F_BODY], &facet_len[F_BODY], node);
+        JSValue px = prop(ctx, node, A.parallax_factor);
+        if (!JS_IsUndefined(px) && !JS_IsNull(px)) push_node(ctx, facets[F_PARALLAX], &facet_len[F_PARALLAX], node);
+        JS_FreeValue(ctx, px);
+        JS_FreeValue(ctx, node);
+    }
+
+    // Зоны по классу "trigger" (третий случай isZoneNode) — после остальных,
+    // как и в JS: тег <trigger> и attrs.trigger === true уже учтены.
+    for (int c = 0; c < classes.count; ++c) {
+        if (classes.items[c].atom != atom_trigger_tag) continue;
+        JSValue list = classes.items[c].list;
+        for (uint32_t i = 0; i < classes.items[c].len; ++i) {
+            JSValue node = JS_GetPropertyUint32(ctx, list, i);
+            JSValue tag = prop(ctx, node, A.tag);
+            const JSAtom ta = JS_ValueToAtom(ctx, tag);
+            JS_FreeValue(ctx, tag);
+            bool skip = ta == atom_trigger_tag;
+            JS_FreeAtom(ctx, ta);
+            if (!skip) {
+                JSValue attrs = prop(ctx, node, A.attrs);
+                if (JS_IsObject(attrs) && strictly_true(ctx, attrs, A.trigger)) skip = true;
+                JS_FreeValue(ctx, attrs);
+            }
+            if (!skip) push_node(ctx, facets[F_ZONES], &facet_len[F_ZONES], node);
+            JS_FreeValue(ctx, node);
+        }
+    }
+
+    JSValue out = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, out, "all", all);
+    JS_SetPropertyStr(ctx, out, "by_tag", groups_to_map(ctx, &tags, map_ctor));
+    JS_SetPropertyStr(ctx, out, "by_class", groups_to_map(ctx, &classes, map_ctor));
+    JSValue facet_obj = JS_NewObject(ctx), counts = JS_NewObject(ctx);
+    for (int f = 0; f < F_COUNT; ++f) {
+        JS_SetPropertyStr(ctx, facet_obj, facet_names[f], facets[f]);
+        JS_SetPropertyStr(ctx, counts, facet_names[f], JS_NewInt32(ctx, (int32_t)facet_len[f]));
+    }
+    JS_SetPropertyStr(ctx, out, "facets", facet_obj);
+    JS_SetPropertyStr(ctx, out, "counts", counts);
+    JS_FreeValue(ctx, map_ctor);
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Установка
 // ---------------------------------------------------------------------------
@@ -735,6 +906,7 @@ int r2d_nodes_install(JSContext *ctx, JSValue engine)
     JS_SetPropertyStr(ctx, nodes, "sortWorld", JS_NewCFunction(ctx, js_sort_world, "sortWorld", 2));
     JS_SetPropertyStr(ctx, nodes, "collectWorld", JS_NewCFunction(ctx, js_collect_world, "collectWorld", 2));
     JS_SetPropertyStr(ctx, nodes, "drawWorld", JS_NewCFunction(ctx, js_draw_world, "drawWorld", 9));
+    JS_SetPropertyStr(ctx, nodes, "buildIndex", JS_NewCFunction(ctx, js_build_index, "buildIndex", 1));
     JS_SetPropertyStr(ctx, engine, "nodes", nodes);
     return 0;
 }

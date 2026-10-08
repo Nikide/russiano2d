@@ -50,6 +50,17 @@ def main():
         check(native == js, "кадр C и кадр JS совпадают до байта (%s)" % folder)
         check(stats_native == stats_js, "статистика кадра та же: %s / %s" % (stats_native, stats_js))
 
+        # Индекс реестра: те же выборки по тегу, классу и признакам. Узел
+        # создаётся и убирается, чтобы индекс перестроился в каждом режиме.
+        digest = ("(() => { $('<rect>').remove(); const q = s => $(s).nodes.map(n => n.uid).join(',');"
+                  " return [q('rect'), q('.cell'), q('rect.cell'), q('text'), q('light'), q('*'),"
+                  " q('.cell:visible'), q('#parent > *')].join('|'); })()")
+        index = {}
+        for mode in (True, False):
+            a.eval("$.debug.nativePasses(%s); true" % ("true" if mode else "false"))
+            index[mode] = a.eval(digest)
+        check(index[True] == index[False] and len(index[True]) > 20, "индекс реестра C и JS совпадает")
+
         # Наведение: тот же «верхний» узел и те же события в обоих режимах.
         a.eval("globalThis.__ev = []; $('*').on('mouseenter', e => __ev.push('in:' + (e.self.attr('id') || e.self.get(0).uid)));"
                "$('*').on('mouseleave', e => __ev.push('out:' + (e.self.attr('id') || e.self.get(0).uid))); true")

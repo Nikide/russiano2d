@@ -124,6 +124,13 @@ export function tickMine(dt) {
 `node.on(...)`, `node.addTag(...)` и `node.dataMap()`, а читайте с проверкой на
 `null` — `node.classes` создаётся всегда.
 
+Неизменяемые умолчания узла (`tint`, `hitbox`, `listeners`, `frames`, …) лежат
+на `Node.prototype`, а не в каждом объекте: читаются так же, первая запись
+создаёт собственное поле. Не полагайтесь на `hasOwnProperty`/`Object.keys(node)`.
+Классы меняйте только через `addClass`/`removeClass`/`toggleClass`: рядом с
+Set `classes` ядро ведёт массив `class_list`, по которому C строит индекс
+реестра ([native.md](native.md)).
+
 ## 3. Отрисовка нового тега
 
 Ядро не знает про новые теги. Модуль рисует их сам:

@@ -1460,7 +1460,20 @@ function installNodeMethods($) {
     });
     def('prepend', function (child) { return Wrapper.prototype.append.call(this, child); });
 
-    def('remove', function () { return this.eachNode((_, el) => { const n = el; if (n) n.destroy(); }); });
+    // Несколько узлов разом — одна уборка реестра в конце вызова, как в
+    // $.batch: иначе каждый destroy() искал свой узел и сдвигал хвост
+    // массива, и $('.enemy').remove() на N узлах стоил O(N²) (§0.6 отчёта).
+    // К возврату из remove() реестр уже чист — снаружи разницы нет.
+    def('remove', function () {
+        const nodes = this.nodes;
+        if (nodes.length > 1) beginBatch();
+        try {
+            for (let i = 0; i < nodes.length; i++) if (nodes[i]) nodes[i].destroy();
+        } finally {
+            if (nodes.length > 1) endBatch();
+        }
+        return this;
+    });
 
     def('detach', function () {
         return this.eachNode((_, el) => {
