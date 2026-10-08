@@ -40,7 +40,7 @@ export function createStudio(app) {
     const s = {
         active: false, path: null, dir: null,
         def: null, indent: 2, newline: true, history: null, anim: null,
-        tab: 'view', mode: 'final',
+        tab: 'view', mode: 'final', author: null, equipmentNode: null,
         node: null, nodeError: null, fromFile: false,
         yaw: 0, pitch: 0, size: 0, motion: null, emotion: null, style: 'anime', body: true, playing: true,
         debug: null,                 // { node, path, key, cell, x, y }
@@ -116,7 +116,7 @@ export function createStudio(app) {
         s.style = s.def.style || 'anime';
         s.body = !s.def.defaults || s.def.defaults.body !== false;
         s.yaw = 0; s.pitch = 0; s.motion = null; s.emotion = null; s.playing = true;
-        s.boneSel = null; s.socketSel = null;
+        s.boneSel = null; s.socketSel = null; s.author = null;
         loadAnimations();
         s.active = true;
         s.tab = 'view';
@@ -170,6 +170,7 @@ export function createStudio(app) {
 
     // --- Предпросмотр: настоящий рантайм -------------------------------------------------------------
     function killPreview() {
+        if (s.equipmentNode) { try { s.equipmentNode.remove(); } catch(e) {} s.equipmentNode=null; }
         if (s.node) { try { $(s.node).remove(); } catch (e) { /* узел уже убран */ } s.node = null; }
     }
 
@@ -322,6 +323,7 @@ export function createStudio(app) {
         if (!s.history) return null;
         try {
             const result = s.history.run(label, fn);
+            loadAnimations();
             s.dirtyPreview = true;
             renderAll();
             return result;
@@ -333,13 +335,27 @@ export function createStudio(app) {
     }
 
     const ops = {
+        setAuthor(category, name, value) {
+            if (!['clips','emotions','variants','equipment'].includes(category)) throw new Error('Неизвестный раздел');
+            if (value !== null && (!value || typeof value !== 'object' || Array.isArray(value))) throw new Error('Запись должна быть JSON-объектом');
+            if (!name || ['__proto__','constructor','prototype'].includes(name)) throw new Error('Нужно безопасное имя');
+            return run(category + ' «' + name + '»', d => {
+                let target;
+                if (category === 'clips') {
+                    if (typeof d.animations === 'string' || !d.animations) d.animations = JSON.parse(JSON.stringify(s.anim || {version:1,clips:{}}));
+                    target = d.animations.clips;
+                } else target = d[category] || (d[category] = {});
+                if (value === null) delete target[name];
+                else target[name] = JSON.parse(JSON.stringify(value));
+            });
+        },
         setBonePivot(name, pivot, portrait) { return run('pivot «' + name + '»', (d) => R.setBonePivot(d, name, pivot, portrait)); },
         setPartBone(id, bone) { return run('часть ' + id, (d) => R.setPartBone(d, id, bone)); },
         setProjection(key, value) { return run('проекция', (d) => R.setProjection(d, key, value)); },
         setSocket(name, patch) { return run('сокет «' + name + '»', (d) => R.setSocket(d, name, patch)); },
         setStyle(style) { return run('стиль', (d) => R.setStyle(d, style)); },
-        undo() { const l = s.history && s.history.undo(); if (l) { s.dirtyPreview = true; renderAll(); } return l; },
-        redo() { const l = s.history && s.history.redo(); if (l) { s.dirtyPreview = true; renderAll(); } return l; },
+        undo() { const l = s.history && s.history.undo(); if (l) { loadAnimations(); s.dirtyPreview = true; renderAll(); } return l; },
+        redo() { const l = s.history && s.history.redo(); if (l) { loadAnimations(); s.dirtyPreview = true; renderAll(); } return l; },
     };
 
     async function save() {
@@ -386,7 +402,7 @@ export function createStudio(app) {
         doc.text('rs-dirty', s.history && s.history.dirty() ? '● есть несохранённые правки' : '');
         doc.cls('rs-undo', 'off', !(s.history && s.history.canUndo()));
         doc.cls('rs-redo', 'off', !(s.history && s.history.canRedo()));
-        for (const t of ['view', 'surface', 'rig']) {
+        for (const t of ['view', 'surface', 'rig', 'author']) {
             doc.cls('rs-tab-' + t, 'on', s.tab === t);
             doc.style('rs-left-' + t, 'display', s.tab === t ? 'block' : 'none');
             doc.style('rs-right-' + t, 'display', s.tab === t ? 'block' : 'none');
@@ -467,7 +483,37 @@ export function createStudio(app) {
         renderModes();
         renderRig();
         renderRight();
+        renderAuthor();
         doc.text('rs-hud', escapeHtml(hudText()));
+    }
+
+    function selectAuthor(category, name) {
+        s.author={category,name};doc.setValue('a-category',category);doc.setValue('a-name',name);
+        const value=category==='clips' ? s.anim?.clips?.[name] : s.def?.[category]?.[name];
+        doc.setValue('a-json', JSON.stringify(value || {},null,2));
+        if(category==='clips'){if(s.dirtyPreview){buildPreview(false);s.dirtyPreview=false;}setMotion(name);}
+        renderAuthor();return value;
+    }
+    function renderAuthor() {
+        if(!s.def)return;
+        doc.html('rs-author-list',['clips','emotions','variants','equipment'].map(category=>'<h4>'+category+'</h4>'+Object.keys(category==='clips'?s.anim?.clips||{}:s.def[category]||{}).map(name=>'<div class="row" data-key="'+escapeHtml(category+':'+name)+'">'+escapeHtml(name)+'</div>').join('')).join(''));
+        const clip=s.author?.category==='clips'?s.anim?.clips?.[s.author.name]:null;
+        doc.html('rs-timeline',clip?(Array.isArray(clip.tracks)?clip.tracks:[]).filter(t=>t&&typeof t==='object').map(t=>'<div class="kv">'+escapeHtml(t.target+' · '+t.channel)+'</div>'+(Array.isArray(t.keys)?t.keys:[]).filter(k=>Array.isArray(k)&&Number.isFinite(k[0])).map(k=>'<button class="btn small" data-key="'+k[0]+'">'+k[0]+'s · '+escapeHtml(String(k[1]))+'</button>').join('')).join(''):'Выберите клип. Клик по ключу ставит время runtime.');
+    }
+    function seek(time) { if(!Number.isFinite(time)||time<0)throw new Error('Время должно быть >= 0');setPlaying(false);if(s.node)$(s.node).re2dSeek(time);return time; }
+    function previewAuthor() {
+        if(!s.author)return false;
+        if(s.dirtyPreview){buildPreview(false);s.dirtyPreview=false;}
+        if(!s.node)return false;
+        const {category,name}=s.author;
+        if(category==='clips')setMotion(name);
+        if(category==='emotions')setEmotion(name);
+        if(category==='variants'){const key=Object.keys(s.def.variants[name]||{})[0];if(key)return setVariant(name,key);return false;}
+        if(category==='equipment'){
+            if(s.equipmentNode)s.equipmentNode.remove();s.equipmentNode=$.re2dSprite.equip($(s.node),name);
+            const pose=s.def.equipment[name].pose;if(pose)setMotion(pose);
+        }
+        return true;
     }
 
     // --- Кадр и мышь -----------------------------------------------------------------------------------------------
@@ -475,7 +521,7 @@ export function createStudio(app) {
         if (!s.active) return;
         const r = slot();
         if (r.w <= 0) return;
-        if (s.dirtyPreview && s.tab === 'view' && s.mode === 'final') {
+        if (s.dirtyPreview && (s.tab === 'view' || s.tab === 'author') && s.mode === 'final') {
             s.dirtyPreview = false;
             // Чистое состояние — читаем сам файл (hot reload включён); есть правки — предпросмотр из памяти.
             buildPreview(!(s.history && s.history.dirty()));
@@ -520,9 +566,9 @@ export function createStudio(app) {
 
     // --- Подписки ---------------------------------------------------------------------------------------------------
     function setTab(tab) {
-        if (!['view', 'surface', 'rig'].includes(tab)) return false;
+        if (!['view', 'surface', 'rig', 'author'].includes(tab)) return false;
         s.tab = tab;
-        if (tab === 'view') {
+        if (tab === 'view' || tab === 'author') {
             killDebug();
             s.mode = 'final';
             s.dirtyPreview = true;
@@ -542,6 +588,13 @@ export function createStudio(app) {
     function wire() {
         if (wired) return;
         wired = true;
+        doc.on('rs-tab-author','click',()=>setTab('author'));
+        doc.on('rs-author-list','click',(id,ev,key)=>{const n=key.indexOf(':');if(n>0)selectAuthor(key.slice(0,n),key.slice(n+1));});
+        doc.on('a-apply','click',()=>{try{ops.setAuthor(doc.value('a-category'),doc.value('a-name'),JSON.parse(doc.value('a-json')));selectAuthor(doc.value('a-category'),doc.value('a-name'));}catch(e){note('error','SDK_EDIT_REJECTED',e.message);}});
+        doc.on('a-remove','click',()=>{try{ops.setAuthor(doc.value('a-category'),doc.value('a-name'),null);}catch(e){note('error','SDK_EDIT_REJECTED',e.message);}});
+        doc.on('a-preview','click',()=>{try{previewAuthor();}catch(e){note('error','SDK_RE2D_RUNTIME',e.message);}});
+        doc.on('a-seek','click',()=>{try{seek(Number(doc.value('a-time')));}catch(e){note('error','SDK_EDIT_REJECTED',e.message);}});
+        doc.on('rs-timeline','click',(id,ev,key)=>{if(key!==''){try{seek(Number(key));doc.setValue('a-time',key);}catch(e){note('error','SDK_EDIT_REJECTED',e.message);}}});
         doc.on('rs-back', 'click', () => close());
         doc.on('rs-save', 'click', () => save());
         doc.on('rs-undo', 'click', () => ops.undo());
@@ -588,7 +641,7 @@ export function createStudio(app) {
         state: s, ops,
         openAsset, close, save, validate, setTab, showMode, inspect,
         applyPose, setMotion, setEmotion, setVariant, setStyle, setBody, setPlaying,
-        selectBone, selectSocket, buildPreview,
+        selectBone, selectSocket, buildPreview, selectAuthor, previewAuthor, seek,
         get def() { return s.def; },
         snapshot() {
             const info = s.node ? $.re2dSprite.info(s.node) : null;

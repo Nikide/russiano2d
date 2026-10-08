@@ -19,11 +19,12 @@
         <button id="rs-validate" class="btn">Проверить</button>
         <button id="rs-tab-view" class="btn on">Вид</button>
         <button id="rs-tab-surface" class="btn">Поверхность</button>
-        <button id="rs-tab-rig" class="btn">Скелет</button>
+        <button id="rs-tab-rig" class="btn">Скелет</button><button id="rs-tab-author" class="btn">Клипы и варианты</button>
     </div>
 
     <div class="body-row">
         <div class="side left">
+            <div id="rs-left-author"><h4>Клипы / эмоции / варианты / экипировка</h4><div id="rs-author-list" class="list grow"></div><h4>Ключи клипа</h4><div id="rs-timeline" class="list"></div></div>
             <div id="rs-left-view">
                 <h4>Движение</h4>
                 <div id="rs-motions" class="list"></div>
@@ -51,6 +52,13 @@
         </div>
 
         <div class="side right">
+            <div id="rs-right-author" style="width:280px;">
+                <h4>Редактор данных</h4><div class="hint">Раздел: clips, emotions, variants, equipment. Новое имя добавляет запись. Изменённые клипы сохраняются в модели inline; исходный внешний animations.json сохраняется.</div>
+                <input id="a-category" class="field" type="text" value="clips"/><input id="a-name" class="field" type="text" value="newClip"/>
+                <textarea id="a-json" style="display:block;width:280px;height:260px;background-color:#08101c;color:#dbe7f7;">{}</textarea>
+                <button id="a-apply" class="btn primary">Применить</button><button id="a-remove" class="btn">Удалить</button><button id="a-preview" class="btn">В preview</button>
+                <h4>Время клипа</h4><input id="a-time" class="field" type="text" value="0"/><button id="a-seek" class="btn">Перейти к времени</button>
+            </div>
             <div id="rs-right-view">
                 <h4>Ракурс</h4>
                 <div class="field-row"><label>Yaw</label><input id="v-yaw" type="text" value="0" class="field"/></div>
