@@ -16,7 +16,7 @@ $.ready(() => {
     $('#door').on('leave', () => $.sound.play('door-close'));
 
     // .overlaps(sel, cb) теперь действительно вызывается каждый кадр.
-    $('#hero').overlaps('.lava', (hit) => hit && hit.damage(10 * engine.dt));
+    $('#hero').overlaps('.lava', (hit) => hit && hit.damage(10 * $.time.delta()));
 });
 ```
 
@@ -213,7 +213,7 @@ $('#door').on('leave', () => $('#door').attr('open', false));
 
 ```js
 $('#hero').overlaps('.lava', (hit) => {
-    if (hit) $('#hero').damage(30 * engine.dt);
+    if (hit) $('#hero').damage(30 * $.time.delta());
 });
 ```
 

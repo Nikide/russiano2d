@@ -66,7 +66,7 @@ $.ready(() => {
 | `color_ramp` | `[{ t, color }]` | — | кривая цвета; перекрывает `color`/`end_color` |
 | `alpha_ramp` | `[{ t, alpha }]` | константа `1` | кривая прозрачности |
 | `damping` | число | `0` | экспоненциальное торможение, 1/с |
-| `texture` / `src` | путь / id / `[x,y,w,h]` | `engine.whiteSprite` | спрайт частицы |
+| `texture` / `src` | путь / id / `[x,y,w,h]` | `$.gfx.white` | спрайт частицы |
 | `local` | bool | `true` | частицы движутся вместе с узлом |
 | `global` | bool | `false` | `true` — мировые координаты (алиас `local: false`) |
 | `one_shot` | bool | `false` | один залп из `amount` при старте |

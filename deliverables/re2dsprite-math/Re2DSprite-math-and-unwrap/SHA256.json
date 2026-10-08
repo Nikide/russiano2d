@@ -1,0 +1,22 @@
+{
+  "docs/RE2DSPRITE_MATH.md": "38f783fcd24600362245ea51fd742c0a12f08b2dd4614e339e73c76d25b02e35",
+  "docs/RE2DSPRITE_GUIDE.md": "b9087e2c39f274ca763dd3eaa16e53bd469a032af2092e9eba543bf468d1f3c2",
+  "docs/RE2DSPRITE_V2.md": "5504ccdfe6a9784320a66755645368e6f92817e38e602a53d7dc30a87101c720",
+  "docs/RE2DSPRITE_JSON.md": "80f5321da997e67f06b765e8bf19f83eb67ab7a4f628d281efcd9343775996be",
+  "src/rotsprite_math.c": "399f6d33a74b84631feb36454e0f496ae7fcdfbe3a82c32acb47219e66b47950",
+  "src/rotsprite_math.h": "61aa6882a05c6555cb6a54a0413ed251484e4dd7a826c2a32bc2be49c4ad9ce3",
+  "src/rotsprite.c": "6dead937ab585c13e6e212fcfc1ad8aa3cd18b768c621d5e490a57075af9f0c4",
+  "src/rotsprite.h": "ea8e78251b73957033c556fa408052dc4049baa4b8b7baf709ac4795ea043f23",
+  "src/highlevel/rotsprite.js": "be6b666d00baf763afb3c2548026d6385678032cd773a7e47d6841df861a5e3e",
+  "tools/compile_rotsprite.py": "570ed3444a243ef52b7994c1bb4b545e5c92170f1a9a5734df0bf0e59bf0a815",
+  "tools/make_rotsprite_v2.py": "4e3c1d03449e1756c3c3d503a26bb50fb7b284b4962d1f31047347562bfa7553",
+  "demos/rotsprite/russi.character.json": "9e8cdb8f48505d87d57fd195fba3c0f1318554719531b5c94e4298f57242331f",
+  "demos/rotsprite/russi.animations.json": "45de1531de0af520ba6d9d8109d79b12f8507a2a93da716fb2bd1aa0d1f75198",
+  "demos/rotsprite/source/russi_maid.surface.json": "0a09add48f65bf86f6a5fd0085bda55f791a7e15bea933a989d2dfe3258c327f",
+  "demos/assets/art/mascot/russi_rotsprite_v2.png": "f1a5dd5a65717e49ca36a92a42be7cef26c5e1b45a6fe80aa558851615fcf50c",
+  "demos/assets/art/mascot/russi_model_maid.png": "5ba541dbf0c493bb21f2b80421cd5f6a562d732ecb91ba600c3ca31dcb7a9ec8",
+  "tests/rotsprite/rotsprite_test.c": "dbe46ee47f55cda4d1fa6905b6152266885843383e1255f5734d098c584b6bfd",
+  "tests/rotsprite/surface_test.py": "e257367797514985d7390459790aad25288388987747881ca6269ee39550b032",
+  "tests/js/rotsprite_json_test.mjs": "30849870a0c0286e014faa4ecffc7cae3b502a180eccd040b7491dec6a448e73",
+  "tests/agent/highlevel_rotsprite_test.py": "1e9b1954f4a18ff16fa55e572ac88840e56d979886704a405dfce96e6ea27a1d"
+}

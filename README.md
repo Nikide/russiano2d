@@ -260,8 +260,8 @@ $.ready(() => {
 });
 
 $.update(dt => {
-    $('.goblin').each(e => {
-        if (e.distanceTo('#hero') < 250) e.moveTowards('#hero', 120);
+    $('.goblin').each((i, el) => {
+        if (el.distanceTo('#hero') < 250) el.moveTowards('#hero', 120);
     });
 });
 ```
@@ -417,7 +417,7 @@ C-ядро владеет всем: окном, GPU-устройством, фи
         ┌───────────────────┐
         │     ЯДРО (C)      │ ◄──── Box2D v3
         └─────────┬─────────┘
-                  │  C-биндинги globalThis.engine
+                  │  C-биндинги engine.* (приватные для $)
                   ▼
         ┌───────────────────┐
         │    QuickJS-ng     │ ◄──── $ (src/highlevel/*.js, встроен в бинарник)
@@ -428,6 +428,10 @@ C-ядро владеет всем: окном, GPU-устройством, фи
         │  SDL_GPU (Render) │ ───► Vulkan / Metal / DX12
         └───────────────────┘
 ```
+
+Игре доступен только `$`: биндинги ядра `engine.*` модули `$` берут из
+приватного `native.js`, а после загрузки игры `engine` не существует
+([native.md](docs/highlevel/native.md), [PHILOSOPHY.md](docs/PHILOSOPHY.md)).
 
 ### Батчинг: один вызов на весь кадр
 
@@ -450,21 +454,16 @@ draw call'ов, сколько раз в кадре меняется текст�
 
 ### Физика целиком в C
 
-JS не считает коллизии и не трогает векторы Box2D. Модуль `$` создаёт тело и
-получает числовой id:
+JS не считает коллизии и не трогает векторы Box2D. Узел `$` получает тело
+и числовой id к нему:
 
 ```js
-const body = engine.createBody({ x: 120, y: 400, halfW: 14, halfH: 20,
-                                 type: engine.DYNAMIC, fixedRotation: true });
+$('<crate>').at(120, 400).size(28, 40).collision(28, 40).body('dynamic');
 ```
 
-Раз в кадр `engine.getTransforms()` возвращает `Float32Array`, который смотрит
-**прямо в память C** — копирования нет:
-
-```js
-const t = engine.getTransforms();
-const x = t[body * 3], y = t[body * 3 + 1], angle = t[body * 3 + 2];
-```
+Раз в кадр нативный проход синка (`src/nodes.c`) читает трансформы **прямо
+из памяти C** — копирования нет: позиции и углы тел оказываются на узлах `$`
+до игрового кода ([native.md](docs/highlevel/native.md)).
 
 ### Масштаб единиц
 

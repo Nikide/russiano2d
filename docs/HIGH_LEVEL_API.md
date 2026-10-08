@@ -904,7 +904,7 @@ $.debug.profile()                          // { frame_ms, zones_ms, unaccounted_
 $.debug.queryStats()                       // { calls, candidates, results, ms, cap, truncated } — последний $().within()
 $.debug.profileReset()                     // сбросить накопленное
 $.debug.profiling(false)                   // выключить замеры (по умолчанию включены)
-$.debug.profiler.start('моё') / .end('моё') / .report()   // свои замеры, время — engine.now()
+$.debug.profiler.start('моё') / .end('моё') / .report()   // свои замеры, время — $.time.perfNow()
 $.debug.profiler.on(true) .isOn()          // покадровый профайлер подсистем (по умолчанию выключен)
 $.debug.render()                           // { info, depth } — факты рендера кадра и z-буфера
 $.debug.memory()                           // { bytes, objects, … } — JS-куча: утечка или шум замера
@@ -1147,7 +1147,7 @@ $.update(() => {
 | Перезапуск скриптов на границе кадра (hot reload) | `$.script` | — | [script.md](highlevel/script.md) |
 | Сценки и катсцены: текстовый DSL, реплики, выборы, флаги | `$.story` | — | [story.md](highlevel/story.md) |
 | Задания: цели, условия открытия, события рейда, награда | `$.quest` | — | [quest.md](highlevel/quest.md) |
-| Банки звуков, шаги по материалу, реплики NPC | `$.sound.playBank`, `$.steps`, `$.barks` | — | [sound_bank.md](highlevel/sound_bank.md) |
+| Банки звуков, шаги по материалу, реплики NPC | `$.sound.playBank`, `$.steps`, `$.barks` | — | [soundbank.md](highlevel/soundbank.md), [steps.md](highlevel/steps.md) |
 | Предметы и инвентарь: клетки, стопки, вес, ношение | `$.items`, `$.inv` | — | [items.md](highlevel/items.md) |
 | Здоровье по зонам, урон, кровь, броня | `$.combat` | — | [combat.md](highlevel/combat.md) |
 | Оружие: база стволов, магазин, темп, отдача, навесное | `$.weapons` | — | [weapons.md](highlevel/weapons.md) |
@@ -1256,8 +1256,8 @@ $.ready(() => {
 * **Blend-режимы** работают на уровне узла (`.blend('add')`) и кадра
   (`$.blend('add')`); движок сам режет батч на участки с одинаковым режимом,
   так что порядок отрисовки не меняется.
-* **Текст в `<ui.input>`** приходит через `$.input.text()`
-  (`engine.textInput()`), в агентском режиме — командой `text`.
+* **Текст в `<ui.input>`** приходит через `$.input.text()`,
+  в агентском режиме — командой `text`.
 
 ---
 

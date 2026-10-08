@@ -25,7 +25,7 @@ $.console.run('spawn 100 200');
 | `memory()` | факты о JS-куче: `{ bytes, used, objects, arrays, strings, atoms, shapes, native_tweens }` (QuickJS `JS_ComputeMemoryUsage`); без движка — `null`. Растущее `objects` между кадрами — утечка, а не шум |
 | `nativePasses(on?)` | нативные проходы кадра (`src/nodes.c`): синк физики, события мира, наведение, сортировка и сборка батча. `false` возвращает прежний JS-путь — для сверки «C против JS»; без аргумента — включены ли сейчас (`true` по умолчанию в движке, `false` без движка) |
 | `profiler.on(on?)` / `isOn()` | покадровый профайлер подсистем: включить (без аргумента), выключить `on(false)`, прочитать состояние |
-| `profiler.start/end/record/report/reset` | свои замеры; время — `engine.now()` |
+| `profiler.start/end/record/report/reset` | свои замеры; время — `$.time.perfNow()` |
 
 ## 2. Методы `$.console`
 

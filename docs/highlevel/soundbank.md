@@ -19,9 +19,14 @@ $.sound.defineBank('hit', { files: ['h1.wav', 'h2.wav'], volume: 0.9, pitch: 0.0
 |---|---|
 | `defineBank(name, spec)` | описать банк: список файлов или `{ files, … }` |
 | `load(data)` | загрузить пачку банков |
-| `playBank(name, opts?)` | проиграть случайный вариант |
+| `playBank(name, opts?)` | проиграть случайный вариант; вернёт имя файла или `null` (не сыграно) |
 | `bankNames()` / `bankFiles(name)` / `has(name)` / `remove(name)` / `reset()` | реестр |
-| `lastPlayed()` | какой файл играл последним (для тестов и отладки) |
+| `lastPlayed(name)` | какой файл банк играл последним (для тестов и отладки) |
+| `$.sound.bank` | сам банк: `files()`, `names()`, `has()`, `remove()`, `reset()`, `load()` |
+
+Настройки банка: `files`, `pitch` (±доля высоты), `volume` (число или
+`[min, max]`), `interval` (не чаще, чем раз в секунды), `avoids` (сколько
+последних файлов не повторять).
 
 Чистые помощники: `bankFiles(spec)`, `pickBankFile(files, random)`,
 `bankVolume(spec)`, `bankPitch(spec)` — их проверяет юнит-тест.
@@ -45,3 +50,9 @@ $.sound.defineBank('hit', { files: ['h1.wav', 'h2.wav'], volume: 0.9, pitch: 0.0
   подсистема `playBank` берёт `fxRandom` — он сеется движком (`--seed`), поэтому
   реплей воспроизводится. Свой генератор можно передать явно;
 * **нет приоритетов и лимитов каналов на банк**: за это отвечает `$.sound`.
+
+## 4. Шаги и реплики — отдельно
+
+Шаги по материалу пола (`$.steps`) и реплики NPC (`$.barks`) — соседняя
+подсистема со своей страницей: [steps.md](steps.md). Шины, эффекты и
+акустика помещений — в [sound.md](sound.md) и [audiobus.md](audiobus.md).

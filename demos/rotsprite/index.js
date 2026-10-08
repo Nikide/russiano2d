@@ -3,7 +3,7 @@ const ATLAS = 'demos/assets/art/mascot/russi_model_maid.png';
 const DOC = 'demos/rotsprite/rotsprite.rml';
 
 export default function installRe2DSpriteDemo($) {
-    let doc, head, yaw=0, pitch=0, auto=true, elapsed=0, eyes='half', mouth='smile', blink=true, speaking=false;
+    let doc, head, yaw=0, pitch=0, auto=true, elapsed=0, eyes='open', mouth='smile', blink=true, speaking=false;
     let body=true, motion='idle', phase=0, armLeft=0, armRight=0, drag=null, shortHair=false, headYaw=0;
     let weapon=null, equipment='none', holdPose=null;
     function cycleEquipment() {
@@ -52,7 +52,7 @@ export default function installRe2DSpriteDemo($) {
         if (!$.input.mouseDown('left')) drag=null;
         if (drag) {
             const shoulder=jointScreen($.re2dSprite.info(head).joints['shoulder'+drag]);
-            const angle=(Math.atan2(m.y-shoulder.y,m.x-shoulder.x)*180/Math.PI)-90;
+            const angle=(Math.atan2(m.y-shoulder.y,m.x-shoulder.x)*180/Math.PI)-90-(drag==='Left' ? 20 : -20);
             if (drag==='Left') armLeft=angle;else armRight=angle;
         }
     }
@@ -60,12 +60,12 @@ export default function installRe2DSpriteDemo($) {
         head:head ? $.re2dSprite.info(head) : null,atlas:ATLAS}));
     const scene={
         enter() {
-            yaw=pitch=elapsed=phase=armLeft=armRight=0;auto=true;eyes='half';mouth='smile';blink=true;speaking=false;
+            yaw=pitch=elapsed=phase=armLeft=armRight=0;auto=true;eyes='open';mouth='smile';blink=true;speaking=false;
             weapon=null;equipment='none';holdPose=null;body=true;motion='idle';drag=null;headYaw=0;shortHair=false;emotion='neutral';brows='neutral';
             $.world.color('#101820');$.camera.at(0,0).zoom(1);
             $('<sprite>',{id:'rot-atlas',src:ATLAS});
             head=$.re2dSprite.from(CHARACTER,{id:'rot-head'}).re2dHotReload();
-            [-45,0,45].forEach((p,i) => $.re2dSprite.from(CHARACTER,{id:'rot-small-'+i}).re2dRig({body:false}).re2dPose(35,p).re2dExpression({eyes:'half',mouth:'smile'}));
+            [-45,0,45].forEach((p,i) => $.re2dSprite.from(CHARACTER,{id:'rot-small-'+i}).re2dMotion('idle',0).re2dRig({body:false}).re2dPose(35,p).re2dExpression({eyes:'open',mouth:'smile'}));
             layout();doc=$.ui.doc(DOC).show();
             doc.on('front','click',() => setPose(0,0)).on('back','click',() => setPose(180,0))
                 .on('profile','click',() => setPose(90,0)).on('auto','click',() => {auto=!auto;})

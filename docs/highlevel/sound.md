@@ -71,6 +71,6 @@ $.sound.busy();            // { active, free, total } — обычно total 16
 
 ## 4. Связанное
 
-* [sound_bank.md](sound_bank.md) — варианты одного звука (шаги, попадания);
+* [soundbank.md](soundbank.md) — варианты одного звука (шаги, попадания);
 * [acoustics.md](acoustics.md) — реверберация помещений;
 * `$.steps`/`$.barks` — шаги по материалу и реплики NPC.

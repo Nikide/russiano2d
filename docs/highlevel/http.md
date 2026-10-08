@@ -183,7 +183,8 @@ $.http (src/highlevel/http.js)  ──►  engine.http.* (src/http.c)
 | `r2d_http_active()` / `r2d_http_available()` / `r2d_http_backend()` | состояние |
 | `r2d_http_free(&result)` | освободить строки результата |
 
-В JS видны `engine.http.request/poll/cancel/active/backend/available`.
+Биндинги живут в ядре (`engine.http.request/poll/cancel/active/backend/available`)
+и видны только модулям движка; игре доступен `$.http` поверх них.
 
 ---
 
