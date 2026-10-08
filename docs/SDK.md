@@ -76,6 +76,7 @@ SDK не владеет игрой: проекты и ассеты остают�
 | `re2d-info <character.json\|png>` | Re2DSprite: PNG v2, части ↔ кости, статистика карт, проверка |
 | `re2d-debug <character.json\|png> --mode m --out f.png [--scale N]` | Re2DSprite: отладочный вид карт поверхности |
 | `re2d-sample <character.json\|png> --x mx --y my` | Re2DSprite: один отсчёт (ID, XYZ, покрытие, владелец) |
+| `bake-re2d <модель.glb\|.gltf> --type prop --output каталог [--uv auto\|existing] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N]` | Re2D Baker: GLB/glTF → Re2DSprite |
 | `run <каталог> [--scene s] [--frames N] [--headless] [--engine путь]` | запуск игры движком |
 | `build <каталог> --out f [--entry main.js] [--encrypt\|--no-encrypt]` | сборка в один файл (`russiano2d build`) |
 
@@ -175,7 +176,61 @@ SDK не владеет игрой: проекты и ассеты остают�
 мимики и вариантов (их можно только выбирать для просмотра), экипировка и сокеты в
 сцене (сокеты правятся числами), правка карт поверхности. Это следующие шаги Phase 3.
 
-## 7. Мост `$.sdk` и агент
+## 7. Re2D Baker (Prop)
+
+**Закон:** 3D разрешён на этапе импорта и не становится архитектурой рантайма. Baker читает
+GLB/glTF как *временный источник данных* и записывает нативный ассет Re2DSprite; результат
+не содержит меша, рантайм не читает GLB, MeshRenderer'а нет.
+
+```bash
+build/r2d-sdk bake-re2d crate.glb --type prop --output assets/crate/
+# → crate.png (PNG v2), crate.character.json, crate.animations.json (клип spin), crate.bake.json (отчёт)
+```
+
+Конвейер (`sdk/native/sdk_gltf.c`, `sdk_bake.c`; **один код** для CLI и GUI):
+
+1. **Разбор** GLB / `.gltf` (+внешний `.bin`, `data:`-URI): иерархия узлов (матрицы и TRS),
+   TRIANGLES/STRIP/FAN, индексы u8/u16/u32, `byteStride`, нормализованные UV,
+   baseColorFactor/baseColorTexture (PNG/JPEG во встроенных и внешних изображениях), alphaMode.
+2. **Оси Re2D:** X вправо, **Y вниз**, Z к зрителю; нормали зеркалятся вместе с осью.
+3. **Coordinate Fit:** авто-вписывание в диапазон карт (X/Z −32…31.75, Y −64…63.5) с запасом
+   2%; `--scale S` задаёт масштаб явно (выход за диапазон — ошибка `SDK_BAKE_FIT_OVERFLOW`);
+   `--origin center|feet` (feet прижимает низ к Y=0, допустимая высота — 64 ед.).
+4. **UV:** `auto` (Auto Unwrap) — 6 плоских карт по доминирующей оси нормали, плотная упаковка
+   в 256×192 отсчётов с поиском минимального шага; `existing` — UV модели как есть (нужны UV
+   в 0..1, наложения развёртки считаются и сообщаются). `Re2D Optimized` — **не реализован**
+   (`SDK_BAKE_UV_MODE_UNSUPPORTED`).
+5. **Растеризация** в сетку текселей (PNG 1024/2048/4096: на отсчёт приходится блок 4k×4k
+   текселей цвета), цвет — baseColor × текстура (билинейно), cutout по alpha.
+6. **Карты v2** (RE2DSPRITE_MATH.md §2): ID (часть = материал, `--first-id` по умолчанию 80),
+   группа материала (ID.G), глубина Z и XY с дробными частями (SUB), покрытие; заголовок v2.
+7. **Описание модели:** одна кость `object`, части по материалам, группы по именам материалов,
+   клип `spin`; опционально стиль (`--style anime|pixel`).
+
+Отчёт `*.bake.json` (он же ответ CLI, машинно-читаемый):
+`{ success, ok, type, source{kind,triangles,materials,textures,skins,animations}, parts, atlasUsage,
+samples, uvMode, size, sampleSpacing, uvOverlapTexels, fit{scale,origin,x,y,z,limits}, files{png,character,animations},
+errors, warnings, infos, diagnostics }`.
+
+Диагностика `SDK_BAKE_*`: `INPUT_MISSING`, `FORMAT`, `GLB_HEADER`, `GLB_CHUNK`, `GLTF_VERSION`,
+`EXTENSION_UNSUPPORTED` (Draco, meshopt, basisu), `SPARSE_UNSUPPORTED`, `BUFFER_MISSING`, `ACCESSOR`,
+`ACCESSOR_RANGE`, `INDEX_RANGE`, `NO_POSITION`, `NO_MESH`, `MODE_UNSUPPORTED`, `TEXTURE_MISSING`,
+`IMAGE_FORMAT`, `TEXCOORD_UNSUPPORTED`, `TEXTURE_TRANSFORM`, `TEXTURE_NO_UV`, `SKIN_IGNORED`,
+`ANIMATION_IGNORED`, `DEGENERATE`, `FIT_OVERFLOW`, `LOW_DENSITY`, `UV_MISSING`, `UV_RANGE`, `UV_OVERLAP`,
+`UV_MODE_UNSUPPORTED`, `TYPE_UNSUPPORTED`, `PARTS_LIMIT`, `SIZE`, `MEMORY`, `EMPTY`, `WRITE_FAILED`.
+
+**GUI** `sdk/tools/re2d-baker.js` + `sdk/ui/baker.rml`: Prop, Auto/Existing UV, размер PNG,
+Feet/центр, масштаб, панель *Coordinate Fit* (диапазоны X/Y/Z, ✓), отчёт, диагностика,
+превью — запечённая модель вращается настоящим `$.re2dSprite`, кнопка «Открыть результат в
+Re2DSprite Studio». GUI вызывает тот же `bake-re2d`, поэтому PNG побайтно совпадает с CLI.
+
+Что НЕ сделано (честно): Character/Weapon/Environment, **VRM** и перенос скелета/скиннинга
+(Phase 5), Re2D Optimized UV, сравнение «источник ↔ Re2D» и метрика различия (§39–40
+спецификации), пакетный режим и CI-режим (Phase 7), FBX/OBJ. Качество: плоские карты по оси
+дают просветы на косых гранях и швы между картами — это видно в диагностике (`LOW_DENSITY`)
+и на проекциях; «идеального auto unwrap» baker не обещает.
+
+## 8. Мост `$.sdk` и агент
 
 Игра не может порождать процессы. Проект-инструмент включает мост флагом
 `"toolHost": true` (`sdk/project.json`); тогда `$.sdk.tool([...])` запускает
@@ -190,7 +245,7 @@ $.sdkApp.snapshot()                       // и раздел sdk в ответе
 $.ui.doc('sdk/ui/shell.rml').click('btn-build')   // нажать элемент RmlUi
 ```
 
-## 8. Состояние (IMPLEMENTED / PARTIAL / NOT STARTED)
+## 9. Состояние (IMPLEMENTED / PARTIAL / NOT STARTED)
 
 | Возможность | Статус | Примечание |
 |---|---|---|
@@ -200,6 +255,8 @@ $.ui.doc('sdk/ui/shell.rml').click('btn-build')   // нажать элемент
 | Sprite Studio, Animation Studio | IMPLEMENTED для атласа и тегов | нет: tilemap, particles, collision, RmlUi Studio, события клипов |
 | Phase 3: Re2DSprite Studio (загрузка, просмотр рантаймом, yaw/pitch, виды карт, проверка, скелет, сохранение, hot reload) | IMPLEMENTED | `tests/agent/sdk_re2dsprite_test.py`, `sdk_re2d_parity_test.py` |
 | Re2DSprite: редактор клипов, мимики, вариантов, экипировки | NOT STARTED | только выбор для просмотра |
+| Phase 4: Re2D Baker MVP (GLB/glTF → Prop), CLI и GUI на одном коде | IMPLEMENTED | `tests/agent/sdk_baker_test.py` |
+| Baker: Character/Weapon/Environment, VRM, FBX/OBJ, Re2D Optimized UV, сравнение с источником, batch | NOT STARTED / PLANNED | Phase 5, 7 |
 | Валидаторы форматов | PARTIAL | `project`, `sdk.registry`, `json`, `sprite.atlas`, `re2dsprite.character`; остальные — по фазам |
 | Редакторы и Baker | NOT STARTED на момент этого раздела | см. SDK_HANDOFF.md |
 | Нативный агентский клиент | NOT STARTED | Python-клиент `tools/agent_client.py` — тестовая обвязка репозитория, не инструмент SDK |

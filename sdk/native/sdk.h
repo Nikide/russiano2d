@@ -179,6 +179,7 @@ void sdk_json_put_compact(R2dSb *sb, const R2dJson *v);
 bool sdk_image_info(const char *path, int *w, int *h);
 // RGBA8 целиком; освобождать sdk_image_free(). NULL при ошибке.
 uint8_t *sdk_image_load_rgba(const char *path, int *w, int *h);
+uint8_t *sdk_image_load_rgba_mem(const uint8_t *data, size_t size, int *w, int *h);
 void sdk_image_free(uint8_t *pixels);
 // Запись RGBA8 в PNG.
 bool sdk_image_write_png(const char *path, const uint8_t *rgba, int w, int h);

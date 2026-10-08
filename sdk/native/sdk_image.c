@@ -46,6 +46,12 @@ uint8_t *sdk_image_load_rgba(const char *path, int *w, int *h)
     return pixels;
 }
 
+uint8_t *sdk_image_load_rgba_mem(const uint8_t *data, size_t size, int *w, int *h)
+{
+    int comp = 0;
+    return stbi_load_from_memory(data, (int)size, w, h, &comp, 4);
+}
+
 void sdk_image_free(uint8_t *pixels)
 {
     stbi_image_free(pixels);

@@ -56,6 +56,18 @@
       "assets": [
         "*.character.json"
       ]
+    },
+    {
+      "id": "re2d-baker",
+      "name": "Re2D Baker",
+      "description": "GLB/glTF → нативный Re2DSprite: Prop, Auto Unwrap / Existing UV, Coordinate Fit, отчёт со стабильными кодами. 3D нужен только на этапе импорта.",
+      "last_updated": "2026-10-08T23:00:00+03:00",
+      "entry": "re2d-baker",
+      "category": "re2d",
+      "assets": [
+        "*.glb",
+        "*.gltf"
+      ]
     }
   ]
 }

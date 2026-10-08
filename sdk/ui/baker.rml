@@ -1,0 +1,76 @@
+<rml>
+<head>
+    <link type="text/rcss" href="studio.rcss"/>
+    <title>Re2D Baker</title>
+</head>
+<body>
+<div class="studio">
+    <div class="bar top">
+        <button id="bk-back" class="btn small">К SDK</button>
+        <span class="title">Re2D Baker</span>
+        <span id="bk-source" class="sub">модель не выбрана</span>
+    </div>
+
+    <div class="bar">
+        <button id="bk-run" class="btn primary">Запечь (bake)</button>
+        <button id="bk-autofit" class="btn">Авто-вписывание</button>
+        <button id="bk-open" class="btn">Открыть результат в Re2DSprite Studio</button>
+        <span id="bk-state" class="sub"></span>
+    </div>
+
+    <div class="body-row">
+        <div class="side left">
+            <h4>Пресет</h4>
+            <div class="field-row">
+                <button id="bk-type-prop" class="btn small on">Prop</button>
+                <button id="bk-type-character" class="btn small off">Character</button>
+                <button id="bk-type-weapon" class="btn small off">Weapon</button>
+                <button id="bk-type-env" class="btn small off">Environment</button>
+            </div>
+            <div class="hint">Сейчас запекается только Prop; остальные пресеты — по фазам плана (Character/VRM — Phase 5).</div>
+
+            <h4>UV</h4>
+            <div class="field-row">
+                <button id="bk-uv-auto" class="btn small on">Auto Unwrap</button>
+                <button id="bk-uv-existing" class="btn small">Use Existing UV</button>
+                <button id="bk-uv-opt" class="btn small off">Re2D Optimized</button>
+            </div>
+            <div class="hint">Re2D Optimized не реализован: выбор вернёт понятную ошибку.</div>
+
+            <h4>PNG и начало координат</h4>
+            <div class="field-row">
+                <button id="bk-size-1024" class="btn small on">1024</button>
+                <button id="bk-size-2048" class="btn small">2048</button>
+                <button id="bk-size-4096" class="btn small">4096</button>
+            </div>
+            <div class="field-row">
+                <button id="bk-origin-center" class="btn small on">центр</button>
+                <button id="bk-origin-feet" class="btn small">ноги (Feet)</button>
+            </div>
+
+            <h4>Масштаб</h4>
+            <div class="field-row"><label>Scale</label><input id="bk-scale" type="text" value="" class="field"/></div>
+            <div class="hint">Пусто — вписать автоматически с запасом 2%.</div>
+
+            <h4>Результат в</h4>
+            <div class="field-row"><input id="bk-out" type="text" value="" class="field"/></div>
+            <div class="field-row"><label>Имя</label><input id="bk-name" type="text" value="" class="field"/></div>
+        </div>
+
+        <div class="center">
+            <div id="bk-view" class="viewport"></div>
+            <div id="bk-hud" class="hud-text">—</div>
+        </div>
+
+        <div class="side right">
+            <h4>RE2D Coordinate Fit</h4>
+            <div id="bk-fit"></div>
+            <h4>Отчёт</h4>
+            <div id="bk-report"></div>
+        </div>
+    </div>
+
+    <div id="bk-diag" class="diag-strip"></div>
+</div>
+</body>
+</rml>

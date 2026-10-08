@@ -1,5 +1,15 @@
 # История изменений
 
+## SDK: Re2D Baker MVP — GLB/glTF → Re2DSprite (Phase 4)
+
+- `r2d-sdk bake-re2d`: GLB/glTF (внешний `.bin`, `data:`-URI, иерархия узлов, текстуры
+  baseColor) → PNG v2 + `*.character.json` + анимация `spin` + машинно-читаемый отчёт.
+  Пресет Prop; Auto Unwrap и Use Existing UV; авто-вписывание Coordinate Fit; origin
+  center/feet; PNG 1024/2048/4096; детерминированный результат.
+- Re2D Baker в SDK (RmlUi): параметры, панель Coordinate Fit, отчёт, диагностика, превью
+  запечённой модели настоящим `$.re2dSprite`, переход в Re2DSprite Studio.
+- Тестовые low-poly props: crate, barrel, lamp, chair (+ негативные GLB/glTF).
+
 ## SDK: Re2DSprite Studio (Phase 3)
 
 - Re2DSprite Studio: просмотр модели настоящим `$.re2dSprite`, yaw/pitch мышью и

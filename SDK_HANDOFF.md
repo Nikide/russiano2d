@@ -13,14 +13,14 @@ Last updated: 2026-10-08 (Europe/Moscow)
 | 1 SDK Shell | IMPLEMENTED | оболочка `sdk/`, реестр `sdk_tools.json`, бэкенд `r2d-sdk`, мост `$.sdk` |
 | 2 Classic 2D slice | IMPLEMENTED | Sprite Studio + Animation Studio на атласе `*.atlas.json` |
 | 3 Re2DSprite Studio | IMPLEMENTED (срез) | просмотр рантаймом, виды карт, скелет, проверка; редакторы клипов/мимики/вариантов/экипировки — NOT STARTED |
-| 4 Re2D Baker MVP | NOT STARTED | |
+| 4 Re2D Baker MVP | IMPLEMENTED (Prop) | `sdk_gltf.c`, `sdk_bake.c`, GUI `re2d-baker`; Character/VRM/Weapon/Env NOT STARTED |
 | 5 Character / VRM | NOT STARTED | |
 | 6 Re2D World Studio | NOT STARTED | |
 | 7 Automation / Batch | NOT STARTED | |
 
 ## Что проверено (Phase 1–2)
 
-- `cmake --build build` зелёная; `python3 tools/run_tests.py`: 99 ok, 0 fail, 0 skip
+- `cmake --build build` зелёная; `python3 tools/run_tests.py`: 100 ok, 0 fail, 0 skip
   (до работы `highlevel_perf_test` один раз падал — перфоманс-порог Debug, потом проходил).
 - `build/_deps/quickjs-build/qjs tests/js/*_test.mjs` — все; `build/sdk/native/r2d_sdk_core_test` (ASan/UBSan).
 - Phase 2: `tests/agent/sdk_classic2d_test.py` (SDK-процесс правит файлы, отдельный headless-процесс
@@ -63,6 +63,16 @@ Last updated: 2026-10-08 (Europe/Moscow)
 - Нет: редактор клипов (timeline), мимики, вариантов, экипировки; вид «Occlusion» из спеки реализован как «Перекрытие»
   (счётчик отсчётов на ячейку фронтальной проекции) — это не настоящая окклюзия рантайма.
 
+## Phase 4: решения
+
+- Baker = `sdk/native/sdk_gltf.c` (разбор) + `sdk_bake.c` (оси, вписывание, раскладка, растеризация, запись) —
+  одна функция `bk_bake` для CLI и GUI; отчёт всегда собирается (`res->report_json`), на диск пишется при успехе.
+- Auto Unwrap = 6 плоских карт по доминирующей оси нормали + плотная упаковка (двоичный поиск шага отсчёта).
+  Просветы на косых гранях и швы между картами — известное ограничение (`SDK_BAKE_LOW_DENSITY` предупреждает).
+- Y-ось: glTF вверх → Re2D вниз; «feet» = низ (max Y) в 0, допустимая высота 64 ед.
+- Тестовые GLB генерируются Python-скриптом (одноразовый dev-инструмент, результат закоммичен в `tests/fixtures/sdk/props/`).
+- Не сделано: Character/Weapon/Environment, VRM, skin→part ownership, Re2D Optimized, source-vs-Re2D, batch.
+
 ## Известные ограничения / не сделано
 
 - ImGui-оверлей (`src/debug_ui.*`) НЕ удалён. Текст сцены уже рисуется без ImGui
@@ -73,7 +83,8 @@ Last updated: 2026-10-08 (Europe/Moscow)
 
 ## Следующий шаг
 
-Phase 4: Re2D Baker MVP (GLB/glTF + Prop): C-парсер GLB, нормализация, выборка поверхности по UV в карты
-PNG v2 (`sdk_image_write_png` уже есть), запись `*.character.json`, отчёт со стабильными кодами;
-CLI `r2d-sdk bake-re2d <glb> --type prop --output <dir>`; GUI-экран вызывает ту же функцию через `app.backend`;
-превью — Re2DSprite Studio (результат открывается в нём).
+Phase 5: Character / VRM. Разбор VRM (glTF + расширения VRM 0.x `extensions.VRM` и VRMC_vrm 1.0): humanoid-кости →
+rig Re2D (Auto Re2D Character: head/torso/arms/legs/hair/clothes), skin weights → владение частями по доминирующей кости
+(`owner = argmax weight`) с отчётом о неоднозначности (§36), expressions → emotions, материалы. Скелет: нужен разбор
+`skins` (joints/inverseBindMatrices) и JOINTS_0/WEIGHTS_0 в `sdk_gltf.c`. Реальный VRM в репозитории не лежит —
+сгенерировать синтетический VRM (как props) и описать честно, что настоящий VRoid-файл не проверялся.

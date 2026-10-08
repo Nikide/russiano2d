@@ -510,6 +510,7 @@ export function createApp($) {
                 sprite: app.studios && app.studios.sprite ? app.studios.sprite.snapshot() : null,
                 animation: app.studios && app.studios.animation ? app.studios.animation.snapshot() : null,
                 re2d: app.studios && app.studios.re2d ? app.studios.re2d.snapshot() : null,
+                baker: app.studios && app.studios.baker ? app.studios.baker.snapshot() : null,
             },
         };
     }

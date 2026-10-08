@@ -1,0 +1,1 @@
+{"asset": {"version": "2.0"}, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0}], "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}], "buffers": [{"uri": "\u043d\u0435\u0442_\u0442\u0430\u043a\u043e\u0433\u043e.bin", "byteLength": 36}], "bufferViews": [{"buffer": 0, "byteLength": 36}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}]}

@@ -8,6 +8,7 @@
 // ===========================================================================
 #include "sdk.h"
 #include "sdk_re2d.h"
+#include "sdk_bake.h"
 
 #include <SDL3/SDL.h>
 
@@ -37,6 +38,7 @@ static const Command k_commands[] = {
     { "re2d-info",   sdk_cmd_re2d_info,   "Re2DSprite: PNG v2, части, статистика карт и проверка" },
     { "re2d-debug",  sdk_cmd_re2d_debug,  "Re2DSprite: отладочный вид карт поверхности в PNG" },
     { "re2d-sample", sdk_cmd_re2d_sample, "Re2DSprite: один отсчёт поверхности (ID, XYZ, покрытие, владелец)" },
+    { "bake-re2d", sdk_cmd_bake_re2d, "Re2D Baker: GLB/glTF → Re2DSprite (пресет prop)" },
     { "run",      sdk_cmd_run,      "запустить игру движком" },
     { "build",    sdk_cmd_build,    "собрать игру в один файл" },
 };
