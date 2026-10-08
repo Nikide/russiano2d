@@ -4441,6 +4441,8 @@ static void r2d__destroy_context(R2DScript *s)
 {
     if (s->ctx) {
         r2d__free_js_values(s);
+        // Ссылки C на узлы $ (активные твины) и атомы — до JS_FreeContext.
+        r2d_nodes_shutdown(s->ctx);
         JS_FreeContext(s->ctx);
         s->ctx = NULL;
     }

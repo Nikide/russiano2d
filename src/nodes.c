@@ -11,6 +11,17 @@
 
 #include "nodes.h"
 
+// Без слияния a*b+c в FMA: компилятор на arm64 делает это по умолчанию, а
+// QuickJS считает раздельно — и твин или позиция на экране расходились бы с
+// прежним JS-путём в последнем знаке (тест «C против JS» это ловит).
+#if defined(__clang__)
+#pragma clang fp contract(off)
+#elif defined(__GNUC__)
+#pragma GCC optimize("fp-contract=off")
+#elif defined(_MSC_VER)
+#pragma fp_contract(off)
+#endif
+
 #include "physics.h"
 #include "r2d.h"
 #include "script.h"
@@ -30,7 +41,8 @@
     X(kind) X(tag) X(clip) X(shadow) X(outline) X(nine_slice) X(shake_timer)         \
     X(pivot_x) X(pivot_y) X(shader_name) X(blend_mode) X(sprite) X(color) X(tint)    \
     X(tint_timer) X(_scr_x) X(_scr_y) X(_scr_frame) X(_rk)                         \
-    X(class_list) X(tr) X(controls) X(trigger) X(anim) X(__clip) X(parallax_factor)
+    X(class_list) X(tr) X(controls) X(trigger) X(anim) X(__clip) X(parallax_factor)   \
+    X(shake_amount) X(iframes) X(_fx)
 
 typedef struct {
 #define R2D_DECL_ATOM(name) JSAtom name;
@@ -712,6 +724,281 @@ static JSValue js_draw_world(JSContext *ctx, JSValueConst this_val, int argc, JS
 
 
 // ---------------------------------------------------------------------------
+// Простые твины — tweenProps()/tickTweens() из tween.js
+// ---------------------------------------------------------------------------
+//
+// `.tween({x, alpha}, ms, ease)`, `.moveTo`, `.fadeTo`, `.scaleTo`,
+// `.rotateTo`: числа, встроенная плавность, свойство узла. Такой твин целиком
+// живёт здесь: состояние, плавность и запись в узел (x/y — вместе с телом, как
+// moveToX/moveToY). JS только создаёт его и разрешает Promise по id, когда C
+// сообщает о завершении. Свою функцию плавности и запись в attrs ведёт
+// прежний JS-путь.
+
+enum {
+    TP_X, TP_Y, TP_ALPHA, TP_ANGLE, TP_SCALE, TP_SCALE_X, TP_SCALE_Y, TP_W, TP_H, TP_VALUE,
+};
+
+#define R2D_TWEEN_KEYS 8
+
+typedef struct {
+    JSValue node;
+    double from[R2D_TWEEN_KEYS], to[R2D_TWEEN_KEYS];
+    uint8_t prop[R2D_TWEEN_KEYS];
+    int keys;
+    double ms, t;
+    int ease;
+    int id;
+    bool paused;
+} NativeTween;
+
+static NativeTween *tweens;
+static int tween_count, tween_cap, tween_next_id = 1;
+static JSAtom atom_value;
+
+// EASES из tween.js, один в один (QuickJS считает Math.pow/sin/cos тем же libm).
+static double ease_out_bounce(double t)
+{
+    const double n1 = 7.5625, d1 = 2.75;
+    if (t < 1 / d1) return n1 * t * t;
+    if (t < 2 / d1) { t -= 1.5 / d1; return n1 * t * t + 0.75; }
+    if (t < 2.5 / d1) { t -= 2.25 / d1; return n1 * t * t + 0.9375; }
+    t -= 2.625 / d1;
+    return n1 * t * t + 0.984375;
+}
+
+static double ease_eval(int id, double t)
+{
+    switch (id) {
+    case 0: return t;                                                            // linear
+    case 1: case 4: return t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2;     // ease, easeInOut
+    case 2: case 8: return t * t;                                                // easeIn, easeInQuad
+    case 3: case 9: return 1 - (1 - t) * (1 - t);                                // easeOut, easeOutQuad
+    case 5: return t * t * t;                                                    // easeInCubic
+    case 6: return 1 - pow(1 - t, 3);                                            // easeOutCubic
+    case 7: return t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2;         // easeInOutCubic
+    case 10: return t * t * t * t;                                               // easeInQuart
+    case 11: return 1 - pow(1 - t, 4);                                           // easeOutQuart
+    case 12: return 2.70158 * t * t * t - 1.70158 * t * t;                       // easeInBack
+    case 13: return 1 + 2.70158 * pow(t - 1, 3) + 1.70158 * pow(t - 1, 2);       // easeOutBack
+    case 14:                                                                     // easeInOutBack
+        return t < 0.5
+            ? (pow(2 * t, 2) * (7.189819 * t - 2.5949095)) / 2
+            : (pow(2 * t - 2, 2) * (3.5949095 * (t * 2 - 2) + 2.5949095) + 2) / 2;
+    case 15:                                                                     // easeOutElastic
+        return t == 0 ? 0 : t == 1 ? 1
+            : pow(2, -10 * t) * sin((t * 10 - 0.75) * ((2 * M_PI) / 3)) + 1;
+    case 16:                                                                     // easeInElastic
+        return t == 0 ? 0 : t == 1 ? 1
+            : -pow(2, 10 * t - 10) * sin((t * 10 - 10.75) * ((2 * M_PI) / 3));
+    case 17: return ease_out_bounce(t);                                          // easeOutBounce
+    case 18: return 1 - ease_out_bounce(1 - t);                                  // easeInBounce
+    case 19: return 1 - cos((t * M_PI) / 2);                                     // easeInSine
+    case 20: return sin((t * M_PI) / 2);                                         // easeOutSine
+    case 21: return t < 1 ? 0 : 1;                                               // step
+    default: return t;
+    }
+}
+
+// Запись свойства — writeProp() из tween.js.
+static void tween_write(JSContext *ctx, JSValueConst node, int prop, double v)
+{
+    switch (prop) {
+    case TP_X: case TP_Y: {
+        R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+        const double body = num_prop(ctx, node, A.body);
+        if (body >= 0 && s && s->physics) {
+            // moveToX/moveToY: вторая координата и угол — из трансформов тела.
+            const int id = (int)body;
+            if (id < R2D_MAX_BODIES) {
+                const float *t = s->physics->transforms;
+                const float x = prop == TP_X ? (float)v : t[id * 3];
+                const float y = prop == TP_Y ? (float)v : t[id * 3 + 1];
+                r2d_physics_set_position(s->physics, id, x, y, t[id * 3 + 2]);
+            }
+        }
+        set_num(ctx, node, prop == TP_X ? A.x : A.y, v);
+        return;
+    }
+    case TP_ALPHA: set_num(ctx, node, A.alpha, v); return;
+    case TP_ANGLE: set_num(ctx, node, A.angle, v); return;
+    case TP_SCALE: set_num(ctx, node, A.scale_x, v); set_num(ctx, node, A.scale_y, v); return;
+    case TP_SCALE_X: set_num(ctx, node, A.scale_x, v); return;
+    case TP_SCALE_Y: set_num(ctx, node, A.scale_y, v); return;
+    case TP_W: set_num(ctx, node, A.w, v); return;
+    case TP_H: set_num(ctx, node, A.h, v); return;
+    case TP_VALUE: set_num(ctx, node, atom_value, v); return;
+    default: return;
+    }
+}
+
+// engine.nodes.tweenAdd(node, props, from, to, ms, ease) → id.
+static JSValue js_tween_add(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 6 || !JS_IsObject(argv[0])) return JS_ThrowTypeError(ctx, "nodes.tweenAdd(node, props, from, to, ms, ease)");
+    const uint32_t keys = list_length(ctx, argv[1]);
+    if (keys == 0 || keys > R2D_TWEEN_KEYS) return JS_ThrowRangeError(ctx, "nodes.tweenAdd: 1..8 свойств");
+    if (tween_count == tween_cap) {
+        const int cap = tween_cap ? tween_cap * 2 : 64;
+        NativeTween *grown = (NativeTween *)SDL_realloc(tweens, sizeof(NativeTween) * (size_t)cap);
+        if (!grown) return JS_ThrowOutOfMemory(ctx);
+        tweens = grown;
+        tween_cap = cap;
+    }
+    NativeTween *tw = &tweens[tween_count];
+    SDL_zerop(tw);
+    for (uint32_t k = 0; k < keys; ++k) {
+        JSValue p = JS_GetPropertyUint32(ctx, argv[1], k);
+        JSValue a = JS_GetPropertyUint32(ctx, argv[2], k);
+        JSValue b = JS_GetPropertyUint32(ctx, argv[3], k);
+        int32_t code = 0;
+        JS_ToInt32(ctx, &code, p);
+        tw->prop[k] = (uint8_t)code;
+        tw->from[k] = to_num(ctx, a);
+        tw->to[k] = to_num(ctx, b);
+        JS_FreeValue(ctx, p);
+        JS_FreeValue(ctx, a);
+        JS_FreeValue(ctx, b);
+    }
+    tw->keys = (int)keys;
+    tw->ms = to_num(ctx, argv[4]);
+    int32_t ease = 0;
+    JS_ToInt32(ctx, &ease, argv[5]);
+    tw->ease = ease;
+    tw->node = JS_DupValue(ctx, argv[0]);
+    tw->id = tween_next_id++;
+    tween_count++;
+    return JS_NewInt32(ctx, tw->id);
+}
+
+// engine.nodes.tweenStep(ms) → массив id завершённых (в порядке tickTweens:
+// от последнего добавленного к первому) или null, если ничего не кончилось.
+static JSValue js_tween_step(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (tween_count == 0 || argc < 1) return JS_NULL;
+    const double ms = to_num(ctx, argv[0]);
+    JSValue done = JS_NULL;
+    uint32_t done_len = 0;
+    for (int i = tween_count - 1; i >= 0; --i) {
+        NativeTween *tw = &tweens[i];
+        if (tw->paused) continue;
+        tw->t += ms;
+        double p = tw->t / tw->ms;
+        if (!(p < 1)) p = p != p ? p : 1;   // Math.min(1, NaN) → NaN, как в JS
+        const double e = ease_eval(tw->ease, p);
+        for (int k = 0; k < tw->keys; ++k) {
+            tween_write(ctx, tw->node, tw->prop[k], tw->from[k] + (tw->to[k] - tw->from[k]) * e);
+        }
+        if (p >= 1) {
+            if (JS_IsNull(done)) done = JS_NewArray(ctx);
+            JS_SetPropertyUint32(ctx, done, done_len++, JS_NewInt32(ctx, tw->id));
+            JS_FreeValue(ctx, tw->node);
+            // Порядок важен (обход с конца): сдвигаем хвост, как splice.
+            SDL_memmove(&tweens[i], &tweens[i + 1], sizeof(NativeTween) * (size_t)(tween_count - i - 1));
+            tween_count--;
+        }
+    }
+    return done;
+}
+
+static bool same_node(JSValueConst a, JSValueConst b)
+{
+    return JS_IsObject(a) && JS_IsObject(b) && JS_VALUE_GET_PTR(a) == JS_VALUE_GET_PTR(b);
+}
+
+// engine.nodes.tweenClear(node) → id снятых твинов узла (с конца, как
+// clearNodeTweens) или null.
+static JSValue js_tween_clear(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 1 || tween_count == 0) return JS_NULL;
+    JSValue out = JS_NULL;
+    uint32_t len = 0;
+    for (int i = tween_count - 1; i >= 0; --i) {
+        if (!same_node(tweens[i].node, argv[0])) continue;
+        if (JS_IsNull(out)) out = JS_NewArray(ctx);
+        JS_SetPropertyUint32(ctx, out, len++, JS_NewInt32(ctx, tweens[i].id));
+        JS_FreeValue(ctx, tweens[i].node);
+        SDL_memmove(&tweens[i], &tweens[i + 1], sizeof(NativeTween) * (size_t)(tween_count - i - 1));
+        tween_count--;
+    }
+    return out;
+}
+
+// engine.nodes.tweenPause(node | null, paused) — pauseNodeTweens().
+static JSValue js_tween_pause(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 2) return JS_UNDEFINED;
+    const bool paused = JS_ToBool(ctx, argv[1]) > 0;
+    const bool all = !JS_ToBool(ctx, argv[0]);
+    for (int i = 0; i < tween_count; ++i) {
+        if (all || same_node(tweens[i].node, argv[0])) tweens[i].paused = paused;
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue js_tween_count(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    return JS_NewInt32(ctx, tween_count);
+}
+
+static void tweens_release(JSContext *ctx)
+{
+    for (int i = 0; i < tween_count; ++i) JS_FreeValue(ctx, tweens[i].node);
+    tween_count = 0;
+}
+
+// ---------------------------------------------------------------------------
+// engine.nodes.tickEffects(nodes, dt) — tickEffects() из tween.js
+// ---------------------------------------------------------------------------
+//
+// Таймеры тряски, вспышки и неуязвимости. Возвращает, у скольких узлов эффект
+// ещё жив — по этому счётчику JS-тик выходит на первой строке.
+
+static JSValue js_tick_effects(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 2) return JS_NewInt32(ctx, 0);
+    const double dt = to_num(ctx, argv[1]);
+    const uint32_t n = list_length(ctx, argv[0]);
+    int32_t live = 0;
+    for (uint32_t i = 0; i < n; ++i) {
+        JSValue node = JS_GetPropertyUint32(ctx, argv[0], i);
+        if (!JS_IsObject(node)) { JS_FreeValue(ctx, node); continue; }
+        double shake = num_prop(ctx, node, A.shake_timer);
+        if (shake > 0) {
+            shake -= dt;
+            if (shake <= 0) {
+                shake = 0;
+                set_num(ctx, node, A.shake_amount, 0);
+            }
+            set_num(ctx, node, A.shake_timer, shake);
+        }
+        double tint = num_prop(ctx, node, A.tint_timer);
+        if (tint > 0) {
+            tint -= dt;
+            if (tint <= 0) {
+                tint = 0;
+                JS_SetProperty(ctx, node, A.tint, JS_NULL);
+            }
+            set_num(ctx, node, A.tint_timer, tint);
+        }
+        double iframes = num_prop(ctx, node, A.iframes);
+        if (iframes > 0) {
+            iframes -= dt;
+            set_num(ctx, node, A.iframes, iframes);
+        }
+        if (shake > 0 || tint > 0 || iframes > 0) live++;
+        else if (strictly_true(ctx, node, A._fx)) JS_SetProperty(ctx, node, A._fx, JS_FALSE);
+        JS_FreeValue(ctx, node);
+    }
+    return JS_NewInt32(ctx, live);
+}
+
+// ---------------------------------------------------------------------------
 // engine.nodes.buildIndex(nodes) — buildRegistryIndex() из core.js
 // ---------------------------------------------------------------------------
 //
@@ -884,10 +1171,28 @@ static JSValue js_build_index(JSContext *ctx, JSValueConst this_val, int argc, J
 // Установка
 // ---------------------------------------------------------------------------
 
+void r2d_nodes_shutdown(JSContext *ctx)
+{
+    if (!A.ready || !ctx) return;
+    tweens_release(ctx);
+#define R2D_FREE_ATOM(name) JS_FreeAtom(ctx, A.name);
+    R2D_NODE_ATOMS(R2D_FREE_ATOM)
+#undef R2D_FREE_ATOM
+    for (int i = 0; i < A.special_count; ++i) JS_FreeAtom(ctx, A.special[i]);
+    JS_FreeAtom(ctx, atom_value);
+    JS_FreeValue(ctx, A.str_2d);
+    JS_FreeValue(ctx, A.str_none);
+    for (int i = 0; i < 4; ++i) JS_FreeValue(ctx, A.blend_names[i]);
+    SDL_zero(A);
+}
+
 int r2d_nodes_install(JSContext *ctx, JSValue engine)
 {
-    // Атомы прошлого рантайма умерли вместе с ним — заводим заново.
+    // Атомы прошлого рантайма умерли вместе с ним (r2d_nodes_shutdown) —
+    // заводим заново. Твины прошлого рантайма там же и отпущены.
     SDL_zero(A);
+    tween_count = 0;
+    atom_value = JS_NewAtom(ctx, "value");
 #define R2D_MAKE_ATOM(name) A.name = JS_NewAtom(ctx, #name);
     R2D_NODE_ATOMS(R2D_MAKE_ATOM)
 #undef R2D_MAKE_ATOM
@@ -907,6 +1212,12 @@ int r2d_nodes_install(JSContext *ctx, JSValue engine)
     JS_SetPropertyStr(ctx, nodes, "collectWorld", JS_NewCFunction(ctx, js_collect_world, "collectWorld", 2));
     JS_SetPropertyStr(ctx, nodes, "drawWorld", JS_NewCFunction(ctx, js_draw_world, "drawWorld", 9));
     JS_SetPropertyStr(ctx, nodes, "buildIndex", JS_NewCFunction(ctx, js_build_index, "buildIndex", 1));
+    JS_SetPropertyStr(ctx, nodes, "tweenAdd", JS_NewCFunction(ctx, js_tween_add, "tweenAdd", 6));
+    JS_SetPropertyStr(ctx, nodes, "tweenStep", JS_NewCFunction(ctx, js_tween_step, "tweenStep", 1));
+    JS_SetPropertyStr(ctx, nodes, "tweenClear", JS_NewCFunction(ctx, js_tween_clear, "tweenClear", 1));
+    JS_SetPropertyStr(ctx, nodes, "tweenPause", JS_NewCFunction(ctx, js_tween_pause, "tweenPause", 2));
+    JS_SetPropertyStr(ctx, nodes, "tweenCount", JS_NewCFunction(ctx, js_tween_count, "tweenCount", 0));
+    JS_SetPropertyStr(ctx, nodes, "tickEffects", JS_NewCFunction(ctx, js_tick_effects, "tickEffects", 2));
     JS_SetPropertyStr(ctx, engine, "nodes", nodes);
     return 0;
 }

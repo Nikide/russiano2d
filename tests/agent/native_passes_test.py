@@ -114,6 +114,56 @@ def main():
         check(falls[True] == falls[False] and falls[True][1] > 100000,
               "синк тела одинаков: %s / %s" % (falls[True], falls[False]))
 
+        # Простые твины: нативная лента (C) и JS-лента дают те же значения на
+        # каждом кадре и разрешают Promise в тот же кадр.
+        scenario = ("(() => { globalThis.__tw = []; const mk = (id, extra) => $('<rect>', Object.assign({ id }, extra || {})).at(100, 100).appendTo($.world);"
+                    " const a = mk('ta'), b = mk('tb'), c = $('<enemy>', { id: 'tc' }).at(200, 50).appendTo($.world), d = mk('td'), e = mk('te');"
+                    " $.world.gravity(0, 0);"
+                    " a.tween({ x: 400, alpha: 0.2 }, 300, 'easeOutBack').then(() => __tw.push('a@' + $.time.frame()));"
+                    " b.tween({ scale: 2, angle: 3, value: 5 }, 250, 'easeOutElastic').then(() => __tw.push('b@' + $.time.frame()));"
+                    " c.moveTo(260, 120, 200).then(() => __tw.push('c@' + $.time.frame()));"
+                    " d.tween({ w: 80, h: '+20' }, 400, 'easeInBounce').then(() => __tw.push('d@' + $.time.frame()));"
+                    " e.tween({ y: 300 }, 500).then(() => __tw.push('e@' + $.time.frame()));"
+                    " return true; })()")
+        probe = ("(() => ['ta','tb','tc','td','te'].map(id => { const n = $('#' + id).get(0);"
+                 " return [n.x, n.y, n.alpha, n.scale_x, n.scale_y, n.angle, n.value, n.w, n.h].map(v => +v).join(','); }).join(';'))()")
+        traces = {}
+        for mode in (True, False):
+            a.eval("$.debug.nativePasses(%s); true" % ("true" if mode else "false"))
+            a.eval(scenario)
+            trace = []
+            for f in range(40):
+                if f == 5:
+                    a.eval("$('#td').pauseTweens(); true")
+                if f == 12:
+                    a.eval("$('#td').resumeTweens(); true")
+                if f == 8:
+                    a.eval("$('#te').clearTweens(); true")
+                a.step(1)
+                trace.append(a.eval(probe))
+            trace.append(a.eval("JSON.stringify(globalThis.__tw.map(s => s.split('@')[0]))"))
+            traces[mode] = trace
+            a.eval("$('#ta, #tb, #tc, #td, #te').remove(); true")
+        check(traces[True] == traces[False], "простые твины C и JS совпадают на каждом кадре")
+        first_diff = next((i for i, (x, y) in enumerate(zip(traces[True], traces[False])) if x != y), None)
+        if first_diff is not None:
+            print("    кадр %d:\n    C : %s\n    JS: %s" % (first_diff, traces[True][first_diff], traces[False][first_diff]))
+        check("c" in traces[True][-1] and "e" in traces[True][-1], "Promise твинов разрешаются: %s" % traces[True][-1])
+
+        # Эффекты узла: тряска, вспышка, неуязвимость — те же таймеры.
+        fx_trace = {}
+        for mode in (True, False):
+            a.eval("$.debug.nativePasses(%s); $('<rect>', { id: 'fx%d' }).at(-300, -300).appendTo($.world)"
+                   ".shake(5, 200).flash('#ff0000', 150).invulnerable(100); true" % ("true" if mode else "false", mode))
+            trace = []
+            for f in range(16):
+                a.step(1)
+                trace.append(a.eval("(() => { const n = $('#fx%d').get(0); return [n.shake_timer, n.shake_amount,"
+                                    " n.tint_timer, n.tint, n.iframes, n._fx].map(String).join(','); })()" % mode))
+            fx_trace[mode] = trace
+            a.eval("$('#fx%d').remove(); true" % mode)
+        check(fx_trace[True] == fx_trace[False], "таймеры эффектов C и JS совпадают")
+
     if FAILURES:
         print("ПРОВАЛЕНО: %d" % len(FAILURES))
         sys.exit(1)

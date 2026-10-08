@@ -29,7 +29,8 @@
 //   chain     — N узлов, каждый кадр цепной метод ядра ($('.mob').alpha(1));
 //   fast      — то же, но обход через .eachNode(): без обёртки на узел;
 //   churn     — N узлов в мире + пачка спавна/удаления каждый кадр;
-//   batch     — то же самое, но пачка идёт через $.batch (одна уборка реестра).
+//   batch     — то же самое, но пачка идёт через $.batch (одна уборка реестра);
+//   move      — N узлов, у каждого простой твин .tween({ x, alpha }) по кругу.
 // ===========================================================================
 
 const spec = String($.startScene || 'none:0');
@@ -138,6 +139,21 @@ $.ready(() => {
             const t = $.tween(node);
             t.property('x', p.x + 40, 1);
             t.loops(-1);
+        }
+        $.bench.nodes = N;
+        return;
+    }
+
+    if (KIND === 'move') {
+        const cols = Math.ceil(Math.sqrt(N)) || 1;
+        for (let i = 0; i < N; i++) {
+            const p = grid(i, cols, 24);
+            const node = $('<rect>', { id: 'mob' + i }).at(p.x, p.y).size(16, 16).appendTo($.world);
+            // Туда-обратно бесконечно: каждый твин по завершении запускает
+            // следующий — цена и твина, и его Promise.
+            const go = (k) => node.tween({ x: p.x + (k % 2 ? 0 : 40), alpha: k % 2 ? 1 : 0.4 }, 1000, 'easeInOutCubic')
+                .then(() => go(k + 1));
+            go(0);
         }
         $.bench.nodes = N;
         return;

@@ -35,6 +35,12 @@
 | сбор и сортировка мира | `sortedNodes` | `collectWorld(nodes, out)`, `sortWorld(list, mode)` | `render.js` |
 | отсечение и батч обычных узлов | `drawWorldNode` | `drawWorld(list, P, xf, col, blend, fx, clip, count, cb)` | `render.js` |
 | индекс реестра: все, по тегу, по классу, срезы | `buildRegistryIndex` | `buildIndex(nodes)` | `core.js` |
+| простые твины (`.tween/.moveTo/.fadeTo/…`) | `tickTweens` | `tweenAdd/tweenStep/tweenClear/tweenPause/tweenCount` | `tween.js` |
+| таймеры тряски, вспышки, неуязвимости | `tickEffects` | `tickEffects(nodes, dt)` | `tween.js` |
+
+C-код собирается без слияния `a*b+c` в FMA (`#pragma … fp contract(off)` в
+`src/nodes.c`): QuickJS считает раздельно, и без прагмы твин или позиция на
+экране расходились бы с JS-путём в последнем знаке.
 
 Где JS-цикл звал обработчики посреди обхода, C-проход **возобновляемый**:
 он останавливается на узле с событием, JS рассылает его и продолжает со

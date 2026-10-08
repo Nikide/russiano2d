@@ -11,7 +11,8 @@
 // из $.time, поэтому пауза времени останавливает и анимации.
 // ===========================================================================
 
-import { ctx, Node, query } from './core.js';
+import { engine } from './native.js';
+import { ctx, Node, query, nativeNodes } from './core.js';
 
 // ---------------------------------------------------------------------------
 // Функции плавности
@@ -195,6 +196,52 @@ function writeProp(node, key, value) {
 const active = [];
 let paused_all = false;
 
+// --- Нативная лента (src/nodes.c) -------------------------------------------
+//
+// Числовой твин свойства узла со встроенной плавностью целиком считает C:
+// состояние, плавность и запись в узел. Здесь — только Promise по id.
+// Своя функция плавности и запись в attrs остаются в JS-ленте `active`.
+// Номера свойств и плавностей совпадают с enum/switch в src/nodes.c.
+const NATIVE_PROPS = {
+    x: 0, y: 1, alpha: 2, opacity: 2, angle: 3, scale: 4, scaleX: 5, scaleY: 6,
+    w: 7, width: 7, h: 8, height: 8, value: 9,
+};
+const NATIVE_EASES = {
+    linear: 0, ease: 1, easeIn: 2, easeOut: 3, easeInOut: 4, easeInCubic: 5,
+    easeOutCubic: 6, easeInOutCubic: 7, easeInQuad: 8, easeOutQuad: 9, easeInQuart: 10,
+    easeOutQuart: 11, easeInBack: 12, easeOutBack: 13, easeInOutBack: 14,
+    easeOutElastic: 15, easeInElastic: 16, easeOutBounce: 17, easeInBounce: 18,
+    easeInSine: 19, easeOutSine: 20, step: 21,
+};
+const native_resolvers = new Map();   // id → { node, resolve }
+
+/**
+ * Лента для уже созданных нативных твинов. Переключатель
+ * $.debug.nativePasses(false) решает только, куда пойдут НОВЫЕ твины, —
+ * начатые в C должны доиграть, а не замереть.
+ */
+function tweenLane() {
+    const n = engine && engine.nodes;
+    return n && typeof n === 'object' && typeof n.tweenStep === 'function' ? n : null;
+}
+
+/** Номер встроенной плавности для C или -1 (своя функция, неизвестное имя). */
+function nativeEase(ease) {
+    if (ease === undefined || ease === null) return NATIVE_EASES.easeInOut;
+    if (typeof ease !== 'string') return -1;
+    const id = NATIVE_EASES[ease];
+    return id === undefined ? -1 : id;
+}
+
+function resolveNative(ids) {
+    for (let i = 0; i < ids.length; i++) {
+        const entry = native_resolvers.get(ids[i]);
+        if (entry === undefined) continue;
+        native_resolvers.delete(ids[i]);
+        entry.resolve(entry.node);
+    }
+}
+
 /** Запускает твин свойств. Возвращает Promise, разрешающийся по завершении. */
 export function tweenProps(node, spec, ms, ease) {
     const keys = Object.keys(spec);
@@ -211,6 +258,17 @@ export function tweenProps(node, spec, ms, ease) {
         for (const key of keys) writeProp(node, key, to[key]);
         return Promise.resolve(node);
     }
+    const native = nativeNodes();
+    const ease_id = native ? nativeEase(ease) : -1;
+    if (ease_id >= 0 && keys.length <= 8 && keys.every((k) => NATIVE_PROPS[k] !== undefined)) {
+        const props = keys.map((k) => NATIVE_PROPS[k]);
+        const a = keys.map((k) => from[k]);
+        const b = keys.map((k) => to[k]);
+        return new Promise((resolve) => {
+            const id = native.tweenAdd(node, props, a, b, ms, ease_id);
+            native_resolvers.set(id, { node, resolve });
+        });
+    }
     return new Promise((resolve) => {
         active.push({
             node, keys, from, to, ms, t: 0,
@@ -223,6 +281,14 @@ export function tweenProps(node, spec, ms, ease) {
 
 /** Пауза/остановка твинов конкретного узла. */
 export function clearNodeTweens(node, resolveThem) {
+    const native = native_resolvers.size ? tweenLane() : null;
+    if (native) {
+        const ids = native.tweenClear(node);
+        if (ids) {
+            if (resolveThem) resolveNative(ids);
+            else for (let i = 0; i < ids.length; i++) native_resolvers.delete(ids[i]);
+        }
+    }
     for (let i = active.length - 1; i >= 0; i--) {
         if (active[i].node === node) {
             const tw = active[i];
@@ -233,16 +299,30 @@ export function clearNodeTweens(node, resolveThem) {
 }
 
 export function pauseNodeTweens(node, paused) {
+    if (native_resolvers.size) {
+        const native = tweenLane();
+        if (native) native.tweenPause(node || null, paused);
+    }
     for (const tw of active) if (!node || tw.node === node) tw.paused = paused;
 }
 
 export function pauseAll(paused) { paused_all = paused; }
-export function activeTweenCount() { return active.length; }
+export function activeTweenCount() { return active.length + native_resolvers.size; }
 
 /** Тик твинов. Вызывается из $.time каждый кадр. */
 export function tickTweens(dt) {
-    if (paused_all || active.length === 0) return;
+    if (paused_all) return;
     const ms = dt * 1000;
+    // Нативная лента — первой; при одновременных твинах одного свойства из
+    // двух лент последней пишет JS-лента (своя плавность, attrs).
+    if (native_resolvers.size) {
+        const native = tweenLane();
+        if (native) {
+            const done = native.tweenStep(ms);
+            if (done) resolveNative(done);
+        }
+    }
+    if (active.length === 0) return;
     for (let i = active.length - 1; i >= 0; i--) {
         const tw = active[i];
         if (tw.paused) continue;
@@ -293,8 +373,10 @@ export function flashNode(node, color, ms) {
 
 export function tickEffects(dt) {
     if (fx_live === 0) return;
-    let live = 0;
     const nodes = ctx.nodes;
+    const native = nativeNodes();
+    if (native) { fx_live = native.tickEffects(nodes, dt); return; }
+    let live = 0;
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
         if (node.shake_timer > 0) {
@@ -766,6 +848,9 @@ function prepareTweener(tween, tw, reapply) {
     if (!isFinite(to)) to = tw.from_cache;
     tw.to_cache = tw.relative ? tw.from_cache + to : to;
     tw.ease_fn = transitionFunction(tw.trans_name, tw.ease_kind);
+    // Куда писать, решается один раз при старте, а не в каждом кадре:
+    // `instanceof Node` и разбор пути 'a.b' стоили заметную долю тика.
+    tw._node_prop = tween.target instanceof Node && String(tw.prop).indexOf('.') < 0;
     tw._prepared = true;
     tw.started = true;
 }
@@ -783,20 +868,31 @@ function applyTweenerValue(tween, tw, p) {
     } else {
         value = tw.from_cache + (tw.to_cache - tw.from_cache) * e;
     }
-    if (tw.kind === 'property') { writeTarget(tween.target, tw.prop, value); return; }
+    if (tw.kind === 'property') {
+        if (tw._node_prop === true) writeProp(tween.target, tw.prop, value);
+        else writeTarget(tween.target, tw.prop, value);
+        return;
+    }
     if (typeof tw.fn !== 'function') return;
     try { tw.fn(value, e); } catch (err) { ctx.log(`$: ошибка в method Tween: ${err}`); }
 }
 
+// Индексные циклы, а не for-of: в QuickJS for-of по массиву заводит объект
+// итератора, а эти функции зовутся каждый кадр для каждого твина.
 function stepDuration(step) {
     let duration = 0;
-    for (const tw of step) duration = Math.max(duration, tw.delay_time + tw.duration);
+    for (let i = 0; i < step.length; i++) {
+        const tw = step[i];
+        const d = tw.delay_time + tw.duration;
+        if (d > duration) duration = d;
+    }
     return duration;
 }
 
 function totalDuration(tween) {
     let duration = 0;
-    for (const step of tween._steps) duration += stepDuration(step);
+    const steps = tween._steps;
+    for (let i = 0; i < steps.length; i++) duration += stepDuration(steps[i]);
     return duration;
 }
 
@@ -805,7 +901,8 @@ function totalDuration(tween) {
  * Отдельная функция без состояния — её легко проверять в qjs.
  */
 export function applyStepAt(tween, step, local) {
-    for (const tw of step) {
+    for (let i = 0; i < step.length; i++) {
+        const tw = step[i];
         const start = tw.delay_time;
         if (local + 1e-12 < start) continue;
         if (!tw.started) {
@@ -884,7 +981,6 @@ function completePass(tween) {
  */
 export function advanceTween(tween, dt) {
     tween._elapsed += dt;
-    const total = totalDuration(tween);
     let remain = dt;
     let guard = 0;
     while (!tween._finished && guard++ < 64) {
@@ -892,7 +988,9 @@ export function advanceTween(tween, dt) {
             completePass(tween);
             // Мгновенный сценарий (все шаги нулевые) прокручиваем один проход
             // за тик: иначе loops(-1) без длительностей зациклил бы кадр.
-            if (tween._finished || !(total > 0)) return;
+            // Полная длительность нужна только здесь — на конце прохода, а не
+            // в каждом кадре каждого твина.
+            if (tween._finished || !(totalDuration(tween) > 0)) return;
             continue;
         }
         const step = tween._steps[tween._step];

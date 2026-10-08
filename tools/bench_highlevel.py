@@ -75,7 +75,7 @@ QUICK: List[Tuple[str, int]] = [
 #: Полный набор: каждый вид на нескольких размерах.
 FULL_KINDS: List[str] = [
     "none", "sprite", "body", "query", "id", "cached",
-    "tween", "particles", "ui", "text", "tilemap", "signal",
+    "tween", "move", "particles", "ui", "text", "tilemap", "signal",
     "chain", "fast", "churn", "batch",
 ]
 FULL_NS: List[int] = [0, 100, 250, 500, 1000, 2000]

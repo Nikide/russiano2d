@@ -18,3 +18,7 @@
 
 // Ставит engine.nodes (вызывается из r2d__make_engine). 0 — успех.
 int r2d_nodes_install(JSContext *ctx, JSValue engine);
+
+// Отпускает всё, что C держит на рантайм (атомы, строки, ссылки на узлы в
+// активных твинах). Зовётся до JS_FreeContext — при выходе и hot reload.
+void r2d_nodes_shutdown(JSContext *ctx);
