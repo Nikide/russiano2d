@@ -1,4 +1,5 @@
 // Re2DSprite: один общий PNG персонажа → синтез персонажа в обычном 2D-батче.
+import { engine } from './native.js';
 import { TAGS, def, withAlpha } from './core.js';
 import { registerNodeRenderer } from './render.js';
 

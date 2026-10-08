@@ -16,6 +16,7 @@
 // их проверяет qjs-харнесс без движка.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, Wrapper, TAGS, wrapOne, query, def, defGet, withAlpha, fxRandom,
          nodesByTag } from './core.js';
 import { registerNodeRenderer } from './render.js';

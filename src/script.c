@@ -167,6 +167,18 @@ static char *r2d__module_normalize(JSContext *ctx, const char *base_name,
     // иначе относительные импорты внутри него искались бы от корня игры.
     if (SDL_strcmp(norm, "r2d") == 0) return js_strdup(ctx, "r2d/index.js");
 
+    // Внутренние модули $ (r2d/native.js с движком и прочие) видны только
+    // самим модулям r2d/*. Игре доступен один вход — 'r2d' ($): низкий
+    // уровень без пересборки движка не достать.
+    const bool internal = SDL_strncmp(norm, "r2d/", 4) == 0 &&
+                          SDL_strcmp(norm, "r2d/index.js") != 0;
+    const bool from_engine = base_name && SDL_strncmp(base_name, "r2d/", 4) == 0;
+    if (internal && !from_engine) {
+        JS_ThrowReferenceError(ctx, "модуль '%s' — внутренний модуль движка; игре доступен "
+                               "только import $ from 'r2d'", norm);
+        return NULL;
+    }
+
     return js_strdup(ctx, norm);
 }
 
@@ -3799,10 +3811,21 @@ bool r2d_script_eval(R2DScript *s, const char *code, char **out_json, char **out
         return false;
     }
 
-    // eval в глобальном контексте: доступны engine, $, Global и всё, что игра
-    // положила в globalThis. В отличие от модулей, тут не нужен import.
+    // eval в глобальном контексте: доступны $, Global и всё, что игра
+    // положила в globalThis. Игре engine не виден (bootstrap.js его убирает),
+    // а агентскому eval — инструменту диагностики движка — он выставляется
+    // только на время вызова и сразу убирается обратно.
+    JSValue global = JS_GetGlobalObject(s->ctx);
+    JSAtom engine_atom = JS_NewAtom(s->ctx, "engine");
+    const bool had_engine = JS_HasProperty(s->ctx, global, engine_atom) > 0;
+    if (!had_engine && !JS_IsUndefined(s->engine_obj)) {
+        JS_SetProperty(s->ctx, global, engine_atom, JS_DupValue(s->ctx, s->engine_obj));
+    }
     JSValue value = JS_Eval(s->ctx, code, SDL_strlen(code), "<agent eval>",
                             JS_EVAL_TYPE_GLOBAL);
+    if (!had_engine) JS_DeleteProperty(s->ctx, global, engine_atom, 0);
+    JS_FreeAtom(s->ctx, engine_atom);
+    JS_FreeValue(s->ctx, global);
     if (JS_IsException(value)) {
         JSValue exc = JS_GetException(s->ctx);
         const char *text = JS_ToCString(s->ctx, exc);
@@ -4563,7 +4586,7 @@ static bool r2d__create_context(R2DScript *s)
     if (!r2d__load_highlevel_api(s)) {
         // Игра без $ работать может (engine.* никуда не делся), поэтому это
         // предупреждение, а не отказ: движок продолжает запуск.
-        R2D_WARN("высокоуровневое API ($) не загрузилось — доступен только engine.*");
+        R2D_WARN("высокоуровневое API ($) не загрузилось — игре нечем работать");
     }
 
     // Float32Array поверх C-массива трансформов: без копирования каждый кадр.

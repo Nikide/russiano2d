@@ -25,6 +25,7 @@
 // applyData(), mergeSpec() тестируются под qjs без движка (tests/js/prefab_test.mjs).
 // ===========================================================================
 
+import { engine } from './native.js';
 import {
     ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
     packColor, sheetFrames,

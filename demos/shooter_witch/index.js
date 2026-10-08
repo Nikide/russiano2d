@@ -487,7 +487,7 @@ export default function installWitchShooter($) {
                 y: tr.y + Math.sin(tr.angle) * tr.len * 0.5,
             });
             // Аддитивно: трассер светится поверх тёмного леса, а не тонет в нём.
-            $.gfx.push.sprite(engine.whiteSprite, mid.x, mid.y, len, tr.width * zoom,
+            $.gfx.push.sprite($.gfx.white, mid.x, mid.y, len, tr.width * zoom,
                               tr.angle, $.gfx.rgba(tr.r, tr.g, tr.b, Math.round(255 * alpha)),
                               'add');
         }
@@ -950,7 +950,7 @@ export default function installWitchShooter($) {
         else if (s.kill_t > 0) face_fps = 7; // убила: довольно щурится
         else if (row >= 4) face_fps = 1.6;  // при смерти: медленно
         else if (row === 0) face_fps = 1.1; // цела: почти статична
-        const col = Math.floor(engine.time * face_fps) % FACES.cols;
+        const col = Math.floor($.time.realNow() * face_fps) % FACES.cols;
         const frame = row * FACES.cols + col;
         if (frame !== s.face_frame) {
             s.face_frame = frame;
@@ -1105,12 +1105,9 @@ export default function installWitchShooter($) {
     // Меню: Играть / Настройки / Выход
     // -----------------------------------------------------------------------
 
-    /** Курсор: где бы ни лежал метод — в $.input, $.mouse или в движке. */
+    /** Системный курсор меню. */
     function setCursor(shape) {
-        if ($.input && typeof $.input.cursor === 'function') return $.input.cursor(shape);
-        if ($.mouse && typeof $.mouse.cursor === 'function') return $.mouse.cursor(shape);
-        if (typeof engine.setCursor === 'function') return engine.setCursor(shape);
-        return 'arrow';
+        return $.input.cursor(shape);
     }
 
     /**
@@ -1153,10 +1150,7 @@ export default function installWitchShooter($) {
 
     /** Кадр сцены меню: стрелки вверх/вниз, Enter, настройки. */
     function tickMenuScene(menu, dt) {
-        const setCursor = (shape) => {
-            if ($.input && typeof $.input.cursor === 'function') $.input.cursor(shape);
-            else if (typeof engine.setCursor === 'function') engine.setCursor(shape);
-        };
+        const setCursor = (shape) => $.input.cursor(shape);
         setCursor('hand');
 
         if ($.input.pressed('f')) $.window.fullscreen(!$.window.fullscreen());

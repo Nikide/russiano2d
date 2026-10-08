@@ -33,6 +33,7 @@
 //   * узел с ложным if не показывается вовсе: переход идёт по его to/next.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, packColor, wrapOne } from './core.js';
 import { measureFontText } from './font.js';
 

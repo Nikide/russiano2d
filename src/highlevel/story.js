@@ -22,6 +22,7 @@
 // Флаги сценок — общие на игру: выбор в одной сценке виден в следующих.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, query } from './core.js';
 import { parseStory, checkCondition, applySet, labelIndex } from './story_script.js';
 

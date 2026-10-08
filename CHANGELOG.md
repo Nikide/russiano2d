@@ -1,5 +1,17 @@
 # История изменений
 
+## C → $: игре виден только `$`
+
+- `globalThis.engine` убирается после установки `$`; модули `src/highlevel`
+  берут ядро из приватного `native.js`, загрузчик не отдаёт игре `r2d/*`,
+  кроме `'r2d'`. Агентский `eval` видит `engine` на время вызова.
+- Новое в `$` вместо прямых вызовов: `$.startScene`, `$.gfx.white`,
+  `$.time.perfNow()`. Демки, `game/`, веб-сцена и фикстуры переведены на `$`.
+- **Миграция:** `engine.startScene` → `$.startScene`, `engine.whiteSprite` →
+  `$.gfx.white`, `engine.width/height` → `$.gfx.size()`, `engine.time` →
+  `$.time.realNow()`, `engine.setCursor` → `$.input.cursor`, `engine.drawSprite`
+  → `$.gfx.push.sprite`, `engine.log` → `$.log` (таблица — `docs/highlevel/native.md`).
+
 ## Имя технологии Re2DSprite
 
 - Основной API $.re2dSprite и методы .re2d*, сцена re2dsprite.

@@ -14,6 +14,7 @@
 // картинка воспроизводима, в отличие от Math.random().
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, query, packColor, withAlpha, fxRandom } from './core.js';
 
 const state = {

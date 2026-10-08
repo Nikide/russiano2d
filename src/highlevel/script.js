@@ -16,6 +16,7 @@
 // (см. save.md) или $.store + $.fs.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx } from './core.js';
 
 export function installScript($) {

@@ -5,6 +5,7 @@
 // обновление камеры тикают в одном месте. Пауза останавливает их все сразу.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx } from './core.js';
 import { tickTweens, tickTimers, tickEffects, wait, tickTweenObjects } from './tween.js';
 import { tickCameraAnimations } from './camera.js';
@@ -28,6 +29,8 @@ export function installTime($) {
         now() { return state.scaled_time; },
         /** Время с запуска движка. */
         realNow() { return engine.time; },
+        /** Монотонные миллисекунды для замеров внутри кадра (realNow идёт шагами кадра). */
+        perfNow() { return typeof engine.now === 'function' ? engine.now() : engine.time * 1000; },
         fps() { return engine.fps; },
         frame() { return engine.frame; },
 

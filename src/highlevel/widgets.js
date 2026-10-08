@@ -28,6 +28,7 @@
 //     точечных правок. Тема наследуется детьми от родителя.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, TAGS, def, defGet, query, wrapOne, packColor, withAlpha,
          nodesWithFacet, registryVersion, touchRegistry } from './core.js';
 import { registerUINodeRenderer } from './render.js';

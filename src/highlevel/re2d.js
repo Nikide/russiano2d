@@ -19,6 +19,7 @@
 // ближе. Геометрия узла строится один раз и кэшируется до смены его полей.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { prepareRotWorldPose } from './rotsprite.js';
 import { TAGS, withAlpha } from './core.js';
 import { registerKindPass, registerKindRenderer, KIND_RE2D } from './kinds.js';

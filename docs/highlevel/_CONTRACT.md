@@ -47,9 +47,11 @@ import { cameraTransform } from './camera.js';
   читает `TAGS` в конструкторе, поэтому тег надо зарегистрировать в `install`.
 * `def(name, fn)` / `defGet(name, fn, default)` — метод обёртки (цепочка) и
   геттер. Имя обязано быть уникальным.
-* `engine` — глобальный низкоуровневый объект (`engine.whiteSprite`,
-  `engine.width/height`, `engine.dt`, `engine.rgba`, `engine.createBody`,
-  `engine.submitSprites`, `engine.raycast`, …).
+* `engine` — нативное ядро, **только импортом**: `import { engine } from
+  './native.js'` (`engine.whiteSprite`, `engine.width/height`, `engine.dt`,
+  `engine.rgba`, `engine.createBody`, `engine.submitSprites`, `engine.raycast`,
+  …). Глобального `engine` после установки `$` нет, игре он не виден
+  ([native.md](native.md)); всё, что нужно игре, отдаётся через `$`.
 
 ### Кадровый шаг не должен сканировать реестр
 

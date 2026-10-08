@@ -32,7 +32,7 @@
 //   batch     — то же самое, но пачка идёт через $.batch (одна уборка реестра).
 // ===========================================================================
 
-const spec = String(engine.startScene || 'none:0');
+const spec = String($.startScene || 'none:0');
 const parts = spec.split(':');
 const KIND = parts[0] || 'none';
 const N = Math.max(0, parseInt(parts[1] || '0', 10) || 0);
@@ -123,12 +123,8 @@ $.ready(() => {
         $.bench.nodes = N;
         // Держим тела в движении: спящее тело Box2D почти ничего не стоит, а
         // нам нужна цена «тысячи живых тел», как в реальной сцене.
-        $.update(() => {
-            for (let i = 0; i < bodies.length; i++) {
-                const n = bodies[i];
-                if (n.body >= 0) engine.setVelocity(n.body, 30, 0);
-            }
-        });
+        const movers = $(bodies);
+        $.update(() => { movers.velocity(30, 0); });
         return;
     }
 

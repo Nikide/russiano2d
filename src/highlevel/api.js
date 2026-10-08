@@ -9,6 +9,7 @@
 //   });
 // ===========================================================================
 
+import { engine } from './native.js';
 import {
     ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
     packColor, withAlpha, registerSelector, nodeBounds, boundsOverlap,
@@ -381,6 +382,9 @@ export function createApi() {
 
     $.isAgent = () => !!engineOf().agent;
     $.quit = () => engineOf().quit();
+    // Имя сцены из --scene (или null): то, что раньше игра читала как
+    // engine.startScene. Известно до выполнения main.js, не меняется за сессию.
+    $.startScene = engineOf().startScene || null;
 
     // --- Подсистемы после аудита API ------------------------------------------
     // Ставятся здесь, а не рядом с остальными install*(): им нужны готовые

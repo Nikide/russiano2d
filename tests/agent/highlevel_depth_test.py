@@ -45,10 +45,11 @@ def check_mesh_draw(a):
     биндят участки спрайтов, то есть позже. Подробности и проверку по пикселям
     держит tests/agent/highlevel_mesh_test.py.
     """
-    a.eval("""$.update(() => engine.submitMesh(new Float32Array([
+    # engine виден только внутри eval: колбэк кадра держит свою ссылку.
+    a.eval("""((E) => $.update(() => E.submitMesh(new Float32Array([
         300,200,0.5, 0,0, 1,0,0,
         500,200,0.5, 1,0, 0,1,0,
-        400,400,0.5, 0.5,1, 0,0,1])));""")
+        400,400,0.5, 0.5,1, 0,0,1]))))(engine);""")
     a.step(3)
     info = json.loads(a.eval("JSON.stringify(engine.depthInfo())"))
     return info

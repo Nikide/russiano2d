@@ -7,6 +7,7 @@
 // экранные получаются через $.camera.worldToScreen().
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, query, wrapOne, fxRandom } from './core.js';
 import { setPrimaryCameraSource } from './viewports.js';
 import { normalizeKind, KIND_2D, KIND_RE2D } from './kinds.js';

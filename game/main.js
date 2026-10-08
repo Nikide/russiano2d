@@ -24,6 +24,6 @@ $.ready(($) => {
     $.store.file('save.json').load();
     $.store.autoSave(30000);
 
-    $.scene.load(engine.startScene === 'platformer' ? 'platformer' : 'menu',
+    $.scene.load($.startScene === 'platformer' ? 'platformer' : 'menu',
                  { transition: 'none' });
 });

@@ -12,6 +12,7 @@
 // отдаётся в C одним submitSprites().
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, wrap, def, TAGS, packColor, withAlpha, fxRandom,
          facetCount, nodesWithFacet, registryVersion, spriteSize,
          regionSprite } from './core.js';
@@ -2172,6 +2173,9 @@ export function installGfx($) {
                                  ((packed >> 16) & 0xff) / 255, ((packed >>> 24) & 0xff) / 255);
             return gfx;
         },
+
+        /** Спрайт белой текстуры 1×1: сплошные прямоугольники через $.gfx.push.sprite. */
+        get white() { return engine.whiteSprite; },
 
         /** Отсечение по экрану: false — рисуем всё (полезно для отладки). */
         culling(on) { state.culling = on !== false; return gfx; },

@@ -11,6 +11,7 @@
 // Узлы интерфейса живут в координатах окна: камера на них не влияет.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, query, packColor, nodesWithFacet } from './core.js';
 import { activeDialog } from './widgets.js';
 

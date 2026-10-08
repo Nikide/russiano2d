@@ -8,6 +8,7 @@
 //   $.console.run('spawn 100 200');
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, query, wrap } from './core.js';
 import { collectCounters } from './pool.js';
 

@@ -15,6 +15,7 @@
 // их гоняет qjs-харнесс без движка.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, Node, TAGS, wrap, wrapOne, def, touchRegistry, dropFromRegistry } from './core.js';
 import { noteNodeEffects } from './tween.js';
 

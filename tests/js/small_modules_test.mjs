@@ -10,6 +10,8 @@
 // ===========================================================================
 
 import { test, eq, truthy, falsy, finish } from './_harness.mjs';
+import { installScript } from '../../src/highlevel/script.js';
+import { engine as nativeEngine, setEngineForTests } from '../../src/highlevel/native.js';
 
 test('bootstrap: метка выполнения и готовый $ в globalThis', async () => {
     await import('../../src/highlevel/bootstrap.js');
@@ -27,8 +29,13 @@ test('index: отдаёт ТОТ ЖЕ объект, а не второй экз�
     eq(mod.$, globalThis.$, 'и он тоже тот же объект');
 });
 
-test('script: подсистема ставится без движка и честно отказывает', async () => {
-    const { installScript } = await import('../../src/highlevel/script.js');
+test('bootstrap: игре движок не виден — globalThis.engine убран', async () => {
+    await import('../../src/highlevel/bootstrap.js');
+    eq(typeof globalThis.engine, 'undefined', 'после установки $ глобального engine нет');
+});
+
+test('script: подсистема ставится без движка и честно отказывает', () => {
+    // Мок харнесса: неизвестный метод — no-op, то есть «движок ничего не умеет».
     const $ = {};
     installScript($);
     truthy($.script, '$.script установлена');
@@ -37,14 +44,14 @@ test('script: подсистема ставится без движка и че�
     falsy($.script.pending(), 'нет ожидающей перезагрузки');
 });
 
-test('script: с движком пробрасывает запрос и отдаёт ответ', async () => {
-    const { installScript } = await import('../../src/highlevel/script.js');
+test('script: с движком пробрасывает запрос и отдаёт ответ', () => {
+    const saved = nativeEngine;
     const calls = [];
-    globalThis.engine = {
+    setEngineForTests({
         requestReload: (reason) => { calls.push(reason); return true; },
         hotReload: () => true,
         reloadPending: () => true,
-    };
+    });
     try {
         const $ = {};
         installScript($);
@@ -55,7 +62,7 @@ test('script: с движком пробрасывает запрос и отд�
         $.script.request();
         eq(calls[1], 'запрос игры', 'без причины подставляется текст по умолчанию');
     } finally {
-        delete globalThis.engine;
+        setEngineForTests(saved);
     }
 });
 

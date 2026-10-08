@@ -18,6 +18,7 @@
 // stepParticle) экспортируются наружу — их гоняет qjs-харнесс без движка.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, Node, TAGS, wrapOne, def, packColor, withAlpha,
          resolveSprite, makeRandom, nodesByTag, query } from './core.js';
 import { registerNodeRenderer } from './render.js';

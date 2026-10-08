@@ -17,12 +17,12 @@
 ```
 
 Точка входа — `<каталог>/main.js`, то есть [`demos/main.js`](../demos/main.js).
-`--scene <имя>` движок кладёт в `engine.startScene`, и точка входа открывает
+`--scene <имя>` движок кладёт в `$.startScene`, и точка входа открывает
 эту сцену минуя меню:
 
 ```js
 // demos/main.js
-const start = engine.startScene || 'launcher';
+const start = $.startScene || 'launcher';
 $.scene.load($.scene.has(start) ? start : 'launcher', { transition: 'none' });
 ```
 

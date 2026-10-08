@@ -13,7 +13,7 @@
         <h1>Russiano2D</h1>
         <p id="tagline">демо движка · SDL3 + SDL_GPU · QuickJS-ng · Box2D v3 · RmlUi</p>
 
-        <!-- Карточки демо строит demos/launcher.js: engine.ui.setHtml(doc, 'demo-list', …) -->
+        <!-- Карточки демо строит demos/launcher.js: $.ui.doc(...).html(, 'demo-list', …) -->
         <div id="demo-list"></div>
 
         <div id="footer">

@@ -15,6 +15,7 @@
 // (иначе «$ не определён» неотличимо от «модуль не доехал до бинарника»).
 globalThis.__r2d_boot_started = true;
 
+import { engine } from './native.js';
 import { createApi } from './api.js';
 
 // Ошибку установки показываем как есть: раньше исключение внутри createApi()
@@ -35,6 +36,10 @@ try {
     } catch (e) { /* журнала может не быть */ }
     throw error;
 }
+
+// Низкий уровень игре недоступен: модули $ уже сняли ссылку на движок
+// (native.js), а глобальное имя убираем. Схема — C → $, без engine.* в игре.
+delete globalThis.engine;
 
 globalThis.$ = $;
 globalThis.nk = $;      // короткий алиас: $.world === nk.world

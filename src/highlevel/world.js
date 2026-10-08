@@ -5,6 +5,7 @@
 // кадр позиции тел из C перекладываются в узлы, а удалённые тела убираются.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, Node, Wrapper, wrap, wrapOne, query, TAGS, packColor, resolveSprite, nodeBounds,
          nodesWithFacet, engineOf } from './core.js';
 

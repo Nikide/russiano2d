@@ -50,13 +50,14 @@ function muzzleOnScreen() {
     const z=-Math.sin(yaw)*m[3]+Math.cos(yaw)*m[11];
     const y=Math.cos(pitch)*m[7]-Math.sin(pitch)*z;
     const scale=holder.get(0).rot_sprite.modelPose.scale;
-    return {x:engine.width*.90+x*scale*(1400/128),y:engine.height*.84+y*scale*(1400/128)};
+    const s=$.gfx.size();
+    return {x:s.w*.90+x*scale*(1400/128),y:s.h*.84+y*scale*(1400/128)};
 }
 function fire() {
     if(shotTime>0||reloadTime>0)return false;
     if(magazine===0){message='Магазин пуст — R перезарядить';return false;}
     magazine--;shots++;shotTime=.11;flash=.045;
-    if(shotSound>=0) $.sound.play(shotSound,{volume:.35});
+    if(shotSound) $.sound.play(shotSound,{volume:.35});
     const yaw=view.yaw*Math.PI/180,pitch=view.pitch*Math.PI/180;
     const origin={x:view.x,y:view.y,height:view.eye};
     const delta={x:Math.cos(yaw)*Math.cos(pitch)*RANGE,y:Math.sin(yaw)*Math.cos(pitch)*RANGE,height:Math.sin(pitch)*RANGE};
@@ -97,8 +98,9 @@ $.ready(()=>{
     holder.re2dVisibleParts($.re2dSprite.definition(holder).rig.parts.filter(p=>['armLeft','armRight','forearmLeft','forearmRight'].includes(p.bone)).map(p=>p.id));
     mouseLocked=true;$.window.mouseLock(true);
     globalThis.ak=$.re2dSprite.equip(holder,'ak47',{id:'player-ak'}).re2dStyle('anime').hide();
-    shotSound=engine.audio.load('demos/assets/audio/sfx/shoot_01.ogg');
-    reloadSound=engine.audio.load('demos/assets/audio/sfx/reload.ogg');
+    shotSound='demos/assets/audio/sfx/shoot_01.ogg';
+    reloadSound='demos/assets/audio/sfx/reload.ogg';
+    $.sound.preload([shotSound,reloadSound]);
     globalThis.hud=$.ui.doc('demos/re2d_bsp_world/hud.rml').show();
     globalThis.combat={fire,reset:resetTargets,state:()=>({shots,kills,magazine,reloading:reloadTime>0,lastHit,drawWeapon,mouseLocked})};
     $.agent.expose('re2dBspDemo',()=>({combat:combat.state(),player:{...hero.pos(),height:hero.get(0).depth},targets:npcs.map(n=>({id:n.get(0).id,hp:n.hp(),state:n.attr('state')}))}));
@@ -112,7 +114,7 @@ $.update(dt=>{
     if($.input.pressed('p')) {view.projection=view.projection==='orthographic'?'perspective':'orthographic';view.orthoHeight=400;}
     if($.input.pressed('f')) resetTargets();
     if($.input.pressed('v')) drawWeapon=!drawWeapon;
-    if($.input.pressed('r')&&!reloadTime&&magazine<30){reloadTime=1.2;message='Перезарядка';if(reloadSound>=0)$.sound.play(reloadSound,{volume:.35});}
+    if($.input.pressed('r')&&!reloadTime&&magazine<30){reloadTime=1.2;message='Перезарядка';if(reloadSound)$.sound.play(reloadSound,{volume:.35});}
     view.yaw+=$.input.axis('left','right')*dt*90;
     view.pitch=Math.max(-80,Math.min(80,view.pitch+$.input.axis('down','up')*dt*60));
     if(mouseLocked){const m=$.input.mouseDelta();view.yaw+=m.x*.14;view.pitch=Math.max(-80,Math.min(80,view.pitch-m.y*.14));}
@@ -133,14 +135,15 @@ $.update(dt=>{
     hud.text('keys','WASD ходьба · мышь/стрелки взгляд · M переключить мышь · ЛКМ/Space огонь · R магазин · F цели · E этаж · P проекция · V оружие · Esc отпустить мышь');
 });
 $.render(()=>{
-    world.render(view,drawTargets?npcs.filter(n=>n.alive()):[],Math.min(1024,engine.width),Math.min(1024,engine.height));
+    const scr=$.gfx.size();
+    world.render(view,drawTargets?npcs.filter(n=>n.alive()):[],Math.min(1024,scr.w),Math.min(1024,scr.h));
     if(drawWeapon) {
         const recoil=shotTime/.11;
         holder.re2dPose(220,-12+recoil*5);
         const arm=holder.get(0),weapon=ak.get(0);
-        const draw=n=>engine.drawSprite(n.rot_sprite.sprite,engine.width*.90,engine.height*.84+recoil*12,1400,1400,0,0xffffffff);
+        const draw=n=>$.gfx.push.sprite(n.rot_sprite.sprite,scr.w*.90,scr.h*.84+recoil*12,1400,1400,0,0xffffffff);
         if(weapon.depth<arm.depth){draw(weapon);draw(arm);}else{draw(arm);draw(weapon);}
-        if(flash>0){const p=muzzleOnScreen();engine.drawSprite(engine.whiteSprite,p.x,p.y,18,18,Math.PI/4,0xff75dfff);}
+        if(flash>0){const p=muzzleOnScreen();$.gfx.push.sprite($.gfx.white,p.x,p.y,18,18,Math.PI/4,0xff75dfff);}
     }
 });
 $.exit(()=>{$.window.mouseLock(false);world.dispose();});

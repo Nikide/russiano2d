@@ -25,6 +25,7 @@
 // их гоняет qjs-харнесс без движка.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, Node, TAGS, wrap, wrapOne, query, def,
          packColor, withAlpha, facetCount, nodesByTag, nodesWithFacet,
          touchRegistry } from './core.js';

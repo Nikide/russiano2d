@@ -16,6 +16,7 @@
 // функций, поэтому qjs-тест гоняет очередь Promise через $.http._setBackend().
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx } from './core.js';
 
 const DEFAULT_TIMEOUT_MS = 15000;   // таймаут запроса, если игра не задала свой

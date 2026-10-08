@@ -1,0 +1,5 @@
+body { font-family: "Open Sans"; font-size: 16px; color: #edf2ed; }
+#header { position: absolute; left: 24px; top: 18px; right: 24px; padding: 14px; background-color: #0b131ce6; }
+#status { font-size: 22px; margin-bottom: 5px; }
+#keys { color: #aebcc5; font-size: 14px; }
+.label { position: absolute; color: #e4b5b4; font-size: 18px; }
