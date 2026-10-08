@@ -14,10 +14,11 @@
 import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
 import { createApi } from '../../src/highlevel/api.js';
 import { cameraTransform } from '../../src/highlevel/camera.js';
+import { Wrapper } from '../../src/highlevel/core.js';
 import { kindPass, kindRenderer } from '../../src/highlevel/kinds.js';
 import {
     cellsFor, unpackRgb, pushPlane, pushWall, pushPrism, planeFloats, prismFloats,
-    DEFAULT_HEIGHT, DEFAULT_TILE,
+    billboardPose, shadeColor, DEFAULT_HEIGHT, DEFAULT_TILE,
 } from '../../src/highlevel/re2d.js';
 
 const $ = createApi();
@@ -181,7 +182,7 @@ test('отрисовщик: стена в ведре с CULL_BACK, пол без
     const draw = kindRenderer('re2d');
     eq(draw($('#w').get(0), cam), true, 'стена нарисована');
     eq(draw($('#f').get(0), cam), true, 'пол нарисован');
-    eq(draw($('<npc>').kind(Re2D).get(0), cam), false, 'билборды — следующая фаза: тег не берётся');
+    eq(draw($('<text>').kind(Re2D).get(0), cam), false, 'тег без отрисовщика Re2D (текст) не берётся');
     kindPass('re2d').end(cam);
     eq(meshes.length, 2, 'два ведра: стены и плоскости');
     const wall = meshes.find((m) => m.flags === 1);
@@ -251,6 +252,197 @@ test('$.re2d.info отдаёт вёдра кадра структурой', () =
     eq(info.buckets.length, 1, 'одно ведро');
     eq(info.buckets[0].cull, false, 'пол без отбраковки');
     kindPass('re2d').end(cam);
+});
+
+// --- Фаза 5: билборды и Re2DSprite ---------------------------------------------
+
+test('billboardPose: yaw 0 — лицом к зрителю, ±90 — вбок, ±180 — спиной', () => {
+    // Персонаж в начале координат; камера смотрит на него вдоль оси.
+    const toward = billboardPose(100, 0, 48, 0, 0, 48, 0);          // персонаж смотрит на +x, камера на востоке
+    near(toward.yaw, 0, 1e-9, 'лицом к камере');
+    const away = billboardPose(-100, 0, 48, 0, 0, 48, 0);           // камера на западе — спиной
+    near(Math.abs(away.yaw), 180, 1e-9, 'спиной к камере');
+    const right = billboardPose(-100, 0, 48, 0, 0, 48, Math.PI / 2); // смотрит на +y; камера на западе смотрит на восток, её «вправо» — +y
+    near(right.yaw, 90, 1e-9, 'лицом вправо от зрителя');
+    const left = billboardPose(-100, 0, 48, 0, 0, 48, -Math.PI / 2);
+    near(left.yaw, -90, 1e-9, 'лицом влево от зрителя');
+    const diag = billboardPose(0, 100, 48, 0, 0, 48, Math.PI / 2);   // камера на юге, персонаж смотрит на юг — на камеру
+    near(diag.yaw, 0, 1e-9, 'лицом к камере с другой стороны света');
+});
+
+test('billboardPose: pitch — под каким углом зритель видит центр персонажа', () => {
+    near(billboardPose(100, 0, 48, 0, 0, 48, 0).pitch, 0, 1e-9, 'глаза на уровне центра');
+    truthy(billboardPose(100, 0, 20, 0, 0, 80, 0).pitch > 0, 'глаза ниже центра — зритель смотрит снизу вверх (pitch > 0)');
+    near(billboardPose(100, 0, 148, 0, 0, 48, 0).pitch, -45, 1e-9, 'глаза выше центра на расстояние — -45°');
+});
+
+test('shadeColor множит rgb и не трогает альфу', () => {
+    const c = (0x80 << 24 | 200 << 16 | 100 << 8 | 40) >>> 0;       // a=128, b=200, g=100, r=40
+    eq(shadeColor(c, 1), c, 'shade 1 — без изменений');
+    const half = shadeColor(c, 0.5);
+    eq((half & 255) + ',' + ((half >>> 8) & 255) + ',' + ((half >>> 16) & 255) + ',' + (half >>> 24), '20,50,100,128', 'rgb × 0.5, альфа та же');
+});
+
+function captureSprites(fn) {
+    const calls = [];
+    const original = $.gfx.push.sprite;
+    $.gfx.push.sprite = (...args) => { calls.push(args); };
+    try { fn(); } finally { $.gfx.push.sprite = original; }
+    return calls;
+}
+
+// Нативная проекция-заглушка: x → экран, y — «глубина»; позади камеры (y < 4) — невидима.
+function stubProject() {
+    engine.re2d.project = (pts, out, count) => {
+        let visible = 0;
+        for (let i = 0; i < count; i++) {
+            const depth = pts[i * 3 + 1];
+            const ok = depth >= 4;
+            out[i * 4] = 400 + pts[i * 3]; out[i * 4 + 1] = 400; out[i * 4 + 2] = ok ? 1 - 4 / depth : -1; out[i * 4 + 3] = ok ? 100 / depth : 0;
+            if (ok) visible++;
+        }
+        return visible;
+    };
+}
+
+test('билборды: проекция одним вызовом, дальние рисуются раньше ближних', () => {
+    reset();
+    stubProject();
+    let projectCalls = 0;
+    const inner = engine.re2d.project;
+    engine.re2d.project = (...a) => { projectCalls++; return inner(...a); };
+    $.camera.kind(Re2D);
+    $('<npc>', { id: 'near' }).at(0, 100).size(40, 80).kind(Re2D);
+    $('<npc>', { id: 'far' }).at(0, 400).size(40, 80).kind(Re2D);
+    $('<npc>', { id: 'mid' }).at(0, 200).size(40, 80).kind(Re2D);
+    const cam = cameraTransform();
+    const calls = captureSprites(() => {
+        kindPass('re2d').begin(cam);
+        for (const id of ['near', 'far', 'mid']) kindRenderer('re2d')($('#' + id).get(0), cam);
+        kindPass('re2d').end(cam);
+    });
+    eq(projectCalls, 1, 'все основания спроецированы одним нативным вызовом');
+    eq(calls.length, 3, 'нарисовано три билборда');
+    // k = 100 / depth: far (400) → 0.25, mid (200) → 0.5, near (100) → 1; ширина 40 × k.
+    eq(calls.map((c) => c[3]).join(','), '10,20,40', 'порядок от дальнего к ближнему: ширины 10, 20, 40');
+    eq(calls[2][4], 80, 'высота ближнего = h × k');
+    eq(calls[2][2], 400 - 40, 'центр по y: основание минус полвысоты');
+    eq($.re2d.info().billboards, 3, 'info: три билборда');
+});
+
+test('билборды: позади камеры и за краем кадра не рисуются, альфа узла сохраняется', () => {
+    reset();
+    stubProject();
+    $.camera.kind(Re2D);
+    $('<npc>', { id: 'behind' }).at(0, 2).kind(Re2D);                    // глубина < 4
+    $('<npc>', { id: 'aside' }).at(5000, 100).kind(Re2D);                // далеко вправо за кадром
+    $('<npc>', { id: 'ghost' }).at(0, 100).alpha(0.5).kind(Re2D);
+    const cam = cameraTransform();
+    const calls = captureSprites(() => {
+        kindPass('re2d').begin(cam);
+        for (const id of ['behind', 'aside', 'ghost']) {
+            const node = $('#' + id).get(0);
+            node.alpha = id === 'ghost' ? 0.5 : 1;                       // как внутри drawWorldNode
+            kindRenderer('re2d')(node, cam);
+        }
+        kindPass('re2d').end(cam);
+    });
+    eq(calls.length, 1, 'остался один билборд');
+    eq(calls[0][6] >>> 24, 128, 'прозрачность узла 0.5 дошла до спрайта (альфа 128)');
+});
+
+test('билборды: туман темнит дальние, не трогая альфу', () => {
+    reset();
+    stubProject();
+    $.camera.kind(Re2D).fog(1000, 0.2);
+    $('<npc>', { id: 'f' }).at(0, 500).color('#ffffff').kind(Re2D);
+    const cam = cameraTransform();
+    const calls = captureSprites(() => {
+        kindPass('re2d').begin(cam);
+        kindRenderer('re2d')($('#f').get(0), cam);
+        kindPass('re2d').end(cam);
+    });
+    const color = calls[0][6] >>> 0;
+    truthy((color & 255) < 255 && (color & 255) >= 0.2 * 255 - 1, `rgb затемнён туманом: ${color & 255}`);
+    eq(color >>> 24, 255, 'альфа осталась');
+    $.camera.fog(0);
+});
+
+test('Re2DSprite: поза пересчитывается только при смене квантованного угла', () => {
+    reset();
+    stubProject();
+    const poses = [];
+    const original = Wrapper.prototype.re2dPose;
+    Wrapper.prototype.re2dPose = function (yaw, pitch) { poses.push([yaw, pitch]); return this; };
+    try {
+        $.camera.kind(Re2D).at(300, 0).eye(48);
+        const npc = $('<rotsprite>', { id: 'r' }).at(100, 0).size(96, 96).kind(Re2D);
+        npc.get(0).rot_sprite = { sprite: 9 };
+        npc.get(0).angle = 0;
+        $.re2d.poseStep(5);
+        const frame = () => { const cam = cameraTransform(); kindPass('re2d').begin(cam); kindRenderer('re2d')(npc.get(0), cam); kindPass('re2d').end(cam); };
+        frame();
+        eq(poses.length, 1, 'первый кадр — поза задана');
+        eq(poses[0][0] % 5, 0, 'yaw кратен шагу квантования');
+        $.camera.at(300, 1); frame();
+        eq(poses.length, 1, 'камера чуть сдвинулась — квантованная поза та же, синтез не повторяем');
+        $.camera.at(100, 300); frame();
+        truthy(poses.length === 2 && Math.abs(poses[1][0]) > 30, `камера обошла персонажа — поза новая (${poses[1] && poses[1][0]})`);
+        eq($.re2d.poseStep(), 5, 'poseStep читается');
+    } finally {
+        Wrapper.prototype.re2dPose = original;
+        $.re2d.poseStep(3);
+    }
+});
+
+test('Re2DSprite: предел синтезов поз за кадр откладывает лишнее на следующий кадр', () => {
+    reset();
+    stubProject();
+    const poses = [];
+    const original = Wrapper.prototype.re2dPose;
+    Wrapper.prototype.re2dPose = function (yaw, pitch) { poses.push(this.get(0).id); return this; };
+    try {
+        $.camera.kind(Re2D).at(300, 0).eye(48);
+        $.re2d.poseStep(1).poseBudget(2);
+        const ids = ['a', 'b', 'c', 'd'];
+        for (const id of ids) {
+            const n = $('<rotsprite>', { id }).at(100 + ids.indexOf(id) * 10, 0).size(96, 96).kind(Re2D);
+            n.get(0).rot_sprite = { sprite: 9 };
+        }
+        const frame = () => {
+            const cam = cameraTransform();
+            kindPass('re2d').begin(cam);
+            for (const id of ids) kindRenderer('re2d')($('#' + id).get(0), cam);
+            kindPass('re2d').end(cam);
+        };
+        frame();
+        eq(poses.length, 2, 'в первом кадре синтезировано ровно по пределу (2 из 4)');
+        eq($.re2d.info().poses.deferred, 2, 'info: два отложены');
+        frame();
+        eq(poses.length, 4, 'на следующем кадре дошли остальные');
+        eq(poses.join(''), 'abcd', 'каждый ровно один раз');
+        frame();
+        eq(poses.length, 4, 'поза не изменилась — синтеза нет');
+        $.re2d.poseBudget(0);
+        eq($.re2d.poseBudget(), 0, 'предел читается; 0 — без предела');
+    } finally {
+        Wrapper.prototype.re2dPose = original;
+        $.re2d.poseStep(3).poseBudget(4);
+    }
+});
+
+test('Re2DSprite без загруженной модели не падает и не рисуется', () => {
+    reset();
+    stubProject();
+    $.camera.kind(Re2D);
+    const node = $('<rotsprite>').at(0, 100).kind(Re2D).get(0);
+    const cam = cameraTransform();
+    const calls = captureSprites(() => {
+        kindPass('re2d').begin(cam);
+        eq(kindRenderer('re2d')(node, cam), true, 'отрисовщик «взял» узел');
+        kindPass('re2d').end(cam);
+    });
+    eq(calls.length, 0, 'но рисовать нечего');
 });
 
 finish();

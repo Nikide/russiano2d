@@ -19,7 +19,7 @@
 // ближе. Геометрия узла строится один раз и кэшируется до смены его полей.
 // ===========================================================================
 
-import { TAGS } from './core.js';
+import { TAGS, withAlpha } from './core.js';
 import { registerKindPass, registerKindRenderer, KIND_RE2D } from './kinds.js';
 import { applyRe2dView } from './camera.js';
 
@@ -241,14 +241,183 @@ function drawSurface(node, cam) {
     return true;
 }
 
+// --- Билборды ------------------------------------------------------------------
+//
+// Персонаж, предмет, обычный спрайт в Re2D — плоская картинка, стоящая на полу и
+// всегда повёрнутая к камере (как в Doom). Позиция узла (x, y) — точка на полу,
+// основание — `.depth` (высота над полом), `.size(w, h)` — размер картинки в
+// единицах мира. Узлы не рисуются по одному: отрисовщик только записывает
+// «запись» билборда, а в конце прохода одним нативным вызовом проецируются все
+// основания, записи сортируются от дальних к ближним и уходят в общий батч.
+// Спрайты рисуются поверх меша (ограничение z-буфера), поэтому внутри комнаты
+// перекрытия стенами не бывает; между собой билборды сортируются по глубине.
+
+/** Шаг квантования позы Re2DSprite, градусы: чаще поза не пересчитывается. */
+let poseStep = 3;
+
+/**
+ * Предел синтезов позы за кадр. Синтез картинки персонажа в C стоит заметно
+ * (pixel-стиль около 1 мс, anime около 11 мс), а обход камеры сдвигает позы
+ * всех персонажей разом: без предела один кадр мог бы получить десяток синтезов.
+ * Не уместившиеся поправки откладываются на следующий кадр (персонаж на кадр-два
+ * отстаёт от камеры); 0 — без предела.
+ */
+let poseBudget = 4;
+let posesThisFrame = 0, posesUpdated = 0, posesDeferred = 0;
+
+const records = [];       // переиспользуемые записи кадра (без аллокаций после прогрева)
+let recordCount = 0;
+let billboardsDrawn = 0;
+let points = new Float32Array(3 * 64);
+let projected = new Float32Array(4 * 64);
+let frameView = { focal: 1, fogFar: 0, fogMin: 0.25, w: 800, h: 600 };
+
+/**
+ * Поза Re2DSprite для наблюдателя: yaw — на сколько персонаж повёрнут относительно
+ * камеры (0 — лицом к зрителю, +90 — лицом вправо от зрителя), pitch — угол, под
+ * которым зритель видит центр персонажа (положительный — снизу вверх, поэтому
+ * когда глаза выше центра, он отрицательный). Углы в градусах; `facing` — куда
+ * смотрит персонаж на полу, радианы (0 — вдоль +x, как `node.angle`).
+ */
+export function billboardPose(camX, camY, eye, nx, ny, centerZ, facing) {
+    const dx = nx - camX, dy = ny - camY;
+    const dist = Math.hypot(dx, dy) || 1e-6;
+    const fx = dx / dist, fy = dy / dist;                 // взгляд камеры на персонажа
+    const rx = -fy, ry = fx;                              // вправо от взгляда
+    const ax = Math.cos(facing), ay = Math.sin(facing);   // куда смотрит персонаж
+    const yaw = Math.atan2(ax * rx + ay * ry, -(ax * fx + ay * fy)) * 180 / Math.PI;
+    const pitch = Math.atan2(centerZ - eye, dist) * 180 / Math.PI;
+    return { yaw, pitch };
+}
+
+/**
+ * Скорость игрока от первого лица: ввод `vec` (x — вправо/влево, y — назад/вперёд,
+ * как у `$.input.vec`: W даёт y = -1) поворачивается на yaw камеры. Так `.controls('wasd')`
+ * у Re2D-узла под Re2D-камерой ведёт «вперёд» туда, куда смотрят глаза, а A/D
+ * сдвигают боком. Возвращает { vx, vy } в единицах мира в секунду.
+ */
+export function re2dMove(yaw, vec, speed) {
+    const forward = -vec.y, strafe = vec.x;
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    return { vx: (forward * c - strafe * s) * speed, vy: (forward * s + strafe * c) * speed };
+}
+
+/** Цвет спрайта с затуханием по расстоянию (множитель на rgb, альфа не трогается). */
+export function shadeColor(packed, shade) {
+    if (shade >= 1) return packed >>> 0;
+    const c = packed >>> 0;
+    const r = Math.round((c & 255) * shade), g = Math.round(((c >>> 8) & 255) * shade), b = Math.round(((c >>> 16) & 255) * shade);
+    return ((c & 0xff000000) | (b << 16) | (g << 8) | r) >>> 0;
+}
+
+function billboardSprite(node) {
+    if (node.tag === 'rotsprite') {
+        const r = node.rot_sprite;
+        return r && r.sprite >= 0 ? r.sprite : -1;
+    }
+    return node.sprite >= 0 ? node.sprite : engine.whiteSprite;
+}
+
+// Re2DSprite под углом: поворачиваем модель так, как её видит камера. Поза
+// квантуется (`poseStep`): синтез картинки в C дорог, а смена угла на градус глазу
+// незаметна; одинаковая квантованная поза нового синтеза не вызывает.
+const lastPose = new WeakMap();
+function updateRotPose(node, cam, api) {
+    const centerZ = (Number(node.depth) || 0) + node.h / 2;
+    const pose = billboardPose(cam.x, cam.y, cam.eye, node.x, node.y, centerZ, node.angle);
+    const q = (v) => (poseStep > 0 ? Math.round(v / poseStep) * poseStep : v);
+    const yaw = q(pose.yaw), pitch = q(pose.pitch);
+    const last = lastPose.get(node);
+    if (last !== undefined && last.yaw === yaw && last.pitch === pitch) return;
+    if (poseBudget > 0 && posesThisFrame >= poseBudget) { posesDeferred++; return; }
+    posesThisFrame++;
+    posesUpdated++;
+    lastPose.set(node, { yaw, pitch });
+    api(node).re2dPose(yaw, pitch);
+}
+
+let apiRef = null;
+
+/** Записать билборд кадра; нарисует его end() после проекции и сортировки. */
+function drawBillboard(node, cam) {
+    // Под 2D-камерой узел рисуется обычным 2D-путём.
+    if (cam.kind !== KIND_RE2D) return false;
+    if (node.tag === 'rotsprite') {
+        if (!node.rot_sprite) return true;
+        updateRotPose(node, cam, apiRef);
+    }
+    const sprite = billboardSprite(node);
+    if (sprite < 0) return true;
+
+    if (recordCount * 3 + 3 > points.length) {
+        const grownPoints = new Float32Array(points.length * 2);
+        grownPoints.set(points);
+        points = grownPoints;
+        projected = new Float32Array(points.length / 3 * 4);
+    }
+    let rec = records[recordCount];
+    if (rec === undefined) rec = records[recordCount] = { sprite: 0, w: 0, h: 0, color: 0, blend: undefined, uid: 0 };
+    points[recordCount * 3] = node.x;
+    points[recordCount * 3 + 1] = node.y;
+    points[recordCount * 3 + 2] = Number(node.depth) || 0;
+    rec.sprite = sprite;
+    rec.w = node.w * Math.abs(node.scale_x);
+    rec.h = node.h * Math.abs(node.scale_y);
+    rec.color = withAlpha(node.color, node.alpha);   // альфа узла с учётом родителей — именно сейчас
+    rec.blend = node.blend_mode;
+    rec.uid = node.uid;
+    recordCount++;
+    return true;
+}
+
+// Проекция всех записей одним вызовом, сортировка дальних → ближних, отправка в батч.
+const order = [];
+function flushBillboards(cam) {
+    billboardsDrawn = 0;
+    if (recordCount === 0) return;
+    engine.re2d.project(points, projected, recordCount);
+    order.length = 0;
+    for (let i = 0; i < recordCount; i++) {
+        if (projected[i * 4 + 2] >= 0) order.push(i);    // z01 = -1 — позади камеры
+    }
+    order.sort((a, b) => (projected[b * 4 + 2] - projected[a * 4 + 2]) || (records[a].uid - records[b].uid));
+    const push = $ref.gfx.push;
+    for (let n = 0; n < order.length; n++) {
+        const i = order[n], rec = records[i];
+        const x = projected[i * 4], y = projected[i * 4 + 1], k = projected[i * 4 + 3];
+        const sw = rec.w * k, sh = rec.h * k;
+        if (x + sw / 2 < 0 || x - sw / 2 > cam.w || y < 0 || y - sh > cam.h) continue;
+        let color = rec.color;
+        if (frameView.fogFar > 0) {
+            const depth = frameView.focal / k;
+            color = shadeColor(color, Math.max(frameView.fogMin, Math.min(1, 1 - depth / frameView.fogFar)));
+        }
+        push.sprite(rec.sprite, x, y - sh / 2, sw, sh, 0, color, rec.blend);
+        billboardsDrawn++;
+    }
+    recordCount = 0;
+}
+
+let $ref = null;
+
 // Какие теги умеет рисовать вид; остальные под Re2D-камерой пропускаются.
 const DRAWERS = {
     wall: drawSurface,
     floor: drawSurface,
     ceiling: drawSurface,
+    player: drawBillboard,
+    npc: drawBillboard,
+    enemy: drawBillboard,
+    pickup: drawBillboard,
+    bullet: drawBillboard,
+    sprite: drawBillboard,
+    rect: drawBillboard,
+    rotsprite: drawBillboard,
 };
 
 export function installRe2d($) {
+    $ref = $;
+    apiRef = $;
     // Теги, у которых нет смысла в 2D: плоскости пола и потолка. Под 2D-камерой
     // <floor> — обычный цветной прямоугольник (план этажа), <ceiling> скрыт.
     TAGS.floor = { body: null, w: 256, h: 256, color: '#ffffff' };
@@ -261,17 +430,27 @@ export function installRe2d($) {
 
     registerKindPass(KIND_RE2D, {
         begin(cam) {
-            applyRe2dView(cam);
+            const view = applyRe2dView(cam);
+            frameView = {
+                focal: (cam.h / 2) / Math.tan(view.fov / 2),
+                fogFar: view.fogFar, fogMin: view.fogMin, w: cam.w, h: cam.h,
+            };
             for (const b of buckets.values()) b.len = 0;
             surfacesDrawn = 0;
+            recordCount = 0;
+            posesThisFrame = 0;
+            posesUpdated = 0;
+            posesDeferred = 0;
         },
-        end() {
-            // Узлы кадра собраны: отправляем ведра одним вызовом на каждое.
+        end(cam) {
+            // Узлы кадра собраны: ведра мешей — одним вызовом на каждое, затем
+            // билборды (их проецируют, сортируют и кладут в общий батч спрайтов).
             for (const b of buckets.values()) {
                 if (b.len > 0) {
                     engine.re2d.mesh(b.buf, b.len / FLOATS, b.texture, b.cull ? engine.re2d.CULL_BACK : 0);
                 }
             }
+            flushBillboards(cam);
         },
     });
 
@@ -316,12 +495,26 @@ export function installRe2d($) {
 
     $.re2d = {
         room,
+        /** Предел синтезов позы Re2DSprite за кадр (по умолчанию 4; 0 — без предела). */
+        poseBudget(value) {
+            if (value === undefined) return poseBudget;
+            poseBudget = Math.max(0, Math.floor(Number(value) || 0));
+            return $.re2d;
+        },
+        /** Шаг квантования позы Re2DSprite, градусы (по умолчанию 3; 0 — без квантования). */
+        poseStep(value) {
+            if (value === undefined) return poseStep;
+            poseStep = Math.max(0, Number(value) || 0);
+            return $.re2d;
+        },
         /** Факты о виде: камера (в градусах), счётчики нативного ядра и вёдра кадра. */
         info() {
             return {
                 camera: $.camera.info(),
                 native: engine.re2d.info(),
                 surfaces: surfacesDrawn,
+                billboards: billboardsDrawn,
+                poses: { updated: posesUpdated, deferred: posesDeferred },
                 buckets: [...buckets.values()].filter((b) => b.len > 0)
                     .map((b) => ({ texture: b.texture, cull: b.cull, vertices: b.len / FLOATS })),
             };
