@@ -196,6 +196,13 @@ int sdk_cmd_atlas_format(const SdkArgs *a);
 int sdk_cmd_atlas_info(const SdkArgs *a);
 
 // ---------------------------------------------------------------------------
+// Re2D World: исходник `*.re2dmap` → описание для `$.re2d.world` (docs/SDK.md §11)
+// ---------------------------------------------------------------------------
+void sdk_validate_re2dmap(const char *path, SdkReport *rep);
+int sdk_cmd_world_compile(const SdkArgs *a);
+int sdk_cmd_world_info(const SdkArgs *a);
+
+// ---------------------------------------------------------------------------
 // Валидация ассетов (docs/SDK.md §6): один реестр проверяющих функций.
 // ---------------------------------------------------------------------------
 typedef void (*SdkValidateFn)(const char *path, SdkReport *rep);

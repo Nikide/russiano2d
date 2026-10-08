@@ -1,5 +1,60 @@
 # История изменений
 
+## SDK: Character / VRM в Re2D Baker (Phase 5)
+
+- `r2d-sdk bake-re2d --type character`: VRM 0.x и 1.0 → псевдоскелет Re2DSprite (10 костей,
+  сокеты кистей), владение частями по весам скина, `*.character.json` + `spin`/`walk` + отчёт.
+  Неоднозначное владение считается и сообщается (`SDK_BAKE_SKIN_AMBIGUOUS`), выражения VRM
+  сопоставляются эмоциям Re2DSprite (в PNG не запекаются).
+- Загрузчик glTF читает узлы, скины (inverseBind, JOINTS_0/WEIGHTS_0) и расширения VRM.
+- Re2D Baker (GUI): тип Character, `*.vrm` в реестре, панель VRM/владения/выражений.
+- Проверено на синтетическом VRM (генератор в `tests/fixtures/sdk/`); реальный VRoid-файл не проверялся.
+
+## SDK: Re2D Baker MVP — GLB/glTF → Re2DSprite (Phase 4)
+
+- `r2d-sdk bake-re2d`: GLB/glTF (внешний `.bin`, `data:`-URI, иерархия узлов, текстуры
+  baseColor) → PNG v2 + `*.character.json` + анимация `spin` + машинно-читаемый отчёт.
+  Пресет Prop; Auto Unwrap и Use Existing UV; авто-вписывание Coordinate Fit; origin
+  center/feet; PNG 1024/2048/4096; детерминированный результат.
+- Re2D Baker в SDK (RmlUi): параметры, панель Coordinate Fit, отчёт, диагностика, превью
+  запечённой модели настоящим `$.re2dSprite`, переход в Re2DSprite Studio.
+- Тестовые low-poly props: crate, barrel, lamp, chair (+ негативные GLB/glTF).
+
+## SDK: Re2DSprite Studio (Phase 3)
+
+- Re2DSprite Studio: просмотр модели настоящим `$.re2dSprite`, yaw/pitch мышью и
+  числами, клипы/эмоции/варианты/стиль, отладочные виды карт PNG v2 (материал, ID
+  части, владелец, X/Y/Z, покрытие, группа, перекрытие), осмотр отсчёта, правка
+  скелета и сокетов с undo/redo, сохранение тем же отступом, hot reload.
+- `r2d-sdk`: валидатор `re2dsprite.character` (описание, анимации, PNG v2) и команды
+  `re2d-info`, `re2d-debug`, `re2d-sample`; паритет с рантаймом проверяет тест на 82 правках.
+- Исправлено: `$.re2dSprite.from('/абсолютный/путь.character.json')` теряло ведущий
+  «/» у атласа и не находило PNG (`relativeAsset`).
+
+## SDK: Sprite Studio и Animation Studio, Classic 2D срез (Phase 2)
+
+- Sprite Studio и Animation Studio в `sdk/`: атлас `*.atlas.json` (Aseprite-
+  совместимый формат `$.atlas`): кадры, пивот-слайсы, длительности, теги-
+  анимации, метаданные, undo/redo, просмотр настоящим рантаймом.
+- `r2d-sdk`: `atlas-grid`, `atlas-format`, `atlas-info`, валидатор `sprite.atlas`
+  (стабильные коды `SDK_ATLAS_*`); канонический вид файла — одна строка на кадр.
+- Движок: hot reload теперь следит и за `*.atlas.json` в каталоге игры
+  (раньше — только `.js`).
+
+## SDK: оболочка, реестр инструментов и нативный бэкенд (Phase 1)
+
+- `sdk/` — приложение SDK на R2D (RmlUi): проекты, Asset Browser, каталог
+  инструментов из корневого `sdk_tools.json`, запуск и сборка игры,
+  документация, панель диагностик. Запуск: `./build/russiano2d --game sdk`.
+- `r2d-sdk` (`sdk/native`, чистый C): `tools`, `assets`, `project`, `projects`,
+  `validate`, `run`, `build`; один JSON-объект на команду, диагностики со
+  стабильными кодами. Описание — `docs/SDK.md`.
+- `$.sdk` — мост инструментов (только при `"toolHost": true` в `project.json`):
+  запуск `r2d-sdk` и движка фоновыми процессами без shell.
+- RmlUi-интеграция: `$.ui.doc().value/setValue/content/attr/rect/click`,
+  обработчики получают цель события (`targetKey`, `targetId`) — делегирование
+  списков одним обработчиком. Прежние игры не затронуты.
+
 ## Документация под C → $
 
 - Конституция, архитектура, правила агентов и справочник описывают схему

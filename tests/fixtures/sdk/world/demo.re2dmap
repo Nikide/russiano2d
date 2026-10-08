@@ -1,0 +1,295 @@
+{
+  "version": 1,
+  "name": "demo-hall",
+  "cells": [
+    {
+      "id": "hall",
+      "rect": [
+        -240,
+        -180,
+        400,
+        360
+      ],
+      "spans": [
+        {
+          "bottom": 0,
+          "top": 128,
+          "floorColor": "#375647",
+          "ceilingColor": "#243746"
+        },
+        {
+          "bottom": 160,
+          "top": 288,
+          "floorColor": "#564230",
+          "ceilingColor": "#344858"
+        }
+      ]
+    },
+    {
+      "id": "roomN",
+      "rect": [
+        360,
+        -220,
+        320,
+        220
+      ],
+      "spans": [
+        {
+          "bottom": 0,
+          "top": 128,
+          "floorColor": "#375647",
+          "ceilingColor": "#243746"
+        },
+        {
+          "bottom": 160,
+          "top": 288,
+          "floorColor": "#564230",
+          "ceilingColor": "#344858"
+        }
+      ]
+    },
+    {
+      "id": "roomS",
+      "rect": [
+        360,
+        0,
+        320,
+        220
+      ],
+      "spans": [
+        {
+          "bottom": 0,
+          "top": 128,
+          "floorColor": "#375647",
+          "ceilingColor": "#243746"
+        },
+        {
+          "bottom": 160,
+          "top": 288,
+          "floorColor": "#564230",
+          "ceilingColor": "#344858"
+        }
+      ]
+    }
+  ],
+  "walls": [
+    {
+      "id": "outline0",
+      "from": [
+        -240,
+        -180
+      ],
+      "to": [
+        160,
+        -180
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#78919a"
+    },
+    {
+      "id": "outline1",
+      "from": [
+        160,
+        -180
+      ],
+      "to": [
+        160,
+        -60
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#587386"
+    },
+    {
+      "id": "outline2",
+      "from": [
+        160,
+        -60
+      ],
+      "to": [
+        360,
+        -60
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#78919a"
+    },
+    {
+      "id": "outline3",
+      "from": [
+        360,
+        -60
+      ],
+      "to": [
+        360,
+        -220
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#587386"
+    },
+    {
+      "id": "outline4",
+      "from": [
+        360,
+        -220
+      ],
+      "to": [
+        680,
+        -220
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#78919a"
+    },
+    {
+      "id": "outline5",
+      "from": [
+        680,
+        -220
+      ],
+      "to": [
+        680,
+        220
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#587386"
+    },
+    {
+      "id": "outline6",
+      "from": [
+        680,
+        220
+      ],
+      "to": [
+        360,
+        220
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#78919a"
+    },
+    {
+      "id": "outline7",
+      "from": [
+        360,
+        220
+      ],
+      "to": [
+        360,
+        60
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#587386"
+    },
+    {
+      "id": "outline8",
+      "from": [
+        360,
+        60
+      ],
+      "to": [
+        160,
+        60
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#78919a"
+    },
+    {
+      "id": "outline9",
+      "from": [
+        160,
+        60
+      ],
+      "to": [
+        160,
+        180
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#587386"
+    },
+    {
+      "id": "outline10",
+      "from": [
+        160,
+        180
+      ],
+      "to": [
+        -240,
+        180
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#78919a"
+    },
+    {
+      "id": "outline11",
+      "from": [
+        -240,
+        180
+      ],
+      "to": [
+        -240,
+        -180
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#587386"
+    },
+    {
+      "id": "partition",
+      "from": [
+        430,
+        0
+      ],
+      "to": [
+        680,
+        0
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#96785c"
+    },
+    {
+      "id": "railing",
+      "from": [
+        70,
+        -65
+      ],
+      "to": [
+        70,
+        65
+      ],
+      "bottom": 0,
+      "top": 60,
+      "color": "#b64830"
+    }
+  ],
+  "stairs": [
+    {
+      "id": "stairs",
+      "rect": [
+        160,
+        -60,
+        200,
+        120
+      ],
+      "axis": "x",
+      "dir": 1,
+      "steps": 8,
+      "base": 0,
+      "rise": 20,
+      "top": 288,
+      "floorColor": "#736348",
+      "floorColorAlt": "#64543d",
+      "ceilingColor": "#344858",
+      "riserColor": "#4f4030"
+    }
+  ],
+  "portals": []
+}

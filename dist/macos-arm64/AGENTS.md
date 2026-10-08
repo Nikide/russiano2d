@@ -1,4 +1,4 @@
-# Russiano2D 0.1.21 — macOS Apple Silicon: инструкция для ИИ-агента
+# Russiano2D 0.1.22 — macOS Apple Silicon: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"0.1.21","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"0.1.22","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -164,6 +164,7 @@ call(cmd="quit")
 * Детерминированная запись и воспроизведение (record / replay) — `docs/RECORD_REPLAY.md`
 * Выпуск релиза — `docs/RELEASING.md`
 * Roadmap расширения R2D — `docs/ROADMAP.md`
+* Russiano2D SDK — `docs/SDK.md`
 * Что осталось сделать в `$` — сводный аудит (2026-10-07) — `docs/TASKS.md`
 * Тестирование мира в R2D — `docs/TESTING.md`
 * Как сделать такое же демо на `$` — `docs/TUTORIAL.md`
@@ -227,6 +228,7 @@ call(cmd="quit")
 * Сцены — `$.scene` — `docs/highlevel/scene.md`
 * Экраны и меню — `$.screen` — `docs/highlevel/screen.md`
 * Перезапуск скриптов — `$.script` — `docs/highlevel/script.md`
+* Мост инструментов SDK — `$.sdk` — `docs/highlevel/sdk.md`
 * Сигналы — `$.signal` — `docs/highlevel/signal.md`
 * Звук — `$.sound` — `docs/highlevel/sound.md`
 * Банки звуков — `$.sound.bank*` — `docs/highlevel/soundbank.md`
@@ -8240,6 +8242,13 @@ holdRifle — изготовка вперёд, оба хвата проверя�
 
 Математика, карта частей и формат SUB/BLD: [полный справочник](RE2DSPRITE_MATH.md).
 
+## Проверка без движка
+
+`build/r2d-sdk validate <файл>.character.json` проверяет описание теми же
+правилами, что рантайм (`validateRotDefinition`, `validateRotAnimations`), плюс
+PNG v2: размер, заголовок, карты, части без отсчётов, дыры и скачки XYZ.
+Ответ — JSON со стабильными кодами `SDK_RE2D_*` ([SDK.md](SDK.md) §6).
+
 
 ---
 
@@ -10260,6 +10269,305 @@ transform/physics/state → копирование селектора
 * замены QuickJS-ng;
 * монорепозитория R2D/R3D и общего фреймворка
   ([R2D_R3D_CONVENTIONS.md](R2D_R3D_CONVENTIONS.md)).
+
+
+---
+
+## Russiano2D SDK
+
+<sub>источник: `docs/SDK.md`</sub>
+
+# Russiano2D SDK
+
+Статус документа: описывает **фактическое** состояние SDK (не цель). Целевая
+архитектура и законы — [Следующая цель SDK AGENT.md](../Следующая%20цель%20SDK%20AGENT.md);
+аудит репозитория — [SDK_AUDIT.md](../SDK_AUDIT.md); передача работы между
+сессиями — [SDK_HANDOFF.md](../SDK_HANDOFF.md).
+
+```text
+GAME = CODE + DATA          SDK = R2D-приложение + инструменты для CODE + DATA
+```
+
+SDK не владеет игрой: проекты и ассеты остаются обычными файлами, а игра
+запускается без SDK.
+
+## 1. Состав
+
+| Часть | Где | Что это |
+|---|---|---|
+| Приложение SDK | [`sdk/`](../sdk) | обычный проект R2D: `project.json`, `main.js`, RmlUi-документы `sdk/ui/*.rml`. Запуск: `./build/russiano2d --game sdk` |
+| Реестр компонентов | [`sdk_tools.json`](../sdk_tools.json) | единственный список инструментов; launcher строит каталог по нему |
+| Нативный бэкенд | [`sdk/native/`](../sdk/native) | C-бинарник `r2d-sdk` (`build/r2d-sdk`) без Python/Node.js/shell |
+| Мост GUI → бэкенд | `$.sdk` ([highlevel/sdk.md](highlevel/sdk.md)) | включается `"toolHost": true` в `project.json` |
+| Тесты | `tests/sdk/`, `tests/js/sdk*_test.mjs`, `tests/agent/sdk_*_test.py` | C, qjs и агентские |
+
+## 2. Принципы (кратко)
+
+* **UI только RmlUi.** Оболочка SDK — `sdk/ui/shell.rml` + `shell.rcss`.
+* **Один код для GUI, CLI и агента.** Кнопка вызывает операцию
+  `$.sdkApp.<имя>()`; тот же вызов доступен агенту через `eval`. Тяжёлая работа
+  выполняется в `r2d-sdk`, поэтому GUI и CLI не расходятся.
+* **Диагностика только фактами**, со стабильными кодами:
+  `{ code, severity, asset, location, message, details }`,
+  `severity` ∈ `info | warning | error | fatal`.
+* **Существующие форматы.** Новых «ассет-баз» нет: тип ассета выводится из
+  имени файла, инструмент — из шаблонов `assets` реестра.
+
+## 3. Реестр `sdk_tools.json`
+
+```json
+{ "schema_version": 1,
+  "tools": [ { "id": "world-studio", "name": "Re2D World Studio",
+               "description": "…", "last_updated": "2026-10-08T17:00:00+03:00",
+               "entry": "world-studio", "binary": "build/r2d-sdk",
+               "category": "re2d", "assets": ["*.re2dmap"] } ] }
+```
+
+* `id` — `a-z`, `0-9`, `-`; уникален; `last_updated` — ISO 8601 **с часовым
+  поясом**; `entry` — экран (`sdk/tools/<entry>.js`) либо встроенный
+  (`launcher`, `asset-browser`, `diagnostics`);
+* `assets` — шаблоны имён файлов (`*` и `?`, без учёта регистра): так Asset
+  Browser выбирает инструмент для файла;
+* `binary` — необязательный относительный путь к нативному бинарнику.
+
+Неверная `schema_version` и некорректные записи **не пропускаются молча**:
+запись остаётся в списке с `valid:false`, причина — в диагностике
+(`SDK_REGISTRY_SCHEMA_VERSION`, `SDK_REGISTRY_DATE`, `SDK_REGISTRY_ID`,
+`SDK_REGISTRY_DUPLICATE_ID`, `SDK_REGISTRY_FIELD`, `SDK_REGISTRY_BINARY_PATH`,
+`SDK_REGISTRY_BINARY_MISSING`, `SDK_REGISTRY_ENTRY`).
+
+## 4. CLI `r2d-sdk`
+
+Каждая команда печатает **один JSON-объект**; код выхода: `0` — ok, `1` —
+операция выполнена, но в данных есть ошибки, `2` — неверное использование.
+
+| Команда | Что делает |
+|---|---|
+| `version`, `commands` | версия, список команд и типов, которые умеет проверять `validate` |
+| `tools [--registry f]` | реестр с проверкой схемы |
+| `assets <каталог> [--registry f]` | ассеты по реальной файловой структуре: путь, тип, размер, mtime, инструмент |
+| `project <каталог>` | `project.json` и `main.js`: название, версия, размер окна |
+| `projects <каталог>` | проекты (каталоги с `project.json`) под каталогом |
+| `validate <файл> [--type t]` | проверка ассета, структурная диагностика |
+| `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
+| `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
+| `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |
+| `re2d-info <character.json\|png>` | Re2DSprite: PNG v2, части ↔ кости, статистика карт, проверка |
+| `re2d-debug <character.json\|png> --mode m --out f.png [--scale N]` | Re2DSprite: отладочный вид карт поверхности |
+| `re2d-sample <character.json\|png> --x mx --y my` | Re2DSprite: один отсчёт (ID, XYZ, покрытие, владелец) |
+| `bake-re2d <модель.glb\|.gltf\|.vrm> --type prop\|character --output каталог [--uv auto\|existing] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N]` | Re2D Baker: GLB/glTF → Re2DSprite |
+| `run <каталог> [--scene s] [--frames N] [--headless] [--engine путь]` | запуск игры движком |
+| `build <каталог> --out f [--entry main.js] [--encrypt\|--no-encrypt]` | сборка в один файл (`russiano2d build`) |
+
+Явный `--engine` не подменяется молча: нет файла → `SDK_ENGINE_NOT_FOUND`.
+
+## 5. Classic 2D: Sprite Studio и Animation Studio
+
+Данные — **существующий формат**, который уже читает `$.atlas`
+([highlevel/atlas.md](highlevel/atlas.md)): Aseprite-совместимый JSON
+`*.atlas.json`. Нового формата SDK не вводит.
+
+| Что | Где в файле | Как читает игра |
+|---|---|---|
+| картинка | `meta.image` (путь от каталога JSON), `meta.size` | `$.atlas.load('hero', 'hero.atlas.json')` |
+| кадр | `frames[имя] = { frame:{x,y,w,h}, duration }` | `sheet.frame(имя)`, `sheet.info(имя)` |
+| анимация | тег `meta.frameTags`: `name, from, to, direction, loop` | `sheet.tagSprites(тег)`, `sheet.tagInterval(тег)`, `.frames(ids).animate({speed})` |
+| пивот кадра | слайс с именем кадра в `meta.slices` (`keys[0].pivot`) | `sheet.slice(имя).pivotLx/pivotLy` |
+| метаданные | `meta.custom` (рантайм игнорирует) | — |
+
+Файл пишется в каноническом виде: **один кадр, тег и слайс — на строке**, порядок
+ключей стабилен, поэтому `git diff` показывает только настоящие правки
+(смена длительности тега — 4 строки). Тот же вид пишут C (`atlas-grid`,
+`atlas-format`) и JS-сериализатор Studio; тест `sdk_classic2d_test.py`
+проверяет, что байты совпадают.
+
+**Sprite Studio** (`sdk/tools/sprite-studio.js`, RML `sdk/ui/sprite_studio.rml`):
+открывается на `*.atlas.json` или на `*.png` (нет атласа — режим «нарезка
+сеткой», делает нативный `atlas-grid`). Кадры (рамка мышью или числами),
+пивот, длительность, метаданные, масштаб и панорама, сетка пикселей, undo/redo
+(Ctrl+Z / Ctrl+Shift+Z), проверка черновика нативным `validate`. Картинка рисуется
+обычным узлом `<sprite>` (nearest, как в игре); рамки и подписи — RmlUi поверх.
+
+**Animation Studio** (`sdk/tools/animation-studio.js`): теги атласа как анимации —
+диапазон кадров, направление, цикл, длительность. Просмотр — настоящий
+рантайм: атлас разбирает `$.atlas` из того же текста, что будет записан, узел
+`.frames().animate()` листает кадры кадровым шагом движка. Скорость
+(0.25×…4×), пауза, шаг. Студии делят **одну сессию на файл**: правки одной
+видны в другой, история общая.
+
+Чего нет (честно): события клипов — спрайтовая анимация рантайма их не
+поддерживает (события есть у `$.anim` и `$.anim.player`); `pingpong` рантайм-атлас
+не разворачивает (валидатор предупреждает `SDK_ATLAS_TAG_PINGPONG`); у кадров
+тега рантайм берёт интервал первого кадра (`SDK_ATLAS_DURATION_MIXED`).
+
+**Hot reload.** Движок следит не только за `.js`, но и за `*.atlas.json` в каталоге
+игры ([highlevel/script.md](highlevel/script.md)): сохранили в Studio — игра
+перезапустилась и прочитала новые данные без SDK. В агентском режиме слежение
+выключено (как и раньше), поэтому тест гоняет игру обычным headless-процессом.
+
+Диагностики атласа: `SDK_ATLAS_ROOT`, `_FRAMES`, `_FRAME_RECT`, `_FRAME_BOUNDS`,
+`_FRAME_FRACTIONAL`, `_DUPLICATE_FRAME`, `_IMAGE_FIELD`, `_IMAGE_MISSING`, `_IMAGE_FORMAT`,
+`_SIZE_MISMATCH`, `_DURATION`, `_DURATION_MIXED`, `_ROTATED`, `_TAG`, `_TAG_RANGE`,
+`_TAG_DUPLICATE`, `_TAG_FRAME`, `_TAG_PINGPONG`, `_SLICE`, `_PIVOT_OUTSIDE`,
+`_FORMAT_UNSUPPORTED`, `_GRID`, `_GRID_REMAINDER` (префикс `SDK_ATLAS`).
+
+## 6. Re2DSprite Studio
+
+`sdk/tools/re2dsprite-studio.js` + `sdk/ui/re2d_studio.rml`: открывается на
+`*.character.json` ([RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md)). SDK **не меняет
+семантику формата** и **не синтезирует спрайт сам**: изображение даёт настоящий
+рантайм (`$.re2dSprite.from`), карты PNG v2 декодирует нативный `r2d-sdk`.
+
+| Вкладка | Что делает | Откуда данные |
+|---|---|---|
+| Вид | узел рантайма: ракурс yaw −180…180 / pitch −75…75 (поля и перетаскивание мышью), клипы, эмоции, варианты, стиль anime/pixel, тело/голова, пауза | `$.re2dSprite.*`, `info()` |
+| Поверхность | виды карт: материал, ID части, владелец (кость), X, Y, Z, покрытие, группа материала, перекрытие; отсчёт под курсором (ID, кость, XYZ, покрытие) | `r2d-sdk re2d-debug`, `re2d-sample` |
+| Скелет | кости (pivot/portraitPivot), часть → кость, сокеты, проекция; undo/redo | `*.character.json` |
+
+Сохранение пишет файл **тем же отступом**, что у исходника (у файлов демо роундтрип
+побайтно равен оригиналу), поэтому diff показывает только правки. После сохранения
+узел читает файл с диска и следит за ним (`.re2dHotReload()`): правка снаружи
+подхватывается рантаймом без перезапуска. Ошибка рантайма на невалидной модели
+показывается диагностикой `SDK_RE2D_RUNTIME` рядом с фактами нативной проверки.
+
+Нативные команды ([§4](#4-cli-r2d-sdk)): `re2d-info <character.json|png>` (PNG v2, части
+и кости, статистика карт, проверка), `re2d-debug --mode … --out f.png [--scale N]`,
+`re2d-sample --x mx --y my`. Раскладка PNG — [RE2DSPRITE_V2.md](RE2DSPRITE_V2.md) и
+[RE2DSPRITE_MATH.md](RE2DSPRITE_MATH.md) §2: ID (0,768), глубина (256,768), покрытие
+(512,768), XY (768,768) — по 256×192 отсчётов, адреса умножаются на `size/1024`.
+
+Что проверяет `validate` для `*.character.json` (стабильные коды `SDK_RE2D_*`):
+
+| Область | Коды |
+|---|---|
+| описание | `ROOT`, `VERSION`, `ATLAS`, `STYLE`, `RIG`, `NAME`, `BONE_DUPLICATE`, `BONE_PARENT`, `VECTOR`, `PART_ID`, `PART_BONE`, `PART_FLAG`, `SELECTOR`, `GROUP`, `JOINT`, `CONTROL`, `PROJECTION`, `SOCKET`, `DEFAULTS`, `EMOTION` |
+| анимации | `ANIM_ROOT`, `ANIM_MISSING`, `ANIM_CLIP`, `ANIM_TRACK`, `ANIM_DUPLICATE`, `ANIM_INTERPOLATION`, `ANIM_KEYS`, `ANIM_KEY_TIME`, `ANIM_KEY_ORDER`, `ANIM_KEY_VALUE` |
+| связи | `EQUIPMENT`, `EQUIPMENT_SOCKET`, `EQUIPMENT_MISSING`, `VARIANT_MISSING` |
+| PNG v2 | `ATLAS_MISSING`, `PNG_FORMAT`, `PNG_SIZE`, `PNG_HEADER`, `PNG_BLD_WITHOUT_SUB`, `MAP_EMPTY`, `MAP_ID_RANGE`, `MAP_ALPHA` |
+| поверхность (предупреждения, только факты) | `ID_UNDECLARED`, `PART_EMPTY`, `HOLE`, `SEAM` (скачок XYZ > 6 между соседями одной части), `ISOLATED`, `STALE_ID` |
+
+**Паритет с рантаймом.** QuickJS в инструментах SDK запрещён, поэтому правила
+`validateRotDefinition`/`validateRotAnimations` продублированы в C. Тест
+`tests/agent/sdk_re2d_parity_test.py` прогоняет 82 правки описания через оба
+валидатора, и решения «принять/отвергнуть» должны совпасть.
+
+Что в этом срезе НЕ сделано (честно): редактор клипов и ключей (timeline), редактор
+мимики и вариантов (их можно только выбирать для просмотра), экипировка и сокеты в
+сцене (сокеты правятся числами), правка карт поверхности. Это следующие шаги Phase 3.
+
+## 7. Re2D Baker (Prop и Character)
+
+**Закон:** 3D разрешён на этапе импорта и не становится архитектурой рантайма. Baker читает
+GLB/glTF как *временный источник данных* и записывает нативный ассет Re2DSprite; результат
+не содержит меша, рантайм не читает GLB, MeshRenderer'а нет.
+
+```bash
+build/r2d-sdk bake-re2d crate.glb --type prop --output assets/crate/
+# → crate.png (PNG v2), crate.character.json, crate.animations.json (клип spin), crate.bake.json (отчёт)
+```
+
+Конвейер (`sdk/native/sdk_gltf.c`, `sdk_bake.c`; **один код** для CLI и GUI):
+
+1. **Разбор** GLB / `.gltf` (+внешний `.bin`, `data:`-URI): иерархия узлов (матрицы и TRS),
+   TRIANGLES/STRIP/FAN, индексы u8/u16/u32, `byteStride`, нормализованные UV,
+   baseColorFactor/baseColorTexture (PNG/JPEG во встроенных и внешних изображениях), alphaMode.
+2. **Оси Re2D:** X вправо, **Y вниз**, Z к зрителю; нормали зеркалятся вместе с осью.
+3. **Coordinate Fit:** авто-вписывание в диапазон карт (X/Z −32…31.75, Y −64…63.5) с запасом
+   2%; `--scale S` задаёт масштаб явно (выход за диапазон — ошибка `SDK_BAKE_FIT_OVERFLOW`);
+   `--origin center|feet` (feet прижимает низ к Y=0, допустимая высота — 64 ед.).
+4. **UV:** `auto` (Auto Unwrap) — 6 плоских карт по доминирующей оси нормали, плотная упаковка
+   в 256×192 отсчётов с поиском минимального шага; `existing` — UV модели как есть (нужны UV
+   в 0..1, наложения развёртки считаются и сообщаются). `Re2D Optimized` — **не реализован**
+   (`SDK_BAKE_UV_MODE_UNSUPPORTED`).
+5. **Растеризация** в сетку текселей (PNG 1024/2048/4096: на отсчёт приходится блок 4k×4k
+   текселей цвета), цвет — baseColor × текстура (билинейно), cutout по alpha.
+6. **Карты v2** (RE2DSPRITE_MATH.md §2): ID (часть = материал, `--first-id` по умолчанию 80),
+   группа материала (ID.G), глубина Z и XY с дробными частями (SUB), покрытие; заголовок v2.
+7. **Описание модели:** одна кость `object`, части по материалам, группы по именам материалов,
+   клип `spin`; опционально стиль (`--style anime|pixel`).
+
+Отчёт `*.bake.json` (он же ответ CLI, машинно-читаемый):
+`{ success, ok, type, source{kind,triangles,materials,textures,skins,animations}, parts, atlasUsage,
+samples, uvMode, size, sampleSpacing, uvOverlapTexels, fit{scale,origin,x,y,z,limits}, files{png,character,animations},
+errors, warnings, infos, diagnostics }`.
+
+Диагностика `SDK_BAKE_*`: `INPUT_MISSING`, `FORMAT`, `GLB_HEADER`, `GLB_CHUNK`, `GLTF_VERSION`,
+`EXTENSION_UNSUPPORTED` (Draco, meshopt, basisu), `SPARSE_UNSUPPORTED`, `BUFFER_MISSING`, `ACCESSOR`,
+`ACCESSOR_RANGE`, `INDEX_RANGE`, `NO_POSITION`, `NO_MESH`, `MODE_UNSUPPORTED`, `TEXTURE_MISSING`,
+`IMAGE_FORMAT`, `TEXCOORD_UNSUPPORTED`, `TEXTURE_TRANSFORM`, `TEXTURE_NO_UV`, `SKIN_IGNORED`,
+`ANIMATION_IGNORED`, `DEGENERATE`, `FIT_OVERFLOW`, `LOW_DENSITY`, `UV_MISSING`, `UV_RANGE`, `UV_OVERLAP`,
+`UV_MODE_UNSUPPORTED`, `TYPE_UNSUPPORTED`, `PARTS_LIMIT`, `SIZE`, `MEMORY`, `EMPTY`, `WRITE_FAILED`.
+
+**GUI** `sdk/tools/re2d-baker.js` + `sdk/ui/baker.rml`: Prop, Auto/Existing UV, размер PNG,
+Feet/центр, масштаб, панель *Coordinate Fit* (диапазоны X/Y/Z, ✓), отчёт, диагностика,
+превью — запечённая модель вращается настоящим `$.re2dSprite`, кнопка «Открыть результат в
+Re2DSprite Studio». GUI вызывает тот же `bake-re2d`, поэтому PNG побайтно совпадает с CLI.
+
+### Character / VRM (Phase 5)
+
+```bash
+build/r2d-sdk bake-re2d hero.vrm --type character --output assets/hero/
+# → hero.png, hero.character.json (10 костей, сокеты кистей), hero.animations.json (spin, walk), hero.bake.json
+```
+
+Конвейер поверх Prop (`sdk/native/sdk_char.c`; один код для CLI и GUI):
+
+1. **Скин и VRM:** загрузчик читает узлы, `skins` (inverseBind), JOINTS_0/WEIGHTS_0 и расширения **VRM 0.x** (`extensions.VRM`) и **VRM 1.0**
+   (`VRMC_vrm`): meta, humanoid-кости, пресеты выражений. Геометрия берётся в позе файла: Σ w·(world(joint)·IBM)·v.
+   VRM 0.x (лицом к −Z) разворачивается на 180° вокруг Y; результат совпадает с VRM 1.0 побайтно.
+2. **Rig Re2D (Auto Re2D Character):** humanoid → кости `root, head, arm*, forearm*, hip*, knee*` (Left = сторона X<0, как у Russi);
+   pivot'ы из позиций humanoid-суставов, сокеты `handLeft/handRight` из кистей. Обязательные кости VRM: hips, head, руки и ноги до lowerArm/lowerLeg.
+3. **Владение частями (skin ownership):** треугольник принадлежит кости Re2D с наибольшей суммой весов. Если лучшая кость набрала < 70%,
+   треугольник считается *неоднозначным*: он достаётся доминирующей кости, а число и пары костей уходят в отчёт
+   (`character.ownership.{ambiguous,pairs}`) и в `SDK_BAKE_SKIN_AMBIGUOUS` (warning при > 5%). Сустав без humanoid-предка → root.
+   Негуманоидный скин как character — отказ (`SDK_BAKE_CHARACTER_NO_HUMANOID`), неполный humanoid — `SDK_BAKE_HUMANOID_INCOMPLETE` с именами костей.
+4. **Результат — обычный Re2DSprite:** правится Re2DSprite Studio, рантайм VRM не читает, процедурные клипы `spin`/`walk` заменяются авторскими.
+5. **Выражения:** blendshape VRM в PNG не переносятся (`SDK_BAKE_EXPRESSIONS_NOT_BAKED`); отчёт сопоставляет пресеты эмоциям Re2DSprite
+   (happy, angry, sad, surprised, relaxed→neutral, blink→sleepy), остальное — `null`. Лицо делается в Re2DSprite Studio.
+
+Коды Character: `SDK_BAKE_CHARACTER_NO_HUMANOID`, `HUMANOID_INCOMPLETE`, `SKIN_AMBIGUOUS`, `JOINT_UNMAPPED`, `EXPRESSIONS_NOT_BAKED`, `SKIN_ATTRS`.
+Тест `tests/agent/sdk_character_test.py` проверяет контракт на **синтетическом** VRM (`tests/fixtures/sdk/make_vrm_fixtures.py`);
+реальный файл VRoid/VRM Studio не проверялся, материалы MToon сводятся к baseColor.
+
+Что НЕ сделано (честно): Weapon/Environment, Re2D Optimized UV, сравнение «источник ↔ Re2D» и метрика различия (§39–40
+спецификации), пакетный режим и CI-режим (Phase 7), FBX/OBJ. Качество: плоские карты по оси
+дают просветы на косых гранях и швы между картами — это видно в диагностике (`LOW_DENSITY`)
+и на проекциях; «идеального auto unwrap» baker не обещает.
+
+## 8. Мост `$.sdk` и агент
+
+Игра не может порождать процессы. Проект-инструмент включает мост флагом
+`"toolHost": true` (`sdk/project.json`); тогда `$.sdk.tool([...])` запускает
+`r2d-sdk`, а `$.sdk.launch([...])` — сам движок. Аргументы — массив без shell,
+вывод читается фоном, кадр не блокируется.
+
+Агент управляет SDK теми же средствами, что и игрой:
+
+```js
+await $.sdkApp.openProject('demos');      // eval в агентском режиме
+$.sdkApp.snapshot()                       // и раздел sdk в ответе команды state
+$.ui.doc('sdk/ui/shell.rml').click('btn-build')   // нажать элемент RmlUi
+```
+
+## 9. Состояние (IMPLEMENTED / PARTIAL / NOT STARTED)
+
+| Возможность | Статус | Примечание |
+|---|---|---|
+| Phase 1: оболочка (проекты, Asset Browser, реестр, запуск, сборка, документация, диагностика) | IMPLEMENTED | `tests/agent/sdk_shell_test.py`, `sdk_cli_test.py` |
+| Единый launcher по `sdk_tools.json` | IMPLEMENTED | каталог показывает name, description, last_updated |
+| Phase 2: Classic 2D срез (PNG → Sprite Studio → анимация → сохранение → hot reload → игра) | IMPLEMENTED | `tests/agent/sdk_classic2d_test.py` |
+| Sprite Studio, Animation Studio | IMPLEMENTED для атласа и тегов | нет: tilemap, particles, collision, RmlUi Studio, события клипов |
+| Phase 3: Re2DSprite Studio (загрузка, просмотр рантаймом, yaw/pitch, виды карт, проверка, скелет, сохранение, hot reload) | IMPLEMENTED | `tests/agent/sdk_re2dsprite_test.py`, `sdk_re2d_parity_test.py` |
+| Re2DSprite: редактор клипов, мимики, вариантов, экипировки | NOT STARTED | только выбор для просмотра |
+| Phase 4: Re2D Baker MVP (GLB/glTF/VRM → Prop, Character), CLI и GUI на одном коде | IMPLEMENTED | `tests/agent/sdk_baker_test.py` |
+| Phase 5: Character / VRM (humanoid → псевдоскелет Re2D, владение частями, отчёт о неоднозначности) | PARTIAL | `tests/agent/sdk_character_test.py`; только синтетический VRM, выражения не запекаются, MToon не поддержан |
+| Baker: Weapon/Environment, FBX/OBJ, Re2D Optimized UV, сравнение с источником, batch | NOT STARTED / PLANNED | Phase 7 |
+| Валидаторы форматов | PARTIAL | `project`, `sdk.registry`, `json`, `sprite.atlas`, `re2dsprite.character`; остальные — по фазам |
+| Редакторы и Baker | NOT STARTED на момент этого раздела | см. SDK_HANDOFF.md |
+| Нативный агентский клиент | NOT STARTED | Python-клиент `tools/agent_client.py` — тестовая обвязка репозитория, не инструмент SDK |
+| Удаление Dear ImGui | NOT STARTED | унаследованный оверлей остаётся (SDK_AUDIT.md) |
+
+Когда фаза закрыта — строка меняется здесь же, в том же коммите.
 
 
 ---
@@ -14000,6 +14308,15 @@ const hand = hero.slice('hand', 2);    // ключ слайса для кадр�
 
 Ключи слайса нумеруются **кадрами листа** (число), а не именами: `slice(name,
 frame)` берёт последний ключ с `frame <=` указанного. Без аргумента — первый.
+
+## 3.2. Правка в SDK
+
+Атлас в формате «Aseprite JSON с `frames`-объектом» правит Sprite Studio
+(SDK, [../SDK.md](../SDK.md) §5): кадры, пивоты (слайсы с именем кадра),
+длительности, теги-анимации (`meta.frameTags`, поле `loop` рантайм
+игнорирует) и `meta.custom`. Файл пишется в каноническом виде — по строке на
+кадр, тег и слайс. Движок следит за `*.atlas.json`
+([script.md](script.md)), поэтому сохранение в Studio перезапускает игру.
 
 ## 4. Ограничения
 
@@ -20644,6 +20961,9 @@ headYaw)`, `rotSpritePart(handle,path,mask)`, `rotSpriteChanged(handle)`,
 | `.re2dAttach(parent,socket,{grip?,offset?,rotation?,scale?})` | совместить сокеты моделей |
 | `.re2dDetach()` | отсоединить объект |
 
+Пути внутри описания считаются от его каталога, в том числе когда сама модель
+открыта по абсолютному пути (так её открывает SDK, `relativeAsset` сохраняет
+ведущий `/`).
 В JSON путь анимаций, произвольные ID/кости/сокеты/группы и named clips.
 `.re2dMotion` принимает имя из JSON. `.re2dReload`/`.re2dHotReload` перечитывают
 описание, анимации, PNG и доноры, сохраняют крепления.
@@ -22535,7 +22855,7 @@ JS-вызовов в нём больше не будет. Раньше рант�
 
 ## 2. Когда перезапуск случается сам
 
-* файл `.js` в каталоге игры изменился (mtime и размер, проверка раз в 0.35 с);
+* файл `.js` или атлас спрайтов `*.atlas.json` в каталоге игры изменился (mtime и размер, проверка раз в 0.35 с);
 * нажата **F5** в игре;
 * игра позвала `$.script.request()`.
 
@@ -22561,7 +22881,7 @@ JS-вызовов в нём больше не будет. Раньше рант�
 
 Слежение включено по умолчанию и выключается флагом `--no-hot-reload` (например,
 для релизной сборки или чтобы не дёргать диск). Проверка — раз в 0.35 секунды:
-складываются mtime и размеры `.js` файлов в каталоге игры, что надёжнее
+складываются mtime и размеры `.js` и `*.atlas.json` файлов в каталоге игры, что надёжнее
 сравнения одного mtime на файловой системе с грубыми часами.
 
 `$.script.hotReload()` показывает текущее состояние.
@@ -22574,8 +22894,10 @@ JS-вызовов в нём больше не будет. Раньше рант�
   на медленном кадре — до конца кадра);
 * **неудачный перезапуск оставляет старый рантайм**: если новый скрипт не
   загрузился, движок пишет ошибку и продолжает работать со старым кодом;
-* **слежение только за `.js`**: правка JSON, изображений и шейдеров
-  перезапуска не вызывает;
+* **слежение только за `.js` и `*.atlas.json`**: правка прочего JSON
+  (сохранений, данных), изображений и шейдеров перезапуска не вызывает —
+  атласы включены, потому что их правит SDK (Sprite Studio), а игра читает
+  их при старте;
 * **подкаталоги сканируются**, но символические ссылки не разворачиваются.
 
 ## 6. Проверка
@@ -22584,6 +22906,75 @@ JS-вызовов в нём больше не будет. Раньше рант�
 # запрос ждёт границы кадра, рантайм перезапускается, игра загружается заново
 python3 tests/agent/highlevel_reload_test.py
 ```
+
+
+---
+
+## Мост инструментов SDK — `$.sdk`
+
+<sub>источник: `docs/highlevel/sdk.md`</sub>
+
+# Мост инструментов SDK — `$.sdk`
+
+Подсистема для **проектов-инструментов** (прежде всего самого SDK, `sdk/`).
+Игре порождать процессы не нужно, поэтому мост выключен по умолчанию.
+Он включается манифестом проекта:
+
+```json
+{ "title": "Russiano2D SDK", "toolHost": true }
+```
+
+Без флага `$.sdk.available()` возвращает `false`, а вызовы отклоняются
+ошибкой с подсказкой про `toolHost`. Это не второй игровой API: он запускает
+**ровно два бинарника** — нативный CLI `r2d-sdk` рядом с движком и сам движок.
+Произвольной командной строки нет, аргументы — массив строк без shell.
+
+```js
+const res = await $.sdk.tool(['validate', 'assets/hero.character.json']);
+res.ok;          // код выхода 0 и json.ok !== false
+res.json;        // ответ CLI: { ok, diagnostics: [{ code, severity, asset, … }] }
+
+const game = $.sdk.launch(['--game', 'demos', '--headless', '--frames', '60']);
+game.done.then(r => $.log('игра завершилась: ' + r.exitCode));
+game.peek();     // { running, output, … } без ожидания конца
+game.kill();
+```
+
+## 1. Методы
+
+| Вызов | Смысл |
+|---|---|
+| `available()` | мост включён проектом |
+| `paths()` | `{ tool, toolFound, engine, exeDir }` — пути бинарников |
+| `tool(args, { timeout }?)` | запустить `r2d-sdk <args…>` → `Promise<результат>` |
+| `launch(args, { timeout }?)` | запустить движок → `{ id, done, kill(), peek() }`; таймаут по умолчанию — без ограничения |
+| `active()` | сколько процессов отслеживается |
+
+Результат: `{ ok, exitCode, json, output, truncated, killed, error }`.
+`json` — последняя строка вывода, разбираемая как объект (CLI печатает один
+JSON). Если CLI не вернул JSON, `ok = false` и `error` объясняет это.
+
+## 2. Что гарантируется
+
+* **Кадр не блокируется:** вывод процесса читает отдельный поток, Promise
+  разрешается в `tickSdk()` по игровым кадрам (до 16 процессов одновременно).
+* **Таймаут:** у `tool()` — 120 с по умолчанию; процесс убивается, Promise
+  завершается ошибкой `таймаут процесса`.
+* **Вывод ограничен 1 МБ**, хвост сохраняется (`truncated: true`).
+* **При выходе** движок убивает оставшиеся процессы.
+
+## 3. Ограничения
+
+* только то, что умеет `r2d-sdk` и перезапуск движка; свои бинарники запускать нельзя;
+* в вебе (Emscripten) процессов нет — `available()` всегда `false`;
+* окружение подпроцесса наследуется, рабочий каталог — каталог движка: пути
+  передавайте абсолютными (`sdk/lib/model.js: absolutePath`).
+
+## 4. Проверка
+
+`tests/js/sdk_test.mjs` (очередь, таймаут, ошибки — подменённый бэкенд),
+`tests/agent/sdk_shell_test.py` (настоящий `r2d-sdk` через движок),
+`tests/agent/sdk_cli_test.py`. Описание SDK целиком — [../SDK.md](../SDK.md).
 
 
 ---
@@ -25509,7 +25900,34 @@ $.ui.ariaCount();       // сколько узлов размечено
 он только хранит и отдаёт семантику. Озвучивание делает оболочка, которая
 читает снимок или `ariaOf`.
 
-## 5. Ограничения
+## 5. Документ RmlUi: значения, события и программное нажатие
+
+`$.ui.doc(path)` возвращает обёртку документа. Помимо `show/hide/text/html/
+cls/style/on`, у неё есть чтение состояния — оно нужно инструментам (SDK) и
+тестам агента, которые не могут «кликнуть мышью» (виртуальная мышь SDL-событий
+не рождает):
+
+| Вызов | Смысл |
+|---|---|
+| `value(id)` / `setValue(id, v)` | значение `<input>`, `<textarea>`, `<select>` (или атрибута `value`) |
+| `content(id)` | внутренняя разметка элемента — то, что записали `text()`/`html()` |
+| `attr(id, name)` / `attr(id, name, v)` | атрибут элемента (`null`, если его нет) |
+| `rect(id)` | `{ x, y, w, h }` элемента в координатах окна; скрытый и ещё не размеченный — нулевой размер |
+| `click(id)` | событие `click`, как от мыши; обработчики вызываются сразу |
+
+**Делегирование.** Обработчик, повешенный на контейнер, получает события
+потомков (всплытие) и три дополнительных аргумента:
+`on('list', 'click', (elementId, eventName, targetKey, targetId) => …)`.
+`targetKey` — значение `data-key` ближайшего к цели элемента вверх по дереву
+до контейнера, `targetId` — `id` цели. Один обработчик на список вместо сотен
+на строки: лимит обработчиков `ui.on` — 256 на рантайм.
+
+```js
+doc.html('assets', '<div class="row" data-key="a.png">a.png</div>');
+doc.on('assets', 'click', (id, ev, key) => select(key));   // key === 'a.png'
+```
+
+## 6. Ограничения
 
 * **раскладка вручную**: `at()` и `size()`; автораскладки и контейнеров
   (flex/grid) нет — только то, что даёт RmlUi через `$.ui.html`;
@@ -25524,6 +25942,8 @@ $.ui.ariaCount();       // сколько узлов размечено
 * **узлы, созданные после `scale()`**, получают масштаб только при следующем
   вызове `scale()`: ставьте масштаб при запуске, до создания HUD, либо зовите
   `scale()` ещё раз;
+* **`rect()` скрытого экрана — ноль**, а у уже скрытого после показа может
+  остаться прежняя геометрия: для «виден ли» смотрите свой флаг состояния;
 * **`aria` — хранилище, а не движок доступности**: фокус, порядок обхода и
   озвучивание движок не делает (см. выше).
 
