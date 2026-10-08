@@ -77,6 +77,23 @@ static void v2_tests(void)
     int patches=0;for (int i=0;i<dense.count;i++) if (dense.points[i].patch) patches++;CHECK(patches>=1);
     CHECK(r2d_rotsprite_v2_anime(&dense,0,0,0,0,NULL,smooth2));
     for (int y=132;y<134;y++) for (int x=132;x<134;x++) CHECK(smooth2[(y*256+x)*4+3]==255);
+    // Reused native scratch must not leave silhouette/RGB trails after moves,
+    // hidden parts, empty frames or changes of pose. Same output as fresh scratch.
+    {
+    R2DRotAnimeWorkspace cache={0};R2DRotModelPose model={.scale=1};
+    model.parts[1].defined=true;model.parts[1].visible=true;
+    model.parts[1].matrix[0]=model.parts[1].matrix[5]=model.parts[1].matrix[10]=1;
+    R2DRotRig cached_rig={.body=true,.model=&model};
+    for(int frame=0;frame<16;frame++) {
+        model.parts[1].matrix[3]=(frame%4-2)*40;model.parts[1].matrix[7]=(frame%3-1)*30;
+        model.parts[1].visible=frame%5!=0;
+        CHECK(r2d_rotsprite_v2_anime_workspace(&dense,frame*31.7,frame%2?25:-15,0,0,&cached_rig,smooth+1,&cache));
+        CHECK(r2d_rotsprite_v2_anime(&dense,frame*31.7,frame%2?25:-15,0,0,&cached_rig,smooth2));
+        CHECK(!memcmp(smooth+1,smooth2,256*256*4));
+    }
+    CHECK(!r2d_rotsprite_v2_anime_workspace(&dense,NAN,0,0,0,&cached_rig,smooth2,&cache));
+    r2d_rotsprite_anime_workspace_free(&cache);r2d_rotsprite_anime_workspace_free(&cache);
+    }
     r2d_rotsprite_v2_free(&dense);free(smooth);free(smooth2);
     R2DRotPoint far_eye={.x=5,.y=9,.z=10,.part=16,.rgba={255,100,0,255}};
     R2DRotAtlas face={.points=&far_eye,.count=1};

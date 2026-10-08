@@ -365,10 +365,6 @@ static JSValue world_frame(JSContext *ctx,JSValueConst self,int argc,JSValueCons
             handles[i]=JS_GetPropertyUint32(ctx,argv[2],i);
             if(JS_IsException(handles[i])) goto fail;
         }
-        for(uint32_t i=0;i<count;i++) {
-            images[i]=r2d_rotsprite_pixels(ctx,handles[i],&sizes[i]);
-            if(!images[i]) goto fail;
-        }
     }
     if(w->disposed) {JS_ThrowTypeError(ctx,"World.frame: ресурс освобождён во время чтения models");goto fail;}
     if(width!=w->width||height!=w->height) {
@@ -387,6 +383,14 @@ static JSValue world_frame(JSContext *ctx,JSValueConst self,int argc,JSValueCons
        !isfinite(g_view.cos_pitch)||!isfinite(g_view.sin_pitch)||
        !isfinite(g_view.focal)||g_view.focal<=0) {
         JS_ThrowRangeError(ctx,"World.frame: некорректная камера");goto fail;
+    }
+    for(uint32_t i=0;i<count;i++) {
+        const float *p=positions+i*5;
+        bool visible=r2d_world_sprite_visible(&g_view,width,height,p[0],p[1],p[2],p[3],p[4],(float)ortho_height);
+        const uint8_t *pixels=r2d_rotsprite_pixels(ctx,handles[i],&sizes[i],visible);
+        // Validate every handle, including culled ones. No JS executes after borrowing.
+        if(!pixels) goto fail;
+        images[i]=visible?pixels:NULL;
     }
     r2d_world_frame(&w->world,&g_view,width,height,w->rgba,w->depth,(float)ortho_height);
     for(uint32_t i=0;i<count;i++) {

@@ -417,11 +417,14 @@ bool r2d_rotsprite_v2_raster(const R2DRotAtlas *a,double yaw,double pitch,int ey
 typedef struct RotVertex {double x,y,z; uint8_t rgba[4];} RotVertex;
 static double edge(const RotVertex *a,const RotVertex *b,double x,double y)
 {return (x-a->x)*(b->y-a->y)-(y-a->y)*(b->x-a->x);}
-static void anime_triangle(const RotVertex *a,const RotVertex *b,const RotVertex *c,float *depth,uint8_t *rgba)
+static void anime_triangle(const RotVertex *a,const RotVertex *b,const RotVertex *c,float *depth,uint8_t *rgba,int bounds[4])
 {
     double area=edge(a,b,c->x,c->y);if (fabs(area)<1e-8) return;
     int x0=(int)fmax(0,floor(fmin(a->x,fmin(b->x,c->x)))),x1=(int)fmin(511,ceil(fmax(a->x,fmax(b->x,c->x))));
     int y0=(int)fmax(0,floor(fmin(a->y,fmin(b->y,c->y)))),y1=(int)fmin(511,ceil(fmax(a->y,fmax(b->y,c->y))));
+    if(x0>x1||y0>y1)return;
+    if(x0<bounds[0])bounds[0]=x0;if(y0<bounds[1])bounds[1]=y0;
+    if(x1+1>bounds[2])bounds[2]=x1+1;if(y1+1>bounds[3])bounds[3]=y1+1;
     for (int y=y0;y<=y1;y++) for (int x=x0;x<=x1;x++) {
         double u=edge(b,c,x+.5,y+.5)/area,v=edge(c,a,x+.5,y+.5)/area,w=1-u-v;
         if (u< -1e-7 || v< -1e-7 || w< -1e-7) continue;
@@ -439,20 +442,41 @@ static void anime_triangle(const RotVertex *a,const RotVertex *b,const RotVertex
 
 // Supersampled round surface footprints keep fractional rotations and soft silhouettes.
 // This produces an ordinary 2D RGBA sprite; no scene mesh or 3D renderer is introduced.
-bool r2d_rotsprite_v2_anime(const R2DRotAtlas *a,double yaw,double pitch,int eyes,int mouth,const R2DRotRig *rig,uint8_t *out)
+bool r2d_rotsprite_v2_anime_workspace(const R2DRotAtlas *a,double yaw,double pitch,int eyes,int mouth,const R2DRotRig *rig,uint8_t *out,R2DRotAnimeWorkspace *workspace)
 {
     if (!a || !a->points || !out || eyes<0 || eyes>3 || mouth<0 || mouth>3 ||
         !r2d_rotsprite_angles(yaw,pitch,&yaw,&pitch) || (rig && (rig->brows<0 || rig->brows>3 ||
         !isfinite(rig->phase) || !isfinite(rig->stride) || !isfinite(rig->arm_left) || !isfinite(rig->arm_right) || !isfinite(rig->head_yaw)))) return false;
     enum { N=512 };
-    float *depth=malloc(N*N*sizeof *depth),*distance=malloc(N*N*sizeof *distance);
-    uint8_t *rgba=calloc(N*N,4);
-    if (!depth || !distance || !rgba) {free(depth);free(distance);free(rgba);return false;}
-    for (int i=0;i<N*N;i++) {depth[i]=-1e9f;distance[i]=1e9f;}
+    if(!workspace)return false;
+    if(!workspace->depth) {
+        workspace->depth=malloc(N*N*sizeof(float));workspace->distance=malloc(N*N*sizeof(float));
+        workspace->rgba=malloc(N*N*4);workspace->resolved=malloc(256*256*4);
+        if(!workspace->depth||!workspace->distance||!workspace->rgba||!workspace->resolved) {r2d_rotsprite_anime_workspace_free(workspace);return false;}
+        workspace->bounds[0]=workspace->bounds[1]=0;workspace->bounds[2]=workspace->bounds[3]=N;
+    }
+    float *depth=workspace->depth,*distance=workspace->distance;uint8_t *rgba=workspace->rgba;
+    // Every previously touched supersample is restored before reusing scratch.
+    for(int y=workspace->bounds[1];y<workspace->bounds[3];y++) {
+        int x0=workspace->bounds[0],x1=workspace->bounds[2];
+        for(int x=x0;x<x1;x++){depth[y*N+x]=-1e9f;distance[y*N+x]=1e9f;}
+        memset(rgba+(y*N+x0)*4,0,(size_t)(x1-x0)*4);
+    }
+    int bounds[4]={N,N,0,0};
     double cy=cos(yaw*PI/180),sy=sin(yaw*PI/180),cp=cos(pitch*PI/180),sp=sin(pitch*PI/180);
+    double projected[256][12];
+    if(rig && rig->model)for(int id=1;id<255;id++) {
+        const R2DRotPartPose *part=&rig->model->parts[id];if(!part->defined||!part->visible)continue;
+        const double *m=part->matrix;double scale=rig->model->scale*4;
+        for(int j=0;j<4;j++) {
+            double z=-sy*m[j]+cy*m[8+j];
+            projected[id][j]=(cy*m[j]+sy*m[8+j])*scale;
+            projected[id][4+j]=(cp*m[4+j]-sp*z)*scale;
+            projected[id][8+j]=sp*m[4+j]+cp*z;
+        }
+    }
     for (int i=0;i<a->count;i++) {
         const R2DRotPoint *p=&a->points[i];
-        if (!face_visible(p,yaw,pitch,rig)) continue;
         if (rig && rig->model) {
             const R2DRotPartPose *part=&rig->model->parts[p->part];
             if (!part->defined || !part->visible) continue;
@@ -465,26 +489,54 @@ bool r2d_rotsprite_v2_anime(const R2DRotAtlas *a,double yaw,double pitch,int eye
         bool head=p->part<=3 || p->part==5 || p->part>=16;
         if (!head && (!rig || !rig->body)) continue;
         }
+        if (rig && rig->model) {
+            const R2DRotPartPose *part=&rig->model->parts[p->part];
+            if(part->one_sided) {
+                const double *m=part->matrix;double u[3],v[3],a[3],b[3];
+                for(int j=0;j<3;j++){u[j]=p->patch?p->du[j]+.5*p->duv[j]:(j==0);v[j]=p->patch?p->dv[j]+.5*p->duv[j]:(j==1);}
+                for(int j=0;j<3;j++){a[j]=m[j*4]*u[0]+m[j*4+1]*u[1]+m[j*4+2]*u[2];b[j]=m[j*4]*v[0]+m[j*4+1]*v[1]+m[j*4+2]*v[2];}
+                double nx=a[1]*b[2]-a[2]*b[1],ny=a[2]*b[0]-a[0]*b[2],nz=a[0]*b[1]-a[1]*b[0],len=sqrt(nx*nx+ny*ny+nz*nz);
+                if(len>=1e-8 && (cp*(-sy*nx+cy*nz)+sp*ny)/len<=.02)continue;
+            }
+        } else if(!face_visible(p,yaw,pitch,rig))continue;
         if (p->patch) {
             RotVertex vertices[4];
             for (int j=0;j<4;j++) {
                 R2DRotPoint corner=*p;int u=j%2,v=j/2;
                 corner.x+=u*p->du[0]+v*p->dv[0]+u*v*p->duv[0];corner.y+=u*p->du[1]+v*p->dv[1]+u*v*p->duv[1];corner.z+=u*p->du[2]+v*p->dv[2]+u*v*p->duv[2];
-                double X,Y,Z;transform_point(&corner,rig,&X,&Y,&Z);
-                double scale=rig && rig->model ? rig->model->scale*4 : rig && rig->body ? 4 : 8,zz=-sy*X+cy*Z;
-                vertices[j]=(RotVertex){.x=256+(cy*X+sy*Z)*scale,.y=256+(cp*Y-sp*zz)*scale,.z=sp*Y+cp*zz};
+                if(rig && rig->model) {
+                    const double *m=projected[p->part];double v[3];
+                    for(int row=0;row<3;row++)v[row]=m[row*4]*corner.x+m[row*4+1]*corner.y+m[row*4+2]*corner.z+m[row*4+3];
+                    vertices[j]=(RotVertex){.x=256+v[0],.y=256+v[1],.z=v[2]};
+                } else {
+                    double X,Y,Z;transform_point(&corner,rig,&X,&Y,&Z);
+                    double scale=rig && rig->body ? 4 : 8,zz=-sy*X+cy*Z;
+                    vertices[j]=(RotVertex){.x=256+(cy*X+sy*Z)*scale,.y=256+(cp*Y-sp*zz)*scale,.z=sp*Y+cp*zz};
+                }
                 memcpy(vertices[j].rgba,p->colors[j],4);
             }
-            anime_triangle(&vertices[0],&vertices[1],&vertices[2],depth,rgba);
-            anime_triangle(&vertices[1],&vertices[3],&vertices[2],depth,rgba);
+            anime_triangle(&vertices[0],&vertices[1],&vertices[2],depth,rgba,bounds);
+            anime_triangle(&vertices[1],&vertices[3],&vertices[2],depth,rgba,bounds);
             continue;
         }
         if ((!rig || !rig->model) && (p->part==2 || p->part==3)) continue; // Isolated ear/hair border samples must not become floating dots.
-        double X,Y,Z;transform_point(p,rig,&X,&Y,&Z);
-        double scale=rig && rig->model ? rig->model->scale*4 : rig && rig->body ? 4 : 8,zz=-sy*X+cy*Z;
-        double sx=256+(cy*X+sy*Z)*scale,syy=256+(cp*Y-sp*zz)*scale,z=sp*Y+cp*zz;
+        double sx,syy,z;
+        if(rig && rig->model) {
+            const double *m=projected[p->part];double v[3];
+            for(int row=0;row<3;row++)v[row]=m[row*4]*p->x+m[row*4+1]*p->y+m[row*4+2]*p->z+m[row*4+3];
+            sx=256+v[0];syy=256+v[1];z=v[2];
+        } else {
+            double X,Y,Z;transform_point(p,rig,&X,&Y,&Z);
+            double scale=rig && rig->body ? 4 : 8,zz=-sy*X+cy*Z;
+            sx=256+(cy*X+sy*Z)*scale;syy=256+(cp*Y-sp*zz)*scale;z=sp*Y+cp*zz;
+        }
         double radius=p->part>=32 && p->part<=35 ? 1.2 : p->part>=16 ? 2.7 : 3.2;
         int loX=(int)floor(sx-radius),hiX=(int)ceil(sx+radius),loY=(int)floor(syy-radius),hiY=(int)ceil(syy+radius);
+        int bx0=loX<0?0:loX,by0=loY<0?0:loY,bx1=hiX>=N?N:hiX+1,by1=hiY>=N?N:hiY+1;
+        if(bx0<bx1&&by0<by1){
+            if(bx0<bounds[0])bounds[0]=bx0;if(by0<bounds[1])bounds[1]=by0;
+            if(bx1>bounds[2])bounds[2]=bx1;if(by1>bounds[3])bounds[3]=by1;
+        }
         for (int y=loY;y<=hiY;y++) for (int x=loX;x<=hiX;x++) {
             if (x<0 || y<0 || x>=N || y>=N) continue;
             double d=(x+.5-sx)*(x+.5-sx)+(y+.5-syy)*(y+.5-syy);
@@ -502,8 +554,10 @@ bool r2d_rotsprite_v2_anime(const R2DRotAtlas *a,double yaw,double pitch,int eye
             depth[n]=(float)z;distance[n]=(float)d;memcpy(rgba+n*4,p->rgba,4);
         }
     }
-    // Alpha-weighted box resolve: transparent borders do not produce black fringes.
-    for (int y=0;y<256;y++) for (int x=0;x<256;x++) {
+    memcpy(workspace->bounds,bounds,sizeof bounds);memset(out,0,256*256*4);
+    int x0=bounds[0]/2,y0=bounds[1]/2,x1=(bounds[2]+1)/2,y1=(bounds[3]+1)/2;
+    // Resolve the covered region at the SAME 512 -> 256 quality as before.
+    for (int y=y0;y<y1;y++) for (int x=x0;x<x1;x++) {
         unsigned sum[3]={0},alpha=0;
         for (int dy=0;dy<2;dy++) for (int dx=0;dx<2;dx++) {
             const uint8_t *p=rgba+((y*2+dy)*N+x*2+dx)*4;
@@ -515,16 +569,22 @@ bool r2d_rotsprite_v2_anime(const R2DRotAtlas *a,double yaw,double pitch,int eye
     }
     // Extrude color under transparent neighbors for straight-alpha linear sampling.
     // Otherwise a zero-RGB transparent texel adds a dark fringe to pale anime edges.
-    memcpy(rgba,out,256*256*4);
-    for (int y=0;y<256;y++) for (int x=0;x<256;x++) {
+    memcpy(workspace->resolved,out,256*256*4);
+    if(x0>0)x0--;if(y0>0)y0--;if(x1<256)x1++;if(y1<256)y1++;
+    for (int y=y0;y<y1;y++) for (int x=x0;x<x1;x++) {
         uint8_t *p=out+(y*256+x)*4;if (p[3]) continue;
         const uint8_t *best=NULL;
         for (int dy=-1;dy<=1;dy++) for (int dx=-1;dx<=1;dx++) {
             int sx=x+dx,sy=y+dy;if (sx<0 || sy<0 || sx>=256 || sy>=256) continue;
-            const uint8_t *q=rgba+(sy*256+sx)*4;
+            const uint8_t *q=workspace->resolved+(sy*256+sx)*4;
             if (q[3] && (!best || q[3]>best[3])) best=q;
         }
         if (best) memcpy(p,best,3);
     }
-    free(depth);free(distance);free(rgba);return true;
+    return true;
 }
+
+void r2d_rotsprite_anime_workspace_free(R2DRotAnimeWorkspace *w)
+{if(!w)return;free(w->depth);free(w->distance);free(w->rgba);free(w->resolved);memset(w,0,sizeof *w);}
+bool r2d_rotsprite_v2_anime(const R2DRotAtlas *a,double yaw,double pitch,int eyes,int mouth,const R2DRotRig *rig,uint8_t *out)
+{R2DRotAnimeWorkspace w={0};bool ok=r2d_rotsprite_v2_anime_workspace(a,yaw,pitch,eyes,mouth,rig,out,&w);r2d_rotsprite_anime_workspace_free(&w);return ok;}

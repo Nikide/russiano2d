@@ -129,7 +129,7 @@ $.update(dt=>{
     for(let i=0;i<n;i++){tryMove(h.x+move.x/n,h.y);tryMove(h.x,h.y+move.y/n);}
     view.x=h.x;view.y=h.y;view.eye=h.depth+48;
     if($.input.mouseDown('left')||$.input.down('space'))fire();
-    hud.text('floor',`АК · ${magazine}/30 · выбыло ${kills}/${npcs.length} · высота ${h.depth} · ${message}`);
+    hud.text('floor',`FPS ${Math.round($.time.fps())} · АК · ${magazine}/30 · выбыло ${kills}/${npcs.length} · высота ${h.depth} · ${message}`);
     hud.text('keys','WASD ходьба · мышь/стрелки взгляд · M переключить мышь · ЛКМ/Space огонь · R магазин · F цели · E этаж · P проекция · V оружие · Esc отпустить мышь');
 });
 $.render(()=>{

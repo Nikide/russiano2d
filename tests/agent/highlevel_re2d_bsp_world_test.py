@@ -55,6 +55,26 @@ def main():
         upper = pixels(a, 'upper')
         check(not any(c[0]>150 and c[1]<100 and c[2]<100 for c in upper), 'upper view sees no lower railing through its floor')
         check(a.eval('view.eye') == 208, 'camera eye follows selected support height')
+        check(a.eval('''(()=>{
+            const h=npc.get(0).rot_sprite.handle;
+            const w=engine.re2d.worldCreate(new Float32Array(0),new Float32Array(0));
+            engine.re2d.view(0,0,48,0,0,1);
+            const revision=()=>engine.rotSpriteInfo(h).revision;
+            const start=revision();
+            try {
+                engine.rotSpritePrepare(h,10,0);engine.rotSpritePrepare(h,20,0);
+                if(revision()!==start)return false;
+                w.frame(320,180,[h],new Float32Array([170,0,0,96,96]));
+                if(revision()!==start+1)return false;
+                engine.rotSpritePrepare(h,30,0);
+                w.frame(320,180,[h],new Float32Array([-170,0,0,96,96]));
+                if(revision()!==start+1)return false;
+                engine.rotSpritePose(h,30,0);
+                if(revision()!==start+2)return false;
+                try {w.frame(320,180,[{}],new Float32Array([-170,0,0,96,96]));return false} catch(e) {}
+                return true;
+            } finally {w.dispose()}
+        })()'''), 'World coalesces poses, defers off-screen synthesis, preserves immediate Pose and validates culled handles')
         a.eval("npc.angle(Math.PI-.7).re2dLayer('holdRifle')")
         a.step(2)
         unarmed = pixels(a, 'unarmed')

@@ -3,8 +3,38 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <float.h>
 static int failed;
 #define CHECK(c,m) do {bool ok=(c);printf("  %s %s\n",ok?"ok":"FAIL",m);if(!ok)failed++;}while(0)
+static void reference_frame(const R2DRe2dWorld *w,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,float ortho_height)
+{
+    const float eye[3]={v->x,v->y,v->eye};
+    for(int y=0;y<height;y++) for(int x=0;x<width;x++) {
+        float right,up,forward,o[3],d[3];
+        memcpy(o,eye,sizeof o);
+        if(ortho_height>0) {
+            const float scale=ortho_height/v->height;
+            right=((x+0.5f)*v->width/width-v->width/2)*scale;
+            up=(v->height/2-(y+0.5f)*v->height/height)*scale;
+            o[0]+=-v->sin_yaw*right-v->cos_yaw*v->sin_pitch*up;
+            o[1]+=v->cos_yaw*right-v->sin_yaw*v->sin_pitch*up;
+            o[2]+=v->cos_pitch*up;
+            forward=v->cos_pitch;
+            d[0]=forward*v->cos_yaw;d[1]=forward*v->sin_yaw;d[2]=v->sin_pitch;
+        } else {
+            right=((x+0.5f)*v->width/width-v->width/2)/v->focal;
+            up=(v->height/2-(y+0.5f)*v->height/height)/v->focal;
+            forward=v->cos_pitch-up*v->sin_pitch;
+            d[0]=forward*v->cos_yaw-right*v->sin_yaw;
+            d[1]=forward*v->sin_yaw+right*v->cos_yaw;d[2]=v->sin_pitch+up*v->cos_pitch;
+        }
+        R2DWorldHit hit;int i=y*width+x;uint32_t color=0xff201810;
+        if(r2d_world_ray(w,o,d,v->near_plane,100000.0f,&hit)) {color=hit.color;depth[i]=hit.t;}
+        else depth[i]=FLT_MAX;
+        for(int c=0;c<4;c++) rgba[i*4+c]=(uint8_t)(color>>(c*8));
+    }
+}
+
 int main(void)
 {
     const R2DWorldSpan spans[]={
@@ -52,6 +82,19 @@ int main(void)
     r2d_re2d_view_set(&view,0,0,140,0,-1.5707963f,1.5707963f,32,32);
     r2d_world_frame(&w,&view,32,32,rgba,depth,100);
     CHECK(rgba[pixel*4+2]==68,"orthographic top-down view hits upper floor");
+    // Independent per-pixel query reference catches projection/bounds mistakes.
+    bool matches=true;uint8_t fast[64*48*4],reference[64*48*4];float fd[64*48],rd[64*48];
+    for(int mode=0;mode<2;mode++)for(int storey=0;storey<3;storey++)for(int pose=0;pose<4;pose++) {
+        r2d_re2d_view_set(&view,0,-13,40+storey*100,(pose-1)*.45f,(pose-2)*.35f,1.2f,64,48);
+        r2d_world_frame(&w,&view,64,48,fast,fd,mode?150:0);reference_frame(&w,&view,64,48,reference,rd,mode?150:0);
+        for(int i=0;i<64*48;i++) {
+            if((fd[i]==FLT_MAX)!=(rd[i]==FLT_MAX)) {matches=false;break;}
+            if(fd[i]!=FLT_MAX && fabsf(fd[i]-rd[i])>fmaxf(.02f,rd[i]*.0001f)){matches=false;break;}
+            // Coincident surfaces can choose either colour at the same depth.
+            if(memcmp(fast+i*4,reference+i*4,4) && (fd[i]==FLT_MAX || fabsf(fd[i]-rd[i])>.002f)){matches=false;break;}
+        }
+    }
+    CHECK(matches,"bounded native synthesis matches independent ray queries across projections/storeys/poses");
     r2d_world_free(&w);r2d_world_free(&w);
     // Reverse-facing crossing geometry must have the same world ray answer.
     const R2DWorldWall crossing[]={{-10,0,10,0,0,80,0xff0000ff},{0,-10,0,10,0,80,0xff00ff00}};

@@ -160,8 +160,16 @@ function applyModel($,node) {
     }
     engine.rotSpriteModelPose(r.handle,r.modelPose.scale,r.modelPose.records,!!r.rig.body);
     const face={eyes:FACE.eyes[pose.eyes ?? 0],mouth:FACE.mouth[pose.mouth ?? 0],brows:FACE.brows[pose.brows ?? 0],...r.faceBase,...sample.face};
-    r.sprite=engine.rotSpritePose(r.handle,pose.yaw ?? 0,pose.pitch ?? 0,FACE.eyes.indexOf(face.eyes),FACE.mouth.indexOf(face.mouth),FACE.brows.indexOf(face.brows));
+    const submit=r.worldComposed && typeof engine.rotSpritePrepare==='function' ? engine.rotSpritePrepare : engine.rotSpritePose;
+    r.sprite=submit(r.handle,pose.yaw ?? 0,pose.pitch ?? 0,FACE.eyes.indexOf(face.eyes),FACE.mouth.indexOf(face.mouth),FACE.brows.indexOf(face.brows));
     for (const child of r.children) if (child.rot_sprite) applyModel($,child);
+}
+// World asks native C to coalesce animated model state and the final view pose.
+export function prepareRotWorldPose(node,yaw,pitch) {
+    const r=node.rot_sprite,p=normalizeRotPose(yaw,pitch);r.worldComposed=true;
+    const submit=typeof engine.rotSpritePrepare==='function' ? engine.rotSpritePrepare : engine.rotSpritePose;
+    r.sprite=submit(r.handle,p.yaw,p.pitch);
+    for(const child of r.children || [])if(child.rot_sprite){child.rot_sprite.worldComposed=true;applyModel(rotApi,child);}
 }
 function modelJoints(r,pose) {
     const cy=Math.cos(pose.yaw*Math.PI/180),sy=Math.sin(pose.yaw*Math.PI/180),cp=Math.cos(pose.pitch*Math.PI/180),sp=Math.sin(pose.pitch*Math.PI/180),result={};
@@ -296,7 +304,7 @@ export function installRotSprite($) {
                 const r=temp.get(0).rot_sprite;
                 if (Object.keys(r.animations.clips).length && !Object.hasOwn(r.animations.clips,old.motion.mode)) throw new TypeError('rotReload: активный клип удалён');
                 if (old.visibleParts?.some(id=>!r.definition.rig.parts.some(p=>p.id===id))) throw new TypeError('rotReload: visible part removed');
-                r.visibleParts=old.visibleParts===undefined || old.visibleParts===null ? null : [...old.visibleParts];r.motion={...old.motion};r.boneOverrides=cloneData(old.boneOverrides);r.layers=cloneData(old.layers);r.faceBase={...old.faceBase};
+                r.worldComposed=old.worldComposed;r.visibleParts=old.visibleParts===undefined || old.visibleParts===null ? null : [...old.visibleParts];r.motion={...old.motion};r.boneOverrides=cloneData(old.boneOverrides);r.layers=cloneData(old.layers);r.faceBase={...old.faceBase};
                 for (const key of Object.keys(r.layers)) if (!Object.hasOwn(r.animations.clips,key)) throw new TypeError('rotReload: активный слой удалён');
             }
             if (pose.version===2) temp.rotRig(old.rig);
@@ -406,6 +414,10 @@ export function installRotSprite($) {
         const p = frame.style==='anime' ? t : rotPixelRect(t,frame.width);
         if (p.x + p.w/2 < 0 || p.y + p.h/2 < 0 ||
             p.x - p.w/2 > cam.w || p.y - p.h/2 > cam.h) return;
+        if(node.rot_sprite.worldComposed) {
+            const r=node.rot_sprite,pose=engine.rotSpriteInfo(r.handle);
+            r.sprite=engine.rotSpritePose(r.handle,pose.yaw,pose.pitch);
+        }
         $.gfx.push.sprite(node.rot_sprite.sprite,p.x,p.y,p.w,p.h,0,
             withAlpha(node.color,node.alpha),node.blend_mode);
     });

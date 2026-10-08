@@ -28,3 +28,6 @@ void r2d_world_frame(const R2DRe2dWorld *, const R2DRe2dView *,int w,int h,uint8
 // Compose an already synthesised ordinary 2D sprite at projected depth.
 void r2d_world_stamp(const R2DRe2dView *,int w,int h,uint8_t *rgba,float *depth,
                      const uint8_t *sprite,int size,float x,float y,float bottom,float width,float height,float ortho_height);
+
+// Same screen coverage as stamp; permits deferring off-screen sprite synthesis.
+bool r2d_world_sprite_visible(const R2DRe2dView *,int w,int h,float x,float y,float bottom,float width,float height,float ortho_height);

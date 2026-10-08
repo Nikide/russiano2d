@@ -108,33 +108,112 @@ bool r2d_world_ray(const R2DRe2dWorld *w,const float o[3],const float d[3],float
     }
     return hit->wall>=0||hit->span>=0;
 }
+// Native image synthesis over specialised planar primitives. The projected
+// bounds only limit work; coverage/depth still comes from exact world equations.
+typedef struct { float right,up,forward; } WorldImagePoint;
+typedef struct { const R2DRe2dView *view; int width,height; float ortho;
+    uint8_t *rgba;float *depth; } WorldImage;
+static void image_color(WorldImage *im,int i,uint32_t color)
+{ for(int c=0;c<4;c++)im->rgba[i*4+c]=(uint8_t)(color>>(c*8)); }
+static bool image_bounds(const WorldImage *im,const float points[4][3],int out[4])
+{
+    const R2DRe2dView *v=im->view;WorldImagePoint a[4],b[8];int n=0;
+    for(int i=0;i<4;i++) {
+        float dx=points[i][0]-v->x,dy=points[i][1]-v->y,z=points[i][2]-v->eye;
+        float f=dx*v->cos_yaw+dy*v->sin_yaw;
+        a[i]=(WorldImagePoint){-dx*v->sin_yaw+dy*v->cos_yaw,z*v->cos_pitch-f*v->sin_pitch,f*v->cos_pitch+z*v->sin_pitch};
+    }
+    for(int i=0;i<4;i++) {
+        WorldImagePoint p=a[i],q=a[(i+1)%4];bool pi=p.forward>=v->near_plane,qi=q.forward>=v->near_plane;
+        if(pi)b[n++]=p;
+        if(pi!=qi) {float t=(v->near_plane-p.forward)/(q.forward-p.forward);
+            b[n++]=(WorldImagePoint){p.right+t*(q.right-p.right),p.up+t*(q.up-p.up),v->near_plane};}
+    }
+    if(!n)return false;
+    float left=FLT_MAX,right=-FLT_MAX,top=FLT_MAX,bottom=-FLT_MAX;
+    for(int i=0;i<n;i++) {
+        float scale=im->ortho>0?v->height/im->ortho:v->focal/b[i].forward;
+        float x=(v->width/2+b[i].right*scale)*im->width/v->width;
+        float y=(v->height/2-b[i].up*scale)*im->height/v->height;
+        left=fminf(left,x);right=fmaxf(right,x);top=fminf(top,y);bottom=fmaxf(bottom,y);
+    }
+    // One pixel margin covers floating-point projection at shared edges.
+    out[0]=(int)fmaxf(0,fminf(im->width,floorf(left)-1));out[1]=(int)fmaxf(0,fminf(im->height,floorf(top)-1));
+    out[2]=(int)fmaxf(0,fminf(im->width,ceilf(right)+1));out[3]=(int)fmaxf(0,fminf(im->height,ceilf(bottom)+1));
+    return out[0]<out[2]&&out[1]<out[3];
+}
+static void image_row(const WorldImage *im,int x,int y,float o[3],float d[3],float os[2],float ds[2])
+{
+    const R2DRe2dView *v=im->view;
+    o[0]=v->x;o[1]=v->y;o[2]=v->eye;os[0]=os[1]=ds[0]=ds[1]=0;
+    if(im->ortho>0) {
+        float k=im->ortho/v->height,step=v->width/im->width*k;
+        float right=((x+.5f)*v->width/im->width-v->width/2)*k,up=(v->height/2-(y+.5f)*v->height/im->height)*k;
+        o[0]+=-v->sin_yaw*right-v->cos_yaw*v->sin_pitch*up;o[1]+=v->cos_yaw*right-v->sin_yaw*v->sin_pitch*up;o[2]+=v->cos_pitch*up;
+        d[0]=v->cos_pitch*v->cos_yaw;d[1]=v->cos_pitch*v->sin_yaw;d[2]=v->sin_pitch;
+        os[0]=-v->sin_yaw*step;os[1]=v->cos_yaw*step;
+    } else {
+        float right=((x+.5f)*v->width/im->width-v->width/2)/v->focal,up=(v->height/2-(y+.5f)*v->height/im->height)/v->focal;
+        float forward=v->cos_pitch-up*v->sin_pitch,step=v->width/im->width/v->focal;
+        d[0]=forward*v->cos_yaw-right*v->sin_yaw;d[1]=forward*v->sin_yaw+right*v->cos_yaw;d[2]=v->sin_pitch+up*v->cos_pitch;
+        ds[0]=-v->sin_yaw*step;ds[1]=v->cos_yaw*step;
+    }
+}
+static void image_wall(WorldImage *im,const R2DRe2dWorld *w,int index)
+{
+    const R2DSegment *seg=&w->bsp.segments[index];const R2DWorldWall *wall=&w->walls[seg->user];
+    float points[4][3]={{seg->x1,seg->y1,wall->bottom},{seg->x2,seg->y2,wall->bottom},{seg->x2,seg->y2,wall->top},{seg->x1,seg->y1,wall->top}};
+    int b[4];if(!image_bounds(im,points,b))return;
+    float sx=seg->x2-seg->x1,sy=seg->y2-seg->y1;
+    for(int y=b[1];y<b[3];y++) {
+        float o[3],d[3],os[2],ds[2];image_row(im,b[0],y,o,d,os,ds);
+        float ax=seg->x1-o[0],ay=seg->y1-o[1];
+        float den=cross(d[0],d[1],sx,sy),den_step=cross(ds[0],ds[1],sx,sy);
+        float num=cross(ax,ay,sx,sy),num_step=-cross(os[0],os[1],sx,sy);
+        float un=cross(ax,ay,d[0],d[1]),un_step=cross(ax,ay,ds[0],ds[1])-cross(os[0],os[1],d[0],d[1]);
+        for(int x=b[0];x<b[2];x++) {
+            // Derive from the row origin rather than accumulating drift.
+            float k=(float)(x-b[0]),dd=den+k*den_step;if(fabsf(dd)<1e-8f)continue;
+            float t=(num+k*num_step)/dd;int i=y*im->width+x;
+            if(t<im->view->near_plane||t>100000||t>im->depth[i])continue;
+            float u=(un+k*un_step)/dd,z=o[2]+t*d[2];
+            if(u<0||u>1||z<wall->bottom||z>wall->top)continue;
+            im->depth[i]=t;image_color(im,i,wall->color);
+        }
+    }
+}
+static void image_node(WorldImage *im,const R2DRe2dWorld *w,int index)
+{
+    if(index<0)return;
+    const R2DBspNode *n=&w->bsp.nodes[index];const R2DSegment *s=&w->bsp.segments[n->splitter];
+    bool front=cross(s->x2-s->x1,s->y2-s->y1,im->view->x-s->x1,im->view->y-s->y1)>=0;
+    image_node(im,w,front?n->front:n->back);image_wall(im,w,n->splitter);
+    for(int i=0;i<n->leftover_count;i++)image_wall(im,w,n->leftover_first+i);
+    image_node(im,w,front?n->back:n->front);
+}
+static void image_plane(WorldImage *im,const R2DWorldSpan *s,bool ceiling)
+{
+    float z=ceiling?s->top:s->bottom;
+    float points[4][3]={{s->x,s->y,z},{s->x+s->w,s->y,z},{s->x+s->w,s->y+s->h,z},{s->x,s->y+s->h,z}};
+    int b[4];if(!image_bounds(im,points,b))return;
+    for(int y=b[1];y<b[3];y++) {
+        float o[3],d[3],os[2],ds[2];image_row(im,b[0],y,o,d,os,ds);
+        if(fabsf(d[2])<=1e-8f)continue;
+        float t=(z-o[2])/d[2];if(t<im->view->near_plane||t>100000)continue;
+        float px=o[0]+t*d[0],py=o[1]+t*d[1],xs=os[0]+t*ds[0],ys=os[1]+t*ds[1];
+        for(int x=b[0];x<b[2];x++) {
+            int i=y*im->width+x;float k=(float)(x-b[0]);
+            if(t>im->depth[i]||!inside(s,px+k*xs,py+k*ys))continue;
+            im->depth[i]=t;image_color(im,i,ceiling?s->ceiling_color:s->floor_color);
+        }
+    }
+}
 void r2d_world_frame(const R2DRe2dWorld *w,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,float ortho_height)
 {
-    const float eye[3]={v->x,v->y,v->eye};
-    for(int y=0;y<height;y++) for(int x=0;x<width;x++) {
-        float right,up,forward,o[3],d[3];
-        memcpy(o,eye,sizeof o);
-        if(ortho_height>0) {
-            const float scale=ortho_height/v->height;
-            right=((x+0.5f)*v->width/width-v->width/2)*scale;
-            up=(v->height/2-(y+0.5f)*v->height/height)*scale;
-            o[0]+=-v->sin_yaw*right-v->cos_yaw*v->sin_pitch*up;
-            o[1]+=v->cos_yaw*right-v->sin_yaw*v->sin_pitch*up;
-            o[2]+=v->cos_pitch*up;
-            forward=v->cos_pitch;
-            d[0]=forward*v->cos_yaw;d[1]=forward*v->sin_yaw;d[2]=v->sin_pitch;
-        } else {
-            right=((x+0.5f)*v->width/width-v->width/2)/v->focal;
-            up=(v->height/2-(y+0.5f)*v->height/height)/v->focal;
-            forward=v->cos_pitch-up*v->sin_pitch;
-            d[0]=forward*v->cos_yaw-right*v->sin_yaw;
-            d[1]=forward*v->sin_yaw+right*v->cos_yaw;d[2]=v->sin_pitch+up*v->cos_pitch;
-        }
-        R2DWorldHit hit;int i=y*width+x;uint32_t color=0xff201810;
-        if(r2d_world_ray(w,o,d,v->near_plane,100000.0f,&hit)) {color=hit.color;depth[i]=hit.t;}
-        else depth[i]=FLT_MAX;
-        for(int c=0;c<4;c++) rgba[i*4+c]=(uint8_t)(color>>(c*8));
-    }
+    WorldImage im={v,width,height,ortho_height,rgba,depth};
+    for(int i=0;i<width*height;i++){depth[i]=FLT_MAX;image_color(&im,i,0xff201810);}
+    image_node(&im,w,w->bsp.root);
+    for(int i=0;i<w->span_count;i++){image_plane(&im,&w->spans[i],false);image_plane(&im,&w->spans[i],true);}
 }
 void r2d_world_stamp(const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,
  const uint8_t *sprite,int size,float x,float y,float bottom,float ww,float hh,float ortho_height)
@@ -167,4 +246,29 @@ void r2d_world_stamp(const R2DRe2dView *v,int width,int height,uint8_t *rgba,flo
         if(src[3]<128||dist>depth[i]) continue;
         memcpy(rgba+i*4,src,4);rgba[i*4+3]=255;depth[i]=dist;
     }
+}
+
+bool r2d_world_sprite_visible(const R2DRe2dView *v,int width,int height,float x,float y,float bottom,float ww,float hh,float ortho_height)
+{
+    float p[4];
+    if(ww<=0 || hh<=0) return false;
+    float dist;
+    if(ortho_height>0) {
+        const float dx=x-v->x,dy=y-v->y,up=bottom-v->eye;
+        const float forward=dx*v->cos_yaw+dy*v->sin_yaw;
+        dist=forward*v->cos_pitch+up*v->sin_pitch;
+        if(dist<v->near_plane) return false;
+        const float scale=v->height/ortho_height;
+        p[0]=v->width/2+(-dx*v->sin_yaw+dy*v->cos_yaw)*scale;
+        p[1]=v->height/2-(up*v->cos_pitch-forward*v->sin_pitch)*scale;
+        p[3]=scale;
+    } else {
+        if(!r2d_re2d_project(v,x,y,bottom,p)) return false;
+        dist=v->focal/p[3];
+    }
+    float sx=width/v->width,sy=height/v->height,sw=ww*p[3]*sx,sh=hh*p[3]*sy;
+    float left=p[0]*sx-sw/2,top=p[1]*sy-sh;
+    int x0=(int)fmaxf(0,fminf(width,floorf(left))),x1=(int)fmaxf(0,fminf(width,ceilf(left+sw)));
+    int y0=(int)fmaxf(0,fminf(height,floorf(top))),y1=(int)fmaxf(0,fminf(height,ceilf(top+sh)));
+    return x1>x0 && y1>y0;
 }

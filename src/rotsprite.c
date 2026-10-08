@@ -12,7 +12,8 @@ typedef struct RotSprite {
     uint8_t pixels[256 * 256 * 4];
     R2DRotRig rig;
     R2DRotModelPose model;
-    bool dirty, anime;
+    R2DRotAnimeWorkspace workspace;
+    bool dirty, anime, texture_dirty;
     char path[4096];
     SDL_Time modified;
     Uint64 size;
@@ -29,6 +30,7 @@ static void dispose(RotSprite *r)
 {
     if (!r) return;
     if (r->texture >= 0) r2d_texture_free(r->renderer, r->texture);
+    r2d_rotsprite_anime_workspace_free(&r->workspace);
     r2d_rotsprite_v2_free(&r->surface);
     SDL_DestroySurface(r->atlas);
     r->atlas = NULL;
@@ -123,7 +125,7 @@ static JSValue load(JSContext *ctx, JSValueConst self, int argc, JSValueConst *a
     return handle;
 }
 
-static JSValue pose(JSContext *ctx, JSValueConst self, int argc, JSValueConst *argv)
+static JSValue update_pose(JSContext *ctx, JSValueConst self, int argc, JSValueConst *argv,bool synthesize,bool upload)
 {
     R2D_UNUSED(self);
     RotSprite *r = get(ctx, argc, argv);
@@ -141,21 +143,32 @@ static JSValue pose(JSContext *ctx, JSValueConst self, int argc, JSValueConst *a
     if (brows<0 || brows>3) return JS_ThrowRangeError(ctx,"RotSprite: неизвестные брови");
     if (eyes<0 || eyes>3 || mouth<0 || mouth>3 || (r->version==1 && (eyes || mouth || brows)))
         return JS_ThrowRangeError(ctx,"RotSprite: выражение не поддерживается атласом");
-    if (!r->dirty && yaw == r->yaw && pitch == r->pitch && eyes==r->eyes && mouth==r->mouth && brows==r->rig.brows) return JS_NewInt32(ctx, r->sprite);
-    int previous_brows=r->rig.brows;r->rig.brows=brows;
-    bool drawn=true;
-    if (r->anime) drawn=r2d_rotsprite_v2_anime(&r->surface,yaw,pitch,eyes,mouth,&r->rig,r->pixels);
-    else if (r->version==2) drawn=r2d_rotsprite_v2_draw(&r->surface,yaw,pitch,eyes,mouth,&r->rig,r->pixels);
-    else r2d_rotsprite_raster(r->atlas->pixels, r->atlas->w, r->atlas->h,
-                         r->atlas->pitch, yaw,pitch,r->pixels);
-    if (!drawn) {r->rig.brows=previous_brows;return JS_ThrowOutOfMemory(ctx);}
-    int size=raster_size(r);
-    if (!r2d_texture_upload_region(r->renderer,r->texture,0,0,size,size,r->pixels,size*4)) {
-        r->rig.brows=previous_brows; return JS_ThrowInternalError(ctx, "RotSprite: не удалось обновить GPU-текстуру");
+    bool changed=r->dirty||yaw!=r->yaw||pitch!=r->pitch||eyes!=r->eyes||mouth!=r->mouth||brows!=r->rig.brows;
+    if(!synthesize) {
+        r->dirty=changed;r->yaw=yaw;r->pitch=pitch;r->eyes=eyes;r->mouth=mouth;r->rig.brows=brows;
+        return JS_NewInt32(ctx,r->sprite);
     }
-    r->dirty=false; r->eyes=eyes; r->mouth=mouth; r->yaw = yaw; r->pitch = pitch; r->revision++;
-    return JS_NewInt32(ctx, r->sprite);
+    if(changed) {
+        int previous_brows=r->rig.brows;r->rig.brows=brows;bool drawn=true;
+        if(r->anime)drawn=r2d_rotsprite_v2_anime_workspace(&r->surface,yaw,pitch,eyes,mouth,&r->rig,r->pixels,&r->workspace);
+        else if(r->version==2)drawn=r2d_rotsprite_v2_draw(&r->surface,yaw,pitch,eyes,mouth,&r->rig,r->pixels);
+        else r2d_rotsprite_raster(r->atlas->pixels,r->atlas->w,r->atlas->h,r->atlas->pitch,yaw,pitch,r->pixels);
+        if(!drawn){r->rig.brows=previous_brows;return JS_ThrowOutOfMemory(ctx);}
+        r->dirty=false;r->texture_dirty=true;r->yaw=yaw;r->pitch=pitch;r->eyes=eyes;r->mouth=mouth;r->revision++;
+    }
+    if(upload && r->texture_dirty) {
+        int size=raster_size(r);
+        if(!r2d_texture_upload_region(r->renderer,r->texture,0,0,size,size,r->pixels,size*4))
+            return JS_ThrowInternalError(ctx,"RotSprite: не удалось обновить GPU-текстуру");
+        r->texture_dirty=false;
+    }
+    return JS_NewInt32(ctx,r->sprite);
 }
+static JSValue pose(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{return update_pose(ctx,self,argc,argv,true,true);}
+// Internal World preparation: keep the last complete pose, synthesize on read.
+static JSValue prepare_pose(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{return update_pose(ctx,self,argc,argv,false,false);}
 
 static JSValue info(JSContext *ctx, JSValueConst self, int argc, JSValueConst *argv)
 {
@@ -253,7 +266,7 @@ static JSValue style(JSContext *ctx,JSValueConst self,int argc,JSValueConst *arg
     R2DSprite *sp=&r->renderer->sprites[sprite];sp->force_nearest=!anime;sp->force_linear=anime;
     sp->u0=sp->v0=0;sp->u1=sp->v1=1;
     r2d_texture_free(r->renderer,r->texture);r2d_rotsprite_v2_free(&r->surface);
-    r->surface=surface;r->texture=texture;r->sprite=sprite;r->anime=anime;r->revision++;
+    r->surface=surface;r->texture=texture;r->sprite=sprite;r->anime=anime;r->dirty=false;r->texture_dirty=false;r->revision++;
     return JS_NewInt32(ctx,sprite);
 }
 
@@ -377,16 +390,21 @@ int r2d_rotsprite_install(JSContext *ctx, JSValue engine)
     JS_SetPropertyStr(ctx,engine,"rotSpritePart",JS_NewCFunction(ctx,replace_part,"rotSpritePart",3));
     JS_SetPropertyStr(ctx,engine,"rotSpriteRig",JS_NewCFunction(ctx,rig,"rotSpriteRig",7));
     JS_SetPropertyStr(ctx,engine,"rotSpriteLoad",JS_NewCFunction(ctx,load,"rotSpriteLoad",1));
+    JS_SetPropertyStr(ctx,engine,"rotSpritePrepare",JS_NewCFunction(ctx,prepare_pose,"rotSpritePrepare",3));
     JS_SetPropertyStr(ctx,engine,"rotSpritePose",JS_NewCFunction(ctx,pose,"rotSpritePose",3));
     JS_SetPropertyStr(ctx,engine,"rotSpriteInfo",JS_NewCFunction(ctx,info,"rotSpriteInfo",1));
     JS_SetPropertyStr(ctx,engine,"rotSpriteDispose",JS_NewCFunction(ctx,release,"rotSpriteDispose",1));
     return 0;
 }
 
-const unsigned char *r2d_rotsprite_pixels(JSContext *ctx, JSValueConst handle, int *size)
+const unsigned char *r2d_rotsprite_pixels(JSContext *ctx, JSValueConst handle, int *size, bool synthesize)
 {
     RotSprite *r=JS_GetOpaque2(ctx,handle,rot_class);
     if (!r) return NULL;
     if (!r->atlas) { JS_ThrowTypeError(ctx,"Re2DSprite: ресурс уже освобождён"); return NULL; }
+    if(!synthesize){*size=raster_size(r);return r->pixels;}
+    JSValue args[]={handle,JS_NewFloat64(ctx,r->yaw),JS_NewFloat64(ctx,r->pitch)};
+    JSValue result=update_pose(ctx,JS_UNDEFINED,3,args,true,false);JS_FreeValue(ctx,args[1]);JS_FreeValue(ctx,args[2]);
+    if(JS_IsException(result))return NULL;JS_FreeValue(ctx,result);
     *size=raster_size(r);return r->pixels;
 }

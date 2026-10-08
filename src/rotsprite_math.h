@@ -36,3 +36,10 @@ void r2d_rotsprite_v2_joint(int part,double x,double y,double z,double yaw,doubl
 // Smooth anime projection: dense atlas samples, 512 supersampling -> RGBA 256.
 bool r2d_rotsprite_v2_decode_anime(const uint8_t *atlas,int w,int h,int stride,R2DRotAtlas *out);
 bool r2d_rotsprite_v2_anime(const R2DRotAtlas *atlas,double yaw,double pitch,int eyes,int mouth,const R2DRotRig *rig,uint8_t *out);
+
+// Per-handle scratch for smooth 2D synthesis. Zero-initialise; free at disposal.
+typedef struct R2DRotAnimeWorkspace {
+    float *depth,*distance;uint8_t *rgba,*resolved;int bounds[4];
+} R2DRotAnimeWorkspace;
+void r2d_rotsprite_anime_workspace_free(R2DRotAnimeWorkspace *);
+bool r2d_rotsprite_v2_anime_workspace(const R2DRotAtlas *,double yaw,double pitch,int eyes,int mouth,const R2DRotRig *,uint8_t *out,R2DRotAnimeWorkspace *);

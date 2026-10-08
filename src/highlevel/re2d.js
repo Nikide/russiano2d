@@ -19,6 +19,7 @@
 // ближе. Геометрия узла строится один раз и кэшируется до смены его полей.
 // ===========================================================================
 
+import { prepareRotWorldPose } from './rotsprite.js';
 import { TAGS, withAlpha } from './core.js';
 import { registerKindPass, registerKindRenderer, KIND_RE2D } from './kinds.js';
 import { applyRe2dView } from './camera.js';
@@ -535,7 +536,7 @@ export function installRe2d($) {
                         if (!attached) {
                             const pose = billboardPose(v.x, v.y, v.eye, node.x, node.y,
                                 (Number(node.depth) || 0) + node.h / 2, node.angle);
-                            $(node).re2dPose(pose.yaw, pose.pitch);
+                            prepareRotWorldPose(node,pose.yaw,pose.pitch);
                         }
                         const children = [...(r.children || [])];
                         for (const child of children) if (child.depth < node.depth) emit(child, true);
