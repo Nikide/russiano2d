@@ -40,9 +40,10 @@ export function createBaker(app) {
     }
 
     async function openAsset(abs) {
-        if (!abs || !/\.(glb|gltf)$/i.test(abs)) throw new Error('Re2D Baker: выберите модель .glb или .gltf');
+        if (!abs || !/\.(glb|gltf|vrm)$/i.test(abs)) throw new Error('Re2D Baker: выберите модель .glb, .gltf или .vrm');
         s.source = abs;
         s.report = null;
+        s.type = /\.vrm$/i.test(abs) ? 'character' : 'prop';
         s.name = abs.split('/').pop().replace(/\.[^.]+$/, '');
         s.outDir = joinPath(dirOf(abs), s.name);
         killNode();
@@ -148,7 +149,14 @@ export function createBaker(app) {
         const r = s.report;
         if (!r) return '<p class="empty">Отчёта ещё нет.</p>';
         if (!r.source) return '<div class="kv">ok: ' + r.ok + '</div>';
-        return '<div class="kv">Треугольников: ' + r.source.triangles + ' · материалов: ' + r.source.materials + ' · текстур: ' + r.source.textures + '</div>' +
+        const ch = r.character;
+        const chHtml = !ch ? '' :
+            '<div class="kv">VRM ' + (ch.vrm.version ? '1.0' : '0.x') + ' · «' + escapeHtml(ch.vrm.title || '—') + '» · humanoid-костей: ' + ch.vrm.humanBones +
+            (ch.vrm.rotated180 ? ' · повёрнут на 180°' : '') + '</div>' +
+            '<div class="kv">Владение: ' + ch.ownership.triangles + ' треугольников, неоднозначных ' + ch.ownership.ambiguous +
+            (ch.ownership.pairs.length ? ' (' + ch.ownership.pairs.map((p) => escapeHtml(p.a + '/' + p.b) + ' ' + p.triangles).join(', ') + ')' : '') + '</div>' +
+            '<div class="kv">Выражения: ' + (ch.expressions.length ? ch.expressions.map((e) => escapeHtml(e.vrm) + '→' + escapeHtml(e.re2d || '—')).join(', ') : 'нет') + '</div>';
+        return chHtml + '<div class="kv">Треугольников: ' + r.source.triangles + ' · материалов: ' + r.source.materials + ' · текстур: ' + r.source.textures + '</div>' +
             '<div class="kv">Частей: ' + r.parts + ' · отсчётов: ' + r.samples + ' (' + Math.round(r.atlasUsage * 1000) / 10 + '% атласа)</div>' +
             '<div class="kv">UV: ' + escapeHtml(r.uvMode) + ' · PNG ' + r.size + ' · шаг ' + (r.sampleSpacing || 0).toFixed(2) + ' ед.</div>' +
             '<div class="kv">Ошибок ' + r.errors + ' · предупреждений ' + r.warnings + '</div>' +
@@ -158,6 +166,7 @@ export function createBaker(app) {
     function render() {
         doc.text('bk-source', escapeHtml(s.source || '—'));
         for (const sz of SIZES) doc.cls('bk-size-' + sz, 'on', s.size === sz);
+        for (const t of ['prop', 'character']) doc.cls('bk-type-' + t, 'on', s.type === t);
         doc.cls('bk-uv-auto', 'on', s.uv === 'auto');
         doc.cls('bk-uv-existing', 'on', s.uv === 'existing');
         doc.cls('bk-origin-center', 'on', s.origin === 'center');
@@ -209,7 +218,7 @@ export function createBaker(app) {
             return {
                 active: s.active, source: s.source, type: s.type, uv: s.uv, size: s.size, origin: s.origin,
                 ok: r ? !!r.ok : null, parts: r ? r.parts : null, atlasUsage: r ? r.atlasUsage : null,
-                fit: r ? r.fit : null, codes: s.diagnostics.map((d) => d.code), preview: !!s.node,
+                fit: r ? r.fit : null, character: r && r.character ? r.character : null, codes: s.diagnostics.map((d) => d.code), preview: !!s.node,
                 files: r ? r.files : null,
             };
         },

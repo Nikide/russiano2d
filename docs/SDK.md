@@ -76,7 +76,7 @@ SDK не владеет игрой: проекты и ассеты остают�
 | `re2d-info <character.json\|png>` | Re2DSprite: PNG v2, части ↔ кости, статистика карт, проверка |
 | `re2d-debug <character.json\|png> --mode m --out f.png [--scale N]` | Re2DSprite: отладочный вид карт поверхности |
 | `re2d-sample <character.json\|png> --x mx --y my` | Re2DSprite: один отсчёт (ID, XYZ, покрытие, владелец) |
-| `bake-re2d <модель.glb\|.gltf> --type prop --output каталог [--uv auto\|existing] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N]` | Re2D Baker: GLB/glTF → Re2DSprite |
+| `bake-re2d <модель.glb\|.gltf\|.vrm> --type prop\|character --output каталог [--uv auto\|existing] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N]` | Re2D Baker: GLB/glTF → Re2DSprite |
 | `run <каталог> [--scene s] [--frames N] [--headless] [--engine путь]` | запуск игры движком |
 | `build <каталог> --out f [--entry main.js] [--encrypt\|--no-encrypt]` | сборка в один файл (`russiano2d build`) |
 
@@ -176,7 +176,7 @@ SDK не владеет игрой: проекты и ассеты остают�
 мимики и вариантов (их можно только выбирать для просмотра), экипировка и сокеты в
 сцене (сокеты правятся числами), правка карт поверхности. Это следующие шаги Phase 3.
 
-## 7. Re2D Baker (Prop)
+## 7. Re2D Baker (Prop и Character)
 
 **Закон:** 3D разрешён на этапе импорта и не становится архитектурой рантайма. Baker читает
 GLB/glTF как *временный источник данных* и записывает нативный ассет Re2DSprite; результат
@@ -224,8 +224,33 @@ Feet/центр, масштаб, панель *Coordinate Fit* (диапазон
 превью — запечённая модель вращается настоящим `$.re2dSprite`, кнопка «Открыть результат в
 Re2DSprite Studio». GUI вызывает тот же `bake-re2d`, поэтому PNG побайтно совпадает с CLI.
 
-Что НЕ сделано (честно): Character/Weapon/Environment, **VRM** и перенос скелета/скиннинга
-(Phase 5), Re2D Optimized UV, сравнение «источник ↔ Re2D» и метрика различия (§39–40
+### Character / VRM (Phase 5)
+
+```bash
+build/r2d-sdk bake-re2d hero.vrm --type character --output assets/hero/
+# → hero.png, hero.character.json (10 костей, сокеты кистей), hero.animations.json (spin, walk), hero.bake.json
+```
+
+Конвейер поверх Prop (`sdk/native/sdk_char.c`; один код для CLI и GUI):
+
+1. **Скин и VRM:** загрузчик читает узлы, `skins` (inverseBind), JOINTS_0/WEIGHTS_0 и расширения **VRM 0.x** (`extensions.VRM`) и **VRM 1.0**
+   (`VRMC_vrm`): meta, humanoid-кости, пресеты выражений. Геометрия берётся в позе файла: Σ w·(world(joint)·IBM)·v.
+   VRM 0.x (лицом к −Z) разворачивается на 180° вокруг Y; результат совпадает с VRM 1.0 побайтно.
+2. **Rig Re2D (Auto Re2D Character):** humanoid → кости `root, head, arm*, forearm*, hip*, knee*` (Left = сторона X<0, как у Russi);
+   pivot'ы из позиций humanoid-суставов, сокеты `handLeft/handRight` из кистей. Обязательные кости VRM: hips, head, руки и ноги до lowerArm/lowerLeg.
+3. **Владение частями (skin ownership):** треугольник принадлежит кости Re2D с наибольшей суммой весов. Если лучшая кость набрала < 70%,
+   треугольник считается *неоднозначным*: он достаётся доминирующей кости, а число и пары костей уходят в отчёт
+   (`character.ownership.{ambiguous,pairs}`) и в `SDK_BAKE_SKIN_AMBIGUOUS` (warning при > 5%). Сустав без humanoid-предка → root.
+   Негуманоидный скин как character — отказ (`SDK_BAKE_CHARACTER_NO_HUMANOID`), неполный humanoid — `SDK_BAKE_HUMANOID_INCOMPLETE` с именами костей.
+4. **Результат — обычный Re2DSprite:** правится Re2DSprite Studio, рантайм VRM не читает, процедурные клипы `spin`/`walk` заменяются авторскими.
+5. **Выражения:** blendshape VRM в PNG не переносятся (`SDK_BAKE_EXPRESSIONS_NOT_BAKED`); отчёт сопоставляет пресеты эмоциям Re2DSprite
+   (happy, angry, sad, surprised, relaxed→neutral, blink→sleepy), остальное — `null`. Лицо делается в Re2DSprite Studio.
+
+Коды Character: `SDK_BAKE_CHARACTER_NO_HUMANOID`, `HUMANOID_INCOMPLETE`, `SKIN_AMBIGUOUS`, `JOINT_UNMAPPED`, `EXPRESSIONS_NOT_BAKED`, `SKIN_ATTRS`.
+Тест `tests/agent/sdk_character_test.py` проверяет контракт на **синтетическом** VRM (`tests/fixtures/sdk/make_vrm_fixtures.py`);
+реальный файл VRoid/VRM Studio не проверялся, материалы MToon сводятся к baseColor.
+
+Что НЕ сделано (честно): Weapon/Environment, Re2D Optimized UV, сравнение «источник ↔ Re2D» и метрика различия (§39–40
 спецификации), пакетный режим и CI-режим (Phase 7), FBX/OBJ. Качество: плоские карты по оси
 дают просветы на косых гранях и швы между картами — это видно в диагностике (`LOW_DENSITY`)
 и на проекциях; «идеального auto unwrap» baker не обещает.
@@ -255,8 +280,9 @@ $.ui.doc('sdk/ui/shell.rml').click('btn-build')   // нажать элемент
 | Sprite Studio, Animation Studio | IMPLEMENTED для атласа и тегов | нет: tilemap, particles, collision, RmlUi Studio, события клипов |
 | Phase 3: Re2DSprite Studio (загрузка, просмотр рантаймом, yaw/pitch, виды карт, проверка, скелет, сохранение, hot reload) | IMPLEMENTED | `tests/agent/sdk_re2dsprite_test.py`, `sdk_re2d_parity_test.py` |
 | Re2DSprite: редактор клипов, мимики, вариантов, экипировки | NOT STARTED | только выбор для просмотра |
-| Phase 4: Re2D Baker MVP (GLB/glTF → Prop), CLI и GUI на одном коде | IMPLEMENTED | `tests/agent/sdk_baker_test.py` |
-| Baker: Character/Weapon/Environment, VRM, FBX/OBJ, Re2D Optimized UV, сравнение с источником, batch | NOT STARTED / PLANNED | Phase 5, 7 |
+| Phase 4: Re2D Baker MVP (GLB/glTF/VRM → Prop, Character), CLI и GUI на одном коде | IMPLEMENTED | `tests/agent/sdk_baker_test.py` |
+| Phase 5: Character / VRM (humanoid → псевдоскелет Re2D, владение частями, отчёт о неоднозначности) | PARTIAL | `tests/agent/sdk_character_test.py`; только синтетический VRM, выражения не запекаются, MToon не поддержан |
+| Baker: Weapon/Environment, FBX/OBJ, Re2D Optimized UV, сравнение с источником, batch | NOT STARTED / PLANNED | Phase 7 |
 | Валидаторы форматов | PARTIAL | `project`, `sdk.registry`, `json`, `sprite.atlas`, `re2dsprite.character`; остальные — по фазам |
 | Редакторы и Baker | NOT STARTED на момент этого раздела | см. SDK_HANDOFF.md |
 | Нативный агентский клиент | NOT STARTED | Python-клиент `tools/agent_client.py` — тестовая обвязка репозитория, не инструмент SDK |

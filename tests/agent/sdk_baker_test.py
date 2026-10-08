@@ -154,8 +154,8 @@ def cli_cases():
     check(rc == 1 and "SDK_BAKE_UV_RANGE" in codes(d), "тайлящиеся UV: SDK_BAKE_UV_RANGE")
     rc, d = bake(os.path.join(PROPS, "crate.glb"), "--uv", "optimized", "--output", os.path.join(OUT, "bad"))
     check(rc == 2 and "SDK_BAKE_UV_MODE_UNSUPPORTED" in codes(d), "Re2D Optimized честно не реализован")
-    rc, d = bake(os.path.join(PROPS, "crate.glb"), "--type", "character", "--output", os.path.join(OUT, "bad"))
-    check(rc == 1 and "SDK_BAKE_TYPE_UNSUPPORTED" in codes(d), "Character пока не реализован: SDK_BAKE_TYPE_UNSUPPORTED")
+    rc, d = bake(os.path.join(PROPS, "crate.glb"), "--type", "weapon", "--output", os.path.join(OUT, "bad"))
+    check(rc == 1 and "SDK_BAKE_TYPE_UNSUPPORTED" in codes(d), "Weapon пока не реализован: SDK_BAKE_TYPE_UNSUPPORTED")
 
     # --- размеры PNG и детерминизм ---------------------------------------------------------------------------
     rc, d = bake(os.path.join(PROPS, "crate.glb"), "--size", "2048", "--output", os.path.join(OUT, "crate_2048"))

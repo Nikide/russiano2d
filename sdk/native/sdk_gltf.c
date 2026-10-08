@@ -6,7 +6,7 @@
 // и TRS), TRIANGLES/STRIP/FAN, индексы u8/u16/u32, POSITION/TEXCOORD_0 с
 // нормализованными целыми и byteStride, baseColorFactor/baseColorTexture,
 // alphaMode. Не поддержано (и сообщается кодом): sparse-аксессоры, Draco,
-// meshopt, KHR_texture_basisu. Скины и анимации игнорируются предупреждением.
+// meshopt, KHR_texture_basisu. Скины (JOINTS_0/WEIGHTS_0 + inverseBind) дают позу, VRM 0.x/1.0 — humanoid и выражения; анимации не переносятся.
 // ===========================================================================
 #include "sdk_bake.h"
 
@@ -34,6 +34,8 @@ typedef struct Gltf {
     int       *tex_loaded;        // кэш: индекс текстуры glTF → индекс в scene->texs (-2 не пробовали, -1 ошибка)
     BkScene   *scene;
     int        depth;
+    float    **skin_jm;           // на скин: матрицы суставов (мир * inverseBind), 16 float на сустав
+    int        cur_node, cur_skin;
 } Gltf;
 
 // ---------------------------------------------------------------------------
@@ -183,6 +185,7 @@ static int type_comps(const char *t)
     if (!strcmp(t, "VEC2")) return 2;
     if (!strcmp(t, "VEC3")) return 3;
     if (!strcmp(t, "VEC4")) return 4;
+    if (!strcmp(t, "MAT4")) return 16;
     return 0;
 }
 
@@ -378,22 +381,24 @@ static void load_materials(Gltf *g)
 // ---------------------------------------------------------------------------
 // Меши
 // ---------------------------------------------------------------------------
-static bool push_tri(BkScene *s, const float p[3][3], const float uv[3][2], bool has_uv, int material)
+static BkTri *push_tri(BkScene *s, const float p[3][3], const float uv[3][2], bool has_uv, int material)
 {
     if (s->ntri == s->cap) {
         const int cap = s->cap ? s->cap * 2 : 1024;
         BkTri *t = (BkTri *)realloc(s->tris, (size_t)cap * sizeof(BkTri));
-        if (!t) return false;
+        if (!t) return NULL;
         s->tris = t;
         s->cap = cap;
     }
     BkTri *t = &s->tris[s->ntri++];
+    memset(t, 0, sizeof *t);
+    t->skin = -1;
     memcpy(t->p, p, sizeof t->p);
     if (has_uv) memcpy(t->uv, uv, sizeof t->uv);
     else memset(t->uv, 0, sizeof t->uv);
     t->has_uv = has_uv;
     t->material = material;
-    return true;
+    return t;
 }
 
 static void load_primitive(Gltf *g, const R2dJson *prim, const M4 *xf, int mesh_index, int prim_index)
@@ -433,11 +438,43 @@ static void load_primitive(Gltf *g, const R2dJson *prim, const M4 *xf, int mesh_
     int material = r2d_json_int(r2d_json_get(prim, "material"), -1);
     if (material < 0 || material >= s->nmat - 1) material = s->nmat - 1;
 
+    // Скининг: JOINTS_0/WEIGHTS_0 + матрицы суставов скина узла.
+    AccView jv, wv;
+    bool skinned = false;
+    const BkSkin *sk = (g->cur_skin >= 0 && g->cur_skin < s->nskin) ? &s->skin_list[g->cur_skin] : NULL;
+    if (sk && g->skin_jm && g->skin_jm[g->cur_skin] && r2d_json_get(attrs, "JOINTS_0") && r2d_json_get(attrs, "WEIGHTS_0")) {
+        skinned = acc_view(g, r2d_json_int(r2d_json_get(attrs, "JOINTS_0"), -1), &jv, "JOINTS_0") && jv.comps == 4 && jv.count == pos.count &&
+                  acc_view(g, r2d_json_int(r2d_json_get(attrs, "WEIGHTS_0"), -1), &wv, "WEIGHTS_0") && wv.comps == 4 && wv.count == pos.count;
+        if (!skinned) {
+            sdk_diag(g->rep, SDK_WARNING, "SDK_BAKE_SKIN_ATTRS", g->path, loc, NULL,
+                     "Примитив %d меша %d: JOINTS_0/WEIGHTS_0 не читаются — геометрия берётся без скининга", prim_index, mesh_index);
+        }
+    }
     // Вершины → мировые координаты.
     float *wp = (float *)malloc((size_t)pos.count * 3 * sizeof(float));
+    uint16_t (*vj)[4] = skinned ? (uint16_t (*)[4])malloc((size_t)pos.count * sizeof *vj) : NULL;
+    float (*vw)[4] = skinned ? (float (*)[4])malloc((size_t)pos.count * sizeof *vw) : NULL;
     for (int i = 0; i < pos.count; ++i) {
         const float p[3] = { acc_float(&pos, i, 0), acc_float(&pos, i, 1), acc_float(&pos, i, 2) };
-        m4_point(xf, p, wp + i * 3);
+        if (!skinned) { m4_point(xf, p, wp + i * 3); continue; }
+        float wsum = 0, acc[3] = { 0, 0, 0 };
+        for (int k = 0; k < 4; ++k) {
+            const int ji = (int)acc_float(&jv, i, k);
+            vj[i][k] = (uint16_t)(ji >= 0 && ji < sk->n ? ji : 0);
+            vw[i][k] = ji >= 0 && ji < sk->n ? fmaxf(acc_float(&wv, i, k), 0.0f) : 0.0f;
+            wsum += vw[i][k];
+        }
+        for (int k = 0; k < 4; ++k) {
+            if (wsum > 0) vw[i][k] /= wsum;
+            if (vw[i][k] <= 0) continue;
+            M4 jm;
+            memcpy(jm.m, g->skin_jm[g->cur_skin] + (size_t)vj[i][k] * 16, sizeof jm.m);
+            float q[3];
+            m4_point(&jm, p, q);
+            for (int c = 0; c < 3; ++c) acc[c] += vw[i][k] * q[c];
+        }
+        if (wsum <= 0) m4_point(xf, p, acc);
+        memcpy(wp + i * 3, acc, sizeof acc);
     }
     const int tri_count = mode == 4 ? n / 3 : (n >= 3 ? n - 2 : 0);
     for (int t = 0; t < tri_count; ++t) {
@@ -453,6 +490,8 @@ static void load_primitive(Gltf *g, const R2dJson *prim, const M4 *xf, int mesh_
             sdk_diag(g->rep, SDK_ERROR, "SDK_BAKE_INDEX_RANGE", g->path, loc, NULL,
                      "Примитив %d меша %d: индекс вершины вне 0..%d", prim_index, mesh_index, pos.count - 1);
             free(wp);
+            free(vj);
+            free(vw);
             return;
         }
         float p[3][3], uv[3][2];
@@ -460,28 +499,156 @@ static void load_primitive(Gltf *g, const R2dJson *prim, const M4 *xf, int mesh_
             memcpy(p[k], wp + vi[k] * 3, sizeof p[k]);
             if (has_uv) { uv[k][0] = acc_float(&uvv, (int)vi[k], 0); uv[k][1] = acc_float(&uvv, (int)vi[k], 1); }
         }
-        push_tri(s, p, uv, has_uv, material);
+        BkTri *nt = push_tri(s, p, uv, has_uv, material);
+        if (!nt) continue;
+        nt->node = g->cur_node;
+        nt->skin = skinned ? g->cur_skin : -1;
+        nt->skinned = skinned;
+        if (skinned) {
+            for (int k = 0; k < 3; ++k) {
+                memcpy(nt->j[k], vj[vi[k]], sizeof nt->j[k]);
+                memcpy(nt->w[k], vw[vi[k]], sizeof nt->w[k]);
+            }
+        }
     }
     free(wp);
+    free(vj);
+    free(vw);
+}
+
+// Мировые матрицы и иерархия всех узлов (до загрузки мешей: скинам нужны суставы).
+static void fill_worlds(Gltf *g, int node_index, M4 parent, int parent_index)
+{
+    const R2dJson *nodes = r2d_json_get(g->root, "nodes");
+    const R2dJson *node = r2d_json_at(nodes, node_index);
+    if (!node || node_index < 0 || node_index >= g->scene->nnode || ++g->depth > 64) { if (node) g->depth--; return; }
+    BkNode *bn = &g->scene->nodes[node_index];
+    const M4 world = m4_mul(parent, node_matrix(node));
+    bn->parent = parent_index;
+    memcpy(bn->world, world.m, sizeof bn->world);
+    bn->pos[0] = world.m[12]; bn->pos[1] = world.m[13]; bn->pos[2] = world.m[14];
+    const R2dJson *children = r2d_json_get(node, "children");
+    for (int i = 0; children && i < children->count; ++i) fill_worlds(g, r2d_json_int(children->items[i], -1), world, node_index);
+    g->depth--;
 }
 
 static void walk_node(Gltf *g, int node_index, M4 parent)
 {
     const R2dJson *nodes = r2d_json_get(g->root, "nodes");
     const R2dJson *node = r2d_json_at(nodes, node_index);
-    if (!node || ++g->depth > 64) { g->depth--; return; }
+    if (!node || ++g->depth > 64) { if (node) g->depth--; return; }
     const M4 world = m4_mul(parent, node_matrix(node));
     const int mesh = r2d_json_int(r2d_json_get(node, "mesh"), -1);
     if (mesh >= 0) {
         const R2dJson *m = r2d_json_at(r2d_json_get(g->root, "meshes"), mesh);
         const R2dJson *prims = r2d_json_get(m, "primitives");
         g->scene->meshes++;
+        g->cur_node = node_index;
+        g->cur_skin = r2d_json_int(r2d_json_get(node, "skin"), -1);
         for (int i = 0; prims && i < prims->count; ++i) load_primitive(g, prims->items[i], &world, mesh, i);
+        g->cur_skin = -1;
     }
     if (r2d_json_get(node, "skin")) g->scene->skins++;
     const R2dJson *children = r2d_json_get(node, "children");
     for (int i = 0; children && i < children->count; ++i) walk_node(g, r2d_json_int(children->items[i], -1), world);
     g->depth--;
+}
+
+static void load_skins(Gltf *g)
+{
+    BkScene *s = g->scene;
+    const R2dJson *skins = r2d_json_get(g->root, "skins");
+    s->nskin = r2d_json_size(skins);
+    if (!s->nskin) return;
+    s->skin_list = (BkSkin *)calloc((size_t)s->nskin, sizeof(BkSkin));
+    g->skin_jm = (float **)calloc((size_t)s->nskin, sizeof(float *));
+    for (int i = 0; i < s->nskin; ++i) {
+        const R2dJson *joints = r2d_json_get(skins->items[i], "joints");
+        const int n = r2d_json_size(joints);
+        s->skin_list[i].n = n;
+        s->skin_list[i].joints = (int *)calloc((size_t)(n ? n : 1), sizeof(int));
+        g->skin_jm[i] = (float *)calloc((size_t)(n ? n : 1) * 16, sizeof(float));
+        AccView ibm;
+        bool have = false;
+        const int ia = r2d_json_int(r2d_json_get(skins->items[i], "inverseBindMatrices"), -1);
+        if (ia >= 0) have = acc_view(g, ia, &ibm, "inverseBindMatrices") && ibm.comps == 16 && ibm.count >= n;
+        for (int k = 0; k < n; ++k) {
+            const int node = r2d_json_int(joints->items[k], -1);
+            s->skin_list[i].joints[k] = node;
+            M4 w = m4_identity();
+            if (node >= 0 && node < s->nnode) memcpy(w.m, s->nodes[node].world, sizeof w.m);
+            M4 inv = m4_identity();
+            if (have) for (int c = 0; c < 16; ++c) inv.m[c] = acc_float(&ibm, k, c);
+            const M4 jm = m4_mul(w, inv);
+            memcpy(g->skin_jm[i] + (size_t)k * 16, jm.m, sizeof jm.m);
+        }
+    }
+}
+
+static void copy_str(char *dst, size_t cap, const char *src)
+{
+    snprintf(dst, cap, "%s", src ? src : "");
+}
+
+// VRM 0.x: extensions.VRM; VRM 1.0: extensions.VRMC_vrm. Кости — humanoid, выражения — пресеты.
+static void add_vrm_bone(BkScene *s, const char *bone, int node)
+{
+    BkVrm *v = &s->vrm;
+    if (!bone || !bone[0] || node < 0 || node >= s->nnode || v->nbones >= BK_VRM_BONES) return;
+    snprintf(v->bone_name[v->nbones], sizeof v->bone_name[0], "%s", bone);
+    v->bone_node[v->nbones] = node;
+    s->nodes[node].humanoid = v->nbones;
+    v->nbones++;
+}
+
+static void add_vrm_expr(BkVrm *v, const char *name)
+{
+    if (!name || !name[0] || v->nexpr >= BK_VRM_EXPR) return;
+    for (int i = 0; i < v->nexpr; ++i) if (!strcmp(v->expr[i], name)) return;
+    snprintf(v->expr[v->nexpr++], sizeof v->expr[0], "%s", name);
+}
+
+static void load_vrm(Gltf *g)
+{
+    BkScene *s = g->scene;
+    BkVrm *v = &s->vrm;
+    const R2dJson *ext = r2d_json_get(g->root, "extensions");
+    const R2dJson *v1 = r2d_json_get(ext, "VRMC_vrm");
+    const R2dJson *v0 = r2d_json_get(ext, "VRM");
+    if (v1 && v1->type == R2D_JSON_OBJ) {
+        v->version = 2;
+        copy_str(v->spec, sizeof v->spec, r2d_json_str(r2d_json_get(v1, "specVersion"), "1.0"));
+        const R2dJson *meta = r2d_json_get(v1, "meta");
+        copy_str(v->title, sizeof v->title, r2d_json_str(r2d_json_get(meta, "name"), ""));
+        const R2dJson *authors = r2d_json_get(meta, "authors");
+        copy_str(v->author, sizeof v->author, r2d_json_str(r2d_json_at(authors, 0), ""));
+        copy_str(v->license, sizeof v->license, r2d_json_str(r2d_json_get(meta, "licenseUrl"), ""));
+        const R2dJson *hb = r2d_json_get(r2d_json_get(v1, "humanoid"), "humanBones");
+        if (hb && hb->type == R2D_JSON_OBJ) {
+            for (int i = 0; i < hb->count; ++i) add_vrm_bone(s, hb->keys[i], r2d_json_int(r2d_json_get(hb->items[i], "node"), -1));
+        }
+        const R2dJson *ex = r2d_json_get(v1, "expressions");
+        const R2dJson *preset = r2d_json_get(ex, "preset");
+        if (preset && preset->type == R2D_JSON_OBJ) for (int i = 0; i < preset->count; ++i) add_vrm_expr(v, preset->keys[i]);
+        const R2dJson *custom = r2d_json_get(ex, "custom");
+        if (custom && custom->type == R2D_JSON_OBJ) for (int i = 0; i < custom->count; ++i) add_vrm_expr(v, custom->keys[i]);
+    } else if (v0 && v0->type == R2D_JSON_OBJ) {
+        v->version = 1;
+        copy_str(v->spec, sizeof v->spec, r2d_json_str(r2d_json_get(v0, "specVersion"), "0.0"));
+        const R2dJson *meta = r2d_json_get(v0, "meta");
+        copy_str(v->title, sizeof v->title, r2d_json_str(r2d_json_get(meta, "title"), ""));
+        copy_str(v->author, sizeof v->author, r2d_json_str(r2d_json_get(meta, "author"), ""));
+        copy_str(v->license, sizeof v->license, r2d_json_str(r2d_json_get(meta, "licenseName"), ""));
+        const R2dJson *hb = r2d_json_get(r2d_json_get(v0, "humanoid"), "humanBones");
+        for (int i = 0; hb && hb->type == R2D_JSON_ARR && i < hb->count; ++i) {
+            add_vrm_bone(s, r2d_json_str(r2d_json_get(hb->items[i], "bone"), NULL), r2d_json_int(r2d_json_get(hb->items[i], "node"), -1));
+        }
+        const R2dJson *groups = r2d_json_get(r2d_json_get(v0, "blendShapeMaster"), "blendShapeGroups");
+        for (int i = 0; groups && groups->type == R2D_JSON_ARR && i < groups->count; ++i) {
+            const char *preset = r2d_json_str(r2d_json_get(groups->items[i], "presetName"), "");
+            add_vrm_expr(v, preset[0] && strcmp(preset, "unknown") ? preset : r2d_json_str(r2d_json_get(groups->items[i], "name"), ""));
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -596,6 +763,41 @@ bool bk_load(const char *path, BkScene *scene, SdkReport *rep)
     for (int i = 0; i <= r2d_json_size(r2d_json_get(g.root, "textures")); ++i) g.tex_loaded[i] = -2;
     load_materials(&g);
 
+    // Узлы (иерархия, мировые матрицы), скины, VRM — до мешей.
+    {
+        const R2dJson *jn = r2d_json_get(g.root, "nodes");
+        scene->nnode = r2d_json_size(jn);
+        scene->nodes = (BkNode *)calloc((size_t)(scene->nnode ? scene->nnode : 1), sizeof(BkNode));
+        for (int i = 0; i < scene->nnode; ++i) {
+            BkNode *bn = &scene->nodes[i];
+            bn->parent = -1;
+            bn->humanoid = -1;
+            bn->world[0] = bn->world[5] = bn->world[10] = bn->world[15] = 1;
+            const char *nm = r2d_json_str(r2d_json_get(jn->items[i], "name"), "");
+            if (nm[0]) snprintf(bn->name, sizeof bn->name, "%s", nm); else snprintf(bn->name, sizeof bn->name, "node%d", i);
+        }
+        const M4 id0 = m4_identity();
+        const R2dJson *sc0 = r2d_json_at(r2d_json_get(g.root, "scenes"), r2d_json_int(r2d_json_get(g.root, "scene"), 0));
+        const R2dJson *roots0 = sc0 ? r2d_json_get(sc0, "nodes") : NULL;
+        if (roots0) {
+            for (int i = 0; i < roots0->count; ++i) fill_worlds(&g, r2d_json_int(roots0->items[i], -1), id0, -1);
+        } else {
+            bool *ch = (bool *)calloc((size_t)(scene->nnode ? scene->nnode : 1), sizeof(bool));
+            for (int i = 0; i < scene->nnode; ++i) {
+                const R2dJson *cc = r2d_json_get(jn->items[i], "children");
+                for (int k = 0; cc && k < cc->count; ++k) {
+                    const int c = r2d_json_int(cc->items[k], -1);
+                    if (c >= 0 && c < scene->nnode) ch[c] = true;
+                }
+            }
+            for (int i = 0; i < scene->nnode; ++i) if (!ch[i]) fill_worlds(&g, i, id0, -1);
+            free(ch);
+        }
+        load_skins(&g);
+        load_vrm(&g);
+        g.cur_skin = -1;
+    }
+
     const R2dJson *scenes = r2d_json_get(g.root, "scenes");
     const int scene_index = r2d_json_int(r2d_json_get(g.root, "scene"), 0);
     const R2dJson *sc = r2d_json_at(scenes, scene_index);
@@ -619,10 +821,6 @@ bool bk_load(const char *path, BkScene *scene, SdkReport *rep)
         free(child);
     }
     scene->animations = r2d_json_size(r2d_json_get(g.root, "animations"));
-    if (scene->skins) {
-        sdk_diag(rep, SDK_WARNING, "SDK_BAKE_SKIN_IGNORED", path, NULL, NULL,
-                 "В модели %d скин(ов): пресет Prop их игнорирует (поза bind); для персонажей будет пресет Character", scene->skins);
-    }
     if (scene->animations) {
         sdk_diag(rep, SDK_INFO, "SDK_BAKE_ANIMATION_IGNORED", path, NULL, NULL, "Анимации модели (%d) не переносятся в Prop", scene->animations);
     }
@@ -635,6 +833,7 @@ done:
     for (int i = 0; i < g.nbuf; ++i) if (g.bufs[i].owned) free(g.bufs[i].data);
     free(g.bufs);
     free(g.tex_loaded);
+    if (g.skin_jm) { for (int i = 0; i < scene->nskin; ++i) free(g.skin_jm[i]); free(g.skin_jm); }
     r2d_json_free(g.root);
     free(data);
     return ok;
@@ -646,5 +845,8 @@ void bk_free(BkScene *s)
     free(s->texs);
     free(s->mats);
     free(s->tris);
+    free(s->nodes);
+    for (int i = 0; i < s->nskin; ++i) free(s->skin_list[i].joints);
+    free(s->skin_list);
     memset(s, 0, sizeof *s);
 }

@@ -35,7 +35,40 @@ typedef struct BkTri {
     float uv[3][2];
     int   material;
     bool  has_uv;
+    // Скининг (Character): влияния вершин и узел меша (для жёстких креплений).
+    bool     skinned;
+    int      node;                  // узел с мешем
+    int      skin;                  // индекс скина или -1
+    uint16_t j[3][4];               // индексы в skin.joints
+    float    w[3][4];
 } BkTri;
+
+// Узел сцены: нужен Character для скелета и владения частями.
+typedef struct BkNode {
+    char  name[64];
+    int   parent;
+    float world[16];                // мировая матрица (столбцы, как в glTF)
+    float pos[3];                   // мировое положение начала узла
+    int   humanoid;                 // индекс в BkVrm.bone_* или -1
+} BkNode;
+
+typedef struct BkSkin {
+    int *joints;                    // индексы узлов
+    int  n;
+} BkSkin;
+
+// Данные VRM (0.x: extensions.VRM, 1.0: VRMC_vrm).
+#define BK_VRM_BONES 64
+#define BK_VRM_EXPR  24
+typedef struct BkVrm {
+    int  version;                   // 0 — не VRM, 1 — VRM 0.x, 2 — VRM 1.0
+    char title[128], author[128], license[128], spec[16];
+    int  nbones;
+    char bone_name[BK_VRM_BONES][24];
+    int  bone_node[BK_VRM_BONES];
+    int  nexpr;
+    char expr[BK_VRM_EXPR][24];     // нормализованные имена пресетов выражений
+} BkVrm;
 
 typedef struct BkScene {
     BkTri      *tris;
@@ -44,6 +77,11 @@ typedef struct BkScene {
     int         nmat;
     BkTexture  *texs;
     int         ntex;
+    BkNode     *nodes;
+    int         nnode;
+    BkSkin     *skin_list;
+    int         nskin;
+    BkVrm       vrm;
     int         skins, animations, meshes, primitives_skipped;
     char        source_kind[8];      // "glb" / "gltf"
 } BkScene;
@@ -78,7 +116,31 @@ typedef struct BkResult {
     int    uv_overlap_texels;
     char   png_path[1024], json_path[1024], report_path[1024], anim_path[1024];
     char  *report_json;             // машинно-читаемый отчёт (malloc), заполняется всегда
+    char  *extra_json;              // character: владение, VRM, выражения (JSON-объект)
 } BkResult;
+
+// --- Character (VRM / humanoid → псевдоскелет Re2D) ---------------------------
+#define CH_BONES 10
+typedef struct ChRig {
+    int   owner_bone[CH_BONES];     // не используется вызывающим; индексы 0..CH_BONES-1 фиксированы
+    char  name[CH_BONES][24];       // имена костей Re2D (root, head, armLeft, ...)
+    float pivot[CH_BONES][3];       // в координатах glTF (после поворота VRM 0.x)
+    bool  have_hand[2], have_foot[2];
+    float hand[2][3], foot[2][3];   // 0 — VRM left, 1 — VRM right
+    int   slot_of_vrm_left;         // 0 — VRM left = Left по X<0
+    bool  flipped;                  // VRM 0.x: модель повернута на 180° вокруг Y
+    int   tris_per_bone[CH_BONES];
+    int   ambiguous, rigid, unmapped_joints, total;
+    int   pair[CH_BONES][CH_BONES]; // сколько неоднозначных треугольников делят кости
+} ChRig;
+
+// Назначает владельца каждому треугольнику (индекс кости 0..CH_BONES-1) по весам скина
+// и humanoid VRM. Ошибки (нет humanoid, неполный набор костей) — в `rep`.
+bool ch_assign(BkScene *scene, int *tri_owner, ChRig *rig, SdkReport *rep, const char *source);
+void ch_json(R2dSb *out, const ChRig *rig, const float pivot_re2d[CH_BONES][3], const float hand_re2d[2][3], const float foot_re2d[2][3],
+             const bool used[CH_BONES], int first_id, const char *atlas, const char *style, const char *anim_file);
+void ch_anim_json(R2dSb *out, const ChRig *rig);
+void ch_report_json(R2dSb *out, const ChRig *rig, const BkScene *scene);
 
 void bk_default_options(BkOptions *o);
 void bk_result_free(BkResult *res);

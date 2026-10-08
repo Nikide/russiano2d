@@ -1,6 +1,6 @@
 # SDK Handoff
 
-Last updated: 2026-10-08 (Europe/Moscow)
+Last updated: 2026-10-09 (Europe/Moscow)
 
 Спецификация: [Следующая цель SDK AGENT.md](Следующая%20цель%20SDK%20AGENT.md).
 Фактическое состояние SDK — [docs/SDK.md](docs/SDK.md). Аудит — [SDK_AUDIT.md](SDK_AUDIT.md).
@@ -14,7 +14,7 @@ Last updated: 2026-10-08 (Europe/Moscow)
 | 2 Classic 2D slice | IMPLEMENTED | Sprite Studio + Animation Studio на атласе `*.atlas.json` |
 | 3 Re2DSprite Studio | IMPLEMENTED (срез) | просмотр рантаймом, виды карт, скелет, проверка; редакторы клипов/мимики/вариантов/экипировки — NOT STARTED |
 | 4 Re2D Baker MVP | IMPLEMENTED (Prop) | `sdk_gltf.c`, `sdk_bake.c`, GUI `re2d-baker`; Character/VRM/Weapon/Env NOT STARTED |
-| 5 Character / VRM | NOT STARTED | |
+| 5 Character / VRM | PARTIAL (проверено на синтетическом VRM) | `sdk_char.c`, скины в `sdk_gltf.c`, `--type character`; нет: реальный VRoid-файл, лицо/выражения в PNG, материалы MToon, ручная правка владения |
 | 6 Re2D World Studio | NOT STARTED | |
 | 7 Automation / Batch | NOT STARTED | |
 
@@ -73,6 +73,20 @@ Last updated: 2026-10-08 (Europe/Moscow)
 - Тестовые GLB генерируются Python-скриптом (одноразовый dev-инструмент, результат закоммичен в `tests/fixtures/sdk/props/`).
 - Не сделано: Character/Weapon/Environment, VRM, skin→part ownership, Re2D Optimized, source-vs-Re2D, batch.
 
+## Phase 5: решения
+
+- Character = `sdk/native/sdk_char.c` (humanoid → 10 костей Re2D, владение, rig/клипы/отчёт) поверх `bk_bake`;
+  загрузчик glTF теперь читает узлы (мировые матрицы), `skins` (inverseBind), JOINTS_0/WEIGHTS_0 и VRM 0.x/1.0.
+- Геометрия скинится позой файла: вершина = Σ w·(world(joint)·IBM)·v. Для Prop скин даёт ту же позу, но кости не переносятся.
+- Владение: треугольник → кость Re2D с наибольшей суммой весов; «неоднозначным» считается треугольник, у которого лучшая кость
+  набрала < 70% веса. Счётчик и пары костей — в отчёте и в `SDK_BAKE_SKIN_AMBIGUOUS` (warning при > 5%). Сустав без humanoid-предка → root
+  (`SDK_BAKE_JOINT_UNMAPPED`); негуманоидный GLB как character — отказ `SDK_BAKE_CHARACTER_NO_HUMANOID`, а не угадывание.
+- Left/Right в именах костей Re2D = сторона X (X<0 — Left, как у Russi), а не VRM-имя: у VRM 1.0 «left» стоит на +X. VRM 0.x
+  разворачивается на 180° вокруг Y; результат побайтно равен VRM 1.0 (тест).
+- Выражения VRM (blendshape) не запекаются: отчёт даёт сопоставление happy/angry/sad/surprised/relaxed→neutral/blink→sleepy, остальное — `null`.
+- Клипы `spin` и `walk` процедурные (маятник рук/ног) — не авторская анимация. Анимации модели не переносятся.
+- Фикстуры VRM синтетические: `tests/fixtures/sdk/make_vrm_fixtures.py` (тестовая обвязка). Реальный файл VRoid/VRM Studio НЕ проверялся.
+
 ## Известные ограничения / не сделано
 
 - ImGui-оверлей (`src/debug_ui.*`) НЕ удалён. Текст сцены уже рисуется без ImGui
@@ -83,7 +97,10 @@ Last updated: 2026-10-08 (Europe/Moscow)
 
 ## Следующий шаг
 
-Phase 5: Character / VRM. Разбор VRM (glTF + расширения VRM 0.x `extensions.VRM` и VRMC_vrm 1.0): humanoid-кости →
+Phase 6: Re2D World Studio (карта 2D: стены, cells, height spans, порталы, лестницы/уклоны, compile, validate, preview; тест room-over-room;
+рантайм `re2d_world.c` порталов/PVS/slopes не имеет — это данные и диагностика компилятора, PARTIAL). Далее Phase 7.
+
+(Выполнено в Phase 5, оставлено для истории) Character / VRM. Разбор VRM (glTF + расширения VRM 0.x `extensions.VRM` и VRMC_vrm 1.0): humanoid-кости →
 rig Re2D (Auto Re2D Character: head/torso/arms/legs/hair/clothes), skin weights → владение частями по доминирующей кости
 (`owner = argmax weight`) с отчётом о неоднозначности (§36), expressions → emotions, материалы. Скелет: нужен разбор
 `skins` (joints/inverseBindMatrices) и JOINTS_0/WEIGHTS_0 в `sdk_gltf.c`. Реальный VRM в репозитории не лежит —

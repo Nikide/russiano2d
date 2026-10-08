@@ -1,5 +1,15 @@
 # История изменений
 
+## SDK: Character / VRM в Re2D Baker (Phase 5)
+
+- `r2d-sdk bake-re2d --type character`: VRM 0.x и 1.0 → псевдоскелет Re2DSprite (10 костей,
+  сокеты кистей), владение частями по весам скина, `*.character.json` + `spin`/`walk` + отчёт.
+  Неоднозначное владение считается и сообщается (`SDK_BAKE_SKIN_AMBIGUOUS`), выражения VRM
+  сопоставляются эмоциям Re2DSprite (в PNG не запекаются).
+- Загрузчик glTF читает узлы, скины (inverseBind, JOINTS_0/WEIGHTS_0) и расширения VRM.
+- Re2D Baker (GUI): тип Character, `*.vrm` в реестре, панель VRM/владения/выражений.
+- Проверено на синтетическом VRM (генератор в `tests/fixtures/sdk/`); реальный VRoid-файл не проверялся.
+
 ## SDK: Re2D Baker MVP — GLB/glTF → Re2DSprite (Phase 4)
 
 - `r2d-sdk bake-re2d`: GLB/glTF (внешний `.bin`, `data:`-URI, иерархия узлов, текстуры

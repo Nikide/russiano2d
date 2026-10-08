@@ -179,6 +179,7 @@ typedef struct Baker {
     int       *tri_at;         // треугольник в тексель (W*H) или -1
     float     *depth_at;
     int       *part_of_mat;    // материал → индекс части (-1 нет)
+    int       *tri_part;       // треугольник → индекс части (prop: по материалу, character: по кости)
     int        nparts;
     int        part_mat[254];
     char       part_name[254][80];
@@ -376,9 +377,14 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
     uint8_t *png = NULL;
     char name[128];
 
-    if (strcmp(opt->type, "prop") != 0) {
+    const bool is_char = opt->type && !strcmp(opt->type, "character");
+    ChRig rig;
+    int *tri_owner = NULL;
+    V3 *normals = NULL;
+    memset(&rig, 0, sizeof rig);
+    if (strcmp(opt->type, "prop") != 0 && !is_char) {
         sdk_diag(rep, SDK_ERROR, "SDK_BAKE_TYPE_UNSUPPORTED", source, NULL, NULL,
-                 "Тип «%s» ещё не реализован: сейчас поддержан только prop (character — Phase 5, weapon/environment — планируются)", opt->type);
+                 "Тип «%s» ещё не реализован: поддержаны prop и character (weapon/environment — планируются)", opt->type);
         return early_fail(res, opt, rep, NULL);
     }
     if (opt->size != 1024 && opt->size != 2048 && opt->size != 4096) {
@@ -392,6 +398,14 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
     }
     res->triangles = scene.ntri;
     res->textures = scene.ntex;
+    if (!is_char && scene.skins) {
+        sdk_diag(rep, SDK_WARNING, "SDK_BAKE_SKIN_IGNORED", source, NULL, NULL,
+                 "В модели %d скин(ов): пресет Prop берёт позу как есть и кости не переносит; для персонажей используйте --type character", scene.skins);
+    }
+    if (is_char) {
+        tri_owner = (int *)calloc((size_t)(scene.ntri ? scene.ntri : 1), sizeof(int));
+        if (!ch_assign(&scene, tri_owner, &rig, rep, source)) goto done;
+    }
 
     if (opt->name && opt->name[0]) snprintf(name, sizeof name, "%s", opt->name);
     else {
@@ -404,7 +418,7 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
     // glTF: X вправо, Y вверх, Z к зрителю. Re2D: X вправо, Y ВНИЗ, Z к зрителю.
     BkTri *tris = scene.tris;
     float mn[3] = { 1e30f, 1e30f, 1e30f }, mx[3] = { -1e30f, -1e30f, -1e30f };
-    V3 *normals = (V3 *)calloc((size_t)scene.ntri, sizeof(V3));
+    normals = (V3 *)calloc((size_t)scene.ntri, sizeof(V3));
     int degenerate = 0;
     for (int i = 0; i < scene.ntri; ++i) {
         BkTri *t = &tris[i];
@@ -454,6 +468,18 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
             }
         }
     }
+    float pv[CH_BONES][3], hand_r[2][3], foot_r[2][3];
+    if (is_char) {
+        // Тот же перенос, что у вершин: Y вниз, затем сдвиг и масштаб.
+        for (int b = 0; b < CH_BONES; ++b) {
+            const float q[3] = { rig.pivot[b][0], -rig.pivot[b][1], rig.pivot[b][2] };
+            for (int j = 0; j < 3; ++j) pv[b][j] = (q[j] + shift[j]) * scale;
+        }
+        for (int k = 0; k < 2; ++k) {
+            const float h[3] = { rig.hand[k][0], -rig.hand[k][1], rig.hand[k][2] }, f[3] = { rig.foot[k][0], -rig.foot[k][1], rig.foot[k][2] };
+            for (int j = 0; j < 3; ++j) { hand_r[k][j] = (h[j] + shift[j]) * scale; foot_r[k][j] = (f[j] + shift[j]) * scale; }
+        }
+    }
     res->scale = scale;
     memcpy(res->min, lo, sizeof lo);
     memcpy(res->max, hi, sizeof hi);
@@ -481,8 +507,21 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
     bk.W = MAP_W * bk.T;
     bk.H = MAP_H * bk.T;
     bk.part_of_mat = (int *)malloc((size_t)scene.nmat * sizeof(int));
+    bk.tri_part = (int *)malloc((size_t)(scene.ntri ? scene.ntri : 1) * sizeof(int));
     for (int i = 0; i < scene.nmat; ++i) bk.part_of_mat[i] = -1;
-    for (int i = 0; i < scene.ntri; ++i) {
+    bool used_bone[CH_BONES] = { false };
+    if (is_char) {
+        if (opt->first_id + CH_BONES - 1 > 254) {
+            sdk_diag(rep, SDK_ERROR, "SDK_USAGE", source, NULL, NULL, "Для character --first-id не больше %d (10 частей)", 254 - CH_BONES + 1);
+            goto done;
+        }
+        for (int i = 0; i < scene.ntri; ++i) {
+            bk.tri_part[i] = tri_owner[i];
+            if (!(normals[i].x == 0 && normals[i].y == 0 && normals[i].z == 0)) used_bone[tri_owner[i]] = true;
+        }
+        for (int b = 0; b < CH_BONES; ++b) if (used_bone[b]) bk.nparts++;
+    }
+    for (int i = 0; !is_char && i < scene.ntri; ++i) {
         if (normals[i].x == 0 && normals[i].y == 0 && normals[i].z == 0) continue;
         const int m = tris[i].material;
         if (bk.part_of_mat[m] >= 0) continue;
@@ -496,6 +535,7 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
         sanitize_group(scene.mats[m].name, bk.part_name[bk.nparts], sizeof bk.part_name[0]);
         bk.nparts++;
     }
+    if (!is_char) for (int i = 0; i < scene.ntri; ++i) bk.tri_part[i] = bk.part_of_mat[tris[i].material];
     res->parts = bk.nparts;
     res->materials = scene.nmat - 1;
     // Текстура без UV на примитиве не может быть наложена: говорим об этом, а не молчим.
@@ -640,7 +680,7 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
             uint8_t c[4];
             shade_texel(&bk, bx, by, &pos, c);
             const int ti = bk.tri_at[(size_t)by * (size_t)bk.W + (size_t)bx];
-            const int part = bk.part_of_mat[tris[ti].material];
+            const int part = bk.tri_part[ti];
             const float qx = qenc(pos.x, 4), qy = qenc(pos.y, 2), qz = qenc(pos.z, 4);
             const int cx0 = (int)qx / 16, fx = (int)qx % 16, cy0 = (int)qy / 16, fy = (int)qy % 16, cz0 = (int)qz / 16, fz = (int)qz % 16;
             put_block(png, S, k, 0 + mx, 768 + my, (uint8_t)(opt->first_id + part), (uint8_t)(part + 1), 0, 255);          // ID, группа
@@ -675,9 +715,35 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
     {
         R2dSb js;
         r2d_sb_init(&js);
-        r2d_sb_printf(&js, "{\"version\":1,\"atlas\":");
         char base_png[160];
         snprintf(base_png, sizeof base_png, "%s.png", name);
+        if (is_char) {
+            char anim_base[160];
+            snprintf(anim_base, sizeof anim_base, "%s.animations.json", name);
+            ch_json(&js, &rig, pv, hand_r, foot_r, used_bone, opt->first_id, base_png, opt->style ? opt->style : "anime", anim_base);
+            R2dSb ra;
+            r2d_sb_init(&ra);
+            ch_anim_json(&ra, &rig);
+            const bool wa = write_pretty(res->anim_path, ra.data);
+            r2d_sb_free(&ra);
+            if (!wa) {
+                sdk_diag(rep, SDK_ERROR, "SDK_WRITE_FAILED", res->anim_path, NULL, NULL, "Не удалось записать %s", res->anim_path);
+                r2d_sb_free(&js);
+                goto done;
+            }
+            R2dSb rc;
+            r2d_sb_init(&rc);
+            ch_report_json(&rc, &rig, &scene);
+            res->extra_json = r2d_sb_take(&rc);
+            if (!write_pretty(res->json_path, js.data)) {
+                sdk_diag(rep, SDK_ERROR, "SDK_WRITE_FAILED", res->json_path, NULL, NULL, "Не удалось записать %s", res->json_path);
+                r2d_sb_free(&js);
+                goto done;
+            }
+            r2d_sb_free(&js);
+            goto files_done;
+        }
+        r2d_sb_printf(&js, "{\"version\":1,\"atlas\":");
         r2d_sb_put_json_string(&js, base_png);
         r2d_sb_printf(&js, ",\"style\":\"%s\",\"rig\":{\"bones\":[{\"name\":\"object\",\"pivot\":[0,0,0]}],\"parts\":[", opt->style ? opt->style : "anime");
         for (int i = 0; i < bk.nparts; ++i) r2d_sb_printf(&js, "%s{\"id\":%d,\"bone\":\"object\"}", i ? "," : "", opt->first_id + i);
@@ -708,10 +774,28 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
             goto done;
         }
     }
+files_done:
     ok = rep->errors == 0;
     res->ok = ok;
+    if (is_char && ok) {
+        const int pct = rig.total ? (int)(100.0 * rig.ambiguous / rig.total + 0.5) : 0;
+        char d[160];
+        snprintf(d, sizeof d, "{\"ambiguous\":%d,\"total\":%d,\"percent\":%d}", rig.ambiguous, rig.total, pct);
+        sdk_diag(rep, pct > 5 ? SDK_WARNING : SDK_INFO, "SDK_BAKE_SKIN_AMBIGUOUS", source, NULL, d,
+                 "Владение частями: %d из %d треугольников (%d%%) делят влияние нескольких костей; часть достаётся доминирующей. Границы суставов могут выглядеть резче, чем в источнике", rig.ambiguous, rig.total, pct);
+        if (rig.unmapped_joints) {
+            snprintf(d, sizeof d, "{\"joints\":%d}", rig.unmapped_joints);
+            sdk_diag(rep, SDK_INFO, "SDK_BAKE_JOINT_UNMAPPED", source, NULL, d, "%d суставов скина без humanoid-предка отнесены к root", rig.unmapped_joints);
+        }
+        if (scene.vrm.nexpr) {
+            sdk_diag(rep, SDK_INFO, "SDK_BAKE_EXPRESSIONS_NOT_BAKED", source, NULL, NULL,
+                     "Выражения VRM (%d) — blendshape: в PNG не переносятся, в отчёте дано сопоставление с эмоциями Re2DSprite; лицо правится в Re2DSprite Studio", scene.vrm.nexpr);
+        }
+    }
 
 done:
+    free(tri_owner);
+    free(bk.tri_part);
     free(png);
     free(bk.skip);
     free(normals);
@@ -733,6 +817,8 @@ done:
 
 void bk_result_free(BkResult *res)
 {
+    free(res->extra_json);
+    res->extra_json = NULL;
     free(res->report_json);
     res->report_json = NULL;
 }
@@ -759,6 +845,11 @@ void bk_report_json(const BkResult *res, const BkOptions *opt, const BkScene *sc
     r2d_sb_puts(out, ",\"animations\":");
     if (res->anim_path[0]) r2d_sb_put_json_string(out, res->anim_path); else r2d_sb_puts(out, "null");
     r2d_sb_puts(out, "},");
+    if (res->extra_json) {
+        r2d_sb_puts(out, "\"character\":");
+        r2d_sb_puts(out, res->extra_json);
+        r2d_sb_puts(out, ",");
+    }
     sdk_report_put_counts(rep, out);
     r2d_sb_puts(out, ",");
     sdk_report_put(rep, out);
@@ -772,7 +863,7 @@ int sdk_cmd_bake_re2d(const SdkArgs *a)
     const char *source = sdk_arg_positional(a, 0);
     if (!source) {
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d-sdk bake-re2d <модель.glb|.gltf> --type prop --output <каталог> "
+            "Использование: r2d-sdk bake-re2d <модель.glb|.gltf> --type prop|character --output <каталог> "
             "[--name имя] [--uv auto|existing] [--origin center|feet] [--size 1024|2048|4096] [--scale S] [--style anime|pixel] [--first-id N]");
         sdk_report_free(&rep);
         return rc;

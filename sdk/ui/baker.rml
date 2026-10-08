@@ -23,7 +23,7 @@
             <h4>Пресет</h4>
             <div class="field-row">
                 <button id="bk-type-prop" class="btn small on">Prop</button>
-                <button id="bk-type-character" class="btn small off">Character</button>
+                <button id="bk-type-character" class="btn small">Character</button>
                 <button id="bk-type-weapon" class="btn small off">Weapon</button>
                 <button id="bk-type-env" class="btn small off">Environment</button>
             </div>
