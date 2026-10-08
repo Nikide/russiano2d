@@ -150,3 +150,6 @@ tests/agent/rotsprite_json_test.py, tests/rotsprite/surface_test.py.
 holdRifle — изготовка вперёд, оба хвата проверяются по матрицам сокетов.
 Базовая модельная заготовка: assets/rotsprite/rotsprite_v2_model_template.png
 и demos/rotsprite/templates/russi.character.json.
+
+Выбор частей изображения для рук FPS: `.re2dVisibleParts(ids|null)`,
+[контракт](highlevel/re2dsprite.md#видимые-части-модели). Кости и sockets сохраняются.

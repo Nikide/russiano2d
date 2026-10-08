@@ -108,7 +108,7 @@ function affine(pivot,translation,rotation,scale=[1,1,1]) {
     for (let row=0;row<3;row++) {for (let col=0;col<3;col++) m[row*4+col]*=scale[col];m[row*4+3]=pivot[row]+translation[row]-m[row*4]*pivot[0]-m[row*4+1]*pivot[1]-m[row*4+2]*pivot[2];}return m;
 }
 const transform = (m,p) => [0,1,2].map(row=>m[row*4]*p[0]+m[row*4+1]*p[1]+m[row*4+2]*p[2]+m[row*4+3]);
-export function buildRotModelPose(definition,sample={},rig={},manual={}) {
+export function buildRotModelPose(definition,sample={},rig={},manual={},visibleParts=null) {
     const boneMatrices={},body=rig.body!==false;
     for (const b of definition.rig.bones) {
         const values={...sample.bones?.[b.name],...manual[b.name]};
@@ -119,7 +119,7 @@ export function buildRotModelPose(definition,sample={},rig={},manual={}) {
     }
     const records=definition.rig.parts.map(p=>{
         const bind=body?p.bind:p.portraitBind,m=multiply(boneMatrices[p.bone],affine([0,0,0],bind.translation,bind.rotation,bind.scale));
-        return [p.id,p.selector ? ['','eyes','mouth','brows'].indexOf(p.selector):0,p.variant ?? 0,p.oneSided?1:0,body || p.portrait ? 1:0,...m];
+        return [p.id,p.selector ? ['','eyes','mouth','brows'].indexOf(p.selector):0,p.variant ?? 0,p.oneSided?1:0,(body || p.portrait) && (visibleParts===null || visibleParts.includes(p.id)) ? 1:0,...m];
     });
     return {records,bones:boneMatrices,scale:body?definition.projection.bodyScale:definition.projection.portraitScale};
 }
@@ -141,7 +141,7 @@ function applyModel($,node) {
         for (const [bone,values] of Object.entries(extra.bones)) sample.bones[bone]={...sample.bones[bone],...values};
         Object.assign(sample.face,extra.face);
     }
-    r.modelPose=buildRotModelPose(r.definition,sample,r.rig,r.boneOverrides);
+    r.modelPose=buildRotModelPose(r.definition,sample,r.rig,r.boneOverrides,r.visibleParts ?? null);
     let pose=engine.rotSpriteInfo(r.handle);
     if (r.attachment) {
         const a=r.attachment,parent=a.parent.rot_sprite;
@@ -242,6 +242,14 @@ export function installRotSprite($) {
             $(node).rotExpression(modes[name]);
         });
     });
+    // Select rendered atlas parts without removing bones or attachment sockets.
+    def('rotVisibleParts', function (parts = null) { return this.eachNode((i,node) => {
+        const r=node.rot_sprite;
+        if (!r?.definition) throw new TypeError('rotVisibleParts: JSON model required');
+        if (parts!==null && (!Array.isArray(parts) || parts.some(id=>!Number.isInteger(id) || !r.definition.rig.parts.some(p=>p.id===id))))
+            throw new TypeError('rotVisibleParts: array of model part IDs or null');
+        r.visibleParts=parts===null ? null : [...new Set(parts)];applyModel($,node);
+    }); });
     def('rotRig', function (options = {}) { return this.eachNode((i,node) => {
         if (!node.rot_sprite) throw new TypeError('rotRig: сначала загрузите PNG');
         const r={body:false,phase:0,stride:0,armLeft:0,armRight:0,headYaw:0,...node.rot_sprite.rig,...options};
@@ -287,7 +295,8 @@ export function installRotSprite($) {
             if (old.definition) {
                 const r=temp.get(0).rot_sprite;
                 if (Object.keys(r.animations.clips).length && !Object.hasOwn(r.animations.clips,old.motion.mode)) throw new TypeError('rotReload: активный клип удалён');
-                r.motion={...old.motion};r.boneOverrides=cloneData(old.boneOverrides);r.layers=cloneData(old.layers);r.faceBase={...old.faceBase};
+                if (old.visibleParts?.some(id=>!r.definition.rig.parts.some(p=>p.id===id))) throw new TypeError('rotReload: visible part removed');
+                r.visibleParts=old.visibleParts===undefined || old.visibleParts===null ? null : [...old.visibleParts];r.motion={...old.motion};r.boneOverrides=cloneData(old.boneOverrides);r.layers=cloneData(old.layers);r.faceBase={...old.faceBase};
                 for (const key of Object.keys(r.layers)) if (!Object.hasOwn(r.animations.clips,key)) throw new TypeError('rotReload: активный слой удалён');
             }
             if (pose.version===2) temp.rotRig(old.rig);
@@ -387,7 +396,7 @@ export function installRotSprite($) {
     };
     // Public name; legacy namespace and node methods remain compatible.
     $.re2dSprite=$.rotSprite;
-    for (const old of ['rotSpriteAtlas','rotStyle','rotPose','rotExpression','rotEmotion','rotRig','rotMotion','rotPart','rotReload','rotHotReload','rotAttach','rotDetach','rotVariant','rotLayer','rotBone','rotSeek']) {
+    for (const old of ['rotSpriteAtlas','rotStyle','rotPose','rotExpression','rotEmotion','rotRig','rotMotion','rotPart','rotReload','rotHotReload','rotAttach','rotDetach','rotVariant','rotLayer','rotBone','rotSeek','rotVisibleParts']) {
         const current=old.replace(/^rot/,'re2d');
         def(current,function(...args) {return this[old](...args);});
     }

@@ -90,3 +90,25 @@ row = `[id,selector,variant,oneSided,visible,...12 affine]`.
 `engine.rotSpritePart(handle,path,ids)` также принимает массив ID 1..254.
 
 Полное руководство разработчика/художника: [RE2DSPRITE_GUIDE.md](../RE2DSPRITE_GUIDE.md).
+
+### Видимые части модели
+
+`.re2dVisibleParts(ids=null)` задаёт массив part IDs из `rig.parts`. `null`
+восстанавливает все части, `[]` скрывает всё изображение. Требуется JSON-модель;
+неизвестные IDs отклоняются. Кости, sockets и attachments продолжают работать.
+Маска сохраняется при смене стиля и reload; удаление выбранного ID из новой
+модели отклоняет reload с сохранением прежнего ресурса. Legacy alias:
+`.rotVisibleParts`.
+
+Например, руки FPS берутся из тех же частей Руси, без отдельной модели игрока:
+
+```js
+const hands = $.re2dSprite.from('demos/rotsprite/russi.character.json');
+const ids = $.re2dSprite.definition(hands).rig.parts
+    .filter(p => ['armLeft','armRight','forearmLeft','forearmRight'].includes(p.bone))
+    .map(p => p.id);
+hands.re2dVisibleParts(ids).re2dLayer('holdRifle').re2dPose(200,-12);
+const ak = $.re2dSprite.equip(hands,'ak47');
+```
+
+Это фильтр синтеза изображения, не удаление костей и не игровая система оружия.

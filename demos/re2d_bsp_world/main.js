@@ -50,7 +50,7 @@ function muzzleOnScreen() {
     const z=-Math.sin(yaw)*m[3]+Math.cos(yaw)*m[11];
     const y=Math.cos(pitch)*m[7]-Math.sin(pitch)*z;
     const scale=holder.get(0).rot_sprite.modelPose.scale;
-    return {x:engine.width*.72+x*scale*(1200/128),y:engine.height*.88+y*scale*(1200/128)};
+    return {x:engine.width*.90+x*scale*(1400/128),y:engine.height*.84+y*scale*(1400/128)};
 }
 function fire() {
     if(shotTime>0||reloadTime>0)return false;
@@ -89,12 +89,14 @@ $.ready(()=>{
     globalThis.drawTargets=true;
     globalThis.hero=$('<player>',{id:'world-player'}).body(null).at(-130,0).depth(0).hide();
     globalThis.npcs=SPAWNS.map(([x,y,z],i)=>$.re2dSprite.from(CHARACTER,{id:'russi-'+i})
-        .re2dStyle('pixel').at(x,y).size(96,96).depth(z).angle(Math.PI).health(100).attr('state','idle').hide());
+        .re2dStyle('anime').at(x,y).size(96,96).depth(z).angle(Math.PI).health(100).attr('state','idle').hide());
     globalThis.view={x:-130,y:0,eye:48,yaw:0,pitch:0,fov:70};
     // AK is the existing equipment model attached to the existing hand socket.
-    globalThis.holder=$.re2dSprite.from(CHARACTER,{id:'weapon-holder'}).re2dStyle('pixel')
-        .re2dLayer('holdRifle').re2dPose(-115,-12).hide();
-    globalThis.ak=$.re2dSprite.equip(holder,'ak47',{id:'player-ak'}).re2dStyle('pixel').hide();
+    globalThis.holder=$.re2dSprite.from(CHARACTER,{id:'weapon-holder'}).re2dStyle('anime')
+        .re2dLayer('holdRifle').re2dPose(220,-12).hide();
+    holder.re2dVisibleParts($.re2dSprite.definition(holder).rig.parts.filter(p=>['armLeft','armRight','forearmLeft','forearmRight'].includes(p.bone)).map(p=>p.id));
+    mouseLocked=true;$.window.mouseLock(true);
+    globalThis.ak=$.re2dSprite.equip(holder,'ak47',{id:'player-ak'}).re2dStyle('anime').hide();
     shotSound=engine.audio.load('demos/assets/audio/sfx/shoot_01.ogg');
     reloadSound=engine.audio.load('demos/assets/audio/sfx/reload.ogg');
     globalThis.hud=$.ui.doc('demos/re2d_bsp_world/hud.rml').show();
@@ -128,14 +130,16 @@ $.update(dt=>{
     view.x=h.x;view.y=h.y;view.eye=h.depth+48;
     if($.input.mouseDown('left')||$.input.down('space'))fire();
     hud.text('floor',`АК · ${magazine}/30 · выбыло ${kills}/${npcs.length} · высота ${h.depth} · ${message}`);
-    hud.text('keys','WASD ходьба · мышь/стрелки взгляд · M захват мыши · ЛКМ/Space огонь · R магазин · F цели · E этаж · P проекция · V оружие · Esc отпустить мышь');
+    hud.text('keys','WASD ходьба · мышь/стрелки взгляд · M переключить мышь · ЛКМ/Space огонь · R магазин · F цели · E этаж · P проекция · V оружие · Esc отпустить мышь');
 });
 $.render(()=>{
-    world.render(view,drawTargets?npcs.filter(n=>n.alive()):[],320,180);
+    world.render(view,drawTargets?npcs.filter(n=>n.alive()):[],Math.min(1024,engine.width),Math.min(1024,engine.height));
     if(drawWeapon) {
         const recoil=shotTime/.11;
-        holder.re2dPose(-115,-12+recoil*5);
-        engine.drawSprite(ak.get(0).rot_sprite.sprite,engine.width*.72,engine.height*.88+recoil*12,1200,1200,0,0xffffffff);
+        holder.re2dPose(220,-12+recoil*5);
+        const arm=holder.get(0),weapon=ak.get(0);
+        const draw=n=>engine.drawSprite(n.rot_sprite.sprite,engine.width*.90,engine.height*.84+recoil*12,1400,1400,0,0xffffffff);
+        if(weapon.depth<arm.depth){draw(weapon);draw(arm);}else{draw(arm);draw(weapon);}
         if(flash>0){const p=muzzleOnScreen();engine.drawSprite(engine.whiteSprite,p.x,p.y,18,18,Math.PI/4,0xff75dfff);}
     }
 });

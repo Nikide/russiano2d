@@ -1,6 +1,11 @@
 import { test,eq,near,truthy,finish } from './_harness.mjs';
 import { validateRotDefinition,validateRotAnimations,sampleRotClip,buildRotModelPose,installRotSprite,tickRotSprite } from '../../src/highlevel/rotsprite.js';
 import { createApi } from '../../src/highlevel/api.js';
+test('part visibility masks rendering without deleting socket bone transforms',()=>{
+ const d=validateRotDefinition({version:1,atlas:'prop.png',rig:{bones:[{name:'root',pivot:[0,0,0]}],parts:[{id:80,bone:'root'},{id:81,bone:'root'}]}});
+ const p=buildRotModelPose(d,{}, {body:true},{},[81]);eq(p.records[0][4],0);eq(p.records[1][4],1);truthy(p.bones.root);
+ const full=buildRotModelPose(d);eq(full.records[0][4],1);
+});
 const base=()=>({version:1,atlas:'prop.png',style:'pixel',rig:{bones:[{name:'root',pivot:[0,0,0]},{name:'child',parent:'root',pivot:[10,0,0]}],parts:[{id:80,bone:'child'}],joints:[{name:'tip',bone:'child',point:[10,0,0]}]},groups:{shell:[80]},animations:{version:1,clips:{spin:{duration:2,loop:true,tracks:[{target:'root',channel:'rotation.z',keys:[[0,0],[2,180]]}]},blink:{duration:1,loop:false,tracks:[{target:'face',channel:'eyes',keys:[[0,'open'],[.5,'closed'],[1,'open']]}]}},defaults:{body:true,motion:'spin'}}});
 const throws=f=>{let bad=false;try{f();}catch(e){bad=true;}truthy(bad);};
 test('JSON validation rejects cycles, invalid part IDs, duplicate tracks and key times',()=>{
@@ -32,6 +37,8 @@ test('High-level JSON assembly, layers, overrides, reload and legacy coexistence
  const n=$.re2dSprite.from('models/prop.json',{id:'json'});n.re2dPose(10,5).re2dRig({body:true}).re2dLayer('blink',false).re2dBone('child',{rotation:[0,0,0]}).re2dHotReload(false).re2dPose(0,0);eq($.rotSprite.info(n).path,'models/prop.png');
  n.rotSeek(1);let info=$.rotSprite.info(n);near(info.joints.tip.x,64,1e-9);near(info.joints.tip.y,74,1e-9);
  n.rotLayer('blink');tickRotSprite(.5);eq($.rotSprite.info(n).eyes,2);n.rotLayer('blink',false);eq($.rotSprite.info(n).eyes,0);
+ n.rotVisibleParts([]);eq(n.get(0).rot_sprite.modelPose.records[0][4],0);n.rotReload();eq(n.get(0).rot_sprite.modelPose.records[0][4],0);
+ throws(()=>n.rotVisibleParts([999]));n.rotVisibleParts(null);eq(n.get(0).rot_sprite.modelPose.records[0][4],1);
  n.rotBone('child',{translation:[2,0,0]}).rotPart('shell','donor.png').rotStyle('anime');
  eq($.rotSprite.info(n).style,'anime');eq($.rotSprite.info(n).parts.shell,'donor.png');eq($.rotSprite.info(n).animationTime,1.5);
  n.rotHotReload();stamp='2';tickRotSprite(.5);truthy($.rotSprite.info(n).reloads>1);
