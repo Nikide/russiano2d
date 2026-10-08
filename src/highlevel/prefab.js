@@ -279,6 +279,10 @@ export function nodeToData(node) {
         sprite: spriteField(node),
         frame: num(node.frame_index, 0),
 
+        // Вид узла пишется только для не-2D: так сохранения 2D-игр остаются
+        // побайтово прежними (docs/RE2D.md, правило «ноль стоимости для 2D»).
+        ...(node.kind && node.kind !== '2d' ? { kind: String(node.kind) } : null),
+
         attrs: attrs === undefined ? {} : attrs,
         children: (node.child_nodes || []).map(nodeToData),
     };
@@ -396,6 +400,7 @@ export function applyData(data, parent) {
     if (data.team !== undefined) node.team = num(data.team, 0);
     if (data.maxHp !== undefined) node.max_hp = num(data.maxHp, 0);
     if (data.hp !== undefined) node.cur_hp = num(data.hp, 0);
+    if (data.kind !== undefined) node.set('kind', data.kind);
 
     if (data.hitbox) node.hitbox = { w: num(data.hitbox[0], node.w), h: num(data.hitbox[1], node.h) };
     // Слои и маски: пишем через set(), чтобы фильтр доехал и до уже
@@ -440,7 +445,7 @@ const DATA_FIELDS = new Set([
     'scaleX', 'scaleY', 'alpha', 'visible', 'layer', 'depth', 'color',
     'hoverColor', 'textColor', 'fillColor', 'text', 'fontSize', 'value',
     'max', 'radius', 'intensity', 'r', 'team', 'hp', 'maxHp', 'body',
-    'gravity', 'hitbox', 'collisionMask', 'sprite', 'frame', 'attrs', 'children',
+    'gravity', 'hitbox', 'collisionMask', 'sprite', 'frame', 'kind', 'attrs', 'children',
 ]);
 
 /** Разбор 'a b' / ['a','b'] → ['a','b']. */

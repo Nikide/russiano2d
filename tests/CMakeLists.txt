@@ -26,6 +26,18 @@ if(MSVC OR CMAKE_CROSSCOMPILING)
     set(R2D_SANITIZE_FLAGS_AVAILABLE FALSE)
 endif()
 
+# Re2D: проекция, отсечение по ближней плоскости, обход граней и туман —
+# чистая математика (src/re2d_math.c), без окна и GPU.
+add_executable(r2d_re2d_test re2d/re2d_test.c "${CMAKE_SOURCE_DIR}/src/re2d_math.c")
+target_include_directories(r2d_re2d_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+if(NOT MSVC)
+    target_link_libraries(r2d_re2d_test PRIVATE m)
+endif()
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_re2d_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_re2d_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 add_executable(r2d_json_test json/json_test.c "${CMAKE_SOURCE_DIR}/src/json.c")
 target_include_directories(r2d_json_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(r2d_json_test PRIVATE ${R2D_WIN_LIBS})

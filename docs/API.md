@@ -2145,6 +2145,54 @@ const hit = engine.castShape({ x1: 600, y1: 200, x2: 800, y2: 200,
 if (hit) engine.log('упрётся на', hit.x, hit.y);
 ```
 
+### `engine.re2d.*` — перспектива для Re2D
+
+Нативная проекция вида от первого лица ([RE2D.md](RE2D.md)): мировая точка или
+треугольник → экран. Мир остаётся плоским: точка — это `(x, y)` на полу и высота
+`z` над полом. Математика лежит в [`src/re2d_math.c`](../src/re2d_math.c) и
+проверяется офлайн (`tests/re2d/re2d_test.c`), мост к JS — в
+[`src/re2d.c`](../src/re2d.c). Углы — радианы.
+
+| Вызов | Что делает |
+|---|---|
+| `engine.re2d.view(x, y, eye, yaw, pitch, fov, fogFar?, fogMin?)` | поставить вид кадра; размер кадра берётся у рендера, `fogFar = 0` — без тумана, `fogMin` по умолчанию `0.25` |
+| `engine.re2d.project(points, out, count?)` | `points` — `Float32Array` stride 3 `(x, y, z)`, `out` — `Float32Array` stride 4 `(sx, sy, z01, scale)`; → число видимых точек |
+| `engine.re2d.mesh(verts, count?, texture?, flags?)` | мировые треугольники → отсечение → `submitMesh`; `verts` — stride 8 `(x, y, z, u, v, r, g, b)`, цвет `0..255`; → число отправленных вершин |
+| `engine.re2d.unproject(sx, sy, z?)` | пиксель → `[x, y]` на горизонтальной плоскости высоты `z` (пол по умолчанию) или `null`, если луч не попадает в неё (небо, параллель) |
+| `engine.re2d.sprite(id)` | спрайт движка → `{ texture, u0, v0, u1, v1, w, h }` или `null`: откуда брать текстуру и её прямоугольник для `mesh` |
+| `engine.re2d.info()` | вид и счётчики последнего `mesh()`: `{ x, y, eye, yaw, pitch, fov, focal, width, height, near, fogFar, fogMin, stats }` |
+| `engine.re2d.CULL_BACK` | флаг `mesh`: не рисовать грани, обращённые от камеры |
+
+* **Углы.** `yaw = 0` — взгляд вдоль `+x`, положительный угол поворачивает по
+  часовой стрелке на экране (ось `y` мира вниз), поэтому «вправо от взгляда» при
+  `yaw = 0` — это `+y`. `pitch` положителен вверх; это настоящий поворот камеры,
+  а не сдвиг горизонта, и он зажат строго внутри ±89°.
+* **Проекция.** `sx = w/2 + right · f / depth`, `sy = h/2 − up · f / depth`,
+  `f = (h/2) / tan(fov/2)`. `scale = f / depth` — сколько экранных пикселей
+  занимает единица мира на этой глубине (им масштабируют билборды). Точка ближе
+  ближней плоскости (4) или позади камеры невидима: `z01 = -1`, `scale = 0`.
+* **Глубина для z-буфера** — `z01 = 1 − near / depth`, диапазон `0..1`, ближе —
+  меньше (как ждёт `submitMesh`, см. [depth.md](highlevel/depth.md)).
+* **Отсечение.** Треугольник режется по ближней плоскости (Сазерленд — Ходжман),
+  `u/v` и цвет интерполируются: из одного входного получается не больше двух.
+* **Грани.** Лицевой считается обход **по часовой стрелке на экране**; без
+  `CULL_BACK` рисуются обе стороны.
+* **Туман.** Цвет вершины умножается на `clamp(1 − depth / fogFar, fogMin, 1)`.
+* **Текстуры аффинные** (вершинный шейдер меша без `w`), поэтому крупные грани
+  нарезают на ячейки (пол — по тайлу): так искажение остаётся незаметным.
+* **Спрайты всегда поверх меша** (depth.md §4): персонажи внутри комнаты верны,
+  объекты, закрывающие персонажей, требуют глубины у спрайтов (RE2D.md §8).
+* **Ошибки.** Нечисловые аргументы `view` — `RangeError`; `project`/`mesh` не
+  принимают обычные массивы — `TypeError`. Вершины с нечисловыми координатами
+  молча отбрасываются и считаются в `stats.invalid`.
+
+```js
+engine.re2d.view(640, 1100, 48, -Math.PI / 2, 0, 1.2);   // стоим у южной стены, смотрим на север
+engine.re2d.mesh(wallVerts, wallVerts.length / 8, wallTexture, engine.re2d.CULL_BACK);
+const out = new Float32Array(4);
+engine.re2d.project(new Float32Array([400, 400, 90]), out);   // где на экране голова NPC
+```
+
 ### `engine.keysPressed()` и `engine.keysReleased()`
 
 Скан-коды клавиш, нажатых (отпущенных) **в этом кадре**, одним массивом.
@@ -2311,6 +2359,7 @@ API.md описывает то, на чём стоит `$`; часть вызо�
 | `engine.freeTexture`, `setSpriteFilter`/`spriteFilter`, `textureFromPixels` | [highlevel/resource.md](highlevel/resource.md), [highlevel/sprite.md](highlevel/sprite.md) |
 | `engine.rotSpriteLoad/Pose/Style/Rig/Part/Info/Dispose` — синтез 2D-персонажа из общего PNG | [highlevel/re2dsprite.md](highlevel/re2dsprite.md), [RE2DSPRITE_V2.md](RE2DSPRITE_V2.md) |
 | `engine.setDepth`/`depth`, `engine.depthInfo` | [highlevel/depth.md](highlevel/depth.md), `$.gfx.depth` |
+| `engine.re2d.view/project/unproject/sprite/mesh/info` — перспектива вида от первого лица | §16 выше, [RE2D.md](RE2D.md) |
 | `engine.bodyEnabled`/`isAwake`/`setAwake`/`setGravityScale`, `contactsOf`, `contactBetween` | §8 выше |
 | `engine.netHost`/`netJoin`/`netClose`/`netMode`/`netStatus`/`netSend`/`netPoll` | [highlevel/net.md](highlevel/net.md), `$.net` |
 | `engine.setCursor`/`cursorVisible`, `requestReload`/`reloadPending`/`hotReload` | [highlevel/window.md](highlevel/window.md), [highlevel/script.md](highlevel/script.md) |

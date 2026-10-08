@@ -22,6 +22,7 @@ typedef struct R2DReplayFrame {
     bool     mouse_valid;      // позиция мыши была задана (иначе не трогаем)
     uint32_t buttons;          // маска SDL_BUTTON_MASK
     float    wheel;
+    float    mouse_dx, mouse_dy;   // относительное движение мыши (взгляд, Re2D)
 } R2DReplayFrame;
 
 struct R2DReplay {
@@ -104,6 +105,14 @@ void r2d_replay_capture(R2DReplay *r, const R2DApp *app)
     r2d_sb_printf(&sb, "%u", (unsigned)app->mouse_cur);
     r2d_sb_puts(&sb, ",\"wheel\":");
     r2d_sb_put_json_number(&sb, app->wheel_y);
+    // Относительное движение пишем только когда оно было: записи 2D-игр
+    // остаются побайтово прежними, а Re2D-взгляд мышью воспроизводится.
+    if (app->mouse_dx != 0.0f || app->mouse_dy != 0.0f) {
+        r2d_sb_puts(&sb, ",\"dx\":");
+        r2d_sb_put_json_number(&sb, app->mouse_dx);
+        r2d_sb_puts(&sb, ",\"dy\":");
+        r2d_sb_put_json_number(&sb, app->mouse_dy);
+    }
     r2d_sb_puts(&sb, "}\n");
 
     fputs(sb.data, r->out);
@@ -131,6 +140,8 @@ static bool r2d__replay_push(R2DReplay *r, const R2dJson *line)
     frame.mouse_valid = true;
     frame.buttons = (uint32_t)r2d_json_num(r2d_json_get(line, "mb"), 0.0);
     frame.wheel = (float)r2d_json_num(r2d_json_get(line, "wheel"), 0.0);
+    frame.mouse_dx = (float)r2d_json_num(r2d_json_get(line, "dx"), 0.0);
+    frame.mouse_dy = (float)r2d_json_num(r2d_json_get(line, "dy"), 0.0);
 
     if (r->count % 256 == 0) {
         R2DReplayFrame *grown = (R2DReplayFrame *)SDL_realloc(
@@ -232,6 +243,7 @@ void r2d_replay_apply(R2DReplay *r, R2DApp *app)
         r2d_app_virtual_mouse(app, button, (f->buttons & SDL_BUTTON_MASK(button)) != 0);
     }
     if (f->wheel != 0.0f) r2d_app_virtual_wheel(app, f->wheel);
+    if (f->mouse_dx != 0.0f || f->mouse_dy != 0.0f) r2d_app_virtual_mouse_move(app, f->mouse_dx, f->mouse_dy);
 }
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ import { ctx, wrap, def, TAGS, packColor, withAlpha, fxRandom,
          regionSprite } from './core.js';
 import { cameraTransform } from './camera.js';
 import { viewCams } from './viewports.js';
+import { kindRenderer, kindPass } from './kinds.js';
 
 const MAX_SPRITES = 16384;
 const MAX_TRIS = 8192;
@@ -1767,6 +1768,16 @@ function drawWorldPass(cam) {
 }
 
 function drawWorldPassInner(cam) {
+    // Камера особого вида (Re2D): мир рисует проход вида, а не 2D-путь ниже.
+    // Для обычной 2D-камеры это одно сравнение строк на проход.
+    if (cam.kind !== '2d') {
+        const pass = kindPass(cam.kind);
+        if (pass !== undefined) {
+            drawKindPass(pass, cam);
+            return;
+        }
+    }
+
     // Фон рисуется первым и не двигается с камерой при parallax=0.
     // Фон можно выключить (`bg: false`): у PIP-камеры он закрыл бы весь экран
     // своим прямоугольником, и «камера в текстуру» стала бы заливкой.
@@ -1797,6 +1808,26 @@ function drawWorldPassInner(cam) {
         for (let i = 0; i < total; i++) drawWorldNode(list[i], cam);
     }
     if (ctx.gfx._ysortFlushEnd) ctx.gfx._ysortFlushEnd(cam);
+}
+
+/**
+ * Проход мира для камеры особого вида: begin → узлы ЭТОГО вида → end.
+ * Узлы других видов (в том числе обычные 2D) под такой камерой не рисуются:
+ * у них нет места в её пространстве.
+ */
+function drawKindPass(pass, cam) {
+    const prev_alpha = pass_alpha;
+    pass_alpha = cam.alpha === undefined ? 1 : cam.alpha;
+    try {
+        pass.begin(cam);
+        const list = sortedNodes();
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].kind === cam.kind) drawWorldNode(list[i], cam);
+        }
+        pass.end(cam);
+    } finally {
+        pass_alpha = prev_alpha;
+    }
 }
 
 function drawWorldNode(node, cam) {
@@ -1843,6 +1874,20 @@ function drawWorldNodeClipped(node, cam) {
 }
 
 function drawWorldNodeInner(node, cam) {
+
+    // Вид узла (docs/RE2D.md). Для обычного 2D-узла это одно сравнение строк;
+    // у вида без отрисовщика или отказавшегося от узла (false) узел рисуется
+    // дальше как обычно — вид ничего не ломает.
+    if (node.kind !== '2d') {
+        const drawKind = kindRenderer(node.kind);
+        if (drawKind !== undefined && drawKind(node, cam)) {
+            state.stats.nodes++;
+            return;
+        }
+        // Вид узла совпадает с видом камеры, но отрисовщик его не взял: 2D-путь
+        // здесь бессмыслен (чужое пространство), узел просто не рисуется.
+        if (cam.kind === node.kind) return;
+    }
 
     // Тексту нечего рисовать, кроме строки: его габарит считаем до отсечения.
     if (node.tag === 'text' && node.text) syncTextBounds(node);

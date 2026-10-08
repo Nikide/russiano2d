@@ -542,6 +542,7 @@ $.camera.deadzone(200, 120)
 $.camera.at(x, y) .pos()
 $.camera.worldToScreen(p) .screenToWorld(p)
 $.camera.isOnScreen('#hero') .viewport()
+$.camera.kind(Re2D).eye(48).fov(70).pitch(0).mouseLook(true)   // вид от первого лица (Re2D, camera.md §5)
 ```
 
 ## 17. `$.input` — ввод
@@ -1143,6 +1144,7 @@ $.update(() => {
 | Граф кадров персонажа (псевдо-3D): водители, узлы, зеркало | `$.cels` | — | [cels.md](highlevel/cels.md) |
 | Z-буфер и псевдо-3D: глубина, меш, управление тестом | `$.gfx.depth` | — | [depth.md](highlevel/depth.md) |
 | Процедурный пиксель-арт: палитры, силуэт, свет, лист | `$.proc` | — | [proc.md](highlevel/proc.md) |
+| Виды узла: 2D по умолчанию, `.kind(Re2D)` включает 2.5D-вид того же мира | `.kind()`, `$.kinds`, `Re2D` | — | [kinds.md](highlevel/kinds.md), [RE2D.md](RE2D.md) |
 | Re2DSprite v2: один PNG, тело, мимика, смена частей и anime/pixel проекция | `$.re2dSprite` | `<rotsprite>` | [rotsprite.md](highlevel/re2dsprite.md) |
 | Психика NPC и режиссёр рейда: страх, срывы, давление | `$.alive` | — | [alive.md](highlevel/alive.md) |
 | Сеть, только авторитарная: id, владение, снапшоты | `$.net` | — | [net.md](highlevel/net.md) |

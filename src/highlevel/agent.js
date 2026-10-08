@@ -42,6 +42,8 @@ function nodeBrief(node) {
         visible: node.visible,
         body: node.body,
         ui: !!node.attrs.ui,
+        // Вид узла — только для не-2D: снимок 2D-игры остаётся прежним.
+        ...(node.kind && node.kind !== '2d' ? { kind: node.kind } : null),
         // Семантика для ассистивных технологий (role/label/…): она нужна в
         // снимке, чтобы автотест мог проверить доступность интерфейса.
         aria: node.aria || null,

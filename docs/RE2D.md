@@ -155,7 +155,7 @@ $.camera.kind(Re2D);                                   // камера от пе
 | `.sprite(path)` | спрайт | текстура билборда/граней |
 | `$.camera.at(x, y)` | центр камеры | позиция глаз на полу |
 | `$.camera.follow(sel)` | слежение | глаза на узле, на высоте `eye` |
-| `$.camera.rotation(rad)` | крен кадра | **yaw** (куда смотрим) |
+| `$.camera.rotation(rad)` | крен кадра | **yaw** (куда смотрим); у 2D-кадра и у Re2D свои углы, один не перетекает в другой |
 | `$.camera.zoom(k)` | масштаб | масштаб FOV (1 = базовый) |
 | `$.camera.pitch(deg)` | — | наклон вверх-вниз (клемп ±85°) |
 | `$.camera.eye(h)` | — | высота глаз над полом |
@@ -225,7 +225,20 @@ $.ready(() => {
 
 ## 9. Статус фаз
 
-| Фаза | Статус |
-|---|---|
-| 0 | в работе |
-| 1–7 | не начаты |
+| Фаза | Статус | Где посмотреть |
+|---|---|---|
+| 0 | готово | этот документ, [PHILOSOPHY.md](PHILOSOPHY.md) §1 |
+| 1 | готово | [highlevel/kinds.md](highlevel/kinds.md); `tests/js/kinds_test.mjs`, `tests/agent/highlevel_kinds_test.py` |
+| 2 | готово | [API.md](API.md) `engine.re2d.*`; `tests/re2d/re2d_test.c`, `tests/agent/re2d_native_test.py` |
+| 3 | готово | [highlevel/camera.md](highlevel/camera.md) §5; `tests/js/camera_re2d_test.mjs`, `tests/agent/highlevel_camera_re2d_test.py` |
+| 4–7 | в работе | |
+
+### Замер «ноль стоимости для 2D» (фазы 1–2)
+
+`tools/bench_highlevel.py --repeat 3` на одном и том же бинарнике до и после
+(сборка Release headless, `--fixed-dt`, 15 сцен: от 0 до 10 000 узлов). Колонка
+«JS итого», мс на кадр: `none 0.862 → 0.886`, `sprite×100 2.718 → 2.773`,
+`sprite×1000 17.859 → 17.913`, `tween×1000 26.509 → 26.709`, `churn×1000
+37.598 → 37.532`, `tilemap×10000 15.591 → 15.580`. Расхождения в обе стороны и в
+пределах 1–3 % — шум запуска; в 2D-кадре плата за механизм — одно сравнение
+строк на узел.

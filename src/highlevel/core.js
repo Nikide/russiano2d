@@ -524,6 +524,10 @@ export class Node {
         const defaults = TAGS[tag] || {};
         this.uid = next_uid++;
         this.tag = tag;
+        // Вид узла (docs/RE2D.md): '2d' — обычный узел, 're2d' — 2.5D-вид того
+        // же мира. Строка, а не null: `[kind=2d]` и сериализация работают без
+        // особых случаев, а рендер сравнивает её одним `!==` (kinds.js).
+        this.kind = '2d';
         this.attrs = {};                 // всё, что не описано ниже
         this.classes = new Set();
         this.tags_extra = null;   // ленивый Set: см. addTag/removeTag
@@ -702,6 +706,10 @@ export class Node {
         case 'radius':  this.radius = Number(value); return this;
         case 'intensity': this.intensity = Number(value); return this;
         case 'align':   this.attrs.align = String(value); return this;
+        // Вид узла (`$('<npc>', { kind: Re2D })`). Реестр видов живёт в
+        // kinds.js, который импортирует core.js, поэтому проверка имени
+        // подключается через ctx (ставит installKinds), а не импортом.
+        case 'kind':    this.kind = ctx.normalizeKind ? ctx.normalizeKind(value) : String(value || '2d'); return this;
         case 'bullet': this.bullet_on = value !== false;
                        if (this.body >= 0) engine.setBullet(this.body, this.bullet_on);
                        return this;

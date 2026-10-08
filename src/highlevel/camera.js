@@ -9,6 +9,7 @@
 
 import { ctx, query, wrapOne, fxRandom } from './core.js';
 import { setPrimaryCameraSource } from './viewports.js';
+import { normalizeKind, KIND_2D, KIND_RE2D } from './kinds.js';
 
 const cam = {
     x: 0, y: 0,          // центр камеры в мировых координатах
@@ -27,10 +28,65 @@ const cam = {
     shake_amp: 0,
     shake_x: 0,
     shake_y: 0,
+
+    // --- Вид камеры (docs/RE2D.md). '2d' — всё как раньше; 're2d' — взгляд от
+    // первого лица: положение (x, y) — на полу, yaw — куда смотрим, pitch —
+    // наклон вверх (радианы), eye — высота глаз, fov — вертикальный угол
+    // обзора. Эти поля 2D-камера не читает, а метод rotation() в Re2D
+    // работает с yaw, в 2D — с креном кадра.
+    kind: KIND_2D,
+    yaw: 0,               // куда смотрим; свой угол, чтобы не протекать в крен 2D-кадра (rotation)
+    pitch: 0,
+    eye: 48,
+    fov: 70 * Math.PI / 180,
+    fog_far: 0,
+    fog_min: 0.25,
+    look_on: false,       // взгляд мышью включён
+    look_sens: 0.0025,    // радиан на пиксель сдвига мыши
 };
 
+const PITCH_LIMIT = 85 * Math.PI / 180;   // строго меньше 90°: иначе пол и потолок вырождаются
+const TAU = Math.PI * 2;
+const DEG = Math.PI / 180;
+
+/** Угол в диапазон (-π, π]: yaw не должен расти бесконечно при вращении мышью. */
+function wrapAngle(a) {
+    if (a > Math.PI || a <= -Math.PI) {
+        a -= Math.floor((a + Math.PI) / TAU) * TAU;   // [-π, π)
+        if (a <= -Math.PI) a = Math.PI;               // (-π, π]
+    }
+    return a;
+}
+
+/**
+ * Параметры нативного вида из состояния камеры (чистая функция, тестируется
+ * без движка). Зум в Re2D сужает угол обзора, а не масштабирует кадр: при
+ * zoom = 2 угол по вертикали вдвое «уже» по тангенсу. Тряска — небольшой
+ * поворот, а не сдвиг картинки: она смещает кадр на shake_x/shake_y пикселей.
+ */
+export function re2dViewOf(c) {
+    const zoom = c.zoom > 0 ? c.zoom : 1;
+    const fov = 2 * Math.atan(Math.tan(c.fov / 2) / zoom);
+    const focal = (c.h / 2) / Math.tan(fov / 2);
+    return {
+        x: c.x, y: c.y, eye: c.eye,
+        yaw: c.yaw - Math.atan2(c.shake_x || 0, focal),
+        pitch: Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, c.pitch + Math.atan2(c.shake_y || 0, focal))),
+        fov,
+        fogFar: c.fogFar || 0,
+        fogMin: c.fogMin === undefined ? 0.25 : c.fogMin,
+    };
+}
+
+/** Поставить нативный вид (engine.re2d.view) по состоянию камеры. */
+export function applyRe2dView(c) {
+    const v = re2dViewOf(c);
+    engine.re2d.view(v.x, v.y, v.eye, v.yaw, v.pitch, v.fov, v.fogFar, v.fogMin);
+    return v;
+}
+
 function clampToLimits() {
-    if (!cam.limits) return;
+    if (!cam.limits || cam.kind !== KIND_2D) return;
     const half_w = engine.width / (2 * cam.zoom);
     const half_h = engine.height / (2 * cam.zoom);
     const { x, y, w, h } = cam.limits;
@@ -80,6 +136,10 @@ export function cameraTransform() {
         rotation: cam.rotation,
         shake_x: cam.shake_x, shake_y: cam.shake_y,
         w: engine.width, h: engine.height,
+        // Вид камеры и его параметры: 2D-проход их не читает, проход Re2D
+        // берёт отсюда (render.js, re2d.js).
+        kind: cam.kind, yaw: cam.yaw, pitch: cam.pitch, eye: cam.eye, fov: cam.fov,
+        fogFar: cam.fog_far, fogMin: cam.fog_min,
     };
 }
 
@@ -154,6 +214,8 @@ export function installCamera($, viewports) {
         snapshot() {
             return {
                 x: cam.x, y: cam.y, zoom: cam.zoom, rotation: cam.rotation,
+                kind: cam.kind, yaw: cam.yaw, pitch: cam.pitch, eye: cam.eye, fov: cam.fov,
+                fogFar: cam.fog_far, fogMin: cam.fog_min,
                 target: cam.target, offset: { x: cam.offset.x, y: cam.offset.y },
                 smooth: cam.smooth,
                 limits: cam.limits ? { x: cam.limits.x, y: cam.limits.y, w: cam.limits.w, h: cam.limits.h } : null,
@@ -167,6 +229,14 @@ export function installCamera($, viewports) {
             cam.x = state.x; cam.y = state.y;
             cam.zoom = Math.max(0.01, state.zoom);
             cam.rotation = Number(state.rotation) || 0;
+            // Поля вида: снимок из старой версии их не содержит — берём умолчания.
+            cam.kind = state.kind && typeof state.kind === 'string' ? state.kind : KIND_2D;
+            cam.yaw = Number(state.yaw) || 0;
+            cam.pitch = Number(state.pitch) || 0;
+            cam.eye = state.eye === undefined ? 48 : Number(state.eye);
+            cam.fov = state.fov === undefined ? 70 * DEG : Number(state.fov);
+            cam.fog_far = Number(state.fogFar) || 0;
+            cam.fog_min = state.fogMin === undefined ? 0.25 : Number(state.fogMin);
             cam.target = state.target || null;
             cam.offset.x = state.offset ? state.offset.x : 0;
             cam.offset.y = state.offset ? state.offset.y : 0;
@@ -186,6 +256,12 @@ export function installCamera($, viewports) {
          * Без аргумента — геттер.
          */
         rotation(value) {
+            // В Re2D «поворот кадра» — это куда смотрим (yaw); у 2D-кадра свой крен.
+            if (cam.kind === KIND_RE2D) {
+                if (value === undefined) return cam.yaw;
+                cam.yaw = wrapAngle(Number(value) || 0);
+                return camera;
+            }
             if (value === undefined) return cam.rotation;
             cam.rotation = Number(value) || 0;
             return camera;
@@ -193,11 +269,98 @@ export function installCamera($, viewports) {
 
         /** Плавный поворот к углу (радианы) за `ms` миллисекунд. */
         rotateTo(value, ms) {
-            const from = cam.rotation;
+            const field = cam.kind === KIND_RE2D ? 'yaw' : 'rotation';
+            const from = cam[field];
             const to = Number(value) || 0;
-            if (!(ms > 0)) { cam.rotation = to; return camera; }
-            animate(ms, (p) => { cam.rotation = from + (to - from) * p; });
+            if (!(ms > 0)) { cam[field] = to; return camera; }
+            animate(ms, (p) => { cam[field] = from + (to - from) * p; });
             return camera;
+        },
+
+        // --- Вид камеры: Re2D (docs/RE2D.md) -----------------------------------
+        // Те же методы, что и в 2D, получают смысл «взгляда от первого лица»:
+        // at/follow — положение глаз на полу, rotation — yaw, zoom — сужение
+        // угла обзора. Новые слова заведены только там, где в 2D смысла нет.
+
+        /** Вид камеры: '2d' (по умолчанию) или 're2d'. `.kind(null)` вернёт 2D. */
+        kind(value) {
+            if (value === undefined) return cam.kind;
+            cam.kind = normalizeKind(value);
+            return camera;
+        },
+
+        /** Куда смотрим, градусы (в Re2D это же поле читает rotation() в радианах). */
+        yaw(value) {
+            if (value === undefined) return cam.yaw / DEG;
+            cam.yaw = wrapAngle((Number(value) || 0) * DEG);
+            return camera;
+        },
+
+        /** Наклон вверх-вниз, градусы; зажат в ±85°. */
+        pitch(value) {
+            if (value === undefined) return cam.pitch / DEG;
+            cam.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, (Number(value) || 0) * DEG));
+            return camera;
+        },
+
+        /** Высота глаз над полом (пиксели мира). */
+        eye(value) {
+            if (value === undefined) return cam.eye;
+            cam.eye = Number(value) || 0;
+            return camera;
+        },
+
+        /** Вертикальный угол обзора, градусы (до зума). */
+        fov(value) {
+            if (value === undefined) return cam.fov / DEG;
+            cam.fov = Math.max(5, Math.min(170, Number(value) || 70)) * DEG;
+            return camera;
+        },
+
+        /** Затемнение с расстоянием: `fog(far, min)`; `fog(0)` выключает. */
+        fog(far, min) {
+            if (far === undefined) return { far: cam.fog_far, min: cam.fog_min };
+            cam.fog_far = Math.max(0, Number(far) || 0);
+            if (min !== undefined) cam.fog_min = Math.max(0, Math.min(1, Number(min) || 0));
+            return camera;
+        },
+
+        /**
+         * Повернуть взгляд на сдвиг мыши в пикселях: вправо — поворот направо,
+         * вверх — взгляд вверх. Работает и без `mouseLook`, например из
+         * геймпада или теста.
+         */
+        look(dx, dy) {
+            cam.yaw = wrapAngle(cam.yaw + (Number(dx) || 0) * cam.look_sens);
+            cam.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, cam.pitch - (Number(dy) || 0) * cam.look_sens));
+            return camera;
+        },
+
+        /**
+         * Взгляд мышью. `mouseLook(true)` захватывает мышь (курсор скрыт,
+         * движение относительное) и каждый кадр поворачивает камеру Re2D на
+         * сдвиг мыши; `mouseLook({ sensitivity })` — радианы на пиксель;
+         * без аргументов — включён ли.
+         */
+        mouseLook(opts) {
+            if (opts === undefined) return cam.look_on;
+            const o = (opts && typeof opts === 'object') ? opts : { on: !!opts };
+            if (o.sensitivity !== undefined) cam.look_sens = Math.max(0, Number(o.sensitivity) || 0);
+            if (o.on !== undefined || typeof opts !== 'object') {
+                cam.look_on = o.on !== false;
+                if ($.window && typeof $.window.mouseLock === 'function') $.window.mouseLock(cam.look_on);
+            }
+            return camera;
+        },
+
+        /** Факты о камере структурой: вид, положение, углы в градусах, взгляд мышью. */
+        info() {
+            return {
+                kind: cam.kind, x: cam.x, y: cam.y, eye: cam.eye,
+                yaw: cam.yaw / DEG, pitch: cam.pitch / DEG, fov: cam.fov / DEG,
+                zoom: cam.zoom, fogFar: cam.fog_far, fogMin: cam.fog_min,
+                mouseLook: cam.look_on, sensitivity: cam.look_sens,
+            };
         },
 
         zoom(value) {
@@ -237,6 +400,7 @@ export function installCamera($, viewports) {
 
         worldToScreen(p) {
             const pt = toPoint(p);
+            if (cam.kind === KIND_RE2D) return re2dWorldToScreen(pt, p);
             const state = { x: cam.x, y: cam.y, zoom: cam.zoom, rotation: cam.rotation };
             const out = frameWorldToScreen(state, pt.x, pt.y, engine.width, engine.height);
             // Тряска — поверх всего: она сдвигает кадр, а не мир.
@@ -247,6 +411,12 @@ export function installCamera($, viewports) {
 
         screenToWorld(p) {
             const pt = toPoint(p);
+            if (cam.kind === KIND_RE2D) {
+                // Пиксель → точка на полу (или на высоте p.z): луч из глаз.
+                applyRe2dView(cameraTransform());
+                const hit = engine.re2d.unproject(pt.x, pt.y, p && typeof p === 'object' && p.z ? Number(p.z) : 0);
+                return hit ? { x: hit[0], y: hit[1] } : null;
+            }
             const state = { x: cam.x, y: cam.y, zoom: cam.zoom, rotation: cam.rotation };
             return frameScreenToWorld(state, pt.x - cam.shake_x, pt.y - cam.shake_y,
                                       engine.width, engine.height);
@@ -254,6 +424,12 @@ export function installCamera($, viewports) {
 
         /** Видно ли то, что передали (узел, селектор или точка). */
         isOnScreen(what) {
+            if (cam.kind === KIND_RE2D) {
+                if (typeof what === 'string') return query(what).some((n) => camera.isOnScreen(n));
+                if (typeof what === 'object' && what && what.tag && what.attrs.ui) return true;
+                const s = re2dWorldToScreen(toPoint(what), what);
+                return s.visible && s.x >= 0 && s.x <= engine.width && s.y >= 0 && s.y <= engine.height;
+            }
             const half_w = engine.width / (2 * cam.zoom) + 64;
             const half_h = engine.height / (2 * cam.zoom) + 64;
             if (typeof what === 'string') return query(what).some((n) => camera.isOnScreen(n));
@@ -275,12 +451,21 @@ export function installCamera($, viewports) {
 
         /** Внутреннее: вызывается из $.time каждый кадр. */
         _tick(dt) {
+            if (cam.kind === KIND_RE2D && cam.look_on && $.input) {
+                // Взгляд мышью: сдвиг за кадр (в записи/реплее он тоже есть).
+                const m = $.input.mouseDelta();
+                if (m && (m.x || m.y)) camera.look(m.x, m.y);
+            }
             if (cam.target) {
                 const node = resolveTarget(cam.target);
                 if (node) {
                     const tx = node.x + cam.offset.x;
                     const ty = node.y + cam.offset.y;
-                    if (cam.deadzone) {
+                    if (cam.kind === KIND_RE2D) {
+                        // Глаза не «плывут» за телом: от первого лица слежение мгновенное.
+                        cam.x = tx;
+                        cam.y = ty;
+                    } else if (cam.deadzone) {
                         const dx = tx - cam.x, dy = ty - cam.y;
                         const hw = cam.deadzone.w / 2, hh = cam.deadzone.h / 2;
                         if (Math.abs(dx) > hw) cam.x += dx - Math.sign(dx) * hw;
@@ -314,6 +499,23 @@ export function installCamera($, viewports) {
 
     ctx.camera = camera;
     return camera;
+}
+
+/**
+ * Re2D: мировая точка → экран через нативную проекцию (одна реализация
+ * математики — engine.re2d). Высота берётся из p.z / p.depth (у узлов это
+ * `.depth`), по умолчанию — пол.
+ */
+function re2dWorldToScreen(pt, source) {
+    applyRe2dView(cameraTransform());
+    let node = source;
+    if (typeof node === 'string') node = query(node)[0];
+    else if (node && node.nodes) node = node.nodes[0];
+    const z = node && typeof node === 'object'
+        ? Number(node.z !== undefined ? node.z : (node.depth !== undefined ? node.depth : 0)) || 0 : 0;
+    const out = new Float32Array(4);
+    const visible = engine.re2d.project(new Float32Array([pt.x, pt.y, z]), out) > 0;
+    return { x: out[0], y: out[1], scale: out[3], depth: out[2], visible };
 }
 
 function resolveTarget(target) {

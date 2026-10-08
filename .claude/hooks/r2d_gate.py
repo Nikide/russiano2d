@@ -23,11 +23,30 @@ def state_path(sid):
     return os.path.join(tempfile.gettempdir(), f"r2d_gate_{sid}.json")
 
 
-def load(sid):
+def load_state(sid):
+    """Состояние: {"full": [пути], "ranges": {путь: [[с, по], ...]}}."""
     try:
-        return set(json.load(open(state_path(sid))))
+        d = json.load(open(state_path(sid)))
     except Exception:
-        return set()
+        return {"full": [], "ranges": {}}
+    if isinstance(d, list):          # старый формат: только список целиком прочитанных
+        return {"full": d, "ranges": {}}
+    d.setdefault("full", []); d.setdefault("ranges", {})
+    return d
+
+
+def load(sid):
+    return set(load_state(sid)["full"])
+
+
+def merge(ranges):
+    out = []
+    for a, b in sorted(ranges):
+        if out and a <= out[-1][1] + 1:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return out
 
 
 def line_count(path):
@@ -61,10 +80,18 @@ def main():
         return 0
     if ev == "PostToolUse" and d.get("tool_name") == "Read":
         if r.startswith("docs/") and r.endswith(".md"):
+            # Файл больше лимита одного Read (25k токенов) читают страницами:
+            # засчитываем объединение диапазонов строк, а не один вызов.
+            n = line_count(fp)
+            start = max(1, int(ti.get("offset") or 1))
             lim = ti.get("limit")
-            if (not lim or lim >= line_count(fp)) and not ti.get("offset"):
-                s = load(sid); s.add(r)
-                json.dump(sorted(s), open(state_path(sid), "w"))
+            end = min(n, start + int(lim) - 1) if lim else min(n, start + 1999)
+            st = load_state(sid)
+            rs = merge(st["ranges"].get(r, []) + [[start, end]])
+            st["ranges"][r] = rs
+            if rs and rs[0][0] <= 1 and rs[-1][1] >= n and len(rs) == 1 and r not in st["full"]:
+                st["full"].append(r)
+            json.dump(st, open(state_path(sid), "w"))
         return 0
     if ev == "PreToolUse":
         missing = [x for x in required(r) if x not in load(sid)]

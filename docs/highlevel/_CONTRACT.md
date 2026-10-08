@@ -195,7 +195,7 @@ every fadeIn fadeOut fadeTo fill filter find first fitsAt flash flicker flip
 focus font fontSize frame frames fsm fsmSend gap get globalPos gravity has
 hasClass heal health height hide hp html index inputValue inside intensity
 invulnerable is isDepthRelative isEmitting isNavigating isPlayingClip
-isVisible items joint jump kill last layer layerBits layerName lookAt map
+isVisible items joint jump kill kind last layer layerBits layerName lookAt map
 mask maskBy max maxHp maxLength min move moveAndSlide moveTo moveTowards mute
 navPath navTarget navigateTo not occluders off offset on onFloor onWall
 oneWay opacity openDialog outline overlaps padding parallax params parent
@@ -213,7 +213,7 @@ toLocal toState toggleClass trigger tween tweenTo value velocity visible
 volume wake width within ysort zone zoneCount
 ```
 
-> Список снят с живого движка, а не перепечатан: **256 имён**, команда —
+> Список снят с живого движка, а не перепечатан: **257 имён**, команда —
 > `Object.getOwnPropertyNames(Object.getPrototypeOf($('<rect>'))).filter(n => n !== 'constructor')`
 > в агентском режиме. Это объединение `def()`/`defGet()` из `src/highlevel/*.js`
 > с методами класса `Wrapper` (`each`, `eachNode`, `eq`, `get`, `index`,

@@ -155,6 +155,18 @@ export function installWindow($) {
             return windowApi;
         },
 
+        /**
+         * Захват мыши для взгляда (Re2D, шутеры): курсор скрыт, движение
+         * приходит только относительным (`$.input.mouseDelta()`). Без
+         * аргумента читает состояние. Возвращает, включён ли захват на самом
+         * деле: скрытое окно или окно без фокуса может отказать.
+         */
+        mouseLock(on) {
+            const engine = engineOf();
+            if (typeof engine.mouseLock !== 'function') return false;
+            return !!(on === undefined ? engine.mouseLock() : engine.mouseLock(!!on));
+        },
+
         /** Подписка на события окна: resize, focus, blur, show, hide. */
         on(name, fn) {
             if (!handlers.has(name)) handlers.set(name, []);

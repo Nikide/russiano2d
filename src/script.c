@@ -10,6 +10,7 @@
 
 #include "profile.h"
 #include "rotsprite.h"
+#include "re2d.h"
 
 #include "icons.h"
 #include "js_embed.h"
@@ -354,6 +355,23 @@ static JSValue r2d__js_cursor_visible(JSContext *ctx, JSValueConst this_val,
         r2d_app_cursor_visible(visible);
     }
     return JS_NewBool(ctx, visible);
+}
+
+// engine.mouseLock(flag?) — захват мыши для взгляда (Re2D, шутеры): курсор
+// скрыт, а движение приходит только относительным (engine.mouseDelta()).
+// Без аргумента — читает текущее состояние. Возвращает, включён ли захват на
+// самом деле: окно может отказать (скрытое, не в фокусе), и игра узнаёт об
+// этом из ответа, а не из догадок.
+static JSValue r2d__js_mouse_lock(JSContext *ctx, JSValueConst this_val,
+                                  int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app || !s->app->window) return JS_FALSE;
+    if (argc >= 1 && !JS_IsUndefined(argv[0])) {
+        SDL_SetWindowRelativeMouseMode(s->app->window, JS_ToBool(ctx, argv[0]) != 0);
+    }
+    return JS_NewBool(ctx, SDL_GetWindowRelativeMouseMode(s->app->window));
 }
 
 static JSValue r2d__js_profile(JSContext *ctx, JSValueConst this_val,
@@ -4091,6 +4109,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "now", r2d__js_now, 0);
     r2d__set_fn(ctx, engine, "setCursor", r2d__js_set_cursor, 1);
     r2d__set_fn(ctx, engine, "cursorVisible", r2d__js_cursor_visible, 1);
+    r2d__set_fn(ctx, engine, "mouseLock", r2d__js_mouse_lock, 1);
     r2d__set_fn(ctx, engine, "profile", r2d__js_profile, 0);
     r2d__set_fn(ctx, engine, "profileReset", r2d__js_profile_reset, 0);
     r2d__set_fn(ctx, engine, "profileEnabled", r2d__js_profile_enabled, 1);
@@ -4120,6 +4139,10 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "textureSize", r2d__js_texture_size, 1);
     r2d__set_fn(ctx, engine, "textureFromPixels", r2d__js_texture_from_pixels, 3);
     if (r2d_rotsprite_install(ctx, engine) < 0) {
+        JS_FreeValue(ctx, engine);
+        return JS_EXCEPTION;
+    }
+    if (r2d_re2d_install(ctx, engine) < 0) {
         JS_FreeValue(ctx, engine);
         return JS_EXCEPTION;
     }
