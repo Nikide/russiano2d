@@ -231,7 +231,8 @@ $.ready(() => {
 | 1 | готово | [highlevel/kinds.md](highlevel/kinds.md); `tests/js/kinds_test.mjs`, `tests/agent/highlevel_kinds_test.py` |
 | 2 | готово | [API.md](API.md) `engine.re2d.*`; `tests/re2d/re2d_test.c`, `tests/agent/re2d_native_test.py` |
 | 3 | готово | [highlevel/camera.md](highlevel/camera.md) §5; `tests/js/camera_re2d_test.mjs`, `tests/agent/highlevel_camera_re2d_test.py` |
-| 4–7 | в работе | |
+| 4 | готово | [highlevel/re2d.md](highlevel/re2d.md); `tests/js/re2d_test.mjs`, `tests/agent/highlevel_re2d_room_test.py` |
+| 5–7 | в работе | |
 
 ### Замер «ноль стоимости для 2D» (фазы 1–2)
 

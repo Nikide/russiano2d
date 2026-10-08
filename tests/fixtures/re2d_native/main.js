@@ -7,6 +7,7 @@
 globalThis.__view = [0, 0, 0, 0, 0, Math.PI / 2];
 globalThis.__mesh = null;
 globalThis.__flags = 0;
+globalThis.__texture = -1;
 
 $.ready(() => {
     $.world.gravity(0, 0).color('#000000');
@@ -17,5 +18,5 @@ $.update(() => {
     engine.re2d.view(v[0], v[1], v[2], v[3], v[4], v[5], v[6] || 0, v[7] === undefined ? 0.25 : v[7]);
     const m = globalThis.__mesh;
     if (!m) return;
-    engine.re2d.mesh(m, Math.floor(m.length / 8), -1, globalThis.__flags);
+    engine.re2d.mesh(m, Math.floor(m.length / 8), globalThis.__texture, globalThis.__flags);
 });
