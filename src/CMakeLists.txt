@@ -18,6 +18,7 @@ set(R2D_SOURCES
     physics.h  physics.c
     http.h     http.c
     script.h   script.c
+    nodes.h    nodes.c
     json.h     json.c
     text.h     text.c
     font.h     font.c

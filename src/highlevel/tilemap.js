@@ -1565,6 +1565,12 @@ export function installTilemap($) {
             return flushAllTiles($, cam, worldY === undefined ? Infinity : worldY);
         };
         gfx._ysortFlushEnd = (cam) => flushAllTiles($, cam, Infinity);
+        // Есть ли карта с Y-sort: без неё хук перед каждым узлом не нужен, и
+        // render.js рисует мир нативным проходом (src/nodes.c).
+        gfx._ysortActive = () => {
+            for (const [, tm] of STATES) if (tm.ysort) return true;
+            return false;
+        };
     }
 
     return $;

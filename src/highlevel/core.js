@@ -107,6 +107,17 @@ export function engineOf() {
 
 export function registryVersion() { return registry_version; }
 
+/**
+ * Нативные проходы кадра по узлам (engine.nodes, src/nodes.c) или null:
+ * без движка (юнит-тесты qjs) и при `$.debug.nativePasses(false)` работает
+ * прежний JS-путь. Переключатель нужен для сверки «C против JS» в тестах.
+ */
+export function nativeNodes() {
+    if (ctx.native_off === true) return null;
+    const n = engine && engine.nodes;
+    return n && typeof n === 'object' && typeof n.drawWorld === 'function' ? n : null;
+}
+
 /** Отметить реестр изменённым (см. места вызова: конструктор, destroy, пул). */
 export function touchRegistry() { registry_version++; }
 

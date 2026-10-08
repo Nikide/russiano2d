@@ -11,6 +11,7 @@
 #include "profile.h"
 #include "rotsprite.h"
 #include "re2d.h"
+#include "nodes.h"
 
 #include "icons.h"
 #include "js_embed.h"
@@ -4166,6 +4167,11 @@ static JSValue r2d__make_engine(JSContext *ctx)
         return JS_EXCEPTION;
     }
     if (r2d_re2d_install(ctx, engine) < 0) {
+        JS_FreeValue(ctx, engine);
+        return JS_EXCEPTION;
+    }
+    // Нативные проходы кадра по узлам $ (схема C → $): engine.nodes.*.
+    if (r2d_nodes_install(ctx, engine) < 0) {
         JS_FreeValue(ctx, engine);
         return JS_EXCEPTION;
     }

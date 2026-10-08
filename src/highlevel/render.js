@@ -15,7 +15,7 @@
 import { engine } from './native.js';
 import { ctx, wrap, def, TAGS, packColor, withAlpha, fxRandom,
          facetCount, nodesWithFacet, registryVersion, spriteSize,
-         regionSprite } from './core.js';
+         regionSprite, nativeNodes } from './core.js';
 import { cameraTransform } from './camera.js';
 import { viewCams } from './viewports.js';
 import { kindRenderer, kindPass } from './kinds.js';
@@ -154,9 +154,63 @@ const ui_node_renderers = new Map();
 export function registerNodeRenderer(tag, fn) {
     if (typeof tag !== 'string' || typeof fn !== 'function') return;
     node_renderers.set(tag, fn);
+    syncSpecialTags();
 }
 
-export function unregisterNodeRenderer(tag) { node_renderers.delete(tag); }
+export function unregisterNodeRenderer(tag) { node_renderers.delete(tag); syncSpecialTags(); }
+
+// ---------------------------------------------------------------------------
+// Нативный проход мира (схема C → $, docs/HIGH_LEVEL_API_PERF.md §0.5)
+// ---------------------------------------------------------------------------
+//
+// Сортировку, отсечение и сборку батча обычных узлов делает C
+// (engine.nodes, src/nodes.c): он читает поля узлов напрямую и пишет в те же
+// буферы xf/col/blend/fx/clip_of. Узлы с особой отрисовкой (текст, свет, круг,
+// отрисовщики модулей, тень, контур, nine-slice, шейдер, обрезка, тряска, вид
+// не 2D) C отдаёт обратно в drawWorldNode — порядок кадра не меняется.
+// Без движка (юнит-тесты qjs) работает прежний JS-проход.
+
+/** Теги, которые общий путь не рисует: встроенные особые и отрисовщики модулей. */
+function syncSpecialTags() {
+    const n = engine && engine.nodes;
+    const native = n && typeof n === 'object' && typeof n.specialTags === 'function' ? n : null;
+    if (!native) return;
+    native.specialTags(['text', 'circle', 'light', ...node_renderers.keys()]);
+}
+
+const world_params = new Float64Array(18);
+let native_cam = null;
+function drawNodeFromNative(node, c) {
+    count = c;
+    drawWorldNode(node, native_cam);
+    return count;
+}
+
+function drawListNative(native, list, cam) {
+    const P = world_params;
+    P[0] = cam.x; P[1] = cam.y;
+    P[2] = cam.zoom || 1; P[3] = cam.zoom;
+    P[4] = cam.rotation || 0;
+    P[5] = (cam.w !== undefined ? cam.w : engine.width) / 2;
+    P[6] = (cam.h !== undefined ? cam.h : engine.height) / 2;
+    P[7] = cam.shake_x; P[8] = cam.shake_y;
+    P[9] = cam.w; P[10] = cam.h;
+    P[11] = state.culling ? 1 : 0;
+    P[12] = pass_alpha;
+    P[13] = engine.whiteSprite;
+    P[14] = blendId(default_blend);
+    P[15] = clip_cur;
+    P[16] = MAX_SPRITES;
+    P[17] = 0;
+    const prev_cam = native_cam;
+    native_cam = cam;
+    try {
+        count = native.drawWorld(list, P, xf, col, blend, fx, clip_of, count, drawNodeFromNative);
+    } finally {
+        native_cam = prev_cam;
+    }
+    state.stats.nodes += P[17];
+}
 
 export function registerUINodeRenderer(tag, fn) {
     if (typeof tag !== 'string' || typeof fn !== 'function') return;
@@ -1797,9 +1851,15 @@ function drawWorldPassInner(cam) {
     // Хуки ставит модуль tilemap; если его нет — цикл как раньше.
     // Обход по индексу и вынесенный хук: for-of заводит итератор, а
     // ctx.gfx._ysortFlush читался бы на каждом узле.
-    const flush = ctx.gfx._ysortFlush;
+    // Хук нужен, только если есть карта с Y-sort (tilemap.js): иначе он
+    // перебирал бы карты перед каждым узлом и отключал нативный проход.
+    const active = ctx.gfx._ysortActive;
+    const flush = ctx.gfx._ysortFlush && (!active || active()) ? ctx.gfx._ysortFlush : null;
     const total = list.length;
-    if (flush) {
+    const native = flush ? null : nativeNodes();
+    if (native) {
+        drawListNative(native, list, cam);
+    } else if (flush) {
         for (let i = 0; i < total; i++) {
             const node = list[i];
             flush(cam, node.y);
@@ -2138,17 +2198,27 @@ function sortedNodes() {
     // ничего не меняет.
     if (!fn && sorted_version === registryVersion() && sorted_total === total
         && sorted_mode === mode) {
+        // Тот же состав: C проверяет порядок и, если он нарушен, сортирует на
+        // месте — результат совпадает с полной пересборкой.
+        const native = nativeNodes();
+        if (native) { native.sortWorld(sorted_list, mode === 'y' ? 'y' : 'layer'); return sorted_list; }
         const compare = mode === 'y' ? compareByY : compareByLayer;
         if (isOrdered(sorted_list, compare)) return sorted_list;
     }
 
     sorted_list.length = 0;
     const nodes = ctx.nodes;
-    for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-        if (!node.removed && !node.attrs.ui) sorted_list.push(node);
+    const native = nativeNodes();
+    if (native) {
+        native.collectWorld(nodes, sorted_list);
+    } else {
+        for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            if (!node.removed && !node.attrs.ui) sorted_list.push(node);
+        }
     }
     if (fn) { sorted_list.sort(fn); }
+    else if (native) native.sortWorld(sorted_list, mode === 'y' ? 'y' : 'layer');
     else sorted_list.sort(mode === 'y' ? compareByY : compareByLayer);
     sorted_version = registryVersion();
     sorted_total = sorted_list.length;
@@ -2162,6 +2232,7 @@ function sortedNodes() {
 
 export function installGfx($) {
     ensureBuffers();
+    syncSpecialTags();
 
     const gfx = {
         /** Цвет очистки кадра. */

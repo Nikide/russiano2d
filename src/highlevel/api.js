@@ -14,10 +14,10 @@ import {
     ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
     packColor, withAlpha, registerSelector, nodeBounds, boundsOverlap,
     makeRandom, dotSprite, resolveSprite, sheetFrames, regionSprite,
-    nodesWithFacet, touchRegistry, beginBatch, endBatch, liveNodes, engineOf,
+    nodesWithFacet, touchRegistry, beginBatch, endBatch, liveNodes, engineOf, nativeNodes,
 } from './core.js';
 import { installWorld } from './world.js';
-import { installCamera } from './camera.js';
+import { installCamera, cameraTransform } from './camera.js';
 import { installViewports } from './viewports.js';
 import { installTime, tickTime } from './time.js';
 import { installInput, shiftDown, ctrlDown, altDown } from './input.js';
@@ -1873,6 +1873,8 @@ function stepTowards(node, target, speed) {
  * совпадение по экранному прямоугольнику (zoom учитывается), позиция берётся из
  * `nodeScreenPos` — она верна и для параллакса.
  */
+const hover_params = new Float64Array(13);
+
 function tickWorldHover() {
     const nodes = liveNodes();
     const mx = engineOf().mouseX;
@@ -1880,6 +1882,33 @@ function tickWorldHover() {
     const zoom = ctx.camera ? (ctx.camera.zoom() || 1) : 1;
     let top = null;
     let top_score = -Infinity;
+
+    // Нативный проход (src/nodes.c): попадание и «верхний» узел считает C,
+    // а на узле, у которого попадание сменилось, отдаёт управление сюда —
+    // mouseenter/mouseleave рассылаются в том же порядке, что и раньше.
+    const native = nativeNodes();
+    if (native) {
+        if (nodes.length === 0) { ctx.hovered = null; return null; }
+        const cam = cameraTransform();
+        const P = hover_params;
+        P[0] = mx; P[1] = my; P[2] = zoom;
+        P[3] = cam.x; P[4] = cam.y;
+        P[5] = cam.w && cam.w > 0 ? cam.w / 2 : engineOf().width / 2;
+        P[6] = cam.h && cam.h > 0 ? cam.h / 2 : engineOf().height / 2;
+        P[7] = cam.shake_x || 0; P[8] = cam.shake_y || 0;
+        P[9] = ctx.time && typeof ctx.time.frame === 'function' ? ctx.time.frame() : -1;
+        P[10] = cam.zoom || 1;
+        P[11] = -Infinity; P[12] = -1;
+        let i = native.hover(nodes, 0, P);
+        while (i >= 0) {
+            const node = nodes[i];
+            node.emit(node.hovered ? 'mouseenter' : 'mouseleave', {});
+            i = native.hover(nodes, i + 1, P);
+        }
+        top = P[12] >= 0 ? nodes[P[12]] : null;
+        ctx.hovered = top;
+        return top;
+    }
 
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];

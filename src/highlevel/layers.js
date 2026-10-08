@@ -233,6 +233,11 @@ function stepParallax(node, cam) {
     st.screen_x = node.x;
     st.screen_y = node.y;
     st.screen_frame = ctx.time && typeof ctx.time.frame === 'function' ? ctx.time.frame() : -1;
+    // То же на самом узле: нативный проход наведения (src/nodes.c) не видит
+    // parallax_state и читает экранную позицию отсюда.
+    node._scr_x = st.screen_x;
+    node._scr_y = st.screen_y;
+    node._scr_frame = st.screen_frame;
     if (!Number.isFinite(st.last_x)) { st.ax = node.x - cam.x * (1 - f); st.last_x = node.x; }
     if (!Number.isFinite(st.last_y)) { st.ay = node.y - cam.y * (1 - f); st.last_y = node.y; }
 

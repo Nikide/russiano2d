@@ -9,7 +9,7 @@
 // ===========================================================================
 
 import { engine } from './native.js';
-import { ctx, query, wrap } from './core.js';
+import { ctx, query, wrap, nativeNodes } from './core.js';
 import { collectCounters } from './pool.js';
 
 const watches = [];
@@ -160,6 +160,18 @@ export function installDebug($) {
         },
 
         /** Профайлер по кадрам: меряет время между start и end. */
+        /**
+         * Нативные проходы кадра (src/nodes.c): синк физики, события мира,
+         * наведение, сортировка и сборка батча. `false` возвращает прежний
+         * JS-путь — для сверки картинки и поиска расхождений. Без аргумента —
+         * работают ли они сейчас.
+         */
+        nativePasses(flag) {
+            if (flag === undefined) return nativeNodes() !== null;
+            ctx.native_off = !flag;
+            return debug;
+        },
+
         profiler: {
             /**
              * Покадровый профайлер подсистем включён? По умолчанию выключен:
