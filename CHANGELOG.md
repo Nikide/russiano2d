@@ -2,6 +2,8 @@
 
 ## Не выпущено — завершение SDK и контрольный аудит (2026-10-08)
 
+- Добавлен отдельный периодический стенд `$` API: 75 компонентных и 20 кадровых нагрузок, сырая базовая линия и таблица с условиями измерения; сравнение учитывает оборудование и сборку.
+
 - Re2DSprite: авторинг clips/emotions/variants/equipment, timeline seek и undo/redo.
 - Baker: выражения VRM, dense/sparse morphs, material/UV binds, humanoid mapping, атомарная запись отдельных файлов.
 - World Studio: RmlUi-авторинг `.re2dmap`, native compile, runtime preview и многоэтажность.

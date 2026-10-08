@@ -686,6 +686,7 @@ XY. Результат синтеза — обычный 2D-кадр в суще
 * [docs/internal/NATIVE.md](docs/internal/NATIVE.md) — нативное ядро `engine.*` (внутреннее: игре виден только `$`)
 * [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — замысел движка и философия API `$`
 * [docs/GAP_ANALYSIS.md](docs/GAP_ANALYSIS.md) — аудит API и пробелы относительно Godot 4.x (2D)
+* [docs/API_PERFORMANCE.md](docs/API_PERFORMANCE.md) — периодический benchmark компонентов `$`, таблица и конфигурация машины
 * [docs/HIGH_LEVEL_API_PERF.md](docs/HIGH_LEVEL_API_PERF.md) — сколько стоит кадр `$`: замеры
   (`tools/bench_highlevel.py`), что влияет на производительность и как это исправить
 * [docs/VFX_PLAN.md](docs/VFX_PLAN.md) — план по VFX: взрывы, ударные волны, render target,

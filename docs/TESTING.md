@@ -168,3 +168,28 @@ headroom, ray/circle-height и приватную RGBA/depth-композици�
 локальные ссылки Markdown, контрольные суммы пакетов и содержимое архивов.
 `ctest` пока не регистрирует C-тесты: запускайте собранные test executables
 напрямую. Успешный пустой `ctest` не является доказательством проверки.
+
+## Периодический контроль производительности `$`
+
+Отдельный инструмент — `python3 tools/bench_api.py`. Он не подключён к
+`tools/run_tests.py`, обычному CI или release pipeline: запускать вручную время
+от времени, после изменений горячих путей или при подозрении на деградацию.
+Перед замером собрать актуальный engine. Для другой сборки указать
+`--binary PATH --cache PATH/CMakeCache.txt`.
+
+Сценарии: `tools/bench_api_cases.json`; реальные runtime fixtures в
+`tests/fixtures/bench_api`, кадровые нагрузки используют существующий
+`tools/bench_highlevel.py`. [API_PERFORMANCE.md](API_PERFORMANCE.md) — таблица,
+методика, машина и границы охвата. Сырые данные сохраняются в JSON.
+
+```bash
+python3 tools/bench_api.py
+python3 tools/bench_api.py --baseline docs/benchmarks/api-performance.json \
+  --json build/bench_api_next.json --md docs/API_PERFORMANCE.md
+```
+
+Не сравнивать чужие машины/OS/build/backend или разные workloads. Exit 3
+показывает превышение одновременно относительного и абсолютного порога; сначала
+повторить замер без фоновой нагрузки. Это сигнал к расследованию, не автоматический
+приговор. Быстрые unit checks runner без performance run:
+`python3 tests/bench_api_runner_test.py`.

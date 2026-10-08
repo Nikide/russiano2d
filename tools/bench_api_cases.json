@@ -1,0 +1,754 @@
+[
+  {
+    "id": "selectors",
+    "modules": [
+      "core",
+      "api"
+    ],
+    "description": "CSS class selection over N nodes",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];",
+    "operation": "return $('.mob').length",
+    "size": 128
+  },
+  {
+    "id": "chain",
+    "modules": [
+      "sprite"
+    ],
+    "description": "Position/alpha/pivot on one cached node",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];",
+    "operation": "hero.at(i%16,2).alpha(0.8).pivot(0.5,0.5);return hero.pos().x",
+    "size": 128
+  },
+  {
+    "id": "events",
+    "modules": [
+      "signal"
+    ],
+    "description": "Emit to N listeners",
+    "setup": "for(let j=0;j<N;j++)$.signal.on('perf',()=>{});",
+    "operation": "return $.signal.emit('perf',i)",
+    "size": 128
+  },
+  {
+    "id": "math",
+    "modules": [
+      "mathx"
+    ],
+    "description": "Vector normalize + interpolation",
+    "setup": "",
+    "operation": "return $.math.vecLength($.math.vecNormalize({x:3,y:4}))+$.math.lerp(1,4,0.5)",
+    "size": 128
+  },
+  {
+    "id": "random",
+    "modules": [
+      "random"
+    ],
+    "description": "Seeded noise2D + weighted selection",
+    "setup": "$.random.seed(17);",
+    "operation": "return $.random.noise2D(i%64,i%32)+$.random.next()",
+    "size": 128
+  },
+  {
+    "id": "csv",
+    "modules": [
+      "csv"
+    ],
+    "description": "Parse N-row CSV",
+    "setup": "const text='id,x,y\\n'+Array.from({length:N},(_,j)=>j+',10,20').join('\\n');",
+    "operation": "return $.csv.parse(text).length",
+    "size": 128
+  },
+  {
+    "id": "grid",
+    "modules": [
+      "grid"
+    ],
+    "description": "Flood fill 16x16",
+    "setup": "const grid=$.grid.make({cols:16,rows:16,cell:8});",
+    "operation": "return $.grid.flood(grid,0,0,i%2+1)",
+    "size": 256
+  },
+  {
+    "id": "curve",
+    "modules": [
+      "curve"
+    ],
+    "description": "Evaluate cubic curve and gradient",
+    "setup": "const c=$.curve.make([0,0.5,1,0.2]);const g=$.curve.gradient(['#000','#fff']);",
+    "operation": "return Number(c((i%100)/100))+Number(g((i%100)/100))",
+    "size": 128
+  },
+  {
+    "id": "state",
+    "modules": [
+      "state"
+    ],
+    "description": "FSM send with two real transitions",
+    "setup": "const m=$.state.create({name:'perf',initial:'a',states:{a:{on:{go:'b'}},b:{on:{go:'a'}}}});",
+    "operation": "m.send('go');return m.is('a')?1:2",
+    "size": 128
+  },
+  {
+    "id": "store",
+    "modules": [
+      "store"
+    ],
+    "description": "Set/read one key in N-entry memory store",
+    "setup": "for(let j=0;j<N;j++)$.store.set('k'+j,j);",
+    "operation": "$.store.set('k0',i);return $.store.get('k0')",
+    "size": 128
+  },
+  {
+    "id": "i18n",
+    "modules": [
+      "i18n"
+    ],
+    "description": "Lookup + parameter substitution",
+    "setup": "$.i18n.add('ru',{perf:'Привет, {name}!'});$.i18n.lang('ru');",
+    "operation": "return $.tr('perf',{name:'Руся'}).length",
+    "size": 128
+  },
+  {
+    "id": "collision",
+    "modules": [
+      "collision"
+    ],
+    "description": "Named layer mask resolution",
+    "setup": "$.collision.define('a',1);$.collision.define('b',2);",
+    "operation": "return $.collision.mask(['a','b'])",
+    "size": 128
+  },
+  {
+    "id": "input",
+    "modules": [
+      "input"
+    ],
+    "description": "Bound action state and axis query",
+    "setup": "$.input.bind('perf',['a','left']);",
+    "operation": "return Number($.input.down('perf'))+$.input.vec('wasd').x",
+    "size": 128
+  },
+  {
+    "id": "time",
+    "modules": [
+      "time"
+    ],
+    "description": "Create/cancel timer without frame advance",
+    "setup": "",
+    "operation": "const id=$.time.every(1000,()=>{});$.time.cancel(id);return id",
+    "size": 128
+  },
+  {
+    "id": "camera",
+    "modules": [
+      "camera"
+    ],
+    "description": "Transform screen/world coordinates",
+    "setup": "",
+    "operation": "return $.camera.screenToWorld(i%1280,i%720).x",
+    "size": 128
+  },
+  {
+    "id": "viewports",
+    "modules": [
+      "viewports"
+    ],
+    "description": "Resolve secondary camera data",
+    "setup": "$.camera.add('perf',{x:20,y:10,zoom:1,rect:{x:0,y:0,w:320,h:180}});",
+    "operation": "return $.camera.views().length",
+    "size": 128
+  },
+  {
+    "id": "window",
+    "modules": [
+      "window"
+    ],
+    "description": "Read window size and pixel size",
+    "setup": "",
+    "operation": "return $.window.size().w+$.window.pixels().w",
+    "size": 128
+  },
+  {
+    "id": "agent",
+    "modules": [
+      "agent"
+    ],
+    "description": "Snapshot of N entities",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];",
+    "operation": "return $.agent.snapshot().entities.length",
+    "size": 128
+  },
+  {
+    "id": "debug",
+    "modules": [
+      "debug"
+    ],
+    "description": "Collect counters over N nodes",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];",
+    "operation": "return $.debug.stats().nodes",
+    "size": 128
+  },
+  {
+    "id": "watch",
+    "modules": [
+      "watch"
+    ],
+    "description": "Create/stop live selection watch",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];",
+    "operation": "const h=$.watch('.mob',{onEnter:()=>{}});h.stop();return $.watch.count()",
+    "size": 128
+  },
+  {
+    "id": "prefab",
+    "modules": [
+      "prefab"
+    ],
+    "description": "Serialize subtree to inspectable data",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];",
+    "operation": "return JSON.stringify($.prefab.save(hero)).length",
+    "size": 128
+  },
+  {
+    "id": "save",
+    "modules": [
+      "save"
+    ],
+    "description": "Build store/world snapshot, no disk I/O",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];",
+    "operation": "return JSON.stringify($.save.snapshot()).length",
+    "size": 128
+  },
+  {
+    "id": "resource",
+    "modules": [
+      "resource"
+    ],
+    "description": "Get resident Curve resource",
+    "setup": "$.resource.define('perf',{kind:'curve',points:[0,1,0]});$.resource.load('perf');",
+    "operation": "return $.resource.get('perf')((i%100)/100)",
+    "size": 128
+  },
+  {
+    "id": "scene",
+    "modules": [
+      "scene"
+    ],
+    "description": "Register/remove scene description",
+    "setup": "",
+    "operation": "$.scene.add('perf',{enter(){}});const v=$.scene.has('perf');$.scene.remove('perf');return Number(v)",
+    "size": 128
+  },
+  {
+    "id": "script",
+    "modules": [
+      "script"
+    ],
+    "description": "Read native reload state, no restart",
+    "setup": "",
+    "operation": "return Number($.script.pending())+$.script.count()",
+    "size": 128
+  },
+  {
+    "id": "font",
+    "modules": [
+      "font"
+    ],
+    "description": "Measure cached Cyrillic string",
+    "setup": "$.font.define('perf',{size:20});",
+    "operation": "return $.font.measure('Руся performance','perf')",
+    "size": 128
+  },
+  {
+    "id": "text",
+    "modules": [
+      "text"
+    ],
+    "description": "Measure alternating Cyrillic strings",
+    "setup": "",
+    "operation": "return $.font.width('Руся '+(i%32),20)",
+    "size": 128
+  },
+  {
+    "id": "ui",
+    "modules": [
+      "ui"
+    ],
+    "description": "RmlUi DOM text write/read",
+    "setup": "const doc=$.ui.doc('tests/fixtures/bench_api/probe.rml');",
+    "operation": "doc.text('value',String(i));return doc.content('value').length",
+    "size": 128
+  },
+  {
+    "id": "devtools",
+    "modules": [
+      "devtools"
+    ],
+    "description": "Refresh real RmlUi inspector over N nodes",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];$.devtools.open();",
+    "operation": "$.devtools.refresh();return $.devtools.panel().entities",
+    "size": 128
+  },
+  {
+    "id": "widgets",
+    "modules": [
+      "widgets"
+    ],
+    "description": "Legacy virtual list range of N items",
+    "setup": "const list=$('<ui.list>',{id:'list',items:Array.from({length:N},(_,j)=>'item'+j)}).size(200,160).appendTo($.ui);",
+    "operation": "return JSON.stringify($.ui.listRange(list)).length",
+    "size": 128
+  },
+  {
+    "id": "layers",
+    "modules": [
+      "layers"
+    ],
+    "description": "Resolve layer/parallax",
+    "setup": "$.layers.create({name:'perf',parallax:0.5});",
+    "operation": "return $.layers.list().length",
+    "size": 128
+  },
+  {
+    "id": "anim",
+    "modules": [
+      "anim"
+    ],
+    "description": "Lookup defined sprite animation clip",
+    "setup": "$.anim.define('perf',{duration:1000,tracks:[{prop:'x',keys:[{t:0,v:0},{t:1,v:100}]}]});",
+    "operation": "return $.anim.get('perf')?1:0",
+    "size": 128
+  },
+  {
+    "id": "animplayer",
+    "modules": [
+      "animplayer"
+    ],
+    "description": "Seek actual property-track player",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];$.anim.clip('perf',{duration:1000,tracks:[{type:'position',keys:[{t:0,v:{x:0,y:0}},{t:1000,v:{x:100,y:0}}]}]});const p=$.anim.player('perfPlayer').target(hero);p.play('perf');",
+    "operation": "p.seek(i%1000);return hero.pos().x",
+    "size": 128
+  },
+  {
+    "id": "tween",
+    "modules": [
+      "tween"
+    ],
+    "description": "Create/kill property Tween",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];",
+    "operation": "const t=$.tween(hero);t.property('x',10,0.5);t.kill();return Number(t.isValid())",
+    "size": 128
+  },
+  {
+    "id": "flow",
+    "modules": [
+      "flow"
+    ],
+    "description": "Create/cancel delayed flow",
+    "setup": "",
+    "operation": "const f=$.flow.delay(100);f.cancel();return Number(f.isCancelled())",
+    "size": 128
+  },
+  {
+    "id": "task",
+    "modules": [
+      "task"
+    ],
+    "description": "Create/cancel chunked task",
+    "setup": "",
+    "operation": "const t=$.task.chunked({total:N,step(){},budget:1});t.abort();return $.task.running()",
+    "size": 128
+  },
+  {
+    "id": "nav",
+    "modules": [
+      "nav"
+    ],
+    "description": "A* through 32x32 grid",
+    "setup": "const grid=$.nav.grid({name:'perf',x:0,y:0,w:256,h:256,cell:8});",
+    "operation": "return $.nav.pathOn(grid,{x:1,y:1},{x:250,y:250}).length",
+    "size": 1024
+  },
+  {
+    "id": "bsp",
+    "modules": [
+      "bsp"
+    ],
+    "description": "Native BSP order of N parallel walls",
+    "setup": "const segments=Array.from({length:N},(_,j)=>({x1:j,y1:0,x2:j,y2:20,tag:j}));$.world.bsp.build(segments);",
+    "operation": "return $.world.bsp.order({x:0,y:0}).length",
+    "size": 128
+  },
+  {
+    "id": "world",
+    "modules": [
+      "world"
+    ],
+    "description": "Native broadphase circle query over N bodies",
+    "setup": "for(let j=0;j<N;j++)$('<body>',{id:'b'+j}).at(j*10,0).size(4,4).appendTo($.world);",
+    "operation": "return $.world.query(0,0,100).length",
+    "size": 128
+  },
+  {
+    "id": "triggers",
+    "modules": [
+      "triggers"
+    ],
+    "description": "Test node within real trigger zone",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];const z=$.triggers.zone({x:0,y:0,w:128,h:128});",
+    "operation": "return Number($.triggers.inside(z,hero))",
+    "size": 128
+  },
+  {
+    "id": "pool",
+    "modules": [
+      "pool"
+    ],
+    "description": "Spawn/release reusable object",
+    "setup": "$.pool.create({name:'perf',tag:'rect',max:16});",
+    "operation": "const n=$.pool.spawn('perf',{x:1,y:1});$.pool.release(n);return n?1:0",
+    "size": 16
+  },
+  {
+    "id": "particles",
+    "modules": [
+      "particles"
+    ],
+    "description": "Particle preset normalization",
+    "setup": "",
+    "operation": "return Object.keys($.particles.preset('fire')).length",
+    "size": 128
+  },
+  {
+    "id": "tilemap",
+    "modules": [
+      "tilemap"
+    ],
+    "description": "Coordinate conversion + visible range",
+    "setup": "const map=$.tilemap.create({cols:16,rows:16,tile:8,src:'tests/fixtures/bench/assets/tiles.png',tiles:Array(256).fill(0)});",
+    "operation": "return JSON.stringify($.tilemap.geometry(map)).length",
+    "size": 256
+  },
+  {
+    "id": "atlas",
+    "modules": [
+      "atlas"
+    ],
+    "description": "Parse N frame Aseprite atlas in memory",
+    "setup": "const frames={};for(let j=0;j<N;j++)frames['f'+j]={frame:{x:0,y:0,w:8,h:8},duration:100};const data={frames,meta:{image:'sheet.png',size:{w:8,h:8}}};",
+    "operation": "return JSON.stringify($.atlas.parse(data)).length",
+    "size": 128
+  },
+  {
+    "id": "items",
+    "modules": [
+      "items"
+    ],
+    "description": "Inventory definition lookup + creation",
+    "setup": "$.items.define({id:'perf',title:'Test',size:[1,1],mass:1});",
+    "operation": "return $.items.get('perf').mass",
+    "size": 128
+  },
+  {
+    "id": "weapons",
+    "modules": [
+      "weapons"
+    ],
+    "description": "Weapon stats resolution",
+    "setup": "$.weapons.define({id:'perf',title:'Test',damage:20,magazine:30});",
+    "operation": "return $.weapons.get('perf').id.length",
+    "size": 128
+  },
+  {
+    "id": "combat",
+    "modules": [
+      "combat"
+    ],
+    "description": "Damage/zone calculation",
+    "setup": "",
+    "operation": "return $.combat.damageFor(35,i%2?'head':'chest')",
+    "size": 128
+  },
+  {
+    "id": "alive",
+    "modules": [
+      "alive"
+    ],
+    "description": "Update real NPC psyche",
+    "setup": "const psyche=$.alive.createPsyche({type:'veteran'});",
+    "operation": "psyche.tick(1/60);return psyche.aimErrorMult()",
+    "size": 128
+  },
+  {
+    "id": "quest",
+    "modules": [
+      "quest"
+    ],
+    "description": "Quest definition lookup",
+    "setup": "$.quest.define({id:'perf',title:'Test',objectives:[{kind:'kill',target:'enemy',count:5}]});",
+    "operation": "return $.quest.def('perf').id.length",
+    "size": 128
+  },
+  {
+    "id": "story",
+    "modules": [
+      "story",
+      "story_script"
+    ],
+    "description": "Parse N dialogue steps",
+    "setup": "const text='label start\\n'+Array.from({length:N},()=> 'say russi Привет!').join('\\n');",
+    "operation": "return JSON.stringify($.story.parse(text)).length",
+    "size": 128
+  },
+  {
+    "id": "dialog",
+    "modules": [
+      "dialog"
+    ],
+    "description": "Dialogue definition serialization",
+    "setup": "$.dialog.define('perf',{nodes:{start:{text:'Руся',next:'end'},end:{text:'Готово'}}});",
+    "operation": "return JSON.stringify($.dialog.definition('perf')).length",
+    "size": 128
+  },
+  {
+    "id": "screen",
+    "modules": [
+      "screen"
+    ],
+    "description": "Legacy screen define/remove, no new GUI",
+    "setup": "",
+    "operation": "$.screen.define('perf',{rows:[{id:'a',text:'A'}]});const v=$.screen.has('perf');$.screen.remove('perf');return Number(v)",
+    "size": 128
+  },
+  {
+    "id": "loading",
+    "modules": [
+      "loading"
+    ],
+    "description": "Loading progress state",
+    "setup": "",
+    "operation": "$.loading.progress((i%100)/100);return $.loading.value()",
+    "size": 128
+  },
+  {
+    "id": "timeline",
+    "modules": [
+      "timeline"
+    ],
+    "description": "Timeline definition registration",
+    "setup": "",
+    "operation": "$.timeline.define({id:'perf',script:[{say:'Test'}]});const v=$.timeline.has('perf');$.timeline.remove('perf');return Number(v)",
+    "size": 128
+  },
+  {
+    "id": "cutscene",
+    "modules": [
+      "cutscene"
+    ],
+    "description": "Read input ownership and cutscene state",
+    "setup": "",
+    "operation": "return Number($.input.taken())+Number($.cutscene.running())",
+    "size": 128
+  },
+  {
+    "id": "cels",
+    "modules": [
+      "cels"
+    ],
+    "description": "Evaluate real cel graph drivers",
+    "setup": "$.cels.define('perf',{root:{type:'switch',driver:'pose',nodes:[{type:'cel',cel:'a'},{type:'cel',cel:'b'}]}});const c=$.cels.create('perf');",
+    "operation": "c.state({pose:i%2});c.tick(1/60);return String(c.cel()).length",
+    "size": 128
+  },
+  {
+    "id": "mesh",
+    "modules": [
+      "mesh"
+    ],
+    "description": "Pose two-bone skeleton",
+    "setup": "const rig=$.mesh.skeleton({root:{length:40},arm:{parent:'root',length:30}});",
+    "operation": "return rig.tip(rig.pose({arm:(i%100)/100}),'arm').x",
+    "size": 2
+  },
+  {
+    "id": "proc",
+    "modules": [
+      "proc"
+    ],
+    "description": "Render 32x32 pixel character with seed",
+    "setup": "const art=$.proc.define({id:'perf',seed:17,w:32,h:32,palette:'city'});",
+    "operation": "return $.proc.pixels($.proc.render('perf',i%4)).length",
+    "size": 1024
+  },
+  {
+    "id": "raid",
+    "modules": [
+      "raid"
+    ],
+    "description": "Generate deterministic raid plan",
+    "setup": "",
+    "operation": "return JSON.stringify($.raid.create({seed:17,width:256,height:128})).length",
+    "size": 32768
+  },
+  {
+    "id": "replay",
+    "modules": [
+      "replay"
+    ],
+    "description": "Serialize deterministic recorded input frames",
+    "setup": "$.replay.record(()=>({x:1}));$.benchApi.prime=()=>{};",
+    "operation": "return $.replay.toText().length",
+    "size": 128
+  },
+  {
+    "id": "acoustics",
+    "modules": [
+      "acoustics"
+    ],
+    "description": "Resolve current room/zone state",
+    "setup": "$.audio.room({size:[8,5,3],material:'wood'});$.audio.zone('perf',{rect:[0,0,128,128],wet:0.3});",
+    "operation": "return JSON.stringify($.audio.acousticsState()).length",
+    "size": 128
+  },
+  {
+    "id": "audiobus",
+    "modules": [
+      "audiobus"
+    ],
+    "description": "Resolve gain through bus tree",
+    "setup": "$.audio.bus('perf',{volume:0.7});",
+    "operation": "return $.audio.gain('perf')",
+    "size": 128
+  },
+  {
+    "id": "soundbank",
+    "modules": [
+      "soundbank"
+    ],
+    "description": "Bank variation lookup",
+    "setup": "$.sound.defineBank('perf',{files:['a.wav','b.wav']});",
+    "operation": "return $.sound.bankFiles('perf').length",
+    "size": 128
+  },
+  {
+    "id": "steps",
+    "modules": [
+      "steps"
+    ],
+    "description": "Resolve footstep material",
+    "setup": "$.steps.material('perf',{files:['a.wav']});",
+    "operation": "return JSON.stringify($.steps.resolveMaterial('perf')).length",
+    "size": 128
+  },
+  {
+    "id": "sound",
+    "modules": [
+      "sound"
+    ],
+    "description": "Native sound play/stop",
+    "setup": "const path='assets/audio/sfx/pickup_01.ogg';",
+    "operation": "const h=$.sound.play(path,{volume:0});if(h<0)throw new Error('sound failed');$.sound.stop(h);return h+1",
+    "size": 128
+  },
+  {
+    "id": "net",
+    "modules": [
+      "net"
+    ],
+    "description": "Pack replicated snapshot without external transport",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];if(!$.net.host(0))throw new Error('host failed');for(const n of nodes)$.net.replicate(n);",
+    "operation": "const s=$.net.snapshotNow();if(Object.keys(s.entities).length!==N)throw new Error('replication missing');return JSON.stringify(s).length",
+    "size": 128
+  },
+  {
+    "id": "re2d",
+    "modules": [
+      "re2d"
+    ],
+    "description": "Native height support over 2 vertical spans",
+    "setup": "const world=$.re2d.world({cells:[{x:0,y:0,w:128,h:128,spans:[{bottom:0,top:100},{bottom:200,top:300}]}],walls:[]});",
+    "operation": "return JSON.stringify(world.support(10,10,i%2?210:10,40,20)).length",
+    "size": 2
+  },
+  {
+    "id": "rotsprite",
+    "modules": [
+      "rotsprite"
+    ],
+    "description": "Native Re2DSprite synthesize changing pose",
+    "setup": "const n=$.re2dSprite.from('tests/fixtures/sdk/re2d_proj/animal.character.json',{id:'animal'});",
+    "operation": "n.re2dPose(i%360,0);return n.get(0).rot_sprite.sprite+1",
+    "size": 1
+  },
+  {
+    "id": "kinds",
+    "modules": [
+      "kinds"
+    ],
+    "description": "Change node kind and resolve",
+    "setup": "const nodes=[];for(let j=0;j<N;j++)nodes.push($('<rect>',{id:'n'+j,class:'mob'}).at(j%16,j>>4).size(4,4).appendTo($.world));const hero=nodes[0];",
+    "operation": "hero.kind(i%2?'re2d':'2d');return hero.kind().length",
+    "size": 128
+  },
+  {
+    "id": "ru",
+    "modules": [
+      "ru"
+    ],
+    "description": "Russian tag/name alias creation and removal",
+    "setup": "",
+    "operation": "const n=$('<прямоугольник>').at(1,1);n.remove();return 1",
+    "size": 128
+  },
+  {
+    "id": "viewport",
+    "modules": [
+      "viewport"
+    ],
+    "description": "Native target create/destroy, 32x32",
+    "setup": "",
+    "operation": "const id=$.viewport.create(32,32);if(id<0)throw new Error('viewport unsupported');$.viewport.destroy(id);return id+1",
+    "size": 1024
+  },
+  {
+    "id": "fx",
+    "modules": [
+      "fx"
+    ],
+    "description": "Build ribbon and clear bounded effect registry",
+    "setup": "const points=[{x:0,y:0},{x:20,y:10},{x:40,y:0}];",
+    "operation": "$.fx.ribbon(points,{width:3});const n=JSON.stringify($.fx.stats()).length;$.fx.clear();return n",
+    "size": 3
+  },
+  {
+    "id": "depth",
+    "modules": [
+      "depth"
+    ],
+    "description": "Toggle native depth mode; not GPU fill rate",
+    "setup": "",
+    "operation": "$.gfx.depth(i%2===0);return Number($.gfx.depth())",
+    "size": 1
+  },
+  {
+    "id": "http_control",
+    "modules": [
+      "http"
+    ],
+    "description": "HTTP capability/pending query only; no network transfer",
+    "setup": "",
+    "operation": "return Number($.http.available())+$.http.pending()",
+    "size": 1
+  },
+  {
+    "id": "sdk_control",
+    "modules": [
+      "sdk"
+    ],
+    "description": "Native tool paths/availability only; no bake/process throughput",
+    "setup": "",
+    "operation": "return JSON.stringify($.sdk.paths()).length",
+    "size": 1
+  }
+]
