@@ -2,54 +2,51 @@
 
 Last updated: 2026-10-08 (Europe/Moscow)
 
-## Current status
+Спецификация: [Следующая цель SDK AGENT.md](Следующая%20цель%20SDK%20AGENT.md).
+Фактическое состояние SDK — [docs/SDK.md](docs/SDK.md). Аудит — [SDK_AUDIT.md](SDK_AUDIT.md).
 
-The root specification is [Следующая цель SDK AGENT.md](Следующая%20цель%20SDK%20AGENT.md).
-It has been updated with the current agreed direction. This is a documentation
-specification; the SDK launcher, `sdk_tools.json`, and SDK tools have not been
-implemented in this session.
+## Статус фаз
 
-## Decisions captured in the specification
+| Фаза | Статус | Коммит/заметка |
+|---|---|---|
+| 0 Audit | IMPLEMENTED | SDK_AUDIT.md |
+| 1 SDK Shell | IMPLEMENTED | оболочка `sdk/`, реестр `sdk_tools.json`, бэкенд `r2d-sdk`, мост `$.sdk` |
+| 2 Classic 2D slice | NOT STARTED | |
+| 3 Re2DSprite Studio | NOT STARTED | |
+| 4 Re2D Baker MVP | NOT STARTED | |
+| 5 Character / VRM | NOT STARTED | |
+| 6 Re2D World Studio | NOT STARTED | |
+| 7 Automation / Batch | NOT STARTED | |
 
-- The SDK itself is an R2D application built on the R2D runtime. Its UI uses
-  RmlUi.
-- The public application API is C → `$`. Private `engine.*` bindings still
-  exist internally in QuickJS modules; application and SDK code must not expose
-  or use them as a second public API.
-- Capabilities needed by both games and the SDK belong in `$`; tool-only
-  operations remain tool-only.
-- SDK tool backends and agent client/protocol components must be native C
-  binaries. No Python, Node.js, Ruby, shell scripts, or external scripting
-  runtimes for SDK tools.
-- No ImGui UI. The existing debug overlay is legacy and must be removed or
-  replaced with RmlUi.
-- Engine and SDK are AI-first. SDK agents retain parity with the current engine
-  agent protocol and gain machine access to SDK operations. Extending the
-  existing SDK agent module is allowed; a parallel agent stack is not.
-- Re2D World/BSP Studio should be a more capable, R2D-specific editor inspired
-  by Valve Hammer, not a direct copy or a universal scene editor.
-- One SDK Launcher/Manager discovers all components from root `sdk_tools.json`
-  entries with a stable id, name, description, ISO 8601 `last_updated`, and
-  entry point.
-- Every SDK session/agent reads and updates this shared handoff.
+## Что проверено (Phase 1)
 
-## Work completed this session
+- `cmake --build build` зелёная; `python3 tools/run_tests.py`: 96 ok, 0 fail, 0 skip
+  (до работы `highlevel_perf_test` один раз падал — перфоманс-порог Debug, потом проходил).
+- `build/_deps/quickjs-build/qjs tests/js/*_test.mjs` — все; `build/sdk/native/r2d_sdk_core_test` (ASan/UBSan).
+- Новые: `tests/sdk/sdk_core_test.c`, `tests/js/sdk_test.mjs`, `tests/js/sdk_app_test.mjs`,
+  `tests/agent/sdk_cli_test.py`, `tests/agent/sdk_shell_test.py`.
 
-- Updated `Следующая цель SDK AGENT.md` with the above architecture and
-  acceptance rules.
-- Reviewed current agent command headings in `docs/AGENT_API.md` and checked the
-  QuickJS/private `engine.*` boundary in `src/highlevel/bootstrap.js`,
-  `src/highlevel/native.js`, and `src/script.c`.
-- No engine or SDK implementation code was changed. No tests were run; this
-  session reviewed and edited documentation only.
+## Архитектурные решения
 
-## Before continuing
+- SDK = обычный проект R2D `sdk/` (RmlUi, `$`). Нативный бэкенд `sdk/native` → `build/r2d-sdk`
+  (C11 + SDL3 + `src/json.c`, без внешних runtime). Python — только тестовая обвязка репозитория.
+- Мост `$.sdk` (`src/sdk_host.c`, `src/highlevel/sdk.js`) включается `"toolHost": true`; запускает
+  только `r2d-sdk` и сам движок, массив аргументов, фоновый поток читает вывод. Открыто описан
+  (docs/highlevel/sdk.md) — это не скрытый второй API.
+- Расширена RmlUi-интеграция (законно по §4 спецификации): `getValue/setValue/getText/getAttr/
+  setAttr/rect/click`, колбэк `ui.on` получает `targetKey, targetId` (делегирование списков).
+- Агент и человек: каждая кнопка = операция `$.sdkApp.*`; снимок в `state.sdk`.
 
-1. Check `git status` first. The repository already had many unrelated modified,
-   deleted, and untracked files before these documentation edits; preserve them.
-2. Read this handoff and `Следующая цель SDK AGENT.md`, then verify live code
-   before treating any planned feature as implemented.
-3. A useful next step is an implementation audit/plan for the single R2D-based
-   launcher and `sdk_tools.json`, including the C-only tool/backend boundary and
-   agent parity. Do not claim the launcher or manifest exists until created.
+## Известные ограничения / не сделано
 
+- ImGui-оверлей (`src/debug_ui.*`) НЕ удалён. Текст сцены уже рисуется без ImGui
+  (`engine.drawText`, stb_truetype), поэтому удаление должно быть проще, чем предполагал аудит, —
+  но это отдельная работа (main.c, CMake, tests, docs).
+- Нативный агентский C-клиент (паритет всех команд протокола) — Phase 7.
+- `highlevel_perf_test` чувствителен к нагрузке машины (не связан с SDK).
+
+## Следующий шаг
+
+Phase 2: Sprite Studio / Animation: форматы — существующий atlas JSON (`$.atlas`) и клипы
+`$.anim.define`; валидаторы `sprite.atlas`, `animation` в `sdk/native` (регистрируются в
+`sdk_validate.c`), экраны `sdk/tools/*.js` + RML, регистрация в `sdk_tools.json`.

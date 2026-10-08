@@ -22,6 +22,7 @@
 #include "light.h"
 #include "module_path.h"
 #include "http.h"
+#include "sdk_host.h"
 #include "net.h"
 #include "payload.h"
 #include "r2d.h"
@@ -2129,6 +2130,112 @@ static JSValue r2d__js_ui_set_property(JSContext *ctx, JSValueConst this_val, in
     return JS_UNDEFINED;
 }
 
+// engine.ui.getValue/getText/getAttr(doc, id[, name]) → строка или null.
+typedef bool (*R2dGuiGetFn)(R2DGui *, int, const char *, char *, size_t);
+
+static JSValue r2d__ui_get_string(JSContext *ctx, int argc, JSValueConst *argv, R2dGuiGetFn fn)
+{
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    JSValue result = JS_NULL;
+    if (s && s->gui && element) {
+        char buf[8192];
+        if (fn(s->gui, doc, element, buf, sizeof buf)) result = JS_NewString(ctx, buf);
+    }
+    if (element) JS_FreeCString(ctx, element);
+    return result;
+}
+
+static JSValue r2d__js_ui_get_value(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    return r2d__ui_get_string(ctx, argc, argv, r2d_gui_get_value);
+}
+
+static JSValue r2d__js_ui_get_text(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    return r2d__ui_get_string(ctx, argc, argv, r2d_gui_get_text);
+}
+
+static JSValue r2d__js_ui_set_value(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    const char *value = r2d__arg_str(ctx, argc, argv, 2);
+    const bool ok = s && s->gui && element && value && r2d_gui_set_value(s->gui, doc, element, value);
+    if (element) JS_FreeCString(ctx, element);
+    if (value) JS_FreeCString(ctx, value);
+    return JS_NewBool(ctx, ok);
+}
+
+static JSValue r2d__js_ui_get_attr(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    const char *name = r2d__arg_str(ctx, argc, argv, 2);
+    JSValue result = JS_NULL;
+    if (s && s->gui && element && name) {
+        char buf[8192];
+        if (r2d_gui_get_attr(s->gui, doc, element, name, buf, sizeof buf)) result = JS_NewString(ctx, buf);
+    }
+    if (element) JS_FreeCString(ctx, element);
+    if (name) JS_FreeCString(ctx, name);
+    return result;
+}
+
+static JSValue r2d__js_ui_set_attr(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    const char *name = r2d__arg_str(ctx, argc, argv, 2);
+    const char *value = r2d__arg_str(ctx, argc, argv, 3);
+    const bool ok = s && s->gui && element && name && value &&
+                    r2d_gui_set_attr(s->gui, doc, element, name, value);
+    if (element) JS_FreeCString(ctx, element);
+    if (name) JS_FreeCString(ctx, name);
+    if (value) JS_FreeCString(ctx, value);
+    return JS_NewBool(ctx, ok);
+}
+
+static JSValue r2d__js_ui_click(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    const bool ok = s && s->gui && element && r2d_gui_click(s->gui, doc, element);
+    if (element) JS_FreeCString(ctx, element);
+    return JS_NewBool(ctx, ok);
+}
+
+// engine.ui.rect(doc, id) → { x, y, w, h } в координатах окна или null.
+static JSValue r2d__js_ui_rect(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    JSValue result = JS_NULL;
+    float r[4];
+    if (s && s->gui && element && r2d_gui_get_rect(s->gui, doc, element, r)) {
+        result = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, result, "x", JS_NewFloat64(ctx, r[0]));
+        JS_SetPropertyStr(ctx, result, "y", JS_NewFloat64(ctx, r[1]));
+        JS_SetPropertyStr(ctx, result, "w", JS_NewFloat64(ctx, r[2]));
+        JS_SetPropertyStr(ctx, result, "h", JS_NewFloat64(ctx, r[3]));
+    }
+    if (element) JS_FreeCString(ctx, element);
+    return result;
+}
+
 static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -2170,7 +2277,8 @@ static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JS
 
 // Мост RmlUi → JS: вызывается из gui.cpp при срабатывании слушателя.
 static void r2d__gui_dispatch(void *user, int callback_id, const char *element_id,
-                               const char *event_name)
+                               const char *event_name, const char *target_id,
+                               const char *target_key)
 {
     R2DScript *s = (R2DScript *)user;
     if (!s || !s->ctx) return;
@@ -2180,17 +2288,20 @@ static void r2d__gui_dispatch(void *user, int callback_id, const char *element_i
     JSValue fn = s->callbacks[callback_id];
     if (!JS_IsFunction(ctx, fn)) return;
 
-    JSValue args[2];
+    // (elementId, eventName, targetKey, targetId): первые два аргумента — как
+    // раньше, остальные нужны делегированию списков (docs/highlevel/ui.md).
+    JSValue args[4];
     args[0] = JS_NewString(ctx, element_id ? element_id : "");
     args[1] = JS_NewString(ctx, event_name ? event_name : "");
+    args[2] = JS_NewString(ctx, target_key ? target_key : "");
+    args[3] = JS_NewString(ctx, target_id ? target_id : "");
 
-    JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 2, args);
+    JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 4, args);
     if (JS_IsException(ret)) {
         r2d__capture_error(s);
     }
     JS_FreeValue(ctx, ret);
-    JS_FreeValue(ctx, args[0]);
-    JS_FreeValue(ctx, args[1]);
+    for (int i = 0; i < 4; ++i) JS_FreeValue(ctx, args[i]);
 }
 
 // ---------------------------------------------------------------------------
@@ -4282,6 +4393,13 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, ui, "setClass", r2d__js_ui_set_class, 4);
     r2d__set_fn(ctx, ui, "setProperty", r2d__js_ui_set_property, 4);
     r2d__set_fn(ctx, ui, "on", r2d__js_ui_on, 4);
+    r2d__set_fn(ctx, ui, "getValue", r2d__js_ui_get_value, 2);
+    r2d__set_fn(ctx, ui, "setValue", r2d__js_ui_set_value, 3);
+    r2d__set_fn(ctx, ui, "getText", r2d__js_ui_get_text, 2);
+    r2d__set_fn(ctx, ui, "getAttr", r2d__js_ui_get_attr, 3);
+    r2d__set_fn(ctx, ui, "setAttr", r2d__js_ui_set_attr, 4);
+    r2d__set_fn(ctx, ui, "rect", r2d__js_ui_rect, 2);
+    r2d__set_fn(ctx, ui, "click", r2d__js_ui_click, 2);
 
     // Иконки Material Design: встроены в бинарник, доступны по имени.
     r2d__set_fn(ctx, ui, "icon", r2d__js_ui_icon, 1);
@@ -4401,6 +4519,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     // расширения одна, а реализации — у каждого свои.
     r2d_render_register_js(ctx, engine);
     r2d_http_register_js(ctx, engine);
+    r2d_sdk_host_register_js(ctx, engine);
 
     return engine;
 }

@@ -114,3 +114,45 @@ int r2d_gui_document_count(const R2DGui *g)
     R2D_UNUSED(g);
     return 0;
 }
+
+bool r2d_gui_get_value(R2DGui *g, int doc, const char *element_id, char *out, size_t cap)
+{
+    R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id); R2D_UNUSED(out); R2D_UNUSED(cap);
+    return false;
+}
+
+bool r2d_gui_set_value(R2DGui *g, int doc, const char *element_id, const char *value)
+{
+    R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id); R2D_UNUSED(value);
+    return false;
+}
+
+bool r2d_gui_get_text(R2DGui *g, int doc, const char *element_id, char *out, size_t cap)
+{
+    R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id); R2D_UNUSED(out); R2D_UNUSED(cap);
+    return false;
+}
+
+bool r2d_gui_get_attr(R2DGui *g, int doc, const char *element_id, const char *name, char *out, size_t cap)
+{
+    R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id); R2D_UNUSED(name); R2D_UNUSED(out); R2D_UNUSED(cap);
+    return false;
+}
+
+bool r2d_gui_set_attr(R2DGui *g, int doc, const char *element_id, const char *name, const char *value)
+{
+    R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id); R2D_UNUSED(name); R2D_UNUSED(value);
+    return false;
+}
+
+bool r2d_gui_get_rect(R2DGui *g, int doc, const char *element_id, float out[4])
+{
+    R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id); R2D_UNUSED(out);
+    return false;
+}
+
+bool r2d_gui_click(R2DGui *g, int doc, const char *element_id)
+{
+    R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id);
+    return false;
+}

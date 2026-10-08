@@ -87,3 +87,4 @@ id_rsa*
 
 # Local Claude configuration
 .claude/
+sdk/state.local.json

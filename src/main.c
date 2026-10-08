@@ -13,6 +13,7 @@
 #include "app.h"
 #include "payload.h"
 #include "project.h"
+#include "sdk_host.h"
 #include "json.h"
 #include "physics.h"
 #include "http.h"
@@ -767,6 +768,8 @@ int main(int argc, char **argv)
     // проекта, и внутри собранной игры.
     R2dProject project;
     r2d_project_load(&project, opt_game, r2d_payload_entry());
+    // Мост инструментов SDK включается только манифестом проекта (src/sdk_host.h).
+    r2d_sdk_host_enable(project.tool_host);
 
     char window_title[512];
     if (opt_title) {

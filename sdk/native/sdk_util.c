@@ -296,13 +296,18 @@ void sdk_proc_free(SdkProcResult *res)
 
 bool sdk_find_engine(const char *override_path, char *out, size_t cap)
 {
+    // Явно указанный путь — приказ, а не подсказка: если файла нет, молча
+    // подставлять другой движок нельзя (иначе запустится не то, что просили).
+    if (override_path && override_path[0]) {
+        if (!sdk_file_exists(override_path)) return false;
+        snprintf(out, cap, "%s", override_path);
+        return true;
+    }
     const char *env = SDL_getenv("R2D_ENGINE");
-    const char *candidates[3] = { override_path, env, NULL };
-    for (int i = 0; i < 2; ++i) {
-        if (candidates[i] && candidates[i][0] && sdk_file_exists(candidates[i])) {
-            snprintf(out, cap, "%s", candidates[i]);
-            return true;
-        }
+    if (env && env[0]) {
+        if (!sdk_file_exists(env)) return false;
+        snprintf(out, cap, "%s", env);
+        return true;
     }
     char path[1024];
     sdk_join(sdk_exe_dir(), "russiano2d", path, sizeof path);

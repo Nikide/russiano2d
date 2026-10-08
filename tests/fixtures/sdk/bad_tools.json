@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "tools": [
+    { "id": "good-tool", "name": "Хороший", "description": "Нормальная запись.",
+      "last_updated": "2026-10-08T17:00:00+03:00", "entry": "asset-browser", "assets": ["*.png"] },
+    { "id": "bad-date", "name": "Без часового пояса", "description": "Дата без пояса.",
+      "last_updated": "2026-10-08T17:00:00", "entry": "x" },
+    { "id": "good-tool", "name": "Дубликат", "description": "Повторный id.",
+      "last_updated": "2026-10-08T17:00:00Z", "entry": "x" },
+    { "id": "No Entry", "name": "Без entry", "description": "Плохой id и нет entry.",
+      "last_updated": "2026-10-08T17:00:00Z" }
+  ]
+}

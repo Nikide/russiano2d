@@ -91,6 +91,7 @@ import { installI18n, tickI18n } from './i18n.js';
 import { installPool, tickPool } from './pool.js';
 import { installViewport, tickViewport } from './viewport.js';
 import { installHttp, tickHttp } from './http.js';
+import { installSdk, tickSdk } from './sdk.js';
 import { installCutscene, tickCutscene } from './cutscene.js';
 
 // ---------------------------------------------------------------------------
@@ -430,6 +431,7 @@ export function createApi() {
     installPool($);
     installViewport($);
     installHttp($);
+    installSdk($);               // мост инструментов SDK: $.sdk (включается project.json "toolHost")
 
     // --- Утилиты, логика и данные --------------------------------------------
     // Порядок важен: installRandom перекрывает $.random из ядра (там только
@@ -1753,6 +1755,7 @@ function installFrameHooks($) {
         prof('пулы'); tickPool(dt);
         prof('вьюпорты'); tickViewport(dt);
         prof('http'); tickHttp(dt);
+        prof('sdk'); tickSdk(dt);
         prof('шины звука'); tickAudiobus(dt);
         prof('акустика'); tickAcoustics(dt);
         prof('интерфейс'); ctx.ui._tick();

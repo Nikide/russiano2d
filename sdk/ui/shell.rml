@@ -1,0 +1,105 @@
+<rml>
+<head>
+    <link type="text/rcss" href="shell.rcss"/>
+    <title>Russiano2D SDK</title>
+</head>
+<body>
+<div id="app">
+    <div id="topbar">
+        <span id="brand">Russiano2D SDK</span>
+        <span id="project-badge">проект не открыт</span>
+        <span id="status">готов</span>
+    </div>
+
+    <div id="main">
+        <div id="nav">
+            <button id="nav-projects" class="nav-btn on">Проекты</button>
+            <button id="nav-assets" class="nav-btn">Ассеты</button>
+            <button id="nav-tools" class="nav-btn">Инструменты</button>
+            <button id="nav-run" class="nav-btn">Запуск и сборка</button>
+            <button id="nav-docs" class="nav-btn">Документация</button>
+            <div id="nav-version">SDK <span id="sdk-version"></span></div>
+        </div>
+
+        <div id="content">
+            <!-- Проекты -->
+            <div id="view-projects" class="view">
+                <h2>Проекты</h2>
+                <div class="panel">
+                    <div class="form-row">
+                        <input id="project-path" type="text" value="" class="field"/>
+                        <button id="btn-open-project" class="btn primary">Открыть</button>
+                        <button id="btn-find-projects" class="btn">Найти проекты</button>
+                    </div>
+                    <div id="project-info"></div>
+                </div>
+                <h3>Недавние</h3>
+                <div id="recent-list" class="list"></div>
+                <h3>Найденные в каталоге</h3>
+                <div id="found-list" class="list"></div>
+            </div>
+
+            <!-- Ассеты -->
+            <div id="view-assets" class="view hidden">
+                <h2>Asset Browser</h2>
+                <div class="form-row">
+                    <input id="asset-filter" type="text" value="" class="field"/>
+                    <button id="btn-asset-filter" class="btn">Фильтр</button>
+                    <button id="btn-assets-refresh" class="btn">Обновить</button>
+                </div>
+                <div id="type-chips"></div>
+                <div id="asset-list" class="list tall"></div>
+                <div class="form-row">
+                    <span id="asset-selected">файл не выбран</span>
+                    <button id="btn-asset-open" class="btn primary">Открыть в инструменте</button>
+                    <button id="btn-asset-validate" class="btn">Проверить</button>
+                </div>
+            </div>
+
+            <!-- Инструменты -->
+            <div id="view-tools" class="view hidden">
+                <h2>Инструменты</h2>
+                <p class="hint">Каталог читается из sdk_tools.json — списка инструментов в коде нет.</p>
+                <div id="tool-list" class="list tall"></div>
+                <div class="form-row"><button id="btn-tools-reload" class="btn">Перечитать реестр</button></div>
+            </div>
+
+            <!-- Запуск и сборка -->
+            <div id="view-run" class="view hidden">
+                <h2>Запуск и сборка</h2>
+                <div class="panel">
+                    <div class="form-row">
+                        <button id="btn-run" class="btn primary">Запустить игру</button>
+                        <button id="btn-stop" class="btn">Остановить</button>
+                        <button id="btn-validate-project" class="btn">Проверить project.json</button>
+                    </div>
+                    <div class="form-row">
+                        <input id="build-out" type="text" value="build/game" class="field"/>
+                        <button id="btn-build" class="btn primary">Собрать в один файл</button>
+                    </div>
+                    <div id="run-status">процессов нет</div>
+                </div>
+                <h3>Вывод</h3>
+                <div id="run-log" class="log"></div>
+            </div>
+
+            <!-- Документация -->
+            <div id="view-docs" class="view hidden">
+                <h2>Документация</h2>
+                <div id="doc-list" class="list short"></div>
+                <div id="doc-text" class="log tall-log"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="diag">
+        <div id="diag-head">
+            <span id="diag-title">Диагностика</span>
+            <span id="diag-counts">ошибок 0 · предупреждений 0</span>
+            <button id="btn-diag-clear" class="btn small">Очистить</button>
+        </div>
+        <div id="diag-list"></div>
+    </div>
+</div>
+</body>
+</rml>

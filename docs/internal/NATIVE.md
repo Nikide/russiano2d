@@ -1423,6 +1423,29 @@ engine.ui.on(doc, 'btn-quit', 'click', () => engine.quit());
 > расти. Храните флаг (`this.listenersBound`) — пример в
 > [`game/scenes/menu.js`](../../game/scenes/menu.js).
 
+### Чтение состояния элементов и программное нажатие
+
+| Вызов | Возвращает | Описание |
+|---|---|---|
+| `engine.ui.getValue(doc, id)` / `setValue(doc, id, v)` | `string\|null` / `bool` | значение поля формы (`ElementFormControl`) или атрибута `value` |
+| `engine.ui.getText(doc, id)` | `string\|null` | внутренний RML элемента |
+| `engine.ui.getAttr(doc, id, name)` / `setAttr(doc, id, name, v)` | `string\|null` / `bool` | атрибут элемента |
+| `engine.ui.rect(doc, id)` | `{x,y,w,h}\|null` | абсолютный прямоугольник границы элемента |
+| `engine.ui.click(doc, id)` | `bool` | `Element::Click()` — событие `click` без мыши |
+
+Колбэк `engine.ui.on` теперь вызывается как
+`callback(elementId, eventName, targetKey, targetId)`: два последних аргумента
+— цель всплывшего события (`data-key` ближайшего предка цели до слушателя и
+`id` цели); прежние обработчики с двумя параметрами работают как раньше.
+
+### Мост инструментов `engine.sdk`
+
+Только при `"toolHost": true` в `project.json` ([`src/sdk_host.h`](../../src/sdk_host.h)):
+`available()`, `start(kind, args[])` (`kind` — `'tool'` для `r2d-sdk` рядом с
+движком либо `'engine'`; возвращает id ≥ 0 или код ошибки < 0), `poll(id)`,
+`kill(id)`, `release(id)`, `paths()`. Из игры доступен только через `$.sdk`
+([highlevel/sdk.md](../highlevel/sdk.md)).
+
 ### Шрифты
 
 При старте движок загружает **все** `.ttf`/`.otf` из `assets/fonts`

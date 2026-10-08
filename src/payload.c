@@ -252,6 +252,11 @@ static bool self_path(char *out, size_t out_size)
 #endif
 }
 
+bool r2d_self_executable_path(char *out, size_t out_size)
+{
+    return self_path(out, out_size);
+}
+
 #ifdef R2D_EMBEDDED_PAYLOAD
 // Заполняет файл, сгенерированный `russiano2d build --relink`: контейнер и
 // футер уже лежат в бинарнике как массивы байт.

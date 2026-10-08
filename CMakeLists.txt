@@ -87,6 +87,8 @@ add_subdirectory(src)
 # дымовой прогон страницы в браузере (tests/web/README.md).
 if(NOT EMSCRIPTEN)
     add_subdirectory(tests)
+    # Нативный бэкенд SDK (r2d-sdk): отдельный CLI-бинарник, не часть игры.
+    add_subdirectory(sdk/native)
 endif()
 
 message(STATUS "")

@@ -17,6 +17,7 @@ set(R2D_SOURCES
     profile.h  profile.c
     physics.h  physics.c
     http.h     http.c
+    sdk_host.h sdk_host.c
     script.h   script.c
     nodes.h    nodes.c
     json.h     json.c

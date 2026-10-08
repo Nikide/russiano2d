@@ -20,8 +20,14 @@ typedef struct R2DGui R2DGui;
 
 // Вызывается, когда пользователь взаимодействует с элементом, на который
 // через JS повешен обработчик. callback_id выдаётся скриптовым слоем.
+// `target_id` — id элемента, до которого дошло событие (при всплытии это может
+// быть потомок слушателя); `target_key` — значение data-key ближайшего к цели
+// элемента вверх по дереву до слушателя (делегирование списков: один
+// обработчик на контейнер вместо сотен на строки). Оба могут быть пустой
+// строкой.
 typedef void (*R2DGuiEventFn)(void *user, int callback_id, const char *element_id,
-                               const char *event_name);
+                               const char *event_name, const char *target_id,
+                               const char *target_key);
 
 R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *base_path);
 void     r2d_gui_destroy(R2DGui *g);
@@ -57,6 +63,19 @@ void r2d_gui_set_html(R2DGui *g, int doc, const char *element_id, const char *ht
 void r2d_gui_set_class(R2DGui *g, int doc, const char *element_id, const char *class_name, bool add);
 void r2d_gui_set_property(R2DGui *g, int doc, const char *element_id,
                            const char *property, const char *value);
+
+// Чтение состояния элемента: нужно инструментам (поля ввода) и тестам агента.
+// Все функции возвращают false, если документа или элемента нет.
+bool r2d_gui_get_value(R2DGui *g, int doc, const char *element_id, char *out, size_t cap);
+bool r2d_gui_set_value(R2DGui *g, int doc, const char *element_id, const char *value);
+bool r2d_gui_get_text(R2DGui *g, int doc, const char *element_id, char *out, size_t cap);
+bool r2d_gui_get_attr(R2DGui *g, int doc, const char *element_id, const char *name, char *out, size_t cap);
+bool r2d_gui_set_attr(R2DGui *g, int doc, const char *element_id, const char *name, const char *value);
+// Нажать элемент программно: RmlUi рассылает ему обычное событие click (так
+// интерфейс проверяет агент: виртуальная мышь SDL-событий не рождает).
+bool r2d_gui_click(R2DGui *g, int doc, const char *element_id);
+// Абсолютный прямоугольник элемента в координатах окна: x, y, w, h.
+bool r2d_gui_get_rect(R2DGui *g, int doc, const char *element_id, float out[4]);
 
 // Подписка на событие элемента. callback_id трактуется скриптовым слоем.
 bool r2d_gui_add_listener(R2DGui *g, int doc, const char *element_id,
