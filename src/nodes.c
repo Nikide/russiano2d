@@ -22,6 +22,7 @@
 #pragma fp_contract(off)
 #endif
 
+#include "font.h"
 #include "physics.h"
 #include "r2d.h"
 #include "script.h"
@@ -42,7 +43,12 @@
     X(pivot_x) X(pivot_y) X(shader_name) X(blend_mode) X(sprite) X(color) X(tint)    \
     X(tint_timer) X(_scr_x) X(_scr_y) X(_scr_frame) X(_rk)                         \
     X(class_list) X(tr) X(controls) X(trigger) X(anim) X(__clip) X(parallax_factor)   \
-    X(shake_amount) X(iframes) X(_fx)
+    X(shake_amount) X(iframes) X(_fx)                                              \
+    X(text) X(size) X(font) X(align) X(_tm_text) X(_tm_size) X(_tm_family)       \
+    X(age) X(life) X(end_size) X(t) X(v) X(_uk)                                   \
+    X(_anchor) X(anchorLeft) X(anchorTop) X(anchorRight) X(anchorBottom)           \
+    X(offsetLeft) X(offsetTop) X(offsetRight) X(offsetBottom) X(themeName)         \
+    X(_style) X(_styleStates)
 
 typedef struct {
 #define R2D_DECL_ATOM(name) JSAtom name;
@@ -57,6 +63,12 @@ typedef struct {
     JSAtom special[64];
     int    special_count;
     int    special_version;
+    // UI-теги со своими отрисовщиками (registerUINodeRenderer) и атомы
+    // встроенных тегов, которые UI-проход рисует сам.
+    JSAtom ui_special[64];
+    int    ui_special_count;
+    int    ui_version;
+    JSAtom tag_ui_label, tag_ui_panel;
     bool   ready;
 } R2DNodeAtoms;
 
@@ -192,24 +204,31 @@ static JSValue js_special_tags(JSContext *ctx, JSValueConst this_val, int argc, 
     return JS_UNDEFINED;
 }
 
-// Рисуется ли узел НЕ общим путём из-за тега. Кэш на узле — `_rk`:
-// версия набора * 2 + признак, чтобы атом тега не искать каждый кадр.
-static bool special_tag(JSContext *ctx, JSValueConst node)
+// Как рисуется узел по тегу: общий путь, особый (JS) или текст (C).
+// Кэш на узле — `_rk` = версия набора * 4 + вид, чтобы атом тега не искать
+// каждый кадр.
+enum { RK_PLAIN = 0, RK_SPECIAL = 1, RK_TEXT = 2 };
+
+static int render_kind(JSContext *ctx, JSValueConst node)
 {
     const double rk = num_prop(ctx, node, A._rk);
-    if (rk == rk && (int)(rk / 2) == A.special_version) return ((int)rk & 1) != 0;
+    if (rk == rk && (int)(rk / 4) == A.special_version) return (int)rk & 3;
     JSValue tag = prop(ctx, node, A.tag);
-    bool special = false;
+    int kind = RK_PLAIN;
     if (JS_IsString(tag)) {
         const JSAtom atom = JS_ValueToAtom(ctx, tag);
-        for (int i = 0; i < A.special_count; ++i) {
-            if (A.special[i] == atom) { special = true; break; }
+        if (atom == A.text) {
+            kind = RK_TEXT;
+        } else {
+            for (int i = 0; i < A.special_count; ++i) {
+                if (A.special[i] == atom) { kind = RK_SPECIAL; break; }
+            }
         }
         JS_FreeAtom(ctx, atom);
     }
     JS_FreeValue(ctx, tag);
-    set_num(ctx, node, A._rk, (double)(A.special_version * 2 + (special ? 1 : 0)));
-    return special;
+    set_num(ctx, node, A._rk, (double)(A.special_version * 4 + kind));
+    return kind;
 }
 
 // ---------------------------------------------------------------------------
@@ -561,15 +580,17 @@ static inline uint32_t to_u32(JSContext *ctx, JSValue v)
     return (uint32_t)i;
 }
 
-// Нужен ли узлу JS-путь (см. drawWorldNodeClipped/Inner).
-static bool needs_js(JSContext *ctx, JSValueConst node)
+// Нужен ли узлу JS-путь (см. drawWorldNodeClipped/Inner). Текст рисует C,
+// но тень/контур/шейдер ему не нужны: в JS у текста своя ветка без них.
+static bool needs_js(JSContext *ctx, JSValueConst node, int rk)
 {
     JSValue kind = prop(ctx, node, A.kind);
     const bool plain_kind = JS_IsStrictEqual(ctx, kind, A.str_2d);
     JS_FreeValue(ctx, kind);
     if (!plain_kind) return true;
-    if (special_tag(ctx, node)) return true;
+    if (rk == RK_SPECIAL) return true;
     if (attrs_truthy(ctx, node, A.clip)) return true;
+    if (rk == RK_TEXT) return num_prop(ctx, node, A.shake_timer) > 0;
     if (truthy_prop(ctx, node, A.shadow) || truthy_prop(ctx, node, A.outline) ||
         truthy_prop(ctx, node, A.nine_slice)) return true;
     if (num_prop(ctx, node, A.shake_timer) > 0) return true;
@@ -577,6 +598,64 @@ static bool needs_js(JSContext *ctx, JSValueConst node)
     const bool fx = JS_ToBool(ctx, shader) > 0 && !JS_IsStrictEqual(ctx, shader, A.str_none);
     JS_FreeValue(ctx, shader);
     return fx;
+}
+
+// nodeFontFamily(): attrs.font ближайшего узла по цепочке родителей или NULL.
+// Вызывающий освобождает строку JS_FreeCString.
+static const char *font_family(JSContext *ctx, JSValueConst node)
+{
+    JSValue cur = JS_DupValue(ctx, node);
+    const char *out = NULL;
+    for (int guard = 0; JS_IsObject(cur) && guard < 4096; ++guard) {
+        JSValue attrs = prop(ctx, cur, A.attrs);
+        if (JS_IsObject(attrs)) {
+            JSValue family = prop(ctx, attrs, A.font);
+            if (JS_ToBool(ctx, family) > 0) out = JS_ToCString(ctx, family);
+            JS_FreeValue(ctx, family);
+        }
+        JS_FreeValue(ctx, attrs);
+        if (out) break;
+        JSValue parent = prop(ctx, cur, A.parent_node);
+        JS_FreeValue(ctx, cur);
+        cur = parent;
+    }
+    JS_FreeValue(ctx, cur);
+    return out;
+}
+
+// syncTextBounds(): габарит текста по шрифту, пересчёт только при смене
+// текста, кегля или семейства (поля _tm_* общие с JS-путём).
+static void sync_text_bounds(JSContext *ctx, JSValueConst node, JSValueConst text)
+{
+    double size = num_prop(ctx, node, A.size);
+    if (!isfinite(size)) size = 20;
+    const char *family = font_family(ctx, node);
+    JSValue family_v = JS_NewString(ctx, family ? family : "");
+    JSValue size_v = JS_NewFloat64(ctx, size);
+    JSValue c_text = prop(ctx, node, A._tm_text);
+    JSValue c_size = prop(ctx, node, A._tm_size);
+    JSValue c_family = prop(ctx, node, A._tm_family);
+    const bool same = JS_IsStrictEqual(ctx, c_text, text) && JS_IsStrictEqual(ctx, c_size, size_v) &&
+                      JS_IsStrictEqual(ctx, c_family, family_v);
+    JS_FreeValue(ctx, c_text);
+    JS_FreeValue(ctx, c_size);
+    JS_FreeValue(ctx, c_family);
+    if (!same) {
+        JS_SetProperty(ctx, node, A._tm_text, JS_DupValue(ctx, text));
+        JS_SetProperty(ctx, node, A._tm_size, JS_DupValue(ctx, size_v));
+        JS_SetProperty(ctx, node, A._tm_family, JS_DupValue(ctx, family_v));
+        const char *str = JS_ToCString(ctx, text);
+        float w = 0.0f, h = 0.0f;
+        if (str) {
+            r2d_font_measure(str, (float)size, family ? family : "", &w, &h);
+            JS_FreeCString(ctx, str);
+        }
+        set_num(ctx, node, A.w, (double)w);
+        set_num(ctx, node, A.h, (double)h);
+    }
+    JS_FreeValue(ctx, family_v);
+    JS_FreeValue(ctx, size_v);
+    if (family) JS_FreeCString(ctx, family);
 }
 
 static JSValue js_draw_world(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -590,7 +669,7 @@ static JSValue js_draw_world(JSContext *ctx, JSValueConst this_val, int argc, JS
     uint8_t *blend = (uint8_t *)typed_args(ctx, argv[4], &bn, 1);
     int32_t *fx = (int32_t *)typed_args(ctx, argv[5], &fn, 4);
     int16_t *clip = (int16_t *)typed_args(ctx, argv[6], &kn, 2);
-    if (!P || pn < 18 || !xf || !col || !blend || !fx || !clip) {
+    if (!P || pn < 19 || !xf || !col || !blend || !fx || !clip) {
         return JS_ThrowTypeError(ctx, "nodes.drawWorld: неверные буферы батча");
     }
     int32_t count = 0;
@@ -613,7 +692,7 @@ static JSValue js_draw_world(JSContext *ctx, JSValueConst this_val, int argc, JS
     const uint8_t default_blend = (uint8_t)P[14];
     const int16_t clip_cur = (int16_t)P[15];
     const double rc = cos(rot), rs = sin(rot);
-    double drawn = 0;
+    double drawn = 0, texts = 0;
 
     const uint32_t n = list_length(ctx, argv[0]);
     for (uint32_t i = 0; i < n; ++i) {
@@ -644,7 +723,8 @@ static JSValue js_draw_world(JSContext *ctx, JSValueConst this_val, int argc, JS
         JS_FreeValue(ctx, cur);
         if (eff_alpha <= 0) { JS_FreeValue(ctx, node); continue; }
 
-        if (needs_js(ctx, node)) {
+        const int rk = render_kind(ctx, node);
+        if (needs_js(ctx, node, rk)) {
             JSValue args[2] = { node, JS_NewInt32(ctx, count) };
             JSValue r = JS_Call(ctx, cb, JS_UNDEFINED, 2, args);
             JS_FreeValue(ctx, node);
@@ -652,6 +732,13 @@ static JSValue js_draw_world(JSContext *ctx, JSValueConst this_val, int argc, JS
             JS_ToInt32(ctx, &count, r);
             JS_FreeValue(ctx, r);
             continue;
+        }
+
+        // Текст: габарит считается до отсечения (у <text> нет спрайта).
+        JSValue text = JS_UNDEFINED;
+        if (rk == RK_TEXT) {
+            text = prop(ctx, node, A.text);
+            if (JS_ToBool(ctx, text) > 0) sync_text_bounds(ctx, node, text);
         }
 
         // nodeTransform(): та же математика кадра, что frameViewPoint().
@@ -679,11 +766,58 @@ static JSValue js_draw_world(JSContext *ctx, JSValueConst this_val, int argc, JS
         if (culling) {
             if (tx + fabs(tw) < -64 || tx - fabs(tw) > cull_w + 64 ||
                 ty + fabs(th) < -64 || ty - fabs(th) > cull_h + 64) {
+                JS_FreeValue(ctx, text);
                 JS_FreeValue(ctx, node);
                 continue;
             }
         }
         drawn += 1;
+
+        if (rk == RK_TEXT) {
+            // _queueTextScaled(): строка сразу уходит в батч глифов.
+            uint32_t color;
+            JSValue tint = prop(ctx, node, A.tint);
+            if (JS_ToBool(ctx, tint) > 0 && num_prop(ctx, node, A.tint_timer) > 0) {
+                color = to_u32(ctx, tint);
+            } else {
+                JSValue c = prop(ctx, node, A.color);
+                color = to_u32(ctx, c);
+                JS_FreeValue(ctx, c);
+            }
+            JS_FreeValue(ctx, tint);
+            if (eff_alpha < 1) color = with_alpha(color, eff_alpha);
+            if (pass_alpha < 1) color = with_alpha(color, pass_alpha);
+
+            int align = R2D_TEXT_ALIGN_LEFT;
+            JSValue attrs = prop(ctx, node, A.attrs);
+            JSValue align_v = JS_IsObject(attrs) ? prop(ctx, attrs, A.align) : JS_UNDEFINED;
+            if (JS_ToBool(ctx, align_v) > 0) {
+                const char *a = JS_ToCString(ctx, align_v);
+                if (a && SDL_strcmp(a, "center") == 0) align = R2D_TEXT_ALIGN_CENTER;
+                else if (a && SDL_strcmp(a, "right") == 0) align = R2D_TEXT_ALIGN_RIGHT;
+                if (a) JS_FreeCString(ctx, a);
+            }
+            JS_FreeValue(ctx, align_v);
+            JS_FreeValue(ctx, attrs);
+
+            const char *family = font_family(ctx, node);
+            const char *str = JS_ToCString(ctx, text);
+            double angle = num_prop(ctx, node, A.angle);
+            if (!(angle == angle) || angle == 0) angle = 0;
+            const double scale = zsize > 0 ? zsize : 1;
+            if (str) {
+                r2d_font_draw(str, (float)tx, (float)ty, (float)num_prop(ctx, node, A.size), color,
+                              align, family, (float)angle, (float)scale);
+                JS_FreeCString(ctx, str);
+            } else {
+                JS_FreeValue(ctx, JS_GetException(ctx));
+            }
+            if (family) JS_FreeCString(ctx, family);
+            texts += 1;
+            JS_FreeValue(ctx, text);
+            JS_FreeValue(ctx, node);
+            continue;
+        }
 
         double sprite = num_prop(ctx, node, A.sprite);
         if (!(sprite >= 0)) sprite = white;
@@ -719,6 +853,7 @@ static JSValue js_draw_world(JSContext *ctx, JSValueConst this_val, int argc, JS
         JS_FreeValue(ctx, node);
     }
     P[17] = drawn;
+    P[18] = texts;
     return JS_NewInt32(ctx, count);
 }
 
@@ -999,6 +1134,593 @@ static JSValue js_tick_effects(JSContext *ctx, JSValueConst this_val, int argc, 
 }
 
 // ---------------------------------------------------------------------------
+// Ядра модулей: тайлы и частицы прямо в буферы батча render.js
+// ---------------------------------------------------------------------------
+//
+// Модуль (tilemap.js, particles.js) раньше звал $.gfx.push.sprite на каждый
+// тайл и каждую частицу. Здесь та же математика и та же запись в буферы
+// xf/col/blend/fx/clip_of, что делает pushSprite() (при выключенном view —
+// а в проходе мира он выключен всегда).
+
+typedef struct {
+    float *xf;
+    uint32_t *col;
+    uint8_t *blend;
+    int32_t *fx;
+    int16_t *clip;
+    size_t cap;
+} Batch;
+
+// argv[0..4] — xf, col, blend, fx, clip_of; cap — MAX_SPRITES.
+static bool batch_bind(JSContext *ctx, JSValueConst *argv, double cap, Batch *b)
+{
+    size_t xn = 0, cn = 0, bn = 0, fn = 0, kn = 0;
+    b->xf = (float *)typed_args(ctx, argv[0], &xn, 4);
+    b->col = (uint32_t *)typed_args(ctx, argv[1], &cn, 4);
+    b->blend = (uint8_t *)typed_args(ctx, argv[2], &bn, 1);
+    b->fx = (int32_t *)typed_args(ctx, argv[3], &fn, 4);
+    b->clip = (int16_t *)typed_args(ctx, argv[4], &kn, 2);
+    if (!b->xf || !b->col || !b->blend || !b->fx || !b->clip) return false;
+    size_t c = cap > 0 ? (size_t)cap : 0;
+    if (c > xn / 6) c = xn / 6;
+    if (c > cn) c = cn;
+    if (c > bn) c = bn;
+    if (c > fn) c = fn;
+    if (c > kn) c = kn;
+    b->cap = c;
+    return true;
+}
+
+static inline void batch_push(const Batch *b, int32_t *count, double sprite, double x, double y,
+                              double w, double h, double angle, uint32_t color, uint8_t blend,
+                              int16_t clip)
+{
+    if ((size_t)*count >= b->cap || !(sprite >= 0)) return;
+    const size_t o = (size_t)*count * 6;
+    b->xf[o] = (float)sprite;
+    b->xf[o + 1] = (float)x;
+    b->xf[o + 2] = (float)y;
+    b->xf[o + 3] = (float)w;
+    b->xf[o + 4] = (float)h;
+    b->xf[o + 5] = (float)angle;
+    b->col[*count] = color;
+    b->blend[*count] = blend;
+    b->fx[*count] = 0;
+    b->clip[*count] = clip;
+    (*count)++;
+}
+
+// engine.nodes.drawTiles(data, frames, G, xf, col, blend, fx, clip, count)
+// G: [0] x0, [1] y0, [2] x1, [3] y1, [4] ширина слоя в клетках, [5] ox,
+// [6] oy, [7] tile_w, [8] tile_h, [9] цвет, [10] режим смешивания,
+// [11] текущая обрезка, [12] ёмкость буфера.
+static JSValue js_draw_tiles(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 9) return JS_ThrowTypeError(ctx, "nodes.drawTiles: 9 аргументов");
+    size_t gn = 0;
+    double *G = f64_args(ctx, argv[2], &gn);
+    Batch b;
+    if (!G || gn < 13 || !batch_bind(ctx, argv + 3, G[12], &b)) {
+        return JS_ThrowTypeError(ctx, "nodes.drawTiles: неверные аргументы");
+    }
+    int32_t count = 0;
+    JS_ToInt32(ctx, &count, argv[8]);
+    const int x0 = (int)G[0], y0 = (int)G[1], x1 = (int)G[2], y1 = (int)G[3];
+    const int64_t lw = (int64_t)G[4];
+    const double ox = G[5], oy = G[6], tw = G[7], th = G[8];
+    const uint32_t color = (uint32_t)(int64_t)G[9];
+    const uint8_t blend = (uint8_t)G[10];
+    const int16_t clip = (int16_t)G[11];
+    const uint32_t frame_count = list_length(ctx, argv[1]);
+    for (int ty = y0; ty <= y1; ++ty) {
+        const int64_t row = (int64_t)ty * lw;
+        const double sy = oy + (ty + 0.5) * th;
+        for (int tx = x0; tx <= x1; ++tx) {
+            JSValue idv = JS_GetPropertyInt64(ctx, argv[0], row + tx);
+            const double id = to_num(ctx, idv);
+            JS_FreeValue(ctx, idv);
+            if (id <= 0) continue;                       // 0 и <0 — пусто
+            // frames[id - 1]: только целый индекс внутри массива, иначе undefined.
+            const double fi = id - 1;
+            if (!(fi >= 0) || fi != floor(fi) || fi >= (double)frame_count) continue;
+            JSValue sv = JS_GetPropertyUint32(ctx, argv[1], (uint32_t)fi);
+            const bool missing = JS_IsUndefined(sv);
+            const double sprite = to_num(ctx, sv);
+            JS_FreeValue(ctx, sv);
+            if (missing || sprite < 0) continue;
+            batch_push(&b, &count, sprite, ox + (tx + 0.5) * tw, sy, tw, th, 0, color, blend, clip);
+        }
+    }
+    return JS_NewInt32(ctx, count);
+}
+
+// rampAt() из particles.js: ramp — массив {t, v} (отсортирован) с флагом
+// .color, либо null.
+static inline uint32_t lerp_color(uint32_t a, uint32_t b, double k)
+{
+    if (a == b) return a;
+    const double ch[4][2] = {
+        { (double)(a & 0xff), (double)(b & 0xff) },
+        { (double)((a >> 8) & 0xff), (double)((b >> 8) & 0xff) },
+        { (double)((a >> 16) & 0xff), (double)((b >> 16) & 0xff) },
+        { (double)((a >> 24) & 0xff), (double)((b >> 24) & 0xff) },
+    };
+    uint32_t out = 0;
+    for (int i = 0; i < 4; ++i) {
+        // Math.round → engine.rgba (ToInt32 и младший байт).
+        const double v = floor(ch[i][0] + (ch[i][1] - ch[i][0]) * k + 0.5);
+        out |= (uint32_t)(uint8_t)(int32_t)v << (8 * i);
+    }
+    return out;
+}
+
+typedef struct { double t; double v; } RampStop;
+
+typedef struct {
+    RampStop stops[16];
+    int count;
+    bool color;
+    bool present;
+} Ramp;
+
+static void ramp_read(JSContext *ctx, JSValueConst value, Ramp *r)
+{
+    r->count = 0;
+    r->color = false;
+    r->present = JS_IsArray(value);
+    if (!r->present) return;
+    const uint32_t n = list_length(ctx, value);
+    for (uint32_t i = 0; i < n && r->count < (int)SDL_arraysize(r->stops); ++i) {
+        JSValue stop = JS_GetPropertyUint32(ctx, value, i);
+        r->stops[r->count].t = num_prop(ctx, stop, A.t);
+        JSValue v = prop(ctx, stop, A.v);
+        r->stops[r->count].v = to_num(ctx, v);
+        JS_FreeValue(ctx, v);
+        JS_FreeValue(ctx, stop);
+        r->count++;
+    }
+    r->color = truthy_prop(ctx, value, A.color);
+}
+
+static double ramp_at(const Ramp *r, double t)
+{
+    if (!r->present || r->count == 0) return 0;
+    const double tt = t < 0 ? 0 : (t > 1 ? 1 : t);
+    if (tt <= r->stops[0].t) return r->stops[0].v;
+    if (tt >= r->stops[r->count - 1].t) return r->stops[r->count - 1].v;
+    for (int i = 1; i < r->count; ++i) {
+        if (tt <= r->stops[i].t) {
+            const RampStop *a = &r->stops[i - 1], *b = &r->stops[i];
+            const double span = b->t - a->t;
+            const double k = span > 1e-9 ? (tt - a->t) / span : 0;
+            if (r->color) {
+                return (double)(int32_t)lerp_color((uint32_t)(int64_t)a->v, (uint32_t)(int64_t)b->v, k);
+            }
+            return a->v + (b->v - a->v) * k;
+        }
+    }
+    return r->stops[r->count - 1].v;
+}
+
+// engine.nodes.drawParticles(parts, rampColor, rampAlpha, rampSize, G,
+//                            xf, col, blend, fx, clip, count)
+// G: [0] zoom, [1] cam.w, [2] cam.h, [3] cam.x, [4] cam.y, [5] shake_x,
+// [6] shake_y, [7] спрайт, [8] alpha узла, [9] локальные координаты,
+// [10] node.x, [11] node.y, [12] node.angle, [13] режим смешивания,
+// [14] обрезка, [15] ёмкость буфера, [16] предел частиц на эмиттер.
+// Ramp-ы не длиннее 16 стопов; длиннее — JS-путь (решает particles.js).
+static JSValue js_draw_particles(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 11) return JS_ThrowTypeError(ctx, "nodes.drawParticles: 11 аргументов");
+    size_t gn = 0;
+    double *G = f64_args(ctx, argv[4], &gn);
+    Batch b;
+    if (!G || gn < 17 || !batch_bind(ctx, argv + 5, G[15], &b)) {
+        return JS_ThrowTypeError(ctx, "nodes.drawParticles: неверные аргументы");
+    }
+    int32_t count = 0;
+    JS_ToInt32(ctx, &count, argv[10]);
+    Ramp rc, ra, rs;
+    ramp_read(ctx, argv[1], &rc);
+    ramp_read(ctx, argv[2], &ra);
+    ramp_read(ctx, argv[3], &rs);
+
+    const double zoom = G[0], cw = G[1], ch = G[2], cx = G[3], cy = G[4];
+    const double shx = G[5], shy = G[6], sprite = G[7], alpha_base = G[8];
+    const bool local = G[9] != 0;
+    const double nx = G[10], ny = G[11], nangle = G[12];
+    const uint8_t blend = (uint8_t)G[13];
+    const int16_t clip = (int16_t)G[14];
+    const double max_draw = G[16];
+    const double cs = local ? cos(nangle) : 1, sn = local ? sin(nangle) : 0;
+
+    const uint32_t n = list_length(ctx, argv[0]);
+    double drawn = 0;
+    for (uint32_t i = 0; i < n && drawn < max_draw; ++i) {
+        JSValue p = JS_GetPropertyUint32(ctx, argv[0], i);
+        const double px = num_prop(ctx, p, A.x), py = num_prop(ctx, p, A.y);
+        double wx, wy;
+        if (local) {
+            wx = nx + px * cs - py * sn;
+            wy = ny + px * sn + py * cs;
+        } else {
+            wx = px;
+            wy = py;
+        }
+        const double sx = (wx - cx) * zoom + cw / 2 + shx;
+        const double sy = (wy - cy) * zoom + ch / 2 + shy;
+        if (sx < -64 || sx > cw + 64 || sy < -64 || sy > ch + 64) { JS_FreeValue(ctx, p); continue; }
+
+        const double age = num_prop(ctx, p, A.age), life = num_prop(ctx, p, A.life);
+        const double ratio = life > 0 ? age / life : 1;
+        double world_size;
+        if (rs.present) world_size = ramp_at(&rs, ratio);
+        else {
+            const double size = num_prop(ctx, p, A.size), end = num_prop(ctx, p, A.end_size);
+            world_size = size + (end - size) * ratio;
+        }
+        uint32_t color = (uint32_t)(int64_t)ramp_at(&rc, ratio);
+        color = with_alpha(color, ramp_at(&ra, ratio) * alpha_base);
+        const double pa = num_prop(ctx, p, A.angle);
+        const double angle = local ? pa + nangle : pa;
+        // push.sprite: angle || 0.
+        batch_push(&b, &count, sprite, sx, sy, world_size * zoom, world_size * zoom,
+                   angle == angle && angle != 0 ? angle : 0, color, blend, clip);
+        drawn += 1;
+        JS_FreeValue(ctx, p);
+    }
+    return JS_NewInt32(ctx, count);
+}
+
+// ---------------------------------------------------------------------------
+// UI-проход: drawUINode() из render.js и очередь подписей HUD
+// ---------------------------------------------------------------------------
+//
+// Подписи UI откладываются до конца пакета подложек (иначе подложка
+// закрашивала бы текст). Очередь — здесь, в C: в неё пишут и этот проход
+// (ui.label), и JS (`_queueText` кнопок, баров, виджетов) — порядок обхода
+// сохраняется, а uiTextFlush() рисует всё после submitSprites.
+
+typedef struct {
+    char *text;
+    char *family;
+    float x, y, size, angle;
+    uint32_t color;
+    int align;
+} UIText;
+
+static UIText *ui_texts;
+static int ui_text_count, ui_text_cap;
+
+static char *dup_cstr(JSContext *ctx, JSValueConst v)
+{
+    const char *s = JS_ToCString(ctx, v);
+    if (!s) { JS_FreeValue(ctx, JS_GetException(ctx)); return NULL; }
+    char *out = SDL_strdup(s);
+    JS_FreeCString(ctx, s);
+    return out;
+}
+
+static int align_of(JSContext *ctx, JSValueConst v)
+{
+    int align = R2D_TEXT_ALIGN_LEFT;
+    if (JS_ToBool(ctx, v) <= 0) return align;
+    const char *a = JS_ToCString(ctx, v);
+    if (a && SDL_strcmp(a, "center") == 0) align = R2D_TEXT_ALIGN_CENTER;
+    else if (a && SDL_strcmp(a, "right") == 0) align = R2D_TEXT_ALIGN_RIGHT;
+    if (a) JS_FreeCString(ctx, a);
+    else JS_FreeValue(ctx, JS_GetException(ctx));
+    return align;
+}
+
+static UIText *ui_text_slot(void)
+{
+    if (ui_text_count == ui_text_cap) {
+        const int cap = ui_text_cap ? ui_text_cap * 2 : 256;
+        UIText *grown = (UIText *)SDL_realloc(ui_texts, sizeof(UIText) * (size_t)cap);
+        if (!grown) return NULL;
+        ui_texts = grown;
+        ui_text_cap = cap;
+    }
+    UIText *t = &ui_texts[ui_text_count++];
+    SDL_zerop(t);
+    return t;
+}
+
+static void ui_text_clear(void)
+{
+    for (int i = 0; i < ui_text_count; ++i) {
+        SDL_free(ui_texts[i].text);
+        SDL_free(ui_texts[i].family);
+    }
+    ui_text_count = 0;
+}
+
+static JSValue js_ui_text_begin(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(ctx); R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    ui_text_clear();
+    return JS_UNDEFINED;
+}
+
+// engine.nodes.uiTextPush(text, x, y, size, color, align, family, angle) —
+// те же преобразования аргументов, что у engine.drawText.
+static JSValue js_ui_text_push(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 1) return JS_UNDEFINED;
+    UIText *t = ui_text_slot();
+    if (!t) return JS_ThrowOutOfMemory(ctx);
+    t->text = dup_cstr(ctx, argv[0]);
+    t->x = argc > 1 ? (float)to_num(ctx, argv[1]) : 0.0f;
+    t->y = argc > 2 ? (float)to_num(ctx, argv[2]) : 0.0f;
+    t->size = argc > 3 ? (float)to_num(ctx, argv[3]) : 18.0f;
+    int32_t color = (int32_t)R2D_WHITE;
+    if (argc > 4) JS_ToInt32(ctx, &color, argv[4]);
+    t->color = (uint32_t)color;
+    t->align = argc > 5 ? align_of(ctx, argv[5]) : R2D_TEXT_ALIGN_LEFT;
+    t->family = (argc > 6 && !JS_IsUndefined(argv[6]) && !JS_IsNull(argv[6])) ? dup_cstr(ctx, argv[6]) : NULL;
+    t->angle = argc > 7 ? (float)to_num(ctx, argv[7]) : 0.0f;
+    return JS_UNDEFINED;
+}
+
+static JSValue js_ui_text_flush(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    const int n = ui_text_count;
+    for (int i = 0; i < n; ++i) {
+        const UIText *t = &ui_texts[i];
+        if (t->text) r2d_font_draw(t->text, t->x, t->y, t->size, t->color, t->align, t->family, t->angle, 1.0f);
+    }
+    ui_text_clear();
+    return JS_NewInt32(ctx, n);
+}
+
+// engine.nodes.uiTags([...]) — UI-теги со своими отрисовщиками.
+static JSValue js_ui_tags(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    for (int i = 0; i < A.ui_special_count; ++i) JS_FreeAtom(ctx, A.ui_special[i]);
+    A.ui_special_count = 0;
+    if (argc >= 1) {
+        const uint32_t n = list_length(ctx, argv[0]);
+        for (uint32_t i = 0; i < n && A.ui_special_count < (int)SDL_arraysize(A.ui_special); ++i) {
+            JSValue v = JS_GetPropertyUint32(ctx, argv[0], i);
+            if (JS_IsString(v)) A.ui_special[A.ui_special_count++] = JS_ValueToAtom(ctx, v);
+            JS_FreeValue(ctx, v);
+        }
+    }
+    A.ui_version++;
+    return JS_UNDEFINED;
+}
+
+enum { UK_JS = 0, UK_LABEL = 1, UK_PANEL = 2 };
+
+static int ui_kind(JSContext *ctx, JSValueConst node)
+{
+    const double uk = num_prop(ctx, node, A._uk);
+    if (uk == uk && (int)(uk / 4) == A.ui_version) return (int)uk & 3;
+    JSValue tag = prop(ctx, node, A.tag);
+    int kind = UK_JS;
+    if (JS_IsString(tag)) {
+        const JSAtom atom = JS_ValueToAtom(ctx, tag);
+        bool custom = false;
+        for (int i = 0; i < A.ui_special_count; ++i) if (A.ui_special[i] == atom) { custom = true; break; }
+        if (!custom) {
+            if (atom == A.tag_ui_label) kind = UK_LABEL;
+            else if (atom == A.tag_ui_panel) kind = UK_PANEL;
+        }
+        JS_FreeAtom(ctx, atom);
+    }
+    JS_FreeValue(ctx, tag);
+    set_num(ctx, node, A._uk, (double)(A.ui_version * 4 + kind));
+    return kind;
+}
+
+// engine.nodes.drawUI(list, P, xf, col, blend, fx, clip, count, cb)
+// P: [0] белый спрайт, [1] режим смешивания по умолчанию, [2] обрезка,
+// [3] ёмкость буфера, [4] выход: сколько подписей поставлено в очередь.
+static JSValue js_draw_ui(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 9) return JS_ThrowTypeError(ctx, "nodes.drawUI: 9 аргументов");
+    size_t pn = 0;
+    double *P = f64_args(ctx, argv[1], &pn);
+    Batch b;
+    if (!P || pn < 5 || !batch_bind(ctx, argv + 2, P[3], &b)) {
+        return JS_ThrowTypeError(ctx, "nodes.drawUI: неверные аргументы");
+    }
+    int32_t count = 0;
+    JS_ToInt32(ctx, &count, argv[7]);
+    JSValueConst cb = argv[8];
+    const double white = P[0];
+    const uint8_t default_blend = (uint8_t)P[1];
+    const int16_t clip = (int16_t)P[2];
+    double texts = 0;
+
+    const uint32_t n = list_length(ctx, argv[0]);
+    for (uint32_t i = 0; i < n; ++i) {
+        JSValue node = JS_GetPropertyUint32(ctx, argv[0], i);
+        if (!JS_IsObject(node)) { JS_FreeValue(ctx, node); continue; }
+        // if (!node.visible || node.alpha <= 0) return;
+        if (!truthy_prop(ctx, node, A.visible)) { JS_FreeValue(ctx, node); continue; }
+        const double alpha = num_prop(ctx, node, A.alpha);
+        if (alpha <= 0) { JS_FreeValue(ctx, node); continue; }
+
+        const int kind = ui_kind(ctx, node);
+        JSValue color_v = prop(ctx, node, A.color);
+        const int ctag = JS_VALUE_GET_NORM_TAG(color_v);
+        const bool numeric = ctag == JS_TAG_INT || ctag == JS_TAG_FLOAT64;
+        if (kind == UK_JS || !numeric) {
+            JS_FreeValue(ctx, color_v);
+            JSValue args[2] = { node, JS_NewInt32(ctx, count) };
+            JSValue r = JS_Call(ctx, cb, JS_UNDEFINED, 2, args);
+            JS_FreeValue(ctx, node);
+            if (JS_IsException(r)) return r;
+            JS_ToInt32(ctx, &count, r);
+            JS_FreeValue(ctx, r);
+            continue;
+        }
+        const uint32_t color = with_alpha(to_u32(ctx, color_v), alpha);
+        JS_FreeValue(ctx, color_v);
+
+        if (kind == UK_PANEL) {
+            batch_push(&b, &count, white, num_prop(ctx, node, A.x), num_prop(ctx, node, A.y),
+                       num_prop(ctx, node, A.w), num_prop(ctx, node, A.h), 0, color, default_blend, clip);
+        } else {
+            UIText *t = ui_text_slot();
+            if (t) {
+                JSValue text = prop(ctx, node, A.text);
+                t->text = dup_cstr(ctx, text);
+                JS_FreeValue(ctx, text);
+                t->x = (float)num_prop(ctx, node, A.x);
+                t->y = (float)num_prop(ctx, node, A.y);
+                t->size = (float)num_prop(ctx, node, A.size);
+                t->color = color;
+                JSValue attrs = prop(ctx, node, A.attrs);
+                JSValue align = JS_IsObject(attrs) ? prop(ctx, attrs, A.align) : JS_UNDEFINED;
+                t->align = align_of(ctx, align);
+                JS_FreeValue(ctx, align);
+                JS_FreeValue(ctx, attrs);
+                const char *family = font_family(ctx, node);
+                t->family = family ? SDL_strdup(family) : NULL;
+                if (family) JS_FreeCString(ctx, family);
+                t->angle = 0.0f;
+            }
+            texts += 1;
+        }
+        JS_FreeValue(ctx, node);
+    }
+    P[4] = texts;
+    return JS_NewInt32(ctx, count);
+}
+
+// ---------------------------------------------------------------------------
+// engine.nodes.filterNodes(nodes, mode, tags?) — кандидаты для widgets.js
+// ---------------------------------------------------------------------------
+//
+// Тик виджетов обходил весь реестр, чтобы найти несколько якорных узлов и
+// контейнеров. Здесь тот же предикат за один нативный проход; порядок —
+// порядок реестра. mode: 0 — isAnchored(), 1 — тег из `tags`,
+// 2 — узел, которому нужен applyThemes() без темы по умолчанию (своя тема у
+// узла или предка, свой стиль или ещё не сброшенные состояния темы).
+
+static bool is_anchored(JSContext *ctx, JSValueConst node)
+{
+    JSValue a = prop(ctx, node, A.attrs);
+    bool r = false;
+    if (JS_IsObject(a)) {
+        if (truthy_prop(ctx, a, A._anchor)) r = true;
+        const JSAtom keys[8] = { A.anchorLeft, A.anchorTop, A.anchorRight, A.anchorBottom,
+                                 A.offsetLeft, A.offsetTop, A.offsetRight, A.offsetBottom };
+        for (int i = 0; i < 8 && !r; ++i) {
+            JSValue v = prop(ctx, a, keys[i]);
+            if (!JS_IsUndefined(v)) r = true;
+            JS_FreeValue(ctx, v);
+        }
+    }
+    JS_FreeValue(ctx, a);
+    return r;
+}
+
+static bool needs_theme(JSContext *ctx, JSValueConst node)
+{
+    JSValue a = prop(ctx, node, A.attrs);
+    bool r = false;
+    if (JS_IsObject(a)) {
+        if (truthy_prop(ctx, a, A._style)) r = true;
+        if (!r) {
+            JSValue st = prop(ctx, a, A._styleStates);
+            r = !JS_IsUndefined(st) && !JS_IsNull(st);
+            JS_FreeValue(ctx, st);
+        }
+    }
+    JS_FreeValue(ctx, a);
+    if (r) return true;
+    // inheritThemeName(): attrs.themeName у узла или любого предка.
+    JSValue cur = JS_DupValue(ctx, node);
+    for (int guard = 0; JS_IsObject(cur) && guard < 4096 && !r; ++guard) {
+        JSValue attrs = prop(ctx, cur, A.attrs);
+        if (JS_IsObject(attrs)) {
+            JSValue tn = prop(ctx, attrs, A.themeName);
+            if (!JS_IsUndefined(tn)) r = true;
+            JS_FreeValue(ctx, tn);
+        }
+        JS_FreeValue(ctx, attrs);
+        JSValue parent = prop(ctx, cur, A.parent_node);
+        JS_FreeValue(ctx, cur);
+        cur = parent;
+    }
+    JS_FreeValue(ctx, cur);
+    return r;
+}
+
+static JSValue js_filter_nodes(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 2) return JS_NewArray(ctx);
+    int32_t mode = 0;
+    JS_ToInt32(ctx, &mode, argv[1]);
+    JSAtom tags[16];
+    int tag_count = 0;
+    if (mode == 1 && argc >= 3) {
+        const uint32_t tn = list_length(ctx, argv[2]);
+        for (uint32_t i = 0; i < tn && tag_count < 16; ++i) {
+            JSValue v = JS_GetPropertyUint32(ctx, argv[2], i);
+            tags[tag_count++] = JS_ValueToAtom(ctx, v);
+            JS_FreeValue(ctx, v);
+        }
+    }
+    JSValue out = JS_NewArray(ctx);
+    uint32_t len = 0;
+    const uint32_t n = list_length(ctx, argv[0]);
+    for (uint32_t i = 0; i < n; ++i) {
+        JSValue node = JS_GetPropertyUint32(ctx, argv[0], i);
+        bool keep = false;
+        if (JS_IsObject(node)) {
+            if (mode == 0) keep = is_anchored(ctx, node);
+            else if (mode == 2) keep = needs_theme(ctx, node);
+            else {
+                JSValue tag = prop(ctx, node, A.tag);
+                if (JS_IsString(tag)) {
+                    const JSAtom a = JS_ValueToAtom(ctx, tag);
+                    for (int k = 0; k < tag_count; ++k) if (tags[k] == a) { keep = true; break; }
+                    JS_FreeAtom(ctx, a);
+                }
+                JS_FreeValue(ctx, tag);
+            }
+        }
+        if (keep) JS_SetPropertyUint32(ctx, out, len++, node);
+        else JS_FreeValue(ctx, node);
+    }
+    for (int k = 0; k < tag_count; ++k) JS_FreeAtom(ctx, tags[k]);
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// engine.nodes.memory() — факты о JS-куче (JS_ComputeMemoryUsage)
+// ---------------------------------------------------------------------------
+
+static JSValue js_memory(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    JSMemoryUsage u;
+    JS_ComputeMemoryUsage(JS_GetRuntime(ctx), &u);
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "bytes", JS_NewFloat64(ctx, (double)u.malloc_size));
+    JS_SetPropertyStr(ctx, o, "used", JS_NewFloat64(ctx, (double)u.memory_used_size));
+    JS_SetPropertyStr(ctx, o, "objects", JS_NewFloat64(ctx, (double)u.obj_count));
+    JS_SetPropertyStr(ctx, o, "arrays", JS_NewFloat64(ctx, (double)u.array_count));
+    JS_SetPropertyStr(ctx, o, "strings", JS_NewFloat64(ctx, (double)u.str_count));
+    JS_SetPropertyStr(ctx, o, "atoms", JS_NewFloat64(ctx, (double)u.atom_count));
+    JS_SetPropertyStr(ctx, o, "shapes", JS_NewFloat64(ctx, (double)u.shape_count));
+    JS_SetPropertyStr(ctx, o, "native_tweens", JS_NewInt32(ctx, tween_count));
+    return o;
+}
+
+// ---------------------------------------------------------------------------
 // engine.nodes.buildIndex(nodes) — buildRegistryIndex() из core.js
 // ---------------------------------------------------------------------------
 //
@@ -1179,6 +1901,10 @@ void r2d_nodes_shutdown(JSContext *ctx)
     R2D_NODE_ATOMS(R2D_FREE_ATOM)
 #undef R2D_FREE_ATOM
     for (int i = 0; i < A.special_count; ++i) JS_FreeAtom(ctx, A.special[i]);
+    for (int i = 0; i < A.ui_special_count; ++i) JS_FreeAtom(ctx, A.ui_special[i]);
+    JS_FreeAtom(ctx, A.tag_ui_label);
+    JS_FreeAtom(ctx, A.tag_ui_panel);
+    ui_text_clear();
     JS_FreeAtom(ctx, atom_value);
     JS_FreeValue(ctx, A.str_2d);
     JS_FreeValue(ctx, A.str_none);
@@ -1201,6 +1927,10 @@ int r2d_nodes_install(JSContext *ctx, JSValue engine)
     static const char *const blends[4] = { "alpha", "add", "multiply", "none" };
     for (int i = 0; i < 4; ++i) A.blend_names[i] = JS_NewString(ctx, blends[i]);
     A.special_version = 1;
+    A.ui_version = 1;
+    A.tag_ui_label = JS_NewAtom(ctx, "ui.label");
+    A.tag_ui_panel = JS_NewAtom(ctx, "ui.panel");
+    ui_text_clear();
     A.ready = true;
 
     JSValue nodes = JS_NewObject(ctx);
@@ -1218,6 +1948,15 @@ int r2d_nodes_install(JSContext *ctx, JSValue engine)
     JS_SetPropertyStr(ctx, nodes, "tweenPause", JS_NewCFunction(ctx, js_tween_pause, "tweenPause", 2));
     JS_SetPropertyStr(ctx, nodes, "tweenCount", JS_NewCFunction(ctx, js_tween_count, "tweenCount", 0));
     JS_SetPropertyStr(ctx, nodes, "tickEffects", JS_NewCFunction(ctx, js_tick_effects, "tickEffects", 2));
+    JS_SetPropertyStr(ctx, nodes, "drawTiles", JS_NewCFunction(ctx, js_draw_tiles, "drawTiles", 9));
+    JS_SetPropertyStr(ctx, nodes, "drawUI", JS_NewCFunction(ctx, js_draw_ui, "drawUI", 9));
+    JS_SetPropertyStr(ctx, nodes, "filterNodes", JS_NewCFunction(ctx, js_filter_nodes, "filterNodes", 3));
+    JS_SetPropertyStr(ctx, nodes, "memory", JS_NewCFunction(ctx, js_memory, "memory", 0));
+    JS_SetPropertyStr(ctx, nodes, "uiTags", JS_NewCFunction(ctx, js_ui_tags, "uiTags", 1));
+    JS_SetPropertyStr(ctx, nodes, "uiTextBegin", JS_NewCFunction(ctx, js_ui_text_begin, "uiTextBegin", 0));
+    JS_SetPropertyStr(ctx, nodes, "uiTextPush", JS_NewCFunction(ctx, js_ui_text_push, "uiTextPush", 8));
+    JS_SetPropertyStr(ctx, nodes, "uiTextFlush", JS_NewCFunction(ctx, js_ui_text_flush, "uiTextFlush", 0));
+    JS_SetPropertyStr(ctx, nodes, "drawParticles", JS_NewCFunction(ctx, js_draw_particles, "drawParticles", 11));
     JS_SetPropertyStr(ctx, engine, "nodes", nodes);
     return 0;
 }

@@ -35,4 +35,23 @@ $.ready(() => {
     $('<rect>', { id: 'shadowed' }).at(420, 500).size(50, 30).color('#cccccc')
         .shadow({ x: 4, y: 4, color: 'rgba(0,0,0,0.5)' }).outline(2, '#000000').appendTo($.world);
     $('<light>', { id: 'lamp', radius: 90, color: '#ffd9a0' }).at(700, 150).blend('add').appendTo($.world);
+
+    // Частицы неподвижны (скорость 0, жизнь «вечная»), но рампы двухстоповые:
+    // кадр между режимами совпадает, а интерполяция цвета и альфы работает.
+    $('<particles>', {
+        id: 'sparks', amount: 60, rate: 2000, lifetime: [1e7, 1e7], speed: [0, 0], spread: 0,
+        size: [3, 7], seed: 9, emit_zone: { shape: 'rect', w: 220, h: 90 },
+        color_ramp: [{ t: 0, color: '#ffe08a' }, { t: 1, color: '#ff4020' }],
+        alpha_ramp: [{ t: 0, value: 1 }, { t: 1, value: 0.2 }],
+    }).at(260, 160).appendTo($.world);
+    $.tilemap.fromASCII(['111111', '1....1', '111111'], { '1': 1, '.': 0 }, { src: 'tiles.png', tile: 32 })
+        .at(420, 470).appendTo($.world);
+
+    // HUD: подложки, подписи (в том числе поверх подложек), кнопка и полоса —
+    // общий UI-проход C и drawUINode через колбэк, подписи в одной очереди.
+    $('<ui.panel>', { id: 'hud' }).at(120, 40).size(220, 60).color('#000000aa').appendTo($.ui);
+    $('<ui.label>', { id: 'hud-text', text: 'HP 100', size: 18 }).at(40, 30).color('#ffe08a').appendTo($.ui);
+    $('<ui.label>', { text: 'справа', size: 14, align: 'right' }).at(220, 52).alpha(0.6).appendTo($.ui);
+    $('<ui.button>', { id: 'btn', text: 'Играть' }).at(640, 560).appendTo($.ui);
+    $('<ui.bar>', { id: 'bar', value: 30, max: 100, text: '30%' }).at(640, 40).appendTo($.ui);
 });

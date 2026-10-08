@@ -176,9 +176,40 @@ function syncSpecialTags() {
     const native = n && typeof n === 'object' && typeof n.specialTags === 'function' ? n : null;
     if (!native) return;
     native.specialTags(['text', 'circle', 'light', ...node_renderers.keys()]);
+    if (typeof native.uiTags === 'function') native.uiTags([...ui_node_renderers.keys()]);
 }
 
-const world_params = new Float64Array(18);
+const world_params = new Float64Array(19);
+
+/** Номер режима смешивания для буфера батча (как pushSprite). */
+export function blendIndex(name) {
+    return blendId(name === undefined || name === null ? default_blend : name);
+}
+
+/**
+ * Ядра модулей (src/nodes.c): тайлы карты и частицы эмиттера пишутся прямо в
+ * буферы батча — вместо $.gfx.push.sprite на каждый. false — ядра нет
+ * (юнит-тест, nativePasses(false)) или включён view ($.gfx.draw.* в мировых
+ * координатах): тогда модуль рисует прежним путём.
+ */
+export function nativeTiles(data, frames, G) {
+    const native = view === null ? nativeNodes() : null;
+    if (!native) return false;
+    G[11] = clip_cur;
+    G[12] = MAX_SPRITES;
+    count = native.drawTiles(data, frames, G, xf, col, blend, fx, clip_of, count);
+    return true;
+}
+
+export function nativeParticles(parts, ramp_color, ramp_alpha, ramp_size, G) {
+    const native = view === null ? nativeNodes() : null;
+    if (!native) return false;
+    G[14] = clip_cur;
+    G[15] = MAX_SPRITES;
+    count = native.drawParticles(parts, ramp_color, ramp_alpha, ramp_size, G,
+                                 xf, col, blend, fx, clip_of, count);
+    return true;
+}
 let native_cam = null;
 function drawNodeFromNative(node, c) {
     count = c;
@@ -202,6 +233,7 @@ function drawListNative(native, list, cam) {
     P[15] = clip_cur;
     P[16] = MAX_SPRITES;
     P[17] = 0;
+    P[18] = 0;
     const prev_cam = native_cam;
     native_cam = cam;
     try {
@@ -210,14 +242,16 @@ function drawListNative(native, list, cam) {
         native_cam = prev_cam;
     }
     state.stats.nodes += P[17];
+    state.stats.texts += P[18];
 }
 
 export function registerUINodeRenderer(tag, fn) {
     if (typeof tag !== 'string' || typeof fn !== 'function') return;
     ui_node_renderers.set(tag, fn);
+    syncSpecialTags();
 }
 
-export function unregisterUINodeRenderer(tag) { ui_node_renderers.delete(tag); }
+export function unregisterUINodeRenderer(tag) { ui_node_renderers.delete(tag); syncSpecialTags(); }
 
 const state = {
     clear: '#141824',
@@ -776,6 +810,14 @@ let ambient_params = null;
 /** Lightmap: свет копится в отдельной текстуре и накладывается одним проходом. */
 // UI-текст, отложенный до конца ui-пакета: см. _queueText.
 let ui_text_pending = null;
+// Нативная очередь подписей UI на время ui-прохода (engine.nodes) или null.
+let ui_text_native = null;
+const ui_params = new Float64Array(5);
+function drawUIFromNative(node, c) {
+    count = c;
+    drawUINode(node);
+    return count;
+}
 let lightmap_on = false;
 let lightmap_intensity = 1;
 let lightmap_soft = 1;
@@ -1710,9 +1752,12 @@ function baseColor(node) {
 function syncTextBounds(node) {
     const size = numOf(node.size, 20);
     const family = nodeFontFamily(node) || '';
-    const key = node.text + '|' + size + '|' + family;
-    if (node._text_measure_key === key) return;
-    node._text_measure_key = key;
+    // Три поля, а не склеенная строка-ключ: склейка стоила строку на каждый
+    // текст каждый кадр. Те же поля читает нативный проход (src/nodes.c).
+    if (node._tm_text === node.text && node._tm_size === size && node._tm_family === family) return;
+    node._tm_text = node.text;
+    node._tm_size = size;
+    node._tm_family = family;
 
     const measured = typeof engine.measureText === 'function'
         ? engine.measureText(String(node.text), size, family)
@@ -2685,6 +2730,11 @@ export function installGfx($) {
             // только в submitSprites(), а drawText пишет в C сразу. Без
             // отсрочки подпись попадала в батч РАНЬШЕ своей подложки и
             // закрашивалась ею — так пропадал экран исхода в игре.
+            if (ui_text_native) {
+                ui_text_native.uiTextPush(text, x, y, size, color, align || 'left',
+                                          family || nodeFontFamily(null), angle || 0);
+                return;
+            }
             if (ui_text_pending) {
                 ui_text_pending.push([text, x, y, size, color, align || 'left',
                                       family || nodeFontFamily(null), angle || 0]);
@@ -2796,8 +2846,25 @@ export function installGfx($) {
             const ui_start = count;
             const ui_list = nodesWithFacet('ui');
             // Текст собираем, а не рисуем: иначе он окажется под подложками.
+            // С нативным проходом очередь подписей живёт в C (src/nodes.c):
+            // ui.label и ui.panel рисует C, остальное — drawUINode через колбэк,
+            // и его подписи (_queueText) попадают в ту же очередь по порядку.
             ui_text_pending = [];
-            for (let i = 0; i < ui_list.length; i++) drawUINode(ui_list[i]);
+            const ui_native = nativeNodes();
+            ui_text_native = ui_native;
+            if (ui_native) {
+                ui_native.uiTextBegin();
+                const P = ui_params;
+                P[0] = engine.whiteSprite;
+                P[1] = blendId(default_blend);
+                P[2] = clip_cur;
+                P[3] = MAX_SPRITES;
+                P[4] = 0;
+                count = ui_native.drawUI(ui_list, P, xf, col, blend, fx, clip_of, count, drawUIFromNative);
+                state.stats.texts += P[4];
+            } else {
+                for (let i = 0; i < ui_list.length; i++) drawUINode(ui_list[i]);
+            }
             if (count > ui_start) {
                 // UI идёт после треугольников, поэтому отдаём его отдельным
                 // пакетом: сначала сцена, потом интерфейс поверх.
@@ -2808,6 +2875,11 @@ export function installGfx($) {
             }
             // Отложенный текст — ПОСЛЕ подложек и в том же ui-диапазоне:
             // markUI() уже отмечен, поэтому HUD остаётся поверх пост-обработки.
+            if (ui_text_native) {
+                ui_text_native.uiTextFlush();
+                ui_text_native = null;
+                ui_text_pending = null;
+            }
             if (ui_text_pending) {
                 for (let i = 0; i < ui_text_pending.length; i++) {
                     const t = ui_text_pending[i];

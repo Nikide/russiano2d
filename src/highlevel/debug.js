@@ -166,6 +166,16 @@ export function installDebug($) {
          * JS-путь — для сверки картинки и поиска расхождений. Без аргумента —
          * работают ли они сейчас.
          */
+        /**
+         * Факты о JS-куче (QuickJS JS_ComputeMemoryUsage): `{ bytes, used,
+         * objects, arrays, strings, atoms, shapes, native_tweens }`. Без
+         * движка — null. Нужен, чтобы отличать утечку от шума замера.
+         */
+        memory() {
+            const n = engine && engine.nodes;
+            return n && typeof n === 'object' && typeof n.memory === 'function' ? n.memory() : null;
+        },
+
         nativePasses(flag) {
             if (flag === undefined) return nativeNodes() !== null;
             ctx.native_off = !flag;

@@ -37,6 +37,18 @@
 | индекс реестра: все, по тегу, по классу, срезы | `buildRegistryIndex` | `buildIndex(nodes)` | `core.js` |
 | простые твины (`.tween/.moveTo/.fadeTo/…`) | `tickTweens` | `tweenAdd/tweenStep/tweenClear/tweenPause/tweenCount` | `tween.js` |
 | таймеры тряски, вспышки, неуязвимости | `tickEffects` | `tickEffects(nodes, dt)` | `tween.js` |
+| `<text>`: замер строки и глифы в батч | `syncTextBounds`, `_queueTextScaled` | внутри `drawWorld` | `render.js` |
+| статичные слои `<tilemap>` | цикл `push.sprite` по клеткам | `drawTiles(data, frames, G, …)` | `tilemap.js` через `nativeTiles` |
+| частицы эмиттера (рампы цвета, альфы, размера ≤ 16 стопов) | `renderParticles` | `drawParticles(parts, rc, ra, rs, G, …)` | `particles.js` через `nativeParticles` |
+| HUD: `ui.label`, `ui.panel`; остальное — колбэк в `drawUINode` | цикл `drawUINode` | `drawUI(list, P, …, cb)` | `render.js` |
+| очередь подписей HUD (после подложек) | массив `ui_text_pending` | `uiTextBegin/uiTextPush/uiTextFlush` | `render.js` |
+| кандидаты тика виджетов: якоря, контейнеры, темы | `for…of ctx.nodes` | `filterNodes(nodes, mode, tags?)` | `widgets.js` |
+| размер JS-кучи | — | `memory()` | `$.debug.memory()` |
+
+Модули с большим числом своих спрайтов пишут в батч через `nativeTiles` /
+`nativeParticles` из `render.js`: те сами подставляют буферы, обрезку и
+счётчик, а при выключенных проходах или активном `view` возвращают `false` —
+модуль рисует прежним путём.
 
 C-код собирается без слияния `a*b+c` в FMA (`#pragma … fp contract(off)` в
 `src/nodes.c`): QuickJS считает раздельно, и без прагмы твин или позиция на

@@ -19,7 +19,7 @@
 import { engine } from './native.js';
 import { ctx, Wrapper, TAGS, wrapOne, query, def, defGet, withAlpha, fxRandom,
          nodesByTag } from './core.js';
-import { registerNodeRenderer } from './render.js';
+import { registerNodeRenderer, nativeTiles, blendIndex } from './render.js';
 import { cameraTransform } from './camera.js';
 
 // ---------------------------------------------------------------------------
@@ -1345,6 +1345,7 @@ export function installTilemap($) {
 
     // --- Отрисовка --------------------------------------------------------
 
+    const tile_params = new Float64Array(13);
     registerNodeRenderer('tilemap', (node, t, cam) => {
         const tm = stateOf(node) || ensureTilemap(node);
         if (!tm.layers.length) return;
@@ -1380,6 +1381,16 @@ export function installTilemap($) {
             const y0 = Math.max(0, Math.floor((0 - oy) / tile_h));
             const x1 = Math.min(layer.w - 1, Math.ceil((cam_w - ox) / tile_w));
             const y1 = Math.min(layer.h - 1, Math.ceil((cam_h - oy) / tile_h));
+            // Статичный слой — нативным ядром (src/nodes.c): видимые клетки
+            // пишутся в батч без push.sprite на каждую. Анимированный слой
+            // выбирает кадр в JS (animatedTileSprite) — прежним путём.
+            if (!layer.anim) {
+                const G = tile_params;
+                G[0] = x0; G[1] = y0; G[2] = x1; G[3] = y1; G[4] = layer.w;
+                G[5] = ox; G[6] = oy; G[7] = tile_w; G[8] = tile_h;
+                G[9] = color; G[10] = blendIndex(node.blend_mode);
+                if (nativeTiles(layer.data, frames, G)) continue;
+            }
             for (let ty = y0; ty <= y1; ty++) {
                 const row = ty * layer.w;
                 const sy = oy + (ty + 0.5) * tile_h;
