@@ -108,6 +108,35 @@ def cli_cases():
     rc, v = sdk("validate", ver)
     check(rc == 1 and "SDK_WORLD_VERSION" in codes(v), "неизвестная version: SDK_WORLD_VERSION")
 
+    # Audit regressions: malformed collections, generated geometry, diagnostics, I/O.
+    base = json.load(open(fx("stack.re2dmap")))
+    for key in ("cells", "walls", "portals", "stairs", "slopes"):
+        m = copy.deepcopy(base); m[key] = {"invalid": []}
+        path = os.path.join(OUT, "malformed.re2dmap"); json.dump(m, open(path, "w"))
+        rc, d = sdk("world-info", path)
+        check(rc == 1 and not d["ok"] and "SDK_WORLD_FIELD" in codes(d), f"{key}: объект вместо массива отвергается")
+    m = copy.deepcopy(base); m["cells"][0]["id"] = 'room"\\name'; m["cells"][0]["spans"][0]["top"] = -1
+    path = os.path.join(OUT, "quoted.re2dmap"); json.dump(m, open(path, "w"))
+    rc, d = sdk("world-info", path)
+    check(rc == 1 and d["diagnostics"][0]["location"]["id"] == m["cells"][0]["id"], "кавычки и обратный слеш в id сохраняют валидный JSON диагностики")
+    for key, value, code in (("top", 10, "SDK_WORLD_SPAN_HEIGHT"), ("steps", 2.5, "SDK_WORLD_FIELD"), ("dir", 0, "SDK_WORLD_FIELD")):
+        m = {"version": 1, "stairs": [{"id": "s", "rect": [0, 0, 100, 100], "steps": 2, "base": 0, "rise": 20, "top": 100}]}
+        m["stairs"][0][key] = value
+        path = os.path.join(OUT, "stairs_bad.re2dmap"); json.dump(m, open(path, "w"))
+        rc, d = sdk("world-info", path)
+        check(rc == 1 and not d["ok"] and code in codes(d), f"ступени: неверный {key} не попадает в runtime")
+    rc, d = sdk("world-compile", fx("stack.re2dmap"), "--output", OUT)
+    check(rc == 1 and not d["ok"] and "SDK_WRITE_FAILED" in codes(d), "ошибка записи возвращает ok=false и ненулевой код")
+
+
+    # A closed edge assembled from more than 510 pieces must not lose coverage.
+    m={"version":1,"cells":[{"id":"many","rect":[0,0,600,600],"spans":[{"bottom":0,"top":100}]}],"walls":[]}
+    for i in range(600):m["walls"].append({"id":"n"+str(i),"from":[i,0],"to":[i+1,0],"bottom":0,"top":100})
+    for id_,a,b in [("s",[0,600],[600,600]),("w",[0,0],[0,600]),("e",[600,0],[600,600])]:m["walls"].append({"id":id_,"from":a,"to":b,"bottom":0,"top":100})
+    path=os.path.join(OUT,"many.re2dmap");json.dump(m,open(path,"w"))
+    rc,d=sdk("world-info",path)
+    check(rc==0 and "SDK_WORLD_OPEN_EDGE" not in codes(d),"кромка из 600 стен проверяется целиком, без ложной утечки")
+
 
 def description_of(src):
     """То, что получил бы $.re2d.world без компилятора: только явные cells и walls."""
@@ -125,7 +154,7 @@ def runtime_cases():
                                 "return JSON.stringify({info:w.info(),"
                                 "ground:s(100,100,0,50,0),upper:s(100,100,160,50,0),gap:s(100,100,140,50,0),gapStep:s(100,100,140,50,30),"
                                 "tooTall:s(100,100,0,200,0),outside:s(500,500,0,50,0),"
-                                "up:w.ray([100,100,10],[100,100,250]),fromGap:w.ray([100,100,140],[100,100,250]),"
+                                "up:w.ray({x:100,y:100,height:10},{x:100,y:100,height:250}),fromGap:w.ray({x:100,y:100,height:140},{x:100,y:100,height:250}),"
                                 "wallLow:w.blocked(3,100,5,10,60),wallUp:w.blocked(3,100,5,170,200)});})()" % json.dumps(desc)))
         check(res["info"]["spans"] == 2 and res["info"]["walls"] == 4, "рантайм принял скомпилированную карту: 2 spans, 4 стены")
         check(res["ground"] and res["ground"]["height"] == 0 and res["ground"]["ceiling"] == 128, "room-over-room: на одном XY нижний этаж — пол 0, потолок 128")

@@ -91,10 +91,22 @@ typedef struct Ctx {
     const char *path;
 } Ctx;
 
+// Escape identifiers inserted into diagnostic JSON; buffers live until sdk_diag copies them.
+static const char *json_fragment(const char *s)
+{
+    static char slots[8][1024];
+    static unsigned next;
+    char *out = slots[next++ % 8];
+    R2dSb b; r2d_sb_init(&b); r2d_sb_put_json_string(&b, s ? s : "");
+    const size_t n = b.len >= 2 ? b.len - 2 : 0;
+    memcpy(out, b.data + 1, n); out[n] = 0; r2d_sb_free(&b);
+    return out;
+}
+
 static void field_diag(Ctx *c, const char *section, int index, const char *id, const char *field, const char *msg)
 {
-    char loc[256];
-    snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\",\"field\":\"%s\"}", section, index, id ? id : "", field);
+    char loc[2048];
+    snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\",\"field\":\"%s\"}", section, index, json_fragment(id ? id : ""), field);
     sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_FIELD", c->path, loc, NULL, "%s[%d]%s%s: %s", section, index, id && id[0] ? " «" : "", id && id[0] ? id : "", msg);
 }
 
@@ -118,8 +130,8 @@ static bool get_float(Ctx *c, const R2dJson *o, const char *section, int index, 
         return false;
     }
     if (fabs(v->number) > W_LIMIT) {
-        char loc[256], m[96];
-        snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\",\"field\":\"%s\"}", section, index, id ? id : "", key);
+        char loc[2048], m[96];
+        snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\",\"field\":\"%s\"}", section, index, json_fragment(id ? id : ""), key);
         snprintf(m, sizeof m, "поле %s вне ±1000000", key);
         sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_RANGE", c->path, loc, NULL, "%s[%d]: %s", section, index, m);
         return false;
@@ -136,8 +148,14 @@ static bool get_pair(Ctx *c, const R2dJson *o, const char *section, int index, c
         return false;
     }
     for (int i = 0; i < 2; ++i) {
-        if (!isfinite(v->items[i]->number) || fabs(v->items[i]->number) > W_LIMIT) {
-            field_diag(c, section, index, id, key, "координата не конечна или вне ±1000000");
+        if (!isfinite(v->items[i]->number)) {
+            field_diag(c, section, index, id, key, "координата должна быть конечной");
+            return false;
+        }
+        if (fabs(v->items[i]->number) > W_LIMIT) {
+            char loc[2048];
+            snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\",\"field\":\"%s\"}", section, index, json_fragment(id), key);
+            sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_RANGE", c->path, loc, NULL, "%s: координата вне ±1000000", key);
             return false;
         }
         out[i] = (float)v->items[i]->number;
@@ -153,15 +171,21 @@ static bool get_rect(Ctx *c, const R2dJson *o, const char *section, int index, c
         return false;
     }
     for (int i = 0; i < 4; ++i) {
-        if (v->items[i]->type != R2D_JSON_NUM || !isfinite(v->items[i]->number) || fabs(v->items[i]->number) > W_LIMIT) {
+        if (v->items[i]->type != R2D_JSON_NUM || !isfinite(v->items[i]->number)) {
             field_diag(c, section, index, id, key, "числа [x, y, w, h] должны быть конечными в пределах ±1000000");
+            return false;
+        }
+        if (fabs(v->items[i]->number) > W_LIMIT) {
+            char loc[2048];
+            snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\",\"field\":\"%s\"}", section, index, json_fragment(id), key);
+            sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_RANGE", c->path, loc, NULL, "%s: значение вне ±1000000", key);
             return false;
         }
         r[i] = (float)v->items[i]->number;
     }
     if (!(r[2] > 0) || !(r[3] > 0)) {
-        char loc[256];
-        snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\",\"field\":\"%s\"}", section, index, id ? id : "", key);
+        char loc[2048];
+        snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\",\"field\":\"%s\"}", section, index, json_fragment(id ? id : ""), key);
         sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_CELL_SIZE", c->path, loc, NULL, "%s[%d] «%s»: ширина и высота прямоугольника должны быть > 0", section, index, id ? id : "");
         return false;
     }
@@ -207,7 +231,7 @@ static bool get_id(Ctx *c, const R2dJson *o, const char *section, int index, cha
 static bool load_spans(Ctx *c, const R2dJson *o, const char *section, int index, const char *id, WSpan **out, int *n)
 {
     const R2dJson *arr = r2d_json_get(o, "spans");
-    if (!arr || arr->type != R2D_JSON_ARR) {
+    if (!arr || arr->type != R2D_JSON_ARR || arr->count > W_MAX) {
         field_diag(c, section, index, id, "spans", "нужен массив spans");
         return false;
     }
@@ -225,8 +249,8 @@ static bool load_spans(Ctx *c, const R2dJson *o, const char *section, int index,
         ok &= get_color(c, s, sec, i, id, "floorColor", sp->floor_c, sizeof sp->floor_c, "#ffffff");
         ok &= get_color(c, s, sec, i, id, "ceilingColor", sp->ceil_c, sizeof sp->ceil_c, "#ffffff");
         if (ok && !(sp->top > sp->bottom)) {
-            char loc[256];
-            snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\",\"span\":%d}", section, index, id, i);
+            char loc[2048];
+            snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\",\"span\":%d}", section, index, json_fragment(id), i);
             sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_SPAN_HEIGHT", c->path, loc, NULL,
                      "cell «%s», span %d: top (%g) должен быть больше bottom (%g)", id, i, sp->top, sp->bottom);
             ok = false;
@@ -270,8 +294,8 @@ static bool dup_check(Ctx *c, const char *section, char (*ids)[64], int n, int i
 {
     for (int j = 0; j < i; ++j) {
         if (!strcmp(ids[j], ids[i])) {
-            char loc[256];
-            snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\"}", section, i, ids[i]);
+            char loc[2048];
+            snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\"}", section, i, json_fragment(ids[i]));
             sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_ID_DUPLICATE", c->path, loc, NULL, "%s: id «%s» повторяется (индексы %d и %d)", section, ids[i], j, i);
             return false;
         }
@@ -300,6 +324,16 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
     }
     snprintf(w->name, sizeof w->name, "%s", r2d_json_str(r2d_json_get(root, "name"), ""));
 
+    // Reject malformed collections instead of silently compiling an empty map.
+    const char *sections[] = {"cells", "walls", "portals", "stairs", "slopes"};
+    for (int i = 0; i < 5; ++i) {
+        const R2dJson *a = r2d_json_get(root, sections[i]);
+        if (a && (a->type != R2D_JSON_ARR || a->count > W_MAX)) {
+            field_diag(&c, sections[i], -1, NULL, sections[i], "нужен массив (не более 65536 элементов)");
+            ok = false;
+        }
+    }
+    if (!ok) { r2d_json_free(root); return false; }
     // --- cells ---
     const R2dJson *cells = r2d_json_get(root, "cells");
     w->ncell = r2d_json_size(cells);
@@ -316,8 +350,8 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
         cell->x = r[0]; cell->y = r[1]; cell->w = r[2]; cell->h = r[3];
         if (!load_spans(&c, o, "cells", i, cell->id, &cell->spans, &cell->nspan)) ok = false;
         if (cell->nspan == 0) {
-            char loc[256];
-            snprintf(loc, sizeof loc, "{\"section\":\"cells\",\"index\":%d,\"id\":\"%s\"}", i, cell->id);
+            char loc[2048];
+            snprintf(loc, sizeof loc, "{\"section\":\"cells\",\"index\":%d,\"id\":\"%s\"}", i, json_fragment(cell->id));
             sdk_diag(rep, SDK_WARNING, "SDK_WORLD_CELL_NO_SPANS", path, loc, NULL, "cell «%s» без spans: в мир ничего не попадёт", cell->id);
         }
     }
@@ -344,8 +378,8 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
         good &= get_color(&c, o, "walls", i, wall->id, "color", wall->color, sizeof wall->color, "#ffffff");
         if (!good) { ok = false; continue; }
         wall->x1 = a[0]; wall->y1 = a[1]; wall->x2 = b[0]; wall->y2 = b[1];
-        char loc[256];
-        snprintf(loc, sizeof loc, "{\"section\":\"walls\",\"index\":%d,\"id\":\"%s\"}", i, wall->id);
+        char loc[2048];
+        snprintf(loc, sizeof loc, "{\"section\":\"walls\",\"index\":%d,\"id\":\"%s\"}", i, json_fragment(wall->id));
         if (wall->x1 == wall->x2 && wall->y1 == wall->y2) {
             sdk_diag(rep, SDK_ERROR, "SDK_WORLD_WALL_DEGENERATE", path, loc, NULL, "wall «%s»: начало и конец совпадают", wall->id);
             ok = false;
@@ -378,6 +412,10 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
         if (!good) { ok = false; continue; }
         p->x1 = a[0]; p->y1 = a[1]; p->x2 = b[0]; p->y2 = b[1];
         const R2dJson *op = r2d_json_get(o, "openings");
+        if (!op || op->type != R2D_JSON_ARR || op->count > W_MAX) {
+            field_diag(&c, "portals", i, p->id, "openings", "нужен массив openings");
+            ok = false; continue;
+        }
         p->nopen = r2d_json_size(op);
         p->open = (WOpening *)calloc((size_t)(p->nopen ? p->nopen : 1), sizeof(WOpening));
         for (int k = 0; k < p->nopen; ++k) {
@@ -385,8 +423,8 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
                 !get_float(&c, op->items[k], "portals.openings", k, p->id, "bottom", &p->open[k].bottom, true, 0) ||
                 !get_float(&c, op->items[k], "portals.openings", k, p->id, "top", &p->open[k].top, true, 0)) { ok = false; continue; }
             if (!(p->open[k].top > p->open[k].bottom)) {
-                char loc[256];
-                snprintf(loc, sizeof loc, "{\"section\":\"portals\",\"index\":%d,\"id\":\"%s\",\"opening\":%d}", i, p->id, k);
+                char loc[2048];
+                snprintf(loc, sizeof loc, "{\"section\":\"portals\",\"index\":%d,\"id\":\"%s\",\"opening\":%d}", i, json_fragment(p->id), k);
                 sdk_diag(rep, SDK_ERROR, "SDK_WORLD_SPAN_HEIGHT", path, loc, NULL, "portal «%s», opening %d: top должен быть больше bottom", p->id, k);
                 ok = false;
             }
@@ -415,8 +453,13 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
             bool good = get_rect(&c, o, section, i, id, "rect", r);
             const char *axis = r2d_json_str(r2d_json_get(o, "axis"), "x");
             if (strcmp(axis, "x") && strcmp(axis, "y")) { field_diag(&c, section, i, id, "axis", "axis — «x» или «y»"); good = false; }
-            const int dir = r2d_json_int(r2d_json_get(o, "dir"), 1) < 0 ? -1 : 1;
-            const int steps = r2d_json_int(r2d_json_get(o, pass == 0 ? "steps" : "segments"), 0);
+            const R2dJson *dv = r2d_json_get(o, "dir");
+            const int dir = dv && dv->type == R2D_JSON_NUM && dv->number == -1 ? -1 : 1;
+            if (dv && (dv->type != R2D_JSON_NUM || (dv->number != 1 && dv->number != -1))) {
+                field_diag(&c, section, i, id, "dir", "dir — 1 или -1"); good = false;
+            }
+            const R2dJson *sv = r2d_json_get(o, pass == 0 ? "steps" : "segments");
+            const int steps = sv && sv->type == R2D_JSON_NUM && sv->number >= 1 && sv->number <= 256 && floor(sv->number) == sv->number ? (int)sv->number : 0;
             if (steps < 1 || steps > 256) { field_diag(&c, section, i, id, pass == 0 ? "steps" : "segments", "число шагов 1..256"); good = false; }
             good &= get_float(&c, o, section, i, id, "top", &top, true, 0);
             char fc[2][40], cc[40];
@@ -435,6 +478,9 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
             char wall_color[40];
             good &= get_color(&c, o, section, i, id, "riserColor", wall_color, sizeof wall_color, "#4f4030");
             if (!good) { ok = false; continue; }
+            if (w->ncc + steps > W_MAX || w->ncw + steps > W_MAX) {
+                sdk_diag(rep, SDK_ERROR, "SDK_WORLD_LIMIT", path, NULL, NULL, "Слишком много скомпилированных ступеней"); ok = false; continue;
+            }
             if (pass == 0 && !(rise != 0)) { field_diag(&c, section, i, id, "rise", "rise не может быть 0"); ok = false; continue; }
             const bool along_x = !strcmp(axis, "x");
             const float len = along_x ? r[2] : r[3];
@@ -472,7 +518,7 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
             if (pass == 1) {
                 char d[160], loc[160];
                 snprintf(d, sizeof d, "{\"segments\":%d,\"maxStep\":%g}", steps, fabsf(to - from) / (float)steps);
-                snprintf(loc, sizeof loc, "{\"section\":\"slopes\",\"index\":%d,\"id\":\"%s\"}", i, id);
+                snprintf(loc, sizeof loc, "{\"section\":\"slopes\",\"index\":%d,\"id\":\"%s\"}", i, json_fragment(id));
                 sdk_diag(rep, SDK_INFO, "SDK_WORLD_SLOPE_STEPPED", path, loc, d,
                          "slope «%s» аппроксимирован %d ступенями (шаг до %g): рантайм наклонных плоскостей не имеет", id, steps, fabsf(to - from) / (float)steps);
             }
@@ -482,7 +528,7 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
         if (!sids[i][0]) continue;
         for (int j = 0; j < i; ++j) {
             if (!strcmp(sids[i], sids[j])) {
-                char loc[160];
+                char loc[2048];
                 snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"id\":\"%s\"}", i < w->nstairs ? "stairs" : "slopes", sids[i]);
                 sdk_diag(rep, SDK_ERROR, "SDK_WORLD_ID_DUPLICATE", path, loc, NULL, "stairs/slopes: id «%s» повторяется", sids[i]);
                 ok = false;
@@ -538,6 +584,23 @@ static void check_compiled(Ctx *c, World *w, bool *ok, StackInfo **stacks, int *
     int ns = 0;
     for (int i = 0; i < w->ncc; ++i) ns += w->cc[i].nspan;
     *total_spans = ns;
+    for (int i = 0; i < w->ncc; ++i) {
+        const CCell *cell = &w->cc[i];
+        if (!isfinite(cell->x+cell->w) || !isfinite(cell->y+cell->h) || fabsf(cell->x+cell->w)>W_LIMIT || fabsf(cell->y+cell->h)>W_LIMIT) {
+            sdk_diag(rep,SDK_ERROR,"SDK_WORLD_RANGE",c->path,NULL,NULL,"Правая/нижняя граница cell вне ±1000000"); *ok=false;
+        }
+        for (int j = 0; j < cell->nspan; ++j) {
+            const WSpan *sp = &cell->spans[j];
+            char loc[2048];
+            snprintf(loc, sizeof loc, "{\"id\":\"%s\",\"span\":%d}", json_fragment(cell->owner), j);
+            if (!(sp->top > sp->bottom)) {
+                sdk_diag(rep, SDK_ERROR, "SDK_WORLD_SPAN_HEIGHT", c->path, loc, NULL, "Потолок должен быть выше пола скомпилированной ступени"); *ok = false;
+            }
+            if (fabsf(sp->bottom) > W_LIMIT || fabsf(sp->top) > W_LIMIT) {
+                sdk_diag(rep, SDK_ERROR, "SDK_WORLD_RANGE", c->path, loc, NULL, "Высота скомпилированной ступени вне ±1000000"); *ok = false;
+            }
+        }
+    }
     if (w->ncw > W_MAX || ns > W_MAX) {
         sdk_diag(rep, SDK_ERROR, "SDK_WORLD_LIMIT", c->path, NULL, NULL, "Рантайм принимает до %d стен и %d spans (в карте: %d стен, %d spans)", W_MAX, W_MAX, w->ncw, ns);
         *ok = false;
@@ -558,10 +621,10 @@ static void check_compiled(Ctx *c, World *w, bool *ok, StackInfo **stacks, int *
                     const WSpan *sb = &b->spans[sj];
                     if (!rects_cross(a->x, a->y, a->w, a->h, b->x, b->y, b->w, b->h)) continue;
                     if (sa->bottom < sb->top && sb->bottom < sa->top) {
-                        char loc[320], d[320];
-                        snprintf(loc, sizeof loc, "{\"cells\":[\"%s\",\"%s\"]}", a->owner, b->owner);
+                        char loc[2048], d[4096];
+                        snprintf(loc, sizeof loc, "{\"cells\":[\"%s\",\"%s\"]}", json_fragment(a->owner), json_fragment(b->owner));
                         snprintf(d, sizeof d, "{\"a\":{\"cell\":\"%s\",\"bottom\":%g,\"top\":%g},\"b\":{\"cell\":\"%s\",\"bottom\":%g,\"top\":%g}}",
-                                 a->owner, sa->bottom, sa->top, b->owner, sb->bottom, sb->top);
+                                 json_fragment(a->owner), sa->bottom, sa->top, json_fragment(b->owner), sb->bottom, sb->top);
                         sdk_diag(rep, SDK_ERROR, "SDK_WORLD_SPAN_OVERLAP", c->path, loc, d,
                                  "Свободные интервалы высоты перекрываются на пересекающихся XY: «%s» [%g..%g] и «%s» [%g..%g] — рантайм такой мир отвергнет",
                                  a->owner, sa->bottom, sa->top, b->owner, sb->bottom, sb->top);
@@ -587,8 +650,15 @@ static void check_compiled(Ctx *c, World *w, bool *ok, StackInfo **stacks, int *
 }
 
 // Покрыта ли кромка [lo,hi] cell на высоте span стенами, соседями и порталами.
+static int interval_compare(const void *a, const void *b)
+{
+    float x=((const float*)a)[0], y=((const float*)b)[0]; return x<y ? -1 : x>y ? 1 : 0;
+}
 static void check_leaks(Ctx *c, const World *w)
 {
+    size_t capacity=(size_t)w->ncw+w->nwall+w->ncc+w->nportal+1;
+    float (*iv)[2]=malloc(capacity*sizeof *iv);
+    if(!iv){sdk_diag(c->rep,SDK_ERROR,"SDK_WORLD_MEMORY",c->path,NULL,NULL,"Не хватило памяти для проверки кромок");return;}
     for (int ci = 0; ci < w->ncell; ++ci) {
         const WCell *cell = &w->cells[ci];
         for (int si = 0; si < cell->nspan; ++si) {
@@ -599,9 +669,8 @@ static void check_leaks(Ctx *c, const World *w)
                 const float coord = e == 0 ? cell->x : e == 1 ? cell->x + cell->w : e == 2 ? cell->y : cell->y + cell->h;
                 const float lo = vertical ? cell->y : cell->x, hi = vertical ? cell->y + cell->h : cell->x + cell->w;
                 // Интервалы покрытия (простое объединение через сортировку).
-                float iv[512][2];
                 int n = 0;
-                for (int k = 0; k < w->ncw + w->nwall && n < 510; ++k) {
+                for (int k = 0; k < w->ncw + w->nwall; ++k) {
                     const WWall *wl = k < w->nwall ? &w->walls[k] : &w->cw[k - w->nwall];
                     const bool wv = fabsf(wl->x1 - wl->x2) < W_EPS, wh = fabsf(wl->y1 - wl->y2) < W_EPS;
                     if (!((vertical && wv && fabsf(wl->x1 - coord) < W_EPS) || (!vertical && wh && fabsf(wl->y1 - coord) < W_EPS))) continue;
@@ -609,7 +678,7 @@ static void check_leaks(Ctx *c, const World *w)
                     const float a = vertical ? fminf(wl->y1, wl->y2) : fminf(wl->x1, wl->x2), b = vertical ? fmaxf(wl->y1, wl->y2) : fmaxf(wl->x1, wl->x2);
                     iv[n][0] = a; iv[n][1] = b; ++n;
                 }
-                for (int k = 0; k < w->ncc && n < 510; ++k) {
+                for (int k = 0; k < w->ncc; ++k) {
                     const CCell *o = &w->cc[k];
                     if (o->explicit_index == ci) continue;
                     float ocoord, olo, ohi;
@@ -628,7 +697,7 @@ static void check_leaks(Ctx *c, const World *w)
                     if (!conn) continue;
                     iv[n][0] = olo; iv[n][1] = ohi; ++n;
                 }
-                for (int k = 0; k < w->nportal && n < 510; ++k) {
+                for (int k = 0; k < w->nportal; ++k) {
                     const WPortal *p = &w->portals[k];
                     if (strcmp(p->a, cell->id) && strcmp(p->b, cell->id)) continue;
                     const bool pv = fabsf(p->x1 - p->x2) < W_EPS;
@@ -642,12 +711,7 @@ static void check_leaks(Ctx *c, const World *w)
                     ++n;
                 }
                 // Сортировка по началу и поиск первого разрыва.
-                for (int a = 1; a < n; ++a) {
-                    float t0 = iv[a][0], t1 = iv[a][1];
-                    int b = a - 1;
-                    while (b >= 0 && iv[b][0] > t0) { iv[b + 1][0] = iv[b][0]; iv[b + 1][1] = iv[b][1]; --b; }
-                    iv[b + 1][0] = t0; iv[b + 1][1] = t1;
-                }
+                qsort(iv,(size_t)n,sizeof *iv,interval_compare);
                 float cur = lo, gap_lo = 0, gap_hi = 0, gap_total = 0;
                 bool have_gap = false;
                 for (int a = 0; a < n; ++a) {
@@ -660,8 +724,8 @@ static void check_leaks(Ctx *c, const World *w)
                 if (cur < hi - W_EPS) { if (!have_gap) { gap_lo = cur; gap_hi = hi; have_gap = true; } gap_total += hi - cur; }
                 if (have_gap) {
                     static const char *const names[4] = { "west", "east", "north", "south" };
-                    char loc[256], d[320];
-                    snprintf(loc, sizeof loc, "{\"section\":\"cells\",\"index\":%d,\"id\":\"%s\",\"span\":%d,\"edge\":\"%s\"}", ci, cell->id, si, names[e]);
+                    char loc[2048], d[4096];
+                    snprintf(loc, sizeof loc, "{\"section\":\"cells\",\"index\":%d,\"id\":\"%s\",\"span\":%d,\"edge\":\"%s\"}", ci, json_fragment(cell->id), si, names[e]);
                     snprintf(d, sizeof d, "{\"edge\":\"%s\",\"from\":%g,\"to\":%g,\"length\":%g,\"coord\":%g,\"span\":[%g,%g]}",
                              names[e], gap_lo, gap_hi, gap_total, coord, sp->bottom, sp->top);
                     sdk_diag(c->rep, SDK_WARNING, "SDK_WORLD_OPEN_EDGE", c->path, loc, d,
@@ -671,14 +735,15 @@ static void check_leaks(Ctx *c, const World *w)
             }
         }
     }
+    free(iv);
 }
 
 static void check_portals(Ctx *c, const World *w, bool *ok)
 {
     for (int i = 0; i < w->nportal; ++i) {
         const WPortal *p = &w->portals[i];
-        char loc[256];
-        snprintf(loc, sizeof loc, "{\"section\":\"portals\",\"index\":%d,\"id\":\"%s\"}", i, p->id);
+        char loc[2048];
+        snprintf(loc, sizeof loc, "{\"section\":\"portals\",\"index\":%d,\"id\":\"%s\"}", i, json_fragment(p->id));
         const int ia = find_cell(w, p->a), ib = find_cell(w, p->b);
         if (ia < 0 || ib < 0) {
             sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_PORTAL_CELL", c->path, loc, NULL, "portal «%s»: cell «%s» не существует", p->id, ia < 0 ? p->a : p->b);
@@ -721,8 +786,8 @@ static void check_portals(Ctx *c, const World *w, bool *ok)
                     if (p->open[k].bottom >= b0 - W_EPS && p->open[k].top <= t0 + W_EPS) fits = true;
                 }
             if (!fits) {
-                char l2[256];
-                snprintf(l2, sizeof l2, "{\"section\":\"portals\",\"index\":%d,\"id\":\"%s\",\"opening\":%d}", i, p->id, k);
+                char l2[2048];
+                snprintf(l2, sizeof l2, "{\"section\":\"portals\",\"index\":%d,\"id\":\"%s\",\"opening\":%d}", i, json_fragment(p->id), k);
                 sdk_diag(c->rep, SDK_WARNING, "SDK_WORLD_PORTAL_OPENING", c->path, l2, NULL,
                          "portal «%s», opening %d [%g..%g]: нет пары spans «%s»/«%s», в которую он помещается", p->id, k, p->open[k].bottom, p->open[k].top, p->a, p->b);
             }
@@ -866,8 +931,8 @@ static bool compile_world(const char *path, World *w, SdkReport *rep, StackInfo 
                 linked = shared_edge(&w->cells[i], &tmp, &axis, &co, &lo, &hi);
             }
             if (!linked) {
-                char loc[200];
-                snprintf(loc, sizeof loc, "{\"section\":\"cells\",\"index\":%d,\"id\":\"%s\"}", i, w->cells[i].id);
+                char loc[2048];
+                snprintf(loc, sizeof loc, "{\"section\":\"cells\",\"index\":%d,\"id\":\"%s\"}", i, json_fragment(w->cells[i].id));
                 sdk_diag(rep, SDK_INFO, "SDK_WORLD_CELL_ISOLATED", path, loc, NULL, "cell «%s» не связан ни порталом, ни общей кромкой с другим cell", w->cells[i].id);
             }
         }
@@ -918,7 +983,7 @@ static int world_cmd(const SdkArgs *a, bool write)
     const bool ok = compile_world(src, &w, &rep, &stacks, &nstacks, &spans);
     R2dSb out;
     r2d_sb_init(&out);
-    r2d_sb_printf(&out, "{\"ok\":%s,\"source\":", ok ? "true" : "false");
+    r2d_sb_puts(&out, "{\"source\":");
     r2d_sb_put_json_string(&out, src);
     char outpath[1024] = "";
     if (ok && write) {
@@ -941,7 +1006,7 @@ static int world_cmd(const SdkArgs *a, bool write)
         }
         r2d_sb_free(&file);
     }
-    r2d_sb_puts(&out, ",\"output\":");
+    r2d_sb_printf(&out, ",\"ok\":%s,\"output\":", ok && rep.errors == 0 ? "true" : "false");
     if (outpath[0]) r2d_sb_put_json_string(&out, outpath); else r2d_sb_puts(&out, "null");
     r2d_sb_printf(&out, ",\"stats\":{\"cells\":%d,\"walls\":%d,\"portals\":%d,\"stairs\":%d,\"slopes\":%d,\"compiledCells\":%d,\"compiledWalls\":%d,\"spans\":%d,\"stairSteps\":%d,\"slopeSegments\":%d,\"stacks\":%d}",
                   w.ncell, w.nwall, w.nportal, w.nstairs, w.nslopes, w.ncc, w.ncw, spans, w.stair_steps, w.slope_segments, nstacks);

@@ -49,8 +49,8 @@
     {
       "id": "re2dsprite-studio",
       "name": "Re2DSprite Studio",
-      "description": "Просмотр модели настоящим рантаймом ($.re2dSprite): ракурс yaw/pitch, движения, эмоции, варианты; отладочные виды карт PNG v2 (ID, XYZ, глубина, покрытие, владелец); скелет, сокеты, проверка.",
-      "last_updated": "2026-10-08T21:30:00+03:00",
+      "description": "Настоящий Re2DSprite runtime: ракурс, debug-карты поверхности, скелет и сокеты; правка клипов/эмоций/вариантов/экипировки, timeline seek, undo/redo, сохранение и проверка.",
+      "last_updated": "2026-10-08T21:40:00+03:00",
       "entry": "re2dsprite-studio",
       "category": "re2d",
       "assets": [
@@ -61,13 +61,25 @@
       "id": "re2d-baker",
       "name": "Re2D Baker",
       "description": "GLB/glTF/VRM → нативный Re2DSprite: Prop и Character (humanoid → псевдоскелет, владение частями), Auto Unwrap / Existing UV, Coordinate Fit, отчёт со стабильными кодами. 3D нужен только на этапе импорта.",
-      "last_updated": "2026-10-09T01:00:00+03:00",
+      "last_updated": "2026-10-08T21:40:00+03:00",
       "entry": "re2d-baker",
       "category": "re2d",
       "assets": [
         "*.glb",
         "*.gltf",
         "*.vrm"
+      ]
+    },
+    {
+      "id": "re2d-world-studio",
+      "name": "Re2D World Studio",
+      "description": "Карта XY, стены, высотные spans, порталы, лестницы и уклоны. Нативная компиляция, диагностика и preview настоящим runtime.",
+      "last_updated": "2026-10-08T21:40:00+03:00",
+      "entry": "re2d-world-studio",
+      "category": "re2d",
+      "assets": [
+        "*.re2dmap",
+        "*.re2dmap.json"
       ]
     }
   ]
