@@ -161,6 +161,7 @@ $.camera.kind(Re2D);                                   // камера от пе
 | `$.camera.eye(h)` | — | высота глаз над полом |
 | `$.camera.fov(deg)` | — | угол обзора по вертикали |
 | `$.camera.worldToScreen` | экран ← мир | экран ← мир (в перспективе, с признаком «позади камеры») |
+| `.controls('wasd')` | ввод по осям экрана | **ввод по взгляду камеры**: `W` — вперёд туда, куда смотрим, `A`/`D` — боком |
 | `$.input.mouseDelta()` | сдвиг мыши | то же; в режиме `mouseLock` — относительный |
 
 Таблица сверяется с кодом стражем `tests/re2d_table_test.py` (появляется в
@@ -233,7 +234,8 @@ $.ready(() => {
 | 3 | готово | [highlevel/camera.md](highlevel/camera.md) §5; `tests/js/camera_re2d_test.mjs`, `tests/agent/highlevel_camera_re2d_test.py` |
 | 4 | готово | [highlevel/re2d.md](highlevel/re2d.md); `tests/js/re2d_test.mjs`, `tests/agent/highlevel_re2d_room_test.py` |
 | 5 | готово | [highlevel/re2d.md](highlevel/re2d.md) §3; `tests/agent/highlevel_re2d_billboards_test.py` |
-| 6–7 | в работе | |
+| 6 | готово | [highlevel/re2d.md](highlevel/re2d.md) §4, [demos/re2d_world](../demos/re2d_world/README.md); `tests/agent/highlevel_re2d_world_test.py` |
+| 7 | в работе | |
 
 ### Замер «ноль стоимости для 2D» (фазы 1–2)
 

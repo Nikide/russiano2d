@@ -18,7 +18,7 @@ import { Wrapper } from '../../src/highlevel/core.js';
 import { kindPass, kindRenderer } from '../../src/highlevel/kinds.js';
 import {
     cellsFor, unpackRgb, pushPlane, pushWall, pushPrism, planeFloats, prismFloats,
-    billboardPose, shadeColor, DEFAULT_HEIGHT, DEFAULT_TILE,
+    billboardPose, shadeColor, re2dMove, DEFAULT_HEIGHT, DEFAULT_TILE,
 } from '../../src/highlevel/re2d.js';
 
 const $ = createApi();
@@ -429,6 +429,24 @@ test('Re2DSprite: предел синтезов поз за кадр откла�
         Wrapper.prototype.re2dPose = original;
         $.re2d.poseStep(3).poseBudget(4);
     }
+});
+
+test('re2dMove: ввод поворачивается на yaw камеры (W — вперёд по взгляду, A/D — боком)', () => {
+    const W = { x: 0, y: -1 }, S = { x: 0, y: 1 }, D = { x: 1, y: 0 }, A = { x: -1, y: 0 };
+    let m = re2dMove(0, W, 100);                      // смотрим на +x
+    near(m.vx, 100, 1e-9, 'yaw 0: W → +x'); near(m.vy, 0, 1e-9, 'yaw 0: W без боковой составляющей');
+    m = re2dMove(0, D, 100);
+    near(m.vx, 0, 1e-9, 'yaw 0: D не двигает вдоль взгляда'); near(m.vy, 100, 1e-9, 'yaw 0: D — вправо от взгляда, то есть +y');
+    m = re2dMove(-Math.PI / 2, W, 100);               // смотрим на север (-y)
+    near(m.vx, 0, 1e-9, 'yaw -90°: W идёт строго на север'); near(m.vy, -100, 1e-9, 'yaw -90°: W → -y');
+    m = re2dMove(-Math.PI / 2, D, 100);
+    near(m.vx, 100, 1e-9, 'yaw -90°: D — вправо от взгляда на север, то есть на восток (+x)'); near(m.vy, 0, 1e-9, 'yaw -90°: D без продольной составляющей');
+    m = re2dMove(Math.PI, S, 100);                    // смотрим на запад, S — назад (на восток)
+    near(m.vx, 100, 1e-9, 'yaw 180°: S → +x');
+    m = re2dMove(Math.PI / 3, A, 50);
+    near(Math.hypot(m.vx, m.vy), 50, 1e-9, 'длина скорости не зависит от yaw');
+    m = re2dMove(0.7, { x: 0, y: 0 }, 100);
+    eq(m.vx + ',' + m.vy, '0,0', 'нет ввода — нет движения');
 });
 
 test('Re2DSprite без загруженной модели не падает и не рисуется', () => {

@@ -21,6 +21,10 @@ static float *g_scratch;
 static int g_scratch_cap;   // в вершинах (по 8 float)
 static int g_meshes, g_mesh_verts;
 
+// Предел выходного буфера меша, вершины (32 МБ): дальше треугольники отбрасываются
+// и считаются в stats.overflow.
+#define R2D_RE2D_MAX_VERTS (1 << 20)
+
 static void ensure_view(void)
 {
     if (g_view_ready) return;
@@ -174,14 +178,21 @@ static JSValue js_mesh(JSContext *ctx, JSValueConst self, int argc, JSValueConst
     memset(&g_stats, 0, sizeof g_stats);
     int submitted = 0;
     if (count >= 3) {
-        const int need = count * 2;   // отсечение даёт не больше двух треугольников из одного
-        if (need > g_scratch_cap) {
-            float *grown = realloc(g_scratch, (size_t)need * 8 * sizeof(float));
-            if (!grown) { JS_FreeValue(ctx, a); return JS_ThrowOutOfMemory(ctx); }
-            g_scratch = grown;
-            g_scratch_cap = need;
+        // Запас под дробление близких крупных треугольников (re2d_math.c): буфер
+        // заранее нужного размера не известен, поэтому при нехватке места считаем
+        // заново с вдвое большим — вход тот же, результат детерминирован.
+        int need = count * 3;
+        for (;;) {
+            if (need > g_scratch_cap) {
+                float *grown = realloc(g_scratch, (size_t)need * 8 * sizeof(float));
+                if (!grown) { JS_FreeValue(ctx, a); return JS_ThrowOutOfMemory(ctx); }
+                g_scratch = grown;
+                g_scratch_cap = need;
+            }
+            submitted = r2d_re2d_mesh(&g_view, in, count, g_scratch, g_scratch_cap, flags, &g_stats);
+            if (g_stats.overflow == 0 || g_scratch_cap >= R2D_RE2D_MAX_VERTS) break;
+            need = g_scratch_cap * 2;
         }
-        submitted = r2d_re2d_mesh(&g_view, in, count, g_scratch, g_scratch_cap, flags, &g_stats);
         if (submitted > 0 && s && s->renderer) {
             r2d_batch_mesh(s->renderer, g_scratch, submitted, texture);
             ++g_meshes;
@@ -220,6 +231,7 @@ static JSValue js_info(JSContext *ctx, JSValueConst self, int argc, JSValueConst
     set_num(ctx, st, "trisOut", g_stats.tris_out);
     set_num(ctx, st, "behind", g_stats.behind);
     set_num(ctx, st, "clipped", g_stats.clipped);
+    set_num(ctx, st, "split", g_stats.split);
     set_num(ctx, st, "culled", g_stats.culled);
     set_num(ctx, st, "invalid", g_stats.invalid);
     set_num(ctx, st, "overflow", g_stats.overflow);
@@ -239,6 +251,7 @@ int r2d_re2d_install(JSContext *ctx, JSValue engine)
     JS_SetPropertyStr(ctx, re2d, "mesh", JS_NewCFunction(ctx, js_mesh, "mesh", 4));
     JS_SetPropertyStr(ctx, re2d, "info", JS_NewCFunction(ctx, js_info, "info", 0));
     JS_SetPropertyStr(ctx, re2d, "CULL_BACK", JS_NewInt32(ctx, R2D_RE2D_CULL_BACK));
+    JS_SetPropertyStr(ctx, re2d, "NO_SPLIT", JS_NewInt32(ctx, R2D_RE2D_NO_SPLIT));
     JS_SetPropertyStr(ctx, engine, "re2d", re2d);
     return 0;
 }

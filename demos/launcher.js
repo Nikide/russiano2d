@@ -39,6 +39,12 @@ const DEMOS = [
         hint: 'Визуальная новелла: озвучка, выбор и две концовки',
     },
     {
+        scene: 're2d_world',
+        icon: 'view_in_ar',
+        title: 'Re2D · мир-коробка',
+        hint: 'Комната от первого лица, мышь крутит взгляд, добрые маскоты',
+    },
+    {
         scene: 're2dsprite',
         icon: '360',
         title: 'Re2DSprite · Руси-тян',

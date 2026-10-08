@@ -33,6 +33,7 @@ SCENES = {
     "russi_vn": (3, 4, 300),
     "launcher": (0, 0, 20),
     "rotsprite": (5, 0, 60),
+    "re2d_world": (10, 0, 120),
 }
 
 FAILURES = []
@@ -44,8 +45,10 @@ FAILURES = []
 DOC_BUTTONS = {
     # Лаунчер целиком на RmlUi: проверяем, что документ поднят и слушает кнопки
     # (узлов <ui.*> у него больше нет — они были прошлой реализацией меню).
-    "launcher": ("demos/ui/launcher.rml", ["demo-0", "demo-1", "demo-2", "vol-up", "vol-mute"], True),
+    "launcher": ("demos/ui/launcher.rml", ["demo-0", "demo-1", "demo-2", "demo-3", "vol-up", "vol-mute"], True),
     "rotsprite": ("demos/rotsprite/rotsprite.rml", ["front", "profile", "back", "auto", "menu"], True),
+    # Re2D: HUD (прицел, реплика, подсказка) — без кнопок, но документ обязан быть виден.
+    "re2d_world": ("demos/ui/re2d-hud.rml", [], True),
     # Новелла: документ реплики обязан подниматься и прятать штатную панель $.dialog.
     "russi_vn": ("demos/ui/vn-dialog.rml", ["vn-choice-0", "vn-choice-1", "vn-choice-2"], False),
 }

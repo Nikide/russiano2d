@@ -137,6 +137,86 @@ static int clip_near(const ViewVert *poly, int n, float near_plane, ViewVert *ou
     return m;
 }
 
+// --- Дробление крупных близких треугольников -----------------------------------
+//
+// Аффинная текстура врёт тем сильнее, чем больше глубина меняется внутри
+// треугольника: ячейка пола, одним краем у самых глаз, а другим — в сотне
+// единиц, превращается в «плывущую» кашу. Дробим по самому длинному ребру
+// (середина считается в пространстве камеры, поэтому она настоящая середина
+// ребра в мире, а не на экране), пока кусок не станет «плоским» по глубине или
+// коротким на экране.
+
+#define SPLIT_MAX_LEVEL 6          // не больше 64 кусков из одного треугольника
+#define SPLIT_DEPTH_RATIO 1.25f    // допустимый разброс глубины внутри куска
+#define SPLIT_MIN_EDGE_PX 24.0f    // короче этого на экране — дробить незачем
+
+static float screen_len(const R2DRe2dView *v, const ViewVert *a, const ViewVert *b)
+{
+    const float ka = v->focal / a->depth, kb = v->focal / b->depth;
+    return hypotf(a->right * ka - b->right * kb, a->up * ka - b->up * kb);
+}
+
+static bool needs_split(const R2DRe2dView *v, const ViewVert *a, const ViewVert *b, const ViewVert *c)
+{
+    const float dmin = fminf(a->depth, fminf(b->depth, c->depth));
+    const float dmax = fmaxf(a->depth, fmaxf(b->depth, c->depth));
+    if (dmax <= dmin * SPLIT_DEPTH_RATIO) return false;
+    const float longest = fmaxf(screen_len(v, a, b), fmaxf(screen_len(v, b, c), screen_len(v, c, a)));
+    return longest > SPLIT_MIN_EDGE_PX;
+}
+
+typedef struct {
+    float *out;
+    int cap;                // вместимость в вершинах
+    int written;            // записано вершин
+    unsigned flags;
+    R2DRe2dStats *st;
+} MeshSink;
+
+static void emit_vert(const R2DRe2dView *v, const ViewVert *p, float *dst);
+
+// Точка деления ребра: глубина в ней — среднее геометрическое глубин концов.
+// Тогда оба куска получают одинаковый разброс глубины (sqrt от исходного), а
+// аффинная ошибка текстуры падает вдвое-втрое быстрее, чем при делении пополам.
+static float split_param(const ViewVert *a, const ViewVert *b)
+{
+    const float da = a->depth, db = b->depth;
+    if (fabsf(db - da) < 1e-4f * da) return 0.5f;
+    const float t = (sqrtf(da * db) - da) / (db - da);
+    return fminf(0.95f, fmaxf(0.05f, t));
+}
+
+// Записать треугольник, при необходимости раздробив. false — не поместилось.
+static bool emit_tri(const R2DRe2dView *v, MeshSink *sink,
+                     const ViewVert *a, const ViewVert *b, const ViewVert *c, int level)
+{
+    if (level < SPLIT_MAX_LEVEL && !(sink->flags & R2D_RE2D_NO_SPLIT) && needs_split(v, a, b, c)) {
+        // Делим ребро с самым большим разбросом глубины: именно оно кривит текстуру.
+        const float rab = fmaxf(a->depth, b->depth) / fminf(a->depth, b->depth);
+        const float rbc = fmaxf(b->depth, c->depth) / fminf(b->depth, c->depth);
+        const float rca = fmaxf(c->depth, a->depth) / fminf(c->depth, a->depth);
+        ViewVert m;
+        ++sink->st->split;
+        if (rab >= rbc && rab >= rca) {
+            lerp_vert(a, b, split_param(a, b), &m);
+            return emit_tri(v, sink, a, &m, c, level + 1) && emit_tri(v, sink, &m, b, c, level + 1);
+        }
+        if (rbc >= rca) {
+            lerp_vert(b, c, split_param(b, c), &m);
+            return emit_tri(v, sink, a, b, &m, level + 1) && emit_tri(v, sink, a, &m, c, level + 1);
+        }
+        lerp_vert(c, a, split_param(c, a), &m);
+        return emit_tri(v, sink, a, b, &m, level + 1) && emit_tri(v, sink, &m, b, c, level + 1);
+    }
+    if (sink->written + 3 > sink->cap) return false;
+    emit_vert(v, a, sink->out + (size_t)sink->written * 8);
+    emit_vert(v, b, sink->out + (size_t)(sink->written + 1) * 8);
+    emit_vert(v, c, sink->out + (size_t)(sink->written + 2) * 8);
+    sink->written += 3;
+    ++sink->st->tris_out;
+    return true;
+}
+
 // Вершина камеры → вершина меша для submitMesh: экран, глубина 0..1, цвет с туманом.
 static void emit_vert(const R2DRe2dView *v, const ViewVert *p, float *dst)
 {
@@ -162,7 +242,7 @@ int r2d_re2d_mesh(const R2DRe2dView *v, const float *in, int count,
     memset(st, 0, sizeof *st);
     if (!v || !in || !out || count < 3 || out_cap_verts < 3) return 0;
 
-    int written = 0;
+    MeshSink sink = { out, out_cap_verts, 0, flags, st };
     for (int i = 0; i + 2 < count; i += 3) {
         ++st->tris_in;
 
@@ -206,15 +286,16 @@ int r2d_re2d_mesh(const R2DRe2dView *v, const float *in, int count,
             if (area <= 0.0f) { ++st->culled; continue; }
         }
 
-        const int tris = n - 2;
-        if (written + tris * 3 > out_cap_verts) { ++st->overflow; continue; }
-        for (int t = 0; t < tris; ++t) {
-            emit_vert(v, &poly[0], out + (size_t)written * 8);
-            emit_vert(v, &poly[t + 1], out + (size_t)(written + 1) * 8);
-            emit_vert(v, &poly[t + 2], out + (size_t)(written + 2) * 8);
-            written += 3;
-            ++st->tris_out;
+        // Веер (poly[0], poly[t+1], poly[t+2]); каждый треугольник может раздробиться.
+        // Откат записи при нехватке места: треугольник входа целиком либо есть, либо нет.
+        const int mark = sink.written, mark_tris = st->tris_out;
+        bool ok = true;
+        for (int t = 0; t + 2 < n && ok; ++t) ok = emit_tri(v, &sink, &poly[0], &poly[t + 1], &poly[t + 2], 0);
+        if (!ok) {
+            sink.written = mark;
+            st->tris_out = mark_tris;
+            ++st->overflow;
         }
     }
-    return written;
+    return sink.written;
 }

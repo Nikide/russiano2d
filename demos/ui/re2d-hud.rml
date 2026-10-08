@@ -1,0 +1,24 @@
+<rml>
+<head>
+    <link type="text/rcss" href="re2d-hud.rcss"/>
+    <title>HUD Re2D</title>
+</head>
+<body>
+    <!-- Обёртка на весь экран: проценты у позиционированных детей считаются от неё.
+         Сцена 16:9, размеры в vh — как у остальных демо. -->
+    <div id="re2d-hud">
+        <!-- Прицел: точка в центре сцены. -->
+        <div id="cross"></div>
+
+        <!-- Реплика ближайшего маскота: показывается, пока игрок рядом. -->
+        <div id="speech" class="hidden">
+            <p id="speech-name">Руся</p>
+            <p id="speech-line">…</p>
+        </div>
+
+        <p id="hint">
+            W A S D — ходить &nbsp;·&nbsp; мышь — смотреть &nbsp;·&nbsp; подойди к маскоту &nbsp;·&nbsp; Esc — назад в меню
+        </p>
+    </div>
+</body>
+</rml>

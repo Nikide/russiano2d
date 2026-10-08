@@ -1,0 +1,64 @@
+/* HUD демо Re2D. Фон body прозрачный: сцена видна целиком. */
+
+body {
+    font-family: Noto Sans;
+    font-size: 2.4vh;
+    color: #ffffff;
+    width: 100%;
+    height: 100%;
+}
+
+#re2d-hud {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 100%;
+    height: 100%;
+}
+
+#cross {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    margin-top: -3px;
+    background-color: rgba(255, 255, 255, 210);
+    border-radius: 3px;
+}
+
+#speech {
+    position: absolute;
+    left: 50%;
+    bottom: 11vh;
+    width: 54vh;
+    margin-left: -27vh;
+    padding: 1.6vh 2.4vh;
+    background-color: rgba(10, 14, 24, 200);
+    border-radius: 1.2vh;
+}
+
+#speech.hidden {
+    display: none;
+}
+
+#speech-name {
+    display: block;
+    color: #ffd873;
+    font-size: 2.1vh;
+}
+
+#speech-line {
+    display: block;
+    color: #f4f0e6;
+    font-size: 2.6vh;
+}
+
+#hint {
+    position: absolute;
+    left: 2vh;
+    bottom: 2vh;
+    font-size: 1.9vh;
+    color: #93a4bb;
+}

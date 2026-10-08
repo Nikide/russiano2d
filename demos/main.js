@@ -31,6 +31,7 @@ const MODULES = [
     './shooter_witch/index.js',
     './russi_vn/index.js',
     './rotsprite/index.js',
+    './re2d_world/index.js',
 ];
 
 $.ready(async ($) => {

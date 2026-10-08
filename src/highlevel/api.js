@@ -76,7 +76,7 @@ import { installRaid } from './raid.js';
 import { installCels } from './cels.js';
 import { installProc } from './proc.js';
 import { installKinds } from './kinds.js';
-import { installRe2d } from './re2d.js';
+import { installRe2d, re2dMove } from './re2d.js';
 import { installRotSprite, tickRotSprite } from './rotsprite.js';
 import { installMesh } from './mesh.js';
 import { installAlive } from './alive.js';
@@ -1948,7 +1948,13 @@ function applyControls(dt) {
         const up_key = cfg.up || 'w';
         const jump_pressed = ctx.input.pressed(jump_key) || ctx.input.pressed(up_key);
 
-        if (node.body >= 0) {
+        if (node.kind === 're2d' && ctx.camera.kind() === 're2d') {
+            // Re2D: «вперёд» — туда, куда смотрит камера (yaw), A/D — боком;
+            // мир плоский, поэтому скорость задаётся по обеим осям пола.
+            const m = re2dMove(ctx.camera.rotation(), vec, speed);
+            if (node.body >= 0) engineOf().setVelocity(node.body, m.vx, m.vy);
+            else { node.x += m.vx * dt; node.y += m.vy * dt; }
+        } else if (node.body >= 0) {
             const [vx, vy] = engineOf().getVelocity(node.body);
             engineOf().setVelocity(node.body, vec.x * speed, node.gravity_on === false ? 0 : vy);
             if (jump_pressed && Wrapper.prototype.onFloor.call(wrapOne(node))) {
