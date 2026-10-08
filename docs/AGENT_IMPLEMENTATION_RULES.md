@@ -157,7 +157,7 @@ $.ready(() => {
 ## Правила репозитория, о которых легко забыть
 
 * **Гейт документации.** Агент не пишет в движок, пока не прочитал целиком
-  [ARCHITECTURE.md](ARCHITECTURE.md) → этот файл → [API.md](API.md) →
+  [ARCHITECTURE.md](ARCHITECTURE.md) → этот файл → [internal/NATIVE.md](internal/NATIVE.md) →
   [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md), а при правке `src/highlevel/**` —
   ещё [highlevel/_CONTRACT.md](highlevel/_CONTRACT.md) и страницу модуля
   `docs/highlevel/<имя>.md`. Это делает плагин

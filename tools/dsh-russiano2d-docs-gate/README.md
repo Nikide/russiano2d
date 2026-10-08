@@ -8,7 +8,7 @@
 |---|---|---|
 | 1 | `docs/ARCHITECTURE.md` | Архитектура и философия API `$` |
 | 2 | `docs/AGENT_IMPLEMENTATION_RULES.md` | Правила для кодинг-агентов: рабочий цикл, стоп-условия, закон UI |
-| 3 | `docs/API.md` | Низкоуровневые вызовы `engine.*` |
+| 3 | `docs/internal/NATIVE.md` | Низкоуровневые вызовы `engine.*` |
 | 4 | `docs/HIGH_LEVEL_API.md` | Высокоуровневое API `$` |
 | + | `docs/highlevel/_CONTRACT.md` | только при правке `src/highlevel/**` |
 | + | `docs/highlevel/<имя>.md` | только при правке `src/highlevel/<имя>.js` |
@@ -46,12 +46,12 @@ Russiano2D: правка «src/highlevel/fx.js» заблокирована, п�
 
 Обязательный порядок (сначала философия, потом низкоуровневые доки, потом высокоуровневые):
 ✅ 1. docs/ARCHITECTURE.md — Архитектура и философия API `$`
-⬜ 2. docs/API.md — Низкоуровневые вызовы `engine.*`
+⬜ 2. docs/internal/NATIVE.md — Низкоуровневые вызовы `engine.*`
 ⬜ 3. docs/HIGH_LEVEL_API.md — Высокоуровневое API `$`
 ⬜ 4. docs/highlevel/_CONTRACT.md — Контракт модуля подсистемы `$`
 ⬜ 5. docs/highlevel/fx.md — Подсистема `fx` в высокоуровневом API
 
-Сейчас читай: read file_path="docs/API.md" limit=2000
+Сейчас читай: read file_path="docs/internal/NATIVE.md" limit=2000
 Читать нужно целиком и по порядку; bash `cat` вместо read не засчитывается.
 После этого повтори ровно тот же вызов инструмента write.
 ```
@@ -79,7 +79,7 @@ dsh plugin --profile web remove dsh-russiano2d-docs-gate
 | Поле | По умолчанию | Смысл |
 |---|---|---|
 | `enabled` | `true` | полный выключатель |
-| `rootMarkers` | `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/HIGH_LEVEL_API.md` | все файлы должны быть в каталоге, чтобы он считался корнем движка |
+| `rootMarkers` | `docs/ARCHITECTURE.md`, `docs/internal/NATIVE.md`, `docs/HIGH_LEVEL_API.md` | все файлы должны быть в каталоге, чтобы он считался корнем движка |
 | `docs` | триада выше | обязательные документы: `{ id, path, title, minCoverage? }` |
 | `conditionalDocs` | `_CONTRACT.md` при `src/highlevel/` | `{ id, path, title, whenPrefix }` |
 | `moduleDocs` | включено | `src/highlevel/<имя>.js` требует `docs/highlevel/<имя>.md`, если он есть |

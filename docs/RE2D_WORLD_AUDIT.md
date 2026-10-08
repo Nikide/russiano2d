@@ -61,7 +61,7 @@ sprite id и весь кадр отправляется существующим
 FPS/TPS задаются положением наблюдателя, отдельного scene graph нет.
 Совместимые Re2DSprite pose/socket/attach/equip API сохранены. Поза вычисляется
 непрерывно, не выбором billboard-направлений. API описан в
-[highlevel/re2d.md](highlevel/re2d.md) и [API.md](API.md).
+[highlevel/re2d.md](highlevel/re2d.md) и [internal/NATIVE.md](internal/NATIVE.md).
 
 ## Игровое демо
 

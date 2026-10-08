@@ -566,7 +566,7 @@ class Agent:
     def key(self, name: str, action: str = "tap") -> Dict[str, Any]:
         """Нажать/отпустить клавишу: ``action`` — ``down``, ``up`` или ``tap``.
 
-        Имя клавиши — как в SDL (``docs/API.md``, раздел 5): ``"Space"``,
+        Имя клавиши — как в SDL (``docs/internal/NATIVE.md``, раздел 5): ``"Space"``,
         ``"D"``, ``"Return"``, ``"Left Shift"``. ``tap`` — нажатие на один кадр.
         """
         if action not in ("down", "up", "tap"):

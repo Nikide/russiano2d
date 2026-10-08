@@ -308,7 +308,7 @@ $.update(dt => {
 Схема движка — **C → `$`**: нативное ядро (текстуры, тела, батчинг, RmlUi, BSP,
 свет) спрятано под `$`, глобального `engine` у игры нет
 ([docs/highlevel/native.md](docs/highlevel/native.md)). Внутренний справочник
-ядра — [docs/API.md](docs/API.md).
+ядра — [docs/internal/NATIVE.md](docs/internal/NATIVE.md).
 
 ---
 
@@ -547,7 +547,7 @@ tests/
   fixtures/                 маленькие игры для тестов
 docs/
   HIGH_LEVEL_API.md         полный справочник по $
-  API.md                    нативное ядро engine.* (внутреннее, для модулей $)
+  internal/NATIVE.md                    нативное ядро engine.* (внутреннее, для модулей $)
   AGENT_API.md              протокол агента
   ARCHITECTURE.md           замысел движка и философия API $
   GAP_ANALYSIS.md           аудит API и пробелы относительно Godot 4.x
@@ -652,7 +652,7 @@ JavaScript. Текстуры (`assets/`), шрифты и разметка ин�
 * [docs/tutorial-first-game.md](docs/tutorial-first-game.md) — **«Моя первая игра»**: платформер с маскотом за 15 минут
 * [docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md) — всё, что умеет `$`
 * [docs/AGENT_API.md](docs/AGENT_API.md) — как управлять движком программой
-* [docs/API.md](docs/API.md) — нативное ядро `engine.*` (внутреннее: игре виден только `$`)
+* [docs/internal/NATIVE.md](docs/internal/NATIVE.md) — нативное ядро `engine.*` (внутреннее: игре виден только `$`)
 * [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — замысел движка и философия API `$`
 * [docs/GAP_ANALYSIS.md](docs/GAP_ANALYSIS.md) — аудит API и пробелы относительно Godot 4.x (2D)
 * [docs/HIGH_LEVEL_API_PERF.md](docs/HIGH_LEVEL_API_PERF.md) — сколько стоит кадр `$`: замеры

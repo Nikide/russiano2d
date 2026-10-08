@@ -782,7 +782,7 @@ $.exit(() => $.store.save());
 ## Что дальше
 
 * [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) — всё, что умеет `$`: селекторы,
-  физика, события, твины, сцены, интерфейс, окно и время; [API.md](API.md) —
+  физика, события, твины, сцены, интерфейс, окно и время; [internal/NATIVE.md](internal/NATIVE.md) —
   низкий уровень: батчинг, тела, BSP, свет, RmlUi.
 * [tutorial-menus.md](tutorial-menus.md) — меню, пауза и переходы подробнее;
   [tutorial-platformer.md](tutorial-platformer.md) — платформер с врагами и

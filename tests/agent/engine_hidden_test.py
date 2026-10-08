@@ -41,6 +41,20 @@ def main():
         check(a.eval("$.startScene") is None, "$.startScene без --scene — null")
         check(isinstance(a.eval("$.gfx.white"), int), "$.gfx.white — id белого спрайта")
 
+        # То, что раньше игра брала из engine.* напрямую, теперь есть в $.
+        a.eval("$('<enemy>', { id: 'spin' }).at(100, 100).appendTo($.world); true")
+        a.step(1)
+        check(a.eval("$('#spin').mass()") > 0, "$().mass() — масса тела")
+        a.eval("$('#spin').angularVelocity(2); $('#spin').allowSleep(false); true")
+        a.step(1)
+        check(isinstance(a.eval("$('#spin').angularVelocity()"), (int, float)), "$().angularVelocity() читает скорость тела")
+        ch = a.eval("$.sound.channel(0)")
+        check(isinstance(ch, dict) and "playing" in ch and "volume" in ch, "$.sound.channel(ch) — состояние канала: %s" % ch)
+        r = a.eval("$.debug.render()")
+        check(isinstance(r, dict) and "info" in r and "depth" in r, "$.debug.render() — факты рендера")
+        m = a.eval("$.debug.memory()")
+        check(isinstance(m, dict) and m.get("objects", 0) > 0, "$.debug.memory() — факты о куче")
+
     if FAILURES:
         print("ПРОВАЛЕНО: %d" % len(FAILURES))
         sys.exit(1)

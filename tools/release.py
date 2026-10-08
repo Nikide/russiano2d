@@ -334,7 +334,6 @@ AGENTS_DOC_ORDER = (
     "docs/UI_RMLUI_LAW.md",
     "docs/ARCHITECTURE.md",
     "docs/HIGH_LEVEL_API.md",
-    "docs/API.md",
     "docs/AGENT_API.md",
     "docs/BUILD.md",
     "docs/tutorial-first-game.md",

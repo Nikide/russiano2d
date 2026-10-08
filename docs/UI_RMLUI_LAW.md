@@ -28,7 +28,7 @@
 ## 2. Что разрешено
 
 * Документы RmlUi: `$.ui.doc('ui/menu.rml')` и низкоуровневые `engine.ui.*`
-  ([HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §20, [API.md](API.md) §9).
+  ([HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §20, [internal/NATIVE.md](internal/NATIVE.md) §9).
 * **Нативные custom-элементы внутри RmlUi** — для специализированного
   отрисованного содержимого: визуализация коллизий, BSP, навигационной сетки,
   зон видимости, графиков профайлера ([DEVTOOLS.md](DEVTOOLS.md) §5).
@@ -141,6 +141,6 @@ grep -rn "ui\.panel\|ui\.button" src/highlevel/*.js demos/*.js
 grep -rn "ui\.doc(\|ui_load" src/highlevel/*.js game demos
 ```
 
-Ссылки: [API.md](API.md) §9 (низкоуровневый GUI),
+Ссылки: [internal/NATIVE.md](internal/NATIVE.md) §9 (низкоуровневый GUI),
 [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §20 (`$.ui`),
 [PHILOSOPHY.md](PHILOSOPHY.md) §2.6, [DEVTOOLS.md](DEVTOOLS.md).

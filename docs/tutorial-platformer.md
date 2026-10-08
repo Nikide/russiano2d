@@ -261,4 +261,4 @@ $.test.check($('.coin').length === 5, 'монет пять');
 
 * [tutorial-menus.md](tutorial-menus.md) — меню, пауза и переходы между сценами.
 * [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) — всё, что умеет `$`.
-* [API.md](API.md) — низкий уровень: батчинг, тела, BSP, свет, RmlUi.
+* [internal/NATIVE.md](internal/NATIVE.md) — низкий уровень: батчинг, тела, BSP, свет, RmlUi.

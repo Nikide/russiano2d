@@ -1599,6 +1599,32 @@ function installNodeMethods($) {
      * .sleeping() — спит ли тело (Box2D усыпляет неподвижные). Спящее тело не
      * считается физикой: полезно, чтобы не будить его лишней логикой.
      */
+    // Угловая скорость тела, рад/с: `.angularVelocity()` — прочитать,
+    // `.angularVelocity(w)` — задать всем узлам выборки. У узла без тела — 0.
+    def('angularVelocity', function (w) {
+        if (w === undefined) {
+            const node = this.nodes[0];
+            return node && node.body >= 0 && typeof engineOf().getAngularVelocity === 'function'
+                ? engineOf().getAngularVelocity(node.body) : 0;
+        }
+        return this.eachNode((_, node) => {
+            if (node.body >= 0) engineOf().setAngularVelocity(node.body, Number(w) || 0);
+        });
+    });
+    // Масса тела, кг (32 px = 1 м, плотность из attrs.density). Без тела — 0.
+    defGet('mass', function (node) {
+        return node.body >= 0 && typeof engineOf().bodyMass === 'function' ? engineOf().bodyMass(node.body) : 0;
+    }, 0);
+    // Разрешить Box2D усыплять тело (по умолчанию да). `false` нужен, если
+    // игра двигает тело скоростью: уснувшее тело перестаёт её слушать.
+    def('allowSleep', function (on) {
+        return this.eachNode((_, node) => {
+            if (node.body >= 0 && typeof engineOf().setSleeping === 'function') {
+                engineOf().setSleeping(node.body, on !== false);
+            }
+        });
+    });
+
     defGet('sleeping', function (node) {
         return node.body >= 0 && typeof engineOf().isAwake === 'function'
             ? !engineOf().isAwake(node.body)

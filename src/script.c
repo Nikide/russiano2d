@@ -4649,7 +4649,7 @@ static void r2d__refresh_engine_props(R2DScript *s)
     JS_SetPropertyStr(ctx, e, "width", JS_NewInt32(ctx, s->app->width));
     JS_SetPropertyStr(ctx, e, "height", JS_NewInt32(ctx, s->app->height));
     // Физический размер буфера кадра (Retina/HiDPI). Нужен только операциям над
-    // самим изображением — например, снимку кадра (docs/API.md §11).
+    // самим изображением — например, снимку кадра (docs/internal/NATIVE.md §11).
     JS_SetPropertyStr(ctx, e, "pixel_width", JS_NewInt32(ctx, s->app->pixel_width));
     JS_SetPropertyStr(ctx, e, "pixel_height", JS_NewInt32(ctx, s->app->pixel_height));
     JS_SetPropertyStr(ctx, e, "mouseX", JS_NewFloat64(ctx, s->app->mouse_x));

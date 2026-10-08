@@ -44,7 +44,7 @@
 | Стражи доков | да | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py` |
 | Инвентаризация `$` | да | [GAP_ANALYSIS.md](GAP_ANALYSIS.md), [TASKS.md](TASKS.md) |
 | Агентский протокол | да | [AGENT_API.md](AGENT_API.md), [src/agent.c](../src/agent.c) |
-| RmlUi | да | [src/gui.cpp](../src/gui.cpp), [API.md](API.md) §9 |
+| RmlUi | да | [src/gui.cpp](../src/gui.cpp), [internal/NATIVE.md](internal/NATIVE.md) §9 |
 | Замеры | частично | `$.debug.profile()`, `tools/bench_highlevel.py`, `--stats` |
 | **CI прогоняет сборку/тесты** | **нет** | [.gitlab-ci.yml](../.gitlab-ci.yml) только публикует релиз — сборка и тесты запускаются локально |
 
@@ -97,7 +97,7 @@ $('.enemy').within('#hero', 500);
 
 * `engine.queryStats()` → `{ calls, candidates, results, ms, cap, truncated }` —
   только факты о последнем `engine.queryCircle`
-  ([script.c](../src/script.c), [API.md](API.md) §16);
+  ([script.c](../src/script.c), [internal/NATIVE.md](internal/NATIVE.md) §16);
 * `$.debug.queryStats()` — то же из игры
   ([debug.js](../src/highlevel/debug.js));
 * профилировщик по-прежнему знает только зоны кадра — `UPDATE`, `RENDER_JS`,

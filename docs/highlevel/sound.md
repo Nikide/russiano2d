@@ -23,6 +23,7 @@ $.sound.crossfade('battle.ogg', 1.5);
 | `priorityOf(handle)` / `busy()` | с каким приоритетом играет канал и сколько каналов занято |
 | `playAt(file, x, y, opts?)` | позиционно от камеры |
 | `stopAll()` / `stop(handle)` / `playing(handle)` / `count()` | управление каналами |
+| `channel(ch)` | что звучит на канале сейчас: `{ playing, volume, pan, pitch, effect, position, duration }` |
 | `activeChannels()` | сколько каналов занято |
 | `preload(file)` / `duration(file)` | подготовка и длительность |
 | `volume(value?)` / `sfxVolume(value?)` / `mute(on?)` | общая и эффектовая громкость |

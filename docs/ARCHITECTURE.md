@@ -2,6 +2,12 @@
 
 > Исходный проектный документ: каким задумывалось высокоуровневое API.
 > Актуальный справочник — [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md).
+>
+> **Сейчас схема — C → `$`** ([PHILOSOPHY.md](PHILOSOPHY.md), константы 1 и 5):
+> игре виден только `$`, нативное ядро (`engine`) спрятано под ним
+> ([highlevel/native.md](highlevel/native.md)), а покадровые проходы по узлам
+> идут в C (`src/nodes.c`). Внутренний справочник ядра —
+> [internal/NATIVE.md](internal/NATIVE.md).
 
 jQuery-style API для 2D-движка (SDL3 + QJS-NG)
 
@@ -23,7 +29,7 @@ text
 
 - **Весь UI движка — документы RmlUi**: `.rml` + `.rcss`, загружаются через
   `$.ui.doc('ui/menu.rml')` (внутри — нативный `engine.ui.*`, §9 в
-  [API.md](API.md#9-игровой-gui-rmlui); см. §20 в
+  [internal/NATIVE.md](internal/NATIVE.md#9-игровой-gui-rmlui); см. §20 в
   [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md)). Меню, HUD, диалоги, экраны,
   инвентарь, настройки, оверлеи — всё это RmlUi.
 - **Второго UI-пути в движке нет.** Сторонний UI-фреймворк, вёрстка интерфейса

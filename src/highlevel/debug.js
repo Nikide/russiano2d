@@ -171,6 +171,19 @@ export function installDebug($) {
          * objects, arrays, strings, atoms, shapes, native_tweens }`. Без
          * движка — null. Нужен, чтобы отличать утечку от шума замера.
          */
+        /**
+         * Факты рендера кадра: `{ info, depth }` — engine.renderInfo()
+         * (пост-обработка, bloom, проходы) и engine.depthInfo() (меш и
+         * z-буфер). Без движка — null.
+         */
+        render() {
+            if (!engine || typeof engine.renderInfo !== 'function') return null;
+            return {
+                info: engine.renderInfo(),
+                depth: typeof engine.depthInfo === 'function' ? engine.depthInfo() : null,
+            };
+        },
+
         memory() {
             const n = engine && engine.nodes;
             return n && typeof n === 'object' && typeof n.memory === 'function' ? n.memory() : null;

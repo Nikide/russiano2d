@@ -91,7 +91,7 @@ CLAIMS = [
      "docs/HIGH_LEVEL_API_PERF.md", r"Настоящие дыры[^\n]*Curve"),
     ("мипмапы",
      "src/render.c", r"SDL_GenerateMipmapsForGPUTexture",
-     "docs/API.md", r"мипмап[^\n]*не поддержан"),
+     "docs/internal/NATIVE.md", r"мипмап[^\n]*не поддержан"),
     ("обрезка (scissor)",
      "src/render.c", r"SDL_SetGPUScissor",
      "docs/highlevel/render.md", r"scissor/clip нет|обрезка[^\n]*не сделана"),

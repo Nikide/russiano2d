@@ -2,15 +2,15 @@
 
 > **Внутренний документ.** Схема движка — C → `$`: игре виден только `$`, а
 > объект `engine` берут лишь модули `src/highlevel/*.js` через
-> `import { engine } from './native.js'` ([highlevel/native.md](highlevel/native.md)).
+> `import { engine } from './native.js'` ([highlevel/native.md](../highlevel/native.md)).
 > Глобального `engine` после установки `$` нет. Примеры ниже показывают
 > нативные вызовы так, как их видит модуль `$` или агентский `eval`.
 
-Полное описание объекта `engine` — нативных биндингов ядра. Все биндинги зарегистрированы в [`src/script.c`](../src/script.c) (функция
+Полное описание объекта `engine` — нативных биндингов ядра. Все биндинги зарегистрированы в [`src/script.c`](../../src/script.c) (функция
 `r2d__make_engine`), свойства кадра обновляются в `r2d__refresh_engine_props`.
 
 Игровой код — это ES-модули (QuickJS-ng, ES2023+). Точка входа по умолчанию —
-[`game/main.js`](../game/main.js); движок вызывает у неё `onUpdate(dt)` и `onRender()`.
+[`game/main.js`](../../game/main.js); движок вызывает у неё `onUpdate(dt)` и `onRender()`.
 
 - [1. Точка входа и контракт кадра](#1-точка-входа-и-контракт-кадра)
 - [2. Свойства кадра](#2-свойства-кадра)
@@ -32,6 +32,11 @@
 
 ## 1. Точка входа и контракт кадра
 
+> **Схема C → `$`.** Контракт кадра ниже — то, как ядро зовёт JS. Обработчики
+> ставит сам `$` (`api.js`: `engine.setUpdate`/`setRender`), игра пишет
+> `$.update`/`$.render`. Экспорт `onUpdate`/`onRender` из `main.js` по-прежнему
+> разбирается ядром и **перебил бы цикл `$`** — в играх на `$` его не используют.
+
 ### 1.1. Экспорт из ES-модуля
 
 Файл, указанный как точка входа (по умолчанию `game/main.js`), выполняется как
@@ -51,7 +56,7 @@ export function onRender() {
 `onUpdate(dt)` вызывается один раз за кадр **после** шагов физики, поэтому
 `engine.getTransforms()` внутри `onUpdate` уже содержит свежие позиции.
 `onRender()` вызывается сразу после `onUpdate`, перед началом кадра рендера
-(см. [`src/main.c`](../src/main.c)). Обе функции могут отсутствовать — движок
+(см. [`src/main.c`](../../src/main.c)). Обе функции могут отсутствовать — движок
 просто ничего не вызовет.
 
 ### 1.2. Альтернатива: `engine.setUpdate` / `engine.setRender`
@@ -105,7 +110,7 @@ engine.setRender(() => {
 
 ### 1.5. Командная строка
 
-Опции разбираются в цикле аргументов `main` ([`src/main.c`](../src/main.c));
+Опции разбираются в цикле аргументов `main` ([`src/main.c`](../../src/main.c));
 справку печатает `r2d__print_usage` там же:
 
 | Опция | Действие |
@@ -117,7 +122,7 @@ engine.setRender(() => {
 | `--overlay` | Показать отладочный оверлей сразу; иначе он скрыт до `F1` |
 | `--stats` | Печатать раз в секунду статистику кадра (FPS, спрайты, тела, звук) |
 | `--seconds N` | Выйти автоматически через N секунд — для дымовых тестов |
-| `--record <файл>` | Записать ввод кадров в файл `.r2replay` (см. [RECORD_REPLAY.md](RECORD_REPLAY.md)) |
+| `--record <файл>` | Записать ввод кадров в файл `.r2replay` (см. [RECORD_REPLAY.md](../RECORD_REPLAY.md)) |
 | `--replay <файл>` | Воспроизвести записанный ввод вместо настоящего |
 | `--no-hot-reload` | Не следить за изменениями `.js` |
 | `--help`, `-h` | Справка |
@@ -173,7 +178,7 @@ export function onUpdate(dt) {
 Свойство, а не функция: имя сцены, переданное флагом `--scene` при запуске
 (см. [1.5](#15-командная-строка)), либо `null`, если флаг не задавали. Движок
 выставляет его **до** выполнения модуля точки входа, поэтому читать можно прямо
-в top-level коде — именно так делает [`demos/main.js`](../demos/main.js):
+в top-level коде — именно так делает [`demos/main.js`](../../demos/main.js):
 
 ```js
 // demos/main.js
@@ -226,7 +231,7 @@ engine.log('игрок на', engine.mouseX.toFixed(0), 'px');
 ### `engine.rgba(r, g, b, a)`
 
 Упаковывает цвет в 32-битное целое (little-endian RGBA: младший байт — красный).
-Формат совпадает с `R2D_RGBA` из [`src/r2d.h`](../src/r2d.h).
+Формат совпадает с `R2D_RGBA` из [`src/r2d.h`](../../src/r2d.h).
 
 | Параметр | Тип | По умолчанию | Описание |
 |---|---|---|---|
@@ -422,7 +427,7 @@ const keys = {
 1. **каталог игры** — то, что передано в `--game <каталог>`;
 2. **`base_path`** — каталог запуска движка: переменная окружения `R2D_GAME_DIR`
    → текущий каталог, если в нём есть `game/main.js` → каталог исполняемого файла
-   (см. `r2d__pick_base_path` в [`src/app.c`](../src/app.c)).
+   (см. `r2d__pick_base_path` в [`src/app.c`](../../src/app.c)).
 
 Проверяется именно **наличие файла**: если игра положила рядом свой `assets/`,
 он будет найден, а встроенные шрифты и иконки движка (которых в игре нет)
@@ -583,7 +588,7 @@ engine.setClearColor(0.06, 0.08, 0.11, 1.0);
 Режим смешивания действует на весь вызов: один батч рисуется одним конвейером.
 Если в кадре нужны разные режимы, разбейте спрайты на несколько вызовов —
 именно так делает высокоуровневый `$.gfx` (см.
-[HIGH_LEVEL_API.md](HIGH_LEVEL_API.md), раздел 7). Без четвёртого аргумента
+[HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md), раздел 7). Без четвёртого аргумента
 поведение прежнее — обычное альфа-смешивание.
 
 ```js
@@ -793,7 +798,7 @@ engine.submitTriangles(tri, v);   // → число принятых верши�
 
 В высокоуровневом API — `$.net.simulate({loss, delay, jitter, seed})`,
 `$.net.simulation()`, `$.net.delayed()`, `$.net.simulateOff()`
-(см. [highlevel/net.md](highlevel/net.md) §8).
+(см. [highlevel/net.md](../highlevel/net.md) §8).
 
 ### `engine.addShape(body, desc)` / `engine.shapeCount(body)`
 
@@ -813,7 +818,7 @@ engine.submitTriangles(tri, v);   // → число принятых верши�
 предупреждение. `engine.shapeCount(body)` — сколько форм у тела.
 
 В высокоуровневом API — `.zone({...})`, `$.world.zone/zoneTag/zoneCount/
-zonesTouching` (см. [highlevel/world.md](highlevel/world.md) §2.3).
+zonesTouching` (см. [highlevel/world.md](../highlevel/world.md) §2.3).
 
 ### `engine.contactBetween(a, b)` / `engine.touching(a, b)` / `engine.contactsOf(id, cap?)`
 
@@ -871,7 +876,7 @@ engine.clearClip();
 ```
 
 В высокоуровневом API — `$.gfx.clip` / `clipOff` / `clipRect` и `.clip()` у узла
-(см. [highlevel/render.md](highlevel/render.md) §5.1).
+(см. [highlevel/render.md](../highlevel/render.md) §5.1).
 
 ### `engine.submitMesh(vertices, count?, texture?)`
 
@@ -905,7 +910,7 @@ z-буфер — **порядок добавления не важен**, бли
 **Границы.** `count` округляется вниз до кратного трём; при `count % 3 != 0`
 пишется ошибка. Спрайты пишут `z = 0` («ближе всего»), поэтому **спрайт всегда
 перекрывает меш** — z-буфер сортирует только треугольники меша между собой
-(см. [highlevel/depth.md](highlevel/depth.md) §4).
+(см. [highlevel/depth.md](../highlevel/depth.md) §4).
 
 **Возвращает:** `number` — сколько вершин принято.
 
@@ -953,13 +958,13 @@ z-буфер — **порядок добавления не важен**, бли
 
 Координаты, размеры, скорости и гравитация задаются в **пикселях** и
 **пикселях в секунду**. Внутри Box2D всё переводится в метры делением на
-`R2D_PX_PER_M = 32` (см. [`src/physics.h`](../src/physics.h) и
-[`src/physics.c`](../src/physics.c)). Углы и угловые скорости — без перевода:
+`R2D_PX_PER_M = 32` (см. [`src/physics.h`](../../src/physics.h) и
+[`src/physics.c`](../../src/physics.c)). Углы и угловые скорости — без перевода:
 радианы и радианы в секунду. Масса — килограммы.
 
 Ось `y` направлена **вниз**, как на экране, поэтому «вниз» — это
 положительная гравитация `+y`. При старте мир получает гравитацию
-`(0, 2000)` px/s² (см. [`src/main.c`](../src/main.c)).
+`(0, 2000)` px/s² (см. [`src/main.c`](../../src/main.c)).
 
 ### `engine.createBody(opts)`
 
@@ -1112,7 +1117,7 @@ for (const c of engine.contacts()) {
 
 События приходят только для форм, созданных с `contacts: true`. Высокоуровневое
 API включает этот флаг динамическим телам автоматически и раздаёт события
-узлам — см. [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md).
+узлам — см. [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md).
 
 ### `engine.createJoint(opts)` / `engine.destroyJoint(id)`
 
@@ -1316,7 +1321,7 @@ RmlUi рисует HTML/CSS-подобные документы (`.rml` + `.rcss
 
 Создаёт документ **из строки разметки**, а не из файла. Нужно инструментам,
 которые строят интерфейс кодом и не хотят класть `.rml` в игру (DevTools,
-[highlevel/devtools.md](highlevel/devtools.md)).
+[highlevel/devtools.md](../highlevel/devtools.md)).
 
 | Параметр | Тип | Описание |
 |---|---|---|
@@ -1416,12 +1421,12 @@ engine.ui.on(doc, 'btn-quit', 'click', () => engine.quit());
 > кэширует документ, а слушатели остаются на элементах. Если вешать их каждый
 > `onEnter`, один клик вызовет обработчик несколько раз, а счётчик 256 будет
 > расти. Храните флаг (`this.listenersBound`) — пример в
-> [`game/scenes/menu.js`](../game/scenes/menu.js).
+> [`game/scenes/menu.js`](../../game/scenes/menu.js).
 
 ### Шрифты
 
 При старте движок загружает **все** `.ttf`/`.otf` из `assets/fonts`
-(см. `r2d_gui_create` в [`src/gui.cpp`](../src/gui.cpp)). В RCSS имя семейства
+(см. `r2d_gui_create` в [`src/gui.cpp`](../../src/gui.cpp)). В RCSS имя семейства
 берётся из самого шрифта:
 
 ```css
@@ -1438,9 +1443,9 @@ body {
 
 **2235** иконок Material Design вкомпилированы в исполняемый файл вместе со
 шрифтом и таблицей имён — внешних файлов не нужно, работает и в релизной сборке
-без ассетов. Генератор — [`tools/r2d_embed_icons.c`](../tools/r2d_embed_icons.c),
-сборка — [`cmake/Icons.cmake`](../cmake/Icons.cmake); из C доступны функции из
-[`src/icons.h`](../src/icons.h).
+без ассетов. Генератор — [`tools/r2d_embed_icons.c`](../../tools/r2d_embed_icons.c),
+сборка — [`cmake/Icons.cmake`](../../cmake/Icons.cmake); из C доступны функции из
+[`src/icons.h`](../../src/icons.h).
 
 | Функция | Возвращает | Описание |
 |---|---|---|
@@ -1467,7 +1472,7 @@ if (engine.ui.hasIcon('volume_up')) {
 
 Имена — официальные из Material Design Icons (`home`, `settings`, `volume_up`,
 `directions_run`, …). Полный список отдаёт `iconNames()`; сами иконки и лицензия
-(Apache-2.0) перечислены в [`demos/assets/CREDITS.md`](../demos/assets/CREDITS.md).
+(Apache-2.0) перечислены в [`demos/assets/CREDITS.md`](../../demos/assets/CREDITS.md).
 
 ### Подключение стилей и файловая система
 
@@ -1484,15 +1489,15 @@ if (engine.ui.hasIcon('volume_up')) {
 
 Файловый интерфейс RmlUi ищет документ сначала в `<base_path>/game/`, затем в
 `<base_path>/` (см. `BasePathFileInterface` в
-[`src/gui.cpp`](../src/gui.cpp)), поэтому из JS можно писать и
+[`src/gui.cpp`](../../src/gui.cpp)), поэтому из JS можно писать и
 `engine.ui.load('ui/menu.rml')`, и `engine.ui.load('game/ui/menu.rml')`.
 
 ---
 
 ## 10. Звук и музыка
 
-Звуковой слой построен на SDL3_mixer ([`src/audio.h`](../src/audio.h),
-[`src/audio.c`](../src/audio.c)): он даёт декодеры OGG/WAV/MP3, пул каналов,
+Звуковой слой построен на SDL3_mixer ([`src/audio.h`](../../src/audio.h),
+[`src/audio.c`](../../src/audio.c)): он даёт декодеры OGG/WAV/MP3, пул каналов,
 петли, затухания и отдельную дорожку для музыки. Всё доступно как
 `engine.audio.*` (регистрация — в `r2d__make_engine`, блок «Звук и музыка»).
 
@@ -1528,7 +1533,7 @@ if (engine.ui.hasIcon('volume_up')) {
 ### Каналы звука: громкость, панорама, эффекты
 
 Эти вызовы добавлены для высокоуровневых аудио-шин (`$.audio` в
-[HIGH_LEVEL_API.md](HIGH_LEVEL_API.md)): громкость шины должна менять уже
+[HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md)): громкость шины должна менять уже
 играющие звуки, а не только следующие за ней.
 
 | Функция | Возвращает | Описание |
@@ -1544,7 +1549,7 @@ if (engine.ui.hasIcon('volume_up')) {
 | `engine.audio.setChannelPitch(channel, ratio)` / `channelPitch(channel)` | `undefined` / `number` | Скорость канала: `1` — как записано, `2` — вдвое быстрее и на октаву выше |
 | `engine.audio.setMusicPitch(ratio)` / `musicPitch()` | `undefined` / `number` | То же для музыкальной дорожки |
 | `engine.audio.setChannel3D(channel, x, y, z?)` | `undefined` | Позиция источника для объёмного звука |
-| `engine.audio.setRoom(...)` / `getRoom()` | `undefined` / `object` | Акустика помещения (см. [highlevel/audiobus.md](highlevel/audiobus.md) §8) |
+| `engine.audio.setRoom(...)` / `getRoom()` | `undefined` / `object` | Акустика помещения (см. [highlevel/audiobus.md](../highlevel/audiobus.md) §8) |
 | `engine.audio.group(name)` / `groupCount()` / `setChannelGroup(channel, name)` | `number` / `number` / `undefined` | Группы звука: своя громкость и эффект на группу |
 | `engine.audio.setGroupEffect(name, kind, p1?, p2?)` / `groupEffect(name)` | `boolean` / `string` | Эффект группы |
 | `engine.audio.setChannelReverb(channel, ...)` / `setGroupReverb(name, ...)` | `undefined` | Реверб канала и группы |
@@ -1564,7 +1569,7 @@ if (engine.ui.hasIcon('volume_up')) {
 Реверба, хоруса и компрессора в **эффектах канала** нет (только `'lowpass'` и
 `'echo'`) — но объём помещения есть отдельно: `setRoom`/`getRoom`,
 `setChannelReverb`/`setGroupReverb` и зоны акустики в высокоуровневом
-`$.audio.zone/room` (см. [highlevel/audiobus.md](highlevel/audiobus.md) §8).
+`$.audio.zone/room` (см. [highlevel/audiobus.md](../highlevel/audiobus.md) §8).
 Это ограничение списка DSP-эффектов канала, а не отсутствие реверба в движке. Обработка идёт в аудиопотоке: буфер задержки выделяется один раз
 при инициализации, поэтому переключение эффекта на лету безопасно.
 
@@ -1641,7 +1646,7 @@ engine.log('звуков загружено:', engine.audio.count(),
 * **Каналов эффектов ровно 16** (`R2D_AUDIO_CHANNELS`). Если все заняты,
   движок вытесняет **самый неважный** канал (с наименьшим приоритетом) и только
   если новый звук не менее важен; иначе `play` вернёт `-1` — лучше не играть,
-  чем заглушить важное ([src/audio.c](../src/audio.c), `r2d_audio_play`).
+  чем заглушить важное ([src/audio.c](../../src/audio.c), `r2d_audio_play`).
 * **До 128 уникальных звуков** (`R2D_AUDIO_MAX_SOUNDS`); при переполнении
   `load` вернёт `-1` и запишет ошибку в лог.
 * **Повторный `load()` с тем же путём возвращает тот же id.** Звуки живут в C и
@@ -1652,8 +1657,8 @@ engine.log('звуков загружено:', engine.audio.count(),
 * **Короткие эффекты декодируются при первом проигрывании** (`predecode = false`),
   поэтому первый `play` может слегка задержаться; дальше звук берётся из кэша.
 * **Сборка без звука.** С `-DR2D_ENABLE_AUDIO=OFF` вместо
-  [`src/audio.c`](../src/audio.c) компилируется
-  [`src/audio_stub.c`](../src/audio_stub.c): все вызовы становятся no-op,
+  [`src/audio.c`](../../src/audio.c) компилируется
+  [`src/audio_stub.c`](../../src/audio_stub.c): все вызовы становятся no-op,
   `load` всегда возвращает `-1`, а при старте в лог уйдёт предупреждение.
 
 ---
@@ -1670,7 +1675,7 @@ engine.log('звуков загружено:', engine.audio.count(),
   `r2d_render_begin_frame`, поэтому проекция и все команды отрисовки живут в
   логических точках.
 
-Разделение размеров в [`src/app.h`](../src/app.h):
+Разделение размеров в [`src/app.h`](../../src/app.h):
 
 | Поле | Где используется |
 |---|---|
@@ -1686,7 +1691,7 @@ engine.height, ...)` заливает экран целиком на любом 
 
 Курсор мыши (`engine.mouseX`/`engine.mouseY`) приходит в логических точках — в
 той же системе, что и координаты сцены (см. комментарий в
-[`src/app.c`](../src/app.c)).
+[`src/app.c`](../../src/app.c)).
 
 ---
 
@@ -1699,13 +1704,13 @@ engine.height, ...)` заливает экран целиком на любом 
 попало, остаётся в тени. Тени получаются из самой геометрии — отдельной карты
 теней не нужно.
 
-Реализация — C-обёртка [`src/light.h`](../src/light.h) /
-[`src/light.cpp`](../src/light.cpp) над header-only библиотекой
+Реализация — C-обёртка [`src/light.h`](../../src/light.h) /
+[`src/light.cpp`](../../src/light.cpp) над header-only библиотекой
 trylock/visibility (MIT). Библиотека
 тянется через `FetchContent` с пином коммита
 `71eb5c00692713abd870113f3efc943322486d8e` (объявление —
-[`cmake/Dependencies.cmake`](../cmake/Dependencies.cmake), оформление —
-[`cmake/Light.cmake`](../cmake/Light.cmake)). Её заголовки подключены как SYSTEM,
+[`cmake/Dependencies.cmake`](../../cmake/Dependencies.cmake), оформление —
+[`cmake/Light.cmake`](../../cmake/Light.cmake)). Её заголовки подключены как SYSTEM,
 чтобы строгие предупреждения движка не разбирали чужой C++14-код. Из движка
 наружу торчит только C-API: ни классов, ни исключений.
 
@@ -1836,7 +1841,7 @@ const poly = engine.light.visibilityPrepared(player.x, player.y);
 ## 13. 2D BSP-дерево
 
 `engine.bsp.*` — собственное 2D BSP-дерево движка
-([`src/bsp.h`](../src/bsp.h), [`src/bsp.c`](../src/bsp.c)). Оно решает одну
+([`src/bsp.h`](../../src/bsp.h), [`src/bsp.c`](../../src/bsp.c)). Оно решает одну
 задачу: дать корректный порядок отрисовки «от дальних к ближним» для **целых
 отрезков** на произвольной геометрии. Пакетная отрисовка не имеет z-буфера:
 порядок в пакете и есть порядок отрисовки.
@@ -1926,7 +1931,7 @@ for (const i of order) {
 
 Вставки точек в дерево, как в Doom, в движке **нет**: промежуточная версия
 падала, и её убрали, чтобы не держать в движке нерабочий путь (см. комментарий в
-[`src/bsp.h`](../src/bsp.h)). Спрайты сортируйте по расстоянию до наблюдателя —
+[`src/bsp.h`](../../src/bsp.h)). Спрайты сортируйте по расстоянию до наблюдателя —
 в сценах, где BSP нужен ради отрезков, этого достаточно. Так сделано в демо
 `bsp`: стены идут в порядке из дерева, а персонажи — поверх них, по расстоянию.
 
@@ -1963,35 +1968,35 @@ for (const i of order) {
 
 | Что | Лимит | Константа / где |
 |---|---|---|
-| Одновременных физических тел | 8192 | `R2D_MAX_BODIES` в [`src/r2d.h`](../src/r2d.h) |
+| Одновременных физических тел | 8192 | `R2D_MAX_BODIES` в [`src/r2d.h`](../../src/r2d.h) |
 | Загруженных текстур | 256 | `R2D_MAX_TEXTURES` |
-| Каналов звуковых эффектов | 16 | `R2D_AUDIO_CHANNELS` в [`src/audio.h`](../src/audio.h) |
-| Загруженных звуков | 128 | `R2D_AUDIO_MAX_SOUNDS` в [`src/audio.h`](../src/audio.h) |
-| Дорожек музыки | 1 | `music_track` в [`src/audio.h`](../src/audio.h) |
-| Встроенных иконок Material Design | 2235 | `r2d_icon_total()`, [`src/icons.h`](../src/icons.h) |
+| Каналов звуковых эффектов | 16 | `R2D_AUDIO_CHANNELS` в [`src/audio.h`](../../src/audio.h) |
+| Загруженных звуков | 128 | `R2D_AUDIO_MAX_SOUNDS` в [`src/audio.h`](../../src/audio.h) |
+| Дорожек музыки | 1 | `music_track` в [`src/audio.h`](../../src/audio.h) |
+| Встроенных иконок Material Design | 2235 | `r2d_icon_total()`, [`src/icons.h`](../../src/icons.h) |
 | Спрайтов | растёт динамически | `R2D_INITIAL_SPRITES = 1024` — стартовая ёмкость |
-| Вершин в `submitTriangles` | растёт динамически (по размеру `Float32Array`) | батчер `r2d_batch_triangles` в [`src/render.c`](../src/render.c) |
-| Отрезков-препятствий для `light.visibility` | ограничено памятью; пересечения разрезаются за O(n²) | `r2d_visibility_polygon` в [`src/light.cpp`](../src/light.cpp) |
-| Вершин полигона видимости | верхняя оценка ~`8n² + 24`; при `n = 50` — 20024. У подготовленного набора (`prepare`) оценка линейна: `4m + 8` | `r2d_visibility_max_points`, `r2d_visibility_prepared_max_points` в [`src/light.cpp`](../src/light.cpp) |
-| Отрезков в BSP-дереве | растёт динамически; разрезание увеличивает `count()` | `R2DBsp` в [`src/bsp.h`](../src/bsp.h) |
-| Документов RmlUi | 64 | `kMaxDocuments` в [`src/gui.cpp`](../src/gui.cpp) |
-| Обработчиков `ui.on` | 256 | `callbacks[256]` в [`src/script.h`](../src/script.h) |
-| Суставов | 64 | `R2D_MAX_JOINTS` в [`src/physics.h`](../src/physics.h) |
+| Вершин в `submitTriangles` | растёт динамически (по размеру `Float32Array`) | батчер `r2d_batch_triangles` в [`src/render.c`](../../src/render.c) |
+| Отрезков-препятствий для `light.visibility` | ограничено памятью; пересечения разрезаются за O(n²) | `r2d_visibility_polygon` в [`src/light.cpp`](../../src/light.cpp) |
+| Вершин полигона видимости | верхняя оценка ~`8n² + 24`; при `n = 50` — 20024. У подготовленного набора (`prepare`) оценка линейна: `4m + 8` | `r2d_visibility_max_points`, `r2d_visibility_prepared_max_points` в [`src/light.cpp`](../../src/light.cpp) |
+| Отрезков в BSP-дереве | растёт динамически; разрезание увеличивает `count()` | `R2DBsp` в [`src/bsp.h`](../../src/bsp.h) |
+| Документов RmlUi | 64 | `kMaxDocuments` в [`src/gui.cpp`](../../src/gui.cpp) |
+| Обработчиков `ui.on` | 256 | `callbacks[256]` в [`src/script.h`](../../src/script.h) |
+| Суставов | 64 | `R2D_MAX_JOINTS` в [`src/physics.h`](../../src/physics.h) |
 | Событий контакта за кадр | 128 | `R2D_MAX_CONTACT_EVENTS` |
-| Эффектов на узле | 64 | `R2D_MAX_NODE_FX` в [`src/render.h`](../src/render.h) |
+| Эффектов на узле | 64 | `R2D_MAX_NODE_FX` в [`src/render.h`](../../src/render.h) |
 | Пользовательских шейдеров | 16 | `R2D_MAX_USER_SHADERS` |
 | Render target'ов | 8 | `R2D_MAX_VIEWPORTS` |
 | Результатов запроса к физике | 256 | `R2D_MAX_QUERY` |
 | Строк в очереди текста | 2048 | `text.c` |
-| Буфер текста за кадр | 1024 байта | `text_input` в [`src/app.h`](../src/app.h) |
-| Композиция IME | 256 байт | `text_editing` в [`src/app.h`](../src/app.h) |
-| Геймпадов | 4 слота | `R2D_MAX_GAMEPADS` в [`src/app.h`](../src/app.h) |
+| Буфер текста за кадр | 1024 байта | `text_input` в [`src/app.h`](../../src/app.h) |
+| Композиция IME | 256 байт | `text_editing` в [`src/app.h`](../../src/app.h) |
+| Геймпадов | 4 слота | `R2D_MAX_GAMEPADS` в [`src/app.h`](../../src/app.h) |
 | Касаний | 10 точек | `R2D_MAX_TOUCHES` |
-| Подписчиков на события SDL | 8 | `event_listeners[8]` в [`src/app.h`](../src/app.h) |
+| Подписчиков на события SDL | 8 | `event_listeners[8]` в [`src/app.h`](../../src/app.h) |
 | Память JS-рантайма | 256 МБ | `JS_SetMemoryLimit` |
 | Размер стека JS | 2 МБ | `JS_SetMaxStackSize` |
 | Максимальный `dt` кадра | 0.25 с | ограничение в `r2d_app_begin_frame` |
-| Максимальная скорость тела | 120 м/с ≈ 3840 px/с = ~64 px за шаг 1/60 | `def.maximumLinearSpeed` в [`src/physics.c`](../src/physics.c); быстрее `setVelocity` не разгонит |
+| Максимальная скорость тела | 120 м/с ≈ 3840 px/с = ~64 px за шаг 1/60 | `def.maximumLinearSpeed` в [`src/physics.c`](../../src/physics.c); быстрее `setVelocity` не разгонит |
 | Шаг физики | 1/60 с, до 5 подшагов | `R2D_FIXED_DT`, `R2D_MAX_SUBSTEPS` |
 
 ---
@@ -2006,7 +2011,7 @@ for (const i of order) {
 * `engine.log(...)` пишет в **stdout**, ошибки — в **stderr**, чтобы диагностика
   не смешивалась.
 
-Горячие клавиши движка (см. [`src/main.c`](../src/main.c)):
+Горячие клавиши движка (см. [`src/main.c`](../../src/main.c)):
 
 | Клавиша | Действие |
 |---|---|
@@ -2029,8 +2034,8 @@ for (const i of order) {
 ## 16. Дополнения: мир, файлы, текст, агент
 
 Этот раздел описывает вызовы, добавленные вместе с высокоуровневым API `$`
-(см. [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md)). Игре они доступны и напрямую —
-`$` построен поверх них.
+(см. [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md)). Игре они доступны только через
+`$`, который построен поверх них.
 
 ### `engine.raycast(x1, y1, x2, y2, ignore, mask)`
 
@@ -2097,7 +2102,7 @@ const ids = engine.queryCircle(100, 100, 500, 0);
 ```
 
 Высокоуровневая обёртка — `$('.enemy').within('#hero', 500)`
-([HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §5).
+([HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) §5).
 
 ### `engine.queryStats()`
 
@@ -2120,7 +2125,7 @@ if (q.truncated) engine.log('кандидатов больше предела:',
 ```
 
 Высокоуровневая обёртка — `$.debug.queryStats()`
-([HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §24).
+([HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) §24).
 
 ### `engine.castShape(opts)`
 
@@ -2152,11 +2157,11 @@ if (hit) engine.log('упрётся на', hit.x, hit.y);
 
 ### `engine.re2d.*` — перспектива для Re2D
 
-Нативная проекция вида от первого лица ([RE2D.md](RE2D.md)): мировая точка или
+Нативная проекция вида от первого лица ([RE2D.md](../RE2D.md)): мировая точка или
 треугольник → экран. Мир остаётся плоским: точка — это `(x, y)` на полу и высота
-`z` над полом. Математика лежит в [`src/re2d_math.c`](../src/re2d_math.c) и
+`z` над полом. Математика лежит в [`src/re2d_math.c`](../../src/re2d_math.c) и
 проверяется офлайн (`tests/re2d/re2d_test.c`), мост к JS — в
-[`src/re2d.c`](../src/re2d.c). Углы — радианы.
+[`src/re2d.c`](../../src/re2d.c). Углы — радианы.
 
 | Вызов | Что делает |
 |---|---|
@@ -2177,7 +2182,7 @@ if (hit) engine.log('упрётся на', hit.x, hit.y);
   занимает единица мира на этой глубине (им масштабируют билборды). Точка ближе
   ближней плоскости (4) или позади камеры невидима: `z01 = -1`, `scale = 0`.
 * **Глубина для z-буфера** — `z01 = 1 − near / depth`, диапазон `0..1`, ближе —
-  меньше (как ждёт `submitMesh`, см. [depth.md](highlevel/depth.md)).
+  меньше (как ждёт `submitMesh`, см. [depth.md](../highlevel/depth.md)).
 * **Отсечение.** Треугольник режется по ближней плоскости (Сазерленд — Ходжман),
   `u/v` и цвет интерполируются: из одного входного получается не больше двух.
 * **Грани.** Лицевой считается обход **по часовой стрелке на экране**; без
@@ -2237,14 +2242,14 @@ if (typed) name += typed;
 
 Буфер обмена: `engine.clipboard()` → текст или `null`,
 `engine.setClipboard(text)` → `bool`. В `<ui.input>` на них висят `Ctrl+C/X/V/A`
-и `Shift+Insert` (см. [widgets.md](highlevel/widgets.md)).
+и `Shift+Insert` (см. [widgets.md](../highlevel/widgets.md)).
 
 В высокоуровневом API то же самое доступно как `$.input.text()`,
 а контрол `<ui.input>` использует это сам (см.
-[widgets.md](highlevel/widgets.md)).
+[widgets.md](../highlevel/widgets.md)).
 
 Агентский режим умеет набирать текст командой `text` — см.
-[AGENT_API.md](AGENT_API.md), раздел 3.5.
+[AGENT_API.md](../AGENT_API.md), раздел 3.5.
 
 ### `engine.drawText(text, x, y, size, color, align, family?, angle?, scale?)`
 
@@ -2320,11 +2325,11 @@ if (typed) name += typed;
   `$.agent.expose(имя, функция)`.
 * `setAgentQuery(fn)` — функция `(селектор, режим, предел) → значение` для
   команд `query`, `inspect` и `profile`
-  ([AGENT_API.md](AGENT_API.md) §3.3.1–3.3.3). Режимы: `'list'` — массив
+  ([AGENT_API.md](../AGENT_API.md) §3.3.1–3.3.3). Режимы: `'list'` — массив
   описаний узлов, `'one'` — узел или `null`, `'count'` — число узлов.
   Высокоуровневое API ставит её само и отдаёт тот же код, что
   `$.agent.node/nodes` — второй реализации инспекции быть не должно
-  ([DEVTOOLS.md](DEVTOOLS.md) §7).
+  ([DEVTOOLS.md](../DEVTOOLS.md) §7).
 
 ```js
 engine.setExit(() => engine.fs.write('save.json', JSON.stringify(progress)));
@@ -2351,35 +2356,35 @@ engine.setAgentQuery((sel, mode, limit) => {
 
 ### Что ещё есть в `engine`
 
-API.md описывает то, на чём стоит `$`; часть вызовов живёт в подсистемах и
+internal/NATIVE.md описывает то, на чём стоит `$`; часть вызовов живёт в подсистемах и
 подробно описана в их справочниках. Чтобы не искать наугад:
 
 | Группа | Где описана |
 |---|---|
-| `engine.window.*` — заголовок, размер, режим, курсор, фокус | [highlevel/window.md](highlevel/window.md), `$.window` в [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §20.1 |
-| `engine.viewport.*` — render target игры | [highlevel/viewport.md](highlevel/viewport.md), [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §23 |
-| `engine.http.*` — HTTP-запросы | [highlevel/http.md](highlevel/http.md), `$.http` |
-| `engine.post`/`setPost`/`getPost`/`renderInfo`/`markUI` | [highlevel/render.md](highlevel/render.md) §3, §5 |
+| `engine.window.*` — заголовок, размер, режим, курсор, фокус | [highlevel/window.md](../highlevel/window.md), `$.window` в [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) §20.1 |
+| `engine.viewport.*` — render target игры | [highlevel/viewport.md](../highlevel/viewport.md), [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) §23 |
+| `engine.http.*` — HTTP-запросы | [highlevel/http.md](../highlevel/http.md), `$.http` |
+| `engine.post`/`setPost`/`getPost`/`renderInfo`/`markUI` | [highlevel/render.md](../highlevel/render.md) §3, §5 |
 | `engine.profile`/`profileReset`/`profileEnabled` | §15 выше, `$.debug.profile()` |
-| `engine.freeTexture`, `setSpriteFilter`/`spriteFilter`, `textureFromPixels` | [highlevel/resource.md](highlevel/resource.md), [highlevel/sprite.md](highlevel/sprite.md) |
-| `engine.rotSpriteLoad/Pose/Style/Rig/Part/Info/Dispose` — синтез 2D-персонажа из общего PNG | [highlevel/re2dsprite.md](highlevel/re2dsprite.md), [RE2DSPRITE_V2.md](RE2DSPRITE_V2.md) |
-| `engine.setDepth`/`depth`, `engine.depthInfo` | [highlevel/depth.md](highlevel/depth.md), `$.gfx.depth` |
-| `engine.re2d.view/project/unproject/sprite/mesh/info` — перспектива вида от первого лица | §16 выше, [RE2D.md](RE2D.md) |
+| `engine.freeTexture`, `setSpriteFilter`/`spriteFilter`, `textureFromPixels` | [highlevel/resource.md](../highlevel/resource.md), [highlevel/sprite.md](../highlevel/sprite.md) |
+| `engine.rotSpriteLoad/Pose/Style/Rig/Part/Info/Dispose` — синтез 2D-персонажа из общего PNG | [highlevel/re2dsprite.md](../highlevel/re2dsprite.md), [RE2DSPRITE_V2.md](../RE2DSPRITE_V2.md) |
+| `engine.setDepth`/`depth`, `engine.depthInfo` | [highlevel/depth.md](../highlevel/depth.md), `$.gfx.depth` |
+| `engine.re2d.view/project/unproject/sprite/mesh/info` — перспектива вида от первого лица | §16 выше, [RE2D.md](../RE2D.md) |
 | `engine.bodyEnabled`/`isAwake`/`setAwake`/`setGravityScale`, `contactsOf`, `contactBetween` | §8 выше |
-| `engine.netHost`/`netJoin`/`netClose`/`netMode`/`netStatus`/`netSend`/`netPoll` | [highlevel/net.md](highlevel/net.md), `$.net` |
-| `engine.setCursor`/`cursorVisible`, `requestReload`/`reloadPending`/`hotReload` | [highlevel/window.md](highlevel/window.md), [highlevel/script.md](highlevel/script.md) |
-| `engine.audio.*` — шины, комнаты, группы, 3D | §10 выше, [highlevel/audiobus.md](highlevel/audiobus.md) |
+| `engine.netHost`/`netJoin`/`netClose`/`netMode`/`netStatus`/`netSend`/`netPoll` | [highlevel/net.md](../highlevel/net.md), `$.net` |
+| `engine.setCursor`/`cursorVisible`, `requestReload`/`reloadPending`/`hotReload` | [highlevel/window.md](../highlevel/window.md), [highlevel/script.md](../highlevel/script.md) |
+| `engine.audio.*` — шины, комнаты, группы, 3D | §10 выше, [highlevel/audiobus.md](../highlevel/audiobus.md) |
 
 ### Командная строка (дополнение к 1.5)
 
 | Опция | Действие |
 |---|---|
-| `--agent` | Режим агента: JSON-команды со stdin, ответы в stdout (см. [AGENT_API.md](AGENT_API.md)) |
+| `--agent` | Режим агента: JSON-команды со stdin, ответы в stdout (см. [AGENT_API.md](../AGENT_API.md)) |
 | `--headless` | Скрытое окно: рендер и скриншоты работают, на экране ничего нет |
 | `--fixed-dt <сек>` | Детерминированный шаг времени |
 | `--seed <N>` | Зерно случайных чисел (по умолчанию `12345`) |
 | `--frames <N>` | Выйти ровно после N кадров |
-| `--record <файл>` / `--replay <файл>` | Запись и воспроизведение ввода ([RECORD_REPLAY.md](RECORD_REPLAY.md)) |
+| `--record <файл>` / `--replay <файл>` | Запись и воспроизведение ввода ([RECORD_REPLAY.md](../RECORD_REPLAY.md)) |
 | `--gpu <имя>` / `--list-gpu` | Выбрать GPU-бэкенд / показать доступные |
 | `--title <текст>` | Имя окна (иначе из `project.json`) |
 | `--width <N>` / `--height <N>` | Размер окна в точках |
@@ -2388,11 +2393,11 @@ API.md описывает то, на чём стоит `$`; часть вызо�
 > В агентском режиме весь журнал движка переключается в **stderr** (даже то,
 > что печатают RmlUi и ImGui), чтобы stdout оставался чистым потоком JSON.
 
-Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](RE2DSPRITE_V2.md),
-[API `$`](highlevel/re2dsprite.md). Демо `rotsprite` — переключение костюмов,
+Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](../RE2DSPRITE_V2.md),
+[API `$`](../highlevel/re2dsprite.md). Демо `rotsprite` — переключение костюмов,
 моргание, ходьба/бег на месте и перетаскивание кистей.
 
-Re2DSprite JSON, пользовательские модели/анимации и сокеты: [RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md). High-level `$.re2dSprite.from`, `$.re2dSprite.equip`, `.re2dAttach`, `.re2dDetach`, `.re2dBone`, `.re2dLayer`, `.re2dSeek`, `.re2dVariant`.
+Re2DSprite JSON, пользовательские модели/анимации и сокеты: [RE2DSPRITE_JSON.md](../RE2DSPRITE_JSON.md). High-level `$.re2dSprite.from`, `$.re2dSprite.equip`, `.re2dAttach`, `.re2dDetach`, `.re2dBone`, `.re2dLayer`, `.re2dSeek`, `.re2dVariant`.
 
 ### `engine.re2d.worldCreate(walls, spans)` — специализированный RE2D World
 
@@ -2410,7 +2415,7 @@ GC или `dispose()` освобождает ресурсы.
 Методы native handle:
 `support(x,y,feet,height,step)`, `blocked(x,y,radius,bottom,top)`,
 `ray(x1,y1,h1,x2,y2,h2)`, `info()`, `dispose()` — см.
-[highlevel/re2d.md](highlevel/re2d.md) §8.
+[highlevel/re2d.md](../highlevel/re2d.md) §8.
 `frame(width,height,handles?,transforms?,orthoHeight=0)` возвращает обычный sprite id;
 целые width/height 1..1024. Размер кадра может изменяться. Камера — последний
 `engine.re2d.view` (углы в радианах). `handles` — массив native Re2DSprite handles,

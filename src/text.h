@@ -2,7 +2,7 @@
 // Текст поверх сцены.
 //
 // ВНИМАНИЕ: очередь из этого файла — РУДИМЕНТ. Игровой текст рисуется спрайтами
-// глифов движка (src/font.c: engine.drawText/measureText, docs/API.md §16), и в
+// глифов движка (src/font.c: engine.drawText/measureText, docs/internal/NATIVE.md §16), и в
 // r2d_text_queue() больше никто не пишет. Живыми остаются измерение строки
 // (r2d_text_measure_ui) и очистка очереди в кадре.
 //

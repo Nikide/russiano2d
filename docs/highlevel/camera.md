@@ -108,7 +108,7 @@ $.camera.info();                     // { kind, x, y, eye, yaw, pitch, fov, … 
 Взгляд мышью детерминирован: сдвиг мыши за кадр попадает в запись
 `--record/--replay` (поля `dx`/`dy`, [RECORD_REPLAY.md](../RECORD_REPLAY.md)), а
 `look(dx, dy)` можно вызывать из кода и тестов. Перспективу считает C
-(`engine.re2d.*`, [API.md](../API.md)), камера лишь собирает его параметры
+(`engine.re2d.*`, [internal/NATIVE.md](../internal/NATIVE.md)), камера лишь собирает его параметры
 (`re2dViewOf`): одна реализация математики.
 
 Ограничения: дополнительные камеры (`split/add/pip`) остаются 2D; `isOnScreen`

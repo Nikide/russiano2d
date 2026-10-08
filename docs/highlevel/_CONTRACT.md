@@ -192,41 +192,52 @@ no-op) и даёт `test/eq/near/truthy/falsy/joined/finish`. Поэтому м�
 Уже занятые имена методов обёртки (переопределять **нельзя**):
 
 ```
-add addClass addTag agentRadius agentSize align alive alpha anchor
-anchorPreset anchorRect anchors angle angleTo animate append appendTo
-applyForce applyImpulse at attr autotile blend blur body bounce bullet burst
-checked children clear clearTiles clearTweens clip clipProgress clipRect
-clipSpeed clipTime clone closeDialog closest collidesWith collision
+add addClass addTag agentRadius agentSize align alive allowSleep alpha anchor
+anchorPreset anchorRect anchors angle angleTo angularVelocity animate append
+appendTo applyForce applyImpulse at attr autotile blend blur body bounce
+bullet burst checked children clear clearTiles clearTweens clip clipProgress
+clipRect clipSpeed clipTime clone closeDialog closest collidesWith collision
 collisionCircle collisions color cone contacts controls count damage data
-delay depth depthRelative detach directionTo disabled distanceTo each
-eachNode effectiveAlpha effectiveDepth effectivelyVisible emit emitting eq
-every fadeIn fadeOut fadeTo fill filter find first fitsAt flash flicker flip
-focus font fontSize frame frames fsm fsmSend gap get globalPos gravity has
-hasClass heal health height hide hp html index inputValue inside intensity
-invulnerable is isDepthRelative isEmitting isNavigating isPlayingClip
-isVisible items joint jump kill kind last layer layerBits layerName lookAt map
-mask maskBy max maxHp maxLength min move moveAndSlide moveTo moveTowards mute
-navPath navTarget navigateTo not occluders off offset on onFloor onWall
-oneWay opacity openDialog outline overlaps padding parallax params parent
-particleAt pause pauseClip pauseTweens pivot pivotAt placeholder playClip
-playSound playing pos prefab prefabClone prepend prependTo punch radius rayTo
-rebuild rect reduce region release remove removeClass removeTag repath reset
-respawn restart resumeClip resumeTweens rotate rotateTo rotation sample
-savePrefab scale scaleTo selectedIndex selectedItem sensor sequence setTile
-shader shaderParam shadow shadowSoft shadows shake shape show siblings size
-sizePercent sleeping slice sliderValue some sound speed sprite start state
-stateMachine stateTime states step stop stopAll stopAnim stopClip stopNav
-style sweepTo tag team terrainData text textStyle theme tileAnimation tileAt
-tileLayer tileSize tilesData tilesList tileset toArray toData toGlobal
-toLocal toState toggleClass trigger tween tweenTo value velocity visible
-volume wake width within ysort zone zoneCount
+delay depth depthRelative detach directionTo disabled distanceTo each eachNode
+effectiveAlpha effectiveDepth effectivelyVisible emit emitting eq every fadeIn
+fadeOut fadeTo fill filter find first fitsAt flash flicker flip focus font
+fontSize frame frames fsm fsmSend gap get globalPos gravity has hasClass heal
+health height hide hp html index inputValue inside intensity invulnerable is
+isDepthRelative isEmitting isNavigating isPlayingClip isVisible items joint
+jump kill kind last layer layerBits layerName lookAt map mask maskBy mass max
+maxHp maxLength min move moveAndSlide moveTo moveTowards mute navPath
+navTarget navigateTo not occluders off offset on onFloor onWall oneWay opacity
+openDialog outline overlaps padding parallax params parent particleAt pause
+pauseClip pauseTweens pivot pivotAt placeholder playClip playSound playing pos
+prefab prefabClone prepend prependTo punch radius rayTo re2dAttach re2dBone
+re2dDetach re2dEmotion re2dExpression re2dHotReload re2dLayer re2dMotion
+re2dPart re2dPose re2dReload re2dRig re2dSeek re2dSpriteAtlas re2dStyle
+re2dVariant re2dVisibleParts rebuild rect reduce region release remove
+removeClass removeTag repath reset respawn restart resumeClip resumeTweens
+rotAttach rotBone rotDetach rotEmotion rotExpression rotHotReload rotLayer
+rotMotion rotPart rotPose rotReload rotRig rotSeek rotSpriteAtlas rotStyle
+rotVariant rotVisibleParts rotate rotateTo rotation sample savePrefab scale
+scaleTo selectedIndex selectedItem sensor sequence setTile shader shaderParam
+shadow shadowSoft shadows shake shape show siblings size sizePercent sleeping
+slice sliderValue some sound speed sprite start state stateMachine stateTime
+states step stop stopAll stopAnim stopClip stopNav style sweepTo tag team
+terrainData text textStyle theme tileAnimation tileAt tileLayer tileSize
+tilesData tilesList tileset toArray toData toGlobal toLocal toState
+toggleClass trigger tween tweenTo value velocity visible volume wake width
+within ysort zone zoneCount анимация в видимый высота глубина данные добавить
+добавитьВ естьКласс жив здоровье игратьЗвук идтиК испустить кадр кадры каждый
+класс контур конус лечить мерцание на остановитьАнимацию поворот позиция
+показать препятствия прозрачность прыжок радиус размер скорость скрыть слой
+смешать смотретьНа снять столкновение текст тени тень убить убратьКласс угол
+удалить управление урон цвет ширина яркость
 ```
 
-> Список снят с живого движка, а не перепечатан: **257 имён**, команда —
+> Список снят с живого движка, а не перепечатан: **345 имён**, команда —
 > `Object.getOwnPropertyNames(Object.getPrototypeOf($('<rect>'))).filter(n => n !== 'constructor')`
 > в агентском режиме. Это объединение `def()`/`defGet()` из `src/highlevel/*.js`
 > с методами класса `Wrapper` (`each`, `eachNode`, `eq`, `get`, `index`,
-> `toArray`, `within`). Список устаревает вместе с кодом, поэтому перед
+> `toArray`, `within`), включая методы `re2d*`/`rot*` и русские псевдонимы
+> `$.ru` (они тоже занимают имена). Список устаревает вместе с кодом, поэтому перед
 > добавлением своего метода сверяйтесь с ним, а не с памятью: прежняя версия
 > этого списка отставала на 86 имён, и автор подсистемы мог занять уже занятое.
 

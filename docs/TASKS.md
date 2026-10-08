@@ -56,7 +56,7 @@ UI-виджеты, локализация, сохранения, префабы,
 | 0.1 | Переполнение таблицы текстур в `$.viewport.create` | [render.c:1471](../src/render.c#L1471) — `r->texture_count++` без проверки лимита, массив `R2DTexture textures[256]` ([render.h:165](../src/render.h#L165)); destroy слот не возвращает ([render.c:1490-1510](../src/render.c#L1490)) | Цикл «создать/уничтожить viewport» (живых всего 8) за 256 итераций пишет за границу массива и затирает поля структуры рендерера. Достижимо из игрового JS | S |
 | 0.2 | `$.viewport.draw()` вызывает несуществующий метод | [viewport.js:181](../src/highlevel/viewport.js#L181) → `$.gfx.draw.sprite`, которого нет среди `glow/line/rect/circle/ring/text/arrow/clear` ([render.js:1820-1862](../src/highlevel/render.js#L1820)) | Задокументированная функция падает с `TypeError` ([HIGH_LEVEL_API.md:829](HIGH_LEVEL_API.md#L829), [render.md:482](highlevel/render.md#L482)) | S |
 | 0.3 | `.region()` создаёт новый спрайт на каждый вызов | [api.js:640-645](../src/highlevel/api.js#L640), таблица спрайтов растёт без предела ([render.c:382-409](../src/render.c#L382)) | Вызов в кадре (анимация, скролл) неограниченно растит `r2d__grow`: RAM + GPU-объекты; нужен кэш по `(sprite, x, y, w, h)` | S |
-| 0.4 | Потеря событий контакта на подшагах физики | Буфер сбрасывается в начале **каждого** шага ([physics.c:103](../src/physics.c#L103)), а `engine.contacts()` читается один раз за кадр; до 5 подшагов ([main.c:212-216](../src/main.c#L212)) | При 30 FPS и на просадках теряется половина `begin`/`end`/`hit`: урон и смерть «через раз», недетерминированно. Доки ([API.md:873-874](API.md#L873)) обещают «живут до следующего шага» — верно по шагу, не по кадру | S |
+| 0.4 | Потеря событий контакта на подшагах физики | Буфер сбрасывается в начале **каждого** шага ([physics.c:103](../src/physics.c#L103)), а `engine.contacts()` читается один раз за кадр; до 5 подшагов ([main.c:212-216](../src/main.c#L212)) | При 30 FPS и на просадках теряется половина `begin`/`end`/`hit`: урон и смерть «через раз», недетерминированно. Доки ([internal/NATIVE.md:873-874](internal/NATIVE.md#L873)) обещают «живут до следующего шага» — верно по шагу, не по кадру | S |
 | 0.5 | Blend у частиц молча не работает | [particles.js:265-270](../src/highlevel/particles.js#L265) — устаревшая заглушка «конвейер умеет только альфа»; с v0.1.10 конвейеров четыре ([render.c:1863-1877](../src/render.c#L1863)), а `push.sprite` принимает режим ([render.js:1887-1890](../src/highlevel/render.js#L1887)) | `<particles blend:'add'>` не аддитивен; то же в `layers.js`/`tilemap.js` — режим не передаётся вовсе | S |
 | 0.6 | Модальный диалог не блокирует мышь | [widgets.js:1563-1566](../src/highlevel/widgets.js#L1563) выходит рано, но [ui.js:85-113](../src/highlevel/ui.js#L85) модальность не знает и вызывается позже ([api.js:1445](../src/highlevel/api.js#L1445) после [api.js:1437](../src/highlevel/api.js#L1437)) | Пока открыт `<ui.dialog>`, клик проходит в кнопки **под** затемнением. Доки обещают обратное ([widgets.md:291](highlevel/widgets.md#L291)) | S |
 | 0.7 | Геометрия пропадает из порядка BSP на глубине 64 | Остаток дублируется в плоский массив без узлов ([bsp.c:205-215](../src/bsp.c#L205)), а порядок строится только обходом узлов ([bsp.c:296-308](../src/bsp.c#L296)) | `count()`/`segment(i)` эти отрезки видят, `order()` — никогда: на вырожденной геометрии часть стен исчезает из кадра | S |
@@ -106,7 +106,7 @@ UI-виджеты, локализация, сохранения, префабы,
 
 | Пробел | Доказательство | Почему важно | S/M |
 |---|---|---|---|
-| **CCD добавлен и проверен** | [physics.c](../src/physics.c) `def.isBullet`, `r2d_physics_set_bullet`; `$.world.bullet` / `.bullet(on)` / `engine.setBullet`. Туннелирование НЕ воспроизводится ни с CCD, ни без него, и это объяснено: `maximumLinearSpeed = 120` м/с ≈ 3840 px/с (~64 px за шаг) — быстрее тело не разогнать (`setVelocity(60000)` даёт 3840), а Box2D v3 решает высокоскоростные контакты спекулятивно, поэтому 2-пиксельная стена держит и на пределе. Значит `bullet` — страховка на будущее, а не наблюдаемый эффект. Проверка: tests/agent/highlevel_ccd_test.py. См. API.md §15 |
+| **CCD добавлен и проверен** | [physics.c](../src/physics.c) `def.isBullet`, `r2d_physics_set_bullet`; `$.world.bullet` / `.bullet(on)` / `engine.setBullet`. Туннелирование НЕ воспроизводится ни с CCD, ни без него, и это объяснено: `maximumLinearSpeed = 120` м/с ≈ 3840 px/с (~64 px за шаг) — быстрее тело не разогнать (`setVelocity(60000)` даёт 3840), а Box2D v3 решает высокоскоростные контакты спекулятивно, поэтому 2-пиксельная стена держит и на пределе. Значит `bullet` — страховка на будущее, а не наблюдаемый эффект. Проверка: tests/agent/highlevel_ccd_test.py. См. internal/NATIVE.md §15 |
 | Только 3 типа суставов; неизвестная строка молча становится `revolute` | `R2DJointKind = {REVOLUTE, DISTANCE, WELD}` ([physics.h:103](../src/physics.h#L103)); разбор строк [script.c:899-908](../src/script.c#L899) | Нет prismatic/wheel/pulley/gear/mouse: лифты на рельсе, машины, полиспасты, шестерни, «таскать мышью» невыразимы. Тихая подмена типа — источник трудноуловимых багов | M |
 | Нет пружин/демпферов и реакции сустава | в дефайны пишутся только `length/limit/motor/collideConnected` ([physics.c:773-826](../src/physics.c#L773)); `b2Joint_Get*` только `GetBodyA/B` ([:325-326](../src/physics.c#L325)) | нет `stiffness`/`damping`, нельзя узнать усилие на суставе (разрыв верёвки по нагрузке) | S/M |
 | **Контакты: импульс, точки и «касаются ли сейчас» сделаны.** Форма — нет (у тела движка ОДНА форма, значит «попал в голову, а не в ногу» недостижимо: нужны несколько форм на тело) | `engine.contactBetween/touching/contactsOf`, `$.world.touching/contactBetween/contactImpulse/contactsOf` — через `b2Body_GetContactData` (манифолд с импульсом предыдущего шага); события импульса не несут, солвер считает его после. Проверка: tests/agent/highlevel_contact_test.py (удар 0.2249 против покоя 0.1222) |
@@ -657,7 +657,7 @@ API (по числу упоминаний `Node`/`Resource`/`Vector2`/`signal`/`
 * **Реплеи и запись ввода** — нет, хотя `--seed` и `--fixed-dt` дают детерминизм:
   воспроизведения кадра нет. Полезно для регресс-тестов и баг-репортов. P2.
 * **BSP-вставка точек (спрайтов)** — не реализована осознанно ([bsp.h:62-65](../src/bsp.h#L62),
-  [API.md:1648](API.md#L1648)); спрайты сортируются по расстоянию. P3.
+  [internal/NATIVE.md:1648](internal/NATIVE.md#L1648)); спрайты сортируются по расстоянию. P3.
 * **Редактора сцены и data-driven уровней нет** — при этом формат уже есть:
   `$.prefab` + `$.save` сериализуют дерево и умеют читать `scenes/<имя>.json`
   ([prefab.js:688-697](../src/highlevel/prefab.js#L688)), а `$.tilemap.fromASCII`
@@ -702,7 +702,7 @@ API (по числу упоминаний `Node`/`Resource`/`Vector2`/`signal`/`
 
 ## 10. Лимиты — **закрыто**
 
-Все лимиты сведены в одну таблицу в [API.md §14](API.md#14-ограничения-и-лимиты)
+Все лимиты сведены в одну таблицу в [internal/NATIVE.md §14](internal/NATIVE.md#14-ограничения-и-лимиты)
 вместе с **поведением при достижении** (это и было главной проблемой: где-то
 `-1`, где-то исключение, где-то тихая потеря).
 
@@ -766,14 +766,14 @@ API (по числу упоминаний `Node`/`Resource`/`Vector2`/`signal`/`
 | Файл | Цитата | Реальность |
 |---|---|---|
 | [HIGH_LEVEL_API.md:154](HIGH_LEVEL_API.md#L154), [ARCHITECTURE.md:91](ARCHITECTURE.md#L91) | «`:picked` — под курсором» | Работает только для ui-узлов ([ui.js:88-102](../src/highlevel/ui.js#L88)) |
-| [API.md:1174-1180](API.md#L1174) | «в RCSS имя семейства берётся из самого шрифта», пример `font-family: LatoLatin` | Только для шрифтов с диска; из груза все — «Noto Sans» ([gui.cpp:311-313](../src/gui.cpp#L311)) |
-| [API.md:1805-1808](API.md#L1805) | текст «уже с учётом IME» | `TEXT_EDITING`/`SetTextInputArea` не используются, только финальный коммит ([app.c:444-456](../src/app.c#L444)) |
+| [internal/NATIVE.md:1174-1180](internal/NATIVE.md#L1174) | «в RCSS имя семейства берётся из самого шрифта», пример `font-family: LatoLatin` | Только для шрифтов с диска; из груза все — «Noto Sans» ([gui.cpp:311-313](../src/gui.cpp#L311)) |
+| [internal/NATIVE.md:1805-1808](internal/NATIVE.md#L1805) | текст «уже с учётом IME» | `TEXT_EDITING`/`SetTextInputArea` не используются, только финальный коммит ([app.c:444-456](../src/app.c#L444)) |
 | [widgets.md:291-292](highlevel/widgets.md#L291) | «Пока диалог открыт, остальные контролы ввод не получают» | Неверно для мыши — дефект 0.6 |
 | [widgets.md:354-356](highlevel/widgets.md#L354) | «фокус нельзя запереть, кроме модального диалога» | Запирание только для клавиатуры ([widgets.js:1471-1477](../src/highlevel/widgets.js#L1471)) |
 | [widgets.md:361](highlevel/widgets.md#L361) | «шрифт — системный» | Системного шрифта нет: TTF из `assets/fonts` + ImGui-шрифт |
 | [HIGH_LEVEL_API.md:533](HIGH_LEVEL_API.md#L533) | `e.key` в `$.input.on('key')` | `String(scancode)` — `KEY_NAMES` не заполняется ([input.js:465-469](../src/highlevel/input.js#L465)) |
 | [HIGH_LEVEL_API.md:891-893](HIGH_LEVEL_API.md#L891) | снимок содержит `ui` | Это `nodeBrief` без текста и значения ([agent.js:23-42](../src/highlevel/agent.js#L23), [:98](../src/highlevel/agent.js#L98)) |
-| [API.md:873-874](API.md#L873) | контакты «живут до следующего шага» | По шагу, а не по кадру — при нескольких подшагах события теряются (дефект 0.4) |
+| [internal/NATIVE.md:873-874](internal/NATIVE.md#L873) | контакты «живут до следующего шага» | По шагу, а не по кадру — при нескольких подшагах события теряются (дефект 0.4) |
 | [HIGH_LEVEL_API.md:21](HIGH_LEVEL_API.md#L21), [README.md](../README.md) | `.each(e => …)`, где `e` — индекс | В README пример молча ничего не делает; верная форма — `.each((i, el) => …)` ([HIGH_LEVEL_API.md:164](HIGH_LEVEL_API.md#L164)) |
 | [ARCHITECTURE.md:363](ARCHITECTURE.md#L363) | `$.scene.preload(['level2','level3'])` | Заглушка: греет только звуки ([scene.js:112-118](../src/highlevel/scene.js#L112)) |
 
@@ -810,6 +810,22 @@ bootstrap, index, script).
 Исправлено в `loading.js`.
 
 ---
+
+## 13. Покрытие `$` после схемы C → `$`
+
+Игре больше не дотянуться до `engine.*`, поэтому всё, что ей нужно, обязано
+быть в `$`. Сверка живого `engine` с `src/highlevel` (2026-10-08): из 325
+ключей у 29 нет следа в `$`. Закрыто в том же изменении: угловая скорость,
+масса и сон тела (`.angularVelocity()`, `.mass()`, `.allowSleep()`),
+состояние канала звука (`$.sound.channel(ch)`), факты рендера и z-буфера
+(`$.debug.render()`). Осталось — решить, нужно ли игре:
+
+* `getBodyFilter` — слои читаются из узла (`.attr('layerBits')`), но не из тела;
+* `audio.groupCount/groupEffect` — группы звука без геттеров в `$.audio`;
+* `pixel_width/pixel_height` — размер буфера кадра в пикселях (`$.window.pixels()` есть, проверить совпадение);
+* `netMode`, `userShaderCount`, `ui.iconCode`, `light.maxPoints/preparedCount/preparedMaxPoints`,
+  `getClip`, `drawRect`, `mouseDX/mouseDY`, `re2d.NO_SPLIT` — служебные или
+  покрытые другими вызовами `$`; оставить внутренними, если игре не нужны.
 
 ## 12. Предлагаемый порядок работ
 

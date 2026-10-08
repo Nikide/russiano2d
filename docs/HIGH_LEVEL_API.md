@@ -24,7 +24,7 @@ $.update(dt => {
 
 Схема движка — **C → `$`**: нативное ядро (текстуры, тела, батчинг, RmlUi, BSP,
 свет) спрятано под `$` и игре не видно — глобального `engine` нет, импортировать
-можно только `'r2d'`. Внутренний справочник ядра — [API.md](API.md), как это
+можно только `'r2d'`. Внутренний справочник ядра — [internal/NATIVE.md](internal/NATIVE.md), как это
 устроено — [highlevel/native.md](highlevel/native.md).
 
 ---
@@ -202,7 +202,7 @@ $('.enemy').within({ x: 0, y: 0 }, 200)   // цель — точка, узел, 
 `$.debug.queryStats()` (§24).
 
 Предел нативного запроса — 256 тел (`R2D_MAX_QUERY`, §14 в
-[API.md](API.md)). Если кандидатов больше, выборка обрезана: признак виден в
+[internal/NATIVE.md](internal/NATIVE.md)). Если кандидатов больше, выборка обрезана: признак виден в
 `$.debug.queryStats().truncated`. Для очень плотных сцен это значит, что
 `within()` — про «кто рядом», а не про полный перебор мира.
 
@@ -288,7 +288,10 @@ $.gfx.filter(true)                        // линейная фильтраци
 .sensor(true)                               // зона: ловит, но не толкает
 .contacts(true | false)                     // события контакта
 .sleeping()                                 // → bool: усыпил ли Box2D тело
-.bullet(true | false)                       // CCD для быстрых тел (см. API.md §8)
+.allowSleep(false)                          // не усыплять тело (игра ведёт его скоростью)
+.angularVelocity() .angularVelocity(2)      // угловая скорость тела, рад/с
+.mass()                                     // масса тела, кг (0 без тела)
+.bullet(true | false)                       // CCD для быстрых тел (см. internal/NATIVE.md §8)
 .joint('#other', { type: 'revolute' })      // сустав, → id
 .onFloor() .onWall()                        // → bool (луч вниз/вбок)
 .jump(640)                                  // импульс вверх с гашением падения
@@ -341,7 +344,7 @@ $.world.bodyAt(x, y, { mask: 0x2 });                  // кто из враго�
 (`.oneWay(true, -Math.PI / 2)` — вверх по умолчанию).
 
 **Суставы.** `.joint(цель, opts)` возвращает id; `opts` — как в
-[API.md](API.md#enginecreatejointopts--engineestroyjointid), плюс сокращения:
+[internal/NATIVE.md](internal/NATIVE.md#enginecreatejointopts--engineestroyjointid), плюс сокращения:
 `a`/`b` — точки крепления в мировых пикселях. Для `revolute` и `weld` вторая
 точка по умолчанию совпадает с первой (крепление в одну точку), для
 `distance` — берутся центры тел. Уничтожение: `$.world.destroyJoint(id)`,
@@ -604,6 +607,7 @@ $.sound.musicPitch() .musicPitch(1.1)
 $.sound.crossfade('boss.ogg', 1000) .stopMusic(500)
 $.sound.volume(0.8) .mute(true) .sfxVolume(0.5) .musicVolume(0.5)
 $.sound.stopAll() .playing(ch) .activeChannels() .duration('x.ogg') .preload(['a.ogg'])
+$.sound.channel(ch)   // { playing, volume, pan, pitch, effect, position, duration } — что звучит сейчас
 ```
 
 Расширение можно не писать: движок сам ищет `.wav`, `.ogg`, `.mp3`, `.flac`.
@@ -901,6 +905,9 @@ $.debug.profileReset()                     // сбросить накоплен�
 $.debug.profiling(false)                   // выключить замеры (по умолчанию включены)
 $.debug.profiler.start('моё') / .end('моё') / .report()   // свои замеры, время — engine.now()
 $.debug.profiler.on(true) .isOn()          // покадровый профайлер подсистем (по умолчанию выключен)
+$.debug.render()                           // { info, depth } — факты рендера кадра и z-буфера
+$.debug.memory()                           // { bytes, objects, … } — JS-куча: утечка или шум замера
+$.debug.nativePasses(false)                // вернуть JS-проходы кадра (сверка «C против JS»)
 $.debug.draw.line('#hero', '#exit', 'yellow')   // принимает селекторы и узлы
 $.debug.draw.rect('#zone', '#door', 'red')
 $.debug.watch('hp', () => $('#hero').hp())
@@ -1156,7 +1163,7 @@ $.update(() => {
 
 Физика в этой таблице не отдельной подсистемой, а частью ядра: формы тел,
 односторонние платформы, события контакта и суставы описаны в разделе 8 выше
-и в [API.md](API.md).
+и в [internal/NATIVE.md](internal/NATIVE.md).
 
 ### Свет в стиле Candle (`<light>`, `<lightarea>`, `<fog>`)
 
@@ -1244,7 +1251,7 @@ $.ready(() => {
   `registerNodeRenderer` и общий батч `$.gfx.push`, поэтому лишних draw call'ов
   не появляется.
 * **Аудио-шины** пересчитывают громкость живых каналов через новые
-  `engine.audio.setChannelVolume/setChannelEffect` (см. [API.md](API.md)).
+  `engine.audio.setChannelVolume/setChannelEffect` (см. [internal/NATIVE.md](internal/NATIVE.md)).
 * **Blend-режимы** работают на уровне узла (`.blend('add')`) и кадра
   (`$.blend('add')`); движок сам режет батч на участки с одинаковым режимом,
   так что порядок отрисовки не меняется.
@@ -1542,7 +1549,7 @@ $.ready(() => {
 [screen.md](highlevel/screen.md), [font.md](highlevel/font.md).
 
 Дальше: [AGENT_API.md](AGENT_API.md) — как этим управлять программой,
-[RECIPES](tutorial-platformer.md) и [API.md](API.md) — низкий уровень.
+[RECIPES](tutorial-platformer.md) и [internal/NATIVE.md](internal/NATIVE.md) — низкий уровень.
 
 Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](RE2DSPRITE_V2.md),
 [API `$`](highlevel/re2dsprite.md). Демо `rotsprite` — переключение костюмов,

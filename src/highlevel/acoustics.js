@@ -21,7 +21,7 @@
 import { engine } from './native.js';
 import { ctx, query } from './core.js';
 
-// Масштаб мира: 32 пикселя = 1 метр (тот же, что у физики, docs/API.md).
+// Масштаб мира: 32 пикселя = 1 метр (тот же, что у физики, docs/internal/NATIVE.md).
 export const PX_PER_METER = 32;
 
 // Поглощение (α) и демпфирование высоких для типовых материалов.
