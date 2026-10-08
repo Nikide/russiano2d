@@ -73,6 +73,9 @@ SDK не владеет игрой: проекты и ассеты остают�
 | `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
 | `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
 | `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |
+| `re2d-info <character.json\|png>` | Re2DSprite: PNG v2, части ↔ кости, статистика карт, проверка |
+| `re2d-debug <character.json\|png> --mode m --out f.png [--scale N]` | Re2DSprite: отладочный вид карт поверхности |
+| `re2d-sample <character.json\|png> --x mx --y my` | Re2DSprite: один отсчёт (ID, XYZ, покрытие, владелец) |
 | `run <каталог> [--scene s] [--frames N] [--headless] [--engine путь]` | запуск игры движком |
 | `build <каталог> --out f [--entry main.js] [--encrypt\|--no-encrypt]` | сборка в один файл (`russiano2d build`) |
 
@@ -128,7 +131,51 @@ SDK не владеет игрой: проекты и ассеты остают�
 `_TAG_DUPLICATE`, `_TAG_FRAME`, `_TAG_PINGPONG`, `_SLICE`, `_PIVOT_OUTSIDE`,
 `_FORMAT_UNSUPPORTED`, `_GRID`, `_GRID_REMAINDER` (префикс `SDK_ATLAS`).
 
-## 6. Мост `$.sdk` и агент
+## 6. Re2DSprite Studio
+
+`sdk/tools/re2dsprite-studio.js` + `sdk/ui/re2d_studio.rml`: открывается на
+`*.character.json` ([RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md)). SDK **не меняет
+семантику формата** и **не синтезирует спрайт сам**: изображение даёт настоящий
+рантайм (`$.re2dSprite.from`), карты PNG v2 декодирует нативный `r2d-sdk`.
+
+| Вкладка | Что делает | Откуда данные |
+|---|---|---|
+| Вид | узел рантайма: ракурс yaw −180…180 / pitch −75…75 (поля и перетаскивание мышью), клипы, эмоции, варианты, стиль anime/pixel, тело/голова, пауза | `$.re2dSprite.*`, `info()` |
+| Поверхность | виды карт: материал, ID части, владелец (кость), X, Y, Z, покрытие, группа материала, перекрытие; отсчёт под курсором (ID, кость, XYZ, покрытие) | `r2d-sdk re2d-debug`, `re2d-sample` |
+| Скелет | кости (pivot/portraitPivot), часть → кость, сокеты, проекция; undo/redo | `*.character.json` |
+
+Сохранение пишет файл **тем же отступом**, что у исходника (у файлов демо роундтрип
+побайтно равен оригиналу), поэтому diff показывает только правки. После сохранения
+узел читает файл с диска и следит за ним (`.re2dHotReload()`): правка снаружи
+подхватывается рантаймом без перезапуска. Ошибка рантайма на невалидной модели
+показывается диагностикой `SDK_RE2D_RUNTIME` рядом с фактами нативной проверки.
+
+Нативные команды ([§4](#4-cli-r2d-sdk)): `re2d-info <character.json|png>` (PNG v2, части
+и кости, статистика карт, проверка), `re2d-debug --mode … --out f.png [--scale N]`,
+`re2d-sample --x mx --y my`. Раскладка PNG — [RE2DSPRITE_V2.md](RE2DSPRITE_V2.md) и
+[RE2DSPRITE_MATH.md](RE2DSPRITE_MATH.md) §2: ID (0,768), глубина (256,768), покрытие
+(512,768), XY (768,768) — по 256×192 отсчётов, адреса умножаются на `size/1024`.
+
+Что проверяет `validate` для `*.character.json` (стабильные коды `SDK_RE2D_*`):
+
+| Область | Коды |
+|---|---|
+| описание | `ROOT`, `VERSION`, `ATLAS`, `STYLE`, `RIG`, `NAME`, `BONE_DUPLICATE`, `BONE_PARENT`, `VECTOR`, `PART_ID`, `PART_BONE`, `PART_FLAG`, `SELECTOR`, `GROUP`, `JOINT`, `CONTROL`, `PROJECTION`, `SOCKET`, `DEFAULTS`, `EMOTION` |
+| анимации | `ANIM_ROOT`, `ANIM_MISSING`, `ANIM_CLIP`, `ANIM_TRACK`, `ANIM_DUPLICATE`, `ANIM_INTERPOLATION`, `ANIM_KEYS`, `ANIM_KEY_TIME`, `ANIM_KEY_ORDER`, `ANIM_KEY_VALUE` |
+| связи | `EQUIPMENT`, `EQUIPMENT_SOCKET`, `EQUIPMENT_MISSING`, `VARIANT_MISSING` |
+| PNG v2 | `ATLAS_MISSING`, `PNG_FORMAT`, `PNG_SIZE`, `PNG_HEADER`, `PNG_BLD_WITHOUT_SUB`, `MAP_EMPTY`, `MAP_ID_RANGE`, `MAP_ALPHA` |
+| поверхность (предупреждения, только факты) | `ID_UNDECLARED`, `PART_EMPTY`, `HOLE`, `SEAM` (скачок XYZ > 6 между соседями одной части), `ISOLATED`, `STALE_ID` |
+
+**Паритет с рантаймом.** QuickJS в инструментах SDK запрещён, поэтому правила
+`validateRotDefinition`/`validateRotAnimations` продублированы в C. Тест
+`tests/agent/sdk_re2d_parity_test.py` прогоняет 82 правки описания через оба
+валидатора, и решения «принять/отвергнуть» должны совпасть.
+
+Что в этом срезе НЕ сделано (честно): редактор клипов и ключей (timeline), редактор
+мимики и вариантов (их можно только выбирать для просмотра), экипировка и сокеты в
+сцене (сокеты правятся числами), правка карт поверхности. Это следующие шаги Phase 3.
+
+## 7. Мост `$.sdk` и агент
 
 Игра не может порождать процессы. Проект-инструмент включает мост флагом
 `"toolHost": true` (`sdk/project.json`); тогда `$.sdk.tool([...])` запускает
@@ -143,7 +190,7 @@ $.sdkApp.snapshot()                       // и раздел sdk в ответе
 $.ui.doc('sdk/ui/shell.rml').click('btn-build')   // нажать элемент RmlUi
 ```
 
-## 7. Состояние (IMPLEMENTED / PARTIAL / NOT STARTED)
+## 8. Состояние (IMPLEMENTED / PARTIAL / NOT STARTED)
 
 | Возможность | Статус | Примечание |
 |---|---|---|
@@ -151,7 +198,9 @@ $.ui.doc('sdk/ui/shell.rml').click('btn-build')   // нажать элемент
 | Единый launcher по `sdk_tools.json` | IMPLEMENTED | каталог показывает name, description, last_updated |
 | Phase 2: Classic 2D срез (PNG → Sprite Studio → анимация → сохранение → hot reload → игра) | IMPLEMENTED | `tests/agent/sdk_classic2d_test.py` |
 | Sprite Studio, Animation Studio | IMPLEMENTED для атласа и тегов | нет: tilemap, particles, collision, RmlUi Studio, события клипов |
-| Валидаторы форматов | PARTIAL | `project`, `sdk.registry`, `json`, `sprite.atlas`; остальные — по фазам |
+| Phase 3: Re2DSprite Studio (загрузка, просмотр рантаймом, yaw/pitch, виды карт, проверка, скелет, сохранение, hot reload) | IMPLEMENTED | `tests/agent/sdk_re2dsprite_test.py`, `sdk_re2d_parity_test.py` |
+| Re2DSprite: редактор клипов, мимики, вариантов, экипировки | NOT STARTED | только выбор для просмотра |
+| Валидаторы форматов | PARTIAL | `project`, `sdk.registry`, `json`, `sprite.atlas`, `re2dsprite.character`; остальные — по фазам |
 | Редакторы и Baker | NOT STARTED на момент этого раздела | см. SDK_HANDOFF.md |
 | Нативный агентский клиент | NOT STARTED | Python-клиент `tools/agent_client.py` — тестовая обвязка репозитория, не инструмент SDK |
 | Удаление Dear ImGui | NOT STARTED | унаследованный оверлей остаётся (SDK_AUDIT.md) |

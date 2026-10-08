@@ -81,6 +81,9 @@ headYaw)`, `rotSpritePart(handle,path,mask)`, `rotSpriteChanged(handle)`,
 | `.re2dAttach(parent,socket,{grip?,offset?,rotation?,scale?})` | совместить сокеты моделей |
 | `.re2dDetach()` | отсоединить объект |
 
+Пути внутри описания считаются от его каталога, в том числе когда сама модель
+открыта по абсолютному пути (так её открывает SDK, `relativeAsset` сохраняет
+ведущий `/`).
 В JSON путь анимаций, произвольные ID/кости/сокеты/группы и named clips.
 `.re2dMotion` принимает имя из JSON. `.re2dReload`/`.re2dHotReload` перечитывают
 описание, анимации, PNG и доноры, сохраняют крепления.

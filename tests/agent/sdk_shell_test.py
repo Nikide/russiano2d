@@ -119,7 +119,8 @@ def main():
         check(snap(a)["assets"]["selected"] == "assets/hero.character.json", "выбор файла")
         check("row sel" in a.eval(f"{DOC}.content('asset-list')"), "выбранная строка подсвечена")
 
-        # Проверка ассета: у character.json пока нет валидатора — info, не ошибка.
+        # Проверка ассета: у RML пока нет валидатора — info, не ошибка.
+        a.eval("$.sdkApp.selectAsset('ui/menu.rml'); 1")
         a.eval(f"{DOC}.click('btn-asset-validate')")
         wait_idle(a)
         s = snap(a)

@@ -176,12 +176,15 @@ function modelJoints(r,pose) {
     const cy=Math.cos(pose.yaw*Math.PI/180),sy=Math.sin(pose.yaw*Math.PI/180),cp=Math.cos(pose.pitch*Math.PI/180),sp=Math.sin(pose.pitch*Math.PI/180),result={};
     for (const j of r.definition.rig.joints) {const [x,y,z]=transform(r.modelPose.bones[j.bone],j.point),zz=-sy*x+cy*z;result[j.name]={x:64+(cy*x+sy*z)*r.modelPose.scale,y:64+(cp*y-sp*zz)*r.modelPose.scale};}return result;
 }
-function relativeAsset(file,path) {
+export function relativeAsset(file,path) {
     if (typeof path!=='string' || !path) throw new TypeError('Re2DSprite JSON: путь');
     if (path.startsWith('/')) return path;
+    // Модель по абсолютному пути (так её открывает SDK): ведущий «/» нельзя терять,
+    // иначе атлас рядом с ней превращается в относительный путь и не находится.
+    const root=typeof file==='string' && file.startsWith('/') ? '/' : '';
     const parts=(file?file.slice(0,file.lastIndexOf('/')+1):'').split('/').filter(Boolean);
     for (const p of path.split('/')) {if (p==='..') {if (!parts.length) throw new RangeError('Re2DSprite JSON: путь выходит за корень');parts.pop();}else if (p && p!=='.') parts.push(p);}
-    return parts.join('/');
+    return root+parts.join('/');
 }
 function readDefinition($,source) {
     const read=p=>{const text=$.fs.readText(p);if (text==null) throw new Error(`Re2DSprite JSON: не удалось прочитать ${p}`);return JSON.parse(text);};

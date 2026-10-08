@@ -14,6 +14,8 @@ set(R2D_SDK_SOURCES
     sdk_json.c
     sdk_image.c
     sdk_atlas.c
+    sdk_re2dpng.c
+    sdk_re2d.c
     sdk_cmds.c
     "${CMAKE_SOURCE_DIR}/src/json.c")
 

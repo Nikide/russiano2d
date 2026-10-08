@@ -1,5 +1,16 @@
 # История изменений
 
+## SDK: Re2DSprite Studio (Phase 3)
+
+- Re2DSprite Studio: просмотр модели настоящим `$.re2dSprite`, yaw/pitch мышью и
+  числами, клипы/эмоции/варианты/стиль, отладочные виды карт PNG v2 (материал, ID
+  части, владелец, X/Y/Z, покрытие, группа, перекрытие), осмотр отсчёта, правка
+  скелета и сокетов с undo/redo, сохранение тем же отступом, hot reload.
+- `r2d-sdk`: валидатор `re2dsprite.character` (описание, анимации, PNG v2) и команды
+  `re2d-info`, `re2d-debug`, `re2d-sample`; паритет с рантаймом проверяет тест на 82 правках.
+- Исправлено: `$.re2dSprite.from('/абсолютный/путь.character.json')` теряло ведущий
+  «/» у атласа и не находило PNG (`relativeAsset`).
+
 ## SDK: Sprite Studio и Animation Studio, Classic 2D срез (Phase 2)
 
 - Sprite Studio и Animation Studio в `sdk/`: атлас `*.atlas.json` (Aseprite-

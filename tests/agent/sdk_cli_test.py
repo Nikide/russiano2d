@@ -155,6 +155,29 @@ def main():
     check(diag["location"]["frame"] == "far" and diag["details"]["image"] == [128, 64], "validate: location и details указывают на кадр и размер картинки")
     shutil.rmtree(out_dir, ignore_errors=True)
 
+    # --- Re2DSprite: re2d-info / re2d-debug / re2d-sample / validate --------------------
+    model = os.path.join(ROOT, "tests", "fixtures", "sdk", "re2d_proj", "animal.character.json")
+    rc, d = sdk("validate", model)
+    check(rc == 0 and d["type"] == "re2dsprite.character" and d["errors"] == 0, "validate: модель Re2DSprite валидна")
+    rc, d = sdk("re2d-info", model)
+    check(rc == 0 and d["png"]["w"] == 1024 and d["png"]["headerOk"] and d["samples"]["active"] > 100, "re2d-info: PNG v2 и статистика карт")
+    check({p["id"]: p["bone"] for p in d["parts"]}.get(91) == "head", "re2d-info: часть 91 принадлежит кости head")
+    dbg = os.path.join(ROOT, "build", "sdk_cli_re2d.png")
+    rc, d = sdk("re2d-debug", model, "--mode", "part", "--out", dbg, "--scale", "2")
+    check(rc == 0 and d["w"] == 512 and d["h"] == 384 and os.path.isfile(dbg), "re2d-debug: PNG вида 512×384 при --scale 2")
+    rc, d = sdk("re2d-debug", model, "--mode", "нет", "--out", dbg)
+    check(rc == 2 and "SDK_RE2D_MODE" in codes(d), "re2d-debug: неизвестный режим")
+    rc, d = sdk("re2d-debug", png, "--mode", "part", "--out", dbg)
+    check(rc == 1 and ("SDK_RE2D_PNG_SIZE" in codes(d) or "SDK_RE2D_PNG_HEADER" in codes(d)), "re2d-debug: обычный PNG — не Re2DSprite v2")
+    if os.path.exists(dbg):
+        os.remove(dbg)
+    rc, d = sdk("re2d-sample", model, "--x", "9999", "--y", "0")
+    check(rc == 1 and "SDK_RE2D_SAMPLE_RANGE" in codes(d), "re2d-sample: отсчёт вне карты")
+    rc, d = sdk("re2d-sample", model, "--x", "0", "--y", "0")
+    check(rc == 0 and d["sample"]["coverage"] in (0, 128, 255), "re2d-sample: отсчёт читается")
+    rc, d = sdk("re2d-info", png)
+    check(rc == 1 and ("SDK_RE2D_PNG_SIZE" in codes(d) or "SDK_RE2D_PNG_HEADER" in codes(d)), "re2d-info: PNG 128×64 — не v2")
+
     # --- ошибки использования ---------------------------------------------------
     rc, d = sdk("unknown-command")
     check(rc == 2 and "SDK_UNKNOWN_COMMAND" in codes(d), "неизвестная команда — код 2")

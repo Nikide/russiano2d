@@ -7,6 +7,7 @@
 // 1 — операция выполнена, но есть ошибки данных, 2 — неверное использование.
 // ===========================================================================
 #include "sdk.h"
+#include "sdk_re2d.h"
 
 #include <SDL3/SDL.h>
 
@@ -33,6 +34,9 @@ static const Command k_commands[] = {
     { "atlas-grid",   sdk_cmd_atlas_grid,   "создать атлас спрайтов сеткой из картинки" },
     { "atlas-format", sdk_cmd_atlas_format, "привести атлас к каноническому виду" },
     { "atlas-info",   sdk_cmd_atlas_info,   "кадры, теги, слайсы и проверка атласа" },
+    { "re2d-info",   sdk_cmd_re2d_info,   "Re2DSprite: PNG v2, части, статистика карт и проверка" },
+    { "re2d-debug",  sdk_cmd_re2d_debug,  "Re2DSprite: отладочный вид карт поверхности в PNG" },
+    { "re2d-sample", sdk_cmd_re2d_sample, "Re2DSprite: один отсчёт поверхности (ID, XYZ, покрытие, владелец)" },
     { "run",      sdk_cmd_run,      "запустить игру движком" },
     { "build",    sdk_cmd_build,    "собрать игру в один файл" },
 };

@@ -1,5 +1,5 @@
 import { test,eq,near,truthy,finish } from './_harness.mjs';
-import { validateRotDefinition,validateRotAnimations,sampleRotClip,buildRotModelPose,installRotSprite,tickRotSprite } from '../../src/highlevel/rotsprite.js';
+import { validateRotDefinition,validateRotAnimations,sampleRotClip,buildRotModelPose,installRotSprite,tickRotSprite,relativeAsset } from '../../src/highlevel/rotsprite.js';
 import { createApi } from '../../src/highlevel/api.js';
 test('part visibility masks rendering without deleting socket bone transforms',()=>{
  const d=validateRotDefinition({version:1,atlas:'prop.png',rig:{bones:[{name:'root',pivot:[0,0,0]}],parts:[{id:80,bone:'root'},{id:81,bone:'root'}]}});
@@ -7,6 +7,13 @@ test('part visibility masks rendering without deleting socket bone transforms',(
  const full=buildRotModelPose(d);eq(full.records[0][4],1);
 });
 const base=()=>({version:1,atlas:'prop.png',style:'pixel',rig:{bones:[{name:'root',pivot:[0,0,0]},{name:'child',parent:'root',pivot:[10,0,0]}],parts:[{id:80,bone:'child'}],joints:[{name:'tip',bone:'child',point:[10,0,0]}]},groups:{shell:[80]},animations:{version:1,clips:{spin:{duration:2,loop:true,tracks:[{target:'root',channel:'rotation.z',keys:[[0,0],[2,180]]}]},blink:{duration:1,loop:false,tracks:[{target:'face',channel:'eyes',keys:[[0,'open'],[.5,'closed'],[1,'open']]}]}},defaults:{body:true,motion:'spin'}}});
+test('relativeAsset: относительные и абсолютные пути модели',()=>{
+ eq(relativeAsset('demos/rotsprite/a.character.json','../assets/x.png'),'demos/assets/x.png');
+ eq(relativeAsset(null,'art/x.png'),'art/x.png');
+ eq(relativeAsset('/abs/proj/a.character.json','hero.png'),'/abs/proj/hero.png','ведущий «/» сохраняется (SDK открывает модели по абсолютному пути)');
+ eq(relativeAsset('/abs/proj/a.character.json','../shared/x.png'),'/abs/shared/x.png');
+ eq(relativeAsset('/abs/proj/a.character.json','/other/x.png'),'/other/x.png');
+});
 const throws=f=>{let bad=false;try{f();}catch(e){bad=true;}truthy(bad);};
 test('JSON validation rejects cycles, invalid part IDs, duplicate tracks and key times',()=>{
  const d=validateRotDefinition(base());eq(d.rig.parts[0].id,80);

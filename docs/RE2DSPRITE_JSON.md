@@ -155,3 +155,10 @@ holdRifle — изготовка вперёд, оба хвата проверя�
 [контракт](highlevel/re2dsprite.md#видимые-части-модели). Кости и sockets сохраняются.
 
 Математика, карта частей и формат SUB/BLD: [полный справочник](RE2DSPRITE_MATH.md).
+
+## Проверка без движка
+
+`build/r2d-sdk validate <файл>.character.json` проверяет описание теми же
+правилами, что рантайм (`validateRotDefinition`, `validateRotAnimations`), плюс
+PNG v2: размер, заголовок, карты, части без отсчётов, дыры и скачки XYZ.
+Ответ — JSON со стабильными кодами `SDK_RE2D_*` ([SDK.md](SDK.md) §6).

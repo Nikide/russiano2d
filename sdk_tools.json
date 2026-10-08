@@ -45,6 +45,17 @@
       "last_updated": "2026-10-08T20:00:00+03:00",
       "entry": "animation-studio",
       "category": "classic-2d"
+    },
+    {
+      "id": "re2dsprite-studio",
+      "name": "Re2DSprite Studio",
+      "description": "Просмотр модели настоящим рантаймом ($.re2dSprite): ракурс yaw/pitch, движения, эмоции, варианты; отладочные виды карт PNG v2 (ID, XYZ, глубина, покрытие, владелец); скелет, сокеты, проверка.",
+      "last_updated": "2026-10-08T21:30:00+03:00",
+      "entry": "re2dsprite-studio",
+      "category": "re2d",
+      "assets": [
+        "*.character.json"
+      ]
     }
   ]
 }

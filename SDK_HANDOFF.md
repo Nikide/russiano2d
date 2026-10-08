@@ -12,7 +12,7 @@ Last updated: 2026-10-08 (Europe/Moscow)
 | 0 Audit | IMPLEMENTED | SDK_AUDIT.md |
 | 1 SDK Shell | IMPLEMENTED | оболочка `sdk/`, реестр `sdk_tools.json`, бэкенд `r2d-sdk`, мост `$.sdk` |
 | 2 Classic 2D slice | IMPLEMENTED | Sprite Studio + Animation Studio на атласе `*.atlas.json` |
-| 3 Re2DSprite Studio | NOT STARTED | |
+| 3 Re2DSprite Studio | IMPLEMENTED (срез) | просмотр рантаймом, виды карт, скелет, проверка; редакторы клипов/мимики/вариантов/экипировки — NOT STARTED |
 | 4 Re2D Baker MVP | NOT STARTED | |
 | 5 Character / VRM | NOT STARTED | |
 | 6 Re2D World Studio | NOT STARTED | |
@@ -20,7 +20,7 @@ Last updated: 2026-10-08 (Europe/Moscow)
 
 ## Что проверено (Phase 1–2)
 
-- `cmake --build build` зелёная; `python3 tools/run_tests.py`: 97 ok, 0 fail, 0 skip
+- `cmake --build build` зелёная; `python3 tools/run_tests.py`: 99 ok, 0 fail, 0 skip
   (до работы `highlevel_perf_test` один раз падал — перфоманс-порог Debug, потом проходил).
 - `build/_deps/quickjs-build/qjs tests/js/*_test.mjs` — все; `build/sdk/native/r2d_sdk_core_test` (ASan/UBSan).
 - Phase 2: `tests/agent/sdk_classic2d_test.py` (SDK-процесс правит файлы, отдельный headless-процесс
@@ -52,6 +52,17 @@ Last updated: 2026-10-08 (Europe/Moscow)
 - Корневые документы RmlUi студий без фона у `body`: область просмотра прозрачна, сквозь неё видна сцена.
 - Нет в Phase 2: tilemap/particles/collision/RmlUi Studio, события клипов (рантайм-спрайты их не умеют).
 
+## Phase 3: решения
+
+- Изображение модели рисует НАСТОЯЩИЙ рантайм (`$.re2dSprite.from`); SDK декодирует карты PNG v2 в C
+  (`sdk_re2dpng.c`) только для проверки и отладочных видов (PNG вида 768×576 в `build/sdk_cache/`).
+- Валидатор описания в C зеркалит `validateRotDefinition/Animations`; паритет — `tests/agent/sdk_re2d_parity_test.py`
+  (82 правки). При изменении правил рантайма обновлять оба и расширять корпус.
+- Правка движка: `relativeAsset` в `src/highlevel/rotsprite.js` сохраняет ведущий «/» (модели по абсолютному пути).
+- Сохранение пишет файл тем же отступом (`detectIndent`); у файлов демо роундтрип побайтно равен исходнику.
+- Нет: редактор клипов (timeline), мимики, вариантов, экипировки; вид «Occlusion» из спеки реализован как «Перекрытие»
+  (счётчик отсчётов на ячейку фронтальной проекции) — это не настоящая окклюзия рантайма.
+
 ## Известные ограничения / не сделано
 
 - ImGui-оверлей (`src/debug_ui.*`) НЕ удалён. Текст сцены уже рисуется без ImGui
@@ -62,8 +73,7 @@ Last updated: 2026-10-08 (Europe/Moscow)
 
 ## Следующий шаг
 
-Phase 3: Re2DSprite Studio — загрузка `*.character.json` + PNG v2, просмотр настоящим
-`$.re2dSprite` (yaw/pitch, `info()`), debug-режимы по картам ID/depth/coverage/XYZ из самого PNG,
-C-валидатор формата (`docs/RE2DSPRITE_JSON.md`, `RE2DSPRITE_V2.md`) в `sdk/native` (по образцу
-`sdk_atlas.c`: валидатор + тип в `sdk_asset_type` + запись в `sdk_validate.c`), экран `sdk/tools/*.js` + RML,
-запись в `sdk_tools.json`.
+Phase 4: Re2D Baker MVP (GLB/glTF + Prop): C-парсер GLB, нормализация, выборка поверхности по UV в карты
+PNG v2 (`sdk_image_write_png` уже есть), запись `*.character.json`, отчёт со стабильными кодами;
+CLI `r2d-sdk bake-re2d <glb> --type prop --output <dir>`; GUI-экран вызывает ту же функцию через `app.backend`;
+превью — Re2DSprite Studio (результат открывается в нём).
