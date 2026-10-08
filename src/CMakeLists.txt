@@ -13,7 +13,7 @@ set(R2D_SOURCES
     app.h      app.c
     render.h   render.c
     rotsprite.h rotsprite.c rotsprite_math.h rotsprite_math.c
-    re2d.h re2d.c re2d_math.h re2d_math.c
+    re2d.h re2d.c re2d_math.h re2d_math.c re2d_world.h re2d_world.c
     profile.h  profile.c
     physics.h  physics.c
     http.h     http.c

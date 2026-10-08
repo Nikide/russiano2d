@@ -134,8 +134,9 @@ $.test.report();
 ## 7. Критерии приёмки
 
 * CI/headless-окружение способно прогнать игровой тест **без видимого окна**
-  (сегодня это возможно: `--agent --headless`, но CI сборку и тесты не
-  запускает — [.gitlab-ci.yml](../.gitlab-ci.yml) только публикует релиз).
+  (`--agent --headless`). GitHub Actions
+  ([build.yml](../.github/workflows/build.yml)) настроен на нативную сборку и
+  C-тесты по новому тегу; запуск GPU/агентских тестов на раннере ещё не настроен.
 * При падении тест-раннер отдаёт достаточно структурированного контекста,
   чтобы диагноз был возможен без перезапуска.
 
@@ -152,3 +153,11 @@ $.test.report();
 же изменении** ([TASKS.md](TASKS.md) §11). Страж `tests/doc_claims_test.py`
 ловит только известный ему список утверждений «этого нет», поэтому
 расхождения в сигнатурах он не видит — такие правки остаются на ревью.
+
+## RE2D BSP World (новый специализированный путь)
+
+`build/tests/r2d_re2d_world_test` проверяет одинаковые XY на трёх этажах,
+headroom, ray/circle-height и приватную RGBA/depth-композицию (ASan/UBSan).
+`python3 tools/run_tests.py highlevel_re2d_bsp_world_test re2d_bsp_combat_test`
+проверяет compositor и игровое демо с АК. Это отдельный путь от legacy
+`highlevel_re2d_world_test`. Подробности: [аудит](RE2D_WORLD_AUDIT.md).

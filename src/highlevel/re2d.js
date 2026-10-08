@@ -415,6 +415,23 @@ const DRAWERS = {
     rotsprite: drawBillboard,
 };
 
+/** RE2D World description -> native specialised primitives (no world triangles). */
+export function worldPrimitives(description, colorOf) {
+    const walls = [], spans = [];
+    const rgb = (color) => unpackRgb(colorOf(color || '#ffffff'));
+    for (const wall of description.walls || []) {
+        walls.push(wall.from[0], wall.from[1], wall.to[0], wall.to[1], wall.bottom, wall.top, ...rgb(wall.color));
+    }
+    for (const cell of description.cells || []) {
+        for (const span of cell.spans || []) {
+            spans.push(cell.x, cell.y, cell.w, cell.h, span.bottom, span.top,
+                ...rgb(span.floorColor), ...rgb(span.ceilingColor));
+        }
+    }
+    if (![...walls, ...spans].every(Number.isFinite)) throw new TypeError('RE2D World: нужны конечные координаты и высоты');
+    return { walls: new Float32Array(walls), spans: new Float32Array(spans) };
+}
+
 export function installRe2d($) {
     $ref = $;
     apiRef = $;
@@ -495,6 +512,47 @@ export function installRe2d($) {
 
     $.re2d = {
         room,
+        /** Spatial description -> synthesised image -> ordinary 2D batch. */
+        world(description) {
+            const p = worldPrimitives(description || {}, $.color);
+            const native = engine.re2d.worldCreate(p.walls, p.spans);
+            return {
+                support(x, y, feet, height, step = 0) { return native.support(x, y, feet, height, step); },
+                blocked(x, y, radius, bottom, top) { return native.blocked(x, y, radius, bottom, top); },
+                ray(from, to) { return native.ray(from.x, from.y, from.height, to.x, to.y, to.height); },
+                info() { return native.info(); },
+                dispose() { native.dispose(); },
+                render(view, entities = [], width = 320, height = 180) {
+                    const v = view;
+                    engine.re2d.view(v.x, v.y, v.eye, v.yaw * Math.PI / 180,
+                        (v.pitch || 0) * Math.PI / 180, (v.fov || 70) * Math.PI / 180);
+                    // Existing relative yaw/pitch and attachment/socket synthesis.
+                    const nodes = Array.isArray(entities) ? entities.flatMap(e => $(e).toArray()) : $(entities).toArray();
+                    const handles = [], transforms = [];
+                    const emit = (node, attached = false) => {
+                        const r = node.rot_sprite;
+                        if (!r) return;
+                        if (!attached) {
+                            const pose = billboardPose(v.x, v.y, v.eye, node.x, node.y,
+                                (Number(node.depth) || 0) + node.h / 2, node.angle);
+                            $(node).re2dPose(pose.yaw, pose.pitch);
+                        }
+                        const children = [...(r.children || [])];
+                        for (const child of children) if (child.depth < node.depth) emit(child, true);
+                        handles.push(r.handle);
+                        transforms.push(node.x, node.y, Number(node.depth) || 0,
+                            node.w * Math.abs(node.scale_x), node.h * Math.abs(node.scale_y));
+                        for (const child of children) if (child.depth >= node.depth) emit(child, true);
+                    };
+                    for (const node of nodes) if (!node.rot_sprite?.attachment) emit(node);
+                    const sprite = native.frame(width, height, handles, new Float32Array(transforms),
+                        v.projection === 'orthographic' ? (v.orthoHeight || 400) : 0);
+                    engine.drawSprite(sprite, engine.width / 2, engine.height / 2,
+                        engine.width, engine.height, 0, 0xffffffff);
+                    return sprite;
+                },
+            };
+        },
         /** Предел синтезов позы Re2DSprite за кадр (по умолчанию 4; 0 — без предела). */
         poseBudget(value) {
             if (value === undefined) return poseBudget;

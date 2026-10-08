@@ -1548,3 +1548,12 @@ Re2DSprite v2: [большой PNG, мимика, костюмы и псевдо
 моргание, ходьба/бег на месте и перетаскивание кистей.
 
 Re2DSprite JSON, пользовательские модели/анимации и сокеты: [RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md). High-level `$.re2dSprite.from`, `$.re2dSprite.equip`, `.re2dAttach`, `.re2dDetach`, `.re2dBone`, `.re2dLayer`, `.re2dSeek`, `.re2dVariant`.
+
+### Специализированный RE2D World
+
+`$.re2d.world({walls,cells})` — XY BSP + vertical spans, native queries и
+синтез конечного обычного 2D sprite. Несколько этажей на одинаковых XY,
+перспективная/ортографическая проекция и приватная композиция Re2DSprite.
+[Контракт и ограничения](highlevel/re2d.md#8-re2d-world--новый-минимальный-bspspan-срез),
+[аудит и проверки](RE2D_WORLD_AUDIT.md).
+Демо с комнатами, лестницей и АК: `--game demos/re2d_bsp_world`.

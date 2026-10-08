@@ -106,15 +106,7 @@ static void test_fan(void)
     r2d_bsp_free(&b);
 }
 
-// Вырожденная геометрия — коллинеарные отрезки и дубликаты: дерево уходит в
-// предельную глубину, и именно здесь ломался обход. ДО правки порядок отдавал
-// 65 отрезков из 959 (894 недостижимых), ПОСЛЕ — 511 (448 недостижимых):
-// это все отрезки, занятые узлами дерева, без единого повтора.
-//
-// Остальные 447 — разрезанные половины, которые построение создаёт, но не
-// кладёт ни в одну ветвь: отдельный известный дефект build_node (docs/TASKS.md
-// §0.7, пункт «известный остаток»). Тест фиксирует текущее состояние и не даёт
-// ему ухудшиться: если обход снова начнёт отдавать меньше, проверка упадёт.
+// Коллинеарные отрезки и дубликаты: проверяем полноту на пределе глубины.
 static void test_degenerate(void)
 {
     enum { N = 512 };
@@ -132,13 +124,12 @@ static void test_degenerate(void)
     memset(&b, 0, sizeof b);
     check(r2d_bsp_build(&b, segs, N), "вырожденная геометрия: дерево построено");
 
+    check_order_is_complete(&b, 0, 200, "depth limit: splitter and every segment");
     const int depth = r2d_bsp_depth(&b);
     printf("       (глубина дерева %d, отрезков после разрезания %d)\n",
            depth, r2d_bsp_segment_count(&b));
 
-    // Обход не обязан покрыть всё (известный дефект), но обязан:
-    //   * отдать не меньше отрезков, чем узлов дерева;
-    //   * не повторять ни одного.
+    // Полный обход должен сохранять все активные отрезки.
     const int nodes = r2d_bsp_node_count(&b);
     int n = 0;
     const int *order = r2d_bsp_traverse(&b, 0, 200, true, &n);
@@ -191,9 +182,25 @@ static void test_order_length_matches_count(void)
     free(segs);
 }
 
+// Both crossing directions must split; active geometry must be reachable.
+static void test_crossing_directions(void)
+{
+    for (int reverse = 0; reverse < 2; reverse++) {
+        const float segments[] = { -10,0,10,0,0, 0,reverse ? -10:10,0,reverse ? 10:-10,1 };
+        R2DBsp b = {0};
+        check(r2d_bsp_build(&b, segments, 2), "crossing: build");
+        int n = 0;
+        const int *order = r2d_bsp_traverse(&b, 5, 5, true, &n);
+        check(order && n == 3, "crossing: two halves plus splitter in both directions");
+        check_order_is_complete(&b, 5, 5, "crossing: active count");
+        r2d_bsp_free(&b);
+    }
+}
+
 int main(void)
 {
     printf("2D BSP: инвариант полноты порядка обхода\n");
+    test_crossing_directions();
     test_square();
     test_fan();
     test_degenerate();

@@ -17,7 +17,7 @@ import { cameraTransform } from '../../src/highlevel/camera.js';
 import { Wrapper } from '../../src/highlevel/core.js';
 import { kindPass, kindRenderer } from '../../src/highlevel/kinds.js';
 import {
-    cellsFor, unpackRgb, pushPlane, pushWall, pushPrism, planeFloats, prismFloats,
+    worldPrimitives, cellsFor, unpackRgb, pushPlane, pushWall, pushPrism, planeFloats, prismFloats,
     billboardPose, shadeColor, re2dMove, DEFAULT_HEIGHT, DEFAULT_TILE,
 } from '../../src/highlevel/re2d.js';
 
@@ -461,6 +461,15 @@ test('Re2DSprite без загруженной модели не падает и
         kindPass('re2d').end(cam);
     });
     eq(calls.length, 0, 'но рисовать нечего');
+});
+
+test('World authoring keeps multiple height intervals on identical XY', () => {
+    const p = worldPrimitives({ walls:[{from:[0,0],to:[1,0],bottom:0,top:8,color:'#ff0000'}],
+        cells:[{x:0,y:0,w:20,h:20,spans:[{bottom:0,top:8},{bottom:10,top:18}]}]}, $.color);
+    eq(p.walls.length, 9, 'specialised segment with height, no triangles');
+    eq(p.spans.length, 24, 'both spans retained');
+    eq(p.spans[4], 0, 'lower floor');
+    eq(p.spans[16], 10, 'upper floor on identical XY');
 });
 
 finish();

@@ -382,3 +382,11 @@ int r2d_rotsprite_install(JSContext *ctx, JSValue engine)
     JS_SetPropertyStr(ctx,engine,"rotSpriteDispose",JS_NewCFunction(ctx,release,"rotSpriteDispose",1));
     return 0;
 }
+
+const unsigned char *r2d_rotsprite_pixels(JSContext *ctx, JSValueConst handle, int *size)
+{
+    RotSprite *r=JS_GetOpaque2(ctx,handle,rot_class);
+    if (!r) return NULL;
+    if (!r->atlas) { JS_ThrowTypeError(ctx,"Re2DSprite: ресурс уже освобождён"); return NULL; }
+    *size=raster_size(r);return r->pixels;
+}

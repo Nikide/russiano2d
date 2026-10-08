@@ -10,9 +10,12 @@ $('<npc>', { id: 'bob' }).at(300, 400);                // kind не указан
 $.camera.kind(Re2D);                                   // камера от первого лица
 ```
 
-Статус: проектный документ и план фаз. Что уже сделано, видно в таблице
-статусов (§9); справочник по готовому API — [highlevel/re2d.md](highlevel/re2d.md)
-(появляется вместе с кодом).
+Статус на 2026-10-08: разделы 1–9 описывают прежний перспективный
+room/mesh-путь, а не готовый BSP/span World. Фактический аудит и выполненный
+минимальный совместимый срез — [RE2D_WORLD_AUDIT.md](RE2D_WORLD_AUDIT.md).
+Новый `$.re2d.world` — [highlevel/re2d.md](highlevel/re2d.md) §8.
+Канонический принцип: spatial description → projection → ordinary 2D representation.
+Исторические замеры ниже не являются замерами нового World.
 
 Связанные документы: [PHILOSOPHY.md](PHILOSOPHY.md) (константы),
 [AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md) (рабочий цикл),
@@ -47,7 +50,8 @@ $.camera.kind(Re2D);                                   // камера от пе
    Прогон старых тестов и демо с `--fixed-dt/--seed` даёт тот же результат, а
    `tools/bench_highlevel.py` не показывает регрессии. Отдельный тест
    сравнивает кадры 2D-сцены до и после.
-2. **Тот же `$`.** Нет `$.re2d.*` рядом с `$.*`. Методы узла те же
+2. **Тот же `$`.** `$.re2d.room` создаёт обычные узлы мира, а не отдельную
+   подсистему физических сущностей. Методы узла те же
    (`.at`, `.size`, `.sprite`, `.playClip`); `kind` меняет смысл ровно там, где
    это записано в таблице §5. Новое слово заводится, только если у старого нет
    смысла в 2.5D (например, `$.camera.pitch`).
@@ -102,7 +106,7 @@ $.camera.kind(Re2D);                                   // камера от пе
 
 В `render.js` один узкий хук: у узла с `kind`, для которого зарегистрирован
 рендерер вида, отрисовку берёт рендерер вида. Узел без `kind` проходит ровно
-одну проверку `node.kind === null` — это и есть вся плата за 2D (§2.1).
+одну проверку `node.kind !== '2d'` — это и есть вся плата за 2D (§2.1).
 Проход мира для Re2D-камеры (пол, потолок, блоки) вызывается перед циклом
 узлов. Камера без `kind` проход не меняет.
 
@@ -114,7 +118,7 @@ $.camera.kind(Re2D);                                   // камера от пе
 |---|---|
 | `engine.re2d.view(x, y, eye, yaw, pitch, fov)` | задать вид кадра: положение на полу, высота глаз, углы, FOV |
 | `engine.re2d.project(points, out)` | пакетная проекция точек `(x, y, z)` → экран `(sx, sy, depth, scale)` для билбордов |
-| `engine.re2d.quad(…)` / `engine.re2d.mesh(verts, count, texture)` | мировые треугольники → отсечение по ближней плоскости → экранные вершины → `submitMesh` с глубиной |
+| `engine.re2d.mesh(verts, count, texture, flags)` | мировые треугольники → отсечение по ближней плоскости → экранные вершины → `submitMesh` с глубиной |
 
 Технические решения:
 
@@ -176,16 +180,16 @@ $.ready(() => {
     $.camera.kind(Re2D).eye(48).fov(70).mouseLook(true);
 
     // Комната 1280×1280, стены толщиной 32 и высотой 280.
-    $.re2d.room({ x: 0, y: 0, w: 1280, h: 1280, wallHeight: 280,
+    $.re2d.room({ x: 0, y: 0, w: 1280, h: 1280, height: 280,
                   wall: 'demos/assets/tiles/wall_brick.png',
-                  floor: 'demos/assets/tiles/floor.png' });
+                  floor: 'demos/assets/tiles/wall_stone.png' });
 
     $('<player>', { id: 'hero' }).at(640, 1100).size(40, 40)
         .controls('wasd').collision(32, 32).kind(Re2D).appendTo($.world);
     $.camera.follow('#hero');
 
-    for (const [x, y, model] of [[400, 400, 'russi'], [880, 420, 'mimi'], [640, 760, 'keke']]) {
-        $.re2dSprite.from(`demos/rotsprite/${model}.character.json`)
+    for (const [x, y] of [[400, 400], [880, 420], [640, 760]]) {
+        $.re2dSprite.from('demos/rotsprite/russi.character.json')
             .at(x, y).size(96, 150).kind(Re2D).appendTo($.world);
     }
 });
@@ -218,11 +222,12 @@ $.ready(() => {
   ящики), требуют глубины у спрайтов: сейчас спрайт пишет `z = 0` и всегда
   поверх меша. Решение (спрайт-как-меш с альфа-отсечением) — отдельная фаза
   после демо; `TASKS.md`.
-* Свет, тени, туман в Re2D-проходе не используются (камера Re2D рисует мир без
-  света); совместимость с `$.gfx.light` — отдельная задача.
+* Свет и тени `$.gfx.light` в Re2D-проходе не используются; их интеграция —
+  отдельная задача. Туман `$.camera.fog` уже работает для поверхностей и билбордов.
 * Физика остаётся 2D: прыжки и высота в столкновениях не моделируются.
-* WebGPU: меш и глубина проверяются на нативной сборке; веб-проверка — в
-  фазе 7.
+* WebGPU: прежний текст заявлял проверку Chrome, но подтверждающего отчёта
+  в этой копии не было. В текущем прогоне Web/WASM не проверены; это относится
+  и к новому BSP World ([RE2D_WORLD_AUDIT.md](RE2D_WORLD_AUDIT.md)).
 
 ## 9. Статус фаз
 
@@ -235,7 +240,7 @@ $.ready(() => {
 | 4 | готово | [highlevel/re2d.md](highlevel/re2d.md); `tests/js/re2d_test.mjs`, `tests/agent/highlevel_re2d_room_test.py` |
 | 5 | готово | [highlevel/re2d.md](highlevel/re2d.md) §3; `tests/agent/highlevel_re2d_billboards_test.py` |
 | 6 | готово | [highlevel/re2d.md](highlevel/re2d.md) §4, [demos/re2d_world](../demos/re2d_world/README.md); `tests/agent/highlevel_re2d_world_test.py` |
-| 7 | в работе | |
+| 7 | native перепроверен; web не проверен | [RE2D_WORLD_AUDIT.md](RE2D_WORLD_AUDIT.md): фактический аудит и native тесты; замер нового пути и публикация не выполнялись |
 
 ### Замер «ноль стоимости для 2D» (фазы 1–2)
 

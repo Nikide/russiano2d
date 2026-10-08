@@ -2388,3 +2388,31 @@ Re2DSprite v2: [большой PNG, мимика, костюмы и псевдо
 моргание, ходьба/бег на месте и перетаскивание кистей.
 
 Re2DSprite JSON, пользовательские модели/анимации и сокеты: [RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md). High-level `$.re2dSprite.from`, `$.re2dSprite.equip`, `.re2dAttach`, `.re2dDetach`, `.re2dBone`, `.re2dLayer`, `.re2dSeek`, `.re2dVariant`.
+
+### `engine.re2d.worldCreate(walls, spans)` — специализированный RE2D World
+
+Новый совместимый путь синтеза обычного 2D-кадра, без `re2d.mesh`/`submitMesh`.
+Оба аргумента строго `Float32Array`, длина кратна записи, ≤65536 записей:
+
+* walls, stride 9: `x1,y1,x2,y2,bottom,top,r,g,b`;
+* spans, stride 12: `x,y,w,h,bottom,top,floorR,floorG,floorB,ceilingR,ceilingG,ceilingB`.
+
+Положительные размеры/интервалы, ненулевые отрезки, конечные значения ±1000000,
+RGB 0..255. Перекрытие свободных spans на общей XY-области запрещено. Handle
+владеет своими данными (входы копируются), XY BSP и синтезированной текстурой;
+GC или `dispose()` освобождает ресурсы.
+
+Методы native handle:
+`support(x,y,feet,height,step)`, `blocked(x,y,radius,bottom,top)`,
+`ray(x1,y1,h1,x2,y2,h2)`, `info()`, `dispose()` — см.
+[highlevel/re2d.md](highlevel/re2d.md) §8.
+`frame(width,height,handles?,transforms?,orthoHeight=0)` возвращает обычный sprite id;
+целые width/height 1..1024. Размер кадра может изменяться. Камера — последний
+`engine.re2d.view` (углы в радианах). `handles` — массив native Re2DSprite handles,
+`transforms` — строго Float32Array stride 5 `x,y,bottom,width,height`, ровно по
+одной записи на модель, максимум 4096. Полученная текстура готова для обычного
+`drawSprite`; private depth не передаётся GPU. `dispose()` идемпотентен,
+методы освобождённого handle бросают `TypeError`.
+
+World `orthoHeight=0` задаёт perspective; положительный world-height задаёт
+ортографическую проекцию. Это CPU-синтез тех же примитивов, не GPU mesh API.
