@@ -3,6 +3,13 @@
 Аудит репозитория перед разработкой Russiano2D SDK
 ([Следующая цель SDK AGENT.md](Следующая%20цель%20SDK%20AGENT.md) §60, §78).
 Статусы по §7: IMPLEMENTED / PARTIAL / STUB / PLANNED / NOT STARTED.
+
+**Исторический снимок Phase 0.** Таблица ниже не является текущим статусом SDK.
+Последующий аудит и закрытие фаз: [SDK_HANDOFF.md](SDK_HANDOFF.md),
+[docs/SDK_VERIFICATION.md](docs/SDK_VERIFICATION.md). Утверждение ниже о зависимости
+текста сцены от ImGui было ошибочным: текущий `text.c` рисует через stb_truetype.
+Устаревший путь `src/highlevel/re2dsprite.js` следует читать как `rotsprite.js`,
+где зарегистрировано публичное имя Re2DSprite.
 Всё ниже проверено чтением кода и запусками на HEAD `7b41d4f`.
 
 ## 0. Базовое состояние

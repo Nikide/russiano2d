@@ -222,6 +222,9 @@ bool        sdk_arg_flag(const SdkArgs *a, const char *flag);    // --flag
 // n-й позиционный аргумент (не флаг и не значение флага).
 const char *sdk_arg_positional(const SdkArgs *a, int n);
 
+int sdk_cmd_batch(const SdkArgs *a);
+int sdk_cmd_agent(const SdkArgs *a);
+
 int sdk_cmd_tools(const SdkArgs *a);
 int sdk_cmd_assets(const SdkArgs *a);
 int sdk_cmd_project(const SdkArgs *a);

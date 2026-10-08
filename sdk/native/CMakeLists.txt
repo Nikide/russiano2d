@@ -20,6 +20,8 @@ set(R2D_SDK_SOURCES
     sdk_char.c
     sdk_world.c
     sdk_bake.c
+    sdk_batch.c
+    sdk_agent.c
     sdk_cmds.c
     "${CMAKE_SOURCE_DIR}/src/json.c")
 

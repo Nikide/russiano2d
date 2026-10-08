@@ -81,6 +81,18 @@
         "*.re2dmap",
         "*.re2dmap.json"
       ]
+    },
+    {
+      "id": "automation",
+      "name": "Automation / Batch",
+      "description": "Пакетное запекание и проверка ассетов, машинные отчёты и сессии исходного агентского протокола движка.",
+      "last_updated": "2026-10-08T21:40:00+03:00",
+      "entry": "automation",
+      "category": "automation",
+      "assets": [
+        "*.batch.json",
+        "*.agent.json"
+      ]
     }
   ]
 }

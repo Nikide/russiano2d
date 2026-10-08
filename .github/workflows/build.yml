@@ -22,7 +22,8 @@ jobs:
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
             libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev \
             libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev \
-            libudev-dev libdbus-1-dev libfreetype-dev libcurl4-openssl-dev
+            libudev-dev libdbus-1-dev libfreetype-dev libcurl4-openssl-dev \
+            xvfb mesa-vulkan-drivers
       - name: Configure
         run: cmake -S . -B build-ci -G Ninja -DCMAKE_BUILD_TYPE=Debug
       - name: Build
@@ -30,6 +31,33 @@ jobs:
       - name: Native regression tests
         run: |
           set -eu
-          for test in json crypto payload reverb audio_fx profile bsp rotsprite re2d; do
+          for test in json crypto payload reverb audio_fx profile bsp rotsprite re2d re2d_world; do
             "./build-ci/tests/r2d_${test}_test"
           done
+      - name: SDK native, batch and import regressions
+        env:
+          R2D_SDK_BINARY: build-ci/r2d-sdk
+          R2D_BINARY: build-ci/russiano2d
+          SDL_GPU_DRIVER: vulkan
+        run: |
+          ./build-ci/sdk/native/r2d_sdk_core_test
+          ./build-ci/r2d-sdk batch tests/fixtures/sdk/ci.batch.json --output build-ci/sdk-ci-report.json
+          xvfb-run -a python3 tests/agent/sdk_cli_test.py
+          python3 tests/agent/sdk_expression_test.py
+      - name: Native SDK agent protocol parity
+        env:
+          R2D_SDK_BINARY: build-ci/r2d-sdk
+          R2D_BINARY: build-ci/russiano2d
+          SDK_SKIP_GUI: "1"
+          SDL_GPU_DRIVER: vulkan
+        run: xvfb-run -a python3 tests/agent/sdk_automation_test.py
+      - name: SDK machine reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-reports
+          path: |
+            build-ci/sdk-ci-report.json
+            build/sdk_automation/*.json
+            build/sdk_automation/*.png
+          if-no-files-found: warn

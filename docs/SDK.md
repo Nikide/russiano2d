@@ -76,7 +76,11 @@ SDK не владеет игрой: проекты и ассеты остают�
 | `re2d-info <character.json\|png>` | Re2DSprite: PNG v2, части ↔ кости, статистика карт, проверка |
 | `re2d-debug <character.json\|png> --mode m --out f.png [--scale N]` | Re2DSprite: отладочный вид карт поверхности |
 | `re2d-sample <character.json\|png> --x mx --y my` | Re2DSprite: один отсчёт (ID, XYZ, покрытие, владелец) |
-| `bake-re2d <модель.glb\|.gltf\|.vrm> --type prop\|character --output каталог [--uv auto\|existing] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N]` | Re2D Baker: GLB/glTF → Re2DSprite |
+| `bake-re2d <модель.glb\|.gltf\|.vrm> --type prop\|character --output каталог [--uv auto\|existing] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N] [--expression имя]` | Re2D Baker: GLB/glTF → Re2DSprite |
+| `world-compile <f.re2dmap> [--output f.compiled.json]` | карта → описание настоящего `$.re2d.world` |
+| `world-info <f.re2dmap>` | compile/validation без записи результата |
+| `batch <manifest.batch.json> [--output report.json]` | пакет bake-re2d / validate, ошибки отдельных jobs не прерывают пакет |
+| `agent <session.agent.json> [--engine путь] [--output report.json]` | нативный клиент исходного агентского протокола движка |
 | `run <каталог> [--scene s] [--frames N] [--headless] [--engine путь]` | запуск игры движком |
 | `build <каталог> --out f [--entry main.js] [--encrypt\|--no-encrypt]` | сборка в один файл (`russiano2d build`) |
 
@@ -144,6 +148,7 @@ SDK не владеет игрой: проекты и ассеты остают�
 | Вид | узел рантайма: ракурс yaw −180…180 / pitch −75…75 (поля и перетаскивание мышью), клипы, эмоции, варианты, стиль anime/pixel, тело/голова, пауза | `$.re2dSprite.*`, `info()` |
 | Поверхность | виды карт: материал, ID части, владелец (кость), X, Y, Z, покрытие, группа материала, перекрытие; отсчёт под курсором (ID, кость, XYZ, покрытие) | `r2d-sdk re2d-debug`, `re2d-sample` |
 | Скелет | кости (pivot/portraitPivot), часть → кость, сокеты, проекция; undo/redo | `*.character.json` |
+| Клипы и варианты | добавление/правка/удаление clips, emotions, variants, equipment; ключи клипа и переход по времени; preview экипировки | существующие JSON definitions и настоящий runtime |
 
 Сохранение пишет файл **тем же отступом**, что у исходника (у файлов демо роундтрип
 побайтно равен оригиналу), поэтому diff показывает только правки. После сохранения
@@ -172,15 +177,21 @@ SDK не владеет игрой: проекты и ассеты остают�
 `tests/agent/sdk_re2d_parity_test.py` прогоняет 82 правки описания через оба
 валидатора, и решения «принять/отвергнуть» должны совпасть.
 
-Что в этом срезе НЕ сделано (честно): редактор клипов и ключей (timeline), редактор
-мимики и вариантов (их можно только выбирать для просмотра), экипировка и сокеты в
-сцене (сокеты правятся числами), правка карт поверхности. Это следующие шаги Phase 3.
+Авторский редактор сохраняет записи в существующих разделах JSON. При первой правке
+внешнего клипа копирует все клипы в inline `animations`, сохраняя исходный внешний
+файл. `variants[group][key]` указывает на PNG донора; `equipment[key]` — на описание
+модели и существующий сокет. Изменения имеют undo/redo. Клик по ключу ставит время
+реального runtime (`re2dSeek`); SDK не рассчитывает позу вторым алгоритмом.
+Правка карт поверхности и графический редактор кривых пока не реализованы.
 
 ## 7. Re2D Baker (Prop и Character)
 
 **Закон:** 3D разрешён на этапе импорта и не становится архитектурой рантайма. Baker читает
 GLB/glTF как *временный источник данных* и записывает нативный ассет Re2DSprite; результат
 не содержит меша, рантайм не читает GLB, MeshRenderer'а нет.
+Нативный SDK публикует каждый PNG/JSON через временный файл и rename: читатель
+hot reload не получает недописанный файл. Это атомарность отдельного файла, а не
+транзакция всего пакета ассетов.
 
 ```bash
 build/r2d-sdk bake-re2d crate.glb --type prop --output assets/crate/
@@ -191,7 +202,7 @@ build/r2d-sdk bake-re2d crate.glb --type prop --output assets/crate/
 
 1. **Разбор** GLB / `.gltf` (+внешний `.bin`, `data:`-URI): иерархия узлов (матрицы и TRS),
    TRIANGLES/STRIP/FAN, индексы u8/u16/u32, `byteStride`, нормализованные UV,
-   baseColorFactor/baseColorTexture (PNG/JPEG во встроенных и внешних изображениях), alphaMode.
+   baseColorFactor/baseColorTexture (PNG/JPEG во встроенных и внешних изображениях), alphaMode, `KHR_texture_transform`.
 2. **Оси Re2D:** X вправо, **Y вниз**, Z к зрителю; нормали зеркалятся вместе с осью.
 3. **Coordinate Fit:** авто-вписывание в диапазон карт (X/Z −32…31.75, Y −64…63.5) с запасом
    2%; `--scale S` задаёт масштаб явно (выход за диапазон — ошибка `SDK_BAKE_FIT_OVERFLOW`);
@@ -219,7 +230,7 @@ errors, warnings, infos, diagnostics }`.
 `ANIMATION_IGNORED`, `DEGENERATE`, `FIT_OVERFLOW`, `LOW_DENSITY`, `UV_MISSING`, `UV_RANGE`, `UV_OVERLAP`,
 `UV_MODE_UNSUPPORTED`, `TYPE_UNSUPPORTED`, `PARTS_LIMIT`, `SIZE`, `MEMORY`, `EMPTY`, `WRITE_FAILED`.
 
-**GUI** `sdk/tools/re2d-baker.js` + `sdk/ui/baker.rml`: Prop, Auto/Existing UV, размер PNG,
+**GUI** `sdk/tools/re2d-baker.js` + `sdk/ui/baker.rml`: Prop/Character, выбранное выражение VRM, Auto/Existing UV, размер PNG,
 Feet/центр, масштаб, панель *Coordinate Fit* (диапазоны X/Y/Z, ✓), отчёт, диагностика,
 превью — запечённая модель вращается настоящим `$.re2dSprite`, кнопка «Открыть результат в
 Re2DSprite Studio». GUI вызывает тот же `bake-re2d`, поэтому PNG побайтно совпадает с CLI.
@@ -243,15 +254,23 @@ build/r2d-sdk bake-re2d hero.vrm --type character --output assets/hero/
    (`character.ownership.{ambiguous,pairs}`) и в `SDK_BAKE_SKIN_AMBIGUOUS` (warning при > 5%). Сустав без humanoid-предка → root.
    Негуманоидный скин как character — отказ (`SDK_BAKE_CHARACTER_NO_HUMANOID`), неполный humanoid — `SDK_BAKE_HUMANOID_INCOMPLETE` с именами костей.
 4. **Результат — обычный Re2DSprite:** правится Re2DSprite Studio, рантайм VRM не читает, процедурные клипы `spin`/`walk` заменяются авторскими.
-5. **Выражения:** blendshape VRM в PNG не переносятся (`SDK_BAKE_EXPRESSIONS_NOT_BAKED`); отчёт сопоставляет пресеты эмоциям Re2DSprite
-   (happy, angry, sad, surprised, relaxed→neutral, blink→sleepy), остальное — `null`. Лицо делается в Re2DSprite Studio.
+5. **Выражения:** `--expression happy` запекает выбранное VRM 0.x/1.0 выражение в отдельный ассет.
+   POSITION morph (dense и sparse) применяется до skinning; поддержаны color и texture-transform binds.
+   PNG можно использовать донором `variants.head.happy` в основном описании персонажа.
+   Без выбора выражения сохраняется поза файла; `SDK_BAKE_EXPRESSIONS_NOT_BAKED` сообщает
+   о доступном отдельном bake. Неизвестное имя — ошибка, неподдержанный материал bind — предупреждение.
+6. **Материалы:** цвет и текстуры переносятся в PNG, MToon освещение/rim/outline не переносится
+   (`SDK_BAKE_MATERIAL_FLATTENED`). Это преобразование материала в обычный Re2D цвет.
+7. **Видимое сопоставление:** `character.mapping[]` содержит humanoid, node, re2d;
+   Baker показывает таблицу вместе с количеством и парами неоднозначных треугольников.
 
 Коды Character: `SDK_BAKE_CHARACTER_NO_HUMANOID`, `HUMANOID_INCOMPLETE`, `SKIN_AMBIGUOUS`, `JOINT_UNMAPPED`, `EXPRESSIONS_NOT_BAKED`, `SKIN_ATTRS`.
 Тест `tests/agent/sdk_character_test.py` проверяет контракт на **синтетическом** VRM (`tests/fixtures/sdk/make_vrm_fixtures.py`);
-реальный файл VRoid/VRM Studio не проверялся, материалы MToon сводятся к baseColor.
+реальный Seed-san VRM и три реальные GLB проверены дополнительно — [SDK_VERIFICATION.md](SDK_VERIFICATION.md).
+Материалы MToon сводятся к baseColor; авторская анимация файла не переносится.
 
 Что НЕ сделано (честно): Weapon/Environment, Re2D Optimized UV, сравнение «источник ↔ Re2D» и метрика различия (§39–40
-спецификации), пакетный режим и CI-режим (Phase 7), FBX/OBJ. Качество: плоские карты по оси
+спецификации), FBX/OBJ. Качество: плоские карты по оси
 дают просветы на косых гранях и швы между картами — это видно в диагностике (`LOW_DENSITY`)
 и на проекциях; «идеального auto unwrap» baker не обещает.
 
@@ -270,22 +289,85 @@ $.sdkApp.snapshot()                       // и раздел sdk в ответе
 $.ui.doc('sdk/ui/shell.rml').click('btn-build')   // нажать элемент RmlUi
 ```
 
-## 9. Состояние (IMPLEMENTED / PARTIAL / NOT STARTED)
+## 9. Re2D World Studio
 
-| Возможность | Статус | Примечание |
+Экран `re2d-world-studio` открывает `*.re2dmap` / `*.re2dmap.json`. Это JSON исходник,
+а результат `world-compile` — описание для существующего `$.re2d.world`.
+План XY и высотный разрез показывают выбор синхронно. Доступны добавление/удаление,
+свойства JSON, перемещение выбранного объекта с сеткой, split/join коллинеарных стен,
+undo/redo (Ctrl+Z / Ctrl+Shift+Z), палитра цветов, сохранение, compile и validation.
+Диагностика ведёт к объекту; preview использует настоящий native World, камера
+редактируется полями XY/eye/yaw/pitch. Данные проекта остаются обычными файлами.
+
+Карта содержит version:1, name, cells, walls, portals, stairs, slopes. Cells задают
+rect:[x,y,w,h] и spans:[{bottom,top,floorColor,ceilingColor}]; стены — from/to XY,
+bottom/top/color. Лестницы раскрываются в соседние cells и вертикальные стены;
+уклон — в указанное число ступенчатых segments. Порталы проверяются и вырезают
+проёмы стен. PVS — консервативная portal-reachability в отчёте с runtimeUsed:false:
+движок пока не применяет этот PVS для отсечения. Непрерывная поверхность уклона,
+произвольные polygon cells и spatial PVS не реализованы.
+
+Обязательная регрессия `sdk_world_test.py` проверяет два проходимых spans на
+одинаковых XY: полы 0 и 160, разные support/blocked/ray результаты и независимое
+редактирование этажей в `sdk_world_studio_test.py`.
+
+## 10. Automation / Batch
+
+`r2d-sdk batch manifest.batch.json --output report.json` использует те же C baker и
+validator, что GUI. Пути source/output jobs относительны каталогу манифеста.
+
+```json
+{ "version": 1, "jobs": [
+  { "op": "validate", "source": "world.re2dmap" },
+  { "op": "bake-re2d", "source": "hero.vrm", "type": "character",
+    "output": "hero", "origin": "feet", "expression": "happy" }
+] }
+```
+
+Baker job принимает type, name, uv, origin, size, scale, style, firstId, expression.
+Пакет продолжает обработку после ошибки; выход содержит total/succeeded/failed,
+warnings, jobs с исходными diagnostics/result. Код выхода 1 при ошибке job или
+записи отчёта. Повторный output в одном пакете отклоняется.
+
+`r2d-sdk agent session.agent.json --output report.json` запускает движок в режиме
+agent/headless/fixed-dt с seed и последовательно пересылает исходные requests.
+Это клиент существующего протокола, без второго игрового API или Python runtime.
+Ответы и их id сохраняются, неизвестная команда остаётся ошибкой движка; quit
+допустим последним. После сессии дочерний процесс освобождается.
+
+```json
+{ "version": 1, "game": "../../sdk", "seed": 7, "timeoutMs": 30000,
+  "requests": [
+    { "cmd": "step", "frames": 4 },
+    { "cmd": "eval", "code": "$.sdkApp.snapshot()" },
+    { "cmd": "quit" }
+  ] }
+```
+
+Путь game относителен сессии; scene — необязательная строка. Seed — uint32 (по умолчанию 1).
+Timeout — целое число 1..600000 мс,
+максимум 4096 requests/jobs. Экран `automation` сохраняет JSON и запускает
+batch/agent через тот же мост, отображая машинный отчёт. Он доступен из реестра,
+а API — в `$.sdkApp.studios.automation`, снимок — `state.sdk.studios.automation`.
+CI вызывает SDK native tests, CLI, expression regression, batch manifest и
+паритет всех 19 команд агента; сохраняет машинные отчёты артефактами.
+
+## 11. Состояние фаз
+
+| Фаза | Статус по acceptance §60–67 | Проверка |
 |---|---|---|
-| Phase 1: оболочка (проекты, Asset Browser, реестр, запуск, сборка, документация, диагностика) | IMPLEMENTED | `tests/agent/sdk_shell_test.py`, `sdk_cli_test.py` |
-| Единый launcher по `sdk_tools.json` | IMPLEMENTED | каталог показывает name, description, last_updated |
-| Phase 2: Classic 2D срез (PNG → Sprite Studio → анимация → сохранение → hot reload → игра) | IMPLEMENTED | `tests/agent/sdk_classic2d_test.py` |
-| Sprite Studio, Animation Studio | IMPLEMENTED для атласа и тегов | нет: tilemap, particles, collision, RmlUi Studio, события клипов |
-| Phase 3: Re2DSprite Studio (загрузка, просмотр рантаймом, yaw/pitch, виды карт, проверка, скелет, сохранение, hot reload) | IMPLEMENTED | `tests/agent/sdk_re2dsprite_test.py`, `sdk_re2d_parity_test.py` |
-| Re2DSprite: редактор клипов, мимики, вариантов, экипировки | NOT STARTED | только выбор для просмотра |
-| Phase 4: Re2D Baker MVP (GLB/glTF/VRM → Prop, Character), CLI и GUI на одном коде | IMPLEMENTED | `tests/agent/sdk_baker_test.py` |
-| Phase 5: Character / VRM (humanoid → псевдоскелет Re2D, владение частями, отчёт о неоднозначности) | PARTIAL | `tests/agent/sdk_character_test.py`; только синтетический VRM, выражения не запекаются, MToon не поддержан |
-| Baker: Weapon/Environment, FBX/OBJ, Re2D Optimized UV, сравнение с источником, batch | NOT STARTED / PLANNED | Phase 7 |
-| Валидаторы форматов | PARTIAL | `project`, `sdk.registry`, `json`, `sprite.atlas`, `re2dsprite.character`; остальные — по фазам |
-| Редакторы и Baker | NOT STARTED на момент этого раздела | см. SDK_HANDOFF.md |
-| Нативный агентский клиент | NOT STARTED | Python-клиент `tools/agent_client.py` — тестовая обвязка репозитория, не инструмент SDK |
-| Удаление Dear ImGui | NOT STARTED | унаследованный оверлей остаётся (SDK_AUDIT.md) |
+| 0 Audit | IMPLEMENTED | SDK_AUDIT.md, последующий аудит SDK_VERIFICATION.md |
+| 1 Shell | IMPLEMENTED | sdk_shell_test, sdk_cli_test |
+| 2 Classic 2D vertical slice | IMPLEMENTED | sdk_classic2d_test |
+| 3 Re2DSprite Studio | IMPLEMENTED | sdk_re2dsprite_test, sdk_author_test, sdk_re2d_parity_test |
+| 4 Baker MVP Prop | IMPLEMENTED | sdk_baker_test, реальные BoxTextured/Duck/Lantern |
+| 5 Character / VRM | IMPLEMENTED по acceptance | sdk_character_test, sdk_expression_test, реальный Seed-san |
+| 6 World Studio | IMPLEMENTED по acceptance | sdk_world_test, sdk_world_studio_test; same-XY/different-height |
+| 7 Automation / Batch | IMPLEMENTED | sdk_automation_test, CI manifest и workflow |
 
-Когда фаза закрыта — строка меняется здесь же, в том же коммите.
+Это закрытие перечисленных вертикальных срезов, а не всех желательных инструментов
+большой спецификации. Tilemap/particles/collision/RmlUi Studio, Weapon/Environment,
+FBX/OBJ, optimized UV, сравнение с исходным 3D, рисование поверхности и graph editor
+пока не реализованы. Legacy ImGui-оверлей движка сохранён; UI SDK — RmlUi.
+Процедурный walk, ступенчатые slopes, консервативный PVS и упрощение MToon описаны
+выше и не выдаются за авторскую анимацию, continuous slopes или lighting shader.

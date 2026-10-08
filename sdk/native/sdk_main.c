@@ -41,6 +41,8 @@ static const Command k_commands[] = {
     { "bake-re2d", sdk_cmd_bake_re2d, "Re2D Baker: GLB/glTF/VRM → Re2DSprite (prop, character)" },
     { "world-compile", sdk_cmd_world_compile, "Re2D World: исходник *.re2dmap → описание для $.re2d.world" },
     { "world-info",    sdk_cmd_world_info,    "Re2D World: статистика, room-over-room, порталы и проверка без записи" },
+    { "batch", sdk_cmd_batch, "Пакетный Baker / validation: JSON manifest и сводный report" },
+    { "agent", sdk_cmd_agent, "Нативный клиент существующего агентского протокола (JSON session)" },
     { "run",      sdk_cmd_run,      "запустить игру движком" },
     { "build",    sdk_cmd_build,    "собрать игру в один файл" },
 };
