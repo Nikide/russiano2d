@@ -9,13 +9,17 @@
 [AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md).
 
 Другие списки работ, с которыми этот документ не конфликтует, а дополняет:
-[TASKS.md](TASKS.md) (аудит пробелов и дефектов, §12 — предлагаемый порядок),
+[TASKS.md](TASKS.md) (текущие задачи и ограничения),
 [GAP_ANALYSIS.md](GAP_ANALYSIS.md) (сверка с Godot 4.x).
 
 Правило перехода: **следующая фаза не начинается, пока текущая не зелёная** —
 сборка, существующие тесты, новые тесты, headless-прогон, документация.
 
 ---
+
+Актуальная сверка от 2026-10-08: [REPOSITORY_REVIEW.md](REPOSITORY_REVIEW.md).
+Числа в фазах ниже относятся к датам их выполнения. SDK имеет отдельные
+фазы и критерии: [SDK.md](SDK.md) §11.
 
 ## Фаза 0 — Базовая линия
 
@@ -46,7 +50,7 @@
 | Агентский протокол | да | [AGENT_API.md](AGENT_API.md), [src/agent.c](../src/agent.c) |
 | RmlUi | да | [src/gui.cpp](../src/gui.cpp), [internal/NATIVE.md](internal/NATIVE.md) §9 |
 | Замеры | частично | `$.debug.profile()`, `tools/bench_highlevel.py`, `--stats` |
-| **CI прогоняет сборку/тесты** | **нет** | [.gitlab-ci.yml](../.gitlab-ci.yml) только публикует релиз — сборка и тесты запускаются локально |
+| **CI прогоняет сборку/тесты** | **настроен** | [.github/workflows/build.yml](../.github/workflows/build.yml): сборка, native/JS/SDK и агентские проверки; удалённый запуск отдельно не подтверждён |
 
 ---
 

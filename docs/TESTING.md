@@ -14,8 +14,8 @@
 
 | Уровень | Что проверяет | Где | Как запускать |
 |---|---|---|---|
-| Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (79 наборов) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
-| Интеграционные в движке | поведение игры и API через агентский протокол | `tests/agent/*_test.py` (79 тестов) | `python3 tools/run_tests.py` |
+| Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (91 набор, сверка 2026-10-08) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
+| Интеграционные в движке | поведение игры и API через агентский протокол | `tests/agent/*_test.py` (106 наборов, сверка 2026-10-08) | `python3 tools/run_tests.py` |
 | Стражи документации | «в доке написано, что чего-то нет, а в коде есть»; у каждого модуля есть страница и тест | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py` | `python3 tests/doc_...py` |
 | C | физика/BSP и прочие ядра | `tests/bsp`, цели CMake | `cmake --build build` |
 
@@ -150,7 +150,7 @@ $.test.report();
 больше не обещается (лимит — только у нативных запросов к физике).
 
 Общее правило: **каждый закрытый пункт работы исчезает из документации в том
-же изменении** ([TASKS.md](TASKS.md) §11). Страж `tests/doc_claims_test.py`
+же изменении** ([TASKS.md](TASKS.md) §6). Страж `tests/doc_claims_test.py`
 ловит только известный ему список утверждений «этого нет», поэтому
 расхождения в сигнатурах он не видит — такие правки остаются на ревью.
 
@@ -161,3 +161,10 @@ headroom, ray/circle-height и приватную RGBA/depth-композици�
 `python3 tools/run_tests.py highlevel_re2d_bsp_world_test re2d_bsp_combat_test`
 проверяет compositor и игровое демо с АК. Это отдельный путь от legacy
 `highlevel_re2d_world_test`. Подробности: [аудит](RE2D_WORLD_AUDIT.md).
+
+## Контроль репозитория
+
+`python3 tests/repository_hygiene_test.py` проверяет мусор в tracked файлах,
+локальные ссылки Markdown, контрольные суммы пакетов и содержимое архивов.
+`ctest` пока не регистрирует C-тесты: запускайте собранные test executables
+напрямую. Успешный пустой `ctest` не является доказательством проверки.

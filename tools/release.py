@@ -622,7 +622,8 @@ def package_platform(
             log("    пропускаю отсутствующий %s" % source)
             continue
         if os.path.isdir(source_path):
-            shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+            shutil.copytree(source_path, dest_path, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", "*.pyc", "*.pyo", "state.local.json"))
         else:
             shutil.copy2(source_path, dest_path)
             if source == binary:
@@ -632,7 +633,8 @@ def package_platform(
     # библиотеки), он едет в пакет: бинарник ищет их через $ORIGIN/lib.
     build_lib = os.path.join(os.path.dirname(os.path.join(ROOT, binary)), "lib")
     if os.path.isdir(build_lib) and os.listdir(build_lib):
-        shutil.copytree(build_lib, os.path.join(target, "lib"), dirs_exist_ok=True)
+        shutil.copytree(build_lib, os.path.join(target, "lib"), dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", "*.pyc", "*.pyo", "state.local.json"))
         log("    библиотек из сборки: %d" % len(os.listdir(build_lib)))
 
     for extra in extras:

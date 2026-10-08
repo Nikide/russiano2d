@@ -371,3 +371,12 @@ FBX/OBJ, optimized UV, сравнение с исходным 3D, рисован
 пока не реализованы. Legacy ImGui-оверлей движка сохранён; UI SDK — RmlUi.
 Процедурный walk, ступенчатые slopes, консервативный PVS и упрощение MToon описаны
 выше и не выдаются за авторскую анимацию, continuous slopes или lighting shader.
+
+## 12. Запуск и поставка
+
+Текущий SDK запускается из исходного checkout: `cmake --build build`, затем
+`./build/russiano2d --game sdk`. Нативный CLI — `build/r2d-sdk`. Хостовый
+CMake собирает его автоматически; в Emscripten этот target не включается.
+Опубликованные `dist/` 0.1.22 не содержат завершённый SDK.
+`tools/release.py` пока упаковывает engine/game/assets, а не SDK-приложение.
+Проверенная упаковка SDK остаётся в [TASKS.md](TASKS.md) §5.

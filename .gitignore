@@ -53,6 +53,8 @@ qjsc_out/
 *.log
 imgui.ini
 __pycache__/
+*.py[cod]
+*.cleanup.tmp
 
 # Локальный лог; build_and_push.sh теперь хранится в репозитории.
 build_and_push.log

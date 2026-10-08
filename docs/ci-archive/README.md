@@ -1,17 +1,13 @@
-# CI migration
+# Архив прежних CI-конфигураций
 
-CI is configured only in `.github/workflows/build.yml` (GitHub Actions).
-The previous GitLab and GitVerse configurations are preserved here with
-`.disabled` extensions, outside their providers' workflow directories.
+Активный CI: [GitHub Actions](../../.github/workflows/build.yml).
+Конфигурации GitLab/GitVerse сохранены с `.disabled` расширениями вне рабочих
+каталогов провайдеров. Они служат историей, не инструкцией текущего выпуска.
 
-`build_and_push.sh` defaults to the `github` remote, bumps the patch version,
-builds locally, commits and pushes the current branch plus a new annotated
-`vX.Y.Z` tag. CI triggers only on new version tags, not branch pushes or PRs.
-Existing tags are never overwritten. Old remotes remain unchanged.
+`build_and_push.sh` использует remote `github` по умолчанию и публикует ветку
+плюс новый annotated tag `vX.Y.Z`. CI запускается только на version tags.
+Workflow собирает Linux Debug и запускает native/JS/SDK tests, batch и native
+agent parity под Xvfb. Windows/macOS/release jobs пока нет; удалённый запуск
+должен быть проверен отдельно. Старые remotes остаются на месте.
 
-The initial workflow builds Linux Debug and runs nine existing native regression
-executables. GPU/agent, JavaScript, Windows, macOS and release jobs are not yet
-configured. The hosted workflow must be verified after the first push.
-
-Removing a configuration locally does not change the configuration already
-present on old remote branches. No push to hub.mos.ru or GitVerse was performed.
+Подробности — [RELEASING.md](../RELEASING.md).

@@ -1,14 +1,24 @@
 # История изменений
 
+## Не выпущено — завершение SDK и контрольный аудит (2026-10-08)
+
+- Re2DSprite: авторинг clips/emotions/variants/equipment, timeline seek и undo/redo.
+- Baker: выражения VRM, dense/sparse morphs, material/UV binds, humanoid mapping, атомарная запись отдельных файлов.
+- World Studio: RmlUi-авторинг `.re2dmap`, native compile, runtime preview и многоэтажность.
+- Automation: C batch/agent, паритет 19 команд, RmlUi UI и CI проверки.
+- Уточнены ограничения MVP и статус исходников относительно готовых пакетов 0.1.22.
+- Документация и списки задач сверены с кодом; убраны системные файлы и временные артефакты.
+
+
 ## SDK: Character / VRM в Re2D Baker (Phase 5)
 
 - `r2d-sdk bake-re2d --type character`: VRM 0.x и 1.0 → псевдоскелет Re2DSprite (10 костей,
   сокеты кистей), владение частями по весам скина, `*.character.json` + `spin`/`walk` + отчёт.
   Неоднозначное владение считается и сообщается (`SDK_BAKE_SKIN_AMBIGUOUS`), выражения VRM
-  сопоставляются эмоциям Re2DSprite (в PNG не запекаются).
+  сопоставляются эмоциям Re2DSprite; выбранное `--expression` запекается в PNG.
 - Загрузчик glTF читает узлы, скины (inverseBind, JOINTS_0/WEIGHTS_0) и расширения VRM.
 - Re2D Baker (GUI): тип Character, `*.vrm` в реестре, панель VRM/владения/выражений.
-- Проверено на синтетическом VRM (генератор в `tests/fixtures/sdk/`); реальный VRoid-файл не проверялся.
+- Проверено на синтетических VRM 0.x/1.0 и реальном Seed-san. Это не проверка всех экспортёров VRoid.
 
 ## SDK: Re2D Baker MVP — GLB/glTF → Re2DSprite (Phase 4)
 

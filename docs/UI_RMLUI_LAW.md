@@ -49,49 +49,25 @@
 
 ---
 
-## 4. Текущее состояние (честно)
+## 4. Текущее состояние (2026-10-08)
 
-Закон закреплён текстом, но код ему пока соответствует не полностью. Ниже —
-фактическая картина на момент аудита (v0.1.14).
+| Путь | Где | Статус |
+|---|---|---|
+| RmlUi-документы | [gui.cpp](../src/gui.cpp), [ui.js](../src/highlevel/ui.js), [devtools.js](../src/highlevel/devtools.js), `sdk/ui/`, `demos/ui/launcher.rml` | целевой путь; новый SDK и DevTools используют его |
+| Legacy HUD/widgets | [ui.js](../src/highlevel/ui.js), [widgets.js](../src/highlevel/widgets.js), [screen.js](../src/highlevel/screen.js) | совместимость; новые меню/экраны на них не строятся |
+| Legacy F1-оверлей ImGui | [debug_ui.cpp](../src/debug_ui.cpp), [main.c](../src/main.c) | сохранён; скрыт по умолчанию; не расширяется |
 
-| Путь | Чем рисуется | Где | Соответствие закону |
-|---|---|---|---|
-| A. Документы RmlUi | `.rml` + `.rcss`, отдельный GPU-проход после сцены | [main.c:392-398](../src/main.c#L392-L398), `engine.ui.*` [script.c:4082-4098](../src/script.c#L4082), [gui.cpp](../src/gui.cpp), обёртка `$.ui.doc` [ui.js:126-136](../src/highlevel/ui.js#L126-L136) | **целевой путь** |
-| B. Узлы `<ui.*>` | собственный рисователь (белый спрайт + глифы текста), **не RmlUi** | теги [core.js:476-482](../src/highlevel/core.js#L476-L482), отрисовка [render.js:1939-1985](../src/highlevel/render.js#L1939-L1985), [render.js:2561-2576](../src/highlevel/render.js#L2561-L2576) | допустимо только как HUD |
-| B′. Надстройки, строящие меню из узлов | тот же рисователь | `$.screen` [screen.js:1-31](../src/highlevel/screen.js#L1-L31), `$.dialog` [dialog.js:278-297](../src/highlevel/dialog.js#L278-L297), `$.story` [story.js:224](../src/highlevel/story.js#L224), `$.timeline` [timeline.js:1467-1496](../src/highlevel/timeline.js#L1467-L1496), `$.loading` [loading.js:50-62](../src/highlevel/loading.js#L50-L62), лаунчер [launcher.js:8-9](../demos/launcher.js#L8-L9) | **противоречит** закону для новых меню |
-| C. Оверлей Dear ImGui | ImGui, отдельный проход | [CMakeLists.txt:46](../CMakeLists.txt#L46) (`R2D_ENABLE_IMGUI=ON` по умолчанию), [debug_ui.cpp](../src/debug_ui.cpp), включается `F1` / `--overlay` / `$.debug.on()` | существующий отклонённый путь |
+ImGui включается F1 / `--overlay` / `$.debug.on()`; выключается сборкой
+`-DR2D_ENABLE_IMGUI=OFF`. Скрытый оверлей не начинает кадр ImGui.
+RmlUi рисуется после сцены и ImGui. `r2d_debug_ui_wants_mouse/keyboard`
+объявлены, но не вызываются из main; оверлей не отбирает ввод у игры.
 
-Что ещё важно знать про путь C:
-
-* оверлей **скрыт по умолчанию** и включается `F1`, `--overlay` или
-  `$.debug.on()` ([main.c:204](../src/main.c#L204) — `F1`,
-  [main.c:575-576](../src/main.c#L575-L576) — `--overlay`,
-  [debug.js:23-30](../src/highlevel/debug.js#L23-L30) — `$.debug.on()`);
-* пока оверлей скрыт, **кадр ImGui не начинается вовсе**
-  ([debug_ui.cpp](../src/debug_ui.cpp) — `r2d_debug_ui_begin` выходит на первой
-  проверке видимости); в кадре остаётся только RmlUi;
-* `r2d_debug_ui_wants_mouse/keyboard` объявлены, но **нигде не вызываются**
-  ([debug_ui.h:30-31](../src/debug_ui.h#L30-L31), [debug_ui.cpp:188-213](../src/debug_ui.cpp#L188-L213)) —
-  ввод у игры оверлей не отбирает;
-* RmlUi рисуется **выше** ImGui: ImGui дорисовывается внутри прохода сцены,
-  RmlUi открывает свой проход после него ([main.c:344-398](../src/main.c#L344-L398));
-* выключить ImGui целиком можно сборкой `-DR2D_ENABLE_IMGUI=OFF`.
-
-Тексты, которые пока противоречат закону и подлежат приведению к нему при
-своей правке: [tutorial-menus.md](tutorial-menus.md) («Два пути интерфейса»,
-«оба пути можно смешивать»), [tutorial-first-game.md](tutorial-first-game.md)
-(«Путь А — узлы: меню без единого файла разметки»),
-[highlevel/screen.md](highlevel/screen.md) (подсистема меню на `ui.*`),
-[highlevel/ui.md](highlevel/ui.md) (заголовок «Интерфейсный слой»),
-[GAP_ANALYSIS.md](GAP_ANALYSIS.md) §1 (узлы и RmlUi как равноправный набор),
-шапки [ui.js:1-12](../src/highlevel/ui.js#L1-L12), [screen.js:1-31](../src/highlevel/screen.js#L1-L31),
-[widgets.js:1-8](../src/highlevel/widgets.js#L1-L8), [core.js:475](../src/highlevel/core.js#L475).
-
-Отдельная мелочь того же происхождения: `.rml`-файлы, оставшиеся от прежних
-RmlUi-версий и не упомянутые ни в одном `.js`/`.json`: `demos/ui/launcher.rml`,
-`demos/ui/stub.rml`, `demos/ui/platformer-hud.rml`,
-`demos/ui/platformer-pause.rml`, `game/ui/hud.rml` (HUD платформера рисуется
-узлами, а не этим документом).
+Текст сцены использует native TTF/stb_truetype и существующий 2D sprite batch
+([text.c](../src/text.c)), а не ImGui. Launcher уже на RmlUi; прежнее
+утверждение, что `launcher.rml` не используется, удалено.
+Справочники legacy подсистем сохраняют API, но не предлагают их для новых меню.
+Все новые SDK-панели находятся в `.rml` / `.rcss`; World Studio редактирует
+открытые данные и не вводит другой UI или renderer.
 
 ---
 

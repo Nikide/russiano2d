@@ -16,8 +16,9 @@
 **Russiano2D** — настоящий российский 2D-игровой движок, готовый к дистрибуции
 и к тому, чтобы на нём делали игры. Ядро написано на C, игровая логика — на
 JavaScript; всё общение с движком идёт через одну точку входа — `$`.
-Основной репозиторий — **[hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d)**,
-зеркало кода — **[gitverse.ru/Nikide/russiano2d](https://gitverse.ru/Nikide/russiano2d)**.
+Текущая публикация и CI — **[GitHub](https://github.com/Nikide/russiano2d)**.
+Прежние хосты [hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d) и
+[GitVerse](https://gitverse.ru/Nikide/russiano2d) сохранены в remote-конфигурации.
 Готовые сборки под macOS, Linux и Windows лежат в самом репозитории, в
 [`dist/`](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/dist) — качайте оттуда.
 Играть можно и без установки: демо-меню работает **прямо в браузере** —
@@ -30,7 +31,7 @@ WebGPU, см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
   не нравится — пожалуйста, не пользуйтесь им. Целиком условия — в
   [LICENSE](LICENSE).
 * **Ядро — SDL3 и QuickJS-ng.** Графика через SDL_GPU (Vulkan / Metal / DirectX 12),
-  физика на Box2D v3, звук на SDL3_mixer, интерфейс на RmlUi, отладка на Dear ImGui.
+  физика на Box2D v3, звук на SDL3_mixer, интерфейс и DevTools на RmlUi; старый отладочный оверлей Dear ImGui сохранён для совместимости.
   Та же игра собирается и **в браузере**: Emscripten + WebGPU, интерфейс RmlUi,
   одна команда — `python3 web/export.py` (см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
 * **Высокоуровневое API `$` в стиле jQuery.** Игра компилируется в один исполняемый
@@ -84,7 +85,7 @@ WebGPU, см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
 | Упорядочивание геометрии | **2D BSP-дерево** (своё, `src/bsp.c`) |
 | Свет и видимость | **trylock/visibility** (полигоны видимости, MIT; C-обёртка в `src/light.cpp`) |
 | Иконки | **Material Design Icons** — 2235 штук, встроены в бинарник |
-| Отладочный оверлей | **Dear ImGui** (docking) |
+| DevTools / SDK | **RmlUi**; существующий F1-оверлей — Dear ImGui |
 | HTTP из игры | **libcurl** (или встроенный сокетный бэкенд для `http://`) |
 | Язык ядра | C11 (+ C++20 только для адаптеров ImGui и RmlUi) |
 | Тесты | агентский режим движка + **qjs** для логики подсистем |
@@ -148,8 +149,8 @@ python3 tools/autobuild.py --with-windows
 |---|---|---|
 | `R2D_ENABLE_AUDIO` | `ON` | звук и музыка (SDL3_mixer); `OFF` — заглушки без зависимости |
 | `R2D_ENABLE_RMLUI` | `ON` | HTML/CSS-подобный игровой интерфейс |
-| `R2D_ENABLE_IMGUI` | `ON` | отладочный оверлей (F1) |
-| `R2D_ENABLE_HOTRELOAD` | `ON` | перезапуск скриптов при изменении `.js` (F5) |
+| `R2D_ENABLE_IMGUI` | `ON` | существующий отладочный оверлей (F1); новый UI — RmlUi |
+| `R2D_ENABLE_HOTRELOAD` | `ON` | перезапуск при изменении `.js` / `.atlas.json` (F5) |
 | `R2D_EMBED_SCRIPTS` | `ON` в Release | упаковка скриптов игры в байткод QuickJS |
 | `R2D_ENABLE_HTTP` | `ON` | `$.http`; без libcurl остаётся сокетный бэкенд для `http://` |
 | `R2D_ENABLE_LIVE_SHADERS` | `ON` | компиляция своих шейдеров в рантайме (`$.gfx.defineShader`); `OFF` — только встроенные эффекты и бинарник на пару мегабайт легче |
@@ -167,8 +168,9 @@ python3 tools/autobuild.py --with-windows
 `SHA256SUMS.txt` для проверки. Собирает и кладёт их туда локальный
 `build_and_push.sh`; он же поднимает версию и ставит тег `vX.Y.Z`.
 
-CI на GitVerse написан ([.gitverse/workflows/release.yaml](.gitverse/workflows/release.yaml)),
-но **выключен** — автоматического запуска у него нет.
+Старый CI на GitVerse перенесён в [архив](docs/ci-archive/README.md);
+активный [GitHub workflow](.github/workflows/build.yml) запускается на version tags
+и проверяет Linux build, native/JS/SDK и агентские сценарии.
 
 Собрать руками:
 
@@ -646,7 +648,37 @@ JavaScript. Текстуры (`assets/`), шрифты и разметка ин�
 
 Подробности, раскладка файла и разбор ошибок — в [docs/BUILD.md](docs/BUILD.md).
 
+## SDK и Re2D
+
+SDK запускается из исходного checkout после сборки:
+
+```bash
+./build/russiano2d --game sdk
+./build/r2d-sdk commands
+```
+
+Это приложение R2D на `$` и RmlUi: браузер ассетов, Sprite/Animation Studio,
+Re2DSprite Studio, GLB/glTF/VRM Baker, Re2D World Studio и Automation.
+Редакторы сохраняют обычные JSON/PNG; игра продолжает работать без SDK.
+CLI выполняет ту же нативную проверку, компиляцию, запекание и пакетные задания.
+Нативный агентский клиент использует существующий протокол движка.
+
+Re2DSprite синтезирует 2D-персонажа из PNG v2 и описания скелета. Re2D World
+использует XY BSP и вертикальные интервалы: два этажа могут занимать одинаковые
+XY. Результат синтеза — обычный 2D-кадр в существующем батче. Порталы/PVS пока
+данные компилятора; slopes аппроксимируются ступенями. Baker — MVP с ограничениями
+развёртки и владения частями, а не универсальный импортёр 3D-анимации.
+
+Состояние и команды — [SDK](docs/SDK.md), [Re2DSprite](docs/RE2DSPRITE_GUIDE.md),
+[Re2D World](docs/RE2D_WORLD_AUDIT.md). `dist/` содержит опубликованные снимки
+версии 0.1.22: новый SDK в них ещё не упакован. Не смешивайте возможности текущих
+исходников с возможностями старого скачанного бинарника.
+
 ## Документация
+
+* [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) — конституция проекта
+* [docs/SDK.md](docs/SDK.md) — текущие инструменты и команды SDK
+* [docs/REPOSITORY_REVIEW.md](docs/REPOSITORY_REVIEW.md) — контрольная сверка документации, архитектуры и поставки
 
 * [docs/tutorial-first-game.md](docs/tutorial-first-game.md) — **«Моя первая игра»**: платформер с маскотом за 15 минут
 * [docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md) — всё, что умеет `$`
@@ -686,37 +718,15 @@ JavaScript. Текстуры (`assets/`), шрифты и разметка ин�
 
 ## Где живёт проект
 
-Проект целиком живёт на отечественном хостинге
-**[hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d)** — там исходники,
-сборки и вся история. Код зеркалится на
-**[gitverse.ru](https://gitverse.ru/Nikide/russiano2d)**.
+Текущий remote публикации — **[GitHub](https://github.com/Nikide/russiano2d)**.
+Прежние [hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d) и
+[GitVerse](https://gitverse.ru/Nikide/russiano2d) остаются в конфигурации.
+Готовые пакеты лежат в [`dist/`](dist/); это снимки конкретной версии.
 
-**Релизы лежат в [`dist/`](dist/) этого репозитория** — отдельной выгрузки нет:
-
-* [dist/ на hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/dist)
-* [dist/ на GitVerse](https://gitverse.ru/Nikide/russiano2d/content/main/dist)
-
-Собирает их туда `build_and_push.sh`: он поднимает версию, собирает все
-платформы, коммитит, пушит ветку и тег `vX.Y.Z` на оба хостинга.
-
-Пуш настроен мульти-пушем: у `origin` две push-цели, поэтому один `git push`
-уходит сразу на оба хостинга.
-
-```bash
-git remote -v
-# origin    git@hub.mos.ru:dem4ev48/russiano2d.git  (fetch)
-# origin    git@hub.mos.ru:dem4ev48/russiano2d.git  (push)
-# origin    git@gitverse.ru:Nikide/russiano2d.git   (push)
-# gitverse  git@gitverse.ru:Nikide/russiano2d.git
-
-git push origin main         # ветка — сразу на оба хоста
-git push origin --tags       # теги — тоже на оба
-git push gitverse main       # только на GitVerse
-git pull origin main         # тянет с hub.mos.ru
-```
-
-`--mirror` для публикации не используйте: он удаляет на сервере всё, чего нет
-локально. Подробности процесса — в [docs/RELEASING.md](docs/RELEASING.md).
+`build_and_push.sh` поднимает версию, собирает платформы, коммитит и пушит ветку
+и новый tag `vX.Y.Z` в `github` по умолчанию. `REMOTE=...` меняет цель явно.
+CI запускается на version tags. Не использовать `--mirror` для публикации.
+Подробности — [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Автор
 
