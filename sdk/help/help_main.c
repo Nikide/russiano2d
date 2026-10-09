@@ -22,7 +22,11 @@
 #include <string.h>
 
 #define DEFAULT_TOP 8
+// Через сколько новых векторов индекс записывается промежуточно.
+#define HELP_CHECKPOINT_EVERY 400
 #define MAX_TOP     50
+// Сколько лучших записей берётся из поиска, чтобы набрать отдельный список API.
+#define HELP_POOL   400
 
 typedef struct Ctx {
     SdkArgs     args;
@@ -212,6 +216,16 @@ static bool build_index(Ctx *c, const HelpIndex *old, HelpIndex *out, UpdateInfo
         info->embedded++;
         if (info->embedded % 200 == 0) {
             fprintf(stderr, "r2d-help: эмбеддинги %d/%d\n", i + 1, out->count);
+        }
+        if (info->embedded % HELP_CHECKPOINT_EVERY == 0) {
+            // Промежуточная запись: прерванная сборка (медленная машина,
+            // ограничение времени команды) продолжится с этого места —
+            // посчитанные векторы возьмутся из этого файла по хэшу текста.
+            // Отпечаток 0 помечает индекс устаревшим, поэтому его пересоберут.
+            const uint64_t hash = out->sources_hash;
+            out->sources_hash = 0;
+            help_index_save(out, c->index_path);
+            out->sources_hash = hash;
         }
     }
     free(v);
@@ -412,23 +426,39 @@ static int cmd_search(Ctx *c, int first_word)
                  "модели нет рядом с r2d-help (r2d-help.gguf) или --model: поиск только BM25");
     }
 
-    HelpHit hits[MAX_TOP];
-    const int n = help_search(&ix, q.data, qvec, hits, top);
+    // Общий список ранжирован вместе с разделами docs; записи API — ещё и
+    // отдельным списком из той же выдачи: агенту прежде всего нужно имя
+    // функции, а разделы документации часто его вытесняют (docs/HELP.md §3).
+    HelpHit pool[HELP_POOL];
+    const int got = help_search(&ix, q.data, qvec, pool, HELP_POOL);
     free(qvec);
+    const int n = got < top ? got : top;
+    const HelpHit *hits = pool;
+    HelpHit api[MAX_TOP];
+    int napi = 0;
+    for (int i = 0; i < got && napi < top; ++i) {
+        if (ix.items[pool[i].entry].kind != HELP_KIND_DOC) api[napi++] = pool[i];
+    }
 
     if (c->text) {
-        printf("%s · %s · %d записей\n\n", q.data, mode, ix.count);
-        for (int i = 0; i < n; ++i) {
-            const HelpEntry *e = &ix.items[hits[i].entry];
+        printf("%s · %s · %d записей\n\nAPI:\n", q.data, mode, ix.count);
+        for (int i = 0; i < napi; ++i) {
+            const HelpEntry *e = &ix.items[api[i].entry];
             char sn[240];
             snippet(e->text, sn, sizeof sn);
             printf("%2d. %s\n    %s\n", i + 1, e->signature[0] ? e->signature : e->name, e->location);
             if (sn[0]) printf("    %s\n", sn);
-            if (e->doc[0] && e->kind != HELP_KIND_DOC) printf("    → %s\n", e->doc);
+            if (e->doc[0]) printf("    → %s\n", e->doc);
             printf("\n");
         }
-        if (n == 0) printf("ничего не найдено\n");
-        for (int i = 0; i < c->rep.count; ++i) (void)0;
+        int ndoc = 0;
+        for (int i = 0; i < got && ndoc < 3; ++i) {
+            const HelpEntry *e = &ix.items[pool[i].entry];
+            if (e->kind != HELP_KIND_DOC) continue;
+            if (ndoc++ == 0) printf("Документация:\n");
+            printf("  • %s — %s\n", e->name, e->location);
+        }
+        if (got == 0) printf("ничего не найдено\n");
         help_index_free(&ix);
         r2d_sb_free(&q);
         const int code = c->rep.errors > 0 ? 1 : 0;
@@ -450,6 +480,14 @@ static int cmd_search(Ctx *c, int first_word)
         put_entry(&ix.items[hits[i].entry], &o, false);
         r2d_sb_printf(&o, ",\"rank\":%d,\"score\":%.6f,\"bm25\":%.4f", i + 1, hits[i].score, hits[i].bm25);
         if (hits[i].cosine > -2.0) r2d_sb_printf(&o, ",\"cosine\":%.4f", hits[i].cosine);
+        r2d_sb_putc(&o, '}');
+    }
+    r2d_sb_puts(&o, "],\"api\":[");
+    for (int i = 0; i < napi; ++i) {
+        if (i) r2d_sb_putc(&o, ',');
+        put_entry(&ix.items[api[i].entry], &o, false);
+        r2d_sb_printf(&o, ",\"rank\":%d,\"score\":%.6f,\"bm25\":%.4f", i + 1, api[i].score, api[i].bm25);
+        if (api[i].cosine > -2.0) r2d_sb_printf(&o, ",\"cosine\":%.4f", api[i].cosine);
         r2d_sb_putc(&o, '}');
     }
     r2d_sb_putc(&o, ']');

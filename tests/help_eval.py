@@ -37,7 +37,8 @@ for item in queries:
     out = subprocess.run(cmd, capture_output=True, text=True, check=False)
     data = json.loads(out.stdout)
     mode = data.get('mode')
-    names = [r['name'] for r in data.get('results', [])]
+    # Ответ на вопрос «как сделать» — имя API: замер идёт по списку api.
+    names = [r['name'] for r in data.get('api', data.get('results', []))]
     rank = next((i + 1 for i, n in enumerate(names) if n in item['expect']), None)
     if rank == 1:
         hit1 += 1
