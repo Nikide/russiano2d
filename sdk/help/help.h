@@ -25,6 +25,9 @@ extern "C" {
 #define HELP_VERSION       "0.1.0"
 #define HELP_INDEX_MAGIC   "R2DHELP1"
 #define HELP_INDEX_FORMAT  1u
+// Версия правил сбора корпуса: входит в отпечаток источников, поэтому новый
+// r2d-help пересобирает индекс, даже если docs/ и src/highlevel/ не менялись.
+#define HELP_CORPUS_VERSION 2u
 
 typedef enum HelpKind {
     HELP_KIND_METHOD = 1,   // метод/геттер обёртки: def()/defGet()

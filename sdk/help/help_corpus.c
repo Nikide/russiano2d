@@ -126,7 +126,8 @@ uint64_t help_sources_hash(const char *root)
 {
     FileList js = {0}, md = {0};
     collect_files(root, &js, &md);
-    uint64_t h = 0;
+    const uint32_t ver = HELP_CORPUS_VERSION;
+    uint64_t h = help_fnv1a(&ver, sizeof ver, 0);
     FileList *lists[2] = { &js, &md };
     for (int l = 0; l < 2; ++l) {
         for (int i = 0; i < lists[l]->count; ++i) {
@@ -227,7 +228,8 @@ static void comment_line(Comment *c, const char *line, int lineno)
         if (*body == '*' && body[1] != '/') ++body;
         body = skip_ws(body);
         const size_t n = end ? (size_t)(end - body) : strlen(body);
-        if (end && end < body) { /* «*/» в начале строки */ }
+        // Конец блока раньше текста — строка из одного закрытия комментария.
+        if (end && end < body) { }
         else if (n > 0) { r2d_sb_putc(&c->text, ' '); r2d_sb_printf(&c->text, "%.*s", (int)n, body); }
         if (end) { c->in_block = false; c->last_line = lineno; }
         return;
@@ -263,7 +265,7 @@ static const char *comment_for(Comment *c, int lineno)
 // Реестр API из одного JS-модуля
 // ---------------------------------------------------------------------------
 typedef struct Member {
-    char  owner[64];      // имя переменной объекта: «nav», «api»
+    char  owner[128];     // имя переменной объекта: «nav», «api»
     char  name[96];
     char  params[256];
     char *comment;
@@ -275,20 +277,78 @@ typedef struct Alias {
     char ns[96];          // «nav» для `$.nav = nav`
 } Alias;
 
+// Справочные тексты, из которых API-запись берёт строки с упоминанием имени:
+// страница модуля и общий справочник HIGH_LEVEL_API.md. Так метод без
+// комментария в коде всё равно получает описание — строку таблицы из docs.
+typedef struct DocRefs {
+    const char *module_page;   // может быть NULL
+    const char *reference;     // может быть NULL
+} DocRefs;
+
+#define REF_LINES    3
+#define REF_LINE_MAX 320
+
+// Дописывает до `left` строк из text, где встречается needle.
+static int append_ref_lines(R2dSb *t, const char *text, const char *needle, int left)
+{
+    if (!text || !needle[0]) return left;
+    const char *p = text;
+    while (left > 0 && (p = strstr(p, needle)) != NULL) {
+        const char *b = p;
+        while (b > text && b[-1] != '\n') --b;
+        const char *e = strchr(p, '\n');
+        if (!e) e = p + strlen(p);
+        size_t max = REF_LINE_MAX;
+        if (*b == '#' && *e == '\n') {
+            // Заголовок «### `.navigateTo(target, opts)`»: описание — абзац под ним.
+            const char *q = e + 1;
+            while (*q == '\n') ++q;
+            const char *end = strstr(q, "\n\n");
+            if (!end) end = q + strlen(q);
+            if (*q && *q != '#') { e = end; max = REF_LINE_MAX * 2; }
+        }
+        // Заголовки и строки кода тоже годятся, но не пустые обрывки.
+        const size_t len = utf8_clip(b, (size_t)(e - b), max);
+        if (len > strlen(needle) + 4) {
+            r2d_sb_putc(t, '\n');
+            r2d_sb_printf(t, "%.*s", (int)len, b);
+            left--;
+        }
+        p = e;
+    }
+    return left;
+}
+
 static void add_api_entry(HelpIndex *ix, int kind, const char *full_name, const char *module,
                           const char *sig, const char *rel, int line, const char *doc,
-                          const char *comment)
+                          const char *comment, const DocRefs *refs)
 {
     char loc[1100];
     snprintf(loc, sizeof loc, "%s:%d", rel, line);
     R2dSb t;
     r2d_sb_init(&t);
     r2d_sb_printf(&t, "%s %s\nмодуль %s\n%s", full_name, sig, module, comment ? comment : "");
+    if (refs) {
+        // «.navigateTo(» / «$.nav.mesh(» — вызов именно этого имени.
+        char needle[200];
+        snprintf(needle, sizeof needle, "%s(", full_name);
+        int left = append_ref_lines(&t, refs->module_page, needle, REF_LINES);
+        left = append_ref_lines(&t, refs->reference, needle, left);
+        if (left == REF_LINES && kind == HELP_KIND_NS) {
+            // На странице модуля функцию часто пишут коротко: «.mesh(opts)».
+            const char *bare = strrchr(full_name, '.');
+            if (bare) {
+                snprintf(needle, sizeof needle, "`%s(", bare);
+                append_ref_lines(&t, refs->module_page, needle, left);
+            }
+        }
+    }
     help_index_add(ix, kind, full_name, module, sig, loc, doc, t.data ? t.data : "");
     r2d_sb_free(&t);
 }
 
-static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport *rep)
+static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport *rep,
+                    const char *reference)
 {
     char full[2048];
     snprintf(full, sizeof full, "%s/%s", root, rel);
@@ -309,6 +369,14 @@ static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport 
         snprintf(p, sizeof p, "%s/docs/highlevel/%s.md", root, module);
         if (sdk_file_exists(p)) snprintf(doc, sizeof doc, "docs/highlevel/%s.md", module);
     }
+    char *module_page = NULL;
+    if (doc[0]) {
+        char p[2048];
+        snprintf(p, sizeof p, "%s/%s", root, doc);
+        size_t n = 0;
+        module_page = sdk_read_file(p, &n);
+    }
+    const DocRefs refs = { module_page, reference };
 
     Member *mem = NULL;
     int nmem = 0, capmem = 0;
@@ -316,7 +384,7 @@ static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport 
     int nalias = 0;
 
     // Открытые объектные литералы: переменная и её отступ.
-    char obj_var[8][64];
+    char obj_var[8][128];
     int obj_indent[8];
     int nobj = 0;
 
@@ -375,13 +443,13 @@ static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport 
                         snprintf(name, sizeof name, "$.%s", ns);
                         snprintf(sig, sizeof sig, "$.%s(%s)", ns, params);
                         add_api_entry(ix, HELP_KIND_NS, name, module, sig, rel, lineno, doc,
-                                      comment_for(&cm, lineno));
+                                      comment_for(&cm, lineno), &refs);
                     } else if (*p == '(' && read_params(p, params, sizeof params) && strstr(p, "=>")) {
                         char name[128], sig[400];
                         snprintf(name, sizeof name, "$.%s", ns);
                         snprintf(sig, sizeof sig, "$.%s(%s)", ns, params);
                         add_api_entry(ix, HELP_KIND_NS, name, module, sig, rel, lineno, doc,
-                                      comment_for(&cm, lineno));
+                                      comment_for(&cm, lineno), &refs);
                     } else if (after && (*skip_ws(after) == ';' || *skip_ws(after) == '\0') &&
                                nalias < 64) {
                         snprintf(alias[nalias].var, sizeof alias[nalias].var, "%s", rhs);
@@ -461,7 +529,7 @@ static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport 
                         snprintf(full_name, sizeof full_name, ".%s", name);
                         snprintf(sig, sizeof sig, ".%s(%s)", name, params);
                         add_api_entry(ix, HELP_KIND_METHOD, full_name, module, sig, rel, lineno, doc,
-                                      comment_for(&cm, lineno));
+                                      comment_for(&cm, lineno), &refs);
                     }
                 }
             }
@@ -483,11 +551,12 @@ static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport 
             char name[200], sig[600];
             snprintf(name, sizeof name, "$.%s.%s", ns, m->name);
             snprintf(sig, sizeof sig, "$.%s.%s(%s)", ns, m->name, m->params);
-            add_api_entry(ix, HELP_KIND_NS, name, module, sig, rel, m->line, doc, m->comment);
+            add_api_entry(ix, HELP_KIND_NS, name, module, sig, rel, m->line, doc, m->comment, &refs);
         }
         free(m->comment);
     }
     free(mem);
+    free(module_page);
     r2d_sb_free(&cm.text);
     free(src);
 }
@@ -604,7 +673,12 @@ bool help_collect(const char *root, HelpIndex *ix, SdkReport *rep)
     FileList js = {0}, md = {0};
     collect_files(root, &js, &md);
     // Сначала API (короткие точные записи), затем документация.
-    for (int i = 0; i < js.count; ++i) scan_js(root, js.paths[i], ix, rep);
+    char ref_path[2048];
+    snprintf(ref_path, sizeof ref_path, "%s/docs/HIGH_LEVEL_API.md", root);
+    size_t ref_size = 0;
+    char *reference = sdk_read_file(ref_path, &ref_size);
+    for (int i = 0; i < js.count; ++i) scan_js(root, js.paths[i], ix, rep, reference);
+    free(reference);
     for (int i = 0; i < md.count; ++i) scan_md(root, md.paths[i], ix, rep);
     list_free(&js);
     list_free(&md);
