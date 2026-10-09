@@ -1,5 +1,28 @@
 # История изменений
 
+## Не выпущено — SDK: все инструменты спецификации, новая тема, рабочие кнопки (2026-10-09)
+
+- **Исправлено «кнопки не нажимаются»:** у контейнеров с `overflow: auto` не было стилей полос прокрутки,
+  RmlUi резервировал под полосу всю ширину, и содержимое (каталог инструментов, списки) схлопывалось до
+  нуля — кнопки «Открыть» были недоступны. Стили полос — в `sdk/ui/theme.rcss`.
+- **Движок:** виртуальная мышь агента (`mouseMove`, `mouse`, `wheel`) теперь доходит до RmlUi: агент
+  наводит курсор, нажимает кнопки интерфейса и крутит списки (раньше RmlUi получал только настоящие
+  события SDL). Тест `tests/agent/ui_virtual_mouse_test.py`, описание в `docs/AGENT_API.md` §3.5.
+- **SDK, оформление:** собственная тема в стиле сайта (`sdk/ui/theme.rcss`, `shell.rcss`, `studio.rcss`),
+  навигация по группам, экран «Шаблоны» и «Сборки движка», Debug и Package.
+- **SDK, недостающие инструменты:** Tilemap Studio, Particle Studio, Collision / Physics Tools, Parallax
+  Tools, Font / Text Tools, Audio Tools, Input Tools, RmlUi Studio и DevTools; все предпросмотры — настоящий
+  рантайм (`$.tilemap`, `$.particles`, Box2D, `$.layers`, `$.font`, `$.audio`, `$.input`, RmlUi). Форматы —
+  JSON с `version: 1`, содержимое которого игра читает `$.fs.readJSON`; описание — `docs/SDK.md` §13–§17.
+- Re2D Baker: импорт Wavefront OBJ + MTL (`bake-re2d model.obj`, `*.obj` в реестре); тест `sdk_obj_test.py`.
+- `r2d-sdk`: команды `templates`, `new`, `engines`; нативные валидаторы `tilemap`, `particles`, `collision`,
+  `layers`, `fonts`, `audio`, `input`, `rmlui.document`, `rmlui.style`; `build` создаёт каталог результата;
+  Asset Browser не показывает служебные `.r2d-*` черновики.
+- Тесты: `sdk_studios_test.py` (все студии настоящей мышью), `sdk_data_parity_test.py` (JS ↔ C, 2912 правок,
+  0 расхождений), `sdk_kinds_test.mjs`, `sdk_rml_test.mjs`.
+- Тесты `sdk_shell_test` и `sdk_classic2d_test` обновлены: карточки проверяются по id (буфер `getText` 8 КБ),
+  рамка кадра — по серединам пикселей (не зависит от дробной раскладки RmlUi).
+
 ## Не выпущено — завершение SDK и контрольный аудит (2026-10-08)
 
 - Добавлен отдельный периодический стенд `$` API: 75 компонентных и 20 кадровых нагрузок, сырая базовая линия и таблица с условиями измерения; сравнение учитывает оборудование и сборку.

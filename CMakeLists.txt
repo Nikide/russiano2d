@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(russiano2d
-    VERSION 0.1.25
+    VERSION 0.1.26
     DESCRIPTION "Легковесный кроссплатформенный 2D-движок: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi, экспорт в веб (WebGPU)"
     LANGUAGES C CXX)
 # Бинарник ищет библиотеки рядом с собой: если что-то осталось динамическим,
