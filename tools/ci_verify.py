@@ -14,6 +14,8 @@ def executable(name):
 for name in ['json', 'crypto', 'payload', 'reverb', 'audio_fx', 'profile', 'bsp', 'rotsprite', 're2d', 're2d_world']:
     subprocess.run([str(executable('r2d_' + name + '_test'))], check=True)
 subprocess.run([str(executable('r2d_sdk_core_test'))], check=True)
+# r2d-help: формат индекса, BM25 и сбор корпуса из этого дерева (docs/HELP.md)
+subprocess.run([str(executable('r2d_help_test')), '.'], check=True)
 qjs = executable('qjs')
 for test in sorted(Path('tests/js').glob('*_test.mjs')):
     subprocess.run([str(qjs), str(test)], check=True)

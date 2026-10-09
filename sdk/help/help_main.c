@@ -298,14 +298,14 @@ static void snippet(const char *text, char *out, size_t cap)
         space = false;
         out[n++] = (char)ch;
     }
-    // Не резать UTF-8 посередине символа.
-    while (n > 0 && ((unsigned char)out[n - 1] & 0xC0) == 0x80) {
+    // Не резать UTF-8 посередине символа: последний символ должен быть полным
+    // (обрыв бывает и сразу после ведущего байта, и внутри продолжения).
+    if (n > 0) {
         size_t k = n - 1;
         while (k > 0 && ((unsigned char)out[k] & 0xC0) == 0x80) --k;
         const unsigned char lead = (unsigned char)out[k];
         const size_t need = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1;
-        if (n - k >= need) break;
-        n = k;
+        if (n - k < need) n = k;
     }
     out[n] = '\0';
 }

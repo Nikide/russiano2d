@@ -347,8 +347,32 @@ static void add_api_entry(HelpIndex *ix, int kind, const char *full_name, const 
     r2d_sb_free(&t);
 }
 
+// Есть ли имя в списке «имя\n имя\n …».
+static bool in_list(const char *list, const char *name)
+{
+    if (!list) return false;
+    const size_t n = strlen(name);
+    for (const char *p = list; *p;) {
+        const char *e = strchr(p, '\n');
+        const size_t len = e ? (size_t)(e - p) : strlen(p);
+        if (len == n && memcmp(p, name, n) == 0) return true;
+        if (!e) break;
+        p = e + 1;
+    }
+    return false;
+}
+
+typedef struct FnDecl {
+    char  name[96];
+    char  params[256];
+    char *comment;
+    int   line;
+} FnDecl;
+
+// ctx_ns — имена, которые api.js выставляет как `$.<имя> = ctx.<имя>`:
+// модуль пишет `ctx.time = time`, и это тоже пространство имён `$.time`.
 static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport *rep,
-                    const char *reference)
+                    const char *reference, const char *ctx_ns)
 {
     char full[2048];
     snprintf(full, sizeof full, "%s/%s", root, rel);
@@ -382,6 +406,8 @@ static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport 
     int nmem = 0, capmem = 0;
     Alias alias[64];
     int nalias = 0;
+    FnDecl *fns = NULL;
+    int nfn = 0, capfn = 0;
 
     // Открытые объектные литералы: переменная и её отступ.
     char obj_var[8][128];
@@ -422,6 +448,42 @@ static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport 
                         snprintf(obj_var[nobj], sizeof obj_var[nobj], "%s", var);
                         obj_indent[nobj++] = ind;
                     }
+                }
+            }
+        }
+
+        // ctx.time = time;  — пространство $.time, если api.js его выставляет.
+        if (strncmp(s, "ctx.", 4) == 0 && nalias < 64) {
+            char ns[96], rhs[64];
+            const char *p = read_ident(s + 4, ns, sizeof ns);
+            if (p && *(p = skip_ws(p)) == '=' && p[1] != '=') {
+                const char *after = read_ident(skip_ws(p + 1), rhs, sizeof rhs);
+                if (after && *skip_ws(after) == ';' && in_list(ctx_ns, ns)) {
+                    snprintf(alias[nalias].var, sizeof alias[nalias].var, "%s", rhs);
+                    snprintf(alias[nalias].ns, sizeof alias[nalias].ns, "%s", ns);
+                    nalias++;
+                }
+            }
+        }
+
+        // function create(target, …) {  — может стать пространством: $.tween = create
+        if (strncmp(s, "function ", 9) == 0) {
+            char name[96], params[256] = "";
+            const char *p = read_ident(skip_ws(s + 9), name, sizeof name);
+            if (p && read_params(p, params, sizeof params) && nfn < 4096) {
+                if (nfn == capfn) {
+                    capfn = capfn ? capfn * 2 : 32;
+                    FnDecl *f = (FnDecl *)realloc(fns, (size_t)capfn * sizeof *f);
+                    if (f) fns = f; else capfn = nfn;
+                }
+                if (nfn < capfn) {
+                    FnDecl *f = &fns[nfn++];
+                    snprintf(f->name, sizeof f->name, "%s", name);
+                    snprintf(f->params, sizeof f->params, "%s", params);
+                    const char *c = comment_for(&cm, lineno);
+                    f->comment = (char *)malloc(strlen(c) + 1);
+                    if (f->comment) strcpy(f->comment, c);
+                    f->line = lineno;
                 }
             }
         }
@@ -556,6 +618,19 @@ static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport 
         free(m->comment);
     }
     free(mem);
+    // Пространство имён, которое само является функцией: $.tween = create.
+    for (int a = 0; a < nalias; ++a) {
+        for (int f = 0; f < nfn; ++f) {
+            if (strcmp(fns[f].name, alias[a].var) != 0) continue;
+            char name[200], sig[600];
+            snprintf(name, sizeof name, "$.%s", alias[a].ns);
+            snprintf(sig, sizeof sig, "$.%s(%s)", alias[a].ns, fns[f].params);
+            add_api_entry(ix, HELP_KIND_NS, name, module, sig, rel, fns[f].line, doc, fns[f].comment, &refs);
+            break;
+        }
+    }
+    for (int f = 0; f < nfn; ++f) free(fns[f].comment);
+    free(fns);
     free(module_page);
     r2d_sb_free(&cm.text);
     free(src);
@@ -663,6 +738,37 @@ static void scan_md(const char *root, const char *rel, HelpIndex *ix, SdkReport 
     free(src);
 }
 
+// Имена из строк api.js вида `$.time = ctx.time;` — через «\n».
+static char *api_ctx_namespaces(const char *root)
+{
+    char p[2048];
+    snprintf(p, sizeof p, "%s/src/highlevel/api.js", root);
+    size_t size = 0;
+    char *src = sdk_read_file(p, &size);
+    R2dSb out;
+    r2d_sb_init(&out);
+    for (char *line = src; line && *line;) {
+        char *nl = strchr(line, '\n');
+        const char *s = skip_ws(line);
+        char a[96], b[96];
+        const char *q = NULL;
+        if (s[0] == '$' && s[1] == '.' && (q = read_ident(s + 2, a, sizeof a)) != NULL) {
+            q = skip_ws(q);
+            if (*q == '=' && strncmp(skip_ws(q + 1), "ctx.", 4) == 0) {
+                const char *r = read_ident(skip_ws(q + 1) + 4, b, sizeof b);
+                if (r && *skip_ws(r) == ';' && strcmp(a, b) == 0) {
+                    r2d_sb_puts(&out, a);
+                    r2d_sb_putc(&out, '\n');
+                }
+            }
+        }
+        line = nl ? nl + 1 : NULL;
+    }
+    free(src);
+    if (!out.data) r2d_sb_puts(&out, "");
+    return r2d_sb_take(&out);
+}
+
 bool help_collect(const char *root, HelpIndex *ix, SdkReport *rep)
 {
     if (!help_root_ok(root)) {
@@ -677,7 +783,9 @@ bool help_collect(const char *root, HelpIndex *ix, SdkReport *rep)
     snprintf(ref_path, sizeof ref_path, "%s/docs/HIGH_LEVEL_API.md", root);
     size_t ref_size = 0;
     char *reference = sdk_read_file(ref_path, &ref_size);
-    for (int i = 0; i < js.count; ++i) scan_js(root, js.paths[i], ix, rep, reference);
+    char *ctx_ns = api_ctx_namespaces(root);
+    for (int i = 0; i < js.count; ++i) scan_js(root, js.paths[i], ix, rep, reference, ctx_ns);
+    free(ctx_ns);
     free(reference);
     for (int i = 0; i < md.count; ++i) scan_md(root, md.paths[i], ix, rep);
     list_free(&js);
