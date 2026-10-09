@@ -1,6 +1,6 @@
 """Дообучение модели эмбеддингов r2d-help на парах «вопрос → API».
 
-    python3 tools/help_train/train.py --binary build/r2d-help --root . \
+    python3 tools/help_train/train.py --binary build/r2d-help --root . --index bm25.idx \
         --base путь/multilingual-e5-small --out путь/e5-r2d [--epochs 3]
 
 Пары — tools/help_train/pairs.tsv. Текст записи («passage») берётся у самого
@@ -19,6 +19,7 @@ from pathlib import Path
 p = argparse.ArgumentParser()
 p.add_argument('--binary', required=True)
 p.add_argument('--root', required=True)
+p.add_argument('--index', required=True, help='готовый индекс r2d-help (например bm25.idx)')
 p.add_argument('--base', required=True)
 p.add_argument('--out', required=True)
 p.add_argument('--pairs', default=str(Path(__file__).with_name('pairs.tsv')))
@@ -32,7 +33,7 @@ random.seed(args.seed)
 
 
 def help_json(*cmd):
-    out = subprocess.run([args.binary, *cmd, '--root', args.root, '--no-update'],
+    out = subprocess.run([args.binary, *cmd, '--root', args.root, '--index', args.index, '--no-update'],
                          capture_output=True, check=False)
     return json.loads(out.stdout.decode('utf-8'))
 
@@ -104,7 +105,8 @@ model.fit(train_objectives=[(loader, loss)], epochs=args.epochs,
 
 out = Path(args.out)
 out.mkdir(parents=True, exist_ok=True)
-# Для конвертера llama.cpp нужен обычный каталог модели Hugging Face.
-model[0].auto_model.save_pretrained(out)
-model[0].tokenizer.save_pretrained(out)
+# Полная модель sentence-transformers: в корне — обычный каталог Hugging Face
+# (config, веса, токенизатор) для конвертера llama.cpp, рядом — modules.json и
+# пулинг, чтобы сверка check_gguf.py шла тем же путём, что обучение.
+model.save(str(out))
 print('сохранено:', out, flush=True)

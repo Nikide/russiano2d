@@ -7,9 +7,12 @@
 # статической библиотеки llama.cpp — решение владельца, записанное в
 # docs/HELP.md §6.
 #
-# R2D_HELP_LLAMA=OFF — сборка без llama.cpp: только BM25, без модели.
+# R2D_HELP_LLAMA=OFF (по умолчанию) — сборка без llama.cpp: только BM25.
+# ON включают явно (tools/help_train/run.sh, релиз с моделью): llama.cpp —
+# тяжёлая C++-зависимость, и обычная сборка движка не должна её тянуть, пока
+# модель не выбрана замером (docs/HELP.md §6).
 # ---------------------------------------------------------------------------
-option(R2D_HELP_LLAMA "r2d-help: эмбеддинги через llama.cpp" ON)
+option(R2D_HELP_LLAMA "r2d-help: эмбеддинги через llama.cpp" OFF)
 set(R2D_HELP_MODEL "" CACHE FILEPATH
     "r2d-help: модель эмбеддингов GGUF (копируется рядом как r2d-help.gguf)")
 
@@ -39,8 +42,8 @@ if(R2D_HELP_LLAMA)
     set(GGML_VULKAN          OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(llama_cpp
         GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
-        GIT_TAG        8a1a9b5126126e5228b95fa909d4b08fac65e8b3  # b11517
-        GIT_SHALLOW    FALSE
+        GIT_TAG        b11517   # коммит 8a1a9b5126126e5228b95fa909d4b08fac65e8b3
+        GIT_SHALLOW    TRUE     # только этот тег, без всей истории
         EXCLUDE_FROM_ALL)
     FetchContent_MakeAvailable(llama_cpp)
     target_link_libraries(r2d-help PRIVATE llama)

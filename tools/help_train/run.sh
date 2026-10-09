@@ -30,6 +30,10 @@ step "Проверка инструментов"
 for t in git cmake python3; do command -v "$t" >/dev/null || fail "нет $t"; done
 command -v ninja >/dev/null && GEN=(-G Ninja) || GEN=()
 uname -m; sw_vers -productVersion 2>/dev/null || true
+python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' \
+    || fail "нужен Python 3.10+ (сейчас $(python3 --version 2>&1)); поставьте свежий python3 первым в PATH"
+# e5 обучена с префиксами «query: » / «passage: »: включаем их явно, а не по имени модели.
+export R2D_HELP_E5_PREFIX=1
 
 step "Копия проекта для сборки: $WT"
 if [ ! -d "$WT/.git" ] && [ ! -f "$WT/.git" ]; then
@@ -39,16 +43,16 @@ if [ ! -f "$WT/sdk/help/help_main.c" ]; then
     git -C "$WT" apply --3way "$HERE/r2d-help.patch" || git -C "$WT" apply "$HERE/r2d-help.patch" \
         || fail "патч r2d-help не применился к $(git -C "$ROOT" rev-parse --short HEAD)"
 fi
-cp "$HERE/pairs.tsv" "$HERE/train.py" "$WT/tools/help_train/" 2>/dev/null || {
-    mkdir -p "$WT/tools/help_train"; cp "$HERE/pairs.tsv" "$HERE/train.py" "$WT/tools/help_train/"; }
+mkdir -p "$WT/tools/help_train"
+cp "$HERE"/pairs.tsv "$HERE"/train.py "$HERE"/convert_e5.py "$HERE"/check_gguf.py "$WT/tools/help_train/"
 
 step "Python-окружение для подготовки модели (только здесь, не в r2d-help)"
 VENV="$OUT/venv"
 [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
 PY="$VENV/bin/python"
 "$PY" -m pip install -q --upgrade pip
-"$PY" -m pip install -q torch "sentence-transformers>=3" huggingface_hub numpy sentencepiece \
-    safetensors protobuf pyyaml
+"$PY" -m pip install -q torch "sentence-transformers>=3" datasets accelerate huggingface_hub numpy \
+    sentencepiece safetensors protobuf pyyaml
 
 step "Сборка r2d-help (Release, llama.cpp CPU)"
 BUILD="$WT/build-help"
@@ -70,9 +74,12 @@ from huggingface_hub import snapshot_download
 snapshot_download('intfloat/multilingual-e5-small', local_dir=sys.argv[1])
 EOF
 
-convert() {  # каталог HF → GGUF q8_0
-    "$PY" "$LLAMA_SRC/convert_hf_to_gguf.py" "$1" --outfile "$2" --outtype q8_0
+convert() {  # каталог HF → GGUF q8_0, затем сверка с исходной моделью
+    "$PY" "$WT/tools/help_train/convert_e5.py" "$LLAMA_SRC" "$1" --outfile "$2" --outtype q8_0
     ls -la "$2"
+    "$PY" "$WT/tools/help_train/check_gguf.py" --binary "$BIN" --gguf "$2" --hf "$1" | tee "$2.check.txt" \
+        || fail "GGUF $(basename "$2") не совпадает с исходной моделью — см. $2.check.txt"
+    echo "сверка $(basename "$2"): $(tail -n 1 "$2.check.txt")" >> "$OUT/report.txt"
 }
 
 measure() {  # имя режима, модель или пусто
@@ -99,7 +106,8 @@ measure e5-small "$OUT/e5-small-q8_0.gguf"
 
 step "Дообучение на парах «вопрос → API»"
 FT="$OUT/e5-r2d"
-"$PY" "$WT/tools/help_train/train.py" --binary "$BIN" --root "$WT" --base "$BASE" --out "$FT"
+"$PY" "$WT/tools/help_train/train.py" --binary "$BIN" --root "$WT" --index "$OUT/bm25.idx" \
+    --base "$BASE" --out "$FT"
 # Конвертеру нужны файлы токенизатора исходной модели (sentencepiece).
 for f in "$BASE"/sentencepiece* "$BASE"/tokenizer* "$BASE"/special_tokens_map.json; do
     if [ -e "$f" ] && [ ! -e "$FT/$(basename "$f")" ]; then cp "$f" "$FT/"; fi

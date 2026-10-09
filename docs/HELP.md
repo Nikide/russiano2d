@@ -20,6 +20,7 @@ r2d-help show navigateTo                           # объявление + ра
 r2d-help show '$.nav.mesh'
 r2d-help index --root .                            # собрать/обновить индекс
 r2d-help status
+r2d-help embed "текст" --query --model f.gguf      # вектор текста (сверка модели)
 ```
 
 | Флаг | Смысл |
@@ -101,11 +102,23 @@ llama.cpp. Выбрана **multilingual-e5-small** (MIT, русский и ан
 передаётся сборке:
 
 ```sh
-cmake -S . -B build -DR2D_HELP_MODEL=/путь/multilingual-e5-small-q8_0.gguf
+cmake -S . -B build -DR2D_HELP_LLAMA=ON -DR2D_HELP_MODEL=/путь/multilingual-e5-small-q8_0.gguf
 ```
 
 Сборка кладёт её рядом как `build/r2d-help.gguf` и считает векторы индекса.
 Без модели всё работает в режиме `bm25`.
+
+У e5-small в `config.json` архитектура `BertModel`, а словарь — sentencepiece
+от XLM-RoBERTa; стандартный конвертер записал бы его как WordPiece и сломал
+токенизацию. Поэтому конвертация идёт через `tools/help_train/convert_e5.py`,
+а `tools/help_train/check_gguf.py` сверяет векторы GGUF (`r2d-help embed`) с
+исходной моделью: косинус ниже 0,98 — конвертация сломана.
+
+Весь путь — загрузка, конвертация, сверка, три замера (BM25, e5-small,
+e5-small после дообучения на `tools/help_train/pairs.tsv`) — делает
+`bash tools/help_train/run.sh` на машине с сетью к Hugging Face (Mac с Apple
+Silicon обучает на MPS). Рабочее дерево не меняется: сборка идёт в отдельном
+`git worktree`, отчёт — `build/help_train/report.txt`.
 
 ## 5. Автообновление
 
@@ -131,8 +144,12 @@ cmake -S . -B build -DR2D_HELP_MODEL=/путь/multilingual-e5-small-q8_0.gguf
   `sdk/help/CMakeLists.txt`). Движок и `r2d-sdk` не меняются и новых
   зависимостей не получают. Это решение владельца проекта (2026-10-09).
 * **Только CPU, без OpenMP, без Metal/CUDA** — одинаковый результат и один
-  бинарник без внешних библиотек. `R2D_HELP_LLAMA=OFF` собирает помощника
-  без llama.cpp (только BM25).
+  бинарник без внешних библиотек.
+* **llama.cpp выключен по умолчанию** (`R2D_HELP_LLAMA=OFF`): обычная сборка
+  движка и автосборка пяти платформ не тянут тяжёлую C++-зависимость, пока
+  модель не выбрана замером; помощник собирается с BM25. Включается
+  `-DR2D_HELP_LLAMA=ON` (так делает `tools/help_train/run.sh`). llama.cpp
+  берётся неглубоким клоном тега `b11517`.
 * **Размер.** Linux x86_64 Release: 10,7 МБ, после `strip` 9,4 МБ. Из них
   код llama.cpp (все архитектуры моделей) ≈ 4,1 МБ, ggml ≈ 1,5 МБ, SDL3 из
   ядра SDK ≈ 1,4 МБ. Индекс без векторов — около 2,4 МБ; векторы e5-small

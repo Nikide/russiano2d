@@ -352,7 +352,8 @@ static int finish(Ctx *c, R2dSb *o, bool ok)
 static bool is_command(const char *s)
 {
     return strcmp(s, "search") == 0 || strcmp(s, "show") == 0 || strcmp(s, "index") == 0 ||
-           strcmp(s, "status") == 0 || strcmp(s, "version") == 0 || strcmp(s, "help") == 0;
+           strcmp(s, "status") == 0 || strcmp(s, "version") == 0 || strcmp(s, "help") == 0 ||
+           strcmp(s, "embed") == 0;
 }
 
 static int cmd_search(Ctx *c, int first_word)
@@ -561,6 +562,32 @@ static int cmd_status(Ctx *c)
     return code;
 }
 
+// Служебное: вектор одного текста. Нужен, чтобы сверить GGUF-модель с
+// исходной (tools/help_train/run.sh): расхождение значит сломанную конвертацию.
+static int cmd_embed(Ctx *c)
+{
+    const char *text = sdk_arg_positional(&c->args, 1);
+    if (!text) return sdk_fail(&c->rep, "HELP_USAGE", "нужен текст: r2d-help embed \"текст\" [--query]");
+    if (!model_usable(c)) return sdk_fail(&c->rep, "HELP_MODEL_MISSING", "нужна модель: --model f.gguf");
+    char err[512];
+    HelpEmbedder *e = help_embed_open(c->model_path, c->threads > 0 ? c->threads : 1, err, sizeof err);
+    if (!e) return sdk_fail(&c->rep, "HELP_MODEL_OPEN", "%s", err);
+    const int dim = help_embed_dim(e);
+    float *v = (float *)malloc((size_t)dim * sizeof *v);
+    const bool ok = v && help_embed_text(e, text, sdk_arg_flag(&c->args, "--query"), v);
+    help_embed_close(e);
+    if (!ok) { free(v); return sdk_fail(&c->rep, "HELP_EMBED_FAILED", "вектор не посчитан"); }
+    R2dSb o;
+    r2d_sb_init(&o);
+    r2d_sb_printf(&o, "{\"ok\":true,\"dim\":%d,\"vector\":[", dim);
+    for (int i = 0; i < dim; ++i) r2d_sb_printf(&o, i ? ",%.6f" : "%.6f", v[i]);
+    r2d_sb_putc(&o, ']');
+    free(v);
+    const int code = finish(c, &o, true);
+    sdk_report_free(&c->rep);
+    return code;
+}
+
 static int usage(Ctx *c)
 {
     return sdk_fail(&c->rep, "HELP_USAGE",
@@ -589,6 +616,7 @@ int main(int argc, char **argv)
     if (strcmp(cmd, "show") == 0) return cmd_show(&c);
     if (strcmp(cmd, "index") == 0) return cmd_index(&c);
     if (strcmp(cmd, "status") == 0) return cmd_status(&c);
+    if (strcmp(cmd, "embed") == 0) return cmd_embed(&c);
     if (!is_command(cmd)) return cmd_search(&c, 0);   // r2d-help как сделать патруль
     return usage(&c);
 }
