@@ -29,7 +29,8 @@ typedef void (*R2DGuiEventFn)(void *user, int callback_id, const char *element_i
                                const char *event_name, const char *target_id,
                                const char *target_key);
 
-R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *base_path);
+struct R2DApp;
+R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *base_path, const struct R2DApp *app);
 void     r2d_gui_destroy(R2DGui *g);
 
 // Пробрасывает событие SDL в RmlUi (мышь, клавиатура, текст).

@@ -10,11 +10,12 @@
 
 #include <SDL3/SDL.h>
 
-R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *base_path)
+R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *base_path, const struct R2DApp *app)
 {
     R2D_UNUSED(device);
     R2D_UNUSED(window);
     R2D_UNUSED(base_path);
+    R2D_UNUSED(app);
     R2D_WARN("движок собран без RmlUi (R2D_ENABLE_RMLUI=OFF) — engine.ui.* недоступен");
     return NULL;
 }

@@ -21,14 +21,20 @@ export function installDebug($) {
         overlay: false,
 
         /** Показать/скрыть отладочный оверлей движка (то же, что F1). */
-        on() { debug.overlay = true; engine.setOverlay(true); return debug; },
-        off() { debug.overlay = false; engine.setOverlay(false); return debug; },
-        toggle() {
-            debug.overlay = !debug.overlay;
-            engine.setOverlay(debug.overlay);
+        on() {
+            debug.overlay = ctx.devtools ? ctx.devtools.openRuntime() : false;
             return debug;
         },
-        isOn() { return debug.overlay; },
+        off() {
+            debug.overlay = false;
+            if (ctx.devtools) ctx.devtools.closeRuntime();
+            return debug;
+        },
+        toggle() { return debug.isOn() ? debug.off() : debug.on(); },
+        isOn() { return ctx.devtools ? ctx.devtools.runtimePanel().open : debug.overlay; },
+
+        /** Метаданные живых GPU-текстур: тот же список, который видит DevTools. */
+        textures() { return typeof engine.debugTextures === 'function' ? engine.debugTextures() : []; },
 
         /** Сводка по кадру: FPS, спрайты, узлы, тела, звук. */
         stats() {
@@ -276,7 +282,7 @@ export function installDebug($) {
         /** Внутреннее: рисует список watch поверх кадра. */
         _render() {
             if (watches.length === 0) return;
-            if (!debug.overlay) return;
+            if (!debug.isOn()) return;
             let y = 90;
             ctx.gfx.text('— наблюдение ($.debug.watch) —', 12, y - 22, { size: 15, color: '#8fd1ff' });
             for (const w of watches) {

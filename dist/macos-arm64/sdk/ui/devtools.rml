@@ -1,0 +1,60 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="studio.rcss"/>
+    <link type="text/rcss" href="rmlui_studio.rcss"/>
+    <title>DevTools</title>
+</head>
+<body>
+<div class="studio">
+    <div class="bar top">
+        <button id="dt-back" class="btn small">К SDK</button>
+        <span class="title">DevTools</span>
+        <span id="dt-state" class="pill">сессия не запускалась</span>
+    </div>
+
+    <div class="bar">
+        <button id="dt-run" class="btn primary">Запустить и опросить</button>
+        <button id="dt-save" class="btn">Сохранить сессию .agent.json</button>
+        <span class="sub">Игра запускается headless, детерминированно (fixed-dt), опрос — командами исходного агентского протокола. Только чтение.</span>
+    </div>
+
+    <div class="body-row">
+        <div class="side left">
+            <h4>СЕССИЯ</h4>
+            <div class="field-row"><label>Игра</label><input id="dt-game" type="text" value="" class="field"/></div>
+            <div class="field-row"><label>Сцена</label><input id="dt-scene" type="text" value="" class="field"/></div>
+            <div class="field-row"><label>Seed</label><input id="dt-seed" type="text" value="1" class="field"/></div>
+            <div class="field-row"><label>Кадров</label><input id="dt-frames" type="text" value="60" class="field"/></div>
+            <h4>ЗАПРОС (селектор $)</h4>
+            <div class="field-row"><label>Селектор</label><input id="dt-sel" type="text" value="*" class="field"/></div>
+            <div class="field-row"><label>Предел</label><input id="dt-limit" type="text" value="50" class="field"/></div>
+            <h4>КОМАНДЫ</h4>
+            <div id="dt-cmds"></div>
+            <h4>СВОИ КОМАНДЫ (JSON-массив)</h4>
+            <textarea id="dt-extra" class="area" style="height:70px;"></textarea>
+            <div class="hint">Например: [{"cmd":"keys","hold":["D"]},{"cmd":"step","frames":30}] — выполняются перед опросом.</div>
+        </div>
+
+        <div class="center">
+            <div id="dt-view" class="viewport"></div>
+            <div id="dt-hud" class="hud-text">скриншот появится после запуска</div>
+        </div>
+
+        <div class="side right">
+            <h4>СУЩНОСТИ</h4>
+            <div id="dt-entities"></div>
+            <h4>ВЫБРАННАЯ</h4>
+            <div id="dt-node"></div>
+            <h4>ПРОФИЛЬ КАДРА</h4>
+            <div id="dt-profile"></div>
+        </div>
+    </div>
+
+    <div id="dt-bottom">
+        <div class="bar tools"><span class="sub">Ответы протокола (JSON)</span></div>
+        <div id="dt-log-wrap"><div id="dt-log" class="log"></div></div>
+    </div>
+</div>
+</body>
+</rml>

@@ -154,9 +154,9 @@ def main():
         check(snap(a)["view"] == "docs", "клик по навигации переключает экран")
 
         # --- Документация ----------------------------------------------------------------------------------------
-        n = a.eval("$.sdkApp.showDoc('SDK_AUDIT.md')")
+        n = a.eval("$.sdkApp.showDoc('SDK_HANDOFF.md')")
         check(isinstance(n, int) and n > 500, "документ прочитан")
-        check("Аудит" in a.eval(f"{DOC}.content('doc-text')"), "текст документа показан в RmlUi")
+        check("SDK Handoff" in a.eval(f"{DOC}.content('doc-text')"), "текст документа показан в RmlUi")
         a.eval("$.sdkApp.showDoc('docs/нет.md'); 1")
         check("SDK_DOC_MISSING" in snap(a)["diagnostics"]["codes"], "нет документа — диагностика")
 

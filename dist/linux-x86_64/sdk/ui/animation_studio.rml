@@ -1,0 +1,77 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/>
+    <title>Animation Studio</title>
+</head>
+<body>
+<div class="studio">
+    <div class="bar top">
+        <button id="an-back" class="btn small">К SDK</button>
+        <span class="title">Animation Studio</span>
+        <span id="an-file" class="sub">файл не открыт</span>
+        <span id="an-dirty" class="dirty"></span>
+    </div>
+
+    <div class="bar">
+        <button id="an-save" class="btn primary">Сохранить</button>
+        <button id="an-undo" class="btn">Отменить</button>
+        <button id="an-redo" class="btn">Повторить</button>
+        <button id="an-validate" class="btn">Проверить</button>
+        <button id="an-to-sprite" class="btn">Sprite Studio</button>
+    </div>
+
+    <div class="body-row">
+        <div class="side left">
+            <h4>Анимации (теги)</h4>
+            <div id="an-tags" class="list grow"></div>
+            <div class="field-row">
+                <button id="an-add-tag" class="btn">Новая</button>
+                <button id="an-del-tag" class="btn">Удалить</button>
+            </div>
+            <div class="hint">Анимация — тег атласа (meta.frameTags): так её читает $.atlas — tagSprites(), tagInterval().</div>
+        </div>
+
+        <div class="center">
+            <div id="an-view" class="viewport"></div>
+            <div id="an-overlay" class="overlay"></div>
+            <div id="an-hud" class="hud-text">—</div>
+        </div>
+
+        <div class="side right">
+            <h4>Воспроизведение</h4>
+            <div class="field-row">
+                <button id="an-play" class="btn on">Пауза</button>
+                <button id="an-step" class="btn">Кадр</button>
+            </div>
+            <div class="field-row">
+                <button id="an-sp-0" class="btn small">0.25×</button>
+                <button id="an-sp-1" class="btn small">0.5×</button>
+                <button id="an-sp-2" class="btn small on">1×</button>
+                <button id="an-sp-3" class="btn small">2×</button>
+                <button id="an-sp-4" class="btn small">4×</button>
+            </div>
+
+            <h4>Тег</h4>
+            <div class="field-row"><label>Имя</label><input id="t-name" type="text" value="" class="field"/></div>
+            <div class="field-row"><label>Кадры</label>
+                <div class="pair"><input id="t-from" type="text" value="" class="field"/><input id="t-to" type="text" value="" class="field"/></div></div>
+            <div class="field-row"><label>Направление</label>
+                <div class="pair">
+                    <button id="t-dir-forward" class="btn small on">вперёд</button>
+                    <button id="t-dir-reverse" class="btn small">назад</button>
+                    <button id="t-dir-pingpong" class="btn small">туда-сюда</button>
+                </div></div>
+            <div class="field-row"><label>Цикл</label><button id="t-loop" class="btn small on">зациклить</button></div>
+            <div class="field-row"><label>Длит., мс</label><input id="t-dur" type="text" value="" class="field"/></div>
+            <div class="field-row"><button id="an-apply" class="btn primary">Применить</button></div>
+            <div class="hint">Длительность применяется ко всем кадрам тега: рантайм берёт интервал по первому кадру.</div>
+
+            <h4>Кадры тега</h4>
+            <div id="an-strip"></div>
+        </div>
+    </div>
+
+    <div id="an-diag" class="diag-strip"></div>
+</div>
+</body>
+</rml>

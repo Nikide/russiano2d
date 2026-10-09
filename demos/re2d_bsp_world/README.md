@@ -29,7 +29,7 @@ World синтезирует один обычный 2D sprite; mesh GPU/depth �
 текстур, статические circle/height queries с подшагами движения; нет прыжков,
 PVS, падения или общего physics engine. Глубина Re2DSprite приближённая.
 
-Контракт и ограничения: [RE2D_WORLD_AUDIT.md](../../docs/RE2D_WORLD_AUDIT.md).
+Контракт и ограничения: [RE2D_WORLD_GUIDE.md](../../docs/RE2D_WORLD_GUIDE.md).
 Регрессии: `tests/agent/re2d_bsp_combat_test.py` и отдельная стабильная fixture
 `tests/fixtures/re2d_bsp_world` для проверки compositor.
 

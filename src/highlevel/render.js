@@ -6,7 +6,7 @@
 //   2. круги и свечения — треугольниками (у спрайта нет формы);
 //   3. интерфейс — узлы <ui.*> в координатах окна;
 //   4. примитивы $.gfx.draw.* — поверх всего;
-//   5. текст — через engine.drawText (ImGui background draw list).
+//   5. текст — через engine.drawText (нативный font batch).
 //
 // Никаких вызовов «на спрайт»: пакет наполняется в типизированные массивы и
 // отдаётся в C одним submitSprites().
@@ -2581,7 +2581,7 @@ export function installGfx($) {
             clear() { draw_calls.length = 0; return gfx; },
         },
 
-        /** Очередь текста: C рисует её поверх сцены шрифтом ImGui. */
+        /** Очередь текста: C рисует её поверх сцены нативным шрифтом. */
         text(text, x, y, opts) {
             const o = opts || {};
             gfx._queueText(String(text), x, y, (o.size || 20) * state.text_scale,

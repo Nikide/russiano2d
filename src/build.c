@@ -526,6 +526,58 @@ static bool write_append(const BuildState *st, const char *engine_path, const ch
     return true;
 }
 
+// Пакетный runtime ищет dylib/so в соседнем lib/. Вместе с новой игрой
+// переносим этот каталог: копия исполняемого файла сама по себе недостаточна.
+typedef struct RuntimeLibCopy { const char *dest; bool ok; } RuntimeLibCopy;
+
+static SDL_EnumerationResult copy_runtime_lib(void *user, const char *dir, const char *name)
+{
+    RuntimeLibCopy *copy = (RuntimeLibCopy *)user;
+    char source[4096], target[4096];
+    SDL_snprintf(source, sizeof source, "%s%s", dir, name);
+    SDL_snprintf(target, sizeof target, "%s/%s", copy->dest, name);
+    SDL_PathInfo info;
+    if (!SDL_GetPathInfo(source, &info) || info.type != SDL_PATHTYPE_FILE) return SDL_ENUM_CONTINUE;
+    if (SDL_GetPathInfo(target, &info)) {
+        size_t ns = 0, nt = 0;
+        void *s = SDL_LoadFile(source, &ns), *t = SDL_LoadFile(target, &nt);
+        bool same = s && t && ns == nt && SDL_memcmp(s, t, ns) == 0;
+        SDL_free(s); SDL_free(t);
+        if (same) return SDL_ENUM_CONTINUE;
+        fprintf(stderr, "russiano2d build: конфликт runtime-библиотеки %s; выберите пустой каталог вывода\n", target);
+        copy->ok = false;
+        return SDL_ENUM_FAILURE;
+    }
+    if (!SDL_CopyFile(source, target)) {
+        fprintf(stderr, "russiano2d build: не удалось скопировать %s: %s\n", source, SDL_GetError());
+        copy->ok = false;
+        return SDL_ENUM_FAILURE;
+    }
+    return SDL_ENUM_CONTINUE;
+}
+
+static bool copy_runtime_libs(const char *engine_path, const char *out_path)
+{
+    char source[4096], target[4096];
+    SDL_snprintf(source, sizeof source, "%s", engine_path);
+    SDL_snprintf(target, sizeof target, "%s", out_path);
+    char *ss = SDL_strrchr(source, '/'), *ts = SDL_strrchr(target, '/');
+#ifdef _WIN32
+    char *sb = SDL_strrchr(source, '\\'), *tb = SDL_strrchr(target, '\\');
+    if (sb && (!ss || sb > ss)) ss = sb;
+    if (tb && (!ts || tb > ts)) ts = tb;
+#endif
+    if (ss) *ss = '\0'; else SDL_strlcpy(source, ".", sizeof source);
+    if (ts) *ts = '\0'; else SDL_strlcpy(target, ".", sizeof target);
+    SDL_strlcat(source, "/lib", sizeof source);
+    SDL_strlcat(target, "/lib", sizeof target);
+    SDL_PathInfo info;
+    if (!SDL_GetPathInfo(source, &info) || info.type != SDL_PATHTYPE_DIRECTORY) return true;
+    if (!SDL_CreateDirectory(target)) return false;
+    RuntimeLibCopy copy = { target, true };
+    return SDL_EnumerateDirectory(source, copy_runtime_lib, &copy) && copy.ok;
+}
+
 static bool write_relink(const char *dir, const uint8_t *container, size_t container_size,
                          const uint8_t *footer)
 {
@@ -799,7 +851,9 @@ int r2d_build_main(int argc, char **argv)
         SDL_snprintf(entry_dir, sizeof entry_dir, "%s", entry_buf);
         char *slash = SDL_strrchr(entry_dir, '/');
         if (slash) *slash = '\0'; else entry_dir[0] = '\0';
-        if (entry_dir[0]) collect_assets(&st, entry_dir);
+        // main.js в корне (все SDK-шаблоны): данные и ui рядом с ним
+        // тоже принадлежат игре, как для entry game/main.js.
+        collect_assets(&st, entry_dir[0] ? entry_dir : "");
         for (int i = 0; i < add_count; ++i) collect_assets(&st, adds[i]);
     }
 
@@ -928,6 +982,7 @@ int r2d_build_main(int argc, char **argv)
         SDL_free(probe);
         put_u64(footer + 8, (uint64_t)engine_size);
         ok = write_append(&st, engine_path, out_path, container, container_size, footer);
+        if (ok) ok = copy_runtime_libs(engine_path, out_path);
         if (ok) {
             SDL_PathInfo info;
             if (SDL_GetPathInfo(out_path, &info)) {

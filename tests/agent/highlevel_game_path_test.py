@@ -57,6 +57,12 @@ def main():
     try:
         os.makedirs(os.path.join(tmp, "assets"), exist_ok=True)
         write_png(os.path.join(tmp, "assets", "probe.png"), 8, 8, (0, 200, 0))
+        os.makedirs(os.path.join(tmp, "ui"), exist_ok=True)
+        with open(os.path.join(tmp, "ui", "menu.rml"), "w", encoding="utf-8") as f:
+            f.write('<rml><head><link type="text/rcss" href="probe.rcss"/></head>'
+                    '<body><div id="own-menu">Own project menu</div></body></rml>')
+        with open(os.path.join(tmp, "ui", "probe.rcss"), "w", encoding="utf-8") as f:
+            f.write('body { font-family: Open Sans; } #own-menu { display: block; width: 123px; height: 47px; }')
         with open(os.path.join(tmp, "project.json"), "w", encoding="utf-8") as f:
             f.write('{"title": "Тест каталога игры", "width": 320, "height": 240}')
         # Игра ничего не рисует — только помечает, что загрузилась.
@@ -84,6 +90,13 @@ def main():
             # и относительный путь движка всё ещё работают.
             abs_tex = a.eval("engine.loadTexture('%s/assets/probe.png')" % tmp)
             check(abs_tex == tex, "абсолютный путь даёт ту же текстуру")
+            a.eval("$.ui.doc('ui/menu.rml').show()")
+            a.step(3)
+            check(a.eval("$.ui.doc('ui/menu.rml').content('own-menu')") == "Own project menu",
+                  "RmlUi берёт меню выбранного --game, а не game/ui/menu.rml")
+            rect = a.eval("$.ui.doc('ui/menu.rml').rect('own-menu')")
+            check(rect and rect['w'] == 123 and rect['h'] == 47,
+                  "относительный RCSS загружен из того же проекта")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

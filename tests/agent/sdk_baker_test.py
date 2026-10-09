@@ -153,9 +153,9 @@ def cli_cases():
     rc, d = bake(os.path.join(PROPS, "tiled_uv.glb"), "--uv", "existing", "--output", os.path.join(OUT, "bad"))
     check(rc == 1 and "SDK_BAKE_UV_RANGE" in codes(d), "тайлящиеся UV: SDK_BAKE_UV_RANGE")
     rc, d = bake(os.path.join(PROPS, "crate.glb"), "--uv", "optimized", "--output", os.path.join(OUT, "bad"))
-    check(rc == 2 and "SDK_BAKE_UV_MODE_UNSUPPORTED" in codes(d), "Re2D Optimized честно не реализован")
+    check(rc == 0 and d["uvMode"] == "optimized" and "SDK_BAKE_OPTIMIZED_BUDGET" in codes(d), "Re2D Optimized применяет распределение бюджета")
     rc, d = bake(os.path.join(PROPS, "crate.glb"), "--type", "weapon", "--output", os.path.join(OUT, "bad"))
-    check(rc == 1 and "SDK_BAKE_TYPE_UNSUPPORTED" in codes(d), "Weapon пока не реализован: SDK_BAKE_TYPE_UNSUPPORTED")
+    check(rc == 0 and d["type"] == "weapon", "Weapon создаёт runtime asset")
 
     # --- размеры PNG и детерминизм ---------------------------------------------------------------------------
     rc, d = bake(os.path.join(PROPS, "crate.glb"), "--size", "2048", "--output", os.path.join(OUT, "crate_2048"))
@@ -268,11 +268,11 @@ def gui_cases():
         cli_png = hashlib.sha256(open(d["files"]["png"], "rb").read()).hexdigest()
         check(gui_png == cli_png, "GUI и CLI дают один и тот же PNG (одна реализация baker)")
 
-        # Режим, который не реализован, даёт структурную ошибку.
+        # Optimized использует тот же native baker из GUI.
         a.eval(f"{BK}.click('bk-uv-opt'); {BK}.click('bk-run')")
         wait_idle(a)
         st = snap(a)["baker"]
-        check(not st["ok"] and "SDK_BAKE_UV_MODE_UNSUPPORTED" in st["codes"], "Re2D Optimized в GUI: SDK_BAKE_UV_MODE_UNSUPPORTED")
+        check(st["ok"] and "SDK_BAKE_OPTIMIZED_BUDGET" in st["codes"], "Re2D Optimized в GUI применяет native atlas budget")
         a.eval(f"{BK}.click('bk-uv-auto'); {BK}.click('bk-run')")
         wait_idle(a)
         a.step(4)

@@ -1201,6 +1201,32 @@ static JSValue r2d__js_set_awake(JSContext *ctx, JSValueConst this_val, int argc
 // достижении разное — где-то возвращается -1, где-то бросается исключение,
 // где-то событие молча теряется. Теперь игре есть что показать в отладочном
 // оверлее и по чему принять решение.
+static JSValue r2d__js_debug_textures(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue array = JS_NewArray(ctx);
+    uint32_t n = 0;
+    if (s && s->renderer) for (int i = 0; i < s->renderer->texture_count; ++i) {
+        const R2DTexture *t = &s->renderer->textures[i];
+        if (!t->alive) continue;
+        JSValue row = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, row, "id", JS_NewInt32(ctx, i));
+        JS_SetPropertyStr(ctx, row, "name", JS_NewString(ctx, t->name));
+        JS_SetPropertyStr(ctx, row, "width", JS_NewInt32(ctx, t->width));
+        JS_SetPropertyStr(ctx, row, "height", JS_NewInt32(ctx, t->height));
+        JS_SetPropertyUint32(ctx, array, n++, row);
+    }
+    return array;
+}
+
+static JSValue r2d__js_script_error(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewString(ctx, s ? s->last_error : "");
+}
+
 static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
@@ -3633,6 +3659,13 @@ static JSValue r2d__js_fs_read_text(JSContext *ctx, JSValueConst this_val, int a
     const char *path = r2d__arg_str(ctx, argc, argv, 0);
     if (!path || !s) { if (path) JS_FreeCString(ctx, path); return JS_UNDEFINED; }
 
+    const R2dPayloadFile *packed = r2d_payload_find(r2d_payload_active(), path);
+    if (packed) {
+        JSValue out = JS_NewStringLen(ctx, (const char *)packed->data, packed->size);
+        JS_FreeCString(ctx, path);
+        return out;
+    }
+
     char full[4096];
     r2d_app_resolve_path(s->app, full, sizeof full, path);
     JS_FreeCString(ctx, path);
@@ -3683,6 +3716,11 @@ static JSValue r2d__js_fs_exists(JSContext *ctx, JSValueConst this_val, int argc
     R2DScript *s = r2d__script_of(ctx);
     const char *path = r2d__arg_str(ctx, argc, argv, 0);
     if (!path || !s) { if (path) JS_FreeCString(ctx, path); return JS_FALSE; }
+
+    if (r2d_vfs_has(path)) {
+        JS_FreeCString(ctx, path);
+        return JS_TRUE;
+    }
 
     char full[4096];
     r2d_app_resolve_path(s->app, full, sizeof full, path);
@@ -4340,6 +4378,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "netDelayed", r2d__js_net_delayed, 0);
     r2d__set_fn(ctx, engine, "spriteFilter", r2d__js_get_sprite_filter, 0);
     r2d__set_fn(ctx, engine, "limits", r2d__js_limits, 0);
+    r2d__set_fn(ctx, engine, "debugTextures", r2d__js_debug_textures, 0);
+    r2d__set_fn(ctx, engine, "scriptError", r2d__js_script_error, 0);
     r2d__set_fn(ctx, engine, "setBodyEnabled", r2d__js_set_body_enabled, 2);
     r2d__set_fn(ctx, engine, "setBodyFilter", r2d__js_set_body_filter, 4);
     r2d__set_fn(ctx, engine, "getBodyFilter", r2d__js_get_body_filter, 1);
@@ -5018,6 +5058,10 @@ bool r2d_script_init(R2DScript *s, R2DApp *app, R2DRenderer *renderer,
     s->hot_reload = hot_reload;
 #endif
 
+    if (s->gui) {
+        r2d_gui_set_event_dispatch(s->gui, r2d__gui_dispatch, s);
+    }
+
     // В собранной игре скриптов на диске нет: точкой входа становится груз,
     // а каталогом — каталог запуска (по нему разрешаются пути к ассетам).
     const char *entry_from_payload = r2d_payload_entry();
@@ -5048,10 +5092,6 @@ bool r2d_script_init(R2DScript *s, R2DApp *app, R2DRenderer *renderer,
     } else {
         SDL_snprintf(s->entry_name, sizeof s->entry_name, "%s", s->entry_path);
         s->game_dir[0] = '\0';
-    }
-
-    if (s->gui) {
-        r2d_gui_set_event_dispatch(s->gui, r2d__gui_dispatch, s);
     }
 
     if (!r2d__create_context(s)) {

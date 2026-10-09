@@ -54,6 +54,7 @@ typedef struct Chart {
     float umin, vmin, umax, vmax;
     int   ox, oy, sw, sh;          // положение и размер в отсчётах
     int   tris;
+    float weight, area, weighted_area;
     bool  used;
 } Chart;
 
@@ -81,8 +82,8 @@ static bool pack_charts(Chart *charts, int n, float spacing)
     for (int i = 0; i < n; ++i) {
         if (!charts[i].used) continue;
         items[m].index = i;
-        items[m].w = (int)ceilf((charts[i].umax - charts[i].umin) / spacing) + 2;
-        items[m].h = (int)ceilf((charts[i].vmax - charts[i].vmin) / spacing) + 2;
+        items[m].w = (int)ceilf((charts[i].umax - charts[i].umin) / (spacing / charts[i].weight)) + 2;
+        items[m].h = (int)ceilf((charts[i].vmax - charts[i].vmin) / (spacing / charts[i].weight)) + 2;
         ++m;
     }
     qsort(items, (size_t)m, sizeof items[0], cmp_pack);
@@ -195,7 +196,7 @@ static void tri_texel_coords(const Baker *b, int ti, float out[3][2])
         return;
     }
     const Chart *c = &b->charts[b->tri_chart[ti]];
-    const float tex_per_unit = (float)b->T / b->spacing;
+    const float tex_per_unit = (float)b->T * c->weight / b->spacing;
     for (int i = 0; i < 3; ++i) {
         out[i][0] = (float)(c->ox * b->T) + (comp(v3(t->p[i][0], t->p[i][1], t->p[i][2]), c->ua) - c->umin) * tex_per_unit + (float)b->T;
         out[i][1] = (float)(c->oy * b->T) + (comp(v3(t->p[i][0], t->p[i][1], t->p[i][2]), c->va) - c->vmin) * tex_per_unit + (float)b->T;
@@ -209,7 +210,7 @@ static void rasterize(Baker *b)
         const BkTri *t = &b->scene->tris[ti];
         float v[3][2];
         tri_texel_coords(b, ti, v);
-        const Chart *c = b->opt->uv == BK_UV_AUTO ? &b->charts[b->tri_chart[ti]] : NULL;
+        const Chart *c = b->opt->uv != BK_UV_EXISTING ? &b->charts[b->tri_chart[ti]] : NULL;
         float minx = fminf(v[0][0], fminf(v[1][0], v[2][0])), maxx = fmaxf(v[0][0], fmaxf(v[1][0], v[2][0]));
         float miny = fminf(v[0][1], fminf(v[1][1], v[2][1])), maxy = fmaxf(v[0][1], fmaxf(v[1][1], v[2][1]));
         int x0 = (int)floorf(minx), x1 = (int)ceilf(maxx), y0 = (int)floorf(miny), y1 = (int)ceilf(maxy);
@@ -288,6 +289,54 @@ static bool shade_texel(const Baker *b, int tx, int ty, V3 *pos, uint8_t rgba[4]
     for (int i = 0; i < 3; ++i) rgba[i] = (uint8_t)fminf(fmaxf(c[i] * 255.0f + 0.5f, 0.0f), 255.0f);
     rgba[3] = 255;
     return true;
+}
+
+// Временный source preview: только authoring, исходные треугольники не
+// поступают в runtime. Правая сторона GUI всегда обычный $.re2dSprite.
+static bool write_source_previews(const BkScene *scene, const char *dir, SdkReport *rep)
+{
+    const int size = 512;
+    uint8_t *image = calloc((size_t)size * size, 4);
+    float *depth = malloc((size_t)size * size * sizeof(float));
+    if (!image || !depth || !SDL_CreateDirectory(dir)) { free(image); free(depth); return false; }
+    const int yaws[] = {0,45,90,135,180}, pitches[] = {-45,-20,0,20,45};
+    bool ok = true;
+    for (int yi=0; yi<5 && ok; yi++) for (int pi=0; pi<5 && ok; pi++) {
+        memset(image,0,(size_t)size*size*4);
+        for (int i=0;i<size*size;i++) depth[i]=-1e30f;
+        float yaw=yaws[yi]*0.01745329252f, pitch=pitches[pi]*0.01745329252f;
+        float cy=cosf(yaw),sy=sinf(yaw),cp=cosf(pitch),sp=sinf(pitch);
+        for (int ti=0;ti<scene->ntri;ti++) {
+            const BkTri *tri=&scene->tris[ti];
+            const BkMaterial *mat=&scene->mats[tri->material];
+            float xy[3][2],z[3];
+            for(int v=0;v<3;v++) {
+                float x=tri->p[v][0],y=tri->p[v][1],zz=-sy*x+cy*tri->p[v][2];
+                xy[v][0]=256+4*(cy*x+sy*tri->p[v][2]);
+                xy[v][1]=256+4*(cp*y-sp*zz); z[v]=sp*y+cp*zz;
+            }
+            int x0=(int)fmaxf(0,floorf(fminf(xy[0][0],fminf(xy[1][0],xy[2][0]))));
+            int x1=(int)fminf(size-1,ceilf(fmaxf(xy[0][0],fmaxf(xy[1][0],xy[2][0]))));
+            int y0=(int)fmaxf(0,floorf(fminf(xy[0][1],fminf(xy[1][1],xy[2][1]))));
+            int y1=(int)fminf(size-1,ceilf(fmaxf(xy[0][1],fmaxf(xy[1][1],xy[2][1]))));
+            for(int y=y0;y<=y1;y++)for(int x=x0;x<=x1;x++) {
+                float b[3];if(!bary2((const float(*)[2])xy,x+.5f,y+.5f,b)||b[0]<0||b[1]<0||b[2]<0)continue;
+                float d=b[0]*z[0]+b[1]*z[1]+b[2]*z[2];int at=y*size+x;if(d<depth[at])continue;
+                float c[4];memcpy(c,mat->base,sizeof c);
+                if(mat->tex>=0 && tri->has_uv) {
+                    float u=0,v=0,t[4];for(int j=0;j<3;j++){u+=b[j]*tri->uv[j][0];v+=b[j]*tri->uv[j][1];}
+                    sample_tex(&scene->texs[mat->tex],u,v,t);for(int j=0;j<4;j++)c[j]*=t[j];
+                }
+                if(mat->alpha!=BK_ALPHA_OPAQUE && c[3]<(mat->alpha==BK_ALPHA_MASK?mat->cutoff:.5f))continue;
+                depth[at]=d;for(int j=0;j<3;j++)image[at*4+j]=(uint8_t)fminf(255,fmaxf(0,c[j]*255+.5f));image[at*4+3]=255;
+            }
+        }
+        char path[1400];snprintf(path,sizeof path,"%s/source-%d-%d.png",dir,yaws[yi],pitches[pi]);
+        ok=sdk_image_write_png(path,image,size,size);
+    }
+    free(image);free(depth);
+    if(!ok)sdk_diag(rep,SDK_ERROR,"SDK_SOURCE_PREVIEW_WRITE",dir,NULL,NULL,"Не удалось записать source preview");
+    return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -382,9 +431,9 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
     int *tri_owner = NULL;
     V3 *normals = NULL;
     memset(&rig, 0, sizeof rig);
-    if (strcmp(opt->type, "prop") != 0 && !is_char) {
+    if (strcmp(opt->type, "prop") != 0 && strcmp(opt->type, "weapon") != 0 && strcmp(opt->type, "environment") != 0 && !is_char) {
         sdk_diag(rep, SDK_ERROR, "SDK_BAKE_TYPE_UNSUPPORTED", source, NULL, NULL,
-                 "Тип «%s» ещё не реализован: поддержаны prop и character (weapon/environment — планируются)", opt->type);
+                 "Неверный тип «%s»: доступны prop, character, weapon и environment", opt->type);
         return early_fail(res, opt, rep, NULL);
     }
     if (opt->size != 1024 && opt->size != 2048 && opt->size != 4096) {
@@ -585,6 +634,7 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
     } else {
         bk.tri_chart = (int *)malloc((size_t)scene.ntri * sizeof(int));
         for (int i = 0; i < 6; ++i) {
+            bk.charts[i].weight = 1;
             bk.charts[i].axis = i / 2;
             bk.charts[i].sign = (i % 2) ? -1 : 1;
             chart_axes(bk.charts[i].axis, &bk.charts[i].ua, &bk.charts[i].va);
@@ -616,7 +666,27 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
             // Площадь проекции для оценки шага.
             const float *p0 = tris[i].p[0], *p1 = tris[i].p[1], *p2 = tris[i].p[2];
             const float ax = p1[c->ua] - p0[c->ua], ay = p1[c->va] - p0[c->va], bx = p2[c->ua] - p0[c->ua], by = p2[c->va] - p0[c->va];
-            total_area += fabsf(ax * by - ay * bx) * 0.5f;
+            const float area = fabsf(ax * by - ay * bx) * .5f;
+            float importance = 1;
+            if (is_char && !strcmp(rig.name[tri_owner[i]], "head")) importance = 2;
+            const char *material = scene.mats[tris[i].material].name;
+            if (strstr(material,"eye") || strstr(material,"face")) importance = 3;
+            c->area += area; c->weighted_area += area * importance;
+            total_area += area;
+        }
+        if (opt->uv == BK_UV_OPTIMIZED) {
+            for (int i=0;i<6;i++) {
+                Chart *c=&bk.charts[i];if(!c->used)continue;
+                float box=(c->umax-c->umin)*(c->vmax-c->vmin);
+                float fill=box>0?fminf(1,c->area/box):1;
+                float importance=c->area>0?c->weighted_area/c->area:1;
+                // Фронтальная/задняя проекции чаще показывают лицо и силуэт;
+                // пустота в chart не должна получать тот же бюджет, что поверхность.
+                float projection=c->axis==2?1.4f:1;
+                c->weight=sqrtf(fmaxf(.25f,fill*importance*projection));
+            }
+            sdk_diag(rep, SDK_INFO, "SDK_BAKE_OPTIMIZED_BUDGET", source, NULL, NULL,
+                     "Atlas budget учитывает площадь заполнения charts, части head/face/eyes и фронтальные проекции; это не идеальная развёртка");
         }
         // Плотность: самый маленький шаг, при котором все карты умещаются в 256×192 отсчётов.
         float lo_s = 1e-3f, hi_s = 200.0f;
@@ -753,7 +823,9 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
         r2d_sb_put_json_string(&js, base_png);
         r2d_sb_printf(&js, ",\"style\":\"%s\",\"rig\":{\"bones\":[{\"name\":\"object\",\"pivot\":[0,0,0]}],\"parts\":[", opt->style ? opt->style : "anime");
         for (int i = 0; i < bk.nparts; ++i) r2d_sb_printf(&js, "%s{\"id\":%d,\"bone\":\"object\"}", i ? "," : "", opt->first_id + i);
-        r2d_sb_puts(&js, "],\"joints\":[{\"name\":\"origin\",\"bone\":\"object\",\"point\":[0,0,0]}]},\"groups\":{");
+        r2d_sb_puts(&js, "],\"joints\":[{\"name\":\"origin\",\"bone\":\"object\",\"point\":[0,0,0]}]");
+        if (!strcmp(opt->type, "weapon")) r2d_sb_puts(&js, ",\"sockets\":[{\"name\":\"grip\",\"bone\":\"object\",\"point\":[0,0,0]}]");
+        r2d_sb_puts(&js, "},\"groups\":{");
         for (int i = 0; i < bk.nparts; ++i) {
             // Имена групп уникальны: повтор получает суффикс.
             char gname[96];
@@ -781,6 +853,10 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
         }
     }
 files_done:
+    if (opt->compare) {
+        snprintf(res->comparison_dir, sizeof res->comparison_dir, "%s/%s.source-preview", out_dir, name);
+        if (!write_source_previews(&scene, res->comparison_dir, rep)) goto done;
+    }
     ok = rep->errors == 0;
     res->ok = ok;
     if (is_char && ok) {
@@ -843,11 +919,16 @@ void bk_report_json(const BkResult *res, const BkOptions *opt, const BkScene *sc
     r2d_sb_printf(out, ",\"source\":{\"kind\":\"%s\",\"triangles\":%d,\"materials\":%d,\"textures\":%d,\"skins\":%d,\"animations\":%d},",
                   scene->source_kind, res->triangles, res->materials, res->textures, scene->skins, scene->animations);
     r2d_sb_printf(out, "\"parts\":%d,\"atlasUsage\":%.4f,\"samples\":%d,\"uvMode\":\"%s\",\"size\":%d,\"sampleSpacing\":%.4f,\"uvOverlapTexels\":%d,",
-                  res->parts, res->atlas_usage, res->samples_active, opt->uv == BK_UV_EXISTING ? "existing" : "auto", opt->size,
+                  res->parts, res->atlas_usage, res->samples_active, opt->uv == BK_UV_EXISTING ? "existing" : opt->uv == BK_UV_OPTIMIZED ? "optimized" : "auto", opt->size,
                   res->sample_spacing, res->uv_overlap_texels);
     r2d_sb_printf(out, "\"fit\":{\"scale\":%.6g,\"origin\":\"%s\",\"x\":[%.4f,%.4f],\"y\":[%.4f,%.4f],\"z\":[%.4f,%.4f],\"limits\":{\"x\":[%g,%g],\"y\":[%g,%g],\"z\":[%g,%g]}},",
                   res->scale, opt->origin == BK_ORIGIN_FEET ? "feet" : "center", res->min[0], res->max[0], res->min[1], res->max[1], res->min[2], res->max[2],
                   LIM_XMIN, LIM_XMAX, LIM_YMIN, LIM_YMAX, LIM_ZMIN, LIM_ZMAX);
+    r2d_sb_puts(out, "\"comparison\":");
+    if (res->comparison_dir[0]) {
+        r2d_sb_puts(out, "{\"sourceOnly\":true,\"size\":512,\"yaw\":[0,45,90,135,180],\"pitch\":[-45,-20,0,20,45],\"directory\":");
+        r2d_sb_put_json_string(out, res->comparison_dir); r2d_sb_puts(out, "},");
+    } else r2d_sb_puts(out, "null,");
     r2d_sb_puts(out, "\"files\":{\"png\":");
     if (res->png_path[0]) r2d_sb_put_json_string(out, res->png_path); else r2d_sb_puts(out, "null");
     r2d_sb_puts(out, ",\"character\":");
@@ -873,24 +954,27 @@ int sdk_cmd_bake_re2d(const SdkArgs *a)
     const char *source = sdk_arg_positional(a, 0);
     if (!source) {
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d-sdk bake-re2d <модель.glb|.gltf|.vrm|.obj> --type prop|character --output <каталог> "
-            "[--name имя] [--uv auto|existing] [--origin center|feet] [--size 1024|2048|4096] [--scale S] [--style anime|pixel] [--first-id N]");
+            "Использование: r2d-sdk bake-re2d <модель.glb|.gltf|.vrm|.obj> --type prop|character|weapon|environment --output <каталог> "
+            "[--name имя] [--uv auto|existing|optimized] [--compare] [--origin center|feet] [--size 1024|2048|4096] [--scale S] [--style anime|pixel] [--first-id N]");
         sdk_report_free(&rep);
         return rc;
     }
     BkOptions opt;
     bk_default_options(&opt);
     const char *v;
+    opt.compare = sdk_arg_flag(a, "--compare");
     if ((v = sdk_arg_value(a, "--expression"))) opt.expression = v;
     if ((v = sdk_arg_value(a, "--type"))) opt.type = v;
+    if (!strcmp(opt.type, "environment") && !sdk_arg_value(a, "--origin")) opt.origin = BK_ORIGIN_FEET;
     if ((v = sdk_arg_value(a, "--name"))) opt.name = v;
     if ((v = sdk_arg_value(a, "--style"))) opt.style = v;
     if ((v = sdk_arg_value(a, "--uv"))) {
         if (!strcmp(v, "existing")) opt.uv = BK_UV_EXISTING;
         else if (!strcmp(v, "auto")) opt.uv = BK_UV_AUTO;
+        else if (!strcmp(v, "optimized")) opt.uv = BK_UV_OPTIMIZED;
         else {
             const int rc = sdk_fail(&rep, "SDK_BAKE_UV_MODE_UNSUPPORTED",
-                "Режим UV «%s» не реализован: доступны auto и existing (Re2D Optimized — планируется)", v);
+                "Неверный режим UV «%s»: доступны auto, existing и optimized", v);
             sdk_report_free(&rep);
             return rc;
         }

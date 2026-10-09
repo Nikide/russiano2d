@@ -10,7 +10,7 @@
 #     SPIR-V и MSL ему не нужны, а SPIRV-Cross в WGSL не умеет, поэтому
 #     веб-сборка берёт рукописные shaders/wgsl/*.wgsl и не тянет glslang.
 #   * Подсистемы, которых в браузере нет или которые пока не портированы
-#     (RmlUi, ImGui, сеть на датаграммах, hot reload, libcurl), выключаются
+#     (RmlUi, сеть на датаграммах, hot reload, libcurl), выключаются
 #     штатными опциями движка — вместо них работают существующие заглушки.
 #   * HTML-оболочка и груз игры (--preload-file) описываются здесь, чтобы
 #     веб-сборка запускалась одной командой.
@@ -57,7 +57,6 @@ endif()
 # лежат в движке (src/rmlui_wgsl.c) и подключаются патчем к его бэкенду
 # (third_party/patches/rmlui-webgpu-wgsl.patch) — см. cmake/Dependencies.cmake.
 set(R2D_ENABLE_RMLUI        ON  CACHE BOOL "" FORCE)
-set(R2D_ENABLE_IMGUI        OFF CACHE BOOL "" FORCE)
 # Сеть движка — датаграммы (UDP); браузер их не даёт: нужен транспорт поверх
 # WebSocket/WebRTC. Пока net_stub.c.
 set(R2D_ENABLE_NET          OFF CACHE BOOL "" FORCE)

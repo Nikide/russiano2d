@@ -1,0 +1,17 @@
+<rml>
+<head>
+    <link type="text/rcss" href="menu.rcss"/>
+    <title>Меню</title>
+</head>
+<body>
+    <div id="menu">
+        <h1>RUSSIANO2D</h1>
+        <p id="subtitle">Демо-платформер на движке russiano2d</p>
+
+        <button id="btn-play">Играть</button>
+        <button id="btn-quit">Выход</button>
+
+        <p id="hint">Enter — играть, Esc — выход</p>
+    </div>
+</body>
+</rml>

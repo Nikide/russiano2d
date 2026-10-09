@@ -10,3 +10,7 @@ dist/
 *.dylib
 *.exe
 *.pdb
+
+site/
+.env*
+.claude/

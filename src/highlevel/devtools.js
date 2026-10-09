@@ -23,7 +23,7 @@ const MARKUP = `
 <rml>
 <head>
 <style>
-body { font-family: LatoLatin; font-size: 13px; color: #dbe4f0; }
+body { width: 100%; height: 100%; font-family: "Open Sans"; font-size: 13px; color: #dbe4f0; }
 #dt { position: absolute; left: 12px; top: 12px; width: 640px; height: 360px;
       background-color: rgba(9,13,20,0.94); border-width: 1px; border-color: #33415a; }
 #dt-title { display: block; padding: 6px 10px; color: #8fd8ff; }
@@ -169,6 +169,8 @@ export function installDevTools($) {
                 ctx.log('$.devtools: не удалось создать документ панели');
                 return false;
             }
+            engine.ui.setHtml(state.doc, 'dt-list', Array.from({length: ROWS}, (_, i) =>
+                `<div class="dt-row" id="dt-row-${i}"></div>`).join(''));
             // Строки и кнопка создаются один раз: обработчик в RmlUi живёт на
             // элементе, поэтому перерисовывать разметку нельзя — обновляем
             // текст и классы (иначе слушатели исчезли бы вместе с элементами).
@@ -197,7 +199,87 @@ export function installDevTools($) {
         return true;
     }
 
+    const runtime = { open: false, doc: -1, frames: 0, snapshot: null };
+    function refreshRuntime() {
+        if (!runtime.open) return;
+        if (++runtime.frames % REFRESH_FRAMES !== 1) return;
+        runtime.snapshot = {
+            stats: $.debug.stats(), profile: $.debug.profile(), limits: $.debug.limits(),
+            gravity: $.world.gravity(), reloads: $.script.count(), error: $.script.error(), textures: $.debug.textures(),
+            watches: $.debug.watches(),
+        };
+        const r = runtime.snapshot;
+        const lines = Object.entries(r.stats).filter(([k,v]) => typeof v !== 'object')
+            .map(([k,v]) => `${k}: ${v}`).join('  |  ');
+        engine.ui.setText(runtime.doc, 'rt-stats', lines);
+        engine.ui.setText(runtime.doc, 'rt-profile', r.profile ?
+            'Кадр: ' + r.profile.frame_ms.toFixed(2) + ' мс\n' + (r.profile.zones || []).map(z =>
+                z.name + ': ' + (z.valid ? z.ms.toFixed(3) + ' мс; пик ' + z.peak.toFixed(3) : 'нет данных')).join('\n') : 'Профиль недоступен');
+        engine.ui.setText(runtime.doc, 'rt-limits', Object.entries(r.limits).map(([k,v]) => k + ': ' + v).join(' | '));
+        engine.ui.setText(runtime.doc, 'rt-script', `Перезагрузок: ${r.reloads}. ${r.error}`);
+        engine.ui.setText(runtime.doc, 'rt-textures', r.textures.map(t => t.id + ': ' + t.name + ' (' + t.width + ' x ' + t.height + ')').join(' | '));
+        engine.ui.setText(runtime.doc, 'rt-watches', JSON.stringify(r.watches, null, 2));
+    }
+    function openRuntime() {
+        if (!engine.ui || typeof engine.ui.loadMarkup !== 'function') return false;
+        if (runtime.doc < 0) {
+            runtime.doc = engine.ui.loadMarkup('runtime-debug', `<rml><head><style>
+body { width: 100%; height: 100%; font-family: "Open Sans"; font-size: 13px; color: #dbe4f0; }
+#rt { position: absolute; left: 12px; top: 12px; width: 740px;
+height: 540px; background-color: #0c1522; padding: 12px; }
+.rt-section { display: block; margin-top: 10px; color: #8fd8ff; }
+.rt-data { display: block; white-space: pre-wrap; font-size: 11px; }
+#rt-profile, #rt-limits { max-height: 150px; overflow: hidden; }
+button { padding: 5px 10px; margin: 4px; background-color: #294458; }
+input { width: 85px; height: 24px; background-color: #203448; }
+</style></head><body><div id="rt">
+<div>Диагностика R2D / RmlUi (F1 — закрыть)</div><div id="rt-stats" class="rt-data"></div>
+<div class="rt-section">Профиль кадра CPU/GPU</div><div id="rt-profile" class="rt-data"></div>
+<button id="rt-reset">Сбросить профиль</button>
+<div class="rt-section">Физика: гравитация X / Y</div>
+<input id="rt-gx" type="text"/><input id="rt-gy" type="text"/>
+<button id="rt-gravity">Применить</button><div id="rt-error"></div>
+<div class="rt-section">Скрипты</div><div id="rt-script"></div>
+<button id="rt-reload">Перезапустить (F5)</button><button id="rt-nodes">Инспектор узлов</button>
+<div class="rt-section">Таблицы runtime / текстуры</div><div id="rt-limits" class="rt-data"></div>
+<div id="rt-textures" class="rt-data"></div>
+<div class="rt-section">Наблюдения</div><div id="rt-watches" class="rt-data"></div>
+</div></body></rml>`);
+            if (runtime.doc < 0) return false;
+            engine.ui.on(runtime.doc, 'rt-reset', 'click', () => $.debug.profileReset());
+            engine.ui.on(runtime.doc, 'rt-reload', 'click', () => $.script.request('RmlUi DevTools'));
+            engine.ui.on(runtime.doc, 'rt-nodes', 'click', () => { closeRuntime(); open(); });
+            engine.ui.on(runtime.doc, 'rt-gravity', 'click', () => {
+                const x = engine.ui.getValue(runtime.doc, 'rt-gx');
+                const y = engine.ui.getValue(runtime.doc, 'rt-gy');
+                if (!String(x).trim() || !String(y).trim() || !Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) {
+                    engine.ui.setText(runtime.doc, 'rt-error', 'Введите конечные числа X и Y.');
+                    return;
+                }
+                $.world.gravity(Number(x), Number(y));
+                engine.ui.setText(runtime.doc, 'rt-error', 'Гравитация применена к текущему миру.');
+            });
+        }
+        const g = $.world.gravity();
+        engine.ui.setValue(runtime.doc, 'rt-gx', String(g.x));
+        engine.ui.setValue(runtime.doc, 'rt-gy', String(g.y));
+        engine.ui.setProperty(runtime.doc, "rt", "width", Math.max(240, Math.min(900, engine.width - 48)) + "px");
+        engine.ui.setProperty(runtime.doc, "rt", "height", Math.max(300, engine.height - 48) + "px");
+        engine.ui.show(runtime.doc);
+        runtime.open = true; runtime.frames = 0; refreshRuntime();
+        return true;
+    }
+    function closeRuntime() {
+        if (runtime.doc >= 0) engine.ui.hide(runtime.doc);
+        runtime.open = false;
+        return true;
+    }
+
     const devtools = {
+        openRuntime,
+        closeRuntime,
+        refreshRuntime,
+        runtimePanel() { return { open: runtime.open, doc: runtime.doc, snapshot: runtime.snapshot }; },
         /** Открыть панель (в сборке без RmlUi честно вернёт false). */
         open,
         close,
@@ -244,6 +326,10 @@ export function installDevTools($) {
 export function tickDevTools(dt) {
     const d = ctx.devtools;
     if (!d) return;
-    if (ctx.input && ctx.input.pressed && ctx.input.pressed('f2')) d.toggle();
+    if (ctx.input && ctx.input.pressed) {
+        if (ctx.input.pressed('f2')) d.toggle();
+        if (ctx.input.pressed('f1') && ctx.debug) ctx.debug.toggle();
+    }
+    d.refreshRuntime();
     if (d.isOpen()) d.refresh();
 }

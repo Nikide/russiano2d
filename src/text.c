@@ -2,6 +2,7 @@
 // Очередь текста поверх сцены. См. src/text.h.
 // ===========================================================================
 #include "text.h"
+#include "font.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -58,25 +59,14 @@ bool r2d_text_measure(const char *text, float size, float *w, float *h)
 
     if (r2d_text_measure_ui(text, size, w, h)) return true;
 
-    // Оценка до первого кадра ImGui: средняя ширина глифа ~0.55 кегля.
-    // Для центрирования этого достаточно, а после первого кадра измерение
-    // станет точным.
+    // Резервная оценка, если семейство шрифта ещё не загружено.
     const size_t len = strlen(text);
     if (w) *w = (float)len * size * 0.55f;
     if (h) *h = size;
     return false;
 }
 
-#ifndef R2D_ENABLE_IMGUI
-// Без Dear ImGui точное измерение недоступно: r2d_text_measure() сам оценит
-// ширину по числу глифов. Заглушка нужна для линковки — настоящая реализация
-// живёт в debug_ui.cpp, который при R2D_ENABLE_IMGUI=OFF не собирается.
 bool r2d_text_measure_ui(const char *text, float size, float *w, float *h)
 {
-    (void)text;
-    (void)size;
-    (void)w;
-    (void)h;
-    return false;
+    return r2d_font_measure(text, size, NULL, w, h);
 }
-#endif

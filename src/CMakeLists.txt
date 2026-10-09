@@ -2,7 +2,7 @@
 # Исполняемый файл движка russiano2d.
 #
 # Ядро (C11): app / render / physics / script / main
-# Плюс два C++-слоя: отладочный оверлей (ImGui) и игровой GUI (RmlUi).
+# C++-адаптеры существующих библиотек, включая GUI RmlUi.
 # ---------------------------------------------------------------------------
 
 set(R2D_SOURCES
@@ -74,19 +74,6 @@ else()
     list(APPEND R2D_SOURCES net.h net_stub.c)
 endif()
 
-# --- Dear ImGui -------------------------------------------------------------
-if(R2D_ENABLE_IMGUI)
-    list(APPEND R2D_SOURCES
-        debug_ui.h
-        debug_ui.cpp
-        "${imgui_SOURCE_DIR}/imgui.cpp"
-        "${imgui_SOURCE_DIR}/imgui_draw.cpp"
-        "${imgui_SOURCE_DIR}/imgui_tables.cpp"
-        "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
-        "${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp"
-        "${imgui_SOURCE_DIR}/backends/imgui_impl_sdlgpu3.cpp")
-    list(APPEND R2D_DEFINES R2D_ENABLE_IMGUI=1)
-endif()
 
 # --- Компилятор живых шейдеров ($.gfx.defineShader) -------------------------
 # Выключенный компилятор больше не оставляет render.c без символов: вместо
@@ -369,11 +356,6 @@ if(R2D_ENABLE_NET)
     endif()
 endif()
 
-if(R2D_ENABLE_IMGUI)
-    target_include_directories(russiano2d PRIVATE
-        "${imgui_SOURCE_DIR}"
-        "${imgui_SOURCE_DIR}/backends")
-endif()
 
 if(R2D_ENABLE_RMLUI)
     target_include_directories(russiano2d PRIVATE "${R2D_RMLUI_BACKENDS_DIR}")

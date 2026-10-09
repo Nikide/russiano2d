@@ -37,6 +37,9 @@ export function installScript($) {
             return typeof engine.hotReload === 'function' ? !!engine.hotReload() : false;
         },
 
+        /** Последняя фактическая ошибка скрипта, пустая строка при отсутствии. */
+        error() { return typeof engine.scriptError === 'function' ? engine.scriptError() : ''; },
+
         /** Сколько раз рантайм перезапускался за процесс. */
         count() {
             return typeof engine.reloads === 'number' ? engine.reloads : 0;

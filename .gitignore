@@ -90,3 +90,25 @@ id_rsa*
 # Local Claude configuration
 .claude/
 sdk/state.local.json
+
+# Public site sources; generated pages, downloads and credentials stay local.
+!site/
+site/*
+!site/index.html
+!site/404.html
+!site/style.css
+!site/app.js
+!site/build-doc.py
+!site/build-site.sh
+!site/sync-index.py
+!site/sync-downloads.sh
+!site/deploy-fast.sh
+!site/robots.txt
+!site/img/
+!site/doc/
+site/doc/*
+!site/doc/index.html
+!site/doc/custom.css
+!site/doc/vendor/
+
+!site/list-removed-docs.py

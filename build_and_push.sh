@@ -8,7 +8,7 @@
 # ALLOW_PARTIAL=1 ./build_and_push.sh  # разрешить частичную локальную сборку
 # KEEP_DIST=0 ./build_and_push.sh      # без добавления новых бинарников
 # BUMP=0 / TAG=0 отключают bump / тег; без нового тега CI не запускается.
-# REMOTE=... переопределяет github; старые remote сохранены отдельно.
+# REMOTES="github origin gitverse" — независимая отправка на три хоста.
 # Версия берётся из CMakeLists.txt через tools/release.py.
 # ---------------------------------------------------------------------------
 set -euo pipefail
@@ -17,7 +17,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
 MESSAGE="${1:-Новые билды}"
-REMOTE="${REMOTE:-github}"
+REMOTES="${REMOTES:-github origin gitverse}"
 BRANCH="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 KEEP_DIST="${KEEP_DIST:-1}"
 ALLOW_PARTIAL="${ALLOW_PARTIAL:-0}"
@@ -41,73 +41,19 @@ fi
 # В ограниченных окружениях (песочница, свежий сервер) ~/.ssh/known_hosts
 # недоступен, и `git push` падает с «Host key verification failed».
 # Разрешаем принять ключ автоматически; на обычной машине это ничего не меняет.
-export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new}"
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new}"
 
 step() { printf '\n=== %s ===\n' "$1"; }
 
-# Пуш ссылок во все push-цели remote'а ОДНОВРЕМЕННО и сверка по каждому адресу.
-#   $1 — remote, остальные — полные ref'ы (refs/heads/… | refs/tags/…)
-# Адреса пушатся параллельно (hub.mos.ru и gitverse.ru — разные хосты, ждать
-# один другого незачем), а ветка и тег едут одним пушем — одно SSH-соединение
-# на хост вместо двух. Возвращает 0, только если ВСЕ ссылки получили ВСЕ адреса.
-push_refs() {
-    local remote="$1"; shift
-    local -a refs=("$@")
-    local url n=0 missing="" ref local_sha tip status
-    local tmp; tmp="$(mktemp -d "${TMPDIR:-/tmp}/r2d-push.XXXXXX")"
-    local -a pids=() urls=()
-
-    for url in $(git remote get-url --push --all "$remote"); do
-        n=$((n + 1)); urls+=("$url")
-        ( if git push "$url" "${refs[@]}" >"$tmp/push.$n" 2>&1; then
-            echo 0 >"$tmp/status.$n"
-          else
-            echo $? >"$tmp/status.$n"
-          fi ) &
-        pids+=("$!")
-    done
-    for pid in "${pids[@]}"; do wait "$pid" || true; done
-
-    n=0
-    for url in "${urls[@]}"; do
-        n=$((n + 1))
-        echo "  push → $url (код $(cat "$tmp/status.$n"))"
-        sed 's/^/    /' "$tmp/push.$n"
-    done
-
-    echo "  сверка ${refs[*]}:"
-    for url in "${urls[@]}"; do
-        # `|| true` обязателен: при set -euo pipefail недоступный хост уронил бы
-        # весь скрипт прямо в подстановке, не показав, кто именно не ответил.
-        git ls-remote "$url" "${refs[@]}" 2>/dev/null > "$tmp/ls" || true
-        for ref in "${refs[@]}"; do
-            local_sha="$(git rev-parse "$ref")"
-            tip="$(awk -v r="$ref" '$2==r{print $1}' "$tmp/ls")"
-            case "$tip" in
-                "$local_sha") echo "    OK   $url  $ref" ;;
-                "")           echo "    НЕТ  $url  $ref — ссылки нет"; missing="$missing $url" ;;
-                *)            echo "    ЖДЁТ $url  $ref — там ${tip:0:7}, у нас ${local_sha:0:7}"; missing="$missing $url" ;;
-            esac
-        done
-    done
-    rm -rf "$tmp"
-
-    if [ -n "$missing" ]; then
-        echo "  !! не доехало до:$missing"
-        return 1
-    fi
-    return 0
-}
-
 step "Автосборка $(date '+%Y-%m-%d %H:%M:%S')"
-echo "ветка: $BRANCH   remote: $REMOTE   сообщение: «${MESSAGE}»"
+echo "ветка: $BRANCH   remotes: $REMOTES   сообщение: «${MESSAGE}»"
 
 # Проверки до изменения версии и запуска сборок.
 if [ "$BRANCH" != "$(git branch --show-current)" ]; then
     echo "!! BRANCH должен совпадать с текущей веткой; переключите её сначала."
     exit 1
 fi
-git remote get-url --push "$REMOTE" >/dev/null
+for remote in $REMOTES; do git remote get-url --push "$remote" >/dev/null || echo "!! remote $remote недоступен — остальные продолжат"; done
 if [ "$BUMP" = "1" ] && [ "$TAG" = "1" ]; then
     candidate_tag="$(python3 - <<'PYTAG'
 import sys
@@ -121,16 +67,16 @@ PYTAG
         echo "!! Новый тег $candidate_tag уже существует; история не изменена."
         exit 1
     fi
-    while IFS= read -r publish_url; do
+    for remote in $REMOTES; do
+      while IFS= read -r publish_url; do
         remote_tag="$(git ls-remote --exit-code "$publish_url" "refs/tags/$candidate_tag")" && remote_status=0 || remote_status=$?
-        if [ "$remote_status" = "0" ]; then
-            echo "!! Тег $candidate_tag уже опубликован в $publish_url."
-            exit 1
-        elif [ "$remote_status" != "2" ]; then
-            echo "!! Не удалось проверить новый тег в $publish_url."
-            exit 1
+        if [ "$remote_status" = 0 ]; then
+            echo "!! Тег $candidate_tag уже опубликован в $publish_url."; exit 1
+        elif [ "$remote_status" != 2 ]; then
+            echo "!! $publish_url недоступен для проверки; попытка push будет независимой."
         fi
-    done < <(git remote get-url --push --all "$REMOTE")
+      done < <(git remote get-url --push --all "$remote" 2>/dev/null || true)
+    done
 fi
 
 # --- 0. Версия: +1 к патчу ДО сборки ---------------------------------------
@@ -155,7 +101,7 @@ fi
 
 # --- 1. Сборка -------------------------------------------------------------
 build_status=0
-python3 tools/autobuild.py --with-windows || build_status=$?
+python3 tools/autobuild.py --platforms "${PLATFORMS:-macos-arm64,macos-x86_64,linux-x86_64,linux-aarch64,windows-x86_64}" || build_status=$?
 
 if [ "$build_status" -ne 0 ]; then
     echo
@@ -187,7 +133,7 @@ step "Обновляю AGENTS.md и README.md из документации"
 if python3 tools/agents_doc.py --all; then
     echo "документы в dist/ пересобраны из docs/"
 else
-    echo "!! не удалось обновить документы — коммичу как есть"
+    echo "!! не удалось обновить документы — публикация отменена"; exit 1
 fi
 
 # --- 2б. Сайт: подготовка параллельно с git ----------------------------------
@@ -201,6 +147,18 @@ if [ "$SITE" = "1" ] && [ -x site/build-site.sh ]; then
     step "Сайт: подготовка в фоне"
     site/build-site.sh --prepare >"$SITE_PREP_LOG" 2>&1 &
     site_prep_pid=$!
+fi
+
+# Site sources are tracked: finish regeneration before git add/commit.
+if [ -n "$site_prep_pid" ]; then
+    if wait "$site_prep_pid"; then
+        cat "$SITE_PREP_LOG"
+        site_prep_pid=""
+    else
+        cat "$SITE_PREP_LOG"
+        echo "!! подготовка сайта не удалась — публикация отменена"
+        exit 1
+    fi
 fi
 
 # --- 3. Что собралось ------------------------------------------------------
@@ -255,11 +213,9 @@ elif [ "$TAG" != "1" ]; then
     echo "TAG=0 — тег не ставлю"
 fi
 
-step "Пуш в $REMOTE (${push_list[*]})"
-# По умолчанию только GitHub. Ветка и новый тег отправляются одним пушем.
-# Пуш ветки не запускает CI: workflow реагирует только на новый тег.
-push_refs "$REMOTE" "${push_list[@]}" || push_failed=1
-[ -n "$push_failed" ] || git update-ref "refs/remotes/$REMOTE/$BRANCH" HEAD 2>/dev/null || true
+step "Независимая публикация: $REMOTES"
+# Один и тот же URL отправляем лишь раз (origin также содержит GitVerse).
+python3 tools/publish_refs.py --remotes $REMOTES --refs "${push_list[@]}" || push_failed=1
 
 step "Готово $(date '+%Y-%m-%d %H:%M:%S')"
 git log --oneline -1
@@ -278,17 +234,14 @@ if [ "$SITE" != "1" ]; then
 elif [ ! -x site/build-site.sh ]; then
     step "Сайт"
     echo "site/build-site.sh не найден — сайт не публикую"
-elif [ -n "$push_failed" ]; then
-    step "Сайт"
-    echo "!! пуш доехал не до всех хостов — сайт не публикую."
-    echo "   Когда хосты догонят, обновите сайт вручную: site/build-site.sh"
+
 else
     step "Публикация сайта r2d.nikiniki.ru"
     site_ok=1
     if [ -n "$site_prep_pid" ]; then
         wait "$site_prep_pid" || site_ok=0
         cat "$SITE_PREP_LOG"
-    else
+    elif [ ! -s "$SITE_PREP_LOG" ]; then
         site/build-site.sh --prepare || site_ok=0
     fi
     if [ "$site_ok" = 1 ] && site/build-site.sh --upload; then

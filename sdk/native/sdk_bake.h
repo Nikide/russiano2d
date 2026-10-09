@@ -94,12 +94,13 @@ bool bk_load(const char *path, BkScene *scene, SdkReport *rep);
 void bk_free(BkScene *scene);
 
 // --- Параметры и результат bake ------------------------------------------------
-typedef enum BkUvMode { BK_UV_AUTO = 0, BK_UV_EXISTING } BkUvMode;
+typedef enum BkUvMode { BK_UV_AUTO = 0, BK_UV_EXISTING, BK_UV_OPTIMIZED } BkUvMode;
 typedef enum BkOrigin { BK_ORIGIN_CENTER = 0, BK_ORIGIN_FEET } BkOrigin;
 
 typedef struct BkOptions {
+    bool compare;          // authoring-only source projections, no runtime mesh
     const char *expression; // VRM expression baked into geometry/materials
-    const char *type;       // "prop" or "character"
+    const char *type;       // prop / character / weapon / environment
     const char *name;       // базовое имя ассета
     BkUvMode    uv;
     BkOrigin    origin;
@@ -120,6 +121,7 @@ typedef struct BkResult {
     int    samples_active;
     int    uv_overlap_texels;
     char   png_path[1024], json_path[1024], report_path[1024], anim_path[1024];
+    char   comparison_dir[1024];
     char  *report_json;             // машинно-читаемый отчёт (malloc), заполняется всегда
     char  *extra_json;              // character: владение, VRM, выражения (JSON-объект)
 } BkResult;

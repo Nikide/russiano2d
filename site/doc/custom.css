@@ -1,0 +1,271 @@
+/* Тёмная тема документации поверх vendor/vue.css — в тон лендингу. */
+
+:root {
+  --bg: #0b0e14;
+  --bg-alt: #0f131c;
+  --panel: #141926;
+  --line: #232b3d;
+  --fg: #e9edf6;
+  --muted: #97a2b8;
+  --accent: #ff5a3c;
+  --accent-2: #ffb03a;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+
+/* ── сайдбар ────────────────────────────────────────────────────────── */
+.sidebar {
+  background: var(--bg-alt);
+  color: var(--muted);
+  border-right: 1px solid var(--line);
+  padding: 24px 0;
+  width: 300px;
+}
+.sidebar .app-name { color: var(--fg); }
+.sidebar .app-name-link { display: block; padding: 0 24px 8px; font-weight: 700; }
+.sidebar .app-name-link::before { content: "⬤ "; color: var(--accent); font-size: 10px; }
+.sidebar ul { margin: 0; padding: 0; list-style: none; }
+.sidebar li { margin: 0; }
+.sidebar > nav > ul > li > p,
+.sidebar > nav > ul > li > strong { margin: 0; }
+.sidebar ul li a {
+  display: block;
+  padding: 5px 24px;
+  color: var(--muted);
+  border-left: 2px solid transparent;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar ul li a:hover { color: var(--fg); background: #ffffff06; }
+.sidebar ul li.active > a {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: #ff5a3c12;
+  font-weight: 600;
+}
+.sidebar ul ul li a { padding-left: 38px; font-size: 13.5px; }
+.sidebar ul ul ul li a { padding-left: 52px; }
+
+/* группы сайдбара */
+.sidebar li > p, .sidebar li > strong {
+  padding: 16px 24px 6px;
+  color: var(--fg);
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.sidebar li > p a, .sidebar li > strong a { color: var(--fg) !important; padding: 0; }
+.sidebar li > p::before { content: none; }
+
+/* ── контент ────────────────────────────────────────────────────────── */
+.content {
+  background: var(--bg);
+  padding-top: 0;
+}
+.markdown-section { max-width: 900px; padding: 30px 32px 80px; color: var(--fg); }
+
+.markdown-section h1, .markdown-section h2, .markdown-section h3, .markdown-section h4 {
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+.markdown-section h1 { font-size: 1.9rem; margin: 0.4em 0 0.6em; }
+.markdown-section h2 {
+  font-size: 1.45rem;
+  margin-top: 2.2em;
+  padding-top: 0.6em;
+  border-top: 1px solid var(--line);
+}
+.markdown-section h3 { font-size: 1.15rem; margin-top: 1.8em; }
+
+.markdown-section a { color: var(--accent); text-decoration: none; }
+.markdown-section a:hover { text-decoration: underline; }
+.markdown-section strong { color: #fff; }
+.markdown-section hr { border: 0; border-top: 1px solid var(--line); }
+
+.markdown-section code {
+  background: #ffffff10;
+  border: 1px solid #ffffff14;
+  border-radius: 6px;
+  color: #ffd479;
+  font-size: 0.86em;
+  padding: 1px 5px;
+}
+.markdown-section pre {
+  background: #0a0d13;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin: 1.2em 0;
+}
+.markdown-section pre > code {
+  background: none;
+  border: 0;
+  color: #d7deeb;
+  padding: 0;
+  font-size: 0.84em;
+  line-height: 1.62;
+}
+.markdown-section blockquote {
+  background: var(--bg-alt);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  color: var(--muted);
+  padding: 10px 18px;
+  margin: 1.2em 0;
+}
+.markdown-section blockquote p { margin: 0.3em 0; }
+
+.markdown-section table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.2em 0;
+  font-size: 0.94em;
+}
+.markdown-section th, .markdown-section td {
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+}
+.markdown-section th { background: var(--panel); color: var(--fg); }
+.markdown-section tr:nth-child(2n) { background: #ffffff05; }
+
+.markdown-section img { border-radius: 10px; border: 1px solid var(--line); }
+.markdown-section ul { padding-left: 1.3em; }
+
+/* ── поиск ──────────────────────────────────────────────────────────── */
+.sidebar .search { margin: 0 16px 14px; border-bottom: 1px solid var(--line); }
+.sidebar .search input {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--fg);
+  padding: 8px 12px;
+  width: 100%;
+  outline: none;
+}
+.sidebar .search input:focus { border-color: var(--accent); }
+.sidebar .search .results-panel { background: var(--bg); color: var(--muted); }
+.sidebar .search h2 { color: var(--fg); font-size: 15px; }
+.sidebar .search .matching-post { border-bottom: 1px solid var(--line); }
+.sidebar .search p { color: var(--muted); }
+.sidebar .search .search-keyword { color: var(--accent); }
+
+/* ── обложка ────────────────────────────────────────────────────────── */
+section.cover {
+  /* Docsify подставляет случайный градиент — перебиваем своим. */
+  background: var(--bg) !important;
+  background-image:
+    radial-gradient(46% 60% at 22% 28%, #ff5a3c33 0%, transparent 70%),
+    radial-gradient(42% 52% at 78% 12%, #ffb03a22 0%, transparent 72%) !important;
+}
+section.cover.has-mask .mask { background-color: var(--bg) !important; opacity: .35 !important; }
+section.cover .cover-main { max-width: 760px; }
+section.cover h1 {
+  color: var(--fg) !important;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+section.cover h1 .anchor span { color: var(--fg) !important; }
+section.cover blockquote { color: var(--muted) !important; font-size: 1.15rem; border: 0; }
+section.cover blockquote p { color: var(--muted); }
+section.cover p { color: var(--muted); }
+section.cover .cover-main > p:last-child a {
+  border: 1px solid var(--line) !important;
+  border-radius: 12px !important;
+  color: var(--fg) !important;
+  background: var(--panel);
+  padding: .7em 1.8rem !important;
+  font-size: 1rem !important;
+  letter-spacing: 0 !important;
+  transition: border-color .15s ease, transform .15s ease;
+}
+section.cover .cover-main > p:last-child a:hover {
+  border-color: #3a4560 !important;
+  color: var(--fg) !important;
+  transform: translateY(-1px);
+}
+section.cover .cover-main > p:last-child a:last-child {
+  background: linear-gradient(135deg, var(--accent), #ff8a3c) !important;
+  border-color: transparent !important;
+  color: #180b06 !important;
+  font-weight: 600;
+}
+section.cover .cover-main > p:last-child a:last-child:hover { color: #180b06 !important; }
+section.cover img { display: block; margin: 0 auto 18px; width: 96px; height: 96px; border-radius: 22px; }
+
+/* Меню документации (справа сверху): ссылки на сайт и репозитории. */
+.app-nav {
+  margin: 34px 40px 0 0;
+}
+.app-nav > ul > li > a, .app-nav p a {
+  color: var(--muted) !important;
+  font-size: 14px;
+  font-weight: 500;
+}
+.app-nav > ul > li > a:hover, .app-nav p a:hover { color: var(--fg) !important; }
+.app-nav > ul > li > a.active { border-bottom-color: var(--accent) !important; }
+@media (max-width: 768px) {
+  /* mergeNavbar: на телефоне меню уезжает в сайдбар */
+  .app-nav { margin: 0; }
+}
+
+/* ── прочее ─────────────────────────────────────────────────────────── */
+.sidebar-toggle { background: transparent; }
+.sidebar-toggle span { background: var(--fg); }
+.progress { background: linear-gradient(90deg, var(--accent), var(--accent-2)) !important; }
+.docsify-copy-code-button {
+  background: #ffffff0f !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 8px !important;
+  color: var(--muted) !important;
+  font-size: 12px !important;
+}
+.docsify-copy-code-button:hover { color: var(--fg) !important; }
+.docsify-pagination-container { border-top: 1px solid var(--line); }
+.pagination-item-title { color: var(--fg); }
+.pagination-item-label { color: var(--muted); }
+#docsify-darklight-theme { display: none; }
+
+/* ── обложка доков: по центру, с маскотом ───────────────────────────────
+   vue.css выравнивает обложку по левому краю — здесь она собирается в
+   колонку по центру, а вместо маленькой иконки стоит маскот из README
+   (docs/images/russiano2d-mascot.png, копируется в images/ при сборке доков). */
+section.cover .cover-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+section.cover .cover-mascot {
+  width: min(420px, 60vw);
+  height: auto;
+  margin: 0 auto 4px;
+  border: 0;
+  filter: drop-shadow(0 18px 42px rgba(0, 0, 0, .55));
+}
+
+section.cover h1 { margin: 10px 0 8px; }
+
+section.cover blockquote {
+  max-width: 62ch;
+  margin: 0 auto 20px;
+  text-align: center;
+}
+
+/* Кнопки — только последняя строка обложки: остальные абзацы должны
+   оставаться обычным текстом по центру. */
+section.cover .cover-main > p:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 4px;
+}

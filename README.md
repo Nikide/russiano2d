@@ -31,7 +31,7 @@ WebGPU, см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
   не нравится — пожалуйста, не пользуйтесь им. Целиком условия — в
   [LICENSE](LICENSE).
 * **Ядро — SDL3 и QuickJS-ng.** Графика через SDL_GPU (Vulkan / Metal / DirectX 12),
-  физика на Box2D v3, звук на SDL3_mixer, интерфейс и DevTools на RmlUi; старый отладочный оверлей Dear ImGui сохранён для совместимости.
+  физика на Box2D v3, звук на SDL3_mixer, интерфейс и DevTools на RmlUi.
   Та же игра собирается и **в браузере**: Emscripten + WebGPU, интерфейс RmlUi,
   одна команда — `python3 web/export.py` (см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
 * **Высокоуровневое API `$` в стиле jQuery.** Игра компилируется в один исполняемый
@@ -85,9 +85,9 @@ WebGPU, см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
 | Упорядочивание геометрии | **2D BSP-дерево** (своё, `src/bsp.c`) |
 | Свет и видимость | **trylock/visibility** (полигоны видимости, MIT; C-обёртка в `src/light.cpp`) |
 | Иконки | **Material Design Icons** — 2235 штук, встроены в бинарник |
-| DevTools / SDK | **RmlUi**; существующий F1-оверлей — Dear ImGui |
+| DevTools / SDK | **RmlUi**, включая F1-диагностику |
 | HTTP из игры | **libcurl** (или встроенный сокетный бэкенд для `http://`) |
-| Язык ядра | C11 (+ C++20 только для адаптеров ImGui и RmlUi) |
+| Язык ядра | C11 (+ C++20 только для адаптеров библиотек и RmlUi) |
 | Тесты | агентский режим движка + **qjs** для логики подсистем |
 
 ---
@@ -116,7 +116,7 @@ cmake --build build-release -j
 ```
 
 Первый прогон занимает несколько минут: собираются SDL3, SDL3_image, QuickJS-ng,
-Box2D, RmlUi, Dear ImGui, glslang и SPIRV-Cross. Дальше сборка инкрементальная
+Box2D, RmlUi, glslang и SPIRV-Cross. Дальше сборка инкрементальная
 (конфигурация ~3 минуты, сама сборка — около минуты).
 
 Если SDL3 уже установлен в системе (например, `brew install sdl3`), движок
@@ -149,7 +149,6 @@ python3 tools/autobuild.py --with-windows
 |---|---|---|
 | `R2D_ENABLE_AUDIO` | `ON` | звук и музыка (SDL3_mixer); `OFF` — заглушки без зависимости |
 | `R2D_ENABLE_RMLUI` | `ON` | HTML/CSS-подобный игровой интерфейс |
-| `R2D_ENABLE_IMGUI` | `ON` | существующий отладочный оверлей (F1); новый UI — RmlUi |
 | `R2D_ENABLE_HOTRELOAD` | `ON` | перезапуск при изменении `.js` / `.atlas.json` (F5) |
 | `R2D_EMBED_SCRIPTS` | `ON` в Release | упаковка скриптов игры в байткод QuickJS |
 | `R2D_ENABLE_HTTP` | `ON` | `$.http`; без libcurl остаётся сокетный бэкенд для `http://` |
@@ -163,14 +162,16 @@ python3 tools/autobuild.py --with-windows
 * [dist/ на hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/dist)
 * [dist/ на GitVerse](https://gitverse.ru/Nikide/russiano2d/content/main/dist)
 
-Внутри — пакеты под macOS (arm64), Linux (aarch64) и Windows (x86_64):
+Внутри — пакеты под macOS (arm64/x86_64), Linux (x86_64/aarch64) и Windows (x86_64):
 архивы `russiano2d-<платформа>.tar.gz` / `.zip`, распакованные каталоги и
 `SHA256SUMS.txt` для проверки. Собирает и кладёт их туда локальный
 `build_and_push.sh`; он же поднимает версию и ставит тег `vX.Y.Z`.
 
-Старый CI на GitVerse перенесён в [архив](docs/ci-archive/README.md);
-активный [GitHub workflow](.github/workflows/build.yml) запускается на version tags
-и проверяет Linux build, native/JS/SDK и агентские сценарии.
+[GitHub workflow](.github/workflows/build.yml) по тегу собирает и проверяет
+macOS arm64/x86_64, Linux x86_64/aarch64 и Windows x86_64, затем публикует
+пять SDK-пакетов и checksums в [Releases](https://github.com/Nikide/russiano2d/releases).
+`build_and_push.sh` независимо отправляет ветку/тег в GitHub, hub.mos.ru и GitVerse
+и пересобирает сайт из актуальной документации.
 
 Собрать руками:
 
@@ -300,7 +301,7 @@ $.update(dt => {
 * **расширение** — `$.fn.myMethod = function () { … }` добавляет метод всем узлам.
 
 Полный справочник — **[docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md)**,
-разбор подсистем — в **[docs/GAP_ANALYSIS.md](docs/GAP_ANALYSIS.md)** и
+разбор подсистем — в **[docs/TASKS.md](docs/TASKS.md)** и
 **[docs/highlevel/](docs/highlevel/)**.
 Сколько стоит кадр `$` и что в нём узкое место —
 **[docs/HIGH_LEVEL_API_PERF.md](docs/HIGH_LEVEL_API_PERF.md)** (замеры,
@@ -521,7 +522,6 @@ src/
   profile.c/.h              профилировка кадра
   text.c/.h                 очередь текста поверх сцены
   gui.cpp/.h                игровой GUI на RmlUi (gui_stub.c — сборка без UI)
-  debug_ui.cpp/.h           отладочный оверлей на Dear ImGui
   highlevel/*.js            высокоуровневое API $ (встраивается в бинарник)
 game/                       игровой код на JavaScript (ES-модули)
 demos/                      три демо, набор UI-контролов и меню-лаунчер
@@ -551,14 +551,14 @@ docs/
   internal/NATIVE.md                    нативное ядро engine.* (внутреннее, для модулей $)
   AGENT_API.md              протокол агента
   ARCHITECTURE.md           замысел движка и философия API $
-  GAP_ANALYSIS.md           аудит API и пробелы относительно Godot 4.x
+  TASKS.md           аудит API и пробелы относительно Godot 4.x
   HIGH_LEVEL_API_PERF.md    производительность $: замеры, причины, план правок
   TUTORIAL.md               туториал по демо «Типичная ночь в Мытищинском лесу»
   tutorial-first-game.md    «Моя первая игра»: от hello world до сборки
   tutorial-platformer.md    разбор платформера
   tutorial-menus.md         меню, сцены и переходы
   demos.md                  разбор всех демо
-  VFX_PLAN.md               план по VFX: взрывы, ударные волны, render target
+  highlevel/fx.md               план по VFX: взрывы, ударные волны, render target
   BUILD.md                  сборка игры в один файл
   RELEASING.md              выпуск релиза
   highlevel/                справочники подсистем по отдельности
@@ -670,7 +670,7 @@ XY. Результат синтеза — обычный 2D-кадр в суще
 развёртки и владения частями, а не универсальный импортёр 3D-анимации.
 
 Состояние и команды — [SDK](docs/SDK.md), [Re2DSprite](docs/RE2DSPRITE_GUIDE.md),
-[Re2D World](docs/RE2D_WORLD_AUDIT.md). `dist/` содержит опубликованные снимки
+[Re2D World](docs/RE2D_WORLD_GUIDE.md). `dist/` содержит опубликованные снимки
 версии 0.1.22: новый SDK в них ещё не упакован. Не смешивайте возможности текущих
 исходников с возможностями старого скачанного бинарника.
 
@@ -678,18 +678,18 @@ XY. Результат синтеза — обычный 2D-кадр в суще
 
 * [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) — конституция проекта
 * [docs/SDK.md](docs/SDK.md) — текущие инструменты и команды SDK
-* [docs/REPOSITORY_REVIEW.md](docs/REPOSITORY_REVIEW.md) — контрольная сверка документации, архитектуры и поставки
+* [docs/TASKS.md](docs/TASKS.md) — контрольная сверка документации, архитектуры и поставки
 
 * [docs/tutorial-first-game.md](docs/tutorial-first-game.md) — **«Моя первая игра»**: платформер с маскотом за 15 минут
 * [docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md) — всё, что умеет `$`
 * [docs/AGENT_API.md](docs/AGENT_API.md) — как управлять движком программой
 * [docs/internal/NATIVE.md](docs/internal/NATIVE.md) — нативное ядро `engine.*` (внутреннее: игре виден только `$`)
 * [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — замысел движка и философия API `$`
-* [docs/GAP_ANALYSIS.md](docs/GAP_ANALYSIS.md) — аудит API и пробелы относительно Godot 4.x (2D)
+* [docs/TASKS.md](docs/TASKS.md) — аудит API и пробелы относительно Godot 4.x (2D)
 * [docs/API_PERFORMANCE.md](docs/API_PERFORMANCE.md) — периодический benchmark компонентов `$`, таблица и конфигурация машины
 * [docs/HIGH_LEVEL_API_PERF.md](docs/HIGH_LEVEL_API_PERF.md) — сколько стоит кадр `$`: замеры
   (`tools/bench_highlevel.py`), что влияет на производительность и как это исправить
-* [docs/VFX_PLAN.md](docs/VFX_PLAN.md) — план по VFX: взрывы, ударные волны, render target,
+* [docs/highlevel/fx.md](docs/highlevel/fx.md) — план по VFX: взрывы, ударные волны, render target,
   рантайм-шейдеры, чёрная дыра
 * [docs/highlevel/fx.md](docs/highlevel/fx.md) — `$.fx`: ленты, молнии, ударные волны,
   поля сил, hit-stop
@@ -725,7 +725,8 @@ XY. Результат синтеза — обычный 2D-кадр в суще
 Готовые пакеты лежат в [`dist/`](dist/); это снимки конкретной версии.
 
 `build_and_push.sh` поднимает версию, собирает платформы, коммитит и пушит ветку
-и новый tag `vX.Y.Z` в `github` по умолчанию. `REMOTE=...` меняет цель явно.
+и новый tag `vX.Y.Z` независимо в GitHub, hub.mos.ru и GitVerse.
+`REMOTES=...` меняет список целей; отказ одного хоста не блокирует остальные и сайт.
 CI запускается на version tags. Не использовать `--mirror` для публикации.
 Подробности — [docs/RELEASING.md](docs/RELEASING.md).
 
@@ -748,13 +749,13 @@ CI запускается на version tags. Не использовать `--mi
 пользуйтесь им. Если выпустишь на нём игру — скажи спасибо автору, можно не вслух.
 
 Полный текст — в [LICENSE](LICENSE). Сторонние компоненты (SDL3, QuickJS-ng, Box2D,
-RmlUi, Dear ImGui, glslang, SPIRV-Cross, шрифты, иконки) остаются под своими
+RmlUi, glslang, SPIRV-Cross, шрифты, иконки) остаются под своими
 лицензиями — см. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Лицензии сторонних компонентов
 
 SDL3 (zlib), SDL3_image (zlib), SDL3_mixer (zlib), QuickJS-ng (MIT), Box2D (MIT),
-RmlUi (MIT), Dear ImGui (MIT), trylock/visibility (MIT), glslang / SPIRV-Cross
+RmlUi (MIT), trylock/visibility (MIT), glslang / SPIRV-Cross
 (Apache-2.0 / MIT), Material Design Icons (Apache-2.0).
 Шрифты Noto Sans и LatoLatin распространяются по лицензии SIL OFL —
 см. `assets/fonts/LICENSE-NotoSans.txt` и `assets/fonts/LICENSE-Lato.txt`.

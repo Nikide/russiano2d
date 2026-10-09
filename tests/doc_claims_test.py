@@ -60,10 +60,10 @@ CLAIMS = [
      "docs/HIGH_LEVEL_API_PERF.md", r"viewport.*\(заглушка\)"),
     ("render target в GAP",
      "src/render.c", r"r2d_render_viewport_target",
-     "docs/GAP_ANALYSIS.md", r"render target.*остаётся заглушкой|Render target.*заглушкой"),
+     "docs/TASKS.md", r"render target.*остаётся заглушкой|Render target.*заглушкой"),
     ("render target в VFX",
      "src/render.c", r"r2d_render_viewport_target",
-     "docs/VFX_PLAN.md", r"render target не поддержан"),
+     "docs/highlevel/fx.md", r"render target не поддержан"),
     ("режим треугольника",
      "src/highlevel/render.js", r"triangle\(x1, y1, x2, y2, x3, y3, color, blend\)",
      "docs/highlevel/render.md", r"отдаёт треугольники без режима"),
@@ -72,10 +72,10 @@ CLAIMS = [
      "docs/HIGH_LEVEL_API_PERF.md", r"KEY_NAMES.*никем не заполняется"),
     ("мультиплеер",
      "src/highlevel/net.js", r"createAuthority",
-     "docs/GAP_ANALYSIS.md", r"сетевая игра.*не мультиплеер"),
+     "docs/TASKS.md", r"сетевая игра.*не мультиплеер"),
     ("фигурный свип",
      "src/script.c", r"castShape",
-     "docs/GAP_ANALYSIS.md", r"нет фигурного свипа"),
+     "docs/TASKS.md", r"нет фигурного свипа"),
     # --- добавлено после аудита §12.16: эти враки страж не ловил ---
     ("слои коллизий в PERF",
      "src/highlevel/world.js", r"layerBits",
@@ -100,7 +100,7 @@ CLAIMS = [
      "docs/highlevel/world.md", r"форм[^\n]*не сделаны|недостижимо"),
     ("viewport не заглушка",
      "src/render.c", r"r2d_render_viewport_target",
-     "docs/VFX_PLAN.md", r"viewport\.js[^\n]*перестаёт быть\s+заглушкой"),
+     "docs/highlevel/fx.md", r"viewport\.js[^\n]*перестаёт быть\s+заглушкой"),
 ]
 
 NO_CALLS = [

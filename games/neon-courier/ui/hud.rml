@@ -1,0 +1,4 @@
+<rml><head><title>Курьер</title><link type="text/rcss" href="game.rcss"/></head><body>
+<div id="header"><div id="brand">NEON / COURIER</div><div id="stats"><span id="score">0 / 6</span><span id="health">ЩИТ 3 / 3</span><span id="time">75 сек</span><button id="pause">Пауза</button></div></div>
+<div id="footer"><div id="status"></div><div id="keys">WASD / стрелки — движение · Escape — пауза · R — новый рейс</div></div>
+</body></rml>

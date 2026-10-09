@@ -1,4 +1,4 @@
-# Russiano2D 0.1.26 — Linux aarch64: инструкция для ИИ-агента
+# Russiano2D 0.1.27 — Linux aarch64: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"0.1.26","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"0.1.27","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -144,12 +144,12 @@ call(cmd="quit")
 * Архитектура и философия API `$` — `docs/ARCHITECTURE.md`
 * Russiano2D — высокоуровневое API `$` — `docs/HIGH_LEVEL_API.md`
 * russiano2d — агентский интерфейс (низкий уровень) — `docs/AGENT_API.md`
-* Сборка игры в один файл — `docs/BUILD.md`
+* Сборка и распространение игры — `docs/BUILD.md`
 * Моя первая игра: платформер с маскотом — `docs/tutorial-first-game.md`
 * Туториал: первая игра на `$` — `docs/tutorial-platformer.md`
 * Туториал: меню, пауза и смена сцен — `docs/tutorial-menus.md`
 * Russiano2D — демо-проект — `docs/demos.md`
-* R2D: покрытие 2D API и реальные границы — `docs/GAP_ANALYSIS.md`
+* Текущие задачи и ограничения R2D — `docs/TASKS.md`
 * Производительность и полнота высокоуровневого API `$` — `docs/HIGH_LEVEL_API_PERF.md`
 * Производительность компонентов `$` API — `docs/API_PERFORMANCE.md`
 * R2D DevTools — `docs/DEVTOOLS.md`
@@ -160,18 +160,15 @@ call(cmd="quit")
 * Re2DSprite: развёртка и математика всех частей тела — `docs/RE2DSPRITE_MATH.md`
 * Re2DSprite v1 — развёртка всего персонажа, прототип головы — `docs/RE2DSPRITE_V1.md`
 * Re2DSprite v2 — большой PNG персонажа — `docs/RE2DSPRITE_V2.md`
-* RE2D World: аудит и проверенный вертикальный срез — `docs/RE2D_WORLD_AUDIT.md`
+* RE2D World: устройство, проверки и ограничения — `docs/RE2D_WORLD_GUIDE.md`
 * RE2D World: native CPU optimisation — `docs/RE2D_WORLD_PERF.md`
 * Детерминированная запись и воспроизведение (record / replay) — `docs/RECORD_REPLAY.md`
-* Выпуск и проверка поставки — `docs/RELEASING.md`
-* Контрольная сверка репозитория — `docs/REPOSITORY_REVIEW.md`
+* Сборка и публикация — `docs/RELEASING.md`
 * Roadmap расширения R2D — `docs/ROADMAP.md`
 * Russiano2D SDK — `docs/SDK.md`
-* SDK: проверка после передачи от Claude — `docs/SDK_VERIFICATION.md`
-* Текущие задачи и ограничения R2D — `docs/TASKS.md`
+* SDK: проверенное состояние и ограничения — `docs/SDK_VERIFICATION.md`
 * Тестирование мира в R2D — `docs/TESTING.md`
 * Как сделать такое же демо на `$` — `docs/TUTORIAL.md`
-* Russiano2D — план VFX для 2D — `docs/VFX_PLAN.md`
 * Веб-экспорт: движок в браузере (Emscripten + WebGPU) — `docs/WEB_EXPORT.md`
 * Контракт модуля подсистемы `$` — `docs/highlevel/_CONTRACT.md`
 * Акустика помещений — `$.audio.room` — `docs/highlevel/acoustics.md`
@@ -458,7 +455,7 @@ $.ready(() => {
 владельца проекта, а не побочный эффект правки кода.
 
 Детали и история: [ARCHITECTURE.md](ARCHITECTURE.md) (философия API `$`),
-[GAP_ANALYSIS.md](GAP_ANALYSIS.md) (сверка с Godot 4.x),
+[TASKS.md](TASKS.md) (сверка с Godot 4.x),
 [TASKS.md](TASKS.md) (что осталось). Законы, вытекающие отсюда:
 [UI_RMLUI_LAW.md](UI_RMLUI_LAW.md) и
 [AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md).
@@ -627,18 +624,16 @@ RE2D World продолжает этот принцип: XY BSP + vertical spans
 
 ---
 
-## 4. Текущее состояние (2026-10-08)
+## 4. Текущее состояние (2026-10-09)
 
 | Путь | Где | Статус |
 |---|---|---|
 | RmlUi-документы | [gui.cpp](../src/gui.cpp), [ui.js](../src/highlevel/ui.js), [devtools.js](../src/highlevel/devtools.js), `sdk/ui/`, `demos/ui/launcher.rml` | целевой путь; новый SDK и DevTools используют его |
 | Legacy HUD/widgets | [ui.js](../src/highlevel/ui.js), [widgets.js](../src/highlevel/widgets.js), [screen.js](../src/highlevel/screen.js) | совместимость; новые меню/экраны на них не строятся |
-| Legacy F1-оверлей ImGui | [debug_ui.cpp](../src/debug_ui.cpp), [main.c](../src/main.c) | сохранён; скрыт по умолчанию; не расширяется |
+| F1 / `--overlay` / `$.debug.on()` | [devtools.js](../src/highlevel/devtools.js) | RmlUi: статистика, профиль, гравитация, скрипты, текстуры и наблюдения |
 
-ImGui включается F1 / `--overlay` / `$.debug.on()`; выключается сборкой
-`-DR2D_ENABLE_IMGUI=OFF`. Скрытый оверлей не начинает кадр ImGui.
-RmlUi рисуется после сцены и ImGui. `r2d_debug_ui_wants_mouse/keyboard`
-объявлены, но не вызываются из main; оверлей не отбирает ввод у игры.
+ImGui удалён из зависимостей, сборки, обработки событий и runtime.
+F5 запрашивает общий reload независимо от GUI. F2 открывает инспектор узлов.
 
 Текст сцены использует native TTF/stb_truetype и существующий 2D sprite batch
 ([text.c](../src/text.c)), а не ImGui. Launcher уже на RmlUi; прежнее
@@ -661,9 +656,7 @@ RmlUi рисуется после сцены и ImGui. `r2d_debug_ui_wants_mouse
 4. **DevTools — на RmlUi.** Панели инспектора делаются RmlUi-документами;
    нативная отрисовка допускается только как содержимое внутри custom-элемента
    ([DEVTOOLS.md](DEVTOOLS.md)).
-5. **ImGui-оверлей — существующий инструмент, а не образец.** Он не
-   расширяется новыми окнами; новые панели делаются на RmlUi. Возможность
-   собрать движок без ImGui (`R2D_ENABLE_IMGUI=OFF`) сохраняется.
+5. **ImGui удалён.** Отладочные панели используют тот же RmlUi, что SDK и игры.
 
 ---
 
@@ -685,8 +678,8 @@ RmlUi рисуется после сцены и ImGui. `r2d_debug_ui_wants_mouse
 ## 7. Как проверить, что закон соблюдён
 
 ```bash
-# любые окна ImGui, кроме существующего оверлея
-grep -rn "ImGui::Begin" src/
+# ImGui не должен присутствовать в коде
+rg "ImGui::|imgui.h" src/
 
 # новые меню/экраны на узлах <ui.*>
 grep -rn "ui\.panel\|ui\.button" src/highlevel/*.js demos/*.js
@@ -2432,7 +2425,7 @@ $.update(() => {
 ## 30. Подсистемы после аудита API
 
 Эти подсистемы добавлены по итогам сверки с Godot 4.x (2D) — разбор пробелов
-и приоритетов в [GAP_ANALYSIS.md](GAP_ANALYSIS.md). Каждая живёт в своём файле
+и приоритетов в [TASKS.md](TASKS.md). Каждая живёт в своём файле
 `src/highlevel/<имя>.js`, ставится из `api.js` и обновляется в кадре своей
 `tick`-функцией.
 
@@ -2901,7 +2894,7 @@ Re2DSprite JSON, пользовательские модели/анимации 
 синтез конечного обычного 2D sprite. Несколько этажей на одинаковых XY,
 перспективная/ортографическая проекция и приватная композиция Re2DSprite.
 [Контракт и ограничения](highlevel/re2d.md#8-re2d-world--новый-минимальный-bspspan-срез),
-[аудит и проверки](RE2D_WORLD_AUDIT.md).
+[аудит и проверки](RE2D_WORLD_GUIDE.md).
 Демо с комнатами, лестницей и АК: `--game demos/re2d_bsp_world`.
 
 
@@ -3323,15 +3316,16 @@ R2D_TEST_AUDIO=real python3 tests/agent/sound_test.py
 
 ---
 
-## Сборка игры в один файл
+## Сборка и распространение игры
 
 <sub>источник: `docs/BUILD.md`</sub>
 
-# Сборка игры в один файл
+# Сборка и распространение игры
 
 Движок умеет собирать проект в **самостоятельный исполняемый файл**: папка с
 `main.js` и ассетами больше не нужна рядом с игрой. Сборка встроена в сам
-движок — отдельного инструмента нет.
+движок; SDK использует тот же builder. Если движок использует динамические
+библиотеки, builder копирует соседний `lib/`: распространяйте его вместе с игрой.
 
 ```bash
 # Движок лежит там же, где собирался
@@ -3366,7 +3360,7 @@ R2D_TEST_AUDIO=real python3 tests/agent/sound_test.py
 | Слой | Как | Где искать источник |
 |---|---|---|
 | Скрипты | компилируются в байткод QuickJS по графу `import` от точки входа | `--entry`, по умолчанию `main.js` |
-| Ассеты | каталоги `assets/` и каталог точки входа (`game/`) | `--add <путь>` добавляет ещё |
+| Ассеты | каталоги `assets/` и каталог точки входа (`game/` либо корень проекта для `main.js`) | `--add <путь>` добавляет ещё |
 | — | расшифровываются в память при старте | читаются через виртуальную файловую систему |
 
 Известное ограничение: файлы, скрипты которые незаметны для движка (данные
@@ -3616,6 +3610,13 @@ python3 web/export.py --game demos --out dist/web-demos
 причины — [WEB_EXPORT.md](WEB_EXPORT.md).
 
 Готовый пример такой сборки — `site/play/` (демо-меню на сайте).
+
+### Библиотеки пакетного runtime
+
+Если движок содержит соседний `lib/` с dylib/so, builder копирует библиотеки
+рядом с output. Игра распространяется каталогом: executable + `lib/`.
+Конфликтующий файл библиотеки отклоняется — выберите пустой каталог вывода.
+Пакетный SDK проверяется распаковкой настоящего архива, не только запуском из checkout.
 
 
 ---
@@ -5044,55 +5045,77 @@ Re2DSprite v2: [большой PNG, мимика, костюмы и псевдо
 
 ---
 
-## R2D: покрытие 2D API и реальные границы
+## Текущие задачи и ограничения R2D
 
-<sub>источник: `docs/GAP_ANALYSIS.md`</sub>
+<sub>источник: `docs/TASKS.md`</sub>
 
-# R2D: покрытие 2D API и реальные границы
+# Текущие задачи и ограничения R2D
 
-Сверка: 2026-10-08. Старые таблицы 2026-10-05 с колонкой «нет» для уже
-реализованных модулей удалены. Проектные наброски и история итераций остаются
-в Git; текущий справочник — [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md).
-Это сопоставление областей 2D-движка, а не обещание совместимости с Godot.
+Сверка: 2026-10-09, исходники после завершения SDK. Старый аудит 2026-10-07
+с закрытыми дефектами и проектными набросками удалён из текущего списка;
+его можно прочитать в истории Git. Справочник поведения —
+[HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) и [highlevel/](highlevel/).
 
-## 1. Реализованные области
+## 1. Запросы и диагностика
 
-| Область | Текущая подсистема / документация |
-|---|---|
-| Узлы, селекторы, transform, иерархия | [core](highlevel/core.md), [render](highlevel/render.md) |
-| Спрайты, region/nine-slice, атласы, шрифты | [atlas](highlevel/atlas.md), [text](highlevel/text.md), [font](highlevel/font.md) |
-| Анимация и состояния | [anim](highlevel/anim.md), [animplayer](highlevel/animplayer.md), [state](highlevel/state.md) |
-| Тайлы, частицы, навигация | [tilemap](highlevel/tilemap.md), [particles](highlevel/particles.md), [navmesh](highlevel/nav.md) |
-| Prefab, сцены и загрузка | [prefab](highlevel/prefab.md), [scene](highlevel/scene.md), [task](highlevel/task.md) |
-| Box2D формы/зоны/суставы/CCD/запросы | [world](highlevel/world.md) |
-| Камеры, render targets, shader/post/VFX | [camera](highlevel/camera.md), [viewport](highlevel/viewport.md), [fx](highlevel/fx.md) |
-| Шины, эффекты, seek, приоритеты голосов | [audiobus](highlevel/audiobus.md), [sound](highlevel/sound.md), [acoustics](highlevel/acoustics.md) |
-| UI, ввод, локализация | [ui](highlevel/ui.md), [input](highlevel/input.md), [i18n](highlevel/i18n.md) |
-| Mesh/кости/IK, Re2DSprite, Re2D World | [mesh](highlevel/mesh.md), [re2dsprite](highlevel/re2dsprite.md), [re2d](highlevel/re2d.md) |
-| Сеть, record/replay, агент/DevTools | [net](highlevel/net.md), [replay](highlevel/replay.md), [agent](highlevel/agent.md), [devtools](highlevel/devtools.md) |
-| Авторинг и нативные операции SDK | [SDK](SDK.md) |
+В [ROADMAP.md](ROADMAP.md) остаются операторы `nearest` / `inside` /
+`visibleFrom` / `limit`, команда `why`, единый `trace` и трассировка событий.
+`query` / `inspect` / `profile`, `within`, `$.watch`, `$.expect` и record/replay
+уже работают. Не возвращать их в список отсутствующих возможностей.
+`why` допустим только как фактическая диагностика, без выдуманных причин.
 
-Наличие подсистемы не означает совпадения всех возможностей с другим движком.
-Подробные диапазоны, лимиты и fallback поведения указаны на страницах модулей.
-Низкоуровневый `engine` — внутренность `$`, а не второй публичный игровой API.
+## 2. DevTools и UI
 
-## 2. Что остаётся
+`$.devtools` — RmlUi-инспектор. Остались изменение значений/экспорт, picking,
+специализированные панели и визуализация событий, BSP, навигации и профиля.
+ImGui удалён из сборки и runtime. F1 открывает RmlUi-панель статистики,
+профиля, гравитации и reload; F2 открывает инспектор узлов. Legacy `ui.*` / `$.screen` сохранены для совместимости.
+Новые экраны используют RmlUi — [UI_RMLUI_LAW.md](UI_RMLUI_LAW.md).
 
-Актуальные незакрытые задачи собраны в [TASKS.md](TASKS.md): запросы/trace,
-расширение DevTools, runtime portals/PVS и другие границы World, улучшение
-bake и дальнейшие SDK-инструменты, упаковка SDK и проверка других платформ.
-`Curve`/`Gradient`, nine-slice, IK, наследование visible/alpha, относительная
-глубина, звук seek/priority и BSP-обёртка уже есть; их старые «нет» не актуальны.
+## 3. Re2D World
 
-## 3. Архитектура сравнения
+Реализованы XY BSP, вертикальные spans, same-XY многоэтажность, support /
+blocked / ray и синтез обычного 2D-кадра. Остались runtime portals/PVS,
+автоматическая топология cells, текстурные surfaces/полигональные floors,
+непрерывные slopes, sweep/полный footprint и точная глубина samples персонажа.
+SDK генерирует лестницы и ступенчатые slopes; это не новые физические примитивы.
+Порталы/PVS в compiled JSON не используются runtime (`runtimeUsed:false`).
+Ограничения compositor и измерения — [RE2D_WORLD_GUIDE.md](RE2D_WORLD_GUIDE.md),
+[RE2D_WORLD_PERF.md](RE2D_WORLD_PERF.md).
 
-R2D сохраняет `$`, C-ядро, JS-оркестрацию и пакетный кадр. Код и открытые данные
-авторитетны; SDK-инструменты — их представления. UI — RmlUi, legacy пути
-сохраняются по переходному правилу. Re2D синтезирует ordinary 2D representation.
-См. [PHILOSOPHY.md](PHILOSOPHY.md), [UI_RMLUI_LAW.md](UI_RMLUI_LAW.md).
+## 4. SDK после acceptance фаз 0–7
 
-Исторические замеры производительности — [HIGH_LEVEL_API_PERF.md](HIGH_LEVEL_API_PERF.md).
-Числа оттуда нельзя переносить на текущую сборку без повторного измерения.
+[SDK.md](SDK.md) описывает реализованные срезы; все компоненты дерева §8 спецификации
+(Tilemap, Particle, Collision/Physics, Parallax, Font, Audio, Input, RmlUi Studio, DevTools,
+шаблоны, сборки движка) есть и покрыты тестами. Следующие возможности большой
+спецификации остаются отдельными задачами: FBX, автоматическая метрика
+source↔Re2D comparison, кисти поверхности, графические кривые, выбор элемента кликом в
+предпросмотре RmlUi Studio, drag-ресайз фигур коллизии и зон акустики.
+
+Baker использует dominant rigid ownership; просветы и швы sampling остаются.
+VRM expression запекается по выбору; MToon lighting/rim/outline не переносятся.
+Walk процедурный. Запись атомарна для каждого файла, а не всего asset package.
+Доказательства и визуальные ограничения — [SDK_VERIFICATION.md](SDK_VERIFICATION.md).
+
+## 5. Поставка и платформы
+
+`dist/` содержит снимки конкретных версий. Свежесть определяется версией
+в пакете и checksum manifest; наличие каталога само по себе не доказывает
+сборку из текущего исходного дерева.
+Текущий packager включает `r2d-sdk`, RmlUi/JS оболочку, реестр и документацию.
+Тест запуска распакованного архива и построенной им игры прошёл на macOS arm64.
+Нельзя обновлять только AGENTS.md старого пакета и выдавать это за новый runtime.
+GitHub CI по version tags собирает пять платформ и публикует полный Release
+после успешных jobs; фактический удалённый результат проверяется по run и assets.
+Новый World проверен на macOS; Web/WASM и остальные платформы требуют своей
+проверки. См. [RELEASING.md](RELEASING.md).
+
+## 6. Правило сопровождения
+
+Закрытый пункт удаляется из текущего списка в том же изменении. История багов
+живёт в Git и CHANGELOG. Новое поведение одновременно получает документацию
+и подходящую проверку; успешная сборка не заменяет визуальную проверку импорта.
+Архитектурные ограничения — [PHILOSOPHY.md](PHILOSOPHY.md).
 
 
 ---
@@ -6151,7 +6174,7 @@ QuickJS — интерпретатор с mark-sweep GC; каждый мелки
 
 ### 4.3. Дыры как игрового API (сверка с Godot 4.x, 2D)
 
-Закрыто с прошлого аудита (`docs/GAP_ANALYSIS.md`): анимация и `AnimationPlayer`,
+Закрыто с прошлого аудита (`docs/TASKS.md`): анимация и `AnimationPlayer`,
 тайлмапы, частицы, навигация и A*, префабы, шины звука с эффектами, слои и
 parallax, UI-контролы (контейнеры, скролл, фокус, ввод текста, чекбоксы,
 слайдеры, списки, диалоги), локализация, состояния/потоки, экраны, шрифты,
@@ -6186,7 +6209,7 @@ parallax, UI-контролы (контейнеры, скролл, фокус, �
 Покрытие всех 78 high-level модулей документацией и проверками подтверждается
 `tests/doc_coverage_test.py`. `tests/doc_claims_test.py` ловит известные
 устаревшие отрицания; он не заменяет чтение кода. Текущая сверка —
-[REPOSITORY_REVIEW.md](REPOSITORY_REVIEW.md).
+[TASKS.md](TASKS.md).
 
 ---
 
@@ -6798,7 +6821,7 @@ override». Заготовки для них — ниже.
 | `$.debug.draw.*`, `$.debug.watch()` | отладочная отрисовка и наблюдения (принимают селекторы) | [debug.js:72-118](../src/highlevel/debug.js#L72-L118) |
 | `engine.depthInfo()`, `engine.fontStats()`, `engine.renderInfo()` | глубина/меш, атлас глифов, проходы рендера | [script.c:4028](../src/script.c#L4028), [:4190](../src/script.c#L4190) |
 | Курсор и выбор в мире | `attrs.picked`/`hovered` | [api.js:1851-1890](../src/highlevel/api.js#L1851-L1890) |
-| Оверлей Dear ImGui (F1) | статистика, физика, текстуры, скрипты, таблица зон | [debug_ui.cpp:237-434](../src/debug_ui.cpp#L237-L434) |
+| Диагностика F1 (RmlUi) | статистика, профиль, физика, текстуры, скрипты, watches | [devtools.js](../src/highlevel/devtools.js) |
 
 **Чего ещё нет:**
 
@@ -6807,20 +6830,14 @@ override». Заготовки для них — ниже.
   ([ui.js:160-202](../src/highlevel/ui.js#L160-L202)), но клик по спрайту в
   сцене пока не превращается в селектор панели;
 * панелей WORLD / EVENTS / PHYSICS / BSP / NAV / AUDIO / RENDER / PERF —
-  сейчас только список сущностей и инспектор;
+  уже есть диагностика статистики/профиля, гравитации, скриптов и текстур; специализированные визуализации остаются;
 * визуализации коллизий, BSP, навигации и зон видимости как инструмента
   (есть только ручные примитивы `$.debug.draw`);
 * таймлайна событий — `$.watch` (реактивные запросы) даёт материал, но
   панели на нём ещё нет.
 
-**Отдельное обстоятельство.** «Второй developer GUI» в движке уже существует:
-оверлей Dear ImGui, включённый в сборке по умолчанию
-([CMakeLists.txt:46](../CMakeLists.txt#L46), [debug_ui.cpp](../src/debug_ui.cpp)),
-скрытый до `F1`/`--overlay`/`$.debug.on()`. Он не отбирает ввод у игры
-(`r2d_debug_ui_wants_mouse/keyboard` нигде не вызываются —
-[debug_ui.h:30-31](../src/debug_ui.h#L30-L31)), но закону UI не соответствует.
-Новые панели делаются на RmlUi; возможность собрать движок без ImGui
-(`-DR2D_ENABLE_IMGUI=OFF`) сохраняется.
+**ImGui удалён (2026-10-09).** F1, `--overlay` и `$.debug.on()` используют
+RmlUi диагностику существующего DevTools, F2 — инспектор узлов.
 
 ---
 
@@ -6986,7 +7003,7 @@ $.camera.kind(Re2D);                                   // камера от пе
 
 Статус на 2026-10-08: разделы 1–9 описывают прежний перспективный
 room/mesh-путь, а не готовый BSP/span World. Фактический аудит и выполненный
-минимальный совместимый срез — [RE2D_WORLD_AUDIT.md](RE2D_WORLD_AUDIT.md).
+минимальный совместимый срез — [RE2D_WORLD_GUIDE.md](RE2D_WORLD_GUIDE.md).
 Новый `$.re2d.world` — [highlevel/re2d.md](highlevel/re2d.md) §8.
 Канонический принцип: spatial description → projection → ordinary 2D representation.
 Исторические замеры ниже не являются замерами нового World.
@@ -7201,7 +7218,7 @@ $.ready(() => {
 * Физика остаётся 2D: прыжки и высота в столкновениях не моделируются.
 * WebGPU: прежний текст заявлял проверку Chrome, но подтверждающего отчёта
   в этой копии не было. В текущем прогоне Web/WASM не проверены; это относится
-  и к новому BSP World ([RE2D_WORLD_AUDIT.md](RE2D_WORLD_AUDIT.md)).
+  и к новому BSP World ([RE2D_WORLD_GUIDE.md](RE2D_WORLD_GUIDE.md)).
 
 ## 9. Статус фаз
 
@@ -7214,7 +7231,7 @@ $.ready(() => {
 | 4 | готово | [highlevel/re2d.md](highlevel/re2d.md); `tests/js/re2d_test.mjs`, `tests/agent/highlevel_re2d_room_test.py` |
 | 5 | готово | [highlevel/re2d.md](highlevel/re2d.md) §3; `tests/agent/highlevel_re2d_billboards_test.py` |
 | 6 | готово | [highlevel/re2d.md](highlevel/re2d.md) §4, [demos/re2d_world](../demos/re2d_world/README.md); `tests/agent/highlevel_re2d_world_test.py` |
-| 7 | native перепроверен; web не проверен | [RE2D_WORLD_AUDIT.md](RE2D_WORLD_AUDIT.md): фактический аудит и native тесты; замер нового пути и публикация не выполнялись |
+| 7 | native перепроверен; web не проверен | [RE2D_WORLD_GUIDE.md](RE2D_WORLD_GUIDE.md): фактический аудит и native тесты; замер нового пути и публикация не выполнялись |
 
 ### Замер «ноль стоимости для 2D» (фазы 1–2)
 
@@ -8881,42 +8898,15 @@ demos/rotsprite/source/*.surface.json; анатомические формулы
 
 ---
 
-## RE2D World: аудит и проверенный вертикальный срез
+## RE2D World: устройство, проверки и ограничения
 
-<sub>источник: `docs/RE2D_WORLD_AUDIT.md`</sub>
+<sub>источник: `docs/RE2D_WORLD_GUIDE.md`</sub>
 
-# RE2D World: аудит и проверенный вертикальный срез
+# RE2D World: устройство, проверки и ограничения
 
-Дата: 2026-10-08. Исходная копия: `nikiniki2d`, ветка `re2d`, HEAD `9cf1a74`.
+Актуализировано: 2026-10-09. Проверки SDK World и World Studio входят в полный прогон 116/116.
 Этот документ описывает фактическое состояние; исторические Phase 0–5 не означают
 готовность всего World. Замеры текущего пути описаны в `RE2D_WORLD_PERF.md`.
-
-## Что было в копии Claude
-
-До изменений проверены status/diff, история веток, native C, QuickJS API,
-документация и тесты. `main` (`f176aa0`) был предком `re2d`. Рабочая копия уже
-содержала незакоммиченные правки документации, старых демо, web export и тестов,
-а также staged-удаление `.claude`-настроек. Эти изменения не откатывались.
-Отдельной незавершённой native реализации World/cells/spans в копии не найдено.
-
-* `src/bsp.c`: настоящий **2D BSP по XY-отрезкам**, отдельный API сортировки.
-  Нет height spans, порталов/PVS, world collision или связи с RE2D World.
-* `src/re2d.c`, `re2d_math.c`, high-level `re2d.js`: legacy камера и поверхности
-  переводятся в треугольники для GPU mesh/depth; комнаты — прямоугольные призмы.
-  Этот путь сохранён для совместимости, но не является новым World.
-* Legacy billboards рисуются поверх mesh. Re2DSprite уже синтезирует свой 2D
-  sprite из пространственных данных и непрерывных относительных yaw/pitch.
-  Общего Z-buffer между его экземплярами не было.
-* Box2D остаётся плоской физикой. Высота legacy узлов влияла на изображение,
-  а не выбирала этаж столкновения. Игровой контроллер многоэтажности отсутствовал.
-* Документы ссылались на отсутствующий `RE2D_VALIDATION.md` и смешивали статус
-  старых фаз с ещё не реализованным BSP World. Ссылки и статус уточнены.
-
-Исходная сборка прошла. Исходные C-проверки BSP (11), проекции RE2D и Re2DSprite,
-JS BSP/RE2D/camera/kinds и пять агентских RE2D-наборов прошли без пропусков.
-Новые регрессии обнаружили то, чего прежние проверки не проверяли:
-разрезание пересечения лишь в одном направлении, лишние исходные segments после
-разрезания и пропуск splitter/геометрии при предельной глубине.
 
 ## Что реализовано теперь
 
@@ -9108,7 +9098,7 @@ invalid culled handles, height occlusion, attachments, shooting and stairs.
 Three frozen demo views match the pre-optimisation rendered pixels exactly
 below the HUD; the HUD gained an FPS label. Documentation checks pass.
 
-Remaining constraints are described in [World audit](RE2D_WORLD_AUDIT.md):
+Remaining constraints are described in [World audit](RE2D_WORLD_GUIDE.md):
 no portals/PVS, no textured World surfaces, rectangular supports, approximate
 depth per composed sprite, and no verified Web/WASM build. Off-screen culling
 does not imply PVS or rejection of actors hidden behind walls. Large-scene
@@ -9341,209 +9331,60 @@ frame 120:
 
 ---
 
-## Выпуск и проверка поставки
+## Сборка и публикация
 
 <sub>источник: `docs/RELEASING.md`</sub>
 
-# Выпуск и проверка поставки
+# Сборка и публикация
 
-Сверка: 2026-10-08. Источник текущей схемы — [build_and_push.sh](../build_and_push.sh),
-[tools/autobuild.py](../tools/autobuild.py), [tools/release.py](../tools/release.py)
-и [.github/workflows/build.yml](../.github/workflows/build.yml).
+Актуализировано 2026-10-09. Общий упаковщик — `tools/release.py`: движок,
+нативный `r2d-sdk`, JS/RmlUi оболочка SDK, шаблоны, реестр, лицензии и текущие docs.
 
-## 1. Репозитории и CI
+## Локальный выпуск
 
-| Remote | Адрес | Текущая роль |
-|---|---|---|
-| `github` | `https://github.com/Nikide/russiano2d.git` | default remote скрипта публикации и GitHub Actions |
-| `origin` | `git@hub.mos.ru:dem4ev48/russiano2d.git` | прежний основной fetch; push также на GitVerse |
-| `gitverse` | `git@gitverse.ru:Nikide/russiano2d.git` | сохранённый отдельный remote |
-
-`build_and_push.sh` по умолчанию использует `REMOTE=github`. Переопределение
-remote — явное решение вызывающего; наличие двух push URL у `origin` не означает,
-что текущий скрипт всегда публикует на оба старых хоста.
-
-Единственный активный workflow находится в `.github/workflows/build.yml`:
-version tags `vX.Y.Z`, Linux Debug build, native tests, все JS suites, SDK
-core/CLI/expression/batch и native agent parity под Xvfb. SDK reports сохраняются
-как CI artifacts. Windows/macOS/release jobs этим workflow не выполняются.
-Удалённый результат CI в текущем аудите не подтверждён.
-
-Старые GitLab/GitVerse конфигурации находятся в [ci-archive](ci-archive/README.md)
-с `.disabled` суффиксами и не являются действующей схемой CI.
-
-## 2. Проверка до выпуска
-
-```bash
-cmake --build build --parallel 4
-python3 tools/run_tests.py
-python3 tests/doc_claims_test.py
-python3 tests/doc_coverage_test.py
-python3 tests/duplicate_keys_test.py
-python3 tests/repository_hygiene_test.py
+```sh
+./build_and_push.sh "Описание изменений"
 ```
 
-Также запускать C test executables и `tests/js/*_test.mjs` через bundled qjs;
-`ctest` пока не имеет зарегистрированных тестов. Визуальные изменения требуют
-проверки настоящего runtime. `skip` — не подтверждение работоспособности.
+Скрипт проверяет новый тег, поднимает patch version до сборки, собирает пять
+платформ через `tools/autobuild.py`, обновляет документы пакетов из docs/,
+пересобирает документацию и главную сайта, WebGPU demos при наличии toolchain,
+коммитит текущее дерево, создаёт `vX.Y.Z` и отправляет ветку/тег в три хоста:
+GitHub (`github`), hub.mos.ru (`origin`), GitVerse (`gitverse`). Повторяющиеся
+push URL отправляются один раз. Ошибка одного хоста не блокирует другие и сайт;
+итоговый ненулевой код сообщает о частичной публикации. История не переписывается.
 
-Должны совпадать версия, бинарник, документация и состав пакета. Документы
-старого готового бинарника не обновляются отдельно под новые исходники.
-Проверка платформы macOS не заменяет Linux/Windows/Web smoke tests.
+Локальная сборка использует macOS toolchain для arm64/x86_64 и Docker для
+Linux x86_64/aarch64 и Windows x86_64. Сборочная ошибка по умолчанию отменяет
+коммит/публикацию и возвращает версию. `ALLOW_PARTIAL=1` разрешает частичный
+набор, `PLATFORMS` задаёт явный список. `REMOTES` переопределяет три направления,
+`SITE=0` отключает сайт, `BUMP=0`/`TAG=0` отключают bump/tag.
 
-## 3. Подготовка и упаковка
+## GitHub CI и Releases
 
-Для просмотра плана без записи/публикации:
+`.github/workflows/build.yml` запускается по новому version tag или вручную.
+Пять независимых Release jobs на нативных GitHub runners: macOS arm64/x86_64,
+Linux x86_64/aarch64, Windows x86_64. Каждый собирает engine и SDK, выполняет
+native/JS тесты, упаковывает архив. Linux дополнительно проверяет SDK GUI под Xvfb.
+После успешных пяти jobs release job публикует пять архивов и SHA256SUMS.txt
+в GitHub Release этого тега. Неуспешный build не выдаётся за полный релиз.
+Вручную запущенный workflow сохраняет artifacts без создания релиза.
 
-```bash
-python3 tools/release.py --dry-run
-python3 tools/autobuild.py --help
-```
+## Сайт и документы
 
-`release.py` поддерживает `--version`, `--platform`, `--build-dir`, `--out`,
-`--with-demos`; `--package-only --binary PATH` упаковывает уже собранный бинарник.
-`--force` заменяет существующий каталог пакета, `--yes` снимает интерактивный
-вопрос. Эти ключи применяются только при намеренном выпуске.
+Исходники сайта отслеживаются в Git; секреты `site/.env.deploy`, состояние
+выгрузки, generated docs/download/play остаются локальными. `site/build-site.sh`
+читает текущие docs/ заново, удаляет старые generated pages, обновляет llms.txt,
+llms-full.txt, sitemap, links/version и архивы. `deploy-fast.sh` после успешной
+загрузки удаляет с сервера снятые doc pages, ранее учтённые в deployment manifest.
+Удаление ограничено doc/, остальные удалённые локальные файлы не затрагиваются.
 
-Пакет содержит engine, game/assets, platform README, AGENTS.md из `docs/`,
-CHANGELOG, LICENSE, THIRD_PARTY_NOTICES и SHA256SUMS. Рядом стоящий `lib/`
-копируется; macOS-зависимости собираются packager в пакет.
-Системные `.DS_Store`, Python caches и local state исключаются при копировании.
+## Проверка результата
 
-**SDK пока не входит в packager.** Текущий SDK запускается из checkout;
-проверенная упаковка C CLI + оболочки RmlUi/JS + реестра и launch из распакованной
-папки — отдельная задача [TASKS.md](TASKS.md) §5. Не объявлять готовые `dist/`
-снимки 0.1.22 поставкой нового SDK.
-
-## 4. Публикация
-
-`build_and_push.sh` меняет версию, собирает платформы, обновляет package docs,
-коммитит и пушит текущую ветку и новый annotated version tag. Сайт готовится
-существующими локальными инструментами; загрузка идёт после подтверждённого push.
-Это скрипт выпуска, а не команда для обычной проверки.
-
-Существующие version tags не переписываются. Не использовать `git push --mirror`:
-он может удалить remote refs. История и старые remotes сохраняются.
-Секреты сайта находятся вне tracked файлов (`site/` игнорируется целиком).
-
-## 5. Контроль готовых пакетов
-
-`dist/` намеренно versioned: бинарники и release archives — продукт проекта.
-Они не удаляются вместе с обычными build caches. `SHA256SUMS.txt` платформы
-описывает файлы пакета; `dist/SHA256SUMS.txt` — release archives.
-
-```bash
-cd dist/macos-arm64
-shasum -a 256 -c SHA256SUMS.txt
-```
-
-При очистке release archives необходимо обновить внутренний manifest и внешний
-hash, сохранив payload бинарников и лицензионные файлы. Автоматическая сверка
-архивов/каталогов — `tests/repository_hygiene_test.py`.
-
-Изменения текущего аудита остаются локальными: выпуск, push и загрузка сайта
-не выполнялись.
-
-
----
-
-## Контрольная сверка репозитория
-
-<sub>источник: `docs/REPOSITORY_REVIEW.md`</sub>
-
-# Контрольная сверка репозитория
-
-Дата: 2026-10-08, macOS arm64, CMake Release. Исходный HEAD `375ea03`,
-рабочая копия до начала чистая. Проверка охватывает текущее дерево документации,
-новый SDK, архитектурные границы, tracked-файлы, release archives и тестовые слои.
-Это локальная проверка; remote CI и публикация не выполнялись.
-
-## 1. Документация
-
-- README теперь описывает SDK/Re2DSprite/World и отличает свежие исходники от
-  готовых пакетов 0.1.22. Инструкция SDK использует реальную команду `commands`.
-- TASKS/GAP_ANALYSIS очищены от закрытых дефектов и устаревших проектных
-  набросков. Текущий backlog содержит только оставшиеся возможности/ограничения;
-  история прежних аудитов доступна в Git.
-- Закон UI сверён с текущим launcher/DevTools/SDK и native text renderer.
-  Удалены старые списки якобы неиспользуемых RmlUi-файлов и ImGui-текста.
-- Исправлены отрицания working IME preview, world picking и mouse modality,
-  ложная потеря contact events на подшагах, старые сведения об IK/seek и BSP.
-- RELEASING и CI archive описывают фактический remote `github` и version-tag
-  GitHub workflow. Старые GitLab/GitVerse конфигурации — исторический архив.
-- SDK commands, форматы и ограничения сверены с кодом/тестами. Полный acceptance
-  фаз не означает завершение всей большой спецификации. Source↔Re2D comparison,
-  optimized UV и прочие дальнейшие инструменты остаются в backlog.
-- Исторические performance measurements сохранены с датами и статусом: их
-  нельзя объявлять текущим замером. SDK_AUDIT остаётся явно историческим снимком.
-
-## 2. Соответствие философии
-
-| Закон | Фактический новый SDK / World |
-|---|---|
-| `$` — public runtime API | SDK JS использует `$`, toolHost включает existing `$.sdk`; engine спрятан |
-| CODE + DATA | Открытые JSON/PNG/JS остаются источником; GUI не создаёт скрытый обязательный project format |
-| Весь новый UI — RmlUi | SDK/DevTools/launcher используют RmlUi; новых ImGui-окон нет |
-| C — тяжёлая работа, JS — оркестрация | Native validation/bake/world compile/batch/agent в `sdk/native`; Python только development tests/tools |
-| Existing runtime вместо дубликата | Preview использует `$.re2dSprite` / `$.re2d.world`; agent сохраняет исходный протокол |
-| Spatial description → ordinary 2D | World синтезирует RGBA и передаёт обычный sprite в существующий 2D batch |
-| Совместимость и воспроизводимость | Legacy пути сохранены, fixed-step/seed и parity tests проходят |
-| Только известные факты | Diagnostics и reports структурированы; ограничения PVS/slopes/ownership указаны явно |
-
-Нового отхода от этих принципов в SDK не обнаружено. Существующий ImGui-оверлей
-и legacy node UI остаются переходным техническим долгом. Они не объявлены
-целевой архитектурой. Формулировка философии уточнена: SDK-редактор открытых
-данных допустим в уже заданном code/data-first подходе; канонический редактор
-сцен со своим scene graph и обязательным проектным состоянием не вводится.
-
-## 3. Очистка
-
-Удалены tracked `.DS_Store`, временный `_tmp_apid.mjs`, runtime save/log,
-Python caches и disposable `build-autobuild`, `build-release`, `build-ci`.
-Освобождено около 3,4 ГБ. Рабочий build, Web dependencies, сайт и его доступы,
-исходники, тестовые fixtures и запрошенный справочный deliverable сохранены.
-Справочный deliverable — исторический срез, не текущий executable release.
-
-В трёх `dist` archives удалены `.DS_Store`; внутренние manifests и внешние
-контрольные суммы пересчитаны. **Все остальные payload files побайтно совпадают**
-с версиями архивов до очистки: 36 Linux, 33 macOS, 29 Windows файлов.
-Версия и executable payload не менялись. `tools/release.py` теперь исключает
-OS/Python caches и local SDK state при копировании данных в будущий пакет.
-
-## 4. Проверки
-
-- Сборка прошла.
-- Полный agent integration run: **106 ok, 0 fail, 0 skip**, 245,6 с.
-- **91 JS suite** прошёл через bundled qjs.
-- Все **10 native engine test executables** и **SDK core** прошли.
-- Docs claims/coverage, duplicate keys и **16 docs-gate tests** прошли.
-- Новый `tests/repository_hygiene_test.py`: tracked hygiene, существование local
-  Markdown targets, package checksums, manifests внутри archives и отсутствие
-  системного мусора. Он не проверяет remote URL или Markdown anchors.
-- Реальный local `release.py --package-only` в игнорируемый build прошёл:
-  macOS libraries, platform docs, archive и checksums. Это проверка packager,
-  а не публикация нового релиза или доказательство готового SDK package.
-- Сайт локально пересобран из docs: 136 документов, 7 картинок, без сообщений
-  о недостающих документах. В локальном ignored builder добавлена страница
-  ci-archive; она не публиковалась. Сводный AGENTS.md создан в build (117 документов).
-  `site/` сохраняет существующую политику вне Git.
-- `git diff --check` пройден.
-
-`ctest` сообщает **No tests were found**: это не считается проверкой.
-Нативные executable targets были запущены напрямую. Визуальная проверка SDK
-в предыдущем завершённом срезе описана в [SDK_VERIFICATION.md](SDK_VERIFICATION.md);
-в этом проходе runtime/UI не менялись, поэтому старые shots не выдаются за новые.
-
-Логи этого прохода — игнорируемые `build/control_*.log`.
-
-## 5. Оставшиеся ограничения
-
-Готовые пакеты 0.1.22 не содержат новый SDK; packager пока не включает SDK
-application/CLI/registry. Это честно вынесено в [TASKS.md](TASKS.md) §5.
-Runtime PVS/portals отсутствуют, slopes ступенчатые, character ownership жёсткий,
-bake имеет sampling seams, walk процедурный, MToon lighting не воспроизводится.
-Эти ограничения не спрятаны статусом IMPLEMENTED. Подробности — [SDK.md](SDK.md),
-[RE2D_WORLD_AUDIT.md](RE2D_WORLD_AUDIT.md).
+Проверить `build_and_push.log`, три remote branch/tag и GitHub Actions run.
+Проверить пять assets в Release и опубликованный сайт, а не только локальный
+workflow. macOS append signing и поддержка других платформ проверяются отдельно:
+локальный запуск игры сам по себе не подтверждает пригодную для распространения подпись.
 
 
 ---
@@ -9564,14 +9405,14 @@ bake имеет sampling seams, walk процедурный, MToon lighting не
 
 Другие списки работ, с которыми этот документ не конфликтует, а дополняет:
 [TASKS.md](TASKS.md) (текущие задачи и ограничения),
-[GAP_ANALYSIS.md](GAP_ANALYSIS.md) (сверка с Godot 4.x).
+[TASKS.md](TASKS.md) (сверка с Godot 4.x).
 
 Правило перехода: **следующая фаза не начинается, пока текущая не зелёная** —
 сборка, существующие тесты, новые тесты, headless-прогон, документация.
 
 ---
 
-Актуальная сверка от 2026-10-08: [REPOSITORY_REVIEW.md](REPOSITORY_REVIEW.md).
+Актуальная сверка от 2026-10-08: [TASKS.md](TASKS.md).
 Числа в фазах ниже относятся к датам их выполнения. SDK имеет отдельные
 фазы и критерии: [SDK.md](SDK.md) §11.
 
@@ -9600,7 +9441,7 @@ bake имеет sampling seams, walk процедурный, MToon lighting не
 | Сборка | да | `build/russiano2d` собирается `cmake --build build` |
 | Тесты | да | `python3 tools/run_tests.py` (79 агентских), `tests/js/*_test.mjs` (79) |
 | Стражи доков | да | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py` |
-| Инвентаризация `$` | да | [GAP_ANALYSIS.md](GAP_ANALYSIS.md), [TASKS.md](TASKS.md) |
+| Инвентаризация `$` | да | [TASKS.md](TASKS.md), [TASKS.md](TASKS.md) |
 | Агентский протокол | да | [AGENT_API.md](AGENT_API.md), [src/agent.c](../src/agent.c) |
 | RmlUi | да | [src/gui.cpp](../src/gui.cpp), [internal/NATIVE.md](internal/NATIVE.md) §9 |
 | Замеры | частично | `$.debug.profile()`, `tools/bench_highlevel.py`, `--stats` |
@@ -9859,8 +9700,8 @@ transform/physics/state → копирование селектора
 
 Статус документа: описывает **фактическое** состояние SDK (не цель). Целевая
 архитектура и законы — [Следующая цель SDK AGENT.md](../Следующая%20цель%20SDK%20AGENT.md);
-аудит репозитория — [SDK_AUDIT.md](../SDK_AUDIT.md); передача работы между
-сессиями — [SDK_HANDOFF.md](../SDK_HANDOFF.md).
+проверки — [SDK_VERIFICATION.md](SDK_VERIFICATION.md); журнал работы —
+[SDK_HANDOFF.md](../SDK_HANDOFF.md).
 
 ```text
 GAME = CODE + DATA          SDK = R2D-приложение + инструменты для CODE + DATA
@@ -9941,7 +9782,7 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `re2d-info <character.json\|png>` | Re2DSprite: PNG v2, части ↔ кости, статистика карт, проверка |
 | `re2d-debug <character.json\|png> --mode m --out f.png [--scale N]` | Re2DSprite: отладочный вид карт поверхности |
 | `re2d-sample <character.json\|png> --x mx --y my` | Re2DSprite: один отсчёт (ID, XYZ, покрытие, владелец) |
-| `bake-re2d <модель.glb\|.gltf\|.vrm> --type prop\|character --output каталог [--uv auto\|existing] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N] [--expression имя]` | Re2D Baker: GLB/glTF → Re2DSprite |
+| `bake-re2d <модель.glb\|.gltf\|.vrm\|.obj> --type prop\|character\|weapon\|environment --output каталог [--uv auto\|existing\|optimized] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N] [--expression имя]` | Re2D Baker: GLB/glTF → Re2DSprite |
 | `world-compile <f.re2dmap> [--output f.compiled.json]` | карта → описание настоящего `$.re2d.world` |
 | `world-info <f.re2dmap>` | compile/validation без записи результата |
 | `batch <manifest.batch.json> [--output report.json]` | пакет bake-re2d / validate, ошибки отдельных jobs не прерывают пакет |
@@ -10077,8 +9918,8 @@ build/r2d-sdk bake-re2d crate.glb --type prop --output assets/crate/
    `--origin center|feet` (feet прижимает низ к Y=0, допустимая высота — 64 ед.).
 4. **UV:** `auto` (Auto Unwrap) — 6 плоских карт по доминирующей оси нормали, плотная упаковка
    в 256×192 отсчётов с поиском минимального шага; `existing` — UV модели как есть (нужны UV
-   в 0..1, наложения развёртки считаются и сообщаются). `Re2D Optimized` — **не реализован**
-   (`SDK_BAKE_UV_MODE_UNSUPPORTED`).
+   в 0..1, наложения развёртки считаются и сообщаются). `optimized` — те же карты с распределением плотности по заполнению, семантической
+   важности и ожидаемой проекции; ограничения швов сохраняются (§19).
 5. **Растеризация** в сетку текселей (PNG 1024/2048/4096: на отсчёт приходится блок 4k×4k
    текселей цвета), цвет — baseColor × текстура (билинейно), cutout по alpha.
 6. **Карты v2** (RE2DSPRITE_MATH.md §2): ID (часть = материал, `--first-id` по умолчанию 80),
@@ -10098,7 +9939,7 @@ errors, warnings, infos, diagnostics }`.
 `ANIMATION_IGNORED`, `DEGENERATE`, `FIT_OVERFLOW`, `LOW_DENSITY`, `UV_MISSING`, `UV_RANGE`, `UV_OVERLAP`,
 `UV_MODE_UNSUPPORTED`, `TYPE_UNSUPPORTED`, `PARTS_LIMIT`, `SIZE`, `MEMORY`, `EMPTY`, `WRITE_FAILED`.
 
-**GUI** `sdk/tools/re2d-baker.js` + `sdk/ui/baker.rml`: Prop/Character, выбранное выражение VRM, Auto/Existing UV, размер PNG,
+**GUI** `sdk/tools/re2d-baker.js` + `sdk/ui/baker.rml`: Prop/Character/Weapon/Environment, выбранное выражение VRM, Auto/Existing/Optimized UV, размер PNG,
 Feet/центр, масштаб, панель *Coordinate Fit* (диапазоны X/Y/Z, ✓), отчёт, диагностика,
 превью — запечённая модель вращается настоящим `$.re2dSprite`, кнопка «Открыть результат в
 Re2DSprite Studio». GUI вызывает тот же `bake-re2d`, поэтому PNG побайтно совпадает с CLI.
@@ -10150,8 +9991,8 @@ build/r2d-sdk bake-re2d hero.vrm --type character --output assets/hero/
 реальный Seed-san VRM и три реальные GLB проверены дополнительно — [SDK_VERIFICATION.md](SDK_VERIFICATION.md).
 Материалы MToon сводятся к baseColor; авторская анимация файла не переносится.
 
-Что НЕ сделано (честно): Weapon/Environment, Re2D Optimized UV, сравнение «источник ↔ Re2D» и метрика различия (§39–40
-спецификации), FBX (OBJ поддержан — ниже). Качество: плоские карты по оси
+Weapon/Environment, optimized UV и сравнение «источник ↔ Re2D» реализованы (§19).
+Не реализованы автоматическая метрика различия (§40) и FBX (OBJ поддержан — ниже). Качество: плоские карты по оси
 дают просветы на косых гранях и швы между картами — это видно в диагностике (`LOW_DENSITY`)
 и на проекциях; «идеального auto unwrap» baker не обещает.
 
@@ -10239,7 +10080,7 @@ CI вызывает SDK native tests, CLI, expression regression, batch manifest
 
 | Фаза | Статус по acceptance §60–67 | Проверка |
 |---|---|---|
-| 0 Audit | IMPLEMENTED | SDK_AUDIT.md, последующий аудит SDK_VERIFICATION.md |
+| 0 Audit | IMPLEMENTED | SDK_HANDOFF.md, последующий аудит SDK_VERIFICATION.md |
 | 1 Shell | IMPLEMENTED | sdk_shell_test, sdk_cli_test |
 | 2 Classic 2D vertical slice | IMPLEMENTED | sdk_classic2d_test |
 | 3 Re2DSprite Studio | IMPLEMENTED | sdk_re2dsprite_test, sdk_author_test, sdk_re2d_parity_test |
@@ -10251,9 +10092,9 @@ CI вызывает SDK native tests, CLI, expression regression, batch manifest
 Это закрытие перечисленных вертикальных срезов. Все компоненты дерева §8 спецификации
 теперь есть в реестре и открываются (Tilemap, Particle, Collision/Physics, Parallax,
 Font/Text, Audio, Input, RmlUi Studio, DevTools — §13–§16). Не реализованы:
-Weapon/Environment, FBX, optimized UV, сравнение с исходным 3D, рисование поверхности,
+FBX, автоматическая метрика сравнения с исходным 3D, рисование поверхности,
 graph editor кривых, выбор элемента кликом в предпросмотре RmlUi Studio, drag-ресайз
-фигур коллизии и drag зон акустики (числовые поля есть). Legacy ImGui-оверлей движка сохранён; UI SDK — RmlUi.
+фигур коллизии и drag зон акустики (числовые поля есть). ImGui удалён; весь UI и runtime диагностика — RmlUi.
 Процедурный walk, ступенчатые slopes, консервативный PVS и упрощение MToon описаны
 выше и не выдаются за авторскую анимацию, continuous slopes или lighting shader.
 
@@ -10333,7 +10174,8 @@ CMake собирает его автоматически; в Emscripten этот
 
 API для агента: `$.sdkApp.studios['tilemap-studio'].ops` (`paint`, `fillRect`, `fillAt`, `setMap`,
 `addLayer`, …), аналогично `particle-studio`, `collision-tools`, `parallax-tools`, `font-tools`,
-`audio-tools`, `input-tools`; общее — `undo/redo/save/validate/select`, снимок —
+`audio-tools`, `input-tools`; общее — `$.sdkApp.studios['<id>'].undo/redo/save/validate/select`
+(методы самой студии, не её `ops`), снимок —
 `state.sdk.studios.<id>`.
 
 ## 14. RmlUi Studio
@@ -10395,216 +10237,103 @@ SDK не нуждается), **Сборки движка** (`r2d-sdk engines`; 
 `tests/agent/sdk_data_parity_test.py` (JS ↔ C), `tests/agent/sdk_studios_test.py` (все студии, оболочка,
 шаблоны, движки, запуск/пакет — настоящей мышью), `tests/agent/ui_virtual_mouse_test.py` (движок).
 
+## 18. Проверка созданием игры (2026-10-09)
+
+`games/neon-courier` — законченная небольшая аркада: шесть посылок, два движущихся
+дрона, щит, таймер, пауза, победа/поражение и новый рейс. Проект создан шаблоном
+blank через кнопку SDK; управление сохранено Input Tools; частицы изменены
+Particle Studio с undo/redo/save. Gameplay остаётся обычным `main.js`, UI — RmlUi.
+Запуск и Package проверяются через SDK, результат запускается без SDK.
+
+Проверка выявила и устранила ошибки общего рабочего процесса: RmlUi теперь
+ищет файлы выбранного `--game` перед стандартным проектом; builder включает
+данные каталога точки входа также для корневого `main.js`; `$.fs.readJSON`
+читает встроенный payload, шрифты RmlUi из payload сохраняют имя семейства,
+обработчики кнопок подключаются также в автономной игре. Регрессии —
+`highlevel_game_path_test.py` и `neon_courier_test.py`. Для автономного текста
+проект явно содержит Open Sans с лицензией.
+
+Полная сверка философии и большого гайдлайна — [SDK_VERIFICATION.md](SDK_VERIFICATION.md).
+
+## 19. Завершение рабочего процесса (2026-10-09)
+
+- F1 / `--overlay` / `$.debug.on()` — общая RmlUi диагностика DevTools;
+  ImGui удалён из source/dependencies/build/input/render. F2 — инспектор узлов.
+- Package платформы включает `r2d-sdk`, `sdk/`, шаблоны, `sdk_tools.json`,
+  handoff и документацию. Backend должен лежать рядом с переданным engine binary.
+  Пакет проверяется распаковкой и созданием/запуском/сборкой проекта без checkout.
+- Собранная игра переносит соседний `lib/`; весь каталог игры, включая `lib/`,
+  распространяется вместе. Конфликт библиотек — ошибка, без их перезаписи.
+- Autosave раз в 2 секунды пишет отдельный `.r2d-recovery-<asset>.json` рядом
+  с ассетом. Исходник меняется только Save. После crash студия предлагает
+  restore/discard/later на RmlUi. Restore — undo-команда; изменение исходника
+  после autosave показывается как конфликт. Data/atlas/Re2DSprite/World/RmlUi
+  histories используют один recovery host. API агента:
+  `$.sdkApp.recovery.snapshot()/flush()/restore(abs)/discard(abs)/offer(abs)`.
+- Baker `--compare` создаёт 25 временных source PNG (yaw 0/45/90/135/180,
+  pitch -45/-20/0/20/45). GUI выбирает пару: слева C source projection,
+  справа настоящий `$.re2dSprite`, одинаковый масштаб и ракурс. Исходный меш
+  остаётся tool-only; source PNG не является Re2D approximation.
+- `--type weapon`: статическая модель и редактируемый grip socket в origin;
+  автоматическое угадывание хвата не заявляется. `--type environment`: отдельная
+  статическая деталь, Feet по умолчанию; это не импорт игровой сцены.
+- `--uv optimized`: weighted charts по площади заполнения, важности head/face/eyes
+  и фронтальной проекции. Это существующий C sampler с распределённым budget,
+  без нового runtime; не обещает идеальную развёртку. Поддержан и в batch.
+
+Новые регрессии: sdk_runtime_ui / sdk_package / sdk_recovery / sdk_comparison /
+sdk_baker_modes. Подробные доказательства — SDK_HANDOFF и SDK_VERIFICATION.
+
 
 ---
 
-## SDK: проверка после передачи от Claude
+## SDK: проверенное состояние и ограничения
 
 <sub>источник: `docs/SDK_VERIFICATION.md`</sub>
 
-# SDK: проверка после передачи от Claude
+# SDK: проверенное состояние и ограничения
 
-Дата: 2026-10-08, macOS arm64, clang, CMake Release. Исходный HEAD: `1c754c3`.
-Полный исходный аудит — [SDK_AUDIT.md](../SDK_AUDIT.md), итог фаз —
-[SDK_HANDOFF.md](../SDK_HANDOFF.md), команды — [SDK.md](SDK.md).
+Сверка 2026-10-09, macOS arm64/Metal, CMake Release. Команды и возможности —
+[SDK.md](SDK.md), журнал и история проверок — [SDK_HANDOFF.md](../SDK_HANDOFF.md).
 
 ## Автоматические проверки
 
-- Сборка `cmake --build build --parallel 4` прошла.
-- Полный `python3 tools/run_tests.py`: **106 ok, 0 fail, 0 skip**, 249.9 с.
-  Это 106 наборов, а не 106 отдельных assertions.
-- После последних изменений повторены восемь SDK-наборов: CLI, author, automation, baker,
-  character, expression, world, world studio — **8 ok, 0 fail, 0 skip**.
-  Последующие регрессии expression проверены отдельно (10 assertions).
-- Все **91** файла `tests/js/*_test.mjs` прошли через bundled qjs.
-- `build/sdk/native/r2d_sdk_core_test`: **100 ok, 0 FAIL**.
-- Нативные json, crypto, payload, reverb, audio_fx, profile, bsp, rotsprite,
-  re2d, re2d_world test executables прошли. Их targets используют имеющиеся
-  sanitizer настройки CMake; это не заявление о полном instrumented engine build.
-- Дополнительно весь C SDK собран отдельно с ASan/UBSan (включая библиотечные
-  исходники) и прошёл batch/agent parity, dense/sparse expressions и world с 600
-  сегментами без sanitizer ошибок. Логи `codex_sdk_sanitize_*.log`.
-- CI batch manifest `tests/fixtures/sdk/ci.batch.json` локально прошёл: validation
-  world/character + prop/character bake. Внешний GitHub CI здесь не запускался.
+- Полный agent suite: **116/116**, fail 0, skip 0, 301.3 с.
+- **93 JS suites**, native SDK core **100 checks**; doc claims/coverage прошли.
+- Новые проверки: runtime RmlUi UI 13, SDK archive 10, crash recovery 10,
+  source/runtime comparison 6, Baker modes 9, игра 21.
+- SDK archive распаковывается в отдельный каталог: CLI/GUI, 18 инструментов,
+  четыре шаблона, new/run/build и самостоятельная собранная игра проверены.
+- Все 25 source/runtime ракурсов Baker проверены; comparison screenshot просмотрен.
+- Recovery проверен аварийным завершением процесса, реальной кнопкой Restore,
+  undo/redo/Save. Невидимый текст окна найден визуально и исправлен.
+- Публикационный pipeline: actionlint, shell syntax, native/JS/batch на свежей
+  macOS Release-сборке, временные Git зеркала с одним отказом, mock FTP prune/retry
+  и пять заголовков CPU/platform. Несовпадение архитектуры не стирает старый пакет.
 
-Логи находятся в игнорируемом `build/`: `codex_all_tests.log`,
-`codex_changed_tests.log`, `codex_final_build.log`, `codex_native_tests.log`,
-`codex_sdk_core.log`, `codex_js_tests.log`, `codex_expression_test.log`.
+Это число наборов/проверок конкретных сценариев, а не доказательство полного
+выполнения всего большого гайдлайна. Логи — build/sdk_completion_* и build/publish_*.
 
-## Новые регрессии
+## Практическая игра
 
-- World: неправильные типы коллекций, дробные steps, неверный dir, потолок ниже
-  пола сгенерированной ступени, id с кавычкой/backslash, сбой записи output,
-  кромка из 600 стен; сохранён compiler/runtime parity и room-over-room.
-- World Studio: открытие из реестра, геометрия двух видов, кнопка native compile,
-  настоящая опора верхнего этажа, split/undo/redo/join, изменение span,
-  сохранение/recompile/dispose.
-- Author: добавление clips с сохранением предыдущих внешних клипов, timeline seek,
-  эмоция, PNG variant, attached equipment, undo/redo, сохранение и native validate;
-  preview проверяется на отсутствие runtime error diagnostics.
-- Expressions: dense/sparse morph дают одинаковый PNG и отличаются от neutral,
-  неверные sparse indices и nonfinite morph отклоняются, mapping полный,
-  unknown expression отклоняется, KHR texCoord override учитывается до выбора UV.
-- Automation: ошибочный job не прерывает следующие; stdout/report идентичны;
-  сбой записи и повторный/алиасный output отражаются в статусе. Проверены все
-  **19** команд `src/agent.c`; ответы совпадают с Python клиентом после удаления
-  автоматически скрываемого им id. Profile/state проверены по структуре/ok:
-  измеренные profiler времена двух процессов не объявляются побайтно равными.
-  RmlUi кнопка возвращает тот же native batch report.
+[Неоновый курьер](../games/neon-courier/README.md) создан через шаблон SDK,
+Input Tools, Particle Studio и Run/Package. Использует публичный `$`, RmlUi,
+обычные JSON/JS/RML/RCSS. Полный выигрышный маршрут воспроизводится клавишами;
+упакованное меню нажимается мышью в пустом каталоге без проекта и SDK.
 
-## Реальные внешние источники
+## Ограничения
 
-Модели скачаны только для локальной проверки в `build/sdk_external`; они не входят
-в репозиторий или SDK пакет. URL ниже — реальные источники проверки, SHA256 позволяет
-проверить, что повторный запуск использует те же байты.
+FBX, кисти поверхности, графические кривые и автоматическая численная метрика
+сравнения не реализованы. Skin — dominant rigid ownership; walk процедурный,
+MToon lighting не переносится. Source-preview — C tool-only raster, справа
+настоящий Re2DSprite runtime. World runtime не использует PVS, slopes ступенчатые.
 
-| Источник | SHA256 |
-|---|---|
-| [Seed-san.vrm](https://raw.githubusercontent.com/vrm-c/vrm-specification/master/samples/Seed-san/vrm/Seed-san.vrm), 10,917,800 bytes | `624d0d554bc205bbdc33e22a68a2c3c20edebb3e573011ead8878a65e5329b23` |
-| [BoxTextured.glb](https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/BoxTextured/glTF-Binary/BoxTextured.glb), 5,956 bytes | `b510eca2e2ef33f62f9ed57d6e7ce2d10ebb2bdebc4a8e59d347719ba81abdf4` |
-| [Duck.glb](https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Duck/glTF-Binary/Duck.glb), 120,484 bytes | `65bf938f54d6073e619e76e007820bbf980cdc3dc0daec0d94830ffc4ae54ab5` |
-| [Lantern.glb](https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Lantern/glTF-Binary/Lantern.glb), 9,564,264 bytes | `a79458c4b02d695187a952f23a63b8bf278e7bc3d316a3c2a314f2d6974181f1` |
-
-Условия Seed-san — в [официальном README](https://github.com/vrm-c/vrm-specification/blob/master/samples/Seed-san/README.md).
-Условия/атрибуция Khronos samples — в [каталоге моделей](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models).
-Перед включением внешних моделей в собственную поставку читайте соответствующие
-licenses; эта проверка их не распространяет.
-
-```bash
-build/r2d-sdk bake-re2d build/sdk_external/Seed-san.vrm --type character --origin feet --output build/sdk_seed
-build/r2d-sdk bake-re2d build/sdk_external/Seed-san.vrm --type character --origin feet --expression happy --name Seed-happy --output build/sdk_seed_happy
-build/r2d-sdk bake-re2d build/sdk_external/Duck.glb --output build/sdk_real_props/Duck
-```
-
-Seed-san: **45,058 triangles, 51 humanoid bones, 10 Re2D parts**. Неоднозначных
-треугольников 1,098 (около 2.4%); пары явно показаны. Neutral и happy bake успешны.
-Все три GLB prop bake успешны, без error/warning diagnostics. Проверка реального
-VRM не означает универсальную совместимость со всеми экспортёрами VRoid.
-
-## Визуальная проверка настоящего runtime
-
-Проверены снимки, а не только размеры PNG:
-
-- `build/codex-world-studio.png`: дерево, XY plan, высотный разрез, свойства и
-  runtime view; после осмотра исправлена нулевая ширина панели свойств.
-- `build/sdk_author/author.png`: авторские записи и прикреплённая копия животного;
-  после осмотра исправлен преждевременный запуск нового клипа на старом узле.
-- `build/sdk_automation/gui.png`: manifest и native JSON report в RmlUi.
-- `build/codex_real_props.png`: BoxTextured, Duck, Lantern при yaw35/pitch15,
-  модель загружена только из PNG/JSON. На Duck заметны просветы surface sampling;
-  BoxTextured имеет швы, Lantern читается как столб с подвешенным фонарём.
-- `build/codex_seed_rest_0.png`, `codex_seed_rest_90.png`, `codex_seed_walk.png`:
-  нейтральный Seed-san и движение на разных ракурсах. Robo-arm относится к
-  отдельному skinned mesh модели, а не дубликату, созданному SDK. На поверхностях
-  остаются просветы/швы аппроксимации. Runtime validation сообщает 107 hole samples.
-- `build/codex_seed_happy.png`: PNG happy подключён донором группы head обычным
-  `re2dVariant`, исходный VRM не используется runtime.
-
-Это visual QA импорта/редактирования MVP, а не обещание отсутствия швов у любого
-skinned персонажа. Dominant rigid ownership не является полноценной skin деформацией;
-PVS пока не используется runtime, slopes ступенчатые, walk процедурный, MToon освещение
-не воспроизводится. Эти границы сохранены в документации фаз, а не спрятаны зелёной сборкой.
-
-## Студии данных, тема и OBJ (2026-10-09)
-
-Проверено на macOS arm64 (Metal), сборка `cmake --build build`:
-
-| Что | Команда | Результат |
-|---|---|---|
-| Полный набор агентских тестов | `python3 tools/run_tests.py` | 109 тестов; единственные два падения (`sdk_character_test` — строка с «→», `sdk_classic2d_test` — гонка hot reload с черновиком) исправлены и перепроверены |
-| Студии, оболочка, шаблоны, движки, запуск, пакет (настоящей мышью) | `python3 tests/agent/sdk_studios_test.py` | проходит |
-| Мышь агента → RmlUi | `python3 tests/agent/ui_virtual_mouse_test.py` | проходит |
-| Паритет проверок JS ↔ C | `python3 tests/agent/sdk_data_parity_test.py` | 2912 файлов, 0 расхождений (первый прогон нашёл 2 неточности JS, исправлены) |
-| Импорт OBJ | `python3 tests/agent/sdk_obj_test.py` | проходит |
-| Чистая логика | `qjs -m tests/js/sdk_kinds_test.mjs`, `sdk_rml_test.mjs`, все 95 `tests/js/*_test.mjs` | проходят |
-| C | `build/sdk/native/r2d_sdk_core_test` и тесты `build/tests/r2d_*_test` | проходят |
-
-Визуально проверено скриншотами агента (`build/sdkshots/`): оболочка (проекты, ассеты, каталог, шаблоны, запуск,
-сборки, документация) и все новые студии; старые студии (Re2DSprite, World, Baker) после смены темы читаются и
-не перекрывают окно просмотра. Не проверялось: другие ОС и GPU-бэкенды, окно меньше 1100×700, Retina
-(RmlUi-интерфейсы на `px` при HIGH_PIXEL_DENSITY рисуются в физических пикселях — свойство движка, не SDK), удалённый GitHub CI
-(шаг «SDK data studios, OBJ import and UI mouse» добавлен в `.github/workflows/build.yml`, но не запускался).
-
-## Источник документации и сайт
-
-`docs/` и корневые SDK документы — исходники; `site/doc/` — генерируемая копия.
-При локальной пересборке обнаружены битые ссылки: builder исключал internal/NATIVE,
-SDK_AUDIT/HANDOFF/spec и не декодировал `%20` в названиях. Исправлен существующий
-`site/build-doc.py` и сайт пересобран без загрузки на сервер. `site/` полностью
-игнорируется Git согласно существующей политике; локальная правка builder остаётся
-там, исходные SDK документы и этот отчёт сохраняются в репозитории.
-
-
----
-
-## Текущие задачи и ограничения R2D
-
-<sub>источник: `docs/TASKS.md`</sub>
-
-# Текущие задачи и ограничения R2D
-
-Сверка: 2026-10-08, исходники после завершения SDK. Старый аудит 2026-10-07
-с закрытыми дефектами и проектными набросками удалён из текущего списка;
-его можно прочитать в истории Git. Справочник поведения —
-[HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) и [highlevel/](highlevel/).
-
-## 1. Запросы и диагностика
-
-В [ROADMAP.md](ROADMAP.md) остаются операторы `nearest` / `inside` /
-`visibleFrom` / `limit`, команда `why`, единый `trace` и трассировка событий.
-`query` / `inspect` / `profile`, `within`, `$.watch`, `$.expect` и record/replay
-уже работают. Не возвращать их в список отсутствующих возможностей.
-`why` допустим только как фактическая диагностика, без выдуманных причин.
-
-## 2. DevTools и UI
-
-`$.devtools` — RmlUi-инспектор. Остались изменение значений/экспорт, picking,
-специализированные панели и визуализация событий, BSP, навигации и профиля.
-Старый F1 ImGui-оверлей существует и выключается при сборке; новые окна туда
-не добавляются. Legacy `ui.*` / `$.screen` сохранены для совместимости.
-Новые экраны используют RmlUi — [UI_RMLUI_LAW.md](UI_RMLUI_LAW.md).
-
-## 3. Re2D World
-
-Реализованы XY BSP, вертикальные spans, same-XY многоэтажность, support /
-blocked / ray и синтез обычного 2D-кадра. Остались runtime portals/PVS,
-автоматическая топология cells, текстурные surfaces/полигональные floors,
-непрерывные slopes, sweep/полный footprint и точная глубина samples персонажа.
-SDK генерирует лестницы и ступенчатые slopes; это не новые физические примитивы.
-Порталы/PVS в compiled JSON не используются runtime (`runtimeUsed:false`).
-Ограничения compositor и измерения — [RE2D_WORLD_AUDIT.md](RE2D_WORLD_AUDIT.md),
-[RE2D_WORLD_PERF.md](RE2D_WORLD_PERF.md).
-
-## 4. SDK после acceptance фаз 0–7
-
-[SDK.md](SDK.md) описывает реализованные срезы; все компоненты дерева §8 спецификации
-(Tilemap, Particle, Collision/Physics, Parallax, Font, Audio, Input, RmlUi Studio, DevTools,
-шаблоны, сборки движка) есть и покрыты тестами. Следующие возможности большой
-спецификации остаются отдельными задачами: Weapon/Environment presets, FBX, optimized UV,
-source↔Re2D comparison, кисти поверхности, графические кривые, выбор элемента кликом в
-предпросмотре RmlUi Studio, drag-ресайз фигур коллизии и зон акустики.
-
-Baker использует dominant rigid ownership; просветы и швы sampling остаются.
-VRM expression запекается по выбору; MToon lighting/rim/outline не переносятся.
-Walk процедурный. Запись атомарна для каждого файла, а не всего asset package.
-Доказательства и визуальные ограничения — [SDK_VERIFICATION.md](SDK_VERIFICATION.md).
-
-## 5. Поставка и платформы
-
-`dist/` — готовые снимки 0.1.22, не свежая сборка новых SDK-коммитов.
-Текущий packager не включает SDK: нужен отдельный проверенный срез упаковки
-`r2d-sdk` + RmlUi/JS оболочки + реестра и тест запуска из распакованного пакета.
-Нельзя обновлять только AGENTS.md старого пакета и выдавать это за новый runtime.
-GitHub CI настроен на version tags; удалённый результат ещё не подтверждён.
-Новый World проверен на macOS; Web/WASM и остальные платформы требуют своей
-проверки. См. [RELEASING.md](RELEASING.md).
-
-## 6. Правило сопровождения
-
-Закрытый пункт удаляется из текущего списка в том же изменении. История багов
-живёт в Git и CHANGELOG. Новое поведение одновременно получает документацию
-и подходящую проверку; успешная сборка не заменяет визуальную проверку импорта.
-Архитектурные ограничения — [PHILOSOPHY.md](PHILOSOPHY.md).
+В этой сессии VRM/GLB регрессии используют fixtures. Реальные Seed-san/GLB
+из предыдущего этапа заново не скачивались и не выдаются за свежую проверку.
+macOS append codesign выдавал strict validation warning: локальный запуск
+работает, пригодная для распространения подпись игры не подтверждена.
+Удалённый CI/пять Release assets подтверждаются только фактическим GitHub run;
+результаты публикации записываются отдельно в handoff.
 
 
 ---
@@ -10775,7 +10504,7 @@ $.test.report();
 headroom, ray/circle-height и приватную RGBA/depth-композицию (ASan/UBSan).
 `python3 tools/run_tests.py highlevel_re2d_bsp_world_test re2d_bsp_combat_test`
 проверяет compositor и игровое демо с АК. Это отдельный путь от legacy
-`highlevel_re2d_world_test`. Подробности: [аудит](RE2D_WORLD_AUDIT.md).
+`highlevel_re2d_world_test`. Подробности: [аудит](RE2D_WORLD_GUIDE.md).
 
 ## Контроль репозитория
 
@@ -11152,236 +10881,6 @@ $.debug.profiler.start('своё'); ... $.debug.profiler.end('своё');
    по первому кадру.
 
 Приятной разработки — и не забудь про пересборку после правок `src/highlevel/`.
-
-
----
-
-## Russiano2D — план VFX для 2D
-
-<sub>источник: `docs/VFX_PLAN.md`</sub>
-
-# Russiano2D — план VFX для 2D
-
-Дата: 2026-10-05. Продолжение [GAP_ANALYSIS.md](GAP_ANALYSIS.md) и аудио-плана
-(§8 того же документа). Задача: от «выстрел — это спрайт и звук» до взрывов,
-ударных волн, искажений и схлопывания чёрной дыры.
-
-Принцип тот же, что и в остальном движке: **сначала то, что делается на текущем
-пайплайне**, и только под то, что в него не влезает, добавляем возможность.
-Ничего не рисуем «наполовину»: если фича требует шейдера, она честно недоступна,
-как сейчас `.shader()`.
-
----
-
-## 0. Что уже есть — не изобретать заново
-
-| Инструмент | Где | Что даёт для VFX |
-|---|---|---|
-| Батч произвольной геометрии | `$.gfx.push`: `pushSprite`, `pushVertex`, `pushTriangle`, `pushDisc`, `pushRing` — [render.js](../src/highlevel/render.js) | ленты, молнии, клинья, кольца — всё, что можно собрать из треугольников |
-| CPU-частицы | [particles.js](../src/highlevel/particles.js): пресеты `explosion`, `smoke`, `sparks`, `fire`, `rain`, `dust`; `one-shot`/`burst`, кривые цвета/размера/альфы, `local`/`global` | взрывы, дым, искры |
-| Режимы смешивания | `alpha` / `add` / `multiply` / `none` на узле и на кадр | свечение, «выжигание», тени |
-| Слои и параллакс | [layers.js](../src/highlevel/layers.js) | оверлеи, полноэкранные затемнения и вспышки |
-| Камера | `$.camera.shake`, `zoomTo`, `limits` | отдача, удары, наезды |
-| Время | `$.time.scale`, `pause`, твины | hit-stop, слоу-мо, таймлайны |
-| 2D-тени | `engine.light.visibility` ([light.h](../src/light.h), полигоны видимости) | свет и тени как элемент эффекта |
-| Аудио-реверб | аудио-план, этап 2–3 | хвост взрыва по размеру помещения |
-
-То есть значительная часть «сочности» достижима **без единой правки в C** —
-только за счёт того, что батч принимает произвольные треугольники.
-
----
-
-## 1. Три уровня — по тому, что требуется от движка
-
-| Уровень | Что нужно | Что становится доступно |
-|---|---|---|
-| **Tier 0** | ничего, только JS | ленты/трейлы, молнии, ударные волны, вспышки, суб-эмиттеры, аттракторы, декали-квады, hit-stop |
-| **Tier 1** | **render target + пост-проход** | bloom, хроматическая аберрация, heat haze, вигнетка/зерно, трейлы через feedback, линза чёрной дыры, порталы, слой повреждений |
-| **Tier 2** | **рантайм-шейдеры** | материалы на спрайт (dissolve, голограмма, вода, огонь), normal-mapped 2D, soft particles, полноценная линза с аккреционным диском |
-
-Tier 1 частично сделан: offscreen-проход и пост-обработка (`$.gfx.post`) уже
-работают — см. §7 «Сделано». Пользовательский render target для игры всё ещё
-**реализован**: [viewport.js](../src/highlevel/viewport.js) привязывает текстуру
-на кадр, отдаёт спрайт прошлого кадра и блитит его на экран. Шейдеры тоже
-компилируются в рантайме — `$.gfx.defineShader` (glslang/SPIRV-Cross собираются
-и в рантайм-варианте, см. `cmake/Shaders.cmake`). `Tier 2` больше не упирается в
-механизмы: остались готовые эффекты поверх них.
-
----
-
-## 2. Tier 0 — делаем сразу, только JS
-
-1. **Ленты и трейлы.** `ribbon(points, width, color, fade)` из `pushTriangle`:
-   трассеры, следы клинков, дымный шлейф ракеты, струи. Бюджет — пул точек, как
-   в [pool.js](../src/highlevel/pool.js).
-2. **Молнии и энергетические дуги.** Сегментированная ломаная с дрожанием
-   средней точки (фрактальный шум), аддитивный blend, ветвление. Для
-   электричества, телепортов, разрядов.
-3. **Ударные волны.** Расширяющееся `pushRing` + аддитивный слой + `camera.shake`
-   + короткое замедление `$.time.scale(0.35)` на 60–120 мс.
-4. **Вспышка выстрела.** Ядро `add` + `<light>` с `radius/intensity` + искры +
-   импульс камеры; для дробовика — конус из `pushTriangle`.
-5. **Суб-эмиттеры.** Событие эмиттера: искры рождают дым, дым — пепел. Это
-   доработка `particles.js` (сейчас эмиттеры независимы).
-6. **Частицы, знающие мир.** Отскок от стен через `$.world.raycast`, затухание в
-   воде/дыму по зонам-триггерам, рикошет искр от пола.
-7. **Аттракторы и вихри.** Список полей сил на частицы (радиальное притяжение,
-   тангенциальный вихрь, ветер). Прямая заготовка под чёрную дыру — и заодно
-   под гранаты, вентиляцию, водовороты.
-8. **Декали-квады.** Обгоревшие пятна и кровь как плоские узлы с лимитом и
-   затуханием; полноценный «слой повреждений» — уже Tier 1.
-9. **Juice.** Hit-stop на попадании, вспышка экрана через `$.layers`, «дрожь»
-   спрайта, ступенчатая тряска камеры по оси удара.
-
-**Оценка:** одна итерация, правки только в `src/highlevel/` (+ тесты `tests/js/`),
-новые пресеты в демо.
-
----
-
-## 3. Tier 1 — render target и пост-обработка
-
-Перестройка [render.c](../src/render.c) и точки открытия прохода в `main.c`
-**сделана**: сцена рисуется в offscreen-текстуру, затем полноэкранные проходы, а
-[viewport.js](../src/highlevel/viewport.js) больше не заглушка (см.
-`docs/highlevel/render.md` §3–4). Ниже — что это открыло и что из этого уже
-использовано (`$.gfx.post` с bloom и искажениями).
-
-Что открывается:
-
-- **Bloom/glow.** Яркостный проход → размытие (два прохода, дешёвый gaussian) → композит.
-- **Полноэкранные эффекты:** вигнетка, зерно, скан-линии, дисторшн, мягкая
-  хроматическая аберрация (три выборки R/G/B с разным смещением).
-- **Heat haze и рефракция.** Сэмплирование сцены со смещением UV по шуму —
-  жар от огня, искажение над горячим металлом, подводная рябь.
-- **Линза чёрной дыры.** Экранная деформация UV по полю `~1/r` вокруг центра.
-  Это ключевой шаг для «схлопывания»: без него остаётся только аккреционный диск.
-- **Трейлы и afterimages** через feedback-буфер (предыдущий кадр с затуханием).
-- **Постоянный слой повреждений**, мини-карта, порталы, mirror-эффекты — всё,
-  что требует «нарисовать в текстуру и потом показать».
-- **Volumetric 2D:** god rays как radial blur от источника света.
-
-**Оценка:** 1–2 итерации. Главные риски — форматы текстур, число проходов,
-поведение на трёх платформах; нужен визуальный тест-стенд (сцена с эталонными
-кадрами) и замер цены кадра.
-
----
-
-## 4. Tier 2 — свои шейдеры
-
-Ключ — рантайм-компиляция. Вместо того чтобы тащить glslang целиком,
-целесообразно взять [SDL_shadercross](https://github.com/libsdl-org/SDL_shadercross)
-(zlib, автор Sam Lantinga): он транслирует HLSL/GLSL → SPIR-V → MSL и сделан
-ровно под SDL_GPU.
-
-Что открывается:
-
-- **Материалы на спрайт:** dissolve (огненное растворение), голограмма,
-  палитровая замена, вода, огонь, UV-скролл, маска-раскрытие, вспышка при
-  получении урона.
-- **Normal-mapped 2D:** освещение с картой нормалей — «2.5D»-вид без 3D.
-- **Soft particles:** частицы, растворяющиеся при пересечении с геометрией.
-- **Полная линза чёрной дыры** с аккреционным диском, доплеровским сдвигом и
-  bloom в одном проходе.
-
-**Оценка:** 1–2 итерации после Tier 1, плюс проверка кросс-сборки (особенно
-MinGW/Windows): рантайм-транслятор — нативная библиотека, её надо собрать на все
-три платформы.
-
----
-
-## 5. Стороннее — что имеет смысл взять
-
-| Проект | Лицензия | Зачем | Цена входа |
-|---|---|---|---|
-| [Effekseer](https://github.com/effekseer/Effekseer) | MIT (ядро; у рендереров DirectX/Vulkan свои файлы лицензий) | **редактор** эффектов + рантайм: художник собирает взрыв мышью, игра проигрывает `.efkefc` | официального бэкенда под SDL_GPU нет — писать свой рендерер-модуль; основной объём работ |
-| [SDL_shadercross](https://github.com/libsdl-org/SDL_shadercross) | zlib | рантайм-шейдеры для SDL_GPU (Tier 2) | сборка библиотеки под 3 платформы |
-| [FastNoiseLite](https://github.com/Auburn/FastNoiseLite) | MIT, один заголовок | шум для дыма, огня, dissolve, полей искажения | почти ноль |
-| [Rive runtime](https://github.com/rive-app/rive-runtime) | MIT (редактор — по подписке) | векторные анимации для UI/катсцен | свой рендерер под SDL_GPU, нишево |
-| Tracy | BSD | профилирование, когда эффектов станет много | низкая |
-| Spine / DragonBones | коммерческая / MIT | это скелетная анимация персонажей, **не VFX** | отдельная тема |
-
-Практический вывод: **Effekseer — единственный способ дать художнику редактор
-эффектов**, и это самая дорогая интеграция. Всё остальное — библиотеки-помощники
-на один вечер.
-
----
-
-## 6. Чёрная дыра — по этапам
-
-Пример, который проверяет весь стек на прочность. Этапы идут ровно по уровням
-возможностей, каждый следующий не отменяет предыдущий:
-
-1. **Гравитация (Tier 0).** Радиальное поле сил на тела Box2D
-   (`applyForce` есть) и аттрактор для частиц; орбитальные скорости, чтобы
-   вещество закручивалось, а не падало по прямой.
-2. **Аккреционный диск (Tier 0).** Ленты + аддитивные частицы, цвет по радиусу
-   (горячее ближе), доплеровский сдвиг как подкраска ведущей/ведомой стороны.
-3. **Искажение пространства (Tier 1).** Render target + шейдер линзы: UV-warp
-   по полю `1/r`, хроматическая аберрация по краю, bloom на диске.
-4. **Схлопывание (Tier 1 + аудио).** Таймлайн: нарастающий warp → рывок
-   `$.time.scale` → вспышка на весь экран → ударная волна → **реверб-хвост**
-   из аудио-плана, длина которого зависит от размера помещения. Тут VFX и аудио
-   наконец работают вместе.
-5. **Поглощение (Tier 1/2).** Тела и спрайты затягиваются, «спагеттификация»
-   через масштаб; честного `skew` в API нет — либо сегментировать спрайт на
-   полосы, либо добавить `skew` в трансформ узла.
-
----
-
-## 7. Порядок работ
-
-| Этап | Содержание | Оценка | Что должно появиться |
-|---|---|---|---|
-| A | Tier 0: ленты, молнии, шоквейвы, суб-эмиттеры, аттракторы, juice | 1 итерация | демо `demos/vfx` + тесты `tests/js/` |
-| B | Tier 1: render target, bloom, пост-цепочка; `viewport.js` оживает | 1–2 итерации | визуальный тест-стенд, замер цены кадра || C | Tier 2: SDL_shadercross, материалы, normal-map | 1–2 итерации | демо материалов, кросс-сборка |
-| D | Effekseer: спайк рендерера под SDL_GPU, затем редактор | спайк + 1–2 итерации | `.efkefc` проигрывается из игры |
-
-Каждый этап заканчивается работающим демо и тестом — как обычно в этом проекте.
-
-### Сделано (этап A, 2026-10-05)
-
-| Что из плана | Где | Чем проверено |
-|---|---|---|
-| Ленты и разовые трассеры | `src/highlevel/fx.js` (`trail`, `ribbon`) | `tests/js/fx_test.mjs` |
-| Молнии с ветвями и свечением | `fx.js` (`lightning`) | то же |
-| Ударные волны и вспышки | `fx.js` (`shockwave`, `pulse`) | то же |
-| Поля сил (аттрактор и вихрь) для частиц | `fx.js` + `particles.js` | то же |
-| Juice: hit-stop, тряска, готовый `impact` | `fx.js` | `tests/agent/demos_test.py shooter_witch` |
-| Мягкое пятно света вместо плоского круга | `render.js`, тег `<light>` | скриншот демо |
-| **Render target для пост-обработки** (сцена → offscreen → эффекты → swapchain) | `render.c`, `main.c`, `shaders/post.*` | `tests/agent/highlevel_render_test.py` |
-| **Пост-эффекты**: свечение, вигнетка, хроматика, зерно, скан-линии и линза (`$.gfx.post`) | `render.js`, `render.c` | то же |
-| HUD поверх пост-обработки (`engine.markUI()`) | `render.js`, `main.c` | скриншот демо |
-| Суб-эмиттеры (искры → дым) через `on_death` | `particles.js` | `tests/js/particles_test.mjs` |
-
-Чего из этапа A **не** переделывали под новый вид: все эффекты собраны в
-игре `demos/shooter_witch` (она же проверяется агентом), отдельного демо
-`demos/vfx` нет.
-
-Что осталось из Tier 1: пользовательские render target для игры
-(`$.viewport.create`) — offscreen-текстура уже есть, но нужен список команд
-вместо прямых вызовов `SDL_BeginGPURenderPass`; heat haze как отдельный эффект
-(линза уже даёт искажение); трейлы через feedback-буфер.
-**Честный bloom сделан** (bright-pass в половинном разрешении + разделяемое
-размытие + композит, см. `shaders/bloom_pre.frag.glsl` и
-`shaders/bloom_blur.frag.glsl`). Tier 2 (рантайм-шейдеры, материалы на спрайт) — без изменений.
-
----
-
-## 8. Риски
-
-- **Tier 1 в SDL_GPU:** несколько проходов, форматы, MSAA, порядок с blend-режимами
-  батча. Проверять на macOS/Linux/Windows сразу, а не в конце.
-- **Рантайм-шейдеры:** размер рантайма и наличие сборки под MinGW; при провале —
-  вариант «набор предкомпилированных вариантов на сборке» (шейдеры уже
-  компилируются хостовыми инструментами, `cmake/Shaders.cmake`).
-- **Effekseer:** свой рендерер-модуль — самая дорогая часть; начинать со спайка,
-  а не с обещаний.
-- **Производительность:** CPU-частицы в JS упираются в несколько тысяч штук.
-  Бюджет на эффект обязателен; при перегрузе — перенос частиц в C
-  (`src/particles.c`) или GPU-частицы после Tier 2.
-- **Согласованность с редактором:** визуальные эффекты должны быть
-  сериализуемыми в `.bscene`/prefab, иначе они не попадут в PIE, и автор будет
-  видеть одно, а игрок другое.
 
 
 ---
@@ -11797,7 +11296,6 @@ SDL_SubmitGPUCommandBuffer(command_buffer);
 | Emscripten ищет пакеты только в своём sysroot | `CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY` в тулчейне: SDL3 из `/tmp/r2d-web/sdl-install` не находился, и движок **молча** собирался с апстримом SDL — без WebGPU вообще. Лечится `set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)` плюс проверкой, что в найденном `SDL_gpu.h` есть `SDL_GPU_SHADERFORMAT_WGSL` (cmake/Web.cmake) |
 | `JSValue` — не всегда структура | В QuickJS-ng при `JS_NAN_BOXING` (включён для wasm32) `JSValue` — это `uint64_t`. Самодельные `typedef struct JSValue JSValue;` в [src/http.h](../src/http.h) и [src/render.h](../src/render.h) разъезжались с `quickjs.h`, и сборка падала на его inline-функциях. Теперь оба заголовка берут типы из `<quickjs.h>`; для нативных конфигураций с nan-boxing это тоже исправление |
 | Заглушки были неполными | При `R2D_ENABLE_LIVE_SHADERS=OFF` не линковались `r2d_live_shader_*` (добавлен [src/shader_live_stub.c](../src/shader_live_stub.c)), а в `gui_stub.c` не было `r2d_gui_load_markup` |
-| `R2DDebugUI` в структуре кадра | `FrameContext` держит указатель на оверлей всегда, а тип приходил только из `debug_ui.h` (под `#ifdef R2D_ENABLE_IMGUI`). Добавлено предварительное объявление в `main.c` |
 | `--preload-file` и относительные пути | Путь разрешается от каталога линковки: `-DR2D_WEB_PRELOAD="web/game@/game"` падало с «does not exist». Относительные пути теперь переводятся в абсолютные от корня репозитория |
 | Правка оболочки не пересобирала страницу | `--shell-file` — опция линковки, а не зависимость: ninja отвечал «no work to do». Добавлен `LINK_DEPENDS` |
 | `emdawnwebgpu` требует C++ | Линковать надо `em++`, а не `emcc`: «emdawnwebgpu requires C++». У движка C++ и так есть, а вот C-щуп пришлось собирать `em++` |
@@ -11811,7 +11309,6 @@ SDL_SubmitGPUCommandBuffer(command_buffer);
 
 | Опция | Почему выключена |
 |---|---|
-| `R2D_ENABLE_IMGUI` | Отладочный оверлей тянет `imgui_impl_sdlgpu3` и в браузере не нужен |
 | `R2D_ENABLE_NET` | Сеть движка — датаграммы (UDP); браузер их не даёт. Нужен транспорт поверх WebSocket/WebRTC |
 | `R2D_ENABLE_HOTRELOAD` | В браузере файлы не меняются: следить за mtime нечего |
 | `R2D_ENABLE_HTTP` | libcurl в wasm не собирается; нужен бэкенд на fetch/XHR (и CORS) |
@@ -11932,7 +11429,7 @@ RmlUi (`$.ui.doc(...).listeners()` + «документ виден»), а не �
 
 Документ для разработчиков (в том числе ИИ-агентов), которые добавляют
 подсистему в высокоуровневое API. Задача и общий план — в
-[GAP_ANALYSIS.md](../GAP_ANALYSIS.md).
+[TASKS.md](../TASKS.md).
 
 ## 1. Один модуль — один файл
 
@@ -14992,7 +14489,7 @@ $.console.run('spawn 100 200');
 | `watch(name, fn)` / `unwatch(name)` / `watches()` | значения в оверлее |
 | `profile()` / `profileReset()` / `profiling(on)` | замеры кадра: зоны, GPU, пики (у `profile()` аргументов нет) |
 | `queryStats()` | диагностика последнего нативного запроса (`$().within`, `engine.queryCircle`) |
-| `stats()` / `counters()` / `limits()` | счётчики, занятость и потолки таблиц |
+| `stats()` / `counters()` / `limits()` / `textures()` | счётчики, занятость и потолки таблиц |
 | `render()` | факты рендера кадра: `{ info, depth }` — пост-обработка, bloom, проходы и состояние меша/z-буфера; без движка — `null` |
 | `memory()` | факты о JS-куче: `{ bytes, used, objects, arrays, strings, atoms, shapes, native_tweens }` (QuickJS `JS_ComputeMemoryUsage`); без движка — `null`. Растущее `objects` между кадрами — утечка, а не шум |
 | `nativePasses(on?)` | нативные проходы кадра (`src/nodes.c`): синк физики, события мира, наведение, сортировка и сборка батча. `false` возвращает прежний JS-путь — для сверки «C против JS»; без аргумента — включены ли сейчас (`true` по умолчанию в движке, `false` без движка) |
@@ -15012,13 +14509,16 @@ $.console.run('spawn 100 200');
 
 ## 3. Ограничения
 
-* **оверлей рисуется движком (ImGui)**: если сборка без `R2D_ENABLE_IMGUI`,
-  `$.debug.on()` ничего не показывает;
+* **оверлей — RmlUi DevTools**: F1, `--overlay` и `$.debug.on()` используют одну панель; без RmlUi она недоступна. `isOn()` возвращает фактическую видимость;
 * **рисование поверх кадра отключается с пост-обработкой** — отладочные фигуры
   идут в тот же проход, что и сцена;
 * **профайлер замеряет участки**, а не отдельные вызовы: вложенные замеры
   складываются в один;
 * **консоль без истории и автодополнения**: это вызов команды, а не REPL.
+
+`textures()` возвращает метаданные живых GPU-текстур `{id,name,width,height}`.
+Панель показывает профиль, статистику, текстуры, watches и `$.script.error()`,
+позволяет применить гравитацию общего мира и запросить reload на границе кадра.
 
 
 ---
@@ -15228,6 +14728,17 @@ $.devtools.panel();                  // { open, doc, rows, entities, selected, s
 build/_deps/quickjs-build/qjs tests/js/devtools_test.mjs   # без GUI
 python3 tests/agent/devtools_test.py                        # в движке
 ```
+
+## 6. Диагностика runtime (F1)
+
+`openRuntime()` / `closeRuntime()` открывают/скрывают RmlUi диагностику.
+`runtimePanel()` возвращает `{open,doc,snapshot}`; `refreshRuntime()` обновляет
+её с периодом 6 кадров. Snapshot содержит stats/profile/limits/textures,
+gravity/reloads/error/watches из существующих публичных API.
+F1 / `--overlay` / `$.debug.on()` используют эту же панель. Поля гравитации
+проверяют конечные числа; reload выполняется существующим `$.script.request()`.
+Это временная отладка текущего мира, без записи проекта или Scene Editor.
+Проверка: `tests/agent/sdk_runtime_ui_test.py`.
 
 
 ---
@@ -15851,8 +15362,7 @@ build/_deps/quickjs-build/qjs tests/js/font_test.mjs
 (`$.gfx.push.triangle/line/ring/circle`), поэтому эффекты попадают в кадр сцены
 и не добавляют draw call'ов.
 
-План развития (render target, шейдеры, чёрная дыра по этапам) — в
-[../VFX_PLAN.md](../VFX_PLAN.md).
+Пост-обработка и пользовательские шейдеры — в [render.md](render.md).
 
 ---
 
@@ -15955,8 +15465,7 @@ $.time.after(2800, () => $.fx.shockwave(x, y, { radius: 420, ms: 520, width: 16,
 
 * Пост-обработка и шейдеры **есть** (`$.gfx.post`, `$.gfx.defineShader`), но
   искажений кадра целиком (heat haze, линза чёрной дыры) в `$.fx` нет: их
-  собирает игра из пост-обработки и пользовательского шейдера. Этапы B и C в
-  [VFX_PLAN.md](../VFX_PLAN.md) закрыты по механизмам, но не как готовые эффекты.
+  собирает игра из пост-обработки и пользовательского шейдера.
 * Свет `<light>` — радиальный градиент из колец (мягкое пятно), а не честный
   источник с тенями; тени даёт `engine.light.visibility`.
 * Поля сил действуют только на частицы, не на тела Box2D.
@@ -16639,8 +16148,8 @@ $.ready(() => {
 # Ввод — `$.input`
 
 Одна точка входа для всей игры: клавиши, мышь, геймпад, события, перенастройка
-биндов. Низкоуровневые `engine.*` не запрещены, но переопределение ввода
-(агентский режим, ребинд) живёт здесь.
+биндов. Игровой и SDK-код обращается только к `$`: приватный `engine` скрыт.
+Переопределение ввода (агентский режим, ребинд) живёт здесь.
 
 Имена клавиш — «человеческие»: `'space'`, `'w'`, `'left'`, `'escape'`, `'f1'`.
 `$.input.on('key')` отдаёт **имя** клавиши (`'Space'`), а не номер скан-кода.
@@ -16659,7 +16168,8 @@ $.input.on('mouse', (e) => { if (e.button === 1 && e.pressed) shoot(); });
 | Вызов | Смысл |
 |---|---|
 | `down(action)` / `pressed(action)` / `released(action)` | удержание / нажатие / отпускание |
-| `vec(negative, positive)` | направление по двум действиям (-1/0/1) |
+| `axis(negative, positive)` | направление по двум действиям (-1/0/1) |
+| `vec('wasd' \| 'arrows' \| 'both')` | вектор `{x, y}` готовой схемы управления |
 | `bind(action, keys)` / `unbind(action)` / `bindings()` | бинды |
 | `rebind(action, key)` | переназначить одно действие |
 | `saveBindings()` / `loadBindings()` | сохранить и вернуть раскладку |
@@ -19970,7 +19480,7 @@ alpha, flip, blend, fog и poseBudget в новом явном World-вызов�
 `build/tests/r2d_re2d_world_test` (ASan/UBSan),
 `tests/js/re2d_test.mjs`, `tests/agent/highlevel_re2d_bsp_world_test.py`,
 `tests/agent/re2d_bsp_combat_test.py`.
-Подробный аудит: [RE2D_WORLD_AUDIT.md](../RE2D_WORLD_AUDIT.md).
+Подробный аудит: [RE2D_WORLD_GUIDE.md](../RE2D_WORLD_GUIDE.md).
 
 Производительность нативного пути и воспроизводимый стенд: [RE2D World performance](../RE2D_WORLD_PERF.md).
 
@@ -20739,7 +20249,7 @@ main.c:
    transfer-буфер + fence после отправки кадра. Синхронно в том же кадре не
    выйдет, поэтому контракт должен быть «снимок прошлого кадра» либо
    `await`-хелпер; это отдельное решение по API.
-6. **Согласовать с `r2d_gui_render`/ImGui.** Они открывают собственные проходы
+6. **Согласовать с `r2d_gui_render` (RmlUi).** Они открывают собственные проходы
    после основного; offscreen-проходы обязаны идти до них.
 
 Когда это будет сделано, `$.viewport` из подсистемы станет тонкой обёрткой над
@@ -21952,6 +21462,7 @@ JS-вызовов в нём больше не будет. Раньше рант�
 | `$.script.pending()` | `bool` | ждёт ли перезапуска |
 | `$.script.hotReload()` | `bool` | следит ли движок за файлами (см. `--no-hot-reload`) |
 | `$.script.count()` | `number` | сколько раз рантайм перезапускался за процесс |
+| `$.script.error()` | `string` | последняя ошибка скрипта, пустая строка при отсутствии |
 
 Низкоуровневые вызовы: `engine.requestReload(reason)`,
 `engine.reloadPending()`, `engine.hotReload()`, `engine.reloads`.
@@ -22992,14 +22503,16 @@ const hp = $.store.get('hp', 100);    // значение по умолчани�
 | `readJSON(path, fallback?)` / `readText(path)` | чтение |
 | `writeJSON(path, data)` / `write(path, text)` | запись |
 
-Путь — от корня запуска (`$.fs.basePath()`), запись разрешена только рядом с
-игрой; абсолютные пути движок не открывает.
+Чтение сначала проверяет встроенные данные собранной игры, затем файлы на
+диске: каталог выбранного `--game` → корень запуска (`$.fs.basePath()`).
+`exists` также видит встроенные файлы. Абсолютные пути принимаются как есть.
+Запись и удаление работают на диске; встроенный payload не меняют.
 
 ## 3. Ограничения
 
 | Чего нет | Что делать |
 |---|---|
-| Песочницы на уровне файловой системы | движок не пускает за пределы каталога запуска |
+| Песочницы на уровне файловой системы | её нет; абсолютные пути принимаются, поэтому ограничение доступа задаёт окружение запуска |
 | Нескольких слотов в одном файле | `save('slot2.json')` — имя файла и есть слот |
 | Шифрования и защиты от правки | сохранение — обычный JSON; для честности — хеш на стороне игры |
 | Версионирования формата | храните `store.set('version', 2)` и миграции пишите сами |
@@ -25008,8 +24521,9 @@ $.ui.ariaCount();       // сколько узлов размечено
 
 `$.ui.doc(path)` возвращает обёртку документа. Помимо `show/hide/text/html/
 cls/style/on`, у неё есть чтение состояния — оно нужно инструментам (SDK) и
-тестам агента, которые не могут «кликнуть мышью» (виртуальная мышь SDL-событий
-не рождает):
+тестам агента, которым нужны структурированные значения и программное нажатие.
+Виртуальная мышь агента также передаётся в RmlUi через SDL
+(`tests/agent/ui_virtual_mouse_test.py`):
 
 | Вызов | Смысл |
 |---|---|

@@ -37,7 +37,7 @@ void r2d_text_queue(const char *text, float x, float y, float size,
                     uint32_t color, int align);
 
 // Размер строки в пикселях для данного кегля. Возвращает false, если точный
-// размер пока неизвестен (шрифт ImGui ещё не инициализирован) — тогда в w/h
+// шрифт пока не загружен — тогда в w/h
 // кладётся оценка, которой достаточно для центрирования.
 bool r2d_text_measure(const char *text, float size, float *w, float *h);
 
@@ -46,8 +46,7 @@ int                r2d_text_count(void);
 const R2DTextItem *r2d_text_items(void);
 void               r2d_text_clear(void);
 
-// Точное измерение силами ImGui. Реализовано в src/debug_ui.cpp: в C нет
-// доступа к шрифту. Возвращает false, если ImGui ещё не начинал кадр.
+// Измерение существующим native font runtime. False, если шрифт не загружен.
 bool r2d_text_measure_ui(const char *text, float size, float *w, float *h);
 
 #ifdef __cplusplus

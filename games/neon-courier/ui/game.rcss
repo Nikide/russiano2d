@@ -1,0 +1,20 @@
+body { width: 100%; height: 100%; font-family: Open Sans; font-size: 16px; color: #e3f4f5; }
+div, h1, p { display: block; }
+#header { position: absolute; top: 0; left: 0; width: 100%; height: 94px; background-color: #0d1829; border-bottom: 1px #315b70; }
+#brand { position: absolute; left: 50px; top: 24px; font-size: 28px; color: #7fffe0; }
+#stats { position: absolute; right: 50px; top: 27px; }
+#stats span { display: inline-block; margin-right: 22px; font-size: 18px; }
+#score { color: #ffcf7b; } #time { color: #7fffe0; }
+button { padding: 10px 18px; background-color: #23374a; color: #e3f4f5; border-radius: 7px; }
+button:hover { background-color: #37576c; } button:active { background-color: #152939; }
+#footer { position: absolute; bottom: 0; left: 50px; width: 860px; height: 72px; }
+#status { color: #7fffe0; font-size: 16px; margin-top: 6px; }
+#keys { color: #849dad; font-size: 14px; margin-top: 7px; }
+#shade { position: absolute; left: 0; top: 94px; width: 100%; height: 474px; background-color: #080e1cdd; }
+#card { width: 440px; margin: 38px auto 0 auto; padding: 26px 32px; background-color: #14253a; border: 1px #3b6574; border-radius: 14px; }
+#eyebrow { color: #7fffe0; font-size: 12px; margin-bottom: 10px; }
+h1 { font-size: 32px; margin-bottom: 14px; }
+p { color: #b5ced9; line-height: 25px; margin-bottom: 22px; }
+#play { display: inline-block; background-color: #217c68; margin-right: 10px; }
+#play:hover { background-color: #2d9c82; }
+#legend { font-size: 13px; color: #849dad; line-height: 22px; margin-top: 20px; }

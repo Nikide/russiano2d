@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Документация Russiano2D</title>
+<meta name="description" content="Документация движка Russiano2D: публичное API $, SDK, протокол агента, туториалы и сборка.">
+<link rel="icon" href="/img/icon.png" type="image/png">
+<meta name="theme-color" content="#0b0e14">
+
+<!-- Тема Docsify лежит локально: сайт не зависит от внешних CDN. -->
+<link rel="stylesheet" href="vendor/vue.css">
+<link rel="stylesheet" href="custom.css">
+</head>
+<body>
+<div id="app">Загрузка документации…</div>
+
+<script>
+  // <base> для хеш-роутинга: относительные пути внутри страниц считаются от /doc/
+  // repo намеренно НЕ указываем: docsify рисует по нему уголок GitHub с котом,
+  // а исходники и Releases живут на GitHub — ссылки на репозитории лежат в _navbar.md.
+  window.$docsify = {
+    name: 'Russiano2D',
+    nameLink: '/doc/',
+    homepage: 'README.md',
+    basePath: '/doc/',
+    loadSidebar: true,
+    loadNavbar: true,
+    subMaxLevel: 3,
+    maxLevel: 4,
+    auto2top: true,
+    relativePath: false,
+    coverpage: true,
+    onlyCover: false,
+    mergeNavbar: true,
+    notFoundPage: true,
+    executeScript: true,
+    routerMode: 'hash',
+    search: {
+      placeholder: 'Поиск по документации…',
+      noData: 'Ничего не найдено',
+      depth: 4,
+      paths: 'auto',
+      hideOtherSidebarContent: false,
+    },
+    copyCode: {
+      buttonText: 'Копировать',
+      errorText: 'Не вышло',
+      successText: 'Скопировано',
+    },
+    plugins: [
+      function (hook, vm) {
+        // Внешние ссылки — в новой вкладке.
+        hook.afterEach(function (html) {
+          return html.replace(/<a href="(https?:\/\/[^"]+)"/g, '<a target="_blank" rel="noopener" href="$1"');
+        });
+      },
+    ],
+  };
+</script>
+
+<script src="vendor/docsify.min.js"></script>
+<script src="vendor/search.min.js"></script>
+<script src="vendor/copy-code.min.js"></script>
+<script src="vendor/zoom-image.min.js"></script>
+<script src="vendor/front-matter.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "deadzone": 0.2,
+  "actions": {
+    "left": ["a", "left"],
+    "right": ["d", "right"],
+    "up": ["w", "up"],
+    "down": ["s", "down"],
+    "restart": ["r"],
+    "pause": ["escape"]
+  }
+}

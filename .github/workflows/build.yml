@@ -1,76 +1,107 @@
-name: Build and test
+name: Build, test and release
 on:
   push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
-  linux:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: linux-x86_64, runner: ubuntu-24.04}
+          - {platform: linux-aarch64, runner: ubuntu-24.04-arm}
+          - {platform: macos-arm64, runner: macos-14}
+          - {platform: macos-x86_64, runner: macos-15-intel}
+          - {platform: windows-x86_64, runner: windows-2022}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake ninja-build pkg-config git ca-certificates \
-            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
-            libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev \
-            libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev \
-            libudev-dev libdbus-1-dev libfreetype-dev libcurl4-openssl-dev \
-            xvfb mesa-vulkan-drivers
+          sudo apt-get install -y ninja-build pkg-config libfreetype-dev patchelf \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev \
+            libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev \
+            libgl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
+            libcurl4-openssl-dev xvfb mesa-vulkan-drivers
+      - name: macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install freetype ninja pkg-config
+      - name: Windows dependencies
+        if: runner.os == 'Windows'
+        run: vcpkg install freetype:x64-windows-static
       - name: Configure
-        run: cmake -S . -B build-ci -G Ninja -DCMAKE_BUILD_TYPE=Debug
-      - name: Build
-        run: cmake --build build-ci --parallel 2
-      - name: Native regression tests
         run: |
-          set -eu
-          for test in json crypto payload reverb audio_fx profile bsp rotsprite re2d re2d_world; do
-            "./build-ci/tests/r2d_${test}_test"
-          done
-      - name: SDK native, batch and import regressions
+          flags=()
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            flags+=("-DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" "-DVCPKG_TARGET_TRIPLET=x64-windows-static" '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>')
+          fi
+          cmake -S . -B build-ci -DCMAKE_BUILD_TYPE=Release "${flags[@]}"
+      - name: Build engine and SDK
+        run: cmake --build build-ci --config Release --parallel 4
+      - name: Validate version tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'tools')
+          import release
+          assert os.environ['GITHUB_REF_NAME'] == 'v' + release.read_version()
+          PY
+      - name: Native and JavaScript tests
+        run: python tools/ci_verify.py --build-dir build-ci
+      - name: Linux SDK GUI regressions
+        if: runner.os == 'Linux'
         env:
           R2D_SDK_BINARY: build-ci/r2d-sdk
           R2D_BINARY: build-ci/russiano2d
           SDL_GPU_DRIVER: vulkan
         run: |
-          ./build-ci/sdk/native/r2d_sdk_core_test
-          ./build-ci/r2d-sdk batch tests/fixtures/sdk/ci.batch.json --output build-ci/sdk-ci-report.json
           xvfb-run -a python3 tests/agent/sdk_cli_test.py
-          python3 tests/agent/sdk_expression_test.py
-      - name: SDK data studios, OBJ import and UI mouse
+          xvfb-run -a python3 tests/agent/sdk_studios_test.py
+          xvfb-run -a python3 tests/agent/ui_virtual_mouse_test.py
+      - name: Package engine, SDK and docs
+        run: python tools/ci_package.py --build-dir build-ci --platform '${{ matrix.platform }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: |
+            dist-ci/*.tar.gz
+            dist-ci/*.zip
+          if-no-files-found: error
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: artifacts
+      - name: Publish all five packages
         env:
-          R2D_SDK_BINARY: build-ci/r2d-sdk
-          R2D_BINARY: build-ci/russiano2d
-          R2D_QJS: build-ci/_deps/quickjs-build/qjs
-          SDL_GPU_DRIVER: vulkan
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -eu
-          for test in sdk_kinds_test sdk_rml_test; do "$R2D_QJS" -m "tests/js/${test}.mjs"; done
-          python3 tests/agent/sdk_data_parity_test.py
-          python3 tests/agent/sdk_obj_test.py
-          xvfb-run -a python3 tests/agent/ui_virtual_mouse_test.py
-          xvfb-run -a python3 tests/agent/sdk_studios_test.py
-      - name: Native SDK agent protocol parity
-        env:
-          R2D_SDK_BINARY: build-ci/r2d-sdk
-          R2D_BINARY: build-ci/russiano2d
-          SDK_SKIP_GUI: "1"
-          SDL_GPU_DRIVER: vulkan
-        run: xvfb-run -a python3 tests/agent/sdk_automation_test.py
-      - name: SDK machine reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sdk-reports
-          path: |
-            build-ci/sdk-ci-report.json
-            build/sdk_automation/*.json
-            build/sdk_automation/*.png
-          if-no-files-found: warn
+          cd artifacts
+          test "$(find . -maxdepth 1 -type f | wc -l)" -eq 5
+          sha256sum * > SHA256SUMS.txt
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "Russiano2D $GITHUB_REF_NAME" --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" ./* --clobber

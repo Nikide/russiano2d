@@ -6,7 +6,7 @@
 //   2. фиксированный шаг физики Box2D    (r2d_physics_step)
 //   3. JS: onUpdate(dt) → игровая логика (r2d_script_call_update)
 //   4. JS: onRender()   → набор батча    (r2d_script_call_render)
-//   5. GPU: copy pass → render pass      (спрайты, ImGui, RmlUi)
+//   5. GPU: copy pass → render pass      (спрайты, RmlUi)
 // ===========================================================================
 
 #include "agent.h"
@@ -25,9 +25,6 @@
 #include "text.h"
 #include "font.h"
 
-#ifdef R2D_ENABLE_IMGUI
-#include "debug_ui.h"
-#endif
 #ifdef R2D_ENABLE_RMLUI
 #include "gui.h"
 #endif
@@ -40,14 +37,10 @@
 #endif
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #define R2D_FIXED_DT      (1.0f / 60.0f)
 #define R2D_MAX_SUBSTEPS  5
-
-// Поле кадра для отладочного оверлея есть всегда (так меньше #ifdef вокруг
-// тела кадра), поэтому тип нужен и в сборке без ImGui — там оверлей просто не
-// создаётся. Повторное объявление совпадает с debug_ui.h и в C11 допустимо.
-typedef struct R2DDebugUI R2DDebugUI;
 
 // --- Мосты «событие SDL → подсистема» (нужны, чтобы не тащить контекст) ------
 
@@ -58,28 +51,9 @@ static void r2d__gui_event(void *user, const SDL_Event *ev)
 }
 #endif
 
-#ifdef R2D_ENABLE_IMGUI
-static void r2d__debug_event(void *user, const SDL_Event *ev)
-{
-    r2d_debug_ui_process_event((R2DDebugUI *)user, ev);
-}
-
-// Мост для engine.setOverlay(bool) из игры: управляет тем же оверлеем.
-static void r2d__set_overlay_requested(void *user, bool visible)
-{
-    r2d_debug_ui_set_visible((R2DDebugUI *)user, visible);
-}
-#endif
 
 // --- Перезапуск скриптов по кнопке в оверлее --------------------------------
 
-#ifdef R2D_ENABLE_IMGUI
-static void r2d__on_reload_requested(void *user)
-{
-    R2DScript *s = (R2DScript *)user;
-    r2d_script_reload(s);
-}
-#endif
 
 // --- Опции командной строки -------------------------------------------------
 
@@ -187,7 +161,6 @@ typedef struct FrameContext {
     R2DAudio    *audio;
     R2DScript   *script;
     R2DGui      *gui;
-    R2DDebugUI  *debug;
 
     float  accumulator;
     bool   stats;
@@ -227,12 +200,8 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
         return false;
     }
 
-#ifdef R2D_ENABLE_IMGUI
-    if (fc->debug) {
-        if (r2d_key_pressed(app, SDL_SCANCODE_F1)) r2d_debug_ui_toggle(fc->debug);
-        if (r2d_key_pressed(app, SDL_SCANCODE_F5)) r2d_script_request_reload(fc->script, "F5");
-    }
-#endif
+
+    if (r2d_key_pressed(app, SDL_SCANCODE_F5)) r2d_script_request_reload(fc->script, "F5");
 
     // --- HTTP: продвигаем активные запросы, не блокируя кадр ---
     r2d_http_update();
@@ -293,22 +262,12 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
         return app->running;   // кадр пропущен, но не повод выходить
     }
 
-    // Кадр ImGui начинаем только здесь: ниже мы гарантированно его отрисуем.
-    // Если начать раньше, любая ветка с continue оставила бы кадр незакрытым,
-    // и следующий NewFrame упал бы с ассертом.
     if (swapchain) {
-#ifdef R2D_ENABLE_IMGUI
-        r2d_debug_ui_begin(fc->debug, app, fc->renderer, fc->physics, fc->script,
-                           r2d__on_reload_requested, fc->script);
-#endif
         // Копирующие проходы обязаны идти до открытия render pass.
         r2d_prof_begin(R2D_PROF_UPLOAD);
         r2d_render_upload(fc->renderer, cmd);
         r2d_prof_end(R2D_PROF_UPLOAD);
         r2d_prof_begin(R2D_PROF_DRAW);
-#ifdef R2D_ENABLE_IMGUI
-        r2d_debug_ui_prepare(fc->debug, cmd);
-#endif
 
         // Lightmap: свет копится в отдельной текстуре и накладывается на сцену
         // одним проходом. Считается до сцены — он от неё не зависит, а читает
@@ -357,9 +316,6 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
             r2d_render_light_composite(fc->renderer, cmd, pass);
             if (!scene) {
                 r2d_render_draw_ui(fc->renderer, cmd, pass);
-#ifdef R2D_ENABLE_IMGUI
-                r2d_debug_ui_draw(fc->debug, cmd, pass);
-#endif
             }
             SDL_EndGPURenderPass(pass);
         }
@@ -386,9 +342,6 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
             upass = SDL_BeginGPURenderPass(cmd, &hud, 1, has_depth ? &hud_depth : NULL);
             if (upass) {
                 r2d_render_draw_ui(fc->renderer, cmd, upass);
-#ifdef R2D_ENABLE_IMGUI
-                r2d_debug_ui_draw(fc->debug, cmd, upass);
-#endif
                 SDL_EndGPURenderPass(upass);
             }
         } else if (scene) {
@@ -433,9 +386,6 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
                                                               has_depth ? &hud_depth : NULL);
             if (hpass) {
                 r2d_render_draw_ui(fc->renderer, cmd, hpass);
-#ifdef R2D_ENABLE_IMGUI
-                r2d_debug_ui_draw(fc->debug, cmd, hpass);
-#endif
                 SDL_EndGPURenderPass(hpass);
             }
         }
@@ -451,11 +401,7 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
     r2d_prof_end(R2D_PROF_UI);
 #endif
 
-#ifndef R2D_ENABLE_IMGUI
-    // Очередь текста разбирает только оверлей (r2d_debug_ui_draw). Без ImGui
-    // её не чистит никто: строки копились бы до лимита и висели в памяти.
     r2d_text_clear();
-#endif
 
     // Снимок кадра: копируем swapchain в transfer-буфер тем же командным
     // буфером, а читаем уже после fence.
@@ -580,9 +526,6 @@ static void r2d__shutdown(FrameContext *fc)
     r2d_script_call_exit(fc->script);
     r2d_script_shutdown(fc->script);
     r2d_replay_destroy(fc->replay);
-#ifdef R2D_ENABLE_IMGUI
-    r2d_debug_ui_destroy(fc->debug);
-#endif
 #ifdef R2D_ENABLE_RMLUI
     r2d_gui_destroy(fc->gui);
 #endif
@@ -746,7 +689,7 @@ int main(int argc, char **argv)
     }
 
     // В агентском режиме stdout принадлежит протоколу, поэтому перенаправляем
-    // его в stderr ДО инициализации подсистем: RmlUi, ImGui и Box2D печатают
+    // его в stderr ДО инициализации подсистем: RmlUi и Box2D печатают
     // туда сами, и без этого JSON смешался бы с их сообщениями.
     if (opt_agent) r2d_agent_capture_stdout();
 
@@ -817,7 +760,7 @@ int main(int argc, char **argv)
     r2d_physics_init(&physics, 0.0f, 2000.0f);
 
 #ifdef R2D_ENABLE_RMLUI
-    R2DGui *gui = r2d_gui_create(app.device, app.window, app.base_path);
+    R2DGui *gui = r2d_gui_create(app.device, app.window, app.base_path, &app);
     if (gui) r2d_app_add_event_listener(&app, r2d__gui_event, gui);
 #else
     R2DGui *gui = NULL;
@@ -840,17 +783,6 @@ int main(int argc, char **argv)
         R2D_LOG("сеть недоступна ($.net скажет об этом игре)");
     }
 
-#ifdef R2D_ENABLE_IMGUI
-    // Оверлей по умолчанию скрыт, чтобы не закрывать демо; F1 показывает его.
-    R2DDebugUI *debug = r2d_debug_ui_create(app.device, app.window, app.base_path, opt_overlay);
-    if (debug) {
-        r2d_app_add_event_listener(&app, r2d__debug_event, debug);
-        // engine.setOverlay() из игры управляет тем же оверлеем.
-        r2d_script_set_overlay_hook(r2d__set_overlay_requested, debug);
-    }
-#else
-    R2DDebugUI *debug = NULL;
-#endif
 
     R2DScript script;
 #ifdef R2D_ENABLE_HOTRELOAD
@@ -872,7 +804,6 @@ int main(int argc, char **argv)
     fc.audio = &audio;
     fc.script = &script;
     fc.gui = gui;
-    fc.debug = debug;
     fc.stats = opt_stats;
     fc.frame_limit = opt_frame_limit;
     fc.seconds_limit = opt_seconds;
@@ -897,6 +828,13 @@ int main(int argc, char **argv)
         else R2D_WARN("%s", replay_err);
     }
     fc.replay = replay;
+
+    if (opt_overlay) {
+        char *result = NULL, *error = NULL;
+        r2d_script_eval(&script, "$.debug.on()", &result, &error);
+        free(result);
+        free(error);
+    }
 
     R2D_LOG("управление: F1 — оверлей, F5 — перезапуск скриптов, закрытие окна — выход");
 
@@ -932,9 +870,6 @@ int main(int argc, char **argv)
         SDL_WaitForGPUIdle(app.device);
         r2d_prof_gpu_shutdown();   // после WaitForGPUIdle: fence'ы уже сигнальны
         r2d_script_shutdown(&script);
-#ifdef R2D_ENABLE_IMGUI
-        r2d_debug_ui_destroy(debug);
-#endif
 #ifdef R2D_ENABLE_RMLUI
         r2d_gui_destroy(gui);
 #endif

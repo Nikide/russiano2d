@@ -1,0 +1,59 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="studio.rcss"/>
+    <link type="text/rcss" href="rmlui_studio.rcss"/>
+    <title>RmlUi Studio</title>
+</head>
+<body>
+<div class="studio">
+    <div class="bar top">
+        <button id="rm-back" class="btn small">К SDK</button>
+        <span class="title">RmlUi Studio</span>
+        <span id="rm-file" class="pill">файл не открыт</span>
+        <span id="rm-dirty" class="dirty"></span>
+    </div>
+
+    <div class="bar">
+        <button id="rm-save" class="btn primary">Сохранить</button>
+        <button id="rm-undo" class="btn">Отменить</button>
+        <button id="rm-redo" class="btn">Повторить</button>
+        <button id="rm-validate" class="btn">Проверить</button>
+        <button id="rm-refresh" class="btn">Обновить предпросмотр</button>
+    </div>
+
+    <div class="body-row">
+        <div class="side left">
+            <h4>ДЕРЕВО RML</h4>
+            <div id="rm-tree"></div>
+        </div>
+
+        <div class="center">
+            <div id="rm-view" class="viewport"></div>
+            <div id="rm-hud" class="hud-text">—</div>
+        </div>
+
+        <div class="side right">
+            <h4>ФАЙЛ</h4>
+            <div class="field-row"><input id="rm-path" type="text" value="" class="field"/></div>
+            <div class="field-row"><button id="rm-open" class="btn small">Открыть</button></div>
+            <div id="rm-props"></div>
+            <h4>ИСХОДНИК RML</h4>
+            <textarea id="rm-src" class="area" style="height:150px;"></textarea>
+            <div class="field-row"><button id="rm-apply-src" class="btn small primary">Применить исходник</button></div>
+        </div>
+    </div>
+
+    <div id="rm-bottom">
+        <div class="bar tools">
+            <span class="sub">RCSS:</span>
+            <span id="rm-sheets"></span>
+            <button id="rm-apply-rcss" class="btn small primary">Применить RCSS</button>
+        </div>
+        <div id="rm-rcss-wrap"><textarea id="rm-rcss" class="area" style="height:130px;"></textarea></div>
+    </div>
+
+    <div id="rm-diag" class="diag-strip"></div>
+</div>
+</body>
+</rml>

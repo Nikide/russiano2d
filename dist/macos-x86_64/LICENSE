@@ -1,0 +1,91 @@
+Russiano2D — лицензия автора
+============================
+
+Copyright (c) 2026 Никита (admin@nikiniki.ru)
+
+--------------------------------------------------------------------------
+ИГРЫ
+
+Игры, сделанные на этом движке, вы можете распространять свободно: продавать,
+выкладывать, дарить, портировать, встраивать куда угодно. Отчислений автору
+движка не нужно, указывать его в игре не обязательно.
+
+--------------------------------------------------------------------------
+РУССКИЙ ДВИЖОК
+
+Russiano2D — русский движок, и делает его русский автор. Если этот факт вам
+не нравится — пожалуйста, не пользуйтесь этим движком.
+
+--------------------------------------------------------------------------
+ДВИЖОК
+
+Разрешается свободно использовать, изменять, распространять, встраивать и
+продавать этот движок и его части — без обязательных отчислений и без
+обязательного указания автора.
+
+Единственная просьба: если выпустишь на нём игру — скажи спасибо автору.
+Можно не вслух. Это не условие лицензии, а просто приятно.
+
+--------------------------------------------------------------------------
+
+Сторонние компоненты распространяются под своими лицензиями и в эту лицензию
+не входят: SDL3, SDL3_image, SDL3_mixer (zlib), QuickJS-ng, Box2D, RmlUi,
+Dear ImGui, trylock/visibility (MIT), glslang и SPIRV-Cross (Apache-2.0),
+Material Design Icons (Apache-2.0), шрифты Noto Sans и LatoLatin (SIL OFL).
+Полный список — в THIRD_PARTY_NOTICES.md.
+
+--------------------------------------------------------------------------
+ГАРАНТИИ
+
+Программа предоставляется «как есть», без каких-либо гарантий, явных или
+подразумеваемых, включая, но не ограничиваясь, гарантиями товарной
+пригодности, пригодности для конкретной цели и ненарушения прав. Автор ни при
+каких обстоятельствах не несёт ответственности по претензиям, убыткам или иным
+требованиям, возникшим из программы, в связи с ней или в результате её
+использования.
+
+==========================================================================
+ENGLISH TRANSLATION
+===================
+This is a courtesy translation of the Russian text above. The Russian text is
+the license and prevails if the two ever disagree.
+==========================================================================
+
+GAMES
+
+Games made with this engine may be distributed freely: sell them, publish
+them, give them away, port them, embed them anywhere. No royalties are owed
+to the engine's author, and crediting the author in the game is not required.
+
+--------------------------------------------------------------------------
+RUSSIAN ENGINE
+
+Russiano2D is a Russian engine made by a Russian author. If you do not like
+that fact, please do not use this engine.
+
+--------------------------------------------------------------------------
+ENGINE
+
+You are free to use, modify, distribute, embed and sell this engine and its
+parts — with no mandatory royalties and no mandatory attribution.
+
+One request: if you release a game made with it, say thanks to the author.
+You do not have to say it out loud. It is not a license condition, it is just
+nice.
+
+--------------------------------------------------------------------------
+
+Third-party components are distributed under their own licenses and are not
+covered by this license: SDL3, SDL3_image, SDL3_mixer (zlib), QuickJS-ng,
+Box2D, RmlUi, Dear ImGui, trylock/visibility (MIT), glslang and SPIRV-Cross
+(Apache-2.0), Material Design Icons (Apache-2.0), Noto Sans and LatoLatin
+fonts (SIL OFL). The full list is in THIRD_PARTY_NOTICES.md.
+
+--------------------------------------------------------------------------
+WARRANTY
+
+This software is provided "as is", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose and noninfringement. In no event shall the
+authors be liable for any claim, damages or other liability arising from,
+out of or in connection with the software or the use of the software.

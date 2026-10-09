@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 from typing import List
 
@@ -65,7 +66,27 @@ def refresh_out_dir(out_dir: str, version: str) -> int:
         target = os.path.join(out_dir, name)
         if not os.path.isdir(target) or name not in release.PLATFORMS:
             continue
+        # Refresh source documentation too, then regenerate checksums AND the
+        # archive. Editing only AGENTS/README made dist differ from its tarball.
+        docs = os.path.join(target, 'docs')
+        if os.path.isdir(docs): shutil.rmtree(docs)
+        shutil.copytree(os.path.join(ROOT, 'docs'), docs, ignore=shutil.ignore_patterns('.DS_Store', '__pycache__'))
+        for source in ('SDK_HANDOFF.md', 'Следующая цель SDK AGENT.md', *release.DOC_FILES):
+            if os.path.isfile(os.path.join(ROOT, source)):
+                shutil.copy2(os.path.join(ROOT, source), os.path.join(target, source))
         release.render_platform_docs(target, name, version)
+        entries=[]
+        for folder, _, files in os.walk(target):
+            for file in files:
+                full=os.path.join(folder,file)
+                rel=os.path.relpath(full,target)
+                if rel != 'SHA256SUMS.txt':
+                    entries.append((rel,release.sha256_file(full)))
+        with open(os.path.join(target,'SHA256SUMS.txt'),'w') as out:
+            out.write(''.join(sha+'  '+rel+'\n' for rel,sha in sorted(entries)))
+        fmt=release.PLATFORMS[name][2]
+        base=os.path.join(out_dir,'russiano2d-'+name)
+        shutil.make_archive(base,'zip' if fmt=='zip' else 'gztar',root_dir=target)
         agents = os.path.join(target, "AGENTS.md")
         if os.path.exists(agents):
             print("  %s — %d КБ" % (agents, os.path.getsize(agents) // 1024))
@@ -73,7 +94,8 @@ def refresh_out_dir(out_dir: str, version: str) -> int:
     if updated == 0:
         print("в %s нет папок платформ" % out_dir, file=sys.stderr)
         return 1
-    print("обновлено платформ: %d" % updated)
+    release._write_global_sums(out_dir)
+    print("обновлено платформ и архивов: %d" % updated)
     return 0
 
 
