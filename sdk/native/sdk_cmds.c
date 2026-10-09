@@ -4,6 +4,8 @@
 // ===========================================================================
 #include "sdk.h"
 
+#include <SDL3/SDL.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -396,6 +398,10 @@ int sdk_cmd_build(const SdkArgs *a)
         sdk_report_free(&rep);
         return rc;
     }
+    // Каталог результата создаётся здесь: пакет не должен падать из-за отсутствующего build/…/
+    char out_dir[1536];
+    sdk_dirname(out_path, out_dir, sizeof out_dir);
+    if (out_dir[0] && !sdk_is_dir(out_dir)) SDL_CreateDirectory(out_dir);
     const char *eargv[16];
     int n = 0;
     eargv[n++] = "build";

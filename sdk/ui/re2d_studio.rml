@@ -1,6 +1,6 @@
 <rml>
 <head>
-    <link type="text/rcss" href="studio.rcss"/>
+    <link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/>
     <title>Re2DSprite Studio</title>
 </head>
 <body>
@@ -95,7 +95,7 @@
                 <div class="field-row"><button id="b-apply" class="btn primary">Применить</button></div>
                 <h4>Части кости</h4>
                 <div id="rs-bone-parts" class="list"></div>
-                <div class="field-row"><label>ID → кость</label>
+                <div class="field-row"><label>ID » кость</label>
                     <div class="pair"><input id="p-id" type="text" value="" class="field"/><input id="p-bone" type="text" value="" class="field"/></div></div>
                 <div class="field-row"><button id="p-apply" class="btn">Переназначить часть</button></div>
                 <h4>Сокет</h4>

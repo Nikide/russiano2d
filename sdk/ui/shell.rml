@@ -1,30 +1,42 @@
 <rml>
 <head>
-    <link type="text/rcss" href="shell.rcss"/>
+    <link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="shell.rcss"/>
     <title>Russiano2D SDK</title>
 </head>
 <body>
 <div id="app">
     <div id="topbar">
-        <span id="brand">Russiano2D SDK</span>
-        <span id="project-badge">проект не открыт</span>
-        <span id="status">готов</span>
+        <span id="brand">Russiano<em>2D</em> SDK</span>
+        <span id="brand-ver" class="pill">v<span id="sdk-version"></span></span>
+        <span id="project-badge" class="pill">проект не открыт</span>
+        <span id="topbar-spacer"></span>
+        <span id="status" class="pill ok">готов</span>
     </div>
 
     <div id="main">
         <div id="nav">
+            <div class="nav-group">ПРОЕКТ</div>
             <button id="nav-projects" class="nav-btn on">Проекты</button>
             <button id="nav-assets" class="nav-btn">Ассеты</button>
-            <button id="nav-tools" class="nav-btn">Инструменты</button>
+            <div class="nav-group">ИНСТРУМЕНТЫ</div>
+            <button id="nav-tools" class="nav-btn">Все инструменты</button>
+            <button id="nav-templates" class="nav-btn">Шаблоны</button>
+            <div class="nav-group">ЗАПУСК</div>
             <button id="nav-run" class="nav-btn">Запуск и сборка</button>
+            <button id="nav-engines" class="nav-btn">Сборки движка</button>
+            <div class="nav-group">СПРАВКА</div>
             <button id="nav-docs" class="nav-btn">Документация</button>
-            <div id="nav-version">SDK <span id="sdk-version"></span></div>
+            <div id="nav-version">GAME = CODE + DATA</div>
         </div>
 
         <div id="content">
             <!-- Проекты -->
             <div id="view-projects" class="view">
-                <h2>Проекты</h2>
+                <div class="hero">
+                    <h2>Russiano<em>2D</em> SDK</h2>
+                    <span class="lead">Инструменты для данных вашей игры. Код остаётся кодом: SDK не владеет проектом, а ассеты — обычные файлы.</span>
+                    <span class="formula">GAME = CODE + DATA &nbsp;·&nbsp; SDK = R2D-приложение + инструменты</span>
+                </div>
                 <div class="panel">
                     <div class="form-row">
                         <input id="project-path" type="text" value="" class="field"/>
@@ -33,54 +45,82 @@
                     </div>
                     <div id="project-info"></div>
                 </div>
-                <h3>Недавние</h3>
+                <h3>НЕДАВНИЕ</h3>
                 <div id="recent-list" class="list"></div>
-                <h3>Найденные в каталоге</h3>
+                <h3>НАЙДЕННЫЕ В КАТАЛОГЕ</h3>
                 <div id="found-list" class="list"></div>
             </div>
 
             <!-- Ассеты -->
             <div id="view-assets" class="view hidden">
                 <h2>Asset Browser</h2>
+                <span class="lead">Реальные файлы проекта. Тип определяется по имени, инструмент — по реестру.</span>
                 <div class="form-row">
                     <input id="asset-filter" type="text" value="" class="field"/>
                     <button id="btn-asset-filter" class="btn">Фильтр</button>
                     <button id="btn-assets-refresh" class="btn">Обновить</button>
                 </div>
-                <div id="type-chips"></div>
-                <div id="asset-list" class="list tall"></div>
                 <div class="form-row">
-                    <span id="asset-selected">файл не выбран</span>
+                    <span id="asset-selected" class="pill">файл не выбран</span>
                     <button id="btn-asset-open" class="btn primary">Открыть в инструменте</button>
                     <button id="btn-asset-validate" class="btn">Проверить</button>
                 </div>
+                <div id="type-chips"></div>
+                <div id="asset-list" class="list tall"></div>
             </div>
 
             <!-- Инструменты -->
             <div id="view-tools" class="view hidden">
                 <h2>Инструменты</h2>
-                <p class="hint">Каталог читается из sdk_tools.json — списка инструментов в коде нет.</p>
-                <div id="tool-list" class="list tall"></div>
+                <span class="lead">Каталог читается из sdk_tools.json — списка инструментов в коде нет.</span>
+                <div id="tool-list" class="cards"></div>
                 <div class="form-row"><button id="btn-tools-reload" class="btn">Перечитать реестр</button></div>
+            </div>
+
+            <!-- Шаблоны -->
+            <div id="view-templates" class="view hidden">
+                <h2>Шаблоны проектов</h2>
+                <span class="lead">Новый проект — это обычный каталог с project.json и main.js; после создания SDK не нужен.</span>
+                <div class="panel">
+                    <div class="form-row">
+                        <input id="template-dest" type="text" value="build/my-game" class="field"/>
+                        <button id="btn-template-create" class="btn primary">Создать проект</button>
+                    </div>
+                    <span id="template-selected" class="pill">шаблон не выбран</span>
+                </div>
+                <div id="template-list" class="cards"></div>
             </div>
 
             <!-- Запуск и сборка -->
             <div id="view-run" class="view hidden">
                 <h2>Запуск и сборка</h2>
+                <span class="lead">Run, Debug, Build и Package — те же операции, что у CLI r2d-sdk и у агента.</span>
                 <div class="panel">
+                    <h4>ЗАПУСК И ОТЛАДКА</h4>
                     <div class="form-row">
                         <button id="btn-run" class="btn primary">Запустить игру</button>
+                        <button id="btn-debug" class="btn">Отладка (статистика)</button>
                         <button id="btn-stop" class="btn">Остановить</button>
                         <button id="btn-validate-project" class="btn">Проверить project.json</button>
                     </div>
+                    <h4>СБОРКА И ПАКЕТ</h4>
                     <div class="form-row">
                         <input id="build-out" type="text" value="build/game" class="field"/>
                         <button id="btn-build" class="btn primary">Собрать в один файл</button>
+                        <button id="btn-package" class="btn">Собрать без шифрования</button>
                     </div>
-                    <div id="run-status">процессов нет</div>
+                    <span id="run-status" class="pill">процессов нет</span>
                 </div>
-                <h3>Вывод</h3>
+                <h3>ВЫВОД</h3>
                 <div id="run-log" class="log"></div>
+            </div>
+
+            <!-- Сборки движка -->
+            <div id="view-engines" class="view hidden">
+                <h2>Сборки движка</h2>
+                <span class="lead">Бинарники russiano2d, найденные рядом с SDK. Проект запускается тем, который выбран.</span>
+                <div class="form-row"><button id="btn-engines-refresh" class="btn">Обновить</button></div>
+                <div id="engine-list" class="cards"></div>
             </div>
 
             <!-- Документация -->
@@ -94,7 +134,7 @@
 
     <div id="diag">
         <div id="diag-head">
-            <span id="diag-title">Диагностика</span>
+            <span id="diag-title">ДИАГНОСТИКА</span>
             <span id="diag-counts">ошибок 0 · предупреждений 0</span>
             <button id="btn-diag-clear" class="btn small">Очистить</button>
         </div>

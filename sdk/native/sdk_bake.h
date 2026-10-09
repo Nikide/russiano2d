@@ -84,10 +84,12 @@ typedef struct BkScene {
     int         nskin;
     BkVrm       vrm;
     int         skins, animations, meshes, primitives_skipped;
-    char        source_kind[8];      // "glb" / "gltf"
+    char        source_kind[8];      // "glb" / "gltf" / "obj"
 } BkScene;
 
 bool bk_load_expression(const char *path, const char *expression, BkScene *scene, SdkReport *rep);
+// Wavefront OBJ (+ MTL): sdk_obj.c; вызывается из bk_load_expression по расширению .obj.
+bool bk_load_obj(const char *path, BkScene *scene, SdkReport *rep);
 bool bk_load(const char *path, BkScene *scene, SdkReport *rep);
 void bk_free(BkScene *scene);
 

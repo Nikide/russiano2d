@@ -1,11 +1,45 @@
 # SDK Handoff
 
-Last updated: 2026-10-08 (Europe/Moscow).
+Last updated: 2026-10-09 (Europe/Moscow).
 
 Спецификация: [Следующая цель SDK AGENT.md](Следующая%20цель%20SDK%20AGENT.md).
 Фактическое поведение и команды — [docs/SDK.md](docs/SDK.md).
 Исходный аудит — [SDK_AUDIT.md](SDK_AUDIT.md); текущие доказательства —
 [docs/SDK_VERIFICATION.md](docs/SDK_VERIFICATION.md).
+
+## Сессия 2026-10-09: «SDK не рабочий, кнопки не нажимаются, нет инструментов»
+
+**Причина мёртвых кнопок (подтверждена):** RmlUi без стилей `scrollbarvertical/sliderbar/…` не знает ширину полосы у
+`overflow: auto`; при переполнении высоты он отдаёт под полосу всю ширину, и дети контейнера получают ширину 0
+(каталог инструментов, списки). Клики по навигации работали — «Открыть» в карточках нет. Исправлено стилями в
+`sdk/ui/theme.rcss`. Ещё: `@import` в RCSS не поддерживается (тема подключается `<link>`), градиентные
+декораторы рендерер не строит (`Could not generate decorator element data`), в Open Sans нет «→ ← ●».
+
+**Сделано (проверено тестами):**
+
+| Что | Файлы | Проверка |
+|---|---|---|
+| Тема в стиле сайта, навигация по группам, Шаблоны, Сборки движка, Debug, Package | `sdk/ui/theme.rcss`, `shell.rcss`, `studio.rcss`, `shell.rml`, `sdk/app.js`, `sdk/lib/views.js` | `sdk_studios_test.py`, `sdk_shell_test.py`, `sdk_app_test.mjs` |
+| Движок: мышь агента доходит до RmlUi | `src/app.c` (`r2d__app_forward_virtual_mouse`), `src/app.h` | `ui_virtual_mouse_test.py` (фикстура `tests/fixtures/uiclick`) |
+| Хост студий данных + 7 студий (tilemap, particles, collision, layers, fonts, audio, input) | `sdk/lib/studio_host.js`, `data_session.js`, `kit.js`, `kinds/*.js`, `sdk/tools/*-studio.js`/`*-tools.js`, `sdk/ui/data_studio.rml` | `sdk_studios_test.py`, `sdk_kinds_test.mjs` |
+| RmlUi Studio, DevTools | `sdk/tools/rmlui-studio.js`, `devtools.js`, `sdk/lib/rml_model.js`, `sdk/ui/rmlui_studio.rml`, `devtools.rml` | `sdk_studios_test.py`, `sdk_rml_test.mjs` |
+| Нативные команды и валидаторы | `sdk/native/sdk_scaffold.c` (`templates`, `new`, `engines`), `sdk_data.c` (9 валидаторов), `sdk_assets.c`, `sdk_cmds.c` | `sdk_data_parity_test.py` (2912 правок, JS ↔ C, 0 расхождений), `sdk_studios_test.py` |
+| Baker: импорт OBJ + MTL | `sdk/native/sdk_obj.c`, `sdk_gltf.c` (диспетчер по расширению), `sdk_tools.json` | `sdk_obj_test.py` |
+| Шаблоны проектов | `sdk/templates/{blank,platformer,tilemap-room,ui-menu}` | `sdk_studios_test.py` (создание, запуск без SDK) |
+| Реестр: 18 компонентов спецификации §8 | `sdk_tools.json` | `sdk_studios_test.py` (сверка и наличие экранов) |
+
+Документация: `docs/SDK.md` §3, §4, §11, §13–§17; `docs/AGENT_API.md` §3.5; `docs/TASKS.md` §4; `CHANGELOG.md`.
+
+**Решения, которые нельзя молча менять:** формат каждой новой студии — JSON `version: 1`, который игра читает
+`$.fs.readJSON` (корень tilemap/particles — сами `opts`); существующий файл студия не перезаписывает; правила проверки
+продублированы в JS и C и держатся паритет-тестом; студия без `standalone` без файла ведёт в Asset Browser.
+
+**Не проверялось / ограничения:** окно меньше 1100×700 (раскладка рассчитана на 1360×820); Windows/Linux (проверка
+только на macOS arm64); выбор элемента кликом в предпросмотре RmlUi Studio (нет hit-test API); drag-ресайз фигур
+коллизии и зон акустики (числовые поля есть); SDK по-прежнему не входит в `tools/release.py` и `dist/`.
+
+**Следующий шаг:** упаковка SDK (`r2d-sdk` + `sdk/` + `sdk_tools.json` + `sdk/templates`) в `tools/release.py` с тестом
+запуска из распакованного пакета (docs/TASKS.md §5).
 
 ## Передача от Claude
 
@@ -59,7 +93,7 @@ PNG v2 / character.json / animations — существующие runtime фор
 
 Статус IMPLEMENTED относится к acceptance фаз. Дальнейшие возможности большой
 спецификации остаются отдельными задачами: tilemap/particles/collision/RmlUi editors,
-Weapon/Environment, FBX/OBJ, optimized UV, сравнение source↔Re2D, кисти поверхности,
+Weapon/Environment, FBX, optimized UV, сравнение source↔Re2D, кисти поверхности,
 графические кривые. Legacy ImGui в движке сохранён; весь SDK UI — RmlUi.
 
 PVS пока данные компилятора (`runtimeUsed:false`), slopes — ступенчатая аппроксимация,

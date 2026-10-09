@@ -44,6 +44,19 @@ jobs:
           ./build-ci/r2d-sdk batch tests/fixtures/sdk/ci.batch.json --output build-ci/sdk-ci-report.json
           xvfb-run -a python3 tests/agent/sdk_cli_test.py
           python3 tests/agent/sdk_expression_test.py
+      - name: SDK data studios, OBJ import and UI mouse
+        env:
+          R2D_SDK_BINARY: build-ci/r2d-sdk
+          R2D_BINARY: build-ci/russiano2d
+          R2D_QJS: build-ci/_deps/quickjs-build/qjs
+          SDL_GPU_DRIVER: vulkan
+        run: |
+          set -eu
+          for test in sdk_kinds_test sdk_rml_test; do "$R2D_QJS" -m "tests/js/${test}.mjs"; done
+          python3 tests/agent/sdk_data_parity_test.py
+          python3 tests/agent/sdk_obj_test.py
+          xvfb-run -a python3 tests/agent/ui_virtual_mouse_test.py
+          xvfb-run -a python3 tests/agent/sdk_studios_test.py
       - name: Native SDK agent protocol parity
         env:
           R2D_SDK_BINARY: build-ci/r2d-sdk

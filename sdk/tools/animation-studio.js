@@ -276,7 +276,7 @@ export function createStudio(app) {
     function renderTop() {
         const dirty = s.session && s.session.history.dirty();
         doc.text('an-file', escapeHtml(s.session ? s.session.path : '—'));
-        doc.text('an-dirty', dirty ? '● есть несохранённые правки' : '');
+        doc.text('an-dirty', dirty ? '• есть несохранённые правки' : '');
         const h = s.session ? s.session.history : null;
         doc.cls('an-undo', 'off', !(h && h.canUndo()));
         doc.cls('an-redo', 'off', !(h && h.canRedo()));

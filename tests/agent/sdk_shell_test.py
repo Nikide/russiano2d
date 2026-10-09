@@ -60,11 +60,14 @@ def main():
         ids = [t["id"] for t in s["registry"]["tools"]]
         reg = json.load(open(os.path.join(ROOT, "sdk_tools.json"), encoding="utf-8"))
         check(ids == [t["id"] for t in reg["tools"]], "launcher показывает ровно записи sdk_tools.json")
-        cards = a.eval(f"{DOC}.content('tool-list')")
-        check(all(t["name"] in cards for t in reg["tools"]), "карточки содержат name каждого инструмента")
-        check(all(t["description"][:20] in cards for t in reg["tools"]), "карточки содержат description")
-        check("08.10.2026 18:00 (+03:00)" in cards, "карточки показывают last_updated")
-        check("Открыть" in cards, "у валидных записей есть кнопка")
+        # Карточка каждого инструмента имеет id tool-<id>; весь список в getText не помещается (буфер 8 КБ).
+        cards = {t["id"]: a.eval(f"{DOC}.content('tool-{t['id']}')") or "" for t in reg["tools"]}
+        check(all(t["name"] in cards[t["id"]] for t in reg["tools"]), "карточки содержат name каждого инструмента")
+        check(all(t["description"][:20] in cards[t["id"]] for t in reg["tools"]), "карточки содержат description")
+        first = reg["tools"][0]["last_updated"]
+        shown = "%s.%s.%s %s:%s" % (first[8:10], first[5:7], first[0:4], first[11:13], first[14:16])
+        check(shown in cards[reg["tools"][0]["id"]], "карточки показывают last_updated (%s)" % shown)
+        check(all("Открыть" in c for c in cards.values()), "у валидных записей есть кнопка")
         check(a.eval(f"{DOC}.rect('view-tools').h") == 0, "скрытый экран инструментов не занимает места")
         check(a.eval(f"{DOC}.rect('view-projects').h") > 100, "активный экран проектов имеет геометрию")
 
@@ -119,8 +122,8 @@ def main():
         check(snap(a)["assets"]["selected"] == "assets/hero.character.json", "выбор файла")
         check("row sel" in a.eval(f"{DOC}.content('asset-list')"), "выбранная строка подсвечена")
 
-        # Проверка ассета: у RML пока нет валидатора — info, не ошибка.
-        a.eval("$.sdkApp.selectAsset('ui/menu.rml'); 1")
+        # Проверка ассета без валидатора (скрипт) — info, не ошибка.
+        a.eval("$.sdkApp.selectAsset('main.js'); 1")
         a.eval(f"{DOC}.click('btn-asset-validate')")
         wait_idle(a)
         s = snap(a)
@@ -128,7 +131,7 @@ def main():
               "проверка без валидатора — info SDK_NO_VALIDATOR")
 
         # Открыть файл без инструмента — понятная диагностика, а не тишина.
-        a.eval("$.sdkApp.openAsset('ui/menu.rml'); 1")
+        a.eval("$.sdkApp.openAsset('project.json'); 1")
         check("SDK_NO_TOOL_FOR_ASSET" in snap(a)["diagnostics"]["codes"], "файл без инструмента: SDK_NO_TOOL_FOR_ASSET")
 
         # Несуществующий проект.

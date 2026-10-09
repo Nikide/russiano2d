@@ -1,15 +1,15 @@
 /* ---------------------------------------------------------------------------
-   Общие стили студий (Sprite Studio, Animation Studio).
+   Общие стили студий. Тема — theme.rcss (палитра сайта), подключается ссылкой в .rml: RmlUi не знает @import.
 
    Важно: у body НЕТ фона. Область просмотра прозрачна — сквозь неё видна сцена
-   движка, в которой настоящий рантайм рисует текстуру и анимацию. Все
+   движка, в которой настоящий рантайм рисует спрайты, частицы и мир. Все
    остальные панели непрозрачны.
    --------------------------------------------------------------------------- */
 
 body {
     font-family: Open Sans;
     font-size: 14px;
-    color: #dbe4f0;
+    color: #e9edf6;
     width: 100%;
     height: 100%;
 }
@@ -18,110 +18,64 @@ body {
 
 .bar {
     display: block;
-    padding: 6px 12px;
-    background-color: #0a0f19;
-    border-color: #1f2b40;
+    padding: 8px 14px;
+    background-color: #0f131c;
+    border-color: #232b3d;
     border-width: 0px;
 }
-.bar.top { border-bottom-width: 1px; }
+.bar.top { border-bottom-width: 1px; padding: 10px 16px; }
 .bar.bottom { border-top-width: 1px; }
 .bar > * { margin-right: 8px; }
-.title { color: #7fd1ff; font-size: 16px; margin-right: 16px; }
-.dirty { color: #ffd27f; }
-.sub { color: #8393a8; }
+.title { color: #e9edf6; font-size: 17px; margin-right: 16px; }
 
-.body-row { display: flex; flex-direction: row; flex: 1 1 0; min-height: 0; }
+.body-row { display: flex; flex-direction: row; flex: 1 1 0; min-height: 0px; }
 
 .side {
     display: block;
+    flex: 0 0 260px;
     width: 260px;
-    padding: 8px;
+    padding: 10px 12px;
     overflow-y: auto;
-    background-color: #0b111c;
+    background-color: #0f131c;
 }
-.side.left { border-right-width: 1px; border-color: #1f2b40; }
-.side.right { border-left-width: 1px; border-color: #1f2b40; width: 300px; }
+.side.left { border-right-width: 1px; border-color: #232b3d; }
+.side.right { border-left-width: 1px; border-color: #232b3d; flex: 0 0 310px; width: 310px; }
 
-.center { display: block; flex: 1 1 0; min-width: 0; position: relative; }
+.center { display: block; flex: 1 1 0; min-width: 0px; position: relative; }
 
 /* Окно просмотра: прозрачное, сквозь него видна сцена. */
 .viewport { position: absolute; left: 0px; top: 0px; right: 0px; bottom: 0px; overflow: hidden; }
 .overlay { position: absolute; left: 0px; top: 0px; right: 0px; bottom: 0px; overflow: hidden; }
 
-.fr {
-    position: absolute;
-    border-width: 1px;
-    border-color: rgba(127, 209, 255, 170);
-}
-.fr.sel { border-color: #ffd27f; background-color: rgba(255, 210, 127, 40); }
-.fr.hot { border-color: #a8e6a1; }
+.fr { position: absolute; border-width: 1px; border-color: rgba(255, 176, 58, 170); }
+.fr.sel { border-color: #ff5a3c; background-color: rgba(255, 90, 60, 45); }
+.fr.hot { border-color: #4ad991; }
 .fr-label {
     position: absolute;
     left: 1px; top: 1px;
     font-size: 11px;
-    color: #cfe9ff;
-    background-color: rgba(8, 12, 20, 200);
+    color: #ffe2b0;
+    background-color: rgba(11, 14, 20, 210);
     padding: 0px 3px;
 }
 .pivot {
     position: absolute;
     width: 9px; height: 9px;
     border-width: 2px;
-    border-color: #ff6b9d;
+    border-color: #ff5a8a;
     border-radius: 6px;
-    background-color: rgba(255, 107, 157, 90);
+    background-color: rgba(255, 90, 138, 90);
 }
-.drag { position: absolute; border-width: 1px; border-color: #a8e6a1; background-color: rgba(168, 230, 161, 50); }
+.drag { position: absolute; border-width: 1px; border-color: #4ad991; background-color: rgba(74, 217, 145, 50); }
 .hud-text {
-    position: absolute; left: 8px; bottom: 6px;
-    padding: 2px 8px; color: #cfe0f5; font-size: 12px;
-    background-color: rgba(8, 12, 20, 210); border-radius: 4px;
+    position: absolute; left: 10px; bottom: 8px;
+    padding: 3px 10px; color: #d7deee; font-size: 12px;
+    background-color: rgba(11, 14, 20, 225); border-radius: 8px;
 }
 
-h4 { display: block; margin: 10px 0 4px 0; color: #8fb4de; font-size: 14px; }
-.hint { display: block; color: #7b8da6; font-size: 12px; margin: 4px 0; }
-.empty { display: block; color: #6c7b90; padding: 6px 4px; }
+.strip-cell { display: inline-block; margin: 2px; padding: 4px 9px; background-color: #141926; border-radius: 8px; color: #b4bdd0; cursor: pointer; }
+.strip-cell:hover { background-color: #1c2335; }
+.strip-cell.cur { background-color: #2a1a1c; color: #ffb03a; }
 
-.list { display: block; max-height: 300px; overflow-y: auto; background-color: #0d1522; border-radius: 6px; border-width: 1px; border-color: #1b283d; }
-.list.grow { max-height: 420px; }
-.row { display: block; padding: 4px 8px; }
-.row:hover { background-color: #172540; }
-.row.sel { background-color: #223a60; }
-.row-name { color: #eaf2ff; margin-right: 8px; }
-.row-dir { color: #6f84a2; font-size: 12px; }
-
-.field-row { display: flex; flex-direction: row; margin: 3px 0; }
-.field-row > label { width: 78px; color: #8393a8; padding-top: 6px; }
-input.field {
-    display: block; flex: 1 1 0; min-width: 40px; height: 26px; padding: 3px 8px;
-    color: #eef4ff; background-color: #0a111d;
-    border-width: 1px; border-color: #2b3c58; border-radius: 4px;
-}
-input.field:focus { border-color: #7fd1ff; }
-.pair { display: flex; flex-direction: row; flex: 1 1 0; }
-.pair > input.field { margin-right: 4px; }
-
-.btn {
-    display: inline-block; padding: 5px 12px; color: #dbe7f7;
-    background-color: #1a2a44; border-radius: 5px; border-width: 1px; border-color: #2b4366;
-}
-.btn:hover { background-color: #23395c; }
-.btn.primary { background-color: #2a5fa0; border-color: #4a86cc; color: #ffffff; }
-.btn.primary:hover { background-color: #3571bb; }
-.btn.on { background-color: #2f6b4a; border-color: #4aa377; color: #ffffff; }
-.btn.small { padding: 2px 9px; font-size: 12px; }
-.btn.off { color: #5f7088; }
-
-.diag-strip { display: block; height: 96px; overflow-y: auto; padding: 3px 12px; background-color: #0a0f19; border-top-width: 1px; border-color: #1f2b40; }
-.diag { display: block; padding: 2px 0; }
-.diag-sev { display: inline-block; width: 64px; font-size: 11px; }
-.diag-code { color: #dbe4f0; margin-right: 10px; font-size: 13px; }
-.diag-asset { color: #6f84a2; font-size: 12px; }
-.diag-msg { display: block; margin-left: 64px; color: #aab9cf; font-size: 12px; }
-.diag-err .diag-sev { color: #ff8f8f; }
-.diag-warn .diag-sev { color: #ffd27f; }
-.diag-info .diag-sev { color: #7fd1ff; }
-
-.strip-cell { display: inline-block; margin: 2px; padding: 3px 7px; background-color: #152036; border-radius: 4px; color: #b9c8de; }
-.strip-cell.cur { background-color: #2a5fa0; color: #ffffff; }
-.kv { display: block; padding: 1px 0; color: #9fb2cc; font-size: 13px; }
+.bar.tools { border-top-width: 1px; padding: 6px 14px; }
+.bar.tools .btn { padding: 5px 12px; margin-bottom: 0px; }

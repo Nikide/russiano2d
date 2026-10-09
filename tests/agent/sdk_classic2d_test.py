@@ -94,8 +94,9 @@ def edit_sprites(a):
     def to_screen(tx, ty):
         return view["cx"] + (tx - view["px"]) * view["zoom"], view["cy"] + (ty - view["py"]) * view["zoom"]
 
-    x0, y0 = to_screen(4, 4)
-    x1, y1 = to_screen(12, 12)
+    # Середины пикселей, а не границы: floor/ceil рамки не должны зависеть от дробной раскладки RmlUi.
+    x0, y0 = to_screen(4.1, 4.1)
+    x1, y1 = to_screen(11.9, 11.9)
     a.mouse_move(x=x0, y=y0); a.step(2)
     a.mouse(button=1, action="down"); a.step(2)
     a.mouse_move(x=(x0 + x1) / 2, y=(y0 + y1) / 2); a.step(2)
@@ -103,7 +104,7 @@ def edit_sprites(a):
     a.mouse(button=1, action="up"); a.step(3)
     check(snap(a)["studios"]["sprite"]["frames"] == 9, "кадр создан перетаскиванием мыши по картинке")
     fr = json.loads(a.eval("JSON.stringify($.sdkApp.studios.sprite.session.doc.frames[8])"))
-    check((fr["x"], fr["y"], fr["w"], fr["h"]) == (4, 4, 8, 8), "рамка кадра совпала с протянутой областью 8×8")
+    check((fr["x"], fr["y"], fr["w"], fr["h"]) == (4, 4, 8, 8), "рамка кадра совпала с протянутой областью 8×8 (получено %r)" % ((fr["x"], fr["y"], fr["w"], fr["h"]),))
     a.eval(f"{SPR}.click('ss-undo')")
     check(snap(a)["studios"]["sprite"]["frames"] == 8, "undo убрал кадр, созданный мышью")
 

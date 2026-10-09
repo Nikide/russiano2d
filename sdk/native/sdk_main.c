@@ -43,6 +43,9 @@ static const Command k_commands[] = {
     { "world-info",    sdk_cmd_world_info,    "Re2D World: статистика, room-over-room, порталы и проверка без записи" },
     { "batch", sdk_cmd_batch, "Пакетный Baker / validation: JSON manifest и сводный report" },
     { "agent", sdk_cmd_agent, "Нативный клиент существующего агентского протокола (JSON session)" },
+    { "templates", sdk_cmd_templates, "шаблоны проектов sdk/templates" },
+    { "new",       sdk_cmd_new,       "создать проект из шаблона (копирование файлов)" },
+    { "engines",   sdk_cmd_engines,   "найденные сборки движка russiano2d" },
     { "run",      sdk_cmd_run,      "запустить игру движком" },
     { "build",    sdk_cmd_build,    "собрать игру в один файл" },
 };

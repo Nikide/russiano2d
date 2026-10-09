@@ -1,4 +1,4 @@
-<rml><head><link type="text/rcss" href="studio.rcss"/><link type="text/rcss" href="world_studio.rcss"/><title>Re2D World Studio</title></head><body>
+<rml><head><link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/><link type="text/rcss" href="world_studio.rcss"/><title>Re2D World Studio</title></head><body>
 <div class="studio">
 <div class="bar top"><button id="ws-back" class="btn small">К SDK</button><span class="title">Re2D World Studio</span><span id="ws-file" class="sub"></span><span id="ws-dirty" class="dirty"></span></div>
 <div class="bar"><button id="ws-save" class="btn primary">Сохранить</button><button id="ws-undo" class="btn">Отменить</button><button id="ws-redo" class="btn">Повторить</button><button id="ws-compile" class="btn primary">Проверить и скомпилировать</button><button id="ws-preview" class="btn">Обновить preview</button><span id="ws-stats" class="sub"></span></div>

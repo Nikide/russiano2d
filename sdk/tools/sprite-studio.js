@@ -310,7 +310,7 @@ export function createStudio(app) {
     function renderTop() {
         const dirty = s.session && s.session.history.dirty();
         doc.text('ss-file', escapeHtml(s.session ? s.session.path : (s.createFor || '—')));
-        doc.text('ss-dirty', dirty ? '● есть несохранённые правки' : '');
+        doc.text('ss-dirty', dirty ? '• есть несохранённые правки' : '');
         const h = s.session ? s.session.history : null;
         doc.cls('ss-undo', 'off', !(h && h.canUndo()));
         doc.cls('ss-redo', 'off', !(h && h.canRedo()));

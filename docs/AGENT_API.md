@@ -221,6 +221,14 @@
 | `wheel` | `amount` (number) | `{"ok":true}` |
 | `text` | `text` (строка, UTF-8) — символы, которые игрок «набрал» в этом кадре | `{"ok":true,"text":"..."}` |
 
+**Мышь агента доходит и до RmlUi.** RmlUi получает ввод только событиями SDL, поэтому движок
+(`r2d_app_begin_frame`) отправляет подписчикам событий изменения виртуальной мыши — движение,
+кнопки, колесо — теми же `SDL_EVENT_MOUSE_*`, что и у настоящей мыши. Агент наводит курсор
+(`mouseMove` + `step`), нажимает кнопки интерфейса (`mouse` `click` = down и up в разных кадрах,
+`click` у элемента срабатывает как у человека: отпустить над другим элементом — не клик) и крутит
+списки (`wheel`). RmlUi прокручивает плавно, поэтому после `wheel` положение элементов меняется ещё
+несколько кадров. Проверка — `tests/agent/ui_virtual_mouse_test.py`.
+
 `text` нужен для `<ui.input>` и любых текстовых полей: SDL присылает ввод
 событием `SDL_EVENT_TEXT_INPUT`, синтезировать его снаружи нельзя, поэтому
 агент дописывает символы прямо в буфер кадра. Игра читает их через
@@ -336,6 +344,7 @@ R2D_TEST_TIMEOUT=120 python3 tools/run_tests.py
 | `tests/agent/demos_test.py` | все демо: сцена открывается, рисуется и не пишет ошибок |
 | `tests/agent/build_test.py` | сборка игры в один файл: запуск без проекта, шифрование, защита от подмены |
 | `tests/agent/highlevel_*_test.py` | подсистемы `$` по отдельности: `anim`, `tilemap`, `tilemap_ysort`, `particles`, `nav`, `navmesh`, `prefab`, `audiobus`, `layers`, `widgets`, `widgets_anchor`, `tween`, `triggers`, `i18n`, `pool`, `physics`, `http`, `render`, `timeline` |
+| `tests/agent/ui_virtual_mouse_test.py` | виртуальная мышь агента доходит до RmlUi: наведение, клик, отпускание над другим элементом, колесо |
 | `tests/agent/highlevel_guide_test.py` | страж документации: достаёт листинг из `docs/tutorial-first-game.md` и запускает его |
 | `tests/js/*_test.mjs` | юнит-тесты логики модулей под `qjs` — без движка и без сборки (91 набор, сверка 2026-10-08) |
 | `tests/fixtures/*` | маленькие игры для тестов (`hello`, `bare`, `spawn`, `dynimport`, по одной на подсистему) |

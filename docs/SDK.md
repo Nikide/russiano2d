@@ -51,6 +51,14 @@ SDK не владеет игрой: проекты и ассеты остают�
   Browser выбирает инструмент для файла;
 * `binary` — необязательный относительный путь к нативному бинарнику.
 
+Состав реестра (18 компонентов, каждый ровно один раз; тест `sdk_studios_test.py` сверяет его со
+спецификацией §8 и наличием экранов): оболочка — `launcher`, `asset-browser`; бэкенд — `r2d-sdk`;
+Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-studio`,
+`collision-tools`, `parallax-tools`, `font-tools`, `audio-tools`, `input-tools`, `rmlui-studio`;
+отладка — `devtools`; Re2D — `re2dsprite-studio`, `re2d-baker`, `re2d-world-studio`; автоматизация —
+`automation`. Экран, которому нужен файл (`assets` в записи), без файла ведёт в Asset Browser с
+фильтром и подсказкой `SDK_PICK_ASSET`; студии с `export const standalone = true` открываются сразу.
+
 Неверная `schema_version` и некорректные записи **не пропускаются молча**:
 запись остаётся в списке с `valid:false`, причина — в диагностике
 (`SDK_REGISTRY_SCHEMA_VERSION`, `SDK_REGISTRY_DATE`, `SDK_REGISTRY_ID`,
@@ -81,8 +89,11 @@ SDK не владеет игрой: проекты и ассеты остают�
 | `world-info <f.re2dmap>` | compile/validation без записи результата |
 | `batch <manifest.batch.json> [--output report.json]` | пакет bake-re2d / validate, ошибки отдельных jobs не прерывают пакет |
 | `agent <session.agent.json> [--engine путь] [--output report.json]` | нативный клиент исходного агентского протокола движка |
+| `templates [--root sdk/templates]` | шаблоны проектов (`sdk/templates/<id>/template.json`): имя, описание, число файлов |
+| `new <шаблон> <каталог> [--name «Имя»] [--root sdk/templates]` | создать проект копированием файлов шаблона; `{{name}}` в текстовых файлах заменяется именем; непустой каталог не перезаписывается (`SDK_DEST_EXISTS`) |
+| `engines [--engine путь]` | найденные сборки движка `russiano2d` (рядом с `r2d-sdk`, `dist/*`, `R2D_ENGINE`) и используемая |
 | `run <каталог> [--scene s] [--frames N] [--headless] [--engine путь]` | запуск игры движком |
-| `build <каталог> --out f [--entry main.js] [--encrypt\|--no-encrypt]` | сборка в один файл (`russiano2d build`) |
+| `build <каталог> --out f [--entry main.js] [--encrypt\|--no-encrypt]` | сборка в один файл (`russiano2d build`); каталог результата создаётся |
 
 Явный `--engine` не подменяется молча: нет файла → `SDK_ENGINE_NOT_FOUND`.
 
@@ -235,6 +246,19 @@ Feet/центр, масштаб, панель *Coordinate Fit* (диапазон
 превью — запечённая модель вращается настоящим `$.re2dSprite`, кнопка «Открыть результат в
 Re2DSprite Studio». GUI вызывает тот же `bake-re2d`, поэтому PNG побайтно совпадает с CLI.
 
+### OBJ (Prop)
+
+`bake-re2d model.obj --type prop` читает Wavefront OBJ + MTL тем же конвейером, что GLB
+(`sdk/native/sdk_obj.c`: `v`, `vt`, `f` в формах `v`, `v/vt`, `v//vn`, `v/vt/vn`, отрицательные
+индексы, полигоны веером; `usemtl`/`mtllib`; MTL `Kd`, `d`/`Tr`, `map_Kd` — PNG/JPEG/BMP рядом с
+моделью). Оси как у glTF (Y вверх); V текстуры OBJ идёт снизу вверх и переворачивается. Линии и
+точки пропускаются с предупреждением, нормали и сглаживание игнорируются (нормали считает Baker),
+остальные карты MTL не читаются. OBJ — временный источник: результат тот же PNG v2 +
+`*.character.json`. Коды: `SDK_BAKE_OBJ_SYNTAX`, `INDEX_RANGE` (с номером строки), `NO_MESH`,
+`MTL_MISSING`, `MATERIAL_MISSING`, `TEXTURE_MISSING`, `EXPRESSION_UNSUPPORTED`; как `--type character`
+OBJ отвергается (нет humanoid). Тест `tests/agent/sdk_obj_test.py`, фикстуры —
+`tests/fixtures/sdk/make_obj_fixtures.py`.
+
 ### Character / VRM (Phase 5)
 
 ```bash
@@ -270,7 +294,7 @@ build/r2d-sdk bake-re2d hero.vrm --type character --output assets/hero/
 Материалы MToon сводятся к baseColor; авторская анимация файла не переносится.
 
 Что НЕ сделано (честно): Weapon/Environment, Re2D Optimized UV, сравнение «источник ↔ Re2D» и метрика различия (§39–40
-спецификации), FBX/OBJ. Качество: плоские карты по оси
+спецификации), FBX (OBJ поддержан — ниже). Качество: плоские карты по оси
 дают просветы на косых гранях и швы между картами — это видно в диагностике (`LOW_DENSITY`)
 и на проекциях; «идеального auto unwrap» baker не обещает.
 
@@ -349,8 +373,10 @@ Timeout — целое число 1..600000 мс,
 максимум 4096 requests/jobs. Экран `automation` сохраняет JSON и запускает
 batch/agent через тот же мост, отображая машинный отчёт. Он доступен из реестра,
 а API — в `$.sdkApp.studios.automation`, снимок — `state.sdk.studios.automation`.
-CI вызывает SDK native tests, CLI, expression regression, batch manifest и
-паритет всех 19 команд агента; сохраняет машинные отчёты артефактами.
+CI вызывает SDK native tests, CLI, expression regression, batch manifest,
+паритет всех 19 команд агента, а также паритет JS ↔ C студий данных, импорт OBJ,
+мышь агента и сами студии (шаг в `.github/workflows/build.yml`, удалённо не запускался);
+сохраняет машинные отчёты артефактами.
 
 ## 11. Состояние фаз
 
@@ -365,10 +391,12 @@ CI вызывает SDK native tests, CLI, expression regression, batch manifest
 | 6 World Studio | IMPLEMENTED по acceptance | sdk_world_test, sdk_world_studio_test; same-XY/different-height |
 | 7 Automation / Batch | IMPLEMENTED | sdk_automation_test, CI manifest и workflow |
 
-Это закрытие перечисленных вертикальных срезов, а не всех желательных инструментов
-большой спецификации. Tilemap/particles/collision/RmlUi Studio, Weapon/Environment,
-FBX/OBJ, optimized UV, сравнение с исходным 3D, рисование поверхности и graph editor
-пока не реализованы. Legacy ImGui-оверлей движка сохранён; UI SDK — RmlUi.
+Это закрытие перечисленных вертикальных срезов. Все компоненты дерева §8 спецификации
+теперь есть в реестре и открываются (Tilemap, Particle, Collision/Physics, Parallax,
+Font/Text, Audio, Input, RmlUi Studio, DevTools — §13–§16). Не реализованы:
+Weapon/Environment, FBX, optimized UV, сравнение с исходным 3D, рисование поверхности,
+graph editor кривых, выбор элемента кликом в предпросмотре RmlUi Studio, drag-ресайз
+фигур коллизии и drag зон акустики (числовые поля есть). Legacy ImGui-оверлей движка сохранён; UI SDK — RmlUi.
 Процедурный walk, ступенчатые slopes, консервативный PVS и упрощение MToon описаны
 выше и не выдаются за авторскую анимацию, continuous slopes или lighting shader.
 
@@ -380,3 +408,132 @@ CMake собирает его автоматически; в Emscripten этот
 Опубликованные `dist/` 0.1.22 не содержат завершённый SDK.
 `tools/release.py` пока упаковывает engine/game/assets, а не SDK-приложение.
 Проверенная упаковка SDK остаётся в [TASKS.md](TASKS.md) §5.
+
+## 13. Студии данных Classic 2D
+
+Семь студий работают на одном хосте (`sdk/lib/studio_host.js`, страница
+`sdk/ui/data_studio.rml`): файл, undo/redo, сохранение, нативная проверка, горячие
+клавиши (Ctrl+Z / Ctrl+Shift+Z / Ctrl+S), мышь над окном просмотра и кадровые хуки.
+Студия — объект `def` с несколькими функциями (`left/tools/right`, `mount/unmount`,
+`tick`, `api`); код студии не строит интерфейс вне RmlUi. Каждая студия открывается
+**без файла** (создаёт новый по имени `*.<тип>.json`, существующий **никогда не
+перезаписывается**) или на выбранном в Asset Browser.
+
+Формат каждой студии — **JSON с `version: 1`**, содержимое которого игра читает обычным
+`$.fs.readJSON`; новых «баз ассетов» нет. Файл пишется в каноническом виде
+(`sdk/lib/kit.js` `canonicalJson`: массивы скаляров в строку, ряд тайлов — строка файла),
+поэтому `git diff` показывает только настоящие правки. Правила проверки живут в двух
+копиях — JS (`sdk/lib/kinds/*.js`, живая диагностика студии) и C (`sdk/native/sdk_data.c`,
+`r2d-sdk validate`, кнопка «Проверить», агент); `tests/agent/sdk_data_parity_test.py`
+прогоняет ~2900 правок базовых файлов через обе и требует одинаковых `severity:code`.
+
+| Инструмент | Файл | Игра читает так | Предпросмотр (настоящий рантайм) |
+|---|---|---|---|
+| Tilemap Studio | `*.tilemap.json` | `$('<tilemap>', $.fs.readJSON(f)).at(x, y).appendTo($.world)` | узел `<tilemap>` с теми же параметрами, `autotile`, палитра тайлсета |
+| Particle Studio | `*.particles.json` | `$('<particles>', $.fs.readJSON(f)).at(x, y)…` | узел `<particles>`, пресеты `$.particles.preset` |
+| Collision / Physics Tools | `*.collision.json` | `for (const s of f.shapes) applyShape($('<' + (s.tag \|\| 'wall') + '>').at(s.x, s.y), s)…` | настоящие `<wall>/<trigger>/<area>`, Box2D, шары |
+| Parallax Tools | `*.layers.json` | `$.layers.create(l)` и спрайты в слой | настоящие слои `$.layers`, камера |
+| Font / Text Tools | `*.fonts.json` | `$.font.load`, `$.font.define` | `$.font`, текст `<text>`, `$.font.measure` |
+| Audio Tools | `*.audio.json` | `$.audio.bus`, `$.audio.zone`, `$.audio.play` | `$.audio` (шины, звук, зоны) |
+| Input Tools | `*.input.json` | `$.input.bind(действие, клавиши)` | `$.input.bind` + тестер `$.input.down` |
+
+Параметры файла — **те же `opts`**, что принимают соответствующие вызовы `$`
+(поэтому у `tilemap`/`particles` корень файла — сами `opts`, а `version`/`name` рантайм
+складывает в attrs). Подробности форматов и диагностики:
+
+* **tilemap**: `tile` (1..512), `src`, `cols`, `solid` (bool или id), `autotile`
+  (`bit16`/`blob47`), `layers[{ name, depth, solid, data[][] }]` (до 16 слоёв, ряды одной
+  длины, id 0..65535). Инструменты: кисть, ластик, заливка, область; ПКМ — пипетка, СКМ —
+  панорама, колесо — масштаб; мазок — один шаг undo. Режим «id» рисует цветные клетки, когда
+  тайлсет не нужен. Коды `SDK_TILEMAP_*`: `FIELD, NO_SRC, AUTOTILE, LAYERS, LAYER, DATA, SHAPE,
+  SIZE, TILE_ID, EMPTY_LAYER, DUPLICATE_NAME`.
+* **particles**: все параметры `docs/highlevel/particles.md` §2. Стопы рамп принимают `value` и
+  именованное поле так же, как рантайм (в пресетах `{ t, value }`). Неизвестное поле — предупреждение
+  `UNKNOWN_FIELD` (рантайм кладёт его в attrs). Коды: `FIELD, RANGE, RAMP, COLOR, SUBEMITTER, CAP`.
+* **collision**: фигуры `box|circle|capsule|polygon` (центр `x, y`; полигон — 3..8 вершин, локальные
+  пиксели), `tag` (`wall|trigger|area`), `sensor`, `oneWay`, `layerBits`, `mask`. Режим «Физика»
+  создаёт из файла узлы функцией `applyShape` (она же — в документации и игре) и роняет шар:
+  столкновения считает Box2D. Правки: перетаскивание с привязкой к сетке, вершины полигона,
+  числовые поля. Коды: `SHAPES, SHAPE, KIND, TAG, GEOMETRY, POLYGON_POINTS, POLYGON_CONCAVE, FLAG, BITS`.
+* **layers**: `layers[{ name, order, parallax 0..4, visible, modulate, sprites[{ src, x, y, w, h }] }]`,
+  общий `modulate`. Слой не тайлится — «ряд копий» записывает копии спрайтов явно. Предпросмотр
+  двигает камеру (мышью или автопрокруткой). Коды: `LAYERS, LAYER, NAME, PARALLAX, COLOR, SPRITES,
+  SPRITE, MODULATE, NO_PARALLAX`.
+* **fonts**: `fonts[{ name, path }]` (.ttf/.otf) и `styles{ имя → { size 4..512, color, align,
+  lineHeight, base, font } }`; итоговый стиль — `default → base → стиль`. Коды: `FONTS, FONT, STYLES,
+  STYLE, SIZE, COLOR, ALIGN, LINEHEIGHT, BASE_MISSING, FONT_MISSING, CYCLE`.
+* **audio**: `buses`, `sounds`, `zones`. Эффективная громкость шины считается по цепочке родителей и
+  совпадает с `$.audio.gain`. Коды: `BUSES, BUS, VOLUME, EFFECT, PARENT, CYCLE, SOUNDS, SOUND, PITCH,
+  BUS_MISSING, ZONES, ZONE`.
+* **input**: `actions{ имя → [клавиши] }`, `deadzone`. Клавишу можно назначить нажатием. Коды:
+  `DEADZONE, ACTIONS, ACTION, KEYS, UNKNOWN_KEY, CONFLICT`.
+
+Предпросмотр берёт ресурсы по путям от корня проекта (открытый проект или каталог файла); имена
+в рантайме SDK получают префикс `sdkpv-` и убираются при закрытии студии. Ограничения (честно):
+у Audio нет редактирования зон мышью и записи звука; у Collision нет drag-ресайза; у Tilemap нет
+редактора террейнов и анимации тайлов (есть автотайл); Font Tools не подбирает кернинг и не
+умеет жирный/курсив стилем — это ограничение движка (`docs/highlevel/font.md` §6).
+
+API для агента: `$.sdkApp.studios['tilemap-studio'].ops` (`paint`, `fillRect`, `fillAt`, `setMap`,
+`addLayer`, …), аналогично `particle-studio`, `collision-tools`, `parallax-tools`, `font-tools`,
+`audio-tools`, `input-tools`; общее — `undo/redo/save/validate/select`, снимок —
+`state.sdk.studios.<id>`.
+
+## 14. RmlUi Studio
+
+`sdk/tools/rmlui-studio.js` + `sdk/ui/rmlui_studio.rml`: открывается на `*.rml` (стили берёт из
+`<link type="text/rcss">`) и на `*.rcss` (ищет документ, который его подключает; нет — пример
+разметки, не сохраняется). Раскладка по спецификации §17: дерево элементов | предпросмотр |
+свойства, снизу RCSS. Файлы остаются обычным текстом: студия меняет только правимый фрагмент
+(`sdk/lib/rml_model.js`: терпимый разбор с позициями, `setAttrs`, `setInnerText`, дублирование,
+перемещение, удаление). Любая правка — команда undo/redo.
+
+Предпросмотр — **настоящий RmlUi**: черновики документа и стилей пишутся рядом с оригиналом
+(`.r2d-draft-*`, Asset Browser их не показывает), загружаются `$.ui.doc` и прижимаются к окну
+просмотра; закрытие студии удаляет черновики. Сломанная разметка не загружается в предпросмотр, а
+показывается диагностикой `SDK_RML_UNBALANCED` / `SDK_RML_UNCLOSED` / `SDK_RML_ROOT` /
+`SDK_RCSS_BRACES` / `SDK_RCSS_COMMENT` (те же коды у `r2d-sdk validate` для `rmlui.document` и
+`rmlui.style`). Не реализовано: выбор элемента кликом в предпросмотре (в RmlUi-интеграции нет
+hit-test API), проверка свойств RCSS (разбор — дело RmlUi; движок пишет предупреждения в журнал).
+
+## 15. DevTools
+
+`sdk/tools/devtools.js` + `sdk/ui/devtools.rml` — инспектор **запущенной игры**, только чтение
+(спецификация §18). Студия собирает сессию исходного агентского протокола и запускает её нативным
+`r2d-sdk agent`: игра идёт headless и детерминированно (`fixed-dt`, seed). Показывает `state`,
+сущности по селектору `$` (`query`), профиль кадра (`profile`) и скриншот кадра игры; свои команды
+(JSON-массив) выполняются перед опросом. Сессию можно сохранить в `*.agent.json` и повторить в
+Automation. Описание сущностей даёт игровой `$.agent` — те же понятия `$`, что у человека и агента;
+второй реализации поиска нет. Это не scene editor: ничего не пишется в данные игры.
+
+## 16. Шаблоны, сборки движка, запуск, отладка, пакет
+
+Экраны оболочки по §9 спецификации: **Шаблоны** (`r2d-sdk templates` / `new`; поставляются `blank`,
+`platformer`, `tilemap-room`, `ui-menu` в `sdk/templates/`; созданный проект открывается сразу и в
+SDK не нуждается), **Сборки движка** (`r2d-sdk engines`; показывает, какой бинарник используется),
+**Запуск и сборка**: Run, **Debug** (запуск со статистикой кадра `--stats`), Build (один файл) и
+**Package** (тот же файл без шифрования). Операции: `$.sdkApp.createFromTemplate`,
+`loadEngines`, `debugProject`, `packageProject`.
+
+## 17. Оформление и поведение интерфейса
+
+Тема SDK — `sdk/ui/theme.rcss` в палитре сайта (`site/style.css`: фон `#0b0e14`, акцент
+`#ff5a3c → #ffb03a`, скругления 14/10/6), общая для оболочки (`shell.rcss`) и студий
+(`studio.rcss`). Правила RmlUi, которые легко нарушить:
+
+* **Полосам прокрутки нужны стили** (`scrollbarvertical`, `sliderbar`, …): без них RmlUi резервирует
+  под полосу всю ширину контейнера с `overflow: auto`, и содержимое схлопывается до нуля — так были
+  «мёртвыми» кнопки каталога инструментов. Стили заданы в `theme.rcss`; не удаляйте их.
+* RCSS не поддерживает `@import`, переменные и градиентные декораторы в этом рендерере:
+  `theme.rcss` подключается ссылкой `<link>` в каждом документе, цвета повторены литералами.
+* Шрифт интерфейса — Open Sans: «→», «←», «●» в нём нет (используйте «»», «•»).
+
+Нажатие мышью: виртуальная мышь агента теперь доходит до RmlUi (`r2d_app_begin_frame` отправляет
+изменения позиции, кнопок и колеса подписчикам SDL-событий) — агент нажимает настоящие кнопки
+интерфейса, наводит курсор и крутит списки; см. [AGENT_API.md](AGENT_API.md) §3.5 и
+`tests/agent/ui_virtual_mouse_test.py`. RmlUi прокручивает плавно: после колеса положение
+элементов (`rect`) меняется ещё несколько кадров.
+
+Тесты: `tests/js/sdk_kinds_test.mjs`, `tests/js/sdk_rml_test.mjs` (чистая логика),
+`tests/agent/sdk_data_parity_test.py` (JS ↔ C), `tests/agent/sdk_studios_test.py` (все студии, оболочка,
+шаблоны, движки, запуск/пакет — настоящей мышью), `tests/agent/ui_virtual_mouse_test.py` (движок).

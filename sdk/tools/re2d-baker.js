@@ -40,7 +40,7 @@ export function createBaker(app) {
     }
 
     async function openAsset(abs) {
-        if (!abs || !/\.(glb|gltf|vrm)$/i.test(abs)) throw new Error('Re2D Baker: выберите модель .glb, .gltf или .vrm');
+        if (!abs || !/\.(glb|gltf|vrm|obj)$/i.test(abs)) throw new Error('Re2D Baker: выберите модель .glb, .gltf, .vrm или .obj');
         s.source = abs;
         s.report = null;
         s.type = /\.vrm$/i.test(abs) ? 'character' : 'prop';
@@ -156,8 +156,8 @@ export function createBaker(app) {
             (ch.vrm.rotated180 ? ' · повёрнут на 180°' : '') + '</div>' +
             '<div class="kv">Владение: ' + ch.ownership.triangles + ' треугольников, неоднозначных ' + ch.ownership.ambiguous +
             (ch.ownership.pairs.length ? ' (' + ch.ownership.pairs.map((p) => escapeHtml(p.a + '/' + p.b) + ' ' + p.triangles).join(', ') + ')' : '') + '</div>' +
-            '<div class="kv">Humanoid → Re2D: '+(ch.mapping||[]).map(m=>escapeHtml(m.humanoid)+' → '+escapeHtml(m.re2d||'не сопоставлено')).join(', ')+'</div>'+
-            '<div class="kv">Выражения: ' + (ch.expressions.length ? ch.expressions.map((e) => escapeHtml(e.vrm) + '→' + escapeHtml(e.re2d || '—')).join(', ') : 'нет') + '</div>';
+            '<div class="kv">Humanoid » Re2D: '+(ch.mapping||[]).map(m=>escapeHtml(m.humanoid)+' » '+escapeHtml(m.re2d||'не сопоставлено')).join(', ')+'</div>'+
+            '<div class="kv">Выражения: ' + (ch.expressions.length ? ch.expressions.map((e) => escapeHtml(e.vrm) + ' » ' + escapeHtml(e.re2d || '—')).join(', ') : 'нет') + '</div>';
         return chHtml + '<div class="kv">Треугольников: ' + r.source.triangles + ' · материалов: ' + r.source.materials + ' · текстур: ' + r.source.textures + '</div>' +
             '<div class="kv">Частей: ' + r.parts + ' · отсчётов: ' + r.samples + ' (' + Math.round(r.atlasUsage * 1000) / 10 + '% атласа)</div>' +
             '<div class="kv">UV: ' + escapeHtml(r.uvMode) + ' · PNG ' + r.size + ' · шаг ' + (r.sampleSpacing || 0).toFixed(2) + ' ед.</div>' +

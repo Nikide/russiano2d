@@ -480,6 +480,68 @@ static void r2d__app_end_input(R2DApp *app)
     }
 }
 
+// Виртуальная мышь агента для подписчиков SDL-событий. RmlUi получает ввод
+// только событиями, а опросное состояние (mouse_virt) его не видит, поэтому
+// изменения позиции, кнопок и колеса отправляются тем же путём, что и события
+// настоящей мыши: агент может нажимать кнопки интерфейса и крутить его списки.
+static void r2d__app_dispatch(R2DApp *app, const SDL_Event *ev)
+{
+    for (int i = 0; i < app->event_listener_count; ++i) {
+        app->event_listeners[i](app->event_listener_user[i], ev);
+    }
+}
+
+static void r2d__app_forward_virtual_mouse(R2DApp *app)
+{
+    if (!app->mouse_virt_active) return;
+    const Uint64 now = SDL_GetTicksNS();
+
+    if (!app->mouse_virt_sent_pos ||
+        app->mouse_virt_sent_x != app->mouse_virt_x || app->mouse_virt_sent_y != app->mouse_virt_y) {
+        SDL_Event ev;
+        SDL_zero(ev);
+        ev.type = SDL_EVENT_MOUSE_MOTION;
+        ev.motion.timestamp = now;
+        ev.motion.x = app->mouse_virt_x;
+        ev.motion.y = app->mouse_virt_y;
+        ev.motion.xrel = app->mouse_virt_sent_pos ? app->mouse_virt_x - app->mouse_virt_sent_x : 0.0f;
+        ev.motion.yrel = app->mouse_virt_sent_pos ? app->mouse_virt_y - app->mouse_virt_sent_y : 0.0f;
+        app->mouse_virt_sent_pos = true;
+        app->mouse_virt_sent_x = app->mouse_virt_x;
+        app->mouse_virt_sent_y = app->mouse_virt_y;
+        r2d__app_dispatch(app, &ev);
+    }
+
+    const uint32_t changed = app->mouse_virt ^ app->mouse_virt_sent_buttons;
+    for (int b = SDL_BUTTON_LEFT; b <= SDL_BUTTON_X2 && changed; ++b) {
+        const uint32_t mask = SDL_BUTTON_MASK(b);
+        if (!(changed & mask)) continue;
+        SDL_Event ev;
+        SDL_zero(ev);
+        const bool down = (app->mouse_virt & mask) != 0;
+        ev.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+        ev.button.timestamp = now;
+        ev.button.button = (Uint8)b;
+        ev.button.down = down;
+        ev.button.clicks = 1;
+        ev.button.x = app->mouse_virt_x;
+        ev.button.y = app->mouse_virt_y;
+        r2d__app_dispatch(app, &ev);
+    }
+    app->mouse_virt_sent_buttons = app->mouse_virt;
+
+    if (app->wheel_virt != 0.0f) {
+        SDL_Event ev;
+        SDL_zero(ev);
+        ev.type = SDL_EVENT_MOUSE_WHEEL;
+        ev.wheel.timestamp = now;
+        ev.wheel.y = app->wheel_virt;
+        ev.wheel.mouse_x = app->mouse_virt_x;
+        ev.wheel.mouse_y = app->mouse_virt_y;
+        r2d__app_dispatch(app, &ev);
+    }
+}
+
 void r2d_app_begin_frame(R2DApp *app)
 {
     // Предыдущее состояние ввода нужно для детекта фронтов нажатий.
@@ -679,6 +741,7 @@ void r2d_app_begin_frame(R2DApp *app)
     for (int sc = 0; sc < SDL_SCANCODE_COUNT; ++sc) {
         if (app->keys_virt[sc] || app->keys_tap[sc]) app->keys_cur[sc] = true;
     }
+    r2d__app_forward_virtual_mouse(app);
     app->mouse_cur |= app->mouse_virt;
     if (app->mouse_virt_active) {
         app->mouse_x = app->mouse_virt_x;

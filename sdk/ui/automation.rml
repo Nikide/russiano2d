@@ -1,4 +1,4 @@
-<rml><head><link type="text/rcss" href="studio.rcss"/><title>Automation</title></head><body>
+<rml><head><link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/><title>Automation</title></head><body>
 <div class="studio">
 <div class="bar top"><button id="au-back" class="btn small">К SDK</button><span class="title">Automation / Batch</span></div>
 <div class="bar"><button id="au-batch" class="btn">Пакет ассетов</button><button id="au-agent" class="btn">Сессия агента</button><span id="au-mode">batch</span><button id="au-run" class="btn primary">Сохранить и выполнить</button><span id="au-state"></span></div>

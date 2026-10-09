@@ -34,10 +34,12 @@ SDK генерирует лестницы и ступенчатые slopes; эт
 
 ## 4. SDK после acceptance фаз 0–7
 
-[SDK.md](SDK.md) описывает реализованные срезы. Следующие возможности большой
-спецификации остаются отдельными задачами: tilemap/particles/collision/RmlUi
-editors, Weapon/Environment presets, FBX/OBJ, optimized UV, source↔Re2D
-comparison, кисти поверхности и графические кривые.
+[SDK.md](SDK.md) описывает реализованные срезы; все компоненты дерева §8 спецификации
+(Tilemap, Particle, Collision/Physics, Parallax, Font, Audio, Input, RmlUi Studio, DevTools,
+шаблоны, сборки движка) есть и покрыты тестами. Следующие возможности большой
+спецификации остаются отдельными задачами: Weapon/Environment presets, FBX, optimized UV,
+source↔Re2D comparison, кисти поверхности, графические кривые, выбор элемента кликом в
+предпросмотре RmlUi Studio, drag-ресайз фигур коллизии и зон акустики.
 
 Baker использует dominant rigid ownership; просветы и швы sampling остаются.
 VRM expression запекается по выбору; MToon lighting/rim/outline не переносятся.

@@ -1,0 +1,11 @@
+body { font-family: Open Sans; font-size: 16px; color: #ffffff; width: 100%; height: 100%; }
+.btn { display: block; position: absolute; width: 120px; height: 40px; background-color: #335577; }
+.btn:hover { background-color: #5577aa; }
+#btn-a { left: 40px; top: 40px; }
+#btn-b { left: 200px; top: 40px; }
+#list { position: absolute; left: 40px; top: 120px; width: 300px; height: 200px; overflow-y: auto; background-color: #223344; }
+.row { display: block; height: 24px; }
+scrollbarvertical { width: 12px; }
+scrollbarvertical slidertrack { background-color: #111111; }
+scrollbarvertical sliderbar { width: 8px; background-color: #888888; }
+scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0px; height: 0px; }

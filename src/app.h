@@ -57,6 +57,11 @@ typedef struct R2DApp {
     float    mouse_virt_x, mouse_virt_y;
     float    mouse_virt_dx, mouse_virt_dy;
     float    wheel_virt;
+    // Что из виртуальной мыши уже отправлено подписчикам SDL-событий (RmlUi):
+    // отправляются только изменения, как у настоящей мыши.
+    bool     mouse_virt_sent_pos;
+    float    mouse_virt_sent_x, mouse_virt_sent_y;
+    uint32_t mouse_virt_sent_buttons;
 
     // --- Тайминги ---
     uint64_t perf_freq;

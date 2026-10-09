@@ -8,25 +8,89 @@ import { escapeHtml, assetTypeLabel, formatUpdated, formatSize, dirOf } from './
 
 const MAX_ASSET_ROWS = 300;
 
-/** Карточки инструментов из реестра. Невалидная запись остаётся видимой и помечена. */
+const CATEGORY_LABELS = {
+    shell: 'ОБОЛОЧКА',
+    backend: 'НАТИВНЫЙ БЭКЕНД',
+    'classic-2d': 'КЛАССИЧЕСКИЙ 2D',
+    re2d: 'RE2D',
+    automation: 'АВТОМАТИЗАЦИЯ',
+    devtools: 'ОТЛАДКА',
+};
+const CATEGORY_ORDER = ['shell', 'classic-2d', 're2d', 'automation', 'devtools', 'backend'];
+
+export function categoryLabel(category) {
+    return CATEGORY_LABELS[category] || String(category || 'ПРОЧЕЕ').toUpperCase();
+}
+
+function toolCard(t, notes) {
+    const bad = !t.valid;
+    let html = '<div id="tool-' + escapeHtml(t.id) + '" class="card' + (bad ? ' invalid' : '') + '"><div class="card-body">' +
+        '<div class="card-head"><span class="card-name">' + escapeHtml(t.name || t.id || '(без имени)') + '</span>' +
+        (bad ? '<span class="tag tag-bad">ошибка записи</span>' : '') + '</div>' +
+        '<div class="card-desc">' + escapeHtml(t.description) + '</div>' +
+        '<div class="card-meta">id: ' + escapeHtml(t.id) + ' · обновлён ' + escapeHtml(formatUpdated(t.last_updated)) +
+        ' · экран: ' + escapeHtml(t.entry) +
+        (t.assets && t.assets.length ? ' · файлы: ' + escapeHtml(t.assets.join(', ')) : '') + '</div>';
+    for (const n of notes) html += '<div class="card-note">' + escapeHtml(n.code) + ': ' + escapeHtml(n.message) + '</div>';
+    html += '</div><div class="card-actions">' +
+        (bad ? '' : '<button id="tool-open-' + escapeHtml(t.id) + '" class="btn" data-key="' + escapeHtml(t.id) + '">Открыть</button>') + '</div></div>';
+    return html;
+}
+
+/**
+ * Карточки инструментов из реестра, сгруппированные по category. Невалидная
+ * запись остаётся видимой и помечена; категорий в коде нет — заголовки берутся
+ * из поля записи, неизвестная категория показывается своим именем.
+ */
 export function toolCards(tools, diagsByTool) {
     if (!tools || tools.length === 0) return '<p class="empty">Реестр пуст: в sdk_tools.json нет инструментов.</p>';
-    let html = '';
+    const groups = new Map();
     for (const t of tools) {
-        const bad = !t.valid;
-        const notes = (diagsByTool && diagsByTool[t.id || ('#' + t.index)]) || [];
-        html += '<div class="card' + (bad ? ' invalid' : '') + '">' +
-            '<div class="card-head"><span class="card-name">' + escapeHtml(t.name || t.id || '(без имени)') + '</span>' +
-            (t.category ? '<span class="tag">' + escapeHtml(t.category) + '</span>' : '') +
-            (bad ? '<span class="tag tag-bad">ошибка записи</span>' : '') + '</div>' +
-            '<div class="card-desc">' + escapeHtml(t.description) + '</div>' +
-            '<div class="card-meta">id: ' + escapeHtml(t.id) + ' · обновлён ' + escapeHtml(formatUpdated(t.last_updated)) +
-            ' · экран: ' + escapeHtml(t.entry) + '</div>';
-        for (const n of notes) html += '<div class="card-note">' + escapeHtml(n.code) + ': ' + escapeHtml(n.message) + '</div>';
-        html += '<div class="card-actions">' +
-            (bad ? '' : '<button class="btn" data-key="' + escapeHtml(t.id) + '">Открыть</button>') + '</div></div>';
+        const key = t.category || '';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(t);
+    }
+    const keys = [...groups.keys()].sort((a, b) => {
+        const ia = CATEGORY_ORDER.indexOf(a), ib = CATEGORY_ORDER.indexOf(b);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+    let html = '';
+    for (const key of keys) {
+        html += '<div class="cat">' + escapeHtml(categoryLabel(key)) + '</div>';
+        for (const t of groups.get(key)) {
+            html += toolCard(t, (diagsByTool && diagsByTool[t.id || ('#' + t.index)]) || []);
+        }
     }
     return html;
+}
+
+/** Карточки шаблонов проектов (`r2d-sdk templates`). */
+export function templateCards(list, selected) {
+    if (!list || list.length === 0) return '<p class="empty">Шаблонов нет: каталог sdk/templates пуст.</p>';
+    return list.map((t) =>
+        '<div class="card' + (t.id === selected ? ' on' : '') + '"><div class="card-body"><div class="card-head"><span class="card-name">' + escapeHtml(t.name) + '</span>' +
+        (t.category ? '<span class="tag">' + escapeHtml(t.category) + '</span>' : '') + (t.id === selected ? '<span class="tag tag-new">выбран</span>' : '') + '</div>' +
+        '<div class="card-desc">' + escapeHtml(t.description) + '</div>' +
+        '<div class="card-meta">id: ' + escapeHtml(t.id) + ' · файлов ' + t.files + ' · ' + escapeHtml(formatSize(t.bytes)) + '</div></div>' +
+        '<div class="card-actions"><button class="btn' + (t.id === selected ? ' on' : '') + '" data-key="' + escapeHtml(t.id) + '">' +
+        (t.id === selected ? 'Выбран' : 'Выбрать') + '</button></div></div>').join('');
+}
+
+/** Карточки сборок движка (`r2d-sdk engines`). */
+export function engineCards(list) {
+    if (!list || list.length === 0) return '<p class="empty">Движок не найден: соберите russiano2d или задайте R2D_ENGINE.</p>';
+    return list.map((e) =>
+        '<div class="card"><div class="card-body"><div class="card-head"><span class="card-name">' + escapeHtml(e.label) + '</span>' +
+        (e.selected ? '<span class="tag tag-new">используется</span>' : '') + '</div>' +
+        '<div class="card-desc">' + escapeHtml(e.path) + '</div>' +
+        '<div class="card-meta">' + escapeHtml(formatSize(e.size)) + ' · изменён ' + escapeHtml(formatUnix(e.mtime)) + '</div></div></div>').join('');
+}
+
+function formatUnix(sec) {
+    const d = new Date(Number(sec) * 1000);
+    if (!Number.isFinite(d.getTime())) return '—';
+    const p = (n) => String(n).padStart(2, '0');
+    return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
 /** Строки Asset Browser. Больше MAX_ASSET_ROWS не рисуем: фильтр сужает список. */
@@ -43,7 +107,7 @@ export function assetRows(entries, selected) {
             '<span class="row-dir">' + escapeHtml(dir) + '</span>' +
             '<span class="row-type">' + escapeHtml(assetTypeLabel(e.type)) + '</span>' +
             '<span class="row-size">' + escapeHtml(formatSize(e.size)) + '</span>' +
-            (e.tool ? '<span class="row-tool">→ ' + escapeHtml(e.tool) + '</span>' : '') + '</div>';
+            (e.tool ? '<span class="row-tool">» ' + escapeHtml(e.tool) + '</span>' : '') + '</div>';
     }
     if (entries.length > shown) {
         html += '<p class="empty">Показано ' + shown + ' из ' + entries.length + ' — уточните фильтр.</p>';

@@ -101,6 +101,26 @@ skinned персонажа. Dominant rigid ownership не является по�
 PVS пока не используется runtime, slopes ступенчатые, walk процедурный, MToon освещение
 не воспроизводится. Эти границы сохранены в документации фаз, а не спрятаны зелёной сборкой.
 
+## Студии данных, тема и OBJ (2026-10-09)
+
+Проверено на macOS arm64 (Metal), сборка `cmake --build build`:
+
+| Что | Команда | Результат |
+|---|---|---|
+| Полный набор агентских тестов | `python3 tools/run_tests.py` | 109 тестов; единственные два падения (`sdk_character_test` — строка с «→», `sdk_classic2d_test` — гонка hot reload с черновиком) исправлены и перепроверены |
+| Студии, оболочка, шаблоны, движки, запуск, пакет (настоящей мышью) | `python3 tests/agent/sdk_studios_test.py` | проходит |
+| Мышь агента → RmlUi | `python3 tests/agent/ui_virtual_mouse_test.py` | проходит |
+| Паритет проверок JS ↔ C | `python3 tests/agent/sdk_data_parity_test.py` | 2912 файлов, 0 расхождений (первый прогон нашёл 2 неточности JS, исправлены) |
+| Импорт OBJ | `python3 tests/agent/sdk_obj_test.py` | проходит |
+| Чистая логика | `qjs -m tests/js/sdk_kinds_test.mjs`, `sdk_rml_test.mjs`, все 95 `tests/js/*_test.mjs` | проходят |
+| C | `build/sdk/native/r2d_sdk_core_test` и тесты `build/tests/r2d_*_test` | проходят |
+
+Визуально проверено скриншотами агента (`build/sdkshots/`): оболочка (проекты, ассеты, каталог, шаблоны, запуск,
+сборки, документация) и все новые студии; старые студии (Re2DSprite, World, Baker) после смены темы читаются и
+не перекрывают окно просмотра. Не проверялось: другие ОС и GPU-бэкенды, окно меньше 1100×700, Retina
+(RmlUi-интерфейсы на `px` при HIGH_PIXEL_DENSITY рисуются в физических пикселях — свойство движка, не SDK), удалённый GitHub CI
+(шаг «SDK data studios, OBJ import and UI mouse» добавлен в `.github/workflows/build.yml`, но не запускался).
+
 ## Источник документации и сайт
 
 `docs/` и корневые SDK документы — исходники; `site/doc/` — генерируемая копия.

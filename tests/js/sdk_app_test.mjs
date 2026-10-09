@@ -101,7 +101,7 @@ test('toolCards: невалидная запись остаётся видимо
 test('assetRows: выбранная строка, инструмент, обрезка длинного списка', () => {
     const html = v.assetRows(ENTRIES, 'assets/a.png');
     truthy(html.includes('row sel'), 'выбранная строка');
-    truthy(html.includes('→ x'), 'инструмент показан');
+    truthy(html.includes('» x'), 'инструмент показан («→» нет в шрифте интерфейса, поэтому «»»)');
     const many = [];
     for (let i = 0; i < 350; i++) many.push({ path: 'f' + i + '.png', type: 'image', size: 1 });
     truthy(v.assetRows(many, null).includes('Показано 300 из 350'));

@@ -2,6 +2,7 @@
 import { escapeHtml, absolutePath } from '../lib/model.js';
 import * as views from '../lib/views.js';
 let singleton;
+export const standalone=true;
 export async function open(app,args){if(!singleton)singleton=create(app);return singleton.openAsset(args.assetAbs||null);}
 function create(app){
     const $=app.$,doc=$.ui.doc('sdk/ui/automation.rml');

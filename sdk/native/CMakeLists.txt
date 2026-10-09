@@ -17,12 +17,15 @@ set(R2D_SDK_SOURCES
     sdk_re2dpng.c
     sdk_re2d.c
     sdk_gltf.c
+    sdk_obj.c
     sdk_char.c
     sdk_world.c
+    sdk_data.c
     sdk_bake.c
     sdk_batch.c
     sdk_agent.c
     sdk_cmds.c
+    sdk_scaffold.c
     "${CMAKE_SOURCE_DIR}/src/json.c")
 
 add_library(r2d_sdk_core STATIC ${R2D_SDK_SOURCES})

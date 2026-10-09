@@ -1,222 +1,92 @@
 /* ---------------------------------------------------------------------------
-   Russiano2D SDK — оболочка. Весь интерфейс — RmlUi.
-   Размеры в процентах и flex: окно SDK можно менять мышью.
+   Russiano2D SDK — оболочка (launcher). Весь интерфейс — RmlUi.
+   Общие компоненты — theme.rcss (подключается ссылкой в .rml: RmlUi не знает @import).
    --------------------------------------------------------------------------- */
 
 body {
     font-family: Open Sans;
     font-size: 15px;
-    color: #dbe4f0;
+    color: #e9edf6;
     width: 100%;
     height: 100%;
-    background-color: #0e1420;
+    background-color: #0b0e14;
 }
 
-#app {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    height: 100%;
-}
+#app { display: flex; flex-direction: column; width: 100%; height: 100%; }
 
-/* --- Верхняя полоса ------------------------------------------------------ */
+/* --- Верхняя полоса ------------------------------------------------------------ */
 #topbar {
-    display: block;
-    height: 38px;
-    padding: 9px 16px 0 16px;
-    background-color: #0a0f19;
-    border-bottom-width: 1px;
-    border-color: #1f2b40;
-}
-
-#brand { color: #7fd1ff; font-size: 17px; margin-right: 24px; }
-#project-badge { color: #93a4bb; margin-right: 24px; }
-#status { color: #a8e6a1; }
-#status.busy { color: #ffd27f; }
-#status.fail { color: #ff8f8f; }
-
-/* --- Основная часть ------------------------------------------------------ */
-#main {
     display: flex;
     flex-direction: row;
-    flex: 1 1 0;
-    min-height: 0;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 12px 22px;
+    background-color: #0f131c;
+    border-bottom-width: 1px;
+    border-color: #232b3d;
 }
+#brand { font-size: 20px; color: #e9edf6; margin-right: 10px; }
+#brand em { color: #ff5a3c; font-style: normal; }
+#brand-ver { margin-right: 18px; }
+#project-badge { margin-right: 10px; }
+#topbar-spacer { flex: 1 1 0; }
+
+/* --- Основная часть -------------------------------------------------------------- */
+#main { display: flex; flex-direction: row; flex: 1 1 0; min-height: 0px; }
 
 #nav {
     display: block;
-    width: 200px;
-    padding: 14px 10px;
-    background-color: #0b111c;
+    flex: 0 0 214px;
+    width: 214px;
+    box-sizing: border-box;
+    padding: 18px 12px;
+    background-color: #0f131c;
     border-right-width: 1px;
-    border-color: #1f2b40;
+    border-color: #232b3d;
+    overflow-y: auto;
 }
-
+.nav-group { display: block; margin: 14px 0px 6px 10px; color: #6f7a92; font-size: 11px; letter-spacing: 2px; }
 .nav-btn {
     display: block;
-    width: 100%;
-    margin-bottom: 6px;
-    padding: 9px 12px;
+    width: auto;
+    margin: 0px 0px 4px 0px;
+    padding: 9px 14px;
     text-align: left;
-    color: #c4d0e2;
-    background-color: #131c2c;
-    border-radius: 6px;
+    color: #97a2b8;
+    background-color: transparent;
+    border-width: 1px;
+    border-color: transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.12s cubic-out, color 0.12s cubic-out;
 }
-.nav-btn:hover { background-color: #1b2840; }
-.nav-btn.on { color: #ffffff; background-color: #26446c; }
-
-#nav-version { margin-top: 20px; color: #5f7088; font-size: 12px; }
+.nav-btn:hover { color: #e9edf6; background-color: #171e2f; }
+.nav-btn:active { background-color: #1f2740; transform: translateY(1px); }
+.nav-btn.on { color: #ffb03a; background-color: #2a1a1c; border-color: #4a2a26; }
+#nav-version { margin: 22px 0px 0px 10px; color: #5d6882; font-size: 12px; }
 
 #content {
     display: block;
     flex: 1 1 0;
-    min-width: 0;
-    padding: 14px 20px;
+    min-width: 0px;
+    padding: 26px 34px 30px 34px;
     overflow-y: auto;
 }
-
 .view { display: block; }
 .view.hidden { display: none; }
 
-h2 { display: block; font-size: 22px; color: #eaf2ff; margin-bottom: 10px; }
-h3 { display: block; font-size: 16px; color: #8fb4de; margin: 16px 0 6px 0; }
-.hint { display: block; color: #8393a8; margin-bottom: 8px; }
-.empty { display: block; color: #6c7b90; padding: 8px 4px; }
+/* --- Нижняя панель диагностики -------------------------------------------------------- */
+#diag { display: block; flex: 0 0 auto; background-color: #0a0d13; border-top-width: 1px; border-color: #232b3d; }
+#diag-head { display: flex; flex-direction: row; align-items: center; padding: 6px 18px; background-color: #0f131c; }
+#diag-title { color: #ffb03a; font-size: 12px; letter-spacing: 2px; margin-right: 14px; }
+#diag-counts { flex: 1 1 0; color: #97a2b8; font-size: 12px; }
+#diag-list { display: block; height: 92px; overflow-y: auto; padding: 4px 18px; }
 
-.panel {
-    display: block;
-    padding: 12px;
-    background-color: #111a29;
-    border-radius: 8px;
-    border-width: 1px;
-    border-color: #1f2b40;
-}
-
-.form-row { display: flex; flex-direction: row; margin: 6px 0; }
-.form-row > * { margin-right: 8px; }
-
-/* --- Поля и кнопки ------------------------------------------------------- */
-input.field {
-    display: block;
-    flex: 1 1 0;
-    min-width: 120px;
-    height: 32px;
-    padding: 5px 10px;
-    color: #eef4ff;
-    background-color: #0a111d;
-    border-width: 1px;
-    border-color: #2b3c58;
-    border-radius: 5px;
-}
-input.field:focus { border-color: #7fd1ff; }
-
-.btn {
-    display: block;
-    padding: 6px 14px;
-    color: #dbe7f7;
-    background-color: #1a2a44;
-    border-radius: 5px;
-    border-width: 1px;
-    border-color: #2b4366;
-}
-.btn:hover { background-color: #23395c; }
-.btn.primary { background-color: #2a5fa0; border-color: #4a86cc; color: #ffffff; }
-.btn.primary:hover { background-color: #3571bb; }
-.btn.small { display: inline-block; padding: 2px 10px; font-size: 13px; }
-
-/* --- Списки -------------------------------------------------------------- */
-.list {
-    display: block;
-    max-height: 260px;
-    overflow-y: auto;
-    background-color: #0d1522;
-    border-radius: 6px;
-    border-width: 1px;
-    border-color: #1b283d;
-}
-.list.tall { max-height: 420px; }
-.list.short { max-height: 160px; }
-
-.row { display: block; padding: 5px 10px; }
-.row:hover { background-color: #172540; }
-.row.sel { background-color: #223a60; }
-.row-name { color: #eaf2ff; margin-right: 12px; }
-.row-dir { color: #6f84a2; margin-right: 12px; font-size: 13px; }
-.row-type { color: #8fd8ff; margin-right: 12px; font-size: 13px; }
-.row-size { color: #7a8aa0; margin-right: 12px; font-size: 13px; }
-.row-tool { color: #a8e6a1; font-size: 13px; }
-
-.chip {
-    display: inline-block;
-    margin: 4px 6px 4px 0;
-    padding: 2px 10px;
-    color: #b9c8de;
-    background-color: #152036;
-    border-radius: 10px;
-}
-.chip:hover { background-color: #1d2e4d; }
-.chip.on { color: #ffffff; background-color: #2a5fa0; }
-
-/* --- Карточки инструментов ------------------------------------------------ */
-.card {
-    display: block;
-    margin: 8px;
-    padding: 10px 14px;
-    background-color: #111b2d;
-    border-radius: 8px;
-    border-width: 1px;
-    border-color: #223454;
-}
-.card.invalid { border-color: #8a3b3b; background-color: #1e1519; }
-.card-head { display: block; margin-bottom: 4px; }
-.card-name { font-size: 17px; color: #f1f6ff; margin-right: 10px; }
-.tag { margin-right: 6px; padding: 1px 8px; font-size: 12px; color: #9ec2ee; background-color: #172944; border-radius: 8px; }
-.tag-bad { color: #ffb0b0; background-color: #4a2020; }
-.card-desc { display: block; color: #c4d0e2; margin-bottom: 4px; }
-.card-meta { display: block; color: #6f84a2; font-size: 12px; }
-.card-note { display: block; color: #ffb0b0; font-size: 13px; margin-top: 3px; }
-.card-actions { display: block; margin-top: 8px; }
-
-/* --- Сводка проекта -------------------------------------------------------- */
-.kv { display: block; padding: 2px 0; }
-.k { display: inline-block; width: 120px; color: #7b8da6; }
-.v { color: #e3ecfa; }
-
-/* --- Журнал ---------------------------------------------------------------- */
-.log {
-    display: block;
-    max-height: 220px;
-    overflow-y: auto;
-    padding: 8px 10px;
-    color: #b8c6da;
-    font-size: 13px;
-    white-space: pre-wrap;
-    background-color: #090e17;
-    border-radius: 6px;
-    border-width: 1px;
-    border-color: #1b283d;
-}
-.log.tall-log { max-height: 360px; margin-top: 8px; }
-#run-status { display: block; margin-top: 8px; color: #9fb2cc; }
-
-/* --- Панель диагностик ------------------------------------------------------ */
-#diag {
-    display: block;
-    height: 190px;
-    background-color: #0a0f19;
-    border-top-width: 1px;
-    border-color: #1f2b40;
-}
-#diag-head { display: block; padding: 6px 14px; background-color: #0d1422; }
-#diag-title { color: #eaf2ff; margin-right: 18px; }
-#diag-counts { color: #8393a8; margin-right: 18px; }
-#diag-list { display: block; height: 140px; overflow-y: auto; padding: 4px 14px; }
-
-.diag { display: block; padding: 3px 0; }
-.diag-sev { display: inline-block; width: 70px; font-size: 12px; }
-.diag-code { color: #dbe4f0; margin-right: 12px; }
-.diag-asset { color: #6f84a2; font-size: 13px; }
-.diag-msg { display: block; margin-left: 70px; color: #aab9cf; font-size: 13px; }
-.diag-err .diag-sev { color: #ff8f8f; }
-.diag-warn .diag-sev { color: #ffd27f; }
-.diag-info .diag-sev { color: #7fd1ff; }
+/* --- Hero-блок первого экрана -------------------------------------------------------- */
+.hero { display: block; margin-bottom: 18px; }
+.hero h2 { font-size: 32px; }
+.hero h2 em { color: #ff5a3c; font-style: normal; }
+.formula { display: block; margin: 4px 0px 0px 0px; color: #ffb03a; font-size: 13px; letter-spacing: 1px; }
+.cols { display: flex; flex-direction: row; }
+.cols > .col { flex: 1 1 0; min-width: 0px; margin-right: 16px; }
+.cols > .col:last-child { margin-right: 0px; }

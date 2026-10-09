@@ -1,6 +1,6 @@
 <rml>
 <head>
-    <link type="text/rcss" href="studio.rcss"/>
+    <link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/>
     <title>Re2D Baker</title>
 </head>
 <body>

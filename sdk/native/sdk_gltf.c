@@ -759,8 +759,27 @@ static void load_vrm(Gltf *g)
 // ---------------------------------------------------------------------------
 // Вход
 // ---------------------------------------------------------------------------
+static bool ends_with_icase(const char *s, const char *suffix)
+{
+    const size_t n = strlen(s), m = strlen(suffix);
+    if (n < m) return false;
+    for (size_t i = 0; i < m; ++i) {
+        char a = s[n - m + i], b = suffix[i];
+        if (a >= 'A' && a <= 'Z') a = (char)(a - 'A' + 'a');
+        if (a != b) return false;
+    }
+    return true;
+}
+
 bool bk_load_expression(const char *path, const char *expression, BkScene *scene, SdkReport *rep)
 {
+    if (ends_with_icase(path, ".obj")) {
+        if (expression && expression[0]) {
+            sdk_diag(rep, SDK_WARNING, "SDK_BAKE_EXPRESSION_UNSUPPORTED", path, NULL, NULL,
+                     "У OBJ нет выражений (blendshape): --expression «%s» проигнорирован", expression);
+        }
+        return bk_load_obj(path, scene, rep);
+    }
     memset(scene, 0, sizeof *scene);
     size_t size = 0;
     char *data = sdk_read_file(path, &size);

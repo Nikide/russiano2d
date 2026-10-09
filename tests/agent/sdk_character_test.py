@@ -194,7 +194,7 @@ def gui_cases():
         check(st["ok"] and st["parts"] == 10 and st["character"]["ownership"]["ambiguous"] == 48, "GUI: 10 частей, неоднозначность 48")
         check(st["preview"], "превью — настоящий Re2DSprite")
         report = a.eval(f"{BK}.content('bk-report')")
-        check("VRM 1.0" in report and "Владение" in report and "happy→happy" in report, "панель отчёта показывает VRM, владение и выражения")
+        check("VRM 1.0" in report and "Владение" in report and "happy » happy" in report, "панель отчёта показывает VRM, владение и выражения")
         # GUI и CLI — один код: PNG побайтно совпадает с CLI.
         _, cli = bake("humanoid.vrm", os.path.join(OUT, "cli_gui"), "--name", "humanoid")
         check(idat(st["files"]["png"]) == idat(cli["files"]["png"]), "GUI и CLI дают побайтно одинаковые карты")

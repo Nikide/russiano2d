@@ -873,7 +873,7 @@ int sdk_cmd_bake_re2d(const SdkArgs *a)
     const char *source = sdk_arg_positional(a, 0);
     if (!source) {
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d-sdk bake-re2d <модель.glb|.gltf> --type prop|character --output <каталог> "
+            "Использование: r2d-sdk bake-re2d <модель.glb|.gltf|.vrm|.obj> --type prop|character --output <каталог> "
             "[--name имя] [--uv auto|existing] [--origin center|feet] [--size 1024|2048|4096] [--scale S] [--style anime|pixel] [--first-id N]");
         sdk_report_free(&rep);
         return rc;

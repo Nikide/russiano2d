@@ -24,6 +24,11 @@ static const TypeRule k_rules[] = {
     { ".atlas.json",      "sprite.atlas" },
     { ".tilemap.json",    "tilemap" },
     { ".particles.json",  "particles" },
+    { ".collision.json",  "collision" },
+    { ".layers.json",     "layers" },
+    { ".fonts.json",      "fonts" },
+    { ".audio.json",      "audio" },
+    { ".input.json",      "input" },
     { ".bake.json",       "re2d.bake" },
     { ".re2dmap.json",    "re2d.world" },
     { ".re2dmap",         "re2d.world" },
@@ -134,6 +139,8 @@ static SDL_EnumerationResult SDLCALL on_entry(void *user, const char *dirname, c
         return SDL_ENUM_CONTINUE;
     }
     if (info.type != SDL_PATHTYPE_FILE) return SDL_ENUM_CONTINUE;
+    // Черновики студий (.r2d-draft-*, .r2d-sdk-draft.*) — служебные файлы, а не ассеты проекта.
+    if (strncmp(fname, ".r2d-", 5) == 0) return SDL_ENUM_CONTINUE;
 
     if (out->count == out->cap) {
         const int cap = out->cap ? out->cap * 2 : 256;

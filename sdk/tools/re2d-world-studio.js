@@ -3,6 +3,7 @@ import { createWorldSession, sections } from '../lib/world_model.js';
 import { escapeHtml as esc, dirOf, joinPath } from '../lib/model.js';
 import * as views from '../lib/views.js';
 let singleton;
+export const standalone = true;
 export async function open(app, args) {
     if (!singleton) singleton = createStudio(app);
     return singleton.openAsset(args.assetAbs || args.asset || null);

@@ -399,7 +399,7 @@ export function createStudio(app) {
 
     function renderTop() {
         doc.text('rs-file', escapeHtml(s.path || '—'));
-        doc.text('rs-dirty', s.history && s.history.dirty() ? '● есть несохранённые правки' : '');
+        doc.text('rs-dirty', s.history && s.history.dirty() ? '• есть несохранённые правки' : '');
         doc.cls('rs-undo', 'off', !(s.history && s.history.canUndo()));
         doc.cls('rs-redo', 'off', !(s.history && s.history.canRedo()));
         for (const t of ['view', 'surface', 'rig', 'author']) {

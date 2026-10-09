@@ -4923,6 +4923,10 @@ static SDL_EnumerationResult SDLCALL r2d__scan_cb(void *userdata, const char *di
     // (Sprite Studio), а игра читает при старте — перезапуск подхватывает
     // новые кадры без ручного F5. Прочий JSON (сохранения, данные) не трогаем:
     // игра сама пишет его на ходу, и перезапуск превратился бы в петлю.
+    // Служебные черновики SDK (.r2d-sdk-draft.*, .r2d-draft-*) не считаются правкой игры: проверка
+    // «Проверить» в студии пишет такой файл рядом с атласом, и без этого игра перезапускалась бы
+    // со старыми данными, пока настоящий файл ещё не сохранён.
+    if (SDL_strncmp(fname, ".r2d-", 5) == 0) return SDL_ENUM_CONTINUE;
     const size_t len = SDL_strlen(fname);
     const bool is_script = len >= 3 && SDL_strcasecmp(fname + len - 3, ".js") == 0;
     const bool is_atlas = len >= 11 && SDL_strcasecmp(fname + len - 11, ".atlas.json") == 0;

@@ -5,7 +5,7 @@
       "id": "launcher",
       "name": "SDK Launcher",
       "description": "Проекты, инструменты, сборка и запуск игры. Единая точка входа SDK.",
-      "last_updated": "2026-10-08T18:00:00+03:00",
+      "last_updated": "2026-10-09T12:00:00+03:00",
       "entry": "launcher",
       "category": "shell"
     },
@@ -13,7 +13,7 @@
       "id": "asset-browser",
       "name": "Asset Browser",
       "description": "Реальная файловая структура проекта: типы ассетов и открытие в нужном инструменте.",
-      "last_updated": "2026-10-08T18:00:00+03:00",
+      "last_updated": "2026-10-09T12:00:00+03:00",
       "entry": "asset-browser",
       "category": "shell"
     },
@@ -21,7 +21,7 @@
       "id": "r2d-sdk",
       "name": "r2d-sdk (нативный бэкенд)",
       "description": "CLI: реестр, ассеты, валидация, запуск и сборка. Один C-код для GUI, CLI и агента.",
-      "last_updated": "2026-10-08T18:00:00+03:00",
+      "last_updated": "2026-10-09T12:00:00+03:00",
       "entry": "diagnostics",
       "binary": "build/r2d-sdk",
       "category": "backend"
@@ -47,6 +47,103 @@
       "category": "classic-2d"
     },
     {
+      "id": "tilemap-studio",
+      "name": "Tilemap Studio",
+      "description": "Тайлкарты: слои, рисование, заливка, непроходимые тайлы, автотайл. Файл — параметры тега <tilemap>; предпросмотр — настоящий $.tilemap.",
+      "entry": "tilemap-studio",
+      "category": "classic-2d",
+      "assets": [
+        "*.tilemap.json"
+      ],
+      "last_updated": "2026-10-09T12:00:00+03:00"
+    },
+    {
+      "id": "particle-studio",
+      "name": "Particle Studio",
+      "description": "Параметры эмиттера $.particles: скорость, разброс, рампы цвета и размера. Предпросмотр — настоящий узел <particles>.",
+      "entry": "particle-studio",
+      "category": "classic-2d",
+      "assets": [
+        "*.particles.json"
+      ],
+      "last_updated": "2026-10-09T12:00:00+03:00"
+    },
+    {
+      "id": "collision-tools",
+      "name": "Collision / Physics Tools",
+      "description": "Прямоугольники, круги, капсулы, полигоны, сенсоры, односторонние платформы и слои. Тела создаёт настоящий Box2D движка.",
+      "entry": "collision-tools",
+      "category": "classic-2d",
+      "assets": [
+        "*.collision.json"
+      ],
+      "last_updated": "2026-10-09T12:00:00+03:00"
+    },
+    {
+      "id": "parallax-tools",
+      "name": "Parallax Tools",
+      "description": "Слои $.layers: порядок, коэффициент параллакса, затемнение. Предпросмотр двигает камеру настоящего рантайма.",
+      "entry": "parallax-tools",
+      "category": "classic-2d",
+      "assets": [
+        "*.layers.json"
+      ],
+      "last_updated": "2026-10-09T12:00:00+03:00"
+    },
+    {
+      "id": "font-tools",
+      "name": "Font / Text Tools",
+      "description": "Шрифты и текстовые стили $.font: размер, цвет, выравнивание, наследование. Предпросмотр рисует настоящий текст движка.",
+      "entry": "font-tools",
+      "category": "classic-2d",
+      "assets": [
+        "*.fonts.json"
+      ],
+      "last_updated": "2026-10-09T12:00:00+03:00"
+    },
+    {
+      "id": "audio-tools",
+      "name": "Audio Tools",
+      "description": "Шины, звуки и зоны акустики $.audio. Прослушивание — настоящим звуковым слоем движка.",
+      "entry": "audio-tools",
+      "category": "classic-2d",
+      "assets": [
+        "*.audio.json"
+      ],
+      "last_updated": "2026-10-09T12:00:00+03:00"
+    },
+    {
+      "id": "input-tools",
+      "name": "Input Tools",
+      "description": "Действия и раскладка $.input. Клавишу можно назначить нажатием; тестер показывает нажатые действия настоящего рантайма.",
+      "entry": "input-tools",
+      "category": "classic-2d",
+      "assets": [
+        "*.input.json"
+      ],
+      "last_updated": "2026-10-09T12:00:00+03:00"
+    },
+    {
+      "id": "rmlui-studio",
+      "name": "RmlUi Studio",
+      "description": "Редактор .rml и .rcss: дерево элементов, свойства, живой предпросмотр настоящим RmlUi. Файлы остаются обычными.",
+      "entry": "rmlui-studio",
+      "category": "classic-2d",
+      "assets": [
+        "*.rml",
+        "*.rcss"
+      ],
+      "last_updated": "2026-10-09T12:00:00+03:00"
+    },
+    {
+      "id": "devtools",
+      "name": "DevTools",
+      "description": "Инспектор запущенной игры по агентскому протоколу движка: состояние, запросы по селекторам, профиль. Только чтение.",
+      "entry": "devtools",
+      "category": "devtools",
+      "last_updated": "2026-10-09T12:00:00+03:00"
+    },
+    {
       "id": "re2dsprite-studio",
       "name": "Re2DSprite Studio",
       "description": "Настоящий Re2DSprite runtime: ракурс, debug-карты поверхности, скелет и сокеты; правка клипов/эмоций/вариантов/экипировки, timeline seek, undo/redo, сохранение и проверка.",
@@ -60,14 +157,15 @@
     {
       "id": "re2d-baker",
       "name": "Re2D Baker",
-      "description": "GLB/glTF/VRM → нативный Re2DSprite: Prop и Character (humanoid → псевдоскелет, владение частями), Auto Unwrap / Existing UV, Coordinate Fit, отчёт со стабильными кодами. 3D нужен только на этапе импорта.",
-      "last_updated": "2026-10-08T21:40:00+03:00",
+      "description": "GLB/glTF/VRM/OBJ → нативный Re2DSprite: Prop и Character (humanoid → псевдоскелет, владение частями), Auto Unwrap / Existing UV, Coordinate Fit, отчёт со стабильными кодами. 3D нужен только на этапе импорта.",
+      "last_updated": "2026-10-09T12:00:00+03:00",
       "entry": "re2d-baker",
       "category": "re2d",
       "assets": [
         "*.glb",
         "*.gltf",
-        "*.vrm"
+        "*.vrm",
+        "*.obj"
       ]
     },
     {

@@ -88,6 +88,15 @@ static const Validator k_validators[] = {
     { "sprite.atlas", sdk_validate_atlas },
     { "re2dsprite.character", sdk_validate_re2d_character },
     { "re2d.world",   sdk_validate_re2dmap },
+    { "tilemap",      sdk_validate_tilemap },
+    { "particles",    sdk_validate_particles },
+    { "collision",    sdk_validate_collision },
+    { "layers",       sdk_validate_layers },
+    { "fonts",        sdk_validate_fonts },
+    { "audio",        sdk_validate_audio },
+    { "input",        sdk_validate_input },
+    { "rmlui.document", sdk_validate_rml },
+    { "rmlui.style",  sdk_validate_rcss },
 };
 
 int sdk_validator_count(void) { return (int)(sizeof k_validators / sizeof k_validators[0]); }

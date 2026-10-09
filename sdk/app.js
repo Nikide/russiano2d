@@ -53,6 +53,9 @@ export function createApp($) {
         busy: 0,
         status: 'готов',
         docPath: null,
+        templates: { loaded: false, list: [], root: '' },
+        templateSelected: null,
+        engines: { loaded: false, list: [], selected: null },
         tool: null,               // открытый инструмент: { entry, id }
         log: [],
     };
@@ -68,7 +71,7 @@ export function createApp($) {
         state.status = text;
         if (!doc) return;
         doc.text('status', escapeHtml(text));
-        doc.cls('status', 'busy', kind === 'busy').cls('status', 'fail', kind === 'fail');
+        doc.cls('status', 'busy', kind === 'busy').cls('status', 'fail', kind === 'fail').cls('status', 'ok', kind !== 'busy' && kind !== 'fail');
     }
 
     function setDiagnostics(source, list) {
@@ -275,15 +278,35 @@ export function createApp($) {
                 mod = await import('./tools/' + tool.entry + '.js');
                 toolModules.set(tool.entry, mod);
             }
+            // Студия, которой нужен файл, без файла не открывается «в никуда»: ведём в Asset Browser
+            // с фильтром по её файлам. Студии с `export const standalone = true` создают файл сами.
+            if (!toolArgs.assetAbs && !mod.standalone && tool.assets && tool.assets.length) {
+                return pickAssetFor(tool);
+            }
             const session = await mod.open(app, Object.assign({ tool }, toolArgs));
             state.tool = { id: tool.id, entry: tool.entry };
             setStatus('открыт инструмент: ' + tool.name, '');
             return session || state.tool;
         } catch (e) {
             addDiagnostic('error', 'SDK_TOOL_SCREEN', 'Экран инструмента «' + tool.id + '» не открылся: ' +
-                (e && e.message ? e.message : e), { details: { entry: tool.entry } });
+                (e && e.message ? e.message : e), { details: { entry: tool.entry, stack: e && e.stack ? String(e.stack).split('\n').slice(0, 4).join(' | ') : null } });
             return null;
         }
+    }
+
+    /** Ведёт в Asset Browser: показать только файлы инструмента и объяснить, что выбрать. */
+    function pickAssetFor(tool) {
+        const patterns = tool.assets || [];
+        if (!state.project) {
+            addDiagnostic('warning', 'SDK_NO_PROJECT', 'Для «' + tool.name + '» нужен файл: сначала откройте проект');
+            showView('projects');
+            return { id: tool.id, needsAsset: true, patterns };
+        }
+        showView('assets');
+        setFilter(String(patterns[0] || '').replace(/^\*+/, ''), '');
+        addDiagnostic('info', 'SDK_PICK_ASSET', 'Выберите файл (' + patterns.join(', ') + ') и нажмите «Открыть в инструменте»', { asset: tool.id });
+        setStatus('выберите файл для «' + tool.name + '»', '');
+        return { id: tool.id, needsAsset: true, patterns };
     }
 
     function closeTool() {
@@ -322,6 +345,7 @@ export function createApp($) {
             if (opts && opts.scene) args.push('--scene', String(opts.scene));
             if (opts && opts.frames) args.push('--frames', String(opts.frames));
             if (opts && opts.headless) args.push('--headless');
+            if (opts && opts.stats) args.push('--stats');
             const handle = $.sdk.launch(args);
             state.run = { handle, running: true, exitCode: null, output: '' };
             handle.done.then((r) => {
@@ -348,13 +372,15 @@ export function createApp($) {
         return state.run.handle.kill();
     }
 
-    async function buildProject(outText) {
+    async function buildProject(outText, opts) {
         if (!state.project) {
             addDiagnostic('warning', 'SDK_NO_PROJECT', 'Сначала откройте проект');
             return null;
         }
         const out = absolutePath(base(), normalizeDir(outText || 'build/game'));
-        const r = await backend(['build', state.project.abs, '--out', out], 'сборка в ' + out);
+        const args = ['build', state.project.abs, '--out', out];
+        if (opts && opts.encrypt === false) args.push('--no-encrypt');
+        const r = await backend(args, 'сборка в ' + out);
         if (r.json) {
             setDiagnostics('build', r.json.diagnostics || []);
             state.log = String(r.json.outputTail || '').split(/\r?\n/).slice(-80);
@@ -362,6 +388,62 @@ export function createApp($) {
         finishStatus(!!(r.json && r.json.ok), 'сборка готова: ' + out, 'сборка не удалась');
         renderRun();
         return r.json;
+    }
+
+    // --- Шаблоны проектов (нативные `templates` и `new`) --------------------------------------
+    async function loadTemplates() {
+        const r = await backend(['templates', '--root', absolutePath(base(), 'sdk/templates')], 'читаю шаблоны');
+        const json = r.json;
+        state.templates = { loaded: !!json, list: json && json.templates ? json.templates : [], root: json && json.root ? json.root : '' };
+        if (json && json.diagnostics && json.diagnostics.length) setDiagnostics('templates', json.diagnostics);
+        finishStatus(!!(json && json.ok), 'шаблонов: ' + state.templates.list.length, 'не удалось прочитать шаблоны');
+        renderTemplates();
+        return state.templates;
+    }
+
+    function selectTemplate(id) {
+        state.templateSelected = state.templates.list.some((t) => t.id === id) ? id : null;
+        renderTemplates();
+        return state.templateSelected;
+    }
+
+    async function createFromTemplate(destText) {
+        const dest = normalizeDir(destText);
+        if (!state.templateSelected) {
+            addDiagnostic('warning', 'SDK_NO_TEMPLATE', 'Сначала выберите шаблон');
+            return null;
+        }
+        if (!dest) {
+            addDiagnostic('error', 'SDK_USAGE', 'Укажите каталог нового проекта');
+            return null;
+        }
+        const abs = absolutePath(base(), dest);
+        const r = await backend(['new', state.templateSelected, abs, '--root', absolutePath(base(), 'sdk/templates')], 'создаю проект ' + dest);
+        if (r.json) setDiagnostics('new', r.json.diagnostics || []);
+        finishStatus(!!(r.json && r.json.ok), 'проект создан: ' + dest, 'проект не создан');
+        if (r.json && r.json.ok) await openProject(dest);
+        return r.json;
+    }
+
+    // --- Сборки движка (нативный `engines`) -------------------------------------------------------
+    async function loadEngines() {
+        const r = await backend(['engines'], 'ищу сборки движка');
+        const json = r.json;
+        state.engines = { loaded: !!json, list: json && json.engines ? json.engines : [], selected: json ? json.selected : null };
+        if (json && json.diagnostics && json.diagnostics.length) setDiagnostics('engines', json.diagnostics);
+        finishStatus(!!(json && json.ok), 'сборок движка: ' + state.engines.list.length, 'движок не найден');
+        renderEngines();
+        return state.engines;
+    }
+
+    // Отладка = запуск со статистикой кадра (`--stats`): тот же движок, те же флаги.
+    function debugProject(opts) {
+        return runProject(Object.assign({ stats: true }, opts || {}));
+    }
+
+    // Пакет без шифрования — обычный читаемый файл (`build --no-encrypt`).
+    async function packageProject(outText) {
+        return buildProject(outText, { encrypt: false });
     }
 
     // --- Документация -----------------------------------------------------------
@@ -379,10 +461,13 @@ export function createApp($) {
     }
 
     // --- Навигация -------------------------------------------------------------
-    const VIEWS = ['projects', 'assets', 'tools', 'run', 'docs'];
+    const VIEWS = ['projects', 'assets', 'tools', 'templates', 'run', 'engines', 'docs'];
     function showView(name) {
         if (!VIEWS.includes(name)) return false;
         state.view = name;
+        if (name === 'templates' && !state.templates.loaded) loadTemplates();
+        if (name === 'engines' && !state.engines.loaded) loadEngines();
+        if (name === 'docs' && !state.docPath) showDoc(DOCS[0].path);
         if (doc) {
             for (const v of VIEWS) {
                 doc.cls('view-' + v, 'hidden', v !== name);
@@ -427,6 +512,19 @@ export function createApp($) {
             : '<p class="empty">Реестр ещё не прочитан.</p>');
     }
 
+    function renderTemplates() {
+        if (!doc) return;
+        doc.html('template-list', state.templates.loaded
+            ? views.templateCards(state.templates.list, state.templateSelected)
+            : '<p class="empty">Шаблоны ещё не прочитаны.</p>');
+        doc.text('template-selected', escapeHtml(state.templateSelected ? 'шаблон: ' + state.templateSelected : 'шаблон не выбран'));
+    }
+
+    function renderEngines() {
+        if (!doc) return;
+        doc.html('engine-list', state.engines.loaded ? views.engineCards(state.engines.list) : '<p class="empty">Сборки ещё не искали.</p>');
+    }
+
     function renderDiagnostics() {
         if (!doc) return;
         const sum = summarize(state.diagnostics);
@@ -453,6 +551,8 @@ export function createApp($) {
         renderProject();
         renderAssets();
         renderTools();
+        renderTemplates();
+        renderEngines();
         renderDiagnostics();
         renderRun();
         renderDocs();
@@ -460,7 +560,10 @@ export function createApp($) {
 
     // --- Подписки интерфейса -----------------------------------------------------
     function wire() {
-        const nav = { 'nav-projects': 'projects', 'nav-assets': 'assets', 'nav-tools': 'tools', 'nav-run': 'run', 'nav-docs': 'docs' };
+        const nav = {
+            'nav-projects': 'projects', 'nav-assets': 'assets', 'nav-tools': 'tools', 'nav-templates': 'templates',
+            'nav-run': 'run', 'nav-engines': 'engines', 'nav-docs': 'docs',
+        };
         for (const id of Object.keys(nav)) doc.on(id, 'click', () => showView(nav[id]));
 
         doc.on('btn-open-project', 'click', () => openProject(doc.value('project-path')));
@@ -477,6 +580,12 @@ export function createApp($) {
 
         doc.on('tool-list', 'click', (id, ev, key) => { if (key) openTool(key); });
         doc.on('btn-tools-reload', 'click', () => loadRegistry());
+
+        doc.on('template-list', 'click', (id, ev, key) => { if (key) selectTemplate(key); });
+        doc.on('btn-template-create', 'click', () => createFromTemplate(doc.value('template-dest')));
+        doc.on('btn-engines-refresh', 'click', () => loadEngines());
+        doc.on('btn-debug', 'click', () => debugProject());
+        doc.on('btn-package', 'click', () => packageProject(doc.value('build-out')));
 
         doc.on('btn-run', 'click', () => runProject());
         doc.on('btn-stop', 'click', () => stopProject());
@@ -506,15 +615,21 @@ export function createApp($) {
                            codes: state.diagnostics.map((d) => d.code) },
             run: state.run ? { running: state.run.running, exitCode: state.run.exitCode } : null,
             tool: state.tool,
-            studios: {
-                sprite: app.studios && app.studios.sprite ? app.studios.sprite.snapshot() : null,
-                animation: app.studios && app.studios.animation ? app.studios.animation.snapshot() : null,
-                re2d: app.studios && app.studios.re2d ? app.studios.re2d.snapshot() : null,
-                automation: app.studios && app.studios.automation ? app.studios.automation.snapshot() : null,
-                world: app.studios && app.studios.world ? app.studios.world.snapshot() : null,
-                baker: app.studios && app.studios.baker ? app.studios.baker.snapshot() : null,
-            },
+            templates: { loaded: state.templates.loaded, count: state.templates.list.length, selected: state.templateSelected },
+            engines: { loaded: state.engines.loaded, count: state.engines.list.length, selected: state.engines.selected },
+            // Снимок каждой открытой студии: список заполняют сами студии (app.studios[id]).
+            studios: studioSnapshots(),
         };
+    }
+
+    function studioSnapshots() {
+        // Прежние ключи остаются в снимке (null, пока студия не открыта): тесты и агенты на них опираются.
+        const out = { sprite: null, animation: null, re2d: null, automation: null, world: null, baker: null };
+        for (const key of Object.keys(app.studios || {})) {
+            const st = app.studios[key];
+            out[key] = st && st.snapshot ? st.snapshot() : null;
+        }
+        return out;
     }
 
     // --- Публичный объект приложения ---------------------------------------------------
@@ -522,7 +637,8 @@ export function createApp($) {
         $, state,
         loadRegistry, openProject, findProjects, refreshAssets, setFilter, selectAsset,
         validateAsset, validateProject, openTool, closeTool, openAsset,
-        runProject, stopProject, buildProject, showDoc, showView, snapshot,
+        runProject, stopProject, buildProject, debugProject, packageProject, showDoc, showView, snapshot,
+        loadTemplates, selectTemplate, createFromTemplate, loadEngines,
         setStatus, setDiagnostics, addDiagnostic, backend,
         visibleAssets,
         atlasModel,                       // чистая модель атласа: агент правит данные теми же функциями, что студия
