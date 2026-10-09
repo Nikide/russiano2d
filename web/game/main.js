@@ -6,15 +6,16 @@
 // пост-обработки — в первой веб-сборке они выключены (см. cmake/Web.cmake).
 //
 // Признак успеха: в кадре видны цветные прямоугольники, круг и текст, а в
-// консоли браузера — строки [r2d] из engine.log.
+// консоли браузера — строки [r2d] из $.log.
 // ---------------------------------------------------------------------------
 
 $.ready(() => {
+    const { w: W, h: H } = $.gfx.size();
     $.world.color('#0d1117');
 
     $('<rect>', { id: 'bg' })
-        .at(engine.width / 2, engine.height / 2)
-        .size(engine.width, engine.height)
+        .at(W / 2, H / 2)
+        .size(W, H)
         .color('#161b22')
         .layer(-10)
         .appendTo($.world);
@@ -28,7 +29,7 @@ $.ready(() => {
     }
 
     $('<circle>', { id: 'orb' })
-        .at(engine.width / 2, 480)
+        .at(W / 2, 480)
         .size(120, 120)
         .color('#ffd54a')
         .appendTo($.world);
@@ -40,14 +41,14 @@ $.ready(() => {
         .color('#e6edf3')
         .appendTo($.world);
 
-    engine.log('веб-сцена построена: ' + engine.width + 'x' + engine.height);
+    $.log('веб-сцена построена: ' + W + 'x' + H);
 });
 
 // Двигаем круг по кругу и «дышим» плитками — если кадры идут, это видно.
 $.update((dt) => {
     const t = $.time.now();
     const orb = $('#orb');
-    const cx = engine.width / 2 + Math.cos(t * 1.7) * 260;
+    const cx = $.gfx.size().w / 2 + Math.cos(t * 1.7) * 260;
     const cy = 480 + Math.sin(t * 2.3) * 90;
     orb.at(cx, cy);
 

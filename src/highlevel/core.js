@@ -16,6 +16,7 @@
 // Общее состояние API. Модули ссылаются друг на друга через него, а не через
 // импорты — иначе получилось бы кольцо импортов (мир знает про узлы, узлы про
 // мир, камера про мир и так далее).
+import { engine } from './native.js';
 export const ctx = {
     $: null,
     nodes: [],          // все живые узлы мира, в порядке создания
@@ -106,6 +107,17 @@ export function engineOf() {
 
 export function registryVersion() { return registry_version; }
 
+/**
+ * Нативные проходы кадра по узлам (engine.nodes, src/nodes.c) или null:
+ * без движка (юнит-тесты qjs) и при `$.debug.nativePasses(false)` работает
+ * прежний JS-путь. Переключатель нужен для сверки «C против JS» в тестах.
+ */
+export function nativeNodes() {
+    if (ctx.native_off === true) return null;
+    const n = engine && engine.nodes;
+    return n && typeof n === 'object' && typeof n.drawWorld === 'function' ? n : null;
+}
+
 /** Отметить реестр изменённым (см. места вызова: конструктор, destroy, пул). */
 export function touchRegistry() { registry_version++; }
 
@@ -151,6 +163,22 @@ Object.freeze(EMPTY_NODES);
 let registry_index = null;
 
 function buildRegistryIndex() {
+    // Нативный проход (src/nodes.c): та же раскладка за один проход в C —
+    // при пачках спавна индекс перестраивается каждый кадр (§0.6 отчёта).
+    const native = nativeNodes();
+    if (native && typeof native.buildIndex === 'function') {
+        const built = native.buildIndex(ctx.nodes);
+        registry_index = {
+            version: registry_version,
+            all: built.all,
+            by_tag: built.by_tag,
+            by_class: built.by_class,
+            facets: built.facets,
+            counts: built.counts,
+            selects: new Map(),
+        };
+        return registry_index;
+    }
     const by_tag = new Map();
     const by_class = new Map();
     const facets = {
@@ -335,7 +363,9 @@ export function dropFromRegistry(node) {
         }
         return;
     }
-    const i = ctx.nodes.indexOf(node);
+    // С конца: свежие узлы (пули, частицы, волна врагов) живут меньше всех,
+    // и поиск обычно заканчивается на первых шагах, а не через весь реестр.
+    const i = ctx.nodes.lastIndexOf(node);
     if (i >= 0) ctx.nodes.splice(i, 1);
     node.in_registry = false;
     touchRegistry();
@@ -408,33 +438,47 @@ export function packColor(value, alpha) {
         return alpha === undefined ? value : withAlpha(value, alpha);
     }
     if (typeof value === 'string') {
-        const named = NAMED_COLORS[value.toLowerCase()];
-        if (named) return engine.rgba(named[0], named[1], named[2], named[3]);
-        if (value[0] === '#') {
-            let hex = value.slice(1);
-            if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-            if (hex.length === 6) hex += 'ff';
-            if (hex.length === 8) {
-                const r = parseInt(hex.slice(0, 2), 16);
-                const g = parseInt(hex.slice(2, 4), 16);
-                const b = parseInt(hex.slice(4, 6), 16);
-                const a = parseInt(hex.slice(6, 8), 16);
-                return engine.rgba(r, g, b, a);
-            }
-        }
-        const m = /^rgba?\(([^)]+)\)$/.exec(value);
-        if (m) {
-            const parts = m[1].split(',').map((s) => parseFloat(s));
-            const a = parts.length > 3 ? Math.round(parts[3] * 255) : 255;
-            return engine.rgba(parts[0] | 0, parts[1] | 0, parts[2] | 0, a);
-        }
-        ctx.log(`$: непонятный цвет "${value}" — беру белый`);
-        return engine.WHITE;
+        // Разбор строки — регулярки и parseInt — стоил ≈0,6 мкс на каждый
+        // узел с цветом тега ('#ffffff' у каждого <rect>). Кэш по строке.
+        const hit = color_cache.get(value);
+        if (hit !== undefined) return hit;
+        const packed = parseColorString(value);
+        if (color_cache.size >= 512) color_cache.clear();
+        color_cache.set(value, packed);
+        return packed;
     }
     if (Array.isArray(value)) {
         const a = value.length > 3 ? Math.round(value[3] * 255) : 255;
         return engine.rgba(value[0] | 0, value[1] | 0, value[2] | 0, a);
     }
+    return engine.WHITE;
+}
+
+const color_cache = new Map();
+
+/** Строка цвета → упакованный RGBA (без кэша; см. packColor). */
+function parseColorString(value) {
+    const named = NAMED_COLORS[value.toLowerCase()];
+    if (named) return engine.rgba(named[0], named[1], named[2], named[3]);
+    if (value[0] === '#') {
+        let hex = value.slice(1);
+        if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+        if (hex.length === 6) hex += 'ff';
+        if (hex.length === 8) {
+            const r = parseInt(hex.slice(0, 2), 16);
+            const g = parseInt(hex.slice(2, 4), 16);
+            const b = parseInt(hex.slice(4, 6), 16);
+            const a = parseInt(hex.slice(6, 8), 16);
+            return engine.rgba(r, g, b, a);
+        }
+    }
+    const m = /^rgba?\(([^)]+)\)$/.exec(value);
+    if (m) {
+        const parts = m[1].split(',').map((s) => parseFloat(s));
+        const a = parts.length > 3 ? Math.round(parts[3] * 255) : 255;
+        return engine.rgba(parts[0] | 0, parts[1] | 0, parts[2] | 0, a);
+    }
+    ctx.log(`$: непонятный цвет "${value}" — беру белый`);
     return engine.WHITE;
 }
 
@@ -513,15 +557,46 @@ const EVENT_ALIASES = {
     separation: 'separate',
 };
 
+/** Есть ли в строке пробельный символ (быстрее regexp на коротких именах). */
+function hasSpace(text) {
+    for (let i = 0; i < text.length; i++) {
+        const c = text.charCodeAt(i);
+        if (c === 32 || (c >= 9 && c <= 13) || c === 160) return true;
+        // Редкие юникод-пробелы (U+1680, U+2000…) решает тот же regexp, что и раньше.
+        if (c >= 0x1680) return /\s/.test(text);
+    }
+    return false;
+}
+
 /** Каноническое имя события (или исходное, если псевдонима нет). */
 export function eventName(name) {
     if (typeof name !== 'string') return name;
     return EVENT_ALIASES[name.toLowerCase()] || name;
 }
 
+// Упакованные цвета тега считаются один раз на объект умолчаний TAGS, а не
+// на каждый узел: четыре разбора строки и вызов engine.rgba в конструкторе.
+const tag_colors = new Map();
+const NO_DEFAULTS = Object.freeze({});
+function tagColors(defaults) {
+    let c = tag_colors.get(defaults);
+    if (c === undefined) {
+        c = {
+            color: packColor(defaults.color),
+            hover: defaults.hoverColor ? packColor(defaults.hoverColor) : null,
+            text: defaults.textColor ? packColor(defaults.textColor) : engine.WHITE,
+            fill: defaults.fillColor ? packColor(defaults.fillColor) : engine.rgba(80, 200, 100, 255),
+        };
+        tag_colors.set(defaults, c);
+    }
+    return c;
+}
+
 export class Node {
     constructor(tag, attrs) {
-        const defaults = TAGS[tag] || {};
+        // Общий пустой объект: кэш цветов тега (tagColors) держит ключ по
+        // объекту умолчаний, и новый `{}` на каждый неизвестный тег рос бы.
+        const defaults = TAGS[tag] || NO_DEFAULTS;
         this.uid = next_uid++;
         this.tag = tag;
         // Вид узла (docs/RE2D.md): '2d' — обычный узел, 're2d' — 2.5D-вид того
@@ -530,7 +605,10 @@ export class Node {
         this.kind = '2d';
         this.attrs = {};                 // всё, что не описано ниже
         this.classes = new Set();
-        this.tags_extra = null;   // ленивый Set: см. addTag/removeTag
+        // Те же классы массивом, в порядке Set: его читает нативная сборка
+        // индекса реестра (src/nodes.c) — итерировать Set из C нельзя.
+        // Меняется только вместе с classes (addClass/removeClass/toggleClass).
+        this.class_list = [];
 
         // Узлы интерфейса живут в координатах окна: камера на них не влияет,
         // и в игровой мир они не попадают. Признак хранится в attrs, потому
@@ -546,20 +624,17 @@ export class Node {
         this.scale_x = 1;
         this.scale_y = 1;
         this.alpha = 1;
-        this.color = packColor(defaults.color);
-        this.hover_color = defaults.hoverColor ? packColor(defaults.hoverColor) : null;
-        this.text_color = defaults.textColor ? packColor(defaults.textColor) : engine.WHITE;
-        this.fill_color = defaults.fillColor ? packColor(defaults.fillColor) : engine.rgba(80, 200, 100, 255);
+        const colors = tagColors(defaults);
+        this.color = colors.color;
+        this.hover_color = colors.hover;
+        this.text_color = colors.text;
+        this.fill_color = colors.fill;
         this.visible = true;
         this.layer = defaults.ui ? 1000 : 0;
         this.depth = 0;
-        this.z = 0;                       // алиас depth, используется .depth()
 
         this.sprite = -1;
         this.default_sprite = dotSprite();
-        this.anim = null;                 // текущая спрайт-анимация
-        this.frames = null;               // массив кадров
-        this.frame_index = 0;
 
         // Физика
         this.body_kind = defaults.body || null;   // 'static' | 'dynamic' | 'kinematic'
@@ -568,22 +643,15 @@ export class Node {
         // CCD: быстрое тело (пуля) проверяется непрерывно — иначе за шаг оно
         // проходит десятки пикселей и проскакивает тонкие стены.
         this.bullet_on = defaults.bullet === true;
-        this.hitbox = null;               // {w, h} — если задан явно
-        this.circle_hitbox = 0;
         // Форма тела: 'box' (по умолчанию) | 'circle' | 'capsule' | 'polygon'.
         // У <circle> форма задана тегом; остальные включают её явно.
         this.shape_kind = defaults.shape || null;
-        this.poly_points = null;          // для 'polygon': плоский массив x,y
-        // Односторонняя платформа: тело проходит сквозь снизу и встаёт сверху.
-        this.one_way = false;
-        this.one_way_angle = -Math.PI / 2;   // куда смотрит лицевая сторона
         this.sensor = !!defaults.sensor;     // зона без отталкивания
         // События контакта (collide/separate/hit). По умолчанию включены
         // динамическим телам: именно они во что-то врезаются. Явный вызов
         // .contacts(true/false) перебивает автоматику — для этого и храним
         // режим отдельно от текущего значения.
         this.contacts_mode = defaults.contacts !== undefined ? !!defaults.contacts : null;
-        this.contacts_enabled = false;
         // Слои и маски коллизий (b2Filter). layer_bits — «в каком слое лежит
         // тело», collision_mask — «с какими слоями сталкивается». Умолчания
         // повторяют прежнее поведение движка: слой 1, сталкивается со всеми.
@@ -591,58 +659,34 @@ export class Node {
         this.layer_bits = defaults.layerBits !== undefined ? defaults.layerBits >>> 0 : 0x1;
         this.collision_mask = defaults.mask !== undefined ? defaults.mask >>> 0 : 0xffffffff;
         this.collision_group = defaults.group !== undefined ? defaults.group | 0 : 0;
-        this.velocity_cache = { x: 0, y: 0 };
 
         // Здоровье
         this.max_hp = defaults.hp || 0;
         this.cur_hp = this.max_hp;
-        // Прошлый кадр для автособытий мира (hit/heal/death/show/hide). Поля
-        // самого узла, а не Map по uid: числовой ключ в QuickJS стоит ~6 мкс,
-        // и эти четыре операции съедали половину кадра (см.
-        // docs/HIGH_LEVEL_API_PERF.md §3.1). undefined = «узел ещё не виден».
-        this._hp_seen = undefined;
-        this._vis_seen = undefined;
+        // Прошлый кадр для автособытий мира (_hp_seen/_vis_seen) заводит сам
+        // проход worldEvents: пока полей нет, узел «ещё не виден» (§3.1).
         // Скорость из TAGS: без этого умолчания тегов (enemy 90, npc 70) не
         // доходили ни до .controls(), ни до .attr('speed') — враг с
         // управлением ехал 150, хотя справочник обещал 90.
         this.speed = defaults.speed !== undefined ? defaults.speed : 0;
         this.team = defaults.team !== undefined ? defaults.team : 0;
-        this.iframes = 0;
-
-        // Визуальные состояния
-        this.tint = null;                 // временный цвет (.flash)
-        this.tint_timer = 0;
-        this.shake_timer = 0;
-        this.shake_amount = 0;
 
         // Иерархия
         this.parent_node = null;
         this.child_nodes = [];
         this.removed = false;
-        this.detached = false;
-        // Узел лежит в ctx.nodes. Флаг нужен там, где раньше был
-        // ctx.nodes.indexOf(node) — это O(N) на проверку (§3.3 отчёта).
-        this.in_registry = false;
-
-        // События. Контейнеры ленивые: пустые Map/Set — это malloc на каждый
-        // узел, а подписки и data() есть у единиц узлов (§3.5, пункт 13).
-        this.listeners = null;
-        this.data_store = null;
-        // Узел помечен на удаление внутри $.batch (см. dropFromRegistry).
-        this._drop_queued = false;
 
         // Интерфейс
-        this.hovered = false;
-        this.pressed = false;
         this.value = defaults.value !== undefined ? defaults.value : 0;
         this.max_value = defaults.max !== undefined ? defaults.max : 1;
 
-        this.tile_src = null;
         this.text = defaults.text !== undefined ? defaults.text : '';
         this.size = defaults.size !== undefined ? defaults.size : 20;
         this.radius = defaults.radius !== undefined ? defaults.radius : 200;
         this.intensity = defaults.intensity !== undefined ? defaults.intensity : 1;
 
+        // Узел лежит в ctx.nodes. Флаг нужен там, где раньше был
+        // ctx.nodes.indexOf(node) — это O(N) на проверку (§3.3 отчёта).
         ctx.nodes.push(this);
         this.in_registry = true;
         this.applyInitial(attrs);
@@ -1004,9 +1048,21 @@ export class Node {
     // --- Классы и теги -----------------------------------------------------
 
     addClass(name) {
-        const list = String(name).split(/\s+/).filter(Boolean);
+        const text = String(name);
+        // Одно имя без пробелов — самый частый случай ($('<rect>', { class:
+        // 'mob' })): без split/regexp/filter на каждом узле.
+        if (text.length !== 0 && !hasSpace(text)) {
+            if (this.classes.has(text)) return this;
+            this.classes.add(text);
+            this.class_list.push(text);
+            touchRegistry();
+            return this;
+        }
+        const list = text.split(/\s+/).filter(Boolean);
         let changed = false;
-        for (const c of list) if (!this.classes.has(c)) { this.classes.add(c); changed = true; }
+        for (const c of list) {
+            if (!this.classes.has(c)) { this.classes.add(c); this.class_list.push(c); changed = true; }
+        }
         // Классы читают селекторы и зоны (isZoneNode): сводки подсистем
         // должны узнать об изменении.
         if (changed) touchRegistry();
@@ -1015,15 +1071,29 @@ export class Node {
     removeClass(name) {
         const list = String(name).split(/\s+/).filter(Boolean);
         let changed = false;
-        for (const c of list) if (this.classes.delete(c)) changed = true;
+        for (const c of list) {
+            if (this.classes.delete(c)) {
+                changed = true;
+                const i = this.class_list.indexOf(c);
+                if (i >= 0) this.class_list.splice(i, 1);
+            }
+        }
         if (changed) touchRegistry();
         return this;
     }
     toggleClass(name, force) {
         const has = this.classes.has(name);
         const want = force === undefined ? !has : !!force;
-        if (want) this.classes.add(name); else this.classes.delete(name);
-        if (want !== has) touchRegistry();
+        if (want === has) return this;
+        if (want) {
+            this.classes.add(name);
+            this.class_list.push(name);
+        } else {
+            this.classes.delete(name);
+            const i = this.class_list.indexOf(name);
+            if (i >= 0) this.class_list.splice(i, 1);
+        }
+        touchRegistry();
         return this;
     }
     hasClass(name) { return this.classes.has(name); }
@@ -1048,6 +1118,41 @@ export class Node {
 
     matches(sel) { return matchesSelector(this, sel); }
 }
+
+// Неизменяемые умолчания узла живут на прототипе, а не в каждом объекте:
+// в QuickJS каждое новое собственное свойство — переход формы (≈28 нс), и
+// конструктор с семью десятками полей стоил ≈4 мкс на узел
+// (docs/HIGH_LEVEL_API_PERF.md §0.6). Чтение `node.tint` даёт то же значение,
+// первая запись создаёт собственное поле. Здесь только примитивы и null —
+// общий изменяемый объект на прототипе был бы ошибкой. Горячие поля кадра
+// (x, y, w, h, angle, scale, alpha, visible, layer, depth, sprite, color,
+// body, removed, parent_node, kind) остаются собственными: их читает C.
+Object.assign(Node.prototype, {
+    z: 0,                     // алиас depth, используется .depth()
+    anim: null,               // текущая спрайт-анимация
+    frames: null,             // массив кадров
+    frame_index: 0,
+    hitbox: null,             // {w, h} — если задан явно
+    circle_hitbox: 0,
+    poly_points: null,        // для 'polygon': плоский массив x,y
+    one_way: false,
+    one_way_angle: -Math.PI / 2,   // куда смотрит лицевая сторона
+    contacts_enabled: false,
+    iframes: 0,
+    tint: null,               // временный цвет (.flash)
+    tint_timer: 0,
+    shake_timer: 0,
+    shake_amount: 0,
+    detached: false,
+    listeners: null,          // события: ленивый Map, см. on()
+    data_store: null,         // ленивый Map, см. dataMap()
+    _drop_queued: false,      // помечен на удаление внутри $.batch
+    hovered: false,
+    pressed: false,
+    tile_src: null,
+    tags_extra: null,         // ленивый Set: см. addTag/removeTag
+    velocity_cache: null,     // {x, y} последней заданной скорости (пишут .velocity() и тело)
+});
 
 // ---------------------------------------------------------------------------
 // Обёртка-коллекция (то, что возвращает $)

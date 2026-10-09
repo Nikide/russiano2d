@@ -59,7 +59,7 @@ function makeEngine() {
   const files = {
     'docs/ARCHITECTURE.md': 12,
     'docs/AGENT_IMPLEMENTATION_RULES.md': 20,
-    'docs/API.md': 40,
+    'docs/internal/NATIVE.md': 40,
     'docs/HIGH_LEVEL_API.md': 25,
     'docs/highlevel/vfx.md': 8,
     'docs/highlevel/_CONTRACT.md': 6,
@@ -124,7 +124,7 @@ function execFor(name, args, agent) {
 function readCore(handlers, agent, files) {
   readFile(handlers, agent, 'docs/ARCHITECTURE.md', files['docs/ARCHITECTURE.md'])
   readFile(handlers, agent, 'docs/AGENT_IMPLEMENTATION_RULES.md', files['docs/AGENT_IMPLEMENTATION_RULES.md'])
-  readFile(handlers, agent, 'docs/API.md', files['docs/API.md'])
+  readFile(handlers, agent, 'docs/internal/NATIVE.md', files['docs/internal/NATIVE.md'])
   readFile(handlers, agent, 'docs/HIGH_LEVEL_API.md', files['docs/HIGH_LEVEL_API.md'])
 }
 
@@ -153,9 +153,9 @@ test('shellMutates ловит запись и пропускает чтение/
   const patterns = settings.shellMutationPatterns
   const denied = [
     'echo ok > src/highlevel/vfx.js',
-    'printf x >> docs/API.md',
+    'printf x >> docs/internal/NATIVE.md',
     'cat > src/highlevel/new.js <<EOF',
-    'sed -i "" s/a/b/ docs/API.md',
+    'sed -i "" s/a/b/ docs/internal/NATIVE.md',
     'tee src/highlevel/vfx.js',
     'git apply patch.diff',
     'rm -rf src/highlevel',
@@ -187,14 +187,14 @@ test('requiredDocs добавляет контракт и doc подсистем
   assert.deepEqual(core.map((doc) => doc.path), [
     'docs/ARCHITECTURE.md',
     'docs/AGENT_IMPLEMENTATION_RULES.md',
-    'docs/API.md',
+    'docs/internal/NATIVE.md',
     'docs/HIGH_LEVEL_API.md',
   ])
   const highlevel = policy.requiredDocs(root, 'src/highlevel/vfx.js', [], settings, fs.existsSync)
   assert.deepEqual(highlevel.map((doc) => doc.path), [
     'docs/ARCHITECTURE.md',
     'docs/AGENT_IMPLEMENTATION_RULES.md',
-    'docs/API.md',
+    'docs/internal/NATIVE.md',
     'docs/HIGH_LEVEL_API.md',
     'docs/highlevel/_CONTRACT.md',
     'docs/highlevel/vfx.md',
@@ -238,7 +238,7 @@ test('без документации write отклоняется с обяза
   const reason = guardReason(guards, execFor('write', { file_path: 'src/core/render.c' }, agent))
   assert.ok(reason, 'запись должна быть отклонена')
   assert.match(reason, /docs\/ARCHITECTURE\.md/)
-  assert.match(reason, /docs\/API\.md/)
+  assert.match(reason, /docs\/internal\/NATIVE\.md/)
   assert.match(reason, /docs\/HIGH_LEVEL_API\.md/)
   assert.match(reason, /философия/)
   assert.match(reason, /повтори ровно тот же вызов/)
@@ -271,7 +271,7 @@ test('чтение несколькими окнами складывается'
   assert.ok(guardReason(guards, execFor('write', { file_path: 'src/core/render.c' }, freshAgent)))
   readFile(handlers, freshAgent, 'docs/ARCHITECTURE.md', total, { lines: total - 5, offset: 6 })
   readFile(handlers, freshAgent, 'docs/AGENT_IMPLEMENTATION_RULES.md', fresh.files['docs/AGENT_IMPLEMENTATION_RULES.md'])
-  readFile(handlers, freshAgent, 'docs/API.md', files['docs/API.md'])
+  readFile(handlers, freshAgent, 'docs/internal/NATIVE.md', files['docs/internal/NATIVE.md'])
   readFile(handlers, freshAgent, 'docs/HIGH_LEVEL_API.md', files['docs/HIGH_LEVEL_API.md'])
   assert.equal(guardReason(guards, execFor('write', { file_path: 'src/core/render.c' }, freshAgent)), undefined)
 })

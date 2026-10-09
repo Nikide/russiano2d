@@ -1,0 +1,9 @@
+<rml><head><title>Свинки-солдаты</title><link type="text/rcss" href="gallery.rcss"/></head><body>
+<div id="header"><div id="status">6 NPC</div><div id="keys">←/→ поворот · ↑/↓ наклон · Space автоповорот · I idle · W walk · R run · H hit · K death · G АК · Esc выход</div></div>
+<div class="label" style="left: 40px; top: 106px;">01 · Автоматчица</div>
+<div class="label" style="left: 440px; top: 106px;">02 · Разведчица</div>
+<div class="label" style="left: 840px; top: 106px;">03 · Тяжёлая штурмовичка</div>
+<div class="label" style="left: 40px; top: 476px;">04 · Снайперша</div>
+<div class="label" style="left: 440px; top: 476px;">05 · Медик</div>
+<div class="label" style="left: 840px; top: 476px;">06 · Командир</div>
+</body></rml>

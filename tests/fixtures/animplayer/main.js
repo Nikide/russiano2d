@@ -98,7 +98,7 @@ $.ready(() => {
     // --- 6. Дорожка кадров на узле с настоящим листом -------------------------
     // Кадры берём у встроенного белого спрайта: тесту важна смена индекса, а не
     // картинка. Так проверяется и запись node.sprite/node.frame_index.
-    const white = engine.whiteSprite;
+    const white = $.gfx.white;
     $('<sprite>', { id: 'fx', frames: [white, white, white, white] })
         .at(400, 100).size(24, 24).appendTo($.world);
     $.anim.player('fx').target('#fx').play('sheet');

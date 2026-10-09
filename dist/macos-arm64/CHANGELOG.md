@@ -1,5 +1,151 @@
 # История изменений
 
+## Не выпущено — SDK: все инструменты спецификации, новая тема, рабочие кнопки (2026-10-09)
+
+- **Исправлено «кнопки не нажимаются»:** у контейнеров с `overflow: auto` не было стилей полос прокрутки,
+  RmlUi резервировал под полосу всю ширину, и содержимое (каталог инструментов, списки) схлопывалось до
+  нуля — кнопки «Открыть» были недоступны. Стили полос — в `sdk/ui/theme.rcss`.
+- **Движок:** виртуальная мышь агента (`mouseMove`, `mouse`, `wheel`) теперь доходит до RmlUi: агент
+  наводит курсор, нажимает кнопки интерфейса и крутит списки (раньше RmlUi получал только настоящие
+  события SDL). Тест `tests/agent/ui_virtual_mouse_test.py`, описание в `docs/AGENT_API.md` §3.5.
+- **SDK, оформление:** собственная тема в стиле сайта (`sdk/ui/theme.rcss`, `shell.rcss`, `studio.rcss`),
+  навигация по группам, экран «Шаблоны» и «Сборки движка», Debug и Package.
+- **SDK, недостающие инструменты:** Tilemap Studio, Particle Studio, Collision / Physics Tools, Parallax
+  Tools, Font / Text Tools, Audio Tools, Input Tools, RmlUi Studio и DevTools; все предпросмотры — настоящий
+  рантайм (`$.tilemap`, `$.particles`, Box2D, `$.layers`, `$.font`, `$.audio`, `$.input`, RmlUi). Форматы —
+  JSON с `version: 1`, содержимое которого игра читает `$.fs.readJSON`; описание — `docs/SDK.md` §13–§17.
+- Re2D Baker: импорт Wavefront OBJ + MTL (`bake-re2d model.obj`, `*.obj` в реестре); тест `sdk_obj_test.py`.
+- `r2d-sdk`: команды `templates`, `new`, `engines`; нативные валидаторы `tilemap`, `particles`, `collision`,
+  `layers`, `fonts`, `audio`, `input`, `rmlui.document`, `rmlui.style`; `build` создаёт каталог результата;
+  Asset Browser не показывает служебные `.r2d-*` черновики.
+- Тесты: `sdk_studios_test.py` (все студии настоящей мышью), `sdk_data_parity_test.py` (JS ↔ C, 2912 правок,
+  0 расхождений), `sdk_kinds_test.mjs`, `sdk_rml_test.mjs`.
+- Тесты `sdk_shell_test` и `sdk_classic2d_test` обновлены: карточки проверяются по id (буфер `getText` 8 КБ),
+  рамка кадра — по серединам пикселей (не зависит от дробной раскладки RmlUi).
+
+## Не выпущено — завершение SDK и контрольный аудит (2026-10-08)
+
+- Добавлен отдельный периодический стенд `$` API: 75 компонентных и 20 кадровых нагрузок, сырая базовая линия и таблица с условиями измерения; сравнение учитывает оборудование и сборку.
+
+- Re2DSprite: авторинг clips/emotions/variants/equipment, timeline seek и undo/redo.
+- Baker: выражения VRM, dense/sparse morphs, material/UV binds, humanoid mapping, атомарная запись отдельных файлов.
+- World Studio: RmlUi-авторинг `.re2dmap`, native compile, runtime preview и многоэтажность.
+- Automation: C batch/agent, паритет 19 команд, RmlUi UI и CI проверки.
+- Уточнены ограничения MVP и статус исходников относительно готовых пакетов 0.1.22.
+- Документация и списки задач сверены с кодом; убраны системные файлы и временные артефакты.
+
+
+## SDK: Character / VRM в Re2D Baker (Phase 5)
+
+- `r2d-sdk bake-re2d --type character`: VRM 0.x и 1.0 → псевдоскелет Re2DSprite (10 костей,
+  сокеты кистей), владение частями по весам скина, `*.character.json` + `spin`/`walk` + отчёт.
+  Неоднозначное владение считается и сообщается (`SDK_BAKE_SKIN_AMBIGUOUS`), выражения VRM
+  сопоставляются эмоциям Re2DSprite; выбранное `--expression` запекается в PNG.
+- Загрузчик glTF читает узлы, скины (inverseBind, JOINTS_0/WEIGHTS_0) и расширения VRM.
+- Re2D Baker (GUI): тип Character, `*.vrm` в реестре, панель VRM/владения/выражений.
+- Проверено на синтетических VRM 0.x/1.0 и реальном Seed-san. Это не проверка всех экспортёров VRoid.
+
+## SDK: Re2D Baker MVP — GLB/glTF → Re2DSprite (Phase 4)
+
+- `r2d-sdk bake-re2d`: GLB/glTF (внешний `.bin`, `data:`-URI, иерархия узлов, текстуры
+  baseColor) → PNG v2 + `*.character.json` + анимация `spin` + машинно-читаемый отчёт.
+  Пресет Prop; Auto Unwrap и Use Existing UV; авто-вписывание Coordinate Fit; origin
+  center/feet; PNG 1024/2048/4096; детерминированный результат.
+- Re2D Baker в SDK (RmlUi): параметры, панель Coordinate Fit, отчёт, диагностика, превью
+  запечённой модели настоящим `$.re2dSprite`, переход в Re2DSprite Studio.
+- Тестовые low-poly props: crate, barrel, lamp, chair (+ негативные GLB/glTF).
+
+## SDK: Re2DSprite Studio (Phase 3)
+
+- Re2DSprite Studio: просмотр модели настоящим `$.re2dSprite`, yaw/pitch мышью и
+  числами, клипы/эмоции/варианты/стиль, отладочные виды карт PNG v2 (материал, ID
+  части, владелец, X/Y/Z, покрытие, группа, перекрытие), осмотр отсчёта, правка
+  скелета и сокетов с undo/redo, сохранение тем же отступом, hot reload.
+- `r2d-sdk`: валидатор `re2dsprite.character` (описание, анимации, PNG v2) и команды
+  `re2d-info`, `re2d-debug`, `re2d-sample`; паритет с рантаймом проверяет тест на 82 правках.
+- Исправлено: `$.re2dSprite.from('/абсолютный/путь.character.json')` теряло ведущий
+  «/» у атласа и не находило PNG (`relativeAsset`).
+
+## SDK: Sprite Studio и Animation Studio, Classic 2D срез (Phase 2)
+
+- Sprite Studio и Animation Studio в `sdk/`: атлас `*.atlas.json` (Aseprite-
+  совместимый формат `$.atlas`): кадры, пивот-слайсы, длительности, теги-
+  анимации, метаданные, undo/redo, просмотр настоящим рантаймом.
+- `r2d-sdk`: `atlas-grid`, `atlas-format`, `atlas-info`, валидатор `sprite.atlas`
+  (стабильные коды `SDK_ATLAS_*`); канонический вид файла — одна строка на кадр.
+- Движок: hot reload теперь следит и за `*.atlas.json` в каталоге игры
+  (раньше — только `.js`).
+
+## SDK: оболочка, реестр инструментов и нативный бэкенд (Phase 1)
+
+- `sdk/` — приложение SDK на R2D (RmlUi): проекты, Asset Browser, каталог
+  инструментов из корневого `sdk_tools.json`, запуск и сборка игры,
+  документация, панель диагностик. Запуск: `./build/russiano2d --game sdk`.
+- `r2d-sdk` (`sdk/native`, чистый C): `tools`, `assets`, `project`, `projects`,
+  `validate`, `run`, `build`; один JSON-объект на команду, диагностики со
+  стабильными кодами. Описание — `docs/SDK.md`.
+- `$.sdk` — мост инструментов (только при `"toolHost": true` в `project.json`):
+  запуск `r2d-sdk` и движка фоновыми процессами без shell.
+- RmlUi-интеграция: `$.ui.doc().value/setValue/content/attr/rect/click`,
+  обработчики получают цель события (`targetKey`, `targetId`) — делегирование
+  списков одним обработчиком. Прежние игры не затронуты.
+
+## Документация под C → $
+
+- Конституция, архитектура, правила агентов и справочник описывают схему
+  C → `$`; справочник ядра — внутренний `docs/internal/NATIVE.md` (вместо
+  `docs/API.md`, в релизный AGENTS.md не входит).
+- В `$` добавлено то, что игра раньше брала из `engine.*`: `.angularVelocity()`,
+  `.mass()`, `.allowSleep()`, `$.sound.channel(ch)`, `$.debug.render()`.
+  Остаток сверки — `docs/TASKS.md` §13.
+
+## Текст, тайлы, частицы и HUD в C
+
+- `<text>`, статичные слои `<tilemap>`, частицы, `ui.label`/`ui.panel` и
+  очередь подписей HUD собираются в C; кадр совпадает с JS-путём до байта.
+- Release, 2000: текст 7,2 → 1,8 мс, `ui.label` 4,7 → 2,7, тайлмап 1,9 → 1,0,
+  частицы 3,2 → 2,3. Тик виджетов — без обходов всего реестра.
+- `$.debug.memory()` — факты о JS-куче (утечка или шум замера).
+
+## Твины в C
+
+- Простые твины (`.tween/.moveTo/.fadeTo/.scaleTo/.rotateTo`) со встроенной
+  плавностью считает C: 2000 твинов — 0,04 мс за кадр, значения побитово как
+  в JS. Таймеры тряски/вспышки/неуязвимости — тоже в C.
+- Сценарии `$.tween(target)` без лишней работы в кадре: 2000 сценариев
+  10,3 → 2,9 мс («JS итого», Release). Новая сцена стенда `move`.
+
+## Дешёвые спавн и удаление узлов
+
+- Индекс реестра строит C (`engine.nodes.buildIndex`); конструктор узла
+  4,2 → 2,7 мкс (умолчания на прототипе, кэш цветов тега, быстрый `addClass`).
+- `.remove()` по нескольким узлам чистит реестр одной уборкой; одиночное
+  удаление ищет узел с конца. Пачка 200 спавнов и удалений на 2000 узлах —
+  4,4 → 2,0 мс, `churn:2000` 14,5 → 3,4 мс (`HIGH_LEVEL_API_PERF.md` §0.6).
+
+## C → $: нативные проходы кадра
+
+- Синк тел, автособытия мира, наведение мыши, сортировка и сборка батча
+  обычных узлов идут в C (`src/nodes.c`, `engine.nodes.*`) прямо над узлами `$`;
+  особые узлы C отдаёт обратно в JS — кадр совпадает до байта.
+- Release, 2000 узлов: спрайты 6,9 → 2,1 мс, тела 6,6 → 2,3, твины 10,3 → 4,2,
+  `$.batch` 13,5 → 5,1 (`docs/HIGH_LEVEL_API_PERF.md` §0.5).
+- Y-sort хук tilemap работает только при карте с `ysort` — раньше он
+  обходил все карты перед каждым узлом.
+- `$.debug.nativePasses(false)` — вернуть JS-проходы для сверки.
+
+## C → $: игре виден только `$`
+
+- `globalThis.engine` убирается после установки `$`; модули `src/highlevel`
+  берут ядро из приватного `native.js`, загрузчик не отдаёт игре `r2d/*`,
+  кроме `'r2d'`. Агентский `eval` видит `engine` на время вызова.
+- Новое в `$` вместо прямых вызовов: `$.startScene`, `$.gfx.white`,
+  `$.time.perfNow()`. Демки, `game/`, веб-сцена и фикстуры переведены на `$`.
+- **Миграция:** `engine.startScene` → `$.startScene`, `engine.whiteSprite` →
+  `$.gfx.white`, `engine.width/height` → `$.gfx.size()`, `engine.time` →
+  `$.time.realNow()`, `engine.setCursor` → `$.input.cursor`, `engine.drawSprite`
+  → `$.gfx.push.sprite`, `engine.log` → `$.log` (таблица — `docs/highlevel/native.md`).
+
 ## Имя технологии Re2DSprite
 
 - Основной API $.re2dSprite и методы .re2d*, сцена re2dsprite.
@@ -188,7 +334,7 @@ RmlUi работает как обычно. Полный разбор, граб�
 ### Изменено
 - **`engine.queryPoint`, `engine.queryBox`, `engine.keysPressed`,
   `engine.keysReleased` возвращают настоящий `Int32Array`** — как и было
-  обещано в API.md; раньше это был обычный массив. Для кода с индексным
+  обещано в internal/NATIVE.md; раньше это был обычный массив. Для кода с индексным
   доступом и `.length` ничего не меняется.
 - **Кадр ImGui больше не начинается, пока оверлей скрыт.** Раньше он шёл
   каждый кадр ради очереди текста, которая давно мертва (игровой текст рисуется
@@ -281,7 +427,7 @@ RmlUi работает как обычно. Полный разбор, граб�
   вершин (`r2d__pack_triangles`), а пакеты треугольников рисует один помощник
   (`r2d__draw_tri_batches`).
 - Документация: `docs/highlevel/render.md` §3.0.5 (световая карта),
-  `docs/API.md` (новые биндинги).
+  `docs/internal/NATIVE.md` (новые биндинги).
 
 ### Тесты
 - `tests/agent/highlevel_light_test.py`: карта включается и выключается, свет в
@@ -330,7 +476,7 @@ RmlUi работает как обычно. Полный разбор, граб�
 - **`$.gfx.light.polygon(x, y)`** готовит набор по версии реестра и считает
   полигон из подготовленного набора, а не режет отрезки заново.
 - Документация: `docs/highlevel/render.md` §3.0.3–3.0.4 (темнота и
-  производительность света), `docs/API.md` §12 (подготовленный набор).
+  производительность света), `docs/internal/NATIVE.md` §12 (подготовленный набор).
 
 ### Тесты
 - `tests/js/light_test.mjs`: индекс по клеткам (выборка, длинные отрезки, дубли,
@@ -1147,7 +1293,7 @@ RmlUi работает как обычно. Полный разбор, граб�
 - **Тесты.** Агентские тесты `tests/agent/*_test.py` под раннером
   `tools/run_tests.py` (исходы `ok` / `fail` / `skip`), C-тесты разбора JSON и
   ChaCha20-Poly1305 с санитайзерами, юнит-тесты логики `$` под `qjs`.
-- **Документация.** `README.md`, `docs/API.md`, `docs/HIGH_LEVEL_API.md`,
+- **Документация.** `README.md`, `docs/internal/NATIVE.md`, `docs/HIGH_LEVEL_API.md`,
   `docs/AGENT_API.md`, `docs/BUILD.md`, `docs/GAP_ANALYSIS.md`,
   туториалы по платформеру и меню.
 

@@ -1,0 +1,15 @@
+.world-top { display: flex; height: 46%; }
+.world-pane { flex: 1 1 0; min-width: 0; background-color: #101b2b; border-width: 1px; border-color: #294363; }
+.world-map { position: relative; height: 85%; overflow: hidden; }
+.world-preview { height: 54%; }
+.world-view { height: 88%; }
+.world-properties { width: 100%; height: 260px; color: #dbe7f7; background-color: #08101c; font-size: 12px; border-width: 1px; border-color: #294363; }
+.world-shape { position: absolute; border-width: 1px; border-color: #7faaca; background-color: rgba(80, 128, 170, 60); color: #dbe7f7; font-size: 11px; padding: 0; }
+.world-shape.sel { border-color: #ffd27f; background-color: rgba(170, 120, 60, 100); }
+.side.left { flex: 0 0 240px; min-width: 240px; }
+.side.right { flex: 0 0 300px; min-width: 300px; }
+.world-pane, .world-preview, .world-view, .world-properties { display: block; }
+.world-view { width: 100%; }
+.world-properties { box-sizing: border-box; }
+
+.world-inspector { display: block; width: 280px; }

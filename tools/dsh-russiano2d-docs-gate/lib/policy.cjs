@@ -25,7 +25,7 @@ const DEFAULTS = {
   /** Место секции в системном промпте (до TOOL_BASH = 1000). */
   sectionOrder: 950,
   /** Все файлы должны существовать в каталоге, чтобы он считался корнем движка. */
-  rootMarkers: ['docs/ARCHITECTURE.md', 'docs/API.md', 'docs/HIGH_LEVEL_API.md'],
+  rootMarkers: ['docs/ARCHITECTURE.md', 'docs/internal/NATIVE.md', 'docs/HIGH_LEVEL_API.md'],
   /** Обязательные документы в обязательном порядке. */
   docs: [
     { id: 'philosophy', path: 'docs/ARCHITECTURE.md', title: 'Архитектура и философия API `$`' },
@@ -34,7 +34,7 @@ const DEFAULTS = {
       path: 'docs/AGENT_IMPLEMENTATION_RULES.md',
       title: 'Правила для кодинг-агентов',
     },
-    { id: 'lowlevel', path: 'docs/API.md', title: 'Низкоуровневые вызовы `engine.*`' },
+    { id: 'lowlevel', path: 'docs/internal/NATIVE.md', title: 'Нативное ядро `engine.*` (внутреннее, для модулей `$`)' },
     { id: 'highlevel', path: 'docs/HIGH_LEVEL_API.md', title: 'Высокоуровневое API `$`' },
   ],
   /** Какая доля строк документа должна быть прочитана (1 = файл целиком). */
@@ -338,7 +338,7 @@ function evaluate(state, root, docs, settings) {
   return { open: items.every((item) => item.done), items }
 }
 
-/** Строка чек-листа: `✅ 1. docs/API.md — …`. */
+/** Строка чек-листа: `✅ 1. docs/internal/NATIVE.md — …`. */
 function checklistLine(item, index) {
   const mark = item.done ? '✅' : item.read > 0 ? '🟡' : '⬜'
   const progress = item.done || item.total <= 0

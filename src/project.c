@@ -97,6 +97,9 @@ static void apply_json(R2dProject *project, R2dJson *root, const char *source)
     read_string(root, "version", version, sizeof version);
     if (version[0]) SDL_snprintf(project->version, sizeof project->version, "%s", version);
 
+    const R2dJson *tool_host = r2d_json_get(root, "toolHost");
+    if (tool_host && tool_host->type == R2D_JSON_BOOL) project->tool_host = tool_host->boolean;
+
     const int width  = read_int(root, "width", 0);
     const int height = read_int(root, "height", 0);
     if (width > 0) project->width = width;

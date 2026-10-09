@@ -1,11 +1,10 @@
 const CHARACTER = 'demos/rotsprite/russi.character.json';
 const ATLAS = 'demos/assets/art/mascot/russi_model_maid.png';
 const DOC = 'demos/rotsprite/rotsprite.rml';
-let costumes;
 
 export default function installRe2DSpriteDemo($) {
-    let doc, head, yaw=0, pitch=0, auto=true, elapsed=0, eyes='half', mouth='smile', blink=true, speaking=false;
-    let body=true, costume='maid', motion='idle', phase=0, armLeft=0, armRight=0, drag=null, shortHair=false, headYaw=0;
+    let doc, head, yaw=0, pitch=0, auto=true, elapsed=0, eyes='open', mouth='smile', blink=true, speaking=false;
+    let body=true, motion='idle', phase=0, armLeft=0, armRight=0, drag=null, shortHair=false, headYaw=0;
     let weapon=null, equipment='none', holdPose=null;
     function cycleEquipment() {
         const names=['none','ak47','pistol','shotgun'],next=names[(names.indexOf(equipment)+1)%names.length];
@@ -14,7 +13,7 @@ export default function installRe2DSpriteDemo($) {
         if (holdPose) head.re2dLayer(holdPose,false);
         holdPose=$.re2dSprite.definition(head).equipment[next]?.pose ?? null;
         if (holdPose) head.re2dLayer(holdPose);
-        $('#rot-atlas').sprite(item?$.re2dSprite.info(item).path:costumes[costume]);
+        $('#rot-atlas').sprite(item?$.re2dSprite.info(item).path:ATLAS);
     }
     let rect={x:0,y:0,scale:1}, emotion='neutral', brows='neutral';
     function setPose(y,p) { yaw=y;pitch=p;auto=false;head.re2dPose(yaw,pitch); }
@@ -28,11 +27,6 @@ export default function installRe2DSpriteDemo($) {
         head.re2dEmotion(emotion);
         const p=$.re2dSprite.info(head);eyes=['open','half','closed','happy'][p.eyes];mouth=['closed','open','smile','talk'][p.mouth];brows=['neutral','angry','sad','surprised'][p.brows];
     }
-    function outfit(name) {
-        head.re2dVariant('costume',name);costume=name;
-        $('#rot-atlas').sprite(weapon?$.re2dSprite.info(weapon).path:costumes[name]);
-    }
-    function cycleCostume() {const a=['maid','swim','police'];outfit(a[(a.indexOf(costume)+1)%3]);}
     function cycleMotion() {const a=['idle','walk','run'];motion=a[(a.indexOf(motion)+1)%3];body=true;head.re2dMotion(motion);}
     function hair() {
         shortHair=!shortHair;
@@ -58,27 +52,26 @@ export default function installRe2DSpriteDemo($) {
         if (!$.input.mouseDown('left')) drag=null;
         if (drag) {
             const shoulder=jointScreen($.re2dSprite.info(head).joints['shoulder'+drag]);
-            const angle=(Math.atan2(m.y-shoulder.y,m.x-shoulder.x)*180/Math.PI)-90;
+            const angle=(Math.atan2(m.y-shoulder.y,m.x-shoulder.x)*180/Math.PI)-90-(drag==='Left' ? 20 : -20);
             if (drag==='Left') armLeft=angle;else armRight=angle;
         }
     }
-    $.agent.expose('rotSpriteDemo',() => ({auto,yaw,pitch,eyes,mouth,brows,emotion,blink,speaking,bodyProjection:body,costume,motion,phase,armLeft,armRight,drag,shortHair,equipment,weapon:weapon ? $.re2dSprite.info(weapon) : null,
-        head:head ? $.re2dSprite.info(head) : null,atlas:costumes[costume]}));
+    $.agent.expose('rotSpriteDemo',() => ({auto,yaw,pitch,eyes,mouth,brows,emotion,blink,speaking,bodyProjection:body,motion,phase,armLeft,armRight,drag,shortHair,equipment,weapon:weapon ? $.re2dSprite.info(weapon) : null,
+        head:head ? $.re2dSprite.info(head) : null,atlas:ATLAS}));
     const scene={
         enter() {
-            yaw=pitch=elapsed=phase=armLeft=armRight=0;auto=true;eyes='half';mouth='smile';blink=true;speaking=false;
-            weapon=null;equipment='none';holdPose=null;body=true;costume='maid';motion='idle';drag=null;headYaw=0;shortHair=false;emotion='neutral';brows='neutral';
+            yaw=pitch=elapsed=phase=armLeft=armRight=0;auto=true;eyes='open';mouth='smile';blink=true;speaking=false;
+            weapon=null;equipment='none';holdPose=null;body=true;motion='idle';drag=null;headYaw=0;shortHair=false;emotion='neutral';brows='neutral';
             $.world.color('#101820');$.camera.at(0,0).zoom(1);
             $('<sprite>',{id:'rot-atlas',src:ATLAS});
             head=$.re2dSprite.from(CHARACTER,{id:'rot-head'}).re2dHotReload();
-            costumes=Object.fromEntries(Object.entries($.re2dSprite.definition(head).variants.costume).map(([key,path])=>[key,'demos/rotsprite/'+path]));
-            [-45,0,45].forEach((p,i) => $.re2dSprite.from(CHARACTER,{id:'rot-small-'+i}).re2dRig({body:false}).re2dPose(35,p).re2dExpression({eyes:'half',mouth:'smile'}));
+            [-45,0,45].forEach((p,i) => $.re2dSprite.from(CHARACTER,{id:'rot-small-'+i}).re2dMotion('idle',0).re2dRig({body:false}).re2dPose(35,p).re2dExpression({eyes:'open',mouth:'smile'}));
             layout();doc=$.ui.doc(DOC).show();
             doc.on('front','click',() => setPose(0,0)).on('back','click',() => setPose(180,0))
                 .on('profile','click',() => setPose(90,0)).on('auto','click',() => {auto=!auto;})
                 .on('emotion','click',cycleEmotion).on('eyes','click',cycleEyes).on('mouth','click',cycleMouth)
                 .on('blink','click',() => {blink=!blink;}).on('talk','click',() => {speaking=!speaking;})
-                .on('body','click',() => {body=!body;motion='idle';head.re2dMotion('idle');}).on('costume','click',cycleCostume).on('hair','click',hair)
+                .on('body','click',() => {body=!body;motion='idle';head.re2dMotion('idle');}).on('hair','click',hair)
                 .on('equipment','click',cycleEquipment).on('motion','click',cycleMotion).on('reset','click',() => {armLeft=armRight=0;motion='idle';head.re2dMotion('idle');})
                 .on('reload','click',() => head.re2dReload()).on('menu','click',() => $.scene.load('launcher'));
         },
@@ -91,7 +84,7 @@ export default function installRe2DSpriteDemo($) {
             if ($.input.pressed('v')) cycleEmotion();
             if ($.input.pressed('e')) cycleEyes();if ($.input.pressed('m')) cycleMouth();
             if ($.input.pressed('b')) blink=!blink;if ($.input.pressed('t')) speaking=!speaking;
-            if ($.input.pressed('c')) cycleCostume();if ($.input.pressed('l')) cycleMotion();
+            if ($.input.pressed('l')) cycleMotion();
             if ($.input.pressed('g')) cycleEquipment();if ($.input.pressed('h')) hair();if ($.input.pressed('r')) head.re2dReload();
             layout();hands();
             headYaw+=$.input.axis('q','w')*dt*65;
@@ -109,8 +102,8 @@ export default function installRe2DSpriteDemo($) {
                 }
             }
             doc.text('pose',`yaw ${yaw.toFixed(1)}° · pitch ${pitch.toFixed(1)}° · ${auto ? 'авто' : 'ручной режим'}`);
-            const clothes={maid:'Горничная',swim:'Купальник',police:'Полиция РФ'},moves={idle:'Стоит',walk:'Ходьба',run:'Бег'};
-            doc.text('status',`${clothes[costume]} · ${moves[motion]} · ${{none:'Без предмета',ak47:'АК-47',pistol:'Пистолет',shotgun:'Дробовик'}[equipment]} · PNG 4096×4096 · обновлений ${info.reloads}`);
+            const moves={idle:'Стоит',walk:'Ходьба',run:'Бег'};
+            doc.text('status',`${moves[motion]} · ${{none:'Без предмета',ak47:'АК-47',pistol:'Пистолет',shotgun:'Дробовик'}[equipment]} · PNG 4096×4096 · обновлений ${info.reloads}`);
             doc.text('error',info.reloadError || '');
             if ($.input.pressed('escape')) $.scene.load('launcher');
         },

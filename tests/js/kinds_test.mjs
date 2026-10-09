@@ -113,7 +113,9 @@ test('registerKind: имя — строчная строка', () => {
 });
 
 test('отрисовщик вида: регистрация и чтение', () => {
-    eq(kindRenderer('re2d'), undefined, 'у re2d пока нет отрисовщика (фаза 4)');
+    eq(typeof kindRenderer('re2d'), 'function', 'готовый Re2D регистрирует отрисовщик при createApi');
+    eq(kindRenderer('2d'), undefined, 'обычный 2D не требует отдельного отрисовщика');
+    eq(kindRenderer('probe'), undefined, 'у нового вида нет отрисовщика до регистрации');
     const fn = () => true;
     registerKindRenderer('probe', fn);
     eq(kindRenderer('probe'), fn, 'функция та же');

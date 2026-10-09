@@ -125,7 +125,7 @@ def build_via_context(platform_name: str, image: str, inner: str, windows: bool,
     )
 
     tag = "r2d-artifact:" + platform_name
-    build_cmd = ["docker", "build", "-f", str(dockerfile), "-t", tag]
+    build_cmd = ["docker", "buildx", "build", "--load", "-f", str(dockerfile), "-t", tag]
     if container_platform:
         build_cmd += ["--platform", container_platform]
     build_cmd.append(str(ROOT))
@@ -139,6 +139,8 @@ def build_via_context(platform_name: str, image: str, inner: str, windows: bool,
     binary = ROOT / build_dir_name / ("russiano2d.exe" if windows else "russiano2d")
     binary.parent.mkdir(parents=True, exist_ok=True)
     run(["docker", "cp", "%s:/src/%s" % (name, binary_rel), str(binary)])
+    backend = "r2d-sdk.exe" if windows else "r2d-sdk"
+    run(["docker", "cp", "%s:/src/%s/%s" % (name, build_dir_name, backend), str(binary.parent / backend)])
     run(["docker", "rm", "-f", name], quiet=True)
     subprocess.run(["docker", "rmi", "-f", tag],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -158,8 +160,9 @@ def host_platform() -> str:
 
 def prepare_docker_env() -> None:
     """Увести конфиг Docker CLI в доступный каталог (см. DOCKER_CONFIG_DIR)."""
-    os.makedirs(DOCKER_CONFIG_DIR, exist_ok=True)
-    os.environ.setdefault("DOCKER_CONFIG", DOCKER_CONFIG_DIR)
+    # Keep the real Docker config: redirecting it hides buildx plugins and
+    # legacy builder can silently ignore the requested base-image platform.
+    pass
 
 
 def docker_available() -> bool:
@@ -174,21 +177,25 @@ def docker_available() -> bool:
     return result.returncode == 0
 
 
-def ensure_builder_image(with_mingw: bool) -> str:
+def ensure_builder_image(with_mingw: bool, container_platform: Optional[str] = None) -> str:
     """Собрать (или переиспользовать) образ-сборщик. Вернуть его имя."""
-    tag = BUILDER_IMAGE_MINGW if with_mingw else BUILDER_IMAGE + ":linux"
+    container_platform = container_platform or ("linux/arm64" if platform.machine().lower() in ("arm64", "aarch64") else "linux/amd64")
+    tag = (BUILDER_IMAGE_MINGW if with_mingw else BUILDER_IMAGE + ":linux") + "-" + container_platform.split("/")[-1]
     marker = subprocess.run(
         ["docker", "image", "inspect", "--format", "{{.Id}}", tag],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     if marker.returncode == 0:
-        log("[образ] %s уже собран" % tag)
-        return tag
+        actual = subprocess.check_output(["docker", "image", "inspect", "--format", "{{.Architecture}}", tag], text=True).strip()
+        if actual == container_platform.split('/')[-1]:
+            log("[образ] %s уже собран" % tag)
+            return tag
+        log("[образ] неверная архитектура %s: %s; пересобираю" % (tag, actual))
 
     log("[образ] собираю %s (один раз, дальше берётся из кэша)" % tag)
     run([
-        "docker", "build",
+        "docker", "buildx", "build", "--load", "--platform", container_platform,
         "--build-arg", "WITH_MINGW=1" if with_mingw else "WITH_MINGW=0",
         "-t", tag,
         "-f", str(DOCKER_DIR / "Dockerfile.linux-builder"),
@@ -248,6 +255,10 @@ def build_native(platform_name: str, build_type: str, jobs: int,
     build_dir = BUILD_ROOT / platform_name
     log("[%s] нативная сборка в %s" % (platform_name, build_dir.relative_to(ROOT)))
     extra = list(MINGW_CMAKE_FLAGS) if windows else []
+    if platform_name.startswith("macos"):
+        extra.append("-DCMAKE_OSX_ARCHITECTURES=" + ("arm64" if platform_name.endswith("arm64") else "x86_64"))
+        if platform_name != host_platform():
+            extra += ["-DR2D_BUNDLED_FREETYPE=ON", "-DCMAKE_DISABLE_FIND_PACKAGE_SDL3=ON"]
     run(["cmake", "-S", str(ROOT), "-B", str(build_dir), "-G", "Ninja",
          *cmake_flags(build_type), *extra])
     run(["cmake", "--build", str(build_dir), "-j", str(jobs)])
@@ -469,12 +480,12 @@ def main(argv: List[str]) -> int:
             if missing:
                 log("! Docker не запущен — пропускаю: %s" % ", ".join(missing))
                 log("  Запусти Docker Desktop и повтори, либо собери только %s." % host)
-                platforms = [p for p in platforms if p == host]
+                platforms = [p for p in platforms if p == host or (host.startswith("macos") and p.startswith("macos"))]
 
     built: List[str] = []
     failed: List[str] = []
 
-    image: Optional[str] = None
+    images = {}
     for platform_name in platforms:
         log("")
         log("── %s" % platform_name)
@@ -482,13 +493,14 @@ def main(argv: List[str]) -> int:
             if options.no_docker:
                 binary = build_native(platform_name, build_type, jobs,
                                       windows=(platform_name == "windows-x86_64"))
-            elif platform_name == host:
+            elif platform_name == host or (host.startswith("macos") and platform_name.startswith("macos")):
                 binary = build_native(platform_name, build_type, jobs)
             else:
-                if image is None:
-                    image = ensure_builder_image("windows-x86_64" in platforms)
                 windows = platform_name == "windows-x86_64"
-                binary = build_in_container(platform_name, build_type, jobs, image, windows)
+                image_key = (windows, CONTAINER_PLATFORM[platform_name])
+                if image_key not in images:
+                    images[image_key] = ensure_builder_image(*image_key)
+                binary = build_in_container(platform_name, build_type, jobs, images[image_key], windows)
             extras = []
             if platform_name == host:
                 game = build_game(platform_name, binary)

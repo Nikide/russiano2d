@@ -11,6 +11,7 @@
 // Узлы интерфейса живут в координатах окна: камера на них не влияет.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, query, packColor, nodesWithFacet } from './core.js';
 import { activeDialog } from './widgets.js';
 
@@ -222,6 +223,20 @@ function makeDoc(id, path) {
         html(element, html) { engine.ui.setHtml(id, element, html); return this; },
         cls(element, name, add) { engine.ui.setClass(id, element, name, add !== false); return this; },
         style(element, property, value) { engine.ui.setProperty(id, element, property, value); return this; },
+        /** Значение поля ввода (`<input>`, `<textarea>`, `<select>`) или атрибута value; null — нет элемента. */
+        value(element) { return engine.ui.getValue(id, element); },
+        setValue(element, value) { return engine.ui.setValue(id, element, String(value)); },
+        /** Внутренняя разметка элемента (то, что записал `text()`/`html()`); null — нет элемента. */
+        content(element) { return engine.ui.getText(id, element); },
+        attr(element, name, value) {
+            if (value === undefined) return engine.ui.getAttr(id, element, name);
+            engine.ui.setAttr(id, element, name, String(value));
+            return this;
+        },
+        /** Нажать элемент программно (событие click, как от мыши): агент и тесты управляют интерфейсом без пикселей. */
+        click(element) { return engine.ui.click(id, element); },
+        /** Прямоугольник элемента в координатах окна { x, y, w, h } — для тестов агента и наведения. */
+        rect(element) { return engine.ui.rect(id, element); },
 
         /**
          * Обработчик события элемента документа.

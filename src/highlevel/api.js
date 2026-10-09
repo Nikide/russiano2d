@@ -9,14 +9,15 @@
 //   });
 // ===========================================================================
 
+import { engine } from './native.js';
 import {
     ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
     packColor, withAlpha, registerSelector, nodeBounds, boundsOverlap,
     makeRandom, dotSprite, resolveSprite, sheetFrames, regionSprite,
-    nodesWithFacet, touchRegistry, beginBatch, endBatch, liveNodes, engineOf,
+    nodesWithFacet, touchRegistry, beginBatch, endBatch, liveNodes, engineOf, nativeNodes,
 } from './core.js';
 import { installWorld } from './world.js';
-import { installCamera } from './camera.js';
+import { installCamera, cameraTransform } from './camera.js';
 import { installViewports } from './viewports.js';
 import { installTime, tickTime } from './time.js';
 import { installInput, shiftDown, ctrlDown, altDown } from './input.js';
@@ -90,6 +91,7 @@ import { installI18n, tickI18n } from './i18n.js';
 import { installPool, tickPool } from './pool.js';
 import { installViewport, tickViewport } from './viewport.js';
 import { installHttp, tickHttp } from './http.js';
+import { installSdk, tickSdk } from './sdk.js';
 import { installCutscene, tickCutscene } from './cutscene.js';
 
 // ---------------------------------------------------------------------------
@@ -381,6 +383,9 @@ export function createApi() {
 
     $.isAgent = () => !!engineOf().agent;
     $.quit = () => engineOf().quit();
+    // Имя сцены из --scene (или null): то, что раньше игра читала как
+    // engine.startScene. Известно до выполнения main.js, не меняется за сессию.
+    $.startScene = engineOf().startScene || null;
 
     // --- Подсистемы после аудита API ------------------------------------------
     // Ставятся здесь, а не рядом с остальными install*(): им нужны готовые
@@ -426,6 +431,7 @@ export function createApi() {
     installPool($);
     installViewport($);
     installHttp($);
+    installSdk($);               // мост инструментов SDK: $.sdk (включается project.json "toolHost")
 
     // --- Утилиты, логика и данные --------------------------------------------
     // Порядок важен: installRandom перекрывает $.random из ядра (там только
@@ -1456,7 +1462,20 @@ function installNodeMethods($) {
     });
     def('prepend', function (child) { return Wrapper.prototype.append.call(this, child); });
 
-    def('remove', function () { return this.eachNode((_, el) => { const n = el; if (n) n.destroy(); }); });
+    // Несколько узлов разом — одна уборка реестра в конце вызова, как в
+    // $.batch: иначе каждый destroy() искал свой узел и сдвигал хвост
+    // массива, и $('.enemy').remove() на N узлах стоил O(N²) (§0.6 отчёта).
+    // К возврату из remove() реестр уже чист — снаружи разницы нет.
+    def('remove', function () {
+        const nodes = this.nodes;
+        if (nodes.length > 1) beginBatch();
+        try {
+            for (let i = 0; i < nodes.length; i++) if (nodes[i]) nodes[i].destroy();
+        } finally {
+            if (nodes.length > 1) endBatch();
+        }
+        return this;
+    });
 
     def('detach', function () {
         return this.eachNode((_, el) => {
@@ -1582,6 +1601,32 @@ function installNodeMethods($) {
      * .sleeping() — спит ли тело (Box2D усыпляет неподвижные). Спящее тело не
      * считается физикой: полезно, чтобы не будить его лишней логикой.
      */
+    // Угловая скорость тела, рад/с: `.angularVelocity()` — прочитать,
+    // `.angularVelocity(w)` — задать всем узлам выборки. У узла без тела — 0.
+    def('angularVelocity', function (w) {
+        if (w === undefined) {
+            const node = this.nodes[0];
+            return node && node.body >= 0 && typeof engineOf().getAngularVelocity === 'function'
+                ? engineOf().getAngularVelocity(node.body) : 0;
+        }
+        return this.eachNode((_, node) => {
+            if (node.body >= 0) engineOf().setAngularVelocity(node.body, Number(w) || 0);
+        });
+    });
+    // Масса тела, кг (32 px = 1 м, плотность из attrs.density). Без тела — 0.
+    defGet('mass', function (node) {
+        return node.body >= 0 && typeof engineOf().bodyMass === 'function' ? engineOf().bodyMass(node.body) : 0;
+    }, 0);
+    // Разрешить Box2D усыплять тело (по умолчанию да). `false` нужен, если
+    // игра двигает тело скоростью: уснувшее тело перестаёт её слушать.
+    def('allowSleep', function (on) {
+        return this.eachNode((_, node) => {
+            if (node.body >= 0 && typeof engineOf().setSleeping === 'function') {
+                engineOf().setSleeping(node.body, on !== false);
+            }
+        });
+    });
+
     defGet('sleeping', function (node) {
         return node.body >= 0 && typeof engineOf().isAwake === 'function'
             ? !engineOf().isAwake(node.body)
@@ -1710,6 +1755,7 @@ function installFrameHooks($) {
         prof('пулы'); tickPool(dt);
         prof('вьюпорты'); tickViewport(dt);
         prof('http'); tickHttp(dt);
+        prof('sdk'); tickSdk(dt);
         prof('шины звука'); tickAudiobus(dt);
         prof('акустика'); tickAcoustics(dt);
         prof('интерфейс'); ctx.ui._tick();
@@ -1869,6 +1915,8 @@ function stepTowards(node, target, speed) {
  * совпадение по экранному прямоугольнику (zoom учитывается), позиция берётся из
  * `nodeScreenPos` — она верна и для параллакса.
  */
+const hover_params = new Float64Array(13);
+
 function tickWorldHover() {
     const nodes = liveNodes();
     const mx = engineOf().mouseX;
@@ -1876,6 +1924,33 @@ function tickWorldHover() {
     const zoom = ctx.camera ? (ctx.camera.zoom() || 1) : 1;
     let top = null;
     let top_score = -Infinity;
+
+    // Нативный проход (src/nodes.c): попадание и «верхний» узел считает C,
+    // а на узле, у которого попадание сменилось, отдаёт управление сюда —
+    // mouseenter/mouseleave рассылаются в том же порядке, что и раньше.
+    const native = nativeNodes();
+    if (native) {
+        if (nodes.length === 0) { ctx.hovered = null; return null; }
+        const cam = cameraTransform();
+        const P = hover_params;
+        P[0] = mx; P[1] = my; P[2] = zoom;
+        P[3] = cam.x; P[4] = cam.y;
+        P[5] = cam.w && cam.w > 0 ? cam.w / 2 : engineOf().width / 2;
+        P[6] = cam.h && cam.h > 0 ? cam.h / 2 : engineOf().height / 2;
+        P[7] = cam.shake_x || 0; P[8] = cam.shake_y || 0;
+        P[9] = ctx.time && typeof ctx.time.frame === 'function' ? ctx.time.frame() : -1;
+        P[10] = cam.zoom || 1;
+        P[11] = -Infinity; P[12] = -1;
+        let i = native.hover(nodes, 0, P);
+        while (i >= 0) {
+            const node = nodes[i];
+            node.emit(node.hovered ? 'mouseenter' : 'mouseleave', {});
+            i = native.hover(nodes, i + 1, P);
+        }
+        top = P[12] >= 0 ? nodes[P[12]] : null;
+        ctx.hovered = top;
+        return top;
+    }
 
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];

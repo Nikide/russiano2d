@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Russiano2D — российский 2D-игровой движок</title>
+<meta name="description" content="Russiano2D — 2D-игровой движок: ядро на C, игры на JavaScript через высокоуровневое API $. Физика Box2D, UI на RmlUi, агентский режим, сборка игры в один файл, экспорт в веб (WebGPU).">
+<link rel="canonical" href="https://r2d.nikiniki.ru/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:site_name" content="Russiano2D">
+<meta property="og:url" content="https://r2d.nikiniki.ru/">
+<meta property="og:title" content="Russiano2D — российский 2D-игровой движок">
+<meta property="og:description" content="Ядро на C, игровая логика на JavaScript, один вход — $. Демо, скриншоты, документация, сборки под macOS, Linux и Windows и играбельная веб-версия (WebGPU).">
+<meta property="og:image" content="https://r2d.nikiniki.ru/img/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Russiano2D — российский 2D-игровой движок">
+<meta name="twitter:image" content="https://r2d.nikiniki.ru/img/og.jpg">
+<meta name="theme-color" content="#0b0e14">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="img/icon.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+<!-- Машинные манифесты: выжимка для моделей и карта сайта. -->
+<link rel="alternate" type="text/markdown" title="llms.txt" href="/llms.txt">
+<link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Russiano2D",
+ "applicationCategory":"GameEngine","operatingSystem":"macOS, Linux, Windows, Web (WebGPU)",
+ "description":"2D-игровой движок: ядро на C, игры на JavaScript через API $.",
+ "url":"https://r2d.nikiniki.ru/","inLanguage":"ru",
+ "offers":{"@type":"Offer","price":"0","priceCurrency":"RUB"}}
+</script>
+<style>
+.faq-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  width: 100%;
+  counter-reset: faq;
+}
+
+@media (min-width: 900px) {
+  .faq-list { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+}
+
+.faq-list > .card {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  min-width: 0;
+  position: relative;
+  padding: 22px 24px 22px 66px;
+  counter-increment: faq;
+  border-left: 3px solid var(--accent);
+}
+
+.faq-list > .card::before {
+  content: counter(faq, decimal-leading-zero);
+  position: absolute;
+  left: 20px;
+  top: 24px;
+  font: 700 15px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--accent);
+}
+
+.faq-list > .card h3 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--fg);
+}
+
+.faq-list > .card p + p { margin-top: 10px; }
+
+.faq-list > .card pre {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.faq-list > .card pre code { color: var(--fg); background: none; padding: 0; }
+.faq-list > .card strong { color: var(--fg); }
+.faq-list > .card:hover { transform: none; }
+
+@media (max-width: 560px) {
+  .faq-list > .card { padding: 20px 18px 20px 52px; }
+  .faq-list > .card::before { left: 16px; top: 22px; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">К содержимому</a>
+
+<header class="topbar">
+  <a class="brand" href="/">
+    <img src="img/icon.png" alt="" width="28" height="28">
+    <span>Russiano<em>2D</em></span>
+    <span class="ver">v0.1.27</span>
+  </a>
+  <button class="burger" id="burger" aria-label="Меню" aria-expanded="false" aria-controls="menu">☰</button>
+  <nav class="menu" id="menu">
+    <a href="#features">Возможности</a>
+    <a href="#code">Код</a>
+    <a href="#demos">Демо</a>
+    <a href="#inside">Как устроен</a>
+    <a href="#download">Скачать</a>
+    <a href="/doc/" class="menu-docs">Документация →</a>
+  </nav>
+</header>
+
+<main id="main">
+
+<!-- ── HERO ───────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-text">
+    <p class="kicker">Настоящий <span class="tricolor"><span class="tri-w">рос</span><span class="tri-b">сий</span><span class="tri-r">ский</span></span> 2D-движок · C11 + QuickJS-ng</p>
+    <h1>Делай игры<span class="accent">.</span><br>Код и SDK.</h1>
+    <p class="lead">
+      Ядро на <strong>C</strong>, игровая логика на <strong>JavaScript</strong>
+      через <code>$</code>. Игра — обычный код и данные, которые удобно читать и менять.
+      <strong>SDK</strong> помогает создавать спрайты, анимации, частицы и интерфейсы RmlUi;
+      Re2D Baker превращает VRM/GLB в Re2DSprite.
+      Пакеты для <strong>macOS, Linux и Windows</strong> включают движок, SDK и документацию.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="/play/">▶ Играть в браузере</a>
+      <a class="btn" href="#download">Скачать движок и SDK</a>
+      <a class="btn btn-ghost" href="/doc/#/SDK">Открыть руководство SDK</a>
+      <a class="btn btn-ghost" href="#demos">Посмотреть демо</a>
+    </div>
+    <ul class="badges">
+      <li>SDL3 + SDL_GPU</li>
+      <li>Box2D v3</li>
+      <li>RmlUi</li>
+      <li>QuickJS-ng</li>
+      <li>macOS · Linux · Windows</li>
+      <li>Веб (WebGPU)</li>
+    </ul>
+  </div>
+  <figure class="hero-art">
+    <picture>
+      <source srcset="img/mascot-hero.webp" type="image/webp">
+      <img src="img/mascot-hero.png" alt="Маскот Russiano2D — Руси-тян" width="664" height="1400">
+    </picture>
+    <figcaption>Маскот проекта — Руси-тян</figcaption>
+  </figure>
+</section>
+
+<div class="stats">
+  <div><b>2235</b><span>иконок Material Design внутри бинарника</span></div>
+  <div><b>0.001</b><span>draw call на спрайт: 1000 спрайтов, одна текстура</span></div>
+  <div><b>116</b><span>агентских наборов тестов для движка</span></div>
+  <div><b>C11</b><span>ядро; игры на JavaScript, адаптеры на C++20</span></div>
+  <div><b>78</b><span>модулей API в периодическом стенде: 95 нагрузок</span></div>
+  <div><b>1.51 мс</b><span>CPU: логика и батч для 1000 спрайтов в стенде</span></div>
+</div>
+<p class="sub" style="text-align:center">Замер 08.10.2026 · v0.1.23 · Mac mini M4 · 16 ГБ · Metal · Release · 1280×720. <a href="/doc/#/API_PERFORMANCE">Условия и полная таблица</a></p>
+
+<!-- ── FEATURES ───────────────────────────────────────────────────────── -->
+<section id="features" class="section">
+  <h2>Что внутри</h2>
+  <p class="sub">Движок готов к дистрибуции: собирает игру в один исполняемый файл и умеет работать инструментом для программы, а не только для человека.</p>
+
+  <div class="grid">
+    <article class="card">
+      <h3><span class="ico">$</span> Высокоуровневое API <code>$</code></h3>
+      <p>Декларативные цепочки вместо десятка параметров: создание, поиск по CSS-подобным
+      селекторам (<code>#id</code>, <code>.class</code>, <code>:alive</code>, <code>[hp&lt;20]</code>),
+      твины, физика, события, звук, UI.</p>
+    </article>
+    <article class="card">
+      <h3><span class="ico">🔥</span> Hot reload на лету</h3>
+      <p>Правка любого <code>.js</code> в <code>game/</code> перезапускает QuickJS, не пересоздавая
+      окно и физический мир — цикл правок занимает секунды.</p>
+    </article>
+    <article class="card">
+      <h3><span class="ico">📦</span> Игра в одном файле</h3>
+      <p>Скрипты компилируются в байткод QuickJS и вместе с ассетами приписываются к копии
+      движка. Контейнер шифруется <strong>ChaCha20-Poly1305</strong>, подмена байта ломает запуск.</p>
+    </article>
+    <article class="card">
+      <h3><span class="ico">🤖</span> Режим для ИИ-агентов</h3>
+      <p><code>--agent --headless</code>: JSON-команды в <code>stdin</code>, ответы в <code>stdout</code>,
+      детерминированные кадры (<code>--fixed-dt</code>, <code>--seed</code>), <code>eval</code>,
+      <code>state</code>, <code>screenshot</code> и виртуальный ввод.</p>
+    </article>
+    <article class="card">
+      <h3><span class="ico">🎯</span> Запросы к миру</h3>
+      <p>Выборка по радиусу одним нативным проходом:
+      <code>$('.goblin').within('#hero', 250).remove()</code>. Те же селекторы
+      видят агент (<code>query</code>, <code>inspect</code>), DevTools и сама игра.</p>
+    </article>
+    <article class="card">
+      <h3><span class="ico">🔁</span> Запись и воспроизведение</h3>
+      <p><code>--record</code> пишет ввод, <code>--replay</code> проигрывает его на фиксированном шаге
+      с тем же зерном: баг, пойманный один раз, воспроизводится всегда.</p>
+    </article>
+    <article class="card">
+      <h3><span class="ico">✅</span> Тесты в понятиях мира</h3>
+      <p>Утверждения на селекторах, а не на внутренностях:
+      <code>$.expect('#door').state('open')</code>, <code>.count(5)</code>,
+      <code>.positionNear(100, 300)</code>. Итог видит и человек, и агент.</p>
+    </article>
+    <article class="card">
+      <h3><span class="ico">🧱</span> Физика и геометрия</h3>
+      <p>Box2D v3: формы тел, односторонние платформы, суставы, лучи и запросы.
+      Своё 2D BSP-дерево упорядочивает геометрию без z-буфера.</p>
+    </article>
+    <article class="card">
+      <h3><span class="ico">💡</span> Свет и видимость</h3>
+      <p>Полигоны видимости поверх <code>trylock/visibility</code>: тени от стволов,
+      фонари, глушение звука в чаще — как в демо «Типичная ночь в Мытищинском лесу».</p>
+    </article>
+    <article class="card">
+      <h3><span class="ico">🖼️</span> Графика без тормозов</h3>
+      <p>Игровой код наполняет плоский <code>Float32Array</code> и отдаёт кадр одним вызовом
+      в C. Батчинг, blend-режимы, канвас-слои и параллакс, SPIR-V → MSL на этапе сборки.</p>
+    </article>
+    <article class="card">
+      <h3><span class="ico">🎛️</span> Интерфейс на RmlUi</h3>
+      <p>HTML/CSS-подобная разметка: панели, списки, скроллы, слайдеры, чекбоксы, диалоги,
+      якоря и темы. Виртуальная новелла целиком собрана на ней.</p>
+    </article>
+    <article class="card">
+      <h3><span class="ico">🗺️</span> Геймплейные подсистемы</h3>
+      <p>Анимация и машины состояний, TileMap с автотайлом и Y-sort, частицы, VFX,
+      навигация A* и navmesh, prefab'ы, аудио-шины, локализация, пул узлов, HTTP, триггеры.</p>
+    </article>
+  </div>
+</section>
+
+<!-- ── CODE ───────────────────────────────────────────────────────────── -->
+<section id="code" class="section section-alt">
+  <h2>Код, а не сцена</h2>
+  <p class="sub">Весь игровой код — один глобальный объект <code>$</code>, без импортов. Игра выглядит как обычный текст.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab is-active" data-tab="game" role="tab" id="tab-game" aria-controls="pane-game" aria-selected="true">Игра на&nbsp;<code>$</code></button>
+    <button class="tab" data-tab="build" role="tab" id="tab-build" aria-controls="pane-build" aria-selected="false">Сборка и запуск</button>
+    <button class="tab" data-tab="agent" role="tab" id="tab-agent" aria-controls="pane-agent" aria-selected="false">Агент и CI</button>
+  </div>
+
+  <div class="panes">
+<pre class="pane is-active" data-pane="game" id="pane-game" role="tabpanel" aria-labelledby="tab-game" tabindex="0"><code class="lang-js">$.ready(() =&gt; {
+    $.world.gravity(0, 1200).color('#101820').bounds(0, 0, 4000, 1200);
+
+    $('&lt;player&gt;', { id: 'hero' })
+        .at(100, 300).size(32, 48).health(100).speed(250)
+        .controls('wasd')
+        .on('hit', e =&gt; $.camera.shake(4, 200))
+        .on('death', () =&gt; $.scene.load('gameOver'))
+        .appendTo($.world);
+
+    for (let i = 0; i &lt; 5; i++) {
+        $('&lt;enemy&gt;', { class: 'goblin' })
+            .at(500 + i * 80, 300).health(30).speed(80)
+            .on('death', e =&gt; { $.sound.playAt('die.ogg', e.self); e.self.fadeOut(200).remove(); })
+            .appendTo($.world);
+    }
+
+    $.camera.follow('#hero').zoom(1.5);
+});
+
+$.update(dt =&gt; {
+    $('.goblin').each(e =&gt; {
+        if (e.distanceTo('#hero') &lt; 250) e.moveTowards('#hero', 120);
+    });
+});</code></pre>
+
+<pre class="pane" data-pane="build" id="pane-build" role="tabpanel" aria-labelledby="tab-build" tabindex="0"><code class="lang-bash"># Зависимости тянутся сами через CMake FetchContent
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
+
+./build/russiano2d                  # игра из каталога game/
+./build/russiano2d --game demos     # меню со всеми демо
+./build/russiano2d --game sdk       # инструменты разработки
+
+# Игра: скрипты + ассеты внутри, соседний lib/ распространяется вместе
+./build/russiano2d build --project . --entry game/main.js --out mygame
+./mygame</code></pre>
+
+<pre class="pane" data-pane="agent" id="pane-agent" role="tabpanel" aria-labelledby="tab-agent" tabindex="0"><code class="lang-bash">./build/russiano2d --agent --headless --fixed-dt 0.0166666667 --game demos --scene platformer
+
+→ {"cmd":"ping","id":1}
+← {"ok":true,"id":1,"pong":true,"frame":1,"time":0.016}
+→ {"cmd":"keys","hold":["D"]}
+→ {"cmd":"step","frames":60}
+→ {"cmd":"eval","code":"$('#hero').pos()"}
+← {"ok":true,"result":{"x":296.5,"y":300}}
+→ {"cmd":"screenshot","path":"build/level1.png"}</code></pre>
+  </div>
+
+  <p class="note">
+    Кадры сами не идут — их продвигает команда <code>step</code>, поэтому прогон воспроизводим
+    побитово. Готовый клиент — <code>tools/agent_client.py</code>, протокол —
+    <a href="/doc/#/AGENT_API">AGENT_API</a>.
+  </p>
+</section>
+
+<!-- ── DEMOS ──────────────────────────────────────────────────────────── -->
+<section id="demos" class="section">
+  <h2>Три демо — три слоя движка</h2>
+  <p class="sub">Все запускаются одним и тем же бинарником: <code>./build/russiano2d --game demos</code></p>
+
+  <div class="demos">
+    <article class="demo">
+      <a class="shot" href="img/shot-platformer.jpg" data-lightbox>
+        <img src="img/shot-platformer.jpg" alt="Демо «Платформер»" loading="lazy" width="1280" height="720">
+      </a>
+      <h3>Платформер</h3>
+      <p>Box2D, листы анимации, монеты, враги, параллакс, HUD и пауза.</p>
+      <a class="link" href="/doc/#/tutorial-platformer">Разбор →</a>
+    </article>
+    <article class="demo">
+      <a class="shot" href="img/shot-witch.jpg" data-lightbox>
+        <img src="img/shot-witch.jpg" alt="Демо «Типичная ночь в Мытищинском лесу»" loading="lazy" width="1280" height="720">
+      </a>
+      <h3>Типичная ночь в Мытищинском лесу</h3>
+      <p>Ночной лес: авто-стрельба, волны, опыт и карты апгрейдов; свет только от фонарей,
+      тени от стволов, кровь и лужи. В духе Vampire Survivors.</p>
+      <a class="link" href="/doc/#/demos">Разбор →</a>
+    </article>
+    <article class="demo">
+      <a class="shot" href="img/shot-vn.jpg" data-lightbox>
+        <img src="img/shot-vn.jpg" alt="Демо «Руси-тян»" loading="lazy" width="1280" height="720">
+      </a>
+      <h3>Руси-тян (ВН)</h3>
+      <p>Визуальная новелла на <code>$.timeline</code>: интерфейс целиком на RmlUi,
+      семь поз героини, озвучка реплик, три выбора и две концовки.</p>
+      <a class="link" href="/doc/#/demos">Разбор →</a>
+    </article>
+  </div>
+
+  <div class="play-cta">
+    <a class="btn btn-primary" href="/play/">▶ Играть в браузере</a>
+    <p class="play-note">
+      Меню демо запускается прямо на странице: движок собран под WebGPU
+      (Emscripten + SDL_GPU), интерфейс — на RmlUi. Нужен браузер с WebGPU
+      (Chrome, Edge, Safari 26+, Firefox 141+) и около 70 МБ трафика —
+      груз тянется один раз и кешируется.
+    </p>
+  </div>
+
+  <div class="keys">
+    <h3>Управление</h3>
+    <table>
+      <tr><td><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd></td><td>идти</td></tr>
+      <tr><td><kbd>Space</kbd> / <kbd>W</kbd> / <kbd>↑</kbd></td><td>прыжок, стрельба</td></tr>
+      <tr><td><kbd>Ctrl</kbd> · <kbd>A</kbd> · <kbd>R</kbd></td><td>пропустить · авто-режим · заново (новелла)</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>выход из демо в меню</td></tr>
+      <tr><td><kbd>F1</kbd> / <kbd>F5</kbd></td><td>отладочный оверлей / перезапуск скриптов</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ── INSIDE ─────────────────────────────────────────────────────────── -->
+<section id="inside" class="section section-alt">
+  <h2>Как устроен движок</h2>
+  <p class="sub">C-ядро владеет всем: окном, GPU-устройством, физическим миром и жизненным циклом JavaScript. Скрипт не может уронить движок — ошибка уходит в консоль и оверлей, а кадр продолжает рисоваться.</p>
+
+  <div class="arch">
+    <div class="arch-node">
+      <h4>ЯДРО (C11)</h4>
+      <p>окно, ввод, GPU-устройство, физический мир, тайминги</p>
+      <span class="arch-tag">+ Box2D v3</span>
+    </div>
+    <div class="arch-arrow">C-биндинги <code>globalThis.engine</code> ↓</div>
+    <div class="arch-node">
+      <h4>QuickJS-ng</h4>
+      <p>игровая логика и API <code>$</code> (встроены в бинарник)</p>
+      <span class="arch-tag">hot reload</span>
+    </div>
+    <div class="arch-arrow">плоский массив команд ↓</div>
+    <div class="arch-node">
+      <h4>SDL_GPU</h4>
+      <p>один кадр — один вызов отрисовки</p>
+      <span class="arch-tag">Vulkan · Metal · DX12</span>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <article class="card">
+      <h3>Батчинг: один вызов на кадр</h3>
+      <p>Вызов через границу C ↔ JS дорог, поэтому отрисовка не идёт по спрайту. Код наполняет
+      плоский <code>Float32Array</code> и отдаёт его одним вызовом <code>engine.submitSprites()</code>.
+      В стенде: <strong>1 draw call на 1000 спрайтов</strong> с одной текстурой, без смены blend/clip. Число зависит от сцены.</p>
+    </article>
+    <article class="card">
+      <h3>Физика целиком в C</h3>
+      <p>JS не считает коллизии и не трогает векторы Box2D: создаёт тело и получает числовой id.
+      <code>engine.getTransforms()</code> возвращает <code>Float32Array</code>, который смотрит
+      прямо в память C — без копирования.</p>
+    </article>
+    <article class="card">
+      <h3>Пиксели снаружи, метры внутри</h3>
+      <p>Игровой код и рендер работают в пикселях, логические координаты окна не зависят от DPI
+      (на Retina 1280×720 остаётся 1280×720). 32 пикселя = 1 метр, ось <code>y</code> вниз как на экране.</p>
+    </article>
+    <article class="card">
+      <h3>Шейдеры без внешних тулов в рантайме</h3>
+      <p>На этапе сборки GLSL компилируется в SPIR-V, оттуда в Metal Shading Language, и оба
+      варианта встраиваются в бинарник. На старте движок спрашивает устройство и берёт подходящий.</p>
+    </article>
+    <article class="card">
+      <h3>Честно про защиту сборок</h3>
+      <p>Шифрование контейнера — это обфускация, а не защита: ключ обязан лежать в файле.
+      Что реально сделано: байткод вместо исходников, уникальный ключ на сборку, расшифрованное
+      стирается при выходе.</p>
+    </article>
+    <article class="card">
+      <h3>Стек</h3>
+      <p class="stack">
+        <span>SDL3 3.4</span><span>SDL_GPU</span><span>QuickJS-ng 0.10</span><span>Box2D v3.1</span>
+        <span>SDL3_mixer 3.2</span><span>RmlUi 6.3</span><span>libcurl</span>
+        <span>2D BSP (своё)</span><span>visibility</span><span>MDI-иконки</span><span>C11 + C++20 адаптеры</span>
+      </p>
+    </article>
+  </div>
+</section>
+
+<!-- ── DOWNLOAD ───────────────────────────────────────────────────────── -->
+<section id="download" class="section">
+  <h2>Скачать</h2>
+  <p class="sub">Сборки лежат и здесь, и в самом репозитории. Внутри каждого пакета — движок, SDK с инструментами и шаблонами, игра по умолчанию, ассеты, инструкция «первый проект» и <code>AGENTS.md</code> со всей документацией движка внутри одного файла.</p>
+
+  <div class="dl">
+    <article class="dl-card">
+      <h3>macOS</h3>
+      <p class="dl-sub">Apple Silicon</p>
+      <a class="btn btn-primary" href="download/russiano2d-macos-arm64.tar.gz" download>Скачать .tar.gz</a>
+      <p class="dl-size" data-size="russiano2d-macos-arm64.tar.gz">24 МБ</p>
+    </article>
+    <article class="dl-card">
+      <h3>macOS</h3>
+      <p class="dl-sub">Intel x86_64</p>
+      <a class="btn btn-primary" href="download/russiano2d-macos-x86_64.tar.gz" download>Скачать .tar.gz</a>
+      <p class="dl-size" data-size="russiano2d-macos-x86_64.tar.gz">15 МБ</p>
+    </article>
+    <article class="dl-card">
+      <h3>Linux</h3>
+      <p class="dl-sub">x86_64</p>
+      <a class="btn btn-primary" href="download/russiano2d-linux-x86_64.tar.gz" download>Скачать .tar.gz</a>
+      <p class="dl-size" data-size="russiano2d-linux-x86_64.tar.gz">18 МБ</p>
+    </article>
+    <article class="dl-card">
+      <h3>Linux</h3>
+      <p class="dl-sub">aarch64</p>
+      <a class="btn btn-primary" href="download/russiano2d-linux-aarch64.tar.gz" download>Скачать .tar.gz</a>
+      <p class="dl-size" data-size="russiano2d-linux-aarch64.tar.gz">20 МБ</p>
+    </article>
+    <article class="dl-card">
+      <h3>Windows</h3>
+      <p class="dl-sub">x86_64</p>
+      <a class="btn btn-primary" href="download/russiano2d-windows-x86_64.zip" download>Скачать .zip</a>
+      <p class="dl-size" data-size="russiano2d-windows-x86_64.zip">22 МБ</p>
+    </article>
+  </div>
+
+  <p class="note">
+    Проверить целостность: <code>shasum -a 256 -c SHA256SUMS.txt</code>
+    (<a href="download/SHA256SUMS.txt" download>контрольные суммы</a>).
+    Все пять платформ и контрольные суммы также доступны в
+    <a href="https://github.com/Nikide/russiano2d/releases">GitHub Releases</a>.
+  </p>
+
+  <div class="source">
+    <h3>Или собрать самому</h3>
+    <p>Нужны CMake 3.24+, компилятор с C11 и C++20 (AppleClang, GCC, Clang, MSVC) и Git.
+    Первый прогон — несколько минут: собираются SDL3, SDL3_image, QuickJS-ng, Box2D, RmlUi,
+    glslang и SPIRV-Cross. Дальше сборка инкрементальная.</p>
+<pre class="pane is-active"><code class="lang-bash">git clone https://github.com/Nikide/russiano2d.git &amp;&amp; cd russiano2d
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
+./build/russiano2d --game demos</code></pre>
+    <p class="note">Одна команда собирает все платформы, которые можно собрать на этой машине:
+    <code>python3 tools/autobuild.py --with-windows</code> — Linux и Windows собираются в контейнере,
+    macOS нативно, на выходе архивы и общий <code>SHA256SUMS.txt</code>.</p>
+  </div>
+</section>
+<section id="faq" class="section section-alt">
+  <h2>Неудобные вопросы</h2>
+  <p class="sub">
+    Вопросы, которые всё равно зададут. Поэтому отвечаем сразу.
+  </p>
+
+  <div class="faq-list">
+
+    <article class="card">
+      <h3>У Russiano2D есть визуальный редактор?</h3>
+      <p>Нет. Он и не нужен.</p>
+      <p>
+        <strong>А мы всё равно его сделали. Мы ж не ебанутые.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>А ECS есть?</h3>
+      <p>Нет.</p>
+      <p>И не нужен.</p>
+      <p>
+        Есть <code>$('&lt;player&gt;')</code>.
+        <strong>Не усложняй.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>Почему <code>$</code> — точка входа? Движок же русский.</h3>
+      <p>
+        Потому что это <strong>JavaScript, блядь.</strong>
+      </p>
+      <p>
+        И <code>$</code> — далеко не самая странная вещь в этом движке.
+      </p>
+      <p>
+        Не нравится — объяви точкой входа хоть слово <code>ХУЙ</code>.
+        JavaScript это полностью позволяет. Особенно тот, который встроен
+        в этот движок.
+      </p>
+
+      <pre><code>const ХУЙ = $;
+
+ХУЙ('&lt;player&gt;', { id: 'hero' })
+    .at(100, 300)
+    .appendTo(ХУЙ.world);</code></pre>
+
+      <p>
+        <strong>Всё. Теперь точка входа российская.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>Почему JavaScript, а не божественный Python?</h3>
+      <p>
+        Потому что, блядь, пока питонщики спорят —
+        <strong>пробелы или табы</strong>, а потом обмазываются YAML-файлами,
+        нормальные люди уже закрыли фигурную скобку и пошли делать игру.
+      </p>
+
+      <pre><code>$('&lt;player&gt;')
+    .at(100, 300)
+    .controls('wasd');</code></pre>
+
+      <p><code>}</code></p>
+
+      <p>
+        <strong>Всё. Архитектура закончилась. Игра началась.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>Но как читать такой код? Мы, зумеры, привыкли максимум к Python.</h3>
+      <p>
+        А в Unreal, чтобы бедным детям не смотреть на страшные буковки,
+        принесли Blueprints — и никто не жалуется.
+      </p>
+      <p>
+        И вообще тут можно написать
+        <strong>целую игру в одну строчку.</strong> Буквально.
+      </p>
+
+      <pre><code>$('&lt;player&gt;').at(100,100).sprite('hero.png').body('dynamic').controls('wasd').on('death',()=>$.scene.reload()).appendTo($.world);</code></pre>
+
+      <p><strong>Не можешь прочитать?</strong></p>
+      <p>Отлично.</p>
+      <p>
+        <strong>В Unreal она была бы нарисована проводами.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>Но я хочу писать код по-русски.</h3>
+      <p><strong>Да, 1Сник.</strong></p>
+      <p>
+        Поэтому Russiano2D поддерживает русское написание API.
+      </p>
+
+      <pre><code>$.мир.gravity(0, 0).bounds(0, 0, 800, 600);
+
+$('&lt;свет&gt;', {
+    'радиус': 280,
+    'цвет': '#ffd9a0',
+    'тени': true
+})
+    .в(200, 300)
+    .смешать('add')
+    .конус(70)
+    .добавитьВ($.мир);
+
+$('&lt;игрок&gt;', { id: 'герой' })
+    .в(100, 300)
+    .скорость(220)
+    .управление('wasd')
+    .на('смерть', () => $.сцена.load('конец'))
+    .добавитьВ($.мир);
+
+$('игрок').цвет('#ffd9a0');</code></pre>
+
+      <p><strong>Зачем?</strong></p>
+      <p>Хуй его знает.</p>
+      <p>Но оно работает.</p>
+      <p>
+        И что самое страшное —
+        <strong>это даже развивается. Иногда.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>
+        А если я хочу писать низкоуровневые функции,
+        а не ебаться с твоим <code>$</code>?
+      </h3>
+
+      <p><strong>То идёшь нахуй.</strong></p>
+
+      <p>
+        Начиная с одной из древних версий низкоуровневый JS API вообще
+        выкинули.
+      </p>
+
+      <p>
+        Поэтому <code>$</code> теперь одновременно
+        <strong>высокоуровневый и низкоуровневый API.</strong>
+      </p>
+
+      <p><strong>Пиздануться, да?</strong></p>
+      <p>Зато больше не надо выбирать.</p>
+    </article>
+
+    <article class="card">
+      <h3>
+        Какой нахуй Re2D? Ты чё, ебанутый? У тебя SDL3 —
+        ты можешь буквально 3D вставлять в сцену!
+      </h3>
+
+      <p>Да, ебанутый.</p>
+
+      <p>
+        <strong>И вообще-то тут сцен нет.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>R2D умеет 3D?</h3>
+
+      <p>Нет.</p>
+
+      <p><strong>А персонажа на 360° повернуть?</strong><br>Да.</p>
+      <p><strong>FPS?</strong><br>Да.</p>
+      <p><strong>Несколько этажей?</strong><br>Да.</p>
+      <p><strong>3D-модели и VRM импортировать?</strong><br>Будет.</p>
+
+      <p><strong>Так это 3D?</strong></p>
+      <p>Нет, блядь.</p>
+
+      <p><strong>Это Re2D.</strong></p>
+    </article>
+
+    <article class="card">
+      <h3>Шуток что-то много. Движок вообще серьёзный или так, поиграться?</h3>
+
+      <p><strong>Играюсь, блядь.</strong></p>
+
+      <p>
+        Распространяю его сразу через три сервиса, веду Git, пополняю
+        документацию, выпускаю релизы и почти каждый день занимаюсь
+        оптимизацией.
+      </p>
+
+      <p><strong>Очень несерьёзно играюсь.</strong></p>
+
+      <p>
+        Но есть реальная проблема: движок пока активно развивается.
+        Если ты начал игру на <code>1.X.1</code>, никто не гарантирует,
+        что она без изменений заведётся на <code>1.X.2</code>.
+      </p>
+
+      <p>
+        Я это знаю и со временем буду уходить от таких поломок совместимости.
+      </p>
+
+      <p>
+        <strong>
+          А пока правило простое: начал проект на конкретной версии —
+          зафиксируй её.
+        </strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>Почему лицензия такая странная?</h3>
+
+      <p>Больше тебя в этом движке ничего не смущает?</p>
+
+      <p>
+        Это мой ответ на остальные тупые лицензии, которые всё равно
+        никто не соблюдает. После 2022 года — тем более.
+      </p>
+
+      <p>
+        <strong>
+          А если мне всё-таки нужна настоящая юридическая лицензия?
+        </strong>
+      </p>
+
+      <p>Напиши мне. Предоставлю безвозмездную лицензию.</p>
+
+      <p>
+        <strong>Скучную, настоящую и без шуток.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>
+        Называется российским движком. А в реестре российского ПО он есть?
+      </h3>
+
+      <p>Нету.</p>
+
+      <p><strong>Почему?</strong></p>
+
+      <p>
+        Потому что мне это не надо. Хотят аттестировать —
+        пусть сами приходят и аттестируют.
+      </p>
+
+      <p>
+        <strong>Движок от этого внезапно иностранным не стал.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>
+        Движок же полностью ИИ написан. Ты тут как автор при чём?
+      </h3>
+
+      <p>Напиши агенту:</p>
+
+      <p><strong>«Сделай мне 2D-движок».</strong></p>
+
+      <p>Потом поговорим.</p>
+    </article>
+
+    <article class="card">
+      <h3>То есть это вайбкодинг?</h3>
+
+      <p>Да.</p>
+
+      <p>
+        Только <strong>вайбкодинг — не бесплатное удовольствие.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>ИИ сам придумал этот движок?</h3>
+
+      <p>Нет.</p>
+
+      <p>
+        Более того, ИИ меня останавливал и говорил
+        <strong>не делать такой движок.</strong>
+      </p>
+
+      <p><strong>Он не смог меня остановить.</strong></p>
+    </article>
+
+    <article class="card">
+      <h3>Так кто тогда его сделал?</h3>
+
+      <p>Идея, требования, архитектура и вкус — мои.</p>
+
+      <p>Код писали разные ИИ-агенты.</p>
+
+      <p>
+        Они периодически объясняли мне, почему очередная идея плохая.
+      </p>
+
+      <p>Некоторые действительно были плохими.</p>
+
+      <p>
+        <strong>Остальные теперь называются Re2D.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>Что за «Руси-тян»?</h3>
+
+      <p>
+        Зеленоволосая тянка-кошкодевка появилась
+        <strong>задолго до Russiano2D.</strong>
+      </p>
+
+      <p>
+        Лет десять я таскаю её из проекта в проект примерно по одной
+        технологии:
+      </p>
+
+      <p>
+        <strong>1.</strong> Берём блондинку.<br>
+        <strong>2.</strong> Красим волосы в зелёный — мой любимый цвет.<br>
+        <strong>3.</strong> Делаем кошкодевкой — мой любимый вид.<br>
+        <strong>4.</strong> Готово.
+      </p>
+
+      <p>
+        Имя <strong>«Руси-тян»</strong> появилось совсем недавно.
+        Для демо визуальной новеллы персонажа надо было всё-таки как-то назвать.
+      </p>
+
+      <p>
+        <strong>
+          То есть Руси-тян специально придумали как маскота движка?
+        </strong>
+      </p>
+
+      <p>Нет.</p>
+
+      <p><strong>Она просто была здесь раньше.</strong></p>
+
+      <p>
+        Причём в первой версии движка она вообще лежала в
+        <code>enemy.db</code>.
+      </p>
+
+      <p>Лол.</p>
+    </article>
+
+    <article class="card">
+      <h3>
+        Я дошёл до конца FAQ. Но серьёзно: где посмотреть примеры
+        и как это реально работает?
+      </h3>
+
+      <p><strong>Серьёзно — есть документация.</strong></p>
+
+      <p>
+        Там есть примеры, описание API и того, как всё это реально работает.
+        Там же периодически обновляются
+        <strong>бенчмарки производительности.</strong>
+      </p>
+
+      <p>
+        Движок старается быть
+        <strong>производительным и красивым одновременно.</strong>
+      </p>
+
+      <p>
+        Если это у него не получается, бедные ИИ-агенты мучаются и
+        бьются хлыстом, пока не станет и красиво, и производительно.
+      </p>
+
+      <p><strong>А ещё это очень дорого.</strong></p>
+    </article>
+
+    <article class="card">
+      <h3>А почему движок открытый?</h3>
+
+      <p>
+        Такую «уникальную» технологию можно было бы закрыть и продавать
+        всяким госконторам.
+      </p>
+
+      <p><strong>Во-первых, GNU — говно.</strong></p>
+
+      <p>
+        <strong>Во-вторых, первый ответ вообще не отвечает на вопрос.</strong>
+      </p>
+
+      <p>
+        <strong>В-третьих — потому что мне не жалко.</strong>
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>
+        Мне не нравится этот FAQ, и вообще то, как тут разработчик
+        общается и высказывается.
+      </h3>
+
+      <p>
+        Можете идти в Godot и обмазаться нодами и их милой
+        <strong>РАДУЖНОЙ атмосферой.</strong>
+      </p>
+
+      <p>
+        <strong>Здесь вам никто ничего не продаёт.</strong>
+      </p>
+    </article>
+
+  </div>
+</section>
+<!-- ── DOCS ───────────────────────────────────────────────────────────── -->
+<section id="docs" class="section section-alt">
+  <h2>Документация</h2>
+  <p class="sub">Полные справочники, туториалы и разборы подсистем — на сайте, в формате, который читается с телефона.</p>
+
+  <div class="docs-grid">
+    <a class="doc-link" href="/doc/#/tutorial-first-game"><b>Моя первая игра</b><span>платформер с маскотом за 15 минут</span></a>
+    <a class="doc-link" href="/doc/#/HIGH_LEVEL_API"><b>Высокоуровневое API <code>$</code></b><span>всё, что умеет движок в игровом коде</span></a>
+    <a class="doc-link" href="/doc/#/API"><b>Низкоуровневый <code>engine.*</code></b><span>текстуры, тела, батчинг, RmlUi, BSP, свет</span></a>
+    <a class="doc-link" href="/doc/#/AGENT_API"><b>Протокол агента</b><span>как управлять движком программой</span></a>
+    <a class="doc-link" href="/doc/#/ARCHITECTURE"><b>Архитектура</b><span>замысел и философия API <code>$</code></span></a>
+    <a class="doc-link" href="/doc/#/API_PERFORMANCE"><b>95 нагрузок API</b><span>замеры 78 модулей, оборудование и сравнение деградаций</span></a>
+    <a class="doc-link" href="/doc/#/HIGH_LEVEL_API_PERF"><b>Производительность</b><span>сколько стоит кадр <code>$</code>: замеры</span></a>
+    <a class="doc-link" href="/doc/#/tutorial-platformer"><b>Разбор платформера</b><span>платформер глубже</span></a>
+    <a class="doc-link" href="/doc/#/tutorial-menus"><b>Меню и сцены</b><span>переходы и интерфейс</span></a>
+    <a class="doc-link" href="/doc/#/demos"><b>Разбор всех демо</b><span>что внутри каждого</span></a>
+    <a class="doc-link" href="/doc/#/BUILD"><b>Сборка в один файл</b><span>упаковка и шифрование груза</span></a>
+    <a class="doc-link" href="/doc/"><b>Все документы →</b><span>весь раздел целиком</span></a>
+    <a class="doc-link" href="/doc/#/CHANGELOG"><b>Что нового</b><span>история изменений по версиям</span></a>
+  </div>
+</section>
+
+<!-- ── PROJECT ────────────────────────────────────────────────────────── -->
+<section id="project" class="section">
+  <h2>Проект</h2>
+  <div class="grid grid-2">
+    <article class="card">
+      <h3>Где живёт</h3>
+      <p>Проект целиком на отечественном хостинге:
+      <a href="https://hub.mos.ru/dem4ev48/russiano2d">hub.mos.ru/dem4ev48/russiano2d</a> — исходники,
+      сборки и вся история; зеркало —
+      <a href="https://gitverse.ru/Nikide/russiano2d">gitverse.ru/Nikide/russiano2d</a>.</p>
+    </article>
+    <article class="card">
+      <h3>Правила</h3>
+      <p>PR не принимаются: проект личный, пишет его только автор. Не нравится — делайте форк,
+      лицензия это разрешает. Баг-репорты принимаются, критика мимо — движок пилится всегда.</p>
+    </article>
+    <article class="card">
+      <h3>Лицензия</h3>
+      <p>Используй, меняй, распространяй и продавай движок свободно; игры на нём распространяй
+      как хочешь. Russiano2D — русский движок, и делает его русский автор: если этот факт вам
+      не нравится — пожалуйста, не пользуйтесь им.
+      <a href="/doc/#/LICENSE">Полный текст →</a></p>
+    </article>
+    <article class="card">
+      <h3>Автор</h3>
+      <p>Движок делали разные ИИ-агенты, а идея, требования и вкус — Никиты.
+      Почта: <a href="mailto:admin@nikiniki.ru">admin@nikiniki.ru</a></p>
+    </article>
+  </div>
+  <p class="note third">
+    Сторонние компоненты под своими лицензиями: SDL3, SDL3_image, SDL3_mixer (zlib), QuickJS-ng (MIT),
+    Box2D (MIT), RmlUi (MIT), trylock/visibility (MIT), glslang / SPIRV-Cross
+    (Apache-2.0 / MIT), Material Design Icons (Apache-2.0), шрифты Noto Sans и LatoLatin (SIL OFL).
+  </p>
+</section>
+
+</main>
+
+<footer>
+  <div class="foot">
+    <div>
+      <b>Russiano<em>2D</em></b> <span class="ver">v0.1.27</span>
+      <p>Настоящий <span class="tricolor"><span class="tri-w">рос</span><span class="tri-b">сий</span><span class="tri-r">ский</span></span> 2D-игровой движок.</p>
+    </div>
+    <nav>
+      <a href="/doc/">Документация</a>
+      <a href="#download">Скачать</a>
+      <a href="https://hub.mos.ru/dem4ev48/russiano2d">Исходники</a>
+      <a href="https://gitverse.ru/Nikide/russiano2d">Зеркало</a>
+      <a href="https://gitverse.ru/Nikide/russiano2d/releases">Релизы</a>
+      <a href="mailto:admin@nikiniki.ru">admin@nikiniki.ru</a>
+    </nav>
+  </div>
+  <p class="copy">© Никита · Russiano2D · <a href="mailto:admin@nikiniki.ru">admin@nikiniki.ru</a>.
+  Иконка и иллюстрации — материалы владельца проекта.
+  Для ИИ-агентов: <a href="/llms.txt">llms.txt</a>,
+  <a href="/llms-full.txt">llms-full.txt</a>,
+  <a href="/.well-known/ai.txt">ai.txt</a>,
+  <a href="/sitemap.xml">sitemap.xml</a>.</p>
+</footer>
+
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Просмотр скриншота" hidden>
+  <button class="lb-close" aria-label="Закрыть">✕</button>
+  <img src="" alt="">
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

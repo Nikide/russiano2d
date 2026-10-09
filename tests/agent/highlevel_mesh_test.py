@@ -116,13 +116,15 @@ def main():
         a.eval("""
             globalThis.__mesh = null;
             globalThis.__tex = -1;
+            // engine виден только внутри eval: колбэк кадра держит свою ссылку.
+            const E = engine;
             $.update(() => {
                 const m = globalThis.__mesh;
                 if (!m) return;
                 // count считаем САМИ: второй аргумент `undefined` движок
                 // читает как 0, и меш молча не рисуется.
                 const n = Math.floor(m.length / 8);
-                engine.submitMesh(m, n, globalThis.__tex);
+                E.submitMesh(m, n, globalThis.__tex);
             });
         """)
 

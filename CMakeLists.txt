@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(russiano2d
-    VERSION 0.1.20
+    VERSION 0.1.27
     DESCRIPTION "Легковесный кроссплатформенный 2D-движок: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi, экспорт в веб (WebGPU)"
     LANGUAGES C CXX)
 # Бинарник ищет библиотеки рядом с собой: если что-то осталось динамическим,
@@ -43,7 +43,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
-option(R2D_ENABLE_IMGUI   "Собрать отладочный оверлей Dear ImGui"      ON)
+option(R2D_BUNDLED_FREETYPE "Build FreeType for target architecture" OFF)
 option(R2D_ENABLE_RMLUI   "Собрать игровой GUI на RmlUi"               ON)
 option(R2D_ENABLE_AUDIO   "Собрать звук и музыку на SDL3_mixer"        ON)
 option(R2D_ENABLE_NET     "Собрать сеть на SDL3_net (только авторитарная)" ON)
@@ -87,12 +87,13 @@ add_subdirectory(src)
 # дымовой прогон страницы в браузере (tests/web/README.md).
 if(NOT EMSCRIPTEN)
     add_subdirectory(tests)
+    # Нативный бэкенд SDK (r2d-sdk): отдельный CLI-бинарник, не часть игры.
+    add_subdirectory(sdk/native)
 endif()
 
 message(STATUS "")
 message(STATUS "── russiano2d ${PROJECT_VERSION} ──────────────────────────────")
 message(STATUS "  Тип сборки ...... ${CMAKE_BUILD_TYPE}")
-message(STATUS "  Dear ImGui ...... ${R2D_ENABLE_IMGUI}")
 message(STATUS "  RmlUi ........... ${R2D_ENABLE_RMLUI}")
 message(STATUS "  Звук ............ ${R2D_ENABLE_AUDIO}")
 message(STATUS "  Сеть ............ ${R2D_ENABLE_NET}")

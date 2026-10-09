@@ -6,6 +6,7 @@
 // достаточно для 2D: источник слева — в левом ухе.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, query } from './core.js';
 
 const loaded = new Map();     // путь → id звука
@@ -145,6 +146,26 @@ export function installSound($) {
         stopAll(fadeMs) { engine.audio.stopAll(fadeMs === undefined ? 0 : fadeMs); return sound; },
         stop(channel, fadeMs) { engine.audio.stop(channel, fadeMs === undefined ? 0 : fadeMs); return sound; },
         playing(channel) { return engine.audio.playing(channel); },
+
+        /**
+         * Состояние канала эффектов: `$.sound.channel(ch)` →
+         * `{ playing, volume, pan, pitch, effect, position, duration }` —
+         * то, что сейчас звучит, а не то, что игра когда-то задала.
+         */
+        channel(channel) {
+            const a = engine.audio;
+            const ch = Number(channel) | 0;
+            const num = (fn, def) => (typeof a[fn] === 'function' ? a[fn](ch) : def);
+            return {
+                playing: !!num('playing', false),
+                volume: num('channelVolume', 0),
+                pan: num('channelPan', 0),
+                pitch: num('channelPitch', 1),
+                effect: num('channelEffect', 'none'),
+                position: num('position', -1),
+                duration: num('channelDuration', -1),
+            };
+        },
 
         /**
          * Перемотать проигрываемый звук: `$.sound.seek(channel, seconds)`.

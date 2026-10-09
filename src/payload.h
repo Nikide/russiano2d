@@ -61,6 +61,10 @@ const R2dPayloadFile *r2d_payload_find(const R2dPayload *payload, const char *pa
 // если груза нет — тогда движок работает как обычно, с файлов на диске.
 bool r2d_payload_attach_self(void);
 
+// Путь к собственному исполняемому файлу (нужен мосту инструментов SDK,
+// чтобы перезапустить движок с другими аргументами).
+bool r2d_self_executable_path(char *out, size_t out_size);
+
 void r2d_payload_shutdown(void);
 
 // Активный груз или NULL.

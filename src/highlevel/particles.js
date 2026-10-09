@@ -18,9 +18,10 @@
 // stepParticle) экспортируются наружу — их гоняет qjs-харнесс без движка.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, Node, TAGS, wrapOne, def, packColor, withAlpha,
          resolveSprite, makeRandom, nodesByTag, query } from './core.js';
-import { registerNodeRenderer } from './render.js';
+import { registerNodeRenderer, nativeParticles, blendIndex } from './render.js';
 
 // Предел батча спрайтов движка (см. render.js). Один эмиттер не должен
 // выбирать его целиком, иначе частицы других систем молча исчезнут, поэтому
@@ -561,6 +562,8 @@ export function tickParticles(dt) {
 // Отрисовка
 // ---------------------------------------------------------------------------
 
+const particle_params = new Float64Array(17);
+
 function renderParticles(node, t, cam) {
     const st = states.get(node);
     if (!st || st.parts.length === 0) return;
@@ -574,6 +577,21 @@ function renderParticles(node, t, cam) {
     const sprite = st.sprite >= 0 ? st.sprite : engine.whiteSprite;
     const alpha_base = node.alpha;
     const local = st.local;
+
+    // Нативное ядро (src/nodes.c): та же математика без push.sprite на
+    // частицу. Рампы длиннее 16 стопов рисует прежний путь.
+    const short = (r) => r === null || r === undefined || r.length <= 16;
+    if (short(params.ramp_color) && short(params.ramp_alpha) && short(params.ramp_size)) {
+        const G = particle_params;
+        G[0] = zoom; G[1] = cw; G[2] = ch; G[3] = cx; G[4] = cy; G[5] = shx; G[6] = shy;
+        G[7] = sprite; G[8] = alpha_base; G[9] = local ? 1 : 0;
+        G[10] = node.x; G[11] = node.y; G[12] = node.angle;
+        G[13] = blendIndex(params.blend || node.blend_mode);
+        G[16] = MAX_DRAW_PER_EMITTER;
+        if (nativeParticles(st.parts, params.ramp_color || null, params.ramp_alpha || null,
+                            params.ramp_size || null, G)) return;
+    }
+
     const cos = local ? Math.cos(node.angle) : 1;
     const sin = local ? Math.sin(node.angle) : 0;
 

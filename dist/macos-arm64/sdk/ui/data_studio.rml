@@ -1,0 +1,51 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/>
+    <title>SDK Studio</title>
+</head>
+<body>
+<div class="studio">
+    <div class="bar top">
+        <button id="ds-back" class="btn small">К SDK</button>
+        <span id="ds-title" class="title">Studio</span>
+        <span id="ds-file" class="pill">файл не открыт</span>
+        <span id="ds-dirty" class="dirty"></span>
+    </div>
+
+    <div class="bar">
+        <button id="ds-save" class="btn primary">Сохранить</button>
+        <button id="ds-undo" class="btn">Отменить</button>
+        <button id="ds-redo" class="btn">Повторить</button>
+        <button id="ds-validate" class="btn">Проверить</button>
+    </div>
+    <div id="ds-tools" class="bar tools"></div>
+
+    <div class="body-row">
+        <div class="side left">
+            <h4 id="ds-left-title">СПИСОК</h4>
+            <div id="ds-left"></div>
+        </div>
+
+        <div class="center">
+            <div id="ds-view" class="viewport"></div>
+            <div id="ds-overlay" class="overlay"></div>
+            <div id="ds-hud" class="hud-text">—</div>
+        </div>
+
+        <div class="side right">
+            <h4>ФАЙЛ</h4>
+            <div class="field-row"><input id="ds-path" type="text" value="" class="field"/></div>
+            <div class="field-row">
+                <button id="ds-open" class="btn small">Открыть</button>
+                <button id="ds-create" class="btn small">Создать</button>
+            </div>
+            <div id="ds-summary" class="hint"></div>
+            <div id="ds-right"></div>
+        </div>
+    </div>
+
+    <div id="ds-diag" class="diag-strip"></div>
+</div>
+</body>
+
+</rml>

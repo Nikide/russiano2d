@@ -11,6 +11,7 @@
 #include "profile.h"
 #include "rotsprite.h"
 #include "re2d.h"
+#include "nodes.h"
 
 #include "icons.h"
 #include "js_embed.h"
@@ -21,6 +22,7 @@
 #include "light.h"
 #include "module_path.h"
 #include "http.h"
+#include "sdk_host.h"
 #include "net.h"
 #include "payload.h"
 #include "r2d.h"
@@ -166,6 +168,18 @@ static char *r2d__module_normalize(JSContext *ctx, const char *base_name,
     // Короткий алиас: import $ from 'r2d'. Приводим к настоящему пути модуля,
     // иначе относительные импорты внутри него искались бы от корня игры.
     if (SDL_strcmp(norm, "r2d") == 0) return js_strdup(ctx, "r2d/index.js");
+
+    // Внутренние модули $ (r2d/native.js с движком и прочие) видны только
+    // самим модулям r2d/*. Игре доступен один вход — 'r2d' ($): низкий
+    // уровень без пересборки движка не достать.
+    const bool internal = SDL_strncmp(norm, "r2d/", 4) == 0 &&
+                          SDL_strcmp(norm, "r2d/index.js") != 0;
+    const bool from_engine = base_name && SDL_strncmp(base_name, "r2d/", 4) == 0;
+    if (internal && !from_engine) {
+        JS_ThrowReferenceError(ctx, "модуль '%s' — внутренний модуль движка; игре доступен "
+                               "только import $ from 'r2d'", norm);
+        return NULL;
+    }
 
     return js_strdup(ctx, norm);
 }
@@ -1187,6 +1201,32 @@ static JSValue r2d__js_set_awake(JSContext *ctx, JSValueConst this_val, int argc
 // достижении разное — где-то возвращается -1, где-то бросается исключение,
 // где-то событие молча теряется. Теперь игре есть что показать в отладочном
 // оверлее и по чему принять решение.
+static JSValue r2d__js_debug_textures(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue array = JS_NewArray(ctx);
+    uint32_t n = 0;
+    if (s && s->renderer) for (int i = 0; i < s->renderer->texture_count; ++i) {
+        const R2DTexture *t = &s->renderer->textures[i];
+        if (!t->alive) continue;
+        JSValue row = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, row, "id", JS_NewInt32(ctx, i));
+        JS_SetPropertyStr(ctx, row, "name", JS_NewString(ctx, t->name));
+        JS_SetPropertyStr(ctx, row, "width", JS_NewInt32(ctx, t->width));
+        JS_SetPropertyStr(ctx, row, "height", JS_NewInt32(ctx, t->height));
+        JS_SetPropertyUint32(ctx, array, n++, row);
+    }
+    return array;
+}
+
+static JSValue r2d__js_script_error(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewString(ctx, s ? s->last_error : "");
+}
+
 static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
@@ -2116,6 +2156,112 @@ static JSValue r2d__js_ui_set_property(JSContext *ctx, JSValueConst this_val, in
     return JS_UNDEFINED;
 }
 
+// engine.ui.getValue/getText/getAttr(doc, id[, name]) → строка или null.
+typedef bool (*R2dGuiGetFn)(R2DGui *, int, const char *, char *, size_t);
+
+static JSValue r2d__ui_get_string(JSContext *ctx, int argc, JSValueConst *argv, R2dGuiGetFn fn)
+{
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    JSValue result = JS_NULL;
+    if (s && s->gui && element) {
+        char buf[8192];
+        if (fn(s->gui, doc, element, buf, sizeof buf)) result = JS_NewString(ctx, buf);
+    }
+    if (element) JS_FreeCString(ctx, element);
+    return result;
+}
+
+static JSValue r2d__js_ui_get_value(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    return r2d__ui_get_string(ctx, argc, argv, r2d_gui_get_value);
+}
+
+static JSValue r2d__js_ui_get_text(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    return r2d__ui_get_string(ctx, argc, argv, r2d_gui_get_text);
+}
+
+static JSValue r2d__js_ui_set_value(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    const char *value = r2d__arg_str(ctx, argc, argv, 2);
+    const bool ok = s && s->gui && element && value && r2d_gui_set_value(s->gui, doc, element, value);
+    if (element) JS_FreeCString(ctx, element);
+    if (value) JS_FreeCString(ctx, value);
+    return JS_NewBool(ctx, ok);
+}
+
+static JSValue r2d__js_ui_get_attr(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    const char *name = r2d__arg_str(ctx, argc, argv, 2);
+    JSValue result = JS_NULL;
+    if (s && s->gui && element && name) {
+        char buf[8192];
+        if (r2d_gui_get_attr(s->gui, doc, element, name, buf, sizeof buf)) result = JS_NewString(ctx, buf);
+    }
+    if (element) JS_FreeCString(ctx, element);
+    if (name) JS_FreeCString(ctx, name);
+    return result;
+}
+
+static JSValue r2d__js_ui_set_attr(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    const char *name = r2d__arg_str(ctx, argc, argv, 2);
+    const char *value = r2d__arg_str(ctx, argc, argv, 3);
+    const bool ok = s && s->gui && element && name && value &&
+                    r2d_gui_set_attr(s->gui, doc, element, name, value);
+    if (element) JS_FreeCString(ctx, element);
+    if (name) JS_FreeCString(ctx, name);
+    if (value) JS_FreeCString(ctx, value);
+    return JS_NewBool(ctx, ok);
+}
+
+static JSValue r2d__js_ui_click(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    const bool ok = s && s->gui && element && r2d_gui_click(s->gui, doc, element);
+    if (element) JS_FreeCString(ctx, element);
+    return JS_NewBool(ctx, ok);
+}
+
+// engine.ui.rect(doc, id) → { x, y, w, h } в координатах окна или null.
+static JSValue r2d__js_ui_rect(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    JSValue result = JS_NULL;
+    float r[4];
+    if (s && s->gui && element && r2d_gui_get_rect(s->gui, doc, element, r)) {
+        result = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, result, "x", JS_NewFloat64(ctx, r[0]));
+        JS_SetPropertyStr(ctx, result, "y", JS_NewFloat64(ctx, r[1]));
+        JS_SetPropertyStr(ctx, result, "w", JS_NewFloat64(ctx, r[2]));
+        JS_SetPropertyStr(ctx, result, "h", JS_NewFloat64(ctx, r[3]));
+    }
+    if (element) JS_FreeCString(ctx, element);
+    return result;
+}
+
 static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -2157,7 +2303,8 @@ static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JS
 
 // Мост RmlUi → JS: вызывается из gui.cpp при срабатывании слушателя.
 static void r2d__gui_dispatch(void *user, int callback_id, const char *element_id,
-                               const char *event_name)
+                               const char *event_name, const char *target_id,
+                               const char *target_key)
 {
     R2DScript *s = (R2DScript *)user;
     if (!s || !s->ctx) return;
@@ -2167,17 +2314,20 @@ static void r2d__gui_dispatch(void *user, int callback_id, const char *element_i
     JSValue fn = s->callbacks[callback_id];
     if (!JS_IsFunction(ctx, fn)) return;
 
-    JSValue args[2];
+    // (elementId, eventName, targetKey, targetId): первые два аргумента — как
+    // раньше, остальные нужны делегированию списков (docs/highlevel/ui.md).
+    JSValue args[4];
     args[0] = JS_NewString(ctx, element_id ? element_id : "");
     args[1] = JS_NewString(ctx, event_name ? event_name : "");
+    args[2] = JS_NewString(ctx, target_key ? target_key : "");
+    args[3] = JS_NewString(ctx, target_id ? target_id : "");
 
-    JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 2, args);
+    JSValue ret = JS_Call(ctx, fn, JS_UNDEFINED, 4, args);
     if (JS_IsException(ret)) {
         r2d__capture_error(s);
     }
     JS_FreeValue(ctx, ret);
-    JS_FreeValue(ctx, args[0]);
-    JS_FreeValue(ctx, args[1]);
+    for (int i = 0; i < 4; ++i) JS_FreeValue(ctx, args[i]);
 }
 
 // ---------------------------------------------------------------------------
@@ -3509,6 +3659,13 @@ static JSValue r2d__js_fs_read_text(JSContext *ctx, JSValueConst this_val, int a
     const char *path = r2d__arg_str(ctx, argc, argv, 0);
     if (!path || !s) { if (path) JS_FreeCString(ctx, path); return JS_UNDEFINED; }
 
+    const R2dPayloadFile *packed = r2d_payload_find(r2d_payload_active(), path);
+    if (packed) {
+        JSValue out = JS_NewStringLen(ctx, (const char *)packed->data, packed->size);
+        JS_FreeCString(ctx, path);
+        return out;
+    }
+
     char full[4096];
     r2d_app_resolve_path(s->app, full, sizeof full, path);
     JS_FreeCString(ctx, path);
@@ -3559,6 +3716,11 @@ static JSValue r2d__js_fs_exists(JSContext *ctx, JSValueConst this_val, int argc
     R2DScript *s = r2d__script_of(ctx);
     const char *path = r2d__arg_str(ctx, argc, argv, 0);
     if (!path || !s) { if (path) JS_FreeCString(ctx, path); return JS_FALSE; }
+
+    if (r2d_vfs_has(path)) {
+        JS_FreeCString(ctx, path);
+        return JS_TRUE;
+    }
 
     char full[4096];
     r2d_app_resolve_path(s->app, full, sizeof full, path);
@@ -3799,10 +3961,21 @@ bool r2d_script_eval(R2DScript *s, const char *code, char **out_json, char **out
         return false;
     }
 
-    // eval в глобальном контексте: доступны engine, $, Global и всё, что игра
-    // положила в globalThis. В отличие от модулей, тут не нужен import.
+    // eval в глобальном контексте: доступны $, Global и всё, что игра
+    // положила в globalThis. Игре engine не виден (bootstrap.js его убирает),
+    // а агентскому eval — инструменту диагностики движка — он выставляется
+    // только на время вызова и сразу убирается обратно.
+    JSValue global = JS_GetGlobalObject(s->ctx);
+    JSAtom engine_atom = JS_NewAtom(s->ctx, "engine");
+    const bool had_engine = JS_HasProperty(s->ctx, global, engine_atom) > 0;
+    if (!had_engine && !JS_IsUndefined(s->engine_obj)) {
+        JS_SetProperty(s->ctx, global, engine_atom, JS_DupValue(s->ctx, s->engine_obj));
+    }
     JSValue value = JS_Eval(s->ctx, code, SDL_strlen(code), "<agent eval>",
                             JS_EVAL_TYPE_GLOBAL);
+    if (!had_engine) JS_DeleteProperty(s->ctx, global, engine_atom, 0);
+    JS_FreeAtom(s->ctx, engine_atom);
+    JS_FreeValue(s->ctx, global);
     if (JS_IsException(value)) {
         JSValue exc = JS_GetException(s->ctx);
         const char *text = JS_ToCString(s->ctx, exc);
@@ -4146,6 +4319,11 @@ static JSValue r2d__make_engine(JSContext *ctx)
         JS_FreeValue(ctx, engine);
         return JS_EXCEPTION;
     }
+    // Нативные проходы кадра по узлам $ (схема C → $): engine.nodes.*.
+    if (r2d_nodes_install(ctx, engine) < 0) {
+        JS_FreeValue(ctx, engine);
+        return JS_EXCEPTION;
+    }
     r2d__set_fn(ctx, engine, "createSprite", r2d__js_create_sprite, 5);
     r2d__set_fn(ctx, engine, "drawSprite", r2d__js_draw_sprite, 7);
     r2d__set_fn(ctx, engine, "drawRect", r2d__js_draw_rect, 5);
@@ -4200,6 +4378,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "netDelayed", r2d__js_net_delayed, 0);
     r2d__set_fn(ctx, engine, "spriteFilter", r2d__js_get_sprite_filter, 0);
     r2d__set_fn(ctx, engine, "limits", r2d__js_limits, 0);
+    r2d__set_fn(ctx, engine, "debugTextures", r2d__js_debug_textures, 0);
+    r2d__set_fn(ctx, engine, "scriptError", r2d__js_script_error, 0);
     r2d__set_fn(ctx, engine, "setBodyEnabled", r2d__js_set_body_enabled, 2);
     r2d__set_fn(ctx, engine, "setBodyFilter", r2d__js_set_body_filter, 4);
     r2d__set_fn(ctx, engine, "getBodyFilter", r2d__js_get_body_filter, 1);
@@ -4253,6 +4433,13 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, ui, "setClass", r2d__js_ui_set_class, 4);
     r2d__set_fn(ctx, ui, "setProperty", r2d__js_ui_set_property, 4);
     r2d__set_fn(ctx, ui, "on", r2d__js_ui_on, 4);
+    r2d__set_fn(ctx, ui, "getValue", r2d__js_ui_get_value, 2);
+    r2d__set_fn(ctx, ui, "setValue", r2d__js_ui_set_value, 3);
+    r2d__set_fn(ctx, ui, "getText", r2d__js_ui_get_text, 2);
+    r2d__set_fn(ctx, ui, "getAttr", r2d__js_ui_get_attr, 3);
+    r2d__set_fn(ctx, ui, "setAttr", r2d__js_ui_set_attr, 4);
+    r2d__set_fn(ctx, ui, "rect", r2d__js_ui_rect, 2);
+    r2d__set_fn(ctx, ui, "click", r2d__js_ui_click, 2);
 
     // Иконки Material Design: встроены в бинарник, доступны по имени.
     r2d__set_fn(ctx, ui, "icon", r2d__js_ui_icon, 1);
@@ -4372,6 +4559,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     // расширения одна, а реализации — у каждого свои.
     r2d_render_register_js(ctx, engine);
     r2d_http_register_js(ctx, engine);
+    r2d_sdk_host_register_js(ctx, engine);
 
     return engine;
 }
@@ -4412,6 +4600,8 @@ static void r2d__destroy_context(R2DScript *s)
 {
     if (s->ctx) {
         r2d__free_js_values(s);
+        // Ссылки C на узлы $ (активные твины) и атомы — до JS_FreeContext.
+        r2d_nodes_shutdown(s->ctx);
         JS_FreeContext(s->ctx);
         s->ctx = NULL;
     }
@@ -4563,7 +4753,7 @@ static bool r2d__create_context(R2DScript *s)
     if (!r2d__load_highlevel_api(s)) {
         // Игра без $ работать может (engine.* никуда не делся), поэтому это
         // предупреждение, а не отказ: движок продолжает запуск.
-        R2D_WARN("высокоуровневое API ($) не загрузилось — доступен только engine.*");
+        R2D_WARN("высокоуровневое API ($) не загрузилось — игре нечем работать");
     }
 
     // Float32Array поверх C-массива трансформов: без копирования каждый кадр.
@@ -4618,7 +4808,7 @@ static void r2d__refresh_engine_props(R2DScript *s)
     JS_SetPropertyStr(ctx, e, "width", JS_NewInt32(ctx, s->app->width));
     JS_SetPropertyStr(ctx, e, "height", JS_NewInt32(ctx, s->app->height));
     // Физический размер буфера кадра (Retina/HiDPI). Нужен только операциям над
-    // самим изображением — например, снимку кадра (docs/API.md §11).
+    // самим изображением — например, снимку кадра (docs/internal/NATIVE.md §11).
     JS_SetPropertyStr(ctx, e, "pixel_width", JS_NewInt32(ctx, s->app->pixel_width));
     JS_SetPropertyStr(ctx, e, "pixel_height", JS_NewInt32(ctx, s->app->pixel_height));
     JS_SetPropertyStr(ctx, e, "mouseX", JS_NewFloat64(ctx, s->app->mouse_x));
@@ -4769,8 +4959,18 @@ static SDL_EnumerationResult SDLCALL r2d__scan_cb(void *userdata, const char *di
         return SDL_ENUM_CONTINUE;
     }
 
+    // Следим за скриптами и за атласами спрайтов (*.atlas.json): их правит SDK
+    // (Sprite Studio), а игра читает при старте — перезапуск подхватывает
+    // новые кадры без ручного F5. Прочий JSON (сохранения, данные) не трогаем:
+    // игра сама пишет его на ходу, и перезапуск превратился бы в петлю.
+    // Служебные черновики SDK (.r2d-sdk-draft.*, .r2d-draft-*) не считаются правкой игры: проверка
+    // «Проверить» в студии пишет такой файл рядом с атласом, и без этого игра перезапускалась бы
+    // со старыми данными, пока настоящий файл ещё не сохранён.
+    if (SDL_strncmp(fname, ".r2d-", 5) == 0) return SDL_ENUM_CONTINUE;
     const size_t len = SDL_strlen(fname);
-    if (len < 3 || SDL_strcasecmp(fname + len - 3, ".js") != 0) return SDL_ENUM_CONTINUE;
+    const bool is_script = len >= 3 && SDL_strcasecmp(fname + len - 3, ".js") == 0;
+    const bool is_atlas = len >= 11 && SDL_strcasecmp(fname + len - 11, ".atlas.json") == 0;
+    if (!is_script && !is_atlas) return SDL_ENUM_CONTINUE;
 
     // Складываем времена правки и размеры — достаточно, чтобы заметить
     // сохранение файла, и не зависит от точности часов файловой системы.
@@ -4858,6 +5058,10 @@ bool r2d_script_init(R2DScript *s, R2DApp *app, R2DRenderer *renderer,
     s->hot_reload = hot_reload;
 #endif
 
+    if (s->gui) {
+        r2d_gui_set_event_dispatch(s->gui, r2d__gui_dispatch, s);
+    }
+
     // В собранной игре скриптов на диске нет: точкой входа становится груз,
     // а каталогом — каталог запуска (по нему разрешаются пути к ассетам).
     const char *entry_from_payload = r2d_payload_entry();
@@ -4888,10 +5092,6 @@ bool r2d_script_init(R2DScript *s, R2DApp *app, R2DRenderer *renderer,
     } else {
         SDL_snprintf(s->entry_name, sizeof s->entry_name, "%s", s->entry_path);
         s->game_dir[0] = '\0';
-    }
-
-    if (s->gui) {
-        r2d_gui_set_event_dispatch(s->gui, r2d__gui_dispatch, s);
     }
 
     if (!r2d__create_context(s)) {

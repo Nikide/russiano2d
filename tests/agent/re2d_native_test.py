@@ -126,6 +126,8 @@ def wall(x, y0, y1, z0, z1, rgb):
 def main():
     with Agent(game=GAME, seed=5, fixed_dt=1.0 / 60.0) as a:
         check(a.eval("typeof engine.re2d") == "object", "engine.re2d доступен")
+        # Игре engine не виден; фикстуре нативный слой отдаёт агентский eval.
+        a.eval("globalThis.__native = engine; true")
         for name in ("view", "project", "mesh", "info"):
             check(a.eval("typeof engine.re2d.%s" % name) == "function", "engine.re2d.%s — функция" % name)
 

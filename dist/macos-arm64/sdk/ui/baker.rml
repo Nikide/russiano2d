@@ -1,0 +1,80 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/>
+    <title>Re2D Baker</title>
+</head>
+<body>
+<div class="studio">
+    <div class="bar top">
+        <button id="bk-back" class="btn small">К SDK</button>
+        <span class="title">Re2D Baker</span>
+        <span id="bk-source" class="sub">модель не выбрана</span>
+    </div>
+
+    <div class="bar">
+        <button id="bk-run" class="btn primary">Запечь (bake)</button>
+        <button id="bk-autofit" class="btn">Авто-вписывание</button>
+        <button id="bk-open" class="btn">Открыть результат в Re2DSprite Studio</button>
+        <span id="bk-state" class="sub"></span>
+    </div>
+
+    <div class="body-row">
+        <div class="side left">
+            <h4>Пресет</h4>
+            <div class="field-row">
+                <button id="bk-type-prop" class="btn small on">Prop</button>
+                <button id="bk-type-character" class="btn small">Character</button>
+                <button id="bk-type-weapon" class="btn small">Weapon</button>
+                <button id="bk-type-env" class="btn small">Environment</button>
+            </div>
+            <div class="hint">Weapon — статический объект с редактируемым grip в origin. Environment — отдельная деталь, Feet; gameplay остаётся кодом.</div>
+
+<h4>Source / Re2D comparison</h4><div class="field-row"><button id="bk-yaw-0" class="btn small">0</button><button id="bk-yaw-45" class="btn small">45</button><button id="bk-yaw-90" class="btn small">90</button><button id="bk-yaw-135" class="btn small">135</button><button id="bk-yaw-180" class="btn small">180</button></div><div class="field-row"><button id="bk-pitch--45" class="btn small">-45</button><button id="bk-pitch--20" class="btn small">-20</button><button id="bk-pitch-0" class="btn small">0</button><button id="bk-pitch-20" class="btn small">20</button><button id="bk-pitch-45" class="btn small">45</button></div><div class="hint">После bake: одинаковые yaw/pitch, слева временный source preview, справа runtime.</div>
+            <h4>UV</h4>
+            <div class="field-row">
+                <button id="bk-uv-auto" class="btn small on">Auto Unwrap</button>
+                <button id="bk-uv-existing" class="btn small">Use Existing UV</button>
+                <button id="bk-uv-opt" class="btn small">Re2D Optimized</button>
+            </div>
+            <div class="hint">Optimized перераспределяет бюджет по площади, важности частей и проекции. Швы и наложения проверяйте сравнением.</div>
+
+            <h4>PNG и начало координат</h4>
+            <div class="field-row">
+                <button id="bk-size-1024" class="btn small on">1024</button>
+                <button id="bk-size-2048" class="btn small">2048</button>
+                <button id="bk-size-4096" class="btn small">4096</button>
+            </div>
+            <div class="field-row">
+                <button id="bk-origin-center" class="btn small on">центр</button>
+                <button id="bk-origin-feet" class="btn small">ноги (Feet)</button>
+            </div>
+
+            <h4>Выражение VRM</h4>
+            <input id="bk-expression" type="text" value="" class="field"/>
+            <div class="hint">Пусто — исходная поза лица. Имя из отчёта, например happy, запекает эмоцию для варианта.</div>
+            <h4>Масштаб</h4>
+            <div class="field-row"><label>Scale</label><input id="bk-scale" type="text" value="" class="field"/></div>
+            <div class="hint">Пусто — вписать автоматически с запасом 2%.</div>
+
+            <h4>Результат в</h4>
+            <div class="field-row"><input id="bk-out" type="text" value="" class="field"/></div>
+            <div class="field-row"><label>Имя</label><input id="bk-name" type="text" value="" class="field"/></div>
+        </div>
+
+        <div class="center">
+            <div id="bk-view" class="viewport"><span id="bk-compare-title"></span></div>
+            <div id="bk-hud" class="hud-text">—</div>
+        </div>
+
+        <div class="side right">
+            <h4>RE2D Coordinate Fit</h4>
+            <div id="bk-fit"></div>
+            <h4>Отчёт</h4>
+            <div id="bk-report"></div>
+        </div>
+    </div>
+
+    <div id="bk-diag" class="diag-strip"></div>
+</div>
+</body>
+</rml>

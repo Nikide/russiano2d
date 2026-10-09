@@ -37,6 +37,11 @@ typedef struct R2dProject {
 
     bool has_title;
     bool has_size;
+
+    // "toolHost": true — проект сам является инструментом SDK и получает мост
+    // `$.sdk` к нативному бэкенду r2d-sdk (src/sdk_host.h). Обычным играм он
+    // не нужен и по умолчанию выключен.
+    bool tool_host;
 } R2dProject;
 
 // Значения по умолчанию (пустой манифест).

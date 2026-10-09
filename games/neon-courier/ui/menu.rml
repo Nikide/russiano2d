@@ -1,0 +1,3 @@
+<rml><head><title>Рейс</title><link type="text/rcss" href="game.rcss"/></head><body>
+<div id="shade"><div id="card"><div id="eyebrow">НОЧНАЯ СЛУЖБА ДОСТАВКИ</div><h1 id="title"></h1><p id="message"></p><button id="play">Начать рейс</button><button id="quit">Выход</button><div id="legend">Мятный — курьер и база<br/>Золотой — посылки · Розовый — опасность</div></div></div>
+</body></rml>

@@ -2,7 +2,7 @@
   "name": "dsh-russiano2d-docs-gate",
   "version": "0.1.0",
   "private": true,
-  "description": "Russiano2D docs-gate: агент не пишет в движок, пока не прочитал философию (ARCHITECTURE.md), низкоуровневые (API.md) и высокоуровневые (HIGH_LEVEL_API.md) доки — целиком и по порядку",
+  "description": "Russiano2D docs-gate: агент не пишет в движок, пока не прочитал философию (ARCHITECTURE.md), низкоуровневые (internal/NATIVE.md) и высокоуровневые (HIGH_LEVEL_API.md) доки — целиком и по порядку",
   "keywords": [
     "deepseek-harness",
     "dsh",

@@ -17,6 +17,7 @@
 // с фиксированным шагом.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, makeRandom } from './core.js';
 import { lerp } from './mathx.js';
 

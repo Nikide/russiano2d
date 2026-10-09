@@ -4,6 +4,9 @@
 // и globalThis.__mesh (Float32Array мировых вершин stride 8) — а один обработчик
 // кадра ставит вид и отправляет меш. Обработчик один на весь тест, иначе
 // $.update накопил бы по функции на каждый вызов eval.
+//
+// Игре engine не виден (только $): нативный слой фикстуре отдаёт сам тест
+// через агентский eval — globalThis.__native = engine (см. re2d_native_test.py).
 globalThis.__view = [0, 0, 0, 0, 0, Math.PI / 2];
 globalThis.__mesh = null;
 globalThis.__flags = 0;
@@ -14,9 +17,11 @@ $.ready(() => {
 });
 
 $.update(() => {
+    const native = globalThis.__native;
+    if (!native) return;
     const v = globalThis.__view;
-    engine.re2d.view(v[0], v[1], v[2], v[3], v[4], v[5], v[6] || 0, v[7] === undefined ? 0.25 : v[7]);
+    native.re2d.view(v[0], v[1], v[2], v[3], v[4], v[5], v[6] || 0, v[7] === undefined ? 0.25 : v[7]);
     const m = globalThis.__mesh;
     if (!m) return;
-    engine.re2d.mesh(m, Math.floor(m.length / 8), globalThis.__texture, globalThis.__flags);
+    native.re2d.mesh(m, Math.floor(m.length / 8), globalThis.__texture, globalThis.__flags);
 });

@@ -1,0 +1,3 @@
+<rml><head><title>RE2D World · AK</title><link type="text/rcss" href="hud.rcss" /></head><body>
+<div id="panel"><div id="floor"></div><div id="keys"></div></div><div id="cross">+</div>
+</body></rml>

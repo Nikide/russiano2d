@@ -27,6 +27,7 @@
 //   data    — значение из кода (value) или фабрика (build) — без движка и файлов.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, resolveSprite, sheetFrames, forgetTexture } from './core.js';
 import { makeCurve, makeGradient } from './curve.js';
 

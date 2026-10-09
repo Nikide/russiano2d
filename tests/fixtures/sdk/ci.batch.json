@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "jobs": [
+    { "op": "validate", "source": "world/stack.re2dmap" },
+    { "op": "validate", "source": "re2d_proj/animal.character.json" },
+    { "op": "bake-re2d", "source": "props/crate.glb", "output": "../../../build-ci/sdk-ci/crate", "type": "prop" },
+    { "op": "bake-re2d", "source": "vrm/humanoid.vrm", "output": "../../../build-ci/sdk-ci/hero", "type": "character", "origin": "feet" }
+  ]
+}

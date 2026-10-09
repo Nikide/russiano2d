@@ -9,12 +9,14 @@
 // ===========================================================================
 
 #include "gui.h"
+#include "app.h"
 
 #include "payload.h"
 
 #include "icons.h"
 
 #include <RmlUi/Core.h>
+#include <RmlUi/Core/Elements/ElementFormControl.h>
 
 #include "RmlUi_Platform_SDL.h"
 #include "RmlUi_Renderer_SDL_GPU.h"
@@ -56,7 +58,7 @@ inline Rml::FileHandle to_handle(MemoryFile *file)
 
 class BasePathFileInterface : public Rml::FileInterface {
 public:
-    explicit BasePathFileInterface(std::string base) : base_(std::move(base)) {}
+    BasePathFileInterface(std::string base, const R2DApp *app) : base_(std::move(base)), app_(app) {}
 
     Rml::FileHandle Open(const Rml::String &path) override
     {
@@ -87,6 +89,14 @@ private:
 
     Rml::FileHandle OpenOnDisk(const Rml::String &path)
     {
+        // Тот же поиск, что у текстур/JSON: выбранный --game перед base_path.
+        // Включает относительные RCSS и изображения внутри документа.
+        if (app_) {
+            char resolved[4096];
+            r2d_app_resolve_path(app_, resolved, sizeof resolved, path.c_str());
+            if (std::FILE *file = std::fopen(resolved, "rb"))
+                return reinterpret_cast<Rml::FileHandle>(file);
+        }
         // Пути документов RmlUi отсчитываются от каталога игры: в проекте это
         // game/ui/menu.rml, а из JS пишут engine.ui.load('ui/menu.rml').
         // Проверяем три варианта по порядку, чтобы работали обе формы записи
@@ -167,6 +177,7 @@ private:
 
 private:
     std::string base_;
+    const R2DApp *app_;
 };
 
 // ---------------------------------------------------------------------------
@@ -177,11 +188,23 @@ public:
     JsEventListener(int callback_id, std::string element_id, std::string event_name)
         : callback_id_(callback_id), element_id_(std::move(element_id)), event_name_(std::move(event_name)) {}
 
-    void ProcessEvent(Rml::Event & /*event*/) override
+    void ProcessEvent(Rml::Event &event) override
     {
-        if (dispatch_) {
-            dispatch_(dispatch_user_, callback_id_, element_id_.c_str(), event_name_.c_str());
+        if (!dispatch_) return;
+        // Цель события и её data-key: при всплытии клик по потомку доходит
+        // до слушателя на контейнере, и по ним JS понимает, куда нажали.
+        std::string target_id;
+        std::string target_key;
+        Rml::Element *current = event.GetCurrentElement();
+        for (Rml::Element *el = event.GetTargetElement(); el; el = el->GetParentNode()) {
+            if (target_id.empty()) target_id = el->GetId();
+            if (target_key.empty() && el->HasAttribute("data-key")) {
+                target_key = el->GetAttribute<Rml::String>("data-key", "");
+            }
+            if (el == current) break;
         }
+        dispatch_(dispatch_user_, callback_id_, element_id_.c_str(), event_name_.c_str(),
+                  target_id.c_str(), target_key.c_str());
     }
 
     void OnDetach(Rml::Element * /*element*/) override { delete this; }
@@ -233,13 +256,13 @@ struct R2DGui {
 
 // ---------------------------------------------------------------------------
 
-R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *base_path)
+R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *base_path, const R2DApp *app)
 {
     R2DGui *g = new R2DGui();
     g->device = device;
     g->window = window;
 
-    g->files = new BasePathFileInterface(base_path ? base_path : "");
+    g->files = new BasePathFileInterface(base_path ? base_path : "", app);
 
     g->system = new SystemInterface_SDL(window);
     g->renderer = new RenderInterface_SDL_GPU(device, window);
@@ -287,10 +310,10 @@ R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *ba
     }
 
     // Шрифты: берём все .ttf из assets/fonts. RmlUi без шрифта рисовать не умеет.
-    // В собранной игре шрифты лежат в грузе — их данные должны жить весь
-    // процесс, поэтому складываем буферы в статический список.
+    // В собранной игре RmlUi читает шрифты тем же файловым интерфейсом VFS.
+    // Семейство берётся из самого шрифта, как при загрузке с диска.
     {
-        static std::vector<std::vector<unsigned char>> loaded_fonts;
+        int payload_fonts = 0;
         const int payload_files = r2d_vfs_count();
         for (int i = 0; i < payload_files; ++i) {
             const char *p = r2d_vfs_path_at(i);
@@ -301,16 +324,8 @@ R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *ba
             if (SDL_strcasecmp(ext, ".ttf") != 0 && SDL_strcasecmp(ext, ".otf") != 0) continue;
             if (!std::strstr(p, "assets/fonts/")) continue;
 
-            size_t size = 0;
-            uint8_t *data = r2d_vfs_read(p, &size);
-            if (!data || size == 0) continue;
-            loaded_fonts.emplace_back(data, data + size);
-            const auto &buffer = loaded_fonts.back();
-            // Данные должны жить до Rml::Shutdown — поэтому буфер хранится в
-            // статическом списке, а не освобождается после загрузки.
-            if (Rml::LoadFontFace(Rml::Span<const Rml::byte>(buffer.data(), buffer.size()),
-                                  "Noto Sans", Rml::Style::FontStyle::Normal,
-                                  Rml::Style::FontWeight::Normal)) {
+            if (Rml::LoadFontFace(p)) {
+                ++payload_fonts;
                 R2D_LOG("RmlUi: шрифт из груза — %s", p);
             } else {
                 R2D_WARN("RmlUi: не удалось загрузить шрифт из груза: %s", p);
@@ -347,7 +362,7 @@ R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *ba
                 }
             }
         }
-        if (fonts.empty()) {
+        if (fonts.empty() && payload_fonts == 0) {
             R2D_WARN("RmlUi: в %s нет .ttf/.otf — текст не будет отрисован", dir.c_str());
         }
     }
@@ -573,6 +588,77 @@ void r2d_gui_set_property(R2DGui *g, int doc, const char *element_id,
     if (Rml::Element *el = r2d__element(g, doc, element_id)) {
         el->SetProperty(property ? property : "", value ? value : "");
     }
+}
+
+static bool r2d__copy_out(const std::string &text, char *out, size_t cap)
+{
+    if (!out || cap == 0) return false;
+    std::snprintf(out, cap, "%s", text.c_str());
+    return true;
+}
+
+bool r2d_gui_get_value(R2DGui *g, int doc, const char *element_id, char *out, size_t cap)
+{
+    Rml::Element *el = r2d__element(g, doc, element_id);
+    if (!el) return false;
+    if (auto *control = rmlui_dynamic_cast<Rml::ElementFormControl *>(el)) {
+        return r2d__copy_out(control->GetValue(), out, cap);
+    }
+    return r2d__copy_out(el->GetAttribute<Rml::String>("value", ""), out, cap);
+}
+
+bool r2d_gui_set_value(R2DGui *g, int doc, const char *element_id, const char *value)
+{
+    Rml::Element *el = r2d__element(g, doc, element_id);
+    if (!el) return false;
+    if (auto *control = rmlui_dynamic_cast<Rml::ElementFormControl *>(el)) {
+        control->SetValue(value ? value : "");
+        return true;
+    }
+    el->SetAttribute("value", Rml::String(value ? value : ""));
+    return true;
+}
+
+bool r2d_gui_get_text(R2DGui *g, int doc, const char *element_id, char *out, size_t cap)
+{
+    Rml::Element *el = r2d__element(g, doc, element_id);
+    return el && r2d__copy_out(el->GetInnerRML(), out, cap);
+}
+
+bool r2d_gui_get_attr(R2DGui *g, int doc, const char *element_id, const char *name, char *out, size_t cap)
+{
+    Rml::Element *el = r2d__element(g, doc, element_id);
+    if (!el || !name || !el->HasAttribute(name)) return false;
+    return r2d__copy_out(el->GetAttribute<Rml::String>(name, ""), out, cap);
+}
+
+bool r2d_gui_set_attr(R2DGui *g, int doc, const char *element_id, const char *name, const char *value)
+{
+    Rml::Element *el = r2d__element(g, doc, element_id);
+    if (!el || !name) return false;
+    el->SetAttribute(name, Rml::String(value ? value : ""));
+    return true;
+}
+
+bool r2d_gui_click(R2DGui *g, int doc, const char *element_id)
+{
+    Rml::Element *el = r2d__element(g, doc, element_id);
+    if (!el) return false;
+    el->Click();
+    return true;
+}
+
+bool r2d_gui_get_rect(R2DGui *g, int doc, const char *element_id, float out[4])
+{
+    Rml::Element *el = r2d__element(g, doc, element_id);
+    if (!el || !out) return false;
+    const Rml::Vector2f pos = el->GetAbsoluteOffset(Rml::BoxArea::Border);
+    const Rml::Vector2f size = el->GetBox().GetSize(Rml::BoxArea::Border);
+    out[0] = pos.x;
+    out[1] = pos.y;
+    out[2] = size.x;
+    out[3] = size.y;
+    return true;
 }
 
 bool r2d_gui_add_listener(R2DGui *g, int doc, const char *element_id,

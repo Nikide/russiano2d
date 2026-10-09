@@ -1,0 +1,119 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/>
+    <title>Re2DSprite Studio</title>
+</head>
+<body>
+<div class="studio">
+    <div class="bar top">
+        <button id="rs-back" class="btn small">К SDK</button>
+        <span class="title">Re2DSprite Studio</span>
+        <span id="rs-file" class="sub">файл не открыт</span>
+        <span id="rs-dirty" class="dirty"></span>
+    </div>
+
+    <div class="bar">
+        <button id="rs-save" class="btn primary">Сохранить</button>
+        <button id="rs-undo" class="btn">Отменить</button>
+        <button id="rs-redo" class="btn">Повторить</button>
+        <button id="rs-validate" class="btn">Проверить</button>
+        <button id="rs-tab-view" class="btn on">Вид</button>
+        <button id="rs-tab-surface" class="btn">Поверхность</button>
+        <button id="rs-tab-rig" class="btn">Скелет</button><button id="rs-tab-author" class="btn">Клипы и варианты</button>
+    </div>
+
+    <div class="body-row">
+        <div class="side left">
+            <div id="rs-left-author"><h4>Клипы / эмоции / варианты / экипировка</h4><div id="rs-author-list" class="list grow"></div><h4>Ключи клипа</h4><div id="rs-timeline" class="list"></div></div>
+            <div id="rs-left-view">
+                <h4>Движение</h4>
+                <div id="rs-motions" class="list"></div>
+                <h4>Эмоции</h4>
+                <div id="rs-emotions" class="list"></div>
+                <h4>Варианты</h4>
+                <div id="rs-variants" class="list"></div>
+            </div>
+            <div id="rs-left-surface">
+                <h4>Режим просмотра</h4>
+                <div id="rs-modes" class="list grow"></div>
+                <div class="hint">Карты читаются из PNG: цвет сверху, ID/глубина/покрытие/XY снизу.</div>
+            </div>
+            <div id="rs-left-rig">
+                <h4>Кости</h4>
+                <div id="rs-bones" class="list grow"></div>
+                <h4>Сокеты</h4>
+                <div id="rs-sockets" class="list"></div>
+            </div>
+        </div>
+
+        <div class="center">
+            <div id="rs-viewport" class="viewport"></div>
+            <div id="rs-hud" class="hud-text">—</div>
+        </div>
+
+        <div class="side right">
+            <div id="rs-right-author" style="width:280px;">
+                <h4>Редактор данных</h4><div class="hint">Раздел: clips, emotions, variants, equipment. Новое имя добавляет запись. Изменённые клипы сохраняются в модели inline; исходный внешний animations.json сохраняется.</div>
+                <input id="a-category" class="field" type="text" value="clips"/><input id="a-name" class="field" type="text" value="newClip"/>
+                <textarea id="a-json" style="display:block;width:280px;height:260px;background-color:#08101c;color:#dbe7f7;">{}</textarea>
+                <button id="a-apply" class="btn primary">Применить</button><button id="a-remove" class="btn">Удалить</button><button id="a-preview" class="btn">В preview</button>
+                <h4>Время клипа</h4><input id="a-time" class="field" type="text" value="0"/><button id="a-seek" class="btn">Перейти к времени</button>
+            </div>
+            <div id="rs-right-view">
+                <h4>Ракурс</h4>
+                <div class="field-row"><label>Yaw</label><input id="v-yaw" type="text" value="0" class="field"/></div>
+                <div class="field-row"><label>Pitch</label><input id="v-pitch" type="text" value="0" class="field"/></div>
+                <div class="field-row">
+                    <button id="v-apply" class="btn primary">Применить</button>
+                    <button id="v-reset" class="btn">Сброс</button>
+                </div>
+                <div class="field-row">
+                    <button id="v-style-anime" class="btn small on">anime</button>
+                    <button id="v-style-pixel" class="btn small">pixel</button>
+                    <button id="v-body" class="btn small on">тело</button>
+                    <button id="v-play" class="btn small on">играет</button>
+                </div>
+                <div class="hint">Тяните мышью по окну просмотра: yaw −180…180, pitch −75…75. Колесо — размер.</div>
+                <h4>Рантайм</h4>
+                <div id="rs-info" class="hint"></div>
+            </div>
+
+            <div id="rs-right-surface">
+                <h4>Отсчёт под курсором</h4>
+                <div id="rs-sample" class="hint">Наведите мышь на карту.</div>
+                <h4>Части</h4>
+                <div id="rs-parts" class="list"></div>
+            </div>
+
+            <div id="rs-right-rig">
+                <h4>Кость</h4>
+                <div class="field-row"><label>Имя</label><input id="b-name" type="text" value="" class="field"/></div>
+                <div class="field-row"><label>Pivot</label>
+                    <div class="pair"><input id="b-px" type="text" value="" class="field"/><input id="b-py" type="text" value="" class="field"/><input id="b-pz" type="text" value="" class="field"/></div></div>
+                <div class="field-row"><label>Portrait</label>
+                    <div class="pair"><input id="b-qx" type="text" value="" class="field"/><input id="b-qy" type="text" value="" class="field"/><input id="b-qz" type="text" value="" class="field"/></div></div>
+                <div class="field-row"><button id="b-apply" class="btn primary">Применить</button></div>
+                <h4>Части кости</h4>
+                <div id="rs-bone-parts" class="list"></div>
+                <div class="field-row"><label>ID » кость</label>
+                    <div class="pair"><input id="p-id" type="text" value="" class="field"/><input id="p-bone" type="text" value="" class="field"/></div></div>
+                <div class="field-row"><button id="p-apply" class="btn">Переназначить часть</button></div>
+                <h4>Сокет</h4>
+                <div class="field-row"><label>Имя</label><input id="k-name" type="text" value="" class="field"/></div>
+                <div class="field-row"><label>Точка</label>
+                    <div class="pair"><input id="k-px" type="text" value="" class="field"/><input id="k-py" type="text" value="" class="field"/><input id="k-pz" type="text" value="" class="field"/></div></div>
+                <div class="field-row"><label>Поворот</label>
+                    <div class="pair"><input id="k-rx" type="text" value="" class="field"/><input id="k-ry" type="text" value="" class="field"/><input id="k-rz" type="text" value="" class="field"/></div></div>
+                <div class="field-row"><button id="k-apply" class="btn">Применить сокет</button></div>
+                <h4>Проекция</h4>
+                <div class="field-row"><label>Тело, голова</label>
+                    <div class="pair"><input id="j-body" type="text" value="" class="field"/><input id="j-portrait" type="text" value="" class="field"/></div></div>
+                <div class="field-row"><button id="j-apply" class="btn">Применить</button></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="rs-diag" class="diag-strip"></div>
+</div>
+</body>
+</rml>

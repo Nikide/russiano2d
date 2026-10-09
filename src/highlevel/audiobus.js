@@ -26,6 +26,7 @@
 // гоняет qjs-харнесс без движка.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, query } from './core.js';
 import { tweenProps } from './tween.js';
 

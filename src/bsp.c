@@ -123,7 +123,7 @@ static int count_splits(const R2DBsp *b, const int *indices, int n, int candidat
     return splits;
 }
 
-static int build_node(R2DBsp *b, int *indices, int n, int depth)
+static int build_node(R2DBsp *b, int *indices, int n, int depth, bool *failed)
 {
     if (n <= 0) return -1;
 
@@ -151,9 +151,10 @@ static int build_node(R2DBsp *b, int *indices, int n, int depth)
     int *back = (int *)malloc(list_cap * sizeof(int));
     // Индексы отрезков в списках ОТДЕЛЬНЫЕ от координат: разрезание создаёт
     // новые отрезки, а исходные индексы остаются валидными и после realloc.
-    // Мутировать отрезок «на месте» нельзя: тот же индекс может лежать в
-    // списках родителя, и подмена координат ломала уже принятые решения.
+    // Индекс активного неразделителя можно переиспользовать: его splitter
+    // ещё не выбран, и sibling-список этим индексом не владеет.
     if (!front || !back) {
+        *failed = true;
         free(front);
         free(back);
         return -1;
@@ -175,29 +176,16 @@ static int build_node(R2DBsp *b, int *indices, int n, int depth)
             front[nf++] = idx;
         } else if (d1 <= 0.0f && d2 <= 0.0f) {
             back[nb++] = idx;
-        } else if (d1 > 0.0f && d2 < 0.0f) {
-            // Отрезок пересекает разделитель: обе половины — НОВЫЕ отрезки,
-            // исходный больше не используется никем.
-            if (nf >= (int)list_cap || nb >= (int)list_cap) {
-                free(front); free(back);
-                return -1;
-            }
-            R2DSegment f;
-            R2DSegment bk;
-            if (!split_segment(&seg, sp.x1, sp.y1, sp.x2, sp.y2, &f, &bk)) {
-                front[nf++] = idx;      // вырожденный случай — как есть
-                continue;
-            }
-            const int fi = add_segment(b, f.x1, f.y1, f.x2, f.y2, seg.user, true);
-            const int bi = add_segment(b, bk.x1, bk.y1, bk.x2, bk.y2, seg.user, true);
-            if (fi < 0 || bi < 0) { free(front); free(back); return -1; }
-            front[nf++] = fi;
-            back[nb++] = bi;
         } else {
-            // Касается разделителя концом (одна из сторон ровно 0) — целиком в
-            // переднюю половину. Так «±0» не попадает сразу в оба списка:
-            // пересекающиеся множества ломали дерево.
+            R2DSegment f, bk;
+            split_segment(&seg, sp.x1, sp.y1, sp.x2, sp.y2, &f, &bk);
+            // The input index is not a splitter and belongs to this list only.
+            // Reuse it for one half, so count() contains no abandoned originals.
+            b->segments[idx] = f;
+            const int bi = add_segment(b, bk.x1, bk.y1, bk.x2, bk.y2, seg.user, true);
+            if (bi < 0) { *failed = true; free(front); free(back); return -1; }
             front[nf++] = idx;
+            back[nb++] = bi;
         }
     }
 
@@ -205,7 +193,7 @@ static int build_node(R2DBsp *b, int *indices, int n, int depth)
     // сохранённый индекс `node` после этого остаётся валидным, а указатель на
     // элемент — нет. Пишем поля только после возврата детей.
     const int node = add_node(b);
-    if (node < 0) { free(front); free(back); return -1; }
+    if (node < 0) { *failed = true; free(front); free(back); return -1; }
     b->nodes[node].splitter = best;
 
     int front_node = -1;
@@ -214,40 +202,24 @@ static int build_node(R2DBsp *b, int *indices, int n, int depth)
     int leftover_count = 0;
 
     if (depth < R2D_BSP_MAX_DEPTH) {
-        front_node = build_node(b, front, nf, depth + 1);
-        back_node  = build_node(b, back, nb, depth + 1);
+        front_node = build_node(b, front, nf, depth + 1, failed);
+        back_node  = build_node(b, back, nb, depth + 1, failed);
     } else {
-        // Слишком глубоко — остаток уходит в ЛИСТ. Отрезки копируются в общий
-        // массив, а узел помнит свой диапазон, чтобы обход порядка их отдал:
-        // раньше они дублировались «в никуда» и пропадали из order() — часть
-        // стен молча исчезала из кадра.
-        // Список покрытия: каждый отрезок листа обязан оказаться в хвосте
-        // ровно один раз, иначе он недостижим из order().
-        unsigned char *covered = (unsigned char *)calloc((size_t)b->segment_count + 12, 1);
-        if (!covered) { free(front); free(back); return -1; }
+        // Move the active tail into a contiguous range, without duplicating it.
+        // All active segments are compacted once after construction below.
         leftover_first = b->segment_count;
-        for (int i = 0; i < nf; i++) {
-            const int src = front[i];
-            const R2DSegment s2 = b->segments[src];
-            if (src >= leftover_first && covered[src - leftover_first]) continue;
-            if (src >= leftover_first) covered[src - leftover_first] = 1;
-            if (add_segment(b, s2.x1, s2.y1, s2.x2, s2.y2, s2.user, true) < 0) {
-                free(covered); free(front); free(back); return -1;
+        for (int side = 0; side < 2; side++) {
+            const int *list = side ? back : front;
+            const int count = side ? nb : nf;
+            for (int i = 0; i < count; i++) {
+                const R2DSegment tail = b->segments[list[i]];
+                if (add_segment(b, tail.x1, tail.y1, tail.x2, tail.y2, tail.user, tail.split) < 0) {
+                    *failed = true; free(front); free(back); return -1;
+                }
+                leftover_count++;
             }
-            leftover_count++;
         }
-        for (int i = 0; i < nb; i++) {
-            const int src = back[i];
-            const R2DSegment s2 = b->segments[src];
-            if (src >= leftover_first && covered[src - leftover_first]) continue;
-            if (src >= leftover_first) covered[src - leftover_first] = 1;
-            if (add_segment(b, s2.x1, s2.y1, s2.x2, s2.y2, s2.user, true) < 0) {
-                free(covered); free(front); free(back); return -1;
-            }
-            leftover_count++;
-        }
-        free(covered);
-        if (leftover_count == 0) leftover_first = -1;
+        if (!leftover_count) leftover_first = -1;
     }
 
     b->nodes[node].front = front_node;
@@ -278,11 +250,35 @@ bool r2d_bsp_build(R2DBsp *b, const float *segments, int count)
     if (!indices) { r2d_bsp_free(b); return false; }
     for (int i = 0; i < count; i++) indices[i] = i;
 
-    b->root = build_node(b, indices, count, 0);
+    bool failed = false;
+    b->root = build_node(b, indices, count, 0, &failed);
     free(indices);
+    if (failed || b->root < 0) { r2d_bsp_free(b); return false; }
 
-    if (b->root < 0) { r2d_bsp_free(b); return false; }
-    return ensure_visit_capacity(b, b->segment_count + 1);
+    // Publish only reachable segments. Segment indices are local to a build;
+    // user tags and endpoint orientation remain stable.
+    int *map = malloc((size_t)b->segment_count * sizeof *map);
+    if (!map) { r2d_bsp_free(b); return false; }
+    for (int i = 0; i < b->segment_count; i++) map[i] = -1;
+    for (int i = 0; i < b->node_count; i++) {
+        const R2DBspNode *n = &b->nodes[i];
+        map[n->splitter] = 0;
+        for (int j = 0; j < n->leftover_count; j++) map[n->leftover_first + j] = 0;
+    }
+    int active = 0;
+    for (int i = 0; i < b->segment_count; i++) if (map[i] == 0) {
+        map[i] = active;
+        b->segments[active++] = b->segments[i];
+    }
+    for (int i = 0; i < b->node_count; i++) {
+        R2DBspNode *n = &b->nodes[i];
+        n->splitter = map[n->splitter];
+        if (n->leftover_count) n->leftover_first = map[n->leftover_first];
+    }
+    free(map);
+    b->segment_count = active;
+    if (!ensure_visit_capacity(b, active)) { r2d_bsp_free(b); return false; }
+    return true;
 }
 
 void r2d_bsp_free(R2DBsp *b)
@@ -334,6 +330,7 @@ static void traverse_node(R2DBsp *b, int node, float px, float py,
     // Хвост листа на предельной глубине: его отрезки тоже часть геометрии,
     // поэтому отдаём их сразу после разделителя узла.
     if (n->leftover_count > 0) {
+        b->visit_order[(*count)++] = n->splitter;
         for (int i = 0; i < n->leftover_count; ++i) {
             if (*count < b->visit_cap) {
                 b->visit_order[(*count)++] = n->leftover_first + i;

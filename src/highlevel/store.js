@@ -9,6 +9,7 @@
 //   $.store.get('highscore');   // → 1200
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx } from './core.js';
 
 const state = {

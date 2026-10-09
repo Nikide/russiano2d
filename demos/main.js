@@ -54,7 +54,7 @@ $.ready(async ($) => {
     }
 
     // --scene <имя> открывает демо сразу, минуя меню (нужно тестам и агенту).
-    const start = engine.startScene || 'launcher';
+    const start = $.startScene || 'launcher';
     if (!$.scene.has(start)) {
         $.log(`сцена "${start}" не зарегистрирована — открываю меню`);
         $.scene.load('launcher', { transition: 'none' });

@@ -8,6 +8,8 @@
 // ===========================================================================
 #include "re2d.h"
 #include "re2d_math.h"
+#include "re2d_world.h"
+#include "rotsprite.h"
 #include "script.h"
 
 #include <math.h>
@@ -241,9 +243,206 @@ static JSValue js_info(JSContext *ctx, JSValueConst self, int argc, JSValueConst
     return o;
 }
 
+
+// World lifetime belongs to its QJS handle, like Re2DSprite. No global world.
+typedef struct {
+    R2DRe2dWorld world;
+    R2DRenderer *renderer;
+    uint8_t *rgba;
+    float *depth;
+    int width,height,texture,sprite;
+    bool disposed;
+} WorldHandle;
+static JSClassID world_class;
+static void world_dispose(WorldHandle *w)
+{
+    if(!w || w->disposed) return;
+    r2d_world_free(&w->world);
+    if(w->texture>=0) r2d_texture_free(w->renderer,w->texture);
+    free(w->rgba);free(w->depth);w->rgba=NULL;w->depth=NULL;
+    w->texture=w->sprite=-1;w->disposed=true;
+}
+static void world_finalizer(JSRuntime *rt,JSValue value)
+{ (void)rt;WorldHandle *w=JS_GetOpaque(value,world_class);world_dispose(w);free(w); }
+static WorldHandle *world_get(JSContext *ctx,JSValueConst self)
+{
+    WorldHandle *w=JS_GetOpaque2(ctx,self,world_class);
+    if(w && w->disposed) {JS_ThrowTypeError(ctx,"RE2D World: ресурс освобождён");return NULL;}
+    return w;
+}
+static bool world_numbers(JSContext *ctx,int argc,JSValueConst *argv,int n,float *out)
+{
+    if(argc<n) {JS_ThrowTypeError(ctx,"RE2D World: недостаточно аргументов");return false;}
+    for(int i=0;i<n;i++) {
+        double v;
+        if(JS_ToFloat64(ctx,&v,argv[i])<0) return false;
+        if(!isfinite(v)||fabs(v)>1e6) {JS_ThrowRangeError(ctx,"RE2D World: конечные числа в пределах +/-1000000");return false;}
+        out[i]=(float)v;
+    }
+    return true;
+}
+static uint32_t world_rgb(const float *v)
+{ return 0xff000000u|(uint32_t)v[0]|((uint32_t)v[1]<<8)|((uint32_t)v[2]<<16); }
+static bool world_rows(JSContext *ctx,const float *p,size_t n,int stride)
+{
+    if(n%(size_t)stride || n/(size_t)stride>65536) {JS_ThrowRangeError(ctx,"RE2D World: неверная длина массива");return false;}
+    for(size_t i=0;i<n;i++) {
+        if(!isfinite(p[i])||fabsf(p[i])>1e6f || (i%(size_t)stride>=6 && (p[i]<0||p[i]>255))) {
+            JS_ThrowRangeError(ctx,"RE2D World: конечная геометрия и RGB 0..255");return false;
+        }
+    }
+    return true;
+}
+static JSValue world_release(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=JS_GetOpaque2(ctx,self,world_class);
+    if(!w) return JS_EXCEPTION;world_dispose(w);return JS_UNDEFINED;
+}
+static JSValue world_support(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[5];if(!w||!world_numbers(ctx,argc,argv,5,p)) return JS_EXCEPTION;
+    if(p[3]<=0||p[4]<0) return JS_ThrowRangeError(ctx,"World.support: height>0, step>=0");
+    int i=r2d_world_support(&w->world,p[0],p[1],p[2],p[3],p[4]);if(i<0) return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"span",i);set_num(ctx,o,"height",w->world.spans[i].bottom);set_num(ctx,o,"ceiling",w->world.spans[i].top);return o;
+}
+static JSValue world_blocked(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[5];if(!w||!world_numbers(ctx,argc,argv,5,p)) return JS_EXCEPTION;
+    if(p[2]<0||p[4]<=p[3]) return JS_ThrowRangeError(ctx,"World.blocked: radius>=0, top>bottom");
+    return JS_NewBool(ctx,r2d_world_blocked(&w->world,p[0],p[1],p[2],p[3],p[4]));
+}
+static JSValue world_ray(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[6];if(!w||!world_numbers(ctx,argc,argv,6,p)) return JS_EXCEPTION;
+    float d[3]={p[3]-p[0],p[4]-p[1],p[5]-p[2]};R2DWorldHit h;
+    if(!r2d_world_ray(&w->world,p,d,0,1,&h)) return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"fraction",h.t);set_num(ctx,o,"x",h.x);set_num(ctx,o,"y",h.y);
+    set_num(ctx,o,"height",h.height);set_num(ctx,o,"wall",h.wall);set_num(ctx,o,"span",h.span);
+    JS_SetPropertyStr(ctx,o,"ceiling",JS_NewBool(ctx,h.ceiling));return o;
+}
+static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w) return JS_EXCEPTION;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"walls",w->world.wall_count);set_num(ctx,o,"spans",w->world.span_count);
+    set_num(ctx,o,"segments",w->world.bsp.segment_count);set_num(ctx,o,"width",w->width);set_num(ctx,o,"height",w->height);
+    return o;
+}
+static JSValue world_frame(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float dims[2];if(!w||!world_numbers(ctx,argc,argv,2,dims)) return JS_EXCEPTION;
+    if(dims[0]!=floorf(dims[0])||dims[1]!=floorf(dims[1])||dims[0]<1||dims[1]<1||dims[0]>1024||dims[1]>1024)
+        return JS_ThrowRangeError(ctx,"World.frame: целый размер 1..1024");
+    int width=(int)dims[0],height=(int)dims[1];
+    double ortho_height=0;
+    if(argc>4 && JS_ToFloat64(ctx,&ortho_height,argv[4])<0) return JS_EXCEPTION;
+    if(!isfinite(ortho_height)||ortho_height<0||ortho_height>1e6)
+        return JS_ThrowRangeError(ctx,"World.frame: orthoHeight 0..1000000");
+    const uint8_t **images=NULL;JSValue *handles=NULL;int *sizes=NULL;float *positions=NULL,*position_copy=NULL;size_t nf=0;JSValue ab=JS_UNDEFINED;
+    uint32_t count=0;
+    if(argc>2) {
+        if(argc<4||!JS_IsArray(argv[2])||JS_GetTypedArrayType(argv[3])!=JS_TYPED_ARRAY_FLOAT32)
+            return JS_ThrowTypeError(ctx,"World.frame: handles[] и Float32Array stride 5");
+        JSValue length=JS_GetPropertyStr(ctx,argv[2],"length");int ok=JS_ToUint32(ctx,&count,length);JS_FreeValue(ctx,length);
+        if(ok<0) return JS_EXCEPTION;
+        if(count>4096) return JS_ThrowRangeError(ctx,"World.frame: максимум 4096 моделей");
+        ab=f32_view(ctx,argv[3],&positions,&nf);if(JS_IsException(ab)) return ab;
+        if(nf!=(size_t)count*5) {JS_FreeValue(ctx,ab);return JS_ThrowRangeError(ctx,"World.frame: неверная длина transforms");}
+        for(size_t i=0;i<nf;i++) if(!isfinite(positions[i])||fabsf(positions[i])>1e6f || (i%5>=3&&positions[i]<=0)) {
+            JS_FreeValue(ctx,ab);return JS_ThrowRangeError(ctx,"World.frame: конечные позиции, положительные размеры");
+        }
+        // Model getters can detach or mutate the caller's ArrayBuffer.
+        position_copy=malloc((nf?nf:1)*sizeof(float));
+        if(!position_copy) {JS_ThrowOutOfMemory(ctx);goto fail;}
+        if(nf) memcpy(position_copy,positions,nf*sizeof(float));
+        positions=position_copy;
+        images=calloc(count?count:1,sizeof *images);sizes=calloc(count?count:1,sizeof *sizes);
+        handles=malloc((count?count:1)*sizeof *handles);
+        if(handles) for(uint32_t i=0;i<count;i++) handles[i]=JS_UNDEFINED;
+        if(!images||!sizes||!handles) {JS_ThrowOutOfMemory(ctx);goto fail;}
+        // Resolve all getters before borrowing CPU pixels: a getter may dispose
+        // an earlier model. Keep references alive through the native pass.
+        for(uint32_t i=0;i<count;i++) {
+            handles[i]=JS_GetPropertyUint32(ctx,argv[2],i);
+            if(JS_IsException(handles[i])) goto fail;
+        }
+    }
+    if(w->disposed) {JS_ThrowTypeError(ctx,"World.frame: ресурс освобождён во время чтения models");goto fail;}
+    if(width!=w->width||height!=w->height) {
+        size_t n=(size_t)width*height;
+        uint8_t *rgba=malloc(n*4);float *depth=malloc(n*sizeof(float));
+        if(!rgba||!depth) {free(rgba);free(depth);JS_ThrowOutOfMemory(ctx);goto fail;}
+        int texture=r2d_texture_create_rgba(w->renderer,NULL,width,height);
+        int sprite=texture<0?-1:r2d_sprite_create(w->renderer,texture,0,0,(float)width,(float)height);
+        if(sprite<0) {if(texture>=0)r2d_texture_free(w->renderer,texture);free(rgba);free(depth);JS_ThrowInternalError(ctx,"World.frame: текстура не создана");goto fail;}
+        if(w->texture>=0)r2d_texture_free(w->renderer,w->texture);free(w->rgba);free(w->depth);
+        w->rgba=rgba;w->depth=depth;w->texture=texture;w->sprite=sprite;w->width=width;w->height=height;
+    }
+    ensure_view();
+    if(!isfinite(g_view.x)||!isfinite(g_view.y)||!isfinite(g_view.eye)||
+       !isfinite(g_view.cos_yaw)||!isfinite(g_view.sin_yaw)||
+       !isfinite(g_view.cos_pitch)||!isfinite(g_view.sin_pitch)||
+       !isfinite(g_view.focal)||g_view.focal<=0) {
+        JS_ThrowRangeError(ctx,"World.frame: некорректная камера");goto fail;
+    }
+    for(uint32_t i=0;i<count;i++) {
+        const float *p=positions+i*5;
+        bool visible=r2d_world_sprite_visible(&g_view,width,height,p[0],p[1],p[2],p[3],p[4],(float)ortho_height);
+        const uint8_t *pixels=r2d_rotsprite_pixels(ctx,handles[i],&sizes[i],visible);
+        // Validate every handle, including culled ones. No JS executes after borrowing.
+        if(!pixels) goto fail;
+        images[i]=visible?pixels:NULL;
+    }
+    r2d_world_frame(&w->world,&g_view,width,height,w->rgba,w->depth,(float)ortho_height);
+    for(uint32_t i=0;i<count;i++) {
+        const float *p=positions+i*5;
+        r2d_world_stamp(&g_view,width,height,w->rgba,w->depth,images[i],sizes[i],p[0],p[1],p[2],p[3],p[4],(float)ortho_height);
+    }
+    if(!r2d_texture_upload_region(w->renderer,w->texture,0,0,width,height,w->rgba,width*4)) {
+        JS_ThrowInternalError(ctx,"World.frame: не удалось обновить текстуру");goto fail;
+    }
+    for(uint32_t i=0;handles&&i<count;i++) JS_FreeValue(ctx,handles[i]);
+    free(handles);free(images);free(sizes);free(position_copy);JS_FreeValue(ctx,ab);return JS_NewInt32(ctx,w->sprite);
+fail:
+    for(uint32_t i=0;handles&&i<count;i++) JS_FreeValue(ctx,handles[i]);
+    free(handles);free(images);free(sizes);free(position_copy);JS_FreeValue(ctx,ab);return JS_EXCEPTION;
+}
+static JSValue world_create(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)self;R2DScript *script=JS_GetContextOpaque(ctx);
+    if(!script||!script->renderer||argc<2||JS_GetTypedArrayType(argv[0])!=JS_TYPED_ARRAY_FLOAT32||JS_GetTypedArrayType(argv[1])!=JS_TYPED_ARRAY_FLOAT32)
+        return JS_ThrowTypeError(ctx,"World.create: walls/spans Float32Array");
+    float *walls,*spans;size_t nw,ns;
+    JSValue a=f32_view(ctx,argv[0],&walls,&nw);if(JS_IsException(a)) return a;
+    JSValue b=f32_view(ctx,argv[1],&spans,&ns);if(JS_IsException(b)) {JS_FreeValue(ctx,a);return b;}
+    if(!world_rows(ctx,walls,nw,9)||!world_rows(ctx,spans,ns,12)) {JS_FreeValue(ctx,a);JS_FreeValue(ctx,b);return JS_EXCEPTION;}
+    R2DWorldWall *ww=calloc(nw/9+1,sizeof *ww);R2DWorldSpan *ss=calloc(ns/12+1,sizeof *ss);
+    WorldHandle *w=calloc(1,sizeof *w);
+    if(!ww||!ss||!w) {free(ww);free(ss);free(w);JS_FreeValue(ctx,a);JS_FreeValue(ctx,b);return JS_ThrowOutOfMemory(ctx);}
+    w->renderer=script->renderer;w->texture=w->sprite=-1;
+    for(size_t i=0;i<nw/9;i++) {float *p=walls+i*9;ww[i]=(R2DWorldWall){p[0],p[1],p[2],p[3],p[4],p[5],world_rgb(p+6)};}
+    for(size_t i=0;i<ns/12;i++) {float *p=spans+i*12;ss[i]=(R2DWorldSpan){p[0],p[1],p[2],p[3],p[4],p[5],world_rgb(p+6),world_rgb(p+9)};}
+    bool built=r2d_world_build(&w->world,ww,(int)(nw/9),ss,(int)(ns/12));
+    free(ww);free(ss);JS_FreeValue(ctx,a);JS_FreeValue(ctx,b);
+    if(!built) {world_dispose(w);free(w);return JS_ThrowRangeError(ctx,"World.create: неверная геометрия, пересечение spans или нехватка памяти");}
+    JSValue handle=JS_NewObjectClass(ctx,world_class);if(JS_IsException(handle)) {world_dispose(w);free(w);return handle;}
+    JS_SetOpaque(handle,w);
+    JS_SetPropertyStr(ctx,handle,"support",JS_NewCFunction(ctx,world_support,"support",5));
+    JS_SetPropertyStr(ctx,handle,"blocked",JS_NewCFunction(ctx,world_blocked,"blocked",5));
+    JS_SetPropertyStr(ctx,handle,"ray",JS_NewCFunction(ctx,world_ray,"ray",6));
+    JS_SetPropertyStr(ctx,handle,"frame",JS_NewCFunction(ctx,world_frame,"frame",4));
+    JS_SetPropertyStr(ctx,handle,"info",JS_NewCFunction(ctx,world_info,"info",0));
+    JS_SetPropertyStr(ctx,handle,"dispose",JS_NewCFunction(ctx,world_release,"dispose",0));
+    return handle;
+}
+
 int r2d_re2d_install(JSContext *ctx, JSValue engine)
 {
+    world_class=0;
+    JS_NewClassID(JS_GetRuntime(ctx),&world_class);
+    JSClassDef def={.class_name="Re2DWorld",.finalizer=world_finalizer};
+    if(JS_NewClass(JS_GetRuntime(ctx),world_class,&def)<0) return -1;
     JSValue re2d = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx,re2d,"worldCreate",JS_NewCFunction(ctx,world_create,"worldCreate",2));
     JS_SetPropertyStr(ctx, re2d, "view", JS_NewCFunction(ctx, js_view, "view", 6));
     JS_SetPropertyStr(ctx, re2d, "project", JS_NewCFunction(ctx, js_project, "project", 2));
     JS_SetPropertyStr(ctx, re2d, "sprite", JS_NewCFunction(ctx, js_sprite, "sprite", 1));

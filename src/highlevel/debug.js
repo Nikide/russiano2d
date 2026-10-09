@@ -8,7 +8,8 @@
 //   $.console.run('spawn 100 200');
 // ===========================================================================
 
-import { ctx, query, wrap } from './core.js';
+import { engine } from './native.js';
+import { ctx, query, wrap, nativeNodes } from './core.js';
 import { collectCounters } from './pool.js';
 
 const watches = [];
@@ -20,14 +21,20 @@ export function installDebug($) {
         overlay: false,
 
         /** Показать/скрыть отладочный оверлей движка (то же, что F1). */
-        on() { debug.overlay = true; engine.setOverlay(true); return debug; },
-        off() { debug.overlay = false; engine.setOverlay(false); return debug; },
-        toggle() {
-            debug.overlay = !debug.overlay;
-            engine.setOverlay(debug.overlay);
+        on() {
+            debug.overlay = ctx.devtools ? ctx.devtools.openRuntime() : false;
             return debug;
         },
-        isOn() { return debug.overlay; },
+        off() {
+            debug.overlay = false;
+            if (ctx.devtools) ctx.devtools.closeRuntime();
+            return debug;
+        },
+        toggle() { return debug.isOn() ? debug.off() : debug.on(); },
+        isOn() { return ctx.devtools ? ctx.devtools.runtimePanel().open : debug.overlay; },
+
+        /** Метаданные живых GPU-текстур: тот же список, который видит DevTools. */
+        textures() { return typeof engine.debugTextures === 'function' ? engine.debugTextures() : []; },
 
         /** Сводка по кадру: FPS, спрайты, узлы, тела, звук. */
         stats() {
@@ -159,6 +166,41 @@ export function installDebug($) {
         },
 
         /** Профайлер по кадрам: меряет время между start и end. */
+        /**
+         * Нативные проходы кадра (src/nodes.c): синк физики, события мира,
+         * наведение, сортировка и сборка батча. `false` возвращает прежний
+         * JS-путь — для сверки картинки и поиска расхождений. Без аргумента —
+         * работают ли они сейчас.
+         */
+        /**
+         * Факты о JS-куче (QuickJS JS_ComputeMemoryUsage): `{ bytes, used,
+         * objects, arrays, strings, atoms, shapes, native_tweens }`. Без
+         * движка — null. Нужен, чтобы отличать утечку от шума замера.
+         */
+        /**
+         * Факты рендера кадра: `{ info, depth }` — engine.renderInfo()
+         * (пост-обработка, bloom, проходы) и engine.depthInfo() (меш и
+         * z-буфер). Без движка — null.
+         */
+        render() {
+            if (!engine || typeof engine.renderInfo !== 'function') return null;
+            return {
+                info: engine.renderInfo(),
+                depth: typeof engine.depthInfo === 'function' ? engine.depthInfo() : null,
+            };
+        },
+
+        memory() {
+            const n = engine && engine.nodes;
+            return n && typeof n === 'object' && typeof n.memory === 'function' ? n.memory() : null;
+        },
+
+        nativePasses(flag) {
+            if (flag === undefined) return nativeNodes() !== null;
+            ctx.native_off = !flag;
+            return debug;
+        },
+
         profiler: {
             /**
              * Покадровый профайлер подсистем включён? По умолчанию выключен:
@@ -240,7 +282,7 @@ export function installDebug($) {
         /** Внутреннее: рисует список watch поверх кадра. */
         _render() {
             if (watches.length === 0) return;
-            if (!debug.overlay) return;
+            if (!debug.isOn()) return;
             let y = 90;
             ctx.gfx.text('— наблюдение ($.debug.watch) —', 12, y - 22, { size: 15, color: '#8fd1ff' });
             for (const w of watches) {

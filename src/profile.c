@@ -36,7 +36,7 @@ static const char *ZONE_NAMES[R2D_PROF_COUNT] = {
     "ожидание swapchain",
     "загрузка VB/IB",
     "draw-команды",
-    "интерфейс (ImGui/RmlUi)",
+    "интерфейс (RmlUi)",
     "прочее",
 };
 

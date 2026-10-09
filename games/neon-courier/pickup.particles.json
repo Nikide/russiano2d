@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "name": "pickup",
+  "emitting": false,
+  "amount": 24,
+  "max_particles": 128,
+  "lifetime": [250, 600],
+  "speed": [45, 120],
+  "direction": 0,
+  "spread": 360,
+  "size": [3, 8],
+  "end_size": 0,
+  "color": "#ffcf7b",
+  "end_color": "#7fffe0",
+  "alpha_ramp": [
+    { "t": 0, "alpha": 1 },
+    { "t": 1, "alpha": 0 }
+  ],
+  "local": false,
+  "seed": 19,
+  "blend": "add"
+}

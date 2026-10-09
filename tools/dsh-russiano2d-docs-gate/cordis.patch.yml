@@ -13,7 +13,7 @@
 #       minCoverage: 1
 #       docs:
 #         - { id: philosophy, path: docs/ARCHITECTURE.md, title: "Философия API $" }
-#         - { id: lowlevel, path: docs/API.md, title: "Низкоуровневые вызовы engine.*" }
+#         - { id: lowlevel, path: docs/internal/NATIVE.md, title: "Низкоуровневые вызовы engine.*" }
 #         - { id: highlevel, path: docs/HIGH_LEVEL_API.md, title: "Высокоуровневое API $" }
 #
 # Список документов, шаблоны «команда пишет файлы» и тексты отказов живут в

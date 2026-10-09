@@ -44,7 +44,7 @@ typedef enum {
     R2D_PROF_ACQUIRE,        // ожидание swapchain (vsync/ограничитель)
     R2D_PROF_UPLOAD,         // копирующий проход: VB/IB, текстуры
     R2D_PROF_DRAW,           // запись draw-команд (мир, UI, пост)
-    R2D_PROF_UI,             // ImGui/RmlUi: подготовка интерфейса
+    R2D_PROF_UI,             // RmlUi: подготовка интерфейса
     R2D_PROF_OTHER,          // события, ввод, горячая перезагрузка, http
     R2D_PROF_COUNT
 } R2DProfileZone;

@@ -131,3 +131,17 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_bsp_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_bsp_test PRIVATE -fsanitize=address,undefined)
 endif()
+
+# RE2D World: multi-height queries and final RGBA synthesis, no GPU.
+add_executable(r2d_re2d_world_test re2d/world_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
+    "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_re2d_world_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_re2d_world_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
+if(NOT MSVC)
+    target_link_libraries(r2d_re2d_world_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_re2d_world_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_re2d_world_test PRIVATE -fsanitize=address,undefined)
+endif()

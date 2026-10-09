@@ -16,8 +16,9 @@
 **Russiano2D** — настоящий российский 2D-игровой движок, готовый к дистрибуции
 и к тому, чтобы на нём делали игры. Ядро написано на C, игровая логика — на
 JavaScript; всё общение с движком идёт через одну точку входа — `$`.
-Основной репозиторий — **[hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d)**,
-зеркало кода — **[gitverse.ru/Nikide/russiano2d](https://gitverse.ru/Nikide/russiano2d)**.
+Текущая публикация и CI — **[GitHub](https://github.com/Nikide/russiano2d)**.
+Прежние хосты [hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d) и
+[GitVerse](https://gitverse.ru/Nikide/russiano2d) сохранены в remote-конфигурации.
 Готовые сборки под macOS, Linux и Windows лежат в самом репозитории, в
 [`dist/`](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/dist) — качайте оттуда.
 Играть можно и без установки: демо-меню работает **прямо в браузере** —
@@ -30,7 +31,7 @@ WebGPU, см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
   не нравится — пожалуйста, не пользуйтесь им. Целиком условия — в
   [LICENSE](LICENSE).
 * **Ядро — SDL3 и QuickJS-ng.** Графика через SDL_GPU (Vulkan / Metal / DirectX 12),
-  физика на Box2D v3, звук на SDL3_mixer, интерфейс на RmlUi, отладка на Dear ImGui.
+  физика на Box2D v3, звук на SDL3_mixer, интерфейс и DevTools на RmlUi.
   Та же игра собирается и **в браузере**: Emscripten + WebGPU, интерфейс RmlUi,
   одна команда — `python3 web/export.py` (см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
 * **Высокоуровневое API `$` в стиле jQuery.** Игра компилируется в один исполняемый
@@ -84,9 +85,9 @@ WebGPU, см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
 | Упорядочивание геометрии | **2D BSP-дерево** (своё, `src/bsp.c`) |
 | Свет и видимость | **trylock/visibility** (полигоны видимости, MIT; C-обёртка в `src/light.cpp`) |
 | Иконки | **Material Design Icons** — 2235 штук, встроены в бинарник |
-| Отладочный оверлей | **Dear ImGui** (docking) |
+| DevTools / SDK | **RmlUi**, включая F1-диагностику |
 | HTTP из игры | **libcurl** (или встроенный сокетный бэкенд для `http://`) |
-| Язык ядра | C11 (+ C++20 только для адаптеров ImGui и RmlUi) |
+| Язык ядра | C11 (+ C++20 только для адаптеров библиотек и RmlUi) |
 | Тесты | агентский режим движка + **qjs** для логики подсистем |
 
 ---
@@ -115,7 +116,7 @@ cmake --build build-release -j
 ```
 
 Первый прогон занимает несколько минут: собираются SDL3, SDL3_image, QuickJS-ng,
-Box2D, RmlUi, Dear ImGui, glslang и SPIRV-Cross. Дальше сборка инкрементальная
+Box2D, RmlUi, glslang и SPIRV-Cross. Дальше сборка инкрементальная
 (конфигурация ~3 минуты, сама сборка — около минуты).
 
 Если SDL3 уже установлен в системе (например, `brew install sdl3`), движок
@@ -148,8 +149,7 @@ python3 tools/autobuild.py --with-windows
 |---|---|---|
 | `R2D_ENABLE_AUDIO` | `ON` | звук и музыка (SDL3_mixer); `OFF` — заглушки без зависимости |
 | `R2D_ENABLE_RMLUI` | `ON` | HTML/CSS-подобный игровой интерфейс |
-| `R2D_ENABLE_IMGUI` | `ON` | отладочный оверлей (F1) |
-| `R2D_ENABLE_HOTRELOAD` | `ON` | перезапуск скриптов при изменении `.js` (F5) |
+| `R2D_ENABLE_HOTRELOAD` | `ON` | перезапуск при изменении `.js` / `.atlas.json` (F5) |
 | `R2D_EMBED_SCRIPTS` | `ON` в Release | упаковка скриптов игры в байткод QuickJS |
 | `R2D_ENABLE_HTTP` | `ON` | `$.http`; без libcurl остаётся сокетный бэкенд для `http://` |
 | `R2D_ENABLE_LIVE_SHADERS` | `ON` | компиляция своих шейдеров в рантайме (`$.gfx.defineShader`); `OFF` — только встроенные эффекты и бинарник на пару мегабайт легче |
@@ -162,13 +162,16 @@ python3 tools/autobuild.py --with-windows
 * [dist/ на hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/dist)
 * [dist/ на GitVerse](https://gitverse.ru/Nikide/russiano2d/content/main/dist)
 
-Внутри — пакеты под macOS (arm64), Linux (aarch64) и Windows (x86_64):
+Внутри — пакеты под macOS (arm64/x86_64), Linux (x86_64/aarch64) и Windows (x86_64):
 архивы `russiano2d-<платформа>.tar.gz` / `.zip`, распакованные каталоги и
 `SHA256SUMS.txt` для проверки. Собирает и кладёт их туда локальный
 `build_and_push.sh`; он же поднимает версию и ставит тег `vX.Y.Z`.
 
-CI на GitVerse написан ([.gitverse/workflows/release.yaml](.gitverse/workflows/release.yaml)),
-но **выключен** — автоматического запуска у него нет.
+[GitHub workflow](.github/workflows/build.yml) по тегу собирает и проверяет
+macOS arm64/x86_64, Linux x86_64/aarch64 и Windows x86_64, затем публикует
+пять SDK-пакетов и checksums в [Releases](https://github.com/Nikide/russiano2d/releases).
+`build_and_push.sh` независимо отправляет ветку/тег в GitHub, hub.mos.ru и GitVerse
+и пересобирает сайт из актуальной документации.
 
 Собрать руками:
 
@@ -260,8 +263,8 @@ $.ready(() => {
 });
 
 $.update(dt => {
-    $('.goblin').each(e => {
-        if (e.distanceTo('#hero') < 250) e.moveTowards('#hero', 120);
+    $('.goblin').each((i, el) => {
+        if (el.distanceTo('#hero') < 250) el.moveTowards('#hero', 120);
     });
 });
 ```
@@ -298,16 +301,17 @@ $.update(dt => {
 * **расширение** — `$.fn.myMethod = function () { … }` добавляет метод всем узлам.
 
 Полный справочник — **[docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md)**,
-разбор подсистем — в **[docs/GAP_ANALYSIS.md](docs/GAP_ANALYSIS.md)** и
+разбор подсистем — в **[docs/TASKS.md](docs/TASKS.md)** и
 **[docs/highlevel/](docs/highlevel/)**.
 Сколько стоит кадр `$` и что в нём узкое место —
 **[docs/HIGH_LEVEL_API_PERF.md](docs/HIGH_LEVEL_API_PERF.md)** (замеры,
 причины, план правок).
 Первая игра по шагам — **[docs/tutorial-first-game.md](docs/tutorial-first-game.md)**.
 
-Низкоуровневый `engine.*` (текстуры, тела, батчинг, RmlUi, BSP, свет) никуда не
-делся: `$` построен поверх него и доступен из игры в любой момент.
-Справочник — [docs/API.md](docs/API.md).
+Схема движка — **C → `$`**: нативное ядро (текстуры, тела, батчинг, RmlUi, BSP,
+свет) спрятано под `$`, глобального `engine` у игры нет
+([docs/highlevel/native.md](docs/highlevel/native.md)). Внутренний справочник
+ядра — [docs/internal/NATIVE.md](docs/internal/NATIVE.md).
 
 ---
 
@@ -416,7 +420,7 @@ C-ядро владеет всем: окном, GPU-устройством, фи
         ┌───────────────────┐
         │     ЯДРО (C)      │ ◄──── Box2D v3
         └─────────┬─────────┘
-                  │  C-биндинги globalThis.engine
+                  │  C-биндинги engine.* (приватные для $)
                   ▼
         ┌───────────────────┐
         │    QuickJS-ng     │ ◄──── $ (src/highlevel/*.js, встроен в бинарник)
@@ -428,11 +432,15 @@ C-ядро владеет всем: окном, GPU-устройством, фи
         └───────────────────┘
 ```
 
+Игре доступен только `$`: биндинги ядра `engine.*` модули `$` берут из
+приватного `native.js`, а после загрузки игры `engine` не существует
+([native.md](docs/highlevel/native.md), [PHILOSOPHY.md](docs/PHILOSOPHY.md)).
+
 ### Батчинг: один вызов на весь кадр
 
 Вызов через границу C ↔ JS стоит дорого, поэтому отрисовка не делается
-по спрайту. Игровой код наполняет плоский `Float32Array` и отдаёт его
-одним вызовом:
+по спрайту. `$.gfx` (внутри движка, игре это не видно) наполняет плоский
+`Float32Array` и отдаёт его одним вызовом:
 
 ```js
 const xf  = new Float32Array(maxSprites * 6);  // sprite, x, y, w, h, angle
@@ -449,21 +457,16 @@ draw call'ов, сколько раз в кадре меняется текст�
 
 ### Физика целиком в C
 
-JS не считает коллизии и не трогает векторы Box2D. Он создаёт тело и получает
-числовой id:
+JS не считает коллизии и не трогает векторы Box2D. Узел `$` получает тело
+и числовой id к нему:
 
 ```js
-const body = engine.createBody({ x: 120, y: 400, halfW: 14, halfH: 20,
-                                 type: engine.DYNAMIC, fixedRotation: true });
+$('<crate>').at(120, 400).size(28, 40).collision(28, 40).body('dynamic');
 ```
 
-Раз в кадр `engine.getTransforms()` возвращает `Float32Array`, который смотрит
-**прямо в память C** — копирования нет:
-
-```js
-const t = engine.getTransforms();
-const x = t[body * 3], y = t[body * 3 + 1], angle = t[body * 3 + 2];
-```
+Раз в кадр нативный проход синка (`src/nodes.c`) читает трансформы **прямо
+из памяти C** — копирования нет: позиции и углы тел оказываются на узлах `$`
+до игрового кода ([native.md](docs/highlevel/native.md)).
 
 ### Масштаб единиц
 
@@ -519,7 +522,6 @@ src/
   profile.c/.h              профилировка кадра
   text.c/.h                 очередь текста поверх сцены
   gui.cpp/.h                игровой GUI на RmlUi (gui_stub.c — сборка без UI)
-  debug_ui.cpp/.h           отладочный оверлей на Dear ImGui
   highlevel/*.js            высокоуровневое API $ (встраивается в бинарник)
 game/                       игровой код на JavaScript (ES-модули)
 demos/                      три демо, набор UI-контролов и меню-лаунчер
@@ -546,17 +548,17 @@ tests/
   fixtures/                 маленькие игры для тестов
 docs/
   HIGH_LEVEL_API.md         полный справочник по $
-  API.md                    низкоуровневые вызовы engine.*
+  internal/NATIVE.md                    нативное ядро engine.* (внутреннее, для модулей $)
   AGENT_API.md              протокол агента
   ARCHITECTURE.md           замысел движка и философия API $
-  GAP_ANALYSIS.md           аудит API и пробелы относительно Godot 4.x
+  TASKS.md           аудит API и пробелы относительно Godot 4.x
   HIGH_LEVEL_API_PERF.md    производительность $: замеры, причины, план правок
   TUTORIAL.md               туториал по демо «Типичная ночь в Мытищинском лесу»
   tutorial-first-game.md    «Моя первая игра»: от hello world до сборки
   tutorial-platformer.md    разбор платформера
   tutorial-menus.md         меню, сцены и переходы
   demos.md                  разбор всех демо
-  VFX_PLAN.md               план по VFX: взрывы, ударные волны, render target
+  highlevel/fx.md               план по VFX: взрывы, ударные волны, render target
   BUILD.md                  сборка игры в один файл
   RELEASING.md              выпуск релиза
   highlevel/                справочники подсистем по отдельности
@@ -646,17 +648,48 @@ JavaScript. Текстуры (`assets/`), шрифты и разметка ин�
 
 Подробности, раскладка файла и разбор ошибок — в [docs/BUILD.md](docs/BUILD.md).
 
+## SDK и Re2D
+
+SDK запускается из исходного checkout после сборки:
+
+```bash
+./build/russiano2d --game sdk
+./build/r2d-sdk commands
+```
+
+Это приложение R2D на `$` и RmlUi: браузер ассетов, Sprite/Animation Studio,
+Re2DSprite Studio, GLB/glTF/VRM Baker, Re2D World Studio и Automation.
+Редакторы сохраняют обычные JSON/PNG; игра продолжает работать без SDK.
+CLI выполняет ту же нативную проверку, компиляцию, запекание и пакетные задания.
+Нативный агентский клиент использует существующий протокол движка.
+
+Re2DSprite синтезирует 2D-персонажа из PNG v2 и описания скелета. Re2D World
+использует XY BSP и вертикальные интервалы: два этажа могут занимать одинаковые
+XY. Результат синтеза — обычный 2D-кадр в существующем батче. Порталы/PVS пока
+данные компилятора; slopes аппроксимируются ступенями. Baker — MVP с ограничениями
+развёртки и владения частями, а не универсальный импортёр 3D-анимации.
+
+Состояние и команды — [SDK](docs/SDK.md), [Re2DSprite](docs/RE2DSPRITE_GUIDE.md),
+[Re2D World](docs/RE2D_WORLD_GUIDE.md). `dist/` содержит опубликованные снимки
+версии 0.1.22: новый SDK в них ещё не упакован. Не смешивайте возможности текущих
+исходников с возможностями старого скачанного бинарника.
+
 ## Документация
+
+* [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) — конституция проекта
+* [docs/SDK.md](docs/SDK.md) — текущие инструменты и команды SDK
+* [docs/TASKS.md](docs/TASKS.md) — контрольная сверка документации, архитектуры и поставки
 
 * [docs/tutorial-first-game.md](docs/tutorial-first-game.md) — **«Моя первая игра»**: платформер с маскотом за 15 минут
 * [docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md) — всё, что умеет `$`
 * [docs/AGENT_API.md](docs/AGENT_API.md) — как управлять движком программой
-* [docs/API.md](docs/API.md) — низкоуровневые вызовы `engine.*`
+* [docs/internal/NATIVE.md](docs/internal/NATIVE.md) — нативное ядро `engine.*` (внутреннее: игре виден только `$`)
 * [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — замысел движка и философия API `$`
-* [docs/GAP_ANALYSIS.md](docs/GAP_ANALYSIS.md) — аудит API и пробелы относительно Godot 4.x (2D)
+* [docs/TASKS.md](docs/TASKS.md) — аудит API и пробелы относительно Godot 4.x (2D)
+* [docs/API_PERFORMANCE.md](docs/API_PERFORMANCE.md) — периодический benchmark компонентов `$`, таблица и конфигурация машины
 * [docs/HIGH_LEVEL_API_PERF.md](docs/HIGH_LEVEL_API_PERF.md) — сколько стоит кадр `$`: замеры
   (`tools/bench_highlevel.py`), что влияет на производительность и как это исправить
-* [docs/VFX_PLAN.md](docs/VFX_PLAN.md) — план по VFX: взрывы, ударные волны, render target,
+* [docs/highlevel/fx.md](docs/highlevel/fx.md) — план по VFX: взрывы, ударные волны, render target,
   рантайм-шейдеры, чёрная дыра
 * [docs/highlevel/fx.md](docs/highlevel/fx.md) — `$.fx`: ленты, молнии, ударные волны,
   поля сил, hit-stop
@@ -686,37 +719,16 @@ JavaScript. Текстуры (`assets/`), шрифты и разметка ин�
 
 ## Где живёт проект
 
-Проект целиком живёт на отечественном хостинге
-**[hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d)** — там исходники,
-сборки и вся история. Код зеркалится на
-**[gitverse.ru](https://gitverse.ru/Nikide/russiano2d)**.
+Текущий remote публикации — **[GitHub](https://github.com/Nikide/russiano2d)**.
+Прежние [hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d) и
+[GitVerse](https://gitverse.ru/Nikide/russiano2d) остаются в конфигурации.
+Готовые пакеты лежат в [`dist/`](dist/); это снимки конкретной версии.
 
-**Релизы лежат в [`dist/`](dist/) этого репозитория** — отдельной выгрузки нет:
-
-* [dist/ на hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/dist)
-* [dist/ на GitVerse](https://gitverse.ru/Nikide/russiano2d/content/main/dist)
-
-Собирает их туда `build_and_push.sh`: он поднимает версию, собирает все
-платформы, коммитит, пушит ветку и тег `vX.Y.Z` на оба хостинга.
-
-Пуш настроен мульти-пушем: у `origin` две push-цели, поэтому один `git push`
-уходит сразу на оба хостинга.
-
-```bash
-git remote -v
-# origin    git@hub.mos.ru:dem4ev48/russiano2d.git  (fetch)
-# origin    git@hub.mos.ru:dem4ev48/russiano2d.git  (push)
-# origin    git@gitverse.ru:Nikide/russiano2d.git   (push)
-# gitverse  git@gitverse.ru:Nikide/russiano2d.git
-
-git push origin main         # ветка — сразу на оба хоста
-git push origin --tags       # теги — тоже на оба
-git push gitverse main       # только на GitVerse
-git pull origin main         # тянет с hub.mos.ru
-```
-
-`--mirror` для публикации не используйте: он удаляет на сервере всё, чего нет
-локально. Подробности процесса — в [docs/RELEASING.md](docs/RELEASING.md).
+`build_and_push.sh` поднимает версию, собирает платформы, коммитит и пушит ветку
+и новый tag `vX.Y.Z` независимо в GitHub, hub.mos.ru и GitVerse.
+`REMOTES=...` меняет список целей; отказ одного хоста не блокирует остальные и сайт.
+CI запускается на version tags. Не использовать `--mirror` для публикации.
+Подробности — [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Автор
 
@@ -737,13 +749,13 @@ git pull origin main         # тянет с hub.mos.ru
 пользуйтесь им. Если выпустишь на нём игру — скажи спасибо автору, можно не вслух.
 
 Полный текст — в [LICENSE](LICENSE). Сторонние компоненты (SDL3, QuickJS-ng, Box2D,
-RmlUi, Dear ImGui, glslang, SPIRV-Cross, шрифты, иконки) остаются под своими
+RmlUi, glslang, SPIRV-Cross, шрифты, иконки) остаются под своими
 лицензиями — см. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Лицензии сторонних компонентов
 
 SDL3 (zlib), SDL3_image (zlib), SDL3_mixer (zlib), QuickJS-ng (MIT), Box2D (MIT),
-RmlUi (MIT), Dear ImGui (MIT), trylock/visibility (MIT), glslang / SPIRV-Cross
+RmlUi (MIT), trylock/visibility (MIT), glslang / SPIRV-Cross
 (Apache-2.0 / MIT), Material Design Icons (Apache-2.0).
 Шрифты Noto Sans и LatoLatin распространяются по лицензии SIL OFL —
 см. `assets/fonts/LICENSE-NotoSans.txt` и `assets/fonts/LICENSE-Lato.txt`.

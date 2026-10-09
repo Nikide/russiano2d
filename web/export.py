@@ -189,6 +189,11 @@ def main(argv: list[str]) -> int:
         print("[export] старт без кнопки «Играть»", flush=True)
 
     run_in_emsdk(emsdk, f'emcmake cmake -S "{REPO}" -B "{build_dir}" -G Ninja {quoted}')
+    # Preloaded game files are inputs to emcc's packager, but are not all
+    # represented in the current CMake link dependency graph. Re-run the link
+    # on each export so edits and deletions in JS/RmlUi/assets reach .data.
+    # Only the generated HTML output is removed; compiled objects are retained.
+    (build_dir / "russiano2d.html").unlink(missing_ok=True)
     run_in_emsdk(emsdk, f'cmake --build "{build_dir}" -j{os.cpu_count() or 4}')
 
     missing = [name for name in ARTIFACTS if not (build_dir / name).exists()]

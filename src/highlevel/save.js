@@ -23,6 +23,7 @@
 // модуль обращается только внутри installSave().
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx } from './core.js';
 import { sanitize } from './prefab.js';
 

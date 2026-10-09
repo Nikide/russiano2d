@@ -1,4 +1,5 @@
 // Re2DSprite: один общий PNG персонажа → синтез персонажа в обычном 2D-батче.
+import { engine } from './native.js';
 import { TAGS, def, withAlpha } from './core.js';
 import { registerNodeRenderer } from './render.js';
 
@@ -108,7 +109,7 @@ function affine(pivot,translation,rotation,scale=[1,1,1]) {
     for (let row=0;row<3;row++) {for (let col=0;col<3;col++) m[row*4+col]*=scale[col];m[row*4+3]=pivot[row]+translation[row]-m[row*4]*pivot[0]-m[row*4+1]*pivot[1]-m[row*4+2]*pivot[2];}return m;
 }
 const transform = (m,p) => [0,1,2].map(row=>m[row*4]*p[0]+m[row*4+1]*p[1]+m[row*4+2]*p[2]+m[row*4+3]);
-export function buildRotModelPose(definition,sample={},rig={},manual={}) {
+export function buildRotModelPose(definition,sample={},rig={},manual={},visibleParts=null) {
     const boneMatrices={},body=rig.body!==false;
     for (const b of definition.rig.bones) {
         const values={...sample.bones?.[b.name],...manual[b.name]};
@@ -119,7 +120,7 @@ export function buildRotModelPose(definition,sample={},rig={},manual={}) {
     }
     const records=definition.rig.parts.map(p=>{
         const bind=body?p.bind:p.portraitBind,m=multiply(boneMatrices[p.bone],affine([0,0,0],bind.translation,bind.rotation,bind.scale));
-        return [p.id,p.selector ? ['','eyes','mouth','brows'].indexOf(p.selector):0,p.variant ?? 0,p.oneSided?1:0,body || p.portrait ? 1:0,...m];
+        return [p.id,p.selector ? ['','eyes','mouth','brows'].indexOf(p.selector):0,p.variant ?? 0,p.oneSided?1:0,(body || p.portrait) && (visibleParts===null || visibleParts.includes(p.id)) ? 1:0,...m];
     });
     return {records,bones:boneMatrices,scale:body?definition.projection.bodyScale:definition.projection.portraitScale};
 }
@@ -141,7 +142,7 @@ function applyModel($,node) {
         for (const [bone,values] of Object.entries(extra.bones)) sample.bones[bone]={...sample.bones[bone],...values};
         Object.assign(sample.face,extra.face);
     }
-    r.modelPose=buildRotModelPose(r.definition,sample,r.rig,r.boneOverrides);
+    r.modelPose=buildRotModelPose(r.definition,sample,r.rig,r.boneOverrides,r.visibleParts ?? null);
     let pose=engine.rotSpriteInfo(r.handle);
     if (r.attachment) {
         const a=r.attachment,parent=a.parent.rot_sprite;
@@ -160,19 +161,30 @@ function applyModel($,node) {
     }
     engine.rotSpriteModelPose(r.handle,r.modelPose.scale,r.modelPose.records,!!r.rig.body);
     const face={eyes:FACE.eyes[pose.eyes ?? 0],mouth:FACE.mouth[pose.mouth ?? 0],brows:FACE.brows[pose.brows ?? 0],...r.faceBase,...sample.face};
-    r.sprite=engine.rotSpritePose(r.handle,pose.yaw ?? 0,pose.pitch ?? 0,FACE.eyes.indexOf(face.eyes),FACE.mouth.indexOf(face.mouth),FACE.brows.indexOf(face.brows));
+    const submit=r.worldComposed && typeof engine.rotSpritePrepare==='function' ? engine.rotSpritePrepare : engine.rotSpritePose;
+    r.sprite=submit(r.handle,pose.yaw ?? 0,pose.pitch ?? 0,FACE.eyes.indexOf(face.eyes),FACE.mouth.indexOf(face.mouth),FACE.brows.indexOf(face.brows));
     for (const child of r.children) if (child.rot_sprite) applyModel($,child);
+}
+// World asks native C to coalesce animated model state and the final view pose.
+export function prepareRotWorldPose(node,yaw,pitch) {
+    const r=node.rot_sprite,p=normalizeRotPose(yaw,pitch);r.worldComposed=true;
+    const submit=typeof engine.rotSpritePrepare==='function' ? engine.rotSpritePrepare : engine.rotSpritePose;
+    r.sprite=submit(r.handle,p.yaw,p.pitch);
+    for(const child of r.children || [])if(child.rot_sprite){child.rot_sprite.worldComposed=true;applyModel(rotApi,child);}
 }
 function modelJoints(r,pose) {
     const cy=Math.cos(pose.yaw*Math.PI/180),sy=Math.sin(pose.yaw*Math.PI/180),cp=Math.cos(pose.pitch*Math.PI/180),sp=Math.sin(pose.pitch*Math.PI/180),result={};
     for (const j of r.definition.rig.joints) {const [x,y,z]=transform(r.modelPose.bones[j.bone],j.point),zz=-sy*x+cy*z;result[j.name]={x:64+(cy*x+sy*z)*r.modelPose.scale,y:64+(cp*y-sp*zz)*r.modelPose.scale};}return result;
 }
-function relativeAsset(file,path) {
+export function relativeAsset(file,path) {
     if (typeof path!=='string' || !path) throw new TypeError('Re2DSprite JSON: путь');
     if (path.startsWith('/')) return path;
+    // Модель по абсолютному пути (так её открывает SDK): ведущий «/» нельзя терять,
+    // иначе атлас рядом с ней превращается в относительный путь и не находится.
+    const root=typeof file==='string' && file.startsWith('/') ? '/' : '';
     const parts=(file?file.slice(0,file.lastIndexOf('/')+1):'').split('/').filter(Boolean);
     for (const p of path.split('/')) {if (p==='..') {if (!parts.length) throw new RangeError('Re2DSprite JSON: путь выходит за корень');parts.pop();}else if (p && p!=='.') parts.push(p);}
-    return parts.join('/');
+    return root+parts.join('/');
 }
 function readDefinition($,source) {
     const read=p=>{const text=$.fs.readText(p);if (text==null) throw new Error(`Re2DSprite JSON: не удалось прочитать ${p}`);return JSON.parse(text);};
@@ -242,6 +254,14 @@ export function installRotSprite($) {
             $(node).rotExpression(modes[name]);
         });
     });
+    // Select rendered atlas parts without removing bones or attachment sockets.
+    def('rotVisibleParts', function (parts = null) { return this.eachNode((i,node) => {
+        const r=node.rot_sprite;
+        if (!r?.definition) throw new TypeError('rotVisibleParts: JSON model required');
+        if (parts!==null && (!Array.isArray(parts) || parts.some(id=>!Number.isInteger(id) || !r.definition.rig.parts.some(p=>p.id===id))))
+            throw new TypeError('rotVisibleParts: array of model part IDs or null');
+        r.visibleParts=parts===null ? null : [...new Set(parts)];applyModel($,node);
+    }); });
     def('rotRig', function (options = {}) { return this.eachNode((i,node) => {
         if (!node.rot_sprite) throw new TypeError('rotRig: сначала загрузите PNG');
         const r={body:false,phase:0,stride:0,armLeft:0,armRight:0,headYaw:0,...node.rot_sprite.rig,...options};
@@ -287,7 +307,8 @@ export function installRotSprite($) {
             if (old.definition) {
                 const r=temp.get(0).rot_sprite;
                 if (Object.keys(r.animations.clips).length && !Object.hasOwn(r.animations.clips,old.motion.mode)) throw new TypeError('rotReload: активный клип удалён');
-                r.motion={...old.motion};r.boneOverrides=cloneData(old.boneOverrides);r.layers=cloneData(old.layers);r.faceBase={...old.faceBase};
+                if (old.visibleParts?.some(id=>!r.definition.rig.parts.some(p=>p.id===id))) throw new TypeError('rotReload: visible part removed');
+                r.worldComposed=old.worldComposed;r.visibleParts=old.visibleParts===undefined || old.visibleParts===null ? null : [...old.visibleParts];r.motion={...old.motion};r.boneOverrides=cloneData(old.boneOverrides);r.layers=cloneData(old.layers);r.faceBase={...old.faceBase};
                 for (const key of Object.keys(r.layers)) if (!Object.hasOwn(r.animations.clips,key)) throw new TypeError('rotReload: активный слой удалён');
             }
             if (pose.version===2) temp.rotRig(old.rig);
@@ -387,7 +408,7 @@ export function installRotSprite($) {
     };
     // Public name; legacy namespace and node methods remain compatible.
     $.re2dSprite=$.rotSprite;
-    for (const old of ['rotSpriteAtlas','rotStyle','rotPose','rotExpression','rotEmotion','rotRig','rotMotion','rotPart','rotReload','rotHotReload','rotAttach','rotDetach','rotVariant','rotLayer','rotBone','rotSeek']) {
+    for (const old of ['rotSpriteAtlas','rotStyle','rotPose','rotExpression','rotEmotion','rotRig','rotMotion','rotPart','rotReload','rotHotReload','rotAttach','rotDetach','rotVariant','rotLayer','rotBone','rotSeek','rotVisibleParts']) {
         const current=old.replace(/^rot/,'re2d');
         def(current,function(...args) {return this[old](...args);});
     }
@@ -397,6 +418,10 @@ export function installRotSprite($) {
         const p = frame.style==='anime' ? t : rotPixelRect(t,frame.width);
         if (p.x + p.w/2 < 0 || p.y + p.h/2 < 0 ||
             p.x - p.w/2 > cam.w || p.y - p.h/2 > cam.h) return;
+        if(node.rot_sprite.worldComposed) {
+            const r=node.rot_sprite,pose=engine.rotSpriteInfo(r.handle);
+            r.sprite=engine.rotSpritePose(r.handle,pose.yaw,pose.pitch);
+        }
         $.gfx.push.sprite(node.rot_sprite.sprite,p.x,p.y,p.w,p.h,0,
             withAlpha(node.color,node.alpha),node.blend_mode);
     });

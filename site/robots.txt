@@ -1,0 +1,90 @@
+# robots.txt — r2d.nikiniki.ru (движок Russiano2D)
+#
+# Политика: индексация поисковыми системами и ИИ-ботами разрешена, обучение
+# моделей тоже разрешено. Ограничений нет ни для одного User-agent.
+# Машинный манифест прав: https://r2d.nikiniki.ru/.well-known/ai.txt
+# Выжимка для моделей:   https://r2d.nikiniki.ru/llms.txt
+
+User-agent: *
+Allow: /
+
+# --- ИИ-боты, которые читают и цитируют (явно разрешены) --------------------
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+User-agent: Meta-ExternalAgent
+Allow: /
+
+User-agent: Meta-ExternalFetcher
+Allow: /
+
+User-agent: Diffbot
+Allow: /
+
+User-agent: ImagesiftBot
+Allow: /
+
+User-agent: YouBot
+Allow: /
+
+User-agent: DuckAssistBot
+Allow: /
+
+User-agent: PetalBot
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+Sitemap: https://r2d.nikiniki.ru/sitemap.xml

@@ -316,6 +316,12 @@ def collect_runtime_files(
     """
     files: List[Tuple[str, str]] = []
     files.append((binary, os.path.basename(binary)))
+    suffix = '.exe' if binary.lower().endswith('.exe') else ''
+    sdk_binary = os.path.join(os.path.dirname(binary), 'r2d-sdk' + suffix)
+    files.append((sdk_binary, 'r2d-sdk' + suffix))
+    for name in ('sdk', 'sdk_tools.json', 'SDK_HANDOFF.md',
+                 'Следующая цель SDK AGENT.md', 'docs'):
+        files.append((name, name))
     for name in DOC_FILES:
         if os.path.exists(os.path.join(ROOT, name)):
             files.append((name, name))
@@ -334,14 +340,13 @@ AGENTS_DOC_ORDER = (
     "docs/UI_RMLUI_LAW.md",
     "docs/ARCHITECTURE.md",
     "docs/HIGH_LEVEL_API.md",
-    "docs/API.md",
     "docs/AGENT_API.md",
     "docs/BUILD.md",
     "docs/tutorial-first-game.md",
     "docs/tutorial-platformer.md",
     "docs/tutorial-menus.md",
     "docs/demos.md",
-    "docs/GAP_ANALYSIS.md",
+    "docs/TASKS.md",
     "docs/HIGH_LEVEL_API_PERF.md",
 )
 
@@ -433,7 +438,7 @@ def platform_runtime_note(platform_name: str, binary: str) -> Tuple[str, str, st
     return (
         "./" + binary,
         "**Linux:** если файл не запускается — `chmod +x %s`" % binary,
-        "**Linux:** собранная игра самодостаточна: `chmod +x mygame-release` и запускай. "
+        "**Linux:** запуск: `chmod +x mygame-release`; распространяйте соседний `lib/`, если он создан builder. "
         "Груз шифруется по умолчанию.",
     )
 
@@ -573,6 +578,25 @@ def render_platform_docs(target: str, platform_name: str, version: str) -> None:
         log("    документ: %s" % out_name)
 
 
+def binary_platform(path: str) -> str:
+    """Read executable architecture, rather than trusting archive labels."""
+    with open(path, 'rb') as stream:
+        header = stream.read(64)
+        if header[:4] == b'\x7fELF':
+            endian = 'little' if header[5] == 1 else 'big'
+            machine = int.from_bytes(header[18:20], endian)
+            return {62:'linux-x86_64', 183:'linux-aarch64'}.get(machine, 'unsupported-elf')
+        if header[:4] == b'\xcf\xfa\xed\xfe':
+            cpu = int.from_bytes(header[4:8], 'little')
+            return {0x1000007:'macos-x86_64', 0x100000c:'macos-arm64'}.get(cpu, 'unsupported-macho')
+        if header[:2] == b'MZ':
+            stream.seek(int.from_bytes(header[60:64], 'little'))
+            pe = stream.read(6)
+            if pe[:4] == b'PE\0\0' and int.from_bytes(pe[4:6], 'little') == 0x8664:
+                return 'windows-x86_64'
+        return 'unsupported'
+
+
 def package_platform(
     runner: Runner,
     platform_name: str,
@@ -607,6 +631,18 @@ def package_platform(
         log("    контрольные суммы: %s/SHA256SUMS.txt" % target)
         return
 
+    # Не выдавать runtime-only архив за SDK и не стирать старый пакет до
+    # проверки обязательного нативного backend.
+    suffix = PLATFORMS[platform_name][1]
+    sdk_binary = os.path.join(ROOT, os.path.dirname(binary), 'r2d-sdk' + suffix)
+    if not os.path.isfile(sdk_binary):
+        raise SystemExit('ошибка: SDK backend не найден: %s; соберите r2d-sdk' % sdk_binary)
+    if not runner.dry_run:
+        for executable in (os.path.join(ROOT, binary), sdk_binary):
+            actual = binary_platform(executable)
+            if actual != platform_name:
+                raise SystemExit('ошибка: %s имеет архитектуру %s, запрошена %s' % (executable, actual, platform_name))
+
     if os.path.isdir(target) and os.listdir(target) and not force:
         raise SystemExit(
             "ошибка: %s уже существует и не пуст.\n"
@@ -623,17 +659,19 @@ def package_platform(
             log("    пропускаю отсутствующий %s" % source)
             continue
         if os.path.isdir(source_path):
-            shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+            shutil.copytree(source_path, dest_path, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", "*.pyc", "*.pyo", "state.local.json", "native", "CMakeLists.txt"))
         else:
             shutil.copy2(source_path, dest_path)
-            if source == binary:
+            if source == binary or os.path.basename(dest).startswith('r2d-sdk'):
                 os.chmod(dest_path, 0o755)
 
     # Если сборка положила рядом с бинарником каталог lib/ (внешние
     # библиотеки), он едет в пакет: бинарник ищет их через $ORIGIN/lib.
     build_lib = os.path.join(os.path.dirname(os.path.join(ROOT, binary)), "lib")
     if os.path.isdir(build_lib) and os.listdir(build_lib):
-        shutil.copytree(build_lib, os.path.join(target, "lib"), dirs_exist_ok=True)
+        shutil.copytree(build_lib, os.path.join(target, "lib"), dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", "*.pyc", "*.pyo", "state.local.json"))
         log("    библиотек из сборки: %d" % len(os.listdir(build_lib)))
 
     for extra in extras:

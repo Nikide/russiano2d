@@ -18,7 +18,7 @@
 
 #include <SDL3/SDL.h>
 
-// io.h/unistd.h нужны, чтобы увести stdout в stderr: RmlUi, ImGui и Box2D
+// io.h/unistd.h нужны, чтобы увести stdout в stderr: RmlUi и Box2D
 // пишут туда напрямую своими print()/printf(), и в агентском режиме они бы
 // смешались с JSON.
 #ifdef _WIN32

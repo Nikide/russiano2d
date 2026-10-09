@@ -15,6 +15,7 @@
 // их гоняет qjs-харнесс без движка.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, Node, TAGS, wrap, wrapOne, def, touchRegistry, dropFromRegistry } from './core.js';
 import { noteNodeEffects } from './tween.js';
 
@@ -169,6 +170,7 @@ function newPoolNode(st) {
 function resetNode(node, st) {
     const b = st.baseline;
     node.classes = new Set(b.classes);
+    node.class_list = [...b.classes];
     node.tags_extra = b.tags.size === 0 ? null : new Set(b.tags);
     node.attrs = Object.assign({}, b.attrs);
     node.x = b.x;

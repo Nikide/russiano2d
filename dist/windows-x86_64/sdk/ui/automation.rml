@@ -1,0 +1,7 @@
+<rml><head><link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/><title>Automation</title></head><body>
+<div class="studio">
+<div class="bar top"><button id="au-back" class="btn small">К SDK</button><span class="title">Automation / Batch</span></div>
+<div class="bar"><button id="au-batch" class="btn">Пакет ассетов</button><button id="au-agent" class="btn">Сессия агента</button><span id="au-mode">batch</span><button id="au-run" class="btn primary">Сохранить и выполнить</button><span id="au-state"></span></div>
+<div class="bar"><label>Манифест</label><input id="au-path" type="text" class="field" style="width:50%;"/><label>Отчёт</label><input id="au-output" type="text" class="field" style="width:30%;"/></div>
+<div class="body-row"><div style="width:50%;padding:12px;box-sizing:border-box;"><h4>Исходный JSON</h4><textarea id="au-json" style="display:block;width:100%;height:75%;background-color:#08101c;color:#dbe7f7;border-width:1px;border-color:#2b4366;"/><div class="hint">batch: version:1, jobs с op validate/bake-re2d. agent: version:1, game, requests с исходными командами движка. Пути jobs/game относительны этому файлу. Сохраните файл в доступный каталог.</div></div><div style="width:50%;padding:12px;box-sizing:border-box;overflow:auto;"><h4>Машинный отчёт</h4><pre id="au-report" style="display:block;white-space:pre-wrap;"/></div></div>
+<div id="au-diag" class="diag-strip"/></div></body></rml>

@@ -4,8 +4,8 @@
 Гоняет сцену-стенд ``tests/fixtures/bench`` в агентском режиме движка
 (``--agent --headless --fixed-dt``) и печатает, сколько времени кадра уходит
 на JS-слой: цикл кадра, селекторы, обёртки, сборку батча. Замеры берутся из
-встроенного профайлера (``engine.profile()``), поэтому они не зависят от
-vsync, GPU и загрузки машины — сравнимы между запусками.
+встроенного профайлера (``$.debug.profile()``), CPU-зоны исключают ожидание vsync, но зависят от сборки, GPU-бэкенда,
+частоты CPU и фоновой нагрузки. Сравнивайте одинаковые условия.
 
 Зачем отдельный инструмент: у движка есть профайлер кадра, но не было сцены,
 на которой видно цену самого `$`. Отчёт по результатам —
@@ -75,7 +75,7 @@ QUICK: List[Tuple[str, int]] = [
 #: Полный набор: каждый вид на нескольких размерах.
 FULL_KINDS: List[str] = [
     "none", "sprite", "body", "query", "id", "cached",
-    "tween", "particles", "ui", "text", "tilemap", "signal",
+    "tween", "move", "particles", "ui", "text", "tilemap", "signal",
     "chain", "fast", "churn", "batch",
 ]
 FULL_NS: List[int] = [0, 100, 250, 500, 1000, 2000]
@@ -163,13 +163,13 @@ def plan(opts: Dict[str, Any]) -> List[Tuple[str, int]]:
 def measure(kind: str, n: int, opts: Dict[str, Any]) -> Dict[str, Any]:
     """Один прогон сценария: прогрев, окно замера, снимок профайлера."""
     scene = "%s:%d" % (kind, n)
-    with Agent(game=GAME, scene=scene, seed=1, binary=opts["binary"],
+    with Agent(game=opts.get("game", GAME), scene=scene, seed=opts.get("seed", 1), binary=opts["binary"],
                start_timeout=60, timeout=120) as a:
         if opts["warm"]:
             a.step(opts["warm"])
-        a.cmd("eval", code="engine.profileReset()")
+        a.cmd("eval", code="$.debug.profileReset()")
         a.step(opts["frames"])
-        prof = a.eval("engine.profile()")
+        prof = a.eval("$.debug.profile()")
         stats = a.eval("$.gfx.stats()")
         nodes = a.eval("$.bench && $.bench.nodes")
 

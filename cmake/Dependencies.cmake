@@ -11,7 +11,6 @@
 #   qjsc                        — компилятор JS → байткод (релизная сборка)
 #   box2d::box2d                — физика Box2D v3
 #   RmlUi::Core                 — игровой GUI
-#   imgui                       — отладочный оверлей (собираем сами)
 # ---------------------------------------------------------------------------
 
 include(FetchContent)
@@ -166,6 +165,21 @@ endif()
 # RmlUi — игровой GUI (HUD, меню, инвентарь) на HTML/CSS-подобной разметке
 # ---------------------------------------------------------------------------
 if(R2D_ENABLE_RMLUI)
+    # Cross macOS cannot link the host Homebrew FreeType architecture.
+    if(R2D_BUNDLED_FREETYPE)
+        set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+        set(FT_DISABLE_ZLIB ON CACHE BOOL "" FORCE)
+        set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
+        set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
+        set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
+        set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
+        FetchContent_Declare(r2d_freetype
+            URL https://archive.ubuntu.com/ubuntu/pool/main/f/freetype/freetype_2.13.2+dfsg.orig.tar.xz
+            URL_HASH SHA256=48c78a4194adfcd15a4d089f3206dab8454c311f5577f3ef7eaef95f777f86e6)
+        FetchContent_MakeAvailable(r2d_freetype)
+        add_library(Freetype::Freetype ALIAS freetype)
+        set(CMAKE_DISABLE_FIND_PACKAGE_Freetype ON)
+    endif()
     set(RMLUI_SAMPLES              OFF CACHE BOOL "" FORCE)
     set(RMLUI_TESTS                OFF CACHE BOOL "" FORCE)
     set(RMLUI_BUILD_TESTS          OFF CACHE BOOL "" FORCE)
@@ -250,23 +264,6 @@ if(R2D_ENABLE_RMLUI)
     endif()
 endif()
 
-# ---------------------------------------------------------------------------
-# Dear ImGui — отладочный оверлей
-# ---------------------------------------------------------------------------
-if(R2D_ENABLE_IMGUI)
-    # У upstream-репозитория ImGui нет своего CMakeLists.txt. Пустой
-    # SOURCE_SUBDIR заставляет FetchContent только скачать исходники.
-    # Глубокий клон обязателен: пин указывает на коммит ветки `docking`, а
-    # shallow-клон главной ветки его не содержит — checkout падает с
-    # «reference is not a tree». На машине, где _deps уже был, ошибка не
-    # видна; в чистом контейнере или CI она есть.
-    FetchContent_Declare(imgui
-        GIT_REPOSITORY https://github.com/ocornut/imgui.git
-        GIT_TAG        64944b4520b30772de8dbf0b37d0311746477a32  # docking
-        GIT_SHALLOW    FALSE
-        SOURCE_SUBDIR  "cmake/нет-здесь-CMakeLists")
-    FetchContent_MakeAvailable(imgui)
-endif()
 
 # ---------------------------------------------------------------------------
 # visibility — полигоны видимости (header-only C++, MIT)
@@ -278,7 +275,7 @@ endif()
 #
 # У репозитория свой CMakeLists.txt, который собирает static-библиотеку и
 # тесты на Catch. Нам нужны только заголовки, поэтому несуществующий
-# SOURCE_SUBDIR отключает add_subdirectory — как у ImGui выше. CMake-таргет
+# SOURCE_SUBDIR отключает add_subdirectory. CMake-таргет
 # оформляет cmake/Light.cmake.
 # ---------------------------------------------------------------------------
 FetchContent_Declare(visibility
@@ -291,14 +288,7 @@ FetchContent_MakeAvailable(visibility)
 # ---------------------------------------------------------------------------
 # stb_truetype — растеризатор глифов для текста в сцене (src/font.c).
 #
-# Зачем своя зависимость, если stb уже лежит внутри ImGui. ImGui подключает
-# свою копию со стандартным stb-двойным включением (реализация — только в
-# imgui_draw.cpp). Если движок определит STB_TRUETYPE_IMPLEMENTATION и
-# подключит ту же копию, символы продублируются на линковке. Поэтому берём
-# оригинальный заголовок из отдельного репозитория: у него свой guard, и он
-# не конфликтует с копией ImGui.
-#
-# Версия 1.26 — та же, что внутри ImGui, так что метрики совпадают.
+# Самостоятельный C-растеризатор текста сцены, версия 1.26.
 # ---------------------------------------------------------------------------
 FetchContent_Declare(stb
     GIT_REPOSITORY https://github.com/nothings/stb.git

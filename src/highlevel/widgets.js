@@ -28,8 +28,9 @@
 //     точечных правок. Тема наследуется детьми от родителя.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, TAGS, def, defGet, query, wrapOne, packColor, withAlpha,
-         nodesWithFacet, registryVersion, touchRegistry } from './core.js';
+         nodesWithFacet, registryVersion, touchRegistry, nativeNodes } from './core.js';
 import { registerUINodeRenderer } from './render.js';
 
 // ---------------------------------------------------------------------------
@@ -479,8 +480,18 @@ function setAnchorOnNode(node, anchors, offsets) {
  * расчёта ребёнка размер родителя уже актуален. Запись только при изменении,
  * чтобы не плодить лишние сбросы подписи раскладки.
  */
+// Кандидаты для обходов тика — нативным фильтром (src/nodes.c), тот же
+// предикат и порядок реестра; без движка — все узлы, как раньше.
+const CONTAINER_TAG_LIST = [...CONTAINER_TAGS];
+function candidates(list, mode, tags) {
+    const native = nativeNodes();
+    return native && typeof native.filterNodes === 'function' ? native.filterNodes(list, mode, tags) : null;
+}
+
 function applyAnchors() {
-    for (const node of ctx.nodes) {
+    const list = candidates(ctx.nodes, 0) || ctx.nodes;
+    for (let i = 0; i < list.length; i++) {
+        const node = list[i];
         if (!isAnchored(node)) continue;
         const spec = anchorSpecOf(node);
         const rect = computeAnchorRect(spec.anchors, spec.offsets, anchorParentRect(node));
@@ -683,7 +694,10 @@ function themeSig(node) {
 /** Применяет темы к «грязным» узлам: подпись меняется при смене темы/стиля. */
 function applyThemes() {
     // Только ui-узлы: срез держит индекс реестра, полного обхода мира нет.
-    const nodes = nodesWithFacet('ui');
+    // Без темы по умолчанию тема нужна лишь узлам со своей темой/стилем (или
+    // ещё не сброшенным состоянием темы) — их отбирает нативный фильтр.
+    const ui = nodesWithFacet('ui');
+    const nodes = (!default_theme_active && candidates(ui, 2)) || ui;
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
         if (!inheritThemeName(node) && !node.attrs._style) {
@@ -1455,7 +1469,8 @@ function isContainer(node) {
  * трогаем (требование производительности).
  */
 function layoutTree() {
-    for (const node of ctx.nodes.slice()) {
+    const list = candidates(ctx.nodes, 1, CONTAINER_TAG_LIST) || ctx.nodes.slice();
+    for (const node of list) {
         if (!isContainer(node)) continue;
         if (node.attrs._wlaying) continue;
         if (containerSig(node) !== node.attrs._wsig) relayout(node);

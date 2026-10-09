@@ -5,8 +5,9 @@
 // кадр позиции тел из C перекладываются в узлы, а удалённые тела убираются.
 // ===========================================================================
 
+import { engine } from './native.js';
 import { ctx, Node, Wrapper, wrap, wrapOne, query, TAGS, packColor, resolveSprite, nodeBounds,
-         nodesWithFacet, engineOf } from './core.js';
+         nodesWithFacet, engineOf, nativeNodes } from './core.js';
 
 const state = {
     gravity: { x: 0, y: 2000 },
@@ -558,11 +559,17 @@ export function installWorld($) {
 
         // --- Служебное ------------------------------------------------------
         sync(dt) {
-            const t = engine.getTransforms();
             // Только узлы с живым телом: срез body держит индекс реестра, и в
             // сцене без физики цикл пуст, хотя раньше проходил весь мир
-            // (§5, P2 отчёта).
+            // (§5, P2 отчёта). Сам синк — нативный проход (src/nodes.c).
             const bodies = nodesWithFacet('body');
+            const native = nativeNodes();
+            if (native) {
+                if (bodies.length) native.syncBodies(bodies);
+                worldEvents(dt);
+                return;
+            }
+            const t = engine.getTransforms();
             for (let i = 0; i < bodies.length; i++) {
                 const node = bodies[i];
                 if (node.removed) continue;
@@ -725,9 +732,39 @@ function rayBox(ox, oy, dx, dy, box) {
 // (docs/HIGH_LEVEL_API_PERF.md §3.1). Карты прошлых значений и их ленивая чистка
 // больше не нужны: данные умирают вместе с узлом.
 
+const world_event_out = new Float64Array(3);
+
+/** События hit/heal/death/respawn/show/hide одного узла (общие для C и JS). */
+function emitWorldEvents(node, was, now_hp, vis) {
+    if (now_hp < was) {
+        node.emit('hit', { damage: was - now_hp, hp: now_hp });
+    } else if (now_hp > was) {
+        node.emit('heal', { amount: now_hp - was, hp: now_hp });
+    }
+    if (was > 0 && now_hp <= 0) {
+        node.emit('death', { killer: null });
+        node.emit('dead', { killer: null });
+    }
+    if (was <= 0 && now_hp > 0) node.emit('respawn', { hp: now_hp });
+    if (vis !== 0) node.emit(vis === 1 ? 'show' : 'hide', {});
+}
+
 function worldEvents(dt) {
     void dt;
     const nodes = ctx.nodes;
+    // Нативный проход: C находит узел с изменением (и обновляет его прошлое
+    // состояние), JS рассылает события и продолжает со следующего — так
+    // обработчик видит мир ровно как при прежнем JS-цикле.
+    const native = nativeNodes();
+    if (native) {
+        const out = world_event_out;
+        let i = native.worldEvents(nodes, 0, out);
+        while (i >= 0) {
+            emitWorldEvents(nodes[i], out[0], out[1], out[2]);
+            i = native.worldEvents(nodes, i + 1, out);
+        }
+        return;
+    }
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
         const was = node._hp_seen;

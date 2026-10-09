@@ -1,0 +1,506 @@
+{
+  "version": 1,
+  "atlas": "commander.png",
+  "style": "anime",
+  "animations": "animations.json",
+  "surface": "commander.surface.json",
+  "rig": {
+    "bones": [
+      {
+        "name": "root",
+        "pivot": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "head",
+        "parent": "root",
+        "pivot": [
+          0,
+          -22,
+          0
+        ],
+        "portraitPivot": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "armLeft",
+        "parent": "root",
+        "pivot": [
+          -9.5,
+          -10,
+          0
+        ]
+      },
+      {
+        "name": "forearmLeft",
+        "parent": "armLeft",
+        "pivot": [
+          -9.5,
+          4,
+          0
+        ]
+      },
+      {
+        "name": "armRight",
+        "parent": "root",
+        "pivot": [
+          9.5,
+          -10,
+          0
+        ]
+      },
+      {
+        "name": "forearmRight",
+        "parent": "armRight",
+        "pivot": [
+          9.5,
+          4,
+          0
+        ]
+      },
+      {
+        "name": "hipLeft",
+        "parent": "root",
+        "pivot": [
+          -5,
+          20,
+          0
+        ]
+      },
+      {
+        "name": "kneeLeft",
+        "parent": "hipLeft",
+        "pivot": [
+          -5,
+          36,
+          0
+        ]
+      },
+      {
+        "name": "hipRight",
+        "parent": "root",
+        "pivot": [
+          5,
+          20,
+          0
+        ]
+      },
+      {
+        "name": "kneeRight",
+        "parent": "hipRight",
+        "pivot": [
+          5,
+          36,
+          0
+        ]
+      },
+      {
+        "name": "tail",
+        "parent": "root",
+        "pivot": [
+          -2,
+          10,
+          -8
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "id": 1,
+        "bone": "head",
+        "portrait": true,
+        "bind": {
+          "scale": [
+            0.8,
+            0.8,
+            0.8
+          ],
+          "translation": [
+            0,
+            -22,
+            0
+          ]
+        },
+        "portraitBind": {}
+      },
+      {
+        "id": 2,
+        "bone": "head",
+        "portrait": true,
+        "bind": {
+          "scale": [
+            0.8,
+            0.8,
+            0.8
+          ],
+          "translation": [
+            0,
+            -22,
+            0
+          ]
+        },
+        "portraitBind": {}
+      },
+      {
+        "id": 3,
+        "bone": "head",
+        "portrait": true,
+        "bind": {
+          "scale": [
+            0.8,
+            0.8,
+            0.8
+          ],
+          "translation": [
+            0,
+            -22,
+            0
+          ]
+        },
+        "portraitBind": {}
+      },
+      {
+        "id": 5,
+        "bone": "head",
+        "portrait": true,
+        "bind": {
+          "scale": [
+            0.8,
+            0.8,
+            0.8
+          ],
+          "translation": [
+            0,
+            -22,
+            0
+          ]
+        },
+        "portraitBind": {}
+      },
+      {
+        "id": 4,
+        "bone": "tail"
+      },
+      {
+        "id": 6,
+        "bone": "root"
+      },
+      {
+        "id": 7,
+        "bone": "armLeft"
+      },
+      {
+        "id": 11,
+        "bone": "armRight"
+      },
+      {
+        "id": 8,
+        "bone": "hipLeft"
+      },
+      {
+        "id": 12,
+        "bone": "hipRight"
+      },
+      {
+        "id": 10,
+        "bone": "kneeLeft"
+      },
+      {
+        "id": 15,
+        "bone": "kneeRight"
+      },
+      {
+        "id": 13,
+        "bone": "kneeLeft"
+      },
+      {
+        "id": 14,
+        "bone": "kneeRight"
+      },
+      {
+        "id": 9,
+        "bone": "root"
+      },
+      {
+        "id": 20,
+        "bone": "forearmLeft"
+      },
+      {
+        "id": 21,
+        "bone": "forearmRight"
+      },
+      {
+        "id": 60,
+        "bone": "root"
+      }
+    ],
+    "joints": [
+      {
+        "name": "head",
+        "bone": "head",
+        "point": [
+          0,
+          -22,
+          0
+        ]
+      },
+      {
+        "name": "shoulderLeft",
+        "bone": "armLeft",
+        "point": [
+          -9.5,
+          -10,
+          0
+        ]
+      },
+      {
+        "name": "handLeft",
+        "bone": "forearmLeft",
+        "point": [
+          -9.5,
+          18,
+          0
+        ]
+      },
+      {
+        "name": "shoulderRight",
+        "bone": "armRight",
+        "point": [
+          9.5,
+          -10,
+          0
+        ]
+      },
+      {
+        "name": "handRight",
+        "bone": "forearmRight",
+        "point": [
+          9.5,
+          18,
+          0
+        ]
+      },
+      {
+        "name": "hipLeft",
+        "bone": "hipLeft",
+        "point": [
+          -5,
+          20,
+          0
+        ]
+      },
+      {
+        "name": "kneeLeft",
+        "bone": "kneeLeft",
+        "point": [
+          -5,
+          36,
+          0
+        ]
+      },
+      {
+        "name": "footLeft",
+        "bone": "kneeLeft",
+        "point": [
+          -5,
+          54,
+          0
+        ]
+      },
+      {
+        "name": "hipRight",
+        "bone": "hipRight",
+        "point": [
+          5,
+          20,
+          0
+        ]
+      },
+      {
+        "name": "kneeRight",
+        "bone": "kneeRight",
+        "point": [
+          5,
+          36,
+          0
+        ]
+      },
+      {
+        "name": "footRight",
+        "bone": "kneeRight",
+        "point": [
+          5,
+          54,
+          0
+        ]
+      },
+      {
+        "name": "elbowLeft",
+        "bone": "armLeft",
+        "point": [
+          -9.5,
+          4,
+          0
+        ]
+      },
+      {
+        "name": "elbowRight",
+        "bone": "armRight",
+        "point": [
+          9.5,
+          4,
+          0
+        ]
+      }
+    ],
+    "controls": {
+      "armLeft": {
+        "bone": "armLeft",
+        "axis": "z"
+      },
+      "armRight": {
+        "bone": "armRight",
+        "axis": "z"
+      },
+      "headYaw": {
+        "bone": "head",
+        "axis": "y"
+      }
+    },
+    "sockets": [
+      {
+        "name": "handRight",
+        "bone": "forearmRight",
+        "point": [
+          9.5,
+          18,
+          0
+        ]
+      },
+      {
+        "name": "handLeft",
+        "bone": "forearmLeft",
+        "point": [
+          -9.5,
+          18,
+          0
+        ]
+      },
+      {
+        "name": "back",
+        "bone": "root",
+        "point": [
+          0,
+          -2,
+          -8
+        ],
+        "rotation": [
+          0,
+          0,
+          35
+        ]
+      }
+    ]
+  },
+  "groups": {
+    "head": [
+      1,
+      2,
+      5
+    ],
+    "hair": [
+      3
+    ],
+    "tail": [
+      4
+    ],
+    "hat": [
+      5
+    ],
+    "torso": [
+      6
+    ],
+    "arms": [
+      7,
+      11,
+      20,
+      21
+    ],
+    "legs": [
+      8,
+      12,
+      10,
+      15
+    ],
+    "skirt": [
+      9
+    ],
+    "shoes": [
+      13,
+      14
+    ],
+    "costume": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      20,
+      21,
+      60
+    ]
+  },
+  "emotions": {},
+  "defaults": {
+    "body": true,
+    "motion": "idle"
+  },
+  "variants": {},
+  "equipment": {
+    "ak47": {
+      "model": "../rotsprite/weapons/ak47.character.json",
+      "socket": "handRight",
+      "grip": "trigger",
+      "rotation": [
+        106.53756919233633,
+        -36.96009575891543,
+        91.7099951295849
+      ],
+      "pose": "holdRifle"
+    },
+    "pistol": {
+      "model": "../rotsprite/weapons/pistol.character.json",
+      "socket": "handRight",
+      "grip": "trigger",
+      "rotation": [
+        0,
+        180,
+        0
+      ],
+      "pose": "holdPistol"
+    },
+    "shotgun": {
+      "model": "../rotsprite/weapons/shotgun.character.json",
+      "socket": "handRight",
+      "grip": "trigger",
+      "rotation": [
+        106.53756919233633,
+        -36.96009575891543,
+        91.7099951295849
+      ],
+      "pose": "holdRifle"
+    }
+  }
+}
