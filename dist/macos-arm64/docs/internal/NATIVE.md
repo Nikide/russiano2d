@@ -2216,8 +2216,10 @@ if (hit) engine.log('упрётся на', hit.x, hit.y);
 * **Туман.** Цвет вершины умножается на `clamp(1 − depth / fogFar, fogMin, 1)`.
 * **Текстуры аффинные** (вершинный шейдер меша без `w`), поэтому крупные грани
   нарезают на ячейки (пол — по тайлу): так искажение остаётся незаметным.
-* **Спрайты всегда поверх меша** (depth.md §4): персонажи внутри комнаты верны,
-  объекты, закрывающие персонажей, требуют глубины у спрайтов (RE2D.md §8).
+* **Ordinary batch sprites поверх mesh** (depth.md §4): это legacy mesh presentation,
+  не новый native World. В `$.re2dWorld` own shared depth/owner targets и
+  resolved anime sample depth обеспечивают sprite node/world occlusion; см.
+  [runtime](../re2d/RE2D_WORLD_RUNTIME.md).
 * **Ошибки.** Нечисловые аргументы `view` — `RangeError`; `project`/`mesh` не
   принимают обычные массивы — `TypeError`. Вершины с нечисловыми координатами
   молча отбрасываются и считаются в `stats.invalid`.
@@ -2429,7 +2431,8 @@ Re2DSprite JSON, пользовательские модели/анимации 
 
 ### `engine.re2d.worldCreate(walls, spans)` — специализированный RE2D World
 
-Новый совместимый путь синтеза обычного 2D-кадра, без `re2d.mesh`/`submitMesh`.
+Сохранённый legacy CPU путь для `$.re2d.world`, без `re2d.mesh`/`submitMesh`.
+Новый `$.re2dWorld` использует worldLoad/native registered frame ниже.
 Оба аргумента строго `Float32Array`, длина кратна записи, ≤65536 записей:
 
 * walls, stride 9: `x1,y1,x2,y2,bottom,top,r,g,b`;
@@ -2443,7 +2446,7 @@ GC или `dispose()` освобождает ресурсы.
 Методы native handle:
 `support(x,y,feet,height,step)`, `blocked(x,y,radius,bottom,top)`,
 `ray(x1,y1,h1,x2,y2,h2)`, `info()`, `dispose()` — см.
-[highlevel/re2d.md](../highlevel/re2d.md) §8.
+[legacy reference](../highlevel/re2d_legacy.md#8-сохранённый-re2dworlddescription).
 `frame(width,height,handles?,transforms?,orthoHeight=0)` возвращает обычный sprite id;
 целые width/height 1..1024. Размер кадра может изменяться. Камера — последний
 `engine.re2d.view` (углы в радианах). `handles` — массив native Re2DSprite handles,
@@ -2458,3 +2461,11 @@ World `orthoHeight=0` задаёт perspective; положительный world
 `engine.debugTextures()` — внутренний список `{id,name,width,height}` для
 публичного `$.debug.textures()`; `engine.scriptError()` — фактическая ошибка
 для `$.script.error()`. F1-панель реализована существующим DevTools на RmlUi.
+
+### Native renderer service для `$.re2dWorld` (2026-10-10)
+
+Private `engine.re2d.worldLoad(text)` validates native author/baked JSON и возвращает handle. Public wrapper выполняет conversion/configuration; native handle camera/actorAdd/actorRemove/frameRegistered/backend/quality/light/material/query/reload/watch/debug methods вызывают C runtime. Gameplay использует [public API](../highlevel/re2d.md), не private engine calls.
+
+Authority: `src/re2d_world_topology.c` loader/cells/portals; visibility C; material/light C; `src/re2d_world_runtime.c` registrations/retained frame arena/pose scheduling; `src/re2d_world_gpu.c` existing SDL_GPU execution; `src/re2d_world_bake.c` binary tables. Legacy mesh helper не является authoritative world model. Full handle signatures/defaults/lifecycle/profiler/limits — [runtime reference](../re2d/RE2D_WORLD_RUNTIME.md).
+
+GPU FINAL own shared color/owner/depth targets и direct texture copy; diagnostics may readback. CPU reference own RGBA/depth. Anime sprite sample_depth exported for actual sprite node/world occlusion; pixel/v1 fallback image depth. `worldLoad` baked wirev1/v2 validates tables, startup imports BSP/CSR/static links. `worldCreate` legacy Float32 arrays не заменяет этот topology loader.

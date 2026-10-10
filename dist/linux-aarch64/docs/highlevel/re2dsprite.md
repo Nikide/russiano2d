@@ -38,13 +38,14 @@ Info: `{sprite,texture,revision,yaw,pitch,width,height,atlasWidth,version,
 style,body,eyes,mouth,brows,surfaceSamples,joints?,path,rig,motion,parts,hotReload,
 reloads,reloadError,milestone,disposed}`. Индексы глаз/рта/бровей — 0..3.
 Joints — координаты канонического поля 128×128, не экранные, в обоих режимах v2.
-Raster v1=64, v2 pixel=128, v2 anime=256. По умолчанию pixel.
+Raster v1=64, v2 pixel=128, текущий runtime v2 anime=512 (1024 supersampling).
+Legacy C anime entry points сохраняют 256; `_sized` поддерживает 256/512. По умолчанию pixel.
 Повторная одинаковая поза/мимика не делает upload; 360° равен 0°.
 
 Pixel: минимальный масштаб 1, целый; позиция округляется после камеры.
 Nearest работает при глобальном linear. Anime: непрерывная позиция и размер,
-сглаженные края и цвета, принудительный linear независимо от режима кадра. Цвет, alpha, слой, камера, clip,
-видимость наследуются обычным путём. Angle/pivot, неравномерный scale/flip,
+сглаженные края и цвета, принудительный linear независимо от режима кадра. Для обычной 2D-отрисовки цвет, alpha, слой, камера, clip,
+видимость наследуются обычным путём; registered World имеет отдельный контракт ниже. Angle/pivot, неравномерный scale/flip,
 пользовательские шейдеры узла, outline/shadow пока не применяются.
 
 Remove, смена сцены и hot reload освобождают ресурс; finalizer страхует
@@ -115,3 +116,19 @@ const ak = $.re2dSprite.equip(hands,'ak47');
 ```
 
 Это фильтр синтеза изображения, не удаление костей и не игровая система оружия.
+
+## В новом `$.re2dWorld`
+
+```js
+// world — загруженный $.re2dWorld; character asset должен существовать.
+const hero=$.re2dSprite.from('art/hero.character.json')
+  .re2dStyle('anime').at(350,120).depth(0).size(74,80).angle(Math.PI).hide();
+const ak=$.re2dSprite.equip(hero,'ak47').re2dStyle('anime').hide();
+world.add(hero);
+```
+
+Регистрация один раз включает root и native attachment mirror. World читает node position/height/size/facing и сам задаёт camera-relative pose. `.hide()` исключает ordinary draw, но не registered world composition. Для despawn world.remove(hero), затем обычное удаление узла. PNG/rig/animations formats не меняются.
+
+Для узла со спрайтом, включённым в кадр World, depth — абсолютная высота основания, angle — направление в радианах. Рендер выбирает free span, применяет light/fog и сравнивает world depth с sample depth anime output. Pixel/v1 output не имеет этой exported sample map и использует fallback depth изображения. Node tint/alpha/flip/shader semantics обычного draw не гарантируются World. World surface normal/emissive materials не превращают atlas в PBR mesh.
+
+Pose synthesis budget и camera quantization задаются world.quality, не legacy $.re2d.poseBudget. Animation orchestration остаётся existing sprite wrapper, expensive world synthesis/composition — C. Полный контракт: [Re2DSprite World](../re2d/RE2DSPRITE_WORLD.md), [World guide](../RE2D_WORLD_GUIDE.md), [migration](../re2d/RE2D_MIGRATION.md).

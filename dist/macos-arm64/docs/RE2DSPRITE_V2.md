@@ -6,6 +6,11 @@
 128×128 (pixel) или 512×512 со сглаживанием (anime) в существующий батч. UI остаётся RmlUi, игровая оркестрация — `$`.
 Старые атласы [v1](RE2DSPRITE_V1.md) и их растер 64×64 продолжают работать.
 
+В новом `$.re2dWorld` этот же anime output дополняется resolved sample depth
+для общего перекрытия мира и спрайтов и shared lighting/fog. Pixel/v1 используют
+fallback image depth. Подключение через world.add, sockets/equipment и limits —
+[Re2DSprite World](re2d/RE2DSPRITE_WORLD.md). Это не изменение layout PNG.
+
 ## PNG и координаты
 
 RGBA, квадрат 1024/2048/3072/4096; поставляемые ассеты — **4096×4096**.

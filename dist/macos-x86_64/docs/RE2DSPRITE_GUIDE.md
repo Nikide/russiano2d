@@ -1,6 +1,6 @@
 # R2D Re2DSprite — руководство разработчика и художника
 
-Редакция 2026-10-08. PNG v2 + описание модели JSON v1 + анимации JSON v1.
+Редакция 2026-10-10. PNG v2 + описание модели JSON v1 + анимации JSON v1.
 Это документация реализованного прототипа, включая его ограничения.
 Точный компактный контракт: [RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md).
 API: [highlevel/re2dsprite.md](highlevel/re2dsprite.md).
@@ -17,7 +17,10 @@ Re2DSprite синтезирует обычный спрайт R2D из разв�
 верхней части PNG; нижняя часть содержит координаты и принадлежность
 каждого участка. При повороте C преобразует эти точки/непрерывные участки,
 разрешает глубину внутри модели и записывает изображение в текстуру.
-Текстура рисуется существующим 2D-батчем, с обычной камерой и слоями R2D.
+В обычной сцене текстура рисуется существующим 2D-батчем. В новом
+`$.re2dWorld` anime output дополнительно имеет resolved sample depth; native
+compositor освещает его, применяет span fog и объединяет с world depth, после
+чего весь world снова рисуется обычным 2D-кадром. PNG/rig/animations остаются теми же.
 
 PNG не является sprite sheet: в нём нет заранее нарисованных направлений
 0/45/90° или кадров ходьбы. JSON не содержит треугольный OBJ-меш.
@@ -30,6 +33,11 @@ PNG не является sprite sheet: в нём нет заранее нари
 Сначала автор задаёт форму, затем рисует материал, соответствующий её UV.
 Готовые виды персонажа полезны как художественный референс, но не являются
 входными кадрами Re2DSprite.
+
+Для нового World: [полный контракт персонажа](re2d/RE2DSPRITE_WORLD.md),
+[создание мира](RE2D_WORLD_GUIDE.md), [public API](highlevel/re2d.md),
+[миграция старой игры](re2d/RE2D_MIGRATION.md). Никакой конвертации персонажа
+в generic mesh для этого не требуется.
 
 ## 2. Какие файлы нужны
 
@@ -63,9 +71,10 @@ PNG не является sprite sheet: в нём нет заранее нари
 
 G / «Предмет»: без предмета → АК → пистолет → дробовик. Стрелки меняют yaw
 и pitch, пробел включает автоповорот. L переключает стойку, ходьбу, бег;
-C — костюм; H — волосы; V — эмоцию; E/M — глаза/рот; B/T — моргание/речь;
+H — волосы; V — эмоцию; E/M — глаза/рот; B/T — моргание/речь;
 Q/W — независимый поворот головы; R перечитывает данные. Кисти можно тянуть
-мышью. Движение пока проигрывается на месте, позицию на карте задаёт игра.
+мышью. Движение проигрывается на месте, позицию на карте задаёт игра.
+Переключателя костюма C в текущем демо нет; donor/variant API остаётся authoring возможностью.
 
 Готовый персонаж:
 
@@ -740,3 +749,19 @@ animations и build JSON. Для релиза достаточно runtime PNG/J
 а не переопределять существующие байты незаметно для загрузчика.
 
 Полные формулы, функции и таблица частей: [Математика Re2DSprite](RE2DSPRITE_MATH.md).
+
+## 18. Использование готового персонажа в новом World
+
+```js
+// world — $.re2dWorld.load(...); assets уже находятся в игре.
+const hero=$.re2dSprite.from('art/hero.character.json',{id:'hero'})
+  .re2dStyle('anime').at(350,120).depth(160).size(74,80).angle(Math.PI).hide();
+world.add(hero);
+const weapon=$.re2dSprite.equip(hero,'ak47').hide();
+```
+
+В этом контексте at — XY карты, depth — абсолютная высота основания, size — размер в мире, angle(rad) — направление тела. World берёт camera-relative yaw/pitch сам. Не вызывайте re2dPose каждый frame ради камеры; явный pose полезен для ordinary 2D preview. Hide подавляет отдельную отрисовку, root registry продолжает composition.
+
+Для художника atlas/character/animation format не меняется. Anime сохраняет depth отсчётов в native sample map; pixel/v1 используют fallback image depth. Lighting/fog/world occlusion выполняются native. World normal/emissive textures принадлежат поверхности карты; это не новые обязательные каналы character atlas. Alpha world coverage threshold128 ограничивает полупрозрачность персонажа.
+
+Оружие использует прежние sockets/grip/equip; attached child входит через root mirror. Global poseBudget1/poseStep3° — policy нового world, дорогая animation synthesis может отставать по времени. Controller, height collision, jumping/falling, AI/health/hitbox принадлежат игре. Все детали lifecycle/performance/limitations — [RE2DSPRITE_WORLD.md](re2d/RE2DSPRITE_WORLD.md).

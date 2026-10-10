@@ -1,4 +1,4 @@
-# Russiano2D 0.1.27 — Linux x86_64: инструкция для ИИ-агента
+# Russiano2D 0.1.28 — Linux x86_64: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"0.1.27","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"0.1.28","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -154,18 +154,19 @@ call(cmd="quit")
 * Производительность компонентов `$` API — `docs/API_PERFORMANCE.md`
 * R2D DevTools — `docs/DEVTOOLS.md`
 * Конвенции Russiano (R2D и R3D) — `docs/R2D_R3D_CONVENTIONS.md`
-* Re2D — 2.5D как дополнение к 2D — `docs/RE2D.md`
+* Re2D: мир, персонажи и обычный 2D-кадр — `docs/RE2D.md`
 * R2D Re2DSprite — руководство разработчика и художника — `docs/RE2DSPRITE_GUIDE.md`
 * Re2DSprite JSON v1: модели, анимации и сокеты — `docs/RE2DSPRITE_JSON.md`
 * Re2DSprite: развёртка и математика всех частей тела — `docs/RE2DSPRITE_MATH.md`
 * Re2DSprite v1 — развёртка всего персонажа, прототип головы — `docs/RE2DSPRITE_V1.md`
 * Re2DSprite v2 — большой PNG персонажа — `docs/RE2DSPRITE_V2.md`
-* RE2D World: устройство, проверки и ограничения — `docs/RE2D_WORLD_GUIDE.md`
-* RE2D World: native CPU optimisation — `docs/RE2D_WORLD_PERF.md`
+* Re2D World: руководство по новой игре — `docs/RE2D_WORLD_GUIDE.md`
+* Re2D World: производительность и измерения — `docs/RE2D_WORLD_PERF.md`
 * Детерминированная запись и воспроизведение (record / replay) — `docs/RECORD_REPLAY.md`
 * Сборка и публикация — `docs/RELEASING.md`
 * Roadmap расширения R2D — `docs/ROADMAP.md`
 * Russiano2D SDK — `docs/SDK.md`
+* Недостающие возможности SDK и Re2D — `docs/SDK_IMPLEMENTATION_GAPS.md`
 * SDK: проверенное состояние и ограничения — `docs/SDK_VERIFICATION.md`
 * Тестирование мира в R2D — `docs/TESTING.md`
 * Как сделать такое же демо на `$` — `docs/TUTORIAL.md`
@@ -190,7 +191,7 @@ call(cmd="quit")
 * Кривые и градиенты — `$.curve` — `docs/highlevel/curve.md`
 * Катсцены — `$.cutscene` — `docs/highlevel/cutscene.md`
 * Отладка — `$.debug` и `$.console` — `docs/highlevel/debug.md`
-* Z-буфер и псевдо-3D — `$.gfx.depth` — `docs/highlevel/depth.md`
+* Z-буфер ordinary batch — `$.gfx.depth` — `docs/highlevel/depth.md`
 * DevTools — `$.devtools` — `docs/highlevel/devtools.md`
 * Диалоги — `$.dialog` — `docs/highlevel/dialog.md`
 * Потоки и таймеры — `$.flow` — `docs/highlevel/flow.md`
@@ -217,7 +218,8 @@ call(cmd="quit")
 * Задания — `$.quest` — `docs/highlevel/quest.md`
 * Генерация рейда — `$.raid` — `docs/highlevel/raid.md`
 * `$.random` — детерминированная случайность — `docs/highlevel/random.md`
-* Re2D — 2.5D вид того же мира — `docs/highlevel/re2d.md`
+* Re2D World — public `$` API — `docs/highlevel/re2d.md`
+* Legacy Re2D: room/kind и прежний World — `docs/highlevel/re2d_legacy.md`
 * Re2DSprite — `$.re2dSprite` — `docs/highlevel/re2dsprite.md`
 * `$.blend` и `$.viewport` — смешивание и render target — `docs/highlevel/render.md`
 * Реплеи — `$.replay` — `docs/highlevel/replay.md`
@@ -1674,7 +1676,7 @@ $.world.bodyAt(x, y, { mask: 0x2 });                  // кто из враго�
 (`.oneWay(true, -Math.PI / 2)` — вверх по умолчанию).
 
 **Суставы.** `.joint(цель, opts)` возвращает id; `opts` — как в
-[internal/NATIVE.md](internal/NATIVE.md#enginecreatejointopts--engineestroyjointid), плюс сокращения:
+[internal/NATIVE.md](internal/NATIVE.md#enginecreatejointopts--enginedestroyjointid), плюс сокращения:
 `a`/`b` — точки крепления в мировых пикселях. Для `revolute` и `weld` вторая
 точка по умолчанию совпадает с первой (крепление в одну точку), для
 `distance` — берутся центры тел. Уничтожение: `$.world.destroyJoint(id)`,
@@ -1704,7 +1706,7 @@ $('#hero').on('hit', e => {              // удар быстрее порога
 `.controls({ axis: 'both', jump: 'space' })` — двигает узел или его тело,
 прыжок по `space`/`w`/`↑` только когда узел на земле.
 У узла вида Re2D под Re2D-камерой те же схемы ведут по **взгляду** камеры
-(`W` — вперёд, `A`/`D` — боком), см. [re2d.md](highlevel/re2d.md) §4.
+(`W` — вперёд, `A`/`D` — боком), см. [legacy Re2D](highlevel/re2d_legacy.md#4-игрок-от-первого-лица).
 
 ## 9. Здоровье
 
@@ -2883,19 +2885,21 @@ $.ready(() => {
 [RECIPES](tutorial-platformer.md) и [internal/NATIVE.md](internal/NATIVE.md) — низкий уровень.
 
 Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](RE2DSPRITE_V2.md),
-[API `$`](highlevel/re2dsprite.md). Демо `rotsprite` — переключение костюмов,
-моргание, ходьба/бег на месте и перетаскивание кистей.
+[API `$`](highlevel/re2dsprite.md). Демо `re2dsprite` — equipment, волосы,
+моргание, ходьба/бег на месте и перетаскивание кистей; старое имя rotsprite — alias.
 
 Re2DSprite JSON, пользовательские модели/анимации и сокеты: [RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md). High-level `$.re2dSprite.from`, `$.re2dSprite.equip`, `.re2dAttach`, `.re2dDetach`, `.re2dBone`, `.re2dLayer`, `.re2dSeek`, `.re2dVariant`.
 
-### Специализированный RE2D World
+### Native Re2D World
 
-`$.re2d.world({walls,cells})` — XY BSP + vertical spans, native queries и
-синтез конечного обычного 2D sprite. Несколько этажей на одинаковых XY,
-перспективная/ортографическая проекция и приватная композиция Re2DSprite.
-[Контракт и ограничения](highlevel/re2d.md#8-re2d-world--новый-минимальный-bspspan-срез),
-[аудит и проверки](RE2D_WORLD_GUIDE.md).
-Демо с комнатами, лестницей и АК: `--game demos/re2d_bsp_world`.
+`$.re2dWorld.load(path)` / `.fromJSON(text)` — explicit native cells/XY BSP/free spans/portals, constrained textured surfaces, classic/dynamic lighting/shadows/fog и shared depth с Re2DSprite. `world.add(sprite)` включает изображения существующего узла `$` и его присоединённых спрайтов в кадр; `world.render(view,width,height)` выводит ordinary 2D frame. Горячие пути рендера исполняются в C, GPU-путь — через SDL_GPU. World не создаёт отдельный тип игровой сущности или её жизненный цикл.
+
+[Полное руководство](RE2D_WORLD_GUIDE.md), [public API](highlevel/re2d.md),
+[персонажи/оружие](re2d/RE2DSPRITE_WORLD.md), [форматы/SDK](re2d/RE2D_WORLD_FORMAT.md),
+[миграция](re2d/RE2D_MIGRATION.md), [performance](RE2D_WORLD_PERF.md).
+Новые demos: `demos/re2d_world_renderer_lab/acceptance`, `demos/re2d_dust2`.
+
+`$.re2d.room`, `.kind(Re2D)`, `$.re2d.world(description)` остаются [legacy API](highlevel/re2d_legacy.md), не alias новой world registration/render signature. Существующее `demos/re2d_bsp_world` относится к прежнему CPU пути.
 
 
 ---
@@ -3617,6 +3621,19 @@ python3 web/export.py --game demos --out dist/web-demos
 рядом с output. Игра распространяется каталогом: executable + `lib/`.
 Конфликтующий файл библиотеки отклоняется — выберите пустой каталог вывода.
 Пакетный SDK проверяется распаковкой настоящего архива, не только запуском из checkout.
+
+### Сторонние библиотеки поздних подсистем
+
+| Библиотека | Где | Для чего | Лицензия в пакете |
+|---|---|---|---|
+| tinyexr 1.0.13 | `cmake/WorldEXR.cmake`, `src/re2d_world_exr.cpp` | декодирование EXR-неба World при загрузке; рендера и сцены нет | `share/licenses/tinyexr` |
+| Steam Audio 4.8.1 (HRTF) | `cmake/SteamAudio.cmake`, `R2D_ENABLE_STEAM_AUDIO=ON` | только бинауральная DSP поверх SDL_mixer; топологию решает World | `third_party/steam_audio` |
+| ufbx 0.20.1 | `cmake/SDKFBX.cmake` | импорт FBX-движения командой `r2d-sdk animation-import`; **только SDK**, в runtime игры не линкуется | `share/licenses/ufbx` |
+
+Steam Audio подгружается как динамическая библиотека (`phonon`) для macOS,
+Windows x64 и Linux x86_64; на остальных платформах и в Web сборка идёт без HRTF.
+Свой SDK указывается через `-DR2D_STEAM_AUDIO_SDK=<путь>`. Источники скачиваются
+по зафиксированному SHA-256.
 
 
 ---
@@ -4990,6 +5007,9 @@ export default function install($) {
 | Сцена | Что показывает | Ключевые вызовы |
 |---|---|---|
 | `re2d_world` | **Re2D: 2.5D от первого лица** над плоским миром — комната-коробка с текстурами, игрок (WASD + мышь), три добрых маскота Re2DSprite, которые замечают вас, поворачиваются, улыбаются и говорят. Описание — [README](../demos/re2d_world/README.md) | `$.camera.kind(Re2D)`, `$.re2d.room`, `.kind(Re2D)`, `.controls`, `$.re2dSprite.from`, `$.ui.doc` |
+| `re2d_bsp_world` | **Re2D World: комнаты, этажи и АК** — XY BSP, вертикальные интервалы, оружие первого лица. Запуск отдельным проектом: `build/russiano2d --game demos/re2d_bsp_world`. [README](../demos/re2d_bsp_world/README.md) | `$.re2d.world`, `$.re2dSprite` |
+| `re2d_world_renderer_lab` | **лаборатория рендерера World**: шесть камер с эталонными кадрами CPU/GPU, свет, тени, туман, порталы, прозрачность, декали; вложенная `acceptance`. Запуск: `build/russiano2d --game demos/re2d_world_renderer_lab` | `$.re2d.world`, `.light`, `.material`, `.sky` |
+| `re2d_dust2` | **Dust II по маршрутам** — оригинальная карта из ячеек: A/B, спавны, двери, тоннели, рампы, клуб с музыкой (HRTF), NPC Re2DSprite, шаги и ветер. Запуск: `build/russiano2d --game demos/re2d_dust2 --seed 7`. [README](../demos/re2d_dust2/README.md) | `$.re2dWorldAudio`, `.sky` (EXR), контроллер в стиле Quake |
 | `re2dsprite` | **один атлас всего тела Руси-тян**: прототип головы, yaw −180..180°, pitch, nearest и привязка к пикселям. Стрелки — вращение, пробел — авто, Esc — меню. Базовый PNG и описание — [README](../demos/rotsprite/README.md) | `$.re2dSprite.create`, `.re2dPose`, `$.ui.doc` |
 | `platformer` | Box2D, листы анимации, монеты, враги, параллакс, HUD, пауза | `.controls`, `.frames`, `.animate`, `.on('death')`, `<ui.*>` |
 | `shooter_witch` | **ночной лес**: зомби-шутер в духе Vampire Survivors — авто-стрельба по ближайшему, волны, опыт, карты апгрейдов, фонари как единственный свет, тени от стволов, кровь и лужи | `<tilemap>` + `.autotile()`, `$.gfx.light.polygon`, `$.audio.zone/obstacles/damping`, `$.fx.*`, `$.gfx.postPreset` |
@@ -5056,6 +5076,11 @@ Re2DSprite v2: [большой PNG, мимика, костюмы и псевдо
 его можно прочитать в истории Git. Справочник поведения —
 [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) и [highlevel/](highlevel/).
 
+Текущие доработки SDK/Re2D от 2026-10-10, включая Dust2, небо, анимации и
+звук, — [SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md).
+Этот список содержит отдельные критерии приёмки и не изменяет статус
+исторической сверки ниже.
+
 ## 1. Запросы и диагностика
 
 В [ROADMAP.md](ROADMAP.md) остаются операторы `nearest` / `inside` /
@@ -5074,13 +5099,15 @@ ImGui удалён из сборки и runtime. F1 открывает RmlUi-п�
 
 ## 3. Re2D World
 
-Реализованы XY BSP, вертикальные spans, same-XY многоэтажность, support /
-blocked / ray и синтез обычного 2D-кадра. Остались runtime portals/PVS,
-автоматическая топология cells, текстурные surfaces/полигональные floors,
-непрерывные slopes, sweep/полный footprint и точная глубина samples персонажа.
+Реализованы XY BSP, вертикальные spans, same-XY многоэтажность, порталы с
+экранными окнами и обходом BSP, слитые поверхности, материалы, нативный свет и
+тени, туман, декали, панорамное небо (PNG или EXR), точная глубина samples
+Re2DSprite, GPU-путь SDL_GPU с CPU-эталоном и World audio (HRTF). Остались:
+автоматическая топология cells, непрерывные slopes как физические примитивы,
+sweep/полный footprint, прохождение звука через материалы и реверберация.
 SDK генерирует лестницы и ступенчатые slopes; это не новые физические примитивы.
-Порталы/PVS в compiled JSON не используются runtime (`runtimeUsed:false`).
-Ограничения compositor и измерения — [RE2D_WORLD_GUIDE.md](RE2D_WORLD_GUIDE.md),
+Границы и очередь — [re2d/RE2D_WORLD_RUNTIME.md](re2d/RE2D_WORLD_RUNTIME.md),
+[SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md); измерения —
 [RE2D_WORLD_PERF.md](RE2D_WORLD_PERF.md).
 
 ## 4. SDK после acceptance фаз 0–7
@@ -5088,7 +5115,7 @@ SDK генерирует лестницы и ступенчатые slopes; эт
 [SDK.md](SDK.md) описывает реализованные срезы; все компоненты дерева §8 спецификации
 (Tilemap, Particle, Collision/Physics, Parallax, Font, Audio, Input, RmlUi Studio, DevTools,
 шаблоны, сборки движка) есть и покрыты тестами. Следующие возможности большой
-спецификации остаются отдельными задачами: FBX, автоматическая метрика
+спецификации остаются отдельными задачами: универсальный FBX-ретаргетинг (ограниченный motion-import для Mixamo уже есть), автоматическая метрика
 source↔Re2D comparison, кисти поверхности, графические кривые, выбор элемента кликом в
 предпросмотре RmlUi Studio, drag-ресайз фигур коллизии и зон акустики.
 
@@ -6985,263 +7012,61 @@ profile
 
 ---
 
-## Re2D — 2.5D как дополнение к 2D
+## Re2D: мир, персонажи и обычный 2D-кадр
 
 <sub>источник: `docs/RE2D.md`</sub>
 
-# Re2D — 2.5D как дополнение к 2D
+# Re2D: мир, персонажи и обычный 2D-кадр
 
-Re2D — переосмысление 2.5D в Russiano2D. Это **дополнение**, а не замена:
-всё, что работает в 2D, продолжает работать байт-в-байт, а Re2D включается
-явно, словом `kind`.
+Редакция 2026-10-10. Текущий public API мира — `$.re2dWorld`; персонажа — `$.re2dSprite`. Эта страница заменяет прежний план room/mesh. Старые API сохранены и описаны в [совместимости](highlevel/re2d_legacy.md).
 
-```js
-$('<npc>', { id: 'russi' }).at(500, 400).kind(Re2D);   // этот узел живёт в 2.5D
-$('<npc>', { id: 'bob' }).at(300, 400);                // kind не указан — обычный 2D
-$.camera.kind(Re2D);                                   // камера от первого лица
+## Как устроен мир
+
+Re2D хранит пространственную карту в XY. BSP делит эти две координаты. В каждой cell есть свободные интервалы высоты — VerticalSpans. Например, `[0,128)` и `[160,288)` находятся в одной XY-области; промежуток между ними непроходимый. Пол, потолок, стена, уклон и portal — специализированные данные мира. Наличие высоты не вводит generic mesh scene, ECS или универсальную 3D-физику. Игровые объекты остаются существующими узлами `$` с атрибутами, компонентами и событиями; отдельных классов Sprite node, ActorComponent или второго игрового реестра World не создаёт.
+
+```mermaid
+flowchart LR
+  A[Карта XY и VerticalSpans] --> B[Native C: BSP и portal visibility]
+  B --> C[Поверхности, свет, тени и Re2DSprite]
+  C --> D[SDL_GPU: общий depth и composition]
+  D --> E[Обычный 2D-кадр R2D]
+  F[Игра через $] --> B
 ```
 
-Статус на 2026-10-08: разделы 1–9 описывают прежний перспективный
-room/mesh-путь, а не готовый BSP/span World. Фактический аудит и выполненный
-минимальный совместимый срез — [RE2D_WORLD_GUIDE.md](RE2D_WORLD_GUIDE.md).
-Новый `$.re2d.world` — [highlevel/re2d.md](highlevel/re2d.md) §8.
-Канонический принцип: spatial description → projection → ordinary 2D representation.
-Исторические замеры ниже не являются замерами нового World.
+`$` создаёт/настраивает объекты и делает игровые запросы. C владеет картой, видимостью, light lists, shadow construction, очередями синтеза ракурсов спрайтов и ресурсами. SDL_GPU исполняет выбранный GPU путь; CPU reference сохраняет ту же модель. GPU triangles — внутренний способ рисования, а не авторский формат карты.
 
-Связанные документы: [PHILOSOPHY.md](PHILOSOPHY.md) (константы),
-[AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md) (рабочий цикл),
-[RE2DSPRITE_V2.md](RE2DSPRITE_V2.md) (персонаж из одного PNG),
-[highlevel/depth.md](highlevel/depth.md) (z-буфер и меш),
-[R2D_R3D_CONVENTIONS.md](R2D_R3D_CONVENTIONS.md) (Re2D — часть R2D, а не мост к R3D).
+## Что происходит с Re2DSprite
 
----
+Персонаж остаётся PNG + character/animations JSON. C синтезирует его ракурс из данных поверхности. Регистрация через `world.add(sprite)` позволяет миру рассчитать угол от камеры, выбрать span, применить его свет/туман и объединить sample depth anime-персонажа с world depth. Pixel/v1 используют fallback глубину изображения. За стеной персонаж скрывается, на верхнем этаже получает верхний свет. Native composition включает socket attachments, например AK.
 
-## 1. Что такое Re2D
+Положение задаётся `.at(x,y)`, высота основания — `.depth(h)`, физический размер изображения в мире — `.size(w,h)`, направление тела — `.angle(rad)`. Это семантика **спрайта узла `$`, включённого в кадр World**; обычный 2D-путь продолжает трактовать depth как порядок. Camera yaw/pitch и explicit sprite pose — в градусах, node angle — в радианах. World сам задаёт camera-relative pose, поэтому для поворота тела меняйте angle, а не вызывайте re2dPose каждый кадр.
 
-**Re2D — способ посмотреть на тот же 2D-мир как на 2.5D.**
+Новый мир не превращает Box2D в многоэтажную физику. Игра выбирает достижимый пол через support, проверяет препятствия через blocked/ray и задаёт высоту узла. Прыжки, падение, health, оружие и AI принадлежат игре.
 
-* Мир остаётся плоским: узлы лежат на полу в координатах `(x, y)`, физика —
-  обычный Box2D «вид сверху», запросы (`within`, `raycast`), события, `$.nav`,
-  сохранения, реплеи работают как раньше.
-* Re2D добавляет **высоту** (`z`, подъём над полом), **камеру с перспективой**
-  (от первого лица: поворот мышью во все стороны, наклон вверх-вниз) и
-  **рисование** узлов в перспективе: пол, потолок, стены-блоки, билборды.
-* Персонажи — [Re2DSprite](RE2DSPRITE_V2.md): один PNG синтезирует спрайт
-  под любой угол `yaw/pitch`. Re2D считает угол из положения камеры, и
-  персонаж плавно поворачивается, когда игрок обходит его кругом (в Doom
-  для этого рисовали 8 фиксированных ракурсов).
+## Какие возможности доступны
 
-Чего Re2D **не** делает: не заменяет 2D, не вводит второй физический мир, не
-добавляет редактор, не тянет за собой R3D. Это один вид мира, а не второй
-движок.
+- XY cells/BSP, несколько spans, portals и room-over-room; walls/floors/ceilings/continuous slopes.
+- Textured albedo, optional normal/emissive, classic RGB span light, native dynamic lights, height-aware shadows и per-span fog.
+- Общая глубина изображения мира и спрайтов; native attachment mirror; opaque/masked/translucent/additive world materials.
+- Sky backdrop, bounded decals, binary doors, изменение flat-span heights, transactional reload/watch.
+- 13 diagnostic views, native counters, pose scheduling и измеряемые caches/batching/static-light associations.
 
-## 2. Правила (проверяются тестами)
+Текущие cells прямоугольные. Рендер не обещает arbitrary polygon world, smooth sliding doors, per-texel transparent shadows или массовую anime-анимацию при 60 FPS. Наблюдения запущенного GZDoom и hosted Linux CI не заявляются выполненными. Полные границы — [runtime reference](re2d/RE2D_WORLD_RUNTIME.md).
 
-1. **Ноль стоимости для 2D.** Узел и камера без `kind` идут по прежнему коду.
-   Прогон старых тестов и демо с `--fixed-dt/--seed` даёт тот же результат, а
-   `tools/bench_highlevel.py` не показывает регрессии. Отдельный тест
-   сравнивает кадры 2D-сцены до и после.
-2. **Тот же `$`.** `$.re2d.room` создаёт обычные узлы мира, а не отдельную
-   подсистему физических сущностей. Методы узла те же
-   (`.at`, `.size`, `.sprite`, `.playClip`); `kind` меняет смысл ровно там, где
-   это записано в таблице §5. Новое слово заводится, только если у старого нет
-   смысла в 2.5D (например, `$.camera.pitch`).
-3. **`kind` — данные, а не класс.** Строка в узле; поведение берётся из
-   реестра `$.kinds`. Никаких `new`, `extends`, `this` в игровом коде. В
-   `inspect`/`query` `kind` виден как факт.
-4. **Мир — истина, Re2D — вид.** Позиция, размер, тело, слои, события остаются
-   2D-полями узла. Re2D читает их и рисует, но не хранит вторую копию.
-5. **Быстрота — в C, оркестрация — в JS.** Проекция вершин и отсечение — один
-   нативный проход на кадр (`engine.re2d.*`); JS собирает сцену и вызывает его
-   пакетом. Поштучных переходов C↔JS на вершину нет.
-6. **Структурные данные для агента.** `$.camera.info()` и `inspect` отдают
-   числа и факты (`{ kind, yaw, pitch, fov, eye }`), а не пояснения.
-7. **Детерминизм.** Вид зависит только от состояния мира и камеры;
-   `--fixed-dt`, `--seed`, `--record/--replay` дают один и тот же кадр.
+## С чего начать
 
-## 3. Принятые решения
+| Задача | Документ |
+| --- | --- |
+| Создать мир, подключить персонажа и пройти карту | [World guide](RE2D_WORLD_GUIDE.md) |
+| Найти точную сигнатуру/default/limit | [Public API](highlevel/re2d.md), [runtime reference](re2d/RE2D_WORLD_RUNTIME.md) |
+| Свет, depth, оружие и pose budget персонажа | [Re2DSprite в World](re2d/RE2DSPRITE_WORLD.md) |
+| Авторский JSON, portals, stairs/slopes и native bake | [World formats и SDK](re2d/RE2D_WORLD_FORMAT.md), [SDK](SDK.md#9-re2d-world-studio) |
+| Перенести старую room/World игру | [Migration](re2d/RE2D_MIGRATION.md) |
+| Создать PNG/rig/animation персонажа | [Re2DSprite guide](RE2DSPRITE_GUIDE.md), [JSON](RE2DSPRITE_JSON.md), [математика](RE2DSPRITE_MATH.md) |
+| Измерить стоимость кадра | [Performance](RE2D_WORLD_PERF.md) |
+| Проверить исходные требования | [Document acceptance audit](re2d/RE2D_DOCUMENT_ACCEPTANCE_AUDIT.md) |
 
-Часть решений — ответы владельца проекта, часть — рекомендованные значения,
-принятые, чтобы фазы шли без остановок. Любое можно пересмотреть до фазы, в
-которой оно используется.
-
-| Вопрос | Решение | Источник |
-|---|---|---|
-| Как называется константа | `Re2D`: канонически `$.Re2D`, плюс глобальный алиас `Re2D` | владелец |
-| Значение константы | замороженная строка `'re2d'` — переживает JSON/prefab/`inspect`; `'2d'` — значение по умолчанию | рекомендация |
-| Вид камеры | как в Doom: от первого лица, мышь крутит куда угодно | владелец |
-| Наклон камеры | настоящий (перспективная проекция с `pitch`), не сдвиг горизонта | владелец |
-| Горячий путь | в C; JS остаётся прослойкой `$` | владелец |
-| Физика | плоская, Box2D «вид сверху»; `z` — только для рисования | рекомендация |
-| Смешивание | в одном мире можно держать 2D- и Re2D-узлы | рекомендация |
-| Mascots демо | три Re2DSprite-персонажа, выбираем по ходу | владелец |
-| Git | локальная ветка `re2d`, коммит на каждую фазу, без push | владелец |
-| Старые имена `rot*` | остаются алиасами; удаление — отдельным решением | рекомендация |
-
-## 4. Архитектура
-
-```text
- игра (JS, $)                      движок (C)
- ─────────────                     ──────────
- $('<wall>').kind(Re2D)  ─┐
- $('<floor>')…            ├─►  src/highlevel/re2d.js  ──►  engine.re2d.*
- $('<npc>').kind(Re2D)    │      (реестр $.kinds,           (камера, проекция,
- $.camera.kind(Re2D)     ─┘       сбор сцены, мышь)          отсечение, меш)
-                                         │
-                         render.js: kind-хук в drawWorldNodeInner
-                                         │
-                         engine.submitMesh (z-буфер)  +  спрайты-билборды
-```
-
-### 4.1. Хук в рендере
-
-В `render.js` один узкий хук: у узла с `kind`, для которого зарегистрирован
-рендерер вида, отрисовку берёт рендерер вида. Узел без `kind` проходит ровно
-одну проверку `node.kind !== '2d'` — это и есть вся плата за 2D (§2.1).
-Проход мира для Re2D-камеры (пол, потолок, блоки) вызывается перед циклом
-узлов. Камера без `kind` проход не меняет.
-
-### 4.2. Нативные примитивы (`engine.re2d.*`)
-
-Минимум, который нужен виду, и только то, что экономит работу на кадр:
-
-| Вызов | Назначение |
-|---|---|
-| `engine.re2d.view(x, y, eye, yaw, pitch, fov)` | задать вид кадра: положение на полу, высота глаз, углы, FOV |
-| `engine.re2d.project(points, out)` | пакетная проекция точек `(x, y, z)` → экран `(sx, sy, depth, scale)` для билбордов |
-| `engine.re2d.mesh(verts, count, texture, flags)` | мировые треугольники → отсечение по ближней плоскости → экранные вершины → `submitMesh` с глубиной |
-
-Технические решения:
-
-* **Глубина меша** — `z = 1 − near/d` в диапазоне 0..1 (ближе — меньше), как
-  ждёт z-буфер из [depth.md](highlevel/depth.md).
-* **Текстуры стен и пола** — аффинные в железе (вершинный шейдер без `w`), поэтому
-  крупные грани нарезаются на ячейки (пол — по тайлу); погрешность видна как
-  мягкая «PS1-кривизна» только на очень крупных гранях и убирается нарезкой.
-* **Отсечение по ближней плоскости** — в C (Sutherland–Hodgman на треугольник),
-  без него стена вплотную рвётся.
-* **Спрайты всегда поверх меша** (ограничение z-буфера, depth.md §4). Для
-  мира-коробки это верно: персонажи внутри комнаты не могут быть закрыты
-  стеной. Столбы и препятствия внутри комнаты — отдельная задача (§8).
-* **Мышь** — режим относительного ввода окна (`$.window.mouseLock`), без него
-  нельзя «крутить куда угодно».
-
-### 4.3. Что в Re2D означает «обычный» узел
-
-| Тег | Re2D-рендер |
-|---|---|
-| `<wall>` | блок: прямоугольник `x,y,w,h` на полу, поднятый на `height` (по умолчанию высота комнаты) |
-| `<floor>`, `<ceiling>` | горизонтальная плоскость с тайловой текстурой (новые теги, имеют смысл только в Re2D) |
-| `<rotsprite>` (Re2DSprite) | билборд; `yaw` считается из положения камеры и направления узла |
-| `<sprite>`, `<npc>`, `<enemy>`, `<player>`, `<pickup>` | билборд, стоящий на полу |
-| остальные | как в 2D (в Re2D-проходе не рисуются, если не имеют смысла в перспективе) |
-
-## 5. Таблица «метод × вид»
-
-Записываются только различия. Всё, чего здесь нет, в Re2D работает как в 2D.
-
-| Метод | 2D | Re2D |
-|---|---|---|
-| `.kind()` | `'2d'` | `'re2d'` |
-| `.at(x, y)` | позиция | позиция на полу (та же, что у физики) |
-| `.depth(z)` / `.z` | порядок отрисовки | **высота** над полом (px), порядок считается из расстояния |
-| `.size(w, h)` | размер спрайта | `w` — ширина, `h` — высота билборда |
-| `.rotate(deg)` / `.angle(rad)` | поворот спрайта | направление взгляда узла (для Re2DSprite — `yaw` тела) |
-| `.sprite(path)` | спрайт | текстура билборда/граней |
-| `$.camera.at(x, y)` | центр камеры | позиция глаз на полу |
-| `$.camera.follow(sel)` | слежение | глаза на узле, на высоте `eye` |
-| `$.camera.rotation(rad)` | крен кадра | **yaw** (куда смотрим); у 2D-кадра и у Re2D свои углы, один не перетекает в другой |
-| `$.camera.zoom(k)` | масштаб | масштаб FOV (1 = базовый) |
-| `$.camera.pitch(deg)` | — | наклон вверх-вниз (клемп ±85°) |
-| `$.camera.eye(h)` | — | высота глаз над полом |
-| `$.camera.fov(deg)` | — | угол обзора по вертикали |
-| `$.camera.worldToScreen` | экран ← мир | экран ← мир (в перспективе, с признаком «позади камеры») |
-| `.controls('wasd')` | ввод по осям экрана | **ввод по взгляду камеры**: `W` — вперёд туда, куда смотрим, `A`/`D` — боком |
-| `$.input.mouseDelta()` | сдвиг мыши | то же; в режиме `mouseLock` — относительный |
-
-Таблица сверяется с кодом стражем `tests/re2d_table_test.py` (появляется в
-фазе 1): метод из таблицы должен существовать, а у метода с различием должна
-быть запись.
-
-## 6. Пример: целиком
-
-```js
-$.ready(() => {
-    $.world.gravity(0, 0);                       // вид сверху: пол без гравитации
-    $.camera.kind(Re2D).eye(48).fov(70).mouseLook(true);
-
-    // Комната 1280×1280, стены толщиной 32 и высотой 280.
-    $.re2d.room({ x: 0, y: 0, w: 1280, h: 1280, height: 280,
-                  wall: 'demos/assets/tiles/wall_brick.png',
-                  floor: 'demos/assets/tiles/wall_stone.png' });
-
-    $('<player>', { id: 'hero' }).at(640, 1100).size(40, 40)
-        .controls('wasd').collision(32, 32).kind(Re2D).appendTo($.world);
-    $.camera.follow('#hero');
-
-    for (const [x, y] of [[400, 400], [880, 420], [640, 760]]) {
-        $.re2dSprite.from('demos/rotsprite/russi.character.json')
-            .at(x, y).size(96, 150).kind(Re2D).appendTo($.world);
-    }
-});
-```
-
-Игрок идёт по плоскому полу, стены не пускают (физика Box2D), камера смотрит
-его глазами, мышь крутит вид, маскоты стоят в комнате и поворачиваются к
-игроку. Тот же файл без `.kind(Re2D)` в вызовах — обычная 2D-сцена вида сверху.
-
-## 7. План по фазам
-
-Каждая фаза закрыта, когда: собран `build`, зелёны старые тесты, зелёны новые,
-есть детерминированный headless-прогон, обновлены доки, фаза закоммичена в
-ветку `re2d`.
-
-| Фаза | Что делаем | Критерий приёмки |
-|---|---|---|
-| 0 | Документ (этот файл), разведка, философия | документ в репо; `doc_claims`/`doc_coverage` зелёные |
-| 1 | `kind`: реестр `$.kinds`, `.kind()`, константа `Re2D`, селектор `[kind=…]`, снимок `kind` в `inspect`; хук в `render.js` | 2D-кадр до/после идентичен; бенч без регрессии; `tests/js/re2d_kind_test.mjs` |
-| 2 | Нативное ядро: `engine.re2d.view/project/mesh`, ближняя плоскость, нарезка | C-юнит и qjs-тест на эталонных точках; замер времени на 10k вершин |
-| 3 | Камера Re2D: `$.camera.kind(Re2D)`, `pitch/eye/fov`, `follow`, `rotation=yaw`, мышь (`$.window.mouseLock`, `mouseLook`) | `--record/--replay` повторяют кадр; сериализация `camera.snapshot` |
-| 4 | Мир-коробка: `<floor>`, `<ceiling>`, `<wall>`-блоки, `$.re2d.room(...)` | скриншот-эталон; игрок упирается в стены (Box2D); семантические проверки |
-| 5 | Билборды и Re2DSprite: `yaw` из камеры, масштаб по дистанции, сортировка | при обходе кругом `yaw` меняется плавно; `$.expect` на порядок отрисовки |
-| 6 | Игрок и NPC-маскоты: ходьба, поворот к игроку, эмоции по близости | `$.expect('#russi').state('smile')` при подходе |
-| 7 | Демо `re2d_world`, веб-экспорт, замеры, документация, релизная сверка | headless-прогон, `tests/web/smoke.py`, `run_tests.py` зелёный |
-
-## 8. Ограничения и отложенное (честно)
-
-* Объекты внутри комнаты, которые должны закрывать персонажей (столбы,
-  ящики), требуют глубины у спрайтов: сейчас спрайт пишет `z = 0` и всегда
-  поверх меша. Решение (спрайт-как-меш с альфа-отсечением) — отдельная фаза
-  после демо; `TASKS.md`.
-* Свет и тени `$.gfx.light` в Re2D-проходе не используются; их интеграция —
-  отдельная задача. Туман `$.camera.fog` уже работает для поверхностей и билбордов.
-* Физика остаётся 2D: прыжки и высота в столкновениях не моделируются.
-* WebGPU: прежний текст заявлял проверку Chrome, но подтверждающего отчёта
-  в этой копии не было. В текущем прогоне Web/WASM не проверены; это относится
-  и к новому BSP World ([RE2D_WORLD_GUIDE.md](RE2D_WORLD_GUIDE.md)).
-
-## 9. Статус фаз
-
-| Фаза | Статус | Где посмотреть |
-|---|---|---|
-| 0 | готово | этот документ, [PHILOSOPHY.md](PHILOSOPHY.md) §1 |
-| 1 | готово | [highlevel/kinds.md](highlevel/kinds.md); `tests/js/kinds_test.mjs`, `tests/agent/highlevel_kinds_test.py` |
-| 2 | готово | [internal/NATIVE.md](internal/NATIVE.md) `engine.re2d.*`; `tests/re2d/re2d_test.c`, `tests/agent/re2d_native_test.py` |
-| 3 | готово | [highlevel/camera.md](highlevel/camera.md) §5; `tests/js/camera_re2d_test.mjs`, `tests/agent/highlevel_camera_re2d_test.py` |
-| 4 | готово | [highlevel/re2d.md](highlevel/re2d.md); `tests/js/re2d_test.mjs`, `tests/agent/highlevel_re2d_room_test.py` |
-| 5 | готово | [highlevel/re2d.md](highlevel/re2d.md) §3; `tests/agent/highlevel_re2d_billboards_test.py` |
-| 6 | готово | [highlevel/re2d.md](highlevel/re2d.md) §4, [demos/re2d_world](../demos/re2d_world/README.md); `tests/agent/highlevel_re2d_world_test.py` |
-| 7 | native перепроверен; web не проверен | [RE2D_WORLD_GUIDE.md](RE2D_WORLD_GUIDE.md): фактический аудит и native тесты; замер нового пути и публикация не выполнялись |
-
-### Замер «ноль стоимости для 2D» (фазы 1–2)
-
-`tools/bench_highlevel.py --repeat 3` на одном и том же бинарнике до и после
-(сборка Release headless, `--fixed-dt`, 15 сцен: от 0 до 10 000 узлов). Колонка
-«JS итого», мс на кадр: `none 0.862 → 0.886`, `sprite×100 2.718 → 2.773`,
-`sprite×1000 17.859 → 17.913`, `tween×1000 26.509 → 26.709`, `churn×1000
-37.598 → 37.532`, `tilemap×10000 15.591 → 15.580`. Расхождения в обе стороны и в
-пределах 1–3 % — шум запуска; в 2D-кадре плата за механизм — одно сравнение
-строк на узел.
+Рабочие образцы: `demos/re2d_world_renderer_lab/acceptance` и `demos/re2d_dust2`. Dust2 — оригинальная Re2D-интерпретация маршрутов, а не точная геометрия Valve или законченная Counter-Strike игра. Данные и код являются источником истины, SDK RmlUi показывает и редактирует их.
 
 
 ---
@@ -7252,7 +7077,7 @@ $.ready(() => {
 
 # R2D Re2DSprite — руководство разработчика и художника
 
-Редакция 2026-10-08. PNG v2 + описание модели JSON v1 + анимации JSON v1.
+Редакция 2026-10-10. PNG v2 + описание модели JSON v1 + анимации JSON v1.
 Это документация реализованного прототипа, включая его ограничения.
 Точный компактный контракт: [RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md).
 API: [highlevel/re2dsprite.md](highlevel/re2dsprite.md).
@@ -7269,7 +7094,10 @@ Re2DSprite синтезирует обычный спрайт R2D из разв�
 верхней части PNG; нижняя часть содержит координаты и принадлежность
 каждого участка. При повороте C преобразует эти точки/непрерывные участки,
 разрешает глубину внутри модели и записывает изображение в текстуру.
-Текстура рисуется существующим 2D-батчем, с обычной камерой и слоями R2D.
+В обычной сцене текстура рисуется существующим 2D-батчем. В новом
+`$.re2dWorld` anime output дополнительно имеет resolved sample depth; native
+compositor освещает его, применяет span fog и объединяет с world depth, после
+чего весь world снова рисуется обычным 2D-кадром. PNG/rig/animations остаются теми же.
 
 PNG не является sprite sheet: в нём нет заранее нарисованных направлений
 0/45/90° или кадров ходьбы. JSON не содержит треугольный OBJ-меш.
@@ -7282,6 +7110,11 @@ PNG не является sprite sheet: в нём нет заранее нари
 Сначала автор задаёт форму, затем рисует материал, соответствующий её UV.
 Готовые виды персонажа полезны как художественный референс, но не являются
 входными кадрами Re2DSprite.
+
+Для нового World: [полный контракт персонажа](re2d/RE2DSPRITE_WORLD.md),
+[создание мира](RE2D_WORLD_GUIDE.md), [public API](highlevel/re2d.md),
+[миграция старой игры](re2d/RE2D_MIGRATION.md). Никакой конвертации персонажа
+в generic mesh для этого не требуется.
 
 ## 2. Какие файлы нужны
 
@@ -7315,9 +7148,10 @@ PNG не является sprite sheet: в нём нет заранее нари
 
 G / «Предмет»: без предмета → АК → пистолет → дробовик. Стрелки меняют yaw
 и pitch, пробел включает автоповорот. L переключает стойку, ходьбу, бег;
-C — костюм; H — волосы; V — эмоцию; E/M — глаза/рот; B/T — моргание/речь;
+H — волосы; V — эмоцию; E/M — глаза/рот; B/T — моргание/речь;
 Q/W — независимый поворот головы; R перечитывает данные. Кисти можно тянуть
-мышью. Движение пока проигрывается на месте, позицию на карте задаёт игра.
+мышью. Движение проигрывается на месте, позицию на карте задаёт игра.
+Переключателя костюма C в текущем демо нет; donor/variant API остаётся authoring возможностью.
 
 Готовый персонаж:
 
@@ -7993,6 +7827,22 @@ animations и build JSON. Для релиза достаточно runtime PNG/J
 
 Полные формулы, функции и таблица частей: [Математика Re2DSprite](RE2DSPRITE_MATH.md).
 
+## 18. Использование готового персонажа в новом World
+
+```js
+// world — $.re2dWorld.load(...); assets уже находятся в игре.
+const hero=$.re2dSprite.from('art/hero.character.json',{id:'hero'})
+  .re2dStyle('anime').at(350,120).depth(160).size(74,80).angle(Math.PI).hide();
+world.add(hero);
+const weapon=$.re2dSprite.equip(hero,'ak47').hide();
+```
+
+В этом контексте at — XY карты, depth — абсолютная высота основания, size — размер в мире, angle(rad) — направление тела. World берёт camera-relative yaw/pitch сам. Не вызывайте re2dPose каждый frame ради камеры; явный pose полезен для ordinary 2D preview. Hide подавляет отдельную отрисовку, root registry продолжает composition.
+
+Для художника atlas/character/animation format не меняется. Anime сохраняет depth отсчётов в native sample map; pixel/v1 используют fallback image depth. Lighting/fog/world occlusion выполняются native. World normal/emissive textures принадлежат поверхности карты; это не новые обязательные каналы character atlas. Alpha world coverage threshold128 ограничивает полупрозрачность персонажа.
+
+Оружие использует прежние sockets/grip/equip; attached child входит через root mirror. Global poseBudget1/poseStep3° — policy нового world, дорогая animation synthesis может отставать по времени. Controller, height collision, jumping/falling, AI/health/hitbox принадлежат игре. Все детали lifecycle/performance/limitations — [RE2DSPRITE_WORLD.md](re2d/RE2DSPRITE_WORLD.md).
+
 
 ---
 
@@ -8164,6 +8014,12 @@ holdRifle — изготовка вперёд, оба хвата проверя�
 правилами, что рантайм (`validateRotDefinition`, `validateRotAnimations`), плюс
 PNG v2: размер, заголовок, карты, части без отсчётов, дыры и скачки XYZ.
 Ответ — JSON со стабильными кодами `SDK_RE2D_*` ([SDK.md](SDK.md) §6).
+
+## Integration с новым World (2026-10-10)
+
+Этот JSON/PNG контракт сохранён. `world.add(sprite)` включает существующий узел `$` со спрайтом в кадр World после `.from`, а native renderer читает position/depth/size/angle, рассчитывает camera-relative pose и включает socket attachments. High-level JSON animation/model orchestration остаётся existing wrapper; native world synthesis/light/depth/composition — C.
+
+Используйте `sprite.hide()`, чтобы подавить его отдельную обычную 2D-отрисовку. Из кадра World спрайт исключается через `world.remove(sprite)`. Height через depth, physical world size через size. Не заменяйте atlas на world mesh. Полный пример, lighting/fog/sample-depth, lifecycle и budgets: [Re2DSprite World](re2d/RE2DSPRITE_WORLD.md).
 
 
 ---
@@ -8499,6 +8355,31 @@ UV, сохранение радиуса сгиба), `tests/rotsprite/surface_te
 `tests/agent/highlevel_rotsprite_test.py` (реальный runtime).
 В этой документационной правке код и визуальные данные не менялись.
 
+## 11. Resolved sample depth и новый World (2026-10-10)
+
+Sources: [anime resolve](../src/rotsprite_math.c), [native sample accessor](../src/rotsprite.c), [world stamp](../src/re2d_world.c), [GPU-композиция спрайтов](../shaders/world.frag.glsl). Function names: `r2d_rotsprite_v2_anime_sized`, `r2d_rotsprite_sample_depth`, `r2d_world_stamp_samples`.
+
+При anime resolve размер internal field =2N, output=N (текущий runtime N=512). В каждой группе2×2 output alpha — mean alpha, color — alpha-weighted mean, sample depth — maximum depth among covered subpixels, умноженная на normalization depth_scale: `(model ? model.scale : body ? 1 : 2)/128`. Большая internal depth ближе к зрителю; output sample map сохраняется с конечным RGBA, supersampling arena может переиспользоваться.
+
+Нативная композиция спрайта с высотой основания b, world width W/height H, center=b+H/2, camera basis:
+
+```text
+dx = sprite.x-camera.x; dy = sprite.y-camera.y
+forward = dx*cos(yaw)+dy*sin(yaw)
+centerDepth = forward*cos(pitch)+(center-eye)*sin(pitch)
+offset = sampleDepth[texel]*H
+projectedDepth = centerDepth-offset
+right = (u-.5)*W
+up = (.5-v)*H
+wx = x-sin(yaw)*right-cos(yaw)*sin(pitch)*up-cos(yaw)*cos(pitch)*offset
+wy = y+cos(yaw)*right-sin(yaw)*sin(pitch)*up-sin(yaw)*cos(pitch)*offset
+wh = center+cos(pitch)*up-sin(pitch)*offset
+```
+
+Alpha<128, behind-near и depth farther than current world sample rejected. Reconstructed wx/wy/wh определяют native span/light/fog receiver. Это camera-aligned 2D synthesis reconstruction, не произвольный character mesh и не physically exact surface normals. Нормаль диффузного освещения спрайта приближённо направлена к camera в XY.
+
+`r2d_rotsprite_sample_depth` возвращает map для anime; pixel/v1 возвращают NULL. `r2d_world_stamp_samples` тогда вызывает fallback image-depth stamp. Поэтому обещание одинаковой sample-depth точности всех styles неверно. Public creation/model format не меняется; [World integration](re2d/RE2DSPRITE_WORLD.md) описывает API/lifecycle/pose budget. Ordinary 2D atlas math выше не следует путать с perspective world camera.
+
 
 ---
 
@@ -8605,6 +8486,11 @@ GPU-текстура на голову. Повтор той же позы не �
 Нативный генератор поворачивает отсчёты поверхности и выдаёт обычный 2D-спрайт
 128×128 (pixel) или 512×512 со сглаживанием (anime) в существующий батч. UI остаётся RmlUi, игровая оркестрация — `$`.
 Старые атласы [v1](RE2DSPRITE_V1.md) и их растер 64×64 продолжают работать.
+
+В новом `$.re2dWorld` этот же anime output дополняется resolved sample depth
+для общего перекрытия мира и спрайтов и shared lighting/fog. Pixel/v1 используют
+fallback image depth. Подключение через world.add, sockets/equipment и limits —
+[Re2DSprite World](re2d/RE2DSPRITE_WORLD.md). Это не изменение layout PNG.
 
 ## PNG и координаты
 
@@ -8898,211 +8784,238 @@ demos/rotsprite/source/*.surface.json; анатомические формулы
 
 ---
 
-## RE2D World: устройство, проверки и ограничения
+## Re2D World: руководство по новой игре
 
 <sub>источник: `docs/RE2D_WORLD_GUIDE.md`</sub>
 
-# RE2D World: устройство, проверки и ограничения
+# Re2D World: руководство по новой игре
 
-Актуализировано: 2026-10-09. Проверки SDK World и World Studio входят в полный прогон 116/116.
-Этот документ описывает фактическое состояние; исторические Phase 0–5 не означают
-готовность всего World. Замеры текущего пути описаны в `RE2D_WORLD_PERF.md`.
+Редакция 2026-10-10. Новый мир создаётся через `$.re2dWorld`, персонаж — через `$.re2dSprite`. Здесь описан текущий native renderer; прежние room/kind и `$.re2d.world` находятся в [legacy reference](highlevel/re2d_legacy.md).
 
-## Что реализовано теперь
+## Быстро посмотреть результат
 
-Native `re2d_world.c/.h` принимает только специализированные примитивы:
-стена = XY-отрезок + bottom/top; пол/потолок = прямоугольный регион + height.
-В одном регионе допустимы несколько свободных вертикальных интервалов.
-Перекрывающиеся свободные интервалы на пересекающихся XY отклоняются.
-Построение транзакционное: ошибка не разрушает прежний мир.
+Из корня checkout:
 
-BSP режет **только XY**. Исправлены оба направления пересечения и полнота обхода.
-Теги исходных стен сохраняются; числовые индексы fragments локальны для сборки.
-Вырожденный tail на лимите глубины полный, но не гарантирует точный painter order.
-`blocked` пока линейно просматривает стены, без BSP broadphase.
-Ray traversal проверяет весь tail и возвращает ближайшее попадание независимо
-от его внутреннего порядка. Пол/потолок пока проверяется по списку spans.
-
-Queries: support выбирает достижимый пол с headroom; blocked проверяет круг XY
-× вертикальный интервал против стен; ray возвращает ближайшую стену/пол/потолок.
-Ни World, ни renderer не владеют типами Player/Enemy/Weapon.
-
-**Spatial description → projection → ordinary 2D representation**:
-C синтезирует конечные RGBA и приватную CPU-глубину. Уже синтезированные
-Re2DSprite покрываются внутри этого изображения. Затем возвращается обычный
-sprite id и весь кадр отправляется существующим `engine.drawSprite` в 2D batch.
-Новый World не подаёт треугольники в GPU mesh renderer.
-
-Перспективная и ортографическая проекции используют те же примитивы. Наклон
-поддерживается; pitch существующей native камеры ограничен примерно ±89°.
-FPS/TPS задаются положением наблюдателя, отдельного scene graph нет.
-Совместимые Re2DSprite pose/socket/attach/equip API сохранены. Поза вычисляется
-непрерывно, не выбором billboard-направлений. API описан в
-[highlevel/re2d.md](highlevel/re2d.md) и [internal/NATIVE.md](internal/NATIVE.md).
-
-## Игровое демо
-
-`./build/russiano2d --game demos/re2d_bsp_world`
-
-Холл, лестничный коридор из восьми ступеней и две комнаты с перегородкой.
-Холл и комнаты имеют одинаковые XY на двух высотах. Четыре Руси — обычные
-Re2DSprite узлы со здоровьем. АК из существующего equipment JSON прикреплён
-через handRight; muzzle socket используется для вспышки. Выстрел использует
-world ray и игровую форму круг XY × высота. Урон 34, магазин 30, автоматический
-огонь, задержка перезарядки и восстановление целей. Звук — имеющийся тестовый
-эффект, а не специально записанный звук АК. Интерфейс — RmlUi.
-
-WASD — движение, стрелки — взгляд, M — захват мыши, ЛКМ/Space — огонь,
-R — перезарядка, F — восстановить цели, E — тестовый переход между этажами,
-P — проекция, V — показать оружие, Esc — отпустить мышь.
-
-## Ограничения и следующий безопасный этап
-
-* Нет portals/PVS и автоматической топологии BSP cells. Authoring cells —
-  прямоугольные регионы, не готовые BSP-листы. BSP применяется к traversal стен.
-* Runtime не имеет текстурных world surfaces, произвольных многоугольных floors,
-  непрерывных slopes или patches. SDK теперь генерирует лестницы и ступенчатую
-  аппроксимацию slopes в обычные supports/стены — [SDK.md](SDK.md) §9.
-* Support проверяет точку, blocked — статическую позицию, не sweep или весь
-  footprint. Движение демо использует подшаги; нет прыжков/падения/общей физики
-  сущностей или автоматического height-фильтра Box2D.
-* Глубина Re2DSprite одна на изображение, alpha coverage ≥128. Тело и attached
-  weapon упорядочиваются приближённо; точной глубины отдельных body samples нет.
-  Полупрозрачность, tint/flip/blend/fog/poseBudget узла в World не применяются.
-* Нет гарантии FPS, Web/WASM нового пути не собран. CPU-синтез проверен также на демо
-  800×600, но не на больших сценах. Построение spans проверяет пары регионов.
-* Данные экземпляров независимы, но камера legacy API общая и последовательно
-  устанавливается перед синтезом. Viewmodel рисуется обычным экранным 2D sprite.
-
-Следующий этап: world cells/порталы по XY с height-окнами, более полные формы
-support/сweep, специализированные текстурные surfaces и экспорт глубины
-Re2DSprite samples для точного compositor. Сохранять конечный обычный 2D кадр;
-не добавлять универсальные meshes, OBJ-world или 3D physics/scene graph.
-
-## Воспроизводимая проверка
-
-```
-cmake --build build -j6
-build/tests/r2d_bsp_test
-build/tests/r2d_re2d_world_test
-build/_deps/quickjs-build/qjs tests/js/re2d_test.mjs
-python3 tools/run_tests.py highlevel_re2d_bsp_world_test re2d_bsp_combat_test
+```sh
+./build/russiano2d --game demos/re2d_world_renderer_lab/acceptance --seed 7
+./build/russiano2d --game demos/re2d_dust2 --seed 7
 ```
 
-C World проверяет три walkable spans с одинаковыми XY, headroom, высотные
-столкновения/лучи, ступени, отклонение плохой сборки, обе проекции и RGBA/depth.
-C BSP проверяет разрезание в обе стороны и полноту вырожденного обхода.
-Агентский World-набор проверяет реальные пиксели перил/маскота/крепления,
-проекции, native lifetime и отсутствие GPU world mesh. Игровой набор проверяет
-попадания/смерть, препятствия, этажи, лестницу, магазин и восстановление целей.
-Завершающая Debug-сборка прошла. Все 10 native test executables (включая
-ASan/UBSan World/BSP) и 87 JS test files прошли. Агентские наборы: legacy
-camera/room/world/billboards/native, Re2DSprite JSON/high-level, базовые
-agent_protocol/highlevel_api/game и новые BSP World/combat — без пропусков.
-Новые наборы: 29 и 16 проверок соответственно. Проверки doc_claims,
-doc_coverage и `git diff --check` также прошли. Пиксели демо проверены визуально:
-Руси виден в комнате, АК и socket-вспышка видны, RmlUi содержит счётчики.
+Acceptance lab: 1–7 выбирают corridor/upper/bridge/fog/stairs/ramp/window; E — этаж, O — дверь, Space — вспышка, M — движение красной верхней лампы, F2 — debug, WASD/стрелки — движение/взгляд. Dust2: 1–7 — именованные камеры, O — doors, Space — прыжок, Shift — бег, мышь — взгляд, ЛКМ/F — вспышка, Esc — отпустить мышь, M — захват, Q — выход; G — CPU/GPU, R — reset, F2 — diagnostics. Управление конкретного демо задано его README/main.js.
 
-## Исправление вида от первого лица
+## Минимальный main.js
 
-Демо больше не принуждает pixel-стиль или 320×180. World синтезируется по
-размеру окна до native лимита 1024 на ось; модели используют anime. Руки из
-частей Руси выбираются `.re2dVisibleParts`, АК направлен в глубину кадра и
-остаётся attached через handRight. Захват мыши включён сразу, M переключает,
-Esc отпускает. Проверяется реальный mouse delta и сохранение маски при reload.
-Оптимизация CPU-синтеза, замеры и ограничения описаны в `RE2D_WORLD_PERF.md`;
-гарантии FPS для произвольного мира нет.
+Этот пример работает с существующим персонажем checkout; отдельную карту читать не нужно. Создайте проект с обычным `project.json` и этим `main.js`. В своей игре замените путь персонажа на локальный asset, скопировав его atlas, animations и equipment dependencies вместе с character JSON.
+
+```js
+const view = {x:60,y:120,h:48,yaw:0,pitch:0,fov:70,near:1};
+$.ready(() => {
+  $.world.gravity(0,0).color('#14202c');
+  const description = {
+    version:1,
+    cells:[
+      {x:0,y:0,w:240,h:240,spans:[
+        {bottom:0,top:128,lighting:{level:.35}},
+        {bottom:160,top:288,lighting:{level:.25}}
+      ]},
+      {x:240,y:0,w:240,h:240,spans:[
+        {bottom:0,top:128,lighting:{level:.35}},
+        {bottom:160,top:288,lighting:{level:.25}}
+      ]}
+    ],
+    walls:[
+      {from:[0,0],to:[480,0],bottom:0,top:288,color:'#bba078'},
+      {from:[0,240],to:[480,240],bottom:0,top:288,color:'#bba078'},
+      {from:[0,0],to:[0,240],bottom:0,top:288,color:'#bba078'},
+      {from:[480,0],to:[480,240],bottom:0,top:288,color:'#bba078'},
+      {from:[240,0],to:[240,80],bottom:0,top:288,color:'#aa8866'},
+      {from:[240,160],to:[240,240],bottom:0,top:288,color:'#aa8866'}
+    ],
+    portals:[{cellA:0,cellB:1,from:[240,80],to:[240,160],
+      openings:[{bottom:0,top:128},{bottom:160,top:288}]}]
+  };
+  const world = globalThis.docWorld = $.re2dWorld.fromJSON(JSON.stringify(description))
+    .backend('gpu');
+  world.lighting({mode:'classic',dynamic:true,shadows:true,distanceScale:.001});
+  const source = 'demos/rotsprite/russi.character.json';
+  const lower = globalThis.docLower = $.re2dSprite.from(source,{id:'doc-lower'})
+    .re2dStyle('anime').at(330,120).depth(0).size(64,80).angle(Math.PI)
+    .re2dMotion('idle',0).hide();
+  const upper = globalThis.docUpper = $.re2dSprite.from(source,{id:'doc-upper'})
+    .re2dStyle('anime').at(330,120).depth(160).size(64,80).angle(Math.PI)
+    .re2dMotion('idle',0).hide();
+  globalThis.docWeapon = $.re2dSprite.equip(lower,'ak47').re2dStyle('anime').hide();
+  world.add(lower).add(upper);
+  world.light({x:330,y:120,h:208,radius:180,intensity:1.2,color:'#ff3020',shadow:true});
+  // Flush initial static synthesis deterministically for this small example.
+  world.quality({poseBudget:0,poseStep:0});
+});
+let closed = false;
+$.update(() => {
+  if ($.input.pressed('o')) docWorld.portalClosed(0,closed=!closed);
+  if ($.input.pressed('e')) view.h = view.h<128 ? 208 : 48;
+  if ($.input.pressed('space')) docWorld.light({x:300,y:120,h:45,radius:200,
+    intensity:3,color:'#ffbf70',shadow:true}).life(.12);
+  if ($.input.pressed('escape')) $.quit();
+});
+$.render(() => docWorld.render(view,400,240));
+```
+
+Два спрайта находятся на одинаковых XY, но в разных free spans. Верхняя лампа не должна освещать нижнего через solid перекрытие; портал позволяет проход между соседними rooms отдельно на каждой высоте. E показывает другой этаж, O закрывает обе openings данного portal. Вспышка имеет native lifetime — игровой callback для удаления не нужен.
+
+`.hide()` подавляет отдельную обычную 2D-отрисовку персонажа и оружия; в кадре World спрайт остаётся зарегистрирован. `.kind(Re2D)` и `$.camera.kind(Re2D)` для этого нового explicit world не нужны. UI делайте существующим RmlUi; world.render рисует готовое изображение, а HUD остаётся отдельным интерфейсом.
+
+## Загрузить авторскую карту
+
+Вместо description в JS храните `.re2dmap` с SDK rect/id/stairs/slopes; compile выдаёт `.re2dworld`:
+
+```sh
+build/r2d-sdk world-compile maps/room.re2dmap --renderer --output maps/room.re2dworld
+```
+
+```js
+const world = $.re2dWorld.load('maps/room.re2dworld').backend('gpu');
+```
+
+Не передавайте сырой SDK `.re2dmap` loader-у: его cells имеют `rect`, а native runtime JSON — x/y/w/h. `fromJSON` нужен для native description или теста, а compiled load избегает повторного authoring build. [Форматы и compile](re2d/RE2D_WORLD_FORMAT.md) описывают различия и validation.
+
+## Материалы и свет
+
+Сначала настройте span ambient и проверьте читаемость без dynamic lights. Затем зарегистрируйте PNG material и присвойте canonical surface IDs:
+
+```js
+world.material('brick',{albedo:'art/brick.png',normal:'art/brick_n.png',blend:'opaque'});
+world.surface(0).material('brick');
+world.material('lamp-panel',{albedo:'art/panel.png',emissive:'art/panel_e.png',emissiveStrength:1.3});
+world.span(0).lighting({level:.2,color:'#ffe2c5'});
+world.span(0).fog({density:.004,start:60,color:'#142a49'});
+```
+
+Emissive — видимая яркость самого материала; она не создаёт свет в комнате. Для освещения добавьте world.light. Classic settings в `world.lighting` — полная конфигурация, span setters — частичная. Поэтому явно задавайте dynamic/shadows/distanceScale при каждом global lighting switch.
+
+Свет выбирается по portal/radius/height в C; API не выдаёт игре списки для per-frame light pairing. World normal map влияет на освещение wall/plane, а не меняет её geometry. Персонаж использует совместимый native light/fog path; его PNG не нужно переписывать в world material.
+
+## Движение и высота
+
+World не содержит встроенный Player/Enemy controller. `support` проверяет точку и headroom, `blocked` — статическую форму, `ray` — отрезок; это не swept movement и не gravity solver. Для движения используйте небольшие подшаги и проверяйте опору под радиусом. Такой helper повторяет подход рабочего Dust2 demo:
+
+```js
+function moveWalker(world, walker, dx, dy) {
+  const x=walker.x+dx, y=walker.y+dy;
+  let support=world.support(x,y,walker.feet,walker.bodyHeight,walker.step);
+  const distance=Math.hypot(dx,dy);
+  if (distance && support) {
+    for (const sign of [-1,1]) {
+      const probe=world.support(x+sign*dx/distance*walker.radius,
+        y+sign*dy/distance*walker.radius,walker.feet,walker.bodyHeight,walker.step);
+      if (probe && probe.height>support.height) support=probe;
+    }
+  }
+  if (!support || world.blocked(x,y,walker.radius,support.height,
+      support.height+walker.bodyHeight)) return false;
+  walker.x=x; walker.y=y; walker.feet=support.height;
+  return true;
+}
+// walker = {x:60,y:120,feet:0,bodyHeight:64,step:9,radius:6};
+// После успешного шага: sprite.at(walker.x,walker.y).depth(walker.feet),
+// view.x=walker.x; view.y=walker.y; view.h=walker.feet+48.
+```
+
+Это ограниченный игровой helper, не гарантированный footprint/sweep solver: он не покрывает все углы, скачки и движущиеся платформы. Если используется Box2D body, physics update может переписать позицию/angle. Box2D не разделяет спрайты по spans автоматически; многоэтажную collision policy задаёт игра.
+
+## Дверь, lift, reload
+
+`world.portalClosed(id,true/false)` одной операцией меняет portal closure, collision, rays, visibility и light/shadow invalidation. Smooth fraction `door.open(.7)` из исходного плана не является текущим public API.
+
+`world.span(id).heights(bottom,top)` меняет допустимый span без overlap/ownership конфликтов. Это не автоматическое движение стоящего на нём узла. Для flat lift игре нужно согласованно перемещать passengers. Static continuous slopes поддерживаются; сложные runtime edits slope/portal boundaries ограничены.
+
+`reloadJSON(text)`/`reload(path)` и `watch(path)` сохраняют прежний world при invalid edit. После успеха проверьте новые index domains и перенастройте индексные surfaces/spans, если topology изменилась. Ссылки на узлы со спрайтами, handles динамического света и material bank сохраняются согласно [runtime lifecycle](re2d/RE2D_WORLD_RUNTIME.md#перезагрузка-и-жизненный-цикл).
+
+## Отладка и типичные ошибки
+
+| Симптом | Проверить |
+| --- | --- |
+| Персонаж нарисован ещё раз поверх карты | скрыт ли обычный draw через `sprite.hide()`/`weapon.hide()` |
+| Спрайт не видно | world.add; positive size; midpoint height входит в free span; camera/frustum/portal visibility |
+| Свет не действует | global dynamic enabled; radius/height; closed portal; shadow; per-span limit/slot priority |
+| Emissive не освещает соседа | добавить отдельный world.light, emissive не emitter |
+| За стеной всё видно | используется ли новый World, а не legacy room billboard renderer |
+| Спрайт шагает сквозь этаж | depth задан правильно, controller использует support/headroom; Box2D не height authority |
+| Поза догоняет с задержкой | posesDeferred, poseBudget, poseStep; unlimited increases synthesis cost |
+| Правка compiled JSON не видна | baked tables authoritative; править source .re2dmap и compile |
+| Surface settings после reload неверны | проверить canonical domain, старый numeric ID не semantic handle |
+
+Debug: `world.debug.view('depth')`, `'owner'`, `'bsp'`, `'portals'`, `'dynamic-light-count'`, `'shadow-mask'`, `'normal'`, `'emissive'`, `'overdraw'`. Вернуть normal frame: `'final'`. `world.info()` — native counts/timings; не стройте JS render queue из debug snapshots.
+
+## Что проверено и где продолжать
+
+Локальная acceptance evidence: full lab 21 checks, renderer 55, Dust2 17, dedicated World Studio 19; ранее прошли native/JS verification и 6 goldens. Это результаты конкретных прогонов, не гарантия всех платформ. Детали и ограничения — [audit](re2d/RE2D_DOCUMENT_ACCEPTANCE_AUDIT.md), [implementation evidence](re2d/RE2D_RENDERER_IMPLEMENTATION_PLAN.md), [performance](RE2D_WORLD_PERF.md).
+
+Далее: [полный API](highlevel/re2d.md), [Re2DSprite в мире](re2d/RE2DSPRITE_WORLD.md), [форматы](re2d/RE2D_WORLD_FORMAT.md), [миграция](re2d/RE2D_MIGRATION.md). GZDoom — reference поведения; его code/shaders/assets не являются implementation источником.
+
+World positional audio: [`world.audio` / `$.re2dWorldAudio(world)`](re2d/WORLD_AUDIO.md). Sources share the native Re2D geometry and existing mixer; Steam Audio supplies HRTF PCM only.
 
 
 ---
 
-## RE2D World: native CPU optimisation
+## Re2D World: производительность и измерения
 
 <sub>источник: `docs/RE2D_WORLD_PERF.md`</sub>
 
-# RE2D World: native CPU optimisation
+# Re2D World: производительность и измерения
 
-Measured 2026-10-08 on Apple M4, macOS 27.0.1, Metal, 800×600 demo window.
-Both versions use Release (`-O3 -DNDEBUG`). Baseline is `3bf46c8`; the
-optimised version is the change introducing this document. Animations, four
-Russi actors, AK viewmodel and RmlUi are enabled in both. No resolution,
-supersampling or animation rate reduction was used.
+Редакция 2026-10-10. Текущий renderer — native C + SDL_GPU. GPU world raster и CPU Re2DSprite pose synthesis — разные части кадра. Исторический отчёт прежнего CPU World сохранён [отдельно](re2d/RE2D_WORLD_CPU_HISTORY.md); он не описывает новый renderer.
 
-## Measured result
+## Финальный static stress
 
-Three samples of 30 frames per scenario, median elapsed wall-clock time per
-frame. Both versions start with the same seeded scene and camera reset.
+Provenance: Apple M4, macOS27.0.1 arm64, AppleClang Release, SDL_GPU Metal, native400×240, seed7, warmup8/sample20. Sprite nodes static; initial synthesis unlimited, poseStep0. GPU completion fence waited; FINAL output без framebuffer readback. Modified checkout baseline HEAD8011294b01330420ec12c903dfd9041834a6ecfe, binarySHA256 `6ebf56e995b3f68329c35c8993913dfbf0c96968762103ff2451c2524ff7364c`. Full recorded report: [JSON](re2d/RE2D_RENDERER_BENCHMARK.json).
 
-| Scenario | Before, ms/frame | After, ms/frame | Speedup |
-|---|---:|---:|---:|
-| Stationary camera | 59.86 | 16.17 | 3.70× |
-| Turn with Right | 63.22 | 16.09 | 3.93× |
-| Walk with W | 74.62 | 16.27 | 4.59× |
+| Сцена | Visible / total cells | Visible surfaces | Relevant / total lights | Видимые / все спрайты | Warm median ms | Cold frame ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | 16 / 100 | 166 | 8 / 8 | 9 / 10 | 1.056667 | 144.995750 |
+| B | 30 / 500 | 486 | 12 / 64 | 29 / 30 | 1.733438 | 444.015333 |
+| C room-over-room | 16 / 80 | 167 | 16 / 128 | 15 / 50 | 1.659104 | 254.589333 |
 
-The after measurements correspond to approximately 61–62 frames/s throughput
-in this agent test. They include command overhead and are **not presented
-window FPS** or a guarantee for other scenes, resolutions or hardware. A
-separate 60-frame window gave 13.66–16.31 ms/frame; scene progression changes
-which actors and surfaces are visible. Fixed-dt agent runs report 60 in the
-engine FPS counter regardless of actual speed: that counter was not used.
-The ordinary demo now displays the engine's real-clock FPS when launched
-without `--fixed-dt`.
+Первичный синтез ракурсов спрайтов: A126.580250/B411.129250/C232.270042ms. Warm static cache не включает постоянную animation resynthesis. Это native world frame time с fence, не displayed FPS и не whole application frame budget. Scene C содержит16 shadow candidates. Полные totals/surfaces/stages/parameters сохранены в JSON, не выводятся из таблицы приблизительно.
 
-## What changed
+BSP visits23/34/29; draws302/1044/314; adjacent sampler batches10/30/16. Binding batches не означают столько же draw calls. GPU draws — specialized fullscreen triangles, не generic scene triangles.
 
-The World compositor no longer traverses all geometry for every output pixel.
-Native C computes clipped screen bounds for each specialised wall segment or
-rectangular floor/ceiling region. Within those bounds it evaluates the same
-intersection and depth equations using row coefficients. XY BSP orders wall
-work; the existing world ray query remains available for gameplay. This is
-still a private CPU RGBA/depth synthesis pass followed by one ordinary sprite
-through the existing 2D batch. No GPU world mesh or generic triangle API was
-introduced.
+GPU texture payloads A21,562,376/B63,505,416/C34,145,288bytes; buffer/download payloads A1,922,048/B1,922,048/C1,947,424bytes. Эти resident payload categories исключают allocator/driver/temporary/shared resources; их нельзя называть total VRAM/process memory.
 
-Re2DSprite's anime synthesis reuses native scratch, clears/resolves only the
-affected region, and composes each part's model/view transform once per pose.
-The previous 512→256 supersampling and alpha treatment are preserved. Scratch
-retains approximately 3.25 MiB per animated anime handle until disposal; this
-trades retained memory for fewer allocations and less clearing.
+## Анимированные персонажи
 
-For World composition only, animated state and final relative yaw/pitch are
-queued through internal `rotSpritePrepare` and synthesised once when C reads
-the pixels. Fully off-screen actors defer synthesis until needed. Their
-animation clocks and socket/model state continue updating. Individual GPU
-texture uploads are deferred because World reads CPU pixels directly. Explicit
-`.re2dPose` and ordinary visible 2D rendering flush and upload as before. All
-native model handles are validated even when off-screen. The public high-level
-API remains a wrapper; gameplay types are unchanged.
+Earlier unbudgeted animated GPU stress в том же ходе работ дал A135.863/B433.309/C227.574ms; CPU pose synthesis занимала примерно131/421/219ms. Эти значения исторические для recorded промежуточного build, не fresh measurement финального binary. Они объясняют, почему нельзя подменять animated throughput static warm цифрами.
 
-## Verification and reproduction
+Default `world.quality({poseBudget:1,poseStep:3})` ограничивает dirty synthesis и распределяет её round robin. Спрайт, синтез которого отложен, использует готовый ракурс, animation clocks продолжаются. Budget0 unlimited; step0 unquantized. Снижение pose refresh — visual quality tradeoff, не бесплатное ускорение. Attachment candidates тоже потребляют budget.
 
-```
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j6
-python3 tools/bench_re2d_world.py --frames 30 --samples 3 --json build/bench_re2d_world.json
-./build/russiano2d --game demos/re2d_bsp_world
+## Что оптимизировано
+
+Native visibility следует reachable spans/portal windows и active near-first XY BSP branches. Light masks/per-light reached-span lists ремонтируют dirty links, не пересканируют все cells на unchanged frame. Baked topology/static associations избегают authoring build при compiled startup.
+
+Retained scratch: visibility/frame/light/touched/sort buffers, shared anime supersampling arena. GPU-кэш спрайтов использует монотонный ID экземпляра, ревизию и размер; повторное использование адреса памяти не вызывает коллизии кэша. Shadow chunks local per-light invalidation; atlas repacks/uploads whole after relevant change. Adjacent equal material samplers reused without geometry order changes. Эти оптимизации сохраняют constrained authoritative model.
+
+## Воспроизвести
+
+Из checkout после Release build, на свободной машине:
+
+```sh
+python3 tools/bench_re2d_world_renderer.py --backend gpu --frames 20 --output build/re2d_world_renderer_gpu_benchmark.json
+python3 tools/bench_re2d_world_renderer.py --backend cpu --frames 20 --output build/re2d_world_renderer_cpu_benchmark.json
 ```
 
-The benchmark writes raw samples and environment information. Run on an idle
-machine without a second copy of the demo for comparable results. The baseline
-was built from committed engine sources, measured, then the optimised sources
-were restored and rebuilt before final checks.
+Script drives agent protocol; measured workload reports native counters, not Python loop execution. Output captures machine/commit/working-tree/binary digest/resolution/quality/cold frame/warm stages. Benchmark tool currently hashes build/russiano2d; для сопоставимого прогона используйте этот binary и не задавайте другой agent binary через environment. LoadWallMs и ColdAgentStepWallMs включают transport; они отличны от frameMs.
 
-All 10 native test executables and 87 JS test files pass. Native tests compare
-World coverage/depth against independent per-pixel ray queries across 24
-camera/storey/projection combinations and compare reused anime scratch against
-fresh scratch across 16 poses, including hidden/empty frames. BSP, World and
-RotSprite native tests run with ASan/UBSan. Twelve relevant agent suites pass,
-including World pose coalescing, off-screen deferral, immediate Pose semantics,
-invalid culled handles, height occlusion, attachments, shooting and stairs.
-Three frozen demo views match the pre-optimisation rendered pixels exactly
-below the HUD; the HUD gained an FPS label. Documentation checks pass.
+```js
+world.profile({gpuWait:true});
+world.quality({poseBudget:0,poseStep:0});
+const sample=world.info(); // читать после фактического render/frame
+```
 
-Remaining constraints are described in [World audit](RE2D_WORLD_GUIDE.md):
-no portals/PVS, no textured World surfaces, rectangular supports, approximate
-depth per composed sprite, and no verified Web/WASM build. Off-screen culling
-does not imply PVS or rejection of actors hidden behind walls. Large-scene
-scaling and higher-resolution presentation still need separate measurements.
+GPU timing fields — CPU wall/cache construction/submission/fence wait, не hardware timestamp. FrameMs без gpuWait не ждёт GPU. Debug capture/readback дороже FINAL; измеряйте выбранный mode явно. Не меняйте golden baseline ради performance результата.
+
+## Что пока не подтверждено
+
+Hosted Linux/Vulkan run, fresh Web/WASM build, arbitrary animated50 actor60FPS и другие hardware/resolutions не подтверждены этим benchmark. CPU/GPU parity и local correctness checks не заменяют platform performance measurements. [Runtime profiler reference](re2d/RE2D_WORLD_RUNTIME.md#диагностика-и-полный-profiler-snapshot), [implementation evidence](re2d/RE2D_RENDERER_IMPLEMENTATION_PLAN.md), [audit](re2d/RE2D_DOCUMENT_ACCEPTANCE_AUDIT.md).
 
 
 ---
@@ -9703,6 +9616,9 @@ transform/physics/state → копирование селектора
 проверки — [SDK_VERIFICATION.md](SDK_VERIFICATION.md); журнал работы —
 [SDK_HANDOFF.md](../SDK_HANDOFF.md).
 
+Недостающие возможности, текущие доработки Re2D и критерии их приёмки —
+[SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md).
+
 ```text
 GAME = CODE + DATA          SDK = R2D-приложение + инструменты для CODE + DATA
 ```
@@ -9782,8 +9698,8 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `re2d-info <character.json\|png>` | Re2DSprite: PNG v2, части ↔ кости, статистика карт, проверка |
 | `re2d-debug <character.json\|png> --mode m --out f.png [--scale N]` | Re2DSprite: отладочный вид карт поверхности |
 | `re2d-sample <character.json\|png> --x mx --y my` | Re2DSprite: один отсчёт (ID, XYZ, покрытие, владелец) |
-| `bake-re2d <модель.glb\|.gltf\|.vrm\|.obj> --type prop\|character\|weapon\|environment --output каталог [--uv auto\|existing\|optimized] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N] [--expression имя]` | Re2D Baker: GLB/glTF → Re2DSprite |
-| `world-compile <f.re2dmap> [--output f.compiled.json]` | карта → описание настоящего `$.re2d.world` |
+| `bake-re2d <модель.glb\|.gltf\|.vrm\|.obj\|.fbx> --type prop\|character\|weapon\|environment --output каталог [--uv auto\|existing\|optimized] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N] [--expression имя]` | Re2D Baker: GLB/glTF → Re2DSprite |
+| `world-compile <f.re2dmap> [--renderer] [--output f.re2dworld]` | --renderer: native baked $.re2dWorld; без флага: legacy $.re2d.world output |
 | `world-info <f.re2dmap>` | compile/validation без записи результата |
 | `batch <manifest.batch.json> [--output report.json]` | пакет bake-re2d / validate, ошибки отдельных jobs не прерывают пакет |
 | `agent <session.agent.json> [--engine путь] [--output report.json]` | нативный клиент исходного агентского протокола движка |
@@ -9957,6 +9873,28 @@ Re2DSprite Studio». GUI вызывает тот же `bake-re2d`, поэтом�
 OBJ отвергается (нет humanoid). Тест `tests/agent/sdk_obj_test.py`, фикстуры —
 `tests/fixtures/sdk/make_obj_fixtures.py`.
 
+### FBX (Prop, Weapon, Character)
+
+`bake-re2d model.fbx --type prop|weapon|character` читает ASCII/binary FBX через ufbx (`sdk/native/sdk_fbx.c`) тем же
+конвейером, что GLB/OBJ: треугольники, UV, материалы, текстуры; результат — PNG v2 + `*.character.json`. Меш и кости — временный
+источник, рантайм FBX не читает. Единицы приводятся к метрам, оси — как у glTF (Y вверх).
+
+| Опция | Смысл |
+| --- | --- |
+| `--fbx-stack клип --fbx-time секунды` | вершины в позе клипа в заданный момент (скин считается ufbx); так запекается покадровая анимация: по вызову на кадр |
+| `--pivot x,y,z` | фиксированная точка привязки (метры, Y вверх) вместо центрирования по габариту: кадры одного клипа обязаны совпадать |
+| `--scale S` | единиц Re2D на метр; без неё каждый кадр вписывался бы по-своему |
+| `--fbx-tint имя=#rrggbb,…` | цвет материала без базовой текстуры |
+| `--fbx-ao имя=файл.png,…` | карта затенения, умножается на цвет (и текстура для материала без base color; `default=…` — для мешей без материала) |
+| `--fbx-rot "Кость=rx,ry,rz;…"` | (character) локальные повороты костей поверх позы файла: A-поза для ретаргета `animation-import` |
+
+Текстуры ищутся по пути из файла, рядом с моделью, в `textures/`, `../textures/`, `tex/` по имени файла.
+`--type character`: Mixamo-кости (`mixamorig:Hips`, `LeftArm`, …) сопоставляются с humanoid, веса вершин (до 4 на вершину) и
+узлы переходят в тот же персонажный baker, что у VRM; ходьба ретаргетится штатным `animation-import`. Не поддержано: blendshape
+(предупреждение `SDK_BAKE_FBX_MORPH`), карты normal/specular. Диагностика: `SDK_BAKE_FBX_STACK` (нет клипа), `SDK_BAKE_FBX_BONE` (нет кости для `--fbx-rot`).
+Ограничение формата: Re2DSprite v2 — облако из ≤49 152 отсчётов (карта 256×192); крупные кадры показывают блоки, это не настройка baker'а.
+Тест: `tests/agent/sdk_fbx_test.py` (фикстура — `tests/fixtures/sdk/make_fbx_fixtures.py`).
+
 ### Character / VRM (Phase 5)
 
 ```bash
@@ -9992,7 +9930,7 @@ build/r2d-sdk bake-re2d hero.vrm --type character --output assets/hero/
 Материалы MToon сводятся к baseColor; авторская анимация файла не переносится.
 
 Weapon/Environment, optimized UV и сравнение «источник ↔ Re2D» реализованы (§19).
-Не реализованы автоматическая метрика различия (§40) и FBX (OBJ поддержан — ниже). Качество: плоские карты по оси
+Не реализованы автоматическая метрика различия (§40) и FBX mesh baking (OBJ поддержан — ниже). FBX→Re2D skeletal-motion import доступен для Mixamo-подобного rig preset через `animation-import`. Качество: плоские карты по оси
 дают просветы на косых гранях и швы между картами — это видно в диагностике (`LOW_DENSITY`)
 и на проекциях; «идеального auto unwrap» baker не обещает.
 
@@ -10013,25 +9951,19 @@ $.ui.doc('sdk/ui/shell.rml').click('btn-build')   // нажать элемент
 
 ## 9. Re2D World Studio
 
-Экран `re2d-world-studio` открывает `*.re2dmap` / `*.re2dmap.json`. Это JSON исходник,
-а результат `world-compile` — описание для существующего `$.re2d.world`.
-План XY и высотный разрез показывают выбор синхронно. Доступны добавление/удаление,
-свойства JSON, перемещение выбранного объекта с сеткой, split/join коллинеарных стен,
-undo/redo (Ctrl+Z / Ctrl+Shift+Z), палитра цветов, сохранение, compile и validation.
-Диагностика ведёт к объекту; preview использует настоящий native World, камера
-редактируется полями XY/eye/yaw/pitch. Данные проекта остаются обычными файлами.
+Экран `re2d-world-studio` редактирует `*.re2dmap` / `*.re2dmap.json` — source data, не runtime DB. Native compiler с `--renderer` выдаёт baked `.re2dworld` для нового `$.re2dWorld`. Preview использует этот compiled world через `renderToSprite`, а UI остаётся existing RmlUi.
 
-Карта содержит version:1, name, cells, walls, portals, stairs, slopes. Cells задают
-rect:[x,y,w,h] и spans:[{bottom,top,floorColor,ceilingColor}]; стены — from/to XY,
-bottom/top/color. Лестницы раскрываются в соседние cells и вертикальные стены;
-уклон — в указанное число ступенчатых segments. Порталы проверяются и вырезают
-проёмы стен. PVS — консервативная portal-reachability в отчёте с runtimeUsed:false:
-движок пока не применяет этот PVS для отсечения. Непрерывная поверхность уклона,
-произвольные polygon cells и spatial PVS не реализованы.
+```sh
+build/r2d-sdk world-compile maps/room.re2dmap --renderer --output maps/room.re2dworld
+```
 
-Обязательная регрессия `sdk_world_test.py` проверяет два проходимых spans на
-одинаковых XY: полы 0 и 160, разные support/blocked/ray результаты и независимое
-редактирование этажей в `sdk_world_studio_test.py`.
+Без флага compiler сохраняет legacy stepped output. В новом режиме BSP/cell/span/portal/surface tables и static light associations импортируются runtime без тяжёлого authoring build. XY cells rectangular; exact same-XY source rectangles объединяются в native owner с несколькими spans. Continuous slopes — одна plane; stairs дают шаги с соседними native openings. Authored walls блокируют generated links только при пересечении высоты opening.
+
+Инструменты: synchronized XY plan/height section, добавление/удаление, JSON properties, grid move, split/join коллинеарных стен, undo/redo, save/compile/validation; author/move static lights; debug-view cycling, CPU/GPU selection, lighting toggle. PreviewMaterial задаёт имя, surface IDs и PNG albedo/normal/emissive для настоящего material bank. Это preview configuration, не новый world mesh format.
+
+Source sections version/name/cells/walls/portals/stairs/slopes/lighting/lights. Cells используют rect:[x,y,w,h]; native loader input использует x/y/w/h. Compiler diagnostic ведёт к source object. Source PVS report и runtime BSP/portal-window visibility — разные данные; legacy runtimeUsed:false нельзя переносить как утверждение об отсутствии culling в новом renderer. Текстуры/continuous slopes/portals/sample depth уже реализованы в новом пути.
+
+Полное описание: [World formats](re2d/RE2D_WORLD_FORMAT.md), [runtime API](highlevel/re2d.md), [migration](re2d/RE2D_MIGRATION.md). Проверки: sdk_world_test.py81, dedicated sdk_world_studio_test.py19, renderer55; latest full-lab21. Это local run evidence, не hosted CI/package publication claim. UI редактирует inspectable files; игра запускается из собственного project context без работающего SDK.
 
 ## 10. Automation / Batch
 
@@ -10092,7 +10024,7 @@ CI вызывает SDK native tests, CLI, expression regression, batch manifest
 Это закрытие перечисленных вертикальных срезов. Все компоненты дерева §8 спецификации
 теперь есть в реестре и открываются (Tilemap, Particle, Collision/Physics, Parallax,
 Font/Text, Audio, Input, RmlUi Studio, DevTools — §13–§16). Не реализованы:
-FBX, автоматическая метрика сравнения с исходным 3D, рисование поверхности,
+универсальный FBX-ретаргетинг, автоматическая метрика сравнения с исходным 3D, рисование поверхности,
 graph editor кривых, выбор элемента кликом в предпросмотре RmlUi Studio, drag-ресайз
 фигур коллизии и drag зон акустики (числовые поля есть). ImGui удалён; весь UI и runtime диагностика — RmlUi.
 Процедурный walk, ступенчатые slopes, консервативный PVS и упрощение MToon описаны
@@ -10287,6 +10219,99 @@ sdk_baker_modes. Подробные доказательства — SDK_HANDOFF
 
 ---
 
+## Недостающие возможности SDK и Re2D
+
+<sub>источник: `docs/SDK_IMPLEMENTATION_GAPS.md`</sub>
+
+# Недостающие возможности SDK и Re2D
+
+Обновлено 2026-10-10. Этот документ — очередь дальнейшей реализации.
+[SDK_HANDOFF.md](../SDK_HANDOFF.md) хранит изменения, команды, результаты и
+ошибки; здесь хранится то, что ещё нужно сделать, и условия приёмки.
+Статусы: **проверено**, **в работе**, **запланировано**. Наличие исходников
+или красивого кадра само по себе не переводит пункт в «проверено».
+
+Архитектурные условия: [PHILOSOPHY.md](PHILOSOPHY.md),
+[ARCHITECTURE.md](ARCHITECTURE.md),
+[AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md).
+Расширяем существующие нативные модули через C → `$`; игровой код и данные
+остаются открытыми файлами. World использует XY и вертикальные интервалы,
+анимация выводится существующим Re2DSprite. Gameplay использует существующие
+узлы и компоненты; новая иерархия Actor, отдельная 3D-сцена и 3D-физика
+не входят в эти задачи. Любой новый интерфейс SDK делается на RmlUi.
+
+## Ближайший порядок работ
+
+1. **Закрыть текущие дефекты Dust2 — в работе.** Сохранить воспроизводимые
+   позиции камеры для каждого присланного дефекта; проверить углы стен,
+   лестницы, края рамп и NPC. Мировые UV и линейная фильтрация уже написаны,
+   но нужна отдельная проверка неизменности картинки при разбиении и развороте
+   стены. Принять после конкретных регрессий, прохода маршрутов без провалов
+   и просмотра кадров; общий успешный тест не закрывает все ракурсы.
+2. **Завершить панорамное небо — в работе.** Пользовательский EXR читается
+   нативным адаптером, его тесты прошли 7/7; реальные кадры CPU/GPU получены.
+   Осталось отдельно проверить шов 360°, поворот, отсутствие параллакса при
+   перемещении и сохранение закрытых потолков. Небо — выборка 2D-панорамы.
+3. **Завершить Chicken Dance — в работе.** Нативный SDK уже выдал из
+   предоставленного FBX клип 4.76666667 с, 144 отсчёта и 31 дорожку;
+   кадр танцующей клубной тянки получен. Остались воспроизводимый повторный
+   импорт, проверка поз на границе цикла и работающего автоматического
+   воспроизведения. Runtime читает animation JSON; FBX нужен при импорте.
+4. **Обобщить импорт анимаций — запланировано.** Пользовательская карта
+   костей, разные исходные позы, выбор клипа, сохранение скручивания,
+   кисти/пальцы, переходы между движениями и явный root motion. Текущий
+   пресет для десяти костей маскота не считать универсальным импортом.
+5. **Расширить акустику — запланировано.** Прохождение звука через
+   материалы, огибание углов, отражения и реверберация комнаты; сглаживание
+   по времени. Использовать ту же геометрию World. Текущие расстояние,
+   прямая преграда и HRTF проверены отдельно: 9 DSP + 12 World проверок.
+6. **Проверить поставку — запланировано.** Запустить установленный пакет
+   вне рабочего дерева на macOS, Linux и Windows; проверить зависимости,
+   EXR, импорт и HRTF. Наличие настроек сборки не доказывает работу пакета.
+
+Для каждого нового пункта записывать: воспроизводимый пример, затронутый
+существующий модуль/API, ожидаемое поведение, тест, реальный кадр или PCM
+при необходимости, ограничения и результат проверки. Если потребуется
+новый исходный риг для проверки ретаргетинга или материал для акустики,
+фиксировать конкретный недостающий файл в handoff. Сейчас предоставленные
+музыка, EXR и FBX доступны; текущая работа не требует дополнительных файлов
+от пользователя.
+
+## Технические ограничения и критерии приёмки
+
+Дополнение 2026-10-10: крышки пяти коробок и их твёрдый объём проверены
+нативными лучами/опорой и реальными кадрами CPU/GPU. Шаги и ветер используют
+существующий World audio; проверены движение, остановка, прыжок и приглушение
+ветра потолками (18/18 специальных проверок). Следующие улучшения: банк шагов
+по материалу вместо выбранных снежных записей; различение намеренного запаса
+воздуха над стенами и случайных дыр в диагностике SDK. Сейчас авторская карта
+даёт79 предупреждений `SDK_WORLD_OPEN_EDGE` над наружными стенами; это не
+ошибки компиляции, но утверждать «0 предупреждений» для неё нельзя.
+
+Реализация NPC на карте Dust2 завершена в текущем узком объёме: три
+предоставленных Mixamo-совместимых стека импортируются в animation JSON;
+сближение запускает голос, RmlUi-реплику и чередование трёх клипов. Штатные
+`headYaw`/`bodyYaw` controls ограничивают поворот головы и передают остаток
+корпусу. Новые риги и карта кости остаются отдельными будущими возможностями.
+
+This is an evidence-based backlog, not a claim that every plan is implemented. Current code/data and specific acceptance tests remain authoritative. Last updated 2026-10-10; active work is tracked in SDK_HANDOFF.md.
+
+| Area | Current implementation / active work | Remaining capability | Acceptance criterion |
+|---|---|---|---|
+| Re2D World audio | Existing SDL_mixer, positioned sources, native distance and direct-ray wall/ceiling/door obstruction; Steam Audio PCM HRTF. Verified 9 DSP + 12 world tests. | Material transmission, diffraction around corners, reflections and room reverberation; time-based smoothing. | Same authored XY/spans/portals drive sound; opening/closing a door changes impulse response; reproducible PCM tests; no independent 3D scene. |
+| Audio portability | macOS runtime exercised; Linux x64/Windows x64 build integration exists. | Actual platform runtime and release bundle tests, unsupported-target policy validation. | Fresh installed bundle plays HRTF MP3 without development-tree libraries; requested missing HRTF fails explicitly. |
+| Panorama sky | Native equirectangular selection existed for PNG; direct EXR/tone mapping/yaw and smooth sampling are active work. Supplied EXR decoded by new native adapter tests. | Complete current camera/seam/CPU-GPU regression and demo launch before marking done; larger-than-4K or multipart/deep EXR deliberately unsupported. | Actual supplied file, yaw/pitch and 360 seam, no translation parallax, enclosed club/tunnel ceilings remain closed, CPU/GPU agreement. |
+| Surface rendering | World-coordinate UV and optional bilinear sampling are active corrections to segment/cell texture resets. | Complete actual-frame regressions; mipmaps/footprint-aware minification if distant shimmer persists. | Splitting/reversing a wall does not change world-mapped appearance; matching CPU/GPU frames; collision unchanged. |
+| FBX motion | Re2DSprite animation JSON playback and validation already existed. Direct FBX motion import was missing; native SDK humanoid importer is active work for Chicken Dance. | Finish current import/runtime/loop verification. No generic importer completion claim yet. | Real provided FBX yields version1 clip, valid target bones, nontrivial sampled poses, bounded keys, seamless loop and actual club playback. Runtime consumes JSON, not FBX. |
+| Retargeting | Current importer targets the existing mascot's ten humanoid bones with explicit image-side mapping and swing retargeting. | User-supplied source/target bone maps, differing rest poses/bone axes, missing bones, multiple stacks/clips, twist/roll preservation. | Different humanoid rigs retarget without hardcoded names; bind pose and bone length preserved; unsupported mappings return structured errors. |
+| Hands/fingers | Existing mascot rig does not expose finger bones. | Author finger surfaces/rig and import individual finger tracks; foot/hand contact constraints if required. | Visible articulation and seam inspection in real Re2DSprite output, not an imported 3D mesh preview. |
+| Motion loops | Current dance import bakes a short closing seam and in-place root movement. | General root-motion extraction, blend transitions, quaternion interpolation/bake continuity checks near singular rotations. | Loop boundary has no visible jump; root motion is explicit data consumed by game logic; deterministic pose tests. |
+
+Keep this table current after verification. A passing generic suite does not prove untested acoustics, platform packaging, universal FBX retargeting or all camera angles. Detailed commands, evidence, failures and remaining risks belong in SDK_HANDOFF.md.
+
+
+---
+
 ## SDK: проверенное состояние и ограничения
 
 <sub>источник: `docs/SDK_VERIFICATION.md`</sub>
@@ -10295,6 +10320,10 @@ sdk_baker_modes. Подробные доказательства — SDK_HANDOFF
 
 Сверка 2026-10-09, macOS arm64/Metal, CMake Release. Команды и возможности —
 [SDK.md](SDK.md), журнал и история проверок — [SDK_HANDOFF.md](../SDK_HANDOFF.md).
+
+Дополнения и незавершённые проверки от 2026-10-10 ведутся в
+[SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md) и handoff;
+числа ниже относятся к указанной сверке 2026-10-09.
 
 ## Автоматические проверки
 
@@ -10323,7 +10352,7 @@ Input Tools, Particle Studio и Run/Package. Использует публичн
 
 ## Ограничения
 
-FBX, кисти поверхности, графические кривые и автоматическая численная метрика
+универсальный FBX-ретаргетинг (есть ограниченный Mixamo motion-import пресет), кисти поверхности, графические кривые и автоматическая численная метрика
 сравнения не реализованы. Skin — dominant rigid ownership; walk процедурный,
 MToon lighting не переносится. Source-preview — C tool-only raster, справа
 настоящий Re2DSprite runtime. World runtime не использует PVS, slopes ступенчатые.
@@ -14523,11 +14552,16 @@ $.console.run('spawn 100 200');
 
 ---
 
-## Z-буфер и псевдо-3D — `$.gfx.depth`
+## Z-буфер ordinary batch — `$.gfx.depth`
 
 <sub>источник: `docs/highlevel/depth.md`</sub>
 
-# Z-буфер и псевдо-3D — `$.gfx.depth`
+# Z-буфер ordinary batch — `$.gfx.depth`
+
+Эта страница относится к ordinary sprite/mesh passes. Новый `$.re2dWorld`
+имеет собственный общую глубину мира и спрайтов и owner targets до финального 2D draw.
+Ограничение «ordinary sprite поверх mesh» ниже не относится к спрайтам существующих узлов `$`, включённым в кадр World.
+См. [runtime](../re2d/RE2D_WORLD_RUNTIME.md) и [Re2DSprite World](../re2d/RE2DSPRITE_WORLD.md).
 
 Глубина в движке нужна псевдо-3D: меш персонажа пишет настоящий z, а спрайты
 сцены проверяются по нему — поэтому плоский спрайт не рисуется поверх
@@ -14631,13 +14665,14 @@ SDL_BindGPUIndexBuffer(pass, &ib, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 | обратный порядок | результат тот же: z решает, порядок не важен |
 | 100 треугольников (300 вершин), 10 кадров | без падения |
 
-### Ограничение: спрайты всегда поверх меша
+### Ограничение ordinary batch: спрайты поверх меша
 
 Спрайтовый вершинный шейдер пишет `z = 0` — «ближе всего». Поэтому **спрайт
 перекрывает меш всегда**, каким бы близким меш ни был; z-буфер сортирует только
 треугольники меша между собой. Чтобы спрайт мог оказаться ЗА выпуклостью
 персонажа, спрайтам нужна своя глубина (например, из y-сортировки) — это
-отдельная работа, и она не сделана.
+не предоставляется этим ordinary batch API. В новом World перекрытие спрайтов по глубине samples
+реализована отдельным native compositor; это не изменение обычного sprite shader.
 
 ## 5. Ограничения (честно)
 
@@ -17105,8 +17140,9 @@ solved.tip;        // { x, y } — куда встал конец
   считается;
 * **части не сортируются автоматически**: `depth` задаёт игра. Если части
   пересекаются и `depth` одинаков — порядок будет порядком вызовов;
-* **спрайты всегда поверх меша** (спрайтовый шейдер пишет `z = 0`) — см.
-  [depth.md](depth.md) §4;
+* **ordinary batch sprites поверх mesh** (sprite shader пишет `z = 0`) — см.
+  [depth.md](depth.md); это не новый `$.re2dWorld`, где samples спрайтов и мира
+  имеют shared depth: [runtime](../re2d/RE2D_WORLD_RUNTIME.md);
 * **нет скелетной анимации как данных**: дорожки углов кладутся на существующий
   `$.anim` / `$.anim.player` — своего формата клипов у `$.mesh` нет;
 * **IK без ограничений углов**: суставы не имеют пределов поворота, поэтому
@@ -19216,11 +19252,109 @@ installRandom($);       // $.random = makeGenerator(engine.seed ?? 12345)
 
 ---
 
-## Re2D — 2.5D вид того же мира
+## Re2D World — public `$` API
 
 <sub>источник: `docs/highlevel/re2d.md`</sub>
 
-# Re2D — 2.5D вид того же мира
+# Re2D World — public `$` API
+
+Редакция 2026-10-10. Для нового рендера используйте `$.re2dWorld`. Это native world handle с собственными cells/spans/portals, списком ссылок на существующие узлы со спрайтами и camera configuration. `$.re2d.room`, `.kind(Re2D)` и `$.re2d.world` сохранены в [legacy reference](re2d_legacy.md); это другие entry points, не сокращённые имена нового API.
+
+## Создание и кадр
+
+```js
+const world = $.re2dWorld.load('maps/room.re2dworld').backend('gpu');
+const sprite = $.re2dSprite.from('art/hero.character.json')
+  .at(150,120).depth(0).size(60,80).re2dStyle('anime').hide();
+world.add(sprite);
+const view = {x:40,y:120,h:48,yaw:0,pitch:0,fov:70,near:1};
+$.render(() => world.render(view,400,240));
+```
+
+Файлы примера должны существовать в проекте. Полностью запускаемый пример без внешней карты — [World guide](../RE2D_WORLD_GUIDE.md#минимальный-mainjs).
+
+| Вызов | Контракт |
+| --- | --- |
+| `$.re2dWorld.load(path)` | читает native author/baked JSON из VFS; включает watcher при engine hot reload |
+| `$.re2dWorld.fromJSON(text)` | принимает JSON **строку**, не объект; author topology строится в C |
+| `world.add(target)` / `.remove(target)` | регистрирует/снимает Re2DSprite roots; add повторно того же узла не дублирует его |
+| `.camera(view={})` | заменяет конфигурацию камеры; пропущенные поля получают defaults |
+| `.render(view=null,width=320,height=180)` | синтезирует и рисует обычный sprite на всё окно; возвращает sprite ID |
+| `.renderToSprite(view=null,width=320,height=180)` | синтезирует без fullscreen draw; возвращает sprite ID для previews |
+| `.backend('cpu'\|'gpu')` | выбор native reference или SDL_GPU; wrapper default CPU |
+| `.quality({poseBudget,poseStep})` | частично обновляет policy; defaults 1 pose/frame, 3°; 0 budget = unlimited |
+| `.profile({gpuWait:false})` | completion wait для измерения; true включает ожидание fence |
+| `.info()` | native snapshot counts/timings; точные поля в [runtime](../re2d/RE2D_WORLD_RUNTIME.md) |
+| `.dispose()` | освобождает мир/его registry/frame/GPU resources; повторный вызов безопасен; не удаляет игровые узлы |
+
+Frame dimensions — целые 1..1024. View: x/y=0, h=48 (eye — alias), yaw/pitch=0, fov=70°, near=4; projection perspective. Для orthographic: `projection:'orthographic',orthoHeight:400`. `render(null)` использует сохранённую camera. Здесь второй аргумент render — width, **не массив спрайтов**.
+
+## Игровые запросы
+
+| Вызов | Результат |
+| --- | --- |
+| `.cellAt(x,y)` | cell index или null |
+| `.spanAt(x,y,h)` | global span index или null |
+| `.support(x,y,feet,bodyHeight,step=0)` | `{span,height,ceiling}` или null; reachable floor с headroom |
+| `.blocked(x,y,radius,bottom,top)` | boolean; статический circle XY × height против стен/portal closure |
+| `.ray(from,to)` | точки `{x,y,height}`; `{fraction,x,y,height,wall,span,ceiling}` или null |
+| `.lightAt(x,y,h)` | `{r,g,b,level}` или null; native gameplay approximation, без чтения pixels |
+| `.surface(index)` | `{kind,primitive,cell,span,material(name),sky(enabled=true)}` или null |
+
+XY — half-open. Свободный span включает пол и исключает потолок. `surface.kind`: 0 wall, 1 floor, 2 ceiling; наклон — коэффициенты соответствующей plane, не четвёртый mesh type. Не выводите surface ID из wall index попадания вслепую после перекомпиляции: IDs принадлежат текущему canonical domain.
+
+## Свет, материал, изменение мира
+
+```js
+world.lighting({mode:'classic',dynamic:true,shadows:true,
+  distanceScale:.001,orientationContrast:true,orientationStrength:.06});
+world.span(0).lighting({level:.35,color:'#ffffff'})
+  .fog({density:.002,start:100,color:'#263044'});
+world.material('brick',{albedo:'art/brick.png',normal:'art/brick_n.png',blend:'opaque'});
+world.surface(0).material('brick');
+const lamp = world.light({x:100,y:120,h:70,radius:180,intensity:1,color:'#ff7040',shadow:true});
+lamp.flicker({min:.8,max:1,rate:9,seed:42});
+world.portalClosed(0,true);
+```
+
+`lighting` задаёт полную global конфигурацию: отсутствующие dynamic/shadows false, distanceScale 0, orientationContrast/enabled true, orientationStrength .06. `span.lighting` и `span.fog` частично обновляют состояние. `span.info()` возвращает level/r/g/b/fogDensity/fogStart/fogR/fogG/fogB. `.span(id).heights(bottom,top)` transactionally меняет допустимый height interval; это не controller, спрайты нужно перемещать игре.
+
+Light: `.at(x,y)`, `.height(h)`, `.radius(r)`, `.intensity(v)`, `.color(c)`, `.shadow(bool)`, `.life(seconds)`, `.flicker(options)`, `.info()`, `.remove()`. Life 0 — постоянный свет; после expiry/removal handle устарел. Limits: 128 total lights, 16 selected/span, 16 shadow lights.
+
+Material: albedo, normal?, emissive?, emissiveStrength=1, uScale/vScale=1/64, blend=`masked` по умолчанию, opacity=1. Blend: opaque/masked/translucent/additive. Masked alpha threshold 128. 64 material slots, texture axes ≤2048. В world shading optional normal относится к constrained surface, не к imported mesh tangent.
+
+Sky: `.sky({texture?,color?,yaw?,exposure?})` — `texture` PNG или `.exr` (панорама; EXR декодируется при загрузке в обычный 8-бит RGBA нативным адаптером tinyexr, одна часть, до 4096×2048, ≤64 МиБ; `exposure` −16..16 EV; для PNG экспозиция применяется в линейном пространстве). Небо — выборка 2D-панорамы без параллакса, не 3D-купол. Поверхность помечается `.surface(ceilingId).sky(true)`. Decal: `.decal({surface,material,u=0,v=0,width=16,height=16,life=0})` → handle с remove(); максимум 128. Transparent/sky base rejects decals.
+
+## Reload и debug
+
+| Вызов | Назначение |
+| --- | --- |
+| `.reload(path)` / `.reloadJSON(text)` | transactionally заменяет валидную геометрию и authored static lighting |
+| `.watch(path)` / `.watch('')` | native watcher каждые .35s / отключение |
+| `.debug.view(name)` | переключить native diagnostic, возвращает world |
+| `.debug.visibility()` | `{spans:[indices],surfaces:[indices]}` из последнего visibility pass |
+| `.debug.renderStats()` | тот же native snapshot, что info() |
+
+Views: final, cell-id, span-id, bsp, portals, depth, owner, light-level, dynamic-light-count, shadow-mask, normal, emissive, overdraw. Snapshot — диагностическая копия; не используйте массивы для JS renderer loops. Index handles проверяются заново после topology reload. Динамический свет, ссылки на узлы со спрайтами и material/sky banks сохраняются при допустимом reload; подробнее [runtime](../re2d/RE2D_WORLD_RUNTIME.md#перезагрузка-и-жизненный-цикл).
+
+## Примеры, ограничения, проверки
+
+[World guide](../RE2D_WORLD_GUIDE.md), [sprite integration](../re2d/RE2DSPRITE_WORLD.md), [formats](../re2d/RE2D_WORLD_FORMAT.md), [migration](../re2d/RE2D_MIGRATION.md). Sources: [wrapper](../../src/highlevel/re2d.js), [bindings](../../src/re2d.c), [нативная композиция спрайтов](../../src/re2d_world_runtime.c).
+
+Public runtime checks: `tests/agent/re2d_world_renderer_test.py`, `re2d_world_acceptance_test.py`, `re2d_dust2_test.py`. Native correctness: `tests/re2d/world_test.c` и `tests/rotsprite/rotsprite_test.c`. Limits и measurement provenance находятся в [performance](../RE2D_WORLD_PERF.md); наличие тестов не заменяет фактический отчёт прогона.
+
+World positional audio: [`world.audio` / `$.re2dWorldAudio(world)`](../re2d/WORLD_AUDIO.md). Sources share the native Re2D geometry and existing mixer; Steam Audio supplies HRTF PCM only.
+
+
+---
+
+## Legacy Re2D: room/kind и прежний World
+
+<sub>источник: `docs/highlevel/re2d_legacy.md`</sub>
+
+> Совместимость: эта страница относится к `$.re2d.room`, `.kind(Re2D)` и старому `$.re2d.world`. Ограничения room/billboards ниже не относятся к новому `$.re2dWorld`. Для нового проекта начните с [World guide](../RE2D_WORLD_GUIDE.md). Замеры ниже исторические, без текущей benchmark-провенанс; не используйте их для обещаний FPS.
+
+# Legacy Re2D: room/kind и прежний World
 
 Re2D — **дополнение** к 2D, а не замена: мир остаётся плоским (позиция, размер,
 тело, слои, события узла — обычные 2D-поля), а Re2D добавляет **вид** на него:
@@ -19252,7 +19386,7 @@ $.ready(() => {
 | `$.re2d.poseBudget(n?)` | предел синтезов позы за кадр (по умолчанию 4; 0 — без предела) |
 
 Остальной API Re2D — это **те же** методы `$`, у которых при `kind(Re2D)`
-меняется смысл (таблица «метод × вид» в [RE2D.md](../RE2D.md) §5), и новые слова
+меняется смысл (таблица «метод × вид» в [миграции](../re2d/RE2D_MIGRATION.md)), и новые слова
 камеры там, где в 2D смысла нет (`pitch`, `eye`, `fov`, `mouseLook`, `look`).
 
 ## 2. Поверхности мира
@@ -19344,7 +19478,7 @@ $('#russi').get(0).angle = Math.PI / 2;           // лицом на юг (+y); 
 `.controls('wasd')` у узла вида Re2D под Re2D-камерой работает по **взгляду** камеры,
 а не по осям экрана: `W` ведёт «вперёд» туда, куда смотрят глаза, `S` — назад, `A`/`D`
 — боком. Это тот же метод `$`, у которого при `kind(Re2D)` другое значение (таблица
-«метод × вид», [RE2D.md](../RE2D.md) §5):
+«метод × вид», [миграции](../re2d/RE2D_MIGRATION.md)):
 
 ```js
 $('<player>', { id: 'hero' }).at(640, 1130).size(36, 36).collision(30, 30)
@@ -19398,7 +19532,7 @@ $.camera.mouseLook({ on: true, sensitivity: 0.0026 });   // мышь крути�
 * Физика остаётся плоской (вид сверху); высота `z` узла нужна только рисованию.
 * Спрайты всегда рисуются поверх меша (ограничение z-буфера, [depth.md](depth.md) §4):
   объекты внутри комнаты, которые должны закрывать персонажей, пока не
-  поддержаны ([RE2D.md](../RE2D.md) §8).
+  поддержаны ([миграции](../re2d/RE2D_MIGRATION.md)).
 * Билборд всегда плоский и стоит прямо: наклон камеры не искажает картинку, как
   и в Doom. Спрайты поверх меша, поэтому билборд никогда не заслонён стеной или
   столбом (внутри комнаты-коробки это верно).
@@ -19418,71 +19552,23 @@ python3 tests/agent/highlevel_re2d_billboards_test.py           # билборд
 python3 tests/agent/highlevel_re2d_world_test.py                # демо: ходьба, стены, маскоты, запись/воспроизведение
 ```
 
-## 8. RE2D World — новый минимальный BSP/span-срез
 
-`$.re2d.world(description)` создаёт независимый native handle специализированного
-мира. Это **spatial description → projection → ordinary 2D representation**:
-C синтезирует RGBA, приватная глубина решает покрытие, а конечная текстура
-рисуется существующим обычным `engine.drawSprite` в 2D-батче. World не принимает
-произвольные треугольники. Разделы 1–7 выше описывают сохранённый legacy-путь.
+## 8. Сохранённый `$.re2d.world(description)`
+
+Принимает объект с `walls` и `cells`, где cell задаёт x/y/w/h и свободные spans. Это прежний CPU compositor, не alias нового `$.re2dWorld`. Сигнатура:
 
 ```js
-const world = $.re2d.world({
-    walls: [{ from:[100,-70], to:[100,70], bottom:0, top:60, color:'#c83c28' }],
-    cells: [{ x:-200, y:-200, w:600, h:400, spans:[
-        { bottom:0, top:128, floorColor:'#305840', ceilingColor:'#233540' },
-        { bottom:160, top:288, floorColor:'#544030', ceilingColor:'#344858' },
-    ] }],
+const oldWorld = $.re2d.world({
+  walls: [{from:[100,-70],to:[100,70],bottom:0,top:60,color:'#c83c28'}],
+  cells: [{x:-200,y:-200,w:600,h:400,spans:[{bottom:0,top:128}]}]
 });
-$.render(() => world.render({x:0,y:0,eye:48,yaw:0,pitch:0,fov:70}, npc));
+// npc — заранее созданный Re2DSprite; eye — высота камеры.
+$.render(() => oldWorld.render({x:0,y:0,eye:48,yaw:0,pitch:0,fov:70}, npc,320,180));
 ```
 
-`cells` сейчас — прямоугольные authoring-регионы с несколькими свободными
-интервалами высоты. BSP строится только по XY-отрезкам стен; геометрия региона
-не превращается автоматически в BSP-листы или порталы. Одинаковые XY допустимы,
-перекрывающиеся свободные интервалы на пересекающихся XY-регионах отклоняются.
-Цвета RGB, по умолчанию белые; геометрия конечная, в пределах ±1000000.
+`render(view,entities=[],width=320,height=180)` получает sprite nodes при каждом вызове. Он сохраняет прежнюю JS-подготовку и CPU stamp с приближённой глубиной изображения. `support`, `blocked`, `ray`, `info`, `dispose` сохранены. Здесь нельзя подменить второй аргумент числом разрешения по примеру нового API: это место для entities.
 
-| Вызов handle | Контракт |
-|---|---|
-| `support(x,y,feet,height,step=0)` | самый высокий достижимый пол ≤ `feet+step`, с headroom ≥ `height`; `{span,height,ceiling}` или `null`; не проваливается сквозь потолок нижнего этажа |
-| `blocked(x,y,radius,bottom,top)` | статический круг XY × интервал высоты против стен; касание вертикальных интервалов не блокирует, касание круга со стеной блокирует |
-| `ray(from,to)` | отрезок запроса, точки `{x,y,height}`; ближайшее попадание `{fraction,x,y,height,wall,span,ceiling}` или `null`; стены обходятся через XY BSP, пол/потолок — по списку spans |
-| `render(view,entities=[],width=320,height=180)` | синтезирует RGBA и отправляет один обычный спрайт на всё окно; возвращает id спрайта; `view` содержит `x,y,eye,yaw,pitch,fov`, углы в градусах; целый размер 1..1024 |
-| `info()` | `{walls,spans,segments,width,height}` |
-| `dispose()` | освобождает CPU/GPU-ресурсы; повторный вызов безопасен; дальнейшие запросы бросают ошибку |
-
-`entities` — обёртка, селектор, узел или массив Re2DSprite-узлов/обёрток. Поза вычисляется
-относительным yaw/pitch с теми же правилами `.re2dPose`, дети `.re2dAttach` используют
-прежний socket/model API. World объединяет изменение анимации и углов перед
-нативным CPU-синтезом; полностью вне кадра синтез откладывается. Прямой вызов
-`.re2dPose` сохраняет немедленное обновление обычного спрайта. Для этого явного вызова спрячьте узлы `.hide()`, чтобы
-не получить их дополнительную обычную отрисовку. Их участие в World задаёт список,
-поэтому `hide()` этот список не фильтрует. Тела Box2D не получают height-фильтра
-автоматически: для многоэтажных сущностей используйте обычные узлы без тела и
-скриптовый контроллер поверх запросов. В демо это `<player>` и подшаги движения.
-
-Проекции: perspective по умолчанию; `view.projection="orthographic"` и
-`orthoHeight` (по умолчанию 400) задают параллельный вид. Обе проекции допускают
-наклон; native pitch ограничен примерно ±89°.
-
-Ограничения: цветные стены/плоскости без текстур;
-нет PVS/порталов, slopes и готового stair/controller API. `support` проверяет
-точку, не весь footprint, `blocked` — позицию, не sweep; нет автоматической
-симуляции падения, прыжков, переходов между этажами и столкновений сущностей.
-У спрайта одна глубина на изображение, coverage — порог alpha 128; полупрозрачные
-фрагменты не смешиваются. Крепление рисуется до/после родителя по существующему
-приближённому признаку: точной попиксельной глубины тела/оружия нет. Узловые tint,
-alpha, flip, blend, fog и poseBudget в новом явном World-вызове пока не применяются.
-Производительность и веб-сборка нового пути не проверялись.
-
-Демо: `./build/russiano2d --game demos/re2d_bsp_world`. Проверки:
-`build/tests/r2d_re2d_world_test` (ASan/UBSan),
-`tests/js/re2d_test.mjs`, `tests/agent/highlevel_re2d_bsp_world_test.py`,
-`tests/agent/re2d_bsp_combat_test.py`.
-Подробный аудит: [RE2D_WORLD_GUIDE.md](../RE2D_WORLD_GUIDE.md).
-
-Производительность нативного пути и воспроизводимый стенд: [RE2D World performance](../RE2D_WORLD_PERF.md).
+Прежний `worldPrimitives` преобразует объект в плоские стены/spans и не передаёт portal topology/continuous slopes. Для новых материалов/света/sample depth/native registrations используйте новый loader. Перенос шаг за шагом — [RE2D_MIGRATION.md](../re2d/RE2D_MIGRATION.md). Legacy demos: `demos/re2d_world`, `demos/re2d_bsp_world`; новые fixtures: `demos/re2d_world_renderer_lab`, `demos/re2d_dust2`.
 
 
 ---
@@ -19531,13 +19617,14 @@ Info: `{sprite,texture,revision,yaw,pitch,width,height,atlasWidth,version,
 style,body,eyes,mouth,brows,surfaceSamples,joints?,path,rig,motion,parts,hotReload,
 reloads,reloadError,milestone,disposed}`. Индексы глаз/рта/бровей — 0..3.
 Joints — координаты канонического поля 128×128, не экранные, в обоих режимах v2.
-Raster v1=64, v2 pixel=128, v2 anime=256. По умолчанию pixel.
+Raster v1=64, v2 pixel=128, текущий runtime v2 anime=512 (1024 supersampling).
+Legacy C anime entry points сохраняют 256; `_sized` поддерживает 256/512. По умолчанию pixel.
 Повторная одинаковая поза/мимика не делает upload; 360° равен 0°.
 
 Pixel: минимальный масштаб 1, целый; позиция округляется после камеры.
 Nearest работает при глобальном linear. Anime: непрерывная позиция и размер,
-сглаженные края и цвета, принудительный linear независимо от режима кадра. Цвет, alpha, слой, камера, clip,
-видимость наследуются обычным путём. Angle/pivot, неравномерный scale/flip,
+сглаженные края и цвета, принудительный linear независимо от режима кадра. Для обычной 2D-отрисовки цвет, alpha, слой, камера, clip,
+видимость наследуются обычным путём; registered World имеет отдельный контракт ниже. Angle/pivot, неравномерный scale/flip,
 пользовательские шейдеры узла, outline/shadow пока не применяются.
 
 Remove, смена сцены и hot reload освобождают ресурс; finalizer страхует
@@ -19608,6 +19695,22 @@ const ak = $.re2dSprite.equip(hands,'ak47');
 ```
 
 Это фильтр синтеза изображения, не удаление костей и не игровая система оружия.
+
+## В новом `$.re2dWorld`
+
+```js
+// world — загруженный $.re2dWorld; character asset должен существовать.
+const hero=$.re2dSprite.from('art/hero.character.json')
+  .re2dStyle('anime').at(350,120).depth(0).size(74,80).angle(Math.PI).hide();
+const ak=$.re2dSprite.equip(hero,'ak47').re2dStyle('anime').hide();
+world.add(hero);
+```
+
+Регистрация один раз включает root и native attachment mirror. World читает node position/height/size/facing и сам задаёт camera-relative pose. `.hide()` исключает ordinary draw, но не registered world composition. Для despawn world.remove(hero), затем обычное удаление узла. PNG/rig/animations formats не меняются.
+
+Для узла со спрайтом, включённым в кадр World, depth — абсолютная высота основания, angle — направление в радианах. Рендер выбирает free span, применяет light/fog и сравнивает world depth с sample depth anime output. Pixel/v1 output не имеет этой exported sample map и использует fallback depth изображения. Node tint/alpha/flip/shader semantics обычного draw не гарантируются World. World surface normal/emissive materials не превращают atlas в PBR mesh.
+
+Pose synthesis budget и camera quantization задаются world.quality, не legacy $.re2d.poseBudget. Animation orchestration остаётся existing sprite wrapper, expensive world synthesis/composition — C. Полный контракт: [Re2DSprite World](../re2d/RE2DSPRITE_WORLD.md), [World guide](../RE2D_WORLD_GUIDE.md), [migration](../re2d/RE2D_MIGRATION.md).
 
 
 ---

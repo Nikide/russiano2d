@@ -1,263 +1,88 @@
-# Re2D — 2.5D вид того же мира
+# Re2D World — public `$` API
 
-Re2D — **дополнение** к 2D, а не замена: мир остаётся плоским (позиция, размер,
-тело, слои, события узла — обычные 2D-поля), а Re2D добавляет **вид** на него:
-камеру от первого лица и отрисовку узлов в перспективе. Замысел, правила и план
-фаз — [RE2D.md](../RE2D.md); вид узла — [kinds.md](kinds.md); камера —
-[camera.md](camera.md) §5; нативная проекция — [internal/NATIVE.md](../internal/NATIVE.md) (`engine.re2d.*`).
+Редакция 2026-10-10. Для нового рендера используйте `$.re2dWorld`. Это native world handle с собственными cells/spans/portals, списком ссылок на существующие узлы со спрайтами и camera configuration. `$.re2d.room`, `.kind(Re2D)` и `$.re2d.world` сохранены в [legacy reference](re2d_legacy.md); это другие entry points, не сокращённые имена нового API.
+
+## Создание и кадр
 
 ```js
-$.ready(() => {
-    $.camera.kind(Re2D).eye(48).fov(70).mouseLook(true);   // от первого лица, мышь крутит взгляд
-    $('<player>', { id: 'hero' }).at(640, 1100).controls('wasd').kind(Re2D).appendTo($.world);
-    $.camera.follow('#hero');                              // глаза на теле, без сглаживания
-});
+const world = $.re2dWorld.load('maps/room.re2dworld').backend('gpu');
+const sprite = $.re2dSprite.from('art/hero.character.json')
+  .at(150,120).depth(0).size(60,80).re2dStyle('anime').hide();
+world.add(sprite);
+const view = {x:40,y:120,h:48,yaw:0,pitch:0,fov:70,near:1};
+$.render(() => world.render(view,400,240));
 ```
 
-Узел и камера **без** `kind` — обычный 2D, и для них ничего не изменилось.
+Файлы примера должны существовать в проекте. Полностью запускаемый пример без внешней карты — [World guide](../RE2D_WORLD_GUIDE.md#минимальный-mainjs).
 
----
+| Вызов | Контракт |
+| --- | --- |
+| `$.re2dWorld.load(path)` | читает native author/baked JSON из VFS; включает watcher при engine hot reload |
+| `$.re2dWorld.fromJSON(text)` | принимает JSON **строку**, не объект; author topology строится в C |
+| `world.add(target)` / `.remove(target)` | регистрирует/снимает Re2DSprite roots; add повторно того же узла не дублирует его |
+| `.camera(view={})` | заменяет конфигурацию камеры; пропущенные поля получают defaults |
+| `.render(view=null,width=320,height=180)` | синтезирует и рисует обычный sprite на всё окно; возвращает sprite ID |
+| `.renderToSprite(view=null,width=320,height=180)` | синтезирует без fullscreen draw; возвращает sprite ID для previews |
+| `.backend('cpu'\|'gpu')` | выбор native reference или SDL_GPU; wrapper default CPU |
+| `.quality({poseBudget,poseStep})` | частично обновляет policy; defaults 1 pose/frame, 3°; 0 budget = unlimited |
+| `.profile({gpuWait:false})` | completion wait для измерения; true включает ожидание fence |
+| `.info()` | native snapshot counts/timings; точные поля в [runtime](../re2d/RE2D_WORLD_RUNTIME.md) |
+| `.dispose()` | освобождает мир/его registry/frame/GPU resources; повторный вызов безопасен; не удаляет игровые узлы |
 
-## 1. Что здесь есть
+Frame dimensions — целые 1..1024. View: x/y=0, h=48 (eye — alias), yaw/pitch=0, fov=70°, near=4; projection perspective. Для orthographic: `projection:'orthographic',orthoHeight:400`. `render(null)` использует сохранённую camera. Здесь второй аргумент render — width, **не массив спрайтов**.
+
+## Игровые запросы
 
 | Вызов | Результат |
-|---|---|
-| `$.re2d.room(opts)` | комната-коробка: пол, потолок и четыре стены-плиты вокруг внутреннего прямоугольника; → обёртка узлов (класс `re2d-room`) |
-| `$.re2d.info()` | факты: `{ camera, native, surfaces, buckets }` — камера ([camera.md](camera.md) §5), вид и счётчики ядра, сколько поверхностей и какие «вёдра» отправлены в кадре |
-| теги `<wall>`, `<floor>`, `<ceiling>` + `.kind(Re2D)` | поверхности мира (§2) |
-| теги `<player>`, `<npc>`, `<enemy>`, `<pickup>`, `<bullet>`, `<sprite>`, `<rect>`, `<rotsprite>` + `.kind(Re2D)` | билборды: картинка на полу, всегда лицом к камере (§3) |
-| `$.re2d.poseStep(deg?)` | шаг квантования позы Re2DSprite, градусы (по умолчанию 3; 0 — без квантования) |
-| `$.re2d.poseBudget(n?)` | предел синтезов позы за кадр (по умолчанию 4; 0 — без предела) |
+| --- | --- |
+| `.cellAt(x,y)` | cell index или null |
+| `.spanAt(x,y,h)` | global span index или null |
+| `.support(x,y,feet,bodyHeight,step=0)` | `{span,height,ceiling}` или null; reachable floor с headroom |
+| `.blocked(x,y,radius,bottom,top)` | boolean; статический circle XY × height против стен/portal closure |
+| `.ray(from,to)` | точки `{x,y,height}`; `{fraction,x,y,height,wall,span,ceiling}` или null |
+| `.lightAt(x,y,h)` | `{r,g,b,level}` или null; native gameplay approximation, без чтения pixels |
+| `.surface(index)` | `{kind,primitive,cell,span,material(name),sky(enabled=true)}` или null |
 
-Остальной API Re2D — это **те же** методы `$`, у которых при `kind(Re2D)`
-меняется смысл (таблица «метод × вид» в [RE2D.md](../RE2D.md) §5), и новые слова
-камеры там, где в 2D смысла нет (`pitch`, `eye`, `fov`, `mouseLook`, `look`).
+XY — half-open. Свободный span включает пол и исключает потолок. `surface.kind`: 0 wall, 1 floor, 2 ceiling; наклон — коэффициенты соответствующей plane, не четвёртый mesh type. Не выводите surface ID из wall index попадания вслепую после перекомпиляции: IDs принадлежат текущему canonical domain.
 
-## 2. Поверхности мира
-
-Мир по-прежнему плоский: у каждой поверхности есть обычный 2D-прямоугольник
-`x, y, w, h` на полу (по нему же работает физика), а Re2D добавляет высоту.
-
-| Тег | Что рисуется | Высота |
-|---|---|---|
-| `<wall>` | призма над прямоугольником; с телом `static`, как обычная 2D-стена | от `.depth(z)` (основание, по умолчанию 0) до `attr('top')` (по умолчанию основание + 256) |
-| `<floor>` | горизонтальная плоскость | на высоте `.depth(z)` (0 по умолчанию) |
-| `<ceiling>` | горизонтальная плоскость | на высоте `attr('top')` (по умолчанию 256) |
+## Свет, материал, изменение мира
 
 ```js
-$('<wall>', { top: 300, tile: 128 }).at(600, 400).size(200, 32).sprite('art/brick.png')
-    .color('#ffffff').kind(Re2D).appendTo($.world);       // стена-перегородка высотой 300
+world.lighting({mode:'classic',dynamic:true,shadows:true,
+  distanceScale:.001,orientationContrast:true,orientationStrength:.06});
+world.span(0).lighting({level:.35,color:'#ffffff'})
+  .fog({density:.002,start:100,color:'#263044'});
+world.material('brick',{albedo:'art/brick.png',normal:'art/brick_n.png',blend:'opaque'});
+world.surface(0).material('brick');
+const lamp = world.light({x:100,y:120,h:70,radius:180,intensity:1,color:'#ff7040',shadow:true});
+lamp.flicker({min:.8,max:1,rate:9,seed:42});
+world.portalClosed(0,true);
 ```
 
-* **Текстура — обычный `.sprite(path)`**: цвет узла (`.color()`) умножается на
-  текстуру, поэтому у текстурной стены ставьте `#ffffff` (у `<wall>` по
-  умолчанию серый `#555555`, как в 2D). Без спрайта поверхность заливается цветом.
-* **`tile`** (атрибут) — сторона тайла в единицах мира: через столько текстура
-  повторяется; по умолчанию 64 (без текстуры — 256, повторять нечего).
-* **`top`**, а не `height`: в конструкторе узла `height` — это размер спрайта.
-* **Порядок `.sprite()` и `.size()`.** `.sprite(path)` подгоняет узел под размер
-  картинки, если ширина ещё 32 (так и в 2D): сначала `.sprite()`, потом `.size()`
-  — `$.re2d.room` делает именно так.
-* **Лицевая сторона.** Грани призмы рисуются, только если обращены к камере (по
-  обходу), поэтому комната из четырёх плит видна изнутри, а снаружи плиты
-  «прозрачны». Пол и потолок двусторонние.
-* **Под 2D-камерой** `<wall>` и `<floor>` деградируют в обычные 2D-прямоугольники —
-  вид сверху на тот же мир (план этажа, миникарта); `<ceiling>` скрыт.
+`lighting` задаёт полную global конфигурацию: отсутствующие dynamic/shadows false, distanceScale 0, orientationContrast/enabled true, orientationStrength .06. `span.lighting` и `span.fog` частично обновляют состояние. `span.info()` возвращает level/r/g/b/fogDensity/fogStart/fogR/fogG/fogB. `.span(id).heights(bottom,top)` transactionally меняет допустимый height interval; это не controller, спрайты нужно перемещать игре.
 
-## 3. Билборды и персонажи Re2DSprite
+Light: `.at(x,y)`, `.height(h)`, `.radius(r)`, `.intensity(v)`, `.color(c)`, `.shadow(bool)`, `.life(seconds)`, `.flicker(options)`, `.info()`, `.remove()`. Life 0 — постоянный свет; после expiry/removal handle устарел. Limits: 128 total lights, 16 selected/span, 16 shadow lights.
 
-Узел вида Re2D с «картиночным» тегом — плоская картинка, стоящая на полу и
-повёрнутая к камере (как в Doom). Позиция `(x, y)` — точка на полу, основание —
-`.depth(z)` (высота над полом, по умолчанию 0), `.size(w, h)` — размер картинки в
-единицах мира, а не пикселях экрана: на экране она масштабируется глубиной.
+Material: albedo, normal?, emissive?, emissiveStrength=1, uScale/vScale=1/64, blend=`masked` по умолчанию, opacity=1. Blend: opaque/masked/translucent/additive. Masked alpha threshold 128. 64 material slots, texture axes ≤2048. В world shading optional normal относится к constrained surface, не к imported mesh tangent.
 
-```js
-$.re2dSprite.from('demos/rotsprite/russi.character.json', { id: 'russi' })
-    .re2dStyle('pixel').re2dVariant('costume', 'police')
-    .at(640, 380).size(150, 150).kind(Re2D);     // маскот в комнате; angle — куда он смотрит
-$('#russi').get(0).angle = Math.PI / 2;           // лицом на юг (+y); 0 — на +x
-```
+Sky: `.sky({texture?,color?,yaw?,exposure?})` — `texture` PNG или `.exr` (панорама; EXR декодируется при загрузке в обычный 8-бит RGBA нативным адаптером tinyexr, одна часть, до 4096×2048, ≤64 МиБ; `exposure` −16..16 EV; для PNG экспозиция применяется в линейном пространстве). Небо — выборка 2D-панорамы без параллакса, не 3D-купол. Поверхность помечается `.surface(ceilingId).sky(true)`. Decal: `.decal({surface,material,u=0,v=0,width=16,height=16,life=0})` → handle с remove(); максимум 128. Transparent/sky base rejects decals.
 
-* **Один нативный вызов на кадр.** Отрисовщик только записывает билборд; в конце
-  прохода основания всех записей проецируются `engine.re2d.project` разом, записи
-  сортируются от дальних к ближним (при равной глубине — по `uid`, порядок
-  детерминирован) и уходят в общий батч спрайтов. Позади камеры и за краем кадра
-  билборд не рисуется; прозрачность узла (с учётом родителей) запоминается в момент
-  записи.
-* **Туман.** `$.camera.fog(far, min)` затемняет и билборды: rgb × `clamp(1 − d/far, min, 1)`.
-* **Анимация и кадры.** Спрайт берётся у узла (`.frames()`, `.animate()` работают),
-  у `<rotsprite>` — картинка модели.
+## Reload и debug
 
-### Re2DSprite поворачивается за камерой
+| Вызов | Назначение |
+| --- | --- |
+| `.reload(path)` / `.reloadJSON(text)` | transactionally заменяет валидную геометрию и authored static lighting |
+| `.watch(path)` / `.watch('')` | native watcher каждые .35s / отключение |
+| `.debug.view(name)` | переключить native diagnostic, возвращает world |
+| `.debug.visibility()` | `{spans:[indices],surfaces:[indices]}` из последнего visibility pass |
+| `.debug.renderStats()` | тот же native snapshot, что info() |
 
-Для узла `<rotsprite>` Re2D каждый кадр считает позу модели, какой её видит
-камера, и ставит `.re2dPose(yaw, pitch)`:
+Views: final, cell-id, span-id, bsp, portals, depth, owner, light-level, dynamic-light-count, shadow-mask, normal, emissive, overdraw. Snapshot — диагностическая копия; не используйте массивы для JS renderer loops. Index handles проверяются заново после topology reload. Динамический свет, ссылки на узлы со спрайтами и material/sky banks сохраняются при допустимом reload; подробнее [runtime](../re2d/RE2D_WORLD_RUNTIME.md#перезагрузка-и-жизненный-цикл).
 
-* **yaw** — на сколько персонаж повёрнут относительно взгляда камеры: 0 — лицом к
-  зрителю, +90° — лицом вправо от зрителя, ±180° — спиной. Берётся из направления
-  `node.angle` на полу и положения камеры, поэтому при обходе вокруг персонажа он
-  плавно поворачивается — в Doom для этого рисовали 8 ракурсов;
-* **pitch** — под каким углом зритель видит центр персонажа (положителен, если глаза
-  ниже центра, отрицателен — если выше).
+## Примеры, ограничения, проверки
 
-Поза **квантуется** (`$.re2d.poseStep`, 3° по умолчанию) и меняется только при смене
-квантованного значения: синтез картинки в C стоит заметно. Цифры замера (headless,
-один персонаж): `re2dPose` в **pixel**-стиле — около 1.3 мс, в **anime** — около
-11 мс. Поэтому:
+[World guide](../RE2D_WORLD_GUIDE.md), [sprite integration](../re2d/RE2DSPRITE_WORLD.md), [formats](../re2d/RE2D_WORLD_FORMAT.md), [migration](../re2d/RE2D_MIGRATION.md). Sources: [wrapper](../../src/highlevel/re2d.js), [bindings](../../src/re2d.c), [нативная композиция спрайтов](../../src/re2d_world_runtime.c).
 
-* маскоты для Re2D делайте в `pixel`-стиле (`.re2dStyle('pixel')`) — он же даёт
-  ретро-вид «как в Doom»; anime-стиль годится для одного-двух персонажей;
-* за кадр синтезируется не больше `$.re2d.poseBudget` поз (4 по умолчанию): при
-  обходе камерой поправки всех персонажей не приходят в один кадр, остальные
-  догоняют на следующих. `$.re2d.info().poses` показывает `{ updated, deferred }`;
-* анимация JSON-модели (`re2dMotion('idle')`) — это синтез каждый кадр на
-  персонажа независимо от камеры (pixel: около 3 мс), поэтому в сцене держите
-  немного анимированных маскотов.
+Public runtime checks: `tests/agent/re2d_world_renderer_test.py`, `re2d_world_acceptance_test.py`, `re2d_dust2_test.py`. Native correctness: `tests/re2d/world_test.c` и `tests/rotsprite/rotsprite_test.c`. Limits и measurement provenance находятся в [performance](../RE2D_WORLD_PERF.md); наличие тестов не заменяет фактический отчёт прогона.
 
-Пример замера (3 маскота в pixel-стиле, idle-анимация, камера стоит): `JS: логика`
-9.6 мс; при обходе камерой добавляется около 3.4 мс на синтез поз.
-
-## 4. Игрок от первого лица
-
-`.controls('wasd')` у узла вида Re2D под Re2D-камерой работает по **взгляду** камеры,
-а не по осям экрана: `W` ведёт «вперёд» туда, куда смотрят глаза, `S` — назад, `A`/`D`
-— боком. Это тот же метод `$`, у которого при `kind(Re2D)` другое значение (таблица
-«метод × вид», [RE2D.md](../RE2D.md) §5):
-
-```js
-$('<player>', { id: 'hero' }).at(640, 1130).size(36, 36).collision(30, 30)
-    .speed(240).controls('wasd').kind(Re2D).appendTo($.world);
-$.camera.follow('#hero').yaw(-90);                       // глаза на теле, взгляд на север
-$.camera.mouseLook({ on: true, sensitivity: 0.0026 });   // мышь крутит камеру
-```
-
-* Скорость задаётся по обеим осям пола; тело — обычное 2D (Box2D), поэтому стены, слои
-  и события контакта работают как в 2D. Гравитации нет (`$.world.gravity(0, 0)`).
-* Ввод — `$.input.vec(...)`, повёрнутый на yaw камеры (`re2dMove`, чистая функция).
-* Узел без `kind` и любой узел под 2D-камерой управляются как раньше.
-* Mouse-look детерминирован: сдвиг мыши за кадр попадает в `--record` (поля `dx`/`dy`),
-  и прогулка воспроизводится в ту же точку ([RECORD_REPLAY.md](../RECORD_REPLAY.md)).
-
-Маскотов и их реакции движок **не** выдумывает: расстояние → поворот → эмоция — это
-обычная игровая логика в демо ([demos/re2d_world](../../demos/re2d_world/README.md)),
-а состояние лежит в свободном атрибуте (`attr('state')`), поэтому проверяется без
-пикселей: `$.expect('#maid').state('smile')`. Поворачивать узел с телом нужно методом
-`.angle(rad)` (он двигает и тело): прямая запись в `node.angle` перезаписывается физикой.
-
-## 5. Как это устроено
-
-1. **Вид камеры.** `$.camera.kind(Re2D)` переключает проход мира. Для обычной
-   камеры `render.js` проверяет `cam.kind !== '2d'` один раз на проход.
-2. **Проход вида.** Если у камеры вид с зарегистрированным проходом
-   (`$.kinds.pass`), 2D-мир не рисуется: вызывается `begin(cam)`, затем рисуются
-   узлы **этого же вида** (узлы других видов, в том числе 2D, под такой камерой
-   не рисуются — у них нет места в её пространстве), затем `end(cam)`.
-3. **Вёдра.** Отрисовщик поверхности не шлёт меш по одному узлу: треугольники
-   копятся в вёдрах по паре «текстура, режим граней» (стены с отбраковкой, плоскости
-   без), а `end` отправляет каждое ведро одним `engine.re2d.mesh`. Порядок не важен —
-   разбирает z-буфер.
-4. **Нарезка и кэш.** Грань режется на ячейки по тайлу: текстуры меша аффинные, и
-   большая ячейка кривит картинку. Геометрия узла строится один раз и
-   пересобирается, только если изменились его поля (положение, размер, `depth`,
-   `top`, `tile`, цвет, спрайт); число ячеек на сторону ограничено 96.
-5. **Деградация.** Узел вида `re2d` под обычной 2D-камерой рисуется как 2D-узел:
-   включать вид можно по частям.
-
-Стоимость кадра комнаты 1024×1024 с тремя текстурами (около 900 треугольников
-в вёдрах): JS-часть — `логика` 0.76 мс, `сборка батча` 1.14 мс (замер
-`$.debug.profile()`, 240 кадров, headless).
-
-## 6. Ограничения
-
-* Камера Re2D — **главная**. Дополнительные камеры сплитскрина и PIP
-  ([viewports.md](viewports.md)) остаются 2D.
-* Свет, туман и тени 2D (`$.gfx.light`, `$.gfx.fog`) в проходе Re2D не
-  участвуют; затемнение с расстоянием — `$.camera.fog(far, min)`.
-* Физика остаётся плоской (вид сверху); высота `z` узла нужна только рисованию.
-* Спрайты всегда рисуются поверх меша (ограничение z-буфера, [depth.md](depth.md) §4):
-  объекты внутри комнаты, которые должны закрывать персонажей, пока не
-  поддержаны ([RE2D.md](../RE2D.md) §8).
-* Билборд всегда плоский и стоит прямо: наклон камеры не искажает картинку, как
-  и в Doom. Спрайты поверх меша, поэтому билборд никогда не заслонён стеной или
-  столбом (внутри комнаты-коробки это верно).
-* Re2D-узлы других тегов (`<text>`, `<particles>`, `<tilemap>` …) под Re2D-камерой
-  пока не рисуются.
-
-## 7. Проверка
-
-```bash
-build/_deps/quickjs-build/qjs tests/js/camera_re2d_test.mjs     # JS-слой камеры
-build/_deps/quickjs-build/qjs tests/js/re2d_test.mjs            # геометрия поверхностей, вёдра
-./build/tests/r2d_re2d_test                                     # математика (C)
-python3 tests/agent/re2d_native_test.py                         # ядро в движке, пиксели
-python3 tests/agent/highlevel_camera_re2d_test.py               # камера в движке
-python3 tests/agent/highlevel_re2d_room_test.py                 # комната: пиксели, физика, текстуры
-python3 tests/agent/highlevel_re2d_billboards_test.py           # билборды и маскоты Re2DSprite
-python3 tests/agent/highlevel_re2d_world_test.py                # демо: ходьба, стены, маскоты, запись/воспроизведение
-```
-
-## 8. RE2D World — новый минимальный BSP/span-срез
-
-`$.re2d.world(description)` создаёт независимый native handle специализированного
-мира. Это **spatial description → projection → ordinary 2D representation**:
-C синтезирует RGBA, приватная глубина решает покрытие, а конечная текстура
-рисуется существующим обычным `engine.drawSprite` в 2D-батче. World не принимает
-произвольные треугольники. Разделы 1–7 выше описывают сохранённый legacy-путь.
-
-```js
-const world = $.re2d.world({
-    walls: [{ from:[100,-70], to:[100,70], bottom:0, top:60, color:'#c83c28' }],
-    cells: [{ x:-200, y:-200, w:600, h:400, spans:[
-        { bottom:0, top:128, floorColor:'#305840', ceilingColor:'#233540' },
-        { bottom:160, top:288, floorColor:'#544030', ceilingColor:'#344858' },
-    ] }],
-});
-$.render(() => world.render({x:0,y:0,eye:48,yaw:0,pitch:0,fov:70}, npc));
-```
-
-`cells` сейчас — прямоугольные authoring-регионы с несколькими свободными
-интервалами высоты. BSP строится только по XY-отрезкам стен; геометрия региона
-не превращается автоматически в BSP-листы или порталы. Одинаковые XY допустимы,
-перекрывающиеся свободные интервалы на пересекающихся XY-регионах отклоняются.
-Цвета RGB, по умолчанию белые; геометрия конечная, в пределах ±1000000.
-
-| Вызов handle | Контракт |
-|---|---|
-| `support(x,y,feet,height,step=0)` | самый высокий достижимый пол ≤ `feet+step`, с headroom ≥ `height`; `{span,height,ceiling}` или `null`; не проваливается сквозь потолок нижнего этажа |
-| `blocked(x,y,radius,bottom,top)` | статический круг XY × интервал высоты против стен; касание вертикальных интервалов не блокирует, касание круга со стеной блокирует |
-| `ray(from,to)` | отрезок запроса, точки `{x,y,height}`; ближайшее попадание `{fraction,x,y,height,wall,span,ceiling}` или `null`; стены обходятся через XY BSP, пол/потолок — по списку spans |
-| `render(view,entities=[],width=320,height=180)` | синтезирует RGBA и отправляет один обычный спрайт на всё окно; возвращает id спрайта; `view` содержит `x,y,eye,yaw,pitch,fov`, углы в градусах; целый размер 1..1024 |
-| `info()` | `{walls,spans,segments,width,height}` |
-| `dispose()` | освобождает CPU/GPU-ресурсы; повторный вызов безопасен; дальнейшие запросы бросают ошибку |
-
-`entities` — обёртка, селектор, узел или массив Re2DSprite-узлов/обёрток. Поза вычисляется
-относительным yaw/pitch с теми же правилами `.re2dPose`, дети `.re2dAttach` используют
-прежний socket/model API. World объединяет изменение анимации и углов перед
-нативным CPU-синтезом; полностью вне кадра синтез откладывается. Прямой вызов
-`.re2dPose` сохраняет немедленное обновление обычного спрайта. Для этого явного вызова спрячьте узлы `.hide()`, чтобы
-не получить их дополнительную обычную отрисовку. Их участие в World задаёт список,
-поэтому `hide()` этот список не фильтрует. Тела Box2D не получают height-фильтра
-автоматически: для многоэтажных сущностей используйте обычные узлы без тела и
-скриптовый контроллер поверх запросов. В демо это `<player>` и подшаги движения.
-
-Проекции: perspective по умолчанию; `view.projection="orthographic"` и
-`orthoHeight` (по умолчанию 400) задают параллельный вид. Обе проекции допускают
-наклон; native pitch ограничен примерно ±89°.
-
-Ограничения: цветные стены/плоскости без текстур;
-нет PVS/порталов, slopes и готового stair/controller API. `support` проверяет
-точку, не весь footprint, `blocked` — позицию, не sweep; нет автоматической
-симуляции падения, прыжков, переходов между этажами и столкновений сущностей.
-У спрайта одна глубина на изображение, coverage — порог alpha 128; полупрозрачные
-фрагменты не смешиваются. Крепление рисуется до/после родителя по существующему
-приближённому признаку: точной попиксельной глубины тела/оружия нет. Узловые tint,
-alpha, flip, blend, fog и poseBudget в новом явном World-вызове пока не применяются.
-Производительность и веб-сборка нового пути не проверялись.
-
-Демо: `./build/russiano2d --game demos/re2d_bsp_world`. Проверки:
-`build/tests/r2d_re2d_world_test` (ASan/UBSan),
-`tests/js/re2d_test.mjs`, `tests/agent/highlevel_re2d_bsp_world_test.py`,
-`tests/agent/re2d_bsp_combat_test.py`.
-Подробный аудит: [RE2D_WORLD_GUIDE.md](../RE2D_WORLD_GUIDE.md).
-
-Производительность нативного пути и воспроизводимый стенд: [RE2D World performance](../RE2D_WORLD_PERF.md).
+World positional audio: [`world.audio` / `$.re2dWorldAudio(world)`](../re2d/WORLD_AUDIO.md). Sources share the native Re2D geometry and existing mixer; Steam Audio supplies HRTF PCM only.

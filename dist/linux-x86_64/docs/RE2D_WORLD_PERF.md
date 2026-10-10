@@ -1,83 +1,54 @@
-# RE2D World: native CPU optimisation
+# Re2D World: производительность и измерения
 
-Measured 2026-10-08 on Apple M4, macOS 27.0.1, Metal, 800×600 demo window.
-Both versions use Release (`-O3 -DNDEBUG`). Baseline is `3bf46c8`; the
-optimised version is the change introducing this document. Animations, four
-Russi actors, AK viewmodel and RmlUi are enabled in both. No resolution,
-supersampling or animation rate reduction was used.
+Редакция 2026-10-10. Текущий renderer — native C + SDL_GPU. GPU world raster и CPU Re2DSprite pose synthesis — разные части кадра. Исторический отчёт прежнего CPU World сохранён [отдельно](re2d/RE2D_WORLD_CPU_HISTORY.md); он не описывает новый renderer.
 
-## Measured result
+## Финальный static stress
 
-Three samples of 30 frames per scenario, median elapsed wall-clock time per
-frame. Both versions start with the same seeded scene and camera reset.
+Provenance: Apple M4, macOS27.0.1 arm64, AppleClang Release, SDL_GPU Metal, native400×240, seed7, warmup8/sample20. Sprite nodes static; initial synthesis unlimited, poseStep0. GPU completion fence waited; FINAL output без framebuffer readback. Modified checkout baseline HEAD8011294b01330420ec12c903dfd9041834a6ecfe, binarySHA256 `6ebf56e995b3f68329c35c8993913dfbf0c96968762103ff2451c2524ff7364c`. Full recorded report: [JSON](re2d/RE2D_RENDERER_BENCHMARK.json).
 
-| Scenario | Before, ms/frame | After, ms/frame | Speedup |
-|---|---:|---:|---:|
-| Stationary camera | 59.86 | 16.17 | 3.70× |
-| Turn with Right | 63.22 | 16.09 | 3.93× |
-| Walk with W | 74.62 | 16.27 | 4.59× |
+| Сцена | Visible / total cells | Visible surfaces | Relevant / total lights | Видимые / все спрайты | Warm median ms | Cold frame ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | 16 / 100 | 166 | 8 / 8 | 9 / 10 | 1.056667 | 144.995750 |
+| B | 30 / 500 | 486 | 12 / 64 | 29 / 30 | 1.733438 | 444.015333 |
+| C room-over-room | 16 / 80 | 167 | 16 / 128 | 15 / 50 | 1.659104 | 254.589333 |
 
-The after measurements correspond to approximately 61–62 frames/s throughput
-in this agent test. They include command overhead and are **not presented
-window FPS** or a guarantee for other scenes, resolutions or hardware. A
-separate 60-frame window gave 13.66–16.31 ms/frame; scene progression changes
-which actors and surfaces are visible. Fixed-dt agent runs report 60 in the
-engine FPS counter regardless of actual speed: that counter was not used.
-The ordinary demo now displays the engine's real-clock FPS when launched
-without `--fixed-dt`.
+Первичный синтез ракурсов спрайтов: A126.580250/B411.129250/C232.270042ms. Warm static cache не включает постоянную animation resynthesis. Это native world frame time с fence, не displayed FPS и не whole application frame budget. Scene C содержит16 shadow candidates. Полные totals/surfaces/stages/parameters сохранены в JSON, не выводятся из таблицы приблизительно.
 
-## What changed
+BSP visits23/34/29; draws302/1044/314; adjacent sampler batches10/30/16. Binding batches не означают столько же draw calls. GPU draws — specialized fullscreen triangles, не generic scene triangles.
 
-The World compositor no longer traverses all geometry for every output pixel.
-Native C computes clipped screen bounds for each specialised wall segment or
-rectangular floor/ceiling region. Within those bounds it evaluates the same
-intersection and depth equations using row coefficients. XY BSP orders wall
-work; the existing world ray query remains available for gameplay. This is
-still a private CPU RGBA/depth synthesis pass followed by one ordinary sprite
-through the existing 2D batch. No GPU world mesh or generic triangle API was
-introduced.
+GPU texture payloads A21,562,376/B63,505,416/C34,145,288bytes; buffer/download payloads A1,922,048/B1,922,048/C1,947,424bytes. Эти resident payload categories исключают allocator/driver/temporary/shared resources; их нельзя называть total VRAM/process memory.
 
-Re2DSprite's anime synthesis reuses native scratch, clears/resolves only the
-affected region, and composes each part's model/view transform once per pose.
-The previous 512→256 supersampling and alpha treatment are preserved. Scratch
-retains approximately 3.25 MiB per animated anime handle until disposal; this
-trades retained memory for fewer allocations and less clearing.
+## Анимированные персонажи
 
-For World composition only, animated state and final relative yaw/pitch are
-queued through internal `rotSpritePrepare` and synthesised once when C reads
-the pixels. Fully off-screen actors defer synthesis until needed. Their
-animation clocks and socket/model state continue updating. Individual GPU
-texture uploads are deferred because World reads CPU pixels directly. Explicit
-`.re2dPose` and ordinary visible 2D rendering flush and upload as before. All
-native model handles are validated even when off-screen. The public high-level
-API remains a wrapper; gameplay types are unchanged.
+Earlier unbudgeted animated GPU stress в том же ходе работ дал A135.863/B433.309/C227.574ms; CPU pose synthesis занимала примерно131/421/219ms. Эти значения исторические для recorded промежуточного build, не fresh measurement финального binary. Они объясняют, почему нельзя подменять animated throughput static warm цифрами.
 
-## Verification and reproduction
+Default `world.quality({poseBudget:1,poseStep:3})` ограничивает dirty synthesis и распределяет её round robin. Спрайт, синтез которого отложен, использует готовый ракурс, animation clocks продолжаются. Budget0 unlimited; step0 unquantized. Снижение pose refresh — visual quality tradeoff, не бесплатное ускорение. Attachment candidates тоже потребляют budget.
 
-```
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j6
-python3 tools/bench_re2d_world.py --frames 30 --samples 3 --json build/bench_re2d_world.json
-./build/russiano2d --game demos/re2d_bsp_world
+## Что оптимизировано
+
+Native visibility следует reachable spans/portal windows и active near-first XY BSP branches. Light masks/per-light reached-span lists ремонтируют dirty links, не пересканируют все cells на unchanged frame. Baked topology/static associations избегают authoring build при compiled startup.
+
+Retained scratch: visibility/frame/light/touched/sort buffers, shared anime supersampling arena. GPU-кэш спрайтов использует монотонный ID экземпляра, ревизию и размер; повторное использование адреса памяти не вызывает коллизии кэша. Shadow chunks local per-light invalidation; atlas repacks/uploads whole after relevant change. Adjacent equal material samplers reused without geometry order changes. Эти оптимизации сохраняют constrained authoritative model.
+
+## Воспроизвести
+
+Из checkout после Release build, на свободной машине:
+
+```sh
+python3 tools/bench_re2d_world_renderer.py --backend gpu --frames 20 --output build/re2d_world_renderer_gpu_benchmark.json
+python3 tools/bench_re2d_world_renderer.py --backend cpu --frames 20 --output build/re2d_world_renderer_cpu_benchmark.json
 ```
 
-The benchmark writes raw samples and environment information. Run on an idle
-machine without a second copy of the demo for comparable results. The baseline
-was built from committed engine sources, measured, then the optimised sources
-were restored and rebuilt before final checks.
+Script drives agent protocol; measured workload reports native counters, not Python loop execution. Output captures machine/commit/working-tree/binary digest/resolution/quality/cold frame/warm stages. Benchmark tool currently hashes build/russiano2d; для сопоставимого прогона используйте этот binary и не задавайте другой agent binary через environment. LoadWallMs и ColdAgentStepWallMs включают transport; они отличны от frameMs.
 
-All 10 native test executables and 87 JS test files pass. Native tests compare
-World coverage/depth against independent per-pixel ray queries across 24
-camera/storey/projection combinations and compare reused anime scratch against
-fresh scratch across 16 poses, including hidden/empty frames. BSP, World and
-RotSprite native tests run with ASan/UBSan. Twelve relevant agent suites pass,
-including World pose coalescing, off-screen deferral, immediate Pose semantics,
-invalid culled handles, height occlusion, attachments, shooting and stairs.
-Three frozen demo views match the pre-optimisation rendered pixels exactly
-below the HUD; the HUD gained an FPS label. Documentation checks pass.
+```js
+world.profile({gpuWait:true});
+world.quality({poseBudget:0,poseStep:0});
+const sample=world.info(); // читать после фактического render/frame
+```
 
-Remaining constraints are described in [World audit](RE2D_WORLD_GUIDE.md):
-no portals/PVS, no textured World surfaces, rectangular supports, approximate
-depth per composed sprite, and no verified Web/WASM build. Off-screen culling
-does not imply PVS or rejection of actors hidden behind walls. Large-scene
-scaling and higher-resolution presentation still need separate measurements.
+GPU timing fields — CPU wall/cache construction/submission/fence wait, не hardware timestamp. FrameMs без gpuWait не ждёт GPU. Debug capture/readback дороже FINAL; измеряйте выбранный mode явно. Не меняйте golden baseline ради performance результата.
+
+## Что пока не подтверждено
+
+Hosted Linux/Vulkan run, fresh Web/WASM build, arbitrary animated50 actor60FPS и другие hardware/resolutions не подтверждены этим benchmark. CPU/GPU parity и local correctness checks не заменяют platform performance measurements. [Runtime profiler reference](re2d/RE2D_WORLD_RUNTIME.md#диагностика-и-полный-profiler-snapshot), [implementation evidence](re2d/RE2D_RENDERER_IMPLEMENTATION_PLAN.md), [audit](re2d/RE2D_DOCUMENT_ACCEPTANCE_AUDIT.md).

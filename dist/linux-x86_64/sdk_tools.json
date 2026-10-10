@@ -20,8 +20,8 @@
     {
       "id": "r2d-sdk",
       "name": "r2d-sdk (нативный бэкенд)",
-      "description": "CLI: реестр, ассеты, валидация, запуск и сборка. Один C-код для GUI, CLI и агента.",
-      "last_updated": "2026-10-09T12:00:00+03:00",
+      "description": "CLI: реестр, ассеты, валидация, запуск, сборка и animation-import (FBX → Re2DSprite JSON-клип). Один C-код для GUI, CLI и агента.",
+      "last_updated": "2026-10-10T07:40:00+03:00",
       "entry": "diagnostics",
       "binary": "build/r2d-sdk",
       "category": "backend"

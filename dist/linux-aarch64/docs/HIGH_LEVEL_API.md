@@ -344,7 +344,7 @@ $.world.bodyAt(x, y, { mask: 0x2 });                  // кто из враго�
 (`.oneWay(true, -Math.PI / 2)` — вверх по умолчанию).
 
 **Суставы.** `.joint(цель, opts)` возвращает id; `opts` — как в
-[internal/NATIVE.md](internal/NATIVE.md#enginecreatejointopts--engineestroyjointid), плюс сокращения:
+[internal/NATIVE.md](internal/NATIVE.md#enginecreatejointopts--enginedestroyjointid), плюс сокращения:
 `a`/`b` — точки крепления в мировых пикселях. Для `revolute` и `weld` вторая
 точка по умолчанию совпадает с первой (крепление в одну точку), для
 `distance` — берутся центры тел. Уничтожение: `$.world.destroyJoint(id)`,
@@ -374,7 +374,7 @@ $('#hero').on('hit', e => {              // удар быстрее порога
 `.controls({ axis: 'both', jump: 'space' })` — двигает узел или его тело,
 прыжок по `space`/`w`/`↑` только когда узел на земле.
 У узла вида Re2D под Re2D-камерой те же схемы ведут по **взгляду** камеры
-(`W` — вперёд, `A`/`D` — боком), см. [re2d.md](highlevel/re2d.md) §4.
+(`W` — вперёд, `A`/`D` — боком), см. [legacy Re2D](highlevel/re2d_legacy.md#4-игрок-от-первого-лица).
 
 ## 9. Здоровье
 
@@ -1553,16 +1553,18 @@ $.ready(() => {
 [RECIPES](tutorial-platformer.md) и [internal/NATIVE.md](internal/NATIVE.md) — низкий уровень.
 
 Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](RE2DSPRITE_V2.md),
-[API `$`](highlevel/re2dsprite.md). Демо `rotsprite` — переключение костюмов,
-моргание, ходьба/бег на месте и перетаскивание кистей.
+[API `$`](highlevel/re2dsprite.md). Демо `re2dsprite` — equipment, волосы,
+моргание, ходьба/бег на месте и перетаскивание кистей; старое имя rotsprite — alias.
 
 Re2DSprite JSON, пользовательские модели/анимации и сокеты: [RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md). High-level `$.re2dSprite.from`, `$.re2dSprite.equip`, `.re2dAttach`, `.re2dDetach`, `.re2dBone`, `.re2dLayer`, `.re2dSeek`, `.re2dVariant`.
 
-### Специализированный RE2D World
+### Native Re2D World
 
-`$.re2d.world({walls,cells})` — XY BSP + vertical spans, native queries и
-синтез конечного обычного 2D sprite. Несколько этажей на одинаковых XY,
-перспективная/ортографическая проекция и приватная композиция Re2DSprite.
-[Контракт и ограничения](highlevel/re2d.md#8-re2d-world--новый-минимальный-bspspan-срез),
-[аудит и проверки](RE2D_WORLD_GUIDE.md).
-Демо с комнатами, лестницей и АК: `--game demos/re2d_bsp_world`.
+`$.re2dWorld.load(path)` / `.fromJSON(text)` — explicit native cells/XY BSP/free spans/portals, constrained textured surfaces, classic/dynamic lighting/shadows/fog и shared depth с Re2DSprite. `world.add(sprite)` включает изображения существующего узла `$` и его присоединённых спрайтов в кадр; `world.render(view,width,height)` выводит ordinary 2D frame. Горячие пути рендера исполняются в C, GPU-путь — через SDL_GPU. World не создаёт отдельный тип игровой сущности или её жизненный цикл.
+
+[Полное руководство](RE2D_WORLD_GUIDE.md), [public API](highlevel/re2d.md),
+[персонажи/оружие](re2d/RE2DSPRITE_WORLD.md), [форматы/SDK](re2d/RE2D_WORLD_FORMAT.md),
+[миграция](re2d/RE2D_MIGRATION.md), [performance](RE2D_WORLD_PERF.md).
+Новые demos: `demos/re2d_world_renderer_lab/acceptance`, `demos/re2d_dust2`.
+
+`$.re2d.room`, `.kind(Re2D)`, `$.re2d.world(description)` остаются [legacy API](highlevel/re2d_legacy.md), не alias новой world registration/render signature. Существующее `demos/re2d_bsp_world` относится к прежнему CPU пути.

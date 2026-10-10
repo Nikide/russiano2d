@@ -324,3 +324,28 @@ UV, сохранение радиуса сгиба), `tests/rotsprite/surface_te
 сегментация), `tests/js/rotsprite_json_test.mjs` (матрицы, клипы, сокеты),
 `tests/agent/highlevel_rotsprite_test.py` (реальный runtime).
 В этой документационной правке код и визуальные данные не менялись.
+
+## 11. Resolved sample depth и новый World (2026-10-10)
+
+Sources: [anime resolve](../src/rotsprite_math.c), [native sample accessor](../src/rotsprite.c), [world stamp](../src/re2d_world.c), [GPU-композиция спрайтов](../shaders/world.frag.glsl). Function names: `r2d_rotsprite_v2_anime_sized`, `r2d_rotsprite_sample_depth`, `r2d_world_stamp_samples`.
+
+При anime resolve размер internal field =2N, output=N (текущий runtime N=512). В каждой группе2×2 output alpha — mean alpha, color — alpha-weighted mean, sample depth — maximum depth among covered subpixels, умноженная на normalization depth_scale: `(model ? model.scale : body ? 1 : 2)/128`. Большая internal depth ближе к зрителю; output sample map сохраняется с конечным RGBA, supersampling arena может переиспользоваться.
+
+Нативная композиция спрайта с высотой основания b, world width W/height H, center=b+H/2, camera basis:
+
+```text
+dx = sprite.x-camera.x; dy = sprite.y-camera.y
+forward = dx*cos(yaw)+dy*sin(yaw)
+centerDepth = forward*cos(pitch)+(center-eye)*sin(pitch)
+offset = sampleDepth[texel]*H
+projectedDepth = centerDepth-offset
+right = (u-.5)*W
+up = (.5-v)*H
+wx = x-sin(yaw)*right-cos(yaw)*sin(pitch)*up-cos(yaw)*cos(pitch)*offset
+wy = y+cos(yaw)*right-sin(yaw)*sin(pitch)*up-sin(yaw)*cos(pitch)*offset
+wh = center+cos(pitch)*up-sin(pitch)*offset
+```
+
+Alpha<128, behind-near и depth farther than current world sample rejected. Reconstructed wx/wy/wh определяют native span/light/fog receiver. Это camera-aligned 2D synthesis reconstruction, не произвольный character mesh и не physically exact surface normals. Нормаль диффузного освещения спрайта приближённо направлена к camera в XY.
+
+`r2d_rotsprite_sample_depth` возвращает map для anime; pixel/v1 возвращают NULL. `r2d_world_stamp_samples` тогда вызывает fallback image-depth stamp. Поэтому обещание одинаковой sample-depth точности всех styles неверно. Public creation/model format не меняется; [World integration](re2d/RE2DSPRITE_WORLD.md) описывает API/lifecycle/pose budget. Ordinary 2D atlas math выше не следует путать с perspective world camera.

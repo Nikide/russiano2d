@@ -3,6 +3,7 @@ import { createWorldSession, sections } from '../lib/world_model.js';
 import { escapeHtml as esc, dirOf, joinPath } from '../lib/model.js';
 import * as views from '../lib/views.js';
 let singleton;
+const debugViews=['final','cell-id','span-id','depth','owner','light-level','dynamic-light-count','normal','emissive','bsp','portals','shadow-mask','overdraw'];
 export const standalone = true;
 export async function open(app, args) {
     if (!singleton) singleton = createStudio(app);
@@ -11,7 +12,7 @@ export async function open(app, args) {
 export function createStudio(app) {
     const $ = app.$, doc = $.ui.doc('sdk/ui/world_studio.rml');
     const s = { active: false, path: null, session: null, selection: null, report: null, diagnostics: [], world: null, node: null,
-        view: { x: 100, y: 100, eye: 60, yaw: 0, pitch: 0, fov: 70 }, scale: 1, origin: [0,0], drag: null, busy: false };
+        view: { x: 100, y: 100, eye: 60, yaw: 0, pitch: 0, fov: 70 }, debug:0,gpu:false,lighting:true,scale: 1, origin: [0,0], drag: null, busy: false };
     const fail = (e, code='SDK_WORLD_EDIT') => { s.diagnostics = [{ code, severity: 'error', asset: s.path, message: String(e.message || e), location: null, details: null }]; doc.html('ws-diag', views.diagRows(s.diagnostics)); };
     const dispose = () => { if (s.world) s.world.dispose(); s.world = null; if (s.node) s.node.remove(); s.node = null; };
     function select(key, i) { s.selection = { key, i }; render(); return s.selection; }
@@ -30,12 +31,12 @@ export function createStudio(app) {
     }
     function drawPlans() {
         const d=s.session.data, r=doc.rect('ws-plan');if (!r||r.w<1||r.h<1)return;
-        const points=[];for(const key of sections)for(const v of d[key]||[]){ if(v.rect)points.push([v.rect[0],v.rect[1]],[v.rect[0]+v.rect[2],v.rect[1]+v.rect[3]]);else if(Array.isArray(v.from)&&Array.isArray(v.to))points.push(v.from,v.to); }
+        const points=[];for(const key of sections)for(const v of d[key]||[]){ if(key==='lights')points.push([v.x,v.y]);else if(v.rect)points.push([v.rect[0],v.rect[1]],[v.rect[0]+v.rect[2],v.rect[1]+v.rect[3]]);else if(Array.isArray(v.from)&&Array.isArray(v.to))points.push(v.from,v.to); }
         const minX=points.length?Math.min(...points.map(v=>v[0])):0,minY=points.length?Math.min(...points.map(v=>v[1])):0;
         const maxX=points.length?Math.max(...points.map(v=>v[0])):200,maxY=points.length?Math.max(...points.map(v=>v[1])):200;
         s.scale=Math.max(.001,Math.min((r.w-30)/Math.max(100,maxX-minX),(r.h-30)/Math.max(100,maxY-minY)));s.origin=[minX-15/s.scale,minY-15/s.scale];
         const html=[]; const shape=(key,i,v,x,y,w,h,extra='')=>'<div class="world-shape'+(s.selection&&s.selection.key===key&&s.selection.i===i?' sel':'')+'" data-key="'+key+':'+i+'" style="left:'+x+'px;top:'+y+'px;width:'+Math.max(3,w)+'px;height:'+Math.max(3,h)+'px;'+extra+'">'+esc(v.id)+'</div>';
-        for(const key of sections)for(let i=0;i<(d[key]||[]).length;i++){const v=d[key][i]; if(v.rect){ const q=v.rect;html.push(shape(key,i,v,(q[0]-s.origin[0])*s.scale,(q[1]-s.origin[1])*s.scale,q[2]*s.scale,q[3]*s.scale)); }
+        for(const key of sections)for(let i=0;i<(d[key]||[]).length;i++){const v=d[key][i]; if(key==='lights'){html.push(shape(key,i,v,(v.x-s.origin[0])*s.scale-4,(v.y-s.origin[1])*s.scale-4,8,8,'background-color:#ffd06a;'));}else if(v.rect){ const q=v.rect;html.push(shape(key,i,v,(q[0]-s.origin[0])*s.scale,(q[1]-s.origin[1])*s.scale,q[2]*s.scale,q[3]*s.scale)); }
             else if(Array.isArray(v.from)&&Array.isArray(v.to)){const a=v.from,b=v.to,dx=b[0]-a[0],dy=b[1]-a[1];html.push(shape(key,i,v,(a[0]-s.origin[0])*s.scale,(a[1]-s.origin[1])*s.scale,Math.hypot(dx,dy)*s.scale,3,'transform-origin:0px 0px;transform:rotate('+Math.atan2(dy,dx)+'rad);background-color:'+(key==='portals'?'#83dba4':'#98bddd')+';'));}}
         doc.html('ws-plan',html.join(''));
         const sec=doc.rect('ws-section'), cells=s.report&&s.report.ok?s.report.world.cells:(d.cells||[]).filter(c=>Array.isArray(c.rect)).map(c=>({x:c.rect[0],w:c.rect[2],spans:c.spans,id:c.id}));
@@ -57,16 +58,16 @@ export function createStudio(app) {
         const draft=joinPath(dirOf(s.path),'.r2d-sdk-world-draft.re2dmap');
         try {
             if(!$.fs.write(draft,s.session.text()))throw new Error('Не удалось записать черновик');
-            const args=['world-compile',draft];if(write)args.push('--output',s.path.replace(/\.re2dmap(?:\.json)?$/i,'')+'.compiled.json');else args[0]='world-info';
+            const args=['world-compile',draft,'--renderer'];if(write)args.push('--output',s.path.replace(/\.re2dmap(?:\.json)?$/i,'')+'.re2dworld');else args[0]='world-info';
             const r=await app.backend(args,'Компиляция мира');s.report=r.json;s.diagnostics=r.json?r.json.diagnostics:app.state.diagnostics;
             doc.html('ws-diag',views.diagRows(s.diagnostics));dispose();
-            if(r.json&&r.json.ok){s.world=$.re2d.world(r.json.world);s.node=$('<sprite>',{id:'sdk-world-preview'});doc.text('ws-preview-state','настоящий runtime');}
+            if(r.json&&r.json.ok){s.world=$.re2dWorld.fromJSON(JSON.stringify(r.json.world)).backend(s.gpu?'gpu':'cpu');s.world.debug.view(debugViews[s.debug]);if(!s.lighting)s.world.lighting({enabled:false});s.node=$('<sprite>',{id:'sdk-world-preview'});doc.text('ws-preview-state','настоящий runtime');}
             else doc.text('ws-preview-state','ошибка компиляции');
             render();return r.json;
         }catch(e){fail(e);return null;}finally{$.fs.remove(draft);s.busy=false;}
     }
     function save(){if(!$.fs.write(s.path,s.session.text())){fail(new Error('Не удалось сохранить'),'SDK_WRITE_FAILED');return false;}s.session.history.markSaved();render();return true;}
-    const defaults={cells:{rect:[0,0,128,128],spans:[{bottom:0,top:128,floorColor:'#687b91',ceilingColor:'#344858'}]},walls:{from:[0,0],to:[128,0],bottom:0,top:128,color:'#8b9ab2'},portals:{cellA:'',cellB:'',from:[0,0],to:[0,64],openings:[{bottom:0,top:96}]},stairs:{rect:[128,0,128,64],axis:'x',dir:1,steps:8,base:0,rise:16,top:256},slopes:{rect:[128,0,128,64],axis:'x',dir:1,segments:8,from:0,to:128,top:256}};
+    const defaults={cells:{rect:[0,0,128,128],spans:[{bottom:0,top:128,floorColor:'#687b91',ceilingColor:'#344858'}]},walls:{from:[0,0],to:[128,0],bottom:0,top:128,color:'#8b9ab2'},portals:{cellA:'',cellB:'',from:[0,0],to:[0,64],openings:[{bottom:0,top:96}]},stairs:{rect:[128,0,128,64],axis:'x',dir:1,steps:8,base:0,rise:16,top:256},lights:{x:64,y:64,h:60,radius:180,intensity:1,color:'#ffd6a0',shadow:true},slopes:{rect:[128,0,128,64],axis:'x',dir:1,segments:8,from:0,to:128,top:256}};
     function add(key){return operation(()=>{let n=(s.session.data[key]||[]).length,id;do{id=key+'-'+n++;}while((s.session.data[key]||[]).some(v=>v.id===id));const i=s.session.add(key,Object.assign({id},defaults[key]));s.selection={key,i};return i;});}
     function close(){s.active=false;dispose();doc.hide();app.closeTool();}
     const pick=key=>{const [section,i]=String(key).split(':');if(sections.includes(section))select(section,Number(i));};
@@ -76,11 +77,22 @@ export function createStudio(app) {
     doc.on('ws-undo','click',()=>operation(()=>s.session.history.undo()));doc.on('ws-redo','click',()=>operation(()=>s.session.history.redo()));
     doc.on('ws-apply','click',()=>operation(()=>{const {key,i}=s.selection||{};s.session.replace(key,i,JSON.parse(doc.value('ws-properties')));}));
     doc.on('ws-delete','click',()=>operation(()=>{const {key,i}=s.selection||{};s.session.remove(key,i);s.selection=null;}));
-    for(const [button,key]of [['cell','cells'],['wall','walls'],['portal','portals'],['stair','stairs'],['slope','slopes']])doc.on('ws-add-'+button,'click',()=>add(key));
+    for(const [button,key]of [['cell','cells'],['wall','walls'],['portal','portals'],['stair','stairs'],['slope','slopes'],['light','lights']])doc.on('ws-add-'+button,'click',()=>add(key));
     doc.on('ws-split','click',()=>operation(()=>{if(!s.selection||s.selection.key!=='walls')throw new Error('Выберите стену');s.session.splitWall(s.selection.i);}));
     doc.on('ws-join','click',()=>operation(()=>{if(!s.selection||s.selection.key!=='walls')throw new Error('Выберите стену');s.session.joinWalls(s.selection.i,Number(doc.value('ws-join-index')));s.selection=null;}));
     doc.on('ws-camera','click',()=>{try {for(const [k,id]of [['x','x'],['y','y'],['eye','eye'],['yaw','yaw'],['pitch','pitch']]){const v=Number(doc.value('ws-cam-'+id));if(!Number.isFinite(v)||Math.abs(v)>1e6)throw new Error('Неверная камера');s.view[k]=v;} }catch(e){fail(e);} });
     doc.on('ws-diag','click',(id,ev,key)=>{const d=s.diagnostics[Number(key)];if(d&&d.location){const loc=d.location;if(sections.includes(loc.section)&&Number.isInteger(loc.index))select(loc.section,loc.index);}});
+    doc.on('ws-debug','click',()=>{s.debug=(s.debug+1)%debugViews.length;if(s.world)s.world.debug.view(debugViews[s.debug]);doc.text('ws-debug','Вид: '+debugViews[s.debug]);});
+    doc.on('ws-backend','click',()=>{s.gpu=!s.gpu;if(s.world)s.world.backend(s.gpu?'gpu':'cpu');doc.text('ws-backend',s.gpu?'GPU':'CPU');});
+    doc.on('ws-light','click',()=>{s.lighting=!s.lighting;if(s.world)s.world.lighting({enabled:s.lighting,dynamic:s.lighting,shadows:s.lighting});doc.text('ws-light',s.lighting?'Свет включён':'Свет выключен');});
+    function previewMaterial(options){
+        if(!s.world)throw new Error('Сначала скомпилируйте preview');
+        if(!options||typeof options.name!=='string'||!Array.isArray(options.surfaces))throw new Error('Нужны name и список surfaces');
+        s.world.material(options.name,options);
+        for(const id of options.surfaces){const surface=s.world.surface(id);if(!surface)throw new Error('Поверхность '+id+' отсутствует');surface.material(options.name);}
+        return s.world.info();
+    }
+    doc.on('ws-material-apply','click',()=>{try{previewMaterial(JSON.parse(doc.value('ws-material-spec')));}catch(e){fail(e);}});
     let wasDown=false;
     $.update(()=>{if(!s.active)return;
         if($.input.ctrlDown()&&$.input.pressed('z'))operation(()=>$.input.shiftDown()?s.session.history.redo():s.session.history.undo());
@@ -88,9 +100,9 @@ export function createStudio(app) {
         if(down&&!wasDown&&s.selection&&m.x>=r.x&&m.x<r.x+r.w&&m.y>=r.y&&m.y<r.y+r.h)s.drag={x:m.x,y:m.y,selection:{...s.selection},scale:s.scale};
         if(!down&&wasDown&&s.drag){const drag=s.drag;s.drag=null;const grid=Math.max(1,Number(doc.value('ws-grid'))||16);const dx=Math.round((m.x-drag.x)/drag.scale/grid)*grid,dy=Math.round((m.y-drag.y)/drag.scale/grid)*grid;if(dx||dy)operation(()=>s.session.move(drag.selection.key,drag.selection.i,dx,dy));}
         wasDown=down;
-        if(s.world&&s.node){const v=doc.rect('ws-view');if(v.w>0&&v.h>0){const texture=s.world.render(s.view,[],Math.min(640,Math.round(v.w)),Math.min(360,Math.round(v.h)));s.node.sprite(texture).at(v.x+v.w/2,v.y+v.h/2).size(v.w,v.h);}}
+        if(s.world&&s.node){const v=doc.rect('ws-view');if(v.w>0&&v.h>0){const texture=s.world.renderToSprite(s.view,Math.min(640,Math.round(v.w)),Math.min(360,Math.round(v.h)));s.node.sprite(texture).at(v.x+v.w/2,v.y+v.h/2).size(v.w,v.h);}}
     });
-    const api={state:s,openAsset,close,select,add,save,compile,operation,render,
+    const api={state:s,openAsset,close,select,add,save,compile,operation,render,previewMaterial,
         snapshot(){return {active:s.active,path:s.path,dirty:s.session?s.session.history.dirty():false,selection:s.selection,busy:s.busy,preview:!!s.world,stats:s.report?s.report.stats:null,codes:s.diagnostics.map(d=>d.code),data:s.session?s.session.data:null};}};
     app.studios.world=api;return api;
 }

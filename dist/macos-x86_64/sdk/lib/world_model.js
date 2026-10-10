@@ -1,6 +1,6 @@
 // Authoring operations share the existing SDK history. Validation/compilation lives in C.
 import { createHistory } from './history.js';
-export const sections = ['cells', 'walls', 'portals', 'stairs', 'slopes'];
+export const sections = ['cells', 'walls', 'portals', 'stairs', 'slopes', 'lights'];
 const copy = v => JSON.parse(JSON.stringify(v));
 export function createWorldSession(source) {
     const data = copy(source), history = createHistory(data);
@@ -21,6 +21,7 @@ export function createWorldSession(source) {
             const v = item(key, i);
             history.run('Переместить', () => {
                 if (v.rect) { v.rect[0] += dx; v.rect[1] += dy; }
+                else if(key==='lights'){v.x+=dx;v.y+=dy;}
                 else { v.from[0] += dx; v.from[1] += dy; v.to[0] += dx; v.to[1] += dy; }
             });
         },

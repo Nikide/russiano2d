@@ -295,3 +295,16 @@ python3 web/export.py --game demos --out dist/web-demos
 рядом с output. Игра распространяется каталогом: executable + `lib/`.
 Конфликтующий файл библиотеки отклоняется — выберите пустой каталог вывода.
 Пакетный SDK проверяется распаковкой настоящего архива, не только запуском из checkout.
+
+### Сторонние библиотеки поздних подсистем
+
+| Библиотека | Где | Для чего | Лицензия в пакете |
+|---|---|---|---|
+| tinyexr 1.0.13 | `cmake/WorldEXR.cmake`, `src/re2d_world_exr.cpp` | декодирование EXR-неба World при загрузке; рендера и сцены нет | `share/licenses/tinyexr` |
+| Steam Audio 4.8.1 (HRTF) | `cmake/SteamAudio.cmake`, `R2D_ENABLE_STEAM_AUDIO=ON` | только бинауральная DSP поверх SDL_mixer; топологию решает World | `third_party/steam_audio` |
+| ufbx 0.20.1 | `cmake/SDKFBX.cmake` | импорт FBX-движения командой `r2d-sdk animation-import`; **только SDK**, в runtime игры не линкуется | `share/licenses/ufbx` |
+
+Steam Audio подгружается как динамическая библиотека (`phonon`) для macOS,
+Windows x64 и Linux x86_64; на остальных платформах и в Web сборка идёт без HRTF.
+Свой SDK указывается через `-DR2D_STEAM_AUDIO_SDK=<путь>`. Источники скачиваются
+по зафиксированному SHA-256.
