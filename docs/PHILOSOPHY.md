@@ -8,8 +8,8 @@
 владельца проекта, а не побочный эффект правки кода.
 
 Детали и история: [ARCHITECTURE.md](ARCHITECTURE.md) (философия API `$`),
-[TASKS.md](TASKS.md) (сверка с Godot 4.x),
-[TASKS.md](TASKS.md) (что осталось). Законы, вытекающие отсюда:
+[TASKS.md](TASKS.md) (сверка с Godot 4.x, текущие задачи и ограничения).
+Законы, вытекающие отсюда:
 [UI_RMLUI_LAW.md](UI_RMLUI_LAW.md) и
 [AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md).
 

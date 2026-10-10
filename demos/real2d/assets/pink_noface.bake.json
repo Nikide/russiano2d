@@ -1,0 +1,89 @@
+{
+  "ok": true,
+  "format": "r2d4",
+  "stage": "A (head-only, yaw S1, pitch 0)",
+  "container": "demos/real2d/assets/pink_noface.r2d4",
+  "container_sha256": "6f81b8b7ce24e41eb598f6b67206f0767350dc441031a12870d2aec4829a371f",
+  "container_bytes": 174294,
+  "source_counts": {
+    "patches": 4,
+    "mirrored": 0,
+    "triangles": 32,
+    "mesh_vertices": 36,
+    "anchors": 12
+  },
+  "manifold": {
+    "dim": 20,
+    "rank": 1,
+    "yaw_K": 3,
+    "pitch_L": 0,
+    "features": 7,
+    "layout": "mu[dim] | basis[dim*rank] (row-major D×r) | coeff[rank*features] (row-major r×features: coeff[n][k])",
+    "param_layout": "на патч: dx, dy, sx, sy, rot",
+    "variance_kept": 1.0,
+    "anchor_reconstruction_max_abs": 0.0
+  },
+  "atlas": {
+    "sha256": "f16bc8d0d8fc783165073234c269a549e8cc32b42cd6d5b47883e34bed32793e",
+    "bytes": 165163
+  },
+  "gates": {
+    "rings": [
+      "hair_back",
+      "head",
+      "fringe",
+      "cat_clip"
+    ],
+    "fade_deg": {
+      "hair_back": 8.0,
+      "head": 8.0,
+      "fringe": 8.0,
+      "cat_clip": 8.0
+    }
+  },
+  "acceptance_probe": {
+    "anchor_reconstruction_max_abs": 0.0,
+    "anchor_reconstruction_top": [
+      {
+        "patch": "hair_back",
+        "param": "dx",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back",
+        "param": "dy",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back",
+        "param": "sx",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back",
+        "param": "sy",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back",
+        "param": "rot",
+        "max_abs": 0.0
+      }
+    ],
+    "variance_kept": 1.0,
+    "rank": 1,
+    "rank_floor_by_variance": 1,
+    "singular_values": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "warnings": []
+}

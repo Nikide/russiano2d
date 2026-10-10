@@ -22,9 +22,12 @@ const $ = createApi();          // свой экземпляр API (тесты, 
 `installBsp` → `installAtlas` → `installCurve` → `installTask` → `installScript`
 → `installStory` → `installQuest` → `installSoundBank` → `installSteps` →
 `installBarks` → `installItems` → `installCombat` → `installWeapons` →
-`installRaid` → `installCels` → `installProc` → `installAlive` → `installNet`
-→ `installReplay`. Реактивные запросы (`installWatch`) ставятся рядом с
-сигналами и состояниями, а DevTools (`installDevTools`) — после `installAgent`:
+`installRaid` → `installCels` → `installProc` → `installKinds` →
+`installRotSprite` → `installMesh` → `installReplay` → `installCutscene` →
+`installAlive` → `installNet`; далее — `installWidgets`, `installTriggers`,
+`installPool`, `installViewport`, `installHttp`, `installSdk`. Реактивные запросы
+(`installWatch`) ставятся рядом с сигналами и состояниями, а DevTools
+(`installDevTools`) — после `installAgent`:
 панель берёт данные из инспекции агента.
 
 ## 2. Кадровые хуки

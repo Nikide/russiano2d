@@ -28,6 +28,7 @@ $.input.on('mouse', (e) => { if (e.button === 1 && e.pressed) shoot(); });
 | `saveBindings()` / `loadBindings()` | сохранить и вернуть раскладку |
 | `actions()` / `deadzone(value?)` | список действий / мёртвая зона стиков |
 | `on(name, fn)` / `off(name, fn)` | события `key`, `mouse`, `wheel`, `text` |
+| `shiftDown()` / `ctrlDown()` / `altDown()` | модификаторы клавиатуры на этот кадр |
 | `describe()` | строка состояния для интерфейса |
 
 ## 2. Мышь и геймпад
@@ -40,6 +41,7 @@ $.input.on('mouse', (e) => { if (e.button === 1 && e.pressed) shoot(); });
 | `padDown(button)` / `padAxis(name)` | кнопка и ось ПЕРВОГО геймпада |
 | `gamepad(slot)` | геймпад по номеру: `.down()`, `.pressed()`, `.axis()`, `.connected()`, `.rumble()` |
 | `padCount()` / `padSlots()` | сколько подключено / сколько слотов всего |
+| `padDownAt(slot, button)` / `padConnectedAt(slot)` | кнопка и наличие геймпада в конкретном слоте |
 | `rumble(opts)` / `stopRumble()` / `rumbleSupported()` | виброотклик первого геймпада |
 
 Кнопки мыши: `1` — левая, `2` — средняя, `3` — правая.

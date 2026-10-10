@@ -19,4 +19,4 @@
 
 Implementation/requirements evidence: [source plan](RE2D_WORLD_GZDOOM_RENDERER_PLAN.md), [behavior](RE2D_RENDERER_BEHAVIOR.md), [reference rules](GZDOOM_REFERENCE_RULES.md), [phase evidence](RE2D_RENDERER_IMPLEMENTATION_PLAN.md), [17-point audit](RE2D_DOCUMENT_ACCEPTANCE_AUDIT.md), [benchmark JSON](RE2D_RENDERER_BENCHMARK.json).
 
-Последние local results находятся в SDK_HANDOFF.md; наличие документа или configured CI не является hosted run/visual observation evidence. Runtime examples: demos/re2d_world_renderer_lab/acceptance и demos/re2d_dust2.
+Последние local results находятся в [SDK_HANDOFF.md](../../SDK_HANDOFF.md); наличие документа или configured CI не является hosted run/visual observation evidence. Runtime examples: demos/re2d_world_renderer_lab/acceptance и demos/re2d_dust2.

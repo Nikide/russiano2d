@@ -14,8 +14,8 @@
 
 | Уровень | Что проверяет | Где | Как запускать |
 |---|---|---|---|
-| Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (91 набор, сверка 2026-10-08) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
-| Интеграционные в движке | поведение игры и API через агентский протокол | `tests/agent/*_test.py` (106 наборов, сверка 2026-10-08) | `python3 tools/run_tests.py` |
+| Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (94 набора, сверка 2026-10-11) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
+| Интеграционные в движке | поведение игры и API через агентский протокол | `tests/agent/*_test.py` (125 наборов, сверка 2026-10-11) | `python3 tools/run_tests.py` |
 | Стражи документации | «в доке написано, что чего-то нет, а в коде есть»; у каждого модуля есть страница и тест | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py` | `python3 tests/doc_...py` |
 | C | физика/BSP и прочие ядра | `tests/bsp`, цели CMake | `cmake --build build` |
 

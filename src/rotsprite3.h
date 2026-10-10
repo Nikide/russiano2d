@@ -44,6 +44,12 @@ void r2d_rot3_default_light(R3Light *light);
 typedef void (*R3Task)(void *ctx, int index);
 typedef void (*R3Parallel)(R3Task task, void *ctx, int count);
 
+// Общий параллельный цикл движка (тот же пул, что у синтеза v3): нужен другим
+// CPU-проходам, чтобы не плодить второй пул потоков. При недоступности пула
+// (сборка без потоков, R2D_ROT_THREADS=1) выполняет задачи последовательно —
+// результат обязан совпадать, поэтому задачи не должны пересекаться по данным.
+void r2d_rot_parallel(R3Task task, void *ctx, int count);
+
 typedef struct R3Work {
     int size, ss, cap_vertices;
     float *depth;                      // (size*ss)²

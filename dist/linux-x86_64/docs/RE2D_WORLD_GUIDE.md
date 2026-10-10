@@ -11,7 +11,7 @@
 ./build/russiano2d --game demos/re2d_dust2 --seed 7
 ```
 
-Acceptance lab: 1–7 выбирают corridor/upper/bridge/fog/stairs/ramp/window; E — этаж, O — дверь, Space — вспышка, M — движение красной верхней лампы, F2 — debug, WASD/стрелки — движение/взгляд. Dust2: 1–7 — именованные камеры, O — doors, Space — прыжок, Shift — бег, мышь — взгляд, ЛКМ/F — вспышка, Esc — отпустить мышь, M — захват, Q — выход; G — CPU/GPU, R — reset, F2 — diagnostics. Управление конкретного демо задано его README/main.js.
+Acceptance lab: 1–7 выбирают corridor/upper/bridge/fog/stairs/ramp/window; E — этаж, O — дверь, Space — вспышка, M — движение красной верхней лампы, F2 — debug, WASD/стрелки — движение/взгляд. Dust2: 1–8 — именованные камеры, 0 — fire map (стрельбище), O — doors, Space — прыжок, Shift — бег, мышь — взгляд, ЛКМ/F — вспышка, Esc — отпустить мышь, M — захват, Q — выход; G — CPU/GPU, R — перезарядка, X — reset очагов (вне fire map — камера «T SPAWN»), F2 — diagnostics. Управление конкретного демо задано его README/main.js.
 
 ## Минимальный main.js
 

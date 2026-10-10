@@ -397,7 +397,10 @@ $.audio.damping({ radius: 34, strength: 0.2, max: 0.85,
 (`MIX_SetTrackFrequencyRatio`), шины (`MIX_CreateGroup` + пост-микс группы),
 позиция (`MIX_SetTrack3DPosition`), DSP на дорожке. Поэтому из SoLoud взят
 только алгоритм реверберации (Freeverb, `src/audio_reverb.c`), а публичный API
-остался один — `$.sound` и `$.audio`; возможности бэкенда проверяются через
-`$.audio.supports(...)`, а не отдельным пространством имён. SoLoud — запасной
+остался один — `$.sound` и `$.audio`; отдельного запроса возможностей бэкенда у
+`$.audio` нет (`$.audio.supports(...)` не существует): pitch, шины, 3D-позиция и
+DSP-эффекты дорожки доступны всегда, а при сборке без звука
+(`-DR2D_ENABLE_AUDIO=OFF`) вызовы `$.audio`/`$.sound` становятся no-op.
+SoLoud — запасной
 вариант, если понадобится граф шин с send/return или свёртка с импульсными
 характеристиками.

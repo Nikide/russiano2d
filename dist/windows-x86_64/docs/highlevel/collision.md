@@ -37,6 +37,7 @@ $.ready(() => {
 | `$.collision.names()` | имена по алфавиту |
 | `$.collision.list()` | `[{ name, bit, mask }]` |
 | `$.collision.freeBit()` | бит, ещё не занятый ни одним именем |
+| `$.collision.allExcept(...names)` | маска «все биты, кроме перечисленных слоёв» |
 | `$.collision.reload()` | перечитать реестр из `$.store` |
 
 Реестр живёт в `$.store` под ключом `collision.layers`, поэтому переживает

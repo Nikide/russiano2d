@@ -7,7 +7,8 @@
 
 Всё, что здесь есть, — только высокоуровневое API `$`. Если чего-то не хватало,
 это добавлялось в движок и обнажалось через `$` (так появились `$.loading`,
-`$.input.cursor`, `$.ui.setIcon`, `$.time.perfNow()`, полтексельные UV атласа).
+`$.input.cursor()`, `$.ui.setIcon` для глифа на уже созданном узле,
+`$.time.perfNow()`, полтексельные UV атласа).
 
 ---
 
@@ -91,7 +92,8 @@ $('<light>', { radius: 210, intensity: 0.9, color: '#ffd9a0', falloff: 1.6 })
 Камера и пост-обработка — один пресет на всю игру:
 
 ```js
-$.camera.follow(hero, { lerp: 6, zoom: 1.6, bounds: world_rect });
+$.camera.follow(hero, { smooth: 0.15, zoom: 1.6 });
+$.camera.limits(world_rect.x, world_rect.y, world_rect.w, world_rect.h);
 $.gfx.postPreset('forest_night', { ms: 600 });
 ```
 
@@ -161,7 +163,8 @@ const hp    = 3 + s.run / 25;
 ```js
 function hurtZombie(s, z, dmg) { ... }
 function killZombie(s, z) {
-    burstBlood(z, 3.2);                       // $.fx.burst + $.fx.decal
+    $.fx.pulse(z.x, z.y, { radius: 48, color: '#a1121b', ms: 260 });   // брызги
+    $('<particles>', { amount: 18 }).at(z.x, z.y).burst(18);           // лужа/осколки
     for (let i = 0; i < 6; i++) spawnGib(s, z);  // $.prefab.spawn — гибы летят
     $.sound.play(SFX + 'zombie_die.ogg', { volume: 0.5 });
 }
@@ -258,6 +261,11 @@ face_node.region(FACES.pad + col * 384, FACES.pad + row * 384, 364, 344);
 ## 7. Меню, загрузка, музыка
 
 Меню — отдельная сцена: так видно, что смена сцены меняет и мир, и музыку.
+
+> В этом демо меню собрано на legacy-узлах `<ui.*>` — так оно и работало.
+> Для **нового** меню/экрана закон интерфейса требует RmlUi: документ `.rml` +
+> `.rcss` через `$.ui.doc(...)` ([UI_RMLUI_LAW.md](UI_RMLUI_LAW.md),
+> [tutorial-menus.md](tutorial-menus.md)). `<ui.*>` остаются для HUD.
 
 ```js
 act: () => {

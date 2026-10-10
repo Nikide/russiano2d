@@ -20,19 +20,25 @@ body {
     text-align: center;
 }
 
+/* display: block обязателен: в RmlUi элементы по умолчанию inline, и без него
+   заголовок, подпись и подсказка ложатся в одну строку и наезжают друг на
+   друга. Так же оформлены остальные документы демо (см. rotsprite.rcss). */
 h1 {
+    display: block;
     font-size: 34px;
     color: #7fd1ff;
     margin-bottom: 2px;
 }
 
 #stub-subtitle {
+    display: block;
     font-size: 16px;
     color: #9fb0c8;
     margin-bottom: 18px;
 }
 
 #stub-hint {
+    display: block;
     font-size: 14px;
     color: #7c8ca3;
 }

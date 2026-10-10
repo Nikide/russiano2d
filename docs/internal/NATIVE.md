@@ -214,7 +214,7 @@ const id = engine.createBody({ x: 100, y: 100, halfW: 16, halfH: 16, type: engin
 
 ### `engine.log(...args)`
 
-Печатает аргументы в stdout через движок, с префиксом `[js]` и `[r2d]`.
+Печатает аргументы в stdout через движок, с префиксом `[russiano2d] [js]`.
 Аргументы приводятся к строке и соединяются пробелом.
 
 | Параметр | Тип | Описание |
@@ -225,7 +225,7 @@ const id = engine.createBody({ x: 100, y: 100, halfW: 16, halfH: 16, type: engin
 
 ```js
 engine.log('игрок на', engine.mouseX.toFixed(0), 'px');
-// [r2d] [js] игрок на 640 px
+// [russiano2d] [js] игрок на 640 px
 ```
 
 ### `engine.rgba(r, g, b, a)`
@@ -883,7 +883,9 @@ engine.clearClip();
 Меш псевдо-3D: вершины с глубиной. 8 float на вершину —
 `x, y, z, u, v, r, g, b`, где `x`/`y` — **экранные** пиксели (камера на меш не
 влияет), `z` — глубина `0..1`, `u`/`v` — текстурные координаты, `r`/`g`/`b` —
-цвет `0..1`. Треугольники собираются своим батчем.
+цвет `0..255` (как у `drawRect`; значение `0..1` здесь дало бы почти чёрный
+кадр — см. [highlevel/depth.md](../highlevel/depth.md)). Треугольники
+собираются своим батчем.
 
 ```js
 $.update(() => {
@@ -1091,7 +1093,9 @@ engine.setBodyFilter(ghost, 0x8, 0, 0);          // призрак: ни с ке
 ### `engine.getBodyFilter(body)`
 
 **Возвращает:** `{ layerBits, mask, group }` или `null`, если тела нет.
-Умолчания движка — слой `1` и маска «все слои» (`0xffffffff`).
+Умолчания движка — слой `1` и маска «все слои»
+(`R2D_FILTER_DEFAULT_MASK = 0xFFFFFFFFFFFFFFFF`, в JS она приходит числом
+`1.8446744073709552e19`; побитовые операторы JS всё равно 32-битные).
 
 ### `engine.contacts()`
 
@@ -1115,7 +1119,8 @@ for (const c of engine.contacts()) {
 }
 ```
 
-События приходят только для форм, созданных с `contacts: true`. Высокоуровневое
+События приходят для форм, созданных с `contacts: true`, и для односторонних
+платформ (`oneWay: true` — им контакты нужны для pre-solve). Высокоуровневое
 API включает этот флаг динамическим телам автоматически и раздаёт события
 узлам — см. [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md).
 
@@ -1568,7 +1573,7 @@ if (engine.ui.hasIcon('volume_up')) {
 | `engine.audio.channelVolume(channel)` | `number` | Громкость, заданная игре для канала |
 | `engine.audio.setChannelPan(channel, pan)` | `undefined` | Панорама канала: `-1`…`+1` |
 | `engine.audio.channelPan(channel)` | `number` | Текущая панорама канала |
-| `engine.audio.setChannelEffect(channel, kind, p1?, p2?)` | `boolean` | Эффект канала: `'none'`, `'lowpass'`, `'echo'` |
+| `engine.audio.setChannelEffect(channel, kind, p1?, p2?)` | `boolean` | Эффект канала: `'none'`, `'lowpass'`, `'highpass'`, `'echo'`, `'tremolo'`, `'bitcrush'`, `'ringmod'`, `'reverb'` |
 | `engine.audio.channelEffect(channel)` | `string` | Имя активного эффекта канала |
 | `engine.audio.effectCount()` | `number` | Сколько встроенных эффектов |
 | `engine.audio.effectName(i)` | `string` | Имя эффекта по индексу |
@@ -1582,21 +1587,33 @@ if (engine.ui.hasIcon('volume_up')) {
 
 > Обратите внимание: **эффекты канала** (`setChannelEffect`) и **реверб/комната**
 > (`setRoom`, `setChannelReverb`) — разные вещи: первый меняет сам сэмпл
-> (`lowpass`/`echo`), второй добавляет объём помещения.
+> (`lowpass`/`highpass`/`echo`/`tremolo`/`bitcrush`/`ringmod`/`reverb`), второй
+> задаёт акустику помещения целиком.
 
 **Эффекты.** SDL_mixer 3.2 не содержит готовых DSP-эффектов, поэтому движок
-обрабатывает сэмплы сам через `MIX_SetTrackRawCallback`:
+обрабатывает сэмплы сам через `MIX_SetTrackRawCallback`
+([`src/audio_fx.c`](../../src/audio_fx.c)):
 
 | `kind` | `p1` | `p2` | Что делает |
 |---|---|---|---|
 | `'lowpass'` | частота среза, Гц (по умолчанию 800) | — | однополюсный фильтр низких частот (приглушение) |
+| `'highpass'` | частота среза, Гц (по умолчанию 200) | — | однополюсный фильтр высоких частот (убирает гул) |
 | `'echo'` | задержка, мс (по умолчанию 180) | доля повтора 0..0.9 (по умолчанию 0.35) | эхо с обратной связью |
+| `'tremolo'` | частота, Гц (по умолчанию 5) | глубина 0..1 (по умолчанию 0.5) | амплитудное дрожание |
+| `'bitcrush'` | бит 1..16 (по умолчанию 6) | прореживание 1..64 (по умолчанию 1) | квантование и downsampling |
+| `'ringmod'` | частота, Гц (по умолчанию 220) | доля модуляции 0..1 (по умолчанию 1) | кольцевая модуляция |
+| `'reverb'` | посыл 0..1 (по умолчанию 0.35) | размер помещения 0..1 (по умолчанию 0.5) | реверб-хвост канала |
+| `'none'` | — | — | выключить эффект |
 
-Реверба, хоруса и компрессора в **эффектах канала** нет (только `'lowpass'` и
-`'echo'`) — но объём помещения есть отдельно: `setRoom`/`getRoom`,
+Полный список отдаёт сам движок: `engine.audio.effectCount()` (сейчас **8** —
+семь содержательных эффектов и `'none'`) и `engine.audio.effectName(i)`.
+
+Кроме эффекта канала есть отдельный **объём помещения**: `setRoom`/`getRoom`,
 `setChannelReverb`/`setGroupReverb` и зоны акустики в высокоуровневом
 `$.audio.zone/room` (см. [highlevel/audiobus.md](../highlevel/audiobus.md) §8).
-Это ограничение списка DSP-эффектов канала, а не отсутствие реверба в движке. Обработка идёт в аудиопотоке: буфер задержки выделяется один раз
+Хоруса и компрессора в списке нет; реверб доступен и как эффект канала
+(`'reverb'`), и как акустика помещения.
+Обработка идёт в аудиопотоке: буферы задержки и реверба выделяются один раз
 при инициализации, поэтому переключение эффекта на лету безопасно.
 
 ### Параметры
@@ -1833,7 +1850,7 @@ const tri = new Float32Array(maxVerts * 3 * 6);   // с запасом на ве
 | Функция | Возвращает |
 |---|---|
 | `engine.light.preparedCount()` | `number` — подотрезков в подготовленном наборе |
-| `engine.light.preparedMaxPoints()` | `number` — верхнюю оценку вершин **по набору**: `4m + 8`, где `m` — подотрезки |
+| `engine.light.preparedMaxPoints()` | `number` — верхнюю оценку вершин **по набору**: `4m + 8`, где `m` — подотрезки набора **плюс 4** отрезка ограничивающей рамки (в коде `m = prepared_count + 4`) |
 
 Оценка линейна по числу подотрезков, а не квадратична по исходным отрезкам:
 пересечений в наборе уже нет. На четырёх отрезках коробки это `40` против
@@ -1985,7 +2002,7 @@ for (const i of order) {
 | Подписчиков SDL | 8 (`event_listeners[8]`) | варнинг, подписка теряется |
 | Обработчиков `ui.on` | 256 | слот занимается ТОЛЬКО при успешной подписке; при переполнении — `InternalError`, при ненайденном элементе — `-1` |
 | Буфер обмена | системный, размера нет | `engine.clipboard()` / `engine.setClipboard(text)` |
-| Очередь текста | 1024 байта на кадр (было 256) | длинная вставка обрезается по буферу кадра |
+| Буфер ввода текста за кадр | 1024 байта (было 256) | длинная вставка обрезается по буферу кадра |
 | Документов RmlUi | 64 | слоты **переиспользуются**, «лимит» почти не достигается |
 | Геймпадов | 4 слота (`R2D_MAX_GAMEPADS`) | лишние устройства не открываются |
 | Касаний | 10 точек (`R2D_MAX_TOUCHES`) | лишние пальцы игнорируются |
@@ -2030,20 +2047,21 @@ for (const i of order) {
 ## 15. Ошибки и отладка
 
 * Ошибка в JS (исключение, `throw`) не роняет движок: движок перехватывает её,
-  печатает в stderr с префиксом `[r2d][error] JS:` и стек вызова, а кадр
+  печатает в stderr с префиксом `[russiano2d][error] JS:` и стек вызова, а кадр
   продолжает рисоваться. Текст последней ошибки виден в отладочном оверлее.
 * Если скрипт не загрузился, окно всё равно откроется (сцена будет пустой), а
   причина окажется в консоли.
 * `engine.log(...)` пишет в **stdout**, ошибки — в **stderr**, чтобы диагностика
   не смешивалась.
 
-Горячие клавиши движка (см. [`src/main.c`](../../src/main.c)):
+Горячие клавиши:
 
-| Клавиша | Действие |
-|---|---|
-| `F1` | Показать/скрыть RmlUi диагностику |
-| `F5` | Перезапустить скрипты вручную |
-| `Cmd+Esc` / `Ctrl+Esc` | Выход из приложения |
+| Клавиша | Действие | Где |
+|---|---|---|
+| `F1` | Показать/скрыть RmlUi-панель DevTools (диагностика) | JS: `src/highlevel/devtools.js`, `$.debug.toggle()` |
+| `F2` | Инспектор узлов `$` (той же панелью) | JS: `src/highlevel/devtools.js` |
+| `F5` | Перезапустить скрипты вручную | C: [`src/main.c`](../../src/main.c), `r2d_script_request_reload` |
+| `Cmd+Esc` / `Ctrl+Esc` | Выход из приложения | C: [`src/main.c`](../../src/main.c) |
 
 > Отладочный оверлей по умолчанию **скрыт**, чтобы не закрывать демо, и
 > включается по `F1`. Показать его сразу при старте можно флагом `--overlay`
@@ -2326,10 +2344,13 @@ if (typed) name += typed;
 | `engine.fontStats()` | `{ glyphs, atlas_w, atlas_h, drawn, first_sprite }` — состояние атласа глифов |
 
 
-### `engine.setOverlay(on)`
+### `engine.setOverlay(on)` — легаси-хук без реализации
 
-Показать (`true`) или скрыть (`false`) отладочный оверлей — тот же, что
-переключается по `F1`.
+Хук `r2d_script_set_overlay_hook` объявлен, но **нигде не устанавливается**:
+`engine.setOverlay(on)` — no-op. Оверлей движка сегодня — это RmlUi-панель
+DevTools, которой управляет JS: `$.debug.on()`/`off()`/`toggle()` (клавиша `F1`,
+`src/highlevel/devtools.js`), а `--overlay` в `src/main.c` включает панель при
+старте через тот же путь.
 
 ### `engine.fs` — файлы
 
@@ -2391,15 +2412,18 @@ internal/NATIVE.md описывает то, на чём стоит `$`; част
 
 | Группа | Где описана |
 |---|---|
+| `engine.nodes.*` — нативные покадровые проходы по узлам `$` (схема C → `$`): `specialTags`, `syncBodies`, `worldEvents`, `hover`, `sortWorld`, `collectWorld`, `drawWorld`, `buildIndex`, `tweenAdd`/`tweenStep`/`tweenClear`/`tweenPause`/`tweenCount`, `tickEffects`, `drawTiles`, `drawUI`, `filterNodes`, `memory`, `uiTags`, `uiTextBegin`/`uiTextPush`/`uiTextFlush`, `drawParticles` | [`src/nodes.c`](../../src/nodes.c), [highlevel/native.md](../highlevel/native.md) |
+| `engine.real2d.*` — Real2D v4 (layered warp): `load`, `render`, `pixels`, `info`, `provenance`, `provenanceMap`, `patchWeights`, `atlasPixels`, `debugSetAtlas`, `dispose` | [`src/real2d4.c`](../../src/real2d4.c), [highlevel/real2d.md](../highlevel/real2d.md) |
 | `engine.window.*` — заголовок, размер, режим, курсор, фокус | [highlevel/window.md](../highlevel/window.md), `$.window` в [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) §20.1 |
 | `engine.viewport.*` — render target игры | [highlevel/viewport.md](../highlevel/viewport.md), [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) §23 |
 | `engine.http.*` — HTTP-запросы | [highlevel/http.md](../highlevel/http.md), `$.http` |
-| `engine.post`/`setPost`/`getPost`/`renderInfo`/`markUI` | [highlevel/render.md](../highlevel/render.md) §3, §5 |
+| `engine.renderInfo()` (поле `post`), `engine.setPost`/`getPost`/`postSupported`, `engine.markUI` | [highlevel/render.md](../highlevel/render.md) §3, §5 |
 | `engine.profile`/`profileReset`/`profileEnabled` | §15 выше, `$.debug.profile()` |
 | `engine.freeTexture`, `setSpriteFilter`/`spriteFilter`, `textureFromPixels` | [highlevel/resource.md](../highlevel/resource.md), [highlevel/sprite.md](../highlevel/sprite.md) |
-| `engine.rotSpriteLoad/Pose/Style/Rig/Part/Info/Dispose` — синтез 2D-персонажа из общего PNG | [highlevel/re2dsprite.md](../highlevel/re2dsprite.md), [RE2DSPRITE_V2.md](../RE2DSPRITE_V2.md) |
+| `engine.rotSpriteLoad/Pose/Style/Rig/Part/Info/Dispose`, `rotSpriteModelPose`, `rotSpriteFileStamp`, `rotSpriteChanged`, `rotSpritePrepare` — синтез 2D-персонажа из общего PNG | [highlevel/re2dsprite.md](../highlevel/re2dsprite.md), [RE2DSPRITE_V2.md](../RE2DSPRITE_V2.md) |
 | `engine.setDepth`/`depth`, `engine.depthInfo` | [highlevel/depth.md](../highlevel/depth.md), `$.gfx.depth` |
-| `engine.re2d.view/project/unproject/sprite/mesh/info` — перспектива вида от первого лица | §16 выше, [RE2D.md](../RE2D.md) |
+| `engine.re2d.view/project/unproject/sprite/mesh/info`, `engine.re2d.worldStep(dt)`, флаг `engine.re2d.NO_SPLIT` — перспектива вида от первого лица | §16 выше, [RE2D.md](../RE2D.md) |
+| `engine.now()` — монотонное время, мс; `engine.mouseLock(on)` — захват курсора; `engine.setBodyEnabled`/`bodyEnabled` | §16 выше, [highlevel/window.md](../highlevel/window.md) |
 | `engine.bodyEnabled`/`isAwake`/`setAwake`/`setGravityScale`, `contactsOf`, `contactBetween` | §8 выше |
 | `engine.netHost`/`netJoin`/`netClose`/`netMode`/`netStatus`/`netSend`/`netPoll` | [highlevel/net.md](../highlevel/net.md), `$.net` |
 | `engine.setCursor`/`cursorVisible`, `requestReload`/`reloadPending`/`hotReload` | [highlevel/window.md](../highlevel/window.md), [highlevel/script.md](../highlevel/script.md) |

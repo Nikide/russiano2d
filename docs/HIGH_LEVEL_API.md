@@ -129,9 +129,10 @@ $('<sprite>', { frames: { src: 'sheet.png', cols: 8, rows: 4, cw: 16, ch: 16 } }
 | `<layer>` | нет | канвас-слой: порядок, параллакс, затемнение (раздел 30) |
 | `<trigger>` | нет | зона, событие `enter` / `leave` |
 | `<area>` | нет | невидимая зона без отрисовки |
+| `<real2d>` | нет | Real2D v4: голова из семантических компонентов (раздел 30) |
 | `<ui.panel>`, `<ui.label>`, `<ui.button>`, `<ui.bar>`, `<ui.image>` | нет | базовые элементы интерфейса в координатах окна |
-| `<ui.row>`, `<ui.col>`, `<ui.grid>` | нет | контейнеры раскладки (раздел 30) |
-| `<ui.scroll>`, `<ui.list>`, `<ui.checkbox>`, `<ui.slider>`, `<ui.input>`, `<ui.dialog>` | нет | контролы с вводом и фокусом (раздел 30) |
+| `<ui.row>`, `<ui.col>`, `<ui.grid>` | нет | контейнеры раскладки ([widgets.md](highlevel/widgets.md)) |
+| `<ui.scroll>`, `<ui.list>`, `<ui.checkbox>`, `<ui.slider>`, `<ui.input>`, `<ui.dialog>` | нет | контролы с вводом и фокусом ([widgets.md](highlevel/widgets.md)) |
 
 Теги `ui.panel`, `ui.label`, `ui.button`, `ui.bar`, `ui.image` живут в
 координатах окна: камера на них не влияет, в `$.world.count()` они не входят.
@@ -270,8 +271,9 @@ $.gfx.filter(true)                        // линейная фильтраци
 
 `.blend('alpha' | 'add' | 'multiply' | 'none')` задаёт режим смешивания узла,
 `$.blend(name)` — режим по умолчанию для всего кадра. **Пользовательские
-шейдеры поддержаны** (v0.1.10+): `$.gfx.defineShader(name, { frag })` компилирует
-фрагментный шейдер в рантайме, и `.shader(name)` включает его у узла. На
+шейдеры поддержаны** (v0.1.10+): `$.gfx.defineShader(name, source)` компилирует
+фрагментный шейдер (исходник — **строкой**, тело без `#version`) в рантайме, и
+`.shader(name)` включает его у узла. На
 платформах, где живые шейдеры выключены сборкой (`R2D_ENABLE_LIVE_SHADERS=OFF`),
 `.shader()` безопасен и пишет предупреждение в журнал.
 
@@ -587,8 +589,9 @@ $.input.text()                         // символы, набранные з�
 `duration` — миллисекунды (по умолчанию 250). `triggers: [left, right]` трясёт
 курки. `$.input.rumble(0)`, `$.input.stopRumble()` останавливают вибрацию,
 `$.input.rumbleSupported()` отвечает, есть ли кому трясти. Адресно —
-`$.input.gamepad(0).rumble(...)`; движок открывает один геймпад, поэтому для
-`gamepad(1)` и дальше вызов честно вернёт `false`.
+`$.input.gamepad(0).rumble(...)`: движок держит **4 слота** и открывает все
+подключённые геймпады, так что `gamepad(1)`…`gamepad(3)` работают (игра
+вдвоём-вчетвером); без геймпада в слоте вызов вернёт `false`.
 
 ```js
 $('#hero').on('hit', (e) => $.input.rumble({ weak: 0.2, strong: 0.9, duration: 150 }));
@@ -607,6 +610,7 @@ $.sound.musicPitch() .musicPitch(1.1)
 $.sound.crossfade('boss.ogg', 1000) .stopMusic(500)
 $.sound.volume(0.8) .mute(true) .sfxVolume(0.5) .musicVolume(0.5)
 $.sound.stopAll() .playing(ch) .activeChannels() .duration('x.ogg') .preload(['a.ogg'])
+$.sound.seek(ch, 1.2) .position(ch) .durationOf(ch)   // перемотка и позиция канала
 $.sound.channel(ch)   // { playing, volume, pan, pitch, effect, position, duration } — что звучит сейчас
 ```
 
@@ -1002,6 +1006,10 @@ $.vec(1, 0)            // { x, y }
 $.random               // ГПСЧ с зерном из --seed: .next() .range(a,b) .int(a,b) .pick(list) .chance(p)
 $.find(sel) .count(sel)
 $.log('текст')         // в журнал движка
+$.logger('текст')      // то же: ctx.log
+$.now()                // игровое время в секундах (синоним $.time.now())
+$.pick(point)          // узел под точкой (тот же отбор, что :picked)
+$.pickAll(point)       // все узлы под точкой
 $.quit()
 $.isAgent()            // true в режиме агента
 $.startScene           // имя сцены из --scene или null
@@ -1023,7 +1031,7 @@ DSP-эффекты и реверб-шины — всё это есть (см. §
 | Ограничение | Почему так и что делать |
 |---|---|
 | DXIL не генерируется (Windows/D3D12) | Встроенные и пользовательские шейдеры собираются в SPIR-V и MSL; для DXIL нужен DXC, которого в зависимостях нет. На D3D12 движок честно пишет об этом в журнал — используйте Vulkan-бэкенд |
-| Свой шейдер — только фрагментный | Вершинный шейдер общий (спрайтовый конвейер: позиция, UV, цвет), у шейдера один сэмплер (`u_texture`) и один блок параметров (`u`, два vec4). Этого хватает для эффектов поверхности; своя геометрия — правкой `shaders/sprite_vert.glsl` и пересборкой |
+| Свой шейдер — только фрагментный | Вершинный шейдер общий (спрайтовый конвейер: позиция, UV, цвет), у шейдера один сэмплер (`u_texture`) и один блок параметров (`u`, два vec4). Этого хватает для эффектов поверхности; своя геометрия — правкой `shaders/sprite.vert.glsl` и пересборкой |
 | Компилятор шейдеров занимает место в бинарнике | glslang и SPIRV-Cross линкуются статически. Нужна минимальная сборка — `-DR2D_ENABLE_LIVE_SHADERS=OFF`: тогда `.shader()` работает только со встроенными эффектами, а `$.gfx.shadersSupported()` вернёт `false` |
 | Render target — цель всего кадра | Произвольный проход посреди кадра из JS не начать: проходы открывает `main.c`. Связали viewport — пост-обработка в этом кадре не считается (см. §23) |
 | Компиляция шейдера синхронная | `$.gfx.defineShader()` компилирует в вызывающем кадре (десятки миллисекунд). Регистрируйте шейдеры на загрузке уровня, а не в игровом цикле |
@@ -1157,6 +1165,13 @@ $.update(() => {
 | Процедурный пиксель-арт: палитры, силуэт, свет, лист | `$.proc` | — | [proc.md](highlevel/proc.md) |
 | Виды узла: 2D по умолчанию, `.kind(Re2D)` включает 2.5D-вид того же мира | `.kind()`, `$.kinds`, `Re2D` | — | [kinds.md](highlevel/kinds.md), [RE2D.md](RE2D.md) |
 | Re2DSprite v2: один PNG, тело, мимика, смена частей и anime/pixel проекция | `$.re2dSprite` | `<rotsprite>` | [rotsprite.md](highlevel/re2dsprite.md) |
+| Re2DSprite v3: перспектива, свет, skin-клипы (`skin` в JSON) | `$.rotSprite` | `<rotsprite>` | [re2dsprite.md](highlevel/re2dsprite.md), [RE2DSPRITE_V3.md](RE2DSPRITE_V3.md) |
+| Real2D v4: голова из семантических компонентов, layered warp | `$.real2d` | `<real2d>` | [real2d.md](highlevel/real2d.md) |
+| Меш и скелет псевдо-3D: z-буфер, глубина, IK и части | `$.mesh` | — | [mesh.md](highlevel/mesh.md), [depth.md](highlevel/depth.md) |
+| Именованные слои и маски коллизий | `$.collision` | — | [collision.md](highlevel/collision.md) |
+| Катсцены: сценки внутри текущей сцены | `$.cutscene` | — | [cutscene.md](highlevel/cutscene.md) |
+| Реплей: запись и воспроизведение ввода | `$.replay` | — | [replay.md](highlevel/replay.md) |
+| Экран загрузки: полоса, шаги по кадрам | `$.loading` | — | [loading.md](highlevel/loading.md) |
 | Психика NPC и режиссёр рейда: страх, срывы, давление | `$.alive` | — | [alive.md](highlevel/alive.md) |
 | Сеть, только авторитарная: id, владение, снапшоты | `$.net` | — | [net.md](highlevel/net.md) |
 | Время, окно, файлы, сцены, ввод, мир, камера, интерфейс, звук, BSP | `$.time`, `$.window`, `$.fs`, `$.scene`, `$.input`, `$.world`, `$.camera`, `$.ui`, `$.sound`, `$.world.bsp` | — | [time](highlevel/time.md), [window](highlevel/window.md), [store](highlevel/store.md), [scene](highlevel/scene.md), [input](highlevel/input.md), [world](highlevel/world.md), [camera](highlevel/camera.md), [ui](highlevel/ui.md), [sound](highlevel/sound.md), [bsp](highlevel/bsp.md), [replay](highlevel/replay.md) |

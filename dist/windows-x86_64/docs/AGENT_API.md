@@ -346,14 +346,14 @@ R2D_TEST_TIMEOUT=120 python3 tools/run_tests.py
 | `tests/agent/highlevel_*_test.py` | подсистемы `$` по отдельности: `anim`, `tilemap`, `tilemap_ysort`, `particles`, `nav`, `navmesh`, `prefab`, `audiobus`, `layers`, `widgets`, `widgets_anchor`, `tween`, `triggers`, `i18n`, `pool`, `physics`, `http`, `render`, `timeline` |
 | `tests/agent/ui_virtual_mouse_test.py` | виртуальная мышь агента доходит до RmlUi: наведение, клик, отпускание над другим элементом, колесо |
 | `tests/agent/highlevel_guide_test.py` | страж документации: достаёт листинг из `docs/tutorial-first-game.md` и запускает его |
-| `tests/js/*_test.mjs` | юнит-тесты логики модулей под `qjs` — без движка и без сборки (91 набор, сверка 2026-10-08) |
+| `tests/js/*_test.mjs` | юнит-тесты логики модулей под `qjs` — без движка и без сборки (94 набора, сверка 2026-10-11) |
 | `tests/fixtures/*` | маленькие игры для тестов (`hello`, `bare`, `spawn`, `dynimport`, по одной на подсистему) |
 
 ```bash
 python3 tools/run_tests.py --fast          # быстрый набор (~12 с)
 python3 tools/run_tests.py                 # все тесты
 python3 tools/run_tests.py demos_test      # только выбранный
-python3 tests/agent/demos_test.py light    # тест можно запускать и напрямую
+python3 tests/agent/demos_test.py shooter_witch   # тест можно запускать и напрямую
 
 # Логика подсистем без движка: сборка не нужна, секунды
 build/_deps/quickjs-build/qjs tests/js/nav_test.mjs
@@ -404,5 +404,5 @@ $.test.near(x, 100, 0.5, 'игрок у отметки');
 Прогнать конкретный тест со звуком:
 
 ```bash
-R2D_TEST_AUDIO=real python3 tests/agent/sound_test.py
+R2D_TEST_AUDIO=real python3 tests/agent/highlevel_sound_seek_test.py
 ```

@@ -9,8 +9,7 @@
 [AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md).
 
 Другие списки работ, с которыми этот документ не конфликтует, а дополняет:
-[TASKS.md](TASKS.md) (текущие задачи и ограничения),
-[TASKS.md](TASKS.md) (сверка с Godot 4.x).
+[TASKS.md](TASKS.md) (текущие задачи и ограничения).
 
 Правило перехода: **следующая фаза не начинается, пока текущая не зелёная** —
 сборка, существующие тесты, новые тесты, headless-прогон, документация.
@@ -37,16 +36,18 @@
 **Результат:** изменений в поведении нет.
 
 **Статус: выполнена 2026-10-07.** Сборка `build/russiano2d` на месте; полный
-прогон `python3 tools/run_tests.py` — **79/79 ok, 0 fail, 0 skip** (283.8 с);
-`tests/js/*_test.mjs` — 79 наборов зелёные; `tests/doc_claims_test.py` и
+прогон `python3 tools/run_tests.py` — **79/79 ok, 0 fail, 0 skip** (283.8 с) на
+ту дату; `tests/js/*_test.mjs` — 79 наборов зелёные; `tests/doc_claims_test.py` и
 `tests/doc_coverage_test.py` пройдены; тесты гейта — 16/16. Инвентаризация ниже.
+Текущий размер наборов (сверка 2026-10-11): **125** агентских тестов и **94**
+юнит-набора `tests/js`.
 
 | Пункт | Есть | Где |
 |---|---|---|
 | Сборка | да | `build/russiano2d` собирается `cmake --build build` |
-| Тесты | да | `python3 tools/run_tests.py` (79 агентских), `tests/js/*_test.mjs` (79) |
+| Тесты | да | `python3 tools/run_tests.py` (79 агентских на дату фазы, сейчас 125), `tests/js/*_test.mjs` (79, сейчас 94) |
 | Стражи доков | да | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py` |
-| Инвентаризация `$` | да | [TASKS.md](TASKS.md), [TASKS.md](TASKS.md) |
+| Инвентаризация `$` | да | [TASKS.md](TASKS.md), [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) |
 | Агентский протокол | да | [AGENT_API.md](AGENT_API.md), [src/agent.c](../src/agent.c) |
 | RmlUi | да | [src/gui.cpp](../src/gui.cpp), [internal/NATIVE.md](internal/NATIVE.md) §9 |
 | Замеры | частично | `$.debug.profile()`, `tools/bench_highlevel.py`, `--stats` |

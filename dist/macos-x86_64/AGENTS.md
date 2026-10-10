@@ -1,4 +1,4 @@
-# Russiano2D 0.1.29 — macOS Intel: инструкция для ИИ-агента
+# Russiano2D 0.1.30 — macOS Intel: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"0.1.29","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"0.1.30","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -222,6 +222,7 @@ call(cmd="quit")
 * Re2D World — public `$` API — `docs/highlevel/re2d.md`
 * Legacy Re2D: room/kind и прежний World — `docs/highlevel/re2d_legacy.md`
 * Re2DSprite — `$.re2dSprite` — `docs/highlevel/re2dsprite.md`
+* `$.real2d` — Real2D v4: вычисляемый layered warp персонажа — `docs/highlevel/real2d.md`
 * `$.blend` и `$.viewport` — смешивание и render target — `docs/highlevel/render.md`
 * Реплеи — `$.replay` — `docs/highlevel/replay.md`
 * Реестр ресурсов — `$.resource` — `docs/highlevel/resource.md`
@@ -444,10 +445,14 @@ $.ready(() => {
 * **Каждый модуль `src/highlevel/<имя>.js`** имеет страницу
   `docs/highlevel/<имя>.md` и тест — это проверяет
   `tests/doc_coverage_test.py`.
-* **Новый файл в `docs/`** автоматически попадает в `AGENTS.md` релизного
-  пакета ([tools/agents_doc.py](../tools/agents_doc.py)); порядок документов
-  задаёт [tools/release.py](../tools/release.py) (`AGENTS_DOC_ORDER`). Поэтому
-  документ не может «отстать» от движка — и не должен врать.
+* **Новый файл в `docs/` и `docs/highlevel/`** автоматически попадает в
+  `AGENTS.md` релизного пакета
+  ([tools/agents_doc.py](../tools/agents_doc.py)); порядок документов
+  задаёт [tools/release.py](../tools/release.py) (`AGENTS_DOC_ORDER`). Именно
+  эти два каталога собирает `release.agents_doc_files()`, поэтому литература
+  `docs/internal/**`, `docs/re2d/**` и `demos/*/README.md` в приложение
+  `AGENTS.md` не входит — она едет в пакете файлами `docs/`. Документ не может
+  «отстать» от движка — и не должен врать.
 * **Закрытый пункт работы исчезает из документации в том же изменении**
   (правило из [TASKS.md](TASKS.md) §6).
 * **Язык документации — русский**, термины API — английские; код и имена в
@@ -470,8 +475,8 @@ $.ready(() => {
 владельца проекта, а не побочный эффект правки кода.
 
 Детали и история: [ARCHITECTURE.md](ARCHITECTURE.md) (философия API `$`),
-[TASKS.md](TASKS.md) (сверка с Godot 4.x),
-[TASKS.md](TASKS.md) (что осталось). Законы, вытекающие отсюда:
+[TASKS.md](TASKS.md) (сверка с Godot 4.x, текущие задачи и ограничения).
+Законы, вытекающие отсюда:
 [UI_RMLUI_LAW.md](UI_RMLUI_LAW.md) и
 [AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md).
 
@@ -639,7 +644,7 @@ RE2D World продолжает этот принцип: XY BSP + vertical spans
 
 ---
 
-## 4. Текущее состояние (2026-10-09)
+## 4. Текущее состояние (2026-10-11)
 
 | Путь | Где | Статус |
 |---|---|---|
@@ -1474,9 +1479,10 @@ $('<sprite>', { frames: { src: 'sheet.png', cols: 8, rows: 4, cw: 16, ch: 16 } }
 | `<layer>` | нет | канвас-слой: порядок, параллакс, затемнение (раздел 30) |
 | `<trigger>` | нет | зона, событие `enter` / `leave` |
 | `<area>` | нет | невидимая зона без отрисовки |
+| `<real2d>` | нет | Real2D v4: голова из семантических компонентов (раздел 30) |
 | `<ui.panel>`, `<ui.label>`, `<ui.button>`, `<ui.bar>`, `<ui.image>` | нет | базовые элементы интерфейса в координатах окна |
-| `<ui.row>`, `<ui.col>`, `<ui.grid>` | нет | контейнеры раскладки (раздел 30) |
-| `<ui.scroll>`, `<ui.list>`, `<ui.checkbox>`, `<ui.slider>`, `<ui.input>`, `<ui.dialog>` | нет | контролы с вводом и фокусом (раздел 30) |
+| `<ui.row>`, `<ui.col>`, `<ui.grid>` | нет | контейнеры раскладки ([widgets.md](highlevel/widgets.md)) |
+| `<ui.scroll>`, `<ui.list>`, `<ui.checkbox>`, `<ui.slider>`, `<ui.input>`, `<ui.dialog>` | нет | контролы с вводом и фокусом ([widgets.md](highlevel/widgets.md)) |
 
 Теги `ui.panel`, `ui.label`, `ui.button`, `ui.bar`, `ui.image` живут в
 координатах окна: камера на них не влияет, в `$.world.count()` они не входят.
@@ -1615,8 +1621,9 @@ $.gfx.filter(true)                        // линейная фильтраци
 
 `.blend('alpha' | 'add' | 'multiply' | 'none')` задаёт режим смешивания узла,
 `$.blend(name)` — режим по умолчанию для всего кадра. **Пользовательские
-шейдеры поддержаны** (v0.1.10+): `$.gfx.defineShader(name, { frag })` компилирует
-фрагментный шейдер в рантайме, и `.shader(name)` включает его у узла. На
+шейдеры поддержаны** (v0.1.10+): `$.gfx.defineShader(name, source)` компилирует
+фрагментный шейдер (исходник — **строкой**, тело без `#version`) в рантайме, и
+`.shader(name)` включает его у узла. На
 платформах, где живые шейдеры выключены сборкой (`R2D_ENABLE_LIVE_SHADERS=OFF`),
 `.shader()` безопасен и пишет предупреждение в журнал.
 
@@ -1932,8 +1939,9 @@ $.input.text()                         // символы, набранные з�
 `duration` — миллисекунды (по умолчанию 250). `triggers: [left, right]` трясёт
 курки. `$.input.rumble(0)`, `$.input.stopRumble()` останавливают вибрацию,
 `$.input.rumbleSupported()` отвечает, есть ли кому трясти. Адресно —
-`$.input.gamepad(0).rumble(...)`; движок открывает один геймпад, поэтому для
-`gamepad(1)` и дальше вызов честно вернёт `false`.
+`$.input.gamepad(0).rumble(...)`: движок держит **4 слота** и открывает все
+подключённые геймпады, так что `gamepad(1)`…`gamepad(3)` работают (игра
+вдвоём-вчетвером); без геймпада в слоте вызов вернёт `false`.
 
 ```js
 $('#hero').on('hit', (e) => $.input.rumble({ weak: 0.2, strong: 0.9, duration: 150 }));
@@ -1952,6 +1960,7 @@ $.sound.musicPitch() .musicPitch(1.1)
 $.sound.crossfade('boss.ogg', 1000) .stopMusic(500)
 $.sound.volume(0.8) .mute(true) .sfxVolume(0.5) .musicVolume(0.5)
 $.sound.stopAll() .playing(ch) .activeChannels() .duration('x.ogg') .preload(['a.ogg'])
+$.sound.seek(ch, 1.2) .position(ch) .durationOf(ch)   // перемотка и позиция канала
 $.sound.channel(ch)   // { playing, volume, pan, pitch, effect, position, duration } — что звучит сейчас
 ```
 
@@ -2347,6 +2356,10 @@ $.vec(1, 0)            // { x, y }
 $.random               // ГПСЧ с зерном из --seed: .next() .range(a,b) .int(a,b) .pick(list) .chance(p)
 $.find(sel) .count(sel)
 $.log('текст')         // в журнал движка
+$.logger('текст')      // то же: ctx.log
+$.now()                // игровое время в секундах (синоним $.time.now())
+$.pick(point)          // узел под точкой (тот же отбор, что :picked)
+$.pickAll(point)       // все узлы под точкой
 $.quit()
 $.isAgent()            // true в режиме агента
 $.startScene           // имя сцены из --scene или null
@@ -2368,7 +2381,7 @@ DSP-эффекты и реверб-шины — всё это есть (см. §
 | Ограничение | Почему так и что делать |
 |---|---|
 | DXIL не генерируется (Windows/D3D12) | Встроенные и пользовательские шейдеры собираются в SPIR-V и MSL; для DXIL нужен DXC, которого в зависимостях нет. На D3D12 движок честно пишет об этом в журнал — используйте Vulkan-бэкенд |
-| Свой шейдер — только фрагментный | Вершинный шейдер общий (спрайтовый конвейер: позиция, UV, цвет), у шейдера один сэмплер (`u_texture`) и один блок параметров (`u`, два vec4). Этого хватает для эффектов поверхности; своя геометрия — правкой `shaders/sprite_vert.glsl` и пересборкой |
+| Свой шейдер — только фрагментный | Вершинный шейдер общий (спрайтовый конвейер: позиция, UV, цвет), у шейдера один сэмплер (`u_texture`) и один блок параметров (`u`, два vec4). Этого хватает для эффектов поверхности; своя геометрия — правкой `shaders/sprite.vert.glsl` и пересборкой |
 | Компилятор шейдеров занимает место в бинарнике | glslang и SPIRV-Cross линкуются статически. Нужна минимальная сборка — `-DR2D_ENABLE_LIVE_SHADERS=OFF`: тогда `.shader()` работает только со встроенными эффектами, а `$.gfx.shadersSupported()` вернёт `false` |
 | Render target — цель всего кадра | Произвольный проход посреди кадра из JS не начать: проходы открывает `main.c`. Связали viewport — пост-обработка в этом кадре не считается (см. §23) |
 | Компиляция шейдера синхронная | `$.gfx.defineShader()` компилирует в вызывающем кадре (десятки миллисекунд). Регистрируйте шейдеры на загрузке уровня, а не в игровом цикле |
@@ -2502,6 +2515,13 @@ $.update(() => {
 | Процедурный пиксель-арт: палитры, силуэт, свет, лист | `$.proc` | — | [proc.md](highlevel/proc.md) |
 | Виды узла: 2D по умолчанию, `.kind(Re2D)` включает 2.5D-вид того же мира | `.kind()`, `$.kinds`, `Re2D` | — | [kinds.md](highlevel/kinds.md), [RE2D.md](RE2D.md) |
 | Re2DSprite v2: один PNG, тело, мимика, смена частей и anime/pixel проекция | `$.re2dSprite` | `<rotsprite>` | [rotsprite.md](highlevel/re2dsprite.md) |
+| Re2DSprite v3: перспектива, свет, skin-клипы (`skin` в JSON) | `$.rotSprite` | `<rotsprite>` | [re2dsprite.md](highlevel/re2dsprite.md), [RE2DSPRITE_V3.md](RE2DSPRITE_V3.md) |
+| Real2D v4: голова из семантических компонентов, layered warp | `$.real2d` | `<real2d>` | [real2d.md](highlevel/real2d.md) |
+| Меш и скелет псевдо-3D: z-буфер, глубина, IK и части | `$.mesh` | — | [mesh.md](highlevel/mesh.md), [depth.md](highlevel/depth.md) |
+| Именованные слои и маски коллизий | `$.collision` | — | [collision.md](highlevel/collision.md) |
+| Катсцены: сценки внутри текущей сцены | `$.cutscene` | — | [cutscene.md](highlevel/cutscene.md) |
+| Реплей: запись и воспроизведение ввода | `$.replay` | — | [replay.md](highlevel/replay.md) |
+| Экран загрузки: полоса, шаги по кадрам | `$.loading` | — | [loading.md](highlevel/loading.md) |
 | Психика NPC и режиссёр рейда: страх, срывы, давление | `$.alive` | — | [alive.md](highlevel/alive.md) |
 | Сеть, только авторитарная: id, владение, снапшоты | `$.net` | — | [net.md](highlevel/net.md) |
 | Время, окно, файлы, сцены, ввод, мир, камера, интерфейс, звук, BSP | `$.time`, `$.window`, `$.fs`, `$.scene`, `$.input`, `$.world`, `$.camera`, `$.ui`, `$.sound`, `$.world.bsp` | — | [time](highlevel/time.md), [window](highlevel/window.md), [store](highlevel/store.md), [scene](highlevel/scene.md), [input](highlevel/input.md), [world](highlevel/world.md), [camera](highlevel/camera.md), [ui](highlevel/ui.md), [sound](highlevel/sound.md), [bsp](highlevel/bsp.md), [replay](highlevel/replay.md) |
@@ -3269,14 +3289,14 @@ R2D_TEST_TIMEOUT=120 python3 tools/run_tests.py
 | `tests/agent/highlevel_*_test.py` | подсистемы `$` по отдельности: `anim`, `tilemap`, `tilemap_ysort`, `particles`, `nav`, `navmesh`, `prefab`, `audiobus`, `layers`, `widgets`, `widgets_anchor`, `tween`, `triggers`, `i18n`, `pool`, `physics`, `http`, `render`, `timeline` |
 | `tests/agent/ui_virtual_mouse_test.py` | виртуальная мышь агента доходит до RmlUi: наведение, клик, отпускание над другим элементом, колесо |
 | `tests/agent/highlevel_guide_test.py` | страж документации: достаёт листинг из `docs/tutorial-first-game.md` и запускает его |
-| `tests/js/*_test.mjs` | юнит-тесты логики модулей под `qjs` — без движка и без сборки (91 набор, сверка 2026-10-08) |
+| `tests/js/*_test.mjs` | юнит-тесты логики модулей под `qjs` — без движка и без сборки (94 набора, сверка 2026-10-11) |
 | `tests/fixtures/*` | маленькие игры для тестов (`hello`, `bare`, `spawn`, `dynimport`, по одной на подсистему) |
 
 ```bash
 python3 tools/run_tests.py --fast          # быстрый набор (~12 с)
 python3 tools/run_tests.py                 # все тесты
 python3 tools/run_tests.py demos_test      # только выбранный
-python3 tests/agent/demos_test.py light    # тест можно запускать и напрямую
+python3 tests/agent/demos_test.py shooter_witch   # тест можно запускать и напрямую
 
 # Логика подсистем без движка: сборка не нужна, секунды
 build/_deps/quickjs-build/qjs tests/js/nav_test.mjs
@@ -3327,7 +3347,7 @@ $.test.near(x, 100, 0.5, 'игрок у отметки');
 Прогнать конкретный тест со звуком:
 
 ```bash
-R2D_TEST_AUDIO=real python3 tests/agent/sound_test.py
+R2D_TEST_AUDIO=real python3 tests/agent/highlevel_sound_seek_test.py
 ```
 
 
@@ -3423,9 +3443,11 @@ $.window.on('resize', ({ w, h }) => relayout(w, h));
 
 ## Выбор GPU-бэкенда
 
-Движок рисует через SDL3 GPU и включает все три формата шейдеров (SPIR-V, MSL,
-DXIL); конкретный бэкенд SDL выбирает сам. Если нужно назвать его вручную — при
-отладке драйверов или чтобы обойти проблемный бэкенд:
+Движок рисует через SDL3 GPU и включает два формата шейдеров — SPIR-V и MSL;
+DXIL (Windows/D3D12) не генерируется: для него нужен DXC, которого в
+зависимостях нет ([cmake/Shaders.cmake](../cmake/Shaders.cmake)). Конкретный
+бэкенд SDL выбирает сам. Если нужно назвать его вручную — при отладке драйверов
+или чтобы обойти проблемный бэкенд:
 
 ```bash
 # Что собрано в этой сборке
@@ -4027,9 +4049,10 @@ $.store.autoSave(30000);            // писать раз в 30 с, если ч
 | Путь | Когда выбирать |
 |---|---|
 | RmlUi-документ `$.ui.doc('...rml')` | **Основной путь**: меню, настройки, инвентарь, диалоги |
-| Узлы `<ui.panel>`, `<ui.label>`, `<ui.button>` | Быстрый экран на `$` без файлов: пробы, HUD, существующие игры |
+| Узлы `<ui.panel>`, `<ui.label>`, `<ui.button>` | Быстрый HUD на `$` без файлов и поддержка существующих игр; для нового меню/экрана основной путь выше |
 
-**Путь А — узлы** (для существующих игр и проб). Меню без единого файла разметки:
+**Путь А — узлы** (для существующих игр и быстрого HUD; закон интерфейса
+разрешает их как HUD, но не как основу нового меню). Меню без единого файла разметки:
 
 ```js
 function buildMenu() {
@@ -4625,7 +4648,9 @@ $.update(() => {
 ## Шаг 6. HUD на узлах интерфейса
 
 Узлы `ui.*` рисуются в координатах окна: камера на них не влияет, в мир они не
-попадают и видны агенту в снимке состояния.
+попадают и видны агенту в снимке состояния. Это **HUD**; меню и экраны нового
+кода делаются документами RmlUi (`$.ui.doc('ui/menu.rml')`) — см.
+[UI_RMLUI_LAW.md](UI_RMLUI_LAW.md) и [tutorial-menus.md](tutorial-menus.md).
 
 ```js
 $('<ui.bar>', { id: 'hp', value: 100, max: 100 }).at(120, 30).appendTo($.ui);
@@ -4809,7 +4834,7 @@ $.scene.stack();         // список отложенных сцен
 сохранить мир уровня «под» паузой, делайте паузу не сценой, а оверлеем
 (см. ниже).
 
-## Два пути интерфейса
+## Интерфейс: RmlUi и legacy-HUD
 
 **Закон интерфейса — RmlUi** ([UI_RMLUI_LAW.md](UI_RMLUI_LAW.md)): меню,
 экраны и диалоги делаются документами `.rml` + `.rcss`. Таблица ниже описывает,
@@ -4960,10 +4985,14 @@ $.exit(() => $.store.save());          // последний шанс запис
 
 # Russiano2D — демо-проект
 
-`demos/` — отдельная игра на движке: четыре сцены-демо, каждая показывает свой
+`demos/` — отдельная игра на движке: несколько сцен-демо, каждая показывает свой
 слой движка — платформер (Box2D и анимация), «Типичная ночь в Мытищинском лесу»
-(свет, частицы, волны), новелла «Руси-тян» (`$.timeline` и интерфейс на RmlUi)
-и Re2DSprite (поворот головы из одной развёртки всего персонажа).
+(свет, частицы, волны), новелла «Руси-тян» (`$.timeline` и интерфейс на RmlUi),
+Re2DSprite (поворот головы из одной развёртки всего персонажа) и Re2D World
+(2.5D от первого лица). Модулей демо шесть — `launcher`, `platformer`,
+`shooter_witch`, `russi_vn`, `rotsprite` (сцена `re2dsprite`) и `re2d_world`;
+остальные сцены из таблицы ниже открываются отдельными проектами
+(`--game demos/<имя>`).
 Запускается тем же бинарником, что и `game/`, и выбирается флагом `--game`.
 
 ## Запуск
@@ -5022,8 +5051,9 @@ export default function install($) {
 | `re2d_world` | **Re2D: 2.5D от первого лица** над плоским миром — комната-коробка с текстурами, игрок (WASD + мышь), три добрых маскота Re2DSprite, которые замечают вас, поворачиваются, улыбаются и говорят. Описание — [README](../demos/re2d_world/README.md) | `$.camera.kind(Re2D)`, `$.re2d.room`, `.kind(Re2D)`, `.controls`, `$.re2dSprite.from`, `$.ui.doc` |
 | `re2d_bsp_world` | **Re2D World: комнаты, этажи и АК** — XY BSP, вертикальные интервалы, оружие первого лица. Запуск отдельным проектом: `build/russiano2d --game demos/re2d_bsp_world`. [README](../demos/re2d_bsp_world/README.md) | `$.re2d.world`, `$.re2dSprite` |
 | `re2d_world_renderer_lab` | **лаборатория рендерера World**: шесть камер с эталонными кадрами CPU/GPU, свет, тени, туман, порталы, прозрачность, декали; вложенная `acceptance`. Запуск: `build/russiano2d --game demos/re2d_world_renderer_lab` | `$.re2d.world`, `.light`, `.material`, `.sky` |
-| `re2d_dust2` | **Dust II по маршрутам** — оригинальная карта из ячеек: A/B, спавны, двери, тоннели, рампы, клуб с музыкой (HRTF), NPC Re2DSprite, шаги и ветер. Запуск: `build/russiano2d --game demos/re2d_dust2 --seed 7`. [README](../demos/re2d_dust2/README.md) | `$.re2dWorldAudio`, `.sky` (EXR), контроллер в стиле Quake |
+| `re2d_dust2` | **Dust II по маршрутам** — оригинальная карта из ячеек: A/B, спавны, двери, тоннели, рампы, клуб с музыкой (HRTF), NPC Re2DSprite, шаги и ветер. Запуск: `build/russiano2d --game demos/re2d_dust2 --seed 7`. [README](../demos/re2d_dust2/README.md) | `$.re2dWorldAudio(world)`, `.sky` (EXR), контроллер в стиле Quake |
 | `re2dsprite` | **один атлас всего тела Руси-тян**: прототип головы, yaw −180..180°, pitch, nearest и привязка к пикселям. Стрелки — вращение, пробел — авто, Esc — меню. Базовый PNG и описание — [README](../demos/rotsprite/README.md) | `$.re2dSprite.create`, `.re2dPose`, `$.ui.doc` |
+| `real2d` (отдельный проект) | **Real2D v4, стадия A**: голова из отдельных семантических компонентов — каждый угол yaw вычислен (12 anchors, Фурье K=3, растеризация реальных texels), RmlUi-HUD, автоповорот, перечитывание контейнера. Запуск: `build/russiano2d --game demos/real2d`. [README](../demos/real2d/README.md), план — [STAGE_A_PLAN.md](../demos/real2d/STAGE_A_PLAN.md) | `$.real2d.load/frame/info/provenance`, `<real2d>`, `.real2dPose` |
 | `platformer` | Box2D, листы анимации, монеты, враги, параллакс, HUD, пауза | `.controls`, `.frames`, `.animate`, `.on('death')`, `<ui.*>` |
 | `shooter_witch` | **ночной лес**: зомби-шутер в духе Vampire Survivors — авто-стрельба по ближайшему, волны, опыт, карты апгрейдов, фонари как единственный свет, тени от стволов, кровь и лужи | `<tilemap>` + `.autotile()`, `$.gfx.light.polygon`, `$.audio.zone/obstacles/damping`, `$.fx.*`, `$.gfx.postPreset` |
 | `russi_vn` | **визуальная новелла «Руси-тян: Бака!»**: цундэрэ-маскот объясняет, чем JS лучше Python; интерфейс на RmlUi, пять локаций, тряска экрана, семь поз, озвучка реплик, три выбора и две концовки | `$.animatedTimelineScene2d`, `$.timeline.state`, `$.ui.doc`, `$.camera.shake`, `{ ending }` с флагом в `$.store` |
@@ -5059,7 +5089,7 @@ export default function install($) {
 
 ```bash
 python3 tests/agent/demos_test.py              # все сцены
-python3 tests/agent/demos_test.py light        # только выбранные
+python3 tests/agent/demos_test.py shooter_witch  # только выбранные
 ```
 
 Тест открывает каждую сцену, шагает кадры, проверяет журнал на ошибки
@@ -5072,8 +5102,9 @@ python3 tests/agent/demos_test.py light        # только выбранные
 карточки апгрейдов, HUD на якорях, меню со своей музыкой и профилирование.
 
 Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](RE2DSPRITE_V2.md),
-[API `$`](highlevel/re2dsprite.md). Демо `rotsprite` — переключение костюмов,
-моргание, ходьба/бег на месте и перетаскивание кистей.
+[API `$`](highlevel/re2dsprite.md). Демо `re2dsprite` — переключение костюмов,
+моргание, ходьба/бег на месте и перетаскивание кистей; старое имя сцены
+`rotsprite` осталось псевдонимом ([`demos/rotsprite/index.js`](../demos/rotsprite/index.js)).
 
 
 ---
@@ -5238,6 +5269,15 @@ python3 tools/bench_highlevel.py --only churn,batch --ns 5000 --repeat 3   # ц�
 **138 (82 %)**; не обёрнуто 30, но по-настоящему нужен игре из них **один** —
 `engine.keyName` (без него `$.input.on('key')` отдаёт код числом). Остальное —
 геттеры состояния звука/физики, BSP и легаси-отрисовка.
+
+> **Проверка состава (2026-10-11).** Числа этого раздела — снимок аудита
+> 2026-10-06. Сегодня `src/highlevel/*.js` — **79 модулей и ≈48 тыс. строк**;
+> биндингов `engine.*` в `src/script.c` (`r2d__set_fn`) — **130** имён;
+> тестов — **94** набора `tests/js/*_test.mjs` и **125** `tests/agent/*_test.py`.
+> `engine.keyName` уже используется ядром `$`: `input.js` кладёт имя в `e.key`
+> события `$.input.on('key')`. Публичного геттера имени клавиши в `$` при этом
+> нет — если он понадобится игре, его нужно добавить (например,
+> `$.input.keyName(code)`).
 
 **Настоящих дыр в игровом API больше нет** — то, что перечислялось здесь раньше,
 закрыто (проверено по коду, см. §4.4): пользовательские шейдеры, слои коллизий,
@@ -6678,7 +6718,8 @@ DevTools — это **инспектор и отладчик**. Это **не** 
 авторинга игры: уровень и логика по-прежнему описываются кодом и данными.
 DevTools ничего не «сохраняет как проект» и не становится источником истины.
 
-Статус: план ([ROADMAP.md](ROADMAP.md) фаза 8).
+Статус: первый срез реализован (RmlUi-панель F1/F2 и `$.devtools`, см. §9);
+остальное — план ([ROADMAP.md](ROADMAP.md) фаза 8).
 
 ---
 
@@ -7090,8 +7131,20 @@ flowchart LR
 
 # R2D Re2DSprite — руководство разработчика и художника
 
-Редакция 2026-10-10. PNG v2 + описание модели JSON v1 + анимации JSON v1.
-Это документация реализованного прототипа, включая его ограничения.
+Редакция 2026-10-10. Это руководство описывает **v2**: PNG v2 + описание
+модели JSON v1 + анимации JSON v1. Это документация реализованного прототипа,
+включая его ограничения.
+
+> **Текущий формат — [Re2DSprite v3](RE2DSPRITE_V3.md)** (плотная поверхность,
+> перспектива, свет и `skin`-клипы). Всё, что ниже, остаётся рабочим
+> (совместимость данных), но автору нового персонажа начинать стоит с v3:
+> `r2d-sdk convert-re2d3` для апгрейда v2-атласа или `r2d-sdk bake-re2d3` для
+> FBX/GLB/OBJ; вид синтеза задаёт `projection` в character.json
+> (`raster` 128..2048, по умолчанию 1024; `light`, `detail`, `eye`, `window`,
+> `cull`, `motionLod`), а сменные `variants` у v3 не переносятся.
+> Смешивать версии в одном ассете нельзя: `from()` выбирает разбор по
+> `atlasInfo.version` (2 или 3), другое значение — ошибка.
+
 Точный компактный контракт: [RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md).
 API: [highlevel/re2dsprite.md](highlevel/re2dsprite.md).
 
@@ -7494,7 +7547,7 @@ JSON-модельные PNG с разделёнными коленями/лок�
 }
 ```
 
-JSON MUST содержать version=1, atlas, 1..64 bones и 1..254 уникальных parts.
+JSON MUST содержать version=1, atlas, 1..128 bones и 1..254 уникальных parts.
 У всех частей MUST существовать bone. Имена MUST быть уникальными и не
 являться __proto__/constructor/prototype. Неизвестные поля не превращаются
 автоматически в новые функции движка.
@@ -7900,7 +7953,7 @@ prop.re2dAttach(russi,'handRight',{
 для авторского инструмента, runtime её не компилирует.
 
 `style`: anime (по умолчанию) либо pixel. `rig.bones` MUST содержать
-1..64 уникальных имени. Родитель MUST идти раньше ребёнка. `pivot` —
+1..128 уникальных имени (`parts` — 1..254). Родитель MUST идти раньше ребёнка. `pivot` —
 координата шарнира в общей системе покоя, не смещение от родителя.
 X направлен вправо, Y вниз, Z к зрителю при yaw=0. Углы в градусах.
 Порядок вращения X, Y, Z (матрица Rz*Ry*Rx); преобразование ребёнка
@@ -7943,6 +7996,21 @@ offset?, scale?; поле pose в демо описывает рекоменду
 Числа интерполируются linear либо step. Для target=face допускаются
 каналы eyes/mouth/brows, строковые состояния, только step. Максимум 64
 клипа, 256 треков/клип, 1024 ключа/трек. Повтор канала запрещён.
+
+**Клип скелета v3 (`skin`).** У ассета v3 клип может нести матрицы костей по
+кадрам — тогда рядом с обычными полями стоит `skin`:
+
+```json
+{"version":1,"clips":{"walk":{"duration":1.0,"loop":true,"tracks":[],
+  "skin":{"frames":31,"fps":30,"bones":58,"data":[/* frames·bones·12 чисел */]}}}}
+```
+
+Проверяется: `duration > 0`, `loop` — булево, `tracks` — массив (у чисто
+скелетного клипа пустой), затем `skin`: `frames` 2..8192, `fps > 0`, `bones`
+равно числу костей `rig`, длина `data` — `frames · bones · 12` конечных чисел
+(мировая матрица каждой кости на каждом кадре, порядок костей — как в
+`rig.bones`). Кадры интерполируются линейно; играет клип так же —
+`.re2dMotion(name, speed)` и `.re2dSeek(seconds)`.
 
 `.re2dMotion(name,speed)` включает клип и сбрасывает его время; speed=0
 останавливает его. `.re2dSeek(seconds)` задаёт время основного клипа.
@@ -8402,8 +8470,9 @@ Alpha<128, behind-near и depth farther than current world sample rejected. Reco
 
 # Re2DSprite v1 — развёртка всего персонажа, прототип головы
 
-> Это совместимый ранний формат. Текущий большой атлас, мимика, тело и
-> подмены описаны в [Re2DSprite v2](RE2DSPRITE_V2.md).
+> Это совместимый ранний формат. Текущий формат — [Re2DSprite v3](RE2DSPRITE_V3.md)
+> (перспектива, свет, `skin`-клипы); предыдущий — [Re2DSprite v2](RE2DSPRITE_V2.md)
+> (большой атлас, мимика, тело и подмены).
 
 Re2DSprite синтезирует спрайт из одной PNG-развёртки поверхности. Готовых
 ракурсов, меша, скелета и перспективной камеры в ассете нет. Это новый
@@ -8878,7 +8947,7 @@ JS: `$.re2dSprite.from('x.character.json')` определяет v3 по заг�
 ./build/russiano2d --game demos/re2d_dust2 --seed 7
 ```
 
-Acceptance lab: 1–7 выбирают corridor/upper/bridge/fog/stairs/ramp/window; E — этаж, O — дверь, Space — вспышка, M — движение красной верхней лампы, F2 — debug, WASD/стрелки — движение/взгляд. Dust2: 1–7 — именованные камеры, O — doors, Space — прыжок, Shift — бег, мышь — взгляд, ЛКМ/F — вспышка, Esc — отпустить мышь, M — захват, Q — выход; G — CPU/GPU, R — reset, F2 — diagnostics. Управление конкретного демо задано его README/main.js.
+Acceptance lab: 1–7 выбирают corridor/upper/bridge/fog/stairs/ramp/window; E — этаж, O — дверь, Space — вспышка, M — движение красной верхней лампы, F2 — debug, WASD/стрелки — движение/взгляд. Dust2: 1–8 — именованные камеры, 0 — fire map (стрельбище), O — doors, Space — прыжок, Shift — бег, мышь — взгляд, ЛКМ/F — вспышка, Esc — отпустить мышь, M — захват, Q — выход; G — CPU/GPU, R — перезарядка, X — reset очагов (вне fire map — камера «T SPAWN»), F2 — diagnostics. Управление конкретного демо задано его README/main.js.
 
 ## Минимальный main.js
 
@@ -9249,8 +9318,6 @@ frame 120:
 
 **Чего нет:**
 
-* CLI `--record` / `--replay` — опций нет в разборе аргументов
-  ([main.c:529-580](../src/main.c#L529-L580));
 * версии формата: `load()` проверяет только `Array.isArray(obj.frames)`
   ([replay.js:122-125](../src/highlevel/replay.js#L122-L125));
 * версии движка, идентификатора игры и конфигурации рантайма в заголовке
@@ -9394,8 +9461,7 @@ workflow. macOS append signing и поддержка других платфор
 [AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md).
 
 Другие списки работ, с которыми этот документ не конфликтует, а дополняет:
-[TASKS.md](TASKS.md) (текущие задачи и ограничения),
-[TASKS.md](TASKS.md) (сверка с Godot 4.x).
+[TASKS.md](TASKS.md) (текущие задачи и ограничения).
 
 Правило перехода: **следующая фаза не начинается, пока текущая не зелёная** —
 сборка, существующие тесты, новые тесты, headless-прогон, документация.
@@ -9422,16 +9488,18 @@ workflow. macOS append signing и поддержка других платфор
 **Результат:** изменений в поведении нет.
 
 **Статус: выполнена 2026-10-07.** Сборка `build/russiano2d` на месте; полный
-прогон `python3 tools/run_tests.py` — **79/79 ok, 0 fail, 0 skip** (283.8 с);
-`tests/js/*_test.mjs` — 79 наборов зелёные; `tests/doc_claims_test.py` и
+прогон `python3 tools/run_tests.py` — **79/79 ok, 0 fail, 0 skip** (283.8 с) на
+ту дату; `tests/js/*_test.mjs` — 79 наборов зелёные; `tests/doc_claims_test.py` и
 `tests/doc_coverage_test.py` пройдены; тесты гейта — 16/16. Инвентаризация ниже.
+Текущий размер наборов (сверка 2026-10-11): **125** агентских тестов и **94**
+юнит-набора `tests/js`.
 
 | Пункт | Есть | Где |
 |---|---|---|
 | Сборка | да | `build/russiano2d` собирается `cmake --build build` |
-| Тесты | да | `python3 tools/run_tests.py` (79 агентских), `tests/js/*_test.mjs` (79) |
+| Тесты | да | `python3 tools/run_tests.py` (79 агентских на дату фазы, сейчас 125), `tests/js/*_test.mjs` (79, сейчас 94) |
 | Стражи доков | да | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py` |
-| Инвентаризация `$` | да | [TASKS.md](TASKS.md), [TASKS.md](TASKS.md) |
+| Инвентаризация `$` | да | [TASKS.md](TASKS.md), [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) |
 | Агентский протокол | да | [AGENT_API.md](AGENT_API.md), [src/agent.c](../src/agent.c) |
 | RmlUi | да | [src/gui.cpp](../src/gui.cpp), [internal/NATIVE.md](internal/NATIVE.md) §9 |
 | Замеры | частично | `$.debug.profile()`, `tools/bench_highlevel.py`, `--stats` |
@@ -9689,7 +9757,8 @@ transform/physics/state → копирование селектора
 # Russiano2D SDK
 
 Статус документа: описывает **фактическое** состояние SDK (не цель). Целевая
-архитектура и законы — [Следующая цель SDK AGENT.md](../Следующая%20цель%20SDK%20AGENT.md);
+архитектура и законы — спецификация «Следующая цель SDK AGENT.md»: она снята с
+текущей документации и лежит в `к удалению.md` (и в истории Git);
 проверки — [SDK_VERIFICATION.md](SDK_VERIFICATION.md); журнал работы —
 [SDK_HANDOFF.md](../SDK_HANDOFF.md).
 
@@ -10478,8 +10547,8 @@ macOS append codesign выдавал strict validation warning: локальны
 
 | Уровень | Что проверяет | Где | Как запускать |
 |---|---|---|---|
-| Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (91 набор, сверка 2026-10-08) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
-| Интеграционные в движке | поведение игры и API через агентский протокол | `tests/agent/*_test.py` (106 наборов, сверка 2026-10-08) | `python3 tools/run_tests.py` |
+| Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (94 набора, сверка 2026-10-11) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
+| Интеграционные в движке | поведение игры и API через агентский протокол | `tests/agent/*_test.py` (125 наборов, сверка 2026-10-11) | `python3 tools/run_tests.py` |
 | Стражи документации | «в доке написано, что чего-то нет, а в коде есть»; у каждого модуля есть страница и тест | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py` | `python3 tests/doc_...py` |
 | C | физика/BSP и прочие ядра | `tests/bsp`, цели CMake | `cmake --build build` |
 
@@ -10674,7 +10743,8 @@ python3 tools/bench_api.py --baseline docs/benchmarks/api-performance.json \
 
 Всё, что здесь есть, — только высокоуровневое API `$`. Если чего-то не хватало,
 это добавлялось в движок и обнажалось через `$` (так появились `$.loading`,
-`$.input.cursor`, `$.ui.setIcon`, `$.time.perfNow()`, полтексельные UV атласа).
+`$.input.cursor()`, `$.ui.setIcon` для глифа на уже созданном узле,
+`$.time.perfNow()`, полтексельные UV атласа).
 
 ---
 
@@ -10758,7 +10828,8 @@ $('<light>', { radius: 210, intensity: 0.9, color: '#ffd9a0', falloff: 1.6 })
 Камера и пост-обработка — один пресет на всю игру:
 
 ```js
-$.camera.follow(hero, { lerp: 6, zoom: 1.6, bounds: world_rect });
+$.camera.follow(hero, { smooth: 0.15, zoom: 1.6 });
+$.camera.limits(world_rect.x, world_rect.y, world_rect.w, world_rect.h);
 $.gfx.postPreset('forest_night', { ms: 600 });
 ```
 
@@ -10828,7 +10899,8 @@ const hp    = 3 + s.run / 25;
 ```js
 function hurtZombie(s, z, dmg) { ... }
 function killZombie(s, z) {
-    burstBlood(z, 3.2);                       // $.fx.burst + $.fx.decal
+    $.fx.pulse(z.x, z.y, { radius: 48, color: '#a1121b', ms: 260 });   // брызги
+    $('<particles>', { amount: 18 }).at(z.x, z.y).burst(18);           // лужа/осколки
     for (let i = 0; i < 6; i++) spawnGib(s, z);  // $.prefab.spawn — гибы летят
     $.sound.play(SFX + 'zombie_die.ogg', { volume: 0.5 });
 }
@@ -10925,6 +10997,11 @@ face_node.region(FACES.pad + col * 384, FACES.pad + row * 384, 364, 344);
 ## 7. Меню, загрузка, музыка
 
 Меню — отдельная сцена: так видно, что смена сцены меняет и мир, и музыку.
+
+> В этом демо меню собрано на legacy-узлах `<ui.*>` — так оно и работало.
+> Для **нового** меню/экрана закон интерфейса требует RmlUi: документ `.rml` +
+> `.rcss` через `$.ui.doc(...)` ([UI_RMLUI_LAW.md](UI_RMLUI_LAW.md),
+> [tutorial-menus.md](tutorial-menus.md)). `<ui.*>` остаются для HUD.
 
 ```js
 act: () => {
@@ -11759,7 +11836,8 @@ pauseClip pauseTweens pivot pivotAt placeholder playClip playSound playing pos
 prefab prefabClone prepend prependTo punch radius rayTo re2dAttach re2dBone
 re2dDetach re2dEmotion re2dExpression re2dHotReload re2dLayer re2dMotion
 re2dPart re2dPose re2dReload re2dRig re2dSeek re2dSpriteAtlas re2dStyle
-re2dVariant re2dVisibleParts rebuild rect reduce region release remove
+re2dVariant re2dVisibleParts real2dInfo real2dPose real2dReload real2dSize
+real2dSpin real2dSrc real2dYaw rebuild rect reduce region release remove
 removeClass removeTag repath reset respawn restart resumeClip resumeTweens
 rotAttach rotBone rotDetach rotEmotion rotExpression rotHotReload rotLayer
 rotMotion rotPart rotPose rotReload rotRig rotSeek rotSpriteAtlas rotStyle
@@ -11779,7 +11857,8 @@ within ysort zone zoneCount анимация в видимый высота гл
 удалить управление урон цвет ширина яркость
 ```
 
-> Список снят с живого движка, а не перепечатан: **345 имён**, команда —
+> Список снят с живого движка, а не перепечатан: **352 имени** (сверка 2026-10-11),
+> команда —
 > `Object.getOwnPropertyNames(Object.getPrototypeOf($('<rect>'))).filter(n => n !== 'constructor')`
 > в агентском режиме. Это объединение `def()`/`defGet()` из `src/highlevel/*.js`
 > с методами класса `Wrapper` (`each`, `eachNode`, `eq`, `get`, `index`,
@@ -12884,9 +12963,12 @@ const $ = createApi();          // свой экземпляр API (тесты, 
 `installBsp` → `installAtlas` → `installCurve` → `installTask` → `installScript`
 → `installStory` → `installQuest` → `installSoundBank` → `installSteps` →
 `installBarks` → `installItems` → `installCombat` → `installWeapons` →
-`installRaid` → `installCels` → `installProc` → `installAlive` → `installNet`
-→ `installReplay`. Реактивные запросы (`installWatch`) ставятся рядом с
-сигналами и состояниями, а DevTools (`installDevTools`) — после `installAgent`:
+`installRaid` → `installCels` → `installProc` → `installKinds` →
+`installRotSprite` → `installMesh` → `installReplay` → `installCutscene` →
+`installAlive` → `installNet`; далее — `installWidgets`, `installTriggers`,
+`installPool`, `installViewport`, `installHttp`, `installSdk`. Реактивные запросы
+(`installWatch`) ставятся рядом с сигналами и состояниями, а DevTools
+(`installDevTools`) — после `installAgent`:
 панель берёт данные из инспекции агента.
 
 ## 2. Кадровые хуки
@@ -12941,19 +13023,20 @@ build/_deps/quickjs-build/qjs tests/js/api_no_engine_test.mjs
 ```js
 $.ready(() => {
     const hero = $.atlas.load('hero', 'art/hero.json');
+    const idle = hero.tagSprites('idle');          // массив id спрайтов тега
 
-    $('#hero').sprite(hero.frame('idle_0')).at(200, 300).appendTo($.world);
-
-    // Тег Aseprite — готовый клип для $.anim.
-    $.anim.define('hero', {
-        clips: {
-            idle: { frames: hero.tagSprites('idle'), fps: 8, loop: true },
-            walk: { frames: hero.tagSprites('walk'), fps: 12, loop: true },
-        },
-    });
-    $('.hero').anim('hero').play('idle');
+    $('#hero').at(200, 300)
+        .frames(idle)                              // кадры тега становятся листом узла
+        .animate({ from: 0, to: idle.length - 1, speed: 8, loop: true })
+        .appendTo($.world);
 });
 ```
+
+`$.anim.clip(имя, { frames })` из шапки модуля — **не** рабочий вызов: клип
+плеера (`$.anim.clip`, [animplayer.md](animplayer.md)) состоит из `duration`,
+`loop`, `speed` и `tracks`, а дорожка `sprite` берёт кадры из `node.frames`
+узла, то есть после `.frames(idle)`. Для клипа старого формата
+(`$.anim.define`) дорожка — `{ anim: { from, to } }`.
 
 ---
 
@@ -13469,8 +13552,11 @@ $.audio.damping({ radius: 34, strength: 0.2, max: 0.85,
 (`MIX_SetTrackFrequencyRatio`), шины (`MIX_CreateGroup` + пост-микс группы),
 позиция (`MIX_SetTrack3DPosition`), DSP на дорожке. Поэтому из SoLoud взят
 только алгоритм реверберации (Freeverb, `src/audio_reverb.c`), а публичный API
-остался один — `$.sound` и `$.audio`; возможности бэкенда проверяются через
-`$.audio.supports(...)`, а не отдельным пространством имён. SoLoud — запасной
+остался один — `$.sound` и `$.audio`; отдельного запроса возможностей бэкенда у
+`$.audio` нет (`$.audio.supports(...)` не существует): pitch, шины, 3D-позиция и
+DSP-эффекты дорожки доступны всегда, а при сборке без звука
+(`-DR2D_ENABLE_AUDIO=OFF`) вызовы `$.audio`/`$.sound` становятся no-op.
+SoLoud — запасной
 вариант, если понадобится граф шин с send/return или свёртка с импульсными
 характеристиками.
 
@@ -13643,12 +13729,15 @@ $.camera.panTo(1200, 400, 0.8);          // плавный наезд (катс�
 ```js
 $.camera.split(2);                          // две камеры в половинах окна
 $.camera.viewAt('p2', hero2.x, hero2.y);    // куда смотрит вторая
+$.camera.pip({ x: 400, y: 20, w: 260, h: 200 }, { at: '#hero', zoom: 2 });  // картинка в картинке
+$.camera.pipClear();                        // убрать PIP
 ```
 
 Подробности — [viewports.md](viewports.md). Коротко: регион выражается зумом и
 центром камеры, поэтому ни сциссор, ни отдельные цели не нужны, а камеры
 рисуются в один батч кадра. Ограничения (спрайты на границе регионов, общий пост
-и свет, ввод по главной камере) — там же, §4.
+и свет, ввод по главной камере) — там же, §4. PIP проверяется по пикселям
+(`tests/agent/highlevel_pip_test.py`), его состояние отдаёт `$.camera.pipInfo()`.
 
 ## 1.1. Поворот кадра
 
@@ -13826,6 +13915,15 @@ $.ready(() => {
 | `cels.trace()` / `node()` | путь решения (для отладки) |
 | `cels.reset(values?)` | вернуть начальные водители |
 | `cels.save()` / `load(data)` | снимок состояния |
+| `cels.steps()` | сколько решений графа сделано |
+
+Реестр графов — `$.cels`:
+
+| Вызов | Что делает |
+|---|---|
+| `$.cels.get(name)` / `has(name)` / `names()` | получить граф, проверить наличие, список имён |
+| `$.cels.remove(name)` / `clear()` | забыть граф / очистить реестр |
+| `$.cels.load(data)` | загрузить пачку: `{ hero: {…} }` или `{ graphs: {…} }` |
 
 `fps` у графа ограничивает частоту решения: кадр меняется не чаще, чем раз в
 `1/fps` секунд, а не каждый кадр движка.
@@ -13914,6 +14012,7 @@ $.ready(() => {
 | `$.collision.names()` | имена по алфавиту |
 | `$.collision.list()` | `[{ name, bit, mask }]` |
 | `$.collision.freeBit()` | бит, ещё не занятый ни одним именем |
+| `$.collision.allExcept(...names)` | маска «все биты, кроме перечисленных слоёв» |
 | `$.collision.reload()` | перечитать реестр из `$.store` |
 
 Реестр живёт в `$.store` под ключом `collision.layers`, поэтому переживает
@@ -14038,8 +14137,21 @@ hp.heal('arms', 20);      // аптечка (поднимает и чёрное)
 hp.stopBleeding();        // жгут
 hp.aimPenalty();          // множители дебаффов
 hp.report();              // «Руки 0/60 (чёрная), Ноги 40/65 (кровь)»
+hp.isBleeding('arms');    // идёт ли кровь в зоне
+hp.anyBleeding();         // есть ли кровь вообще
+hp.blackedZones();        // ['arms', …] — список чёрных зон
+hp.blackedCount();        // сколько зон чёрных
+hp.speedMultiplier();     // 0..1 — штраф чёрных ног
+hp.jumpMultiplier();      // 0..1 — штраф чёрных ног для прыжка
+hp.reloadPenalty();       // множитель времени перезарядки от чёрных рук
+hp.zones() / hp.maxOf('arms');   // список зон модели / максимум зоны
+hp.totalMax();            // сумма максимумов всех зон
 hp.save() / hp.load(d);   // сейв
 ```
+
+На пространстве имён: `$.combat.zones()` и `$.combat.titles()` — зоны и их
+подписи для интерфейса, `$.combat.detach('#hero')` — снять привязку модели к
+узлу (например, при выходе со сцены).
 
 `$.combat.health()` без аргумента создаёт **новую** модель — удобно для своих
 бойцов и тестов.
@@ -14122,7 +14234,7 @@ $('.enemy').within('#hero', 500);       // выборка в радиусе (н�
 |---|---|
 | Контекст | `ctx` — общий контекст подсистем (реестр, камера, время, сети подсистем) |
 | Узлы | `Node`, `Wrapper`, `wrap`, `wrapOne`, `query`, `def`, `defGet` |
-| Реестр | `registryIndex`, `nodesByTag`, `nodesByClass`, `nodesWithFacet`, `facetCount`, `liveNodes`, `dropFromRegistry`, `touchRegistry`, `registryVersion`, `registrySummary` |
+| Реестр | `registryIndex`, `nodesByTag`, `nodesByClass`, `nodesWithFacet`, `facetCount`, `liveNodes`, `dropFromRegistry`, `touchRegistry`, `registryVersion`, `registrySummary`, `nativeNodes`, `wrapper_proto_ready` |
 | Пакетная правка | `beginBatch`, `endBatch`, `inBatch` |
 | Выборки | `registerSelector`, `compileSelector`, `TAGS` |
 | Радиус | `withinRadius` — чистая фильтрация «центр в радиусе» (метод обёртки `.within()`) |
@@ -14767,11 +14879,6 @@ SDL_BindGPUIndexBuffer(pass, &ib, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
 ## 5. Ограничения (честно)
 
-* **меш ещё не рисуется на экране**: конвейер, формат вершины, заливка буфера и
-  отрисовка написаны и вызываются, но проверка показала, что кадр не меняется.
-  Инструмент отладки (`engine.depthInfo()`) и счётчики (`meshDraws`,
-  `meshBatches`, `pending`) добавлены именно для этого и остаются в движке;
-  довести меш — отдельная задача (§4 в `docs/TASKS.md`);
 * **у спрайтов нет своей глубины**: они все пишут `z = 0`. Сортировать спрайты
   между собой по-прежнему нужно порядком отрисовки (`$.gfx.layer`);
 * **нет трафарета**: формат только глубина;
@@ -15416,6 +15523,10 @@ $.ready(() => {
 | `$.font.styleOf(target)` | что реально читает отрисовка: `{ font, size, align, lineHeight, color }` |
 | `$.font.measure(text, name)` | ширина строки в пикселях этим стилем |
 | `$.font.defaults()` | значения по умолчанию (копия) |
+| `$.font.load(name, path)` | загрузить `.ttf`/`.otf` как семейство (без имени — имя файла) |
+| `$.font.uploaded()` / `families()` / `default()` | что загрузила игра / все семейства движка / семейство по умолчанию |
+| `$.font.atlas()` | `{ glyphs, atlas_w, atlas_h }` — состояние атласа глифов |
+| `$.font.width(text, size, family?)` | ширина строки явным кеглем |
 
 ```js
 $.font.apply('#score', 'hud');       // селектор
@@ -16258,8 +16369,9 @@ $.ready(() => {
 
 ## 3. Ограничения
 
-* **до `bootstrap.js` объекта нет**: если модуль импортировать раньше, `$` будет
-  `undefined`; в движке порядок гарантирован;
+* **до `bootstrap.js` объекта нет**: импорт раньше времени **бросает**
+  `Error('r2d: высокоуровневое API не загружено — движок не выполнил r2d/bootstrap.js')`,
+  а не отдаёт `undefined`; в движке порядок гарантирован;
 * **второго экземпляра не будет**: для независимого API зовите `createApi()`
   напрямую (см. [api.md](api.md));
 * **короткого алиаса `nk` в модуле нет**: он выставлен только в `globalThis`.
@@ -16301,6 +16413,7 @@ $.input.on('mouse', (e) => { if (e.button === 1 && e.pressed) shoot(); });
 | `saveBindings()` / `loadBindings()` | сохранить и вернуть раскладку |
 | `actions()` / `deadzone(value?)` | список действий / мёртвая зона стиков |
 | `on(name, fn)` / `off(name, fn)` | события `key`, `mouse`, `wheel`, `text` |
+| `shiftDown()` / `ctrlDown()` / `altDown()` | модификаторы клавиатуры на этот кадр |
 | `describe()` | строка состояния для интерфейса |
 
 ## 2. Мышь и геймпад
@@ -16313,6 +16426,7 @@ $.input.on('mouse', (e) => { if (e.button === 1 && e.pressed) shoot(); });
 | `padDown(button)` / `padAxis(name)` | кнопка и ось ПЕРВОГО геймпада |
 | `gamepad(slot)` | геймпад по номеру: `.down()`, `.pressed()`, `.axis()`, `.connected()`, `.rumble()` |
 | `padCount()` / `padSlots()` | сколько подключено / сколько слотов всего |
+| `padDownAt(slot, button)` / `padConnectedAt(slot)` | кнопка и наличие геймпада в конкретном слоте |
 | `rumble(opts)` / `stopRumble()` / `rumbleSupported()` | виброотклик первого геймпада |
 
 Кнопки мыши: `1` — левая, `2` — средняя, `3` — правая.
@@ -16468,7 +16582,11 @@ $.items.loadFile('items.json');                  // { items: [...] } тоже
 * **прочность брони не тает**: `durability` хранится, но урон по ней считает
   боевая система;
 * **денег одна сумма**: `bag.money` — кошелёк контейнера, отдельного счёта
-  торговца нет.
+  торговца нет. Кладут деньги `bag.addMoney(n)` (возвращает новый остаток),
+  прочитать всё содержимое — `bag.ids()`, сколько ещё поместится по весу —
+  `bag.massLimit()` (0 — без предела, когда предметы невесомы);
+* **восстановление инвентаря** — `$.items.restore(saveData, spec)`: собирает
+  контейнер из сейва (`bag.save()`), проверяя, что описание предметов знакомо.
 
 ## 7. Проверка
 
@@ -16545,7 +16663,7 @@ $.kinds.renderer('probe', (node, cam) => {
 отрисовщику своего вида. Если отрисовщика нет или он вернул `false`, узел
 рисуется как обычный 2D-узел, поэтому незавершённый или «пустой» вид ничего не
 ломает. Отрисовщик вида `re2d` уже регистрируется при сборке API: поверхности и
-билборды реализованы ([re2d.md](re2d.md)).
+билборды реализованы ([re2d_legacy.md](re2d_legacy.md)).
 
 ### Проход вида
 
@@ -16554,7 +16672,7 @@ $.kinds.renderer('probe', (node, cam) => {
 других видов, в том числе 2D, под такой камерой не рисуются) и вызывает
 `end(cam)`. Узел, чей вид совпал с видом камеры, но отрисовщик его не взял
 (`false`), 2D-путём не рисуется — для чужого пространства он не имеет смысла.
-Так устроен Re2D ([re2d.md](re2d.md)); обычная 2D-камера проходов не имеет.
+Так устроен Re2D ([re2d_legacy.md](re2d_legacy.md)); обычная 2D-камера проходов не имеет.
 
 ## 3. Данные, выборки и снимки
 
@@ -16576,7 +16694,7 @@ $.kinds.renderer('probe', (node, cam) => {
   попадает ни одним путём (`.kind()`, конструктор, prefab).
 * Вид камеры — `$.camera.kind(Re2D)` ([camera.md](camera.md) §5); отрисовщики
   узлов вида `re2d` (стены, пол, билборды) уже зарегистрированы. Под обычной
-  2D-камерой сохраняется вид сверху ([re2d.md](re2d.md)); `<ceiling>` скрыт.
+  2D-камерой сохраняется вид сверху ([re2d_legacy.md](re2d_legacy.md)); `<ceiling>` скрыт.
 
 ## 5. Проверка
 
@@ -16868,10 +16986,16 @@ $.ready(() => {
 ```js
 $.loading.show({ title: 'Готовим лес…', hint: 'пара секунд' });
 $.loading.progress(0.4, 'деревья');   // 0..1 и подпись текущего шага
-$.loading.label('фонари');            // только подпись
+$.loading.label('фонари');            // подпись-подсказка (та же строка, что hint)
 $.loading.title('Уровень 2');
 $.loading.hide();
 ```
+
+`show(opts)` принимает `title`, `hint`, а также `value` (стартовый прогресс
+0..1), `color` (цвет заголовка, по умолчанию `#e8f0ff`) и `barColor` (цвет
+заполнения полосы, по умолчанию `#5ce1e6`). `label(text)` пишет в строку
+подсказки (`hint`), а подпись шага показывает второй аргумент
+`progress(value, label)` — это разные строки экрана.
 
 Проверки: `$.loading.visible()`, `$.loading.value()`.
 
@@ -19671,8 +19795,11 @@ $.render(() => oldWorld.render({x:0,y:0,eye:48,yaw:0,pitch:0,fov:70}, npc,320,18
 # Re2DSprite — `$.re2dSprite`
 
 Один PNG с развёрткой и картами поверхности → обычный 2D-спрайт.
+[v3](../RE2DSPRITE_V3.md) — плотная поверхность с перспективой, светом и
+`skin`-клипами (текущий формат, его грузят персонажи `russi3` в демо Dust2);
 [v2](../RE2DSPRITE_V2.md) поддерживает голову, тело, мимику и простые суставы;
-[v1](../RE2DSPRITE_V1.md) остаётся совместимым прототипом головы.
+[v1](../RE2DSPRITE_V1.md) остаётся совместимым прототипом головы. Разбор
+выбирается по `atlasInfo.version`: 2 или 3, другое значение — ошибка.
 
 ```js
 $.re2dSprite.create('art/russi.png',{id:'russi'})
@@ -19683,7 +19810,7 @@ $('#russi').re2dPart('costume','art/police.png');
 
 | Вызов | Результат |
 |---|---|
-| `$.re2dSprite.create(path,opts?)` | узел `<rotsprite>`, собственный ресурс |
+| `$.re2dSprite.create(path,opts?)` | создать узел `<rotsprite>` и сразу загрузить атлас `path`; при ошибке узел удаляется, исключение уходит наверх |
 | `.re2dSpriteAtlas(path)` | атомарная замена всего PNG; новая поза по умолчанию |
 | `.re2dStyle(style='anime')` | v2: anime / pixel, атомарно сохраняет подмены и позу |
 | `.re2dPose(yaw,pitch=0)` | yaw в градусах, wrap ±180, pitch clamp ±75 |
@@ -19708,8 +19835,10 @@ Info: `{sprite,texture,revision,yaw,pitch,width,height,atlasWidth,version,
 style,body,eyes,mouth,brows,surfaceSamples,joints?,path,rig,motion,parts,hotReload,
 reloads,reloadError,milestone,disposed}`. Индексы глаз/рта/бровей — 0..3.
 Joints — координаты канонического поля 128×128, не экранные, в обоих режимах v2.
-Raster v1=64, v2 pixel=128, текущий runtime v2 anime=512 (1024 supersampling).
-Legacy C anime entry points сохраняют 256; `_sized` поддерживает 256/512. По умолчанию pixel.
+Raster v1=64, v2 pixel=128, v2 anime=512 (1024 supersampling).
+У v3 растр задаёт `projection.raster` в character.json (128..2048, по умолчанию
+1024), детализацию — `projection.detail`, вид — `projection.eye/window/cull/motionLod`.
+Legacy C anime entry points сохраняют 256; `_sized` поддерживает 256/512. По умолчанию pixel (у legacy `.create()`).
 Повторная одинаковая поза/мимика не делает upload; 360° равен 0°.
 
 Pixel: минимальный масштаб 1, целый; позиция округляется после камеры.
@@ -19803,10 +19932,137 @@ world.add(hero);
 
 Pose synthesis budget и camera quantization задаются world.quality, не legacy $.re2d.poseBudget. Animation orchestration остаётся existing sprite wrapper, expensive world synthesis/composition — C. Полный контракт: [Re2DSprite World](../re2d/RE2DSPRITE_WORLD.md), [World guide](../RE2D_WORLD_GUIDE.md), [migration](../re2d/RE2D_MIGRATION.md).
 
+Низкий уровень v3: `engine.rotSpriteConfig(handle, raster, light24, detail, view)` —
+разрешение синтеза (≤2048), 24 числа света и вид `{eye, window, cull, motionLod}`
+(для v2 вызов отклоняется), и `engine.rotSpritePrepare(handle)` — подготовка
+ресурсов синтеза. Обёртка зовёт их сама по `projection` из character.json; вручную
+они нужны только при работе с `engine.*` напрямую ([internal/NATIVE.md](../internal/NATIVE.md)).
+
 ## v3
 
-PNG формата [v3](../RE2DSPRITE_V3.md) загружается тем же `$.re2dSprite.from()/create()`; `re2dMotion(clip,loop)` + `re2dSeek(t)` играют скин-клипы.
+PNG формата [v3](../RE2DSPRITE_V3.md) загружается тем же `$.re2dSprite.from()/create()`; `re2dMotion(clip, speed=1)` + `re2dSeek(t)` играют скин-клипы (`skin:{frames,fps,bones,data}` в animations JSON).
 `projection.raster/light/detail` в character.json управляют разрешением синтеза, светом и уровнем детализации; `eye` включает перспективу (оружие от первого лица), `window` — видимое окно, `cull` — отсечение отвернувшихся ячеек, `motionLod` — более грубый уровень в движении; `.color()` — освещение мира.
+
+
+---
+
+## `$.real2d` — Real2D v4: вычисляемый layered warp персонажа
+
+<sub>источник: `docs/highlevel/real2d.md`</sub>
+
+# `$.real2d` — Real2D v4: вычисляемый layered warp персонажа
+
+Модуль подсистемы `$`: рендер персонажа из **отдельных семантических
+RGBA-компонентов** (лицо, глаза, нос, рот, волосы), согласованных 2D-сеток и
+коэффициентов функций ракурса. Каждый угол yaw **вычисляется**, а не выбирается
+из готовых кадров: в контейнере нет ни одного полнофигурного ракурса.
+
+Спецификация и границы — [REAL2D_V4_SPEC.md](../../demos/real2d/REAL2D_V4_SPEC.md),
+план стадии — [STAGE_A_PLAN.md](../../demos/real2d/STAGE_A_PLAN.md).
+
+**Чем отличается от `$.re2dSprite` (v2/v3).** Тот синтезирует кадр из одной
+большой развёртки, где попиксельно закодированы part-ID, скининг и перспектива.
+Здесь другой вход (отдельные компоненты + cage + манифолд + гейты видимости) и
+другой путь кадра (инверсно-барицентрическая растеризация реальных texels с
+композицией по псевдоглубине). Это не вторая реализация той же подсистемы:
+формат данных, математика и доказательства разные.
+
+## Стадия A (что реально работает)
+
+| Ограничение | Значение |
+|---|---|
+| Часть тела | только голова (`head-only`) |
+| Yaw | полный круг `S¹`, радианы |
+| Pitch | **не вход**: стадия B отдельно |
+| Anchors | 12 геометрических, Fourier `K=3`, `L=0` |
+| Контейнер | `.r2d4` — ZIP store-only: `manifest.json`, `atlas/atlas_00.png`, `geometry/*` |
+| Композиция | linear RGB, premultiplied alpha, вывод в sRGB8 |
+
+## API модуля
+
+```js
+const id = $.real2d.load('demos/real2d/assets/head_real2d_v4.r2d4'); // кэш по пути
+const sprite = $.real2d.frame(id, { yaw: 1.05, blink: 0, mouth: 0, scale: 512 });
+const info = $.real2d.info(id);        // структурные факты ассета и кадра
+const rgba = $.real2d.pixels(id);      // Uint8Array RGBA8 последнего кадра
+const chain = $.real2d.provenance(id, x, y);  // patch → triangle → UV (если рендер с provenance)
+$.real2d.debugSetAtlas(id, bytes);     // мутация источника для доказательных тестов (null — вернуть)
+$.real2d.dispose(id);
+```
+
+| Вызов | Возвращает | Назначение |
+|---|---|---|
+| `load(path)` | `number` | id контейнера; повторный вызов отдаёт тот же id |
+| `frame(id, opts)` | `number` | id спрайта в общем батче движка |
+| `pixels(id)` | `Uint8Array` | **копия** RGBA8 последнего кадра на момент вызова (для проверок) |
+| `info(id)` | `object` | canvas, atlas, rank, dim, счётчики кадра, фазы `ms`, `last_error` |
+| `provenance(id, x, y)` | `object\|null` | цепочка patch → треугольник → UV для пикселя |
+| `provenanceMap(id)` | `Uint16Array` | индекс патча+1 на пиксель (нужен рендер с `provenance`) |
+| `atlasPixels(id)` | `Uint8Array` | копия атласа (или подменённого) — для доказательных мутаций |
+| `patchWeights(id, yaw)` | `array` | что решил движок: `gate`, перенос, масштаб по патчам |
+| `debugSetAtlas(id, bytes)` | `bool` | подмена атласа целиком (доказательные тесты) |
+| `handles()` | `Map` | путь → `{ id, users }`: что уже загружено (отладка и тесты) |
+| `yaw(rad)` | `number` | нормализовать угол в `0..2π` (та же функция, что у `.real2dYaw()`); нечисло — `RangeError` |
+| `dispose(id)` | `bool` | освободить ассет и его текстуру |
+
+`frame` принимает `{ yaw, blink, mouth, scale, validate, provenance }`:
+`yaw` — радианы, `blink`/`mouth` — 0..1, `scale` — размер растра 128..1024,
+`validate` включает счётчик записей на пиксель (проверка fill rule),
+`provenance` — запись цепочки для `provenance()`.
+
+## Узел `<real2d>`
+
+```js
+$('<real2d>', { id: 'head' })
+    .at(400, 300).size(512, 512)
+    .real2dSrc('demos/real2d/assets/head_real2d_v4.r2d4')
+    .real2dPose(0.6, { blink: 0 })
+    .appendTo($.world);
+
+$.update(dt => $('#head').real2dYaw($.time.now()));   // угол меняется кодом
+$('#head').real2dSpin(0.8);                            // или автоповорот, рад/с
+```
+
+| Метод | Что делает |
+|---|---|
+| `.real2dSrc(path)` | загрузить контейнер и отрисовать кадр |
+| `.real2dPose(yaw, { blink, mouth })` | задать угол и состояние, пересчитать кадр |
+| `.real2dYaw(yaw)` | только угол |
+| `.real2dSpin(rad_per_sec)` | автоповорот в тике |
+| `.real2dSize(px)` | размер растра (128..1024) |
+| `.real2dReload()` | перечитать контейнер с диска (после bake) |
+| `.real2dInfo()` | `$.real2d.info` плюс состояние узла (метод-геттер первого узла) |
+
+## Композиция
+
+Слои группы «лицо» (кожа головы, варианты вида) складываются **внутри группы**
+(`Σ w·α`, `Σ w·α·C`) и сбрасываются на кадр одним проходом с нормированным
+покрытием: два appearance-варианта по 0.5 дают alpha 1, а не 0.75 — иначе лицо
+на переходе становится полупрозрачным «призраком» (спека §7 правило 5).
+Остальные слои (чёлка, пряди, глаза, нос, рот) накладываются обычным `over` по
+псевдоглубине; детали лица дополнительно умножаются на маску силуэта лица.
+
+Переходы между вариантами — короткие (1.5–10° в зависимости от кольца), то есть
+быстрый свап, а не длинный dissolve: при 60 кадрах и обычной скорости поворота
+это доли кадра, зато нет «двойного лица» на пол-оборота.
+
+## Ограничения и честные границы
+
+* pitch не поддерживается: стадия A объявляет домен `pitch = 0`, вне домена
+  ассет не притворяется, что умеет;
+* полнотелого персонажа нет — это head-only стадия, и выдавать её за v4 целиком
+  запрещено;
+* растеризация идёт через общий пул потоков движка (`R2D_ROT_THREADS=1` —
+  последовательный режим для замеров и отладки). Замер на объявленной машине
+  (Apple Silicon, Release, полный круг): **13.5 мс/кадр** при 512×512 и
+  **4.3 мс** при 256×256; до распараллеливания было 24.9 и 5.6 мс (фаза
+  растеризации ускорилась в 2.5 раза). Разбивка по фазам — `$.real2d.info().ms`
+  (`clear`, `evaluate`, `raster`, `composite`, `encode`, `upload`).
+  Цель спеки (≤1 мс) не достигнута: остаток — стоимость на пиксель
+  (≈19 нс на проверку) и три отдельных прохода (растр → композит → кодирование);
+  план — слияние композита с растеризацией и SIMD-выборка;
+* `debugSetAtlas` — диагностический вход для доказательных тестов, а не игровой
+  путь: он меняет источник texels, чтобы проверить provenance и мутации.
 
 
 ---
@@ -20939,6 +21195,26 @@ $.resource: не удалось загрузить "config" (json data/config.js
 `.re2d*`: оба имени указывают на один и тот же код
 (`src/highlevel/rotsprite.js`), поведение не отличается.
 
+## Что даёт модуль
+
+`src/highlevel/rotsprite.js` — вся подсистема Re2DSprite: namespace `$.rotSprite`
+(он же `$.re2dSprite`) и методы узла `rot*`/`re2d*`.
+
+| Вызов | Что делает |
+|---|---|
+| `$.rotSprite.from(path, opts?)` | загрузить character.json и создать узел |
+| `$.rotSprite.definition(path)` | разобранная модель без создания узла |
+| `$.rotSprite.equip(target, item)` | надеть предмет (сокет/смена части) |
+| `$.rotSprite.create(path, opts?)` | создать узел `<rotsprite>` и загрузить атлас `path` |
+| `$.rotSprite.pose(target, yaw, pitch?)` / `.info(target)` / `.dispose(target)` | поза, состояние, освобождение ресурса |
+
+Формат выбирается по `atlasInfo.version`: **2** (развёртка v2) или **3**
+(плотная поверхность, [RE2DSPRITE_V3.md](../RE2DSPRITE_V3.md)); другое значение —
+ошибка. Вид синтеза v3 задаёт сам JSON (`projection.raster/light/detail/eye/window/
+cull/motionLod`), а не вызовы из игры; нативный вход —
+`engine.rotSpriteConfig(handle, raster, light24, detail, view)` и
+`engine.rotSpritePrepare(handle)` ([internal/NATIVE.md](../internal/NATIVE.md)).
+
 | Старое имя | Новое имя |
 |---|---|
 | `$.rotSprite` | `$.re2dSprite` |
@@ -20952,6 +21228,10 @@ $.resource: не удалось загрузить "config" (json data/config.js
 | `.rotReload()`, `.rotHotReload(on)` | `.re2dReload()`, `.re2dHotReload(on)` |
 | `.rotAttach(...)`, `.rotDetach()` | `.re2dAttach(...)`, `.re2dDetach()` |
 | `.rotBone(...)`, `.rotLayer(...)`, `.rotSeek(t)` | `.re2dBone(...)`, `.re2dLayer(...)`, `.re2dSeek(t)` |
+| `.rotVisibleParts(ids)` | `.re2dVisibleParts(ids=null)` |
+
+Полный список алиасов объявляет сам модуль циклом — 17 имён; таблица выше
+перечисляет те, что встречаются в примерах и справочниках.
 
 Новый код пишите с `re2d*`: именно эти имена описаны в справочнике и
 используются в [Re2D](../RE2D.md). Старые алиасы удаляются только отдельным
@@ -24648,7 +24928,7 @@ h/height, value` целиком считается в C (`src/nodes.c`): сос�
 ```js
 $('<ui.label>', { id: 'hp', text: 'HP 100', size: 20 }).at(60, 30).appendTo($.ui);
 $('<ui.bar>', { id: 'stam', value: 0, max: 100, w: 200, h: 12 }).at(60, 60).appendTo($.ui);
-$.ui.icon('play', 24);                      // иконка Material Design
+$.ui.setIcon('#hp', 'favorite');            // глиф Material Design на узел
 ```
 
 ---
@@ -24657,16 +24937,21 @@ $.ui.icon('play', 24);                      // иконка Material Design
 
 | Вызов | Смысл |
 |---|---|
-| `label(text, opts?)` | подпись |
-| `bar(value, max, opts?)` | полоса |
-| `text(text, opts?)` | многострочный текст |
-| `icon(name, size?)` / `hasIcon(name)` / `iconNames()` / `iconCount()` | иконки Material Design |
-| `on(event, fn)` / `listeners()` / `off()` | события интерфейса |
-| `show()` / `hide()` / `visible(on?)` | видимость всего слоя |
-| `html(markup)` / `style(css)` / `unload()` | RmlUi-документ и его стиль |
-| `fps()` / `cls()` / `doc()` | диагностика и доступ к документу |
-| `scale(value?)` / `scaleValue()` | масштаб интерфейса (0.25…4) |
+| `label(sel, text)` | текст любого `<ui.*>`-узла по селектору |
+| `bar(sel, value, max?)` | значение полосы (и её максимум) |
+| `show(sel)` / `hide(sel)` | показать/скрыть узлы `<ui.*>` по селектору |
+| `icon(name)` / `hasIcon(name)` / `iconNames()` / `iconCount()` | иконки Material Design (размер задаёт кегль узла, а не аргумент) |
+| `setIcon(target, name)` | поставить глиф иконки на узел(ы) по селектору или обёртке |
+| `fps()` | FPS для HUD |
+| `scale(value?)` | масштаб интерфейса (0.25…4); без аргумента — прочитать и вернуть число |
+| `scaleValue()` | прочитать масштаб, не меняя узлы |
 | `aria(sel, props?)` / `ariaOf(sel)` / `ariaCount()` | семантика для ассистивных технологий |
+| `doc(path)` | RmlUi-документ: `.show()` / `.hide()` / `.visible()` / `.text(id, t)` / `.html(id, m)` / `.cls(id, name, add)` / `.style(id, prop, value)` / `.on(id, event, fn)` / `.listeners()` / `.unload()` |
+
+Своих `on`/`off`/`listeners` и узельной видимости «всего слоя» у `$.ui` нет:
+события и разметка принадлежат **документу** (`$.ui.doc(path)`), а `show(sel)` /
+`hide(sel)` работают по селектору узлов. Скрыть целый документ — `.hide()` у
+обёртки документа.
 
 ## 2. Узлы интерфейса
 
@@ -24951,39 +25236,35 @@ $.camera.viewAt('p3', 1200, 300);
 (`alpha`) и отказ от фона (`bg: false`) уже поддержаны в отрисовке — иначе
 второй проход закрасил бы экран наглухо.
 
-**Готового `$.camera.pip(...)` в API НЕТ.** Я его написал, замерил и снял:
-проекция считается верно, а рисуется не то.
+**`$.camera.pip(...)` есть и работает** — дефект масштаба в регионе найден и
+починен; проверка по пикселям — `tests/agent/highlevel_pip_test.py`:
 
-### Что измерено (узел 100×100 в мире `(1000, 1000)`, вторая камера получает
-`x = 1060, y = 956, zoom = 5`, регион `{620, 20, 160, 120}`)
+```js
+$.camera.pip({ x: 400, y: 300, w: 400, h: 300 }, { at: '#far', zoom: 2, alpha: 0.9 });
+$.camera.pipInfo();     // прямоугольник и настройки активного PIP
+$.camera.pipClear();    // убрать картинку в картинке
+```
+
+`opts`: `at` (узел/селектор/точка — за кем следить), `zoom`, `alpha`
+(по умолчанию 0.9) и `bg` (по умолчанию `false` — второй проход не заливает
+кадр). Публичное описание — [camera.md](camera.md) §1.0.
+
+### Как искали дефект (история)
+
+До починки замер показывал: узел 100×100 в мире `(1000, 1000)`, вторая камера
+получала `x = 1060, y = 956, zoom = 5`, регион `{620, 20, 160, 120}`.
 
 | Замер | Результат |
 |---|---|
 | `nodeTransform` (предсказание) | экран `(100, 520)`, размер `500×500` |
-| **что реально ушло в `submitSprites`** | **`(100, 520, 500, 500)`** — совпадает с предсказанием |
+| **что реально ушло в `submitSprites`** | **`(100, 520, 500, 500)`** |
 | что на экране (скриншот) | зелёный прямоугольник `(100, 250)`, размер ≈ `350×350` |
 
-То есть **на стороне JS всё сходится**: и математика кадра, и запись в буфер
-спрайтов. Расхождение появляется между буфером и пикселем — то есть на пути
-`submitSprites → GPU`. При этом:
-
-* камера с регионом во **весь экран** (`zoom 1`) рисует точь-в-точь правильно;
-* сплитскрин (`zoom 2`, регионы-половины) тоже рисует правильно и подтверждён
-  тестом по пикселям;
-* ошибка проявляется при **масштабе больше 1** в отдельном регионе.
-
-### Где искать дальше
-
-Смотреть `r2d_batch_sprites`/`r2d_render_draw_world` в [`src/render.c`](../../src/render.c):
-спрайты второго прохода едут в общий батч, и что-то там применяет другой
-масштаб/смещение (возможно, зажим координат или пересчёт относительно размера
-окна, а не спрайта). Проверять так: положить в буфер один спрайт с координатами
-`(100, 520, 500, 500)` и одним проходом — если он нарисуется как `(100, 250,
-350, 350)`, дело точно в буфере/движке, а не в камерах. Инструмент для этого
-уже есть: см. «что реально ушло в `submitSprites`» выше — тот же приём.
-
-Незачем было объявлять метод, пока это не выяснено: непроверенная функция в
-публичном API хуже её отсутствия.
+На стороне JS сходилось всё, расхождение было между буфером и пикселем.
+Причины: камера во весь экран (`zoom 1`) и сплитскрин рисовались верно, ошибка
+проявлялась при **масштабе больше 1** в отдельном регионе. Если такой симптом
+вернётся — смотреть `r2d_batch_sprites`/`r2d_render_draw_world` в
+[`src/render.c`](../../src/render.c).
 
 
 ## 5. Проверка

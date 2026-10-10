@@ -1,0 +1,28 @@
+<rml>
+<head>
+    <link type="text/rcss" href="real2d.rcss"/>
+    <title>Real2D v4</title>
+</head>
+<body>
+    <div id="heading">
+        <div id="kicker">R2D / REAL2D V4 · СТАДИЯ A</div>
+        <h1>Голова из компонентов</h1>
+        <p id="sub">Каждый угол вычислен: 12 anchors, серия Фурье K=3, реальные texels шита</p>
+    </div>
+    <div id="readout">
+        <p id="yaw-line">yaw: 0.0°</p>
+        <p id="stage-line">стадия A: только голова, pitch 0</p>
+        <p id="stats-line">модель ещё не загружена</p>
+    </div>
+    <div id="controls">
+        <button id="front">Фронт</button>
+        <button id="q45">−45°</button>
+        <button id="p45">+45°</button>
+        <button id="profile">Профиль</button>
+        <button id="back">Затылок</button>
+        <button id="auto">Автоповорот</button>
+        <button id="reload">Перечитать</button>
+        <span>← → угол · пробел — автоповорот · R — перечитать · Esc — выход</span>
+    </div>
+</body>
+</rml>

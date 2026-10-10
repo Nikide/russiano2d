@@ -1,0 +1,151 @@
+[
+  {
+    "file": "assets/pink_body_components_compact_v2.png",
+    "size": [
+      1244,
+      1264
+    ],
+    "mode": "RGBA",
+    "sha256": "2f851f929db4db0be88fda166e2a6272c84f3e87645edf01d7953aec9d8ee814",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "fully_transparent_pixels": 1136906,
+    "pixels_alpha_1_to_7": 88334,
+    "status": "GENERATED_CANDIDATE_NEEDS_AUTHORING",
+    "geometry_validated": false,
+    "yaw_labels_validated": false,
+    "runtime_acceptance_passed": false
+  },
+  {
+    "file": "assets/pink_body_limbs_yaw_layers_v1.png",
+    "size": [
+      1536,
+      1024
+    ],
+    "mode": "RGBA",
+    "sha256": "5bbfd4da1c22b9fe42d8cc8f7d0af68b9c1fce55c7c78bbfa26f3b2614f1c9ce",
+    "alpha_range": [
+      0,
+      254
+    ],
+    "fully_transparent_pixels": 625752,
+    "pixels_alpha_1_to_7": 380167,
+    "status": "GENERATED_CANDIDATE_NEEDS_AUTHORING",
+    "geometry_validated": false,
+    "yaw_labels_validated": false,
+    "runtime_acceptance_passed": false
+  },
+  {
+    "file": "assets/pink_clothing_equipment_yaw_layers_v1.png",
+    "size": [
+      2014,
+      781
+    ],
+    "mode": "RGBA",
+    "sha256": "f667360fd170d47e77f08d176698743685361dfac04b54b8b81b073ac2011006",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "fully_transparent_pixels": 806106,
+    "pixels_alpha_1_to_7": 117973,
+    "status": "GENERATED_CANDIDATE_NEEDS_AUTHORING",
+    "geometry_validated": false,
+    "yaw_labels_validated": false,
+    "runtime_acceptance_passed": false
+  },
+  {
+    "file": "assets/pink_face_yaw_layers_v1.png",
+    "size": [
+      2172,
+      724
+    ],
+    "mode": "RGBA",
+    "sha256": "58bed75b0a79f489ade6ff130cb4ab7b0b5ad6b394882c30dc310da74cb4fd25",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "fully_transparent_pixels": 1367101,
+    "pixels_alpha_1_to_7": 117619,
+    "status": "GENERATED_CANDIDATE_NEEDS_AUTHORING",
+    "geometry_validated": false,
+    "yaw_labels_validated": false,
+    "runtime_acceptance_passed": false
+  },
+  {
+    "file": "assets/pink_full_character_target_yaw_pitch_v1.png",
+    "size": [
+      1536,
+      1024
+    ],
+    "mode": "RGB",
+    "sha256": "e2f972c6868af90dc274390e8a060585d4d827bfe6f8aef7d1dc343b785be6d4",
+    "alpha_range": null,
+    "fully_transparent_pixels": 0,
+    "pixels_alpha_1_to_7": 0,
+    "status": "REFERENCE_ONLY",
+    "geometry_validated": false,
+    "yaw_labels_validated": false,
+    "runtime_acceptance_passed": false
+  },
+  {
+    "file": "assets/pink_head_hair_yaw_layers_v1.png",
+    "size": [
+      1774,
+      887
+    ],
+    "mode": "RGBA",
+    "sha256": "3c0fdf1fe00d868cede2926698449c896e6301c32ad855b6053b0db4c35b1e1d",
+    "alpha_range": [
+      0,
+      255
+    ],
+    "fully_transparent_pixels": 824243,
+    "pixels_alpha_1_to_7": 267351,
+    "status": "GENERATED_CANDIDATE_NEEDS_AUTHORING",
+    "geometry_validated": false,
+    "yaw_labels_validated": false,
+    "runtime_acceptance_passed": false
+  },
+  {
+    "file": "assets/pink_weapon_pose_expressions_v1.png",
+    "size": [
+      1536,
+      1024
+    ],
+    "mode": "RGBA",
+    "sha256": "8a97fc09a1136fccc3e3ea1e2aa9822f773a06835276715502763c6f494b43de",
+    "alpha_range": [
+      0,
+      254
+    ],
+    "fully_transparent_pixels": 553907,
+    "pixels_alpha_1_to_7": 670941,
+    "status": "GENERATED_CANDIDATE_NEEDS_AUTHORING",
+    "geometry_validated": false,
+    "yaw_labels_validated": false,
+    "runtime_acceptance_passed": false
+  },
+  {
+    "file": "assets/pink_weapon_pose_expressions_v2.png",
+    "size": [
+      1536,
+      1024
+    ],
+    "mode": "RGBA",
+    "sha256": "f5b1014ec3d76f6a9219eb987d4ca950071bbbfb603ce5b6eacccce159aa26e9",
+    "alpha_range": [
+      0,
+      254
+    ],
+    "fully_transparent_pixels": 1069788,
+    "pixels_alpha_1_to_7": 218480,
+    "status": "GENERATED_CANDIDATE_NEEDS_AUTHORING",
+    "geometry_validated": false,
+    "yaw_labels_validated": false,
+    "runtime_acceptance_passed": false
+  }
+]

@@ -47,6 +47,13 @@ for p in sorted((REPO / "docs" / "highlevel").glob("*.md")):
     SOURCES[f"docs/highlevel/{p.name}"] = f"highlevel/{p.name[:-3]}"
 for p in sorted((REPO / "docs" / "internal").glob("*.md")):
     SOURCES[f"docs/internal/{p.name}"] = f"internal/{p.name[:-3]}"
+# Семейство RE2D: публичные справочники нового World и Re2DSprite.
+# Без этого ссылки на них с опубликованных страниц уходили на GitHub, а сами
+# документы на сайте отсутствовали.
+for p in sorted((REPO / "docs" / "re2d").glob("*.md")):
+    if p.name.startswith("_"):
+        continue
+    SOURCES[f"docs/re2d/{p.name}"] = f"re2d/{p.name[:-3]}"
 for p in sorted((REPO / "docs" / "ci-archive").glob("*.md")):
     SOURCES[f"docs/ci-archive/{p.name}"] = f"ci-archive/{p.name[:-3]}"
 for extra, route in [
@@ -287,6 +294,7 @@ def write_sidebar() -> None:
                       "demos/platformer", "demos/shooter_witch", "demos/russi_vn",
                       "BUILD", "WEB_EXPORT", "demos/assets/CREDITS"]),
         ("Внутреннее и разработка", ["internal/NATIVE", "SDK", "SDK_VERIFICATION", "TASKS", "RELEASING"]),
+        ("RE2D World", sorted(r for r in SOURCES.values() if r.startswith("re2d/"))),
         ("Проект", ["CHANGELOG", "CONTRIBUTING", "CODE_OF_CONDUCT", "SECURITY",
                     "LICENSE", "THIRD_PARTY_NOTICES"]),
     ]

@@ -79,6 +79,7 @@ import { installProc } from './proc.js';
 import { installKinds } from './kinds.js';
 import { installRe2d, re2dMove } from './re2d.js';
 import { installRotSprite, tickRotSprite } from './rotsprite.js';
+import { installReal2d, tickReal2d } from './real2d.js';
 import { installMesh } from './mesh.js';
 import { installAlive } from './alive.js';
 import { installNet } from './net.js';
@@ -419,6 +420,7 @@ export function createApi() {
     installProc($);              // процедурный пиксель-арт: $.proc
     installKinds($);             // виды узла: .kind(), $.kinds, Re2D (docs/RE2D.md)
     installRotSprite($);         // развёртка всего персонажа: прототип головы
+    installReal2d($);            // Real2D v4: вычисляемый layered warp (docs/highlevel/real2d.md)
     installRe2d($);              // Re2D: проход вида от первого лица, $.re2d (docs/RE2D.md)
     $.mesh = installMesh($);     // меш со скелетом: $.mesh
     installReplay($);            // реплеи: запись ввода и воспроизведение
@@ -1735,6 +1737,7 @@ function installFrameHooks($) {
         // на реальном времени — кнопки обязаны работать и на паузе.
         const game_dt = ctx.time.delta();
         prof('анимация'); tickAnim(game_dt); tickRotSprite(dt,game_dt);
+        prof('real2d'); tickReal2d(game_dt);
         prof('плеер анимации'); tickAnimPlayer(game_dt);
         prof('состояния'); tickState(game_dt);
         prof('последовательности'); tickFlow(dt);

@@ -212,7 +212,8 @@ pauseClip pauseTweens pivot pivotAt placeholder playClip playSound playing pos
 prefab prefabClone prepend prependTo punch radius rayTo re2dAttach re2dBone
 re2dDetach re2dEmotion re2dExpression re2dHotReload re2dLayer re2dMotion
 re2dPart re2dPose re2dReload re2dRig re2dSeek re2dSpriteAtlas re2dStyle
-re2dVariant re2dVisibleParts rebuild rect reduce region release remove
+re2dVariant re2dVisibleParts real2dInfo real2dPose real2dReload real2dSize
+real2dSpin real2dSrc real2dYaw rebuild rect reduce region release remove
 removeClass removeTag repath reset respawn restart resumeClip resumeTweens
 rotAttach rotBone rotDetach rotEmotion rotExpression rotHotReload rotLayer
 rotMotion rotPart rotPose rotReload rotRig rotSeek rotSpriteAtlas rotStyle
@@ -232,7 +233,8 @@ within ysort zone zoneCount анимация в видимый высота гл
 удалить управление урон цвет ширина яркость
 ```
 
-> Список снят с живого движка, а не перепечатан: **345 имён**, команда —
+> Список снят с живого движка, а не перепечатан: **352 имени** (сверка 2026-10-11),
+> команда —
 > `Object.getOwnPropertyNames(Object.getPrototypeOf($('<rect>'))).filter(n => n !== 'constructor')`
 > в агентском режиме. Это объединение `def()`/`defGet()` из `src/highlevel/*.js`
 > с методами класса `Wrapper` (`each`, `eachNode`, `eq`, `get`, `index`,

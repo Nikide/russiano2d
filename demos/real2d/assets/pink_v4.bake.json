@@ -1,0 +1,129 @@
+{
+  "ok": true,
+  "format": "r2d4",
+  "stage": "A (head-only, yaw S1, pitch 0)",
+  "container": "demos/real2d/assets/pink_v4.r2d4",
+  "container_sha256": "64a11f86ad48bd4c9949bac88859589dec9b07bc2b3b702b35b7bb4b8e9288f4",
+  "container_bytes": 1835022,
+  "source_counts": {
+    "patches": 142,
+    "mirrored": 0,
+    "triangles": 1136,
+    "mesh_vertices": 1278,
+    "anchors": 12
+  },
+  "manifold": {
+    "dim": 710,
+    "rank": 1,
+    "yaw_K": 3,
+    "pitch_L": 0,
+    "features": 7,
+    "layout": "mu[dim] | basis[dim*rank] (row-major D×r) | coeff[rank*features] (row-major r×features: coeff[n][k])",
+    "param_layout": "на патч: dx, dy, sx, sy, rot",
+    "variance_kept": 1.0,
+    "anchor_reconstruction_max_abs": 0.0
+  },
+  "atlas": {
+    "sha256": "ee71be6296082b0d3b4d870e2fa9309496a4939a5523fb4fb47b195c829ba404",
+    "bytes": 1639208
+  },
+  "gates": {
+    "rings": [
+      "hair_back",
+      "head",
+      "hair_left",
+      "hair_right",
+      "mouth",
+      "nose",
+      "eye_r",
+      "eye_l",
+      "iris_r",
+      "iris_l",
+      "brows_r",
+      "brows_l",
+      "fringe",
+      "cat_clip"
+    ],
+    "fade_deg": {
+      "hair_back": 15.0,
+      "head": 15.0,
+      "hair_left": 15.0,
+      "hair_right": 15.0,
+      "mouth": 15.0,
+      "nose": 15.0,
+      "eye_r": 15.0,
+      "eye_l": 15.0,
+      "iris_r": 15.0,
+      "iris_l": 15.0,
+      "brows_r": 15.0,
+      "brows_l": 15.0,
+      "fringe": 15.0,
+      "cat_clip": 15.0
+    }
+  },
+  "status": {
+    "container_valid": true,
+    "geometry_fit_valid": false,
+    "anchor_visual_accepted": false,
+    "non_anchor_tests_passed": false,
+    "pitch_supported": false,
+    "full_body_supported": false
+  },
+  "status_notes": {
+    "anchor_visual_accepted": "выставляется только после глазной проверки собранных ключевых видов (front/profiles/back)",
+    "non_anchor_tests_passed": "выставляется после прогона не-анкорных углов из tests/non_anchor_angles.csv",
+    "pitch_supported": "pitch-домен не поддержан: anchors только pitch=0",
+    "full_body_supported": "тело/одежда не собраны: стадия C не начата"
+  },
+  "acceptance_probe": {
+    "anchor_reconstruction_max_abs": 0.0,
+    "anchor_reconstruction_top": [
+      {
+        "patch": "hair_back_00",
+        "param": "dx",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back_00",
+        "param": "dy",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back_00",
+        "param": "sx",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back_00",
+        "param": "sy",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back_00",
+        "param": "rot",
+        "max_abs": 0.0
+      }
+    ],
+    "total_variance": 4.991180431616694e-30,
+    "measured_rank": 0,
+    "format_rank": 1,
+    "format_rank_floor_by_variance": 1,
+    "retained_variance_ratio": null,
+    "retained_variance_note": "not_applicable при total_variance=0",
+    "constant_anchors": true,
+    "singular_values": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "warnings": [
+    "anchors не варьируются по ракурсу: total_variance=0, измеренный ранг 0 — view manifold НЕ обучен, это хранилище констант"
+  ]
+}

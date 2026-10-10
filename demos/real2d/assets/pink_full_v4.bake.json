@@ -1,0 +1,151 @@
+{
+  "ok": true,
+  "format": "r2d4",
+  "stage": "A (head-only, yaw S1, pitch 0)",
+  "container": "demos/real2d/assets/pink_full_v4.r2d4",
+  "container_sha256": "e155c4f6872c38ca5abd624600c21d96a1a046111b22d9ce66d808f522e24ea7",
+  "container_bytes": 4914028,
+  "source_counts": {
+    "patches": 262,
+    "mirrored": 0,
+    "triangles": 2096,
+    "mesh_vertices": 2358,
+    "anchors": 12
+  },
+  "manifold": {
+    "dim": 1310,
+    "rank": 8,
+    "yaw_K": 3,
+    "pitch_L": 0,
+    "features": 7,
+    "layout": "mu[dim] | basis[dim*rank] (row-major D×r) | coeff[rank*features] (row-major r×features: coeff[n][k])",
+    "param_layout": "на патч: dx, dy, sx, sy, rot",
+    "variance_kept": 0.9999629890246489,
+    "anchor_reconstruction_max_abs": 0.21954505924217693
+  },
+  "atlas": {
+    "sha256": "07ac27c05c73a419c30e967629a0aade00b1ed0355bac57dc02203a49962a83f",
+    "bytes": 4519410
+  },
+  "gates": {
+    "rings": [
+      "arm_l",
+      "arm_r",
+      "belt",
+      "blouse",
+      "brows_l",
+      "brows_r",
+      "cat_clip",
+      "eye_l",
+      "eye_r",
+      "fringe",
+      "hair_back",
+      "hair_left",
+      "hair_right",
+      "hand_l",
+      "hand_r",
+      "head",
+      "hips",
+      "iris_l",
+      "iris_r",
+      "legs",
+      "mouth",
+      "nose",
+      "skirt",
+      "torso"
+    ],
+    "fade_deg": {
+      "arm_l": 15.0,
+      "arm_r": 15.0,
+      "belt": 15.0,
+      "blouse": 15.0,
+      "brows_l": 15.0,
+      "brows_r": 15.0,
+      "cat_clip": 15.0,
+      "eye_l": 15.0,
+      "eye_r": 15.0,
+      "fringe": 15.0,
+      "hair_back": 15.0,
+      "hair_left": 15.0,
+      "hair_right": 15.0,
+      "hand_l": 15.0,
+      "hand_r": 15.0,
+      "head": 15.0,
+      "hips": 15.0,
+      "iris_l": 15.0,
+      "iris_r": 15.0,
+      "legs": 15.0,
+      "mouth": 15.0,
+      "nose": 15.0,
+      "skirt": 15.0,
+      "torso": 15.0
+    }
+  },
+  "status": {
+    "container_valid": true,
+    "geometry_fit_valid": false,
+    "anchor_visual_accepted": false,
+    "non_anchor_tests_passed": false,
+    "pitch_supported": false,
+    "full_body_supported": false
+  },
+  "status_notes": {
+    "anchor_visual_accepted": "выставляется только после глазной проверки собранных ключевых видов (front/profiles/back)",
+    "non_anchor_tests_passed": "выставляется после прогона не-анкорных углов из tests/non_anchor_angles.csv",
+    "pitch_supported": "pitch-домен не поддержан: anchors только pitch=0",
+    "full_body_supported": "тело/одежда не собраны: стадия C не начата"
+  },
+  "acceptance_probe": {
+    "anchor_reconstruction_max_abs": 0.21954505924217693,
+    "anchor_reconstruction_top": [
+      {
+        "patch": "eye_r_00",
+        "param": "dy",
+        "max_abs": 0.21955
+      },
+      {
+        "patch": "eye_l_00",
+        "param": "dy",
+        "max_abs": 0.21955
+      },
+      {
+        "patch": "eye_r_01",
+        "param": "dy",
+        "max_abs": 0.21955
+      },
+      {
+        "patch": "eye_l_01",
+        "param": "dy",
+        "max_abs": 0.21955
+      },
+      {
+        "patch": "eye_r_02",
+        "param": "dy",
+        "max_abs": 0.21955
+      }
+    ],
+    "total_variance": 89.44406341870247,
+    "measured_rank": 11,
+    "format_rank": 8,
+    "format_rank_floor_by_variance": 5,
+    "retained_variance_ratio": 0.9999629890246489,
+    "retained_variance_note": "",
+    "constant_anchors": false,
+    "singular_values": [
+      6.413667,
+      6.179808,
+      2.304203,
+      1.794585,
+      1.172957,
+      0.418597,
+      0.156184,
+      0.101344,
+      0.052602
+    ]
+  },
+  "warnings": [
+    "реконструкция anchors: max|Δ|=0.2195 у патча eye_r_00 — фит K=3 сглаживает авторскую траекторию",
+    "ранг упёрся в потолок 8: max|Δ|=0.2195 > 0.02",
+    "rank дефицит: 7 < 8"
+  ]
+}

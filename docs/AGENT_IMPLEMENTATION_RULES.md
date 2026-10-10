@@ -178,10 +178,14 @@ $.ready(() => {
 * **Каждый модуль `src/highlevel/<имя>.js`** имеет страницу
   `docs/highlevel/<имя>.md` и тест — это проверяет
   `tests/doc_coverage_test.py`.
-* **Новый файл в `docs/`** автоматически попадает в `AGENTS.md` релизного
-  пакета ([tools/agents_doc.py](../tools/agents_doc.py)); порядок документов
-  задаёт [tools/release.py](../tools/release.py) (`AGENTS_DOC_ORDER`). Поэтому
-  документ не может «отстать» от движка — и не должен врать.
+* **Новый файл в `docs/` и `docs/highlevel/`** автоматически попадает в
+  `AGENTS.md` релизного пакета
+  ([tools/agents_doc.py](../tools/agents_doc.py)); порядок документов
+  задаёт [tools/release.py](../tools/release.py) (`AGENTS_DOC_ORDER`). Именно
+  эти два каталога собирает `release.agents_doc_files()`, поэтому литература
+  `docs/internal/**`, `docs/re2d/**` и `demos/*/README.md` в приложение
+  `AGENTS.md` не входит — она едет в пакете файлами `docs/`. Документ не может
+  «отстать» от движка — и не должен врать.
 * **Закрытый пункт работы исчезает из документации в том же изменении**
   (правило из [TASKS.md](TASKS.md) §6).
 * **Язык документации — русский**, термины API — английские; код и имена в

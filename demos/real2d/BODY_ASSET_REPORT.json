@@ -1,0 +1,59 @@
+[
+  {
+    "file": "torso_clothing_components_candidate_v1.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "sha256": "42af85430957daae04ada128260995da917f34c76d0ee83f15d1f848abf5b8c4",
+    "role": "source_candidate",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "transparent_pixels": 759854
+  },
+  {
+    "file": "limbs_components_candidate_v1.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "sha256": "70832ca3a764589816f40fc47d5568edcf0267cd84cc4573ef8c301ac36061ef",
+    "role": "source_candidate",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "transparent_pixels": 1137384
+  },
+  {
+    "file": "hands_joint_variants_candidate_v1.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "sha256": "717f27ac8ef1cc7ed1f9a11e09e55c55a54fe579b63e6f6b860f17f895056d4e",
+    "role": "source_candidate",
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "transparent_pixels": 933013
+  },
+  {
+    "file": "full_body_target_reference_v1.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGB",
+    "sha256": "45529b22cac5c0863ed0292dffca4f6c3f3bb584d9583cc811021ba4b05d8313",
+    "role": "reference_only",
+    "alpha_extrema": null,
+    "transparent_pixels": 0
+  }
+]

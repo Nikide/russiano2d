@@ -1,0 +1,105 @@
+{
+  "ok": true,
+  "format": "r2d4",
+  "stage": "A (head-only, yaw S1, pitch 0)",
+  "container": "demos/real2d/assets/pink_front_v4.r2d4",
+  "container_sha256": "4c072aeb349e1e90fcaa93ca862f5d0c6b2d8bb63bf6d7400f77edcb56ccfce0",
+  "container_bytes": 199786,
+  "source_counts": {
+    "patches": 12,
+    "mirrored": 0,
+    "triangles": 96,
+    "mesh_vertices": 108,
+    "anchors": 12
+  },
+  "manifold": {
+    "dim": 60,
+    "rank": 1,
+    "yaw_K": 3,
+    "pitch_L": 0,
+    "features": 7,
+    "layout": "mu[dim] | basis[dim*rank] (row-major D×r) | coeff[rank*features] (row-major r×features: coeff[n][k])",
+    "param_layout": "на патч: dx, dy, sx, sy, rot",
+    "variance_kept": 1.0,
+    "anchor_reconstruction_max_abs": 0.0
+  },
+  "atlas": {
+    "sha256": "0f613afad847355e1252ddaff0eedd2e7d6c249e38c18e9dde2d30127169fb49",
+    "bytes": 180034
+  },
+  "gates": {
+    "rings": [
+      "hair_back",
+      "head",
+      "hair_left",
+      "hair_right",
+      "mouth",
+      "nose",
+      "eye_r",
+      "iris_r",
+      "iris_l",
+      "brows",
+      "fringe",
+      "cat_clip"
+    ],
+    "fade_deg": {
+      "hair_back": 8.0,
+      "head": 8.0,
+      "hair_left": 8.0,
+      "hair_right": 8.0,
+      "mouth": 8.0,
+      "nose": 8.0,
+      "eye_r": 8.0,
+      "iris_r": 8.0,
+      "iris_l": 8.0,
+      "brows": 8.0,
+      "fringe": 8.0,
+      "cat_clip": 8.0
+    }
+  },
+  "acceptance_probe": {
+    "anchor_reconstruction_max_abs": 0.0,
+    "anchor_reconstruction_top": [
+      {
+        "patch": "hair_back",
+        "param": "dx",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back",
+        "param": "dy",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back",
+        "param": "sx",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back",
+        "param": "sy",
+        "max_abs": 0.0
+      },
+      {
+        "patch": "hair_back",
+        "param": "rot",
+        "max_abs": 0.0
+      }
+    ],
+    "variance_kept": 1.0,
+    "rank": 1,
+    "rank_floor_by_variance": 1,
+    "singular_values": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "warnings": []
+}

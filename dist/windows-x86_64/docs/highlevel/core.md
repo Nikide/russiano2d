@@ -19,7 +19,7 @@ $('.enemy').within('#hero', 500);       // выборка в радиусе (н�
 |---|---|
 | Контекст | `ctx` — общий контекст подсистем (реестр, камера, время, сети подсистем) |
 | Узлы | `Node`, `Wrapper`, `wrap`, `wrapOne`, `query`, `def`, `defGet` |
-| Реестр | `registryIndex`, `nodesByTag`, `nodesByClass`, `nodesWithFacet`, `facetCount`, `liveNodes`, `dropFromRegistry`, `touchRegistry`, `registryVersion`, `registrySummary` |
+| Реестр | `registryIndex`, `nodesByTag`, `nodesByClass`, `nodesWithFacet`, `facetCount`, `liveNodes`, `dropFromRegistry`, `touchRegistry`, `registryVersion`, `registrySummary`, `nativeNodes`, `wrapper_proto_ready` |
 | Пакетная правка | `beginBatch`, `endBatch`, `inBatch` |
 | Выборки | `registerSelector`, `compileSelector`, `TAGS` |
 | Радиус | `withinRadius` — чистая фильтрация «центр в радиусе» (метод обёртки `.within()`) |

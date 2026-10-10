@@ -1,8 +1,11 @@
 # Re2DSprite — `$.re2dSprite`
 
 Один PNG с развёрткой и картами поверхности → обычный 2D-спрайт.
+[v3](../RE2DSPRITE_V3.md) — плотная поверхность с перспективой, светом и
+`skin`-клипами (текущий формат, его грузят персонажи `russi3` в демо Dust2);
 [v2](../RE2DSPRITE_V2.md) поддерживает голову, тело, мимику и простые суставы;
-[v1](../RE2DSPRITE_V1.md) остаётся совместимым прототипом головы.
+[v1](../RE2DSPRITE_V1.md) остаётся совместимым прототипом головы. Разбор
+выбирается по `atlasInfo.version`: 2 или 3, другое значение — ошибка.
 
 ```js
 $.re2dSprite.create('art/russi.png',{id:'russi'})
@@ -13,7 +16,7 @@ $('#russi').re2dPart('costume','art/police.png');
 
 | Вызов | Результат |
 |---|---|
-| `$.re2dSprite.create(path,opts?)` | узел `<rotsprite>`, собственный ресурс |
+| `$.re2dSprite.create(path,opts?)` | создать узел `<rotsprite>` и сразу загрузить атлас `path`; при ошибке узел удаляется, исключение уходит наверх |
 | `.re2dSpriteAtlas(path)` | атомарная замена всего PNG; новая поза по умолчанию |
 | `.re2dStyle(style='anime')` | v2: anime / pixel, атомарно сохраняет подмены и позу |
 | `.re2dPose(yaw,pitch=0)` | yaw в градусах, wrap ±180, pitch clamp ±75 |
@@ -38,8 +41,10 @@ Info: `{sprite,texture,revision,yaw,pitch,width,height,atlasWidth,version,
 style,body,eyes,mouth,brows,surfaceSamples,joints?,path,rig,motion,parts,hotReload,
 reloads,reloadError,milestone,disposed}`. Индексы глаз/рта/бровей — 0..3.
 Joints — координаты канонического поля 128×128, не экранные, в обоих режимах v2.
-Raster v1=64, v2 pixel=128, текущий runtime v2 anime=512 (1024 supersampling).
-Legacy C anime entry points сохраняют 256; `_sized` поддерживает 256/512. По умолчанию pixel.
+Raster v1=64, v2 pixel=128, v2 anime=512 (1024 supersampling).
+У v3 растр задаёт `projection.raster` в character.json (128..2048, по умолчанию
+1024), детализацию — `projection.detail`, вид — `projection.eye/window/cull/motionLod`.
+Legacy C anime entry points сохраняют 256; `_sized` поддерживает 256/512. По умолчанию pixel (у legacy `.create()`).
 Повторная одинаковая поза/мимика не делает upload; 360° равен 0°.
 
 Pixel: минимальный масштаб 1, целый; позиция округляется после камеры.
@@ -133,7 +138,13 @@ world.add(hero);
 
 Pose synthesis budget и camera quantization задаются world.quality, не legacy $.re2d.poseBudget. Animation orchestration остаётся existing sprite wrapper, expensive world synthesis/composition — C. Полный контракт: [Re2DSprite World](../re2d/RE2DSPRITE_WORLD.md), [World guide](../RE2D_WORLD_GUIDE.md), [migration](../re2d/RE2D_MIGRATION.md).
 
+Низкий уровень v3: `engine.rotSpriteConfig(handle, raster, light24, detail, view)` —
+разрешение синтеза (≤2048), 24 числа света и вид `{eye, window, cull, motionLod}`
+(для v2 вызов отклоняется), и `engine.rotSpritePrepare(handle)` — подготовка
+ресурсов синтеза. Обёртка зовёт их сама по `projection` из character.json; вручную
+они нужны только при работе с `engine.*` напрямую ([internal/NATIVE.md](../internal/NATIVE.md)).
+
 ## v3
 
-PNG формата [v3](../RE2DSPRITE_V3.md) загружается тем же `$.re2dSprite.from()/create()`; `re2dMotion(clip,loop)` + `re2dSeek(t)` играют скин-клипы.
+PNG формата [v3](../RE2DSPRITE_V3.md) загружается тем же `$.re2dSprite.from()/create()`; `re2dMotion(clip, speed=1)` + `re2dSeek(t)` играют скин-клипы (`skin:{frames,fps,bones,data}` в animations JSON).
 `projection.raster/light/detail` в character.json управляют разрешением синтеза, светом и уровнем детализации; `eye` включает перспективу (оружие от первого лица), `window` — видимое окно, `cull` — отсечение отвернувшихся ячеек, `motionLod` — более грубый уровень в движении; `.color()` — освещение мира.

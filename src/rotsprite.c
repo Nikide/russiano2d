@@ -80,6 +80,16 @@ static void rot_parallel(R3Task task, void *ctx, int count)
 }
 #endif
 
+void r2d_rot_parallel(R3Task task, void *ctx, int count)
+{
+    if (count <= 0) return;
+#ifdef __EMSCRIPTEN__
+    for (int i = 0; i < count; ++i) task(ctx, i);
+#else
+    rot_parallel(task, ctx, count);
+#endif
+}
+
 static bool ensure_pixels(RotSprite *r,int size)
 {
     const size_t need=(size_t)size*size*4;

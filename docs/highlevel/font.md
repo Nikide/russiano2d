@@ -64,6 +64,10 @@ $.ready(() => {
 | `$.font.styleOf(target)` | что реально читает отрисовка: `{ font, size, align, lineHeight, color }` |
 | `$.font.measure(text, name)` | ширина строки в пикселях этим стилем |
 | `$.font.defaults()` | значения по умолчанию (копия) |
+| `$.font.load(name, path)` | загрузить `.ttf`/`.otf` как семейство (без имени — имя файла) |
+| `$.font.uploaded()` / `families()` / `default()` | что загрузила игра / все семейства движка / семейство по умолчанию |
+| `$.font.atlas()` | `{ glyphs, atlas_w, atlas_h }` — состояние атласа глифов |
+| `$.font.width(text, size, family?)` | ширина строки явным кеглем |
 
 ```js
 $.font.apply('#score', 'hud');       // селектор

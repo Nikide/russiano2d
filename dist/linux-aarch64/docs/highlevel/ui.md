@@ -10,7 +10,7 @@
 ```js
 $('<ui.label>', { id: 'hp', text: 'HP 100', size: 20 }).at(60, 30).appendTo($.ui);
 $('<ui.bar>', { id: 'stam', value: 0, max: 100, w: 200, h: 12 }).at(60, 60).appendTo($.ui);
-$.ui.icon('play', 24);                      // иконка Material Design
+$.ui.setIcon('#hp', 'favorite');            // глиф Material Design на узел
 ```
 
 ---
@@ -19,16 +19,21 @@ $.ui.icon('play', 24);                      // иконка Material Design
 
 | Вызов | Смысл |
 |---|---|
-| `label(text, opts?)` | подпись |
-| `bar(value, max, opts?)` | полоса |
-| `text(text, opts?)` | многострочный текст |
-| `icon(name, size?)` / `hasIcon(name)` / `iconNames()` / `iconCount()` | иконки Material Design |
-| `on(event, fn)` / `listeners()` / `off()` | события интерфейса |
-| `show()` / `hide()` / `visible(on?)` | видимость всего слоя |
-| `html(markup)` / `style(css)` / `unload()` | RmlUi-документ и его стиль |
-| `fps()` / `cls()` / `doc()` | диагностика и доступ к документу |
-| `scale(value?)` / `scaleValue()` | масштаб интерфейса (0.25…4) |
+| `label(sel, text)` | текст любого `<ui.*>`-узла по селектору |
+| `bar(sel, value, max?)` | значение полосы (и её максимум) |
+| `show(sel)` / `hide(sel)` | показать/скрыть узлы `<ui.*>` по селектору |
+| `icon(name)` / `hasIcon(name)` / `iconNames()` / `iconCount()` | иконки Material Design (размер задаёт кегль узла, а не аргумент) |
+| `setIcon(target, name)` | поставить глиф иконки на узел(ы) по селектору или обёртке |
+| `fps()` | FPS для HUD |
+| `scale(value?)` | масштаб интерфейса (0.25…4); без аргумента — прочитать и вернуть число |
+| `scaleValue()` | прочитать масштаб, не меняя узлы |
 | `aria(sel, props?)` / `ariaOf(sel)` / `ariaCount()` | семантика для ассистивных технологий |
+| `doc(path)` | RmlUi-документ: `.show()` / `.hide()` / `.visible()` / `.text(id, t)` / `.html(id, m)` / `.cls(id, name, add)` / `.style(id, prop, value)` / `.on(id, event, fn)` / `.listeners()` / `.unload()` |
+
+Своих `on`/`off`/`listeners` и узельной видимости «всего слоя» у `$.ui` нет:
+события и разметка принадлежат **документу** (`$.ui.doc(path)`), а `show(sel)` /
+`hide(sel)` работают по селектору узлов. Скрыть целый документ — `.hide()` у
+обёртки документа.
 
 ## 2. Узлы интерфейса
 

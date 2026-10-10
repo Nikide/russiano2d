@@ -7,19 +7,20 @@
 ```js
 $.ready(() => {
     const hero = $.atlas.load('hero', 'art/hero.json');
+    const idle = hero.tagSprites('idle');          // массив id спрайтов тега
 
-    $('#hero').sprite(hero.frame('idle_0')).at(200, 300).appendTo($.world);
-
-    // Тег Aseprite — готовый клип для $.anim.
-    $.anim.define('hero', {
-        clips: {
-            idle: { frames: hero.tagSprites('idle'), fps: 8, loop: true },
-            walk: { frames: hero.tagSprites('walk'), fps: 12, loop: true },
-        },
-    });
-    $('.hero').anim('hero').play('idle');
+    $('#hero').at(200, 300)
+        .frames(idle)                              // кадры тега становятся листом узла
+        .animate({ from: 0, to: idle.length - 1, speed: 8, loop: true })
+        .appendTo($.world);
 });
 ```
+
+`$.anim.clip(имя, { frames })` из шапки модуля — **не** рабочий вызов: клип
+плеера (`$.anim.clip`, [animplayer.md](animplayer.md)) состоит из `duration`,
+`loop`, `speed` и `tracks`, а дорожка `sprite` берёт кадры из `node.frames`
+узла, то есть после `.frames(idle)`. Для клипа старого формата
+(`$.anim.define`) дорожка — `{ anim: { from, to } }`.
 
 ---
 

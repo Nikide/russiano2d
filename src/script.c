@@ -11,6 +11,7 @@
 #include "profile.h"
 #include "rotsprite.h"
 #include "re2d.h"
+#include "real2d4.h"
 #include "nodes.h"
 
 #include "icons.h"
@@ -4316,6 +4317,11 @@ static JSValue r2d__make_engine(JSContext *ctx)
         return JS_EXCEPTION;
     }
     if (r2d_re2d_install(ctx, engine) < 0) {
+        JS_FreeValue(ctx, engine);
+        return JS_EXCEPTION;
+    }
+    // Real2D v4: вычисляемый layered warp-рендер персонажа (стадия A).
+    if (r2d_real2d_install(ctx, engine) < 0) {
         JS_FreeValue(ctx, engine);
         return JS_EXCEPTION;
     }

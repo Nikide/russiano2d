@@ -1,0 +1,230 @@
+{
+  "format": "real2d-pink-registration",
+  "version": 1,
+  "energy": {
+    "w_silhouette": 1.0,
+    "w_color": 0.6,
+    "w_reg": 0.02
+  },
+  "columns": [
+    {
+      "column": 0,
+      "yaw": 0,
+      "placements": [
+        {
+          "part": "hair_back",
+          "depth": 0.2,
+          "scale": 0.56197,
+          "center_h": [
+            0.892,
+            0.313
+          ],
+          "sheet": "head",
+          "rect": [
+            11,
+            192,
+            156,
+            336
+          ],
+          "applied": true,
+          "iou": 0.54725,
+          "color": 0.29179
+        },
+        {
+          "part": "head",
+          "depth": 0.4,
+          "scale": 1.325,
+          "center_h": [
+            0.88,
+            0.11633
+          ],
+          "sheet": "head",
+          "rect": [
+            31,
+            28,
+            141,
+            174
+          ],
+          "applied": true,
+          "iou": 0.54115,
+          "color": 0.26845
+        },
+        {
+          "part": "hair_left",
+          "depth": 0.48,
+          "scale": 1.5,
+          "center_h": [
+            0.688,
+            0.473
+          ],
+          "sheet": "head",
+          "rect": [
+            102,
+            349,
+            151,
+            487
+          ],
+          "applied": true,
+          "iou": 0.56893,
+          "color": 0.25031
+        },
+        {
+          "part": "hair_right",
+          "depth": 0.48,
+          "scale": 0.67416,
+          "center_h": [
+            0.662,
+            0.467
+          ],
+          "sheet": "head",
+          "rect": [
+            27,
+            501,
+            79,
+            637
+          ],
+          "applied": true,
+          "iou": 0.56893,
+          "color": 0.24177
+        },
+        {
+          "part": "mouth",
+          "depth": 0.56,
+          "scale": 0.848,
+          "center_h": [
+            0.72,
+            0.24167
+          ],
+          "sheet": "face",
+          "rect": [
+            94,
+            600,
+            125,
+            615
+          ],
+          "applied": true,
+          "iou": 0.56893,
+          "color": 0.23944
+        },
+        {
+          "part": "eye_l",
+          "depth": 0.62,
+          "scale": 0.70688,
+          "center_h": [
+            0.762,
+            0.468
+          ],
+          "sheet": "face",
+          "rect": [
+            83,
+            113,
+            125,
+            175
+          ],
+          "applied": true,
+          "iou": 0.56893,
+          "color": 0.23375
+        },
+        {
+          "part": "eye_r",
+          "depth": 0.62,
+          "scale": 0.59784,
+          "center_h": [
+            0.68,
+            0.00367
+          ],
+          "sheet": "face",
+          "rect": [
+            74,
+            206,
+            125,
+            270
+          ],
+          "applied": true,
+          "iou": 0.56893,
+          "color": 0.23079
+        },
+        {
+          "part": "iris",
+          "depth": 0.64,
+          "scale": 0.59784,
+          "center_h": [
+            0.545,
+            0.37967
+          ],
+          "sheet": "face",
+          "rect": [
+            104,
+            298,
+            125,
+            366
+          ],
+          "applied": true,
+          "iou": 0.56893,
+          "color": 0.22732
+        },
+        {
+          "part": "brows",
+          "depth": 0.66,
+          "scale": 0.67416,
+          "center_h": [
+            0.85,
+            0.2
+          ],
+          "sheet": "face",
+          "rect": [
+            38,
+            425,
+            100,
+            436
+          ],
+          "applied": true,
+          "iou": 0.56893,
+          "color": 0.22687
+        },
+        {
+          "part": "fringe",
+          "depth": 0.7,
+          "scale": 0.53016,
+          "center_h": [
+            0.503,
+            -0.097
+          ],
+          "sheet": "head",
+          "rect": [
+            26,
+            650,
+            142,
+            768
+          ],
+          "applied": false,
+          "iou": 0.56893,
+          "color": 0.2285
+        },
+        {
+          "part": "cat_clip",
+          "depth": 0.72,
+          "scale": 0.53016,
+          "center_h": [
+            0.553,
+            0.487
+          ],
+          "sheet": "head",
+          "rect": [
+            58,
+            801,
+            111,
+            857
+          ],
+          "applied": true,
+          "iou": 0.56893,
+          "color": 0.22427
+        }
+      ],
+      "metrics": {
+        "iou": 0.56893,
+        "color": 0.22427
+      }
+    }
+  ]
+}

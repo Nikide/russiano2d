@@ -1,0 +1,1233 @@
+{
+  "format": "real2d-pink-target-landmarks",
+  "version": 1,
+  "source": "demos/real2d/pink_v4/assets/pink_full_character_target_yaw_pitch_v1.png",
+  "size": [
+    1536,
+    1024
+  ],
+  "yaw_keys": [
+    0,
+    30,
+    60,
+    90,
+    120,
+    150,
+    180,
+    210,
+    240,
+    270,
+    300,
+    330
+  ],
+  "figures": [
+    {
+      "index": 0,
+      "yaw": 0,
+      "figure_bbox": [
+        4,
+        9,
+        128,
+        366
+      ],
+      "figure_height_px": 357,
+      "figure_center_x": 66.0,
+      "head_bbox": [
+        50,
+        9,
+        120,
+        80
+      ],
+      "head_top_h": 0.0,
+      "chin_h": 0.19888,
+      "head_width_h": 0.14006,
+      "hair_bbox": [
+        50,
+        9,
+        120,
+        73
+      ],
+      "hair_top_h": 0.0,
+      "hair_bottom_h": 0.17927,
+      "skin_bbox": [
+        69,
+        39,
+        98,
+        80
+      ],
+      "eyes": [
+        {
+          "bbox": [
+            92,
+            27,
+            101,
+            47
+          ],
+          "center_h": [
+            0.08728,
+            0.07591
+          ],
+          "area": 89
+        },
+        {
+          "bbox": [
+            69,
+            11,
+            82,
+            26
+          ],
+          "center_h": [
+            0.02367,
+            0.02047
+          ],
+          "area": 49
+        },
+        {
+          "bbox": [
+            74,
+            16,
+            81,
+            32
+          ],
+          "center_h": [
+            0.02937,
+            0.03626
+          ],
+          "area": 37
+        },
+        {
+          "bbox": [
+            85,
+            13,
+            98,
+            24
+          ],
+          "center_h": [
+            0.06907,
+            0.02285
+          ],
+          "area": 32
+        },
+        {
+          "bbox": [
+            74,
+            37,
+            82,
+            47
+          ],
+          "center_h": [
+            0.03216,
+            0.09273
+          ],
+          "area": 29
+        },
+        {
+          "bbox": [
+            84,
+            34,
+            89,
+            47
+          ],
+          "center_h": [
+            0.05509,
+            0.08672
+          ],
+          "area": 24
+        },
+        {
+          "bbox": [
+            71,
+            45,
+            78,
+            53
+          ],
+          "center_h": [
+            0.02255,
+            0.11148
+          ],
+          "area": 20
+        },
+        {
+          "bbox": [
+            90,
+            46,
+            96,
+            50
+          ],
+          "center_h": [
+            0.07316,
+            0.10694
+          ],
+          "area": 17
+        },
+        {
+          "bbox": [
+            88,
+            23,
+            91,
+            34
+          ],
+          "center_h": [
+            0.0632,
+            0.05497
+          ],
+          "area": 16
+        },
+        {
+          "bbox": [
+            82,
+            10,
+            89,
+            13
+          ],
+          "center_h": [
+            0.05222,
+            0.005
+          ],
+          "area": 14
+        },
+        {
+          "bbox": [
+            81,
+            68,
+            87,
+            71
+          ],
+          "center_h": [
+            0.04832,
+            0.16772
+          ],
+          "area": 8
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "yaw": 30,
+      "figure_bbox": [
+        128,
+        9,
+        256,
+        367
+      ],
+      "figure_height_px": 358,
+      "figure_center_x": 192.0,
+      "head_bbox": [
+        180,
+        9,
+        250,
+        116
+      ],
+      "head_top_h": 0.0,
+      "chin_h": 0.29888,
+      "head_width_h": 0.15084,
+      "hair_bbox": [
+        180,
+        9,
+        250,
+        72
+      ],
+      "hair_top_h": 0.0,
+      "hair_bottom_h": 0.17598,
+      "skin_bbox": [
+        193,
+        43,
+        241,
+        116
+      ],
+      "eyes": []
+    },
+    {
+      "index": 2,
+      "yaw": 60,
+      "figure_bbox": [
+        256,
+        8,
+        384,
+        367
+      ],
+      "figure_height_px": 359,
+      "figure_center_x": 320.0,
+      "head_bbox": [
+        304,
+        9,
+        372,
+        115
+      ],
+      "head_top_h": 0.00279,
+      "chin_h": 0.29805,
+      "head_width_h": 0.07521,
+      "hair_bbox": [
+        304,
+        9,
+        372,
+        74
+      ],
+      "hair_top_h": 0.00279,
+      "hair_bottom_h": 0.18384,
+      "skin_bbox": [
+        312,
+        43,
+        339,
+        115
+      ],
+      "eyes": []
+    },
+    {
+      "index": 3,
+      "yaw": 90,
+      "figure_bbox": [
+        384,
+        8,
+        512,
+        366
+      ],
+      "figure_height_px": 358,
+      "figure_center_x": 448.0,
+      "head_bbox": [
+        427,
+        8,
+        494,
+        115
+      ],
+      "head_top_h": 0.0,
+      "chin_h": 0.29888,
+      "head_width_h": 0.14246,
+      "hair_bbox": [
+        427,
+        8,
+        494,
+        72
+      ],
+      "hair_top_h": 0.0,
+      "hair_bottom_h": 0.17877,
+      "skin_bbox": [
+        427,
+        39,
+        470,
+        115
+      ],
+      "eyes": []
+    },
+    {
+      "index": 4,
+      "yaw": 120,
+      "figure_bbox": [
+        512,
+        8,
+        640,
+        366
+      ],
+      "figure_height_px": 358,
+      "figure_center_x": 576.0,
+      "head_bbox": [
+        553,
+        8,
+        618,
+        115
+      ],
+      "head_top_h": 0.0,
+      "chin_h": 0.29888,
+      "head_width_h": 0.1648,
+      "hair_bbox": [
+        553,
+        8,
+        618,
+        72
+      ],
+      "hair_top_h": 0.0,
+      "hair_bottom_h": 0.17877,
+      "skin_bbox": [
+        555,
+        45,
+        596,
+        115
+      ],
+      "eyes": []
+    },
+    {
+      "index": 5,
+      "yaw": 150,
+      "figure_bbox": [
+        640,
+        8,
+        768,
+        366
+      ],
+      "figure_height_px": 358,
+      "figure_center_x": 704.0,
+      "head_bbox": [
+        676,
+        8,
+        741,
+        108
+      ],
+      "head_top_h": 0.0,
+      "chin_h": 0.27933,
+      "head_width_h": 0.13128,
+      "hair_bbox": [
+        676,
+        8,
+        741,
+        68
+      ],
+      "hair_top_h": 0.0,
+      "hair_bottom_h": 0.1676,
+      "skin_bbox": [
+        678,
+        48,
+        693,
+        108
+      ],
+      "eyes": []
+    },
+    {
+      "index": 6,
+      "yaw": 180,
+      "figure_bbox": [
+        768,
+        8,
+        896,
+        365
+      ],
+      "figure_height_px": 357,
+      "figure_center_x": 832.0,
+      "head_bbox": [
+        794,
+        8,
+        863,
+        69
+      ],
+      "head_top_h": 0.0,
+      "chin_h": null,
+      "head_width_h": null,
+      "hair_bbox": [
+        794,
+        8,
+        863,
+        69
+      ],
+      "hair_top_h": 0.0,
+      "hair_bottom_h": 0.17087,
+      "skin_bbox": null,
+      "eyes": [
+        {
+          "bbox": [
+            794,
+            9,
+            862,
+            70
+          ],
+          "center_h": [
+            -0.02396,
+            0.12116
+          ],
+          "area": 1431
+        },
+        {
+          "bbox": [
+            850,
+            25,
+            857,
+            45
+          ],
+          "center_h": [
+            0.06035,
+            0.07268
+          ],
+          "area": 55
+        },
+        {
+          "bbox": [
+            808,
+            13,
+            817,
+            22
+          ],
+          "center_h": [
+            -0.05682,
+            0.02649
+          ],
+          "area": 35
+        },
+        {
+          "bbox": [
+            847,
+            24,
+            851,
+            44
+          ],
+          "center_h": [
+            0.04692,
+            0.0723
+          ],
+          "area": 32
+        },
+        {
+          "bbox": [
+            838,
+            33,
+            840,
+            45
+          ],
+          "center_h": [
+            0.01821,
+            0.08543
+          ],
+          "area": 18
+        },
+        {
+          "bbox": [
+            835,
+            36,
+            837,
+            47
+          ],
+          "center_h": [
+            0.00939,
+            0.09178
+          ],
+          "area": 17
+        },
+        {
+          "bbox": [
+            841,
+            14,
+            847,
+            20
+          ],
+          "center_h": [
+            0.03259,
+            0.02343
+          ],
+          "area": 11
+        },
+        {
+          "bbox": [
+            834,
+            9,
+            839,
+            12
+          ],
+          "center_h": [
+            0.01155,
+            0.0056
+          ],
+          "area": 8
+        },
+        {
+          "bbox": [
+            847,
+            38,
+            848,
+            45
+          ],
+          "center_h": [
+            0.04202,
+            0.09244
+          ],
+          "area": 7
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "yaw": 210,
+      "figure_bbox": [
+        896,
+        8,
+        1024,
+        366
+      ],
+      "figure_height_px": 358,
+      "figure_center_x": 960.0,
+      "head_bbox": [
+        916,
+        8,
+        981,
+        71
+      ],
+      "head_top_h": 0.0,
+      "chin_h": null,
+      "head_width_h": null,
+      "hair_bbox": [
+        916,
+        8,
+        981,
+        71
+      ],
+      "hair_top_h": 0.0,
+      "hair_bottom_h": 0.17598,
+      "skin_bbox": null,
+      "eyes": [
+        {
+          "bbox": [
+            917,
+            14,
+            966,
+            70
+          ],
+          "center_h": [
+            -0.0592,
+            0.12253
+          ],
+          "area": 1017
+        },
+        {
+          "bbox": [
+            971,
+            24,
+            981,
+            49
+          ],
+          "center_h": [
+            0.0427,
+            0.08002
+          ],
+          "area": 122
+        },
+        {
+          "bbox": [
+            965,
+            42,
+            974,
+            71
+          ],
+          "center_h": [
+            0.02566,
+            0.13812
+          ],
+          "area": 107
+        },
+        {
+          "bbox": [
+            960,
+            24,
+            967,
+            43
+          ],
+          "center_h": [
+            0.00903,
+            0.071
+          ],
+          "area": 86
+        },
+        {
+          "bbox": [
+            951,
+            27,
+            955,
+            45
+          ],
+          "center_h": [
+            -0.02118,
+            0.07728
+          ],
+          "area": 24
+        },
+        {
+          "bbox": [
+            968,
+            14,
+            974,
+            21
+          ],
+          "center_h": [
+            0.02824,
+            0.02514
+          ],
+          "area": 18
+        },
+        {
+          "bbox": [
+            938,
+            10,
+            947,
+            14
+          ],
+          "center_h": [
+            -0.04988,
+            0.00898
+          ],
+          "area": 14
+        },
+        {
+          "bbox": [
+            940,
+            14,
+            944,
+            22
+          ],
+          "center_h": [
+            -0.05206,
+            0.02616
+          ],
+          "area": 11
+        },
+        {
+          "bbox": [
+            950,
+            9,
+            955,
+            13
+          ],
+          "center_h": [
+            -0.02142,
+            0.0059
+          ],
+          "area": 9
+        },
+        {
+          "bbox": [
+            959,
+            12,
+            963,
+            17
+          ],
+          "center_h": [
+            0.0014,
+            0.01676
+          ],
+          "area": 8
+        },
+        {
+          "bbox": [
+            961,
+            17,
+            964,
+            21
+          ],
+          "center_h": [
+            0.00559,
+            0.02898
+          ],
+          "area": 8
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "yaw": 240,
+      "figure_bbox": [
+        1024,
+        8,
+        1152,
+        366
+      ],
+      "figure_height_px": 358,
+      "figure_center_x": 1088.0,
+      "head_bbox": [
+        1039,
+        8,
+        1106,
+        74
+      ],
+      "head_top_h": 0.0,
+      "chin_h": 0.1648,
+      "head_width_h": 0.13966,
+      "hair_bbox": [
+        1039,
+        8,
+        1106,
+        74
+      ],
+      "hair_top_h": 0.0,
+      "hair_bottom_h": 0.18436,
+      "skin_bbox": [
+        1093,
+        45,
+        1103,
+        67
+      ],
+      "eyes": []
+    },
+    {
+      "index": 9,
+      "yaw": 270,
+      "figure_bbox": [
+        1152,
+        8,
+        1280,
+        366
+      ],
+      "figure_height_px": 358,
+      "figure_center_x": 1216.0,
+      "head_bbox": [
+        1162,
+        9,
+        1229,
+        98
+      ],
+      "head_top_h": 0.00279,
+      "chin_h": 0.2514,
+      "head_width_h": 0.06983,
+      "hair_bbox": [
+        1162,
+        9,
+        1229,
+        73
+      ],
+      "hair_top_h": 0.00279,
+      "hair_bottom_h": 0.18156,
+      "skin_bbox": [
+        1201,
+        44,
+        1226,
+        98
+      ],
+      "eyes": []
+    },
+    {
+      "index": 10,
+      "yaw": 300,
+      "figure_bbox": [
+        1280,
+        9,
+        1408,
+        367
+      ],
+      "figure_height_px": 358,
+      "figure_center_x": 1344.0,
+      "head_bbox": [
+        1283,
+        9,
+        1352,
+        116
+      ],
+      "head_top_h": 0.0,
+      "chin_h": 0.29888,
+      "head_width_h": 0.18436,
+      "hair_bbox": [
+        1283,
+        9,
+        1352,
+        74
+      ],
+      "hair_top_h": 0.0,
+      "hair_bottom_h": 0.18156,
+      "skin_bbox": [
+        1288,
+        43,
+        1343,
+        116
+      ],
+      "eyes": []
+    },
+    {
+      "index": 11,
+      "yaw": 330,
+      "figure_bbox": [
+        1408,
+        9,
+        1522,
+        365
+      ],
+      "figure_height_px": 356,
+      "figure_center_x": 1465.0,
+      "head_bbox": [
+        1415,
+        9,
+        1486,
+        86
+      ],
+      "head_top_h": 0.0,
+      "chin_h": 0.21629,
+      "head_width_h": 0.14326,
+      "hair_bbox": [
+        1415,
+        9,
+        1486,
+        73
+      ],
+      "hair_top_h": 0.0,
+      "hair_bottom_h": 0.17978,
+      "skin_bbox": [
+        1433,
+        44,
+        1464,
+        86
+      ],
+      "eyes": []
+    }
+  ],
+  "head_views": [
+    {
+      "index": 0,
+      "bbox": [
+        13,
+        372,
+        243,
+        613
+      ],
+      "skin_bbox": [
+        59,
+        85,
+        228,
+        240
+      ],
+      "hair_bbox": [
+        3,
+        0,
+        212,
+        239
+      ],
+      "head_h": 155,
+      "head_w": 169,
+      "hair_w_over_head_w": 1.2367,
+      "hair_top_over_head_h": -0.5484,
+      "hair_bottom_over_head_h": 0.9935,
+      "eyes": [
+        {
+          "center_rel": [
+            0.2964,
+            0.9669
+          ],
+          "area": 542
+        },
+        {
+          "center_rel": [
+            0.0083,
+            -0.4314
+          ],
+          "area": 220
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "bbox": [
+        109,
+        615,
+        436,
+        1013
+      ],
+      "skin_bbox": [
+        104,
+        45,
+        266,
+        225
+      ],
+      "hair_bbox": [
+        136,
+        1,
+        228,
+        112
+      ],
+      "head_h": 180,
+      "head_w": 162,
+      "hair_w_over_head_w": 0.5679,
+      "hair_top_over_head_h": -0.2444,
+      "hair_bottom_over_head_h": 0.3722,
+      "eyes": [
+        {
+          "center_rel": [
+            0.3296,
+            0.3611
+          ],
+          "area": 771
+        },
+        {
+          "center_rel": [
+            0.3003,
+            0.0352
+          ],
+          "area": 622
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "bbox": [
+        264,
+        372,
+        499,
+        613
+      ],
+      "skin_bbox": [
+        23,
+        66,
+        211,
+        240
+      ],
+      "hair_bbox": [
+        3,
+        1,
+        225,
+        241
+      ],
+      "head_h": 174,
+      "head_w": 188,
+      "hair_w_over_head_w": 1.1809,
+      "hair_top_over_head_h": -0.3736,
+      "hair_bottom_over_head_h": 1.0057,
+      "eyes": [
+        {
+          "center_rel": [
+            0.9513,
+            0.5392
+          ],
+          "area": 339
+        },
+        {
+          "center_rel": [
+            0.848,
+            0.0646
+          ],
+          "area": 283
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "bbox": [
+        512,
+        372,
+        750,
+        613
+      ],
+      "skin_bbox": [
+        37,
+        44,
+        222,
+        240
+      ],
+      "hair_bbox": [
+        9,
+        0,
+        236,
+        241
+      ],
+      "head_h": 196,
+      "head_w": 185,
+      "hair_w_over_head_w": 1.227,
+      "hair_top_over_head_h": -0.2245,
+      "hair_bottom_over_head_h": 1.0051,
+      "eyes": [
+        {
+          "center_rel": [
+            0.547,
+            0.9448
+          ],
+          "area": 651
+        },
+        {
+          "center_rel": [
+            0.5033,
+            0.8288
+          ],
+          "area": 613
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "bbox": [
+        604,
+        615,
+        917,
+        1013
+      ],
+      "skin_bbox": [
+        73,
+        33,
+        246,
+        225
+      ],
+      "hair_bbox": [
+        95,
+        0,
+        186,
+        108
+      ],
+      "head_h": 192,
+      "head_w": 173,
+      "hair_w_over_head_w": 0.526,
+      "hair_top_over_head_h": -0.1719,
+      "hair_bottom_over_head_h": 0.3906,
+      "eyes": [
+        {
+          "center_rel": [
+            0.3475,
+            0.3948
+          ],
+          "area": 1159
+        },
+        {
+          "center_rel": [
+            0.2552,
+            0.1247
+          ],
+          "area": 617
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "bbox": [
+        784,
+        372,
+        1000,
+        613
+      ],
+      "skin_bbox": [
+        38,
+        95,
+        154,
+        222
+      ],
+      "hair_bbox": [
+        0,
+        0,
+        214,
+        241
+      ],
+      "head_h": 127,
+      "head_w": 116,
+      "hair_w_over_head_w": 1.8448,
+      "hair_top_over_head_h": -0.748,
+      "hair_bottom_over_head_h": 1.1496,
+      "eyes": [
+        {
+          "center_rel": [
+            0.1869,
+            1.0743
+          ],
+          "area": 393
+        },
+        {
+          "center_rel": [
+            0.6575,
+            0.6477
+          ],
+          "area": 338
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "bbox": [
+        1016,
+        372,
+        1250,
+        613
+      ],
+      "skin_bbox": [
+        31,
+        58,
+        197,
+        240
+      ],
+      "hair_bbox": [
+        12,
+        0,
+        229,
+        241
+      ],
+      "head_h": 182,
+      "head_w": 166,
+      "hair_w_over_head_w": 1.3072,
+      "hair_top_over_head_h": -0.3187,
+      "hair_bottom_over_head_h": 1.0055,
+      "eyes": [
+        {
+          "center_rel": [
+            0.7438,
+            0.9376
+          ],
+          "area": 1003
+        },
+        {
+          "center_rel": [
+            0.0367,
+            0.4655
+          ],
+          "area": 458
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "bbox": [
+        1084,
+        615,
+        1422,
+        1013
+      ],
+      "skin_bbox": [
+        104,
+        31,
+        276,
+        228
+      ],
+      "hair_bbox": [
+        95,
+        1,
+        187,
+        79
+      ],
+      "head_h": 197,
+      "head_w": 172,
+      "hair_w_over_head_w": 0.5349,
+      "hair_top_over_head_h": -0.1523,
+      "hair_bottom_over_head_h": 0.2437,
+      "eyes": [
+        {
+          "center_rel": [
+            0.2966,
+            0.3607
+          ],
+          "area": 742
+        },
+        {
+          "center_rel": [
+            0.0897,
+            0.1277
+          ],
+          "area": 694
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "bbox": [
+        1268,
+        376,
+        1523,
+        613
+      ],
+      "skin_bbox": [
+        19,
+        1,
+        210,
+        236
+      ],
+      "hair_bbox": [
+        15,
+        1,
+        252,
+        237
+      ],
+      "head_h": 235,
+      "head_w": 191,
+      "hair_w_over_head_w": 1.2408,
+      "hair_top_over_head_h": 0.0,
+      "hair_bottom_over_head_h": 1.0043,
+      "eyes": [
+        {
+          "center_rel": [
+            0.8154,
+            0.967
+          ],
+          "area": 686
+        },
+        {
+          "center_rel": [
+            0.4199,
+            0.2797
+          ],
+          "area": 477
+        }
+      ]
+    }
+  ]
+}

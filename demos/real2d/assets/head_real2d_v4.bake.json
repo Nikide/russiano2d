@@ -1,0 +1,99 @@
+{
+  "ok": true,
+  "format": "r2d4",
+  "stage": "A (head-only, yaw S1, pitch 0)",
+  "container": "demos/real2d/assets/head_real2d_v4.r2d4",
+  "container_sha256": "319629b4a5119630191be0f23dea90ecdb4395ba702472ad78bf6b45f5496ded",
+  "container_bytes": 1121681,
+  "source_counts": {
+    "patches": 20,
+    "mirrored": 4,
+    "triangles": 2168,
+    "mesh_vertices": 1384,
+    "anchors": 12
+  },
+  "manifold": {
+    "dim": 100,
+    "rank": 6,
+    "yaw_K": 3,
+    "pitch_L": 0,
+    "features": 7,
+    "layout": "mu[dim] | basis[dim*rank] (row-major D×r) | coeff[rank*features] (row-major r×features: coeff[n][k])",
+    "param_layout": "на патч: dx, dy, sx, sy, rot",
+    "variance_kept": 0.9999377395092754,
+    "anchor_reconstruction_max_abs": 0.010862354393338686
+  },
+  "atlas": {
+    "sha256": "a96284644499bf665ee26d362e7f0f7e87a81568d06156e4809032b4358e7857",
+    "bytes": 1016658
+  },
+  "gates": {
+    "rings": [
+      "face",
+      "eye_R",
+      "eye_L",
+      "nose",
+      "mouth",
+      "bangs",
+      "hair_back",
+      "lock_R",
+      "lock_L"
+    ],
+    "fade_deg": {
+      "face": 3.0,
+      "eye_R": 6.0,
+      "eye_L": 6.0,
+      "nose": 8.0,
+      "mouth": 8.0,
+      "bangs": 20.0,
+      "hair_back": 20.0,
+      "lock_R": 12.0,
+      "lock_L": 12.0
+    }
+  },
+  "acceptance_probe": {
+    "anchor_reconstruction_max_abs": 0.010862354393338686,
+    "anchor_reconstruction_top": [
+      {
+        "patch": "hair_lock_left",
+        "param": "sx",
+        "max_abs": 0.01086
+      },
+      {
+        "patch": "hair_lock_right",
+        "param": "sx",
+        "max_abs": 0.01086
+      },
+      {
+        "patch": "eye_front_left",
+        "param": "sx",
+        "max_abs": 0.00989
+      },
+      {
+        "patch": "eye_front_right",
+        "param": "sx",
+        "max_abs": 0.00989
+      },
+      {
+        "patch": "eye_three_quarter",
+        "param": "sx",
+        "max_abs": 0.00989
+      }
+    ],
+    "variance_kept": 0.9999377395092754,
+    "rank": 6,
+    "rank_floor_by_variance": 4,
+    "singular_values": [
+      3.9614,
+      3.2473,
+      1.0412,
+      0.9481,
+      0.2529,
+      0.1276,
+      0.042,
+      0.0,
+      0.0
+    ]
+  },
+  "warnings": []
+}

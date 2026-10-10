@@ -1,9 +1,13 @@
 # Russiano2D — демо-проект
 
-`demos/` — отдельная игра на движке: четыре сцены-демо, каждая показывает свой
+`demos/` — отдельная игра на движке: несколько сцен-демо, каждая показывает свой
 слой движка — платформер (Box2D и анимация), «Типичная ночь в Мытищинском лесу»
-(свет, частицы, волны), новелла «Руси-тян» (`$.timeline` и интерфейс на RmlUi)
-и Re2DSprite (поворот головы из одной развёртки всего персонажа).
+(свет, частицы, волны), новелла «Руси-тян» (`$.timeline` и интерфейс на RmlUi),
+Re2DSprite (поворот головы из одной развёртки всего персонажа) и Re2D World
+(2.5D от первого лица). Модулей демо шесть — `launcher`, `platformer`,
+`shooter_witch`, `russi_vn`, `rotsprite` (сцена `re2dsprite`) и `re2d_world`;
+остальные сцены из таблицы ниже открываются отдельными проектами
+(`--game demos/<имя>`).
 Запускается тем же бинарником, что и `game/`, и выбирается флагом `--game`.
 
 ## Запуск
@@ -62,8 +66,9 @@ export default function install($) {
 | `re2d_world` | **Re2D: 2.5D от первого лица** над плоским миром — комната-коробка с текстурами, игрок (WASD + мышь), три добрых маскота Re2DSprite, которые замечают вас, поворачиваются, улыбаются и говорят. Описание — [README](../demos/re2d_world/README.md) | `$.camera.kind(Re2D)`, `$.re2d.room`, `.kind(Re2D)`, `.controls`, `$.re2dSprite.from`, `$.ui.doc` |
 | `re2d_bsp_world` | **Re2D World: комнаты, этажи и АК** — XY BSP, вертикальные интервалы, оружие первого лица. Запуск отдельным проектом: `build/russiano2d --game demos/re2d_bsp_world`. [README](../demos/re2d_bsp_world/README.md) | `$.re2d.world`, `$.re2dSprite` |
 | `re2d_world_renderer_lab` | **лаборатория рендерера World**: шесть камер с эталонными кадрами CPU/GPU, свет, тени, туман, порталы, прозрачность, декали; вложенная `acceptance`. Запуск: `build/russiano2d --game demos/re2d_world_renderer_lab` | `$.re2d.world`, `.light`, `.material`, `.sky` |
-| `re2d_dust2` | **Dust II по маршрутам** — оригинальная карта из ячеек: A/B, спавны, двери, тоннели, рампы, клуб с музыкой (HRTF), NPC Re2DSprite, шаги и ветер. Запуск: `build/russiano2d --game demos/re2d_dust2 --seed 7`. [README](../demos/re2d_dust2/README.md) | `$.re2dWorldAudio`, `.sky` (EXR), контроллер в стиле Quake |
+| `re2d_dust2` | **Dust II по маршрутам** — оригинальная карта из ячеек: A/B, спавны, двери, тоннели, рампы, клуб с музыкой (HRTF), NPC Re2DSprite, шаги и ветер. Запуск: `build/russiano2d --game demos/re2d_dust2 --seed 7`. [README](../demos/re2d_dust2/README.md) | `$.re2dWorldAudio(world)`, `.sky` (EXR), контроллер в стиле Quake |
 | `re2dsprite` | **один атлас всего тела Руси-тян**: прототип головы, yaw −180..180°, pitch, nearest и привязка к пикселям. Стрелки — вращение, пробел — авто, Esc — меню. Базовый PNG и описание — [README](../demos/rotsprite/README.md) | `$.re2dSprite.create`, `.re2dPose`, `$.ui.doc` |
+| `real2d` (отдельный проект) | **Real2D v4, стадия A**: голова из отдельных семантических компонентов — каждый угол yaw вычислен (12 anchors, Фурье K=3, растеризация реальных texels), RmlUi-HUD, автоповорот, перечитывание контейнера. Запуск: `build/russiano2d --game demos/real2d`. [README](../demos/real2d/README.md), план — [STAGE_A_PLAN.md](../demos/real2d/STAGE_A_PLAN.md) | `$.real2d.load/frame/info/provenance`, `<real2d>`, `.real2dPose` |
 | `platformer` | Box2D, листы анимации, монеты, враги, параллакс, HUD, пауза | `.controls`, `.frames`, `.animate`, `.on('death')`, `<ui.*>` |
 | `shooter_witch` | **ночной лес**: зомби-шутер в духе Vampire Survivors — авто-стрельба по ближайшему, волны, опыт, карты апгрейдов, фонари как единственный свет, тени от стволов, кровь и лужи | `<tilemap>` + `.autotile()`, `$.gfx.light.polygon`, `$.audio.zone/obstacles/damping`, `$.fx.*`, `$.gfx.postPreset` |
 | `russi_vn` | **визуальная новелла «Руси-тян: Бака!»**: цундэрэ-маскот объясняет, чем JS лучше Python; интерфейс на RmlUi, пять локаций, тряска экрана, семь поз, озвучка реплик, три выбора и две концовки | `$.animatedTimelineScene2d`, `$.timeline.state`, `$.ui.doc`, `$.camera.shake`, `{ ending }` с флагом в `$.store` |
@@ -99,7 +104,7 @@ export default function install($) {
 
 ```bash
 python3 tests/agent/demos_test.py              # все сцены
-python3 tests/agent/demos_test.py light        # только выбранные
+python3 tests/agent/demos_test.py shooter_witch  # только выбранные
 ```
 
 Тест открывает каждую сцену, шагает кадры, проверяет журнал на ошибки
@@ -112,5 +117,6 @@ python3 tests/agent/demos_test.py light        # только выбранные
 карточки апгрейдов, HUD на якорях, меню со своей музыкой и профилирование.
 
 Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](RE2DSPRITE_V2.md),
-[API `$`](highlevel/re2dsprite.md). Демо `rotsprite` — переключение костюмов,
-моргание, ходьба/бег на месте и перетаскивание кистей.
+[API `$`](highlevel/re2dsprite.md). Демо `re2dsprite` — переключение костюмов,
+моргание, ходьба/бег на месте и перетаскивание кистей; старое имя сцены
+`rotsprite` осталось псевдонимом ([`demos/rotsprite/index.js`](../demos/rotsprite/index.js)).

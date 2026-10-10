@@ -46,13 +46,17 @@ for name in existing:
     if not name.endswith('.md') or name.startswith(('dist/', 'deliverables/')):
         continue  # Published docs are snapshots, not the live Markdown source tree.
     path = ROOT / name
+    # site/doc-home.md — стартовая страница документации: build-doc.py разбирает
+    # её с origin='README.md', то есть её ссылки отсчитываются от КОРНЯ
+    # репозитория, а не от site/. Поэтому база — корень.
+    base = ROOT if name == 'site/doc-home.md' else path.parent
     text = re.sub(r'```.*?```', '', path.read_text(encoding='utf-8'), flags=re.S)
     for match in re.finditer(r'!?\[[^\]\n]*\]\(([^\n]+?)\)', text):
         url = match.group(1).strip().split(' "')[0].strip('<>')
         if re.match(r'[a-zA-Z][a-zA-Z0-9+.-]*:', url) or url.startswith('//'):
             continue
         target = urllib.parse.unquote(url.split('#')[0].split('?')[0])
-        if target and not (path.parent / target).exists():
+        if target and not (base / target).exists():
             missing.append(name + ': ' + target)
 check(not missing, 'live Markdown local targets exist: ' + str(missing))
 for manifest in sorted((ROOT / 'dist').glob('*/SHA256SUMS.txt')):
