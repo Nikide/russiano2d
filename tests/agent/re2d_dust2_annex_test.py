@@ -53,7 +53,7 @@ def main():
   check(a.eval('aks.clip')=='reload','R starts the reload clip')
   a.step(150)
   check(a.eval('aks.ammo')==30 and a.eval('aks.clip')=='idle','reload completes and refills the magazine')
-  check(a.eval("Object.keys(aks.frames).length")==31,'31 SDK-baked frames (idle, draw, fire, reload) are loaded as Re2DSprites')
+  check(a.eval("$.re2dSprite.info(aks.node).levels")>=1 and a.eval("Object.keys(aks.clips).join()")=='idle,draw,fire,reload','the AKS is one Re2DSprite v3 (dense skin clips idle/draw/fire/reload baked by bake-re2d3)')
   a.eval('aks.ammo=0');a.step(2)
   a.mouse(1,'down');a.step(2);a.mouse(1,'up');a.step(2)
   a.eval('aks.ammo=30;aks.clip="idle"');a.mouse(1,'down');a.step(160);a.mouse(1,'up')

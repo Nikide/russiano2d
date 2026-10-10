@@ -429,6 +429,12 @@ def main():
     A.theme([3920, 2560, 400, 320], 'toxic', 'concrete')
     A.theme([3840, 2400, 640, 640], 'hazard', 'concrete')
 
+    # Fire-alarm test room south of the hall: dark, red emergency light, the supplied siren through HRTF
+    A.cell('a_alarm', [3360, 2400, 480, 480],
+           [span(0, 288, '#3a2a28', '#181010', .08, '#ff3020', {'density': .004, 'start': 40, 'color': '#2a0808'})], 'metal')
+    A.door('a_alarm', hall[(22, 14)], 3600)
+    A.theme([3360, 2400, 480, 480], 'hazard', 'concrete')
+
     # Three offices south of gate
     off = [('a_off1', [2400, 1920, 320, 480], 2560, 'wood', .62, '#ffd48a', '#8a6a44'),
            ('a_off2', [2720, 1920, 320, 480], 2880, 'carpet', .5, '#ff9ad8', '#703050'),
@@ -502,6 +508,8 @@ def main():
         dict(x=4160, y=1840, h=330, radius=800, intensity=1.5, color='#ff40ff', orbit=dict(cx=4160, cy=1840, r=480, speed=.4)),
         dict(x=4160, y=1840, h=330, radius=800, intensity=1.5, color='#40ffff', orbit=dict(cx=4160, cy=1840, r=480, speed=-.4, phase=3.14)),
     ]
+    A.dyn.append(dict(x=3600, y=2640, h=250, radius=520, intensity=2.4, color='#ff2010', pulse=dict(min=.05, max=1.0, rate=2.2)))
+    A.dyn.append(dict(x=3600, y=2440, h=200, radius=300, intensity=1.2, color='#ff4020', pulse=dict(min=.1, max=1.0, rate=2.2)))
     # HRTF sources (the game keeps only the nearest few alive; 16 mixer channels total)
     S = lambda f, x, y, h, rng, ref, vol: A.audio.append(dict(file='annex/' + f, x=x, y=y, h=h, range=rng, reference=ref, volume=vol))
     S('buzz.wav', 2560, 1840, 200, 700, 80, .35)
@@ -521,13 +529,16 @@ def main():
     S('drip.wav', 5200, 2600, 100, 500, 60, .6)
     S('fan.wav', 5760, 2800, 190, 600, 80, .4)
     S('water.wav', 6640, 1760, 40, 900, 100, .8)
+    A.audio.append(dict(file='annex/fire_alarm.mp3', x=3600, y=2700, h=250, range=1500, reference=220, volume=1.0))
     A.cameras = {
         'ANNEX GATE': [2440, 1840, 48, 0], 'MAZE': [2800, 1680, 48, -90], 'GRAND HALL': [3400, 1840, 48, 0],
         'SERVER': [4080, 1220, 48, -90], 'TOXIC': [4080, 2440, 48, 90], 'OFFICES': [2440, 1800, 48, 90],
         'ATRIUM LOW': [5000, 1840, 48, 0], 'MEZZANINE': [5700, 1840, 336, 180], 'YARD': [6440, 2000, 48, 0],
+        'FIRE ALARM': [3600, 2460, 48, 90],
     }
     # zones for HUD/sky
     A.zone([2400, 1760, 960, 160], 'ANNEX / BLUE GATE')
+    A.zone([3360, 2400, 480, 480], 'ANNEX / FIRE ALARM')
     A.zone([2400, 800, 960, 960], 'ANNEX / MAZE')
     A.zone([3360, 1280, 1600, 1120], 'ANNEX / GRAND HALL')
     A.zone([3840, 640, 640, 640], 'ANNEX / SERVER ROOM')

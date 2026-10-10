@@ -62,6 +62,14 @@ typedef struct B3Options {
     float scale, fit;               // scale — единиц на метр; 0 = подобрать по fit (доля extent)
     bool has_pivot;
     float pivot[3];
+    bool has_eye;
+    float eye[3];                   // положение камеры в исходных координатах (метры): viewmodel с перспективой
+    float zoom;                     // projection.bodyScale: увеличение проекции (1 — весь extent в спрайте)
+    int raster;                     // projection.raster: размер синтеза, 0 — по умолчанию рантайма
+    int motion_lod;                 // projection.motionLod: на сколько уровней грубее рисовать движение
+    float detail;                   // projection.detail: размер текселя выбранного уровня в пикселях, 0 — по умолчанию
+    bool has_window, cull;
+    float window[4];                // projection.window: видимое окно спрайта в долях
     float fps;
     bool normal_flip_y;
 } B3Options;
@@ -483,6 +491,7 @@ typedef struct Bake {
     Frame f;
     int W, H;
     Texel *texels;
+    float *mdist;                // поля: расстояние до уже выбранного треугольника (ближайший выигрывает)
     long overlaps, margin_texels;
     int islands;
 } Bake;
@@ -685,7 +694,29 @@ static bool bary_texel(const float uv[3][2], float px, float py, float b[3], flo
     return true;
 }
 
-static void shade_texel(Bake *bk, const B3Tri *t, float uv_tex[3][2], int x, int y, const float b[3], Texel *out)
+// Ближайшая к (px,py) точка треугольника (координаты сетки): её барицентры и расстояние до неё в текселях.
+static float closest_bary(const float uv[3][2], float px, float py, float b[3])
+{
+    float best = 1e30f, bx = uv[0][0], by = uv[0][1];
+    for (int i = 0; i < 3; ++i) {
+        const float ax = uv[i][0], ay = uv[i][1], ex = uv[(i + 1) % 3][0] - ax, ey = uv[(i + 1) % 3][1] - ay;
+        const float l2 = ex * ex + ey * ey;
+        float t = l2 > 1e-12f ? ((px - ax) * ex + (py - ay) * ey) / l2 : 0;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const float qx = ax + ex * t, qy = ay + ey * t, d = hypotf(px - qx, py - qy);
+        if (d < best) { best = d; bx = qx; by = qy; }
+    }
+    float md;
+    if (!bary_texel(uv, bx, by, b, &md)) return 1e30f;
+    float sum = 0;
+    for (int i = 0; i < 3; ++i) { if (b[i] < 0) b[i] = 0; sum += b[i]; }
+    if (sum < 1e-9f) return 1e30f;
+    for (int i = 0; i < 3; ++i) b[i] /= sum;
+    return best;
+}
+
+// margin — тексель поля за краем острова: b уже прижаты к ребру, цвет берём в той же точке (без выхода за остров).
+static void shade_texel(Bake *bk, const B3Tri *t, float uv_tex[3][2], int x, int y, const float b[3], bool margin, Texel *out)
 {
     const B3Mat *m = &bk->s->mats[t->mat];
     float P[3] = { 0, 0, 0 }, N[3] = { 0, 0, 0 }, T[3] = { 0, 0, 0 }, B[3] = { 0, 0, 0 };
@@ -714,7 +745,13 @@ static void shade_texel(Bake *bk, const B3Tri *t, float uv_tex[3][2], int x, int
     const float sub[4][2] = { { .25f, .25f }, { .75f, .25f }, { .25f, .75f }, { .75f, .75f } };
     for (int s = 0; s < 4; ++s) {
         float bs[3], md;
-        if (!bary_texel(uv_tex, x + sub[s][0], y + sub[s][1], bs, &md)) { bs[0] = bs[1] = bs[2] = 1.0f / 3; }
+        if (margin) memcpy(bs, b, sizeof bs);
+        else if (!bary_texel(uv_tex, x + sub[s][0], y + sub[s][1], bs, &md)) { bs[0] = bs[1] = bs[2] = 1.0f / 3; }
+        else if (md < 0) {                                  // подвыборка вышла за треугольник: не тянем цвет из-за края острова
+            float sum = 0;
+            for (int k = 0; k < 3; ++k) { if (bs[k] < 0) bs[k] = 0; sum += bs[k]; }
+            for (int k = 0; k < 3; ++k) bs[k] /= sum > 1e-9f ? sum : 1;
+        }
         const float u = bs[0] * t->uv[0][0] + bs[1] * t->uv[1][0] + bs[2] * t->uv[2][0];
         const float v = bs[0] * t->uv[0][1] + bs[1] * t->uv[1][1] + bs[2] * t->uv[2][1];
         float c[4] = { m->base[0] * 255, m->base[1] * 255, m->base[2] * 255, m->base[3] * 255 };
@@ -827,10 +864,15 @@ static void rasterize_triangles(Bake *bk, int pass)
                 if (!inside) continue;
                 if (tx->flag == 1) { bk->overlaps++; continue; }
             } else {
-                if (inside || tx->flag || md < -B3_MARGIN) continue;
-                bk->margin_texels++;
+                // поле: тексель за краем острова ложится точно на ближайшую точку ребра (поверхность доходит до ребра и не торчит за него)
+                if (inside || tx->flag == 1) continue;
+                const float d = closest_bary(uv, x + .5f, y + .5f, b);
+                const size_t idx = (size_t)y * W + x;
+                if (d > B3_MARGIN || (tx->flag == 2 && d >= bk->mdist[idx])) continue;
+                if (!tx->flag) bk->margin_texels++;
+                bk->mdist[idx] = d;
             }
-            shade_texel(bk, t, uv, x, y, b, tx);
+            shade_texel(bk, t, uv, x, y, b, pass == 2, tx);
             tx->flag = pass == 1 ? 1 : 2;
         }
     }
@@ -1026,7 +1068,9 @@ static bool bake3(const char *source, const char *out_dir, const B3Options *o, S
             if (!plan_islands(&bk, rep)) ok = false;
             if (ok) {
             rasterize_triangles(&bk, 1);
-            rasterize_triangles(&bk, 2);
+            bk.mdist = (float *)malloc((size_t)bk.W * bk.H * sizeof(float));
+            if (bk.mdist) rasterize_triangles(&bk, 2);
+            else ok = false;
             }
             for (long i = 0; i < (long)bk.W * bk.H; ++i) {
                 const Texel *t = &bk.texels[i];
@@ -1078,7 +1122,18 @@ static bool bake3(const char *source, const char *out_dir, const B3Options *o, S
                 r2d_sb_put_json_string(&js, s.bones[i].name);
                 r2d_sb_putc(&js, '}');
             }
-            r2d_sb_printf(&js, "],\"joints\":[],\"sockets\":[]},\"groups\":{},\"defaults\":{\"body\":true},\"projection\":{\"bodyScale\":1,\"portraitScale\":2,\"extent\":%d,\"v3\":true}", o->extent);
+            r2d_sb_printf(&js, "],\"joints\":[],\"sockets\":[]},\"groups\":{},\"defaults\":{\"body\":true},\"projection\":{\"bodyScale\":%.5g,\"portraitScale\":2,\"extent\":%d,\"v3\":true", o->zoom > 0 ? o->zoom : 1.0, o->extent);
+            if (o->raster) r2d_sb_printf(&js, ",\"raster\":%d", o->raster);
+            if (o->has_window) r2d_sb_printf(&js, ",\"window\":[%.4g,%.4g,%.4g,%.4g]", o->window[0], o->window[1], o->window[2], o->window[3]);
+            if (o->cull) r2d_sb_puts(&js, ",\"cull\":true");
+            if (o->motion_lod) r2d_sb_printf(&js, ",\"motionLod\":%d", o->motion_lod);
+            if (o->detail > 0) r2d_sb_printf(&js, ",\"detail\":%.4g", o->detail);
+            if (o->has_eye) {
+                float e[3];
+                frame_apply(&bk.f, o->eye, e);
+                r2d_sb_printf(&js, ",\"eye\":[%.4g,%.4g,%.4g]", e[0], e[1], e[2]);
+            }
+            r2d_sb_putc(&js, '}');
             if (clips) {
                 char animfile[300];
                 snprintf(animfile, sizeof animfile, "%s.animations.json", o->name ? o->name : "model");
@@ -1111,6 +1166,7 @@ static bool bake3(const char *source, const char *out_dir, const B3Options *o, S
     r2d_sb_puts(report, "}\n");
     if (ok && rep_path[0]) sdk_write_file(rep_path, report->data, report->len);
     free(bk.texels);
+    free(bk.mdist);
     free(bk.rect);
     for (int i = 0; i < s.ntex; ++i) sdk_image_free(s.texs[i].px);
     free(s.texs);
@@ -1128,7 +1184,7 @@ int sdk_cmd_bake_re2d3(const SdkArgs *a)
     if (!source) {
         const int rc = sdk_fail(&rep, "SDK_USAGE",
             "Использование: r2d-sdk bake-re2d3 <модель.fbx|.glb|.gltf|.obj> --output <каталог> [--name имя] [--grid 512..2048] [--extent N] [--scale S] [--fit 0.94] "
-            "[--pivot x,y,z] [--fbx-tint имя=#rrggbb,…] [--fbx-ao имя=файл.png,…] [--fbx-spec имя=0..1,…] [--tiles имя=вес,…] [--clips имя=клип[:l],…] [--fps 30] [--normal-flip-y]");
+            "[--pivot x,y,z] [--eye x,y,z] [--zoom k] [--raster N] [--window x0,y0,x1,y1] [--cull] [--motion-lod 0..4] [--detail 0.25..8] [--fbx-tint имя=#rrggbb,…] [--fbx-ao имя=файл.png,…] [--fbx-spec имя=0..1,…] [--tiles имя=вес,…] [--clips имя=клип[:l],…] [--fps 30] [--normal-flip-y]");
         sdk_report_free(&rep);
         return rc;
     }
@@ -1158,6 +1214,27 @@ int sdk_cmd_bake_re2d3(const SdkArgs *a)
     o.clips = sdk_arg_value(a, "--clips");
     o.tiles = sdk_arg_value(a, "--tiles");
     o.normal_flip_y = sdk_arg_flag(a, "--normal-flip-y");
+    if ((v = sdk_arg_value(a, "--zoom"))) o.zoom = (float)atof(v);
+    if ((v = sdk_arg_value(a, "--raster"))) o.raster = atoi(v);
+    if ((v = sdk_arg_value(a, "--motion-lod"))) o.motion_lod = atoi(v);
+    if ((v = sdk_arg_value(a, "--detail"))) o.detail = (float)atof(v);
+    o.cull = sdk_arg_flag(a, "--cull");
+    if ((v = sdk_arg_value(a, "--window"))) {
+        if (sscanf(v, "%f,%f,%f,%f", &o.window[0], &o.window[1], &o.window[2], &o.window[3]) != 4 || !(o.window[0] >= 0 && o.window[1] >= 0 && o.window[2] <= 1 && o.window[3] <= 1 && o.window[2] > o.window[0] && o.window[3] > o.window[1])) {
+            const int rc = sdk_fail(&rep, "SDK_BAKE_OPTIONS", "--window: x0,y0,x1,y1 в долях 0..1, x1>x0 и y1>y0");
+            sdk_report_free(&rep);
+            return rc;
+        }
+        o.has_window = true;
+    }
+    if ((v = sdk_arg_value(a, "--eye"))) {
+        if (sscanf(v, "%f,%f,%f", &o.eye[0], &o.eye[1], &o.eye[2]) != 3) {
+            const int rc = sdk_fail(&rep, "SDK_BAKE_OPTIONS", "--eye: три числа через запятую x,y,z (метры исходной модели)");
+            sdk_report_free(&rep);
+            return rc;
+        }
+        o.has_eye = true;
+    }
     if ((v = sdk_arg_value(a, "--pivot"))) {
         if (sscanf(v, "%f,%f,%f", &o.pivot[0], &o.pivot[1], &o.pivot[2]) != 3) {
             const int rc = sdk_fail(&rep, "SDK_BAKE_OPTIONS", "--pivot: три числа через запятую x,y,z");
@@ -1166,8 +1243,9 @@ int sdk_cmd_bake_re2d3(const SdkArgs *a)
         }
         o.has_pivot = true;
     }
-    if (o.grid < 256 || o.grid > 2048 || o.extent < 16 || o.extent > 250 || !(o.fit > .1f && o.fit <= 1) || o.scale < 0 || !(o.fps >= 1 && o.fps <= 120)) {
-        const int rc = sdk_fail(&rep, "SDK_BAKE_OPTIONS", "Недопустимые опции: grid 256..2048, extent 16..250, fit 0.1..1, scale>=0, fps 1..120");
+    if (o.grid < 256 || o.grid > 2048 || o.extent < 16 || o.extent > 250 || !(o.fit > .1f && o.fit <= 1) || o.scale < 0 || !(o.fps >= 1 && o.fps <= 120) ||
+        o.zoom < 0 || o.zoom > 8 || (o.raster && (o.raster < 128 || o.raster > 2048)) || o.motion_lod < 0 || o.motion_lod > 4 || (o.detail != 0 && !(o.detail >= .25f && o.detail <= 8))) {
+        const int rc = sdk_fail(&rep, "SDK_BAKE_OPTIONS", "Недопустимые опции: grid 256..2048, extent 16..250, fit 0.1..1, scale>=0, fps 1..120, zoom 0..8, raster 128..2048, motion-lod 0..4, detail 0.25..8");
         sdk_report_free(&rep);
         return rc;
     }

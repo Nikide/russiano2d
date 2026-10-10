@@ -22,6 +22,8 @@ set(R2D_SDK_SOURCES
     sdk_obj.c
     sdk_fbx.c
     sdk_bake3.c
+    sdk_v2to3.c
+    "${CMAKE_SOURCE_DIR}/src/rotsprite_math.c"
     sdk_char.c
     sdk_animation.c
     sdk_world.c

@@ -27,6 +27,8 @@ typedef struct RotSprite {
     R3Light light3;
     R3Work work3;
     int out_size;
+    int motion_lod, still, up[4];    // грубее во время движения; сколько кадров поза не менялась; область текстуры к загрузке
+    bool coarse, drawn;
 } RotSprite;
 
 // --- параллельный цикл для синтеза v3: рабочие потоки живут до выхода процесса ---------------
@@ -87,6 +89,18 @@ static bool ensure_pixels(RotSprite *r,int size)
     if(r->sample_depth){float *d=realloc(r->sample_depth,(size_t)size*size*sizeof(float));if(!d)return false;r->sample_depth=d;memset(d,0,(size_t)size*size*sizeof(float));}
     r->out_size=size;return true;
 }
+// v3: накопить область результата, изменённую синтезом, до следующей загрузки текстуры.
+static void rot_touch(RotSprite *r)
+{
+    if(r->version!=3)return;
+    const int *t=r->work3.touched;
+    if(t[2]<=t[0] || t[3]<=t[1])return;
+    if(r->up[2]<=r->up[0] || r->up[3]<=r->up[1]){memcpy(r->up,t,sizeof r->up);return;}
+    if(t[0]<r->up[0])r->up[0]=t[0];
+    if(t[1]<r->up[1])r->up[1]=t[1];
+    if(t[2]>r->up[2])r->up[2]=t[2];
+    if(t[3]>r->up[3])r->up[3]=t[3];
+}
 static bool anime_draw(RotSprite *r,const R2DRotAtlas *surface,double yaw,double pitch,int eyes,int mouth)
 {
     if(r->version==3){
@@ -95,6 +109,9 @@ static bool anime_draw(RotSprite *r,const R2DRotAtlas *surface,double yaw,double
 #ifndef __EMSCRIPTEN__
         r->work3.parallel=rot_parallel;
 #endif
+        // движение (поза менялась в последние кадры) рисуется на motion_lod уровней грубее; первый кадр и покой — в полном качестве
+        r->coarse=r->motion_lod>0 && r->drawn && r->still<4;
+        r->work3.lod_bias=r->coarse?r->motion_lod:0;
         return r2d_rot3_draw(&r->m3,yaw,pitch,&r->rig,&r->light3,r->out_size,&r->work3,r->pixels,r->sample_depth);
     }
     // Main-thread synthesis is serial: shared supersampling scratch, private output.
@@ -286,12 +303,21 @@ static JSValue update_pose(JSContext *ctx, JSValueConst self, int argc, JSValueC
         else r2d_rotsprite_raster(r->atlas->pixels,r->atlas->w,r->atlas->h,r->atlas->pitch,yaw,pitch,r->pixels);
         if(!drawn){r->rig.brows=previous_brows;return JS_ThrowOutOfMemory(ctx);}
         r->dirty=false;r->texture_dirty=true;r->yaw=yaw;r->pitch=pitch;r->eyes=eyes;r->mouth=mouth;r->revision++;
+        r->still=0;r->drawn=true;rot_touch(r);
+    } else if(r->version==3 && r->anime) {
+        // поза устоялась: кадр, нарисованный в движении грубее, дорисовывается в полном качестве
+        if(r->still<1000)r->still++;
+        if(r->coarse && r->still>=4) {
+            if(!anime_draw(r,&r->surface,r->yaw,r->pitch,r->eyes,r->mouth))return JS_ThrowOutOfMemory(ctx);
+            r->texture_dirty=true;r->revision++;rot_touch(r);
+        }
     }
     if(upload && r->texture_dirty) {
-        int size=raster_size(r);
-        if(!r2d_texture_upload_region(r->renderer,r->texture,0,0,size,size,r->pixels,size*4))
+        int size=raster_size(r),x=0,y=0,w=size,h=size;
+        if(r->version==3 && r->up[2]>r->up[0] && r->up[3]>r->up[1]) {x=r->up[0];y=r->up[1];w=r->up[2]-x;h=r->up[3]-y;}   // v3: только изменённая область
+        if(!r2d_texture_upload_region(r->renderer,r->texture,x,y,w,h,r->pixels+((size_t)y*size+x)*4,size*4))
             return JS_ThrowInternalError(ctx,"RotSprite: не удалось обновить GPU-текстуру");
-        r->texture_dirty=false;
+        r->texture_dirty=false;memset(r->up,0,sizeof r->up);
     }
     return JS_NewInt32(ctx,r->sprite);
 }
@@ -517,7 +543,7 @@ static JSValue file_stamp(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     return JS_NewString(ctx,stamp);
 }
 
-// Размер растра и освещение синтеза v3: rotSpriteConfig(handle, size, [24 числа света]).
+// Размер растра, освещение, детализация и вид синтеза v3: rotSpriteConfig(handle, size, [24 числа света], detail, {eye,window,cull,motionLod}).
 static JSValue config(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     R2D_UNUSED(self);RotSprite *r=get(ctx,argc,argv);if (!r) return JS_EXCEPTION;
@@ -530,6 +556,44 @@ static JSValue config(JSContext *ctx,JSValueConst self,int argc,JSValueConst *ar
         if (JS_ToFloat64(ctx,&detail,argv[3])<0) return JS_EXCEPTION;
         if (!(detail>=.25 && detail<=8)) return JS_ThrowRangeError(ctx,"RotSprite: detail 0.25..8 пикселей на тексель");
         if ((float)detail!=r->work3.detail) {r->work3.detail=(float)detail;r->dirty=true;}
+    }
+    if (argc>4 && JS_IsObject(argv[4])) {
+        // вид: {eye:[x,y,z]|null — глаз перспективы (единицы Re2D, z>0), window:[x0,y0,x1,y1]|null — видимое окно в долях, cull:boolean}
+        float eye[3]={0,0,0},window[4]={0,0,0,0};int persp=0;
+        JSValue item=JS_GetPropertyStr(ctx,argv[4],"eye");
+        if (JS_IsArray(item)) {
+            for (int i=0;i<3;i++) {
+                JSValue n=JS_GetPropertyUint32(ctx,item,i);double d=0;
+                int ok=JS_ToFloat64(ctx,&d,n);JS_FreeValue(ctx,n);
+                if (ok<0 || !isfinite(d) || fabs(d)>1000) {JS_FreeValue(ctx,item);return JS_ThrowRangeError(ctx,"RotSprite: eye — три конечных числа");}
+                eye[i]=(float)d;
+            }
+            if (eye[2]<=1e-3f) {JS_FreeValue(ctx,item);return JS_ThrowRangeError(ctx,"RotSprite: eye.z должен быть > 0 (глаз перед моделью)");}
+            persp=1;
+        } else if (!JS_IsNull(item) && !JS_IsUndefined(item)) {JS_FreeValue(ctx,item);return JS_ThrowTypeError(ctx,"RotSprite: eye — массив [x,y,z] или null");}
+        JS_FreeValue(ctx,item);
+        item=JS_GetPropertyStr(ctx,argv[4],"window");
+        if (JS_IsArray(item)) {
+            for (int i=0;i<4;i++) {
+                JSValue n=JS_GetPropertyUint32(ctx,item,i);double d=0;
+                int ok=JS_ToFloat64(ctx,&d,n);JS_FreeValue(ctx,n);
+                if (ok<0 || !(d>=0 && d<=1)) {JS_FreeValue(ctx,item);return JS_ThrowRangeError(ctx,"RotSprite: window — четыре доли 0..1");}
+                window[i]=(float)d;
+            }
+            if (!(window[2]>window[0] && window[3]>window[1])) {JS_FreeValue(ctx,item);return JS_ThrowRangeError(ctx,"RotSprite: window — [x0,y0,x1,y1], x1>x0 и y1>y0");}
+        } else if (!JS_IsNull(item) && !JS_IsUndefined(item)) {JS_FreeValue(ctx,item);return JS_ThrowTypeError(ctx,"RotSprite: window — массив [x0,y0,x1,y1] или null");}
+        JS_FreeValue(ctx,item);
+        item=JS_GetPropertyStr(ctx,argv[4],"cull");
+        const int cull=JS_ToBool(ctx,item)>0;JS_FreeValue(ctx,item);
+        item=JS_GetPropertyStr(ctx,argv[4],"motionLod");
+        int motion_lod=0;
+        if (!JS_IsUndefined(item) && !JS_IsNull(item) && JS_ToInt32(ctx,&motion_lod,item)<0) {JS_FreeValue(ctx,item);return JS_EXCEPTION;}
+        JS_FreeValue(ctx,item);
+        if (motion_lod<0 || motion_lod>4) return JS_ThrowRangeError(ctx,"RotSprite: motionLod 0..4");
+        r->motion_lod=motion_lod;
+        if (persp!=r->work3.persp || cull!=r->work3.cull || memcmp(eye,r->work3.eye,sizeof eye) || memcmp(window,r->work3.window,sizeof window)) {
+            r->work3.persp=persp;r->work3.cull=cull;memcpy(r->work3.eye,eye,sizeof eye);memcpy(r->work3.window,window,sizeof window);r->dirty=true;
+        }
     }
     if (argc>2 && JS_IsArray(argv[2])) {
         float v[24];
@@ -583,7 +647,7 @@ int r2d_rotsprite_install(JSContext *ctx, JSValue engine)
     JS_SetPropertyStr(ctx,engine,"rotSpritePrepare",JS_NewCFunction(ctx,prepare_pose,"rotSpritePrepare",3));
     JS_SetPropertyStr(ctx,engine,"rotSpritePose",JS_NewCFunction(ctx,pose,"rotSpritePose",3));
     JS_SetPropertyStr(ctx,engine,"rotSpriteInfo",JS_NewCFunction(ctx,info,"rotSpriteInfo",1));
-    JS_SetPropertyStr(ctx,engine,"rotSpriteConfig",JS_NewCFunction(ctx,config,"rotSpriteConfig",4));
+    JS_SetPropertyStr(ctx,engine,"rotSpriteConfig",JS_NewCFunction(ctx,config,"rotSpriteConfig",5));
     JS_SetPropertyStr(ctx,engine,"rotSpriteDispose",JS_NewCFunction(ctx,release,"rotSpriteDispose",1));
     return 0;
 }

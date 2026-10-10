@@ -149,13 +149,13 @@ $.ready(()=>{
     globalThis.dustNPCs=[];
     for(const [x,y,h] of [[360,240,0],[1520,240,128],[1200,1040,128],[1000,1660,0],[2280,1840,0],[1840,1240,0]]){
         const talker=x===npcAt.x&&y===npcAt.y,isClub=x>=2080;
-        const sprite=$.re2dSprite.from(talker?base+'npc.character.json':isClub?base+'club.character.json':'demos/rotsprite/russi.character.json').re2dStyle('anime').at(x,y).depth(h).size(72,88).angle(isClub?Math.PI:Math.PI/2).re2dMotion(talker?'idle':isClub?'chickenDance':'idle',talker?1:isClub?1:0).hide();world.add(sprite);dustNPCs.push(sprite);
+        const sprite=$.re2dSprite.from(talker?base+'npc.character.json':isClub?base+'club.character.json':'demos/rotsprite/russi3.character.json').re2dStyle('anime').at(x,y).depth(h).size(72,88).angle(isClub?Math.PI:Math.PI/2).re2dMotion(talker?'idle':isClub?'chickenDance':'idle',talker?1:isClub?1:0).hide();world.add(sprite);dustNPCs.push(sprite);
         if(talker)globalThis.talkNpc=sprite;if(isClub)globalThis.clubDancer=sprite;
     }
     globalThis.annexNPCs=[];
     const npcGuns=['smg','pistol','sniper','shotgun','lmg'];
     for(const [x,y,h] of [[3960,1700,0],[4160,960,0],[5600,1700,288],[4000,2480,0],[6800,2200,0]]){
-        const key=npcGuns[annexNPCs.length],sp=$.re2dSprite.from('demos/rotsprite/russi.character.json').re2dStyle('anime').at(x,y).depth(h).size(72,88).angle(Math.PI/2).hide();
+        const key=npcGuns[annexNPCs.length],sp=$.re2dSprite.from('demos/rotsprite/russi3.character.json').re2dStyle('anime').at(x,y).depth(h).size(72,88).angle(Math.PI/2).hide();
         sp.re2dMotion($.re2dSprite.definition(sp).equipment[key].pose,0);
         $.re2dSprite.equip(sp,key).re2dStyle('anime').hide();   // weapon is a Re2DSprite attached to her hand socket
         world.add(sp);annexNPCs.push(sp);
@@ -169,7 +169,7 @@ $.ready(()=>{
     globalThis.clubAudio=$.re2dWorldAudio(world);
     globalThis.dustSteps={count:0,last:null,variant:0};globalThis.dustWalkAudio=dustWalkAudio;
     globalThis.dustWind=snd(base+'audio/wind.wav',{x:view.x,y:view.y,h:800,range:2000,reference:1000,volume:.14,loop:true,hrtf:true,priority:10});
-    globalThis.clubMusic=snd(base+'club_loop.mp3',{x:2352,y:1840,h:64,range:1300,reference:130,volume:.7,loop:true,hrtf:true});
+    globalThis.clubMusic=clubAudio.source(base+'club_loop.mp3',{x:2352,y:1840,h:64,range:1300,reference:130,volume:.7,loop:true,hrtf:true});
     dustCamera('T SPAWN');
     $.window.mouseLock(true);
 });
@@ -230,13 +230,13 @@ function loadFireMap(){
 }
 function dustAudioPark(){
     if(globalThis.dustWind){dustWind.stop();globalThis.dustWind=null;}
-    if(globalThis.clubMusic){clubMusic.stop();globalThis.clubMusic=null;}
+    if(globalThis.clubMusic){try{clubMusic.stop();}catch(e){}globalThis.clubMusic=null;}
     if(globalThis.npcVoice){npcVoice.stop();globalThis.npcVoice=null;}
     for(const [,src] of annexAmbient.active)src.stop();annexAmbient.active.clear();
 }
 function dustAudioResume(){
     globalThis.dustWind=snd(base+'audio/wind.wav',{x:view.x,y:view.y,h:800,range:2000,reference:1000,volume:.14,loop:true,hrtf:true,priority:10});
-    globalThis.clubMusic=snd(base+'club_loop.mp3',{x:2352,y:1840,h:64,range:1300,reference:130,volume:.7,loop:true,hrtf:true});
+    globalThis.clubMusic=clubAudio.source(base+'club_loop.mp3',{x:2352,y:1840,h:64,range:1300,reference:130,volume:.7,loop:true,hrtf:true});
 }
 function cleanFire(){
     for(const e of fireMap.fires){e.flame.remove();e.smoke.remove();e.light.remove();}
@@ -314,7 +314,7 @@ function fireBoom(){
 // ---- Zombies: plain objects (no classes); movement/hearing/line of sight are coarse queries on the native world ----
 function zombieVoice(z,file,volume){return snd(base+'annex/'+file,{x:z.x,y:z.y,h:z.h+52,range:2200,reference:110,volume,loop:false,hrtf:true,priority:75});}
 function zombieSpawn(x,y){
-    const sp=$.re2dSprite.from(base+'zombie/zombie.character.json').re2dStyle('anime').at(x,y).depth(0).size(96,112).angle(0).re2dMotion('walk',.25).hide();
+    const sp=$.re2dSprite.from(base+'zombie3/zombie.character.json').at(x,y).depth(0).size(128,128).angle(0).re2dMotion('walk',.25).hide();
     world.add(sp);
     fireMap.zombies.push({sp,x,y,h:0,hp:3,state:'idle',t:0,cool:0,hitT:0,growl:1.5+fxRand()*5,dead:false,gone:false,speed:48+fxRand()*26,face:fxRand()*6.283,anim:'idle'});
 }
@@ -327,11 +327,11 @@ function zombieHit(z,dmg){
     if(z.dead)return;
     z.hp-=dmg;z.state='chase';
     if(z.hp<=0){
-        z.dead=true;z.t=0;z.sp.re2dMotion('death',1);fireMap.kills++;
+        z.dead=true;z.t=0;z.sp.re2dMotion('walk',0);fireMap.kills++;
         zombieVoice(z,'zombie_die.wav',1);
         snd('demos/assets/audio/sfx/enemy_die.ogg',{x:z.x,y:z.y,h:z.h+40,range:1400,reference:100,volume:.5,loop:false,hrtf:true,priority:70});
     }else{
-        z.hitT=.35;z.anim='hit';z.sp.re2dMotion('hit',1);
+        z.hitT=.35;z.anim='hit';
         zombieVoice(z,'zombie_growl_'+(1+Math.floor(fxRand()*3))+'.wav',.9);
         snd('demos/assets/audio/sfx/enemy_hit.ogg',{x:z.x,y:z.y,h:z.h+45,range:1200,reference:100,volume:.7,loop:false,hrtf:true,priority:70});
     }
@@ -344,13 +344,13 @@ function playerHurt(d){
 }
 function zombieUpdate(z,dt){
     if(z.gone)return;
-    if(z.dead){z.t+=dt;if(z.t>9){z.sp.remove();z.gone=true;}return;}
+    if(z.dead){z.t+=dt;z.sp.re2dPose(0,-Math.min(88,z.t*220));if(z.t>9){z.sp.remove();z.gone=true;}return;}
     z.cool=Math.max(0,z.cool-dt);z.growl-=dt;
     const dx=view.x-z.x,dy=view.y-z.y,dist=Math.hypot(dx,dy);
     const sees=dist<1100&&!world.ray({x:z.x,y:z.y,height:z.h+54},{x:view.x,y:view.y,height:view.h-8});
     if(sees||(fireMap.noise>0&&dist<1500))z.state='chase';
     if(z.growl<=0&&dist<1700){zombieVoice(z,'zombie_growl_'+(1+Math.floor(fxRand()*3))+'.wav',z.state==='chase'?1:.75);z.growl=3.5+fxRand()*5;}
-    if(z.hitT>0){z.hitT-=dt;if(z.hitT<=0)z.anim='';return;}
+    if(z.hitT>0){z.hitT-=dt;z.sp.color('#ff9a9a');if(z.hitT<=0){z.anim='';z.sp.color('#ffffff');}return;}
     if(z.state==='chase'){
         z.face=Math.atan2(dy,dx);
         if(dist>64){
@@ -394,33 +394,45 @@ function fireUpdate(dt){
     fireMap.booms=fireMap.booms.filter(b=>{if(fireMap.t<b.until)return true;for(const n of b.nodes)n.remove();return false;});
     for(const z of fireMap.zombies)zombieUpdate(z,dt);
 }
-// ---- Player weapon: AKS-74U with hands, baked by r2d-sdk from the supplied FBX (flip-book of Re2DSprite frames) ----
-// The viewmodel is an ordinary Re2DSprite over the world frame; its tint follows `world.lightAt`, so it goes dark in a dark room.
+// ---- Player weapon: AKS-74U with hands, one dense Re2DSprite v3 baked by r2d-sdk from the supplied FBX ----
+// The viewmodel is an ordinary 2D sprite over the world frame, synthesized with a perspective eye (`projection.eye` in aks.character.json):
+// the sprite centre is the view axis (the crosshair), so the weapon sits where a first-person camera would see it.
+// Its tint follows `world.lightAt`, so it goes dark in a dark room.
 const WSND=base+'audio/weapon/';
-const AKS=globalThis.AKS={x:615,y:478,size:3900,yaw:34,pitch:-6,muzzleX:-58,muzzleY:-152};
+// Sprite nodes live in window pixels around the screen centre (the 2D camera stays at 0,0), so the view axis is the node position (0,0).
+const AKS=globalThis.AKS={fov:52,yaw:7,pitch:-4,cx:0,cy:0,muzzle:[2.86,-12.15,-30.82],eye:[0,0,1],focal:1,size:2100};
+// Model point (Re2D units, idle pose) -> screen point of the viewmodel sprite; the same maths as the native v3 projection.
+function aksProject(p){
+    const yaw=AKS.yaw*Math.PI/180,pit=AKS.pitch*Math.PI/180,cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pit),sp=Math.sin(pit);
+    const x=cy*p[0]+sy*p[2],y=sp*sy*p[0]+cp*p[1]-sp*cy*p[2],z=-cp*sy*p[0]+sp*p[1]+cp*cy*p[2],k=AKS.focal/(AKS.eye[2]-z);
+    return{x:(x-AKS.eye[0])*k,y:(y-AKS.eye[1])*k};
+}
 const weaponList=globalThis.weaponList=['aks74u','ak47','pistol','revolver','shotgun','smg','sniper','lmg'];
 const staticGuns={ak47:[46,138],pistol:[13,138],revolver:[15,138],shotgun:[48,138],smg:[30,138],sniper:[56,138],lmg:[52,138]};
 const aks=globalThis.aks={frames:{},clips:null,node:null,clip:'idle',t:0,ammo:30,mag:30,cool:0,flash:[],flashT:0,recoil:0,recoilYaw:0,timers:[],reloadClicked:false};
 globalThis.weaponIndex=0;globalThis.vmKick=0;
 function weaponInit(){
-    aks.clips=JSON.parse($.fs.readText(base+'aks74u/frames.json'));
-    for(const clip of Object.values(aks.clips))for(const name of clip.frames){
-        aks.frames[name]=$.re2dSprite.from(base+'aks74u/'+name+'.character.json').re2dStyle('anime').at(AKS.x,AKS.y).size(AKS.size,AKS.size).re2dPose(AKS.yaw,AKS.pitch).layer(5).hide();
-    }
+    // v3 viewmodel: one dense Re2DSprite with skin clips idle/draw/fire/reload baked by `r2d-sdk bake-re2d3`
+    aks.clips={idle:{seconds:.0167},draw:{seconds:1},fire:{seconds:.3},reload:{seconds:1.8833}};
+    const def=JSON.parse($.fs.readText(base+'aks3/aks.character.json')).projection;
+    AKS.eye=def.eye;AKS.focal=$.window.size().h/2/Math.tan(AKS.fov*Math.PI/360);
+    AKS.size=AKS.focal*def.extent/(def.eye[2]*def.bodyScale);        // sprite size that gives the chosen field of view
+    AKS.flashAt=aksProject(AKS.muzzle);
+    aks.node=$.re2dSprite.from(base+'aks3/aks.character.json').at(AKS.cx,AKS.cy).size(AKS.size,AKS.size).re2dPose(AKS.yaw,AKS.pitch).layer(5).hide();
     for(let i=1;i<=4;i++)aks.flash.push($('<sprite>',{src:base+'annex/flash_'+i+'.png'}).blend('add').layer(6).hide());
     setWeapon(0);
 }
 globalThis.setWeapon=i=>setWeapon(i);
-function aksFrame(name){
-    if(aks.node)aks.node.hide();
-    aks.node=aks.frames[name];aks.node.show();
+function aksFrame(name,t){
+    if(aks.shown!==name){aks.node.re2dMotion(name,0);aks.shown=name;}
+    aks.node.re2dSeek(Math.min(t,aks.clips[name].seconds));
 }
 function setWeapon(i){
-    if(aks.node){aks.node.hide();aks.node=null;}
+    if(aks.node)aks.node.hide();
     if(globalThis.vm){vm.remove();globalThis.vm=null;}
     weaponIndex=((i%weaponList.length)+weaponList.length)%weaponList.length;
     const key=weaponList[weaponIndex];
-    if(key==='aks74u'){aks.clip='draw';aks.t=0;aks.cool=0;aksFrame('draw_00');return;}
+    if(key==='aks74u'){aks.clip='draw';aks.t=0;aks.cool=0;aks.shown=null;aks.node.show();return;}
     const [len,yaw]=staticGuns[key],px=key==='pistol'||key==='revolver'?400:key==='smg'?820:key==='sniper'||key==='lmg'?1250:1100,size=128.4*px/len;
     globalThis.vm=$.re2dSprite.from('demos/rotsprite/weapons/'+key+'_fp.character.json').re2dStyle('anime').at(610,470).size(size,size).re2dPose(yaw,-24).layer(5);
     globalThis.vmYaw=yaw;
@@ -473,15 +485,15 @@ function aksUpdate(dt){
     aks.timers=aks.timers.filter(t=>t.t>0);
     const clips=aks.clips;
     if(aks.clip==='draw'){
-        const c=clips.draw,i=Math.min(c.frames.length-1,Math.floor(aks.t/c.seconds*c.frames.length));aksFrame(c.frames[i]);
-        if(aks.t>=c.seconds){aks.clip='idle';aks.t=0;}
+        aksFrame('draw',aks.t);
+        if(aks.t>=clips.draw.seconds){aks.clip='idle';aks.t=0;}
     }else if(aks.clip==='reload'){
-        const c=clips.reload,i=Math.min(c.frames.length-1,Math.floor(aks.t/c.seconds*c.frames.length));aksFrame(c.frames[i]);
+        aksFrame('reload',aks.t);
         if(!aks.reloadClicked&&aks.t>1.02){aks.reloadClicked=true;weaponSound('rifle-mag-insert.wav',view.x,view.y,view.h-16,.9,900,60);}
-        if(aks.t>=c.seconds){aks.clip='idle';aks.t=0;aks.ammo=aks.mag;}
+        if(aks.t>=clips.reload.seconds){aks.clip='idle';aks.t=0;aks.ammo=aks.mag;}
     }else{
-        if(aks.clip==='fire'){const c=clips.fire,i=Math.min(c.frames.length-1,Math.floor(aks.t/.2*c.frames.length));aksFrame(c.frames[i]);if(aks.t>.2){aks.clip='idle';aks.t=0;}}
-        else aksFrame(clips.idle.frames[0]);
+        if(aks.clip==='fire'){aksFrame('fire',aks.t);if(aks.t>clips.fire.seconds){aks.clip='idle';aks.t=0;}}
+        else aksFrame('idle',0);
         if($.input.pressed('r')&&aks.ammo<aks.mag){aks.clip='reload';aks.t=0;aks.reloadClicked=false;}
         else if(firing&&aks.cool<=0){
             if(aks.ammo>0)aksShoot();
@@ -491,11 +503,12 @@ function aksUpdate(dt){
     // recoil settles; the muzzle flash is a short additive sprite at the barrel tip
     aks.recoil=Math.max(0,aks.recoil-dt*5.5);aks.recoilYaw*=Math.max(0,1-dt*8);
     const sp=Math.hypot(motion.vx,motion.vy)*(motion.grounded?1:0),bob=Math.sin(clubTime*9)*Math.min(1,sp/240);
-    const nodeX=AKS.x+bob*3+aks.recoilYaw*6,nodeY=AKS.y+Math.abs(bob)*3+aks.recoil*7;
-    aks.node.at(nodeX,nodeY).re2dPose(AKS.yaw,AKS.pitch+aks.recoil*1.8).color(worldTint());
+    // recoil: the sprite grows about the view axis (the weapon kicks toward the eye) and drops a little; no re-synthesis is needed for that
+    const kick=1+aks.recoil*.03,size=AKS.size*kick,nodeX=AKS.cx+bob*3+aks.recoilYaw*4,nodeY=AKS.cy+Math.abs(bob)*3+aks.recoil*4;
+    aks.node.at(nodeX,nodeY).size(size,size).color(worldTint());
     if(aks.flashT>0){
         aks.flashT-=dt;
-        aks.flash.forEach((f,i)=>{if(i===aks.flashIndex&&aks.flashT>0){const fs=400*aks.flashScale;f.show().size(fs,fs).at(nodeX+AKS.muzzleX-fs/2,nodeY+AKS.muzzleY-fs/2).rotate?.(aks.flashRot);}else f.hide();});
+        aks.flash.forEach((f,i)=>{if(i===aks.flashIndex&&aks.flashT>0){const fs=520*aks.flashScale;f.show().size(fs,fs).at(nodeX+AKS.flashAt.x*kick,nodeY+AKS.flashAt.y*kick).rotate?.(aks.flashRot);}else f.hide();});
     }else aks.flash.forEach(f=>f.hide());
 }
 function weaponUpdate(dt){
@@ -538,6 +551,7 @@ function npcLookAndTalk(dt){
     if(distance>620)npcHasSpoken=false;
 }
 $.update(dt=>{
+    if(mouseLocked&&$.input.mousePressed('left')&&!$.window.mouseLock())$.window.mouseLock(true);   // a click re-captures the mouse if the window started without focus
     if($.input.pressed('escape')){mouseLocked=false;$.window.mouseLock(false);}
     if($.input.pressed('m')){mouseLocked=!mouseLocked;$.window.mouseLock(mouseLocked);}
     if($.input.pressed('q'))$.quit();

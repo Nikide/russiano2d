@@ -73,6 +73,10 @@ export function validateRotDefinition(source) {
     // v3: размер растра синтеза и освещение (см. docs/RE2DSPRITE_V3.md); у v2 эти поля игнорируются.
     if (d.projection.raster!=null && (!Number.isInteger(d.projection.raster) || d.projection.raster<128 || d.projection.raster>2048)) throw new RangeError('Re2DSprite JSON: projection.raster — целое 128..2048');
     if (d.projection.light!=null) d.projection.light=normalizeRotLight(d.projection.light);
+    if (d.projection.eye!=null && !(Array.isArray(d.projection.eye) && d.projection.eye.length===3 && d.projection.eye.every(Number.isFinite) && d.projection.eye[2]>0)) throw new RangeError('Re2DSprite JSON: projection.eye — [x,y,z], z>0 (глаз перед моделью, единицы Re2D)');
+    if (d.projection.window!=null && !(Array.isArray(d.projection.window) && d.projection.window.length===4 && d.projection.window.every(v=>typeof v==='number' && v>=0 && v<=1) && d.projection.window[2]>d.projection.window[0] && d.projection.window[3]>d.projection.window[1])) throw new RangeError('Re2DSprite JSON: projection.window — [x0,y0,x1,y1] в долях 0..1');
+    if (d.projection.cull!=null && typeof d.projection.cull!=='boolean') throw new TypeError('Re2DSprite JSON: projection.cull — boolean');
+    if (d.projection.motionLod!=null && !(Number.isInteger(d.projection.motionLod) && d.projection.motionLod>=0 && d.projection.motionLod<=4)) throw new RangeError('Re2DSprite JSON: projection.motionLod — целое 0..4');
     if (d.projection.detail!=null && !(typeof d.projection.detail==='number' && d.projection.detail>=.25 && d.projection.detail<=8)) throw new RangeError('Re2DSprite JSON: projection.detail 0.25..8');
     rig.sockets=rig.sockets ?? [];const sockets=new Set();
     if (!Array.isArray(rig.sockets) || rig.sockets.length>128) throw new TypeError('Re2DSprite JSON: sockets');
@@ -429,7 +433,7 @@ export function installRotSprite($) {
                 if (atlasInfo.version!==2 && atlasInfo.version!==3) throw new TypeError('Re2DSprite JSON: нужен PNG v2 или контейнер v3');
                 // v3: размер растра и освещение синтеза задаёт JSON (`projection.raster`, `projection.light`).
                 if (atlasInfo.version===3) {
-                    r.sprite=engine.rotSpriteConfig(r.handle,d.projection.raster ?? 1024,d.projection.light ? rotLightArray(d.projection.light) : undefined,d.projection.detail);
+                    r.sprite=engine.rotSpriteConfig(r.handle,d.projection.raster ?? 1024,d.projection.light ? rotLightArray(d.projection.light) : undefined,d.projection.detail,{eye:d.projection.eye ?? null,window:d.projection.window ?? null,cull:d.projection.cull===true,motionLod:d.projection.motionLod ?? 0});
                     r.width=engine.rotSpriteInfo(r.handle).width;
                 }
                 Object.assign(r,loaded,{boneOverrides:{},layers:{},children:new Set(),attachment:null,definitionStamps:{}});

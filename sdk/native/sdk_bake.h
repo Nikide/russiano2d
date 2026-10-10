@@ -170,6 +170,7 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
 void bk_report_json(const BkResult *res, const BkOptions *opt, const BkScene *scene, const SdkReport *rep, R2dSb *out);
 
 int sdk_cmd_bake_re2d(const SdkArgs *a);
+int sdk_cmd_convert_re2d3(const SdkArgs *a); // sdk_v2to3.c: Re2DSprite v2 → v3
 int sdk_cmd_bake_re2d3(const SdkArgs *a);   // sdk_bake3.c: Re2DSprite v3 (плотная геометрическая картинка)
 
 #ifdef __cplusplus

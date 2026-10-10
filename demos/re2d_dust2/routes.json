@@ -1064,6 +1064,17 @@
     },
     {
       "rect": [
+        3360,
+        2400,
+        480,
+        480
+      ],
+      "name": "ANNEX / FIRE ALARM",
+      "floor": 0,
+      "indoor": true
+    },
+    {
+      "rect": [
         2400,
         800,
         960,
@@ -1281,6 +1292,12 @@
       2000,
       48,
       0
+    ],
+    "FIRE ALARM": [
+      3600,
+      2460,
+      48,
+      90
     ]
   },
   "annexLights": [
@@ -1394,6 +1411,32 @@
         "r": 480,
         "speed": -0.4,
         "phase": 3.14
+      }
+    },
+    {
+      "x": 3600,
+      "y": 2640,
+      "h": 250,
+      "radius": 520,
+      "intensity": 2.4,
+      "color": "#ff2010",
+      "pulse": {
+        "min": 0.05,
+        "max": 1.0,
+        "rate": 2.2
+      }
+    },
+    {
+      "x": 3600,
+      "y": 2440,
+      "h": 200,
+      "radius": 300,
+      "intensity": 1.2,
+      "color": "#ff4020",
+      "pulse": {
+        "min": 0.1,
+        "max": 1.0,
+        "rate": 2.2
       }
     }
   ],
@@ -1550,6 +1593,15 @@
       "range": 900,
       "reference": 100,
       "volume": 0.8
+    },
+    {
+      "file": "annex/fire_alarm.mp3",
+      "x": 3600,
+      "y": 2700,
+      "h": 250,
+      "range": 1500,
+      "reference": 220,
+      "volume": 1.0
     }
   ],
   "annexThemes": [
@@ -1599,6 +1651,16 @@
         2400,
         640,
         640
+      ],
+      "floor": "hazard",
+      "ceil": "concrete"
+    },
+    {
+      "rect": [
+        3360,
+        2400,
+        480,
+        480
       ],
       "floor": "hazard",
       "ceil": "concrete"
@@ -1673,6 +1735,7 @@
     267,
     268,
     269,
-    277
+    270,
+    278
   ]
 }

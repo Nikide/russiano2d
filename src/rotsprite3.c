@@ -258,12 +258,20 @@ typedef struct Frame {
     R3Work *work;
     const R2DRotRig *rig;
     int M, size, ss;
-    double P[256][12];                  // кость → экранная матрица (xy в px внутреннего буфера, z — глубина)
+    float P[256][12];                   // кость → экранная матрица (xy в px внутреннего буфера, z — глубина)
     float Nm[256][9];                   // кость → поворот нормали в пространство вида
     bool hidden[256];
     float key[3], fill[3], half[3];
     int band_h, bands;
     float depth_scale;
+    float eye_px[2], eye_z, near_den;     // перспектива: глаз по x,y в пикселях, по z — в единицах Re2D
+    float inv_ppu;
+    int persp, cull;
+    int clip[4];                          // видимое окно во внутренних пикселях: x0,y0,x1,y1 (x1,y1 не включаются)
+    int rect[4];                          // область свёртки в пикселях результата
+    float pow_lut[66];                    // (n·h)^shine на отрезке 0.55..1: без powf в пикселе
+    const uint8_t *tmp;                   // снимок результата для продолжения цвета под прозрачные пиксели
+    int trect[4];
     uint8_t *out;
     float *sample_depth;
 } Frame;
@@ -281,18 +289,34 @@ static void task_transform(void *vctx, int index)
         float sx = 0, sy = 0, sz = 0, nx = 0, ny = 0, nz = 0;
         const float ix = L->nrm[i * 3] / 127.0f, iy = L->nrm[i * 3 + 1] / 127.0f, iz = L->nrm[i * 3 + 2] / 127.0f;
         for (int q = 0; q < 4 && w[q]; ++q) {
-            const double *m = F->P[b[q]];
+            const float *m = F->P[b[q]];
             const float *r = F->Nm[b[q]];
             const float k = w[q] / 255.0f;
-            sx += k * (float)(m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3]);
-            sy += k * (float)(m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7]);
-            sz += k * (float)(m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11]);
+            sx += k * (m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3]);
+            sy += k * (m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7]);
+            sz += k * (m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11]);
             nx += k * (r[0] * ix + r[1] * iy + r[2] * iz);
             ny += k * (r[3] * ix + r[4] * iy + r[5] * iz);
             nz += k * (r[6] * ix + r[7] * iy + r[8] * iz);
         }
         const float nl = sqrtf(nx * nx + ny * ny + nz * nz);
         if (nl > 1e-9f) { nx /= nl; ny /= nl; nz /= nl; }
+        uint8_t flags = F->hidden[b[0]] ? 1 : 0;        // бит 0 — вершины нет (скрытая часть или за ближней плоскостью), бит 1 — отвернулась
+        float tx = 0, ty = 0, tz = 1;                   // направление на зрителя
+        if (F->persp) {
+            // луч из глаза через точку пересекает плоскость z=0 в масштабе проекции: ближние части крупнее, ось взгляда — центр спрайта
+            const float den = F->eye_z - sz;
+            if (den < F->near_den) flags |= 1;
+            else {
+                const float k = F->eye_z / den;
+                tx = (F->eye_px[0] - sx) * F->inv_ppu;
+                ty = (F->eye_px[1] - sy) * F->inv_ppu;
+                tz = den;
+                sx = (sx - F->eye_px[0]) * k;
+                sy = (sy - F->eye_px[1]) * k;
+            }
+        }
+        if (F->cull && nx * tx + ny * ty + nz * tz < -.15f * sqrtf(tx * tx + ty * ty + tz * tz)) flags |= 2;
         W->vx[i] = c0 + sx;
         W->vy[i] = c0 + sy;
         W->vz[i] = sz;
@@ -300,8 +324,18 @@ static void task_transform(void *vctx, int index)
         const float r = L->rgb[i * 3] / 255.0f, g = L->rgb[i * 3 + 1] / 255.0f, bl = L->rgb[i * 3 + 2] / 255.0f;
         W->vc[i * 3] = r * r; W->vc[i * 3 + 1] = g * g; W->vc[i * 3 + 2] = bl * bl;
         W->vs[i] = L->spec[i] / 255.0f;
-        W->vhide[i] = F->hidden[b[0]];
+        W->vhide[i] = flags;
     }
+}
+
+// Линейная яркость 0..1 → байт sRGB-подобной кривой (гамма 2): таблица вместо sqrtf в каждом пикселе.
+static uint8_t g_gamma[4097];
+static bool g_gamma_ready;
+static void gamma_init(void)
+{
+    if (g_gamma_ready) return;
+    for (int i = 0; i <= 4096; ++i) g_gamma[i] = (uint8_t)(sqrtf(i / 4096.0f) * 255.0f + .5f);
+    g_gamma_ready = true;
 }
 
 static inline void shade_pixel(const Frame *F, const float n_in[3], const float col[3], float spec, uint8_t *out)
@@ -318,13 +352,17 @@ static inline void shade_pixel(const Frame *F, const float n_in[3], const float 
     float spec_term = 0;
     if (ndl > 0 && spec > 0.02f) {
         const float ndh = nx * F->half[0] + ny * F->half[1] + nz * F->half[2];
-        if (ndh > .55f) spec_term = powf(ndh, L->shine) * spec * L->spec;
+        if (ndh > .55f) {
+            const float t = fminf(64.0f, (ndh - .55f) * (64.0f / .45f));
+            const int i = (int)t;
+            spec_term = (F->pow_lut[i] + (F->pow_lut[i + 1] - F->pow_lut[i]) * (t - i)) * spec * L->spec;
+        }
     }
     for (int c = 0; c < 3; ++c) {
         const float amb = L->ground[c] + (L->sky[c] - L->ground[c]) * hemi;
         float v = col[c] * (amb + L->key_col[c] * ndl + L->fill_col[c] * ndf + rim * L->sky[c]) + spec_term * L->key_col[c] * .55f;
         v *= L->tint[c];
-        out[c] = (uint8_t)(sqrtf(fminf(1.0f, fmaxf(0.0f, v))) * 255.0f + .5f);
+        out[c] = g_gamma[(int)(fminf(1.0f, fmaxf(0.0f, v)) * 4096.0f)];
     }
     out[3] = 255;
 }
@@ -334,6 +372,17 @@ static void raster_tri(const Frame *F, int y0, int y1, int ia, int ib, int ic)
     const R3Work *W = F->work;
     const int M = F->M;
     float ax = W->vx[ia], ay = W->vy[ia], bx = W->vx[ib], by = W->vy[ib], cx = W->vx[ic], cy = W->vy[ic];
+    // пиксель рисуется, если его центр внутри: точный габарит по центрам сразу отсеивает ячейки мельче пикселя
+    const float miny = fminf(ay, fminf(by, cy)), maxy = fmaxf(ay, fmaxf(by, cy));
+    int ty0 = (int)ceilf(miny - .5f), ty1 = (int)floorf(maxy - .5f);
+    if (ty0 < y0) ty0 = y0;
+    if (ty1 > y1 - 1) ty1 = y1 - 1;
+    if (ty0 > ty1) return;
+    const float minx = fminf(ax, fminf(bx, cx)), maxx = fmaxf(ax, fmaxf(bx, cx));
+    int x0 = (int)ceilf(minx - .5f), x1 = (int)floorf(maxx - .5f);
+    if (x0 < F->clip[0]) x0 = F->clip[0];
+    if (x1 > F->clip[2] - 1) x1 = F->clip[2] - 1;
+    if (x0 > x1) return;
     float area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
     if (fabsf(area) < 1e-7f) return;
     if (area < 0) {                                         // единая ориентация
@@ -341,32 +390,27 @@ static void raster_tri(const Frame *F, int y0, int y1, int ia, int ib, int ic)
         const float tx = bx, ty = by; bx = cx; by = cy; cx = tx; cy = ty;
         area = -area;
     }
-    float minx = fminf(ax, fminf(bx, cx)), maxx = fmaxf(ax, fmaxf(bx, cx)), miny = fminf(ay, fminf(by, cy)), maxy = fmaxf(ay, fmaxf(by, cy));
-    int x0 = (int)floorf(minx - .5f), x1 = (int)ceilf(maxx - .5f), ty0 = (int)floorf(miny - .5f), ty1 = (int)ceilf(maxy - .5f);
-    if (x0 < 0) x0 = 0;
-    if (x1 > M - 1) x1 = M - 1;
-    if (ty0 < y0) ty0 = y0;
-    if (ty1 > y1 - 1) ty1 = y1 - 1;
-    if (x0 > x1 || ty0 > ty1) return;
     const float za = W->vz[ia], zb = W->vz[ib], zc = W->vz[ic], inv = 1.0f / area, eps = -area * 2e-5f;
     const float *na = W->vn + ia * 3, *nb = W->vn + ib * 3, *nc = W->vn + ic * 3;
     const float *ca = W->vc + ia * 3, *cb = W->vc + ib * 3, *cc = W->vc + ic * 3;
-    for (int y = ty0; y <= ty1; ++y) {
-        const float py = y + .5f;
-        for (int x = x0; x <= x1; ++x) {
-            const float px = x + .5f;
-            const float wa = (cx - bx) * (py - by) - (cy - by) * (px - bx);
-            const float wb = (ax - cx) * (py - cy) - (ay - cy) * (px - cx);
-            const float wc = (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+    const float sa = W->vs[ia], sb = W->vs[ib], sc = W->vs[ic];
+    // рёберные функции шагают приращениями по x и по y
+    const float dax = by - cy, day = cx - bx, dbx = cy - ay, dby = ax - cx, dcx = ay - by, dcy = bx - ax;
+    const float px0 = x0 + .5f, py0 = ty0 + .5f;
+    float ra = day * (py0 - by) + dax * (px0 - bx), rb = dby * (py0 - cy) + dbx * (px0 - cx), rc = dcy * (py0 - ay) + dcx * (px0 - ax);
+    for (int y = ty0; y <= ty1; ++y, ra += day, rb += dby, rc += dcy) {
+        float wa = ra, wb = rb, wc = rc;
+        float *depth = W->depth + (size_t)y * M + x0;
+        uint8_t *rgba = W->rgba + ((size_t)y * M + x0) * 4;
+        for (int x = x0; x <= x1; ++x, wa += dax, wb += dbx, wc += dcx, ++depth, rgba += 4) {
             if (wa < eps || wb < eps || wc < eps) continue;
             const float la = wa * inv, lb = wb * inv, lc = wc * inv;
             const float z = la * za + lb * zb + lc * zc;
-            const size_t idx = (size_t)y * M + x;
-            if (z <= W->depth[idx]) continue;
-            W->depth[idx] = z;
+            if (z <= *depth) continue;
+            *depth = z;
             float n[3], col[3];
             for (int k = 0; k < 3; ++k) { n[k] = la * na[k] + lb * nb[k] + lc * nc[k]; col[k] = la * ca[k] + lb * cb[k] + lc * cc[k]; }
-            shade_pixel(F, n, col, la * W->vs[ia] + lb * W->vs[ib] + lc * W->vs[ic], W->rgba + idx * 4);
+            shade_pixel(F, n, col, la * sa + lb * sb + lc * sc, rgba);
         }
     }
 }
@@ -399,16 +443,20 @@ static void task_raster(void *vctx, int index)
     Frame *F = (Frame *)vctx;
     const R3Level *L = F->lv;
     const R3Work *W = F->work;
-    const int y0 = index * F->band_h, y1 = y0 + F->band_h < F->M ? y0 + F->band_h : F->M;
+    const int y0 = F->clip[1] + index * F->band_h, y1 = y0 + F->band_h < F->clip[3] ? y0 + F->band_h : F->clip[3];
+    if (y0 >= y1) return;
+    const int cull = F->cull;
     for (int b = 0; b < L->nblocks; ++b) {
         const float *bb = W->bb + b * 4;
-        if (bb[3] + .5f < y0 || bb[1] - .5f > y1 || bb[2] < -1 || bb[0] > F->M + 1) continue;
+        if (bb[3] + .5f < y0 || bb[1] - .5f > y1 || bb[2] + .5f < F->clip[0] || bb[0] - .5f > F->clip[2]) continue;
         for (uint32_t q = L->block[b]; q < L->block[b + 1]; ++q) {
             const uint32_t *v = L->quad + (size_t)q * 4;
             const float ya = W->vy[v[0]], yb = W->vy[v[1]], yc = W->vy[v[2]], yd = W->vy[v[3]];
             const float mn = fminf(fminf(ya, yb), fminf(yc, yd)), mx = fmaxf(fmaxf(ya, yb), fmaxf(yc, yd));
             if (mx + .5f < y0 || mn - .5f > y1) continue;
-            if (W->vhide[v[0]] || W->vhide[v[1]] || W->vhide[v[2]] || W->vhide[v[3]]) continue;
+            const uint8_t fa = W->vhide[v[0]], fb = W->vhide[v[1]], fc = W->vhide[v[2]], fd = W->vhide[v[3]];
+            if ((fa | fb | fc | fd) & 1) continue;
+            if (cull && (fa & fb & fc & fd & 2)) continue;
             raster_tri(F, y0, y1, (int)v[0], (int)v[1], (int)v[2]);
             raster_tri(F, y0, y1, (int)v[1], (int)v[3], (int)v[2]);
         }
@@ -420,8 +468,9 @@ static void task_resolve(void *vctx, int index)
     Frame *F = (Frame *)vctx;
     R3Work *W = F->work;
     const int size = F->size, ss = F->ss, M = F->M;
-    const int rows = (size + F->bands - 1) / F->bands, y0 = index * rows, y1 = y0 + rows < size ? y0 + rows : size;
-    for (int y = y0; y < y1; ++y) for (int x = 0; x < size; ++x) {
+    const int *R = F->rect;
+    const int rows = (R[3] - R[1] + F->bands - 1) / F->bands, y0 = R[1] + index * rows, y1 = y0 + rows < R[3] ? y0 + rows : R[3];
+    for (int y = y0; y < y1; ++y) for (int x = R[0]; x < R[2]; ++x) {
         unsigned sum[3] = { 0, 0, 0 }, alpha = 0;
         float nearest = -1e30f;
         for (int dy = 0; dy < ss; ++dy) for (int dx = 0; dx < ss; ++dx) {
@@ -445,6 +494,35 @@ static void task_resolve(void *vctx, int index)
     }
 }
 
+// Продолжить цвет под прозрачными соседями (без тёмной каймы при линейной фильтрации) и сгладить силуэт.
+// При одном отсчёте на пиксель (ss=1) покрытие края берётся из окрестности 3×3 с весами 1-2-1: лесенка силуэта
+// превращается в мягкий край шириной в пиксель. При ss=2 край уже сглажен свёрткой, альфа не трогается.
+static void task_extrude(void *vctx, int index)
+{
+    Frame *F = (Frame *)vctx;
+    const int size = F->size, *R = F->rect, *T = F->trect, tw = T[2] - T[0];
+    const int rows = (R[3] - R[1] + F->bands - 1) / F->bands, y0 = R[1] + index * rows, y1 = y0 + rows < R[3] ? y0 + rows : R[3];
+    const bool smooth = F->ss == 1;
+    for (int y = y0; y < y1; ++y) for (int x = R[0]; x < R[2]; ++x) {
+        uint8_t *p = F->out + ((size_t)y * size + x) * 4;
+        const uint8_t *best = NULL;
+        int cover = 0;
+        for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+            const int sx = x + dx, sy = y + dy;
+            if (sx < T[0] || sy < T[1] || sx >= T[2] || sy >= T[3]) continue;
+            const uint8_t *q = F->tmp + ((size_t)(sy - T[1]) * tw + (sx - T[0])) * 4;
+            if (!q[3]) continue;
+            cover += (dx ? 1 : 2) * (dy ? 1 : 2);
+            if (!best || q[3] > best[3]) best = q;
+        }
+        if (!p[3]) {
+            if (!best) continue;
+            memcpy(p, best, 3);
+            if (smooth) p[3] = (uint8_t)(cover * 255 / 16);
+        } else if (smooth && cover < 16) p[3] = (uint8_t)(cover * 255 / 16);
+    }
+}
+
 static void run_parallel(R3Work *w, R3Task task, Frame *F, int count)
 {
     if (w->parallel && count > 1) w->parallel(task, F, count);
@@ -455,11 +533,18 @@ void r2d_rot3_work_free(R3Work *w)
 {
     if (!w) return;
     free(w->depth); free(w->rgba); free(w->vx); free(w->vy); free(w->vz); free(w->vn); free(w->vc); free(w->vs); free(w->vhide); free(w->bb);
+    // настройки (не буферы) переживают смену размера растра
     R3Parallel keep = w->parallel;
-    const float detail = w->detail;
+    const float detail = w->detail, eye[3] = { w->eye[0], w->eye[1], w->eye[2] };
+    const float window[4] = { w->window[0], w->window[1], w->window[2], w->window[3] };
+    const int persp = w->persp, cull = w->cull;
     memset(w, 0, sizeof *w);
     w->parallel = keep;
     w->detail = detail;
+    w->persp = persp;
+    w->cull = cull;
+    memcpy(w->eye, eye, sizeof eye);
+    memcpy(w->window, window, sizeof window);
 }
 
 static bool ensure_work(R3Work *w, int size, int ss, int nvert, int nblocks)
@@ -475,6 +560,7 @@ static bool ensure_work(R3Work *w, int size, int ss, int nvert, int nblocks)
         w->ss = ss;
         w->bounds[0] = w->bounds[1] = M;
         w->bounds[2] = w->bounds[3] = 0;
+        memset(w->out_rect, 0, sizeof w->out_rect);     // новый размер — новый (пустой) буфер результата
     }
     if (nvert > w->cap_vertices) {
         free(w->vx); free(w->vy); free(w->vz); free(w->vn); free(w->vc); free(w->vs); free(w->vhide);
@@ -505,7 +591,9 @@ bool r2d_rot3_draw(const R3Model *m, double yaw, double pitch, const R2DRotRig *
     // уровень детализации: тексель не мельче ~0.8 внутреннего пикселя
     int level = 0;
     const double detail = work->detail > 0 ? work->detail : 1.25;
-    while (level + 1 < m->levels && m->lv[level + 1].spacing * ppu / ss <= detail) ++level;
+    const double pk = work->persp ? 2.0 : 1.0;     // перспектива увеличивает ближние тексели: берём запас
+    while (level + 1 < m->levels && m->lv[level + 1].spacing * ppu * pk / ss <= detail) ++level;
+    for (int b = 0; b < work->lod_bias && level + 1 < m->levels; ++b) ++level;
     const R3Level *L = &m->lv[level];
     // область, грязная после прошлого кадра
     if (work->depth && work->size == size && work->ss == ss) {
@@ -522,6 +610,24 @@ bool r2d_rot3_draw(const R3Model *m, double yaw, double pitch, const R2DRotRig *
     F->model = m; F->lv = L; F->light = light; F->work = work; F->rig = rig; F->M = M; F->size = size; F->ss = ss;
     F->out = out; F->sample_depth = sample_depth;
     F->depth_scale = (float)(mscale / m->extent);
+    F->inv_ppu = (float)(1.0 / ppu);
+    F->cull = work->cull;
+    F->clip[0] = F->clip[1] = 0;
+    F->clip[2] = F->clip[3] = M;
+    if (work->window[2] > work->window[0] && work->window[3] > work->window[1]) {
+        // видимое окно: всё, что вне его, не растеризуется и не сворачивается (спрайт больше экрана)
+        for (int k = 0; k < 4; ++k) {
+            const float v = fminf(1.0f, fmaxf(0.0f, work->window[k]));
+            F->clip[k] = (k < 2 ? (int)floorf(v * size) : (int)ceilf(v * size)) * ss;
+        }
+    }
+    if (work->persp && work->eye[2] > 1e-3f) {
+        F->persp = 1;
+        F->eye_px[0] = (float)(work->eye[0] * ppu);
+        F->eye_px[1] = (float)(work->eye[1] * ppu);
+        F->eye_z = work->eye[2];
+        F->near_den = fmaxf(.5f, .2f * work->eye[2]);
+    }
     // матрицы костей: поворот вида · часть, масштаб проекции — в xy
     const double cy = cos(yaw * PI / 180), sy = sin(yaw * PI / 180), cp = cos(pitch * PI / 180), sp = sin(pitch * PI / 180);
     const double V[3][3] = { { cy, 0, sy }, { sp * sy, cp, -sp * cy }, { -cp * sy, sp, cp * cy } };
@@ -537,7 +643,7 @@ bool r2d_rot3_draw(const R3Model *m, double yaw, double pitch, const R2DRotRig *
         for (int i = 0; i < 3; ++i) for (int j = 0; j < 4; ++j) {
             double v = 0;
             for (int k = 0; k < 3; ++k) v += V[i][k] * a[k * 4 + j];
-            F->P[id][i * 4 + j] = i < 2 ? v * ppu : v;
+            F->P[id][i * 4 + j] = (float)(i < 2 ? v * ppu : v);
         }
         for (int i = 0; i < 3; ++i) for (int j = 0; j < 3; ++j) {
             double v = 0;
@@ -551,51 +657,78 @@ bool r2d_rot3_draw(const R3Model *m, double yaw, double pitch, const R2DRotRig *
         const float hl = sqrtf(F->half[0] * F->half[0] + F->half[1] * F->half[1] + F->half[2] * F->half[2]);
         for (int i = 0; i < 3; ++i) F->half[i] /= hl > 1e-9f ? hl : 1;
     }
-    F->bands = M >= 512 ? 32 : 8;
-    F->band_h = (M + F->bands - 1) / F->bands;
+    gamma_init();
+    for (int i = 0; i <= 65; ++i) F->pow_lut[i] = powf(fminf(1.0f, .55f + i * (.45f / 64.0f)), light->shine);
+    const int clip_h = F->clip[3] - F->clip[1];
+    F->bands = clip_h >= 512 ? 48 : 8;
+    F->band_h = (clip_h + F->bands - 1) / F->bands;
+    if (F->band_h < 1) F->band_h = 1;
     double t0 = now_ms();
     run_parallel(work, task_transform, F, (L->n + 8191) / 8192);
-    // габарит
-    int bx0 = M, by0 = M, bx1 = 0, by1 = 0;
-    for (int i = 0; i < L->n; ++i) {
-        if (work->vhide[i]) continue;
-        const int x = (int)work->vx[i], y = (int)work->vy[i];
-        if (x < bx0) bx0 = x;
-        if (x > bx1) bx1 = x;
-        if (y < by0) by0 = y;
-        if (y > by1) by1 = y;
-    }
-    bx0 = bx0 - 2 < 0 ? 0 : bx0 - 2; by0 = by0 - 2 < 0 ? 0 : by0 - 2;
-    bx1 = bx1 + 3 > M ? M : bx1 + 3; by1 = by1 + 3 > M ? M : by1 + 3;
-    work->bounds[0] = bx0; work->bounds[1] = by0; work->bounds[2] = bx1 > bx0 ? bx1 : bx0; work->bounds[3] = by1 > by0 ? by1 : by0;
     run_parallel(work, task_blockbox, F, (L->nblocks + 127) / 128);
+    // габарит кадра — по блокам ячеек, в пределах видимого окна
+    float fx0 = 1e30f, fy0 = 1e30f, fx1 = -1e30f, fy1 = -1e30f;
+    for (int b = 0; b < L->nblocks; ++b) {
+        const float *bb = work->bb + b * 4;
+        if (bb[2] < F->clip[0] || bb[0] > F->clip[2] || bb[3] < F->clip[1] || bb[1] > F->clip[3]) continue;
+        if (bb[0] < fx0) fx0 = bb[0];
+        if (bb[1] < fy0) fy0 = bb[1];
+        if (bb[2] > fx1) fx1 = bb[2];
+        if (bb[3] > fy1) fy1 = bb[3];
+    }
+    int bx0 = F->clip[0], by0 = F->clip[1], bx1 = F->clip[0], by1 = F->clip[1];
+    if (fx1 >= fx0 && fy1 >= fy0) {
+        const float lo_x = fmaxf(fx0 - 2, (float)F->clip[0]), lo_y = fmaxf(fy0 - 2, (float)F->clip[1]);
+        const float hi_x = fminf(fx1 + 3, (float)F->clip[2]), hi_y = fminf(fy1 + 3, (float)F->clip[3]);
+        if (hi_x > lo_x && hi_y > lo_y) { bx0 = (int)lo_x; by0 = (int)lo_y; bx1 = (int)ceilf(hi_x); by1 = (int)ceilf(hi_y); }
+    }
+    if (bx1 > F->clip[2]) bx1 = F->clip[2];
+    if (by1 > F->clip[3]) by1 = F->clip[3];
+    work->bounds[0] = bx0; work->bounds[1] = by0; work->bounds[2] = bx1; work->bounds[3] = by1;
     double t1 = now_ms();
     run_parallel(work, task_raster, F, F->bands);
     double t2 = now_ms();
-    F->bands = size >= 256 ? 16 : 4;
-    run_parallel(work, task_resolve, F, F->bands);
-    // продолжить цвет под прозрачными соседями: без тёмной каймы при линейной фильтрации
-    {
-        uint8_t *tmp = (uint8_t *)malloc((size_t)size * size * 4);
+    // свёртка: только текущая область и то, что осталось от прошлого кадра
+    int E[4] = { 0, 0, 0, 0 };
+    if (bx1 > bx0 && by1 > by0) {
+        E[0] = bx0 / ss - 1; E[1] = by0 / ss - 1; E[2] = (bx1 + ss - 1) / ss + 1; E[3] = (by1 + ss - 1) / ss + 1;
+        if (E[0] < 0) E[0] = 0;
+        if (E[1] < 0) E[1] = 0;
+        if (E[2] > size) E[2] = size;
+        if (E[3] > size) E[3] = size;
+    }
+    int R[4] = { E[0], E[1], E[2], E[3] };
+    const int *pr = work->out_rect;
+    if (pr[2] > pr[0] && pr[3] > pr[1]) {
+        if (R[2] <= R[0] || R[3] <= R[1]) memcpy(R, pr, sizeof R);
+        else {
+            if (pr[0] < R[0]) R[0] = pr[0];
+            if (pr[1] < R[1]) R[1] = pr[1];
+            if (pr[2] > R[2]) R[2] = pr[2];
+            if (pr[3] > R[3]) R[3] = pr[3];
+        }
+    }
+    if (R[2] > R[0] && R[3] > R[1]) {
+        memcpy(F->rect, R, sizeof R);
+        F->bands = R[3] - R[1] >= 64 ? 32 : 1;
+        run_parallel(work, task_resolve, F, F->bands);
+    }
+    if (E[2] > E[0] && E[3] > E[1]) {
+        int T[4] = { E[0] > 0 ? E[0] - 1 : 0, E[1] > 0 ? E[1] - 1 : 0, E[2] < size ? E[2] + 1 : size, E[3] < size ? E[3] + 1 : size };
+        const int tw = T[2] - T[0], th = T[3] - T[1];
+        uint8_t *tmp = (uint8_t *)malloc((size_t)tw * th * 4);
         if (tmp) {
-            memcpy(tmp, out, (size_t)size * size * 4);
-            const int ex0 = bx0 / ss > 0 ? bx0 / ss - 1 : 0, ey0 = by0 / ss > 0 ? by0 / ss - 1 : 0;
-            const int ex1 = bx1 / ss + 1 < size ? bx1 / ss + 1 : size, ey1 = by1 / ss + 1 < size ? by1 / ss + 1 : size;
-            for (int y = ey0; y < ey1; ++y) for (int x = ex0; x < ex1; ++x) {
-                uint8_t *p = out + ((size_t)y * size + x) * 4;
-                if (p[3]) continue;
-                const uint8_t *best = NULL;
-                for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
-                    const int sx = x + dx, sy2 = y + dy;
-                    if (sx < 0 || sy2 < 0 || sx >= size || sy2 >= size) continue;
-                    const uint8_t *q = tmp + ((size_t)sy2 * size + sx) * 4;
-                    if (q[3] && (!best || q[3] > best[3])) best = q;
-                }
-                if (best) memcpy(p, best, 3);
-            }
+            for (int y = 0; y < th; ++y) memcpy(tmp + (size_t)y * tw * 4, out + ((size_t)(T[1] + y) * size + T[0]) * 4, (size_t)tw * 4);
+            memcpy(F->rect, E, sizeof E);
+            memcpy(F->trect, T, sizeof T);
+            F->tmp = tmp;
+            F->bands = E[3] - E[1] >= 64 ? 32 : 1;
+            run_parallel(work, task_extrude, F, F->bands);
             free(tmp);
         }
     }
+    memcpy(work->out_rect, E, sizeof E);
+    memcpy(work->touched, R, sizeof R);
     double t3 = now_ms();
     work->last_level = level;
     work->last_ms[0] = t1 - t0;

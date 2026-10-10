@@ -132,3 +132,8 @@ world.add(hero);
 Для узла со спрайтом, включённым в кадр World, depth — абсолютная высота основания, angle — направление в радианах. Рендер выбирает free span, применяет light/fog и сравнивает world depth с sample depth anime output. Pixel/v1 output не имеет этой exported sample map и использует fallback depth изображения. Node tint/alpha/flip/shader semantics обычного draw не гарантируются World. World surface normal/emissive materials не превращают atlas в PBR mesh.
 
 Pose synthesis budget и camera quantization задаются world.quality, не legacy $.re2d.poseBudget. Animation orchestration остаётся existing sprite wrapper, expensive world synthesis/composition — C. Полный контракт: [Re2DSprite World](../re2d/RE2DSPRITE_WORLD.md), [World guide](../RE2D_WORLD_GUIDE.md), [migration](../re2d/RE2D_MIGRATION.md).
+
+## v3
+
+PNG формата [v3](../RE2DSPRITE_V3.md) загружается тем же `$.re2dSprite.from()/create()`; `re2dMotion(clip,loop)` + `re2dSeek(t)` играют скин-клипы.
+`projection.raster/light/detail` в character.json управляют разрешением синтеза, светом и уровнем детализации; `eye` включает перспективу (оружие от первого лица), `window` — видимое окно, `cull` — отсечение отвернувшихся ячеек, `motionLod` — более грубый уровень в движении; `.color()` — освещение мира.

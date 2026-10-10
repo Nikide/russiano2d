@@ -588,6 +588,19 @@ void r2d_app_begin_frame(R2DApp *app)
             app->quit_requested = true;
             break;
 
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            // Окно, запущенное из фонового процесса, может остаться без фокуса клавиатуры: щелчок по нему забирает фокус.
+            if (app->window && !(SDL_GetWindowFlags(app->window) & SDL_WINDOW_INPUT_FOCUS)) SDL_RaiseWindow(app->window);
+            break;
+
+        case SDL_EVENT_WINDOW_FOCUS_GAINED:
+            // Захват мыши, запрошенный до получения фокуса, применяем заново.
+            if (app->window && SDL_GetWindowRelativeMouseMode(app->window)) {
+                SDL_SetWindowRelativeMouseMode(app->window, false);
+                SDL_SetWindowRelativeMouseMode(app->window, true);
+            }
+            break;
+
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
         case SDL_EVENT_WINDOW_RESIZED:
             SDL_GetWindowSizeInPixels(app->window, &app->pixel_width, &app->pixel_height);

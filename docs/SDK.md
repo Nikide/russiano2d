@@ -604,3 +604,17 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 
 Новые регрессии: sdk_runtime_ui / sdk_package / sdk_recovery / sdk_comparison /
 sdk_baker_modes. Подробные доказательства — SDK_HANDOFF и SDK_VERIFICATION.
+
+
+## Re2DSprite v3: `bake-re2d3` и `convert-re2d3`
+
+`r2d-sdk bake-re2d3 <модель.fbx|glb|obj> --output <каталог> [--name] [--grid 256..2048] [--extent 96] [--scale|--fit] [--pivot x,y,z]
+[--fbx-tint имя=#rrggbb] [--fbx-ao имя=png] [--tiles имя=вес] [--clips имя=клип[:l]] [--fps 30]` — плотная геометрическая картинка
+(`name.png`, `name.character.json`, `name.animations.json` со скин-клипами, `name.bake.json`). Формат: [RE2DSPRITE_V3.md](RE2DSPRITE_V3.md).
+
+Опции проекции записываются в `projection` character.json (смысл полей — в [RE2DSPRITE_V3.md](RE2DSPRITE_V3.md)):
+`--eye x,y,z` — камера перспективы в метрах исходной модели (для позы yaw=pitch=0), `--zoom k` → `bodyScale`, `--raster N`,
+`--window x0,y0,x1,y1`, `--cull`, `--motion-lod 0..4`, `--detail 0.25..8`.
+
+`r2d-sdk convert-re2d3 <v2.png> [--character x.character.json] [--output каталог] [--name имя] [--density 2..12] [--raster 128..2048]` — апгрейд v2→v3
+без меша: ячейки управляющей сетки делятся на d×d текселей (по умолчанию 8 → сетка 2048×1536), цвет из атласа, кости по углам ячейки.
