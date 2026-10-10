@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "atlas": "shotgun_fp.png",
+  "style": "anime",
+  "rig": {
+    "bones": [
+      {
+        "name": "object",
+        "pivot": [
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "parts": [
+      {
+        "id": 80,
+        "bone": "object"
+      }
+    ],
+    "joints": [
+      {
+        "name": "origin",
+        "bone": "object",
+        "point": [
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "sockets": [
+      {
+        "name": "trigger",
+        "bone": "object",
+        "point": [
+          -6.5,
+          -6.402,
+          0.0
+        ]
+      },
+      {
+        "name": "foregrip",
+        "bone": "object",
+        "point": [
+          4.0,
+          -7.802,
+          0.0
+        ]
+      },
+      {
+        "name": "muzzle",
+        "bone": "object",
+        "point": [
+          24.0,
+          -11.602,
+          0.0
+        ]
+      },
+      {
+        "name": "grip",
+        "bone": "object",
+        "point": [
+          -6.5,
+          -6.402,
+          0.0
+        ]
+      }
+    ]
+  },
+  "groups": {
+    "gun": [
+      80
+    ]
+  },
+  "defaults": {
+    "body": true
+  },
+  "animations": {
+    "version": 1,
+    "clips": {}
+  }
+}

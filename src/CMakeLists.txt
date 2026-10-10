@@ -14,7 +14,7 @@ set(R2D_SOURCES
     light.h    light.cpp
     app.h      app.c
     render.h   render.c
-    rotsprite.h rotsprite.c rotsprite_math.h rotsprite_math.c
+    rotsprite.h rotsprite.c rotsprite_math.h rotsprite_math.c rotsprite3.h rotsprite3.c
     re2d.h re2d.c re2d_math.h re2d_math.c re2d_world.h re2d_world.c re2d_world_topology.c re2d_world_visibility.c re2d_world_light.c re2d_world_material.c re2d_world_runtime.c
     re2d_world_gpu.h re2d_world_gpu.c
     re2d_world_bake.h re2d_world_bake.c

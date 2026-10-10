@@ -27,6 +27,8 @@ p.add_argument('--epochs', type=int, default=3)
 p.add_argument('--batch', type=int, default=32)
 p.add_argument('--lr', type=float, default=2e-5)
 p.add_argument('--seed', type=int, default=7)
+p.add_argument('--device', default='cpu', choices=['cpu', 'mps'], help='cpu — все ядра, mps — GPU Apple')
+p.add_argument('--threads', type=int, default=0, help='потоков torch; 0 — все ядра кроме одного')
 args = p.parse_args()
 
 random.seed(args.seed)
@@ -81,9 +83,14 @@ from sentence_transformers import InputExample, SentenceTransformer, losses  # n
 from torch.utils.data import DataLoader  # noqa: E402
 
 torch.manual_seed(args.seed)
-device = 'mps' if torch.backends.mps.is_available() else 'cpu'
+import os  # noqa: E402
+device = args.device if (args.device != 'mps' or torch.backends.mps.is_available()) else 'cpu'
+threads = args.threads or max(1, (os.cpu_count() or 2) - 1)
+torch.set_num_threads(threads)
+print('потоков torch:', threads, flush=True)
 print('устройство:', device, flush=True)
 model = SentenceTransformer(args.base, device=device)
+model.max_seq_length = 128
 
 train = []
 for q, pos, neg in examples:

@@ -27,3 +27,25 @@
 holdRifle обновлён: оружие направлено по +Z персонажа, приклад у плеча,
 правый trigger и левый foregrip совмещены с кистями. Локти — отдельные
 JSON-кости forearmLeft/forearmRight. Это authored-поза, не автоматический IK.
+
+## Новые пушки: 3D-модель → SDK → Re2DSprite (2026-10-10)
+
+`pistol`, `revolver`, `shotgun`, `smg`, `sniper`, `lmg` больше не собраны из материалов АК. Пиксель-арт частей
+(контур, блики стали, текстура дерева, насечки) рисует `make_guns.py`; из силуэтов выдавливаются настоящие объёмы
+(стволы и барабаны — призмы), результат пишется как OBJ+MTL+PNG в `source/`. Дальше **всё делает SDK**:
+
+```
+python3 demos/rotsprite/weapons/bake_guns.py          # все шесть
+python3 demos/rotsprite/weapons/bake_guns.py pistol   # одна
+# внутри: build/r2d-sdk bake-re2d source/<имя>_model.obj --type weapon --uv existing --size 4096 --scale 1 --origin center
+```
+
+`bake_guns.py` лишь добавляет игровые сокеты `trigger`/`foregrip`/`muzzle`/`grip` в запечённый `*.character.json`
+(позиции пересчитаны из центрованного fit). Правила: UV не должны перекрываться (отчёт `*.bake.json`,
+`uvOverlapTexels` = 0), каждой грани нужна своя площадь в UV (иначе baker не даёт отсчётов и стволы пропадают),
+размеры задаём явным `--scale 1`, чтобы пистолет и снайперка сохраняли соотношение. АК остаётся прежним (surface-сборка).
+Просмотр: `build/russiano2d --game demos/re2d_gun_viewer` (стрелки — смена пушки).
+
+Руки: `<имя>_fp` — та же пушка плюс кожаные кулаки и рукава (`bake_guns.py` без аргументов печёт обе версии). Их держит viewmodel игрока в Dust2;
+у NPC в руке обычная версия без рук (руки у них свои, из тела персонажа). АК пересобран тем же путём (`ak47`), старая surface-сборка осталась
+примером формата в `build.json` (`ak47_legacy.png`).

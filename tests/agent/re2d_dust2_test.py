@@ -19,7 +19,7 @@ def main():
   check(a.eval('world.spanAt(240,1360,800)===null&&world.spanAt(2180,1840,800)===null') is True,'tunnels and club retain closed height bounds')
   check(a.eval('(()=>{const w=$.re2dWorld.load("build/dust2-portal-regression.re2dworld");const n=w.info().portals;w.dispose();return n>157})()') is True,'fresh compiler output loads subdivided slope portals in native runtime')
   a.step(5);a.eval('world.quality({poseBudget:0,poseStep:0});world.profile({gpuWait:true});')
-  info=a.eval('world.info()');check(info['cells']==137 and info['spans']==139 and info['bakedLighting'] and info['actors']==6,'compiled cells, crate solids, stacked spans, static lights and world sprites load')
+  info=a.eval('world.info()');check(info['cells']==312 and info['spans']==315 and info['bakedLighting'] and info['actors']==11,'compiled cells, crate solids, stacked spans, static lights and world sprites load')
   check(a.eval('dustNPCs.length===6&&dustNPCs.every(n=>n.get(0).w===72&&n.get(0).h===88)') is True,'six enlarged standing Re2DSprite NPCs populate the map')
   check(a.eval('(()=>{dustCamera("T SPAWN");for(let i=0;i<20;i++)dustPhysics(.01,{x:0,y:-1},false);const speed=Math.hypot(dustMotion.vx,dustMotion.vy);dustPhysics(.01,{x:0,y:0},false);return speed>100&&speed<=240.001&&Math.hypot(dustMotion.vx,dustMotion.vy)<speed})()') is True,'ground acceleration reaches wish speed and friction slows released movement')
   check(a.eval('(()=>{dustCamera("T SPAWN");dustPhysics(.02,{x:0,y:0},true);const airborne=!dustMotion.grounded&&view.h>48;for(let i=0;i<100;i++)dustPhysics(.01,{x:0,y:0},false);return airborne&&dustMotion.grounded&&Math.abs(view.h-48)<.01})()') is True,'jump rises and native floor ray lands without sinking')

@@ -513,6 +513,11 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
     shift[0] = -(mn[0] + mx[0]) / 2;
     shift[2] = -(mn[2] + mx[2]) / 2;
     shift[1] = opt->origin == BK_ORIGIN_FEET ? -mx[1] : -(mn[1] + mx[1]) / 2;     // Y вниз: низ — это max Y
+    if (opt->has_pivot) {          // кадры одной анимации обязаны иметь одну и ту же точку отсчёта
+        shift[0] = -opt->pivot[0];
+        shift[1] = opt->pivot[1];  // исходная Y вверх, Re2D Y вниз
+        shift[2] = -opt->pivot[2];
+    }
     float lo[3] = { 1e30f, 1e30f, 1e30f }, hi[3] = { -1e30f, -1e30f, -1e30f };
     for (int i = 0; i < scene.ntri; ++i) {
         for (int v = 0; v < 3; ++v) {
@@ -954,8 +959,8 @@ int sdk_cmd_bake_re2d(const SdkArgs *a)
     const char *source = sdk_arg_positional(a, 0);
     if (!source) {
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d-sdk bake-re2d <модель.glb|.gltf|.vrm|.obj> --type prop|character|weapon|environment --output <каталог> "
-            "[--name имя] [--uv auto|existing|optimized] [--compare] [--origin center|feet] [--size 1024|2048|4096] [--scale S] [--style anime|pixel] [--first-id N]");
+            "Использование: r2d-sdk bake-re2d <модель.glb|.gltf|.vrm|.obj|.fbx> --type prop|character|weapon|environment --output <каталог> "
+            "[--name имя] [--uv auto|existing|optimized] [--compare] [--origin center|feet] [--size 1024|2048|4096] [--scale S] [--style anime|pixel] [--first-id N] [--fbx-stack клип --fbx-time секунды --fbx-tint имя=#rrggbb,… --fbx-ao имя=файл.png,…] [--pivot x,y,z] [--fbx-rot \"Кость=rx,ry,rz;…\"]");
         sdk_report_free(&rep);
         return rc;
     }
@@ -968,6 +973,23 @@ int sdk_cmd_bake_re2d(const SdkArgs *a)
     if (!strcmp(opt.type, "environment") && !sdk_arg_value(a, "--origin")) opt.origin = BK_ORIGIN_FEET;
     if ((v = sdk_arg_value(a, "--name"))) opt.name = v;
     if ((v = sdk_arg_value(a, "--style"))) opt.style = v;
+    if ((v = sdk_arg_value(a, "--pivot"))) {
+        float p[3];
+        if (sscanf(v, "%f,%f,%f", &p[0], &p[1], &p[2]) != 3) {
+            const int rc = sdk_fail(&rep, "SDK_BAKE_OPTIONS", "--pivot: три числа через запятую x,y,z");
+            sdk_report_free(&rep);
+            return rc;
+        }
+        opt.has_pivot = true;
+        memcpy(opt.pivot, p, sizeof p);
+    }
+    {
+        const char *stack = sdk_arg_value(a, "--fbx-stack"), *tm = sdk_arg_value(a, "--fbx-time");
+        bk_fbx_set_pose(stack, tm ? (float)atof(tm) : 0.0f);
+        bk_fbx_set_character(opt.type && !strcmp(opt.type, "character"));
+        bk_fbx_set_rotations(sdk_arg_value(a, "--fbx-rot"));
+        bk_fbx_set_materials(sdk_arg_value(a, "--fbx-tint"), sdk_arg_value(a, "--fbx-ao"));
+    }
     if ((v = sdk_arg_value(a, "--uv"))) {
         if (!strcmp(v, "existing")) opt.uv = BK_UV_EXISTING;
         else if (!strcmp(v, "auto")) opt.uv = BK_UV_AUTO;

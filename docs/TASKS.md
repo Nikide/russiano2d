@@ -28,13 +28,15 @@ ImGui удалён из сборки и runtime. F1 открывает RmlUi-п�
 
 ## 3. Re2D World
 
-Реализованы XY BSP, вертикальные spans, same-XY многоэтажность, support /
-blocked / ray и синтез обычного 2D-кадра. Остались runtime portals/PVS,
-автоматическая топология cells, текстурные surfaces/полигональные floors,
-непрерывные slopes, sweep/полный footprint и точная глубина samples персонажа.
+Реализованы XY BSP, вертикальные spans, same-XY многоэтажность, порталы с
+экранными окнами и обходом BSP, слитые поверхности, материалы, нативный свет и
+тени, туман, декали, панорамное небо (PNG или EXR), точная глубина samples
+Re2DSprite, GPU-путь SDL_GPU с CPU-эталоном и World audio (HRTF). Остались:
+автоматическая топология cells, непрерывные slopes как физические примитивы,
+sweep/полный footprint, прохождение звука через материалы и реверберация.
 SDK генерирует лестницы и ступенчатые slopes; это не новые физические примитивы.
-Порталы/PVS в compiled JSON не используются runtime (`runtimeUsed:false`).
-Ограничения compositor и измерения — [RE2D_WORLD_GUIDE.md](RE2D_WORLD_GUIDE.md),
+Границы и очередь — [re2d/RE2D_WORLD_RUNTIME.md](re2d/RE2D_WORLD_RUNTIME.md),
+[SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md); измерения —
 [RE2D_WORLD_PERF.md](RE2D_WORLD_PERF.md).
 
 ## 4. SDK после acceptance фаз 0–7

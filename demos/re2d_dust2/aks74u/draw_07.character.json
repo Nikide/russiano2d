@@ -1,0 +1,78 @@
+{
+ "version": 1,
+ "atlas": "draw_07.png",
+ "style": "anime",
+ "rig": {
+  "bones": [
+   {
+    "name": "object",
+    "pivot": [
+     0,
+     0,
+     0
+    ]
+   }
+  ],
+  "parts": [
+   {
+    "id": 80,
+    "bone": "object"
+   },
+   {
+    "id": 81,
+    "bone": "object"
+   },
+   {
+    "id": 82,
+    "bone": "object"
+   },
+   {
+    "id": 83,
+    "bone": "object"
+   }
+  ],
+  "joints": [
+   {
+    "name": "origin",
+    "bone": "object",
+    "point": [
+     0,
+     0,
+     0
+    ]
+   }
+  ],
+  "sockets": [
+   {
+    "name": "grip",
+    "bone": "object",
+    "point": [
+     0,
+     0,
+     0
+    ]
+   }
+  ]
+ },
+ "groups": {
+  "arms": [
+   80
+  ],
+  "aks74u": [
+   81
+  ],
+  "aks74u_wood": [
+   82
+  ],
+  "bullet": [
+   83
+  ]
+ },
+ "defaults": {
+  "body": true
+ },
+ "animations": {
+  "version": 1,
+  "clips": {}
+ }
+}

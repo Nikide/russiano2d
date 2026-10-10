@@ -780,6 +780,13 @@ bool bk_load_expression(const char *path, const char *expression, BkScene *scene
         }
         return bk_load_obj(path, scene, rep);
     }
+    if (ends_with_icase(path, ".fbx")) {
+        if (expression && expression[0]) {
+            sdk_diag(rep, SDK_WARNING, "SDK_BAKE_EXPRESSION_UNSUPPORTED", path, NULL, NULL,
+                     "У FBX нет выражений: --expression «%s» проигнорирован", expression);
+        }
+        return bk_load_fbx(path, scene, rep);
+    }
     memset(scene, 0, sizeof *scene);
     size_t size = 0;
     char *data = sdk_read_file(path, &size);

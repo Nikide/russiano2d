@@ -37,17 +37,29 @@ export R2D_HELP_E5_PREFIX=1
 
 step "Копия проекта для сборки: $WT"
 if [ ! -d "$WT/.git" ] && [ ! -f "$WT/.git" ]; then
-    git -C "$ROOT" worktree add --detach "$WT" HEAD
+    if [ -n "${R2D_HELP_COPY:-}" ]; then
+        # Контейнер: .git проекта не трогаем, берём снимок HEAD в отдельный каталог.
+        mkdir -p "$WT"
+        git -C "$ROOT" archive HEAD | tar -x -C "$WT"
+        git -C "$WT" init -q
+        git -C "$WT" -c user.name=r2d -c user.email=r2d@localhost add -A
+        git -C "$WT" -c user.name=r2d -c user.email=r2d@localhost commit -q -m snapshot
+    else
+        git -C "$ROOT" worktree add --detach "$WT" HEAD
+    fi
 fi
 if [ ! -f "$WT/sdk/help/help_main.c" ]; then
     git -C "$WT" apply --3way "$HERE/r2d-help.patch" || git -C "$WT" apply "$HERE/r2d-help.patch" \
         || fail "патч r2d-help не применился к $(git -C "$ROOT" rev-parse --short HEAD)"
 fi
+# Актуальные модули и доки рабочего дерева (оно впереди HEAD): реестр $ API берётся отсюда.
+rsync -a "$ROOT/src/highlevel/" "$WT/src/highlevel/"
+rsync -a "$ROOT/docs/" "$WT/docs/"
 mkdir -p "$WT/tools/help_train"
 cp "$HERE"/pairs.tsv "$HERE"/train.py "$HERE"/convert_e5.py "$HERE"/check_gguf.py "$WT/tools/help_train/"
 
 step "Python-окружение для подготовки модели (только здесь, не в r2d-help)"
-VENV="$OUT/venv"
+VENV="${R2D_HELP_VENV:-$OUT/venv}"
 [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
 PY="$VENV/bin/python"
 "$PY" -m pip install -q --upgrade pip
@@ -57,7 +69,7 @@ PY="$VENV/bin/python"
 step "Сборка r2d-help (Release, llama.cpp CPU)"
 BUILD="$WT/build-help"
 cmake -S "$WT" -B "$BUILD" ${GEN[@]+"${GEN[@]}"} -DCMAKE_BUILD_TYPE=Release -DR2D_HELP_LLAMA=ON
-cmake --build "$BUILD" --target r2d-help r2d_help_test --parallel
+cmake --build "$BUILD" --target r2d-help r2d_help_test --parallel "${R2D_HELP_JOBS:-4}"
 BIN="$BUILD/r2d-help"
 "$BIN" version
 "$BUILD/sdk/help/r2d_help_test" "$WT" > "$OUT/help_test.txt" || fail "r2d_help_test не прошёл: $OUT/help_test.txt"
@@ -107,7 +119,7 @@ measure e5-small "$OUT/e5-small-q8_0.gguf"
 step "Дообучение на парах «вопрос → API»"
 FT="$OUT/e5-r2d"
 "$PY" "$WT/tools/help_train/train.py" --binary "$BIN" --root "$WT" --index "$OUT/bm25.idx" \
-    --base "$BASE" --out "$FT"
+    --base "$BASE" --out "$FT" --device "${R2D_HELP_DEVICE:-cpu}" --threads "${R2D_HELP_THREADS:-0}" --batch "${R2D_HELP_BATCH:-8}"
 # Конвертеру нужны файлы токенизатора исходной модели (sentencepiece).
 for f in "$BASE"/sentencepiece* "$BASE"/tokenizer* "$BASE"/special_tokens_map.json; do
     if [ -e "$f" ] && [ ! -e "$FT/$(basename "$f")" ]; then cp "$f" "$FT/"; fi

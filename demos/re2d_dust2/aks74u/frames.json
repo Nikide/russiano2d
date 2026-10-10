@@ -1,0 +1,53 @@
+{
+ "idle": {
+  "frames": [
+   "idle"
+  ],
+  "seconds": 0
+ },
+ "draw": {
+  "frames": [
+   "draw_00",
+   "draw_01",
+   "draw_02",
+   "draw_03",
+   "draw_04",
+   "draw_05",
+   "draw_06",
+   "draw_07"
+  ],
+  "seconds": 1.0
+ },
+ "fire": {
+  "frames": [
+   "fire_00",
+   "fire_01",
+   "fire_02",
+   "fire_03",
+   "fire_04",
+   "fire_05"
+  ],
+  "seconds": 0.3
+ },
+ "reload": {
+  "frames": [
+   "reload_00",
+   "reload_01",
+   "reload_02",
+   "reload_03",
+   "reload_04",
+   "reload_05",
+   "reload_06",
+   "reload_07",
+   "reload_08",
+   "reload_09",
+   "reload_10",
+   "reload_11",
+   "reload_12",
+   "reload_13",
+   "reload_14",
+   "reload_15"
+  ],
+  "seconds": 1.883
+ }
+}

@@ -2,7 +2,6 @@
   "version": 1,
   "atlas": "pistol.png",
   "style": "anime",
-  "surface": "pistol.surface.json",
   "rig": {
     "bones": [
       {
@@ -16,24 +15,19 @@
     ],
     "parts": [
       {
-        "id": 110,
+        "id": 80,
         "bone": "object"
-      },
+      }
+    ],
+    "joints": [
       {
-        "id": 111,
-        "bone": "object"
-      },
-      {
-        "id": 112,
-        "bone": "object"
-      },
-      {
-        "id": 113,
-        "bone": "object"
-      },
-      {
-        "id": 114,
-        "bone": "object"
+        "name": "origin",
+        "bone": "object",
+        "point": [
+          0,
+          0,
+          0
+        ]
       }
     ],
     "sockets": [
@@ -41,38 +35,43 @@
         "name": "trigger",
         "bone": "object",
         "point": [
-          0,
-          3,
-          0
+          -0.4,
+          0.75,
+          0.0
         ]
       },
       {
         "name": "foregrip",
         "bone": "object",
         "point": [
-          0,
-          3,
-          0
+          -0.4,
+          0.75,
+          0.0
         ]
       },
       {
         "name": "muzzle",
         "bone": "object",
         "point": [
-          9,
-          -2,
-          0
+          6.6,
+          -2.75,
+          0.0
+        ]
+      },
+      {
+        "name": "grip",
+        "bone": "object",
+        "point": [
+          -0.4,
+          0.75,
+          0.0
         ]
       }
     ]
   },
   "groups": {
-    "all": [
-      110,
-      111,
-      112,
-      113,
-      114
+    "gun": [
+      80
     ]
   },
   "defaults": {

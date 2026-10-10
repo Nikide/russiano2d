@@ -212,6 +212,6 @@ const oldWorld = $.re2d.world({
 $.render(() => oldWorld.render({x:0,y:0,eye:48,yaw:0,pitch:0,fov:70}, npc,320,180));
 ```
 
-`render(view,entities=[],width=320,height=180)` получает actors при каждом вызове. Он сохраняет прежнюю JS-подготовку и CPU stamp с приближённой глубиной изображения. `support`, `blocked`, `ray`, `info`, `dispose` сохранены. Здесь нельзя подменить второй аргумент числом разрешения по примеру нового API: это место для entities.
+`render(view,entities=[],width=320,height=180)` получает sprite nodes при каждом вызове. Он сохраняет прежнюю JS-подготовку и CPU stamp с приближённой глубиной изображения. `support`, `blocked`, `ray`, `info`, `dispose` сохранены. Здесь нельзя подменить второй аргумент числом разрешения по примеру нового API: это место для entities.
 
 Прежний `worldPrimitives` преобразует объект в плоские стены/spans и не передаёт portal topology/continuous slopes. Для новых материалов/света/sample depth/native registrations используйте новый loader. Перенос шаг за шагом — [RE2D_MIGRATION.md](../re2d/RE2D_MIGRATION.md). Legacy demos: `demos/re2d_world`, `demos/re2d_bsp_world`; новые fixtures: `demos/re2d_world_renderer_lab`, `demos/re2d_dust2`.

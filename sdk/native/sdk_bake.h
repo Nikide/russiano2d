@@ -90,6 +90,15 @@ typedef struct BkScene {
 bool bk_load_expression(const char *path, const char *expression, BkScene *scene, SdkReport *rep);
 // Wavefront OBJ (+ MTL): sdk_obj.c; вызывается из bk_load_expression по расширению .obj.
 bool bk_load_obj(const char *path, BkScene *scene, SdkReport *rep);
+// FBX (через ufbx): sdk_fbx.c; поза — клип и время задаются bk_fbx_set_pose до загрузки (пустой клип — поза файла).
+bool bk_load_fbx(const char *path, BkScene *scene, SdkReport *rep);
+void bk_fbx_set_pose(const char *stack, float time);
+// Character: скин-меш (Mixamo humanoid) со скелетом для персонажного baker; поза — файловая (привязка).
+void bk_fbx_set_character(bool on);
+// «Кость=rx,ry,rz;…» (градусы, локально) для character: поза привязки меша, например A-поза.
+void bk_fbx_set_rotations(const char *spec);
+// «имя=#rrggbb,…» и «имя=файл.png,…» для материалов без базовой текстуры (цвет и карта затенения).
+void bk_fbx_set_materials(const char *tint, const char *ao);
 bool bk_load(const char *path, BkScene *scene, SdkReport *rep);
 void bk_free(BkScene *scene);
 
@@ -109,6 +118,8 @@ typedef struct BkOptions {
     float       margin;     // доля свободного места при авто-вписывании (0.98)
     int         first_id;   // ID первой части (80)
     const char *style;      // anime / pixel
+    bool        has_pivot;  // --pivot x,y,z: фиксированная точка привязки (координаты исходной модели, Y вверх)
+    float       pivot[3];
 } BkOptions;
 
 typedef struct BkResult {
@@ -159,6 +170,7 @@ bool bk_bake(const char *source, const char *out_dir, const BkOptions *opt, BkRe
 void bk_report_json(const BkResult *res, const BkOptions *opt, const BkScene *scene, const SdkReport *rep, R2dSb *out);
 
 int sdk_cmd_bake_re2d(const SdkArgs *a);
+int sdk_cmd_bake_re2d3(const SdkArgs *a);   // sdk_bake3.c: Re2DSprite v3 (плотная геометрическая картинка)
 
 #ifdef __cplusplus
 }

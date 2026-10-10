@@ -2,6 +2,7 @@
 #include "rotsprite_math.h"
 #include "script.h"
 #include "payload.h"
+#include "rotsprite3.h"
 #include <SDL3_image/SDL_image.h>
 #include <math.h>
 #include <stdlib.h>
@@ -10,7 +11,7 @@ typedef struct RotSprite {
     uint64_t instance_id;
     R2DRenderer *renderer;
     SDL_Surface *atlas;
-    uint8_t pixels[512 * 512 * 4];
+    uint8_t *pixels;                 // raster_size()² RGBA
     R2DRotRig rig;
     R2DRotModelPose model;
     float *sample_depth;
@@ -21,26 +22,100 @@ typedef struct RotSprite {
     int texture, sprite, revision, version, eyes, mouth;
     R2DRotAtlas surface;
     double yaw, pitch;
+    // v3: плотная геометрическая картинка (src/rotsprite3.c)
+    R3Model m3;
+    R3Light light3;
+    R3Work work3;
+    int out_size;
 } RotSprite;
 
+// --- параллельный цикл для синтеза v3: рабочие потоки живут до выхода процесса ---------------
+#ifndef __EMSCRIPTEN__
+typedef struct RotPool {
+    int workers;
+    SDL_Semaphore *start[15], *done;
+    SDL_AtomicInt next;
+    R3Task task;
+    void *ctx;
+    int count;
+    bool ready;
+} RotPool;
+static RotPool g_pool;
+static int SDLCALL rot_worker(void *arg)
+{
+    const int id = (int)(intptr_t)arg;
+    for (;;) {
+        SDL_WaitSemaphore(g_pool.start[id]);
+        int i;
+        while ((i = SDL_AddAtomicInt(&g_pool.next, 1)) < g_pool.count) g_pool.task(g_pool.ctx, i);
+        SDL_SignalSemaphore(g_pool.done);
+    }
+    return 0;
+}
+static void rot_parallel(R3Task task, void *ctx, int count)
+{
+    if (!g_pool.ready) {
+        g_pool.ready = true;
+        int cores = SDL_GetNumLogicalCPUCores();
+        const char *forced = SDL_getenv("R2D_ROT_THREADS");      // 1 — без пула (замеры и отладка)
+        if (forced) cores = SDL_atoi(forced);
+        g_pool.workers = cores > 1 ? (cores - 1 < 15 ? cores - 1 : 15) : 0;
+        g_pool.done = SDL_CreateSemaphore(0);
+        for (int i = 0; i < g_pool.workers; ++i) {
+            g_pool.start[i] = SDL_CreateSemaphore(0);
+            SDL_Thread *t = SDL_CreateThread(rot_worker, "r2d-rot3", (void *)(intptr_t)i);
+            if (t) SDL_DetachThread(t);
+            else { g_pool.workers = i; break; }
+        }
+    }
+    if (!g_pool.workers || !g_pool.done) { for (int i = 0; i < count; ++i) task(ctx, i); return; }
+    g_pool.task = task; g_pool.ctx = ctx; g_pool.count = count;
+    SDL_SetAtomicInt(&g_pool.next, 0);
+    for (int i = 0; i < g_pool.workers; ++i) SDL_SignalSemaphore(g_pool.start[i]);
+    int i;
+    while ((i = SDL_AddAtomicInt(&g_pool.next, 1)) < count) task(ctx, i);
+    for (int k = 0; k < g_pool.workers; ++k) SDL_WaitSemaphore(g_pool.done);
+}
+#endif
+
+static bool ensure_pixels(RotSprite *r,int size)
+{
+    const size_t need=(size_t)size*size*4;
+    if(r->pixels&&r->out_size==size)return true;
+    uint8_t *p=realloc(r->pixels,need);if(!p)return false;
+    r->pixels=p;memset(p,0,need);
+    if(r->sample_depth){float *d=realloc(r->sample_depth,(size_t)size*size*sizeof(float));if(!d)return false;r->sample_depth=d;memset(d,0,(size_t)size*size*sizeof(float));}
+    r->out_size=size;return true;
+}
 static bool anime_draw(RotSprite *r,const R2DRotAtlas *surface,double yaw,double pitch,int eyes,int mouth)
 {
+    if(r->version==3){
+        if(!r->sample_depth){r->sample_depth=calloc((size_t)r->out_size*r->out_size,sizeof(float));if(!r->sample_depth)return false;}
+        if(!ensure_pixels(r,r->out_size))return false;
+#ifndef __EMSCRIPTEN__
+        r->work3.parallel=rot_parallel;
+#endif
+        return r2d_rot3_draw(&r->m3,yaw,pitch,&r->rig,&r->light3,r->out_size,&r->work3,r->pixels,r->sample_depth);
+    }
     // Main-thread synthesis is serial: shared supersampling scratch, private output.
     if(!r->renderer->rot_workspace){r->renderer->rot_workspace=calloc(1,sizeof(R2DRotAnimeWorkspace));if(!r->renderer->rot_workspace)return false;}
     if(!r->sample_depth){r->sample_depth=malloc(512*512*sizeof(float));if(!r->sample_depth)return false;}
+    if(!ensure_pixels(r,512))return false;
     R2DRotAnimeWorkspace *scratch=r->renderer->rot_workspace;
     if(!r2d_rotsprite_v2_anime_sized(surface,yaw,pitch,eyes,mouth,&r->rig,r->pixels,scratch,512))return false;
     memcpy(r->sample_depth,scratch->sample_depth,512*512*sizeof(float));return true;
 }
 static JSClassID rot_class;
 static JSValue style(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv);
-static int raster_size(const RotSprite *r) {return r->anime ? 512 : r->version==2 ? 128 : 64;}
+static int raster_size(const RotSprite *r) {return r->version==3 ? r->out_size : r->anime ? 512 : r->version==2 ? 128 : 64;}
 
 static void dispose(RotSprite *r)
 {
     if (!r) return;
     if (r->texture >= 0) r2d_texture_free(r->renderer, r->texture);
     free(r->sample_depth);r->sample_depth=NULL;
+    free(r->pixels);r->pixels=NULL;
+    r2d_rot3_free(&r->m3);r2d_rot3_work_free(&r->work3);
     r2d_rotsprite_v2_free(&r->surface);
     SDL_DestroySurface(r->atlas);
     r->atlas = NULL;
@@ -87,11 +162,54 @@ static JSValue load(JSContext *ctx, JSValueConst self, int argc, JSValueConst *a
         if (io) { image = IMG_LoadPNG_IO(io); SDL_CloseIO(io); }
     }
     if (!image) return JS_ThrowTypeError(ctx, "RotSprite: не удалось прочитать PNG: %s", full);
+    SDL_Surface *atlas = NULL;
+    {
+        SDL_Surface *rgba = SDL_ConvertSurface(image, SDL_PIXELFORMAT_RGBA32);
+        const bool is_v3 = rgba && r2d_rot3_header(rgba->pixels, rgba->w, rgba->h, rgba->pitch);
+        if (is_v3) {
+            // Re2DSprite v3: слои данных (веса костей лежат в альфе) — альфа-проверка v2 не применяется.
+            R3Model model;
+            if (!r2d_rot3_decode(rgba->pixels, rgba->w, rgba->h, rgba->pitch, &model)) {
+                SDL_DestroySurface(rgba); SDL_DestroySurface(image);
+                return JS_ThrowRangeError(ctx, "RotSprite: повреждённая сетка Re2DSprite v3");
+            }
+            SDL_DestroySurface(rgba);
+            SDL_DestroySurface(image);
+            RotSprite *r = SDL_calloc(1, sizeof *r);
+            static uint64_t next_v3_instance;
+            if (!r) { r2d_rot3_free(&model); return JS_ThrowOutOfMemory(ctx); }
+            r->instance_id = ((uint64_t)1 << 40) + ++next_v3_instance;
+            SDL_strlcpy(r->path, full, sizeof r->path);
+            SDL_PathInfo file3;
+            if (SDL_GetPathInfo(full, &file3)) { r->modified = file3.modify_time; r->size = file3.size; }
+            r->renderer = s->renderer;
+            r->atlas = SDL_CreateSurface(1, 1, SDL_PIXELFORMAT_RGBA32);       // «жив»: большой PNG после декодирования не нужен
+            r->texture = r->sprite = -1;
+            r->version = 3;
+            r->anime = true;
+            r->m3 = model;
+            r2d_rot3_default_light(&r->light3);
+            r->out_size = 1024;
+            if (!r->atlas || !ensure_pixels(r, r->out_size)) { dispose(r); SDL_free(r); return JS_ThrowOutOfMemory(ctx); }
+            r->texture = r2d_texture_create_rgba(r->renderer, r->pixels, r->out_size, r->out_size);
+            if (r->texture >= 0) r->sprite = r2d_sprite_create(r->renderer, r->texture, 0, 0, r->out_size, r->out_size);
+            if (r->sprite < 0) { dispose(r); SDL_free(r); return JS_ThrowInternalError(ctx, "RotSprite: не удалось создать спрайт — проверьте лимит текстур"); }
+            R2DSprite *sp3 = &r->renderer->sprites[r->sprite];
+            sp3->force_linear = true;
+            sp3->u0 = sp3->v0 = 0; sp3->u1 = sp3->v1 = 1;
+            r->revision = 1;
+            JSValue handle3 = JS_NewObjectClass(ctx, rot_class);
+            if (JS_IsException(handle3)) { dispose(r); SDL_free(r); return handle3; }
+            JS_SetOpaque(handle3, r);
+            return handle3;
+        }
+        if (rgba) SDL_DestroySurface(rgba);
+    }
     if (!r2d_rotsprite_layout(image->w, image->h, NULL) && !(image->w==image->h && (image->w==3072 || image->w==4096))) {
         SDL_DestroySurface(image);
-        return JS_ThrowRangeError(ctx, "RotSprite: нужен квадратный атлас v1 до 2048 или v2 до 4096");
+        return JS_ThrowRangeError(ctx, "RotSprite: нужен квадратный атлас v1 до 2048, v2 до 4096 или контейнер v3");
     }
-    SDL_Surface *atlas = SDL_ConvertSurface(image, SDL_PIXELFORMAT_RGBA32);
+    atlas = SDL_ConvertSurface(image, SDL_PIXELFORMAT_RGBA32);
     SDL_DestroySurface(image);
     if (!atlas) return JS_ThrowInternalError(ctx, "RotSprite: не удалось декодировать RGBA");
     for (int y = 0; y < atlas->h; ++y) {
@@ -112,6 +230,7 @@ static JSValue load(JSContext *ctx, JSValueConst self, int argc, JSValueConst *a
     if (SDL_GetPathInfo(full,&file)) { r->modified=file.modify_time; r->size=file.size; }
     r->renderer = s->renderer; r->atlas = atlas; r->texture = r->sprite = -1;
     r->version = r2d_rotsprite_v2_header(atlas->pixels,atlas->w,atlas->h,atlas->pitch) ? 2 : 1;
+    if (!ensure_pixels(r, r->version==2 ? 128 : 64)) { dispose(r); SDL_free(r); return JS_ThrowOutOfMemory(ctx); }
     if (r->version == 2) {
         if (!r2d_rotsprite_v2_decode(atlas->pixels,atlas->w,atlas->h,atlas->pitch,&r->surface)) {
             dispose(r); SDL_free(r); return JS_ThrowRangeError(ctx,"RotSprite: невалидные или пустые карты v2");
@@ -207,7 +326,16 @@ static JSValue info(JSContext *ctx, JSValueConst self, int argc, JSValueConst *a
     JS_SetPropertyStr(ctx,o,"brows",JS_NewInt32(ctx,r->rig.brows));
     JS_SetPropertyStr(ctx,o,"eyes",JS_NewInt32(ctx,r->eyes));
     JS_SetPropertyStr(ctx,o,"mouth",JS_NewInt32(ctx,r->mouth));
-    JS_SetPropertyStr(ctx,o,"surfaceSamples",JS_NewInt32(ctx,r->surface.count));
+    JS_SetPropertyStr(ctx,o,"surfaceSamples",JS_NewInt32(ctx,r->version==3 ? r->m3.vertices : r->surface.count));
+    if (r->version==3) {
+        JS_SetPropertyStr(ctx,o,"grid",JS_NewInt32(ctx,r->m3.grid_w));
+        JS_SetPropertyStr(ctx,o,"extent",JS_NewInt32(ctx,r->m3.extent));
+        JS_SetPropertyStr(ctx,o,"level",JS_NewInt32(ctx,r->work3.last_level));
+        JS_SetPropertyStr(ctx,o,"levels",JS_NewInt32(ctx,r->m3.levels));
+        JSValue ms=JS_NewArray(ctx);
+        for (int i=0;i<3;i++) JS_SetPropertyUint32(ctx,ms,i,JS_NewFloat64(ctx,r->work3.last_ms[i]));
+        JS_SetPropertyStr(ctx,o,"synthMs",ms);
+    }
     JS_SetPropertyStr(ctx,o,"sprite",JS_NewInt32(ctx,r->sprite));
     JS_SetPropertyStr(ctx,o,"texture",JS_NewInt32(ctx,r->texture));
     JS_SetPropertyStr(ctx,o,"revision",JS_NewInt32(ctx,r->revision));
@@ -260,6 +388,7 @@ static JSValue style(JSContext *ctx,JSValueConst self,int argc,JSValueConst *arg
 {
     R2D_UNUSED(self);RotSprite *r=get(ctx,argc,argv);if (!r) return JS_EXCEPTION;
     if (!r->atlas || argc<2 || !JS_IsString(argv[1])) return JS_ThrowTypeError(ctx,"RotSprite: style pixel / anime");
+    if (r->version==3) return JS_NewInt32(ctx,r->sprite);      // v3 всегда гладкий синтез
     const char *name=JS_ToCString(ctx,argv[1]);if (!name) return JS_EXCEPTION;
     bool anime=!strcmp(name,"anime"),valid=anime || !strcmp(name,"pixel");JS_FreeCString(ctx,name);
     if (!valid || (anime && r->version!=2)) return JS_ThrowRangeError(ctx,"RotSprite: anime требует v2");
@@ -294,8 +423,8 @@ static JSValue changed(JSContext *ctx,JSValueConst self,int argc,JSValueConst *a
 static JSValue model_pose(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     R2D_UNUSED(self);RotSprite *r=get(ctx,argc,argv);if (!r) return JS_EXCEPTION;
-    if (!r->atlas || r->version!=2 || argc<3 || !JS_IsArray(argv[2]))
-        return JS_ThrowTypeError(ctx,"RotSprite: model требует v2, scale и массив частей");
+    if (!r->atlas || (r->version!=2 && r->version!=3) || argc<3 || !JS_IsArray(argv[2]))
+        return JS_ThrowTypeError(ctx,"RotSprite: model требует v2/v3, scale и массив частей");
     R2DRotModelPose next={0};
     if (JS_ToFloat64(ctx,&next.scale,argv[1])<0) return JS_EXCEPTION;
     if (!isfinite(next.scale) || next.scale<=0 || next.scale>8) return JS_ThrowRangeError(ctx,"RotSprite: scale 0..8");
@@ -388,6 +517,55 @@ static JSValue file_stamp(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     return JS_NewString(ctx,stamp);
 }
 
+// Размер растра и освещение синтеза v3: rotSpriteConfig(handle, size, [24 числа света]).
+static JSValue config(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    R2D_UNUSED(self);RotSprite *r=get(ctx,argc,argv);if (!r) return JS_EXCEPTION;
+    if (!r->atlas || r->version!=3) return JS_ThrowTypeError(ctx,"RotSprite: config требует Re2DSprite v3");
+    int size=r->out_size;
+    if (argc>1 && !JS_IsUndefined(argv[1]) && JS_ToInt32(ctx,&size,argv[1])<0) return JS_EXCEPTION;
+    if (size<128 || size>2048) return JS_ThrowRangeError(ctx,"RotSprite: размер растра v3 128..2048");
+    if (argc>3 && !JS_IsUndefined(argv[3])) {
+        double detail=0;
+        if (JS_ToFloat64(ctx,&detail,argv[3])<0) return JS_EXCEPTION;
+        if (!(detail>=.25 && detail<=8)) return JS_ThrowRangeError(ctx,"RotSprite: detail 0.25..8 пикселей на тексель");
+        if ((float)detail!=r->work3.detail) {r->work3.detail=(float)detail;r->dirty=true;}
+    }
+    if (argc>2 && JS_IsArray(argv[2])) {
+        float v[24];
+        for (int i=0;i<24;i++) {
+            JSValue item=JS_GetPropertyUint32(ctx,argv[2],i);double d=0;
+            int ok=JS_ToFloat64(ctx,&d,item);JS_FreeValue(ctx,item);
+            if (ok<0 || !isfinite(d) || fabs(d)>1000) return JS_ThrowRangeError(ctx,"RotSprite: свет — 24 конечных числа");
+            v[i]=(float)d;
+        }
+        R3Light next;memcpy(&next,&r->light3,sizeof next);
+        memcpy(next.key_dir,v,12);memcpy(next.key_col,v+3,12);memcpy(next.fill_dir,v+6,12);memcpy(next.fill_col,v+9,12);
+        memcpy(next.sky,v+12,12);memcpy(next.ground,v+15,12);next.rim=v[18];next.spec=v[19];next.shine=fmaxf(4,v[20]);memcpy(next.tint,v+21,12);
+        for (int k=0;k<2;k++) {
+            float *d=k?next.fill_dir:next.key_dir,l=sqrtf(d[0]*d[0]+d[1]*d[1]+d[2]*d[2]);
+            if (l<1e-6f) return JS_ThrowRangeError(ctx,"RotSprite: направление света не нулевое");
+            for (int j=0;j<3;j++) d[j]/=l;
+        }
+        if (memcmp(&next,&r->light3,sizeof next)) {r->light3=next;r->dirty=true;}
+    }
+    if (size!=r->out_size) {
+        int old_size=r->out_size;
+        free(r->sample_depth);r->sample_depth=NULL;
+        if (!ensure_pixels(r,size)) {r->out_size=old_size;return JS_ThrowOutOfMemory(ctx);}
+        r->sample_depth=calloc((size_t)size*size,sizeof(float));
+        if (!r->sample_depth) return JS_ThrowOutOfMemory(ctx);
+        r2d_rot3_work_free(&r->work3);
+        int texture=r2d_texture_create_rgba(r->renderer,r->pixels,size,size);
+        int sprite=texture>=0 ? r2d_sprite_create(r->renderer,texture,0,0,size,size) : -1;
+        if (sprite<0) {if (texture>=0) r2d_texture_free(r->renderer,texture);return JS_ThrowInternalError(ctx,"RotSprite: не удалось сменить размер растра");}
+        R2DSprite *sp=&r->renderer->sprites[sprite];sp->force_linear=true;sp->u0=sp->v0=0;sp->u1=sp->v1=1;
+        r2d_texture_free(r->renderer,r->texture);
+        r->texture=texture;r->sprite=sprite;r->dirty=true;r->texture_dirty=false;r->revision++;
+    }
+    return JS_NewInt32(ctx,r->sprite);
+}
+
 int r2d_rotsprite_install(JSContext *ctx, JSValue engine)
 {
     // В QuickJS-ng allocator принадлежит runtime: после reload нужен новый id.
@@ -405,6 +583,7 @@ int r2d_rotsprite_install(JSContext *ctx, JSValue engine)
     JS_SetPropertyStr(ctx,engine,"rotSpritePrepare",JS_NewCFunction(ctx,prepare_pose,"rotSpritePrepare",3));
     JS_SetPropertyStr(ctx,engine,"rotSpritePose",JS_NewCFunction(ctx,pose,"rotSpritePose",3));
     JS_SetPropertyStr(ctx,engine,"rotSpriteInfo",JS_NewCFunction(ctx,info,"rotSpriteInfo",1));
+    JS_SetPropertyStr(ctx,engine,"rotSpriteConfig",JS_NewCFunction(ctx,config,"rotSpriteConfig",4));
     JS_SetPropertyStr(ctx,engine,"rotSpriteDispose",JS_NewCFunction(ctx,release,"rotSpriteDispose",1));
     return 0;
 }

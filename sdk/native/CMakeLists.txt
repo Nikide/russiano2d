@@ -20,6 +20,8 @@ set(R2D_SDK_SOURCES
     sdk_re2d.c
     sdk_gltf.c
     sdk_obj.c
+    sdk_fbx.c
+    sdk_bake3.c
     sdk_char.c
     sdk_animation.c
     sdk_world.c

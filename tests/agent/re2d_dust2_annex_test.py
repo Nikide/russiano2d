@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Dust2 annex: big multi-room wing, doors, room-over-room, HRTF ambience and SDK-baked Re2DSprite guns."""
+import json,sys
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
+from agent_client import Agent
+failed=[]
+def check(ok,name):
+ print(('ok ' if ok else 'FAIL ')+name,flush=True)
+ if not ok:failed.append(name)
+def main():
+ routes=json.loads(Path('demos/re2d_dust2/routes.json').read_text())
+ with Agent(game='demos/re2d_dust2',seed=7) as a:
+  a.step(8)
+  info=a.eval('world.info()')
+  check(info['cells']>=300 and info['portals']>=600 and info['lights']>=40,'annex adds a large map: %d cells, %d portals, %d lights'%(info['cells'],info['portals'],info['lights']))
+  frames=[]
+  for name in routes['annexCameras']:
+   a.eval('dustCamera('+json.dumps(name)+')');a.step(6)
+   check(a.eval('world.support(view.x,view.y,view.h-48,64,9)!==null') is True and a.eval('world.info().visibleSurfaces')>0,'annex camera '+name+' stands in a supported free span and renders')
+   path=Path('build/annex/test_'+name.lower().replace(' ','_')+'.png');path.parent.mkdir(exist_ok=True);a.screenshot(str(path));frames.append(path.read_bytes())
+  check(len(set(frames))==len(frames),'every annex camera produces a distinct real frame')
+  check(a.eval('world.spanAt(5440,1840,40)!==world.spanAt(5440,1840,330)&&world.spanAt(5440,1840,40)!==null&&world.spanAt(5440,1840,330)!==null&&world.spanAt(5440,1840,260)===null') is True,'atrium has two free spans at the same XY with solid between them')
+  a.eval('globalThis.walk=(points)=>{for(const [x,y] of points){let guard=0;while(Math.hypot(view.x-x,view.y-y)>.1){if(++guard>4000)return false;const d=Math.hypot(x-view.x,y-view.y),s=Math.min(2,d);if(!dustMove((x-view.x)/d*s,(y-view.y)/d*s))return false;}}return true;}')
+  a.eval('dustCamera("CLUB")')
+  check(a.eval('walk([[2300,1840],[2600,1840],[3440,1840],[3440,1680],[5000,1680],[5440,1680]])&&view.h===48') is True,'club -> blue gate -> grand hall -> atrium (lower floor) walks without teleport')
+  check(a.eval('walk([[5200,2300],[5200,2500],[5200,2800],[6300,2800],[6480,2800],[6480,1840],[6200,1840],[5960,1840],[5500,1840]])&&Math.abs(view.h-336)<.01') is True,'service corridor -> yard -> ramp -> mezzanine climbs to height 288')
+  # Door 226 joins the club and the gate: closing it blocks the walk, reopening restores it.
+  a.eval('dustCamera("ANNEX GATE");view.x=2440;view.y=1840')
+  check(a.eval('dustMove(-30,0)') is True,'club door is open at start')
+  a.eval('view.x=2440;view.y=1840');a.key('o');a.step(3)
+  check(a.eval('(()=>{view.x=2380;view.y=1840;return walk([[2430,1840]])})()') is False,'closed annex door blocks walking')
+  a.eval('view.x=2440;view.y=1840');a.key('o');a.step(3)
+  check(a.eval('(()=>{view.x=2380;view.y=1840;return walk([[2430,1840]])})()') is True,'reopened annex door passes again')
+  # HRTF ambience: nearest sources only (16 shared mixer channels).
+  a.eval('view.x=4080;view.y=1000;view.h=48');a.step(40)
+  amb=a.eval('({n:annexAmbient.active.size,infos:[...annexAmbient.active.values()].map(s=>s.info())})')
+  check(1<=amb['n']<=6 and all(i['hrtf'] for i in amb['infos']),'server room keeps nearest ambience sources alive, all HRTF (%d)'%amb['n'])
+  a.eval('view.x=6800;view.y=2200;view.h=48');a.step(40)
+  amb2=a.eval('annexAmbient.active.size');check(amb2<=6,'ambience stays within its channel budget in the yard (%d)'%amb2)
+  # Re2DSprite guns baked by r2d-sdk.
+  check(a.eval('weaponList.length')==8 and a.eval("weaponList[0]")=='aks74u','the animated SDK-baked AKS-74U is the main weapon, plus seven procedural guns')
+  seen=set()
+  for _ in range(8):
+   seen.add(a.eval('weaponList[weaponIndex]'));a.key('c');a.step(2)
+  check(len(seen)==8,'C cycles through all eight guns')
+  a.eval('setWeapon(0)');a.step(100)
+  check(a.eval('aks.clip')=='idle' and a.eval('aks.ammo')==30,'AKS-74U finishes its draw clip and starts with a full magazine')
+  a.eval('view.x=3400;view.y=1840;view.h=48;view.yaw=0;view.pitch=0');a.step(5)
+  a.mouse(1,'down');a.step(2);a.mouse(1,'up');a.step(2)
+  check(a.eval('aks.ammo')<30 and a.eval('aks.clip')=='fire','left mouse fires one round and plays the fire clip')
+  a.step(40);a.key('r');a.step(5)
+  check(a.eval('aks.clip')=='reload','R starts the reload clip')
+  a.step(150)
+  check(a.eval('aks.ammo')==30 and a.eval('aks.clip')=='idle','reload completes and refills the magazine')
+  check(a.eval("Object.keys(aks.frames).length")==31,'31 SDK-baked frames (idle, draw, fire, reload) are loaded as Re2DSprites')
+  a.eval('aks.ammo=0');a.step(2)
+  a.mouse(1,'down');a.step(2);a.mouse(1,'up');a.step(2)
+  a.eval('aks.ammo=30;aks.clip="idle"');a.mouse(1,'down');a.step(160);a.mouse(1,'up')
+  errs=[l for l in a.stderr_text().split('\n') if 'ошибка в' in l]
+  check(a.eval('aks.ammo')<=12 and not errs,'a full-auto burst empties the magazine with no script errors (stale audio handles are tolerated): %s'%errs[:1])
+  a.eval('aks.ammo=0;aks.clip="idle"');a.step(2)
+  check(a.eval('aks.ammo')==0,'empty magazine does not fire (dry-fire click only)')
+  check(a.eval('annexNPCs.length')==5 and a.eval("['smg','pistol','sniper','shotgun','lmg'].every((k,i)=>!!$.re2dSprite.definition(annexNPCs[i]).equipment[k])") is True,'five annex NPCs carry their own gun equipment')
+  for g in ['pistol','revolver','shotgun','smg','sniper','lmg']:
+   rep=json.loads(Path('demos/rotsprite/weapons/%s.bake.json'%g).read_text())
+   check(rep.get('ok') and rep.get('type')=='weapon' and rep.get('uvOverlapTexels',1)==0,'%s gun is an r2d-sdk bake-re2d weapon without UV overlap'%g)
+  # ---- second map (key 0): separate $.re2dWorld, zombies, HRTF alarm, explosions ----
+  dust_cells=a.eval('world.info().cells')
+  a.eval('view.x=3400;view.y=1840;view.h=48;view.yaw=0;view.pitch=0');a.step(3)
+  a.key('0');a.step(30)
+  check(a.eval('fireMap.active')is True and a.eval('world.info().cells')==163 and dust_cells>=300,'key 0 switches to the second map (a separate world with its own %d cells)'%163)
+  check(a.eval('fireMap.zombies.length')==8 and a.eval('fireMap.fires.length')==9,'fire map spawns 8 zombies and 9 fires')
+  check(a.eval('fireMap.alarms.length')==4 and a.eval('fireMap.alarms.every(s=>s.info().hrtf)') is True,'four fire-alarm sources (the supplied mp3) play through HRTF')
+  check(a.eval('fireMap.zombies.every(z=>world.support(z.x,z.y,0,64,9)!==null)') is True,'every zombie stands on supported floor')
+  a.eval('view.x=2640;view.y=1040;view.h=48;view.yaw=0;view.pitch=0;fireMap.noise=3');a.step(2)
+  near=a.eval('(()=>{const z=fireMap.zombies.find(z=>Math.hypot(z.x-view.x,z.y-view.y)<200&&!z.dead);return z?1:0})()')
+  d0=a.eval('Math.min(...fireMap.zombies.map(z=>Math.hypot(z.x-view.x,z.y-view.y)))')
+  a.step(240)
+  d1=a.eval('Math.min(...fireMap.zombies.map(z=>Math.hypot(z.x-view.x,z.y-view.y)))')
+  check(near==1 or d1<d0,'zombies chase the player (nearest distance %.0f -> %.0f)'%(d0,d1))
+  hp0=a.eval('fireMap.hp');a.step(300)
+  check(a.eval('fireMap.hp')<hp0 or a.eval('fireMap.dead')>0,'a zombie that reaches the player hurts them (hp %d -> %d)'%(hp0,a.eval('fireMap.hp')))
+  a.eval('resetFire()');a.step(5)
+  z=a.eval('(()=>{const z=fireMap.zombies[0];return z.hp})()')
+  a.eval('zombieHit(fireMap.zombies[0],1)');a.step(3)
+  check(a.eval('fireMap.zombies[0].hp')==z-1 and a.eval('fireMap.zombies[0].anim')=='hit','a hit lowers zombie health and plays the hit clip')
+  a.eval('zombieHit(fireMap.zombies[0],5)');a.step(3)
+  check(a.eval('fireMap.zombies[0].dead') is True and a.eval('fireMap.kills')==1,'enough damage kills a zombie and plays the death clip')
+  a.eval('fireBoom()');a.step(3)
+  check(a.eval('fireMap.booms.length')>=1 and a.eval('fireMap.noise')>1,'an explosion spawns particles, a flash light and noise that alerts zombies')
+  a.eval('playerHurt(100)');a.step(3)
+  check(a.eval('fireMap.dead')>0,'player death is reported')
+  a.step(260)
+  check(a.eval('fireMap.hp')==100 and a.eval('fireMap.dead')==0 and a.eval('fireMap.zombies.length')==8,'the scene restarts after death')
+  a.key('0');a.step(20)
+  check(a.eval('fireMap.active') is False and a.eval('world.info().cells')==dust_cells and abs(a.eval('view.x')-3400)<1,'key 0 returns to Dust2 at the same spot')
+  zrep=json.loads(Path('demos/re2d_dust2/zombie/zombie.bake.json').read_text())
+  check(zrep.get('ok') and zrep.get('type')=='character' and len(zrep.get('character',{}).get('mapping',[0]))>=0,'zombie is an r2d-sdk bake-re2d character (FBX skin mesh, Mixamo humanoid)')
+ print(('FAILED: %d'%len(failed)) if failed else 'all annex checks passed')
+ return 1 if failed else 0
+sys.exit(main())

@@ -850,7 +850,7 @@ const pig = $.re2dSprite
 World integration native.
 
 **PASS:** свинья входит из тёмной комнаты в красную; muzzle flash
-освещает actor + weapon + wall + floor; JS frame loop отсутствует.
+освещает sprite node + weapon + wall + floor; JS frame loop отсутствует.
 
 ------------------------------------------------------------------------
 
@@ -867,7 +867,7 @@ optional owner/category buffer
 World surfaces и Re2DSprite используют одну depth convention после
 projection.
 
-**PASS:** actor за стеной скрывается; мост закрывает actor снизу с
+**PASS:** sprite node за стеной скрывается; мост закрывает sprite node снизу с
 правильного угла; transparent path документирован.
 
 ------------------------------------------------------------------------
@@ -947,7 +947,7 @@ ADDITIVE
 
 Не решать OIT в v1. Определить стабильный ordering.
 
-Тесты: решётка, окно, дым, additive flash, actor за/перед окном, два
+Тесты: решётка, окно, дым, additive flash, sprite node за/перед окном, два
 translucent слоя.
 
 ------------------------------------------------------------------------
@@ -1234,7 +1234,7 @@ Scene C:
 16. moving light;
 17. muzzle flash;
 18. 3+ Re2DSprite;
-19. actor сверху и снизу в одинаковом XY;
+19. sprite node сверху и снизу в одинаковом XY;
 20. transparent surface.
 
 ------------------------------------------------------------------------
@@ -2127,7 +2127,7 @@ LIGHT
 CHARACTERS
 [x] Re2DSprite lighting
 [x] Re2DSprite depth
-[x] muzzle flash affects actor + world
+[x] muzzle flash affects sprite node + world
 
 QUALITY
 [x] debug views
@@ -2172,7 +2172,7 @@ LICENSE HYGIENE
 Обязательно:
 
 1.  одинаковый XY имеет два spans;
-2.  actor сверху и снизу;
+2.  sprite node сверху и снизу;
 3.  красный light сверху;
 4.  solid floor блокирует свет;
 5.  opening пропускает;

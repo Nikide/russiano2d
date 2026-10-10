@@ -25,11 +25,31 @@ const finite = (v,label) => {if (typeof v!=='number' || !Number.isFinite(v) || M
 const vector = (v,fallback,label) => {v=v ?? fallback;if (!Array.isArray(v) || v.length!==3) throw new TypeError(`Re2DSprite JSON: ${label} — три числа`);return v.map(x=>finite(x,label));};
 function cloneData(v) {return JSON.parse(JSON.stringify(v,(k,x)=>{if (typeof x==='function' || typeof x==='symbol' || typeof x==='number' && !Number.isFinite(x)) throw new TypeError('Re2DSprite JSON: только JSON-данные');return x;}));}
 function name(v) {if (typeof v!=='string' || !v || v.length>80 || ['__proto__','constructor','prototype'].includes(v)) throw new TypeError('Re2DSprite JSON: имя');return v;}
+// Освещение синтеза v3 (пространство вида: x вправо, y вниз, z к зрителю). Значения по умолчанию совпадают с C.
+const LIGHT_DEFAULT={key:{dir:[-.45,-.55,.7],color:[1.05,1,.93]},fill:{dir:[.75,.15,.45],color:[.26,.32,.42]},sky:[.3,.33,.4],ground:[.1,.09,.08],rim:.18,spec:1,shine:36,tint:[1,1,1]};
+export function normalizeRotLight(source) {
+    if (!source || typeof source!=='object' || Array.isArray(source)) throw new TypeError('Re2DSprite JSON: light — объект');
+    const triple=(v,fallback,label)=>vector(v,fallback,label);
+    const light={
+        key:{dir:triple(source.key?.dir,LIGHT_DEFAULT.key.dir,'light.key.dir'),color:triple(source.key?.color,LIGHT_DEFAULT.key.color,'light.key.color')},
+        fill:{dir:triple(source.fill?.dir,LIGHT_DEFAULT.fill.dir,'light.fill.dir'),color:triple(source.fill?.color,LIGHT_DEFAULT.fill.color,'light.fill.color')},
+        sky:triple(source.sky,LIGHT_DEFAULT.sky,'light.sky'),ground:triple(source.ground,LIGHT_DEFAULT.ground,'light.ground'),
+        rim:finite(source.rim ?? LIGHT_DEFAULT.rim,'light.rim'),spec:finite(source.spec ?? LIGHT_DEFAULT.spec,'light.spec'),shine:finite(source.shine ?? LIGHT_DEFAULT.shine,'light.shine'),
+        tint:triple(source.tint,LIGHT_DEFAULT.tint,'light.tint'),
+    };
+    for (const dir of [light.key.dir,light.fill.dir]) if (!(Math.hypot(...dir)>1e-6)) throw new RangeError('Re2DSprite JSON: направление света не нулевое');
+    if (light.shine<4 || light.shine>512 || light.rim<0 || light.spec<0) throw new RangeError('Re2DSprite JSON: light.shine 4..512, rim/spec ≥ 0');
+    return light;
+}
+export function rotLightArray(light) {
+    const l=normalizeRotLight(light ?? {});
+    return [...l.key.dir,...l.key.color,...l.fill.dir,...l.fill.color,...l.sky,...l.ground,l.rim,l.spec,l.shine,...l.tint];
+}
 export function validateRotDefinition(source) {
     const d=cloneData(source);
     if (!d || d.version!==1 || typeof d.atlas!=='string' || !d.atlas) throw new TypeError('Re2DSprite JSON: version=1 и atlas');
     d.style=d.style ?? 'anime';if (!['anime','pixel'].includes(d.style)) throw new TypeError('Re2DSprite JSON: style');
-    const rig=d.rig;if (!rig || !Array.isArray(rig.bones) || !rig.bones.length || rig.bones.length>64 || !Array.isArray(rig.parts) || !rig.parts.length || rig.parts.length>254) throw new TypeError('Re2DSprite JSON: 1..64 bones, 1..254 parts');
+    const rig=d.rig;if (!rig || !Array.isArray(rig.bones) || !rig.bones.length || rig.bones.length>128 || !Array.isArray(rig.parts) || !rig.parts.length || rig.parts.length>254) throw new TypeError('Re2DSprite JSON: 1..128 bones, 1..254 parts');
     const names=new Set(),ids=new Set();
     for (const b of rig.bones) {
         name(b.name);if (names.has(b.name) || b.parent!=null && !names.has(b.parent)) throw new TypeError('Re2DSprite JSON: уникальные bones, родитель раньше ребёнка');
@@ -50,6 +70,10 @@ export function validateRotDefinition(source) {
     for (const j of rig.joints) {name(j.name);if (jointNames.has(j.name) || !names.has(j.bone)) throw new TypeError('Re2DSprite JSON: joint');jointNames.add(j.name);j.point=vector(j.point,[0,0,0],'joint.point');}
     rig.controls=rig.controls ?? {};for (const [key,c] of Object.entries(rig.controls)) {name(key);if (!names.has(c.bone) || !['x','y','z'].includes(c.axis)) throw new TypeError('Re2DSprite JSON: control bone/axis');}
     d.projection=d.projection ?? {};for (const key of ['bodyScale','portraitScale']) {d.projection[key]=finite(d.projection[key] ?? (key==='bodyScale'?1:2),key);if (d.projection[key]<=0 || d.projection[key]>8) throw new RangeError('Re2DSprite JSON: projection 0..8');}
+    // v3: размер растра синтеза и освещение (см. docs/RE2DSPRITE_V3.md); у v2 эти поля игнорируются.
+    if (d.projection.raster!=null && (!Number.isInteger(d.projection.raster) || d.projection.raster<128 || d.projection.raster>2048)) throw new RangeError('Re2DSprite JSON: projection.raster — целое 128..2048');
+    if (d.projection.light!=null) d.projection.light=normalizeRotLight(d.projection.light);
+    if (d.projection.detail!=null && !(typeof d.projection.detail==='number' && d.projection.detail>=.25 && d.projection.detail<=8)) throw new RangeError('Re2DSprite JSON: projection.detail 0.25..8');
     rig.sockets=rig.sockets ?? [];const sockets=new Set();
     if (!Array.isArray(rig.sockets) || rig.sockets.length>128) throw new TypeError('Re2DSprite JSON: sockets');
     for (const socket of rig.sockets) {
@@ -67,6 +91,14 @@ export function validateRotAnimations(source,definition) {
     const bones=new Set(definition.rig.bones.map(b=>b.name));
     for (const [key,c] of Object.entries(a.clips)) {
         name(key);finite(c.duration,'duration');if (c.duration<=0 || typeof c.loop!=='boolean' || !Array.isArray(c.tracks) || c.tracks.length>256) throw new TypeError('Re2DSprite JSON: duration>0, loop, tracks');
+        if (c.skin!=null) {
+            // Клип скелета (Re2DSprite v3): мировая матрица каждой кости на каждом кадре, порядок костей — как в rig.bones.
+            const k=c.skin,count=definition.rig.bones.length;
+            if (typeof k!=='object' || !Number.isInteger(k.frames) || k.frames<2 || k.frames>8192 || !(Number.isFinite(k.fps) && k.fps>0) || k.bones!==count || !Array.isArray(k.data) || k.data.length!==k.frames*count*12)
+                throw new TypeError('Re2DSprite JSON: skin — fps>0, frames≥2, bones=число костей rig, data=frames·bones·12 чисел');
+            for (let i=0;i<k.data.length;i++) if (typeof k.data[i]!=='number' || !Number.isFinite(k.data[i]) || Math.abs(k.data[i])>1e6) throw new RangeError('Re2DSprite JSON: skin.data — конечные числа');
+            k.matrices=Float32Array.from(k.data);k.data=null;
+        }
         const used=new Set();
         for (const t of c.tracks) {
             const face=t.target==='face';
@@ -86,6 +118,11 @@ export function validateRotAnimations(source,definition) {
 export function sampleRotClip(clip,time) {
     finite(time,'animation time');if (time<0) throw new RangeError('Re2DSprite JSON: time>=0');
     const t=clip.loop ? time%clip.duration : Math.min(time,clip.duration),bones={},face={};
+    let skin=null;
+    if (clip.skin) {
+        const k=clip.skin,f=Math.min(t*k.fps,k.frames-1),i=Math.min(k.frames-2,Math.floor(f));
+        skin={clip:k,frame:i,alpha:Math.min(1,f-i)};
+    }
     for (const track of clip.tracks) {
         const keys=track.keys;let value=keys[0][1];
         for (let i=0;i<keys.length;i++) {
@@ -97,7 +134,7 @@ export function sampleRotClip(clip,time) {
         if (track.target==='face') face[track.channel]=value;
         else {bones[track.target] ??= {};bones[track.target][track.channel]=value;}
     }
-    return {bones,face,time:t,ended:!clip.loop && time>=clip.duration};
+    return {bones,face,skin,time:t,ended:!clip.loop && time>=clip.duration};
 }
 function multiply(a,b) {
     const m=Array(12).fill(0);
@@ -111,7 +148,14 @@ function affine(pivot,translation,rotation,scale=[1,1,1]) {
 const transform = (m,p) => [0,1,2].map(row=>m[row*4]*p[0]+m[row*4+1]*p[1]+m[row*4+2]*p[2]+m[row*4+3]);
 export function buildRotModelPose(definition,sample={},rig={},manual={},visibleParts=null) {
     const boneMatrices={},body=rig.body!==false;
+    let bone_index=0;
     for (const b of definition.rig.bones) {
+        if (sample.skin) {
+            // Скелетный клип: матрица кости уже в пространстве модели, цепочка родителей не нужна.
+            const k=sample.skin.clip,n=definition.rig.bones.length,a=(sample.skin.frame*n+bone_index++)*12,c=a+n*12,t=sample.skin.alpha,m=new Array(12);
+            for (let j=0;j<12;j++) m[j]=k.matrices[a+j]+(k.matrices[c+j]-k.matrices[a+j])*t;
+            boneMatrices[b.name]=m;continue;
+        }
         const values={...sample.bones?.[b.name],...manual[b.name]};
         const rotation=['x','y','z'].map(k=>values['rotation.'+k] ?? 0),translation=['x','y','z'].map(k=>values['translation.'+k] ?? 0);
         for (const [key,c] of Object.entries(definition.rig.controls)) if (c.bone===b.name) rotation[['x','y','z'].indexOf(c.axis)]+=rig[key] || 0;
@@ -381,7 +425,13 @@ export function installRotSprite($) {
             const loaded=readDefinition($,source),node=$.rotSprite.create(loaded.atlas,opts);
             try {
                 const r=node.get(0).rot_sprite,d=loaded.definition;
-                if (engine.rotSpriteInfo(r.handle).version!==2) throw new TypeError('Re2DSprite JSON: нужен PNG v2');
+                const atlasInfo=engine.rotSpriteInfo(r.handle);
+                if (atlasInfo.version!==2 && atlasInfo.version!==3) throw new TypeError('Re2DSprite JSON: нужен PNG v2 или контейнер v3');
+                // v3: размер растра и освещение синтеза задаёт JSON (`projection.raster`, `projection.light`).
+                if (atlasInfo.version===3) {
+                    r.sprite=engine.rotSpriteConfig(r.handle,d.projection.raster ?? 1024,d.projection.light ? rotLightArray(d.projection.light) : undefined,d.projection.detail);
+                    r.width=engine.rotSpriteInfo(r.handle).width;
+                }
                 Object.assign(r,loaded,{boneOverrides:{},layers:{},children:new Set(),attachment:null,definitionStamps:{}});
                 for (const f of loaded.files) r.definitionStamps[f]=engine.rotSpriteFileStamp(f);
                 if (r.style!==d.style) {r.sprite=engine.rotSpriteStyle(r.handle,d.style);r.style=d.style;r.width=engine.rotSpriteInfo(r.handle).width;}

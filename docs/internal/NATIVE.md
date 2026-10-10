@@ -2218,7 +2218,7 @@ if (hit) engine.log('упрётся на', hit.x, hit.y);
   нарезают на ячейки (пол — по тайлу): так искажение остаётся незаметным.
 * **Ordinary batch sprites поверх mesh** (depth.md §4): это legacy mesh presentation,
   не новый native World. В `$.re2dWorld` own shared depth/owner targets и
-  resolved anime sample depth обеспечивают actor/world occlusion; см.
+  resolved anime sample depth обеспечивают sprite node/world occlusion; см.
   [runtime](../re2d/RE2D_WORLD_RUNTIME.md).
 * **Ошибки.** Нечисловые аргументы `view` — `RangeError`; `project`/`mesh` не
   принимают обычные массивы — `TypeError`. Вершины с нечисловыми координатами
@@ -2468,4 +2468,4 @@ Private `engine.re2d.worldLoad(text)` validates native author/baked JSON и во
 
 Authority: `src/re2d_world_topology.c` loader/cells/portals; visibility C; material/light C; `src/re2d_world_runtime.c` registrations/retained frame arena/pose scheduling; `src/re2d_world_gpu.c` existing SDL_GPU execution; `src/re2d_world_bake.c` binary tables. Legacy mesh helper не является authoritative world model. Full handle signatures/defaults/lifecycle/profiler/limits — [runtime reference](../re2d/RE2D_WORLD_RUNTIME.md).
 
-GPU FINAL own shared color/owner/depth targets и direct texture copy; diagnostics may readback. CPU reference own RGBA/depth. Anime sprite sample_depth exported for actual actor/world occlusion; pixel/v1 fallback image depth. `worldLoad` baked wirev1/v2 validates tables, startup imports BSP/CSR/static links. `worldCreate` legacy Float32 arrays не заменяет этот topology loader.
+GPU FINAL own shared color/owner/depth targets и direct texture copy; diagnostics may readback. CPU reference own RGBA/depth. Anime sprite sample_depth exported for actual sprite node/world occlusion; pixel/v1 fallback image depth. `worldLoad` baked wirev1/v2 validates tables, startup imports BSP/CSR/static links. `worldCreate` legacy Float32 arrays не заменяет этот topology loader.

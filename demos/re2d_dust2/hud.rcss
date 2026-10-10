@@ -8,3 +8,6 @@ body { width: 100%; height: 100%; font-family: Noto Sans; font-size: 14px; color
 
 #brand, #status, #stats, #keys, #views { display: block; }
 #panel { right: 250px; }
+
+#ammo { position: absolute; right: 40px; bottom: 36px; font-size: 40px; font-weight: 700; color: #ffe4b0; text-align: right; }
+#hp { position: absolute; left: 40px; bottom: 36px; font-size: 30px; font-weight: 700; color: #ff9c8a; }

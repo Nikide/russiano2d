@@ -30,8 +30,8 @@ Initial worktree contains unrelated modifications .gitattributes, SDK_HANDOFF.md
 | 5 | native material handles/albedo/emissive/optional normals; opaque/masked queues | emissive darkness, tangent basis, cheaper unlit/no-normal paths, material batching/debug |
 | 6 | bounded native light handles, cell/span/portal/radius culling, GPU light upload | 128-light stress, open/closed/height/radius tests, relevant pairs counters; no JS light loops |
 | 7 | benchmark analytic vs mask shadow candidate; implement selected height-aware wall AND solid-floor occlusion | door, upper lamp/solid floor/opening regressions; 16 shadow candidates with recorded cost |
-| 8 | per-span fog shared with actor path | monotone depth and distinct-span tests; fog corridor golden |
-| 9 | native actor registration and pose/attachment integration; compatible lighting and sample depth | same-XY upper/lower actor, wall/bridge occlusion, muzzle actor+weapon+wall+floor, no JS per-frame packing |
+| 8 | per-span fog shared with sprite node path | monotone depth and distinct-span tests; fog corridor golden |
+| 9 | native sprite node registration and pose/attachment integration; compatible lighting and sample depth | same-XY upper/lower sprite node, wall/bridge occlusion, muzzle sprite node+weapon+wall+floor, no JS per-frame packing |
 | 10 | doors/lifts, local dirty topology/light/shadow/GPU invalidation | one operation synchronizes collision/visibility/light/shadow; reopen and hot reload regressions |
 | 11 | complete native debug buffers, counters and timings; transparency, sky and bounded surface decals | all specified views, two translucent layers, pool overflow; JS only queries snapshots |
 | 12 | measured arenas/caches/static-light associations/batching/hot reload | stress A/B/C, cold/warm timings and memory, unchanged reference/goldens; atomic compiled output publication |
@@ -67,10 +67,10 @@ This table describes the current native rectangular-cell implementation. The ori
 | 2 | near-first XY BSP active branches, retained ownership indexes, clipped portal windows | 128-cell disconnected branch test, cyclic/open/closed/height tests, BSP/portal views |
 | 3 | SDL_GPU constrained exact surface intersections, UV/depth, continuous slopes, CPU reference | independent CPU ray equivalence, native surface tests and CPU/GPU parity |
 | 4 | independently specified classic RGB/orientation/distance | native response tests, unlit/classic fixtures and golden corridor |
-| 5 | native albedo/normal/emissive/material bank, opaque/masked/sorted translucent/additive paths | mapped-normal/emissive diagnostics, two-layer/actor/additive parity, adjacent sampler batches |
+| 5 | native albedo/normal/emissive/material bank, opaque/masked/sorted translucent/additive paths | mapped-normal/emissive diagnostics, two-layer/sprite node/additive parity, adjacent sampler batches |
 | 6 | native generation pool, sparse radius/height/portal association masks/lists, lifetimes/flicker | 128-light pool/stress, wrong-height/door/radius/overflow/promotion tests |
 | 7 | wall AND height-plane analytic shadow occluders, per-light cached radius-filtered GPU chunks | solid-floor/opening/door/lift reference parity and local invalidation tests |
-| 8 | native span fog shared with actor/world material shading | fog response tests, full lab and golden fog camera |
+| 8 | native span fog shared with sprite node/world material shading | fog response tests, full lab and golden fog camera |
 | 9 | native registration/attachment mirror, native pose budget, PNG sample depth/shared GPU depth | lower/upper pig + AK, flash output, wall/sample occlusion, deferred/fair pose tests |
 | 10 | native flat lift/door state, local dirty associations/shadows, transactional reload/watch | geometry/support/collision/ray/visibility/light/parity and valid/invalid reload tests |
 | 11 | all 13 native diagnostic views, actual coverage overdraw, counts/wall timings/payload memory, sky/decals | renderer integration and complete lab diagnostics, bounded decal/lifetime parity |
@@ -83,7 +83,7 @@ Native hot paths remain C, public configuration remains `$`, GPU execution remai
 
 ## Final validation
 
-Document-conformance continuation: `RE2D_DOCUMENT_ACCEPTANCE_AUDIT.md` maps the mandatory scope and all 17 final scenario requirements to actual evidence. The reattached source plan is byte-identical to the preserved copy. Fixed the full lab moving lamp to red at upper-storey h=208, matching its behavior contract. The latest acceptance run passed **21 checks**, adding isolated upper-light opening/solid-floor isolation and separate muzzle actor/wall/floor receiver contributions. This lab-only change does not alter the native binary or parent golden fixture; prior results below retain their original provenance.
+Document-conformance continuation: `RE2D_DOCUMENT_ACCEPTANCE_AUDIT.md` maps the mandatory scope and all 17 final scenario requirements to actual evidence. The reattached source plan is byte-identical to the preserved copy. Fixed the full lab moving lamp to red at upper-storey h=208, matching its behavior contract. The latest acceptance run passed **21 checks**, adding isolated upper-light opening/solid-floor isolation and separate muzzle sprite node/wall/floor receiver contributions. This lab-only change does not alter the native binary or parent golden fixture; prior results below retain their original provenance.
 
 Release build: AppleClang, Apple M4/macOS 27.0.1 arm64. `tools/ci_verify.py --build-dir build` passed all registered native checks (including world/RotSprite ASan/UBSan), JavaScript tests and SDK fixture batch. Twelve selected agent suites passed: camera 22, BSP world 30, legacy world 30, Re2DSprite 51, combat 22, native 84, Dust2 17, complete lab 18, JSON rig/attachment smoke 1, World Studio 19, SDK world 81, renderer 54 at that run. The subsequent stair-lintel fix and final counter cleanup passed the focused renderer 55 / lab 18 / Studio 19 / SDK 81 run. Six GPU golden comparisons after final changes were byte-identical; no baseline re-recording. `git diff --check` passed.
 
@@ -91,15 +91,15 @@ Linux CI now runs public renderer/Studio/lab/Dust2/golden checks through SDL_GPU
 
 ## Final static stress measurements
 
-Full report: RE2D_RENDERER_BENCHMARK.json. Native 400×240, seed 7, 8 warmup / 20 measured frames, static actors, unlimited initial pose synthesis, no angle quantization. SDL_GPU Metal surfaces/shadows/sample-depth actors, FINAL without framebuffer readback, completion fence waited. Binary digest, baseline HEAD and modified-checkout provenance are in the report.
+Full report: RE2D_RENDERER_BENCHMARK.json. Native 400×240, seed 7, 8 warmup / 20 measured frames, static sprite nodes, unlimited initial pose synthesis, no angle quantization. SDL_GPU Metal surfaces/shadows/sample-depth sprite nodes, FINAL without framebuffer readback, completion fence waited. Binary digest, baseline HEAD and modified-checkout provenance are in the report.
 
-| Scene | Selected / total cells | Selected / total surfaces | Relevant / total lights | Visible / registered actors | Median frame |
+| Scene | Selected / total cells | Selected / total surfaces | Relevant / total lights | Visible / registered sprite nodes | Median frame |
 | --- | --- | --- | --- | --- | --- |
 | A | 16 / 100 | 166 / 1101 | 8 / 8 | 9 / 10 | 1.057 ms |
 | B | 30 / 500 | 486 / 8501 | 12 / 64 | 29 / 30 | 1.733 ms |
 | C | 16 / 80 | 167 / 1120 | 16 / 128 | 15 / 50 | 1.659 ms |
 
-Each case records a cold native frame separately, including initial visible actor synthesis, and resident frame/material/GPU payload counters. Warm static results do not establish arbitrary animated-actor throughput. Earlier unbudgeted animated measurements were A/B/C 135.863/433.309/227.574 ms, mostly CPU actor resynthesis; default poseBudget=1/poseStep=3 trades pose freshness for bounded work. This limitation remains explicit. Timings are CPU wall and completion-fence measurements, not hardware GPU timestamps; memory payloads exclude driver/allocator/temporary/shared authoring overhead.
+Each case records a cold native frame separately, including initial visible sprite node synthesis, and resident frame/material/GPU payload counters. Warm static results do not establish arbitrary animated-sprite node throughput. Earlier unbudgeted animated measurements were A/B/C 135.863/433.309/227.574 ms, mostly CPU sprite node resynthesis; default poseBudget=1/poseStep=3 trades pose freshness for bounded work. This limitation remains explicit. Timings are CPU wall and completion-fence measurements, not hardware GPU timestamps; memory payloads exclude driver/allocator/temporary/shared authoring overhead.
 
 ## Scope and limits
 

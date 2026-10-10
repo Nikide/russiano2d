@@ -1050,6 +1050,116 @@
       ],
       "name": "CLUB",
       "floor": 0
+    },
+    {
+      "rect": [
+        2400,
+        1760,
+        960,
+        160
+      ],
+      "name": "ANNEX / BLUE GATE",
+      "floor": 0,
+      "indoor": true
+    },
+    {
+      "rect": [
+        2400,
+        800,
+        960,
+        960
+      ],
+      "name": "ANNEX / MAZE",
+      "floor": 0,
+      "indoor": true
+    },
+    {
+      "rect": [
+        3360,
+        1280,
+        1600,
+        1120
+      ],
+      "name": "ANNEX / GRAND HALL",
+      "floor": 0,
+      "indoor": true
+    },
+    {
+      "rect": [
+        3840,
+        640,
+        640,
+        640
+      ],
+      "name": "ANNEX / SERVER ROOM",
+      "floor": 0,
+      "indoor": true
+    },
+    {
+      "rect": [
+        3840,
+        2400,
+        640,
+        640
+      ],
+      "name": "ANNEX / TOXIC ROOM",
+      "floor": 0,
+      "indoor": true
+    },
+    {
+      "rect": [
+        2400,
+        1920,
+        960,
+        480
+      ],
+      "name": "ANNEX / OFFICES",
+      "floor": 0,
+      "indoor": true
+    },
+    {
+      "rect": [
+        4960,
+        1280,
+        960,
+        1120
+      ],
+      "name": "ANNEX / ATRIUM",
+      "floor": 0,
+      "indoor": true
+    },
+    {
+      "rect": [
+        5120,
+        2400,
+        1280,
+        480
+      ],
+      "name": "ANNEX / SERVICE",
+      "floor": 0,
+      "indoor": true
+    },
+    {
+      "rect": [
+        5920,
+        1760,
+        480,
+        160
+      ],
+      "name": "ANNEX / RAMP",
+      "floor": 0,
+      "indoor": true
+    },
+    {
+      "rect": [
+        6400,
+        1280,
+        800,
+        1600
+      ],
+      "name": "ANNEX / YARD",
+      "floor": 0,
+      "indoor": false
     }
   ],
   "doors": [
@@ -1116,5 +1226,453 @@
       64
     ],
     "door": 151
-  }
+  },
+  "annexCameras": {
+    "ANNEX GATE": [
+      2440,
+      1840,
+      48,
+      0
+    ],
+    "MAZE": [
+      2800,
+      1680,
+      48,
+      -90
+    ],
+    "GRAND HALL": [
+      3400,
+      1840,
+      48,
+      0
+    ],
+    "SERVER": [
+      4080,
+      1220,
+      48,
+      -90
+    ],
+    "TOXIC": [
+      4080,
+      2440,
+      48,
+      90
+    ],
+    "OFFICES": [
+      2440,
+      1800,
+      48,
+      90
+    ],
+    "ATRIUM LOW": [
+      5000,
+      1840,
+      48,
+      0
+    ],
+    "MEZZANINE": [
+      5700,
+      1840,
+      336,
+      180
+    ],
+    "YARD": [
+      6440,
+      2000,
+      48,
+      0
+    ]
+  },
+  "annexLights": [
+    {
+      "x": 4080,
+      "y": 1000,
+      "h": 240,
+      "radius": 520,
+      "intensity": 1.8,
+      "color": "#ff2020",
+      "pulse": {
+        "min": 0.1,
+        "max": 1.0,
+        "rate": 1.6
+      }
+    },
+    {
+      "x": 4000,
+      "y": 1180,
+      "h": 200,
+      "radius": 420,
+      "intensity": 1.4,
+      "color": "#ff5030",
+      "flicker": {
+        "min": 0.3,
+        "max": 1.0,
+        "rate": 11,
+        "seed": 3
+      }
+    },
+    {
+      "x": 4160,
+      "y": 2720,
+      "h": 60,
+      "radius": 420,
+      "intensity": 1.6,
+      "color": "#40ff80",
+      "flicker": {
+        "min": 0.55,
+        "max": 1.0,
+        "rate": 5,
+        "seed": 9
+      }
+    },
+    {
+      "x": 2900,
+      "y": 1140,
+      "h": 120,
+      "radius": 360,
+      "intensity": 1.2,
+      "color": "#ff3820",
+      "flicker": {
+        "min": 0.1,
+        "max": 1.0,
+        "rate": 14,
+        "seed": 21
+      }
+    },
+    {
+      "x": 3040,
+      "y": 1500,
+      "h": 140,
+      "radius": 300,
+      "intensity": 1.0,
+      "color": "#ff7040",
+      "flicker": {
+        "min": 0.2,
+        "max": 1.0,
+        "rate": 9,
+        "seed": 5
+      }
+    },
+    {
+      "x": 5440,
+      "y": 1840,
+      "h": 500,
+      "radius": 700,
+      "intensity": 1.2,
+      "color": "#80b8ff",
+      "orbit": {
+        "cx": 5440,
+        "cy": 1840,
+        "r": 320,
+        "speed": 0.5
+      }
+    },
+    {
+      "x": 4160,
+      "y": 1840,
+      "h": 330,
+      "radius": 800,
+      "intensity": 1.5,
+      "color": "#ff40ff",
+      "orbit": {
+        "cx": 4160,
+        "cy": 1840,
+        "r": 480,
+        "speed": 0.4
+      }
+    },
+    {
+      "x": 4160,
+      "y": 1840,
+      "h": 330,
+      "radius": 800,
+      "intensity": 1.5,
+      "color": "#40ffff",
+      "orbit": {
+        "cx": 4160,
+        "cy": 1840,
+        "r": 480,
+        "speed": -0.4,
+        "phase": 3.14
+      }
+    }
+  ],
+  "annexAudio": [
+    {
+      "file": "annex/buzz.wav",
+      "x": 2560,
+      "y": 1840,
+      "h": 200,
+      "range": 700,
+      "reference": 80,
+      "volume": 0.35
+    },
+    {
+      "file": "annex/buzz.wav",
+      "x": 3200,
+      "y": 1840,
+      "h": 200,
+      "range": 700,
+      "reference": 80,
+      "volume": 0.35
+    },
+    {
+      "file": "annex/drip.wav",
+      "x": 2900,
+      "y": 1200,
+      "h": 100,
+      "range": 500,
+      "reference": 60,
+      "volume": 0.6
+    },
+    {
+      "file": "annex/drip.wav",
+      "x": 3200,
+      "y": 900,
+      "h": 100,
+      "range": 500,
+      "reference": 60,
+      "volume": 0.6
+    },
+    {
+      "file": "annex/rumble.wav",
+      "x": 4160,
+      "y": 1840,
+      "h": 300,
+      "range": 1500,
+      "reference": 300,
+      "volume": 0.5
+    },
+    {
+      "file": "annex/hum_server.wav",
+      "x": 4000,
+      "y": 900,
+      "h": 160,
+      "range": 900,
+      "reference": 100,
+      "volume": 0.7
+    },
+    {
+      "file": "annex/fan.wav",
+      "x": 4300,
+      "y": 700,
+      "h": 280,
+      "range": 800,
+      "reference": 100,
+      "volume": 0.5
+    },
+    {
+      "file": "annex/alarm.wav",
+      "x": 4080,
+      "y": 1000,
+      "h": 240,
+      "range": 1200,
+      "reference": 150,
+      "volume": 0.35
+    },
+    {
+      "file": "annex/bubble.wav",
+      "x": 4120,
+      "y": 2720,
+      "h": 40,
+      "range": 800,
+      "reference": 100,
+      "volume": 0.8
+    },
+    {
+      "file": "annex/crackle.wav",
+      "x": 4440,
+      "y": 2560,
+      "h": 200,
+      "range": 600,
+      "reference": 80,
+      "volume": 0.4
+    },
+    {
+      "file": "annex/tick.wav",
+      "x": 2560,
+      "y": 2200,
+      "h": 150,
+      "range": 450,
+      "reference": 50,
+      "volume": 0.6
+    },
+    {
+      "file": "annex/hum_server.wav",
+      "x": 2880,
+      "y": 2300,
+      "h": 120,
+      "range": 450,
+      "reference": 60,
+      "volume": 0.25
+    },
+    {
+      "file": "annex/fan.wav",
+      "x": 3200,
+      "y": 2100,
+      "h": 240,
+      "range": 500,
+      "reference": 80,
+      "volume": 0.4
+    },
+    {
+      "file": "annex/rumble.wav",
+      "x": 5440,
+      "y": 1840,
+      "h": 350,
+      "range": 1400,
+      "reference": 300,
+      "volume": 0.4
+    },
+    {
+      "file": "annex/drip.wav",
+      "x": 5200,
+      "y": 2600,
+      "h": 100,
+      "range": 500,
+      "reference": 60,
+      "volume": 0.6
+    },
+    {
+      "file": "annex/fan.wav",
+      "x": 5760,
+      "y": 2800,
+      "h": 190,
+      "range": 600,
+      "reference": 80,
+      "volume": 0.4
+    },
+    {
+      "file": "annex/water.wav",
+      "x": 6640,
+      "y": 1760,
+      "h": 40,
+      "range": 900,
+      "reference": 100,
+      "volume": 0.8
+    }
+  ],
+  "annexThemes": [
+    {
+      "rect": [
+        2400,
+        800,
+        960,
+        960
+      ],
+      "floor": "concrete",
+      "ceil": "concrete"
+    },
+    {
+      "rect": [
+        3360,
+        1280,
+        1600,
+        1120
+      ],
+      "floor": "tile",
+      "ceil": "concrete"
+    },
+    {
+      "rect": [
+        3840,
+        640,
+        640,
+        640
+      ],
+      "floor": "metal",
+      "ceil": "concrete"
+    },
+    {
+      "rect": [
+        3920,
+        2560,
+        400,
+        320
+      ],
+      "floor": "toxic",
+      "ceil": "concrete"
+    },
+    {
+      "rect": [
+        3840,
+        2400,
+        640,
+        640
+      ],
+      "floor": "hazard",
+      "ceil": "concrete"
+    },
+    {
+      "rect": [
+        2400,
+        1920,
+        320,
+        480
+      ],
+      "floor": "wood",
+      "ceil": "plaster"
+    },
+    {
+      "rect": [
+        2720,
+        1920,
+        320,
+        480
+      ],
+      "floor": "carpet",
+      "ceil": "plaster"
+    },
+    {
+      "rect": [
+        3040,
+        1920,
+        320,
+        480
+      ],
+      "floor": "tile",
+      "ceil": "plaster"
+    },
+    {
+      "rect": [
+        4960,
+        1280,
+        960,
+        1120
+      ],
+      "floor": "concrete",
+      "ceil": "concrete"
+    },
+    {
+      "rect": [
+        5120,
+        2400,
+        1280,
+        480
+      ],
+      "floor": "metal",
+      "ceil": "concrete"
+    },
+    {
+      "rect": [
+        6400,
+        1280,
+        800,
+        1600
+      ],
+      "floor": "grass",
+      "ceil": "plaster"
+    }
+  ],
+  "annexDoors": [
+    226,
+    262,
+    264,
+    265,
+    266,
+    267,
+    268,
+    269,
+    277
+  ]
 }

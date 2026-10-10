@@ -5,7 +5,7 @@
 Measured 2026-10-08 on Apple M4, macOS 27.0.1, Metal, 800×600 demo window.
 Both versions use Release (`-O3 -DNDEBUG`). Baseline is `3bf46c8`; the
 optimised version is the change introducing this document. Animations, four
-Russi actors, AK viewmodel and RmlUi are enabled in both. No resolution,
+Russi sprite nodes, AK viewmodel and RmlUi are enabled in both. No resolution,
 supersampling or animation rate reduction was used.
 
 ## Measured result
@@ -23,7 +23,7 @@ The after measurements correspond to approximately 61–62 frames/s throughput
 in this agent test. They include command overhead and are **not presented
 window FPS** or a guarantee for other scenes, resolutions or hardware. A
 separate 60-frame window gave 13.66–16.31 ms/frame; scene progression changes
-which actors and surfaces are visible. Fixed-dt agent runs report 60 in the
+which sprite nodes and surfaces are visible. Fixed-dt agent runs report 60 in the
 engine FPS counter regardless of actual speed: that counter was not used.
 The ordinary demo now displays the engine's real-clock FPS when launched
 without `--fixed-dt`.
@@ -47,7 +47,7 @@ trades retained memory for fewer allocations and less clearing.
 
 For World composition only, animated state and final relative yaw/pitch are
 queued through internal `rotSpritePrepare` and synthesised once when C reads
-the pixels. Fully off-screen actors defer synthesis until needed. Their
+the pixels. Fully off-screen sprite nodes defer synthesis until needed. Their
 animation clocks and socket/model state continue updating. Individual GPU
 texture uploads are deferred because World reads CPU pixels directly. Explicit
 `.re2dPose` and ordinary visible 2D rendering flush and upload as before. All
@@ -81,5 +81,5 @@ below the HUD; the HUD gained an FPS label. Documentation checks pass.
 Remaining constraints are described in [World guide](../RE2D_WORLD_GUIDE.md):
 no portals/PVS, no textured World surfaces, rectangular supports, approximate
 depth per composed sprite, and no verified Web/WASM build. Off-screen culling
-does not imply PVS or rejection of actors hidden behind walls. Large-scene
+does not imply PVS or rejection of sprite nodes hidden behind walls. Large-scene
 scaling and higher-resolution presentation still need separate measurements.

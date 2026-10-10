@@ -87,7 +87,7 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `re2d-info <character.json\|png>` | Re2DSprite: PNG v2, части ↔ кости, статистика карт, проверка |
 | `re2d-debug <character.json\|png> --mode m --out f.png [--scale N]` | Re2DSprite: отладочный вид карт поверхности |
 | `re2d-sample <character.json\|png> --x mx --y my` | Re2DSprite: один отсчёт (ID, XYZ, покрытие, владелец) |
-| `bake-re2d <модель.glb\|.gltf\|.vrm\|.obj> --type prop\|character\|weapon\|environment --output каталог [--uv auto\|existing\|optimized] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N] [--expression имя]` | Re2D Baker: GLB/glTF → Re2DSprite |
+| `bake-re2d <модель.glb\|.gltf\|.vrm\|.obj\|.fbx> --type prop\|character\|weapon\|environment --output каталог [--uv auto\|existing\|optimized] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N] [--expression имя]` | Re2D Baker: GLB/glTF → Re2DSprite |
 | `world-compile <f.re2dmap> [--renderer] [--output f.re2dworld]` | --renderer: native baked $.re2dWorld; без флага: legacy $.re2d.world output |
 | `world-info <f.re2dmap>` | compile/validation без записи результата |
 | `batch <manifest.batch.json> [--output report.json]` | пакет bake-re2d / validate, ошибки отдельных jobs не прерывают пакет |
@@ -261,6 +261,28 @@ Re2DSprite Studio». GUI вызывает тот же `bake-re2d`, поэтом�
 `MTL_MISSING`, `MATERIAL_MISSING`, `TEXTURE_MISSING`, `EXPRESSION_UNSUPPORTED`; как `--type character`
 OBJ отвергается (нет humanoid). Тест `tests/agent/sdk_obj_test.py`, фикстуры —
 `tests/fixtures/sdk/make_obj_fixtures.py`.
+
+### FBX (Prop, Weapon, Character)
+
+`bake-re2d model.fbx --type prop|weapon|character` читает ASCII/binary FBX через ufbx (`sdk/native/sdk_fbx.c`) тем же
+конвейером, что GLB/OBJ: треугольники, UV, материалы, текстуры; результат — PNG v2 + `*.character.json`. Меш и кости — временный
+источник, рантайм FBX не читает. Единицы приводятся к метрам, оси — как у glTF (Y вверх).
+
+| Опция | Смысл |
+| --- | --- |
+| `--fbx-stack клип --fbx-time секунды` | вершины в позе клипа в заданный момент (скин считается ufbx); так запекается покадровая анимация: по вызову на кадр |
+| `--pivot x,y,z` | фиксированная точка привязки (метры, Y вверх) вместо центрирования по габариту: кадры одного клипа обязаны совпадать |
+| `--scale S` | единиц Re2D на метр; без неё каждый кадр вписывался бы по-своему |
+| `--fbx-tint имя=#rrggbb,…` | цвет материала без базовой текстуры |
+| `--fbx-ao имя=файл.png,…` | карта затенения, умножается на цвет (и текстура для материала без base color; `default=…` — для мешей без материала) |
+| `--fbx-rot "Кость=rx,ry,rz;…"` | (character) локальные повороты костей поверх позы файла: A-поза для ретаргета `animation-import` |
+
+Текстуры ищутся по пути из файла, рядом с моделью, в `textures/`, `../textures/`, `tex/` по имени файла.
+`--type character`: Mixamo-кости (`mixamorig:Hips`, `LeftArm`, …) сопоставляются с humanoid, веса вершин (до 4 на вершину) и
+узлы переходят в тот же персонажный baker, что у VRM; ходьба ретаргетится штатным `animation-import`. Не поддержано: blendshape
+(предупреждение `SDK_BAKE_FBX_MORPH`), карты normal/specular. Диагностика: `SDK_BAKE_FBX_STACK` (нет клипа), `SDK_BAKE_FBX_BONE` (нет кости для `--fbx-rot`).
+Ограничение формата: Re2DSprite v2 — облако из ≤49 152 отсчётов (карта 256×192); крупные кадры показывают блоки, это не настройка baker'а.
+Тест: `tests/agent/sdk_fbx_test.py` (фикстура — `tests/fixtures/sdk/make_fbx_fixtures.py`).
 
 ### Character / VRM (Phase 5)
 

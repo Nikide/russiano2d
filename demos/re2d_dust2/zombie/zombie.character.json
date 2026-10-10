@@ -1,0 +1,316 @@
+{
+ "version": 1,
+ "atlas": "zombie.png",
+ "style": "anime",
+ "rig": {
+  "bones": [
+   {
+    "name": "root",
+    "pivot": [
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "name": "head",
+    "parent": "root",
+    "pivot": [
+     -0.4627,
+     -37.1348,
+     16.1672
+    ]
+   },
+   {
+    "name": "armRight",
+    "parent": "root",
+    "pivot": [
+     12.14,
+     -33.8315,
+     16.4636
+    ]
+   },
+   {
+    "name": "forearmRight",
+    "parent": "armRight",
+    "pivot": [
+     9.4688,
+     -32.0458,
+     1.9031
+    ]
+   },
+   {
+    "name": "armLeft",
+    "parent": "root",
+    "pivot": [
+     -13.0655,
+     -33.8315,
+     15.8708
+    ]
+   },
+   {
+    "name": "forearmLeft",
+    "parent": "armLeft",
+    "pivot": [
+     -8.2306,
+     -32.4458,
+     1.8821
+    ]
+   },
+   {
+    "name": "hipRight",
+    "parent": "root",
+    "pivot": [
+     5.2921,
+     -2.3506,
+     20.4987
+    ]
+   },
+   {
+    "name": "kneeRight",
+    "parent": "hipRight",
+    "pivot": [
+     6.3591,
+     24.0612,
+     19.7132
+    ]
+   },
+   {
+    "name": "hipLeft",
+    "parent": "root",
+    "pivot": [
+     -6.2176,
+     -2.3506,
+     20.0549
+    ]
+   },
+   {
+    "name": "kneeLeft",
+    "parent": "hipLeft",
+    "pivot": [
+     -7.2845,
+     24.0612,
+     19.3975
+    ]
+   }
+  ],
+  "parts": [
+   {
+    "id": 80,
+    "bone": "root"
+   },
+   {
+    "id": 81,
+    "bone": "head"
+   },
+   {
+    "id": 82,
+    "bone": "armRight"
+   },
+   {
+    "id": 83,
+    "bone": "forearmRight"
+   },
+   {
+    "id": 84,
+    "bone": "armLeft"
+   },
+   {
+    "id": 85,
+    "bone": "forearmLeft"
+   },
+   {
+    "id": 86,
+    "bone": "hipRight"
+   },
+   {
+    "id": 87,
+    "bone": "kneeRight"
+   },
+   {
+    "id": 88,
+    "bone": "hipLeft"
+   },
+   {
+    "id": 89,
+    "bone": "kneeLeft"
+   }
+  ],
+  "joints": [
+   {
+    "name": "head",
+    "bone": "head",
+    "point": [
+     -0.4627,
+     -37.1348,
+     16.1672
+    ]
+   },
+   {
+    "name": "shoulderRight",
+    "bone": "armRight",
+    "point": [
+     12.14,
+     -33.8315,
+     16.4636
+    ]
+   },
+   {
+    "name": "elbowRight",
+    "bone": "forearmRight",
+    "point": [
+     9.4688,
+     -32.0458,
+     1.9031
+    ]
+   },
+   {
+    "name": "shoulderLeft",
+    "bone": "armLeft",
+    "point": [
+     -13.0655,
+     -33.8315,
+     15.8708
+    ]
+   },
+   {
+    "name": "elbowLeft",
+    "bone": "forearmLeft",
+    "point": [
+     -8.2306,
+     -32.4458,
+     1.8821
+    ]
+   },
+   {
+    "name": "hipRight",
+    "bone": "hipRight",
+    "point": [
+     5.2921,
+     -2.3506,
+     20.4987
+    ]
+   },
+   {
+    "name": "kneeRight",
+    "bone": "kneeRight",
+    "point": [
+     6.3591,
+     24.0612,
+     19.7132
+    ]
+   },
+   {
+    "name": "hipLeft",
+    "bone": "hipLeft",
+    "point": [
+     -6.2176,
+     -2.3506,
+     20.0549
+    ]
+   },
+   {
+    "name": "kneeLeft",
+    "bone": "kneeLeft",
+    "point": [
+     -7.2845,
+     24.0612,
+     19.3975
+    ]
+   },
+   {
+    "name": "handRight",
+    "bone": "forearmRight",
+    "point": [
+     7.7167,
+     -31.6811,
+     -17.1721
+    ]
+   },
+   {
+    "name": "footRight",
+    "bone": "kneeRight",
+    "point": [
+     5.0796,
+     48.5407,
+     17.2856
+    ]
+   },
+   {
+    "name": "handLeft",
+    "bone": "forearmLeft",
+    "point": [
+     -4.4467,
+     -32.4248,
+     -16.6894
+    ]
+   },
+   {
+    "name": "footLeft",
+    "bone": "kneeLeft",
+    "point": [
+     -6.0051,
+     48.5407,
+     16.7752
+    ]
+   }
+  ],
+  "sockets": [
+   {
+    "name": "handRight",
+    "bone": "forearmRight",
+    "point": [
+     7.7167,
+     -31.6811,
+     -17.1721
+    ]
+   },
+   {
+    "name": "handLeft",
+    "bone": "forearmLeft",
+    "point": [
+     -4.4467,
+     -32.4248,
+     -16.6894
+    ]
+   }
+  ]
+ },
+ "groups": {
+  "root": [
+   80
+  ],
+  "head": [
+   81
+  ],
+  "armRight": [
+   82
+  ],
+  "forearmRight": [
+   83
+  ],
+  "armLeft": [
+   84
+  ],
+  "forearmLeft": [
+   85
+  ],
+  "hipRight": [
+   86
+  ],
+  "kneeRight": [
+   87
+  ],
+  "hipLeft": [
+   88
+  ],
+  "kneeLeft": [
+   89
+  ]
+ },
+ "defaults": {
+  "body": true,
+  "motion": "idle"
+ },
+ "animations": "zombie.animations.json"
+}

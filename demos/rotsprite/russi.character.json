@@ -802,6 +802,50 @@
         91.7099951295849
       ],
       "pose": "holdRifle"
+    },
+    "smg": {
+      "model": "weapons/smg.character.json",
+      "socket": "handRight",
+      "grip": "trigger",
+      "rotation": [
+        106.53756919233633,
+        -36.96009575891543,
+        91.7099951295849
+      ],
+      "pose": "holdRifle"
+    },
+    "sniper": {
+      "model": "weapons/sniper.character.json",
+      "socket": "handRight",
+      "grip": "trigger",
+      "rotation": [
+        106.53756919233633,
+        -36.96009575891543,
+        91.7099951295849
+      ],
+      "pose": "holdRifle"
+    },
+    "lmg": {
+      "model": "weapons/lmg.character.json",
+      "socket": "handRight",
+      "grip": "trigger",
+      "rotation": [
+        106.53756919233633,
+        -36.96009575891543,
+        91.7099951295849
+      ],
+      "pose": "holdRifle"
+    },
+    "revolver": {
+      "model": "weapons/revolver.character.json",
+      "socket": "handRight",
+      "grip": "trigger",
+      "rotation": [
+        0,
+        180,
+        0
+      ],
+      "pose": "holdPistol"
     }
   }
 }

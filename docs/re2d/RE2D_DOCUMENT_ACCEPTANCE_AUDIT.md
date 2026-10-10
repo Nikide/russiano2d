@@ -21,20 +21,20 @@
 | № | Требование | Конкретное подтверждение |
 | --- | --- | --- |
 | 1 | Два spans в одинаковом XY | acceptance `spanAt(350,120,40/200/140)` различает нижний/верхний/solid промежуток |
-| 2 | Actors сверху и снизу | native registrations; две свиньи имеют одинаковые XY и разные depth |
+| 2 | Sprite nodes сверху и снизу | native registrations; две свиньи имеют одинаковые XY и разные depth |
 | 3 | Красный свет сверху | authored upper lights; movingLamp теперь красный на h=208; отдельный assertion |
 | 4 | Solid floor блокирует свет | cross-storey ray + isolated red lamp: нижний receiver не меняется |
 | 5 | Opening пропускает | isolated upper lamp увеличивает lightAt в соседнем upper span через открытие |
 | 6 | Дверь меняет visibility | закрытие уменьшает visibleCells и меняет фактический кадр |
 | 7 | Дверь меняет propagation | уменьшается native lightSpanPairs |
 | 8 | Дверь меняет shadow | native door/lift shadow parity; reopening invalidates GPU chunks, stationary cache не перестраивается |
-| 9 | Flash освещает нижнюю свинью | фактический pig/AK screen region ярче; отдельно растут native receiver contributions actor/wall/floor; lifetime истекает |
+| 9 | Flash освещает нижнюю свинью | фактический pig/AK screen region ярче; отдельно растут native receiver contributions sprite node/wall/floor; lifetime истекает |
 | 10 | Normal wall реагирует | native facing-normal response test, material CPU/GPU parity; acceptance normal diagnostics |
 | 11 | Emissive panel виден | native emissive survives zero ambient, golden/material tests, emissive diagnostics |
-| 12 | Fog corridor | отключение span fog меняет фактические pixels; world/actor shared fog |
+| 12 | Fog corridor | отключение span fog меняет фактические pixels; world/sprite node shared fog |
 | 13 | BSP debug | native owner-node view; distinct captured diagnostic |
 | 14 | Light debug | dynamic-light-count view и native association counts |
-| 15 | Depth debug | depth/owner distinct captures + native actor/wall/sample occlusion checks |
+| 15 | Depth debug | depth/owner distinct captures + native sprite node/wall/sample occlusion checks |
 | 16 | Profiler показывает culling | bspNodesVisited/cellsRejected/draws/material batches assertions |
 | 17 | Gameplay JS не содержит renderer loops | lab callbacks конфигурируют camera/moving light, делают support/blocked queries и вызывают world.render; все renderer loops native |
 
