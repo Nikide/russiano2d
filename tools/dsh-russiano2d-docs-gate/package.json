@@ -1,15 +1,17 @@
 {
   "name": "dsh-russiano2d-docs-gate",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Russiano2D docs-gate: агент не пишет в движок, пока не прочитал философию (ARCHITECTURE.md), низкоуровневые (internal/NATIVE.md) и высокоуровневые (HIGH_LEVEL_API.md) доки — целиком и по порядку",
+  "description": "Russiano2D gate: агент не пишет в движок, пока не прочитал целиком философию (docs/PHILOSOPHY.md); главный гейт — движок только 2D, правка с 3D-сущностями отклоняется",
   "keywords": [
     "deepseek-harness",
     "dsh",
     "cordis",
     "plugin",
     "russiano2d",
-    "docs-gate"
+    "docs-gate",
+    "philosophy-gate",
+    "2d-only"
   ],
   "type": "module",
   "main": "lib/gate.js",

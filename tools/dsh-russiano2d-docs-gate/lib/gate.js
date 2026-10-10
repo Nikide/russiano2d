@@ -1,26 +1,35 @@
 /**
  * Russiano2D docs-gate — плагин DeepSeek Harness.
  *
- * Доктрина движка: **сначала философия, потом низкоуровневые доки, потом
- * высокоуровневые доки; без этих знаний писать в движок нельзя.**
+ * Две доктрины движка, ровно две:
+ *
+ *   1. **Сначала философия — потом работа.** Агент не пишет в движок, пока не
+ *      прочитал целиком `docs/PHILOSOPHY.md` — конституцию движка. Это всё, что
+ *      требуется перед первой правкой; остальные доки репозитория идут списком
+ *      ссылок в промпте и запись не блокируют.
+ *   2. **ГЛАВНЫЙ ГЕЙТ: движок только 2D.** Превращать Russiano2D в 3D нельзя
+ *      (`PHILOSOPHY.md` §3). Правка, вводящая 3D-сущность — по имени пути или по
+ *      имени архитектуры в коде, — отклоняется. RE2D разрешён: это projection в
+ *      обычный 2D-кадр (`PHILOSOPHY.md` §1).
  *
  * Плагин делает три вещи:
- *   1. добавляет в системный промпт агента обязательный порядок чтения и текущий
- *      прогресс именно этой сессии;
+ *   1. добавляет в системный промпт агента доктрину и текущий прогресс чтения
+ *      именно этой сессии;
  *   2. следит за результатами инструмента `read` и считает документ прочитанным
  *      только тогда, когда покрыты его строки (частичное чтение не считается);
  *   3. отклоняет `write`/`edit` и изменяющие файлы команды `bash`/`pwsh`, пока
- *      обязательные документы не прочитаны, — через `ctx.tools.guard`, то есть
- *      для всех агентов профиля, включая сабагентов, тимейтов и детей workflow.
+ *      философия не прочитана, и любую правку, вводящую 3D, — через
+ *      `ctx.tools.guard`, то есть для всех агентов профиля, включая сабагентов,
+ *      тимейтов и детей workflow.
  *
  * Гейт включается только в рабочем каталоге, который действительно является
- * репозиторием Russiano2D (по умолчанию — есть `docs/ARCHITECTURE.md`,
- * `docs/internal/NATIVE.md` и `docs/HIGH_LEVEL_API.md`). В любом другом каталоге плагин
- * молчит и ничего не блокирует.
+ * репозиторием Russiano2D (по умолчанию — есть `docs/PHILOSOPHY.md` и
+ * `docs/ARCHITECTURE.md`). В любом другом каталоге плагин молчит и ничего не
+ * блокирует.
  *
  * Этот файл — стабильный загрузчик: политика (список документов, шаблоны команд,
- * тексты) живёт в `policy.cjs` и перечитывается с диска при каждой загрузке
- * композиции. Меняешь политику — переключаешь бандл в Plugins.
+ * правила «только 2D», тексты) живёт в `policy.cjs` и перечитывается с диска при
+ * каждой загрузке композиции. Меняешь политику — переключаешь бандл в Plugins.
  *
  * @module dsh-russiano2d-docs-gate
  */
@@ -105,12 +114,13 @@ export function apply(ctx, config) {
     return state
   }
 
-  /** Оценка гейта для одного агента и набора документов. */
-  const evaluateFor = (agent, docs) => {
+  /** Оценка гейта документации для одного агента. */
+  const evaluateFor = (agent) => {
     const cwd = agent?.session?.header?.cwd
     const root = rootFor(cwd)
     if (root === undefined) return undefined
     const state = stateFor(agent.id)
+    const docs = policy.requiredDocs(settings)
     return { root, state, evaluation: policy.evaluate(state, root, docs, settings) }
   }
 
@@ -126,46 +136,59 @@ export function apply(ctx, config) {
       if (root === undefined) return undefined
 
       const toolName = String(exec.name)
-      let targetRelative
-      let mentioned = []
+      const base = typeof cwd === 'string' && cwd !== '' ? cwd : root
+      let targets = []
+      let payload = ''
       let pattern
+      let removing = false
 
       if (settings.writeTools.includes(toolName)) {
         const rawPath = policy.filePathOf(exec.arguments)
         if (rawPath === undefined) return undefined
-        const absolute = path.resolve(typeof cwd === 'string' && cwd !== '' ? cwd : root, rawPath)
-        targetRelative = policy.relativeTo(root, absolute)
+        const absolute = path.resolve(base, rawPath)
+        const targetRelative = policy.relativeTo(root, absolute)
         if (targetRelative === undefined) return undefined
+        targets = [targetRelative]
+        payload = policy.toolText(exec.arguments, settings)
       } else if (settings.shellTools.includes(toolName)) {
         const command = exec.arguments && typeof exec.arguments === 'object' ? exec.arguments.command : undefined
         pattern = policy.shellMutates(command, settings.shellMutationPatterns)
         if (pattern === undefined) return undefined
-        mentioned = policy.mentionedTargets(command, settings)
+        targets = policy.mentionedPaths(command, root, base, settings)
+        payload = typeof command === 'string' ? command : ''
+        removing = policy.shellRemoves(command, settings)
       } else {
         return undefined
       }
 
-      const docs = policy.requiredDocs(root, targetRelative, mentioned, settings, existsSync)
       const state = stateFor(exec.agent.id)
-      const evaluation = policy.evaluate(state, root, docs, settings)
-      if (evaluation.open) return undefined
 
-      state.blocked += 1
-      const reason = policy.renderDenial({
-        toolName,
-        target: targetRelative,
-        pattern,
-        evaluation,
-        settings,
-      })
-      try {
-        ctx.logger?.debug?.(
-          `russiano2d-docs-gate: отклонён ${toolName}${targetRelative ? ` (${targetRelative})` : ''}`,
-        )
-      } catch {
-        /* журнал не должен влиять на отказ */
+      // 1. Сначала философия — потом работа.
+      const docs = policy.requiredDocs(settings)
+      const evaluation = policy.evaluate(state, root, docs, settings)
+      if (!evaluation.open) {
+        state.blocked += 1
+        const reason = policy.renderDenial({
+          toolName,
+          target: targets[0],
+          pattern,
+          evaluation,
+          settings,
+        })
+        logDenied(ctx, toolName, targets[0], 'документация')
+        return reason
       }
-      return reason
+
+      // 2. Главный гейт: движок только 2D.
+      const violation = policy.findForbidden3d({ targets, payload, removing, settings })
+      if (violation !== undefined) {
+        state.blocked3d += 1
+        const reason = policy.renderDenial3d({ toolName, ...violation, settings })
+        logDenied(ctx, toolName, violation.target, `только 2D: ${violation.id}`)
+        return reason
+      }
+
+      return undefined
     } catch (error) {
       try {
         ctx.logger?.warn?.(`russiano2d-docs-gate: страж не смог оценить вызов, вызов разрешён: ${String(error)}`)
@@ -213,14 +236,14 @@ export function apply(ctx, config) {
       try {
         const agent = assemblyContext && assemblyContext.agent
         if (!agent) return ''
-        const root = rootFor(agent.session?.header?.cwd)
-        if (root === undefined) return ''
-        const core = policy.requiredDocs(root, undefined, [], settings, existsSync)
-        const evaluated = evaluateFor(agent, core)
+        const evaluated = evaluateFor(agent)
         if (evaluated === undefined) return ''
-        const status = policy.renderPrompt({ evaluation: evaluated.evaluation, settings })
-        if (evaluated.evaluation.open || evaluated.state.blocked === 0) return status
-        return `${status}\n\nОтклонённых попыток записи в этой сессии: ${evaluated.state.blocked}.`
+        return policy.renderPrompt({
+          evaluation: evaluated.evaluation,
+          settings,
+          blocked: evaluated.state.blocked,
+          blocked3d: evaluated.state.blocked3d,
+        })
       } catch {
         return ''
       }
@@ -234,6 +257,17 @@ export function apply(ctx, config) {
       'russiano2d-docs-gate.section',
     )
   })
+}
+
+/** Запись в журнал об отказе: журнал не должен влиять на сам отказ. */
+function logDenied(ctx, toolName, target, reason) {
+  try {
+    ctx.logger?.debug?.(
+      `russiano2d-docs-gate: отклонён ${toolName}${target ? ` (${target})` : ''} — ${reason}`,
+    )
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Экспорт для автотестов: сам Cordis его не использует. */
