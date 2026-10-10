@@ -160,6 +160,7 @@ call(cmd="quit")
 * Re2DSprite: развёртка и математика всех частей тела — `docs/RE2DSPRITE_MATH.md`
 * Re2DSprite v1 — развёртка всего персонажа, прототип головы — `docs/RE2DSPRITE_V1.md`
 * Re2DSprite v2 — большой PNG персонажа — `docs/RE2DSPRITE_V2.md`
+* Re2DSprite v3 — плотная «геометрическая картинка» — `docs/RE2DSPRITE_V3.md`
 * Re2D World: руководство по новой игре — `docs/RE2D_WORLD_GUIDE.md`
 * Re2D World: производительность и измерения — `docs/RE2D_WORLD_PERF.md`
 * Детерминированная запись и воспроизведение (record / replay) — `docs/RECORD_REPLAY.md`
@@ -421,13 +422,25 @@ $.ready(() => {
 
 ## Правила репозитория, о которых легко забыть
 
-* **Гейт документации.** Агент не пишет в движок, пока не прочитал целиком
-  [ARCHITECTURE.md](ARCHITECTURE.md) → этот файл → [internal/NATIVE.md](internal/NATIVE.md) →
-  [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md), а при правке `src/highlevel/**` —
-  ещё [highlevel/_CONTRACT.md](highlevel/_CONTRACT.md) и страницу модуля
-  `docs/highlevel/<имя>.md`. Это делает плагин
+* **Сначала философия — потом работа.** Агент не пишет в движок, пока не прочитал
+  целиком [PHILOSOPHY.md](PHILOSOPHY.md) — конституцию движка. Это всё, что
+  требует гейт. Остальные доки ([ARCHITECTURE.md](ARCHITECTURE.md), этот файл,
+  [internal/NATIVE.md](internal/NATIVE.md), [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md),
+  а при правке `src/highlevel/**` — [highlevel/_CONTRACT.md](highlevel/_CONTRACT.md)
+  и страница модуля `docs/highlevel/<имя>.md`) обязательны по правилам выше, но
+  запись не блокируют. Гейт делает плагин
   `tools/dsh-russiano2d-docs-gate`; обойти его нельзя, делегирование не
   отменяет правило.
+* **Главный гейт: движок только 2D.** Тот же плагин отклоняет правку, вводящую
+  3D-сущность: имя пути вида `render3d.c`/`mesh3d.js`, имена `R3D`, `Scene3D`,
+  `Mesh3D`, `Vector3`, `Matrix4`, `Quaternion`, `MeshRenderer`, `Physics3D`,
+  `Camera3D` и загрузчики 3D-ассетов в рантайме (`assimp`/`tinygltf`/`cgltf`/`glm`,
+  three.js). Превращать Russiano2D в 3D нельзя — это non-goal
+  ([PHILOSOPHY.md](PHILOSOPHY.md) §3). RE2D остаётся разрешённым: это
+  `spatial description → projection → ordinary 2D representation`
+  ([PHILOSOPHY.md](PHILOSOPHY.md) §1), а не мост к 3D. SDK-импорт 3D-моделей
+  (`sdk/**`), инструменты, документация, тесты и дистрибутивы из гейта исключены.
+  Спорную задачу останавливай и выноси владельцу проекта.
 * **Каждый модуль `src/highlevel/<имя>.js`** имеет страницу
   `docs/highlevel/<имя>.md` и тест — это проверяет
   `tests/doc_coverage_test.py`.
@@ -8784,6 +8797,70 @@ demos/rotsprite/source/*.surface.json; анатомические формулы
 
 ---
 
+## Re2DSprite v3 — плотная «геометрическая картинка»
+
+<sub>источник: `docs/RE2DSPRITE_V3.md`</sub>
+
+# Re2DSprite v3 — плотная «геометрическая картинка»
+
+v3 снимает главный потолок v2: геометрия больше не хранится редкой сеткой 256×192 с кэшем цвета 5×5.
+Один PNG хранит **плотную поверхность**: каждый тексель — цвет, позиция, нормаль, блеск и до четырёх костей с весами.
+Рантайм сам строит из соседних текселей четырёхугольники, переносит их костями, рисует программным растеризатором
+(SS×2, попиксельный свет) и отдаёт обычный 2D-спрайт + карту глубины для `$.re2dWorld`.
+Меша, сцены и 3D-API в игре нет: это внутренняя растеризация одного спрайта.
+
+## Контейнер
+
+PNG шириной `3·W` и высотой `1 + 2·H`. Строка 0 — заголовок: `R2D`/`ROT`/`(3,0,0)`, затем W, H (16 бит), число колонок и слоёв, `extent`.
+Шесть слоёв W×H (3 колонки × 2 ряда): цвет · позиция hi · позиция lo (16 бит на ось, единицы Re2D −128…128) ·
+нормаль (+блеск в A) · кости (id−1) · веса (сумма 255). Альфа слоя позиции 255 — тексель существует.
+Единицы и оси совпадают с v2 (X вправо, Y вниз, Z к зрителю), поэтому матрицы частей `R2DRotModelPose.parts[id]` применяются без изменений;
+`extent` — размер холста в единицах Re2D (v2: 128).
+
+## Рантайм
+
+- Соседние тексели образуют ячейку, если рёбра короче 5× медианного шага; пирамида уровней 2×2; уровень выбирается по размеру растра (`projection.detail`).
+- Кожный скининг (LBS) матрицами частей; клипы `skin` (`animations.json`) — матрицы костей по кадрам, линейная интерполяция.
+- Свет синтеза: ключевой, заполняющий, полусфера неба/земли, контровой, блик Блинна; множитель `tint` — освещение мира (`.color(...)`).
+- Растеризация делится на горизонтальные полосы и идёт на потоках SDL (`R2D_ROT_THREADS`), блоки 16×16 ячеек отсекаются по экранному габариту.
+- При растре ≤ 1024 — два отсчёта на пиксель по каждой оси; выше — один отсчёт и сглаживание силуэта по окрестности 3×3.
+- Сворачивается и загружается в текстуру только изменённая область результата.
+- Для World отдаётся `sample_depth`; цвет/глубина — как у v2 anime.
+
+JS: `$.re2dSprite.from('x.character.json')` определяет v3 по заголовку PNG. `info()` добавляет `grid`, `extent`, `level`, `levels`, `synthMs`.
+
+## Проекция (`projection` в character.json)
+
+| Поле | Значение |
+|---|---|
+| `bodyScale` | увеличение проекции: 1 — весь `extent` помещается в спрайт |
+| `raster` | размер синтеза, 128..2048 (по умолчанию 1024). Для спрайтов мира достаточно 512: кадр мира 1024×576 |
+| `detail` | 0.25..8 — допустимый размер текселя выбранного уровня в пикселях (по умолчанию 1.25) |
+| `light` | 24 числа или объект освещения синтеза |
+| `eye` | `[x,y,z]`, z>0 — глаз перспективы в пространстве вида (единицы Re2D, после поворота позы). Нет поля — ортографическая проекция |
+| `window` | `[x0,y0,x1,y1]` в долях спрайта — видимое окно; вне его ничего не рисуется (спрайт больше экрана) |
+| `cull` | `true` — пропускать ячейки, отвернувшиеся от зрителя (только замкнутые модели) |
+| `motionLod` | 0..4 — на сколько уровней грубее рисовать кадры движения; когда поза устоялась, кадр дорисовывается в полном качестве |
+
+**Перспектива.** Луч из глаза через точку пересекает плоскость `z=0` модели; ось взгляда попадает в центр спрайта.
+Фокус в пикселях экрана: `f = S·bodyScale·eye.z/extent`, где `S` — размер спрайта на экране. Вершины ближе `0.2·eye.z` к глазу отбрасываются.
+Так ставится оружие от первого лица: глаз — там, где он задуман в исходной модели, спрайт центрируется на прицеле,
+`window` обрезает то, что за экраном (пример — `demos/re2d_dust2/aks3/bake_aks3.sh` и `AKS` в `demos/re2d_dust2/main.js`).
+
+## Получение v3
+
+- `r2d-sdk bake-re2d3 модель.fbx|glb|obj` — FBX/GLB/OBJ → v3 с костями и клипами скелета (см. [SDK.md](SDK.md)). Поля за краем UV-острова ложатся на ближайшую точку ребра: поверхность доходит до ребра и не торчит за него.
+- `r2d-sdk convert-re2d3 russi.png --character russi.character.json --name russi3` — апгрейд v2: геометрия ячеек делится на d×d текселей,
+  цвет берётся прямо из атласа 4096 (без кэша 5×5), нормали из градиента; `--raster N` записывает `projection.raster`. Сменные `variants` (hair/costume) у v3 не переносятся.
+
+## Ограничения
+
+Скининг линейный (в v2 — dual quaternion для суставов); мимика v2 работает через видимость частей. Время синтеза зависит от размера
+растра и уровня: автомат от первого лица на 2048 — ≈20 мс в покое и ≈10 мс в движении (`motionLod: 1`), зомби и Руся на 512 — ≈2,5 мс.
+
+
+---
+
 ## Re2D World: руководство по новой игре
 
 <sub>источник: `docs/RE2D_WORLD_GUIDE.md`</sub>
@@ -10215,6 +10292,20 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 
 Новые регрессии: sdk_runtime_ui / sdk_package / sdk_recovery / sdk_comparison /
 sdk_baker_modes. Подробные доказательства — SDK_HANDOFF и SDK_VERIFICATION.
+
+
+## Re2DSprite v3: `bake-re2d3` и `convert-re2d3`
+
+`r2d-sdk bake-re2d3 <модель.fbx|glb|obj> --output <каталог> [--name] [--grid 256..2048] [--extent 96] [--scale|--fit] [--pivot x,y,z]
+[--fbx-tint имя=#rrggbb] [--fbx-ao имя=png] [--tiles имя=вес] [--clips имя=клип[:l]] [--fps 30]` — плотная геометрическая картинка
+(`name.png`, `name.character.json`, `name.animations.json` со скин-клипами, `name.bake.json`). Формат: [RE2DSPRITE_V3.md](RE2DSPRITE_V3.md).
+
+Опции проекции записываются в `projection` character.json (смысл полей — в [RE2DSPRITE_V3.md](RE2DSPRITE_V3.md)):
+`--eye x,y,z` — камера перспективы в метрах исходной модели (для позы yaw=pitch=0), `--zoom k` → `bodyScale`, `--raster N`,
+`--window x0,y0,x1,y1`, `--cull`, `--motion-lod 0..4`, `--detail 0.25..8`.
+
+`r2d-sdk convert-re2d3 <v2.png> [--character x.character.json] [--output каталог] [--name имя] [--density 2..12] [--raster 128..2048]` — апгрейд v2→v3
+без меша: ячейки управляющей сетки делятся на d×d текселей (по умолчанию 8 → сетка 2048×1536), цвет из атласа, кости по углам ячейки.
 
 
 ---
@@ -19711,6 +19802,11 @@ world.add(hero);
 Для узла со спрайтом, включённым в кадр World, depth — абсолютная высота основания, angle — направление в радианах. Рендер выбирает free span, применяет light/fog и сравнивает world depth с sample depth anime output. Pixel/v1 output не имеет этой exported sample map и использует fallback depth изображения. Node tint/alpha/flip/shader semantics обычного draw не гарантируются World. World surface normal/emissive materials не превращают atlas в PBR mesh.
 
 Pose synthesis budget и camera quantization задаются world.quality, не legacy $.re2d.poseBudget. Animation orchestration остаётся existing sprite wrapper, expensive world synthesis/composition — C. Полный контракт: [Re2DSprite World](../re2d/RE2DSPRITE_WORLD.md), [World guide](../RE2D_WORLD_GUIDE.md), [migration](../re2d/RE2D_MIGRATION.md).
+
+## v3
+
+PNG формата [v3](../RE2DSPRITE_V3.md) загружается тем же `$.re2dSprite.from()/create()`; `re2dMotion(clip,loop)` + `re2dSeek(t)` играют скин-клипы.
+`projection.raster/light/detail` в character.json управляют разрешением синтеза, светом и уровнем детализации; `eye` включает перспективу (оружие от первого лица), `window` — видимое окно, `cull` — отсечение отвернувшихся ячеек, `motionLod` — более грубый уровень в движении; `.color()` — освещение мира.
 
 
 ---

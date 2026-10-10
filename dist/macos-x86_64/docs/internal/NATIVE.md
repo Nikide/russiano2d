@@ -2469,3 +2469,12 @@ Private `engine.re2d.worldLoad(text)` validates native author/baked JSON и во
 Authority: `src/re2d_world_topology.c` loader/cells/portals; visibility C; material/light C; `src/re2d_world_runtime.c` registrations/retained frame arena/pose scheduling; `src/re2d_world_gpu.c` existing SDL_GPU execution; `src/re2d_world_bake.c` binary tables. Legacy mesh helper не является authoritative world model. Full handle signatures/defaults/lifecycle/profiler/limits — [runtime reference](../re2d/RE2D_WORLD_RUNTIME.md).
 
 GPU FINAL own shared color/owner/depth targets и direct texture copy; diagnostics may readback. CPU reference own RGBA/depth. Anime sprite sample_depth exported for actual sprite node/world occlusion; pixel/v1 fallback image depth. `worldLoad` baked wirev1/v2 validates tables, startup imports BSP/CSR/static links. `worldCreate` legacy Float32 arrays не заменяет этот topology loader.
+
+## rotSpriteConfig (Re2DSprite v3)
+
+`engine.rotSpriteConfig(handle, raster, light24, detail, view)` — разрешение синтеза (≤2048), 24 числа освещения (`R3Light`), порог детализации
+(пиксели на тексель) и вид `{eye:[x,y,z]|null, window:[x0,y0,x1,y1]|null, cull, motionLod}`. Для v2 вызов отклоняется. Ядро: `src/rotsprite3.c`
+(декодер контейнера, пирамида, скининг, перспектива, растр, свёртка, сглаживание силуэта), формат и поля — `docs/RE2DSPRITE_V3.md`.
+Настройки вида переживают смену размера растра; в текстуру загружается только изменённая область (`R3Work.touched`).
+
+Окно: щелчок по окну без фокуса клавиатуры поднимает его (`SDL_RaiseWindow`), при получении фокуса захват мыши применяется заново (`src/app.c`).

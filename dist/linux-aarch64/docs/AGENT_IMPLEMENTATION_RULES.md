@@ -156,13 +156,25 @@ $.ready(() => {
 
 ## Правила репозитория, о которых легко забыть
 
-* **Гейт документации.** Агент не пишет в движок, пока не прочитал целиком
-  [ARCHITECTURE.md](ARCHITECTURE.md) → этот файл → [internal/NATIVE.md](internal/NATIVE.md) →
-  [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md), а при правке `src/highlevel/**` —
-  ещё [highlevel/_CONTRACT.md](highlevel/_CONTRACT.md) и страницу модуля
-  `docs/highlevel/<имя>.md`. Это делает плагин
+* **Сначала философия — потом работа.** Агент не пишет в движок, пока не прочитал
+  целиком [PHILOSOPHY.md](PHILOSOPHY.md) — конституцию движка. Это всё, что
+  требует гейт. Остальные доки ([ARCHITECTURE.md](ARCHITECTURE.md), этот файл,
+  [internal/NATIVE.md](internal/NATIVE.md), [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md),
+  а при правке `src/highlevel/**` — [highlevel/_CONTRACT.md](highlevel/_CONTRACT.md)
+  и страница модуля `docs/highlevel/<имя>.md`) обязательны по правилам выше, но
+  запись не блокируют. Гейт делает плагин
   `tools/dsh-russiano2d-docs-gate`; обойти его нельзя, делегирование не
   отменяет правило.
+* **Главный гейт: движок только 2D.** Тот же плагин отклоняет правку, вводящую
+  3D-сущность: имя пути вида `render3d.c`/`mesh3d.js`, имена `R3D`, `Scene3D`,
+  `Mesh3D`, `Vector3`, `Matrix4`, `Quaternion`, `MeshRenderer`, `Physics3D`,
+  `Camera3D` и загрузчики 3D-ассетов в рантайме (`assimp`/`tinygltf`/`cgltf`/`glm`,
+  three.js). Превращать Russiano2D в 3D нельзя — это non-goal
+  ([PHILOSOPHY.md](PHILOSOPHY.md) §3). RE2D остаётся разрешённым: это
+  `spatial description → projection → ordinary 2D representation`
+  ([PHILOSOPHY.md](PHILOSOPHY.md) §1), а не мост к 3D. SDK-импорт 3D-моделей
+  (`sdk/**`), инструменты, документация, тесты и дистрибутивы из гейта исключены.
+  Спорную задачу останавливай и выноси владельцу проекта.
 * **Каждый модуль `src/highlevel/<имя>.js`** имеет страницу
   `docs/highlevel/<имя>.md` и тест — это проверяет
   `tests/doc_coverage_test.py`.

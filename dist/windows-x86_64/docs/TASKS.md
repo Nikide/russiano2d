@@ -5,6 +5,11 @@
 его можно прочитать в истории Git. Справочник поведения —
 [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) и [highlevel/](highlevel/).
 
+Текущие доработки SDK/Re2D от 2026-10-10, включая Dust2, небо, анимации и
+звук, — [SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md).
+Этот список содержит отдельные критерии приёмки и не изменяет статус
+исторической сверки ниже.
+
 ## 1. Запросы и диагностика
 
 В [ROADMAP.md](ROADMAP.md) остаются операторы `nearest` / `inside` /
@@ -23,13 +28,15 @@ ImGui удалён из сборки и runtime. F1 открывает RmlUi-п�
 
 ## 3. Re2D World
 
-Реализованы XY BSP, вертикальные spans, same-XY многоэтажность, support /
-blocked / ray и синтез обычного 2D-кадра. Остались runtime portals/PVS,
-автоматическая топология cells, текстурные surfaces/полигональные floors,
-непрерывные slopes, sweep/полный footprint и точная глубина samples персонажа.
+Реализованы XY BSP, вертикальные spans, same-XY многоэтажность, порталы с
+экранными окнами и обходом BSP, слитые поверхности, материалы, нативный свет и
+тени, туман, декали, панорамное небо (PNG или EXR), точная глубина samples
+Re2DSprite, GPU-путь SDL_GPU с CPU-эталоном и World audio (HRTF). Остались:
+автоматическая топология cells, непрерывные slopes как физические примитивы,
+sweep/полный footprint, прохождение звука через материалы и реверберация.
 SDK генерирует лестницы и ступенчатые slopes; это не новые физические примитивы.
-Порталы/PVS в compiled JSON не используются runtime (`runtimeUsed:false`).
-Ограничения compositor и измерения — [RE2D_WORLD_GUIDE.md](RE2D_WORLD_GUIDE.md),
+Границы и очередь — [re2d/RE2D_WORLD_RUNTIME.md](re2d/RE2D_WORLD_RUNTIME.md),
+[SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md); измерения —
 [RE2D_WORLD_PERF.md](RE2D_WORLD_PERF.md).
 
 ## 4. SDK после acceptance фаз 0–7
@@ -37,7 +44,7 @@ SDK генерирует лестницы и ступенчатые slopes; эт
 [SDK.md](SDK.md) описывает реализованные срезы; все компоненты дерева §8 спецификации
 (Tilemap, Particle, Collision/Physics, Parallax, Font, Audio, Input, RmlUi Studio, DevTools,
 шаблоны, сборки движка) есть и покрыты тестами. Следующие возможности большой
-спецификации остаются отдельными задачами: FBX, автоматическая метрика
+спецификации остаются отдельными задачами: универсальный FBX-ретаргетинг (ограниченный motion-import для Mixamo уже есть), автоматическая метрика
 source↔Re2D comparison, кисти поверхности, графические кривые, выбор элемента кликом в
 предпросмотре RmlUi Studio, drag-ресайз фигур коллизии и зон акустики.
 
