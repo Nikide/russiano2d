@@ -178,6 +178,7 @@ typedef struct R2DVertex {
 
 typedef struct R2DRenderer {
     SDL_GPUDevice *device;
+    void *rot_workspace; // serial native Re2DSprite synthesis scratch; renderer owns it
     SDL_Window    *window;
 
     // Обрезка: `clips` — таблица прямоугольников кадра, `clip_count` — сколько
@@ -441,6 +442,7 @@ int  r2d_render_user_shader_define(R2DRenderer *r, const char *name, const char 
 const char *r2d_render_user_shader_error(const R2DRenderer *r);
 int  r2d_render_user_shader_count(const R2DRenderer *r);
 bool r2d_render_user_shader_supported(void);
+SDL_GPUShader *r2d_render_world_shader(R2DRenderer *,bool fragment);
 const char *r2d_render_user_shader_preamble(void);
 // Пакет спрайтов с эффектом: fx — массив индексов на каждый спрайт (может
 // быть NULL — тогда весь пакет идёт обычным конвейером).

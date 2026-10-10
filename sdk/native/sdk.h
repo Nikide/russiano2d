@@ -257,3 +257,5 @@ int sdk_fail(SdkReport *rep, const char *code, const char *fmt, ...);
 #ifdef __cplusplus
 }
 #endif
+
+int sdk_cmd_animation_import(const SdkArgs *a);

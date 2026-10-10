@@ -1,0 +1,10 @@
+body { width: 100%; height: 100%; font-family: Noto Sans; font-size: 14px; color: #fff2da; }
+#panel { position: absolute; top: 18px; left: 20px; padding: 14px; background-color: #101b26e8; border-left: 4px #d9a857; }
+#brand { font-size: 24px; font-weight: 700; color: #f2c078; letter-spacing: 1.4px; }
+#status { font-size: 17px; } #stats { color: #c0cbd0; margin-top: 5px; }
+#keys { margin-top: 9px; font-size: 12px; } #views { color: #d9a857; margin-top: 5px; font-size: 12px; }
+#map { position: absolute; right: 20px; top: 18px; width: 200px; height: 217px; opacity: 0.9; }
+#cross { position: absolute; left: 50%; top: 50%; font-size: 22px; color: #fff5dc; }
+
+#brand, #status, #stats, #keys, #views { display: block; }
+#panel { right: 250px; }

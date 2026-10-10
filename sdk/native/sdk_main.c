@@ -38,6 +38,7 @@ static const Command k_commands[] = {
     { "re2d-info",   sdk_cmd_re2d_info,   "Re2DSprite: PNG v2, части, статистика карт и проверка" },
     { "re2d-debug",  sdk_cmd_re2d_debug,  "Re2DSprite: отладочный вид карт поверхности в PNG" },
     { "re2d-sample", sdk_cmd_re2d_sample, "Re2DSprite: один отсчёт поверхности (ID, XYZ, покрытие, владелец)" },
+    { "animation-import", sdk_cmd_animation_import, "FBX humanoid motion → existing Re2DSprite rig animation JSON" },
     { "bake-re2d", sdk_cmd_bake_re2d, "Re2D Baker: GLB/glTF/VRM → Re2DSprite (prop, character)" },
     { "world-compile", sdk_cmd_world_compile, "Re2D World: исходник *.re2dmap → описание для $.re2d.world" },
     { "world-info",    sdk_cmd_world_info,    "Re2D World: статистика, room-over-room, порталы и проверка без записи" },

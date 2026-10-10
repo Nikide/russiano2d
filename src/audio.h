@@ -55,6 +55,8 @@ typedef struct R2DAudioGroup {
 } R2DAudioGroup;
 
 typedef struct R2DAudio {
+    void *spatial;
+    unsigned channel_generation[R2D_AUDIO_CHANNELS];
     MIX_Mixer *mixer;
 
     MIX_Audio *sounds[R2D_AUDIO_MAX_SOUNDS];
@@ -198,3 +200,6 @@ void  r2d_audio_set_sfx_volume(R2DAudio *a, float v);
 float r2d_audio_get_sfx_volume(const R2DAudio *a);
 void  r2d_audio_set_music_volume(R2DAudio *a, float v);
 float r2d_audio_get_music_volume(const R2DAudio *a);
+
+// World adapter reuses mixer channels and their generation, never a second device.
+bool r2d_audio_world_channel(R2DAudio *,int,bool,bool,float,float,float,float,float);

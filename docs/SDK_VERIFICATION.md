@@ -3,6 +3,10 @@
 Сверка 2026-10-09, macOS arm64/Metal, CMake Release. Команды и возможности —
 [SDK.md](SDK.md), журнал и история проверок — [SDK_HANDOFF.md](../SDK_HANDOFF.md).
 
+Дополнения и незавершённые проверки от 2026-10-10 ведутся в
+[SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md) и handoff;
+числа ниже относятся к указанной сверке 2026-10-09.
+
 ## Автоматические проверки
 
 - Полный agent suite: **116/116**, fail 0, skip 0, 301.3 с.
@@ -30,7 +34,7 @@ Input Tools, Particle Studio и Run/Package. Использует публичн
 
 ## Ограничения
 
-FBX, кисти поверхности, графические кривые и автоматическая численная метрика
+универсальный FBX-ретаргетинг (есть ограниченный Mixamo motion-import пресет), кисти поверхности, графические кривые и автоматическая численная метрика
 сравнения не реализованы. Skin — dominant rigid ownership; walk процедурный,
 MToon lighting не переносится. Source-preview — C tool-only raster, справа
 настоящий Re2DSprite runtime. World runtime не использует PVS, slopes ступенчатые.

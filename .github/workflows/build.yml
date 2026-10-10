@@ -38,14 +38,11 @@ jobs:
       - name: macOS dependencies
         if: runner.os == 'macOS'
         run: brew install freetype ninja pkg-config
-      - name: Windows dependencies
-        if: runner.os == 'Windows'
-        run: vcpkg install freetype:x64-windows-static
       - name: Configure
         run: |
           flags=()
           if [[ "$RUNNER_OS" == Windows ]]; then
-            flags+=("-DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" "-DVCPKG_TARGET_TRIPLET=x64-windows-static" '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>')
+            flags+=("-DR2D_BUNDLED_FREETYPE=ON" '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>')
           fi
           cmake -S . -B build-ci -DCMAKE_BUILD_TYPE=Release "${flags[@]}"
       - name: Build engine and SDK
@@ -71,6 +68,19 @@ jobs:
           xvfb-run -a python3 tests/agent/sdk_cli_test.py
           xvfb-run -a python3 tests/agent/sdk_studios_test.py
           xvfb-run -a python3 tests/agent/ui_virtual_mouse_test.py
+      - name: Linux Re2D World acceptance and golden images
+        if: runner.os == 'Linux'
+        env:
+          R2D_SDK_BINARY: build-ci/r2d-sdk
+          R2D_BINARY: build-ci/russiano2d
+          SDL_GPU_DRIVER: vulkan
+        run: |
+          mkdir -p build
+          xvfb-run -a python3 tests/agent/re2d_world_renderer_test.py
+          xvfb-run -a python3 tests/agent/sdk_world_studio_test.py
+          xvfb-run -a python3 tests/agent/re2d_world_acceptance_test.py
+          xvfb-run -a python3 tests/agent/re2d_dust2_test.py
+          xvfb-run -a python3 tools/re2d_world_goldens.py
       - name: Package engine, SDK and docs
         run: python tools/ci_package.py --build-dir build-ci --platform '${{ matrix.platform }}'
       - uses: actions/upload-artifact@v4

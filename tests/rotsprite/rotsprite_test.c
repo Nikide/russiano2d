@@ -90,6 +90,8 @@ static void v2_tests(void)
         CHECK(r2d_rotsprite_v2_anime_workspace(&dense,frame*31.7,frame%2?25:-15,0,0,&cached_rig,smooth+1,&cache));
         CHECK(r2d_rotsprite_v2_anime(&dense,frame*31.7,frame%2?25:-15,0,0,&cached_rig,smooth2));
         CHECK(!memcmp(smooth+1,smooth2,256*256*4));
+        CHECK(cache.sample_depth!=NULL);
+        for(int i=0;i<256*256;i++)if(smooth[1+i*4+3])CHECK(isfinite(cache.sample_depth[i]));
     }
     CHECK(!r2d_rotsprite_v2_anime_workspace(&dense,NAN,0,0,0,&cached_rig,smooth2,&cache));
     r2d_rotsprite_anime_workspace_free(&cache);r2d_rotsprite_anime_workspace_free(&cache);

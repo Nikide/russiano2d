@@ -90,3 +90,6 @@ game/*.js         linguist-language=JavaScript
 # Сгенерированные артефакты не должны раздувать статистику.
 demos/assets/art/** linguist-generated
 src/generated/**  linguist-generated
+
+# Release manifests hash exact bytes; Git must not normalize packaged files.
+dist/** -text

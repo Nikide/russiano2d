@@ -20,7 +20,7 @@
 // ===========================================================================
 
 import { engine } from './native.js';
-import { prepareRotWorldPose } from './rotsprite.js';
+import { prepareRotWorldPose, registerRotWorldNode } from './rotsprite.js';
 import { TAGS, withAlpha } from './core.js';
 import { registerKindPass, registerKindRenderer, KIND_RE2D } from './kinds.js';
 import { applyRe2dView } from './camera.js';
@@ -434,7 +434,172 @@ export function worldPrimitives(description, colorOf) {
     return { walls: new Float32Array(walls), spans: new Float32Array(spans) };
 }
 
+function worldWrapper($, native) {
+    return {
+                support(x, y, feet, height, step = 0) { return native.support(x, y, feet, height, step); },
+                blocked(x, y, radius, bottom, top) { return native.blocked(x, y, radius, bottom, top); },
+                ray(from, to) { return native.ray(from.x, from.y, from.height, to.x, to.y, to.height); },
+                info() { return native.info(); },
+                lighting(options = {}) {
+                    if (options.mode && options.mode !== 'classic') throw new TypeError('Re2D World: supported lighting mode is classic');
+                    native.lighting(+!!options.dynamic, +!!options.shadows, +(options.orientationContrast !== false),
+                        options.distanceScale ?? 0, options.orientationStrength ?? 0.06, +(options.enabled !== false));
+                    return this;
+                },
+                span(index) {
+                    const set = l => native.spanLight(index, l.level,l.r,l.g,l.b,l.fogDensity,l.fogStart,l.fogR,l.fogG,l.fogB);
+                    return {
+                        heights(bottom,top) { native.spanHeight(index,bottom,top); return this; },
+                        info() { return native.spanLight(index); },
+                        lighting(options = {}) {
+                            const l = native.spanLight(index);
+                            if (options.level !== undefined) l.level = options.level;
+                            if (options.color !== undefined) [l.r,l.g,l.b] = unpackRgb($.color(options.color)).map(x => x / 255);
+                            set(l); return this;
+                        },
+                        fog(options = {}) {
+                            const l = native.spanLight(index);
+                            if (options.density !== undefined) l.fogDensity = options.density;
+                            if (options.start !== undefined) l.fogStart = options.start;
+                            if (options.color !== undefined) [l.fogR,l.fogG,l.fogB] = unpackRgb($.color(options.color)).map(x => x / 255);
+                            set(l); return this;
+                        },
+                    };
+                },
+                light(options = {}) {
+                    const rgb = unpackRgb($.color(options.color ?? '#ffffff')).map(x => x / 255);
+                    const token = native.lightCreate(options.x ?? 0,options.y ?? 0,options.h ?? 0,
+                        options.radius ?? 100,options.intensity ?? 1,...rgb,+!!options.shadow);
+                    const update = patch => {
+                        const l = { ...native.lightInfo(token), ...patch };
+                        native.lightUpdate(token,l.x,l.y,l.h,l.radius,l.intensity,l.r,l.g,l.b,+l.shadow);
+                    };
+                    return {
+                        info() { return native.lightInfo(token); },
+                        at(x,y) { update({x,y}); return this; },
+                        height(h) { update({h}); return this; },
+                        radius(radius) { update({radius}); return this; },
+                        intensity(intensity) { update({intensity}); return this; },
+                        shadow(shadow) { update({shadow}); return this; },
+                        color(color) { const [r,g,b] = unpackRgb($.color(color)).map(x => x / 255); update({r,g,b}); return this; },
+                        life(seconds) { const l=native.lightInfo(token); native.lightVisual(token,seconds,l.flickerMin,l.flickerMax,l.flickerRate,l.flickerSeed); return this; },
+                        flicker(options = {}) { const l=native.lightInfo(token); native.lightVisual(token,l.remaining,options.min ?? .5,options.max ?? 1,options.rate ?? 9,options.seed ?? 42); return this; },
+                        remove() { native.lightRemove(token); },
+                    };
+                },
+                cellAt(x, y) { return native.cellAt(x, y); },
+                spanAt(x, y, h) { return native.spanAt(x, y, h); },
+                lightAt(x,y,h) { return native.lightAt(x,y,h); },
+                surface(index) {
+                    const info = native.surface(index);
+                    return info ? { ...info, material(name) { native.surfaceMaterial(index,name); return this; },sky(enabled=true) { native.surfaceSky(index,!!enabled);return this; } } : null;
+                },
+                material(name, options) {
+                    native.material(name,options.albedo,options.normal ?? '',options.emissive ?? '',
+                        options.emissiveStrength ?? 1,options.uScale ?? (1/64),options.vScale ?? (1/64),({masked:0,opaque:1,translucent:2,additive:3})[options.blend ?? "masked"] ?? -1,options.opacity ?? 1,options.mapping === "world",options.filter === "linear");
+                    return this;
+                },
+                portalClosed(index, closed) { native.portalClosed(index, closed); return this; },
+                dispose() { native.dispose(); },
+                render(view, entities = [], width = 320, height = 180) {
+                    const v = view;
+                    engine.re2d.view(v.x, v.y, v.eye, v.yaw * Math.PI / 180,
+                        (v.pitch || 0) * Math.PI / 180, (v.fov || 70) * Math.PI / 180);
+                    // Existing relative yaw/pitch and attachment/socket synthesis.
+                    const nodes = Array.isArray(entities) ? entities.flatMap(e => $(e).toArray()) : $(entities).toArray();
+                    const handles = [], transforms = [];
+                    const emit = (node, attached = false) => {
+                        const r = node.rot_sprite;
+                        if (!r) return;
+                        if (!attached) {
+                            const pose = billboardPose(v.x, v.y, v.eye, node.x, node.y,
+                                (Number(node.depth) || 0) + node.h / 2, node.angle);
+                            prepareRotWorldPose(node,pose.yaw,pose.pitch);
+                        }
+                        const children = [...(r.children || [])];
+                        for (const child of children) if (child.depth < node.depth) emit(child, true);
+                        handles.push(r.handle);
+                        transforms.push(node.x, node.y, Number(node.depth) || 0,
+                            node.w * Math.abs(node.scale_x), node.h * Math.abs(node.scale_y));
+                        for (const child of children) if (child.depth >= node.depth) emit(child, true);
+                    };
+                    for (const node of nodes) if (!node.rot_sprite?.attachment) emit(node);
+                    const sprite = native.frame(width, height, handles, new Float32Array(transforms),
+                        v.projection === 'orthographic' ? (v.orthoHeight || 400) : 0);
+                    engine.drawSprite(sprite, engine.width / 2, engine.height / 2,
+                        engine.width, engine.height, 0, 0xffffffff);
+                    return sprite;
+                },
+            };
+}
+
+function rendererWorldWrapper($, native) {
+    const world = worldWrapper($, native);
+    world.watch = path => {native.watch(path ?? "");return world;};
+    world.reloadJSON = text => { native.reloadJSON(text); return world; };
+    world.decal = options => {const token=native.decal(options.surface,options.material,options.u ?? 0,options.v ?? 0,options.width ?? 16,options.height ?? 16,options.life ?? 0);return {remove(){native.decalRemove(token);}};};
+    world.sky = (options = {}) => {if(options.projection!==undefined&&!['panorama','equirectangular'].includes(options.projection))throw new TypeError('Re2D World: sky projection must be panorama');native.sky(options.texture ?? '',$.color(options.color ?? '#ffffff'),(options.yaw ?? 0)*Math.PI/180,options.exposure ?? 0);return world; };
+    world.reload = path => { const text=$.fs.readText(path);if(text==null)throw new Error(`Re2D World: cannot read ${path}`);return world.reloadJSON(text); };
+    world.backend = name => { native.backend(name); return world; };
+    world.profile = (options = {}) => { native.gpuWait(!!options.gpuWait); return world; };
+    world.quality = (options = {}) => { const current=native.info();native.quality(options.poseBudget ?? current.poseBudget,options.poseStep ?? current.poseStep); return world; };
+    world.quality({poseBudget:1,poseStep:3});
+    const views = ['final','cell-id','span-id','depth','owner','light-level','dynamic-light-count','normal','emissive','bsp','portals','shadow-mask','overdraw'];
+    world.debug = {
+        view(name) { const mode = views.indexOf(name); if (mode < 0) throw new TypeError(`Re2D World: unsupported debug view ${name}`); native.debugView(mode); return world; },
+        renderStats() { return native.info(); },
+        visibility() { return native.visibility(); },
+    };
+    world.audio = {
+        source(path,options={}) {
+            const state={x:options.x??0,y:options.y??0,h:options.h??48,range:options.range??1200,reference:options.reference??120,volume:options.volume??.7};
+            const validate=s=>{if(!Object.values(s).every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=1000000)||s.range<=0||s.reference<=0||s.volume<0||s.volume>1)throw new RangeError('Re2D World audio: invalid source parameters');};
+            validate(state);
+            const channel=$.sound.play(path,{loop:options.loop??true,volume:0,priority:options.priority??20});
+            if(channel<0)throw new Error('Re2D World audio: cannot play source');
+            let token;
+            try{token=native.audioAdd(channel,state.x,state.y,state.h,state.range,state.reference,state.volume,options.hrtf??true);}catch(error){$.sound.stop(channel);throw error;}
+            const update=patch=>{const next={...state,...patch};validate(next);native.audioUpdate(token,next.x,next.y,next.h,next.range,next.reference,next.volume);Object.assign(state,next);};
+            const source={
+                at(x,y,h=state.h){update({x,y,h});return source;},
+                volume(v){update({volume:v});return source;},
+                range(v){update({range:v});return source;},
+                info(){return native.audioInfo(token);},
+                stop(){native.audioRemove(token);},
+            };return source;
+        },
+        listener(view){world.camera(view);return world.audio;},
+    };
+    world.add = target => { $(target).eachNode((i,node) => { registerRotWorldNode(node); native.actorAdd(node); }); return world; };
+    world.remove = target => { $(target).eachNode((i,node) => native.actorRemove(node)); return world; };
+    world.camera = (view = {}) => {
+        native.camera(view.x ?? 0,view.y ?? 0,view.h ?? view.eye ?? 48,
+            (view.yaw ?? 0)*Math.PI/180,(view.pitch ?? 0)*Math.PI/180,(view.fov ?? 70)*Math.PI/180,
+            view.near ?? 4,view.projection === 'orthographic' ? (view.orthoHeight ?? 400) : 0);
+        return world;
+    };
+    world.renderToSprite = (view = null,width = 320,height = 180) => {if(view)world.camera(view);return native.frameRegistered(width,height);};
+    world.render = (view = null,width = 320,height = 180) => {
+        const sprite = world.renderToSprite(view,width,height);
+        engine.drawSprite(sprite,engine.width/2,engine.height/2,engine.width,engine.height,0,0xffffffff);
+        return sprite;
+    };
+    return world;
+}
+
 export function installRe2d($) {
+    $.update(dt => { if (typeof engine.re2d.worldStep === 'function') engine.re2d.worldStep(dt); });
+    $.re2dWorld = {
+        load(path) {
+            const text = $.fs.readText(path);
+            if (text == null) throw new Error(`Re2D World: cannot read ${path}`);
+            const world=rendererWorldWrapper($, engine.re2d.worldLoad(text));if(engine.hotReload())world.watch(path);return world;
+        },
+        fromJSON(text) {
+            return rendererWorldWrapper($, engine.re2d.worldLoad(text));
+        },
+    };
+    $.re2dWorldAudio = world => {if(!world?.audio)throw new TypeError("Re2D World audio: native world required");return world.audio;};
     $ref = $;
     apiRef = $;
     // Теги, у которых нет смысла в 2D: плоскости пола и потолка. Под 2D-камерой
@@ -518,42 +683,7 @@ export function installRe2d($) {
         world(description) {
             const p = worldPrimitives(description || {}, $.color);
             const native = engine.re2d.worldCreate(p.walls, p.spans);
-            return {
-                support(x, y, feet, height, step = 0) { return native.support(x, y, feet, height, step); },
-                blocked(x, y, radius, bottom, top) { return native.blocked(x, y, radius, bottom, top); },
-                ray(from, to) { return native.ray(from.x, from.y, from.height, to.x, to.y, to.height); },
-                info() { return native.info(); },
-                dispose() { native.dispose(); },
-                render(view, entities = [], width = 320, height = 180) {
-                    const v = view;
-                    engine.re2d.view(v.x, v.y, v.eye, v.yaw * Math.PI / 180,
-                        (v.pitch || 0) * Math.PI / 180, (v.fov || 70) * Math.PI / 180);
-                    // Existing relative yaw/pitch and attachment/socket synthesis.
-                    const nodes = Array.isArray(entities) ? entities.flatMap(e => $(e).toArray()) : $(entities).toArray();
-                    const handles = [], transforms = [];
-                    const emit = (node, attached = false) => {
-                        const r = node.rot_sprite;
-                        if (!r) return;
-                        if (!attached) {
-                            const pose = billboardPose(v.x, v.y, v.eye, node.x, node.y,
-                                (Number(node.depth) || 0) + node.h / 2, node.angle);
-                            prepareRotWorldPose(node,pose.yaw,pose.pitch);
-                        }
-                        const children = [...(r.children || [])];
-                        for (const child of children) if (child.depth < node.depth) emit(child, true);
-                        handles.push(r.handle);
-                        transforms.push(node.x, node.y, Number(node.depth) || 0,
-                            node.w * Math.abs(node.scale_x), node.h * Math.abs(node.scale_y));
-                        for (const child of children) if (child.depth >= node.depth) emit(child, true);
-                    };
-                    for (const node of nodes) if (!node.rot_sprite?.attachment) emit(node);
-                    const sprite = native.frame(width, height, handles, new Float32Array(transforms),
-                        v.projection === 'orthographic' ? (v.orthoHeight || 400) : 0);
-                    engine.drawSprite(sprite, engine.width / 2, engine.height / 2,
-                        engine.width, engine.height, 0, 0xffffffff);
-                    return sprite;
-                },
-            };
+            return worldWrapper($, native);
         },
         /** Предел синтезов позы Re2DSprite за кадр (по умолчанию 4; 0 — без предела). */
         poseBudget(value) {

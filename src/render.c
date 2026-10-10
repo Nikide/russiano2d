@@ -1,5 +1,6 @@
 #include "render.h"
 #include "shader_live.h"
+#include "rotsprite_math.h"
 
 #include <quickjs.h>
 #include "payload.h"
@@ -119,6 +120,9 @@ static SDL_GPUShader *r2d__make_shader(SDL_GPUDevice *device,
     info.stage               = stage;
     info.num_uniform_buffers = num_uniform_buffers;
     info.num_samplers        = num_samplers;
+#ifndef __EMSCRIPTEN__
+    if(blob==&r2d_shader_world_frag)info.num_storage_buffers=1;
+#endif
 
     // Порядок предпочтений: сначала «родные» форматы бэкенда, WGSL — последним.
     // Так нативный WebGPU (если появится) сможет взять SPIR-V, а браузерный,
@@ -164,6 +168,16 @@ static SDL_GPUShader *r2d__make_shader(SDL_GPUDevice *device,
         R2D_ERROR("SDL_CreateGPUShader: %s", SDL_GetError());
     }
     return shader;
+}
+
+SDL_GPUShader *r2d_render_world_shader(R2DRenderer *r,bool fragment)
+{
+#ifdef __EMSCRIPTEN__
+    (void)r;(void)fragment;return NULL;
+#else
+    return r2d__make_shader(r->device,fragment?&r2d_shader_world_frag:&r2d_shader_world_vert,
+        fragment?SDL_GPU_SHADERSTAGE_FRAGMENT:SDL_GPU_SHADERSTAGE_VERTEX,fragment?1:0,fragment?3:0);
+#endif
 }
 
 // Создаёт конвейер спрайтов под конкретный режим смешивания. Вершинный вход
@@ -2675,6 +2689,7 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
 
 void r2d_render_shutdown(R2DRenderer *r)
 {
+    if(r->rot_workspace){r2d_rotsprite_anime_workspace_free(r->rot_workspace);free(r->rot_workspace);r->rot_workspace=NULL;}
     // Z-буфер живёт вне кадра: освобождаем явно.
     if (r->depth_texture) {
         SDL_ReleaseGPUTexture(r->device, r->depth_texture);

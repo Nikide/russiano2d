@@ -5,6 +5,8 @@
 # C++-адаптеры существующих библиотек, включая GUI RmlUi.
 # ---------------------------------------------------------------------------
 
+include(WorldEXR)
+
 set(R2D_SOURCES
     r2d.h
     icons.h    icons.c
@@ -13,7 +15,9 @@ set(R2D_SOURCES
     app.h      app.c
     render.h   render.c
     rotsprite.h rotsprite.c rotsprite_math.h rotsprite_math.c
-    re2d.h re2d.c re2d_math.h re2d_math.c re2d_world.h re2d_world.c
+    re2d.h re2d.c re2d_math.h re2d_math.c re2d_world.h re2d_world.c re2d_world_topology.c re2d_world_visibility.c re2d_world_light.c re2d_world_material.c re2d_world_runtime.c
+    re2d_world_gpu.h re2d_world_gpu.c
+    re2d_world_bake.h re2d_world_bake.c
     profile.h  profile.c
     physics.h  physics.c
     http.h     http.c
@@ -55,7 +59,8 @@ endif()
 
 # --- Звук -------------------------------------------------------------------
 if(R2D_ENABLE_AUDIO)
-    list(APPEND R2D_SOURCES audio.h audio.c audio_fx.h audio_fx.c
+    include(SteamAudio)
+    list(APPEND R2D_SOURCES audio_spatial.h audio_spatial.c audio.h audio.c audio_fx.h audio_fx.c
                             audio_reverb.h audio_reverb.c)
     list(APPEND R2D_DEFINES R2D_ENABLE_AUDIO=1)
 else()
@@ -288,7 +293,7 @@ target_include_directories(russiano2d PRIVATE
 
 target_compile_definitions(russiano2d PRIVATE ${R2D_DEFINES})
 
-target_link_libraries(russiano2d PRIVATE ${R2D_WIN_LIBS}
+target_link_libraries(russiano2d PRIVATE r2d_world_exr ${R2D_WIN_LIBS}
     SDL3::SDL3
     SDL3_image::SDL3_image
     qjs
@@ -342,6 +347,23 @@ endif()
 
 if(R2D_ENABLE_AUDIO)
     target_link_libraries(russiano2d PRIVATE SDL3_mixer::SDL3_mixer)
+    if(TARGET R2D_SteamAudio)
+        target_link_libraries(russiano2d PRIVATE R2D_SteamAudio)
+        target_compile_definitions(russiano2d PRIVATE R2D_STEAM_AUDIO=1)
+        if(WIN32)
+            set(_r2d_audio_dest "$<TARGET_FILE_DIR:russiano2d>")
+        else()
+            set(_r2d_audio_dest "$<TARGET_FILE_DIR:russiano2d>/lib")
+        endif()
+        add_custom_command(TARGET russiano2d POST_BUILD COMMAND ${CMAKE_COMMAND} -E make_directory "${_r2d_audio_dest}" COMMAND ${CMAKE_COMMAND} -E copy_if_different "${R2D_STEAM_AUDIO_RUNTIME}" "${_r2d_audio_dest}")
+        set_property(TARGET russiano2d APPEND PROPERTY BUILD_RPATH "$<TARGET_FILE_DIR:russiano2d>")
+        if(WIN32)
+            install(FILES "${R2D_STEAM_AUDIO_RUNTIME}" DESTINATION .)
+        else()
+            install(FILES "${R2D_STEAM_AUDIO_RUNTIME}" DESTINATION lib)
+        endif()
+        install(DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/steam_audio/" DESTINATION share/licenses/steam_audio)
+    endif()
 endif()
 
 if(R2D_ENABLE_NET)

@@ -69,7 +69,7 @@ done < <(find . \( -type f -o -type l \) \
   ! -name '.env.deploy' ! -name '.askpass.sh' ! -name '.deploy-state' \
   ! -name 'deploy.sh' ! -name 'deploy-fast.sh' ! -name 'build-doc.py' \
   ! -name 'sync-downloads.sh' ! -name 'sync-index.py' ! -name 'build-site.sh' ! -name 'list-removed-docs.py' \
-  ! -name '.DS_Store' ! -path './README.md' ! -path './.preview/*' ! -path './.git/*' \
+  ! -name '*.pyc' ! -name '*.pyo' ! -path '*/__pycache__/*' ! -name '.DS_Store' ! -path './README.md' ! -path './.preview/*' ! -path './.git/*' \
   | sed 's|^\./||' | sort)
 
 if [ "${SKIP_DOWNLOAD:-0}" = "1" ]; then
@@ -109,8 +109,8 @@ for f in "${FILES[@]}"; do
 done
 # Prune only obsolete documentation previously tracked by this deployment.
 DELETE_LIST="$WORK/delete.list"
-awk -F'\t' '$1 ~ /^doc\// {print $1}' "$STATE_IN" | while IFS= read -r f; do
-  [ -e "$f" ] || printf '%s\n' "$f"
+awk -F'\t' '$1 ~ /^doc\// || $1 ~ /(^|\/)__pycache__\/.*\.py[co]$/ {print $1}' "$STATE_IN" | while IFS= read -r f; do
+  case "$f" in */__pycache__/*) printf '%s\n' "$f" ;; *) [ -e "$f" ] || printf '%s\n' "$f" ;; esac
 done > "$DELETE_LIST"
 if [ "${DEPLOY_INVENTORY:-1}" = 1 ]; then
   if python3 list-removed-docs.py > "$WORK/remote-removed"; then
@@ -203,7 +203,7 @@ fi
 # Only after replacement pages are uploaded, remove obsolete doc files.
 prune_failed=0
 while IFS= read -r f; do
-  case "$f" in doc/*) ;; *) echo "invalid prune path"; exit 1 ;; esac
+  case "$f" in doc/*|__pycache__/*.pyc|__pycache__/*.pyo) ;; *) echo "invalid prune path"; exit 1 ;; esac
   case "$f" in *..*|*$'\n'*) echo "invalid prune path"; exit 1 ;; esac
   if curl -sS --connect-timeout 20 --max-time 60 --user "$DEPLOY_USER:$DEPLOY_PASS" \
       -Q "DELE $f" "$FTP_BASE/" -o /dev/null 2>"$WORK/prune.err"; then

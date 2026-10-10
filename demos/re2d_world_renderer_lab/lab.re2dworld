@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "cells": [
+    {
+      "x": 0,
+      "y": -120,
+      "w": 240,
+      "h": 240,
+      "spans": [
+        {
+          "bottom": 0,
+          "top": 128,
+          "floorColor": "#929a92",
+          "ceilingColor": "#777d88"
+        },
+        {
+          "bottom": 160,
+          "top": 288,
+          "floorColor": "#ad9473",
+          "ceilingColor": "#7a8190"
+        }
+      ]
+    },
+    {
+      "x": 240,
+      "y": -120,
+      "w": 240,
+      "h": 240,
+      "spans": [
+        {
+          "bottom": 0,
+          "top": 128,
+          "floorColor": "#929a92",
+          "ceilingColor": "#777d88"
+        },
+        {
+          "bottom": 160,
+          "top": 288,
+          "floorColor": "#ad9473",
+          "ceilingColor": "#7a8190"
+        }
+      ]
+    }
+  ],
+  "walls": [
+    {
+      "from": [
+        0,
+        -120
+      ],
+      "to": [
+        480,
+        -120
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#a4b3c1"
+    },
+    {
+      "from": [
+        480,
+        -120
+      ],
+      "to": [
+        480,
+        120
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#b49d88"
+    },
+    {
+      "from": [
+        480,
+        120
+      ],
+      "to": [
+        0,
+        120
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#879baf"
+    },
+    {
+      "from": [
+        0,
+        120
+      ],
+      "to": [
+        0,
+        -120
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#a4b3c1"
+    },
+    {
+      "from": [
+        240,
+        -120
+      ],
+      "to": [
+        240,
+        -50
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#b0a78e"
+    },
+    {
+      "from": [
+        240,
+        50
+      ],
+      "to": [
+        240,
+        120
+      ],
+      "bottom": 0,
+      "top": 288,
+      "color": "#b0a78e"
+    },
+    {
+      "from": [
+        240,
+        -50
+      ],
+      "to": [
+        240,
+        50
+      ],
+      "bottom": 100,
+      "top": 160,
+      "color": "#b0a78e"
+    },
+    {
+      "from": [
+        240,
+        -50
+      ],
+      "to": [
+        240,
+        50
+      ],
+      "bottom": 260,
+      "top": 288,
+      "color": "#b0a78e"
+    },
+    {
+      "from": [
+        479,
+        -30
+      ],
+      "to": [
+        479,
+        30
+      ],
+      "bottom": 28,
+      "top": 90,
+      "color": "#ffffff"
+    }
+  ],
+  "portals": [
+    {
+      "cellA": 0,
+      "cellB": 1,
+      "from": [
+        240,
+        -50
+      ],
+      "to": [
+        240,
+        50
+      ],
+      "openings": [
+        {
+          "bottom": 0,
+          "top": 100
+        },
+        {
+          "bottom": 160,
+          "top": 260
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 #include "audio.h"
+#include "audio_spatial.h"
 
 #include "payload.h"
 
@@ -80,6 +81,7 @@ static void SDLCALL r2d__group_fx(void *userdata, MIX_Group *group,
 {
     R2D_UNUSED(group);
     r2d_audio_fx_process((R2DAudioFx *)userdata, spec, pcm, samples);
+
 }
 
 int r2d_audio_group(R2DAudio *a, const char *name)
@@ -203,6 +205,12 @@ static void SDLCALL r2d__track_fx(void *userdata, MIX_Track *track,
 {
     R2D_UNUSED(track);
     r2d_audio_fx_process((R2DAudioFx *)userdata, spec, pcm, samples);
+
+}
+
+
+static void SDLCALL r2d__track_spatial(void *userdata,MIX_Track *track,const SDL_AudioSpec *spec,float *pcm,int samples) {
+    R2D_UNUSED(track);r2d_audio_spatial_process(userdata,spec,pcm,samples);
 }
 
 bool r2d_audio_set_channel_effect(R2DAudio *a, int channel, const char *kind,
@@ -362,9 +370,12 @@ bool r2d_audio_init(R2DAudio *a)
     // Колбэк ставим один раз на канал: подмена на лету гонялась бы с
     // аудиопотоком, а сам эффект задаётся полем kind. Буферы (линия задержки,
     // хвост реверба) выделяет модуль эффектов лениво — при включении эффекта.
+    a->spatial=r2d_audio_spatial_create(a->fx_freq,a->fx_channels);
     for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
+        a->fx[i].spatial=r2d_audio_spatial_channel(a->spatial,i);
         a->fx[i].kind = R2D_AUDIO_FX_NONE;
         MIX_SetTrackRawCallback(a->channels[i], r2d__track_fx, &a->fx[i]);
+        MIX_SetTrackCookedCallback(a->channels[i],r2d__track_spatial,a->fx[i].spatial);
     }
     return true;
 }
@@ -407,6 +418,7 @@ void r2d_audio_shutdown(R2DAudio *a)
     a->mixer = NULL;
     MIX_Quit();
 
+    r2d_audio_spatial_destroy(a->spatial);a->spatial=NULL;
     a->ready = false;
     a->sound_count = 0;
 }
@@ -516,6 +528,10 @@ int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops,
     if (channel < 0) return -1;
 
     MIX_Track *track = a->channels[channel];
+    r2d_audio_spatial_params(a->fx[channel].spatial,false,false,0,0,-1,22000);
+    r2d_audio_spatial_reset(a->fx[channel].spatial);
+    a->channel_3d[channel]=false;
+    if(++a->channel_generation[channel]>1000000)a->channel_generation[channel]=1;
 
     if (!MIX_SetTrackAudio(track, a->sounds[id])) return -1;
 
@@ -697,3 +713,11 @@ void r2d_audio_set_music_volume(R2DAudio *a, float v)
 }
 
 float r2d_audio_get_music_volume(const R2DAudio *a) { return a->music_volume; }
+
+bool r2d_audio_world_channel(R2DAudio *a,int c,bool enabled,bool hrtf,float x,float y,float z,float gain,float cutoff) {
+    if(!a||!a->ready||c<0||c>=R2D_AUDIO_CHANNELS||!a->spatial)return false;
+    if(hrtf&&!r2d_audio_spatial_hrtf(a->spatial))return false;
+    MIX_StereoGains stereo={1,1};MIX_SetTrackStereo(a->channels[c],&stereo);a->channel_3d[c]=false;
+    r2d_audio_set_channel_volume(a,c,gain);
+    r2d_audio_spatial_params(a->fx[c].spatial,enabled,hrtf,x,y,z,cutoff);return true;
+}

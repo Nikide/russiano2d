@@ -162,3 +162,9 @@ holdRifle — изготовка вперёд, оба хвата проверя�
 правилами, что рантайм (`validateRotDefinition`, `validateRotAnimations`), плюс
 PNG v2: размер, заголовок, карты, части без отсчётов, дыры и скачки XYZ.
 Ответ — JSON со стабильными кодами `SDK_RE2D_*` ([SDK.md](SDK.md) §6).
+
+## Integration с новым World (2026-10-10)
+
+Этот JSON/PNG контракт сохранён. `world.add(sprite)` включает существующий узел `$` со спрайтом в кадр World после `.from`, а native renderer читает position/depth/size/angle, рассчитывает camera-relative pose и включает socket attachments. High-level JSON animation/model orchestration остаётся existing wrapper; native world synthesis/light/depth/composition — C.
+
+Используйте `sprite.hide()`, чтобы подавить его отдельную обычную 2D-отрисовку. Из кадра World спрайт исключается через `world.remove(sprite)`. Height через depth, physical world size через size. Не заменяйте atlas на world mesh. Полный пример, lighting/fog/sample-depth, lifecycle и budgets: [Re2DSprite World](re2d/RE2DSPRITE_WORLD.md).

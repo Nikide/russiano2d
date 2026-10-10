@@ -110,6 +110,12 @@ function(r2d_add_shader name stage source)
 
     set(spv "${R2D_SHADER_DIR}/${basename}.spv")
     set(msl "${R2D_SHADER_DIR}/${basename}.msl")
+    set(binding_fix "")
+    set(binding_dep "")
+    if(name STREQUAL "world" AND stage STREQUAL "frag")
+        set(binding_fix COMMAND ${CMAKE_COMMAND} -DINPUT=${msl} -P "${CMAKE_SOURCE_DIR}/cmake/WorldMetalBindings.cmake")
+        set(binding_dep "${CMAKE_SOURCE_DIR}/cmake/WorldMetalBindings.cmake")
+    endif()
 
     add_custom_command(
         OUTPUT "${spv}" "${msl}"
@@ -122,7 +128,8 @@ function(r2d_add_shader name stage source)
                 --msl-version 20100
                 --msl-decoration-binding
                 --output "${msl}"
-        DEPENDS "${source}" ${R2D_SHADER_TOOL_DEPS}
+        ${binding_fix}
+        DEPENDS "${source}" ${R2D_SHADER_TOOL_DEPS} ${binding_dep}
         COMMENT "Шейдер ${basename}: GLSL → SPIR-V → MSL"
         VERBATIM)
 
@@ -150,6 +157,12 @@ r2d_add_shader(bloom_blur frag "${CMAKE_SOURCE_DIR}/shaders/bloom_blur.frag.glsl
 
 # Lightmap: композит накопленного света на сцену (аддитивное смешивание).
 r2d_add_shader(light_map frag "${CMAKE_SOURCE_DIR}/shaders/light_map.frag.glsl")
+
+# Native constrained-surface reference pass; web retains CPU until WGSL parity.
+if(NOT R2D_SHADERS_WGSL_ONLY)
+    r2d_add_shader(world vert "${CMAKE_SOURCE_DIR}/shaders/world.vert.glsl")
+    r2d_add_shader(world frag "${CMAKE_SOURCE_DIR}/shaders/world.frag.glsl")
+endif()
 
 if(R2D_SHADERS_WGSL_ONLY)
     set(R2D_SHADER_MODE "wgsl")

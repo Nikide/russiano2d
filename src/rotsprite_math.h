@@ -42,7 +42,7 @@ bool r2d_rotsprite_v2_anime(const R2DRotAtlas *atlas,double yaw,double pitch,int
 
 // Per-handle scratch for smooth 2D synthesis. Zero-initialise; free at disposal.
 typedef struct R2DRotAnimeWorkspace {
-    float *depth,*distance;uint8_t *rgba,*resolved;int bounds[4], size;
+    float *depth,*distance,*sample_depth;uint8_t *rgba,*resolved;int bounds[4], size;
 } R2DRotAnimeWorkspace;
 void r2d_rotsprite_anime_workspace_free(R2DRotAnimeWorkspace *);
 bool r2d_rotsprite_v2_anime_workspace(const R2DRotAtlas *,double yaw,double pitch,int eyes,int mouth,const R2DRotRig *,uint8_t *out,R2DRotAnimeWorkspace *);

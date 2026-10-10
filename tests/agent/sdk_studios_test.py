@@ -485,7 +485,7 @@ def main():
             a.step(3)
         s = st(a, "devtools")
         check(s["ok"] is True and s["entities"] >= 6, "DevTools: игра запущена протоколом, получены сущности (%s)" % s["entities"])
-        check(s["profile"] and s["screenshot"] and s["frame"] == 61, "DevTools: профиль кадра, скриншот и номер кадра (60 шагов + ping)")
+        check(s["profile"] and s["screenshot"] and s["frame"] == 61, "DevTools: профиль кадра, скриншот и номер кадра (60 шагов + ping): %s" % s)
         a.eval("$.sdkApp.studios.devtools.select(4); 1")
         check("hero" in (a.eval(f"{DTD}.content('dt-node')") or "") or "player" in (a.eval(f"{DTD}.content('dt-node')") or ""), "выбранная сущность описана полями $.agent")
         out_session = a.eval("$.sdkApp.studios.devtools.saveSession().then ? 1 : $.sdkApp.studios.devtools.saveSession()")

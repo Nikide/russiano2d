@@ -7,12 +7,13 @@
 #include <stdlib.h>
 
 typedef struct RotSprite {
+    uint64_t instance_id;
     R2DRenderer *renderer;
     SDL_Surface *atlas;
     uint8_t pixels[512 * 512 * 4];
     R2DRotRig rig;
     R2DRotModelPose model;
-    R2DRotAnimeWorkspace workspace;
+    float *sample_depth;
     bool dirty, anime, texture_dirty;
     char path[4096];
     SDL_Time modified;
@@ -22,6 +23,15 @@ typedef struct RotSprite {
     double yaw, pitch;
 } RotSprite;
 
+static bool anime_draw(RotSprite *r,const R2DRotAtlas *surface,double yaw,double pitch,int eyes,int mouth)
+{
+    // Main-thread synthesis is serial: shared supersampling scratch, private output.
+    if(!r->renderer->rot_workspace){r->renderer->rot_workspace=calloc(1,sizeof(R2DRotAnimeWorkspace));if(!r->renderer->rot_workspace)return false;}
+    if(!r->sample_depth){r->sample_depth=malloc(512*512*sizeof(float));if(!r->sample_depth)return false;}
+    R2DRotAnimeWorkspace *scratch=r->renderer->rot_workspace;
+    if(!r2d_rotsprite_v2_anime_sized(surface,yaw,pitch,eyes,mouth,&r->rig,r->pixels,scratch,512))return false;
+    memcpy(r->sample_depth,scratch->sample_depth,512*512*sizeof(float));return true;
+}
 static JSClassID rot_class;
 static JSValue style(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv);
 static int raster_size(const RotSprite *r) {return r->anime ? 512 : r->version==2 ? 128 : 64;}
@@ -30,7 +40,7 @@ static void dispose(RotSprite *r)
 {
     if (!r) return;
     if (r->texture >= 0) r2d_texture_free(r->renderer, r->texture);
-    r2d_rotsprite_anime_workspace_free(&r->workspace);
+    free(r->sample_depth);r->sample_depth=NULL;
     r2d_rotsprite_v2_free(&r->surface);
     SDL_DestroySurface(r->atlas);
     r->atlas = NULL;
@@ -94,6 +104,8 @@ static JSValue load(JSContext *ctx, JSValueConst self, int argc, JSValueConst *a
         }
     }
     RotSprite *r = SDL_calloc(1, sizeof *r);
+    static uint64_t next_instance_id;
+    if(r)r->instance_id=++next_instance_id;
     if (!r) { SDL_DestroySurface(atlas); return JS_ThrowOutOfMemory(ctx); }
     SDL_strlcpy(r->path,full,sizeof r->path);
     SDL_PathInfo file;
@@ -150,7 +162,7 @@ static JSValue update_pose(JSContext *ctx, JSValueConst self, int argc, JSValueC
     }
     if(changed) {
         int previous_brows=r->rig.brows;r->rig.brows=brows;bool drawn=true;
-        if(r->anime)drawn=r2d_rotsprite_v2_anime_sized(&r->surface,yaw,pitch,eyes,mouth,&r->rig,r->pixels,&r->workspace,512);
+        if(r->anime)drawn=anime_draw(r,&r->surface,yaw,pitch,eyes,mouth);
         else if(r->version==2)drawn=r2d_rotsprite_v2_draw(&r->surface,yaw,pitch,eyes,mouth,&r->rig,r->pixels);
         else r2d_rotsprite_raster(r->atlas->pixels,r->atlas->w,r->atlas->h,r->atlas->pitch,yaw,pitch,r->pixels);
         if(!drawn){r->rig.brows=previous_brows;return JS_ThrowOutOfMemory(ctx);}
@@ -256,7 +268,7 @@ static JSValue style(JSContext *ctx,JSValueConst self,int argc,JSValueConst *arg
     bool decoded=anime ? r2d_rotsprite_v2_decode_anime(r->atlas->pixels,r->atlas->w,r->atlas->h,r->atlas->pitch,&surface) :
         r2d_rotsprite_v2_decode(r->atlas->pixels,r->atlas->w,r->atlas->h,r->atlas->pitch,&surface);
     if (!decoded) return JS_ThrowOutOfMemory(ctx);
-    bool drawn=anime ? r2d_rotsprite_v2_anime_sized(&surface,r->yaw,r->pitch,r->eyes,r->mouth,&r->rig,r->pixels,&r->workspace,512) :
+    bool drawn=anime ? anime_draw(r,&surface,r->yaw,r->pitch,r->eyes,r->mouth) :
         r2d_rotsprite_v2_draw(&surface,r->yaw,r->pitch,r->eyes,r->mouth,&r->rig,r->pixels);
     if (!drawn) {r2d_rotsprite_v2_free(&surface);return JS_ThrowOutOfMemory(ctx);}
     int size=anime ? 512 : 128;
@@ -408,3 +420,23 @@ const unsigned char *r2d_rotsprite_pixels(JSContext *ctx, JSValueConst handle, i
     if(JS_IsException(result))return NULL;JS_FreeValue(ctx,result);
     *size=raster_size(r);return r->pixels;
 }
+
+bool r2d_rotsprite_world_pose(JSContext *ctx,JSValueConst handle,double yaw,double pitch)
+{
+    RotSprite *r=JS_GetOpaque2(ctx,handle,rot_class);
+    if(!r)return false;if(!r->atlas){JS_ThrowTypeError(ctx,"Re2DSprite: resource disposed");return false;}
+    if(!r2d_rotsprite_angles(yaw,pitch,&yaw,&pitch)){JS_ThrowRangeError(ctx,"Re2DSprite: invalid world pose");return false;}
+    pitch=fmax(-75,fmin(75,pitch));
+    r->dirty=r->dirty||yaw!=r->yaw||pitch!=r->pitch;r->yaw=yaw;r->pitch=pitch;return true;
+}
+const float *r2d_rotsprite_sample_depth(JSContext *ctx,JSValueConst handle)
+{
+    RotSprite *r=JS_GetOpaque2(ctx,handle,rot_class);if(!r)return NULL;
+    return r->anime?r->sample_depth:NULL;
+}
+int r2d_rotsprite_revision(JSContext *ctx,JSValueConst handle)
+{ RotSprite *r=JS_GetOpaque2(ctx,handle,rot_class);return r?r->revision:-1; }
+uint64_t r2d_rotsprite_instance(JSContext *ctx,JSValueConst handle)
+{ RotSprite *r=JS_GetOpaque2(ctx,handle,rot_class);return r?r->instance_id:0; }
+bool r2d_rotsprite_dirty(JSContext *ctx,JSValueConst handle)
+{ RotSprite *r=JS_GetOpaque2(ctx,handle,rot_class);return r&&r->dirty; }

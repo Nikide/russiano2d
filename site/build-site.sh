@@ -38,7 +38,7 @@ esac
 
 step() { printf '\n=== %s ===\n' "$1"; }
 
-if [ ! -f .env.deploy ]; then
+if [ "$UPLOAD" = 1 ] && [ ! -f .env.deploy ]; then
     echo "!! нет site/.env.deploy с доступами к хостингу — публиковать некуда"
     echo "   (пересборку можно сделать так: ./build-site.sh --dry-run)"
     [ "$DRY_RUN" = 1 ] || exit 1

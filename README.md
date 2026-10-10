@@ -665,12 +665,15 @@ CLI выполняет ту же нативную проверку, компил
 
 Re2DSprite синтезирует 2D-персонажа из PNG v2 и описания скелета. Re2D World
 использует XY BSP и вертикальные интервалы: два этажа могут занимать одинаковые
-XY. Результат синтеза — обычный 2D-кадр в существующем батче. Порталы/PVS пока
-данные компилятора; slopes аппроксимируются ступенями. Baker — MVP с ограничениями
+XY. Новый `$.re2dWorld` выполняет native BSP/portal visibility, textured surfaces,
+continuous slopes, свет/тени/туман и shared sample depth с Re2DSprite; результат —
+обычный 2D-кадр в существующем батче. SDK `world-compile --renderer` выдаёт baked
+`.re2dworld`; старый API сохранён для совместимости. Baker имеет ограничения
 развёртки и владения частями, а не универсальный импортёр 3D-анимации.
 
 Состояние и команды — [SDK](docs/SDK.md), [Re2DSprite](docs/RE2DSPRITE_GUIDE.md),
-[Re2D World](docs/RE2D_WORLD_GUIDE.md). `dist/` содержит опубликованные снимки
+[Re2D World](docs/RE2D_WORLD_GUIDE.md), [персонажи в новом мире](docs/re2d/RE2DSPRITE_WORLD.md)
+и [миграция](docs/re2d/RE2D_MIGRATION.md). `dist/` содержит опубликованные снимки
 версии 0.1.22: новый SDK в них ещё не упакован. Не смешивайте возможности текущих
 исходников с возможностями старого скачанного бинарника.
 

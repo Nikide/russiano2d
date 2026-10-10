@@ -42,6 +42,7 @@ typedef enum R2DAudioFxKind {
 #define R2D_AUDIO_FX_FRAMES 24000
 
 typedef struct R2DAudioFx {
+    void *spatial; // owned by the existing audio bank, independent of ordinary FX
     int   kind;      // R2DAudioFxKind
     float p1;        // первый параметр: срез (Гц), задержка (мс), частота, биты…
     float p2;        // второй параметр: доля повтора, глубина, коэффициент прореживания…

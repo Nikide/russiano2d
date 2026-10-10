@@ -1,0 +1,3597 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index bbe25b5..19de657 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,15 @@
+ # История изменений
+ 
++## Не выпущено — r2d-help: CLI-помощник по `$` API (2026-10-09)
++
++- Новый бинарник SDK `r2d-help` (C11, `sdk/help/`): поиск по реестру `$` API, который собирается из
++  `src/highlevel/*.js` (`def`/`defGet`, члены `$.<имя>`, комментарии), и по разделам `docs/`. BM25 +
++  эмбеддинги GGUF через C API llama.cpp (только CPU), слияние рангов, детерминированный ответ JSON.
++- Индекс пересобирается сам при сборке и при запуске из репозитория; векторы неизменённых записей
++  берутся из прошлого индекса. Без модели — режим `bm25`. Описание — `docs/HELP.md`.
++- `tools/release.py` кладёт `r2d-help`, индекс и модель рядом с `r2d-sdk`; тест `r2d_help_test` в
++  `tools/ci_verify.py`.
++
+ ## Не выпущено — SDK: все инструменты спецификации, новая тема, рабочие кнопки (2026-10-09)
+ 
+ - **Исправлено «кнопки не нажимаются»:** у контейнеров с `overflow: auto` не было стилей полос прокрутки,
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c14a24f..3fdf3df 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -89,6 +89,8 @@ if(NOT EMSCRIPTEN)
+     add_subdirectory(tests)
+     # Нативный бэкенд SDK (r2d-sdk): отдельный CLI-бинарник, не часть игры.
+     add_subdirectory(sdk/native)
++    # CLI-помощник по $ API (docs/HELP.md): отдельный бинарник SDK.
++    add_subdirectory(sdk/help)
+ endif()
+ 
+ message(STATUS "")
+diff --git a/docs/HELP.md b/docs/HELP.md
+new file mode 100644
+index 0000000..d434815
+--- /dev/null
++++ b/docs/HELP.md
+@@ -0,0 +1,184 @@
++# r2d-help — CLI-помощник по `$` API
++
++`r2d-help` отвечает на вопрос «как это сделать в R2D» списком **настоящих**
++имён API и разделов документации. Он нужен прежде всего ИИ-агенту: вместо
++чтения всего справочника агент спрашивает помощника и получает структуру —
++имя, сигнатуру, файл и строку объявления, страницу документации.
++
++Это отдельный бинарник SDK, только CLI: один запуск — один JSON-объект на
++stdout. Демона, сервера и сетевых запросов нет.
++
++---
++
++## 1. Использование
++
++```sh
++r2d-help как сделать чтобы враг шёл по пути       # то же, что search
++r2d-help search "сохранить прогресс" --top 5
++r2d-help "tween alpha" --text                      # для человека
++r2d-help show navigateTo                           # объявление + разделы docs
++r2d-help show '$.nav.mesh'
++r2d-help index --root .                            # собрать/обновить индекс
++r2d-help status
++r2d-help embed "текст" --query --model f.gguf      # вектор текста (сверка модели)
++```
++
++| Флаг | Смысл |
++|---|---|
++| `--top N` | сколько результатов (по умолчанию 8, максимум 50) |
++| `--text` | человекочитаемый вывод вместо JSON |
++| `--index f` | файл индекса (по умолчанию `r2d-help.idx` рядом с бинарником, или `R2D_HELP_INDEX`) |
++| `--model f.gguf` | модель эмбеддингов (по умолчанию `r2d-help.gguf` рядом с бинарником, или `R2D_HELP_MODEL`) |
++| `--root dir` | корень репозитория движка (иначе ищется вверх от текущего каталога и от бинарника; или `R2D_HELP_ROOT`) |
++| `--threads N` | потоки модели (поиск — 1, сборка индекса — все ядра) |
++| `--no-update` | не пересобирать устаревший индекс |
++| `--force` | `index`: пересобрать даже свежий индекс |
++
++Коды выхода как у `r2d-sdk` ([SDK.md](SDK.md) §4): `0` — ok, `1` — выполнено,
++но в данных есть ошибки, `2` — неверный вызов.
++
++Ответ `search`:
++
++```json
++{ "ok": true, "query": "navigateTo", "mode": "hybrid",
++  "index": { "entries": 2904, "api": 1161, "docs": 1743, "dim": 384, "updated": false, … },
++  "results": [
++    { "kind": "method", "name": ".navigateTo", "signature": ".navigateTo(target, opts)",
++      "module": "nav", "location": "src/highlevel/nav.js:1738",
++      "doc": "docs/highlevel/nav.md", "snippet": "…", "rank": 1,
++      "score": 1.032787, "bm25": 18.52, "cosine": 0.81 } ],
++  "diagnostics": [] }
++```
++
++`kind`: `method` — метод узла (`def`/`defGet`), `function` — функция
++пространства имён (`$.nav.mesh`), `doc` — раздел документации. `mode`:
++`hybrid` — BM25 и эмбеддинги, `bm25` — только лексический поиск (модели нет,
++она другая или сборка без llama.cpp; причина — в `diagnostics`).
++
++## 2. Что индексируется
++
++Источник правды — код, а не ручной список:
++
++* **методы узла** — каждый `def('имя', …)` / `defGet('имя', …)` в
++  `src/highlevel/*.js`;
++* **функции пространств имён** — члены объектного литерала, присвоенного
++  `$.<имя>` (`const nav = { mesh(opts) {…} }; $.nav = nav;` → `$.nav.mesh`), и
++  прямые `$.<имя> = (…) =>`;
++* **описание** — комментарий `/** … */` или строки `//` прямо над объявлением,
++  плюс до трёх строк из страницы модуля `docs/highlevel/<модуль>.md` и
++  `docs/HIGH_LEVEL_API.md`, где вызывается это имя (заголовок вида
++  `### .navigateTo(…)` берётся вместе с абзацем под ним);
++* **документация** — каждый `docs/**/*.md`, разрезанный по заголовкам; длинный
++  раздел режется на части по абзацам (не больше 1600 байт).
++
++Разбор построчный и рассчитан на стиль кода движка
++([highlevel/_CONTRACT.md](highlevel/_CONTRACT.md) §8, отступ 4 пробела). Что не
++распознано как функция, всё равно находится через разделы документации.
++
++## 3. Как ищет
++
++1. **BM25** по тексту всех записей. Токенизатор понимает русский и английский:
++   нижний регистр, `ё → е`, `camelCase` режется на части, длинные слова
++   сводятся к основе из 6 букв, частые служебные слова отброшены.
++2. **Эмбеддинги** — косинус между вектором запроса и векторами записей
++   (int8, нормированы).
++3. **Слияние рангов** (Reciprocal Rank Fusion, k = 60): запись, которая высоко
++   в обоих списках, побеждает.
++4. **Точное имя** в запросе (`navigateTo`, `$.nav.find`) поднимает эту запись
++   наверх.
++
++Оценки округляются, равные упорядочиваются по номеру записи, порядок файлов
++отсортирован: одинаковый запрос даёт одинаковый ответ на любой платформе.
++
++## 4. Модель
++
++Любая GGUF-модель эмбеддингов предложений (с пулингом), которую читает
++llama.cpp. Выбрана **multilingual-e5-small** (MIT, русский и английский,
++384 измерения): префиксы `query: ` / `passage: ` помощник ставит сам, если в
++имени модели есть `e5`.
++
++Модель — данные, а не часть сборки. GGUF готовится один раз на машине
++разработчика конвертером llama.cpp (`convert_hf_to_gguf.py`, тип `q8_0`) и
++передаётся сборке:
++
++```sh
++cmake -S . -B build -DR2D_HELP_LLAMA=ON -DR2D_HELP_MODEL=/путь/multilingual-e5-small-q8_0.gguf
++```
++
++Сборка кладёт её рядом как `build/r2d-help.gguf` и считает векторы индекса.
++Без модели всё работает в режиме `bm25`.
++
++У e5-small в `config.json` архитектура `BertModel`, а словарь — sentencepiece
++от XLM-RoBERTa; стандартный конвертер записал бы его как WordPiece и сломал
++токенизацию. Поэтому конвертация идёт через `tools/help_train/convert_e5.py`,
++а `tools/help_train/check_gguf.py` сверяет векторы GGUF (`r2d-help embed`) с
++исходной моделью: косинус ниже 0,98 — конвертация сломана.
++
++Весь путь — загрузка, конвертация, сверка, три замера (BM25, e5-small,
++e5-small после дообучения на `tools/help_train/pairs.tsv`) — делает
++`bash tools/help_train/run.sh` на машине с сетью к Hugging Face (Mac с Apple
++Silicon обучает на MPS). Рабочее дерево не меняется: сборка идёт в отдельном
++`git worktree`, отчёт — `build/help_train/report.txt`.
++
++## 5. Автообновление
++
++* **При сборке** цель `r2d-help-index` (входит в `ALL`) пересобирает
++  `build/r2d-help.idx`, когда меняется любой `docs/**/*.md`,
++  `src/highlevel/*.js`, модель или сам `r2d-help`. Новые файлы замечаются
++  (`CONFIGURE_DEPENDS`).
++* **При запуске** из репозитория помощник сверяет отпечаток источников
++  (пути, размеры, mtime и версия правил сбора) с индексом и, если они
++  разошлись, пересобирает индекс до ответа (`"updated": true`).
++* **Векторы не считаются заново** для неизменённых записей: индекс хранит хэш
++  текста каждой записи, вектор берётся из прошлого индекса той же модели.
++  Правка одного раздела — пересчёт одного-двух векторов.
++
++В поставленном пакете исходников `src/highlevel/` нет: там используется
++индекс, собранный при выпуске (`tools/release.py` кладёт `r2d-help`,
++`r2d-help.idx` и, если есть, `r2d-help.gguf` рядом с `r2d-sdk`).
++
++## 6. Решения и ограничения
++
++* **C11 + C API llama.cpp.** Помощник написан на C; C++ живёт только внутри
++  статической библиотеки llama.cpp (запинена по коммиту в
++  `sdk/help/CMakeLists.txt`). Движок и `r2d-sdk` не меняются и новых
++  зависимостей не получают. Это решение владельца проекта (2026-10-09).
++* **Только CPU, без OpenMP, без Metal/CUDA** — одинаковый результат и один
++  бинарник без внешних библиотек.
++* **llama.cpp выключен по умолчанию** (`R2D_HELP_LLAMA=OFF`): обычная сборка
++  движка и автосборка пяти платформ не тянут тяжёлую C++-зависимость, пока
++  модель не выбрана замером; помощник собирается с BM25. Включается
++  `-DR2D_HELP_LLAMA=ON` (так делает `tools/help_train/run.sh`). llama.cpp
++  берётся неглубоким клоном тега `b11517`.
++* **Размер.** Linux x86_64 Release: 10,7 МБ, после `strip` 9,4 МБ. Из них
++  код llama.cpp (все архитектуры моделей) ≈ 4,1 МБ, ggml ≈ 1,5 МБ, SDL3 из
++  ядра SDK ≈ 1,4 МБ. Индекс без векторов — около 2,4 МБ; векторы e5-small
++  добавят примерно 384 байта на запись (≈ 1,1 МБ на 2900 записей).
++* **Качество.** Набор `tests/fixtures/help/queries.json` (50 вопросов на
++  русском и английском, ожидаемые имена API) и замер
++  `python3 tests/help_eval.py [--model f.gguf]`
++  ([AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md), правило 6).
++
++  | Режим | recall@1 | recall@5 | MRR | Условия |
++  |---|---|---|---|---|
++  | `bm25` | 0,18 | 0,36 | 0,26 | 2026-10-09, 2904 записи, Linux x86_64 |
++  | `hybrid` (e5-small) | — | — | — | не измерено: модели не было в среде сборки |
++
++  BM25 хорошо находит точные имена и ключевые слова, но не синонимы и
++  словоформы («поставить на паузу» → `$.time.pause` мимо): это задача
++  эмбеддингов. Снятие русских окончаний в токенизаторе проверено и
++  отклонено: recall@5 0,40, но recall@1 0,12 и MRR 0,22 — первое место
++  важнее для агента.
++* Цепочка эмбеддингов проверена на крошечной BERT-модели со случайными весами
++  (загрузка, пулинг, пересборка только изменённых записей, откат на BM25 при
++  чужой модели и без модели); качество так не проверяется.
++* Сокращение словаря модели (меньший GGUF) не реализовано.
++
++## 7. Проверка
++
++* `build/sdk/help/r2d_help_test <корень>` — токенизатор, файл индекса, BM25,
++  слияние с векторами, детерминизм, сбор корпуса из этого репозитория;
++  входит в `tools/ci_verify.py`.
++* Ручная проверка с моделью: `r2d-help index --model f.gguf --force`, затем
++  `r2d-help status` — `vectors` равно `entries`, `mode` в ответе `hybrid`.
++* `python3 tests/help_eval.py [--model f.gguf]` — замер качества (§6).
+diff --git a/docs/SDK.md b/docs/SDK.md
+index 7c7ab8c..e3e7c0b 100644
+--- a/docs/SDK.md
++++ b/docs/SDK.md
+@@ -20,6 +20,7 @@ SDK не владеет игрой: проекты и ассеты остают
+ | Реестр компонентов | [`sdk_tools.json`](../sdk_tools.json) | единственный список инструментов; launcher строит каталог по нему |
+ | Нативный бэкенд | [`sdk/native/`](../sdk/native) | C-бинарник `r2d-sdk` (`build/r2d-sdk`) без Python/Node.js/shell |
+ | Мост GUI → бэкенд | `$.sdk` ([highlevel/sdk.md](highlevel/sdk.md)) | включается `"toolHost": true` в `project.json` |
++| Помощник по `$` API | [`sdk/help/`](../sdk/help) | CLI `r2d-help`: поиск по реестру API и docs (BM25 + эмбеддинги), [HELP.md](HELP.md) |
+ | Тесты | `tests/sdk/`, `tests/js/sdk*_test.mjs`, `tests/agent/sdk_*_test.py` | C, qjs и агентские |
+ 
+ ## 2. Принципы (кратко)
+diff --git a/sdk/help/CMakeLists.txt b/sdk/help/CMakeLists.txt
+new file mode 100644
+index 0000000..08db411
+--- /dev/null
++++ b/sdk/help/CMakeLists.txt
+@@ -0,0 +1,82 @@
++# ---------------------------------------------------------------------------
++# r2d-help — CLI-помощник по `$` API (docs/HELP.md).
++#
++# Отдельный бинарник SDK, не часть игры и не часть r2d-sdk: движок и ядро SDK
++# остаются на C11 без новых зависимостей. Сам помощник — C11; эмбеддинги
++# считает llama.cpp через его C API (llama.h). C++ живёт только внутри
++# статической библиотеки llama.cpp — решение владельца, записанное в
++# docs/HELP.md §6.
++#
++# R2D_HELP_LLAMA=OFF (по умолчанию) — сборка без llama.cpp: только BM25.
++# ON включают явно (tools/help_train/run.sh, релиз с моделью): llama.cpp —
++# тяжёлая C++-зависимость, и обычная сборка движка не должна её тянуть, пока
++# модель не выбрана замером (docs/HELP.md §6).
++# ---------------------------------------------------------------------------
++option(R2D_HELP_LLAMA "r2d-help: эмбеддинги через llama.cpp" OFF)
++set(R2D_HELP_MODEL "" CACHE FILEPATH
++    "r2d-help: модель эмбеддингов GGUF (копируется рядом как r2d-help.gguf)")
++
++add_executable(r2d-help help_main.c help_index.c help_corpus.c help_embed.c)
++target_link_libraries(r2d-help PRIVATE r2d_sdk_core)
++set_target_properties(r2d-help PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
++if(NOT MSVC)
++    target_compile_options(r2d-help PRIVATE -Wall -Wextra -Wno-unused-parameter)
++endif()
++
++if(R2D_HELP_LLAMA)
++    # Запинено по коммиту, как остальные зависимости (cmake/Dependencies.cmake).
++    # Только CPU и без OpenMP: один бинарник без внешних библиотек и одинаковый
++    # результат на всех платформах.
++    set(LLAMA_BUILD_COMMON   OFF CACHE BOOL "" FORCE)
++    set(LLAMA_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
++    set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
++    set(LLAMA_BUILD_TOOLS    OFF CACHE BOOL "" FORCE)
++    set(LLAMA_BUILD_SERVER   OFF CACHE BOOL "" FORCE)
++    set(LLAMA_CURL           OFF CACHE BOOL "" FORCE)
++    set(LLAMA_OPENSSL        OFF CACHE BOOL "" FORCE)
++    set(GGML_NATIVE          OFF CACHE BOOL "" FORCE)
++    set(GGML_OPENMP          OFF CACHE BOOL "" FORCE)
++    set(GGML_METAL           OFF CACHE BOOL "" FORCE)
++    set(GGML_BLAS            OFF CACHE BOOL "" FORCE)
++    set(GGML_CUDA            OFF CACHE BOOL "" FORCE)
++    set(GGML_VULKAN          OFF CACHE BOOL "" FORCE)
++    FetchContent_Declare(llama_cpp
++        GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
++        GIT_TAG        b11517   # коммит 8a1a9b5126126e5228b95fa909d4b08fac65e8b3
++        GIT_SHALLOW    TRUE     # только этот тег, без всей истории
++        EXCLUDE_FROM_ALL)
++    FetchContent_MakeAvailable(llama_cpp)
++    target_link_libraries(r2d-help PRIVATE llama)
++    target_compile_definitions(r2d-help PRIVATE R2D_HELP_LLAMA=1)
++endif()
++
++# ---------------------------------------------------------------------------
++# Индекс: пересобирается сам, когда меняются docs/ или src/highlevel/.
++# CONFIGURE_DEPENDS — новый файл тоже замечается. Неизменённые фрагменты
++# берут вектор из прошлого индекса, поэтому пересборка после правки — секунды.
++# ---------------------------------------------------------------------------
++file(GLOB R2D_HELP_JS CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/highlevel/*.js")
++file(GLOB_RECURSE R2D_HELP_MD CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/docs/*.md")
++
++set(R2D_HELP_INDEX "${CMAKE_BINARY_DIR}/r2d-help.idx")
++set(R2D_HELP_ARGS index --root "${CMAKE_SOURCE_DIR}" --out "${R2D_HELP_INDEX}")
++set(R2D_HELP_DEPS r2d-help ${R2D_HELP_JS} ${R2D_HELP_MD})
++if(R2D_HELP_MODEL)
++    set(R2D_HELP_GGUF "${CMAKE_BINARY_DIR}/r2d-help.gguf")
++    add_custom_command(OUTPUT "${R2D_HELP_GGUF}"
++        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${R2D_HELP_MODEL}" "${R2D_HELP_GGUF}"
++        DEPENDS "${R2D_HELP_MODEL}"
++        COMMENT "r2d-help: модель эмбеддингов")
++    list(APPEND R2D_HELP_ARGS --model "${R2D_HELP_GGUF}")
++    list(APPEND R2D_HELP_DEPS "${R2D_HELP_GGUF}")
++endif()
++add_custom_command(OUTPUT "${R2D_HELP_INDEX}"
++    COMMAND r2d-help ${R2D_HELP_ARGS}
++    DEPENDS ${R2D_HELP_DEPS}
++    COMMENT "r2d-help: индекс $ API и docs"
++    VERBATIM)
++add_custom_target(r2d-help-index ALL DEPENDS "${R2D_HELP_INDEX}")
++
++add_executable(r2d_help_test "${CMAKE_SOURCE_DIR}/tests/sdk/help_test.c" help_index.c help_corpus.c)
++target_include_directories(r2d_help_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
++target_link_libraries(r2d_help_test PRIVATE r2d_sdk_core)
+diff --git a/sdk/help/help.h b/sdk/help/help.h
+new file mode 100644
+index 0000000..81d495f
+--- /dev/null
++++ b/sdk/help/help.h
+@@ -0,0 +1,122 @@
++// ===========================================================================
++// r2d-help: CLI-помощник по `$` API (docs/HELP.md).
++//
++// Ищет по реестру API (src/highlevel/*.js) и разделам docs/ двумя способами
++// сразу: лексически (BM25) и по смыслу (эмбеддинги модели GGUF через
++// llama.cpp). Без модели работает только BM25 — инструмент остаётся рабочим.
++//
++// Только CLI: один запуск — один JSON-объект на stdout (как r2d-sdk,
++// docs/SDK.md §4). Ни демона, ни сервера. Индекс пересобирается сам, когда
++// меняются docs/ или src/highlevel/, а неизменённые фрагменты не
++// переэмбеддятся (вектор берётся из прошлого индекса по хэшу текста).
++// ===========================================================================
++#pragma once
++
++#include "sdk.h"
++
++#include <stdbool.h>
++#include <stddef.h>
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#define HELP_VERSION       "0.1.0"
++#define HELP_INDEX_MAGIC   "R2DHELP1"
++#define HELP_INDEX_FORMAT  1u
++// Версия правил сбора корпуса: входит в отпечаток источников, поэтому новый
++// r2d-help пересобирает индекс, даже если docs/ и src/highlevel/ не менялись.
++#define HELP_CORPUS_VERSION 4u
++
++typedef enum HelpKind {
++    HELP_KIND_METHOD = 1,   // метод/геттер обёртки: def()/defGet()
++    HELP_KIND_NS     = 2,   // функция пространства имён: $.nav.find
++    HELP_KIND_DOC    = 3,   // раздел документации
++} HelpKind;
++
++const char *help_kind_name(int kind);
++
++typedef struct HelpEntry {
++    int      kind;
++    char    *name;       // «.navigateTo», «$.nav.find», «Заголовок раздела»
++    char    *module;     // «nav» или путь документа
++    char    *signature;  // «navigateTo(target, opts)» или ""
++    char    *location;   // «src/highlevel/nav.js:1738», «docs/highlevel/nav.md:42»
++    char    *doc;        // страница документации модуля или ""
++    char    *text;       // текст для поиска и эмбеддинга
++    uint64_t text_hash;  // FNV-1a от text: ключ повторного использования вектора
++    int8_t  *vec;        // dim значений или NULL
++    float    vec_scale;  // vec[i] * scale ≈ исходное значение
++} HelpEntry;
++
++typedef struct HelpIndex {
++    HelpEntry *items;
++    int        count;
++    int        cap;
++    int        dim;               // 0 — эмбеддингов нет
++    uint64_t   sources_hash;      // размеры и mtime источников на момент сборки
++    char       model_id[128];     // отпечаток модели, которой посчитаны векторы
++} HelpIndex;
++
++void       help_index_init(HelpIndex *ix);
++void       help_index_free(HelpIndex *ix);
++HelpEntry *help_index_add(HelpIndex *ix, int kind, const char *name, const char *module,
++                          const char *signature, const char *location, const char *doc,
++                          const char *text);
++bool       help_index_save(const HelpIndex *ix, const char *path);
++bool       help_index_load(HelpIndex *ix, const char *path);
++
++uint64_t   help_fnv1a(const void *data, size_t size, uint64_t seed);
++
++// ---------------------------------------------------------------------------
++// Корпус: что индексируется
++// ---------------------------------------------------------------------------
++// Собирает реестр API из <root>/src/highlevel/*.js и разделы <root>/docs/**.md.
++// Нечитаемые файлы — диагностика в rep, а не молчаливый пропуск.
++bool     help_collect(const char *root, HelpIndex *ix, SdkReport *rep);
++// Отпечаток источников: пути, размеры и mtime (дёшево, без чтения файлов).
++uint64_t help_sources_hash(const char *root);
++// Есть ли под root исходники, из которых строится индекс.
++bool     help_root_ok(const char *root);
++
++// ---------------------------------------------------------------------------
++// Поиск
++// ---------------------------------------------------------------------------
++typedef struct HelpHit {
++    int    entry;
++    double score;      // итоговая оценка (больше — лучше), округлена
++    double bm25;
++    double cosine;     // -2 — не считался
++} HelpHit;
++
++// Токены для BM25: нижний регистр (латиница и кириллица), camelCase режется
++// на части, длинные слова дополнительно усечены до основы.
++typedef void (*HelpTokenFn)(const char *tok, size_t len, void *user);
++void help_tokenize(const char *text, HelpTokenFn fn, void *user);
++
++// qvec — нормированный вектор запроса (dim = ix->dim) или NULL.
++int help_search(const HelpIndex *ix, const char *query, const float *qvec,
++                HelpHit *out, int max_out);
++
++// ---------------------------------------------------------------------------
++// Эмбеддинги (llama.cpp; без R2D_HELP_LLAMA — заглушка, available() == false)
++// ---------------------------------------------------------------------------
++typedef struct HelpEmbedder HelpEmbedder;
++
++bool          help_embed_available(void);
++// NULL при ошибке; причина — в err.
++HelpEmbedder *help_embed_open(const char *model_path, int threads, char *err, size_t err_cap);
++void          help_embed_close(HelpEmbedder *e);
++int           help_embed_dim(const HelpEmbedder *e);
++// is_query: e5 различает «query: » и «passage: ». Результат нормирован (L2).
++bool          help_embed_text(HelpEmbedder *e, const char *text, bool is_query, float *out);
++// Отпечаток файла модели: размер + FNV первых и последних 1 МБ.
++bool          help_model_id(const char *model_path, char *out, size_t cap);
++
++// Квантование в int8 с общим масштабом на вектор.
++void help_quantize(const float *v, int dim, int8_t *out, float *scale);
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/sdk/help/help_corpus.c b/sdk/help/help_corpus.c
+new file mode 100644
+index 0000000..5bfe823
+--- /dev/null
++++ b/sdk/help/help_corpus.c
+@@ -0,0 +1,794 @@
++// ===========================================================================
++// r2d-help: корпус — реестр `$` API из исходников и разделы документации.
++//
++// Источник правды — сам код: метод узла существует, если он объявлен через
++// def()/defGet() в src/highlevel/*.js, функция пространства имён — если она
++// член объекта, который присвоен `$.<имя>`. Поэтому новая фича попадает в
++// помощника вместе с кодом, без ручного списка. Комментарий `/** … */` или
++// строки `//` прямо над объявлением — описание. Документация режется по
++// заголовкам: один раздел — одна запись.
++//
++// Это не парсер JS: разбор построчный и рассчитан на стиль кода движка
++// (docs/highlevel/_CONTRACT.md §8: отступ 4 пробела). Что не распознано —
++// просто не попадает в реестр как функция, но остаётся в разделах docs.
++// ===========================================================================
++#include "help.h"
++
++#include <SDL3/SDL.h>
++
++#include <ctype.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#define DOC_CHUNK_MAX 1600   // байт текста раздела в одной записи
++
++// ---------------------------------------------------------------------------
++// Список файлов (отсортированный: порядок обхода каталога зависит от ОС)
++// ---------------------------------------------------------------------------
++typedef struct FileList {
++    char **paths;   // относительно root, с «/»
++    int    count;
++    int    cap;
++} FileList;
++
++static void list_push(FileList *l, const char *rel)
++{
++    if (l->count == l->cap) {
++        const int cap = l->cap ? l->cap * 2 : 64;
++        char **p = (char **)realloc(l->paths, (size_t)cap * sizeof *p);
++        if (!p) return;
++        l->paths = p;
++        l->cap = cap;
++    }
++    const size_t n = strlen(rel);
++    char *s = (char *)malloc(n + 1);
++    if (!s) return;
++    memcpy(s, rel, n + 1);
++    l->paths[l->count++] = s;
++}
++
++static void list_free(FileList *l)
++{
++    for (int i = 0; i < l->count; ++i) free(l->paths[i]);
++    free(l->paths);
++    memset(l, 0, sizeof *l);
++}
++
++static int cmp_str(const void *a, const void *b)
++{
++    return strcmp(*(const char *const *)a, *(const char *const *)b);
++}
++
++typedef struct Walk {
++    const char *root;
++    const char *suffix;
++    FileList   *out;
++    bool        recursive;
++} Walk;
++
++static void walk_dir(const Walk *w, const char *rel_dir);
++
++typedef struct WalkCtx {
++    const Walk *w;
++    const char *rel_dir;
++} WalkCtx;
++
++static SDL_EnumerationResult SDLCALL walk_cb(void *user, const char *dirname, const char *fname)
++{
++    (void)dirname;
++    const WalkCtx *c = (const WalkCtx *)user;
++    if (fname[0] == '.') return SDL_ENUM_CONTINUE;
++    char rel[1024], full[2048];
++    snprintf(rel, sizeof rel, "%s/%s", c->rel_dir, fname);
++    snprintf(full, sizeof full, "%s/%s", c->w->root, rel);
++    SDL_PathInfo info;
++    if (!SDL_GetPathInfo(full, &info)) return SDL_ENUM_CONTINUE;
++    if (info.type == SDL_PATHTYPE_DIRECTORY) {
++        // Картинки и машинные замеры — не текст для помощника.
++        if (c->w->recursive && strcmp(fname, "images") != 0 && strcmp(fname, "screenshots") != 0 &&
++            strcmp(fname, "benchmarks") != 0) {
++            walk_dir(c->w, rel);
++        }
++    } else if (info.type == SDL_PATHTYPE_FILE && sdk_ends_with(fname, c->w->suffix)) {
++        list_push(c->w->out, rel);
++    }
++    return SDL_ENUM_CONTINUE;
++}
++
++static void walk_dir(const Walk *w, const char *rel_dir)
++{
++    char full[2048];
++    snprintf(full, sizeof full, "%s/%s", w->root, rel_dir);
++    WalkCtx c = { w, rel_dir };
++    SDL_EnumerateDirectory(full, walk_cb, &c);
++}
++
++static void collect_files(const char *root, FileList *js, FileList *md)
++{
++    Walk wj = { root, ".js", js, false };
++    walk_dir(&wj, "src/highlevel");
++    Walk wm = { root, ".md", md, true };
++    walk_dir(&wm, "docs");
++    qsort(js->paths, (size_t)js->count, sizeof *js->paths, cmp_str);
++    qsort(md->paths, (size_t)md->count, sizeof *md->paths, cmp_str);
++}
++
++bool help_root_ok(const char *root)
++{
++    char a[2048], b[2048];
++    snprintf(a, sizeof a, "%s/src/highlevel/api.js", root);
++    snprintf(b, sizeof b, "%s/docs", root);
++    return sdk_file_exists(a) && sdk_is_dir(b);
++}
++
++uint64_t help_sources_hash(const char *root)
++{
++    FileList js = {0}, md = {0};
++    collect_files(root, &js, &md);
++    const uint32_t ver = HELP_CORPUS_VERSION;
++    uint64_t h = help_fnv1a(&ver, sizeof ver, 0);
++    FileList *lists[2] = { &js, &md };
++    for (int l = 0; l < 2; ++l) {
++        for (int i = 0; i < lists[l]->count; ++i) {
++            const char *rel = lists[l]->paths[i];
++            char full[2048];
++            snprintf(full, sizeof full, "%s/%s", root, rel);
++            SDL_PathInfo info;
++            int64_t meta[2] = { -1, -1 };
++            if (SDL_GetPathInfo(full, &info)) {
++                meta[0] = (int64_t)info.size;
++                meta[1] = (int64_t)info.modify_time;
++            }
++            h = help_fnv1a(rel, strlen(rel) + 1, h);
++            h = help_fnv1a(meta, sizeof meta, h);
++        }
++    }
++    list_free(&js);
++    list_free(&md);
++    return h;
++}
++
++// ---------------------------------------------------------------------------
++// Мелочи разбора строк
++// ---------------------------------------------------------------------------
++static int indent_of(const char *line)
++{
++    int n = 0;
++    while (line[n] == ' ') ++n;
++    return n;
++}
++
++static const char *skip_ws(const char *s)
++{
++    while (*s == ' ' || *s == '\t') ++s;
++    return s;
++}
++
++static bool is_ident_start(char c) { return isalpha((unsigned char)c) || c == '_' || c == '$'; }
++static bool is_ident(char c) { return isalnum((unsigned char)c) || c == '_' || c == '$'; }
++
++// Читает идентификатор; возвращает указатель за ним или NULL.
++static const char *read_ident(const char *s, char *out, size_t cap)
++{
++    if (!is_ident_start(*s)) return NULL;
++    size_t n = 0;
++    while (is_ident(*s)) {
++        if (n + 1 < cap) out[n++] = *s;
++        ++s;
++    }
++    out[n] = '\0';
++    return s;
++}
++
++// Содержимое скобок «(a, b = 1)» → «a, b = 1» (без вложенных скобок по
++// строке дальше первой закрывающей на том же уровне).
++static bool read_params(const char *s, char *out, size_t cap)
++{
++    s = skip_ws(s);
++    if (*s != '(') return false;
++    int depth = 0;
++    size_t n = 0;
++    for (++s; *s; ++s) {
++        if (*s == '(' || *s == '[' || *s == '{') depth++;
++        if (*s == ')' || *s == ']' || *s == '}') {
++            if (depth == 0) { out[n] = '\0'; return true; }
++            depth--;
++        }
++        if (n + 1 < cap) out[n++] = *s;
++    }
++    out[n] = '\0';
++    return false;   // параметры на нескольких строках: берём начало
++}
++
++// Обрезает UTF-8 строку по границе символа не длиннее max байт.
++static size_t utf8_clip(const char *s, size_t len, size_t max)
++{
++    if (len <= max) return len;
++    size_t n = max;
++    while (n > 0 && ((unsigned char)s[n] & 0xC0) == 0x80) --n;
++    return n;
++}
++
++// ---------------------------------------------------------------------------
++// Комментарий над объявлением
++// ---------------------------------------------------------------------------
++typedef struct Comment {
++    R2dSb text;
++    bool  in_block;
++    int   last_line;   // строка, где комментарий закончился
++} Comment;
++
++static void comment_line(Comment *c, const char *line, int lineno)
++{
++    const char *s = skip_ws(line);
++    if (c->in_block) {
++        const char *end = strstr(s, "*/");
++        const char *body = s;
++        if (*body == '*' && body[1] != '/') ++body;
++        body = skip_ws(body);
++        const size_t n = end ? (size_t)(end - body) : strlen(body);
++        // Конец блока раньше текста — строка из одного закрытия комментария.
++        if (end && end < body) { }
++        else if (n > 0) { r2d_sb_putc(&c->text, ' '); r2d_sb_printf(&c->text, "%.*s", (int)n, body); }
++        if (end) { c->in_block = false; c->last_line = lineno; }
++        return;
++    }
++    if (strncmp(s, "/**", 3) == 0 || strncmp(s, "/*", 2) == 0) {
++        r2d_sb_clear(&c->text);
++        const char *body = s + (s[2] == '*' ? 3 : 2);
++        const char *end = strstr(body, "*/");
++        body = skip_ws(body);
++        const size_t n = end ? (size_t)(end - body) : strlen(body);
++        if (n > 0) r2d_sb_printf(&c->text, "%.*s", (int)n, body);
++        if (end) c->last_line = lineno; else c->in_block = true;
++        return;
++    }
++    if (strncmp(s, "//", 2) == 0) {
++        if (c->last_line != lineno - 1) r2d_sb_clear(&c->text);
++        const char *body = skip_ws(s + 2);
++        if (*body == '-' || *body == '=') { c->last_line = lineno; return; }  // разделители
++        if (c->text.len > 0) r2d_sb_putc(&c->text, ' ');
++        r2d_sb_puts(&c->text, body);
++        c->last_line = lineno;
++    }
++}
++
++// Комментарий относится к объявлению на следующей строке, иначе сброшен.
++static const char *comment_for(Comment *c, int lineno)
++{
++    if (c->in_block || c->last_line != lineno - 1 || c->text.len == 0) return "";
++    return c->text.data;
++}
++
++// ---------------------------------------------------------------------------
++// Реестр API из одного JS-модуля
++// ---------------------------------------------------------------------------
++typedef struct Member {
++    char  owner[128];     // имя переменной объекта: «nav», «api»
++    char  name[96];
++    char  params[256];
++    char *comment;
++    int   line;
++} Member;
++
++typedef struct Alias {
++    char var[64];         // переменная
++    char ns[96];          // «nav» для `$.nav = nav`
++} Alias;
++
++// Справочные тексты, из которых API-запись берёт строки с упоминанием имени:
++// страница модуля и общий справочник HIGH_LEVEL_API.md. Так метод без
++// комментария в коде всё равно получает описание — строку таблицы из docs.
++typedef struct DocRefs {
++    const char *module_page;   // может быть NULL
++    const char *reference;     // может быть NULL
++} DocRefs;
++
++#define REF_LINES    3
++#define REF_LINE_MAX 320
++
++// Дописывает до `left` строк из text, где встречается needle.
++static int append_ref_lines(R2dSb *t, const char *text, const char *needle, int left)
++{
++    if (!text || !needle[0]) return left;
++    const char *p = text;
++    while (left > 0 && (p = strstr(p, needle)) != NULL) {
++        const char *b = p;
++        while (b > text && b[-1] != '\n') --b;
++        const char *e = strchr(p, '\n');
++        if (!e) e = p + strlen(p);
++        size_t max = REF_LINE_MAX;
++        if (*b == '#' && *e == '\n') {
++            // Заголовок «### `.navigateTo(target, opts)`»: описание — абзац под ним.
++            const char *q = e + 1;
++            while (*q == '\n') ++q;
++            const char *end = strstr(q, "\n\n");
++            if (!end) end = q + strlen(q);
++            if (*q && *q != '#') { e = end; max = REF_LINE_MAX * 2; }
++        }
++        // Заголовки и строки кода тоже годятся, но не пустые обрывки.
++        const size_t len = utf8_clip(b, (size_t)(e - b), max);
++        if (len > strlen(needle) + 4) {
++            r2d_sb_putc(t, '\n');
++            r2d_sb_printf(t, "%.*s", (int)len, b);
++            left--;
++        }
++        p = e;
++    }
++    return left;
++}
++
++static void add_api_entry(HelpIndex *ix, int kind, const char *full_name, const char *module,
++                          const char *sig, const char *rel, int line, const char *doc,
++                          const char *comment, const DocRefs *refs)
++{
++    char loc[1100];
++    snprintf(loc, sizeof loc, "%s:%d", rel, line);
++    R2dSb t;
++    r2d_sb_init(&t);
++    r2d_sb_printf(&t, "%s %s\nмодуль %s\n%s", full_name, sig, module, comment ? comment : "");
++    if (refs) {
++        // «.navigateTo(» / «$.nav.mesh(» — вызов именно этого имени.
++        char needle[200];
++        snprintf(needle, sizeof needle, "%s(", full_name);
++        int left = append_ref_lines(&t, refs->module_page, needle, REF_LINES);
++        left = append_ref_lines(&t, refs->reference, needle, left);
++        if (left == REF_LINES && kind == HELP_KIND_NS) {
++            // На странице модуля функцию часто пишут коротко: «.mesh(opts)».
++            const char *bare = strrchr(full_name, '.');
++            if (bare) {
++                snprintf(needle, sizeof needle, "`%s(", bare);
++                append_ref_lines(&t, refs->module_page, needle, left);
++            }
++        }
++    }
++    help_index_add(ix, kind, full_name, module, sig, loc, doc, t.data ? t.data : "");
++    r2d_sb_free(&t);
++}
++
++// Есть ли имя в списке «имя\n имя\n …».
++static bool in_list(const char *list, const char *name)
++{
++    if (!list) return false;
++    const size_t n = strlen(name);
++    for (const char *p = list; *p;) {
++        const char *e = strchr(p, '\n');
++        const size_t len = e ? (size_t)(e - p) : strlen(p);
++        if (len == n && memcmp(p, name, n) == 0) return true;
++        if (!e) break;
++        p = e + 1;
++    }
++    return false;
++}
++
++typedef struct FnDecl {
++    char  name[96];
++    char  params[256];
++    char *comment;
++    int   line;
++} FnDecl;
++
++// ctx_ns — имена, которые api.js выставляет как `$.<имя> = ctx.<имя>`:
++// модуль пишет `ctx.time = time`, и это тоже пространство имён `$.time`.
++static void scan_js(const char *root, const char *rel, HelpIndex *ix, SdkReport *rep,
++                    const char *reference, const char *ctx_ns)
++{
++    char full[2048];
++    snprintf(full, sizeof full, "%s/%s", root, rel);
++    size_t size = 0;
++    char *src = sdk_read_file(full, &size);
++    if (!src) {
++        sdk_diag(rep, SDK_WARNING, "HELP_SOURCE_READ", rel, NULL, NULL, "файл не прочитан");
++        return;
++    }
++
++    char module[96];
++    snprintf(module, sizeof module, "%s", sdk_basename(rel));
++    char *dot = strrchr(module, '.');
++    if (dot) *dot = '\0';
++    char doc[256] = "";
++    {
++        char p[2048];
++        snprintf(p, sizeof p, "%s/docs/highlevel/%s.md", root, module);
++        if (sdk_file_exists(p)) snprintf(doc, sizeof doc, "docs/highlevel/%s.md", module);
++    }
++    char *module_page = NULL;
++    if (doc[0]) {
++        char p[2048];
++        snprintf(p, sizeof p, "%s/%s", root, doc);
++        size_t n = 0;
++        module_page = sdk_read_file(p, &n);
++    }
++    const DocRefs refs = { module_page, reference };
++
++    Member *mem = NULL;
++    int nmem = 0, capmem = 0;
++    Alias alias[64];
++    int nalias = 0;
++    FnDecl *fns = NULL;
++    int nfn = 0, capfn = 0;
++
++    // Открытые объектные литералы: переменная и её отступ.
++    char obj_var[8][128];
++    int obj_indent[8];
++    int nobj = 0;
++
++    Comment cm;
++    memset(&cm, 0, sizeof cm);
++    r2d_sb_init(&cm.text);
++
++    int lineno = 0;
++    char *line = src;
++    while (line && *line) {
++        char *nl = strchr(line, '\n');
++        if (nl) *nl = '\0';
++        if (nl && nl > line && nl[-1] == '\r') nl[-1] = '\0';
++        ++lineno;
++        const int ind = indent_of(line);
++        const char *s = line + ind;
++
++        if (cm.in_block || strncmp(s, "/*", 2) == 0 || strncmp(s, "//", 2) == 0) {
++            comment_line(&cm, line, lineno);
++            goto next;
++        }
++
++        // Закрытие объектного литерала на его отступе.
++        if (nobj > 0 && ind == obj_indent[nobj - 1] && s[0] == '}') nobj--;
++
++        // const X = {   /   let X = {
++        if (strncmp(s, "const ", 6) == 0 || strncmp(s, "let ", 4) == 0) {
++            char var[64];
++            const char *p = read_ident(skip_ws(strchr(s, ' ')), var, sizeof var);
++            if (p) {
++                p = skip_ws(p);
++                if (*p == '=') {
++                    p = skip_ws(p + 1);
++                    if (*p == '{' && skip_ws(p + 1)[0] == '\0' && nobj < 8) {
++                        snprintf(obj_var[nobj], sizeof obj_var[nobj], "%s", var);
++                        obj_indent[nobj++] = ind;
++                    }
++                }
++            }
++        }
++
++        // ctx.time = time;  — пространство $.time, если api.js его выставляет.
++        if (strncmp(s, "ctx.", 4) == 0 && nalias < 64) {
++            char ns[96], rhs[64];
++            const char *p = read_ident(s + 4, ns, sizeof ns);
++            if (p && *(p = skip_ws(p)) == '=' && p[1] != '=') {
++                const char *after = read_ident(skip_ws(p + 1), rhs, sizeof rhs);
++                if (after && *skip_ws(after) == ';' && in_list(ctx_ns, ns)) {
++                    snprintf(alias[nalias].var, sizeof alias[nalias].var, "%s", rhs);
++                    snprintf(alias[nalias].ns, sizeof alias[nalias].ns, "%s", ns);
++                    nalias++;
++                }
++            }
++        }
++
++        // function create(target, …) {  — может стать пространством: $.tween = create
++        if (strncmp(s, "function ", 9) == 0) {
++            char name[96], params[256] = "";
++            const char *p = read_ident(skip_ws(s + 9), name, sizeof name);
++            if (p && read_params(p, params, sizeof params) && nfn < 4096) {
++                if (nfn == capfn) {
++                    capfn = capfn ? capfn * 2 : 32;
++                    FnDecl *f = (FnDecl *)realloc(fns, (size_t)capfn * sizeof *f);
++                    if (f) fns = f; else capfn = nfn;
++                }
++                if (nfn < capfn) {
++                    FnDecl *f = &fns[nfn++];
++                    snprintf(f->name, sizeof f->name, "%s", name);
++                    snprintf(f->params, sizeof f->params, "%s", params);
++                    const char *c = comment_for(&cm, lineno);
++                    f->comment = (char *)malloc(strlen(c) + 1);
++                    if (f->comment) strcpy(f->comment, c);
++                    f->line = lineno;
++                }
++            }
++        }
++
++        // $.ns = var;   $.ns = (args) => …;   $.ns = function (args)
++        if (s[0] == '$' && s[1] == '.') {
++            char ns[96];
++            const char *p = read_ident(s + 2, ns, sizeof ns);
++            if (p && *p == '.') p = NULL;   // $.a.b = … — не новое пространство
++            if (p) {
++                p = skip_ws(p);
++                if (p[0] == '=' && p[1] != '=') {
++                    p = skip_ws(p + 1);
++                    char rhs[64];
++                    const char *after = read_ident(p, rhs, sizeof rhs);
++                    char params[256];
++                    if (strncmp(p, "function", 8) == 0 && read_params(p + 8, params, sizeof params)) {
++                        char name[128], sig[400];
++                        snprintf(name, sizeof name, "$.%s", ns);
++                        snprintf(sig, sizeof sig, "$.%s(%s)", ns, params);
++                        add_api_entry(ix, HELP_KIND_NS, name, module, sig, rel, lineno, doc,
++                                      comment_for(&cm, lineno), &refs);
++                    } else if (*p == '(' && read_params(p, params, sizeof params) && strstr(p, "=>")) {
++                        char name[128], sig[400];
++                        snprintf(name, sizeof name, "$.%s", ns);
++                        snprintf(sig, sizeof sig, "$.%s(%s)", ns, params);
++                        add_api_entry(ix, HELP_KIND_NS, name, module, sig, rel, lineno, doc,
++                                      comment_for(&cm, lineno), &refs);
++                    } else if (after && (*skip_ws(after) == ';' || *skip_ws(after) == '\0') &&
++                               nalias < 64) {
++                        snprintf(alias[nalias].var, sizeof alias[nalias].var, "%s", rhs);
++                        snprintf(alias[nalias].ns, sizeof alias[nalias].ns, "%s", ns);
++                        nalias++;
++                    } else if (*p == '{' && nobj < 8) {
++                        // $.ns = {  — литерал прямо в пространстве имён
++                        snprintf(obj_var[nobj], sizeof obj_var[nobj], "$.%s", ns);
++                        obj_indent[nobj++] = ind;
++                    }
++                }
++            }
++        }
++
++        // Член открытого литерала: на отступ глубже литерала.
++        if (nobj > 0 && ind == obj_indent[nobj - 1] + 4 && is_ident_start(*s)) {
++            char name[96];
++            const char *p = read_ident(s, name, sizeof name);
++            char params[256] = "";
++            bool is_fn = false;
++            if (p) {
++                const char *q = skip_ws(p);
++                if (*q == '(' && strchr(q, '{') && !strstr(q, "=>")) {
++                    is_fn = read_params(q, params, sizeof params) || params[0] || true;
++                } else if (*q == ':') {
++                    q = skip_ws(q + 1);
++                    if (strncmp(q, "function", 8) == 0) is_fn = read_params(q + 8, params, sizeof params) || true;
++                    else if (*q == '(' && strstr(q, "=>")) is_fn = read_params(q, params, sizeof params) || true;
++                    else if (is_ident_start(*q)) {
++                        char id[64];
++                        const char *r = read_ident(q, id, sizeof id);
++                        if (r && strncmp(skip_ws(r), "=>", 2) == 0) { snprintf(params, sizeof params, "%s", id); is_fn = true; }
++                    }
++                }
++            }
++            if (is_fn && strcmp(name, "if") != 0 && strcmp(name, "for") != 0 &&
++                strcmp(name, "while") != 0 && strcmp(name, "switch") != 0 &&
++                strcmp(name, "return") != 0 && strcmp(name, "catch") != 0) {
++                if (nmem == capmem) {
++                    capmem = capmem ? capmem * 2 : 64;
++                    Member *m = (Member *)realloc(mem, (size_t)capmem * sizeof *m);
++                    if (!m) goto next;
++                    mem = m;
++                }
++                Member *m = &mem[nmem++];
++                snprintf(m->owner, sizeof m->owner, "%s", obj_var[nobj - 1]);
++                snprintf(m->name, sizeof m->name, "%s", name);
++                snprintf(m->params, sizeof m->params, "%s", params);
++                const char *c = comment_for(&cm, lineno);
++                m->comment = (char *)malloc(strlen(c) + 1);
++                if (m->comment) strcpy(m->comment, c);
++                m->line = lineno;
++            }
++        }
++
++        // def('name', function (args)  /  def('name', (args) =>  /  defGet('name', …
++        {
++            const bool is_get = strncmp(s, "defGet(", 7) == 0;
++            if (is_get || strncmp(s, "def(", 4) == 0) {
++                const char *p = skip_ws(s + (is_get ? 7 : 4));
++                const char quote = *p;
++                if (quote == '\'' || quote == '"') {
++                    const char *e = strchr(p + 1, quote);
++                    if (e && e - p - 1 < 96) {
++                        char name[96];
++                        snprintf(name, sizeof name, "%.*s", (int)(e - p - 1), p + 1);
++                        char params[256] = "";
++                        const char *q = skip_ws(e + 1);
++                        if (*q == ',') {
++                            q = skip_ws(q + 1);
++                            if (strncmp(q, "function", 8) == 0) read_params(q + 8, params, sizeof params);
++                            else if (*q == '(') read_params(q, params, sizeof params);
++                        }
++                        // У геттера первый параметр — узел, а не аргумент вызова.
++                        if (is_get) params[0] = '\0';
++                        char full_name[128], sig[400];
++                        snprintf(full_name, sizeof full_name, ".%s", name);
++                        snprintf(sig, sizeof sig, ".%s(%s)", name, params);
++                        add_api_entry(ix, HELP_KIND_METHOD, full_name, module, sig, rel, lineno, doc,
++                                      comment_for(&cm, lineno), &refs);
++                    }
++                }
++            }
++        }
++    next:
++        if (!cm.in_block && cm.last_line != lineno && s[0] != '\0') {
++            // Обычная строка кода: комментарий выше к следующим строкам не относится.
++        }
++        line = nl ? nl + 1 : NULL;
++    }
++
++    // Члены объектов, которые стали пространствами имён `$`.
++    for (int i = 0; i < nmem; ++i) {
++        const Member *m = &mem[i];
++        const char *ns = NULL;
++        if (strncmp(m->owner, "$.", 2) == 0) ns = m->owner + 2;
++        for (int a = 0; !ns && a < nalias; ++a) if (strcmp(alias[a].var, m->owner) == 0) ns = alias[a].ns;
++        if (ns) {
++            char name[200], sig[600];
++            snprintf(name, sizeof name, "$.%s.%s", ns, m->name);
++            snprintf(sig, sizeof sig, "$.%s.%s(%s)", ns, m->name, m->params);
++            add_api_entry(ix, HELP_KIND_NS, name, module, sig, rel, m->line, doc, m->comment, &refs);
++        }
++        free(m->comment);
++    }
++    free(mem);
++    // Пространство имён, которое само является функцией: $.tween = create.
++    for (int a = 0; a < nalias; ++a) {
++        for (int f = 0; f < nfn; ++f) {
++            if (strcmp(fns[f].name, alias[a].var) != 0) continue;
++            char name[200], sig[600];
++            snprintf(name, sizeof name, "$.%s", alias[a].ns);
++            snprintf(sig, sizeof sig, "$.%s(%s)", alias[a].ns, fns[f].params);
++            add_api_entry(ix, HELP_KIND_NS, name, module, sig, rel, fns[f].line, doc, fns[f].comment, &refs);
++            break;
++        }
++    }
++    for (int f = 0; f < nfn; ++f) free(fns[f].comment);
++    free(fns);
++    free(module_page);
++    r2d_sb_free(&cm.text);
++    free(src);
++}
++
++// ---------------------------------------------------------------------------
++// Документация: один раздел (заголовок + текст до следующего) — одна запись
++// ---------------------------------------------------------------------------
++typedef struct Section {
++    R2dSb body;
++    char  path[6][256];   // заголовки по уровням
++    int   level;          // уровень текущего заголовка (0 — до первого)
++    int   line;           // строка заголовка
++    int   part;
++} Section;
++
++static void flush_section(HelpIndex *ix, Section *sec, const char *rel)
++{
++    const char *body = sec->body.data ? sec->body.data : "";
++    // Пустые разделы (только заголовок, пустые строки) не нужны.
++    const char *p = body;
++    while (*p == ' ' || *p == '\n' || *p == '\t') ++p;
++    if (strlen(p) < 20) { r2d_sb_clear(&sec->body); return; }
++
++    char title[300] = "";
++    char crumbs[1200] = "";
++    for (int l = 0; l < sec->level && l < 6; ++l) {
++        if (!sec->path[l][0]) continue;
++        if (crumbs[0]) strncat(crumbs, " › ", sizeof crumbs - strlen(crumbs) - 1);
++        strncat(crumbs, sec->path[l], sizeof crumbs - strlen(crumbs) - 1);
++        snprintf(title, sizeof title, "%s", sec->path[l]);
++    }
++    if (!title[0]) snprintf(title, sizeof title, "%s", sdk_basename(rel));
++
++    // Длинный раздел режется на части по абзацам, чтобы текст влезал в окно
++    // модели и не размывал смысл.
++    size_t len = strlen(p);
++    int part = 1;
++    while (len > 0) {
++        size_t take = utf8_clip(p, len, DOC_CHUNK_MAX);
++        if (take < len) {
++            // Разрез на границе абзаца или строки, если она недалеко.
++            size_t cut = take;
++            while (cut > take / 2 && !(p[cut] == '\n' && cut > 0 && p[cut - 1] == '\n')) --cut;
++            if (cut <= take / 2) { cut = take; while (cut > take / 2 && p[cut] != '\n') --cut; }
++            if (cut > take / 2) take = cut;
++        }
++        char name[340], loc[1100];
++        if (part == 1 && take == len) snprintf(name, sizeof name, "%s", title);
++        else snprintf(name, sizeof name, "%s (ч. %d)", title, part);
++        snprintf(loc, sizeof loc, "%s:%d", rel, sec->line);
++        R2dSb t;
++        r2d_sb_init(&t);
++        r2d_sb_printf(&t, "%s\n%.*s", crumbs[0] ? crumbs : rel, (int)take, p);
++        help_index_add(ix, HELP_KIND_DOC, name, rel, "", loc, rel, t.data ? t.data : "");
++        r2d_sb_free(&t);
++        p += take;
++        len -= take;
++        while (len > 0 && (*p == '\n' || *p == ' ')) { ++p; --len; }
++        part++;
++    }
++    r2d_sb_clear(&sec->body);
++}
++
++static void scan_md(const char *root, const char *rel, HelpIndex *ix, SdkReport *rep)
++{
++    char full[2048];
++    snprintf(full, sizeof full, "%s/%s", root, rel);
++    size_t size = 0;
++    char *src = sdk_read_file(full, &size);
++    if (!src) {
++        sdk_diag(rep, SDK_WARNING, "HELP_SOURCE_READ", rel, NULL, NULL, "файл не прочитан");
++        return;
++    }
++    Section sec;
++    memset(&sec, 0, sizeof sec);
++    r2d_sb_init(&sec.body);
++    sec.line = 1;
++    bool fence = false;
++    int lineno = 0;
++    char *line = src;
++    while (line && *line) {
++        char *nl = strchr(line, '\n');
++        if (nl) *nl = '\0';
++        if (nl && nl > line && nl[-1] == '\r') nl[-1] = '\0';
++        ++lineno;
++        if (strncmp(line, "```", 3) == 0) fence = !fence;
++        int level = 0;
++        if (!fence) while (line[level] == '#') ++level;
++        if (level >= 1 && level <= 6 && line[level] == ' ') {
++            flush_section(ix, &sec, rel);
++            const char *h = skip_ws(line + level);
++            snprintf(sec.path[level - 1], sizeof sec.path[0], "%s", h);
++            for (int l = level; l < 6; ++l) sec.path[l][0] = '\0';
++            sec.level = level;
++            sec.line = lineno;
++        } else {
++            r2d_sb_puts(&sec.body, line);
++            r2d_sb_putc(&sec.body, '\n');
++        }
++        line = nl ? nl + 1 : NULL;
++    }
++    flush_section(ix, &sec, rel);
++    r2d_sb_free(&sec.body);
++    free(src);
++}
++
++// Имена из строк api.js вида `$.time = ctx.time;` — через «\n».
++static char *api_ctx_namespaces(const char *root)
++{
++    char p[2048];
++    snprintf(p, sizeof p, "%s/src/highlevel/api.js", root);
++    size_t size = 0;
++    char *src = sdk_read_file(p, &size);
++    R2dSb out;
++    r2d_sb_init(&out);
++    for (char *line = src; line && *line;) {
++        char *nl = strchr(line, '\n');
++        const char *s = skip_ws(line);
++        char a[96], b[96];
++        const char *q = NULL;
++        if (s[0] == '$' && s[1] == '.' && (q = read_ident(s + 2, a, sizeof a)) != NULL) {
++            q = skip_ws(q);
++            if (*q == '=' && strncmp(skip_ws(q + 1), "ctx.", 4) == 0) {
++                const char *r = read_ident(skip_ws(q + 1) + 4, b, sizeof b);
++                if (r && *skip_ws(r) == ';' && strcmp(a, b) == 0) {
++                    r2d_sb_puts(&out, a);
++                    r2d_sb_putc(&out, '\n');
++                }
++            }
++        }
++        line = nl ? nl + 1 : NULL;
++    }
++    free(src);
++    if (!out.data) r2d_sb_puts(&out, "");
++    return r2d_sb_take(&out);
++}
++
++bool help_collect(const char *root, HelpIndex *ix, SdkReport *rep)
++{
++    if (!help_root_ok(root)) {
++        sdk_diag(rep, SDK_ERROR, "HELP_ROOT", root, NULL, NULL,
++                 "нет src/highlevel/api.js или docs/ — это не корень репозитория движка");
++        return false;
++    }
++    FileList js = {0}, md = {0};
++    collect_files(root, &js, &md);
++    // Сначала API (короткие точные записи), затем документация.
++    char ref_path[2048];
++    snprintf(ref_path, sizeof ref_path, "%s/docs/HIGH_LEVEL_API.md", root);
++    size_t ref_size = 0;
++    char *reference = sdk_read_file(ref_path, &ref_size);
++    char *ctx_ns = api_ctx_namespaces(root);
++    for (int i = 0; i < js.count; ++i) scan_js(root, js.paths[i], ix, rep, reference, ctx_ns);
++    free(ctx_ns);
++    free(reference);
++    for (int i = 0; i < md.count; ++i) scan_md(root, md.paths[i], ix, rep);
++    list_free(&js);
++    list_free(&md);
++    return true;
++}
+diff --git a/sdk/help/help_embed.c b/sdk/help/help_embed.c
+new file mode 100644
+index 0000000..7e7ccec
+--- /dev/null
++++ b/sdk/help/help_embed.c
+@@ -0,0 +1,200 @@
++// ===========================================================================
++// r2d-help: эмбеддинги через C API llama.cpp (llama.h).
++//
++// Только CPU и фиксированное число потоков: результат должен совпадать между
++// запусками и платформами настолько, насколько позволяет float (оценки при
++// поиске ещё и округляются). Модель — любая GGUF-модель эмбеддингов с
++// пулингом; по умолчанию multilingual-e5-small (docs/HELP.md §4), у e5
++// обязательные префиксы «query: » / «passage: ».
++// ===========================================================================
++#include "help.h"
++
++#include <math.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#ifdef R2D_HELP_LLAMA
++#include "llama.h"
++
++struct HelpEmbedder {
++    struct llama_model   *model;
++    struct llama_context *ctx;
++    const struct llama_vocab *vocab;
++    int   dim;
++    int   n_ctx;
++    bool  e5_prefix;
++};
++
++// stdout занят ответом JSON; журнал llama.cpp не должен туда попадать.
++static void quiet_log(enum ggml_log_level level, const char *text, void *user)
++{
++    (void)user;
++    if (level == GGML_LOG_LEVEL_ERROR && getenv("R2D_HELP_DEBUG")) fputs(text, stderr);
++}
++
++bool help_embed_available(void) { return true; }
++
++HelpEmbedder *help_embed_open(const char *model_path, int threads, char *err, size_t err_cap)
++{
++    llama_log_set(quiet_log, NULL);
++    llama_backend_init();
++
++    struct llama_model_params mp = llama_model_default_params();
++    mp.n_gpu_layers = 0;   // только CPU: одинаковый результат на всех платформах
++    struct llama_model *model = llama_model_load_from_file(model_path, mp);
++    if (!model) {
++        snprintf(err, err_cap, "модель не загружена: %s", model_path);
++        return NULL;
++    }
++
++    struct llama_context_params cp = llama_context_default_params();
++    cp.embeddings = true;
++    cp.n_ctx = 512;
++    cp.n_batch = 512;
++    cp.n_ubatch = 512;
++    cp.n_threads = threads > 0 ? threads : 1;
++    cp.n_threads_batch = cp.n_threads;
++    cp.pooling_type = LLAMA_POOLING_TYPE_UNSPECIFIED;   // из метаданных модели
++    struct llama_context *ctx = llama_init_from_model(model, cp);
++    if (!ctx) {
++        llama_model_free(model);
++        snprintf(err, err_cap, "контекст модели не создан");
++        return NULL;
++    }
++    if (llama_pooling_type(ctx) == LLAMA_POOLING_TYPE_NONE) {
++        llama_free(ctx);
++        llama_model_free(model);
++        snprintf(err, err_cap, "модель без пулинга: нужна модель эмбеддингов предложений");
++        return NULL;
++    }
++
++    HelpEmbedder *e = (HelpEmbedder *)calloc(1, sizeof *e);
++    if (!e) { llama_free(ctx); llama_model_free(model); return NULL; }
++    e->model = model;
++    e->ctx = ctx;
++    e->vocab = llama_model_get_vocab(model);
++    e->dim = llama_model_n_embd(model);
++    e->n_ctx = (int)llama_n_ctx(ctx);
++
++    // e5 обучена с префиксами; узнаём её по имени в метаданных.
++    char name[256] = "";
++    llama_model_meta_val_str(model, "general.name", name, sizeof name);
++    for (char *p = name; *p; ++p) if (*p >= 'A' && *p <= 'Z') *p = (char)(*p + 32);
++    e->e5_prefix = strstr(name, "e5") != NULL || getenv("R2D_HELP_E5_PREFIX") != NULL;
++    return e;
++}
++
++void help_embed_close(HelpEmbedder *e)
++{
++    if (!e) return;
++    llama_free(e->ctx);
++    llama_model_free(e->model);
++    free(e);
++    llama_backend_free();
++}
++
++int help_embed_dim(const HelpEmbedder *e) { return e ? e->dim : 0; }
++
++bool help_embed_text(HelpEmbedder *e, const char *text, bool is_query, float *out)
++{
++    if (!e) return false;
++    const char *prefix = e->e5_prefix ? (is_query ? "query: " : "passage: ") : "";
++    const size_t len = strlen(prefix) + strlen(text);
++    char *buf = (char *)malloc(len + 1);
++    if (!buf) return false;
++    snprintf(buf, len + 1, "%s%s", prefix, text);
++
++    const int cap = e->n_ctx;
++    llama_token *toks = (llama_token *)malloc((size_t)cap * sizeof *toks);
++    if (!toks) { free(buf); return false; }
++    int n = llama_tokenize(e->vocab, buf, (int32_t)len, toks, cap, true, true);
++    if (n < 0) {
++        // Текст длиннее окна модели: берём начало (разделы docs и так
++        // нарезаны так, чтобы это было редкостью).
++        const int need = -n;
++        llama_token *all = (llama_token *)malloc((size_t)need * sizeof *all);
++        if (!all) { free(toks); free(buf); return false; }
++        llama_tokenize(e->vocab, buf, (int32_t)len, all, need, true, true);
++        n = cap;
++        memcpy(toks, all, (size_t)(n - 1) * sizeof *toks);
++        // Последний — служебный конец последовательности, если он был.
++        toks[n - 1] = all[need - 1];
++        free(all);
++    }
++    free(buf);
++    if (n <= 0) { free(toks); return false; }
++
++    struct llama_batch batch = llama_batch_init(n, 0, 1);
++    for (int i = 0; i < n; ++i) {
++        batch.token[i] = toks[i];
++        batch.pos[i] = i;
++        batch.n_seq_id[i] = 1;
++        batch.seq_id[i][0] = 0;
++        batch.logits[i] = 1;
++    }
++    batch.n_tokens = n;
++    free(toks);
++
++    llama_memory_clear(llama_get_memory(e->ctx), true);
++    const int rc = llama_decode(e->ctx, batch);
++    bool ok = rc == 0;
++    if (ok) {
++        const float *v = llama_get_embeddings_seq(e->ctx, 0);
++        if (!v) ok = false;
++        else {
++            double norm = 0.0;
++            for (int i = 0; i < e->dim; ++i) norm += (double)v[i] * v[i];
++            norm = sqrt(norm);
++            for (int i = 0; i < e->dim; ++i) out[i] = norm > 0.0 ? (float)(v[i] / norm) : 0.0f;
++        }
++    }
++    llama_batch_free(batch);
++    return ok;
++}
++
++#else  // без llama.cpp: только BM25
++
++bool help_embed_available(void) { return false; }
++
++HelpEmbedder *help_embed_open(const char *model_path, int threads, char *err, size_t err_cap)
++{
++    (void)model_path; (void)threads;
++    snprintf(err, err_cap, "r2d-help собран без llama.cpp (R2D_HELP_LLAMA=OFF)");
++    return NULL;
++}
++
++void help_embed_close(HelpEmbedder *e) { (void)e; }
++int  help_embed_dim(const HelpEmbedder *e) { (void)e; return 0; }
++bool help_embed_text(HelpEmbedder *e, const char *t, bool q, float *o)
++{
++    (void)e; (void)t; (void)q; (void)o;
++    return false;
++}
++
++#endif
++
++bool help_model_id(const char *model_path, char *out, size_t cap)
++{
++    FILE *f = fopen(model_path, "rb");
++    if (!f) return false;
++    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return false; }
++    const long size = ftell(f);
++    if (size <= 0) { fclose(f); return false; }
++    const size_t chunk = 1u << 20;
++    uint8_t *buf = (uint8_t *)malloc(chunk);
++    if (!buf) { fclose(f); return false; }
++    uint64_t h = 0;
++    fseek(f, 0, SEEK_SET);
++    size_t got = fread(buf, 1, chunk, f);
++    h = help_fnv1a(buf, got, h);
++    if ((size_t)size > chunk) {
++        fseek(f, size - (long)chunk, SEEK_SET);
++        got = fread(buf, 1, chunk, f);
++        h = help_fnv1a(buf, got, h);
++    }
++    free(buf);
++    fclose(f);
++    snprintf(out, cap, "%s:%ld:%016llx", sdk_basename(model_path), size, (unsigned long long)h);
++    return true;
++}
+diff --git a/sdk/help/help_index.c b/sdk/help/help_index.c
+new file mode 100644
+index 0000000..d918855
+--- /dev/null
++++ b/sdk/help/help_index.c
+@@ -0,0 +1,611 @@
++// ===========================================================================
++// r2d-help: индекс (формат файла), токенизатор, BM25 и слияние с эмбеддингами.
++//
++// Формат файла (little-endian), версия HELP_INDEX_FORMAT:
++//   magic[8] "R2DHELP1", u32 format, u32 count, u32 dim, u64 sources_hash,
++//   str model_id; затем count записей:
++//   u8 kind, str name, str module, str signature, str location, str doc,
++//   str text, u64 text_hash, f32 scale, i8 vec[dim] (если dim > 0).
++//   str — u32 длина + байты без нуля.
++// Порядок записей фиксирован (порядок сбора), поэтому при равных оценках
++// результат одинаков на всех платформах.
++// ===========================================================================
++#include "help.h"
++
++#include <ctype.h>
++#include <math.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++const char *help_kind_name(int kind)
++{
++    switch (kind) {
++    case HELP_KIND_METHOD: return "method";
++    case HELP_KIND_NS:     return "function";
++    case HELP_KIND_DOC:    return "doc";
++    default:               return "unknown";
++    }
++}
++
++uint64_t help_fnv1a(const void *data, size_t size, uint64_t seed)
++{
++    const uint8_t *p = (const uint8_t *)data;
++    uint64_t h = seed ? seed : 1469598103934665603ull;
++    for (size_t i = 0; i < size; ++i) {
++        h ^= p[i];
++        h *= 1099511628211ull;
++    }
++    return h;
++}
++
++static char *dup_str(const char *s)
++{
++    if (!s) s = "";
++    const size_t n = strlen(s);
++    char *r = (char *)malloc(n + 1);
++    if (r) memcpy(r, s, n + 1);
++    return r;
++}
++
++void help_index_init(HelpIndex *ix)
++{
++    memset(ix, 0, sizeof *ix);
++}
++
++static void entry_free(HelpEntry *e)
++{
++    free(e->name); free(e->module); free(e->signature);
++    free(e->location); free(e->doc); free(e->text); free(e->vec);
++}
++
++void help_index_free(HelpIndex *ix)
++{
++    for (int i = 0; i < ix->count; ++i) entry_free(&ix->items[i]);
++    free(ix->items);
++    help_index_init(ix);
++}
++
++HelpEntry *help_index_add(HelpIndex *ix, int kind, const char *name, const char *module,
++                          const char *signature, const char *location, const char *doc,
++                          const char *text)
++{
++    if (ix->count == ix->cap) {
++        const int cap = ix->cap ? ix->cap * 2 : 256;
++        HelpEntry *items = (HelpEntry *)realloc(ix->items, (size_t)cap * sizeof *items);
++        if (!items) return NULL;
++        ix->items = items;
++        ix->cap = cap;
++    }
++    HelpEntry *e = &ix->items[ix->count++];
++    memset(e, 0, sizeof *e);
++    e->kind = kind;
++    e->name = dup_str(name);
++    e->module = dup_str(module);
++    e->signature = dup_str(signature);
++    e->location = dup_str(location);
++    e->doc = dup_str(doc);
++    e->text = dup_str(text);
++    e->text_hash = help_fnv1a(e->text, strlen(e->text), 0);
++    return e;
++}
++
++void help_quantize(const float *v, int dim, int8_t *out, float *scale)
++{
++    float m = 0.0f;
++    for (int i = 0; i < dim; ++i) {
++        const float a = fabsf(v[i]);
++        if (a > m) m = a;
++    }
++    const float s = m > 0.0f ? m / 127.0f : 1.0f;
++    for (int i = 0; i < dim; ++i) {
++        long q = lroundf(v[i] / s);
++        if (q > 127) q = 127;
++        if (q < -127) q = -127;
++        out[i] = (int8_t)q;
++    }
++    *scale = s;
++}
++
++// ---------------------------------------------------------------------------
++// Файл индекса
++// ---------------------------------------------------------------------------
++static bool put_u32(FILE *f, uint32_t v)
++{
++    uint8_t b[4] = { (uint8_t)v, (uint8_t)(v >> 8), (uint8_t)(v >> 16), (uint8_t)(v >> 24) };
++    return fwrite(b, 1, 4, f) == 4;
++}
++
++static bool put_u64(FILE *f, uint64_t v)
++{
++    return put_u32(f, (uint32_t)v) && put_u32(f, (uint32_t)(v >> 32));
++}
++
++static bool put_f32(FILE *f, float v)
++{
++    uint32_t u;
++    memcpy(&u, &v, 4);
++    return put_u32(f, u);
++}
++
++static bool put_str(FILE *f, const char *s)
++{
++    const uint32_t n = (uint32_t)strlen(s ? s : "");
++    return put_u32(f, n) && (n == 0 || fwrite(s, 1, n, f) == n);
++}
++
++bool help_index_save(const HelpIndex *ix, const char *path)
++{
++    // Атомарно: пишем во временный файл и переименовываем, чтобы прерванная
++    // сборка не оставила полуиндекс (так же пишет PNG/JSON бэкенд SDK).
++    char tmp[2048];
++    snprintf(tmp, sizeof tmp, "%s.tmp", path);
++    FILE *f = fopen(tmp, "wb");
++    if (!f) return false;
++    bool ok = fwrite(HELP_INDEX_MAGIC, 1, 8, f) == 8 &&
++              put_u32(f, HELP_INDEX_FORMAT) &&
++              put_u32(f, (uint32_t)ix->count) &&
++              put_u32(f, (uint32_t)ix->dim) &&
++              put_u64(f, ix->sources_hash) &&
++              put_str(f, ix->model_id);
++    for (int i = 0; ok && i < ix->count; ++i) {
++        const HelpEntry *e = &ix->items[i];
++        const uint8_t kind = (uint8_t)e->kind;
++        ok = fwrite(&kind, 1, 1, f) == 1 &&
++             put_str(f, e->name) && put_str(f, e->module) && put_str(f, e->signature) &&
++             put_str(f, e->location) && put_str(f, e->doc) && put_str(f, e->text) &&
++             put_u64(f, e->text_hash) && put_f32(f, e->vec ? e->vec_scale : 0.0f);
++        if (ok && ix->dim > 0) {
++            static const int8_t zero[4096];
++            const void *src = e->vec ? (const void *)e->vec : (const void *)zero;
++            ok = ix->dim <= 4096 && fwrite(src, 1, (size_t)ix->dim, f) == (size_t)ix->dim;
++        }
++    }
++    ok = (fclose(f) == 0) && ok;
++    if (!ok) { remove(tmp); return false; }
++    remove(path);
++    if (rename(tmp, path) != 0) { remove(tmp); return false; }
++    return true;
++}
++
++typedef struct Reader {
++    const uint8_t *p;
++    size_t left;
++    bool ok;
++} Reader;
++
++static uint32_t get_u32(Reader *r)
++{
++    if (!r->ok || r->left < 4) { r->ok = false; return 0; }
++    const uint32_t v = (uint32_t)r->p[0] | ((uint32_t)r->p[1] << 8) |
++                       ((uint32_t)r->p[2] << 16) | ((uint32_t)r->p[3] << 24);
++    r->p += 4; r->left -= 4;
++    return v;
++}
++
++static uint64_t get_u64(Reader *r)
++{
++    const uint64_t lo = get_u32(r);
++    const uint64_t hi = get_u32(r);
++    return lo | (hi << 32);
++}
++
++static float get_f32(Reader *r)
++{
++    const uint32_t u = get_u32(r);
++    float v;
++    memcpy(&v, &u, 4);
++    return v;
++}
++
++static char *get_str(Reader *r)
++{
++    const uint32_t n = get_u32(r);
++    if (!r->ok || r->left < n) { r->ok = false; return NULL; }
++    char *s = (char *)malloc((size_t)n + 1);
++    if (!s) { r->ok = false; return NULL; }
++    memcpy(s, r->p, n);
++    s[n] = '\0';
++    r->p += n; r->left -= n;
++    return s;
++}
++
++bool help_index_load(HelpIndex *ix, const char *path)
++{
++    help_index_init(ix);
++    size_t size = 0;
++    char *data = sdk_read_file(path, &size);
++    if (!data) return false;
++    Reader r = { (const uint8_t *)data, size, true };
++    if (size < 8 || memcmp(data, HELP_INDEX_MAGIC, 8) != 0) { free(data); return false; }
++    r.p += 8; r.left -= 8;
++    const uint32_t format = get_u32(&r);
++    const uint32_t count = get_u32(&r);
++    const uint32_t dim = get_u32(&r);
++    ix->sources_hash = get_u64(&r);
++    char *model = get_str(&r);
++    if (!r.ok || format != HELP_INDEX_FORMAT || dim > 4096) { free(model); free(data); return false; }
++    snprintf(ix->model_id, sizeof ix->model_id, "%s", model);
++    free(model);
++    ix->dim = (int)dim;
++    for (uint32_t i = 0; r.ok && i < count; ++i) {
++        if (r.left < 1) { r.ok = false; break; }
++        const int kind = r.p[0];
++        r.p += 1; r.left -= 1;
++        char *name = get_str(&r), *module = get_str(&r), *sig = get_str(&r);
++        char *loc = get_str(&r), *doc = get_str(&r), *text = get_str(&r);
++        const uint64_t th = get_u64(&r);
++        const float scale = get_f32(&r);
++        HelpEntry *e = NULL;
++        if (r.ok) e = help_index_add(ix, kind, name, module, sig, loc, doc, text);
++        free(name); free(module); free(sig); free(loc); free(doc); free(text);
++        if (!e) { r.ok = false; break; }
++        e->text_hash = th;
++        if (dim > 0) {
++            if (r.left < dim) { r.ok = false; break; }
++            if (scale > 0.0f) {
++                e->vec = (int8_t *)malloc(dim);
++                if (!e->vec) { r.ok = false; break; }
++                memcpy(e->vec, r.p, dim);
++                e->vec_scale = scale;
++            }
++            r.p += dim; r.left -= dim;
++        }
++    }
++    free(data);
++    if (!r.ok) { help_index_free(ix); return false; }
++    return true;
++}
++
++// ---------------------------------------------------------------------------
++// Токенизатор
++// ---------------------------------------------------------------------------
++// Основа слова — первые STEM_CP кодовых точек: «навигация/навигации/навигацию»
++// и «navigation/navigate» дают общую основу. Грубо, но без словарей и
++// одинаково для русского и английского; смысловую близость добирают эмбеддинги.
++#define STEM_CP 6
++#define MAX_TOK 96
++
++static const char *const STOP[] = {
++    "и", "в", "во", "на", "по", "с", "со", "к", "ко", "о", "об", "от", "до", "из",
++    "за", "для", "как", "что", "это", "так", "же", "ли", "не", "но", "а", "или",
++    "мне", "я", "мы", "его", "её", "их", "чтобы", "надо", "нужно", "можно", "как-то",
++    "the", "a", "an", "to", "of", "in", "on", "for", "and", "or", "is", "are", "be",
++    "how", "do", "i", "it", "with", "by", "can", "what", "this", "that",
++    NULL,
++};
++
++static bool is_stop(const char *t, size_t n)
++{
++    for (int i = 0; STOP[i]; ++i) {
++        if (strlen(STOP[i]) == n && memcmp(STOP[i], t, n) == 0) return true;
++    }
++    return false;
++}
++
++// Декодирует одну кодовую точку UTF-8; возвращает длину (≥1).
++static int utf8_next(const unsigned char *s, uint32_t *cp)
++{
++    if (s[0] < 0x80) { *cp = s[0]; return 1; }
++    if ((s[0] & 0xE0) == 0xC0 && (s[1] & 0xC0) == 0x80) {
++        *cp = ((uint32_t)(s[0] & 0x1F) << 6) | (s[1] & 0x3F);
++        return 2;
++    }
++    if ((s[0] & 0xF0) == 0xE0 && (s[1] & 0xC0) == 0x80 && (s[2] & 0xC0) == 0x80) {
++        *cp = ((uint32_t)(s[0] & 0x0F) << 12) | ((uint32_t)(s[1] & 0x3F) << 6) | (s[2] & 0x3F);
++        return 3;
++    }
++    if ((s[0] & 0xF8) == 0xF0 && (s[1] & 0xC0) == 0x80 && (s[2] & 0xC0) == 0x80 &&
++        (s[3] & 0xC0) == 0x80) {
++        *cp = ((uint32_t)(s[0] & 0x07) << 18) | ((uint32_t)(s[1] & 0x3F) << 12) |
++              ((uint32_t)(s[2] & 0x3F) << 6) | (s[3] & 0x3F);
++        return 4;
++    }
++    *cp = 0xFFFD;
++    return 1;
++}
++
++static int utf8_put(uint32_t cp, char *out)
++{
++    if (cp < 0x80) { out[0] = (char)cp; return 1; }
++    if (cp < 0x800) {
++        out[0] = (char)(0xC0 | (cp >> 6));
++        out[1] = (char)(0x80 | (cp & 0x3F));
++        return 2;
++    }
++    if (cp < 0x10000) {
++        out[0] = (char)(0xE0 | (cp >> 12));
++        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
++        out[2] = (char)(0x80 | (cp & 0x3F));
++        return 3;
++    }
++    out[0] = (char)(0xF0 | (cp >> 18));
++    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
++    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
++    out[3] = (char)(0x80 | (cp & 0x3F));
++    return 4;
++}
++
++static bool is_word_cp(uint32_t cp)
++{
++    if (cp < 0x80) return (cp >= '0' && cp <= '9') || (cp >= 'a' && cp <= 'z') ||
++                          (cp >= 'A' && cp <= 'Z') || cp == '_';
++    return (cp >= 0x0400 && cp <= 0x04FF) || (cp >= 0x00C0 && cp <= 0x024F);
++}
++
++static uint32_t lower_cp(uint32_t cp)
++{
++    if (cp >= 'A' && cp <= 'Z') return cp + 32;
++    if (cp >= 0x0410 && cp <= 0x042F) return cp + 32;   // А-Я
++    if (cp == 0x0401 || cp == 0x0451) return 0x0435;   // Ё/ё → е
++    return cp;
++}
++
++static bool is_upper_ascii(uint32_t cp) { return cp >= 'A' && cp <= 'Z'; }
++
++// Нормализует и отдаёт один токен (с основой для длинных слов).
++static void emit(const uint32_t *cps, int n, HelpTokenFn fn, void *user, bool stem)
++{
++    if (n <= 0) return;
++    char buf[MAX_TOK * 4 + 1];
++    int len = 0;
++    const int lim = (stem && n > STEM_CP) ? STEM_CP : n;
++    for (int i = 0; i < lim && i < MAX_TOK; ++i) len += utf8_put(lower_cp(cps[i]), buf + len);
++    buf[len] = '\0';
++    if (is_stop(buf, (size_t)len)) return;
++    if (n == 1 && cps[0] < 0x80 && !(cps[0] >= '0' && cps[0] <= '9')) return;  // одиночные буквы
++    fn(buf, (size_t)len, user);
++}
++
++void help_tokenize(const char *text, HelpTokenFn fn, void *user)
++{
++    const unsigned char *s = (const unsigned char *)text;
++    uint32_t word[MAX_TOK];
++    while (*s) {
++        uint32_t cp;
++        int k = utf8_next(s, &cp);
++        if (!is_word_cp(cp)) { s += k; continue; }
++        int n = 0;
++        bool camel = false, under = false;
++        while (*s) {
++            k = utf8_next(s, &cp);
++            if (!is_word_cp(cp)) break;
++            if (n > 0 && is_upper_ascii(cp) && !is_upper_ascii(word[n - 1])) camel = true;
++            if (cp == '_') under = true;
++            if (n < MAX_TOK) word[n++] = cp;
++            s += k;
++        }
++        if (camel || under) {
++            // Идентификатор: целиком (точное совпадение имени API) и по частям.
++            emit(word, n, fn, user, false);
++            int start = 0;
++            for (int i = 1; i <= n; ++i) {
++                const bool cut = i == n || word[i] == '_' ||
++                                 (is_upper_ascii(word[i]) && !is_upper_ascii(word[i - 1]));
++                if (!cut) continue;
++                int a = start, b = i;
++                while (a < b && word[a] == '_') ++a;
++                emit(word + a, b - a, fn, user, true);
++                start = i;
++            }
++        } else {
++            emit(word, n, fn, user, true);
++        }
++    }
++}
++
++// ---------------------------------------------------------------------------
++// Поиск: BM25 по всем записям + косинус по векторам, слияние рангов (RRF)
++// ---------------------------------------------------------------------------
++#define MAX_QTERMS 32
++
++typedef struct QTerms {
++    char     term[MAX_QTERMS][MAX_TOK * 4 + 1];
++    uint64_t hash[MAX_QTERMS];
++    int      n;
++} QTerms;
++
++static void add_qterm(const char *tok, size_t len, void *user)
++{
++    QTerms *q = (QTerms *)user;
++    const uint64_t h = help_fnv1a(tok, len, 0);
++    for (int i = 0; i < q->n; ++i) if (q->hash[i] == h) return;
++    if (q->n >= MAX_QTERMS) return;
++    memcpy(q->term[q->n], tok, len);
++    q->term[q->n][len] = '\0';
++    q->hash[q->n++] = h;
++}
++
++typedef struct DocCount {
++    const QTerms *q;
++    int tf[MAX_QTERMS];
++    int len;
++} DocCount;
++
++static void count_tok(const char *tok, size_t len, void *user)
++{
++    DocCount *d = (DocCount *)user;
++    d->len++;
++    const uint64_t h = help_fnv1a(tok, len, 0);
++    for (int i = 0; i < d->q->n; ++i) if (d->q->hash[i] == h) { d->tf[i]++; break; }
++}
++
++// «.navigateTo» / «$.nav.find» → «navigateto» / «find»: последнее звено имени.
++static void bare_name(const char *name, char *out, size_t cap)
++{
++    const char *p = strrchr(name, '.');
++    p = p ? p + 1 : name;
++    size_t n = 0;
++    while (*p && *p != '(' && n + 1 < cap) out[n++] = (char)lower_cp((unsigned char)*p++);
++    out[n] = '\0';
++}
++
++// Полное имя в нижнем регистре без «$.» и ведущей точки: «nav.find».
++static void dotted_name(const char *name, char *out, size_t cap)
++{
++    if (name[0] == '$' && name[1] == '.') name += 2;
++    else if (name[0] == '.') name += 1;
++    size_t n = 0;
++    while (*name && *name != '(' && n + 1 < cap) out[n++] = (char)lower_cp((unsigned char)*name++);
++    out[n] = '\0';
++}
++
++typedef struct Scored {
++    int    idx;
++    double v;
++} Scored;
++
++static int cmp_scored(const void *a, const void *b)
++{
++    const Scored *x = (const Scored *)a, *y = (const Scored *)b;
++    if (x->v > y->v) return -1;
++    if (x->v < y->v) return 1;
++    return x->idx - y->idx;   // детерминированно при равенстве
++}
++
++static int cmp_hits(const void *a, const void *b)
++{
++    const HelpHit *x = (const HelpHit *)a, *y = (const HelpHit *)b;
++    if (x->score > y->score) return -1;
++    if (x->score < y->score) return 1;
++    return x->entry - y->entry;
++}
++
++// Слова запроса как есть (без основы) — для сравнения с именами API.
++typedef struct RawWords {
++    char w[MAX_QTERMS][128];
++    int  n;
++} RawWords;
++
++static void raw_words(const char *q, RawWords *rw)
++{
++    rw->n = 0;
++    const unsigned char *s = (const unsigned char *)q;
++    while (*s && rw->n < MAX_QTERMS) {
++        while (*s && !(isalnum(*s) || *s == '_' || *s == '.' || *s == '$')) ++s;
++        size_t n = 0;
++        while (*s && (isalnum(*s) || *s == '_' || *s == '.' || *s == '$')) {
++            if (n + 1 < sizeof rw->w[0]) rw->w[rw->n][n++] = (char)lower_cp(*s);
++            ++s;
++        }
++        if (n == 0) { if (*s) ++s; continue; }
++        rw->w[rw->n][n] = '\0';
++        // «$.nav.find(…)» → «nav.find»; «.navigateTo» → «navigateto»
++        char *w = rw->w[rw->n];
++        char *start = w;
++        if (start[0] == '$' && start[1] == '.') start += 2;
++        while (*start == '.') ++start;
++        size_t len = strlen(start);
++        while (len > 0 && start[len - 1] == '.') start[--len] = '\0';
++        memmove(w, start, len + 1);
++        if (len > 0) rw->n++;
++    }
++}
++
++int help_search(const HelpIndex *ix, const char *query, const float *qvec,
++                HelpHit *out, int max_out)
++{
++    if (ix->count == 0 || max_out <= 0) return 0;
++    QTerms q;
++    memset(&q, 0, sizeof q);
++    help_tokenize(query, add_qterm, &q);
++
++    const int N = ix->count;
++    double *bm = (double *)calloc((size_t)N, sizeof *bm);
++    double *cs = (double *)malloc((size_t)N * sizeof *cs);
++    int *df = (int *)calloc(MAX_QTERMS, sizeof *df);
++    int (*tf)[MAX_QTERMS] = (int (*)[MAX_QTERMS])calloc((size_t)N, sizeof *tf);
++    int *dl = (int *)calloc((size_t)N, sizeof *dl);
++    Scored *order = (Scored *)malloc((size_t)N * sizeof *order);
++    HelpHit *hits = (HelpHit *)malloc((size_t)N * sizeof *hits);
++    if (!bm || !cs || !df || !tf || !dl || !order || !hits) {
++        free(bm); free(cs); free(df); free(tf); free(dl); free(order); free(hits);
++        return 0;
++    }
++
++    // BM25 (k1 = 1.2, b = 0.75). Имя и сигнатура входят в текст записи.
++    double avg = 0.0;
++    for (int i = 0; i < N; ++i) {
++        DocCount d;
++        memset(&d, 0, sizeof d);
++        d.q = &q;
++        help_tokenize(ix->items[i].text, count_tok, &d);
++        dl[i] = d.len;
++        avg += d.len;
++        for (int t = 0; t < q.n; ++t) {
++            tf[i][t] = d.tf[t];
++            if (d.tf[t] > 0) df[t]++;
++        }
++    }
++    avg = N > 0 ? avg / N : 1.0;
++    if (avg <= 0.0) avg = 1.0;
++    for (int i = 0; i < N; ++i) {
++        double s = 0.0;
++        for (int t = 0; t < q.n; ++t) {
++            if (tf[i][t] == 0) continue;
++            const double idf = log(1.0 + (N - df[t] + 0.5) / (df[t] + 0.5));
++            const double f = tf[i][t];
++            s += idf * f * 2.2 / (f + 1.2 * (0.25 + 0.75 * dl[i] / avg));
++        }
++        bm[i] = s;
++    }
++
++    // Косинус: векторы нормированы до квантования, поэтому скалярное
++    // произведение ≈ косинусу. Запись без вектора в смысловой ранг не входит.
++    const bool use_vec = qvec && ix->dim > 0;
++    for (int i = 0; i < N; ++i) {
++        cs[i] = -2.0;
++        const HelpEntry *e = &ix->items[i];
++        if (!use_vec || !e->vec) continue;
++        double dot = 0.0;
++        for (int k = 0; k < ix->dim; ++k) dot += (double)qvec[k] * (double)e->vec[k];
++        cs[i] = dot * e->vec_scale;
++    }
++
++    // Ранги по каждому сигналу.
++    double *rrf = (double *)calloc((size_t)N, sizeof *rrf);
++    if (!rrf) { free(bm); free(cs); free(df); free(tf); free(dl); free(order); free(hits); return 0; }
++    const double K = 60.0;
++    for (int i = 0; i < N; ++i) { order[i].idx = i; order[i].v = bm[i]; }
++    qsort(order, (size_t)N, sizeof *order, cmp_scored);
++    for (int r = 0; r < N; ++r) if (order[r].v > 0.0) rrf[order[r].idx] += 1.0 / (K + r + 1);
++    if (use_vec) {
++        for (int i = 0; i < N; ++i) { order[i].idx = i; order[i].v = cs[i]; }
++        qsort(order, (size_t)N, sizeof *order, cmp_scored);
++        for (int r = 0; r < N; ++r) if (order[r].v > -2.0) rrf[order[r].idx] += 1.0 / (K + r + 1);
++    }
++
++    // Точное имя API в запросе («navigateTo», «$.nav.find») поднимает запись
++    // наверх: агент часто спрашивает про уже известное имя.
++    RawWords rw;
++    raw_words(query, &rw);
++    for (int i = 0; i < N; ++i) {
++        const HelpEntry *e = &ix->items[i];
++        if (e->kind == HELP_KIND_DOC) continue;
++        char bare[128], dotted[192];
++        bare_name(e->name, bare, sizeof bare);
++        dotted_name(e->name, dotted, sizeof dotted);
++        for (int w = 0; w < rw.n; ++w) {
++            if (strcmp(rw.w[w], dotted) == 0) { rrf[i] += 1.0; break; }
++            if (bare[0] && strcmp(rw.w[w], bare) == 0) { rrf[i] += 0.5; break; }
++        }
++    }
++
++    int n = 0;
++    for (int i = 0; i < N; ++i) {
++        if (rrf[i] <= 0.0) continue;
++        hits[n].entry = i;
++        // Округление: крошечные расхождения float между платформами не
++        // переставляют результаты с равной по смыслу оценкой.
++        hits[n].score = floor(rrf[i] * 1e6 + 0.5) / 1e6;
++        hits[n].bm25 = floor(bm[i] * 1e4 + 0.5) / 1e4;
++        hits[n].cosine = cs[i] > -2.0 ? floor(cs[i] * 1e4 + 0.5) / 1e4 : -2.0;
++        n++;
++    }
++    qsort(hits, (size_t)n, sizeof *hits, cmp_hits);
++    if (n > max_out) n = max_out;
++    memcpy(out, hits, (size_t)n * sizeof *out);
++
++    free(bm); free(cs); free(df); free(tf); free(dl); free(order); free(hits); free(rrf);
++    return n;
++}
+diff --git a/sdk/help/help_main.c b/sdk/help/help_main.c
+new file mode 100644
+index 0000000..451d338
+--- /dev/null
++++ b/sdk/help/help_main.c
+@@ -0,0 +1,622 @@
++// ===========================================================================
++// r2d-help — CLI-помощник по `$` API (docs/HELP.md).
++//
++//   r2d-help <запрос…>                     то же, что search
++//   r2d-help search <запрос…> [--top N] [--text]
++//   r2d-help show <имя>                     полное описание: .navigateTo, $.nav.find
++//   r2d-help index [--root dir] [--out f]   собрать/обновить индекс
++//   r2d-help status                         индекс, модель, свежесть
++//   r2d-help version
++//
++// Общие флаги: --index f, --model f.gguf, --root каталог, --threads N,
++// --no-update (не пересобирать устаревший индекс).
++// Ответ — один JSON-объект на stdout (--text — для человека). Коды выхода
++// как у r2d-sdk: 0 — ok, 1 — выполнено с ошибками в данных, 2 — неверный вызов.
++// ===========================================================================
++#include "help.h"
++
++#include <SDL3/SDL.h>
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#define DEFAULT_TOP 8
++#define MAX_TOP     50
++
++typedef struct Ctx {
++    SdkArgs     args;
++    SdkReport   rep;
++    char        index_path[2048];
++    char        model_path[2048];   // "" — модели нет
++    char        root[2048];         // "" — исходников нет (поставленный пакет)
++    int         threads;
++    bool        text;
++} Ctx;
++
++typedef struct UpdateInfo {
++    bool checked;      // была проверка свежести
++    bool stale;
++    bool updated;
++    int  embedded;     // сколько записей посчитано моделью заново
++    int  reused;       // сколько векторов взято из прошлого индекса
++} UpdateInfo;
++
++// ---------------------------------------------------------------------------
++// Пути
++// ---------------------------------------------------------------------------
++static void exe_file(const char *name, char *out, size_t cap)
++{
++    sdk_join(sdk_exe_dir(), name, out, cap);
++}
++
++static bool find_root(const Ctx *c, char *out, size_t cap)
++{
++    const char *v = sdk_arg_value(&c->args, "--root");
++    if (!v) v = getenv("R2D_HELP_ROOT");
++    if (v) {
++        if (!help_root_ok(v)) return false;
++        snprintf(out, cap, "%s", v);
++        return true;
++    }
++    // Вверх от текущего каталога: помощник запускают изнутри репозитория.
++    char *cwd = SDL_GetCurrentDirectory();
++    if (cwd) {
++        char dir[2048];
++        snprintf(dir, sizeof dir, "%s", cwd);
++        SDL_free(cwd);
++        for (int up = 0; up < 8; ++up) {
++            size_t n = strlen(dir);
++            while (n > 1 && (dir[n - 1] == '/' || dir[n - 1] == '\\')) dir[--n] = '\0';
++            if (help_root_ok(dir)) { snprintf(out, cap, "%s", dir); return true; }
++            char *slash = strrchr(dir, '/');
++            if (!slash) slash = strrchr(dir, '\\');
++            if (!slash || slash == dir) break;
++            *slash = '\0';
++        }
++    }
++    // Бинарник в build/ внутри репозитория.
++    char p[2048];
++    snprintf(p, sizeof p, "%s..", sdk_exe_dir());
++    if (help_root_ok(p)) { snprintf(out, cap, "%s", p); return true; }
++    return false;
++}
++
++static void resolve_paths(Ctx *c)
++{
++    const char *v = sdk_arg_value(&c->args, "--index");
++    if (!v) v = getenv("R2D_HELP_INDEX");
++    if (v) snprintf(c->index_path, sizeof c->index_path, "%s", v);
++    else exe_file("r2d-help.idx", c->index_path, sizeof c->index_path);
++
++    v = sdk_arg_value(&c->args, "--model");
++    if (!v) v = getenv("R2D_HELP_MODEL");
++    if (v) snprintf(c->model_path, sizeof c->model_path, "%s", v);
++    else {
++        exe_file("r2d-help.gguf", c->model_path, sizeof c->model_path);
++        if (!sdk_file_exists(c->model_path)) c->model_path[0] = '\0';
++    }
++
++    if (!find_root(c, c->root, sizeof c->root)) c->root[0] = '\0';
++
++    v = sdk_arg_value(&c->args, "--threads");
++    c->threads = v ? atoi(v) : 0;
++    c->text = sdk_arg_flag(&c->args, "--text");
++}
++
++static bool model_usable(const Ctx *c)
++{
++    return c->model_path[0] && help_embed_available() && sdk_file_exists(c->model_path);
++}
++
++// ---------------------------------------------------------------------------
++// Сборка индекса: неизменённые тексты берут вектор из прошлого индекса
++// ---------------------------------------------------------------------------
++typedef struct VecMap {
++    uint64_t *keys;
++    int      *vals;
++    int       cap;
++} VecMap;
++
++static void vmap_build(VecMap *m, const HelpIndex *old)
++{
++    m->cap = 1;
++    while (m->cap < old->count * 2 + 16) m->cap <<= 1;
++    m->keys = (uint64_t *)calloc((size_t)m->cap, sizeof *m->keys);
++    m->vals = (int *)malloc((size_t)m->cap * sizeof *m->vals);
++    if (!m->keys || !m->vals) { m->cap = 0; return; }
++    for (int i = 0; i < old->count; ++i) {
++        if (!old->items[i].vec) continue;
++        const uint64_t k = old->items[i].text_hash | 1u;   // 0 — пустая ячейка
++        int s = (int)(k & (uint64_t)(m->cap - 1));
++        while (m->keys[s] && m->keys[s] != k) s = (s + 1) & (m->cap - 1);
++        m->keys[s] = k;
++        m->vals[s] = i;
++    }
++}
++
++static int vmap_get(const VecMap *m, uint64_t hash)
++{
++    if (m->cap == 0) return -1;
++    const uint64_t k = hash | 1u;
++    int s = (int)(k & (uint64_t)(m->cap - 1));
++    while (m->keys[s]) {
++        if (m->keys[s] == k) return m->vals[s];
++        s = (s + 1) & (m->cap - 1);
++    }
++    return -1;
++}
++
++static void vmap_free(VecMap *m)
++{
++    free(m->keys);
++    free(m->vals);
++    memset(m, 0, sizeof *m);
++}
++
++static bool build_index(Ctx *c, const HelpIndex *old, HelpIndex *out, UpdateInfo *info)
++{
++    help_index_init(out);
++    if (!help_collect(c->root, out, &c->rep)) return false;
++    out->sources_hash = help_sources_hash(c->root);
++
++    if (!model_usable(c)) {
++        if (c->model_path[0] && !help_embed_available()) {
++            sdk_diag(&c->rep, SDK_INFO, "HELP_NO_LLAMA", NULL, NULL, NULL,
++                     "собран без llama.cpp: индекс только для BM25");
++        }
++        return true;
++    }
++
++    char model_id[128];
++    if (!help_model_id(c->model_path, model_id, sizeof model_id)) {
++        sdk_diag(&c->rep, SDK_WARNING, "HELP_MODEL_READ", c->model_path, NULL, NULL, "файл модели не прочитан");
++        return true;
++    }
++    char err[512] = "";
++    // Сборка индекса — разовая работа: потоков столько, сколько дадут.
++    const int threads = c->threads > 0 ? c->threads : SDL_GetNumLogicalCPUCores();
++    HelpEmbedder *e = help_embed_open(c->model_path, threads, err, sizeof err);
++    if (!e) {
++        sdk_diag(&c->rep, SDK_WARNING, "HELP_MODEL_OPEN", c->model_path, NULL, NULL, "%s", err);
++        return true;
++    }
++    const int dim = help_embed_dim(e);
++    snprintf(out->model_id, sizeof out->model_id, "%s", model_id);
++    out->dim = dim;
++
++    VecMap map = {0};
++    const bool same_model = old && old->dim == dim && strcmp(old->model_id, model_id) == 0;
++    if (same_model) vmap_build(&map, old);
++
++    float *v = (float *)malloc((size_t)dim * sizeof *v);
++    int failed = 0;
++    for (int i = 0; v && i < out->count; ++i) {
++        HelpEntry *en = &out->items[i];
++        en->vec = (int8_t *)malloc((size_t)dim);
++        if (!en->vec) break;
++        const int j = same_model ? vmap_get(&map, en->text_hash) : -1;
++        if (j >= 0) {
++            memcpy(en->vec, old->items[j].vec, (size_t)dim);
++            en->vec_scale = old->items[j].vec_scale;
++            info->reused++;
++            continue;
++        }
++        if (!help_embed_text(e, en->text, false, v)) {
++            free(en->vec);
++            en->vec = NULL;
++            failed++;
++            continue;
++        }
++        help_quantize(v, dim, en->vec, &en->vec_scale);
++        info->embedded++;
++        if (info->embedded % 200 == 0) {
++            fprintf(stderr, "r2d-help: эмбеддинги %d/%d\n", i + 1, out->count);
++        }
++    }
++    free(v);
++    vmap_free(&map);
++    help_embed_close(e);
++    if (failed > 0) {
++        sdk_diag(&c->rep, SDK_WARNING, "HELP_EMBED_FAILED", NULL, NULL, NULL,
++                 "%d записей без вектора: они ищутся только BM25", failed);
++    }
++    return true;
++}
++
++// Загружает индекс и, если есть исходники и они изменились, пересобирает его.
++static bool load_fresh(Ctx *c, HelpIndex *ix, UpdateInfo *info, bool force)
++{
++    memset(info, 0, sizeof *info);
++    const bool have = help_index_load(ix, c->index_path);
++    if (!have && sdk_file_exists(c->index_path)) {
++        sdk_diag(&c->rep, SDK_WARNING, "HELP_INDEX_FORMAT", c->index_path, NULL, NULL,
++                 "индекс другого формата или повреждён — будет пересобран");
++    }
++    if (!c->root[0]) return have;   // поставленный пакет: индекс как есть
++    if (!force && sdk_arg_flag(&c->args, "--no-update")) return have;
++
++    info->checked = true;
++    bool stale = !have || ix->sources_hash != help_sources_hash(c->root);
++    if (!stale && model_usable(c)) {
++        char id[128];
++        if (help_model_id(c->model_path, id, sizeof id) && strcmp(id, ix->model_id) != 0) stale = true;
++    }
++    info->stale = stale;
++    if (!stale && !force) return have;
++
++    HelpIndex fresh;
++    if (!build_index(c, have ? ix : NULL, &fresh, info)) {
++        help_index_free(&fresh);
++        return have;
++    }
++    help_index_free(ix);
++    *ix = fresh;
++    info->updated = true;
++    if (!help_index_save(ix, c->index_path)) {
++        sdk_diag(&c->rep, SDK_WARNING, "HELP_INDEX_WRITE", c->index_path, NULL, NULL,
++                 "индекс не записан: используется собранный в памяти");
++    }
++    return true;
++}
++
++// ---------------------------------------------------------------------------
++// Вывод
++// ---------------------------------------------------------------------------
++static void put_index_info(const Ctx *c, const HelpIndex *ix, const UpdateInfo *u, R2dSb *o)
++{
++    int api = 0, docs = 0, vec = 0;
++    for (int i = 0; i < ix->count; ++i) {
++        if (ix->items[i].kind == HELP_KIND_DOC) docs++; else api++;
++        if (ix->items[i].vec) vec++;
++    }
++    r2d_sb_puts(o, "\"index\":{");
++    sdk_put_kv_str(o, "path", c->index_path);
++    r2d_sb_printf(o, ",\"entries\":%d,\"api\":%d,\"docs\":%d,\"dim\":%d,\"vectors\":%d,",
++                  ix->count, api, docs, ix->dim, vec);
++    sdk_put_kv_str(o, "model", ix->model_id[0] ? ix->model_id : NULL);
++    r2d_sb_putc(o, ',');
++    sdk_put_kv_str(o, "root", c->root[0] ? c->root : NULL);
++    r2d_sb_printf(o, ",\"checked\":%s,\"stale\":%s,\"updated\":%s,\"embedded\":%d,\"reused\":%d}",
++                  u->checked ? "true" : "false", u->stale ? "true" : "false",
++                  u->updated ? "true" : "false", u->embedded, u->reused);
++}
++
++// Первые строки описания без заголовка записи, в одну строку.
++static void snippet(const char *text, char *out, size_t cap)
++{
++    const char *p = strchr(text, '\n');
++    p = p ? p + 1 : text;
++    size_t n = 0;
++    bool space = false;
++    while (*p && n + 4 < cap) {
++        const unsigned char ch = (unsigned char)*p++;
++        if (ch == '\n' || ch == '\t' || ch == '\r' || ch == ' ') {
++            if (!space && n > 0) { out[n++] = ' '; space = true; }
++            continue;
++        }
++        space = false;
++        out[n++] = (char)ch;
++    }
++    // Не резать UTF-8 посередине символа: последний символ должен быть полным
++    // (обрыв бывает и сразу после ведущего байта, и внутри продолжения).
++    if (n > 0) {
++        size_t k = n - 1;
++        while (k > 0 && ((unsigned char)out[k] & 0xC0) == 0x80) --k;
++        const unsigned char lead = (unsigned char)out[k];
++        const size_t need = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1;
++        if (n - k < need) n = k;
++    }
++    out[n] = '\0';
++}
++
++static void put_entry(const HelpEntry *e, R2dSb *o, bool full)
++{
++    r2d_sb_putc(o, '{');
++    sdk_put_kv_str(o, "kind", help_kind_name(e->kind));
++    r2d_sb_putc(o, ',');
++    sdk_put_kv_str(o, "name", e->name);
++    r2d_sb_putc(o, ',');
++    sdk_put_kv_str(o, "signature", e->signature[0] ? e->signature : NULL);
++    r2d_sb_putc(o, ',');
++    sdk_put_kv_str(o, "module", e->module);
++    r2d_sb_putc(o, ',');
++    sdk_put_kv_str(o, "location", e->location);
++    r2d_sb_putc(o, ',');
++    sdk_put_kv_str(o, "doc", e->doc[0] ? e->doc : NULL);
++    r2d_sb_putc(o, ',');
++    if (full) {
++        sdk_put_kv_str(o, "text", e->text);
++    } else {
++        char sn[320];
++        snippet(e->text, sn, sizeof sn);
++        sdk_put_kv_str(o, "snippet", sn);
++    }
++}
++
++static int finish(Ctx *c, R2dSb *o, bool ok)
++{
++    r2d_sb_putc(o, ',');
++    sdk_report_put_counts(&c->rep, o);
++    r2d_sb_putc(o, ',');
++    sdk_report_put(&c->rep, o);
++    r2d_sb_putc(o, '}');
++    puts(o->data);
++    r2d_sb_free(o);
++    return ok ? (c->rep.errors > 0 ? 1 : 0) : 1;
++}
++
++// ---------------------------------------------------------------------------
++// Команды
++// ---------------------------------------------------------------------------
++static bool is_command(const char *s)
++{
++    return strcmp(s, "search") == 0 || strcmp(s, "show") == 0 || strcmp(s, "index") == 0 ||
++           strcmp(s, "status") == 0 || strcmp(s, "version") == 0 || strcmp(s, "help") == 0 ||
++           strcmp(s, "embed") == 0;
++}
++
++static int cmd_search(Ctx *c, int first_word)
++{
++    // Запрос — все позиционные слова (кавычки не обязательны).
++    R2dSb q;
++    r2d_sb_init(&q);
++    for (int i = first_word;; ++i) {
++        const char *w = sdk_arg_positional(&c->args, i);
++        if (!w) break;
++        if (q.len) r2d_sb_putc(&q, ' ');
++        r2d_sb_puts(&q, w);
++    }
++    if (q.len == 0) {
++        r2d_sb_free(&q);
++        return sdk_fail(&c->rep, "HELP_USAGE", "нужен запрос: r2d-help \"как сделать патруль врага\"");
++    }
++    const char *topv = sdk_arg_value(&c->args, "--top");
++    int top = topv ? atoi(topv) : DEFAULT_TOP;
++    if (top < 1) top = 1;
++    if (top > MAX_TOP) top = MAX_TOP;
++
++    HelpIndex ix;
++    UpdateInfo u;
++    if (!load_fresh(c, &ix, &u, false) || ix.count == 0) {
++        r2d_sb_free(&q);
++        help_index_free(&ix);
++        return sdk_fail(&c->rep, "HELP_INDEX_MISSING",
++                        "нет индекса %s и нет исходников для сборки (--root <репозиторий> или --index)",
++                        c->index_path);
++    }
++
++    // Вектор запроса: только той же моделью, что считала индекс.
++    float *qvec = NULL;
++    const char *mode = "bm25";
++    if (ix.dim > 0 && model_usable(c)) {
++        char id[128];
++        if (help_model_id(c->model_path, id, sizeof id) && strcmp(id, ix.model_id) == 0) {
++            char err[512];
++            // Один поток: короткий запрос, а результат воспроизводим.
++            HelpEmbedder *e = help_embed_open(c->model_path, c->threads > 0 ? c->threads : 1, err, sizeof err);
++            if (e) {
++                qvec = (float *)malloc((size_t)ix.dim * sizeof *qvec);
++                if (qvec && help_embed_text(e, q.data, true, qvec)) mode = "hybrid";
++                else { free(qvec); qvec = NULL; }
++                help_embed_close(e);
++            } else {
++                sdk_diag(&c->rep, SDK_WARNING, "HELP_MODEL_OPEN", c->model_path, NULL, NULL, "%s", err);
++            }
++        } else {
++            sdk_diag(&c->rep, SDK_WARNING, "HELP_MODEL_MISMATCH", c->model_path, NULL, NULL,
++                     "индекс посчитан другой моделью (%s): поиск только BM25", ix.model_id);
++        }
++    } else if (ix.dim > 0) {
++        sdk_diag(&c->rep, SDK_INFO, "HELP_MODEL_MISSING", NULL, NULL, NULL,
++                 "модели нет рядом с r2d-help (r2d-help.gguf) или --model: поиск только BM25");
++    }
++
++    HelpHit hits[MAX_TOP];
++    const int n = help_search(&ix, q.data, qvec, hits, top);
++    free(qvec);
++
++    if (c->text) {
++        printf("%s · %s · %d записей\n\n", q.data, mode, ix.count);
++        for (int i = 0; i < n; ++i) {
++            const HelpEntry *e = &ix.items[hits[i].entry];
++            char sn[240];
++            snippet(e->text, sn, sizeof sn);
++            printf("%2d. %s\n    %s\n", i + 1, e->signature[0] ? e->signature : e->name, e->location);
++            if (sn[0]) printf("    %s\n", sn);
++            if (e->doc[0] && e->kind != HELP_KIND_DOC) printf("    → %s\n", e->doc);
++            printf("\n");
++        }
++        if (n == 0) printf("ничего не найдено\n");
++        for (int i = 0; i < c->rep.count; ++i) (void)0;
++        help_index_free(&ix);
++        r2d_sb_free(&q);
++        const int code = c->rep.errors > 0 ? 1 : 0;
++        sdk_report_free(&c->rep);
++        return code;
++    }
++
++    R2dSb o;
++    r2d_sb_init(&o);
++    r2d_sb_puts(&o, "{\"ok\":true,");
++    sdk_put_kv_str(&o, "query", q.data);
++    r2d_sb_putc(&o, ',');
++    sdk_put_kv_str(&o, "mode", mode);
++    r2d_sb_putc(&o, ',');
++    put_index_info(c, &ix, &u, &o);
++    r2d_sb_puts(&o, ",\"results\":[");
++    for (int i = 0; i < n; ++i) {
++        if (i) r2d_sb_putc(&o, ',');
++        put_entry(&ix.items[hits[i].entry], &o, false);
++        r2d_sb_printf(&o, ",\"rank\":%d,\"score\":%.6f,\"bm25\":%.4f", i + 1, hits[i].score, hits[i].bm25);
++        if (hits[i].cosine > -2.0) r2d_sb_printf(&o, ",\"cosine\":%.4f", hits[i].cosine);
++        r2d_sb_putc(&o, '}');
++    }
++    r2d_sb_putc(&o, ']');
++    help_index_free(&ix);
++    r2d_sb_free(&q);
++    const int code = finish(c, &o, true);
++    sdk_report_free(&c->rep);
++    return code;
++}
++
++// «.navigateTo», «navigateTo», «$.nav.find», «nav.find» — одно и то же имя.
++static bool name_matches(const char *entry, const char *want)
++{
++    const char *a = entry, *b = want;
++    if (a[0] == '$' && a[1] == '.') a += 2;
++    if (b[0] == '$' && b[1] == '.') b += 2;
++    if (*a == '.') ++a;
++    if (*b == '.') ++b;
++    size_t nb = strlen(b);
++    if (nb > 2 && strcmp(b + nb - 2, "()") == 0) nb -= 2;
++    return strlen(a) == nb && SDL_strncasecmp(a, b, nb) == 0;
++}
++
++static int cmd_show(Ctx *c)
++{
++    const char *want = sdk_arg_positional(&c->args, 1);
++    if (!want) return sdk_fail(&c->rep, "HELP_USAGE", "нужно имя: r2d-help show navigateTo");
++    HelpIndex ix;
++    UpdateInfo u;
++    if (!load_fresh(c, &ix, &u, false) || ix.count == 0) {
++        help_index_free(&ix);
++        return sdk_fail(&c->rep, "HELP_INDEX_MISSING", "нет индекса %s", c->index_path);
++    }
++    // Само объявление и разделы документации, где имя встречается в тексте.
++    const char *bare = strrchr(want, '.');
++    bare = bare ? bare + 1 : want;
++    int api = 0, docs = 0;
++    R2dSb o;
++    r2d_sb_init(&o);
++    r2d_sb_puts(&o, "{\"ok\":true,");
++    sdk_put_kv_str(&o, "name", want);
++    r2d_sb_puts(&o, ",\"entries\":[");
++    for (int i = 0; i < ix.count; ++i) {
++        const HelpEntry *e = &ix.items[i];
++        if (e->kind == HELP_KIND_DOC || !name_matches(e->name, want)) continue;
++        if (api + docs) r2d_sb_putc(&o, ',');
++        put_entry(e, &o, true);
++        r2d_sb_putc(&o, '}');
++        api++;
++    }
++    for (int i = 0; i < ix.count && docs < 6 && strlen(bare) >= 3; ++i) {
++        const HelpEntry *e = &ix.items[i];
++        if (e->kind != HELP_KIND_DOC || !strstr(e->text, bare)) continue;
++        if (api + docs) r2d_sb_putc(&o, ',');
++        put_entry(e, &o, true);
++        r2d_sb_putc(&o, '}');
++        docs++;
++    }
++    r2d_sb_putc(&o, ']');
++    if (api == 0) {
++        sdk_diag(&c->rep, SDK_INFO, "HELP_NOT_FOUND", want, NULL, NULL,
++                 "в реестре API нет такого имени: попробуйте r2d-help search");
++    }
++    help_index_free(&ix);
++    const int code = finish(c, &o, true);
++    sdk_report_free(&c->rep);
++    return code;
++}
++
++static int cmd_index(Ctx *c)
++{
++    if (!c->root[0]) {
++        return sdk_fail(&c->rep, "HELP_ROOT", "нет исходников: укажите --root <репозиторий движка>");
++    }
++    const char *out = sdk_arg_value(&c->args, "--out");
++    if (out) snprintf(c->index_path, sizeof c->index_path, "%s", out);
++    HelpIndex ix;
++    UpdateInfo u;
++    const bool ok = load_fresh(c, &ix, &u, sdk_arg_flag(&c->args, "--force"));
++    R2dSb o;
++    r2d_sb_init(&o);
++    r2d_sb_printf(&o, "{\"ok\":%s,", ok ? "true" : "false");
++    put_index_info(c, &ix, &u, &o);
++    help_index_free(&ix);
++    const int code = finish(c, &o, ok);
++    sdk_report_free(&c->rep);
++    return code;
++}
++
++static int cmd_status(Ctx *c)
++{
++    HelpIndex ix;
++    const bool have = help_index_load(&ix, c->index_path);
++    UpdateInfo u;
++    memset(&u, 0, sizeof u);
++    if (have && c->root[0]) {
++        u.checked = true;
++        u.stale = ix.sources_hash != help_sources_hash(c->root);
++    }
++    R2dSb o;
++    r2d_sb_init(&o);
++    r2d_sb_printf(&o, "{\"ok\":true,\"version\":\"%s\",\"llama\":%s,", HELP_VERSION,
++                  help_embed_available() ? "true" : "false");
++    sdk_put_kv_str(&o, "model", c->model_path[0] ? c->model_path : NULL);
++    r2d_sb_printf(&o, ",\"indexPresent\":%s,", have ? "true" : "false");
++    put_index_info(c, &ix, &u, &o);
++    help_index_free(&ix);
++    const int code = finish(c, &o, true);
++    sdk_report_free(&c->rep);
++    return code;
++}
++
++// Служебное: вектор одного текста. Нужен, чтобы сверить GGUF-модель с
++// исходной (tools/help_train/run.sh): расхождение значит сломанную конвертацию.
++static int cmd_embed(Ctx *c)
++{
++    const char *text = sdk_arg_positional(&c->args, 1);
++    if (!text) return sdk_fail(&c->rep, "HELP_USAGE", "нужен текст: r2d-help embed \"текст\" [--query]");
++    if (!model_usable(c)) return sdk_fail(&c->rep, "HELP_MODEL_MISSING", "нужна модель: --model f.gguf");
++    char err[512];
++    HelpEmbedder *e = help_embed_open(c->model_path, c->threads > 0 ? c->threads : 1, err, sizeof err);
++    if (!e) return sdk_fail(&c->rep, "HELP_MODEL_OPEN", "%s", err);
++    const int dim = help_embed_dim(e);
++    float *v = (float *)malloc((size_t)dim * sizeof *v);
++    const bool ok = v && help_embed_text(e, text, sdk_arg_flag(&c->args, "--query"), v);
++    help_embed_close(e);
++    if (!ok) { free(v); return sdk_fail(&c->rep, "HELP_EMBED_FAILED", "вектор не посчитан"); }
++    R2dSb o;
++    r2d_sb_init(&o);
++    r2d_sb_printf(&o, "{\"ok\":true,\"dim\":%d,\"vector\":[", dim);
++    for (int i = 0; i < dim; ++i) r2d_sb_printf(&o, i ? ",%.6f" : "%.6f", v[i]);
++    r2d_sb_putc(&o, ']');
++    free(v);
++    const int code = finish(c, &o, true);
++    sdk_report_free(&c->rep);
++    return code;
++}
++
++static int usage(Ctx *c)
++{
++    return sdk_fail(&c->rep, "HELP_USAGE",
++                    "r2d-help <запрос> | search <запрос> [--top N] [--text] | show <имя> | "
++                    "index [--root dir] [--force] | status | version");
++}
++
++int main(int argc, char **argv)
++{
++    Ctx c;
++    memset(&c, 0, sizeof c);
++    sdk_report_init(&c.rep);
++    c.args.argc = argc - 1;
++    c.args.argv = (const char **)(argv + 1);
++    resolve_paths(&c);
++
++    const char *cmd = sdk_arg_positional(&c.args, 0);
++    if (!cmd || strcmp(cmd, "help") == 0) return usage(&c);
++    if (strcmp(cmd, "version") == 0) {
++        printf("{\"ok\":true,\"name\":\"r2d-help\",\"version\":\"%s\",\"llama\":%s}\n", HELP_VERSION,
++               help_embed_available() ? "true" : "false");
++        sdk_report_free(&c.rep);
++        return 0;
++    }
++    if (strcmp(cmd, "search") == 0) return cmd_search(&c, 1);
++    if (strcmp(cmd, "show") == 0) return cmd_show(&c);
++    if (strcmp(cmd, "index") == 0) return cmd_index(&c);
++    if (strcmp(cmd, "status") == 0) return cmd_status(&c);
++    if (strcmp(cmd, "embed") == 0) return cmd_embed(&c);
++    if (!is_command(cmd)) return cmd_search(&c, 0);   // r2d-help как сделать патруль
++    return usage(&c);
++}
+diff --git a/sdk/native/sdk_util.c b/sdk/native/sdk_util.c
+index 0e7ebe4..43e613b 100644
+--- a/sdk/native/sdk_util.c
++++ b/sdk/native/sdk_util.c
+@@ -340,7 +340,8 @@ static bool takes_value(const char *flag)
+         "--scene", "--frames", "--project", "--seed", "--preset", "--name", "--tool",
+         "--expression", "--uv", "--origin", "--size", "--scale", "--style", "--first-id", "--mode", "--x", "--y",
+         "--cell", "--cols", "--rows", "--prefix", "--duration", "--tags",
+-        "--root", "--game", "--fixed-dt", "--format", "--width", "--height", NULL,
++        "--root", "--game", "--fixed-dt", "--format", "--width", "--height",
++        "--top", "--index", "--model", "--threads", NULL,   // r2d-help (docs/HELP.md)
+     };
+     for (int i = 0; names[i]; ++i) {
+         if (strcmp(flag, names[i]) == 0) return true;
+diff --git a/tests/fixtures/help/queries.json b/tests/fixtures/help/queries.json
+new file mode 100644
+index 0000000..2339dbe
+--- /dev/null
++++ b/tests/fixtures/help/queries.json
+@@ -0,0 +1,56 @@
++{
++  "version": 1,
++  "about": "Вопросы к r2d-help и ожидаемые ответы: попадание — любое имя из expect в первых N результатах. Имена — как в индексе (.метод, $.пространство.функция).",
++  "queries": [
++    { "q": "как сделать чтобы враг шёл по пути к игроку", "expect": [".navigateTo", "$.nav.path", "$.nav.grid"] },
++    { "q": "enemy follows the player around walls", "expect": [".navigateTo", "$.nav.path", "$.nav.grid"] },
++    { "q": "поставить игру на паузу", "expect": ["$.time.pause"] },
++    { "q": "pause the game", "expect": ["$.time.pause"] },
++    { "q": "замедление времени slow motion", "expect": ["$.time.scale"] },
++    { "q": "сохранить рекорд между запусками", "expect": ["$.store.set", "$.store.save"] },
++    { "q": "save game to slot", "expect": ["$.save.save", "$.save.slot"] },
++    { "q": "тряска камеры при взрыве", "expect": ["$.camera.shake"] },
++    { "q": "камера следует за героем", "expect": ["$.camera.follow"] },
++    { "q": "camera must not leave the level bounds", "expect": ["$.camera.limits"] },
++    { "q": "проиграть звук выстрела", "expect": ["$.sound.play", "$.audio.play", ".playSound"] },
++    { "q": "луч от игрока до стены", "expect": ["$.world.raycast", ".rayTo"] },
++    { "q": "видит ли враг игрока", "expect": ["$.world.lineOfSight", "$.nav.lineOfSight"] },
++    { "q": "нанести урон врагу", "expect": [".damage", "$.combat.damage"] },
++    { "q": "heal the player", "expect": [".heal"] },
++    { "q": "возродить героя на точке спавна", "expect": [".respawn"] },
++    { "q": "стоит ли персонаж на земле", "expect": [".onFloor"] },
++    { "q": "прыжок персонажа", "expect": [".jump"] },
++    { "q": "задать скорость телу", "expect": [".velocity"] },
++    { "q": "плавно исчезнуть объекту", "expect": [".fadeOut", ".fadeTo"] },
++    { "q": "animate position smoothly over time", "expect": [".tween", ".tweenTo", "$.tween"] },
++    { "q": "отразить спрайт по горизонтали когда идёт влево", "expect": [".flip"] },
++    { "q": "меню на RmlUi", "expect": ["$.ui.doc"] },
++    { "q": "проверить что нажата клавиша", "expect": ["$.input.pressed", "$.input.down"] },
++    { "q": "движение стрелками или WASD по осям", "expect": ["$.input.axis", "$.input.vec"] },
++    { "q": "toggle fullscreen", "expect": ["$.window.fullscreen", "$.window.toggleFullscreen"] },
++    { "q": "проиграть анимацию бега", "expect": [".playClip", ".animate"] },
++    { "q": "эффект взрыва частицами", "expect": ["$.particles.preset", ".burst", "$.particles.create"] },
++    { "q": "уровень из текстовой карты символами", "expect": ["$.tilemap.fromASCII"] },
++    { "q": "поменять тайл в клетке", "expect": [".setTile"] },
++    { "q": "перевод строк на другой язык", "expect": ["$.i18n.tr", "$.tr"] },
++    { "q": "http запрос к серверу", "expect": ["$.http.get", "$.http.request", "$.http.json"] },
++    { "q": "переиспользовать пули без создания новых", "expect": ["$.pool.spawn", "$.pool.create", ".release"] },
++    { "q": "создать объект из префаба", "expect": ["$.prefab.instantiate", ".prefabClone"] },
++    { "q": "конечный автомат состояний врага", "expect": ["$.state.create", ".fsm", ".stateMachine"] },
++    { "q": "катсцена с репликами", "expect": ["$.cutscene.play", "$.timeline.play", "$.story.play"] },
++    { "q": "параллакс фона", "expect": [".parallax", "$.layers.parallax"] },
++    { "q": "подождать секунду в скрипте", "expect": ["$.wait", "$.flow.delay"] },
++    { "q": "расстояние до ближайшего врага", "expect": [".distanceTo", ".closest"] },
++    { "q": "слои столкновений: пули не бьют своих", "expect": ["$.collision.define", ".collidesWith", ".maskBy"] },
++    { "q": "мультиплеер: поднять сервер", "expect": ["$.net.host"] },
++    { "q": "записать реплей", "expect": ["$.replay.start", "$.replay.record"] },
++    { "q": "показать отладочную панель", "expect": ["$.debug.on", "$.devtools.toggle"] },
++    { "q": "агент: выставить счёт в состояние", "expect": ["$.agent.expose"] },
++    { "q": "самопроверка в игре", "expect": ["$.test.check"] },
++    { "q": "тени от источника света", "expect": [".shadows", ".shadowSoft"] },
++    { "q": "ударная волна эффект", "expect": ["$.fx.shockwave"] },
++    { "q": "выстрел из оружия с перезарядкой", "expect": ["$.weapons.fire", "$.weapons.give"] },
++    { "q": "navigateTo", "expect": [".navigateTo"] },
++    { "q": "$.nav.mesh", "expect": ["$.nav.mesh"] }
++  ]
++}
+diff --git a/tests/help_eval.py b/tests/help_eval.py
+new file mode 100644
+index 0000000..ee7b3fd
+--- /dev/null
++++ b/tests/help_eval.py
+@@ -0,0 +1,58 @@
++"""Замер качества r2d-help: recall@1, recall@5 и MRR на наборе вопросов.
++
++    python3 tests/help_eval.py [--binary build/r2d-help] [--model f.gguf] [--min-recall5 0.0]
++
++Без модели меряет BM25, с моделью — гибридный поиск. Число — доказательство
++для docs/HELP.md (правило 6 AGENT_IMPLEMENTATION_RULES: измерять, а не верить).
++"""
++import argparse
++import json
++import subprocess
++import sys
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parent.parent
++
++p = argparse.ArgumentParser()
++p.add_argument('--binary', default=str(ROOT / 'build' / 'r2d-help'))
++p.add_argument('--model')
++p.add_argument('--index')
++p.add_argument('--queries', default=str(ROOT / 'tests' / 'fixtures' / 'help' / 'queries.json'))
++p.add_argument('--top', type=int, default=10)
++p.add_argument('--min-recall5', type=float, default=0.0)
++p.add_argument('--verbose', action='store_true')
++args = p.parse_args()
++
++queries = json.loads(Path(args.queries).read_text(encoding='utf-8'))['queries']
++hit1 = hit5 = 0
++rr = 0.0
++mode = None
++misses = []
++for item in queries:
++    cmd = [args.binary, 'search', item['q'], '--top', str(args.top), '--root', str(ROOT)]
++    if args.model:
++        cmd += ['--model', args.model]
++    if args.index:
++        cmd += ['--index', args.index]
++    out = subprocess.run(cmd, capture_output=True, text=True, check=False)
++    data = json.loads(out.stdout)
++    mode = data.get('mode')
++    names = [r['name'] for r in data.get('results', [])]
++    rank = next((i + 1 for i, n in enumerate(names) if n in item['expect']), None)
++    if rank == 1:
++        hit1 += 1
++    if rank and rank <= 5:
++        hit5 += 1
++    if rank:
++        rr += 1.0 / rank
++    if not rank or rank > 5:
++        misses.append((item['q'], rank, names[:3]))
++    if args.verbose:
++        print('%-55s %s' % (item['q'][:55], rank))
++
++n = len(queries)
++r1, r5, mrr = hit1 / n, hit5 / n, rr / n
++print('режим %s, вопросов %d: recall@1 %.2f  recall@5 %.2f  MRR %.2f' % (mode, n, r1, r5, mrr))
++for q, rank, top in misses:
++    print('  мимо (ранг %s): %s → %s' % (rank, q, ', '.join(top)))
++sys.exit(0 if r5 >= args.min_recall5 else 1)
+diff --git a/tests/sdk/help_test.c b/tests/sdk/help_test.c
+new file mode 100644
+index 0000000..4a38797
+--- /dev/null
++++ b/tests/sdk/help_test.c
+@@ -0,0 +1,131 @@
++// ===========================================================================
++// Тест r2d-help без модели: токенизатор, файл индекса, BM25, сбор корпуса
++// из настоящего репозитория (путь к корню — первый аргумент).
++// ===========================================================================
++#include "help.h"
++
++#include <math.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++static int failures = 0;
++
++static void check(bool cond, const char *what)
++{
++    printf("  %s %s\n", cond ? "ok  " : "FAIL", what);
++    if (!cond) failures++;
++}
++
++typedef struct Toks {
++    char buf[2048];
++} Toks;
++
++static void collect_tok(const char *t, size_t n, void *user)
++{
++    Toks *k = (Toks *)user;
++    strncat(k->buf, "|", sizeof k->buf - strlen(k->buf) - 1);
++    strncat(k->buf, t, n < sizeof k->buf - strlen(k->buf) - 1 ? n : sizeof k->buf - strlen(k->buf) - 1);
++}
++
++static const char *toks(const char *text)
++{
++    static Toks k;
++    k.buf[0] = '\0';
++    help_tokenize(text, collect_tok, &k);
++    return k.buf;
++}
++
++static int find_name(const HelpIndex *ix, const char *name)
++{
++    for (int i = 0; i < ix->count; ++i) if (strcmp(ix->items[i].name, name) == 0) return i;
++    return -1;
++}
++
++int main(int argc, char **argv)
++{
++    // --- токенизатор ---------------------------------------------------------
++    check(strstr(toks("navigateTo"), "|navigateto") != NULL, "идентификатор целиком");
++    check(strstr(toks("navigateTo"), "|naviga") != NULL, "часть идентификатора с основой");
++    check(strstr(toks("Навигация НАВИГАЦИИ"), "|навига|навига") != NULL, "кириллица: регистр и основа");
++    check(strstr(toks("ёлка Ёж"), "|елка|еж") != NULL, "ё → е");
++    check(strcmp(toks("как и в the of"), "") == 0, "стоп-слова отброшены");
++
++    // --- индекс: запись и чтение ---------------------------------------------
++    HelpIndex ix;
++    help_index_init(&ix);
++    help_index_add(&ix, HELP_KIND_METHOD, ".navigateTo", "nav", ".navigateTo(target, opts)",
++                   "src/highlevel/nav.js:1", "docs/highlevel/nav.md",
++                   ".navigateTo .navigateTo(target, opts)\nмодуль nav\nидти к цели по навигационной сетке");
++    help_index_add(&ix, HELP_KIND_NS, "$.tween", "tween", "$.tween(target)", "src/highlevel/tween.js:1", "",
++                   "$.tween\nмодуль tween\nплавно менять значения во времени");
++    help_index_add(&ix, HELP_KIND_DOC, "Пауза", "docs/x.md", "", "docs/x.md:3", "docs/x.md",
++                   "docs/x.md › Пауза\n$.time.pause() останавливает время игры");
++    ix.dim = 4;
++    ix.sources_hash = 0x1234;
++    snprintf(ix.model_id, sizeof ix.model_id, "test:1");
++    const float v0[4] = { 1, 0, 0, 0 }, v1[4] = { 0, 1, 0, 0 };
++    for (int i = 0; i < 2; ++i) {
++        ix.items[i].vec = (int8_t *)malloc(4);
++        help_quantize(i == 0 ? v0 : v1, 4, ix.items[i].vec, &ix.items[i].vec_scale);
++    }
++    const char *tmp = "help_test.idx";
++    check(help_index_save(&ix, tmp), "индекс записан");
++    HelpIndex back;
++    check(help_index_load(&back, tmp), "индекс прочитан");
++    check(back.count == 3 && back.dim == 4 && back.sources_hash == 0x1234, "заголовок сохранён");
++    check(strcmp(back.items[0].signature, ".navigateTo(target, opts)") == 0, "строки сохранены");
++    check(back.items[0].vec && back.items[0].vec[0] == 127, "вектор сохранён");
++    check(back.items[2].vec == NULL, "запись без вектора остаётся без вектора");
++    remove(tmp);
++
++    // --- поиск ----------------------------------------------------------------
++    HelpHit hits[8];
++    int n = help_search(&back, "как идти к цели навигацией", NULL, hits, 8);
++    check(n > 0 && hits[0].entry == 0, "BM25: русский запрос находит метод");
++    n = help_search(&back, "navigateTo", NULL, hits, 8);
++    check(n > 0 && hits[0].entry == 0, "точное имя — первым");
++    n = help_search(&back, "$.time.pause", NULL, hits, 8);
++    check(n > 0 && hits[0].entry == 2, "имя из текста документации находится");
++    const float q[4] = { 0, 1, 0, 0 };
++    n = help_search(&back, "анимация", q, hits, 8);
++    check(n > 0 && hits[0].entry == 1, "без слов совпадения решает вектор");
++    int a = help_search(&back, "цель", q, hits, 8);
++    HelpHit again[8];
++    int b = help_search(&back, "цель", q, again, 8);
++    check(a == b && memcmp(hits, again, (size_t)a * sizeof *hits) == 0, "поиск детерминирован");
++    help_index_free(&back);
++    help_index_free(&ix);
++
++    // --- корпус из репозитория ----------------------------------------------------
++    if (argc > 1) {
++        HelpIndex rx;
++        help_index_init(&rx);
++        SdkReport rep;
++        sdk_report_init(&rep);
++        check(help_collect(argv[1], &rx, &rep), "корпус собран из репозитория");
++        int api = 0, docs = 0;
++        for (int i = 0; i < rx.count; ++i) {
++            if (rx.items[i].kind == HELP_KIND_DOC) docs++;
++            else api++;
++        }
++        printf("       записей: %d (API %d, разделов docs %d)\n", rx.count, api, docs);
++        check(api > 300, "в реестре больше 300 имён API");
++        check(docs > 500, "больше 500 разделов документации");
++        check(find_name(&rx, ".navigateTo") >= 0, "метод узла .navigateTo найден");
++        check(find_name(&rx, "$.nav.mesh") >= 0, "функция пространства имён $.nav.mesh найдена");
++        const int m = find_name(&rx, "$.nav.mesh");
++        check(m >= 0 && strstr(rx.items[m].text, "навмеш") != NULL, "комментарий /** */ попал в описание");
++        check(m >= 0 && strcmp(rx.items[m].doc, "docs/highlevel/nav.md") == 0, "ссылка на страницу модуля");
++        n = help_search(&rx, "navigateTo", NULL, hits, 8);
++        check(n > 0 && strcmp(rx.items[hits[0].entry].name, ".navigateTo") == 0, "поиск по имени в реальном корпусе");
++        const uint64_t h1 = help_sources_hash(argv[1]), h2 = help_sources_hash(argv[1]);
++        check(h1 == h2 && h1 != 0, "отпечаток источников стабилен");
++        check(rep.errors == 0, "без ошибок сбора");
++        help_index_free(&rx);
++        sdk_report_free(&rep);
++    }
++
++    printf(failures ? "\nПровалено: %d\n" : "\nВсе проверки пройдены\n", failures);
++    return failures ? 1 : 0;
++}
+diff --git a/tools/ci_verify.py b/tools/ci_verify.py
+index 707bd93..f2bbdb4 100644
+--- a/tools/ci_verify.py
++++ b/tools/ci_verify.py
+@@ -14,6 +14,8 @@ def executable(name):
+ for name in ['json', 'crypto', 'payload', 'reverb', 'audio_fx', 'profile', 'bsp', 'rotsprite', 're2d', 're2d_world']:
+     subprocess.run([str(executable('r2d_' + name + '_test'))], check=True)
+ subprocess.run([str(executable('r2d_sdk_core_test'))], check=True)
++# r2d-help: формат индекса, BM25 и сбор корпуса из этого дерева (docs/HELP.md)
++subprocess.run([str(executable('r2d_help_test')), '.'], check=True)
+ qjs = executable('qjs')
+ for test in sorted(Path('tests/js').glob('*_test.mjs')):
+     subprocess.run([str(qjs), str(test)], check=True)
+diff --git a/tools/help_train/check_gguf.py b/tools/help_train/check_gguf.py
+new file mode 100644
+index 0000000..fa21215
+--- /dev/null
++++ b/tools/help_train/check_gguf.py
+@@ -0,0 +1,51 @@
++"""Сверка GGUF-модели в r2d-help с исходной моделью sentence-transformers.
++
++    python check_gguf.py --binary r2d-help --gguf f.gguf --hf каталог_модели
++
++Считает векторы одних и тех же вопросов и разделов двумя путями: исходной
++моделью (PyTorch) и r2d-help (llama.cpp, GGUF q8_0). Косинус должен быть
++близок к 1; иначе конвертация сломана (словарь, позиции, пулинг), и все
++дальнейшие замеры качества недостоверны — выход с кодом 1.
++"""
++import argparse
++import json
++import subprocess
++import sys
++
++p = argparse.ArgumentParser()
++p.add_argument('--binary', required=True)
++p.add_argument('--gguf', required=True)
++p.add_argument('--hf', required=True)
++p.add_argument('--min-cos', type=float, default=0.98)
++args = p.parse_args()
++
++SAMPLES = [
++    ('как поставить игру на паузу', True),
++    ('enemy follows the player around walls', True),
++    ('$.nav.mesh(opts) создаёт навмеш — прямоугольную декомпозицию области', False),
++    ('.navigateTo(target, opts) Ставит узел на маршрут к цели.', False),
++    ('Ёлка, ёжик и «кавычки» — UTF-8 с эмодзи 🎮 и цифрами 12345', True),
++]
++
++from sentence_transformers import SentenceTransformer  # noqa: E402
++
++model = SentenceTransformer(args.hf, device='cpu')
++worst = 1.0
++for text, is_query in SAMPLES:
++    prefix = 'query: ' if is_query else 'passage: '
++    ref = model.encode(prefix + text, normalize_embeddings=True)
++    cmd = [args.binary, 'embed', text, '--model', args.gguf]
++    if is_query:
++        cmd.append('--query')
++    out = subprocess.run(cmd, capture_output=True, check=False)
++    data = json.loads(out.stdout.decode('utf-8'))
++    if not data.get('ok'):
++        sys.exit('r2d-help embed: %s' % data.get('error'))
++    vec = data['vector']
++    if len(vec) != len(ref):
++        sys.exit('размерность разная: gguf %d, исходная %d' % (len(vec), len(ref)))
++    cos = float(sum(a * b for a, b in zip(vec, ref)))
++    worst = min(worst, cos)
++    print('cos %.4f  %s' % (cos, text[:60]))
++print('худший косинус %.4f (порог %.2f)' % (worst, args.min_cos))
++sys.exit(0 if worst >= args.min_cos else 1)
+diff --git a/tools/help_train/convert_e5.py b/tools/help_train/convert_e5.py
+new file mode 100644
+index 0000000..04e92df
+--- /dev/null
++++ b/tools/help_train/convert_e5.py
+@@ -0,0 +1,46 @@
++"""Конвертация multilingual-e5-small (и дообученной копии) в GGUF.
++
++    python convert_e5.py <llama.cpp> <каталог модели HF> --outfile f.gguf --outtype q8_0
++
++У e5-small в config.json архитектура BertModel, но словарь — sentencepiece от
++XLM-RoBERTa. Конвертер llama.cpp для BertModel пишет словарь как WordPiece
++(«##»), и модель токенизирует текст неверно. Здесь BertModel получает словарь
++XLM-R (unigram, «t5» в GGUF), а позиции остаются как у BERT: смещение
++позиций XLM-R (pad + 1) к e5 не относится. Правильность проверяет
++check_gguf.py сравнением с исходной моделью.
++"""
++import runpy
++import sys
++from pathlib import Path
++
++llama = Path(sys.argv[1]).resolve()
++sys.argv = [str(llama / 'convert_hf_to_gguf.py')] + sys.argv[2:]
++sys.path.insert(0, str(llama / 'gguf-py'))
++sys.path.insert(0, str(llama))
++
++from conversion import bert  # noqa: E402
++
++original = bert.BertModel.set_vocab
++
++
++def xlmr_tokenizer(dir_model):
++    if (dir_model / 'sentencepiece.bpe.model').is_file():
++        return True
++    cfg = dir_model / 'tokenizer_config.json'
++    if cfg.is_file():
++        import json
++        cls = json.loads(cfg.read_text(encoding='utf-8')).get('tokenizer_class') or ''
++        return 'XLMRoberta' in cls
++    return False
++
++
++def set_vocab(self):
++    # Только сам BertModel со словарём XLM-R; подклассы со своим set_vocab
++    # (XLMRobertaModel, NomicBert…) сюда не попадают.
++    if type(self) is bert.BertModel and xlmr_tokenizer(self.dir_model):
++        return self._xlmroberta_set_vocab()
++    return original(self)
++
++
++bert.BertModel.set_vocab = set_vocab
++runpy.run_path(sys.argv[0], run_name='__main__')
+diff --git a/tools/help_train/pairs.tsv b/tools/help_train/pairs.tsv
+new file mode 100644
+index 0000000..e3d7932
+--- /dev/null
++++ b/tools/help_train/pairs.tsv
+@@ -0,0 +1,202 @@
++# Обучающие пары для дообучения модели r2d-help (docs/HELP.md §4).
++# Формат: имя API <TAB> вопросы через « | ». Имя — как в индексе r2d-help.
++# Вопросы НЕ совпадают с tests/fixtures/help/queries.json (там — замер).
++.navigateTo	как отправить юнита к точке в обход препятствий | npc идёт к цели по сетке | move character to target avoiding walls | автоматический поиск пути для персонажа
++.stopNav	остановить движение по маршруту | прекратить навигацию юнита | stop pathfinding movement
++.isNavigating	идёт ли сейчас персонаж по маршруту | check if unit is still walking a path
++$.nav.grid	сетка проходимости для поиска пути | create navigation grid from walls | клетки, по которым можно ходить
++$.nav.path	найти путь между двумя точками | compute path from a to b | маршрут из точки в точку без движения узла
++$.nav.mesh	навмеш для большой карты | navigation mesh instead of grid | прямоугольная навигация по области
++$.time.pause	заморозить весь игровой мир | stop game time while menu is open | остановить игру на время
++$.time.resume	продолжить игру после паузы | unpause game | снять игру с паузы
++$.time.isPaused	проверить стоит ли игра на паузе | is the game paused now
++$.time.scale	ускорить время в игре | bullet time effect | множитель скорости времени
++$.time.after	выполнить функцию через несколько секунд | run callback after delay | таймер на одно срабатывание
++$.time.every	повторять действие каждые N миллисекунд | interval timer | периодический таймер спавна врагов
++$.time.cancel	отменить таймер | stop a scheduled timer
++$.time.delta	время прошедшее с прошлого кадра | frame delta time dt
++$.time.fps	текущий fps | frames per second counter
++$.store.set	запомнить значение в хранилище | persist a setting value | записать настройку громкости
++$.store.get	прочитать сохранённое значение | load stored best score | достать значение по ключу
++$.store.save	записать хранилище на диск | flush settings to file
++$.store.load	загрузить настройки при старте | read store file on launch
++$.store.autoSave	автоматически сохранять настройки периодически | autosave store every N seconds
++$.save.load	загрузить сохранение игры из слота | restore saved game | продолжить игру с сохранения
++$.save.list	список слотов сохранения для меню | show save slots
++$.save.autosave	автосохранение игрового мира | periodic world save
++$.camera.follow	камера едет за игроком | attach camera to hero | слежение камерой за объектом
++$.camera.zoom	приблизить камеру | camera zoom level | масштаб вида
++$.camera.zoomTo	плавно изменить зум камеры | smooth zoom in
++$.camera.panTo	плавно перевести камеру на точку | move camera to position smoothly
++$.camera.deadzone	мёртвая зона камеры | camera does not move for small player motion
++$.camera.worldToScreen	перевести мировые координаты в экранные | world position to screen pixels
++$.camera.screenToWorld	куда кликнула мышь в мире | screen coordinates to world coordinates
++$.camera.isOnScreen	виден ли объект на экране | is node inside the camera view
++$.camera.split	разделённый экран для двух игроков | split screen camera
++$.input.down	клавиша удерживается | key is held down | зажата ли кнопка
++$.input.released	клавишу отпустили | key released this frame
++$.input.vec	вектор направления движения от ввода | movement direction from keys normalized
++$.input.bind	назначить действие на клавишу | map action to key | привязка управления
++$.input.rebind	переназначить кнопку в настройках | let player remap controls
++$.input.mouse	позиция мыши | mouse cursor coordinates
++$.input.mouseWorld	мышь в координатах мира | mouse position in world space
++$.input.mousePressed	клик мышью | mouse button clicked
++$.input.gamepad	геймпад | gamepad state | джойстик
++$.input.rumble	вибрация геймпада | gamepad vibration
++$.input.touches	касания на сенсорном экране | touch input points
++$.scene.add	зарегистрировать сцену | define a scene with enter and update | описать экран игры
++$.scene.load	перейти на другую сцену | switch to level scene | загрузить уровень
++$.scene.restart	перезапустить текущий уровень | restart scene after death
++$.scene.push	открыть сцену поверх текущей | overlay scene like inventory
++$.scene.pop	закрыть верхнюю сцену и вернуться | return from overlay scene
++$.scene.transition	переход между сценами с затемнением | fade transition between scenes
++$.world.gravity	сила тяжести в мире | set world gravity
++$.world.bounds	границы мира | world borders walls around level
++$.world.raycastAll	все объекты на линии луча | raycast returning every hit
++$.world.castShape	проверить фигурой есть ли столкновение | shape cast sweep
++$.world.bodyAt	какое тело в точке | body under cursor
++$.world.joint	соединить два тела шарниром | physics joint between bodies
++$.world.contactBetween	касаются ли два объекта | contact between two bodies
++$.world.timeScale	замедлить физику | physics time scale
++$.world.spawn	создать узел в мире | spawn object in world
++.damage	отнять здоровье у персонажа | apply hit points loss | получить урон
++.heal	восстановить здоровье | restore hp | аптечка
++.health	задать здоровье объекту | set hit points
++.hp	сколько здоровья у юнита | current health value
++.alive	жив ли объект | check whether unit is dead
++.kill	убить объект | destroy enemy instantly
++.respawn	вернуть персонажа на точку после смерти | respawn at checkpoint
++.velocity	скорость тела по осям | set body speed vector
++.applyImpulse	толкнуть тело импульсом | knockback impulse | отбросить врага ударом
++.applyForce	приложить силу к телу | push body with force
++.moveAndSlide	движение кинематического персонажа со скольжением по стенам | character controller move and slide
++.onWall	упёрся ли персонаж в стену | touching a wall
++.body	сделать узел физическим телом | add physics body to node
++.sensor	триггер без столкновения | sensor body overlap only
++.bounce	упругость отскока | restitution bounciness
++.collidesWith	с какими слоями сталкивается объект | collision filter what to hit
++.layerName	слой столкновений объекта | collision layer of node
++.on	подписаться на событие узла | listen to node event | обработчик события
++.emit	отправить событие | trigger custom event
++.tween	плавно анимировать свойства узла | tween alpha and position | анимация движения по времени
++.tweenTo	плавно перейти к значениям | tween node to target values
++.fadeTo	изменить прозрачность плавно до значения | fade to opacity
++.fadeIn	плавное появление объекта | fade in
++.alpha	прозрачность узла | opacity of sprite
++.flash	мигнуть цветом при попадании | hit flash white
++.shake	встряхнуть объект | shake node
++.rotate	вращать объект | rotate node
++.lookAt	повернуться к цели | face towards target
++.scale	масштаб объекта | resize sprite scale
++.depth	порядок отрисовки по глубине | draw order z index
++.sprite	картинка узла | set texture of node
++.frames	кадры анимации спрайта | sprite sheet frames
++.animate	покадровая анимация спрайта | play frame animation
++.playClip	запустить клип анимации | play animation clip by name
++.stateMachine	машина состояний анимации | animation state machine
++.text	текст узла | set label text
++.font	шрифт текста | font of text node
++.attr	атрибут узла | custom data on node
++.data	хранить данные в узле | node data storage
++.addClass	добавить класс узлу | tag node with css class
++.hasClass	есть ли у узла класс | check class on node
++.remove	удалить узел из мира | destroy node
++.appendTo	добавить узел в контейнер | attach child to parent
++.children	дочерние узлы | children of node
++.find	найти потомков по селектору | query inside node
++.filter	отфильтровать выборку | filter nodes by predicate
++.closest	ближайший узел к этому | nearest enemy
++.inside	внутри ли прямоугольника | is node inside area
++.overlaps	пересекаются ли два объекта | overlap test between nodes
++.rayTo	луч от узла к цели | raycast from node to target
++.zone	зона-триггер на узле | trigger zone around node
++$.triggers.zone	зона входа и выхода | trigger area enter exit events
++$.sound.music	фоновая музыка | play background music | включить музыку уровня
++$.sound.crossfade	плавно сменить музыку | crossfade music tracks
++$.sound.stopMusic	выключить музыку | stop background music
++$.sound.volume	громкость звука | sound volume
++$.sound.playAt	звук в точке мира | positional sound effect
++$.audio.bus	шина звука для группы | audio bus mixer group
++$.audio.effect	эффект на звук реверберация | apply reverb effect to bus
++$.ui.bar	полоска здоровья в HUD | health bar on screen
++$.ui.label	надпись в HUD | update HUD text label
++.openDialog	открыть диалоговое окно | modal dialog
++.checked	отмечен ли чекбокс | checkbox state
++.sliderValue	значение слайдера | slider value
++.inputValue	текст из поля ввода | text input value
++$.particles.create	система частиц | particle emitter | создать эмиттер частиц
++.emitting	включить или выключить эмиттер | toggle particle emission
++$.fx.trail	шлейф за объектом | motion trail effect
++$.fx.lightning	молния эффект | lightning bolt between points
++$.fx.hitStop	заморозка кадра при ударе | hit stop freeze frames
++$.fx.impact	эффект удара | impact effect with shake and flash
++.shadowSoft	мягкие тени | soft shadows from light
++.cone	конус света фонарика | flashlight cone light
++.flicker	мерцание света | flickering torch light
++$.tilemap.create	создать тайловую карту | tile map from tileset
++.autotile	автотайлинг стыков | autotile terrain edges
++.tileAt	какой тайл в клетке | read tile at cell
++.fill	залить область тайлами | fill rect with tile
++$.tilemap.pixelToTile	клетка по координатам пикселя | pixel to tile coordinates
++.ysort	сортировка по y для видa сверху | y-sorting top down depth
++$.layers.create	слой отрисовки | create render layer
++$.layers.fadeTo	затемнить экран | fade screen to black
++.parallax	коэффициент параллакса узла | parallax factor of background
++$.i18n.load	загрузить словарь перевода | load translation file
++$.i18n.lang	сменить язык игры | switch language
++$.i18n.plural	множественное число в переводе | plural forms
++$.http.post	отправить данные на сервер | post json request
++$.http.download	скачать файл | download file over http
++$.pool.create	пул объектов | object pool for bullets
++$.pool.release	вернуть объект в пул | release pooled node
++$.prefab.save	сохранить узел как префаб | save prefab template
++$.prefab.register	зарегистрировать шаблон объекта | register prefab
++.clone	копия узла | duplicate node
++$.state.send	отправить событие автомату | send event to state machine
++.fsm	автомат состояний на узле | finite state machine on node
++.state	текущее состояние узла | current state name
++$.timeline.define	описать сценарий диалога | define timeline script
++$.timeline.choose	выбор варианта ответа | choose dialog option
++$.story.play	визуальная новелла сценарий | play story script
++$.cutscene.skip	пропустить катсцену | skip cutscene
++$.cutscene.letterbox	чёрные полосы в катсцене | letterbox bars
++$.flow.series	последовательность действий по времени | run steps in sequence
++$.flow.parallel	параллельные действия | run actions in parallel
++$.flow.repeat	повторять действие несколько раз | repeat action n times
++$.signal.on	глобальная шина событий | subscribe to global signal
++$.signal.emit	разослать глобальное событие | broadcast signal
++$.signal.waitFor	дождаться события | await signal
++$.net.join	подключиться к серверу | join multiplayer game
++$.net.replicate	синхронизировать узел по сети | replicate node over network
++$.net.ping	задержка сети | network ping
++$.replay.play	воспроизвести запись | playback replay
++$.debug.profile	профилирование кадра | profile frame time
++$.debug.watch	следить за значением в отладке | watch variable in debug panel
++$.agent.snapshot	снимок состояния для агента | agent state snapshot
++$.test.equal	проверить равенство в тесте | assert equal
++$.window.title	заголовок окна | set window title
++$.window.size	размер окна | window width and height
++$.window.vsync	вертикальная синхронизация | vsync on off
++$.window.cursor	курсор мыши вид | change mouse cursor
++$.gfx.post	постобработка экрана | post processing effect | bloom и виньетка
++$.gfx.defineShader	свой шейдер | custom shader
++$.gfx.measureText	ширина текста в пикселях | measure text size
++$.fs.readJSON	прочитать json файл | load json data file
++$.fs.writeJSON	записать json файл | save json file
++$.resource.preload	предзагрузить ресурсы | preload assets
++$.atlas.load	загрузить атлас спрайтов | load sprite atlas
++$.items.define	описать предмет инвентаря | define inventory item
++$.weapons.define	описать оружие | define weapon stats
++$.combat.hit	попадание с расчётом урона | apply hit with damage zones
++$.alive.psyche	психика npc страх | npc fear morale
++$.proc.render	процедурная картинка | procedural sprite generation
++$.re2d.world	мир с высотой и этажами | re2d world bsp floors
++$.rotSprite.from	спрайт с поворотом по ракурсам | rotating sprite from atlas
++$.ready	код после загрузки движка | run code when engine ready
++$.update	функция каждого кадра | per frame update callback
++$.on	глобальное событие игры | listen global event
++$.batch	много изменений одним проходом | batch node changes
++$.pick	случайный элемент массива | random choice
++$.vec	вектор x y | 2d vector helper
++$.color	цвет из строки | parse color
++$.quit	выйти из игры | quit application
+diff --git a/tools/help_train/run.sh b/tools/help_train/run.sh
+new file mode 100755
+index 0000000..543678c
+--- /dev/null
++++ b/tools/help_train/run.sh
+@@ -0,0 +1,122 @@
++#!/usr/bin/env bash
++# ---------------------------------------------------------------------------
++# r2d-help: модель e5-small → GGUF, замер до/после дообучения на $ API.
++#
++#   bash tools/help_train/run.sh
++#
++# Рабочее дерево проекта НЕ меняется: сборка идёт в отдельной копии
++# (git worktree) рядом с проектом, к ней применяется патч r2d-help.
++# Всё, что получилось, и отчёт — в build/help_train/ основного проекта:
++#   report.txt  — цифры recall@1/@5/MRR для bm25, e5-small, e5-small+обучение
++#   run.log     — полный журнал
++#   *.gguf      — модели
++# ---------------------------------------------------------------------------
++set -euo pipefail
++
++HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++ROOT="$(cd "$HERE/../.." && pwd)"
++OUT="$ROOT/build/help_train"
++WT="${R2D_HELP_WORKTREE:-$ROOT/../nikiniki2d-help}"
++mkdir -p "$OUT"
++exec > >(tee "$OUT/run.log") 2>&1
++
++step() { printf '\n=== %s  %s ===\n' "$(date '+%H:%M:%S')" "$*"; }
++fail() { echo "ОШИБКА: $*" | tee -a "$OUT/report.txt"; exit 1; }
++
++: > "$OUT/report.txt"
++echo "r2d-help: обучение и замер $(date '+%Y-%m-%d %H:%M')" >> "$OUT/report.txt"
++
++step "Проверка инструментов"
++for t in git cmake python3; do command -v "$t" >/dev/null || fail "нет $t"; done
++command -v ninja >/dev/null && GEN=(-G Ninja) || GEN=()
++uname -m; sw_vers -productVersion 2>/dev/null || true
++python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' \
++    || fail "нужен Python 3.10+ (сейчас $(python3 --version 2>&1)); поставьте свежий python3 первым в PATH"
++# e5 обучена с префиксами «query: » / «passage: »: включаем их явно, а не по имени модели.
++export R2D_HELP_E5_PREFIX=1
++
++step "Копия проекта для сборки: $WT"
++if [ ! -d "$WT/.git" ] && [ ! -f "$WT/.git" ]; then
++    git -C "$ROOT" worktree add --detach "$WT" HEAD
++fi
++if [ ! -f "$WT/sdk/help/help_main.c" ]; then
++    git -C "$WT" apply --3way "$HERE/r2d-help.patch" || git -C "$WT" apply "$HERE/r2d-help.patch" \
++        || fail "патч r2d-help не применился к $(git -C "$ROOT" rev-parse --short HEAD)"
++fi
++mkdir -p "$WT/tools/help_train"
++cp "$HERE"/pairs.tsv "$HERE"/train.py "$HERE"/convert_e5.py "$HERE"/check_gguf.py "$WT/tools/help_train/"
++
++step "Python-окружение для подготовки модели (только здесь, не в r2d-help)"
++VENV="$OUT/venv"
++[ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
++PY="$VENV/bin/python"
++"$PY" -m pip install -q --upgrade pip
++"$PY" -m pip install -q torch "sentence-transformers>=3" datasets accelerate huggingface_hub numpy \
++    sentencepiece safetensors protobuf pyyaml
++
++step "Сборка r2d-help (Release, llama.cpp CPU)"
++BUILD="$WT/build-help"
++cmake -S "$WT" -B "$BUILD" ${GEN[@]+"${GEN[@]}"} -DCMAKE_BUILD_TYPE=Release -DR2D_HELP_LLAMA=ON
++cmake --build "$BUILD" --target r2d-help r2d_help_test --parallel
++BIN="$BUILD/r2d-help"
++"$BIN" version
++"$BUILD/sdk/help/r2d_help_test" "$WT" > "$OUT/help_test.txt" || fail "r2d_help_test не прошёл: $OUT/help_test.txt"
++tail -n 1 "$OUT/help_test.txt"
++LLAMA_SRC="$BUILD/_deps/llama_cpp-src"
++[ -f "$LLAMA_SRC/convert_hf_to_gguf.py" ] || fail "нет конвертера llama.cpp в $LLAMA_SRC"
++"$PY" -m pip install -q -e "$LLAMA_SRC/gguf-py" || true
++
++step "Скачивание multilingual-e5-small"
++BASE="$OUT/multilingual-e5-small"
++"$PY" - "$BASE" <<'EOF'
++import sys
++from huggingface_hub import snapshot_download
++snapshot_download('intfloat/multilingual-e5-small', local_dir=sys.argv[1])
++EOF
++
++convert() {  # каталог HF → GGUF q8_0, затем сверка с исходной моделью
++    "$PY" "$WT/tools/help_train/convert_e5.py" "$LLAMA_SRC" "$1" --outfile "$2" --outtype q8_0
++    ls -la "$2"
++    "$PY" "$WT/tools/help_train/check_gguf.py" --binary "$BIN" --gguf "$2" --hf "$1" | tee "$2.check.txt" \
++        || fail "GGUF $(basename "$2") не совпадает с исходной моделью — см. $2.check.txt"
++    echo "сверка $(basename "$2"): $(tail -n 1 "$2.check.txt")" >> "$OUT/report.txt"
++}
++
++measure() {  # имя режима, модель или пусто
++    local label="$1" model="${2:-}" idx="$OUT/$1.idx" args=()
++    rm -f "$idx"
++    if [ -n "$model" ]; then args=(--model "$model"); fi
++    local t0=$SECONDS
++    "$BIN" index --root "$WT" --out "$idx" ${args[@]+"${args[@]}"} > "$OUT/$label.index.json"
++    local t1=$SECONDS
++    local line
++    "$PY" "$WT/tests/help_eval.py" --binary "$BIN" --index "$idx" ${args[@]+"${args[@]}"} > "$OUT/$label.eval.txt"
++    line="$(sed -n 1p "$OUT/$label.eval.txt")"
++    echo "$line"
++    printf '%-14s %s  (индекс %d с, %s)\n' "$label" "$line" "$((t1 - t0))" \
++        "$(ls -lh "$idx" | awk '{print $5}')" >> "$OUT/report.txt"
++}
++
++step "Замер 1: только BM25"
++measure bm25
++
++step "Конвертация и замер 2: e5-small как есть"
++convert "$BASE" "$OUT/e5-small-q8_0.gguf"
++measure e5-small "$OUT/e5-small-q8_0.gguf"
++
++step "Дообучение на парах «вопрос → API»"
++FT="$OUT/e5-r2d"
++"$PY" "$WT/tools/help_train/train.py" --binary "$BIN" --root "$WT" --index "$OUT/bm25.idx" \
++    --base "$BASE" --out "$FT"
++# Конвертеру нужны файлы токенизатора исходной модели (sentencepiece).
++for f in "$BASE"/sentencepiece* "$BASE"/tokenizer* "$BASE"/special_tokens_map.json; do
++    if [ -e "$f" ] && [ ! -e "$FT/$(basename "$f")" ]; then cp "$f" "$FT/"; fi
++done
++
++step "Конвертация и замер 3: e5-small + дообучение"
++convert "$FT" "$OUT/e5-r2d-q8_0.gguf"
++measure e5-r2d "$OUT/e5-r2d-q8_0.gguf"
++
++step "Готово"
++echo "размер r2d-help: $(ls -lh "$BIN" | awk '{print $5}')" >> "$OUT/report.txt"
++cat "$OUT/report.txt"
+diff --git a/tools/help_train/train.py b/tools/help_train/train.py
+new file mode 100644
+index 0000000..9f6da23
+--- /dev/null
++++ b/tools/help_train/train.py
+@@ -0,0 +1,112 @@
++"""Дообучение модели эмбеддингов r2d-help на парах «вопрос → API».
++
++    python3 tools/help_train/train.py --binary build/r2d-help --root . --index bm25.idx \
++        --base путь/multilingual-e5-small --out путь/e5-r2d [--epochs 3]
++
++Пары — tools/help_train/pairs.tsv. Текст записи («passage») берётся у самого
++r2d-help (`show <имя>`), поэтому модель учится ровно на том, что потом лежит
++в индексе. Трудный отрицательный пример — первая чужая API-запись из
++BM25-поиска по этому же вопросу. Обучение — Python и PyTorch только здесь, при
++подготовке модели; в r2d-help остаётся GGUF и C (docs/HELP.md §4).
++"""
++import argparse
++import json
++import random
++import subprocess
++import sys
++from pathlib import Path
++
++p = argparse.ArgumentParser()
++p.add_argument('--binary', required=True)
++p.add_argument('--root', required=True)
++p.add_argument('--index', required=True, help='готовый индекс r2d-help (например bm25.idx)')
++p.add_argument('--base', required=True)
++p.add_argument('--out', required=True)
++p.add_argument('--pairs', default=str(Path(__file__).with_name('pairs.tsv')))
++p.add_argument('--epochs', type=int, default=3)
++p.add_argument('--batch', type=int, default=32)
++p.add_argument('--lr', type=float, default=2e-5)
++p.add_argument('--seed', type=int, default=7)
++args = p.parse_args()
++
++random.seed(args.seed)
++
++
++def help_json(*cmd):
++    out = subprocess.run([args.binary, *cmd, '--root', args.root, '--index', args.index, '--no-update'],
++                         capture_output=True, check=False)
++    return json.loads(out.stdout.decode('utf-8'))
++
++
++texts = {}
++
++
++def passage(name):
++    if name not in texts:
++        data = help_json('show', name)
++        api = [e for e in data.get('entries', []) if e['kind'] != 'doc' and e['name'] == name]
++        texts[name] = api[0]['text'] if api else None
++    return texts[name]
++
++
++pairs = []
++for line in Path(args.pairs).read_text(encoding='utf-8').splitlines():
++    if not line.strip() or line.startswith('#'):
++        continue
++    name, qs = line.split('\t', 1)
++    for q in qs.split(' | '):
++        pairs.append((q.strip(), name))
++
++examples = []
++skipped = 0
++for q, name in pairs:
++    pos = passage(name)
++    if not pos:
++        skipped += 1
++        continue
++    neg = None
++    for r in help_json('search', q, '--top', '10').get('results', []):
++        if r['kind'] != 'doc' and r['name'] != name:
++            neg = passage(r['name'])
++            if neg:
++                break
++    examples.append((q, pos, neg))
++print('пар: %d, без текста записи: %d, с трудным отрицательным: %d'
++      % (len(examples), skipped, sum(1 for e in examples if e[2])), flush=True)
++if not examples:
++    sys.exit('нет обучающих пар')
++
++import torch  # noqa: E402
++from sentence_transformers import InputExample, SentenceTransformer, losses  # noqa: E402
++from torch.utils.data import DataLoader  # noqa: E402
++
++torch.manual_seed(args.seed)
++device = 'mps' if torch.backends.mps.is_available() else 'cpu'
++print('устройство:', device, flush=True)
++model = SentenceTransformer(args.base, device=device)
++
++train = []
++for q, pos, neg in examples:
++    texts_ = ['query: ' + q, 'passage: ' + pos]
++    if neg:
++        texts_.append('passage: ' + neg)
++        train.append(InputExample(texts=texts_))
++    else:
++        # Тройка нужна всем элементам батча: без трудного отрицательного
++        # второй позитив играет его роль только как ещё один «чужой» пример.
++        train.append(InputExample(texts=texts_ + ['passage: ' + random.choice(examples)[1]]))
++random.shuffle(train)
++loader = DataLoader(train, shuffle=True, batch_size=args.batch)
++# In-batch negatives: остальные записи батча — отрицательные примеры.
++loss = losses.MultipleNegativesRankingLoss(model)
++model.fit(train_objectives=[(loader, loss)], epochs=args.epochs,
++          warmup_steps=max(1, len(loader) // 10), optimizer_params={'lr': args.lr},
++          show_progress_bar=True)
++
++out = Path(args.out)
++out.mkdir(parents=True, exist_ok=True)
++# Полная модель sentence-transformers: в корне — обычный каталог Hugging Face
++# (config, веса, токенизатор) для конвертера llama.cpp, рядом — modules.json и
++# пулинг, чтобы сверка check_gguf.py шла тем же путём, что обучение.
++model.save(str(out))
++print('сохранено:', out, flush=True)
+diff --git a/tools/release.py b/tools/release.py
+index 9f2623f..6ca3952 100644
+--- a/tools/release.py
++++ b/tools/release.py
+@@ -319,6 +319,11 @@ def collect_runtime_files(
+     suffix = '.exe' if binary.lower().endswith('.exe') else ''
+     sdk_binary = os.path.join(os.path.dirname(binary), 'r2d-sdk' + suffix)
+     files.append((sdk_binary, 'r2d-sdk' + suffix))
++    # CLI-помощник по $ API (docs/HELP.md): бинарник, индекс и модель рядом.
++    # Индекс и модель необязательны: без модели помощник ищет только BM25.
++    build_dir = os.path.dirname(binary)
++    for name in ('r2d-help' + suffix, 'r2d-help.idx', 'r2d-help.gguf'):
++        files.append((os.path.join(build_dir, name), name))
+     for name in ('sdk', 'sdk_tools.json', 'SDK_HANDOFF.md',
+                  'Следующая цель SDK AGENT.md', 'docs'):
+         files.append((name, name))
+@@ -638,7 +643,11 @@ def package_platform(
+     if not os.path.isfile(sdk_binary):
+         raise SystemExit('ошибка: SDK backend не найден: %s; соберите r2d-sdk' % sdk_binary)
+     if not runner.dry_run:
+-        for executable in (os.path.join(ROOT, binary), sdk_binary):
++        help_binary = os.path.join(ROOT, os.path.dirname(binary), 'r2d-help' + suffix)
++        executables = [os.path.join(ROOT, binary), sdk_binary]
++        if os.path.isfile(help_binary):
++            executables.append(help_binary)
++        for executable in executables:
+             actual = binary_platform(executable)
+             if actual != platform_name:
+                 raise SystemExit('ошибка: %s имеет архитектуру %s, запрошена %s' % (executable, actual, platform_name))
+@@ -660,10 +669,10 @@ def package_platform(
+             continue
+         if os.path.isdir(source_path):
+             shutil.copytree(source_path, dest_path, dirs_exist_ok=True,
+-                            ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", "*.pyc", "*.pyo", "state.local.json", "native", "CMakeLists.txt"))
++                            ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", "*.pyc", "*.pyo", "state.local.json", "native", "help", "CMakeLists.txt"))
+         else:
+             shutil.copy2(source_path, dest_path)
+-            if source == binary or os.path.basename(dest).startswith('r2d-sdk'):
++            if source == binary or dest in ('r2d-sdk' + suffix, 'r2d-help' + suffix):
+                 os.chmod(dest_path, 0o755)
+ 
+     # Если сборка положила рядом с бинарником каталог lib/ (внешние

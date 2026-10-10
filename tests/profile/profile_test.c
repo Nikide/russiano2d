@@ -73,9 +73,12 @@ int main(void)
     // времени, значит остаток положительный и близок к реальному.
     check(r2d_prof_real_ms() > 15.0f && r2d_prof_real_ms() < 17.0f,
           "реальное время кадра — из real_ms");
-    check(r2d_prof_frame_ms() > 0.0f && r2d_prof_frame_ms() < 5.0f,
-          "сумма зон посчитана и меньше кадра");
-    check(r2d_prof_unaccounted_ms() > 10.0f, "неучтённый остаток посчитан");
+    float cpu_sum = 0.0f;
+    for (int i = 0; i < R2D_PROF_COUNT; ++i) cpu_sum += rows[i].ms;
+    check(cpu_sum > 0.0f && fabsf(r2d_prof_frame_ms() - cpu_sum) < 0.001f,
+          "итог равен сумме измеренных CPU-зон");
+    check(fabsf(r2d_prof_unaccounted_ms() - fmaxf(16.0f - cpu_sum, 0.0f)) < 0.001f,
+          "остаток равен реальному времени минус зоны, минимум ноль");
 
     // --- 3. Обрезка и защита от мусора ---------------------------------------
     check(r2d_prof_rows(rows, 3) == 3, "max меньше числа зон — строк меньше");

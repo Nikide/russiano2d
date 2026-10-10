@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "seed": 7,
+  "backend": "gpu",
+  "nativeResolution": [
+    400,
+    240
+  ],
+  "screenshotResolution": [
+    1280,
+    720
+  ],
+  "tolerance": {
+    "channelDelta": 3,
+    "outlierFraction": 0.01,
+    "meanAbsoluteDelta": 1
+  },
+  "machine": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "baselineCommit": "8011294b01330420ec12c903dfd9041834a6ecfe",
+  "binarySHA256": "a43f5963c4e0ffaf85954d94234f60670a5cada512d323af8b21a8be1c9cadb4",
+  "cases": [
+    {
+      "name": "camera01_corridor",
+      "file": "camera01_corridor.png",
+      "configure": "",
+      "sha256": "3332dc5586bc1536f83b957fcd78539f4bb153eda09057dab71986728874cd44",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "name": "camera02_multifloor",
+      "file": "camera02_multifloor.png",
+      "configure": "world.add(lower).add(upper);view.x=60;view.h=128;view.projection=\"orthographic\";view.orthoHeight=340;",
+      "sha256": "ce58493b09fd601c8a4fec594456aa7b48671548fb0cae711cafff80c1c41194",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "name": "camera03_redlight",
+      "file": "camera03_redlight.png",
+      "configure": "world.lighting({mode:\"classic\",dynamic:true,shadows:false,distanceScale:.001});",
+      "sha256": "a40fb91d5c1ba7f8442e86ed63caaeba451225188dba570e42f3f66579a5cdd1",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "name": "camera04_fog",
+      "file": "camera04_fog.png",
+      "configure": "world.span(0).fog({color:\"#142a49\",density:.008,start:0});world.span(2).fog({color:\"#142a49\",density:.008,start:0});",
+      "sha256": "9d5beda1317b2065725d9d875b2339001842240e0e17be6b6b60f4aecdd8afef",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "name": "camera05_shadow",
+      "file": "camera05_shadow.png",
+      "configure": "world.lighting({mode:\"classic\",dynamic:true,shadows:true,distanceScale:.001});lowerLamp.at(380,0).height(70);",
+      "sha256": "e325bd6cad5e8d320782348e2ce289bc28cc247ad7ab0bdef966fc65673628ab",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "name": "camera06_sprite_occlusion",
+      "file": "camera06_sprite_occlusion.png",
+      "configure": "world.add(lower);lower.at(245,0).size(80,96);world.lighting({mode:\"classic\",dynamic:true,shadows:true,distanceScale:.001});",
+      "sha256": "1801d23ed43ac5e64ae4f1370f6cd185b011c516ce55b4b3c533cae8ff33d29a",
+      "width": 1280,
+      "height": 720
+    }
+  ]
+}

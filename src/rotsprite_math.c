@@ -559,7 +559,8 @@ bool r2d_rotsprite_v2_anime_sized(const R2DRotAtlas *a,double yaw,double pitch,i
     if(!workspace->depth) {
         workspace->depth=malloc(N*N*sizeof(float));workspace->distance=malloc(N*N*sizeof(float));
         workspace->rgba=malloc(N*N*4);workspace->resolved=malloc(size*size*4);
-        if(!workspace->depth||!workspace->distance||!workspace->rgba||!workspace->resolved) {r2d_rotsprite_anime_workspace_free(workspace);return false;}
+        workspace->sample_depth=calloc((size_t)size*size,sizeof(float));
+        if(!workspace->depth||!workspace->distance||!workspace->rgba||!workspace->resolved||!workspace->sample_depth) {r2d_rotsprite_anime_workspace_free(workspace);return false;}
         workspace->size=size;
         workspace->bounds[0]=workspace->bounds[1]=0;workspace->bounds[2]=workspace->bounds[3]=N;
     }
@@ -676,17 +677,21 @@ bool r2d_rotsprite_v2_anime_sized(const R2DRotAtlas *a,double yaw,double pitch,i
         }
     }
     memcpy(workspace->bounds,bounds,sizeof bounds);memset(out,0,size*size*4);
+    memset(workspace->sample_depth,0,(size_t)size*size*sizeof(float));
+    const double depth_scale=(rig && rig->model ? rig->model->scale : rig && rig->body ? 1 : 2)/128.0;
     int x0=bounds[0]/2,y0=bounds[1]/2,x1=(bounds[2]+1)/2,y1=(bounds[3]+1)/2;
     // Resolve two supersamples per output axis with alpha-weighted color.
     for (int y=y0;y<y1;y++) for (int x=x0;x<x1;x++) {
-        unsigned sum[3]={0},alpha=0;
+        unsigned sum[3]={0},alpha=0;float nearest=-1e9f;
         for (int dy=0;dy<2;dy++) for (int dx=0;dx<2;dx++) {
             const uint8_t *p=rgba+((y*2+dy)*N+x*2+dx)*4;
             alpha+=p[3];for (int j=0;j<3;j++) sum[j]+=p[j]*p[3];
+            if(p[3]&&depth[(y*2+dy)*N+x*2+dx]>nearest)nearest=depth[(y*2+dy)*N+x*2+dx];
         }
         uint8_t *p=out+(y*size+x)*4;
         for (int j=0;j<3;j++) p[j]=alpha ? (uint8_t)((sum[j]+alpha/2)/alpha) : 0;
         p[3]=(uint8_t)((alpha+2)/4);
+        if(alpha)workspace->sample_depth[y*size+x]=(float)(nearest*depth_scale);
     }
     // Extrude color under transparent neighbors for straight-alpha linear sampling.
     // Otherwise a zero-RGB transparent texel adds a dark fringe to pale anime edges.
@@ -709,6 +714,6 @@ bool r2d_rotsprite_v2_anime_workspace(const R2DRotAtlas *a,double yaw,double pit
 {return r2d_rotsprite_v2_anime_sized(a,yaw,pitch,eyes,mouth,rig,out,w,256);}
 
 void r2d_rotsprite_anime_workspace_free(R2DRotAnimeWorkspace *w)
-{if(!w)return;free(w->depth);free(w->distance);free(w->rgba);free(w->resolved);memset(w,0,sizeof *w);}
+{if(!w)return;free(w->depth);free(w->distance);free(w->sample_depth);free(w->rgba);free(w->resolved);memset(w,0,sizeof *w);}
 bool r2d_rotsprite_v2_anime(const R2DRotAtlas *a,double yaw,double pitch,int eyes,int mouth,const R2DRotRig *rig,uint8_t *out)
 {R2DRotAnimeWorkspace w={0};bool ok=r2d_rotsprite_v2_anime_workspace(a,yaw,pitch,eyes,mouth,rig,out,&w);r2d_rotsprite_anime_workspace_free(&w);return ok;}

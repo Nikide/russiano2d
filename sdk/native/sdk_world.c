@@ -6,13 +6,12 @@
 // (`src/re2d_world.c`, `src/re2d.c`), и выдаёт `{walls, cells}`. BSP руками не
 // правится: рантайм строит его сам по XY-стенам.
 //
-// Что рантайм НЕ умеет (docs/RE2D_WORLD_AUDIT.md): порталы, PVS, slopes,
-// stairs, непрямоугольные cells. Поэтому:
-//   - stairs раскрываются в ступени-cells с стенами-подступёнками;
-//   - slopes аппроксимируются ступенями (диагностика SDK_WORLD_SLOPE_STEPPED);
-//   - порталы и «PVS» — данные компилятора и диагностика, рантайм их не читает.
+// Default output preserves the legacy runtime contract: slopes are stepped and
+// portal/PVS metadata is diagnostic. --renderer emits native continuous slopes,
+// portal topology and prebuilt BSP/incidence tables for $.re2dWorld.
 // ===========================================================================
 #include "sdk.h"
+#include "re2d_world_bake.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -24,8 +23,9 @@
 #define W_MAX 65536
 
 typedef struct WSpan {
-    float bottom, top;
+    float bottom, top, floor_a, floor_b;
     char  floor_c[40], ceil_c[40];
+    R2DWorldSpanLight light;bool lit;
 } WSpan;
 
 typedef struct WCell {
@@ -61,6 +61,7 @@ typedef struct CCell {
 
 typedef struct World {
     char     name[128];
+    char *lighting_json,*lights_json;
     WCell   *cells;    int ncell;
     WWall   *walls;    int nwall;
     WPortal *portals;  int nportal;
@@ -79,7 +80,7 @@ static void world_free(World *w)
     free(w->portals);
     for (int i = 0; i < w->ncc; ++i) free(w->cc[i].spans);
     free(w->cc);
-    free(w->cw);
+    free(w->cw);free(w->lighting_json);free(w->lights_json);
     memset(w, 0, sizeof *w);
 }
 
@@ -248,6 +249,7 @@ static bool load_spans(Ctx *c, const R2dJson *o, const char *section, int index,
         ok &= get_float(c, s, sec, i, id, "top", &sp->top, true, 0);
         ok &= get_color(c, s, sec, i, id, "floorColor", sp->floor_c, sizeof sp->floor_c, "#ffffff");
         ok &= get_color(c, s, sec, i, id, "ceilingColor", sp->ceil_c, sizeof sp->ceil_c, "#ffffff");
+        const R2dJson *lighting=r2d_json_get(s,"lighting");if(lighting){sp->lit=r2d_world_span_light_json(lighting,&sp->light);if(!sp->lit){field_diag(c,sec,i,id,"lighting","invalid classic span lighting");ok=false;}}
         if (ok && !(sp->top > sp->bottom)) {
             char loc[2048];
             snprintf(loc, sizeof loc, "{\"section\":\"%s\",\"index\":%d,\"id\":\"%s\",\"span\":%d}", section, index, json_fragment(id), i);
@@ -304,7 +306,7 @@ static bool dup_check(Ctx *c, const char *section, char (*ids)[64], int n, int i
     return true;
 }
 
-static bool load_world(const char *path, World *w, SdkReport *rep)
+static bool load_world(const char *path, World *w, SdkReport *rep, bool renderer)
 {
     memset(w, 0, sizeof *w);
     R2dJson *root = sdk_load_json(path, rep);
@@ -323,6 +325,11 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
         return false;
     }
     snprintf(w->name, sizeof w->name, "%s", r2d_json_str(r2d_json_get(root, "name"), ""));
+    if(renderer){
+        const char *fields[]={"lighting","lights"};char **outputs[]={&w->lighting_json,&w->lights_json};
+        for(int i=0;i<2;i++){const R2dJson *value=r2d_json_get(root,fields[i]);if(value){R2dSb copy;r2d_sb_init(&copy);sdk_json_put_compact(&copy,value);*outputs[i]=copy.data;}}
+    }
+
 
     // Reject malformed collections instead of silently compiling an empty map.
     const char *sections[] = {"cells", "walls", "portals", "stairs", "slopes"};
@@ -459,7 +466,7 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
                 field_diag(&c, section, i, id, "dir", "dir — 1 или -1"); good = false;
             }
             const R2dJson *sv = r2d_json_get(o, pass == 0 ? "steps" : "segments");
-            const int steps = sv && sv->type == R2D_JSON_NUM && sv->number >= 1 && sv->number <= 256 && floor(sv->number) == sv->number ? (int)sv->number : 0;
+            const int steps = sv && sv->type == R2D_JSON_NUM && sv->number >= 1 && sv->number <= 256 && floor(sv->number) == sv->number ? (int)sv->number : (renderer && pass == 1 && !sv ? 1 : 0);
             if (steps < 1 || steps > 256) { field_diag(&c, section, i, id, pass == 0 ? "steps" : "segments", "число шагов 1..256"); good = false; }
             good &= get_float(&c, o, section, i, id, "top", &top, true, 0);
             char fc[2][40], cc[40];
@@ -477,6 +484,8 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
             good &= get_color(&c, o, section, i, id, "ceilingColor", cc, sizeof cc, "#344858");
             char wall_color[40];
             good &= get_color(&c, o, section, i, id, "riserColor", wall_color, sizeof wall_color, "#4f4030");
+            R2DWorldSpanLight authored_light;const R2dJson *authored_lighting=r2d_json_get(o,"lighting");
+            if(authored_lighting&&!r2d_world_span_light_json(authored_lighting,&authored_light)){field_diag(&c,section,i,id,"lighting","invalid classic span lighting/fog");good=false;}
             if (!good) { ok = false; continue; }
             if (w->ncc + steps > W_MAX || w->ncw + steps > W_MAX) {
                 sdk_diag(rep, SDK_ERROR, "SDK_WORLD_LIMIT", path, NULL, NULL, "Слишком много скомпилированных ступеней"); ok = false; continue;
@@ -484,6 +493,21 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
             if (pass == 0 && !(rise != 0)) { field_diag(&c, section, i, id, "rise", "rise не может быть 0"); ok = false; continue; }
             const bool along_x = !strcmp(axis, "x");
             const float len = along_x ? r[2] : r[3];
+            if (renderer && pass == 1) {
+                if (!(top > fmaxf(from,to))) { field_diag(&c,section,i,id,"top","ceiling must clear both slope endpoints"); ok=false; continue; }
+                CCell *cell=add_cc(w);
+                cell->x=r[0];cell->y=r[1];cell->w=r[2];cell->h=r[3];
+                cell->nspan=1;cell->spans=calloc(1,sizeof(WSpan));
+                if(authored_lighting){cell->spans[0].light=authored_light;cell->spans[0].lit=true;}
+                cell->spans[0].bottom=dir>0?from:to;cell->spans[0].top=top;
+                if(along_x)cell->spans[0].floor_a=(to-from)*(float)dir/len;
+                else cell->spans[0].floor_b=(to-from)*(float)dir/len;
+                snprintf(cell->spans[0].floor_c,sizeof cell->spans[0].floor_c,"%s",fc[0]);
+                snprintf(cell->spans[0].ceil_c,sizeof cell->spans[0].ceil_c,"%s",cc);
+                snprintf(cell->owner,sizeof cell->owner,"%s",id);
+                w->slope_segments++;
+                continue;
+            }
             const float step_len = len / (float)steps;
             for (int k = 0; k < steps; ++k) {
                 const int pos = dir > 0 ? k : steps - 1 - k;                // k — по ходу подъёма, pos — положение вдоль оси
@@ -496,6 +520,7 @@ static bool load_world(const char *path, World *w, SdkReport *rep)
                 cell->h = along_x ? r[3] : step_len;
                 cell->nspan = 1;
                 cell->spans = (WSpan *)calloc(1, sizeof(WSpan));
+                if(authored_lighting){cell->spans[0].light=authored_light;cell->spans[0].lit=true;}
                 cell->spans[0].bottom = height;
                 cell->spans[0].top = top;
                 snprintf(cell->spans[0].floor_c, sizeof cell->spans[0].floor_c, "%s", fc[k & 1]);
@@ -855,13 +880,99 @@ static void put_description(const World *w, R2dSb *sb, bool pretty)
         for (int k = 0; k < c->nspan; ++k) {
             r2d_sb_printf(sb, "%s{\"bottom\":", k ? "," : "");
             put_num(sb, c->spans[k].bottom); r2d_sb_puts(sb, ",\"top\":"); put_num(sb, c->spans[k].top);
+            if(c->spans[k].floor_a || c->spans[k].floor_b) r2d_sb_printf(sb,",\"floorSlope\":{\"a\":%g,\"b\":%g}",c->spans[k].floor_a,c->spans[k].floor_b);
             r2d_sb_puts(sb, ",\"floorColor\":"); r2d_sb_put_json_string(sb, c->spans[k].floor_c);
             r2d_sb_puts(sb, ",\"ceilingColor\":"); r2d_sb_put_json_string(sb, c->spans[k].ceil_c);
+            if(c->spans[k].lit){const R2DWorldSpanLight *l=&c->spans[k].light;unsigned color=((unsigned)roundf(l->r*255)<<16)|((unsigned)roundf(l->g*255)<<8)|(unsigned)roundf(l->b*255),fog=((unsigned)roundf(l->fog_r*255)<<16)|((unsigned)roundf(l->fog_g*255)<<8)|(unsigned)roundf(l->fog_b*255);
+                r2d_sb_printf(sb,",\"lighting\":{\"level\":%g,\"color\":\"#%06x\",\"fog\":{\"density\":%g,\"start\":%g,\"color\":\"#%06x\"}}",l->level,color,l->fog_density,l->fog_start,fog);}
+
             r2d_sb_putc(sb, '}');
         }
         r2d_sb_puts(sb, "]}");
     }
     r2d_sb_printf(sb, "%s]%s}", nl, nl);
+}
+
+// Versioned native renderer input, retaining authored portal geometry.
+static bool put_renderer_description(const World *w,R2dSb *sb,SdkReport *rep,const char *path)
+{
+    // Reject overlapping XY authoring cells explicitly; native topology owns stacked spans per cell.
+    for(int i=0;i<w->ncc;i++)for(int j=0;j<i;j++) {
+        const CCell *a=&w->cc[i],*b=&w->cc[j];
+        if(a->x<b->x+b->w&&b->x<a->x+a->w&&a->y<b->y+b->h&&b->y<a->y+a->h){
+            sdk_diag(rep,SDK_ERROR,"SDK_WORLD_RENDERER_XY_OVERLAP",path,NULL,NULL,"Renderer topology requires disjoint XY cells; merge stacked spans into one cell");return false;
+        }
+    }
+    int *compiled=w->nportal?malloc((size_t)w->nportal*2*sizeof(int)):NULL;
+    if(w->nportal&&!compiled){sdk_diag(rep,SDK_ERROR,"SDK_OOM",path,NULL,NULL,"Renderer portal index allocation failed");return false;}
+    for(int i=0;i<w->nportal;i++) {
+        int a=find_cell(w,w->portals[i].a),b=find_cell(w,w->portals[i].b),ca=-1,cb=-1;
+        for(int j=0;j<w->ncc;j++){
+            const CCell *c=&w->cc[j];
+            if(a>=0&&c->x==w->cells[a].x&&c->y==w->cells[a].y&&c->w==w->cells[a].w&&c->h==w->cells[a].h)ca=j;
+            if(b>=0&&c->x==w->cells[b].x&&c->y==w->cells[b].y&&c->w==w->cells[b].w&&c->h==w->cells[b].h)cb=j;
+        }
+        if(ca<0||cb<0){free(compiled);sdk_diag(rep,SDK_ERROR,"SDK_WORLD_RENDERER_PORTAL",path,NULL,NULL,"Portal has no compiled cell owner");return false;}
+        compiled[i*2]=ca;compiled[i*2+1]=cb;
+    }
+    put_description(w,sb,false);
+    // put_description ends in a closing object brace; append new format fields.
+    if(sb->len&&sb->data[sb->len-1]=='}')sb->data[--sb->len]=0;
+    r2d_sb_puts(sb,",\"version\":1,\"portals\":[");
+    for(int i=0;i<w->nportal;i++) {
+        const WPortal *p=&w->portals[i];
+        r2d_sb_printf(sb,"%s{\"cellA\":%d,\"cellB\":%d,\"from\":[",i?",":"",compiled[i*2],compiled[i*2+1]);
+        put_num(sb,p->x1);r2d_sb_putc(sb,',');put_num(sb,p->y1);r2d_sb_puts(sb,"],\"to\":[");put_num(sb,p->x2);r2d_sb_putc(sb,',');put_num(sb,p->y2);
+        r2d_sb_puts(sb,"],\"openings\":[");
+        for(int j=0;j<p->nopen;j++)r2d_sb_printf(sb,"%s{\"bottom\":%g,\"top\":%g}",j?",":"",p->open[j].bottom,p->open[j].top);
+        r2d_sb_puts(sb,"]}");
+    }
+    int emitted=w->nportal;
+    // Generated stairs/slopes connect across their shared XY edge. Authored cells
+    // retain explicit portal control; a solid authored wall blocks generation.
+    for(int a=0;a<w->ncc;a++)for(int b=0;b<a;b++) {
+        const CCell *ca=&w->cc[a],*cb=&w->cc[b];
+        if(ca->explicit_index>=0&&cb->explicit_index>=0)continue;
+        WCell ra={.x=ca->x,.y=ca->y,.w=ca->w,.h=ca->h};
+        WCell rb={.x=cb->x,.y=cb->y,.w=cb->w,.h=cb->h};
+        int axis;float co,lo,hi;
+        if(!shared_edge(&ra,&rb,&axis,&co,&lo,&hi))continue;
+        // A single rectangle at the highest endpoint hides the lower side of a
+        // sloped edge. Keep rectangular native portals, subdividing only edges
+        // whose floor varies along the shared boundary (floors remain planes).
+        bool varying=false;
+        for(int i=0;i<ca->nspan;i++)if(axis?ca->spans[i].floor_a:ca->spans[i].floor_b)varying=true;
+        for(int i=0;i<cb->nspan;i++)if(axis?cb->spans[i].floor_a:cb->spans[i].floor_b)varying=true;
+        int pieces=varying?(int)fminf(256,ceilf(hi-lo)):1;
+        for(int piece=0;piece<pieces;piece++) {
+        float edge_lo=lo+(hi-lo)*(float)piece/pieces,edge_hi=lo+(hi-lo)*(float)(piece+1)/pieces;
+        const float x1=axis?edge_lo:co,y1=axis?co:edge_lo,x2=axis?edge_hi:co,y2=axis?co:edge_hi;
+        R2dSb openings;r2d_sb_init(&openings);int count=0;
+        for(int i=0;i<ca->nspan;i++)for(int j=0;j<cb->nspan;j++) {
+            const WSpan *sa=&ca->spans[i],*sc=&cb->spans[j];
+            float floor=fmaxf(fmaxf(sa->bottom+sa->floor_a*(x1-ca->x)+sa->floor_b*(y1-ca->y),sa->bottom+sa->floor_a*(x2-ca->x)+sa->floor_b*(y2-ca->y)),
+                             fmaxf(sc->bottom+sc->floor_a*(x1-cb->x)+sc->floor_b*(y1-cb->y),sc->bottom+sc->floor_a*(x2-cb->x)+sc->floor_b*(y2-cb->y)));
+            float ceiling=fminf(sa->top,sc->top);
+            bool blocked=false;
+        for(int k=0;k<w->nwall;k++) {
+            const WWall *wall=&w->walls[k];
+            if(wall->top<=floor+W_EPS||wall->bottom>=ceiling-W_EPS)continue;
+            if((!axis&&fabsf(wall->x1-co)<W_EPS&&fabsf(wall->x2-co)<W_EPS&&fminf(wall->y1,wall->y2)<edge_hi&&fmaxf(wall->y1,wall->y2)>edge_lo)||
+               (axis&&fabsf(wall->y1-co)<W_EPS&&fabsf(wall->y2-co)<W_EPS&&fminf(wall->x1,wall->x2)<edge_hi&&fmaxf(wall->x1,wall->x2)>edge_lo)){blocked=true;break;}
+        }
+            if(blocked)continue;
+            if(ceiling>floor+W_EPS)r2d_sb_printf(&openings,"%s{\"bottom\":%.9g,\"top\":%.9g}",count++?",":"",floor,ceiling);
+        }
+        if(count)r2d_sb_printf(sb,"%s{\"cellA\":%d,\"cellB\":%d,\"from\":[%g,%g],\"to\":[%g,%g],\"openings\":[%s]}",emitted++?",":"",a,b,x1,y1,x2,y2,openings.data);
+        r2d_sb_free(&openings);
+        }
+    }
+    r2d_sb_putc(sb,']');if(w->lighting_json)r2d_sb_printf(sb,",\"lighting\":%s",w->lighting_json);if(w->lights_json)r2d_sb_printf(sb,",\"lights\":%s",w->lights_json);r2d_sb_putc(sb,'}');free(compiled);
+    R2DRe2dWorld runtime={0};char error[256];
+    if(!r2d_world_load_json(&runtime,sb->data,error,sizeof error)){
+        sdk_diag(rep,SDK_ERROR,"SDK_WORLD_RENDERER_BAKE",path,NULL,NULL,"%s",error);return false;}
+    if(sb->len&&sb->data[sb->len-1]=='}')sb->data[--sb->len]=0;
+    r2d_sb_putc(sb,',');bool baked=r2d_world_put_baked(&runtime,sb);r2d_sb_putc(sb,'}');r2d_world_free(&runtime);if(!baked)sdk_diag(rep,SDK_ERROR,"SDK_WORLD_RENDERER_BAKE",path,NULL,NULL,"Native static light precompute failed");return baked;
 }
 
 // Консервативная достижимость через порталы (данные компилятора; рантайм PVS не использует).
@@ -903,19 +1014,28 @@ static void put_pvs(const World *w, R2dSb *sb)
 }
 
 // Полный проход: загрузка + раскрытие + проверки. `compiled` — доступно при ok.
-static bool compile_world(const char *path, World *w, SdkReport *rep, StackInfo **stacks, int *nstacks, int *total_spans)
+static bool compile_world(const char *path, World *w, SdkReport *rep, StackInfo **stacks, int *nstacks, int *total_spans, bool renderer)
 {
     *stacks = NULL;
     *nstacks = 0;
     *total_spans = 0;
     Ctx c = { rep, path };
-    bool ok = load_world(path, w, rep);
+    bool ok = load_world(path, w, rep, renderer);
     if (!ok) return false;
     build_compiled(w);
+    if(renderer)for(int i=0;i<w->ncc;i++)for(int j=i+1;j<w->ncc;){
+        CCell *a=&w->cc[i],*b=&w->cc[j];
+        if(a->explicit_index>=0&&b->explicit_index>=0&&a->x==b->x&&a->y==b->y&&a->w==b->w&&a->h==b->h){
+            WSpan *spans=realloc(a->spans,(size_t)(a->nspan+b->nspan)*sizeof(WSpan));
+            if(!spans){sdk_diag(rep,SDK_ERROR,"SDK_OOM",path,NULL,NULL,"Stacked cell merge failed");return false;}
+            a->spans=spans;memcpy(a->spans+a->nspan,b->spans,(size_t)b->nspan*sizeof(WSpan));a->nspan+=b->nspan;free(b->spans);
+            memmove(b,b+1,(size_t)(w->ncc-j-1)*sizeof(CCell));w->ncc--;
+        }else j++;
+    }
     check_compiled(&c, w, &ok, stacks, nstacks, total_spans);
     check_portals(&c, w, &ok);
     if (ok) check_leaks(&c, w);
-    if (w->nportal > 0) {
+    if (w->nportal > 0 && !renderer) {
         sdk_diag(rep, SDK_INFO, "SDK_WORLD_PORTALS_NOT_IN_RUNTIME", path, NULL, NULL,
                  "Порталы (%d) и PVS — данные компилятора и диагностика: рантайм Re2D World их не использует", w->nportal);
     }
@@ -948,7 +1068,7 @@ void sdk_validate_re2dmap(const char *path, SdkReport *rep)
     World w;
     StackInfo *stacks;
     int n, spans;
-    compile_world(path, &w, rep, &stacks, &n, &spans);
+    compile_world(path, &w, rep, &stacks, &n, &spans, false);
     free(stacks);
     world_free(&w);
 }
@@ -980,7 +1100,10 @@ static int world_cmd(const SdkArgs *a, bool write)
     World w;
     StackInfo *stacks;
     int nstacks, spans;
-    const bool ok = compile_world(src, &w, &rep, &stacks, &nstacks, &spans);
+    const bool renderer = sdk_arg_flag(a,"--renderer");
+    bool ok = compile_world(src, &w, &rep, &stacks, &nstacks, &spans, renderer);
+    R2dSb renderer_data;r2d_sb_init(&renderer_data);
+    if(ok&&renderer)ok=put_renderer_description(&w,&renderer_data,&rep,src);
     R2dSb out;
     r2d_sb_init(&out);
     r2d_sb_puts(&out, "{\"source\":");
@@ -994,13 +1117,15 @@ static int world_cmd(const SdkArgs *a, bool write)
             snprintf(outpath, sizeof outpath, "%s", src);
             char *dot = strrchr(outpath, '.');
             if (dot && strchr(dot, '/') == NULL) *dot = '\0';
-            strncat(outpath, ".compiled.json", sizeof outpath - strlen(outpath) - 1);
+            strncat(outpath, renderer?".re2dworld":".compiled.json", sizeof outpath - strlen(outpath) - 1);
         }
         R2dSb file;
         r2d_sb_init(&file);
-        put_description(&w, &file, true);
+        bool description_ok=true;
+        if(renderer)r2d_sb_puts(&file,renderer_data.data);else put_description(&w, &file, true);
         r2d_sb_putc(&file, '\n');
-        if (!sdk_write_file(outpath, file.data, file.len)) {
+        if(!description_ok){outpath[0]=0;}
+        else if (!sdk_write_file(outpath, file.data, file.len)) {
             sdk_diag(&rep, SDK_ERROR, "SDK_WRITE_FAILED", outpath, NULL, NULL, "Не удалось записать %s", outpath);
             outpath[0] = '\0';
         }
@@ -1008,6 +1133,7 @@ static int world_cmd(const SdkArgs *a, bool write)
     }
     r2d_sb_printf(&out, ",\"ok\":%s,\"output\":", ok && rep.errors == 0 ? "true" : "false");
     if (outpath[0]) r2d_sb_put_json_string(&out, outpath); else r2d_sb_puts(&out, "null");
+    r2d_sb_printf(&out, ",\"outputFormat\":\"%s\",\"runtimePortals\":%s", renderer?"re2dworld-v1":"legacy-compiled-json",renderer?"true":"false");
     r2d_sb_printf(&out, ",\"stats\":{\"cells\":%d,\"walls\":%d,\"portals\":%d,\"stairs\":%d,\"slopes\":%d,\"compiledCells\":%d,\"compiledWalls\":%d,\"spans\":%d,\"stairSteps\":%d,\"slopeSegments\":%d,\"stacks\":%d}",
                   w.ncell, w.nwall, w.nportal, w.nstairs, w.nslopes, w.ncc, w.ncw, spans, w.stair_steps, w.slope_segments, nstacks);
     r2d_sb_puts(&out, ",\"stacks\":[");
@@ -1015,7 +1141,7 @@ static int world_cmd(const SdkArgs *a, bool write)
     r2d_sb_puts(&out, "]");
     if (ok) {
         r2d_sb_puts(&out, ",\"world\":");
-        put_description(&w, &out, false);
+        if(renderer)r2d_sb_puts(&out,renderer_data.data);else put_description(&w, &out, false);
         r2d_sb_puts(&out, ",\"portals\":[");
         for (int i = 0; i < w.nportal; ++i) {
             const WPortal *p = &w.portals[i];
@@ -1038,7 +1164,7 @@ static int world_cmd(const SdkArgs *a, bool write)
     fputs(out.data, stdout);
     fflush(stdout);
     const int rc = (ok && rep.errors == 0) ? 0 : 1;
-    r2d_sb_free(&out);
+    r2d_sb_free(&out);r2d_sb_free(&renderer_data);
     free(stacks);
     world_free(&w);
     sdk_report_free(&rep);

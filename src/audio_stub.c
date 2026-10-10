@@ -225,3 +225,5 @@ bool r2d_audio_set_channel_3d(R2DAudio *a, int channel, float x, float y, float 
     R2D_UNUSED(x); R2D_UNUSED(y); R2D_UNUSED(z); R2D_UNUSED(on);
     return false;
 }
+
+bool r2d_audio_world_channel(R2DAudio *a,int c,bool enabled,bool hrtf,float x,float y,float z,float gain,float cutoff){(void)a;(void)c;(void)enabled;(void)hrtf;(void)x;(void)y;(void)z;(void)gain;(void)cutoff;return false;}

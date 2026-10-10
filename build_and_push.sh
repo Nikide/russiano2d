@@ -142,6 +142,7 @@ fi
 # подтверждённого пуша (шаг 6). Вывод копится в файл и печатается целиком позже,
 # чтобы логи не перемешались.
 site_prep_pid=""
+site_prep_ok=1
 SITE_PREP_LOG="$(mktemp "${TMPDIR:-/tmp}/r2d-site-prep.XXXXXX")"
 if [ "$SITE" = "1" ] && [ -x site/build-site.sh ]; then
     step "Сайт: подготовка в фоне"
@@ -156,8 +157,9 @@ if [ -n "$site_prep_pid" ]; then
         site_prep_pid=""
     else
         cat "$SITE_PREP_LOG"
-        echo "!! подготовка сайта не удалась — публикация отменена"
-        exit 1
+        echo "!! подготовка сайта не удалась — Git-хосты будут опубликованы независимо"
+        site_prep_ok=0
+        site_prep_pid=""
     fi
 fi
 
@@ -237,7 +239,7 @@ elif [ ! -x site/build-site.sh ]; then
 
 else
     step "Публикация сайта r2d.nikiniki.ru"
-    site_ok=1
+    site_ok="$site_prep_ok"
     if [ -n "$site_prep_pid" ]; then
         wait "$site_prep_pid" || site_ok=0
         cat "$SITE_PREP_LOG"

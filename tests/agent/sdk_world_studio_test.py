@@ -4,6 +4,8 @@ import json, os, sys, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from agent_client import Agent, ROOT
 OUT=os.path.join(ROOT,'build','studio-world.re2dmap')
+RECOVERY=os.path.join(ROOT,'tests','fixtures','sdk','world','.r2d-recovery-stack.re2dmap.json')
+RECOVERY_BEFORE=open(RECOVERY,'rb').read() if os.path.isfile(RECOVERY) else None
 DOC="$.ui.doc('sdk/ui/world_studio.rml')"
 failures=[]
 def check(v,m):
@@ -47,6 +49,18 @@ with Agent(game='sdk',seed=6) as a:
     check(os.path.isfile(OUT) and not snap(a)['dirty'],'сохранён JSON исходник, dirty сброшен')
     a.eval("$.sdkApp.studios.world.compile(false);1");wait(a);a.step(2)
     check(snap(a)['preview'],'изменённая карта снова принята runtime')
+    check(a.eval(DOC+".rect('ws-debug').w")>0 and a.eval(DOC+".rect('ws-material-apply').w")>0,'diagnostic and material preview controls are actual RmlUi elements')
+    a.eval(DOC+".click('ws-add-light');1");a.step(2)
+    check(len(snap(a)['data']['lights'])==1,'light button adds inspectable authoring data')
+    a.eval("$.sdkApp.studios.world.compile(false);1");wait(a);a.step(2)
+    check(a.eval("$.sdkApp.studios.world.state.world.info().lights")==1,'native compiled light reaches the actual Studio preview')
+    a.eval(DOC+".click('ws-debug');1");a.eval(DOC+".click('ws-backend');1");a.step(2)
+    check(a.eval("$.sdkApp.studios.world.state.world.info().backend")=="gpu-reference",'Studio GPU/diagnostic controls operate the native preview')
+    a.eval("$.sdkApp.studios.world.previewMaterial({name:'test',surfaces:[0],albedo:'demos/re2d_world_renderer_lab/brick.png',normal:'demos/re2d_world_renderer_lab/brick_n.png'});1");a.step(2)
+    check(a.eval("$.sdkApp.studios.world.state.world.info().materials")==1,'Studio PNG albedo/normal preview loads native material resources')
     a.eval("$.sdkApp.studios.world.close();1");a.step(2)
     check(not snap(a)['active'] and not snap(a)['preview'],'закрытие освобождает world и возвращает оболочку')
+if RECOVERY_BEFORE is not None:
+    with open(RECOVERY,'wb') as f:f.write(RECOVERY_BEFORE)
+elif os.path.isfile(RECOVERY):os.remove(RECOVERY)
 sys.exit(bool(failures))

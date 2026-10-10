@@ -1,0 +1,1 @@
+<rml><head><title>Re2D renderer lab</title><link type="text/rcss" href="hud.rcss" /></head><body><div id="panel"><div id="status"></div><div id="keys">Arrows: look · WASD: move · E: floor · O: door · L: lights · P: projection · Esc: exit</div></div><div id="cross">+</div></body></rml>

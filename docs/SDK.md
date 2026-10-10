@@ -5,6 +5,9 @@
 проверки — [SDK_VERIFICATION.md](SDK_VERIFICATION.md); журнал работы —
 [SDK_HANDOFF.md](../SDK_HANDOFF.md).
 
+Недостающие возможности, текущие доработки Re2D и критерии их приёмки —
+[SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md).
+
 ```text
 GAME = CODE + DATA          SDK = R2D-приложение + инструменты для CODE + DATA
 ```
@@ -85,7 +88,7 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `re2d-debug <character.json\|png> --mode m --out f.png [--scale N]` | Re2DSprite: отладочный вид карт поверхности |
 | `re2d-sample <character.json\|png> --x mx --y my` | Re2DSprite: один отсчёт (ID, XYZ, покрытие, владелец) |
 | `bake-re2d <модель.glb\|.gltf\|.vrm\|.obj> --type prop\|character\|weapon\|environment --output каталог [--uv auto\|existing\|optimized] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N] [--expression имя]` | Re2D Baker: GLB/glTF → Re2DSprite |
-| `world-compile <f.re2dmap> [--output f.compiled.json]` | карта → описание настоящего `$.re2d.world` |
+| `world-compile <f.re2dmap> [--renderer] [--output f.re2dworld]` | --renderer: native baked $.re2dWorld; без флага: legacy $.re2d.world output |
 | `world-info <f.re2dmap>` | compile/validation без записи результата |
 | `batch <manifest.batch.json> [--output report.json]` | пакет bake-re2d / validate, ошибки отдельных jobs не прерывают пакет |
 | `agent <session.agent.json> [--engine путь] [--output report.json]` | нативный клиент исходного агентского протокола движка |
@@ -294,7 +297,7 @@ build/r2d-sdk bake-re2d hero.vrm --type character --output assets/hero/
 Материалы MToon сводятся к baseColor; авторская анимация файла не переносится.
 
 Weapon/Environment, optimized UV и сравнение «источник ↔ Re2D» реализованы (§19).
-Не реализованы автоматическая метрика различия (§40) и FBX (OBJ поддержан — ниже). Качество: плоские карты по оси
+Не реализованы автоматическая метрика различия (§40) и FBX mesh baking (OBJ поддержан — ниже). FBX→Re2D skeletal-motion import доступен для Mixamo-подобного rig preset через `animation-import`. Качество: плоские карты по оси
 дают просветы на косых гранях и швы между картами — это видно в диагностике (`LOW_DENSITY`)
 и на проекциях; «идеального auto unwrap» baker не обещает.
 
@@ -315,25 +318,19 @@ $.ui.doc('sdk/ui/shell.rml').click('btn-build')   // нажать элемент
 
 ## 9. Re2D World Studio
 
-Экран `re2d-world-studio` открывает `*.re2dmap` / `*.re2dmap.json`. Это JSON исходник,
-а результат `world-compile` — описание для существующего `$.re2d.world`.
-План XY и высотный разрез показывают выбор синхронно. Доступны добавление/удаление,
-свойства JSON, перемещение выбранного объекта с сеткой, split/join коллинеарных стен,
-undo/redo (Ctrl+Z / Ctrl+Shift+Z), палитра цветов, сохранение, compile и validation.
-Диагностика ведёт к объекту; preview использует настоящий native World, камера
-редактируется полями XY/eye/yaw/pitch. Данные проекта остаются обычными файлами.
+Экран `re2d-world-studio` редактирует `*.re2dmap` / `*.re2dmap.json` — source data, не runtime DB. Native compiler с `--renderer` выдаёт baked `.re2dworld` для нового `$.re2dWorld`. Preview использует этот compiled world через `renderToSprite`, а UI остаётся existing RmlUi.
 
-Карта содержит version:1, name, cells, walls, portals, stairs, slopes. Cells задают
-rect:[x,y,w,h] и spans:[{bottom,top,floorColor,ceilingColor}]; стены — from/to XY,
-bottom/top/color. Лестницы раскрываются в соседние cells и вертикальные стены;
-уклон — в указанное число ступенчатых segments. Порталы проверяются и вырезают
-проёмы стен. PVS — консервативная portal-reachability в отчёте с runtimeUsed:false:
-движок пока не применяет этот PVS для отсечения. Непрерывная поверхность уклона,
-произвольные polygon cells и spatial PVS не реализованы.
+```sh
+build/r2d-sdk world-compile maps/room.re2dmap --renderer --output maps/room.re2dworld
+```
 
-Обязательная регрессия `sdk_world_test.py` проверяет два проходимых spans на
-одинаковых XY: полы 0 и 160, разные support/blocked/ray результаты и независимое
-редактирование этажей в `sdk_world_studio_test.py`.
+Без флага compiler сохраняет legacy stepped output. В новом режиме BSP/cell/span/portal/surface tables и static light associations импортируются runtime без тяжёлого authoring build. XY cells rectangular; exact same-XY source rectangles объединяются в native owner с несколькими spans. Continuous slopes — одна plane; stairs дают шаги с соседними native openings. Authored walls блокируют generated links только при пересечении высоты opening.
+
+Инструменты: synchronized XY plan/height section, добавление/удаление, JSON properties, grid move, split/join коллинеарных стен, undo/redo, save/compile/validation; author/move static lights; debug-view cycling, CPU/GPU selection, lighting toggle. PreviewMaterial задаёт имя, surface IDs и PNG albedo/normal/emissive для настоящего material bank. Это preview configuration, не новый world mesh format.
+
+Source sections version/name/cells/walls/portals/stairs/slopes/lighting/lights. Cells используют rect:[x,y,w,h]; native loader input использует x/y/w/h. Compiler diagnostic ведёт к source object. Source PVS report и runtime BSP/portal-window visibility — разные данные; legacy runtimeUsed:false нельзя переносить как утверждение об отсутствии culling в новом renderer. Текстуры/continuous slopes/portals/sample depth уже реализованы в новом пути.
+
+Полное описание: [World formats](re2d/RE2D_WORLD_FORMAT.md), [runtime API](highlevel/re2d.md), [migration](re2d/RE2D_MIGRATION.md). Проверки: sdk_world_test.py81, dedicated sdk_world_studio_test.py19, renderer55; latest full-lab21. Это local run evidence, не hosted CI/package publication claim. UI редактирует inspectable files; игра запускается из собственного project context без работающего SDK.
 
 ## 10. Automation / Batch
 
@@ -394,7 +391,7 @@ CI вызывает SDK native tests, CLI, expression regression, batch manifest
 Это закрытие перечисленных вертикальных срезов. Все компоненты дерева §8 спецификации
 теперь есть в реестре и открываются (Tilemap, Particle, Collision/Physics, Parallax,
 Font/Text, Audio, Input, RmlUi Studio, DevTools — §13–§16). Не реализованы:
-FBX, автоматическая метрика сравнения с исходным 3D, рисование поверхности,
+универсальный FBX-ретаргетинг, автоматическая метрика сравнения с исходным 3D, рисование поверхности,
 graph editor кривых, выбор элемента кликом в предпросмотре RmlUi Studio, drag-ресайз
 фигур коллизии и drag зон акустики (числовые поля есть). ImGui удалён; весь UI и runtime диагностика — RmlUi.
 Процедурный walk, ступенчатые slopes, консервативный PVS и упрощение MToon описаны

@@ -172,6 +172,12 @@ export function prepareRotWorldPose(node,yaw,pitch) {
     r.sprite=submit(r.handle,p.yaw,p.pitch);
     for(const child of r.children || [])if(child.rot_sprite){child.rot_sprite.worldComposed=true;applyModel(rotApi,child);}
 }
+// Configuration-time registration mirror. Native render never converts Sets.
+export function registerRotWorldNode(node) {
+    const r=node.rot_sprite;if(!r)return;
+    r.worldComposed=true;r.nativeChildren=[...(r.children || [])];
+    for(const child of r.nativeChildren)registerRotWorldNode(child);
+}
 function modelJoints(r,pose) {
     const cy=Math.cos(pose.yaw*Math.PI/180),sy=Math.sin(pose.yaw*Math.PI/180),cp=Math.cos(pose.pitch*Math.PI/180),sp=Math.sin(pose.pitch*Math.PI/180),result={};
     for (const j of r.definition.rig.joints) {const [x,y,z]=transform(r.modelPose.bones[j.bone],j.point),zz=-sy*x+cy*z;result[j.name]={x:64+(cy*x+sy*z)*r.modelPose.scale,y:64+(cp*y-sp*zz)*r.modelPose.scale};}return result;
@@ -320,7 +326,7 @@ export function installRotSprite($) {
             }
             if (!old.definition) temp.rotExpression({eyes:['open','half','closed','happy'][pose.eyes],mouth:['closed','open','smile','talk'][pose.mouth],brows:['neutral','angry','sad','surprised'][pose.brows || 0]});
             release(node,false); node.rot_sprite=temp.get(0).rot_sprite; temp.get(0).rot_sprite=null;
-            if (old.definition) {node.rot_sprite.children=old.children;for (const child of old.children) if (child.rot_sprite) applyModel($,child);}
+            if (old.definition) {node.rot_sprite.children=old.children;if(node.rot_sprite.worldComposed)registerRotWorldNode(node);for (const child of old.children) if (child.rot_sprite) applyModel($,child);}
             node.rot_sprite.motion={...old.motion};node.rot_sprite.hotReload=old.hotReload;node.rot_sprite.reloads=old.reloads+1;
         } finally { temp.remove(); }
     }); });
@@ -341,12 +347,14 @@ export function installRotSprite($) {
             if (a.scale.some(v=>v<=0)) throw new RangeError('rotAttach: положительный scale');
             const previous=r.attachment;if (previous) previous.parent.rot_sprite?.children.delete(node);
             r.attachment=a;parent.rot_sprite.children.add(node);
-            try {applyModel($,node);}catch(error) {parent.rot_sprite.children.delete(node);r.attachment=previous;if(previous) previous.parent.rot_sprite.children.add(node);throw error;}
+            if(parent.rot_sprite.worldComposed)registerRotWorldNode(parent);
+            if(previous?.parent.rot_sprite?.worldComposed)registerRotWorldNode(previous.parent);
+            try {applyModel($,node);}catch(error) {parent.rot_sprite.children.delete(node);r.attachment=previous;if(previous) previous.parent.rot_sprite.children.add(node);if(parent.rot_sprite.worldComposed)registerRotWorldNode(parent);if(previous?.parent.rot_sprite?.worldComposed)registerRotWorldNode(previous.parent);throw error;}
         });
     });
     def('rotDetach',function() {return this.eachNode((i,node)=>{
         const r=node.rot_sprite;if (!r?.attachment) return;
-        r.attachment.parent.rot_sprite?.children.delete(node);r.attachment=null;applyModel($,node);
+        const parent=r.attachment.parent;parent.rot_sprite?.children.delete(node);r.attachment=null;if(parent.rot_sprite?.worldComposed)registerRotWorldNode(parent);applyModel($,node);
     });});
     def('rotVariant',function(group,key) {return this.eachNode((i,node)=>{
         const r=node.rot_sprite,path=r?.definition?.variants?.[group]?.[key];

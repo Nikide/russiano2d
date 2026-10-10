@@ -1,0 +1,202 @@
+# Обучающие пары для дообучения модели r2d-help (docs/HELP.md §4).
+# Формат: имя API <TAB> вопросы через « | ». Имя — как в индексе r2d-help.
+# Вопросы НЕ совпадают с tests/fixtures/help/queries.json (там — замер).
+.navigateTo	как отправить юнита к точке в обход препятствий | npc идёт к цели по сетке | move character to target avoiding walls | автоматический поиск пути для персонажа
+.stopNav	остановить движение по маршруту | прекратить навигацию юнита | stop pathfinding movement
+.isNavigating	идёт ли сейчас персонаж по маршруту | check if unit is still walking a path
+$.nav.grid	сетка проходимости для поиска пути | create navigation grid from walls | клетки, по которым можно ходить
+$.nav.path	найти путь между двумя точками | compute path from a to b | маршрут из точки в точку без движения узла
+$.nav.mesh	навмеш для большой карты | navigation mesh instead of grid | прямоугольная навигация по области
+$.time.pause	заморозить весь игровой мир | stop game time while menu is open | остановить игру на время
+$.time.resume	продолжить игру после паузы | unpause game | снять игру с паузы
+$.time.isPaused	проверить стоит ли игра на паузе | is the game paused now
+$.time.scale	ускорить время в игре | bullet time effect | множитель скорости времени
+$.time.after	выполнить функцию через несколько секунд | run callback after delay | таймер на одно срабатывание
+$.time.every	повторять действие каждые N миллисекунд | interval timer | периодический таймер спавна врагов
+$.time.cancel	отменить таймер | stop a scheduled timer
+$.time.delta	время прошедшее с прошлого кадра | frame delta time dt
+$.time.fps	текущий fps | frames per second counter
+$.store.set	запомнить значение в хранилище | persist a setting value | записать настройку громкости
+$.store.get	прочитать сохранённое значение | load stored best score | достать значение по ключу
+$.store.save	записать хранилище на диск | flush settings to file
+$.store.load	загрузить настройки при старте | read store file on launch
+$.store.autoSave	автоматически сохранять настройки периодически | autosave store every N seconds
+$.save.load	загрузить сохранение игры из слота | restore saved game | продолжить игру с сохранения
+$.save.list	список слотов сохранения для меню | show save slots
+$.save.autosave	автосохранение игрового мира | periodic world save
+$.camera.follow	камера едет за игроком | attach camera to hero | слежение камерой за объектом
+$.camera.zoom	приблизить камеру | camera zoom level | масштаб вида
+$.camera.zoomTo	плавно изменить зум камеры | smooth zoom in
+$.camera.panTo	плавно перевести камеру на точку | move camera to position smoothly
+$.camera.deadzone	мёртвая зона камеры | camera does not move for small player motion
+$.camera.worldToScreen	перевести мировые координаты в экранные | world position to screen pixels
+$.camera.screenToWorld	куда кликнула мышь в мире | screen coordinates to world coordinates
+$.camera.isOnScreen	виден ли объект на экране | is node inside the camera view
+$.camera.split	разделённый экран для двух игроков | split screen camera
+$.input.down	клавиша удерживается | key is held down | зажата ли кнопка
+$.input.released	клавишу отпустили | key released this frame
+$.input.vec	вектор направления движения от ввода | movement direction from keys normalized
+$.input.bind	назначить действие на клавишу | map action to key | привязка управления
+$.input.rebind	переназначить кнопку в настройках | let player remap controls
+$.input.mouse	позиция мыши | mouse cursor coordinates
+$.input.mouseWorld	мышь в координатах мира | mouse position in world space
+$.input.mousePressed	клик мышью | mouse button clicked
+$.input.gamepad	геймпад | gamepad state | джойстик
+$.input.rumble	вибрация геймпада | gamepad vibration
+$.input.touches	касания на сенсорном экране | touch input points
+$.scene.add	зарегистрировать сцену | define a scene with enter and update | описать экран игры
+$.scene.load	перейти на другую сцену | switch to level scene | загрузить уровень
+$.scene.restart	перезапустить текущий уровень | restart scene after death
+$.scene.push	открыть сцену поверх текущей | overlay scene like inventory
+$.scene.pop	закрыть верхнюю сцену и вернуться | return from overlay scene
+$.scene.transition	переход между сценами с затемнением | fade transition between scenes
+$.world.gravity	сила тяжести в мире | set world gravity
+$.world.bounds	границы мира | world borders walls around level
+$.world.raycastAll	все объекты на линии луча | raycast returning every hit
+$.world.castShape	проверить фигурой есть ли столкновение | shape cast sweep
+$.world.bodyAt	какое тело в точке | body under cursor
+$.world.joint	соединить два тела шарниром | physics joint between bodies
+$.world.contactBetween	касаются ли два объекта | contact between two bodies
+$.world.timeScale	замедлить физику | physics time scale
+$.world.spawn	создать узел в мире | spawn object in world
+.damage	отнять здоровье у персонажа | apply hit points loss | получить урон
+.heal	восстановить здоровье | restore hp | аптечка
+.health	задать здоровье объекту | set hit points
+.hp	сколько здоровья у юнита | current health value
+.alive	жив ли объект | check whether unit is dead
+.kill	убить объект | destroy enemy instantly
+.respawn	вернуть персонажа на точку после смерти | respawn at checkpoint
+.velocity	скорость тела по осям | set body speed vector
+.applyImpulse	толкнуть тело импульсом | knockback impulse | отбросить врага ударом
+.applyForce	приложить силу к телу | push body with force
+.moveAndSlide	движение кинематического персонажа со скольжением по стенам | character controller move and slide
+.onWall	упёрся ли персонаж в стену | touching a wall
+.body	сделать узел физическим телом | add physics body to node
+.sensor	триггер без столкновения | sensor body overlap only
+.bounce	упругость отскока | restitution bounciness
+.collidesWith	с какими слоями сталкивается объект | collision filter what to hit
+.layerName	слой столкновений объекта | collision layer of node
+.on	подписаться на событие узла | listen to node event | обработчик события
+.emit	отправить событие | trigger custom event
+.tween	плавно анимировать свойства узла | tween alpha and position | анимация движения по времени
+.tweenTo	плавно перейти к значениям | tween node to target values
+.fadeTo	изменить прозрачность плавно до значения | fade to opacity
+.fadeIn	плавное появление объекта | fade in
+.alpha	прозрачность узла | opacity of sprite
+.flash	мигнуть цветом при попадании | hit flash white
+.shake	встряхнуть объект | shake node
+.rotate	вращать объект | rotate node
+.lookAt	повернуться к цели | face towards target
+.scale	масштаб объекта | resize sprite scale
+.depth	порядок отрисовки по глубине | draw order z index
+.sprite	картинка узла | set texture of node
+.frames	кадры анимации спрайта | sprite sheet frames
+.animate	покадровая анимация спрайта | play frame animation
+.playClip	запустить клип анимации | play animation clip by name
+.stateMachine	машина состояний анимации | animation state machine
+.text	текст узла | set label text
+.font	шрифт текста | font of text node
+.attr	атрибут узла | custom data on node
+.data	хранить данные в узле | node data storage
+.addClass	добавить класс узлу | tag node with css class
+.hasClass	есть ли у узла класс | check class on node
+.remove	удалить узел из мира | destroy node
+.appendTo	добавить узел в контейнер | attach child to parent
+.children	дочерние узлы | children of node
+.find	найти потомков по селектору | query inside node
+.filter	отфильтровать выборку | filter nodes by predicate
+.closest	ближайший узел к этому | nearest enemy
+.inside	внутри ли прямоугольника | is node inside area
+.overlaps	пересекаются ли два объекта | overlap test between nodes
+.rayTo	луч от узла к цели | raycast from node to target
+.zone	зона-триггер на узле | trigger zone around node
+$.triggers.zone	зона входа и выхода | trigger area enter exit events
+$.sound.music	фоновая музыка | play background music | включить музыку уровня
+$.sound.crossfade	плавно сменить музыку | crossfade music tracks
+$.sound.stopMusic	выключить музыку | stop background music
+$.sound.volume	громкость звука | sound volume
+$.sound.playAt	звук в точке мира | positional sound effect
+$.audio.bus	шина звука для группы | audio bus mixer group
+$.audio.effect	эффект на звук реверберация | apply reverb effect to bus
+$.ui.bar	полоска здоровья в HUD | health bar on screen
+$.ui.label	надпись в HUD | update HUD text label
+.openDialog	открыть диалоговое окно | modal dialog
+.checked	отмечен ли чекбокс | checkbox state
+.sliderValue	значение слайдера | slider value
+.inputValue	текст из поля ввода | text input value
+$.particles.create	система частиц | particle emitter | создать эмиттер частиц
+.emitting	включить или выключить эмиттер | toggle particle emission
+$.fx.trail	шлейф за объектом | motion trail effect
+$.fx.lightning	молния эффект | lightning bolt between points
+$.fx.hitStop	заморозка кадра при ударе | hit stop freeze frames
+$.fx.impact	эффект удара | impact effect with shake and flash
+.shadowSoft	мягкие тени | soft shadows from light
+.cone	конус света фонарика | flashlight cone light
+.flicker	мерцание света | flickering torch light
+$.tilemap.create	создать тайловую карту | tile map from tileset
+.autotile	автотайлинг стыков | autotile terrain edges
+.tileAt	какой тайл в клетке | read tile at cell
+.fill	залить область тайлами | fill rect with tile
+$.tilemap.pixelToTile	клетка по координатам пикселя | pixel to tile coordinates
+.ysort	сортировка по y для видa сверху | y-sorting top down depth
+$.layers.create	слой отрисовки | create render layer
+$.layers.fadeTo	затемнить экран | fade screen to black
+.parallax	коэффициент параллакса узла | parallax factor of background
+$.i18n.load	загрузить словарь перевода | load translation file
+$.i18n.lang	сменить язык игры | switch language
+$.i18n.plural	множественное число в переводе | plural forms
+$.http.post	отправить данные на сервер | post json request
+$.http.download	скачать файл | download file over http
+$.pool.create	пул объектов | object pool for bullets
+$.pool.release	вернуть объект в пул | release pooled node
+$.prefab.save	сохранить узел как префаб | save prefab template
+$.prefab.register	зарегистрировать шаблон объекта | register prefab
+.clone	копия узла | duplicate node
+$.state.send	отправить событие автомату | send event to state machine
+.fsm	автомат состояний на узле | finite state machine on node
+.state	текущее состояние узла | current state name
+$.timeline.define	описать сценарий диалога | define timeline script
+$.timeline.choose	выбор варианта ответа | choose dialog option
+$.story.play	визуальная новелла сценарий | play story script
+$.cutscene.skip	пропустить катсцену | skip cutscene
+$.cutscene.letterbox	чёрные полосы в катсцене | letterbox bars
+$.flow.series	последовательность действий по времени | run steps in sequence
+$.flow.parallel	параллельные действия | run actions in parallel
+$.flow.repeat	повторять действие несколько раз | repeat action n times
+$.signal.on	глобальная шина событий | subscribe to global signal
+$.signal.emit	разослать глобальное событие | broadcast signal
+$.signal.waitFor	дождаться события | await signal
+$.net.join	подключиться к серверу | join multiplayer game
+$.net.replicate	синхронизировать узел по сети | replicate node over network
+$.net.ping	задержка сети | network ping
+$.replay.play	воспроизвести запись | playback replay
+$.debug.profile	профилирование кадра | profile frame time
+$.debug.watch	следить за значением в отладке | watch variable in debug panel
+$.agent.snapshot	снимок состояния для агента | agent state snapshot
+$.test.equal	проверить равенство в тесте | assert equal
+$.window.title	заголовок окна | set window title
+$.window.size	размер окна | window width and height
+$.window.vsync	вертикальная синхронизация | vsync on off
+$.window.cursor	курсор мыши вид | change mouse cursor
+$.gfx.post	постобработка экрана | post processing effect | bloom и виньетка
+$.gfx.defineShader	свой шейдер | custom shader
+$.gfx.measureText	ширина текста в пикселях | measure text size
+$.fs.readJSON	прочитать json файл | load json data file
+$.fs.writeJSON	записать json файл | save json file
+$.resource.preload	предзагрузить ресурсы | preload assets
+$.atlas.load	загрузить атлас спрайтов | load sprite atlas
+$.items.define	описать предмет инвентаря | define inventory item
+$.weapons.define	описать оружие | define weapon stats
+$.combat.hit	попадание с расчётом урона | apply hit with damage zones
+$.alive.psyche	психика npc страх | npc fear morale
+$.proc.render	процедурная картинка | procedural sprite generation
+$.re2d.world	мир с высотой и этажами | re2d world bsp floors
+$.rotSprite.from	спрайт с поворотом по ракурсам | rotating sprite from atlas
+$.ready	код после загрузки движка | run code when engine ready
+$.update	функция каждого кадра | per frame update callback
+$.on	глобальное событие игры | listen global event
+$.batch	много изменений одним проходом | batch node changes
+$.pick	случайный элемент массива | random choice
+$.vec	вектор x y | 2d vector helper
+$.color	цвет из строки | parse color
+$.quit	выйти из игры | quit application
