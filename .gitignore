@@ -99,6 +99,7 @@ site/*
 !site/style.css
 !site/app.js
 !site/build-doc.py
+!site/doc-home.md
 !site/build-site.sh
 !site/sync-index.py
 !site/sync-downloads.sh

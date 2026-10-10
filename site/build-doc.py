@@ -3,8 +3,10 @@
 
 Что делает:
   1. копирует docs/*.md, docs/highlevel/*.md, docs/images/, docs/screenshots/;
-  2. добавляет «внешние» документы: README.md, CHANGELOG, CONTRIBUTING,
-     CODE_OF_CONDUCT, SECURITY, LICENSE, THIRD_PARTY_NOTICES, demos/*/README.md;
+  2. добавляет «внешние» документы: CHANGELOG, CONTRIBUTING, CODE_OF_CONDUCT,
+     SECURITY, LICENSE, THIRD_PARTY_NOTICES, demos/*/README.md;
+     корневой README.md сюда НЕ входит: он теперь только страница репозитория,
+     а стартовая страница документации берётся из site/doc-home.md;
   3. переписывает ссылки под Docsify:
        * ссылки на документы -> хеш-маршруты вида #/HIGH_LEVEL_API
          (якоря #section у межстраничных ссылок отбрасываются: id заголовков
@@ -48,7 +50,6 @@ for p in sorted((REPO / "docs" / "internal").glob("*.md")):
 for p in sorted((REPO / "docs" / "ci-archive").glob("*.md")):
     SOURCES[f"docs/ci-archive/{p.name}"] = f"ci-archive/{p.name[:-3]}"
 for extra, route in [
-    ("README.md", "overview"),
     ("CHANGELOG.md", "CHANGELOG"),
     ("CONTRIBUTING.md", "CONTRIBUTING"),
     ("CODE_OF_CONDUCT.md", "CODE_OF_CONDUCT"),
@@ -207,7 +208,13 @@ def main() -> int:
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO / src, dest)
 
-    (DOC / 'README.md').write_text((DOC / 'overview.md').read_text())
+    # Стартовая страница документации — отдельный файл, а не корневой README:
+    # README остаётся страницей репозитория (маскот и ссылки). Разбор ссылок —
+    # как у прежнего README.md, чтобы пути внутри текста не поехали.
+    home = SITE / 'doc-home.md'
+    (DOC / 'README.md').write_text(
+        rewrite_md(home.read_text(encoding='utf-8'), 'README.md', 'overview'),
+        encoding='utf-8')
     (DOC / '_coverpage.md').write_text("""# Russiano2D
 
 > Игры — код и данные. Ядро C, публичный API `$`, интерфейсы RmlUi.
@@ -273,7 +280,7 @@ def write_sitemap() -> None:
 
 def write_sidebar() -> None:
     groups: list[tuple[str, list[str]]] = [
-        ("Начало", ["overview", "tutorial-first-game", "ARCHITECTURE"]),
+        ("Начало", ["tutorial-first-game", "ARCHITECTURE"]),
         ("Справочники", ["HIGH_LEVEL_API", "API", "AGENT_API", "API_PERFORMANCE", "HIGH_LEVEL_API_PERF"]),
         ("Подсистемы <code>$</code>", sorted(r for r in SOURCES.values() if r.startswith("highlevel/"))),
         ("Практика", ["tutorial-platformer", "tutorial-menus", "demos",
