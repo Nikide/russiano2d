@@ -340,7 +340,8 @@ static bool takes_value(const char *flag)
         "--scene", "--frames", "--project", "--seed", "--preset", "--name", "--tool",
         "--expression", "--uv", "--origin", "--size", "--scale", "--style", "--first-id", "--mode", "--x", "--y",
         "--cell", "--cols", "--rows", "--prefix", "--duration", "--tags",
-        "--root", "--game", "--fixed-dt", "--format", "--width", "--height", NULL,
+        "--root", "--game", "--fixed-dt", "--format", "--width", "--height",
+        "--top", "--index", "--model", "--threads", NULL,   // r2d-help (docs/HELP.md)
     };
     for (int i = 0; names[i]; ++i) {
         if (strcmp(flag, names[i]) == 0) return true;
