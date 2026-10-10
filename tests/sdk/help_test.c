@@ -69,14 +69,21 @@ int main(int argc, char **argv)
         ix.items[i].vec = (int8_t *)malloc(4);
         help_quantize(i == 0 ? v0 : v1, 4, ix.items[i].vec, &ix.items[i].vec_scale);
     }
-    const char *tmp = "help_test.idx";
+    // Индекс пишем в каталог временных файлов, а не в текущий: тест
+    // запускается и там, где рабочий каталог только для чтения (контейнер
+    // с проектом, смонтированным :ro — так его зовёт tools/help_train/run.sh).
+    char tmp[2048];
+    const char *tmpdir = getenv("TMPDIR");
+    if (!tmpdir || !*tmpdir) tmpdir = "/tmp";
+    snprintf(tmp, sizeof tmp, "%s/r2d-help-test.idx", tmpdir);
     check(help_index_save(&ix, tmp), "индекс записан");
     HelpIndex back;
-    check(help_index_load(&back, tmp), "индекс прочитан");
-    check(back.count == 3 && back.dim == 4 && back.sources_hash == 0x1234, "заголовок сохранён");
-    check(strcmp(back.items[0].signature, ".navigateTo(target, opts)") == 0, "строки сохранены");
-    check(back.items[0].vec && back.items[0].vec[0] == 127, "вектор сохранён");
-    check(back.items[2].vec == NULL, "запись без вектора остаётся без вектора");
+    const bool loaded = help_index_load(&back, tmp);
+    check(loaded, "индекс прочитан");
+    check(loaded && back.count == 3 && back.dim == 4 && back.sources_hash == 0x1234, "заголовок сохранён");
+    check(loaded && strcmp(back.items[0].signature, ".navigateTo(target, opts)") == 0, "строки сохранены");
+    check(loaded && back.items[0].vec && back.items[0].vec[0] == 127, "вектор сохранён");
+    check(loaded && back.items[2].vec == NULL, "запись без вектора остаётся без вектора");
     remove(tmp);
 
     // --- поиск ----------------------------------------------------------------
