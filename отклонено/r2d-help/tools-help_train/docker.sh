@@ -25,7 +25,11 @@ DOCKERFILE
 
 mkdir -p "$ROOT/build/help_train"
 # Проект монтируется только на чтение; пишем лишь в build/help_train.
-exec docker run --rm -it \
+# -t нужен только живому терминалу: в фоне и в CI его нет, и docker падает
+# с «the input device is not a TTY» — поэтому добавляем его по наличию TTY.
+TTY=""
+[ -t 0 ] && TTY="-t"
+exec docker run --rm -i ${TTY} \
     --memory="$MEM" --memory-swap="$MEM" --cpus="$CPUS" --pids-limit=2048 \
     -e R2D_HELP_COPY=1 -e R2D_HELP_WORKTREE=/cache/wt -e R2D_HELP_JOBS=4 \
     -e R2D_HELP_THREADS="$((CPUS - 1))" -e R2D_HELP_BATCH="${BATCH:-8}" \

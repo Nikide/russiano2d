@@ -319,11 +319,6 @@ def collect_runtime_files(
     suffix = '.exe' if binary.lower().endswith('.exe') else ''
     sdk_binary = os.path.join(os.path.dirname(binary), 'r2d-sdk' + suffix)
     files.append((sdk_binary, 'r2d-sdk' + suffix))
-    # CLI-помощник по $ API (docs/HELP.md): бинарник, индекс и модель рядом.
-    # Индекс и модель необязательны: без модели помощник ищет только BM25.
-    build_dir = os.path.dirname(binary)
-    for name in ('r2d-help' + suffix, 'r2d-help.idx', 'r2d-help.gguf'):
-        files.append((os.path.join(build_dir, name), name))
     for name in ('sdk', 'sdk_tools.json', 'SDK_HANDOFF.md',
                  'Следующая цель SDK AGENT.md', 'docs'):
         files.append((name, name))
@@ -643,10 +638,7 @@ def package_platform(
     if not os.path.isfile(sdk_binary):
         raise SystemExit('ошибка: SDK backend не найден: %s; соберите r2d-sdk' % sdk_binary)
     if not runner.dry_run:
-        help_binary = os.path.join(ROOT, os.path.dirname(binary), 'r2d-help' + suffix)
         executables = [os.path.join(ROOT, binary), sdk_binary]
-        if os.path.isfile(help_binary):
-            executables.append(help_binary)
         for executable in executables:
             actual = binary_platform(executable)
             if actual != platform_name:
@@ -669,10 +661,10 @@ def package_platform(
             continue
         if os.path.isdir(source_path):
             shutil.copytree(source_path, dest_path, dirs_exist_ok=True,
-                            ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", "*.pyc", "*.pyo", "state.local.json", "native", "help", "CMakeLists.txt"))
+                            ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", "*.pyc", "*.pyo", "state.local.json", "native", "CMakeLists.txt"))
         else:
             shutil.copy2(source_path, dest_path)
-            if source == binary or dest in ('r2d-sdk' + suffix, 'r2d-help' + suffix):
+            if source == binary or dest == 'r2d-sdk' + suffix:
                 os.chmod(dest_path, 0o755)
 
     # Если сборка положила рядом с бинарником каталог lib/ (внешние

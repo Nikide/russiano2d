@@ -89,8 +89,6 @@ if(NOT EMSCRIPTEN)
     add_subdirectory(tests)
     # Нативный бэкенд SDK (r2d-sdk): отдельный CLI-бинарник, не часть игры.
     add_subdirectory(sdk/native)
-    # CLI-помощник по $ API (docs/HELP.md): отдельный бинарник SDK.
-    add_subdirectory(sdk/help)
 endif()
 
 message(STATUS "")

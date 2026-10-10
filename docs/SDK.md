@@ -23,7 +23,6 @@ SDK не владеет игрой: проекты и ассеты остают�
 | Реестр компонентов | [`sdk_tools.json`](../sdk_tools.json) | единственный список инструментов; launcher строит каталог по нему |
 | Нативный бэкенд | [`sdk/native/`](../sdk/native) | C-бинарник `r2d-sdk` (`build/r2d-sdk`) без Python/Node.js/shell |
 | Мост GUI → бэкенд | `$.sdk` ([highlevel/sdk.md](highlevel/sdk.md)) | включается `"toolHost": true` в `project.json` |
-| Помощник по `$` API | [`sdk/help/`](../sdk/help) | CLI `r2d-help`: поиск по реестру API и docs (BM25 + эмбеддинги), [HELP.md](HELP.md) |
 | Тесты | `tests/sdk/`, `tests/js/sdk*_test.mjs`, `tests/agent/sdk_*_test.py` | C, qjs и агентские |
 
 ## 2. Принципы (кратко)
