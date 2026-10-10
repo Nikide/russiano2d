@@ -6,12 +6,25 @@
 
 #define PI 3.14159265358979323846
 
+// Замер времени синтеза. В MinGW нет timespec_get/TIME_UTC, поэтому в Windows — счётчик производительности.
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+static double now_ms(void)
+{
+    LARGE_INTEGER freq, count;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&count);
+    return (double)count.QuadPart * 1000.0 / (double)freq.QuadPart;
+}
+#else
 static double now_ms(void)
 {
     struct timespec ts;
     timespec_get(&ts, TIME_UTC);
     return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
 }
+#endif
 
 void r2d_rot3_default_light(R3Light *l)
 {

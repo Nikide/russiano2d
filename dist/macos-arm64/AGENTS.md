@@ -1,4 +1,4 @@
-# Russiano2D 0.1.28 — macOS Apple Silicon: инструкция для ИИ-агента
+# Russiano2D 0.1.29 — macOS Apple Silicon: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"0.1.28","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"0.1.29","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
