@@ -8,6 +8,7 @@
 // ===========================================================================
 #include "sdk.h"
 #include "sdk_re2d.h"
+#include "sdk_re2d3.h"
 #include "sdk_bake.h"
 
 #include <SDL3/SDL.h>
@@ -35,9 +36,10 @@ static const Command k_commands[] = {
     { "atlas-grid",   sdk_cmd_atlas_grid,   "создать атлас спрайтов сеткой из картинки" },
     { "atlas-format", sdk_cmd_atlas_format, "привести атлас к каноническому виду" },
     { "atlas-info",   sdk_cmd_atlas_info,   "кадры, теги, слайсы и проверка атласа" },
-    { "re2d-info",   sdk_cmd_re2d_info,   "Re2DSprite: PNG v2, части, статистика карт и проверка" },
-    { "re2d-debug",  sdk_cmd_re2d_debug,  "Re2DSprite: отладочный вид карт поверхности в PNG" },
-    { "re2d-sample", sdk_cmd_re2d_sample, "Re2DSprite: один отсчёт поверхности (ID, XYZ, покрытие, владелец)" },
+    { "re2d-info",   sdk_cmd_re2d_info,   "Re2DSprite: карты v2 или контейнер v3, части/кости, статистика и проверка" },
+    { "re2d-debug",  sdk_cmd_re2d_debug,  "Re2DSprite: отладочный вид поверхности (карты v2 или сетка v3) в PNG" },
+    { "re2d-sample", sdk_cmd_re2d_sample, "Re2DSprite: один отсчёт поверхности или тексель контейнера v3" },
+    { "re2d3-paint", sdk_cmd_re2d3_paint, "Re2DSprite v3: правка сетки текселей (кость, блеск, цвет) по ops.json" },
     { "animation-import", sdk_cmd_animation_import, "FBX humanoid motion → existing Re2DSprite rig animation JSON" },
     { "convert-re2d3", sdk_cmd_convert_re2d3, "Re2DSprite v2 → плотный v3 (геометрия ячеек + цвет атласа без кэша 5×5)" },
     { "bake-re2d3", sdk_cmd_bake_re2d3, "Re2D Baker v3: FBX/GLB/OBJ → плотный Re2DSprite v3 + клипы скелета" },

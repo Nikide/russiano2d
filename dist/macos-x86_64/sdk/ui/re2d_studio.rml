@@ -19,6 +19,7 @@
         <button id="rs-validate" class="btn">Проверить</button>
         <button id="rs-tab-view" class="btn on">Вид</button>
         <button id="rs-tab-surface" class="btn">Поверхность</button>
+        <button id="rs-tab-grid" class="btn">Сетка</button>
         <button id="rs-tab-rig" class="btn">Скелет</button><button id="rs-tab-author" class="btn">Клипы и варианты</button>
     </div>
 
@@ -43,6 +44,19 @@
                 <div id="rs-bones" class="list grow"></div>
                 <h4>Сокеты</h4>
                 <div id="rs-sockets" class="list"></div>
+            </div>
+            <div id="rs-left-grid">
+                <h4>Инструмент кисти</h4>
+                <div id="gr-tools" class="list"></div>
+                <h4>Кость</h4>
+                <div id="gr-bones" class="list grow"></div>
+                <h4>Кисть и значение</h4>
+                <div class="field-row"><label>Клеток</label><input id="gr-brush" type="text" value="3" class="field"/><button id="gr-brush-apply" class="btn small">Ок</button></div>
+                <div class="field-row"><label>Блеск</label><input id="gr-gloss" type="text" value="128" class="field"/><button id="gr-gloss-apply" class="btn small">Ок</button></div>
+                <div class="field-row"><label>Цвет</label><input id="gr-color" type="text" value="#ffd24a" class="field"/><button id="gr-color-apply" class="btn small">Ок</button></div>
+                <h4>Режим вида</h4>
+                <div id="gr-modes" class="list"></div>
+                <div id="gr-hint" class="hint"></div>
             </div>
         </div>
 
@@ -83,6 +97,24 @@
                 <div id="rs-sample" class="hint">Наведите мышь на карту.</div>
                 <h4>Части</h4>
                 <div id="rs-parts" class="list"></div>
+            </div>
+
+            <div id="rs-right-grid">
+                <h4>Тексель под курсором</h4>
+                <div id="gr-sample" class="hint">Наведите мышь на сетку.</div>
+                <h4>Правки сетки</h4>
+                <div id="gr-stats" class="hint">правок 0</div>
+                <div class="field-row">
+                    <button id="gr-undo" class="btn">Отменить</button>
+                    <button id="gr-redo" class="btn">Повторить</button>
+                </div>
+                <div class="field-row">
+                    <button id="gr-reset" class="btn">Сбросить правки</button>
+                    <button id="gr-save" class="btn primary">Сохранить PNG</button>
+                </div>
+                <div class="hint">Пока идёт правка, черновик лежит в build/sdk_cache; контейнер PNG меняет только «Сохранить PNG» (нативный re2d3-paint). После сохранения список правок обнуляется — ассет становится новой базой, а рантайм перечитывает спрайт сам.</div>
+                <h4>Кости контейнера</h4>
+                <div id="gr-parts" class="list"></div>
             </div>
 
             <div id="rs-right-rig">

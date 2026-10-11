@@ -18,6 +18,7 @@ set(R2D_SDK_SOURCES
     sdk_atlas.c
     sdk_re2dpng.c
     sdk_re2d.c
+    sdk_re2d3.c
     sdk_gltf.c
     sdk_obj.c
     sdk_fbx.c

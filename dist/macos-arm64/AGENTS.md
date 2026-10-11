@@ -1,4 +1,4 @@
-# Russiano2D 0.1.30 — macOS Apple Silicon: инструкция для ИИ-агента
+# Russiano2D 0.1.31 — macOS Apple Silicon: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"0.1.30","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"0.1.31","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -8922,6 +8922,33 @@ JS: `$.re2dSprite.from('x.character.json')` определяет v3 по заг�
 - `r2d-sdk convert-re2d3 russi.png --character russi.character.json --name russi3` — апгрейд v2: геометрия ячеек делится на d×d текселей,
   цвет берётся прямо из атласа 4096 (без кэша 5×5), нормали из градиента; `--raster N` записывает `projection.raster`. Сменные `variants` (hair/costume) у v3 не переносятся.
 
+## Инструменты SDK
+
+- `r2d-sdk re2d-info <character.json|png>` распознаёт контейнер v3 по заголовку и
+  отдаёт факты: сетка `W×H`, `extent`, число живых текселей, диапазон позиции,
+  блеск (min/max/mean), суммы весов, кости с числом текселей. `re2d-debug` строит
+  вид сетки (`material normal gloss owner weight coverage x y z`), `re2d-sample`
+  читает один тексель (цвет, позиция, нормаль, блеск, кости с весами),
+  `validate` проверяет `*.character.json` вместе с контейнером (коды `SDK_RE2D3_*`).
+- `r2d-sdk re2d3-paint <png|character.json> --edits ops.json [--out путь]` правит
+  сетку текселей: операция `bone` (id + вес, веса нормируются к 255 методом
+  наибольших остатков), `gloss` (0…255) и `color` (rgb). Значения строго целые:
+  `true`, строка и дробное число отвергаются с диагностикой, а не превращаются
+  в 0. Меняются только живые тексели, заголовок и строка 0 не пересобираются.
+  Ошибка любой операции отменяет всю запись: файл ассета остаётся как был.
+- **Нулевые веса** (тексель без костей) — факт данных: SDK отдаёт `weightsSum: 0`
+  и `SDK_RE2D3_WEIGHT_ZERO` уровнем info, потому что рантайм на таком текселе
+  подставляет кость 1 с весом 255 (src/rotsprite3.c).
+- Re2DSprite Studio открывает v3 в том же окне: вкладка «Поверхность» показывает
+  сетку, вкладка «Сетка» — редактор (кисть по кости/блеску/цвету, undo/redo,
+  «Сохранить PNG»). Подробности и ограничения — [SDK.md](SDK.md) §6.
+- **Идентификатор слоя костей** — число, и прочесть его можно двумя способами:
+  как индекс кости + 1 (`rig.bones[id−1]`) и как id части (`rig.parts[].id`). У
+  моделей `bake-re2d3` части описаны как кости (`id = индекс + 1`), поэтому
+  трактовки дают одно имя; `convert-re2d3` переносит id частей v2 — тогда верна
+  вторая. SDK показывает обе как факты (`asBone`/`bone`, `asPart`/`partBone`),
+  не выбирая за автора.
+
 ## Ограничения
 
 Скининг линейный (в v2 — dual quaternion для суставов); мимика v2 работает через видимость частей. Время синтеза зависит от размера
@@ -9776,7 +9803,7 @@ SDK не владеет игрой: проекты и ассеты остают�
 
 | Часть | Где | Что это |
 |---|---|---|
-| Приложение SDK | [`sdk/`](../sdk) | обычный проект R2D: `project.json`, `main.js`, RmlUi-документы `sdk/ui/*.rml`. Запуск: `./build/russiano2d --game sdk` |
+| Приложение SDK | [`sdk/`](../sdk) | обычный проект R2D: `project.json`, `main.js`, RmlUi-документы `sdk/ui/*.rml`. Запуск: `./build/russiano2d --game sdk` или скриптом [`./run_sdk.sh`](../run_sdk.sh) |
 | Реестр компонентов | [`sdk_tools.json`](../sdk_tools.json) | единственный список инструментов; launcher строит каталог по нему |
 | Нативный бэкенд | [`sdk/native/`](../sdk/native) | C-бинарник `r2d-sdk` (`build/r2d-sdk`) без Python/Node.js/shell |
 | Мост GUI → бэкенд | `$.sdk` ([highlevel/sdk.md](highlevel/sdk.md)) | включается `"toolHost": true` в `project.json` |
@@ -9841,10 +9868,14 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
 | `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
 | `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |
-| `re2d-info <character.json\|png>` | Re2DSprite: PNG v2, части ↔ кости, статистика карт, проверка |
-| `re2d-debug <character.json\|png> --mode m --out f.png [--scale N]` | Re2DSprite: отладочный вид карт поверхности |
-| `re2d-sample <character.json\|png> --x mx --y my` | Re2DSprite: один отсчёт (ID, XYZ, покрытие, владелец) |
+| `re2d-info <character.json\|png> [--model описание.json]` | Re2DSprite: карты PNG v2 **или контейнер v3** — части/кости, статистика, материалы и проверка |
+| `re2d-debug <character.json\|png> --mode m --out f.png [--scale 1..16] [--model описание.json]` | Re2DSprite: отладочный вид поверхности (по умолчанию `--scale 3`, у крупной сетки v3 — `1`). Карты v2: `material part owner x y z coverage group overlap`; контейнер v3: `material normal gloss owner weight coverage x y z` |
+| `re2d-sample <character.json\|png> --x mx --y my [--model описание.json]` | Re2DSprite: один отсчёт карты v2 (ID, XYZ, покрытие, владелец) или тексель v3 (цвет, позиция, нормаль, блеск, кости с весами) |
+| `re2d3-paint <png\|character.json> --edits правки.json [--out путь.png] [--model описание.json]` | Re2DSprite v3: правка сетки текселей (кость, блеск, цвет) и запись контейнера; без `--out` пишет на месте, при ошибке любой операции файл не трогает |
+| `convert-re2d3 <v2.png> [--character x.character.json] [--output каталог] [--name имя] [--density 2..12] [--raster 128..2048]` | апгрейд Re2DSprite v2 → контейнер v3 |
+| `bake-re2d3 <модель.fbx\|.glb\|.gltf\|.obj> --output каталог [--name имя] [--grid 512..2048] [--extent N] [--scale S] [--fit 0.94] [--clips имя=клип[:l],…] [--fps 30] [--eye x,y,z] [--raster N] [--cull] [--motion-lod 0..4] [--detail 0.25..8]` | Re2D Baker v3: модель → плотный контейнер v3 + клипы скелета |
 | `bake-re2d <модель.glb\|.gltf\|.vrm\|.obj\|.fbx> --type prop\|character\|weapon\|environment --output каталог [--uv auto\|existing\|optimized] [--origin center\|feet] [--size 1024\|2048\|4096] [--scale S] [--name n] [--style s] [--first-id N] [--expression имя]` | Re2D Baker: GLB/glTF → Re2DSprite |
+| `animation-import <motion.fbx> --rig character.json --output animations.json [--clip name] [--stack name] [--fps 30] [--seam .2]` | FBX humanoid motion → существующий rig Re2DSprite |
 | `world-compile <f.re2dmap> [--renderer] [--output f.re2dworld]` | --renderer: native baked $.re2dWorld; без флага: legacy $.re2d.world output |
 | `world-info <f.re2dmap>` | compile/validation без записи результата |
 | `batch <manifest.batch.json> [--output report.json]` | пакет bake-re2d / validate, ошибки отдельных jobs не прерывают пакет |
@@ -9912,12 +9943,16 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 `sdk/tools/re2dsprite-studio.js` + `sdk/ui/re2d_studio.rml`: открывается на
 `*.character.json` ([RE2DSPRITE_JSON.md](RE2DSPRITE_JSON.md)). SDK **не меняет
 семантику формата** и **не синтезирует спрайт сам**: изображение даёт настоящий
-рантайм (`$.re2dSprite.from`), карты PNG v2 декодирует нативный `r2d-sdk`.
+рантайм (`$.re2dSprite.from`), а поверхность декодирует нативный `r2d-sdk` —
+у карт v2 это карты 256×192, у контейнера v3 плотная сетка текселей
+([RE2DSPRITE_V3.md](RE2DSPRITE_V3.md)). Версию контейнера называет бэкенд
+(`re2d-info` → `format`), студия её не угадывает.
 
 | Вкладка | Что делает | Откуда данные |
 |---|---|---|
 | Вид | узел рантайма: ракурс yaw −180…180 / pitch −75…75 (поля и перетаскивание мышью), клипы, эмоции, варианты, стиль anime/pixel, тело/голова, пауза | `$.re2dSprite.*`, `info()` |
-| Поверхность | виды карт: материал, ID части, владелец (кость), X, Y, Z, покрытие, группа материала, перекрытие; отсчёт под курсором (ID, кость, XYZ, покрытие) | `r2d-sdk re2d-debug`, `re2d-sample` |
+| Поверхность | карты v2: материал, ID части, владелец (кость), X, Y, Z, покрытие, группа материала, перекрытие. Контейнер v3: цвет, нормаль, блеск, кость, вес кости, покрытие, X, Y, Z; отсчёт/тексель под курсором | `r2d-sdk re2d-debug`, `re2d-sample` |
+| Сетка | редактор сетки текселей **контейнера v3**: кисть по кости, блеску или цвету, размер кисти, масштаб и сдвиг вида, undo/redo, «Сохранить PNG»; у карт v2 вкладка честно отказывает (`SDK_RE2D3_ONLY`) | `r2d-sdk re2d3-paint`, `re2d-debug`, `re2d-sample` |
 | Скелет | кости (pivot/portraitPivot), часть → кость, сокеты, проекция; undo/redo | `*.character.json` |
 | Клипы и варианты | добавление/правка/удаление clips, emotions, variants, equipment; ключи клипа и переход по времени; preview экипировки | существующие JSON definitions и настоящий runtime |
 
@@ -9927,11 +9962,64 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 подхватывается рантаймом без перезапуска. Ошибка рантайма на невалидной модели
 показывается диагностикой `SDK_RE2D_RUNTIME` рядом с фактами нативной проверки.
 
-Нативные команды ([§4](#4-cli-r2d-sdk)): `re2d-info <character.json|png>` (PNG v2, части
-и кости, статистика карт, проверка), `re2d-debug --mode … --out f.png [--scale N]`,
-`re2d-sample --x mx --y my`. Раскладка PNG — [RE2DSPRITE_V2.md](RE2DSPRITE_V2.md) и
-[RE2DSPRITE_MATH.md](RE2DSPRITE_MATH.md) §2: ID (0,768), глубина (256,768), покрытие
-(512,768), XY (768,768) — по 256×192 отсчётов, адреса умножаются на `size/1024`.
+Нативные команды ([§4](#4-cli-r2d-sdk)): `re2d-info <character.json|png>` (версия
+контейнера, части или кости, статистика, проверка), `re2d-debug --mode … --out f.png
+[--scale N]`, `re2d-sample --x mx --y my`. Раскладка карт PNG v2 —
+[RE2DSPRITE_V2.md](RE2DSPRITE_V2.md) и [RE2DSPRITE_MATH.md](RE2DSPRITE_MATH.md) §2:
+ID (0,768), глубина (256,768), покрытие (512,768), XY (768,768) — по 256×192
+отсчётов, адреса умножаются на `size/1024`. Контейнер v3 читается целиком: сетка
+`W×H` из заголовка, шесть слоёв, alpha слоя позиции — признак живого текселя.
+
+### Редактор сетки v3 (`re2d3-paint`)
+
+Правка — это список операций над сеткой; файл операций читает нативный бэкенд
+(**один код** для CLI, GUI и агента), ошибка в любой операции отменяет всю запись:
+
+```json
+{ "version": 1,
+  "ops": [ { "op": "bone",  "rects": [[900, 700, 8, 8]], "bones": [[2, 255]] },
+           { "op": "gloss", "rects": [[900, 700, 8, 8]], "value": 200 },
+           { "op": "color", "rects": [[900, 700, 2, 2]], "rgb": [255, 0, 0] } ] }
+```
+
+Прямоугольники — в клетках сетки текселей; меняются только **живые** тексели
+(alpha слоя позиции 255). Значения операций проверяются строго и все целые:
+`x`, `y` — ±1000000, `w`, `h` — 1..1000000, `id` — 1..255, веса — 0..255
+(сумма больше нуля), блеск и цвет — 0..255. Веса операции `bone` нормируются к
+сумме ровно 255 методом наибольших остатков — ни один вес не «заворачивается»
+и не превышает 255.
+Заголовок контейнера при записи не пересобирается — строка 0 остаётся как была,
+поэтому чужие поля не теряются. Студия держит правки в памяти и в
+`.r2d-recovery-<имя ассета>.grid.json` (например, для `russi3.character.json` это
+`.r2d-recovery-russi3.character.json.grid.json`), черновик пишет в `build/sdk_cache`, а сам PNG
+меняет **только** по «Сохранить PNG» (как и требуют правила SDK: исходник меняет
+один явный Save). После сохранения список правок обнуляется, а сохранённый PNG
+становится новой базой: операции присваивающие, поэтому «отмена» после Save не
+могла бы вернуть файл — теперь Undo/Redo всегда означают ровно неприменённую
+разницу с ассетом. Узел рантайма перечитывает PNG сам (`engine.rotSpriteChanged`).
+
+**Нулевые веса — факт данных.** У текселя может не быть ни одной кости с весом
+(сумма 0). SDK так его и показывает (`weightsSum: 0`, `bones: []`), а в проверке
+пишет `SDK_RE2D3_WEIGHT_ZERO` уровнем *info*: это не ошибка формата — рантайм на
+таком текселе подставляет кость 1 с весом 255 (`src/rotsprite3.c`). Гистограмма
+костей нулевые тексели не приписывает никому.
+
+**Что означают идентификаторы в слое костей.** Контейнер хранит числа, а не имена,
+и прочесть их можно двумя способами: как индекс кости + 1 (`rig.bones[id−1]`) и
+как id части (`rig.parts[].id`). У моделей `bake-re2d3` эти номера совпадают —
+части описываются как кости (`rig.parts[].id = индекс + 1`), поэтому обе
+трактовки дают одно имя; `convert-re2d3` переносит id частей v2, и тогда верна
+только вторая. `re2d-info` отдаёт обе трактовки как факты (`asBone`/`bone` и
+`asPart`/`partBone`), студия показывает их и предлагает выбрать цель кисти из
+костей и из частей. Идентификатор, который не описан ни так, ни так, отмечается
+`SDK_RE2D3_ID_UNDECLARED`.
+
+API для агента и тестов — тот же код, что у кнопок:
+`$.sdkApp.studios.re2d.gridPaint(прямоугольники, 'bone'|'gloss'|'color', значение)`,
+где значение — id кости для `bone`, целое 0..255 для `gloss` и строка `#rrggbb`
+для `color`; `gridRender`, `gridSave`, `gridUndo`, `gridRedo`, `gridReset`,
+`setGridMode`, `loadContainer`; снимок — `state.sdk.studios.re2d`
+(`container.format`/`grid`, `grid.{tool,mode,brush,boneId,ops,painted,dirty,sample}`).
 
 Что проверяет `validate` для `*.character.json` (стабильные коды `SDK_RE2D_*`):
 
@@ -9941,7 +10029,8 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | анимации | `ANIM_ROOT`, `ANIM_MISSING`, `ANIM_CLIP`, `ANIM_TRACK`, `ANIM_DUPLICATE`, `ANIM_INTERPOLATION`, `ANIM_KEYS`, `ANIM_KEY_TIME`, `ANIM_KEY_ORDER`, `ANIM_KEY_VALUE` |
 | связи | `EQUIPMENT`, `EQUIPMENT_SOCKET`, `EQUIPMENT_MISSING`, `VARIANT_MISSING` |
 | PNG v2 | `ATLAS_MISSING`, `PNG_FORMAT`, `PNG_SIZE`, `PNG_HEADER`, `PNG_BLD_WITHOUT_SUB`, `MAP_EMPTY`, `MAP_ID_RANGE`, `MAP_ALPHA` |
-| поверхность (предупреждения, только факты) | `ID_UNDECLARED`, `PART_EMPTY`, `HOLE`, `SEAM` (скачок XYZ > 6 между соседями одной части), `ISOLATED`, `STALE_ID` |
+| поверхность v2 (предупреждения, только факты) | `ID_UNDECLARED`, `PART_EMPTY`, `HOLE`, `SEAM` (скачок XYZ > 6 между соседями одной части), `ISOLATED`, `STALE_ID` |
+| контейнер v3 | `HEADER`, `SIZE`, `EMPTY`, `COLOR_ALPHA` (ошибки), `WEIGHT_SUM`, `NORMAL`, `LAYERS`, `ID_UNDECLARED` (предупреждения), `WEIGHT_ZERO` (инфо: кость не задана, рантайм подставит кость 1), `POSITION_ALPHA`, `ISOLATED` (инфо) — префикс `SDK_RE2D3_` |
 
 **Паритет с рантаймом.** QuickJS в инструментах SDK запрещён, поэтому правила
 `validateRotDefinition`/`validateRotAnimations` продублированы в C. Тест
@@ -9953,7 +10042,11 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 файл. `variants[group][key]` указывает на PNG донора; `equipment[key]` — на описание
 модели и существующий сокет. Изменения имеют undo/redo. Клик по ключу ставит время
 реального runtime (`re2dSeek`); SDK не рассчитывает позу вторым алгоритмом.
-Правка карт поверхности и графический редактор кривых пока не реализованы.
+
+Чего в редакторе сетки нет (честно): кисть кладёт кость с весом 255 (частичные веса
+между костями не размазываются), позиция и нормаль текселя не правятся — сетка
+меняет только кость, блеск и цвет; **карты PNG v2 не редактируются вовсе** (только
+чтение и отладочные виды). Графический редактор кривых по-прежнему не реализован.
 
 ## 7. Re2D Baker (Prop и Character)
 
@@ -10170,8 +10263,9 @@ CI вызывает SDK native tests, CLI, expression regression, batch manifest
 Это закрытие перечисленных вертикальных срезов. Все компоненты дерева §8 спецификации
 теперь есть в реестре и открываются (Tilemap, Particle, Collision/Physics, Parallax,
 Font/Text, Audio, Input, RmlUi Studio, DevTools — §13–§16). Не реализованы:
-универсальный FBX-ретаргетинг, автоматическая метрика сравнения с исходным 3D, рисование поверхности,
-graph editor кривых, выбор элемента кликом в предпросмотре RmlUi Studio, drag-ресайз
+универсальный FBX-ретаргетинг, автоматическая метрика сравнения с исходным 3D,
+рисование **карт PNG v2** (правится только сетка контейнера v3 — вкладка «Сетка»,
+§6), graph editor кривых, выбор элемента кликом в предпросмотре RmlUi Studio, drag-ресайз
 фигур коллизии и drag зон акустики (числовые поля есть). ImGui удалён; весь UI и runtime диагностика — RmlUi.
 Процедурный walk, ступенчатые slopes, консервативный PVS и упрощение MToon описаны
 выше и не выдаются за авторскую анимацию, continuous slopes или lighting shader.
@@ -10184,6 +10278,20 @@ CMake собирает его автоматически; в Emscripten этот
 Опубликованные `dist/` 0.1.22 не содержат завершённый SDK.
 `tools/release.py` пока упаковывает engine/game/assets, а не SDK-приложение.
 Проверенная упаковка SDK остаётся в [TASKS.md](TASKS.md) §5.
+
+Короткий путь — [`./run_sdk.sh`](../run_sdk.sh): находит бинарник движка
+(`R2D_BINARY` → `build/russiano2d` → `build/nikiniki2d` → `build-release/russiano2d`),
+при необходимости собирает (`--build`, `NO_BUILD=1` отключает), проверяет наличие
+`build/r2d-sdk` и запускает движок с `--game sdk` **из корня репозитория** — от
+каталога запуска зависят `sdk_tools.json` и `sdk/state.local.json`. Свои флаги
+движка передаются дальше как есть:
+
+```bash
+./run_sdk.sh                        # открыть SDK
+./run_sdk.sh --stats                # с покадровой статистикой
+./run_sdk.sh --headless --seconds 5 # дымовой прогон без окна
+JOBS=4 ./run_sdk.sh --build         # пересобрать и открыть
+```
 
 ## 13. Студии данных Classic 2D
 
@@ -10385,7 +10493,7 @@ sdk_baker_modes. Подробные доказательства — SDK_HANDOFF
 
 # Недостающие возможности SDK и Re2D
 
-Обновлено 2026-10-10. Этот документ — очередь дальнейшей реализации.
+Обновлено 2026-10-11. Этот документ — очередь дальнейшей реализации.
 [SDK_HANDOFF.md](../SDK_HANDOFF.md) хранит изменения, команды, результаты и
 ошибки; здесь хранится то, что ещё нужно сделать, и условия приёмки.
 Статусы: **проверено**, **в работе**, **запланировано**. Наличие исходников
@@ -10454,7 +10562,7 @@ sdk_baker_modes. Подробные доказательства — SDK_HANDOFF
 `headYaw`/`bodyYaw` controls ограничивают поворот головы и передают остаток
 корпусу. Новые риги и карта кости остаются отдельными будущими возможностями.
 
-This is an evidence-based backlog, not a claim that every plan is implemented. Current code/data and specific acceptance tests remain authoritative. Last updated 2026-10-10; active work is tracked in SDK_HANDOFF.md.
+This is an evidence-based backlog, not a claim that every plan is implemented. Current code/data and specific acceptance tests remain authoritative. Last updated 2026-10-11; active work is tracked in SDK_HANDOFF.md.
 
 | Area | Current implementation / active work | Remaining capability | Acceptance criterion |
 |---|---|---|---|
@@ -10466,6 +10574,7 @@ This is an evidence-based backlog, not a claim that every plan is implemented. C
 | Retargeting | Current importer targets the existing mascot's ten humanoid bones with explicit image-side mapping and swing retargeting. | User-supplied source/target bone maps, differing rest poses/bone axes, missing bones, multiple stacks/clips, twist/roll preservation. | Different humanoid rigs retarget without hardcoded names; bind pose and bone length preserved; unsupported mappings return structured errors. |
 | Hands/fingers | Existing mascot rig does not expose finger bones. | Author finger surfaces/rig and import individual finger tracks; foot/hand contact constraints if required. | Visible articulation and seam inspection in real Re2DSprite output, not an imported 3D mesh preview. |
 | Motion loops | Current dance import bakes a short closing seam and in-place root movement. | General root-motion extraction, blend transitions, quaternion interpolation/bake continuity checks near singular rotations. | Loop boundary has no visible jump; root motion is explicit data consumed by game logic; deterministic pose tests. |
+| Re2DSprite v3 tooling | Native SDK now reads the dense v3 container (colour, position, normal+gloss, bones, weights): `re2d-info`/`re2d-debug`/`re2d-sample`/`validate` report version, W×H grid, extent, live texels, gloss range, weight sums and per-bone texel counts. `re2d3-paint` edits the texel grid (bone id+weight normalised to 255, gloss, colour) and rewrites the container; the Re2DSprite Studio «Сетка» tab paints with the mouse, keeps undo/redo and writes the PNG only on Save. Verified by tests/sdk/sdk_core_test.c (146 checks), tests/agent/sdk_re2d3_test.py (54 checks) and tests/js/sdk_re2d_model_test.mjs. | v2 surface maps stay read-only (no painting); the brush assigns one bone at weight 255 (no partial-weight smoothing) and never edits position/normal layers; `.surface.json` grid patches are not authored by the studio. | Opening a v3 asset no longer fails as "not PNG v2"; a painted container still loads in the runtime as v3 (`$.re2dSprite`); v2 assets keep working unchanged; id-space ambiguity (bone index+1 vs v2 part id) is reported as data, not guessed. |
 
 Keep this table current after verification. A passing generic suite does not prove untested acoustics, platform packaging, universal FBX retargeting or all camera angles. Detailed commands, evidence, failures and remaining risks belong in SDK_HANDOFF.md.
 
@@ -10512,7 +10621,8 @@ Input Tools, Particle Studio и Run/Package. Использует публичн
 
 ## Ограничения
 
-универсальный FBX-ретаргетинг (есть ограниченный Mixamo motion-import пресет), кисти поверхности, графические кривые и автоматическая численная метрика
+универсальный FBX-ретаргетинг (есть ограниченный Mixamo motion-import пресет), кисти по картам PNG v2
+(сетку контейнера Re2DSprite v3 правит вкладка «Сетка», см. [SDK.md](SDK.md) §6), графические кривые и автоматическая численная метрика
 сравнения не реализованы. Skin — dominant rigid ownership; walk процедурный,
 MToon lighting не переносится. Source-preview — C tool-only raster, справа
 настоящий Re2DSprite runtime. World runtime не использует PVS, slopes ступенчатые.

@@ -142,11 +142,91 @@ export function setDefaultMotion(def, name, clips) {
 export const MAP_W = 256;
 export const MAP_H = 192;
 
-/** Отсчёт карты под точкой экрана; null, если точка вне картинки. */
-export function sampleAt(view, sx, sy) {
+/** Отсчёт карты под точкой экрана; null, если точка вне картинки.
+ *  `gw`/`gh` — размер сетки: у карт v2 это 256×192, у контейнера v3 — W×H
+ *  из заголовка (docs/RE2DSPRITE_V3.md). */
+export function sampleAt(view, sx, sy, gw = MAP_W, gh = MAP_H) {
     const mx = Math.floor((sx - view.x) / view.cell);
     const my = Math.floor((sy - view.y) / view.cell);
-    return mx >= 0 && my >= 0 && mx < MAP_W && my < MAP_H ? { mx, my } : null;
+    return mx >= 0 && my >= 0 && mx < gw && my < gh ? { mx, my } : null;
+}
+
+// ---------------------------------------------------------------------------
+// Сетка текселей контейнера v3
+// ---------------------------------------------------------------------------
+
+/** Клетки квадратной кисти вокруг (cx, cy); всё за пределами сетки отброшено. */
+export function brushCells(cx, cy, size, gw = MAP_W, gh = MAP_H) {
+    const n = Math.max(1, Math.min(64, Math.floor(Number(size)) || 1));
+    const half = Math.floor((n - 1) / 2);
+    const out = [];
+    for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+            const gx = cx - half + x, gy = cy - half + y;
+            if (gx >= 0 && gy >= 0 && gx < gw && gy < gh) out.push([gx, gy]);
+        }
+    }
+    return out;
+}
+
+/** Клетки мазка («x,y» в наборе) → прямоугольники: горизонтальные прогоны. */
+export function strokeRects(keys) {
+    const rows = new Map();
+    for (const key of keys || []) {
+        const parts = String(key).split(',');
+        const x = Number(parts[0]), y = Number(parts[1]);
+        if (!Number.isInteger(x) || !Number.isInteger(y)) continue;
+        if (!rows.has(y)) rows.set(y, new Set());
+        rows.get(y).add(x);
+    }
+    const rects = [];
+    for (const y of [...rows.keys()].sort((a, b) => a - b)) {
+        const xs = [...rows.get(y)].sort((a, b) => a - b);
+        let start = xs[0], prev = xs[0];
+        for (let i = 1; i < xs.length; i++) {
+            if (xs[i] !== prev + 1) { rects.push([start, y, prev - start + 1, 1]); start = xs[i]; }
+            prev = xs[i];
+        }
+        rects.push([start, y, prev - start + 1, 1]);
+    }
+    return rects;
+}
+
+/** Масштаб отладочного вида сетки: целое 1…4, чтобы картинка влезала в предел. */
+export function gridScale(gw, gh, max = 1400) {
+    const safe = (v) => (Number.isFinite(v) && v > 0 ? v : 1);
+    const longest = Math.max(1, safe(gw), safe(gh));
+    return Math.max(1, Math.min(4, Math.floor(max / longest)));
+}
+
+/** Разбор строки цвета «#rrggbb» → [r, g, b] или null. */
+export function parseHexColor(text) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(text || '').trim());
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+const fmt2 = (v) => (typeof v === 'number' && Number.isFinite(v) ? (Math.round(v * 100) / 100).toString() : '—');
+
+/** Тексель контейнера v3 одним текстом: цвет, позиция, нормаль, блеск, кости. */
+export function describeTexel(s) {
+    if (!s) return '—';
+    const where = '(' + s.x + ', ' + s.y + ')';
+    if (!s.live) return where + ' · пусто';
+    const color = Array.isArray(s.color) ? s.color : [0, 0, 0, 0];
+    const pos = Array.isArray(s.position) ? s.position : [0, 0, 0];
+    const nrm = Array.isArray(s.normal) ? s.normal : [0, 0, 0];
+    const bones = (s.bones || []).filter((b) => b && b.weight > 0).map((b) => {
+        // id слоя трактуется двумя способами (факты описания, не догадка):
+        // индекс кости + 1 (bake-re2d3) или id части v2 (convert-re2d3).
+        const name = b.asBone && b.bone ? b.bone + ' (кость #' + b.id + ')'
+            : b.asPart && b.partBone ? 'часть ' + b.id + ' → ' + b.partBone
+                : '#' + b.id + ' (не описано)';
+        return name + ' ' + Math.round((b.weight / 255) * 100) + '%' + (b.dominant ? '*' : '');
+    }).join(' + ') || 'кости не заданы';
+    return where + ' · rgb(' + color.slice(0, 3).join(',') + ') · XYZ (' + fmt2(pos[0]) + ', ' + fmt2(pos[1]) + ', ' + fmt2(pos[2]) +
+        ') · N (' + fmt2(nrm[0]) + ', ' + fmt2(nrm[1]) + ', ' + fmt2(nrm[2]) + ') · блеск ' + s.gloss + ' · ' + bones;
 }
 
 /** Нормализованные углы просмотра: yaw ±180 с заворотом, pitch ±75 (как рантайм). */

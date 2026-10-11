@@ -1,6 +1,6 @@
 # Недостающие возможности SDK и Re2D
 
-Обновлено 2026-10-10. Этот документ — очередь дальнейшей реализации.
+Обновлено 2026-10-11. Этот документ — очередь дальнейшей реализации.
 [SDK_HANDOFF.md](../SDK_HANDOFF.md) хранит изменения, команды, результаты и
 ошибки; здесь хранится то, что ещё нужно сделать, и условия приёмки.
 Статусы: **проверено**, **в работе**, **запланировано**. Наличие исходников
@@ -69,7 +69,7 @@
 `headYaw`/`bodyYaw` controls ограничивают поворот головы и передают остаток
 корпусу. Новые риги и карта кости остаются отдельными будущими возможностями.
 
-This is an evidence-based backlog, not a claim that every plan is implemented. Current code/data and specific acceptance tests remain authoritative. Last updated 2026-10-10; active work is tracked in SDK_HANDOFF.md.
+This is an evidence-based backlog, not a claim that every plan is implemented. Current code/data and specific acceptance tests remain authoritative. Last updated 2026-10-11; active work is tracked in SDK_HANDOFF.md.
 
 | Area | Current implementation / active work | Remaining capability | Acceptance criterion |
 |---|---|---|---|
@@ -81,5 +81,6 @@ This is an evidence-based backlog, not a claim that every plan is implemented. C
 | Retargeting | Current importer targets the existing mascot's ten humanoid bones with explicit image-side mapping and swing retargeting. | User-supplied source/target bone maps, differing rest poses/bone axes, missing bones, multiple stacks/clips, twist/roll preservation. | Different humanoid rigs retarget without hardcoded names; bind pose and bone length preserved; unsupported mappings return structured errors. |
 | Hands/fingers | Existing mascot rig does not expose finger bones. | Author finger surfaces/rig and import individual finger tracks; foot/hand contact constraints if required. | Visible articulation and seam inspection in real Re2DSprite output, not an imported 3D mesh preview. |
 | Motion loops | Current dance import bakes a short closing seam and in-place root movement. | General root-motion extraction, blend transitions, quaternion interpolation/bake continuity checks near singular rotations. | Loop boundary has no visible jump; root motion is explicit data consumed by game logic; deterministic pose tests. |
+| Re2DSprite v3 tooling | Native SDK now reads the dense v3 container (colour, position, normal+gloss, bones, weights): `re2d-info`/`re2d-debug`/`re2d-sample`/`validate` report version, W×H grid, extent, live texels, gloss range, weight sums and per-bone texel counts. `re2d3-paint` edits the texel grid (bone id+weight normalised to 255, gloss, colour) and rewrites the container; the Re2DSprite Studio «Сетка» tab paints with the mouse, keeps undo/redo and writes the PNG only on Save. Verified by tests/sdk/sdk_core_test.c (146 checks), tests/agent/sdk_re2d3_test.py (54 checks) and tests/js/sdk_re2d_model_test.mjs. | v2 surface maps stay read-only (no painting); the brush assigns one bone at weight 255 (no partial-weight smoothing) and never edits position/normal layers; `.surface.json` grid patches are not authored by the studio. | Opening a v3 asset no longer fails as "not PNG v2"; a painted container still loads in the runtime as v3 (`$.re2dSprite`); v2 assets keep working unchanged; id-space ambiguity (bone index+1 vs v2 part id) is reported as data, not guessed. |
 
 Keep this table current after verification. A passing generic suite does not prove untested acoustics, platform packaging, universal FBX retargeting or all camera angles. Detailed commands, evidence, failures and remaining risks belong in SDK_HANDOFF.md.

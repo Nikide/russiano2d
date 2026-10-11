@@ -34,7 +34,8 @@ Input Tools, Particle Studio и Run/Package. Использует публичн
 
 ## Ограничения
 
-универсальный FBX-ретаргетинг (есть ограниченный Mixamo motion-import пресет), кисти поверхности, графические кривые и автоматическая численная метрика
+универсальный FBX-ретаргетинг (есть ограниченный Mixamo motion-import пресет), кисти по картам PNG v2
+(сетку контейнера Re2DSprite v3 правит вкладка «Сетка», см. [SDK.md](SDK.md) §6), графические кривые и автоматическая численная метрика
 сравнения не реализованы. Skin — dominant rigid ownership; walk процедурный,
 MToon lighting не переносится. Source-preview — C tool-only raster, справа
 настоящий Re2DSprite runtime. World runtime не использует PVS, slopes ступенчатые.

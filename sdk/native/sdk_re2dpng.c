@@ -303,6 +303,11 @@ void re2d_owners_load(const char *model_path, Re2dOwners *o)
     const R2dJson *rig = r2d_json_get(root, "rig");
     const R2dJson *bones = r2d_json_get(rig, "bones");
     const R2dJson *parts = r2d_json_get(rig, "parts");
+    // Кости по индексу: контейнер v3 хранит id = индекс кости + 1.
+    for (int b = 0; bones && b < bones->count && b < 255; ++b) {
+        snprintf(o->bone_names[b + 1], sizeof o->bone_names[b + 1], "%s", r2d_json_str(r2d_json_get(bones->items[b], "name"), ""));
+        o->bone_count = b + 1;
+    }
     for (int i = 0; parts && i < parts->count; ++i) {
         const R2dJson *p = parts->items[i];
         const int id = r2d_json_int(r2d_json_get(p, "id"), 0);
@@ -322,7 +327,9 @@ void re2d_owners_load(const char *model_path, Re2dOwners *o)
 // ---------------------------------------------------------------------------
 // Отладочный вид
 // ---------------------------------------------------------------------------
-static void hsv(float h, float s, float v, uint8_t *out)
+// Общие помощники отладочных видов: их используют и v2-карты, и контейнер v3
+// (sdk_re2d3.c). Отдельные копии палитр разошлись бы.
+void re2d_hsv(float h, float s, float v, uint8_t *out)
 {
     const float c = v * s;
     const float hp = fmodf(h, 360.0f) / 60.0f;
@@ -334,7 +341,7 @@ static void hsv(float h, float s, float v, uint8_t *out)
     out[0] = (uint8_t)((r + m) * 255); out[1] = (uint8_t)((g + m) * 255); out[2] = (uint8_t)((b + m) * 255);
 }
 
-static void ramp(float t, uint8_t *out)
+void re2d_ramp(float t, uint8_t *out)
 {
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     // тёмно-синий → бирюзовый → жёлтый
@@ -374,24 +381,24 @@ uint8_t *re2d_debug_image(const Re2dPng *png, int mode, const Re2dOwners *owners
                 if (s->a) { c[0] = s->r; c[1] = s->g; c[2] = s->b; }
                 break;
             case RE2D_MODE_PART:
-                if (act && s->id > 0) hsv((float)(s->id * 137), 0.65f, 0.95f, c);
+                if (act && s->id > 0) re2d_hsv((float)(s->id * 137), 0.65f, 0.95f, c);
                 else if (act) { c[0] = 255; c[1] = 0; c[2] = 255; }
                 break;
             case RE2D_MODE_OWNER:
                 if (act) {
-                    if (owners && s->id > 0 && owners->declared[s->id]) hsv((float)(owners->bone_index[s->id] * 47 + 10), 0.7f, 0.95f, c);
+                    if (owners && s->id > 0 && owners->declared[s->id]) re2d_hsv((float)(owners->bone_index[s->id] * 47 + 10), 0.7f, 0.95f, c);
                     else { c[0] = 255; c[1] = 0; c[2] = 255; }     // владелец не описан
                 }
                 break;
-            case RE2D_MODE_X: if (act) ramp((s->x + 32.0f) / 64.0f, c); break;
-            case RE2D_MODE_Y: if (act) ramp((s->y + 64.0f) / 128.0f, c); break;
-            case RE2D_MODE_Z: if (act) ramp((s->z + 32.0f) / 64.0f, c); break;
+            case RE2D_MODE_X: if (act) re2d_ramp((s->x + 32.0f) / 64.0f, c); break;
+            case RE2D_MODE_Y: if (act) re2d_ramp((s->y + 64.0f) / 128.0f, c); break;
+            case RE2D_MODE_Z: if (act) re2d_ramp((s->z + 32.0f) / 64.0f, c); break;
             case RE2D_MODE_COVERAGE:
                 if (s->coverage == 255) { c[0] = c[1] = c[2] = 240; }
                 else if (s->coverage == 128) { c[0] = c[1] = c[2] = 110; }
                 break;
             case RE2D_MODE_GROUP:
-                if (act) hsv((float)(s->group * 53 + 200), 0.55f, 0.9f, c);
+                if (act) re2d_hsv((float)(s->group * 53 + 200), 0.55f, 0.9f, c);
                 break;
             case RE2D_MODE_OVERLAP:
                 if (act) {

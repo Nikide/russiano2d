@@ -4,6 +4,7 @@
 // Собирается с ASan/UBSan (см. sdk/native/CMakeLists.txt).
 // ===========================================================================
 #include "sdk.h"
+#include "sdk_re2d3.h"
 
 #include <SDL3/SDL.h>
 
@@ -350,6 +351,214 @@ static void test_atlas(void)
         "{\"image\":\"hero.png\",\"frames\":{\"a\":{\"x\":0,\"y\":0,\"w\":4,\"h\":4}},\"tags\":{\"idle\":[\"a\",\"zzz\"]}}", c7, 1, "простые теги");
 }
 
+// ---------------------------------------------------------------------------
+// Re2DSprite v3: контейнер (docs/RE2DSPRITE_V3.md) — чтение, статистика,
+// правка сетки и запись. Контейнер собирается здесь же: 3 колонки × 2 ряда
+// слоёв, строка 0 — заголовок, alpha слоя позиции 255 — тексель существует.
+// ---------------------------------------------------------------------------
+static void enc_v3(float v, uint8_t *hi, uint8_t *lo)
+{
+    float q = (v + 128.0f) * 256.0f;
+    if (q < 0) q = 0;
+    if (q > 65535.0f) q = 65535.0f;
+    const uint16_t u = (uint16_t)(q + 0.5f);
+    *hi = (uint8_t)(u >> 8);
+    *lo = (uint8_t)u;
+}
+
+// `live_mode`: 0 — ни одного живого текселя, 1 — все живые, 2 — все, кроме
+// одного (проверка «мёртвый тексель внутри живой области»), 3 — все живые, но у
+// одного текселя нулевые веса.
+// `layers` — число слоёв в контейнере (6 — формат правки).
+static const char *put_v3_layers(const char *rel, int W, int H, int extent, int live_mode, int layers)
+{
+    const int cols = 3;
+    const int PW = W * cols, PH = 1 + ((layers + cols - 1) / cols) * H;
+    uint8_t *px = (uint8_t *)calloc((size_t)PW * PH * 4, 1);
+    const uint8_t head[7][4] = { { 82, 50, 68, 255 }, { 82, 79, 84, 255 }, { 3, 0, 0, 255 },
+                                 { (uint8_t)(W >> 8), (uint8_t)W, (uint8_t)(H >> 8), (uint8_t)H },
+                                 { cols, (uint8_t)layers, 0, 0 }, { (uint8_t)(extent >> 8), (uint8_t)extent, 0, 0 }, { 0, 0, 0, 0 } };
+    memcpy(px, head, sizeof head);
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            const bool live = live_mode == 1 || live_mode == 3 || (live_mode == 2 && !(x == 1 && y == 1));
+            uint8_t *l[6];
+            for (int k = 0; k < 6; ++k) l[k] = px + ((size_t)(1 + (k / cols) * H + y) * PW + (size_t)(k % cols) * W + x) * 4;
+            if (!live) continue;
+            l[0][0] = (uint8_t)(x * 3); l[0][1] = (uint8_t)(y * 3); l[0][2] = 64; l[0][3] = 255;
+            enc_v3((float)x - 32.0f, &l[1][0], &l[2][0]);
+            enc_v3((float)y - 32.0f, &l[1][1], &l[2][1]);
+            enc_v3(4.0f, &l[1][2], &l[2][2]);
+            l[1][3] = 255; l[2][3] = 255;
+            l[3][0] = 128; l[3][1] = 128; l[3][2] = 255; l[3][3] = 90;   // нормаль «в зрителя», блеск 90
+            l[4][0] = 1; l[4][1] = 0; l[4][2] = 0; l[4][3] = 0;          // кость id 2
+            if (live_mode == 3 && x == 5 && y == 5) continue;           // нулевые веса у одного текселя
+            l[5][0] = 255; l[5][1] = 0; l[5][2] = 0; l[5][3] = 0;
+        }
+    }
+    const char *path = p(rel);
+    char dir[1024];
+    sdk_dirname(path, dir, sizeof dir);
+    SDL_CreateDirectory(dir);
+    sdk_image_write_png(path, px, PW, PH);
+    free(px);
+    return path;
+}
+
+static const char *put_v3(const char *rel, int W, int H, int extent, int live_mode)
+{
+    return put_v3_layers(rel, W, H, extent, live_mode, 6);
+}
+
+static void test_re2d3(void)
+{
+    const char *path = put_v3("v3/hero.png", 64, 64, 128, 2);
+    Re2d3Png png;
+    memset(&png, 0, sizeof png);
+    CHECK(re2d_container_version(path, &png) == 3, "контейнер v3 опознан по заголовку в пикселях");
+    CHECK(png.header_ok && png.size_ok && png.editable, "заголовок, размер и шесть слоёв");
+    CHECK(png.tw == 64 && png.th == 64 && png.cols == 3 && png.layers == 6 && png.extent == 128, "поля заголовка прочитаны");
+    CHECK(png.w == 192 && png.h == 129, "размер PNG: 3 колонки × 2 ряда слоёв");
+
+    Re2d3Sample s;
+    re2d3_sample(&png, 10, 20, &s);
+    CHECK(s.live && s.px == -22.0f && s.py == -12.0f && s.pz == 4.0f, "позиция из 16-битных слоёв");
+    CHECK(s.rgba[0] == 30 && s.rgba[1] == 60 && s.rgba[3] == 255, "цвет слоя 0");
+    CHECK(s.gloss == 90 && s.bones[0] == 2 && s.weights[0] == 255, "блеск, id кости и вес текселя");
+    re2d3_sample(&png, 1, 1, &s);
+    CHECK(!s.live, "мёртвый тексель отличим от живого");
+
+    Re2d3Stats st;
+    re2d3_stats(&png, &st);
+    CHECK(st.live == 64 * 64 - 1 && st.slots == 64 * 64, "живых текселей на один меньше сетки");
+    CHECK(st.bones_used == 1 && st.bone_texels[2] == st.live, "кость 2 владеет всеми живыми текселями");
+    CHECK(st.bad_weights == 0 && st.zero_weights == 0, "веса в норме");
+    CHECK(st.gloss_min == 90 && st.gloss_max == 90, "блеск прочитан");
+    CHECK(st.pos_min[0] == -32.0f && st.pos_max[0] == 31.0f, "диапазон позиции по X");
+    CHECK(st.isolated == 0, "изолированных текселей нет");
+
+    // Правка сетки: кость, блеск, цвет — только по живым текселям.
+    const int bone7[4] = { 7, 0, 0, 0 }, weight255[4] = { 255, 0, 0, 0 };
+    const int bone9[4] = { 9, 0, 0, 0 };
+    const uint8_t red[3] = { 255, 0, 0 };
+    CHECK(re2d3_paint_bone(&png, 8, 8, 4, 4, bone7, weight255) == 16, "кость покрашена в 16 текселях");
+    CHECK(re2d3_paint_gloss(&png, 8, 8, 4, 4, 200) == 16, "блеск задан");
+    CHECK(re2d3_paint_color(&png, 8, 8, 2, 2, red) == 4, "цвет задан");
+    CHECK(re2d3_paint_bone(&png, 1, 1, 1, 1, bone9, weight255) == 0, "мёртвый тексель не красится");
+    // Клетка (1,1) мертва, поэтому живых в обрезанном прямоугольнике 15 из 16.
+    CHECK(re2d3_paint_gloss(&png, -4, -4, 8, 8, 10) == 15, "прямоугольник обрезан по границе сетки, мёртвый тексель пропущен");
+    re2d3_sample(&png, 9, 9, &s);
+    CHECK(s.bones[0] == 7 && s.gloss == 200 && s.rgba[0] == 255, "правка видна в отсчёте");
+
+    // Четыре кости с неравными долями: сумма весов ровно 255, ни один вес не
+    // «заворачивается» в 255 из-за отрицательного довеска (метод наибольших
+    // остатков). Набор {1,253,253,3} раньше давал сумму 511.
+    const int bone_mix[4] = { 1, 2, 3, 4 }, weight_mix[4] = { 1, 253, 253, 3 };
+    CHECK(re2d3_paint_bone(&png, 20, 20, 2, 2, bone_mix, weight_mix) == 4, "четыре кости покрашены");
+    re2d3_sample(&png, 20, 20, &s);
+    {
+        const int sum = s.weights[0] + s.weights[1] + s.weights[2] + s.weights[3];
+        int worst = 0;
+        for (int q = 0; q < 4; ++q) if (s.weights[q] > worst) worst = s.weights[q];
+        CHECK(sum == 255 && worst <= 255, "сумма весов ровно 255 после нормировки");
+        CHECK(s.weights[0] > 0 && s.weights[0] < 10 && s.weights[3] > 0 && s.weights[3] < 10,
+              "мелкие доли остались мелкими, а не 255");
+        CHECK(s.weights[1] > s.weights[0] && s.weights[2] > s.weights[3], "доминирование долей сохранено");
+    }
+
+    const char *out = p("v3/hero_painted.png");
+    CHECK(re2d3_write(&png, out), "контейнер записан");
+    re2d3_close(&png);
+
+    Re2d3Png again;
+    memset(&again, 0, sizeof again);
+    CHECK(re2d_container_version(out, &again) == 3, "записанный файл — контейнер v3");
+    CHECK(again.tw == 64 && again.th == 64 && again.extent == 128, "заголовок сохранён как был");
+    re2d3_sample(&again, 9, 9, &s);
+    CHECK(s.bones[0] == 7 && s.weights[0] == 255 && s.gloss == 200 && s.rgba[0] == 255, "правка пережила запись и чтение");
+    re2d3_close(&again);
+
+    // Отладочный вид: сетка × масштаб, без выхода за пределы изображения.
+    Re2d3Png view;
+    memset(&view, 0, sizeof view);
+    re2d_container_version(path, &view);
+    int vw = 0, vh = 0;
+    uint8_t *img = re2d3_debug_image(&view, RE2D3_MODE_OWNER, 2, &vw, &vh);
+    CHECK(img && vw == 128 && vh == 128, "вид «кость» — сетка × масштаб");
+    free(img);
+    img = re2d3_debug_image(&view, RE2D3_MODE_COVERAGE, 1, &vw, &vh);
+    CHECK(img && vw == 64 && vh == 64 && img[(1 * 64 + 1) * 4] == 48, "вид «покрытие» различает мёртвый тексель");
+    free(img);
+    CHECK(re2d3_debug_image(&view, RE2D3_MODE_OWNER, 99, &vw, &vh) == NULL, "масштаб вне 1..16 отвергнут");
+    CHECK(re2d3_mode_from_name("gloss") == RE2D3_MODE_GLOSS && re2d3_mode_from_name("part") < 0, "имена режимов v3");
+
+    SdkReport rep;
+    sdk_report_init(&rep);
+    re2d3_stats(&view, &st);
+    re2d3_validate_png(path, &view, &st, &rep);
+    CHECK(rep.errors == 0 && !has_code(&rep, "SDK_RE2D3_EMPTY"), "валидный контейнер без ошибок");
+    CHECK(report_is_json(&rep), "диагностика контейнера — JSON");
+    sdk_report_free(&rep);
+    re2d3_close(&view);
+
+    // Пустой контейнер: ни одного живого текселя.
+    const char *empty = put_v3("v3/empty.png", 64, 64, 128, 0);
+    Re2d3Png p3;
+    memset(&p3, 0, sizeof p3);
+    CHECK(re2d_container_version(empty, &p3) == 3, "пустой контейнер всё ещё контейнер v3");
+    re2d3_stats(&p3, &st);
+    sdk_report_init(&rep);
+    re2d3_validate_png(empty, &p3, &st, &rep);
+    CHECK(has_code(&rep, "SDK_RE2D3_EMPTY"), "пустая сетка — ошибка SDK_RE2D3_EMPTY");
+    sdk_report_free(&rep);
+    re2d3_close(&p3);
+
+    // Нулевые веса: факт данных, а не подставленная кость. Рантайм подставляет
+    // кость 1 сам (src/rotsprite3.c), SDK обязан показать то, что лежит в файле.
+    const char *zero = put_v3("v3/zero.png", 64, 64, 128, 3);
+    Re2d3Png pz;
+    memset(&pz, 0, sizeof pz);
+    CHECK(re2d_container_version(zero, &pz) == 3, "контейнер с нулевым весом читается");
+    re2d3_sample(&pz, 5, 5, &s);
+    CHECK(s.live && s.weights[0] + s.weights[1] + s.weights[2] + s.weights[3] == 0,
+          "нулевые веса не подменяются в отсчёте");
+    re2d3_stats(&pz, &st);
+    CHECK(st.zero_weights == 1 && st.bone_texels[2] + st.bone_texels[1] == st.live - 1,
+          "статистика считает нулевой вес и не приписывает фантомную кость");
+    sdk_report_init(&rep);
+    re2d3_validate_png(zero, &pz, &st, &rep);
+    CHECK(has_code(&rep, "SDK_RE2D3_WEIGHT_ZERO") && rep.errors == 0,
+          "нулевой вес — информация, а не ошибка: контейнер читается");
+    sdk_report_free(&rep);
+    re2d3_close(&pz);
+
+    // Контейнер с другим числом слоёв читается, но править его нельзя: формат
+    // правки рассчитан ровно на шесть слоёв. Размер при этом верный, поэтому
+    // диагностика — про слои, а не про «размеры не совпадают».
+    {
+        const char *seven_path = put_v3_layers("v3/seven.png", 64, 64, 128, 1, 7);
+        Re2d3Png seven;
+        memset(&seven, 0, sizeof seven);
+        CHECK(re2d_container_version(seven_path, &seven) == 3, "семь слоёв читаются");
+        CHECK(seven.size_ok && seven.header_ok && !seven.editable, "размер верный, правка недоступна");
+        re2d3_stats(&seven, &st);
+        sdk_report_init(&rep);
+        re2d3_validate_png(seven_path, &seven, &st, &rep);
+        CHECK(has_code(&rep, "SDK_RE2D3_LAYERS") && !has_code(&rep, "SDK_RE2D3_SIZE"),
+              "лишние слои — отдельная диагностика SDK_RE2D3_LAYERS, а не ошибка размера");
+        sdk_report_free(&rep);
+        re2d3_close(&seven);
+    }
+
+    // Обычная квадратная PNG v2 — это не контейнер v3.
+    const char *square = put_png("v3/square.png", 64, 64);
+    Re2d3Png not3;
+    memset(&not3, 0, sizeof not3);
+    CHECK(re2d_container_version(square, &not3) == 2, "квадратная PNG не считается контейнером v3");
+    CHECK(not3.px == NULL, "не-v3 контейнер закрыт сразу");
+    CHECK(re2d_container_version(p("v3/none.png"), &not3) == 0, "отсутствующий файл — 0");
+}
+
 static void test_args(void)
 {
     const char *argv[] = { "dir", "--registry", "r.json", "--headless", "second" };
@@ -376,6 +585,7 @@ int main(void)
     test_validate();
     test_image();
     test_atlas();
+    test_re2d3();
     test_args();
 
     SDL_RemovePath(g_tmp);

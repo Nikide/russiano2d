@@ -10,6 +10,7 @@
 // продублированы в C — это осознанная цена (docs/SDK.md §1).
 // ===========================================================================
 #include "sdk_re2d.h"
+#include "sdk_re2d3.h"
 
 #include <SDL3/SDL.h>
 
@@ -23,6 +24,11 @@ typedef struct Ctx {
     const char *asset;
     SdkReport  *rep;
 } Ctx;
+
+// Проверка контейнера v3 с описанием костей (реализация — ниже, рядом с
+// командами v3: одному описанию соответствуют один разбор и один набор кодов).
+static void v3_validate(const char *path, const Re2d3Png *png, const Re2d3Stats *st,
+                        const Re2dOwners *owners, SdkReport *rep);
 
 static const char *const FACE_EYES[] = { "open", "half", "closed", "happy", NULL };
 static const char *const FACE_MOUTH[] = { "closed", "open", "smile", "talk", NULL };
@@ -571,14 +577,25 @@ void sdk_validate_re2d_character(const char *path, SdkReport *rep)
             sdk_diag(rep, SDK_ERROR, "SDK_RE2D_ATLAS_MISSING", path, NULL, d.data, "PNG атласа «%s» не найден (%s)", atlas->string, png_path);
             r2d_sb_free(&d);
         } else {
-            Re2dPng png;
-            if (!re2d_png_open(png_path, &png)) {
-                sdk_diag(rep, SDK_ERROR, "SDK_RE2D_PNG_FORMAT", png_path, NULL, NULL, "Файл «%s» не читается как PNG", atlas->string);
+            Re2d3Png png3;
+            if (re2d_container_version(png_path, &png3) == 3) {
+                // Атлас — контейнер v3: карты 256×192 к нему не применяются.
+                Re2d3Stats st;
+                Re2dOwners owners;
+                re2d3_stats(&png3, &st);
+                re2d_owners_load(path, &owners);
+                v3_validate(png_path, &png3, &st, &owners, rep);
+                re2d3_close(&png3);
             } else {
-                Re2dStats st;
-                re2d_stats(&png, &st);
-                re2d_validate_png(png_path, &png, &st, declared, rep);
-                re2d_png_close(&png);
+                Re2dPng png;
+                if (!re2d_png_open(png_path, &png)) {
+                    sdk_diag(rep, SDK_ERROR, "SDK_RE2D_PNG_FORMAT", png_path, NULL, NULL, "Файл «%s» не читается как PNG", atlas->string);
+                } else {
+                    Re2dStats st;
+                    re2d_stats(&png, &st);
+                    re2d_validate_png(png_path, &png, &st, declared, rep);
+                    re2d_png_close(&png);
+                }
             }
         }
     }
@@ -610,7 +627,7 @@ static bool model_atlas_path(const char *model, char *out, size_t cap, SdkReport
 }
 
 // Общий разбор: <png | character.json> → путь PNG и (необязательно) путь модели.
-static bool resolve_inputs(const SdkArgs *a, char *png_path, size_t cap, const char **model_out, SdkReport *rep)
+bool re2d_resolve_inputs(const SdkArgs *a, char *png_path, size_t cap, const char **model_out, SdkReport *rep)
 {
     const char *input = sdk_arg_positional(a, 0);
     *model_out = sdk_arg_value(a, "--model");
@@ -621,6 +638,115 @@ static bool resolve_inputs(const SdkArgs *a, char *png_path, size_t cap, const c
     }
     snprintf(png_path, cap, "%s", input);
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// Re2DSprite v3: контейнер (docs/RE2DSPRITE_V3.md) — общий разбор и проверка
+// ---------------------------------------------------------------------------
+// Идентификатор слоя костей v3 трактуется двумя способами, и это факт данных:
+// `bake-re2d3` пишет индекс кости + 1, а `convert-re2d3` переносит id частей v2
+// (sdk/native/sdk_v2to3.c). Наружу отдаются оба имени; ни одно не выдумано.
+static void v3_id_info(const Re2dOwners *o, int id, bool *as_bone, const char **bone_name,
+                       bool *as_part, const char **part_bone)
+{
+    const bool bone_ok = o && id >= 1 && id <= 255 && o->bone_count >= id && o->bone_names[id][0];
+    const bool part_ok = o && id >= 1 && id <= 254 && o->declared[id];
+    if (as_bone) *as_bone = bone_ok;
+    if (bone_name) *bone_name = bone_ok ? o->bone_names[id] : NULL;
+    if (as_part) *as_part = part_ok;
+    if (part_bone) *part_bone = part_ok ? o->bones[id] : NULL;
+}
+
+// Проверка контейнера + сверка идентификаторов сетки с описанием модели.
+static void v3_validate(const char *path, const Re2d3Png *png, const Re2d3Stats *st,
+                        const Re2dOwners *owners, SdkReport *rep)
+{
+    re2d3_validate_png(path, png, st, rep);
+    if (!owners) return;
+    R2dSb undeclared;
+    r2d_sb_init(&undeclared);
+    int n = 0;
+    for (int id = 1; id <= 255; ++id) {
+        if (!st->bone_texels[id]) continue;
+        bool as_bone = false, as_part = false;
+        v3_id_info(owners, id, &as_bone, NULL, &as_part, NULL);
+        if (as_bone || as_part) continue;
+        r2d_sb_printf(&undeclared, "%s%d", n++ ? "," : "", id);
+    }
+    if (n) {
+        R2dSb d;
+        r2d_sb_init(&d);
+        r2d_sb_printf(&d, "{\"ids\":[%s]}", undeclared.data);
+        sdk_diag(rep, SDK_WARNING, "SDK_RE2D3_ID_UNDECLARED", path, NULL, d.data,
+                 "В сетке есть идентификаторы без описания: ни индекс кости + 1, ни id части v2: %s", undeclared.data);
+        r2d_sb_free(&d);
+    }
+    r2d_sb_free(&undeclared);
+}
+
+// `re2d-info` для контейнера v3: печатает свой JSON и возвращает код выхода.
+// `png` уже открыт вызывающим (одна декодировка на команду).
+static int re2d_info_v3(const char *png_path, const char *model, Re2d3Png *png, SdkReport *rep)
+{
+    const bool opened = png->header_ok && png->size_ok;
+    Re2d3Stats st;
+    Re2dOwners owners;
+    re2d_owners_load(model, &owners);
+    if (opened) {
+        re2d3_stats(png, &st);
+        v3_validate(png_path, png, &st, model ? &owners : NULL, rep);
+    } else if (png->header_ok) {
+        // Заголовок v3 есть, размеры не сходятся: причина должна быть названа,
+        // а не оставлять `ok:false` с пустой диагностикой (студия зовёт именно
+        // re2d-info).
+        re2d3_stats(png, &st);
+        re2d3_validate_png(png_path, png, &st, rep);
+    }
+    R2dSb out;
+    r2d_sb_init(&out);
+    r2d_sb_printf(&out, "{\"ok\":%s,", opened && rep->errors == 0 ? "true" : "false");
+    sdk_put_kv_str(&out, "atlas", opened ? png_path : NULL);
+    r2d_sb_putc(&out, ',');
+    sdk_put_kv_str(&out, "format", "v3");
+    if (opened) {
+        r2d_sb_printf(&out, ",\"png\":{\"w\":%d,\"h\":%d,\"cols\":%d,\"layers\":%d,\"extent\":%d,\"grid\":[%d,%d]},",
+                      png->w, png->h, png->cols, png->layers, png->extent, png->tw, png->th);
+        r2d_sb_printf(&out, "\"samples\":{\"live\":%d,\"slots\":%d,\"coverage\":%.4f,\"isolated\":%d},",
+                      st.live, st.slots, st.slots ? (double)st.live / st.slots : 0.0, st.isolated);
+        r2d_sb_printf(&out, "\"materials\":{\"gloss\":{\"min\":%d,\"max\":%d,\"mean\":%.2f},"
+                            "\"weights\":{\"bad\":%d,\"zero\":%d},\"normal\":{\"zero\":%d},"
+                            "\"position\":{\"min\":[%.2f,%.2f,%.2f],\"max\":[%.2f,%.2f,%.2f]}},",
+                      st.gloss_min, st.gloss_max, st.gloss_mean, st.bad_weights, st.zero_weights, st.bad_normal,
+                      st.pos_min[0], st.pos_min[1], st.pos_min[2], st.pos_max[0], st.pos_max[1], st.pos_max[2]);
+        r2d_sb_puts(&out, "\"bones\":[");
+        int n = 0;
+        for (int id = 1; id <= 255; ++id) {
+            bool as_bone = false, as_part = false;
+            const char *bone_name = NULL, *part_bone = NULL;
+            v3_id_info(&owners, id, &as_bone, &bone_name, &as_part, &part_bone);
+            if (!st.bone_texels[id] && !as_bone && !as_part) continue;
+            if (n++) r2d_sb_putc(&out, ',');
+            r2d_sb_printf(&out, "{\"id\":%d,\"texels\":%d,\"weight\":%.0f,\"asBone\":%s,\"bone\":",
+                          id, st.bone_texels[id], st.bone_weight[id], as_bone ? "true" : "false");
+            if (bone_name) r2d_sb_put_json_string(&out, bone_name);
+            else r2d_sb_puts(&out, "null");
+            r2d_sb_printf(&out, ",\"asPart\":%s,\"partBone\":", as_part ? "true" : "false");
+            if (part_bone) r2d_sb_put_json_string(&out, part_bone);
+            else r2d_sb_puts(&out, "null");
+            r2d_sb_putc(&out, '}');
+        }
+        r2d_sb_puts(&out, "],");
+    } else {
+        r2d_sb_puts(&out, ",\"png\":null,\"samples\":null,\"materials\":null,\"bones\":[],");
+    }
+    sdk_report_put_counts(rep, &out);
+    r2d_sb_putc(&out, ',');
+    sdk_report_put(rep, &out);
+    r2d_sb_putc(&out, '}');
+    emit(&out);
+    const int rc = opened && rep->errors == 0 ? 0 : 1;
+    r2d_sb_free(&out);
+    return rc;
 }
 
 int sdk_cmd_re2d_info(const SdkArgs *a)
@@ -635,7 +761,15 @@ int sdk_cmd_re2d_info(const SdkArgs *a)
     }
     char png_path[2048] = "";
     const char *model = NULL;
-    const bool ok_input = resolve_inputs(a, png_path, sizeof png_path, &model, &rep);
+    Re2d3Png png_probe;
+    memset(&png_probe, 0, sizeof png_probe);
+    const bool ok_input = re2d_resolve_inputs(a, png_path, sizeof png_path, &model, &rep);
+    if (ok_input && re2d_container_version(png_path, &png_probe) == 3) {
+        const int rc = re2d_info_v3(png_path, model, &png_probe, &rep);
+        re2d3_close(&png_probe);
+        sdk_report_free(&rep);
+        return rc;
+    }
     Re2dPng png;
     bool opened = ok_input && re2d_png_open(png_path, &png);
     if (ok_input && !opened) sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_PNG_FORMAT", png_path, NULL, NULL, "PNG не найден или не читается: %s", png_path);
@@ -651,6 +785,10 @@ int sdk_cmd_re2d_info(const SdkArgs *a)
     }
     r2d_sb_printf(&out, "{\"ok\":%s,", opened && rep.errors == 0 ? "true" : "false");
     sdk_put_kv_str(&out, "atlas", opened ? png_path : NULL);
+    r2d_sb_putc(&out, ',');
+    // `format` называет версию только тогда, когда файл действительно прочитан:
+    // «на всякий случай v2» — это догадка, а не факт.
+    sdk_put_kv_str(&out, "format", opened ? "v2" : NULL);
     if (opened) {
         r2d_sb_printf(&out, ",\"png\":{\"w\":%d,\"h\":%d,\"k\":%d,\"sizeOk\":%s,\"headerOk\":%s,\"sub\":%s,\"bld\":%s},", png.w, png.h, png.k,
                       png.size_ok ? "true" : "false", png.header_ok ? "true" : "false", png.sub ? "true" : "false", png.bld ? "true" : "false");
@@ -690,19 +828,21 @@ int sdk_cmd_re2d_debug(const SdkArgs *a)
     const char *mode_name = sdk_arg_value(a, "--mode");
     if (!sdk_arg_positional(a, 0) || !out_path || !mode_name) {
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d-sdk re2d-debug <png | character.json> --mode material|part|owner|x|y|z|coverage|group|overlap --out файл.png [--scale 1..16] [--model описание.json]");
+            "Использование: r2d-sdk re2d-debug <png | character.json> --mode РЕЖИМ --out файл.png [--scale 1..16] [--model описание.json]; "
+            "карты v2: material|part|owner|x|y|z|coverage|group|overlap; контейнер v3: material|normal|gloss|owner|weight|coverage|x|y|z");
         sdk_report_free(&rep);
         return rc;
     }
-    const int mode = re2d_mode_from_name(mode_name);
-    if (mode < 0) {
+    const int mode2 = re2d_mode_from_name(mode_name);
+    const int mode3 = re2d3_mode_from_name(mode_name);
+    if (mode2 < 0 && mode3 < 0) {
         const int rc = sdk_fail(&rep, "SDK_RE2D_MODE", "Неизвестный режим «%s»", mode_name);
         sdk_report_free(&rep);
         return rc;
     }
     char png_path[2048] = "";
     const char *model = NULL;
-    if (!resolve_inputs(a, png_path, sizeof png_path, &model, &rep)) {
+    if (!re2d_resolve_inputs(a, png_path, sizeof png_path, &model, &rep)) {
         R2dSb o;
         r2d_sb_init(&o);
         r2d_sb_puts(&o, "{\"ok\":false,");
@@ -714,30 +854,65 @@ int sdk_cmd_re2d_debug(const SdkArgs *a)
         return 1;
     }
     const char *scale_arg = sdk_arg_value(a, "--scale");
-    const int scale = scale_arg ? atoi(scale_arg) : 3;
-    Re2dPng png;
+    Re2d3Png png3;
+    memset(&png3, 0, sizeof png3);
+    const int version = re2d_container_version(png_path, &png3);
+    int w = 0, h = 0, scale_used = scale_arg ? atoi(scale_arg) : 3;
+    int map_w = RE2D_MAP_W, map_h = RE2D_MAP_H;
     bool ok = false;
-    int w = 0, h = 0;
-    if (!re2d_png_open(png_path, &png)) {
-        sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_PNG_FORMAT", png_path, NULL, NULL, "PNG не найден или не читается: %s", png_path);
-    } else if (!png.size_ok || !png.header_ok) {
-        sdk_diag(&rep, SDK_ERROR, png.size_ok ? "SDK_RE2D_PNG_HEADER" : "SDK_RE2D_PNG_SIZE", png_path, NULL, NULL,
-                 "Это не PNG Re2DSprite v2: отладочный вид строится по картам поверхности");
-    } else {
-        Re2dOwners owners;
-        re2d_owners_load(model, &owners);
-        uint8_t *img = re2d_debug_image(&png, mode, &owners, scale, &w, &h);
-        if (!img) {
-            sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_DEBUG", png_path, NULL, NULL, "Не удалось построить вид (scale 1..16)");
+    if (version == 3) {
+        // Контейнер v3: сетка текселей, а не карты 256×192.
+        if (mode3 < 0) {
+            sdk_diag(&rep, SDK_ERROR, "SDK_RE2D3_MODE", png_path, NULL, NULL,
+                     "Режим «%s» есть только у карт v2; контейнер v3 принимает material|normal|gloss|owner|weight|coverage|x|y|z", mode_name);
+        } else if (!png3.header_ok || !png3.size_ok) {
+            Re2d3Stats st;
+            re2d3_stats(&png3, &st);
+            re2d3_validate_png(png_path, &png3, &st, &rep);
         } else {
-            char dir[1024];
-            sdk_dirname(out_path, dir, sizeof dir);
-            if (!sdk_is_dir(dir)) SDL_CreateDirectory(dir);
-            ok = sdk_image_write_png(out_path, img, w, h);
-            if (!ok) sdk_diag(&rep, SDK_ERROR, "SDK_WRITE_FAILED", out_path, NULL, NULL, "Не удалось записать %s", out_path);
-            free(img);
+            map_w = png3.tw;
+            map_h = png3.th;
+            if (!scale_arg) scale_used = (png3.tw > 512 || png3.th > 512) ? 1 : 3;
+            uint8_t *img = re2d3_debug_image(&png3, mode3, scale_used, &w, &h);
+            if (!img) {
+                sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_DEBUG", png_path, NULL, NULL,
+                         "Не удалось построить вид v3 (scale 1..16, размер не больше 8192, не больше 64 Мпикс)");
+            } else {
+                char dir[1024];
+                sdk_dirname(out_path, dir, sizeof dir);
+                if (!sdk_is_dir(dir)) SDL_CreateDirectory(dir);
+                ok = sdk_image_write_png(out_path, img, w, h);
+                if (!ok) sdk_diag(&rep, SDK_ERROR, "SDK_WRITE_FAILED", out_path, NULL, NULL, "Не удалось записать %s", out_path);
+                free(img);
+            }
         }
-        re2d_png_close(&png);
+        re2d3_close(&png3);
+    } else {
+        Re2dPng png;
+        if (!re2d_png_open(png_path, &png)) {
+            sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_PNG_FORMAT", png_path, NULL, NULL, "PNG не найден или не читается: %s", png_path);
+        } else if (!png.size_ok || !png.header_ok) {
+            sdk_diag(&rep, SDK_ERROR, png.size_ok ? "SDK_RE2D_PNG_HEADER" : "SDK_RE2D_PNG_SIZE", png_path, NULL, NULL,
+                     "Это не PNG Re2DSprite v2: отладочный вид строится по картам поверхности");
+        } else if (mode2 < 0) {
+            sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_MODE", png_path, NULL, NULL,
+                     "Режим «%s» есть только у контейнера v3; карты v2 принимают material|part|owner|x|y|z|coverage|group|overlap", mode_name);
+        } else {
+            Re2dOwners owners;
+            re2d_owners_load(model, &owners);
+            uint8_t *img = re2d_debug_image(&png, mode2, &owners, scale_used, &w, &h);
+            if (!img) {
+                sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_DEBUG", png_path, NULL, NULL, "Не удалось построить вид (scale 1..16)");
+            } else {
+                char dir[1024];
+                sdk_dirname(out_path, dir, sizeof dir);
+                if (!sdk_is_dir(dir)) SDL_CreateDirectory(dir);
+                ok = sdk_image_write_png(out_path, img, w, h);
+                if (!ok) sdk_diag(&rep, SDK_ERROR, "SDK_WRITE_FAILED", out_path, NULL, NULL, "Не удалось записать %s", out_path);
+                free(img);
+            }
+            re2d_png_close(&png);
+        }
     }
     R2dSb o;
     r2d_sb_init(&o);
@@ -745,7 +920,13 @@ int sdk_cmd_re2d_debug(const SdkArgs *a)
     sdk_put_kv_str(&o, "mode", mode_name);
     r2d_sb_putc(&o, ',');
     sdk_put_kv_str(&o, "out", ok ? out_path : NULL);
-    r2d_sb_printf(&o, ",\"w\":%d,\"h\":%d,\"scale\":%d,\"mapW\":%d,\"mapH\":%d,", w, h, scale, RE2D_MAP_W, RE2D_MAP_H);
+    r2d_sb_putc(&o, ',');
+    // 0 — файл не декодировался: версия неизвестна, а не «v2 по умолчанию».
+    sdk_put_kv_str(&o, "format", version == 3 ? "v3" : version == 2 ? "v2" : NULL);
+    // У v3 сетка берётся из заголовка: на неуспешной ветке её нет, и печатать
+    // 256×192 (размер карт v2) значило бы выдумывать факт.
+    if (version == 3 && !ok) r2d_sb_printf(&o, ",\"w\":%d,\"h\":%d,\"scale\":%d,", w, h, scale_used);
+    else r2d_sb_printf(&o, ",\"w\":%d,\"h\":%d,\"scale\":%d,\"mapW\":%d,\"mapH\":%d,", w, h, scale_used, map_w, map_h);
     sdk_report_put_counts(&rep, &o);
     r2d_sb_putc(&o, ',');
     sdk_report_put(&rep, &o);
@@ -769,37 +950,85 @@ int sdk_cmd_re2d_sample(const SdkArgs *a)
     }
     char png_path[2048] = "";
     const char *model = NULL;
-    bool ok = resolve_inputs(a, png_path, sizeof png_path, &model, &rep);
+    bool ok = re2d_resolve_inputs(a, png_path, sizeof png_path, &model, &rep);
+    const int mx = atoi(xs), my = atoi(ys);
     Re2dPng png;
     Re2dSample s;
+    Re2d3Png png3;
+    Re2d3Sample s3;
+    memset(&png, 0, sizeof png);
     memset(&s, 0, sizeof s);
-    if (ok && !re2d_png_open(png_path, &png)) {
-        sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_PNG_FORMAT", png_path, NULL, NULL, "PNG не найден или не читается: %s", png_path);
-        ok = false;
-    } else if (ok) {
-        const int mx = atoi(xs), my = atoi(ys);
-        if (!png.size_ok || mx < 0 || my < 0 || mx >= RE2D_MAP_W || my >= RE2D_MAP_H) {
-            sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_SAMPLE_RANGE", png_path, NULL, NULL, "Отсчёт (%d,%d) вне карты %dx%d", mx, my, RE2D_MAP_W, RE2D_MAP_H);
+    memset(&png3, 0, sizeof png3);
+    memset(&s3, 0, sizeof s3);
+    const int version = ok ? re2d_container_version(png_path, &png3) : 0;
+    const bool is_v3 = version == 3;
+    if (ok && is_v3) {
+        if (!png3.header_ok || !png3.size_ok) {
+            Re2d3Stats st;
+            re2d3_stats(&png3, &st);
+            re2d3_validate_png(png_path, &png3, &st, &rep);
+            ok = false;
+        } else if (mx < 0 || my < 0 || mx >= png3.tw || my >= png3.th) {
+            sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_SAMPLE_RANGE", png_path, NULL, NULL, "Тексель (%d,%d) вне сетки %dx%d", mx, my, png3.tw, png3.th);
             ok = false;
         } else {
-            re2d_sample(&png, mx, my, &s);
+            re2d3_sample(&png3, mx, my, &s3);
         }
-        re2d_png_close(&png);
+    } else if (ok) {
+        if (!re2d_png_open(png_path, &png)) {
+            sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_PNG_FORMAT", png_path, NULL, NULL, "PNG не найден или не читается: %s", png_path);
+            ok = false;
+        } else {
+            if (!png.size_ok || mx < 0 || my < 0 || mx >= RE2D_MAP_W || my >= RE2D_MAP_H) {
+                sdk_diag(&rep, SDK_ERROR, "SDK_RE2D_SAMPLE_RANGE", png_path, NULL, NULL, "Отсчёт (%d,%d) вне карты %dx%d", mx, my, RE2D_MAP_W, RE2D_MAP_H);
+                ok = false;
+            } else {
+                re2d_sample(&png, mx, my, &s);
+            }
+            re2d_png_close(&png);
+        }
     }
     Re2dOwners owners;
     re2d_owners_load(model, &owners);
     R2dSb o;
     r2d_sb_init(&o);
     r2d_sb_printf(&o, "{\"ok\":%s,", ok ? "true" : "false");
-    if (ok) {
-        r2d_sb_printf(&o, "\"sample\":{\"mx\":%d,\"my\":%d,\"id\":%d,\"group\":%d,\"id2\":%d,\"coverage\":%d,\"x\":%g,\"y\":%g,\"z\":%g,\"alphaOk\":%s,"
+    sdk_put_kv_str(&o, "format", version == 3 ? "v3" : version == 2 ? "v2" : NULL);
+    if (ok && is_v3) {
+        int best = 0;
+        for (int q = 1; q < 4; ++q) if (s3.weights[q] > s3.weights[best]) best = q;
+        r2d_sb_printf(&o, ",\"sample\":{\"x\":%d,\"y\":%d,\"live\":%s,\"color\":[%d,%d,%d,%d],"
+                          "\"position\":[%.3f,%.3f,%.3f],\"normal\":[%.3f,%.3f,%.3f],\"gloss\":%d,"
+                          "\"weightsSum\":%d,\"bones\":[",
+                      s3.x, s3.y, s3.live ? "true" : "false", s3.rgba[0], s3.rgba[1], s3.rgba[2], s3.rgba[3],
+                      s3.px, s3.py, s3.pz, s3.nx, s3.ny, s3.nz, s3.gloss,
+                      s3.weights[0] + s3.weights[1] + s3.weights[2] + s3.weights[3]);
+        int n = 0;
+        for (int q = 0; q < 4; ++q) {
+            if (!s3.weights[q]) continue;
+            if (n++) r2d_sb_putc(&o, ',');
+            bool as_bone = false, as_part = false;
+            const char *bone_name = NULL, *part_bone = NULL;
+            v3_id_info(&owners, s3.bones[q], &as_bone, &bone_name, &as_part, &part_bone);
+            r2d_sb_printf(&o, "{\"id\":%d,\"weight\":%d,\"dominant\":%s,\"asBone\":%s,\"bone\":",
+                          s3.bones[q], s3.weights[q], q == best ? "true" : "false", as_bone ? "true" : "false");
+            if (bone_name) r2d_sb_put_json_string(&o, bone_name);
+            else r2d_sb_puts(&o, "null");
+            r2d_sb_printf(&o, ",\"asPart\":%s,\"partBone\":", as_part ? "true" : "false");
+            if (part_bone) r2d_sb_put_json_string(&o, part_bone);
+            else r2d_sb_puts(&o, "null");
+            r2d_sb_putc(&o, '}');
+        }
+        r2d_sb_puts(&o, "]},");
+    } else if (ok) {
+        r2d_sb_printf(&o, ",\"sample\":{\"mx\":%d,\"my\":%d,\"id\":%d,\"group\":%d,\"id2\":%d,\"coverage\":%d,\"x\":%g,\"y\":%g,\"z\":%g,\"alphaOk\":%s,"
                           "\"color\":[%d,%d,%d,%d],\"bone\":",
                       s.mx, s.my, s.id, s.group, s.id2, s.coverage, s.x, s.y, s.z, s.alpha_ok ? "true" : "false", s.r, s.g, s.b, s.a);
         if (s.id >= 1 && s.id <= 254 && owners.declared[s.id]) r2d_sb_put_json_string(&o, owners.bones[s.id]);
         else r2d_sb_puts(&o, "null");
         r2d_sb_puts(&o, "},");
     } else {
-        r2d_sb_puts(&o, "\"sample\":null,");
+        r2d_sb_puts(&o, ",\"sample\":null,");
     }
     sdk_report_put_counts(&rep, &o);
     r2d_sb_putc(&o, ',');
@@ -807,6 +1036,7 @@ int sdk_cmd_re2d_sample(const SdkArgs *a)
     r2d_sb_putc(&o, '}');
     emit(&o);
     r2d_sb_free(&o);
+    if (png3.px) re2d3_close(&png3);
     sdk_report_free(&rep);
     return ok ? 0 : 1;
 }

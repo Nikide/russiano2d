@@ -45,6 +45,10 @@ bool re2d_png_open(const char *path, Re2dPng *png);
 void re2d_png_close(Re2dPng *png);
 void re2d_sample(const Re2dPng *png, int mx, int my, Re2dSample *out);
 
+// Палитры отладочных видов — общие для карт v2 и контейнера v3.
+void re2d_hsv(float h, float s, float v, uint8_t *out);
+void re2d_ramp(float t, uint8_t *out);
+
 // Режимы отладочного вида (имена совпадают с --mode CLI).
 typedef enum Re2dMode {
     RE2D_MODE_MATERIAL = 0,
@@ -69,10 +73,17 @@ typedef struct Re2dOwners {
     char bones[256][80];
     int  bone_index[256];   // индекс кости для раскраски
     bool declared[256];
+    // Кости по индексу (id = индекс + 1): так адресует кости контейнер v3.
+    int  bone_count;
+    char bone_names[256][80];
 } Re2dOwners;
 
 // Загружает владельцев частей из character.json (NULL → пусто).
 void re2d_owners_load(const char *model_path, Re2dOwners *owners);
+
+// Общий разбор входа команд Re2DSprite: <png | character.json> → путь PNG и
+// (необязательно) путь описания модели. Используется и v2-, и v3-командами.
+bool re2d_resolve_inputs(const SdkArgs *a, char *png_path, size_t cap, const char **model_out, SdkReport *rep);
 
 // Строит RGBA-изображение (RE2D_MAP_W*scale × RE2D_MAP_H*scale) отладочного вида.
 uint8_t *re2d_debug_image(const Re2dPng *png, int mode, const Re2dOwners *owners, int scale, int *w, int *h);

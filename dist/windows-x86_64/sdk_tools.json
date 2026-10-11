@@ -146,8 +146,8 @@
     {
       "id": "re2dsprite-studio",
       "name": "Re2DSprite Studio",
-      "description": "Настоящий Re2DSprite runtime: ракурс, debug-карты поверхности, скелет и сокеты; правка клипов/эмоций/вариантов/экипировки, timeline seek, undo/redo, сохранение и проверка.",
-      "last_updated": "2026-10-08T21:40:00+03:00",
+      "description": "Настоящий Re2DSprite runtime: ракурс, debug-виды поверхности карт v2 и сетки контейнера v3, редактор сетки v3 (кость, блеск, цвет), скелет и сокеты; правка клипов/эмоций/вариантов/экипировки, timeline seek, undo/redo, сохранение и проверка.",
+      "last_updated": "2026-10-11T06:20:00+03:00",
       "entry": "re2dsprite-studio",
       "category": "re2d",
       "assets": [
