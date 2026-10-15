@@ -126,6 +126,15 @@ export function installKinds($) {
     registerKind(KIND_2D, { title: 'Обычный 2D' });
     registerKind(KIND_RE2D, { title: 'Re2D: 2.5D поверх того же мира' });
 
+    // Вид `re2d` — это данные узла (`.kind(Re2D)` переживает JSON, prefab и
+    // снимок), поэтому вид регистрируется всегда, в обеих сборках.
+    //
+    // Отрисовщик по умолчанию — «вид узел не берёт»: сборка без RE2D
+    // (R2D_ENABLE_RE2D=OFF) не устанавливает модуль re2d.js, и узел с видом
+    // `re2d` рисуется обычным 2D-путём. Когда модуль есть, installRe2d()
+    // перекрывает этот отрисовщик своим (registerKindRenderer заменяет прежний).
+    registerKindRenderer(KIND_RE2D, () => false);
+
     // Константа Re2D: канонически $.Re2D, плюс глобальное имя — чтобы читалось
     // `.kind(Re2D)`. Строка, а не объект: переживает JSON, prefab и inspect.
     ctx.normalizeKind = normalizeKind;   // для Node.set('kind'): core.js не импортирует kinds.js

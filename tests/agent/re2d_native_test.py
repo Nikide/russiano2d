@@ -21,6 +21,7 @@ import zlib
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent   # noqa: E402
+from re2d_skip import skip_without_re2d   # noqa: E402
 
 GAME = os.path.join("tests", "fixtures", "re2d_native")
 FAILURES = []
@@ -125,6 +126,8 @@ def wall(x, y0, y1, z0, z1, rgb):
 
 def main():
     with Agent(game=GAME, seed=5, fixed_dt=1.0 / 60.0) as a:
+        if skip_without_re2d(a):
+            return
         check(a.eval("typeof engine.re2d") == "object", "engine.re2d доступен")
         # Игре engine не виден; фикстуре нативный слой отдаёт агентский eval.
         a.eval("globalThis.__native = engine; true")

@@ -23,9 +23,23 @@ test('createApi работает без движка', () => {
 
 test('новые подсистемы на месте', () => {
     const $ = createApi();
-    for (const name of ['proc', 'cels', 'raid', 'weapons', 'combat', 'items', 'story']) {
+    for (const name of ['proc', 'raid', 'weapons', 'combat', 'items', 'story']) {
         truthy($[name], `$.${name} установлена`);
     }
+});
+
+// Заглушка движка в харнессе не имеет нативных RE2D-биндингов
+// (`engine.re2d.view`), поэтому это ещё и проверка сборки без RE2D
+// (R2D_ENABLE_RE2D=OFF, см. src/CMakeLists.txt): 3D-семейство не ставится,
+// обычный 2D работает, а $.re2dEnabled честно говорит «нет».
+test('без RE2D-биндингов 3D-семейство не ставится', () => {
+    const $ = createApi();
+    eq($.re2dEnabled, false, '$.re2dEnabled=false без нативных биндингов');
+    for (const name of ['cels', 're2d', 'rotsprite', 'real2d', 'mesh', 're2dWorld']) {
+        eq($[name], undefined, `$.${name} не установлена`);
+    }
+    truthy(typeof $.kinds.has === 'function' && $.kinds.has('re2d'),
+           'вид re2d остаётся данными даже без модуля');
 });
 
 test('engineOf без движка не бросает', () => {

@@ -4,6 +4,9 @@ import json, math, sys, tempfile
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 from agent_client import Agent,ROOT
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from re2d_skip import skip_without_re2d   # noqa: E402
 
 def main():
  with tempfile.TemporaryDirectory(prefix='r2d-json-') as temp:
@@ -13,6 +16,8 @@ def main():
   d['atlas']=str(Path(ROOT)/'demos/assets/art/mascot/russi_model_maid.png');d['animations']=str(Path(ROOT)/'demos/rotsprite/russi.animations.json')
   path.write_text(json.dumps(d))
   with Agent(game='tests/fixtures/rotsprite',seed=11) as a:
+   if skip_without_re2d(a):
+       return
    a.step(2);before=a.eval('engine.limits().textures')
    a.eval(f"globalThis.sizeTest=$.rotSprite.from({{version:1,atlas:{str(Path(temp)/'prop3072.png')!r},rig:{{bones:[{{name:'root'}}],parts:[{{id:80,bone:'root'}}]}},defaults:{{body:true}}}})")
    assert a.eval('$.rotSprite.info(sizeTest).atlasWidth')==3072;a.eval('sizeTest.remove()')

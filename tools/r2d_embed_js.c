@@ -79,12 +79,33 @@ static char *read_file(const char *path, size_t *out_size)
 int main(int argc, char **argv)
 {
     if (argc < 3) {
-        fprintf(stderr, "использование: r2d_embed_js <каталог> <заголовок>\n");
+        fprintf(stderr, "использование: r2d_embed_js <каталог> <заголовок> [--exclude имя,имя]\n");
         return 2;
     }
 
     const char *dir = argv[1];
     const char *out_path = argv[2];
+
+    // Необязательный список исключений: модули, которых в этой сборке нет.
+    // Так сборка без RE2D (R2D_ENABLE_RE2D=OFF, src/CMakeLists.txt) не носит в
+    // бинарнике исходники 3D-модулей: их нечем обслужить, а нативный слой
+    // (`engine.re2d`) в такой сборке не создаётся, поэтому api.js их и не
+    // устанавливает. Имена — как у файлов: re2d.js, rotsprite.js, …
+    static const char *exclude[32];
+    int exclude_count = 0;
+    for (int i = 3; i < argc; i++) {
+        if (strcmp(argv[i], "--exclude") != 0 || i + 1 >= argc) {
+            fprintf(stderr, "неизвестный аргумент: %s\n", argv[i]);
+            return 2;
+        }
+        char *list = strdup(argv[++i]);
+        if (!list) return 1;
+        for (char *tok = strtok(list, ","); tok && exclude_count < 32; tok = strtok(NULL, ",")) {
+            exclude[exclude_count++] = tok;
+        }
+        // list намеренно не освобождаем: токены живут до конца main, а утечка
+        // на выходе процесса дешевле ошибки «освободили то, чем пользуемся».
+    }
 
     // Модулей может стать больше: раньше здесь стоял жёсткий предел 64, и
     // 65-й файл (acoustics.js) МОЛЧА не попадал в бинарник — движок падал на
@@ -107,6 +128,11 @@ int main(int argc, char **argv)
     while ((de = readdir(d)) != NULL) {
         const size_t len = strlen(de->d_name);
         if (len < 4 || strcmp(de->d_name + len - 3, ".js") != 0) continue;
+        int skip = 0;
+        for (int i = 0; i < exclude_count; i++) {
+            if (strcmp(de->d_name, exclude[i]) == 0) { skip = 1; break; }
+        }
+        if (skip) continue;
         if ((size_t)count + 1 >= cap) {
             cap *= 2;
             Entry *grown = (Entry *)realloc(entries, cap * sizeof(Entry));
@@ -134,6 +160,11 @@ int main(int argc, char **argv)
         do {
             const size_t len = strlen(fd.cFileName);
             if (len < 4) continue;
+            int skip = 0;
+            for (int i = 0; i < exclude_count; i++) {
+                if (strcmp(fd.cFileName, exclude[i]) == 0) { skip = 1; break; }
+            }
+            if (skip) continue;
             if ((size_t)count + 1 >= cap) {
                 cap *= 2;
                 Entry *grown = (Entry *)realloc(entries, cap * sizeof(Entry));
@@ -192,6 +223,16 @@ int main(int argc, char **argv)
     }
     fprintf(out, "};\n\n");
     fprintf(out, "const int r2d_js_module_count = %d;\n\n", count);
+
+    // Список исключённых модулей — факт сборки, который читают тесты: без него
+    // проверка «все модули в таблице» падала бы на сборке без RE2D, где
+    // 3D-модулей нет намеренно (tests/agent/highlevel_modules_test.py).
+    fprintf(out, "const char *const r2d_js_module_excluded[] = {\n");
+    for (int i = 0; i < exclude_count; ++i) {
+        fprintf(out, "    \"%s\",\n", exclude[i]);
+    }
+    fprintf(out, "};\n\n");
+    fprintf(out, "const int r2d_js_module_excluded_count = %d;\n\n", exclude_count);
 
     fprintf(out,
         "const R2dJsModule *r2d_js_module_find(const char *name)\n"

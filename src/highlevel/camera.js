@@ -24,6 +24,15 @@ const cam = {
     smooth: 0,           // 0 — мгновенно, 1 — «прилипание» без движения
     limits: null,        // { x, y, w, h } — куда камере можно
     deadzone: null,      // { w, h }
+    // Lookahead платформера: камера смотрит на столько пикселей вперёд по
+    // направлению движения цели. Значение — максимум выноса; сам вынос
+    // сглаживается (lookahead_smooth), чтобы разворот не дёргал кадр.
+    lookahead: 0,
+    lookahead_y: 0,
+    lookahead_smooth: 0.9,
+    lead_x: 0,           // текущий сглаженный вынос по X/Y
+    lead_y: 0,
+    prev_target: null,   // { x, y } позиция цели на прошлом тике — из неё скорость
     shake_t: 0,
     shake_total: 0,
     shake_amp: 0,
@@ -79,10 +88,25 @@ export function re2dViewOf(c) {
     };
 }
 
+/**
+ * Есть ли в этом билде движка нативный проход Re2D (`engine.re2d`)?
+ *
+ * Сборка с `-DR2D_ENABLE_RE2D=OFF` (2D-платформерная, см. src/CMakeLists.txt)
+ * не ставит ни `engine.re2d`, ни модули `$`, которые им пользуются. Проверка
+ * одна на весь модуль: камера вида `'re2d'` тогда честно говорит «нет», а не
+ * падает на `undefined.view`, а обычный 2D-вид работает как всегда.
+ */
+export function hasRe2d() {
+    return !!(engine && engine.re2d && typeof engine.re2d.view === 'function');
+}
+
 /** Поставить нативный вид (engine.re2d.view) по состоянию камеры. */
 export function applyRe2dView(c) {
     const v = re2dViewOf(c);
-    engine.re2d.view(v.x, v.y, v.eye, v.yaw, v.pitch, v.fov, v.fogFar, v.fogMin);
+    // Выключенный Re2D — это не ошибка вызова: параметры вида всё равно нужны
+    // вызывающему (кадр, туман), поэтому возвращаем их, просто никуда не шлём.
+    // Сам проход вида регистрируется только вместе с модулем re2d.js.
+    if (hasRe2d()) engine.re2d.view(v.x, v.y, v.eye, v.yaw, v.pitch, v.fov, v.fogFar, v.fogMin);
     return v;
 }
 
@@ -97,6 +121,78 @@ function clampToLimits() {
     const max_y = y + h - Math.min(half_h, h / 2);
     cam.x = Math.max(min_x, Math.min(max_x, cam.x));
     cam.y = Math.max(min_y, Math.min(max_y, cam.y));
+}
+
+// ---------------------------------------------------------------------------
+// Lookahead: камера платформера смотрит вперёд по направлению движения
+//
+// Скорость берётся из смещения цели за шаг (node.x - prev.x)/dt, а не из
+// Box2D: так вынос работает и для узлов без тела (катсцены, кинематика), и
+// при --fixed-dt остаётся детерминированным. Направление важнее модуля
+// скорости: медленный шаг и бег дают один и тот же вынос, поэтому пороговая
+// скорость маленькая (4 px/с), а сам вынос сглаживается — при развороте
+// камера не «прыгает» из края в край.
+// ---------------------------------------------------------------------------
+
+const LEAD_MIN_SPEED = 4;      // px/с: медленнее — цель считается стоящей
+const LEAD_TELEPORT = 128;     // px за шаг: это телепорт/респавн, а не движение
+
+/** Текущий вынос камеры (геттер/сеттер для тестов и катсцен). */
+function resetLead() { cam.lead_x = 0; cam.lead_y = 0; }
+
+function stepLookahead(node, dt) {
+    const prev = cam.prev_target;
+    cam.prev_target = { x: node.x, y: node.y };
+    if (!(cam.lookahead > 0) && !(cam.lookahead_y > 0)) { resetLead(); return; }
+    if (!prev) return;                       // первый тик: направление ещё неизвестно
+    const step = dt > 1e-6 ? dt : 1 / 60;
+    const move_x = node.x - prev.x;
+    const move_y = node.y - prev.y;
+    if (Math.abs(move_x) > LEAD_TELEPORT || Math.abs(move_y) > LEAD_TELEPORT) {
+        resetLead();                         // телепорт: вынос сбрасывается
+        return;
+    }
+    const vx = move_x / step;
+    const vy = move_y / step;
+    const want_x = Math.abs(vx) > LEAD_MIN_SPEED ? Math.sign(vx) * cam.lookahead : 0;
+    const want_y = Math.abs(vy) > LEAD_MIN_SPEED ? Math.sign(vy) * cam.lookahead_y : 0;
+    // smooth — «доля, остающаяся за 1/60 с», как у сглаживания слежения:
+    // 0 — вынос мгновенный, 1 — не двигается.
+    const s = cam.lookahead_smooth;
+    const k = s >= 1 ? 0 : (s <= 0 ? 1 : 1 - Math.pow(s, step * 60));
+    cam.lead_x += (want_x - cam.lead_x) * k;
+    cam.lead_y += (want_y - cam.lead_y) * k;
+}
+
+/** Мёртвая зона: число (квадрат) или [w, h]. false/null — выключить. */
+function parseDeadzone(value) {
+    if (value === false || value === null) return null;
+    if (Array.isArray(value)) return { w: Math.max(0, Number(value[0]) || 0), h: Math.max(0, Number(value[1]) || 0) };
+    if (typeof value === 'object') return { w: Math.max(0, Number(value.w) || 0), h: Math.max(0, Number(value.h) || 0) };
+    const n = Math.max(0, Number(value) || 0);
+    return { w: n, h: n };
+}
+
+/** Lookahead: число (обе оси) или { x, y }. false/null/0 — выключить. */
+function parseLookahead(value) {
+    if (value === false || value === null) return { x: 0, y: 0 };
+    if (typeof value === 'object') {
+        const x = Math.max(0, Number(value.x) || 0);
+        return { x, y: Math.max(0, value.y === undefined ? x : (Number(value.y) || 0)) };
+    }
+    const n = Math.max(0, Number(value) || 0);
+    return { x: n, y: n };
+}
+
+/** Записать lookahead в состояние камеры; smooth необязателен. */
+function applyLookahead(value, smooth) {
+    const lead = parseLookahead(value);
+    cam.lookahead = lead.x;
+    cam.lookahead_y = lead.y;
+    if (smooth !== undefined) {
+        const s = Number(smooth);
+        cam.lookahead_smooth = Number.isFinite(s) ? Math.max(0, Math.min(1, s)) : cam.lookahead_smooth;
+    }
 }
 
 
@@ -182,6 +278,20 @@ export function installCamera($, viewports) {
         x() { return cam.x; },
         y() { return cam.y; },
 
+        /**
+         * Слежение за целью. `opts`:
+         *   * `smooth` — «прилипание»: доля расстояния, которая остаётся за
+         *     1/60 с (0 — мгновенно, 0.12 по умолчанию, 1 — не двигается);
+         *   * `deadzone` — число (квадрат) или `[w, h]`: зона свободы вокруг
+         *     цели; `false` — выключить;
+         *   * `lookahead` — вынос вперёд по направлению движения, px (число
+         *     или `{ x, y }`); 0/`false` — выключить;
+         *   * `lookaheadSmooth` — сглаживание выноса, как `smooth` (0.9);
+         *   * `offset` / `x`/`y` — смещение цели;
+         *   * `zoom` — зум камеры.
+         *
+         *   $.camera.follow('#hero', { smooth: 0.12, deadzone: [40, 24], lookahead: 64 });
+         */
         follow(selector, opts) {
             const o = opts || {};
             // Селектор и индекс храним как есть — узел может появиться позже,
@@ -193,11 +303,31 @@ export function installCamera($, viewports) {
             cam.target = known ? selector : null;
             cam.offset = { x: o.offset ? o.offset[0] : (o.x || 0), y: o.offset ? o.offset[1] : (o.y || 0) };
             cam.smooth = o.smooth === undefined ? 0.12 : o.smooth;
+            // Раньше deadzone в follow() молча игнорировался: в доке пример был,
+            // а камера его не читала. Теперь это обычная настройка слежения.
+            if (o.deadzone !== undefined) cam.deadzone = parseDeadzone(o.deadzone);
+            if (o.lookahead !== undefined) applyLookahead(o.lookahead, o.lookaheadSmooth);
+            else if (o.lookaheadSmooth !== undefined) cam.lookahead_smooth = Number(o.lookaheadSmooth) || 0;
             if (o.zoom !== undefined) cam.zoom = o.zoom;
+            cam.prev_target = null;          // смена цели — вынос считаем заново
             return camera;
         },
 
-        unfollow() { cam.target = null; cam.smooth = 0; return camera; },
+        unfollow() { cam.target = null; cam.smooth = 0; cam.prev_target = null; resetLead(); return camera; },
+
+        /**
+         * Вынос камеры вперёд: `.lookahead(px)` — обе оси, `.lookahead({ x, y })`
+         * — по отдельности, `.lookahead(0)` — выключить. Второй аргумент —
+         * сглаживание выноса (как `smooth`). Без аргументов — геттер
+         * `{ x, y, smooth }`.
+         */
+        lookahead(value, smooth) {
+            if (value === undefined) {
+                return { x: cam.lookahead, y: cam.lookahead_y, smooth: cam.lookahead_smooth };
+            }
+            applyLookahead(value, smooth);
+            return camera;
+        },
 
         /** Узел, за которым следим сейчас (или null). */
         followed() {
@@ -221,6 +351,7 @@ export function installCamera($, viewports) {
                 smooth: cam.smooth,
                 limits: cam.limits ? { x: cam.limits.x, y: cam.limits.y, w: cam.limits.w, h: cam.limits.h } : null,
                 deadzone: cam.deadzone ? { w: cam.deadzone.w, h: cam.deadzone.h } : null,
+                lookahead: { x: cam.lookahead, y: cam.lookahead_y, smooth: cam.lookahead_smooth },
             };
         },
 
@@ -244,6 +375,17 @@ export function installCamera($, viewports) {
             cam.smooth = state.smooth || 0;
             cam.limits = state.limits ? Object.assign({}, state.limits) : null;
             cam.deadzone = state.deadzone ? Object.assign({}, state.deadzone) : null;
+            // Снимок из старой версии выноса не содержит — это не ошибка:
+            // камера возвращается без lookahead, как и была до его включения.
+            const lead = state.lookahead;
+            if (lead) {
+                cam.lookahead = Math.max(0, Number(lead.x) || 0);
+                cam.lookahead_y = Math.max(0, Number(lead.y) || 0);
+                cam.lookahead_smooth = lead.smooth === undefined ? cam.lookahead_smooth
+                                                                 : Math.max(0, Math.min(1, Number(lead.smooth) || 0));
+            }
+            cam.prev_target = null;
+            resetLead();
             clampToLimits();
             return camera;
         },
@@ -286,7 +428,18 @@ export function installCamera($, viewports) {
         /** Вид камеры: '2d' (по умолчанию) или 're2d'. `.kind(null)` вернёт 2D. */
         kind(value) {
             if (value === undefined) return cam.kind;
-            cam.kind = normalizeKind(value);
+            const kind = normalizeKind(value);
+            // Вид 're2d' — это нативный проход (engine.re2d). В сборке
+            // платформера (-DR2D_ENABLE_RE2D=OFF) прохода нет, и включать его
+            // нельзя: кадр пошёл бы по ветке, которой нечем работать, и упал бы
+            // на первом же engine.re2d.* внутри отрисовщиков. Отказываем здесь
+            // и называем причину — это дешевле, чем искать её в чужом стеке.
+            if (kind === KIND_RE2D && !hasRe2d()) {
+                throw new TypeError(
+                    "камера: вид 're2d' недоступен — движок собран без RE2D " +
+                    '(R2D_ENABLE_RE2D=OFF, см. docs/BUILD.md); доступен обычный 2D: .kind(null)');
+            }
+            cam.kind = kind;
             return camera;
         },
 
@@ -361,6 +514,11 @@ export function installCamera($, viewports) {
                 yaw: cam.yaw / DEG, pitch: cam.pitch / DEG, fov: cam.fov / DEG,
                 zoom: cam.zoom, fogFar: cam.fog_far, fogMin: cam.fog_min,
                 mouseLook: cam.look_on, sensitivity: cam.look_sens,
+                // Слежение платформера: цель, сглаживание, мёртвая зона, вынос.
+                target: cam.target !== null, smooth: cam.smooth,
+                deadzone: cam.deadzone ? { w: cam.deadzone.w, h: cam.deadzone.h } : null,
+                lookahead: { x: cam.lookahead, y: cam.lookahead_y, leadX: cam.lead_x, leadY: cam.lead_y },
+                limits: cam.limits ? { x: cam.limits.x, y: cam.limits.y, w: cam.limits.w, h: cam.limits.h } : null,
             };
         },
 
@@ -388,14 +546,27 @@ export function installCamera($, viewports) {
             return camera;
         },
 
+        /**
+         * Границы камеры: `limits(x, y, w, h)`; `limits(null)` — снять.
+         * Без аргументов — геттер `{ x, y, w, h }` или `null`.
+         */
         limits(x, y, w, h) {
+            if (x === undefined) return cam.limits ? { x: cam.limits.x, y: cam.limits.y, w: cam.limits.w, h: cam.limits.h } : null;
             cam.limits = (x === null) ? null : { x, y, w, h };
             clampToLimits();
             return camera;
         },
 
+        /**
+         * Мёртвая зона: `deadzone(w, h)`, `deadzone(n)` — квадрат,
+         * `deadzone(false)` — выключить. Без аргументов — геттер `{ w, h }` или
+         * `null`.
+         */
         deadzone(w, h) {
-            cam.deadzone = (w === null) ? null : { w, h };
+            if (w === undefined) return cam.deadzone ? { w: cam.deadzone.w, h: cam.deadzone.h } : null;
+            if (w === null || w === false) { cam.deadzone = null; return camera; }
+            const n = Number(w) || 0;
+            cam.deadzone = { w: n, h: h === undefined ? n : (Number(h) || 0) };
             return camera;
         },
 
@@ -415,6 +586,9 @@ export function installCamera($, viewports) {
             if (cam.kind === KIND_RE2D) {
                 // Пиксель → точка на полу (или на высоте p.z): луч из глаз.
                 applyRe2dView(cameraTransform());
+                // Сборка без RE2D: восстановить точку нечем — честный null,
+                // как и при промахе луча (см. docs/highlevel/camera.md).
+                if (!hasRe2d() || typeof engine.re2d.unproject !== 'function') return null;
                 const hit = engine.re2d.unproject(pt.x, pt.y, p && typeof p === 'object' && p.z ? Number(p.z) : 0);
                 return hit ? { x: hit[0], y: hit[1] } : null;
             }
@@ -423,17 +597,23 @@ export function installCamera($, viewports) {
                                       engine.width, engine.height);
         },
 
-        /** Видно ли то, что передали (узел, селектор или точка). */
-        isOnScreen(what) {
+        /**
+         * Видно ли то, что передали (узел, селектор или точка). `margin` —
+         * запас в пикселях вокруг кадра (по умолчанию 64): рисуйте только то,
+         * что попало, с запасом на ход объекта за кадр.
+         */
+        isOnScreen(what, margin) {
+            const pad = margin === undefined ? 64 : Math.max(0, Number(margin) || 0);
             if (cam.kind === KIND_RE2D) {
-                if (typeof what === 'string') return query(what).some((n) => camera.isOnScreen(n));
+                if (typeof what === 'string') return query(what).some((n) => camera.isOnScreen(n, margin));
                 if (typeof what === 'object' && what && what.tag && what.attrs.ui) return true;
                 const s = re2dWorldToScreen(toPoint(what), what);
-                return s.visible && s.x >= 0 && s.x <= engine.width && s.y >= 0 && s.y <= engine.height;
+                return s.visible && s.x >= -pad && s.x <= engine.width + pad
+                    && s.y >= -pad && s.y <= engine.height + pad;
             }
-            const half_w = engine.width / (2 * cam.zoom) + 64;
-            const half_h = engine.height / (2 * cam.zoom) + 64;
-            if (typeof what === 'string') return query(what).some((n) => camera.isOnScreen(n));
+            const half_w = engine.width / (2 * cam.zoom) + pad;
+            const half_h = engine.height / (2 * cam.zoom) + pad;
+            if (typeof what === 'string') return query(what).some((n) => camera.isOnScreen(n, margin));
             if (typeof what === 'object' && what && what.tag) {
                 if (what.attrs.ui) return true;
                 return Math.abs(what.x - cam.x) <= half_w + what.w / 2 &&
@@ -459,25 +639,45 @@ export function installCamera($, viewports) {
             }
             if (cam.target) {
                 const node = resolveTarget(cam.target);
-                if (node) {
-                    const tx = node.x + cam.offset.x;
-                    const ty = node.y + cam.offset.y;
+                if (!node) {
+                    // Цель ещё не создана (селектор разрешается лениво):
+                    // прошлую позицию не храним, иначе первый кадр после
+                    // появления узла выглядел бы телепортом.
+                    cam.prev_target = null;
+                    resetLead();
+                } else {
                     if (cam.kind === KIND_RE2D) {
-                        // Глаза не «плывут» за телом: от первого лица слежение мгновенное.
-                        cam.x = tx;
-                        cam.y = ty;
-                    } else if (cam.deadzone) {
-                        const dx = tx - cam.x, dy = ty - cam.y;
-                        const hw = cam.deadzone.w / 2, hh = cam.deadzone.h / 2;
-                        if (Math.abs(dx) > hw) cam.x += dx - Math.sign(dx) * hw;
-                        if (Math.abs(dy) > hh) cam.y += dy - Math.sign(dy) * hh;
-                    } else if (cam.smooth > 0) {
-                        const k = 1 - Math.pow(cam.smooth, dt * 60);
-                        cam.x += (tx - cam.x) * k;
-                        cam.y += (ty - cam.y) * k;
+                        // Глаза не «плывут» за телом: от первого лица слежение
+                        // мгновенное, а вынос кадра не нужен.
+                        cam.x = node.x + cam.offset.x;
+                        cam.y = node.y + cam.offset.y;
+                        cam.prev_target = { x: node.x, y: node.y };
+                        resetLead();
                     } else {
-                        cam.x = tx;
-                        cam.y = ty;
+                        stepLookahead(node, dt);
+                        // Куда камера ХОЧЕТ попасть: цель + смещение + вынос.
+                        const tx = node.x + cam.offset.x + cam.lead_x;
+                        const ty = node.y + cam.offset.y + cam.lead_y;
+                        // Мёртвая зона задаёт ЦЕЛЬ движения, а не способ: пока
+                        // цель внутри зоны, цель движения — текущее положение
+                        // (камера стоит), за зоной — край зоны. Сглаживание
+                        // применяется уже к этой цели, поэтому deadzone и
+                        // smooth работают вместе, а не исключают друг друга.
+                        let gx = tx, gy = ty;
+                        if (cam.deadzone) {
+                            const dx = tx - cam.x, dy = ty - cam.y;
+                            const hw = cam.deadzone.w / 2, hh = cam.deadzone.h / 2;
+                            gx = Math.abs(dx) > hw ? cam.x + dx - Math.sign(dx) * hw : cam.x;
+                            gy = Math.abs(dy) > hh ? cam.y + dy - Math.sign(dy) * hh : cam.y;
+                        }
+                        if (cam.smooth > 0) {
+                            const k = 1 - Math.pow(cam.smooth, dt * 60);
+                            cam.x += (gx - cam.x) * k;
+                            cam.y += (gy - cam.y) * k;
+                        } else {
+                            cam.x = gx;
+                            cam.y = gy;
+                        }
                     }
                 }
             }
@@ -514,6 +714,12 @@ function re2dWorldToScreen(pt, source) {
     else if (node && node.nodes) node = node.nodes[0];
     const z = node && typeof node === 'object'
         ? Number(node.z !== undefined ? node.z : (node.depth !== undefined ? node.depth : 0)) || 0 : 0;
+    // Сборка без RE2D: нативной проекции нет. Возвращаем «не видно», а не
+    // координаты обычной 2D-проекции: вызывающий код проверяет visible, и такая
+    // точка не должна попасть на экран как настоящая.
+    if (!hasRe2d() || typeof engine.re2d.project !== 'function') {
+        return { x: pt.x, y: pt.y, scale: 1, depth: z, visible: false };
+    }
     const out = new Float32Array(4);
     const visible = engine.re2d.project(new Float32Array([pt.x, pt.y, z]), out) > 0;
     return { x: out[0], y: out[1], scale: out[3], depth: out[2], visible };

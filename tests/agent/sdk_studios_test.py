@@ -33,7 +33,7 @@ DTD = "$.ui.doc('sdk/ui/devtools.rml')"
 
 REQUIRED_TOOLS = ["launcher", "asset-browser", "r2d-sdk", "sprite-studio", "animation-studio", "tilemap-studio", "particle-studio",
                   "collision-tools", "parallax-tools", "font-tools", "audio-tools", "input-tools", "rmlui-studio", "devtools",
-                  "re2dsprite-studio", "re2d-baker", "re2d-world-studio", "automation"]
+                  "automation"]
 
 
 def check(condition, message):

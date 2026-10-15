@@ -9,9 +9,14 @@
 #include "script.h"
 
 #include "profile.h"
+// RE2D — необязательный слой 3D-авторинга спрайтов (см. src/CMakeLists.txt,
+// R2D_ENABLE_RE2D). При выключенной опции ни заголовков, ни биндингов нет:
+// игровой 2D-код и модули $, которые от них зависят, просто не устанавливаются.
+#ifdef R2D_ENABLE_RE2D
 #include "rotsprite.h"
 #include "re2d.h"
 #include "real2d4.h"
+#endif
 #include "nodes.h"
 
 #include "icons.h"
@@ -156,6 +161,12 @@ static R2DScript *r2d__script_of(JSContext *ctx)
 {
     return (R2DScript *)JS_GetContextOpaque(ctx);
 }
+
+// §39: кадровый проход локальных трансформов регистрируется в engine при
+// установке биндингов, а определяется рядом с r2d_script_call_update ниже —
+// поэтому объявление нужно раньше использования.
+static JSValue r2d__js_set_resolve_transforms(JSContext *ctx, JSValueConst this_val,
+                                              int argc, JSValueConst *argv);
 
 static char *r2d__module_normalize(JSContext *ctx, const char *base_name,
                                     const char *name, void *opaque)
@@ -912,18 +923,116 @@ static JSValue r2d__js_contacts(JSContext *ctx, JSValueConst this_val, int argc,
     for (int i = 0; i < n; ++i) {
         JSValue o = JS_NewObject(ctx);
         const char *kind = ev[i].kind == R2D_CONTACT_BEGIN ? "begin"
-                         : (ev[i].kind == R2D_CONTACT_END ? "end" : "hit");
+                         : (ev[i].kind == R2D_CONTACT_END ? "end"
+                            : (ev[i].kind == R2D_CONTACT_STAY ? "stay" : "hit"));
         JS_SetPropertyStr(ctx, o, "kind", JS_NewString(ctx, kind));
         JS_SetPropertyStr(ctx, o, "a", JS_NewInt32(ctx, ev[i].a));
         JS_SetPropertyStr(ctx, o, "b", JS_NewInt32(ctx, ev[i].b));
+        // §40: индекс формы участника — по нему api.js определяет область
+        // (area) и её логического владельца раздельно от узла-сенсора.
+        JS_SetPropertyStr(ctx, o, "shapeA", JS_NewInt32(ctx, ev[i].shape_a));
+        JS_SetPropertyStr(ctx, o, "shapeB", JS_NewInt32(ctx, ev[i].shape_b));
         JS_SetPropertyStr(ctx, o, "nx", JS_NewFloat64(ctx, ev[i].nx));
         JS_SetPropertyStr(ctx, o, "ny", JS_NewFloat64(ctx, ev[i].ny));
         JS_SetPropertyStr(ctx, o, "x", JS_NewFloat64(ctx, ev[i].px));
         JS_SetPropertyStr(ctx, o, "y", JS_NewFloat64(ctx, ev[i].py));
         JS_SetPropertyStr(ctx, o, "speed", JS_NewFloat64(ctx, ev[i].speed));
+        // §7: чего backend не дал, помечено явно. Для сенсора контактной
+        // нормали нет — «hasNormal: false» честнее выдуманного нуля.
+        JS_SetPropertyStr(ctx, o, "sensor", JS_NewBool(ctx, ev[i].sensor));
+        JS_SetPropertyStr(ctx, o, "hasNormal", JS_NewBool(ctx, ev[i].has_normal));
+        JS_SetPropertyStr(ctx, o, "hasPoint", JS_NewBool(ctx, ev[i].has_point));
+        // Поколения тел: событие со старым gen относится к уничтоженному телу,
+        // даже если его body id уже занят новым.
+        JS_SetPropertyStr(ctx, o, "genA", JS_NewUint32(ctx, ev[i].gen_a));
+        JS_SetPropertyStr(ctx, o, "genB", JS_NewUint32(ctx, ev[i].gen_b));
         JS_SetPropertyUint32(ctx, arr, (uint32_t)i, o);
     }
     return arr;
+}
+
+// --- §7. Надёжность контактов ----------------------------------------------
+
+// engine.setContactStay(body, on) / engine.contactStay(body) — фаза `stay`.
+// Opt-in: обход контактов тела каждый кадр не бесплатный, поэтому по умолчанию
+// тело получает только begin/end/hit.
+static JSValue r2d__js_set_contact_stay(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_UNDEFINED;
+    r2d_physics_set_contact_stay(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1),
+                                 r2d__arg_bool(ctx, argc, argv, 1, true));
+    return JS_UNDEFINED;
+}
+
+static JSValue r2d__js_contact_stay(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_physics_contact_stay(s->physics,
+                                                    r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+// engine.bodyGeneration(id) — поколение тела. Событие контакта несёт genA/genB;
+// несовпадение означает, что тело уже уничтожено, а id переиспользован.
+static JSValue r2d__js_body_generation(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewUint32(ctx, 0);
+    return JS_NewUint32(ctx, r2d_physics_generation(s->physics,
+                                                    r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+/** Код ошибки физики строкой: машине читать проще, чем число. */
+static const char *r2d__physics_error_name(int code)
+{
+    switch (code) {
+    case R2D_PERR_SHAPE_INVALID: return "shape_invalid";
+    case R2D_PERR_BODY_LIMIT:    return "body_limit";
+    case R2D_PERR_SHAPE_INDEX:   return "shape_index";
+    default:                     return "unknown";
+    }
+}
+
+// engine.physicsErrors() → { total, overflow, errors: [{ code, body, shape,
+// value, detail }] }. Кольцо ошибок физики: форма не создалась, лимит тел.
+static JSValue r2d__js_physics_errors(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue out = JS_NewObject(ctx);
+    JSValue arr = JS_NewArray(ctx);
+    int total = 0;
+    bool overflow = false;
+    if (s && s->physics) {
+        R2DPhysicsError buf[R2D_MAX_PHYSICS_ERRORS];
+        const int n = r2d_physics_errors(s->physics, buf, R2D_MAX_PHYSICS_ERRORS, &overflow);
+        for (int i = 0; i < n; ++i) {
+            JSValue o = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, o, "code", JS_NewString(ctx, r2d__physics_error_name(buf[i].code)));
+            JS_SetPropertyStr(ctx, o, "body", JS_NewInt32(ctx, buf[i].body));
+            JS_SetPropertyStr(ctx, o, "shape", JS_NewInt32(ctx, buf[i].shape));
+            JS_SetPropertyStr(ctx, o, "value", JS_NewFloat64(ctx, buf[i].value));
+            JS_SetPropertyStr(ctx, o, "detail", JS_NewString(ctx, buf[i].detail));
+            JS_SetPropertyUint32(ctx, arr, (uint32_t)i, o);
+        }
+        total = s->physics->error_total;
+    }
+    JS_SetPropertyStr(ctx, out, "total", JS_NewInt32(ctx, total));
+    JS_SetPropertyStr(ctx, out, "overflow", JS_NewBool(ctx, overflow));
+    JS_SetPropertyStr(ctx, out, "errors", arr);
+    return out;
+}
+
+static JSValue r2d__js_clear_physics_errors(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    if (s && s->physics) r2d_physics_clear_errors(s->physics);
+    return JS_UNDEFINED;
 }
 
 // engine.setBodyEnabled(body, on) — включить/выключить тело: выключенное не
@@ -1334,6 +1443,42 @@ static JSValue r2d__js_contacts_of(JSContext *ctx, JSValueConst this_val, int ar
     return arr;
 }
 
+// Разбор описания формы из JS-объекта. Общий для addShape/setShape (§40):
+// у области и второй зоны одно и то же описание — тип, размеры, точки, слои.
+static void r2d__shape_desc_from_obj(JSContext *ctx, JSValueConst opts, R2DBodyDesc *d)
+{
+    d->shape = (int)r2d__obj_num(ctx, opts, "shape", R2D_SHAPE_BOX);
+    d->half_w = (float)r2d__obj_num(ctx, opts, "halfW", 16);
+    d->half_h = (float)r2d__obj_num(ctx, opts, "halfH", 16);
+    d->radius = (float)r2d__obj_num(ctx, opts, "radius", 0);
+    d->poly_radius = (float)r2d__obj_num(ctx, opts, "polyRadius", 0);
+    d->density = (float)r2d__obj_num(ctx, opts, "density", 1.0);
+    d->friction = (float)r2d__obj_num(ctx, opts, "friction", 0.3);
+    d->restitution = (float)r2d__obj_num(ctx, opts, "restitution", 0.0);
+    d->sensor = r2d__obj_bool(ctx, opts, "sensor", false);
+    d->contacts = r2d__obj_bool(ctx, opts, "contacts", false);
+    // Собственный поворот формы: нужен областям (наклон прямоугольника оружия).
+    d->angle = (float)r2d__obj_num(ctx, opts, "angle", 0);
+    {
+        JSValueConst keys[3] = { JS_UNDEFINED, JS_UNDEFINED, JS_UNDEFINED };
+        const char *names[3] = { "layerBits", "mask", "group" };
+        for (int i = 0; i < 3; ++i) keys[i] = JS_GetPropertyStr(ctx, opts, names[i]);
+        const bool any = (!JS_IsUndefined(keys[0]) && !JS_IsNull(keys[0]))
+                      || (!JS_IsUndefined(keys[1]) && !JS_IsNull(keys[1]))
+                      || (!JS_IsUndefined(keys[2]) && !JS_IsNull(keys[2]));
+        if (any) {
+            d->filter_set = true;
+            d->category_bits = (uint64_t)r2d__obj_num(ctx, opts, "layerBits", 1);
+            // -1 как «не задано»: UINT64_MAX в double теряет точность,
+            // а маска по умолчанию — это ВСЕ слои.
+            const double mask_v = r2d__obj_num(ctx, opts, "mask", -1);
+            d->mask_bits = mask_v < 0 ? R2D_FILTER_DEFAULT_MASK : (uint64_t)mask_v;
+            d->group_index = r2d__obj_num(ctx, opts, "group", 0);
+        }
+        for (int i = 0; i < 3; ++i) JS_FreeValue(ctx, keys[i]);
+    }
+}
+
 // engine.addShape(body, {type, w?, h?, radius?, points?, sensor?, ...}) → индекс.
 //
 // Вторая зона на теле: «голова» сверху, «ноги» снизу. Индекс приходит в
@@ -1352,37 +1497,111 @@ static JSValue r2d__js_add_shape(JSContext *ctx, JSValueConst this_val, int argc
     SDL_zero(d);
     // Разбираем только то, что относится к ФОРМЕ: тип, размеры, точки,
     // сенсорность, материал. Положение и тип тела уже заданы телом.
-    d.shape = (int)r2d__obj_num(ctx, opts, "shape", R2D_SHAPE_BOX);
-    d.half_w = (float)r2d__obj_num(ctx, opts, "halfW", 16);
-    d.half_h = (float)r2d__obj_num(ctx, opts, "halfH", 16);
-    d.radius = (float)r2d__obj_num(ctx, opts, "radius", 0);
-    d.poly_radius = (float)r2d__obj_num(ctx, opts, "polyRadius", 0);
-    d.density = (float)r2d__obj_num(ctx, opts, "density", 1.0);
-    d.friction = (float)r2d__obj_num(ctx, opts, "friction", 0.3);
-    d.restitution = (float)r2d__obj_num(ctx, opts, "restitution", 0.0);
-    d.sensor = r2d__obj_bool(ctx, opts, "sensor", false);
-    d.contacts = r2d__obj_bool(ctx, opts, "contacts", false);
-    {
-        JSValueConst keys[3] = { JS_UNDEFINED, JS_UNDEFINED, JS_UNDEFINED };
-        const char *names[3] = { "layerBits", "mask", "group" };
-        for (int i = 0; i < 3; ++i) keys[i] = JS_GetPropertyStr(ctx, opts, names[i]);
-        const bool any = (!JS_IsUndefined(keys[0]) && !JS_IsNull(keys[0]))
-                      || (!JS_IsUndefined(keys[1]) && !JS_IsNull(keys[1]))
-                      || (!JS_IsUndefined(keys[2]) && !JS_IsNull(keys[2]));
-        if (any) {
-            d.filter_set = true;
-            d.category_bits = (uint64_t)r2d__obj_num(ctx, opts, "layerBits", 1);
-            // -1 как «не задано»: UINT64_MAX в double теряет точность,
-            // а маска по умолчанию — это ВСЕ слои.
-            const double mask_v = r2d__obj_num(ctx, opts, "mask", -1);
-            d.mask_bits = mask_v < 0 ? R2D_FILTER_DEFAULT_MASK : (uint64_t)mask_v;
-            d.group_index = r2d__obj_num(ctx, opts, "group", 0);
-        }
-        for (int i = 0; i < 3; ++i) JS_FreeValue(ctx, keys[i]);
-    }
+    r2d__shape_desc_from_obj(ctx, opts, &d);
     return JS_NewInt32(ctx, r2d_physics_add_shape(s->physics, body, &d,
                                                    (float)r2d__obj_num(ctx, opts, "x", 0),
                                                    (float)r2d__obj_num(ctx, opts, "y", 0)));
+}
+
+// engine.setShape(body, index, opts) → индекс формы (§40).
+//
+// Пересобрать ОБЛАСТЬ: смещение, угол, размеры, слои, сенсорность. Индекс
+// сохраняется, поэтому маршрутизация контактов не меняется; native handle при
+// этом новый — игра его не видит и опирается на имя области.
+static JSValue r2d__js_set_shape(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewInt32(ctx, -1);
+    if (argc < 3 || !JS_IsObject(argv[2])) {
+        return JS_ThrowTypeError(ctx, "engine.setShape: нужны тело, индекс и описание формы");
+    }
+    const int body = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const int index = r2d__arg_int(ctx, argc, argv, 1, -1);
+    const JSValueConst opts = argv[2];
+    R2DBodyDesc d;
+    SDL_zero(d);
+    r2d__shape_desc_from_obj(ctx, opts, &d);
+    return JS_NewInt32(ctx, r2d_physics_shape_set(s->physics, body, index, &d,
+                                                  (float)r2d__obj_num(ctx, opts, "x", 0),
+                                                  (float)r2d__obj_num(ctx, opts, "y", 0),
+                                                  d.angle));
+}
+
+// engine.setShapeEnabled(body, index, on, layerBits, mask, group) → bool (§40).
+//
+// Выключенная область выходит из столкновений и запросов, но остаётся у тела:
+// игровой владелец жив, .hide() её не трогает, сон тела — тоже.
+static JSValue r2d__js_set_shape_enabled(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewBool(ctx, false);
+    const int body = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const int index = r2d__arg_int(ctx, argc, argv, 1, -1);
+    int on = 1;
+    if (argc > 2) {
+        on = JS_ToBool(ctx, argv[2]);
+        if (on < 0) {
+            JS_FreeValue(ctx, JS_GetException(ctx));
+            return JS_NewBool(ctx, false);
+        }
+    }
+    // Фильтр на включение: описание области живёт в JS, сюда приходит готовым.
+    const double mask_v = argc > 4 ? r2d__arg_num(ctx, argc, argv, 4, -1.0) : -1.0;
+    const uint64_t cat = argc > 3 ? (uint64_t)r2d__arg_num(ctx, argc, argv, 3, 1.0) : 1u;
+    const uint64_t mask = mask_v < 0 ? R2D_FILTER_DEFAULT_MASK : (uint64_t)mask_v;
+    const int group = argc > 5 ? r2d__arg_int(ctx, argc, argv, 5, 0) : 0;
+    return JS_NewBool(ctx, r2d_physics_set_shape_enabled(s->physics, body, index, on != 0,
+                                                         cat, mask, group));
+}
+
+// engine.shapeEnabled(body, index) → bool — включена ли форма сейчас (§40).
+//
+// Нужен, чтобы JS-описание области не расходилось с native-состоянием: форма
+// может быть переключена внешним драйвером (анимационная дорожка shape.enabled)
+// напрямую через setShapeEnabled.
+static JSValue r2d__js_shape_enabled(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_physics_shape_is_enabled(s->physics,
+                                                       r2d__arg_int(ctx, argc, argv, 0, -1),
+                                                       r2d__arg_int(ctx, argc, argv, 1, -1)));
+}
+
+// engine.shapeOverlaps(body, index, category, mask, cap) → [{body, shape}] (§40).
+//
+// Кто пересекается с областью ПРЯМО СЕЙЧАС: явный геометрический запрос, а не
+// история событий. Именно им игра обнаруживает цель, уже стоящую внутри в
+// момент открытия окна атаки.
+static JSValue r2d__js_shape_overlaps(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue arr = JS_NewArray(ctx);
+    if (!s || !s->physics) return arr;
+    const int body = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const int index = r2d__arg_int(ctx, argc, argv, 1, -1);
+    const double cat_v = argc > 2 ? r2d__arg_num(ctx, argc, argv, 2, 1.0) : 1.0;
+    const double mask_v = argc > 3 ? r2d__arg_num(ctx, argc, argv, 3, -1.0) : -1.0;
+    int cap = argc > 4 ? r2d__arg_int(ctx, argc, argv, 4, 32) : 32;
+    if (cap <= 0) cap = 1;
+    if (cap > R2D_MAX_QUERY) cap = R2D_MAX_QUERY;
+    int bodies[R2D_MAX_QUERY];
+    int shapes[R2D_MAX_QUERY];
+    const uint64_t cat = cat_v > 0 ? (uint64_t)cat_v : 1u;
+    const uint64_t mask = mask_v < 0 ? R2D_FILTER_DEFAULT_MASK : (uint64_t)mask_v;
+    const int n = r2d_physics_shape_overlaps(s->physics, body, index, cat, mask,
+                                             bodies, shapes, cap);
+    for (int i = 0; i < n; ++i) {
+        JSValue o = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, o, "body", JS_NewInt32(ctx, bodies[i]));
+        JS_SetPropertyStr(ctx, o, "shape", JS_NewInt32(ctx, shapes[i]));
+        JS_SetPropertyUint32(ctx, arr, (uint32_t)i, o);
+    }
+    return arr;
 }
 
 // engine.shapeCount(body) → сколько форм у тела.
@@ -2007,6 +2226,57 @@ static JSValue r2d__js_is_bullet(JSContext *ctx, JSValueConst this_val, int argc
     R2DScript *s = r2d__script_of(ctx);
     if (!s || !s->physics) return JS_NewBool(ctx, false);
     return JS_NewBool(ctx, r2d_physics_is_bullet(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+// engine.setOneWayIgnore(id, on) / engine.oneWayIgnore(id) — «спрыгивание»
+// сквозь односторонние платформы. Пока флаг стоит, preSolve (physics.c) не
+// даёт ЭТОМУ телу опираться на one-way платформы; стены и пол продолжают
+// работать. Платформу не трогаем: на ней может стоять несколько тел, и
+// провалиться должно только то, кому велели (см. physics.c).
+static JSValue r2d__js_set_one_way_ignore(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_UNDEFINED;
+    const bool on = r2d__arg_bool(ctx, argc, argv, 1, true);
+    r2d_physics_set_one_way_ignore(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1), on);
+    return JS_UNDEFINED;
+}
+
+// engine.setTimeScale(x) / engine.timeScale() — множитель времени шага физики.
+//
+// Нужен игре для hit-stop и замедления (docs/highlevel/time.md): `$.time.scale`
+// живёт в JS и через этот биндинг останавливает/замедляет именно шаг Box2D,
+// не трогая игровое время скриптов и отрисовку. 0 — тела стоят намертво,
+// 1 — обычный ход, 0.5 — вдвое медленнее. Отрицательный множитель запрещён:
+// «обратное время» не имеет смысла и молча ломало бы симуляцию, поэтому
+// значение ограничивается нулём, а не принимается как есть.
+static JSValue r2d__js_set_time_scale(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->app) return JS_UNDEFINED;
+    float scale = (float)r2d__arg_num(ctx, argc, argv, 0, 1.0);
+    if (!(scale >= 0.0f)) scale = 0.0f;   // NaN и отрицательные — в ноль
+    s->app->time_scale = scale;
+    return JS_UNDEFINED;
+}
+
+static JSValue r2d__js_time_scale(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2D_UNUSED(argc);
+    R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewFloat64(ctx, (s && s->app) ? s->app->time_scale : 1.0);
+}
+
+static JSValue r2d__js_one_way_ignore(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->physics) return JS_NewBool(ctx, false);
+    return JS_NewBool(ctx, r2d_physics_one_way_ignore(s->physics, r2d__arg_int(ctx, argc, argv, 0, -1)));
 }
 
 // engine.setGravityScale(id, scale) — множитель гравитации для тела.
@@ -4291,6 +4561,8 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "scancode", r2d__js_scancode, 1);
     r2d__set_fn(ctx, engine, "setUpdate", r2d__js_set_update, 1);
     r2d__set_fn(ctx, engine, "setRender", r2d__js_set_render, 1);
+    // §39: кадровый проход локальных трансформов (регистрирует core.js).
+    r2d__set_fn(ctx, engine, "setResolveTransforms", r2d__js_set_resolve_transforms, 1);
     r2d__install_window(ctx, engine);
     r2d__set_fn(ctx, engine, "setExit", r2d__js_set_exit, 1);
     r2d__set_fn(ctx, engine, "setSnapshot", r2d__js_set_snapshot, 1);
@@ -4312,6 +4584,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "loadTexture", r2d__js_load_texture, 1);
     r2d__set_fn(ctx, engine, "textureSize", r2d__js_texture_size, 1);
     r2d__set_fn(ctx, engine, "textureFromPixels", r2d__js_texture_from_pixels, 3);
+#ifdef R2D_ENABLE_RE2D
     if (r2d_rotsprite_install(ctx, engine) < 0) {
         JS_FreeValue(ctx, engine);
         return JS_EXCEPTION;
@@ -4325,6 +4598,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
         JS_FreeValue(ctx, engine);
         return JS_EXCEPTION;
     }
+#endif
     // Нативные проходы кадра по узлам $ (схема C → $): engine.nodes.*.
     if (r2d_nodes_install(ctx, engine) < 0) {
         JS_FreeValue(ctx, engine);
@@ -4367,6 +4641,11 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "touching", r2d__js_touching, 2);
     r2d__set_fn(ctx, engine, "addShape", r2d__js_add_shape, 2);
     r2d__set_fn(ctx, engine, "shapeCount", r2d__js_shape_count, 1);
+    // §40: области — пересборка формы, включение/выключение, запрос пересечений.
+    r2d__set_fn(ctx, engine, "setShape", r2d__js_set_shape, 3);
+    r2d__set_fn(ctx, engine, "setShapeEnabled", r2d__js_set_shape_enabled, 6);
+    r2d__set_fn(ctx, engine, "shapeOverlaps", r2d__js_shape_overlaps, 5);
+    r2d__set_fn(ctx, engine, "shapeEnabled", r2d__js_shape_enabled, 2);
     r2d__set_fn(ctx, engine, "setClip", r2d__js_set_clip, 4);
     r2d__set_fn(ctx, engine, "clearClip", r2d__js_clear_clip, 0);
     r2d__set_fn(ctx, engine, "getClip", r2d__js_get_clip, 0);
@@ -4391,6 +4670,11 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "getBodyFilter", r2d__js_get_body_filter, 1);
     r2d__set_fn(ctx, engine, "setGravityScale", r2d__js_set_gravity_scale, 2);
     r2d__set_fn(ctx, engine, "setBullet", r2d__js_set_bullet, 2);
+    r2d__set_fn(ctx, engine, "setOneWayIgnore", r2d__js_set_one_way_ignore, 2);
+    r2d__set_fn(ctx, engine, "oneWayIgnore", r2d__js_one_way_ignore, 1);
+    // Время физики: hit-stop и замедление из игры (.time.scale в $).
+    r2d__set_fn(ctx, engine, "setTimeScale", r2d__js_set_time_scale, 1);
+    r2d__set_fn(ctx, engine, "timeScale", r2d__js_time_scale, 0);
     // Геймпады по слотам и касания (мультигеймпад, тач-экраны).
     // Буфер обмена и IME.
     r2d__set_fn(ctx, engine, "clipboard", r2d__js_clipboard, 0);
@@ -4415,6 +4699,12 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "bodyMass", r2d__js_body_mass, 1);
     r2d__set_fn(ctx, engine, "bodyCount", r2d__js_body_count, 0);
     r2d__set_fn(ctx, engine, "contacts", r2d__js_contacts, 0);
+    // §7: надёжность контактов — фаза stay, поколения тел, кольцо ошибок.
+    r2d__set_fn(ctx, engine, "setContactStay", r2d__js_set_contact_stay, 2);
+    r2d__set_fn(ctx, engine, "contactStay", r2d__js_contact_stay, 1);
+    r2d__set_fn(ctx, engine, "bodyGeneration", r2d__js_body_generation, 1);
+    r2d__set_fn(ctx, engine, "physicsErrors", r2d__js_physics_errors, 0);
+    r2d__set_fn(ctx, engine, "clearPhysicsErrors", r2d__js_clear_physics_errors, 0);
     r2d__set_fn(ctx, engine, "createJoint", r2d__js_create_joint, 1);
     r2d__set_fn(ctx, engine, "destroyJoint", r2d__js_destroy_joint, 1);
     r2d__set_fn(ctx, engine, "jointAlive", r2d__js_joint_alive, 1);
@@ -4585,6 +4875,7 @@ static void r2d__free_js_values(R2DScript *s)
 
     JS_FreeValue(s->ctx, s->update_fn);
     JS_FreeValue(s->ctx, s->render_fn);
+    JS_FreeValue(s->ctx, s->resolve_fn);
     JS_FreeValue(s->ctx, s->exit_fn);
     JS_FreeValue(s->ctx, s->snapshot_fn);
     JS_FreeValue(s->ctx, s->agent_query_fn);
@@ -4593,6 +4884,7 @@ static void r2d__free_js_values(R2DScript *s)
 
     s->update_fn = JS_UNDEFINED;
     s->render_fn = JS_UNDEFINED;
+    s->resolve_fn = JS_UNDEFINED;
     s->exit_fn = JS_UNDEFINED;
     s->snapshot_fn = JS_UNDEFINED;
     s->agent_query_fn = JS_UNDEFINED;
@@ -4716,6 +5008,7 @@ static bool r2d__create_context(R2DScript *s)
 
     s->update_fn = JS_UNDEFINED;
     s->render_fn = JS_UNDEFINED;
+    s->resolve_fn = JS_UNDEFINED;
     s->exit_fn = JS_UNDEFINED;
     s->snapshot_fn = JS_UNDEFINED;
     s->agent_query_fn = JS_UNDEFINED;
@@ -5163,6 +5456,33 @@ static void r2d__call_no_args(R2DScript *s, JSValue fn)
     JS_FreeValue(s->ctx, ret);
 }
 
+// §39: проход локальных трансформов. Молча ничего, пока подсистема $ не
+// зарегистрировала функцию: без локальных узлов это opt-in расширение, и
+// старые игры за него не платят.
+static void r2d__call_resolve_transforms(R2DScript *s)
+{
+    if (!s->ctx || !JS_IsFunction(s->ctx, s->resolve_fn)) return;
+    JSValue ret = JS_Call(s->ctx, s->resolve_fn, JS_UNDEFINED, 0, NULL);
+    if (JS_IsException(ret)) r2d__capture_error(s);
+    JS_FreeValue(s->ctx, ret);
+}
+
+// engine.setResolveTransforms(fn) — кадровый проход локальных трансформов §39.
+// Регистрирует его подсистема $ (core.js), игре это имя не видно.
+static JSValue r2d__js_set_resolve_transforms(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s) return JS_UNDEFINED;
+    if (argc < 1 || !JS_IsFunction(ctx, argv[0])) {
+        JS_ThrowTypeError(ctx, "setResolveTransforms(fn) — нужна функция");
+        return JS_EXCEPTION;
+    }
+    JS_FreeValue(ctx, s->resolve_fn);
+    s->resolve_fn = JS_DupValue(ctx, argv[0]);
+    return JS_UNDEFINED;
+}
+
 void r2d_script_call_update(R2DScript *s, float dt)
 {
     if (!s->ctx || !s->loaded) return;
@@ -5181,11 +5501,20 @@ void r2d_script_call_update(R2DScript *s, float dt)
     // Обещания игрового кода ($.time.wait, твины, await в $.ready) должны
     // разрешаться в том же кадре, иначе цепочки сценариев «зависают».
     r2d__drain_jobs(s);
+
+    // §39: после логики и обещаний — пересчёт локальных трансформов. Это
+    // последняя точка кадра перед следующим физическим шагом, поэтому детские
+    // сенсоры попадают в физику уже со скомпонованным трансформом.
+    r2d__call_resolve_transforms(s);
 }
 
 void r2d_script_call_render(R2DScript *s)
 {
     if (!s->ctx || !s->loaded) return;
+    // §39: перед сборкой кадра трансформы детей обязаны быть верны — если
+    // логика их ещё не пересчитала (или игра меняла узлы в обработчике
+    // рендера), проход добирает изменения здесь.
+    r2d__call_resolve_transforms(s);
     r2d__call_no_args(s, s->render_fn);
     r2d__drain_jobs(s);
 }

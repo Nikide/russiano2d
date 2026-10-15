@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """Spatial playback in actual Re2D topology, using the supplied club loop."""
+import os
 import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 from agent_client import Agent
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from re2d_skip import skip_without_re2d   # noqa: E402
 failed=[];count=0
 def check(ok,name):
  global count
  count+=1;print(('ok ' if ok else 'FAIL ')+name,flush=True)
  if not ok:failed.append(name)
 with Agent(game='demos/re2d_dust2',seed=7) as a:
+ if skip_without_re2d(a):
+     sys.exit(0)
  a.eval('dustCamera("CLUB")');a.step(20);near=a.eval('clubMusic.info()')
  check(near['playing'] and near['hrtf'] and near['gain']>.4,'supplied MP3 plays through real HRTF in club')
  a.eval('dustCamera("T SPAWN")');a.step(20);far=a.eval('clubMusic.info()')

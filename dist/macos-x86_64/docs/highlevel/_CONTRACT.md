@@ -197,7 +197,7 @@ anchorPreset anchorRect anchors angle angleTo angularVelocity animate append
 appendTo applyForce applyImpulse at attr autotile blend blur body bounce
 bullet burst checked children clear clearTiles clearTweens clip clipProgress
 clipRect clipSpeed clipTime clone closeDialog closest collidesWith collision
-collisionCircle collisions color cone contacts controls count damage data
+collisionCircle collisions collisionLimit collisionResult color cone contacts controls count damage data
 delay depth depthRelative detach directionTo disabled distanceTo each eachNode
 effectiveAlpha effectiveDepth effectivelyVisible emit emitting eq every fadeIn
 fadeOut fadeTo fill filter find first fitsAt flash flicker flip focus font
@@ -206,7 +206,7 @@ health height hide hp html index inputValue inside intensity invulnerable is
 isDepthRelative isEmitting isNavigating isPlayingClip isVisible items joint
 jump kill kind last layer layerBits layerName lookAt map mask maskBy mass max
 maxHp maxLength min move moveAndSlide moveTo moveTowards mute navPath
-navTarget navigateTo not occluders off offset on onFloor onWall oneWay opacity
+navTarget navigateTo nid not occluders off offset on onFloor onWall oneWay opacity
 openDialog outline overlaps padding parallax params parent particleAt pause
 pauseClip pauseTweens pivot pivotAt placeholder playClip playSound playing pos
 prefab prefabClone prepend prependTo punch radius rayTo re2dAttach re2dBone
@@ -219,10 +219,10 @@ rotAttach rotBone rotDetach rotEmotion rotExpression rotHotReload rotLayer
 rotMotion rotPart rotPose rotReload rotRig rotSeek rotSpriteAtlas rotStyle
 rotVariant rotVisibleParts rotate rotateTo rotation sample savePrefab scale
 scaleTo selectedIndex selectedItem sensor sequence setTile shader shaderParam
-shadow shadowSoft shadows shake shape show siblings size sizePercent sleeping
-slice sliderValue some sound speed sprite start state stateMachine stateTime
+shadow shadowSoft shadows shake shape shapeAt show siblings size sizePercent sleeping
+slice sliderValue solidAt some sound speed sprite start state stateMachine stateTime
 states step stop stopAll stopAnim stopClip stopNav style sweepTo tag team
-terrainData text textStyle theme tileAnimation tileAt tileLayer tileSize
+terrainData text textStyle theme tileAnimation tileAt tileLayer tileOccluders tileSize
 tilesData tilesList tileset toArray toData toGlobal toLocal toState
 toggleClass trigger tween tweenTo value velocity visible volume wake width
 within ysort zone zoneCount анимация в видимый высота глубина данные добавить
@@ -232,6 +232,16 @@ within ysort zone zoneCount анимация в видимый высота гл
 смешать смотретьНа снять столкновение текст тени тень убить убратьКласс угол
 удалить управление урон цвет ширина яркость
 ```
+
+> Правки §42 (частичная коллизия тайла) добавили пять имён:
+> `collisionLimit`, `collisionResult`, `shapeAt`, `solidAt`, `tileOccluders`.
+
+> Правки §39–40 (локальные трансформы и независимые sensors, 2026-10-15) добавили
+> одиннадцать имён: `area`, `areaOn`, `areas`, `areaOverlap`, `localAngle`,
+> `localAt`, `localPoint`, `localScale`, `transformSpace`, `worldPoint`,
+> `worldTransform` — и `zonesTouching`/`zoneTag` уже были заняты, поэтому области
+> названы `area*`, а не `zone*`. Свободных имён с этими корнями больше нет:
+> перед новым методом сверяйтесь со списком выше и с этим дополнением.
 
 > Список снят с живого движка, а не перепечатан: **352 имени** (сверка 2026-10-11),
 > команда —
@@ -251,10 +261,38 @@ toGlobal toLocal` (плюс `state`, `stateTime`, `states`, `size` и други
 Правила:
 
 * пространство имён — своё: `$.anim`, `$.tilemap`, `$.particles`, `$.nav`,
-  `$.prefab`, `$.audio`, `$.layers`, `$.ui` (дополнять, не заменять);
+  `$.prefab`, `$.audio`, `$.layers`, `$.ui`, `$.trace` (дополнять, не заменять);
 * новый метод узла называйте так, чтобы он не мог столкнуться: например
   `playClip`, `setTile`, `burst`, `navigateTo`, `toData`, `inLayer`;
 * перед добавлением `def()` сверьтесь со списком выше.
+
+### Занятые имена `$.anim` и методов `AnimPlayer` (дополнено §41)
+
+Методов **узла** подсистема не добавляет. Заняты имена в пространстве `$.anim`
+(реестр клипов плеера, §41/§10):
+
+```
+clip clipGet clips clipJSON load markers removeClip clearClips
+bind bindings action actions actionRemove
+player players defaultPlayer clearPlayers
+target play blend stop stopAll interrupt seek skip restore reset clock
+window openWindows pause resume paused speed loop playing time totalTime
+clipName value values on off
+```
+
+Методы плеера `AnimPlayer` (создаётся через `$.anim.player(name)`; `new`
+игровому коду не нужен):
+
+```
+target play blend stop interrupt stopLayers pause resume paused clock reset
+markDirty seek skip restore jump speed loop playing time total clip clipNames
+value values weight window windows openWindows bindings markerFired audioHandle
+on off destroy
+```
+
+Внутренние поля (`clock_ms`, `slots`, `clockValue`, `window_state`,
+`audio_handles`, `values_store`, `fired_markers`) — не публичный контракт;
+`player.clock` — это **метод**, поле часов называется `clock_ms`.
 
 ## 6. Документация — обязательна
 

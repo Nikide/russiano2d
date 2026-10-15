@@ -5,6 +5,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from agent_client import Agent
 sys.path.insert(0, os.path.dirname(__file__))
+from re2d_skip import skip_without_sdk_command, skip_without_re2d   # noqa: E402
+if skip_without_sdk_command('world-compile', what='BSP combat world'):
+    sys.exit(0)
 from re2d_native_test import decode
 failed = []
 def step(a, frames):

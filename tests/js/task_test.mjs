@@ -9,7 +9,7 @@
 // ===========================================================================
 
 import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
-import { createScheduler, createGeneratorScheduler } from '../../src/highlevel/task.js';
+import { createScheduler, createGeneratorScheduler, installTask, tickTask, runningTasks } from '../../src/highlevel/task.js';
 
 /** Часы, которые двигаются на `step` миллисекунд при каждом обращении. */
 function fakeClock(step) {
@@ -128,6 +128,101 @@ test('createGeneratorScheduler: abort закрывает генератор', ()
     s.abort();
     truthy(closed, 'finally генератора выполнился');
     eq(s.tick(), true);
+});
+
+// ---------------------------------------------------------------------------
+// §5/§13: кадровый насос задач и одноразовый done
+// ---------------------------------------------------------------------------
+
+function fakeScope(name) {
+    const items = [];
+    const scope = {
+        name: name || 'scope',
+        _state: 'active',
+        state() { return scope._state; },
+        own(kind, item, cancel) {
+            if (scope._state !== 'active') {
+                if (typeof cancel === 'function') cancel('scope закрыт');
+                return false;
+            }
+            items.push({ kind, item, cancel });
+            return true;
+        },
+        count() { return items.length; },
+        close(reason) {
+            scope._state = 'closing';
+            for (const entry of items.splice(0)) entry.cancel(reason);
+            scope._state = 'closed';
+            return true;
+        },
+    };
+    return scope;
+}
+
+test('$.task: done вызывается ровно один раз после завершения', () => {
+    const $t = {};
+    installTask($t);
+    let done = 0;
+    let aborted = null;
+    $t.task.chunked({
+        total: 3, budget: 1000, step: () => {},
+        done: (ab) => { done++; aborted = ab; },
+    });
+    eq(runningTasks(), 1, 'задача в работе');
+    tickTask(1);
+    eq(done, 1, 'done пришёл один раз');
+    eq(aborted, false, 'done получил aborted = false');
+    tickTask(1);
+    tickTask(1);
+    tickTask(1);
+    eq(done, 1, 'повторные кадры не вызывают done снова');
+    eq($t.task.running(), 0, 'задача снята с насоса');
+});
+
+test('$.task: abort зовёт done один раз с признаком отмены', () => {
+    const $t = {};
+    installTask($t);
+    let done = 0;
+    let aborted = null;
+    const job = $t.task.chunked({
+        total: 100, budget: 1, step: () => {},
+        done: (ab) => { done++; aborted = ab; },
+    });
+    job.abort();
+    eq(done, 1, 'отмена завершила задачу один раз');
+    eq(aborted, true, 'признак отмены передан');
+    tickTask(1);
+    eq(done, 1, 'после отмены done не повторяется');
+    eq($t.task.running(), 0);
+});
+
+test('$.task: закрытие scope отменяет задачу', () => {
+    const $t = {};
+    installTask($t);
+    const scope = fakeScope('room:task');
+    let done = 0;
+    $t.task.chunked({ total: 100, budget: 1, scope, step: () => {}, done: () => { done++; } });
+    eq(scope.count(), 1, 'задача привязана к области');
+    scope.close('restart');
+    eq(done, 1, 'scope отменил задачу и позвал done');
+    eq($t.task.running(), 0);
+    tickTask(1);
+    eq(done, 1);
+});
+
+test('$.task: list наследует scope и done', () => {
+    const $t = {};
+    installTask($t);
+    const scope = fakeScope('room:list');
+    const seen = [];
+    let done = 0;
+    $t.task.list([10, 20, 30], (x) => { seen.push(x); }, {
+        scope, done: () => { done++; }, budget: 1000,
+    });
+    tickTask(1);
+    eq(seen.join(','), '10,20,30');
+    eq(done, 1);
+    eq(scope.count(), 1);
 });
 
 finish();

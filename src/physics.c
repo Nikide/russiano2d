@@ -9,6 +9,55 @@
 #define R2D_TO_PX(m) ((m) * R2D_PX_PER_M)
 
 // ---------------------------------------------------------------------------
+// §7. Ошибки физики: машиночитаемое кольцо
+//
+// Лог человека и ответ машине — разные вещи (§17): игра и агент должны
+// видеть, ЧТО именно не создалось и почему, а не искать строку в stderr.
+// Записи не теряются при нескольких ошибках подряд (кольцо на 16).
+// ---------------------------------------------------------------------------
+
+static void r2d__push_error(R2DPhysics *p, int code, int body, int shape,
+                            float value, const char *detail)
+{
+    if (!p) return;
+    if (p->error_count >= R2D_MAX_PHYSICS_ERRORS) p->error_overflow = true;
+    R2DPhysicsError *e = &p->errors[p->error_head];
+    p->error_head = (p->error_head + 1) % R2D_MAX_PHYSICS_ERRORS;
+    if (p->error_count < R2D_MAX_PHYSICS_ERRORS) p->error_count++;
+    p->error_total++;
+    SDL_zerop(e);
+    e->code = code;
+    e->body = body;
+    e->shape = shape;
+    e->value = value;
+    if (detail) {
+        SDL_strlcpy(e->detail, detail, R2D_PHYSICS_DETAIL_MAX);
+    }
+}
+
+int r2d_physics_errors(const R2DPhysics *p, R2DPhysicsError *out, int cap, bool *overflow)
+{
+    if (overflow) *overflow = p ? p->error_overflow : false;
+    if (!p || !out || cap <= 0) return 0;
+    const int total = p->error_count;
+    const int n = total < cap ? total : cap;
+    const int start = (p->error_head - total + R2D_MAX_PHYSICS_ERRORS) % R2D_MAX_PHYSICS_ERRORS;
+    for (int i = 0; i < n; ++i) {
+        out[i] = p->errors[(start + i) % R2D_MAX_PHYSICS_ERRORS];
+    }
+    return n;
+}
+
+void r2d_physics_clear_errors(R2DPhysics *p)
+{
+    if (!p) return;
+    p->error_head = 0;
+    p->error_count = 0;
+    p->error_total = 0;
+    p->error_overflow = false;
+}
+
+// ---------------------------------------------------------------------------
 // Односторонние платформы
 //
 // Box2D не знает про «пройти сквозь снизу» — это делается на pre-solve:
@@ -53,6 +102,12 @@ static bool r2d__pre_solve(b2ShapeId shape_a, b2ShapeId shape_b,
     const bool ow_a = (id_a >= 0 && id_a < R2D_MAX_BODIES && p->one_way[id_a]);
     const bool ow_b = (id_b >= 0 && id_b < R2D_MAX_BODIES && p->one_way[id_b]);
     if (!ow_a && !ow_b) return true;
+
+    // Спрыгивание: тело, которому сейчас запрещено опираться на односторонние
+    // платформы, не сталкивается с ними вовсе. Проверяем до нормалей — для
+    // пропускаемой пары незачем считать поворот и скалярное произведение.
+    if (ow_a && id_b >= 0 && id_b < R2D_MAX_BODIES && p->one_way_ignore[id_b]) return false;
+    if (ow_b && id_a >= 0 && id_a < R2D_MAX_BODIES && p->one_way_ignore[id_a]) return false;
 
     // Нормаль манифолда направлена от A к B. Для платформы нужна её
     // мировая нормаль: поворачиваем локальную на угол тела.
@@ -110,6 +165,117 @@ void r2d_physics_shutdown(R2DPhysics *p)
     SDL_zero(*p);
 }
 
+// ---------------------------------------------------------------------------
+// §7. Служебное для событий контакта
+// ---------------------------------------------------------------------------
+
+/** Общие поля события: тела, формы, поколения, признак сенсора. */
+static void r2d__event_bodies(R2DPhysics *p, R2DContactEvent *c,
+                              b2ShapeId sa, b2ShapeId sb)
+{
+    c->a = r2d__body_id_of_shape(sa);
+    c->b = r2d__body_id_of_shape(sb);
+    c->shape_a = r2d__shape_index_of_shape(sa);
+    c->shape_b = r2d__shape_index_of_shape(sb);
+    c->gen_a = (c->a >= 0 && c->a < R2D_MAX_BODIES) ? p->generations[c->a] : 0;
+    c->gen_b = (c->b >= 0 && c->b < R2D_MAX_BODIES) ? p->generations[c->b] : 0;
+    c->sensor = (b2Shape_IsValid(sa) && b2Shape_IsSensor(sa))
+             || (b2Shape_IsValid(sb) && b2Shape_IsSensor(sb));
+}
+
+/** Есть ли пара (a, b) в списке этого кадра. */
+static bool r2d__pair_seen(const int *list, int count, int a, int b)
+{
+    for (int i = 0; i + 1 < count; i += 2) {
+        if (list[i] == a && list[i + 1] == b) return true;
+    }
+    return false;
+}
+
+/** Запомнить пару (a, b) этого кадра. */
+static void r2d__pair_add(int *list, int *count, int cap, int a, int b)
+{
+    if (list == NULL || count == NULL) return;
+    if (*count + 2 > cap) return;
+    if (r2d__pair_seen(list, *count, a, b)) return;
+    list[*count] = a;
+    list[*count + 1] = b;
+    *count += 2;
+}
+
+/** Четвёрка (тело, форма) уже дала stay в этом кадре? Порядок пар не важен. */
+static bool r2d__stay_seen(const R2DPhysics *p, int a, int sa, int b, int sb)
+{
+    for (int i = 0; i + 3 < p->stay_count; i += 4) {
+        const bool same = p->stay_pairs[i] == a && p->stay_pairs[i + 1] == sa
+                       && p->stay_pairs[i + 2] == b && p->stay_pairs[i + 3] == sb;
+        const bool mirror = p->stay_pairs[i] == b && p->stay_pairs[i + 1] == sb
+                         && p->stay_pairs[i + 2] == a && p->stay_pairs[i + 3] == sa;
+        if (same || mirror) return true;
+    }
+    return false;
+}
+
+static void r2d__stay_add(R2DPhysics *p, int a, int sa, int b, int sb)
+{
+    if (p->stay_count + 4 > R2D_MAX_CONTACT_EVENTS * 4) return;
+    p->stay_pairs[p->stay_count++] = a;
+    p->stay_pairs[p->stay_count++] = sa;
+    p->stay_pairs[p->stay_count++] = b;
+    p->stay_pairs[p->stay_count++] = sb;
+}
+
+/**
+ * §7. Фаза stay для тел, которые её запросили.
+ *
+ * Box2D присылает begin/end/hit, но не «всё ещё касаюсь»: это состояние
+ * читается из текущих контактов тела. Обход делается ТОЛЬКО для тел с
+ * включённым stay (r2d_physics_set_contact_stay) — иначе цена платилась бы
+ * всеми динамическими телами каждый кадр.
+ *
+ * Касание, начавшееся в этом же кадре, пропускается: у него уже есть begin.
+ * Один контакт, который видят оба участника, отправляется один раз.
+ */
+static void r2d__collect_stay(R2DPhysics *p)
+{
+    bool any = false;
+    for (int i = 0; i < R2D_MAX_BODIES; ++i) {
+        if (p->alive[i] && p->contact_stay[i]) { any = true; break; }
+    }
+    if (!any) return;
+
+    b2ContactData data[R2D_MAX_SHAPES_PER_BODY * 4];
+    const int cap = (int)(sizeof data / sizeof data[0]);
+    for (int id = 0; id < R2D_MAX_BODIES; ++id) {
+        if (!p->alive[id] || !p->contact_stay[id]) continue;
+        const int n = b2Body_GetContactData(p->bodies[id], data, cap);
+        for (int i = 0; i < n && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
+            if (data[i].manifold.pointCount == 0) continue;
+            const int a = r2d__body_id_of_shape(data[i].shapeIdA);
+            const int b = r2d__body_id_of_shape(data[i].shapeIdB);
+            if (a < 0 || b < 0) continue;
+            if (r2d__pair_seen(p->began_pairs, p->began_count, a, b)) continue;
+            const int sa = r2d__shape_index_of_shape(data[i].shapeIdA);
+            const int sb = r2d__shape_index_of_shape(data[i].shapeIdB);
+            if (r2d__stay_seen(p, a, sa, b, sb)) continue;
+            r2d__stay_add(p, a, sa, b, sb);
+
+            R2DContactEvent *c = &p->contacts[p->contact_count++];
+            SDL_zerop(c);
+            c->kind = R2D_CONTACT_STAY;
+            r2d__event_bodies(p, c, data[i].shapeIdA, data[i].shapeIdB);
+            if (!c->sensor) {
+                c->nx = data[i].manifold.normal.x;
+                c->ny = data[i].manifold.normal.y;
+                c->has_normal = true;
+            }
+            c->px = R2D_TO_PX(data[i].manifold.points[0].point.x);
+            c->py = R2D_TO_PX(data[i].manifold.points[0].point.y);
+            c->has_point = true;
+        }
+    }
+}
+
 void r2d_physics_step(R2DPhysics *p, float dt)
 {
     if (!p->world_valid || dt <= 0.0f) return;
@@ -121,47 +287,94 @@ void r2d_physics_step(R2DPhysics *p, float dt)
     // буфер один раз. Поэтому за кадр буфер НЕ обнуляем (это делает
     // r2d_physics_begin_contacts), а копим события всех подшагов — иначе
     // выживали бы только события последнего и урон «через раз» терялся.
-    if (!p->contact_accumulating) p->contact_count = 0;
+    if (!p->contact_accumulating) {
+        p->contact_count = 0;
+        p->began_count = 0;
+        p->ended_count = 0;
+        p->stay_count = 0;
+    }
     if (!p->world_valid) return;
     const b2ContactEvents ev = b2World_GetContactEvents(p->world);
 
+    // §7: пары этого кадра. begin нужен, чтобы stay не повторял уже
+    // отправленный begin; end — чтобы один и тот же разрыв не пришёл дважды
+    // (у пары может закончиться несколько форм подряд).
     for (int i = 0; i < ev.beginCount && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
         const b2ContactBeginTouchEvent *e = &ev.beginEvents[i];
         R2DContactEvent *c = &p->contacts[p->contact_count++];
+        SDL_zerop(c);
         c->kind = R2D_CONTACT_BEGIN;
-        c->a = r2d__body_id_of_shape(e->shapeIdA);
-        c->b = r2d__body_id_of_shape(e->shapeIdB);
-        c->nx = e->manifold.normal.x;
-        c->ny = e->manifold.normal.y;
+        r2d__event_bodies(p, c, e->shapeIdA, e->shapeIdB);
         // Манифолд begin-события записан до солвера: точка есть, импульс нулевой.
         if (e->manifold.pointCount > 0) {
             c->px = R2D_TO_PX(e->manifold.points[0].point.x);
             c->py = R2D_TO_PX(e->manifold.points[0].point.y);
-        } else {
-            c->px = c->py = 0.0f;
+            c->has_point = true;
         }
-        c->speed = 0.0f;
+        // У сенсора контактной нормали нет: Box2D отдаёт для него нулевой
+        // манифолд, и «нормаль 0,0» была бы выдумкой (§7).
+        if (!c->sensor) {
+            c->nx = e->manifold.normal.x;
+            c->ny = e->manifold.normal.y;
+            c->has_normal = true;
+        }
+        r2d__pair_add(p->began_pairs, &p->began_count, R2D_MAX_CONTACT_EVENTS * 2, c->a, c->b);
     }
     for (int i = 0; i < ev.endCount && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
         const b2ContactEndTouchEvent *e = &ev.endEvents[i];
+        const int a = r2d__body_id_of_shape(e->shapeIdA);
+        const int b = r2d__body_id_of_shape(e->shapeIdB);
+        // Повторный end по той же паре тел в одном кадре не отправляем: у игры
+        // на узле одно событие `separate`, и два подряд — это баг для неё.
+        if (r2d__pair_seen(p->ended_pairs, p->ended_count, a, b)) continue;
         R2DContactEvent *c = &p->contacts[p->contact_count++];
+        SDL_zerop(c);
         c->kind = R2D_CONTACT_END;
-        c->a = r2d__body_id_of_shape(e->shapeIdA);
-        c->b = r2d__body_id_of_shape(e->shapeIdB);
-        c->nx = c->ny = c->px = c->py = c->speed = 0.0f;
+        r2d__event_bodies(p, c, e->shapeIdA, e->shapeIdB);
+        r2d__pair_add(p->ended_pairs, &p->ended_count, R2D_MAX_CONTACT_EVENTS * 2, a, b);
     }
     for (int i = 0; i < ev.hitCount && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
         const b2ContactHitEvent *e = &ev.hitEvents[i];
         R2DContactEvent *c = &p->contacts[p->contact_count++];
+        SDL_zerop(c);
         c->kind = R2D_CONTACT_HIT;
-        c->a = r2d__body_id_of_shape(e->shapeIdA);
-        c->b = r2d__body_id_of_shape(e->shapeIdB);
+        r2d__event_bodies(p, c, e->shapeIdA, e->shapeIdB);
         c->nx = e->normal.x;
         c->ny = e->normal.y;
         c->px = R2D_TO_PX(e->point.x);
         c->py = R2D_TO_PX(e->point.y);
         c->speed = R2D_TO_PX(e->approachSpeed);
+        c->has_normal = true;
+        c->has_point = true;
     }
+    // §7: сенсоры. У Box2D для них ОТДЕЛЬНЫЙ поток событий: манифолда и
+    // нормали нет вовсе, поэтому has_normal = has_point = false. «Нормаль 0,0»
+    // для сенсора была бы выдумкой (hurtbox не имеет поверхности).
+    const b2SensorEvents sev = b2World_GetSensorEvents(p->world);
+    for (int i = 0; i < sev.beginCount && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
+        const b2SensorBeginTouchEvent *e = &sev.beginEvents[i];
+        R2DContactEvent *c = &p->contacts[p->contact_count++];
+        SDL_zerop(c);
+        c->kind = R2D_CONTACT_BEGIN;
+        r2d__event_bodies(p, c, e->sensorShapeId, e->visitorShapeId);
+        c->sensor = true;
+        r2d__pair_add(p->began_pairs, &p->began_count, R2D_MAX_CONTACT_EVENTS * 2, c->a, c->b);
+    }
+    for (int i = 0; i < sev.endCount && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
+        const b2SensorEndTouchEvent *e = &sev.endEvents[i];
+        const int a = r2d__body_id_of_shape(e->sensorShapeId);
+        const int b = r2d__body_id_of_shape(e->visitorShapeId);
+        if (r2d__pair_seen(p->ended_pairs, p->ended_count, a, b)) continue;
+        R2DContactEvent *c = &p->contacts[p->contact_count++];
+        SDL_zerop(c);
+        c->kind = R2D_CONTACT_END;
+        r2d__event_bodies(p, c, e->sensorShapeId, e->visitorShapeId);
+        c->sensor = true;
+        r2d__pair_add(p->ended_pairs, &p->ended_count, R2D_MAX_CONTACT_EVENTS * 2, a, b);
+    }
+    // §7: фаза stay — для тел, которые её попросили. Касание, начавшееся в этом
+    // же кадре, не дублируется: у него уже есть begin.
+    r2d__collect_stay(p);
     if (p->contact_count >= R2D_MAX_CONTACT_EVENTS && !p->overflow_logged) {
         p->overflow_logged = true;
         R2D_WARN("события контакта: буфер переполнен, часть событий в кадре потеряна");
@@ -179,6 +392,9 @@ void r2d_physics_clear_contacts(R2DPhysics *p)
     if (p) {
         p->contact_count = 0;
         p->contact_accumulating = false;
+        p->began_count = 0;
+        p->ended_count = 0;
+        p->stay_count = 0;
     }
 }
 
@@ -187,6 +403,11 @@ void r2d_physics_begin_contacts(R2DPhysics *p)
     if (p) {
         p->contact_count = 0;
         p->contact_accumulating = true;
+        // §7: пары кадра считаются заново — иначе end «прошлого» кадра
+        // подавил бы законный end нового.
+        p->began_count = 0;
+        p->ended_count = 0;
+        p->stay_count = 0;
     }
 }
 
@@ -204,15 +425,138 @@ void r2d_physics_sync(R2DPhysics *p)
     }
 }
 
+// ---------------------------------------------------------------------------
+// §7. Валидация формы ДО создания тела
+//
+// Раньше вырожденный полигон молча становился прямоугольником — игра получала
+// не тот силуэт, о котором просила, и узнавала об этом только по странной
+// физике. Теперь контур проверяется до b2CreateBody: при отказе тела НЕТ, а в
+// кольце ошибок лежит код и причина, которые видит агент.
+//
+// Что считается корректным:
+//   * полигон — 3..8 точек, все координаты конечные, площадь не ~0, соседние
+//     точки не совпадают и Box2D строит из них выпуклый контур (hull >= 3);
+//   * капсула — конечные half_h >= 0 и radius; radius <= 0 означает «взять из
+//     half_w/16» (документированное умолчание), а не мусор;
+//   * круг — конечный radius;
+//   * прямоугольник — конечные неотрицательные полуразмеры (0 = умолчание 16).
+// ---------------------------------------------------------------------------
+
+static bool r2d__finite(float v) { return isfinite(v) != 0; }
+
+static bool r2d__validate_desc(R2DPhysics *p, const R2DBodyDesc *d, int body, int shape_index)
+{
+    if (!r2d__finite(d->half_w) || !r2d__finite(d->half_h) || !r2d__finite(d->radius)
+        || !r2d__finite(d->poly_radius)) {
+        r2d__push_error(p, R2D_PERR_SHAPE_INVALID, body, shape_index, 0.0f,
+                        "размер формы не число (NaN/Inf)");
+        R2D_ERROR("форма тела: размер не число (NaN/Inf)");
+        return false;
+    }
+    switch (d->shape) {
+    case R2D_SHAPE_POLYGON: {
+        if (d->point_count < 3) {
+            r2d__push_error(p, R2D_PERR_SHAPE_INVALID, body, shape_index, (float)d->point_count,
+                            "полигон: нужно не меньше 3 точек");
+            R2D_ERROR("полигон: точек %d, нужно >= 3 — тело не создано", d->point_count);
+            return false;
+        }
+        if (d->point_count > R2D_MAX_POLY_POINTS) {
+            r2d__push_error(p, R2D_PERR_SHAPE_INVALID, body, shape_index, (float)d->point_count,
+                            "полигон: больше 8 точек");
+            R2D_ERROR("полигон: точек %d, максимум %d — тело не создано",
+                      d->point_count, R2D_MAX_POLY_POINTS);
+            return false;
+        }
+        b2Vec2 pts[R2D_MAX_POLY_POINTS];
+        for (int i = 0; i < d->point_count; ++i) {
+            const float x = d->points[i * 2];
+            const float y = d->points[i * 2 + 1];
+            if (!r2d__finite(x) || !r2d__finite(y)) {
+                r2d__push_error(p, R2D_PERR_SHAPE_INVALID, body, shape_index, (float)i,
+                                "полигон: координата не число (NaN/Inf)");
+                R2D_ERROR("полигон: точка %d не число — тело не создано", i);
+                return false;
+            }
+            pts[i] = (b2Vec2){ R2D_TO_M(x), R2D_TO_M(y) };
+        }
+        // Площадь по формуле шнурковки: ноль — контур вырожден (линия/точка).
+        double area2 = 0.0;
+        for (int i = 0; i < d->point_count; ++i) {
+            const b2Vec2 a = pts[i];
+            const b2Vec2 b = pts[(i + 1) % d->point_count];
+            area2 += (double)a.x * (double)b.y - (double)b.x * (double)a.y;
+            const float dx = b.x - a.x, dy = b.y - a.y;
+            if (sqrtf(dx * dx + dy * dy) < 1e-4f) {
+                r2d__push_error(p, R2D_PERR_SHAPE_INVALID, body, shape_index, (float)i,
+                                "полигон: соседние точки совпадают");
+                R2D_ERROR("полигон: точки %d и %d совпадают — тело не создано", i,
+                          (i + 1) % d->point_count);
+                return false;
+            }
+        }
+        if (fabs(area2) < 1e-6) {
+            r2d__push_error(p, R2D_PERR_SHAPE_INVALID, body, shape_index, (float)fabs(area2),
+                            "полигон: площадь ~0 (контур вырожден)");
+            R2D_ERROR("полигон вырожден (площадь ~0) — тело не создано");
+            return false;
+        }
+        const b2Hull hull = b2ComputeHull(pts, d->point_count);
+        if (hull.count < 3) {
+            r2d__push_error(p, R2D_PERR_SHAPE_INVALID, body, shape_index, (float)hull.count,
+                            "полигон: Box2D не построил контур");
+            R2D_ERROR("полигон: выпуклый контур не построен — тело не создано");
+            return false;
+        }
+        return true;
+    }
+    case R2D_SHAPE_CAPSULE:
+        if (!r2d__finite(d->half_h) || d->half_h < 0.0f) {
+            r2d__push_error(p, R2D_PERR_SHAPE_INVALID, body, shape_index, d->half_h,
+                            "капсула: half_h < 0");
+            R2D_ERROR("капсула: half_h = %g — тело не создано", (double)d->half_h);
+            return false;
+        }
+        return true;
+    case R2D_SHAPE_CIRCLE:
+        if (!r2d__finite(d->radius) || d->radius < 0.0f) {
+            r2d__push_error(p, R2D_PERR_SHAPE_INVALID, body, shape_index, d->radius,
+                            "круг: отрицательный радиус");
+            R2D_ERROR("круг: radius = %g — тело не создано", (double)d->radius);
+            return false;
+        }
+        return true;
+    default:
+        if (d->half_w < 0.0f || d->half_h < 0.0f) {
+            r2d__push_error(p, R2D_PERR_SHAPE_INVALID, body, shape_index,
+                            d->half_w < 0.0f ? d->half_w : d->half_h,
+                            "прямоугольник: отрицательный полуразмер");
+            R2D_ERROR("прямоугольник: отрицательный полуразмер — тело не создано");
+            return false;
+        }
+        return true;
+    }
+}
+
 // Создать форму по описанию. Общий код для основной формы тела и добавочных:
 // так «голова» и «нога» описываются одним и тем же R2DBodyDesc.
+//
+// `dx`/`dy` — смещение формы от центра тела, `angle` — её собственный поворот
+// (радианы). У основной формы тела поворот всегда 0: её вращает само тело.
+// Собственный угол нужен областям (§40): прямоугольник оружия наклонён
+// относительно тела и пересобирается при смене прицела.
+//
+// Вызывается ТОЛЬКО после r2d__validate_desc: вырожденного полигона здесь уже
+// не бывает, и прямоугольной подмены тоже (см. §7).
 static b2ShapeId r2d__make_shape(b2BodyId body, const b2ShapeDef *sd, const R2DBodyDesc *d,
-                                 float dx, float dy)
+                                 float dx, float dy, float angle)
 {
+    const b2Rot rot = b2MakeRot(angle);
+    const b2Vec2 offset = { R2D_TO_M(dx), R2D_TO_M(dy) };
     b2ShapeId shape;
     switch (d->shape) {
     case R2D_SHAPE_CIRCLE: {
-        const b2Circle c = { { R2D_TO_M(dx), R2D_TO_M(dy) },
+        const b2Circle c = { offset,
                              R2D_TO_M(d->radius > 0.0f ? d->radius : 16.0f) };
         shape = b2CreateCircleShape(body, sd, &c);
         break;
@@ -220,9 +564,10 @@ static b2ShapeId r2d__make_shape(b2BodyId body, const b2ShapeDef *sd, const R2DB
     case R2D_SHAPE_CAPSULE: {
         // Капсула растёт вдоль оси Y: half_h — половина отрезка, radius — скругление.
         const float hh = R2D_TO_M(d->half_h);
-        const float r  = R2D_TO_M(d->radius > 0.0f ? d->radius : (d->half_w > 0.0f ? d->half_w : 16.0f));
-        const b2Capsule cap = { { R2D_TO_M(dx), -hh + R2D_TO_M(dy) },
-                                { R2D_TO_M(dx),  hh + R2D_TO_M(dy) }, r };
+        const b2Vec2 axis = b2RotateVector(rot, (b2Vec2){ 0.0f, hh });
+        const b2Capsule cap = { { offset.x - axis.x, offset.y - axis.y },
+                                { offset.x + axis.x, offset.y + axis.y },
+                                R2D_TO_M(d->radius > 0.0f ? d->radius : (d->half_w > 0.0f ? d->half_w : 16.0f)) };
         shape = b2CreateCapsuleShape(body, sd, &cap);
         break;
     }
@@ -232,8 +577,9 @@ static b2ShapeId r2d__make_shape(b2BodyId body, const b2ShapeDef *sd, const R2DB
         if (n >= 3) {
             b2Vec2 pts[R2D_MAX_POLY_POINTS];
             for (int i = 0; i < n; ++i) {
-                pts[i] = (b2Vec2){ R2D_TO_M(d->points[i * 2] + dx),
-                                   R2D_TO_M(d->points[i * 2 + 1] + dy) };
+                const b2Vec2 local = b2RotateVector(rot,
+                    (b2Vec2){ R2D_TO_M(d->points[i * 2]), R2D_TO_M(d->points[i * 2 + 1]) });
+                pts[i] = (b2Vec2){ local.x + offset.x, local.y + offset.y };
             }
             const b2Hull hull = b2ComputeHull(pts, n);
             if (hull.count >= 3) {
@@ -241,19 +587,21 @@ static b2ShapeId r2d__make_shape(b2BodyId body, const b2ShapeDef *sd, const R2DB
                 shape = b2CreatePolygonShape(body, sd, &poly);
                 break;
             }
-            R2D_WARN("полигон вырожден (точек %d) — тело создано прямоугольником", n);
+            // Сюда попасть нельзя: контур проверен r2d__validate_desc до
+            // создания тела. Молчаливой подмены прямоугольником больше нет —
+            // если инвариант нарушен, форма не создаётся вовсе (§7).
+            R2D_ERROR("полигон прошёл валидацию, но Box2D не построил контур");
+            return b2_nullShapeId;
         }
-        const b2Polygon box = b2MakeBox(R2D_TO_M(d->half_w > 0.0f ? d->half_w : 16.0f),
-                                        R2D_TO_M(d->half_h > 0.0f ? d->half_h : 16.0f));
-        shape = b2CreatePolygonShape(body, sd, &box);
-        break;
+        R2D_ERROR("полигон: точек %d, нужно >= 3 (валидация не сработала)", n);
+        return b2_nullShapeId;
     }
     default: {
         // Смещение задаёт зону: «голова» выше центра, «ноги» ниже.
         const float hx = R2D_TO_M(d->half_w > 0.0f ? d->half_w : 16.0f);
         const float hy = R2D_TO_M(d->half_h > 0.0f ? d->half_h : 16.0f);
-        const b2Polygon box = (dx != 0.0f || dy != 0.0f)
-            ? b2MakeOffsetBox(hx, hy, (b2Vec2){ R2D_TO_M(dx), R2D_TO_M(dy) }, b2Rot_identity)
+        const b2Polygon box = (dx != 0.0f || dy != 0.0f || angle != 0.0f)
+            ? b2MakeOffsetBox(hx, hy, offset, rot)
             : b2MakeBox(hx, hy);
         shape = b2CreatePolygonShape(body, sd, &box);
         break;
@@ -261,6 +609,48 @@ static b2ShapeId r2d__make_shape(b2BodyId body, const b2ShapeDef *sd, const R2DB
     }
     return shape;
 }
+
+/** Найти форму тела по НАШЕМУ индексу (0 — основная, дальше добавленные). */
+static b2ShapeId r2d__shape_at(const R2DPhysics *p, int id, int index)
+{
+    if (!p || id < 0 || id >= R2D_MAX_BODIES || !p->alive[id]) return b2_nullShapeId;
+    b2ShapeId shapes[R2D_MAX_SHAPES_PER_BODY];
+    const int count = b2Body_GetShapes(p->bodies[id], shapes,
+                                       (int)(sizeof shapes / sizeof shapes[0]));
+    for (int i = 0; i < count; ++i) {
+        if (r2d__shape_index_of_shape(shapes[i]) == index) return shapes[i];
+    }
+    return b2_nullShapeId;
+}
+
+/** Фильтр и события формы по описанию (общий код создания и пересборки). */
+static b2ShapeDef r2d__shape_def(const R2DBodyDesc *d)
+{
+    b2ShapeDef sd = b2DefaultShapeDef();
+    sd.density = d->density > 0.0f ? d->density : 1.0f;
+    // Плотность 0 — «форма не участвует в массе тела»: так области §40 не
+    // меняют массу и инерцию владельца (внутреннее представление не должно
+    // менять gameplay). У основной формы тела плотность > 0.
+    sd.updateBodyMass = d->density > 0.0f;
+    sd.material.friction    = d->friction;
+    sd.material.restitution = d->restitution;
+    sd.isSensor = d->sensor;
+    sd.enableContactEvents = d->contacts || d->one_way;
+    sd.enableHitEvents     = d->contacts;
+    sd.enablePreSolveEvents = d->one_way;
+    // §7: у сенсора своя пара событий (b2SensorEvents) — манифолда и нормали у
+    // неё нет, и придумывать их нельзя. Box2D v3 проверяет флаг у ОБЕИХ форм
+    // пары (sensor.c: `otherShape->enableSensorEvents == false` — пропуск),
+    // поэтому его получают: сенсор, тело с событиями контакта и любое
+    // динамическое тело (обычная цель hurtbox). Статичная стена без contacts
+    // сенсором не находится — это осознанно и записано в docs/highlevel/collision.md.
+    sd.enableSensorEvents = d->sensor || d->contacts || d->type == R2D_BODY_DYNAMIC;
+    sd.filter.categoryBits = d->filter_set ? d->category_bits : R2D_FILTER_DEFAULT_CATEGORY;
+    sd.filter.maskBits     = d->filter_set ? d->mask_bits     : R2D_FILTER_DEFAULT_MASK;
+    sd.filter.groupIndex   = d->filter_set ? d->group_index   : R2D_FILTER_GROUP_NONE;
+    return sd;
+}
+
 
 int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
 {
@@ -271,9 +661,17 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
         if (!p->alive[i]) { id = i; break; }
     }
     if (id < 0) {
+        // Лимит тел — не «тихий отказ»: ошибка уходит и в лог, и в кольцо для
+        // машины. Игра по ней понимает, что часть карты осталась без коллизии.
+        r2d__push_error(p, R2D_PERR_BODY_LIMIT, -1, -1, (float)R2D_MAX_BODIES,
+                        "достигнут лимит тел: тело не создано");
         R2D_ERROR("достигнут лимит физических тел (%d)", R2D_MAX_BODIES);
         return -1;
     }
+
+    // §7: форма проверяется ДО b2CreateBody — некорректный контур не должен
+    // тихо превратиться в другое тело.
+    if (!r2d__validate_desc(p, d, id, 0)) return -1;
 
     b2BodyDef def = b2DefaultBodyDef();
     switch (d->type) {
@@ -294,30 +692,16 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
         return -1;
     }
 
-    b2ShapeDef sd = b2DefaultShapeDef();
-    sd.density = d->density > 0.0f ? d->density : 1.0f;
-    sd.material.friction    = d->friction;
-    sd.material.restitution = d->restitution;
-    sd.isSensor = d->sensor;
-    sd.enableContactEvents = d->contacts || d->one_way;
-    sd.enableHitEvents     = d->contacts;
-    // Pre-solve нужен только односторонним платформам: он вызывается
-    // и для пары, где хотя бы одна форма его просила.
-    sd.enablePreSolveEvents = d->one_way;
-
-    // Слои и маски: без filter_set тело встаёт в слой 1 и сталкивается со
-    // всеми — так вели себя все тела до появления фильтров, старые игры не
-    // меняют поведение.
-    sd.filter.categoryBits = d->filter_set ? d->category_bits : R2D_FILTER_DEFAULT_CATEGORY;
-    sd.filter.maskBits     = d->filter_set ? d->mask_bits     : R2D_FILTER_DEFAULT_MASK;
-    sd.filter.groupIndex   = d->filter_set ? d->group_index   : R2D_FILTER_GROUP_NONE;
+    b2ShapeDef sd = r2d__shape_def(d);
     if (sd.filter.categoryBits == 0) {
         // Тело вне всех слоёв не сталкивается ни с кем и не находится
         // запросами — это почти всегда опечатка, а не замысел.
         R2D_WARN("тело создано с categoryBits = 0 (вне всех слоёв) — оно ни с чем не столкнётся");
     }
 
-    b2ShapeId shape = r2d__make_shape(body, &sd, d, 0.0f, 0.0f);
+    // Собственный угол формы основной формы тела всегда 0: её вращает тело
+    // (см. r2d__make_shape). Свой угол есть только у областей (§40).
+    b2ShapeId shape = r2d__make_shape(body, &sd, d, 0.0f, 0.0f, 0.0f);
     if (!b2Shape_IsValid(shape)) {
         R2D_ERROR("не удалось создать форму тела (kind=%d)", d->shape);
         b2DestroyBody(body);
@@ -327,6 +711,8 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
 
     p->one_way[id]  = d->one_way;
     p->one_way[id]  = d->one_way;
+    // Новое тело не наследует «спрыгивание» от прежнего владельца id.
+    p->one_way_ignore[id] = false;
     if (d->one_way) {
         // Лицевая нормаль в системе тела: из мировой поворачиваем на -angle.
         const b2Rot inv = b2MakeRot(-d->angle);
@@ -341,6 +727,10 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
 
     p->bodies[id] = body;
     p->alive[id]  = true;
+    // §7: поколение растёт при каждом создании. Событие контакта несёт его, и
+    // JS отличает «то же тело» от «новый узел на том же id».
+    p->generations[id]++;
+    p->contact_stay[id] = false;
     p->live_count++;
     p->transforms[id * 3 + 0] = d->x;
     p->transforms[id * 3 + 1] = d->y;
@@ -371,26 +761,229 @@ int r2d_physics_add_shape(R2DPhysics *p, int id, const R2DBodyDesc *d, float dx,
             R2D_WARN("у тела уже %d форм — лишние не добавляются (R2D_MAX_SHAPES_PER_BODY)",
                      R2D_MAX_SHAPES_PER_BODY);
         }
+        r2d__push_error(p, R2D_PERR_SHAPE_INDEX, id, index, (float)R2D_MAX_SHAPES_PER_BODY,
+                        "лимит форм тела: форма не добавлена");
         return -1;
     }
 
+    // §7: та же проверка, что при создании тела: область с вырожденным
+    // контуром не должна появиться «наполовину».
+    if (!r2d__validate_desc(p, d, id, index)) return -1;
+
     b2ShapeDef sd = b2DefaultShapeDef();
     sd.density = d->density > 0.0f ? d->density : 1.0f;
+    // Нулевая плотность = «не пересчитывать массу»: области §40 не меняют
+    // массу владельца, зоны $.world.zone плотность не задают (как раньше).
+    sd.updateBodyMass = d->density > 0.0f;
     sd.material.friction    = d->friction    >= 0.0f ? d->friction    : 0.2f;
     sd.material.restitution = d->restitution >= 0.0f ? d->restitution : 0.0f;
     sd.isSensor = d->sensor;
     sd.enableContactEvents = d->contacts;
+    // §7: сенсор-область (hurtbox/interaction) подписывается на свою пару
+    // событий — с манифолдом и нормалью у неё ничего нет.
+    // §7: сенсор-область (hurtbox/interaction) и её цели — см. r2d__shape_def.
+    sd.enableSensorEvents = d->sensor || d->contacts || d->type == R2D_BODY_DYNAMIC;
     sd.filter.categoryBits = d->filter_set ? d->category_bits : R2D_FILTER_DEFAULT_CATEGORY;
     sd.filter.maskBits     = d->filter_set ? d->mask_bits     : R2D_FILTER_DEFAULT_MASK;
     sd.filter.groupIndex   = d->filter_set ? d->group_index   : R2D_FILTER_GROUP_NONE;
 
-    const b2ShapeId shape = r2d__make_shape(p->bodies[id], &sd, d, dx, dy);
+    b2ShapeId shape = r2d__make_shape(p->bodies[id], &sd, d, dx, dy, d->angle);
     if (!b2Shape_IsValid(shape)) {
         R2D_WARN("не удалось добавить форму телу %d (kind=%d)", id, d->shape);
         return -1;
     }
     b2Shape_SetUserData(shape, R2D__SHAPE_TAG(id, index));
     return index;
+}
+
+/**
+ * §40. Пересобрать ОБЛАСТЬ тела: форму с нашим индексом уничтожить и создать
+ * заново по описанию (смещение, угол, размеры, слои, сенсорность).
+ *
+ * Форма пересобирается, а не двигается: Box2D v3 меняет геометрию формы только
+ * через b2Shape_Set*, а проще и надёжнее собрать её тем же кодом, что и при
+ * создании. Индекс сохраняется в user data, поэтому маршрутизация контактов
+ * (shapeA/shapeB) и область в игре остаются теми же — меняется только
+ * native handle, которого игровой код не видит.
+ *
+ * Возвращает индекс формы или -1.
+ */
+int r2d_physics_shape_set(R2DPhysics *p, int id, int index, const R2DBodyDesc *d,
+                          float dx, float dy, float angle)
+{
+    if (!p || !p->world_valid || !d) return -1;
+    if (id < 0 || id >= R2D_MAX_BODIES || !p->alive[id]) return -1;
+    const b2ShapeId old = r2d__shape_at(p, id, index);
+    if (!b2Shape_IsValid(old)) {
+        r2d__push_error(p, R2D_PERR_SHAPE_INDEX, id, index, -1.0f,
+                        "форма с таким индексом не найдена");
+        return -1;
+    }
+    // §7: сначала проверяем НОВОЕ описание, потом уничтожаем старое — иначе
+    // отказ оставлял бы тело без формы вовсе.
+    if (!r2d__validate_desc(p, d, id, index)) return -1;
+
+    b2ShapeDef sd = r2d__shape_def(d);
+    b2DestroyShape(old, true);
+    const b2ShapeId shape = r2d__make_shape(p->bodies[id], &sd, d, dx, dy, angle);
+    if (!b2Shape_IsValid(shape)) {
+        R2D_WARN("не удалось пересобрать форму %d тела %d (kind=%d)", index, id, d->shape);
+        return -1;
+    }
+    b2Shape_SetUserData(shape, R2D__SHAPE_TAG(id, index));
+    b2Body_SetAwake(p->bodies[id], true);
+    return index;
+}
+
+/** Форма включена: фильтр не обнулён (см. r2d_physics_set_shape_enabled). */
+static bool r2d__shape_filter_enabled(b2ShapeId shape)
+{
+    if (!b2Shape_IsValid(shape)) return false;
+    const b2Filter f = b2Shape_GetFilter(shape);
+    return f.categoryBits != 0 || f.maskBits != 0;
+}
+
+/** §40: включена ли форма (false — выключена или формы нет). */
+bool r2d_physics_shape_is_enabled(const R2DPhysics *p, int id, int index)
+{
+    const b2ShapeId shape = r2d__shape_at(p, id, index);
+    if (!b2Shape_IsValid(shape)) return false;
+    return r2d__shape_filter_enabled(shape);
+}
+
+/**
+ * §40. Включить/выключить ОБЛАСТЬ, не удаляя её.
+ *
+ * Выключенная форма получает нулевой фильтр (ни с кем не сталкивается и не
+ * находится запросами) и перестаёт присылать события; игровой владелец при
+ * этом жив. Включение возвращает фильтр области — он приходит из JS вместе с
+ * описанием, потому что описания областей живут на узле и переживают
+ * пересоздание тела.
+ *
+ * События сенсоров здесь не переключаются: движок их не читает, пересечения
+ * сенсора считаются явным запросом (r2d_physics_shape_overlaps).
+ */
+bool r2d_physics_set_shape_enabled(R2DPhysics *p, int id, int index, bool enabled,
+                                   uint64_t category_bits, uint64_t mask_bits, int group_index)
+{
+    if (!p || !p->world_valid) return false;
+    const b2ShapeId shape = r2d__shape_at(p, id, index);
+    if (!b2Shape_IsValid(shape)) return false;
+
+    b2Filter f = b2Shape_GetFilter(shape);
+    if (enabled) {
+        f.categoryBits = category_bits == 0 ? R2D_FILTER_DEFAULT_CATEGORY : category_bits;
+        f.maskBits     = mask_bits;
+        f.groupIndex   = group_index;
+    } else {
+        f.categoryBits = 0;
+        f.maskBits     = 0;
+        f.groupIndex   = 0;
+    }
+    b2Shape_SetFilter(shape, f);
+    if (enabled) {
+        b2Shape_EnableContactEvents(shape, true);
+        b2Shape_EnableHitEvents(shape, true);
+        // §7: включение сенсора даёт документированную пару begin/end — для
+        // этого у сенсора нужно включить его собственный поток событий.
+        b2Shape_EnableSensorEvents(shape, b2Shape_IsSensor(shape));
+    } else {
+        b2Shape_EnableContactEvents(shape, false);
+        b2Shape_EnableHitEvents(shape, false);
+        b2Shape_EnableSensorEvents(shape, false);
+    }
+    b2Body_SetAwake(p->bodies[id], true);
+    return true;
+}
+
+// Контекст запроса пересечений формы с миром (§40).
+typedef struct R2DShapeOverlapCtx {
+    int self_body;
+    int self_index;
+    int *bodies;
+    int *shapes;
+    int  cap;
+    int  count;
+} R2DShapeOverlapCtx;
+
+static bool r2d__overlap_cb(b2ShapeId shape, void *context)
+{
+    R2DShapeOverlapCtx *c = (R2DShapeOverlapCtx *)context;
+    const int body = r2d__body_id_of_shape(shape);
+    // Своё тело пропускаем: формы одного тела не сталкиваются между собой, и
+    // область не должна «находить» владельца.
+    if (body < 0 || body == c->self_body) return true;
+    if (c->count >= c->cap) return false;
+    c->bodies[c->count] = body;
+    c->shapes[c->count] = r2d__shape_index_of_shape(shape);
+    c->count++;
+    return true;
+}
+
+/**
+ * §40. Кто пересекается с областью ПРЯМО СЕЙЧАС.
+ *
+ * Это явный геометрический запрос (b2World_OverlapShape), а не история
+ * событий: цель, уже стоящая внутри области в момент открытия окна атаки,
+ * обнаруживается сразу, без ожидания нового движения. Форма берётся в её
+ * текущем мировом положении (трансформ тела + собственное смещение/угол),
+ * фильтр — слои области.
+ *
+ * Возвращает число записанных пар (тело, индекс формы) или -1.
+ */
+int r2d_physics_shape_overlaps(R2DPhysics *p, int id, int index,
+                               uint64_t category_bits, uint64_t mask_bits,
+                               int *bodies, int *shapes, int cap)
+{
+    if (!p || !p->world_valid || !bodies || !shapes || cap <= 0) return -1;
+    const b2ShapeId shape = r2d__shape_at(p, id, index);
+    if (!b2Shape_IsValid(shape)) return -1;
+    // Выключенная область (нулевой фильтр) не участвует в запросах — это
+    // единственный источник истины о её состоянии: кто бы её ни выключил
+    // (движок §40 или внешний драйвер через setShapeEnabled), результат один.
+    if (!r2d__shape_filter_enabled(shape)) return 0;
+
+    // Мировая геометрия формы: точки формы + трансформ тела.
+    const b2Transform xf = b2Body_GetTransform(p->bodies[id]);
+    b2Vec2 points[B2_MAX_POLYGON_VERTICES];
+    int count = 0;
+    float radius = 0.0f;
+    switch (b2Shape_GetType(shape)) {
+    case b2_circleShape: {
+        const b2Circle c = b2Shape_GetCircle(shape);
+        points[0] = b2TransformPoint(xf, c.center);
+        count = 1;
+        radius = c.radius;
+        break;
+    }
+    case b2_capsuleShape: {
+        const b2Capsule c = b2Shape_GetCapsule(shape);
+        points[0] = b2TransformPoint(xf, c.center1);
+        points[1] = b2TransformPoint(xf, c.center2);
+        count = 2;
+        radius = c.radius;
+        break;
+    }
+    case b2_polygonShape: {
+        const b2Polygon poly = b2Shape_GetPolygon(shape);
+        count = poly.count;
+        if (count > B2_MAX_POLYGON_VERTICES) count = B2_MAX_POLYGON_VERTICES;
+        for (int i = 0; i < count; ++i) points[i] = b2TransformPoint(xf, poly.vertices[i]);
+        radius = poly.radius;
+        break;
+    }
+    default:
+        return -1;
+    }
+
+    b2ShapeProxy proxy = b2MakeProxy(points, count, radius);
+    b2QueryFilter filter;
+    filter.categoryBits = category_bits == 0 ? R2D_FILTER_DEFAULT_CATEGORY : category_bits;
+    filter.maskBits = mask_bits == 0 ? R2D_FILTER_DEFAULT_MASK : mask_bits;
+
+    R2DShapeOverlapCtx ctx = { id, index, bodies, shapes, cap, 0 };
+    b2World_OverlapShape(p->world, &proxy, filter, r2d__overlap_cb, &ctx);
+    return ctx.count;
 }
 
 /** Сколько форм у тела (0 — тела нет). */
@@ -431,6 +1024,12 @@ void r2d_physics_destroy(R2DPhysics *p, int id)
     b2DestroyBody(p->bodies[id]);
     p->alive[id] = false;
     p->one_way[id] = false;
+    // Флаг живёт на теле: новый владелец этого id не должен унаследовать
+    // «спрыгивание» от прошлого.
+    p->one_way_ignore[id] = false;
+    // §7: stay-события снимаются вместе с телом. Поколение НЕ сбрасываем — оно
+    // как раз и отличает события уничтоженного тела от нового владельца id.
+    p->contact_stay[id] = false;
     p->live_count--;
 }
 
@@ -570,6 +1169,43 @@ bool r2d_physics_is_bullet(const R2DPhysics *p, int id)
 {
     if (!r2d_physics_is_alive(p, id)) return false;
     return b2Body_IsBullet(p->bodies[id]);
+}
+
+// Спрыгивание вниз с односторонней платформы. Флаг не трогает саму платформу:
+// на ней может стоять несколько тел, и «провалиться» должно только то, кому
+// это велели. Формально это не выключение столкновений, а их запрет в
+// preSolve — так тело не отталкивается от платформы, но остальные пары
+// (стены, пол, враги) продолжают работать как обычно.
+void r2d_physics_set_one_way_ignore(R2DPhysics *p, int id, bool on)
+{
+    if (!r2d_physics_is_alive(p, id)) return;
+    p->one_way_ignore[id] = on;
+}
+
+bool r2d_physics_one_way_ignore(const R2DPhysics *p, int id)
+{
+    if (id < 0 || id >= R2D_MAX_BODIES) return false;
+    return p->one_way_ignore[id];
+}
+
+// --- §7. Надёжность: stay-события и поколение тел --------------------------
+
+void r2d_physics_set_contact_stay(R2DPhysics *p, int id, bool on)
+{
+    if (!r2d_physics_is_alive(p, id)) return;
+    p->contact_stay[id] = on;
+}
+
+bool r2d_physics_contact_stay(const R2DPhysics *p, int id)
+{
+    if (id < 0 || id >= R2D_MAX_BODIES) return false;
+    return p->contact_stay[id];
+}
+
+uint32_t r2d_physics_generation(const R2DPhysics *p, int id)
+{
+    if (!p || id < 0 || id >= R2D_MAX_BODIES) return 0;
+    return p->generations[id];
 }
 
 // --- Контакты: импульс, точки, «касаются ли сейчас» -----------------------

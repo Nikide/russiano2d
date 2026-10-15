@@ -34,7 +34,7 @@ test('pushRecent: свежие первыми, без повторов, не б�
 });
 
 const ENTRIES = [
-    { path: 'assets/hero.character.json', type: 're2dsprite.character', size: 10, tool: 'x' },
+    { path: 'assets/level.tilemap.json', type: 'tilemap', size: 10, tool: 'x' },
     { path: 'assets/a.png', type: 'image', size: 2048 },
     { path: 'ui/Menu.rml', type: 'rmlui.document', size: 5 },
     { path: 'assets/b.png', type: 'image', size: 1 },

@@ -95,15 +95,53 @@ typedef enum R2DContactKind {
     R2D_CONTACT_BEGIN = 0,
     R2D_CONTACT_END   = 1,
     R2D_CONTACT_HIT   = 2,
+    // §7: тело продолжает касаться (контакт был и в прошлом шаге). Опционально:
+    // считается только для тел, включивших stay (r2d_physics_set_contact_stay).
+    R2D_CONTACT_STAY  = 3,
 } R2DContactKind;
 
 typedef struct R2DContactEvent {
     int   kind;        // R2DContactKind
     int   a, b;        // id тел; -1 — тело не опознано (например, уже удалено)
+    // §40: индекс формы в теле (0 — основная, дальше области). По нему игра
+    // отличает «попал в область оружия» от «задел тело» и находит область
+    // участника; -1 — форма не наша/не опознана.
+    int   shape_a, shape_b;
     float nx, ny;      // нормаль от A к B
     float px, py;      // точка контакта
     float speed;       // скорость сближения для hit, иначе 0
+    // §7: поколение тела на момент события. body id переиспользуется после
+    // destroy, поэтому «устаревший handle» отличается по поколению: событие со
+    // старым gen не должно дойти до нового владельца того же id.
+    uint32_t gen_a, gen_b;
+    // §7: чего backend НЕ дал. Для сенсоров контактная нормаль не определена —
+    // это `has_normal = false`, а не выдуманный нулевой вектор.
+    bool  sensor;      // хотя бы одна сторона — сенсор
+    bool  has_normal;  // false — нормали нет (сенсор или end)
+    bool  has_point;   // false — точки контакта нет (begin без манифолда)
 } R2DContactEvent;
+
+// --- §7. Машиночитаемые ошибки физики --------------------------------------
+// Лог R2D_ERROR видит человек, но не игра и не агент. Ошибки копятся в кольце
+// и отдаются через engine.physicsErrors(): код, тело, форма, число и короткая
+// причина. В отличие от лога, они не теряются при нескольких ошибках подряд.
+typedef enum R2DPhysicsErrorCode {
+    R2D_PERR_SHAPE_INVALID = 1,   // контур/капсула/круг отвергнуты до создания тела
+    R2D_PERR_BODY_LIMIT    = 2,   // достигнут лимит тел (R2D_MAX_BODIES)
+    R2D_PERR_SHAPE_INDEX   = 3,   // форма с таким индексом не найдена
+} R2DPhysicsErrorCode;
+
+#define R2D_MAX_PHYSICS_ERRORS 16
+#define R2D_PHYSICS_DETAIL_MAX 80
+
+typedef struct R2DPhysicsError {
+    int   code;        // R2DPhysicsErrorCode
+    int   body;        // id тела или -1
+    int   shape;       // индекс формы или -1
+    float value;       // числовой контекст (число точек, радиус, …)
+    char  detail[R2D_PHYSICS_DETAIL_MAX];
+} R2DPhysicsError;
+
 
 #define R2D_MAX_CONTACT_EVENTS 128
 #define R2D_MAX_JOINTS         64
@@ -137,6 +175,11 @@ typedef struct R2DPhysics {
     bool  one_way[R2D_MAX_BODIES];
     float one_way_nx[R2D_MAX_BODIES];
     float one_way_ny[R2D_MAX_BODIES];
+    // «Спрыгивание»: пока флаг стоит, preSolve не даёт этому телу упираться в
+    // односторонние платформы — узел падает сквозь ту, на которой стоял.
+    // Флаг персональный (не у платформы): на одной платформе может стоять
+    // несколько тел, и спрыгнуть должно только одно.
+    bool  one_way_ignore[R2D_MAX_BODIES];
 
     // --- События контакта (читает JS через engine.contacts()) ---------------
     R2DContactEvent contacts[R2D_MAX_CONTACT_EVENTS];
@@ -146,6 +189,29 @@ typedef struct R2DPhysics {
     // следующего вызова Box2D, а за кадр шагов бывает до пяти, и раньше
     // выживали только события последнего.
     bool            contact_accumulating;
+
+    // --- §7. Устойчивые контакты -------------------------------------------
+    // STAY — opt-in на тело: без флага ни одного лишнего обхода контактов.
+    bool     contact_stay[R2D_MAX_BODIES];
+    // Пары тел, у которых в этом кадре уже было begin/end/stay. Нужны, чтобы
+    // один и тот же end не пришёл дважды, а stay не дублировался, когда его
+    // просят оба участника пары.
+    int      began_pairs[R2D_MAX_CONTACT_EVENTS * 2];
+    int      began_count;
+    int      ended_pairs[R2D_MAX_CONTACT_EVENTS * 2];
+    int      ended_count;
+    int      stay_pairs[R2D_MAX_CONTACT_EVENTS * 4];
+    int      stay_count;
+    // Поколение тела: растёт при каждом создании. Событие несёт поколение —
+    // «устаревший handle» отличается от нового владельца того же id.
+    uint32_t generations[R2D_MAX_BODIES];
+
+    // --- §7. Ошибки физики (кольцо, читает JS) ------------------------------
+    R2DPhysicsError errors[R2D_MAX_PHYSICS_ERRORS];
+    int             error_head;      // следующий слот записи
+    int             error_count;     // сколько записей сейчас в кольце (<= MAX)
+    int             error_total;     // сколько всего записано (растёт всегда)
+    bool            error_overflow;
 
     // --- Суставы ------------------------------------------------------------
     b2JointId joints[R2D_MAX_JOINTS];
@@ -198,6 +264,30 @@ void  r2d_physics_set_gravity_scale(R2DPhysics *p, int id, float scale);
 // CCD для уже созданного тела: включить/выключить и прочитать.
 void  r2d_physics_set_bullet(R2DPhysics *p, int id, bool bullet);
 bool  r2d_physics_is_bullet(const R2DPhysics *p, int id);
+// Игнорировать ли этому телу односторонние платформы (спрыгивание вниз).
+// Включается на время падения и снимается, когда узел прошёл платформу.
+void  r2d_physics_set_one_way_ignore(R2DPhysics *p, int id, bool on);
+bool  r2d_physics_one_way_ignore(const R2DPhysics *p, int id);
+bool  r2d_physics_is_awake(const R2DPhysics *p, int id);
+
+// --- §7. Контракт надёжности -------------------------------------------------
+
+// STAY-события для тела: opt-in, по умолчанию выключены (обход контактов не
+// бесплатный). Включённое тело получает `stay` для каждого касания, которое
+// уже было в прошлом шаге (begin приходит один раз, stay — пока касаются).
+void  r2d_physics_set_contact_stay(R2DPhysics *p, int id, bool on);
+bool  r2d_physics_contact_stay(const R2DPhysics *p, int id);
+
+// Поколение тела: 0 — тела нет или оно не создавалось. Событие, пришедшее с
+// другим поколением, относится к уже уничтоженному телу — игра не должна
+// принимать его за новый узел с тем же body id.
+uint32_t r2d_physics_generation(const R2DPhysics *p, int id);
+
+// Ошибки физики в порядке появления (до `cap` записей). Возвращает число
+// записей. `overflow` — кольцо переполнялось (часть ошибок вытеснена).
+int  r2d_physics_errors(const R2DPhysics *p, R2DPhysicsError *out, int cap, bool *overflow);
+void r2d_physics_clear_errors(R2DPhysics *p);
+
 bool  r2d_physics_is_awake(const R2DPhysics *p, int id);
 
 // Добавить телу ещё одну форму (второй зоной: голова, нога, щит). Описание —
@@ -205,9 +295,37 @@ bool  r2d_physics_is_awake(const R2DPhysics *p, int id);
 // `dx`/`dy` — СМЕЩЕНИЕ формы от центра тела в пикселях: «голова» выше центра
 // (`dy` отрицательный), «ноги» ниже. Отдельные параметры, а не поля описания:
 // описание описывает ТЕЛО, а смещение относится только к добавочной форме.
+// `d->angle` — собственный поворот формы (радианы).
 int  r2d_physics_add_shape(R2DPhysics *p, int id, const R2DBodyDesc *d, float dx, float dy);
 // Сколько форм у тела (0 — тела нет).
 int  r2d_physics_shape_count(const R2DPhysics *p, int id);
+
+// --- §40. Независимые области (compound shapes) -----------------------------
+//
+// Область — форма тела с собственным смыслом: «тело» (движение), «contact
+// circle», «weapon rect». Описания живут в JS на узле, поэтому здесь только
+// операции над native-формой по индексу (индекс — наш, хранится в user data
+// формы и НЕ меняется при пересборке).
+
+// Пересобрать форму с индексом `index`: геометрия, смещение, угол, слои,
+// сенсорность. Возвращает индекс или -1.
+int  r2d_physics_shape_set(R2DPhysics *p, int id, int index, const R2DBodyDesc *d,
+                           float dx, float dy, float angle);
+// Включить/выключить форму, не удаляя её: выключенная выходит из столкновений
+// и запросов (нулевой фильтр) и не присылает события, но тело и владелец живы.
+// При включении фильтр берётся из аргументов (описание области — в JS).
+bool r2d_physics_set_shape_enabled(R2DPhysics *p, int id, int index, bool enabled,
+                                   uint64_t category_bits, uint64_t mask_bits, int group_index);
+// Включена ли форма сейчас (false — выключена или формы нет). Нужна, чтобы
+// JS-описание области не расходилось с native-состоянием: внешний драйвер
+// (анимационная дорожка) может переключить форму напрямую.
+bool r2d_physics_shape_is_enabled(const R2DPhysics *p, int id, int index);
+// Кто пересекается с формой ПРЯМО СЕЙЧАС: явный геометрический запрос по её
+// текущему мировому положению с фильтром (category, mask). Возвращает число
+// записанных пар; `bodies[i]` — тело, `shapes[i]` — индекс его формы. -1 — ошибка.
+int  r2d_physics_shape_overlaps(R2DPhysics *p, int id, int index,
+                                uint64_t category_bits, uint64_t mask_bits,
+                                int *bodies, int *shapes, int cap);
 
 // --- Контакты: импульс, точки, «касаются ли сейчас» ------------------------
 //

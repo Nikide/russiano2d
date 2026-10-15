@@ -11,25 +11,37 @@ import { ctx, Node, query } from '../../src/highlevel/core.js';
 import { installFx, tickFx, resetFx, fxState } from '../../src/highlevel/fx.js';
 
 // Считающий мок батча: сколько чего модуль положил в кадр.
-const pushed = { tri: 0, line: 0, ring: 0, circle: 0 };
+const pushed = { tri: 0, line: 0, ring: 0, circle: 0, sprite: 0 };
 ctx.gfx = {
     push: {
         triangle() { pushed.tri++; },
         line() { pushed.line++; },
         ring() { pushed.ring++; },
         circle() { pushed.circle++; },
+        sprite() { pushed.sprite++; },
     },
 };
 
-const $ = { camera: { shake() {} }, time: { after() {} } };
+// Хит-стоп уходит в $.time: здесь его только считаем.
+const stopped = { freeze: [], slow: [] };
+const $ = {
+    camera: { shake() {} },
+    time: {
+        after() {},
+        freeze(ms) { stopped.freeze.push(ms); },
+        slow(ms, scale) { stopped.slow.push([ms, scale]); },
+    },
+};
 installFx($);
 
-const CAM = { x: 0, y: 0, zoom: 1 };
+const CAM = { x: 0, y: 0, zoom: 1, w: 800, h: 600, rotation: 0 };
 const draw = () => ctx.gfx._fxFlush(CAM);
 
 function reset() {
     resetFx();
-    pushed.tri = pushed.line = pushed.ring = pushed.circle = 0;
+    pushed.tri = pushed.line = pushed.ring = pushed.circle = pushed.sprite = 0;
+    stopped.freeze.length = 0;
+    stopped.slow.length = 0;
 }
 
 // --- Времена жизни ---------------------------------------------------------
@@ -130,10 +142,64 @@ test('resetFx чистит всё разом', () => {
     $.fx.shockwave(0, 0, {});
     $.fx.lightning([0, 0], [10, 10], {});
     $.fx.attractor(0, 0, {});
-    truthy($.fx.stats().waves + $.fx.stats().bolts + $.fx.stats().fields > 0);
+    $.fx.flash('#ffffff', 100);
+    truthy($.fx.stats().waves + $.fx.stats().bolts + $.fx.stats().fields + $.fx.stats().flashes > 0);
     resetFx();
     const s = $.fx.stats();
-    eq(s.waves + s.bolts + s.fields + s.trails, 0);
+    eq(s.waves + s.bolts + s.fields + s.trails + s.flashes, 0);
+});
+
+// --- Вспышка экрана --------------------------------------------------------
+
+test('вспышка экрана заливает кадр прямоугольником поверх всего', () => {
+    reset();
+    $.fx.flash('#ffdd88', { ms: 100, alpha: 0.8 });
+    eq($.fx.stats().flashes, 1, 'вспышка заведена');
+    draw();
+    eq(pushed.sprite, 1, 'вспышка нарисована спрайтом-заливкой');
+    truthy($.fx.flashLeft() > 0, 'время жизни идёт');
+
+    reset();
+    $.fx.flash('#ffffff', 100);
+    tickFx(0.05);
+    draw();
+    eq(pushed.sprite, 1, 'на половине срока ещё видна');
+    tickFx(0.06);
+    eq($.fx.stats().flashes, 0, 'после срока вспышка удалена');
+    pushed.sprite = 0;
+    draw();
+    eq(pushed.sprite, 0, 'и в кадр больше не попадает');
+});
+
+test('короткая форма $.fx.flash(color, ms) работает для катсцен', () => {
+    reset();
+    $.fx.flash('#ffffff', 200);
+    eq($.fx.stats().flashes, 1, 'число вместо опций — это ms');
+    truthy($.fx.flashLeft() > 0);
+});
+
+test('вспышек экрана не больше четырёх: экран не уходит в белый', () => {
+    reset();
+    for (let i = 0; i < 7; i++) $.fx.flash('#ffffff', 500);
+    eq($.fx.stats().flashes, 4, 'лишние вытесняют самые старые');
+});
+
+// --- Hit-stop --------------------------------------------------------------
+
+test('$.fx.hitStop без масштаба — полная заморозка, с масштабом — замедление', () => {
+    reset();
+    $.fx.hitStop(70);
+    eq(stopped.freeze[0], 70, 'без scale — $.time.freeze');
+    eq(stopped.slow.length, 0);
+    $.fx.hitStop(120, 0.25);
+    eq(stopped.slow[0][0], 120, 'со scale — $.time.slow');
+    eq(stopped.slow[0][1], 0.25);
+});
+
+test('$.fx.impact доводит hit-stop до $.time', () => {
+    reset();
+    $.fx.impact(10, 10, { hitStop: 40, shake: 0 });
+    eq(stopped.freeze[0], 40, 'микро-стоп из impact');
 });
 
 test('нулевой и отрицательный dt не ломают тик', () => {

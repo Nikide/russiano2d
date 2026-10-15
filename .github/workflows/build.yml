@@ -68,19 +68,10 @@ jobs:
           xvfb-run -a python3 tests/agent/sdk_cli_test.py
           xvfb-run -a python3 tests/agent/sdk_studios_test.py
           xvfb-run -a python3 tests/agent/ui_virtual_mouse_test.py
-      - name: Linux Re2D World acceptance and golden images
-        if: runner.os == 'Linux'
-        env:
-          R2D_SDK_BINARY: build-ci/r2d-sdk
-          R2D_BINARY: build-ci/russiano2d
-          SDL_GPU_DRIVER: vulkan
-        run: |
-          mkdir -p build
-          xvfb-run -a python3 tests/agent/re2d_world_renderer_test.py
-          xvfb-run -a python3 tests/agent/sdk_world_studio_test.py
-          xvfb-run -a python3 tests/agent/re2d_world_acceptance_test.py
-          xvfb-run -a python3 tests/agent/re2d_dust2_test.py
-          xvfb-run -a python3 tools/re2d_world_goldens.py
+      # Re2D World acceptance and golden images (re2d_world_renderer_test.py,
+      # sdk_world_studio_test.py, re2d_world_acceptance_test.py, re2d_dust2_test.py,
+      # tools/re2d_world_goldens.py) убраны вместе с 3D-авторингом SDK: команды
+      # world-compile/world-info и экран World Studio из r2d-sdk вырезаны.
       - name: Package engine, SDK and docs
         run: python tools/ci_package.py --build-dir build-ci --platform '${{ matrix.platform }}'
       - uses: actions/upload-artifact@v4

@@ -30,7 +30,7 @@
 // расчёт урона — чистые функции, проверяются юнит-тестом.
 // ===========================================================================
 
-import { ctx, query } from './core.js';
+import { ctx, query, engineOf } from './core.js';
 
 // ---------------------------------------------------------------------------
 // Чистая часть: зоны и урон
@@ -403,12 +403,126 @@ export function createHealth(opts) {
 }
 
 // ---------------------------------------------------------------------------
+// §9. Общий damage contract: атака → фильтр → урон → событие результата
+//
+// Зональная модель выше — опциональная надстройка. Здесь — общий контракт,
+// которым пользуется и она, и обычная полоска node.cur_hp:
+//
+//   const atk = $.combat.attack({ source: '#hero', team: 1, window: 150,
+//                                 amount: 20, rehit: 'once' });
+//   const hits = $.combat.strike(atk, $('#sword').areaOverlap('blade'));
+//
+// Порядок обязателен: собрать кандидатов → отфильтровать и дедуплицировать →
+// применить gameplay → выпустить событие результата → presentation. `$.hits`
+// здесь не вызывается: это presentation, а не источник урона (§9).
+//
+// Ответ damage содержит ФАКТИЧЕСКУЮ причину отказа: inactive_window, immunity,
+// team, duplicate, destroyed_target, owner_dead, zero_amount, unknown_target.
+// ---------------------------------------------------------------------------
+
+/** Порядок причин отказа — контракт; проверяется тестом. */
+export const REFUSAL_REASONS = [
+    'unknown_target', 'destroyed_target', 'inactive_window', 'owner_dead',
+    'team', 'duplicate', 'immunity', 'zero_amount',
+];
+
+/**
+ * Чистое решение фильтра: что ответить на damage request.
+ *
+ * `input`: `{ targetExists, targetRemoved, hp, iframes, teamMismatch, duplicate,
+ *             attackActive, ownerAlive, amount }`.
+ * Возвращает причину отказа или `null` — урон применяется.
+ */
+export function damageReason(input) {
+    const i = input || {};
+    if (i.targetExists === false) return 'unknown_target';
+    if (i.targetRemoved === true || (Number(i.hp) || 0) <= 0) return 'destroyed_target';
+    if (i.attackActive === false) return 'inactive_window';
+    if (i.ownerAlive === false) return 'owner_dead';
+    if (i.teamMismatch === true) return 'team';
+    if (i.duplicate === true) return 'duplicate';
+    if ((Number(i.iframes) || 0) > 0) return 'immunity';
+    if (!(Number(i.amount) > 0)) return 'zero_amount';
+    return null;
+}
+
+/**
+ * Дедупликация повторных попаданий одной атаки.
+ *
+ * Ключ — логический владелец цели (nid), а не форма и не body: несколько
+ * hurtbox одной цели дают ОДИН gameplay-hit. Политика:
+ *   'once'   — одна цель один раз за всю атаку (умолчание);
+ *   'window' — одна цель один раз за активное окно (то же, но с окном);
+ *   'always' — каждая strike попадает, если не истёк hitCooldown.
+ */
+export function hitAllowed(attack, targetKey, now) {
+    if (!attack) return { allowed: false, reason: 'inactive_window' };
+    if (attack.cancelled) return { allowed: false, reason: 'inactive_window' };
+    if (now > attack.until) return { allowed: false, reason: 'inactive_window' };
+    const policy = attack.rehit || 'once';
+    if (policy === 'always') {
+        const last = attack.cooldown_until && attack.cooldown_until[targetKey];
+        if (last !== undefined && now < last) return { allowed: false, reason: 'duplicate' };
+        return { allowed: true, reason: null };
+    }
+    if (attack.hit_targets && attack.hit_targets[targetKey]) {
+        return { allowed: false, reason: 'duplicate' };
+    }
+    return { allowed: true, reason: null };
+}
+
+/** Запомнить попадание (мутирует атаку — это её журнал). */
+export function noteHit(attack, targetKey, now) {
+    if (!attack) return;
+    if (!attack.hit_targets) attack.hit_targets = {};
+    attack.hit_targets[targetKey] = now;
+    if ((attack.rehit || 'once') === 'always') {
+        if (!attack.cooldown_until) attack.cooldown_until = {};
+        // hit_cooldown задаётся в мс, время атаки — в секундах.
+        attack.cooldown_until[targetKey] = now + (attack.hit_cooldown || 0) / 1000;
+    }
+}
+
+/**
+ * Политика отражения снаряда/атаки: создаётся НОВАЯ identity (новый id), у неё
+ * новый владелец и команда, а старая помечается отражённой. Damage type и
+ * множитель урона — по opts, потому что «отражённый вдвое сильнее» — правило
+ * игры, а не движка.
+ */
+export function reflectAttack(spec, opts, makeId, now) {
+    const o = opts || {};
+    const src = spec || {};
+    const out = {
+        id: makeId(),
+        source: o.source !== undefined ? o.source : src.source,
+        owner: o.owner !== undefined ? o.owner : src.owner,
+        team: o.team !== undefined ? o.team : src.team,
+        attackId: src.id,
+        reflected: true,
+        reflectedFrom: src.id,
+        damageType: o.damageType !== undefined ? o.damageType : src.damageType,
+        amount: o.amount !== undefined ? o.amount : (src.amount || 0) * (o.multiplier === undefined ? 1 : o.multiplier),
+        impulse: o.impulse !== undefined ? o.impulse : src.impulse,
+        window: o.window !== undefined ? o.window : (src.window === undefined ? 150 : src.window),
+        rehit: o.rehit !== undefined ? o.rehit : (src.rehit || 'once'),
+        hit_cooldown: o.hitCooldown !== undefined ? o.hitCooldown : (src.hit_cooldown || 0),
+        onOwnerDeath: o.onOwnerDeath !== undefined ? o.onOwnerDeath : 'cancel',
+        until: now + (o.window !== undefined ? o.window : (src.window === undefined ? 150 : src.window)) / 1000,
+        hit_targets: {},
+    };
+    if (src) src.reflectedBy = out.id;
+    return out;
+}
+
+// ---------------------------------------------------------------------------
 // Подсистема
 // ---------------------------------------------------------------------------
 
 export function installCombat($) {
     /** Узел → модель здоровья. */
     const models = new WeakMap();
+    /** §9: атаки этой сессии — identity и журнал попаданий. */
+    const state = { next_id: 1, attacks: new Map(), nodes: new Map() };
 
     function nodeOf(what) {
         if (!what) return null;
@@ -514,11 +628,384 @@ export function installCombat($) {
             }
             return count;
         },
+
+        // --- §9. Атаки и общий damage contract ------------------------------
+
+        /**
+         * Создать instance атаки: `$.combat.attack({ source, owner, team,
+         * amount, damageType, window, rehit, hitCooldown, impulse, data })`.
+         *
+         * Возвращает данные атаки (обычный объект, не компонент): `id` — её
+         * identity, `source_id`/`owner_id` — устойчивые логические ID, `until` —
+         * конец активного окна в игровом времени. Пока окно открыто, атака
+         * живёт в `$.combat.attacks()`.
+         */
+        attack(spec) {
+            const s = spec || {};
+            const now = gameNow();
+            const src = nodeOf(s.source);
+            const own = s.owner === undefined ? src : (nodeOf(s.owner) || src);
+            const window = Math.max(0, Number(s.window) || 150);
+            const atk = {
+                id: state.next_id++,
+                source_id: src ? src.nid : null,
+                owner_id: own ? own.nid : null,
+                team: s.team === undefined ? null : s.team,
+                amount: Math.max(0, Number(s.amount) || 0),
+                damageType: s.damageType === undefined ? 'default' : String(s.damageType),
+                window,
+                until: now + window / 1000,
+                rehit: s.rehit || 'once',
+                hit_cooldown: Math.max(0, Number(s.hitCooldown) || 0),
+                onOwnerDeath: s.onOwnerDeath === 'continue' ? 'continue' : 'cancel',
+                friendlyFire: !!s.friendlyFire,
+                impulse: s.impulse || null,
+                dir: s.dir || null,
+                data: s.data || null,
+                roles: Array.isArray(s.roles) ? s.roles.slice() : ['hurtbox', 'movement'],
+                hit_targets: {},
+                hits: [],
+                cancelled: false,
+            };
+            state.attacks.set(atk.id, atk);
+            // Ссылки на узлы держим ВНЕ объекта атаки: он уходит в JSON
+            // (store/агент) и не должен тащить дерево узлов с циклами.
+            state.nodes.set(atk.id, { source: src, owner: own });
+            note('attack', src, { attack: atk.id, amount: atk.amount, window, team: atk.team });
+            return atk;
+        },
+
+        /** Активные (не истёкшие и не отменённые) атаки — данные, без ссылок на узлы. */
+        attacks() {
+            return activeAttacks();
+        },
+
+        /** Закрыть атаку: дальше она не попадает (reason inactive_window). */
+        endAttack(attack) {
+            const atk = attackOf(attack);
+            if (!atk) return false;
+            atk.cancelled = true;
+            state.attacks.delete(atk.id);
+            state.nodes.delete(atk.id);
+            return true;
+        },
+
+        /**
+         * Отразить снаряд/атаку: НОВАЯ identity, новый владелец и команда.
+         * Политика — в opts: `{ source, owner, team, amount|multiplier,
+         * damageType, impulse, window, onOwnerDeath }`. Старая атака помечается
+         * `reflectedBy`.
+         */
+        reflect(attack, opts) {
+            const atk = attackOf(attack);
+            if (!atk) return null;
+            const out = reflectAttack(atk, opts || {}, () => state.next_id++, gameNow());
+            // Ссылки на узлы — по nid: политика отражения задаёт ID, а не handle.
+            const srcNode = nodeOf(out.source);
+            const ownNode = nodeOf(out.owner) || srcNode;
+            // Устойчивые логические ID: игра и трассировка читают их, а не
+            // нативные handle (у отражённой атаки владелец/команда новые).
+            out.source_id = srcNode ? srcNode.nid : null;
+            out.owner_id = ownNode ? ownNode.nid : null;
+            state.attacks.set(out.id, out);
+            state.nodes.set(out.id, { source: srcNode, owner: ownNode });
+            note('reflect', ownNode, { attack: out.id, from: atk.id });
+            return out;
+        },
+
+        /**
+         * Один damage request: `$.combat.damageRequest({ amount, damageType,
+         * source, target, attackId, dir, impulse, data })`.
+         *
+         * Ответ: `{ accepted, reason, applied, blocked, hpBefore, hpAfter, death,
+         * zone, attackId, source_id, target_id, damageType, area, role }`.
+         * Причина отказа фактическая (см. REFUSAL_REASONS).
+         */
+        damageRequest(request) {
+            const r = request || {};
+            const target = nodeOf(r.target);
+            const source = nodeOf(r.source);
+            const atk = r.attack !== undefined ? attackOf(r.attack)
+                      : (r.attackId !== undefined ? state.attacks.get(r.attackId) : null);
+            const now = gameNow();
+            const transient = atk || {
+                id: null,
+                source_id: source ? source.nid : null,
+                owner_id: source ? source.nid : null,
+                team: r.team === undefined ? null : r.team,
+                amount: Math.max(0, Number(r.amount) || 0),
+                damageType: r.damageType === undefined ? 'default' : String(r.damageType),
+                rehit: 'always', until: Infinity, hit_cooldown: 0,
+                onOwnerDeath: 'continue', friendlyFire: !!r.friendlyFire,
+                impulse: r.impulse || null, dir: r.dir || null, data: r.data || null,
+                roles: ['hurtbox', 'movement'], hit_targets: {}, hits: [], cancelled: false,
+            };
+            return applyDamage(transient, target, target, r, now);
+        },
+
+        /**
+         * Удар атакой по кандидатам: собрать → отфильтровать и дедуплицировать →
+         * применить → событие результата. Кандидаты — результат
+         * `.areaOverlap()`/`$.world.overlap*()` или узел/обёртка/массив.
+         *
+         * Возвращает `{ attackId, accepted, rejected, results }`: у одной цели с
+         * несколькими hurtbox — ОДИН результат.
+         */
+        strike(attack, candidates, opts) {
+            const atk = attackOf(attack);
+            const out = { attackId: atk ? atk.id : null, accepted: 0, rejected: 0, results: [] };
+            if (!atk) return out;
+            if (atk.cancelled || gameNow() > atk.until) {
+                out.reason = 'inactive_window';
+                return out;
+            }
+            const list = candidateList(candidates);
+            const seen = {};
+            const filtered = opts || {};
+            const roleFilter = Array.isArray(filtered.roles) ? filtered.roles : null;
+            for (let i = 0; i < list.length; i++) {
+                const c = list[i];
+                const target = c.node;
+                if (!target) continue;
+                const owner = c.owner || target;
+                // `role` кандидата — это роль ЗАПРОШЕННОЙ области (hitbox), а не
+                // цель; фильтровать по ней по умолчанию нельзя, иначе удар не
+                // находил бы hurtbox. Явный фильтр — `strike(atk, cands,
+                // { roles: ['hurtbox'] })`; кандидат может нести `targetRole`.
+                const role = c.targetRole === undefined
+                    ? (c.role === undefined ? null : String(c.role)) : String(c.targetRole);
+                if (roleFilter && role && roleFilter.indexOf(role) < 0) continue;
+                const key = `${owner.nid}`;
+                if (seen[key]) continue;   // несколько hurtbox одной цели — один удар
+                seen[key] = true;
+                const r = applyDamage(atk, target, owner, {
+                    role, area: c.area || null,
+                    zone: filtered.zone, armor: filtered.armor,
+                    dir: c.dir || filtered.dir, impulse: filtered.impulse,
+                }, gameNow());
+                out.results.push(r);
+                if (r.accepted) out.accepted++; else out.rejected++;
+            }
+            const atkSource = sourceOf(atk.id);
+            if (out.accepted > 0 && atkSource) {
+                atkSource.emit('attackHit', { attack: atk.id, results: out.results });
+            }
+            return out;
+        },
+
+        /** Причины отказа — для интерфейса и тестов. */
+        refusalReasons() { return REFUSAL_REASONS.slice(); },
     };
 
     $.combat = combat;
     ctx.combat = combat;
     return combat;
+
+    // --- §9: служебное (внутри installCombat, чтобы видеть models/attach) ----
+
+    /** Время игры в секундах; без $.time (юнит-тест) — 0. */
+    function gameNow() {
+        return ctx.time && typeof ctx.time.now === 'function' ? ctx.time.now() : 0;
+    }
+
+    /** Запись в журнал $.trace: цепочка attack → damage → death (§28). */
+    function note(kind, node, data) {
+        if ($.trace && typeof $.trace.note === 'function') $.trace.note(kind, node, data);
+    }
+
+    /** Владелец/источник атаки по её id: узлы живут ВНЕ данных атаки, чтобы её
+     *  объект спокойно уходил в JSON (store/агент) без циклов дерева узлов. */
+    function ownerOf(id) {
+        const e = state.nodes.get(id);
+        return e ? (e.owner || e.source) : null;
+    }
+
+    function sourceOf(id) {
+        const e = state.nodes.get(id);
+        return e ? e.source : null;
+    }
+
+    /** Атака по объекту или по id. */
+    function attackOf(what) {
+        if (!what) return null;
+        if (typeof what === 'number') return state.attacks.get(what) || null;
+        return what.id !== undefined && what.until !== undefined ? what : null;
+    }
+
+    function activeAttacks() {
+        const now = gameNow();
+        const out = [];
+        for (const atk of state.attacks.values()) {
+            if (atk.cancelled) continue;
+            out.push({
+                id: atk.id, source_id: atk.source_id, owner_id: atk.owner_id,
+                team: atk.team, amount: atk.amount, damageType: atk.damageType,
+                window: atk.window, until: atk.until, active: now <= atk.until,
+                rehit: atk.rehit, hits: atk.hits.length, reflected: !!atk.reflected,
+                reflectedFrom: atk.reflectedFrom === undefined ? null : atk.reflectedFrom,
+            });
+        }
+        return out;
+    }
+
+    /** Кандидаты удара → единый список `{ node, owner, role, area }`. */
+    function candidateList(candidates) {
+        if (!candidates) return [];
+        // Кандидат приходит из `.areaOverlap()` обёртками (`{ node, owner,
+        // area, role }`) — разворачиваем их в узлы: дедупликация и урон
+        // работают с логическими владельцами, а не с обёртками.
+        if (Array.isArray(candidates)) {
+            const out = [];
+            for (let i = 0; i < candidates.length; i++) {
+                const c = candidates[i];
+                if (!c) continue;
+                const node = nodeOf(c.node !== undefined ? c.node : c);
+                if (!node) continue;
+                out.push({
+                    node,
+                    owner: nodeOf(c.owner) || node,
+                    role: c.role === undefined ? null : c.role,
+                    area: c.area === undefined ? null : c.area,
+                    dir: c.dir,
+                });
+            }
+            return out;
+        }
+        if (candidates.nodes) {
+            return candidates.nodes.map((n) => ({ node: n, owner: n, role: null, area: null }));
+        }
+        const one = nodeOf(candidates);
+        return one ? [{ node: one, owner: one, role: null, area: null }] : [];
+    }
+
+    /**
+     * Применить урон: фильтр → gameplay → событие результата. Возвращает ответ
+     * с ФАКТИЧЕСКОЙ причиной отказа. Presentation ($.hits) здесь не вызывается.
+     */
+    function applyDamage(atk, target, owner, extra, now) {
+        const o = extra || {};
+        const time = now === undefined ? gameNow() : now;
+        const response = {
+            accepted: false, reason: null,
+            attackId: atk.id,
+            source_id: atk.source_id,
+            target_id: owner ? owner.nid : null,
+            targetNodeId: target ? target.nid : null,
+            amount: atk.amount,
+            applied: 0, blocked: 0, hpBefore: 0, hpAfter: 0,
+            death: false, zone: null, damageType: atk.damageType,
+            area: o.area || null, role: o.role || null,
+        };
+
+        const health = target ? models.get(target) || null : null;
+        const hp = target ? (health ? health.sum() : (Number(target.cur_hp) || 0)) : 0;
+        const ownerNode = ownerOf(atk.id);
+        const ownerAlive = !ownerNode || (!ownerNode.removed && ownerNode.cur_hp > 0);
+
+        // Правило смерти владельца: явное, а не «как получилось».
+        if (!ownerAlive && atk.onOwnerDeath === 'cancel') atk.cancelled = true;
+
+        const hit = hitAllowed(atk, owner ? owner.nid : (target ? target.nid : -1), time);
+        const reason = damageReason({
+            targetExists: !!target,
+            targetRemoved: !!(target && target.removed),
+            hp,
+            iframes: target ? (target.iframes || 0) : 0,
+            teamMismatch: teamMismatch(atk, target),
+            duplicate: !hit.allowed && hit.reason === 'duplicate',
+            attackActive: hit.reason !== 'inactive_window',
+            ownerAlive,
+            amount: atk.amount,
+        });
+        if (reason) {
+            response.reason = reason;
+            note('damage', target, { attack: atk.id, accepted: false, reason });
+            if (target && typeof target.emit === 'function') {
+                try { target.emit('damage', response); } catch (e) { /* игра не должна ронять бой */ }
+            }
+            return response;
+        }
+
+        response.accepted = true;
+        response.hpBefore = hp;
+        if (health) {
+            const zone = o.zone || (atk.data && atk.data.zone) || zoneForSlot(o.role || '');
+            const result = health.hit(zone, atk.amount, { armor: o.armor });
+            response.zone = zone;
+            response.applied = result.amount;
+            response.blocked = result.blocked;
+            response.hpAfter = health.sum();
+            response.death = !!result.died;
+        } else {
+            const applied = Math.max(0, Math.min(hp, atk.amount));
+            response.applied = applied;
+            response.hpAfter = hp - applied;
+            target.cur_hp = response.hpAfter;
+            response.death = hp > 0 && response.hpAfter <= 0;
+            if (response.death) {
+                // Единый путь смерти — событие узла; повторный урон по мёртвому
+                // уже отсекается фильтром (destroyed_target).
+                response.hpAfter = 0;
+                target.cur_hp = 0;
+            }
+        }
+        if (target) target.iframes = target.iframes || 0;
+
+        noteHit(atk, owner ? owner.nid : (target ? target.nid : -1), time);
+        atk.hits.push({
+            target_id: response.target_id, applied: response.applied,
+            death: response.death, zone: response.zone, at: time,
+        });
+        note('damage', target, {
+            attack: atk.id, accepted: true, applied: response.applied,
+            hpAfter: response.hpAfter, death: response.death, zone: response.zone,
+        });
+        if (response.death) note('death', target, { attack: atk.id, source: atk.source_id });
+
+        // Импульс — физическое отбрасывание, а не косметический сдвиг: скорость
+        // идёт через канал внешней скорости (§8), поэтому .controls() его не
+        // стирает в следующем тике.
+        const impulse = o.impulse || atk.impulse;
+        if (target && impulse && !(target.removed)) {
+            applyImpulseTo(target, impulse, atk.dir || o.dir);
+        }
+
+        if (target && typeof target.emit === 'function') {
+            try { target.emit('damage', response); } catch (e) { /* см. выше */ }
+        }
+        return response;
+    }
+
+    /** Команда: свои не бьют своих, если игра не разрешила friendly fire. */
+    function teamMismatch(atk, target) {
+        if (atk.friendlyFire || !target) return false;
+        if (atk.team === null || atk.team === undefined) return false;
+        if (target.team === undefined || target.team === null) return false;
+        return Number(target.team) === Number(atk.team);
+    }
+
+    /** Физический импульс: телу — Box2D, узлу без тела — через внешнюю скорость. */
+    function applyImpulseTo(target, impulse, dir) {
+        const ix = typeof impulse === 'object' ? (Number(impulse.x) || 0) : (Number(impulse) || 0);
+        const iy = typeof impulse === 'object' ? (Number(impulse.y) || 0) : 0;
+        const dx = dir ? (Number(dir.x) || 0) : 1;
+        const dy = dir ? (Number(dir.y) || 0) : 0;
+        const fx = ix !== 0 || iy !== 0 ? ix : dx * (Number(impulse) || 0);
+        const fy = ix !== 0 || iy !== 0 ? iy : dy * (Number(impulse) || 0);
+        if (target.body >= 0 && typeof engineOf().applyImpulse === 'function') {
+            engineOf().applyImpulse(target.body, fx, fy);
+        }
+        // Внешняя скорость (§8): то же намерение в px/с, чтобы .controls() не
+        // стёр его в следующем тике. У узла без тела это единственный канал —
+        // косметический сдвиг сквозь стены не делаем.
+        const ms = 120;
+        target.ext_vel = {
+            x: (target.ext_vel ? target.ext_vel.x : 0) + fx,
+            y: (target.ext_vel ? target.ext_vel.y : 0) + fy,
+            ms: ms / 1000, left: ms / 1000,
+            applied_y: target.ext_vel ? target.ext_vel.applied_y : 0,
+        };
+    }
 }
 
 /** Живые узлы реестра: нужны для тика крови. */

@@ -10,32 +10,15 @@
 # запускаются на Windows, где санитайзеры можно включить отдельной сборкой.
 # ---------------------------------------------------------------------------
 
-set(R2D_SANITIZE_FLAGS_AVAILABLE TRUE)
-
-# RotSprite: математика и границы буфера, без GPU и окна.
-add_executable(r2d_rotsprite_test rotsprite/rotsprite_test.c "${CMAKE_SOURCE_DIR}/src/rotsprite_math.c")
-target_include_directories(r2d_rotsprite_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-if(NOT MSVC)
-    target_link_libraries(r2d_rotsprite_test PRIVATE m)
-endif()
-if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
-    target_compile_options(r2d_rotsprite_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(r2d_rotsprite_test PRIVATE -fsanitize=address,undefined)
-endif()
+# Санитайзеры доступны только там, где есть рантайм ASan/UBSan: MSVC и
+# кросс-сборка (MinGW) их не имеют, и линковка падает с «cannot find -lasan».
+# Флаг ставится ДО первого теста: раньше он включался в блоке rotsprite уже
+# ПОСЛЕ r2d_json_test, и при кросс-сборке Windows json-тест всё равно получал
+# -fsanitize=address и валил всю сборку платформы.
 if(MSVC OR CMAKE_CROSSCOMPILING)
     set(R2D_SANITIZE_FLAGS_AVAILABLE FALSE)
-endif()
-
-# Re2D: проекция, отсечение по ближней плоскости, обход граней и туман —
-# чистая математика (src/re2d_math.c), без окна и GPU.
-add_executable(r2d_re2d_test re2d/re2d_test.c "${CMAKE_SOURCE_DIR}/src/re2d_math.c")
-target_include_directories(r2d_re2d_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-if(NOT MSVC)
-    target_link_libraries(r2d_re2d_test PRIVATE m)
-endif()
-if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
-    target_compile_options(r2d_re2d_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(r2d_re2d_test PRIVATE -fsanitize=address,undefined)
+else()
+    set(R2D_SANITIZE_FLAGS_AVAILABLE TRUE)
 endif()
 
 add_executable(r2d_json_test json/json_test.c "${CMAKE_SOURCE_DIR}/src/json.c")
@@ -132,6 +115,38 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_bsp_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# --- RE2D-тесты: только в сборке с RE2D --------------------------------------
+# Тесты 3D-авторинга собираются вместе со своим кодом: при
+# -DR2D_ENABLE_RE2D=OFF целей r2d_re2d_test / r2d_re2d_world_test /
+# r2d_world_exr_test нет — исходников, которые они проверяют, в сборке тоже
+# нет, и цель ссылалась бы на несуществующие файлы. Тест check-скриптов
+# (tools/ci_verify.py) пропускает отсутствующие цели по тому же флагу.
+if(NOT R2D_ENABLE_RE2D)
+    message(STATUS "  RE2D ............ C-тесты re2d/rotsprite пропущены (R2D_ENABLE_RE2D=OFF)")
+else()
+
+# Re2D: проекция, отсечение по ближней плоскости, обход граней и туман —
+# чистая математика (src/re2d_math.c), без окна и GPU.
+add_executable(r2d_re2d_test re2d/re2d_test.c "${CMAKE_SOURCE_DIR}/src/re2d_math.c")
+target_include_directories(r2d_re2d_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+if(NOT MSVC)
+    target_link_libraries(r2d_re2d_test PRIVATE m)
+endif()
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_re2d_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_re2d_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# RotSprite: математика и границы буфера, без GPU и окна.
+add_executable(r2d_rotsprite_test rotsprite/rotsprite_test.c "${CMAKE_SOURCE_DIR}/src/rotsprite_math.c")
+target_include_directories(r2d_rotsprite_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+if(NOT MSVC)
+    target_link_libraries(r2d_rotsprite_test PRIVATE m)
+endif()
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_rotsprite_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_rotsprite_test PRIVATE -fsanitize=address,undefined)
+endif()
 # RE2D World: multi-height queries and final RGBA synthesis, no GPU.
 add_executable(r2d_re2d_world_test re2d/world_test.c
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
@@ -147,10 +162,20 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_re2d_world_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# EXR-декодер панорамного неба Re2D World (cmake/WorldEXR.cmake).
+add_executable(r2d_world_exr_test re2d/exr_test.c)
+target_include_directories(r2d_world_exr_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_exr_test PRIVATE r2d_world_exr)
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_exr_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_exr_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+endif()   # R2D_ENABLE_RE2D
+
 if(TARGET R2D_SteamAudio)
     add_executable(r2d_audio_spatial_test audio/spatial_test.c "${CMAKE_SOURCE_DIR}/src/audio_spatial.c")
     target_include_directories(r2d_audio_spatial_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-    target_compile_definitions(r2d_audio_spatial_test PRIVATE R2D_STEAM_AUDIO=1)
     target_link_libraries(r2d_audio_spatial_test PRIVATE SDL3::SDL3 R2D_SteamAudio)
     if(NOT MSVC)
         target_link_libraries(r2d_audio_spatial_test PRIVATE m)
@@ -160,12 +185,4 @@ if(TARGET R2D_SteamAudio)
         target_compile_options(r2d_audio_spatial_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(r2d_audio_spatial_test PRIVATE -fsanitize=address,undefined)
     endif()
-endif()
-
-add_executable(r2d_world_exr_test re2d/exr_test.c)
-target_include_directories(r2d_world_exr_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(r2d_world_exr_test PRIVATE r2d_world_exr)
-if(R2D_SANITIZE_FLAGS_AVAILABLE)
-    target_compile_options(r2d_world_exr_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(r2d_world_exr_test PRIVATE -fsanitize=address,undefined)
 endif()

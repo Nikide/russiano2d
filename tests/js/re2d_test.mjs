@@ -21,11 +21,14 @@ import {
     billboardPose, shadeColor, re2dMove, DEFAULT_HEIGHT, DEFAULT_TILE,
 } from '../../src/highlevel/re2d.js';
 
-const $ = createApi();
 const UV = { u0: 0, v0: 0, u1: 1, v1: 1 };
 const WHITE = [255, 255, 255];
 
 // Заглушка нативного ядра: запоминает отправленные меши.
+//
+// Ставится ДО createApi(): установка модулей $ решает, есть ли в этой сборке
+// RE2D, по нативным биндингам (api.js: re2dAvailable → engine.re2d.view).
+// Раньше заглушка появлялась после createApi(), и $.re2d не устанавливался.
 const meshes = [];
 engine.re2d = {
     view: () => true,
@@ -36,6 +39,8 @@ engine.re2d = {
     mesh: (buf, count, texture, flags) => { meshes.push({ buf: buf.slice(0, count * 8), count, texture, flags }); return count; },
     CULL_BACK: 1,
 };
+
+const $ = createApi();
 
 // Проекция по независимой формуле (те же соглашения, что в src/re2d_math.h).
 function project(view, p) {

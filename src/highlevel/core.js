@@ -87,6 +87,10 @@ export function engineOf() {
             now: () => 0,
             log: () => undefined,
             setUpdate: noop, setRender: noop, setSnapshot: noop, quit: noop,
+            // §39/§40: проход локальных трансформов и области — за пределами
+            // движка (юнит-тест qjs) молча ничего не делают.
+            setResolveTransforms: noop, setShape: noop, setShapeEnabled: noop,
+            shapeOverlaps: () => [], addShape: () => -1, shapeCount: () => 0,
             setExit: noop, markUI: noop, setErrorHandler: noop, requestReload: noop,
             reloadPending: () => false, hotReload: noop,
             // Общие для подсистем: рисование, физика, окно, ввод.
@@ -535,6 +539,36 @@ const RESERVED = new Set([
 
 let next_uid = 1;
 
+// --- Стабильный идентификатор узла (nid) -------------------------------------
+// `uid` — номер создания: он сбрасывается при перезагрузке скриптов и не
+// переживает сохранение. `nid` — стабильный логический ID (§14 и §4.2
+// Спецификации): он уникален в пределах запуска, попадает в снимок узла
+// (prefab.js) и восстанавливается вместе с ним, поэтому по нему можно
+// сопоставлять состояние (FSM, таймеры, RNG-потоки) между сохранением и
+// загрузкой, не полагаясь на порядок узлов в обходе дерева.
+//
+// Формат — строка `n<счётчик>`, а не число: так ID переживает JSON без
+// округления, отличается от Box2D body id и не выглядит как индекс массива.
+// Старый код продолжает пользоваться `uid`; nid только добавляется.
+let next_nid = 1;
+const nid_digits = new Set(['n', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
+
+/** Назначить узлу новый nid (вызывается при создании, если его ещё нет). */
+export function assignNid(node) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.nid === undefined || node.nid === null || node.nid === '') {
+        node.nid = 'n' + (next_nid++);
+    }
+    return node.nid;
+}
+
+/** Проверка формы nid: 'n' + цифры. Нужна валидаторам данных и save. */
+export function isNid(value) {
+    if (typeof value !== 'string' || value.length < 2) return false;
+    for (const ch of value) if (!nid_digits.has(ch)) return false;
+    return value[0] === 'n';
+}
+
 /**
  * Проставляет фильтр коллизий живому телу узла. Менять фильтр можно без
  * пересоздания тела: Box2D хранит его на форме, а .setBody() при следующем
@@ -547,10 +581,766 @@ function applyFilter(node) {
     return node;
 }
 
-// Псевдонимы событий: в документации контакт исторически называли 'collision'
-// (и так же писали в примерах про пул пуль), а движок шлёт 'collide'. Приводим
-// оба имени к каноническому в on/off/emit — иначе канонический пример
-// «пуля вернулась в пул» молча не срабатывает.
+// ---------------------------------------------------------------------------
+// §39. Локальные трансформы: opt-in композиция по цепочке родителей
+// ---------------------------------------------------------------------------
+//
+// Узел по умолчанию живёт в МИРОВЫХ координатах: x/y/angle/scale_x/scale_y —
+// его собственный трансформ, и так его читают отрисовка, физика и старый
+// игровой код. Опционально узел переводится в локальный режим
+// (`.transformSpace('local')`, `.localAt(...)`): тогда в тех же полях лежит
+// УЖЕ СКОМПОНИРОВАННЫЙ мировой трансформ, а исходные локальные значения — в
+// local_x/local_y/local_angle/local_scale_x/local_scale_y. Поэтому ни одна
+// подсистема не меняется: рендер и физика читают те же поля, что и раньше.
+//
+// Композиция по цепочке родителей:
+//   angle = angle_родителя + local_angle;
+//   scale = scale_родителя * local_scale (знак сохраняется — flip зеркалит);
+//   point = parent + R(angle_родителя) * (local_xy * scale_родителя).
+// Неравномерный масштаб родителя масштабирует сдвиг по своим осям, но не даёт
+// shear: произвольный наклон запрещён (§39).
+//
+// Проход кадра пересчитывает все локальные узлы пакетно и с защитой от циклов:
+// нативный — engine.nodes.resolveTransforms (src/nodes.c), без движка (юнит-тест
+// qjs, $.debug.nativePasses(false)) — резервный JS-путь ниже. Движок зовёт его в
+// конце кадра логики и перед отрисовкой (src/script.c), поэтому к началу
+// следующего физического шага и к сборке кадра трансформы детей уже верны.
+
+// Список узлов в локальном режиме: проход кадра идёт по нему, а не по всему
+// реестру, — без локальных узлов §39 не стоит ничего.
+const local_nodes = [];
+
+// Поколение пересчёта. Растёт на каждом проходе: поля _t_gen/_t_busy узла
+// хранят номер поколения, в котором он уже пересчитан (или находится в
+// обработке — защита от цикла в цепочке родителей).
+let local_gen = 0;
+
+/** Включён ли у узла локальный режим (§39). */
+export function isLocalSpace(node) {
+    return node !== null && node !== undefined && node.local_mode === true;
+}
+
+/** Число с запасным значением: поля локального трансформа могут быть не заданы. */
+function numOr(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function addLocalNode(node) {
+    if (node._t_local === true) return;
+    node._t_local = true;
+    local_nodes.push(node);
+}
+
+function dropLocalNode(node) {
+    if (node._t_local !== true) return;
+    node._t_local = false;
+    const i = local_nodes.indexOf(node);
+    if (i >= 0) local_nodes.splice(i, 1);
+}
+
+/**
+ * Собрать мировой трансформ локального узла из его локальных значений и
+ * мирового трансформа родителя. Возвращает true, если поля узла изменились.
+ * Значения родителя берутся из его x/y/angle/scale — они всегда мировые.
+ */
+function composeLocalInto(node, parent) {
+    const lx = numOr(node.local_x, 0);
+    const ly = numOr(node.local_y, 0);
+    const la = numOr(node.local_angle, 0);
+    const lsx = numOr(node.local_scale_x, 1);
+    const lsy = numOr(node.local_scale_y, 1);
+
+    let nx, ny, na, nsx, nsy;
+    if (!parent) {
+        // Корень: мир и локальное совпадают.
+        nx = lx; ny = ly; na = la; nsx = lsx; nsy = lsy;
+    } else {
+        const pa = numOr(parent.angle, 0);
+        const psx = numOr(parent.scale_x, 1);
+        const psy = numOr(parent.scale_y, 1);
+        const c = Math.cos(pa);
+        const s = Math.sin(pa);
+        const ox = lx * psx;
+        const oy = ly * psy;
+        nx = parent.x + c * ox - s * oy;
+        ny = parent.y + s * ox + c * oy;
+        na = pa + la;
+        nsx = psx * lsx;
+        nsy = psy * lsy;
+    }
+    const changed = nx !== node.x || ny !== node.y || na !== node.angle ||
+                    nsx !== node.scale_x || nsy !== node.scale_y;
+    node.x = nx;
+    node.y = ny;
+    node.angle = na;
+    node.scale_x = nsx;
+    node.scale_y = nsy;
+    return changed;
+}
+
+/** Синхронизация тела локального узла: форма едет за скомпонованным трансформом. */
+function syncLocalBody(node) {
+    if (node.body >= 0) engineOf().setPosition(node.body, node.x, node.y, node.angle);
+}
+
+/**
+ * Пересчитать цепочку локального узла в текущем поколении (родители — раньше
+ * детей). Цикл в цепочке не зацикливает проход: узел, уже находящийся в
+ * обработке, второй раз не считается (его ветка берёт текущие значения).
+ */
+function resolveLocalChain(node) {
+    if (node.local_mode !== true) return false;
+    if (node._t_gen === local_gen) return false;      // уже пересчитан
+    if (node._t_busy === local_gen) return false;     // цикл: узел в обработке
+    node._t_busy = local_gen;
+    const parent = node.parent_node;
+    if (parent && parent.local_mode === true) resolveLocalChain(parent);
+    adoptWorldWrite(node, parent);
+    const changed = composeLocalInto(node, parent);
+    node._t_gen = local_gen;
+    node._t_wx = node.x;
+    node._t_wy = node.y;
+    node._t_wa = node.angle;
+    node._t_wsx = node.scale_x;
+    node._t_wsy = node.scale_y;
+    if (changed) syncLocalBody(node);
+    return changed;
+}
+
+/**
+ * Внешняя запись мирового трансформа: нативный твин (src/nodes.c) и чужие
+ * модули пишут `node.x/y/angle/scale_*` напрямую. Если значения разошлись с
+ * последним скомпонованным (`_t_w*`), запись принимается как МИРОВАЯ и
+ * пересчитывается в локальные поля — иначе проход §39 молча вернул бы узел
+ * назад. Собственный проход сюда не попадает: он сам обновляет `_t_w*`.
+ */
+function adoptWorldWrite(node, parent) {
+    if (node._t_wx === undefined) return;              // ещё не компоновался
+    if (node.x === node._t_wx && node.y === node._t_wy && node.angle === node._t_wa &&
+        node.scale_x === node._t_wsx && node.scale_y === node._t_wsy) return;
+    if (!parent) {
+        node.local_x = node.x;
+        node.local_y = node.y;
+        node.local_angle = node.angle;
+        node.local_scale_x = numOr(node.scale_x, 1);
+        node.local_scale_y = numOr(node.scale_y, 1);
+        return;
+    }
+    const pa = numOr(parent.angle, 0);
+    const psx = numOr(parent.scale_x, 1) || 1;
+    const psy = numOr(parent.scale_y, 1) || 1;
+    const c = Math.cos(pa);
+    const s = Math.sin(pa);
+    const dx = node.x - parent.x;
+    const dy = node.y - parent.y;
+    node.local_x = (dx * c + dy * s) / psx;
+    node.local_y = (-dx * s + dy * c) / psy;
+    node.local_angle = numOr(node.angle, 0) - pa;
+    node.local_scale_x = numOr(node.scale_x, 1) / psx;
+    node.local_scale_y = numOr(node.scale_y, 1) / psy;
+}
+
+/**
+ * Кадровый проход §39: пересчитать все локальные узлы. Возвращает число узлов,
+ * у которых мировой трансформ изменился. Движок зовёт это сам (src/script.c);
+ * вручную вызывать не нужно.
+ */
+export function resolveLocalTransforms() {
+    const count = local_nodes.length;
+    if (count === 0) return 0;
+    local_gen++;
+    const native = nativeNodes();
+    if (native && typeof native.resolveTransforms === 'function') {
+        return native.resolveTransforms(local_nodes, local_gen, syncLocalBody) | 0;
+    }
+    let changed = 0;
+    for (let i = 0; i < count; i++) {
+        const node = local_nodes[i];
+        if (!node || node.removed === true) continue;
+        if (resolveLocalChain(node)) changed++;
+    }
+    return changed;
+}
+
+/**
+ * Регистрация прохода §39 в движке: script.c зовёт его в конце кадра логики и
+ * перед отрисовкой. Без движка (юнит-тест qjs) — молча ничего.
+ */
+export function installTransformResolution() {
+    const eng = engineOf();
+    if (eng && typeof eng.setResolveTransforms === 'function') {
+        eng.setResolveTransforms(resolveLocalTransforms);
+    }
+}
+
+/** Пометить локальное поддерево устаревшим: следующий запрос/проход пересчитает. */
+function invalidateLocalSubtree(node) {
+    if (node.local_mode === true) node._t_gen = -1;
+    const children = node.child_nodes;
+    for (let i = 0; i < children.length; i++) invalidateLocalSubtree(children[i]);
+}
+
+/**
+ * Метод изменил локальные значения узла: пометить поддерево устаревшим и сразу
+ * пересчитать сам узел. Нужно геттерам, которые читают результат сразу после
+ * записи (`.localAt(10, 0).worldPoint(0, 0)` — в одном вызове).
+ */
+export function invalidateNodeTransform(node) {
+    invalidateLocalSubtree(node);
+    if (node.local_mode !== true) return;
+    local_gen++;
+    resolveLocalChain(node);
+}
+
+/** Есть ли смысл помечать поддерево (в мире есть локальные узлы). */
+function node_child_dirty(node) {
+    return local_nodes.length !== 0 && node.child_nodes.length !== 0;
+}
+
+/**
+ * Мировой трансформ узла изменился (`.at()`, `.flip()`, физика): дети в
+ * локальном режиме устарели. В проекте без локальных узлов проверка стоит одно
+ * сравнение длины списка — §39 не платит за себя там, где не используется.
+ */
+function noteWorldChanged(node) {
+    if (local_nodes.length === 0) return;
+    if (node.child_nodes.length !== 0) invalidateLocalSubtree(node);
+}
+
+/**
+ * Перевести узел в локальный режим, сохранив текущий вид (keep-world):
+ * `local_*` выводятся из текущего мирового трансформа и родителя, поэтому
+ * снаружи ничего не двигается. Возвращает true, если режим включился.
+ */
+export function enterLocalSpace(node) {
+    if (!node || node.local_mode === true) return false;
+    node.local_mode = true;
+    const parent = node.parent_node;
+    if (!parent || parent.local_mode !== true) {
+        // Локальное относительно мирового родителя (или корня).
+        if (!parent) {
+            node.local_x = node.x;
+            node.local_y = node.y;
+            node.local_angle = node.angle;
+            node.local_scale_x = numOr(node.scale_x, 1);
+            node.local_scale_y = numOr(node.scale_y, 1);
+        } else {
+            enterLocalWithParent(node, parent);
+        }
+    } else {
+        enterLocalWithParent(node, parent);
+    }
+    addLocalNode(node);
+    invalidateLocalSubtree(node);
+    resolveLocalChain(node);
+    return true;
+}
+
+/** Сложить текущий мировой трансформ узла в локальные поля относительно parent. */
+function enterLocalWithParent(node, parent) {
+    if (parent.local_mode === true) {
+        local_gen++;
+        resolveLocalChain(parent);
+    }
+    const pa = numOr(parent.angle, 0);
+    const psx = numOr(parent.scale_x, 1);
+    const psy = numOr(parent.scale_y, 1);
+    const c = Math.cos(pa);
+    const s = Math.sin(pa);
+    const dx = node.x - parent.x;
+    const dy = node.y - parent.y;
+    node.local_x = (dx * c + dy * s) / (psx === 0 ? 1 : psx);
+    node.local_y = (-dx * s + dy * c) / (psy === 0 ? 1 : psy);
+    node.local_angle = numOr(node.angle, 0) - pa;
+    node.local_scale_x = numOr(node.scale_x, 1) / (psx === 0 ? 1 : psx);
+    node.local_scale_y = numOr(node.scale_y, 1) / (psy === 0 ? 1 : psy);
+}
+
+/**
+ * Вернуть узел в мировой режим. Мировой трансформ уже лежит в x/y/angle/scale,
+ * поэтому ничего не двигается — меняется только способ его вычисления.
+ */
+export function exitLocalSpace(node) {
+    if (!node || node.local_mode !== true) return false;
+    node.local_mode = false;
+    dropLocalNode(node);
+    // Дети в локальном режиме остаются локальными: их цепочка теперь начинается
+    // с мирового трансформа этого узла.
+    invalidateLocalSubtree(node);
+    return true;
+}
+
+/** Мировой трансформ узла — всегда в x/y/angle/scale (см. шапку блока). */
+export function worldTransformOf(node, out) {
+    if (isLocalSpace(node)) {
+        if (node._t_gen !== local_gen) {
+            local_gen++;
+            resolveLocalChain(node);
+        }
+    }
+    const t = out || { x: 0, y: 0, angle: 0, sx: 1, sy: 1 };
+    t.x = node.x;
+    t.y = node.y;
+    t.angle = numOr(node.angle, 0);
+    t.sx = numOr(node.scale_x, 1);
+    t.sy = numOr(node.scale_y, 1);
+    return t;
+}
+
+/** Точка локального пространства узла → мировая (§39, камера не участвует). */
+export function worldPointOf(node, lx, ly) {
+    if (isLocalSpace(node)) {
+        if (node._t_gen !== local_gen) {
+            local_gen++;
+            resolveLocalChain(node);
+        }
+    }
+    const a = numOr(node.angle, 0);
+    const sx = numOr(node.scale_x, 1);
+    const sy = numOr(node.scale_y, 1);
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const ox = lx * sx;
+    const oy = ly * sy;
+    return { x: node.x + c * ox - s * oy, y: node.y + s * ox + c * oy };
+}
+
+/** Мировая точка → локальное пространство узла (обратное к worldPointOf). */
+export function localPointOf(node, wx, wy) {
+    if (isLocalSpace(node)) {
+        if (node._t_gen !== local_gen) {
+            local_gen++;
+            resolveLocalChain(node);
+        }
+    }
+    const a = numOr(node.angle, 0);
+    let sx = numOr(node.scale_x, 1);
+    let sy = numOr(node.scale_y, 1);
+    if (sx === 0) sx = 1;
+    if (sy === 0) sy = 1;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const dx = wx - node.x;
+    const dy = wy - node.y;
+    return { x: (dx * c + dy * s) / sx, y: (-dx * s + dy * c) / sy };
+}
+
+// --- Запись мирового трансформа на узле в локальном режиме ----------------
+//
+// `.at/.angle/.scale/.flip` сохраняют МИРОВУЮ семантику для любого узла: что
+// задали, то и покажет `.pos()`. На локальном узле значение пересчитывается в
+// локальное (обратная композиция), поэтому цепочки родителей не «съедают»
+// выставленную координату. Локальные значения задают .localAt/.localAngle/
+// .localScale.
+
+/** Свежий мировой трансформ родителя (или null, если узел — корень). */
+function freshParent(node) {
+    const parent = node.parent_node;
+    if (parent && parent.local_mode === true && parent._t_gen !== local_gen) {
+        local_gen++;
+        resolveLocalChain(parent);
+    }
+    return parent;
+}
+
+/** `.at(x, y)` с учётом локального режима. */
+export function setWorldPosition(node, x, y) {
+    if (isLocalSpace(node)) {
+        const parent = freshParent(node);
+        if (!parent) {
+            node.local_x = x;
+            node.local_y = y;
+        } else {
+            const pa = numOr(parent.angle, 0);
+            const psx = numOr(parent.scale_x, 1) || 1;
+            const psy = numOr(parent.scale_y, 1) || 1;
+            const c = Math.cos(pa);
+            const s = Math.sin(pa);
+            const dx = x - parent.x;
+            const dy = y - parent.y;
+            node.local_x = (dx * c + dy * s) / psx;
+            node.local_y = (-dx * s + dy * c) / psy;
+        }
+        invalidateLocalSubtree(node);
+    } else {
+        noteWorldChanged(node);
+    }
+    node.x = x;
+    node.y = y;
+    if (node.body >= 0) engineOf().setPosition(node.body, x, y, node.angle);
+}
+
+/** `.angle(rad)` / `.rotate(deg)` с учётом локального режима. */
+export function setWorldAngle(node, rad) {
+    if (isLocalSpace(node)) {
+        const parent = freshParent(node);
+        node.local_angle = rad - (parent ? numOr(parent.angle, 0) : 0);
+        invalidateLocalSubtree(node);
+    } else {
+        noteWorldChanged(node);
+    }
+    node.angle = rad;
+    if (node.body >= 0) engineOf().setPosition(node.body, node.x, node.y, rad);
+}
+
+/** `.scale(sx, sy)` с учётом локального режима (мировой масштаб узла). */
+export function setWorldScale(node, sx, sy) {
+    if (isLocalSpace(node)) {
+        const parent = freshParent(node);
+        const psx = parent ? numOr(parent.scale_x, 1) : 1;
+        const psy = parent ? numOr(parent.scale_y, 1) : 1;
+        node.local_scale_x = psx === 0 ? sx : sx / psx;
+        node.local_scale_y = psy === 0 ? sy : sy / psy;
+        invalidateLocalSubtree(node);
+    } else {
+        noteWorldChanged(node);
+    }
+    node.scale_x = sx;
+    node.scale_y = sy;
+}
+
+/** Мировой масштаб узла (скомпонованный) — для .flip() и геттеров. */
+export function worldScaleOf(node) {
+    if (isLocalSpace(node) && node._t_gen !== local_gen) {
+        local_gen++;
+        resolveLocalChain(node);
+    }
+    return { x: numOr(node.scale_x, 1), y: numOr(node.scale_y, 1) };
+}
+
+// ---------------------------------------------------------------------------
+// §40. Области (areas): несколько независимых форм одного владельца
+// ---------------------------------------------------------------------------
+//
+// Область — это дополнительная native-форма на теле узла (compound shape) со
+// своей ролью, локальным смещением/углом, слоями и признаком enabled:
+//
+//   $('#hero').area('sword', { shape: 'box', w: 48, h: 20, x: 14, angle: -0.3,
+//                              sensor: true, role: 'attack', enabled: false });
+//   $('#hero').areaOn('sword', true);          // окно атаки открыто
+//   $('#hero').areaOverlap('sword');           // кто внутри ПРЯМО СЕЙЧАС
+//
+// Описания живут на узле (JS), а native-формы пересобираются после каждого
+// пересоздания тела (.size(), .sensor(), .collision()): для игры внутреннее
+// представление не меняется, как и требует §40. Индексы форм при пересборке
+// могут смениться — идентичность области держит её имя, а не handle, поэтому
+// дедупликация атак (attack/window id) в игре не сбрасывается.
+
+/** Список областей узла (ленивый). */
+export function areaListOf(node) {
+    return node.area_list || null;
+}
+
+/** Найти описание области по имени. */
+export function areaFind(node, name) {
+    const list = node.area_list;
+    if (!list) return null;
+    for (let i = 0; i < list.length; i++) if (list[i].name === name) return list[i];
+    return null;
+}
+
+/** Числа области: undefined/NaN → запасное значение. */
+function areaNum(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * Форма области в виде описания для engine.addShape/setShape. `w`/`h` — В
+ * пикселях (как .size()), в native уходит половина.
+ */
+function areaShapeDesc(area) {
+    const half_w = areaNum(area.w, 32) / 2;
+    const half_h = areaNum(area.h, 32) / 2;
+    const desc = {
+        shape: area.kind,
+        x: areaNum(area.x, 0),
+        y: areaNum(area.y, 0),
+        angle: areaNum(area.angle, 0),
+        halfW: half_w,
+        halfH: half_h,
+        radius: areaNum(area.radius, area.kind === 1 ? Math.min(half_w, half_h) : 0),
+        polyRadius: areaNum(area.polyRadius, 0),
+        density: 0,
+        friction: 0,
+        restitution: 0,
+        sensor: area.sensor === true,
+        contacts: area.contacts === true,
+        enabled: area.enabled !== false,
+        // Слои: у области свои, иначе — слои тела.
+        layerBits: area.layer,
+        mask: area.mask,
+        group: area.group,
+    };
+    return desc;
+}
+
+/**
+ * Пересобрать native-формы областей узла. Зовётся после создания тела и при
+ * каждом изменении описания; без тела — запоминает и ждёт (форма появится,
+ * когда тело создадут).
+ */
+export function applyAreas(node) {
+    const list = node.area_list;
+    if (!list || list.length === 0) return 0;
+    const eng = engineOf();
+    if (node.body < 0 || typeof eng.addShape !== 'function') {
+        for (let i = 0; i < list.length; i++) list[i].index = -1;
+        return 0;
+    }
+    const body_layer = node.layer_bits === undefined ? 1 : node.layer_bits;
+    const body_mask = node.collision_mask === undefined ? 0xffffffff : node.collision_mask;
+    const body_group = node.collision_group === undefined ? 0 : node.collision_group;
+    let applied = 0;
+    for (let i = 0; i < list.length; i++) {
+        const area = list[i];
+        if (area.layer === undefined) area.layer = body_layer;
+        if (area.mask === undefined) area.mask = body_mask;
+        if (area.group === undefined) area.group = body_group;
+        const desc = areaShapeDesc(area);
+        // Индекс мог остаться от прежнего тела (setBody зовёт resetAreaIndices):
+        // тогда формы с ним нет и её надо создать заново.
+        if (area.index >= 0 && typeof eng.setShape === 'function') {
+            const next = eng.setShape(node.body, area.index, desc);
+            area.index = next >= 0 ? next : -1;
+        }
+        if (area.index < 0 && typeof eng.addShape === 'function') {
+            const next = eng.addShape(node.body, desc);
+            area.index = next >= 0 ? next : -1;
+        }
+        if (area.index >= 0) {
+            applied++;
+            // Выключенная область остаётся у тела, но выходит из столкновений и
+            // запросов: фильтр обнуляется, игровой владелец жив (§40).
+            if (area.enabled === false && typeof eng.setShapeEnabled === 'function') {
+                eng.setShapeEnabled(node.body, area.index, false, desc.layerBits, desc.mask, desc.group);
+            }
+        }
+    }
+    return applied;
+}
+
+/** После пересоздания тела формы теряются: индексы областей недействительны. */
+function resetAreaIndices(node) {
+    const list = node.area_list;
+    if (!list) return;
+    for (let i = 0; i < list.length; i++) list[i].index = -1;
+}
+
+// Имена форм те же, что у $.world.zone и .shape(): числа — нативный enum
+// R2DShapeKind (box, circle, capsule, polygon).
+const AREA_KINDS = { box: 0, circle: 1, capsule: 2, polygon: 3 };
+
+function areaKindOf(value, fallback) {
+    const k = AREA_KINDS[String(value).toLowerCase()];
+    return k === undefined ? fallback : k;
+}
+
+/**
+ * Объявить/обновить область узла (§40). Возвращает описание области.
+ * Повторный вызов с тем же именем меняет только переданные поля.
+ */
+export function areaDefine(node, name, opts) {
+    const o = opts || {};
+    if (!node.area_list) node.area_list = [];
+    let area = areaFind(node, name);
+    let fresh = false;
+    if (!area) {
+        fresh = true;
+        area = {
+            name: String(name),
+            role: o.role === undefined ? String(name) : String(o.role),
+            owner: o.owner === undefined ? null : o.owner,
+            kind: 0, w: 32, h: 32, radius: 0, polyRadius: 0,
+            x: 0, y: 0, angle: 0,
+            sensor: true, contacts: false,
+            layer: undefined, mask: undefined, group: undefined,
+            enabled: o.enabled !== false,
+            index: -1,
+        };
+        node.area_list.push(area);
+    }
+    if (o.role !== undefined) area.role = String(o.role);
+    if (o.owner !== undefined) area.owner = o.owner;
+    // shape — основное имя, type — псевдоним (как в $.world.zone).
+    if (o.shape !== undefined) area.kind = areaKindOf(o.shape, area.kind);
+    if (o.type !== undefined) area.kind = areaKindOf(o.type, area.kind);
+    let geometry = fresh;
+    if (o.w !== undefined) { area.w = areaNum(o.w, area.w); geometry = true; }
+    if (o.h !== undefined) { area.h = areaNum(o.h, area.h); geometry = true; }
+    if (o.width !== undefined) { area.w = areaNum(o.width, area.w); geometry = true; }
+    if (o.height !== undefined) { area.h = areaNum(o.height, area.h); geometry = true; }
+    if (o.radius !== undefined) { area.radius = areaNum(o.radius, area.radius); geometry = true; }
+    if (o.polyRadius !== undefined) { area.polyRadius = areaNum(o.polyRadius, 0); geometry = true; }
+    if (o.points !== undefined) { area.points = Array.isArray(o.points) ? o.points.slice() : null; geometry = true; }
+    if (o.x !== undefined) { area.x = areaNum(o.x, area.x); geometry = true; }
+    if (o.y !== undefined) { area.y = areaNum(o.y, area.y); geometry = true; }
+    if (o.angle !== undefined) { area.angle = areaNum(o.angle, area.angle); geometry = true; }
+    if (o.sensor !== undefined) { area.sensor = o.sensor !== false; geometry = true; }
+    if (o.contacts !== undefined) { area.contacts = o.contacts === true; geometry = true; }
+    if (o.layer !== undefined) { area.layer = o.layer >>> 0; geometry = true; }
+    if (o.mask !== undefined) { area.mask = o.mask >>> 0; geometry = true; }
+    if (o.group !== undefined) { area.group = o.group | 0; geometry = true; }
+    if (o.enabled !== undefined) area.enabled = o.enabled !== false;
+
+    const eng = engineOf();
+    if (node.body < 0 || typeof eng.addShape !== 'function') return area;
+    if (geometry && area.index >= 0 && typeof eng.setShape === 'function') {
+        const next = eng.setShape(node.body, area.index, areaShapeDesc(area));
+        area.index = next >= 0 ? next : -1;
+    }
+    if (area.index < 0) applyAreas(node);
+    else if (typeof eng.setShapeEnabled === 'function') {
+        eng.setShapeEnabled(node.body, area.index, area.enabled, area.layer, area.mask, area.group);
+    }
+    return area;
+}
+
+/** Включить/выключить область (§40). Возвращает новое состояние. */
+export function areaEnable(node, name, on) {
+    const area = areaFind(node, name);
+    if (!area) return false;
+    area.enabled = on !== false;
+    if (node.body >= 0 && area.index >= 0) {
+        const eng = engineOf();
+        if (typeof eng.setShapeEnabled === 'function') {
+            eng.setShapeEnabled(node.body, area.index, area.enabled,
+                                area.layer === undefined ? node.layer_bits : area.layer,
+                                area.mask === undefined ? node.collision_mask : area.mask,
+                                area.group === undefined ? node.collision_group : area.group);
+        }
+    }
+    return area.enabled;
+}
+
+/** Описание области по индексу native-формы — маршрутизация контактов (§40). */
+export function areaByIndex(node, index) {
+    const list = node.area_list;
+    if (!list) return null;
+    for (let i = 0; i < list.length; i++) if (list[i].index === index) return list[i];
+    return null;
+}
+
+/** Логический владелец области: узел, на котором она объявлена, или owner. */export function areaOwnerNode(node, area) {
+    const o = area.owner;
+    if (o === null || o === undefined) return node;
+    if (typeof o === 'string') {
+        const by_id = ctx.byId.get(o);
+        if (by_id) return by_id;
+        const found = query(o);
+        return found.length ? found[0] : node;
+    }
+    if (o instanceof Node) return o;
+    if (o && o.nodes && o.nodes.length) return o.nodes[0];
+    return node;
+}
+
+/**
+ * Фактическое состояние формы области по нативному фильтру. Если движка нет
+ * или формы ещё нет — берём JS-описание (единственный доступный источник).
+ */
+export function areaNativeEnabled(node, area) {
+    if (node.body < 0 || area.index < 0) return area.enabled !== false;
+    const eng = engineOf();
+    if (typeof eng.shapeEnabled !== 'function') return area.enabled !== false;
+    return eng.shapeEnabled(node.body, area.index) === true;
+}
+
+/**
+ * §40: синхронизировать JS-описание области с native-состоянием.
+ *
+ * Форму может переключить не только `.areaOn()`, но и внешний драйвер
+ * (анимационная дорожка `shape.enabled`) — он зовёт `engine.setShapeEnabled`
+ * напрямую. Тогда единственный источник истины — нативный фильтр, а
+ * `.areas()`/`.areaOverlap()` обязаны показывать именно его, иначе игра видит
+ * неправду. Возвращает true, если описание пришлось поправить.
+ */
+export function areaSync(node, area) {
+    const actual = areaNativeEnabled(node, area);
+    if (actual !== (area.enabled !== false)) {
+        area.enabled = actual;
+        return true;
+    }
+    return false;
+}
+
+/** Синхронизировать все области узла с native-состоянием. */
+export function areaSyncAll(node) {
+    const list = node.area_list;
+    if (!list) return 0;
+    let fixed = 0;
+    for (let i = 0; i < list.length; i++) if (areaSync(node, list[i])) fixed++;
+    return fixed;
+}
+
+/** Краткое описание области для игры и отладки. */
+export function areaInfo(node, area) {
+    areaSync(node, area);
+    return {
+        name: area.name,
+        role: area.role,
+        shape: area.kind === 1 ? 'circle' : (area.kind === 2 ? 'capsule' : (area.kind === 3 ? 'polygon' : 'box')),
+        x: area.x, y: area.y, angle: area.angle,
+        w: area.w, h: area.h, radius: area.radius,
+        sensor: area.sensor === true,
+        enabled: area.enabled !== false,
+        layer: area.layer === undefined ? node.layer_bits : area.layer,
+        mask: area.mask === undefined ? node.collision_mask : area.mask,
+        group: area.group === undefined ? node.collision_group : area.group,
+        index: area.index,
+        owner: area.owner === null || area.owner === undefined ? node.id || node.nid : area.owner,
+    };
+}
+
+/**
+ * Кто пересекается с областью ПРЯМО СЕЙЧАС (§40, «overlap policy»).
+ *
+ * Это явный геометрический запрос, а не история событий: цель, уже стоящая
+ * внутри области в момент открытия окна атаки, обязана обнаружиться без
+ * ожидания нового движения. Выключенная область не возвращает никого.
+ * Результат: `[{ node, body, shape, area, role, owner }]`, где `node` — узел
+ * цели (может быть null, если тело без узла), `owner` — логический владелец
+ * области (не сенсор), `area`/`role` — имя и роль области.
+ */
+export function areaOverlap(node, name, opts) {
+    const area = areaFind(node, name);
+    if (!area || node.body < 0 || area.index < 0) return [];
+    // Состояние читаем у native-формы, а не у JS-флага: форму мог выключить
+    // внешний драйвер, и тогда ранний выход по устаревшему флагу врал бы.
+    // Выключенную форму сам запрос и не вернёт (нулевой фильтр).
+    if (!areaNativeEnabled(node, area)) {
+        area.enabled = false;
+        return [];
+    }
+    const eng = engineOf();
+    if (typeof eng.shapeOverlaps !== 'function') return [];
+    const o = opts || {};
+    const mask = o.mask !== undefined ? o.mask >>> 0
+               : (area.mask === undefined ? (node.collision_mask >>> 0) : area.mask >>> 0);
+    const category = o.category !== undefined ? o.category >>> 0
+                   : (area.layer === undefined ? (node.layer_bits >>> 0) : area.layer >>> 0);
+    const raw = eng.shapeOverlaps(node.body, area.index, category, mask, o.cap === undefined ? 32 : o.cap) || [];
+    const owner = areaOwnerNode(node, area);
+    const out = [];
+    for (let i = 0; i < raw.length; i++) {
+        const item = raw[i];
+        if (!item) continue;
+        const other = ctx.byBody.get(item.body);
+        out.push({
+            node: other ? wrapOne(other) : null,
+            self: wrapOne(node),
+            owner: wrapOne(owner),
+            body: item.body,
+            shape: item.shape,
+            area: area.name,
+            role: area.role,
+        });
+    }
+    return out;
+}
+
+
 const EVENT_ALIASES = {
     collision: 'collide',
     contact: 'collide',
@@ -598,6 +1388,9 @@ export class Node {
         // объекту умолчаний, и новый `{}` на каждый неизвестный тег рос бы.
         const defaults = TAGS[tag] || NO_DEFAULTS;
         this.uid = next_uid++;
+        // Стабильный логический ID (см. assignNid выше): нужен save/restore,
+        // трассировке событий (§13) и диагностике (§17), где uid не годится.
+        this.nid = 'n' + (next_nid++);
         this.tag = tag;
         // Вид узла (docs/RE2D.md): '2d' — обычный узел, 're2d' — 2.5D-вид того
         // же мира. Строка, а не null: `[kind=2d]` и сериализация работают без
@@ -754,6 +1547,36 @@ export class Node {
         // kinds.js, который импортирует core.js, поэтому проверка имени
         // подключается через ctx (ставит installKinds), а не импортом.
         case 'kind':    this.kind = ctx.normalizeKind ? ctx.normalizeKind(value) : String(value || '2d'); return this;
+        // §39: режим трансформа — 'local' (локальные координаты относительно
+        // родителя) или 'world' (прежнее поведение по умолчанию).
+        case 'transformSpace':
+            if (String(value) === 'local') enterLocalSpace(this);
+            else exitLocalSpace(this);
+            return this;
+        case 'localAt': case 'localPos': {
+            // Сначала вход в локальный режим (он выводит local_* из текущего
+            // мира), затем явные значения — иначе они были бы перезаписаны.
+            enterLocalSpace(this);
+            if (Array.isArray(value)) { this.local_x = Number(value[0]) || 0; this.local_y = Number(value[1]) || 0; }
+            else if (value && typeof value === 'object') { this.local_x = Number(value.x) || 0; this.local_y = Number(value.y) || 0; }
+            invalidateLocalSubtree(this);
+            return this;
+        }
+        case 'localAngle':
+            enterLocalSpace(this);
+            this.local_angle = Number(value) || 0;
+            invalidateLocalSubtree(this);
+            return this;
+        case 'localScale': {
+            enterLocalSpace(this);
+            if (Array.isArray(value)) { this.local_scale_x = Number(value[0]); this.local_scale_y = Number(value[1]); }
+            else if (value && typeof value === 'object') { this.local_scale_x = Number(value.x); this.local_scale_y = Number(value.y); }
+            else { this.local_scale_x = Number(value); this.local_scale_y = this.local_scale_x; }
+            if (!Number.isFinite(this.local_scale_x)) this.local_scale_x = 1;
+            if (!Number.isFinite(this.local_scale_y)) this.local_scale_y = this.local_scale_x;
+            invalidateLocalSubtree(this);
+            return this;
+        }
         case 'bullet': this.bullet_on = value !== false;
                        if (this.body >= 0) engine.setBullet(this.body, this.bullet_on);
                        return this;
@@ -824,6 +1647,13 @@ export class Node {
         case 'max':     return this.max_value;
         case 'radius':  return this.radius;
         case 'intensity': return this.intensity;
+        // §39: режим трансформа и локальные значения.
+        case 'transformSpace': return this.local_mode === true ? 'local' : 'world';
+        case 'localAt': case 'localPos':
+            return { x: numOr(this.local_x, 0), y: numOr(this.local_y, 0) };
+        case 'localAngle': return this.local_mode === true ? numOr(this.local_angle, 0) : numOr(this.angle, 0);
+        case 'localScale':
+            return { x: numOr(this.local_scale_x, 1), y: numOr(this.local_scale_y, 1) };
         case 'body':    return this.body_kind;
         case 'layerBits': return this.layer_bits;
         case 'mask':    return this.collision_mask;
@@ -835,25 +1665,48 @@ export class Node {
         }
     }
 
+    /** Дети в локальном режиме устарели: мировой трансформ узла изменился. */
+    noteWorldChanged() { noteWorldChanged(this); return this; }
+
     moveToX(x) {
+        let y = this.y;
+        let a = this.angle;
         if (this.body >= 0) {
             const t = engine.getTransforms();
-            const y = t[this.body * 3 + 1];
-            const a = t[this.body * 3 + 2];
-            engine.setPosition(this.body, x, y, a);
+            y = t[this.body * 3 + 1];
+            a = t[this.body * 3 + 2];
         }
+        if (isLocalSpace(this)) {
+            // Локальный узел: .x задаёт МИРОВУЮ координату (совместимость),
+            // в локальные поля она пересчитывается обратной композицией.
+            this.y = y;
+            this.angle = a;
+            setWorldPosition(this, x, y);
+            return this;
+        }
+        if (this.body >= 0) engine.setPosition(this.body, x, y, a);
         this.x = x;
+        this.noteWorldChanged();
         return this;
     }
 
     moveToY(y) {
+        let x = this.x;
+        let a = this.angle;
         if (this.body >= 0) {
             const t = engine.getTransforms();
-            const x = t[this.body * 3];
-            const a = t[this.body * 3 + 2];
-            engine.setPosition(this.body, x, y, a);
+            x = t[this.body * 3];
+            a = t[this.body * 3 + 2];
         }
+        if (isLocalSpace(this)) {
+            this.x = x;
+            this.angle = a;
+            setWorldPosition(this, x, y);
+            return this;
+        }
+        if (this.body >= 0) engine.setPosition(this.body, x, y, a);
         this.y = y;
+        this.noteWorldChanged();
         return this;
     }
 
@@ -950,6 +1803,13 @@ export class Node {
         // только по нему, а не по всему миру (§5, P2 отчёта).
         touchRegistry();
 
+        // §40: тело пересоздано — прежние формы областей уничтожены вместе с
+        // ним. Описания областей живут на узле, поэтому формы возвращаются на
+        // место (и снова выключаются те, что были выключены): внутреннее
+        // представление не меняет gameplay.
+        resetAreaIndices(this);
+        if (this.area_list) applyAreas(this);
+
         // Возвращаем скорость, снятую до пересоздания тела.
         if (had_velocity) {
             engine.setVelocity(this.body, keep_vx, keep_vy);
@@ -992,6 +1852,9 @@ export class Node {
             this.body = -1;
         }
         this.removed = true;
+        // §39: локальный узел уходит из списка кадрового прохода — мёртвый узел
+        // не должен пересчитываться и подавать тело в физику.
+        dropLocalNode(this);
         // Раньше запись в byId оставалась жить: '#id' находил удалённый узел
         // до ближайшего ленивого свипа (prefab/save/scene). Чистим сразу —
         // иначе быстрый путь поиска по id в query() отдавал бы мертвеца.
@@ -1305,12 +2168,26 @@ export function wrapOne(node) {
 
 function makeEvent(node, name, data) {
     const self = wrapOne(node);
+    // §13 Спецификации: событие production-сценария несёт устойчивые ID, по
+    // которым его находит трассировка и диагностика. `self`/`source`/`target`
+    // остаются обёртками (совместимость), а рядом лежат логические ID:
+    //   nid       — узел-получатель;
+    //   source_id — источник события из data (у контактов это участник пары);
+    //   target_id — адресат из data.
+    // Поля берутся из data только если это строка: произвольный payload игры
+    // не должен подменять идентичность события.
+    const payload = data === undefined ? null : data;
+    const source_id = payload && typeof payload.source === 'string' ? payload.source : node.nid;
+    const target_id = payload && typeof payload.target === 'string' ? payload.target : node.nid;
     return {
         self,
         target: self,
         source: self,
+        nid: node.nid,
+        source_id,
+        target_id,
         name,
-        data: data === undefined ? {} : data,
+        data: payload === null ? {} : payload,
         type: name,
         dt: ctx.time ? ctx.time.delta() : 1 / 60,
         frame: engine.frame,

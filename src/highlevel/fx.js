@@ -16,6 +16,7 @@
 
 import { engine } from './native.js';
 import { ctx, query, packColor, withAlpha, fxRandom } from './core.js';
+import { installHits, tickHits } from './hits.js';
 
 const state = {
     trails: [],
@@ -23,10 +24,16 @@ const state = {
     waves: [],
     fields: [],
     pulses: [],     // вспышки в точке: круг с затуханием
+    flashes: [],    // вспышки экрана: прямоугольник на весь вид
 };
 
 // Поля сил видны частицам: particles.js читает этот же массив.
 ctx.fx_fields = state.fields;
+
+// `$` нужен хит-стопу (через $.time) и частицам hits.js; drawFx зовётся из
+// рендера, где `$` не передают, поэтому ссылку держим здесь.
+let api = null;
+let hits_installed = false;
 
 function clamp01(v) {
     return v < 0 ? 0 : (v > 1 ? 1 : v);
@@ -123,13 +130,48 @@ export function installFx($) {
             return { stop() { w.t = w.o.ms; return this; } };
         },
 
-        /** Вспышка в точке: круг, гаснущий за ms. */
+        /**
+         * Вспышка в точке: круг, гаснущий за ms. Для удара по узлу обычно
+         * нужен `.flash()` (подмена тона) — это разные эффекты.
+         */
         pulse(x, y, opts) {
             const o = Object.assign({ radius: 60, ms: 140, color: '#ffffff', blend: 'add' }, opts);
             const p = pointOf({ x, y });
             const u = { x: p.x, y: p.y, t: 0, o };
             state.pulses.push(u);
             return { stop() { u.t = u.o.ms; return this; } };
+        },
+
+        /**
+         * Вспышка ЭКРАНА: `$.fx.flash('#ffffff', { ms: 90, alpha: 0.7 })`.
+         *
+         * Принимает `(color)`, `(color, ms)` и `(color, opts)` — короткая форма
+         * с числом нужна катсценам (`cutscene.js` зовёт `$.fx.flash(color, ms)`).
+         *
+         * Заливка идёт поверх сцены в момент сборки кадра, камеру не сдвигает и
+         * на паузе времени живёт: `$.time.freeze()` её не гасит — вспышка на
+         * удар обязана быть видна, пока мир замер.
+         *
+         * Возвращает ручку `{ stop() }`. Одновременных вспышек не больше
+         * четырёх: пятая вытесняет самую старую, иначе экран уходит в белый.
+         */
+        flash(color, opts) {
+            const o = typeof opts === 'number' ? { ms: opts } : Object.assign({}, opts);
+            const spec = Object.assign({
+                ms: 160, alpha: 0.75, color: color === undefined ? '#ffffff' : color,
+                blend: 'add', ease: 'out',
+            }, o);
+            const f = { t: 0, o: spec };
+            state.flashes.push(f);
+            if (state.flashes.length > 4) state.flashes.shift();
+            return { stop() { f.t = f.o.ms; return this; } };
+        },
+
+        /** Сколько миллисекунд осталось самой длинной вспышке экрана. */
+        flashLeft() {
+            let left = 0;
+            for (const f of state.flashes) left = Math.max(left, f.o.ms - f.t);
+            return left;
         },
 
         /**
@@ -161,18 +203,20 @@ export function installFx($) {
         },
 
         /**
-         * Hit-stop: короткое замедление времени на удар. Возвращает время
-         * к прежнему масштабу само, вложенные вызовы не портят друг друга.
+         * Hit-stop: короткая остановка игрового мира на удар.
+         *
+         * `$.fx.hitStop(ms)` — полная заморозка (`$.time.freeze`), `scale` —
+         * замедление до этой доли скорости (`$.time.slow`). Длительность
+         * считается по времени кадра, поэтому при `--fixed-dt` она
+         * детерминирована, а при масштабе 0 не «залипает» навсегда.
+         * Вложенные вызовы не складываются и не портят `$.time.scale()`.
          */
         hitStop(ms, scale) {
-            const target = scale === undefined ? 0.25 : scale;
-            const before = ctx.time ? ctx.time.scale() : 1;
-            if (ctx.time) ctx.time.scale(Math.min(before, target));
-            if ($.time && $.time.after) {
-                $.time.after(ms === undefined ? 70 : ms, () => {
-                    if (ctx.time) ctx.time.scale(before);
-                });
-            }
+            const time = timeApi();
+            const ms_value = ms === undefined ? 70 : Number(ms);
+            if (!time) return fx;
+            if (scale === undefined || scale <= 0) time.freeze(ms_value);
+            else time.slow(ms_value, scale);
             return fx;
         },
 
@@ -184,6 +228,7 @@ export function installFx($) {
                 waves: state.waves.length,
                 fields: state.fields.length,
                 pulses: state.pulses.length,
+                flashes: state.flashes.length,
             };
         },
 
@@ -194,15 +239,35 @@ export function installFx($) {
             state.waves.length = 0;
             state.fields.length = 0;
             state.pulses.length = 0;
+            state.flashes.length = 0;
             return fx;
         },
     };
 
+    api = $;
     ctx.fx = fx;
     $.fx = fx;
     // Рисуем в момент сборки кадра: батч живёт только внутри _render().
     ctx.gfx._fxFlush = drawFx;
+
+    // --- Хит-фидбек -------------------------------------------------------
+    // hits.js ставится ЗДЕСЬ, а не в api.js: fx.js — уже подключённая
+    // подсистема, и её установщик/тик — мои файлы. Так у интегратора не
+    // появляется второй писатель api.js, а порядок «частицы → fx → удары»
+    // держится сам. Установка идемпотентна: повторный installFx не ставит
+    // подсистему второй раз.
+    if (!hits_installed) {
+        hits_installed = true;
+        installHits($);
+    }
     return fx;
+}
+
+/** Время для hit-stop: сначала ядро времени, потом $.time (юнит-тесты). */
+function timeApi() {
+    if (ctx.time && typeof ctx.time.freeze === 'function') return ctx.time;
+    if (api && api.time && typeof api.time.freeze === 'function') return api.time;
+    return null;
 }
 
 function trailOpts(opts) {
@@ -260,6 +325,10 @@ function pushRibbon(points, o, alpha_scale) {
 // ---------------------------------------------------------------------------
 
 export function tickFx(dt) {
+    // Хит-фидбек тикает всегда — даже на нулевом dt (первый кадр) — поэтому
+    // вызов стоит до раннего выхода по времени.
+    tickHits(dt);
+
     const ms = Number(dt) * 1000;
     if (!Number.isFinite(ms) || ms <= 0) return;
 
@@ -302,11 +371,20 @@ export function tickFx(dt) {
         if (w.t >= w.o.ms) state.waves.splice(i, 1);
     }
 
-    // --- Вспышки ---
+    // --- Вспышки в точке ---
     for (let i = state.pulses.length - 1; i >= 0; i--) {
         const u = state.pulses[i];
         u.t += ms;
         if (u.t >= u.o.ms) state.pulses.splice(i, 1);
+    }
+
+    // --- Вспышки экрана ---
+    // Живут по времени кадра, а не по игровому: удар должен подсветить кадр
+    // даже тогда, когда игровое время заморожено ($.time.freeze).
+    for (let i = state.flashes.length - 1; i >= 0; i--) {
+        const f = state.flashes[i];
+        f.t += ms;
+        if (f.t >= f.o.ms) state.flashes.splice(i, 1);
     }
 
     // --- Поля сил ---
@@ -386,6 +464,23 @@ function drawFx(cam) {
         ctx.gfx.push.ring(f.x, f.y, f.radius * (0.3 + 0.5 * t), 2 + 2 * k,
                           withAlpha(packColor(f.o.edge), k * 0.5), 28);
     }
+    // Вспышки экрана — последними: они заливают кадр поверх остальных VFX.
+    // Квадрат со стороной в диагональ вида покрывает экран при любом зуме и
+    // повороте камеры; угол компенсирует поворот, чтобы заливка не «косилась».
+    if (cam && state.flashes.length) {
+        const zoom = Math.max(0.05, cam.zoom || 1);
+        const w = (cam.w || engine.width) / zoom;
+        const h = (cam.h || engine.height) / zoom;
+        const side = Math.hypot(w, h) * 1.05;
+        const angle = -(cam.rotation || 0);
+        for (const f of state.flashes) {
+            const t = clamp01(f.t / f.o.ms);
+            const k = f.o.ease === 'linear' ? 1 - t : (1 - t) * (1 - t);
+            const color = withAlpha(packColor(f.o.color), clamp01(f.o.alpha * k));
+            if (!color) continue;
+            ctx.gfx.push.sprite(engine.whiteSprite, cam.x, cam.y, side, side, angle, color, f.o.blend);
+        }
+    }
 }
 
 function viewRadius(cam) {
@@ -401,6 +496,7 @@ export function resetFx() {
     state.waves.length = 0;
     state.fields.length = 0;
     state.pulses.length = 0;
+    state.flashes.length = 0;
 }
 
 export const fxState = state;

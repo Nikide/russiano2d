@@ -196,11 +196,6 @@ int sdk_cmd_atlas_format(const SdkArgs *a);
 int sdk_cmd_atlas_info(const SdkArgs *a);
 
 // ---------------------------------------------------------------------------
-// Re2D World: исходник `*.re2dmap` → описание для `$.re2d.world` (docs/SDK.md §11)
-// ---------------------------------------------------------------------------
-void sdk_validate_re2dmap(const char *path, SdkReport *rep);
-
-// ---------------------------------------------------------------------------
 // Студии данных: tilemap, particles, collision, layers, fonts, audio, input, rml, rcss
 // (sdk_data.c; правила совпадают с sdk/lib/kinds/*.js и sdk/lib/rml_model.js)
 // ---------------------------------------------------------------------------
@@ -213,8 +208,6 @@ void sdk_validate_audio(const char *path, SdkReport *rep);
 void sdk_validate_input(const char *path, SdkReport *rep);
 void sdk_validate_rml(const char *path, SdkReport *rep);
 void sdk_validate_rcss(const char *path, SdkReport *rep);
-int sdk_cmd_world_compile(const SdkArgs *a);
-int sdk_cmd_world_info(const SdkArgs *a);
 
 // ---------------------------------------------------------------------------
 // Валидация ассетов (docs/SDK.md §6): один реестр проверяющих функций.
@@ -257,5 +250,3 @@ int sdk_fail(SdkReport *rep, const char *code, const char *fmt, ...);
 #ifdef __cplusplus
 }
 #endif
-
-int sdk_cmd_animation_import(const SdkArgs *a);

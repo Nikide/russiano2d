@@ -7,6 +7,10 @@ import sys
 from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 sys.path.insert(0, os.path.dirname(__file__))
+from re2d_skip import skip_without_sdk_command, skip_without_re2d   # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+if skip_without_sdk_command('world-compile', what='Re2D World compile+renderer'):
+    sys.exit(0)
 from agent_client import Agent
 from re2d_native_test import decode
 FAILED=[]

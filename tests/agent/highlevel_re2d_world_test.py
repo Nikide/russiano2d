@@ -24,6 +24,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
+from re2d_skip import skip_without_re2d_binary   # noqa: E402
 from agent_client import Agent   # noqa: E402
 
 FAILURES = []
@@ -56,6 +57,9 @@ def walk(a, key, frames):
 
 
 def main():
+    # Материала для проверки нет в сборке без RE2D (R2D_ENABLE_RE2D=OFF).
+    if skip_without_re2d_binary(what='highlevel_re2d_world_test'):
+        return
     kw = dict(game="demos", scene="re2d_world", seed=5, fixed_dt=1.0 / 60.0, start_timeout=180, timeout=180)
     with Agent(**kw) as a:
         a.step(10)

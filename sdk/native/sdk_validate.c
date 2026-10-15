@@ -6,7 +6,6 @@
 // (Phase 2+) регистрируют сюда свои типы.
 // ===========================================================================
 #include "sdk.h"
-#include "sdk_re2d.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -86,8 +85,6 @@ static const Validator k_validators[] = {
     { "sdk.registry", validate_registry },
     { "json",         validate_json },
     { "sprite.atlas", sdk_validate_atlas },
-    { "re2dsprite.character", sdk_validate_re2d_character },
-    { "re2d.world",   sdk_validate_re2dmap },
     { "tilemap",      sdk_validate_tilemap },
     { "particles",    sdk_validate_particles },
     { "collision",    sdk_validate_collision },

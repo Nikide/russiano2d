@@ -20,34 +20,31 @@ def wait(a):
   if a.eval('$.sdkApp.state.busy===0 && (!$.sdkApp.studios.automation || !$.sdkApp.studios.automation.state.busy)'):return
  raise RuntimeError('SDK GUI did not finish')
 fixture=os.path.join(ROOT,'tests','fixtures','sdk')
-jobs=[{'op':'validate','source':os.path.join(fixture,'world','stack.re2dmap')},{'op':'validate','source':'missing.json'},{'op':'bake-re2d','source':os.path.join(fixture,'props','crate.glb'),'output':'crate'}]
+# Пакетная проверка 2D-ассетов: битый job не мешает следующим.
+jobs=[{'op':'validate','source':os.path.join(fixture,'proj','project.json')},{'op':'validate','source':'missing.json'},{'op':'validate','source':os.path.join(fixture,'data_proj','project.json')}]
 manifest=save('test.batch.json',{'version':1,'jobs':jobs});report=os.path.join(OUT,'batch.json')
 rc,b=run('batch',manifest,'--output',report)
-check(rc==1 and b['total']==3 and b['failed']==1 and b['succeeded']==2,'batch continues after missing input and bakes subsequent job')
+check(rc==1 and b['total']==3 and b['failed']==1 and b['succeeded']==2,'batch continues after missing input and validates subsequent job')
 check(json.load(open(report))==b,'saved and stdout machine reports are identical')
 rc,bad=run('batch',manifest,'--output',os.path.join(OUT,'missing','report.json'))
 check(rc==1 and not bad['ok'] and any(d['code']=='SDK_WRITE_FAILED' for d in bad['diagnostics']),'report write failure affects status')
-duplicate=save('duplicate.batch.json',{'version':1,'jobs':[
- {'op':'bake-re2d','source':os.path.join(fixture,'props','crate.glb'),'output':'alias'},
- {'op':'bake-re2d','source':os.path.join(fixture,'props','crate.glb'),'output':'unused/../alias'}]})
-rc,dup=run('batch',duplicate)
-check(rc==1 and dup['failed']==1 and any(d['code']=='SDK_BATCH_OUTPUT_DUPLICATE'for d in dup['jobs'][1]['diagnostics']),'lexical output aliases cannot overwrite earlier jobs')
-typed=save('typed.batch.json',{'version':1,'jobs':[{'op':'bake-re2d','source':os.path.join(fixture,'props','crate.glb'),'output':'bad-size','size':'1024'}]})
-rc,wrong_type=run('batch',typed)
-check(rc==1 and wrong_type['failed']==1,'batch option types are checked instead of silently defaulted')
+# 3D-авторинг вырезан: bake-re2d — неизвестная операция, а не молчаливый пропуск.
+unsupported=save('unsupported.batch.json',{'version':1,'jobs':[{'op':'bake-re2d','source':os.path.join(fixture,'proj','project.json'),'output':'x'}]})
+rc,un=run('batch',unsupported)
+check(rc==1 and un['failed']==1 and any(d['code']=='SDK_BATCH_OPERATION'for d in un['jobs'][0]['diagnostics']),'bake-re2d is rejected as an unknown batch operation')
 requests=[{'cmd':'ping','id':'quoted"id'},{'cmd':'step','frames':2},{'cmd':'eval','code':'1+2'}, {'cmd':'sdk-unknown'}, {'cmd':'state'},{'cmd':'quit'}]
 for field,value in [('seed',2.5),('seed','bad'),('timeoutMs','bad'),('scene',42)]:
- invalid=save('invalid.agent.json',{'version':1,'game':os.path.join(fixture,'re2d_proj'),'requests':[],field:value})
+ invalid=save('invalid.agent.json',{'version':1,'game':os.path.join(fixture,'proj'),'requests':[],field:value})
  rc,invalid_report=run('agent',invalid)
  check(rc==1 and invalid_report['completed']==0 and any(d['code']=='SDK_AGENT_SESSION'for d in invalid_report['diagnostics']),'agent session rejects invalid '+field)
-session=save('test.agent.json',{'version':1,'game':os.path.join(fixture,'re2d_proj'),'seed':17,'requests':requests})
+session=save('test.agent.json',{'version':1,'game':os.path.join(fixture,'proj'),'seed':17,'requests':requests})
 rc,ar=run('agent',session,'--output',os.path.join(OUT,'agent.json'))
 check(rc==1 and ar['completed']==6 and ar['failed']==1,'native agent preserves errors and continues original session')
 check(ar['ready']['event']=='ready' and ar['responses'][0]['id']=='quoted"id','ready and original request IDs preserved')
 rc,io_failure=run('agent',session,'--output',os.path.join(OUT,'missing','agent.json'))
 check(rc==1 and io_failure['ready']==ar['ready'] and io_failure['completed']==6 and io_failure['errors']==1,'agent report I/O error retains stable report fields')
 check(ar['responses'][2]['result']==3 and ar['responses'][4]['ok'],'original eval and state responses preserved')
-with Agent(game=os.path.join(fixture,'re2d_proj'),seed=17) as a:
+with Agent(game=os.path.join(fixture,'proj'),seed=17) as a:
  expected=a.cmd('eval',code='1+2')
  check(ar['responses'][2]['result']==expected['result'],'native eval result equals Python protocol client')
 # Every supported command is forwarded to the original engine unchanged.
@@ -58,10 +55,10 @@ all_requests=[{'cmd':'ping'}, {'cmd':'frames'}, {'cmd':'eval','code':'$("<sprite
  {'cmd':'mouse','button':1,'action':'down'}, {'cmd':'mouseMove','x':22,'y':44},
  {'cmd':'wheel','amount':2}, {'cmd':'text','text':'Тест \"json\"'}, {'cmd':'step','frames':2},
  {'cmd':'state'}, {'cmd':'screenshot','path':os.path.join(OUT,'protocol.png')}, {'cmd':'reload'}, {'cmd':'quit'}]
-full=save('all.agent.json',{'version':1,'game':os.path.join(fixture,'re2d_proj'),'seed':17,'requests':all_requests})
+full=save('all.agent.json',{'version':1,'game':os.path.join(fixture,'proj'),'seed':17,'requests':all_requests})
 rc,fr=run('agent',full)
 check(rc==0 and fr['completed']==len(all_requests) and fr['failed']==0,'all 19 original protocol commands execute through native client')
-with Agent(game=os.path.join(fixture,'re2d_proj'),seed=17) as a:
+with Agent(game=os.path.join(fixture,'proj'),seed=17) as a:
  for i,request in enumerate(all_requests[:-1]):
   params={k:v for k,v in request.items() if k!='cmd'}
   expected=a.cmd(request['cmd'],**params);actual={k:v for k,v in fr['responses'][i].items() if k!='id'}

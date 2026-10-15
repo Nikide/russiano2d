@@ -33,9 +33,15 @@ def bake(name):
     meta = json.loads((HERE / 'source' / f'{name}_model.json').read_text())
     lo, hi = meta['min'], meta['max']
     cx, cy, cz = (lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2   # OBJ is Y-up, Re2D Y-down
+    def canon(v):
+        # Целые координаты пишем без дробной части: `json.dumps` иначе даёт
+        # `0.0`/`25.0`, и файл после повторного бейка расходился бы с уже
+        # канонизированным — `git diff` показывал бы шум вместо правок.
+        v = round(v, 3)
+        return int(v) if v == int(v) else v
     path = HERE / f'{name}.character.json'
     char = json.loads(path.read_text())
-    sockets = [dict(name=k, bone='object', point=[round(p[0] - cx, 3), round(p[1] - cy, 3), round(p[2] - cz, 3)])
+    sockets = [dict(name=k, bone='object', point=[canon(p[0] - cx), canon(p[1] - cy), canon(p[2] - cz)])
                for k, p in meta['sockets'].items()]
     sockets.append(dict(name='grip', bone='object', point=sockets[0]['point']))
     char['rig']['sockets'] = sockets

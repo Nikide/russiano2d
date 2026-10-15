@@ -21,12 +21,16 @@ body {
 }
 
 h1 {
+    display: block;
     font-size: 46px;
     color: #7fd1ff;
     margin-bottom: 2px;
 }
 
+/* Строка прогресса под заголовком: h1 по умолчанию строчный, поэтому без
+   display:block подпись вставала рядом с названием, а не под ним. */
 #subtitle {
+    display: block;
     color: #9fb0c8;
     font-size: 17px;
     margin-bottom: 34px;

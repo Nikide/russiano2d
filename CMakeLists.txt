@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(russiano2d
-    VERSION 0.1.31
+    VERSION 0.1.32
     DESCRIPTION "Легковесный кроссплатформенный 2D-движок: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi, экспорт в веб (WebGPU)"
     LANGUAGES C CXX)
 # Бинарник ищет библиотеки рядом с собой: если что-то осталось динамическим,
@@ -72,6 +72,19 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+# --- RE2D: необязательный слой 3D-авторинга спрайтов -------------------------
+# Опция объявлена здесь, а не в src/CMakeLists.txt, потому что от неё зависит
+# и сборка высокоуровневого API (cmake/EmbedJs.cmake, include ниже): при OFF
+# из бинарника убираются исходники 3D-модулей $ — их нечем обслужить.
+option(R2D_ENABLE_RE2D "Собрать RE2D: 3D-авторинг спрайтов, Re2D World, RotSprite" ON)
+# ВАЖНО: модули $ встраиваются в бинарник ЦЕЛИКОМ в обеих конфигурациях.
+# api.js импортирует их статически (ES-модули, а не ленивая загрузка), поэтому
+# исключение файла из таблицы модулей ломает загрузку `$` целиком — проверено
+# сборкой: игра падала с «$ is not defined». Необязательность RE2D обеспечивает
+# не отсутствие JS-файлов, а гейт возможностей (api.js: re2dAvailable) по
+# нативным биндингам: в сборке без RE2D модули просто не устанавливаются.
+set(R2D_JS_EXCLUDE "" CACHE STRING "JS-модули $, не встраиваемые в эту сборку" FORCE)
+
 # Веб-сборка (Emscripten) включается ДО зависимостей: она решает, какие
 # подсистемы собирать и в каком виде готовить шейдеры (см. cmake/Web.cmake).
 include(Web)
@@ -95,6 +108,7 @@ message(STATUS "")
 message(STATUS "── russiano2d ${PROJECT_VERSION} ──────────────────────────────")
 message(STATUS "  Тип сборки ...... ${CMAKE_BUILD_TYPE}")
 message(STATUS "  RmlUi ........... ${R2D_ENABLE_RMLUI}")
+message(STATUS "  RE2D ............ ${R2D_ENABLE_RE2D}")
 message(STATUS "  Звук ............ ${R2D_ENABLE_AUDIO}")
 message(STATUS "  Сеть ............ ${R2D_ENABLE_NET}")
 message(STATUS "  Hot reload ...... ${R2D_ENABLE_HOTRELOAD}")

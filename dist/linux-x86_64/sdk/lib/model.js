@@ -65,11 +65,6 @@ export function countTypes(entries) {
 const TYPE_LABELS = {
     'project': 'проект',
     'sdk.registry': 'реестр SDK',
-    're2dsprite.character': 'Re2DSprite',
-    're2dsprite.animations': 'Re2DSprite · анимации',
-    're2d.surface': 'Re2D · поверхность',
-    're2d.world': 'Re2D World',
-    're2d.bake': 'Re2D · bake',
     'sprite.atlas': 'атлас спрайтов',
     'animation': 'анимация',
     'tilemap': 'тайлкарта',
@@ -83,11 +78,6 @@ const TYPE_LABELS = {
     'font': 'шрифт',
     'doc': 'документ',
     'data': 'данные',
-    'model.glb': 'модель GLB',
-    'model.gltf': 'модель glTF',
-    'model.vrm': 'модель VRM',
-    'model.obj': 'модель OBJ',
-    'model.fbx': 'модель FBX',
     'replay': 'реплей',
     'file': 'файл',
 };

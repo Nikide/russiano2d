@@ -239,6 +239,78 @@ $('.enemy').within({ x: 0, y: 0 }, 200)   // цель — точка, узел, 
 .toGlobal({x,y}) .toLocal({x,y})   // мировые ↔ экранные
 ```
 
+### Локальные трансформы (§39)
+
+Узел по умолчанию живёт в **мировых** координатах — это прежнее поведение, и
+оно не меняется. Опционально узел переводится в локальный режим: его координаты
+считаются относительно родителя, а мировой трансформ вычисляется композицией
+цепочки (`translation`, `angle` и знаковый `scale`).
+
+```js
+$('<rect>', { id: 'weapon' }).size(40, 12).appendTo($('#hero'))
+    .transformSpace('local')      // координаты — относительно #hero
+    .localAt(10, 0)               // локальный сдвиг (10,0)
+    .localAngle(0);               // локальный угол
+$('<rect>', { id: 'muzzle' }).size(4, 4).appendTo($('#weapon'))
+    .transformSpace('local').localAt(20, 0);
+
+$('#muzzle').worldPoint(0, 0);     // → { x, y } в мире, камера не участвует
+$('#muzzle').localPoint(130, 200); // мировая точка → локальная
+$('#weapon').worldTransform();     // → { x, y, angle, sx, sy } с учётом цепочки
+```
+
+```js
+.transformSpace('local' | 'world') // режим; без аргумента — строка режима
+.localAt(x, y) / .localAt()        // локальный сдвиг; геттер → { x, y }
+.localAngle(rad) / .localAngle()   // локальный угол; геттер → радианы
+.localScale(s) / .localScale(sx, sy) / .localScale()   // локальный масштаб
+.worldPoint(lx, ly)                // локальная точка → мировая
+.localPoint(wx, wy)                // мировая точка → локальная
+.worldTransform()                  // → { x, y, angle, sx, sy }
+```
+
+Правила и совместимость:
+
+* **`.at()`, `.angle()`, `.scale()`, `.flip()` остаются МИРОВЫМИ** для любого
+  узла: на локальном узле значение пересчитывается в локальное обратной
+  композицией, поэтому «что задали — то и покажет `.pos()`».
+  Локальные значения задают `.localAt()`/`.localAngle()`/`.localScale()`.
+* Композиция: `angle = angle_родителя + localAngle`;
+  `scale = scale_родителя · localScale` (знак сохраняется — `flip` родителя
+  зеркалит детей); точка = `parent + R(angle_родителя)·(localXY · scale_родителя)`.
+  Неравномерный масштаб родителя не даёт shear: произвольный наклон запрещён.
+* `.transformSpace('local')` **сохраняет вид** (keep-world): текущий мировой
+  трансформ пересчитывается в локальный, узел и дети не двигаются.
+* `.appendTo(parent, { keep: 'world' | 'local' })`: по умолчанию `keep: 'world'`
+  (локальный узел не переезжает); `keep: 'local'` оставляет локальные
+  координаты. Привязка к собственному потомку отклоняется — цикл сломал бы
+  композицию. Для узлов в мировом режиме ничего не меняется.
+* `.globalPos()` и `.toGlobal()/.toLocal()` — по-прежнему **экранные**
+  (камерные) величины; `worldPoint()` камеру не учитывает.
+* Физический корень остаётся мировым. Локальный ребёнок **с телом** (сенсор)
+  ставится в скомпонованную мировую точку до следующего физического шага и до
+  отрисовки; динамическое тело локальным ребёнком делать нельзя. Так работает
+  вторая форма независимого сенсора §40 (помимо областей `.area()`):
+
+  ```js
+  $('<trigger>', { id: 'sword' }).size(24, 24).appendTo($('#hero'))
+      .body('static').sensor(true)          // своё тело-сенсор
+      .transformSpace('local').localAt(20, 0);   // позиция — композиция §39
+  $('#hero').flip(true);                     // сенсор зеркалится вместе с оружием
+  ```
+* Проход пересчёта пакетный (`engine.nodes.resolveTransforms`, §39 в
+  [internal/NATIVE.md](internal/NATIVE.md)); в проекте без локальных узлов он
+  выходит на первой строке. Локальные значения можно твинить как поля:
+  `.tween({ local_x: 40 }, 500)`.
+
+```js
+$('<player>', { id: 'hero' }).at(100, 200).appendTo($.world);
+$('<rect>', { id: 'marker' }).appendTo($('#hero')).transformSpace('local').localAt(20, 0);
+$('#marker').worldPoint(0, 0);   // → { x: 120, y: 200 }
+$('#hero').flip(true);
+$('#marker').worldPoint(0, 0);   // → { x: 80, y: 200 }  (родитель зеркалит)
+```
+
 ## 7. Визуал
 
 ```js
@@ -287,6 +359,7 @@ $.gfx.filter(true)                        // линейная фильтраци
 .collision(w, h) .collisionCircle(r)        // хитбокс (и пересоздать тело)
 .shape('box' | 'circle' | 'capsule' | 'polygon')   // форма тела
 .oneWay(true)                               // односторонняя платформа
+.dropThrough(250)                           // спрыгнуть вниз сквозь one-way на 250 мс
 .sensor(true)                               // зона: ловит, но не толкает
 .contacts(true | false)                     // события контакта
 .sleeping()                                 // → bool: усыпил ли Box2D тело
@@ -343,7 +416,17 @@ $.world.bodyAt(x, y, { mask: 0x2 });                  // кто из враго�
 
 **Односторонние платформы.** `.oneWay(true)` — тело проходит сквозь снизу и
 встаёт сверху. Второй аргумент задаёт направление лицевой стороны
-(`.oneWay(true, -Math.PI / 2)` — вверх по умолчанию).
+(`.oneWay(true, -Math.PI / 2)` — вверх по умолчанию). Стоящее сверху тело может
+спрыгнуть вниз: `.dropThrough(ms)` (по умолчанию 250 мс игрового времени)
+отключает для НЕГО контакт с односторонними платформами — платформа при этом
+не трогается, другие тела продолжают на ней стоять. Встроенное управление
+делает это само по `S`/`↓`+`Space`, когда игрок стоит именно сверху
+(см. `.controls()`).
+
+**Движущиеся платформы.** Кинематическое тело (`.body('kinematic')`) с
+`.velocity(vx, vy)` несёт стоящего на нём управляемого игрока: `.controls()`
+прибавляет горизонтальную скорость опоры, поэтому игрок не проскальзывает и не
+отстаёт. Трение платформы на перенос не влияет.
 
 **Суставы.** `.joint(цель, opts)` возвращает id; `opts` — как в
 [internal/NATIVE.md](internal/NATIVE.md#enginecreatejointopts--enginedestroyjointid), плюс сокращения:
@@ -372,11 +455,96 @@ $('#hero').on('hit', e => {              // удар быстрее порога
 `speed` (скорость сближения, для `hit`). Сырой список за кадр —
 `$.world.contacts()`.
 
+### Области узла (§40)
+
+У одного владельца бывает несколько независимых collision-областей: капсула
+движения, контактный круг, прямоугольник меча, щит. Область — дополнительная
+нативная форма на теле узла со своей ролью, локальным смещением/углом, слоями и
+признаком `enabled`. Описания живут на узле, поэтому пересоздание тела
+(`.size()`, `.sensor()`, `.collision()`) возвращает формы на место и не сбрасывает
+игровую логику.
+
+```js
+$('#hero').area('sword', {
+    shape: 'box', w: 48, h: 20, x: 14, angle: -0.3,
+    sensor: true, role: 'attack', enabled: false,   // окно атаки закрыто
+});
+$('#hero').areaOn('sword', true);       // открыть окно
+$('#hero').area('sword');               // → { name, role, enabled, index, … }
+$('#hero').areas();                     // все области узла
+$('#hero').areaOverlap('sword');        // кто внутри ПРЯМО СЕЙЧАС
+// → [{ node, owner, body, shape, area, role }]
+```
+
+| Вызов | Смысл |
+|---|---|
+| `.area(name, opts)` | объявить/обновить область; без `opts` — описание или `null` |
+| `.areaOn(name, on)` | включить/выключить; без `on` — текущее состояние |
+| `.areas()` | список описаний областей узла |
+| `.areaOverlap(name, opts?)` | пересечения области сейчас (явный запрос) |
+
+`opts`: `shape` (`'box'`/`'circle'`/`'capsule'`/`'polygon'`), `w`/`h`, `radius`,
+`points`, `x`/`y`/`angle` (локальные, пиксели и радианы), `sensor`, `contacts`,
+`role`, `owner` (логический владелец: узел, `#id` или селектор), `layer`/`mask`/
+`group`, `enabled`. По умолчанию области — сенсоры с ролью, равной имени.
+
+* **выключенная область** исключена из столкновений и запросов (в том числе из
+  `areaOverlap`), но остаётся у тела и владелец жив: `.size()` её не теряет;
+* источник истины о состоянии — нативный фильтр формы. Если форму переключил
+  внешний драйвер (анимационная дорожка `shape.enabled`, §41) через
+  `engine.setShapeEnabled`, `.areas()`, `.area(name)` и `.areaOverlap()` показывают
+  фактическое состояние, а не старое значение;
+* `.hide()`, сон тела и `.contacts(false)` область **не выключают** — это
+  разные операции;
+* `areaOverlap()` — геометрический запрос, а не история событий: цель, уже
+  стоящая внутри в момент открытия окна атаки, обнаруживается без ожидания
+  нового движения. Это и есть «overlap policy» §40;
+* пересборка нативной формы сохраняет **индекс** области, поэтому дедупликация
+  попаданий в игре держится на имени/окне атаки, а не на handle:
+  `$('#hero').area('sword').index`;
+* контакт несёт `shapeA`/`shapeB`, а событие узла — ещё и `areaA`/`areaB`,
+  `roleA`/`roleB`, `ownerA`/`ownerB`, `selfArea`/`otherArea`,
+  `selfOwner`/`otherOwner`: сенсор и логический владелец приходят раздельно.
+
+Приёмка (фикстура `tests/fixtures/transforms`, тест
+`tests/agent/highlevel_transforms_test.py`): капсула движения, контактный круг и
+прямоугольник меча одного владельца работают независимо; выключение sword не
+отключает движение; после destroy/re-enable нет stale-попаданий.
+
 Встроенное управление: `.controls('wasd')`, `.controls('arrows')`,
 `.controls({ axis: 'both', jump: 'space' })` — двигает узел или его тело,
 прыжок по `space`/`w`/`↑` только когда узел на земле.
 У узла вида Re2D под Re2D-камерой те же схемы ведут по **взгляду** камеры
 (`W` — вперёд, `A`/`D` — боком), см. [legacy Re2D](highlevel/re2d_legacy.md#4-игрок-от-первого-лица).
+
+Схема — строка (`'wasd'`/`'arrows'`/`'both'`) или объект. Строка ведёт себя
+как раньше; все новые поля необязательные, и без них поведение не меняется.
+
+| Поле | По умолчанию | Смысл |
+|---|---|---|
+| `axis` | `'both'` | раскладка движения: `'wasd'`, `'arrows'`, `'both'` |
+| `jump` / `up` | `'space'` / `'w'` | клавиши прыжка (нажатие любой из них) |
+| `fire` | — | клавиша; нажатие шлёт узлу событие `fire` |
+| `coyote` | `0` мс | прыжок ещё N мс после схода с платформы |
+| `jumpBuffer` | `0` мс | нажатие за N мс до приземления срабатывает при касании земли |
+| `jumpCut` | выкл. | переменная высота: `true` — множитель 0.35, число в (0,1) — своё |
+| `airJump` | `0` | сколько прыжков разрешено в воздухе (0 — только с земли) |
+| `dropThrough` | `true` | `S`/`↓`+`Space` на односторонней платформе — спрыгнуть вниз |
+| `dropTime` | `250` мс | на сколько мс отключается контакт при спрыгивании |
+| `drop` | по `axis` | своя клавиша (или массив) «вниз» для спрыгивания |
+| `jumpForce` | `640` | сила прыжка (px/с); `.attr('jumpForce')` — то же самое |
+
+```js
+$('<player>', { id: 'hero' }).at(100, 300)
+    .controls({ axis: 'both', coyote: 100, jumpBuffer: 120, jumpCut: 0.35 })
+    .appendTo($.world);
+```
+
+Окна `coyote`/`jumpBuffer` считаются игровым временем (суммой `dt`), а не
+кадрами: при `--fixed-dt`, переменном шаге и замедлении они означают одно и то
+же. Пока кнопка прыжка зажата, повторного прыжка при приземлении нет — нужно
+новое нажатие. Стоя на односторонней платформе, `S`/`↓`+`Space` спрыгивает
+вниз, а не прыгает вверх.
 
 ## 9. Здоровье
 
@@ -540,15 +708,18 @@ const wide = $.world.castShape({x: 0, y: 0}, {x: 200, y: 0}, { w: 48, h: 64, mas
 
 ```js
 $.camera.follow('#hero', { smooth: 0.15, offset: [0, -50], zoom: 1.5 })
+$.camera.follow('#hero', { deadzone: [40, 24], lookahead: 64 })   // платформер: зона свободы + взгляд вперёд
 $.camera.unfollow() .followed()
 $.camera.zoom(1.5) .zoomTo(2, 300)
 $.camera.panTo(x, y, 500)
 $.camera.shake(6, 300)
-$.camera.limits(0, 0, 4000, 1200) .limits(null)
-$.camera.deadzone(200, 120)
+$.camera.limits(0, 0, 4000, 1200) .limits() .limits(null)
+$.camera.deadzone(200, 120) .deadzone() .deadzone(false)
+$.camera.lookahead(64) .lookahead({ x: 64, y: 24 }) .lookahead()
 $.camera.at(x, y) .pos()
 $.camera.worldToScreen(p) .screenToWorld(p)
-$.camera.isOnScreen('#hero') .viewport()
+$.camera.isOnScreen('#hero') .isOnScreen('#hero', 0) .viewport()
+$.camera.snapshot() .restore(state) .info()
 $.camera.kind(Re2D).eye(48).fov(70).pitch(0).mouseLook(true)   // вид от первого лица (Re2D, camera.md §5)
 ```
 
@@ -750,14 +921,26 @@ $.time.scale(0.5) .pause() .resume() .toggle() .isPaused()
 await $.time.wait(500)
 const id = $.time.after(200, fn) / $.time.every(1000, fn)
 $.time.cancel(id) .cancelAll()
+$.time.freeze(70)                   // hit-stop: мир стоит, кадр рисуется
+$.time.hitStop(70)                  // то же, читаемое имя для обработчика удара
+$.time.slow(400, 0.25)              // плавное замедление на 0.4 с
+$.time.frozen() .freezeLeft() .unfreeze() .physicsScale()
 ```
 
 Пауза и масштаб действуют на **игровое время** `$.time.delta()`: твины,
 таймеры, `$.time.wait/every/after`, анимацию кадров (`.animate()`), клипы
-`$.anim` (включая `$.anim.player`) и машину состояний `$.state`. Реальным
-временем живут `$.time.rawDelta()`, `$.gfx.post`-эффекты кадра и тряска
-камеры — их пауза не останавливает. Логика игры в `$.update` по-прежнему
+`$.anim` (включая `$.anim.player` с доменом `simulation`) и машину состояний
+`$.state`. Реальным временем живут `$.time.rawDelta()`, `$.gfx.post`-эффекты
+кадра, тряска камеры и плееры с `clock: 'presentation'` — их пауза не
+останавливает. Логика игры в `$.update` по-прежнему
 вызывается: это её собственное дело — решать, что делать на паузе.
+
+Заморозка останавливает и логику кадра, и **шаг физики Box2D**: собранный
+множитель уходит в C (`engine.setTimeScale`, `src/main.c`). Длительность
+считается по времени кадра, поэтому при `--fixed-dt` она детерминирована, а
+`$.time.scale()` не затирается — после разморозки возвращается прежний масштаб.
+Пауза останавливает физику так же: тела не должны ехать под экраном паузы.
+Подробно — [highlevel/time.md](highlevel/time.md).
 
 ## 22. `$.store` и `$.fs` — сохранения и файлы
 
@@ -1116,16 +1299,16 @@ $.update(() => {
 | Подсистема | Пространство имён | Теги | Подробно |
 |---|---|---|---|
 | Анимация клипами и машина состояний | `$.anim` | — | [anim.md](highlevel/anim.md) |
-| Анимационный плеер: таймлайны в мс, события, микширование | `$.anim.player`, `$.anim.clip` | — | [animplayer.md](highlevel/animplayer.md) |
+| Анимационный плеер: таймлайны в мс, мультицелевые дорожки, звук и маркеры | `$.anim.player`, `$.anim.clip`, `$.anim.load` | — | [animplayer.md](highlevel/animplayer.md) |
 | Свет в стиле Candle: тени, конус, площадной свет, туман | `$.gfx.light`, `$.gfx.fog` | `<light>`, `<lightarea>`, `<fog>` | [render.md](highlevel/render.md) §3.0 |
-| TileMap: слои, автотайл, террейны, Y-sort | `$.tilemap` | `<tilemap>` | [tilemap.md](highlevel/tilemap.md) |
+| TileMap: слои, автотайл, террейны, коллизии-прямоугольники, Y-sort | `$.tilemap` | `<tilemap>` | [tilemap.md](highlevel/tilemap.md) |
 | CPU-частицы | `$.particles` | `<particles>` | [particles.md](highlevel/particles.md) |
 | Навигация: A*, агент, navmesh | `$.nav` | — | [nav.md](highlevel/nav.md) |
 | Prefab и сериализация сцен | `$.prefab` | — | [prefab.md](highlevel/prefab.md) |
 | Аудио-шины и эффекты | `$.audio` | — | [audiobus.md](highlevel/audiobus.md) |
 | Комната и акустика помещений | `$.audio.room/zone/listener`, `$.sound.play({ pitch })` | — | [audiobus.md](highlevel/audiobus.md) §8 |
 | VFX: ленты, молнии, волны, поля сил | `$.fx` | — | [fx.md](highlevel/fx.md) |
-| Канвас-слои, параллакс, fade | `$.layers` | `<layer>` | [layers.md](highlevel/layers.md) |
+| Канвас-слои, параллакс, бесшовная полоса (`repeat`), fade | `$.layers` | `<layer>` | [layers.md](highlevel/layers.md) |
 | UI-контролы: контейнеры, ввод, якоря, темы | `$.ui` (дополнение) | `<ui.row>` и др. | [widgets.md](highlevel/widgets.md) |
 | Таймлайн-сцены: диалоги и визуальные новеллы | `$.timeline`, `$.animatedTimelineScene2d` | — | [timeline.md](highlevel/timeline.md) |
 | Tween в стиле Godot | `$.tween` | — | [tween.md](highlevel/tween.md) |
@@ -1212,25 +1395,53 @@ $.gfx.fog({ color: '#8899bb', density: 0.25, ground: 0.6 });   // экранны
 
 Дополняет `$.anim` (anim.js), ничего в ней не заменяя: клипы-таймлайны с
 дорожками `position`/`scale`/`rotation`/`alpha`/`color`/`sprite`/`value`,
-время ключей в миллисекундах, события-ключи (`call` и подписки), собственные
-часы (`play`, `stop`, `seek`, `speed`, `loop`, `pause`) и микширование клипов.
+дискретными `visible`/`bool`/`enum`, property-дорожками `emitter`/`shape`/
+`light`/`ui` и cue-дорожками `audio`/`method`/`event`; время ключей в
+миллисекундах, маркеры с policy при seek/loop/skip, gameplay-окна, собственные
+часы (`play`, `stop`, `interrupt`, `seek`, `skip`, `restore`, `speed`, `loop`,
+`pause`) и микширование клипов.
+
+У дорожки может быть **свой target** относительно корня плеера (§41): один клип
+управляет кадром героя, оружием, sensor'ом атаки, эмиттером, светом и SFX.
+Binding разрешается один раз до `play`; свойство применяется адаптером
+существующей подсистемы — произвольный путь не обходит physics safety.
 
 ```js
-$.anim.clip('run', {
-    duration: 600, loop: 'loop',
+$.anim.clip('attack', {
+    duration: 600,
     tracks: [
-        { type: 'sprite', fps: 12, from: 0, to: 5 },
-        { type: 'value', name: 'stamina', keys: [{ t: 0, v: 100 }, { t: 600, v: 40 }] },
-        { type: 'event', keys: [{ t: 300, name: 'step', call: () => $.sound.play('step') }] },
+        { type: 'sprite', keys: [{ t: 0, v: 0 }, { t: 600, v: 3 }] },              // корень плеера
+        { type: 'rotation', target: 'weapon', keys: [{ t: 0, v: 0 }, { t: 300, v: 1.2 }] },
+        { type: 'shape', binding: 'shape.enabled', target: 'attack-sensor',
+          keys: [{ t: 150, v: true }, { t: 400, v: false }] },
+        { type: 'audio', at: 150, resource: 'shot.ogg', bus: 'sfx', gain: 0.8 },
+        { type: 'method', at: 150, name: 'game.camera', data: { intensity: 6 } },
+    ],
+    events: [
+        { at: 150, name: 'attack-open', window: 'attack', windowPhase: 'open' },
+        { at: 350, name: 'hit', kind: 'damage' },           // seek предпросмотра урон не наносит
     ],
 });
-$.anim.target('#hero').play('run').speed(1.5);
-$.anim.player('hero').blend('walk', 'run', 0.5);   // кроссфейд
-$.anim.player('hero').on('step', () => $.log('шаг'));
+
+$.anim.action('game.camera', (e) => $.camera.shake(e.data.intensity, 120));
+$.anim.target('#hero').play('attack').speed(1.5);
+$.anim.player('hero').on('finished', () => startNextPart());   // flow — ровно один раз
+$.anim.player('hero').blend('walk', 'run', 0.5);               // кроссфейд
+```
+
+Домен часов задаётся опцией `clock` (§6): `'simulation'` (по умолчанию — пауза и
+hit-stop останавливают) или `'presentation'` (идёт сырым временем кадра — VFX и
+камера живут на паузе):
+
+```js
+$.anim.player('fx').clock('presentation');
+$.anim.player('hero').clock();                     // 'simulation'
+$.anim.load(jsonText);                             // клипы из открытого JSON
 ```
 
 Время берётся только из `dt` кадра (детерминизм в `--fixed-dt`), реестр клипов
-плеера отдельный от `$.anim.define`. Подробно — [animplayer.md](highlevel/animplayer.md).
+плеера отдельный от `$.anim.define`. Полная схема дорожек и binding'ов —
+[animplayer.md](highlevel/animplayer.md).
 
 Короткий пример, где заняты сразу несколько:
 
@@ -1307,7 +1518,56 @@ $.fx.shockwave(x, y, { radius: 420, ms: 520, width: 16, color: '#c9a6ff' });
 * эффекты принадлежат сцене: при `$.scene.load()` они сбрасываются сами;
 * `<light>` теперь рисуется мягким радиальным пятном, а не плоским кругом.
 
-## 32. Утилиты, данные и русские имена
+Вспышка всего экрана и частичный hit-stop — те же `$.fx`:
+
+```js
+$.fx.flash('#fff3c4', { ms: 110, alpha: 0.55 });   // вспышка всего экрана
+$.fx.hitStop(90);                                  // полная заморозка на 90 мс
+```
+
+## 32. `$.hits` — ощущение удара
+
+```js
+$('#enemy').on('hit', $.hitFx);            // одна строка: искры, вспышка узла,
+                                           // вспышка экрана, тряска, hit-stop,
+                                           // отдача, squash & stretch
+$.hits.on('.enemy', 'crit');               // пресет по имени
+$.hits.on('.enemy', { hitStop: 90, knockback: 300, screen: null });
+
+$.hits.play(info, { preset: 'death', shake: 9 });  // событие, узел, селектор, {x,y}
+$.hits.squash('#boss', { amount: 0.3 });           // squash & stretch
+$.hits.knockback('#boss', { force: 400 });         // импульс телу / сдвиг узлу
+$.hits.preset('heavy', { hitStop: 120, knockback: 380 });
+```
+
+Опции: `particles`, `flash`, `screen`, `shake`/`shakeMs`, `hitStop`, `slow`/`slowScale`,
+`knockback`, `squash`/`squashMs`, `sound`, `cooldown`, `target`, `dir`.
+Пресеты: `hit` (умолчание), `crit`, `block`, `death`, `land`. Squash и отдача идут
+игровым временем и стоят вместе с миром на hit-stop; частицы и вспышки — реальным,
+поэтому искры видно и в замороженном кадре. Подробно — [highlevel/hits.md](highlevel/hits.md).
+
+## 32.1. `$.trace` — журнал событий и сценария
+
+Диагностика production-сценария: по устойчивому ID найти источник, контакт,
+решение фильтра и результат. Журнал **выключен по умолчанию** — во включённом
+состоянии цена в выключенном остаётся одна проверка флага на событие.
+
+```js
+$.trace.on(true);                       // начать запись
+$.trace.list();                         // [{ n, kind, frame, source, target, data }]
+$.trace.note('phase', node, { hp: 3 }); // записать шаг сценария
+$.trace.dropped();                      // сколько записей вытеснено кольцом
+$.trace.clear();
+```
+
+У каждого узла есть стабильный логический ID — `$('#hero').nid()` (строка вида
+`n1`). Он отличается от `uid` (номер создания, сбрасывается при перезагрузке
+скриптов) и переживает `$.prefab.save()` — на нём строится сопоставление
+состояния между сохранением и загрузкой (§4.2, §14 Спецификации). Событие
+узла несёт `nid` получателя и, для контактов, `source_id`/`target_id`
+участников. Сам порядок фаз кадра описан в [FRAME_PHASES.md](FRAME_PHASES.md).
+
+## 33. Утилиты, данные и русские имена
 
 Подсистемы ниже добавлены после аудита: закрывают то, что каждая игра писала
 себе сама. Каждая живёт в своём файле `src/highlevel/<имя>.js`.
@@ -1335,7 +1595,8 @@ rectOverlap rectIntersect rectCenter rectGrow`.
 ### `$.random` — детерминированный ГПСЧ и шум
 
 Тот же генератор, что и раньше (`next/range/int/pick/chance`), плюс
-`shuffle gaussian weighted noise1D noise2D`. Один seed → одна
+`shuffle gaussian weighted noise1D noise2D simplex2D noise fbm2D hashCells
+stream state restore validateState algorithms`. Один seed → одна
 последовательность: воспроизводимость тестов и `--fixed-dt` сохраняется.
 
 ```js
@@ -1343,6 +1604,18 @@ $.random.seed(level.seed);
 const type = $.random.weighted([{ value: 'goblin', weight: 10 }, { value: 'dragon', weight: 1 }]);
 const x    = $.random.range(0, arena.w);
 const h    = 0.6 * $.random.noise2D(x / 64, y / 64) + 0.4 * $.random.noise2D(x / 16, y / 16, 777);
+
+// Симплекс (§43): именованный алгоритм с версией, а не «ещё один noise».
+const h2 = $.random.simplex2D(x / 48, y / 48, { seed: level.seed, frequency: 1 });
+const source = $.random.noise({ algorithm: 'simplex2d', version: 1, seed: level.seed });
+const h3 = source.fbm2D(x / 96, y / 96, { octaves: 4, gain: 0.5, lacunarity: 2 });
+const hash = $.random.hashCells(cells);          // стабильный FNV-1a, 8 hex
+
+// Потоки и состояние (§26): сохранение продолжает последовательность.
+const gen = $.random.stream('generation');
+const saved = $.random.state();                  // { version, algorithm, seed, value, streams }
+$.random.validateState(saved);                   // true | строка-причина
+$.random.restore(saved);                         // кидает на чужой version/algorithm
 ```
 
 `$.random.seed(n)` перезапускает серию, `seed()` без аргумента возвращает

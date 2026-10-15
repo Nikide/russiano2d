@@ -211,14 +211,21 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
     // Буфер событий контакта копится за все подшаги этого кадра: JS читает его
     // один раз (engine.contacts()), поэтому обнуляем строго здесь.
     r2d_physics_begin_contacts(fc->physics);
-    fc->accumulator += app->dt;
+    // Масштаб времени физики (engine.setTimeScale): 1 — как есть; 0 — шагов
+    // нет вовсе (hit-stop: тела стоят, кадр и UI продолжают идти); 0.5 —
+    // вдвое медленнее. Ноль отсекаем до сравнения в while, иначе он исправно
+    // копил бы время и всё равно шагал: множитель 0 не должен давать шагов.
+    const float physics_dt = app->dt * app->time_scale;
+    fc->accumulator += physics_dt;
     int steps = 0;
-    while (fc->accumulator >= R2D_FIXED_DT && steps < R2D_MAX_SUBSTEPS) {
+    while (physics_dt > 0.0f && fc->accumulator >= R2D_FIXED_DT && steps < R2D_MAX_SUBSTEPS) {
         r2d_physics_step(fc->physics, R2D_FIXED_DT);
         fc->accumulator -= R2D_FIXED_DT;
         steps++;
     }
-    if (steps == R2D_MAX_SUBSTEPS) {
+    if (physics_dt <= 0.0f) {
+        fc->accumulator = 0.0f;   // заморозка не копит долг: иначе рывок на выходе
+    } else if (steps == R2D_MAX_SUBSTEPS) {
         fc->accumulator = 0.0f;   // не копим долг после лага
     }
     if (steps == 0) {

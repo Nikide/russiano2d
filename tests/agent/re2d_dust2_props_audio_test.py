@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Real native crate support/depth and mixer-backed footsteps/outdoor wind."""
-import json,sys
+import json,os,sys
+import os
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 from agent_client import Agent
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from re2d_skip import skip_without_re2d   # noqa: E402
 failed=[];count=0
 def check(ok,name):
  global count
@@ -11,6 +14,8 @@ def check(ok,name):
  if not ok:failed.append(name)
 ws=[w for w in json.loads(Path('demos/re2d_dust2/dust2.re2dmap').read_text())['walls'] if w.get('tag')=='crate']
 with Agent(game='demos/re2d_dust2',seed=7) as a:
+ if skip_without_re2d(a):
+     sys.exit(0)
  a.step(15)
  for i in range(0,len(ws),4):
   g=ws[i:i+4];ps=[p for w in g for p in (w['from'],w['to'])];x=(min(p[0] for p in ps)+max(p[0] for p in ps))/2;y=(min(p[1] for p in ps)+max(p[1] for p in ps))/2;h=g[0]['top'];bottom=g[0]['bottom']

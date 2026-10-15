@@ -4,6 +4,7 @@ import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 sys.path.insert(0, os.path.dirname(__file__))
+from re2d_skip import skip_without_re2d_binary   # noqa: E402
 from agent_client import Agent
 from re2d_native_test import decode
 FAILED = []
@@ -20,6 +21,9 @@ def pixels(a, name):
     return [tuple(row[x:x+3]) for row in rows for x in range(0, len(row), bpp)]
 
 def main():
+    # Материала для проверки нет в сборке без RE2D (R2D_ENABLE_RE2D=OFF).
+    if skip_without_re2d_binary(what='highlevel_re2d_bsp_world_test'):
+        return
     with Agent(game='tests/fixtures/re2d_bsp_world', seed=5) as a:
         a.step(2)
         check(a.eval('world.info().spans') == 2, 'identical XY retains both storeys')

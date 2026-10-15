@@ -253,4 +253,27 @@ test('два независимых $.random-генератора не влия�
     near(b.next(), makeGenerator(1000).next());
 });
 
+// --- §26/§43: новые методы на месте и не трогают старую последовательность ---
+
+test('installRandom даёт state/stream/simplex/noise/hashCells', () => {
+    const $ = {};
+    installRandom($);
+    for (const name of ['state', 'restore', 'validateState', 'stream', 'streamNames',
+        'simplex2D', 'noise', 'algorithms', 'hashCells']) {
+        truthy(typeof $.random[name] === 'function', 'нет метода $.random.' + name);
+    }
+    eq($.random.state().algorithm, 'mulberry32');
+    eq($.random.state().version, 1);
+});
+
+test('новые методы не сдвигают последовательность default', () => {
+    const expected = series(makeGenerator(321), 5);
+    const rng = makeGenerator(321);
+    rng.simplex2D(1.5, 2.5, { seed: 7 });
+    rng.stream('presentation').next();
+    rng.state();
+    rng.hashCells([[1, 0], [0, 1]]);
+    eq(series(rng, 5), expected);
+});
+
 finish();

@@ -53,7 +53,8 @@ export const NEIGHBOURS47 = [
 // Ключи, по которым fromASCII отличает opts от легенды символов.
 const OPTION_KEYS = ['src', 'tile', 'cols', 'rows', 'data', 'solid', 'layers',
                      'mapW', 'mapH', 'id', 'depth', 'legend', 'x', 'y', 'visible', 'class',
-                     'terrains', 'ysort'];
+                     'terrains', 'ysort', 'tiles', 'sources', 'origin', 'pad', 'padTile',
+                     'limitPolicy', 'agentSize', 'agentRadius'];
 
 /**
  * Маска соседей вокруг тайла (tx, ty). Чистая функция: isSolid(nx, ny) решает,
@@ -183,6 +184,385 @@ export function terrainTile(mask, set) {
 }
 
 // ---------------------------------------------------------------------------
+// Дескриптор тайла: visual region, локальная геометрия коллизии, маски, occluder
+//
+// Клетка — не всегда весь тайл: у тонкой платформы картинка 32×32, а тело —
+// полоса внизу клетки. Поэтому у тайлсета может быть таблица `tiles`:
+// id → дескриптор с visual region/source, локальной геометрией коллизии,
+// масками и геометрией occluder (см. docs/highlevel/tilemap.md §13).
+//
+// Локальная система координат — ЦЕНТР клетки, пиксели, Y вниз. Поэтому
+// «visual 32×32, physical rect [-16,8]..[16,16]» — это полоса 32×8 в нижней
+// части клетки, а верхние 24 px клетки свободны для тела и луча.
+//
+// Полная клетка (`shape: 'full'`, по умолчанию) остаётся быстрым случаем: она
+// сливается тем же жадным алгоритмом, что и раньше (solidRects). Частичная
+// геометрия сливается только тогда, когда объединение соседних одинаковых
+// прямоугольников ТОЧНО равно прямоугольнику: иначе в мире появилась бы
+// невидимая коллизия (непрозрачная картинка ≠ непроходимый тайл).
+// ---------------------------------------------------------------------------
+
+/** Допуск сравнения геометрии: размеры в пикселях, значения — обычно целые. */
+const GEOM_EPS = 1e-6;
+
+/** Прямоугольник [x0,y0,x1,y1] из описания или null. */
+function toRect(spec) {
+    if (!spec) return null;
+    if (Array.isArray(spec)) {
+        if (spec.length < 4) return null;
+        const r = [Number(spec[0]), Number(spec[1]), Number(spec[2]), Number(spec[3])];
+        for (const v of r) if (!isFinite(v)) return null;
+        return r;
+    }
+    if (typeof spec !== 'object') return null;
+    if (spec.rect !== undefined) return toRect(spec.rect);
+    if (spec.x0 !== undefined || spec.y0 !== undefined) {
+        const r = [Number(spec.x0), Number(spec.y0), Number(spec.x1), Number(spec.y1)];
+        for (const v of r) if (!isFinite(v)) return null;
+        return r;
+    }
+    const w = Number(spec.w), h = Number(spec.h);
+    if (!isFinite(w) || !isFinite(h)) return null;
+    if (spec.cx !== undefined || spec.cy !== undefined) {
+        const cx = Number(spec.cx) || 0, cy = Number(spec.cy) || 0;
+        return [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
+    }
+    const x = Number(spec.x) || 0, y = Number(spec.y) || 0;
+    return [x, y, x + w, y + h];
+}
+
+/** Список прямоугольников из описания (одна форма или массив форм). */
+function toRects(spec) {
+    if (spec === undefined || spec === null || spec === false) return null;
+    if (Array.isArray(spec) && spec.length > 0 && Array.isArray(spec[0])) {
+        const out = [];
+        for (const item of spec) {
+            const r = toRect(item);
+            if (r) out.push(r);
+        }
+        return out.length ? out : null;
+    }
+    if (Array.isArray(spec) && spec.length === 4 && typeof spec[0] === 'number') {
+        const r = toRect(spec);
+        return r ? [r] : null;
+    }
+    if (typeof spec === 'object' && Array.isArray(spec.rects)) return toRects(spec.rects);
+    const r = toRect(spec);
+    return r ? [r] : null;
+}
+
+/** Полная клетка как форма: локальный прямоугольник от -t/2 до +t/2. */
+function fullShape(tile) {
+    const h = tile / 2;
+    return { full: true, rects: [[-h, -h, h, h]] };
+}
+
+/** Форма из описания: 'full' | 'none' | rect | rects | {…}. null — формы нет. */
+function normalizeShape(spec, tile) {
+    if (spec === 'none' || spec === false || spec === null) return null;
+    if (spec === undefined || spec === true || spec === 'full') return fullShape(tile);
+    const rects = toRects(spec);
+    if (!rects || !rects.length) return null;
+    const h = tile / 2;
+    const full = rects.length === 1 && Math.abs(rects[0][0] + h) < GEOM_EPS
+        && Math.abs(rects[0][1] + h) < GEOM_EPS
+        && Math.abs(rects[0][2] - h) < GEOM_EPS
+        && Math.abs(rects[0][3] - h) < GEOM_EPS;
+    return { full, rects };
+}
+
+/** Visual region: [tx,ty,w,h] | [source,tx,ty,w,h] | { source, tx, ty, w, h }. */
+function normalizeVisual(spec) {
+    if (!spec) return null;
+    let source = 0, tx = 0, ty = 0, w = 0, h = 0;
+    if (Array.isArray(spec)) {
+        if (spec.length === 4) { tx = spec[0] | 0; ty = spec[1] | 0; w = spec[2] | 0; h = spec[3] | 0; }
+        else if (spec.length >= 5) { source = spec[0] | 0; tx = spec[1] | 0; ty = spec[2] | 0; w = spec[3] | 0; h = spec[4] | 0; }
+        else return null;
+    } else if (typeof spec === 'object') {
+        const region = Array.isArray(spec.region) ? spec.region : null;
+        source = (spec.source === undefined ? (spec.atlas === undefined ? 0 : spec.atlas) : spec.source) | 0;
+        if (region) { tx = region[0] | 0; ty = region[1] | 0; w = region[2] | 0; h = region[3] | 0; }
+        else {
+            tx = (spec.tx === undefined ? spec.x : spec.tx) | 0;
+            ty = (spec.ty === undefined ? spec.y : spec.ty) | 0;
+            w = spec.w | 0;
+            h = spec.h | 0;
+        }
+    } else return null;
+    if (!(w > 0) || !(h > 0)) return null;
+    return { source: source < 0 ? 0 : source, tx, ty, w, h };
+}
+
+/** Маски/флаги тела. null — «как у всех» (умолчания движка). */
+function normalizeFilter(raw) {
+    let out = null;
+    for (const key of ['layerBits', 'mask', 'group', 'oneWay', 'oneWayAngle', 'sensor']) {
+        if (raw[key] === undefined || raw[key] === null) continue;
+        if (!out) out = {};
+        if (key === 'oneWay' || key === 'sensor') out[key] = !!raw[key];
+        else out[key] = Number(raw[key]) || 0;
+    }
+    return out;
+}
+
+/**
+ * Приводит дескриптор тайла к единому виду. Чистая функция: ни узлов, ни
+ * движка — её проверяет qjs-харнесс.
+ *
+ * Вход — короткая форма `[x0,y0,x1,y1]` (геометрия) или объект:
+ *   { solid, shape, visual, occluder, layerBits, mask, group, oneWay, sensor, tags }
+ * Выход — `{ solid, shape: { full, rects }, visual, occluder, filter, tags, key }`,
+ * где `key` — сигнатура «геометрия + маски», по ней идёт слияние: сливаются
+ * только действительно эквивалентные соприкасающиеся формы.
+ */
+export function normalizeTileDef(spec, tile) {
+    const t = tile > 0 ? tile : 32;
+    let raw = spec;
+    if (Array.isArray(spec) && spec.length === 4 && typeof spec[0] === 'number') raw = { shape: spec };
+    if (raw === undefined || raw === null) raw = {};
+    if (typeof raw !== 'object') raw = {};
+
+    const shapeDeclared = raw.shape !== undefined;
+    let shape = normalizeShape(shapeDeclared ? raw.shape : 'full', t);
+    const solidFlag = raw.solid;
+    const solid = solidFlag === undefined ? (shape !== null) : !!solidFlag;
+    if (solid && !shape) shape = fullShape(t);
+    if (!solid) shape = null;
+
+    const visual = normalizeVisual(raw.visual);
+    let occluder = null;
+    if (raw.occluder === undefined) {
+        // По умолчанию occluder повторяет геометрию коллизии: «картинка» и
+        // «свет» не должны расходиться с физикой (§42).
+        occluder = shape ? { rects: shape.rects } : null;
+    } else if (raw.occluder !== false && raw.occluder !== null && raw.occluder !== 'none') {
+        if (raw.occluder === true || raw.occluder === 'shape' || raw.occluder === 'collision') {
+            occluder = shape ? { rects: shape.rects } : null;
+        } else if (raw.occluder === 'visual') {
+            occluder = visual ? { rects: [[-visual.w / 2, -visual.h / 2, visual.w / 2, visual.h / 2]] } : null;
+        } else {
+            const rects = toRects(raw.occluder);
+            occluder = rects && rects.length ? { rects } : null;
+        }
+    }
+
+    const filter = normalizeFilter(raw);
+    const key = (shape ? (shape.full ? 'F' : 'R' + shape.rects.map((r) => r.join(',')).join(';')) : 'N')
+        + '|' + (filter ? JSON.stringify(filter) : '')
+        + '|' + (raw.tags === undefined ? '' : JSON.stringify(raw.tags));
+
+    return {
+        solid,
+        shape,
+        visual,
+        occluder,
+        filter,
+        tags: raw.tags === undefined ? null : raw.tags,
+        key,
+    };
+}
+
+/** Максимальный «выход» локальной геометрии за клетку, в клетках. */
+function shapePad(defs, tile) {
+    if (!defs) return 0;
+    const h = tile / 2;
+    let pad = 0;
+    for (const id of Object.keys(defs)) {
+        const shape = defs[id].shape;
+        if (!shape) continue;
+        for (const r of shape.rects) {
+            pad = Math.max(pad, h - r[0], r[2] - h, h - r[1], r[3] - h, 0);
+        }
+    }
+    return Math.ceil(pad / tile - GEOM_EPS);
+}
+
+/**
+ * Тела коллизии по дескрипторам клеток.
+ *
+ * `cellAt(tx, ty)` возвращает дескриптор (normalizeTileDef) или null; координаты
+ * клеток — буферные (0..cols-1), без логического origin. Результат — список
+ * прямоугольников в ПИКСЕЛЯХ относительно левого верхнего угла буфера:
+ *   { lx, ly, w, h, def, tx, ty, nx, ny }
+ *
+ * Слияние: клетки с одинаковой сигнатурой (`def.key`). Полная клетка
+ * сливается как раньше (вправо, потом вниз). Частичная форма сливается по оси
+ * только если её размер по этой оси равен тайлу: тогда соседние копии
+ * соприкасаются, и объединение ТОЧНО равно прямоугольнику. Иначе каждая форма
+ * остаётся собой — расширять тело до размера клетки нельзя.
+ *
+ * `opts.merge === false` — без слияния (по телу на форму в клетке).
+ * Чистая функция: проверяется qjs-харнессом.
+ */
+export function collisionShapes(cols, rows, tile, cellAt, opts) {
+    const c = cols | 0, r = rows | 0;
+    const t = tile > 0 ? tile : 32;
+    const half = t / 2;              // локальная геометрия считается от центра
+    const merge = !(opts && opts.merge === false);
+    const out = [];
+    if (c <= 0 || r <= 0 || typeof cellAt !== 'function') return out;
+
+    const groups = new Map();
+    for (let y = 0; y < r; y++) {
+        for (let x = 0; x < c; x++) {
+            const def = cellAt(x, y);
+            if (!def || !def.shape) continue;
+            let g = groups.get(def.key);
+            if (!g) { g = { def, mask: new Uint8Array(c * r) }; groups.set(def.key, g); }
+            g.mask[y * c + x] = 1;
+        }
+    }
+
+    for (const g of groups.values()) {
+        const rects = g.def.shape.rects;
+        const single = rects.length === 1 ? rects[0] : null;
+        const sw = single ? single[2] - single[0] : 0;
+        const sh = single ? single[3] - single[1] : 0;
+        const allowX = merge && !!single && sw >= t - GEOM_EPS;
+        const allowY = merge && !!single && sh >= t - GEOM_EPS;
+        if (!allowX && !allowY) {
+            // Каждая форма — своё тело: объединять нечего (или не с чем).
+            for (let y = 0; y < r; y++) {
+                for (let x = 0; x < c; x++) {
+                    if (!g.mask[y * c + x]) continue;
+                    for (const rect of rects) {
+                        out.push({
+                            lx: x * t + half + rect[0], ly: y * t + half + rect[1],
+                            w: rect[2] - rect[0], h: rect[3] - rect[1],
+                            def: g.def, tx: x, ty: y, nx: 1, ny: 1,
+                        });
+                    }
+                }
+            }
+            continue;
+        }
+        const used = new Uint8Array(c * r);
+        for (let y = 0; y < r; y++) {
+            for (let x = 0; x < c; x++) {
+                const idx = y * c + x;
+                if (!g.mask[idx] || used[idx]) continue;
+                let nx = 1;
+                while (allowX && x + nx < c && g.mask[idx + nx] && !used[idx + nx]) nx++;
+                let ny = 1;
+                if (allowY) {
+                    while (y + ny < r) {
+                        const base = (y + ny) * c + x;
+                        let full = true;
+                        for (let i = 0; i < nx; i++) {
+                            if (!g.mask[base + i] || used[base + i]) { full = false; break; }
+                        }
+                        if (!full) break;
+                        ny++;
+                    }
+                }
+                for (let yy = 0; yy < ny; yy++) {
+                    const base = (y + yy) * c + x;
+                    for (let i = 0; i < nx; i++) used[base + i] = 1;
+                }
+                out.push({
+                    lx: x * t + half + single[0], ly: y * t + half + single[1],
+                    w: sw + (nx - 1) * t, h: sh + (ny - 1) * t,
+                    def: g.def, tx: x, ty: y, nx, ny,
+                });
+            }
+        }
+    }
+
+    // Канонический порядок: сверху вниз, слева направо. Он же был у solidRects —
+    // повторная сборка не меняет ни число тел, ни их порядок.
+    out.sort((a, b) => (a.ly - b.ly) || (a.lx - b.lx));
+    return out;
+}
+
+/**
+ * Проходит ли прямоугольник (центр x,y, полуразмеры hw,hh) сквозь реальную
+ * геометрию слоя. `rectsAt(tx, ty)` — локальные прямоугольники клетки или null.
+ * Касание границы не считается пересечением (§6.1).
+ *
+ * Чистая функция: проверяется qjs-харнессом.
+ */
+export function shapeBoxBlocked(layer, rectsAt, left, top, x, y, hw, hh) {
+    const tile = layer && layer.tile > 0 ? layer.tile : 32;
+    const pad = layer && layer.shape_pad ? layer.shape_pad : 0;
+    const rx = cellRange(x - hw, x + hw, left, tile);
+    const ry = cellRange(y - hh, y + hh, top, tile);
+    if (!rx || !ry) return false;
+    for (let ty = ry[0] - pad; ty <= ry[1] + pad; ty++) {
+        for (let tx = rx[0] - pad; tx <= rx[1] + pad; tx++) {
+            const rects = rectsAt(tx, ty);
+            if (!rects) continue;
+            // Локальная геометрия — от ЦЕНТРА клетки, поэтому +полтайла.
+            const bx = left + tx * tile + tile / 2, by = top + ty * tile + tile / 2;
+            for (const r of rects) {
+                const sx0 = bx + r[0], sy0 = by + r[1];
+                const sx1 = bx + r[2], sy1 = by + r[3];
+                if (x - hw < sx1 && sx0 < x + hw && y - hh < sy1 && sy0 < y + hh) return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Отрезки-препятствия для освещения по РЕАЛЬНОЙ геометрии клеток.
+ *
+ * Наружу выходят только те рёбра формы, за которыми пусто; ребро, к которому
+ * вплотную прижата такая же форма соседней клетки, пропускается. Так у ряда
+ * тонких платформ остаются верх, низ и торцы, а не 4 ребра на каждую клетку.
+ * `cellAt(tx, ty)` — `{ rects }` (локальные, центр клетки) или null.
+ * left/top — мировые координаты левого верхнего угла буфера.
+ *
+ * Чистая функция: проверяется qjs-харнессом.
+ */
+export function shapeOccluders(cols, rows, tile, cellAt, left, top) {
+    const c = cols | 0, r = rows | 0;
+    const t = tile > 0 ? tile : 32;
+    const h = t / 2;
+    const out = [];
+    if (c <= 0 || r <= 0 || typeof cellAt !== 'function') return out;
+    const ox = left || 0, oy = top || 0;
+    const at = (x, y) => (x < 0 || y < 0 || x >= c || y >= r) ? null : cellAt(x, y);
+    // Ребро может закрыть только соседняя клетка, и только если ребро формы
+    // лежит РОВНО на общей границе клеток: форма, «утопленная» внутрь клетки
+    // (полоса тонкой платформы), соседом не перекрывается — её ребро видно.
+    // У соседа при этом должна быть форма, прижатая к той же границе и
+    // накрывающая ребро целиком.
+    const hidden = (list, which, rect) => {
+        if (!list || !list.rects) return false;
+        for (const n of list.rects) {
+            if (which === 'top') {
+                if (Math.abs(rect[1] + h) < GEOM_EPS && Math.abs(n[3] - h) < GEOM_EPS
+                    && n[0] <= rect[0] + GEOM_EPS && n[2] >= rect[2] - GEOM_EPS) return true;
+            } else if (which === 'bottom') {
+                if (Math.abs(rect[3] - h) < GEOM_EPS && Math.abs(n[1] + h) < GEOM_EPS
+                    && n[0] <= rect[0] + GEOM_EPS && n[2] >= rect[2] - GEOM_EPS) return true;
+            } else if (which === 'left') {
+                if (Math.abs(rect[0] + h) < GEOM_EPS && Math.abs(n[2] - h) < GEOM_EPS
+                    && n[1] <= rect[1] + GEOM_EPS && n[3] >= rect[3] - GEOM_EPS) return true;
+            } else if (Math.abs(rect[2] - h) < GEOM_EPS && Math.abs(n[0] + h) < GEOM_EPS
+                       && n[1] <= rect[1] + GEOM_EPS && n[3] >= rect[3] - GEOM_EPS) return true;
+        }
+        return false;
+    };
+    for (let ty = 0; ty < r; ty++) {
+        for (let tx = 0; tx < c; tx++) {
+            const cell = cellAt(tx, ty);
+            if (!cell || !cell.rects) continue;
+            const bx = ox + tx * t + h, by = oy + ty * t + h;
+            for (const rect of cell.rects) {
+                const x0 = bx + rect[0], y0 = by + rect[1], x1 = bx + rect[2], y1 = by + rect[3];
+                if (!hidden(at(tx, ty - 1), 'top', rect)) out.push(x0, y0, x1, y0);
+                if (!hidden(at(tx, ty + 1), 'bottom', rect)) out.push(x0, y1, x1, y1);
+                if (!hidden(at(tx - 1, ty), 'left', rect)) out.push(x0, y0, x0, y1);
+                if (!hidden(at(tx + 1, ty), 'right', rect)) out.push(x1, y0, x1, y1);
+            }
+        }
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
 // Данные карты
 // ---------------------------------------------------------------------------
 
@@ -217,6 +597,72 @@ function toInt32(source) {
     const out = new Int32Array(source ? source.length : 0);
     if (source) for (let i = 0; i < source.length; i++) out[i] = source[i] | 0;
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// Логические координаты: origin и padding
+//
+// Генератору нужны клетки левее/выше нуля («граница x=-1») и рамка за основной
+// областью. Второй, разреженной карты для этого не нужно: данные остаются
+// finite array, а за координаты отвечают два поля:
+//   * `origin: [ox, oy]` — ЛОГИЧЕСКИЕ координаты клетки data[0];
+//   * `pad: n | [l,t,r,b]` — сколько клеток буфера добавить по сторонам
+//     (`padTile` — чем заполнить). origin сдвигается на -l/-t, поэтому основная
+//     область сохраняет свои логические координаты, а новые клетки создаются
+//     ВНУТРИ буфера — писать за его границы не нужно.
+// ---------------------------------------------------------------------------
+
+/** padding из описания: число или [left, top, right, bottom]. */
+export function normalizePad(spec) {
+    if (spec === undefined || spec === null || spec === false) return [0, 0, 0, 0];
+    if (typeof spec === 'number') {
+        const n = Math.max(0, Math.floor(spec) || 0);
+        return [n, n, n, n];
+    }
+    if (Array.isArray(spec)) {
+        return [0, 1, 2, 3].map((i) => {
+            const v = Number(spec[i]);
+            return isFinite(v) && v > 0 ? Math.floor(v) : 0;
+        });
+    }
+    if (typeof spec === 'object') {
+        return ['left', 'top', 'right', 'bottom'].map((k) => {
+            const v = Number(spec[k]);
+            return isFinite(v) && v > 0 ? Math.floor(v) : 0;
+        });
+    }
+    return [0, 0, 0, 0];
+}
+
+/** Заполнение padding: число (все стороны) или [l,t,r,b] id. */
+function padTilesOf(spec) {
+    if (spec === undefined || spec === null) return [0, 0, 0, 0];
+    if (Array.isArray(spec)) return [0, 1, 2, 3].map((i) => Number(spec[i]) | 0);
+    const v = Number(spec) | 0;
+    return [v, v, v, v];
+}
+
+/** Расширяет данные буфером padding. Возвращает { data, w, h, pad }. */
+export function applyPadding(norm, pad, padTile) {
+    const [l, top, r, bottom] = pad;
+    if (!(l || top || r || bottom)) return { data: norm.data, w: norm.w, h: norm.h, pad };
+    const w = norm.w + l + r;
+    const h = norm.h + top + bottom;
+    const out = new Int32Array(w * h);
+    if (padTile) {
+        const ids = padTilesOf(padTile);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const side = y < top ? 1 : (y >= top + norm.h ? 3 : (x < l ? 0 : (x >= l + norm.w ? 2 : -1)));
+                out[y * w + x] = side < 0 ? 0 : ids[side];
+            }
+        }
+    }
+    for (let y = 0; y < norm.h; y++) {
+        const from = y * norm.w;
+        out.set(norm.data.subarray(from, from + norm.w), (y + top) * w + l);
+    }
+    return { data: out, w, h, pad };
 }
 
 function isTypedArray(value) {
@@ -279,13 +725,25 @@ export function normalizeTileData(data, opts) {
 }
 
 // ---------------------------------------------------------------------------
-// Коллизии: склейка тайлов в горизонтальные полосы
+// Коллизии: склейка тайлов в прямоугольники
+//
+// Движок держит не больше R2D_MAX_BODIES (8192) тел одновременно, и при
+// переполнении r2d_physics_create просто возвращает -1. Карта 200×100 в
+// плотном узоре просит до 10 000 полос — часть тайлов осталась бы БЕЗ
+// коллизий, а игрок проваливался бы в «невидимые дыры» (это и был баг:
+// checkerboard 200×100 давал 8192 тела из 10000 полос).
+//
+// Поэтому тела строятся не по горизонтальным полосам, а по прямоугольникам:
+// соседние одинаково непроходимые строки склеиваются в один прямоугольник.
+// Сплошной блок 200×10 — это одно тело вместо десяти, а число тел на карте
+// перестаёт зависеть от её высоты. Геометрия при этом не меняется: объединение
+// тех же клеток, только крупнее формы.
 // ---------------------------------------------------------------------------
 
 /**
- * Полосы непроходимых тайлов. Склеиваем только по горизонтали: длинные
- * ровные платформы — типичный случай, а вертикальная склейка дала бы тела
- * высотой в пол-карты, что для Box2D хуже сотни узких тел.
+ * Полосы непроходимых тайлов. Горизонтальная склейка как была — годится для
+ * отчётов и ручных проверок («сколько полос в слое»). Тела коллизий строятся
+ * по `solidRects`.
  * Результат: [{ tx, ty, len }] — начало полосы и длина в тайлах.
  */
 export function solidRuns(cols, rows, isSolid) {
@@ -301,35 +759,114 @@ export function solidRuns(cols, rows, isSolid) {
     return out;
 }
 
+/**
+ * Прямоугольники непроходимых тайлов — жадное слияние «сначала вправо, потом
+ * вниз». Обход детерминирован (слева направо, сверху вниз), поэтому одна и та
+ * же карта всегда даёт один и тот же список тел.
+ *
+ * Результат: [{ tx, ty, w, h }] — левый верхний тайл и размеры в тайлах.
+ * Покрытие точное: каждая непроходимая клетка попадает ровно в один
+ * прямоугольник, ни одна проходимая — ни в один.
+ *
+ * Чистая функция: ни узлов, ни движка — проверяется qjs-харнессом.
+ */
+export function solidRects(cols, rows, isSolid) {
+    const c = cols | 0, r = rows | 0;
+    const out = [];
+    if (c <= 0 || r <= 0 || typeof isSolid !== 'function') return out;
+    const used = new Uint8Array(c * r);
+    for (let y = 0; y < r; y++) {
+        for (let x = 0; x < c; x++) {
+            const idx = y * c + x;
+            if (used[idx] || !isSolid(x, y)) continue;
+            // Вправо — пока клетки свободны и непроходимы.
+            let w = 1;
+            while (x + w < c && !used[idx + w] && isSolid(x + w, y)) w++;
+            // Вниз — пока вся строка такой же ширины свободна и непроходима.
+            let h = 1;
+            while (y + h < r) {
+                const base = (y + h) * c + x;
+                let full = true;
+                for (let i = 0; i < w; i++) {
+                    if (used[base + i] || !isSolid(x + i, y + h)) { full = false; break; }
+                }
+                if (!full) break;
+                h++;
+            }
+            for (let yy = 0; yy < h; yy++) {
+                const base = (y + yy) * c + x;
+                for (let i = 0; i < w; i++) used[base + i] = 1;
+            }
+            out.push({ tx: x, ty: y, w, h });
+        }
+    }
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Координаты
+//
+// Геометрия: { x, y, tile, cols, rows [, origin_x, origin_y, scale_x, scale_y] }.
+// x/y — центр карты в мире, cols/rows — размер БУФЕРА в клетках, origin —
+// логические координаты клетки data[0] (см. §про padding), scale — масштаб
+// узла. world↔cell учитывают всё это: без origin и масштаба формулы прежние.
 // ---------------------------------------------------------------------------
 
-/** Геометрия карты: { x, y, tile, cols, rows }. Всё в мировых пикселях/тайлах. */
+/** Масштаб геометрии по оси; 0 и мусор читаются как 1. */
+function geomScale(g, axis) {
+    const v = axis ? g.scale_y : g.scale_x;
+    return typeof v === 'number' && isFinite(v) && v !== 0 ? v : 1;
+}
+
+/** Логические координаты клетки data[0]. */
+function geomOrigin(g, axis) {
+    const v = axis ? g.origin_y : g.origin_x;
+    return typeof v === 'number' && isFinite(v) ? Math.round(v) : 0;
+}
+
+function geomPixelSize(g, axis) {
+    const tile = g.tile || 32;
+    const cols = axis ? (g.rows | 0) : (g.cols | 0);
+    return cols * tile * Math.abs(geomScale(g, axis));
+}
+
+/** Мировые координаты левого верхнего угла буфера. */
+function geomLeft(g) { return (g.x || 0) - geomPixelSize(g, 0) / 2; }
+function geomTop(g) { return (g.y || 0) - geomPixelSize(g, 1) / 2; }
+
+/** Пиксель → логические координаты клетки. */
 export function pixelToTile(geom, x, y) {
     const g = geom || {};
     const tile = g.tile || 32;
-    const left = (g.x || 0) - ((g.cols || 0) * tile) / 2;
-    const top = (g.y || 0) - ((g.rows || 0) * tile) / 2;
-    return { tx: Math.floor((x - left) / tile), ty: Math.floor((y - top) / tile) };
+    const tw = tile * Math.abs(geomScale(g, 0));
+    const th = tile * Math.abs(geomScale(g, 1));
+    return {
+        tx: Math.floor(((x - geomLeft(g)) / tw)) + geomOrigin(g, 0),
+        ty: Math.floor(((y - geomTop(g)) / th)) + geomOrigin(g, 1),
+    };
 }
 
-/** Центр тайла (tx, ty) в мировых координатах. */
+/** Центр клетки (логические tx/ty) в мировых координатах. */
 export function tileToPixel(geom, tx, ty) {
     const g = geom || {};
     const tile = g.tile || 32;
-    const left = (g.x || 0) - ((g.cols || 0) * tile) / 2;
-    const top = (g.y || 0) - ((g.rows || 0) * tile) / 2;
-    return { x: left + (tx + 0.5) * tile, y: top + (ty + 0.5) * tile };
+    const tw = tile * geomScale(g, 0);
+    const th = tile * geomScale(g, 1);
+    return {
+        x: geomLeft(g) + (tx - geomOrigin(g, 0) + 0.5) * tw,
+        y: geomTop(g) + (ty - geomOrigin(g, 1) + 0.5) * th,
+    };
 }
 
-/** Плоский индекс тайла или -1, если он вне карты. */
+/** Плоский индекс клетки по ЛОГИЧЕСКИМ координатам или -1, если она вне буфера. */
 export function tileIndexAt(geom, tx, ty) {
     const g = geom || {};
     const cols = g.cols | 0;
     const rows = g.rows | 0;
-    if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) return -1;
-    return ty * cols + tx;
+    const bx = tx - geomOrigin(g, 0);
+    const by = ty - geomOrigin(g, 1);
+    if (bx < 0 || by < 0 || bx >= cols || by >= rows) return -1;
+    return by * cols + bx;
 }
 
 // ---------------------------------------------------------------------------
@@ -430,6 +967,7 @@ export function collectVisibleTiles(state, cam, opts) {
         const th = layer.tile * Math.abs(sy);
         const left = geom.x - (geom.w * sx) / 2;
         const top = geom.y - (geom.h * sy) / 2;
+        const ox = layer.origin_x | 0, oy = layer.origin_y | 0;
         const list = [];
         for (let ty = range.y0; ty <= range.y1; ty++) {
             const base = ty * layer.w;
@@ -437,9 +975,16 @@ export function collectVisibleTiles(state, cam, opts) {
             for (let tx = range.x0; tx <= range.x1; tx++) {
                 const id = layer.data[base + tx];
                 if (id <= 0) continue;                 // id 0 и <0 — пусто
+                // Мировая позиция считается по индексу буфера, а наружу идут
+                // ЛОГИЧЕСКИЕ координаты клетки (origin учитывается).
+                let vw = tw, vh = th;
+                if (layer.custom_visual && layer.visuals) {
+                    const v = layer.visuals[id - 1];
+                    if (v) { vw = v.w * Math.abs(sx); vh = v.h * Math.abs(sy); }
+                }
                 list.push({
-                    tx, ty, id, li, layer: li,
-                    x: left + (tx + 0.5) * tw, y, w: tw, h: th,
+                    tx: tx + ox, ty: ty + oy, id, li, layer: li,
+                    x: left + (tx + 0.5) * tw, y, w: vw, h: vh,
                 });
             }
         }
@@ -466,6 +1011,14 @@ function activeLayer(tm, layerIndex) {
     return tm.layers[index] || null;
 }
 
+/** Чистая геометрия слоя: буфер + логический origin (для tileIndexAt и др.). */
+function layerGeom(layer) {
+    return {
+        cols: layer.w, rows: layer.h, tile: layer.tile,
+        origin_x: layer.origin_x | 0, origin_y: layer.origin_y | 0,
+    };
+}
+
 function addLayer(tm, spec, base) {
     const d = spec || {};
     const a = base || {};
@@ -475,13 +1028,43 @@ function addLayer(tm, spec, base) {
         h: d.mapH || d.h,
         legend: d.legend || a.legend,
     });
+    // Логические координаты и рамка за основной областью (§14 доки).
+    const pad = normalizePad(d.pad !== undefined ? d.pad : a.pad);
+    const padded = applyPadding(norm, pad, d.padTile !== undefined ? d.padTile : a.padTile);
+    const origin = d.origin !== undefined ? d.origin : a.origin;
+    const ox = (Array.isArray(origin) ? Number(origin[0]) : (origin && origin.x)) || 0;
+    const oy = (Array.isArray(origin) ? Number(origin[1]) : (origin && origin.y)) || 0;
+    // Источники тайлсета: `src` — первый, `sources` добавляются после него.
+    const list = [];
+    const src0 = d.src || a.src;
+    if (src0) list.push(src0);
+    const extra = d.sources !== undefined ? d.sources : a.sources;
+    if (Array.isArray(extra)) for (const s of extra) if (s && list.indexOf(s) < 0) list.push(s);
+    else if (typeof extra === 'string' && list.indexOf(extra) < 0) list.push(extra);
+    // Таблица дескрипторов: id → normalizTileDef. Ключи — id тайла; с автотайлом
+    // «форма» берётся из layer.source, а visual — из layer.data (см. solidPredicate).
+    const table = d.tiles !== undefined ? d.tiles : a.tiles;
+    let defs = null;
+    if (table && typeof table === 'object') {
+        defs = Object.create(null);
+        for (const key of Object.keys(table)) {
+            const id = Number(key);
+            if (!isFinite(id)) continue;
+            defs[id | 0] = normalizeTileDef(table[key], tile);
+        }
+        if (!Object.keys(defs).length) defs = null;
+    }
     const layer = {
-        data: norm.data,
-        w: norm.w,
-        h: norm.h,
+        data: padded.data,
+        w: padded.w,
+        h: padded.h,
+        origin_x: Math.round(isFinite(ox) ? ox : 0) - pad[0],
+        origin_y: Math.round(isFinite(oy) ? oy : 0) - pad[1],
+        pad,
         source: null,            // данные до автотайла (форма, а не картинка)
         tile,
-        src: d.src || a.src || null,
+        src: list[0] || null,
+        sources: list,
         cols: num(d.cols, num(a.cols, 0)),
         rows: num(d.rows, num(a.rows, 0)),
         // Помним, заданы ли cols/rows явно: layerFrames() пишет в те же поля
@@ -490,11 +1073,24 @@ function addLayer(tm, spec, base) {
         explicit_cols: num(d.cols, num(a.cols, 0)) > 0,
         explicit_rows: num(d.rows, num(a.rows, 0)) > 0,
         solid: d.solid === undefined ? false : d.solid,
+        // Явно ли задан solid: с таблицей `tiles` участие слоя в коллизиях
+        // решают дескрипторы, а не умолчание `solid: false`.
+        solid_set: d.solid !== undefined,
+        defs,
+        has_solid_defs: !!defs && Object.keys(defs).some((id) => defs[id].solid),
+        shape_pad: shapePad(defs, tile),
+        // Слияние тайлов коллизий в прямоугольники (см. solidRects). Выключено
+        // только у тех, кто явно просит прежние полосы: mergeCollisions: false.
+        merge: d.mergeCollisions === undefined ? (a.mergeCollisions === undefined ? true : !!a.mergeCollisions)
+                                               : !!d.mergeCollisions,
         depth: num(d.depth, 0),
         autotile: null,
         frames: null,
         tex: -1,
+        visuals: null,           // каноническая таблица visual ID (см. visualOf)
+        custom_visual: false,    // regions не совпадают с клеткой листа
         bodies: [],
+        result: null,            // результат последней сборки тел (см. collisionResult)
         // Анимация тайлов: { ids, tiles, interval, time, frame, random, offset }
         anim: null,
     };
@@ -523,13 +1119,23 @@ function ensureTilemap(node) {
         // Габарит агента для проверок «пролезу ли»: 0 — как раньше, по клетке.
         agent_w: agentSizeOf(a, 0),
         agent_h: agentSizeOf(a, 1),
+        // Политика при исчерпании лимита тел движка: 'fail' (по умолчанию,
+        // §3.1 п.12: карта без обязательной коллизии не публикуется) либо
+        // 'partial' (прежнее поведение с предупреждением).
+        limitPolicy: a.limitPolicy === 'partial' ? 'partial' : 'fail',
+        tile_occluders: !!a.tileOccluders,   // карта владеет реестром света
+        light_owned: false,
+        // Результат последней сборки тел: { ok, error, planned, created, … }.
+        result: { ok: true, error: null, policy: 'fail', planned: 0, created: 0, missing: 0, layers: [] },
     };
     STATES.set(node, tm);
 
     const defs = (Array.isArray(a.layers) && a.layers.length)
         ? a.layers
         : [{ data: a.data, src: a.src, tile: a.tile, cols: a.cols, rows: a.rows,
-             solid: a.solid, depth: a.depth, legend: a.legend, mapW: a.mapW, mapH: a.mapH }];
+             solid: a.solid, depth: a.depth, legend: a.legend, mapW: a.mapW, mapH: a.mapH,
+             tiles: a.tiles, sources: a.sources, origin: a.origin, pad: a.pad,
+             padTile: a.padTile, mergeCollisions: a.mergeCollisions }];
     for (const d of defs) addLayer(tm, d, a);
 
     // Наборы террейнов приходят из данных карты: их можно сохранить как JSON
@@ -557,10 +1163,24 @@ function syncNodeSize(tm) {
     if (ph > 0) tm.node.h = ph;
 }
 
-/** Кадры тайлсета слоя: [тайл id 1, тайл id 2, …]. Кэш общий на все карты. */
+/**
+ * Кадры тайлсета слоя: [тайл id 1, тайл id 2, …]. Кэш общий на все карты.
+ *
+ * Старый путь (один `src`, без таблицы `tiles`) не меняется: сетка режется по
+ * тайлу, cols/rows вычисляются из текстуры. Если заданы `sources` или `tiles`,
+ * собирается КАНОНИЧЕСКАЯ таблица visual ID: id → { source, tx, ty, w, h }, и
+ * спрайт каждого id берётся из своего источника/региона. Наружу отдаются
+ * логические id (см. $.tilemap.visualOf), а не handles текстур.
+ */
 function layerFrames(layer) {
     if (layer.frames) return layer.frames;
     if (!layer.src) return null;
+    if ((!layer.sources || layer.sources.length <= 1) && !layer.defs) return layerFramesLegacy(layer);
+    return layerFramesVisual(layer);
+}
+
+/** Старый путь: один лист, ровная сетка tile × tile. */
+function layerFramesLegacy(layer) {
     const key = `${layer.src}|${layer.tile}|${layer.cols | 0}`;
     if (SHEET_CACHE.has(key)) {
         const cached = SHEET_CACHE.get(key);
@@ -592,6 +1212,59 @@ function layerFrames(layer) {
     layer.tex = tex;
     layer.cols = cols;
     layer.rows = rows;
+    return frames;
+}
+
+/**
+ * Путь с дескрипторами: спрайт id берётся из visual region своего источника.
+ * `layer.visuals[id-1]` — каноническая запись { id, source, tx, ty, w, h } или
+ * null; она же отдаётся через $.tilemap.visualOf/visualTable.
+ */
+function layerFramesVisual(layer) {
+    const sources = layer.sources && layer.sources.length ? layer.sources : (layer.src ? [layer.src] : []);
+    const texs = [];
+    for (const path of sources) {
+        const tex = engine.loadTexture(path);
+        texs.push(tex >= 0 ? tex : -1);
+    }
+    layer.tex = texs.length ? texs[0] : -1;
+    if (!(texs[0] >= 0)) {
+        layer.frames = [];
+        return null;
+    }
+    const size = engine.textureSize(texs[0]) || [0, 0];
+    const cols = (layer.cols | 0) > 0 ? layer.cols | 0 : Math.max(1, Math.floor((size[0] || 0) / layer.tile));
+    const rows = (layer.rows | 0) > 0 ? layer.rows | 0 : Math.max(1, Math.floor((size[1] || 0) / layer.tile));
+    layer.cols = cols;
+    layer.rows = rows;
+    const sheetCells = cols * rows;
+    let maxId = sheetCells;
+    if (layer.defs) {
+        for (const key of Object.keys(layer.defs)) maxId = Math.max(maxId, Number(key) | 0);
+    }
+    const frames = [];
+    const visuals = [];
+    let custom = false;
+    for (let id = 1; id <= maxId; id++) {
+        const def = layer.defs ? layer.defs[id] : null;
+        const v = def && def.visual ? def.visual : null;
+        if (v) {
+            const tex = texs[v.source] !== undefined ? texs[v.source] : -1;
+            const entry = { id, source: v.source, tx: v.tx, ty: v.ty, w: v.w, h: v.h };
+            visuals.push(entry);
+            if (tex >= 0) frames.push(engine.createSprite(tex, v.tx, v.ty, v.w, v.h));
+            else frames.push(-1);
+            if (v.source !== 0 || v.w !== layer.tile || v.h !== layer.tile) custom = true;
+            continue;
+        }
+        visuals.push(null);
+        if (id > sheetCells) { frames.push(-1); continue; }
+        const c = (id - 1) % cols, r = Math.floor((id - 1) / cols);
+        frames.push(engine.createSprite(texs[0], c * layer.tile, r * layer.tile, layer.tile, layer.tile));
+    }
+    layer.frames = frames;
+    layer.visuals = visuals;
+    layer.custom_visual = custom;
     return frames;
 }
 
@@ -706,6 +1379,106 @@ function solidPredicate(layer) {
 }
 
 // ---------------------------------------------------------------------------
+// Занятость клетки и реальная геометрия — разные вещи
+//
+// Клетка может быть «занята» частично: тело занимает полосу внизу, а верх
+// клетки проходим. Поэтому у карты два разных ответа:
+//   * `solidAt(tx, ty)` — занята ли клетка вообще (сетка, навигация, occluder);
+//   * `shapeAt(tx, ty)` — реальная локальная геометрия (физика, fitsAt, луч).
+// Без таблицы `tiles` они совпадают: клетка и есть тело.
+// ---------------------------------------------------------------------------
+
+/** Полная клетка как дескриптор — для id без записи в таблице `tiles`. */
+function layerFullDef(layer) {
+    if (!layer.full_def || layer.full_def_tile !== layer.tile) {
+        layer.full_def = normalizeTileDef('full', layer.tile);
+        layer.full_def_tile = layer.tile;
+    }
+    return layer.full_def;
+}
+
+/** Участвует ли слой в коллизиях: явный solid важнее дескрипторов. */
+function layerSolidOn(layer) {
+    if (layer.solid_set) return !!layer.solid;
+    return !!layer.has_solid_defs;
+}
+
+/**
+ * Дескриптор клетки буфера (0..cols-1). Форма берётся из `layer.source`
+ * (данные до автотайла), поэтому .setTile()/.autotile() её не подменяют.
+ * Дескриптор из таблицы `tiles` важнее слоевого `solid`; для id без
+ * дескриптора работает прежний предикат слоя.
+ */
+function cellDef(layer, tx, ty) {
+    if (tx < 0 || ty < 0 || tx >= layer.w || ty >= layer.h) return null;
+    const idx = ty * layer.w + tx;
+    const id = (layer.source || layer.data)[idx];
+    const def = layer.defs ? layer.defs[id | 0] : null;
+    if (def) return def.solid ? def : null;
+    if (!layer.defs) return null;                 // слой без таблицы — legacy-путь
+    return fallbackSolidPred(layer)(tx, ty) ? layerFullDef(layer) : null;
+}
+
+/** cellDef по ЛОГИЧЕСКИМ координатам (origin учитывается). */
+function logicalDef(layer, tx, ty) {
+    return cellDef(layer, tx - (layer.origin_x | 0), ty - (layer.origin_y | 0));
+}
+
+/** Локальные прямоугольники коллизии клетки или null. */
+function shapeRectsAt(layer, tx, ty) {
+    const def = cellDef(layer, tx, ty);
+    return def && def.shape ? def.shape.rects : null;
+}
+
+/**
+ * Слоевой предикат для id без дескриптора. Кэшируется: в плотной карте его
+ * спрашивают десятки тысяч раз, а замыкание на `data` при этом одно и то же.
+ * Кэш сбрасывается, когда меняются данные автотайла или сам `solid`.
+ */
+function fallbackSolidPred(layer) {
+    if (!layer._fb || layer._fb_src !== layer.source || layer._fb_solid !== layer.solid) {
+        layer._fb = solidPredicate(layer);
+        layer._fb_src = layer.source;
+        layer._fb_solid = layer.solid;
+    }
+    return layer._fb;
+}
+
+/** Предикат «клетка занята» — для слоёв с дескрипторами, иначе прежний solid. */
+function occupiedPredicate(layer) {
+    if (!layer.defs) return fallbackSolidPred(layer);
+    if (!layer._occ_pred) layer._occ_pred = (x, y) => !!cellDef(layer, x, y);
+    return layer._occ_pred;
+}
+
+/** Публичная копия дескриптора: наружу не отдаём внутренние ссылки. */
+function defCopy(def) {
+    return {
+        solid: def.solid,
+        shape: def.shape ? { full: !!def.shape.full, rects: def.shape.rects.map((r) => r.slice()) } : null,
+        visual: def.visual ? Object.assign({}, def.visual) : null,
+        occluder: def.occluder ? { rects: def.occluder.rects.map((r) => r.slice()) } : null,
+        filter: def.filter ? Object.assign({}, def.filter) : null,
+        tags: def.tags,
+    };
+}
+
+/** Локальные прямоугольники occluder'а клетки или null. */
+function occluderRectsAt(layer, tx, ty) {
+    if (!layer.defs) {
+        // Старый слой: препятствие — вся непроходимая клетка.
+        const solid = layer.solid_set ? !!layer.solid : true;
+        if (!solid) return null;
+        const idx = (ty >= 0 && ty < layer.h && tx >= 0 && tx < layer.w) ? ty * layer.w + tx : -1;
+        if (idx < 0 || !solidPredicate(layer)(tx, ty)) return null;
+        const h = layer.tile / 2;
+        return [[-h, -h, h, h]];
+    }
+    const def = cellDef(layer, tx, ty);
+    return def && def.occluder ? def.occluder.rects : null;
+}
+
+// ---------------------------------------------------------------------------
 // Габарит агента: коллизии «по объёму», а не по клетке
 //
 // Сетка тайлов помечает клетки, а не объём, поэтому вопрос «пролезу ли я сюда
@@ -719,7 +1492,8 @@ function solidPredicate(layer) {
  * ровно на стыке, соседнюю клетку не задевает. Для точки ровно на границе
  * берётся клетка справа/снизу — иначе вырожденный габарит не попал бы никуда.
  *
- * Чистая функция — её проверяет qjs-харнесс без движка.
+ * Индексы — буферные (data[0] — клетка 0), логический origin учитывает
+ * вызывающий код. Чистая функция — её проверяет qjs-харнесс без движка.
  */
 export function cellRange(lo, hi, origin, tile) {
     if (!(tile > 0)) return null;
@@ -773,16 +1547,23 @@ function agentFootprint(tm, opts) {    const o = opts || {};
     return { hw: tm.agent_w / 2, hh: tm.agent_h / 2 };
 }
 
+/** Габарит агента против РЕАЛЬНОЙ геометрии слоя (клетка — только если full). */
+function layerBlocked(layer, left, top, x, y, hw, hh) {
+    if (!layer.defs) {
+        // Старые карты: клетка = тело, прежний путь (то же поведение).
+        return boxBlocked(layer, solidPredicate(layer), left, top, x, y, hw, hh);
+    }
+    return shapeBoxBlocked(layer, (tx, ty) => shapeRectsAt(layer, tx, ty), left, top, x, y, hw, hh);
+}
+
 /** Влезает ли габарит агента в позицию (x, y), не задевая твёрдые тайлы. */
 function fitsAt(tm, x, y, foot) {
     const node = tm.node;
     const left = node.x - node.w / 2;
     const top = node.y - node.h / 2;
     for (const layer of tm.layers) {
-        if (!layer.solid) continue;
-        if (boxBlocked(layer, solidPredicate(layer), left, top, x, y, foot.hw, foot.hh)) {
-            return false;
-        }
+        if (!layerSolidOn(layer)) continue;
+        if (layerBlocked(layer, left, top, x, y, foot.hw, foot.hh)) return false;
     }
     return true;
 }
@@ -799,40 +1580,246 @@ function releaseTilemap(node) {
     const tm = STATES.get(node);
     if (!tm) return;
     for (const layer of tm.layers) releaseLayerBodies(layer);
+    releaseTileOccluders(tm);
     STATES.delete(node);
 }
 
-/** Создаёт статические тела под непроходимые полосы всех слоёв. */
+/** Потолок тел движка: 0 — неизвестен. `engine.limits()` читается один раз. */
+let LIMITS_BODY_CAP = -1;
+function bodyCap() {
+    // Прямая настройка (тесты, моки, будущие движки) всегда свежая.
+    const direct = num(engine.bodies_max, 0);
+    if (direct > 0) return direct;
+    if (LIMITS_BODY_CAP < 0 && typeof engine.limits === 'function') {
+        const limits = engine.limits();
+        LIMITS_BODY_CAP = limits ? num(limits.bodies_max, 0) : 0;
+    }
+    return LIMITS_BODY_CAP > 0 ? LIMITS_BODY_CAP : 0;
+}
+
+/** Сколько тел ещё влезет; -1 — лимит неизвестен (qjs-мок, старый движок). */
+function bodyBudget() {
+    const max = bodyCap();
+    if (!(max > 0)) return -1;
+    const used = typeof engine.bodyCount === 'function' ? num(engine.bodyCount(), 0) : 0;
+    return Math.max(0, max - used);
+}
+
+/** План тел слоя: { shapes, legacy } — единый путь описания и создания. */
+function layerPlan(layer) {
+    if (!layerSolidOn(layer)) return [];
+    const merge = layer.merge !== false;
+    if (!layer.defs) {
+        // Прежний путь без изменений: полосы либо прямоугольники.
+        const rects = merge
+            ? solidRects(layer.w, layer.h, solidPredicate(layer))
+                  .map((r) => ({ tx: r.tx, ty: r.ty, nx: r.w, ny: r.h, def: null }))
+            : solidRuns(layer.w, layer.h, solidPredicate(layer))
+                  .map((r) => ({ tx: r.tx, ty: r.ty, nx: r.len, ny: 1, def: null }));
+        return rects.map((r) => ({
+            lx: r.tx * layer.tile, ly: r.ty * layer.tile,
+            w: r.nx * layer.tile, h: r.ny * layer.tile,
+            def: r.def, tx: r.tx, ty: r.ty, nx: r.nx, ny: r.ny,
+        }));
+    }
+    return collisionShapes(layer.w, layer.h, layer.tile,
+                           (tx, ty) => cellDef(layer, tx, ty), { merge });
+}
+
+/**
+ * Создаёт статические тела под непроходимые прямоугольники всех слоёв.
+ *
+ * Лимит тел движка (R2D_MAX_BODIES = 8192) — это НЕ предупреждение, а отказ
+ * (§3.1 п.12, §23): с политикой `limitPolicy: 'fail'` (по умолчанию) частичная
+ * коллизия не публикуется — уже созданные тела карты снимаются, а игра
+ * получает структурированный результат (см. .collisionResult()). Прежнее
+ * поведение «оставить что успело создаться и написать в лог» доступно явно:
+ * `.collisionLimit('partial')`.
+ */
 function buildCollisions(tm) {
     const node = tm.node;
     const left = node.x - node.w / 2;
     const top = node.y - node.h / 2;
-    for (const layer of tm.layers) {
+    const policy = tm.limitPolicy;
+    const plans = [];
+    let planned = 0;
+    let layersOn = 0;
+    for (let li = 0; li < tm.layers.length; li++) {
+        const layer = tm.layers[li];
         releaseLayerBodies(layer);
-        if (!layer.solid) continue;
-        const runs = solidRuns(layer.w, layer.h, solidPredicate(layer));
-        for (const run of runs) {
-            const w = run.len * layer.tile;
-            const h = layer.tile;
-            const id = engine.createBody({
-                x: left + run.tx * layer.tile + w / 2,
-                y: top + run.ty * layer.tile + h / 2,
-                halfW: w / 2,
-                halfH: h / 2,
+        layer.result = { ok: true, error: null, policy, planned: 0, created: 0, missing: 0 };
+        if (!layerSolidOn(layer)) { plans.push(null); continue; }
+        const plan = layerPlan(layer);
+        layer.result.planned = plan.length;
+        plans.push(plan);
+        planned += plan.length;
+        layersOn++;
+    }
+    const result = {
+        ok: true, error: null, policy, planned: 0, created: 0, missing: 0, attempted: 0, layers: [],
+    };
+    tm.result = result;
+    if (!layersOn && planned === 0) { result.layers = tm.layers.map((l) => l.result); return; }
+
+    // Предварительная проверка есть только у политики 'fail': 'partial' —
+    // прежнее поведение «пробуем создавать, пока движок даёт тела».
+    const budget = bodyBudget();
+    if (policy !== 'partial' && budget >= 0 && planned > budget) {
+        // Лимит известен заранее: ни одного тела не создаём.
+        result.planned = planned;
+        result.missing = planned;
+        for (const layer of tm.layers) {
+            if (!layer.result) continue;
+            layer.result.ok = false;
+            layer.result.error = 'body-limit';
+            layer.result.created = 0;
+            layer.result.missing = layer.result.planned;
+        }
+        finishLimit(tm, planned, result);
+        return;
+    }
+
+    let created = 0;
+    for (let li = 0; li < tm.layers.length; li++) {
+        const plan = plans[li];
+        const layer = tm.layers[li];
+        if (!plan) continue;
+        let dropped = 0;
+        for (const shape of plan) {
+            const def = shape.def;
+            const desc = {
+                x: left + shape.lx + shape.w / 2,
+                y: top + shape.ly + shape.h / 2,
+                halfW: shape.w / 2,
+                halfH: shape.h / 2,
                 angle: 0,
                 type: engine.STATIC,
                 friction: 0.4,
                 restitution: 0.0,
                 fixedRotation: true,
-            });
+            };
+            if (def && def.filter) {
+                if (def.filter.layerBits !== undefined) desc.layerBits = def.filter.layerBits;
+                if (def.filter.mask !== undefined) desc.mask = def.filter.mask;
+                if (def.filter.group !== undefined) desc.group = def.filter.group;
+                if (def.filter.oneWay) desc.oneWay = true;
+                if (def.filter.oneWayAngle !== undefined) desc.oneWayAngle = def.filter.oneWayAngle;
+                if (def.filter.sensor) desc.sensor = true;
+            }
             // Мок движка (qjs) возвращает неотрицательное число-заглушку, а
             // настоящий createBody — id тела. Отрицательный id = «не вышло».
+            const id = engine.createBody(desc);
             if (typeof id === 'number' && id >= 0) {
                 layer.bodies.push(id);
+                created++;
                 if (ctx.byBody) ctx.byBody.set(id, node);
+            } else {
+                dropped = plan.length - layer.bodies.length;
+                break;
             }
         }
+        layer.result.planned = plan.length;
+        layer.result.created = layer.bodies.length;
+        layer.result.missing = dropped;
+        if (dropped > 0) { layer.result.ok = false; layer.result.error = 'body-limit'; }
     }
+    result.planned = planned;
+    result.created = created;
+    result.attempted = created;
+    result.layers = tm.layers.map((l) => l.result);
+    if (created < planned) {
+        // Неполная коллизия — это отказ в ЛЮБОЙ политике (§3.1 п.12): политика
+        // решает только, снимать ли уже созданное ('fail') или оставить и
+        // предупредить ('partial', прежнее поведение).
+        result.missing = planned - created;
+        result.ok = false;
+        result.error = 'body-limit';
+        if (policy === 'partial') warnBodyLimit(planned, created, false);
+        else finishLimit(tm, planned, result);
+        return;
+    }
+    applyTileOccluders(tm);
+}
+
+/** Отказ при лимите: снять уже созданные тела карты, отдать failed result. */
+function finishLimit(tm, planned, result) {
+    const attempted = result.created | 0;
+    for (const layer of tm.layers) releaseLayerBodies(layer);
+    for (const layer of tm.layers) {
+        if (!layer.result) continue;
+        layer.result.ok = false;
+        layer.result.error = 'body-limit';
+        layer.result.created = 0;
+        layer.result.missing = layer.result.planned;
+    }
+    result.ok = false;
+    result.error = 'body-limit';
+    result.created = 0;
+    result.missing = planned;
+    result.attempted = attempted;
+    result.layers = tm.layers.map((l) => l.result);
+    warnBodyLimit(planned, attempted, true);
+    applyTileOccluders(tm);
+}
+
+/** Сообщение о лимите. При отказе («fail») оно дополнено явно. */
+function warnBodyLimit(planned, created, rejected) {
+    const dropped = planned - created;
+    ctx.log(`$.tilemap: лимит тел движка — создано ${created} `
+          + `прямоугольников из ${planned}, ${dropped} без коллизий `
+          + '(разрежьте карту на несколько <tilemap> или упростите узор)'
+          + (rejected ? '; коллизия отклонена (limitPolicy: fail) — см. .collisionResult()' : ''));
+}
+
+// ---------------------------------------------------------------------------
+// Тайловые occluders: препятствия света по реальной форме тайла
+//
+// У освещения (render.js) уже есть реестр отрезков; тайлмап отдаёт туда рёбра
+// настоящих форм — тонкая платформа даёт полосу внизу клетки, а не весь
+// квадрат. По умолчанию карта реестром не владеет: отрезки берут явно
+// ($.tilemap.occludersOf) либо включают владение методом .tileOccluders(true)
+// (тогда реестр ЗАМЕНЯЕТСЯ на отрезки этой карты при каждой пересборке —
+// реестр света в движке один, см. docs/highlevel/tilemap.md §15).
+// ---------------------------------------------------------------------------
+
+/** Отрезки препятствий карты (или слоя) в мировых координатах. */
+function tileLightSegments(tm, layerIndex) {
+    const node = tm.node;
+    const left = node.x - node.w / 2;
+    const top = node.y - node.h / 2;
+    const out = [];
+    const indices = layerIndex === undefined ? tm.layers.map((_, i) => i) : [layerIndex];
+    for (const li of indices) {
+        const layer = tm.layers[li];
+        if (!layer) continue;
+        const segs = shapeOccluders(layer.w, layer.h, layer.tile, (tx, ty) => {
+            const rects = occluderRectsAt(layer, tx, ty);
+            return rects ? { rects } : null;
+        }, left, top);
+        for (const v of segs) out.push(v);
+    }
+    return out;
+}
+
+/** Публикация препятствий карты в реестр света (если карта им владеет). */
+function applyTileOccluders(tm) {
+    if (!tm.tile_occluders) return 0;
+    const gfx = ctx.gfx;
+    if (!gfx || !gfx.light || typeof gfx.light.occluders !== 'function') return 0;
+    const segs = tileLightSegments(tm);
+    tm.light_owned = true;
+    return gfx.light.occluders(segs);
+}
+
+/** Снятие препятствий карты из реестра света при выключении/удалении. */
+function releaseTileOccluders(tm) {
+    if (!tm.light_owned) return false;
+    tm.light_owned = false;
+    const gfx = ctx.gfx;
+    if (gfx && gfx.light && typeof gfx.light.clearOccluders === 'function') {
+        gfx.light.clearOccluders();
+    }
+    return true;
 }
 
 /** Набор проходимости для автотайла: функция | массив id | «любой непустой». */
@@ -980,7 +1967,7 @@ function resolveTm(tm) {
 
 function geomOf(tm, layerIndex) {
     const st = resolveTm(tm);
-    if (!st) return { x: 0, y: 0, tile: 32, cols: 0, rows: 0 };
+    if (!st) return { x: 0, y: 0, tile: 32, cols: 0, rows: 0, origin_x: 0, origin_y: 0 };
     const layer = activeLayer(st, layerIndex) || st.layers[0];
     return {
         x: st.node.x,
@@ -988,6 +1975,12 @@ function geomOf(tm, layerIndex) {
         tile: layer ? layer.tile : 32,
         cols: layer ? layer.w : 0,
         rows: layer ? layer.h : 0,
+        // Логические координаты клетки data[0] и масштаб узла: без них
+        // world↔cell разошлись бы у карт с padding и .scale().
+        origin_x: layer ? (layer.origin_x | 0) : 0,
+        origin_y: layer ? (layer.origin_y | 0) : 0,
+        scale_x: st.node.scale_x,
+        scale_y: st.node.scale_y,
     };
 }
 
@@ -1031,7 +2024,9 @@ export function installTilemap($) {
     // карты неотличимы от опечатки.
     TAGS.tilemap = Object.assign({}, TAGS.tilemap, {
         cols: 0, rows: 0, data: null, solid: false, layers: null, legend: null, mapW: 0, mapH: 0,
-        terrains: null, ysort: false,
+        terrains: null, ysort: false, mergeCollisions: true, agentSize: 0, agentRadius: 0,
+        tiles: null, sources: null, origin: null, pad: null, padTile: null,
+        limitPolicy: null, tileOccluders: false,
     });
 
     // --- Методы узла ------------------------------------------------------
@@ -1041,7 +2036,7 @@ export function installTilemap($) {
             const tm = ensureTilemap(node);
             const layer = activeLayer(tm, layerIndex);
             if (!layer) continue;
-            const idx = tileIndexAt({ cols: layer.w, rows: layer.h }, x, y);
+            const idx = tileIndexAt(layerGeom(layer), x, y);
             if (idx < 0) continue;
             layer.data[idx] = id | 0;
             if (layer.source) layer.source[idx] = id | 0;
@@ -1097,7 +2092,7 @@ export function installTilemap($) {
         const tm = ensureTilemap(node);
         const layer = activeLayer(tm, layerIndex);
         if (!layer) return 0;
-        const idx = tileIndexAt({ cols: layer.w, rows: layer.h }, x, y);
+        const idx = tileIndexAt(layerGeom(layer), x, y);
         return idx < 0 ? 0 : layer.data[idx];
     }, 0);
 
@@ -1136,6 +2131,9 @@ export function installTilemap($) {
             for (const layer of tm.layers) {
                 layer.tile = n;
                 layer.frames = null;
+                layer.visuals = null;
+                layer.custom_visual = false;
+                layer.shape_pad = shapePad(layer.defs, n);
                 // Сбрасываем только ВЫЧИСЛЕННЫЕ cols/rows: явно заданные
                 // остаются, а иначе после первого рендера лист резался бы по
                 // старому размеру тайла (см. explicit_cols в addLayer).
@@ -1232,6 +2230,127 @@ export function installTilemap($) {
     });
 
     /**
+     * Слияние тайлов коллизий в прямоугольники: `.collisionMerge(on)`.
+     *
+     * Включено по умолчанию: сплошной блок 200×10 — одно тело вместо десяти,
+     * и карта 200×100 не упирается в лимит тел движка (8192), из-за которого
+     * часть тайлов оставалась без коллизий. `.collisionMerge(false)` возвращает
+     * прежнее поведение «одно тело на горизонтальную полосу» — для игр, которым
+     * важно число/границы тел. Без аргумента — геттер (true/false).
+     */
+    def('collisionMerge', function (on) {
+        if (on === undefined && this.nodes.length) {
+            const tm = ensureTilemap(this.nodes[0]);
+            return tm.layers.length ? tm.layers[0].merge !== false : true;
+        }
+        const value = on !== false;
+        for (const node of this.nodes) {
+            const tm = ensureTilemap(node);
+            for (const layer of tm.layers) layer.merge = value;
+            tm.dirty = true;
+        }
+        return this;
+    });
+
+    /**
+     * Политика при исчерпании лимита тел движка: `.collisionLimit('fail')`
+     * (по умолчанию — коллизия отклоняется целиком, failed result) или
+     * `.collisionLimit('partial')` (прежнее поведение: что успело — то и
+     * осталось, плюс предупреждение). Без аргумента — геттер.
+     */
+    def('collisionLimit', function (policy) {
+        if (policy === undefined && this.nodes.length) {
+            return ensureTilemap(this.nodes[0]).limitPolicy;
+        }
+        const value = policy === 'partial' ? 'partial' : 'fail';
+        for (const node of this.nodes) {
+            const tm = ensureTilemap(node);
+            tm.limitPolicy = value;
+            tm.dirty = true;
+        }
+        return this;
+    });
+
+    /**
+     * Результат последней сборки тел: `{ ok, error, planned, created, missing,
+     * policy, layers }`. `ok: false, error: 'body-limit'` — карта НЕ получила
+     * обязательную коллизию (см. .collisionLimit и §3.1 п.12 спецификации).
+     */
+    defGet('collisionResult', function (node) {
+        const tm = ensureTilemap(node);
+        const r = tm.result || { ok: true, error: null };
+        return {
+            ok: r.ok !== false,
+            error: r.error === undefined ? null : r.error,
+            policy: r.policy,
+            planned: r.planned | 0,
+            created: r.created | 0,
+            missing: r.missing | 0,
+            attempted: r.attempted | 0,
+            layers: (r.layers || []).map((l) => ({
+                ok: l.ok !== false,
+                error: l.error === undefined ? null : l.error,
+                planned: l.planned | 0,
+                created: l.created | 0,
+                missing: l.missing | 0,
+            })),
+        };
+    }, { ok: true, error: null, policy: 'fail', planned: 0, created: 0, missing: 0, attempted: 0, layers: [] });
+
+    /**
+     * Занята ли клетка коллизией (логические координаты). Это КЛЕТОЧНАЯ
+     * занятость: у частичной формы она true, даже если верх клетки проходим.
+     * Геометрию смотрите в .shapeAt().
+     */
+    defGet('solidAt', function (node, tx, ty, layerIndex) {
+        const tm = ensureTilemap(node);
+        const layer = activeLayer(tm, layerIndex);
+        if (!layer) return false;
+        return !!logicalDef(layer, tx | 0, ty | 0);
+    }, false);
+
+    /**
+     * Реальная геометрия клетки: `null`, если коллизии нет, иначе
+     * `{ id, full, rects: [[x0,y0,x1,y1], …] }` — локальные пиксели от центра
+     * клетки. Именно эту форму видят физика, .fitsAt() и луч.
+     */
+    defGet('shapeAt', function (node, tx, ty, layerIndex) {
+        const tm = ensureTilemap(node);
+        const layer = activeLayer(tm, layerIndex);
+        if (!layer) return null;
+        const bx = (tx | 0) - (layer.origin_x | 0);
+        const by = (ty | 0) - (layer.origin_y | 0);
+        const def = cellDef(layer, bx, by);
+        if (!def || !def.shape) return null;
+        const data = layer.source || layer.data;
+        return {
+            id: data[by * layer.w + bx] | 0,
+            full: !!def.shape.full,
+            rects: def.shape.rects.map((r) => r.slice()),
+        };
+    }, null);
+
+    /**
+     * Владеть ли реестром препятствий света этой картой: `.tileOccluders(true)`
+     * публикует рёбра РЕАЛЬНЫХ форм тайлов (partial shapes — частичные).
+     * Реестр света в движке один, поэтому при включении он заменяется
+     * отрезками карты при каждой пересборке (см. docs/highlevel/tilemap.md §15).
+     */
+    def('tileOccluders', function (on) {
+        if (on === undefined && this.nodes.length) {
+            return ensureTilemap(this.nodes[0]).tile_occluders;
+        }
+        const value = on !== false;
+        for (const node of this.nodes) {
+            const tm = ensureTilemap(node);
+            tm.tile_occluders = value;
+            if (!value) releaseTileOccluders(tm);
+            tm.dirty = true;
+        }
+        return this;
+    });
+
+    /**
      * Габарит агента для проверок «пролезу ли»: `.agentRadius(r)` (круг) или
      * `.agentSize(w, h)`. Ноль (по умолчанию) — проверка по клетке, как раньше.
      */
@@ -1321,11 +2440,13 @@ export function installTilemap($) {
         for (const li of indices) {
             const layer = tm.layers[li];
             if (!layer) continue;
+            // Наружу — ЛОГИЧЕСКИЕ координаты (origin/padding), как у tileAt.
+            const ox = layer.origin_x | 0, oy = layer.origin_y | 0;
             for (let y = 0; y < layer.h; y++) {
                 const row = y * layer.w;
                 for (let x = 0; x < layer.w; x++) {
                     const id = layer.data[row + x];
-                    if (id > 0) out.push({ x, y, id, layer: li });
+                    if (id > 0) out.push({ x: x + ox, y: y + oy, id, layer: li });
                 }
             }
         }
@@ -1383,8 +2504,10 @@ export function installTilemap($) {
             const y1 = Math.min(layer.h - 1, Math.ceil((cam_h - oy) / tile_h));
             // Статичный слой — нативным ядром (src/nodes.c): видимые клетки
             // пишутся в батч без push.sprite на каждую. Анимированный слой
-            // выбирает кадр в JS (animatedTileSprite) — прежним путём.
-            if (!layer.anim) {
+            // выбирает кадр в JS (animatedTileSprite) — прежним путём. Слой с
+            // visual region другого размера/источника идёт JS-путём: у него
+            // спрайты не одной сетки, и батч по клеткам не подходит.
+            if (!layer.anim && !layer.custom_visual) {
                 const G = tile_params;
                 G[0] = x0; G[1] = y0; G[2] = x1; G[3] = y1; G[4] = layer.w;
                 G[5] = ox; G[6] = oy; G[7] = tile_w; G[8] = tile_h;
@@ -1401,7 +2524,15 @@ export function installTilemap($) {
                         ? animatedTileSprite(layer, id, layer.anim.time)
                         : frames[id - 1];
                     if (sprite === undefined || sprite < 0) continue;
-                    $.gfx.push.sprite(sprite, ox + (tx + 0.5) * tile_w, sy, tile_w, tile_h, 0, color,
+                    let dw = tile_w, dh = tile_h;
+                    if (layer.custom_visual && layer.visuals) {
+                        const v = layer.visuals[id - 1];
+                        if (v && node.w > 0 && node.h > 0) {
+                            dw = v.w * (bw / node.w);
+                            dh = v.h * (bh / node.h);
+                        }
+                    }
+                    $.gfx.push.sprite(sprite, ox + (tx + 0.5) * tile_w, sy, dw, dh, 0, color,
                                       node.blend_mode);
                 }
             }
@@ -1461,7 +2592,178 @@ export function installTilemap($) {
             if (!st) return [];
             const layer = activeLayer(st, layerIndex);
             if (!layer) return [];
-            return solidRuns(layer.w, layer.h, solidPredicate(layer));
+            return solidRuns(layer.w, layer.h, occupiedPredicate(layer));
+        },
+
+        /**
+         * Прямоугольники непроходимых КЛЕТОК слоя (с учётом `.collisionMerge()`).
+         * Это клеточная занятость: у частичной формы (тонкая платформа) клетка
+         * показана целиком. Точная геометрия тел — в `$.tilemap.shapesOf()`.
+         */
+        rectsOf(tm, layerIndex) {
+            const st = resolveTm(tm);
+            if (!st) return [];
+            const layer = activeLayer(st, layerIndex);
+            if (!layer) return [];
+            if (layer.merge === false) {
+                return solidRuns(layer.w, layer.h, occupiedPredicate(layer))
+                    .map((run) => ({ tx: run.tx, ty: run.ty, w: run.len, h: 1 }));
+            }
+            return solidRects(layer.w, layer.h, occupiedPredicate(layer));
+        },
+
+        /**
+         * Точный план тел слоя — ровно то, что уходит в `engine.createBody`:
+         * `[{ tx, ty, nx, ny, lx, ly, w, h, full }]`, где tx/ty — логическая
+         * клетка-якорь, nx/ny — сколько клеток слито, lx/ly/w/h — прямоугольник
+         * в пикселях от левого верхнего угла буфера (до масштаба узла),
+         * `full` — покрывает ли форма клетку целиком.
+         */
+        shapesOf(tm, layerIndex) {
+            const st = resolveTm(tm);
+            if (!st) return [];
+            const layer = activeLayer(st, layerIndex);
+            if (!layer) return [];
+            const ox = layer.origin_x | 0, oy = layer.origin_y | 0;
+            return layerPlan(layer).map((s) => ({
+                tx: s.tx + ox, ty: s.ty + oy, nx: s.nx, ny: s.ny,
+                lx: s.lx, ly: s.ly, w: s.w, h: s.h,
+                // Без дескриптора тело — всегда полная клетка (прежний путь).
+                full: s.def ? !!(s.def.shape && s.def.shape.full) : true,
+            }));
+        },
+
+        /** Результат сборки тел карты (или слоя): см. `.collisionResult()`. */
+        resultOf(tm, layerIndex) {
+            const st = resolveTm(tm);
+            if (!st) return null;
+            if (layerIndex !== undefined) {
+                const layer = activeLayer(st, layerIndex);
+                if (!layer || !layer.result) return null;
+                return Object.assign({}, layer.result);
+            }
+            const r = st.result || { ok: true, error: null };
+            return {
+                ok: r.ok !== false,
+                error: r.error === undefined ? null : r.error,
+                policy: r.policy,
+                planned: r.planned | 0,
+                created: r.created | 0,
+                missing: r.missing | 0,
+                attempted: r.attempted | 0,
+                layers: (r.layers || []).map((l) => Object.assign({}, l)),
+            };
+        },
+
+        /** Занята ли клетка коллизией (логические координаты). */
+        solidAt(tm, tx, ty, layerIndex) {
+            const st = resolveTm(tm);
+            if (!st) return false;
+            const layer = activeLayer(st, layerIndex);
+            return layer ? !!logicalDef(layer, tx | 0, ty | 0) : false;
+        },
+
+        /**
+         * Реальная геометрия клетки (локальные прямоугольники от её центра)
+         * или null. Клеточная занятость — `solidAt`, она не то же самое.
+         */
+        shapeAt(tm, tx, ty, layerIndex) {
+            const st = resolveTm(tm);
+            if (!st) return null;
+            const layer = activeLayer(st, layerIndex);
+            if (!layer) return null;
+            const bx = (tx | 0) - (layer.origin_x | 0);
+            const by = (ty | 0) - (layer.origin_y | 0);
+            const def = cellDef(layer, bx, by);
+            if (!def || !def.shape) return null;
+            const data = layer.source || layer.data;
+            return {
+                id: data[by * layer.w + bx] | 0,
+                full: !!def.shape.full,
+                rects: def.shape.rects.map((r) => r.slice()),
+            };
+        },
+
+        /**
+         * Предикат «клетка занята» для `$.grid`/`$.nav`: сетка у них клеточная,
+         * поэтому ответ тоже клеточный. Точную форму проверяет `.fitsAt()`.
+         */
+        cellQuery(tm, layerIndex) {
+            const st = resolveTm(tm);
+            if (!st) return () => false;
+            const layer = activeLayer(st, layerIndex);
+            if (!layer) return () => false;
+            const ox = layer.origin_x | 0, oy = layer.origin_y | 0;
+            const pred = occupiedPredicate(layer);
+            return (tx, ty) => !!pred((tx | 0) - ox, (ty | 0) - oy);
+        },
+
+        /** Дескриптор тайла id: visual region, форма, маски, occluder, tags. */
+        tileDef(tm, id, layerIndex) {
+            const st = resolveTm(tm);
+            if (!st) return null;
+            const layer = activeLayer(st, layerIndex);
+            if (!layer || !layer.defs) return null;
+            const def = layer.defs[id | 0];
+            if (!def) return null;
+            return defCopy(def);
+        },
+
+        /**
+         * Каноническая запись visual ID: `{ id, source, tx, ty, w, h }`.
+         * `source` — индекс в списке источников слоя (`src` + `sources`), а не
+         * handle текстуры: сырой ресурсный ID наружу не выходит.
+         */
+        visualOf(tm, id, layerIndex) {
+            const st = resolveTm(tm);
+            if (!st) return null;
+            const layer = activeLayer(st, layerIndex);
+            if (!layer) return null;
+            layerFrames(layer);
+            const v = layer.visuals ? layer.visuals[(id | 0) - 1] : null;
+            return v ? Object.assign({}, v) : null;
+        },
+
+        /** Таблица visual ID слоя (в порядке id): записи или null. */
+        visualTable(tm, layerIndex) {
+            const st = resolveTm(tm);
+            if (!st) return [];
+            const layer = activeLayer(st, layerIndex);
+            if (!layer) return [];
+            layerFrames(layer);
+            if (!layer.visuals) {
+                // Старый слой: сетка листа, id = номер клетки.
+                const out = [];
+                const cells = (layer.cols | 0) * (layer.rows | 0);
+                for (let id = 1; id <= cells; id++) {
+                    out.push({
+                        id, source: 0,
+                        tx: ((id - 1) % layer.cols) * layer.tile,
+                        ty: Math.floor((id - 1) / layer.cols) * layer.tile,
+                        w: layer.tile, h: layer.tile,
+                    });
+                }
+                return out;
+            }
+            return layer.visuals.map((v) => (v ? Object.assign({}, v) : null));
+        },
+
+        /**
+         * Отрезки препятствий света по реальной форме тайлов, мировые
+         * координаты: плоский `[x1,y1,x2,y2, …]`. Их можно отдать в
+         * `$.gfx.light.occluders(...)` или включить владение методом
+         * `.tileOccluders(true)`.
+         */
+        occludersOf(tm, layerIndex) {
+            const st = resolveTm(tm);
+            return st ? tileLightSegments(st, layerIndex) : [];
+        },
+
+        /** Габарит агента против реальной геометрии: как `.fitsAt()` узла. */
+        fitsAt(tm, x, y, opts) {
+            const st = resolveTm(tm);
+            if (!st) return false;
+            return fitsAt(st, num(x, st.node.x), num(y, st.node.y), agentFootprint(st, opts));
         },
 
         numbers() { return STATES.size; },
@@ -1556,6 +2858,13 @@ export function installTilemap($) {
         asciiToData,
         normalizeTileData,
         solidRuns,
+        solidRects,
+        collisionShapes,
+        shapeBoxBlocked,
+        shapeOccluders,
+        normalizeTileDef,
+        applyPadding,
+        normalizePad,
         purePixelToTile: pixelToTile,
         pureTileToPixel: tileToPixel,
         pureTileIndexAt: tileIndexAt,

@@ -16,10 +16,11 @@ import { re2dViewOf, cameraTransform } from '../../src/highlevel/camera.js';
 import { registerKindPass, kindPass } from '../../src/highlevel/kinds.js';
 import { ctx } from '../../src/highlevel/core.js';
 
-const $ = createApi();
 const DEG = Math.PI / 180;
 
 // Заглушка нативного ядра: запоминает вызовы, проекция — «x, y как есть».
+// Ставится ДО createApi(): `$` решает, ставить ли RE2D-модули, ровно по
+// наличию engine.re2d.view в момент установки (сборка -DR2D_ENABLE_RE2D=OFF).
 const calls = { view: [], project: 0, unproject: [] };
 engine.re2d = {
     view: (...args) => { calls.view.push(args); return true; },
@@ -29,6 +30,8 @@ engine.re2d = {
 };
 let locked = false;
 engine.mouseLock = (flag) => { if (flag !== undefined) locked = !!flag; return locked; };
+
+const $ = createApi();
 
 function reset() {
     $.camera.kind(null).rotation(0);

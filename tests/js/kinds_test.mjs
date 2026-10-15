@@ -163,7 +163,10 @@ test('prefab: порядок ключей 2D-данных не изменилс�
     eq(keys.join(','),
         'tag,id,class,tags,data,x,y,w,h,angle,scaleX,scaleY,alpha,visible,layer,depth,color,'
         + 'hoverColor,textColor,fillColor,text,fontSize,value,max,radius,intensity,r,team,hp,'
-        + 'maxHp,body,gravity,hitbox,collisionMask,layerBits,collisionGroup,sprite,frame,attrs,children',
+        // nid — стабильный логический ID (§4.2/§14): он появился в снимке узла
+        // намеренно, между sprite/frame и attrs, и порядок остальных ключей не
+        // сдвинул. Проверка следит, чтобы новые поля не переставляли старые.
+        + 'maxHp,body,gravity,hitbox,collisionMask,layerBits,collisionGroup,sprite,frame,nid,attrs,children',
         'набор и порядок ключей');
 });
 

@@ -36,6 +36,7 @@ export function createBus() {
         queue: [],            // отложенные emit'ы (emit внутри emit)
         depth: 0,             // > 0 — идёт доставка
         next_id: 1,
+        next_event_id: 1,     // стабильные ID production-событий (§13)
         on_error: null,       // (error, name) => void; в игре пишет в $.log
     };
 }
@@ -331,6 +332,47 @@ function notifyWaiter(waiter) {
  * чистить её нужно самому ($.signal.clear() в обработчике смены сцены, если
  * подписки принадлежали старой сцене).
  */
+/** Логический ID отправителя/получателя: узел, обёртка, '#id' или строка. */
+export function logicalId(value) {
+    if (value === undefined || value === null) return null;
+    if (typeof value === 'string') {
+        // '#id' — селектор: отдаём логический id узла, а не строку селектора.
+        if (value[0] === '#' && ctx.byId) {
+            const node = ctx.byId.get(value.slice(1));
+            if (node) return node.id || node.nid || null;
+        }
+        return value;
+    }
+    if (value.nodes && value.nodes.length) {
+        const node = value.nodes[0];
+        return node ? (node.id || node.nid || null) : null;
+    }
+    if (value.id !== undefined && value.id !== null) return String(value.id);
+    if (value.nid !== undefined && value.nid !== null) return String(value.nid);
+    return null;
+}
+
+/**
+ * Lifecycle scope подписки: явный объект/имя или текущий контекст
+ * `$.scene.scope(...)`. Закрытый/закрывающийся scope новые подписки не берёт.
+ */
+function scopeFor(explicit) {
+    if (explicit && typeof explicit === 'object' && typeof explicit.own === 'function') return explicit;
+    if (typeof ctx.scopeGet === 'function') {
+        if (explicit !== undefined && explicit !== null) {
+            const found = ctx.scopeGet(explicit);
+            if (found) return found;
+        }
+    }
+    return ctx.scope_current || null;
+}
+
+/** Привязка подписки/ожидания к scope; false — scope не принимает новое. */
+function bindScope(scope, kind, item, cancel) {
+    if (!scope || typeof scope.own !== 'function') return false;
+    return scope.own(kind, item, cancel) === true;
+}
+
 export function installSignal($) {
     const bus = createBus();
     bus.on_error = (error, name) => {
@@ -338,14 +380,27 @@ export function installSignal($) {
     };
 
     $.signal = {
-        /** Подписка: fn(...args). opts: { priority, once }. Возвращает id. */
-        on(name, fn, opts) { return subscribe(bus, name, fn, opts).id; },
+        /**
+         * Подписка: fn(...args). opts: { priority, once, scope }.
+         * `scope` — имя или объект области владения (§5): при её закрытии
+         * подписка снимается сама. Возвращает id.
+         */
+        on(name, fn, opts) {
+            const scope = scopeFor(opts ? opts.scope : undefined);
+            if (scope && scope.state() !== 'active') {
+                ctx.log(`$.signal.on: scope "${scope.name}" закрывается — подписка не создана`);
+                return 0;
+            }
+            const sub = subscribe(bus, name, fn, opts);
+            bindScope(scope, 'signal', sub, () => unsubscribe(bus, name, sub.id));
+            return sub.id;
+        },
 
-        /** Подписка на одно срабатывание. */
+        /** Подписка на одно срабатывание (scope — как у on). */
         once(name, fn, opts) {
             const o = opts ? Object.assign({}, opts) : {};
             o.once = true;
-            return subscribe(bus, name, fn, o).id;
+            return $.signal.on(name, fn, o);
         },
 
         /** Отписка: fn, id или ничего (снять всех). Возвращает число снятых. */
@@ -376,7 +431,14 @@ export function installSignal($) {
          * opts.timeout (мс игрового времени) отменяет ожидание с ошибкой.
          */
         waitFor(name, opts) {
+            const scope = scopeFor(opts ? opts.scope : undefined);
+            if (scope && scope.state() !== 'active') {
+                const waiter = waitFor(bus, name);
+                waiter.cancel(new Error(`$.signal.waitFor("${name}"): scope "${scope.name}" уже закрывается`));
+                return waiter;
+            }
             const waiter = waitFor(bus, name);
+            bindScope(scope, 'wait', waiter, (reason) => waiter.cancel(reason));
             const timeout = opts ? Number(opts.timeout) : 0;
             if (timeout > 0) {
                 if (ctx.time && typeof ctx.time.after === 'function') {
@@ -393,6 +455,46 @@ export function installSignal($) {
 
         /** Сколько ожиданий висит на сигнале. */
         waiters(name) { return waiterCount(bus, name); },
+
+        /**
+         * Production-событие (§13): стабильный ID, тик симуляции и логические
+         * source/target. Никаких native handles — только id/nid узлов.
+         *
+         *   const ev = $.signal.event('attack:hit', { power: 5 },
+         *                             { source: '#hero', target: '#enemy' });
+         *   $.signal.emitEvent(ev);        // подписка получит сам объект ev
+         */
+        event(name, data, opts) {
+            const o = opts || {};
+            const key = signalName(name);
+            const tick = ctx.time && typeof ctx.time.frame === 'function' ? ctx.time.frame() : -1;
+            return {
+                id: o.id === undefined ? `ev${bus.next_event_id++}:${key}` : String(o.id),
+                name: key,
+                tick,
+                source: logicalId(o.source),
+                target: logicalId(o.target),
+                data: data === undefined ? {} : data,
+            };
+        },
+
+        /** Рассылка готового production-события (payload = сам объект). */
+        emitEvent(ev) {
+            if (!ev || ev.name === undefined || ev.name === null) {
+                ctx.log('$.signal.emitEvent: нужен объект события из $.signal.event(...)');
+                return 0;
+            }
+            const count = emit(bus, String(ev.name), [ev]);
+            const trace = ctx.$ && ctx.$.trace;
+            if (trace && typeof trace.note === 'function') {
+                trace.note(`signal:${ev.name}`, null,
+                    { id: ev.id, tick: ev.tick, source: ev.source, target: ev.target });
+            }
+            return count;
+        },
+
+        /** Сам объект события из opts — для трассировки без $.signal.emitEvent. */
+        eventOf(name, data, opts) { return $.signal.event(name, data, opts); },
 
         /** Сама шина — для отладки и юнит-тестов. */
         bus() { return bus; },

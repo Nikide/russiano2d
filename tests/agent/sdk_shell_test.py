@@ -106,7 +106,7 @@ def main():
         info = a.eval(f"{DOC}.content('project-info')")
         check("SDK fixture" in info and "640×360" in info, "панель проекта показывает данные манифеста")
         rows = a.eval(f"{DOC}.content('asset-list')")
-        for name in ("hero.character.json", "menu.rml", "a.png", "project.json", "main.js"):
+        for name in ("hero.atlas.json", "menu.rml", "a.png", "project.json", "main.js"):
             check(name in rows, f"Asset Browser показывает {name}")
         check("→ good-tool" not in rows, "без совпадающего реестра инструмент не назначен")
         check(a.eval("$.sdkApp.state.recent[0]") == f"{FIX}/proj", "проект попал в недавние")
@@ -118,8 +118,8 @@ def main():
         n = a.eval("$.sdkApp.setFilter(undefined, 'image')")
         check(n == 1, "фильтр по типу image")
         a.eval("$.sdkApp.setFilter('', '')")
-        a.eval("$.sdkApp.selectAsset('assets/hero.character.json')")
-        check(snap(a)["assets"]["selected"] == "assets/hero.character.json", "выбор файла")
+        a.eval("$.sdkApp.selectAsset('assets/hero.atlas.json')")
+        check(snap(a)["assets"]["selected"] == "assets/hero.atlas.json", "выбор файла")
         check("row sel" in a.eval(f"{DOC}.content('asset-list')"), "выбранная строка подсвечена")
 
         # Проверка ассета без валидатора (скрипт) — info, не ошибка.

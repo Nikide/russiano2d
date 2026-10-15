@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Final renderer lab gates: actual native topology, actors, materials and diagnostic frames."""
-import json,sys
+import json,os,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 from agent_client import Agent
 from re2d_native_test import decode
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from re2d_skip import skip_without_sdk_command, skip_without_re2d   # noqa: E402
+if skip_without_sdk_command('world-compile', what='Re2D World acceptance'):
+    sys.exit(0)
 fail=[]
 def check(ok,name):
  print(('ok ' if ok else 'FAIL ')+name,flush=True)
@@ -13,6 +17,8 @@ def capture(a,name):
  p='build/acceptance_'+name+'.png';a.screenshot(p);return b''.join(decode(p)[3])
 def main():
  with Agent(game='demos/re2d_world_renderer_lab/acceptance',seed=7) as a:
+  if skip_without_re2d(a):
+      return
   a.step(4);a.eval('acceptanceMoving=false;world.quality({poseBudget:0,poseStep:0});world.profile({gpuWait:true});hud.hide();');a.step(3)
   i=a.eval('world.info()');check(i['cells']==11 and i['spans']==14 and i['lights']>=16 and i['actors']==3 and i['actorCandidates']==4,'complete lab contains stacked rooms, 16 lights, three actors and native AK attachment')
   check(a.eval('movingLamp.info().h===208&&movingLamp.info().r>movingLamp.info().g') is True,'moving red lamp belongs to upper storey as required by acceptance contract')

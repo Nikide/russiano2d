@@ -5,7 +5,25 @@
 # C++-адаптеры существующих библиотек, включая GUI RmlUi.
 # ---------------------------------------------------------------------------
 
-include(WorldEXR)
+# --- RE2D: 3D-авторинг спрайтов (опция объявлена в корневом CMakeLists) -----
+# R2D_ENABLE_RE2D решает, входит ли в сборку необязательный слой 3D-авторинга:
+#
+#   * исходники re2d*/real2d4/rotsprite* не компилируются;
+#   * EXR-декодер панорамного неба (tinyexr + zlib) не подключается;
+#   * нативные биндинги engine.re2d / engine.rotsprite / engine.real2d не
+#     ставятся, поэтому модули $, которые их требуют, не устанавливаются
+#     (сами JS-модули остаются в бинарнике: api.js импортирует их статически,
+#     см. cmake/EmbedJs.cmake);
+#   * данные и C-тесты 3D-авторинга не собираются.
+#
+# Игровой код двух сборок совместим: конфигурацию видно из скрипта как
+# `$.re2dEnabled`. Существующие 3D-демо требуют сборки с ON (поведение по
+# умолчанию), см. docs/RE2D.md и docs/BUILD.md.
+if(R2D_ENABLE_RE2D)
+    include(WorldEXR)
+else()
+    message(STATUS "  RE2D ............ выключен (2D-платформерная сборка)")
+endif()
 
 set(R2D_SOURCES
     r2d.h
@@ -14,11 +32,6 @@ set(R2D_SOURCES
     light.h    light.cpp
     app.h      app.c
     render.h   render.c
-    rotsprite.h rotsprite.c rotsprite_math.h rotsprite_math.c rotsprite3.h rotsprite3.c
-    real2d4.h  real2d4.c
-    re2d.h re2d.c re2d_math.h re2d_math.c re2d_world.h re2d_world.c re2d_world_topology.c re2d_world_visibility.c re2d_world_light.c re2d_world_material.c re2d_world_runtime.c
-    re2d_world_gpu.h re2d_world_gpu.c
-    re2d_world_bake.h re2d_world_bake.c
     profile.h  profile.c
     physics.h  physics.c
     http.h     http.c
@@ -36,7 +49,12 @@ set(R2D_SOURCES
     build.c
     main.c)
 
+# Опция объявлена здесь, до списка источников: от неё зависит, какие файлы в
+# него попадут (см. выше).
 set(R2D_DEFINES "")
+if(R2D_ENABLE_RE2D)
+    list(APPEND R2D_DEFINES R2D_ENABLE_RE2D=1)
+endif()
 
 # Версия движка одна на проект: строку берём из PROJECT_VERSION, чтобы usage,
 # заголовок окна, событие `ready` агента и User-Agent HTTP не отставали от
@@ -56,6 +74,16 @@ set(R2D_PAYLOAD_FILE "" CACHE FILEPATH "C-файл с грузом игры (с�
 if(R2D_PAYLOAD_FILE)
     list(APPEND R2D_SOURCES "${R2D_PAYLOAD_FILE}")
     list(APPEND R2D_DEFINES R2D_EMBEDDED_PAYLOAD=1)
+endif()
+
+if(R2D_ENABLE_RE2D)
+    list(APPEND R2D_SOURCES
+        rotsprite.h rotsprite.c rotsprite_math.h rotsprite_math.c rotsprite3.h rotsprite3.c
+        real2d4.h  real2d4.c
+        re2d.h re2d.c re2d_math.h re2d_math.c re2d_world.h re2d_world.c re2d_world_topology.c re2d_world_visibility.c re2d_world_light.c re2d_world_material.c re2d_world_runtime.c
+        re2d_world_gpu.h re2d_world_gpu.c
+        re2d_world_bake.h re2d_world_bake.c)
+    list(APPEND R2D_DEFINES R2D_ENABLE_RE2D=1)
 endif()
 
 # --- Звук -------------------------------------------------------------------
@@ -294,7 +322,14 @@ target_include_directories(russiano2d PRIVATE
 
 target_compile_definitions(russiano2d PRIVATE ${R2D_DEFINES})
 
-target_link_libraries(russiano2d PRIVATE r2d_world_exr ${R2D_WIN_LIBS}
+# EXR-декодер нужен только Re2D World (панорамное небо): при выключенном RE2D
+# ни библиотеки, ни tinyexr/zlib в сборке нет.
+set(R2D_RE2D_LIBS "")
+if(R2D_ENABLE_RE2D)
+    set(R2D_RE2D_LIBS r2d_world_exr)
+endif()
+
+target_link_libraries(russiano2d PRIVATE ${R2D_RE2D_LIBS} ${R2D_WIN_LIBS}
     SDL3::SDL3
     SDL3_image::SDL3_image
     qjs
@@ -405,13 +440,23 @@ endif()
 #
 # В веб-сборке копировать нечего: данные вшиваются в .data через
 # --preload-file (см. блок EMSCRIPTEN выше).
+#
+# В сборке платформера (R2D_ENABLE_RE2D=OFF) каталог demos/ не копируется:
+# половина демо — 3D-авторинг, который в такой сборке не работает, а весь
+# каталог весит 260 МБ и в дереве сборки платформера не нужен. Сама игра
+# (game/) и ассеты копируются всегда.
 if(NOT EMSCRIPTEN)
+set(R2D_DATA_DIRS game assets)
+if(R2D_ENABLE_RE2D)
+    list(APPEND R2D_DATA_DIRS demos)
+endif()
+
 file(GLOB_RECURSE R2D_DATA_FILES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/game/*"
     "${CMAKE_SOURCE_DIR}/assets/*"
     "${CMAKE_SOURCE_DIR}/demos/*")
 
-foreach(R2D_DATA_DIR game assets demos)
+foreach(R2D_DATA_DIR IN LISTS R2D_DATA_DIRS)
     set(R2D_DATA_STAMP "${CMAKE_BINARY_DIR}/.r2d-copy-${R2D_DATA_DIR}.stamp")
     add_custom_command(
         OUTPUT "${R2D_DATA_STAMP}"

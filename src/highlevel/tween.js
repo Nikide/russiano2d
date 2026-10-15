@@ -358,17 +358,31 @@ export function noteEffect(node) {
 
 /** Тряска: смещает картинку узла, не трогая его координаты. */
 export function shakeNode(node, intensity, ms) {
+    const value = Number(ms);
+    if (!(value > 0)) return;          // «тряска на ноль мс» — это отсутствие тряски
     node.shake_amount = intensity;
-    node.shake_timer = Math.max(node.shake_timer, ms / 1000);
+    node.shake_timer = Math.max(node.shake_timer, value / 1000);
     node.shake_total = node.shake_timer;
-    if (ms > 0) noteEffect(node);
+    noteEffect(node);
 }
 
-/** Вспышка цвета: временная подмена тона. */
+/**
+ * Вспышка цвета: временная подмена тона. `ms <= 0` — снять тон.
+ *
+ * Граница важна: раньше при `ms = 0` (`tint_timer` = 0) узел оставался
+ * перекрашенным до конца сцены — `tickEffects` списывает таймер только когда
+ * он больше нуля.
+ */
 export function flashNode(node, color, ms) {
+    const value = Number(ms);
+    if (!(value > 0)) {
+        node.tint = null;
+        node.tint_timer = 0;
+        return;
+    }
     node.tint = color;
-    node.tint_timer = ms / 1000;
-    if (ms > 0) noteEffect(node);
+    node.tint_timer = value / 1000;
+    noteEffect(node);
 }
 
 export function tickEffects(dt) {

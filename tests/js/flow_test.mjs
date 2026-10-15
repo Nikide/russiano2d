@@ -372,4 +372,54 @@ test('JSON.stringify хендла не падает на ссылках роди
     truthy(child.isCancelled(), 'отмена родителя добралась и до then-хендла');
 });
 
+// ---------------------------------------------------------------------------
+// §5: область владения потоком
+// ---------------------------------------------------------------------------
+
+function fakeScope(name) {
+    const items = [];
+    const scope = {
+        name: name || 'scope',
+        _state: 'active',
+        state() { return scope._state; },
+        own(kind, item, cancel) {
+            if (scope._state !== 'active') {
+                if (typeof cancel === 'function') cancel('scope закрыт');
+                return false;
+            }
+            items.push({ kind, item, cancel });
+            return true;
+        },
+        count() { return items.length; },
+        close(reason) {
+            scope._state = 'closing';
+            for (const entry of items.splice(0)) entry.cancel(reason);
+            scope._state = 'closed';
+            return true;
+        },
+    };
+    return scope;
+}
+
+test('§5 scope: закрытие области отменяет поток и вложенные шаги', () => {
+    fresh();
+    const scope = fakeScope('room:flow');
+    const parent = $.flow.series([0.1, () => {}, 0.1], { scope });
+    const child = parent.then(() => 1);
+    eq(scope.count(), 1, 'поток принадлежит области');
+    truthy(parent.isPending());
+    scope.close('restart комнаты');
+    truthy(parent.isCancelled(), 'родитель отменён');
+    truthy(child.isCancelled(), 'цепочка then тоже отменена');
+    eq($.flow.active(), 0);
+});
+
+test('§5 scope: закрытая область не берёт поток', () => {
+    fresh();
+    const scope = fakeScope('room:flow-closed');
+    scope.close();
+    const handle = $.flow.after(50, () => {}, { scope });
+    truthy(handle.isCancelled(), 'поток отменён сразу, а не остался забытым');
+});
+
 finish();

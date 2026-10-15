@@ -44,12 +44,21 @@ def main():
         return 1
     header = open(HEADER, encoding="utf-8", errors="replace").read()
     bundled = set(re.findall(r'"r2d/([A-Za-z0-9_.-]+\.js)"', header))
+    # Исключения — тоже факт сборки: при -DR2D_ENABLE_RE2D=OFF из таблицы
+    # намеренно убраны 3D-модули (cmake/EmbedJs.cmake). Генератор печатает их
+    # список рядом с таблицей, поэтому «нет модуля» здесь не гадание, а
+    # сверка с тем, что решила сборка.
+    excluded = set(re.findall(r'^\s*"([A-Za-z0-9_.-]+\.js)",\s*$',
+                              header[header.find("r2d_js_module_excluded[]"):]
+                              if "r2d_js_module_excluded[]" in header else "",
+                              re.M))
 
-    missing = [f for f in files if f not in bundled]
+    missing = [f for f in files if f not in bundled and f not in excluded]
     check(not missing, f"все модули в таблице (нет: {missing})")
+    check(not (bundled & excluded), "исключённые модули в таблицу не попали")
     # Предел в 64 файла — ровно та ошибка, которую проверяем.
-    check(len(bundled) >= 65 or len(files) < 65,
-          f"таблица не обрезана: записей {len(bundled)}")
+    check(len(bundled) >= 65 or len(files) - len(excluded) < 65,
+          f"таблица не обрезана: записей {len(bundled)}, исключено {len(excluded)}")
 
     with Agent(game=os.path.join("tests", "fixtures", "text"), seed=5) as a:
         check(a.eval("typeof $") == "function", "в игре есть $ (bootstrap прошёл)")
@@ -58,8 +67,17 @@ def main():
         check(a.eval("String(globalThis.__r2d_boot_error || '')") == "",
               "ошибки установки API нет")
         check(a.eval("typeof $.audio") == "object", "$.audio установлена")
-        for name in ("proc", "cels", "raid", "weapons"):
+        for name in ("proc", "raid", "weapons"):
             check(a.eval(f"typeof $.{name}") == "object", f"$.{name} установлена")
+        # RE2D-семейство ставится только в сборке с RE2D: модули в таблице есть
+        # всегда (api.js импортирует их статически), но установка идёт по
+        # нативным биндингам (api.js: re2dAvailable). Проверяем факт сборки, а не
+        # угадываем по имени каталога.
+        if a.eval("$.re2dEnabled") is True:
+            check(a.eval("typeof $.cels") == "object", "$.cels установлена (RE2D=ON)")
+        else:
+            check(a.eval("typeof $.cels") == "undefined",
+                  "$.cels отсутствует в сборке без RE2D")
 
     print()
     if FAILURES:

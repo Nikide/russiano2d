@@ -338,10 +338,10 @@ static bool takes_value(const char *flag)
     static const char *const names[] = {
         "--registry", "--engine", "--type", "--depth", "--out", "--output", "--entry",
         "--scene", "--frames", "--project", "--seed", "--preset", "--name", "--tool",
-        "--expression", "--uv", "--origin", "--size", "--scale", "--style", "--first-id", "--mode", "--x", "--y",
+        "--mode", "--x", "--y",
         "--cell", "--cols", "--rows", "--prefix", "--duration", "--tags",
         "--root", "--game", "--fixed-dt", "--format", "--width", "--height",
-        "--model", NULL,   // bake-re2d (sdk_re2d.c)
+        NULL,
     };
     for (int i = 0; names[i]; ++i) {
         if (strcmp(flag, names[i]) == 0) return true;

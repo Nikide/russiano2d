@@ -280,6 +280,12 @@ export function nodeToData(node) {
         sprite: spriteField(node),
         frame: num(node.frame_index, 0),
 
+        // Стабильный логический ID (§4.2 Спецификации): по нему save/restore
+        // сопоставляет состояние узла, не полагаясь на порядок обхода дерева.
+        // Пишется только когда он есть: старые данные без nid грузятся как
+        // раньше, а новый узел получает его при создании (core.js).
+        ...(node.nid ? { nid: String(node.nid) } : null),
+
         // Вид узла пишется только для не-2D: так сохранения 2D-игр остаются
         // побайтово прежними (docs/RE2D.md, правило «ноль стоимости для 2D»).
         ...(node.kind && node.kind !== '2d' ? { kind: String(node.kind) } : null),
@@ -362,6 +368,13 @@ export function applyData(data, parent) {
     if (data.y !== undefined) attrs.y = num(data.y, 0);
 
     const node = new Node(tag, attrs);
+
+    // Стабильный логический ID восстанавливаем как есть: состояние (FSM,
+    // таймеры, RNG-потоки) сопоставляется по нему, а не по порядку обхода.
+    // Данные без nid — старые: узел уже получил новый ID в конструкторе.
+    if (data.nid !== undefined && data.nid !== null && String(data.nid) !== '') {
+        node.nid = String(data.nid);
+    }
 
     // Спрайт ставим до геометрии: setSprite() может подогнать w/h под размер
     // текстуры, а сохранённые размеры авторитетнее автоматических.

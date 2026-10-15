@@ -103,6 +103,58 @@ def main():
         check(a.eval("engine.bodyCount()") == base, "remove() снимает тела карты")
         check(a.eval("$('#solid3').length") == 0, "карта удалена из мира")
 
+        # --- Слияние тайлов в прямоугольники и бюджет тел ---------------------
+        # Сплошной блок 200×100 = 20 000 клеток. Раньше это было 100 тел (по
+        # одному на строку). Движок держит не больше 8192 тел, и на плотных
+        # картах полосы упирались в лимит, оставляя тайлы без коллизий.
+        a.eval("$('<tilemap>', { id: 'big', tile: 16, solid: true, data: Array(20000).fill(1), "
+               "mapW: 200, mapH: 100 }).at(0, 2000)")
+        a.step(2)
+        grown = a.eval("engine.bodyCount()") - base
+        check(grown == 1, f"сплошной блок 200×100 — одно тело, а не 100 полос ({grown})")
+        check(a.eval("$.tilemap.rectsOf('#big', 0).length") == 1, "rectsOf подтверждает один прямоугольник")
+        check(a.eval("JSON.stringify($.tilemap.rectsOf('#big', 0)[0])") == '{"tx":0,"ty":0,"w":200,"h":100}',
+              "прямоугольник накрывает всю карту")
+
+        # Старый режим доступен по запросу: тело на каждую горизонтальную полосу.
+        a.eval("$('#big').collisionMerge(false).rebuild(); 'ok'")
+        a.step(2)
+        check(a.eval("engine.bodyCount()") - base == 100, "collisionMerge(false) возвращает 100 полос")
+        a.eval("$('#big').collisionMerge(true).rebuild(); 'ok'")
+        a.step(2)
+        check(a.eval("engine.bodyCount()") - base == 1, "collisionMerge(true) снова даёт одно тело")
+
+        # Реалистичный плотный уровень 200×100: замер и запас до лимита 8192.
+        a.eval("""(() => {
+            const w = 200, h = 100, d = new Int32Array(w * h);
+            for (let y = h - 4; y < h; y++) for (let x = 0; x < w; x++) d[y * w + x] = 1;
+            for (let y = 0; y < h; y++) { d[y * w] = 1; d[y * w + w - 1] = 1; }
+            for (let y = 6; y < h - 6; y += 6) for (let b = 0; b < 24; b++) {
+                const x = 6 + b * 8;
+                for (let i = 0; i < 5; i++) d[y * w + x + i] = 1;
+            }
+            $('#big').remove();
+            $('<tilemap>', { id: 'real', tile: 16, solid: true, data: d, mapW: w, mapH: h }).at(0, 2000);
+            return 1;
+        })()""")
+        a.step(2)
+        real_bodies = a.eval("engine.bodyCount()") - base
+        print(f"  --   плотный уровень 200×100: тел {real_bodies} (лимит движка 8192)")
+        check(real_bodies > 0 and real_bodies < 2048, f"плотный уровень далеко от лимита ({real_bodies})")
+
+        # Замер (не проверка): сборка тел плотного уровня двумя режимами — то же
+        # «до/после», что в docs/highlevel/tilemap.md §6, но воспроизводимо из
+        # теста. Порогов нет: время зависит от машины, печатаем как есть.
+        for label, merge in (("полосы", "false"), ("прямоугольники", "true")):
+            ms = a.eval("(() => { const el = $('#real'); el.collisionMerge(%s); "
+                        "const t0 = $.time.perfNow(); el.rebuild(); return $.time.perfNow() - t0; })()"
+                        % merge)
+            print(f"  --   плотный уровень 200×100, {label}: rebuild {ms:.3f} мс")
+        a.eval("$('#real').collisionMerge(true).rebuild(); 'ok'")
+        a.eval("$('#real').remove(); 'ok'")
+        a.step(1)
+        check(a.eval("engine.bodyCount()") == base, "уровень 200×100 снят без утечки тел")
+
         # --- Полосы коллизий через публичный помощник -------------------------
         check(a.eval("$.tilemap.runsOf('#level', 0).length") > 0, "runsOf отдаёт полосы непроходимых тайлов")
 

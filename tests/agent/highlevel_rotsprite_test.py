@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2] / 'tools'))
+from re2d_skip import skip_without_re2d_binary   # noqa: E402
 from agent_client import Agent, ROOT
 from PIL import Image
 
@@ -24,6 +25,9 @@ def shot(a, path):
 
 
 def main():
+    # Материала для проверки нет в сборке без RE2D (R2D_ENABLE_RE2D=OFF).
+    if skip_without_re2d_binary(what='highlevel_rotsprite_test'):
+        return
     atlas = 'demos/assets/art/mascot/russi_rotsprite_v1.png'
     with tempfile.TemporaryDirectory(prefix='r2d-rotsprite-') as temp:
         temp = Path(temp)

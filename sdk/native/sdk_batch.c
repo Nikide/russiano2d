@@ -1,6 +1,5 @@
-// Native batch operations reuse the same baker and validator as individual tools.
-#include "sdk_bake.h"
-#include <math.h>
+// Native batch operations reuse the same validator as individual tools.
+#include "sdk.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,38 +36,13 @@ int sdk_cmd_batch(const SdkArgs *a) {
         const R2dJson *j=jobs->items[i];SdkReport jr;sdk_report_init(&jr);
         const char *kind=r2d_json_str(r2d_json_get(j,"op"),"");
         const char *src=r2d_json_str(r2d_json_get(j,"source"),NULL);
-        char source[2048],output[2048];path_of(dir,src,source,sizeof source);
+        char source[2048];path_of(dir,src,source,sizeof source);
         R2dSb result;r2d_sb_init(&result);bool ok=false;
         if(j->type!=R2D_JSON_OBJ || !src || !src[0]) sdk_diag(&jr,SDK_ERROR,"SDK_BATCH_JOB",path,NULL,NULL,"job %d: нужен объект с op и source",i);
         else if(!strcmp(kind,"validate")) {
             const char *type=sdk_validate_file(source,r2d_json_str(r2d_json_get(j,"type"),NULL),&jr);
             r2d_sb_puts(&result,"{\"type\":");r2d_sb_put_json_string(&result,type);r2d_sb_putc(&result,'}');ok=jr.errors==0;
-        } else if(!strcmp(kind,"bake-re2d")) {
-            const char *dest=r2d_json_str(r2d_json_get(j,"output"),NULL);
-            BkOptions o;bk_default_options(&o);BkResult res={0};
-            o.expression=r2d_json_str(r2d_json_get(j,"expression"),NULL);
-            o.type=r2d_json_str(r2d_json_get(j,"type"),"prop");o.name=r2d_json_str(r2d_json_get(j,"name"),NULL);
-            o.style=r2d_json_str(r2d_json_get(j,"style"),"anime");
-            const char *uv=r2d_json_str(r2d_json_get(j,"uv"),"auto"),*origin=r2d_json_str(r2d_json_get(j,"origin"),!strcmp(o.type,"environment")?"feet":"center");
-            double size=r2d_json_num(r2d_json_get(j,"size"),1024),scale=r2d_json_num(r2d_json_get(j,"scale"),0),first=r2d_json_num(r2d_json_get(j,"firstId"),80);
-            const char *strings[]={"type","name","style","uv","origin","expression"};
-            const char *numbers[]={"size","scale","firstId"};bool typed=true;
-            for(size_t k=0;k<sizeof strings/sizeof strings[0];k++){const R2dJson *v=r2d_json_get(j,strings[k]);if(v&&v->type!=R2D_JSON_STR)typed=false;}
-            for(size_t k=0;k<sizeof numbers/sizeof numbers[0];k++){const R2dJson *v=r2d_json_get(j,numbers[k]);if(v&&v->type!=R2D_JSON_NUM)typed=false;}
-            if(!typed || !dest || !dest[0] || (strcmp(uv,"auto")&&strcmp(uv,"existing")&&strcmp(uv,"optimized")) || (strcmp(origin,"center")&&strcmp(origin,"feet")) ||
-                (size!=1024&&size!=2048&&size!=4096) || !isfinite(scale) || scale<0 || scale>1e6 || first<1 || first>254 || floor(first)!=first)
-                sdk_diag(&jr,SDK_ERROR,"SDK_BATCH_OPTIONS",path,NULL,NULL,"job %d: неверные output/uv/origin/size/scale/firstId",i);
-            else {
-                path_of(dir,dest,output,sizeof output);
-                // Duplicate destinations are refused before a later job overwrites an earlier result.
-                for(int k=0;k<i;k++) {const R2dJson *prev=jobs->items[k];const char *pd=r2d_json_str(r2d_json_get(prev,"output"),NULL);char normalized[2048];path_of(dir,pd,normalized,sizeof normalized);if(pd && !strcmp(normalized,output))sdk_diag(&jr,SDK_ERROR,"SDK_BATCH_OUTPUT_DUPLICATE",output,NULL,NULL,"job %d: output уже использован job %d",i,k);}
-                o.uv=!strcmp(uv,"existing")?BK_UV_EXISTING:!strcmp(uv,"optimized")?BK_UV_OPTIMIZED:BK_UV_AUTO;o.origin=!strcmp(origin,"feet")?BK_ORIGIN_FEET:BK_ORIGIN_CENTER;
-                o.size=(int)size;o.scale=(float)scale;o.first_id=(int)first;
-                if(!jr.errors)ok=bk_bake(source,output,&o,&res,&jr);
-                if(res.report_json)r2d_sb_puts(&result,res.report_json);
-                bk_result_free(&res);
-            }
-        } else sdk_diag(&jr,SDK_ERROR,"SDK_BATCH_OPERATION",path,NULL,NULL,"job %d: поддержаны op validate и bake-re2d",i);
+        } else sdk_diag(&jr,SDK_ERROR,"SDK_BATCH_OPERATION",path,NULL,NULL,"job %d: поддержан op validate",i);
         if(!ok)failed++;warnings+=jr.warnings;
         if(i)r2d_sb_putc(&items,',');r2d_sb_printf(&items,"{\"index\":%d,\"ok\":%s,\"source\":",i,ok?"true":"false");r2d_sb_put_json_string(&items,source);
         r2d_sb_puts(&items,",\"result\":");r2d_sb_puts(&items,result.len?result.data:"null");r2d_sb_putc(&items,',');sdk_report_put_counts(&jr,&items);r2d_sb_putc(&items,',');sdk_report_put(&jr,&items);r2d_sb_putc(&items,'}');

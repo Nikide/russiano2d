@@ -131,9 +131,24 @@ def run_scene(name, minimum):
         check(False, f"{name}: запуск не удался — {error}")
 
 
+# Сцены, которым нужен нативный 3D-авторинг: в сборке -DR2D_ENABLE_RE2D=OFF
+# они не собираются в бинарник (docs/BUILD.md), и проверять их нечем.
+NEEDS_RE2D = ("rotsprite", "re2d_world")
+
+
 def main():
     wanted = sys.argv[1:]
     names = [n for n in SCENES if not wanted or n in wanted]
+
+    # Отбрасываем 3D-сцены, если движок собран без RE2D — по факту сборки, а не
+    # по имени каталога (tests/agent/re2d_skip.py).
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from re2d_skip import binary_has_re2d
+    if not binary_has_re2d():
+        skipped = [n for n in names if n in NEEDS_RE2D]
+        if skipped:
+            print("  пропуск: сборка без RE2D — сцены %s не проверяются" % ", ".join(skipped))
+        names = [n for n in names if n not in NEEDS_RE2D]
     if not names:
         print("нет таких демо: " + ", ".join(wanted))
         return 2

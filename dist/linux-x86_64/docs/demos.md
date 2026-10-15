@@ -73,6 +73,11 @@ export default function install($) {
 | `shooter_witch` | **ночной лес**: зомби-шутер в духе Vampire Survivors — авто-стрельба по ближайшему, волны, опыт, карты апгрейдов, фонари как единственный свет, тени от стволов, кровь и лужи | `<tilemap>` + `.autotile()`, `$.gfx.light.polygon`, `$.audio.zone/obstacles/damping`, `$.fx.*`, `$.gfx.postPreset` |
 | `russi_vn` | **визуальная новелла «Руси-тян: Бака!»**: цундэрэ-маскот объясняет, чем JS лучше Python; интерфейс на RmlUi, пять локаций, тряска экрана, семь поз, озвучка реплик, три выбора и две концовки | `$.animatedTimelineScene2d`, `$.timeline.state`, `$.ui.doc`, `$.camera.shake`, `{ ending }` с флагом в `$.store` |
 
+Демо `re2d_world`, `re2d_bsp_world`, `re2d_world_renderer_lab`, `re2d_dust2`,
+`re2dsprite` и `real2d` показывают отклонённый 3D-авторинг Re2D/Real2D: они
+собираются и запускаются только при `-DR2D_ENABLE_RE2D=ON` и не входят в первую
+продакшн-цель (2D-платформер). Инструментов Re2D в SDK больше нет.
+
 | Платформер | Типичная ночь в Мытищинском лесу | Руси-тян |
 |---|---|---|
 | ![Платформер](screenshots/platformer.png) | ![Типичная ночь в Мытищинском лесу](screenshots/shooter_witch.png) | ![Руси-тян](screenshots/russi_vn.png) |

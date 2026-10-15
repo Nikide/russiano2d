@@ -808,10 +808,12 @@ engine.submitTriangles(tri, v);   // → число принятых верши�
 
 `desc`: `shape` (`0` box, `1` circle, `2` capsule, `3` polygon), `halfW`/`halfH`,
 `radius`, `points` (полигон), `polyRadius`, `density`, `friction`, `restitution`,
-`sensor`, `contacts`, `layerBits`/`mask`/`group`.
+`sensor`, `contacts`, `angle` (собственный поворот формы, радианы),
+`layerBits`/`mask`/`group`.
 
 **`x`/`y` в описании добавочной формы — это СМЕЩЕНИЕ от центра тела**, а не
-позиция: голова ставится выше (`y` отрицательный), ноги ниже.
+позиция: голова ставится выше (`y` отрицательный), ноги ниже. `angle` поворачивает
+саму форму вокруг этого смещения (наклон прямоугольника оружия, §40).
 
 Возвращает индекс формы (`0` — основная, дальше добавленные) или `-1`. Предел —
 `R2D_MAX_SHAPES_PER_BODY` (8): лишние не добавляются, в журнал уходит одно
@@ -1034,6 +1036,17 @@ const platform = engine.createBody({ x: 400, y: 300, halfW: 100, halfH: 8,
 самой кромки отсекаются порогом 0.1 — иначе игрок цеплялся бы за угол,
 пролетая снизу.
 
+**Спрыгивание сквозь платформу.** `engine.setOneWayIgnore(body, on)` запрещает
+pre-solve считать контакт **этому** телу с любыми односторонними платформами:
+тело проваливается вниз. Платформа не трогается — на ней могут стоять другие
+тела. Прочитать флаг — `engine.oneWayIgnore(body)`. В высокоуровневом API —
+`.dropThrough(ms)` у узла и автоматическое `S`/`↓`+`Space` в `.controls()`.
+
+```js
+engine.setOneWayIgnore(hero, true);   // падать сквозь one-way
+engine.oneWayIgnore(hero);            // → true
+```
+
 **Сон тела.** `engine.setSleeping(body, false)` запрещает Box2D усыплять тело.
 Нужно там, где игра двигает тело напрямую скоростью: проснувшееся тело Box2D
 усыпит снова на накопленном покое, и `setVelocity` перестанет действовать.
@@ -1076,6 +1089,28 @@ Box2D предупреждает: `isBullet` надо тратить эконо�
 совпадает у обоих тел — она сильнее масок: положительная сталкивает, отрицательная
 запрещает столкновение.
 
+### `engine.setTimeScale(x)` / `engine.timeScale()`
+
+Множитель времени **шага физики** — то, чем делаются hit-stop и замедление.
+`engine.setTimeScale(0)` полностью останавливает Box2D, `1` — обычный ход,
+`0.5` — вдвое медленнее. Кадр, отрисовка, интерфейс и игровое время скриптов
+при этом продолжают идти: замораживается только симуляция тел.
+
+```js
+engine.setTimeScale(0);    // freeze: тела стоят
+engine.timeScale();        // → 0
+engine.setTimeScale(1);    // обычный ход
+```
+
+Как это работает в кадре (`src/main.c`): accumulator физики получает
+`app->dt * app->time_scale`, поэтому при нуле шагов не происходит вовсе, а
+накопленный долг обнуляется — иначе после разморозки был бы рывок. Отрицательный
+множитель и `NaN` приводятся к нулю: обратного времени у симуляции нет.
+
+Поле живёт в `R2DApp.time_scale` и ставится по умолчанию в `1.0` — обнуление
+структуры `SDL_zero` не должно останавливать мир. В высокоуровневом API — `$.time.scale(x)`
+и `$.time.freeze(ms)` (см. [docs/highlevel/time.md](../highlevel/time.md)).
+
 ### `engine.setBodyFilter(body, layerBits, mask, group)`
 
 Меняет слои и маски коллизий у уже созданного тела (Box2D `b2Filter`), не
@@ -1109,6 +1144,7 @@ engine.setBodyFilter(ghost, 0x8, 0, 0);          // призрак: ни с ке
 |---|---|---|
 | `kind` | `string` | `'begin'` (начали касаться), `'end'` (перестали), `'hit'` (удар) |
 | `a`, `b` | `number` | id тел; `-1`, если тело уже удалено |
+| `shapeA`, `shapeB` | `number` | Индекс формы в теле (`0` — основная, дальше области §40); `-1`, если форма не наша |
 | `nx`, `ny` | `number` | Нормаль от A к B |
 | `x`, `y` | `number` | Точка контакта, пиксели |
 | `speed` | `number` | Скорость сближения (только `'hit'`, иначе 0) |
@@ -1123,6 +1159,61 @@ for (const c of engine.contacts()) {
 платформ (`oneWay: true` — им контакты нужны для pre-solve). Высокоуровневое
 API включает этот флаг динамическим телам автоматически и раздаёт события
 узлам — см. [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md).
+
+### `engine.setShape(body, index, desc)` / `engine.setShapeEnabled(...)`
+
+§40: независимые области тела. `engine.setShape(body, index, desc)` пересобирает
+форму с нашим индексом по тому же описанию, что у `engine.addShape` (смещение
+`x`/`y`, `angle`, размеры, слои, `sensor`). **Индекс сохраняется** в user data
+формы, поэтому `shapeA`/`shapeB` в контактах и область в игре не съезжают;
+меняется только native handle, которого игра не видит. Возвращает индекс или
+`-1`.
+
+`engine.setShapeEnabled(body, index, on, layerBits, mask, group)` — включить или
+выключить форму, **не удаляя её**. Выключенная получает нулевой фильтр (ни с чем
+не сталкивается и не находится запросами) и перестаёт присылать события; тело и
+игровой владелец живы. При включении фильтр возвращается из аргументов: описания
+областей живут в JS и переживают пересоздание тела. Возвращает `bool`.
+
+### `engine.shapeEnabled(body, index)`
+
+§40: включена ли форма сейчас. Читает нативный фильтр (выключенная форма §40
+имеет нулевой фильтр), поэтому это единственный источник истины о состоянии
+области: внешний драйвер (анимационная дорожка `shape.enabled`) может
+переключить форму через `engine.setShapeEnabled` напрямую, и JS-описание
+подсистемы `$` подтягивается к этому значению. `false` — форма выключена или её
+нет.
+
+### `engine.shapeOverlaps(body, index, category, mask, cap)`
+
+Кто пересекается с формой **прямо сейчас** — явный геометрический запрос
+(`b2World_OverlapShape`) по её текущему мировому положению и фильтру, а не
+история событий. Выключенная форма (нулевой фильтр) не возвращает никого. Именно им §40 находит цель, уже стоящую внутри области в момент
+открытия окна атаки. Своё тело и сама форма пропускаются.
+
+**Возвращает:** `[{ body, shape }]` — id тела и индекс его формы (до `cap`,
+максимум `R2D_MAX_QUERY`).
+
+```js
+const inside = engine.shapeOverlaps(hero.body, sword_index, 1, 0xffffffff, 32);
+```
+
+### `engine.setResolveTransforms(fn)` / `engine.nodes.resolveTransforms(list, gen, cb)`
+
+§39: кадровый проход локальных трансформов. Подсистема `$` регистрирует `fn`
+(`core.js`, `installTransformResolution()`); движок зовёт его в конце кадра
+логики (`r2d_script_call_update`, после обещаний) и перед отрисовкой
+(`r2d_script_call_render`) — то есть ровно между логикой и следующим физическим
+шагом и до сборки кадра. Пока функция не зарегистрирована, движок не платит за
+проход вовсе: **это opt-in, старое поведение не меняется**.
+
+`engine.nodes.resolveTransforms(list, gen, cb)` — сам пакетный проход. `list` —
+узлы в локальном режиме (`node.local_mode === true`), `gen` — номер поколения
+(поля `_t_gen`/`_t_busy` узла не дают считать узел дважды и защищают от цикла в
+цепочке родителей), `cb(node)` зовётся для изменившихся узлов с телом — JS
+ставит тело в скомпонованную мировую точку. Возвращает число изменённых узлов.
+Без движка (юнит-тест qjs, `$.debug.nativePasses(false)`) тот же алгоритм
+выполняет JS-резерв в `core.js`.
 
 ### `engine.createJoint(opts)` / `engine.destroyJoint(id)`
 
@@ -1426,7 +1517,7 @@ engine.ui.on(doc, 'btn-quit', 'click', () => engine.quit());
 > кэширует документ, а слушатели остаются на элементах. Если вешать их каждый
 > `onEnter`, один клик вызовет обработчик несколько раз, а счётчик 256 будет
 > расти. Храните флаг (`this.listenersBound`) — пример в
-> [`game/scenes/menu.js`](../../game/scenes/menu.js).
+> [`game/campaign.js`](../../game/campaign.js) (сцена меню кампании).
 
 ### Чтение состояния элементов и программное нажатие
 
@@ -2412,7 +2503,7 @@ internal/NATIVE.md описывает то, на чём стоит `$`; част
 
 | Группа | Где описана |
 |---|---|
-| `engine.nodes.*` — нативные покадровые проходы по узлам `$` (схема C → `$`): `specialTags`, `syncBodies`, `worldEvents`, `hover`, `sortWorld`, `collectWorld`, `drawWorld`, `buildIndex`, `tweenAdd`/`tweenStep`/`tweenClear`/`tweenPause`/`tweenCount`, `tickEffects`, `drawTiles`, `drawUI`, `filterNodes`, `memory`, `uiTags`, `uiTextBegin`/`uiTextPush`/`uiTextFlush`, `drawParticles` | [`src/nodes.c`](../../src/nodes.c), [highlevel/native.md](../highlevel/native.md) |
+| `engine.nodes.*` — нативные покадровые проходы по узлам `$` (схема C → `$`): `specialTags`, `syncBodies`, `resolveTransforms`, `worldEvents`, `hover`, `sortWorld`, `collectWorld`, `drawWorld`, `buildIndex`, `tweenAdd`/`tweenStep`/`tweenClear`/`tweenPause`/`tweenCount`, `tickEffects`, `drawTiles`, `drawUI`, `filterNodes`, `memory`, `uiTags`, `uiTextBegin`/`uiTextPush`/`uiTextFlush`, `drawParticles` | [`src/nodes.c`](../../src/nodes.c), [highlevel/native.md](../highlevel/native.md) |
 | `engine.real2d.*` — Real2D v4 (layered warp): `load`, `render`, `pixels`, `info`, `provenance`, `provenanceMap`, `patchWeights`, `atlasPixels`, `debugSetAtlas`, `dispose` | [`src/real2d4.c`](../../src/real2d4.c), [highlevel/real2d.md](../highlevel/real2d.md) |
 | `engine.window.*` — заголовок, размер, режим, курсор, фокус | [highlevel/window.md](../highlevel/window.md), `$.window` в [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) §20.1 |
 | `engine.viewport.*` — render target игры | [highlevel/viewport.md](../highlevel/viewport.md), [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) §23 |

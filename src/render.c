@@ -1,6 +1,8 @@
 #include "render.h"
 #include "shader_live.h"
+#ifdef R2D_ENABLE_RE2D
 #include "rotsprite_math.h"
+#endif
 
 #include <quickjs.h>
 #include "payload.h"
@@ -2689,7 +2691,13 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
 
 void r2d_render_shutdown(R2DRenderer *r)
 {
+    // Рабочая память последовательного синтеза Re2DSprite. В сборке без RE2D
+    // её никто не выделяет (src/rotsprite.c не компилируется), поэтому и
+    // освобождать нечего — поле остаётся, чтобы структура рендерера была одна
+    // на обе сборки.
+#ifdef R2D_ENABLE_RE2D
     if(r->rot_workspace){r2d_rotsprite_anime_workspace_free(r->rot_workspace);free(r->rot_workspace);r->rot_workspace=NULL;}
+#endif
     // Z-буфер живёт вне кадра: освобождаем явно.
     if (r->depth_texture) {
         SDL_ReleaseGPUTexture(r->device, r->depth_texture);

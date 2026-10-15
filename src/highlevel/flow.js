@@ -524,27 +524,50 @@ function frameDeltaMs(dt) {
  * Ставит $.flow. Расписание общее на игру: $.flow.cancelAll() останавливает
  * всё, что было запущено (удобно в обработчике смены сцены).
  */
+/**
+ * Область владения потоком (§5): явный объект/имя или текущий контекст
+ * `$.scene.scope(...)`. При закрытии области поток отменяется вместе с
+ * вложенными шагами.
+ */
+function scopeFor(explicit) {
+    if (explicit && typeof explicit === 'object' && typeof explicit.own === 'function') return explicit;
+    if (typeof ctx.scopeGet === 'function' && explicit !== undefined && explicit !== null) {
+        const found = ctx.scopeGet(explicit);
+        if (found) return found;
+    }
+    return ctx.scope_current || null;
+}
+
+function attachScope(handle, explicit) {
+    const scope = scopeFor(explicit);
+    if (scope && typeof scope.own === 'function') {
+        scope.own('flow', handle, (reason) => cancelFlow(handle, reason));
+    }
+    return handle;
+}
+
 export function installFlow($) {
     sched.on_error = (error) => reportFlowError(error);
 
     $.flow = {
-        /** Последовательность шагов; value — массив результатов шагов. */
-        series(steps) { return flowSeries(steps); },
+        /** Последовательность шагов; opts: { scope } — владелец потока (§5). */
+        series(steps, opts) { return attachScope(flowSeries(steps), opts && opts.scope); },
 
-        /** Все шаги сразу; value — результаты в порядке шагов. */
-        parallel(steps) { return flowParallel(steps); },
+        /** Все шаги сразу; opts: { scope }. */
+        parallel(steps, opts) { return attachScope(flowParallel(steps), opts && opts.scope); },
 
         /** Задержка; хендл можно отменить или дополнить через then(). */
-        delay(ms) { return flowDelay(ms); },
+        delay(ms, opts) { return attachScope(flowDelay(ms), opts && opts.scope); },
 
         /** Однократный вызов через ms — то же, что delay(ms).then(fn). */
-        after(ms, fn) {
+        after(ms, fn, opts) {
             const handle = flowDelay(ms);
-            return typeof fn === 'function' ? chainHandle(handle, fn, undefined) : handle;
+            const result = typeof fn === 'function' ? chainHandle(handle, fn, undefined) : handle;
+            return attachScope(result, opts && opts.scope);
         },
 
         /** n повторов fn(i); fn может вернуть число мс или хендл для паузы. */
-        repeat(times, fn) { return flowRepeat(times, fn); },
+        repeat(times, fn, opts) { return attachScope(flowRepeat(times, fn), opts && opts.scope); },
 
         /** Отмена хендла вместе с вложенными шагами и началом цепочки. */
         cancel(handle) { return cancelFlow(handle); },

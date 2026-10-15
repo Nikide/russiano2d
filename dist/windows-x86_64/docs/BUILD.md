@@ -127,6 +127,41 @@ R2D_GPU=vulkan ./build/russiano2d      # то же переменной окру
 его аргументом): структура приложения обнуляется внутри инициализации, поэтому
 записать поле до вызова было бы недостаточно.
 
+## Конфигурации движка: RE2D включён или выключен
+
+Опция `R2D_ENABLE_RE2D` (по умолчанию `ON`) решает, входит ли в бинарник
+необязательный слой 3D-авторинга спрайтов: RE2D, Real2D, RotSprite, Re2D World
+и EXR-панорама неба. Для 2D-платформера он не нужен — сборка платформера
+делается так:
+
+```bash
+cmake -S . -B build-2d -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DR2D_ENABLE_RE2D=OFF
+cmake --build build-2d --target russiano2d -j 8
+```
+
+| | `R2D_ENABLE_RE2D=ON` (по умолчанию) | `R2D_ENABLE_RE2D=OFF` |
+|---|---|---|
+| исходники | `src/re2d*`, `src/real2d4.*`, `src/rotsprite*` компилируются | не компилируются |
+| EXR-небо | tinyexr + zlib, цель `r2d_world_exr` | не подключается |
+| `engine.re2d` / `engine.rotsprite` / `engine.real2d` | есть | нет |
+| модули `$` | `$.re2d`, `$.re2dWorld`, `$.rotsprite`, `$.real2d`, `$.mesh`, `$.cels` | не устанавливаются |
+| 3D-демо (`demos/re2d_*`, `demos/real2d`, `demos/rotsprite`) | каталог `demos/` копируется рядом с бинарником | каталог `demos/` не копируется вовсе (260 МБ 3D-данных в сборке платформера не нужны) |
+| C-тесты `r2d_re2d_test`, `r2d_re2d_world_test`, `r2d_world_exr_test` | собираются и гоняются | не собираются |
+
+Игровой код двух сборок один и тот же: решает не игра, а настройка сборки.
+Проверить, что за слой достался игре, можно из скрипта — `$.re2dEnabled`:
+
+```js
+if (!$.re2dEnabled) $.log('сборка платформера: 3D-авторинг выключен');
+```
+
+Проверка обеих сторон опции — `tests/agent/re2d_gate_test.py`:
+
+```bash
+python3 tests/agent/re2d_gate_test.py                                   # build/
+R2D_BINARY=build-2d/russiano2d python3 tests/agent/re2d_gate_test.py    # build-2d/
+```
+
 ## Режимы сборки
 
 **`--append` (по умолчанию).** Билдер копирует движок и приписывает к копии

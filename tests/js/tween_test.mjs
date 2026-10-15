@@ -15,7 +15,7 @@ import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
 import { Node, ctx, wrapOne } from '../../src/highlevel/core.js';
 import {
     installTween, tickTweenObjects, transitionFunction, transitionNames,
-    Tween,
+    Tween, shakeNode, flashNode, tickEffects,
 } from '../../src/highlevel/tween.js';
 
 // $.tween ставится на пустой объект: логике движок не нужен, время подаём
@@ -555,6 +555,50 @@ test('ошибка в callback/method/interpolator ловится и уходи�
     truthy(logs.some((m) => m.indexOf('callback') >= 0), 'callback залогирован');
     truthy(logs.some((m) => m.indexOf('method') >= 0), 'method залогирован');
     truthy(logs.every((m) => m.indexOf('$:') === 0), 'стиль сообщений "$: …"');
+});
+
+// --- Эффекты узла: тряска и вспышка -----------------------------------------
+
+test('вспышка узла гаснет сама и не остаётся при нулевой длительности', () => {
+    fresh();
+    const node = new Node('sprite', {});
+    node.tint = null;
+    node.tint_timer = 0;
+
+    flashNode(node, 0xff0000ff, 100);
+    eq(node.tint, 0xff0000ff, 'тон подменён');
+    near(node.tint_timer, 0.1, 1e-9);
+    tickEffects(0.05);
+    truthy(node.tint_timer > 0, 'на половине срока вспышка жива');
+    tickEffects(0.06);
+    eq(node.tint, null, 'после срока тон снят');
+    eq(node.tint_timer, 0, 'таймер обнулён');
+
+    // Граница: нулевая (и отрицательная) длительность НЕ оставляет тон навсегда.
+    flashNode(node, 0x00ff00ff, 120);
+    flashNode(node, 0x00ff00ff, 0);
+    eq(node.tint, null, 'ms = 0 снимает тон, а не красит узел навсегда');
+    eq(node.tint_timer, 0);
+    flashNode(node, 0x00ff00ff, -5);
+    eq(node.tint, null, 'отрицательная длительность — то же самое');
+});
+
+test('тряска узла живёт свой срок и обнуляется', () => {
+    fresh();
+    const node = new Node('sprite', {});
+    node.shake_timer = 0;
+    node.shake_amount = 0;
+    shakeNode(node, 7, 100);
+    eq(node.shake_amount, 7);
+    near(node.shake_timer, 0.1, 1e-9);
+    tickEffects(0.05);
+    truthy(node.shake_timer > 0, 'тряска ещё идёт');
+    tickEffects(0.06);
+    eq(node.shake_timer, 0, 'таймер тряски обнулён');
+    eq(node.shake_amount, 0, 'амплитуда сброшена');
+
+    shakeNode(node, 5, 0);
+    eq(node.shake_amount, 0, 'тряска на ноль мс ничего не взводит');
 });
 
 // --- finished() как Promise -------------------------------------------------

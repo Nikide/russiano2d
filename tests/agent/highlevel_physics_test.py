@@ -94,6 +94,70 @@ def main():
         check(a.eval("$.store.get('rayIgnoreAllNull')") is True,
               "ignore всех стен даёт null, а не исключение")
 
+        # --- §7. Устойчивые контакты и формы -----------------------------------
+        # Вырожденный контур: тела НЕТ, и это видно машине, а не только в логе.
+        bad = a.eval("""(() => {
+            const n = $('<rect>', { id: '__bad' }).at(2500, 300).size(40, 40)
+                .body('dynamic').appendTo($.world);
+            n.shape('polygon', [0, 0, 0, 0, 0, 0]);
+            const body = n.get(0).body;
+            n.remove();
+            return body;
+        })()""")
+        check(bad == -1, "вырожденный полигон: тело не создано (без подмены прямоугольником)")
+        errs = a.eval("$.physics.errors()")
+        check(isinstance(errs, dict) and any(e.get("code") == "shape_invalid" for e in errs.get("errors", [])),
+              "ошибка формы видна машине через $.physics.errors()")
+
+        # Сенсор: контактной нормали у него НЕТ — нулевой вектор не выдумываем.
+        a.eval("""(() => {
+            $.store.set('sensorSeen', null);
+            const z = $('<rect>', { id: '__sens' }).at(2600, 500).size(80, 80)
+                .body('static').appendTo($.world);
+            z.sensor(true).contacts(true);
+            z.on('collide', (e) => {
+                if (!$.store.get('sensorSeen')) {
+                    $.store.set('sensorSeen', { hasNormal: e.data.hasNormal, nx: e.data.nx,
+                                                sensor: e.data.sensor });
+                }
+            });
+            $('<circle>', { id: '__sball' }).at(2600, 250).size(16, 16)
+                .collisionCircle(8).body('dynamic').velocity(0, 400).appendTo($.world);
+            return true;
+        })()""")
+        a.step(40)
+        seen = a.eval("$.store.get('sensorSeen')")
+        check(seen is not None and seen.get("hasNormal") is False
+              and seen.get("nx") is None and seen.get("sensor") is True,
+              f"сенсор: контакт без выдуманной нормали ({seen})")
+
+        # Фаза stay — opt-in и приходит, пока касание продолжается.
+        a.eval("""(() => {
+            $.store.set('stays', 0);
+            $('<wall>', { id: '__stay-g' }).at(2900, 700).size(200, 32).appendTo($.world);
+            const b = $('<circle>', { id: '__stay-b' }).at(2900, 600).size(16, 16)
+                .collisionCircle(8).body('dynamic').velocity(0, 300).appendTo($.world);
+            b.contacts(true, { stay: true });
+            b.on('stay', () => $.store.set('stays', ($.store.get('stays') || 0) + 1));
+            return true;
+        })()""")
+        a.step(60)
+        stays = a.eval("$.store.get('stays')") or 0
+        check(stays >= 5, f"stay-события идут, пока тело касается ({stays})")
+
+        # Поколение тела: id переиспользуется, но события не путаются.
+        gen = a.eval("""(() => {
+            const b1 = engine.createBody({ x: -900, y: -900, halfW: 8, halfH: 8, type: engine.DYNAMIC });
+            const g1 = engine.bodyGeneration(b1);
+            engine.destroyBody(b1);
+            const b2 = engine.createBody({ x: -900, y: -900, halfW: 8, halfH: 8, type: engine.DYNAMIC });
+            const g2 = engine.bodyGeneration(b2);
+            engine.destroyBody(b2);
+            return { g1: g1, g2: g2 };
+        })()""")
+        check(gen.get("g2") > gen.get("g1"),
+              f"поколение тела растёт при переиспользовании id ({gen})")
+
         # --- Движок жив --------------------------------------------------------
         a.step(30)
         check(a.eval("engine.frame > 0") is True, "движок продолжает работать")

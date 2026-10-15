@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
 """Dust2 reference acceptance through the public API and actual native frames."""
-import json,sys,subprocess
+import json,os,sys,subprocess
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 from agent_client import Agent
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from re2d_skip import skip_without_sdk_command, skip_without_re2d   # noqa: E402
+if skip_without_sdk_command('world-compile', what='Dust2 portal regression'):
+    sys.exit(0)
 failed=[]
 def check(ok,name):
  print(('ok ' if ok else 'FAIL ')+name,flush=True)
  if not ok:failed.append(name)
 def main():
+ sdk = os.environ.get('R2D_SDK_BINARY', 'build/r2d-sdk')
  compiled=Path('build/dust2-portal-regression.re2dworld')
- run=subprocess.run(['build/r2d-sdk','world-compile','demos/re2d_dust2/dust2.re2dmap','--renderer','--output',str(compiled)],capture_output=True,text=True)
+ run=subprocess.run([sdk,'world-compile','demos/re2d_dust2/dust2.re2dmap','--renderer','--output',str(compiled)],capture_output=True,text=True)
  check(run.returncode==0,'current native SDK recompiles slope side portals without precision rejection')
  if run.returncode:return 1
  with Agent(game='demos/re2d_dust2',seed=7) as a:
+  if skip_without_re2d(a):
+      return
   check(a.eval('view.x===1040&&view.y===1840&&view.h===48&&view.yaw===-90') is True,'demo starts at T spawn')
   check(a.eval('world.spanAt(1040,1840,800)!==null&&world.spanAt(1200,240,800)!==null&&world.spanAt(1360,400,800)!==null') is True,'open T, CT ramp and raised A have air space above wall tops')
   check(a.eval('world.spanAt(240,1360,800)===null&&world.spanAt(2180,1840,800)===null') is True,'tunnels and club retain closed height bounds')

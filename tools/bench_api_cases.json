@@ -672,16 +672,6 @@
     "size": 2
   },
   {
-    "id": "rotsprite",
-    "modules": [
-      "rotsprite"
-    ],
-    "description": "Native Re2DSprite synthesize changing pose",
-    "setup": "const n=$.re2dSprite.from('tests/fixtures/sdk/re2d_proj/animal.character.json',{id:'animal'});",
-    "operation": "n.re2dPose(i%360,0);return n.get(0).rot_sprite.sprite+1",
-    "size": 1
-  },
-  {
     "id": "kinds",
     "modules": [
       "kinds"

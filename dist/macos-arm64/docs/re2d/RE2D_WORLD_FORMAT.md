@@ -122,7 +122,7 @@ World Studio редактирует source files через existing RmlUi: XY p
 
 Invalid source/bake/reload выдаёт ошибки на языке cells/spans/portals; previous runtime world сохраняется transactionally. Меняйте source, устраняйте diagnostic с object location, compile и проверяйте новую карту. Не исправляйте checksum вручную как authoring workflow.
 
-Sources: [native loader](../../src/re2d_world_topology.c), [baker](../../src/re2d_world_bake.c), [SDK compiler](../../sdk/native/sdk_world.c). Проверки: `tests/re2d/world_test.c`, `tests/agent/sdk_world_test.py`, `sdk_world_studio_test.py`, `re2d_world_renderer_test.py`.
+Sources: [native loader](../../src/re2d_world_topology.c), [baker](../../src/re2d_world_bake.c). Компилятор карт жил в SDK (`sdk/native/sdk_world.c`) и вырезан вместе с 3D-авторингом — см. [docs/SDK.md](../SDK.md) и [docs/BUILD.md](../BUILD.md) (`R2D_ENABLE_RE2D`). Проверки: `tests/re2d/world_test.c`, `tests/agent/re2d_world_renderer_test.py`.
 
 ### Видимость сбоку уклона
 

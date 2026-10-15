@@ -27,10 +27,12 @@
 | `$.fx.lightning(from, to, opts)` | молния с дрожанием и ветвями |
 | `$.fx.shockwave(x, y, opts)` | расширяющееся кольцо |
 | `$.fx.pulse(x, y, opts)` | вспышка-круг в точке (дуло, попадание) |
+| `$.fx.flash(color, ms | opts)` | вспышка **всего экрана**: заливка поверх кадра |
+| `$.fx.flashLeft()` | сколько миллисекунд осталось самой длинной вспышке экрана |
 | `$.fx.attractor(x, y, opts)` | поле сил: притяжение и вихрь для частиц |
 | `$.fx.impact(x, y, opts)` | готовый удар: волна + тряска + микро-стоп кадра |
-| `$.fx.hitStop(ms, scale)` | замедление времени на удар |
-| `$.fx.stats()` | сколько чего живо сейчас |
+| `$.fx.hitStop(ms, scale?)` | `scale` не задан — полная заморозка (`$.time.freeze`), `scale` — замедление (`$.time.slow`) |
+| `$.fx.stats()` | сколько чего живо сейчас (включая вспышки экрана) |
 | `$.fx.clear()` | убрать всё (обычно не нужно: сцена чистит сама) |
 
 Ленты и поля возвращают handle с `.stop()` (у `attractor` ещё `.move(x, y)` и
@@ -44,6 +46,10 @@ $.fx.pulse(muzzle.x, muzzle.y, { radius: 28, ms: 90, color: '#ffe0a0' });
 // Попадание: волна, искры (частицами) и микро-стоп.
 $.fx.impact(point.x, point.y, { radius: 60, shake: 4, hitStop: 60 });
 
+// Удар посильнее: залить кадр светом и заморозить мир на 90 мс.
+$.fx.flash('#fff3c4', { ms: 110, alpha: 0.55 });
+$.fx.hitStop(90);
+
 // Молния между игроком и целью.
 $.fx.lightning('#hero', '#enemy', { life: 120, jitter: 12, branches: 2, color: '#9fe8ff' });
 
@@ -51,6 +57,9 @@ $.fx.lightning('#hero', '#enemy', { life: 120, jitter: 12, branches: 2, color: '
 const hole = $.fx.attractor(x, y, { radius: 280, strength: 1600, swirl: 1.2, life: 2800 });
 $.time.after(2800, () => $.fx.shockwave(x, y, { radius: 420, ms: 520, width: 16, color: '#c9a6ff' }));
 ```
+
+Готовый хит-фидбек одной строкой (`$.hitFx`: искры + вспышки + тряска +
+hit-stop + отдача + squash) — [hits.md](hits.md).
 
 ---
 
@@ -68,6 +77,12 @@ $.time.after(2800, () => $.fx.shockwave(x, y, { radius: 420, ms: 520, width: 16,
 
 **`shockwave`** — `{ radius, ms, width, color, blend, ease }`. `ease` — `'out'`
 (по умолчанию, быстро в начале) или `'linear'`.
+
+**`flash`** — `{ ms, alpha, color, blend, ease }`; вторым аргументом можно
+передать просто `ms` (так зовёт катсцена). Заливка идёт поверх сцены в момент
+сборки кадра, переживает `$.time.freeze()` (удар должен подсветить кадр, даже
+когда мир стоит) и живёт на реальном времени. Одновременных вспышек не больше
+четырёх: пятая вытесняет самую старую, иначе экран уходит в белый.
 
 **`attractor`** — `{ radius, strength, swirl, life, visual, color, edge }`.
 `strength` — сила притяжения, `swirl` — доля тангенциальной составляющей
@@ -102,6 +117,14 @@ $.time.after(2800, () => $.fx.shockwave(x, y, { radius: 420, ms: 520, width: 16,
 Смена сцены чистит эффекты: `resetFx()` вызывается из `scene.js` вместе с
 очисткой мира.
 
+Вспышки экрана — последними в `drawFx`: они заливают кадр поверх остальных VFX.
+Квадрат со стороной в диагональ вида покрывает экран при любом зуме и повороте
+камеры.
+
+`tickFx(dt)` также зовёт `tickHits(dt)` — кадровый шаг хит-фидбека
+([hits.md](hits.md)); модуль ударов ставится из `installFx`, без правок
+`api.js`.
+
 ---
 
 ## 5. Ограничения
@@ -120,5 +143,6 @@ $.time.after(2800, () => $.fx.shockwave(x, y, { radius: 420, ms: 520, width: 16,
 ## 6. Тесты
 
 `tests/js/fx_test.mjs` (qjs, без движка) проверяет времена жизни, привязку
-ленты к цели, поля сил, отсечение по камере и сброс. Демо-проверка —
-`tests/agent/demos_test.py shooter_witch`.
+ленты к цели, поля сил, отсечение по камере, вспышки экрана, передачу hit-stop
+в `$.time` и сброс. Демо-проверка — `tests/agent/demos_test.py shooter_witch`,
+живой хит-фидбек — `tests/agent/highlevel_feel_test.py`.

@@ -4,7 +4,7 @@
 `--game demos/real2d` находил их первым (порядок разрешения путей —
 [docs/BUILD.md](../../../docs/BUILD.md)).
 
-Ожидаемые имена (как у v2/v3, см. [demos/rotsprite](../rotsprite/README.md)):
+Ожидаемые имена (как у v2/v3, см. [demos/rotsprite](../../rotsprite/README.md)):
 
 | Файл | Что внутри |
 |---|---|

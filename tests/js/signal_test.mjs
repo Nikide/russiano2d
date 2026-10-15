@@ -10,7 +10,7 @@
 // ===========================================================================
 
 import { test, eq, truthy, falsy, joined, finish } from './_harness.mjs';
-import { ctx } from '../../src/highlevel/core.js';
+import { ctx, Node } from '../../src/highlevel/core.js';
 import {
     createBus, subscribe, unsubscribe, emit, clearBus, subscriberCount,
     subscribersOf, busNames, waitFor, waiterCount, pendingEmits,
@@ -234,6 +234,139 @@ test('$.signal.waitFor с timeout отменяется по игровому т�
     } finally {
         ctx.time = null;
     }
+});
+
+// ---------------------------------------------------------------------------
+// §13: lifecycle scope, production-события, изоляция node events
+// ---------------------------------------------------------------------------
+
+function fakeScope(name) {
+    const items = [];
+    const scope = {
+        name: name || 'scope',
+        _state: 'active',
+        state() { return scope._state; },
+        own(kind, item, cancel) {
+            if (scope._state !== 'active') {
+                if (typeof cancel === 'function') cancel('scope закрыт');
+                return false;
+            }
+            items.push({ kind, item, cancel });
+            return true;
+        },
+        count() { return items.length; },
+        close(reason) {
+            scope._state = 'closing';
+            for (const entry of items.splice(0)) entry.cancel(reason);
+            scope._state = 'closed';
+            return true;
+        },
+    };
+    return scope;
+}
+
+test('§13 scope: подписка снимается при закрытии области', () => {
+    const $sc = {};
+    installSignal($sc);
+    const scope = fakeScope('room');
+    let calls = 0;
+    const id = $sc.signal.on('enemy:died', () => { calls++; }, { scope });
+    eq($sc.signal.count('enemy:died'), 1, 'подписка создана');
+    eq(scope.count(), 1, 'область владеет подпиской');
+    scope.close('restart комнаты');
+    eq($sc.signal.count('enemy:died'), 0, 'подписка снята');
+    eq($sc.signal.emit('enemy:died'), 0, 'событие больше никого не зовёт');
+    eq(calls, 0);
+    truthy(id > 0);
+});
+
+test('§13 scope: ожидание закрытой области завершается отменой', () => {
+    const $sc = {};
+    installSignal($sc);
+    const scope = fakeScope('room:wait');
+    const waiter = $sc.signal.waitFor('boss:died', { scope });
+    eq($sc.signal.waiters('boss:died'), 1);
+    scope.close('сцена ушла');
+    truthy(waiter.done(), 'ожидание завершено');
+    truthy(waiter.cancelled, 'завершено именно отменой');
+    truthy(/сцена ушла|отменено/.test(String(waiter.error)), String(waiter.error));
+    eq($sc.signal.waiters('boss:died'), 0, 'ожидание снято с шины');
+});
+
+test('§13 scope: закрывающаяся область не принимает новые подписки', () => {
+    const $sc = {};
+    installSignal($sc);
+    const scope = fakeScope('room:closing');
+    scope._state = 'closing';
+    let calls = 0;
+    const id = $sc.signal.on('x', () => { calls++; }, { scope });
+    eq(id, 0, 'подписка не создана');
+    eq($sc.signal.count('x'), 0);
+    $sc.signal.emit('x');
+    eq(calls, 0);
+});
+
+test('§13 once остаётся once при вложенном emit', () => {
+    const $o = {};
+    installSignal($o);
+    let calls = 0;
+    $o.signal.once('tick', () => { calls++; $o.signal.emit('tick'); });
+    eq($o.signal.emit('tick'), 1, 'первый emit вызвал подписчика');
+    eq(calls, 1, 'вложенный emit не вызвал once второй раз');
+});
+
+test('§13 изменение подписок во время dispatch безопасно', () => {
+    const $o = {};
+    installSignal($o);
+    const order = [];
+    const late = () => order.push('late');
+    $o.signal.on('go', () => {
+        order.push('first');
+        $o.signal.on('go', late);      // новый подписчик — только следующие события
+        $o.signal.off('go', second);
+    });
+    const second = () => order.push('second');
+    $o.signal.on('go', second);
+    $o.signal.emit('go');
+    eq(joined(order, ','), 'first', 'снимок рассылки не изменился');
+    $o.signal.emit('go');
+    truthy(order.indexOf('late') >= 0, 'новый подписчик получил следующий emit');
+    eq(order.filter((x) => x === 'second').length, 0, 'отписанный не вызвался');
+});
+
+test('§13 node events не пересылаются в $.signal незаметно', () => {
+    const $o = {};
+    installSignal($o);
+    if (!ctx.$ || typeof ctx.$._dispatchGlobal !== 'function') ctx.$ = { _dispatchGlobal: () => {} };
+    let signals = 0;
+    let node_calls = 0;
+    $o.signal.on('boom', () => { signals++; });
+    const node = new Node('rect', { id: 'n-isolated' });
+    node.on('boom', () => { node_calls++; });
+    node.emit('boom', { power: 1 });
+    eq(node_calls, 1, 'событие узла дошло до узла');
+    eq(signals, 0, 'и НЕ попало в шину сигналов');
+    node.destroy();
+});
+
+test('§13 production-событие: логические ID, tick и сам payload', () => {
+    const $o = {};
+    installSignal($o);
+    if (!ctx.$ || typeof ctx.$._dispatchGlobal !== 'function') ctx.$ = { _dispatchGlobal: () => {} };
+    ctx.time = { frame: () => 42 };
+    const node = new Node('rect', { id: 'hero' });
+    const ev = $o.signal.event('attack:hit', { power: 5 }, { id: 'e7', source: node, target: '#enemy' });
+    eq(ev.id, 'e7');
+    eq(ev.name, 'attack:hit');
+    eq(ev.tick, 42);
+    eq(ev.source, 'hero', 'источник — логический id узла, не native handle');
+    eq(ev.target, '#enemy');
+    let got = null;
+    $o.signal.on('attack:hit', (payload) => { got = payload; });
+    eq($o.signal.emitEvent(ev), 1);
+    eq(got, ev, 'подписчик получил тот же объект события');
+    node.destroy();
+    ctx.time = null;
 });
 
 finish();

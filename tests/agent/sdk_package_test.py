@@ -42,7 +42,8 @@ def main():
             assert r.returncode==0,r.stdout+r.stderr
             result=json.loads(r.stdout);assert result['ok'],result
             return result
-        check(len(command(['tools'])['tools'])==18, 'нативный CLI находит реестр без checkout')
+        tools_count = len(json.load(open(os.path.join(ROOT, 'sdk_tools.json'), encoding='utf-8'))['tools'])
+        check(len(command(['tools'])['tools'])==tools_count, 'нативный CLI находит реестр без checkout')
         check(len(command(['templates'])['templates'])==4, 'нативный CLI находит шаблоны без checkout')
         project=str(Path(tmp)/'new-game')
         command(['new','blank',project,'--name','Packaged SDK game'])
@@ -61,7 +62,7 @@ def main():
                     if a.eval('$.sdkApp.state.busy')==0:return
                 raise AssertionError('SDK timeout')
             a.step(20);idle()
-            check(a.eval('$.sdk.available()') and a.eval('$.sdkApp.snapshot().registry.tools.length')==18,'GUI SDK запускается и загружает 18 инструментов')
+            check(a.eval('$.sdk.available()') and a.eval('$.sdkApp.snapshot().registry.tools.length')==tools_count,'GUI SDK запускается и загружает все инструменты реестра')
             a.eval('$.sdkApp.openProject('+json.dumps(project)+')');idle()
             a.eval('$.sdkApp.loadTemplates()');idle()
             a.screenshot(ROOT+'/build/sdk_package_shell.png')

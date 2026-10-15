@@ -151,10 +151,52 @@ export function createGeneratorScheduler(generator, opts) {
 // Подсистема
 // ---------------------------------------------------------------------------
 
-export function installTask($) {
-    const active = new Set();
+/**
+ * Задачи, которые ждут кадра. Список модульный: кадровый цикл api.js зовёт
+ * tickTask(dt) один раз, а не ставит по хуку $.update на задачу. Раньше хук
+ * никогда не снимался (`.update(fn)` не отдаёт отписку), поэтому `done`
+ * вызывался каждый кадр после завершения, а список хуков рос с каждой задачей.
+ */
+let active = new Set();
 
-    /** Ставит планировщик на игровой кадр. Возвращает задачу. */
+/** Одна задача: шаг планировщика и ОДНО завершение. */
+function stepTask(item, dt) {
+    if (!item || item.done_called) return;
+    const scheduler = item.scheduler;
+    const finished = scheduler.tick(dt);
+    if (item.label && item.loading && typeof item.loading.progress === 'function') {
+        item.loading.progress(scheduler.progress(), item.label);
+    }
+    if (finished || scheduler.aborted) item.finish(scheduler.aborted);
+}
+
+/**
+ * Кадровый шаг всех задач. Вызывается из api.js (`tickTask(dt)`).
+ * Возвращает число задач, которые ещё в работе.
+ */
+export function tickTask(dt) {
+    if (active.size === 0) return 0;
+    for (const item of Array.from(active)) stepTask(item, dt);
+    return active.size;
+}
+
+/** Сколько задач сейчас идёт (для тестов и отладки). */
+export function runningTasks() { return active.size; }
+
+/** Причина, по которой scope закрывает задачи (для журнала и onDone). */
+function scopeOf(explicit) {
+    if (explicit && typeof explicit === 'object' && typeof explicit.own === 'function') return explicit;
+    if (typeof ctx.scopeGet === 'function') {
+        const found = explicit === undefined || explicit === null ? null : ctx.scopeGet(explicit);
+        if (found) return found;
+    }
+    return ctx.scope_current || null;
+}
+
+export function installTask($) {
+    active = new Set();
+
+    /** Ставит задачу на кадровый шаг tickTask. Возвращает задачу. */
     function schedule(scheduler, opts) {
         const spec = opts || {};
         const label = spec.label || '';
@@ -164,37 +206,38 @@ export function installTask($) {
 
         const task = {
             scheduler,
-            /** Отменить: работа не докрутится до конца. */
-            abort() { scheduler.abort(); active.delete(task); stop(); },
+            label,
+            loading,
+            done_called: false,
+            aborted: false,
+            /** Отменить: работа не докрутится до конца, `done` придёт один раз. */
+            abort() {
+                if (task.done_called) return false;
+                task.aborted = true;
+                scheduler.abort();
+                task.finish(true);
+                return true;
+            },
             get progress() { return scheduler.progress(); },
             get finished() { return scheduler.finished; },
         };
 
-        let off = null;
-        const stop = () => { if (off) { off(); off = null; } active.delete(task); };
+        /** Единственная точка завершения: снимает задачу и зовёт done один раз. */
+        task.finish = (aborted) => {
+            if (task.done_called) return;
+            task.done_called = true;
+            active.delete(task);
+            if (typeof onDone === 'function') onDone(aborted === true);
+        };
+        task.tick = (dt) => stepTask(task, dt);
 
-        // Хук ставит $.update (в ctx.update его нет — этой ошибкой задача
-        // падала на первом же шаге).
-        const addUpdate = ($ && typeof $.update === 'function')
-            ? (fn) => { $.update(fn); return () => {}; }
-            : () => {
-                if (typeof ctx !== 'undefined' && ctx && typeof ctx.log === 'function') {
-                    ctx.log('$.task: нет $.update — задача не запущена');
-                }
-                return () => {};
-            };
-
-        off = addUpdate(() => {
-            const finished = scheduler.tick();
-            if (label && loading && typeof loading.progress === 'function') {
-                loading.progress(scheduler.progress(), label);
-            }
-            if (finished || scheduler.aborted) {
-                stop();
-                if (typeof onDone === 'function') onDone(scheduler.aborted);
-            }
-        });
         active.add(task);
+        const scope = scopeOf(spec.scope);
+        if (scope && typeof scope.own === 'function') {
+            scope.own('task', task, () => task.abort(), spec);
+        }
+        // Первый шаг делает кадровый цикл в тот же кадр: tickTask(dt) идёт
+        // после логики игры, поэтому задача не «замирает» до следующего кадра.
         return task;
     }
 
@@ -252,6 +295,7 @@ export function installTask($) {
                 budget: spec.budget,
                 label: spec.label,
                 done: spec.done,
+                scope: spec.scope,
                 step: (i) => each(list[i], i, list.length),
             });
         },

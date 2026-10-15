@@ -18,6 +18,7 @@ import zipfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent, ROOT   # noqa: E402
+from re2d_skip import skip_without_re2d   # noqa: E402
 
 # Углы из спеки §17: ни один не совпадает с якорным (0/30/…/330).
 FIXED_DEG = [33.7, 58.2, 103.4, 177.1, 238.6, 319.3, 37.5]
@@ -66,6 +67,8 @@ def audit_package():
 
 def main():
     with Agent(game="demos/real2d", seed=7) as a:
+        if skip_without_re2d(a):
+            return
         a.step(5)
         info = a.eval("real2dDemo.info()")
         if not isinstance(info, dict):

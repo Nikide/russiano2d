@@ -48,7 +48,9 @@
     X(age) X(life) X(end_size) X(t) X(v) X(_uk)                                   \
     X(_anchor) X(anchorLeft) X(anchorTop) X(anchorRight) X(anchorBottom)           \
     X(offsetLeft) X(offsetTop) X(offsetRight) X(offsetBottom) X(themeName)         \
-    X(_style) X(_styleStates)
+    X(_style) X(_styleStates)                                                      \
+    X(local_mode) X(local_x) X(local_y) X(local_angle) X(local_scale_x)             \
+    X(local_scale_y) X(_t_gen) X(_t_busy) X(_t_wx) X(_t_wy) X(_t_wa) X(_t_wsx) X(_t_wsy)
 
 typedef struct {
 #define R2D_DECL_ATOM(name) JSAtom name;
@@ -259,6 +261,180 @@ static JSValue js_sync_bodies(JSContext *ctx, JSValueConst this_val, int argc, J
         JS_FreeValue(ctx, node);
     }
     return JS_UNDEFINED;
+}
+
+// ---------------------------------------------------------------------------
+// engine.nodes.resolveTransforms(list, gen, cb) — проход локальных трансформов
+// (§39, resolveLocalTransforms() из core.js)
+// ---------------------------------------------------------------------------
+//
+// `list` — узлы в локальном режиме (node.local_mode === true). Для каждого
+// вычисляется мировой трансформ композицией родителей:
+//   angle = angle_родителя + local_angle;
+//   scale = scale_родителя * local_scale;
+//   point = parent + R(angle_родителя) * (local_xy * scale_родителя).
+// Результат пишется в x/y/angle/scale_x/scale_y — те же поля, что читают
+// отрисовка и физика, поэтому ни одна подсистема не меняется.
+//
+// `gen` — номер поколения прохода: поля _t_gen/_t_busy узла говорят, что он
+// уже пересчитан (или находится в обработке — защита от цикла в цепочке
+// родителей, appendTo такую цепочку не создаёт, но данные может испортить
+// игра). `cb(node)` зовётся для изменившихся узлов с телом: JS ставит тело в
+// скомпонованную мировую точку.
+//
+// Возвращает число узлов, у которых трансформ изменился.
+
+// Число поля с запасным значением: незаданное локальное поле = умолчание.
+static inline double num_or(JSContext *ctx, JSValueConst obj, JSAtom atom, double fallback)
+{
+    const double d = num_prop(ctx, obj, atom);
+    return isfinite(d) ? d : fallback;
+}
+
+// 1 — пересчитан и изменился, 0 — не изменился/не локальный.
+static int resolve_one(JSContext *ctx, JSValueConst node, double gen, JSValueConst cb, int depth)
+{
+    if (depth > 4096) return 0;               // слишком длинная цепочка/цикл
+    if (!truthy_prop(ctx, node, A.local_mode)) return 0;
+    if (num_prop(ctx, node, A._t_gen) == gen) return 0;    // уже в этом поколении
+    if (num_prop(ctx, node, A._t_busy) == gen) return 0;   // цикл: узел в обработке
+    set_num(ctx, node, A._t_busy, gen);
+
+    JSValue parent = prop(ctx, node, A.parent_node);
+    const bool has_parent = JS_IsObject(parent);
+    if (has_parent) resolve_one(ctx, parent, gen, cb, depth + 1);
+
+    // Мировой трансформ родителя читаем один раз: он нужен и для «принятия»
+    // внешней записи, и для композиции.
+    double px = 0.0, py = 0.0, pa = 0.0, psx = 1.0, psy = 1.0;
+    if (has_parent) {
+        px = num_prop(ctx, parent, A.x);
+        py = num_prop(ctx, parent, A.y);
+        pa = num_or(ctx, parent, A.angle, 0.0);
+        psx = num_or(ctx, parent, A.scale_x, 1.0);
+        psy = num_or(ctx, parent, A.scale_y, 1.0);
+    }
+
+    // Внешняя запись мирового трансформа: нативный твин (tween_write ниже) и
+    // чужие модули пишут node.x/y/angle/scale_* напрямую, минуя JS-сеттеры.
+    // Если значения разошлись с последним скомпонованным (_t_w*), принимаем их
+    // как МИРОВЫЕ и пересчитываем в локальные — иначе проход молча вернул бы
+    // узел назад.
+    const double last_x = num_prop(ctx, node, A._t_wx);
+    const double cur_x = num_prop(ctx, node, A.x);
+    const double cur_y = num_prop(ctx, node, A.y);
+    const double cur_a = num_prop(ctx, node, A.angle);
+    const double cur_sx = num_prop(ctx, node, A.scale_x);
+    const double cur_sy = num_prop(ctx, node, A.scale_y);
+    if (isfinite(last_x) &&
+        !(cur_x == last_x && cur_y == num_prop(ctx, node, A._t_wy) &&
+          cur_a == num_prop(ctx, node, A._t_wa) &&
+          cur_sx == num_prop(ctx, node, A._t_wsx) &&
+          cur_sy == num_prop(ctx, node, A._t_wsy))) {
+        if (!has_parent) {
+            set_num(ctx, node, A.local_x, cur_x);
+            set_num(ctx, node, A.local_y, cur_y);
+            set_num(ctx, node, A.local_angle, cur_a);
+            set_num(ctx, node, A.local_scale_x, cur_sx);
+            set_num(ctx, node, A.local_scale_y, cur_sy);
+        } else {
+            const double sx0 = psx == 0.0 ? 1.0 : psx;
+            const double sy0 = psy == 0.0 ? 1.0 : psy;
+            const double c = cos(pa);
+            const double sn = sin(pa);
+            const double dx = cur_x - px;
+            const double dy = cur_y - py;
+            set_num(ctx, node, A.local_x, (dx * c + dy * sn) / sx0);
+            set_num(ctx, node, A.local_y, (-dx * sn + dy * c) / sy0);
+            set_num(ctx, node, A.local_angle, cur_a - pa);
+            set_num(ctx, node, A.local_scale_x, cur_sx / sx0);
+            set_num(ctx, node, A.local_scale_y, cur_sy / sy0);
+        }
+    }
+    JS_FreeValue(ctx, parent);
+
+    const double lx = num_or(ctx, node, A.local_x, 0.0);
+    const double ly = num_or(ctx, node, A.local_y, 0.0);
+    const double la = num_or(ctx, node, A.local_angle, 0.0);
+    const double lsx = num_or(ctx, node, A.local_scale_x, 1.0);
+    const double lsy = num_or(ctx, node, A.local_scale_y, 1.0);
+
+    double nx, ny, na, nsx, nsy;
+    if (!has_parent) {
+        // Корень: мир и локальное совпадают.
+        nx = lx; ny = ly; na = la; nsx = lsx; nsy = lsy;
+    } else {
+        const double c = cos(pa);
+        const double s = sin(pa);
+        const double ox = lx * psx;
+        const double oy = ly * psy;
+        nx = px + c * ox - s * oy;
+        ny = py + s * ox + c * oy;
+        na = pa + la;
+        nsx = psx * lsx;
+        nsy = psy * lsy;
+    }
+
+    const bool changed = !(nx == num_prop(ctx, node, A.x) && ny == num_prop(ctx, node, A.y) &&
+                           na == num_prop(ctx, node, A.angle) &&
+                           nsx == num_prop(ctx, node, A.scale_x) &&
+                           nsy == num_prop(ctx, node, A.scale_y));
+    if (changed) {
+        set_num(ctx, node, A.x, nx);
+        set_num(ctx, node, A.y, ny);
+        set_num(ctx, node, A.angle, na);
+        set_num(ctx, node, A.scale_x, nsx);
+        set_num(ctx, node, A.scale_y, nsy);
+    }
+    set_num(ctx, node, A._t_gen, gen);
+    // Запоминаем скомпонованное: по нему следующий проход отличит собственную
+    // запись от внешней (см. выше).
+    set_num(ctx, node, A._t_wx, nx);
+    set_num(ctx, node, A._t_wy, ny);
+    set_num(ctx, node, A._t_wa, na);
+    set_num(ctx, node, A._t_wsx, nsx);
+    set_num(ctx, node, A._t_wsy, nsy);
+
+    if (changed && num_prop(ctx, node, A.body) >= 0 && JS_IsFunction(ctx, cb)) {
+        JSValue arg = JS_DupValue(ctx, node);
+        JSValue r = JS_Call(ctx, cb, JS_UNDEFINED, 1, &arg);
+        JS_FreeValue(ctx, arg);
+        if (JS_IsException(r)) {
+            // Ошибку не глотаем молча: снимаем исключение и логируем, иначе она
+            // всплыла бы на следующем JS-вызове в непонятном месте.
+            JSValue e = JS_GetException(ctx);
+            const char *text = JS_ToCString(ctx, e);
+            R2D_ERROR("resolveTransforms: ошибка синхронизации тела: %s", text ? text : "?");
+            if (text) JS_FreeCString(ctx, text);
+            JS_FreeValue(ctx, e);
+        }
+        JS_FreeValue(ctx, r);
+    }
+    return changed ? 1 : 0;
+}
+
+static JSValue js_resolve_transforms(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 2) return JS_ThrowTypeError(ctx, "nodes.resolveTransforms: нужны список и поколение");
+    double generation = 0.0;
+    if (JS_ToFloat64(ctx, &generation, argv[1]) < 0) {
+        JS_FreeValue(ctx, JS_GetException(ctx));
+        return JS_NewInt32(ctx, 0);
+    }
+    JSValueConst cb = argc > 2 ? argv[2] : JS_UNDEFINED;
+    const uint32_t n = list_length(ctx, argv[0]);
+    int changed = 0;
+    for (uint32_t i = 0; i < n; ++i) {
+        JSValue node = JS_GetPropertyUint32(ctx, argv[0], i);
+        if (!JS_IsObject(node) || truthy_prop(ctx, node, A.removed)) {
+            JS_FreeValue(ctx, node);
+            continue;
+        }
+        changed += resolve_one(ctx, node, generation, cb, 0);
+        JS_FreeValue(ctx, node);
+    }
+    return JS_NewInt32(ctx, changed);
 }
 
 // ---------------------------------------------------------------------------
@@ -1936,6 +2112,8 @@ int r2d_nodes_install(JSContext *ctx, JSValue engine)
     JSValue nodes = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, nodes, "specialTags", JS_NewCFunction(ctx, js_special_tags, "specialTags", 1));
     JS_SetPropertyStr(ctx, nodes, "syncBodies", JS_NewCFunction(ctx, js_sync_bodies, "syncBodies", 1));
+    // §39: пакетный пересчёт локальных трансформов (core.js зовёт его сам).
+    JS_SetPropertyStr(ctx, nodes, "resolveTransforms", JS_NewCFunction(ctx, js_resolve_transforms, "resolveTransforms", 3));
     JS_SetPropertyStr(ctx, nodes, "worldEvents", JS_NewCFunction(ctx, js_world_events, "worldEvents", 3));
     JS_SetPropertyStr(ctx, nodes, "hover", JS_NewCFunction(ctx, js_hover, "hover", 3));
     JS_SetPropertyStr(ctx, nodes, "sortWorld", JS_NewCFunction(ctx, js_sort_world, "sortWorld", 2));

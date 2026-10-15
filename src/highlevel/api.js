@@ -15,6 +15,12 @@ import {
     packColor, withAlpha, registerSelector, nodeBounds, boundsOverlap,
     makeRandom, dotSprite, resolveSprite, sheetFrames, regionSprite,
     nodesWithFacet, touchRegistry, beginBatch, endBatch, liveNodes, engineOf, nativeNodes,
+    // §39/§40: локальные трансформы и независимые области (см. core.js).
+    setWorldPosition, setWorldAngle, setWorldScale, worldScaleOf, isLocalSpace,
+    enterLocalSpace, exitLocalSpace, worldPointOf, localPointOf, worldTransformOf,
+    invalidateNodeTransform,
+    installTransformResolution, areaDefine, areaEnable, areaFind, areaListOf,
+    areaInfo, areaOverlap, areaByIndex, areaOwnerNode,
 } from './core.js';
 import { installWorld } from './world.js';
 import { installCamera, cameraTransform } from './camera.js';
@@ -22,9 +28,10 @@ import { installViewports } from './viewports.js';
 import { installTime, tickTime } from './time.js';
 import { installInput, shiftDown, ctrlDown, altDown } from './input.js';
 import { installSound } from './sound.js';
-import { installScene } from './scene.js';
+import { installScene, tickLifecycle } from './scene.js';
 import { installUi } from './ui.js';
 import { installDebug } from './debug.js';
+import { installDiag, report as diagReport } from './diag.js';
 import { createLoading } from './loading.js';
 import { installGfx } from './render.js';
 import { installStore } from './store.js';
@@ -64,7 +71,7 @@ import { installCollisionLayers } from './collision.js';
 import { installBsp } from './bsp.js';
 import { installAtlas } from './atlas.js';
 import { installCurve } from './curve.js';
-import { installTask } from './task.js';
+import { installTask, tickTask } from './task.js';
 import { installScript } from './script.js';
 import { installStory } from './story.js';
 import { installQuest } from './quest.js';
@@ -74,9 +81,15 @@ import { installItems } from './items.js';
 import { installCombat } from './combat.js';
 import { installWeapons } from './weapons.js';
 import { installRaid } from './raid.js';
-import { installCels } from './cels.js';
 import { installProc } from './proc.js';
 import { installKinds } from './kinds.js';
+// --- RE2D — необязательный слой 3D-авторинга спрайтов ------------------------
+// Модули ниже ставятся только когда нативное ядро их собрало
+// (R2D_ENABLE_RE2D=ON, см. src/CMakeLists.txt). В сборке платформера
+// (`-DR2D_ENABLE_RE2D=OFF`) engine.re2d / engine.rotsprite / engine.real2d не
+// существуют, и установка молча пропускается: $ остаётся обычным 2D-API.
+// Проверка одна на файл — loadRe2dSupport() ниже.
+import { installCels } from './cels.js';
 import { installRe2d, re2dMove } from './re2d.js';
 import { installRotSprite, tickRotSprite } from './rotsprite.js';
 import { installReal2d, tickReal2d } from './real2d.js';
@@ -158,7 +171,39 @@ function translateSelector(selector) {
                             (word) => tag_aliases.get(word) || word);
 }
 
+/**
+ * Собрано ли нативное ядро с RE2D (3D-авторинг спрайтов)?
+ *
+ * Единственная проверка, по которой `$` решает, ставить ли модули Re2D /
+ * RotSprite / Real2D / mesh / cels. Движок с `-DR2D_ENABLE_RE2D=OFF`
+ * (2D-платформерная сборка, см. src/CMakeLists.txt) не создаёт ни одного из
+ * этих объектов `engine.*`, поэтому установка пропускается целиком — а не
+ * падает на первом же `engine.re2d.*` внутри чужого модуля.
+ *
+ * Проверка живёт здесь, а не в отдельном «модуле возможностей», потому что
+ * читает ровно то, что видит загрузчик: наличие нативных биндингов. Тесты
+ * (tests/js/_harness.mjs) подставляют мок движка, поэтому проверка работает и
+ * без бинарника: нет мока `engine.re2d` — нет и 3D-модулей.
+ */
+function re2dAvailable() {
+    return !!(engine && engine.re2d && typeof engine.re2d.view === 'function');
+}
+
+/**
+ * Собрано ли нативное ядро с RE2D — на весь запуск.
+ *
+ * Значение выставляет createApi() (см. re2dAvailable()), читают кадровый цикл
+ * и applyControls: обе функции живут в этом же модуле, но вызываются после
+ * установки. Модульная переменная, а не локальная в createApi(): обработчики
+ * кадра — отдельные функции, локальную переменную они не видят
+ * (ReferenceError: re2dSupport is not defined каждым кадром).
+ */
+let re2dSupport = false;
+
 export function createApi() {
+    // Один раз на весь запуск: наличие нативных RE2D-биндингов во время работы
+    // не меняется (сборка либо с RE2D, либо без него).
+    re2dSupport = re2dAvailable();
     const $ = function (arg, attrs) {
         if (typeof arg === 'function') { $.ready(arg); return wrap([]); }
         if (arg === undefined || arg === null || arg === false) return wrap([]);
@@ -183,6 +228,9 @@ export function createApi() {
                 // { frames } в конструкторе делал бы то же, что .frames():
                 // без этого лист молча превращался в обычный атрибут.
                 if (attrs && attrs.frames !== undefined) applyFrames(node, attrs.frames);
+                // §5: узел, созданный в контексте $.scene.scope(...) или с
+                // атрибутом { scope }, принадлежит области владения.
+                if (typeof ctx.scopeTrack === 'function') ctx.scopeTrack(node);
                 return wrapOne(node);
             }
             return wrap(query(translateSelector(arg)));
@@ -216,6 +264,37 @@ export function createApi() {
 
     // --- Подсистемы ---------------------------------------------------------
     installWorld($);
+    // §7: машиночитаемые ошибки физики. Ошибка лимита тел или отвергнутого
+    // контура не должна жить только в логе: у игры и агента есть список фактов,
+    // который можно разобрать и, при желании, отправить в $.debug.reportError.
+    $.physics = {
+        /** Ошибки физики: `{ total, overflow, errors: [{ code, body, shape, value, detail }] }`. */
+        errors() {
+            const eng = engineOf();
+            if (typeof eng.physicsErrors !== 'function') return { total: 0, overflow: false, errors: [] };
+            return eng.physicsErrors();
+        },
+        /** Перенести накопленные ошибки в журнал диагностики и очистить кольцо. */
+        report() {
+            const list = $.physics.errors();
+            if (!list.errors.length) return 0;
+            if ($.debug && typeof $.debug.reportError === 'function') {
+                for (const e of list.errors) {
+                    $.debug.reportError('physics', new Error(e.detail || e.code), {
+                        code: e.code,
+                        fatal: e.code === 'body_limit',
+                    });
+                }
+            }
+            if (typeof engineOf().clearPhysicsErrors === 'function') engineOf().clearPhysicsErrors();
+            return list.errors.length;
+        },
+        /** Очистить кольцо ошибок. */
+        clear() {
+            if (typeof engineOf().clearPhysicsErrors === 'function') engineOf().clearPhysicsErrors();
+        },
+    };
+
     // Мультикамерность ставится ДО камеры: камера публикует её методы у себя
     // ($.camera.add/split/...), потому что для игры это одна подсистема.
     const viewports = installViewports($);
@@ -247,6 +326,9 @@ export function createApi() {
     $.fs = ctx.fs;
     $.store = ctx.store;
     $.debug = ctx.debug;
+    // §17: структурированные ошибки дописываются в УЖЕ опубликованный $.debug
+    // (installDebug отдаёт объект через ctx, поэтому раньше он не виден).
+    installDiag($);
     $.console = ctx.console;
     $.agent = ctx.agent;
     $.test = ctx.test;
@@ -416,13 +498,28 @@ export function createApi() {
     installCombat($);            // здоровье по зонам: $.combat
     installWeapons($);           // оружие и баллистика: $.weapons
     installRaid($);              // генерация рейда: $.raid
-    installCels($);              // граф кадров (псевдо-3D): $.cels
     installProc($);              // процедурный пиксель-арт: $.proc
-    installKinds($);             // виды узла: .kind(), $.kinds, Re2D (docs/RE2D.md)
-    installRotSprite($);         // развёртка всего персонажа: прототип головы
-    installReal2d($);            // Real2D v4: вычисляемый layered warp (docs/highlevel/real2d.md)
-    installRe2d($);              // Re2D: проход вида от первого лица, $.re2d (docs/RE2D.md)
-    $.mesh = installMesh($);     // меш со скелетом: $.mesh
+    installKinds($);             // виды узла: .kind(), $.kinds
+    installTrace($);             // журнал событий боя и сценария: $.trace (§13, §28)
+    // RE2D-семейство — только если нативное ядро собрано с ним (см. re2dAvailable).
+    // installKinds() выше ставится всегда: виды узлов нужны обычному 2D, а
+    // $.Re2D в выключенной сборке остаётся строкой-константой, которую нечем
+    // отрисовать — это честнее, чем отсутствующее поле (снимки и prefab'ы
+    // переживают JSON, docs/highlevel/kinds.md).
+    if (re2dAvailable()) {
+        installCels($);              // граф кадров (псевдо-3D): $.cels
+        installRotSprite($);         // развёртка всего персонажа: прототип головы
+        installReal2d($);            // Real2D v4: вычисляемый layered warp (docs/highlevel/real2d.md)
+        installRe2d($);              // Re2D: проход вида от первого лица, $.re2d (docs/RE2D.md)
+        $.mesh = installMesh($);     // меш со скелетом: $.mesh
+    }
+    /**
+     * Собрано ли нативное ядро с RE2D. `false` — сборка платформера
+     * (`-DR2D_ENABLE_RE2D=OFF`): нет ни `$.re2d`, ни `$.rotsprite`, ни
+     * `$.real2d`, ни `$.mesh`, ни `$.cels`. Поле нужно игре и инструментам,
+     * чтобы отличить «выключено при сборке» от «я неправильно вызвал».
+     */
+    $.re2dEnabled = re2dSupport;
     installReplay($);            // реплеи: запись ввода и воспроизведение
     installCutscene($, placeBody);   // катсцены в текущей сцене: $.cutscene
     installAlive($);             // психика NPC и режиссёр рейда: $.alive
@@ -517,6 +614,21 @@ function dispatchGlobal(node, name, data) {
 const FX_NAMES = new Set(['none', 'flash', 'dissolve', 'chroma', 'wave']);
 
 function installNodeMethods($) {
+    // === Идентичность =======================================================
+
+    /**
+     * Стабильный логический ID узла (`nid`, §4.2 и §14 Спецификации).
+     *
+     * Отличается от `uid` (номер создания, сбрасывается при перезагрузке
+     * скриптов) и от нативного body id: переживает снимок узла, по нему
+     * сопоставляется состояние между сохранением и загрузкой, он же попадает
+     * в события (§13) для трассировки. Только чтение: ID выдаёт движок.
+     */
+    def('nid', function () {
+        const node = this.nodes[0];
+        return node ? node.nid : null;
+    });
+
     // === Коллекция ==========================================================
 
     // .each() и .eachNode() объявлены в ядре (core.js, класс Wrapper): их зовут
@@ -555,14 +667,19 @@ function installNodeMethods($) {
     });
 
     // === Трансформ ==========================================================
+    //
+    // §39: узел по умолчанию живёт в мировых координатах (прежнее поведение).
+    // `.transformSpace('local')` включает локальный режим: координаты считаются
+    // относительно родителя, а .at/.angle/.scale/.flip на таком узле по-прежнему
+    // задают МИРОВЫЕ значения (пересчитываются в локальные) — совместимость.
+    // Локальные значения задают .localAt/.localAngle/.localScale.
+    installTransformResolution();
 
     def('at', function (x, y) {
         if (typeof x === 'object' && x !== null) { y = x.y; x = x.x; }
         return this.eachNode((_, el) => {
             const node = el;
-            node.x = x;
-            node.y = y;
-            if (node.body >= 0) engineOf().setPosition(node.body, x, y, node.angle);
+            setWorldPosition(node, x, y);
         });
     });
 
@@ -570,8 +687,7 @@ function installNodeMethods($) {
         if (typeof dx === 'object') { dy = dx.y; dx = dx.x; }
         return this.eachNode((_, el) => {
             const node = el;
-            node.x += dx; node.y += dy;
-            if (node.body >= 0) engineOf().setPosition(node.body, node.x, node.y, node.angle);
+            setWorldPosition(node, node.x + dx, node.y + dy);
         });
     });
 
@@ -618,15 +734,13 @@ function installNodeMethods($) {
     def('rotate', function (deg) {
         return this.eachNode((_, el) => {
             const node = el;
-            node.angle = (node.angle || 0) + deg * Math.PI / 180;
-            if (node.body >= 0) engineOf().setPosition(node.body, node.x, node.y, node.angle);
+            setWorldAngle(node, (node.angle || 0) + deg * Math.PI / 180);
         });
     });
     def('angle', function (rad) {
         return this.eachNode((_, el) => {
             const node = el;
-            node.angle = rad;
-            if (node.body >= 0) engineOf().setPosition(node.body, node.x, node.y, node.angle);
+            setWorldAngle(node, rad);
         });
     });
     defGet('rotation', (n) => n.angle, 0);
@@ -635,10 +749,106 @@ function installNodeMethods($) {
         if (typeof sx === 'object') { sy = sx.y; sx = sx.x; }
         return this.eachNode((_, el) => {
             const node = el;
-            node.scale_x = sx;
-            node.scale_y = sy === undefined ? sx : sy;
+            setWorldScale(node, sx, sy === undefined ? sx : sy);
         });
     });
+
+    // --- §39: локальные трансформы ------------------------------------------
+
+    /**
+     * Режим трансформа узла: `.transformSpace('local')` — координаты
+     * относительно родителя, `.transformSpace('world')` — обратно (по
+     * умолчанию мир). Без аргумента возвращает текущий режим строкой.
+     *
+     * Включение сохраняет вид: текущий мировой трансформ пересчитывается в
+     * локальный, поэтому ни узел, ни его дети не двигаются.
+     */
+    def('transformSpace', function (mode) {
+        if (mode === undefined) {
+            const node = this.nodes[0];
+            return node ? (isLocalSpace(node) ? 'local' : 'world') : 'world';
+        }
+        const local = String(mode) === 'local';
+        return this.eachNode((_, el) => { if (local) enterLocalSpace(el); else exitLocalSpace(el); });
+    });
+
+    /**
+     * Локальные координаты узла (относительно родителя). Включает локальный
+     * режим. `.localAt()` без аргументов возвращает `{ x, y }`.
+     */
+    def('localAt', function (x, y) {
+        if (x === undefined) {
+            const node = this.nodes[0];
+            return { x: node ? node.local_x || 0 : 0, y: node ? node.local_y || 0 : 0 };
+        }
+        if (typeof x === 'object' && x !== null) { y = x.y; x = x.x; }
+        return this.eachNode((_, el) => {
+            const node = el;
+            enterLocalSpace(node);
+            node.local_x = Number(x) || 0;
+            node.local_y = Number(y) || 0;
+            invalidateNodeTransform(node);
+        });
+    });
+
+    /** Локальный угол (радианы). Без аргумента — геттер. */
+    def('localAngle', function (rad) {
+        if (rad === undefined) {
+            const node = this.nodes[0];
+            if (!node) return 0;
+            return isLocalSpace(node) ? (node.local_angle || 0) : (node.angle || 0);
+        }
+        return this.eachNode((_, el) => {
+            const node = el;
+            enterLocalSpace(node);
+            node.local_angle = Number(rad) || 0;
+            invalidateNodeTransform(node);
+        });
+    });
+
+    /** Локальный масштаб (знаковый). Без аргумента — `{ x, y }`. */
+    def('localScale', function (sx, sy) {
+        if (sx === undefined) {
+            const node = this.nodes[0];
+            if (!node) return { x: 1, y: 1 };
+            return {
+                x: isLocalSpace(node) ? (node.local_scale_x === undefined ? 1 : node.local_scale_x) : node.scale_x,
+                y: isLocalSpace(node) ? (node.local_scale_y === undefined ? 1 : node.local_scale_y) : node.scale_y,
+            };
+        }
+        if (typeof sx === 'object' && sx !== null) { sy = sx.y; sx = sx.x; }
+        return this.eachNode((_, el) => {
+            const node = el;
+            enterLocalSpace(node);
+            node.local_scale_x = Number(sx);
+            node.local_scale_y = sy === undefined ? node.local_scale_x : Number(sy);
+            if (!Number.isFinite(node.local_scale_x)) node.local_scale_x = 1;
+            if (!Number.isFinite(node.local_scale_y)) node.local_scale_y = node.local_scale_x;
+            invalidateNodeTransform(node);
+        });
+    });
+
+    /**
+     * Точка в локальном пространстве узла → мировая координата:
+     * `$('#weapon').worldPoint(0, -12)` — дуло. Учитывает всю цепочку
+     * родителей, поворот и знаковый масштаб; камера не участвует.
+     */
+    defGet('worldPoint', function (node, lx, ly) {
+        if (lx !== undefined && typeof lx === 'object' && lx !== null) { ly = lx.y; lx = lx.x; }
+        return worldPointOf(node, Number(lx) || 0, Number(ly) || 0);
+    }, { x: 0, y: 0 });
+
+    /** Мировая точка → локальное пространство узла (обратное к .worldPoint()). */
+    defGet('localPoint', function (node, wx, wy) {
+        if (wx !== undefined && typeof wx === 'object' && wx !== null) { wy = wx.y; wx = wx.x; }
+        return localPointOf(node, Number(wx) || 0, Number(wy) || 0);
+    }, { x: 0, y: 0 });
+
+    /** Мировой трансформ узла с учётом цепочки: `{ x, y, angle, sx, sy }`. */
+    defGet('worldTransform', function (node) {
+        const t = worldTransformOf(node);
+        return { x: t.x, y: t.y, angle: t.angle, sx: t.sx, sy: t.sy };
+    }, { x: 0, y: 0, angle: 0, sx: 1, sy: 1 });
 
     // Скорость в пикселях в секунду. Раньше её можно было задать только
     // атрибутом в конструкторе, хотя справочник обещал цепочку `.speed(250)`
@@ -656,16 +866,21 @@ function installNodeMethods($) {
         return this.eachNode((_, el) => {
             const node = el;
             const p = resolvePoint(target);
-            node.angle = Math.atan2(p.y - node.y, p.x - node.x);
-            if (node.body >= 0) engineOf().setPosition(node.body, node.x, node.y, node.angle);
+            setWorldAngle(node, Math.atan2(p.y - node.y, p.x - node.x));
         });
     });
 
     def('flip', function (x, y) {
         return this.eachNode((_, el) => {
             const node = el;
-            if (x !== undefined) node.scale_x = Math.abs(node.scale_x) * (x ? -1 : 1);
-            if (y !== undefined) node.scale_y = Math.abs(node.scale_y) * (y ? -1 : 1);
+            // Знаковый масштаб — мировой (скомпонованный): у локального узла он
+            // пересчитывается в локальный, поэтому зеркало наследуется детьми.
+            const s = worldScaleOf(node);
+            let sx = s.x;
+            let sy = s.y;
+            if (x !== undefined) sx = Math.abs(sx) * (x ? -1 : 1);
+            if (y !== undefined) sy = Math.abs(sy) * (y ? -1 : 1);
+            if (x !== undefined || y !== undefined) setWorldScale(node, sx, sy);
         });
     });
 
@@ -941,6 +1156,91 @@ function installNodeMethods($) {
         return out.length === 1 ? out[0] : out;
     });
     defGet('zoneCount', (n) => ctx.world.zoneCount(n), 0);
+
+    // --- §40: независимые области одного владельца ---------------------------
+    //
+    // Область — native-форма на теле узла со своей ролью, локальным
+    // смещением/углом, слоями и признаком enabled. Несколько областей живут
+    // независимо: движение (основная форма тела), contact circle, weapon rect
+    // не влияют друг на друга, а выключение одной не трогает остальные.
+    //
+    // Описания живут на узле и возвращаются на место после пересоздания тела
+    // (.size(), .sensor(), .collision()), поэтому внутреннее представление не
+    // меняет gameplay, а дедупликация атак в игре держится на имени/attack-id,
+    // а не на native handle (§40).
+
+    /**
+     * Объявить или обновить область: `#hero.area('sword', { shape: 'box',
+     * w: 48, h: 20, x: 14, angle: -0.3, sensor: true, role: 'attack',
+     * enabled: false })`.
+     *
+     * Повторный вызов меняет только переданные поля; `enabled` управляет
+     * участием в столкновениях и запросах, не удаляя область и не трогая
+     * видимость узла (`.hide()` — отдельная операция).
+     */
+    def('area', function (name, opts) {
+        if (name === undefined) return this;
+        if (opts === undefined) {
+            const node = this.nodes[0];
+            const area = node ? areaFind(node, String(name)) : null;
+            return area ? areaInfo(node, area) : null;
+        }
+        return this.eachNode((_, el) => areaDefine(el, String(name), opts));
+    });
+
+    /**
+     * Включить/выключить область: `.areaOn('sword', true)`. Мутация возвращает
+     * обёртку (цепочка), как остальные сеттеры; без второго аргумента —
+     * текущее состояние (`bool`).
+     */
+    def('areaOn', function (name, on) {
+        if (on === undefined) {
+            const node = this.nodes[0];
+            const area = node ? areaFind(node, String(name)) : null;
+            return area ? area.enabled !== false : false;
+        }
+        return this.eachNode((_, el) => areaEnable(el, String(name), on));
+    });
+
+    /** Все области узла: `[{ name, role, enabled, sensor, x, y, angle, … }]`. */
+    defGet('areas', function (node) {
+        const list = areaListOf(node);
+        if (!list) return [];
+        const out = [];
+        for (let i = 0; i < list.length; i++) out.push(areaInfo(node, list[i]));
+        return out;
+    }, []);
+
+    // §9. Роли форм — метаданные области существующего узла, не компоненты.
+    // Основная форма тела — movement collider; области получают роль и живут
+    // по общим правилам §40 (локальное смещение, свой слой, вкл/выкл).
+    const ROLE_METHODS = {
+        hitbox: 'hitbox',        // чем бьём: обычно sensor, окно атаки
+        hurtbox: 'hurtbox',      // куда бьют: цель урона
+        interaction: 'interaction',   // подбор/двери/зоны взаимодействия
+    };
+    for (const method of Object.keys(ROLE_METHODS)) {
+        const role = ROLE_METHODS[method];
+        def(method, function (name, opts) {
+            if (name === undefined) return this;
+            const spec = Object.assign({ role }, opts || {});
+            // Роли — зоны смысла, а не препятствия: по умолчанию сенсор.
+            // Явный `sensor: false` делает форму физической (щит, стена).
+            if (spec.sensor === undefined) spec.sensor = true;
+            return this.eachNode((_, el) => areaDefine(el, String(name), spec));
+        });
+    }
+
+    /**
+     * Кто пересекается с областью ПРЯМО СЕЙЧАС — явная overlap policy §40.
+     * Цель, уже находящаяся внутри в момент открытия окна атаки, находится этим
+     * вызовом без ожидания нового движения; выключенная область не возвращает
+     * никого. Результат: `[{ node, owner, body, shape, area, role }]`, где
+     * `node` — узел цели, `owner` — логический владелец области.
+     */
+    defGet('areaOverlap', function (node, name, opts) {
+        return areaOverlap(node, String(name), opts);
+    }, []);
     def('show', function () { return this.visible(true); });
     def('hide', function () { return this.visible(false); });
     defGet('isVisible', (n) => n.visible, false);
@@ -1140,6 +1440,44 @@ function installNodeMethods($) {
         });
     });
 
+    /**
+     * Спрыгнуть вниз с односторонней платформы: на `ms` игрового времени
+     * (по умолчанию 250) её контакт с этим телом выключен, и узел падает
+     * сквозь. Обычно вызывать не нужно — встроенное управление само делает
+     * это по S/↓+Space, пока узел стоит НА односторонней платформе
+     * (см. [PHILOSOPHY.md] и .controls()).
+     *
+     * Платформу метод не трогает: на ней могут стоять другие тела, и
+     * проваливается только вызвавший.
+     */
+    def('dropThrough', function (ms) {
+        return this.eachNode((_, el) => {
+            const node = el;
+            if (node.body < 0) return;
+            const ground = probeGround(node);
+            const platform = ground && ground.node && ground.node.one_way ? ground.node : null;
+            startDropThrough(node, platform, ms === undefined ? 250 : ms);
+        });
+    });
+
+    /**
+     * §8. Внешняя скорость узла (урон, отдача, ветер) на `ms` игрового
+     * времени: `.externalVelocity(vx, vy, 150)`. Скрипт управления прибавляет
+     * её к своей скорости, поэтому импульс урона не стирается следующим тиком;
+     * сама она линейно затухает до нуля.
+     *
+     * Без аргументов возвращает `{ x, y, ms, left }` или `null`.
+     */
+    def('externalVelocity', function (vx, vy, ms) {
+        if (vx === undefined) {
+            const node = this.nodes[0];
+            const e = node && node.ext_vel;
+            return e ? { x: e.x, y: e.y, ms: e.ms * 1000, left: Math.max(0, e.left) * 1000 } : null;
+        }
+        if (typeof vx === 'object' && vx !== null) { ms = vy; vy = vx.y; vx = vx.x; }
+        return this.eachNode((_, el) => { setExternalVelocity(el, vx, vy, ms); });
+    });
+
     /** Сенсор: тело ловит пересечения, но не отталкивает. */
     def('sensor', function (on) {
         if (on === undefined) return this.nodes.length ? this.nodes[0].sensor : false;
@@ -1154,14 +1492,29 @@ function installNodeMethods($) {
      * События контакта узла: 'collide' (начали касаться), 'separate'
      * (перестали), 'hit' (удар со скоростью). У динамических тел включены
      * сразу; этим методом можно включить и выключить вручную.
+     *
+     * Второй аргумент — опции: `{ stay: true }` добавляет фазу 'stay' (касание
+     * продолжается) для этого тела. Stay — opt-in: обход контактов тела каждый
+     * кадр не бесплатный.
      */
-    def('contacts', function (on) {
+    def('contacts', function (on, opts) {
         if (on === undefined) return this.nodes.length ? this.nodes[0].contacts_enabled : false;
+        const stay = !!(opts && opts.stay);
         return this.eachNode((_, el) => {
             const node = el;
             node.contacts_enabled = on !== false;
             if (node.body >= 0) node.syncBodySize();
+            setContactStay(node, node.contacts_enabled && stay);
         });
+    });
+
+    /**
+     * Фаза 'stay' отдельно: `.contactsStay(true)` — узел получает событие
+     * 'stay' каждый кадр, пока касается (в дополнение к begin/end/hit).
+     */
+    def('contactsStay', function (on) {
+        if (on === undefined) return this.nodes.length ? !!this.nodes[0].contacts_stay : false;
+        return this.eachNode((_, el) => setContactStay(el, on !== false));
     });
 
     /**
@@ -1257,13 +1610,12 @@ function installNodeMethods($) {
      * самой нижней грани нельзя — тело узла тогда лежит внутри опоры, а
      * Box2D для луча «игнорирует начальное перекрытие» и ничего не находит.
      * Старт из центра заодно исключает попадание в самого себя.
+     *
+     * Геометрия одна на всех: тот же луч, что у встроенного управления
+     * (probeGround), — иначе «стою на земле» и «могу прыгнуть» разошлись бы.
      */
     defGet('onFloor', function (node) {
-        const b = nodeBounds(node);
-        // Маска узла: с чем тело не сталкивается, на том и не стоит.
-        const hit = ctx.world.raycast({ x: node.x, y: node.y }, { x: node.x, y: b.y1 + 8 },
-                                      { mask: node.collision_mask });
-        return hit !== null && hit.body !== node.body;
+        return probeGround(node) !== null;
     }, false);
 
     /** Касается ли стены слева или справа — луч тоже из центра узла. */
@@ -1273,6 +1625,39 @@ function installNodeMethods($) {
         const left = ctx.world.raycast({ x: node.x, y: node.y }, { x: b.x0 - 8, y: node.y }, opts);
         const right = ctx.world.raycast({ x: node.x, y: node.y }, { x: b.x1 + 8, y: node.y }, opts);
         return !!((left && left.body !== node.body) || (right && right.body !== node.body));
+    }, false);
+
+    /**
+     * §8. Опора узла: не «истина/ложь», а данные —
+     * `{ on, body, node, x, y, nx, ny, slope, distance, vx, vy, oneWay }`.
+     *
+     * `null` — опоры нет. Опора ищется лучами ПО ШИРИНЕ тела (центр и края), а
+     * не центральным лучом: на кромке платформы центр уже вне опоры, хотя ноги
+     * ещё стоят. `slope` — угол поверхности от вертикали в радианах (0 —
+     * ровный пол), `vx`/`vy` — скорость опоры (движущаяся платформа несёт
+     * стоящего).
+     */
+    defGet('ground', function (node, opts) {
+        const g = probeGround(node, opts);
+        if (!g) return null;
+        return {
+            on: true,
+            body: g.body,
+            node: g.node ? wrapOne(g.node) : null,
+            x: g.x, y: g.y,
+            nx: g.nx, ny: g.ny,
+            slope: g.slope,
+            slopeDegrees: g.slope * 180 / Math.PI,
+            distance: g.distance,
+            vx: g.vx, vy: g.vy,
+            oneWay: g.oneWay,
+            hit: g.hit,
+        };
+    }, null);
+
+    /** §8. Потолок над узлом: лучи по ширине тела вверх. → bool. */
+    defGet('onCeiling', function (node) {
+        return probeCeiling(node) !== null;
     }, false);
 
     /** Двигаться в сторону цели со скоростью. dt не нужен: скорость в px/с. */
@@ -1438,31 +1823,30 @@ function installNodeMethods($) {
     def('volume', function (v) { return this.eachNode((_, el) => { (el).attrs.sound_volume = v; }); });
 
     // === Иерархия ============================================================
+    //
+    // §39: у привязки есть политика keep-world / keep-local. Для узла в
+    // мировом режиме (прежние проекты) не меняется ничего: его x/y абсолютны,
+    // и после appendTo он остаётся на месте. Для локального узла по умолчанию
+    // сохраняется мировая позиция (`{ keep: 'world' }`), а `{ keep: 'local' }`
+    // оставляет локальные координаты — узел переезжает в систему родителя.
 
-    def('appendTo', function (parent) {
+    def('appendTo', function (parent, opts) {
         const target = resolveContainer(parent);
-        return this.eachNode((_, el) => {
-            const node = el;
-            detach(node);
-            node.parent_node = target;
-            if (target) target.child_nodes.push(node);
-        });
+        const keep = keepPolicy(opts);
+        return this.eachNode((_, el) => attachNode(el, target, keep));
     });
 
-    def('prependTo', function (parent) { return Wrapper.prototype.appendTo.call(this, parent); });
+    def('prependTo', function (parent, opts) { return Wrapper.prototype.appendTo.call(this, parent, opts); });
 
-    def('append', function (child) {
+    def('append', function (child, opts) {
         const nodes = child instanceof Wrapper ? child.nodes : (child && child.tag ? [child] : []);
+        const keep = keepPolicy(opts);
         return this.eachNode((_, el) => {
             const node = el;
-            for (const c of nodes) {
-                detach(c);
-                c.parent_node = node;
-                node.child_nodes.push(c);
-            }
+            for (const c of nodes) attachNode(c, node, keep);
         });
     });
-    def('prepend', function (child) { return Wrapper.prototype.append.call(this, child); });
+    def('prepend', function (child, opts) { return Wrapper.prototype.append.call(this, child, opts); });
 
     // Несколько узлов разом — одна уборка реестра в конце вызова, как в
     // $.batch: иначе каждый destroy() искал свой узел и сдвигал хвост
@@ -1736,11 +2120,20 @@ function installFrameHooks($) {
         // анимацию персонажа. Интерфейс (экраны, диалоги, виджеты) остаётся
         // на реальном времени — кнопки обязаны работать и на паузе.
         const game_dt = ctx.time.delta();
-        prof('анимация'); tickAnim(game_dt); tickRotSprite(dt,game_dt);
-        prof('real2d'); tickReal2d(game_dt);
+        // RE2D-тикалки — только когда модули поставлены (см. re2dAvailable()).
+        // Сборка без RE2D не должна платить за два вызова в кадре, которых не
+        // к чему применять.
+        prof('анимация'); tickAnim(game_dt);
+        if (re2dSupport) tickRotSprite(dt, game_dt);
+        if (re2dSupport) { prof('real2d'); tickReal2d(game_dt); }
         prof('плеер анимации'); tickAnimPlayer(game_dt);
         prof('состояния'); tickState(game_dt);
         prof('последовательности'); tickFlow(dt);
+        // §5: задачи кусками тикает один общий насос (без хука $.update на
+        // каждую задачу), а области владения закрываются в безопасной фазе —
+        // после контактов и отложенных изменений.
+        prof('задачи'); tickTask(dt);
+        prof('области'); tickLifecycle(dt);
         prof('экраны'); tickScreen(dt);
         prof('диалоги'); tickDialog(dt);
         prof('таймлайн'); tickTimeline(game_dt);
@@ -1795,11 +2188,60 @@ function installFrameHooks($) {
 // ---------------------------------------------------------------------------
 
 function detach(node) {
-    if (node.parent_node) {
-        const i = node.parent_node.child_nodes.indexOf(node);
-        if (i >= 0) node.parent_node.child_nodes.splice(i, 1);
+    const parent = node.parent_node;
+    if (parent) {
+        const i = parent.child_nodes.indexOf(node);
+        if (i >= 0) parent.child_nodes.splice(i, 1);
         node.parent_node = null;
     }
+    // §39: у локального узла после отвязки корнем становится он сам, поэтому
+    // мировой трансформ складывается в локальные поля — узел не переезжает.
+    if (isLocalSpace(node)) {
+        node.local_x = node.x;
+        node.local_y = node.y;
+        node.local_angle = node.angle;
+        node.local_scale_x = node.scale_x;
+        node.local_scale_y = node.scale_y;
+        invalidateNodeTransform(node);
+    }
+}
+
+/** Политика переноса узла: 'world' (по умолчанию) или 'local' (§39). */
+function keepPolicy(opts) {
+    if (typeof opts === 'string') return opts === 'local' ? 'local' : 'world';
+    if (opts && typeof opts === 'object' && opts.keep === 'local') return 'local';
+    return 'world';
+}
+
+/**
+ * §39: привязать узел к новому родителю. Мировой узел не меняется вовсе
+ * (прежнее поведение); локальный по умолчанию сохраняет мировую позицию
+ * (keep-world), а `{ keep: 'local' }` оставляет локальные значения.
+ * Перенос в собственного потомка отклоняется: цикл в цепочке родителей
+ * сломал бы композицию трансформа.
+ */
+function attachNode(node, target, keep) {
+    if (target && (target === node || isDescendant(node, target))) {
+        ctx.log('$.appendTo: нельзя привязать узел к своему потомку — перенос пропущен');
+        return;
+    }
+    const local = isLocalSpace(node);
+    const wx = node.x;
+    const wy = node.y;
+    const wa = node.angle;
+    const ws = local ? worldScaleOf(node) : null;
+    detach(node);
+    node.parent_node = target;
+    if (target) target.child_nodes.push(node);
+    if (!local) return;
+    if (keep === 'local') {
+        invalidateNodeTransform(node);
+        return;
+    }
+    // keep-world: локальные значения выводятся заново из нового родителя.
+    setWorldPosition(node, wx, wy);
+    setWorldAngle(node, wa);
+    if (ws) setWorldScale(node, ws.x, ws.y);
 }
 
 function allDescendants(node) {
@@ -1920,6 +2362,70 @@ function stepTowards(node, target, speed) {
  */
 const hover_params = new Float64Array(13);
 
+// --- Журнал трассировки (§13, §28) -------------------------------------------
+// Требование Спецификации: игровой сценарий должен быть воспроизводим в
+// журнале — по hit ID найти источник, контакт, решение фильтра и результат
+// урона. Журнал выключен по умолчанию и стоит одну проверку булева флага на
+// событие (не аллокацию): включение — opt-in через `$.trace.on(true)`.
+//
+// Хранится кольцевой буфер фиксированной длины: диагностика не должна расти
+// вместе с длительностью боя (§28: «debug buffers ограничены»).
+const TRACE_LIMIT = 256;
+const trace_ring = new Array(TRACE_LIMIT);
+let trace_head = 0;
+let trace_count = 0;
+let trace_on = false;
+let trace_dropped = 0;
+
+/** Записать запись в журнал. Дёшево: объект строится только при включении. */
+function noteTrace(kind, a, b, extra) {
+    const entry = {
+        n: trace_count + trace_dropped,
+        kind,
+        frame: ctx.time && typeof ctx.time.frame === 'function' ? ctx.time.frame() : -1,
+        source: a ? a.nid : null,
+        target: b ? b.nid : null,
+        data: extra === undefined ? null : extra,
+    };
+    if (trace_count >= TRACE_LIMIT) { trace_dropped++; trace_head = (trace_head + 1) % TRACE_LIMIT; }
+    trace_ring[(trace_head + trace_count) % TRACE_LIMIT] = entry;
+    if (trace_count < TRACE_LIMIT) trace_count++; else trace_count = TRACE_LIMIT;
+}
+
+/** Публичный журнал: массив записей в порядке появления + счётчик потерь. */
+function traceSnapshot() {
+    const out = [];
+    for (let i = 0; i < trace_count; i++) out.push(trace_ring[(trace_head + i) % TRACE_LIMIT]);
+    return out;
+}
+
+function installTrace($) {
+    $.trace = {
+        /**
+         * Включить/выключить запись. Журнал opt-in: цена в выключенном
+         * состоянии — одна проверка флага на событие, а не объект.
+         */
+        on(value) {
+            if (value === undefined) return trace_on;
+            trace_on = value !== false;
+            return trace_on;
+        },
+        /** Записи в порядке появления (без копирования внутренних ссылок). */
+        list() { return traceSnapshot(); },
+        /** Сколько записей вытеснено переполнением кольца. */
+        dropped() { return trace_dropped; },
+        /** Очистить журнал и счётчик потерь. */
+        clear() { trace_count = 0; trace_head = 0; trace_dropped = 0; trace_ring.length = 0; trace_ring.length = TRACE_LIMIT; },
+        /** Запись игры: `$.trace.note('phase', node, {…})` — для сюжетных шагов. */
+        note(kind, node, data) {
+            if (!trace_on) return false;
+            noteTrace(String(kind), node || null, null, data === undefined ? null : data);
+            return true;
+        },
+        limit: TRACE_LIMIT,
+    };
+}
+
 function tickWorldHover() {
     const nodes = liveNodes();
     const mx = engineOf().mouseX;
@@ -1993,6 +2499,372 @@ function placeBody(node) {
     engineOf().setPosition(node.body, node.x, node.y, node.angle);
 }
 
+// --- Встроенное управление: тайминги прыжка --------------------------------
+//
+// Всё, что решает «прыгать или нет», живёт в чистых функциях без движка: их
+// проверяет tests/js/controls_test.mjs под QuickJS за секунды. applyControls
+// только читает ввод, зовёт их и применяет результат к телу.
+//
+// Время здесь — накопленная сумма dt, а не номер кадра: при --fixed-dt,
+// переменном шаге и замедлении окно в 120 мс означает одно и то же
+// (PHILOSOPHY.md §2.8 про детерминизм, §2.11 про замеры).
+
+/** Число из настройки: нечисло и undefined дают умолчание. */
+function ctlNum(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+/** Миллисекунды настройки → секунды игрового времени. */
+function ctlSeconds(value, fallback_ms) {
+    return Math.max(0, ctlNum(value, fallback_ms)) / 1000;
+}
+
+/**
+ * Множитель «обрезания» прыжка при отпускании кнопки. `true` — 0.35,
+ * число в (0,1) — как задано, всё прочее (0, 1, мусор) — выключено.
+ */
+function ctlJumpCut(value) {
+    if (value === true) return 0.35;
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 && n < 1 ? n : 0;
+}
+
+/** Клавиши «вниз» для спрыгивания: зависят от раскладки оси. */
+// Массивы общие и не меняются: applyControls зовётся каждый кадр на каждый
+// управляемый узел, и новая аллокация на узел здесь ни к чему.
+const CTL_DROP_BOTH = ['s', 'down'];
+const CTL_DROP_WASD = ['s'];
+const CTL_DROP_ARROWS = ['down'];
+
+function ctlDropKeys(axis) {
+    if (axis === 'arrows') return CTL_DROP_ARROWS;
+    if (axis === 'wasd') return CTL_DROP_WASD;
+    return CTL_DROP_BOTH;
+}
+
+// §8: на сколько пикселей ниже ступней луч ищет опору. Меньше — теряет землю
+// на мелких ступеньках и склонах, больше — «прилипает» на прыжке.
+const GROUND_TOLERANCE = 8;
+
+/**
+ * §7. Включить/выключить фазу 'stay' у тела узла.
+ *
+ * Флаг живёт в нативном теле, поэтому после пересоздания тела
+ * (`.size()`, `.collision()`, `.sensor()`) его нужно поставить снова —
+ * вызовите `.contacts(true, { stay: true })` последним.
+ */
+function setContactStay(node, on) {
+    node.contacts_stay = !!on;
+    const eng = engineOf();
+    if (node.body >= 0 && typeof eng.setContactStay === 'function') {
+        eng.setContactStay(node.body, node.contacts_stay);
+    }
+}
+
+/** Приблизить значение к цели не быстрее `maxDelta` (px/с² → px/с за кадр). */
+export function approachValue(current, target, maxDelta) {
+    const cur = Number(current) || 0;
+    const dst = Number(target) || 0;
+    const step = Math.max(0, Number(maxDelta) || 0);
+    const delta = dst - cur;
+    if (Math.abs(delta) <= step) return dst;
+    return cur + (delta > 0 ? step : -step);
+}
+
+/**
+ * Схема управления со умолчаниями. Строка — сокращение для `{ axis }`,
+ * поэтому `.controls('both')` работает как раньше, а настройки — необязательные
+ * поля объекта: чего нет, то ведёт себя по-старому.
+ */
+export function controlsScheme(scheme) {
+    const cfg = typeof scheme === 'string' ? { axis: scheme } : (scheme || {});
+    const axis = cfg.axis || 'both';
+    return {
+        cfg,
+        axis,
+        jump_key: cfg.jump || 'space',
+        up_key: cfg.up || 'w',
+        // По умолчанию оба окна нулевые: существующие игры не получают
+        // прыжков, которых раньше не было (PHILOSOPHY.md §2.10). Включаются
+        // осознанно: .controls({ coyote: 100, jumpBuffer: 120 }).
+        coyote: ctlSeconds(cfg.coyote, 0),
+        jump_buffer: ctlSeconds(cfg.jumpBuffer, 0),
+        jump_cut: ctlJumpCut(cfg.jumpCut),
+        air_jumps: Math.max(0, Math.floor(ctlNum(cfg.airJump, 0))),
+        // Спрыгивание — часть односторонних платформ, а не украшение: по
+        // умолчанию включено, выключается `dropThrough: false`.
+        drop: cfg.dropThrough !== false,
+        drop_time: Math.max(0, ctlNum(cfg.dropTime, 250)),
+        drop_keys: cfg.drop ? (Array.isArray(cfg.drop) ? cfg.drop : [cfg.drop]) : ctlDropKeys(axis),
+        // §8: ускорение/торможение в px/с². 0 — мгновенная скорость, как было
+        // до появления опции: старые игры не меняют ощущение управления.
+        accel: Math.max(0, ctlNum(cfg.accel, 0)),
+        decel: Math.max(0, ctlNum(cfg.decel, 0)),
+        air_accel: Math.max(0, ctlNum(cfg.airAccel, 0)),
+        // §8: допустимый угол поверхности в градусах. 90 — любая опора
+        // считается землёй (прежнее поведение). Круче лимита — не земля:
+        // персонаж скользит и не прыгает.
+        max_slope: Math.min(90, Math.max(0, ctlNum(cfg.maxSlope, 90))),
+    };
+}
+
+/** Состояние таймингов прыжка одного узла (живёт, пока жив узел). */
+export function makeControlsState() {
+    return { t: 0, coyote_until: 0, buffer_until: 0, air_left: 0, jumping: false, self_vx: 0 };
+}
+
+/**
+ * Один шаг таймингов прыжка. Чистая функция: меняет только `state` и
+ * сообщает, что сделать с телом.
+ *
+ * `input`: { pressed, released, down, grounded, oneWay, vy }.
+ * Возврат: { jump, air, cut, drop } — `jump` прыгнуть, `air` это воздушный
+ * прыжок, `cut` множитель скорости при обрезании, `drop` спрыгнуть вниз.
+ */
+export function controlsTimingStep(state, s, dt, input) {
+    if (dt > 0) state.t += dt;
+    const out = { jump: false, air: false, cut: 0, drop: false };
+
+    // Прыжок завершён, когда тело перестало подниматься. Без этого отпускание
+    // кнопки в падении «обрезало» бы падение, а не подъём.
+    if (state.jumping && input.vy >= 0) state.jumping = false;
+
+    if (input.grounded) {
+        state.coyote_until = state.t + s.coyote;
+        state.air_left = s.air_jumps;
+    }
+    if (input.pressed) state.buffer_until = state.t + s.jump_buffer;
+
+    // Спрыгивание проверяется ДО прыжка: вниз — это не вверх. Нажатие при
+    // этом считается израсходованным, иначе буфер тут же прыгнул бы от земли.
+    if (s.drop && input.pressed && input.down && input.oneWay) {
+        state.buffer_until = 0;
+        out.drop = true;
+    } else if (input.pressed || state.buffer_until > state.t) {
+        // Право на прыжок: земля, ещё не истёкшая coyote-фора или запас
+        // воздушных прыжков.
+        if (input.grounded || state.coyote_until > state.t) {
+            out.jump = true;
+        } else if (state.air_left > 0) {
+            out.jump = true;
+            out.air = true;
+            state.air_left--;   // запас расходуется: следующий прыжок — только от земли
+        }
+        if (out.jump) {
+            state.buffer_until = 0;
+            state.coyote_until = 0;
+            state.jumping = true;
+        }
+    }
+
+    if (s.jump_cut && input.released) {
+        // Тап (нажатие и отпускание в одном кадре) — сразу короткий прыжок:
+        // иначе «отпустил» опоздало бы на кадр и высота не отличалась бы.
+        if (out.jump || (state.jumping && input.vy < 0)) {
+            out.cut = s.jump_cut;
+            state.jumping = false;
+        }
+    }
+    return out;
+}
+
+/**
+ * §8. Что под ногами: опора и её свойства.
+ *
+ * Центрального луча мало: на самом краю платформы центр тела уже вне опоры,
+ * хотя ноги ещё стоят — и персонаж «терял землю» на кромке. Поэтому опора
+ * ищется НЕСКОЛЬКИМИ лучами по ширине тела (края с отступом и центр), вниз до
+ * низа тела + tolerance. Побеждает самый «горизонтальный» (коллинеарный земле)
+ * луч, при равенстве — ближайший.
+ *
+ * `null` — опоры нет. Иначе: тело и узел опоры, точка и нормаль контакта,
+ * расстояние, угол поверхности (`slope`, радианы; 0 — ровная земля) и скорость
+ * опоры (`vx`/`vy`, px/с) — движущаяся платформа несёт стоящего на ней.
+ */
+export function groundSlope(nx, ny) {
+    // Опора «вверх» в экранных координатах — отрицательный Y. Угол считаем от
+    // вертикали: ровный пол даёт 0, стеноподобная поверхность — π/2.
+    const up = -ny;
+    const len = Math.hypot(nx, ny);
+    if (!(len > 1e-6)) return Math.PI / 2;
+    return Math.atan2(Math.abs(nx) / len, up / len);
+}
+
+/** Точка опоры одним лучом: `null`, если под этой точкой ничего нет. */
+function groundRay(node, x, bottom, tolerance) {
+    // Маска узла: с чем тело не сталкивается, на том и не стоит.
+    const hit = ctx.world.raycast({ x, y: node.y }, { x, y: bottom + tolerance },
+                                  { mask: node.collision_mask });
+    if (!hit || hit.body === node.body) return null;
+    return hit;
+}
+
+/** Опоры по ширине тела. Отступ от краёв — чтобы не задевать соседние стены. */
+function groundProbePoints(node, b) {
+    const inset = Math.min(4, (b.x1 - b.x0) * 0.25);
+    return [b.x0 + inset, node.x, b.x1 - inset];
+}
+
+function probeGround(node, opts) {
+    const b = nodeBounds(node);
+    const tolerance = opts && opts.tolerance !== undefined
+        ? Math.max(0, Number(opts.tolerance) || 0) : GROUND_TOLERANCE;
+    const points = groundProbePoints(node, b);
+    let best = null;
+    for (let i = 0; i < points.length; i++) {
+        const hit = groundRay(node, points[i], b.y1, tolerance);
+        if (!hit) continue;
+        const slope = groundSlope(hit.normal.x, hit.normal.y);
+        const distance = Math.hypot(hit.point.x - node.x, hit.point.y - node.y);
+        // Лучше та опора, что «горизонтальнее»; при равном угле — ближе.
+        if (!best || slope < best.slope - 1e-6
+            || (Math.abs(slope - best.slope) <= 1e-6 && distance < best.distance)) {
+            best = {
+                hit, body: hit.body, node: hit.node || null,
+                x: hit.point.x, y: hit.point.y,
+                nx: hit.normal.x, ny: hit.normal.y,
+                slope, distance,
+            };
+        }
+    }
+    if (!best) return null;
+    const g = best.node;
+    if (g && g.body >= 0) {
+        const [gvx, gvy] = engineOf().getVelocity(g.body);
+        best.vx = gvx;
+        best.vy = gvy;
+        best.oneWay = !!g.one_way;
+    } else {
+        best.vx = 0;
+        best.vy = 0;
+        best.oneWay = false;
+    }
+    return best;
+}
+
+/** §8: потолок — лучи по ширине тела вверх. */
+function probeCeiling(node) {
+    const b = nodeBounds(node);
+    const points = groundProbePoints(node, b);
+    for (let i = 0; i < points.length; i++) {
+        const hit = ctx.world.raycast({ x: points[i], y: node.y }, { x: points[i], y: b.y0 - GROUND_TOLERANCE },
+                                      { mask: node.collision_mask });
+        if (hit && hit.body !== node.body) return hit;
+    }
+    return null;
+}
+
+/**
+ * Стоит ли узел именно СВЕРХУ односторонней платформы (а не висит на кромке
+ * или упирается в неё сбоку). Нормаль луча направлена против луча, то есть
+ * вверх; сверяем её с лицевой нормалью платформы — той же формулой, что в
+ * physics.c (one_way_angle, по умолчанию «вверх»), и проверяем, что центр
+ * узла с лицевой стороны плоскости.
+ */
+function isOneWayTop(node, ground) {
+    const g = ground.node;
+    if (!g || !g.one_way) return false;
+    const face = g.one_way_angle === 0 ? -Math.PI / 2 : g.one_way_angle;
+    const a = face + (g.angle || 0);
+    const nx = Math.cos(a), ny = Math.sin(a);
+    if (ground.nx * nx + ground.ny * ny < 0.5) return false;
+    return (node.x - ground.x) * nx + (node.y - ground.y) * ny > 0;
+}
+
+/**
+ * Скорость опоры, которую надо прибавить игроку: движущаяся платформа
+ * переносит стоящего на ней. Несёт только кинематическое тело — это
+ * транспорт, который игра ведёт сама; динамический ящик под ногами не
+ * обязан тащить игрока за собой.
+ *
+ * Прибавка скорости (а не сдвиг позиции) исключает двойное интегрирование:
+ * позицию двигает физика, JS задаёт лишь намерение скорости на кадр.
+ */
+function carryVelocity(ground) {
+    const g = ground.node;
+    if (!g || g.body < 0 || g.body_kind !== 'kinematic') return null;
+    const [vx] = engineOf().getVelocity(g.body);
+    return vx;
+}
+
+/**
+ * §8. Внешняя скорость узла (урон, отдача, ветер) — то, что скрипт управления
+ * НЕ имеет права стирать. `.controls()` каждый кадр задаёт горизонтальную
+ * скорость, поэтому импульс урона без этого канала исчезал бы в следующем тике.
+ *
+ * Хранится как скорость, линейно затухающая до нуля за `ms` игрового времени.
+ * Вертикаль складывается с физической скоростью и вычитается на следующем
+ * кадре (`applied_y`), иначе одно и то же значение интегрировалось бы дважды.
+ */
+function setExternalVelocity(node, vx, vy, ms) {
+    const life = Math.max(1, ctlNum(ms, 120)) / 1000;
+    node.ext_vel = {
+        x: ctlNum(vx, 0), y: ctlNum(vy, 0),
+        ms: life, left: life,
+        applied_y: node.ext_vel ? node.ext_vel.applied_y : 0,
+    };
+    return node.ext_vel;
+}
+
+/** Остаток внешней скорости на этот кадр (или null, если канал пуст). */
+function stepExternalVelocity(node, dt) {
+    const e = node.ext_vel;
+    if (!e) return null;
+    e.left -= dt;
+    if (e.left <= 0) {
+        node.ext_vel = null;
+        return { x: 0, y: 0, remove_y: e.applied_y };
+    }
+    const k = e.left / e.ms;
+    return { x: e.x * k, y: e.y * k, remove_y: e.applied_y };
+}
+
+/**
+ * Включить игнор односторонних платформ на `ms` игрового времени:
+ * `preSolve` в physics.c перестанет держать тело на платформе, и оно
+ * провалится. Платформа при этом не трогается — на ней могут стоять другие.
+ */
+function startDropThrough(node, platform, ms) {
+    if (!node || node.body < 0) return;
+    const time = ctx.$ && ctx.$.time;
+    if (node._drop_timer !== undefined && time && typeof time.cancel === 'function') {
+        time.cancel(node._drop_timer);   // повторный вызов продлевает окно
+    }
+    node._drop_body = platform ? platform.body : -1;
+    engineOf().setOneWayIgnore(node.body, true);
+    const wait = Math.max(0, ctlNum(ms, 250));
+    if (!time || typeof time.after !== 'function') {
+        // $.time ставится до кода игры, поэтому сюда попадаем только вне
+        // движка (юнит-тест). Снимаем флаг сразу: залипший игнор хуже
+        // короткого окна.
+        engineOf().setOneWayIgnore(node.body, false);
+        node._drop_body = -1;
+        return;
+    }
+    node._drop_timer = time.after(wait, () => endDropThrough(node));
+}
+
+/**
+ * Снять игнор односторонних платформ. Пока центр узла выше низа платформы,
+ * он ещё внутри неё: включить контакт в этот момент — значит вытолкнуть узел
+ * вверх или зажать. Поэтому проверяем ещё раз через 100 мс игрового времени.
+ */
+function endDropThrough(node) {
+    if (!node || node.removed || node.body < 0) return;
+    const time = ctx.$ && ctx.$.time;
+    const platform = node._drop_body >= 0 ? ctx.byBody.get(node._drop_body) : null;
+    if (platform && !platform.removed && node.y < platform.y + platform.h * 0.5) {
+        if (time && typeof time.after === 'function') {
+            node._drop_timer = time.after(100, () => endDropThrough(node));
+        }
+        return;
+    }
+    engineOf().setOneWayIgnore(node.body, false);
+    node._drop_body = -1;
+    node._drop_timer = undefined;
+}
+
 function applyControls(dt) {
     // Гейт катсцены: пока ввод забран, игроком НЕ управляем. Иначе во время
     // катсцены герой продолжал бы бегать под управлением игрока.
@@ -2004,47 +2876,112 @@ function applyControls(dt) {
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
         const scheme = node.attrs.controls;
-        if (!scheme || node.cur_hp <= 0) continue;
+        if (!scheme) continue;
+        // Время идёт и когда узлом не управляют. Иначе coyote-фора и буфер
+        // прыжка «замирали» бы на паузе катсцены и оживали после неё — уже
+        // недействительное нажатие сработало бы как свежее.
+        if (node.cur_hp <= 0) {
+            if (node._ctl && dt > 0) node._ctl.t += dt;
+            continue;
+        }
         // Забран ввод — гасим скорость управляемого тела, но не «замораживаем»
         // узел: на время катсцены его ведёт режиссёр (walk и т.п.).
         if (gated) {
+            if (node._ctl && dt > 0) node._ctl.t += dt;
             if (node.body >= 0) {
                 const [junk_vx, vy] = engineOf().getVelocity(node.body);
                 engineOf().setVelocity(node.body, 0, node.gravity_on === false ? 0 : vy);
             }
             continue;
         }
-        const cfg = typeof scheme === 'string' ? { axis: scheme } : scheme;
-        const axis_name = cfg.axis || 'both';
-        const vec = ctx.input.vec(axis_name);
+        const s = controlsScheme(scheme);
+        const vec = ctx.input.vec(s.axis);
         // Скорость: явный атрибут → умолчание тега из TAGS (player 250,
         // enemy 90, npc 70) → запасное значение для тега без умолчания.
         const speed = node.attrs.speed !== undefined ? node.attrs.speed
             : (node.speed > 0 ? node.speed : (node.tag === 'player' ? 250 : 150));
 
-        const jump_key = cfg.jump || 'space';
-        const up_key = cfg.up || 'w';
-        const jump_pressed = ctx.input.pressed(jump_key) || ctx.input.pressed(up_key);
+        const jump_pressed = ctx.input.pressed(s.jump_key) || ctx.input.pressed(s.up_key);
+        const jump_released = ctx.input.released(s.jump_key) || ctx.input.released(s.up_key);
 
-        if (node.kind === 're2d' && ctx.camera.kind() === 're2d') {
+        // Ветка Re2D — только в сборке с RE2D. Без него 're2d'-вид камеры не
+        // имеет прохода (camera.js: hasRe2d()), и узел управляется как обычный
+        // 2D: иначе ввод молча не работал бы на узле, помеченном kind('re2d').
+        if (re2dSupport && node.kind === 're2d' && ctx.camera.kind() === 're2d') {
             // Re2D: «вперёд» — туда, куда смотрит камера (yaw), A/D — боком;
             // мир плоский, поэтому скорость задаётся по обеим осям пола.
             const m = re2dMove(ctx.camera.rotation(), vec, speed);
             if (node.body >= 0) engineOf().setVelocity(node.body, m.vx, m.vy);
             else { node.x += m.vx * dt; node.y += m.vy * dt; }
         } else if (node.body >= 0) {
+            const ground = probeGround(node);
             const [vx, vy] = engineOf().getVelocity(node.body);
-            engineOf().setVelocity(node.body, vec.x * speed, node.gravity_on === false ? 0 : vy);
-            if (jump_pressed && Wrapper.prototype.onFloor.call(wrapOne(node))) {
-                Wrapper.prototype.jump.call(wrapOne(node), cfg.jumpForce || 640);
+            const ctl = node._ctl || (node._ctl = makeControlsState());
+            let down = false;
+            for (let k = 0; k < s.drop_keys.length && !down; k++) down = ctx.input.down(s.drop_keys[k]);
+            // §8: слишком крутая поверхность — не земля: персонаж на ней не
+            // стоит и не прыгает. По умолчанию лимит 90°, то есть не влияет.
+            const steep = ground !== null && ground.slope > s.max_slope * Math.PI / 180;
+            const on_ground = ground !== null && !steep;
+            const step = controlsTimingStep(ctl, s, dt, {
+                pressed: jump_pressed,
+                released: jump_released,
+                down,
+                grounded: on_ground,
+                oneWay: ground !== null && !steep && isOneWayTop(node, ground),
+                vy,
+            });
+
+            // §8. Приоритет скоростей, явно и по порядку:
+            //   своя скорость (ввод) → перенос платформой → внешняя скорость
+            //   (урон/отдача). Ни один источник не стирает другой.
+            const carry = ground ? carryVelocity(ground) : null;
+            const ext = stepExternalVelocity(node, dt);
+            // Своя скорость: 0 ускорения — мгновенно (как было), иначе
+            // приближаемся к желаемой с заданным ускорением/торможением.
+            const want_self = vec.x * speed;
+            let self_vx = ctl.self_vx === undefined ? want_self : ctl.self_vx;
+            if (s.accel > 0 || s.decel > 0 || s.air_accel > 0) {
+                const rate = on_ground
+                    ? (vec.x !== 0 ? s.accel : s.decel)
+                    : (s.air_accel > 0 ? s.air_accel : s.accel);
+                self_vx = approachValue(self_vx, want_self, rate * dt);
+            } else {
+                self_vx = want_self;
             }
+            ctl.self_vx = self_vx;
+
+            let target_vx = self_vx + (carry === null ? 0 : carry) + (ext ? ext.x : 0);
+            // Вертикаль: физическая скорость (гравитация, импульс) плюс остаток
+            // внешней, минус уже применённый остаток — без двойного интегрирования.
+            let target_vy = node.gravity_on === false ? 0 : vy;
+            if (ext) target_vy += ext.y - ext.remove_y;
+            if (ext) node.ext_vel.applied_y = ext.y;
+            engineOf().setVelocity(node.body, target_vx, target_vy);
+
+            if (step.jump) {
+                // Сила прыжка: настройка схемы → атрибут узла → умолчание.
+                // .attr('jumpForce') документирован в tutorial-platformer.md и
+                // работал только в объектной схеме — теперь одним путём.
+                const force = s.cfg.jumpForce !== undefined ? s.cfg.jumpForce
+                    : (node.attrs.jumpForce !== undefined ? node.attrs.jumpForce : 640);
+                Wrapper.prototype.jump.call(wrapOne(node), force);
+            } else if (step.cut) {
+                // Переменная высота: кнопку отпустили на подъёме — гасим часть
+                // скорости.
+                engineOf().setVelocity(node.body, target_vx, vy * step.cut);
+            }
+            if (step.drop) startDropThrough(node, ground.node, s.drop_time);
+            node.attrs.on_ground = on_ground;
+            node.attrs.on_slope = ground ? ground.slope : 0;
         } else {
             node.x += vec.x * speed * dt;
             node.y += vec.y * speed * dt;
+            // У узла без тела прыжок и опора не считаются: физики нет.
+            node.attrs.on_ground = true;
         }
-        node.attrs.on_ground = node.body >= 0 ? Wrapper.prototype.onFloor.call(wrapOne(node)) : true;
 
-        const fire_key = cfg.fire;
+        const fire_key = s.cfg.fire;
         if (fire_key && ctx.input.pressed(fire_key)) node.emit('fire', {});
     }
 }
@@ -2058,6 +2995,18 @@ function applyControls(dt) {
  * узлы (ctx.byBody) и шлём событие обеим сторонам — как ContactMonitor в
  * Godot. Событие приходит в том кадре, в котором контакт начался/кончился.
  */
+/**
+ * §7: поколение тела. Событие контакта несёт genA/genB; если нативное
+ * поколение уже другое, тело уничтожено, а его id занят новым — событие к
+ * новому владельцу не относится. Заглушка без биндинга считается совпадением
+ * (мок-тесты и старые сборки).
+ */
+function bodyGenerationOf(body) {
+    const eng = engineOf();
+    if (typeof eng.bodyGeneration !== 'function') return undefined;
+    return eng.bodyGeneration(body);
+}
+
 function dispatchContacts() {
     if (typeof engineOf().contacts !== 'function') return;
     const list = engineOf().contacts();
@@ -2065,28 +3014,82 @@ function dispatchContacts() {
 
     for (let i = 0; i < list.length; i++) {
         const c = list[i];
-        const na = ctx.byBody.get(c.a) || null;
-        const nb = ctx.byBody.get(c.b) || null;
+        let na = ctx.byBody.get(c.a) || null;
+        let nb = ctx.byBody.get(c.b) || null;
+        // §7: устаревший handle и callback после destroy. body id переиспользуется
+        // после уничтожения, поэтому «то же число» — не «то же тело»: сверяем
+        // поколение. Уничтоженный узел дальнейших вызовов не получает.
+        if (na && (na.removed || (c.genA !== undefined && bodyGenerationOf(c.a) !== c.genA))) na = null;
+        if (nb && (nb.removed || (c.genB !== undefined && bodyGenerationOf(c.b) !== c.genB))) nb = null;
         if (!na && !nb) continue;
 
-        const name = c.kind === 'begin' ? 'collide' : (c.kind === 'end' ? 'separate' : 'hit');
+        // Фазы: begin → collide, end → separate, hit → hit, stay → stay (§7).
+        const name = c.kind === 'begin' ? 'collide'
+                   : (c.kind === 'end' ? 'separate'
+                      : (c.kind === 'stay' ? 'stay' : 'hit'));
+        // §7: чего backend не дал — обозначено явно. У сенсора контактной
+        // нормали нет, поэтому `nx`/`ny` равны null, а не нулевому вектору;
+        // код, которому нужна нормаль, обязан проверить hasNormal.
+        const has_normal = c.hasNormal === true;
+        const has_point = c.hasPoint === true;
         const info = {
             kind: c.kind,
-            x: c.x, y: c.y,
-            nx: c.nx, ny: c.ny,
+            x: has_point ? c.x : null,
+            y: has_point ? c.y : null,
+            nx: has_normal ? c.nx : null,
+            ny: has_normal ? c.ny : null,
+            hasNormal: has_normal,
+            hasPoint: has_point,
+            sensor: !!c.sensor,
             speed: c.speed,
+            // Устойчивые логические ID участников (§4.2, §13): нужны трассировке
+            // и диагностике, чтобы по событию найти узлы, а не нативные body id.
+            source: na ? na.nid : null,
+            target: nb ? nb.nid : null,
+            // Псевдонимы из contracts §4.3: то же значение, читаемое имя.
+            source_id: na ? na.nid : null,
+            target_id: nb ? nb.nid : null,
             a: na ? wrapOne(na) : null,
             b: nb ? wrapOne(nb) : null,
         };
+        if (trace_on) noteTrace(name, na, nb, c);
+
+        // §40: маршрутизация контакта — индекс native-формы и область каждого
+        // участника отдельно от узла-сенсора. Игра различает «какая именно
+        // область» и «чей это логический владелец», не заглядывая в handle'ы.
+        if (c.shapeA !== undefined) {
+            info.shapeA = c.shapeA;
+            info.shapeB = c.shapeB;
+            const area_a = na ? areaByIndex(na, c.shapeA) : null;
+            const area_b = nb ? areaByIndex(nb, c.shapeB) : null;
+            info.areaA = area_a ? area_a.name : null;
+            info.areaB = area_b ? area_b.name : null;
+            info.roleA = area_a ? area_a.role : null;
+            info.roleB = area_b ? area_b.role : null;
+            info.ownerA = na ? wrapOne(area_a ? areaOwnerNode(na, area_a) : na) : null;
+            info.ownerB = nb ? wrapOne(area_b ? areaOwnerNode(nb, area_b) : nb) : null;
+        }
 
         if (na) {
             info.self = wrapOne(na);
             info.other = nb ? wrapOne(nb) : null;
+            info.selfArea = info.areaA || null;
+            info.otherArea = info.areaB || null;
+            info.selfShape = c.shapeA;
+            info.otherShape = c.shapeB;
+            info.selfOwner = info.ownerA || info.self;
+            info.otherOwner = info.ownerB || info.other;
             try { na.emit(name, info); } catch (e) { reportError(`событие ${name}`, e); }
         }
         if (nb) {
             info.self = wrapOne(nb);
             info.other = na ? wrapOne(na) : null;
+            info.selfArea = info.areaB || null;
+            info.otherArea = info.areaA || null;
+            info.selfShape = c.shapeB;
+            info.otherShape = c.shapeA;
+            info.selfOwner = info.ownerB || info.self;
+            info.otherOwner = info.ownerA || info.other;
             try { nb.emit(name, info); } catch (e) { reportError(`событие ${name}`, e); }
         }
     }
@@ -2122,8 +3125,10 @@ function animateSprites() {
  * поэтому он есть всегда, когда движок его отдаёт.
  */
 function reportError(where, error) {
-    const stack = error && error.stack ? `\n${error.stack}` : '';
-    ctx.log(`$: ошибка в ${where}: ${error}${stack}`);
+    // §17: ошибка идёт и человеку (строка в лог — её ищут тесты и люди), и
+    // машине (запись с кодом/подсистемой/операцией в $.debug.errors()).
+    // Логика записи живёт в diag.js: одна точка на весь движок.
+    return diagReport(where, error);
 }
 
 /** Программный вызов хука выхода (движок не даёт события выхода в JS). */

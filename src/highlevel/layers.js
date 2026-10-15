@@ -111,6 +111,14 @@ function clamp01(value) {
     return v < 0 ? 0 : (v > 1 ? 1 : v);
 }
 
+/** Положительное число или запасное значение: шаг полосы не может быть ≤ 0. */
+function numOr(value, fallback) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+    const f = Number(fallback);
+    return Number.isFinite(f) && f > 0 ? f : 1;
+}
+
 function blackPacked() { return packColor('#000000'); }
 
 // ---------------------------------------------------------------------------
@@ -301,6 +309,102 @@ function applyParallaxDeep(layer, factor) {
 }
 
 // ---------------------------------------------------------------------------
+// Бесшовное повторение параллакс-полосы
+//
+// Проблема: слой с параллаксом — один узел, и длинный фон кончается: у края
+// экрана появляется пустота. Демо платформера решало это своим
+// layoutParallax() — копии спрайта раскладывались по экрану с модульным
+// сдвигом. Здесь то же делает подсистема: $.layers.repeat(layer, { period }).
+//
+// Полоса строится БЕЗ лишних узлов: образец (первый видимый ребёнок слоя со
+// спрайтом) прячется, а его картинка рисуется отрисовщиком слоя столько раз,
+// сколько нужно, чтобы закрыть видимую область. Сдвиг считается по модулю
+// периода в ЭКРАННЫХ точках, поэтому при зуме шаг полосы масштабируется
+// вместе с миром и стык не расходится. Якорь полосы — обычный параллакс
+// образца: позицию образца двигает tickLayers, отрисовщик только повторяет
+// её.
+// ---------------------------------------------------------------------------
+
+const repeats = new WeakMap();     // слой → { template, period }
+const repeat_nodes = new Set();    // слои с полосой — для уборки удалённых
+
+/** Первый видимый ребёнок слоя, у которого есть картинка. */
+function repeatTemplate(layer) {
+    const stack = layer.child_nodes.slice();
+    while (stack.length) {
+        const n = stack.pop();
+        if (n.tag === 'layer') continue;
+        if (!n.removed && n.sprite !== undefined && n.sprite >= 0) return n;
+        if (n.visible) for (const c of n.child_nodes) stack.push(c);
+    }
+    return null;
+}
+
+/**
+ * Раскладка полосы: сколько копий и с какого экранного X начинать. Чистая
+ * арифметика вынесена сюда, чтобы её проверял qjs-тест без отрисовки.
+ *
+ * step — шаг полосы на экране (period × zoom), base — экранный X образца,
+ * view_w — ширина видимой области. Возвращает { first, count }: центры копий
+ * идут с шагом step от `first`; first лежит в (-step, 0], поэтому полоса
+ * всегда начинается левее кадра и закрывает его до правого края.
+ */
+export function repeatLayout(step, base, view_w) {
+    const s = Number.isFinite(step) && step > 0 ? step : 1;
+    const b = Number.isFinite(base) ? base : 0;
+    const w = Number.isFinite(view_w) && view_w > 0 ? view_w : 0;
+    // Остаток по модулю приводим к (-step, 0] — целые копии не «убегают».
+    const first = ((b % s) + s) % s - s;
+    const count = Math.max(1, Math.ceil(w / s) + 2);
+    return { first, count };
+}
+
+/** Рисует полосу (бесшовное повторение) в отрисовщике слоя. */
+function renderRepeatLayer(node, cam) {
+    const group = repeats.get(node);
+    if (!group) return false;
+    const template = group.template;
+    if (!template || template.removed || template.sprite < 0) return false;
+    const zoom = cam && cam.zoom > 0 ? cam.zoom : 1;
+    const view_w = cam && cam.w ? cam.w : engine.width;
+    const view_h = cam && cam.h ? cam.h : engine.height;
+    const cw = cam ? cam.x : 0;
+    const ch = cam ? cam.y : 0;
+    const step = group.period * zoom;
+    const base_x = (template.x - cw) * zoom + view_w / 2 + (cam ? cam.shake_x || 0 : 0);
+    const base_y = (template.y - ch) * zoom + view_h / 2 + (cam ? cam.shake_y || 0 : 0);
+    const layout = repeatLayout(step, base_x, view_w);
+    const color = template.alpha < 1 ? withAlpha(template.color, template.alpha) : template.color;
+    const w = group.period * zoom;
+    const h = template.h * zoom;
+    for (let i = 0; i < layout.count; i++) {
+        ctx.gfx.push.sprite(template.sprite, layout.first + i * step, base_y, w, h, 0,
+                            color, template.blend_mode);
+    }
+    return true;
+}
+
+/** Убрать группу повтора: вернуть образец в обычную отрисовку. */
+function dropRepeat(layer) {
+    const group = repeats.get(layer);
+    if (!group) return false;
+    if (group.template && !group.template.removed) group.template.visible = true;
+    repeats.delete(layer);
+    return true;
+}
+
+/** Прибрать группы, чьи слои/образцы удалены (иначе полоса жила бы вечно). */
+function cleanupRepeats() {
+    for (const layer of Array.from(repeat_nodes)) {
+        const group = repeats.get(layer);
+        if (!group || layer.removed || !group.template || group.template.removed) {
+            dropRepeat(layer);
+            repeat_nodes.delete(layer);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Слои: порядок и видимость
 // ---------------------------------------------------------------------------
 
@@ -441,6 +545,8 @@ function ensureOverlay() {
 
 function renderLayer(node, t, cam) {
     const w = cam.w, h = cam.h;
+    // Полоса параллакса (бесшовное повторение) — под оттенком слоя.
+    renderRepeatLayer(node, cam);
     const color = node.modulate_color;
     const alpha = node.modulate_alpha || 0;
     // Режим берём у узла: `multiply` — затемнение, `add` — засветка (вспышка,
@@ -569,6 +675,10 @@ export function installLayers($) {
             if (!node) return false;
             node.visible = true;
             setVisibleDeep(node, true);
+            // Образец полосы обязан остаться скрытым: его рисует отрисовщик
+            // слоя, иначе картинка удвоилась бы.
+            const group = repeats.get(node);
+            if (group && group.template && !group.template.removed) group.template.visible = false;
             return true;
         },
 
@@ -608,6 +718,63 @@ export function installLayers($) {
             node.layer = node.layer_order;
             propagateLayer(node);
             return node.layer_name;
+        },
+
+        /**
+         * Бесшовное повторение слоя: `$.layers.repeat(layer, opts)`.
+         *
+         * Слой задаёт образец — первый свой ребёнок со спрайтом; образец
+         * прячется, а его картинка рисуется столько раз, сколько нужно, чтобы
+         * закрыть видимый кадр. Шаг полосы — `period` мировых пикселей (по
+         * умолчанию ширина образца), сдвиг считается по модулю в экранных
+         * точках и потому сходится при любом зуме.
+         *
+         *   const sky = $.layers.create({ name: 'sky', order: -30 });
+         *   $('<sprite>', { src: 'assets/sky.png' }).size(512, 256).at(0, 200).appendTo(sky);
+         *   sky.parallax(0.9);                        // коэффициент параллакса
+         *   $.layers.repeat(sky, { period: 512 });    // бесшовная полоса
+         *   $.layers.repeatOff(sky);                  // вернуть обычный слой
+         *
+         * Ограничения: образец — спрайт (не тайлмап и не узел с физикой);
+         * копии не анимируются и не являются узлами, поэтому в `$.world.count()`
+         * и в дереве DevTools их нет.
+         */
+        repeat(what, opts) {
+            const o = opts || {};
+            const layer = layerNodeOf(what);
+            if (!layer) return null;
+            const template = repeatTemplate(layer);
+            if (!template) {
+                ctx.log('$.layers.repeat: у слоя нет ребёнка со спрайтом — '
+                      + 'сначала добавьте <sprite> с картинкой');
+                return null;
+            }
+            const period = Math.max(1, numOr(o.period !== undefined ? o.period : o.tileW, template.w));
+            template.visible = false;         // образец рисует отрисовщик слоя
+            repeats.set(layer, { template, period });
+            repeat_nodes.add(layer);
+            return layers;
+        },
+
+        /** Выключить повторение слоя; образец снова рисуется сам. */
+        repeatOff(what) {
+            const layer = layerNodeOf(what);
+            if (!layer) return false;
+            repeat_nodes.delete(layer);
+            return dropRepeat(layer);
+        },
+
+        /** Факты о полосе: { template, period, factor } или null. */
+        repeatInfo(what) {
+            const layer = layerNodeOf(what);
+            const group = layer ? repeats.get(layer) : null;
+            if (!group) return null;
+            return {
+                template: group.template ? group.template.tag : null,
+                period: group.period,
+                factor: group.template && group.template.parallax_factor !== undefined
+                    ? group.template.parallax_factor : null,
+            };
         },
 
         /**
@@ -737,7 +904,9 @@ function layersSummary() {
 export function tickLayers(dt) {
     const summary = layersSummary();
     // Переход-затемнение живёт вне узлов: пока он идёт, шаг нужен всегда.
-    if (summary.layers === 0 && summary.parallax === 0 && !(fade.ms > 0)) return;
+    // Полосы повторения тоже: их раскладку двигает параллакс образца, а сам
+    // образец может не иметь facet'а (тогда его двигать нечего).
+    if (summary.layers === 0 && summary.parallax === 0 && repeat_nodes.size === 0 && !(fade.ms > 0)) return;
 
     const cam = cameraTransform();
 
@@ -767,6 +936,9 @@ export function tickLayers(dt) {
     for (const [name, node] of registry) {
         if (node.removed || node.internal) registry.delete(name);
     }
+
+    // 3.1. Полосы повторения: снимаем те, чей слой или образец удалён.
+    if (repeat_nodes.size) cleanupRepeats();
 
     // 4. Переход-затемнение.
     tickFade(dt);

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Dust2 annex: big multi-room wing, doors, room-over-room, HRTF ambience and SDK-baked Re2DSprite guns."""
-import json,sys
+import json,os,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 from agent_client import Agent
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from re2d_skip import skip_without_sdk_command, skip_without_re2d   # noqa: E402
+if skip_without_sdk_command('bake-re2d', what='SDK-baked weapons'):
+    sys.exit(0)
 failed=[]
 def check(ok,name):
  print(('ok ' if ok else 'FAIL ')+name,flush=True)
@@ -11,6 +15,8 @@ def check(ok,name):
 def main():
  routes=json.loads(Path('demos/re2d_dust2/routes.json').read_text())
  with Agent(game='demos/re2d_dust2',seed=7) as a:
+  if skip_without_re2d(a):
+      return
   a.step(8)
   info=a.eval('world.info()')
   check(info['cells']>=300 and info['portals']>=600 and info['lights']>=40,'annex adds a large map: %d cells, %d portals, %d lights'%(info['cells'],info['portals'],info['lights']))

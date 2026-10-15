@@ -52,6 +52,9 @@ bool r2d_app_init(R2DApp *app, const char *title, int width, int height, bool vs
                   bool headless, const char *gpu_driver)
 {
     SDL_zero(*app);
+    // Время физики по умолчанию идёт как есть: SDL_zero обнулил бы множитель,
+    // и мир встал бы намертво (см. R2DApp.time_scale).
+    app->time_scale = 1.0f;
     // Имя бэкенда задаётся СРАЗУ: SDL_zero обнуляет структуру, поэтому
     // записать его до вызова было бы недостаточно.
     if (gpu_driver) SDL_strlcpy(app->gpu_driver, gpu_driver, sizeof app->gpu_driver);

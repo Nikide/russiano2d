@@ -13,8 +13,9 @@
 import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
 import { Node, wrapOne, ctx } from '../../src/highlevel/core.js';
 import { installCamera } from '../../src/highlevel/camera.js';
+import { installGfx } from '../../src/highlevel/render.js';
 import {
-    installLayers, tickLayers, parallaxOffset, layerSortKey,
+    installLayers, tickLayers, parallaxOffset, layerSortKey, repeatLayout,
 } from '../../src/highlevel/layers.js';
 
 // $.layers ставится на пустой объект: логике подсистемы движок не нужен.
@@ -321,6 +322,103 @@ test('fadeTo уважает паузу игрового времени', () => {
         if (saved === undefined) delete ctx.time; else ctx.time = saved;
         $.layers.fade('#000000', 0);
     }
+});
+
+// --- Бесшовное повторение полосы -------------------------------------------
+
+test('repeatLayout: копии закрывают кадр и стыкуются по модулю периода', () => {
+    const l = repeatLayout(100, 0, 800);
+    eq(l.count, 10, '800/100 + 2 копии');
+    eq(l.first, -100, 'первая копия начинается левее кадра');
+    // Сдвиг образца ровно на период — та же раскладка: стык не виден.
+    eq(repeatLayout(100, 100, 800).first, -100);
+    eq(repeatLayout(100, 250, 800).first, -50, 'остаток по модулю, а не накопление');
+    eq(repeatLayout(100, -30, 800).first, -30, 'отрицательная база тоже корректна');
+    // Зум: шаг меньше — копий больше, полоса по-прежнему закрывает кадр.
+    const zoomed = repeatLayout(25, 0, 800);
+    eq(zoomed.count, 34);
+    truthy(zoomed.first <= 0 && zoomed.first >= -25);
+    truthy(Number.isFinite(repeatLayout(0, 0, 800).count), 'нулевой шаг не делит на ноль');
+});
+
+test('$.layers.repeat: образец прячется, новых узлов не появляется', () => {
+    const before = ctx.nodes.length;
+    const layer = $.layers.create({ name: 'sky', order: -30 });
+    const sky = makeNode('sprite', { w: 512, h: 256 });
+    sky.sprite = 7;
+    attach(sky, layer.get(0));
+
+    eq($.layers.repeat(layer, { period: 256 }), $.layers, 'возвращает $.layers для цепочки');
+    eq(ctx.nodes.length, before + 2, 'полоса не создаёт узлов-копий');
+    eq(sky.visible, false, 'образец спрятан — его рисует отрисовщик слоя');
+    const info = $.layers.repeatInfo(layer);
+    eq(info.period, 256);
+    eq(info.template, 'sprite');
+
+    truthy($.layers.repeatOff(layer), 'repeatOff сработал');
+    eq(sky.visible, true, 'образец вернулся в обычную отрисовку');
+    eq($.layers.repeatInfo(layer), null);
+    $.layers.remove('sky');
+    sky.destroy();
+});
+
+test('repeat без спрайта в слое не включается и говорит об этом', () => {
+    const layer = $.layers.create({ name: 'empty' });
+    eq($.layers.repeat(layer, { period: 64 }), null, 'нет образца — нет полосы');
+    $.layers.remove('empty');
+});
+
+test('удаление слоя или образца снимает полосу (без вечной утечки)', () => {
+    const layer = $.layers.create({ name: 'gone' });
+    const sky = makeNode('sprite', { w: 64, h: 64 });
+    sky.sprite = 3;
+    attach(sky, layer.get(0));
+    $.layers.repeat(layer, { period: 64 });
+    truthy($.layers.repeatInfo(layer) !== null);
+
+    sky.destroy();                     // образец исчез
+    tickLayers(1 / 60);
+    eq($.layers.repeatInfo(layer), null, 'полоса снята вместе с образцом');
+    $.layers.remove('gone');
+});
+
+test('полоса рисуется: копий ровно по раскладке, образец — ни разу', () => {
+    installGfx($);
+    $.gfx = ctx.gfx;
+    const layer = $.layers.create({ name: 'band', order: -40 });
+    const sky = makeNode('sprite', { w: 100, h: 50 });
+    sky.sprite = 7;
+    attach(sky, layer.get(0));
+
+    ctx.gfx._render();
+    const one = ctx.gfx.push.stats().sprites;      // образец рисуется сам
+
+    $.layers.repeat(layer, { period: 100 });
+    ctx.gfx._render();
+    const band = ctx.gfx.push.stats().sprites;
+    eq(band - one, repeatLayout(100, 0, 800).count - 1,
+       'вместо образца — ровно count копий полосы');
+    $.layers.repeatOff(layer);
+    $.layers.remove('band');
+    sky.destroy();
+});
+
+test('show/hide слоя не «включают» образец полосы обратно', () => {
+    const layer = $.layers.create({ name: 'vis' });
+    const sky = makeNode('sprite', { w: 64, h: 64 });
+    sky.sprite = 4;
+    attach(sky, layer.get(0));
+    $.layers.repeat(layer, { period: 64 });
+    eq(sky.visible, false);
+
+    $.layers.hide('vis');
+    $.layers.show('vis');
+    eq(sky.visible, false, 'после show() образец всё ещё скрыт — картинка не удваивается');
+    eq(layer.get(0).visible, true, 'сам слой снова видим');
+    $.layers.repeatOff(layer);
+    eq(sky.visible, true, 'после repeatOff образец возвращается');
+    $.layers.remove('vis');
+    sky.destroy();
 });
 
 finish();

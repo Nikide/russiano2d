@@ -18,9 +18,6 @@ typedef struct TypeRule {
 
 // Порядок важен: более длинные суффиксы раньше коротких.
 static const TypeRule k_rules[] = {
-    { ".character.json",  "re2dsprite.character" },
-    { ".animations.json", "re2dsprite.animations" },
-    { ".surface.json",    "re2d.surface" },
     { ".atlas.json",      "sprite.atlas" },
     { ".tilemap.json",    "tilemap" },
     { ".particles.json",  "particles" },
@@ -29,9 +26,6 @@ static const TypeRule k_rules[] = {
     { ".fonts.json",      "fonts" },
     { ".audio.json",      "audio" },
     { ".input.json",      "input" },
-    { ".bake.json",       "re2d.bake" },
-    { ".re2dmap.json",    "re2d.world" },
-    { ".re2dmap",         "re2d.world" },
     { ".r2replay",        "replay" },
     { "project.json",     "project" },
     { "sdk_tools.json",   "sdk.registry" },
@@ -49,11 +43,6 @@ static const TypeRule k_rules[] = {
     { ".rcss",            "rmlui.style" },
     { ".js",              "script" },
     { ".mjs",             "script" },
-    { ".glb",             "model.glb" },
-    { ".gltf",            "model.gltf" },
-    { ".vrm",             "model.vrm" },
-    { ".obj",             "model.obj" },
-    { ".fbx",             "model.fbx" },
     { ".ttf",             "font" },
     { ".otf",             "font" },
     { ".md",              "doc" },

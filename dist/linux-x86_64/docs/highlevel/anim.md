@@ -336,3 +336,24 @@ build/_deps/quickjs-build/qjs tests/js/anim_test.mjs
   перехода — сама машина остаётся активной.
 * Имя `$.anim` и методы `.playClip()`, `.stateMachine()` и т. п. не
   пересекаются с именами ядра (`animate`, `pause`, `sequence`, …).
+
+---
+
+## Связь с плеером `$.anim.player` (§41)
+
+Реестры клипов независимы, но у подсистем есть одна точка соприкосновения:
+дорожка плеера `sprite` с `clip: true` (binding `sprite.clip`) выбирает
+именованный клип **этого** модуля через `wrapOne(node).playClip(name)` —
+таймлайн плеера управляет сменой клипа, а время внутри клипа идёт из
+`tickAnim`. Обратной связи нет: `anim.js` ничего не знает о плеере.
+
+```js
+$.anim.define('recoil', { duration: 120, tracks: [{ prop: 'scale_x', keys: [{ t: 0, v: 1 }, { t: 1, v: 1.2 }] }] });
+$.anim.clip('shot', { duration: 400, tracks: [
+    { type: 'sprite', clip: true, keys: [{ t: 0, v: 'recoil' }] },
+    { type: 'shape', binding: 'shape.enabled', target: 'sensor', keys: [{ t: 50, v: true }, { t: 200, v: false }] },
+]});
+```
+
+Мультицелевые дорожки, property/audio-треки, маркеры с policy и домены часов
+описаны в [animplayer.md](animplayer.md).

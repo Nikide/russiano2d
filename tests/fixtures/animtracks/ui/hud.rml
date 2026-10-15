@@ -1,0 +1,7 @@
+<rml>
+<head><title>animtracks hud</title></head>
+<body>
+<div id="fade">fade</div>
+<input id="lives" type="text" value="3"/>
+</body>
+</rml>

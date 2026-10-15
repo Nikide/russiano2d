@@ -27,6 +27,8 @@ $('.enemy').within('#hero', 500);       // выборка в радиусе (н�
 | Спрайты | `dotSprite`, `resolveSprite`, `resolveSheet`, `sheetFrames`, `spriteSize`, `forgetTexture`, `textureSizeOf`, `regionSprite` |
 | Цвет | `packColor`, `withAlpha` |
 | Случайность | `makeRandom`, `fxRandom` |
+| §39 трансформы | `isLocalSpace`, `enterLocalSpace`, `exitLocalSpace`, `resolveLocalTransforms`, `installTransformResolution`, `worldTransformOf`, `worldPointOf`, `localPointOf`, `setWorldPosition`, `setWorldAngle`, `setWorldScale`, `worldScaleOf`, `invalidateNodeTransform` |
+| §40 области | `areaDefine`, `areaEnable`, `areaFind`, `areaListOf`, `areaByIndex`, `areaInfo`, `areaOwnerNode`, `areaOverlap`, `applyAreas`, `areaNativeEnabled`, `areaSync`, `areaSyncAll` |
 | Прочее | `eventName`, `engineOf`, `countUiNodes` |
 
 `engineOf()` — безопасная заглушка движка: подсистемы берут движок через неё,
@@ -64,4 +66,71 @@ Facet — общий признак узлов (`hp`, `body`, …): `nodesWithFa
 `$.collision.define('walls', 0x1)` работают `.layerName('walls')`,
 `.maskBy('walls|enemies')` и `$.collision.mask('all|!enemies')`; список имён —
 `$.collision.names()`.
+
+## 6. Локальные трансформы (§39)
+
+`x/y/angle/scale_x/scale_y` узла — **мировой** трансформ: их читают отрисовка,
+физика и старый игровой код. В локальном режиме (`local_mode === true`) узел
+хранит исходные локальные значения в `local_x/local_y/local_angle/
+local_scale_x/local_scale_y`, а в тех же мировых полях лежит результат
+композиции по цепочке родителей:
+
+```
+angle = angle_родителя + local_angle
+scale = scale_родителя * local_scale        (знак сохраняется: flip зеркалит)
+point = parent + R(angle_родителя) * (local_xy * scale_родителя)
+```
+
+Поэтому ни одна подсистема не меняется: рендер и физика читают прежние поля.
+Неравномерный масштаб родителя масштабирует сдвиг по своим осям, но не даёт
+shear — произвольный наклон запрещён (§39).
+
+Экспорт (используется `api.js` и тестами без движка):
+
+| Имя | Смысл |
+|---|---|
+| `isLocalSpace(node)` | включён ли у узла локальный режим |
+| `enterLocalSpace(node)` / `exitLocalSpace(node)` | включить (keep-world) / выключить |
+| `resolveLocalTransforms()` | кадровый пакетный проход; возвращает число изменённых |
+| `installTransformResolution()` | регистрация прохода в движке (`engine.setResolveTransforms`) |
+| `worldTransformOf(node, out?)` | мировой трансформ `{ x, y, angle, sx, sy }` |
+| `worldPointOf(node, lx, ly)` / `localPointOf(node, wx, wy)` | точка туда/обратно |
+| `setWorldPosition/setWorldAngle/setWorldScale(node, …)` | запись МИРОВОГО значения (обратная композиция) |
+| `worldScaleOf(node)` | скомпонованный масштаб (для `.flip()`) |
+| `invalidateNodeTransform(node)` | пометить поддерево устаревшим и пересчитать узел |
+
+Проход идёт по списку локальных узлов (`local_nodes`), а не по реестру: в
+проекте без локальных узлов он выходит на первой строке и ничего не стоит.
+Поколение (`local_gen`) и поля `_t_gen`/`_t_busy` не дают считать узел дважды и
+**защищают от цикла** в цепочке родителей. Если локальных узлов нет, запись
+мирового трансформа не платит даже за обход детей (проверка длины списка).
+
+Нативный проход — `engine.nodes.resolveTransforms(list, gen, cb)`; без движка
+(юнит-тест qjs, `$.debug.nativePasses(false)`) работает тот же алгоритм на JS.
+Движок зовёт проход в конце кадра логики и перед отрисовкой (`src/script.c`),
+поэтому к следующему физическому шагу и к сборке кадра дети уже скомпонованы;
+локальный ребёнок с телом ставится в мировую точку через `cb`.
+
+## 7. Области узла (§40)
+
+Описания областей — данные узла (`node.area_list`), нативные формы — на теле.
+Экспорт: `areaDefine`, `areaEnable`, `areaFind`, `areaListOf`, `areaByIndex`,
+`areaInfo`, `areaOwnerNode`, `areaOverlap`, `applyAreas` (пересборка форм после
+создания тела). Внутреннее представление — compound shapes: `applyAreas` зовёт
+`engine.setShape`/`engine.addShape`, а `enabled: false` реализуется нулевым
+фильтром через `engine.setShapeEnabled`, поэтому gameplay от представления не
+зависит (§40).
+
+`areaOverlap` — явный геометрический запрос (`engine.shapeOverlaps`), а не
+история событий: цель, уже стоящая внутри при открытии окна атаки, находится
+сразу. `index` области переживает пересборку формы — дедупликация попаданий в
+игре опирается на имя области и окно атаки, а не на handle.
+
+Источник истины о состоянии области — **нативный фильтр формы**:
+`engine.shapeEnabled(body, index)` читает его, а выключенную форму не возвращает
+и сам запрос пересечений. Если форму переключил внешний драйвер (дорожка
+`shape.enabled` §41) напрямую через `engine.setShapeEnabled`, JS-описание
+подтягивается при чтении: `areaSync`/`areaSyncAll`/`areaNativeEnabled`, поэтому
+`.areas()` и `.areaOverlap()` не расходятся с native-состоянием.
+
 

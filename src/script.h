@@ -47,6 +47,10 @@ typedef struct R2DScript {
     JSValue engine_obj;
     JSValue update_fn;
     JSValue render_fn;
+    // §39: кадровый проход локальных трансформов (engine.setResolveTransforms).
+    // Зовётся в конце кадра логики и перед отрисовкой: к началу следующего
+    // физического шага и к сборке кадра трансформы детей уже верны.
+    JSValue resolve_fn;
     JSValue exit_fn;              // engine.setExit(fn) — хук завершения
     JSValue snapshot_fn;          // engine.setSnapshot(fn) — снимок для агента
     JSValue agent_query_fn;       // engine.setAgentQuery(fn) — query/inspect агента

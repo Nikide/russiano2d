@@ -625,8 +625,8 @@ export function createApp($) {
     }
 
     function studioSnapshots() {
-        // Прежние ключи остаются в снимке (null, пока студия не открыта): тесты и агенты на них опираются.
-        const out = { sprite: null, animation: null, re2d: null, automation: null, world: null, baker: null };
+        // Прежние 2D-ключи остаются в снимке (null, пока студия не открыта): тесты и агенты на них опираются.
+        const out = { sprite: null, animation: null, automation: null };
         for (const key of Object.keys(app.studios || {})) {
             const st = app.studios[key];
             out[key] = st && st.snapshot ? st.snapshot() : null;

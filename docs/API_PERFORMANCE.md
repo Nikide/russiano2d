@@ -7,16 +7,16 @@
 
 | Условие | Значение |
 |---|---|
-| Дата UTC | 2026-10-08T20:13:09.286389+00:00 |
-| ОС / архитектура | macOS-27.0.1-arm64-arm-64bit-Mach-O / arm64 |
+| Дата UTC | 2026-10-12T06:14:43.139473+00:00 |
+| ОС / архитектура | macOS-27.0.1-arm64-arm-64bit / arm64 |
 | Компьютер / CPU | Mac mini Mac16,10 / Apple M4 |
 | RAM / logical CPU | 17179869184 bytes / 10 |
 | GPU | `[{"spdisplays_vendor": "sppci_vendor_Apple", "sppci_model": "Apple M4"}]` |
 | GPU backend | metal |
 | Питание | Now drawing from 'AC Power' |
-| Binary version / SHA256 | 0.1.23 / `4ea6a438ecaa1dd693c9cc77c7bd59aa6687ea2d2032b5dc9d151e94bea219a1` |
-| HEAD / dirty | `5710fcfaa81b85516a7c947208a3a5ba61b904a6` / True |
-| Build | `{"CMAKE_BUILD_TYPE:STRING": "Release", "CMAKE_C_COMPILER:FILEPATH": "/usr/bin/cc", "CMAKE_C_FLAGS_RELEASE:STRING": "-O3 -DNDEBUG", "R2D_EMBED_DIR:STRING": "game", "R2D_EMBED_SCRIPTS:BOOL": "OFF", "R2D_ENABLE_AUDIO:BOOL": "ON", "R2D_ENABLE_HOTRELOAD:BOOL": "ON", "R2D_ENABLE_HTTP:BOOL": "ON", "R2D_ENABLE_IMGUI:BOOL": "ON", "R2D_ENABLE_LIVE_SHADERS:BOOL": "ON", "R2D_ENABLE_NET:BOOL": "ON", "R2D_ENABLE_RMLUI:BOOL": "ON", "R2D_JS_LEAK_DEBUG:BOOL": "OFF", "R2D_PAYLOAD_FILE:FILEPATH": "", "R2D_SANITIZE:BOOL": "OFF", "R2D_SHADERS_WGSL_ONLY:BOOL": "OFF", "R2D_VISIBILITY_INCLUDE_DIR:INTERNAL": "/Volumes/SSD NVME/nikiniki2d/build-autobuild/macos-arm64/_deps/visibility-src"}` |
+| Binary version / SHA256 | 0.1.30 / `aee16b21de980d728950bfdd17874b219690c5f79f25092355f43cf4e664a52f` |
+| HEAD / dirty | `da2d27390d2dc0e1f38a3a83e8ed6a0c08976f06` / True |
+| Build | `{"CMAKE_BUILD_TYPE:STRING": "Release", "CMAKE_C_COMPILER:FILEPATH": "/usr/bin/cc", "CMAKE_C_FLAGS_RELEASE:STRING": "-O3 -DNDEBUG", "R2D_BUNDLED_FREETYPE:BOOL": "OFF", "R2D_EMBED_DIR:STRING": "game", "R2D_EMBED_SCRIPTS:BOOL": "OFF", "R2D_ENABLE_AUDIO:BOOL": "ON", "R2D_ENABLE_HOTRELOAD:BOOL": "ON", "R2D_ENABLE_HTTP:BOOL": "ON", "R2D_ENABLE_LIVE_SHADERS:BOOL": "ON", "R2D_ENABLE_NET:BOOL": "ON", "R2D_ENABLE_RMLUI:BOOL": "ON", "R2D_ENABLE_STEAM_AUDIO:BOOL": "ON", "R2D_HELP_LLAMA:BOOL": "OFF", "R2D_HELP_MODEL:FILEPATH": "", "R2D_JS_LEAK_DEBUG:BOOL": "ON", "R2D_PAYLOAD_FILE:FILEPATH": "", "R2D_SANITIZE:BOOL": "OFF", "R2D_SHADERS_WGSL_ONLY:BOOL": "OFF", "R2D_STEAM_AUDIO_SDK:PATH": "/Volumes/SSD NVME/nikiniki2d/build/_deps/steam-audio-sdk/steamaudio", "R2D_VISIBILITY_INCLUDE_DIR:INTERNAL": "/Volumes/SSD NVME/nikiniki2d/build/_deps/visibility-src"}` |
 | Разрешение / режим | 1280×720, headless, fixed dt 1/60, seed 17 |
 | Прогрев / frame window / повторов | 40 / 120 кадров / 7 |
 | Таймер micro | $.time.perfNow, monotonic native clock; target 20 ms на batch |
@@ -28,7 +28,7 @@
 ## Охват и методика
 
 Режим: полный sweep
-В дереве 78 high-level модулей. Micro workloads: 75; frame workloads: 20.
+В дереве 79 high-level модулей. Micro workloads: 76; frame workloads: 20.
 Таблица указывает конкретную операцию: это представительные нагрузки компонентов,
 **не замер каждого метода и каждой комбинации опций**. HTTP/SDK control rows
 меряют только overhead capability/path queries, не сеть, импорт или компиляцию.
@@ -40,106 +40,107 @@ Frame CPU — native profiler averages по окну; P95 — разброс о�
 
 | Компонент / нагрузка | N | Median µs/op | P95 µs/op | Δ baseline |
 |---|---:|---:|---:|---:|
-| core, api — CSS class selection over N nodes | 128 | 8.628 | 8.831 | — |
-| sprite — Position/alpha/pivot on one cached node | 128 | 1.664 | 1.682 | — |
-| signal — Emit to N listeners | 128 | 39.170 | 39.404 | — |
-| mathx — Vector normalize + interpolation | 128 | 0.437 | 0.453 | — |
-| random — Seeded noise2D + weighted selection | 128 | 1.142 | 1.152 | — |
-| csv — Parse N-row CSV | 128 | 187.705 | 213.919 | — |
-| grid — Flood fill 16x16 | 256 | 78.679 | 82.324 | — |
-| curve — Evaluate cubic curve and gradient | 128 | 2.126 | 2.156 | — |
-| state — FSM send with two real transitions | 128 | 7.892 | 7.967 | — |
-| store — Set/read one key in N-entry memory store | 128 | 0.221 | 0.337 | — |
-| i18n — Lookup + parameter substitution | 128 | 3.707 | 3.748 | — |
-| collision — Named layer mask resolution | 128 | 4.739 | 4.782 | — |
-| input — Bound action state and axis query | 128 | 10.937 | 11.043 | — |
-| time — Create/cancel timer without frame advance | 128 | 1.197 | 1.213 | — |
-| camera — Transform screen/world coordinates | 128 | 0.954 | 0.978 | — |
-| viewports — Resolve secondary camera data | 128 | 6.968 | 7.011 | — |
-| window — Read window size and pixel size | 128 | 0.807 | 0.834 | — |
-| agent — Snapshot of N entities | 128 | 237.458 | 238.562 | — |
-| debug — Collect counters over N nodes | 128 | 24.869 | 25.530 | — |
-| watch — Create/stop live selection watch | 128 | 21.418 | 22.406 | — |
-| prefab — Serialize subtree to inspectable data | 128 | 14.452 | 14.592 | — |
-| save — Build store/world snapshot, no disk I/O | 128 | 1771.924 | 1787.871 | — |
-| resource — Get resident Curve resource | 128 | 0.832 | 0.857 | — |
-| scene — Register/remove scene description | 128 | 0.490 | 0.500 | — |
-| script — Read native reload state, no restart | 128 | 0.259 | 0.359 | — |
-| font — Measure cached Cyrillic string | 128 | 3.728 | 3.766 | — |
-| text — Measure alternating Cyrillic strings | 128 | 0.719 | 0.731 | — |
-| ui — RmlUi DOM text write/read | 128 | 0.458 | 0.479 | — |
-| devtools — Refresh real RmlUi inspector over N nodes | 128 | 300.474 | 305.732 | — |
-| widgets — Legacy virtual list range of N items | 128 | 2.360 | 2.382 | — |
-| layers — Resolve layer/parallax | 128 | 0.896 | 0.908 | — |
-| anim — Lookup defined sprite animation clip | 128 | 0.222 | 0.255 | — |
-| animplayer — Seek actual property-track player | 128 | 5.734 | 5.762 | — |
-| tween — Create/kill property Tween | 128 | 3.624 | 3.742 | — |
-| flow — Create/cancel delayed flow | 128 | 7.810 | 8.319 | — |
-| task — Create/cancel chunked task | 128 | 4.699 | 10.418 | — |
-| nav — A* through 32x32 grid | 1024 | 21.191 | 21.532 | — |
-| bsp — Native BSP order of N parallel walls | 128 | 118.743 | 119.713 | — |
-| world — Native broadphase circle query over N bodies | 128 | 99.653 | 101.418 | — |
-| triggers — Test node within real trigger zone | 128 | 0.797 | 0.800 | — |
-| pool — Spawn/release reusable object | 16 | 4.233 | 4.261 | — |
-| particles — Particle preset normalization | 128 | 6.790 | 6.843 | — |
-| tilemap — Coordinate conversion + visible range | 256 | 2.364 | 2.444 | — |
-| atlas — Parse N frame Aseprite atlas in memory | 128 | 326.562 | 328.098 | — |
-| items — Inventory definition lookup + creation | 128 | 0.285 | 0.322 | — |
-| weapons — Weapon stats resolution | 128 | 0.143 | 0.307 | — |
-| combat — Damage/zone calculation | 128 | 0.267 | 0.292 | — |
-| alive — Update real NPC psyche | 128 | 1.606 | 1.623 | — |
-| quest — Quest definition lookup | 128 | 0.130 | 0.317 | — |
-| story, story_script — Parse N dialogue steps | 128 | 578.624 | 587.742 | — |
-| dialog — Dialogue definition serialization | 128 | 0.330 | 0.373 | — |
-| screen — Legacy screen define/remove, no new GUI | 128 | 0.851 | 0.861 | — |
-| loading — Loading progress state | 128 | 0.243 | 0.289 | — |
-| timeline — Timeline definition registration | 128 | 1.693 | 1.784 | — |
-| cutscene — Read input ownership and cutscene state | 128 | 0.187 | 0.284 | — |
-| cels — Evaluate real cel graph drivers | 128 | 2.534 | 2.538 | — |
-| mesh — Pose two-bone skeleton | 2 | 2.189 | 2.197 | — |
-| proc — Render 32x32 pixel character with seed | 1024 | 1718.417 | 1745.742 | — |
-| raid — Generate deterministic raid plan | 32768 | 11.984 | 12.710 | — |
-| replay — Serialize deterministic recorded input frames | 128 | 27.897 | 28.858 | — |
-| acoustics — Resolve current room/zone state | 128 | 6.958 | 7.003 | — |
-| audiobus — Resolve gain through bus tree | 128 | 1.364 | 1.389 | — |
-| soundbank — Bank variation lookup | 128 | 0.436 | 0.451 | — |
-| steps — Resolve footstep material | 128 | 0.467 | 0.472 | — |
-| sound — Native sound play/stop | 128 | 39.607 | 40.800 | — |
-| net — Pack replicated snapshot without external transport | 128 | 209.461 | 211.242 | — |
-| re2d — Native height support over 2 vertical spans | 2 | 1.509 | 1.697 | — |
-| rotsprite — Native Re2DSprite synthesize changing pose | 1 | 4040.302 | 4210.907 | — |
-| kinds — Change node kind and resolve | 128 | 0.509 | 0.524 | — |
-| ru — Russian tag/name alias creation and removal | 128 | 6.108 | 6.336 | — |
-| viewport — Native target create/destroy, 32x32 | 1024 | 6.591 | 6.778 | — |
-| fx — Build ribbon and clear bounded effect registry | 3 | 7.077 | 7.155 | — |
-| depth — Toggle native depth mode; not GPU fill rate | 1 | 0.176 | 0.324 | — |
-| http — HTTP capability/pending query only; no network transfer | 1 | 0.218 | 0.327 | — |
-| sdk — Native tool paths/availability only; no bake/process throughput | 1 | 10.565 | 10.640 | — |
+| core, api — CSS class selection over N nodes | 128 | 7.639 | 7.783 | — |
+| sprite — Position/alpha/pivot on one cached node | 128 | 1.328 | 1.364 | — |
+| signal — Emit to N listeners | 128 | 31.316 | 31.670 | — |
+| mathx — Vector normalize + interpolation | 128 | 0.377 | 0.394 | — |
+| random — Seeded noise2D + weighted selection | 128 | 1.090 | 1.112 | — |
+| csv — Parse N-row CSV | 128 | 151.738 | 154.118 | — |
+| grid — Flood fill 16x16 | 256 | 71.133 | 74.091 | — |
+| curve — Evaluate cubic curve and gradient | 128 | 1.904 | 2.313 | — |
+| state — FSM send with two real transitions | 128 | 6.356 | 6.568 | — |
+| store — Set/read one key in N-entry memory store | 128 | 0.223 | 0.249 | — |
+| i18n — Lookup + parameter substitution | 128 | 2.984 | 3.043 | — |
+| collision — Named layer mask resolution | 128 | 3.669 | 3.718 | — |
+| input — Bound action state and axis query | 128 | 8.811 | 9.370 | — |
+| time — Create/cancel timer without frame advance | 128 | 0.919 | 0.946 | — |
+| camera — Transform screen/world coordinates | 128 | 0.736 | 0.818 | — |
+| viewports — Resolve secondary camera data | 128 | 5.705 | 5.721 | — |
+| window — Read window size and pixel size | 128 | 0.636 | 0.680 | — |
+| agent — Snapshot of N entities | 128 | 194.255 | 195.625 | — |
+| debug — Collect counters over N nodes | 128 | 20.946 | 21.453 | — |
+| watch — Create/stop live selection watch | 128 | 19.021 | 20.016 | — |
+| prefab — Serialize subtree to inspectable data | 128 | 11.760 | 11.847 | — |
+| save — Build store/world snapshot, no disk I/O | 128 | 1432.617 | 1512.480 | — |
+| resource — Get resident Curve resource | 128 | 0.712 | 0.723 | — |
+| scene — Register/remove scene description | 128 | 0.410 | 0.425 | — |
+| script — Read native reload state, no restart | 128 | 0.176 | 0.193 | — |
+| font — Measure cached Cyrillic string | 128 | 3.024 | 3.041 | — |
+| text — Measure alternating Cyrillic strings | 128 | 0.615 | 0.661 | — |
+| ui — RmlUi DOM text write/read | 128 | 0.425 | 0.430 | — |
+| devtools — Refresh real RmlUi inspector over N nodes | 128 | 257.169 | 261.168 | — |
+| widgets — Legacy virtual list range of N items | 128 | 2.061 | 2.267 | — |
+| layers — Resolve layer/parallax | 128 | 0.779 | 0.851 | — |
+| anim — Lookup defined sprite animation clip | 128 | 0.092 | 0.103 | — |
+| animplayer — Seek actual property-track player | 128 | 4.751 | 4.815 | — |
+| tween — Create/kill property Tween | 128 | 3.247 | 3.343 | — |
+| flow — Create/cancel delayed flow | 128 | 7.204 | 7.686 | — |
+| task — Create/cancel chunked task | 128 | 3.709 | 10.456 | — |
+| nav — A* through 32x32 grid | 1024 | 17.751 | 18.495 | — |
+| bsp — Native BSP order of N parallel walls | 128 | 93.117 | 93.904 | — |
+| world — Native broadphase circle query over N bodies | 128 | 80.787 | 85.909 | — |
+| triggers — Test node within real trigger zone | 128 | 0.745 | 0.770 | — |
+| pool — Spawn/release reusable object | 16 | 3.349 | 3.543 | — |
+| particles — Particle preset normalization | 128 | 5.270 | 5.291 | — |
+| tilemap — Coordinate conversion + visible range | 256 | 1.893 | 1.901 | — |
+| atlas — Parse N frame Aseprite atlas in memory | 128 | 274.840 | 304.847 | — |
+| items — Inventory definition lookup + creation | 128 | 0.138 | 0.144 | — |
+| weapons — Weapon stats resolution | 128 | 0.142 | 0.204 | — |
+| combat — Damage/zone calculation | 128 | 0.233 | 0.242 | — |
+| alive — Update real NPC psyche | 128 | 1.434 | 1.451 | — |
+| quest — Quest definition lookup | 128 | 0.119 | 0.119 | — |
+| story, story_script — Parse N dialogue steps | 128 | 461.434 | 467.121 | — |
+| dialog — Dialogue definition serialization | 128 | 0.268 | 0.270 | — |
+| screen — Legacy screen define/remove, no new GUI | 128 | 0.650 | 0.653 | — |
+| loading — Loading progress state | 128 | 0.114 | 0.178 | — |
+| timeline — Timeline definition registration | 128 | 1.754 | 1.786 | — |
+| cutscene — Read input ownership and cutscene state | 128 | 0.121 | 0.167 | — |
+| cels — Evaluate real cel graph drivers | 128 | 2.091 | 2.129 | — |
+| mesh — Pose two-bone skeleton | 2 | 1.806 | 1.832 | — |
+| proc — Render 32x32 pixel character with seed | 1024 | 1470.792 | 1505.129 | — |
+| raid — Generate deterministic raid plan | 32768 | 9.664 | 10.900 | — |
+| replay — Serialize deterministic recorded input frames | 128 | 21.782 | 23.021 | — |
+| acoustics — Resolve current room/zone state | 128 | 5.746 | 5.855 | — |
+| audiobus — Resolve gain through bus tree | 128 | 1.076 | 1.079 | — |
+| soundbank — Bank variation lookup | 128 | 0.363 | 0.369 | — |
+| steps — Resolve footstep material | 128 | 0.387 | 0.394 | — |
+| sound — Native sound play/stop | 128 | 35.371 | 38.213 | — |
+| net — Pack replicated snapshot without external transport | 128 | 182.380 | 185.499 | — |
+| re2d — Native height support over 2 vertical spans | 2 | 1.152 | 1.164 | — |
+| real2d — Real2D v4: synthesize head frame at a changing yaw from the .r2d4 container | 1 | 4879.732 | 5100.562 | — |
+| rotsprite — Native Re2DSprite synthesize changing pose | 1 | 4665.911 | 4925.951 | — |
+| kinds — Change node kind and resolve | 128 | 0.444 | 0.447 | — |
+| ru — Russian tag/name alias creation and removal | 128 | 5.162 | 5.204 | — |
+| viewport — Native target create/destroy, 32x32 | 1024 | 5.595 | 5.801 | — |
+| fx — Build ribbon and clear bounded effect registry | 3 | 5.312 | 5.378 | — |
+| depth — Toggle native depth mode; not GPU fill rate | 1 | 0.159 | 0.162 | — |
+| http — HTTP capability/pending query only; no network transfer | 1 | 0.193 | 0.195 | — |
+| sdk — Native tool paths/availability only; no bake/process throughput | 1 | 8.702 | 8.968 | — |
 
 ## Практические кадровые нагрузки
 
 | Сценарий | N | Логика ms | Батч ms | CPU вместе ms | P95 окон ms | Box2D ms |
 |---|---:|---:|---:|---:|---:|---:|
-| none | 0 | 0.247 | 0.061 | 0.312 | 0.331 | 0.012 |
-| sprite | 100 | 0.291 | 0.133 | 0.423 | 0.444 | 0.012 |
-| sprite | 1000 | 0.744 | 0.777 | 1.513 | 1.552 | 0.012 |
-| sprite | 2000 | 1.181 | 1.394 | 2.575 | 2.797 | 0.011 |
-| body | 100 | 0.422 | 0.134 | 0.555 | 0.574 | 0.047 |
-| body | 1000 | 1.831 | 0.520 | 2.350 | 2.632 | 0.221 |
-| query | 1000 | 2.041 | 0.548 | 2.574 | 2.955 | 0.009 |
-| cached | 1000 | 0.920 | 0.806 | 1.711 | 1.854 | 0.013 |
-| id | 1000 | 0.761 | 0.739 | 1.519 | 1.602 | 0.012 |
-| tween | 1000 | 2.184 | 0.359 | 2.547 | 2.712 | 0.007 |
-| move | 1000 | 1.239 | 0.703 | 1.940 | 2.053 | 0.011 |
-| particles | 1000 | 0.902 | 0.326 | 1.235 | 1.391 | 0.012 |
-| ui | 100 | 0.499 | 0.295 | 0.806 | 0.846 | 0.013 |
-| text | 100 | 0.298 | 0.299 | 0.598 | 0.619 | 0.013 |
-| tilemap | 10000 | 0.256 | 1.130 | 1.385 | 1.480 | 0.012 |
-| signal | 1000 | 2.251 | 0.320 | 2.582 | 2.644 | 0.006 |
-| chain | 1000 | 1.172 | 0.702 | 1.874 | 2.056 | 0.011 |
-| fast | 1000 | 1.111 | 0.789 | 1.901 | 2.022 | 0.012 |
-| churn | 1000 | 2.319 | 0.322 | 2.645 | 2.753 | 0.006 |
-| batch | 1000 | 2.324 | 0.320 | 2.643 | 2.743 | 0.006 |
+| none | 0 | 0.145 | 0.031 | 0.176 | 0.373 | 0.007 |
+| sprite | 100 | 0.190 | 0.075 | 0.264 | 0.366 | 0.007 |
+| sprite | 1000 | 0.642 | 0.529 | 1.171 | 1.561 | 0.009 |
+| sprite | 2000 | 0.716 | 0.672 | 1.388 | 1.807 | 0.007 |
+| body | 100 | 0.287 | 0.087 | 0.374 | 0.559 | 0.031 |
+| body | 1000 | 0.935 | 0.319 | 1.240 | 1.631 | 0.128 |
+| query | 1000 | 0.973 | 0.352 | 1.331 | 1.609 | 0.007 |
+| cached | 1000 | 0.607 | 0.432 | 1.040 | 1.491 | 0.008 |
+| id | 1000 | 0.686 | 0.606 | 1.292 | 1.470 | 0.009 |
+| tween | 1000 | 1.421 | 0.313 | 1.734 | 2.151 | 0.006 |
+| move | 1000 | 0.936 | 0.425 | 1.338 | 1.906 | 0.008 |
+| particles | 1000 | 0.551 | 0.202 | 0.753 | 0.982 | 0.008 |
+| ui | 100 | 0.333 | 0.146 | 0.479 | 0.711 | 0.009 |
+| text | 100 | 0.282 | 0.186 | 0.468 | 0.567 | 0.009 |
+| tilemap | 10000 | 0.193 | 0.593 | 0.786 | 1.181 | 0.008 |
+| signal | 1000 | 1.558 | 0.312 | 1.890 | 2.137 | 0.007 |
+| chain | 1000 | 0.733 | 0.385 | 1.086 | 1.910 | 0.007 |
+| fast | 1000 | 1.321 | 0.866 | 2.187 | 2.401 | 0.014 |
+| churn | 1000 | 2.327 | 0.409 | 2.662 | 2.906 | 0.007 |
+| batch | 1000 | 2.009 | 0.404 | 2.413 | 3.419 | 0.006 |
 
 ## Инфраструктура / ограничения охвата
 
@@ -151,13 +152,14 @@ Frame CPU — native profiler averages по окну; P95 — разброс о�
 Неописанные новые модули: нет.
 GPU fill-rate, реальная сеть/HTTP, дисковая запись, full SDK bake, audio output latency
 и все сцены каждой игры не покрываются micro таблицей. Audio использует SDL dummy.
-Re2DSprite row измеряет native synthesize pose на малом animal fixture; full World/VRM требует отдельных
+Re2DSprite row измеряет native synthesize pose на малом animal fixture; Real2D v4 row — синтез кадра головы на реальном контейнере
+demos/real2d/assets/head_real2d_v4.r2d4 (полное тело и pitch — отдельные стадии, тут не меряются); full World/VRM требует отдельных
 стендов (например `tools/bench_re2d_world.py`), не подменяется этой цифрой.
 
 ## Батчинг и тесты
 
 Измеренный batching probe: `{"scene": "sprite:1000", "sprites": 1000, "draw_calls": 1, "calls_per_sprite": 0.001, "resolution": [1280, 720]}`.
-В дереве 106 агентских наборов; их наличие не означает, что этот скрипт их запускает.
+В дереве 126 агентских наборов; их наличие не означает, что этот скрипт их запускает.
 draw calls / sprite зависит от текстур, порядка, blend и clipping. Probe — одна
 текстура, без смены blend/clip. Это не постоянная стоимость произвольной сцены.
 

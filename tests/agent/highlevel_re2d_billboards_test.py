@@ -21,6 +21,7 @@ import sys
 import zlib
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
+from re2d_skip import skip_without_re2d_binary   # noqa: E402
 from agent_client import Agent   # noqa: E402
 
 GAME = os.path.join("tests", "fixtures", "re2d_mascots")
@@ -104,6 +105,9 @@ def angle_diff(a, b):
 
 
 def main():
+    # Материала для проверки нет в сборке без RE2D (R2D_ENABLE_RE2D=OFF).
+    if skip_without_re2d_binary(what='highlevel_re2d_billboards_test'):
+        return
     with Agent(game=GAME, seed=5, fixed_dt=1.0 / 60.0, start_timeout=120, timeout=120) as a:
         a.step(5)
         check(a.eval("$.re2d.info().billboards") >= 3, "три маскота нарисованы как билборды (%s)" % a.eval("$.re2d.info().billboards"))
