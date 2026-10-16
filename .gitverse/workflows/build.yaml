@@ -17,6 +17,12 @@
 #   Без него job release упадёт — это видимая ошибка, а не «тихий» пропуск.
 # ---------------------------------------------------------------------------
 
+# Платформы: у GitVerse облачный раннер ОДИН — ubuntu-latest (Linux-контейнер,
+# macOS/Windows-раннеров в облаке нет). Поэтому здесь собираются только Linux
+# x86_64 и Windows x86_64 КРОСС-компиляцией MinGW на том же Linux; macOS не
+# собирается, а забирается из dist/ репозитория (job macos-artifacts) — это
+# витрина, собранная на рабочем Mac. См.
+# https://gitverse.ru/docs/cicd/docs/runners/cloud-hosted/
 name: Build and release
 
 on:
@@ -33,6 +39,7 @@ jobs:
   static:
     name: static gates (docs, portability, packaging)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: |
@@ -140,6 +147,7 @@ jobs:
     name: macOS (из dist/)
     needs: static
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Забрать macOS-архивы версии проекта
@@ -171,6 +179,7 @@ jobs:
     needs: [linux-x86_64, windows-x86_64, macos-artifacts]
     if: startsWith(gitverse.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Проверить, что тег совпадает с версией проекта
