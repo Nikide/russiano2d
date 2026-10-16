@@ -2614,15 +2614,72 @@ bool r2d_render_post_enabled(const R2DRenderer *r)
         || p->brightness > 0.001f || p->brightness < -0.001f;
 }
 
+/**
+ * Просит ли игра полноэкранный проход — по самим параметрам, без пайплайна.
+ *
+ * Нужна ленивому созданию: до первого запроса эффектов пайплайна нет вовсе, и
+ * `r2d_render_post_enabled` (он смотрит и на пайплайн) ответить не может.
+ */
+static bool r2d__post_params_need_pass(const R2DPostParams *p)
+{
+    if (!p || p->enabled <= 0.5f) return false;
+    if (p->_pad0 >= 1.5f) return true;          // SMAA
+    if (p->distort > 0.0001f) return true;
+    return p->glow > 0.0001f || p->vignette > 0.0001f || p->chromatic > 0.0001f
+        || p->lens > 0.0001f || p->grain > 0.0001f || p->scanline > 0.0001f
+        || p->posterize > 1.5f || p->tint_amount > 0.0001f || p->blood > 0.0001f
+        || p->saturation < 0.999f || p->saturation > 1.001f
+        || p->contrast < 0.999f || p->contrast > 1.001f
+        || p->brightness > 0.001f || p->brightness < -0.001f;
+}
+
 void r2d_render_mark_ui(R2DRenderer *r)
 {
     if (r) r->ui_cmd_start = r->cmd_count;
+}
+
+/**
+ * Создать пайплайн пост-обработки по первому требованию.
+ *
+ * Держит три инварианта: создаётся не больше одного раза; неудача запоминается,
+ * чтобы не долбить драйвер каждый кадр; причина отказа остаётся доступной игре
+ * (`renderInfo().post_error`) и попадает в журнал — «эффект молча не работает»
+ * этот класс дефектов мы уже проходили.
+ */
+static bool r2d__ensure_post_pipeline(R2DRenderer *r)
+{
+    if (!r || !r->device) return false;
+    if (r->post_pipeline) return true;
+    if (r->post_pipeline_failed) return false;
+    r->post_pipeline = r2d__create_post_pipeline(r);
+    if (!r->post_pipeline) {
+        r->post_pipeline_failed = true;
+        SDL_snprintf(r->post_error, sizeof r->post_error, "%s", SDL_GetError());
+        R2D_ERROR("пост-обработка запрошена, но пайплайн не создан: %s",
+                  r->post_error[0] ? r->post_error : "причина не сообщена");
+        return false;
+    }
+    r->post_pipeline_creates++;
+    r->post_error[0] = '\0';
+    return true;
 }
 
 void r2d_render_set_post(R2DRenderer *r, const R2DPostParams *params)
 {
     if (!r || !params) return;
     r->post = *params;
+    // Ленивое создание: пайплайн появляется ровно в тот момент, когда игра
+    // впервые просит эффекты (или SMAA). Повторные включения второго пайплайна
+    // не создают — он уже есть.
+    if (r2d__post_params_need_pass(&r->post) && !r->post_pipeline) {
+        if (!r2d__ensure_post_pipeline(r)) {
+            // Не тишина: причина отказа уже в журнале (R2D_ERROR) и в
+            // renderInfo().post_error, а режим честно выключается — игра не
+            // должна считать эффект работающим, если прохода нет.
+            r->post.enabled = 0.0f;
+            r->post._pad0 = 0.0f;
+        }
+    }
 }
 
 const R2DPostParams *r2d_render_get_post(const R2DRenderer *r)
@@ -3546,12 +3603,17 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
         }
     }
 
-    // Пост-обработка. Если шейдер не собрался или бэкенд его не принял,
-    // движок просто рисует кадр напрямую в swapchain — это не фатально.
-    r->post_pipeline = r2d__create_post_pipeline(r);
-    if (!r->post_pipeline) {
-        R2D_WARN("пост-обработка недоступна: %s", SDL_GetError());
-    }
+    // Пост-обработка. Пайплайн создаётся ЛЕНИВО — при первом запросе эффектов
+    // (r2d_render_set_post → r2d__ensure_post_pipeline), а не здесь: движок,
+    // которому пост не нужен, не трогает GPU ради выключенной функции. Заодно
+    // это убирает падение программного Vulkan (lavapipe) внутри
+    // vkCreateGraphicsPipelines на старте — task-55, стек в docs/TESTING.md §6.1.
+    // Пока пайплайна нет, кадр идёт прямо в swapchain (r2d_render_post_enabled
+    // вернёт false), то есть поведение прежнее.
+    r->post_pipeline = NULL;
+    r->post_pipeline_creates = 0;
+    r->post_pipeline_failed = false;
+    r->post_error[0] = '\0';
     SDL_zero(r->post);
     r->post.center_x = 0.5f;
     r->post.center_y = 0.5f;
@@ -3981,6 +4043,12 @@ static JSValue r2d__js_render_info(JSContext *ctx, JSValueConst this_val,
 
     JSValue o = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, o, "post", JS_NewBool(ctx, r && r->post_pipeline != NULL));
+    // Ленивое создание пост-обработки: сколько раз пайплайн реально создавался
+    // (0 — пост не просили) и почему не создался, если просили (task-55).
+    JS_SetPropertyStr(ctx, o, "post_pipeline_creates",
+                      JS_NewInt32(ctx, r ? r->post_pipeline_creates : 0));
+    JS_SetPropertyStr(ctx, o, "post_error",
+                      JS_NewString(ctx, r && r->post_error[0] ? r->post_error : ""));
     JS_SetPropertyStr(ctx, o, "bloom", JS_NewBool(ctx, r && r->bloom_a != NULL));
     JS_SetPropertyStr(ctx, o, "bloom_ready", JS_NewBool(ctx, r && r->post.bloom_ready > 0.5f));
     JS_SetPropertyStr(ctx, o, "bloom_w", JS_NewInt32(ctx, r ? r->bloom_w : 0));
@@ -4120,7 +4188,13 @@ static JSValue r2d__js_post_supported(JSContext *ctx, JSValueConst this_val,
     R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
     R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
     R2DRenderer *r = s ? s->renderer : NULL;
-    return JS_NewBool(ctx, r && r->post_pipeline != NULL);
+    // «Поддерживается» — про ВОЗМОЖНОСТЬ, а не про факт: пайплайн пост-обработки
+    // создаётся лениво (task-55), и до первого запроса эффектов его ещё нет.
+    // Спрашивать «есть ли пайплайн» здесь нельзя: JS-слой по этому ответу решает,
+    // конфигурировать ли пост вообще, — и ленивое создание превратилось бы в
+    // «пост недоступен никому». Отказ драйвера виден отдельно: post_error и
+    // renderInfo().post.
+    return JS_NewBool(ctx, r && r->device != NULL);
 }
 
 // engine.markUnlit() — «дальше идёт неосвещённый мировой слой»: без света,
