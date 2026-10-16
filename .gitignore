@@ -108,28 +108,7 @@ id_rsa*
 .claude/
 sdk/state.local.json
 
-# Public site sources; generated pages, downloads and credentials stay local.
-!site/
-site/*
-!site/index.html
-!site/404.html
-!site/style.css
-!site/app.js
-!site/build-doc.py
-!site/doc-home.md
-!site/build-site.sh
-!site/sync-index.py
-!site/sync-downloads.sh
-!site/deploy-fast.sh
-!site/robots.txt
-!site/img/
-!site/doc/
-site/doc/*
-!site/doc/index.html
-!site/doc/custom.css
-!site/doc/vendor/
-
-!site/list-removed-docs.py
-
+# Сайт (site/) не хранится в git вообще: он публикуется отдельно и содержит
+# доступы к хостингу. Файлы остаются на диске.
 # Прогресс, который game_test пишет в свой файл: не часть репозитория.
 build/test_game_save_*.json
