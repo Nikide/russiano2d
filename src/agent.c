@@ -548,6 +548,44 @@ static void cmd_has(R2DAgent *a, const R2dJson *req)
     r2d_sb_free(&code);
 }
 
+// Что умеет ЭТОТ билд (отчёт BASHNYA I17): версия, платформа, GPU и наличие
+// подсистем — маленьким ответом, без списка имён (точечные вопросы — `has`).
+//
+// Платформу и драйвер GPU знает только C (SDL_GetPlatform,
+// SDL_GetGPUDeviceDriver), поэтому передаём их в JS-помощник аргументом:
+// $.agent.capabilities({platform, gpu}) — одна реализация формы ответа.
+static void cmd_capabilities(R2DAgent *a, const R2dJson *req)
+{
+    R2dSb code;
+    r2d_sb_init(&code);
+    r2d_sb_puts(&code, "$.agent.capabilities({platform:");
+    r2d_sb_put_json_string(&code, SDL_GetPlatform());
+    r2d_sb_puts(&code, ",gpu:");
+    r2d_sb_put_json_string(&code, a->app->device ? SDL_GetGPUDeviceDriver(a->app->device) : "");
+    r2d_sb_puts(&code, "})");
+
+    char *json = NULL;
+    char *err = NULL;
+    if (!r2d_script_eval(a->script, code.data, &json, &err)) {
+        send_error(req, err ? err : "capabilities: $.agent.capabilities недоступен: "
+                                 "игра не вызвала $.agent.install()");
+        SDL_free(json);
+        SDL_free(err);
+        r2d_sb_free(&code);
+        return;
+    }
+
+    R2dSb sb;
+    begin_response(&sb, req, true);
+    r2d_sb_puts(&sb, ",\"capabilities\":");
+    r2d_sb_puts(&sb, json ? json : "null");
+    send_ok_end(&sb);
+
+    SDL_free(json);
+    SDL_free(err);
+    r2d_sb_free(&code);
+}
+
 // ---------------------------------------------------------------------------
 // Ввод
 // ---------------------------------------------------------------------------
@@ -1007,6 +1045,8 @@ bool r2d_agent_serve(R2DAgent *a, const R2DAgentHooks *hooks)
             cmd_eval(a, req);
         } else if (SDL_strcmp(cmd, "has") == 0) {
             cmd_has(a, req);
+        } else if (SDL_strcmp(cmd, "capabilities") == 0) {
+            cmd_capabilities(a, req);
         } else if (SDL_strcmp(cmd, "step") == 0) {
             running = command_step(a, hooks, req);
         } else if (SDL_strcmp(cmd, "screenshot") == 0) {

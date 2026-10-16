@@ -252,6 +252,58 @@ export function installAgent($) {
             return one(paths);
         },
 
+        /**
+         * Что умеет ЭТОТ билд — одним маленьким ответом (отчёт BASHNYA I17).
+         *
+         * Зачем отдельно от `has`: `has('audio.captureStart')` отвечает про
+         * КОНКРЕТНОЕ имя (43 байта на вопрос), а здесь — про характер сборки:
+         * версия, платформа, GPU и какие подсистемы вообще есть. Игра сегодня
+         * угадывает это пробами в 16 местах, и каждая проба врёт по-своему,
+         * когда метод переименовали.
+         *
+         * Полного списка имён здесь НЕТ и не будет: их больше трёх тысяч
+         * (≈60 КБ, урок A8). Разделение такое: «есть ли имя X» — `has`,
+         * «что это за сборка» — `capabilities`.
+         *
+         * `env` (платформа и GPU) приходит из C: SDL_GetPlatform() и
+         * SDL_GetGPUDeviceDriver() доступны только там, а выдумывать их в JS
+         * нельзя.
+         */
+        capabilities(env) {
+            const e = (env && typeof env === 'object') ? env : {};
+            const eng = engineOf();
+            const platform = typeof e.platform === 'string' && e.platform ? e.platform : null;
+            const channels = ($.sound && typeof $.sound.channels === 'function')
+                ? Number($.sound.channels()) || 0 : 0;
+            const hrtf = ($.audio && typeof $.audio.hrtf === 'function') ? $.audio.hrtf() : null;
+            return {
+                version: typeof eng.version === 'string' ? eng.version : null,
+                platform,
+                gpu: typeof e.gpu === 'string' && e.gpu ? e.gpu : null,
+                agent: {
+                    mode: !!eng.agent,
+                    headless: !!eng.headless,
+                    fixed_dt: Number(eng.fixedDt) || 0,
+                },
+                systems: {
+                    audio: channels > 0,
+                    channels,
+                    // Фактический бэкенд HRTF: 'steam' | 'synthetic' | false,
+                    // если выключена (не «в сборке есть Steam Audio», а «работает
+                    // сейчас» — иначе клиент поверит в то, чего не слышно).
+                    hrtf: hrtf && hrtf.on ? (hrtf.backend || 'synthetic') : false,
+                    net: !!($.net && typeof $.net === 'object'),
+                    physics: !!($.physics && typeof $.physics === 'object'),
+                    timeline: !!($.timeline && typeof $.timeline === 'object'),
+                    ui: !!($.ui && typeof $.ui === 'object'),
+                    web: platform === 'Emscripten',
+                },
+                // Как спрашивать про конкретные имена — прямо в ответе, чтобы
+                // клиент не догадывался: точечный вопрос задаётся командой has.
+                probe: 'has',
+            };
+        },
+
         /** Полный снимок — то, что уходит в ответ на команду `state`. */
         /**
          * @param {object} [opts] урезание снимка (отчёт BASHNYA A8):
@@ -550,6 +602,12 @@ export function installAgent($) {
     ctx.agent = agent;
     ctx.test = test;
     ctx.expect = expect;
+
+    // I17: версия движка одной функцией. Низкий уровень отдаёт её свойством
+    // (`engine.version`), но игре и автотесту нужен короткий путь — и он же
+    // попадает в `capabilities` (см. §7.5 AGENT_API).
+    $.version = () => (typeof engineOf().version === 'string' ? engineOf().version : null);
+
     agent.install();
     return { agent, test, expect };
 }
