@@ -157,6 +157,35 @@ def main():
               "а по запросу поля — вырос: %d Б → %d Б (значит дело именно в fields)"
               % (ex_size, grown))
 
+        # --- 5. Регресс highlevel_timeline_test: несколько UI-узлов ----------
+        # `ui_nodes.map(nodeBrief)` передаёт вторым аргументом ИНДЕКС, и на
+        # втором UI-узле снимок падал с «TypeError: not a function» (у числа
+        # нет .has). Проверяем снимок с ТРЕМЯ ui-узлами.
+        a.eval("(() => { for (let i = 0; i < 3; ++i) {"
+               " const u = $('<ui.bar>', { id: 'ub' + i }); u.expose({ slot: i }); }"
+               " return true; })()")
+        try:
+            ui_snap = a.cmd("state")
+            ui_ok, ui_err = True, ""
+        except Exception as exc:                      # AgentError от движка
+            ui_snap, ui_ok, ui_err = None, False, str(exc)[:140]
+        check(ui_ok, "снимок не падает при нескольких UI-узлах (%s)" % (ui_err or "ok"))
+        if ui_ok:
+            # Аварийный минимум движка (когда JS снимка упал) НЕ содержит
+            # entities/ui — поэтому проверяем, что снимок настоящий.
+            ents = ui_snap["state"].get("entities")
+            check(isinstance(ents, list) and len(ents) >= NODES,
+                  "снимок настоящий, а не аварийный минимум: сущностей %s"
+                  % (len(ents) if isinstance(ents, list) else "нет"))
+            ui_list = ui_snap["state"].get("ui") or []
+            check(len(ui_list) >= 3, "в снимке %d UI-узлов" % len(ui_list))
+            _sz, ui_exposed = snapshot_size(a, fields=["id", "exposed"])
+            mine = [e for e in (ui_exposed["state"].get("ui") or [])
+                    if str(e.get("id", "")).startswith("ub")]
+            check(bool(mine) and "exposed" in mine[0],
+                  "поля по запросу доезжают и до UI-узлов: %s"
+                  % (json.dumps(mine[:1], ensure_ascii=False)[:120] if mine else "нет"))
+
     print()
     if FAILURES:
         print("ПРОВАЛОВ: %d" % len(FAILURES))

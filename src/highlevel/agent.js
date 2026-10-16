@@ -92,6 +92,12 @@ function hasHealth(node) {
 }
 
 function nodeBrief(node, want) {
+    // `want` — набор запрошенных полей, но вызывать nodeBrief приходится и
+    // через `.map(nodeBrief)`, где вторым аргументом приходит ИНДЕКС. Поэтому
+    // набор распознаём по типу: всё, что не Set, считаем «полей не просили».
+    // Без этой проверки снимок падал с «TypeError: not a function» на втором
+    // UI-узле (индекс 1 → want.has) — регресс, поймал highlevel_timeline_test.
+    const fields = want instanceof Set ? want : null;
     const brief = {
         uid: node.uid,
         id: node.id || null,
@@ -125,16 +131,16 @@ function nodeBrief(node, want) {
     // H7: объявленное состояние и состояние FSM — только по запросу в fields.
     // Без запроса этих полей в снимке нет вовсе, поэтому по умолчанию снимок
     // не растёт (проверяется тестом agent_entity_state_test.py).
-    if (want) {
-        if (want.has('exposed')) {
+    if (fields) {
+        if (fields.has('exposed')) {
             brief.exposed = Object.assign({}, (node.attrs && node.attrs.exposed) || {});
         }
-        if (want.has('state') || want.has('state_time')) {
+        if (fields.has('state') || fields.has('state_time')) {
             // Читаем через обёртку, а не повторяем выражение из anim.js: одна
             // реализация «какое сейчас состояние» на весь движок.
             const wrapper = wrapOne(node);
-            if (want.has('state')) brief.state = wrapper.state();
-            if (want.has('state_time')) brief.state_time = wrapper.stateTime();
+            if (fields.has('state')) brief.state = wrapper.state();
+            if (fields.has('state_time')) brief.state_time = wrapper.stateTime();
         }
     }
     return brief;
@@ -312,7 +318,7 @@ export function installAgent($) {
                     bodies: engineOf().bodyCount(),
                 } : { count: entities.length, bodies: engineOf().bodyCount() },
                 entities: listed.map((n) => trimFields(nodeBrief(n, want), trim && trim.fields)),
-                ui: ui_nodes.map(nodeBrief),
+                ui: ui_nodes.map((n) => nodeBrief(n, want)),
                 tests: {
                     total: tests.total,
                     failed: tests.failed,
