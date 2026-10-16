@@ -21,6 +21,11 @@ Russiano2D собирается из исходников и тянет зави
 | trylock/visibility | `master` (`71eb5c0`) | MIT |
 | glslang | `16.6.0` | Apache-2.0 (части — BSD-3-Clause / MIT) |
 | SPIRV-Cross | `vulkan-sdk-1.4.363.0` | Apache-2.0 |
+| Steam Audio | vendored, `third_party/steam_audio` | Apache-2.0 (бинауральная HRTF, окклюзия) |
+| tinyexr | vendored, `third_party/tinyexr` | BSD-3-Clause |
+| ufbx | vendored, `third_party/ufbx` | MIT **или** public domain (на выбор) |
+| stb_truetype (`nothings/stb`) | `2c980bb` (1.26) | public domain / MIT (dual) |
+| SDL_net | `30dd38a` | zlib |
 | Noto Sans | файл в репозитории | SIL OFL 1.1 |
 | LatoLatin | файл в репозитории | SIL OFL 1.1 |
 | Open Sans | файл в репозитории (`OpenSans-Regular.ttf`) | SIL OFL 1.1 |
