@@ -11,6 +11,7 @@
 import * as M from '../lib/rml_model.js';
 import { createHistory } from '../lib/history.js';
 import { escapeHtml, joinPath, dirOf, absolutePath, summarize } from '../lib/model.js';
+import { createPanel } from '../lib/panel_check.js';
 import * as views from '../lib/views.js';
 import { err, warn, parseNum } from '../lib/kit.js';
 
@@ -56,6 +57,47 @@ function create(app) {
         sheets: [], activeSheet: 0, preview: null, drafts: [], diagnostics: [], native: null, wired: false, status: '', previewOk: true,
     };
 
+    // §29: панель проверки — тот же backend, что CLI; preview идёт тем же путём.
+    let panel = null;
+
+    function makePanel() {
+        panel = createPanel(app, {
+            label: 'RmlUi Studio',
+            paths: () => (s.path ? [s.path].concat(s.sheets.filter((x) => !x.missing).map((x) => x.path)) : []),
+            primary: () => s.path,
+            report: () => rmlReport(),
+        });
+        return panel;
+    }
+
+    /** Отчёт документа: пути, вложенные ссылки, фокус и переполнение под перевод. */
+    function rmlReport() {
+        if (!s.parsed) return { elements: 0, notes: ['файл не открыт'] };
+        const notes = [];
+        const nodes = s.parsed.nodes || [];
+        const focusable = ['button', 'input', 'select', 'textarea'];
+        const focus = nodes.filter((n) => focusable.indexOf(String(n.tag).toLowerCase()) >= 0);
+        const ids = new Set(nodes.map((n) => M.attr(n, 'id')).filter(Boolean));
+        const links = M.links(s.parsed).map((l) => ({ href: l.href, resolved: resolveRel(dirOf(s.path), l.href) }));
+        const missing = s.sheets.filter((x) => x.missing).map((x) => x.path);
+        let longText = 0;
+        for (const n of nodes) {
+            if (!M.isLeaf(n)) continue;
+            const text = M.innerText(s.model.rml, n).trim();
+            if (text.length > 48) longText++;
+        }
+        if (missing.length) notes.push('нет файлов стилей: ' + missing.slice(0, 2).join(', '));
+        if (!focus.length) notes.push('в документе нет фокусируемых элементов: навигация с клавиатуры не проверится');
+        if (longText) notes.push('длинные строки (' + longText + '): перевод может не влезть без переноса');
+        if (!ids.size) notes.push('у элементов нет id: адресация из игры и тестов невозможна');
+        return {
+            elements: nodes.length, ids: ids.size, focusable: focus.map((n) => M.attr(n, 'id') || n.tag),
+            links, sheets: s.sheets.map((x) => x.path), missingSheets: missing,
+            longText, localizationOverflow: longText > 0,
+            previewDraft: !!s.preview, notes,
+        };
+    }
+
     const rect = () => doc.rect('rm-view') || { x: 0, y: 0, w: 0, h: 0 };
     const setStatus = (text, fail) => { s.status = text; app.setStatus(text, fail ? 'fail' : ''); doc.text('rm-hud', escapeHtml(text)); };
 
@@ -94,6 +136,7 @@ function create(app) {
         if (app.recovery) app.recovery.watch(s.path, s.model, s.history, () => { reparse(); refresh(); renderAll(); });
         s.sel = -1;
         s.active = true;
+        makePanel();
         wire();
         if (app.doc) app.doc.hide();
         doc.show();
@@ -390,9 +433,23 @@ function create(app) {
             }
         }
         s.native = diags;
+        if (panel) panel.absorb(diags, s.path);
         renderDiag();
         setStatus(ok ? 'проверка: ошибок нет' : 'проверка: есть ошибки', !ok);
-        return { ok, diagnostics: diags };
+        return { ok, diagnostics: diags, path: s.path, report: panel ? panel.report() : null };
+    }
+
+    /** «Проверить в игре»: предпросмотр и проверка ссылаются на один путь. */
+    function previewRun() {
+        if (!panel) makePanel();
+        const r = panel.preview();
+        renderAll();
+        return r;
+    }
+
+    function report() {
+        if (!panel) makePanel();
+        return panel.report();
     }
 
     function wire() {
@@ -403,6 +460,7 @@ function create(app) {
         doc.on('rm-undo', 'click', () => ops.undo());
         doc.on('rm-redo', 'click', () => ops.redo());
         doc.on('rm-validate', 'click', () => validate());
+        doc.on('rm-preview-run', 'click', () => previewRun());
         doc.on('rm-refresh', 'click', () => refresh());
         doc.on('rm-open', 'click', () => {
             const p = absolutePath($.fs.basePath(), String(doc.value('rm-path') || '').trim());
@@ -439,7 +497,8 @@ function create(app) {
     });
 
     const api = {
-        state: s, ops, openAsset, close, save, validate, refresh,
+        state: s, ops, openAsset, close, save, validate, previewRun, report, refresh,
+        get panel() { return panel; },
         get model() { return s.model; },
         snapshot() {
             const sum = summarize(s.diagnostics);
@@ -448,6 +507,8 @@ function create(app) {
                 selectedLabel: node() ? M.label(node()) : null, sheets: s.sheets.map((x) => x.href), activeSheet: s.activeSheet,
                 dirty: s.history ? s.history.dirty() : false, canUndo: s.history ? s.history.canUndo() : false, canRedo: s.history ? s.history.canRedo() : false,
                 preview: !!s.preview, previewOk: s.previewOk, errors: sum.errors, warnings: sum.warnings, codes: s.diagnostics.map((d) => d.code),
+                panel: panel ? panel.snapshot() : null,
+                report: panel ? panel.report() : null,
             };
         },
     };

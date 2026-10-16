@@ -59,6 +59,26 @@ export default function install($) {
 строку в список `MODULES` в `demos/main.js` — кнопка в меню появится сама
 (подпись и иконка берутся из таблицы `TITLES` в `demos/launcher.js`).
 
+## Вертикальные примеры (§31 спецификации)
+
+Семь примеров — это законченные проекты, которые можно открыть отдельно
+(`build/russiano2d --game demos/<имя>`) и которые проходят свои приёмочные
+тесты. Они показывают, что движок выдерживает игру целиком, а не набор вызовов.
+
+| Пример | Что показывает | Запуск и приёмка |
+|---|---|---|
+| `foundations` | фундамент платформера: управление, камера, физика, HUD, чекпойнты | `--game demos/foundations`; [README](../demos/foundations/README.md), `foundations_test` (25) |
+| `melee` | контактный бой: окно атаки, три hurtbox → один удар, отражение снаряда, отдача в стену | `--game demos/melee`; [README](../demos/melee/README.md), `melee_test` (44) |
+| `arena` | арена с фазами: отменяемая фаза, пул с потолком узлов, пауза, смерть ровно один раз, рестарт | `--game demos/arena`; [README](../demos/arena/README.md), [гайд](tutorial-arena.md), `arena_test` (62) |
+| `roguerooms` | генерация комнат: seed → hash, валидация до публикации, жёсткие бюджеты, отмена | `--game demos/roguerooms`; [README](../demos/roguerooms/README.md), `roguerooms_test` (52) |
+| `litsprites` | 2D-свет: маски препятствий, динамический occluder, неосвещённый слой, флипы атласа | `--game demos/litsprites`; [README](../demos/litsprites/README.md), [гайд](tutorial-litsprites.md), `litsprites_test` (25) |
+| `showcase` | интеграция: RmlUi-HUD, смена языка на ходу, вставка timeline, слои музыки, scoped переход | `--game demos/showcase`; [README](../demos/showcase/README.md), `showcase_test` (56) |
+| `recovery` | восстановление: битый слот из копии, битый ассет и safe reload, расхождение replay | `--game demos/recovery`; [README](../demos/recovery/README.md), [гайд](tutorial-recovery.md), `recovery_test` (66) |
+
+Все семь обязаны собираться и запускаться как отдельные проекты — это проверяет
+`python3 tests/demos_examples_test.py` (структура проекта, README, headless-запуск,
+внешний вид в документации).
+
 ## Сцены
 
 | Сцена | Что показывает | Ключевые вызовы |
@@ -125,3 +145,16 @@ Re2DSprite v2: [большой PNG, мимика, костюмы и псевдо
 [API `$`](highlevel/re2dsprite.md). Демо `re2dsprite` — переключение костюмов,
 моргание, ходьба/бег на месте и перетаскивание кистей; старое имя сцены
 `rotsprite` осталось псевдонимом ([`demos/rotsprite/index.js`](../demos/rotsprite/index.js)).
+
+## Вертикальные примеры спецификации
+
+Отдельные небольшие проекты, каждый проверяется автоматически:
+
+| Пример | Чему учит | Гайд | Проверка |
+|---|---|---|---|
+| `demos/foundations` | край платформы, склон, one-way, движущаяся платформа, зоны камеры, геймпад | — | `foundations_test` |
+| `demos/melee` | окно атаки, несколько hurtbox, отражение снаряда, отдача, hit-фидбек | [tutorial-melee.md](tutorial-melee.md) | `melee_test` |
+| `demos/showcase` | RmlUi HUD, локализация на ходу, вставка timeline, слои музыки, scoped переход | [tutorial-runtime-integration.md](tutorial-runtime-integration.md) | `showcase_test` |
+| `demos/stress` | точки измерения производительности §35.2 (не игра, а стенд) | — | `tools/bench_stress.py` |
+
+Запуск любого: `./build/russiano2d --game demos/<имя>`.

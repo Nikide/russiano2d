@@ -14,6 +14,7 @@
 import * as M from '../lib/atlas_model.js';
 import { openAtlasSession, createAtlasFromImage } from '../lib/atlas_session.js';
 import { escapeHtml, dirOf, joinPath } from '../lib/model.js';
+import { createPanel } from '../lib/panel_check.js';
 import * as views from '../lib/views.js';
 
 const DOC = 'sdk/ui/sprite_studio.rml';
@@ -48,6 +49,9 @@ export function createStudio(app) {
         mouse: { x: 0, y: 0, tx: 0, ty: 0 },
     };
     let wired = false;
+    // §29: панель проверки — тот же backend, что CLI; import report и preview
+    // идут по тому же пути, что проверялся.
+    let panel = null;
 
     // --- Вспомогательное --------------------------------------------------------
     const D = () => (s.session ? s.session.doc : null);
@@ -173,8 +177,53 @@ export function createStudio(app) {
                 if (!s.tex) throw new Error('не удалось прочитать картинку ' + abs);
             }
         }
+        if (s.session) makePanel();
         show();
         return { id: 'sprite-studio', studio: api };
+    }
+
+    function makePanel() {
+        panel = createPanel(app, {
+            label: 'Sprite Studio',
+            paths: () => (s.session ? [s.session.path] : []),
+            primary: () => (s.session ? s.session.path : null),
+            report: () => importReport(),
+        });
+        return panel;
+    }
+
+    /**
+     * Import report §29: что реально попадёт в игру из этого атласа —
+     * кадры, trim/source-size, sockets, страницы и расхождения material.
+     */
+    function importReport() {
+        const d = D();
+        const lines = [];
+        if (!d) return { frames: 0, notes: ['файл не открыт'] };
+        let trimmed = 0;
+        let sockets = 0;
+        let withSource = 0;
+        for (const f of d.frames) {
+            if (f.trim || f.spriteSourceSize) trimmed++;
+            if (f.sockets && Object.keys(f.sockets).length) sockets += Object.keys(f.sockets).length;
+            if (f.sourceSize) withSource++;
+        }
+        const meta = (d.custom && d.custom.meta) || {};
+        const pages = Array.isArray(d.pages) ? d.pages.length : (d.page !== undefined ? 1 : 0);
+        const image = d.image || null;
+        const normal = d.normal || d.normalMap || meta.normal || null;
+        const material = d.material || meta.material || null;
+        if (!image) lines.push('нет meta.image: атлас не привязан к картинке');
+        if (pages === 0) lines.push('страницы не описаны (одна картинка подразумевается)');
+        if (normal && material && String(normal).replace(/normal/i, '') !== String(material).replace(/albedo|base/i, '')) {
+            lines.push('material albedo/normal ссылаются на разные наборы');
+        }
+        if (!d.frames.length) lines.push('кадров нет: импортировать нечего');
+        return {
+            frames: d.frames.length, tags: d.tags.length, trimmed, sockets,
+            sourceSizes: withSource, pages, image, normal, material,
+            notes: lines,
+        };
     }
 
     /**
@@ -239,9 +288,29 @@ export function createStudio(app) {
     async function validate() {
         if (!s.session) return { ok: false, diagnostics: [] };
         const r = await s.session.validateDraft();
+        if (!panel) makePanel();
+        panel.absorb(r.diagnostics, s.session.path);
         renderDiag(r.diagnostics);
+        renderReport();
         setStatus(r.ok ? 'проверка: ошибок нет' : 'проверка: есть ошибки', !r.ok);
+        return Object.assign({ path: s.session.path, report: panel.report() }, r);
+    }
+
+    /** «Проверить в игре»: тот же путь, что у проверки — файл и есть идентичность. */
+    function preview() {
+        if (!panel) makePanel();
+        const r = panel.preview();
+        renderReport();
         return r;
+    }
+
+    function renderReport() {
+        if (!panel || !s.session) { doc.text('ss-report', ''); return; }
+        const rep = panel.report();
+        const sum = panel.state.summary;
+        doc.text('ss-report', escapeHtml('импорт: кадров ' + rep.frames + ' · trim ' + rep.trimmed + ' · sockets ' + rep.sockets +
+            ' · страниц ' + rep.pages + ' · ошибок ' + sum.errors + ' · предупреждений ' + sum.warnings +
+            (rep.notes.length ? ' · ' + rep.notes[0] : '')));
     }
 
     async function makeAtlas() {
@@ -320,6 +389,7 @@ export function createStudio(app) {
         doc.cls('ss-grid', 'on', s.grid);
         doc.style('ss-create', 'display', s.createFor ? 'block' : 'none');
         doc.style('ss-edit', 'display', s.session ? 'block' : 'none');
+        renderReport();
     }
 
     function renderFrames() {
@@ -537,6 +607,7 @@ export function createStudio(app) {
         doc.on('ss-undo', 'click', () => ops.undo());
         doc.on('ss-redo', 'click', () => ops.redo());
         doc.on('ss-validate', 'click', () => validate());
+        doc.on('ss-preview', 'click', () => preview());
         doc.on('ss-tool-select', 'click', () => setTool('select'));
         doc.on('ss-tool-pivot', 'click', () => setTool('pivot'));
         doc.on('ss-zoom-in', 'click', () => { stepZoom(1); renderOverlay(); });
@@ -580,7 +651,8 @@ export function createStudio(app) {
     const api = {
         state: s,
         ops,
-        openAsset, close, save, validate, makeAtlas,
+        openAsset, close, save, validate, preview, makeAtlas,
+        get panel() { return panel; },
         select, setTool, setZoom, stepZoom, fit, toAnimation, resume,
         applyFromForm,
         clickAt,
@@ -600,6 +672,14 @@ export function createStudio(app) {
                 canUndo: s.session ? s.session.history.canUndo() : false,
                 canRedo: s.session ? s.session.history.canRedo() : false,
                 size: s.tex,
+                panel: panel ? panel.snapshot() : null,
+                report: panel ? panel.report() : null,
+                validatedPath: panel ? panel.state.validatedPath : null,
+                previewPath: panel ? panel.state.previewPath : null,
+                previewMatchesValidated: !!(panel && panel.state.validatedPath && panel.state.validatedPath === panel.state.previewPath),
+                errors: panel ? panel.state.summary.errors : 0,
+                warnings: panel ? panel.state.summary.warnings : 0,
+                codes: panel ? panel.state.summary.codes : [],
             };
         },
         layout, renderAll,

@@ -26,14 +26,16 @@ $.sound.crossfade('battle.ogg', 1.5);
 | `channel(ch)` | что звучит на канале сейчас: `{ playing, volume, pan, pitch, effect, position, duration }` |
 | `activeChannels()` | сколько каналов занято |
 | `preload(file)` / `duration(file)` | подготовка и длительность |
-| `volume(value?)` / `sfxVolume(value?)` / `mute(on?)` | общая и эффектовая громкость |
+| `volume(value?)` / `sfxVolume(value?)` / `mute(on?)` | общая и эффектовая громкость (число или `{ db }`) |
+| `dbToLinear(db)` / `linearToDb(v)` | явный перевод громкости: -6 dB → 0.501 |
 
 ## 2. Музыка
 
 | Вызов | Смысл |
 |---|---|
 | `music(file, opts?)` / `stopMusic()` / `musicPlaying()` | запуск и стоп |
-| `musicVolume(value?)` / `musicPitch(value?)` | громкость и тон |
+| `musicVolume(value?)` / `musicPitch(value?)` | громкость и тон (принимают `{ db }`) |
+| `stems(paths, opts?)` | музыкальные слои с общим транспортом (§25) |
 | `pauseMusic(on?)` | пауза музыки (эффекты продолжают) |
 | `crossfade(file, seconds)` | переход между треками |
 
@@ -60,6 +62,53 @@ $.sound.busy();            // { active, free, total } — обычно total 16
 `seek` возвращает `false`, если канал не играет; `position` в этом случае `-1`.
 Перемотка в конец доигрывает звук — канал освобождается сам.
 
+## 2.2. Музыкальные слои (§25): один transport на все stem'ы
+
+Слой («stem») — отдельная дорожка одного музыкального транспорта: спокойная
+и боевая темы, перкуссия, бас. Запуск каждого слоя отдельным вызовом из JS
+разошёлся бы на буфер микшера, поэтому старт, seek и pause идут **одной
+нативной командой** под локом `MIX_LockMixer`, а громкости слоёв считает JS.
+
+```js
+const music = $.sound.stems(['music/calm.ogg', 'music/battle.ogg'], {
+    loop: true,
+    loopStart: 12.5,      // секунды: сюда вернётся петля (без щели)
+    loopEnd: 96.0,        // секунды: конец петли (0 — конец файла)
+    bus: 'music',         // шина: её громкость умножается на громкость слоя (§48)
+});
+
+music.play({ fade: 800 });        // все слои стартуют с одного sample-clock
+music.seek(30.25);                // одна и та же позиция для всех
+music.pause(true);                // пауза всех слоёв
+music.crossfade(1, 900);          // боевой слой наружу, спокойный — в ноль
+music.layer(1, { db: -6 }, { fade: 400 });
+music.gains({ 'music/battle.ogg': 1, 'music/calm.ogg': 0 });
+music.bus('music2');
+music.stop(600);
+
+music.time(0);        // позиция слоя 0 в секундах
+music.frames(1);      // позиция в PCM-кадрах — точное число для сверки фазы
+music.times();        // позиции всех слоёв
+music.drift();        // расхождение слоёв в мс (0 — в фазе)
+music.playing(); music.paused(); music.count();
+```
+
+| Метод | Назначение |
+|---|---|
+| `play({ fade, start, loop, loopStart, loopEnd })` | запуск всех слоёв одной командой |
+| `seek(seconds)` / `pause(on)` / `stop(fadeMs)` | транспорт целиком |
+| `layer(i, gain, { fade })` / `gains({ path: gain })` | громкость слоя (линейно или `{ db }`) |
+| `crossfade(i, ms)` | слой `i` в 1, остальные в 0; сумма громкостей ≤ 1 |
+| `time(i)` / `frames(i)` / `times()` / `drift()` | позиции и расхождение |
+| `bus(name)` | шина слоёв (§48) |
+| `playing()` / `paused()` / `count()` | состояние |
+
+Замер приёмки (`tests/agent/highlevel_music_layers_test.py`, 3-секундные слои
+44.1 кГц): после старта кадры слоёв `[7168, 7168]`, расхождение **0.0000 мс**;
+после `seek(1.5)` — `[67174, 67174]`; после паузы и resume — снова 0.0000 мс;
+петля с `loopStart = 1.0 с` возвращается на **1.016 с** (не на 0) и транспорт
+продолжает играть; во время кроссфейда громкости `0.500 / 0.500`, в сумме ≤ 1.
+
 ## 3. Ограничения
 
 | Чего нет | Что делать |
@@ -70,6 +119,12 @@ $.sound.busy();            // { active, free, total } — обычно total 16
 | Сжатия в рантайме | файлы берутся как есть (WAV/OGG/MP3) |
 
 ## 4. Связанное
+
+* музыкальные слои и шины — [audiobus.md](audiobus.md) (§48: изоляция эффектов);
+* `tests/agent/highlevel_music_layers_test.py` — фазность слоёв, seek, петля;
+* `tests/agent/highlevel_sound_seek_test.py` — перемотка и приоритеты каналов;
+* `tests/js/sound_test.mjs` — юнит-тесты без движка.
+
 
 * [soundbank.md](soundbank.md) — варианты одного звука (шаги, попадания);
 * [acoustics.md](acoustics.md) — реверберация помещений;

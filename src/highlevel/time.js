@@ -28,6 +28,25 @@ import { ctx } from './core.js';
 import { tickTweens, tickTimers, tickEffects, wait, tickTweenObjects } from './tween.js';
 import { tickCameraAnimations } from './camera.js';
 import { tickInput } from './input.js';
+import { processingAllows } from './triggers.js';
+
+// ---------------------------------------------------------------------------
+// Шаг симуляции (§44)
+// ---------------------------------------------------------------------------
+//
+// R2D_FIXED_DT и лимит подшагов живут в C (src/main.c). JS не видит
+// аккумулятор физики, поэтому ведёт свой по тем же правилам и с тем же шагом:
+// gameplay-тик отделён от кадра отрисовки и не зависит от render FPS.
+//
+// В `--fixed-dt` арифметика совпадает с C кадр в кадр (dt — то же число, шаг
+// тот же). В свободном режиме аккумулятор C считается во float, а здесь — в
+// double, поэтому на длинной дистанции возможен сдвиг на один тик.
+// Шаг — та же float-константа, что R2D_FIXED_DT в C, а произведение
+// `dt × множитель` округляется до float: в C оно считается во float, и без
+// этого округления счётчик тиков мог разойтись с шагами физики на кадр
+// (проверено при 144 «кадрах» на секунду: 59 против 60).
+const SIM_DT = Math.fround(1 / 60);
+const SIM_MAX_STEPS = 5;
 
 const state = {
     scale: 1,
@@ -45,6 +64,16 @@ const state = {
     frame_frozen: false,   // был ли заморожен ТЕКУЩИЙ кадр (для delta() после тика)
     // Последний множитель, отданный шагу физики (C): пишем только изменения.
     physics_pushed: 1,
+    // --- Симуляционное время (§44) -----------------------------------------
+    sim: {
+        tick: 0,           // номер последнего шага симуляции (с 0)
+        acc: 0,            // аккумулятор — зеркало аккумулятора C (main.c)
+        c_scale: 1,        // множитель, с которым C шагнул ЭТОТ кадр
+        subs: [],          // подписки $.time.onTick
+        timers: [],        // afterTicks/everyTicks
+        durations: [],     // жизни, измеряемые тиками
+        marks: new Map(),  // именованные метки (state-local tick counter)
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -127,6 +156,98 @@ function pushPhysicsScale() {
     if (value === state.physics_pushed) return;
     state.physics_pushed = value;
     if (hasPhysicsGate()) engine.setTimeScale(value);
+}
+
+// ---------------------------------------------------------------------------
+// Шаги симуляции: счётчик, подписки, таймеры и жизни в тиках
+// ---------------------------------------------------------------------------
+
+/** Разрешён ли владельцу фиксированный шаг (политика §44). */
+function ownerAllows(node, kind) {
+    return !node || processingAllows(node, kind);
+}
+
+function callSub(sub, tick) {
+    try { sub.fn(tick, SIM_DT); } catch (e) { ctx.log(`$: ошибка в $.time.onTick: ${e}`); }
+}
+
+/** Один шаг симуляции: счётчик и всё, что к нему привязано. */
+function runSimTick() {
+    const sim = state.sim;
+    sim.tick++;
+    const tick = sim.tick;
+
+    for (let i = sim.subs.length - 1; i >= 0; i--) {
+        const sub = sim.subs[i];
+        if (!sub.alive) { sim.subs.splice(i, 1); continue; }
+        if (!ownerAllows(sub.node, 'fixed')) continue;
+        if (sub.node && sub.node.removed) { sub.alive = false; sim.subs.splice(i, 1); continue; }
+        callSub(sub, tick);
+    }
+
+    for (let i = sim.timers.length - 1; i >= 0; i--) {
+        const timer = sim.timers[i];
+        if (!timer.alive) { sim.timers.splice(i, 1); continue; }
+        if (!ownerAllows(timer.node, 'fixed')) continue;
+        if (timer.node && timer.node.removed) { timer.alive = false; sim.timers.splice(i, 1); continue; }
+        if (timer.from_zero) {
+            // Явно выбранная семантика: глобальный tick modulo.
+            if (tick % timer.n !== 0) continue;
+        } else {
+            timer.count++;
+            if (timer.count < timer.n) continue;
+            timer.count = 0;
+        }
+        timer.fired++;
+        if (timer.once) timer.alive = false;
+        try { timer.fn(tick, SIM_DT); } catch (e) { ctx.log(`$: ошибка в $.time.everyTicks: ${e}`); }
+        if (!timer.alive) sim.timers.splice(i, 1);
+    }
+
+    for (let i = sim.durations.length - 1; i >= 0; i--) {
+        const dur = sim.durations[i];
+        if (!dur.alive) { sim.durations.splice(i, 1); continue; }
+        if (dur.owner && !ownerAllows(dur.owner, 'fixed')) continue;
+        if (dur.left > 0) dur.left--;
+        if (dur.left > 0) continue;
+        // Истёкшую жизнь убираем из списка, но ручку не гасим: `.expired()`
+        // и `.left()` должны отвечать и после конца.
+        sim.durations.splice(i, 1);
+        dur.ended = true;
+        for (const fn of dur.on_end.splice(0)) {
+            try { fn(dur); } catch (e) { ctx.log(`$: ошибка в $.time.duration.onEnd: ${e}`); }
+        }
+    }
+}
+
+/**
+ * Продвинуть аккумулятор симуляции ровно по правилам C (src/main.c) и
+ * проиграть столько тиков, сколько шагов сделала физика.
+ */
+function stepSimulation(raw) {
+    const sim = state.sim;
+    const dt = Number(raw);
+    if (!(dt > 0)) {
+        sim.c_scale = state.physics_pushed;
+        return 0;
+    }
+    sim.acc += Math.fround(dt * sim.c_scale);
+    let steps = 0;
+    if (sim.c_scale > 0) {
+        while (sim.acc >= SIM_DT && steps < SIM_MAX_STEPS) {
+            sim.acc -= SIM_DT;
+            steps++;
+            runSimTick();
+        }
+        // Долг после лага не копим — как в main.c.
+        if (steps === SIM_MAX_STEPS) sim.acc = 0;
+    } else {
+        sim.acc = 0;
+    }
+    // Значение, с которым C шагнёт СЛЕДУЮЩИЙ кадр: свой шаг физики идёт до
+    // апдейта скрипта, поэтому множитель применяется со следующего кадра.
+    sim.c_scale = state.physics_pushed;
+    return steps;
 }
 
 // ---------------------------------------------------------------------------
@@ -271,18 +392,157 @@ export function installTime($) {
         /** Ожидание в миллисекундах игрового времени. */
         wait(ms) { return wait(ms || 0); },
 
-        /** Однократный вызов через ms игрового времени. */
-        after(ms, fn) {
+        // --- Симуляционные тики (§44) --------------------------------------
+        /**
+         * Номер шага симуляции (фиксированный шаг, начинается с 0).
+         *
+         * Это НЕ номер кадра отрисовки: при `--fixed-dt` счётчик совпадает с
+         * фактическими шагами физики Box2D, при 30/60/144 render FPS одно и то
+         * же симуляционное время даёт одно и то же число тиков.
+         */
+        tick() { return state.sim.tick; },
+
+        /** Длительность одного шага симуляции в секундах. */
+        simDt() { return SIM_DT; },
+
+        /** Симуляционное время в секундах (tick × simDt). */
+        simTime() { return state.sim.tick * SIM_DT; },
+
+        /** Сколько шагов симуляции сделал последний кадр — для отладки. */
+        lastSteps() { return state.sim.last_steps || 0; },
+
+        /**
+         * Фиксированный шаг: `fn(tick, simDt)` на каждом шаге симуляции.
+         * `opts.node` — владелец: пока у узла выключена политика `fixed`,
+         * подписка стоит (не «вызывается реже», а именно не вызывается).
+         * Возвращает ручку `{ cancel(), active() }`.
+         */
+        onTick(fn, opts) {
+            if (typeof fn !== 'function') return { cancel() {}, active() { return false; } };
+            const o = opts || {};
+            const sub = { fn, node: o.node || null, alive: true };
+            state.sim.subs.push(sub);
+            return {
+                cancel() { sub.alive = false; },
+                active() { return sub.alive; },
+            };
+        },
+
+        /**
+         * «Каждые N шагов симуляции»: `$.time.everyTicks(30, fn)`.
+         *
+         * По умолчанию отсчёт идёт от подписки; `{ from: 'zero' }` включает
+         * явную семантику глобального tick modulo (`tick % N === 0`).
+         * `{ node }` — владелец (политика `fixed`), `{ once: true }` — один раз.
+         * Возвращает ручку `{ cancel(), fired(), count() }`.
+         */
+        everyTicks(n, fn, opts) {
+            const count = Math.max(1, Math.floor(Number(n) || 1));
+            const o = opts || {};
+            if (typeof fn !== 'function') return { cancel() {}, fired() { return 0; }, count() { return count; } };
+            const timer = {
+                fn, n: count, node: o.node || null, alive: true,
+                from_zero: o.from === 'zero', count: 0, fired: 0, once: o.once === true,
+            };
+            state.sim.timers.push(timer);
+            return {
+                cancel() { timer.alive = false; },
+                fired() { return timer.fired; },
+                count() { return count; },
+            };
+        },
+
+        /** «Через N шагов симуляции»: `$.time.afterTicks(120, () => boom())`. */
+        afterTicks(n, fn, opts) {
+            const ticks = Math.max(1, Math.floor(Number(n) || 1));
+            const o = opts || {};
+            if (typeof fn !== 'function') return { cancel() {}, left() { return 0; } };
+            const timer = {
+                fn, n: ticks, node: o.node || null, alive: true,
+                from_zero: false, count: 0, fired: 0, once: true,
+            };
+            state.sim.timers.push(timer);
+            return {
+                cancel() { timer.alive = false; },
+                fired() { return timer.fired; },
+                left() { return timer.alive ? Math.max(0, timer.n - timer.count) : 0; },
+            };
+        },
+
+        /**
+         * Жизнь, измеряемая шагами симуляции: `const life = $.time.duration(300)`.
+         *
+         * `life.expired()` — истекла, `life.left()` — осталось тиков,
+         * `life.elapsed()` — прошло, `life.onEnd(fn)` — подписка на конец,
+         * `life.reset(ticks?)` — начать заново, `life.cancel()` — снять.
+         * `opts.owner` — узел-владелец (политика `fixed`).
+         */
+        duration(ticks, opts) {
+            const o = opts || {};
+            const total = Math.max(0, Math.floor(Number(ticks) || 0));
+            const dur = {
+                total, left: total, owner: o.owner || null, alive: true,
+                ended: false, on_end: [],
+            };
+            if (total > 0) state.sim.durations.push(dur);
+            else dur.ended = true;
+            return {
+                ticks() { return dur.total; },
+                left() { return Math.max(0, dur.left); },
+                elapsed() { return dur.total - Math.max(0, dur.left); },
+                expired() { return dur.ended; },
+                onEnd(fn) { if (typeof fn === 'function') { if (dur.ended) fn(dur); else dur.on_end.push(fn); } return this; },
+                reset(next) {
+                    dur.total = next === undefined ? dur.total : Math.max(0, Math.floor(Number(next) || 0));
+                    dur.left = dur.total;
+                    dur.ended = dur.total === 0;
+                    dur.alive = true;
+                    if (dur.total > 0 && state.sim.durations.indexOf(dur) < 0) state.sim.durations.push(dur);
+                    return this;
+                },
+                cancel() { dur.alive = false; dur.ended = true; },
+            };
+        },
+
+        /**
+         * Локальный счётчик тиков: `$.time.mark('shot')` запоминает шаг,
+         * `$.time.since('shot')` возвращает, сколько шагов прошло (0 — метки нет).
+         * Это state-local счётчик вместо глобального `tick % N`.
+         */
+        mark(name) {
+            state.sim.marks.set(String(name), state.sim.tick);
+            return state.sim.tick;
+        },
+
+        /** Сколько шагов симуляции прошло с метки `mark(name)`. */
+        since(name) {
+            const at = state.sim.marks.get(String(name));
+            return at === undefined ? 0 : state.sim.tick - at;
+        },
+
+        /** Снять метку (или все, если имя не задано). */
+        unmark(name) {
+            if (name === undefined) state.sim.marks.clear();
+            else state.sim.marks.delete(String(name));
+            return time;
+        },
+
+        /**
+         * Однократный вызов через ms игрового времени.
+         * `opts.node` (или сам узел третьим аргументом) — владелец: пока у него
+         * выключена политика `timers` (§44), таймер стоит и не истекает.
+         */
+        after(ms, fn, opts) {
             const id = state.next_id++;
             wait(ms).then(() => { if (state.intervals.find((i) => i.id === id)) fn(); });
-            state.intervals.push({ id, once: true, fn, ms, left: ms });
+            state.intervals.push({ id, once: true, fn, ms, left: ms, owner: ownerOf(opts) });
             return id;
         },
 
-        /** Периодический вызов. */
-        every(ms, fn) {
+        /** Периодический вызов (владелец — `opts.node`, см. after). */
+        every(ms, fn, opts) {
             const id = state.next_id++;
-            state.intervals.push({ id, once: false, fn, ms, left: ms });
+            state.intervals.push({ id, once: false, fn, ms, left: ms, owner: ownerOf(opts) });
             return id;
         },
 
@@ -308,6 +568,14 @@ export function installTime($) {
 
 function isFrozen() {
     return state.freeze_ms > 0;
+}
+
+/** Владелец таймера из опций: узел, обёртка или `{ node }`. */
+function ownerOf(opts) {
+    if (!opts) return null;
+    if (opts.nodes && opts.nodes.length) return opts.nodes[0];
+    if (opts.body !== undefined || opts.attrs !== undefined) return opts;   // сам узел
+    return opts.node || null;
 }
 
 function freezeHandle(id, ms) {
@@ -377,6 +645,11 @@ export function tickTime() {
         ? 0 : raw * state.scale * combineSlow(state.slow, 1);
     state.scaled_time += dt;
 
+    // §44: шаги симуляции — по правилам C (main.c), до игровых таймеров кадра.
+    // Множитель берётся тот, с которым C шагнул ЭТОТ кадр: свой шаг физики
+    // идёт до апдейта скрипта, поэтому новый множитель применится к следующему.
+    state.sim.last_steps = stepSimulation(raw);
+
     tickTimers(dt);
     tickTweens(dt);
     // Tween-объекты: dt — с учётом паузы и масштаба, raw — реальный кадр
@@ -389,6 +662,9 @@ export function tickTime() {
 
     for (let i = state.intervals.length - 1; i >= 0; i--) {
         const it = state.intervals[i];
+        // §44: таймер с выключенным владельцем стоит — не «идёт медленнее», а
+        // именно не истекает, пока политика `timers` не вернётся.
+        if (it.owner && !processingAllows(it.owner, 'timers')) continue;
         it.left -= dt * 1000;
         if (it.left <= 0) {
             it.left += it.ms;

@@ -37,6 +37,7 @@ set(R2D_SOURCES
     http.h     http.c
     sdk_host.h sdk_host.c
     script.h   script.c
+    async.h    async.c
     nodes.h    nodes.c
     json.h     json.c
     text.h     text.c

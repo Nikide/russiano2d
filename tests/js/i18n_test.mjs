@@ -11,7 +11,8 @@
 
 import { test, eq, truthy, falsy, finish } from './_harness.mjs';
 import { ctx, touchRegistry } from '../../src/highlevel/core.js';
-import { format, pluralIndex, lookup, installI18n, tickI18n } from '../../src/highlevel/i18n.js';
+import { format, pluralIndex, lookup, installI18n, tickI18n,
+         formatNumber, numberSeparators } from '../../src/highlevel/i18n.js';
 
 // $.store подменяем простым словарём: i18n пишет язык и читает его при старте.
 const store_data = new Map();
@@ -159,6 +160,55 @@ test('auto: tickI18n переводит узлы с attrs.tr при смене �
     i18n.lang('ru');
     tickI18n();
     eq(counter.text, '3 items');           // auto выключен — текст не трогаем
+});
+
+// ---------------------------------------------------------------------------
+// §16: смена языка как событие, пропавшие ключи и числа в локали
+// ---------------------------------------------------------------------------
+
+test('onChange: подписка зовётся на смену языка и снимается', () => {
+    i18n.add('ru', { 'a': 'А' });
+    i18n.add('en', { 'a': 'A' });
+    i18n.lang('ru');
+    let calls = 0;
+    let seen_lang = null;
+    const off = i18n.onChange((info) => { calls++; seen_lang = info.lang; });
+    eq(i18n.listenerCount(), 1, 'подписчик зарегистрирован');
+    i18n.lang('en');
+    eq(calls, 1, 'смена языка уведомила подписчика');
+    eq(seen_lang, 'en', 'подписчик видит новый язык');
+    i18n.lang('en');
+    eq(calls, 1, 'повторная установка того же языка не уведомляет');
+    off();
+    i18n.lang('ru');
+    eq(calls, 1, 'после отписки уведомлений нет');
+    eq(i18n.listenerCount(), 0, 'счётчик подписчиков вернулся к нулю');
+});
+
+test('missing/mark: пропавший ключ видно структурой и явным маркером', () => {
+    i18n.add('ru', { 'yes': 'Да' });
+    i18n.lang('ru');
+    i18n.clearMissing();
+    eq(i18n.tr('нет.ключа'), 'нет.ключа', 'fallback — сам ключ, не пустая строка');
+    const miss = i18n.missing();
+    eq(miss.length, 1, 'пропавший ключ попал в отчёт');
+    eq(miss[0].key, 'нет.ключа');
+    eq(miss[0].lang, 'ru');
+    i18n.mark(true);
+    eq(i18n.tr('нет.ключа'), '⟨нет.ключа⟩', 'явный маркер fallback');
+    i18n.mark(false);
+    eq(i18n.tr('нет.ключа'), 'нет.ключа', 'маркер выключается');
+    eq(i18n.listenerCount(), 0, 'подписок не осталось');
+});
+
+test('числа: разделители по языку, без Intl', () => {
+    eq(numberSeparators('ru').group, '\u00a0');
+    eq(numberSeparators('en').group, ',');
+    eq(formatNumber(1234567.5, 'ru', { decimals: 1 }), '1\u00a0234\u00a0567,5');
+    eq(formatNumber(1234567.5, 'en', { decimals: 1 }), '1,234,567.5');
+    eq(formatNumber(-1000, 'en'), '-1,000');
+    eq(formatNumber(999, 'ru'), '999');
+    eq(formatNumber('не число', 'ru'), 'не число');
 });
 
 finish();

@@ -219,6 +219,77 @@ const char *r2d_audio_group_effect(const R2DAudio *a, int group_id)
     return "none";
 }
 
+bool r2d_audio_group_destroy(R2DAudio *a, int group_id)
+{
+    R2D_UNUSED(a); R2D_UNUSED(group_id);
+    return false;
+}
+
+// --- Музыкальные слои (§25): без звука слоёв нет ----------------------------
+int r2d_audio_stems_set(R2DAudio *a, const int *sound_ids, int count)
+{
+    R2D_UNUSED(a); R2D_UNUSED(sound_ids); R2D_UNUSED(count);
+    return 0;
+}
+
+int r2d_audio_stem_count(const R2DAudio *a) { R2D_UNUSED(a); return 0; }
+
+bool r2d_audio_stems_start(R2DAudio *a, bool loop, float fade_ms, double start_ms,
+                           double loop_start_ms, double loop_end_ms)
+{
+    R2D_UNUSED(a); R2D_UNUSED(loop); R2D_UNUSED(fade_ms); R2D_UNUSED(start_ms);
+    R2D_UNUSED(loop_start_ms); R2D_UNUSED(loop_end_ms);
+    return false;
+}
+
+bool r2d_audio_stems_seek(R2DAudio *a, double seconds)
+{
+    R2D_UNUSED(a); R2D_UNUSED(seconds);
+    return false;
+}
+
+void r2d_audio_stems_pause(R2DAudio *a, bool paused) { R2D_UNUSED(a); R2D_UNUSED(paused); }
+bool r2d_audio_stems_paused(const R2DAudio *a) { R2D_UNUSED(a); return false; }
+bool r2d_audio_stems_playing(const R2DAudio *a) { R2D_UNUSED(a); return false; }
+void r2d_audio_stems_stop(R2DAudio *a, float fade_ms) { R2D_UNUSED(a); R2D_UNUSED(fade_ms); }
+
+double r2d_audio_stem_time(const R2DAudio *a, int index)
+{
+    R2D_UNUSED(a); R2D_UNUSED(index);
+    return -1.0;
+}
+
+long long r2d_audio_stem_frames(const R2DAudio *a, int index)
+{
+    R2D_UNUSED(a); R2D_UNUSED(index);
+    return -1;
+}
+
+void r2d_audio_stem_gain(R2DAudio *a, int index, float gain)
+{
+    R2D_UNUSED(a); R2D_UNUSED(index); R2D_UNUSED(gain);
+}
+
+float r2d_audio_get_stem_gain(const R2DAudio *a, int index)
+{
+    R2D_UNUSED(a); R2D_UNUSED(index);
+    return 0.0f;
+}
+
+double r2d_audio_stems_loop_start(const R2DAudio *a) { R2D_UNUSED(a); return 0.0; }
+
+int r2d_audio_stem_loops(const R2DAudio *a, int index)
+{
+    R2D_UNUSED(a); R2D_UNUSED(index);
+    return 0;
+}
+
+long long r2d_audio_stem_remaining(const R2DAudio *a, int index)
+{
+    R2D_UNUSED(a); R2D_UNUSED(index);
+    return -1;
+}
+
 bool r2d_audio_set_channel_3d(R2DAudio *a, int channel, float x, float y, float z, bool on)
 {
     R2D_UNUSED(a); R2D_UNUSED(channel);

@@ -35,6 +35,7 @@
 from __future__ import annotations
 
 import glob
+import gzip
 import hashlib
 import os
 import platform
@@ -42,6 +43,8 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
+import zipfile
 from typing import Dict, List, Optional, Sequence, Tuple
 
 #: Абсолютный путь к корню репозитория.
@@ -58,6 +61,14 @@ DEFAULT_BUILD_DIR = "build-release"
 
 #: Каталог релизных артефактов по умолчанию.
 DEFAULT_OUT_DIR = "dist"
+
+#: Фиксированное время файлов внутри архива: повторная упаковка из того же
+#: дерева даёт побайтно тот же архив (SPEC: «повторная упаковка не меняет
+#: содержимое»). Обычные mtime файлов и gzip-заголовок иначе текут.
+ARCHIVE_MTIME = 0
+
+#: Файл с версией пакета: manifest версии рядом с SHA256SUMS.
+VERSION_FILE = "VERSION"
 
 #: Файлы, которые кладутся в каждый пакет рядом с бинарником.
 DOC_FILES = ("CHANGELOG.md", "THIRD_PARTY_NOTICES.md", "LICENSE")
@@ -345,6 +356,9 @@ AGENTS_DOC_ORDER = (
     "docs/tutorial-first-game.md",
     "docs/tutorial-platformer.md",
     "docs/tutorial-menus.md",
+    # Вертикальные примеры спецификации: у каждого свой гайд рядом с API.
+    "docs/tutorial-melee.md",
+    "docs/tutorial-runtime-integration.md",
     "docs/demos.md",
     "docs/TASKS.md",
     "docs/HIGH_LEVEL_API_PERF.md",
@@ -698,6 +712,11 @@ def package_platform(
 
     render_platform_docs(target, platform_name, version)
 
+    # Manifest версии: одна строка с версией из CMakeLists.txt, рядом с
+    # SHA256SUMS. Пакет называет свою версию сам, не только в README.
+    with open(os.path.join(target, VERSION_FILE), "w", encoding="utf-8") as handle:
+        handle.write(version + "\n")
+
     # Предупреждения о лицензиях: полные тексты должны лежать в пакете.
     if not any(os.path.exists(os.path.join(target, name)) for name in ("LICENSE", "LICENSE.md")):
         log("    внимание: в пакете нет LICENSE — см. THIRD_PARTY_NOTICES.md")
@@ -717,18 +736,65 @@ def package_platform(
         handle.write("\n".join(entries) + "\n")
     log("    записано %s (%d файлов)" % (sums_path, len(entries)))
 
-    # Архив: tar.gz или zip.
+    # Архив: tar.gz или zip. Пишем сами: время файлов фиксировано, порядок
+    # отсортирован, uid/gid обнулены — повторная упаковка того же дерева даёт
+    # тот же архив, а не только тот же список файлов.
     os.makedirs(os.path.join(ROOT, out_dir), exist_ok=True)
-    base = archive
-    if archive_ext == "zip":
-        base = archive[: -len(".zip")]
-    elif archive_ext == "tar.gz":
-        base = archive[: -len(".tar.gz")]
-    shutil.make_archive(base, "zip" if archive_ext == "zip" else "gztar", root_dir=target)
+    write_archive(target, archive, archive_ext)
     log("    архив: %s" % archive)
 
     # Сводные суммы по архивам всего релиза.
     _write_global_sums(out_dir)
+
+
+def archive_members(target: str) -> List[str]:
+    """Отсортированные относительные пути файлов пакета (для архива)."""
+    members: List[str] = []
+    for root, dirs, names in os.walk(target):
+        dirs.sort()
+        for name in sorted(names):
+            full = os.path.join(root, name)
+            if os.path.isfile(full):
+                members.append(os.path.relpath(full, target))
+    members.sort()
+    return members
+
+
+def write_archive(target: str, archive: str, archive_ext: str) -> str:
+    """Записать архив пакета воспроизводимо.
+
+    Формат выбирается по расширению: ``.tar.gz`` или ``.zip``. Время всех
+    записей — ``ARCHIVE_MTIME``, права — 0755 для исполняемых и 0644 для
+    остальных, порядок — по имени. Так один и тот же каталог даёт один и тот
+    же SHA256, и «переупаковали — ничего не изменилось» проверяется хешем.
+    """
+    if archive_ext == "zip":
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+            for relative in archive_members(target):
+                full = os.path.join(target, relative)
+                info = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
+                mode = 0o755 if os.access(full, os.X_OK) else 0o644
+                info.external_attr = mode << 16
+                info.compress_type = zipfile.ZIP_DEFLATED
+                with open(full, "rb") as handle:
+                    bundle.writestr(info, handle.read())
+        return archive
+    if archive_ext == "tar.gz":
+        with open(archive, "wb") as raw:
+            # mtime=0 в gzip-заголовке: иначе имя файла и время упаковки в нём.
+            with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=ARCHIVE_MTIME) as packed:
+                with tarfile.open(fileobj=packed, mode="w", format=tarfile.PAX_FORMAT) as bundle:
+                    for relative in archive_members(target):
+                        full = os.path.join(target, relative)
+                        info = bundle.gettarinfo(full, arcname="./" + relative)
+                        info.mtime = ARCHIVE_MTIME
+                        info.uid = info.gid = 0
+                        info.uname = info.gname = ""
+                        info.mode = 0o755 if os.access(full, os.X_OK) else 0o644
+                        with open(full, "rb") as handle:
+                            bundle.addfile(info, handle)
+        return archive
+    raise SystemExit("ошибка: неизвестный формат архива %r" % archive_ext)
 
 
 def _write_global_sums(out_dir: str) -> None:

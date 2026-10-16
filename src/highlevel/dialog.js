@@ -439,6 +439,40 @@ export function installDialog($) {
         return focused ? choice_colors.hover : choice_colors.base;
     }
 
+    // --- §16: смена языка НА ХОДУ -----------------------------------------
+    // Диалог переводит тексты в момент отрисовки (translate → $.tr), поэтому
+    // смена языка требует лишь перерисовать открытую реплику. Подписка живёт
+    // РОВНО пока открыт диалог: иначе каждый диалог оставлял бы слушателя в
+    // $.i18n и счётчик подписок рос бы от прогона к прогону.
+    let lang_off = null;
+
+    function watchLang() {
+        if (lang_off) return;
+        const i18n = api.i18n || ctx.i18n;
+        if (!i18n || typeof i18n.onChange !== 'function') return;
+        lang_off = i18n.onChange(() => { retranslate(); });
+    }
+
+    function unwatchLang() {
+        if (!lang_off) return;
+        try { lang_off(); } catch (e) { ctx.log(`$.dialog: отписка от языка: ${e}`); }
+        lang_off = null;
+    }
+
+    /** Пересобрать текст открытой реплики на текущем языке (без перезапуска). */
+    function retranslate() {
+        if (!state || !state.line) return false;
+        const pages = pagesOf(state.line.text, state.vars);
+        state.pages = pages.length ? pages : [''];
+        if (state.page >= state.pages.length) state.page = state.pages.length - 1;
+        // Печать не перезапускаем: строка уже была прочитана на другом языке.
+        state.typing = false;
+        state.typed = Array.from(state.pages[state.page] || '').length;
+        updateView();
+        emit('typed', { id: state.nodeId, text: state.pages[state.page] || '' });
+        return true;
+    }
+
     function destroyView() {
         const view = state && state.view;
         if (!view) return;
@@ -564,6 +598,7 @@ export function installDialog($) {
     function finish(reason) {
         if (!state) return false;
         const info = { reason, definition: state.def.id, node: state.nodeId };
+        unwatchLang();                 // §16: подписок после закрытия не остаётся
         destroyView();
         state = null;
         emit('end', info);
@@ -683,9 +718,21 @@ export function installDialog($) {
             // Диалог забирает клавиатуру: иначе Enter нажал бы и реплику, и
             // узел, оставшийся в фокусе у widgets.js.
             if (api.ui && typeof api.ui.blur === 'function') api.ui.blur();
+            unwatchLang();
+            watchLang();               // §16: язык можно сменить на ходу
             emit('start', { definition: def.id, node: start });
             return goto(start, 0);
         },
+
+        /**
+         * §16: перечитать открытую реплику на текущем языке. Обычно звать не
+         * нужно — диалог подписан на $.i18n.onChange сам; метод нужен тестам и
+         * экранам, которые меняют словарь в обход $.i18n.
+         */
+        retranslate() { return retranslate(); },
+
+        /** Подписан ли открытый диалог на смену языка (проверка «не течёт»). */
+        langBound() { return !!lang_off; },
 
         /** Следующая реплика (или досрочное допечатывание текущей). */
         next,

@@ -154,7 +154,8 @@ def main():
         a.eval("""$.store.set('src', $.combat.attack({ source: '#hero', owner: '#hero', team: 1,
                                                         amount: 20, damageType: 'bullet', window: 500 }))""")
         refl = a.eval(
-            "$.combat.reflect($.store.get('src'), { owner: '#ally', team: 1, multiplier: 2 })")
+            "(() => { const r = $.combat.reflect($.store.get('src'),"
+            " { owner: '#ally', team: 3, multiplier: 2 }); $.store.set('refl', r); return r; })()")
         check(refl.get("id") != a.eval("$.store.get('src').id"),
               "отражение — новая attack identity")
         check(refl.get("owner_id") == a.eval("$('#ally').nid()"),
@@ -162,6 +163,59 @@ def main():
         check(refl.get("amount") == 40, f"урон по политике отражения ({refl.get('amount')})")
         check(a.eval("$.store.get('src').reflectedBy") == refl.get("id"),
               "старая атака помечена reflectedBy")
+
+        # --- Отражённая атака обычна по форме: журналы, сводка, фильтр -------
+        check(isinstance(refl.get("hits"), list),
+              f"reflect() создаёт журнал hits[] ({type(refl.get('hits')).__name__})")
+        check(isinstance(refl.get("hit_targets"), dict) and isinstance(refl.get("cooldown_until"), dict),
+              "hit_targets и cooldown_until созданы")
+        listed = a.eval(f"$.combat.attacks()")
+        check(isinstance(listed, list) and any(x.get("id") == refl.get("id") for x in listed),
+              "$.combat.attacks() не падает и видит отражённую атаку")
+        # Фильтр по владельцу: отражённая принадлежит #ally, не #hero.
+        by_owner = a.eval(f"$.combat.attacks({_js(a.eval('$(\"#ally\").nid()'))})")
+        check(isinstance(by_owner, list) and len(by_owner) >= 1
+              and all(x.get("owner_id") == a.eval("$('#ally').nid()") for x in by_owner),
+              f"attacks(owner) отбирает по владельцу ({len(by_owner)} шт.)")
+        wrong_owner = a.eval("$.combat.attacks('нет-такого-nid')")
+        check(wrong_owner == [], "attacks(чужой owner) пуст")
+        # Атаку, собранную руками (без журналов), движок не роняет.
+        manual = a.eval("""(() => {
+            const atk = { id: 999, until: $.time.now() + 10, amount: 5, rehit: 'once',
+                          hit_targets: {}, hits: [] };
+            delete atk.hits; delete atk.hit_targets;
+            const res = $.combat.strike(atk, ['#dummy']);
+            return { accepted: res.accepted, hasHits: Array.isArray(atk.hits),
+                     hasTargets: !!atk.hit_targets, reason: res.results.length ? res.results[0].reason : null };
+        })()""")
+        check(manual.get("hasHits") is True and manual.get("hasTargets") is True,
+              f"атака, собранная руками, получает журналы ({manual})")
+        # Сводка по цели: отражённая атака бьёт союзника (её команда 3 ≠ 1).
+        struck = a.eval("""(() => {
+            const atk = $.store.get('refl');
+            const res = $.combat.strike(atk, ['#ally']);
+            return { accepted: res.accepted, hits: atk.hits.length,
+                     logged: Object.keys(atk.hit_targets).length };
+        })()""")
+        check(struck.get("hits") == 1 and struck.get("logged") == 1,
+              f"отражённая атака пишет попадание в свой журнал ({struck})")
+        by_target = a.eval(f"$.combat.attacks({{ target: {_js(a.eval('$(\"#ally\").nid()'))} }})")
+        check(isinstance(by_target, list) and len(by_target) >= 1,
+              f"attacks({{target}}) отбирает по цели ({len(by_target)} шт.)")
+
+        # --- $.hits играет прямо по ответу §9 --------------------------------
+        played = a.eval("""(() => {
+            const res = $.combat.damageRequest({ amount: 3, source: '#hero', target: '#ally',
+                                                 friendlyFire: true });
+            const out = $.hits.play(res, { particles: false, shake: 0, hitStop: 0, squash: 0 });
+            return { accepted: res.accepted, hasX: typeof res.x === 'number',
+                     target: out && out.target ? out.target.nid : null,
+                     plays: $.hits.stats().plays };
+        })()""")
+        check(played.get("accepted") is True and played.get("hasX") is True,
+              f"ответ несёт точку презентации ({played})")
+        check(played.get("target") == a.eval("$('#ally').nid()"),
+              f"$.hits находит цель ответа по nid без ручного {{x,y,self}} ({played.get('target')})")
 
         # --- Физическая отдача: импульс не стирается управлением -------------
         kx0 = a.eval("$('#knockee').pos().x")

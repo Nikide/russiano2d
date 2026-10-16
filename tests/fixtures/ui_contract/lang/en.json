@@ -1,0 +1,8 @@
+{
+  "hud.hp": "Health",
+  "hud.ammo": "Ammo: {n}",
+  "menu.play": "Play",
+  "menu.settings": "Settings",
+  "long.paragraph": "A very long interface string that must wrap and never leave the panel even in a narrow window and with a large font size.",
+  "kills": ["{n} item", "{n} items"]
+}

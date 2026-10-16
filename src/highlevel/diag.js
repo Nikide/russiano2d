@@ -19,7 +19,7 @@
 // пишется (её читают люди и тесты, ищущие «$: ошибка»), запись лишь идёт рядом.
 // ===========================================================================
 
-import { ctx } from './core.js';
+import { ctx, wrapOne } from './core.js';
 
 /** Кольцо записей: диагностика не растёт вместе с длительностью запуска (§28). */
 const LIMIT = 128;
@@ -185,6 +185,116 @@ export function installDiag($) {
         const first = list().find((e) => !e.recoverable);
         throw new Error(`в журнале есть неустранимая ошибка: ${first.code} ${first.message}`);
     };
+    // -----------------------------------------------------------------------
+    // §28 P0: фактические представления состояния узла и боя.
+    //
+    // Всё, что нужно для отладки боя, уже есть в разных подсистемах, но чтобы
+    // ответить на вопрос «почему удар не прошёл», приходилось смотреть пять
+    // мест в консоли. `anatomy()` собирает их в один снимок — и он же служит
+    // расширением существующего агентского протокола (новый протокол не
+    // вводится: DevTools и агент читают тот же объект).
+    // -----------------------------------------------------------------------
+
+    /** Первый узел выборки; принимает селектор, обёртку или узел. */
+    function pickNode(sel) {
+        if (sel === undefined || sel === null) return null;
+        if (typeof sel === 'string') {
+            const found = ctx.$ ? ctx.$(sel).get(0) : null;
+            return found || null;
+        }
+        // Обёртку разворачиваем: иначе `anatomy()` получал бы объект-обёртку
+        // без прямых полей узла, и вызывающие ожидали бы то же, что от селектора.
+        const raw = sel.nodes ? sel.nodes[0] : sel;
+        return raw && raw.tag ? raw : null;
+    }
+
+    /** Обёртка для методов узла (`.areas()`, `.ground()`): сырой узел их не имеет. */
+    function wrapFor(node) {
+        try { return wrapOne(node); } catch (e) { return null; }
+    }
+
+    /**
+     * Полная «анатомия» узла: тело, области с ролями, опора, активные окна и
+     * политики обработки.
+     *
+     * ```js
+     * $.debug.anatomy('#hero');
+     * // { found, nid, tag, pos, body, areas: [{name, role, enabled, index}…],
+     * //   ground, windows: ['attack'], processing: {...}, watching: [...] }
+     * ```
+     */
+    debug.anatomy = function (sel) {
+        const node = pickNode(sel);
+        if (!node) return { found: false, selector: typeof sel === 'string' ? sel : null };
+        const wrapped = wrapFor(node);
+        const areas = wrapped && typeof wrapped.areas === 'function' ? wrapped.areas() : [];
+        const processing = (ctx.$ && ctx.$.processing && typeof ctx.$.processing.get === 'function')
+            ? ctx.$.processing.get(node) : null;
+        const windows = (ctx.$ && ctx.$.anim && typeof ctx.$.anim.openWindows === 'function')
+            ? ctx.$.anim.openWindows(node) : null;
+        let ground = null;
+        try { ground = wrapped && typeof wrapped.ground === 'function' ? wrapped.ground() : null; } catch (e) { ground = null; }
+        return {
+            found: true,
+            nid: node.nid || null,
+            tag: node.tag || null,
+            id: node.id || null,
+            pos: { x: node.x, y: node.y },
+            size: { w: node.w, h: node.h },
+            visible: node.visible !== false,
+            body: node.body >= 0
+                ? { id: node.body, layer: node.layer_bits, mask: node.collision_mask, group: node.collision_group }
+                : null,
+            areas: areas.map((a) => ({
+                name: a.name, role: a.role, index: a.index,
+                enabled: a.enabled !== false, sensor: a.sensor !== false,
+                owner: a.owner === null || a.owner === undefined ? null : (a.owner.nid || String(a.owner)),
+                shape: a.shape, x: a.x, y: a.y, w: a.w, h: a.h,
+            })),
+            ground: ground ? {
+                on: !!ground.on, slope: ground.slope, vx: ground.vx, vy: ground.vy,
+                oneWay: !!ground.oneWay, node: ground.node ? (ground.node.nid || null) : null,
+            } : null,
+            windows: windows === null ? null : (Array.isArray(windows) ? windows.slice() : [windows]),
+            processing: processing || null,
+            // Наблюдатели видимости (§44) и владельцы таймеров — тоже часть
+            // «почему объект не двигается».
+            watching: (ctx.$ && ctx.$.activation && typeof ctx.$.activation.stats === 'function')
+                ? (ctx.$.activation.stats().watchers || 0) : null,
+        };
+    };
+
+    /**
+     * Контакты за прошедший шаг в удобном виде (§28 P0): нормаль, точка, фаза и
+     * роли областей, а не сырые id.
+     *
+     * ```js
+     * $.debug.contacts();
+     * // [{ phase, self, other, nx, ny, x, y, areaA, areaB, roleA, roleB, sensor }]
+     * ```
+     */
+    debug.contacts = function (opts) {
+        const eng = ctx.engine || (ctx.native && ctx.native.engine);
+        if (!eng || typeof eng.contacts !== 'function') return [];
+        const list = eng.contacts() || [];
+        const limit = opts && opts.limit ? opts.limit : 64;
+        return list.slice(0, limit).map((c) => ({
+            phase: c.phase || (c.begin ? 'begin' : (c.end ? 'end' : 'hit')),
+            self: c.self !== undefined ? c.self : (c.source_id || null),
+            other: c.other !== undefined ? c.other : (c.target_id || null),
+            nx: c.nx === undefined ? null : c.nx,
+            ny: c.ny === undefined ? null : c.ny,
+            x: c.x === undefined ? null : c.x,
+            y: c.y === undefined ? null : c.y,
+            areaA: c.areaA === undefined ? null : c.areaA,
+            areaB: c.areaB === undefined ? null : c.areaB,
+            roleA: c.roleA === undefined ? null : c.roleA,
+            roleB: c.roleB === undefined ? null : c.roleB,
+            sensor: c.sensor === true,
+            hasNormal: c.hasNormal !== false && c.nx !== null && c.nx !== undefined,
+        }));
+    };
+
     debug.classify = classify;
 
     /**

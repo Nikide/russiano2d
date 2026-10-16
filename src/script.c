@@ -31,6 +31,10 @@
 #include "sdk_host.h"
 #include "net.h"
 #include "payload.h"
+#include "async.h"
+
+// §27: перезагрузка текстуры на месте декодирует картинку (IMG_Load_IO).
+#include <SDL3_image/SDL_image.h>
 #include "r2d.h"
 #include "text.h"
 #include "font.h"
@@ -1993,6 +1997,126 @@ static JSValue r2d__js_free_texture(JSContext *ctx, JSValueConst this_val, int a
     return JS_NewBool(ctx, r2d_texture_free(s->renderer, id));
 }
 
+// engine.reloadTexture(id, path) → { ok, code, reason, w, h, ow, oh } (§27).
+//
+// Перезагрузка текстуры НА МЕСТЕ: картинка читается с диска (или из груза) и
+// заливается в ТУ ЖЕ текстуру. Handle не меняется, поэтому узлы, спрайты и
+// nine-slice продолжают работать без перепривязки, а старых handle'ов не
+// появляется вовсе — серия reload не растит таблицу текстур.
+//
+// Смена размера невозможна: спрайты хранят uv-прямоугольник, нормированный по
+// старому размеру. Такой случай возвращается как code: "size" — вызывающий
+// обязан отклонить замену (last-known-good), а не портить кадры.
+static JSValue r2d__js_reload_texture(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int id = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *rel = r2d__arg_str(ctx, argc, argv, 1);
+
+    JSValue out = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, out, "ok", JS_NewBool(ctx, false));
+    JS_SetPropertyStr(ctx, out, "code", JS_NewString(ctx, "dead"));
+    JS_SetPropertyStr(ctx, out, "reason", JS_NewString(ctx, "нет тела/рендерера или пути"));
+
+    if (!s || !s->renderer || !rel) {
+        if (rel) JS_FreeCString(ctx, rel);
+        return out;
+    }
+
+    char full[4096];
+    r2d_app_resolve_path(s->app, full, sizeof full, rel);
+    JS_FreeCString(ctx, rel);
+
+    int old_w = 0, old_h = 0;
+    r2d_texture_info(s->renderer, id, &old_w, &old_h);
+    if (old_w <= 0 || old_h <= 0) {
+        JS_SetPropertyStr(ctx, out, "code", JS_NewString(ctx, "dead"));
+        JS_SetPropertyStr(ctx, out, "reason", JS_NewString(ctx, "текстура не найдена (id вне таблицы или выгружена)"));
+        return out;
+    }
+
+    SDL_Surface *loaded = NULL;
+    if (r2d_vfs_has(full)) {
+        size_t data_size = 0;
+        uint8_t *data = r2d_vfs_read(full, &data_size);
+        if (data) {
+            SDL_IOStream *io = SDL_IOFromConstMem(data, data_size);
+            if (io) loaded = IMG_Load_IO(io, true);
+            r2d_vfs_free(data);
+        }
+    } else {
+        loaded = IMG_Load(full);
+    }
+    if (!loaded) {
+        JS_SetPropertyStr(ctx, out, "code", JS_NewString(ctx, "decode"));
+        JS_SetPropertyStr(ctx, out, "reason", JS_NewString(ctx, SDL_GetError()));
+        return out;
+    }
+
+    SDL_Surface *rgba = loaded;
+    if (loaded->format != SDL_PIXELFORMAT_RGBA32) {
+        rgba = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA32);
+        if (!rgba) {
+            SDL_DestroySurface(loaded);
+            JS_SetPropertyStr(ctx, out, "code", JS_NewString(ctx, "decode"));
+            JS_SetPropertyStr(ctx, out, "reason", JS_NewString(ctx, SDL_GetError()));
+            return out;
+        }
+    }
+
+    JS_SetPropertyStr(ctx, out, "ow", JS_NewInt32(ctx, old_w));
+    JS_SetPropertyStr(ctx, out, "oh", JS_NewInt32(ctx, old_h));
+    JS_SetPropertyStr(ctx, out, "w", JS_NewInt32(ctx, rgba->w));
+    JS_SetPropertyStr(ctx, out, "h", JS_NewInt32(ctx, rgba->h));
+
+    if (rgba->w != old_w || rgba->h != old_h) {
+        if (rgba != loaded) SDL_DestroySurface(rgba);
+        SDL_DestroySurface(loaded);
+        JS_SetPropertyStr(ctx, out, "code", JS_NewString(ctx, "size"));
+        JS_SetPropertyStr(ctx, out, "reason", JS_NewString(ctx, "размер картинки изменился"));
+        return out;
+    }
+
+    const bool uploaded = r2d_texture_upload_region(s->renderer, id, 0, 0,
+                                                    rgba->w, rgba->h, rgba->pixels, rgba->pitch);
+    if (rgba != loaded) SDL_DestroySurface(rgba);
+    SDL_DestroySurface(loaded);
+
+    JS_SetPropertyStr(ctx, out, "ok", JS_NewBool(ctx, uploaded));
+    JS_SetPropertyStr(ctx, out, "code", JS_NewString(ctx, uploaded ? "ok" : "upload"));
+    JS_SetPropertyStr(ctx, out, "reason", JS_NewString(ctx, uploaded ? "" : "не удалось залить пиксели в текстуру"));
+    return out;
+}
+
+// engine.readBytes(path) → Uint8Array | undefined. Нужен хот-релоаду ассетов
+// (§27): подпись содержимого текстуры считается по байтам файла.
+static JSValue r2d__js_read_bytes(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const char *rel = r2d__arg_str(ctx, argc, argv, 0);
+    if (!rel || !s) { if (rel) JS_FreeCString(ctx, rel); return JS_UNDEFINED; }
+
+    const R2dPayloadFile *packed = r2d_payload_find(r2d_payload_active(), rel);
+    if (packed) {
+        JSValue out = JS_NewUint8ArrayCopy(ctx, (const uint8_t *)packed->data, packed->size);
+        JS_FreeCString(ctx, rel);
+        return out;
+    }
+
+    char full[4096];
+    r2d_app_resolve_path(s->app, full, sizeof full, rel);
+    JS_FreeCString(ctx, rel);
+
+    size_t size = 0;
+    uint8_t *buf = (uint8_t *)SDL_LoadFile(full, &size);
+    if (!buf) return JS_UNDEFINED;
+    JSValue out = JS_NewUint8ArrayCopy(ctx, buf, size);
+    SDL_free(buf);
+    return out;
+}
+
 // engine.isAwake(id) → bool — спит ли тело (Box2D усыпляет неподвижные).
 // Нужен игре, чтобы не будить тела зря и не считать логику спящих.
 static JSValue r2d__js_is_awake(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -3051,6 +3175,152 @@ static JSValue r2d__js_audio_group_effect(JSContext *ctx, JSValueConst this_val,
     return JS_NewString(ctx, name);
 }
 
+
+// engine.audio.destroyGroup(id) — освободить шину: эффект и его хвост
+// снимаются, слот группы переиспользуется следующей шиной.
+static JSValue r2d__js_audio_destroy_group(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    return JS_NewBool(ctx, r2d_audio_group_destroy(s->audio, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+// --- Музыкальные слои (§25) -------------------------------------------------
+// engine.audio.stemsSet([id, id, ...]) — создать слои из загруженных звуков.
+static JSValue r2d__js_audio_stems_set(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio || argc < 1) return JS_NewInt32(ctx, 0);
+    int ids[R2D_AUDIO_MAX_STEMS];
+    int count = 0;
+    int32_t len = 0;
+    JSValue len_val = JS_GetPropertyStr(ctx, argv[0], "length");
+    if (JS_ToInt32(ctx, &len, len_val) == 0) {
+        for (int32_t i = 0; i < len && count < R2D_AUDIO_MAX_STEMS; ++i) {
+            JSValue item = JS_GetPropertyUint32(ctx, argv[0], (uint32_t)i);
+            int32_t id = -1;
+            if (JS_ToInt32(ctx, &id, item) == 0 && id >= 0) ids[count++] = (int)id;
+            JS_FreeValue(ctx, item);
+        }
+    }
+    JS_FreeValue(ctx, len_val);
+    return JS_NewInt32(ctx, r2d_audio_stems_set(s->audio, ids, count));
+}
+
+static JSValue r2d__js_audio_stems_start(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    return JS_NewBool(ctx, r2d_audio_stems_start(
+        s->audio,
+        r2d__arg_bool(ctx, argc, argv, 0, true),
+        (float)r2d__arg_num(ctx, argc, argv, 1, 0),
+        r2d__arg_num(ctx, argc, argv, 2, 0),
+        r2d__arg_num(ctx, argc, argv, 3, 0),
+        r2d__arg_num(ctx, argc, argv, 4, 0)));
+}
+
+static JSValue r2d__js_audio_stems_seek(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    return JS_NewBool(ctx, r2d_audio_stems_seek(s->audio, r2d__arg_num(ctx, argc, argv, 0, 0)));
+}
+
+static JSValue r2d__js_audio_stems_pause(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (s && s->audio) r2d_audio_stems_pause(s->audio, r2d__arg_bool(ctx, argc, argv, 0, true));
+    return JS_UNDEFINED;
+}
+
+static JSValue r2d__js_audio_stems_state(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "count", JS_NewInt32(ctx, s && s->audio ? r2d_audio_stem_count(s->audio) : 0));
+    JS_SetPropertyStr(ctx, o, "playing", JS_NewBool(ctx, s && s->audio && r2d_audio_stems_playing(s->audio)));
+    JS_SetPropertyStr(ctx, o, "paused", JS_NewBool(ctx, s && s->audio && r2d_audio_stems_paused(s->audio)));
+    JS_SetPropertyStr(ctx, o, "loopStart", JS_NewFloat64(ctx, s && s->audio ? r2d_audio_stems_loop_start(s->audio) : 0.0));
+    // Диагностика по слоям: итерации и кадры до конца — по ним видно и петлю,
+    // и что транспорт действительно играет.
+    JSValue loops = JS_NewArray(ctx);
+    JSValue left = JS_NewArray(ctx);
+    const int n = s && s->audio ? r2d_audio_stem_count(s->audio) : 0;
+    for (int i = 0; i < n; ++i) {
+        JS_SetPropertyUint32(ctx, loops, (uint32_t)i, JS_NewInt32(ctx, r2d_audio_stem_loops(s->audio, i)));
+        JS_SetPropertyUint32(ctx, left, (uint32_t)i, JS_NewInt64(ctx, r2d_audio_stem_remaining(s->audio, i)));
+    }
+    JS_SetPropertyStr(ctx, o, "loops", loops);
+    JS_SetPropertyStr(ctx, o, "remaining", left);
+    return o;
+}
+
+static JSValue r2d__js_audio_stems_playing(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewBool(ctx, s && s->audio && r2d_audio_stems_playing(s->audio));
+}
+
+static JSValue r2d__js_audio_stems_paused(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewBool(ctx, s && s->audio && r2d_audio_stems_paused(s->audio));
+}
+
+static JSValue r2d__js_audio_stems_stop(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (s && s->audio) r2d_audio_stems_stop(s->audio, (float)r2d__arg_num(ctx, argc, argv, 0, 0));
+    return JS_UNDEFINED;
+}
+
+// engine.audio.stemTime(index) / stemFrames(index) — позиция слоя: секунды и
+// PCM-кадры. Именно эти числа сверяют фазность слоёв в тестах.
+static JSValue r2d__js_audio_stem_time(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_NewFloat64(ctx, -1.0);
+    return JS_NewFloat64(ctx, r2d_audio_stem_time(s->audio, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+static JSValue r2d__js_audio_stem_frames(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_NewInt64(ctx, -1);
+    return JS_NewInt64(ctx, r2d_audio_stem_frames(s->audio, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+static JSValue r2d__js_audio_set_stem_gain(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (s && s->audio) {
+        r2d_audio_stem_gain(s->audio, r2d__arg_int(ctx, argc, argv, 0, -1),
+                            (float)r2d__arg_num(ctx, argc, argv, 1, 1));
+    }
+    return JS_UNDEFINED;
+}
+
+static JSValue r2d__js_audio_stem_gain(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_NewFloat64(ctx, 0.0);
+    return JS_NewFloat64(ctx, r2d_audio_get_stem_gain(s->audio, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
 // engine.audio.setChannel3D(channel, x, y, z[, on]) — координаты ОТНОСИТЕЛЬНО
 // слушателя: SDL_mixer держит слушателя в (0,0,0) и не даёт его двигать.
 static JSValue r2d__js_audio_set_channel_3d(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -4066,6 +4336,141 @@ static JSValue r2d__js_fs_list(JSContext *ctx, JSValueConst this_val, int argc, 
     return arr;
 }
 
+// --- §45: асинхронная загрузка ---------------------------------------------
+//
+// JS видит engine.async: поставить задание, забрать готовые результаты в
+// безопасной фазе и применить их. Рабочий поток считает, главный применяет —
+// QuickJS из чужого потока не трогается.
+
+// engine.async.size(path) → байт или -1
+static JSValue r2d__js_async_size(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const char *path = r2d__arg_str(ctx, argc, argv, 0);
+    if (!path) return JS_NewInt32(ctx, -1);
+    const long long size = r2d_async_size(s ? s->app : NULL, path);
+    JS_FreeCString(ctx, path);
+    return JS_NewInt64(ctx, size);
+}
+
+static JSValue r2d__js_async_read(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const char *path = r2d__arg_str(ctx, argc, argv, 0);
+    if (!path) return JS_NewInt32(ctx, -1);
+    const int id = r2d_async_request(s ? s->app : NULL, path, R2D_ASYNC_READ);
+    JS_FreeCString(ctx, path);
+    return JS_NewInt32(ctx, id);
+}
+
+static JSValue r2d__js_async_image(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const char *path = r2d__arg_str(ctx, argc, argv, 0);
+    if (!path) return JS_NewInt32(ctx, -1);
+    const int id = r2d_async_request(s ? s->app : NULL, path, R2D_ASYNC_IMAGE);
+    JS_FreeCString(ctx, path);
+    return JS_NewInt32(ctx, id);
+}
+
+static JSValue r2d__js_async_cancel(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    const int id = (int)r2d__arg_num(ctx, argc, argv, 0, -1);
+    return JS_NewBool(ctx, r2d_async_cancel(id));
+}
+
+/** Разложить C-результат в JS-объект (пиксели не копируются). */
+static JSValue r2d__async_result_to_js(JSContext *ctx, const R2DAsyncResult *res)
+{
+    JSValue obj = JS_NewObject(ctx);
+    const char *kind = res->kind == R2D_ASYNC_IMAGE ? "image" : "read";
+    JS_SetPropertyStr(ctx, obj, "id", JS_NewInt32(ctx, res->id));
+    JS_SetPropertyStr(ctx, obj, "kind", JS_NewString(ctx, kind));
+    JS_SetPropertyStr(ctx, obj, "ok", JS_NewBool(ctx, res->ok));
+    JS_SetPropertyStr(ctx, obj, "cancelled", JS_NewBool(ctx, res->cancelled));
+    JS_SetPropertyStr(ctx, obj, "path", JS_NewString(ctx, res->path));
+    JS_SetPropertyStr(ctx, obj, "size", JS_NewInt64(ctx, (int64_t)res->size));
+    JS_SetPropertyStr(ctx, obj, "bytes", JS_NewInt64(ctx, (int64_t)res->size));
+    JS_SetPropertyStr(ctx, obj, "fromPayload", JS_NewBool(ctx, res->from_payload));
+    if (res->kind == R2D_ASYNC_IMAGE) {
+        JS_SetPropertyStr(ctx, obj, "width", JS_NewInt32(ctx, res->width));
+        JS_SetPropertyStr(ctx, obj, "height", JS_NewInt32(ctx, res->height));
+    }
+    JS_SetPropertyStr(ctx, obj, "error",
+                      res->error[0] ? JS_NewString(ctx, res->error) : JS_NULL);
+    return obj;
+}
+
+// engine.async.poll() → массив готовых результатов (тяжёлое забирается отдельно)
+static JSValue r2d__js_async_poll(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DAsyncResult buf[16];
+    JSValue arr = JS_NewArray(ctx);
+    int total = 0;
+    for (;;) {
+        const int n = r2d_async_poll(buf, (int)(sizeof buf / sizeof buf[0]));
+        if (n <= 0) break;
+        for (int i = 0; i < n; ++i) {
+            JS_SetPropertyUint32(ctx, arr, (uint32_t)total++, r2d__async_result_to_js(ctx, &buf[i]));
+        }
+        if (n < (int)(sizeof buf / sizeof buf[0])) break;
+    }
+    return arr;
+}
+
+// engine.async.takeText(id) → строка или null (буфер освобождается)
+static JSValue r2d__js_async_take_text(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    const int id = (int)r2d__arg_num(ctx, argc, argv, 0, -1);
+    size_t size = 0;
+    char *text = r2d_async_take_text(id, &size);
+    if (!text) return JS_NULL;
+    JSValue out = JS_NewStringLen(ctx, text, size);
+    free(text);
+    return out;
+}
+
+// engine.async.takeTexture(id) → id текстуры (upload здесь, вне render pass)
+static JSValue r2d__js_async_take_texture(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int id = (int)r2d__arg_num(ctx, argc, argv, 0, -1);
+    if (!s || !s->renderer) return JS_NewInt32(ctx, -1);
+    return JS_NewInt32(ctx, r2d_async_take_texture(id, s->renderer));
+}
+
+// engine.async.release(id) — освободить результат, который игра не забрала
+static JSValue r2d__js_async_release(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    r2d_async_release((int)r2d__arg_num(ctx, argc, argv, 0, -1));
+    return JS_UNDEFINED;
+}
+
+// engine.async.stats() → { pending, done, failed, cancelled, bytes, workers }
+static JSValue r2d__js_async_stats(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    int pending = 0, done = 0, failed = 0, cancelled = 0;
+    long long bytes = 0;
+    r2d_async_stats(&pending, &done, &failed, &cancelled, &bytes);
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "pending", JS_NewInt32(ctx, pending));
+    JS_SetPropertyStr(ctx, obj, "done", JS_NewInt32(ctx, done));
+    JS_SetPropertyStr(ctx, obj, "failed", JS_NewInt32(ctx, failed));
+    JS_SetPropertyStr(ctx, obj, "cancelled", JS_NewInt32(ctx, cancelled));
+    JS_SetPropertyStr(ctx, obj, "bytes", JS_NewInt64(ctx, (int64_t)bytes));
+    JS_SetPropertyStr(ctx, obj, "workers", JS_NewInt32(ctx, r2d_async_workers()));
+    return obj;
+}
+
 // --- Мост к агенту ----------------------------------------------------------
 
 // engine.setExit(fn) — вызывается движком при завершении (в агентском режиме
@@ -4628,6 +5033,9 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "setAwake", r2d__js_set_awake, 2);
     r2d__set_fn(ctx, engine, "isAwake", r2d__js_is_awake, 1);
     r2d__set_fn(ctx, engine, "freeTexture", r2d__js_free_texture, 1);
+    // §27: перезагрузка текстуры на месте и чтение байтов файла.
+    r2d__set_fn(ctx, engine, "reloadTexture", r2d__js_reload_texture, 2);
+    r2d__set_fn(ctx, engine, "readBytes", r2d__js_read_bytes, 1);
     r2d__set_fn(ctx, engine, "requestReload", r2d__js_request_reload, 1);
     r2d__set_fn(ctx, engine, "reloadPending", r2d__js_reload_pending, 0);
     r2d__set_fn(ctx, engine, "hotReload", r2d__js_hot_reload, 0);
@@ -4790,6 +5198,19 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, audio, "setChannelReverb", r2d__js_audio_set_channel_reverb, 5);
     r2d__set_fn(ctx, audio, "setGroupReverb", r2d__js_audio_set_group_reverb, 5);
     r2d__set_fn(ctx, audio, "groupEffect", r2d__js_audio_group_effect, 1);
+    r2d__set_fn(ctx, audio, "destroyGroup", r2d__js_audio_destroy_group, 1);
+    r2d__set_fn(ctx, audio, "stemsSet", r2d__js_audio_stems_set, 1);
+    r2d__set_fn(ctx, audio, "stemsStart", r2d__js_audio_stems_start, 5);
+    r2d__set_fn(ctx, audio, "stemsSeek", r2d__js_audio_stems_seek, 1);
+    r2d__set_fn(ctx, audio, "stemsPause", r2d__js_audio_stems_pause, 1);
+    r2d__set_fn(ctx, audio, "stemsState", r2d__js_audio_stems_state, 0);
+    r2d__set_fn(ctx, audio, "stemsPlaying", r2d__js_audio_stems_playing, 0);
+    r2d__set_fn(ctx, audio, "stemsPaused", r2d__js_audio_stems_paused, 0);
+    r2d__set_fn(ctx, audio, "stemsStop", r2d__js_audio_stems_stop, 1);
+    r2d__set_fn(ctx, audio, "stemTime", r2d__js_audio_stem_time, 1);
+    r2d__set_fn(ctx, audio, "stemFrames", r2d__js_audio_stem_frames, 1);
+    r2d__set_fn(ctx, audio, "setStemGain", r2d__js_audio_set_stem_gain, 2);
+    r2d__set_fn(ctx, audio, "stemGain", r2d__js_audio_stem_gain, 1);
     r2d__set_fn(ctx, audio, "setChannel3D", r2d__js_audio_set_channel_3d, 5);
     JS_SetPropertyStr(ctx, engine, "audio", audio);
 
@@ -4849,6 +5270,21 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, fs, "remove", r2d__js_fs_remove, 1);
     r2d__set_fn(ctx, fs, "list", r2d__js_fs_list, 1);
     JS_SetPropertyStr(ctx, engine, "fs", fs);
+
+    // §45: асинхронный ввод-вывод и декодирование картинок. Рабочий поток
+    // делает тяжёлую часть; главный забирает результаты в безопасной фазе и
+    // создаёт GPU-текстуру только здесь (вне render pass).
+    JSValue async = JS_NewObject(ctx);
+    r2d__set_fn(ctx, async, "size", r2d__js_async_size, 1);
+    r2d__set_fn(ctx, async, "read", r2d__js_async_read, 1);
+    r2d__set_fn(ctx, async, "image", r2d__js_async_image, 1);
+    r2d__set_fn(ctx, async, "cancel", r2d__js_async_cancel, 1);
+    r2d__set_fn(ctx, async, "poll", r2d__js_async_poll, 0);
+    r2d__set_fn(ctx, async, "takeText", r2d__js_async_take_text, 1);
+    r2d__set_fn(ctx, async, "takeTexture", r2d__js_async_take_texture, 1);
+    r2d__set_fn(ctx, async, "release", r2d__js_async_release, 1);
+    r2d__set_fn(ctx, async, "stats", r2d__js_async_stats, 0);
+    JS_SetPropertyStr(ctx, engine, "async", async);
 
     // Расширения engine.*, которые живут в своих файлах и сами ставят себе
     // свойства. Так render.c и http.c не конфликтуют в этом файле: точка
@@ -5102,6 +5538,11 @@ static void r2d__refresh_engine_props(R2DScript *s)
     JS_SetPropertyStr(ctx, e, "dt", JS_NewFloat64(ctx, s->app->dt));
     JS_SetPropertyStr(ctx, e, "fps", JS_NewFloat64(ctx, s->app->fps));
     JS_SetPropertyStr(ctx, e, "frame", JS_NewFloat64(ctx, (double)s->app->frame));
+    // §26/§28: версия сборки доступна игре. Заголовок replay и отчёты обязаны
+    // называть ID сборки, а не писать null «потому что биндинга нет». Значение
+    // приходит из CMake (R2D_VERSION_STRING = версия проекта), поэтому у
+    // dev-сборки оно тоже есть.
+    JS_SetPropertyStr(ctx, e, "version", JS_NewString(ctx, R2D_VERSION_STRING));
     // Логические точки, а не пиксели буфера: на HiDPI игровой код не должен
     // знать про Retina — 1280x720 остаётся 1280x720.
     JS_SetPropertyStr(ctx, e, "width", JS_NewInt32(ctx, s->app->width));
@@ -5349,6 +5790,9 @@ bool r2d_script_init(R2DScript *s, R2DApp *app, R2DRenderer *renderer,
     s->headless = headless;
     s->fixed_dt = fixed_dt;
     s->seed = seed;
+    // §45: очередь асинхронной загрузки. Поток создаётся один раз на процесс;
+    // app нужен для разрешения путей (payload/диск).
+    r2d_async_init(app);
 #ifdef R2D_EMBED_SCRIPTS
     // В релизной сборке исходников на диске нет — следить не за чем.
     s->hot_reload = false;
@@ -5412,6 +5856,8 @@ bool r2d_script_init(R2DScript *s, R2DApp *app, R2DRenderer *renderer,
 
 void r2d_script_shutdown(R2DScript *s)
 {
+    // Асинхронные задания держат буферы и поток: закрываем до контекста.
+    r2d_async_shutdown();
     r2d_bsp_free(&s->bsp);
     r2d__destroy_context(s);
 }

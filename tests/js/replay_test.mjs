@@ -11,7 +11,10 @@
 // ===========================================================================
 
 import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
-import { createReplay, compareReplays, MAX_FRAMES } from '../../src/highlevel/replay.js';
+import {
+    createReplay, compareReplays, MAX_FRAMES,
+    REPLAY_SCHEMA, REPLAY_VERSION, normalizeReplayHead, replayHeadProblem, hashOfValues,
+} from '../../src/highlevel/replay.js';
 
 test('запись: кадры пишутся только в режиме записи', () => {
     const r = createReplay({ seed: 7, dt: 1 / 60 });
@@ -201,6 +204,147 @@ test('предел записи: дальше кадры не пишутся, н
     for (let i = 0; i < 100; ++i) r.record({ i }, i);
     eq(r.length(), 100, 'обычные кадры пишутся');
     eq(r.dropped(), 0, 'ничего не потеряно');
+});
+
+// ---------------------------------------------------------------------------
+// §26: заголовок, actions, state hashes и divergence report
+// ---------------------------------------------------------------------------
+
+test('заголовок: schema, версия, engine ID, content, streams и input mapping', () => {
+    const r = createReplay({
+        seed: 11, dt: 1 / 60, frame: 3,
+        engine: { version: '0.1.31', build: 'ci-42' },
+        content: { level1: 'ab12' },
+        streams: { version: 1, algorithm: 'mulberry32', seed: 11, value: 5 },
+        input: { mapping: 'actions/v1', actions: ['left', 'jump'] },
+        level: 'bunker',
+    });
+    const head = r.header();
+    eq(head.schema, REPLAY_SCHEMA);
+    eq(head.version, REPLAY_VERSION);
+    eq(head.engine.version, '0.1.31', 'ID движка в заголовке');
+    eq(head.engine.build, 'ci-42', 'build ID в заголовке');
+    eq(head.content.level1, 'ab12', 'content-хэш в заголовке');
+    eq(head.streams.algorithm, 'mulberry32', 'снимок RNG в заголовке');
+    eq(head.input.mapping, 'actions/v1', 'версия input mapping');
+    eq(head.input.actions.join(','), 'left,jump', 'разрешённые actions');
+    eq(head.level, 'bunker', 'поле игры сохранилось');
+
+    const text = r.toText();
+    const back = createReplay({});
+    truthy(back.load(text), 'запись прочиталась');
+    eq(back.header().engine.build, 'ci-42', 'паспорт прогона пережил файл');
+    eq(back.header().input.actions.length, 2);
+});
+
+test('load отклоняет чужую схему и версию из будущего', () => {
+    const r = createReplay({});
+    const future = JSON.stringify({ header: { schema: REPLAY_SCHEMA, version: REPLAY_VERSION + 1 }, frames: [] });
+    falsy(r.load(future), 'версия из будущего не грузится');
+    const alien = JSON.stringify({ header: { schema: 'someone.else', version: 1 }, frames: [] });
+    falsy(r.load(alien), 'чужая схема не грузится');
+    truthy(r.load(JSON.stringify({ header: { schema: REPLAY_SCHEMA, version: REPLAY_VERSION }, frames: [] })),
+           'своя схема грузится');
+});
+
+test('actions: ввод пишется на уровне разрешённых действий, raw — дополнительно', () => {
+    const r = createReplay({ input: { mapping: 'v1', actions: ['left', 'right', 'jump'] } });
+    r.start();
+    r.record(['left', 'jump'], 0);
+    r.record({ actions: ['right', 'hack'], raw: { key: 32 } }, 1);
+    r.stop();
+    eq(r.unknownActions(), 1, 'действие не из списка отсечено и посчитано');
+    eq(r.at(0).a.join(','), 'left,jump', 'действия кадра доступны списком');
+    const d1 = JSON.parse(r.at(1).d);
+    eq(d1.a.join(','), 'right', 'незнакомое действие в кадр не попало');
+    eq(d1.r.key, 32, 'raw-ввод сохранён для диагностики');
+});
+
+test('checkpoints: hash снимается на заданных ticks, divergence называет первый', () => {
+    const state = { labels: ['tick', 'n1.x'], values: [0, 100] };
+    const r = createReplay({}, { stateSnapshot: () => ({ labels: state.labels, values: state.values.slice() }) });
+    r.checkpoints({ every: 2 });
+    r.start();
+    for (let i = 0; i < 6; ++i) {
+        state.values[0] = i;
+        r.record({ i }, i);
+    }
+    r.stop();
+    const points = r.checkpointsList();
+    eq(points.length, 3, 'снято три checkpoint (ticks 0, 2, 4): ' + points.map((p) => p.tick).join(','));
+    eq(points.map((p) => p.tick).join(','), '0,2,4');
+
+    // Проигрываем с расхождением на третьем checkpoint (tick 4).
+    const text = r.toText();
+    const play = createReplay({}, { stateSnapshot: () => ({ labels: state.labels, values: state.values.slice() }) });
+    truthy(play.load(text), 'запись загружена вместе с checkpoints');
+    let frame = 0;
+    play.play();
+    for (; frame < 6; ++frame) {
+        play.tick();
+        state.values[0] = frame;
+        if (frame === 4) state.values[1] = 777;      // расходимся на tick 4
+        play.verifyState(frame);
+    }
+    const div = play.divergence();
+    truthy(div, 'расхождение найдено');
+    eq(div.tick, 4, 'назван ПЕРВЫЙ расходящийся tick');
+    eq(div.fields[0].field, 'n1.x', 'названо расходящееся поле');
+    eq(div.fields[0].actual, 777);
+    eq(div.versions.schema, REPLAY_SCHEMA, 'версии в отчёте');
+    eq(div.ids[0], 'n1', 'назван ID узла');
+});
+
+test('совпадающий прогон не даёт divergence', () => {
+    const values = [0, 1];
+    const make = () => createReplay({}, { stateSnapshot: () => ({ labels: ['tick', 'rng.value'], values: values.slice() }) });
+    const rec = make();
+    rec.checkpoints({ every: 1 });
+    rec.start();
+    for (let i = 0; i < 4; ++i) { values[1] = i * 3; rec.record({ i }, i); }
+    rec.stop();
+
+    const play = make();
+    play.load(rec.toText());
+    play.play();
+    for (let i = 0; i < 4; ++i) { play.tick(); values[1] = i * 3; play.verifyState(i); }
+    eq(play.divergence(), null, 'одинаковые состояния — расхождений нет');
+    eq(play.verifyState(3).ok, true, 'проверка на tick 3 прошла');
+});
+
+test('forApply: одна форма кадра при записи и проигрывании', () => {
+    const r = createReplay({ input: { actions: ['jump'] } });
+    r.start();
+    eq(JSON.stringify(r.forApply(['jump'])), '{"actions":["jump"],"raw":null}');
+    eq(JSON.stringify(r.forApply({ actions: ['jump'], raw: { k: 32 } })),
+       '{"actions":["jump"],"raw":{"k":32}}');
+    eq(JSON.stringify(r.forApply({ a: ['jump'], r: { k: 1 } })),
+       '{"actions":["jump"],"raw":{"k":1}}', 'разобранный кадр записи — та же форма');
+    const raw = createReplay({});
+    eq(JSON.stringify(raw.forApply({ dx: 1 })), '{"dx":1}', 'без actions форма не меняется');
+});
+
+test('divergence report: только реально разошедшиеся поля', () => {
+    const values = [1, 2, 3, 4];
+    const labels = ['a', 'b', 'c', 'd'];
+    const r = createReplay({}, { stateSnapshot: () => ({ labels, values: values.slice() }) });
+    r.checkpoints({ every: 1 });
+    r.start();
+    r.record({}, 0);
+    r.stop();
+    const play = createReplay({}, { stateSnapshot: () => ({ labels, values: values.slice() }) });
+    truthy(play.load(r.toText()));
+    play.play();
+    play.tick();
+    values[2] = 99;
+    const div = play.verifyState(0);
+    eq(div.ok, false);
+    eq(div.fields.length, 1, 'ровно одно разошедшееся поле');
+    eq(div.fields[0].field, 'c');
+    eq(div.fields[0].expected, 3);
+    eq(div.fields[0].actual, 99);
+    eq(play.checkpointAt(0).labels.join(','), 'a,b,c,d', 'checkpointAt отдаёт метки и значения');
+    eq(play.checkpointAt(0).values.length, 4);
 });
 
 finish();

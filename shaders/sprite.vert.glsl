@@ -8,18 +8,28 @@
 // юниформ-буфера, а значит нет и риска разъехаться с раскладкой байндингов
 // SDL_GPU (на Metal юниформ-буферы и вершинные буферы живут в общем
 // пространстве индексов [[buffer(N)]]).
+//
+// §20.1. Четвёртый атрибут — биты получателя света: какие слои источников узел
+// принимает. Атрибут, а не юниформа: участок спрайтов рисуется одним draw
+// call, и поштучные юниформы сломали бы батчинг. У вершин без маски там
+// 0xFFFFFFFF («принимает все слои») — прежнее поведение.
 // ---------------------------------------------------------------------------
 
 layout(location = 0) in vec2 a_position;
 layout(location = 1) in vec2 a_texcoord;
 layout(location = 2) in vec4 a_color;
+layout(location = 3) in uint a_mask;
 
 layout(location = 0) out vec2 v_texcoord;
 layout(location = 1) out vec4 v_color;
+// flat: биты интерполировать нельзя — на границе квада получилась бы смесь
+// масок, которой не существует.
+layout(location = 3) flat out uint v_mask;
 
 void main()
 {
     gl_Position = vec4(a_position, 0.0, 1.0);
     v_texcoord  = a_texcoord;
     v_color     = a_color;
+    v_mask      = a_mask;
 }

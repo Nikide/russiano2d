@@ -18,7 +18,7 @@
         <button id="rm-save" class="btn primary">Сохранить</button>
         <button id="rm-undo" class="btn">Отменить</button>
         <button id="rm-redo" class="btn">Повторить</button>
-        <button id="rm-validate" class="btn">Проверить</button>
+        <button id="rm-validate" class="btn">Проверить</button><button id="rm-preview-run" class="btn">Проверить в игре</button>
         <button id="rm-refresh" class="btn">Обновить предпросмотр</button>
     </div>
 

@@ -11,13 +11,21 @@
 // Раскладка ресурсов SDL_GPU: set 2 — текстуры фрагментной стадии,
 // set 3 — её юниформы (см. sprite.frag.glsl).
 //
-// Параметры приходят push-константами: 12 float, три vec4.
+// Параметры приходят push-константами: блок из девяти vec4 (96 → 144 байта
+// в пределах минимума Vulkan/Metal/D3D12 для push-constant диапазона).
+//
+// Экранное искажение (§46 Спецификации) — это тот же проход: он уже читает
+// готовую сцену (u_scene), поэтому «проход с sampling предыдущего изображения»
+// не требует второго render target. Волна, шум и сдвиг каналов ниже.
 // ---------------------------------------------------------------------------
 
 layout(set = 2, binding = 0) uniform sampler2D u_scene;
 // Готовая размытая яркая часть кадра (bloom_pre + два прохода bloom_blur).
 // Когда свечения нет, сюда привязана чёрная текстура 1×1 — вклад нулевой.
 layout(set = 2, binding = 1) uniform sampler2D u_bloom;
+// Процедурный шум (C генерирует его при старте, пользовательский ассет не
+// нужен). Читается только при noise_amount > 0 — иначе лишней выборки нет.
+layout(set = 2, binding = 2) uniform sampler2D u_noise;
 
 layout(set = 3, binding = 0) uniform PostParams {
     vec4 p0;   // x = свечение, y = вигнетка, z = хроматика, w = линза
@@ -26,6 +34,9 @@ layout(set = 3, binding = 0) uniform PostParams {
     vec4 p3;   // xyz = оттенок (множитель каналов), w = доля оттенка
     vec4 p4;   // x = насыщенность, y = контраст, z = яркость, w = кровь по краям
     vec4 p5;   // x = порог bloom, y = сила размытия, z = bloom готов (1/0)
+    vec4 p6;   // xyzw = волна: амплитуда, частота, скорость, ось
+    vec4 p7;   // xyzw = шум: сила, масштаб, общая сила искажения, сдвиг каналов
+    vec4 p8;   // xy = время эффекта (lo/hi), zw = запас
 } u;
 
 layout(location = 0) in vec2 v_uv;
@@ -64,13 +75,50 @@ void main()
         lens_uv = center + d * (1.0 - clamp(k, 0.0, 0.85));
     }
 
+    // --- Экранное искажение (§46): волна + шум. Работает по уже
+    // нарисованному кадру, поэтому применяется до цветовых эффектов, а сами
+    // выборки ниже используют уже искажённые координаты.
+    const float wave_amp   = u.p6.x;
+    const float wave_freq  = u.p6.y;
+    const float wave_speed = u.p6.z;
+    const float wave_axis  = u.p6.w;
+    const float noise_amt  = u.p7.x;
+    const float noise_scl  = max(u.p7.y, 0.001);
+    const float distortion = u.p7.z;
+    const float chan_shift = u.p7.w;
+    const float post_time  = u.p8.x + u.p8.y;
+
+    if (distortion > 0.0001) {
+        vec2 d = lens_uv;
+        if (wave_amp > 0.0001) {
+            // Волна идёт либо по X, либо по Y: одна формула, два режима.
+            float phase = wave_axis > 0.5 ? d.y : d.x;
+            float offset = sin(phase * wave_freq + post_time * wave_speed) * wave_amp;
+            if (wave_axis > 0.5) d.x += offset; else d.y += offset;
+        }
+        if (noise_amt > 0.0001) {
+            // Шум берётся из процедурной текстуры: два канала дают смещение по
+            // обеим осям, время двигает выборку, поэтому дрожание не «залипает».
+            vec2 nuv = d * noise_scl + vec2(post_time * 0.13, post_time * 0.07);
+            // noise_amount — это амплитуда в долях экрана (как wave_amp), а
+            // distort — просто выключатель. Если умножать на оба, игра задаёт
+            // силу дважды и «0.9» даёт сдвиг меньше пикселя.
+            vec2 jitter = (texture(u_noise, nuv).rg - 0.5) * 2.0;
+            d += jitter * noise_amt;
+        }
+        lens_uv = clamp(d, vec2(0.0), vec2(1.0));
+    }
+
     // --- Цвет: с хроматикой три выборки, без неё одна.
     vec4 col;
-    if (chroma > 0.0001) {
-        vec2 off = (lens_uv - center) * chroma;
-        col.r = texture(u_scene, lens_uv + off).r;
+    if (chroma > 0.0001 || chan_shift > 0.0001) {
+        // Хроматика тянет каналы от центра искажения, chan_shift — просто
+        // сдвигает R и B вдоль X: это разные художественные эффекты, поэтому
+        // они складываются, а не подменяют друг друга.
+        vec2 off = (lens_uv - center) * chroma + vec2(chan_shift, 0.0);
+        col.r = texture(u_scene, clamp(lens_uv + off, vec2(0.0), vec2(1.0))).r;
         col.g = texture(u_scene, lens_uv).g;
-        col.b = texture(u_scene, lens_uv - off).b;
+        col.b = texture(u_scene, clamp(lens_uv - off, vec2(0.0), vec2(1.0))).b;
         col.a = texture(u_scene, lens_uv).a;
     } else {
         col = texture(u_scene, lens_uv);

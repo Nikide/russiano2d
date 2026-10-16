@@ -77,6 +77,21 @@ def run_scene(name, minimum):
             current = a.eval("$.scene.current()")
             check(current == name, f"{name}: сцена открылась ({current})")
 
+            # «Типичная ночь в Мытищинском лесу»: бой зависит от того, когда
+            # враг подошёл в радиус автонаведения. Жёсткие 900 кадров делали
+            # проверку чувствительной к нагрузке машины (на том же дереве она
+            # то проходила, то нет). Ждём ПОЯВЛЕНИЯ первого убийства, но не
+            # дольше потолка: реальная поломка боя не пройдёт и за потолок.
+            if name == "shooter_witch":
+                budget = 4000
+                while budget > 0:
+                    done = a.eval("typeof witch !== 'undefined' ? witch.state().kills : 0") or 0
+                    if int(done) > 0:
+                        break
+                    portion = min(150, budget)
+                    a.step(portion)
+                    budget -= portion
+
             count = a.eval("$.world.count()")
             check(count >= world_min,
                   f"{name}: мир построен ({count} узлов, ждали ≥ {world_min})")

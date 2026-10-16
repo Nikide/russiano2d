@@ -314,6 +314,64 @@ API для агента: `$.sdkApp.studios['tilemap-studio'].ops` (`paint`, `fil
 (методы самой студии, не её `ops`), снимок —
 `state.sdk.studios.<id>`.
 
+## 10.1. Панели проверки §29: тот же backend, что CLI
+
+Все девять инструментов §29 (Sprite, Animation, Tilemap, Particle, Collision,
+Parallax, Font, Audio, Input, RmlUi, DevTools, Automation) имеют в панели две
+кнопки — «Проверить» и «Проверить в игре» — и они не содержат своей логики
+проверок. Единый помощник `sdk/lib/panel_check.js`:
+
+* **`validate()`** вызывает `app.backend(['validate', path])` — тот же нативный
+  валидатор, что `r2d-sdk validate`, и показывает его структурные диагностики
+  (code/severity/location/message) без подмены. Поэтому коды панели **равны**
+  кодам CLI на том же файле (`tests/agent/sdk_tools_panels_test.py` сравнивает
+  их по каждому инструменту; корректный ассет — «ошибок 0», сломанный — коды CLI);
+* **`preview()`** записывает путь preview. Файл не копируется и не ищется в базе
+  проекта: тем же путём его читает игра, поэтому `previewPath === validatedPath`
+  (в снимке — `previewMatchesValidated`);
+* **`report()`** — сводка/import report инструмента: числа по данным и короткие
+  предупреждения, которые человек читает рядом с диагностиками;
+* **`snapshot()`** — `panel` в снимке студии: `validatedPath`, `previewPath`,
+  `previewMatchesValidated`, `codes`, `errors`, `warnings`, `checks`, `report`.
+
+| Инструмент | Сводка/import report панели |
+|---|---|
+| Sprite Studio | кадры, trim, sockets, страницы, image, расхождения material albedo/normal |
+| Animation Studio | теги-клипы: диапазоны (окна), разрывы/пересечения, длительность и fps, цикл/one-shot, прерывание preview |
+| Tilemap Studio | слои и их роли, occlusion-слои, тайлы, сетка, chunk budget, связи комнат, invalid geometry |
+| Particle Studio | space/clock, trails, бюджет (amount/max/rate), seed для replay, one-shot, lifetime |
+| Collision Tools | фигуры, роли, masks, one-way, площадь footprint, поддержка «по низу» |
+| Parallax Tools | слои, спрайты, parallax-слои, порядок depth |
+| Font Tools | шрифты, стили, семейства |
+| Audio Tools | шины, звуки, маршруты по шинам, stems/transport, voice-лимиты, отсутствующие файлы |
+| Input Tools | действия, клавиши, контексты, конфликты клавиш, gamepad/disconnect-тесты |
+| RmlUi Studio | элементы, id, фокусируемые элементы (навигация), ссылки и их разрешение, отсутствующие стили, длинные строки (переполнение под перевод) |
+| DevTools | scoped lifecycle сессии, число validation reports, фикстуры приёмки |
+| Automation | операция, задания манифеста и их `op`, статус прогона |
+
+Undo/redo остаётся у документа: проверка и preview не сбрасывают историю
+(проверяется тестом для студий с документом). Запись нескольких зависимых файлов
+идёт через save → `validate` каждого файла (RmlUi Studio пишет документ и стили
+только при «Сохранить»); атомарность ограничена порядком «сначала файл, потом
+проверка» — при ошибке файл уже записан, и панель показывает коды.
+
+Публичные вызовы (человек и агент — одно и то же):
+
+| Вызов | Что делает |
+|---|---|
+| `$.sdkApp.studios['<id>'].validate()` | проверка текущего файла нативным backend, возвращает `{ok, diagnostics, codes, path, report}` |
+| `$.sdkApp.studios['<id>'].preview()` | preview-ссылка на runtime тем же путём (`{ok, path}`) |
+| `$.sdkApp.studios['<id>'].report()` | сводка/import report (чистые данные) |
+| `$.sdkApp.studios['<id>'].snapshot().panel` | что проверялось, что показал preview, коды и отчёт |
+| `$.sdkApp.studios['animation'].interrupt()` | прерывание preview-анимации (кадр фиксируется) |
+| `$.sdkApp.studios['devtools'].validateSession()` | записать `.agent.json` сессии и проверить его |
+| `$.sdkApp.studios['rmlui-studio'].previewRun()` | «Проверить в игре» для документа RmlUi |
+
+Чего в панелях нет (честно): запуск игры прямо из каждой студии (preview — это
+ссылка на тот же файл; запуск делает кнопка оболочки/DevTools), редактирование
+зон Audio мышью и drag-ресайз Collision (не изменилось с §10), а у DevTools и
+Automation нет документа с undo/redo — там история не ведётся by design.
+
 ## 11. RmlUi Studio
 
 `sdk/tools/rmlui-studio.js` + `sdk/ui/rmlui_studio.rml`: открывается на `*.rml` (стили берёт из
@@ -409,3 +467,31 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 
 Новые регрессии: sdk_runtime_ui / sdk_package / sdk_recovery. Подробные
 доказательства — SDK_HANDOFF и SDK_VERIFICATION.
+
+### Типы валидаторов
+
+`r2d-sdk validate <файл>` определяет тип по суффиксу; явный `--type` важнее.
+Реестр (sdk/native/sdk_validate.c):
+
+| Тип | Суффикс | Что проверяет |
+|---|---|---|
+| `project` | `project.json` | ширину/высоту, строки title/version, наличие `main.js` рядом |
+| `sdk.registry` | `sdk_tools.json` | реестр инструментов |
+| `sdk.manifest` | `.batch.json` | `version: 1`, `jobs[]`, `op: validate` и непустой `source` |
+| `sdk.agent-session` | `.agent.json` | `version: 1`, непустой `game`, `requests[]`, `timeoutMs` 1..600000, `seed` uint32, `quit` только последним |
+| `sprite.atlas` | `.atlas.json` | кадры, пивоты, теги, слайсы, картинка |
+| `tilemap` | `.tilemap.json` | клетки, слои, тайлсет |
+| `particles` | `.particles.json` | параметры эмиттера и их диапазоны |
+| `collision` | `.collision.json` | фигуры, теги, геометрия |
+| `layers` | `.layers.json` | слои, parallax, спрайты |
+| `fonts` | `.fonts.json` | шрифты и стили |
+| `audio` | `.audio.json` | шины, звуки, зоны; путь звука обязан существовать рядом с JSON (`SDK_AUDIO_FILE_MISSING`) |
+| `input` | `.input.json` | действия и привязки |
+| `rmlui.document` | `.rml` | сбалансированность тегов |
+| `rmlui.style` | `.rcss` | скобки и свойства |
+| `json` | `.json` | что это разбираемый JSON |
+
+Каждый тип обязан иметь работающую проверку: корректный файл проходит без
+диагностик, сломанный — выявляется ДО запуска структурированным кодом
+(`tests/sdk_validation_test.py`), а разбор SDK совпадает с разбором движка
+(`tests/sdk_preview_parity_test.py`).

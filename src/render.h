@@ -67,10 +67,30 @@ typedef struct R2DPostParams {
     float blood;      // красная пелена по краям (урон)
     // p5 — свечение (bloom). Порог и сила размытия приходят из JS,
     // bloom_ready заполняет C: 1 — размытая текстура готова и привязана.
+    // w — запас: раскладка push-констант выровнена по vec4, и её нельзя
+    // сдвигать, не переписав шейдер (см. shaders/post.frag.glsl).
     float bloom_threshold;  // порог яркости; <= 0 — 0.75 по умолчанию
     float bloom_radius;     // сила размытия; <= 0 — 1 по умолчанию
     float bloom_ready;      // только чтение: буферы свечения готовы
-    float _pad;
+    float _pad0;            // выравнивание до vec4
+    // p6 — экранное искажение (§46). Отдельный проход не нужен: это тот же
+    // post-pass, который читает уже нарисованную сцену; «вспомогательная
+    // текстура» — процедурный шум noise_texture.
+    float wave_amp;         // амплитуда волны в долях экрана
+    float wave_freq;        // частота волны
+    float wave_speed;       // скорость бега волны (умножается на время)
+    float wave_axis;        // 0 — волна по X, 1 — по Y
+    // p7
+    float noise_amount;     // сила дрожания UV по шуму
+    float noise_scale;      // масштаб выборки шума
+    float distort;          // общая сила искажения (0 — выключено)
+    float channel_shift;    // дополнительный сдвиг R/B каналов (доли экрана)
+    // p8 — время эффекта двумя float: 32 бита поля p2.y мало для долгих
+    // сессий, и на 4-й минуте зерно и волна начинали «шагать».
+    float post_time_lo;
+    float post_time_hi;
+    float _pad1;
+    float _pad2;
 } R2DPostParams;
 
 typedef struct R2DTexture {
@@ -101,6 +121,10 @@ typedef struct R2DDrawCmd {
     // прямоугольника в таблице кадра. Нужна, чтобы разные узлы одного кадра
     // обрезались по-разному (скролл, рамка, миникарта).
     int16_t  clip;     // индекс в r->clips; -1 — без обрезки
+    // §20.1. Биты получателя света этого узла (0xFFFFFFFF — все слои). Маска
+    // лежит в вершине, а не в юниформе: участок спрайтов рисуется одним draw
+    // call, и поштучные юниформы сломали бы батчинг.
+    uint32_t mask;
 } R2DDrawCmd;
 
 // Шейдер узла: вид эффекта и его параметры. Юниформа шейдера — два vec4,
@@ -154,6 +178,10 @@ typedef struct R2DTriBatch {
     int     vertex_count;
     uint8_t blend;
     int     texture;         // id текстуры пакета; -1 — белая (без текстуры)
+    // §20.1: биты слоя источника для пакета СВЕТА. Пакет рвётся там, где слой
+    // меняется, потому что гейт по маске получателя — юниформ на draw call.
+    // Для сцены и меша значение не используется и равно 0xFFFFFFFF.
+    uint32_t layer;
 } R2DTriBatch;
 
 // Вершина меша псевдо-3D: позиция в clip-space, текстура, цвет и ГЛУБИНА.
@@ -170,6 +198,10 @@ typedef struct R2DVertex {
     float    x, y;
     float    u, v;
     uint8_t  r, g, b, a;
+    // §20.1. Биты получателя света: какие слои источников принимает этот узел.
+    // 0xFFFFFFFF — «принимает все слои»: ровно прежнее поведение, поэтому у
+    // вершин без маски здесь именно это значение, а не ноль.
+    uint32_t mask;
 } R2DVertex;
 
 // Таблица обрезок кадра: каждая команда помнит свой прямоугольник, потому что
@@ -194,6 +226,12 @@ typedef struct R2DRenderer {
     SDL_GPUGraphicsPipeline *fx_pipelines[R2D_BLEND_COUNT];
     SDL_GPUSampler          *sampler;
     bool                     filter_linear;  // спрайты с линейной фильтрацией
+    // Начало неосвещённого мирового слоя в батче кадра; -1 — метки нет.
+    int                      unlit_cmd_start;
+    // Презентационный снаппинг: вершины осевых спрайтов округляются до целого
+    // пикселя (пиксель-арт без «дрожания» на дробном зуме). На физику не влияет:
+    // позиции узлов и тела не меняются, округляется только вершина кадра.
+    bool                     snap;
 
     // --- Z-буфер ---------------------------------------------------------
     // Глубина нужна псевдо-3D: меши персонажей пишут z, а спрайты сцены
@@ -302,6 +340,9 @@ typedef struct R2DRenderer {
     SDL_GPUTexture          *bloom_result;    // что уходит в пост как u_bloom
     SDL_GPUSampler          *linear_sampler;  // линейная фильтрация для размытия
     SDL_GPUTexture          *black_texture;   // 1×1 чёрная заглушка для u_bloom
+    // Процедурный шум для экранного искажения (§46): генерируется при старте,
+    // поэтому пользовательская текстура не нужна, а эффект работает без ассетов.
+    SDL_GPUTexture          *noise_texture;
 
     // --- Lightmap -----------------------------------------------------------
     // Свет копится в отдельной текстуре половинного разрешения, при желании
@@ -317,6 +358,19 @@ typedef struct R2DRenderer {
     int             light_w, light_h;
     SDL_GPUGraphicsPipeline *light_blur_pipeline;
     SDL_GPUGraphicsPipeline *light_composite_pipeline;
+    // §20.1. Маска получателя света: отдельная цель половинного разрешения, куда
+    // спрайты пишут свои биты (RGBA8 = 32 бита), и конвейер для этой записи
+    // (спрайтовые шейдеры, без смешивания и без z-буфера). Цель и проход
+    // появляются ТОЛЬКО в кадре, где у какого-то узла маска не «все слои»:
+    // без масок цена и картинка прежние.
+    SDL_GPUTexture          *light_mask_target;
+    int                      light_mask_w, light_mask_h;
+    SDL_GPUGraphicsPipeline *light_mask_pipeline;
+    bool                     light_mask_used;      // в этом кадре есть маски
+    bool                     light_composited;     // композит уже сделан в этом кадре
+    int                      stat_mask_nodes;      // узлов с маской за кадр
+    int                      stat_mask_passes;     // проходов записи маски за кадр
+    int                      prev_mask_passes;     // то же за прошлый кадр (для JS)
 
     // Треугольники света: тот же формат вершин, но свой список и свой проход.
     R2DVertex   *light_vertices;
@@ -448,7 +502,20 @@ const char *r2d_render_user_shader_preamble(void);
 // быть NULL — тогда весь пакет идёт обычным конвейером).
 int r2d_batch_submit_fx(R2DRenderer *r, const float *transforms, const uint32_t *colors,
                         const int32_t *fx, int count, int blend);
+// §20.1: тот же пакет, но с битами получателя света на каждый спрайт (masks
+// может быть NULL — тогда у всех «все слои», поведение прежнее).
+int r2d_batch_submit_fx_mask(R2DRenderer *r, const float *transforms, const uint32_t *colors,
+                             const int32_t *fx, const uint32_t *masks, int count, int blend);
 void r2d_batch_rect(R2DRenderer *r, float x, float y, float w, float h, uint32_t color);
+
+// §20.1. То же, что r2d_batch_add, но с битами получателя света: маска попадает
+// в вершину и учитывается при накоплении света. Отдельная функция, а не новый
+// параметр: старые вызовы (script.c) остаются без изменений.
+void r2d_batch_add_mask(R2DRenderer *r, int sprite, float x, float y, float w, float h,
+                        float angle, uint32_t color, uint32_t mask);
+// Есть ли в этом кадре узлы с маской получателя (для stats() и тестов).
+bool r2d_render_light_mask_used(const R2DRenderer *r);
+int  r2d_render_light_mask_nodes(const R2DRenderer *r);
 
 // Добавляет треугольники одним вызовом. verts — stride 6:
 //   x, y (в пикселях ЛОГИЧЕСКОГО экрана), r, g, b, a (0..255).
@@ -460,6 +527,10 @@ void r2d_batch_triangles(R2DRenderer *r, const float *verts, int vertex_count);
 void r2d_batch_light_triangles(R2DRenderer *r, const float *verts, int vertex_count);
 void r2d_batch_light_triangles_blend(R2DRenderer *r, const float *verts,
                                      int vertex_count, int blend);
+// §20.1: свет с явными битами слоя источника. Пакет света рвётся при смене
+// слоя — гейт по маске получателя передаётся юниформой на draw call.
+void r2d_batch_light_triangles_layer(R2DRenderer *r, const float *verts, int vertex_count,
+                                     int blend, uint32_t layer);
 
 // Разбор плоского JS-массива: transforms — stride 6 (sprite,x,y,w,h,angle),
 // colors — stride 1. Один вызов на весь кадр.
@@ -474,6 +545,10 @@ int  r2d_batch_count(const R2DRenderer *r);
 // Пустая строка/NULL — ALPHA (как без аргумента), неизвестное имя — -1.
 int  r2d_blend_from_name(const char *name);
 
+// Презентационный снаппинг вершин (пиксель-арт). Не влияет на логику/физику.
+void r2d_render_set_snap(R2DRenderer *r, bool on);
+bool r2d_render_snap(const R2DRenderer *r);
+
 // --- Вывод ------------------------------------------------------------------
 // Заливает накопленный батч в GPU-буферы (copy pass). Вызывать ДО render pass.
 void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd);
@@ -482,6 +557,11 @@ void r2d_render_draw(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPas
 // Пометить границу интерфейса: всё, что добавлено после, считается ui-слоем.
 // Нужно, чтобы с пост-обработкой HUD рисовался поверх неё, а не под ней.
 void r2d_render_mark_ui(R2DRenderer *r);
+// Пометить начало НЕОСВЕЩЁННОГО мирового слоя: спрайты этого диапазона
+// рисуются ПОСЛЕ света/тумана/темноты, но до интерфейса. Так узел с
+// `.lit(false)` не темнеет в ночи и не засвечивается фонарями, оставаясь
+// частью мира (в отличие от UI).
+void r2d_render_mark_unlit(R2DRenderer *r);
 // Рисует только ui-слой (спрайты после границы). Треугольники (свет, VFX) —
 // часть мира и в ui-слой не попадают.
 void r2d_render_draw_ui(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass);

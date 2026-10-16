@@ -19,10 +19,16 @@ layout(location = 2) in vec4 a_color;      // нормализованные б�
 
 layout(location = 0) out vec2 v_texcoord;
 layout(location = 1) out vec4 v_color;
+// Меш рисует фрагментный шейдер спрайтов, а тот читает биты получателя света
+// (§20.1). Metal требует, чтобы вершинная стадия ЗАПИСАЛА каждый вход
+// фрагмента — иначе конвейер не создаётся вовсе. У меша маски нет: он всегда
+// «принимает все слои», а в режиме 0 значение вообще не читается.
+layout(location = 3) flat out uint v_mask;
 
 void main()
 {
     gl_Position = vec4(a_position, 1.0);
     v_texcoord  = a_texcoord;
     v_color     = a_color;
+    v_mask      = 0xFFFFFFFFu;
 }

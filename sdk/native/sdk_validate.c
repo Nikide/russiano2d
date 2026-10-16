@@ -83,6 +83,8 @@ typedef struct Validator {
 static const Validator k_validators[] = {
     { "project",      validate_project },
     { "sdk.registry", validate_registry },
+    { "sdk.manifest", sdk_validate_sdk_manifest },
+    { "sdk.agent-session", sdk_validate_agent_session },
     { "json",         validate_json },
     { "sprite.atlas", sdk_validate_atlas },
     { "tilemap",      sdk_validate_tilemap },

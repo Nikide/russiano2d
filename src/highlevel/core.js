@@ -1047,10 +1047,32 @@ function areaNum(value, fallback) {
 }
 
 /**
+ * Фильтр области: своё значение, иначе — фильтр ТЕЛА (§40).
+ *
+ * Одно место на все пути (описание, включение, пересборка): раньше путь
+ * `.area(name, opts)`/`applyAreas()` передавал сырые `area.layer/mask/group`, а
+ * `areaEnable()` — с подстановкой тела. Из-за расхождения `areaOn(false)` →
+ * `areaOn(true)` оставлял форму с ЧУЖИМ фильтром (маска по умолчанию вместо
+ * маски тела), и включённую область не видели ни свои запросы, ни чужие формы.
+ */
+export function areaFilter(node, area) {
+    const body_layer = node.layer_bits === undefined ? 1 : node.layer_bits;
+    const body_mask = node.collision_mask === undefined ? 0xffffffff : node.collision_mask;
+    const body_group = node.collision_group === undefined ? 0 : node.collision_group;
+    return {
+        layer: area.layer === undefined ? body_layer : area.layer,
+        mask: area.mask === undefined ? body_mask : area.mask,
+        group: area.group === undefined ? body_group : area.group,
+    };
+}
+
+/**
  * Форма области в виде описания для engine.addShape/setShape. `w`/`h` — В
  * пикселях (как .size()), в native уходит половина.
  */
-function areaShapeDesc(area) {
+function areaShapeDesc(area, node) {
+    const filter = node ? areaFilter(node, area)
+                        : { layer: area.layer, mask: area.mask, group: area.group };
     const half_w = areaNum(area.w, 32) / 2;
     const half_h = areaNum(area.h, 32) / 2;
     const desc = {
@@ -1068,10 +1090,10 @@ function areaShapeDesc(area) {
         sensor: area.sensor === true,
         contacts: area.contacts === true,
         enabled: area.enabled !== false,
-        // Слои: у области свои, иначе — слои тела.
-        layerBits: area.layer,
-        mask: area.mask,
-        group: area.group,
+        // Слои: у области свои, иначе — слои тела (одно правило на все пути).
+        layerBits: filter.layer,
+        mask: filter.mask,
+        group: filter.group,
     };
     return desc;
 }
@@ -1089,16 +1111,13 @@ export function applyAreas(node) {
         for (let i = 0; i < list.length; i++) list[i].index = -1;
         return 0;
     }
-    const body_layer = node.layer_bits === undefined ? 1 : node.layer_bits;
-    const body_mask = node.collision_mask === undefined ? 0xffffffff : node.collision_mask;
-    const body_group = node.collision_group === undefined ? 0 : node.collision_group;
     let applied = 0;
     for (let i = 0; i < list.length; i++) {
         const area = list[i];
-        if (area.layer === undefined) area.layer = body_layer;
-        if (area.mask === undefined) area.mask = body_mask;
-        if (area.group === undefined) area.group = body_group;
-        const desc = areaShapeDesc(area);
+        // Фильтр НЕ замораживаем в описании: «не задано» значит «как у тела»,
+        // поэтому смена слоёв тела остаётся видна и новым, и пересобранным
+        // формам (иначе пути описания и включения расходятся).
+        const desc = areaShapeDesc(area, node);
         // Индекс мог остаться от прежнего тела (setBody зовёт resetAreaIndices):
         // тогда формы с ним нет и её надо создать заново.
         if (area.index >= 0 && typeof eng.setShape === 'function') {
@@ -1115,6 +1134,10 @@ export function applyAreas(node) {
             // запросов: фильтр обнуляется, игровой владелец жив (§40).
             if (area.enabled === false && typeof eng.setShapeEnabled === 'function') {
                 eng.setShapeEnabled(node.body, area.index, false, desc.layerBits, desc.mask, desc.group);
+            } else if (area.enabled !== false && typeof eng.setShapeEnabled === 'function') {
+                // Пересборка тела возвращает форму включённой — возвращаем ей
+                // ровно тот фильтр, который положен по описанию.
+                eng.setShapeEnabled(node.body, area.index, true, desc.layerBits, desc.mask, desc.group);
             }
         }
     }
@@ -1187,12 +1210,13 @@ export function areaDefine(node, name, opts) {
     const eng = engineOf();
     if (node.body < 0 || typeof eng.addShape !== 'function') return area;
     if (geometry && area.index >= 0 && typeof eng.setShape === 'function') {
-        const next = eng.setShape(node.body, area.index, areaShapeDesc(area));
+        const next = eng.setShape(node.body, area.index, areaShapeDesc(area, node));
         area.index = next >= 0 ? next : -1;
     }
     if (area.index < 0) applyAreas(node);
     else if (typeof eng.setShapeEnabled === 'function') {
-        eng.setShapeEnabled(node.body, area.index, area.enabled, area.layer, area.mask, area.group);
+        const f = areaFilter(node, area);
+        eng.setShapeEnabled(node.body, area.index, area.enabled, f.layer, f.mask, f.group);
     }
     return area;
 }
@@ -1205,10 +1229,8 @@ export function areaEnable(node, name, on) {
     if (node.body >= 0 && area.index >= 0) {
         const eng = engineOf();
         if (typeof eng.setShapeEnabled === 'function') {
-            eng.setShapeEnabled(node.body, area.index, area.enabled,
-                                area.layer === undefined ? node.layer_bits : area.layer,
-                                area.mask === undefined ? node.collision_mask : area.mask,
-                                area.group === undefined ? node.collision_group : area.group);
+            const f = areaFilter(node, area);
+            eng.setShapeEnabled(node.body, area.index, area.enabled, f.layer, f.mask, f.group);
         }
     }
     return area.enabled;
@@ -1222,7 +1244,8 @@ export function areaByIndex(node, index) {
     return null;
 }
 
-/** Логический владелец области: узел, на котором она объявлена, или owner. */export function areaOwnerNode(node, area) {
+/** Логический владелец области: узел, на котором она объявлена, или owner. */
+export function areaOwnerNode(node, area) {
     const o = area.owner;
     if (o === null || o === undefined) return node;
     if (typeof o === 'string') {

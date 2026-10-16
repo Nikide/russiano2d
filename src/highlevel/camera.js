@@ -244,6 +244,254 @@ export function installCamera($, viewports) {
     // Модуль мультикамерности не должен сам лезть в $.camera: он спрашивает
     // главную камеру через эту функцию, поэтому порядок установки любой.
     setPrimaryCameraSource(() => cameraTransform());
+
+    // -----------------------------------------------------------------------
+    // §19: зоны камеры и аренды. Это НАДСТРОЙКА над существующей камерой:
+    // никакой второй камеры и второго transform не появляется — зона лишь
+    // накладывает bounds/zoom/offset/follow и запоминает прежнюю конфигурацию,
+    // чтобы вернуть её при выходе.
+    // -----------------------------------------------------------------------
+    const zone_defs = new Map();     // имя → данные зоны
+    const zone_stack = [];           // активные зоны и аренды в порядке входа
+    const saved_stack = [];          // снимки конфигурации до наложения
+    let lease_seq = 1;
+
+    function snapshotCam() {
+        return {
+            x: cam.x, y: cam.y, zoom: cam.zoom,
+            limits: cam.limits ? { x: cam.limits.x, y: cam.limits.y, w: cam.limits.w, h: cam.limits.h } : null,
+            deadzone: cam.deadzone ? { w: cam.deadzone.w, h: cam.deadzone.h } : null,
+            offset: cam.offset ? { x: cam.offset.x, y: cam.offset.y } : null,
+            target: cam.target, smooth: cam.smooth,
+        };
+    }
+
+    function restoreCam(state) {
+        if (!state) return;
+        cam.x = state.x; cam.y = state.y; cam.zoom = state.zoom;
+        cam.limits = state.limits ? Object.assign({}, state.limits) : null;
+        cam.deadzone = state.deadzone ? Object.assign({}, state.deadzone) : null;
+        cam.offset = state.offset ? Object.assign({}, state.offset) : cam.offset;
+        cam.target = state.target; cam.smooth = state.smooth;
+        clampToLimits();
+    }
+
+    /**
+     * Разбор границ зоны. Принимает и `bounds:{x,y,w,h}`, и плоские
+     * `x/y/w/h` — иначе одна из двух записей молча теряла бы границы
+     * (именно так зона оставалась без limits).
+     */
+    function parseBounds(o) {
+        if (o.bounds === null) return null;
+        if (o.bounds !== undefined) {
+            return {
+                x: Number(o.bounds.x) || 0, y: Number(o.bounds.y) || 0,
+                w: Number(o.bounds.w) || 0, h: Number(o.bounds.h) || 0,
+            };
+        }
+        if (o.w !== undefined) {
+            return { x: Number(o.x) || 0, y: Number(o.y) || 0, w: Number(o.w) || 0, h: Number(o.h) || 0 };
+        }
+        return undefined;
+    }
+
+    /**
+     * Полная запись данных зоны по имени.
+     *
+     * `zones.define(name, null)` (геттер) намеренно отдаёт КОРОТКОЕ описание, а
+     * `acquire` нужна полная зона — иначе вход терял бы границы и данные.
+     */
+    function fullZone(nameOrZone) {
+        if (!nameOrZone) return null;
+        if (nameOrZone.data) return nameOrZone;              // уже полная запись
+        return zone_defs.get(String(nameOrZone.name)) || null;
+    }
+
+    /** Наложить на камеру данные активной записи (зоны или аренды). */
+    function applyEntry(entry) {
+        if (!entry) return;
+        const z = entry.data || {};
+        if (z.bounds !== undefined) {
+            cam.limits = z.bounds === null ? null : {
+                x: z.bounds.x, y: z.bounds.y, w: z.bounds.w, h: z.bounds.h,
+            };
+        }
+        if (z.zoom !== undefined) cam.zoom = z.zoom;
+        if (z.offset !== undefined) cam.offset = { x: z.offset[0] || 0, y: z.offset[1] || 0 };
+        if (z.follow !== undefined) {
+            if (z.follow === null) { cam.target = null; }
+            else {
+                const wanted = typeof z.follow === 'string' ? query(z.follow)[0] : z.follow;
+                cam.target = wanted ? (wanted.nodes ? wanted.nodes[0] : wanted) : null;
+            }
+        }
+        if (z.smooth !== undefined) cam.smooth = z.smooth;
+        if (z.deadzone !== undefined) cam.deadzone = parseDeadzone(z.deadzone);
+        if (z.lookahead !== undefined) cam.lookahead = z.lookahead;
+        if (z.at !== undefined) { cam.x = z.at[0]; cam.y = z.at[1]; }
+        clampToLimits();
+    }
+
+    /**
+     * Пересобрать состояние камеры из базы и активных записей.
+     *
+     * Каждая запись НАКЛАДЫВАЕТСЯ на предыдущее состояние, от младшего
+     * приоритета к старшему: иначе зона, не задавшая поле, «съедала» бы
+     * значение более приоритетной (именно так после аренды зум оставался
+     * чужим). База — конфигурация на момент первого входа, поэтому выход из
+     * всех зон возвращает ровно исходную камеру, а не «примерно».
+     */
+    function recompose() {
+        if (!zone_stack.length) { restoreCam(saved_stack[0] || null); return; }
+        restoreCam(saved_stack[0] || null);
+        const ordered = zone_stack.slice().sort((a, b) => (a.priority - b.priority) || (a.seq - b.seq));
+        for (const e of ordered) applyEntry(e);
+    }
+
+    /** Порядок управления: сначала приоритет, потом порядок входа. */
+    function controlOrder() {
+        return zone_stack.slice().sort((a, b) => (b.priority - a.priority) || (a.seq - b.seq));
+    }
+
+    const zones = {
+        define(name, opts) {
+            const key = String(name);
+            if (opts === null || opts === undefined) {
+                if (!zone_defs.has(key)) zone_defs.set(key, { name: key, priority: 0, seq: 0 });
+                return zone_defs.get(key);
+            }
+            const o = opts || {};
+            const data = {
+                name: key,
+                priority: Number(o.priority || 0),
+                bounds: parseBounds(o),
+                zoom: o.zoom,
+                offset: o.offset,
+                follow: o.follow,
+                smooth: o.smooth,
+                deadzone: o.deadzone,
+                lookahead: o.lookahead,
+                at: o.at,
+                // В `data` кладём НОРМАЛИЗОВАННЫЕ поля, а не исходный объект:
+                // запись вида `{x,y,w,h}` иначе теряла бы границы при входе в
+                // зону (проверено тестом: limits оставался null).
+                data: Object.assign({}, o, { bounds: parseBounds(o) }),
+            };
+            zone_defs.set(key, data);
+            return { name: data.name, priority: data.priority, bounds: data.bounds || null };
+        },
+        info(name) {
+            const z = zone_defs.get(String(name));
+            if (!z) return null;
+            return {
+                name: z.name, priority: z.priority, bounds: z.bounds || null,
+                zoom: z.zoom === undefined ? null : z.zoom,
+                follow: z.follow === undefined ? null : (typeof z.follow === 'string' ? z.follow : 'node'),
+                active: zone_stack.some((e) => e.name === z.name && e.kind === 'zone'),
+            };
+        },
+        list() {
+            const out = [];
+            for (const z of zone_defs.values()) {
+                out.push({ name: z.name, priority: z.priority,
+                           active: zone_stack.some((e) => e.name === z.name && e.kind === 'zone'),
+                           bounds: z.bounds || null });
+            }
+            return out;
+        },
+        /** Зона, в границах которой находится узел (первая по приоритету). */
+        zoneAt(node) {
+            if (!node) return null;
+            const found = [];
+            for (const z of zone_defs.values()) {
+                const b = z.bounds;
+                if (!b) continue;
+                if (node.x >= b.x && node.x <= b.x + b.w && node.y >= b.y && node.y <= b.y + b.h) found.push(z);
+            }
+            if (!found.length) return null;
+            found.sort((a, b) => b.priority - a.priority);
+            return found[0];
+        },
+        acquire(nameOrZone, opts) {
+            const zone = fullZone(nameOrZone);
+            const o = opts || {};
+            const entry = {
+                id: 'lease' + (lease_seq++),
+                kind: zone ? 'zone' : 'lease',
+                name: zone ? zone.name : (o.owner ? String(o.owner) : 'lease' + lease_seq),
+                owner: o.owner === undefined ? (zone ? zone.name : null) : String(o.owner),
+                priority: o.priority === undefined ? (zone ? zone.priority : 0) : Number(o.priority),
+                seq: lease_seq,
+                // Аренда — это данные зоны плюс её собственные поля: так один
+                // механизм обслуживает и зоны уровня, и временные врезки.
+                data: zone ? Object.assign({}, zone.data, o) : o,
+                expires: Number(o.ms || 0) > 0 ? (Number(o.ms) / 1000) : 0,
+            };
+            if (!zone_stack.length) saved_stack[0] = snapshotCam();
+            zone_stack.push(entry);
+            recompose();
+            return entry;
+        },
+        release(name) {
+            if (name === undefined) return null;
+            // Выход по имени зоны снимает последнюю запись этой зоны.
+            for (let i = zone_stack.length - 1; i >= 0; i--) {
+                if (zone_stack[i].name === String(name) || zone_stack[i].id === name) {
+                    const entry = zone_stack.splice(i, 1)[0];
+                    recompose();
+                    return entry;
+                }
+            }
+            return null;
+        },
+        drop(handle) {
+            if (handle === undefined) {
+                zone_stack.length = 0;
+                recompose();
+                const base = saved_stack[0] || null;
+                saved_stack.length = 0;
+                restoreCam(base);
+                return true;
+            }
+            if (typeof handle === 'object' && handle && handle.id) return !!zones.release(handle.id);
+            if (typeof handle === 'object' && handle && handle.owner) return !!zones.release(handle.owner);
+            return !!zones.release(handle);
+        },
+        /** Пересчитать, кто управляет камерой: верхний по приоритету. */
+        applyTop() { recompose(); },
+        // Применить ТОЛЬКО если запись стала верхней по приоритету: вход в
+        // младшую зону не должен перебивать уже активную старшую (иначе
+        // «priority» ничего не решал бы, а решал бы порядок входа).
+        applyIfTop() { recompose(); },
+        apply(zone) { applyEntry(zone_stack.find((e) => e.name === zone.name) || zone); },
+        describe() {
+            const out = { zones: [], leases: [], active: null };
+            for (const e of controlOrder()) {
+                const row = { id: e.id, name: e.name, owner: e.owner, priority: e.priority, kind: e.kind };
+                (e.kind === 'zone' ? out.zones : out.leases).push(row);
+            }
+            const top = controlOrder()[0];
+            out.active = top ? {
+                id: top.id, name: top.name, owner: top.owner,
+                priority: top.priority, kind: top.kind,
+            } : null;
+            return out;
+        },
+        /** Тик: истечение аренд по времени. */
+        tick(dt) {
+            if (!zone_stack.length) return;
+            let changed = false;
+            for (let i = zone_stack.length - 1; i >= 0; i--) {
+                const e = zone_stack[i];
+                if (!e.expires) continue;
+                e.expires -= dt;
+                if (e.expires <= 0) { zone_stack.splice(i, 1); changed = true; }
+            }
+            if (changed) zones.applyTop();
+        },
+        _stack: zone_stack,
+    };
+
     const camera = {
         at(x, y) {
             if (x === undefined) return { x: cam.x, y: cam.y };
@@ -539,6 +787,84 @@ export function installCamera($, viewports) {
             return animate(ms, (p) => { cam.x = fx + (x - fx) * p; cam.y = fy + (y - fy) * p; clampToLimits(); });
         },
 
+        // --- §19: зоны камеры и аренда управления ----------------------------
+
+        /**
+         * Зона камеры: переиспользуемая настройка для участка уровня.
+         *
+         * ```js
+         * $.camera.zone('well', { x: 0, y: 0, w: 800, h: 2000, zoom: 0.9,
+         *                         follow: '#hero', offset: [0, 40] });
+         * $.camera.enter('well');      // применить
+         * $.camera.leave('well');      // вернуть прежнюю конфигурацию
+         * $.camera.enter();            // зона, в которой цель находится сейчас
+         * ```
+         *
+         * Зона — это ДАННЫЕ, а не вторая камера: она накладывает границы, зум,
+         * смещение и политику следования на существующую камеру. Одновременно
+         * активных зон может быть несколько — какая победит, решают `priority`
+         * и порядок входа, а не порядок объявления в коде.
+         */
+        zone(name, opts) {
+            if (name === undefined) return zones.list();
+            if (opts === undefined) return zones.info(name);
+            zones.define(name, opts);
+            // Возвращаем true, а не камеру: `$.camera.zone()` без аргументов —
+            // геттер, и если бы определение возвращало камеру, JSON.stringify
+            // тянул бы весь внутренний стейт камеры в отчёты и логи.
+            return true;
+        },
+
+        /** Войти в зону (или в зону, где сейчас находится цель). */
+        enter(name, opts) {
+            // Без имени — это «перейти в комнату, где цель»: прежние зоны
+            // снимаются, иначе в стеке осталась бы прошлая комната и приоритет
+            // мешал бы новой (вход без имени обязан быть переходом).
+            if (name === undefined) {
+                for (let i = zones._stack.length - 1; i >= 0; i--) {
+                    if (zones._stack[i].kind === 'zone') zones.release(zones._stack[i].id);
+                }
+            }
+            // Позицию берём у ЦЕЛИ камеры, а если цели нет — у игрока/героя:
+            // у только что созданной сцены follow может быть ещё не задан.
+            const where = cam.target || query('#hero')[0] || query('player')[0] || null;
+            const zone = name === undefined ? zones.zoneAt(where) : zones.define(name, null);
+            if (!zone) return false;
+            const lease = zones.acquire(zone, opts);
+            zones.applyIfTop(lease);
+            return lease ? lease.id : false;
+        },
+
+        /** Выйти из зоны: вернуть прежнюю конфигурацию. */
+        leave(name) {
+            const zone = zones.release(name);
+            if (!zone) return false;
+            zones.applyTop();
+            return true;
+        },
+
+        /**
+         * Временная аренда камеры: cutscene, добивание, диалог.
+         *
+         * ```js
+         * const lease = $.camera.lease({ owner: 'cutscene', priority: 10,
+         *                                zoom: 1.4, offset: [0, -20], ms: 1200 });
+         * $.camera.release(lease);     // вернуть прежнюю конфигурацию
+         * ```
+         *
+         * Аренда с более высоким приоритетом перебивает зону; при её снятии
+         * камера возвращается ровно туда, где была, — а не «примерно».
+         */
+        lease(opts) {
+            return zones.acquire(null, opts || {});
+        },
+
+        /** Снять аренду по id, имени владельца или все аренды владельца. */
+        release(lease) { return zones.drop(lease); },
+
+        /** Что сейчас управляет камерой: активные зоны и аренды по приоритету. */
+        control() { return zones.describe(); },
+
         /** Тряска: амплитуда в пикселях, длительность в миллисекундах. */
         shake(intensity, ms) {
             cam.shake_amp = Math.max(cam.shake_amp, intensity || 4);
@@ -632,6 +958,9 @@ export function installCamera($, viewports) {
 
         /** Внутреннее: вызывается из $.time каждый кадр. */
         _tick(dt) {
+            // §19: аренды камеры истекают по времени и возвращают прежнюю
+            // конфигурацию сами — cutscene не обязана помнить о release.
+            zones.tick(dt);
             if (cam.kind === KIND_RE2D && cam.look_on && $.input) {
                 // Взгляд мышью: сдвиг за кадр (в записи/реплее он тоже есть).
                 const m = $.input.mouseDelta();

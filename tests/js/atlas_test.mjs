@@ -9,7 +9,7 @@
 // ===========================================================================
 
 import { test, eq, truthy, falsy, finish } from './_harness.mjs';
-import { parseAtlas, normalizeFrame, atlasImagePath } from '../../src/highlevel/atlas.js';
+import { parseAtlas, normalizeFrame, atlasImagePath, verifyAtlas } from '../../src/highlevel/atlas.js';
 
 test('normalizeFrame понимает `frame{}`, плоский кадр и w/h против width/height', () => {
     const a = normalizeFrame('idle_0', { frame: { x: 1, y: 2, w: 3, h: 4 }, duration: 120 });
@@ -141,6 +141,124 @@ test('parseAtlas: без slices поле не появляется, мусор �
         meta: { slices: [{ name: '', keys: [] }, { name: 'x', keys: [{ frame: 0 }] }] },
     });
     truthy(!bad.slices || bad.slices.x === undefined);
+});
+
+// --- §22: страницы, манифест импорта, проверка данных -----------------------
+
+test('parseAtlas: страницы атласа и page у кадров', () => {
+    const data = {
+        meta: {
+            image: 'p0.png',
+            size: { w: 64, h: 32 },
+            pages: [{ name: 'ground', image: 'p0.png' }, { name: 'props', image: 'p1.png' }],
+            padding: 2,
+            extrusion: 1,
+        },
+        frames: {
+            a: { frame: { x: 0, y: 0, w: 16, h: 16 }, page: 'props' },
+            b: { frame: { x: 16, y: 0, w: 16, h: 16 } },
+        },
+    };
+    const parsed = parseAtlas(data);
+    eq(parsed.meta.pages.length, 2, 'две страницы');
+    eq(parsed.meta.pages[1].name, 'props');
+    eq(parsed.meta.pages[1].image, 'p1.png');
+    eq(parsed.frames[0].page, 1, 'кадр ссылается на страницу по имени');
+    eq(parsed.frames[1].page, 0, 'без page кадр на первой странице');
+    eq(parsed.meta.padding, 2);
+    eq(parsed.meta.extrusion, 1);
+
+    const single = parseAtlas({ frames: { a: { x: 0, y: 0, w: 4, h: 4 } } });
+    eq(single.meta.pages.length, 1, 'одностраничный атлас тоже описывает страницу');
+});
+
+test('parseAtlas: import-манифест (hash, версия, настройки, зависимости)', () => {
+    const parsed = parseAtlas({
+        frames: { a: { x: 0, y: 0, w: 8, h: 8 } },
+        meta: { import: { version: 2, importer: 'r2d-atlas/1.4', hash: 'abc123',
+                          settings: { padding: 2, extrude: 1 }, dependencies: ['raw/hero.ase'] } },
+    });
+    eq(parsed.meta.import.version, 2);
+    eq(parsed.meta.import.importer, 'r2d-atlas/1.4');
+    eq(parsed.meta.import.contentHash, 'abc123', 'hash читается и как contentHash');
+    eq(parsed.meta.import.settings.padding, 2);
+    eq(parsed.meta.import.dependencies.join(), 'raw/hero.ase');
+});
+
+test('parseAtlas: повторный разбор одних данных даёт тот же результат', () => {
+    const data = {
+        frames: { a: { x: 0, y: 0, w: 8, h: 8 }, b: { x: 8, y: 0, w: 8, h: 8 } },
+        meta: { frameTags: [{ name: 'run', from: 0, to: 1 }], image: 'a.png' },
+    };
+    eq(JSON.stringify(parseAtlas(data)), JSON.stringify(parseAtlas(data)),
+       'разбор детерминирован');
+});
+
+test('verifyAtlas: ловит поворот, выход за страницу, перекрытие и битые теги', () => {
+    const bad = verifyAtlas({
+        meta: { image: 'a.png', size: { w: 32, h: 32 },
+                frameTags: [{ name: 'run', from: 0, to: 5 }] },
+        // Свой формат тегов: имя кадра, которого в атласе нет.
+        tags: { jump: ['nope'] },
+        frames: {
+            a: { frame: { x: 0, y: 0, w: 16, h: 16, rotated: true } },
+            b: { frame: { x: 10, y: 10, w: 16, h: 16 } },
+            c: { frame: { x: 40, y: 0, w: 16, h: 16 } },
+        },
+    });
+    const codes = bad.errors.map((e) => e.code);
+    truthy(codes.indexOf('atlas_rotated_frame') >= 0, 'поворот найден: ' + codes.join());
+    truthy(codes.indexOf('atlas_frames_overlap') >= 0, 'перекрытие найдено');
+    truthy(codes.indexOf('atlas_frame_out_of_page') >= 0, 'выход за страницу найден');
+    truthy(codes.indexOf('atlas_tag_frame_missing') >= 0, 'тег на несуществующий кадр найден');
+    falsy(bad.ok, 'плохие данные не проходят проверку');
+
+    const good = verifyAtlas({
+        meta: { image: 'a.png', size: { w: 64, h: 32 }, padding: 0 },
+        frames: { a: { frame: { x: 0, y: 0, w: 16, h: 16 }, duration: 100 },
+                  b: { frame: { x: 16, y: 0, w: 16, h: 16 }, duration: 100 } },
+    });
+    truthy(good.ok, 'ровные кадры проходят: ' + JSON.stringify(good.errors));
+    // Кадры стоят вплотную и padding не объявлен — это предупреждение о риске
+    // протечки, а не ошибка данных.
+    eq(good.warnings.length, 1, 'одно замечание: ' + JSON.stringify(good.warnings));
+    eq(good.warnings[0].code, 'atlas_no_padding');
+    eq(good.frames, 2);
+});
+
+test('verifyAtlas: манифест новее поддерживаемого — ошибка, старый импортёр — предупреждение', () => {
+    const data = {
+        frames: { a: { x: 0, y: 0, w: 8, h: 8, duration: 50 } },
+        meta: { image: 'a.png', import: { version: 9, importer: 'old', hash: '' } },
+    };
+    const r = verifyAtlas(data, { manifestVersion: 2, importer: 'r2d-atlas/2.0' });
+    truthy(r.errors.some((e) => e.code === 'atlas_manifest_version'),
+           'версия манифеста проверяется');
+    truthy(r.warnings.some((w) => w.code === 'atlas_importer_mismatch'),
+           'чужой импортёр — предупреждение');
+    truthy(r.warnings.some((w) => w.code === 'atlas_manifest_no_hash'),
+           'нет hash — предупреждение');
+});
+
+test('verifyAtlas: не-степень-двойки — предупреждение, а не ошибка', () => {
+    const r = verifyAtlas({
+        meta: { image: 'a.png', size: { w: 48, h: 32 }, padding: 4 },
+        frames: { a: { frame: { x: 0, y: 0, w: 8, h: 8 }, duration: 100 },
+                  b: { frame: { x: 16, y: 0, w: 8, h: 8 }, duration: 100 } },
+    });
+    truthy(r.ok, 'проверка проходит: ' + JSON.stringify(r.errors));
+    truthy(r.warnings.some((w) => w.code === 'atlas_page_not_pot'),
+           'POT-политика отмечена предупреждением: ' + JSON.stringify(r.warnings));
+});
+
+test('verifyAtlas: маленький padding — предупреждение, а не ошибка', () => {
+    const r = verifyAtlas({
+        meta: { image: 'a.png', size: { w: 64, h: 16 }, padding: 2 },
+        frames: { a: { frame: { x: 0, y: 0, w: 8, h: 8 } }, b: { frame: { x: 8, y: 0, w: 8, h: 8 } } },
+    });
+    truthy(r.ok, 'проверка проходит');
+    truthy(r.warnings.some((w) => w.code === 'atlas_padding_small'),
+           'padding 2 при зазоре 0 отмечен');
 });
 
 finish();

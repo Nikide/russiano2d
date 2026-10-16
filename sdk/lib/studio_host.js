@@ -23,6 +23,7 @@
 
 import { openDataSession, createDataFile } from './data_session.js';
 import { escapeHtml, joinPath, dirOf, summarize } from './model.js';
+import { createPanel, reportForKind } from './panel_check.js';
 import * as views from './views.js';
 
 const DOC = 'sdk/ui/data_studio.rml';
@@ -53,6 +54,19 @@ function createHost(app) {
     // Мышь над окном просмотра: считывается один раз за кадр.
     const ptr = { x: 0, y: 0, inside: false, down: false, pressed: false, released: false, right: false, middle: false, dx: 0, dy: 0, wheel: 0 };
     let facade = null;
+    // §29: панель проверки живёт на сессию — «Проверить» и «Проверить в игре»
+    // ходят в тот же нативный backend, что CLI, и помнят один и тот же путь.
+    let panel = null;
+
+    function makePanel() {
+        return createPanel(app, {
+            label: s.def ? s.def.title : 'SDK Studio',
+            paths: () => (s.session ? [s.session.path] : []),
+            primary: () => (s.session ? s.session.path : null),
+            report: () => (s.session && s.def && s.def.kind
+                ? reportForKind(s.def.kind.ID, s.session.doc, allDiagnostics(), app) : null),
+        });
+    }
 
     // --- Помощники ------------------------------------------------------------------------
     const model = () => (s.session ? s.session.doc : null);
@@ -140,6 +154,7 @@ function createHost(app) {
     function bindSession(session) {
         if (s.session && s.def.unmount) s.def.unmount(api);
         s.session = session;
+        panel = makePanel();
         s.sel = session ? 0 : -1;
         s.ext = {};
         if (session && s.def.mount) s.def.mount(api);
@@ -221,9 +236,25 @@ function createHost(app) {
     async function validate() {
         if (!s.session) return { ok: false, diagnostics: [] };
         const r = await s.session.validateDraft();
+        if (!panel) panel = makePanel();
+        panel.absorb(r.diagnostics, s.session.path);
         renderAll();
         setStatus(r.ok ? 'проверка: ошибок нет' : 'проверка: есть ошибки', !r.ok);
+        return Object.assign({ path: s.session.path, report: panel.report() }, r);
+    }
+
+    /** «Проверить в игре»: тот же файл, что проверялся, уходит в runtime. */
+    function preview() {
+        if (!panel) panel = makePanel();
+        const r = panel.preview();
+        renderAll();
         return r;
+    }
+
+    /** Отчёт панели (import report): числа по данным инструмента. */
+    function report() {
+        if (!panel) panel = makePanel();
+        return panel.report();
     }
 
     // --- Отрисовка интерфейса --------------------------------------------------------------------------------
@@ -244,6 +275,14 @@ function createHost(app) {
         doc.cls('ds-undo', 'off', !(h && h.canUndo()));
         doc.cls('ds-redo', 'off', !(h && h.canRedo()));
         doc.text('ds-summary', escapeHtml(s.session ? s.def.kind.summary(s.session.doc) : 'Откройте файл или создайте новый: имя оканчивается на ' + s.def.kind.SUFFIX));
+        if (panel && s.session) {
+            const rep = panel.report();
+            const sum = panel.state.summary;
+            doc.text('ds-report', escapeHtml('проверка: ошибок ' + sum.errors + ' · предупреждений ' + sum.warnings +
+                (rep && rep.notes && rep.notes.length ? ' · ' + rep.notes[0] : '')));
+        } else {
+            doc.text('ds-report', '');
+        }
     }
 
     function renderAll() {
@@ -302,6 +341,7 @@ function createHost(app) {
         doc.on('ds-undo', 'click', () => undo());
         doc.on('ds-redo', 'click', () => redo());
         doc.on('ds-validate', 'click', () => validate());
+        doc.on('ds-preview', 'click', () => preview());
         doc.on('ds-open', 'click', () => {
             const p = String(doc.value('ds-path') || '').trim();
             openFile(p).catch((e) => note('error', 'SDK_OPEN_FAILED', e && e.message ? e.message : String(e)));
@@ -329,7 +369,8 @@ function createHost(app) {
         set sel(i) { s.sel = i; },
         get ext() { return s.ext; },
         get def() { return s.def; },
-        rect, run, undo, redo, select, save, validate, close, open,
+        rect, run, undo, redo, select, save, validate, preview, report, close, open,
+        get panel() { return panel; },
         openFile, createFile, setStatus, note, renderAll, renderRight, renderDiag, hud, changed,
         diagnostics: allDiagnostics,
         snapshot() {
@@ -349,6 +390,14 @@ function createHost(app) {
                 warnings: sum.warnings,
                 codes: diags.map((d) => d.code),
             };
+            const p = panel ? panel.snapshot() : null;
+            if (p) {
+                base.panel = p;
+                base.validatedPath = p.validatedPath;
+                base.previewPath = p.previewPath;
+                base.previewMatchesValidated = p.previewMatchesValidated;
+                base.report = p.report;
+            }
             return Object.assign(base, s.def && s.def.snapshot ? s.def.snapshot(api) : {});
         },
     };

@@ -17,6 +17,7 @@
         <button id="ss-undo" class="btn">Отменить</button>
         <button id="ss-redo" class="btn">Повторить</button>
         <button id="ss-validate" class="btn">Проверить</button>
+        <button id="ss-preview" class="btn">Проверить в игре</button>
         <button id="ss-tool-select" class="btn on">Кадры</button>
         <button id="ss-tool-pivot" class="btn">Пивот</button>
         <button id="ss-zoom-out" class="btn">−</button>
@@ -75,6 +76,7 @@
         </div>
     </div>
 
+    <div id="ss-report" class="hint"></div>
     <div id="ss-diag" class="diag-strip"></div>
 </div>
 </body>

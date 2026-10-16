@@ -268,6 +268,91 @@ int main(void)
         r2d_audio_fx_shutdown(&fx);
     }
 
+
+    // --- §48: изоляция шинных эффектов (PCM, без устройства) ----------------
+    //
+    // Шина без эффекта обязана быть ПРОЗРАЧНОЙ бит-в-бит: именно этот путь
+    // (r2d_audio_fx_process) вызывается колбэком группы микшера и каналом,
+    // поэтому проверка буфера — это и есть проверка PCM.
+    {
+        static float dry[4096 * 2];
+        static float wet[4096 * 2];
+        static float ref[4096 * 2];
+        const int n = 4096;              // кадров; samples = n * 2 (interleaved)
+
+        R2DAudioFx dry_bus;
+        R2DAudioFx wet_bus;
+        memset(&dry_bus, 0, sizeof dry_bus);
+        memset(&wet_bus, 0, sizeof wet_bus);
+        r2d_audio_fx_set(&dry_bus, rate, "none", 0, 0);
+        r2d_audio_fx_set(&wet_bus, rate, "reverb", 0.6f, 0.8f);
+
+        // Один и тот же сигнал уходит в две шины: сухую и мокрую.
+        fill_sine(dry, n, rate, 440.0f, 0.5f);
+        memcpy(ref, dry, sizeof(float) * (size_t)(n * 2));
+        memcpy(wet, dry, sizeof(float) * (size_t)(n * 2));
+
+        r2d_audio_fx_process(&dry_bus, &stereo, dry, n * 2);
+        check(memcmp(dry, ref, sizeof(float) * (size_t)(n * 2)) == 0,
+              "§48: шина без эффекта прозрачна бит-в-бит (dry click остаётся dry)");
+
+        r2d_audio_fx_process(&wet_bus, &stereo, wet, n * 2);
+        check(memcmp(wet, ref, sizeof(float) * (size_t)(n * 2)) != 0,
+              "§48: шина с ревербом меняет свой буфер (эффект слышен)");
+
+        // Сухая шина не «подхватила» состояние мокрой: второй прогон сухой
+        // шины всё ещё прозрачен, хотя мокрая уже накопила хвост.
+        memcpy(dry, ref, sizeof(float) * (size_t)(n * 2));
+        r2d_audio_fx_process(&dry_bus, &stereo, dry, n * 2);
+        check(memcmp(dry, ref, sizeof(float) * (size_t)(n * 2)) == 0,
+              "§48: хвост соседней шины не протекает в сухую (состояние раздельно)");
+
+        // Двойное применение эффекта слышно: это то, что случилось бы, если
+        // эффект шины продублировать на канале (защита есть в audiobus.js).
+        static float twice[4096 * 2];
+        memcpy(twice, ref, sizeof(float) * (size_t)(n * 2));
+        R2DAudioFx once_fx;
+        R2DAudioFx twice_fx;
+        memset(&once_fx, 0, sizeof once_fx);
+        memset(&twice_fx, 0, sizeof twice_fx);
+        r2d_audio_fx_set(&once_fx, rate, "reverb", 0.6f, 0.8f);
+        r2d_audio_fx_set(&twice_fx, rate, "reverb", 0.6f, 0.8f);
+        r2d_audio_fx_process(&once_fx, &stereo, twice, n * 2);      // один проход
+        static float singles[4096 * 2];
+        memcpy(singles, twice, sizeof(float) * (size_t)(n * 2));
+        r2d_audio_fx_process(&twice_fx, &stereo, twice, n * 2);     // второй проход
+        check(memcmp(twice, singles, sizeof(float) * (size_t)(n * 2)) != 0,
+              "§48: двойное применение эффекта отличается от одинарного");
+
+        // Переключение шины на ходу: сброс состояния не оставляет хвоста.
+        static float tail[4096 * 2];
+        memset(tail, 0, sizeof(float) * (size_t)(n * 2));
+        tail[0] = 1.0f;
+        tail[1] = 1.0f;
+        r2d_audio_fx_process(&wet_bus, &stereo, tail, n * 2);
+        r2d_audio_fx_reset(&wet_bus);
+        memset(tail, 0, sizeof(float) * (size_t)(n * 2));
+        r2d_audio_fx_process(&wet_bus, &stereo, tail, n * 2);
+        check(energy(tail, n * 2) == 0.0,
+              "§48: после сброса/смены маршрута хвост не звучит");
+
+        // Смена вида эффекта тоже сбрасывает состояние (set — не «докрутка»).
+        memset(tail, 0, sizeof(float) * (size_t)(n * 2));
+        tail[0] = 1.0f;
+        tail[1] = 1.0f;
+        r2d_audio_fx_set(&wet_bus, rate, "reverb", 0.6f, 0.8f);
+        r2d_audio_fx_process(&wet_bus, &stereo, tail, n * 2);
+        r2d_audio_fx_set(&wet_bus, rate, "none", 0, 0);
+        memset(tail, 0, sizeof(float) * (size_t)(n * 2));
+        r2d_audio_fx_process(&wet_bus, &stereo, tail, n * 2);
+        check(energy(tail, n * 2) == 0.0, "§48: set('none') сбрасывает хвост прежнего эффекта");
+
+        r2d_audio_fx_shutdown(&dry_bus);
+        r2d_audio_fx_shutdown(&wet_bus);
+        r2d_audio_fx_shutdown(&once_fx);
+        r2d_audio_fx_shutdown(&twice_fx);
+    }
+
     printf("\n%s\n", failures == 0 ? "Все проверки пройдены" : "ПРОВАЛЕНО");
     printf("проверок: %d, провалов: %d\n", checks, failures);
     return failures == 0 ? 0 : 1;

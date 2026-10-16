@@ -1,0 +1,62 @@
+{
+  "comment": "Эталонные комнаты demos/roguerooms (§31-4). Записано с прогона движка; пересборка — python3 tests/fixtures/roguerooms/gen_expected.py.",
+  "cols": 72,
+  "rows": 40,
+  "tile": 32,
+  "maxSteps": 8721,
+  "rooms": {
+    "standard42": {
+      "profile": "standard",
+      "seed": 42,
+      "status": "published",
+      "hash": "cd09b687",
+      "platforms": 297,
+      "steps": 5878,
+      "attempt": 1,
+      "attemptSeeds": [],
+      "freeFraction": 0.7583333333333333,
+      "longest": 72,
+      "spawn": { "cx": 40, "cy": 5, "danger": 0.3499785368787323 }
+    },
+    "dense7": {
+      "profile": "dense",
+      "seed": 7,
+      "status": "published",
+      "hash": "4e5403a6",
+      "platforms": 181,
+      "steps": 5762,
+      "attempt": 1,
+      "attemptSeeds": [],
+      "freeFraction": 0.8545138888888889,
+      "longest": 72,
+      "spawn": { "cx": 5, "cy": 4, "danger": 0.5553918426904433 }
+    },
+    "standard7": {
+      "profile": "standard",
+      "seed": 7,
+      "status": "published",
+      "hash": "fd9c2b2c",
+      "platforms": 290,
+      "steps": 5871,
+      "attempt": 2,
+      "attemptSeeds": [7],
+      "reason": "спавн в опасной зоне: 0.656",
+      "freeFraction": 0.7711805555555555,
+      "longest": 72,
+      "spawn": { "cx": 62, "cy": 5, "danger": 0.554119212479907 }
+    }
+  },
+  "budgets": {
+    "comment": "Один seed — один hash при разном бюджете $.task (мс/кадр).",
+    "seed": 42,
+    "profile": "standard",
+    "hash": "cd09b687",
+    "steps": 5878
+  },
+  "broken": {
+    "profile": "broken",
+    "seed": 7,
+    "attemptSeeds": [7, 2654435768, 1013904233],
+    "reason": "много свободного места: 0.926; нет свободной клетки для спавна"
+  }
+}

@@ -175,6 +175,86 @@ def main():
         a.eval("$.audio.effect('fx', 'none'); 'ok'")
         check(a.eval("$.audio.effect('fx')") == "none", "эффект шины выключается")
 
+        # --- §48: изоляция шинных эффектов -------------------------------------
+        # Сухой звук на шине БЕЗ эффекта не должен окрашиваться шиной с
+        # ревербом: эффект живёт на группе микшера и на канал не дублируется.
+        # Общую комнату микса выключаем явно — она по определению красит всё,
+        # и её наличие видно в $.audio.routes().globalRoomWet.
+        # ВАЖНО: акустика ($.audio.acoustics) применяет комнату КАЖДЫЙ кадр,
+        # поэтому для шинной изоляции её надо выключить явно — иначе общая
+        # комната окрасит и «сухую» шину (это факт, а не догадка: его видно
+        # в $.audio.routes().warnings).
+        a.eval("$.audio.acoustics(false); $.audio.room({ wet: 0 }); true")
+        a.step(2)
+        check(a.eval("$.audio.routes().globalRoomWet") is False,
+              "общая комната микса выключена (для изоляции шин)")
+
+        a.eval("$.audio.clear(); true")
+        a.eval("$.audio.bus('ui', { volume: 0.8 });"
+               "$.audio.bus('ambience', { volume: 1, effect: 'reverb', effectParams: { send: 0.5 } }); true")
+        dry_ch = a.eval("$.audio.play('%s', { bus: 'ui', volume: 1, pan: -0.5 }).channel" % SFX)
+        wet_ch = a.eval("$.audio.play('%s', { bus: 'ambience', volume: 1 }).channel" % SFX)
+        a.step(2)
+        check(dry_ch is not None and dry_ch >= 0 and wet_ch is not None and wet_ch >= 0,
+              "оба звука получили каналы (dry=%s, wet=%s)" % (dry_ch, wet_ch))
+
+        routes = a.eval("$.audio.routes()")
+        by_name = {b["name"]: b for b in (routes or {}).get("buses", [])}
+        check(by_name.get("ambience", {}).get("effect") == "reverb",
+              "у ambience шины свой реверб")
+        check(by_name.get("ui", {}).get("dry") is True, "ui — сухая шина")
+        check(by_name.get("ui", {}).get("colored") is False,
+              "§48: сухая шина не окрашена, пока ambience мокнет")
+        check(by_name.get("ambience", {}).get("colored") is True, "ambience — окрашена")
+
+        # Эффект шины НЕ продублирован на канале: иначе DSP применился бы дважды.
+        check(a.eval("engine.audio.channelEffect(%d)" % dry_ch) == "none",
+              "§48: у звука сухой шины нет канального эффекта")
+        check(a.eval("engine.audio.channelEffect(%d)" % wet_ch) == "none",
+              "§48: эффект шины не дублируется на канале (двойной обработки нет)")
+
+        # Переключение шины на ходу: громкость и панорама источника не меняются,
+        # состояние канального эффекта не тянет хвост прежней маршрутизации.
+        before = a.eval("(() => { const h = $.audio.handles().find(x => x.channel === %d);"
+                        " return [h.volume(), h.pan(), h.bus]; })()" % dry_ch)
+        a.eval("(() => { const h = $.audio.handles().find(x => x.channel === %d);"
+               " h.toBus('ambience'); })()" % dry_ch)
+        a.step(2)
+        after = a.eval("(() => { const h = $.audio.handles().find(x => x.channel === %d);"
+                       " return [h.volume(), h.pan(), h.bus]; })()" % dry_ch)
+        check(before[0] == after[0] and before[1] == after[1],
+              "§48: смена шины не меняет громкость/панораму источника (%s → %s)" % (before, after))
+        check(after[2] == "ambience", "§48: звук действительно переехал в новую шину")
+        check(a.eval("engine.audio.channelEffect(%d)" % dry_ch) == "none",
+              "§48: после переезда на канале остаётся 'none' (хвост не тянется)")
+
+        # Освобождение шины: её звук уходит к родителю, чужие шины не тронуты.
+        third_ch = a.eval("$.audio.play('%s', { bus: 'ui', volume: 1 }).channel" % SFX)
+        a.step(1)
+        a.eval("$.audio.remove('ambience'); true")
+        a.step(2)
+        moved = a.eval("(() => { const h = $.audio.handles().find(x => x.channel === %d);"
+                       " return h ? h.bus : null; })()" % dry_ch)
+        check(moved == "master", "§48: звук освобождённой шины ушёл к родителю (%s)" % moved)
+        check(a.eval("(() => { const h = $.audio.handles().find(x => x.channel === %d);"
+                     " return h ? [h.bus, h.playing()] : null; })()" % third_ch) == ["ui", True],
+              "§48: звук чужой (ui) шины не пострадал и продолжает играть")
+        names_after = a.eval("$.audio.buses().map(b => b.name).sort()")
+        check("ambience" not in (names_after or []),
+              "§48: освобождённая шина больше не в списке: %s" % names_after)
+        check(a.eval("typeof engine.audio.destroyGroup") == "function"
+              and a.eval("engine.audio.destroyGroup(-1)") is False,
+              "§48: группа освобождается нативной командой")
+
+        # dB и линейный gain — разные вещи, и это видно явно.
+        check(abs(a.eval("$.audio.dbToLinear(-6)") - 0.501187) < 1e-4,
+              "§48: -6 dB → 0.501 линейного gain")
+        check(abs(a.eval("$.audio.linearToDb(0.5)") + 6.0206) < 1e-3,
+              "§48: 0.5 → -6.02 dB")
+        a.eval("$.audio.volume('ui', { db: -6 }); true")
+        check(abs(a.eval("$.audio.volume('ui')") - 0.501187) < 1e-4,
+              "§48: сеттер принимает { db } и хранит линейное значение")
+
         # --- Движок жив и ошибок нет -------------------------------------------
         a.step(2)
         check(a.eval("engine.frame") > 0, "кадры идут после операций с шинами")

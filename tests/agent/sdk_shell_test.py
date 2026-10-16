@@ -197,6 +197,37 @@ def main():
         a.eval(f"{DOC}.click('btn-diag-clear')")
         check(snap(a)["diagnostics"]["codes"] == [], "кнопка очищает панель диагностик")
 
+        # --- §29: панель проверки студии ходит в тот же backend, что CLI --------
+        # Мини-проверка оболочки; полный обход девяти инструментов — в
+        # tests/agent/sdk_tools_panels_test.py.
+        import sys as _sys
+        _sys.path.insert(0, os.path.join(ROOT, "tests"))
+        import sdk_validation_test as _SV
+        tmp = os.path.join(ROOT, "build", "sdk_shell_panels")
+        os.makedirs(tmp, exist_ok=True)
+        atlas = _SV.write_fixture(tmp, "shell.atlas.json", _SV.GOOD["sprite.atlas"],
+                                  _SV.NEIGHBOURS.get("sprite.atlas", ()))
+        a.eval(f"$.sdkApp.openTool('sprite-studio', {{ assetAbs: {atlas!r} }}); 1")
+        for _ in range(60):
+            a.step(2)
+            if a.eval("$.sdkApp.studios.sprite && $.sdkApp.studios.sprite.snapshot().file") == atlas:
+                break
+        check(a.eval("$.sdkApp.studios.sprite.snapshot().file") == atlas, "Sprite Studio открыл атлас для панели")
+        a.eval("$.sdkApp.studios.sprite.validate(); 1")
+        wait_idle(a)
+        studio = json.loads(a.eval("JSON.stringify($.sdkApp.studios.sprite.snapshot())"))
+        ref_codes = _SV.validate(atlas, "sprite.atlas")[1]
+        check(sorted(studio["panel"]["codes"]) == sorted(ref_codes),
+              "панель Sprite Studio показывает коды CLI (%s)" % studio["panel"]["codes"])
+        check(studio["panel"]["errors"] == 0, "панель студии: корректный атлас — ошибок 0")
+        a.eval("$.sdkApp.studios.sprite.preview(); 1")
+        a.step(1)
+        studio = json.loads(a.eval("JSON.stringify($.sdkApp.studios.sprite.snapshot())"))
+        check(studio["panel"]["previewMatchesValidated"] is True,
+              "preview студии ведёт на тот же файл, что проверялся")
+        check("frames" in (studio.get("report") or {}),
+              "панель отдаёт import report (frames/sockets/pages)")
+
     print()
     if FAILURES:
         print(f"ПРОВАЛОВ: {len(FAILURES)}")

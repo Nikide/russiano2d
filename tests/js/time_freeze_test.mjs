@@ -11,10 +11,11 @@
 // ===========================================================================
 
 import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
-import { ctx } from '../../src/highlevel/core.js';
+import { ctx, Node } from '../../src/highlevel/core.js';
 import {
     installTime, tickTime, freezeDuration, slowEnvelope, combineSlow,
 } from '../../src/highlevel/time.js';
+import { installTriggers } from '../../src/highlevel/triggers.js';
 
 // Камера и ввод — часть кадрового тика времени; без движка их надо подставить.
 ctx.camera = { _tick() {} };
@@ -27,6 +28,8 @@ engine.setTimeScale = function (value) { physics.calls.push(value); };
 
 const $ = {};
 const time = installTime($);
+// §44: политики обработки живут в triggers.js; time.js спрашивает их у узла.
+installTriggers($);
 ctx.time = time;
 
 const FRAME = engine.dt;                 // 1/60 c
@@ -40,6 +43,15 @@ function reset() {
     time._state.slow.length = 0;
     time._state.frame_frozen = false;
     physics.calls.length = 0;
+    // Симуляционные подписки/таймеры/метки — тоже между тестами.
+    const sim = time._state.sim;
+    sim.subs.length = 0;
+    sim.timers.length = 0;
+    sim.durations.length = 0;
+    sim.marks.clear();
+    sim.tick = 0;
+    sim.acc = 0;
+    sim.c_scale = 1;
 }
 
 /** Один кадр: тик времени + дельта, которую видит игра. */
@@ -210,6 +222,150 @@ test('hitStop — синоним freeze с умолчанием 70 мс', () => 
     time.hitStop();
     eq(frame(), 0, 'заморожено');
     truthy(time.freezeLeft() <= 70 + FRAME_MS + 1e-6, `осталось не больше заказанного: ${time.freezeLeft()}`);
+});
+
+// --- §44: симуляционные тики отдельно от кадров отрисовки -------------------
+
+test('тик симуляции не зависит от render FPS: 30 и 60 кадров дают одно и то же', () => {
+    reset();
+    // Как в движке: app->dt хранится во float, поэтому и здесь fround.
+    const run = (fps, frames) => {
+        reset();
+        engine.dt = Math.fround(1 / fps);
+        for (let i = 0; i < frames; i++) tickTime();
+        return time.tick();
+    };
+    const at30 = run(30, 60);          // 2 симулированные секунды
+    const at60 = run(60, 120);
+    eq(at30, 120, '30 «кадров» в секунду: 120 тиков за 2 с');
+    eq(at60, 120, '60 «кадров» в секунду: те же 120 тиков');
+    near(time.simDt(), 1 / 60, 1e-9, 'шаг симуляции — 1/60 с');
+    engine.dt = Math.fround(1 / 60);
+});
+
+test('$.time.tick() — не $.time.frame(): счётчики считают разное', () => {
+    reset();
+    engine.dt = Math.fround(1 / 30);
+    for (let i = 0; i < 10; i++) tickTime();
+    eq(time.tick(), 20, '10 кадров по 1/30 с — 20 шагов симуляции');
+    engine.dt = Math.fround(1 / 60);
+});
+
+test('onTick: подписка на каждый шаг, политика fixed её останавливает', () => {
+    reset();
+    engine.dt = Math.fround(1 / 60);
+    const seen = [];
+    time.onTick((tick) => seen.push(tick));
+    for (let i = 0; i < 3; i++) tickTime();
+    eq(seen.join(','), '1,2,3', 'подписка зовётся на каждом шаге');
+
+    const enemy = new Node('enemy', {});
+    let owned = 0;
+    time.onTick(() => { owned++; }, { node: enemy });
+    for (let i = 0; i < 2; i++) tickTime();
+    eq(owned, 2, 'подписка владельца работает, пока он активен');
+    $.processing.set(enemy, { fixed: false });
+    for (let i = 0; i < 3; i++) tickTime();
+    eq(owned, 2, 'у выключенного владельца фиксированный шаг стоит');
+    $.processing.set(enemy, { fixed: true });
+    tickTime();
+    eq(owned, 3, 'после включения снова вызывается');
+});
+
+test('everyTicks / afterTicks: «каждые N тиков» и «через N тиков»', () => {
+    reset();
+    engine.dt = Math.fround(1 / 60);
+    let every = 0;
+    const handle = time.everyTicks(10, () => { every++; });
+    for (let i = 0; i < 25; i++) tickTime();
+    eq(every, 2, 'два раза за 25 тиков при N = 10');
+    eq(handle.fired(), 2);
+    handle.cancel();
+    for (let i = 0; i < 25; i++) tickTime();
+    eq(every, 2, 'после cancel() не вызывается');
+
+    let after = 0;
+    const once = time.afterTicks(10, () => { after++; });
+    for (let i = 0; i < 9; i++) tickTime();
+    eq(after, 0, 'до срока не сработал');
+    tickTime();
+    eq(after, 1, 'на десятом тике сработал');
+    for (let i = 0; i < 5; i++) tickTime();
+    eq(after, 1, 'однократный больше не срабатывает');
+    eq(once.fired(), 1);
+});
+
+test('everyTicks с from: zero — явная семантика глобального tick modulo', () => {
+    reset();
+    engine.dt = Math.fround(1 / 60);
+    const fired = [];
+    time.everyTicks(4, (tick) => fired.push(tick), { from: 'zero' });
+    for (let i = 0; i < 12; i++) tickTime();
+    eq(fired.join(','), '4,8,12', 'срабатывает на тиках, кратных N');
+});
+
+test('duration: жизнь в тиках и отметки состояния', () => {
+    reset();
+    engine.dt = Math.fround(1 / 60);
+    const life = time.duration(30);
+    let ended_at = -1;
+    life.onEnd(() => { ended_at = time.tick(); });
+    for (let i = 0; i < 29; i++) tickTime();
+    falsy(life.expired(), 'до срока жива');
+    eq(life.left(), 1);
+    tickTime();
+    truthy(life.expired(), 'истекла ровно на 30-м тике');
+    eq(ended_at, 30);
+    eq(life.elapsed(), 30);
+    life.reset(5);
+    falsy(life.expired(), 'reset() оживил');
+    for (let i = 0; i < 5; i++) tickTime();
+    truthy(life.expired(), 'истекла снова');
+
+    time.mark('shot');
+    for (let i = 0; i < 7; i++) tickTime();
+    eq(time.since('shot'), 7, 'локальный счётчик тиков от метки');
+    eq(time.since('нет-такой'), 0, 'без метки — ноль');
+});
+
+test('заморозка и пауза останавливают шаги симуляции', () => {
+    reset();
+    engine.dt = Math.fround(1 / 60);
+    for (let i = 0; i < 3; i++) tickTime();
+    const before = time.tick();
+    time.freeze(100);
+    // Кадр, в котором заморозку запросили, ещё шагает: физика C уже сделала
+    // свой шаг до апдейта скрипта, и множитель применяется со следующего кадра.
+    tickTime();
+    truthy(time.tick() === before || time.tick() === before + 1,
+           'кадр запроса заморозки мог шагнуть один раз');
+    const at_freeze = time.tick();
+    for (let i = 0; i < 4; i++) tickTime();
+    eq(time.tick(), at_freeze, 'на заморозке тиков нет (шаг физики стоит)');
+    while (time.frozen()) tickTime();
+    tickTime();
+    truthy(time.tick() > before, 'после заморозки шаги снова идут');
+
+    time.pause();
+    tickTime();                          // кадр запроса: физика C уже шагнула
+    const mark = time.tick();
+    for (let i = 0; i < 4; i++) tickTime();
+    eq(time.tick(), mark, 'на паузе тиков нет');
+    time.resume();
+});
+
+test('таймер с владельцем стоит, пока у узла выключена политика timers', () => {
+    reset();
+    engine.dt = Math.fround(1 / 60);
+    const node = new Node('enemy', {});
+    let fired = 0;
+    time.after(50, () => { fired++; }, { node });
+    $.processing.set(node, { timers: false });
+    for (let i = 0; i < 10; i++) tickTime();
+    eq(fired, 0, 'владелец выключен — таймер не истекает');
+    $.processing.set(node, { timers: true });
+    for (let i = 0; i < 10; i++) tickTime();
+    eq(fired, 1, 'после включения таймер дошёл до конца');
 });
 
 finish();

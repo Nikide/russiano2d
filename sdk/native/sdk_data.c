@@ -36,6 +36,18 @@ static void emit(const Ctx *c, SdkSeverity sev, const char *suffix, const char *
     va_end(ap);
 }
 
+/** Как `emit`, но с машиночитаемыми `details` (пути, имена) в диагностике. */
+static void emit_details(const Ctx *c, SdkSeverity sev, const char *suffix, const char *loc,
+                         const char *details, const char *fmt, ...)
+{
+    char code[96];
+    snprintf(code, sizeof code, "%s%s", c->prefix, suffix);
+    va_list ap;
+    va_start(ap, fmt);
+    sdk_diagv(c->rep, sev, code, c->asset, loc, details, fmt, ap);
+    va_end(ap);
+}
+
 static bool is_obj(const R2dJson *v) { return v && v->type == R2D_JSON_OBJ; }
 static bool is_arr(const R2dJson *v) { return v && v->type == R2D_JSON_ARR; }
 static bool is_str(const R2dJson *v) { return v && v->type == R2D_JSON_STR; }
@@ -624,6 +636,28 @@ void sdk_validate_audio(const char *path, SdkReport *rep)
             snprintf(loc, sizeof loc, "{\"sound\":\"%s\"}", name);
             if (!name_ok(name, 48)) emit(&c, SDK_ERROR, "_SOUND", loc, "Имя звука «%s» недопустимо", name);
             if (!is_obj(s) || !nonempty_str(field(s, "path"))) { emit(&c, SDK_ERROR, "_SOUND", loc, "Звук «%s»: нужен path", name); continue; }
+            // Ссылка проверяется ДО запуска: путь к отсутствующему файлу — это
+            // SDK_AUDIO_FILE_MISSING, а не «field is a string». Так же устроены
+            // атлас (картинка) и шрифты, поэтому «неверная ссылка выявляется до
+            // запуска» (§29) верно и для звука.
+            {
+                char dir[1536], full[2048];
+                sdk_dirname(path, dir, sizeof dir);
+                sdk_join(dir, field(s, "path")->string, full, sizeof full);
+                if (!sdk_file_exists(full)) {
+                    R2dSb d;
+                    r2d_sb_init(&d);
+                    r2d_sb_puts(&d, "{\"sound\":");
+                    r2d_sb_put_json_string(&d, name);
+                    r2d_sb_puts(&d, ",\"path\":");
+                    r2d_sb_put_json_string(&d, field(s, "path")->string);
+                    r2d_sb_putc(&d, '}');
+                    emit_details(&c, SDK_ERROR, "_FILE_MISSING", loc, d.data,
+                                 "Звук «%s»: файл «%s» не найден рядом с JSON",
+                                 name, field(s, "path")->string);
+                    r2d_sb_free(&d);
+                }
+            }
             const R2dJson *v;
             if ((v = field(s, "volume")) && !num_in(v, 0, 1)) emit(&c, SDK_ERROR, "_VOLUME", loc, "volume 0..1");
             if ((v = field(s, "pitch")) && !num_in(v, 0.1, 4)) emit(&c, SDK_ERROR, "_PITCH", loc, "pitch 0.1..4");

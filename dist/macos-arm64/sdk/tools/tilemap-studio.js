@@ -34,13 +34,18 @@ function absSrc(h, src) {
 }
 
 function geometry(h) {
-    const l = layerOf(h) || h.model.layers[0];
+    const l = layerOf(h) || (h.model.layers || [])[0];
     const z = h.ext.zoom, t = h.model.tile || 32;
-    const w = l.data[0].length, hh = l.data.length;
     const r = h.rect();
     const cx = r.x + (r.w - (h.ext.palette ? PAL.w + PAL.pad : 0)) / 2 + h.ext.panX;
     const cy = r.y + r.h / 2 + h.ext.panY;
-    return { w, h: hh, tile: t, z, cx, cy, left: cx - (w * t * z) / 2, top: cy - (hh * t * z) / 2 };
+    // Сломанный или пустой файл — не повод ронять кадр: у слоя может не быть
+    // data (панель обязана показать диагностику, а не исключение в $.update).
+    const rows = l && Array.isArray(l.data) ? l.data : [];
+    const first = rows[0];
+    const w = Array.isArray(first) ? first.length : 0;
+    const hh = rows.length;
+    return { w, h: hh, tile: t, z, cx, cy, left: cx - (w * t * z) / 2, top: cy - (hh * t * z) / 2, empty: w === 0 || hh === 0 };
 }
 
 function cellAt(h, px, py) {
@@ -168,7 +173,7 @@ const DEF = {
     },
 
     right(h) {
-        const m = h.model, l = layerOf(h) || m.layers[0];
+        const m = h.model, l = layerOf(h) || (m.layers || [])[0] || {};
         const sz = K.size(l);
         const ids = Array.isArray(m.solid) ? m.solid.join(', ') : (m.solid === true ? 'все' : '');
         let html = '<h4>КИСТЬ</h4>' + fieldRow({ id: 'tm-brush', label: 'Тайл id', value: h.ext.brush, hint: '0 — пусто; id = номер ячейки тайлсета + 1' }) +
@@ -318,7 +323,10 @@ function frame(h) {
 }
 
 function draw(h, g, pal) {
-    const $ = h.$, e = h.ext, l = layerOf(h);
+    const $ = h.$, e = h.ext, l = layerOf(h) || (h.model.layers || [])[0];
+    // Пустой или сломанный файл — не повод падать в $.update: панель покажет
+    // структурную диагностику, а окно просмотра останется пустым.
+    if (!l || !Array.isArray(l.data) || !l.data.length || !Array.isArray(l.data[0])) return;
     const r = h.rect();
     const t = g.tile * g.z;
     // Режим id: цветные клетки (диагностика данных, когда тайлсет не нужен или не загрузился).
@@ -401,8 +409,9 @@ function api(h) {
             return h.ext.zoom;
         },
         fit() {
-            const l = layerOf(h) || h.model.layers[0];
+            const l = layerOf(h) || (h.model.layers || [])[0];
             const r = h.rect();
+            if (!l || !Array.isArray(l.data) || !l.data.length) return h.ext.zoom;
             const availW = r.w - (h.ext.palette ? PAL.w + PAL.pad * 2 : 0) - 40, availH = r.h - 40;
             const wpx = l.data[0].length * h.model.tile, hpx = l.data.length * h.model.tile;
             const z = Math.min(availW / wpx, availH / hpx);

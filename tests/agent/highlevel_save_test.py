@@ -39,7 +39,7 @@ def main():
         a.step(20)
 
         # --- Запись слота и метаданные ---------------------------------------
-        check(a.eval("$.save.version()") == 2, "$.save.version() возвращает 2")
+        check(a.eval("$.save.version()") == 3, "$.save.version() возвращает 3 (§14: разделы)")
         check(probe(a, "saveOk") is True, "save() записал слот 1")
         check(probe(a, "slotExists") is True, "exists(1) видит слот")
         check(probe(a, "slotPath") == "build/test_saves/slot-1.json",
@@ -53,7 +53,7 @@ def main():
         info = a.eval("$.save.info(1)")
         check(isinstance(info, dict) and info.get("slot") == "1", "info(1) отдаёт метаданные слота")
         check(info.get("ok") is True and info.get("legacy") is False, "слот 1 — текущий формат")
-        check(info.get("version") == 2 and info.get("current") == 2, "версия слота и текущая совпадают")
+        check(info.get("version") == 3 and info.get("current") == 3, "версия слота и текущая совпадают")
         check(info.get("size", 0) > 0, "размер слота известен")
         check(info.get("store_keys") == 2, "в слоте два ключа данных $.store")
         check(info.get("world_nodes") == 3, "в слоте три узла: герой, шляпа, пуля")
@@ -64,11 +64,15 @@ def main():
         # --- Файл слота как JSON ----------------------------------------------
         payload = json.loads(a.eval("$.fs.readText('build/test_saves/slot-1.json')"))
         check(payload.get("format") == "r2d.save", "в файле наш формат")
-        check(payload.get("version") == 2, "в файле текущая версия")
-        check(payload.get("store") == {"score": 500, "kills": 2}, "данные $.store в файле")
-        check(len(payload.get("world", [])) == 2, "в мире два корневых узла")
-        check(len(payload.get("speeds", [])) == 3, "скорости — вектор на каждый узел")
-        check(abs(payload["speeds"][2][0] - 120) < 0.01, "скорость пули сохранена в speeds")
+        check(payload.get("version") == 3, "в файле текущая версия")
+        ns = payload.get("namespaces", {})
+        check(ns.get("run", {}).get("data") == {"score": 500, "kills": 2},
+              "данные $.store лежат в разделе run")
+        check(len(ns.get("room", {}).get("world", [])) == 2, "в мире два корневых узла (раздел room)")
+        check(len(ns.get("room", {}).get("speeds", [])) == 3, "скорости — вектор на каждый узел")
+        check(abs(ns["room"]["speeds"][2][0] - 120) < 0.01, "скорость пули сохранена в room.speeds")
+        check(payload.get("store") is None and payload.get("world") is None,
+              "плоских зеркал в файле нет — только разделы")
 
         # --- Восстановление мира из слота -------------------------------------
         check(probe(a, "loadOk") is True, "load(1) вернул true")
@@ -90,7 +94,7 @@ def main():
         # --- Строки: export/import --------------------------------------------
         check(probe(a, "exportIsString") is True, "export() вернул строку")
         check(probe(a, "exportFormat") == "r2d.save", "в строке наш формат")
-        check(probe(a, "exportVersion") == 2, "версия в строке — 2")
+        check(probe(a, "exportVersion") == 3, "версия в строке — 3")
         check(probe(a, "exportRoots") == 2 and probe(a, "exportSpeeds") == 3,
               "в строке есть и мир, и скорости")
         check(probe(a, "importOk") is True, "import() применил строку")
@@ -138,11 +142,49 @@ def main():
         check(probe(a, "autosaveMs") == 100, "период автосейва запомнен")
         check(probe(a, "slotBeforeAutosave") == "1", "перед автосейвом текущий слот — 1")
         check(a.eval("$.save.exists('auto')") is True, "автосейв записал служебный слот")
-        check(a.eval("$.save.slot()") == "1", "автосейв не переключил текущий слот")
+        check(probe(a, "slotAfterAutosave") == "1", "автосейв не переключил текущий слот")
         check("auto" in {s["slot"] for s in a.eval("$.save.list()")},
               "слот автосейва виден в списке")
         a.eval("$.save.stopAutosave()")
         check(a.eval("$.save.stats().autosave_ms") == 0, "stopAutosave() выключил таймер")
+
+        # --- §14: разделы, состояние по nid, транзакция ------------------------
+        # Пробы читаются ДО рантайм-загрузок ниже: load заменяет данные $.store
+        # целиком, вместе с пробами.
+        check(probe(a, "exportHasFlatStore") is False, "в файле нет плоского store — только разделы")
+        check(probe(a, "exportNamespaces") == "presentation,profile,room,run",
+              "разделы слота на месте: " + str(probe(a, "exportNamespaces")))
+        check(probe(a, "slot14Version") == 3, "слот §14 записан текущей версией")
+        check(probe(a, "profileInSlot") == "ru", "профиль (язык) уехал в слот")
+        check(probe(a, "presentationInSlot") is False, "косметика уехала в слот")
+        check(probe(a, "runInSlot") == 3, "прохождение уехало в раздел run")
+        check(probe(a, "rngInSlot") is True, "состояние RNG записано в раздел run")
+        check(probe(a, "slot14HasSpeeds") is True, "скорости остались в room")
+        check(probe(a, "nodeStateHero") is True, "состояние узла записано по nid")
+        check(abs(probe(a, "nodeStateCooldown") - 0.7) < 1e-6, "cooldown в node_state")
+        check(probe(a, "nodeStateHp") == 100, "hp в node_state")
+
+        # Загрузка «во время действия»: фабрика восстановила поведение.
+        check(probe(a, "restore14") is True, "load(§14) применился")
+        check(probe(a, "hpAfterRestore") == 100, "hp восстановлен фабрикой")
+        check(abs(probe(a, "cooldownAfterRestore") - 0.7) < 1e-6, "cooldown восстановлен фабрикой")
+        check(probe(a, "heroNidAfterRestore") == probe(a, "heroNid"), "nid узла не изменился")
+        check(probe(a, "stats14").get("restores", 0) >= 1, "stats() считает восстановления")
+
+        # Ошибка до commit не уничтожает мир.
+        check(probe(a, "restoreFailedStage") == "invariants",
+              "restore с чужим nid остановлен на инвариантах")
+        check(probe(a, "restoreFailedMissing") == "n999999", "отчёт назвал потерянный nid")
+        check(probe(a, "restoreFailedDelta") == 0, "мир не изменился при откате")
+        check(probe(a, "heroAliveAfterFail") == 1, "старый герой жив после отката")
+        check(probe(a, "heroHpAfterFail") == 100, "и его состояние не пострадало")
+        check(probe(a, "lastFailureCode") == "R2D_SAVE_INVARIANTS", "lastFailure() отдаёт код отказа")
+
+        # restartRun: профиль и косметика остаются, прохождение и мир — нет.
+        check(probe(a, "profileAfterRestart") == "ru", "язык не сброшен при restart run")
+        check(probe(a, "presentationAfterRestart") is False, "косметика не сброшена")
+        check(probe(a, "coinsAfterRestart") is None, "прохождение сброшено")
+        check(probe(a, "worldAfterRestart") == 0, "мир сброшен")
 
         # --- Загрузка по частям в рантайме -------------------------------------
         world_now = a.eval("$.world.count()")
@@ -151,7 +193,7 @@ def main():
         check(a.eval("$.world.count()") == world_now, "и не тронул мир (в слоте его нет)")
         a.eval("$.save.load(3)")
         check(a.eval("$.store.get('score')") is None, "слот 3 (store: false) очистил данные")
-        check(a.eval("$.world.count()") == world_now, "зато восстановил мир")
+        check(a.eval("$.world.count()") == 3, "зато восстановил мир (герой, шляпа, пуля)")
         check(a.eval("$('#hero').length") == 1 and a.eval("$('#hat').length") == 1,
               "герой и его ребёнок на месте после загрузки слота 3")
 

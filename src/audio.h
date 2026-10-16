@@ -48,6 +48,11 @@ typedef struct MIX_Group MIX_Group;
 // громкость/mute/solo по-прежнему считает JS, а группа отвечает за DSP.
 #define R2D_AUDIO_MAX_GROUPS 8
 
+// Музыкальные слои (stem'ы): до восьми дорожек одного transport'а. Запуск
+// идёт одной командой под локом микшера, поэтому слои стартуют с одного
+// sample-clock, а seek/pause применяются ко всем сразу (см. §25).
+#define R2D_AUDIO_MAX_STEMS 8
+
 typedef struct R2DAudioGroup {
     MIX_Group *handle;
     char       name[32];
@@ -89,6 +94,9 @@ typedef struct R2DAudio {
 
     R2DAudioGroup groups[R2D_AUDIO_MAX_GROUPS];
     int    group_count;
+    // Свободные слоты групп (после destroy) переиспользуются: индексы шин
+    // стабильны, а лимит из восьми групп не «выгорает» при смене шин.
+    bool   group_used[R2D_AUDIO_MAX_GROUPS];
 
     R2DAudioFx fx[R2D_AUDIO_CHANNELS];
     int    fx_freq;        // частота микшера, нужна для пересчёта мс → кадры
@@ -99,6 +107,15 @@ typedef struct R2DAudio {
     R2DAudioReverb reverb;
     bool  reverb_on;
     float music_pitch;     // скорость воспроизведения музыки
+
+    // --- Музыкальные слои (§25) ------------------------------------------
+    MIX_Track *stems[R2D_AUDIO_MAX_STEMS];
+    int    stem_count;
+    float  stem_gain[R2D_AUDIO_MAX_STEMS];   // личная громкость слоя (crossfade)
+    bool   stems_active;                     // транспорт запущен
+    bool   stems_paused;
+    double stems_loop_start_ms;              // точка зацикливания (0 — начало)
+    double stems_loop_end_ms;                // конец петли (0 — конец файла)
 } R2DAudio;
 
 // Создаёт микшер. base_path не используется напрямую — пути сюда приходят уже
@@ -181,6 +198,36 @@ bool r2d_audio_set_group_effect(R2DAudio *a, int group_id, const char *kind, flo
 bool r2d_audio_set_group_reverb(R2DAudio *a, int group_id, float send, float room,
                                 float damp, float width);
 const char *r2d_audio_group_effect(const R2DAudio *a, int group_id);
+// Освобождает группу: её эффект (вместе с хвостом) снимается, слот остаётся
+// свободным для следующей шины. Звуки, которые ещё в ней, надо перевести
+// заранее (JS делает это в $.audio.remove).
+bool r2d_audio_group_destroy(R2DAudio *a, int group_id);
+
+// --- Музыкальные слои: один transport на все stem'ы -------------------------
+// Набор слоёв задаётся загруженными sound id; каждый получает свою дорожку.
+int  r2d_audio_stems_set(R2DAudio *a, const int *sound_ids, int count);
+int  r2d_audio_stem_count(const R2DAudio *a);
+// Создать/пересоздать слои и запустить их ОДНОЙ командой: общий sample-clock,
+// общая петля, общий fade-in. Возвращает false, если слоёв нет.
+bool r2d_audio_stems_start(R2DAudio *a, bool loop, float fade_ms, double start_ms,
+                           double loop_start_ms, double loop_end_ms);
+bool r2d_audio_stems_seek(R2DAudio *a, double seconds);
+void r2d_audio_stems_pause(R2DAudio *a, bool paused);
+bool r2d_audio_stems_paused(const R2DAudio *a);
+bool r2d_audio_stems_playing(const R2DAudio *a);
+void r2d_audio_stems_stop(R2DAudio *a, float fade_ms);
+// Позиция слоя в секундах (-1, если слоя нет). Это PCM-кадры SDL_mixer,
+// переведённые в секунды, — по ним и сверяется расхождение слоёв.
+double r2d_audio_stem_time(const R2DAudio *a, int index);
+// Позиция слоя в кадрах — целое число, без потери точности перевода.
+long long r2d_audio_stem_frames(const R2DAudio *a, int index);
+void  r2d_audio_stem_gain(R2DAudio *a, int index, float gain);
+float r2d_audio_get_stem_gain(const R2DAudio *a, int index);
+double r2d_audio_stems_loop_start(const R2DAudio *a);
+// Диагностика транспорта: сколько итераций осталось у слоя и сколько кадров
+// до конца файла (-1 — слоя нет).
+int        r2d_audio_stem_loops(const R2DAudio *a, int index);
+long long  r2d_audio_stem_remaining(const R2DAudio *a, int index);
 
 // --- 3D-позиция канала ------------------------------------------------------
 // Координаты — относительно слушателя (SDL_mixer держит его в (0,0,0) и не

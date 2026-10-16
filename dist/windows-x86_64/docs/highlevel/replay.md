@@ -52,18 +52,95 @@ $.replay.play();                   // если apply не передать, во
 | `mode()` / `isRecording()` / `isPlaying()` | режим |
 | `length()` / `position()` / `dropped()` | сколько кадров, где курсор, сколько потеряно |
 | `header()` / `frames()` / `at(i)` | заголовок, кадры, кадр по индексу |
+| `actions(list, mapping?)` | разрешённые действия и версия input mapping |
+| `checkpoints({ every, max?, snapshot? })` | политика проверки state hash |
+| `verifyState(tick)` / `divergence()` | проверка на tick и первое расхождение |
+| `checkpointsList()` / `checkpointAt(tick)` | записанные проверки: хэши / целиком |
+| `stateProvider(fn)` | свой снимок состояния `() => ({ labels, values })` |
+| `identity({ version, build })` | паспорт сборки для заголовка |
+| `unknownActions()` | сколько действий не прошло по списку |
 | `onEnd` | ваш обработчик конца воспроизведения |
 
-Чистые функции: `createReplay(header)`, `compareReplays(a, b)` — вторая
-возвращает `{ same, count, first }`, где `first` — номер первого расхождения
-(на этом стоит регресс-проверка).
+Чистые функции и константы: `createReplay(header, hooks?)`,
+`compareReplays(a, b)` (даёт `{ same, count, first }`), `normalizeReplayHead`,
+`replayHeadProblem`, `gameplaySnapshot`, `hashOfValues`, `REPLAY_SCHEMA`,
+`REPLAY_VERSION`, `MAX_CHECKPOINTS`, `PRESENTATION_STREAMS`.
 
-## 2. Заголовок
+## 2. Заголовок — паспорт прогона (§26)
 
-В заголовке лежит то, без чего воспроизведение не совпадёт: **зерно запуска**
-(`engine.seed`) и **шаг времени** (`engine.fixedDt`), плюс всё, что игра передала
-в `start({ ... })` (уровень, сложность). Сравнивайте заголовки перед
-воспроизведением: другое зерно — другой мир.
+В заголовке лежит всё, без чего воспроизведение не совпадёт или не проверяется:
+
+| Поле | Что это |
+|---|---|
+| `schema`, `version` | `'r2d.replay'` и версия формата (2): чужую схему и «версию из будущего» `load()` отклоняет с причиной |
+| `engine.version`, `engine.build` | ID движка и сборки. Движок отдаёт `engine.version` (версия проекта из CMake); игру можно уточнить через `$.replay.identity({ version, build })` — явное значение важнее. Неизвестное честно помечается `null`, а не «0.0.0» |
+| `content` | content-версии/хэши из `$.save.contents()` на момент записи |
+| `seed`, `streams` | зерно запуска и **полный снимок RNG** (`$.random.state()`): начального зерна для продолжения середины сессии мало |
+| `dt`, `frame` | fixed step и кадр начала записи |
+| `input.mapping`, `input.actions` | версия раскладки ввода и список разрешённых actions |
+| `checkpoints` | `{ every, count, truncated }` — сколько проверок состояния сделано |
+
+Поля игры (`start({ level: 'bunker' })`) сохраняются как есть: заголовок —
+паспорт прогона, и игра вправе положить туда свои метки.
+
+## 2.1. Ввод на уровне actions
+
+```js
+$.replay.actions(['left', 'right', 'jump'], 'actions/v1');   // что разрешено
+$.replay.record(
+    () => {                                  // sampler
+        const out = [];
+        if ($.input.down('left')) out.push('left');
+        if ($.input.down('right')) out.push('right');
+        return out;
+    },
+    (frame) => {                             // apply — ОДНА форма при записи и проигрывании
+        hero.move((frame.actions.includes('right') ? 1 : 0) * 200 * $.time.delta(), 0);
+    },
+);
+```
+
+* Кадр хранится как `{ "a": ["right"] }`; raw-ввод можно положить рядом
+  (`{ actions, raw }`) — он для диагностики и на симуляцию не влияет.
+* Действие не из списка отсекается и считается в `unknownActions()`: одна
+  новая кнопка не ломает запись.
+* `apply` получает **одну и ту же форму** при записи и при проигрывании:
+  `{ actions, raw }` в режиме actions, иначе — исходное значение
+  (`forApply(value)` доступно и напрямую). Без `actions()` API прежнее: кадр
+  как есть.
+
+## 2.2. State hashes и divergence report (§26)
+
+```js
+$.replay.checkpoints({ every: 60 });      // проверка каждые 60 simulation ticks
+$.replay.record(sampler, apply);
+// ... запись ...
+$.replay.load(text);
+$.replay.play();
+// ... проигрывание ...
+const div = $.replay.divergence();
+// { ok: false, tick: 120, expected: 'ce8f...', actual: '1a2b...',
+//   fields: [{ field: 'n12.x', expected: 29333, actual: 69333 }],
+//   ids: ['n12'],
+//   versions: { schema, replay, engine, rng }, content }
+```
+
+* Проверки идут на **определённых simulation ticks** (от начала прогона, а не
+  от абсолютного `engine.frame`): запись и проигрывание нумеруют их от своего
+  старта, поэтому в новом процессе номера совпадают.
+* Отчёт называет **первый** расходящийся tick, поля (`nid.поле`), ID узлов и
+  версии: schema записи, версия replay, ID движка/сборки и вид RNG.
+* `checkpointAt(tick)` отдаёт записанный checkpoint с метками и значениями —
+  для отладки и тестов; `checkpointsList()` — только `{ tick, hash }`.
+* `$.replay.stateProvider(fn)` заменяет снимок состояния на свой:
+  `() => ({ labels, values })`. По умолчанию — `gameplaySnapshot()`.
+
+**Что входит в hash.** `gameplaySnapshot()` берёт состояние RNG (все потоки,
+кроме `presentation`) и узлы по `nid`: позиция, угол, скорость, наличие тела.
+**Не входят**: настенные часы и абсолютное игровое время, GPU-ресурсы,
+alpha/color/visible/blend, id спрайтов — всё presentation-only. Потребление
+`presentation`-потока на расхождение не влияет: косметика не меняет
+gameplay-сравнение.
 
 ## 3. Что записывать
 
@@ -92,7 +169,14 @@ $.replay.play();                   // если apply не передать, во
 * **состояние мира не пишется**: реплей — это ввод, а не снимок мира. Для
   снимка используйте `$.prefab`/`$.save`;
 * **нет сжатия**: текст — это JSON; для долгих записей сохраняйте реже или
-  округляйте значения.
+  округляйте значения;
+* **checkpoints ограничены** (`MAX_CHECKPOINTS = 1024`): дальше поле
+  `checkpoints.truncated` становится `true`, а первое расхождение всё равно
+  ловится, если оно в сохранённом окне;
+* **ID движка не берётся из ядра**: JS-биндинга версии сборки нет, поэтому
+  `engine.version` в заголовке берётся из биндинга версии (CMake-версия
+  проекта); игра может уточнить его через `$.replay.identity()`. Если ни того,
+  ни другого нет — честный `null`, а не «версия 0».
 
 ## 5. Проверка
 
@@ -101,4 +185,6 @@ $.replay.play();                   // если apply не передать, во
 build/_deps/quickjs-build/qjs tests/js/replay_test.mjs
 # в движке: номер кадра, зерно запуска, шаг времени, текст записи
 python3 tests/agent/highlevel_replay_test.py
+# приёмка §26: заголовок, actions, checkpoints, divergence и restore вместе
+python3 tests/agent/save_restore_test.py
 ```

@@ -1,0 +1,14 @@
+body { width: 100%; height: 100%; font-family: Noto Sans; font-size: 16px; color: #eaf1ff; }
+#hud-panel {
+    position: absolute; top: 24px; left: 24px; padding: 14px 18px;
+    background-color: #0c1424e6; border-left: 4px #6ac7ff;
+}
+#hud-title { font-size: 18px; font-weight: 700; color: #9fd8ff; letter-spacing: 1px; }
+#hud-score { margin-top: 8px; font-size: 26px; font-weight: 700; color: #ffe08a; }
+#hud-room { margin-top: 4px; }
+#hud-lang { margin-top: 4px; color: #b8c6dd; }
+#hud-music { margin-top: 4px; color: #9fe6c0; }
+#hud-hint {
+    position: absolute; bottom: 18px; left: 24px; font-size: 13px; color: #8fa2bd;
+}
+#hud-title, #hud-score, #hud-room, #hud-lang, #hud-music { display: block; }

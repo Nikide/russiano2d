@@ -32,6 +32,9 @@ const state = {
     // WeakSet, а не Set: обычный набор держал бы уничтоженные узлы вечно —
     // чистился он только при смене языка, поэтому утечка была бесконечной.
     nodes: new WeakSet(),  // узлы с attrs.tr, которым текст уже подставлен
+    missing: new Map(),    // ключ → { key, lang, count } — что не перевелось (§16)
+    mark: false,           // явный маркер fallback: «⟨key⟩» вместо голого ключа
+    listeners: new Set(),  // подписчики смены языка/словаря (RmlUi, диалог)
 };
 
 // ---------------------------------------------------------------------------
@@ -98,6 +101,38 @@ export function clipIndex(selector, count) {
     return h % n;
 }
 
+/**
+ * Группировка разрядов и десятичный разделитель для языка. Intl в QuickJS
+ * нет, поэтому правила держим сами: 'ru' — пробел и запятая, 'en' — запятая
+ * и точка. Числа в тексте и в интерфейсе тогда выглядят одинаково.
+ */
+export function numberSeparators(lang) {
+    const code = String(lang || '').toLowerCase().split(/[-_]/)[0];
+    if (code === 'en') return { group: ',', decimal: '.' };
+    return { group: '\u00a0', decimal: ',' };
+}
+
+/** Число в локали: 1234567.5, 'ru' → «1 234 567,5». */
+export function formatNumber(value, lang, opts) {
+    const o = opts || {};
+    const n = Number(value);
+    if (!Number.isFinite(n)) return String(value === undefined ? '' : value);
+    const decimals = o.decimals === undefined ? null : Math.max(0, Math.min(6, Math.trunc(o.decimals)));
+    const sign = n < 0 ? '-' : '';
+    const abs = Math.abs(n);
+    const fixed = decimals === null ? String(abs) : abs.toFixed(decimals);
+    const dot = fixed.indexOf('.');
+    const whole = dot < 0 ? fixed : fixed.slice(0, dot);
+    const frac = dot < 0 ? '' : fixed.slice(dot + 1);
+    const sep = numberSeparators(lang);
+    let out = '';
+    for (let i = 0; i < whole.length; i++) {
+        if (i > 0 && (whole.length - i) % 3 === 0) out += sep.group;
+        out += whole[i];
+    }
+    return sign + out + (frac ? sep.decimal + frac : '');
+}
+
 /** Список клипов из значения словаря (или null, если это не клипы). */
 export function clipsOf(value) {
     if (value === undefined || value === null) return null;
@@ -140,6 +175,33 @@ function guessLang(path) {
 /** Пометить словари изменёнными: tickI18n переприменит перевод к узлам. */
 function bump() {
     state.version++;
+    // §16: смена языка НА ХОДУ должна дойти до открытых документов RmlUi и
+    // активного диалога. Подписчики — единственная точка, где это делается:
+    // каждый модуль сам решает, что перерисовать (см. $.i18n.onChange).
+    if (state.listeners.size) {
+        const info = { lang: state.lang, fallback: state.fallback, version: state.version };
+        for (const fn of Array.from(state.listeners)) {
+            try { fn(info); }
+            catch (e) { ctx.log(`$.i18n.onChange: ошибка подписчика: ${e}`); }
+        }
+    }
+}
+
+/** Пометить ключ как непереведённый: список виден игре (§16, не только лог). */
+function noteMissing(key) {
+    const name = String(key);
+    const seen = state.missing.get(name);
+    if (seen) { seen.count++; return seen; }
+    const rec = { key: name, lang: state.lang, count: 1 };
+    state.missing.set(name, rec);
+    return rec;
+}
+
+/** Текст для отсутствующего ключа: либо сам ключ, либо явный маркер «⟨key⟩». */
+function fallbackText(key) {
+    const name = String(key);
+    if (state.mark) return `⟨${name}⟩`;
+    return name;
 }
 
 /**
@@ -178,7 +240,8 @@ function translate(key, params, fallback) {
     const value = resolve(key);
     if (value === undefined) {
         warnMissing(key);
-        return fallback === undefined ? key : fallback;
+        noteMissing(key);
+        return fallback === undefined ? fallbackText(key) : fallback;
     }
     // У плюрального ключа без числа осмысленнее всего первая форма.
     return Array.isArray(value) ? format(value[0], params) : format(value, params);
@@ -192,7 +255,8 @@ function translateClip(key, params, selector) {
     const value = resolve(key);
     if (value === undefined) {
         warnMissing(key);
-        return { text: key, index: -1, total: 0 };
+        noteMissing(key);
+        return { text: fallbackText(key), fallback: true, index: -1, total: 0 };
     }
     const list = clipsOf(value);
     if (!list) {
@@ -215,7 +279,8 @@ function translatePlural(key, count, params) {
     const value = resolve(key);
     if (value === undefined) {
         warnMissing(key);
-        return key;
+        noteMissing(key);
+        return fallbackText(key);
     }
     const merged = Object.assign({ n: count }, params || {});
     // Формы могут лежать отдельно от клипов: `{ plural: [...], clip: [...] }`.
@@ -374,6 +439,48 @@ const i18n = {
     /** Перевод ключа с подстановкой параметров. */
     tr(key, params, fallback) { return translate(key, params, fallback); },
 
+    /**
+     * §16: подписка на смену языка/словаря. Возвращает функцию отписки.
+     * Нужна тем, кто рисует текст сам: документы RmlUi, активный диалог,
+     * экраны с уже собранными подписями.
+     *
+     *   const off = $.i18n.onChange(() => hud.retranslate());
+     */
+    onChange(fn) {
+        if (typeof fn !== 'function') return () => {};
+        state.listeners.add(fn);
+        return () => state.listeners.delete(fn);
+    },
+
+    /** Сколько живых подписчиков (для проверок «не растут»). */
+    listenerCount() { return state.listeners.size; },
+
+    /**
+     * §16: какие ключи не нашлись — структурой, а не только строкой лога.
+     * [{ key, lang, count }]. `$.i18n.clearMissing()` обнуляет список.
+     */
+    missing() { return [...state.missing.values()].map((r) => Object.assign({}, r)); },
+    missingKeys() { return [...state.missing.keys()]; },
+    clearMissing() { state.missing.clear(); return i18n; },
+
+    /**
+     * Явный маркер fallback: `$.i18n.mark(true)` → отсутствующий ключ
+     * возвращается как «⟨key⟩». По умолчанию возвращается сам ключ — это тоже
+     * признак (пустой строки не бывает), но маркер видно в интерфейсе сразу.
+     */
+    mark(flag) {
+        if (flag === undefined) return state.mark;
+        state.mark = flag !== false;
+        bump();
+        return i18n;
+    },
+
+    /** §16: число в локали — разделители те же, что в текстах. */
+    number(value, opts) { return formatNumber(value, state.lang, opts); },
+
+    /** Разделители текущего языка (для проверок и своих форматтеров). */
+    separators() { return numberSeparators(state.lang); },
+
     /** Плюральная форма по числу: ['нет', 'один', '{n} штуки']. */
     plural(key, count, params) { return translatePlural(key, count, params); },
 };
@@ -398,6 +505,9 @@ export function installI18n($) {
         // текстом, игре нужно знать, какой файл проигрывать.
         $.tr.clip = (key, selector, params) => translateClip(key, selector, params).text;
         $.tr.clipInfo = (key, selector, params) => translateClip(key, selector, params);
+        // §16: число и пропавшие ключи доступны и как $.tr-хелперы.
+        $.tr.number = (value, opts) => formatNumber(value, state.lang, opts);
+        $.tr.missing = () => [...state.missing.keys()];
     }
     return i18n;
 }

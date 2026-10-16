@@ -72,8 +72,11 @@ $.ready(() => {
     probe.exportIsString = typeof text === 'string';
     probe.exportFormat = head.format;
     probe.exportVersion = head.version;
-    probe.exportRoots = head.world.length;
-    probe.exportSpeeds = head.speeds.length;
+    // §14: данные лежат в разделах; плоских зеркал в файле нет.
+    probe.exportRoots = head.namespaces.room.world.length;
+    probe.exportSpeeds = head.namespaces.room.speeds.length;
+    probe.exportHasFlatStore = head.store !== undefined;
+    probe.exportNamespaces = Object.keys(head.namespaces).sort().join(',');
     $('#hero').at(1, 1);
     $.store.set('score', -1);
     probe.importOk = $.save.import(text);
@@ -125,6 +128,64 @@ $.ready(() => {
     probe.autosaveId = $.save.autosave(100, 'auto');
     probe.autosaveMs = $.save.stats().autosave_ms;
     probe.slotBeforeAutosave = $.save.slot();
+    probe.slotAfterAutosave = $.save.slot();
+    probe.autosaveSlotExists = $.save.exists('auto');
+
+    // --- §14: разделы, состояние по nid, транзакционный restore -------------
+    // Профиль (input/audio/язык) не сбрасывается при перезапуске прохождения.
+    $.save.profile().set('lang', 'ru').set('volume', 0.4);
+    $.save.presentation().set('overlay', false);
+    $.save.ns('run').set('coins', 3);
+
+    // Фабрика поведения: логика в коде, в слот уходят только данные.
+    // Внутри фабрик узел — сырой Node (не обёртка), поэтому поля читаются как есть.
+    $.save.behavior('.hero', {
+        save(node) { return { hp: node.cur_hp, cooldown: node.attrs.cooldown || 0 }; },
+        load(node, data) { node.cur_hp = data.hp; node.attrs.cooldown = data.cooldown; },
+    });
+    $('#hero').attr('cooldown', 0.7);           // hp уже 100 у героя
+    probe.save14 = $.save.slot('s14').save();
+    const s14 = $.save.slot('s14').read();
+    const heroNid = $('#hero').nid();
+    probe.heroNid = heroNid;
+    probe.nodeStateHero = !!(s14.namespaces.room.nodes[heroNid]
+        && s14.namespaces.room.nodes[heroNid].p
+        && s14.namespaces.room.nodes[heroNid].p['.hero']);
+    probe.nodeStateCooldown = s14.namespaces.room.nodes[heroNid].p['.hero'].cooldown;
+    probe.nodeStateHp = s14.namespaces.room.nodes[heroNid].p['.hero'].hp;
+    probe.slot14Version = s14.version;
+    probe.profileInSlot = s14.namespaces.profile.data.lang;
+    probe.presentationInSlot = s14.namespaces.presentation.data.overlay;
+    probe.runInSlot = s14.namespaces.run.data.coins;
+    probe.rngInSlot = !!s14.namespaces.run.rng;
+    probe.slot14HasSpeeds = Array.isArray(s14.namespaces.room.speeds);
+
+    // «Загрузка во время действия»: hp и cooldown сбиты — restore возвращает.
+    $('#hero').hp(5).attr('cooldown', 0);
+    probe.restore14 = $.save.load('s14');
+    probe.hpAfterRestore = $('#hero').hp();
+    probe.cooldownAfterRestore = $('#hero').attr('cooldown');
+    probe.heroNidAfterRestore = $('#hero').nid();
+    probe.stats14 = $.save.stats();
+
+    // Ошибка до commit не уничтожает рабочее состояние.
+    const broken = $.save.slot('s14').read();
+    broken.namespaces.room.nodes = { n999999: { v: [0, 0] } };
+    const beforeNodes = $.world.count();
+    const failed = $.save.restore(broken);
+    probe.restoreFailedStage = failed.stage;
+    probe.restoreFailedMissing = failed.missing.join(',');
+    probe.restoreFailedDelta = $.world.count() - beforeNodes;
+    probe.heroAliveAfterFail = $('#hero').length;
+    probe.heroHpAfterFail = $('#hero').hp();
+    probe.lastFailureCode = $.save.lastFailure().code;
+
+    // Профиль переживает restartRun, run/room — сбрасываются.
+    $.save.restartRun();
+    probe.profileAfterRestart = $.save.profile().get('lang');
+    probe.presentationAfterRestart = $.save.presentation().get('overlay');
+    probe.coinsAfterRestart = $.save.ns('run').get('coins');
+    probe.worldAfterRestart = $.world.count();
 
     // Пробы уходят в $.store последними: load/import выше заменяли его целиком.
     $.store.setAll(probe);

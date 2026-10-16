@@ -28,7 +28,7 @@
 // ===========================================================================
 
 import { engine } from './native.js';
-import { ctx, query, def, packColor } from './core.js';
+import { ctx, query, def, packColor, liveNodes } from './core.js';
 import { flashNode } from './tween.js';
 
 // ---------------------------------------------------------------------------
@@ -147,8 +147,31 @@ export function unwrapNode(value) {
 }
 
 /**
- * Точка контакта из того, что дали: событие, узел, обёртка, селектор или
- * функция. `null` — точку взять неоткуда.
+ * §9-ответ damage request, а не узел: у него есть `accepted`/`applied` и
+ * устойчивый `target_id`. Нужен, чтобы `$.hits.play(response)` работал прямо по
+ * ответу — собирать `{ x, y, self }` руками игра не обязана.
+ */
+export function isDamageResponse(what) {
+    return !!(what && typeof what === 'object'
+              && what.accepted !== undefined && what.applied !== undefined
+              && what.target_id !== undefined && what.nodes === undefined
+              && what.body === undefined);
+}
+
+/** Узел по устойчивому логическому id (`nid`) — презентации хватает перебора. */
+export function nodeByNid(nid) {
+    if (nid === undefined || nid === null) return null;
+    const key = String(nid);
+    const nodes = liveNodes();
+    for (let i = 0; i < nodes.length; i++) {
+        if (nodes[i].nid === key) return nodes[i];
+    }
+    return null;
+}
+
+/**
+ * Точка контакта из того, что дали: событие, узел, обёртка, селектор, §9-ответ
+ * или функция. `null` — точку взять неоткуда.
  */
 export function resolvePoint(what) {
     if (!what) return null;
@@ -168,11 +191,17 @@ export function resolvePoint(what) {
 /**
  * Узел, которому достаётся фидбек. `pick`: `'self'` — узел, на котором
  * сработал обработчик (по умолчанию), `'other'` — второй участник контакта.
+ *
+ * §9-ответ адресует цель устойчивым `nid`, а не ссылкой на узел: ответ уходит в
+ * JSON, и держать в нём узел нельзя.
  */
 export function resolveNode(what, pick) {
     if (!what) return null;
     if (typeof what === 'string') return query(what)[0] || null;
     const p = payloadOf(what);
+    if (isDamageResponse(p)) {
+        return nodeByNid(p.targetNodeId !== undefined ? p.targetNodeId : p.target_id);
+    }
     const is_event = p !== what;
     const emitting = unwrapNode(is_event ? what.self : (p && p.self));
     const other = unwrapNode(p && p.other);
@@ -234,6 +263,12 @@ const state = {
     emitters: [],
     next_emitter: 0,
     plays: 0,
+    // §21: настройки «меньше вспышек и тряски». Это НЕ выключатель боя: урон,
+    // события и счётчики остаются теми же, меняется только presentation.
+    // Храним здесь, а не в $.store, чтобы модуль работал и без хранилища; игра
+    // может переопределить через $.hits.reduced({...}) или положить значения в
+    // $.store('hits.reduced') один раз при старте.
+    reduced: { flash: false, shake: false, particles: false, factor: 0.25 },
 };
 
 // `$` нужен частицам и $.world. Ставится в installHits: модуль обязан
@@ -256,6 +291,47 @@ export function installHits($) {
         /** Имена пресетов. */
         presets() { return Object.keys(state.presets); },
 
+        /**
+         * Уменьшить вспышки/тряску/частицы, сохранив игровые события (§21).
+         *
+         * ```js
+         * $.hits.reduced({ flash: true, shake: true });   // включить
+         * $.hits.reduced({ factor: 0.1 });                // ещё мягче
+         * $.hits.reduced();                               // прочитать настройки
+         * ```
+         *
+         * Это presentation-only: урон, событие `damage`, счётчики и knockback
+         * остаются прежними — иначе «меньше вспышек» меняло бы исход боя.
+         */
+        reduced(opts) {
+            if (opts === undefined) return Object.assign({}, state.reduced);
+            if (opts === false) { state.reduced = { flash: false, shake: false, particles: false, factor: 0.25 }; return hits; }
+            if (opts === true) { state.reduced = { flash: true, shake: true, particles: true, factor: 0.25 }; return hits; }
+            if (typeof opts === 'object') {
+                if (opts.flash !== undefined) state.reduced.flash = !!opts.flash;
+                if (opts.shake !== undefined) state.reduced.shake = !!opts.shake;
+                if (opts.particles !== undefined) state.reduced.particles = !!opts.particles;
+                if (opts.factor !== undefined) {
+                    const k = Number(opts.factor);
+                    if (Number.isFinite(k) && k > 0) state.reduced.factor = Math.min(1, k);
+                }
+                // Ещё один способ задать настройки — через хранилище игры:
+                // так они переживут перезапуск сцены и попадут в меню настроек.
+                if (opts.persist && ctx.store && typeof ctx.store.set === 'function') {
+                    ctx.store.set('hits.reduced', Object.assign({}, state.reduced));
+                }
+            }
+            return hits;
+        },
+
+        /** Прочитать настройки из $.store (если игра их туда положила). */
+        reducedFromStore() {
+            const stored = ctx.store && typeof ctx.store.get === 'function'
+                ? ctx.store.get('hits.reduced', null) : null;
+            if (stored && typeof stored === 'object') hits.reduced(stored);
+            return Object.assign({}, state.reduced);
+        },
+
         /** Текст пресета после слияния с умолчаниями — для отладки и тестов. */
         spec(name, opts) { return mergeSpec(state.presets, name, opts); },
 
@@ -276,7 +352,7 @@ export function installHits($) {
          */
         play(what, opts) {
             const o = typeof opts === 'string' ? { preset: opts } : opts;
-            const spec = mergeSpec(state.presets, o && o.preset, o);
+            let spec = mergeSpec(state.presets, o && o.preset, o);
             const point = resolvePoint(what) || (o && o.at) || null;
             // Кому достаётся фидбек. `'self'`/`'other'` — роли в событии;
             // узел или селектор — явный адрес (так делает `$.hits.on`).
@@ -293,6 +369,30 @@ export function installHits($) {
             // объекта падал бы на циклической ссылке.
             spec.target = (typeof wanted === 'string') ? wanted
                 : (wanted && wanted.nodes ? 'wrapper' : (wanted ? 'node' : 'self'));
+            // §21: reduced flash/shake масштабирует ТОЛЬКО presentation.
+            // Спека копируется, поэтому один и тот же объект можно играть
+            // многократно и с разными настройками, не задевая пресет.
+            const red = state.reduced;
+            if (red && (red.flash || red.shake || red.particles)) {
+                const k = Number(red.factor) > 0 ? Math.min(1, Number(red.factor)) : 0.25;
+                const scaled = Object.assign({}, spec);
+                if (red.flash) {
+                    scaled.flash = spec.flash ? Object.assign({}, spec.flash, {
+                        ms: Math.round((Number(spec.flash.ms) || 90) * k),
+                    }) : null;
+                    scaled.screen = spec.screen ? Object.assign({}, spec.screen, {
+                        ms: Math.round((Number(spec.screen.ms) || 200) * k),
+                    }) : null;
+                    scaled.squash = (spec.squash || 0) * k;
+                }
+                if (red.shake) scaled.shake = (Number(spec.shake) || 0) * k;
+                if (red.particles) {
+                    scaled.particles = spec.particles ? Object.assign({}, spec.particles, {
+                        amount: Math.max(1, Math.round((Number(spec.particles.amount) || 1) * k)),
+                    }) : null;
+                }
+                spec = scaled;
+            }
             const now = typeof engine.time === 'number' ? engine.time : 0;
             if (spec.cooldown > 0 && target) {
                 const last = target._hitfx_at;

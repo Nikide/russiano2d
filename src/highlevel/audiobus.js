@@ -28,6 +28,9 @@
 
 import { engine } from './native.js';
 import { ctx, query } from './core.js';
+// Огибающие громкости музыкальных слоёв (§25) считаются по кадрам здесь же:
+// кадровый тик аудио-подсистемы уже есть, второй не нужен.
+import { tickStems, refreshStemGains } from './sound.js';
 import { tweenProps } from './tween.js';
 
 // ---------------------------------------------------------------------------
@@ -302,7 +305,7 @@ function wouldCycle(bus, parent) {
 }
 
 function applyBusOpts(bus, opts) {
-    if (opts.volume !== undefined) bus.volume = clamp01(opts.volume);
+    if (opts.volume !== undefined) bus.volume = volumeValue(opts.volume) ?? bus.volume;
     if (opts.muted !== undefined) bus.muted = !!opts.muted;
     if (opts.solo !== undefined) bus.solo = !!opts.solo;
     if (opts.parent !== undefined) {
@@ -331,6 +334,39 @@ function resolveBus(name) {
 // Применение состояния шин к каналам
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Громкость: линейно или в dB — явно
+// ---------------------------------------------------------------------------
+//
+// Движок хранит линейный gain 0..1, а микшеры и художники меряют в dB.
+// Чтобы «-6 dB» не превращалось молча в 0.06, значение можно передать
+// объектом: `{ db: -6 }`. Здесь — единственный перевод.
+
+/** Линейный gain → dB (0 → -Infinity, 1 → 0). */
+export function linearToDb(value) {
+    const v = Number(value);
+    if (!(v > 0)) return -Infinity;
+    return 20 * Math.log10(v);
+}
+
+/** dB → линейный gain 0..1 (значения выше 0 dB обрезаются единицей). */
+export function dbToLinear(db) {
+    const d = Number(db);
+    if (!Number.isFinite(d)) return d > 0 ? 1 : 0;
+    return Math.max(0, Math.min(1, Math.pow(10, d / 20)));
+}
+
+/** Значение громкости из числа (линейно) или `{ db }`. */
+export function volumeValue(value) {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value === 'object') {
+        if (value.db !== undefined) return dbToLinear(value.db);
+        if (value.linear !== undefined) return clamp01(value.linear);
+        return undefined;
+    }
+    return clamp01(value);
+}
+
 /** Громкость канала = личная громкость handle × эффективная громкость шины. */
 function applyChannel(handle) {
     const a = audio();
@@ -343,6 +379,9 @@ function applyChannel(handle) {
 /** Пересчитать все живые звуки — после смены громкости/mute/solo любой шины. */
 function reapplyAll() {
     for (const handle of handles) applyChannel(handle);
+    // Музыкальные слои живут на отдельных дорожках (§25): их громкость тоже
+    // зависит от шины, поэтому пересчитываем и её.
+    refreshStemGains();
 }
 
 /** Эффект шины. Если движок умеет группы — вешаем его на пост-микс группы. */
@@ -425,7 +464,7 @@ function makeHandle(what, busName, channel, baseVolume, pan) {
 
         volume(value) {
             if (value === undefined) return handle.baseVolume;
-            handle.baseVolume = clamp01(value);
+            handle.baseVolume = volumeValue(value) ?? handle.baseVolume;
             applyChannel(handle);
             return handle;
         },
@@ -439,6 +478,39 @@ function makeHandle(what, busName, channel, baseVolume, pan) {
             }
             return handle;
         },
+
+        /**
+         * Переключить звук на другую шину НА ХОДУ: `handle.toBus('music')`.
+         *
+         * Имя `toBus`, а не `bus`: `handle.bus` — строка с текущей шиной
+         * (её читают игры и отчёты), и метод с тем же именем перекрыл бы её.
+         *
+         * Меняется только маршрут: личная громкость и панорама handle не
+         * трогаются, а хвост прежнего маршрута не тянется за звуком —
+         * состояние канального эффекта сбрасывается (эхо/реверб), затем
+         * применяется эффект новой шины.
+         */
+        toBus(name) {
+            if (name === undefined) return handle.bus;
+            const target = resolveBus(name);
+            if (target.name === handle.bus) return handle;
+            const a = audio();
+            // Сброс состояния канального эффекта: хвост прежней шины/канала
+            // не должен звучать уже в новой маршрутизации.
+            if (handle.channel >= 0 && a && typeof a.setChannelEffect === 'function') {
+                try { a.setChannelEffect(handle.channel, 'none', 0, 0); } catch (e) { /* канал свободен */ }
+            }
+            handle.bus = target.name;
+            if (handle.channel >= 0) {
+                assignGroup(handle.channel, target);
+                applyChannel(handle);
+                applyEffectToHandle(handle);
+            }
+            return handle;
+        },
+
+        /** Шина, в которую звук маршрутизирован сейчас (синоним `handle.bus`). */
+        busName() { return handle.bus; },
 
         effect(kind, params) {
             if (kind === undefined) {
@@ -591,7 +663,8 @@ export function installAudiobus($) {
     function masterVolume(value) {
         if (!api_$.sound || typeof api_$.sound.volume !== 'function') return value === undefined ? 1 : audioNs;
         if (value === undefined) return api_$.sound.volume();
-        api_$.sound.volume(clamp01(value));
+        const v = volumeValue(value);
+        if (v !== undefined) api_$.sound.volume(v);
         return audioNs;
     }
 
@@ -648,15 +721,90 @@ export function installAudiobus($) {
             return out;
         },
 
-        /** Удалить шину; её дети переподчиняются родителю удалённой. */
+        /**
+         * Удалить шину. Дети и ЖИВЫЕ ЗВУКИ шины переподчиняются её родителю
+         * (иначе звук остался бы в освобождённой группе, а громкость считалась
+         * бы от несуществующей шины). Группа движка освобождается вместе с её
+         * эффектом и хвостом — чужие шины это не задевает.
+         */
         remove(name) {
             const n = String(name);
             const bus = buses.get(n);
             if (!bus) return audioNs;
-            buses.forEach((child) => { if (child.parent === n) child.parent = bus.parent || 'master'; });
+            const parent = bus.parent && bus.parent !== n ? bus.parent : 'master';
+            buses.forEach((child) => { if (child.parent === n) child.parent = parent; });
+            // Звуки: маршрут в родителя + перепривязка группы/эффекта.
+            // 'master' — корень дерева, а не шина: у него нет группы, поэтому
+            // канал просто отвязывается от группы удалённой шины.
+            for (const handle of handles) {
+                if (handle.bus !== n) continue;
+                handle.bus = parent;
+            }
             buses.delete(n);
+            const a = audio();
+            for (const handle of handles) {
+                if (handle.channel < 0) continue;
+                if (handle.bus === 'master' || !buses.has(handle.bus)) {
+                    if (a && typeof a.setChannelGroup === 'function') {
+                        try { a.setChannelGroup(handle.channel, -1); } catch (e) { /* канал свободен */ }
+                    }
+                } else {
+                    assignGroup(handle.channel, buses.get(handle.bus));
+                }
+                applyChannel(handle);
+                applyEffectToHandle(handle);
+            }
+            // Группу освобождаем последней: сначала из неё ушли все звуки.
+            if (bus.group >= 0 && a && typeof a.destroyGroup === 'function') {
+                try { a.destroyGroup(bus.group); } catch (e) { /* группа уже освобождена */ }
+            }
             reapplyAll();
             return audioNs;
+        },
+
+        /**
+         * Карта маршрутизации — для отладки, инструментов и тестов:
+         * какая шина в какую группу идёт, какой у неё эффект и громкость.
+         *
+         * `globalRoom` — общий реверб микса (`$.audio.room`, акустика): он
+         * действует на ВСЁ, включая сухие шины, поэтому `colored` у шины
+         * показывает, окрасит ли её текущая маршрутизация. Для изоляции
+         * держите комнату выключенной и включайте реверб на конкретной шине
+         * (`effect('ambience', 'reverb', { send })`).
+         */
+        routes() {
+            let room = null;
+            const a = audio();
+            if (a && typeof a.getRoom === 'function') {
+                try { room = a.getRoom(); } catch (e) { room = null; }
+            }
+            const global_wet = !!(room && Number(room.wet) > 0);
+            const out = [];
+            buses.forEach((b) => {
+                out.push({
+                    name: b.name,
+                    parent: b.parent,
+                    group: b.group,
+                    effect: b.effect,
+                    effectParams: Object.assign({}, b.effectParams),
+                    gain: effectiveGain(buses, b.name),
+                    muted: !!b.muted,
+                    solo: !!b.solo,
+                    // Сухая шина под общей комнатой всё равно мокнет: это честно.
+                    dry: b.effect === 'none',
+                    colored: b.effect !== 'none' || global_wet,
+                });
+            });
+            // Факт, а не догадка: общая комната микса действует на ВСЕ шины,
+            // поэтому сухая шина под ней всё равно мокнет. Для изоляции
+            // выключайте комнату и включайте реверб на конкретной шине.
+            const warnings = [];
+            if (global_wet) {
+                for (const b of out) {
+                    if (b.dry) warnings.push({ kind: 'dry-bus-under-global-room', bus: b.name });
+                }
+            }
+            return { buses: out, globalRoom: room, globalRoomWet: global_wet, warnings };
         },
 
         /** Снять все шины, остановить их звуки, вернуть слушателя камере. */
@@ -687,7 +835,7 @@ export function installAudiobus($) {
                 bus = createBus(n, {});
             }
             if (value === undefined) return bus.volume;
-            bus.volume = clamp01(value);
+            bus.volume = volumeValue(value) ?? bus.volume;
             reapplyAll();
             return audioNs;
         },
@@ -741,6 +889,18 @@ export function installAudiobus($) {
 
         /** Эффективная громкость шины (с родителями, mute и solo) — для отладки. */
         gain(name) { return effectiveGain(buses, String(name)); },
+
+        /**
+         * Явный перевод громкости: `$.audio.dbToLinear(-6)` → 0.501,
+         * `$.audio.linearToDb(0.5)` → -6.02. Все громкости в `$` — линейные;
+         * сеттеры принимают и `{ db: -6 }`.
+         */
+        dbToLinear(db) { return dbToLinear(db); },
+        linearToDb(value) { return linearToDb(value); },
+        volumeOf(value) {
+            const v = volumeValue(value);
+            return v === undefined ? 1 : v;
+        },
 
         // --- Запуск звука ---------------------------------------------------
 
@@ -845,14 +1005,14 @@ export function installAudiobus($) {
 
         sfxVolume(value) {
             if (value === undefined) return sfx_level;
-            sfx_level = clamp01(value);
+            sfx_level = volumeValue(value) ?? sfx_level;
             if (api_$.sound && typeof api_$.sound.sfxVolume === 'function') api_$.sound.sfxVolume(sfx_level);
             return audioNs;
         },
 
         musicVolume(value) {
             if (value === undefined) return music_level;
-            music_level = clamp01(value);
+            music_level = volumeValue(value) ?? music_level;
             if (api_$.sound && typeof api_$.sound.musicVolume === 'function') api_$.sound.musicVolume(music_level);
             return audioNs;
         },
@@ -895,4 +1055,5 @@ export function tickAudiobus(dt) {
         rec.apply(rec.holder.attrs.level);
     }
     pruneHandles();
+    tickStems(ms);
 }

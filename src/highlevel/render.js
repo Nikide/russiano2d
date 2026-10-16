@@ -14,7 +14,7 @@
 
 import { engine } from './native.js';
 import { ctx, wrap, def, TAGS, packColor, withAlpha, fxRandom,
-         facetCount, nodesWithFacet, registryVersion, spriteSize,
+         facetCount, nodesWithFacet, registryVersion, touchRegistry, spriteSize,
          regionSprite, nativeNodes } from './core.js';
 import { cameraTransform } from './camera.js';
 import { viewCams } from './viewports.js';
@@ -49,12 +49,43 @@ function blendId(name) {
 // Режим по умолчанию для всех спрайтов кадра: его задаёт $.blend(...)
 // (модуль viewport.js). Узел может переопределить его через .blend().
 let default_blend = 'alpha';
+// Презентационная целочисленная шкала: зум МИРА квантуется к целому, чтобы
+// пиксель-арт не «мылился» на дробном масштабе. Логика/физика/пикинг видят
+// настоящий зум камеры — квантуется только кадр (см. docs/highlevel/render.md).
+let integer_scale_on = false;
+// Эффективный зум последнего кадра мира (null — кадр ещё не рисовался).
+let last_world_zoom = null;
+
+/** Единая точка правды: во что превращается зум камеры в кадре мира. */
+export function presentationZoom(zoom) {
+    const z = zoom > 0 ? zoom : 1;
+    if (!integer_scale_on) return z;
+    return Math.max(1, Math.round(z));
+}
+
+/** Камера кадра: с целочисленной шкалой — копия с квантованным зумом. */
+function presentationCam(cam) {
+    if (!integer_scale_on || !cam) return cam;
+    const z = presentationZoom(cam.zoom);
+    if (z === (cam.zoom > 0 ? cam.zoom : 1)) return cam;
+    const copy = Object.assign({}, cam);
+    copy.zoom = z;
+    return copy;
+}
 let tri = null;         // Float32Array(max * 3 * 6)
 let tri_count = 0;      // число вершин (кратно 3)
 let tri_blend = null;   // Uint8Array(max) — режим смешивания каждого треугольника
 let tri_blend_cur = 0;  // режим, который получит следующий треугольник
-let tri_layer = null;   // Uint8Array(max) — 1, если треугольник это свет lightmap
+// §20.1. tri_layer хранит БИТЫ СЛОЯ источника (не флаг): 0 — сцена, иначе биты
+// слоя, которые сравниваются с маской получателя в шейдере. Прежнее значение 1
+// («свет lightmap») осталось тем же битом 1, поэтому старые сцены не изменились.
+let tri_layer = null;   // Uint32Array(max) — биты слоя источника
 let tri_layer_cur = 0;  // слой, который получит следующий треугольник (0 — сцена)
+// Биты получателя света на каждый спрайт: 0xFFFFFFFF — «принимает все слои».
+let masks = null;       // Uint32Array(max)
+let masks_used = false; // есть ли в кадре узел с маской (иначе вызов прежний)
+let mask_nodes = 0;      // сколько узлов с маской попало в кадр
+let light_mask_passes = 0;  // проходов записи маски (число из C после кадра)
 
 // Мировой слой. Батч движка принимает ЭКРАННЫЕ координаты (узлы и частицы
 // переводят их сами через камеру), но VFX и $.gfx.draw.* работают в мировых.
@@ -415,7 +446,10 @@ function packColorSafe(color) {
 const POST_KEYS = ['glow', 'vignette', 'chromatic', 'lens', 'center_x', 'center_y', 'radius',
                    'grain', 'scanline', 'posterize', 'tint_r', 'tint_g', 'tint_b',
                    'tint_amount', 'saturation', 'contrast', 'brightness', 'blood',
-                   'bloom_threshold', 'bloom_radius'];
+                   'bloom_threshold', 'bloom_radius',
+                   // §46: экранное искажение — тот же проход, что и остальной пост
+                   'distort', 'wave_amp', 'wave_freq', 'wave_speed', 'wave_axis',
+                   'noise_amount', 'noise_scale', 'channel_shift'];
 
 const post_params = {
     glow: 0, vignette: 0, chromatic: 0, lens: 0,
@@ -427,6 +461,11 @@ const post_params = {
     // Свечение: порог яркости и сила размытия. Само свечение — отдельные
     // проходы (bright-pass + размытие), а не выборки в пост-обработке.
     bloom_threshold: 0.75, bloom_radius: 1,
+    // Экранное искажение (§46). Выключено, пока distort = 0: тогда шейдер не
+    // делает ни одной лишней выборки и не смещает UV. wave_amp и noise_amount —
+    // амплитуды в долях экрана; channel_shift — сдвиг R/B в долях экрана.
+    distort: 0, wave_amp: 0, wave_freq: 24, wave_speed: 6, wave_axis: 0,
+    noise_amount: 0, noise_scale: 8, channel_shift: 0,
 };
 
 // Наборы камерных эффектов: от «тёплого мультика» до хоррора. Значения —
@@ -464,6 +503,18 @@ const POST_PRESETS = {
     },
     // Ч/б нуар.
     noir: { glow: 0.3, vignette: 0.62, grain: 0.07, saturation: 0, contrast: 1.35 },
+    // Подводный мир: медленная волна по вертикали и лёгкий сдвиг каналов.
+    underwater: {
+        glow: 0.2, vignette: 0.35, distort: 1, wave_amp: 0.006, wave_freq: 26,
+        wave_speed: 1.6, wave_axis: 1, noise_amount: 0.004, noise_scale: 6,
+        channel_shift: 0.0015, saturation: 0.95, contrast: 1.04,
+    },
+    // Глитч: резкий шум и расхождение каналов — «сбой сигнала».
+    glitch: {
+        glow: 0.3, vignette: 0.4, distort: 1, wave_amp: 0.004, wave_freq: 90,
+        wave_speed: 14, wave_axis: 1, noise_amount: 0.01, noise_scale: 22,
+        channel_shift: 0.006, saturation: 0.85, contrast: 1.15,
+    },
     // Мягкий сон: сильное свечение и минимум контраста.
     dream: {
         glow: 0.85, vignette: 0.12, chromatic: 0.003, grain: 0.02,
@@ -528,18 +579,25 @@ function pushPost() {
                    post_params.posterize,
                    post_params.tint_r, post_params.tint_g, post_params.tint_b, post_params.tint_amount,
                    post_params.saturation, post_params.contrast, post_params.brightness, post_params.blood,
-                   post_params.bloom_threshold, post_params.bloom_radius);
+                   post_params.bloom_threshold, post_params.bloom_radius,
+                   // §46: экранное искажение — те же параметры, что и остальной
+                   // пост, чтобы «включено/выключено» не разъезжалось.
+                   post_params.distort, post_params.wave_amp, post_params.wave_freq,
+                   post_params.wave_speed, post_params.wave_axis,
+                   post_params.noise_amount, post_params.noise_scale, post_params.channel_shift);
 }
 
 function ensureBuffers() {
     if (!xf) {
         xf = new Float32Array(MAX_SPRITES * 6);
         col = new Uint32Array(MAX_SPRITES);
+        // §20.1: биты получателя света на каждый спрайт кадра.
+        masks = new Uint32Array(MAX_SPRITES);
         blend = new Uint8Array(MAX_SPRITES);
         fx = new Int32Array(MAX_SPRITES);
         tri = new Float32Array(MAX_TRIS * 3 * 6);
         tri_blend = new Uint8Array(MAX_TRIS);
-        tri_layer = new Uint8Array(MAX_TRIS);
+        tri_layer = new Uint32Array(MAX_TRIS);
     }
 }
 
@@ -569,7 +627,32 @@ function clipRectOf(a, b, c, d) {
     return null;
 }
 
-function pushSprite(sprite, x, y, w, h, angle, color, blend_name, fx_index) {
+/**
+ * §20.1. Биты получателя света узла: `lightMask` в attrs. Без него — все слои
+ * (0xFFFFFFFF), то есть прежнее поведение: узел получает каждый источник.
+ */
+// §20.1. Слой источников по умолчанию: `$.gfx.light.layer(bits)`. Всё, что не
+// объявило свой слой, светит всем получателям (прежнее поведение). Значение —
+// литерал, а не LIGHT_MASK_ALL: та константа объявлена НИЖЕ (она же служит
+// маскам препятствий), и обращение к ней здесь падало бы по TDZ.
+let light_layer_default = 0xFFFFFFFF;
+
+/** §20.1. Биты слоя источника: `lightLayer` в attrs или слой по умолчанию. */
+function lightLayerOf(node) {
+    const raw = node && node.attrs ? node.attrs.lightLayer : undefined;
+    if (raw === undefined || raw === null) return light_layer_default;
+    const bits = Number(raw) >>> 0;
+    return bits === 0 ? light_layer_default : bits;
+}
+
+function lightMaskOf(node) {
+    const raw = node && node.attrs ? node.attrs.lightMask : undefined;
+    if (raw === undefined || raw === null) return LIGHT_MASK_ALL;
+    const bits = Number(raw) >>> 0;
+    return bits;
+}
+
+function pushSprite(sprite, x, y, w, h, angle, color, blend_name, fx_index, mask_bits) {
     if (count >= MAX_SPRITES || sprite < 0) return;
     if (view) {
         const wx = x, wy = y;
@@ -585,6 +668,11 @@ function pushSprite(sprite, x, y, w, h, angle, color, blend_name, fx_index) {
     // Индекс шейдера узла: 0 — обычный спрайт (конвейер без юниформ).
     fx[count] = fx_index === undefined ? 0 : fx_index;
     clip_of[count] = clip_cur;
+    // §20.1: маска получателя. Как только она где-то не «все слои», в C
+    // включается проход маски и гейт света.
+    const mbits = mask_bits === undefined || mask_bits === null ? LIGHT_MASK_ALL : (mask_bits >>> 0);
+    masks[count] = mbits;
+    if (mbits !== LIGHT_MASK_ALL) { masks_used = true; mask_nodes++; }
     count++;
 }
 
@@ -610,8 +698,11 @@ function submitSprites(start, end) {
         } else {
             engine.clearClip();
         }
+        // §20.1. Маски передаются шестым аргументом и ТОЛЬКО когда в кадре есть
+        // узел с маской: без них вызов и цена прежние.
         engine.submitSprites(xf.subarray(i * 6, j * 6), col.subarray(i, j), j - i,
-                             BLEND_NAMES[b], f > 0 ? fx.subarray(i, j) : null);
+                             BLEND_NAMES[b], f > 0 ? fx.subarray(i, j) : null,
+                             masks_used ? masks.subarray(i, j) : null);
         i = j;
     }
 }
@@ -729,7 +820,8 @@ function submitTriangles() {
         const part = tri.subarray(i * 18, j * 18);
         const n = (j - i) * 3;
         if (layer && light_ok) {
-            engine.submitLightTriangles(part, n, BLEND_NAMES[b]);
+            // §20.1: биты слоя источника едут в C, где режут пакет света.
+            engine.submitLightTriangles(part, n, BLEND_NAMES[b], layer);
         } else {
             engine.submitTriangles(part, n, BLEND_NAMES[b]);
         }
@@ -837,7 +929,65 @@ let light_cull = new Float64Array(4 * 256);
 let light_cull_stamp = new Int32Array(0);
 let light_cull_query = 0;
 /** Счётчики за кадр: сколько границ посчитано, сколько взято из кэша, сколько отрезков дошло до света. */
-const light_stats = { built: 0, cached: 0, culled: 0, considered: 0, rays: 0, cells: 0 };
+const light_stats = {
+    built: 0, cached: 0, culled: 0, considered: 0, rays: 0, cells: 0,
+    index_appended: 0, index_rebuilt: 0, index_segments: 0,
+};
+
+// ---------------------------------------------------------------------------
+// Профиль качества света (§20.1)
+//
+// Лимиты — не «тихое отключение»: при превышении выбирается документированная
+// деградация (тень → мягкое пятно, меньше лучей, меньше отрезков), а игра
+// видит числа через $.gfx.light.stats()/qualityReport() и предупреждение в лог.
+// ---------------------------------------------------------------------------
+const LIGHT_QUALITY_DEFAULTS = {
+    // Сколько источников за кадр считают тени. Дальше источники рисуются
+    // заливкой без геометрии тени (свет НЕ пропадает).
+    maxShadowLights: 32,
+    // Потолок лучей на источник (совпадает с прежним жёстким лимитом 96).
+    maxRays: 96,
+    // Сколько отрезков препятствий видит один источник за кадр.
+    maxSegments: 4096,
+};
+// Разрешение карты света задано сборкой (C: половинное) — сообщаем как факт.
+const LIGHTMAP_SCALE = 0.5;
+const light_quality = Object.assign({}, LIGHT_QUALITY_DEFAULTS);
+const light_warned = { shadows: false, rays: false, segments: false };
+const light_frame = {
+    lights: 0, shadowLights: 0, culledLights: 0,
+    degradedRays: 0, degradedSegments: 0, skipped: 0,
+};
+
+function lightWarnOnce(reason, message) {
+    if (light_warned[reason]) return;
+    light_warned[reason] = true;
+    ctx.log('$.gfx.light: ' + message);
+}
+
+// Динамические occluder'ы: узлы мира (не <light>/<lightarea>), у которых
+// заданы .occluders([...]) — прямоугольники в ЛОКАЛЬНЫХ координатах узла.
+// Каждый кадр они превращаются в мировые отрезки с учётом позиции и поворота
+// узла; изменённая область сообщается движку теней, поэтому пересчитываются
+// только источники, чьи радиусы её пересекают (§20.1).
+const light_dynamic = [];
+let light_dynamic_box = null;
+
+// Маски отрезков-препятствий: light_mask[s] — биты отрезка s. Свет с
+// .occluderMask(bits) видит только те отрезки, у которых есть общие биты.
+let light_mask = new Uint32Array(256);
+const LIGHT_MASK_ALL = 0xffffffff;
+
+// Области изменений реестра: кэш границ тени пересчитывается только у тех
+// источников, чей радиус пересекает изменённую область.
+const LIGHT_CHANGES_MAX = 256;
+const light_changes = [];
+let light_change_serial = 0;
+// Изменения до этого серийного номера уже выпали из кольца: кэш старше него
+// считается неизвестным и пересчитывается.
+let light_changes_floor = 0;
+let light_index_dirty_from = -1;   // с какого отрезка индекс нужно дополнить
+let light_index_full = true;       // индекс нужно перестроить целиком
 /** Буферы веера: косинусы, синусы, кромка конуса. */
 const fan_buf = [null, null, null];
 
@@ -869,17 +1019,26 @@ function boxSegments(out, x, y, w, h) {
  * Понимает `[x1,y1,x2,y2]`, `{x1,y1,x2,y2}`, `{x,y,w,h}` (левый верхний угол),
  * `{cx,cy,w,h}` (центр) и вложенные массивы. Чистая функция.
  */
-export function occluderSegments(list, out) {
+export function occluderSegments(list, out, masks) {
     const dst = out || [];
     if (!list) return dst;
+    // Маски (необязательно): каждый отрезок получает биты; по умолчанию — все.
+    const pushMask = (value) => {
+        if (!masks) return;
+        const bits = value === undefined || value === null ? LIGHT_MASK_ALL : (value >>> 0);
+        const seg = dst.length >> 2;
+        masks[seg] = bits === 0 ? LIGHT_MASK_ALL : bits;
+    };
     // Плоский список чисел — это либо один отрезок [x1,y1,x2,y2], либо уже
     // готовый набор отрезков (так их отдаёт tileOccluders). Различаем по
     // длине: набор всегда кратен четырём, поэтому четвёрка читается однозначно.
+    let item_mask = LIGHT_MASK_ALL;
     if (Array.isArray(list) && list.length >= 4 && typeof list[0] === 'number') {
         const count = list.length % 4 === 0 ? list.length / 4 : 1;
         for (let s = 0; s < count; s++) {
             const o = s * 4;
             dst.push(list[o], list[o + 1], list[o + 2], list[o + 3]);
+            pushMask(LIGHT_MASK_ALL);
         }
         return dst;
     }
@@ -889,12 +1048,16 @@ export function occluderSegments(list, out) {
         if (Array.isArray(item)) {
             if (item.length >= 4 && typeof item[0] === 'number') {
                 dst.push(item[0], item[1], item[2], item[3]);
+                pushMask(LIGHT_MASK_ALL);
             } else {
-                occluderSegments(item, dst);       // вложенный список
+                occluderSegments(item, dst, masks);       // вложенный список
             }
             continue;
         }
         if (typeof item !== 'object') continue;
+        item_mask = item.mask === undefined ? LIGHT_MASK_ALL : (item.mask >>> 0);
+        if (item_mask === 0) item_mask = LIGHT_MASK_ALL;
+        const before = dst.length >> 2;
         if (Array.isArray(item.box)) {
             boxSegments(dst, item.box[0], item.box[1], item.box[2], item.box[3]);
         } else if (item.x1 !== undefined && item.y1 !== undefined &&
@@ -908,6 +1071,10 @@ export function occluderSegments(list, out) {
             boxSegments(dst, item.x, item.y,
                         item.w === undefined ? 0 : item.w,
                         item.h === undefined ? 0 : item.h);
+        }
+        if (masks) {
+            const after = dst.length >> 2;
+            for (let s2 = before; s2 < after; s2++) masks[s2] = item_mask;
         }
     }
     return dst;
@@ -1214,35 +1381,210 @@ function flickerFactor(node) {
     return 1 - amount * noise;
 }
 
-/** Отрезки для узла: свои плюс общий реестр. Кэш — по версии реестра. */
+/**
+ * Готовит препятствия узла: маску света и СВОИ отрезки.
+ *
+ * Общий реестр остаётся общим массивом (его выборка идёт через индекс), а
+ * `node._light_own` — только отрезки этого источника; они добавляются к
+ * выборке при расчёте тени. Раньше свои препятствия попадали лишь в ключ кэша
+ * и в лучах не участвовали — `.occluders([...])` у узла не работал.
+ */
 function lightSegmentsFor(node) {
-    const own = node.attrs ? node.attrs.occluders : null;
-    if (!own) return light_segments;
-    if (node._light_seg_own === own && node._light_seg_ver === light_segments_version) {
-        return node._light_seg_cache;
+    const attrs = node.attrs || {};
+    const own = attrs.occluders || null;
+    const mask = attrs.occluderMask === undefined ? 0 : (attrs.occluderMask >>> 0);
+    node._light_mask = mask;
+    if (!own) {
+        node._light_own = null;
+        return light_segments;
     }
-    const segs = light_segments.slice();
-    occluderSegments(own, segs);
+    if (node._light_seg_own === own && node._light_seg_mask === mask
+        && node._light_seg_ver === light_segments_version) {
+        node._light_own = node._light_seg_cache;
+        return light_segments;
+    }
+    const raw = [];
+    const masks = [];
+    occluderSegments(own, raw, masks);
+    let filtered = raw;
+    if (mask) {
+        filtered = [];
+        for (let i = 0; i < masks.length; i++) {
+            if ((masks[i] & mask) === 0) continue;
+            const o = i * 4;
+            filtered.push(raw[o], raw[o + 1], raw[o + 2], raw[o + 3]);
+        }
+    }
     node._light_seg_own = own;
+    node._light_seg_mask = mask;
     node._light_seg_ver = light_segments_version;
-    node._light_seg_cache = segs;
-    return segs;
+    node._light_seg_cache = filtered;
+    node._light_own = filtered;
+    return light_segments;
+}
+
+/**
+ * Дополняет индекс новыми отрезками без полного пересбора. Возвращает false,
+ * если отрезки вышли за пределы сетки — тогда нужен полный пересбор.
+ */
+export function lightIndexAppend(index, segments, from) {
+    if (!index || !index.buckets) return false;
+    const count = Math.floor(segments.length / 4);
+    const cs = index.cell;
+    const clamp = (v, hi) => (v < 0 ? 0 : (v > hi ? hi : v));
+    const last_col = index.cols - 1, last_row = index.rows - 1;
+    for (let s = from; s < count; s++) {
+        const o = s * 4;
+        const ax = segments[o], ay = segments[o + 1];
+        const bx = segments[o + 2], by = segments[o + 3];
+        const bx0 = Math.floor((Math.min(ax, bx) - index.minx) / cs);
+        const bx1 = Math.floor((Math.max(ax, bx) - index.minx) / cs);
+        const by0 = Math.floor((Math.min(ay, by) - index.miny) / cs);
+        const by1 = Math.floor((Math.max(ay, by) - index.miny) / cs);
+        if (bx0 < 0 || by0 < 0 || bx1 > last_col || by1 > last_row) return false;
+        for (let by = by0; by <= by1; by++) {
+            for (let bx = bx0; bx <= bx1; bx++) {
+                const key = by * index.cols + clamp(bx, last_col);
+                const list = index.buckets[key];
+                if (list) list.push(s); else index.buckets[key] = [s];
+            }
+        }
+    }
+    return true;
 }
 
 /** Индекс препятствий под текущую версию реестра. Перестраивается только при
- *  изменении реестра, а не каждый кадр. */
+ *  изменении реестра, а не каждый кадр; дозапись отрезков — без полного
+ *  пересбора (изменение одного тайла не пересобирает весь мир). */
 function lightIndexCurrent() {
-    if (light_index.version !== light_segments_version || !light_index.buckets) {
+    if (light_index.version === light_segments_version && light_index.buckets) {
+        return light_index;
+    }
+    const total = Math.floor(light_segments.length / 4);
+    const need_full = light_index_full || !light_index.buckets;
+    let done = false;
+    if (!need_full && light_index_dirty_from >= 0) {
+        done = lightIndexAppend(light_index, light_segments, light_index_dirty_from);
+        if (done) {
+            light_stats.index_appended++;
+            light_stats.index_segments += total - light_index_dirty_from;
+        }
+    }
+    if (!done) {
         const fresh = buildLightIndex(light_segments, LIGHT_BUCKET_CELL);
-        light_index.version = light_segments_version;
         light_index.cell = fresh.cell;
         light_index.minx = fresh.minx;
         light_index.miny = fresh.miny;
         light_index.cols = fresh.cols;
         light_index.rows = fresh.rows;
         light_index.buckets = fresh.buckets;
+        light_stats.index_rebuilt++;
+        light_stats.index_segments += total;
     }
+    light_index.version = light_segments_version;
+    light_index_full = false;
+    light_index_dirty_from = -1;
     return light_index;
+}
+
+/** Запомнить изменённую область реестра: кэш тени пересчитают только те
+ *  источники, чей радиус её пересекает. */
+function noteLightChangeBox(x0, y0, x1, y1) {
+    if (!(x1 >= x0) || !(y1 >= y0)) return;
+    const entry = { serial: ++light_change_serial, x0, y0, x1, y1, global: false };
+    if (light_changes.length >= LIGHT_CHANGES_MAX) {
+        const dropped = light_changes.shift();
+        if (dropped.serial > light_changes_floor) light_changes_floor = dropped.serial;
+    }
+    light_changes.push(entry);
+}
+
+function noteLightChangeGlobal() {
+    const entry = { serial: ++light_change_serial, x0: 0, y0: 0, x1: 0, y1: 0, global: true };
+    light_changes.push(entry);
+    if (light_changes.length > LIGHT_CHANGES_MAX) light_changes.shift();
+}
+
+/**
+ * Собирает мировые отрезки динамических occluder'ов на этот кадр и сообщает
+ * движку теней изменённую область. Скрытый узел препятствием не считается.
+ */
+function collectDynamicOccluders() {
+    light_dynamic.length = 0;
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    const nodes = ctx.nodes;
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (node.removed || !node.attrs || !node.attrs.occluders) continue;
+        // У источника .occluders — список ЕГО препятствий, он не движется.
+        if (node.tag === 'light' || node.tag === 'lightarea') continue;
+        if (node.visible === false || inheritedVisible(node) === false) continue;
+        const count = light_dynamic.length;
+        occluderSegments(node.attrs.occluders, light_dynamic);
+        if (light_dynamic.length === count) continue;
+        const c = Math.cos(node.angle || 0), sn = Math.sin(node.angle || 0);
+        for (let k = count; k < light_dynamic.length; k += 4) {
+            for (let p = 0; p < 4; p += 2) {
+                const lx = light_dynamic[k + p], ly = light_dynamic[k + p + 1];
+                const wx = node.x + lx * c - ly * sn;
+                const wy = node.y + lx * sn + ly * c;
+                light_dynamic[k + p] = wx;
+                light_dynamic[k + p + 1] = wy;
+                if (wx < minx) minx = wx;
+                if (wx > maxx) maxx = wx;
+                if (wy < miny) miny = wy;
+                if (wy > maxy) maxy = wy;
+            }
+        }
+    }
+
+    const used = light_dynamic.length > 0;
+    const box = used ? { x0: minx, y0: miny, x1: maxx, y1: maxy, used: true } : { used: false };
+    const prev = light_dynamic_box;
+    const moved = !prev || prev.used !== box.used
+        || (used && (prev.x0 !== box.x0 || prev.y0 !== box.y0 || prev.x1 !== box.x1 || prev.y1 !== box.y1));
+    if (moved) {
+        if (prev && prev.used && used) {
+            noteLightChangeBox(Math.min(prev.x0, box.x0), Math.min(prev.y0, box.y0),
+                               Math.max(prev.x1, box.x1), Math.max(prev.y1, box.y1));
+        } else if (used) {
+            noteLightChangeBox(box.x0, box.y0, box.x1, box.y1);
+        } else if (prev && prev.used) {
+            noteLightChangeBox(prev.x0, prev.y0, prev.x1, prev.y1);
+        }
+        light_dynamic_box = box;
+    }
+}
+
+/** Область изменений по новым отрезкам [from, count). */
+function noteLightChangeFromSegments(from) {
+    const count = Math.floor(light_segments.length / 4);
+    if (from >= count) return;
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (let s = from; s < count; s++) {
+        const o = s * 4;
+        minx = Math.min(minx, light_segments[o], light_segments[o + 2]);
+        maxx = Math.max(maxx, light_segments[o], light_segments[o + 2]);
+        miny = Math.min(miny, light_segments[o + 1], light_segments[o + 3]);
+        maxy = Math.max(maxy, light_segments[o + 1], light_segments[o + 3]);
+    }
+    noteLightChangeBox(minx, miny, maxx, maxy);
+}
+
+/** Годится ли кэш границ тени: изменилось ли что-то в радиусе источника. */
+function lightShadowCacheFresh(cache, cx, cy, radius) {
+    if (!cache) return false;
+    if (cache.serial === light_change_serial) return true;
+    if (cache.serial < light_changes_floor) return false;
+    for (let i = 0; i < light_changes.length; i++) {
+        const c = light_changes[i];
+        if (c.serial <= cache.serial) continue;
+        if (c.global) return false;
+        if (cx + radius >= c.x0 && cx - radius <= c.x1 &&
+            cy + radius >= c.y0 && cy - radius <= c.y1) return false;
+    }
+    cache.serial = light_change_serial;
+    return true;
 }
 
 /**
@@ -1250,12 +1592,17 @@ function lightIndexCurrent() {
  * вокруг света, и возвращает их число. Копий нет: свет читает общий буфер,
  * поэтому в кадре не появляется ни одного нового массива.
  */
-function lightCollectNear(cx, cy, radius) {
+function lightCollectNear(cx, cy, radius, mask, own) {
     const total = Math.floor(light_segments.length / 4);
-    if (total === 0) return 0;
+    // Ранний выход — только если препятствий нет ВООБЩЕ: динамические
+    // occluder'ы живут вне реестра и при пустом реестре тоже участвуют.
+    if (total === 0 && !(own && own.length) && light_dynamic.length === 0) return 0;
     const idx = lightIndexCurrent();
+    const extra = own || null;
+    const extra_count = extra ? Math.floor(extra.length / 4) : 0;
+    const cap = total + extra_count + light_dynamic.length;
     if (light_cull_stamp.length < total) light_cull_stamp = new Int32Array(total);
-    if (light_cull.length < total * 4) light_cull = new Float64Array(total * 4);
+    if (light_cull.length < cap * 4) light_cull = new Float64Array(cap * 4);
     if (light_cull_query >= 2147483647) { light_cull_stamp.fill(0); light_cull_query = 0; }
     light_cull_query++;
 
@@ -1275,6 +1622,7 @@ function lightCollectNear(cx, cy, radius) {
             for (let k = 0; k < list.length; k++) {
                 const s = list[k];
                 if (light_cull_stamp[s] === light_cull_query) continue;
+                if (mask && (light_mask[s] & mask) === 0) continue;
                 light_cull_stamp[s] = light_cull_query;
                 const o = s * 4, d = n * 4;
                 light_cull[d] = light_segments[o];
@@ -1284,6 +1632,37 @@ function lightCollectNear(cx, cy, radius) {
                 n++;
             }
         }
+    }
+    // Свои препятствия источника (node.occluders) — после общих: они не
+    // лежат в индексе и всегда участвуют целиком.
+    for (let s = 0; s < extra_count; s++) {
+        const o = s * 4, d = n * 4;
+        light_cull[d] = extra[o];
+        light_cull[d + 1] = extra[o + 1];
+        light_cull[d + 2] = extra[o + 2];
+        light_cull[d + 3] = extra[o + 3];
+        n++;
+    }
+    // Динамические occluder'ы: только те, чей габарит рядом с источником.
+    for (let s = 0; s < light_dynamic.length; s += 4) {
+        const ax = light_dynamic[s], ay = light_dynamic[s + 1];
+        const bx = light_dynamic[s + 2], by = light_dynamic[s + 3];
+        if (Math.max(ax, bx) < cx - radius || Math.min(ax, bx) > cx + radius ||
+            Math.max(ay, by) < cy - radius || Math.min(ay, by) > cy + radius) continue;
+        if (n >= cap) break;
+        const d = n * 4;
+        light_cull[d] = ax; light_cull[d + 1] = ay;
+        light_cull[d + 2] = bx; light_cull[d + 3] = by;
+        n++;
+    }
+    // Лимит отрезков на источник: документированная деградация вместо
+    // неограниченной работы; числа видны в stats()/qualityReport().
+    const limit = light_quality.maxSegments;
+    if (limit > 0 && n > limit) {
+        n = limit;
+        light_frame.degradedSegments++;
+        lightWarnOnce('segments', 'источник упёрся в maxSegments=' + limit
+            + ' — тени считаются по первым отрезкам реестра (повысьте $.gfx.light.quality)');
     }
     light_stats.culled += n;
     light_stats.considered += total;
@@ -1315,11 +1694,24 @@ function lightAnglesFor(node, has_cone, angle, cone_deg, cone_soft, samples) {
  * несколько точек-источников, и каждая кэшируется отдельно.
  */
 function lightShadowSlot(node, slot, cx, cy, radius, angles, src, segments, count, soft, spread) {
-    const ver = light_segments_version;
     let cache = node._light_shadow;
-    if (!cache || cache.ver !== ver || cache.angles !== angles ||
-        cache.src !== src || cache.soft !== soft || cache.spread !== spread || cache.r !== radius) {
-        cache = node._light_shadow = { ver, angles, src, soft, spread, r: radius, xs: [], ys: [], dists: [] };
+    // Кэш живёт, пока не сменились веер/набор отрезков/качество и пока в
+    // РАДИУС источника не попало ни одно изменение реестра. Глобальная версия
+    // реестра здесь не годится: правка тайла в другом конце уровня не должна
+    // пересчитывать тени всех фонарей (§20.1).
+    if (!cache || cache.angles !== angles || cache.src !== src || cache.soft !== soft ||
+        cache.spread !== spread || cache.r !== radius || cache.mask !== node._light_mask) {
+        cache = node._light_shadow = {
+            serial: -1, angles, src, soft, spread, r: radius,
+            mask: node._light_mask, xs: [], ys: [], dists: [],
+        };
+    }
+    if (!lightShadowCacheFresh(cache, cx, cy, radius)) {
+        // Область изменилась: границы этого источника устарели, но слоты
+        // других точек площадного света могут остаться валидными.
+        cache.xs[slot] = undefined;
+        cache.ys[slot] = undefined;
+        cache.dists[slot] = null;
     }
     if (cache.xs[slot] === cx && cache.ys[slot] === cy && cache.dists[slot]) {
         light_stats.cached++;
@@ -1329,6 +1721,9 @@ function lightShadowSlot(node, slot, cx, cy, radius, angles, src, segments, coun
     cache.xs[slot] = cx;
     cache.ys[slot] = cy;
     cache.dists[slot] = dist;
+    // Серийный номер фиксируем ПОСЛЕ расчёта: изменения, случившиеся во время
+    // кадра, всё равно должны инвалидировать этот результат.
+    cache.serial = light_change_serial;
     light_stats.built++;
     light_stats.rays += angles.length * soft;
     return dist;
@@ -1343,8 +1738,11 @@ function drawLightNode(node, t, cam) {
     // С включённым lightmap свет уходит в свой слой: C копит его в текстуре
     // света и накладывает одним проходом, поэтому порядок света перестаёт
     // зависеть от порядка сцены.
+    // §20.1. Слой источника: `layer` в attrs или слой по умолчанию
+    // ($.gfx.light.layer(bits)). Без явного слоя источник освещает всех —
+    // биты 0xFFFFFFFF пересекаются с любой маской получателя.
     const prev_layer = tri_layer_cur;
-    if (lightmap_on) tri_layer_cur = 1;
+    if (lightmap_on) tri_layer_cur = lightLayerOf(node);
 
     const zoom = cam.zoom;
     const radius_world = Math.max(0.5, node.radius);
@@ -1352,8 +1750,29 @@ function drawLightNode(node, t, cam) {
     const color = packColor(node.color);
     const cone_deg = attrs.cone === undefined ? 0 : Number(attrs.cone);
     const has_cone = cone_deg > 0 && cone_deg < 360;
-    const shadows = attrs.shadows === true;
-    const samples = Math.max(6, Math.min(96, Math.round(attrs.segments === undefined ? 26 : attrs.segments)));
+    light_frame.lights++;
+    let shadows = attrs.shadows === true;
+    if (shadows) {
+        if (light_frame.shadowLights >= light_quality.maxShadowLights) {
+            // Документированная деградация: источники сверх лимита рисуются
+            // заливкой без геометрии тени — свет не пропадает.
+            shadows = false;
+            light_frame.culledLights++;
+            light_frame.skipped++;
+            lightWarnOnce('shadows', 'источников с тенями больше maxShadowLights='
+                + light_quality.maxShadowLights + ' — лишние рисуются без теней '
+                + '(числа: $.gfx.light.qualityReport())');
+        } else {
+            light_frame.shadowLights++;
+        }
+    }
+    const want_rays = Math.round(attrs.segments === undefined ? 26 : attrs.segments);
+    const samples = Math.max(6, Math.min(96, light_quality.maxRays, want_rays));
+    if (want_rays > samples) {
+        light_frame.degradedRays++;
+        lightWarnOnce('rays', 'segments=' + want_rays + ' урезаны до maxRays='
+            + light_quality.maxRays + ' (повысьте $.gfx.light.quality)');
+    }
     const rings = attrs.rings === undefined ? 7 : Math.round(attrs.rings);
     const falloff = attrs.falloff === undefined ? 2 : attrs.falloff;
     const inner = attrs.inner === undefined ? 0 : attrs.inner;
@@ -1383,10 +1802,10 @@ function drawLightNode(node, t, cam) {
     const dist = lightDistScratch(angles.length);
 
     if (shadows) {
-        const src = lightSegmentsFor(node);
-        const near = lightCollectNear(node.x, node.y, radius_world);
+        lightSegmentsFor(node);
+        const near = lightCollectNear(node.x, node.y, radius_world, node._light_mask, node._light_own);
         const world_dist = lightShadowSlot(node, 0, node.x, node.y, radius_world,
-                                           angles, src, light_cull, near, soft, soft_half);
+                                           angles, node._light_own, light_cull, near, soft, soft_half);
         for (let i = 0; i < angles.length; i++) {
             dist[i] = Math.min(world_dist[i], radius_world) * zoom;
         }
@@ -1419,12 +1838,27 @@ function drawLightAreaNode(node, t, cam) {
     const zoom = cam.zoom;
     const radius_world = Math.max(0.5, node.radius);
     const samples = Math.max(1, Math.min(8, Math.round(attrs.samples === undefined ? 3 : attrs.samples)));
-    const shadows = attrs.shadows === true;
+    light_frame.lights++;
+    let shadows = attrs.shadows === true;
+    if (shadows) {
+        if (light_frame.shadowLights >= light_quality.maxShadowLights) {
+            shadows = false;
+            light_frame.culledLights++;
+            light_frame.skipped++;
+            lightWarnOnce('shadows', 'источников с тенями больше maxShadowLights='
+                + light_quality.maxShadowLights + ' — лишние рисуются без теней '
+                + '(числа: $.gfx.light.qualityReport())');
+        } else {
+            light_frame.shadowLights++;
+        }
+    }
     const src = shadows ? lightSegmentsFor(node) : null;
     const w = Math.abs(node.w), h = Math.abs(node.h);
     const horizontal = w >= h;
     const span = horizontal ? w : h;
-    const angle_count = attrs.segments === undefined ? 20 : attrs.segments;
+    const want_angles = Math.round(attrs.segments === undefined ? 20 : attrs.segments);
+    const angle_count = Math.max(6, Math.min(96, light_quality.maxRays, want_angles));
+    if (want_angles > angle_count) light_frame.degradedRays++;
     const angles = lightAnglesFor(node, false, 0, 0, 0, angle_count);
     const rings = attrs.rings === undefined ? 7 : Math.round(attrs.rings);
     const falloff = attrs.falloff === undefined ? 2 : attrs.falloff;
@@ -1434,7 +1868,9 @@ function drawLightAreaNode(node, t, cam) {
 
     // Все точки площадки лежат в её габарите, поэтому препятствия отсекаются
     // один раз на весь источник, а не на каждую точку.
-    const near = shadows ? lightCollectNear(node.x, node.y, radius_world + span * 0.5) : 0;
+    const near = shadows
+        ? lightCollectNear(node.x, node.y, radius_world + span * 0.5, node._light_mask, node._light_own)
+        : 0;
 
     const prev_blend = tri_blend_cur;
     tri_blend_cur = blendId(node.blend_mode);
@@ -1445,7 +1881,7 @@ function drawLightAreaNode(node, t, cam) {
         const oy = horizontal ? 0 : (u - 0.5) * span;
         const world_dist = src
             ? lightShadowSlot(node, i, node.x + ox, node.y + oy, radius_world,
-                              angles, src, light_cull, near, soft, 0)
+                              angles, node._light_own, light_cull, near, soft, 0)
             : null;
         for (let k = 0; k < angles.length; k++) {
             const d = world_dist ? Math.min(world_dist[k], radius_world) : radius_world;
@@ -1551,20 +1987,101 @@ const light_api = {
     /** Заменить реестр препятствий. Возвращает число отрезков. */
     occluders(list) {
         light_segments.length = 0;
+        light_mask = new Uint32Array(256);
         light_segments_version++;
+        light_index_full = true;
+        light_index_dirty_from = -1;
+        noteLightChangeGlobal();
         return light_api.addOccluders(list);
     },
-    /** Добавить препятствия к реестру. Возвращает число отрезков. */
+    /**
+     * Добавить препятствия к реестру. Возвращает число отрезков.
+     * У элемента можно задать `mask` (биты): свет с `.occluderMask(bits)`
+     * видит только отрезки с общими битами.
+     */
     addOccluders(list) {
-        occluderSegments(list, light_segments);
-        light_segments_version++;
-        return Math.floor(light_segments.length / 4);
+        const from = Math.floor(light_segments.length / 4);
+        if (light_mask.length < light_segments.length / 4 + 64) {
+            const bigger = new Uint32Array(Math.max(256, (from + 64) * 2));
+            bigger.set(light_mask.subarray(0, from));
+            light_mask = bigger;
+        }
+        occluderSegments(list, light_segments, light_mask);
+        const total = Math.floor(light_segments.length / 4);
+        if (total > from) {
+            light_segments_version++;
+            // Отрезки дописываются в конец: индекс дополняется без пересбора,
+            // а кэш теней пересчитывают только источники рядом с изменениями.
+            light_index_dirty_from = from;
+            noteLightChangeFromSegments(from);
+        }
+        return total;
     },
     /** Очистить реестр. */
     clearOccluders() {
         light_segments.length = 0;
+        light_mask = new Uint32Array(256);
         light_segments_version++;
+        light_index_full = true;
+        light_index_dirty_from = -1;
+        noteLightChangeGlobal();
         return 0;
+    },
+    /**
+     * Профиль качества света: `$.gfx.light.quality({ maxShadowLights, maxRays,
+     * maxSegments })`. Без аргумента — текущий профиль (плюс фактическое
+     * разрешение карты света, заданное сборкой).
+     */
+    quality(opts) {
+        if (opts === undefined) {
+            return {
+                maxShadowLights: light_quality.maxShadowLights,
+                maxRays: light_quality.maxRays,
+                maxSegments: light_quality.maxSegments,
+                lightmapScale: LIGHTMAP_SCALE,
+            };
+        }
+        const int = (value, lo, hi, fallback) => {
+            const n = Math.round(Number(value));
+            return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
+        };
+        if (opts.maxShadowLights !== undefined) {
+            light_quality.maxShadowLights = int(opts.maxShadowLights, 1, 4096, light_quality.maxShadowLights);
+        }
+        if (opts.maxRays !== undefined) {
+            light_quality.maxRays = int(opts.maxRays, 6, 96, light_quality.maxRays);
+        }
+        if (opts.maxSegments !== undefined) {
+            light_quality.maxSegments = int(opts.maxSegments, 16, 1 << 20, light_quality.maxSegments);
+        }
+        if (opts.lightmapScale !== undefined && opts.lightmapScale !== LIGHTMAP_SCALE) {
+            ctx.log('$.gfx.light.quality: разрешение карты света задаётся сборкой ('
+                + LIGHTMAP_SCALE + ') — значение не изменено');
+        }
+        light_warned.shadows = false;
+        light_warned.rays = false;
+        light_warned.segments = false;
+        return light_api;
+    },
+    /**
+     * Динамические occluder'ы: сколько отрезков дали узлы со своими
+     * `.occluders([...])` в последнем кадре, и их копия (мировые координаты).
+     */
+    dynamicCount() { return Math.floor(light_dynamic.length / 4); },
+    dynamicSegments() { return light_dynamic.slice(); },
+    /** Сколько областей изменений помнит движок теней (для тестов). */
+    changeRegions() { return light_changes.length; },
+    /** Что произошло с лимитами в последнем кадре (для диагностики и тестов). */
+    qualityReport() {
+        return {
+            quality: light_api.quality(),
+            lights: light_frame.lights,
+            shadowLights: light_frame.shadowLights,
+            culledLights: light_frame.culledLights,
+            degradedRays: light_frame.degradedRays,
+            degradedSegments: light_frame.degradedSegments,
+            warned: { shadows: light_warned.shadows, rays: light_warned.rays, segments: light_warned.segments },
+        };
     },
     /** Сколько отрезков сейчас в реестре. */
     count() { return Math.floor(light_segments.length / 4); },
@@ -1626,7 +2143,37 @@ const light_api = {
     },
     /** Доступна ли световая карта в этой сборке (наличие биндинга в C). */
     mapSupported() { return typeof engine.lightMap === 'function'; },
-    /** Счётчики света за кадр: посчитано границ, взято из кэша, отрезков в радиус. */
+    /**
+     * §20.1. Слой источников по умолчанию: `$.gfx.light.layer(bits)` — его
+     * получают все источники, которые не объявили свой `layer`. Без аргумента —
+     * текущее значение (`0xFFFFFFFF` — «светит всем получателям»).
+     */
+    layer(bits) {
+        if (bits === undefined) return light_layer_default >>> 0;
+        light_layer_default = (Number(bits) >>> 0) || LIGHT_MASK_ALL;
+        return light_layer_default;
+    },
+    /**
+     * §20.1. Объявленный путь масок получателя: факты, а не догадки.
+     * `supported: false` — backend/путь, где маски не применяются (свет
+     * рисуется прямо в сцену: выключена световая карта или кадр уходит в
+     * render target игры). Тогда работает fallback: свет получают все.
+     */
+    maskPath() {
+        const map = lightmap_on && typeof engine.lightMap === 'function';
+        return {
+            supported: map,
+            reason: map ? 'lightmap_accumulation_gate' : 'light_drawn_into_scene',
+            fallback: 'all_receivers',
+            bits: 32,
+            default: LIGHT_MASK_ALL,
+            doc: 'docs/highlevel/render.md',
+        };
+    },
+    /**
+     * Счётчики света за кадр: посчитано границ, взято из кэша, отрезков в
+     * радиус, активные/отсечённые источники, работа с индексом.
+     */
     stats() {
         return {
             built: light_stats.built,
@@ -1636,6 +2183,25 @@ const light_api = {
             rays: light_stats.rays,
             cells: light_stats.cells,
             occluders: Math.floor(light_segments.length / 4),
+            // §20.1: профилирование — активные источники, отсечённые по
+            // бюджету теней, деградация по лучам/отрезкам и работа индекса.
+            lights: light_frame.lights,
+            shadowLights: light_frame.shadowLights,
+            culledLights: light_frame.culledLights,
+            degradedRays: light_frame.degradedRays,
+            degradedSegments: light_frame.degradedSegments,
+            indexAppended: light_stats.index_appended,
+            indexRebuilt: light_stats.index_rebuilt,
+            // Сколько отрезков реально прошло через индекс в этом кадре:
+            // пересбор — все, досыпка — только новые.
+            indexSegments: light_stats.index_segments,
+            lightmap: lightmap_on,
+            compositePasses: lightmap_on ? (lightmap_soft > 0 ? 3 : 1) : 0,
+            // §20.1: сколько узлов объявили маску получателя и был ли проход
+            // маски. Ноль — значит кадр шёл прежним путём и цена не менялась.
+            maskNodes: masks_used ? mask_nodes : 0,
+            maskPasses: light_mask_passes,
+            layerDefault: light_layer_default >>> 0,
         };
     },
     /** Сбросить счётчики (например, чтобы измерить ровно один кадр). */
@@ -1646,6 +2212,15 @@ const light_api = {
         light_stats.considered = 0;
         light_stats.rays = 0;
         light_stats.cells = 0;
+        light_stats.index_appended = 0;
+        light_stats.index_rebuilt = 0;
+        light_stats.index_segments = 0;
+        light_frame.lights = 0;
+        light_frame.shadowLights = 0;
+        light_frame.culledLights = 0;
+        light_frame.degradedRays = 0;
+        light_frame.degradedSegments = 0;
+        light_frame.skipped = 0;
         return light_api;
     },
 };
@@ -1696,6 +2271,108 @@ ambient.params = function () { return ambient_params ? Object.assign({}, ambient
 ambient.on = function () { return ambient_params !== null; };
 
 // ---------------------------------------------------------------------------
+// Материалы спрайтов (§20.2)
+//
+// Минимальное расширение, без generic PBR: albedo (спрайт узла), необязательная
+// normal-карта, необязательный emissive, tint, lit и параметры ответа на свет.
+// Отсутствие normal-карты — НЕ ошибка: материал ведёт себя как базовый
+// (нейтральная норма (0.5,0.5,1)), а обычный спрайт вообще не меняет путь.
+//
+// Данные материала живут в реестре `$.gfx.material(name, spec)`; узел ссылается
+// на имя (`.material('metal')`). Normal map — ДАННЫЕ, а не sRGB-цвет: convention
+// хранится явно (`normalConvention`), зелёный канал не переворачивается молча.
+// ---------------------------------------------------------------------------
+export const MATERIAL_DEFAULTS = {
+    albedo: null,            // путь/спрайт: спрайт узла и есть albedo
+    normal: null,            // карта нормалей (данные, не цвет)
+    emissive: null,          // цвет собственного свечения
+    emissiveStrength: 0.5,   // 0..1 — доля свечения
+    normalConvention: 'opengl',   // '-y вверх' (OpenGL) или 'directx' (+y вниз)
+    lit: true,               // получает ли узел мировой свет
+    tint: null,              // цвет-множитель поверх albedo (или null)
+    response: { diffuse: 1, ambient: 0.35 },
+    perPixelNormal: false,   // учитывается ли normal-карта по пикселям (см. §20.2)
+};
+const materials = new Map();
+
+/** Один раз на сессию: предупреждение о недоступном расширенном режиме. */
+let perPixelNormalWarned = false;
+
+/**
+ * §20.2: попиксельный свет по normal-карте. Константа, а не флаг: расширенного
+ * пути в этом конвейере нет (см. normalPath()), и «включить» его нельзя —
+ * иначе качество профиля молча обещало бы то, чего шейдер не делает.
+ */
+let per_pixel_normal = false;
+
+/**
+ * Объявленный fallback §20.2: факты о том, почему расширенного пути нет.
+ * Движок не сочиняет объяснений — только то, что видно в конвейере:
+ * спрайтовая фрагментная стадия имеет один сэмплер (текстура спрайта),
+ * вершинная стадия не несёт ни нормали, ни мировой позиции, а свет приходит
+ * в сцену отдельным аддитивным композитом (§4.5), где нормали пикселей уже
+ * потеряны. Пока эти три вещи не появятся, материал с normal-картой рисуется
+ * нейтральной нормой.
+ */
+export function normalPathInfo() {
+    return {
+        supported: false,
+        reason: 'sprite_stage_has_no_normal_input',
+        fallback: 'flat_normal',
+        required: ['vertex_normal_attribute', 'fragment_light_direction', 'second_fragment_sampler'],
+        doc: 'docs/highlevel/render.md',
+    };
+}
+
+/** Нейтральная норма (flat normal): «смотрит на зрителя», ничего не искажает. */
+export function flatNormal() { return [0.5, 0.5, 1.0]; }
+
+function normalizeMaterial(spec) {
+    const s = spec || {};
+    const response = s.response || {};
+    return {
+        albedo: s.albedo === undefined ? MATERIAL_DEFAULTS.albedo : s.albedo,
+        normal: s.normal === undefined ? MATERIAL_DEFAULTS.normal : s.normal,
+        // Цвет emissive упакован: так его читает pushSprite, и он не зависит от
+        // того, задан цвет строкой или числом.
+        emissive: s.emissive === undefined || s.emissive === null ? null : packColor(s.emissive),
+        emissiveStrength: Math.max(0, Math.min(1, s.emissiveStrength === undefined
+            ? MATERIAL_DEFAULTS.emissiveStrength : Number(s.emissiveStrength) || 0)),
+        normalConvention: s.normalConvention === 'directx' ? 'directx' : 'opengl',
+        lit: s.lit === undefined ? MATERIAL_DEFAULTS.lit : s.lit !== false,
+        tint: s.tint === undefined || s.tint === null ? null : packColor(s.tint),
+        response: {
+            diffuse: response.diffuse === undefined ? MATERIAL_DEFAULTS.response.diffuse
+                : Math.max(0, Math.min(4, Number(response.diffuse) || 0)),
+            ambient: response.ambient === undefined ? MATERIAL_DEFAULTS.response.ambient
+                : Math.max(0, Math.min(1, Number(response.ambient) || 0)),
+        },
+        // Per-pixel нормаль требует второго сэмплера в спрайтовом конвейере —
+        // это отдельная работа (§20.2), поэтому пока честно сообщаем флагом.
+        perPixelNormal: false,
+    };
+}
+
+/** Материал узла или null: узел может ссылаться на имя или нести spec. */
+function materialOf(node) {
+    const attrs = node.attrs;
+    if (!attrs || attrs.material === undefined || attrs.material === null) return null;
+    if (typeof attrs.material === 'string') return materials.get(attrs.material) || null;
+    if (typeof attrs.material === 'object') return attrs.material;
+    return null;
+}
+
+/** Есть ли в мире материалы, которым нужен проход после света (emissive). */
+function overlayMaterialsActive() {
+    const list = sortedNodes();
+    for (let i = 0; i < list.length; i++) {
+        const m = materialOf(list[i]);
+        if (m && m.emissive !== null && m.emissiveStrength > 0) return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
 // Отрисовка узла
 // ---------------------------------------------------------------------------
 
@@ -1731,11 +2408,79 @@ function nodeTransform(node, cam, out) {
     return t;
 }
 
+/**
+ * Есть ли в мире узлы с `.lit(false)`. Скан реестра — один раз на версию
+ * реестра: по нему решается, можно ли отдать проход мира нативному C (он про
+ * неосвещённый слой не знает) и нужно ли рисовать его отдельно.
+ */
+let unlit_scan_version = -1;
+let unlit_any = false;
+function unlitActive() {
+    const ver = registryVersion();
+    if (ver !== unlit_scan_version) {
+        unlit_scan_version = ver;
+        unlit_any = false;
+        const nodes = ctx.nodes;
+        for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            if (!node.removed && node.attrs && node.attrs.lit === false) { unlit_any = true; break; }
+        }
+    }
+    return unlit_any;
+}
+
+/** Неосвещённый мировой узел: свет/туман/темнота его не касаются. */
+function unlitOf(node) {
+    return !!node.attrs && node.attrs.lit === false;
+}
+
+/** Покомпонентное умножение двух упакованных цветов (alpha — минимум). */
+function multiplyColor(a, b) {
+    const r = Math.round((a & 0xff) * (b & 0xff) / 255);
+    const g = Math.round(((a >> 8) & 0xff) * ((b >> 8) & 0xff) / 255);
+    const bl = Math.round(((a >> 16) & 0xff) * ((b >> 16) & 0xff) / 255);
+    const al = Math.min((a >>> 24) & 0xff, (b >>> 24) & 0xff);
+    return engine.rgba(r, g, bl, al);
+}
+
+/** Рисует неосвещённые узлы мира после световых проходов. */
+function drawUnlitNodes(cam) {
+    const list = sortedNodes();
+    for (let i = 0; i < list.length; i++) {
+        const node = list[i];
+        if (unlitOf(node)) drawWorldNode(node, cam);
+    }
+}
+
+/**
+ * Собственное свечение материала: тот же спрайт узла, но аддитивно и цветом
+ * emissive. Рисуется после света и темноты — светящийся элемент виден и в
+ * ночи, и при выключенном освещении, как и ожидается от emissive.
+ */
+function drawEmissiveNodes(cam) {
+    const list = sortedNodes();
+    for (let i = 0; i < list.length; i++) {
+        const node = list[i];
+        const mat = materialOf(node);
+        if (!mat || mat.emissive === null || mat.emissiveStrength <= 0) continue;
+        if (!node.visible || node.alpha <= 0) continue;
+        // У залитых тегов (<rect>) своего спрайта нет: свечение рисуется белым
+        // 1×1, как и сам прямоугольник.
+        const sprite = node.sprite >= 0 ? node.sprite : engine.whiteSprite;
+        const t = nodeTransform(node, cam);
+        const color = withAlpha(mat.emissive, mat.emissiveStrength * inheritedAlpha(node));
+        pushSprite(sprite, t.x, t.y, t.w, t.h, node.angle, color, 'add');
+    }
+}
+
 /** Копия прямоугольника для тех, кто оставляет его себе (отложенный свет). */
 function copyTransform(t) { return { x: t.x, y: t.y, w: t.w, h: t.h }; }
 
 function baseColor(node) {
     let color = node.tint && node.tint_timer > 0 ? node.tint : node.color;
+    // Материал может задавать цвет-множитель поверх albedo (спрайта узла).
+    const mat = materialOf(node);
+    if (mat && mat.tint !== null) color = multiplyColor(color, mat.tint);
     if (node.alpha < 1) color = withAlpha(color, node.alpha);
     // Прозрачность ВСЕГО прохода: у PIP-камеры кадр ложится поверх основного,
     // и без этого «камера в текстуру» закрашивала бы экран наглухо.
@@ -1901,17 +2646,26 @@ function drawWorldPassInner(cam) {
     const active = ctx.gfx._ysortActive;
     const flush = ctx.gfx._ysortFlush && (!active || active()) ? ctx.gfx._ysortFlush : null;
     const total = list.length;
-    const native = flush ? null : nativeNodes();
+    // Неосвещённые узлы (`.lit(false)`) рисуются отдельным проходом после
+    // света, поэтому нативный проход мира (C) для такого кадра не годится:
+    // он не знает про этот слой.
+    const unlit = unlitActive();
+    const native = (flush || unlit) ? null : nativeNodes();
     if (native) {
         drawListNative(native, list, cam);
     } else if (flush) {
         for (let i = 0; i < total; i++) {
             const node = list[i];
+            if (unlit && unlitOf(node)) continue;
             flush(cam, node.y);
             drawWorldNode(node, cam);
         }
     } else {
-        for (let i = 0; i < total; i++) drawWorldNode(list[i], cam);
+        for (let i = 0; i < total; i++) {
+            const node = list[i];
+            if (unlit && unlitOf(node)) continue;
+            drawWorldNode(node, cam);
+        }
     }
     if (ctx.gfx._ysortFlushEnd) ctx.gfx._ysortFlushEnd(cam);
 }
@@ -2072,7 +2826,7 @@ function drawWorldNodeInner(node, cam) {
         }
 
         pushSprite(sprite, t.x, t.y, t.w, t.h, node.angle, baseColor(node), node.blend_mode,
-                   fxIndexOf(node));
+                   fxIndexOf(node), lightMaskOf(node));
         break;
     }
     }
@@ -2427,6 +3181,132 @@ export function installGfx($) {
             return !!linear;
         },
 
+        /**
+         * Презентационный снаппинг пиксель-арта: `$.gfx.snap(true)`.
+         *
+         * Осевые спрайты (angle === 0) рисуются по ЦЕЛЫМ пикселям экрана:
+         * на дробном зуме камеры картинка перестаёт «дрожать» между
+         * пикселями. Снаппинг — только кадр: `node.x/y`, тела Box2D, пикинг и
+         * `$.camera.worldToScreen` видят НАСТОЯЩИЕ координаты. Повёрнутые
+         * спрайты не снапятся (округление вершин ломало бы форму).
+         *
+         * Без аргумента — геттер. По умолчанию выключен: старые игры рисуются
+         * ровно как раньше.
+         */
+        snap(on) {
+            if (on === undefined) {
+                if (typeof engine.renderInfo === 'function') {
+                    const info = engine.renderInfo();
+                    if (info && typeof info.snap === 'boolean') return info.snap;
+                }
+                return false;
+            }
+            if (typeof engine.setSnap === 'function') engine.setSnap(!!on);
+            return !!on;
+        },
+
+        /**
+         * Целочисленная шкала мира: `$.gfx.integerScale(true)`.
+         *
+         * Зум камеры в кадре мира округляется к целому (минимум 1): при
+         * `zoom = 2.5` кадр рисуется как 2×, без «полупикселей» и муара
+         * линейной фильтрации. Пикинг и `$.camera.worldToScreen` по-прежнему
+         * используют настоящий зум — выбирать мышью нужно по реальной
+         * геометрии. Эффективный зум кадра доступен как `$.gfx.worldZoom()`.
+         *
+         * Без аргумента — геттер. По умолчанию выключено.
+         */
+        integerScale(on) {
+            if (on === undefined) return integer_scale_on;
+            integer_scale_on = !!on;
+            // Кэш вида и нативного прохода живёт в кадре: следующий кадр
+            // возьмёт новое значение сам, сбрасывать нечего.
+            return integer_scale_on;
+        },
+
+        /** Зум, которым нарисован последний кадр мира (с учётом integerScale). */
+        worldZoom() { return last_world_zoom; },
+
+        /** Состояние презентации одним объектом: { snap, integerScale, zoom }. */
+        presentation() {
+            const cam = cameraTransform();
+            return {
+                snap: gfx.snap(),
+                integerScale: integer_scale_on,
+                zoom: last_world_zoom === null ? presentationZoom(cam && cam.zoom) : last_world_zoom,
+            };
+        },
+
+        /**
+         * Материал спрайта (§20.2): `$.gfx.material('metal', { ... })`.
+         *
+         * Поля: `albedo` (спрайт узла), `normal` (карта нормалей — данные, не
+         * цвет), `emissive` + `emissiveStrength`, `tint`, `lit`,
+         * `normalConvention` ('opengl' | 'directx') и `response`.
+         * Без аргумента — текущий материал, `null` — удалить.
+         *
+         * Отсутствие `normal` — нормальный случай: узел рисуется базовым
+         * материалом с нейтральной нормалью (`flatNormal()`).
+         */
+        material(name, spec) {
+            const key = String(name);
+            if (spec === undefined) {
+                const m = materials.get(key);
+                return m ? Object.assign({}, m, { response: Object.assign({}, m.response) }) : null;
+            }
+            if (spec === null || spec === false) { materials.delete(key); return null; }
+            const mat = normalizeMaterial(spec);
+            if (spec.perPixelNormal === true && !perPixelNormalWarned) {
+                perPixelNormalWarned = true;
+                ctx.log('$.gfx.material("' + key + '"): perPixelNormal недоступен ('
+                    + normalPathInfo().reason + ') — материал сохранён с объявленным '
+                    + 'fallback "flat_normal"');
+            } else if (mat.normal && !mat.perPixelNormal) {
+                // Честно: карта нормалей сохранена, но попиксельное освещение
+                // появится вместе со вторым сэмплером спрайтового конвейера.
+                ctx.log('$.gfx.material("' + key + '"): normal-карта сохранена, '
+                    + 'попиксельное освещение пока не применяется — узел рисуется '
+                    + 'нейтральной нормалью (см. docs/highlevel/render.md §4.7)');
+            }
+            materials.set(key, mat);
+            return Object.assign({}, mat, { response: Object.assign({}, mat.response) });
+        },
+
+        /** Имена зарегистрированных материалов. */
+        materials() { return Array.from(materials.keys()); },
+
+        /**
+         * §20.2. Попиксельный свет по normal-карте.
+         *
+         * `$.gfx.perPixelNormal()` — включён ли расширенный путь: всегда
+         * `false` (fallback объявлен и проверен, см. `$.gfx.normalPath()`).
+         * `$.gfx.perPixelNormal(true)` — запрос расширенного режима: движок
+         * НЕ падает и НЕ делает вид, что включил его; он сообщает одной
+         * строкой фактическую причину и возвращает `false`.
+         *
+         * Метод живёт на `$.gfx`, а не на `$.gfx.materials`: `materials()`
+         * уже занято списком имён материалов.
+         */
+        perPixelNormal(on) {
+            if (on === undefined) return per_pixel_normal;
+            if (on === false || on === null) { per_pixel_normal = false; return false; }
+            const info = normalPathInfo();
+            if (!perPixelNormalWarned) {
+                perPixelNormalWarned = true;
+                ctx.log('$.gfx.perPixelNormal(true): расширенный режим недоступен ('
+                    + info.reason + '); узлы рисуются объявленным fallback "'
+                    + info.fallback + '" — см. ' + info.doc);
+            }
+            per_pixel_normal = false;
+            return false;
+        },
+
+        /** Факты об объявленном fallback §20.2 (машиночитаемо, без догадок). */
+        normalPath() { return normalPathInfo(); },
+
+        /** Нейтральная норма: базовый материал без normal-карты. */
+        flatNormal,
+
         /** Виды шейдеров узла: flash, dissolve, chroma, wave (+ none). */
         fxKinds() { return fxKinds(); },
 
@@ -2668,10 +3548,17 @@ export function installGfx($) {
                 post_params.tint_b = Number(o.tint[2]);
                 if (o.on === undefined && o.enabled === undefined) post_params.enabled = 1;
             }
+            // Здесь отдельный список, а не POST_KEYS: сюда попадают только те
+            // ключи, которые игра задаёт напрямую (остальные приходят
+            // пресетами). Новые параметры §46 обязаны быть и тут, иначе
+            // $.gfx.post({distort:1}) молча ничего не делал бы — именно эта
+            // ошибка и была поймана тестом screenfx_test.
             const keys = ['glow', 'vignette', 'chromatic', 'lens', 'grain', 'scanline',
                           'posterize', 'tint_r', 'tint_g', 'tint_b', 'tint_amount',
                           'saturation', 'contrast', 'brightness', 'blood',
-                          'bloom_threshold', 'bloom_radius'];
+                          'bloom_threshold', 'bloom_radius',
+                          'distort', 'wave_amp', 'wave_freq', 'wave_speed', 'wave_axis',
+                          'noise_amount', 'noise_scale', 'channel_shift'];
             for (const key of keys) {
                 if (o[key] !== undefined) {
                     post_params[key] = Number(o[key]) || 0;
@@ -2760,7 +3647,14 @@ export function installGfx($) {
 
         // --- Кадр ------------------------------------------------------------
         _render() {
-            const cam = cameraTransform();
+            // Камера кадра: при `$.gfx.integerScale(true)` зум мира квантуется
+            // к целому. cameraTransform() (пикинг, $.camera.worldToScreen) при
+            // этом не меняется — квантуется только презентация.
+            const cam = presentationCam(cameraTransform());
+            last_world_zoom = cam.zoom > 0 ? cam.zoom : 1;
+            // Динамические occluder'ы пересобираются раз за кадр: их мировая
+            // геометрия зависит от текущих позиций узлов.
+            collectDynamicOccluders();
             // Зерну нужно текущее время, поэтому параметры поста уходят в
             // движок каждый кадр, даже если игра их не меняла.
             pushPost();
@@ -2769,10 +3663,21 @@ export function installGfx($) {
             if (typeof engine.lightMap === 'function') {
                 engine.lightMap(lightmap_on, lightmap_intensity, lightmap_soft);
             }
+            // §20.1. Число проходов маски за прошлый кадр — факт движка:
+            // ноль означает, что масок в кадре не было и цена не менялась.
+            if (typeof engine.lightMaskPasses === 'function') {
+                light_mask_passes = engine.lightMaskPasses();
+            }
             state.stats = { sprites: 0, triangles: 0, texts: 0, nodes: 0 };
             count = 0;
             tri_count = 0;
             tri_blend_cur = 0;
+            // §20.1. Признак «в кадре есть маска получателя»: без него вызов
+            // submitSprites и цена кадра прежние.
+            masks_used = false;
+            mask_nodes = 0;
+            // light_mask_passes НЕ обнуляем: это факт движка о прошлом кадре,
+            // а не счётчик JS. Обнуление здесь стирало бы его до чтения.
             // Счётчики света — за кадр: по ним видно, что статический свет
             // берётся из кэша, а не считается заново (см. $.gfx.light.stats()).
             light_stats.built = 0;
@@ -2781,6 +3686,15 @@ export function installGfx($) {
             light_stats.considered = 0;
             light_stats.rays = 0;
             light_stats.cells = 0;
+            light_stats.index_appended = 0;
+            light_stats.index_rebuilt = 0;
+            light_stats.index_segments = 0;
+            light_frame.lights = 0;
+            light_frame.shadowLights = 0;
+            light_frame.culledLights = 0;
+            light_frame.degradedRays = 0;
+            light_frame.degradedSegments = 0;
+            light_frame.skipped = 0;
             // Таблица шейдеров узлов собирается заново: параметры (например,
             // фаза волны) меняются каждый кадр.
             fx_map.clear();
@@ -2839,6 +3753,18 @@ export function installGfx($) {
 
             // Сцена: спрайты одним вызовом, затем треугольники (они поверх).
             if (count > 0) submitSprites(0, count);
+
+            // Неосвещённый мировой слой (`.lit(false)`): отдельным диапазоном
+            // ПОСЛЕ света, тумана и темноты, но ДО интерфейса. Метка ставится
+            // после отправки лит-части: C отрезает диапазон по индексу команды,
+            // а команды появляются только в submitSprites (см. §20).
+            if (unlitActive() || overlayMaterialsActive()) {
+                if (typeof engine.markUnlit === 'function') engine.markUnlit();
+                const unlit_from = count;
+                if (unlitActive()) drawUnlitNodes(cam);
+                drawEmissiveNodes(cam);
+                if (count > unlit_from) submitSprites(unlit_from, count);
+            }
 
             // Интерфейс — в координатах окна, камера не влияет. Срез ui-узлов
             // держит индекс реестра: второго полного прохода за кадр нет
@@ -2965,6 +3891,105 @@ export function installGfx($) {
     def('occluders', function (list) {
         if (list === undefined) return this.nodes.length ? this.nodes[0].attrs.occluders : null;
         return this.eachNode((_, el) => { (el).attrs.occluders = list; });
+    });
+    /**
+     * Маска препятствий источника: `.occluderMask(bits)` — свет видит только
+     * те отрезки реестра, у которых есть общие биты (`occluders([{...,
+     * mask: 2}])`). 0 (по умолчанию) — видит все.
+     */
+    def('occluderMask', function (bits) {
+        if (bits === undefined) {
+            return this.nodes.length ? (this.nodes[0].attrs.occluderMask >>> 0) : 0;
+        }
+        return this.eachNode((_, el) => { (el).attrs.occluderMask = bits >>> 0; });
+    });
+
+    /**
+     * §20.1. Маска ПОЛУЧАТЕЛЯ света: `.lightMask(bits)` — свет каких слоёв
+     * узел принимает. Источник объявляет свой слой (`.layer(bits)` у `<light>`
+     * или `$.gfx.light.layer(bits)`), и свет доходит только туда, где биты
+     * пересекаются.
+     *
+     * Без аргумента — текущие биты (`0xFFFFFFFF` — «принимает все слои», то
+     * есть поведение до появления масок). Без маски узел ведёт себя как раньше:
+     * ни прохода маски, ни смены цены кадра.
+     */
+    def('lightMask', function (bits) {
+        if (bits === undefined) {
+            if (!this.nodes.length) return 0xFFFFFFFF;
+            const raw = this.nodes[0].attrs.lightMask;
+            // Не объявлена — «принимает все слои»: это и есть значение по
+            // умолчанию, а не ноль (ноль означал бы «не принимает ничего»).
+            return raw === undefined || raw === null ? 0xFFFFFFFF : (raw >>> 0);
+        }
+        return this.eachNode((_, el) => { (el).attrs.lightMask = bits >>> 0; });
+    });
+
+    /**
+     * §20.1. Слой ИСТОЧНИКА света: `.lightLayer(bits)` у узла `<light>` /
+     * `<lightarea>`. Одному источнику можно дать несколько слоёв — это биты, а
+     * не номер. Поле при создании: `$('<light>', { lightLayer: 2 })`.
+     *
+     * Имя не `.layer()`: `.layer(n)` в ядре уже занято ПОРЯДКОМ СЛОЁВ узла
+     * (api.js), и подменять его нельзя. Без аргумента — текущий слой (или слой
+     * по умолчанию, см. `$.gfx.light.layer()`).
+     */
+    def('lightLayer', function (bits) {
+        if (bits === undefined) {
+            return this.nodes.length ? (this.nodes[0].attrs.lightLayer >>> 0) : 0;
+        }
+        return this.eachNode((_, el) => { (el).attrs.lightLayer = bits >>> 0; });
+    });
+    /**
+     * Материал узла: `.material('metal')` по имени из `$.gfx.material()` или
+     * объектом-описанием. Материал решает, получает ли узел свет (`lit`),
+     * каким цветом светится сам (`emissive`) и какой у него множитель (`tint`).
+     * Без аргумента — текущий материал узла (нормализованный) или null.
+     */
+    def('material', function (spec) {
+        if (spec === undefined) {
+            if (!this.nodes.length) return null;
+            const node = this.nodes[0];
+            const mat = materialOf(node);
+            return mat ? Object.assign({}, mat, { response: Object.assign({}, mat.response) })
+                       : (node.attrs.material === undefined ? null : node.attrs.material);
+        }
+        const value = (spec === null || spec === false) ? null
+            : (typeof spec === 'string' ? spec : normalizeMaterial(spec));
+        return this.eachNode((_, el) => {
+            const node = el;
+            node.attrs.material = value;
+            if (value && typeof value === 'object') {
+                // lit материала управляет тем же признаком, что и .lit():
+                // второй таблицы «неосвещённых» нет.
+                const lit = value.lit !== false;
+                if (node.attrs.lit === lit && !lit) return;
+                if ((node.attrs.lit !== false) !== lit) touchRegistry();
+                node.attrs.lit = lit;
+            }
+        });
+    });
+
+    /**
+     * Получает ли узел мировой свет: `.lit(false)` — не получает.
+     *
+     * Такой узел рисуется ПОСЛЕ света, тумана и темноты, но ДО интерфейса:
+     * фонарик его не засвечивает, ночь не гасит, а HUD остаётся сверху.
+     * По умолчанию узлы мира свет получают (старое поведение), UI — нет.
+     */
+    def('lit', function (on) {
+        if (on === undefined) {
+            return this.nodes.length ? this.nodes[0].attrs.lit !== false : true;
+        }
+        // Признак живёт в attrs: его видит и unlitActive(), и нативная проверка
+        // особых узлов — второй таблицы «неосвещённых» нет.
+        const value = on !== false;
+        // Версия реестра растёт: unlitActive() кэширует свой скан по ней, и без
+        // этого переключение .lit() не заметилось бы до смены состава узлов.
+        return this.eachNode((_, el) => {
+            if ((el).attrs.lit !== value) touchRegistry();
+            (el).attrs.lit = value;
+        });
     });
     // Мягкая кромка тени: подлучи на направление. 1 — резкая кромка (как было),
     // больше — источник конечного размера и полутень. Цена растёт во столько же

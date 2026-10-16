@@ -22,6 +22,8 @@ export function createLoading(ctx) {
         hint_lbl: null,
         value: 0,
         visible: false,
+        request: null,        // §45: запрос, за которым следит экран
+        unwatch: null,
     };
 
     function clear() {
@@ -32,6 +34,51 @@ export function createLoading(ctx) {
         state.label_lbl = null;
         state.hint_lbl = null;
         state.visible = false;
+        state.request = null;
+        state.unwatch = null;
+    }
+
+    /** Человеческая подпись прогресса: байты и стадия, без вранья о точности. */
+    function progressText(progress) {
+        const p = progress || {};
+        const parts = [];
+        if (p.bytes_known && p.bytes_total > 0) {
+            parts.push(formatBytes(p.bytes_done) + ' / ' + formatBytes(p.bytes_total));
+        } else if (p.jobs_total) {
+            parts.push(`${p.jobs_done} / ${p.jobs_total}`);
+        }
+        if (p.stage && p.stage !== 'queued' && p.stage !== 'done') parts.push(stageName(p.stage));
+        if (p.cancelled) parts.push('отменено');
+        else if (p.estimated && !p.failed) parts.push('оценочно');
+        return parts.join(' · ');
+    }
+
+    function stageName(stage) {
+        switch (stage) {
+            case 'io': return 'чтение';
+            case 'decode': return 'декодирование';
+            case 'apply': return 'применение';
+            default: return stage;
+        }
+    }
+
+    function formatBytes(value) {
+        const bytes = Math.max(0, Number(value) || 0);
+        if (bytes < 1024) return bytes + ' Б';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' КБ';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' МБ';
+    }
+
+    /** Полоса по прогрессу запроса: байты — точные, стадия — оценочная. */
+    function applyRequestProgress() {
+        const req = state.request;
+        if (!req || !state.visible) return;
+        const p = req.progress();
+        let ratio = 0;
+        if (p.bytes_known && p.bytes_total > 0) ratio = p.bytes_done / p.bytes_total;
+        else if (p.jobs_total > 0) ratio = p.jobs_done / p.jobs_total;
+        if (p.state === 'ready') ratio = 1;
+        loading.progress(ratio, progressText(p));
     }
 
     const loading = {
@@ -98,6 +145,58 @@ export function createLoading(ctx) {
 
         visible() { return state.visible; },
         value() { return state.value; },
+
+        /**
+         * §45: следить за асинхронным запросом ресурсов. Полоса показывает
+         * реальные байты (если размеры известны) и стадию; оценочная стадия
+         * честно помечена словом «оценочно», отмена — «отменено».
+         *
+         *   const req = $.resource.request(['assets/heavy.png']);
+         *   $.loading.show({ title: 'Готовим лес…' }).watch(req);
+         *   $.loading.cancel();     // отмена по кнопке/клавише
+         */
+        watch(request, opts) {
+            const o = opts || {};
+            if (state.unwatch) { state.unwatch(); state.unwatch = null; }
+            state.request = request || null;
+            if (!request || typeof request.on !== 'function') {
+                if (o.label !== undefined) loading.label(o.label);
+                return loading;
+            }
+            const refresh = () => applyRequestProgress();
+            const off = [];
+            for (const event of ['ready', 'failed', 'cancelled']) {
+                request.on(event, () => {
+                    applyRequestProgress();
+                    if (event === 'failed' && typeof o.onFailed === 'function') o.onFailed(request.error());
+                    if (event === 'ready' && typeof o.onReady === 'function') o.onReady(request);
+                    if (event === 'cancelled' && typeof o.onCancelled === 'function') o.onCancelled();
+                });
+            }
+            // Постоянное обновление полосы: прогресс виден и между событиями.
+            const api = ctx.$;
+            if (api && typeof api.update === 'function') {
+                let stopped = false;
+                api.update(() => {
+                    if (stopped || state.request !== request) return;
+                    if (request.done()) { stopped = true; applyRequestProgress(); return; }
+                    applyRequestProgress();
+                });
+                off.push(() => { stopped = true; });
+            }
+            state.unwatch = () => { for (const fn of off) fn(); };
+            applyRequestProgress();
+            return loading;
+        },
+
+        /** Отменить запрос, за которым следит экран. true — отменён. */
+        cancel() {
+            if (!state.request || typeof state.request.cancel !== 'function') return false;
+            return state.request.cancel();
+        },
+
+        /** Запрос, за которым следит экран (или null). */
+        watched() { return state.request; },
 
         /** Убрать экран. */
         hide() { clear(); return loading; },

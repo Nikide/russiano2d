@@ -235,6 +235,11 @@ export function buildParams(spec) {
     p.damping = Math.max(0, num(s.damping, 0));
     p.local = !(s.global === true) && s.local !== false;
     p.one_shot = !!s.one_shot;
+    // §21: часы эффекта. 'simulation' (по умолчанию) — общие игровые часы:
+    // пауза и hit-stop останавливают частицы вместе с миром. 'presentation' —
+    // реальное время кадра: эффект продолжает жить на паузе и в hit-stop, как
+    // вспышки и тряска. Оба варианта обслуживает один и тот же тик.
+    p.clock = (s.clock === 'presentation' || s.clock === 'real') ? 'presentation' : 'simulation';
     p.emitting = s.emitting !== false;
     p.burst = toBurst(s.burst);
 
@@ -509,6 +514,7 @@ function emitSub(st, node, p) {
 
 function tickEmitter(node, dt) {
     const st = ensureState(node);
+    st.age = (st.age || 0) + dt;      // возраст эффекта: нужен событию завершения
 
     // .color() меняет только поле узла — подхватываем, если цвет не задан
     // сырым атрибутом (тогда его читает specOf).
@@ -518,6 +524,15 @@ function tickEmitter(node, dt) {
         emitBurst(st, node, st.pending_burst);
         st.pending_burst = 0;
         if (st.params.one_shot) st.emitting = false;
+        st.finished = false;
+        st.age = 0;
+    }
+    // §21: завершение разового эффекта видно игре событием, а не только
+    // «частиц стало ноль»: без него нельзя понять, когда освобождать узел.
+    if (st.params.one_shot && !st.emitting && st.parts.length === 0 && !st.finished) {
+        st.finished = true;
+        const ev = { node, id: node.nid || null, elapsed_ms: Math.round((st.age || 0) * 1000) };
+        try { node.emit('particlesEnd', ev); } catch (e) { /* нет подписчиков — не повод падать */ }
     }
 
     const params = st.params;
@@ -555,7 +570,14 @@ export function tickParticles(dt) {
     // Нет эмиттеров — шагу нечего делать, и прохода по реестру тоже нет:
     // срез по тегу держит индекс реестра (§5, P2 отчёта).
     const nodes = nodesByTag('particles');
-    for (let i = 0; i < nodes.length; i++) tickEmitter(nodes[i], dt);
+    for (let i = 0; i < nodes.length; i++) {
+        const st = states.get(nodes[i]);
+        // Часы выбираются ПО КАЖДОМУ эмиттеру: иначе один «живущий на паузе»
+        // эффект тянул бы за собой все остальные.
+        const clock = st && st.params && st.params.clock === 'presentation';
+        const step = clock && typeof engine.dt === 'number' ? engine.dt : dt;
+        tickEmitter(nodes[i], step);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1001,6 +1023,8 @@ export function installParticles($) {
             st.rng = makeRandom(st.params.seed || (n.uid >>> 0) || 1);
             st.emit_acc = 0;
             st.emitting = true;
+            st.finished = false;
+            st.age = 0;
             st.pending_burst = (st.params.one_shot ? st.params.amount : 0) + sumBurst(st.params);
         });
     });
@@ -1025,6 +1049,8 @@ export function installParticles($) {
             clearEmitter(st);
             st.rng = makeRandom(st.params.seed || (n.uid >>> 0) || 1);
             st.emit_acc = 0;
+            st.finished = false;
+            st.age = 0;
             st.pending_burst = (st.params.one_shot ? st.params.amount : 0) + sumBurst(st.params);
         });
     });

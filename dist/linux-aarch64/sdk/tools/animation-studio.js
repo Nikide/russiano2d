@@ -15,6 +15,7 @@
 import * as M from '../lib/atlas_model.js';
 import { openAtlasSession } from '../lib/atlas_session.js';
 import { escapeHtml } from '../lib/model.js';
+import { createPanel } from '../lib/panel_check.js';
 import * as views from '../lib/views.js';
 
 const DOC = 'sdk/ui/animation_studio.rml';
@@ -42,8 +43,68 @@ export function createStudio(app) {
         dirtyPreview: true,
     };
     let wired = false;
+    // §29: панель проверки и отчёт по анимациям (маркеры/окна, переходы, часы).
+    let panel = null;
 
     const D = () => (s.session ? s.session.doc : null);
+
+    function makePanel() {
+        panel = createPanel(app, {
+            label: 'Animation Studio',
+            paths: () => (s.session ? [s.session.path] : []),
+            primary: () => (s.session ? s.session.path : null),
+            report: () => animationReport(),
+        });
+        return panel;
+    }
+
+    /**
+     * Отчёт анимаций: теги — это клипы, их диапазоны — окна кадров.
+     * Проверяются переходы (разрывы/пересечения диапазонов), часы (длительность
+     * и fps) и случаи прерывания (цикл/одноразовость).
+     */
+    function animationReport() {
+        const d = D();
+        if (!d) return { tags: 0, notes: ['файл не открыт'] };
+        const notes = [];
+        const rows = [];
+        let gaps = 0;
+        let overlaps = 0;
+        const sorted = d.tags.slice().sort((a, b) => a.from - b.from);
+        for (let i = 0; i < sorted.length; i++) {
+            const t = sorted[i];
+            const count = Math.max(0, (t.to === undefined ? d.frames.length - 1 : t.to) - t.from + 1);
+            const dur = count * (t.duration || 100);
+            rows.push({ name: t.name, from: t.from, to: t.to, frames: count, ms: dur,
+                        fps: dur > 0 ? Math.round((count / dur) * 1000) : 0,
+                        loop: t.loop !== false });
+            if (!count) notes.push('тег «' + t.name + '» пустой: окно не сработает');
+            if (i > 0) {
+                const prev = sorted[i - 1];
+                const prevTo = prev.to === undefined ? d.frames.length - 1 : prev.to;
+                if (t.from > prevTo + 1) gaps++;
+                if (t.from <= prevTo) overlaps++;
+            }
+        }
+        if (overlaps) notes.push('диапазоны тегов пересекаются: переход между анимациями неоднозначен');
+        if (gaps) notes.push('между тегами есть разрывы кадров: часть листа не играется');
+        const loops = rows.filter((r) => r.loop).length;
+        return {
+            tags: rows.length, ranges: rows, gaps, overlaps,
+            loopTags: loops, oneShotTags: rows.length - loops,
+            totalMs: rows.reduce((n, r) => n + r.ms, 0),
+            clock: s.playing ? 'playing' : 'paused',
+            interruption: { playing: s.playing, frame: currentIndex(), oneShotTags: rows.length - loops },
+            notes,
+        };
+    }
+
+    /** Прерывание preview: остановить проигрывание и зафиксировать кадр. */
+    function interrupt() {
+        const before = currentIndex();
+        setPlaying(false);
+        return { stopped: !s.playing, frame: currentIndex(), before };
+    }
 
     function slotRect() { return doc.rect('an-view') || { x: 0, y: 0, w: 0, h: 0 }; }
 
@@ -110,6 +171,7 @@ export function createStudio(app) {
         wire();
         app.setStatus('Animation Studio: ' + abs.split('/').pop(), '');
         s.dirtyPreview = true;
+        makePanel();
         renderAll();
         return { id: 'animation-studio', studio: api };
     }
@@ -146,9 +208,29 @@ export function createStudio(app) {
     async function validate() {
         if (!s.session) return { ok: false, diagnostics: [] };
         const r = await s.session.validateDraft();
+        if (!panel) makePanel();
+        panel.absorb(r.diagnostics, s.session.path);
         doc.html('an-diag', views.diagRows(r.diagnostics));
+        renderReport();
         app.setStatus(r.ok ? 'проверка: ошибок нет' : 'проверка: есть ошибки', r.ok ? '' : 'fail');
+        return Object.assign({ path: s.session.path, report: panel.report() }, r);
+    }
+
+    /** «Проверить в игре»: анимирует тот же файл, что проверялся. */
+    function preview() {
+        if (!panel) makePanel();
+        const r = panel.preview();
+        renderReport();
         return r;
+    }
+
+    function renderReport() {
+        if (!panel || !s.session) { doc.text('an-report', ''); return; }
+        const rep = panel.report();
+        const sum = panel.state.summary;
+        doc.text('an-report', escapeHtml('анимации: ' + rep.tags + ' · разрывов ' + rep.gaps + ' · пересечений ' + rep.overlaps +
+            ' · цикл ' + rep.loopTags + '/' + rep.tags + ' · ошибок ' + sum.errors + ' · предупреждений ' + sum.warnings +
+            (rep.notes.length ? ' · ' + rep.notes[0] : '')));
     }
 
     // --- Выбор тега и просмотр -----------------------------------------------------------------
@@ -362,6 +444,8 @@ export function createStudio(app) {
         doc.on('an-undo', 'click', () => ops.undo());
         doc.on('an-redo', 'click', () => ops.redo());
         doc.on('an-validate', 'click', () => validate());
+        doc.on('an-preview', 'click', () => preview());
+        doc.on('an-interrupt', 'click', () => interrupt());
         doc.on('an-to-sprite', 'click', () => toSprite());
         doc.on('an-tags', 'click', (id, ev, key) => { if (key !== '') selectTag(parseInt(key, 10)); });
         doc.on('an-add-tag', 'click', () => newTag());
@@ -382,7 +466,8 @@ export function createStudio(app) {
     const api = {
         state: s,
         ops,
-        openAsset, close, save, validate, toSprite,
+        openAsset, close, save, validate, preview, interrupt, toSprite,
+        get panel() { return panel; },
         selectTag, setSpeed, setPlaying, stepFrame, applyForm, newTag,
         currentIndex,
         get session() { return s.session; },
@@ -399,6 +484,14 @@ export function createStudio(app) {
                 frames: s.frames.length,
                 names: s.names,
                 dirty: s.session ? s.session.history.dirty() : false,
+                panel: panel ? panel.snapshot() : null,
+                report: panel ? panel.report() : null,
+                validatedPath: panel ? panel.state.validatedPath : null,
+                previewPath: panel ? panel.state.previewPath : null,
+                previewMatchesValidated: !!(panel && panel.state.validatedPath && panel.state.validatedPath === panel.state.previewPath),
+                errors: panel ? panel.state.summary.errors : 0,
+                warnings: panel ? panel.state.summary.warnings : 0,
+                codes: panel ? panel.state.summary.codes : [],
             };
         },
         renderAll,

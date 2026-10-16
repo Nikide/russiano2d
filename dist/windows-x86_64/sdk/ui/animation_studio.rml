@@ -17,6 +17,8 @@
         <button id="an-undo" class="btn">Отменить</button>
         <button id="an-redo" class="btn">Повторить</button>
         <button id="an-validate" class="btn">Проверить</button>
+        <button id="an-preview" class="btn">Проверить в игре</button>
+        <button id="an-interrupt" class="btn">Прервать</button>
         <button id="an-to-sprite" class="btn">Sprite Studio</button>
     </div>
 
@@ -71,6 +73,7 @@
         </div>
     </div>
 
+    <div id="an-report" class="hint"></div>
     <div id="an-diag" class="diag-strip"></div>
 </div>
 </body>

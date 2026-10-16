@@ -1108,7 +1108,7 @@ function ensureTilemap(node) {
     if (tm) return tm;
     const a = node.attrs || {};
     tm = {
-        node, layers: [], active: 0, dirty: true,
+        node, layers: [], active: 0, dirty: true, dirty_cells: 0,
         // Y-sort: по умолчанию выключен, чтобы поведение старых игр не менялось.
         ysort: !!a.ysort,
         ysortFrame: -1,      // кадр, для которого собран видимый список
@@ -1574,6 +1574,114 @@ function releaseLayerBodies(layer) {
         engine.destroyBody(id);
     }
     layer.bodies.length = 0;
+    if (layer.body_keys) layer.body_keys.length = 0;
+}
+
+/**
+ * §23: инкрементальная синхронизация тел слоя.
+ *
+ * Раньше любая правка клетки сбрасывала ВСЕ тела карты и создавала их заново
+ * (`releaseLayerBodies` + полный проход). Теперь тела сопоставляются по
+ * ГЕОМЕТРИИ: неизменившиеся переиспользуются, уничтожаются только исчезнувшие
+ * формы, создаются только новые. Для правки одной клетки это 1–3 тела вместо
+ * всей карты, а число пересобранных видно в `resultOf()` (`created`,
+ * `destroyed`, `reused`, `rebuilt`).
+ *
+ * Лимит тел проверяется ДО создания (fail-closed) — как и раньше; при отказе
+ * вызывающий снимает созданное (`finishLimit`).
+ */
+function syncLayerBodies(layer, plan, left, top, node) {
+    const keys = layer.body_keys || (layer.body_keys = []);
+    const bodies = layer.bodies;
+    const old_by_key = new Map();
+    for (let i = 0; i < keys.length; i++) old_by_key.set(keys[i], bodies[i]);
+
+    const next_keys = [];
+    const next_bodies = [];
+    let reused = 0;
+    let created = 0;
+    let destroyed = 0;
+    let dropped = 0;
+
+    for (const shape of plan) {
+        const def = shape.def;
+        const desc = {
+            x: left + shape.lx + shape.w / 2,
+            y: top + shape.ly + shape.h / 2,
+            halfW: shape.w / 2,
+            halfH: shape.h / 2,
+            angle: 0,
+            type: engine.STATIC,
+            friction: 0.4,
+            restitution: 0.0,
+            fixedRotation: true,
+        };
+        if (def && def.filter) {
+            if (def.filter.layerBits !== undefined) desc.layerBits = def.filter.layerBits;
+            if (def.filter.mask !== undefined) desc.mask = def.filter.mask;
+            if (def.filter.group !== undefined) desc.group = def.filter.group;
+            if (def.filter.oneWay) desc.oneWay = true;
+            if (def.filter.oneWayAngle !== undefined) desc.oneWayAngle = def.filter.oneWayAngle;
+            if (def.filter.sensor) desc.sensor = true;
+        }
+        // Ключ включает всё, что влияет на тело: геометрию, позицию и фильтр.
+        const key = bodyKey(desc);
+        const existing = old_by_key.get(key);
+        if (existing !== undefined) {
+            old_by_key.delete(key);
+            next_keys.push(key);
+            next_bodies.push(existing);
+            reused++;
+            continue;
+        }
+        // Мок движка (qjs) возвращает неотрицательное число-заглушку, а
+        // настоящий createBody — id тела. Отрицательный id = «не вышло».
+        const id = engine.createBody(desc);
+        if (typeof id === 'number' && id >= 0) {
+            next_keys.push(key);
+            next_bodies.push(id);
+            created++;
+            if (ctx.byBody) ctx.byBody.set(id, node);
+        } else {
+            dropped = plan.length - next_bodies.length;
+            break;
+        }
+    }
+
+    // Всё, что осталось в old_by_key, исчезло из новой версии данных.
+    for (const stale of old_by_key.values()) {
+        if (ctx.byBody) ctx.byBody.delete(stale);
+        engine.destroyBody(stale);
+        destroyed++;
+    }
+
+    layer.bodies = next_bodies;
+    layer.body_keys = next_keys;
+    return { created, reused, destroyed, dropped, total: plan.length };
+}
+
+/**
+ * §23: отметить клетку как изменённую. `dirty_cells` — сколько клеток ждёт
+ * пересборки с прошлого прохода (-1 — «вся карта», например после clearTiles).
+ */
+function markDirtyCell(tm, tx, ty) {
+    if (tm.dirty_cells === -1) return;
+    tm.dirty_cells = (tm.dirty_cells | 0) + 1;
+}
+
+/** Ключ формы тела: по нему тело переиспользуется между пересборками. */
+function bodyKey(desc) {
+    return [
+        desc.shape === undefined ? 0 : desc.shape,
+        Math.round(desc.x * 1000) / 1000, Math.round(desc.y * 1000) / 1000,
+        Math.round(desc.halfW * 1000) / 1000, Math.round(desc.halfH * 1000) / 1000,
+        desc.angle || 0,
+        desc.layerBits === undefined ? '' : desc.layerBits,
+        desc.mask === undefined ? '' : desc.mask,
+        desc.group === undefined ? '' : desc.group,
+        desc.oneWay ? 1 : 0, desc.sensor ? 1 : 0,
+        desc.radius === undefined ? '' : desc.radius,
+    ].join('|');
 }
 
 function releaseTilemap(node) {
@@ -1646,8 +1754,10 @@ function buildCollisions(tm) {
     let layersOn = 0;
     for (let li = 0; li < tm.layers.length; li++) {
         const layer = tm.layers[li];
-        releaseLayerBodies(layer);
-        layer.result = { ok: true, error: null, policy, planned: 0, created: 0, missing: 0 };
+        // Тела НЕ снимаем здесь: их синхронизирует syncLayerBodies по геометрии
+        // (§23) — неизменившиеся переиспользуются, снимаются только исчезнувшие.
+        layer.result = { ok: true, error: null, policy, planned: 0, created: 0, missing: 0,
+                         reused: 0, destroyed: 0 };
         if (!layerSolidOn(layer)) { plans.push(null); continue; }
         const plan = layerPlan(layer);
         layer.result.planned = plan.length;
@@ -1657,9 +1767,17 @@ function buildCollisions(tm) {
     }
     const result = {
         ok: true, error: null, policy, planned: 0, created: 0, missing: 0, attempted: 0, layers: [],
+        // §23: сколько клеток изменилось с прошлой сборки (-1 — вся карта) и
+        // сколько тел реально пересобрано (создано + снято).
+        dirty_cells: tm.dirty_cells === undefined ? 0 : tm.dirty_cells,
+        reused: 0, destroyed: 0, rebuilt: 0,
     };
     tm.result = result;
-    if (!layersOn && planned === 0) { result.layers = tm.layers.map((l) => l.result); return; }
+    if (!layersOn && planned === 0) {
+        result.reused = 0; result.destroyed = 0; result.rebuilt = 0;
+        result.layers = tm.layers.map((l) => l.result);
+        return;
+    }
 
     // Предварительная проверка есть только у политики 'fail': 'partial' —
     // прежнее поведение «пробуем создавать, пока движок даёт тела».
@@ -1680,54 +1798,33 @@ function buildCollisions(tm) {
     }
 
     let created = 0;
+    let reused = 0;
+    let destroyed = 0;
     for (let li = 0; li < tm.layers.length; li++) {
         const plan = plans[li];
         const layer = tm.layers[li];
         if (!plan) continue;
-        let dropped = 0;
-        for (const shape of plan) {
-            const def = shape.def;
-            const desc = {
-                x: left + shape.lx + shape.w / 2,
-                y: top + shape.ly + shape.h / 2,
-                halfW: shape.w / 2,
-                halfH: shape.h / 2,
-                angle: 0,
-                type: engine.STATIC,
-                friction: 0.4,
-                restitution: 0.0,
-                fixedRotation: true,
-            };
-            if (def && def.filter) {
-                if (def.filter.layerBits !== undefined) desc.layerBits = def.filter.layerBits;
-                if (def.filter.mask !== undefined) desc.mask = def.filter.mask;
-                if (def.filter.group !== undefined) desc.group = def.filter.group;
-                if (def.filter.oneWay) desc.oneWay = true;
-                if (def.filter.oneWayAngle !== undefined) desc.oneWayAngle = def.filter.oneWayAngle;
-                if (def.filter.sensor) desc.sensor = true;
-            }
-            // Мок движка (qjs) возвращает неотрицательное число-заглушку, а
-            // настоящий createBody — id тела. Отрицательный id = «не вышло».
-            const id = engine.createBody(desc);
-            if (typeof id === 'number' && id >= 0) {
-                layer.bodies.push(id);
-                created++;
-                if (ctx.byBody) ctx.byBody.set(id, node);
-            } else {
-                dropped = plan.length - layer.bodies.length;
-                break;
-            }
-        }
+        const sync = syncLayerBodies(layer, plan, left, top, node);
+        created += sync.created;
+        reused += sync.reused;
+        destroyed += sync.destroyed;
         layer.result.planned = plan.length;
-        layer.result.created = layer.bodies.length;
-        layer.result.missing = dropped;
-        if (dropped > 0) { layer.result.ok = false; layer.result.error = 'body-limit'; }
+        layer.result.created = sync.created;
+        layer.result.reused = sync.reused;
+        layer.result.destroyed = sync.destroyed;
+        layer.result.missing = sync.dropped;
+        if (sync.dropped > 0) { layer.result.ok = false; layer.result.error = 'body-limit'; }
     }
     result.planned = planned;
     result.created = created;
+    result.reused = reused;
+    result.destroyed = destroyed;
+    // «Пересобрано» — тел, которых коснулась эта пересборка (создано + снято);
+    // неизменившиеся переиспользованы и в это число не входят.
+    result.rebuilt = created + destroyed;
     result.attempted = created;
     result.layers = tm.layers.map((l) => l.result);
-    if (created < planned) {
+    if (created + reused < planned) {
         // Неполная коллизия — это отказ в ЛЮБОЙ политике (§3.1 п.12): политика
         // решает только, снимать ли уже созданное ('fail') или оставить и
         // предупредить ('partial', прежнее поведение).
@@ -1860,8 +1957,19 @@ function runAutotile(layer) {
 function rebuildTilemap(tm) {
     for (const layer of tm.layers) if (layer.autotile) runAutotile(layer);
     syncNodeSize(tm);
-    buildCollisions(tm);
+    buildCollisions(tm);          // читает tm.dirty_cells (сколько клеток изменилось)
+    // §23: правки клеток должны быть видны данным узла — иначе $.prefab/$.save
+    // сохранили бы ПЕРВОНАЧАЛЬНЫЙ массив, а не то, что показывает карта.
+    // Один Array.from на пачку правок (а не на каждую клетку).
+    if (tm.attrs_dirty) {
+        const node = tm.node;
+        if (node && node.attrs && tm.layers.length === 1) {
+            node.attrs.data = Array.from(tm.layers[0].data);
+        }
+        tm.attrs_dirty = false;
+    }
     tm.dirty = false;
+    tm.dirty_cells = 0;           // следующий проход копит заново
 }
 
 // ---------------------------------------------------------------------------
@@ -2041,6 +2149,8 @@ export function installTilemap($) {
             layer.data[idx] = id | 0;
             if (layer.source) layer.source[idx] = id | 0;
             tm.dirty = true;
+            tm.attrs_dirty = true;
+            markDirtyCell(tm, x, y);
         }
         return this;
     });
@@ -2121,6 +2231,8 @@ export function installTilemap($) {
                 releaseLayerBodies(layer);
             }
             tm.dirty = true;
+            tm.attrs_dirty = true;
+            tm.dirty_cells = -1;   // -1 — «вся карта», точное число неизвестно
         }
         return this;
     });
@@ -2649,6 +2761,12 @@ export function installTilemap($) {
                 policy: r.policy,
                 planned: r.planned | 0,
                 created: r.created | 0,
+                // §23: сколько тел переиспользовано и снято — по ним видно, что
+                // правка одной клетки не пересобирает всю карту.
+                reused: r.reused | 0,
+                destroyed: r.destroyed | 0,
+                rebuilt: r.rebuilt === undefined ? (r.created | 0) : (r.rebuilt | 0),
+                dirty_cells: r.dirty_cells === undefined ? 0 : (r.dirty_cells | 0),
                 missing: r.missing | 0,
                 attempted: r.attempted | 0,
                 layers: (r.layers || []).map((l) => Object.assign({}, l)),

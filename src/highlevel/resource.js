@@ -199,6 +199,10 @@ export function makeEntry(spec) {
         loads: 0,
         fails: 0,
         at: 0,
+        // §27: ВЕРСИЯ опубликованного значения. Игра ссылается на ресурс по
+        // имени и версии, а не по native-handle; версия растёт только когда
+        // значение действительно опубликовано заново (reload/setValue).
+        version: 0,
     };
 }
 
@@ -238,8 +242,9 @@ export function ensureLoaded(entry, loader, now) {
         entry.state = 'ready';
         entry.error = null;
         entry.loads++;
+        entry.version++;
         entry.at = num(now, 0);
-        return { ok: true, value: entry.value, error: null, loaded: true };
+        return { ok: true, value: entry.value, error: null, loaded: true, version: entry.version };
     }
     entry.value = null;
     entry.state = 'failed';
@@ -335,6 +340,32 @@ export function createRegistry(loader, opts) {
         names() { return [...entries.keys()]; },
         spec(name) { const e = entryOf(name); return e ? e.spec : null; },
         error(name) { const e = entryOf(name); return e ? e.error : null; },
+
+        /**
+         * §45: положить уже загруженное значение (асинхронный путь). Запись
+         * становится ready без повторного вызова загрузчика — иначе async
+         * результат был бы загружен второй раз синхронно.
+         */
+        setValue(name, value) {
+            const entry = entryOf(name);
+            if (!entry) return false;
+            entry.value = value;
+            entry.state = 'ready';
+            entry.error = null;
+            entry.loads++;
+            entry.version++;
+            return true;
+        },
+
+        /** §45: отметить запись неудачной (асинхронный путь). */
+        setFailure(name, message) {
+            const entry = entryOf(name);
+            if (!entry) return false;
+            entry.state = 'failed';
+            entry.error = message;
+            entry.fails++;
+            return true;
+        },
 
         /** Взять ресурс по имени: при необходимости описать и загрузить. */
         acquire(name, spec) {
@@ -453,6 +484,7 @@ export function createRegistry(loader, opts) {
                 refs: entry.refs,
                 loads: entry.loads,
                 fails: entry.fails,
+                version: entry.version,
                 error: entry.error,
             }));
         },
@@ -612,8 +644,426 @@ function loadText($, spec) {
 // Установка: $.resource
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// §45: асинхронный resource request
+//
+// Что это: один запрос на список ресурсов со состояниями
+// queued → loading → decoded → uploading → ready | failed | cancelled и
+// progress в известных единицах (байты и задачи). I/O и декодирование идут в
+// рабочем потоке ядра (engine.async), а применение результата — здесь, на
+// главном потоке, в безопасной фазе кадра (логика, до begin_frame): только тут
+// создаётся GPU-текстура и ставятся значения в реестр.
+//
+// Если ядро собрано без engine.async (или это qjs-харнесс), запрос честно
+// идёт синхронным путём: состояния те же, но один ресурс за кадр, чтобы не
+// блокировать кадр целиком. `estimated` в прогрессе говорит, что доля стадии
+// оценочная, а не измеренная в байтах.
+// ---------------------------------------------------------------------------
+
+/** Вид I/O для спецификации: 'image' | 'read' | 'none'. */
+export function requestIoKind(spec) {
+    if (!spec || !spec.path) return 'none';
+    switch (spec.kind) {
+        case 'texture': return 'image';
+        // Лист и кадр режутся из уже загруженной текстуры: декодировать надо
+        // один раз — картинку.
+        case 'sheet': return 'image';
+        case 'sprite': return spec.crop || spec.texture !== undefined ? 'none' : 'image';
+        case 'sound': return 'read';      // декодирование аудио — на главном потоке
+        case 'json':
+        case 'text': return 'read';
+        default: return 'none';           // data/curve/gradient — не файл
+    }
+}
+
 export function installResource($) {
     const registry = createRegistry((spec) => loadByKind(spec, $), { log: (m) => ctx.log(m) });
+
+    // --- §45: очередь запросов ----------------------------------------------
+    // Проверяем именно возможность (как гейтинг RE2D): в харнессе engine —
+    // Proxy, который на неизвестное имя отдаёт noop-функцию, и проверка
+    // «engine.async истинно» приняла бы мок за настоящий загрузчик.
+    const async_io = () => {
+        if (typeof engine === 'undefined' || !engine || !engine.async) return null;
+        const io = engine.async;
+        return (typeof io.read === 'function' && typeof io.poll === 'function') ? io : null;
+    };
+    const active_requests = new Set();
+    const by_job = new Map();          // id задания ядра → { req, item }
+    let request_seq = 0;
+    let hook_installed = false;
+    // Бюджет применения на кадр: тяжёлые применения (GPU upload, decode звука)
+    // ограничены, чтобы анимация экрана загрузки не вставала.
+    const APPLY_BUDGET = 2;
+
+    function dbgReport(where, message, opts) {
+        const o = opts || {};
+        if ($.debug && typeof $.debug.reportError === 'function') {
+            $.debug.reportError(where, new Error(message), {
+                fatal: false,
+                code: o.code || 'R2D_LOAD_RESOURCE',
+                assetPath: o.assetPath === undefined ? null : o.assetPath,
+            });
+        }
+        ctx.log('$.resource.request: ' + message);
+    }
+
+    function requestProgress(req) {
+        const io_stage = req.state === 'queued' ? 'queued'
+            : (req.state === 'loading' ? 'io'
+            : (req.state === 'decoded' ? 'decode'
+            : (req.state === 'uploading' ? 'apply' : 'done')));
+        // Оценочной доля становится там, где она не в байтах: применение
+        // (GPU upload/parse/decode звука), синхронный путь без engine.async и
+        // случай, когда размеры файлов неизвестны вовсе.
+        const estimated = req.sync_fallback || req.state === 'uploading' || !(req.bytes_total > 0);
+        return {
+            state: req.state,
+            stage: io_stage,
+            bytes_done: req.bytes_done,
+            bytes_total: req.bytes_total,
+            bytes_known: req.bytes_total > 0,
+            jobs_done: req.jobs_done,
+            jobs_total: req.jobs_total,
+            estimated,
+            cancelled: req.state === 'cancelled',
+            failed: req.state === 'failed',
+            names: req.items.map((it) => it.name),
+        };
+    }
+
+    function fire(req, event) {
+        const list = req.listeners[event];
+        if (!list) return;
+        for (const fn of list.slice()) {
+            try { fn(req); } catch (e) { ctx.log(`$: ошибка в $.resource.request.on(${event}): ${e}`); }
+        }
+    }
+
+    function finishRequest(req, state) {
+        if (req.state === state) return;
+        req.state = state;
+        active_requests.delete(req);
+        fire(req, state === 'ready' ? 'ready' : (state === 'failed' ? 'failed' : 'cancelled'));
+        fire(req, 'done');
+    }
+
+    /** Освободить всё, что запрос успел взять: отмена не должна течь. */
+    function releaseRequest(req) {
+        const io = async_io();
+        for (const item of req.items) {
+            if (item.job !== null && item.job !== undefined) {
+                if (io && typeof io.cancel === 'function') io.cancel(item.job);
+                if (io && typeof io.release === 'function') io.release(item.job);
+                by_job.delete(item.job);
+                item.job = null;
+            }
+            if (item.acquired && registry.has(item.name)) registry.free(item.name);
+            if (item.entry && item.entry.refs > 0) {
+                while (item.entry.refs > 0) registry.free(item.name);
+            }
+        }
+    }
+
+    function failRequest(req, message, item) {
+        if (req.state === 'failed' || req.state === 'cancelled') return;
+        req.failed = {
+            code: 'R2D_LOAD_RESOURCE',
+            message,
+            name: item ? item.name : null,
+            path: item && item.spec ? item.spec.path || null : null,
+            stage: req.state,
+        };
+        releaseRequest(req);
+        finishRequest(req, 'failed');
+        dbgReport('$.resource.request', message, {
+            code: 'R2D_LOAD_RESOURCE',
+            assetPath: req.failed.path,
+        });
+    }
+
+    /** Обновить состояние по фактам: I/O закончилось → decoded; всё → ready. */
+    function refreshState(req) {
+        if (req.state === 'failed' || req.state === 'cancelled') return;
+        const pending_io = req.items.some((it) => it.io && !it.io_done);
+        const pending_apply = req.items.some((it) => !it.applied);
+        if (pending_io) { if (req.state !== 'loading') req.state = 'loading'; return; }
+        if (pending_apply) { req.state = req.applying ? 'uploading' : 'decoded'; return; }
+        finishRequest(req, 'ready');
+    }
+
+    /** Применить один готовый ресурс (главный поток, безопасная фаза). */
+    function applyItem(req, item) {
+        const spec = item.spec;
+        const io = async_io();
+        try {
+            if (item.value !== undefined) { item.applied = true; }
+            else if (item.io === 'read' && io) {
+                const text = io.takeText(item.job);
+                if (text === null || text === undefined) throw new Error(`"${spec.path}" не прочитался`);
+                if (spec.kind === 'json') {
+                    let parsed = null;
+                    try { parsed = JSON.parse(text); } catch (e) {
+                        throw new Error(`JSON "${spec.path}" не разобрался: ${e}`);
+                    }
+                    item.value = parsed;
+                } else {
+                    item.value = typeof text === 'string' ? text : String(text);
+                }
+            } else if (item.io === 'image' && io) {
+                const tex = io.takeTexture(item.job);
+                if (!(tex >= 0)) throw new Error(`текстура "${spec.path}" не создалась`);
+                item.value = finishImageValue(spec, tex, item);
+            } else {
+                // Синхронный путь (нет engine.async): обычный загрузчик.
+                const res = loadByKind(spec, $);
+                if (!res.ok) throw new Error(res.error || `"${spec.path}" не загрузился`);
+                item.value = res.value;
+            }
+        } catch (e) {
+            const message = (e && e.message) ? e.message : String(e);
+            item.applied = true;
+            item.ok = false;
+            registry.setFailure(item.name, message);
+            failRequest(req, `ресурс "${item.name}" (${spec.path || spec.kind}): ${message}`, item);
+            return false;
+        }
+        item.applied = true;
+        item.ok = true;
+        item.io_done = true;
+        registry.setValue(item.name, item.value);
+        req.jobs_done++;
+        if (!item.counted_bytes) {
+            item.counted_bytes = true;
+            req.bytes_done += item.bytes || 0;
+        }
+        return true;
+    }
+
+    /** Довести картинку до значения ресурса (лист/кадр/текстура). */
+    function finishImageValue(spec, tex, item) {
+        if (spec.kind === 'texture') return tex;
+        if (spec.kind === 'sheet') {
+            const sheet = { src: spec.path, cols: spec.cols, rows: spec.rows, cw: spec.cw, ch: spec.ch };
+            const frames = sheetFrames(sheet);
+            if (!frames || !frames.length) {
+                throw new Error(`лист "${spec.path}" не нарезался (cols×rows = ${spec.cols}×${spec.rows})`);
+            }
+            return frames;
+        }
+        if (spec.kind === 'sprite') {
+            if (spec.crop) {
+                const cut = engine.createSprite(tex, spec.x, spec.y, spec.w, spec.h);
+                if (!(cut >= 0)) throw new Error(`не удалось вырезать кадр из "${spec.path}"`);
+                return cut;
+            }
+            const id = resolveSprite(spec.path);
+            if (!(id >= 0)) throw new Error(`спрайт "${spec.path}" не получился`);
+            return id;
+        }
+        return tex;
+    }
+
+    /** Забрать результат задания ядра и подготовить применение. */
+    function routeResult(res) {
+        const link = by_job.get(res.id);
+        if (!link) {
+            const io = async_io();
+            if (io && typeof io.release === 'function') io.release(res.id);
+            return;
+        }
+        by_job.delete(res.id);
+        const { req, item } = link;
+        item.io_done = true;
+        item.bytes = res.size || item.bytes || 0;
+        if (res.cancelled) { item.released = true; return; }
+        if (!res.ok) {
+            failRequest(req, res.error || `"${res.path}" не прочитался`, item);
+            return;
+        }
+        item.io_ok = true;
+        item.res = res;
+        refreshState(req);
+    }
+
+    function stepRequest(req, budget) {
+        if (req.state === 'ready' || req.state === 'failed' || req.state === 'cancelled') return;
+        // 1. Задания, которые ещё не поставлены ядру.
+        const io = async_io();
+        for (const item of req.items) {
+            if (item.job !== null || item.applied || item.released) continue;
+            if (item.io === 'none') { applyItem(req, item); continue; }
+            if (!io) {
+                // Синхронный путь: по одному ресурсу за кадр.
+                if (budget.apply <= 0) break;
+                budget.apply--;
+                applyItem(req, item);
+                continue;
+            }
+            const id = (item.io === 'image') ? io.image(item.spec.path) : io.read(item.spec.path);
+            if (!(id >= 0)) {
+                failRequest(req, `не удалось поставить чтение "${item.spec.path}"`, item);
+                return;
+            }
+            item.job = id;
+            by_job.set(id, { req, item });
+        }
+        // 2. Применяем готовые (в пределах бюджета кадра).
+        let applied = 0;
+        for (const item of req.items) {
+            if (item.applied || item.released) continue;
+            if (!item.io_done) continue;
+            if (!item.res && item.io !== 'none' && io) continue;   // ждём poll
+            if (applied >= budget.apply) break;                    // бюджет кадра
+            applied++;
+            req.applying = true;
+            applyItem(req, item);
+            if (req.state === 'failed') return;
+        }
+        budget.apply -= applied;
+        req.applying = false;
+        refreshState(req);
+    }
+
+    /**
+     * Хук кадра: забрать результаты ядра и продвинуть все активные запросы.
+     * Ставится лениво при первом запросе (логика кадра — безопасная фаза для
+     * GPU upload и установки значений).
+     */
+    function tickRequests() {
+        const io = async_io();
+        if (io && typeof io.poll === 'function') {
+            const done = io.poll();
+            if (done && done.length) for (const res of done) routeResult(res);
+        }
+        if (!active_requests.size) return;
+        const budget = { apply: APPLY_BUDGET };
+        for (const req of Array.from(active_requests)) {
+            stepRequest(req, budget);
+            if (budget.apply <= 0) break;
+        }
+    }
+
+    function installHook() {
+        if (hook_installed) return true;
+        const api = ctx.$;
+        if (!api || typeof api.update !== 'function') return false;
+        api.update(tickRequests);
+        hook_installed = true;
+        return true;
+    }
+
+    /**
+     * Создать запрос. `list` — спецификации (как в define/acquire), имена или
+     * готовый массив `{ name, ...spec }`. opts: { sync } — не использовать
+     * рабочий поток даже если он есть (тесты, детерминизм).
+     */
+    function createRequest(list, opts) {
+        const o = opts || {};
+        const items = [];
+        for (const raw of (Array.isArray(list) ? list : [list])) {
+            if (!raw) continue;
+            let name = null;
+            let spec = raw;
+            if (typeof raw === 'string') {
+                if (registry.has(raw)) {
+                    spec = registry.spec(raw);
+                    name = raw;
+                } else {
+                    spec = raw;
+                    name = raw;
+                }
+            } else if (raw.name !== undefined) {
+                name = String(raw.name);
+            }
+            const norm = normalizeSpec(name === null ? (spec.path || spec.src) : name, spec);
+            if (!norm) {
+                ctx.log(`$.resource.request: пропущена запись без имени и пути: ${JSON.stringify(spec)}`);
+                continue;
+            }
+            const entry = registry.define(norm.name, norm);
+            items.push({
+                name: norm.name, spec: norm, entry,
+                io: requestIoKind(norm), job: null, applied: false, io_done: requestIoKind(norm) === 'none',
+                ok: false, value: undefined, bytes: 0, counted_bytes: false,
+            });
+        }
+        const req = {
+            id: ++request_seq, items, state: 'queued', applying: false,
+            failed: null, listeners: {}, sync_fallback: !async_io() || o.sync === true,
+            bytes_total: 0, bytes_done: 0, jobs_total: items.length, jobs_done: 0,
+            created_frame: (typeof engine !== 'undefined' && engine) ? engine.frame : 0,
+        };
+        // Точный знаменатель progress: размеры файлов известны заранее (stat),
+        // поэтому байты — измеренные, а не «примерно 40%».
+        const io = async_io();
+        for (const item of items) {
+            if (!item.spec.path) continue;
+            let size = 0;
+            if (io && typeof io.size === 'function') size = Number(io.size(item.spec.path)) || 0;
+            if (!(size > 0) && $.fs && typeof $.fs.readText === 'function' && item.io === 'read') {
+                const text = $.fs.readText(item.spec.path);
+                size = text ? String(text).length : 0;
+            }
+            item.bytes_total = Math.max(0, size);
+            req.bytes_total += item.bytes_total;
+        }
+        if (o.sync === true && io) req.sync_fallback = true;
+        installHook();
+        active_requests.add(req);
+        stepRequest(req, { apply: APPLY_BUDGET });
+        return req;
+    }
+
+    /** Публичный handle запроса — структура, а не текст (§8). */
+    function requestHandle(req) {
+        const handle = {
+            id: req.id,
+            state() { return req.state; },
+            progress() { return requestProgress(req); },
+            done() { return req.state === 'ready' || req.state === 'failed' || req.state === 'cancelled'; },
+            ok() { return req.state === 'ready'; },
+            cancelled() { return req.state === 'cancelled'; },
+            error() { return req.failed; },
+            names() { return req.items.map((it) => it.name); },
+            results() {
+                const out = {};
+                for (const item of req.items) if (item.ok) out[item.name] = item.value;
+                return out;
+            },
+            value(name) {
+                const item = req.items.find((it) => it.name === String(name));
+                return item && item.ok ? item.value : null;
+            },
+            cancel() {
+                if (req.state === 'ready' || req.state === 'failed' || req.state === 'cancelled') return false;
+                // releaseRequest сам снимает задания у ядра — второй раз не зовём.
+                releaseRequest(req);
+                finishRequest(req, 'cancelled');
+                return true;
+            },
+            on(event, fn) {
+                if (typeof fn !== 'function') return handle;
+                const key = String(event);
+                (req.listeners[key] = req.listeners[key] || []).push(fn);
+                if ((key === 'ready' && req.state === 'ready')
+                    || (key === 'failed' && req.state === 'failed')
+                    || (key === 'cancelled' && req.state === 'cancelled')) {
+                    try { fn(handle); } catch (e) { ctx.log(`$: ошибка в обработчике request: ${e}`); }
+                }
+                return handle;
+            },
+            then(resolve, reject) {
+                return new Promise((res, rej) => {
+                    handle.on('ready', () => res(handle));
+                    handle.on('failed', () => rej(new Error(req.failed ? req.failed.message : 'загрузка не удалась')));
+                    handle.on('cancelled', () => res(handle));
+                }).then(resolve, reject);
+            },
+            _raw: req,
+        };
+        return handle;
+    }
 
     /** Описание + то, что интересно игре: размер текстуры, число кадров. */
     function infoOf(entry) {
@@ -626,6 +1076,7 @@ export function installResource($) {
             refs: entry.refs,
             loads: entry.loads,
             fails: entry.fails,
+            version: entry.version,
             error: entry.error,
         };
         if (entry.state === 'ready') {
@@ -685,12 +1136,63 @@ export function installResource($) {
         /** Прогреть кэш: без аргумента — все описанные ресурсы. */
         preload(names) { return registry.preload(names); },
 
+        /**
+         * §45: асинхронный запрос списка ресурсов. Возвращает handle:
+         * `state()`, `progress()`, `cancel()`, `on('ready'|'failed'|'cancelled')`,
+         * `results()`, `value(name)`, `error()`.
+         *
+         *   const req = $.resource.request(['assets/tiles.png', { name: 'lv', path: 'levels/1.json' }]);
+         *   req.progress();   // { bytes_done, bytes_total, stage, estimated, cancelled }
+         */
+        request(list, opts) { return requestHandle(createRequest(list, opts)); },
+
+        /** Активные запросы (копия handles) — для отладки и экранов загрузки. */
+        requests() {
+            return Array.from(active_requests).map((req) => requestHandle(req));
+        },
+
+        /** Отменить все активные запросы; возвращает число отменённых. */
+        cancelAll() {
+            let n = 0;
+            for (const req of Array.from(active_requests)) {
+                if (requestHandle(req).cancel()) n++;
+            }
+            return n;
+        },
+
         has(name) { return registry.has(name); },
         names() { return registry.names(); },
         list() { return registry.list(); },
-        stats() { return registry.stats(); },
+        stats() {
+            const base = registry.stats();
+            base.requests = active_requests.size;
+            const io = async_io();
+            base.async = io && typeof io.stats === 'function' ? io.stats() : null;
+            base.workers = base.async && base.async.workers !== undefined ? base.async.workers : 0;
+            return base;
+        },
         info(name) { return infoOf(registry.entries.get(String(name).trim()) || null); },
         error(name) { return registry.error(name); },
+
+        /**
+         * §27: опубликовать НОВУЮ ВЕРСИЮ уже загруженного ресурса, не выгружая
+         * его. Нужен хот-релоаду: текстура обновляется на месте (id тот же,
+         * содержимое новое), и версия ресурса обязана это показать, иначе игра
+         * читает по имени устаревшую версию. `value` не задан — значение
+         * остаётся прежним (handle не менялся).
+         */
+        publish(name, value) {
+            const key = String(name).trim();
+            const entry = registry.entries.get(key);
+            if (!entry) return null;
+            if (value !== undefined) registry.setValue(key, value);
+            else {
+                entry.state = 'ready';
+                entry.error = null;
+                entry.version++;
+            }
+            return infoOf(entry);
+        },
 
         /** Забыть ресурс вместе со значением. */
         remove(name) { return registry.remove(name); },

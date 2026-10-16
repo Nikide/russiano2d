@@ -23,7 +23,13 @@
 extern "C" {
 #endif
 
-#define SDK_VERSION "0.1.0"
+// Версия SDK = версия проекта: приходит определением из sdk/native/CMakeLists.txt
+// (PROJECT_VERSION корневого CMakeLists.txt). Запасное значение — только для
+// сборки вне CMake (например, ручной компиляции одного файла).
+#ifndef R2D_SDK_VERSION
+#define R2D_SDK_VERSION "0.0.0-dev"
+#endif
+#define SDK_VERSION R2D_SDK_VERSION
 
 // ---------------------------------------------------------------------------
 // Диагностика
@@ -188,6 +194,10 @@ bool sdk_image_write_png(const char *path, const uint8_t *rgba, int w, int h);
 // Атласы спрайтов (формат Aseprite-совместимый, читается $.atlas — docs/SDK.md §7)
 // ---------------------------------------------------------------------------
 void sdk_validate_atlas(const char *path, SdkReport *rep);
+// Манифест batch и сессия агента (sdk_manifest.c): те же правила, по которым
+// эти файлы исполняются, поэтому панели Automation/DevTools и CLI не расходятся.
+void sdk_validate_sdk_manifest(const char *path, SdkReport *rep);
+void sdk_validate_agent_session(const char *path, SdkReport *rep);
 // Приводит JSON атласа к каноническому виду (одна строка на кадр, тег, слайс).
 // Возвращает malloc'нутый текст или NULL (ошибка — в rep).
 char *sdk_atlas_canonical(const R2dJson *root, SdkReport *rep, const char *asset);

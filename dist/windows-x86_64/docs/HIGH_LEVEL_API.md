@@ -743,6 +743,21 @@ $.input.on('key', e => { })            // e.key, e.pressed, e.shift/ctrl/alt
 $.input.on('mouse', e => { }) .on('wheel', e => { }) .on('gamepadOn', e => { })
 $.input.off()
 $.input.text()                         // символы, набранные за этот кадр
+
+// Контексты ввода (§15): приоритет решает, кому достанется нажатие.
+$.input.context('menu', { active: false, priority: 20, binds: { confirm: ['space'] } })
+$.input.context('gameplay', { active: true, priority: 0, binds: { confirm: ['space'], attack: ['j'] } })
+$.input.context('menu').active(true)   // меню перекрыло gameplay
+$.input.consume('confirm')             // я обработал — остальные не увидят
+$.input.consumed() .conflicts('attack', ['space'])
+$.input.markDefaults() .resetDefaults()
+$.input.waitForInput({ timeout: 3000 })// ждать следующее нажатие (перепривязка)
+$.input.cancelWaits() .waiters()
+$.input.device(0).player() .assign(2)  // слот геймпада → игрок
+$.input.devices() .stuck() .resetHeld(0)
+$.input.glyphs('pause')                // подписи кнопок для UI
+$.input.axisAction('left', { axis: 'leftx', sign: -1, threshold: 0.4 })
+$.input.synthPress('space')            // виртуальный ввод тем же путём
 ```
 
 `$.input.text()` отдаёт готовый UTF-8 с учётом раскладки и IME — из него
@@ -783,6 +798,17 @@ $.sound.volume(0.8) .mute(true) .sfxVolume(0.5) .musicVolume(0.5)
 $.sound.stopAll() .playing(ch) .activeChannels() .duration('x.ogg') .preload(['a.ogg'])
 $.sound.seek(ch, 1.2) .position(ch) .durationOf(ch)   // перемотка и позиция канала
 $.sound.channel(ch)   // { playing, volume, pan, pitch, effect, position, duration } — что звучит сейчас
+$.sound.volume({ db: -6 })                  // громкость в dB или линейно (0..1)
+$.sound.dbToLinear(-6) .linearToDb(0.5)     // явный перевод: 0.501 / -6.02
+
+// Музыкальные слои (§25): общий transport на все stem'ы
+const music = $.sound.stems(['calm.ogg', 'battle.ogg'],
+                            { loop: true, loopStart: 12.5, loopEnd: 96, bus: 'music' });
+music.play({ fade: 800 })     // старт одной командой: один sample-clock
+music.seek(30.25) .pause(true) .stop(600)
+music.crossfade(1, 900)       // боевой слой наружу, спокойный в ноль
+music.layer(1, { db: -6 }, { fade: 400 }) .gains({ 'battle.ogg': 1 })
+music.time(0) .frames(1) .times() .drift()   // позиции и расхождение слоёв (мс)
 ```
 
 Расширение можно не писать: движок сам ищет `.wav`, `.ogg`, `.mp3`, `.flac`.
@@ -802,6 +828,25 @@ $.audio.listener('#hero');
 $.audio.room();          // { wet, room, damp, width } — что сейчас звучит
 ```
 
+**Изоляция шинных эффектов (§48).** Эффект шины считается по её собственному
+миксу (группа SDL_mixer) и не протекает в другие шины; на канале он не
+дублируется. Общая комната — свойство всего микса, поэтому для «сухой клик
+остаётся сухим, пока ambience мокнет» авто-комнату выключают, а реверб вешают
+на конкретную шину:
+
+```js
+$.audio.acoustics(false); $.audio.room({ wet: 0 });
+$.audio.bus('ui');                                   // сухая шина
+$.audio.bus('ambience', { effect: 'reverb', effectParams: { send: 0.5 } });
+$.audio.routes();        // карта маршрутизации: dry/colored и предупреждения
+handle.toBus('ambience');   // смена шины на ходу: громкость/панорама не меняются
+$.audio.remove('ambience'); // группа и её хвост освобождаются, чужие шины целы
+$.audio.volume('music', { db: -6 }) .dbToLinear(-6) .linearToDb(0.5)
+```
+
+Подробности и числа замеров — [audiobus.md](highlevel/audiobus.md) §8.1 и
+[sound.md](highlevel/sound.md) §2.2.
+
 ## 19. `$.scene` — сцены
 
 ```js
@@ -819,6 +864,39 @@ $.scene.transition('fade', 300) .busy();
 вызывать прямо из обработчика клика. При смене мир очищается (узлы, тела,
 твины, таймеры), кроме узлов с классом `scene-persistent` и интерфейса при
 `{ keepUI: true }`.
+
+### `$.room` — комнаты как данные (§23)
+
+Комната — описание поверх prefab/scene: `bounds`, карта, инстансы prefab,
+маркеры (спавн, выходы) и ссылки между комнатами. Загрузка — **транзакция**:
+сборка идёт в области владения §5 и публикуется только целиком, поэтому
+неудачная загрузка не меняет текущий мир, а визуал, коллизия и occluders
+всегда соответствуют одним данным.
+
+```js
+$.room.define('level1', {
+    schema: 1, id: 'level1', bounds: { x: 0, y: 0, w: 1280, h: 720 },
+    tilemap: { id: 'map', path: 'maps/1.json', src: 'assets/tiles.png', tile: 32, at: [640, 360] },
+    instances: [{ prefab: 'door', id: 'door_north', x: 640, y: 64 }],
+    markers: { spawn: { x: 64, y: 64 }, exit_north: { x: 640, y: 32, node: true } },
+    exits: [{ id: 'north', marker: 'exit_north', to: 'level2', to_marker: 'spawn' }],
+});
+
+$.room.enter('level1');     // валидация → staging-сборка → публикация на границе кадра
+$.room.build('level2')      // ... commit(handle) / discard(handle)
+$.room.marker('spawn');     // { ok, x, y } — маркер из данных
+$.room.goto('north');       // нет комнаты/маркера — структурированная ошибка R2D_ROOM_*
+$.room.current() .stats() .generation() .adopt() .unload();
+```
+
+Идентификаторы инстансов и детей — из данных (`door_north`, `door_north/lamp`):
+повторный вход в комнату не порождает новые случайные id, поэтому §14
+восстанавливает состояние по `nid`, а `$.scene.current()` = `room:<id>`
+сохраняется вместе со снимком. Правка одной клетки карты не пересобирает всю
+комнату: `$.tilemap.resultOf()` показывает `dirty_cells`, `reused`,
+`destroyed`, `rebuilt`. Подробно — [highlevel/scene.md](highlevel/scene.md) §4,
+[highlevel/tilemap.md](highlevel/tilemap.md) §20,
+[highlevel/prefab.md](highlevel/prefab.md).
 
 ## 20. `$.ui` — интерфейс
 
@@ -925,6 +1003,13 @@ $.time.freeze(70)                   // hit-stop: мир стоит, кадр р�
 $.time.hitStop(70)                  // то же, читаемое имя для обработчика удара
 $.time.slow(400, 0.25)              // плавное замедление на 0.4 с
 $.time.frozen() .freezeLeft() .unfreeze() .physicsScale()
+$.time.tick() .simDt() .simTime()   // шаг симуляции, а НЕ кадр отрисовки
+$.time.onTick(fn)                   // каждый фиксированный шаг
+$.time.everyTicks(30, fn)           // «каждые 30 физических шагов»
+$.time.afterTicks(120, fn)          // «через 120 шагов»
+const life = $.time.duration(300)   // «жить 300 шагов»: left/expired/onEnd
+$.time.mark('shot') .since('shot')  // локальный счётчик шагов
+$.time.after(200, fn, { node })     // таймер с владельцем (политика timers)
 ```
 
 Пауза и масштаб действуют на **игровое время** `$.time.delta()`: твины,
@@ -941,6 +1026,61 @@ $.time.frozen() .freezeLeft() .unfreeze() .physicsScale()
 `$.time.scale()` не затирается — после разморозки возвращается прежний масштаб.
 Пауза останавливает физику так же: тела не должны ехать под экраном паузы.
 Подробно — [highlevel/time.md](highlevel/time.md).
+
+**Шаги симуляции ≠ кадры отрисовки.** `$.time.frame()` — кадр; `$.time.tick()` —
+фиксированный шаг симуляции (те же правила, что у шага физики в C). Периоды и
+времена жизни выражаются в шагах, поэтому не зависят от render FPS: при
+30/60/144 FPS одно и то же симуляционное время даёт одно и то же число шагов.
+Пауза и hit-stop останавливают шаги тем же множителем — второго механизма нет.
+
+## 21.1. `$.processing` — что узел обрабатывает (§44)
+
+| Операция | Вызов | Что происходит |
+|---|---|---|
+| скрыть | `.hide()` / `.visible(false)` | узел не рисуется, логика работает |
+| усыпить тело | сон Box2D | тело не считает покой, проснётся от толчка |
+| не обрабатывать | `.processing({ update: false })`, `.active(false)` | кадровая логика / шаг / анимация / таймеры / физика — по полям |
+| выключить область | `.areaOn('sword', false)` | конкретная sensor-форма не участвует (§40) |
+
+```js
+$('#enemy').processing({ update: false, physics: false })
+$('#enemy').processing('animation')          // → true
+$('#enemy').active(false)                    // update+fixed+timers+physics off,
+                                             // анимация и визуал не тронуты
+$('#enemy').active(true)
+$.processing.allow('#enemy', 'update')       // → false
+$.processing.define('sleeping', { update: false });
+$.processing.set('.enemy', 'sleeping');
+const room = $.scene.scope('room:1');
+$.processing.scope(room, { update: false }); // наследование областью §5
+$.processing.stats()                         // { nodes, bodies_off, inactive, version }
+```
+
+Поля: `update` (кадровая логика и контроллер; псевдоним `movement`), `fixed`
+(подписки и таймеры шага симуляции), `animation` (спрайтовые кадры),
+`timers` (`$.time.after/every` с владельцем), `physics`
+(`engine.setBodyEnabled` — тело выключено целиком, скорость обнуляется, это не
+сон). Политику применяет кадровый тик после шага физики, поэтому она действует
+со следующего шага. Подробно — [highlevel/triggers.md](highlevel/triggers.md).
+
+## 21.2. `$.activation` — видимость и активация (§44)
+
+```js
+$.activation.auto('.enemy');                 // в кадре — обрабатывать, вне — нет
+$.activation.watch('#boss', { margin: 64, hysteresis: 32, cameras: 'p2' });
+$('#boss').on('screen:enter', (e) => $.log(e.data.camera));
+$('#boss').on('screen:exit', () => $.log('ушёл'));
+$.activation.watch('#trap', { region: { x: 1200, y: 300, w: 400, h: 400 } });
+$.activation.visible('#boss')                // виден ли сейчас
+```
+
+Границы — реальные world bounds узла (хитбокс, подписанный scale, для §39 —
+скомпонованный трансформ), камеры — main/PIP/сплитскрин (`cameras: 'any' |
+'main' | имя | индекс | список`). `margin` расширяет зону входа, `hysteresis` —
+полоса выхода (выход по `margin + hysteresis`), поэтому на границе нет дребезга.
+`once: true` даёт ровно один вход. `auto` не скрывает и не удаляет узел:
+уборка остаётся за владельцем (§5). Подробно —
+[highlevel/triggers.md](highlevel/triggers.md).
 
 ## 22. `$.store` и `$.fs` — сохранения и файлы
 
@@ -1321,6 +1461,7 @@ $.update(() => {
 | Blend-режимы и подвьюпорты | `$.blend`, `$.gfx.blend`, `$.viewport` | — | [render.md](highlevel/render.md) |
 | Сохранения: слоты, версии, миграции, автосейв | `$.save` | — | [save.md](highlevel/save.md) |
 | Реестр ресурсов: ленивая загрузка, ссылки, выгрузка | `$.resource` | — | [resource.md](highlevel/resource.md) |
+| Асинхронная загрузка: состояния, progress в байтах, отмена (§45) | `$.resource.request`, `$.scene.loadAsync({ resources })` | — | [resource.md](highlevel/resource.md) §2.1, [scene.md](highlevel/scene.md) §1.1 |
 | Математика, векторы, прямоугольники | `$.math` | — | [mathx.md](highlevel/mathx.md) |
 | Детерминированный ГПСЧ и шум | `$.random` | — | [random.md](highlevel/random.md) |
 | Сеточные помощники: клетки, линии, заливка | `$.grid` | — | [grid.md](highlevel/grid.md) |
@@ -1334,7 +1475,7 @@ $.update(() => {
 | Именованные текстовые стили | `$.font` | — | [font.md](highlevel/font.md) |
 | Спрайтовые атласы из JSON (Aseprite, TexturePacker) | `$.atlas` | — | [atlas.md](highlevel/atlas.md) |
 | Кривые плавности и градиенты (общий `ease` для твинов) | `$.curve` | — | [curve.md](highlevel/curve.md) |
-| Работа кусками по кадрам (генерация, тёплая загрузка) | `$.task`, `$.scene.loadAsync` | — | [task.md](highlevel/task.md) |
+| Работа кусками по кадрам (генерация, тёплая загрузка) | `$.task`, `$.scene.loadAsync` | — | [task.md](highlevel/task.md), [scene.md](highlevel/scene.md) §1.1 |
 | Перезапуск скриптов на границе кадра (hot reload) | `$.script` | — | [script.md](highlevel/script.md) |
 | Сценки и катсцены: текстовый DSL, реплики, выборы, флаги | `$.story` | — | [story.md](highlevel/story.md) |
 | Задания: цели, условия открытия, события рейда, награда | `$.quest` | — | [quest.md](highlevel/quest.md) |
@@ -1354,7 +1495,10 @@ $.update(() => {
 | Именованные слои и маски коллизий | `$.collision` | — | [collision.md](highlevel/collision.md) |
 | Катсцены: сценки внутри текущей сцены | `$.cutscene` | — | [cutscene.md](highlevel/cutscene.md) |
 | Реплей: запись и воспроизведение ввода | `$.replay` | — | [replay.md](highlevel/replay.md) |
-| Экран загрузки: полоса, шаги по кадрам | `$.loading` | — | [loading.md](highlevel/loading.md) |
+| Экран загрузки: полоса, шаги по кадрам, полоса по запросу ресурсов | `$.loading` | — | [loading.md](highlevel/loading.md) |
+| Контракт UI: постоянный HUD, обязательные ID, модальность и фокус (§16) | `$.ui.persist`, `$.ui.required`, `$.ui.inputBlocked`, `$.ui.focusStack` | — | [ui.md](highlevel/ui.md) §5.1, [widgets.md](highlevel/widgets.md) |
+| Локализация на ходу: подписка, пропавшие ключи, числа (§16) | `$.i18n.onChange`, `$.i18n.missing`, `$.i18n.number` | — | [i18n.md](highlevel/i18n.md) §4.1 |
+| Маркеры, skip и возврат камеры/звука в катсцене (§16) | `$.timeline.markers`, `$.timeline.skipAll` | — | [timeline.md](highlevel/timeline.md) §3.6 |
 | Психика NPC и режиссёр рейда: страх, срывы, давление | `$.alive` | — | [alive.md](highlevel/alive.md) |
 | Сеть, только авторитарная: id, владение, снапшоты | `$.net` | — | [net.md](highlevel/net.md) |
 | Время, окно, файлы, сцены, ввод, мир, камера, интерфейс, звук, BSP | `$.time`, `$.window`, `$.fs`, `$.scene`, `$.input`, `$.world`, `$.camera`, `$.ui`, `$.sound`, `$.world.bsp` | — | [time](highlevel/time.md), [window](highlevel/window.md), [store](highlevel/store.md), [scene](highlevel/scene.md), [input](highlevel/input.md), [world](highlevel/world.md), [camera](highlevel/camera.md), [ui](highlevel/ui.md), [sound](highlevel/sound.md), [bsp](highlevel/bsp.md), [replay](highlevel/replay.md) |
@@ -1716,6 +1860,47 @@ $.resource.free('tiles');                                           // 0 → в�
 Виды: `texture`, `sprite`, `sheet`, `sound`, `json`, `text`, `data`
 (`inferKind` выводит вид по расширению). Ограничения (движок не отдаёт API
 выгрузки текстур и звуков) — [resource.md](highlevel/resource.md).
+
+У записи ресурса есть **версия** (`$.resource.info(name).version`): она растёт
+при каждой публикации значения (`load`, `reload`, `publish`), поэтому игра
+ссылается на ресурс по имени и версии, а не по native-handle (§27).
+`$.resource.publish(name)` двигает версию, не выгружая значение — так хот-релоад
+текстуры «на месте» остаётся виден по имени.
+
+### `$.reload` — хот-релоад ассетов (§27)
+
+Применяет изменившиеся ассеты, не разрушая игру: новая версия сначала читается и
+проверяется (`read → validate → prepare`), публикуется только `apply`, а
+неудачная замена оставляет работать прежнюю версию (last-known-good) и
+возвращает `{ ok: false, stage, code }` с кодом `R2D_RELOAD_*`.
+
+```js
+$.reload.watch('hero', { kind: 'atlas', path: 'art/hero.json', atlas: 'hero',
+                         deps: ['hero_page'] });
+$.reload.watch('hud', { kind: 'rml', path: 'ui/hud.rml' });
+$.reload.watch('map', { kind: 'tilemap', path: 'maps/1.json', target: '#map' });
+
+$.reload.reload('hero');     // { ok, stage, code, version, changed, deps, warnings }
+$.reload.poll();             // применить только изменившееся (кнопка F8)
+$.reload.reloadAll();        // весь граф в порядке зависимостей
+$.reload.version('hero');    // версия данных; value/get/list/graph/stats
+$.reload.pending();          // старые handle'ы, ждущие освобождения
+$.reload.on('applied', (r) => {});
+```
+
+| Вид | Что перезагружает |
+|---|---|
+| `texture` | пиксели **на месте** (`engine.reloadTexture`), handle не меняется |
+| `atlas` | раскладка + картинка; кадры перепривязываются по имени, пропавший используемый кадр — отказ |
+| `tilemap` | клетки карты; визуал, коллизия и occluders пересобираются одним проходом |
+| `rml` | документ RmlUi (текст, встроенный стиль); битый `.rml` отклоняется |
+| `json` | произвольные данные с необязательной схемой `validate` |
+
+Три операции различаются явно: `reload`/`poll` — данные, `$.reload.behavior()` —
+перезапуск поведения (замыкания не сохраняются), `$.reload.restartScene(name,
+{ capture, restore })` — restart сцены через область владения §5. Панель
+DevTools (F1) показывает индикатор и кнопки. Полностью —
+[highlevel/reload.md](highlevel/reload.md).
 
 ### `$.ru` — русские имена API
 

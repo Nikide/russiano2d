@@ -16,7 +16,9 @@ import { installStore } from '../../src/highlevel/store.js';
 import { installPrefab } from '../../src/highlevel/prefab.js';
 import {
     installSave, normalizeSlot, normalizeDir, slotFileName, slotPath, slotFromFile,
-    compareSlots, sortSlots, makeSave, serializeSave, migrateSave, parseSaveJson,
+    compareSlots, sortSlots, makeSave, wireSave, serializeSave, migrateSave, parseSaveJson,
+    namespacesOf, NAMESPACES,
+
     flattenNodes, saveInfo, SAVE_FORMAT, SAVE_VERSION,
 } from '../../src/highlevel/save.js';
 
@@ -62,6 +64,13 @@ function fresh() {
     resetFiles();
     $.store.clear();
     $.save.slot(1).dir('saves').stopAutosave();
+    // Разделы, фабрики и content-версии живут вне $.store: сбрасываем и их,
+    // иначе тесты влияли бы друг на друга.
+    $.save.restartRun({ profile: true, presentation: true });
+    $.save.clearBehaviors();
+    const c = $.save.contents();
+    for (const name of Object.keys(c.versions)) $.save.content(name, null);
+    for (const name of Object.keys(c.hashes)) $.save.content(name, null);
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +120,7 @@ test('makeSave: поля в одном порядке, функции и цик�
         meta: { level: 'level1' },
     });
     eq(Object.keys(payload).join(','),
-       'format,version,saved_at,saved_frame,time,scene,store,world,speeds,meta');
+       'format,version,saved_at,saved_frame,time,scene,namespaces,store,world,speeds,node_state,content,meta');
     eq(payload.format, SAVE_FORMAT);
     eq(payload.version, SAVE_VERSION);
     eq(payload.saved_at, 1234, 'время сохранения — целые миллисекунды');
@@ -125,6 +134,51 @@ test('makeSave: поля в одном порядке, функции и цик�
     eq(payload.meta.level, 'level1');
     eq(makeSave(null).store && Object.keys(makeSave(null).store).length, 0);
     eq(makeSave(null).world, null);
+    // §14: плоские поля — зеркала разделов, а не второй набор данных.
+    eq(payload.namespaces.run.data.kills, 3, 'данные $.store лежат в разделе run');
+    eq(payload.namespaces.room.world, payload.world, 'мир — раздел room');
+    eq(payload.namespaces.room.speeds, payload.speeds, 'скорости — раздел room');
+    eq(Object.keys(payload.namespaces.profile.data).length, 0);
+    eq(Object.keys(payload.namespaces.presentation.data).length, 0);
+});
+
+test('wireSave: в файле разделы без плоских зеркал, round-trip стабилен', () => {
+    const text = serializeSave({
+        store: { hp: 5 },
+        world: [{ tag: 'rect', nid: 'n5', id: 'hero' }],
+        node_state: { n5: { v: [1, 0] } },
+    });
+    const file = JSON.parse(text);
+    eq(Object.keys(file).join(','), 'format,version,saved_at,saved_frame,time,scene,namespaces',
+       'в файле нет дублирующих store/world/speeds');
+    eq(file.namespaces.run.data.hp, 5);
+    eq(file.namespaces.room.world[0].nid, 'n5');
+    eq(file.namespaces.room.nodes.n5.v[0], 1, 'состояние по nid лежит в разделе room');
+
+    const parsed = parseSaveJson(text);
+    eq(parsed.ok, true);
+    // Мигрированный вид отдаёт и разделы, и зеркала для старого кода.
+    eq(parsed.data.store.hp, 5);
+    eq(parsed.data.world[0].id, 'hero');
+    eq(parsed.data.node_state.n5.v[0], 1, 'зеркало node_state на месте');
+    eq(serializeSave(parsed.data) === text, true, 'save → load → save даёт тот же JSON');
+    eq(JSON.stringify(wireSave(makeSave({ store: { a: 1 } })).namespaces.run.data), '{"a":1}');
+});
+
+test('namespacesOf: плоский слот версии 2 приезжает в run/room, явные разделы важнее', () => {
+    const ns = namespacesOf({ store: { a: 1 }, world: [{ tag: 'rect' }], speeds: [[0, 0]] });
+    eq(ns.run.data.a, 1, 'store версии 2 — это run');
+    eq(ns.room.world.length, 1, 'world версии 2 — это room');
+    eq(ns.room.speeds.length, 1);
+
+    const explicit = namespacesOf({
+        namespaces: { run: { data: { from: 'ns' } }, room: { nodes: { n1: { v: [0, 0] } } } },
+        store: { from: 'flat' },
+        node_state: { broken: {} },
+    });
+    eq(explicit.run.data.from, 'ns', 'явный раздел важнее плоского зеркала');
+    eq(explicit.room.nodes.n1.v[0], 0);
+    eq(explicit.room.nodes.broken, undefined, 'чужое зеркало node_state не подмешивается');
 });
 
 test('serializeSave → parseSaveJson: round-trip без потерь', () => {
@@ -493,6 +547,253 @@ test('личный каталог слотов: dir() не даёт затира
     $.save.dir('build/test_saves');
     eq($.save.load('quick'), true);
     eq($.store.get('level'), 'forest');
+});
+
+// ---------------------------------------------------------------------------
+// §14: разделы, фабрики поведения, транзакционный restore, протокол диска
+// ---------------------------------------------------------------------------
+
+test('namespaces: profile переживает restartRun, run и room сбрасываются', () => {
+    fresh();
+    $.save.ns('profile').set('lang', 'ru');
+    $.save.ns('profile').set('volume', 0.5);
+    $.save.ns('presentation').set('overlay', false);
+    $.save.ns('run').set('coins', 7);
+    $.save.ns('room').set('roomKey', 1);
+    new Node('rect', { id: 'hero' });
+    eq($.save.ns(), 'room', 'ns() переключает текущий раздел');
+    eq($.save.get('roomKey'), 1, 'get() читает текущий раздел');
+    eq($.save.ns('profile').get('lang'), 'ru');
+    eq($.save.nsData('run').coins, 7, 'nsData отдаёт весь раздел');
+
+    $.save.restartRun();
+    eq($.save.ns('run').get('coins'), undefined, 'run сброшен перезапуском');
+    eq($.save.ns('room').get('roomKey'), undefined, 'room сброшен');
+    eq($.save.ns('profile').get('lang'), 'ru', 'настройки профиля остались');
+    eq($.save.ns('profile').get('volume'), 0.5);
+    eq($.save.ns('presentation').get('overlay'), false, 'косметика осталась');
+    eq(ctx.nodes.filter((n) => !n.removed && !n.parent_node).length, 0, 'мир сброшен');
+    eq(NAMESPACES.join(','), 'profile,run,room,presentation');
+});
+
+test('снимок делит разделы, и они переживают слот и restore', () => {
+    fresh();
+    $.save.ns('profile').set('lang', 'ru');
+    $.save.ns('presentation').set('fps', true);
+    $.save.ns('run').set('coins', 3);
+    new Node('rect', { id: 'hero', x: 10, y: 20 });
+    eq($.save.slot(1).save(), true);
+
+    const file = JSON.parse(files.get('saves/slot-1.json'));
+    eq(file.version, SAVE_VERSION, 'файл в текущей версии');
+    eq(file.namespaces.profile.data.lang, 'ru');
+    eq(file.namespaces.presentation.data.fps, true);
+    eq(file.namespaces.run.data.coins, 3);
+    eq(file.namespaces.room.world.length, 1);
+    eq(file.store, undefined, 'плоских зеркал в файле нет');
+
+    $.save.profile().clear();
+    $.save.ns('run').set('coins', 99);
+    eq($.save.load(1), true);
+    eq($.save.ns('profile').get('lang'), 'ru', 'раздел профиля вернулся');
+    eq($.save.ns('run').get('coins'), 3, 'раздел прохождения вернулся');
+    eq($.save.ns('presentation').get('fps'), true);
+    eq(ctx.byId.get('hero').x, 10);
+
+    const info = $.save.info(1);
+    eq(info.namespaces.join(','), 'profile,run,room,presentation', 'info перечисляет непустые разделы');
+    eq(info.node_state, 0, 'состояния по nid в этом слоте нет');
+});
+
+test('RNG: снимок живёт в разделе run и восстанавливается через $.random', () => {
+    fresh();
+    let restored = null;
+    $.random = {
+        state: () => ({ version: 1, algorithm: 'mulberry32', seed: 7, value: 42,
+                        streams: { gameplay: { seed: 7, value: 3 } } }),
+        validateState: () => true,
+        restore: (s) => { restored = s; },
+    };
+    try {
+        new Node('rect', { id: 'hero' });
+        const payload = $.save.snapshot();
+        eq(payload.namespaces.run.rng.value, 42, 'состояние RNG — в разделе run');
+        const file = JSON.parse(serializeSave(payload));
+        eq(file.namespaces.run.rng.seed, 7);
+        eq(file.namespaces.run.rng.streams.gameplay.value, 3);
+
+        restored = null;
+        eq($.save.restore(payload).ok, true);
+        truthy(restored && restored.value === 42, 'последовательность продолжилась с нужной точки');
+        eq(restored.streams.gameplay.value, 3);
+    } finally {
+        delete $.random;
+    }
+});
+
+test('фабрики поведения: состояние по nid пишется и восстанавливается', () => {
+    fresh();
+    $.save.clearBehaviors();
+    let saved = 0, loaded = 0;
+    const walker = new Node('rect', { id: 'w1' });
+    walker.testHp = 30;
+    walker.testCd = 0.5;
+    eq($.save.behavior('rect', {
+        save(node) {
+            if (node.testHp === undefined) return null;
+            saved++;
+            return { hp: node.testHp, cd: node.testCd };
+        },
+        load(node, data) {
+            loaded++;
+            node.testHp = data.hp;
+            node.testCd = data.cd;
+        },
+    }), 1, 'behavior() вернул число фабрик');
+
+    const payload = $.save.snapshot();
+    const nid = walker.nid;
+    eq(payload.node_state[nid].p.rect.hp, 30, 'состояние узла ключуется по nid');
+    eq(payload.namespaces.room.nodes[nid].p.rect.cd, 0.5);
+    eq(saved, 1);
+
+    walker.testHp = 1;
+    walker.testCd = 9;
+    const r = $.save.restore(payload);
+    eq(r.ok, true, r.reason || '');
+    eq(loaded, 1, 'фабрика восстановила узел ровно один раз');
+    eq(r.applied, 1);
+    const back = ctx.byId.get('w1');
+    eq(back.testHp, 30, 'данные фабрики применились');
+    eq(back.testCd, 0.5);
+    eq(back.nid, nid, 'nid переживает restore');
+
+    $.save.restore(payload);
+    eq(loaded, 2, 'второй restore — снова по одному вызову на узел, а не два');
+    $.save.clearBehaviors();
+    eq($.save.behaviors().length, 0);
+});
+
+test('restore: ошибка до commit не уничтожает рабочее состояние', () => {
+    fresh();
+    const keep = new Node('rect', { id: 'keep', x: 5, y: 5 });
+    const payload = $.save.snapshot();
+    const rollbacks_before = $.save.stats().rollbacks;
+    payload.namespaces.room.nodes = { n99999: { v: [0, 0] } };
+
+    const before = ctx.nodes.filter((n) => !n.removed).length;
+    const r = $.save.restore(payload);
+    eq(r.ok, false, 'restore с битым состоянием отклонён');
+    eq(r.stage, 'invariants');
+    truthy(r.missing.indexOf('n99999') >= 0, 'отчёт назвал потерянный nid: ' + r.missing.join(','));
+    eq(ctx.nodes.filter((n) => !n.removed).length, before, 'число узлов не изменилось');
+    truthy(ctx.byId.get('keep') === keep, 'старый узел жив и зарегистрирован');
+    eq($.save.stats().rollbacks - rollbacks_before, 1, 'откат посчитан');
+    const fail = $.save.lastFailure();
+    eq(fail.ok, false);
+    eq(fail.stage, 'invariants');
+    eq(fail.code, 'R2D_SAVE_INVARIANTS');
+
+    // Успешный restore после отката работает и коммитит узлы.
+    delete payload.namespaces.room.nodes.n99999;
+    payload.namespaces.room.nodes[keep.nid] = { v: [0, 0] };
+    const ok = $.save.restore(payload);
+    eq(ok.ok, true, ok.reason || '');
+    eq(ok.stage, 'commit');
+    eq($.save.stats().committed_nodes, 1);
+});
+
+test('content-версии: strict отклоняет расхождение до изменений мира', () => {
+    fresh();
+    new Node('rect', { id: 'hero' });
+    $.save.content('level1', { version: 1, hash: 'a1' });
+    const payload = $.save.snapshot();
+    $.save.content('level1', { version: 2, hash: 'b2' });
+
+    const strict = $.save.restore(payload, { content: 'strict' });
+    eq(strict.ok, false);
+    eq(strict.stage, 'content');
+    truthy(strict.content.length >= 1, 'расхождение content видно в отчёте');
+    eq(strict.content[0].name, 'level1');
+    eq(ctx.byId.get('hero').removed, false, 'мир не тронут: проверка была до подготовки');
+
+    const warn = $.save.restore(payload, { content: 'warn' });
+    eq(warn.ok, true, 'warn-политика применяет снимок');
+    truthy(warn.content.length >= 1, 'но расхождение видно в отчёте');
+
+    const ignore = $.save.restore(payload, { content: 'ignore' });
+    eq(ignore.ok, true);
+    $.save.content('level1', null);
+    eq($.save.contents().versions.level1, undefined);
+});
+
+test('диск: временный файл, backup и восстановление слота после сбоя', () => {
+    fresh();
+    const temps_before = $.save.stats().temp_writes;
+    const backups_before = $.save.stats().backups;
+    $.save.ns('run').set('coins', 1);
+    eq($.save.save(1), true);
+    eq($.save.stats().temp_writes - temps_before, 1, 'запись идёт через временный файл');
+    eq(files.has('saves/slot-1.json.tmp'), true, 'временный файл остался следом протокола');
+    eq($.save.stats().backups - backups_before, 0, 'первой записи нечего копировать');
+
+    $.save.ns('run').set('coins', 2);
+    eq($.save.save(1), true);
+    eq($.save.stats().backups - backups_before, 1, 'вторая запись сняла backup');
+    eq(JSON.parse(files.get('saves/slot-1.json.bak')).namespaces.run.data.coins, 1);
+
+    // Прерванная запись: основной файл испорчен, копия целая.
+    files.set('saves/slot-1.json', '{ сломано');
+    const recovered = $.save.read(1);
+    eq(recovered.namespaces.run.data.coins, 1, 'слот взят из backup');
+    truthy($.save.stats().recovered >= 1);
+    const v = $.save.verify(1);
+    eq(v.ok, false);
+    eq(v.backup, true, 'verify говорит, что спасает backup');
+    eq($.save.recover(1), true, 'recover вылечил основной файл');
+    eq($.save.verify(1).ok, true);
+    eq($.save.load(1), true, 'и слот снова читается');
+});
+
+test('слот из будущего не перезаписывается, а несовпавшая запись откатывается', () => {
+    fresh();
+    const future = JSON.stringify({ format: SAVE_FORMAT, version: SAVE_VERSION + 5, namespaces: {} });
+    files.set('saves/slot-9.json', future);
+    eq($.save.save(9), false, 'запись в слот из будущего отклонена');
+    eq(files.get('saves/slot-9.json'), future, 'файл не тронут');
+    truthy($.save.stats().rejected_future >= 1);
+    truthy(String($.save.stats().last_error).indexOf('не перезаписываю') > 0);
+    eq($.save.lastFailure().stage, 'future');
+
+    // Запись, которая не совпала с прочитанным, слот не портит.
+    fresh();
+    $.save.ns('run').set('a', 1);
+    eq($.save.save(2), true);
+    const good = files.get('saves/slot-2.json');
+    const real_write = engine.fs.write;
+    engine.fs.write = (path, text) => real_write(path, path.indexOf('.tmp') > 0 ? text + ' ' : text);
+    try {
+        $.save.ns('run').set('a', 2);
+        eq($.save.save(2), false, 'проверка записи поймала расхождение');
+        eq(files.get('saves/slot-2.json'), good, 'основной слот остался прежним');
+    } finally {
+        engine.fs.write = real_write;
+    }
+});
+
+test('saveInfo видит разделы, состояние по nid и content', () => {
+    fresh();
+    $.save.clearBehaviors();
+    $.save.ns('profile').set('lang', 'ru');
+    $.save.content('level1', { version: 3 });
+    const hero = new Node('rect', { id: 'hero' });
+    const payload = $.save.snapshot();
+    payload.namespaces.room.nodes[hero.nid] = { v: [0, 0] };
+    payload.content = { versions: { level1: 3 }, hashes: {} };
+    const info = saveInfo(payload, { slot: 1 });
+    eq(info.namespaces.join(','), 'profile,room', 'непустые разделы перечислены: ' + info.namespaces.join(','));
+    eq(info.node_state, 1, 'состояние по nid посчитано');
+    eq(info.content.versions.level1, 3, 'content-версия видна в метаданных');
 });
 
 finish();

@@ -47,6 +47,14 @@ jobs:
           cmake -S . -B build-ci -DCMAKE_BUILD_TYPE=Release "${flags[@]}"
       - name: Build engine and SDK
         run: cmake --build build-ci --config Release --parallel 4
+      - name: Configure and build platformer (RE2D off)
+        run: |
+          flags=()
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            flags+=("-DR2D_BUNDLED_FREETYPE=ON" '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>')
+          fi
+          cmake -S . -B build-2d-ci -DCMAKE_BUILD_TYPE=Release -DR2D_ENABLE_RE2D=OFF "${flags[@]}"
+          cmake --build build-2d-ci --config Release --parallel 4
       - name: Validate version tag
         if: startsWith(github.ref, 'refs/tags/')
         run: |
@@ -56,8 +64,12 @@ jobs:
           import release
           assert os.environ['GITHUB_REF_NAME'] == 'v' + release.read_version()
           PY
-      - name: Native and JavaScript tests
-        run: python tools/ci_verify.py --build-dir build-ci
+      - name: Native and JavaScript tests (RE2D on)
+        run: python tools/ci_verify.py --build-dir build-ci --re2d on
+      - name: Native and JavaScript tests (RE2D off)
+        run: python tools/ci_verify.py --build-dir build-2d-ci --re2d off
+      - name: Web export (honest skip without emsdk)
+        run: python tools/ci_verify.py --build-dir build-ci --web
       - name: Linux SDK GUI regressions
         if: runner.os == 'Linux'
         env:
@@ -67,6 +79,8 @@ jobs:
         run: |
           xvfb-run -a python3 tests/agent/sdk_cli_test.py
           xvfb-run -a python3 tests/agent/sdk_studios_test.py
+          xvfb-run -a python3 tests/agent/sdk_package_test.py
+          xvfb-run -a python3 tests/agent/build_test.py
           xvfb-run -a python3 tests/agent/ui_virtual_mouse_test.py
       # Re2D World acceptance and golden images (re2d_world_renderer_test.py,
       # sdk_world_studio_test.py, re2d_world_acceptance_test.py, re2d_dust2_test.py,

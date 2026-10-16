@@ -17,6 +17,7 @@ set(R2D_SDK_SOURCES
     sdk_image.c
     sdk_atlas.c
     sdk_data.c
+    sdk_manifest.c
     sdk_batch.c
     sdk_agent.c
     sdk_cmds.c
@@ -27,6 +28,10 @@ add_library(r2d_sdk_core STATIC ${R2D_SDK_SOURCES})
 target_include_directories(r2d_sdk_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/src")
+# Версия SDK — та же, что версия проекта: одна строка в корневом
+# CMakeLists.txt, её и печатает `r2d-sdk version`. PROJECT_VERSION приходит из
+# project(...) и не дублируется в sdk.h.
+target_compile_definitions(r2d_sdk_core PUBLIC R2D_SDK_VERSION="${PROJECT_VERSION}")
 target_link_libraries(r2d_sdk_core PUBLIC SDL3::SDL3 r2d_stb ${R2D_WIN_LIBS})
 set_source_files_properties(sdk_image.c PROPERTIES COMPILE_OPTIONS "-w")
 if(NOT MSVC)

@@ -17,6 +17,7 @@
         <button id="ds-undo" class="btn">Отменить</button>
         <button id="ds-redo" class="btn">Повторить</button>
         <button id="ds-validate" class="btn">Проверить</button>
+        <button id="ds-preview" class="btn">Проверить в игре</button>
     </div>
     <div id="ds-tools" class="bar tools"></div>
 
@@ -40,6 +41,7 @@
                 <button id="ds-create" class="btn small">Создать</button>
             </div>
             <div id="ds-summary" class="hint"></div>
+            <div id="ds-report" class="hint"></div>
             <div id="ds-right"></div>
         </div>
     </div>

@@ -20,7 +20,11 @@ import * as atlasModel from './lib/atlas_model.js';
 const DOC = 'sdk/ui/shell.rml';
 const STATE_FILE = 'sdk/state.local.json';
 const REGISTRY_FILE = 'sdk_tools.json';
-const SDK_VERSION = '0.1.0';
+// Версия SDK живёт в одном месте — корневом CMakeLists.txt (PROJECT_VERSION);
+// её печатает `r2d-sdk version`. Здесь только запасное значение на время, пока
+// мост не ответил, и для случая выключенного моста (toolHost).
+const SDK_VERSION_FALLBACK = '0.0.0-dev';
+let sdkVersion = SDK_VERSION_FALLBACK;
 const MAX_DOC_CHARS = 60000;
 const MAX_LOG_CHARS = 12000;
 
@@ -117,9 +121,20 @@ export function createApp($) {
         setStatus(ok ? okText : failText, ok ? '' : 'fail');
     }
 
+    // --- Версия SDK -------------------------------------------------------------
+    // Одна на проект: спрашиваем у нативного бэкенда (`r2d-sdk version`), а не
+    // держим вторую строку версии в JS. Не ответил — остаётся запасное значение.
+    async function loadVersion() {
+        const r = await backend(['version'], 'версия SDK');
+        const value = r.json && r.json.version;
+        if (!value) return null;
+        sdkVersion = String(value);
+        doc.text('sdk-version', sdkVersion);
+        return sdkVersion;
+    }
+
     // --- Реестр инструментов ----------------------------------------------------
-    async function loadRegistry(pathOverride) {
-        const path = pathOverride ? absolutePath(base(), pathOverride) : registryPath();
+    async function loadRegistry(pathOverride) {        const path = pathOverride ? absolutePath(base(), pathOverride) : registryPath();
         const r = await backend(['tools', '--registry', path], 'чтение sdk_tools.json');
         const json = r.json;
         if (json) {
@@ -602,7 +617,7 @@ export function createApp($) {
         const sum = summarize(state.diagnostics);
         return {
             recovery: app.recovery ? app.recovery.snapshot() : [],
-            version: SDK_VERSION,
+            version: sdkVersion,
             view: state.view,
             status: state.status,
             busy: state.busy,
@@ -637,7 +652,7 @@ export function createApp($) {
     // --- Публичный объект приложения ---------------------------------------------------
     const app = {
         $, state,
-        loadRegistry, openProject, findProjects, refreshAssets, setFilter, selectAsset,
+        loadRegistry, loadVersion, openProject, findProjects, refreshAssets, setFilter, selectAsset,
         validateAsset, validateProject, openTool, closeTool, openAsset,
         runProject, stopProject, buildProject, debugProject, packageProject, showDoc, showView, snapshot,
         loadTemplates, selectTemplate, createFromTemplate, loadEngines,
@@ -658,7 +673,7 @@ export function createApp($) {
     doc = $.ui.doc(DOC);
     doc.show();
     wire();
-    doc.text('sdk-version', SDK_VERSION);
+    doc.text('sdk-version', sdkVersion);
     showView('projects');
     renderAll();
     $.sdkApp = app;
@@ -676,5 +691,6 @@ export function createApp($) {
     });
 
     loadRegistry();
+    loadVersion();
     return app;
 }

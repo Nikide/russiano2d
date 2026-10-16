@@ -34,6 +34,78 @@ function isInside(ancestor, node) {
 }
 
 export function installUi($) {
+    // §16: реестр «элемент → ключ перевода». Держит и узлы <ui.*>, и элементы
+    // открытых документов RmlUi: при смене языка всё это перерисовывается
+    // одной функцией, а не «кто успел подписаться».
+    const tr_entries = [];
+    // §16: привязки данных (здоровье, cooldown, таймер, прогресс загрузки,
+    // устройство). Не «описание метода», а измеримая связь «источник → вид»:
+    // значение обновляется, только если оно изменилось, и это видно счётчиками.
+    const bindings = [];
+    // Обязательные ID интерфейса: игра объявляет контракт один раз, движок
+    // проверяет его структурой (не «есть методы», а «вот чего нет»).
+    let required = [];
+
+    /** Ключ перевода в объектной форме: { key: 'hud.ammo', n: 12 } (§16). */
+    function trSpec(spec, extra) {
+        if (spec && typeof spec === 'object' && !Array.isArray(spec)) {
+            const key = spec.key !== undefined ? spec.key : spec.tr;
+            const params = Object.assign({}, spec, extra || {});
+            return { key: key === undefined ? '' : String(key), params };
+        }
+        return { key: spec === undefined || spec === null ? '' : String(spec), params: extra || null };
+    }
+
+    /** Записать значение источника в вид. `force` — первое применение. */
+    function applyBinding(entry, force) {
+        let value;
+        try {
+            value = entry.get();
+        } catch (e) {
+            entry.error = String(e && e.message ? e.message : e);
+            if (force) ctx.log(`$.ui.bind("${entry.name}"): источник упал: ${entry.error}`);
+            return false;
+        }
+        entry.error = null;
+        if (!force && value === entry.last) { entry.skipped++; return false; }
+        entry.last = value;
+        entry.value = value;
+        entry.updates++;
+        const o = entry.opts;
+        const text = typeof o.text === 'function' ? o.text(value) : String(value);
+        try {
+            if (entry.doc) {
+                entry.doc.text(entry.element, text);
+            } else {
+                const list = query(entry.selector);
+                for (const node of list) {
+                    if (o.property && typeof node.set === 'function') node.set(o.property, value);
+                    else if (node.tag === 'ui.bar' && typeof value === 'number') node.value = value;
+                    else node.text = text;
+                }
+            }
+        } catch (e) {
+            entry.error = String(e && e.message ? e.message : e);
+            return false;
+        }
+        return true;
+    }
+
+    function applyTrEntry(entry) {
+        const spec = trSpec(entry.key, entry.params);
+        const value = $.tr ? $.tr(spec.key, spec.params) : spec.key;
+        entry.resolved_key = spec.key;
+        if (entry.doc) {
+            entry.doc.text(entry.element, value);
+        } else {
+            const list = query(entry.selector);
+            for (let i = 0; i < list.length; i++) list[i].text = String(value);
+            entry.matched = list.length;
+        }
+        entry.value = value;
+        return value;
+    }
+
     const ui = {
         // --- Узлы <ui.*> -----------------------------------------------------
 
@@ -136,6 +208,225 @@ export function installUi($) {
             return wrapper;
         },
 
+        // --- §16: локализация открытых документов и узлов --------------------
+
+        /**
+         * Привязать текст узла интерфейса к ключу перевода и запомнить связь:
+         * при смене языка `$.i18n.lang('en')` строка обновится сама.
+         *
+         *   $.ui.tr('#menu_play', 'menu.play');
+         */
+        tr(selector, key, params) {
+            ensureTrHook();
+            const entry = { selector: String(selector), key, params: params || null,
+                            doc: null, element: null, value: null, matched: 0 };
+            tr_entries.push(entry);
+            applyTrEntry(entry);
+            return ui;
+        },
+
+        /** Внутреннее: регистрация элемента документа (зовёт doc.tr()). */
+        _trDoc(doc, element, key, params) {
+            ensureTrHook();
+            // key храним КАК ЕСТЬ: это может быть объектная форма { key, n }.
+            const entry = { doc, element: String(element), key,
+                            params: params || null, selector: null, value: null, matched: 0 };
+            tr_entries.push(entry);
+            applyTrEntry(entry);
+            return entry;
+        },
+
+        /** Внутреннее: снять записи выгруженного документа (иначе мёртвые id). */
+        _trDropDoc(doc) {
+            for (let i = tr_entries.length - 1; i >= 0; i--) {
+                if (tr_entries[i].doc === doc) tr_entries.splice(i, 1);
+            }
+        },
+
+        /** Перечитать все привязанные тексты (зовётся хуком i18n.onChange). */
+        retranslate() {
+            for (let i = 0; i < tr_entries.length; i++) applyTrEntry(tr_entries[i]);
+            return ui;
+        },
+
+        /** Что привязано к переводу — для отладки и тестов. */
+        trList() {
+            return tr_entries.map((e) => ({
+                selector: e.selector, element: e.element, key: e.key,
+                value: e.value, matched: e.matched,
+                doc: e.doc ? e.doc.path : null,
+            }));
+        },
+
+        // --- §16: привязки данных --------------------------------------------
+
+        /**
+         * Привязать вид к источнику значения.
+         *
+         *   $.ui.bind('#hp_bar',  () => hero.hp / hero.hpMax);          // полоса
+         *   $.ui.bind('#time_lbl', () => $.time.now(), { text: (v) => v.toFixed(1) + ' с' });
+         *   $.ui.bind({ doc: 'ui/hud.rml', element: 'device' }, () => $.input.device());
+         *
+         * Источник — функция. Вид: узел `<ui.bar>` получает `value`, остальное —
+         * текст; элемент документа получает текст. Перерисовка происходит лишь
+         * при смене значения (`updates`), одинаковые кадры считаются в `skipped`.
+         */
+        bind(target, source, opts) {
+            const get = typeof source === 'function' ? source
+                : (source && typeof source.get === 'function' ? source.get : null);
+            if (typeof get !== 'function') {
+                ctx.log('$.ui.bind: источник — функция или { get() }');
+                return ui;
+            }
+            const entry = {
+                target, get, opts: opts || {}, last: undefined, updates: 0, skipped: 0,
+                error: null, value: undefined, doc: null, element: null, selector: null,
+            };
+            if (target && typeof target === 'object' && target.doc) {
+                const doc = docs.get(String(target.doc));
+                if (!doc) {
+                    ctx.log(`$.ui.bind: документ "${target.doc}" не открыт`);
+                    return ui;
+                }
+                entry.doc = doc;
+                entry.element = String(target.element);
+                entry.name = target.doc + '#' + target.element;
+            } else {
+                entry.selector = String(target);
+                entry.name = entry.selector;
+            }
+            bindings.push(entry);
+            applyBinding(entry, true);
+            return ui;
+        },
+
+        /** Снять привязки: `$.ui.unbind('#hp_bar')` или все без аргумента. */
+        unbind(target) {
+            if (target === undefined) { const n = bindings.length; bindings.length = 0; return n; }
+            const name = typeof target === 'object' && target.doc
+                ? target.doc + '#' + target.element : String(target);
+            for (let i = bindings.length - 1; i >= 0; i--) {
+                if (bindings[i].name === name) bindings.splice(i, 1);
+            }
+            return ui;
+        },
+
+        /** Состояние привязок — для HUD-отладки и тестов. */
+        bindings() {
+            return bindings.map((b) => ({
+                target: b.name, value: b.value, updates: b.updates, skipped: b.skipped,
+                error: b.error,
+            }));
+        },
+
+        /** Сколько обновлений/пропусков всего: проверка «не перерисовываем зря». */
+        bindStats() {
+            let updates = 0;
+            let skipped = 0;
+            for (const b of bindings) { updates += b.updates; skipped += b.skipped; }
+            return { bindings: bindings.length, updates, skipped };
+        },
+
+        // --- §16: постоянный интерфейс против временных окон -----------------
+
+        /**
+         * Пометить узлы постоянными: смена сцены и рестарт комнаты их не
+         * сносят (`clearWorld` пропускает класс `scene-persistent`).
+         *
+         *   $.ui.persist('#hud, #hud_hp, #hud_bar');   // HUD переживёт load()
+         *   $.ui.transient('#pause_menu');             // а это — нет
+         */
+        persist(...targets) {
+            for (const sel of targets) {
+                query(sel).forEach((n) => {
+                    if (n.classes && typeof n.classes.add === 'function') n.classes.add('scene-persistent');
+                    n.attrs.persistent = true;
+                });
+            }
+            return ui;
+        },
+
+        /** Снять постоянство: узел снова принадлежит сцене. */
+        transient(...targets) {
+            for (const sel of targets) {
+                query(sel).forEach((n) => {
+                    if (n.classes && typeof n.classes.remove === 'function') n.classes.remove('scene-persistent');
+                    n.attrs.persistent = false;
+                });
+            }
+            return ui;
+        },
+
+        /** Сколько постоянных ui-узлов живо — проверка «HUD пережил смену». */
+        persistCount() { return ui.persistList().length; },
+
+        /** ID постоянных ui-узлов (для отчёта и теста). */
+        persistList() {
+            const out = [];
+            const nodes = nodesWithFacet('ui');
+            for (let i = 0; i < nodes.length; i++) {
+                const n = nodes[i];
+                if (n.classes && n.classes.has && n.classes.has('scene-persistent')) out.push(n.id || n.tag);
+            }
+            return out;
+        },
+
+        /** Открытые документы RmlUi (пути) — контракт ID проверяется по ним. */
+        documents() { return [...docs.keys()]; },
+
+        /** Есть ли элемент с таким ID в открытом документе. */
+        has(docPath, elementId) {
+            const doc = docs.get(String(docPath));
+            if (!doc) return false;
+            const rect = doc.rect(String(elementId));
+            return !!(rect && rect.w !== undefined && rect.w >= 0);
+        },
+
+        /**
+         * §16: объявить обязательные ID интерфейса.
+         *
+         *   $.ui.required([{ doc: 'ui/hud.rml', ids: ['hp_bar', 'hp_text'] }]);
+         *   $.ui.checkRequired();   // { ok, checked, missing: [{ doc, id }] }
+         *
+         * Проверка идёт через существующий API документов (rect элемента),
+         * а не через парсинг .rml: важно, что ID доступен игре СЕЙЧАС.
+         */
+        required(list) {
+            if (list === undefined) return required.map((r) => ({ doc: r.doc, ids: r.ids.slice() }));
+            required = [];
+            for (const item of [].concat(list)) {
+                if (!item || !item.doc) continue;
+                required.push({ doc: String(item.doc),
+                                ids: (item.ids || []).map(String) });
+            }
+            return ui;
+        },
+
+        /** Проверить обязательные ID: структура, готовая к отчёту и тесту. */
+        checkRequired() {
+            const missing = [];
+            let checked = 0;
+            for (const item of required) {
+                for (const id of item.ids) {
+                    checked++;
+                    if (!ui.has(item.doc, id)) missing.push({ doc: item.doc, id });
+                }
+            }
+            return { ok: missing.length === 0, checked, missing,
+                     documents: ui.documents() };
+        },
+
+        /** §16: полный отчёт интерфейса — документы, обязательные ID, переводы. */
+        report() {
+            return {
+                documents: ui.documents(),
+                required: ui.checkRequired(),
+                translations: ui.trList(),
+                scale: state_scale,
+                aria: ui.ariaCount(),
+            };
+        },
+
         /** Иконка Material Design по имени (2235 штук встроены в движок). */
         icon(name) { return engine.ui.icon(name); },
         hasIcon(name) { return engine.ui.hasIcon(name); },
@@ -159,6 +450,10 @@ export function installUi($) {
 
         /** Внутреннее: обработка наведения и кликов по ui-узлам. */
         _tick() {
+            ensureTrHook();
+            // §16: привязки данных — до обработки ввода, чтобы игрок видел
+            // актуальные значения в том же кадре.
+            for (let i = 0; i < bindings.length; i++) applyBinding(bindings[i], false);
             // Срез ui-узлов держит индекс реестра: нет узлов — цикл пуст, и
             // полного обхода мира здесь больше нет (§5, P2 отчёта).
             const nodes = nodesWithFacet('ui');
@@ -204,6 +499,19 @@ export function installUi($) {
     };
 
     ctx.ui = ui;
+    // §16: подписка на смену языка — открытые документы и привязанные узлы
+    // обновляются на ходу, без перезапуска игры. installUi идёт РАНЬШЕ
+    // installI18n, поэтому подписка ставится лениво: первый же кадр или первая
+    // привязка текста её включает.
+    function ensureTrHook() {
+        if (ui._tr_off) return true;
+        const i18n = ($ && $.i18n) || ctx.i18n;
+        if (!i18n || typeof i18n.onChange !== 'function') return false;
+        ui._tr_off = i18n.onChange(() => ui.retranslate());
+        return true;
+    }
+    ui._ensureTrHook = ensureTrHook;
+    ensureTrHook();
     return ui;
 }
 
@@ -217,7 +525,17 @@ function makeDoc(id, path) {
         hide() { engine.ui.hide(id); return this; },
         // Снимаем документ и выкидываем его из кэша: иначе $.ui.doc(path)
         // после unload() вернул бы ту же обёртку с мёртвым id.
-        unload() { engine.ui.unload(id); docs.delete(path); return this; },
+        unload() {
+            engine.ui.unload(id);
+            ctx.ui._trDropDoc(this);      // мёртвые id в реестре переводов не держим
+            docs.delete(path);
+            return this;
+        },
+        /**
+         * §16: текст элемента документа по ключу перевода. Запись запоминается:
+         * `$.i18n.lang('en')` обновит открытый документ сам.
+         */
+        tr(element, key, params) { ctx.ui._trDoc(this, element, key, params); return this; },
         visible() { return engine.ui.visible(id); },
         text(element, text) { engine.ui.setText(id, element, String(text)); return this; },
         html(element, html) { engine.ui.setHtml(id, element, html); return this; },

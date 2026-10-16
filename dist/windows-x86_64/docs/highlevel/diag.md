@@ -81,3 +81,48 @@ $.debug.classify(where)     // { code, subsystem } — как движок кл�
 * Структурированный результат **по значению** для конкретных операций
   (например `{ ok: false, code }` от загрузчика) — отдельная работа §17; здесь
   только единый журнал ошибок.
+
+---
+
+## Отладочные представления боя (§28)
+
+По одному hit ID видно всю цепочку: чем ударили, что столкнулось, каким было
+решение фильтра и что стало с целью.
+
+```js
+const chain = $.trace.hit(7);
+// { found, hit, owner, target, complete,
+//   steps: [{ kind: 'attack'|'combat:filter'|'damage'|'death', node, frame, data }] }
+
+$.trace.hits();        // все цепочки в журнале
+```
+
+`complete: true` означает, что в цепочке есть источник, решение фильтра и
+результат урона — именно это требование §28, а не просто «есть запись». Отказ
+фильтра тоже попадает в цепочку отдельной записью `combat:filter` с причиной
+(`immunity`, `duplicate`, `team`, `inactive_window`, …), поэтому на вопрос
+«почему урона нет» отвечает журнал, а не чтение кода боя.
+
+Состояние узла в одном снимке:
+
+```js
+$.debug.anatomy('#hero');
+// { found, nid, tag, pos, size, visible, body: { id, layer, mask, group },
+//   areas: [{ name, role, index, enabled, sensor, owner, shape, x, y, w, h }],
+//   ground, windows, processing: { update, fixed, animation, timers, physics },
+//   watching }
+
+$.debug.contacts();    // контакты за шаг: фаза, участники, нормаль, роли областей
+```
+
+`anatomy()` показывает `index` каждой формы — по нему адресуются per-shape
+операции (§40), а `processing` отвечает на «почему объект не двигается» без
+поиска по политикам. Отладочные снимки **не меняют** исход симуляции: проверено
+сравнением состояния боя до и после серии вызовов.
+
+Профиль остаётся машиночитаемым: `engine.profile()` отдаёт `zones`, `frame_ms`
+и `gpu_available`/`gpu_ms`; GPU-время называется GPU-временем только если
+timestamp'ы действительно сняты, иначе поле остаётся пустым, а не подменяется
+CPU-временем.
+
+Проверка: [debug_diagnostics_test.py](../../tests/agent/debug_diagnostics_test.py).

@@ -9,6 +9,7 @@
     python3 tests/agent/build_test.py
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -18,9 +19,12 @@ import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 
 from agent_client import ROOT, Agent, AgentError  # noqa: E402
+import release  # noqa: E402
 
 BINARY = os.environ.get("R2D_BINARY", os.path.join(ROOT, "build", "russiano2d"))
 FIXTURE = os.path.join(ROOT, "tests", "fixtures", "hello")
+#: Готовый проект-пример §31-1: одна команда собирает из него standalone.
+FOUNDATIONS = os.path.join(ROOT, "demos", "foundations")
 
 failures = []
 
@@ -157,6 +161,51 @@ def main():
 
         code, out = run_build(["--project", FIXTURE])
         check(code != 0, "без --out и --relink билдер отказывается работать")
+
+        # --- 7. Экспорт готового проекта одной командой ---------------------
+        # §30: «собрать standalone одной командой» — это `russiano2d build`.
+        demo_out = os.path.join(work, "foundations")
+        code, out = run_build(["--project", FOUNDATIONS, "--out", demo_out])
+        check(code == 0 and os.path.exists(demo_out),
+              "одна команда собрала standalone из demos/foundations")
+        if os.path.exists(demo_out):
+            with Agent(binary=demo_out, game=None, seed=3) as game:
+                game.step(8)
+                check(game.eval("$.scene.current()") == "foundations",
+                      "standalone открыл сцену примера из груза")
+                check(game.eval("$('#hero').length") == 1, "герой примера на месте")
+                check(game.eval("typeof $ === 'function'"), "высокоуровневое API живо")
+                check(game.eval("$('.oneway').length") >= 10,
+                      "мир примера собран (односторонние платформы)")
+
+        # --- 8. Конфигурация RE2D: модули и данные = сборка -----------------
+        # §30: OFF-сборка закреплена фактом, а не обещанием; demos/ копируется
+        # только в ON-сборку (src/CMakeLists.txt: R2D_DATA_DIRS).
+        with Agent(binary=BINARY, game=FIXTURE, seed=5) as game:
+            game.step(3)
+            enabled = game.eval("$.re2dEnabled")
+            check(isinstance(enabled, bool), "движок сообщает $.re2dEnabled (%r)" % enabled)
+            for module in ("re2d", "rotSprite", "real2d", "mesh", "cels"):
+                present = game.eval("typeof $.%s !== 'undefined'" % module)
+                check(present == enabled,
+                      "$.%s %s при $.re2dEnabled=%s"
+                      % (module, "есть" if present else "нет", enabled))
+        demos_next = os.path.isdir(os.path.join(os.path.dirname(BINARY), "demos"))
+        check(demos_next == enabled,
+              "demos/ рядом с бинарником %s при $.re2dEnabled=%s"
+              % ("есть" if demos_next else "нет", enabled))
+
+        # --- 9. Версия — одна на проект (CMakeLists.txt) --------------------
+        sdk_bin = os.path.join(os.path.dirname(BINARY),
+                               "r2d-sdk" + (".exe" if BINARY.endswith(".exe") else ""))
+        if os.path.exists(sdk_bin):
+            version_json = subprocess.run([sdk_bin, "version"], capture_output=True,
+                                          text=True, timeout=60).stdout
+            check(json.loads(version_json)["version"] == release.read_version(),
+                  "r2d-sdk version берёт версию из CMakeLists.txt (%s)"
+                  % release.read_version())
+        else:
+            print("  skip нет r2d-sdk рядом с движком — версия SDK не проверена")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

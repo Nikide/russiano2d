@@ -184,8 +184,8 @@ def main():
         # --- §40: независимые области одного владельца ----------------------
         areas = a.eval("$('#fighter').areas()")
         names = sorted([area["name"] for area in areas])
-        check(names == ["bump", "contact", "sword"],
-              f"§40 у владельца три независимые области: {names}")
+        check(names == ["bump", "contact", "scan", "scan8", "sword"],
+              f"§40 у владельца пять независимых областей: {names}")
         check(a.eval("$('#fighter').shape()") == "capsule",
               "§40 движение — основная капсула тела (.shape('capsule'))")
         roles = {area["name"]: area["role"] for area in areas}
@@ -321,6 +321,34 @@ def main():
                      "engine.shapeEnabled($('#fighter').nodes[0].body,"
                      "$('#fighter').area('sword').index)"),
               "§40 .areaOn(true) переключает и native-форму обратно")
+
+        # --- §40: фильтр области наследуется от тела (регрессия areaOn) ------
+        # Своя форма видит область на слое тела, ЧУЖАЯ форма ищет только свой
+        # слой. После areaOn(false)→areaOn(true) включённая форма обязана снова
+        # получить фильтр ТЕЛА, а не умолчание движка (иначе её не видит никто).
+        check(a.eval("$('#guard').areaOn('hurtbox')") is True,
+              "§40 hurtbox включён изначально")
+        before_scan = a.eval("$('#fighter').areaOverlap('scan').length")
+        before_armor = a.eval("$('#fighter').areaOverlap('scan8').length")
+        check(before_scan >= 1, f"§40 чужая форма видит hurtbox на слое тела (слой 4): {before_scan}")
+        check(before_armor >= 1, f"§40 armor со своим слоем 8 виден своей формой: {before_armor}")
+        a.eval("$('#guard').areaOn('hurtbox', false)")
+        check(a.eval("$('#fighter').areaOverlap('scan').length") == 0,
+              "§40 выключенный hurtbox не виден")
+        check(a.eval("$('#fighter').areaOverlap('scan8').length") >= 1,
+              "§40 выключение hurtbox не портит фильтр соседней области (armor)")
+        a.eval("$('#guard').areaOn('hurtbox', true)")
+        after_scan = a.eval("$('#fighter').areaOverlap('scan').length")
+        check(after_scan >= 1,
+              f"§40 после areaOn(true) форма снова на слое ТЕЛА, а не на умолчании: {after_scan}")
+        check(a.eval("$('#fighter').areaOverlap('scan8').length") >= 1,
+              "§40 соседняя область armor по-прежнему видна")
+        hurtbox_layer = a.eval("$('#guard').area('hurtbox').layer")
+        check(hurtbox_layer == 4,
+              f"§40 у hurtbox слой тела 4, а не умолчание 1: {hurtbox_layer}")
+        check(a.eval("engine.shapeEnabled($('#guard').nodes[0].body,"
+                     "$('#guard').area('hurtbox').index)") is True,
+              "§40 native-форма включена после цикла off→on")
 
         # --- §40: destroy/re-enable без stale callbacks (события формы) ------
         # Не-сенсорная область bump касается статичной стойки: в событии должны

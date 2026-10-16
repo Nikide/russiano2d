@@ -60,7 +60,8 @@ let run = null;
 let ending_view = null;      // карточка концовки: живёт, когда прогон уже завершён
 // След последнего прогона: после концовки `state()` обязан рассказать, чем
 // всё кончилось, — иначе агенту и тестам нечего читать.
-const last_run = { id: null, scene: null, ended: false, ending: null, location: null, beats: 0, ticks: 0, time: 0 };
+const last_run = { id: null, scene: null, ended: false, ending: null, location: null, beats: 0,
+                   ticks: 0, time: 0, markers: [], skipped_markers: [], restored: null };
 const runtime = { auto: 0 };
 
 // Длительности по умолчанию, мс.
@@ -240,6 +241,26 @@ export function installTimeline($) {    api = $;
         /** Дальше: допечатать реплику или перейти к следующей. */
         next() { return api && api.dialog ? api.dialog.next() : false; },
         skip() { return api && api.dialog ? api.dialog.skip() : false; },
+
+        /**
+         * §16: пропустить катсцену целиком — довести прогон до конца, НЕ
+         * исполняя остальные биты. Маркеры (урон, спавн, куи) при этом не
+         * срабатывают: их список уходит в `state().markers_skipped`, и игра
+         * сама сводит итоговое состояние.
+         */
+        skipAll(reason) { return skipRun(reason || 'skip'); },
+
+        /** Сработавшие маркеры прогона (по порядку) — для проверок и отладки. */
+        markers() {
+            if (run) return run.markers.slice();
+            return last_run.markers.slice();
+        },
+
+        /** Маркеры, которые skip не стал исполнять. */
+        skippedMarkers() {
+            if (run) return run.skipped_markers.slice();
+            return last_run.skipped_markers.slice();
+        },
         /** Выбрать вариант по номеру видимого списка. */
         choose(index) { return api && api.dialog ? api.dialog.choose(index) : false; },
         chooseByText(text) { return api && api.dialog ? api.dialog.chooseByText(text) : false; },
@@ -408,6 +429,10 @@ function defineTimeline(id, spec) {
     if (api.scene && typeof api.scene.add === 'function') {
         api.scene.add(def.scene, {
             enter($, opts) {
+                // §16: снимок «до» берётся ДО buildStage — тот намеренно
+                // приковывает камеру к центру и сбрасывает зум, и снимать
+                // состояние после него значило бы «восстанавливать» уже чужое.
+                if (!def.restore_snapshot) def.restore_snapshot = takeSnapshot(def);
                 buildStage(def);
                 const pending = def.pending;
                 def.pending = null;
@@ -690,8 +715,19 @@ function startRun(def, opts) {
         ended: false,
         ending: null,
         beats: 0,
+        // §16/§10: маркеры. Сработавший маркер помнится, чтобы повторное
+        // пересечение (loop, goto назад) не дублировало необратимый эффект.
+        fired: new Set(),
+        markers: [],
+        skipped_markers: [],
+        // Снимок того, что прогон забрал у игры: камера, музыка, управление.
+        // Снимок сцены (до buildStage) важнее живого: buildStage уже забрал
+        // камеру себе. Если сцена не менялась, снимок берётся здесь и сейчас.
+        restore: def.restore_snapshot || takeSnapshot(def),
+        restored: null,
     };
 
+    def.restore_snapshot = null;   // снимок одноразовый: следующий play снимет свой
     buildCast(def);
     run.stage = def.stage;
     if (def.location) startLocation({ location: def.location, fade: 0 });
@@ -714,6 +750,110 @@ function makeControl(def) {
     };
 }
 
+/**
+ * §16: что прогон забирает у игры и что обязан вернуть.
+ *
+ * Снимок берётся ДО первого бита: камера (за кем следила, зум), музыка
+ * (играет ли что-то и что именно), управление (был ли залочен ввод). Политика
+ * `def.restore` может отказаться от возврата: `{ camera: false }` — катсцена
+ * намеренно оставляет камеру себе.
+ */
+function takeSnapshot(def) {
+    const policy = (def && def.restore) || {};
+    const snap = { camera: null, music: null, control: null, policy };
+    if (api && api.camera && policy.camera !== false) {
+        // Храним СЕЛЕКТОР цели, а не обёртку: к моменту возврата узел мог быть
+        // пересоздан, а селектор остаётся тем же.
+        const followed = api.camera.followed ? api.camera.followed() : null;
+        const node = followed && typeof followed.get === 'function' ? followed.get(0) : null;
+        snap.camera = {
+            selector: node && node.id ? '#' + node.id : null,
+            zoom: api.camera.zoom ? api.camera.zoom() : null,
+        };
+    }
+    if (api && api.sound && policy.music !== false) {
+        snap.music = {
+            playing: api.sound.musicPlaying ? !!api.sound.musicPlaying() : null,
+            // Текущий трек живёт в общем состоянии звука (ctx.state_music):
+            // своего геттера у $.sound нет, а трогать sound.js в этой задаче нельзя.
+            track: (ctx && ctx.state_music) || null,
+        };
+    }
+    if (policy.control !== false) snap.control = { locked: !!(api && api.lock && api.lock.locked && api.lock.locked()) };
+    return snap;
+}
+
+/** Вернуть камеру, музыку и управление по снимку. Возвращает отчёт. */
+function applyRestore(def, state) {
+    const snap = state && state.restore;
+    const report = { camera: null, music: null, control: null };
+    if (!snap || !restoreEnabled(def)) { state.restored = report; return report; }
+    if (snap.camera && api && api.camera) {
+        const cam = snap.camera;
+        if (cam.selector && api.camera.follow) api.camera.follow(cam.selector);
+        else if (api.camera.unfollow) api.camera.unfollow();
+        if (cam.zoom !== null && cam.zoom !== undefined && api.camera.zoom) api.camera.zoom(cam.zoom);
+        report.camera = cam.selector || 'free';
+    }
+    if (snap.music && api && api.sound) {
+        const m = snap.music;
+        if (m.track && api.sound.music) { api.sound.music(m.track, { loop: true }); report.music = m.track; }
+        else if (api.sound.stopMusic) { api.sound.stopMusic(); report.music = 'stopped'; }
+        else report.music = 'kept';
+    }
+    if (snap.control && api && api.lock && api.lock.unlock) {
+        // Управление возвращаем всегда: «залочено навсегда» — не контракт.
+        api.lock.unlock();
+        report.control = 'released';
+    } else {
+        report.control = 'free';
+    }
+    state.restored = report;
+    return report;
+}
+
+/** Политика возврата: `def.restore === false` — прогон оставляет всё себе. */
+function restoreEnabled(def) {
+    return !(def && def.restore === false);
+}
+
+/**
+ * §16: skip катсцены — довести прогон до КОНЦА, не исполняя остальные биты.
+ *
+ * Необратимые эффекты (маркеры: урон, спавн, звуковые куи) при skip НЕ
+ * срабатывают: они попадают в `markers_skipped`, и игра по этому списку сама
+ * решает, как свести итоговое состояние. Это и есть «определённое итоговое
+ * состояние без повторного выполнения необратимых gameplay effects».
+ */
+function skipRun(reason) {
+    if (!run) return false;
+    const skipped = [];
+    let guard = 0;
+    while (run) {
+        if (++guard > 200000) { report('$.timeline.skip: скрипт зациклился', null); break; }
+        const frame = run.frames[run.frames.length - 1];
+        if (!frame) break;
+        if (frame.index >= frame.list.length) { run.frames.pop(); continue; }
+        const beat = frame.list[frame.index++];
+        if (!beat || typeof beat !== 'object') continue;
+        if (beat.marker !== undefined) {
+            const id = String(beat.marker);
+            if (!run.fired.has(id)) skipped.push(id);
+            continue;
+        }
+        if (beat.if !== undefined) {
+            const branch = conditionValue(beat.if) ? beat.then : beat.else;
+            if (Array.isArray(branch) && branch.length) run.frames.push({ list: branch, index: 0 });
+        } else if (beat.goto !== undefined) {
+            gotoLabel(beat.goto);
+        }
+    }
+    run.skipped_markers = run.skipped_markers.concat(skipped);
+    emit('skip', { id: run.def.id, markers_skipped: skipped, reason: reason || 'skip' });
+    finishRun();
+    return true;
+}
+
 function stopRun(reason) {
     if (!run) return false;
     const def = run.def;
@@ -728,6 +868,9 @@ function stopRun(reason) {
 
     run.wait = null;
     run.step_pending = false;
+    // §16: явный контракт возврата — управление, камера и звук возвращаются
+    // ровно тем, чем были до прогона (или по политике def.restore).
+    applyRestore(def, run);
     rememberRun(def, run);
     const was_ended = run.ended;
     const ending = run.ending;
@@ -791,6 +934,11 @@ function rememberRun(def, source) {
     last_run.beats = source.beats || 0;
     last_run.ticks = source.ticks || 0;
     last_run.time = Math.round(source.time || 0);
+    // §16: маркеры и отчёт восстановления переживают конец прогона — иначе
+    // после stop/skip игра не узнала бы, что именно сработало и что вернулось.
+    last_run.markers = (source.markers || []).slice();
+    last_run.skipped_markers = (source.skipped_markers || []).slice();
+    last_run.restored = source.restored || null;
 }
 
 /**
@@ -838,6 +986,9 @@ function finishRun() {
     if (!run) return;
     const def = run.def;
     run.ended = true;
+    // §16: нормальное завершение возвращает управление/камеру/звук так же, как
+    // stop и skip: контракт один, а не «как получится у конкретного пути».
+    applyRestore(def, run);
     rememberRun(def, run);
     const ending = run.ending;
     run = null;                    // конец — значит конец: running() не врёт
@@ -867,6 +1018,20 @@ function runBeat(beat) {
         try { run.def.onBeat(beat, run.control); } catch (e) { report('$.timeline: onBeat', e); }
     }
     emit('beat', { beat, count: run.beats, location: run.location });
+
+    // §10/§16: маркер. Не занимает времени, срабатывает РОВНО ОДИН РАЗ за
+    // прогон (пока once не снят), поэтому loop/goto назад не дублируют эффект.
+    if (beat.marker !== undefined) {
+        const id = String(beat.marker);
+        const once = beat.once !== false;
+        if (!once || !run.fired.has(id)) {
+            run.fired.add(id);
+            run.markers.push(id);
+            emit('marker', { marker: id, count: run.beats, location: run.location,
+                             data: beat.data === undefined ? null : beat.data });
+        }
+        return NEXT;
+    }
 
     const flow = beat.say !== undefined || beat.narrate !== undefined || beat.choose !== undefined;
 
@@ -2009,6 +2174,9 @@ function runState() {
             choices: [],
             text: '',
             auto: runtime.auto,
+            markers: last_run.markers.slice(),
+            markers_skipped: last_run.skipped_markers.slice(),
+            restored: last_run.restored,
             flags: api && api.store && api.store.all ? api.store.all() : {},
         };
     }
@@ -2044,6 +2212,9 @@ function runState() {
         choices: api && api.dialog && api.dialog.choices ? api.dialog.choices() : [],
         text: api && api.dialog && api.dialog.text ? api.dialog.text() : '',
         auto: runtime.auto,
+        markers: run.markers.slice(),
+        markers_skipped: run.skipped_markers.slice(),
+        restored: run.restored,
         flags: api && api.store && api.store.all ? api.store.all() : {},
     };
 }

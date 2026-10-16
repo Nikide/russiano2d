@@ -28,7 +28,7 @@ import { installViewports } from './viewports.js';
 import { installTime, tickTime } from './time.js';
 import { installInput, shiftDown, ctrlDown, altDown } from './input.js';
 import { installSound } from './sound.js';
-import { installScene, tickLifecycle } from './scene.js';
+import { installScene, tickLifecycle, installSceneRooms } from './scene.js';
 import { installUi } from './ui.js';
 import { installDebug } from './debug.js';
 import { installDiag, report as diagReport } from './diag.js';
@@ -59,6 +59,7 @@ import { installDialog, tickDialog } from './dialog.js';
 import { installTimeline, tickTimeline } from './timeline.js';
 import { installSave } from './save.js';
 import { installResource } from './resource.js';
+import { installReload } from './reload.js';   // §27: хот-релоад ассетов
 import { installTilemap, tickTilemap } from './tilemap.js';
 import { installParticles, tickParticles } from './particles.js';
 import { installFx, tickFx } from './fx.js';
@@ -98,7 +99,7 @@ import { installAlive } from './alive.js';
 import { installNet } from './net.js';
 import { installReplay } from './replay.js';
 import { installWidgets, tickWidgets } from './widgets.js';
-import { installTriggers, tickTriggers, watchOverlap } from './triggers.js';
+import { installTriggers, tickTriggers, watchOverlap, processingAllows } from './triggers.js';
 import { installWatch, tickWatch } from './watch.js';
 import { installDevTools, tickDevTools } from './devtools.js';
 import { installI18n, tickI18n } from './i18n.js';
@@ -480,6 +481,7 @@ export function createApi() {
     installFx($);
     installNav($);
     installPrefab($);
+    installSceneRooms($);        // §23: комнаты поверх $.scene/$.prefab/$.tilemap
     installAudiobus($);
     installAcoustics($);
     installLayers($);
@@ -553,6 +555,10 @@ export function createApi() {
     installTimeline($);
     installSave($);
     installResource($);
+    // §27: хот-релоад ассетов — после ресурсов, атласа, интерфейса и скриптов:
+    // он только пользуется их публичным API (граф зависимостей, версии,
+    // отложенное освобождение) и ставит свой кадровый ход через $.update.
+    installReload($);
 
     // --- Методы узлов ---------------------------------------------------------
     installNodeMethods($);
@@ -2392,6 +2398,41 @@ function noteTrace(kind, a, b, extra) {
     if (trace_count < TRACE_LIMIT) trace_count++; else trace_count = TRACE_LIMIT;
 }
 
+/**
+ * Цепочка по hit ID: общая реализация для `$.trace.hit` и `$.trace.hits`.
+ *
+ * Чистая функция от журнала — её же проверяет юнит-тест без движка.
+ */
+function chainOf(list, hitId) {
+    const id = hitId === undefined || hitId === null ? null : hitId;
+    const wanted = id === null ? null : String(id);
+    const steps = [];
+    let owner = null, target = null;
+    for (const entry of list) {
+        const d = entry.data || {};
+        const ids = [d.attack, d.attackId, d.hit, d.id];
+        const match = id === null
+            ? (entry.kind === 'attack' || entry.kind === 'damage' || entry.kind === 'death')
+            : ids.some((v) => v !== undefined && v !== null && String(v) === wanted);
+        if (!match) continue;
+        steps.push({ kind: entry.kind, node: entry.source || entry.target || null,
+                     frame: entry.frame, data: d });
+        if (entry.kind === 'attack') owner = entry.source;
+        if (entry.target) target = entry.target;
+    }
+    const kinds = new Set(steps.map((x) => x.kind));
+    return {
+        found: steps.length > 0,
+        hit: id,
+        owner, target,
+        steps,
+        // «Полная» цепочка — та, где видно решение фильтра И результат: именно
+        // это требование §28 («источник, контакт, решение фильтра и damage
+        // result»), а не просто наличие записи.
+        complete: kinds.has('attack') && kinds.has('combat:filter') && kinds.has('damage'),
+    };
+}
+
 /** Публичный журнал: массив записей в порядке появления + счётчик потерь. */
 function traceSnapshot() {
     const out = [];
@@ -2416,6 +2457,32 @@ function installTrace($) {
         dropped() { return trace_dropped; },
         /** Очистить журнал и счётчик потерь. */
         clear() { trace_count = 0; trace_head = 0; trace_dropped = 0; trace_ring.length = 0; trace_ring.length = TRACE_LIMIT; },
+        /**
+         * Цепочка по hit ID (§28): источник → контакт → решение фильтра →
+         * результат урона.
+         *
+         * ```js
+         * const chain = $.trace.hit(7);
+         * // { found, complete, steps: [{ kind, node, frame, data }…], owner, target }
+         * ```
+         *
+         * `hit` — id события атаки (его отдают `$.combat.attack()` и
+         * `$.combat.attacks()`). По нему видно, ЧЕМ ударили, ЧТО столкнулось,
+         * каким было решение фильтра и что стало с целью — без чтения кода боя.
+         */
+        hit(hitId) { return chainOf(traceSnapshot(), hitId); },
+
+        /** Все цепочки в журнале: `[{ hit, steps, complete }…]`. */
+        hits() {
+            const ids = new Set();
+            for (const entry of traceSnapshot()) {
+                const d = entry.data || {};
+                const id = d.attack === undefined ? d.attackId : d.attack;
+                if (id !== undefined && id !== null) ids.add(id);
+            }
+            return [...ids].map((id) => chainOf(traceSnapshot(), id));
+        },
+
         /** Запись игры: `$.trace.note('phase', node, {…})` — для сюжетных шагов. */
         note(kind, node, data) {
             if (!trace_on) return false;
@@ -2875,6 +2942,10 @@ function applyControls(dt) {
     const nodes = nodesWithFacet('controls');
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
+        // §44: политика `update` выключает кадровую логику узла (контроллер).
+        // Скорость тела при этом не обнуляется: усыпление и сон — другие
+        // операции, а «не обрабатывать» значит «не трогать узел из кадра».
+        if (!processingAllows(node, 'update')) continue;
         const scheme = node.attrs.controls;
         if (!scheme) continue;
         // Время идёт и когда узлом не управляют. Иначе coyote-фора и буфер
@@ -3104,6 +3175,9 @@ function animateSprites() {
     const nodes = nodesWithFacet('anim');
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
+        // §44: политика `animation` выключает кадровую анимацию узла, не
+        // трогая движение и физику. Узлы без политики проходят без затрат.
+        if (!processingAllows(node, 'animation')) continue;
         if (!node.anim || !node.anim.playing || !node.frames) continue;
         const anim = node.anim;
         anim.t += dt * anim.speed;

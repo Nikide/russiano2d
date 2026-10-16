@@ -9,6 +9,242 @@
 import { engine } from './native.js';
 import { ctx, query } from './core.js';
 
+/** Линейный gain → dB и обратно: отображение значения — дело вызывающего. */
+export function linearToDb(value) {
+    const v = Number(value);
+    if (!(v > 0)) return -Infinity;
+    return 20 * Math.log10(v);
+}
+
+export function dbToLinear(db) {
+    const d = Number(db);
+    if (!Number.isFinite(d)) return d > 0 ? 1 : 0;
+    return Math.max(0, Math.min(1, Math.pow(10, d / 20)));
+}
+
+/** Значение громкости: число (линейно) или `{ db }` / `{ linear }`. */
+export function levelValue(value) {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'object') {
+        if (value.db !== undefined) return dbToLinear(value.db);
+        if (value.linear !== undefined) return Math.max(0, Math.min(1, Number(value.linear) || 0));
+        return undefined;
+    }
+    const v = Number(value);
+    return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Музыкальные слои (§25): один transport на все stem'ы
+// ---------------------------------------------------------------------------
+//
+// Старт, seek и pause идут ОДНОЙ нативной командой на все слои: по отдельным
+// вызовам из JS слои разошлись бы на буфер микшера (проверено — расхождение
+// видно в $.sound.stems().drift()). Огибающие громкости слоёв считает JS по
+// кадрам (шаг кадра), сами позиции — нативные PCM-кадры.
+
+const stem_transports = [];
+
+function makeStemTransport(paths, opts) {
+    const o = opts || {};
+    const a = engine.audio;
+    const list = [].concat(paths || []).filter((p) => p !== undefined && p !== null);
+    if (list.length === 0 || !a || typeof a.stemsSet !== 'function') return null;
+    const ids = list.map((p) => soundId(p));
+    const count = a.stemsSet(ids);
+    if (!count) return null;
+
+    const layers = [];
+    for (let i = 0; i < count; i++) {
+        layers.push({ base: i === 0 ? 1 : 0, gain: i === 0 ? 1 : 0, from: i === 0 ? 1 : 0, target: i === 0 ? 1 : 0, ms: 0, t: 0 });
+    }
+    const transport = {
+        paths: list.slice(),
+        layers,
+        // Поле и метод не могут называться одинаково: `bus` — МЕТОД смены
+        // шины, поэтому сама шина живёт в `busName`.
+        busName: o.bus === undefined ? 'music' : String(o.bus),
+        loop: o.loop !== false,
+        loopStart: Number(o.loopStart) || 0,
+        loopEnd: Number(o.loopEnd) || 0,
+        count() { return a.stemCount ? a.stemCount() : count; },
+
+        /** Запустить все слои одной командой: общий sample-clock и петля. */
+        play(startOpts) {
+            const p = startOpts || {};
+            const start_ms = p.start !== undefined ? Number(p.start) * 1000 : 0;
+            const loop = p.loop === undefined ? transport.loop : !!p.loop;
+            const loop_start = p.loopStart !== undefined ? Number(p.loopStart) : transport.loopStart;
+            const loop_end = p.loopEnd !== undefined ? Number(p.loopEnd) : transport.loopEnd;
+            transport.loop = loop;
+            transport.loopStart = loop_start || 0;
+            transport.loopEnd = loop_end || 0;
+            a.stemsStart(loop, Number(p.fade) || 0, start_ms,
+                         transport.loopStart * 1000, transport.loopEnd * 1000);
+            transport._applyGains();
+            return transport;
+        },
+
+        /** Перемотка всех слоёв в одну и ту же позицию (секунды). */
+        seek(seconds) {
+            if (typeof a.stemsSeek === 'function') a.stemsSeek(Number(seconds) || 0);
+            return transport;
+        },
+
+        pause(flag) {
+            if (typeof a.stemsPause === 'function') a.stemsPause(flag === undefined ? true : !!flag);
+            return transport;
+        },
+
+        paused() {
+            return typeof a.stemsPaused === 'function' ? !!a.stemsPaused() : false;
+        },
+
+        stop(fadeMs) {
+            if (typeof a.stemsStop === 'function') a.stemsStop(Number(fadeMs) || 0);
+            return transport;
+        },
+
+        playing() {
+            return typeof a.stemsPlaying === 'function' ? !!a.stemsPlaying() : false;
+        },
+
+        /** Позиция слоя в секундах (-1 — слоя нет). */
+        time(index) {
+            if (typeof a.stemTime !== 'function') return -1;
+            const i = index === undefined ? 0 : Math.floor(Number(index) || 0);
+            return a.stemTime(i);
+        },
+
+        /** Позиция слоя в PCM-кадрах — точное число для сверки фазы. */
+        frames(index) {
+            if (typeof a.stemFrames !== 'function') return -1;
+            const i = index === undefined ? 0 : Math.floor(Number(index) || 0);
+            return Number(a.stemFrames(i));
+        },
+
+        /** Позиции всех слоёв в секундах. */
+        times() {
+            const out = [];
+            for (let i = 0; i < transport.count(); i++) out.push(transport.time(i));
+            return out;
+        },
+
+        /** Расхождение слоёв: максимум − минимум в миллисекундах (0 — в фазе). */
+        drift() {
+            const times = transport.times().filter((t) => t >= 0);
+            if (times.length < 2) return 0;
+            return (Math.max(...times) - Math.min(...times)) * 1000;
+        },
+
+        /**
+         * Громкость слоя. `ms > 0` — плавно (огибающая по кадрам), иначе сразу.
+         * Значение — линейно или `{ db }`.
+         */
+        layer(index, value, layerOpts) {
+            const i = Math.floor(Number(index) || 0);
+            const layer = layers[i];
+            if (!layer) return transport;
+            if (value === undefined) return layer.base;
+            const v = levelValue(value);
+            if (v === undefined) return transport;
+            const ms = Number((layerOpts || {}).fade) || 0;
+            layer.base = v;
+            if (ms > 0) {
+                layer.from = layer.gain;
+                layer.target = v;
+                layer.ms = ms;
+                layer.t = 0;
+            } else {
+                layer.gain = v;
+                layer.target = v;
+                layer.ms = 0;
+            }
+            transport._applyGains();
+            return transport;
+        },
+
+        /** Мгновенная громкость слоя (с учётом огибающей) — для тестов. */
+        layerGain(index) {
+            const layer = layers[Math.floor(Number(index) || 0)];
+            return layer ? layer.gain : 0;
+        },
+
+        /** Названные слои одним вызовом: `{ battle: 1, calm: 0 }`. */
+        gains(spec) {
+            if (!spec) return transport;
+            for (const key of Object.keys(spec)) {
+                const i = transport.paths.indexOf(key);
+                if (i >= 0) transport.layer(i, spec[key]);
+            }
+            return transport;
+        },
+
+        /**
+         * Кроссфейд на слой `index`: он уходит в 1, остальные в 0, за `ms`
+         * миллисекунд. Огибающая линейная, громкости слоёв в сумме не
+         * превышают единицу — «двойной громкости» не возникает.
+         */
+        crossfade(index, ms) {
+            const to = Math.floor(Number(index) || 0);
+            for (let i = 0; i < layers.length; i++) {
+                transport.layer(i, i === to ? 1 : 0, { fade: Number(ms) || 0 });
+            }
+            return transport;
+        },
+
+        /** Шина (§48): её громкость умножается на громкость слоя. */
+        bus(name) {
+            if (name === undefined) return transport.busName;
+            transport.busName = String(name);
+            transport._applyGains();
+            return transport;
+        },
+
+        _busGain() {
+            const audio = ctx.audio;
+            if (!audio || typeof audio.gain !== 'function') return 1;
+            try { return Number(audio.gain(transport.busName)) || 0; } catch (e) { return 1; }
+        },
+
+        _applyGains() {
+            const bus = transport._busGain();
+            for (let i = 0; i < layers.length; i++) {
+                if (typeof a.setStemGain === 'function') a.setStemGain(i, layers[i].gain * bus);
+            }
+        },
+    };
+    stem_transports.push(transport);
+    return transport;
+}
+
+/**
+ * Пересчитать громкости слоёв (например, после смены громкости шины):
+ * громкость слоя умножается на громкость ЕГО шины (§48).
+ */
+export function refreshStemGains() {
+    for (const transport of stem_transports) transport._applyGains();
+}
+
+/** Шаг огибающих слоёв; зовётся из кадрового тика шин (tickAudiobus). */
+export function tickStems(dt) {
+    if (stem_transports.length === 0) return;
+    const ms = Number(dt) * 1000;
+    for (const transport of stem_transports) {
+        let changed = false;
+        for (const layer of transport.layers) {
+            if (layer.ms <= 0) continue;
+            layer.t += ms;
+            const p = Math.min(1, layer.t / layer.ms);
+            layer.gain = layer.from + (layer.target - layer.from) * p;
+            if (p >= 1) { layer.gain = layer.target; layer.ms = 0; }
+            changed = true;
+        }
+        if (changed) transport._applyGains();
+    }
+}
+
+
 const loaded = new Map();     // путь → id звука
 
 function soundId(what) {
@@ -122,14 +358,27 @@ export function installSound($) {
         pauseMusic(paused) { engine.audio.pauseMusic(!!paused); return sound; },
         musicPlaying() { return engine.audio.musicPlaying(); },
 
-        /** Общая громкость 0..1. */
+        /** Общая громкость: число (0..1) или `{ db: -6 }`. */
         volume(value) {
             if (value === undefined) return engine.audio.getMasterVolume();
-            engine.audio.setMasterVolume(value);
+            const v = levelValue(value);
+            if (v !== undefined) engine.audio.setMasterVolume(v);
             return sound;
         },
-        sfxVolume(value) { engine.audio.setSfxVolume(value); return sound; },
-        musicVolume(value) { engine.audio.setMusicVolume(value); return sound; },
+        sfxVolume(value) {
+            const v = levelValue(value);
+            if (v !== undefined) engine.audio.setSfxVolume(v);
+            return sound;
+        },
+        musicVolume(value) {
+            const v = levelValue(value);
+            if (v !== undefined) engine.audio.setMusicVolume(v);
+            return sound;
+        },
+
+        /** Перевод громкости: `$.sound.dbToLinear(-6)` → 0.501. */
+        dbToLinear(db) { return dbToLinear(db); },
+        linearToDb(value) { return linearToDb(value); },
 
         mute(flag) {
             if (flag === undefined) return sound._muted || false;
@@ -211,6 +460,20 @@ export function installSound($) {
         activeChannels() { return engine.audio.activeChannels(); },
         duration(what) { return engine.audio.duration(soundId(what)); },
         count() { return engine.audio.count(); },
+
+        /**
+         * Музыкальные слои: `$.sound.stems(['calm.ogg', 'battle.ogg'], opts)`
+         * → transport, у которого старт/seek/pause общие для всех слоёв.
+         *
+         * opts: `{ loop = true, loopStart = 0, loopEnd = 0, bus = 'music' }`
+         * (`loopStart`/`loopEnd` — секунды; `loopEnd = 0` — конец файла).
+         * Слои нумеруются в порядке путей; `transport.gains({ 'battle.ogg': 1 })`
+         * принимает пути, `layer(i, gain)` и `crossfade(i, ms)` — индексы.
+         */
+        stems(paths, opts) { return makeStemTransport(paths, opts); },
+
+        /** Живые транспорты слоёв — для отладки и уборки. */
+        musicLayers() { return stem_transports.slice(); },
 
         /** Предзагрузка: путь → id в кэше. */
         preload(paths) {

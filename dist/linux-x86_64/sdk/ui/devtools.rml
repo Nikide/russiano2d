@@ -16,6 +16,8 @@
     <div class="bar">
         <button id="dt-run" class="btn primary">Запустить и опросить</button>
         <button id="dt-save" class="btn">Сохранить сессию .agent.json</button>
+        <button id="dt-validate" class="btn">Проверить сессию</button>
+        <button id="dt-preview" class="btn">Проверить в игре</button>
         <span class="sub">Игра запускается headless, детерминированно (fixed-dt), опрос — командами исходного агентского протокола. Только чтение.</span>
     </div>
 
@@ -51,6 +53,7 @@
         </div>
     </div>
 
+    <div id="dt-report" class="hint"></div>
     <div id="dt-bottom">
         <div class="bar tools"><span class="sub">Ответы протокола (JSON)</span></div>
         <div id="dt-log-wrap"><div id="dt-log" class="log"></div></div>

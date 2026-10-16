@@ -1,4 +1,4 @@
-# Russiano2D 0.1.32 — Linux aarch64: инструкция для ИИ-агента
+# Russiano2D 0.1.33 — Linux aarch64: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"0.1.32","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"0.1.33","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -148,11 +148,14 @@ call(cmd="quit")
 * Моя первая игра: платформер с маскотом — `docs/tutorial-first-game.md`
 * Туториал: первая игра на `$` — `docs/tutorial-platformer.md`
 * Туториал: меню, пауза и смена сцен — `docs/tutorial-menus.md`
+* Туториал: ближний бой, окна анимации и урон — `docs/tutorial-melee.md`
+* Туториал: runtime integration — HUD, язык, вставка, слои и переход — `docs/tutorial-runtime-integration.md`
 * Russiano2D — демо-проект — `docs/demos.md`
 * Текущие задачи и ограничения R2D — `docs/TASKS.md`
 * Производительность и полнота высокоуровневого API `$` — `docs/HIGH_LEVEL_API_PERF.md`
 * Производительность компонентов `$` API — `docs/API_PERFORMANCE.md`
 * R2D DevTools — `docs/DEVTOOLS.md`
+* Форматы данных: состав полей и честные границы — `docs/FORMATS.md`
 * Фазы кадра — `docs/FRAME_PHASES.md`
 * План закрытия спецификации производственной готовности — `docs/PRODUCTION_PLAN.md`
 * Russiano2D: инженерная спецификация производственной готовности — `docs/PRODUCTION_READINESS.md`
@@ -228,6 +231,7 @@ call(cmd="quit")
 * Legacy Re2D: room/kind и прежний World — `docs/highlevel/re2d_legacy.md`
 * Re2DSprite — `$.re2dSprite` — `docs/highlevel/re2dsprite.md`
 * `$.real2d` — Real2D v4: вычисляемый layered warp персонажа — `docs/highlevel/real2d.md`
+* `$.reload` — горячая перезагрузка ассетов (§27) — `docs/highlevel/reload.md`
 * `$.blend` и `$.viewport` — смешивание и render target — `docs/highlevel/render.md`
 * Реплеи — `$.replay` — `docs/highlevel/replay.md`
 * Реестр ресурсов — `$.resource` — `docs/highlevel/resource.md`
@@ -262,6 +266,9 @@ call(cmd="quit")
 * UI-контролы — `$.ui` и теги `<ui.*>` — `docs/highlevel/widgets.md`
 * Окно — `$.window` — `docs/highlevel/window.md`
 * Мир — `$.world` — `docs/highlevel/world.md`
+* Туториал: pattern arena — фазы, пул, пауза, смерть и рестарт — `docs/tutorial-arena.md`
+* Туториал: свет на спрайтах — маски, окклюзия, атлас — `docs/tutorial-litsprites.md`
+* Туториал: восстановление после сбоев (§31-7) — `docs/tutorial-recovery.md`
 
 
 ---
@@ -2107,6 +2114,21 @@ $.input.on('key', e => { })            // e.key, e.pressed, e.shift/ctrl/alt
 $.input.on('mouse', e => { }) .on('wheel', e => { }) .on('gamepadOn', e => { })
 $.input.off()
 $.input.text()                         // символы, набранные за этот кадр
+
+// Контексты ввода (§15): приоритет решает, кому достанется нажатие.
+$.input.context('menu', { active: false, priority: 20, binds: { confirm: ['space'] } })
+$.input.context('gameplay', { active: true, priority: 0, binds: { confirm: ['space'], attack: ['j'] } })
+$.input.context('menu').active(true)   // меню перекрыло gameplay
+$.input.consume('confirm')             // я обработал — остальные не увидят
+$.input.consumed() .conflicts('attack', ['space'])
+$.input.markDefaults() .resetDefaults()
+$.input.waitForInput({ timeout: 3000 })// ждать следующее нажатие (перепривязка)
+$.input.cancelWaits() .waiters()
+$.input.device(0).player() .assign(2)  // слот геймпада → игрок
+$.input.devices() .stuck() .resetHeld(0)
+$.input.glyphs('pause')                // подписи кнопок для UI
+$.input.axisAction('left', { axis: 'leftx', sign: -1, threshold: 0.4 })
+$.input.synthPress('space')            // виртуальный ввод тем же путём
 ```
 
 `$.input.text()` отдаёт готовый UTF-8 с учётом раскладки и IME — из него
@@ -2147,6 +2169,17 @@ $.sound.volume(0.8) .mute(true) .sfxVolume(0.5) .musicVolume(0.5)
 $.sound.stopAll() .playing(ch) .activeChannels() .duration('x.ogg') .preload(['a.ogg'])
 $.sound.seek(ch, 1.2) .position(ch) .durationOf(ch)   // перемотка и позиция канала
 $.sound.channel(ch)   // { playing, volume, pan, pitch, effect, position, duration } — что звучит сейчас
+$.sound.volume({ db: -6 })                  // громкость в dB или линейно (0..1)
+$.sound.dbToLinear(-6) .linearToDb(0.5)     // явный перевод: 0.501 / -6.02
+
+// Музыкальные слои (§25): общий transport на все stem'ы
+const music = $.sound.stems(['calm.ogg', 'battle.ogg'],
+                            { loop: true, loopStart: 12.5, loopEnd: 96, bus: 'music' });
+music.play({ fade: 800 })     // старт одной командой: один sample-clock
+music.seek(30.25) .pause(true) .stop(600)
+music.crossfade(1, 900)       // боевой слой наружу, спокойный в ноль
+music.layer(1, { db: -6 }, { fade: 400 }) .gains({ 'battle.ogg': 1 })
+music.time(0) .frames(1) .times() .drift()   // позиции и расхождение слоёв (мс)
 ```
 
 Расширение можно не писать: движок сам ищет `.wav`, `.ogg`, `.mp3`, `.flac`.
@@ -2166,6 +2199,25 @@ $.audio.listener('#hero');
 $.audio.room();          // { wet, room, damp, width } — что сейчас звучит
 ```
 
+**Изоляция шинных эффектов (§48).** Эффект шины считается по её собственному
+миксу (группа SDL_mixer) и не протекает в другие шины; на канале он не
+дублируется. Общая комната — свойство всего микса, поэтому для «сухой клик
+остаётся сухим, пока ambience мокнет» авто-комнату выключают, а реверб вешают
+на конкретную шину:
+
+```js
+$.audio.acoustics(false); $.audio.room({ wet: 0 });
+$.audio.bus('ui');                                   // сухая шина
+$.audio.bus('ambience', { effect: 'reverb', effectParams: { send: 0.5 } });
+$.audio.routes();        // карта маршрутизации: dry/colored и предупреждения
+handle.toBus('ambience');   // смена шины на ходу: громкость/панорама не меняются
+$.audio.remove('ambience'); // группа и её хвост освобождаются, чужие шины целы
+$.audio.volume('music', { db: -6 }) .dbToLinear(-6) .linearToDb(0.5)
+```
+
+Подробности и числа замеров — [audiobus.md](highlevel/audiobus.md) §8.1 и
+[sound.md](highlevel/sound.md) §2.2.
+
 ## 19. `$.scene` — сцены
 
 ```js
@@ -2183,6 +2235,39 @@ $.scene.transition('fade', 300) .busy();
 вызывать прямо из обработчика клика. При смене мир очищается (узлы, тела,
 твины, таймеры), кроме узлов с классом `scene-persistent` и интерфейса при
 `{ keepUI: true }`.
+
+### `$.room` — комнаты как данные (§23)
+
+Комната — описание поверх prefab/scene: `bounds`, карта, инстансы prefab,
+маркеры (спавн, выходы) и ссылки между комнатами. Загрузка — **транзакция**:
+сборка идёт в области владения §5 и публикуется только целиком, поэтому
+неудачная загрузка не меняет текущий мир, а визуал, коллизия и occluders
+всегда соответствуют одним данным.
+
+```js
+$.room.define('level1', {
+    schema: 1, id: 'level1', bounds: { x: 0, y: 0, w: 1280, h: 720 },
+    tilemap: { id: 'map', path: 'maps/1.json', src: 'assets/tiles.png', tile: 32, at: [640, 360] },
+    instances: [{ prefab: 'door', id: 'door_north', x: 640, y: 64 }],
+    markers: { spawn: { x: 64, y: 64 }, exit_north: { x: 640, y: 32, node: true } },
+    exits: [{ id: 'north', marker: 'exit_north', to: 'level2', to_marker: 'spawn' }],
+});
+
+$.room.enter('level1');     // валидация → staging-сборка → публикация на границе кадра
+$.room.build('level2')      // ... commit(handle) / discard(handle)
+$.room.marker('spawn');     // { ok, x, y } — маркер из данных
+$.room.goto('north');       // нет комнаты/маркера — структурированная ошибка R2D_ROOM_*
+$.room.current() .stats() .generation() .adopt() .unload();
+```
+
+Идентификаторы инстансов и детей — из данных (`door_north`, `door_north/lamp`):
+повторный вход в комнату не порождает новые случайные id, поэтому §14
+восстанавливает состояние по `nid`, а `$.scene.current()` = `room:<id>`
+сохраняется вместе со снимком. Правка одной клетки карты не пересобирает всю
+комнату: `$.tilemap.resultOf()` показывает `dirty_cells`, `reused`,
+`destroyed`, `rebuilt`. Подробно — [highlevel/scene.md](highlevel/scene.md) §4,
+[highlevel/tilemap.md](highlevel/tilemap.md) §20,
+[highlevel/prefab.md](highlevel/prefab.md).
 
 ## 20. `$.ui` — интерфейс
 
@@ -2289,6 +2374,13 @@ $.time.freeze(70)                   // hit-stop: мир стоит, кадр р�
 $.time.hitStop(70)                  // то же, читаемое имя для обработчика удара
 $.time.slow(400, 0.25)              // плавное замедление на 0.4 с
 $.time.frozen() .freezeLeft() .unfreeze() .physicsScale()
+$.time.tick() .simDt() .simTime()   // шаг симуляции, а НЕ кадр отрисовки
+$.time.onTick(fn)                   // каждый фиксированный шаг
+$.time.everyTicks(30, fn)           // «каждые 30 физических шагов»
+$.time.afterTicks(120, fn)          // «через 120 шагов»
+const life = $.time.duration(300)   // «жить 300 шагов»: left/expired/onEnd
+$.time.mark('shot') .since('shot')  // локальный счётчик шагов
+$.time.after(200, fn, { node })     // таймер с владельцем (политика timers)
 ```
 
 Пауза и масштаб действуют на **игровое время** `$.time.delta()`: твины,
@@ -2305,6 +2397,61 @@ $.time.frozen() .freezeLeft() .unfreeze() .physicsScale()
 `$.time.scale()` не затирается — после разморозки возвращается прежний масштаб.
 Пауза останавливает физику так же: тела не должны ехать под экраном паузы.
 Подробно — [highlevel/time.md](highlevel/time.md).
+
+**Шаги симуляции ≠ кадры отрисовки.** `$.time.frame()` — кадр; `$.time.tick()` —
+фиксированный шаг симуляции (те же правила, что у шага физики в C). Периоды и
+времена жизни выражаются в шагах, поэтому не зависят от render FPS: при
+30/60/144 FPS одно и то же симуляционное время даёт одно и то же число шагов.
+Пауза и hit-stop останавливают шаги тем же множителем — второго механизма нет.
+
+## 21.1. `$.processing` — что узел обрабатывает (§44)
+
+| Операция | Вызов | Что происходит |
+|---|---|---|
+| скрыть | `.hide()` / `.visible(false)` | узел не рисуется, логика работает |
+| усыпить тело | сон Box2D | тело не считает покой, проснётся от толчка |
+| не обрабатывать | `.processing({ update: false })`, `.active(false)` | кадровая логика / шаг / анимация / таймеры / физика — по полям |
+| выключить область | `.areaOn('sword', false)` | конкретная sensor-форма не участвует (§40) |
+
+```js
+$('#enemy').processing({ update: false, physics: false })
+$('#enemy').processing('animation')          // → true
+$('#enemy').active(false)                    // update+fixed+timers+physics off,
+                                             // анимация и визуал не тронуты
+$('#enemy').active(true)
+$.processing.allow('#enemy', 'update')       // → false
+$.processing.define('sleeping', { update: false });
+$.processing.set('.enemy', 'sleeping');
+const room = $.scene.scope('room:1');
+$.processing.scope(room, { update: false }); // наследование областью §5
+$.processing.stats()                         // { nodes, bodies_off, inactive, version }
+```
+
+Поля: `update` (кадровая логика и контроллер; псевдоним `movement`), `fixed`
+(подписки и таймеры шага симуляции), `animation` (спрайтовые кадры),
+`timers` (`$.time.after/every` с владельцем), `physics`
+(`engine.setBodyEnabled` — тело выключено целиком, скорость обнуляется, это не
+сон). Политику применяет кадровый тик после шага физики, поэтому она действует
+со следующего шага. Подробно — [highlevel/triggers.md](highlevel/triggers.md).
+
+## 21.2. `$.activation` — видимость и активация (§44)
+
+```js
+$.activation.auto('.enemy');                 // в кадре — обрабатывать, вне — нет
+$.activation.watch('#boss', { margin: 64, hysteresis: 32, cameras: 'p2' });
+$('#boss').on('screen:enter', (e) => $.log(e.data.camera));
+$('#boss').on('screen:exit', () => $.log('ушёл'));
+$.activation.watch('#trap', { region: { x: 1200, y: 300, w: 400, h: 400 } });
+$.activation.visible('#boss')                // виден ли сейчас
+```
+
+Границы — реальные world bounds узла (хитбокс, подписанный scale, для §39 —
+скомпонованный трансформ), камеры — main/PIP/сплитскрин (`cameras: 'any' |
+'main' | имя | индекс | список`). `margin` расширяет зону входа, `hysteresis` —
+полоса выхода (выход по `margin + hysteresis`), поэтому на границе нет дребезга.
+`once: true` даёт ровно один вход. `auto` не скрывает и не удаляет узел:
+уборка остаётся за владельцем (§5). Подробно —
+[highlevel/triggers.md](highlevel/triggers.md).
 
 ## 22. `$.store` и `$.fs` — сохранения и файлы
 
@@ -2685,6 +2832,7 @@ $.update(() => {
 | Blend-режимы и подвьюпорты | `$.blend`, `$.gfx.blend`, `$.viewport` | — | [render.md](highlevel/render.md) |
 | Сохранения: слоты, версии, миграции, автосейв | `$.save` | — | [save.md](highlevel/save.md) |
 | Реестр ресурсов: ленивая загрузка, ссылки, выгрузка | `$.resource` | — | [resource.md](highlevel/resource.md) |
+| Асинхронная загрузка: состояния, progress в байтах, отмена (§45) | `$.resource.request`, `$.scene.loadAsync({ resources })` | — | [resource.md](highlevel/resource.md) §2.1, [scene.md](highlevel/scene.md) §1.1 |
 | Математика, векторы, прямоугольники | `$.math` | — | [mathx.md](highlevel/mathx.md) |
 | Детерминированный ГПСЧ и шум | `$.random` | — | [random.md](highlevel/random.md) |
 | Сеточные помощники: клетки, линии, заливка | `$.grid` | — | [grid.md](highlevel/grid.md) |
@@ -2698,7 +2846,7 @@ $.update(() => {
 | Именованные текстовые стили | `$.font` | — | [font.md](highlevel/font.md) |
 | Спрайтовые атласы из JSON (Aseprite, TexturePacker) | `$.atlas` | — | [atlas.md](highlevel/atlas.md) |
 | Кривые плавности и градиенты (общий `ease` для твинов) | `$.curve` | — | [curve.md](highlevel/curve.md) |
-| Работа кусками по кадрам (генерация, тёплая загрузка) | `$.task`, `$.scene.loadAsync` | — | [task.md](highlevel/task.md) |
+| Работа кусками по кадрам (генерация, тёплая загрузка) | `$.task`, `$.scene.loadAsync` | — | [task.md](highlevel/task.md), [scene.md](highlevel/scene.md) §1.1 |
 | Перезапуск скриптов на границе кадра (hot reload) | `$.script` | — | [script.md](highlevel/script.md) |
 | Сценки и катсцены: текстовый DSL, реплики, выборы, флаги | `$.story` | — | [story.md](highlevel/story.md) |
 | Задания: цели, условия открытия, события рейда, награда | `$.quest` | — | [quest.md](highlevel/quest.md) |
@@ -2718,7 +2866,10 @@ $.update(() => {
 | Именованные слои и маски коллизий | `$.collision` | — | [collision.md](highlevel/collision.md) |
 | Катсцены: сценки внутри текущей сцены | `$.cutscene` | — | [cutscene.md](highlevel/cutscene.md) |
 | Реплей: запись и воспроизведение ввода | `$.replay` | — | [replay.md](highlevel/replay.md) |
-| Экран загрузки: полоса, шаги по кадрам | `$.loading` | — | [loading.md](highlevel/loading.md) |
+| Экран загрузки: полоса, шаги по кадрам, полоса по запросу ресурсов | `$.loading` | — | [loading.md](highlevel/loading.md) |
+| Контракт UI: постоянный HUD, обязательные ID, модальность и фокус (§16) | `$.ui.persist`, `$.ui.required`, `$.ui.inputBlocked`, `$.ui.focusStack` | — | [ui.md](highlevel/ui.md) §5.1, [widgets.md](highlevel/widgets.md) |
+| Локализация на ходу: подписка, пропавшие ключи, числа (§16) | `$.i18n.onChange`, `$.i18n.missing`, `$.i18n.number` | — | [i18n.md](highlevel/i18n.md) §4.1 |
+| Маркеры, skip и возврат камеры/звука в катсцене (§16) | `$.timeline.markers`, `$.timeline.skipAll` | — | [timeline.md](highlevel/timeline.md) §3.6 |
 | Психика NPC и режиссёр рейда: страх, срывы, давление | `$.alive` | — | [alive.md](highlevel/alive.md) |
 | Сеть, только авторитарная: id, владение, снапшоты | `$.net` | — | [net.md](highlevel/net.md) |
 | Время, окно, файлы, сцены, ввод, мир, камера, интерфейс, звук, BSP | `$.time`, `$.window`, `$.fs`, `$.scene`, `$.input`, `$.world`, `$.camera`, `$.ui`, `$.sound`, `$.world.bsp` | — | [time](highlevel/time.md), [window](highlevel/window.md), [store](highlevel/store.md), [scene](highlevel/scene.md), [input](highlevel/input.md), [world](highlevel/world.md), [camera](highlevel/camera.md), [ui](highlevel/ui.md), [sound](highlevel/sound.md), [bsp](highlevel/bsp.md), [replay](highlevel/replay.md) |
@@ -3080,6 +3231,47 @@ $.resource.free('tiles');                                           // 0 → в�
 Виды: `texture`, `sprite`, `sheet`, `sound`, `json`, `text`, `data`
 (`inferKind` выводит вид по расширению). Ограничения (движок не отдаёт API
 выгрузки текстур и звуков) — [resource.md](highlevel/resource.md).
+
+У записи ресурса есть **версия** (`$.resource.info(name).version`): она растёт
+при каждой публикации значения (`load`, `reload`, `publish`), поэтому игра
+ссылается на ресурс по имени и версии, а не по native-handle (§27).
+`$.resource.publish(name)` двигает версию, не выгружая значение — так хот-релоад
+текстуры «на месте» остаётся виден по имени.
+
+### `$.reload` — хот-релоад ассетов (§27)
+
+Применяет изменившиеся ассеты, не разрушая игру: новая версия сначала читается и
+проверяется (`read → validate → prepare`), публикуется только `apply`, а
+неудачная замена оставляет работать прежнюю версию (last-known-good) и
+возвращает `{ ok: false, stage, code }` с кодом `R2D_RELOAD_*`.
+
+```js
+$.reload.watch('hero', { kind: 'atlas', path: 'art/hero.json', atlas: 'hero',
+                         deps: ['hero_page'] });
+$.reload.watch('hud', { kind: 'rml', path: 'ui/hud.rml' });
+$.reload.watch('map', { kind: 'tilemap', path: 'maps/1.json', target: '#map' });
+
+$.reload.reload('hero');     // { ok, stage, code, version, changed, deps, warnings }
+$.reload.poll();             // применить только изменившееся (кнопка F8)
+$.reload.reloadAll();        // весь граф в порядке зависимостей
+$.reload.version('hero');    // версия данных; value/get/list/graph/stats
+$.reload.pending();          // старые handle'ы, ждущие освобождения
+$.reload.on('applied', (r) => {});
+```
+
+| Вид | Что перезагружает |
+|---|---|
+| `texture` | пиксели **на месте** (`engine.reloadTexture`), handle не меняется |
+| `atlas` | раскладка + картинка; кадры перепривязываются по имени, пропавший используемый кадр — отказ |
+| `tilemap` | клетки карты; визуал, коллизия и occluders пересобираются одним проходом |
+| `rml` | документ RmlUi (текст, встроенный стиль); битый `.rml` отклоняется |
+| `json` | произвольные данные с необязательной схемой `validate` |
+
+Три операции различаются явно: `reload`/`poll` — данные, `$.reload.behavior()` —
+перезапуск поведения (замыкания не сохраняются), `$.reload.restartScene(name,
+{ capture, restore })` — restart сцены через область владения §5. Панель
+DevTools (F1) показывает индикатор и кнопки. Полностью —
+[highlevel/reload.md](highlevel/reload.md).
 
 ### `$.ru` — русские имена API
 
@@ -3685,6 +3877,15 @@ R2D_TEST_AUDIO=real python3 tests/agent/highlevel_sound_seek_test.py
 |---|---|---|
 | Скрипты | компилируются в байткод QuickJS по графу `import` от точки входа | `--entry`, по умолчанию `main.js` |
 | Ассеты | каталоги `assets/` и каталог точки входа (`game/` либо корень проекта для `main.js`) | `--add <путь>` добавляет ещё |
+
+**Зависимости ассетов перечисляются явно.** Автоматического разрешения «по
+цепочке import» для ассетов нет: в груз попадают каталоги, а не граф ссылок
+между файлами. Причина осознанная — в движке нет разбора зависимостей данных
+(только импорты скриптов), а эвристика «любая строка, похожая на путь, — это
+ассет» включала бы в груз мусор и могла ломать корректные сборки. Поэтому
+нужные файлы вне `assets/` и каталога точки входа перечисляются через
+`--add`, а проверка корректности ссылок внутри ассетов (картинка атласа, файл
+звука, шрифт) делается ДО сборки: `r2d-sdk validate` и `r2d-sdk batch`.
 | — | расшифровываются в память при старте | читаются через виртуальную файловую систему |
 
 Известное ограничение: файлы, скрипты которые незаметны для движка (данные
@@ -3807,6 +4008,64 @@ if (!$.re2dEnabled) $.log('сборка платформера: 3D-автори�
 python3 tests/agent/re2d_gate_test.py                                   # build/
 R2D_BINARY=build-2d/russiano2d python3 tests/agent/re2d_gate_test.py    # build-2d/
 ```
+
+## Дистрибутив: что внутри и как проверить
+
+Упаковка — `tools/release.py` (её же вызывают `tools/autobuild.py` для пяти
+платформ и `tools/ci_package.py` в CI). Пакет платформы лежит в
+`dist/<платформа>/` (или `dist-ci/` в CI), рядом — архив и контрольные суммы:
+
+```sh
+python3 tools/release.py --version 0.2.0            # выпуск: версия, сборка, тесты, пакет, тег
+python3 tools/release.py --package-only --platform macos-arm64 \
+    --binary build/russiano2d --out dist            # только пакет (режим CI)
+python3 tools/autobuild.py --platforms auto         # пять платформ (Docker для чужих)
+```
+
+| Платформа | Архив | Бинарник |
+|---|---|---|
+| `linux-x86_64`, `linux-aarch64` | `russiano2d-<платформа>.tar.gz` | `russiano2d` |
+| `macos-arm64`, `macos-x86_64` | `russiano2d-<платформа>.tar.gz` | `russiano2d` |
+| `windows-x86_64` | `russiano2d-<платформа>.zip` | `russiano2d.exe` |
+
+**Что внутри.** Бинарник движка и `r2d-sdk[.exe]` (рядом, один каталог),
+каталог `lib/` с внешними библиотеками и переписанными `@rpath`/`$ORIGIN`
+(если сборка их нашла), `sdk/` и `sdk_tools.json` (оболочка, студии, шаблоны,
+реестр), `assets/` и `game/` (данные игры), `docs/` и сгенерированные
+`README.md` + `AGENTS.md` (полная документация платформы), `LICENSE`,
+`CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`, `VERSION` и `SHA256SUMS.txt`.
+
+**Чего в пакете нет** — и это проверяется тестом: `demos/` (только с
+`--with-demos`; 260 МБ 3D-демо необязательны), исходников backend
+(`sdk/native/`), локального `sdk/state.local.json`, `save.json` игрока,
+`__pycache__`/`*.pyc`/`.DS_Store`.
+
+**Контрольные суммы.** `dist/<платформа>/SHA256SUMS.txt` — хеши всех файлов
+пакета (кроме самого файла сумм, сортировка по имени); `dist/SHA256SUMS.txt` —
+хеши архивов всего релиза. `VERSION` — версия из `CMakeLists.txt`
+(см. [RELEASING.md](RELEASING.md) «Одна версия на проект»).
+
+**Воспроизводимость.** Архивы пишутся с фиксированным временем записей,
+отсортированными именами и обнулёнными `uid`/`gid`: повторная упаковка того же
+дерева даёт побайтно тот же архив и те же суммы. Проверка —
+`tests/agent/sdk_package_test.py`.
+
+```sh
+R2D_BINARY=build/russiano2d python3 tests/agent/sdk_package_test.py
+```
+
+**Профили поставки** (docs/PRODUCTION_READINESS.md §30) — один и тот же движок
+собирается в трёх профилях, и пакет всегда несёт `r2d-sdk` и `sdk/`:
+
+| Профиль | Сборка | Что получает пользователь |
+|---|---|---|
+| Обычный 2D | `-DR2D_ENABLE_RE2D=OFF` | 2D-игра/демо без `$.re2d`, `$.rotSprite`, `$.real2d`, `$.mesh`, `$.cels`; `demos/` рядом с бинарником не копируется |
+| Расширенный 2D (по умолчанию) | `-DR2D_ENABLE_RE2D=ON` | то же плюс 3D-авторинг Re2D/Real2D/RotSprite и каталог `demos/` |
+| SDK | любой из двух | пакет с `r2d-sdk`, `sdk/`, `sdk_tools.json` и шаблонами; авторинг 2D-данных без внешнего scripting runtime |
+
+Профиль не «объявляется готовым» по наличию опции: у каждого заявленного
+target должен быть прогон его собственных проверок (CI-матрица — в
+[RELEASING.md](RELEASING.md)).
 
 ## Режимы сборки
 
@@ -5384,6 +5643,304 @@ $.exit(() => $.store.save());          // последний шанс запис
 
 ---
 
+## Туториал: ближний бой, окна анимации и урон
+
+<sub>источник: `docs/tutorial-melee.md`</sub>
+
+# Туториал: ближний бой, окна анимации и урон
+
+Короткий разбор примера [demos/melee](../demos/melee/README.md) — §31-2
+Спецификации производственной готовности. Итог: удар по окну анимации, одна
+цель с несколькими hurtbox, отражение снаряда, физическая отдача и
+presentation-фидбек. Всё — публичным `$`.
+
+Запуск примера: `./build/russiano2d --game demos/melee`, проверка —
+`python3 tests/agent/melee_test.py`.
+
+## 1. Роли форм вместо компонентов
+
+Тело узла — это движение (`movement collider`), а удар, уязвимое место и щит —
+**области** того же узла (§40/§9). Роли не создают сущностей, они лишь называют
+смысл формы:
+
+```js
+$('#hero').hitbox('blade', { w: 54, h: 26, x: 32 });   // чем бьём (sensor)
+$('#hero').areaOn('blade', false);                     // вне окна выключен
+$('#hero').hitbox('guard', { w: 16, h: 46, x: -16 });  // щит
+$('#hero').hurtbox('body', { w: 26, h: 30 });           // куда бьют
+
+$('<rect>', { id: 'grunt' }).at(460, 538).size(32, 44)
+    .health(100).team(2).body('dynamic').collision(32, 44).appendTo($.world);
+$('#grunt').hurtbox('torso', { w: 36, h: 30 });
+$('#grunt').hurtbox('head', { w: 18, h: 18, y: -22 });  // ещё две формы
+$('#grunt').hurtbox('legs', { w: 30, h: 18, y: 18 });
+```
+
+## 2. Окно анимации открывает удар, а не клип
+
+Клип объявляет маркеры окна; игра реагирует на подписку `'window'`:
+
+```js
+$.anim.clip('slash', {
+    duration: 420,
+    tracks: [{ type: 'sprite', keys: [{ t: 0, v: 0 }, { t: 120, v: 1 }, { t: 300, v: 2 }, { t: 420, v: 0 }] }],
+    events: [
+        { at: 120, name: 'attack-open',  window: 'attack', windowPhase: 'open'  },
+        { at: 300, name: 'attack-close', window: 'attack', windowPhase: 'close' },
+    ],
+});
+
+const player = $.anim.player('hero').target('#hero');
+player.on('window', (e) => {
+    const open = e.window.open;
+    $('#hero').areaOn('blade', open);
+    if (open) state.attack = $.combat.attack({
+        source: '#hero', owner: '#hero', team: 1,
+        amount: 25, damageType: 'slash', window: 180,   // столько же, сколько окно
+        rehit: 'once', impulse: { x: 320, y: -40 }, data: { zone: 'chest' },
+    });
+    else if (state.attack) { $.combat.endAttack(state.attack); state.attack = null; }
+});
+
+// В кадре: пока окно открыто, удар «щупает» hitbox.
+$.update(() => {
+    if (state.attack && player.window('attack')) {
+        $.combat.strike(state.attack, $('#hero').areaOverlap('blade'));
+    }
+});
+```
+
+Почему не «бей, пока играет клип»: у клипа есть замах и восстановление, и урон в
+них — баг геймплея. Окно даёт ровно 180 мс из 420 и проверяется тестом.
+
+## 3. Несколько hurtbox — один удар
+
+`strike()` дедуплицирует попадания по **владельцу цели**, а не по форме:
+
+```js
+const res = $.combat.strike(attack, $('#hero').areaOverlap('blade'));
+// res.accepted === 1, даже если у цели три hurtbox
+// res.results[0].reason === 'duplicate' — повторный удар той же атакой
+```
+
+Новая атака (новый `$.combat.attack()`) поражает ту же цель снова. Причины
+отказа фактические: `inactive_window`, `immunity`, `team`, `duplicate`,
+`destroyed_target`, `owner_dead`.
+
+## 4. Отражение снаряда
+
+```js
+const shot = $.combat.attack({ source: '#shooter', owner: '#shooter', team: 3,
+                               amount: 18, damageType: 'bullet', window: 6000 });
+
+// Попадание в щит:
+const reflected = $.combat.reflect(shot, { owner: '#hero', team: 1, multiplier: 1.5 });
+// reflected.id !== shot.id — новая identity
+// reflected.owner_id — nid героя, reflected.team — 1, shot.reflectedBy — id отражённой
+```
+
+Снаряд при этом — presentation-данные игры: цвет, направление и `team` в
+атрибутах меняет сама игра, потому что «как выглядит отражённый снаряд» —
+решение игры, а не движка.
+
+## 5. Отдача не стирается управлением
+
+Импульс из damage request идёт в тело и в канал внешней скорости (§8):
+
+```js
+$.combat.damageRequest({ amount: 20, source: '#hero', target: '#enemy',
+                         impulse: { x: 320, y: -40 } });
+```
+
+`.controls()` каждый кадр задаёт горизонтальную скорость, поэтому без канала
+внешней скорости отдача исчезла бы в следующем тике. С каналом тело честно
+летит назад и **упирается в стену** — отдача остаётся физикой, а не сдвигом
+спрайта сквозь препятствия.
+
+## 6. Feedback — presentation, не урон
+
+```js
+$('.hurtable').each((i, enemy) => enemy.on('damage', (e) => {
+    const res = e.data;
+    if (!res.accepted) return;
+    $.hitFx(res, res.death ? 'death' : 'crit');   // ответ §9 — уже адрес и точка
+}));
+```
+
+`$.hitFx` получает **damage-ответ §9** напрямую: точка берётся из `x`/`y`
+(позиция цели — факт, известный движку), а цель — из `targetNodeId` (`nid`), без
+ссылки на узел и без циклического JSON. Собирать `{ x, y, self }` руками не
+нужно. Эффект даёт hit-stop, тряску, вспышку и частицы; источник урона — сам
+ответ, а не эффект: выключите фидбек (`$.store.set('feedback', false)`) — урон и
+счётчик попаданий не изменятся.
+
+Отражённая атака по форме не отличается от обычной: `$.combat.reflect()` сразу
+создаёт журналы `hits`/`hit_targets`, поэтому её можно передавать в `strike()` и
+`$.combat.attacks()` без ручной правки объекта.
+
+## Проверка поведения
+
+`tests/agent/melee_test.py` (40 проверок) запускает пример в агентском режиме и
+проверяет именно поведение: урон вне окна, один удар при трёх hurtbox, вторая
+атака, смена владельца при отражении, отдачу в стену, смерть ровно один раз и
+независимость урона от presentation. Тест проходит и в конфигурации без RE2D
+(`R2D_BINARY=build-2d/russiano2d`).
+
+
+---
+
+## Туториал: runtime integration — HUD, язык, вставка, слои и переход
+
+<sub>источник: `docs/tutorial-runtime-integration.md`</sub>
+
+# Туториал: runtime integration — HUD, язык, вставка, слои и переход
+
+Как собрать «игру целиком» из готовых подсистем `$`: постоянный HUD на RmlUi,
+переключение языка на ходу, короткая вставка на `$.timeline`, музыкальные слои
+и переход между комнатами через область владения. Полный запускаемый пример —
+[`demos/showcase`](../demos/showcase/README.md), автоматическая приёмка —
+`python3 tools/run_tests.py showcase_test`.
+
+Справочники по вызовам: [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md),
+[ui.md](highlevel/ui.md), [i18n.md](highlevel/i18n.md),
+[timeline.md](highlevel/timeline.md), [audiobus.md](highlevel/audiobus.md),
+[scene.md](highlevel/scene.md).
+
+---
+
+## 1. Постоянный HUD на RmlUi
+
+Документ RmlUi — не узел мира: его не снимают ни `$.scene.load`, ни закрытие
+области владения. Поэтому HUD, загруженный один раз, переживает и переход
+комнаты, и вставку.
+
+```js
+let hud = $.ui.doc('demos/showcase/rml/hud.rml').show();
+
+function drawHud() {
+    hud.text('hud-score', $.tr('hud.score', { score: state.score }));
+    hud.text('hud-room',  $.tr('hud.room', { room: $.tr('room.' + state.room) }));
+}
+$.update(drawHud);            // один постоянный кадровый хук
+```
+
+Правила, которые видны в примере:
+
+* **HUD не принадлежит комнате.** Его создают один раз (не в `enter`), иначе
+  он умрёт вместе со сценой.
+* **Значение приходит из игры.** HUD не «читает» мир сам: игра пишет строку, а
+  HUD её показывает. В примере очки меняет маркер вставки — тест проверяет,
+  что строка HUD обновилась.
+* **Строки — ключи словаря.** `$.tr` вызывается в кадре, поэтому смена языка
+  видна сразу.
+
+## 2. Локализация без перезапуска
+
+```js
+$.i18n.add('ru', { 'hud.score': 'Очки: {score}' });
+$.i18n.add('en', { 'hud.score': 'Score: {score}' });
+$.i18n.lang('ru');  $.i18n.fallback('ru');
+
+$.tr('hud.score', { score: 12 });   // → 'Очки: 12'
+```
+
+Реплики `$.dialog`/`$.timeline` переводятся сами, если строка совпала с ключом
+словаря: текст разрешается в момент показа, поэтому смена языка действует на
+следующую реплику. Демо-фасад `$.showcase.setLang('en')` переключает словарь и
+сразу перерисовывает HUD; тест сверяет и строку HUD, и текст диалога.
+
+## 3. Вставка на `$.timeline`
+
+```js
+$.timeline.define('showcase-intro', {
+    backdrop: '#0b1020',
+    script: [
+        { narrate: 'intro.line1' },
+        { narrate: 'intro.line2', emit: 'intro-mid' },   // маркер
+        { do: () => $.showcase.addScore(5) },            // правка состояния игры
+        { narrate: 'intro.line3' },
+    ],
+});
+
+$.timeline.auto(500);                    // без нажатий: вставку можно догнать
+$.timeline.play('showcase-intro', { transition: 'none' });
+$.timeline.on('end', (e) => {
+    // e.reason: 'end' — дошла сама, 'manual' — прервана stop()
+    $.scene.load(back, { transition: 'none', scope: true });
+});
+$.timeline.stop('manual');               // прерывание
+```
+
+Что стоит помнить:
+
+* таймлайн регистрирует **свою сцену** (`scene: id`), поэтому вставка — не
+  overlay: мир комнаты на время вставки снимается, а после `end` комната
+  собирается заново;
+* `emit` в бите — маркер для игры (`$.timeline.on('имя', …)`), `do` — свой код;
+* `stop(reason)` отличается от естественного конца по `e.reason` — различайте
+  «прошла» и «прервана» в статистике и flow.
+
+## 4. Музыкальные слои
+
+```js
+$.audio.bus('music.base', { parent: 'music', volume: 0.45 });
+$.audio.bus('music.mid',  { parent: 'music', volume: 0 });
+$.audio.play('demos/assets/audio/music/lobby_groove.mp3', { bus: 'music.base', loop: true });
+$.audio.play('demos/assets/audio/music/action.ogg', { bus: 'music.mid', loop: true });
+
+$.audio.volume('music.mid', 0.7);        // интенсивность боя выросла
+```
+
+Слои независимы: громкость слоя не трогает остальные, `$.audio.gain(name)`
+показывает эффективную громкость с учётом родителей. **Чего нет:** общего
+transport/clock для stems (§25) — нельзя стартовать слои с одной метки или
+перемотать вместе. В примере это честно названо ограничением.
+
+## 5. Переход комнаты через область владения (§5)
+
+Область владения связывает узлы, подписки, таймеры, потоки и задачи комнаты,
+не вводя второй scene graph. Переход — `prepare` → `commit`, отмена — `discard`:
+
+```js
+$.scene.add('lobby', { enter($, scope) { buildLobby($, scope); } });
+$.scene.add('arena', {
+    prepare($, scope) { buildArena($, scope); },   // временная область
+    enter($, scope)   { state.room = 'arena'; },   // публикация
+});
+
+const next = $.scene.prepare('arena');
+if (next.ok) $.scene.commit(next);       // старый мир закрывается после нового
+else         $.scene.discard(next);      // сцена не опубликована
+```
+
+Свойства, на которые опирается пример:
+
+* `prepare` строит мир во **временной** области; `discard` убирает его целиком,
+  число узлов возвращается к прежнему — тест это проверяет;
+* ошибка `prepare` не ломает текущую сцену: игра остаётся играбельной;
+* `load(name, { scope: true })` — обычный переход с областью; persistent-узлы
+  (`scene-persistent`, `attrs.persistent`) и RmlUi-документы остаются;
+* закрытие области отложено до безопасной фазы кадра, поэтому `close()` можно
+  звать из обработчика события.
+
+Комната с областью собирается в `enter($, scope)`: узлы, созданные внутри
+контекста (или с `{ scope: 'имя' }`), принадлежат области автоматически.
+
+## 6. Чего не хватает сегодня (видно в примере)
+
+| Чего нет | Обход в примере | Нужный пункт |
+|---|---|---|
+| Общий transport для stems, seek и синхронный старт | старт всех слоёв в одном кадре + громкость шин | §25 |
+| Data-binding RmlUi на `$.store`/`$.i18n` | кадровый `$.ui.doc(...).text(el, $.tr(...))` | §16 |
+| Невидимая подготовка staging-мира, progress | prepare виден один кадр | §45 |
+| Вставка как overlay поверх комнаты | комната снимается и собирается заново | §10/§16 |
+
+Ограничения перечислены рядом с API в [README примера](../demos/showcase/README.md),
+а не только здесь.
+
+
+---
+
 ## Russiano2D — демо-проект
 
 <sub>источник: `docs/demos.md`</sub>
@@ -5448,6 +6005,26 @@ export default function install($) {
 Добавить своё демо: положить `demos/имя/index.js` с `install($)` и дописать
 строку в список `MODULES` в `demos/main.js` — кнопка в меню появится сама
 (подпись и иконка берутся из таблицы `TITLES` в `demos/launcher.js`).
+
+## Вертикальные примеры (§31 спецификации)
+
+Семь примеров — это законченные проекты, которые можно открыть отдельно
+(`build/russiano2d --game demos/<имя>`) и которые проходят свои приёмочные
+тесты. Они показывают, что движок выдерживает игру целиком, а не набор вызовов.
+
+| Пример | Что показывает | Запуск и приёмка |
+|---|---|---|
+| `foundations` | фундамент платформера: управление, камера, физика, HUD, чекпойнты | `--game demos/foundations`; [README](../demos/foundations/README.md), `foundations_test` (25) |
+| `melee` | контактный бой: окно атаки, три hurtbox → один удар, отражение снаряда, отдача в стену | `--game demos/melee`; [README](../demos/melee/README.md), `melee_test` (44) |
+| `arena` | арена с фазами: отменяемая фаза, пул с потолком узлов, пауза, смерть ровно один раз, рестарт | `--game demos/arena`; [README](../demos/arena/README.md), [гайд](tutorial-arena.md), `arena_test` (62) |
+| `roguerooms` | генерация комнат: seed → hash, валидация до публикации, жёсткие бюджеты, отмена | `--game demos/roguerooms`; [README](../demos/roguerooms/README.md), `roguerooms_test` (52) |
+| `litsprites` | 2D-свет: маски препятствий, динамический occluder, неосвещённый слой, флипы атласа | `--game demos/litsprites`; [README](../demos/litsprites/README.md), [гайд](tutorial-litsprites.md), `litsprites_test` (25) |
+| `showcase` | интеграция: RmlUi-HUD, смена языка на ходу, вставка timeline, слои музыки, scoped переход | `--game demos/showcase`; [README](../demos/showcase/README.md), `showcase_test` (56) |
+| `recovery` | восстановление: битый слот из копии, битый ассет и safe reload, расхождение replay | `--game demos/recovery`; [README](../demos/recovery/README.md), [гайд](tutorial-recovery.md), `recovery_test` (66) |
+
+Все семь обязаны собираться и запускаться как отдельные проекты — это проверяет
+`python3 tests/demos_examples_test.py` (структура проекта, README, headless-запуск,
+внешний вид в документации).
 
 ## Сцены
 
@@ -5515,6 +6092,19 @@ Re2DSprite v2: [большой PNG, мимика, костюмы и псевдо
 [API `$`](highlevel/re2dsprite.md). Демо `re2dsprite` — переключение костюмов,
 моргание, ходьба/бег на месте и перетаскивание кистей; старое имя сцены
 `rotsprite` осталось псевдонимом ([`demos/rotsprite/index.js`](../demos/rotsprite/index.js)).
+
+## Вертикальные примеры спецификации
+
+Отдельные небольшие проекты, каждый проверяется автоматически:
+
+| Пример | Чему учит | Гайд | Проверка |
+|---|---|---|---|
+| `demos/foundations` | край платформы, склон, one-way, движущаяся платформа, зоны камеры, геймпад | — | `foundations_test` |
+| `demos/melee` | окно атаки, несколько hurtbox, отражение снаряда, отдача, hit-фидбек | [tutorial-melee.md](tutorial-melee.md) | `melee_test` |
+| `demos/showcase` | RmlUi HUD, локализация на ходу, вставка timeline, слои музыки, scoped переход | [tutorial-runtime-integration.md](tutorial-runtime-integration.md) | `showcase_test` |
+| `demos/stress` | точки измерения производительности §35.2 (не игра, а стенд) | — | `tools/bench_stress.py` |
+
+Запуск любого: `./build/russiano2d --game demos/<имя>`.
 
 
 ---
@@ -7361,6 +7951,53 @@ RmlUi диагностику существующего DevTools, F2 — инс�
 
 ---
 
+## Форматы данных: состав полей и честные границы
+
+<sub>источник: `docs/FORMATS.md`</sub>
+
+# Форматы данных: состав полей и честные границы
+
+Это не новая схема проекта и не единый «формат всего». Каждый документ игры
+маленький и связывается с другими обычными resource references; prefab остаётся
+источником описания узлов. Раздел соответствует §33
+[спецификации производственной готовности](PRODUCTION_READINESS.md): там
+перечислен **минимальный состав данных**, здесь — где это поле живёт в коде и
+что из него проверено.
+
+Проверяется машиной: [tests/format_extensions_test.py](../tests/format_extensions_test.py)
+сверяет таблицу с кодом и сообщает, если обещание разошлось с реализацией.
+
+| Данные | Поле | Где живёт | Что проверено |
+|---|---|---|---|
+| **Atlas** | `duration` (длительность кадра) | `src/highlevel/atlas.js` | чтение и применение в проигрывании |
+| | `trimmed` + trim-геометрия | `atlas.js` | снимок кадра отдаёт обрезанный регион |
+| | `pivot` | `atlas.js` | `pivotLx/pivotLy` — смещение относительно кадра |
+| | `page` (несколько страниц) | — | **не реализовано**: атлас одного листа с несколькими ИСТОЧНИКАМИ есть (`sources` в тайлмапе, §42), страниц нет |
+| **Animation** | маркеры, окна, named targets, `clock` | `src/highlevel/animplayer.js` | `tests/agent/highlevel_animtracks_test.py` |
+| **Collision** | роль формы, owner, слои/маски, one-way | `core.js` (области) + `tilemap.js` (дескриптор тайла) | `highlevel_transforms_test.py`, `highlevel_tile_geometry_test.py` |
+| **Room/prefab** | стабильные ID (`nid`), children, данные детей | `src/highlevel/prefab.js` | round-trip `prefab.save/apply`, `highlevel_prefab_test.py` |
+| **Save** | schema/content версии, состояние по `nid`, RNG | `src/highlevel/save.js` | `save_restore_test.py` (68 проверок) |
+| **Replay** | build/content hashes, `dt`, checkpoints | `src/highlevel/replay.js` | `highlevel_replay_test.py`, `replay_cli_test.py` |
+| **Light masks** | слои источников + маска получателя | `src/render.c` + `src/highlevel/render.js` | §20.1: `.lightLayer(bits)` у источника, `.lightMask(bits)` у узла, `$.gfx.light.maskPath()`; `light_receiver_mask_test.py` (22) |
+| **Material** | normal/emissive/lit | `src/highlevel/render.js` | данные полные; попиксельный свет по normal-карте — ОБЪЯВЛЕННЫЙ fallback (`$.gfx.normalPath()`, §20.2), см. `node_normal_map_test.py` |
+| **Music** | stems, loop, transport | `src/highlevel/audio.js`, `audiobus.js` | §25 в работе у исполнителя |
+| **Input** | actions/contexts, bindings, device policy, capture | `src/highlevel/input.js` | `highlevel_input_contexts_test.py` (25), `tests/js/input_contexts_test.mjs` (10) |
+| **Validation report** | code, severity, path, nodeId | `src/highlevel/diag.js` | `highlevel_diag_test.py`, `tests/js/diag_test.mjs` |
+
+## Правила, которые нельзя нарушать
+
+1. **Единого гигантского формата проекта нет** и не появится: небольшие
+   документы связываются ссылками на ресурсы.
+2. **Prefab — источник описания узлов.** Ни один другой формат не описывает
+   дерево узлов заново.
+3. **Данные открыты и пригодны для diff**: игра и примеры держат данные в
+   читаемом JSON и ASCII-картах; бинарные blob'ы для ревью непригодны.
+4. **Незаявленное остаётся незаявленным.** Если поля нет в коде, оно не
+   попадает в обещания профиля — тест печатает его как «ждёт», а не «ок».
+
+
+---
+
 ## Фазы кадра
 
 <sub>источник: `docs/FRAME_PHASES.md`</sub>
@@ -7655,36 +8292,53 @@ RmlUi диагностику существующего DevTools, F2 — инс�
 | §14/§4.2 стабильные ID узлов | **закрыт** (основа) | `$('#x').nid()`, снимок узла, поле в `$.prefab.save` |
 | §13/§28 журнал трассировки | **закрыт** (основа) | `$.trace` (кольцо 256, `note/dropped`), `frame_phases_test` |
 | §17 диагностика | **закрыт** | `src/highlevel/diag.js`, `docs/highlevel/diag.md`, `tests/js/diag_test.mjs`, `tests/agent/highlevel_diag_test.py` |
+| §31-3 Pattern arena | **закрыт** | `demos/arena` + `tests/agent/arena_test.py` (62): фазы по таблице HP/таймера/маркера, отменяемая фаза (после отмены за 90 кадров ни одного снаряда), пул с потолком узлов (48 при 163 выдачах), пауза через `$.time.pause` + §44-политику, смерть ровно один раз, рестарт возвращает числа к исходным (узлы 15/тела 10/подписки 1/таймеры 2/области 2) |
+| §31-2 Melee/contact | **закрыт** | `demos/melee` + `melee_test.py` (44): удар по окну анимации, три hurtbox → один удар, отражение снаряда, отдача в стену, feedback не влияет на урон |
+| §31-6 Runtime integration | **закрыт** | `demos/showcase` + `showcase_test.py` (56): RmlUi HUD, смена языка на ходу, вставка timeline с маркерами, слои музыки, scoped переход с persistent HUD |
+| §31 «работают из пакета» | **проверяется машиной** | `tests/demos_examples_test.py`: у всех семи примеров есть project.json, точка входа, README, приёмочная проверка и описание в docs/demos.md; каждый запускается движком `--headless` без ошибок игрового кода |
+| §31-7 Recovery | **закрыт** | `demos/recovery` + `recovery_test.py` (66): битый слот → восстановление из `.bak`, битый ассет → `ok:false` с кодом и живая игра, safe reload после починки, replay divergence с первым расходящимся тиком, чистый прогон без расхождения |
+| §31-5 Lit sprites | **закрыт** | `demos/litsprites` + `litsprites_test.py` (25): яркость на свету/в тени, маски источников, динамический occluder, скрытый occluder не заслоняет, UI не темнеет, atlas-флипы без протечки |
+| §31-4 Generated rooms | **закрыт** | `demos/roguerooms` + `roguerooms_test.py` (52): seed → hash, validation до публикации, бюджеты с жёсткими лимитами, checkpoint/restore с отменой генерации |
 | §31-1 Platform foundations | **закрыт** | `demos/foundations` + `README`, `tests/agent/foundations_test.py` (25 проверок) |
 | §39 local/world transforms | **закрыт** | `transformSpace/localAt/localAngle/localScale/worldPoint/localPoint/worldTransform`, нативный пакетный проход + JS-резерв, reparent keep-world/keep-local; `tests/js/transforms_test.mjs` (21), `highlevel_transforms_test.py` (62) |
 | §40 независимые sensors и enable | **закрыт** | `.area/.areaOn/.areas/.areaOverlap`, native `setShapeEnabled/setShape/shapeOverlaps`, routing `areaA/roleA/ownerA`; форма вне физики и запросов без потери владельца, index переживает пересборку |
 | §41 multi-target tracks | **закрыт** | `tests/js/anim_tracks_test.mjs` (50), `tests/agent/highlevel_animtracks_test.py` (53): клип ведёт кадры, оружие, shape.enabled, emitter, UI и SFX; seek предпросмотра урона не наносит |
 | §10 tracks/markers | **закрыт** (в объёме §41) | маркеры с ID и policy, gameplay-окна, прерывание закрывает окно |
+| §16 UI/HUD/i18n/timeline | **закрыт** | `$.ui.persist/transient` (постоянный HUD переживает смену сцены — раньше он умирал на первой же), модальность через контекст `ui.modal` + `inputBlocked()`, локализация на ходу с явным fallback (`i18n.missing/mark/number`), привязки данных с пропуском неизменных кадров, timeline-маркеры и контракт возврата `state().restored`; `highlevel_ui_contract_test.py` (76). Честно: вёрстку RmlUi при resize движок не перекладывает, HiDPI как политика не проверялся, языки — ru/en |
+| §23 комнаты/tilemap/prefab data | **закрыт** | `$.room`: validateRoom до создания узлов → staging-область → публикация на границе кадра; комната регистрируется сценой `room:<id>`; визуал+коллизия+occluders из одних данных; инкрементальная пересборка тел по геометрии (`dirty_cells/created/reused/destroyed`); `room_transaction_test.py` (31): неудачная загрузка не меняет мир, 10 смен комнаты без роста счётчиков, ошибки `R2D_ROOM_*` в `$.debug.errors()`. Честно: стриминга внутри комнаты нет, `$.room` не редактирует данные, fade заказывается явно |
 | §42 partial tile collision | **закрыт** | дескриптор `tiles` (shape/visual/occluder/masks), logical origin + pad, `fail`-политика лимита тел; `tests/js/tilemap_test.mjs` (35), `tests/agent/highlevel_tile_geometry_test.py` (67), замеры в docs/highlevel/tilemap.md §6 |
 | §43 seeded simplex | **закрыт** | `$.random.simplex2D/noise/fbm2D/hashCells`, `tests/js/simplex_noise_test.mjs` (21), `highlevel_random_test.py` (34), эталоны `tests/fixtures/generation_noise` |
 | §26 RNG state (часть random) | **закрыт** (интерфейс готов) | `$.random.state/restore/validateState/stream`; потребители save/replay — пакет W2-C |
+| §30/§37 профиль 2D | **проверяется машиной** | `tests/profile_2d_test.py`: OFF-сборка поднимает `$`, запускает игру и примеры, отдаёт все подсистемы 2D-профиля, не содержит authoring-подсистем 3D и не пишет ошибок; запускается при релизе |
+| §33 состав данных | **проверяется машиной** | `docs/FORMATS.md` + `tests/format_extensions_test.py`: для каждого расширения названо место в коде; незаявленное (страницы атласа, полный материал, музыка) помечено как «не заявляется», а не выдано за реализованное |
+| сборка: разбор модулей | **проверяется машиной** | `tests/parse_all_test.py`: все модули и точки входа разбираются тем же QuickJS, что и в игре (ловит то, что пропускает `node --check`) |
+| сборка: встраивание скриптов | **проверяется машиной** | `tests/embed_sync_test.py`: встроенный бандл побайтово равен исходникам; ловит случай «исходники целы, а движок падает на старте» (был реальным) |
+| §35 программа приёмки | **проверяется машиной** | `tests/acceptance_test.py`: 35.1 доказательства по классам сценариев, 35.2 отчёт замера с конфигурацией (commit, backend, разрешение, counts, p50/p95/p99, CPU-зоны, GPU-время) и gate p95 ≤ 16,67 мс, 35.3 ревизия/команда/факт; запускается перед релизом |
+| §37 checklist | **проверяется машиной** | `tests/checklist_test.py`: архитектурные обязательства §1.1/§36, доказательство для каждого P0-пункта, README у примеров, трассируемость плана; ожидающие пункты помечаются явно, а не «зеленеют» по умолчанию |
 | §31-2 stress-стенд §35.2 | **закрыт** (стенд) | `demos/stress` (6 сцен, 200 тел / 500 снарядов / 5 000 частиц / 32 света / карта 200×100), `tools/bench_stress.py`, отчёт `build/stress-on.json` |
-| §6 часы/pause/hit-stop | частично (C-гейт `setTimeScale`, `$.time.freeze/slow`) | 30/60/144 FPS, одинаковые simulation events |
+| §6 часы/pause/hit-stop | **закрыт** | фиксированный шаг: `engine.dt` = fixedDt, приращения времени одинаковы (разброс 0.00e+00), движение = скорость × шаг (отклонение 1.7e-05), камера едет 3.3333 px/кадр без дёрганья (`highlevel_camera_fixedstep_test`); hit-stop замораживает время (`highlevel_feel_test`), фазы кадра документированы (`frame_phases_test`) |
 | §5/13 lifecycle и cleanup | **закрыт** (документация в очереди) | scope active→closing→closed, prepare→commit, scoped-подписки/таймеры/задачи; числа: 100 restart/load — nodes 12→12, bodies 10→10, subs 1→1, timers 2→2, flows 2→2; `lifecycle_numbers_test.py` (44) |
-| §7/8/9 контакты, контроллер, damage | частично (controls, one-way, CCD) | края, ступени, потолок, склон, one-way stack, смерть в drop-through |
-| §10/14/26 save/RNG/replay | не начато | mid-session restore, испорченный слот, divergence report |
-| §15 input contexts | не начато | меню геймпадом, reconnect, rebind между запусками |
-| §44 processing policy и ticks | частично (`$.time`, visibility) | inactive враг: sensor отдельно, смерть по clock, тот же simulation time при разном FPS |
-| §45 загрузка и progress | частично (`loadAsync`, `$.loading`) | тяжёлый PNG не блокирует анимацию загрузки и cancel |
-| §46 screen effect pass | не начато | wave/noise/channel shift при resize, fallback |
-| §47 particle параметры | частично | seed+fixed step, отрицательная гравитация, движущийся emitter |
-| §48 audio bus isolation | частично (шины, reverb) | dry click остаётся dry при wet ambience |
-| §18 renderer presentation | не начато | эталонные сцены alpha/add/multiply/Y-sort/UI/parallax |
-| §19 camera и комнаты | частично (follow/deadzone/lookahead/limits) | переходы комнат без пустого края, resize, cutscene-stop |
-| §20 свет и материалы | частично (light nodes, occluders) | маски, динамический occluder, quality limits, flat-normal fallback |
-| §21 particles/VFX бюджеты | частично (presets, ramps, pool) | сотни ударов без роста узлов, reduced flash |
-| §22-24 atlas/tilemap/generation | частично | fixtures кадров, room reload, seed corpus |
+| §7/8/9 контакты, контроллер, damage | **закрыт** | края, ступени, потолок, склон, one-way, движущиеся платформы (`highlevel_controls_test`), контакты и queries при удалении форм (`highlevel_contact_test`), окна атаки и дедупликация урона (`highlevel_combat_contract_test`) |
+| §10/14/26 save/RNG/replay | **закрыт** | формат слота v3 (profile/run/room/presentation), restore по `nid` с prepare→commit, `.bak`/`recover`, отказ слота будущей версии без перезаписи; replay v2 с engine/content/seed/streams и divergence по первому тику; `highlevel_save_test` (101), `save_restore_test` (68), `replay_test.mjs` (19) |
+| §15 input contexts | **закрыт** (без физического геймпада) | контексты с приоритетом, глобальный `consume`, конфликты/эталон/сохранение привязок, захват с отменой и таймаутом, политика слотов, подписи, оси с гистерезисом, виртуальный ввод; `highlevel_input_contexts_test.py` (25) + `tests/js/input_contexts_test.mjs` (10) |
+| §44 обработка и тики | **закрыт** | политики `update/fixed/animation/timers/physics` с наследованием от scope, `$.activation.watch` (screen/region, margin+hysteresis, камеры, once), счётчик тиков отдельно от кадров; `highlevel_activation_test` (42), `highlevel_triggers_test` (32); числа: 120 тиков за 59/119/288 кадров |
+| §45 загрузка и progress | **закрыт** | `$.loading`/`$.resource` с прогрессом, ошибкой и отменой: тяжёлый PNG не блокирует анимацию загрузки, отмена и отказ видны машине; `highlevel_loading_test` + `tests/fixtures/loading`. Честно: GPU-upload, декод аудио и разбор JSON остаются на главном потоке; путь >127 символов может грузиться дважды |
+| §46 экранный эффект | **закрыт** | `$.gfx.post({distort,wave_amp,wave_freq,wave_speed,wave_axis,noise_amount,noise_scale,channel_shift})` + пресеты `underwater`/`glitch`; `tests/agent/screenfx_test.py` (14), фикстура `tests/fixtures/screenfx`; нейтральный пост — тождество, resize и отсутствие feedback проверены |
+| §47 particle параметры | **закрыт** | `p.clock` (simulation/presentation), seed + фиксированный шаг дают одинаковую эволюцию (`highlevel_particles_test`), `$.hits.reduced` и бюджет частиц замерены (`highlevel_particle_budget_test`); ограничения записаны рядом с API |
+| §48 audio bus isolation | **закрыт** | `highlevel_audiobus_test`: звук чужой шины не пострадал, освобождённая шина исчезает из списка, dB↔gain симметричны (0.5 → -6.02 dB → 0.501), кадры идут после операций с шинами |
+| §18 renderer presentation | **закрыт** | контракт порядка проходов в render.md §4.5, снаппинг/целочисленная шкала/материалы, `highlevel_presentation_test.py` (42) на фикстуре `render_presentation`, смена слоя не меняет логику (числа в отчёте) |
+| §19 камера и комнаты | **закрыт** | `$.camera.zone/enter/leave/lease/release/control`: зона — данные поверх камеры, приоритет решает конфликт, аренда возвращает прежнюю конфигурацию и истекает по времени; `camera_zones_test.py` (18) на фикстуре двух комнат |
+| §20.2 normal-карты | **закрыт измерением и объявленным fallback** | измерено: спрайтовая вершинная стадия без юниформов (20 Б/вершина: x,y,u,v,rgba), свет — один аддитивный композит в текстуре 640×360, поэтому (а) до 29.5 млн «источник↔пиксель» на кадр и (б) размытие смешивает каналы. Выбран вариант (в): `$.gfx.normalPath()` отдаёт `{supported:false, reason:'sprite_stage_has_no_normal_input', fallback:'flat_normal', required:[...]}`, `perPixelNormal(true)` не включает режим, а объясняет причину. Приёмка изображениями: `node_normal_map_test.py` (18) — лампа слева/справа зеркалит градиент (89.8/60.0), материал с normal = базовый (60,58,58), trimmed кадр не смещает свет, тень следует за occluder (34.0 → 91.8). Замер до/после: p95 8.348 → 8.345 мс, GPU 1.817 → 1.660 мс |
+| §20.1 маска получателя света | **закрыт** | измерено: N композитов по слоям = N × 0.030 мс и всё равно требует маску получателя, поэтому выбран проход маски (только если в кадре есть узел с маской) + гейт `(receiver & layer) != 0` при накоплении света. Вершина 20 → 24 Б (+2.9 КБ/кадр в стресс-сцене против 0.88 МБ геометрии света). Публично: `.lightMask(bits)`, `.lightLayer(bits)`, `$.gfx.light.layer(bits)`, `$.gfx.light.maskPath()`. Приёмка `light_receiver_mask_test.py` (22): получатель слоя 1 освещён 194.9 и не освещён 169.3 при слое 2, обмен масок зеркален, без масок `maskPasses == 0`, fallback возвращает прежние 219.9/219.5. Замером найдены и исправлены 4 дефекта (`.lit(false)` получал свет поверх себя: 255 вместо 169.3; неосвещённый слой рисовался конвейером композита; юниформы шейдера узла затирались параметрами стадии; затенение `mode`). p95 8.35 → 8.35–8.36 мс, бюджет §35 не затронут |
+| §20 свет и материалы | **закрыт** (кроме попиксельных normal-карт) | профиль качества с измеренной деградацией, маски, динамический occluder (найден и исправлен баг: свои препятствия узла не участвовали в лучах), `.lit(false)`, инвалидация по области; `highlevel_light_limits_test.py` (46). Честно: попиксельный normal-проход требует второго сэмплера и нового прохода — данные материалов готовы, влияние нормалей не заявлено |
+| §21 particles/VFX бюджеты | **закрыт** | `clock: 'presentation'\|'simulation'` по эмиттеру, событие `particlesEnd`, жёсткие пределы и pool, `$.hits.reduced()` (presentation-only); `highlevel_particle_budget_test.py` (18): 400 ударов → узлы 12→12, эмиттеры 9→9, reduced 14→1 частиц при том же уроне |
+| §22 атласы | **закрыт** | страницы/пути относительно JSON, мипмапы только при padding+extrusion (иначе протечка), import-манифест с версией и импортёром, 11 кодов ошибок и 5 предупреждений в `$.atlas.verify()`, отказ на повёрнутый кадр; `atlas_test.mjs` (17) + `highlevel_atlas_test.py` (28) |
 | §25 audio stems | не начато | PCM/transport timestamps |
-| §27 hot reload | частично (reload hooks) | last-known-good при ошибке, серия reload без роста памяти |
-| §28 debug/profiling | частично (DevTools, agent) | hit ID → источник → контакт → damage result |
-| §29 SDK panels | частично | создание/правка/CLI-проверка/preview/игра без project database |
-| §30 packaging/CI | частично (упаковка, CI) | установленный пакет вне checkout: пример, сборка, перенос |
-| §31 docs и вертикальные примеры | частично | семь примеров §31 запускаются из пакета |
+| §27 hot reload | **закрыт** | `$.reload` (watch/reload/poll/versions/graph/order/behavior/restartScene): read→validate→prepare→apply, last-known-good с кодами `R2D_RELOAD_*`, граф зависимостей и топологический порядок, отложенное освобождение handles после кадра; 100 reload — счётчики без изменений; `highlevel_reload_test.py` (58) + `reload_test.mjs` (15). Ограничения: смена размера текстуры и внешний `.rcss` отклоняются/предупреждают |
+| §28 debug/profiling | **закрыт** (P0) | `$.trace.hit/hits` — цепочка attack → combat:filter → damage → death по hit ID (включая ОТКАЗ с причиной), `$.debug.anatomy(sel)` (тело, области с ролями и индексами, опора, окна, политики), `$.debug.contacts()` (фаза, нормаль, роли), профиль машиночитаем и честен про GPU; `debug_diagnostics_test.py` (24) |
+| §29 SDK panels | **закрыт** | `sdk_tools_panels_test` (126): у девяти инструментов валидация через ТОТ ЖЕ backend, что CLI, коды равны CLI на одном файле, preview-путь совпадает с проверенным, undo/redo не теряется; `sdk_validation_test` (11 типов + манифест/сессия/ссылка звука) и `sdk_preview_parity_test` |
+| §30 packaging/CI | **закрыт с объявленными ограничениями** | упаковка, CI и 5 платформенных автосборок работают, установка и перенос проверены в поставке (`dist/*`, `docs/BUILD.md`). Честно и явно: рекурсивного разрешения зависимостей АССЕТОВ из цепочки import нет (`--add` перечисляет их сам — осознанно, см. docs/BUILD.md: эвристика «любая строка похожа на путь» включала бы в груз мусор и ломала корректные сборки); путь Docker не прогонялся в этой среде; установка на чистую систему не воспроизводилась |
+| §31 docs и вертикальные примеры | **закрыт** | семь примеров §31 с приёмочными тестами и описанием в docs/demos.md; `demos_examples_test` запускает каждый движком из дерева и проверяет структуру проекта |
 
 
 ---
@@ -10972,8 +11626,13 @@ frame 120:
   честное ограничение первой версии, а не забывчивость.
 
 Чекпоинтов (утверждений вида `frame 120: #hero.position ~= [420, 200]`) в
-формате пока нет: состояние сверяет игра — `$.replay.verify` для ввода и
+C-формате CLI нет: состояние сверяет игра — `$.replay.verify` для ввода и
 `$.test.near/equal` для мира ([TESTING.md](TESTING.md)).
+
+**JS-формат `$.replay` (версия 2, §26) чекпоинты умеет:** `$.replay.checkpoints`
+снимает state hash на заданных simulation ticks, `$.replay.divergence()` отдаёт
+первый расходящийся tick, поля (`nid.поле`), IDs и версии данных. Подробности —
+[highlevel/replay.md](highlevel/replay.md) §2.2.
 
 ---
 
@@ -10993,29 +11652,34 @@ frame 120:
 | CLI `--replay <файл>` | есть | там же — `r2d_replay_play`, подстановка через виртуальный ввод |
 | Версионированный формат | есть | `{"r2d_replay":1, …}`, чужую версию отвергаем с объяснением |
 | Версия движка, игра, шаг, зерно в заголовке | есть | `version`, `game`, `fixed_dt`, `seed` |
-| Запись ввода по кадрам | есть (JS) | `$.replay.record(sampler, apply)` — [replay.js:276-357](../src/highlevel/replay.js#L276-L357) |
-| Воспроизведение | есть (JS) | `$.replay.play(apply?)` — [replay.js:151-169](../src/highlevel/replay.js#L151-L169) |
-| Формат | JSON-текст, не `.r2replay` | `{ header: {seed, dt, frame, frames}, frames: [[f, d], …] }` — [replay.js:201-206](../src/highlevel/replay.js#L201-L206) |
-| Заголовок с зерном и шагом | есть | `seed: engine.seed`, `dt: engine.fixedDt` — [replay.js:240-252](../src/highlevel/replay.js#L240-L252) |
-| Лимит записи и счётчик потерь | есть | `MAX_FRAMES = 36000`, `dropped()` — [replay.js:27](../src/highlevel/replay.js#L27), [:93-97](../src/highlevel/replay.js#L93-L97) |
-| Сравнение двух записей | есть | `compareReplays(a, b)` → `{ same, count, first }` — [replay.js:227-235](../src/highlevel/replay.js#L227-L235) |
-| Проверка ввода | есть | `verify(sampler)` — [replay.js:310-320](../src/highlevel/replay.js#L310-L320) |
-| Мир не сериализуется по кадрам | соблюдено | лимит кадра 4096 символов — [replay.js:28-29](../src/highlevel/replay.js#L28-L29), [highlevel/replay.md](highlevel/replay.md) §3 |
+| Запись ввода по кадрам | есть (JS) | `$.replay.record(sampler, apply)` — [replay.js](../src/highlevel/replay.js) |
+| Воспроизведение | есть (JS) | `$.replay.play(apply?)` — [replay.js](../src/highlevel/replay.js) |
+| Формат | JSON-текст, не `.r2replay` | `{ header: {schema, version, engine, content, seed, streams, dt, input, checkpoints}, frames: [[f, d], …], checks: [...] }` — [replay.js](../src/highlevel/replay.js) |
+| Schema и версия записи | есть (JS v2) | `schema: 'r2d.replay'`, `version: 2`; чужую схему и версию «из будущего» `load()` отклоняет с причиной — `replayHeadProblem()` |
+| Заголовок: RNG, content, input mapping, ID движка | есть (JS v2) | `streams` (`$.random.state()`), `content` (`$.save.contents()`), `input.{mapping,actions}`, `engine.{version,build}` через `$.replay.identity()` |
+| Ввод на уровне actions | есть (JS v2) | `$.replay.actions([...])`; незнакомое действие отсекается и считается в `unknownActions()`, raw — рядом для диагностики |
+| Checkpoints state hash и divergence | есть (JS v2) | `checkpoints({every})`, `divergence()` → первый tick, поля, IDs, версии; hash без wall-clock/GPU/presentation |
+| Лимит записи и счётчик потерь | есть | `MAX_FRAMES = 36000`, `dropped()` — [replay.js](../src/highlevel/replay.js) |
+| Сравнение двух записей | есть | `compareReplays(a, b)` → `{ same, count, first }` — [replay.js](../src/highlevel/replay.js) |
+| Проверка ввода | есть | `verify(sampler)` — [replay.js](../src/highlevel/replay.js) |
+| Мир не сериализуется по кадрам | соблюдено | лимит кадра 4096 символов — [replay.js](../src/highlevel/replay.js), [highlevel/replay.md](highlevel/replay.md) §3 |
 | Детерминированный прогон | есть | `--fixed-dt` ([app.c:688-693](../src/app.c#L688-L693)), `--seed` ([main.c:552-553](../src/main.c#L552-L553)), фиксированный шаг физики 1/60 ([main.c:217-226](../src/main.c#L217-L226)) |
 | Управляемый ввод | есть | виртуальный ввод агента ([app.c:670-684](../src/app.c#L670-L684)), команды `key`/`keys`/`touch`/`pad`/`mouse`/… |
 | Тесты воспроизведения | есть | [tests/agent/highlevel_replay_test.py](../tests/agent/highlevel_replay_test.py) (seed 777, fixed-dt 1/60), [tests/js/replay_test.mjs](../tests/js/replay_test.mjs) |
 
 **Чего нет:**
 
-* версии формата: `load()` проверяет только `Array.isArray(obj.frames)`
-  ([replay.js:122-125](../src/highlevel/replay.js#L122-L125));
-* версии движка, идентификатора игры и конфигурации рантайма в заголовке
-  (игра может дописать своё через `start(extra)`, но это необязательно);
-* чекпоинтов состояния и хеша мира;
+* в C-формате CLI: идентификатора игры/контента и checkpoints состояния
+  (JS-формат `$.replay` v2 это умеет — см. таблицу выше);
+* ID сборки в JS-заголовке: **исправлено** — движок отдаёт `engine.version`
+  (версия проекта из CMake), а `$.replay.identity()` без аргумента возвращает
+  разрешённый паспорт; игра может уточнить ID через
+  `$.replay.identity({ version, build })`, и явное значение важнее
+  автоматического. В C-формате CLI этого по-прежнему нет;
 * команд реплея в агентском протоколе — сценарий разыгрывается вручную
   ([highlevel/agent.md](highlevel/agent.md) §4);
 * сериализации самого процесса (перед `play()` мир возвращает в начальное
-  состояние сама игра).
+  состояние сама игра — для этого есть `$.save`).
 
 ---
 
@@ -11049,8 +11713,9 @@ frame 120:
    ([main.c](../src/main.c), [random.js](../src/highlevel/random.js)). Раньше
    без `--seed` движок отдавал `engine.seed = 0`, а генератор работал от 12345.
 
-Осталось сделать в самой записи: версию формата, идентификатор игры и чекпоинты
-(§2, §5).
+В JS-записи (`$.replay` v2) версия формата, ID движка/сборки, content, actions и
+чекпоинты состояния уже есть (§2, §5 — сделано пакетом W2-C). В C-формате CLI
+идентификатор игры и чекпоинты ещё нет.
 
 ---
 
@@ -11106,12 +11771,38 @@ Linux x86_64/aarch64 и Windows x86_64. Сборочная ошибка по у�
 набор, `PLATFORMS` задаёт явный список. `REMOTES` переопределяет три направления,
 `SITE=0` отключает сайт, `BUMP=0`/`TAG=0` отключают bump/tag.
 
+## Одна версия на проект
+
+Версия живёт **только** в `CMakeLists.txt` (`project(... VERSION x.y.z)`).
+Оттуда её читает `tools/release.py` (`read_version`) — для имени архива, `VERSION`
+внутри пакета, README/AGENTS и git-тега `vX.Y.Z`; оттуда же `tools/autobuild.py`
+и `tools/ci_package.py` (оба вызывают `release.py`), и `build_and_push.sh`
+(`--bump`). Нативный бэкенд печатает её же: `r2d-sdk version` берёт
+`PROJECT_VERSION` определением из `sdk/native/CMakeLists.txt` (не строкой в
+`sdk.h`), а JS-оболочка SDK показывает ответ бэкенда, а не свою константу.
+Проверки: CI-шаг «Validate version tag» (`GITHUB_REF_NAME == 'v' + read_version()`),
+`r2d-sdk version` в `build_test.py`, `VERSION` в `sdk_package_test.py`.
+
+## Воспроизводимость упаковки
+
+Один и тот же commit даёт один и тот же архив: `tools/release.py` пишет
+`tar.gz`/`zip` сам — время всех записей фиксировано, порядок отсортирован,
+`uid`/`gid` обнулены, права 0755 только у исполняемых файлов. Поэтому повторная
+упаковка того же дерева **не меняет содержимое** (ни SHA256 архива, ни
+`SHA256SUMS.txt`), а не только список файлов. `--with-demos` — единственное, что
+добавляет каталог `demos/` (по умолчанию его в пакете нет).
+Проверка — `tests/agent/sdk_package_test.py`: упаковывает дважды и сравнивает
+SHA256 архивов и обе контрольные суммы.
+
 ## GitHub CI и Releases
 
 `.github/workflows/build.yml` запускается по новому version tag или вручную.
 Пять независимых Release jobs на нативных GitHub runners: macOS arm64/x86_64,
 Linux x86_64/aarch64, Windows x86_64. Каждый собирает engine и SDK, выполняет
-native/JS тесты, упаковывает архив. Linux дополнительно проверяет SDK GUI под Xvfb.
+native/JS тесты **в обеих конфигурациях** (`ci_verify.py --re2d on` для `build-ci`
+и `--re2d off` для `build-2d-ci`), проверяет web-экспорт отдельным шагом (без
+emsdk шаг печатает причину пропуска и не падает) и упаковывает архив. Linux
+дополнительно проверяет SDK GUI, standalone-сборку и пакет под Xvfb.
 После успешных пяти jobs release job публикует пять архивов и SHA256SUMS.txt
 в GitHub Release этого тега. Неуспешный build не выдаётся за полный релиз.
 Вручную запущенный workflow сохраняет artifacts без создания релиза.
@@ -11131,6 +11822,17 @@ llms-full.txt, sitemap, links/version и архивы. `deploy-fast.sh` посл
 Проверить пять assets в Release и опубликованный сайт, а не только локальный
 workflow. macOS append signing и поддержка других платформ проверяются отдельно:
 локальный запуск игры сам по себе не подтверждает пригодную для распространения подпись.
+
+Содержимое пакета и воспроизводимость проверяются автоматически:
+
+```sh
+R2D_BINARY=build/russiano2d python3 tests/agent/sdk_package_test.py   # пакет, SHA256SUMS, VERSION, повторная упаковка
+python3 tools/ci_verify.py --build-dir build --re2d on                # обе конфигурации
+python3 tools/ci_verify.py --build-dir build-2d --re2d off
+python3 tools/ci_verify.py --build-dir build --web                    # web-экспорт или честный skip без emsdk
+```
+
+Состав архива и таблица платформ — [BUILD.md](BUILD.md), раздел «Дистрибутив».
 
 
 ---
@@ -11759,6 +12461,64 @@ API для агента: `$.sdkApp.studios['tilemap-studio'].ops` (`paint`, `fil
 (методы самой студии, не её `ops`), снимок —
 `state.sdk.studios.<id>`.
 
+## 10.1. Панели проверки §29: тот же backend, что CLI
+
+Все девять инструментов §29 (Sprite, Animation, Tilemap, Particle, Collision,
+Parallax, Font, Audio, Input, RmlUi, DevTools, Automation) имеют в панели две
+кнопки — «Проверить» и «Проверить в игре» — и они не содержат своей логики
+проверок. Единый помощник `sdk/lib/panel_check.js`:
+
+* **`validate()`** вызывает `app.backend(['validate', path])` — тот же нативный
+  валидатор, что `r2d-sdk validate`, и показывает его структурные диагностики
+  (code/severity/location/message) без подмены. Поэтому коды панели **равны**
+  кодам CLI на том же файле (`tests/agent/sdk_tools_panels_test.py` сравнивает
+  их по каждому инструменту; корректный ассет — «ошибок 0», сломанный — коды CLI);
+* **`preview()`** записывает путь preview. Файл не копируется и не ищется в базе
+  проекта: тем же путём его читает игра, поэтому `previewPath === validatedPath`
+  (в снимке — `previewMatchesValidated`);
+* **`report()`** — сводка/import report инструмента: числа по данным и короткие
+  предупреждения, которые человек читает рядом с диагностиками;
+* **`snapshot()`** — `panel` в снимке студии: `validatedPath`, `previewPath`,
+  `previewMatchesValidated`, `codes`, `errors`, `warnings`, `checks`, `report`.
+
+| Инструмент | Сводка/import report панели |
+|---|---|
+| Sprite Studio | кадры, trim, sockets, страницы, image, расхождения material albedo/normal |
+| Animation Studio | теги-клипы: диапазоны (окна), разрывы/пересечения, длительность и fps, цикл/one-shot, прерывание preview |
+| Tilemap Studio | слои и их роли, occlusion-слои, тайлы, сетка, chunk budget, связи комнат, invalid geometry |
+| Particle Studio | space/clock, trails, бюджет (amount/max/rate), seed для replay, one-shot, lifetime |
+| Collision Tools | фигуры, роли, masks, one-way, площадь footprint, поддержка «по низу» |
+| Parallax Tools | слои, спрайты, parallax-слои, порядок depth |
+| Font Tools | шрифты, стили, семейства |
+| Audio Tools | шины, звуки, маршруты по шинам, stems/transport, voice-лимиты, отсутствующие файлы |
+| Input Tools | действия, клавиши, контексты, конфликты клавиш, gamepad/disconnect-тесты |
+| RmlUi Studio | элементы, id, фокусируемые элементы (навигация), ссылки и их разрешение, отсутствующие стили, длинные строки (переполнение под перевод) |
+| DevTools | scoped lifecycle сессии, число validation reports, фикстуры приёмки |
+| Automation | операция, задания манифеста и их `op`, статус прогона |
+
+Undo/redo остаётся у документа: проверка и preview не сбрасывают историю
+(проверяется тестом для студий с документом). Запись нескольких зависимых файлов
+идёт через save → `validate` каждого файла (RmlUi Studio пишет документ и стили
+только при «Сохранить»); атомарность ограничена порядком «сначала файл, потом
+проверка» — при ошибке файл уже записан, и панель показывает коды.
+
+Публичные вызовы (человек и агент — одно и то же):
+
+| Вызов | Что делает |
+|---|---|
+| `$.sdkApp.studios['<id>'].validate()` | проверка текущего файла нативным backend, возвращает `{ok, diagnostics, codes, path, report}` |
+| `$.sdkApp.studios['<id>'].preview()` | preview-ссылка на runtime тем же путём (`{ok, path}`) |
+| `$.sdkApp.studios['<id>'].report()` | сводка/import report (чистые данные) |
+| `$.sdkApp.studios['<id>'].snapshot().panel` | что проверялось, что показал preview, коды и отчёт |
+| `$.sdkApp.studios['animation'].interrupt()` | прерывание preview-анимации (кадр фиксируется) |
+| `$.sdkApp.studios['devtools'].validateSession()` | записать `.agent.json` сессии и проверить его |
+| `$.sdkApp.studios['rmlui-studio'].previewRun()` | «Проверить в игре» для документа RmlUi |
+
+Чего в панелях нет (честно): запуск игры прямо из каждой студии (preview — это
+ссылка на тот же файл; запуск делает кнопка оболочки/DevTools), редактирование
+зон Audio мышью и drag-ресайз Collision (не изменилось с §10), а у DevTools и
+Automation нет документа с undo/redo — там история не ведётся by design.
+
 ## 11. RmlUi Studio
 
 `sdk/tools/rmlui-studio.js` + `sdk/ui/rmlui_studio.rml`: открывается на `*.rml` (стили берёт из
@@ -11854,6 +12614,34 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 
 Новые регрессии: sdk_runtime_ui / sdk_package / sdk_recovery. Подробные
 доказательства — SDK_HANDOFF и SDK_VERIFICATION.
+
+### Типы валидаторов
+
+`r2d-sdk validate <файл>` определяет тип по суффиксу; явный `--type` важнее.
+Реестр (sdk/native/sdk_validate.c):
+
+| Тип | Суффикс | Что проверяет |
+|---|---|---|
+| `project` | `project.json` | ширину/высоту, строки title/version, наличие `main.js` рядом |
+| `sdk.registry` | `sdk_tools.json` | реестр инструментов |
+| `sdk.manifest` | `.batch.json` | `version: 1`, `jobs[]`, `op: validate` и непустой `source` |
+| `sdk.agent-session` | `.agent.json` | `version: 1`, непустой `game`, `requests[]`, `timeoutMs` 1..600000, `seed` uint32, `quit` только последним |
+| `sprite.atlas` | `.atlas.json` | кадры, пивоты, теги, слайсы, картинка |
+| `tilemap` | `.tilemap.json` | клетки, слои, тайлсет |
+| `particles` | `.particles.json` | параметры эмиттера и их диапазоны |
+| `collision` | `.collision.json` | фигуры, теги, геометрия |
+| `layers` | `.layers.json` | слои, parallax, спрайты |
+| `fonts` | `.fonts.json` | шрифты и стили |
+| `audio` | `.audio.json` | шины, звуки, зоны; путь звука обязан существовать рядом с JSON (`SDK_AUDIO_FILE_MISSING`) |
+| `input` | `.input.json` | действия и привязки |
+| `rmlui.document` | `.rml` | сбалансированность тегов |
+| `rmlui.style` | `.rcss` | скобки и свойства |
+| `json` | `.json` | что это разбираемый JSON |
+
+Каждый тип обязан иметь работающую проверку: корректный файл проходит без
+диагностик, сломанный — выявляется ДО запуска структурированным кодом
+(`tests/sdk_validation_test.py`), а разбор SDK совпадает с разбором движка
+(`tests/sdk_preview_parity_test.py`).
 
 
 ---
@@ -14920,6 +15708,11 @@ $.ready(() => {
 
 | Вызов | Что делает |
 |---|---|
+| `$.atlas.load(name, { path, data, mipmaps, allowRotated })` | загрузка с опциями (см. ниже) |
+| `$.atlas.verify(data, opts)` | проверка данных без загрузки: `{ ok, errors, warnings }` |
+| `$.atlas.errors()` | кольцо структурированных ошибок (работает и без движка) |
+| `$.atlas.manifest(name)` | import-манифест загруженного атласа или `null` |
+
 | `$.atlas.load('hero', 'art/hero.json')` | читает JSON через `$.fs.readJSON`, грузит картинку из данных, режет кадры |
 | `$.atlas.load('hero', { data: json, src: 'art/sheet.png' })` | данные уже в памяти (ответ сети, тест); `src` перебивает путь к картинке |
 | `$.atlas.get('hero')` | загруженный атлас или `null` |
@@ -14964,7 +15757,52 @@ $.ready(() => {
 Тег `direction: 'reverse'` из Aseprite разворачивает список кадров, поэтому
 `tag('walk')` идёт в правильном порядке.
 
-## 3.1. Слайсы и пивоты Aseprite
+### 3.0. Страницы, padding/extrusion и мипмапы
+
+Атлас может состоять из нескольких PNG (страниц). Кадр несёт `page` (индекс или
+имя), а `meta.pages` описывает страницы:
+
+```json
+{
+  "meta": {
+    "image": "body.png",
+    "size": { "w": 512, "h": 512 },
+    "pages": [{ "name": "body", "image": "body.png" },
+              { "name": "props", "image": "props.png" }],
+    "padding": 2,
+    "extrusion": 1
+  },
+  "frames": {
+    "body_0": { "frame": { "x": 0, "y": 0, "w": 32, "h": 32 }, "page": "body" },
+    "prop_0": { "frame": { "x": 0, "y": 0, "w": 16, "h": 16 }, "page": "props" }
+  }
+}
+```
+
+| Метод | Результат |
+|---|---|
+| `sheet.page(name)` | индекс страницы кадра или `-1` |
+| `sheet.pages()` | `[{ index, name, image, mipmaps, frames }]` |
+| `sheet.images` | пути страниц в порядке индексов |
+| `sheet.verify(opts)` | то же, что `$.atlas.verify(data, opts)` для своих данных |
+
+Пути страниц разрешаются **относительно JSON атласа** (`$.atlas.resolveAssetPath`),
+а не рабочего каталога. Отсутствующая страница — не пустой спрайт, а отказ
+загрузки с кодом `atlas_page_missing` (§3.4).
+
+**Power-of-two.** Не обязательна для современных GPU, поэтому `verify()`
+сообщает `atlas_page_not_pot` предупреждением: размер страницы — вопрос политики
+упаковщика и стриминга, а не корректности кадров.
+
+**Мипмапы и протечка.** `mipmaps: true` включает уровни, но только когда
+упаковка объявила запас: `meta.padding >= 1` **и** `meta.extrusion >= 1`.
+Без запаса грубые уровни усредняют соседние кадры, и кадр «протекает» на
+соседа; в этом случае страница грузится без мипмапов (флаг виден в
+`pages()[i].mipmaps`), а `verify()` сообщает `atlas_no_padding`. На нулевом
+уровне край держит полутексельный отступ, который ставит движок при создании
+спрайта.
+
+### 3.1. Слайсы и пивоты Aseprite
 
 Aseprite хранит **слайсы** (`meta.slices`): у каждого ключа прямоугольник и
 **пивот**. Это ровно то, что нужно для рамок, точек крепления и вращения частей.
@@ -14997,18 +15835,77 @@ frame)` берёт последний ключ с `frame <=` указанног�
 кадр, тег и слайс. Движок следит за `*.atlas.json`
 ([script.md](script.md)), поэтому сохранение в Studio перезапускает игру.
 
+### 3.3. Import-манифест
+
+Авторские данные и результаты импорта разделены: `meta.import` описывает, ЧЕМ и
+ИЗ ЧЕГО собран атлас, и не влияет на кадры.
+
+```json
+{
+  "meta": {
+    "import": {
+      "version": 1,
+      "importer": "r2d-atlas/1.4",
+      "contentHash": "sha256:…",
+      "settings": { "padding": 2, "extrude": 1 },
+      "dependencies": ["raw/hero.ase", "raw/props.ase"]
+    }
+  }
+}
+```
+
+`sheet.manifest` (и `$.atlas.manifest(name)`) отдаёт `{ version, importer,
+contentHash, settings, dependencies }` или `null`. Повторный разбор одних и тех
+же данных детерминирован (`$.atlas.parse(data)` дважды даёт одинаковый
+результат): кэш можно удалить, а настройки — проверить (`verify` с
+`manifestVersion`/`importer`).
+
+### 3.4. Проверка и ошибки
+
+`$.atlas.verify(data, opts)` ничего не грузит и возвращает
+`{ ok, errors, warnings, frames, pages, format, rotated, manifest }`:
+
+| Код | Тип | Что значит |
+|---|---|---|
+| `atlas_no_frames` | ошибка | в данных нет кадров |
+| `atlas_rotated_frame` | ошибка | кадр повёрнут в атласе (см. §4) |
+| `atlas_frame_out_of_page` | ошибка | кадр выходит за `meta.size` |
+| `atlas_frames_overlap` | ошибка | два кадра пересекаются |
+| `atlas_tag_frame_missing` | ошибка | тег ссылается на несуществующий кадр |
+| `atlas_frame_page_missing` | ошибка | у кадра нет объявленной страницы |
+| `atlas_page_no_image` | ошибка | у страницы не указан файл |
+| `atlas_manifest_version` | ошибка | версия манифеста новее поддерживаемой |
+| `atlas_no_padding` / `atlas_padding_small` | предупреждение | кадры вплотную: возможна протечка |
+| `atlas_no_durations` | предупреждение | ни у одного кадра нет длительности |
+| `atlas_page_not_pot` | предупреждение | страница не степень двойки (PoT-политика упаковщика) |
+| `atlas_manifest_no_hash` / `atlas_importer_mismatch` | предупреждение | манифест неполный/чужой |
+
+Ошибки загрузки (а не только проверки) идут двумя путями: строка в журнал,
+`$.atlas.errors()` (кольцо записей `{ code, message, where, assetPath, … }`,
+работает и в qjs-тестах) и запись в `$.debug.reportError` с `code`,
+`subsystem: 'atlas'` и путями — её видит `$.debug.errors()`.
+
+```js
+const r = $.atlas.verify(data);
+if (!r.ok) for (const e of r.errors) $.log(e.code + ': ' + e.message);
+```
+
 ## 4. Ограничения
 
-* **повёрнутые кадры не поддержаны**: если в JSON у кадра `rotated: true`,
-  кадр пропускается с записью в журнал — выгрузите атлас без поворота;
+* **повёрнутые кадры отклоняют атлас целиком**: если в JSON есть `rotated: true`,
+  `$.atlas.load` возвращает `null` и пишет `atlas_rotated_frame` со списком
+  кадров — молча пропускать часть production-клипа нельзя. Явное
+  `allowRotated: true` берёт регионы как есть (для необязательных ассетов);
 * **trimmed-кадры** импортируются по своему прямоугольнику. Пивот из
   **слайсов** (`meta.slices`) теперь переносится — см. §3.1; если пивот задан
   только у trimmed-кадра и слайсов нет, ставьте его сами (`.pivot(0.5, 1)`);
 * **`$.atlas` не кэширует JSON на диск**: повторный `load` тем же именем
   возвращает уже собранный атлас, а `reload` для атласов нет — вызовите
   `unload` и `load` заново;
-* **картинка одна на атлас**: многолистовые атласы (несколько PNG в одном
-  JSON) не собираются;
+* **многолистовые атласы** собираются через `meta.pages` (§3.0); поворот кадра
+  внутри страницы — см. выше;
+* **мипмапы включаются только при `padding >= 1` и `extrusion >= 1`**: иначе
+  страница грузится без уровней (иначе кадры протекают друг в друга);
 * **костей (`bones`) в Aseprite JSON нет**: они есть только в `.ase`, а JSON
   несёт кадры, теги и слайсы. Скелет задаётся через `$.mesh.skeleton` руками, а
   слайсы дают привязку частей и пивоты;
@@ -15018,8 +15915,12 @@ frame)` берёт последний ключ с `frame <=` указанног�
 ## 5. Проверка
 
 ```bash
-# разбор трёх форматов, теги, обратное направление, путь к картинке, слайсы
+# разбор трёх форматов, теги, обратное направление, путь к картинке, слайсы,
+# страницы, import-манифест, verifyAtlas
 build/_deps/quickjs-build/qjs tests/js/atlas_test.mjs
+
+# движок: страницы, мипмапы/padding, отсутствующая страница, поворот
+python3 tests/agent/highlevel_atlas_test.py
 ```
 
 
@@ -15401,6 +16302,63 @@ $.audio.damping({ radius: 34, strength: 0.2, max: 0.85,
 `$.audio.densityAt(x, y, r)` нужен игре, чтобы показать игроку, где он: в
 демо `shooter_witch` в HUD видно «деревьев рядом N · глухо X%».
 
+## 8.1. Изоляция шинных эффектов (§48)
+
+Шина — это группа микшера со своим пост-микс колбэком, поэтому DSP шины
+считается по её собственному микс-буферу и **не протекает** в другие шины.
+Проверено на уровне PCM (`tests/audio/fx_test.c`): шина без эффекта
+прозрачна бит-в-бит, хвост соседней шины в неё не попадает, двойное
+применение эффекта отличается от одинарного (то есть дублирование было бы
+слышно), а сброс/смена эффекта гасит хвост.
+
+Что для этого важно знать:
+
+* **эффект шины не дублируется на канале.** Если шина — настоящая группа,
+  `handle.effect()` для её звуков остаётся `'none'`: иначе DSP применился бы
+  дважды (защита в `applyEffectToHandle`, проверяется тестом);
+* **переключение шины на ходу** — `handle.toBus(name)` (не `handle.bus`: это
+  строка с текущей шиной). Громкость и панорама источника не меняются, а
+  состояние канального эффекта сбрасывается — хвост прежнего маршрута за
+  звуком не тянется;
+* **освобождение шины** — `$.audio.remove(name)`: её дети и ЖИВЫЕ ЗВУКИ
+  уходят к родителю (`master` — корень, у него нет группы, канал просто
+  отвязывается), нативная группа освобождается вместе с эффектом и хвостом
+  (`engine.audio.destroyGroup`), слот группы переиспользуется следующей шиной.
+  Звуки других шин при этом не трогаются;
+* **карта маршрутизации** — `$.audio.routes()`:
+
+```js
+$.audio.routes();
+// { buses: [{ name, parent, group, effect, gain, dry, colored, ... }],
+//   globalRoom: { wet, room, damp, width },
+//   globalRoomWet: false,
+//   warnings: [{ kind: 'dry-bus-under-global-room', bus: 'ui' }] }
+```
+
+`colored` показывает, окрасит ли шину текущая маршрутизация: свой эффект или
+**общая комната микса**. Комната (`§8`, акустика) по определению действует на
+весь микс — это не утечка шинного эффекта, а свойство комнаты. Поэтому для
+честной изоляции «сухой клик остаётся сухим, пока ambience мокнет»:
+
+```js
+$.audio.acoustics(false);                       // авто-комната больше не красит всё
+$.audio.room({ wet: 0 });                       // и общая комната выключена
+$.audio.bus('ui');                              // эффекта нет — шина сухая
+$.audio.bus('ambience', { effect: 'reverb',     // а мокнет только она
+                          effectParams: { send: 0.5 } });
+```
+
+Если комната включена, `routes().warnings` прямо называет сухие шины, которые
+она окрасит, — это факт маршрутизации, а не догадка.
+
+### dB и линейный gain
+
+Все громкости в `$` — **линейные** (0…1), а сеттеры принимают и объект с dB:
+`$.audio.volume('music', { db: -6 })`, `handle.volume({ db: -12 })`,
+`$.sound.musicVolume({ db: -20 })`. Перевод — явный: `$.audio.dbToLinear(-6)`
+→ `0.501`, `$.audio.linearToDb(0.5)` → `-6.02`. Значения выше 0 dB обрезаются
+единицей.
+
 ## 9. Ограничения
 
 * Реверберация — общая на микс: отдельной реверб-шины с посылом из конкретных
@@ -15752,6 +16710,58 @@ $.camera.info();                     // { kind, x, y, eye, yaw, pitch, fov, … 
 
 `isOnScreen` считает по границам узла с запасом `margin`: рисуйте только то, что
 попало, — на больших мирах это главная экономия кадра.
+
+---
+
+## Зоны и аренды камеры (§19)
+
+Вторая камера для платформера не нужна: комната — это **данные**, которые
+накладываются на существующую камеру, а конфликт «кто сейчас управляет»
+решает приоритет.
+
+```js
+$.camera.zone('well', { x: 0, y: 700, w: 900, h: 800, zoom: 1.25,
+                        priority: 5, follow: '#hero', offset: [0, 40] });
+$.camera.zone('hall', { x: 900, y: 700, w: 2100, h: 800, zoom: 0.8, priority: 1 });
+
+$.camera.enter('well');     // войти в зону
+$.camera.enter();           // перейти в зону, где сейчас цель
+$.camera.leave('well');     // выйти, вернув прежнюю конфигурацию
+$.camera.zone();            // список зон
+$.camera.zone('well');      // описание одной зоны
+$.camera.control();         // кто управляет: активная зона/аренда по приоритету
+```
+
+| Данные зоны | Смысл |
+|---|---|
+| `x/y/w/h` или `bounds` | границы комнаты |
+| `zoom` | зум в этой комнате |
+| `follow` | селектор цели (или `null` — не следовать) |
+| `offset` | смещение камеры от цели, `[x, y]` |
+| `deadzone`, `smooth`, `lookahead` | политика следования |
+| `priority` | кто победит при конфликте зон |
+
+**Аренда** — временное управление камерой (cutscene, добивание, диалог):
+
+```js
+const lease = $.camera.lease({ owner: 'cutscene', priority: 50,
+                               zoom: 2.0, offset: [0, -30], ms: 1200 });
+$.camera.release('cutscene');   // или release(lease), или release() — все
+```
+
+Снятие аренды возвращает **ровно** прежнюю конфигурацию: камера пересобирается
+из базы и оставшихся записей, а не «примерно доезжает». Аренда с `ms` истекает
+сама в кадровом тике.
+
+**Границы** считаются с учётом зума: комната уже вьюпорта центрируется, а не
+показывает пустой край. `$.camera.enter()` без имени снимает прежние зоны —
+это переход между комнатами, а не добавление второй.
+
+Проверка: [camera_zones_test.py](../../tests/agent/camera_zones_test.py) —
+фикстура из двух комнат: зона применяет зум и границы, приоритет побеждает
+порядок входа, аренда перебивает зону и возвращает прежний зум, аренда со
+временем истекает, вход без имени находит комнату по позиции цели,
+world↔screen roundtrip сходится при зуме и повороте.
 
 
 ---
@@ -17060,6 +18070,51 @@ $.debug.classify(where)     // { code, subsystem } — как движок кл�
   (например `{ ok: false, code }` от загрузчика) — отдельная работа §17; здесь
   только единый журнал ошибок.
 
+---
+
+## Отладочные представления боя (§28)
+
+По одному hit ID видно всю цепочку: чем ударили, что столкнулось, каким было
+решение фильтра и что стало с целью.
+
+```js
+const chain = $.trace.hit(7);
+// { found, hit, owner, target, complete,
+//   steps: [{ kind: 'attack'|'combat:filter'|'damage'|'death', node, frame, data }] }
+
+$.trace.hits();        // все цепочки в журнале
+```
+
+`complete: true` означает, что в цепочке есть источник, решение фильтра и
+результат урона — именно это требование §28, а не просто «есть запись». Отказ
+фильтра тоже попадает в цепочку отдельной записью `combat:filter` с причиной
+(`immunity`, `duplicate`, `team`, `inactive_window`, …), поэтому на вопрос
+«почему урона нет» отвечает журнал, а не чтение кода боя.
+
+Состояние узла в одном снимке:
+
+```js
+$.debug.anatomy('#hero');
+// { found, nid, tag, pos, size, visible, body: { id, layer, mask, group },
+//   areas: [{ name, role, index, enabled, sensor, owner, shape, x, y, w, h }],
+//   ground, windows, processing: { update, fixed, animation, timers, physics },
+//   watching }
+
+$.debug.contacts();    // контакты за шаг: фаза, участники, нормаль, роли областей
+```
+
+`anatomy()` показывает `index` каждой формы — по нему адресуются per-shape
+операции (§40), а `processing` отвечает на «почему объект не двигается» без
+поиска по политикам. Отладочные снимки **не меняют** исход симуляции: проверено
+сравнением состояния боя до и после серии вызовов.
+
+Профиль остаётся машиночитаемым: `engine.profile()` отдаёт `zones`, `frame_ms`
+и `gpu_available`/`gpu_ms`; GPU-время называется GPU-временем только если
+timestamp'ы действительно сняты, иначе поле остаётся пустым, а не подменяется
+CPU-временем.
+
+Проверка: [debug_diagnostics_test.py](../../tests/agent/debug_diagnostics_test.py).
+
 
 ---
 
@@ -17220,6 +18275,14 @@ $.dialog.play('greet');       // «Привет, Игрок!»
 
 Подстановка `{name}` — штатная `i18n.tr(key, params)`, поэтому имена параметров
 те же, что и в остальном API.
+
+## 6.1. Смена языка при открытом диалоге (§16)
+
+Диалог переводит текст в момент отрисовки, поэтому `$.i18n.lang('en')` во время
+реплики перерисовывает её сама: подписка на `$.i18n.onChange` ставится в
+`play()` и снимается в `finish()`, так что после закрытия подписок не остаётся
+(`$.dialog.langBound()` → false). Печать при этом не перезапускается — игрок уже
+прочитал строку. Вручную: `$.dialog.retranslate()`.
 
 ## 7. Как выглядит диалог
 
@@ -17808,11 +18871,52 @@ hit-stop + отдача + squash) — [hits.md](hits.md).
 
 ---
 
+## 4.1. Экранное искажение (§46)
+
+Волна, шум и сдвиг каналов живут **в том же пост-проходе**, что и остальные
+эффекты: он и так читает уже нарисованный кадр, поэтому «проход с выборкой
+предыдущего изображения» не требует второго render target и не даёт feedback.
+
+```js
+$.gfx.post({ distort: 1, wave_amp: 0.02, wave_freq: 60, wave_speed: 0, wave_axis: 1 });
+$.gfx.postPreset('underwater');            // медленная волна + сдвиг каналов
+$.gfx.postPreset('glitch');                // шум и расхождение каналов
+```
+
+| Параметр | Смысл | Единицы |
+|---|---|---|
+| `distort` | выключатель: при `0` шейдер не делает лишних выборок и не двигает UV | 0/1 |
+| `wave_amp` | амплитуда волны | доли экрана |
+| `wave_freq` | частота волны | рад на долю экрана |
+| `wave_speed` | бег волны во времени; `0` — статичная | 1/с |
+| `wave_axis` | `0` — волна по X, `1` — по Y | — |
+| `noise_amount` | амплитуда дрожания по процедурному шуму | доли экрана |
+| `noise_scale` | масштаб выборки шума (чем больше, тем мельче) | 1/долю экрана |
+| `channel_shift` | сдвиг R и B в противоположные стороны | доли экрана |
+
+Текстура шума **процедурная**: 64×64, генерируется движком при старте
+(xorshift32, одинаково на всех платформах). Ассет не нужен — шум это поле
+дрожания, а не художественный ресурс; при выключенном искажении он не читается.
+
+Что проверено тестом [screenfx_test.py](../../tests/agent/screenfx_test.py):
+при нулевых параметрах пост — тождество (кадр совпадает с кадром без поста);
+волна по X и по Y дают разные кадры; сдвиг каналов даёт цветные кромки на
+границах клеток; эффект переживает resize и не оставляет feedback-мусора в
+углу; после выключения кадр снова чистый и стабильный.
+
+Ограничение честное: точное микро-смещение от шума при разумных амплитудах
+**меньше пикселя**, поэтому тест проверяет «шум меняет кадр» и «масштаб доходит
+до движка», а не измеряет сдвиг в пикселях. Это свойство эффекта, а не пробел
+реализации.
+
+---
+
 ## 5. Ограничения
 
-* Пост-обработка и шейдеры **есть** (`$.gfx.post`, `$.gfx.defineShader`), но
-  искажений кадра целиком (heat haze, линза чёрной дыры) в `$.fx` нет: их
-  собирает игра из пост-обработки и пользовательского шейдера.
+* Пост-обработка и шейдеры **есть** (`$.gfx.post`, `$.gfx.defineShader`);
+  экранное искажение (§46) встроено в пост-проход: волна, шум, сдвиг каналов и
+  линза. Чего нет — покадрового heat haze с несколькими источниками: его
+  собирает игра из `$.gfx.post` и пользовательского шейдера.
 * Свет `<light>` — радиальный градиент из колец (мягкое пятно), а не честный
   источник с тенями; тени даёт `engine.light.visibility`.
 * Поля сил действуют только на частицы, не на тела Box2D.
@@ -17826,7 +18930,8 @@ hit-stop + отдача + squash) — [hits.md](hits.md).
 `tests/js/fx_test.mjs` (qjs, без движка) проверяет времена жизни, привязку
 ленты к цели, поля сил, отсечение по камере, вспышки экрана, передачу hit-stop
 в `$.time` и сброс. Демо-проверка — `tests/agent/demos_test.py shooter_witch`,
-живой хит-фидбек — `tests/agent/highlevel_feel_test.py`.
+живой хит-фидбек — `tests/agent/highlevel_feel_test.py`, экранное искажение —
+`tests/agent/screenfx_test.py` (14 проверок, фикстура `tests/fixtures/screenfx`).
 
 
 ---
@@ -18493,6 +19598,46 @@ $('<ui.label>', { tr: { key: 'item', n: 3 } });
 Если на узле с `tr` вызвать `.text('…')` вручную, при следующей смене языка
 автоподстановка перезапишет текст — убирайте `tr` там, где нужен свой текст.
 
+## 4.1. Смена языка на ходу, пропавшие ключи и числа (§16)
+
+```js
+const off = $.i18n.onChange(() => hud.retranslate());   // подписка; вернёт отписку
+$.i18n.listenerCount();     // сколько живых подписчиков
+$.i18n.missing();           // [{ key, lang, count }] — что не перевелось
+$.i18n.mark(true);          // отсутствующий ключ → «⟨key⟩» (по умолчанию — сам ключ)
+$.i18n.number(1234567.5, { decimals: 1 });   // 'ru' → «1 234 567,5», 'en' → «1,234,567.5»
+$.i18n.separators();        // { group, decimal } текущего языка
+```
+
+`onChange` — единственная точка, через которую открытые документы RmlUi
+(`$.ui.doc(p).tr(...)`), HUD (`$.ui.tr`) и активный диалог узнают о смене языка:
+`$.i18n.lang('en')` меняет видимые строки без перезапуска. Пропавший ключ
+никогда не превращается в пустую строку: возвращается сам ключ (или маркер
+`⟨key⟩` при `mark(true)`), а факт попадает в `missing()` со языком и счётчиком.
+
+Числа форматируются без `Intl` (в QuickJS его нет): правила разделителей
+зашиты для `ru` (пробел/запятая) и `en` (запятая/точка), поэтому число в HUD и
+число внутри переведённой строки выглядят одинаково.
+
+## 4.2. Матрица приёмки языков (§16)
+
+Наличие Unicode-строки не доказывает корректную форму письменности, поэтому
+проверяется конкретика. Заявленные языки — `ru` и `en`; для них есть числа:
+
+| Что проверено числом | ru | en | Где |
+|---|---|---|---|
+| Смена языка на ходу: HUD + элемент документа RmlUi | `Здоровье` | `Health` | `highlevel_ui_contract_test` |
+| Подстановка параметра в переводе | `Патроны: 12` | `Ammo: 12` | там же |
+| Плюральные формы (1 / 2–4 / 5+) | `1 штука / 2 штуки / 5 штук` | `1 item / 2 items` | `tests/js/i18n_test.mjs`, `highlevel_i18n_test` |
+| Числа и разделители | `1 234 567,5` (пробел, запятая) | `1,234,567.5` | `tests/js/i18n_test.mjs` |
+| Перенос длинной строки в панели 360 px | 822.1 px → 3 строки, макс. 351.7 | 660.1 px → 2 строки, макс. 343.5 | `highlevel_ui_contract_test` |
+| Пропавший ключ | сам ключ / `⟨key⟩`, `missing()` | то же | `tests/js/i18n_test.mjs` |
+
+Другие языки движок не заявляет: правила плюрализации и разделителей для них
+не проверялись (для `ru`/`en` они зашиты, для остальных работает общее правило
+«1 / всё остальное»). RTL и вертикальные письменности не проверены — это
+честное ограничение, а не «поддержка всех письменностей».
+
 ## 5. Сохранение выбранного языка
 
 Язык хранится в `$.store` под ключом `i18n.lang` и восстанавливается при
@@ -18723,6 +19868,89 @@ const ax = p1.axis('leftX');
 # имена клавиш доходят до обработчика, а не номера скан-кодов
 python3 tests/agent/highlevel_keyname_test.py
 ```
+
+---
+
+## Контексты ввода, захват и устройства (§15)
+
+Ввод в игре почти никогда не «один на всех»: меню, диалог, gameplay и загрузка
+хотят одни и те же клавиши. Контексты решают, кому достанется нажатие.
+
+```js
+$.input.context('menu',     { active: false, priority: 20, binds: { confirm: ['space', 'enter'] } });
+$.input.context('dialogue', { active: false, priority: 10, binds: { confirm: ['space'] } });
+$.input.context('gameplay', { active: true,  priority: 0,  binds: { confirm: ['space'], attack: ['j'] } });
+
+$.input.context('menu').active(true);          // меню перекрыло gameplay
+$.input.pressed('confirm');                    // true — но это меню, не игрок
+
+if ($.input.pressed('confirm')) {
+    $.input.consume('confirm');                // я обработал: остальные не увидят
+    closeLine();
+}
+```
+
+| Вызов | Смысл |
+|---|---|
+| `$.input.context(name, {active, priority, binds})` | объявить/настроить контекст |
+| `$.input.context(name).active(on)` | включить/выключить; `active()` — чтение |
+| `$.input.context()` | список контекстов по приоритету |
+| `$.input.consume(action)` | отметить действие обработанным (на этот и следующий кадр); без аргумента — сбросить |
+| `$.input.consumed()` | кто и что съел в этом кадре (для DevTools) |
+| `$.input.conflicts(action, keys)` | какие ещё действия заняли эти клавиши |
+| `$.input.markDefaults()` / `resetDefaults()` | эталон привязок и возврат к нему |
+| `$.input.waitForInput({timeout, ignore})` | ждать следующее подходящее нажатие (экран перепривязки) |
+| `$.input.cancelWaits(reason)` / `waiters()` | отменить все ожидания / сколько висит |
+| `$.input.device(slot).player()` / `.assign(n)` | за каким игроком закреплён слот геймпада |
+| `$.input.devices()` / `.stuck()` / `.resetHeld(slot)` | слоты, «зажатые» после отключения кнопки, сброс |
+| `$.input.glyphs(action)` | подписи кнопок для UI (`ESCAPE`, `A`, `LB`) |
+| `$.input.axisAction(name, {axis, sign, threshold, hysteresis})` | ось как действие с гистерезисом |
+| `$.input.synthPress/synthDown/synthRelease/synthClear` | виртуальный ввод тем же путём |
+
+**Потребление.** `consume('confirm')` глушит действие для остальных контекстов
+на текущий и следующий кадр. Именно это требование §15 («один confirm не должен
+одновременно закрывать реплику и выполнять атаку») и не даёт «двойного»
+срабатывания, когда меню и игра слушают одну клавишу.
+
+**Порядок разрешения.** Действие достаётся самому приоритетному активному
+контексту, который его объявил. Контексты с более высоким приоритетом, но без
+этого действия, ввод не перехватывают. Если контекстов нет вовсе, работает
+общий слой `$.input.bind()` — игры без контекстов ведут себя как раньше.
+
+**Перепривязка.** `waitForInput()` отдаёт промис с именем клавиши, умеет
+`timeout`, отменяется через `cancelWaits()`; `conflicts()` показывает, что ещё
+занято, `resetDefaults()` возвращает эталон, а `saveBindings()` +
+`$.store.save()` сохраняют результат между запусками (на старте —
+`$.store.load()` и затем `loadBindings()`).
+
+**Устройства.** Слот геймпада закрепляется за игроком явно
+(`.device(0).assign(2)`), а не порядком подключения: перестановка слотов не
+должна молча менять, кто чем управляет. Отключение устройства сбрасывает
+удержания, поэтому «зажатая» кнопка не остаётся зажатой навсегда —
+`$.input.stuck()` это подтверждает.
+
+**Оси.** `axisAction` включает гистерезис: чтобы действие отпустилось, стик
+должен вернуться ниже порога минус запас, иначе на границе получается дребезг.
+
+### Что проверено и что нет
+
+`tests/agent/highlevel_input_contexts_test.py` (25 проверок) проверяет
+контексты, приоритеты, потребление, конфликты, эталон привязок, сохранение
+между запусками, отмену и таймаут ожиданий, политику слотов, подписи и оси.
+
+Честное ограничение: **реального геймпада в CI нет**. Физическое
+подключение/отключение (hotplug), виброотдача и «меню проходится геймпадом»
+проверяются по состоянию и подписям, а нажатия — клавиатурой через тот же
+резолвер действий. Захват «нажми клавишу» проверяется юнит-тестом qjs
+(`tests/js/input_contexts_test.mjs`): агентский протокол ставит кадр между
+командой и чтением, а фронт нажатия живёт один кадр, поэтому поведенческая
+проверка через агента давала бы плавающий результат.
+
+**Виртуальный ввод.** `$.input.synthPress(key)` заказывает нажатие на
+ближайший кадр: оно видно ровно один кадр и участвует в том же разрешении
+действий, что настоящее (`down/pressed/released`, контексты, потребление).
+`synthDown`/`synthRelease` дают удержание без фронтов. Этим проверяется
+требование §15 «virtual input и replay используют тот же action resolution».
 
 
 ---
@@ -19314,12 +20542,49 @@ $.loading.run([
 Ошибка внутри шага не рвёт загрузку: она уходит в лог (`$: ошибка на шаге…`),
 а следующие шаги выполняются.
 
+## §45: полоса по асинхронному запросу ресурсов
+
+Если ресурсы грузит движок (рабочий поток, §45), полоса подключается к запросу
+одним вызовом и показывает **реальные байты** и стадию:
+
+```js
+const req = $.resource.request([
+    { name: 'tiles', kind: 'texture', path: 'assets/tiles.png' },
+    { name: 'level', kind: 'json',    path: 'levels/1.json' },
+]);
+
+$.loading.show({ title: 'Готовим уровень…' }).watch(req);
+// … кадры идут, полоса живёт …
+$.loading.cancel();                 // отмена по кнопке/клавише
+```
+
+| Форма | Что делает |
+|---|---|
+| `watch(req)` | следить за запросом: полоса = `bytes_done / bytes_total`, подпись = байты · стадия |
+| `watch(req, { onReady, onFailed, onCancelled })` | те же события, если игре нужно своё поведение |
+| `cancel()` | отменить запрос, за которым следит экран (`true` — отменён) |
+| `watched()` | текущий запрос или `null` |
+
+Подпись говорит правду о точности: `1.2 МБ / 4.5 МБ · чтение` — байты
+измерены; на стадии применения (GPU upload, разбор, декодирование звука) и в
+синхронном пути добавляется слово **«оценочно»**, а при неизвестном размере
+файлов прогресс идёт по задачам (`2 / 4`) и тоже помечен оценочным. Отмена
+показывается словом «отменено».
+
+`run(steps, done)` (шаги по кадрам) работает как раньше и не конфликтует с
+`watch`: `$.scene.loadAsync` умеет и то, и другое вместе.
+
 ## Замечания
 
 - Полоса — обычный `<ui.bar>`, экран живёт в слое интерфейса и ввод не блокирует.
 - Экран не переживает смену сцены сам по себе: его нужно показать до
   `$.scene.load(...)` и убрать в новой сцене (`$.loading.hide()`).
 - Повторный `show()` перерисовывает экран с нуля — старые узлы удаляются.
+- Анимация экрана живёт на кадровом времени, поэтому загрузка ресурсов её не
+  останавливает: в приёмке (§45, `tests/agent/highlevel_loading_test.py`)
+  тяжёлый PNG 4096×4096 (459 КБ, 16 Мпикс) грузится 12–14 кадров при 105–124 мс
+  суммарно, самое дорогое кадровое время — 13.7–14.9 мс (это GPU upload, он
+  всегда на главном потоке), отмена отвечает за 8–9 мс.
 
 
 ---
@@ -20776,6 +22041,42 @@ if (shot && shot.particle) $.particles.hit(shot.point.x, shot.point.y, { r: 6 })
   `.params({ … })`.
 * Текстура резолвится один раз при первом тике эмиттера.
 
+---
+
+## Бюджеты, часы и reduced-настройки (§21)
+
+**Часы эффекта.** `clock: 'presentation'` переводит конкретный эмиттер на реальное
+время кадра: он продолжает жить на паузе и в hit-stop, как вспышки и тряска.
+По умолчанию (`'simulation'`) эффект идёт по общим игровым часам и останавливается
+вместе с миром. Часы выбираются **по каждому эмиттеру**, а не на всю подсистему:
+один «живущий на паузе» эффект не тянет за собой остальные.
+
+**Завершение.** Разовый эффект сообщает о конце событием узла
+`particlesEnd` (`{ node, id, elapsed_ms }`) — по нему игра освобождает узел, не
+гадая по числу частиц. `restart()`/`reset()`/новый залп сбрасывают признак
+завершения и возраст, поэтому повторный эффект не наследует состояние прошлого.
+
+**Бюджеты.** Жёсткий предел на эмиттер — `max_particles` (не больше 16384), плюс
+pool: частицы переиспользуются, поэтому серия ударов не растёт по узлам и
+эмиттерам. Проверено на 400 последовательных ударах: узлы мира 12 → 12, эмиттеры
+9 → 9, частицы возвращаются в ноль после затухания.
+
+**`$.hits.reduced(...)`** — доступность: меньше вспышек, тряски и частиц, при
+этом урон, событие `damage`, счётчики и knockback **не меняются**. Масштаб
+задаётся `factor` (доля от обычной интенсивности).
+
+```js
+$.hits.reduced({ flash: true, shake: true });   // мягче вспышки и тряска
+$.hits.reduced({ particles: true, factor: 0.1 }); // частиц в 10 раз меньше
+$.hits.reduced();                                // прочитать настройки
+$.hits.reducedFromStore();                       // взять из $.store('hits.reduced')
+```
+
+Проверка: [highlevel_particle_budget_test.py](../../tests/agent/highlevel_particle_budget_test.py)
+— 18 проверок: бюджет серии ударов, отсутствие мусора после затухания, событие
+завершения, жизнь на presentation-часах в hit-stop, и то, что reduced уменьшает
+пик частиц (14 → 1), не трогая ни урон, ни счётчики.
+
 
 ---
 
@@ -21197,6 +22498,35 @@ $('#hero').clone();         // копия с уникальным id
 `sprite`. Путь спрайта модуль запоминает в момент вызова
 `.sprite('путь.png')` (хук на `Node.prototype.setSprite`), поэтому
 `save → load → save` не теряет картинку.
+
+---
+
+## Комнаты: инстансы по данным (§23)
+
+Комната (§23, [scene.md](scene.md) §4) не дублирует дерево prefab: она хранит
+только имя prefab, позицию и переопределения. Логические id задаются данными,
+а не счётчиком:
+
+```js
+instances: [
+    { prefab: 'door', id: 'door_north', x: 640, y: 64,
+      overrides: { color: '#c8b48a' },                  // корень инстанса
+      children: { lamp: { id: 'door_north/lamp', color: '#8fd8ff' } } },
+]
+```
+
+* `id` инстанса — из данных; повторная сборка комнаты даёт **тот же** id, даже
+  если прежний инстанс ещё жив до конца кадра (авторазведение `freshId`
+  переопределяется явно: логический id важнее уникальности в реестре);
+* дети адресуются **путём** (`lamp`, `lamp/glow`, индекс `0/1`); при сборке
+  комнаты ребёнок получает id `<инстанс>/<путь>`, если своего id у него нет;
+* `children[путь]` переопределяет `id` и любые поля узла (`color`, `x`, `y`,
+  произвольные атрибуты — как `.set()`);
+* id инстансов уникальны внутри комнаты, дубликат — ошибка данных
+  (`room_duplicate_instance`), а не молчаливое переименование.
+
+Именно эти id уходят в `save()`/`$.save` (§14), поэтому восстановление по `nid`
+находит те же узлы после повторного входа в комнату.
 
 ---
 
@@ -22578,6 +23908,230 @@ $('#head').real2dSpin(0.8);                            // или автопов�
 
 ---
 
+## `$.reload` — горячая перезагрузка ассетов (§27)
+
+<sub>источник: `docs/highlevel/reload.md`</sub>
+
+# `$.reload` — горячая перезагрузка ассетов (§27)
+
+Перезагрузка во время работы: правка текстуры, раскладки атласа, данных коллизии
+карты или документа/стиля RmlUi применяется к живой игре — либо согласованно,
+либо отклоняется без повреждения (last-known-good). Три операции различаются
+явно:
+
+| Что | Чем | Что происходит |
+|---|---|---|
+| **Reload данных** | `$.reload.reload(name)`, `poll()`, `reloadAll()` | новый ассет читается, проверяется и только потом подменяет прежний |
+| **Reload поведения** | `$.reload.behavior(reason)` → перезапуск скриптов движком | сохранение произвольных JS-замыканий **не обещается** |
+| **Restart сцены** | `$.reload.restartScene(name, opts)` | сцена собирается заново (`$.scene.load(..., { scope: true })`), поддерживаемое логическое состояние переносится `capture()/restore()` |
+
+## Основное
+
+```js
+$.reload.watch('hero', { kind: 'atlas', path: 'assets/hero.json', atlas: 'hero',
+                         deps: ['hero_page'] });
+$.reload.reload('hero');            // { ok, stage, code, error, version, changed, deps, warnings }
+$.reload.reloadAll();               // весь граф в порядке зависимостей
+$.reload.poll();                    // применить только изменившееся на диске (кнопка F8)
+
+$.reload.list();                    // записи реестра
+$.reload.get('hero');               // { name, kind, version, status/state, path, deps, last, hash }
+$.reload.value('hero');             // текущее ЗНАЧЕНИЕ (то, что видит игра)
+$.reload.version('hero');           // номер версии; 0 — ещё не применялось
+$.reload.versions('hero');          // история: { version, hash, frame, path }
+$.reload.graph();                   // { nodes, edges, cycles }
+$.reload.order(['ui', 'hero']);     // топологический порядок имён
+$.reload.pending();                 // handle'ы, ждущие освобождения
+$.reload.flush(frame);              // освободить то, чей кадр уже прошёл
+$.reload.stats();                   // { watched, applied, failed/failures, retired, live, … }
+$.reload.indicator();               // компактное состояние для панели
+$.reload.on('applied' | 'failed', fn);   // псевдонимы: 'reload' | 'fail'
+```
+
+## Конвейер: prepare → apply
+
+| Стадия | Что делает | Публикует? |
+|---|---|---|
+| `read` | читает источник (`$.fs`, `engine.readBytes`) | нет |
+| `validate` | битый JSON, отсутствующая страница атласа, разметка RmlUi, схема | нет |
+| `prepare` | готовит новое значение во временной области | нет |
+| `apply` | подменяет прежнюю версию, перепривязывает спрайты | да |
+
+Ошибка любой стадии → `{ ok: false, stage, code, error }`, структурная запись в
+`$.debug.reportError` (§17), значение и версия **не меняются**: игра работает на
+прежней версии.
+
+Коды: `R2D_RELOAD_READ`, `R2D_RELOAD_PARSE`, `R2D_RELOAD_VALIDATE`,
+`R2D_RELOAD_PREPARE`, `R2D_RELOAD_APPLY`, `R2D_RELOAD_MISSING_DEP`,
+`R2D_RELOAD_ADAPTER`, `R2D_RELOAD_CYCLE`, `R2D_RELOAD_FRAME_MISSING`,
+`R2D_RELOAD_TEXTURE_SIZE`, `R2D_RELOAD_RML`, `R2D_RELOAD_STYLE_CACHED`,
+`R2D_RELOAD_UNSUPPORTED`, `R2D_RELOAD_FAILED`.
+
+```js
+const r = $.reload.reload('hero');
+if (!r.ok) $.debug.reportError('reload:hero', r.error, { code: r.code });
+```
+
+## Граф зависимостей
+
+`watch(name, { deps: [...] })` описывает, что от чего зависит: `atlas → pages →
+clips/sockets`, `tilemap → collision/occlusion`, `RmlUi → styles/fonts/images`.
+`reloadAll()` обходит граф в порядке `order()`, поэтому страница атласа
+подменяется раньше кадров, которые на неё ссылаются; `reload(name)` с
+`{ deps: true }` (по умолчанию) делает то же для одной ветки. Цикл — явная
+ошибка `R2D_RELOAD_CYCLE`, а не зависание.
+
+```js
+$.reload.watch('hero_page', { kind: 'texture', path: 'assets/hero.png',
+                              texture: () => $.atlas.get('hero').texture });
+$.reload.watch('hero', { kind: 'atlas', path: 'assets/hero.json', atlas: 'hero',
+                         deps: ['hero_page'] });
+```
+
+## Last-known-good
+
+Неудачная перезагрузка **не ломает игру**: прежняя версия остаётся рабочей, а
+результат приходит структурой с кодом. Битый JSON, отсутствующая страница
+атласа, пропавший используемый кадр и плохая разметка дают `ok: false`;
+игра продолжает отвечать и рисовать прежнюю версию.
+
+## Версии и идентичность ресурсов
+
+Игра ссылается на ресурс по **имени и версии**, а не по native-handle.
+Версия растёт только когда данные действительно изменились — сравнение по
+подписи содержимого (FNV-1a), а не по mtime (mtime врёт при checkout и
+копировании). Для `$.resource` версия растёт вместе с заменой
+(`$.resource.publish`), см. [resource.md](resource.md).
+
+## Освобождение handle'ов
+
+Старые handle'ы не освобождаются в кадре замены: `apply` возвращает
+`retire: [{ kind, handle, name }]`, а кадровый ход модуля освобождает их на
+**следующем** кадре (`$.reload.flush`, `$.reload.pending()`). Текстура
+освобождается `engine.freeTexture`, документ RmlUi — `engine.ui.unload`, ресурс —
+`$.resource.remove`.
+
+`remapNodeSprites(nodes, oldToNew)` переносит ссылки узлов на новые id кадров,
+`usedSpriteNames(sheet)` показывает, какие кадры игра реально использует (по
+этому списку видно, какие кадры нельзя выкинуть при обновлении листа).
+
+## Встроенные виды
+
+### `texture`
+
+`{ kind: 'texture', path, texture | resource }`. Перезагрузка **на месте**:
+`engine.reloadTexture` читает картинку и заливает её в ту же текстуру — handle не
+меняется, узлы и спрайты продолжают работать, новых handle'ов не появляется.
+Смена **размера** отклоняется (`R2D_RELOAD_TEXTURE_SIZE`): спрайты хранят
+uv-прямоугольник, нормированный по старому размеру.
+
+### `atlas`
+
+`{ kind: 'atlas', path, atlas?, load?, deps? }`, где `atlas` — имя в `$.atlas`
+(по умолчанию имя ассета).
+
+* та же раскладка, другое содержимое — картинка обновляется на месте, кадры не
+  пересобираются: **ни одного нового спрайта**;
+* изменённая раскладка — кадры пересобираются, спрайты узлов перепривязываются
+  **по имени кадра**, старая ссылка на объект атласа продолжает работать
+  (методы делегируются новой версии); результат отдаёт
+  `frame_map: { имя: { old, new } }`;
+* используемый в мире кадр исчез из новой раскладки — отказ
+  `R2D_RELOAD_FRAME_MISSING` (устаревший frame ID не привязывается молча);
+* пересборка не удалась — атлас восстанавливается на прежних данных.
+
+### `tilemap`
+
+`{ kind: 'tilemap', path, target? }` (`target` по умолчанию `#map`). Проверяются
+`layers[].data` (или `data`), длины массивов и допустимость id. Применение — через
+публичные `.setTile()`/`.rebuild()`: карта сама пересобирает визуал, коллизию и
+occluders одним проходом, поэтому между кадрами нет «старой невидимой стены» или
+«новой видимой платформы без коллизии». Неизменившиеся клетки не трогаются.
+
+### `rml`
+
+`{ kind: 'rml', path }`. Проверка — сбалансированность тегов (RmlUi разбирает XML
+терпимо и незакрытый тег примет) плюс пробная загрузка во временный документ.
+Применение — `doc.unload()` и `$.ui.doc(path)` заново; `value` результата — новый
+handle документа (игре нужно взять его оттуда).
+
+Ограничение: RmlUi кэширует **внешние** `.rcss` по URL. Правка связанного стиля
+даёт предупреждение `R2D_RELOAD_STYLE_CACHED` (и запись в `$.debug.errors()`), а
+не применённый стиль. Стиль, встроенный в сам `.rml` (`<style>`/`style=`),
+применяется сразу.
+
+### `json`
+
+`{ kind: 'json', path, validate?, apply? }`. Значение читается через
+`$.reload.value(name)`; `validate(data)` возвращает `true`, строку-причину или
+`{ ok, error }`. Битый JSON — `R2D_RELOAD_PARSE`, игра продолжает работать.
+
+## Свои виды ассетов
+
+```js
+$.reload.registerKind('my-format', {
+    load(path, env) { /* вернуть значение */ },
+    validate(value) { /* true | строка-причина */ },
+    apply(value) { /* необязательно: применить */ },
+});
+$.reload.kinds();     // ['texture', 'atlas', 'tilemap', 'rml', 'json', 'my-format']
+```
+
+Полный адаптер конвейера (`read/validate/prepare/apply`) принимается как есть;
+упрощённый (`load/validate/apply`) оборачивается в него. Встроенные адаптеры —
+`builtinAdapters()`. Правок движка не требуется.
+
+## Scoped restart
+
+Если безопасный reload поведения невозможен, `$.reload.behavior(reason)`
+запрашивает перезапуск JS-рантайма на границе кадра, а
+`restartScene(name, { capture, restore })` загружает сцену с новой областью
+владения §5 и применяет перенесённое состояние на следующем кадре:
+
+```js
+$.reload.restartScene('level1', {
+    capture: () => ({ hp: 50, room: 3 }),      // только JSON-совместимое
+    restore: (s) => { /* применить */ },
+    transition: 'fade', ms: 300,
+});
+```
+
+## Наблюдение и панель
+
+Панель DevTools (F1) показывает число ассетов под наблюдением, неудачные,
+последний результат и очередь освобождения; кнопки «Перезагрузить ассеты» и
+«Применить изменившиеся» вызывают `reloadAll()`/`poll()`. Программно —
+`$.devtools.assets()`, `$.devtools.assetsReload()`, `$.devtools.assetsPoll()`.
+
+## Ограничения
+
+* Сохранение произвольных JS-замыканий после правки кода не обещается: только
+  scoped restart с переносом логического состояния.
+* Смена **размера** текстуры — не хот-релоад: нужен новый спрайт-набор/сцена.
+* **Внешний `.rcss`** RmlUi кэширует по URL — правка стиля даёт
+  `R2D_RELOAD_STYLE_CACHED`.
+* **Изменение раскладки атласа** создаёт новые спрайты: таблица спрайтов
+  (`src/render.c`) не переиспользует слоты выгруженных. Неизменившаяся раскладка
+  не создаёт ни одного спрайта — серия 100 reload даёт нулевой прирост.
+* Перепривязка идёт по `node.sprite` и массивам `node.frames`; **клипы**,
+  собравшие спрайты заранее, нужно пересобрать по `frame_map` из результата.
+* `poll()` читает файлы, чтобы сравнить подпись: вызывайте по кнопке или
+  таймеру, а не каждый кадр.
+* Кэш SDK (`site/`, `build/sdk-*`) к игре отношения не имеет: итоговый пакет от
+  него не зависит.
+
+## Тесты
+
+`tests/js/reload_test.mjs` (ядро без движка: стадии, откат, граф, циклы, версии,
+отложенное освобождение) и `tests/agent/highlevel_reload_test.py` (фикстура
+`tests/fixtures/reload`): замена текстуры/раскладки атласа/данных коллизии/
+документа RmlUi, last-known-good при битом ассете, согласованность коллизии и
+визуала карты, серия 100 reload без роста узлов/тел/подписок/ресурсов/текстур,
+освобождение старого handle'а на следующем кадре.
+
+
+---
+
 ## `$.blend` и `$.viewport` — смешивание и render target
 
 <sub>источник: `docs/highlevel/render.md`</sub>
@@ -23224,6 +24778,189 @@ main.c:
 
 ---
 
+## 4.5. Контракт презентации: что рисуется в каком порядке (§18)
+
+Порядок кадра зафиксирован и проверен эталонными сценами
+(`tests/agent/highlevel_presentation_test.py`). Менять его нельзя: игра на него
+опирается, а тест ловит сдвиг пикселями.
+
+| # | Проход | Что входит | От чего зависит |
+|---|---|---|---|
+| 1 | мир (по камере) | фон с `parallax`, узлы в порядке `layer`/`depth`/`uid` или по Y (`$.world.sort('y')`), тайлы Y-sort, тени/контуры/шейдеры узлов | порядок узлов, камера, зум |
+| 2 | свет/туман/темнота (треугольники) | `<light>`, `<lightarea>`, `<fog>`, `$.gfx.fog()`, `$.gfx.light.ambient()` | реестр препятствий, параметры профиля света |
+| 3 | неосвещённый мировой слой | узлы с `.lit(false)`, emissive материалов | — |
+| 4 | интерфейс | `$.ui`, HUD; `engine.markUI()` отделяет диапазон | координаты окна |
+| 5 | пост-обработка | `$.gfx.post()`, пресеты; HUD идёт **после** неё | параметры поста |
+| 6 | переход сцены | односпрайтовый затемняющий оверлей | `$.scene` |
+
+Почему так: свет и туман — треугольники, а они у движка рисуются после спрайтов
+мира; поэтому «освещённость» не зависит от того, в каком слое стоит узел.
+Интерфейс отделён меткой и не попадает ни под свет, ни под пост. Неосвещённый
+слой (3) — единственное место между светом и UI: так узел `.lit(false)` не
+темнеет в ночи, но остаётся под HUD.
+
+Правила, которые из этого следуют:
+
+* **смена порядка слоёв не меняет логику** — только картинку. Позиции тел,
+  контакты и `$.world.raycast()` от `layer`/`depth` не зависят (проверено
+  тестом);
+* **параллакс** (`$.layers.parallax(node, f)`) применяется к позиции узла до
+  отрисовки: сдвиг камеры на `dx` сдвигает слой на `dx * (1 - f)`;
+* **resize** не разъезжает композицию: UI живёт в координатах окна, мир — в
+  координатах камеры;
+* **число draw calls объясняется сменой режима**: сцена с `alpha/add/multiply`
+  рисуется тремя участками, одним режимом — одним (`engine.renderInfo().draws`);
+* **конвейеров конечное число**: четыре на режимы смешивания
+  (`sprite_pipelines: 4`) и четыре на шейдер узла (`fx_pipelines_ready`). Смена
+  материала не создаёт новые варианты пайплайнов — она меняет текстурный ключ
+  участка;
+* **освобождённая текстура не показывается**: после `$.viewport.destroy()`
+  привязка снимается, следующий кадр рисуется обычным путём (тест сравнивает
+  пиксели до и после).
+
+```js
+$.gfx.presentation();   // { snap, integerScale, zoom } — состояние презентации
+engine.renderInfo();    // { post, bloom, passes, draws, snap, sprite_pipelines, … }
+```
+
+## 4.6. Пиксель-арт: снаппинг и целочисленная шкала
+
+Две презентационные настройки, которые **не трогают логику**: позиции узлов,
+тела Box2D, пикинг и `$.camera.worldToScreen()` остаются дробными.
+
+```js
+$.gfx.snap(true);            // осевые спрайты — по целым пикселям экрана
+$.gfx.integerScale(true);    // зум кадра мира округляется к целому (мин. 1)
+$.gfx.snap();                // геттеры
+$.gfx.integerScale();
+$.gfx.worldZoom();           // зум, которым нарисован последний кадр мира
+```
+
+* снаппинг округляет вершины **осевых** квадов (`angle === 0`); повёрнутые
+  спрайты не снапятся — округление вершин ломало бы форму. По умолчанию
+  выключен: старые игры рисуются как раньше;
+* при дробном зуме без `integerScale` край пиксель-арта попадает между
+  пикселями (это ожидаемый артефакт: 1.5× не бывает целым). `integerScale`
+  убирает его, округляя зум кадра; выбирать мышью всё равно нужно по настоящей
+  геометрии, поэтому пикинг не квантуется;
+* сам снаппинг живёт в C (`r2d_batch_add`): это единственная воронка, через
+  которую в батч попадают и нативные узлы, и спрайты JS.
+
+## 4.7. Материалы спрайтов (§20.2)
+
+Минимальное расширение без generic PBR: albedo (спрайт узла), необязательная
+normal-карта, необязательный emissive, tint, lit и параметры ответа на свет.
+
+```js
+$.gfx.material('metal', {
+    albedo: 'art/metal.png',        // спрайт узла и есть albedo
+    normal: 'art/metal_n.png',      // данные, НЕ sRGB-цвет
+    normalConvention: 'opengl',     // 'opengl' (−y вверх) | 'directx' (+y вниз)
+    emissive: '#ff8844',            // собственное свечение
+    emissiveStrength: 0.6,
+    tint: '#c0c0c0',
+    lit: true,
+    response: { diffuse: 1, ambient: 0.35 },
+});
+$('#crate').material('metal');
+$('#glow').material({ emissive: '#ff0000', lit: false });
+$.gfx.materials();                  // имена материалов
+$.gfx.material('metal');            // описание или null
+$.gfx.flatNormal();                 // [0.5, 0.5, 1] — нейтральная норма
+```
+
+| Поле | Единицы/значения | По умолчанию | Смысл |
+|---|---|---|---|
+| `albedo` | путь | спрайт узла | базовая картинка |
+| `normal` | путь | `null` | карта нормалей (данные) |
+| `normalConvention` | `'opengl'` \| `'directx'` | `'opengl'` | направление зелёного канала |
+| `emissive` | цвет | `null` | собственное свечение |
+| `emissiveStrength` | 0..1 | `0.5` | сила свечения |
+| `tint` | цвет | `null` | множитель albedo |
+| `lit` | bool | `true` | получает ли узел мировой свет |
+| `response.diffuse`/`.ambient` | 0..4 / 0..1 | `1` / `0.35` | параметры ответа на свет |
+
+**Что уже работает:** `lit: false` (узел рисуется после света, §4.5), `tint`
+(умножение albedo), `emissive` (аддитивный проход после света: светится и в
+полной темноте), данные `normal`/`normalConvention` в реестре, `flatNormal()`.
+
+### 4.7.1. Попиксельный свет по normal-карте: объявленный fallback
+
+Приёмка §20.2 требует, чтобы «shader backend без расширенного режима использовал
+объявленный fallback». Такой backend — этот. Решение принято ПОСЛЕ измерения,
+и измерение публикуется целиком, чтобы выбор можно было перепроверить.
+
+**Что есть в конвейере (факты, не оценка):**
+
+| Факт | Где видно |
+|---|---|
+| Спрайтовая фрагментная стадия: **один** `sampler2D` (set 2, binding 0) — текстура спрайта, света в ней нет | `shaders/sprite.frag.glsl` |
+| Спрайтовая вершинная стадия: **ноль** юниформов, три атрибута, 20 байт (`x,y,u,v,rgba`); позиции уже в clip-space | `shaders/sprite.vert.glsl`, `R2DVertex` в `src/render.h` |
+| Свет копится в отдельной текстуре половинного разрешения аддитивными треугольниками, затем накладывается полноэкранным композитом с `R2D_BLEND_ADD` | `r2d_render_draw_lights`, `shaders/light_map.frag.glsl` |
+| В спрайтовом проходе нет ни мировой позиции пикселя, ни нормали — «выбрать свет по каналу» не из чего | следствие двух первых строк |
+
+**Три варианта и числа:**
+
+* **(а) второй сэмплер + массив активных источников в юниформах спрайтового
+  прохода.** Нужны: мировая позиция фрагмента (в вершинной стадии её нет и
+  атрибута под неё нет), нормаль спрайта (атрибута нет), второй сэмплер
+  (текстур света) и юниформ-буфер со списком источников. В стресс-сцене
+  `demos/stress --scene lights` — **32 источника**; полный кадр 1280×720 —
+  **0.92 млн пикселей**, то есть до **29 млн** вычислений «источник↔пиксель» за
+  кадр поверх нынешней CPU-работы теней (48 лучей на источник). Плюс видимость
+  тени всё равно берётся из световой карты — то есть второй сэмплер нужен и для
+  неё. Всё это требует правки вершинной стадии, раскладки вершин, обоих
+  shader-языков (GLSL и WGSL) и проверки Metal-пути: файл `sprite.vert.glsl` в
+  границы этой работы не входит, поэтому вариант нереализуем корректно.
+* **(б) градиент светового поля в 3 каналах.** Световая карта — RGBA8 половинного
+  разрешения, и её размытие (`bloom_blur.frag.glsl`) смешивает все каналы: под
+  градиент остаются G и B при R=intensity, что даёт **одну** производную на
+  направление — этого мало для отклика по нормали, а композит всё равно не знает
+  нормаль пикселя (её должна записать спрайтовая стадия во вторую цель рендера).
+  Итог тот же: нужна нормаль в вершинной стадии.
+* **(в) объявить fallback.** Данные материала полные (`normal`,
+  `normalConvention`), путь объявлен недоступным и проверяется машиной:
+  `$.gfx.normalPath()` отдаёт `{ supported: false, reason:
+  'sprite_stage_has_no_normal_input', fallback: 'flat_normal', required: [...] }`,
+  `$.gfx.perPixelNormal()` всегда `false`, а `$.gfx.perPixelNormal(true)` **не
+  включает** ничего, а возвращает `false` и одной строкой сообщает причину.
+
+Выбран **(в)**: (а) и (б) требуют правки вершинной стадии и раскладки вершин (вне
+границ этой работы), а выигрыш — только визуальный отклик нормали, которого
+приёмка не требует при наличии объявленного fallback. Затраты (а) — до 29 млн
+вычислений за кадр — при этом реальны.
+
+**Контракт fallback (проверяется `tests/agent/node_normal_map_test.py`):**
+
+```js
+$.gfx.perPixelNormal();          // false — всегда: расширенного пути нет
+$.gfx.perPixelNormal(true);      // false + одна строка в журнал с причиной
+$.gfx.normalPath();              // { supported, reason, fallback, required, doc }
+$.gfx.material('metal').perPixelNormal;   // false
+$.gfx.flatNormal();              // [0.5, 0.5, 1] — нейтраль
+```
+
+**Приёмка изображениями и числами** (фикстура `tests/fixtures/normal_map`,
+скриншоты в `build/node_normal_map_*.png`):
+
+| Проверка | Число |
+|---|---|
+| свет слева: левая половина поля ярче | **89.8** против **60.0** |
+| свет справа: правая половина ярче | **89.8** против **60.0** (градиент зеркален, ±29.8) |
+| выпуклый спрайт следует за источником | баланс «слева минус справа» **+94.3 → +34.9** |
+| материал с normal-картой = базовый материал | пиксели **(60, 58, 58)** тождественно |
+| `.flip(true,false)` и поворот при той же позиции | освещённость **63.32 / 75.59 / 96.86** не меняется |
+| trimmed и обычный кадр при той же позиции | пиксели **(96, 42, 19)** совпадают |
+| тень за движущимся occluder | **34.0** (заслоняет) → **91.8** (ушёл) → **91.8** (скрыт) |
+
+Честно: «нормали преобразуются вместе со спрайтом» в этом пути не проверяется и
+не может — нормаль не участвует в освещении; проверено объявленное свойство
+fallback: освещённость зависит только от мировой позиции узла, поэтому flip и
+поворот её не меняют. `tint`/`emissive`/`lit` меняют картинку предсказуемо
+(`tests/agent/highlevel_light_limits_test.py`).
+
+---
+
 ## 5. Фильтрация спрайтов
 
 ```js
@@ -23317,6 +25054,199 @@ $('#hud').depthRelative(true).depth(10);   // поднять всю панель
 **Считается на ходу, без кэша**: цепочки короткие, а кэш пришлось бы сбрасывать
 при каждом изменении любого предка.
 
+## 5.3. Лимиты качества света, маски и динамический occluder (§20.1)
+
+Свет не отключается молча: у профиля качества есть лимиты, деградация
+документирована, а числа видны в `stats()`/`qualityReport()`.
+
+```js
+$.gfx.light.quality({ maxShadowLights: 16, maxRays: 64, maxSegments: 2048 });
+$.gfx.light.quality();
+// { maxShadowLights, maxRays, maxSegments, lightmapScale: 0.5 }
+$.gfx.light.qualityReport();
+// { quality, lights, shadowLights, culledLights, degradedRays, degradedSegments, warned }
+```
+
+| Лимит | По умолчанию | Деградация при превышении |
+|---|---|---|
+| `maxShadowLights` | 32 | источники сверх лимита рисуются заливкой **без** геометрии тени (свет не пропадает) |
+| `maxRays` | 96 | `segments` источника урезаются: веер грубее, кромка тени резче |
+| `maxSegments` | 4096 | в тень источника идут первые отрезки реестра |
+| `lightmapScale` | 0.5 (задано сборкой) | только сообщается: менять из игры нельзя |
+
+О каждом виде деградации модуль пишет **один раз на профиль** (`$.debug` рядом):
+`$.gfx.light.quality({...})` сбрасывает флаги предупреждений. `stats()` кроме
+прежних полей (`built`, `cached`, `culled`, `considered`, `rays`, `cells`)
+отдаёт `lights`, `shadowLights`, `culledLights`, `degradedRays`,
+`degradedSegments`, `indexAppended`, `indexRebuilt`, `lightmap`,
+`compositePasses` — по ним профилируется CPU-работа теней и GPU-композит.
+
+```js
+$.gfx.light.resetStats();   // измерить ровно один кадр
+$.gfx.light.stats();
+```
+
+**Маски.** §20.1 просил разделить три вещи: маску препятствий, слой рендера и
+**маску получателя света**. Состояние на сегодня:
+
+| Что | Состояние |
+|---|---|
+| маска препятствий (`occluderMask` + `mask` у отрезка) | сделана (ниже) |
+| слой рендера (мир / неосвещённый мир / UI) | сделана: `.lit(false)` рисуется после света, UI — поверх всего (§4.5) |
+| маска получателя света (`receiverMask`/`.lightMask(bits)`) | сделана: §4.8 |
+
+Как она устроена и сколько стоила — в §4.8. Узел по-прежнему может выключить
+свет целиком (`.lit(false)`), но теперь умеет и «принимать свет только этих
+слоёв».
+
+**Маски препятствий.** Узел-источник видит только «свои» препятствия:
+
+```js
+$.gfx.light.occluders([{ x: 100, y: 100, w: 32, h: 32, mask: 1 },
+                       { x: 400, y: 100, w: 32, h: 32, mask: 2 }]);
+$('#lamp').occluderMask(1);      // видит первое, не видит второе
+$('#lamp').occluderMask();       // геттер
+```
+
+**Динамический occluder.** Любой узел мира (не `<light>`/`<lightarea>`) со своим
+списком `.occluders([...])` — движущееся препятствие: прямоугольники задаются в
+**локальных** координатах узла, каждый кадр превращаются в мировые с учётом
+позиции и поворота, а скрытый узел препятствием не считается. Изменение
+сообщается как область: тени пересчитывают только те источники, чей радиус её
+пересекает.
+
+```js
+$('#crate').occluders([{ x: -20, y: -30, w: 40, h: 60 }]);   // локальные px
+$('#crate').at(300, 300);            // ящик едет — тень едет за ним
+$.gfx.light.dynamicCount();          // сколько отрезков дали узлы за кадр
+$.gfx.light.dynamicSegments();       // их копия (мировые координаты)
+$.gfx.light.changeRegions();         // сколько областей изменений помнит кэш
+```
+
+**Замеры (Mac mini M4, `build/` Release, headless `--agent --fixed-dt 1/60`,
+`python3 tests/agent/highlevel_light_limits_test.py` печатает те же числа).**
+Восемь источников с тенями (`segments: 48`) и реестр 1000 отрезков:
+
+| Что | Число |
+|---|---|
+| Прогретый кадр (ничего не менялось) | `built=0`, `cached=8`, `rays=0` |
+| Правка реестра рядом с одним источником | `built=1`, `cached=7` (без области было бы 8) |
+| Досыпка 4 отрезков в покрытую сетку индекса | `indexAppended=1`, `indexRebuilt=0`, через индекс прошло 4 отрезка |
+| Замена реестра целиком (1004 отрезка) | `indexRebuilt=1`, через индекс прошли все отрезки |
+| `maxRays: 16` при `segments: 48` | 128 лучей за кадр (8 × 16), `degradedRays=8`, одно предупреждение |
+| Деградация теней: три источника при `maxShadowLights: 1` | `lights=3`, `shadowLights=1`, `culledLights=2`, свет у всех трёх |
+
+Время JS-вызова правки реестра — 0.013–0.015 мс; сама пересборка индекса идёт в
+следующем кадре и пропорциональна числу отрезков, досыпка — только новым.
+
+**Инвалидация по области (числа).** Кэш границ тени хранит серийный номер
+изменений: если с прошлого расчёта ничего не менялось в радиусе источника —
+результат берётся из кэша. Правка реестра рядом с одним источником не
+пересчитывает остальные: в тесте два источника на расстоянии 550 px дают
+`built=1, cached=1` (а не `built=2`), а `addOccluders` внутри уже покрытой
+сетки индекса — `indexAppended=1, indexRebuilt=0`. Если отрезок выходит за
+границы сетки индекса, индекс пересобирается целиком (одна линейная проходка),
+но кэши теней всё равно остаются точечными.
+
+### 4.8. Маска получателя света (§20.1)
+
+Узел объявляет, свет КАКИХ слоёв он принимает; источник — к каким слоям
+относится свет, который он излучает. Свет доходит только туда, где биты
+пересекаются.
+
+```js
+$.gfx.light.layer(0b0011);      // слой источников по умолчанию (геттер/сеттер)
+$('<light>', { lightLayer: 2 }).at(200, 200);   // поле при создании
+$('#lamp').lightLayer(2);       // слой этого источника
+$('#lamp').lightLayer();        // геттер
+
+$('#panel').lightMask(0b0001);  // узел принимает только слой 1
+$('#panel').lightMask();        // геттер (по умолчанию 0xFFFFFFFF — все слои)
+```
+
+Имя метода узла — `.lightLayer()`, а **не** `.layer()`: `.layer(n)` в ядре уже
+занято порядком слоёв узла, и подменять его нельзя. Поле при создании —
+`lightLayer`, у получателя — `lightMask`.
+
+| Значение | Смысл |
+|---|---|
+| `$.gfx.light.layer()` | `0xFFFFFFFF` — источники без явного слоя светят всем |
+| `.lightLayer(bits)` | биты слоя источника: несколько слоёв задаются одним числом |
+| `.lightMask(bits)` | биты получателя; не объявлена — `0xFFFFFFFF` (прежнее поведение) |
+| `.lightMask(0)` | узел не принимает свет ни от одного источника (но остаётся в мире) |
+
+**Как это работает.** Световая карта копится аддитивными треугольниками, и гейт
+применяется там же — при накоплении, а не в композите:
+
+1. если в кадре есть хотя бы один узел с маской, перед накоплением света идёт
+   **проход маски**: те же квады мира рисуются в отдельную цель половинного
+   разрешения, где цвет пикселя — биты получателя (RGBA8 = 32 бита). Цель
+   очищается в «все слои», поэтому фон и всё, что маску не объявляло, работают
+   как раньше;
+2. каждый пакет света несёт биты слоя источника (пакет рвётся при смене слоя —
+   гейт передаётся юниформой на draw call);
+3. фрагмент света берёт биты получателя из маски и умножается на
+   `(receiver & layer) != 0`.
+
+**Цена (замеры: Mac mini M4, Metal, headless, 1280×720, `tools/bench_stress.py`).**
+
+| Сцена | p95 `client_frame_ms` | Проходов |
+|---|---|---|
+| `demos/stress --scene lights` (32 источника, карта света выключена, масок нет) | **8.35 / 8.34** мс (до изменения 8.35) | 2 |
+| фикстура §20.1 без масок (34 источника, карта света включена) | **8.35** мс | 2 |
+| та же фикстура, маска у всех 120 спрайтов | **8.36** мс | 3 (появился проход маски) |
+| `demos/stress --scene all` | 8.34 мс (до изменения 8.36) | — |
+
+Без масок не появляется ни цели маски, ни прохода, ни выборки в шейдере: цена
+кадра и картинка прежние. Расширенный режим стоит одного прохода по геометрии
+мира в половинном разрешении и одной выборки на фрагмент света.
+
+**Вариант «N композитов по слоям» отвергнут по замеру:** один полноэкранный
+композит 1280×720 на этой машине стоит **≈ 0,030 мс** GPU (измерено повтором
+композита: 1.099 мс при 1 проходе против 2.040 мс при 32). N композитов дали бы
+N × 0,030 мс и N текстур по 0,9 МБ, **но всё равно требовали бы маску
+получателя**: без неё композит не знает, какому пикселю какой слой положен. То
+есть этот путь строго дороже выбранного при той же корректности.
+
+**Объявленный fallback.** Маски применяются там, где свет идёт через световую
+карту. Если карта выключена или кадр уходит в render target игры, свет рисуется
+прямо в сцену — и работает прежнее поведение: свет получают все. Это видно
+машине:
+
+```js
+$.gfx.light.maskPath();
+// { supported: true, reason: 'lightmap_accumulation_gate',
+//   fallback: 'all_receivers', bits: 32, default: 0xFFFFFFFF, doc: ... }
+// без карты света: { supported: false, reason: 'light_drawn_into_scene', ... }
+```
+
+**Порядок с неосвещённым слоем (найдено и исправлено замером).** Композит
+световой карты теперь выполняется между освещённым и неосвещённым слоями мира.
+До этого `.lit(false)` при включённой карте света получал свет поверх себя: узел
+внутри радиуса источника давал **255** вместо собственных **169,3**. После
+исправления — **169,3**, ровно как при выключенной карте.
+
+Приёмка — `tests/agent/light_receiver_mask_test.py` (22 проверки) и фикстура
+`tests/fixtures/light_mask`: два соосных источника разных слоёв, два получателя
+на равном расстоянии и узел без маски. Числа: узел слоя 1 под источником слоя 1
+— **194,9**, узел слоя 2 там же — **169,3** (не освещён), наоборот — тоже;
+после обмена масками картина переворачивается; узел без маски получает
+**215,2**; `.lit(false)` — **169,3** при любой карте; тень за occluder работает
+(**169,3 → 254,3**).
+
+**Чего нет:** маски у треугольников и мешей (у них нет своего списка слоёв — они
+получают свет как фон), нескольких масок у одного узла (маска одна) и отдельной
+записи маски в `save`/`replay` (это свойство узла, оно сохраняется вместе с ним).
+
+**Неосвещённые узлы.** `.lit(false)` — узел не получает ни света, ни тумана, ни
+темноты, но остаётся в мире (рисуется до интерфейса). Это же включает материал
+с `lit: false`.
+
+```js
+$('#sign').lit(false);   // ночью виден, фонарём не засвечивается
+$('#sign').lit();        // геттер
+```
+
 ## 6. Ограничения
 
 * Режим смешивания — свойство **пакета**, а не отдельного спрайта: JS группирует
@@ -23337,6 +25267,8 @@ $('#hud').depthRelative(true).depth(10);   // поднять всю панель
 |---|---|---|
 | Нормализация режимов, приоритет `node.blend_mode`, нарезка на участки, ошибка render target | `tests/js/viewport_test.mjs` | `build/_deps/quickjs-build/qjs tests/js/viewport_test.mjs` |
 | Кадр со всеми четырьмя режимами рисуется, `$.viewport` объясняет отказ | `tests/agent/highlevel_render_test.py`, фикстура `tests/fixtures/render/` | `python3 tests/agent/highlevel_render_test.py` (после сборки) |
+| Эталонные сцены порядка: alpha/add/multiply, Y-sort, UI над светом, параллакс, resize, снаппинг, integerScale, смена слоя не меняет логику | `tests/agent/highlevel_presentation_test.py`, фикстура `tests/fixtures/render_presentation/` | `python3 tests/agent/highlevel_presentation_test.py` |
+| Лимиты света, маски, `.lit(false)`, динамический occluder, инвалидация по области, материалы | `tests/agent/highlevel_light_limits_test.py`, фикстура `tests/fixtures/light_limits/` | `python3 tests/agent/highlevel_light_limits_test.py` |
 
 ---
 
@@ -23348,6 +25280,8 @@ $('#hud').depthRelative(true).depth(10);   // поднять всю панель
 | `src/render.c` | конвейеры по режимам, `blend_state`, переключение в `r2d_render_draw`, биндинги `submitSprites`/`submitTriangles`, обрезка (scissor) и `engine.viewport` |
 | `src/highlevel/viewport.js` | `$.blend`, `$.viewport`, чистые хелперы `normalizeBlend`/`nodeBlendMode`/`resolveBlend`/`blendRuns` |
 | `tests/fixtures/render/` | фикстура агентского теста |
+| `tests/fixtures/render_presentation/` | эталонные сцены контракта презентации |
+| `tests/fixtures/light_limits/` | лимиты света, маски, материалы |
 
 
 ---
@@ -23410,18 +25344,95 @@ $.replay.play();                   // если apply не передать, во
 | `mode()` / `isRecording()` / `isPlaying()` | режим |
 | `length()` / `position()` / `dropped()` | сколько кадров, где курсор, сколько потеряно |
 | `header()` / `frames()` / `at(i)` | заголовок, кадры, кадр по индексу |
+| `actions(list, mapping?)` | разрешённые действия и версия input mapping |
+| `checkpoints({ every, max?, snapshot? })` | политика проверки state hash |
+| `verifyState(tick)` / `divergence()` | проверка на tick и первое расхождение |
+| `checkpointsList()` / `checkpointAt(tick)` | записанные проверки: хэши / целиком |
+| `stateProvider(fn)` | свой снимок состояния `() => ({ labels, values })` |
+| `identity({ version, build })` | паспорт сборки для заголовка |
+| `unknownActions()` | сколько действий не прошло по списку |
 | `onEnd` | ваш обработчик конца воспроизведения |
 
-Чистые функции: `createReplay(header)`, `compareReplays(a, b)` — вторая
-возвращает `{ same, count, first }`, где `first` — номер первого расхождения
-(на этом стоит регресс-проверка).
+Чистые функции и константы: `createReplay(header, hooks?)`,
+`compareReplays(a, b)` (даёт `{ same, count, first }`), `normalizeReplayHead`,
+`replayHeadProblem`, `gameplaySnapshot`, `hashOfValues`, `REPLAY_SCHEMA`,
+`REPLAY_VERSION`, `MAX_CHECKPOINTS`, `PRESENTATION_STREAMS`.
 
-## 2. Заголовок
+## 2. Заголовок — паспорт прогона (§26)
 
-В заголовке лежит то, без чего воспроизведение не совпадёт: **зерно запуска**
-(`engine.seed`) и **шаг времени** (`engine.fixedDt`), плюс всё, что игра передала
-в `start({ ... })` (уровень, сложность). Сравнивайте заголовки перед
-воспроизведением: другое зерно — другой мир.
+В заголовке лежит всё, без чего воспроизведение не совпадёт или не проверяется:
+
+| Поле | Что это |
+|---|---|
+| `schema`, `version` | `'r2d.replay'` и версия формата (2): чужую схему и «версию из будущего» `load()` отклоняет с причиной |
+| `engine.version`, `engine.build` | ID движка и сборки. Движок отдаёт `engine.version` (версия проекта из CMake); игру можно уточнить через `$.replay.identity({ version, build })` — явное значение важнее. Неизвестное честно помечается `null`, а не «0.0.0» |
+| `content` | content-версии/хэши из `$.save.contents()` на момент записи |
+| `seed`, `streams` | зерно запуска и **полный снимок RNG** (`$.random.state()`): начального зерна для продолжения середины сессии мало |
+| `dt`, `frame` | fixed step и кадр начала записи |
+| `input.mapping`, `input.actions` | версия раскладки ввода и список разрешённых actions |
+| `checkpoints` | `{ every, count, truncated }` — сколько проверок состояния сделано |
+
+Поля игры (`start({ level: 'bunker' })`) сохраняются как есть: заголовок —
+паспорт прогона, и игра вправе положить туда свои метки.
+
+## 2.1. Ввод на уровне actions
+
+```js
+$.replay.actions(['left', 'right', 'jump'], 'actions/v1');   // что разрешено
+$.replay.record(
+    () => {                                  // sampler
+        const out = [];
+        if ($.input.down('left')) out.push('left');
+        if ($.input.down('right')) out.push('right');
+        return out;
+    },
+    (frame) => {                             // apply — ОДНА форма при записи и проигрывании
+        hero.move((frame.actions.includes('right') ? 1 : 0) * 200 * $.time.delta(), 0);
+    },
+);
+```
+
+* Кадр хранится как `{ "a": ["right"] }`; raw-ввод можно положить рядом
+  (`{ actions, raw }`) — он для диагностики и на симуляцию не влияет.
+* Действие не из списка отсекается и считается в `unknownActions()`: одна
+  новая кнопка не ломает запись.
+* `apply` получает **одну и ту же форму** при записи и при проигрывании:
+  `{ actions, raw }` в режиме actions, иначе — исходное значение
+  (`forApply(value)` доступно и напрямую). Без `actions()` API прежнее: кадр
+  как есть.
+
+## 2.2. State hashes и divergence report (§26)
+
+```js
+$.replay.checkpoints({ every: 60 });      // проверка каждые 60 simulation ticks
+$.replay.record(sampler, apply);
+// ... запись ...
+$.replay.load(text);
+$.replay.play();
+// ... проигрывание ...
+const div = $.replay.divergence();
+// { ok: false, tick: 120, expected: 'ce8f...', actual: '1a2b...',
+//   fields: [{ field: 'n12.x', expected: 29333, actual: 69333 }],
+//   ids: ['n12'],
+//   versions: { schema, replay, engine, rng }, content }
+```
+
+* Проверки идут на **определённых simulation ticks** (от начала прогона, а не
+  от абсолютного `engine.frame`): запись и проигрывание нумеруют их от своего
+  старта, поэтому в новом процессе номера совпадают.
+* Отчёт называет **первый** расходящийся tick, поля (`nid.поле`), ID узлов и
+  версии: schema записи, версия replay, ID движка/сборки и вид RNG.
+* `checkpointAt(tick)` отдаёт записанный checkpoint с метками и значениями —
+  для отладки и тестов; `checkpointsList()` — только `{ tick, hash }`.
+* `$.replay.stateProvider(fn)` заменяет снимок состояния на свой:
+  `() => ({ labels, values })`. По умолчанию — `gameplaySnapshot()`.
+
+**Что входит в hash.** `gameplaySnapshot()` берёт состояние RNG (все потоки,
+кроме `presentation`) и узлы по `nid`: позиция, угол, скорость, наличие тела.
+**Не входят**: настенные часы и абсолютное игровое время, GPU-ресурсы,
+alpha/color/visible/blend, id спрайтов — всё presentation-only. Потребление
+`presentation`-потока на расхождение не влияет: косметика не меняет
+gameplay-сравнение.
 
 ## 3. Что записывать
 
@@ -23450,7 +25461,14 @@ $.replay.play();                   // если apply не передать, во
 * **состояние мира не пишется**: реплей — это ввод, а не снимок мира. Для
   снимка используйте `$.prefab`/`$.save`;
 * **нет сжатия**: текст — это JSON; для долгих записей сохраняйте реже или
-  округляйте значения.
+  округляйте значения;
+* **checkpoints ограничены** (`MAX_CHECKPOINTS = 1024`): дальше поле
+  `checkpoints.truncated` становится `true`, а первое расхождение всё равно
+  ловится, если оно в сохранённом окне;
+* **ID движка не берётся из ядра**: JS-биндинга версии сборки нет, поэтому
+  `engine.version` в заголовке берётся из биндинга версии (CMake-версия
+  проекта); игра может уточнить его через `$.replay.identity()`. Если ни того,
+  ни другого нет — честный `null`, а не «версия 0».
 
 ## 5. Проверка
 
@@ -23459,6 +25477,8 @@ $.replay.play();                   // если apply не передать, во
 build/_deps/quickjs-build/qjs tests/js/replay_test.mjs
 # в движке: номер кадра, зерно запуска, шаг времени, текст записи
 python3 tests/agent/highlevel_replay_test.py
+# приёмка §26: заголовок, actions, checkpoints, divergence и restore вместе
+python3 tests/agent/save_restore_test.py
 ```
 
 
@@ -23573,9 +25593,13 @@ fire(0);           // 4289262335 — тот же формат, что engine.rgb
 | `$.resource.freeAll()` | число выгруженных | отпустить все ссылки (описания остаются) |
 | `$.resource.preload(names?)` | `{ loaded, failed, total }` | прогреть кэш (без ссылок) |
 | `$.resource.has(name)` / `names()` | `bool` / `string[]` | что зарегистрировано |
-| `$.resource.info(name)` | описание / `null` | состояние, ссылки, размер текстуры, кадры, длительность звука |
-| `$.resource.list()` | массив описаний | все записи без значений (годится в JSON) |
-| `$.resource.stats()` | объект | `{ total, ready, defined, failed, refs, loads, fails, kinds }` |
+| `$.resource.info(name)` | описание / `null` | состояние, ссылки, **версия**, размер текстуры, кадры, длительность звука |
+| `$.resource.list()` | массив описаний | все записи без значений, с версией (годится в JSON) |
+| `$.resource.publish(name, value?)` | описание / `null` | §27: опубликовать **новую версию** без выгрузки (значение не задано — handle не менялся) |
+| `$.resource.stats()` | объект | `{ total, ready, defined, failed, refs, loads, fails, kinds, requests, async, workers }` |
+| `$.resource.request(list, opts?)` | handle | §45: **асинхронный** запрос списка ресурсов (см. §2.1) |
+| `$.resource.requests()` | массив handles | активные запросы |
+| `$.resource.cancelAll()` | число | отменить все активные запросы |
 | `$.resource.error(name)` | строка / `null` | последняя ошибка ресурса |
 | `$.resource.remove(name)` | `bool` | забыть ресурс вместе со значением |
 | `$.resource.clear()` | число | забыть все ресурсы |
@@ -23598,7 +25622,70 @@ $.resource.define('wave', { kind: 'data', build: () => makeWave(3) });   // сч
 выгрузке (закрыть файл, вернуть что-то движку). Если своего `dispose` нет, у
 вида `texture` он появляется сам и возвращает слот движку.
 
+## 2.1. Асинхронный запрос (§45)
+
+`$.resource.request(list)` берёт список спецификаций (как у `define`/`load`) и
+грузит их **вне главного кадра**: рабочий поток ядра читает файлы и декодирует
+картинки, главный поток в безопасной фазе применяет результат (создаёт
+GPU-текстуру, разбирает JSON, ставит значение в реестр).
+
+```js
+const req = $.resource.request([
+    { name: 'tiles', kind: 'texture', path: 'assets/tiles.png' },
+    'levels/1.json',                         // имя = путь, вид по расширению
+]);
+
+req.state();        // queued | loading | decoded | uploading | ready | failed | cancelled
+req.progress();     // { state, stage, bytes_done, bytes_total, bytes_known,
+                    //   jobs_done, jobs_total, estimated, cancelled, failed, names }
+req.value('tiles'); // значение готового ресурса
+req.results();      // { name: значение } для всего готового
+req.error();        // { code, message, name, path, stage } — структурой
+req.cancel();       // отмена: задания снимаются, значения в реестр не попадают
+req.on('ready' | 'failed' | 'cancelled', fn);
+await req;          // промис: ready/cancelled → handle, failed → исключение
+```
+
+* **Единицы прогресса — известные.** `bytes_total` — сумма реальных размеров
+  файлов (stat на главном потоке, до чтения), `bytes_done` — прочитанное;
+  `jobs_done/jobs_total` — задачи. Если размеры неизвестны, `bytes_known:
+  false`, а `estimated: true` — доля оценочная, и это честно видно игре.
+* **Стадии:** `io` (точные байты) → `decode`/`apply` (`estimated: true`, GPU
+  upload и разбор — не байты) → `ready`. В `stats().workers` видно, есть ли
+  фоновый поток: `0` означает честную синхронную деградацию (ядро без
+  `engine.async` или поток не создался).
+* **Бюджет кадра.** Применений на кадр не больше `APPLY_BUDGET` (2), поэтому
+  даже пачка тяжёлых текстур не съедает кадр целиком.
+* **Первый провал отменяет запрос целиком** (`state: 'failed'`), причина
+  уходит в `$.debug.reportError` с кодом `R2D_LOAD_RESOURCE` и в `error()`.
+  Сцена, ждавшая такой запрос, не публикуется.
+* `opts.sync: true` — не использовать рабочий поток (тесты, детерминизм): путь
+  тот же, но синхронный и по одному ресурсу за кадр.
+
 ---
+
+## 2.2. Версии (§27)
+
+У записи реестра есть поле `version` — сколько раз значение было **опубликовано**
+(первая загрузка, `reload`, `setValue` асинхронного пути, `publish`). Версия
+растёт только при фактической публикации: повторный `get`/`load` из кэша её не
+двигает.
+
+```js
+const v = $.resource.info('tiles').version;    // 1 после первой загрузки
+$.resource.reload('tiles');                    // version → 2 (значение новое)
+$.resource.publish('tiles');                   // version → 3, значение то же
+```
+
+Зачем: игра ссылается на ресурс по **имени и версии**, а не по native-handle
+(§4.2 и §27 Спецификации), поэтому нативная замена «на месте» обязана быть видна
+по имени. Так работает хот-релоад текстуры: `engine.reloadTexture` меняет
+пиксели в той же текстуре (id не меняется), а `publish()` двигает версию
+ресурса — см. [reload.md](reload.md).
+
+`publish` **не выгружает** прежнее значение и не зовёт `dispose`: handle не
+менялся, освобождать нечего. Для настоящей смены значения (новый id) есть
+`reload(name)` (мимо кэша, с `dispose` прежнего значения).
 
 ## 3. Счётчик ссылок
 
@@ -23671,6 +25758,17 @@ $.resource: не удалось загрузить "config" (json data/config.js
   спрайт на текстуре.
 * **`json`/`text` требуют `$.fs`** (модуль `store.js`). Без него ресурс
   останется в состоянии `failed` с подсказкой «нет $.fs».
+* **Декодирование аудио — на главном потоке.** Файл звука читается в рабочем
+  потоке, а `engine.audio.load(path)` (разбор формата) вызывается в безопасной
+  фазе: обратного пути «декодировать в потоке» в бинdingах нет. Стадия
+  применения помечена `estimated`.
+* **GPU upload всегда на главном потоке** (SDL_GPU и render pass), поэтому
+  применение одной тяжёлой текстуры — самая дорогая операция кадра; она
+  ограничена бюджетом, но не разбита на части.
+* **Кэш текстур.** Текстура, созданная из пикселей рабочим путём,
+  регистрируется в ядре под разрешённым путём: `engine.loadTexture(path)` и
+  `.sprite(path)` найдут её и не загрузят файл второй раз. Путь длиннее 127
+  символов в кэш не влезает (поле имени в ядре) — тогда будет вторая загрузка.
 
 ---
 
@@ -23890,10 +25988,14 @@ $.aliasTag('камень', 'wall');        // $('<камень>') и $('каме
 # Сохранения игры — `$.save`
 
 Подсистема сохраняет состояние игры целиком и по частям: данные `$.store`,
-мир (узлы со всем поддеревом через `$.prefab`) и метаданные — в **слоты**,
-файлы `saves/slot-<имя>.json`. Слот знает свою версию, поэтому старые
-сохранения доезжают до текущего формата сами, а строки `export()`/`import()`
-годятся для `$.http`, буфера обмена и тестов.
+мир (узлы со всем поддеревом через `$.prefab`) и состояние по стабильным ID —
+в **слоты**, файлы `saves/slot-<имя>.json`. Слот знает свою версию, поэтому
+старые сохранения доезжают до текущего формата сами, а строки
+`export()`/`import()` годятся для `$.http`, буфера обмена и тестов.
+
+Версия 3 (§14 Спецификации) делит снимок на **разделы** — `profile`, `run`,
+`room`, `presentation` — и хранит состояние узлов по `nid`; восстановление
+идёт транзакцией, а запись на диск — через временный файл и backup.
 
 ```js
 $.ready(() => {
@@ -23902,6 +26004,9 @@ $.ready(() => {
     // Меню: три слота + автосейв в слоте 0.
     $('#save-1').on('click', () => $.save.slot(1).save());
     $('#load-2').on('click', () => $.save.slot(2).load());
+
+    // Настройки — в профиль: их не сбрасывает перезапуск прохождения.
+    $.save.profile().set('lang', 'ru').set('volume', 0.6);
 
     // Автосейв раз в минуту, не трогая текущий слот.
     $.save.autosave(60000);
@@ -23930,14 +26035,22 @@ $.ready(() => {
 ```json
 {
   "format": "r2d.save",
-  "version": 2,
+  "version": 3,
   "saved_at": 1730000000000,
   "saved_frame": 1234,
   "time": 20.5,
   "scene": "level1",
-  "store": { "highscore": 1200, "kills": 7 },
-  "world": [ { "tag": "player", "id": "hero", "x": 100, "y": 200, "children": [] } ],
-  "speeds": [ [0, 0] ],
+  "namespaces": {
+    "profile":      { "data": { "lang": "ru", "volume": 0.6 } },
+    "run":          { "data": { "kills": 7 }, "rng": { "version": 1, "algorithm": "mulberry32",
+                                                       "seed": 42, "value": 918273, "streams": {} } },
+    "room":         { "data": {}, "world": [ { "tag": "player", "id": "hero", "nid": "n12",
+                                              "x": 100, "y": 200, "children": [] } ],
+                      "speeds": [ [0, 0] ],
+                      "nodes": { "n12": { "v": [40, -320], "p": { ".hero": { "hp": 100, "cd": 0.7 } } } } },
+    "presentation": { "data": { "overlay": false } }
+  },
+  "content": { "versions": { "level1": 2 }, "hashes": {} },
   "meta": {}
 }
 ```
@@ -23945,19 +26058,26 @@ $.ready(() => {
 | Поле | Смысл |
 |---|---|
 | `format` | всегда `'r2d.save'` — по нему видно, что это наш слот, а не чужой JSON |
-| `version` | версия формата: `1` — запись `$.store.save()` / сцена `$.prefab`, `2` — слот |
+| `version` | версия формата: `1` — запись `$.store.save()` / сцена `$.prefab`, `2` — плоский слот, `3` — разделы (§14) |
 | `saved_at` | `Date.now()` в момент сохранения (для меню: «12 минут назад») |
 | `saved_frame`, `time` | кадр и игровое время на момент снимка |
 | `scene` | имя активной сцены (`$.scene.current()`), **справочно** — см. §9 |
-| `store` | данные `$.store.all()` — счётчики, инвентарь, настройки |
-| `world` | корневые узлы `ctx.nodes` в формате `$.prefab` (или `null`) |
-| `speeds` | скорости тел в порядке обхода узлов, `null` — если тел нет |
+| `namespaces.profile` | настройки, которые **не** сбрасывает перезапуск прохождения: input, audio, язык |
+| `namespaces.run` | состояние прохождения (данные `$.store`) и снимок RNG |
+| `namespaces.room` | мир комнаты: `world` ($.prefab), `speeds`, `nodes` — состояние по `nid` |
+| `namespaces.presentation` | косметика кадра: оверлеи, фильтры, палитра |
+| `content` | объявленные версии/хэши контента (`$.save.content`), проверяются при restore |
 | `meta` | что положит игра: `$.save.save({ meta: { chapter: 2 } })` |
 
-Поля `format`, `version`, `store`, `world`, `speeds`, `meta`, `saved_at`,
-`saved_frame`, `time`, `scene` **зарезервированы**. Объект без них считается
-«сырыми» данными `$.store` (как в `$.store.load()`), поэтому старый файл
-`save.json` тоже открывается как слот.
+В **файле** плоских `store`/`world`/`speeds` нет — только разделы. В объекте
+снимка (`snapshot()`, `read()`, `export()`… ) они остаются **зеркалами**
+разделов: код, который читал `.store`/`.world` до версии 3, продолжает
+работать. `save → load → save` даёт тот же JSON.
+
+Зарезервированные поля: `format`, `version`, `namespaces`, `store`, `world`,
+`speeds`, `node_state`, `content`, `meta`, `saved_at`, `saved_frame`, `time`,
+`scene`. Объект без них считается «сырыми» данными `$.store` (как в
+`$.store.load()`), поэтому старый файл `save.json` тоже открывается как слот.
 
 ---
 
@@ -23987,17 +26107,165 @@ $.ready(() => {
 | `$.save.import(text, opts?)` | `bool` | применить строку JSON |
 | `$.save.autosave(ms?, slot?)` | id | автосейв по таймеру (слот `0`) |
 | `$.save.stopAutosave()` | `$.save` | выключить автосейв |
-| `$.save.counter(key, delta?)` | число | счётчик в `$.store` |
-| `$.save.stats()` | объект | сводка модуля и `last_error` |
+| `$.save.counter(key, delta?)` | число | счётчик в разделе `run` |
+| `$.save.stats()` | объект | сводка модуля, счётчики протокола и `last_error` |
+| `$.save.ns(name?)` | имя / `$.save` | текущий раздел или переключение (§2.1) |
+| `$.save.profile()` / `run()` / `room()` / `presentation()` | handle | доступ к разделу: `set/get/has/remove/all/clear/keys` |
+| `$.save.nsData(name?)` | объект | весь раздел |
+| `$.save.set/get/has/unset(key)` | `$.save` / значение | key-value в текущем разделе |
+| `$.save.restartRun(opts?)` | `$.save` | перезапуск прохождения: run/room сброшены, profile — нет |
+| `$.save.behavior(match, provider, name?)` | число | регистрация фабрики поведения (§2.4) |
+| `$.save.behaviors()` / `clearBehaviors()` | массив / `$.save` | какие фабрики зарегистрированы |
+| `$.save.nodeState(roots?)` | объект | состояние узлов по `nid` |
+| `$.save.setNodeState(sel, data)` / `getNodeState(nidOrSel)` | `$.save` / объект | разовое состояние узла |
+| `$.save.content(name, value?)` | `$.save` / объект | объявить/прочитать версию и хэш контента |
+| `$.save.contents()` | объект | все объявленные content-версии |
+| `$.save.restore(payload, opts?)` | структура | транзакционное восстановление (§2.2) |
+| `$.save.verify(slot?)` | объект | проверка слота без применения |
+| `$.save.recover(slot?)` | `bool` | вылечить слот из `.bak` |
+| `$.save.lastFailure()` | объект / `null` | структура последнего отказа |
 
 `slotOrOpts` — либо номер/имя слота, либо сразу объект настроек:
 `$.save.save()`, `$.save.save(3)`, `$.save.save('quick')`,
 `$.save.save({ world: false, meta: { chapter: 2 } })` — всё одно и то же.
 
 `opts` у `save/snapshot/export`: `world` (true), `store` (true), `speeds`
-(true), `meta`.
-`opts` у `load/import/apply`: `world` (true), `store` (`true` — заменить всё,
-`'merge'` — дополнить, `false` — не трогать), `clear` (true), `speeds` (true).
+(true), `nodeState` (true), `namespaces` (true), `rng` (true), `meta`,
+`force` (перезаписать слот «из будущего» — по умолчанию нельзя).
+`opts` у `load/import/apply/restore`: `world`, `store` (`true` — заменить всё,
+`'merge'` — дополнить, `false` — не трогать), `speeds`, `rng`, `namespaces`,
+`content` (`'strict'` | `'warn'` | `'ignore'`), `transactional`
+(`false` — старое поведение «сначала очистить, потом грузить»), `fatal`
+(провал уходит в `$.debug.reportError`).
+
+---
+
+## 2.1. Разделы: profile / run / room / presentation
+
+Разделы — это **политика одного формата**, а не четыре системы. Хранилища:
+`run` — обычный `$.store` (как и раньше), у остальных — своё key-value внутри
+`$.save`.
+
+```js
+$.save.profile().set('lang', 'ru').set('volume', 0.5);   // настройки игрока
+$.save.run().set('chapter', 3);                          // прохождение
+$.save.presentation().set('overlay', true);              // косметика кадра
+$.save.ns('profile');                                    // текущий раздел
+$.save.get('lang');                                      // 'ru'
+```
+
+`$.save.restartRun()` сбрасывает `run` и `room` (мир и данные прохождения) и
+**сохраняет** `profile` и `presentation`: настройки ввода, звука и язык при
+перезапуске прохождения не теряются. `restartRun({ profile: true })` сбросит
+и их — это осознанное «сбросить всё».
+
+## 2.2. Восстановление: протокол и транзакция
+
+`$.save.load()`/`restore()` идут по шагам, и **ошибка до commit не уничтожает
+рабочее состояние**:
+
+1. **прочитать** слот (битый JSON, отсутствие файла — понятная ошибка в
+   `stats().last_error`, в `lastFailure()` и (при `fatal: true`) в
+   `$.debug.reportError`);
+2. **проверить schema и content**: версия формата (миграции — для старых),
+   объявленные `$.save.content()` расхождения — `content: 'strict'`
+   отклоняет, `'warn'` (по умолчанию) применяет и сообщает;
+3. **подготовить** мир во временной области: узлы собираются, реестр id
+   паркуется, ничего из старого мира пока не тронуто;
+4. **восстановить связи и поведение**: состояние по `nid` (скорости, данные
+   фабрик) — см. §2.4; RNG — из `namespaces.run.rng`;
+5. **проверить инварианты**: узлы мира собрались, все `nid` из снимка нашли
+   узел, нет повторяющихся `nid`;
+6. **commit**: старый мир удаляется, подготовленный остаётся, разделы и RNG
+   применяются;
+7. **освободить** старую область (id, узлы).
+
+```js
+const r = $.save.restore($.save.read(2));
+if (!r.ok) {
+    // r.stage: read | content | resources | prepare | behavior | invariants
+    console.log(r.stage, r.reason, r.missing);
+}
+```
+
+Если фабрика поведения создаёт подписку/таймер, она может записать откат в
+журнал — он вызовется при ошибке до commit:
+
+```js
+$.save.behavior('.turret', {
+    save: (n) => ({ cooldown: n.attrs.cd || 0 }),
+    load(node, data, api) {
+        node.attrs.cd = data.cooldown;
+        const timer = $.time.after(1000, () => {});
+        api.journal.onRollback(() => $.time.cancel(timer));
+    },
+});
+```
+
+## 2.3. Запись на диск: временный файл, backup, восстановление
+
+Протокол (§14): временный файл → проверка записи (файл читается и совпадает)
+→ backup последней корректной версии → перезапись основного файла → проверка
+чтением; при провале проверки основной файл восстанавливается из backup.
+
+* Слот **будущей неподдерживаемой версии не перезаписывается**: `save()`
+  возвращает `false`, файл остаётся как был, `stats().rejected_future` растёт.
+  Осознанно перезаписать можно `save({ force: true })`.
+* **Код отказа называет стадию**: `stats().last_failure` даёт
+  `R2D_SAVE_TEMP` (не удалось записать временный файл), `R2D_SAVE_REPLACE`
+  (не удалось перезаписать основной), `R2D_SAVE_VERIFY`,
+  `R2D_SAVE_VERIFY_TEMP`, `R2D_SAVE_FUTURE`. При `fatal: true` каждый из них
+  уходит и в `$.debug.reportError`, поэтому обязательная операция не может
+  провалиться «молча строкой в журнале».
+* `read()`/`load()` при повреждённом основном файле берут `slot-N.json.bak`,
+  считают это в `stats().recovered` и объясняют в `last_error`;
+  `$.save.verify(slot)` показывает `{ ok, backup, error }`, а
+  `$.save.recover(slot)` лечит основной файл из копии.
+* **Честно о crash-safety.** Atomic replace на этом backend **не проверен**:
+  `engine.fs` отдаёт только `readText/write/exists/remove/list`, операции
+  `rename` в биндингах нет. Поэтому замена не атомарна, а защита — это
+  проверка записи и копия `.bak`: сбой ровно в момент перезаписи основного
+  файла может оставить слот повреждённым, и тогда его спасает `.bak`
+  (`$.save.recover`). Обещание атомарности появится только вместе с
+  `rename`/`fsync` в ядре.
+
+## 2.4. Состояние по стабильному `nid` и фабрики поведения (§10)
+
+Скорости, состояние FSM, cooldown, логические статусы сопоставляются по
+`nid` (`$('#x').nid()`), а не по порядку обхода дерева: узлы можно
+переставлять, добавлять и удалять, и состояние всё равно попадёт в свой узел.
+
+```js
+$.save.behavior('.walker', {
+    save(node) { return { hp: node.cur_hp, phase: node.attrs.phase, cd: node.attrs.cd }; },
+    load(node, data) { node.cur_hp = data.hp; node.attrs.phase = data.phase; node.attrs.cd = data.cd; },
+});
+```
+
+* `match` — тег (`'walker'`), класс (`'.walker'`) или функция `node => bool`.
+* Логика в слот **не сериализуется**: восстанавливают данные, а поведение
+  поднимают зарегистрированные фабрики (§10). Незарегистрированная фабрика
+  видна в отчёте restore (`missing_providers`), восстановление узла при этом
+  не падает.
+* Скорости тел пишутся в `nodes[nid].v` автоматически (для узлов с телом);
+  позиционные `speeds` остаются для слотов версии 2.
+* `nodes[nid].m` — разовое состояние, записанное `$.save.setNodeState()`;
+  после restore его отдаёт `$.save.getNodeState(nid)`.
+* Состояние RNG — `namespaces.run.rng` (снимок `$.random.state()`).
+  **Потоки создавайте до первого сохранения** (`$.random.stream('gameplay')`
+  на старте): в снимок попадают только уже существующие потоки, ленивый поток
+  после restore продолжил бы старую последовательность.
+
+## 2.5. Content-версии
+
+```js
+$.save.content('level1', { version: 2, hash: 'ab12cd34' });
+$.save.load(1, { content: 'strict' });   // расхождение — отказ до изменений
+```
+
+Расхождение проверяется до подготовки мира; список расхождений лежит в
+`restore().content` (`{ kind, name, saved, current }`), а `saveInfo().content`
+показывает объявленные версии слота.
 
 ---
 
@@ -24129,13 +26397,24 @@ $.store.set('inventory', ['меч', 'щит']);   // инвентарь — об
 * **Мир восстанавливается через `$.prefab`.** Если `$.prefab` не установлен
   (или модуль собран без него), `worldData()` вернёт `null`, слот сохранит
   только данные `$.store`, а в журнале будет объяснение.
-* **Скрипты узлов не сохраняются** — `$.prefab` хранит данные, а не функции.
-  После загрузки узлы создаются заново: подписки, таймеры и твины нужно
-  навесить самому (обычно в `$.ready`/сцене).
-* **Скорости — по порядку обхода.** `speeds` сопоставляются узлам
-  «узел → дети» на момент снимка; если игра сама удаляет узлы между
-  сохранением и загрузкой, соответствие может сбиться (это не ошибка загрузки,
-  а цена «дешёвого» формата).
+* **Поведение восстанавливают фабрики, а не слот.** `$.prefab` хранит данные,
+  а не функции: подписки, таймеры и твины поднимает код — через
+  `$.save.behavior()` (§2.4) или вручную после `load()`. Незарегистрированная
+  фабрика не молчит: её имя видно в `restore().missing_providers`, а узел
+  остаётся без своего состояния.
+* **Скорости — по `nid`.** Основной путь — `nodes[nid].v`; позиционные `speeds`
+  остаются для слотов версии 2 и сопоставляются «узел → дети», поэтому после
+  удаления узлов между сохранением и загрузкой могут сбиться.
+* **Atomic replace не проверен на этом backend** (§2.3): `engine.fs` без
+  `rename`, замена не атомарна, слот защищён проверкой записи и копией `.bak`.
+* **Ленивые потоки RNG не откатываются.** В снимок RNG попадают только уже
+  созданные потоки: создавайте `gameplay`/`generation`/`presentation` до
+  первого сохранения, иначе после restore такой поток продолжит старую
+  последовательность.
+* **`nid` — в пределах запуска.** Стабильность ID держится на данных слота:
+  после restore узлы получают те же `nid`; если счётчик успел уйти вперёд,
+  модуль переназначит «сталкивающиеся» ID и сохранит сопоставление, поэтому
+  не полагайтесь на числовое значение `nid` из другого запуска.
 * **`list()` читает файлы.** Десятки больших слотов — это десятки чтений;
   для частого обновления меню используйте `list({ meta: false })`.
 * **Текстуры движок не выгружает** (см. `resource.md`): у `$.save` своей
@@ -24156,11 +26435,13 @@ $.store.set('inventory', ['меч', 'щит']);   // инвентарь — об
 | `normalizeSlot(slot)` / `normalizeDir(dir)` | каноническое имя слота и каталога |
 | `slotFileName(slot)` / `slotPath(dir, slot)` / `slotFromFile(file)` | файлы слотов |
 | `compareSlots(a, b)` / `sortSlots(list)` | человеческая сортировка |
-| `makeSave(raw)` / `serializeSave(raw)` | канонический снимок и его JSON |
+| `makeSave(raw)` / `wireSave(raw)` / `serializeSave(raw)` | канонический снимок (с зеркалами), его файловая форма (только разделы) и JSON |
+| `namespacesOf(raw)` / `NAMESPACES` | разделы из канонической или плоской формы |
 | `migrateSave(raw)` | миграция любой версии к текущей (`null` — не сохранение) |
 | `parseSaveJson(text)` | строка → `{ ok, data, raw, error }` без исключений (`raw` — объект файла, нужен для `saveInfo`) |
 | `flattenNodes(data)` | обход узлов и детей в порядке `nodeToData()` |
-| `saveInfo(raw, extra)` | метаданные слота для `list()`/`info()` |
+| `saveInfo(raw, extra)` | метаданные слота для `list()`/`info()` (разделы, `node_state`, `content`) |
+| `nodesWithNid(data)` | узлы данных мира по стабильному `nid` |
 
 
 ---
@@ -24193,7 +26474,8 @@ $.scene.load('menu');
 |---|---|
 | `add(name, scene)` / `remove(name)` / `has(name)` / `names()` | реестр сцен |
 | `load(name, opts?)` | переключиться на сцену (в начале кадра) |
-| `loadAsync(name, opts?)` | то же, с ожиданием загрузки |
+| `loadAsync(name, opts?)` | то же, с ожиданием загрузки и ресурсов (§45) |
+| `pending()` / `cancelPending(reason?)` | handle последней асинхронной загрузки / отменить её |
 | `push(name)` / `pop()` / `stack()` | стек сцен (меню поверх уровня) |
 | `restart()` / `current()` / `busy()` | перезапуск / текущая / идёт переход |
 | `transition(opts)` | затухание между сценами (`duration`, `color`) |
@@ -24202,11 +26484,48 @@ $.scene.load('menu');
 `busy()` возвращает `true`, пока переход не завершился — на это удобно вешать
 экран загрузки.
 
+## 1.1. Асинхронная загрузка (§45)
+
+`loadAsync(name, opts)` показывает экран загрузки, **ждёт ресурсы** (в фоновом
+потоке ядра), выполняет тяжёлую инстанциацию шагами через `$.task` и только
+потом публикует сцену. Публикация сверяется с `generation`: отменённая
+загрузка не появится ни на следующем кадре, ни позже.
+
+```js
+$.scene.loadAsync('level2', {
+    resources: ['assets/tiles.png', { name: 'lv', path: 'levels/2.json' }],
+    title: 'Готовим уровень…',
+    steps: [{ label: 'сборка', total: 400, work: (i) => build(i) }],
+});
+
+const h = $.scene.pending();
+h.progress();       // { bytes_done, bytes_total, stage, estimated, cancelled, steps_done, … }
+h.state;            // loading | ready | failed | cancelled
+h.error;            // { code, message, path, scene } при провале
+$.scene.cancelPending();     // отмена: ресурсы освобождаются, сцена не появится
+```
+
+* `resources` — список спецификаций (как у `$.resource.request`) **или готовый
+  handle** запроса: тогда сцена ждёт его, а отмена запроса отменяет и сцену.
+* `loading: false` — не показывать экран (своя полоса), `title`/`hint` уходят
+  в `$.loading.show`.
+* Провал ресурсов или шага не переключает сцену: причина уходит в
+  `$.debug.reportError` (`R2D_LOAD_RESOURCE` / `R2D_SCENE_LOAD`) и в `h.error`.
+* `steps` без `resources` работают как раньше — `loadAsync` остаётся
+  совместимым со старым вызовом.
+* Пока идёт загрузка, игра сама решает про часы: `$.time.pause()` на время
+  загрузки не даёт таймеру прохождения считать это время (§44).
+
 ## 2. Ограничения
 
 * **`preload` — заглушка**: греет только звуки ([scene.js](../../src/highlevel/scene.js)),
-  текстуры и сцены не готовит; для честной загрузки — `$.loading.run`;
-* **нет подгрузки частями**: сцена целиком в памяти, стриминга нет;
+  текстуры и сцены не готовит; для честной загрузки — `$.resource.request`
+  (§45) или `$.scene.loadAsync({ resources })`;
+* **нет стриминга внутри уровня**: `resources` — список на всю сцену; сцена
+  целиком в памяти, частей по мере движения нет;
+* **инстанциация — шаги `$.task`**: она режется по кадрам, но остаётся JS-кодом
+  (это и требуется §45: мир публикуется в безопасной фазе, а не из чужого
+  потока);
 * **переход — только затухание**: слайдов, шейдеров и «кругов» нет; сложное
   делается своим `$.gfx.post`;
 * **сцена не владеет узлами**: `exit` должен сам удалить свои узлы
@@ -24216,6 +26535,77 @@ $.scene.load('menu');
 
 `tickScene()` вызывается движком после игровой логики: `update` идёт по сценам
 сверху стека вниз, `enter`/`exit` — в начале кадра, до `$.update`.
+
+## 4. Комнаты: `$.room` (§23)
+
+Комната — **открытые данные** поверх prefab/scene: `bounds`, ссылка на карту,
+инстансы prefab, маркеры (спавн, выходы) и `exits`/`connections` между
+комнатами. Второго дерева prefab не заводится: инстансы создаются
+`$.prefab.instantiate`, карта — `$.tilemap`, владение — областью §5.
+
+```js
+$.room.define('level1', {
+    schema: 1, id: 'level1',
+    bounds: { x: 0, y: 0, w: 1280, h: 720 },
+    tilemap: { id: 'map', path: 'maps/level1.json', src: 'assets/tiles.png', tile: 32, at: [640, 360] },
+    instances: [
+        { prefab: 'door', id: 'door_north', x: 640, y: 64,
+          children: { lamp: { id: 'door_north/lamp', color: '#8fd8ff' } } },
+    ],
+    markers: { spawn: { x: 64, y: 64 }, exit_north: { x: 640, y: 32, node: true } },
+    exits: [{ id: 'north', marker: 'exit_north', to: 'level2', to_marker: 'spawn_south' }],
+    connections: [{ from: 'north', to: 'level2', bidirectional: true }],
+});
+
+$.room.enter('level1');            // валидация → сборка в staging → публикация
+$.room.marker('spawn');            // { ok, x, y } — маркер из данных
+$.room.goto('north');              // переход; нет комнаты/маркера — ошибка, мир не меняется
+```
+
+| Функция | Назначение |
+|---|---|
+| `$.room.define(id, data)` | зарегистрировать описание (локальные ошибки — отказ, межкомнатные ссылки проверяются на переходе) |
+| `$.room.validate(data)` | `{ ok, errors, warnings, room }` — чистая проверка данных |
+| `$.room.build(id)` → handle | собрать в staging-области, ничего не публикуя |
+| `$.room.commit(handle)` / `.discard(handle)` | опубликовать / отменить сборку |
+| `$.room.enter(id)` | build + commit одной командой |
+| `$.room.current()` / `.stats()` / `.generation()` | состояние: id, scope, маркеры, exits, generation |
+| `$.room.marker(name)` / `.exit(name)` | маркер/выход (`'room:marker'` — из другой комнаты) |
+| `$.room.goto(exit)` | переход по выходу с проверкой цели |
+| `$.room.adopt()` | вернуть комнату по её узлу карты (после восстановления мира из снимка) |
+| `$.room.unload()` | выгрузить комнату вместе с её областью |
+| `$.room.on('enter', fn)` | событие входа |
+
+**Комната — транзакция.** `enter` (как и `build` + `commit`) идёт по §5:
+сборка происходит в staging-области, и только успешная публикуется на границе
+кадра. Ошибка валидации или сборки закрывает staging-область: созданные в ней
+узлы уничтожаются, прежняя комната продолжает работать. Числа (узлы/тела/
+подписки до и после отказа) — в `tests/agent/room_transaction_test.py`.
+
+**Согласованность.** Карта комнаты строится из одних данных для визуала,
+коллизии и occluders (`$.tilemap.buildCollisions` → `applyTileOccluders`);
+правка клетки пересобирает только затронутые тела и обновляет препятствия
+света (см. [tilemap.md](tilemap.md) §20).
+
+**Идентификаторы.** У инстанса id из данных (`instance.id`), у детей —
+`<инстанс>/<путь>`; повторная сборка комнаты даёт те же логические id (в том
+числе когда прежний инстанс ещё жив до конца кадра). Именно эти id уходят в
+сохранение (§14), поэтому `$.save` восстанавливает состояние по `nid`.
+
+**Save/restore.** `enter` переводит `$.scene.current()` в `room:<id>`, а §14
+хранит имя сцены: ID комнаты и правки её узлов переживают сохранение. После
+восстановления мира из снимка `$.room.adopt()` снова связывает `$.room` с
+комнатой по её узлу карты.
+
+**Владение узлами.** Узлы, созданные фабрикой `$('<тег>')`, область §5
+подхватывает сама; инстансы prefab создаются внутренним конструктором, поэтому
+комната объявляет их владение явно (`scope.node`). Без этого смена комнаты
+оставила бы прежние инстансы в мире — это отдельная находка §23, закрытая в
+`installSceneRooms`.
+
+**Ограничения** те же, что у §5: комната грузится целиком (нет стриминга
+внутри уровня), а `enter` во время открытой staging-сборки отменяет прежнюю
+(§5 generation).
 
 
 ---
@@ -24840,14 +27230,16 @@ $.sound.crossfade('battle.ogg', 1.5);
 | `channel(ch)` | что звучит на канале сейчас: `{ playing, volume, pan, pitch, effect, position, duration }` |
 | `activeChannels()` | сколько каналов занято |
 | `preload(file)` / `duration(file)` | подготовка и длительность |
-| `volume(value?)` / `sfxVolume(value?)` / `mute(on?)` | общая и эффектовая громкость |
+| `volume(value?)` / `sfxVolume(value?)` / `mute(on?)` | общая и эффектовая громкость (число или `{ db }`) |
+| `dbToLinear(db)` / `linearToDb(v)` | явный перевод громкости: -6 dB → 0.501 |
 
 ## 2. Музыка
 
 | Вызов | Смысл |
 |---|---|
 | `music(file, opts?)` / `stopMusic()` / `musicPlaying()` | запуск и стоп |
-| `musicVolume(value?)` / `musicPitch(value?)` | громкость и тон |
+| `musicVolume(value?)` / `musicPitch(value?)` | громкость и тон (принимают `{ db }`) |
+| `stems(paths, opts?)` | музыкальные слои с общим транспортом (§25) |
 | `pauseMusic(on?)` | пауза музыки (эффекты продолжают) |
 | `crossfade(file, seconds)` | переход между треками |
 
@@ -24874,6 +27266,53 @@ $.sound.busy();            // { active, free, total } — обычно total 16
 `seek` возвращает `false`, если канал не играет; `position` в этом случае `-1`.
 Перемотка в конец доигрывает звук — канал освобождается сам.
 
+## 2.2. Музыкальные слои (§25): один transport на все stem'ы
+
+Слой («stem») — отдельная дорожка одного музыкального транспорта: спокойная
+и боевая темы, перкуссия, бас. Запуск каждого слоя отдельным вызовом из JS
+разошёлся бы на буфер микшера, поэтому старт, seek и pause идут **одной
+нативной командой** под локом `MIX_LockMixer`, а громкости слоёв считает JS.
+
+```js
+const music = $.sound.stems(['music/calm.ogg', 'music/battle.ogg'], {
+    loop: true,
+    loopStart: 12.5,      // секунды: сюда вернётся петля (без щели)
+    loopEnd: 96.0,        // секунды: конец петли (0 — конец файла)
+    bus: 'music',         // шина: её громкость умножается на громкость слоя (§48)
+});
+
+music.play({ fade: 800 });        // все слои стартуют с одного sample-clock
+music.seek(30.25);                // одна и та же позиция для всех
+music.pause(true);                // пауза всех слоёв
+music.crossfade(1, 900);          // боевой слой наружу, спокойный — в ноль
+music.layer(1, { db: -6 }, { fade: 400 });
+music.gains({ 'music/battle.ogg': 1, 'music/calm.ogg': 0 });
+music.bus('music2');
+music.stop(600);
+
+music.time(0);        // позиция слоя 0 в секундах
+music.frames(1);      // позиция в PCM-кадрах — точное число для сверки фазы
+music.times();        // позиции всех слоёв
+music.drift();        // расхождение слоёв в мс (0 — в фазе)
+music.playing(); music.paused(); music.count();
+```
+
+| Метод | Назначение |
+|---|---|
+| `play({ fade, start, loop, loopStart, loopEnd })` | запуск всех слоёв одной командой |
+| `seek(seconds)` / `pause(on)` / `stop(fadeMs)` | транспорт целиком |
+| `layer(i, gain, { fade })` / `gains({ path: gain })` | громкость слоя (линейно или `{ db }`) |
+| `crossfade(i, ms)` | слой `i` в 1, остальные в 0; сумма громкостей ≤ 1 |
+| `time(i)` / `frames(i)` / `times()` / `drift()` | позиции и расхождение |
+| `bus(name)` | шина слоёв (§48) |
+| `playing()` / `paused()` / `count()` | состояние |
+
+Замер приёмки (`tests/agent/highlevel_music_layers_test.py`, 3-секундные слои
+44.1 кГц): после старта кадры слоёв `[7168, 7168]`, расхождение **0.0000 мс**;
+после `seek(1.5)` — `[67174, 67174]`; после паузы и resume — снова 0.0000 мс;
+петля с `loopStart = 1.0 с` возвращается на **1.016 с** (не на 0) и транспорт
+продолжает играть; во время кроссфейда громкости `0.500 / 0.500`, в сумме ≤ 1.
+
 ## 3. Ограничения
 
 | Чего нет | Что делать |
@@ -24884,6 +27323,12 @@ $.sound.busy();            // { active, free, total } — обычно total 16
 | Сжатия в рантайме | файлы берутся как есть (WAV/OGG/MP3) |
 
 ## 4. Связанное
+
+* музыкальные слои и шины — [audiobus.md](audiobus.md) (§48: изоляция эффектов);
+* `tests/agent/highlevel_music_layers_test.py` — фазность слоёв, seek, петля;
+* `tests/agent/highlevel_sound_seek_test.py` — перемотка и приоритеты каналов;
+* `tests/js/sound_test.mjs` — юнит-тесты без движка.
+
 
 * [soundbank.md](soundbank.md) — варианты одного звука (шаги, попадания);
 * [acoustics.md](acoustics.md) — реверберация помещений;
@@ -26110,7 +28555,7 @@ $('<tilemap>', {
 | `.collisions(on)` | включить/выключить непроходимость всех слоёв |
 | `.collisionMerge(on?)` | слияние тайлов в прямоугольники (по умолчанию `true`); без аргумента — геттер |
 | `.collisionLimit(policy?)` | `'fail'` (по умолчанию) или `'partial'` при лимите тел (§19) |
-| `.collisionResult()` | результат последней сборки тел: `{ ok, error, planned, created, missing, attempted, layers }` |
+| `.collisionResult()` | результат последней сборки тел: `{ ok, error, planned, created, reused, destroyed, rebuilt, dirty_cells, missing, attempted, layers }` |
 | `.solidAt(x, y [, layer])` | занята ли клетка коллизией (клеточная занятость, §15) |
 | `.shapeAt(x, y [, layer])` | реальная геометрия клетки: `{ id, full, rects }` или `null` |
 | `.tileOccluders(on?)` | карта владеет реестром препятствий света (§18); без аргумента — геттер |
@@ -26806,6 +29251,49 @@ $('#level').collisionResult();
 | `missing` | сколько тел не хватило |
 | `attempted` | сколько успело создаться до отказа (диагностика) |
 | `layers` | то же по слоям |
+| `dirty_cells` | сколько клеток изменилось с прошлой сборки (`-1` — вся карта, §20) |
+| `reused` | сколько тел переиспользовано (геометрия не менялась) |
+| `destroyed` | сколько тел снято (форма исчезла из данных) |
+| `rebuilt` | сколько тел коснулась пересборка: `created + destroyed` |
+
+---
+
+## 20. Инкрементальная пересборка: правка клетки не пересобирает карту
+
+Любая правка данных (`.setTile`, `.fill`, `.clearTiles`, автотайл) помечает
+карту `dirty`; на ближайшем кадровом проходе `.rebuild()` считает план заново,
+но тела сопоставляет **по геометрии**: неизменившиеся переиспользуются
+(`reused`), снимаются только исчезнувшие формы (`destroyed`), создаются только
+новые (`created`).
+
+```js
+$('#level').setTile(3, 7, 0);
+$('#level').rebuild();
+$('#level').collisionResult();
+// { planned: 3, created: 1, reused: 2, destroyed: 1, rebuilt: 2,
+//   dirty_cells: 1, ok: true }
+```
+
+Что это даёт:
+
+* правка одной клетки касается одного-двух тел (плюс соседние, если форма
+  склеена с ними) вместо ВСЕХ тел карты — на большой карте это разница между
+  «пересобрать 5 000 тел» и «пересобрать 2»;
+* визуал, коллизия и occluders берутся из одних данных в одном проходе
+  (`buildCollisions` → `applyTileOccluders`), поэтому между кадрами не бывает
+  старой невидимой стены или новой видимой платформы без коллизии;
+* правка клетки попадает и в **данные узла** (`attrs.data`), а не только во
+  внутренний массив слоя: иначе `$.prefab.save`/`$.save` сохранили бы
+  первоначальную карту (§14, §23). Синхронизация — одна на пачку правок, а не
+  на каждую клетку.
+
+Правки одной клетки касаются соседей только если формы были склеены
+(`collisionMerge(true)`): тогда старая полоса снимается, а на её месте
+появляются новые — это и есть `rebuilt`. При `collisionMerge(false)` каждая
+клетка — своё тело, и правка трогает ровно её.
+
+Числа замера — в `tests/agent/room_transaction_test.py` (§23) и
+`tests/js/tilemap_test.mjs`.
 
 Загрузчик обязан отличать этот отказ от успеха: log-only сообщение не заменяет
 failed result (`$.tilemap.resultOf()` — то же из пространства имён). Старые
@@ -26861,9 +29349,15 @@ $.time.cancel(id);
 | `slow(ms, scale, opts?)` | плавное замедление на `ms`: `{ in, out }` — доли входа/выхода |
 | `slowScale()` / `slowCount()` | действующий множитель замедления и число активных |
 | `wait(ms)` | промис через `ms` игрового времени |
-| `after(ms, fn)` / `every(ms, fn)` | вызов через `ms` / повторяющийся; возвращает id |
+| `after(ms, fn, opts)` / `every(ms, fn, opts)` | вызов через `ms` / повторяющийся; `opts.node` — владелец (политика `timers`) |
 | `cancel(id)` / `cancelAll()` | снять отложенный вызов / все |
 | `busy()` | есть ли незавершённые ожидания (пауза или заморозка) |
+| `tick()` | номер **шага симуляции** (фиксированный шаг), не кадра отрисовки |
+| `simDt()` / `simTime()` / `lastSteps()` | шаг симуляции (с) / симуляционное время (с) / шагов в последнем кадре |
+| `onTick(fn, opts)` | подписка на каждый шаг симуляции; `opts.node` — владелец (политика `fixed`) |
+| `everyTicks(n, fn, opts)` / `afterTicks(n, fn, opts)` | «каждые N шагов» / «через N шагов» |
+| `duration(ticks, opts)` | жизнь, измеряемая шагами: `{ left(), elapsed(), expired(), onEnd(fn), reset(), cancel() }` |
+| `mark(name)` / `since(name)` / `unmark(name?)` | локальный счётчик шагов от метки |
 
 `rawDelta()` — реальное время кадра: им пользуются интерфейс и анимации, которые
 не должны замирать на паузе.
@@ -26906,7 +29400,54 @@ stop.cancel();
 Готовый хит-фидбек (искры, вспышки, тряска, отдача, squash) — `$.hitFx`:
 [hits.md](hits.md). Он вызывает `freeze`/`slow` сам.
 
-## 3. Почему hit-stop честный
+## 3. Шаги симуляции: `tick`, `onTick`, жизни в тиках (§44)
+
+`$.time.frame()` — кадр **отрисовки**, и для игровой логики он не годится:
+при 30 и 144 FPS одно и то же игровое время — это разное число кадров. Для
+правил вида «каждые 30 физических шагов» и «жить 300 шагов» есть отдельный
+счётчик симуляции:
+
+```js
+$.time.tick();                 // номер шага симуляции (с 0)
+$.time.simDt();                // 1/60 с — шаг симуляции
+$.time.simTime();              // tick × simDt, секунды симуляции
+
+$.time.onTick((tick, dt) => patrol(tick));        // каждый шаг
+$.time.everyTicks(30, () => spawnWave());         // каждые 30 шагов
+const id = $.time.afterTicks(120, () => boom());  // через 120 шагов
+id.cancel();                                      // передумали
+
+const life = $.time.duration(300);                // «жить 300 шагов»
+life.expired(); life.left(); life.onEnd(() => puff());
+
+$.time.mark('shot');                              // локальный счётчик
+$.time.since('shot');                             // шагов с метки
+```
+
+* счётчик продвигается по правилам C (`src/main.c`: аккумулятор `app->dt ×
+  множитель`, шаг `R2D_FIXED_DT`, не больше 5 подшагов). В `--fixed-dt`
+  арифметика совпадает с шагами Box2D кадр в кадр; в свободном режиме C
+  считает во float, а JS — в double, поэтому на длинной дистанции возможен
+  сдвиг на один шаг;
+* **пауза, hit-stop и заморозка останавливают шаги** — множитель шага физики
+  тот же (`engine.setTimeScale`), второго механизма времени нет;
+* «глобальный tick modulo» — явно выбранная семантика:
+  `$.time.everyTicks(30, fn, { from: 'zero' })` срабатывает на шагах, кратных
+  30; по умолчанию отсчёт идёт от подписки;
+* владелец (`{ node }`) подчиняется политике §44: у узла с `fixed: false`
+  подписки и таймеры шага стоят, а `timers: false` останавливает
+  `after`/`every` (не «медленнее», а совсем).
+
+Замер приёмки (§44): при 30/60/144 render FPS (того же fixed step) снаряд
+проходит 200 + 2 px × (шаг − шаг рождения) и живёт ровно 45 шагов — числа в
+`tests/agent/highlevel_activation_test.py`.
+
+Матрица часов (§6): симуляция — gameplay, физика, окна и FSM (пауза стоит,
+hit-stop стоит); presentation — эффекты и камера (по политике); UI — работает
+всегда; аудио-транспорт — своя явная политика. Новым подпискам и таймерам
+задаётся владелец, старые умолчания не менялись.
+
+## 4. Почему hit-stop честный
 
 Физику шагает C **до** апдейта скрипта, поэтому игровая дельта на неё не влияет.
 Модуль времени держит вторую половину договора: собирает множитель
@@ -26926,7 +29467,7 @@ stop.cancel();
 логика кадра всё равно встаёт, а тела продолжают ехать. Проверить, что мост
 жив, можно по `$.time.physicsScale()`.
 
-## 4. Ограничения
+## 5. Ограничения
 
 | Чего нет | Что делать |
 |---|---|
@@ -26935,8 +29476,10 @@ stop.cancel();
 | Таймеров на несколько сцен | `cancelAll()` гасит всё; для сцены держите свои id и снимайте в `onExit` |
 | Времени в `$.update` | движок передаёт туда реальную дельту: если логика не должна идти на заморозке, спрашивайте `$.time.frozen()` или берите `$.time.delta()` |
 | Обратного времени | множитель неотрицателен: отрицательный `scale` приводится к 0 |
+| Шагов симуляции в свободном режиме «до пикселя» | аккумулятор C — float, JS — double: возможен сдвиг на один шаг; в `--fixed-dt` совпадает |
+| Таймера-владельца у `$.time.wait(ms)` | промис живёт в `tween.js` и владельца не имеет; для узла берите `after/every` с `{ node }` |
 
-## 5. Тик
+## 6. Тик
 
 `tickTime()` вызывает движок раз в кадр — игра его не зовёт. Порядок внутри
 кадра: сначала игровая логика (`$.update`), затем отрисовка (`$.render`).
@@ -26944,13 +29487,18 @@ stop.cancel();
 (иначе при нулевом игровом dt счётчик стоял бы), затем идут таймеры, твины,
 эффекты узлов, камера и ввод.
 
-## 6. Тесты
+## 7. Тесты
 
 `tests/js/time_freeze_test.mjs` (qjs, без движка): арифметика длительности,
 огибающая замедления, точное число замороженных кадров, вложенность, отмена,
-незатирание `scale()`, мост к шагу физики. Живой движок —
+незатирание `scale()`, мост к шагу физики, шаги симуляции (одинаковый счётчик
+при 30 и 60 «кадрах», подписки, `everyTicks/afterTicks/duration/mark`, остановка
+шагов на заморозке и паузе, владелец-политика). Живой движок —
 `tests/agent/highlevel_feel_test.py` (тело в полёте не двигается ни на пиксель,
-кадры идут, два прогона при `--fixed-dt` совпадают кадр в кадр).
+кадры идут, два прогона при `--fixed-dt` совпадают кадр в кадр) и
+`tests/agent/highlevel_activation_test.py` (§44: 120 шагов симуляции при
+30/60/144 render FPS дают одинаковую позицию и одинаковую жизнь снаряда).
+
 
 
 ---
@@ -27155,6 +29703,44 @@ $.timeline.lines();   // [{ id: 'tl3', speaker: 'Руси-тян', text: '…', 
 ```
 
 ---
+
+### 3.6. Маркеры, skip и возврат состояния (§16)
+
+Маркер — бит, который не занимает времени и срабатывает ровно один раз за
+прогон (loop/goto назад не дублируют необратимый эффект):
+
+```js
+$.timeline.define('intro', {
+    scene: 'cut_intro',
+    script: [
+        { marker: 'intro_begin' },              // один раз за прогон
+        { marker: 'cue', once: false },         // каждый раз
+        { wait: 0.3 },
+        { say: 'hi' },
+    ],
+});
+$.timeline.on('marker', (d) => sfx(d.marker));
+```
+
+| Метод | Смысл |
+|---|---|
+| `$.timeline.skipAll(reason?)` | довести прогон до конца, **не исполняя** остальные биты |
+| `$.timeline.markers()` | сработавшие маркеры (по порядку) |
+| `$.timeline.skippedMarkers()` | что skip не стал исполнять |
+| `$.timeline.state().restored` | отчёт возврата: `{ camera, music, control }` |
+
+Контракт возврата один для нормального конца, `stop()` и `skipAll()`: прогон
+снимает состояние **до** первого бита (камера — за кем следила и зум, музыка —
+что играло, управление) и возвращает его; политика `restore: false` (или
+`{ camera: false }`) оставляет что-то себе. Снимок берётся до `buildStage`,
+потому что тот намеренно приковывает камеру к центру.
+
+Skip не выполняет необратимые эффекты: маркеры попадают в `skippedMarkers()`, и
+игра по этому списку сводит итоговое состояние сама. Числа приёмки: прогон
+из 4 маркеров сработал по разу и за 3 кадра, `skipAll` на втором кадре оставил
+сработавшими 3 маркера и один (`intro_late`) — пропущенным, без события;
+`restored = { camera: '#hero', music: 'assets/audio/music/action.ogg', control: 'free' }`;
+за 5 циклов «play → stop» подписки (i18n 1, timeline 1) и число узлов не выросли.
 
 ## 4. Биты
 
@@ -27429,7 +30015,13 @@ $.ready(() => {
 | Событие | Когда | `event.data` |
 |---|---|---|
 | `enter` | цель впервые пересекла зону | `{ other, self }` — обёртки цели и зоны |
+| `stay` | цель внутри, со своим интервалом (`stay_ms`/`stay_ticks`; без них — каждый кадр) | `{ other, self }` |
 | `leave` | цель перестала пересекать зону | `{ other, self }` |
+
+`stay` не приходит в тот же кадр, что `enter`: вход считается первым касанием,
+и следующий `stay` — только через интервал. Часы зоны выбираются опцией
+`clock`: `'game'` (по умолчанию — игровое время, значит пауза и hit-stop
+останавливают `stay`) или `'ticks'` (шаги симуляции, §44).
 
 ```js
 $('#door').on('enter', (e) => {
@@ -27469,6 +30061,7 @@ $('#door').on('enter', (e) => {
 | `$.triggers.clear()` | удалить **все** зоны мира |
 | `$.triggers.inside(zone, node)` | пересекается ли узел с зоной сейчас (bool) |
 | `$.triggers.count(zone)` | сколько живых целей сейчас в зоне |
+| `$.triggers.reset(zone?)` | перевзвести зону с `once: true` (без аргумента — все зоны) |
 
 `zone`, `node` в `inside`/`count` принимают узел, обёртку или селектор
 (`'#door'`, `'.lava'`). `count` учитывает `attrs.detect` зоны, поэтому для
@@ -27487,7 +30080,13 @@ detect-зоны считаются только её цели.
 | `visible` | bool | `true` | `false` — зона выключена |
 | `parent` | узел/обёртка | `$.world` | куда добавить |
 | `onEnter` | `(other, self) => {}` | — | обёртки цели и зоны |
+| `onStay` | `(other, self) => {}` | — | то же на `stay` |
 | `onLeave` | `(other, self) => {}` | — | то же при выходе |
+| `stay` | bool | `false` | слать `stay`, пока цель внутри |
+| `stay_ms` / `stay_ticks` | number | — | интервал `stay` в мс (game) или шагах (ticks) |
+| `once` | bool | `false` | ровно один `enter` за всё время; вернуть зону в работу — `$.triggers.reset(zone)` |
+| `cooldown` | number | `0` | не чаще одного `enter` на цель за окно (в единицах `clock`); в окне нет ни `enter`, ни `leave` |
+| `clock` | `'game'`/`'ticks'` | `'game'` | часы для `stay`/`cooldown` |
 
 ```js
 $.triggers.zone({
@@ -27544,7 +30143,136 @@ const off = watchOverlap($('#hero').get(0), query('.lava'), (hit, self) => {
 
 ---
 
-## 5. Примеры
+## 5. §44: политики обработки узла — `$.processing`
+
+Четыре разные операции, которые нельзя смешивать:
+
+| Операция | Чем выключается | Что перестаёт происходить |
+|---|---|---|
+| скрыть | `.hide()` / `.visible(false)` | узел не рисуется; логика и физика работают |
+| усыпить тело | `engine.setAwake` / сон Box2D | тело не считает покой; проснётся от толчка, скорость сохранится |
+| **не обрабатывать** | `.processing(...)` / `.active(false)` | кадровая логика, фиксированный шаг, таймеры, участие в физике — по полям |
+| выключить область | `.areaOn(name, false)` (§40) | конкретная sensor-форма не участвует в столкновениях и запросах |
+
+Политика — opt-in **данные**: пока её никто не задавал, `processingAllows()`
+выходит первой строкой, и цена для игры нулевая.
+
+### Поля политики
+
+| Поле | Псевдоним | Что выключается |
+|---|---|---|
+| `update` | `movement` | кадровая логика узла: контроллер `.controls()`, движение по вводу |
+| `fixed` | — | подписки и таймеры на шаге симуляции (`$.time.onTick/afterTicks/everyTicks/duration`, владелец — узел) |
+| `animation` | — | кадровая анимация узла (`.animate()`, спрайтовые кадры) |
+| `timers` | — | таймеры с владельцем-узлом (`$.time.after/every(..., { node })`) |
+| `physics` | — | участие тела в физике: `engine.setBodyEnabled` |
+
+```js
+$('#enemy').processing({ update: false });   // движение не обновляется
+$('#enemy').processing('update');            // → false (чтение поля)
+$('#enemy').processing();                    // полный набор после наследования
+$('#enemy').active(false);                   // update+fixed+timers+physics off
+$('#enemy').active(true);                    // вернуть всё
+$('#enemy').isActive();                      // обрабатывается как активный?
+```
+
+`.active(false)` — это **не** `.hide()` (визуал не трогается) и **не** сон тела.
+Анимация при `.active(false)` остаётся включённой: завершение клипа обязано
+доиграть (приёмка §44).
+
+### `$.processing`
+
+| Метод | Назначение |
+|---|---|
+| `define(name, spec)` / `presets()` / `spec(name)` | именованные политики |
+| `set(sel, spec)` / `get(sel)` | задать/прочитать политику узлов |
+| `allow(sel, kind)` | разрешена ли обработка этого вида |
+| `scope(scope, spec)` | привязать политику к области владения §5 |
+| `stats()` | `{ nodes, bodies_off, inactive, version }` |
+| `fields()` / `inactive()` | имена полей / готовый «неактивный» набор |
+
+### Наследование от области §5
+
+Наследование **включается явно**: без `$.processing.scope(scope, spec)` у узлов
+области политики нет.
+
+```js
+const room = $.scene.scope('room:level1');
+$.processing.scope(room, { update: false, physics: false });   // спящая комната
+room.node($('<enemy>', { id: 'far_guard' }).at(3000, 400).appendTo($.world));
+$.processing.allow('#far_guard', 'update');   // false — политика области
+$('#far_guard').processing({ update: true }); // своя политика перекрывает область
+```
+
+Узлы, взятые областью через `scope.node(...)`, запоминают её; узлы вне области
+не затронуты.
+
+### Что физика делает с телом
+
+`physics: false` вызывает `engine.setBodyEnabled(id, false)`: тело выключено,
+не падает, не сталкивается и не двигается, его sensor-формы молчат. Это **не
+сон**: спящее тело продолжает участвовать в мире и просыпается от толчка.
+Box2D при выключении обнуляет скорость, поэтому после `physics: true` тело
+начнёт движение с нуля — если нужно сохранить импульс, не выключайте тело, а
+остановите логику (`update: false`) и обнулите скорость сами.
+
+Политику применяет кадровый тик (`tickTriggers`) — **после** шага физики этого
+кадра, поэтому она действует со следующего шага. При `--fixed-dt` это
+постоянная задержка в один кадр и она детерминирована.
+
+---
+
+## 6. §44: visibility/activation — `$.activation`
+
+Наблюдатель за **видимой областью камеры** или **регионом**. Границы берутся из
+реальных world bounds узла (`nodeBounds`: `w`/`h`, `hitbox`, подписанный scale,
+для local-space узлов §39 — скомпонованный мировой трансформ), а не из
+camera-space.
+
+```js
+// Враг просыпается, когда входит в кадр, и засыпает, когда уходит.
+$.activation.auto('.enemy');
+
+// Тонкая настройка: поле 64 px, полоса 32 px, только вторая камера.
+$.activation.watch('#boss', { margin: 64, hysteresis: 32, cameras: 'p2' });
+$('#boss').on('screen:enter', (e) => $.log('босс в кадре: ' + e.data.camera));
+$('#boss').on('screen:exit', () => $.log('босс ушёл'));
+
+// Регион вместо камеры — те же enter/exit, но имена region:enter/region:exit.
+$.activation.watch('#trap', { region: { x: 1200, y: 300, w: 400, h: 400 } });
+```
+
+| Опция | По умолчанию | Смысл |
+|---|---|---|
+| `margin` | `0` | поле вокруг области видимости (px) для входа |
+| `hysteresis` | `0` | насколько дальше надо уйти для выхода: выход по `margin + hysteresis` |
+| `cameras` | `'any'` | `'main'`, имя/индекс камеры или список; `any` — любая |
+| `region` | — | `{x,y,w,h}`, узел, зона или селектор вместо камеры |
+| `event` | `screen` / `region` | базовое имя событий |
+| `once` | `false` | сработать при первом входе и отписаться |
+| `onEnter` / `onExit` | — | колбэки дополнительно к событиям узла |
+
+| Метод | Назначение |
+|---|---|
+| `watch(what, opts)` | наблюдение; ручка `{ stop(), active(), nodes(), inside(node), rects() }` |
+| `visible(what, opts)` | виден ли узел сейчас (одноразовая проверка) |
+| `auto(what, opts)` | включать/выключать обработку по видимости |
+| `stats()` / `clear()` | `{ watchers, nodes }` / снять все наблюдения |
+
+`auto(what, opts)`: `on`/`off` — наборы политик (по умолчанию `on: true`,
+`off` — «неактивный»), `areas: ['sense']` — включать и выключать sensor-области
+§40 через `.areaOn()` (отдельная операция, не часть политики), `start: false` —
+не применять состояние сразу. `auto` **не** скрывает и **не** удаляет узел: если
+объект должен исчезнуть, это делает владелец (область §5, таймер) — иначе
+«выключенный» узел действительно завис бы навсегда.
+
+Порядок кадра: `tickActivation` идёт внутри `tickTriggers` — после `world.sync`
+и до отрисовки, поэтому события видят свежие позиции этого кадра. При
+`once: true` наблюдатель снимается после первого входа: повторных событий нет.
+
+---
+
+## 7. Примеры
 
 ### Дверь открывается только для игрока
 
@@ -27574,6 +30302,26 @@ $('<trigger>', { id: 'pit', detect: 'enemy' }).at(600, 500).size(60, 60)
     .on('leave', (e) => $.log('из ямы ушёл ' + (e.data.other.get(0).id || 'безымянный')));
 ```
 
+### Зона с интервалом, один раз и с окном повтора
+
+```js
+// Урон «пока стоишь в лаве» — раз в 250 мс игрового времени.
+$.triggers.zone({
+    id: 'lava', x: 600, y: 400, w: 200, h: 80, detect: 'player',
+    stay_ms: 250,
+    onStay: (who) => who.damage(5),
+});
+
+// Напольная кнопка: сработала один раз и молчит до reset().
+const button = $.triggers.zone({ id: 'button', x: 200, y: 300, w: 60, h: 20, once: true });
+$('#button').on('enter', () => openGate());
+$.triggers.reset(button);            // позже: снова готова
+
+// Ловушка не бьёт по одной цели чаще, чем раз в 1.5 с.
+$.triggers.zone({ id: 'spikes', x: 900, y: 500, w: 80, h: 40, cooldown: 1500,
+                  onEnter: (who) => who.damage(30) });
+```
+
 ### Временная зона, созданная из кода
 
 ```js
@@ -27586,7 +30334,7 @@ $.time.wait(200).then(() => $.triggers.clear());   // убрать все зон
 
 ---
 
-## 6. Ограничения и решения
+## 8. Ограничения и решения
 
 * **Прямоугольники, а не тела.** Пересечение считается по габаритам узла
   (`w`/`h`, `hitbox`, масштаб), без обращения к Box2D. Это предсказуемо,
@@ -27602,20 +30350,31 @@ $.time.wait(200).then(() => $.triggers.clear());   // убрать все зон
   `alpha: 0` при `visible: true`.
 * **Интерфейс не участвует.** Узлы с `attrs.ui` не бывают ни зонами, ни
   целями: они живут в экранных координатах.
+* **§44: политика «fixed» для `$.anim`/animplayer пока не применяется.** Их
+  часы живут в своих модулях (`anim.js`, `animplayer.js`); политика закрывает
+  спрайтовые кадры (`.animate()`), таймеры и фиксированные подписки `$.time`.
+  Для клипов используйте паузу клипа — это явная операция своего модуля.
+* **§44: `physics: false` обнуляет скорость.** Так делает Box2D при выключении
+  тела; чтобы сохранить импульс — не выключайте тело, а остановите логику.
+* **§44: activation считает габариты узла, а не форму тела.** Хитбокс и масштаб
+  учитываются, поворот — нет (как у зон и `.overlaps`).
 
 ---
 
-## 7. Юнит- и интеграционные тесты
+## 9. Юнит- и интеграционные тесты
 
 | Файл | Что проверяет |
 |---|---|
 | `tests/js/triggers_test.mjs` | чистые функции и жизненный цикл enter/leave без движка |
-| `tests/agent/highlevel_triggers_test.py` | `<trigger>`, `detect`, `$.triggers.*`, `.overlaps` в живом движке |
+| `tests/agent/highlevel_triggers_test.py` | `<trigger>`, `detect`, `$.triggers.*`, `stay`/`once`/`cooldown`, `.overlaps` в живом движке |
 | `tests/fixtures/triggers/` | игра-фикстура для интеграционного теста |
+| `tests/agent/highlevel_activation_test.py` | §44: политики, activation-события, тики симуляции, одинаковое simulation time при 30/60/144 FPS |
+| `tests/fixtures/activation/` | игра-фикстура §44 |
 
 ```bash
 build/_deps/quickjs-build/qjs tests/js/triggers_test.mjs
 python3 tests/agent/highlevel_triggers_test.py     # после сборки движка
+python3 tests/agent/highlevel_activation_test.py   # §44
 ```
 
 
@@ -27960,6 +30719,67 @@ cls/style/on`, у неё есть чтение состояния — оно н�
 doc.html('assets', '<div class="row" data-key="a.png">a.png</div>');
 doc.on('assets', 'click', (id, ev, key) => select(key));   // key === 'a.png'
 ```
+
+## 5.1. Контракт интерфейса: постоянный HUD против временных окон (§16)
+
+По умолчанию узлы `<ui.*>` принадлежат сцене: `$.scene.load()` их сносит
+(`clearWorld` пропускает только помеченные). Постоянный HUD отделяется явно:
+
+```js
+$.ui.persist('#hud, #hud_hp, #hud_bar');   // переживает смену сцены и рестарт комнаты
+$.ui.transient('#pause_menu');             // снова принадлежит сцене
+$.ui.persistCount();                       // сколько постоянных узлов живо
+$.ui.persistList();                        // их id
+```
+
+Проверено в `tests/agent/highlevel_ui_contract_test.py`: после рестарта комнаты
+и после перехода в сцену катсцены HUD остаётся на месте (позиция `{x:240,y:30}`
+и значения `HP 100` те же), а временное окно исчезает.
+
+### Обязательные ID документов
+
+Контракт «какие ID интерфейса обязаны существовать» объявляется один раз и
+проверяется существующим API документов (не парсингом `.rml`):
+
+```js
+$.ui.required([{ doc: 'ui/hud.rml', ids: ['hp_text', 'ammo_text'] }]);
+$.ui.checkRequired();   // { ok, checked, missing: [{ doc, id }], documents }
+$.ui.has('ui/hud.rml', 'hp_text');   // есть ли элемент сейчас
+$.ui.documents();                    // открытые документы
+$.ui.report();                       // документы + обязательные ID + переводы + масштаб
+```
+
+### Привязки данных
+
+`$.ui.bind(вид, источник, opts)` связывает вид с функцией-источником и
+обновляет его **только при смене значения**:
+
+```js
+$.ui.bind('#hp_bar',  () => hero.hp / hero.hpMax);                  // <ui.bar> → value
+$.ui.bind('#time_lbl', () => $.time.now(), { text: (v) => 'T ' + v.toFixed(2) });
+$.ui.bind({ doc: 'ui/hud.rml', element: 'device' }, () => $.input.device());
+$.ui.bindings();    // [{ target, value, updates, skipped, error }]
+$.ui.bindStats();   // { bindings, updates, skipped }
+$.ui.unbind('#hp_bar');
+```
+
+Источник, который бросил исключение, не роняет кадр: ошибка остаётся в
+`bindings()[i].error`. Счётчик `skipped` — доказательство, что одинаковые кадры
+не перерисовываются. Так закрываются проверяемые привязки здоровья, cooldown,
+таймера, прогресса загрузки и выбранного устройства (§16): в приёмке 6 привязок
+обновили HUD при смене модели (`HP 100 → HP 40`, полоса `1 → 0.4`,
+`CD 0.0 → CD 2.5`, `клавиатура → геймпад`, `LOAD 50%` при `$.loading.show({value:0.5})`)
+при 86 пропущенных кадрах.
+
+### Локализация открытых документов
+
+`$.ui.tr('#menu_play', 'menu.play')` привязывает текст узла к ключу, а
+`$.ui.doc(path).tr(element, key)` — элемент RmlUi; объектная форма
+`{ key: 'hud.ammo', n: 12 }` поддерживается. При `$.i18n.lang('en')` всё
+привязанное перерисовывается само (подписка на `$.i18n.onChange` ставится
+лениво), `$.ui.retranslate()` делает то же вручную, `$.ui.trList()` показывает
+реестр. Проверено числами: `Здоровье → Health` одновременно в узле `#hud_tr` и
+в элементе `hp_text` документа, `Патроны: 12 → Ammo: 12`.
 
 ## 6. Ограничения
 
@@ -28490,6 +31310,35 @@ $('#name').on('submit', (e) => $.store.set('name', e.data.value));
 ```
 
 ---
+
+### Модальность, ввод и стек фокуса (§16)
+
+Модальным считается верхний видимый `<ui.dialog>`. Пока он открыт:
+
+* контролы под ним не получают ни наведения, ни кликов (это было и раньше);
+* widgets занимает контекст ввода `ui.modal` (§15) с приоритетом 100 и
+  **гасит `pressed()`** действий, объявленных в других контекстах — игра не
+  увидит то же нажатие;
+* фокус уходит внутрь окна, а прежний узел кладётся в стек; при закрытии
+  (Escape, клик по кнопке, `$.dialog.close()`) фокус возвращается **в том же
+  кадре**.
+
+```js
+$.ui.modalOpen();      // открыто ли модальное окно
+$.ui.inputBlocked();   // единый гейт для игровой логики: if ($.ui.inputBlocked()) return;
+$.ui.modalContext();   // 'ui.modal' или null
+$.ui.closeTop();       // Escape/back: модальное окно → захват ввода → фокус
+$.ui.focusStack();     // кто ждёт фокуса (сверху вниз)
+$.ui.pushFocus(sel);   // своё окно: запомнить фокус и увести внутрь
+$.ui.restoreFocus();   // вернуть из стека (id узла или null)
+```
+
+`consume()` в движке действует на **край** нажатия, поэтому удержания
+(`$.input.down('right')`) игра проверяет сама через `$.ui.inputBlocked()` —
+это записанный контракт, а не недоработка. Числа приёмки: при открытом окне
+`pressed('right')` не дошёл до игры (`right 0 → 0`, `consumed.context =
+'ui.modal'`), при немодальной панели ввод дошёл; Escape вернул фокус
+`menu_btn` и оставил стек пустым.
 
 ## 3. Якоря и относительные размеры
 
@@ -29165,3 +32014,498 @@ $.world.tug('#crate', x, y, { speed: 400, snap: 4 });       // медленне�
   убран, вместо него `$.world.tug`. У `tug` тяга тоже не доводит тело до цели —
   оно доезжает примерно на 270 px из 400 и замирает; причина не выяснена,
   в тесте проверяется ровно то, что работает.
+
+
+---
+
+## Туториал: pattern arena — фазы, пул, пауза, смерть и рестарт
+
+<sub>источник: `docs/tutorial-arena.md`</sub>
+
+# Туториал: pattern arena — фазы, пул, пауза, смерть и рестарт
+
+Как собрать арену с боссом из готовых подсистем `$`: явные фазы, отменяемая
+фаза без «отложенных выстрелов», пул врагов и снарядов, пауза по игровым часам,
+смерть ровно один раз и рестарт без утечек. Полный пример —
+[`demos/arena`](../demos/arena/README.md), автоматическая приёмка —
+`python3 tools/run_tests.py arena_test` (62 проверки).
+
+Справочники: [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md),
+[state.md](highlevel/state.md), [pool.md](highlevel/pool.md),
+[flow.md](highlevel/flow.md), [triggers.md](highlevel/triggers.md) (§44),
+[scene.md](highlevel/scene.md) (§5), [time.md](highlevel/time.md).
+
+---
+
+## 1. Фазы как открытые данные, а не «boss engine»
+
+Спецификация §12 запрещает встраивать универсальный boss framework. Поэтому
+фазы — таблица, а правила переходов — три явных источника: HP, таймер и маркер.
+
+```js
+const PHASES = [
+    { id: 'prepare', hpMax: 101, duration: 900, spawns: 2, shots: 0 },
+    { id: 'volley',  hpMax: 75,  duration: 1400, interval: 320, shots: 1 },
+    { id: 'summon',  hpMax: 50,  duration: 1600, interval: 500, spawns: 3 },
+    { id: 'burst',   hpMax: 25,  duration: 1400, interval: 200, spawns: 1, shots: 3 },
+];
+
+function phaseByHp(hp) {                 // HP-правило
+    let index = 0;
+    for (let i = 0; i < PHASES.length; i++) if (hp <= PHASES[i].hpMax) index = i;
+    return index;
+}
+```
+
+Машина фаз — существующая `$.state`: состояния = фазы, события = `next`,
+`interrupt`, `killed`, а цель `next` вычисляется функцией (данные решают, куда
+идти):
+
+```js
+machine = $.state.create({
+    name: 'arena-boss', initial: 'idle', data: state,
+    states: {
+        idle:    { enter: () => { state.phase = 'idle'; }, on: { start: 'prepare', killed: 'dead' } },
+        prepare: phaseState('prepare'),
+        volley:  phaseState('volley'),
+        summon:  phaseState('summon'),
+        burst:   phaseState('burst'),
+        dead:    { enter: () => onDeath(), on: { restart: 'prepare' } },
+    },
+});
+
+const phaseState = (id) => ({
+    enter: () => startPhase(id),                 // scoped-таймеры фазы
+    exit:  () => stopPhase(false),
+    on: {
+        next: () => (state.hp <= 0 ? 'dead' : pickPhase()),
+        interrupt: { target: 'idle', action: () => cancelPhase('interrupt') },
+        killed: 'dead',
+    },
+});
+```
+
+`pickPhase()` двигает фазу минимум на шаг вперёд и не меньше, чем требует HP:
+таймер обязан менять картину, иначе арена «залипает» на первой фазе.
+
+## 2. Отменяемая фаза: область владения вместо списка таймеров
+
+Действия фазы (очередь выстрелов, спавн волны, таймаут) ставятся в **область
+владения фазы**. Закрытие области снимает всё разом — это и есть гарантия «нет
+отложенных выстрелов»:
+
+```js
+function startPhase(id) {
+    stopPhase(true, 'смена фазы');
+    phaseScope = $.scene.scope('arena:phase:' + (++serial));
+    phaseScope.after(0, () => act(phase));
+    phaseScope.every(phase.interval, () => act(phase));
+    phaseScope.after(phase.duration, () => $.state.send('#boss', 'next'));
+}
+
+function stopPhase(cancelled, reason) {
+    const scope = phaseScope; phaseScope = null;
+    if (!scope) return false;
+    if (cancelled) state.phaseCancels++;
+    scope.close({ immediate: true, reason });     // все таймеры/потоки фазы сняты
+    return true;
+}
+```
+
+Прерывание — переход FSM в `idle`; `exit` фазы закрывает область. В примере
+после отмены за 90 кадров не появляется ни одного нового снаряда и спавна
+(проверяется числом). Уже выпущенные снаряды не телепортируются: они доживают
+и возвращаются в пул по выходу за экран.
+
+## 3. Пул: сотни спавнов без роста узлов
+
+```js
+$.pool.create({ name: 'arena-minions', tag: 'enemy', max: 48, initial: 0, w: 18, h: 18, hp: 10 });
+$.pool.create({ name: 'arena-shots',   tag: 'bullet', max: 64, initial: 0, w: 8, h: 8, gravity: false });
+
+const m = $.pool.spawn('arena-minions', { x, y });   // пусто, если пул исчерпан
+if (m.length) m.velocity(vx, vy);
+...
+el.release();                                        // вернуть в пул
+```
+
+Пул выключает тело вернувшегося узла и убирает его из `ctx.nodes`, поэтому
+`$.scene.counts().nodes` не растёт: в примере три раунда по 60 спавнов дают
+`created = 48`, `spawned = 163`, `skipped = 3`, а узлы держатся на `база + 48`.
+Перед рестартом полезно `$.pool.releaseAll()` — освободить всё, что осталось.
+
+## 4. Пауза: `$.time` плюс §44
+
+Фазы и снаряды тикают **игровым** временем (`$.time.delta()`), поэтому
+`$.time.pause()` останавливает и таймеры фазы, и движение снарядов. Дополнительно
+§44-политика выключает обработку узлов, чтобы они не «просыпались» в обход паузы:
+
+```js
+function setPaused(on) {
+    state.paused = on;
+    if (on) $.time.pause(); else $.time.resume();
+    for (const sel of ['#player', '#boss']) {
+        $(sel).processing(on ? { update: false, timers: false, physics: false } : null);
+    }
+}
+```
+
+Проверка идёт числами: на паузе `$.flow.now()` и позиция снаряда не меняются,
+фаза и счётчик выстрелов стоят, число таймеров не уменьшается; после `resume`
+время идёт, снаряд продолжает движение, `processing('update')` снова `true`.
+
+## 5. Смерть ровно один раз и рестарт без утечек
+
+```js
+function hitPlayer(amount) {
+    if (state.playerDead) return false;          // смерть ровно один раз
+    state.hpPlayer -= amount;
+    if (state.hpPlayer <= 0) $.state.send('#boss', 'killed');
+    return true;
+}
+```
+
+Переход `killed → dead` есть только из живых фаз, поэтому повторный удар в
+состоянии `dead` не находит перехода и счётчик не растёт. В `dead.enter`
+закрывается область фазы и освобождаются снаряды.
+
+Рестарт — явное правило «начать заново»: арена живёт в области владения (§5),
+поэтому `$.scene.load('arena', { scope: true })` заменяет мир целиком, а
+подписки/таймеры сцены закрываются вместе с ней:
+
+```js
+function restart() { setPaused(false); return $.scene.load('arena', { transition: 'none', scope: true }); }
+```
+
+Числа из приёмки: до рестарта и после — одинаковые
+`{nodes:15, bodies:10, subs:1, waits:0, timers:2, tasks:0, flows:0, scopes:2}`,
+`$.state.list().length == 1`, а `$.signal.emit('arena:hit')` после рестарта
+вызывает ровно одну подписку.
+
+## 6. Чего не хватает сегодня
+
+| Чего нет | Обход в примере | Пункт |
+|---|---|---|
+| TTL/auto-release у пула | ручной `release()` по выходу за экран | §21/§47 |
+| Отменяемый переход и остаток таймера у FSM | закрытие scope + `idle`; проверка по факту | §12 |
+| Информация о «съеденном» паузой времени | проверка по возобновлению | §6 |
+| Смена `max` у существующего пула | фиксированный потолок при `create` | §21 |
+| Готовые окна §9 для снарядов из пула | в примере урон боссу — явный вызов | §9 |
+
+Ограничения и трактовки продублированы рядом с API в
+[README примера](../demos/arena/README.md).
+
+
+---
+
+## Туториал: свет на спрайтах — маски, окклюзия, атлас
+
+<sub>источник: `docs/tutorial-litsprites.md`</sub>
+
+# Туториал: свет на спрайтах — маски, окклюзия, атлас
+
+Разбор примера [demos/litsprites](../demos/litsprites/README.md) — §31-5
+Спецификации производственной готовности. Итог: 2D-свет с тенями, маски
+препятствий, динамический occluder, неосвещённые узлы, материал с normal-картой
+и кадры атласа с отражением по X/Y. Всё — публичным `$`.
+
+Запуск: `./build/russiano2d --game demos/litsprites`; проверка —
+`python3 tests/agent/litsprites_test.py`.
+
+## 1. Свет и темнота
+
+```js
+$.camera.at(640, 360).zoom(1);                     // мир == экран: удобно мерить
+$.gfx.light.ambient({ level: 0.55, color: '#05070d' });   // темнота поверх кадра
+
+$('<light>', { radius: 260, intensity: 2.0, color: '#ffbe73',
+               shadows: true, segments: 48 })
+    .at(200, 300).blend('add').appendTo($.world);
+```
+
+`<light>` — обычный узел: он рисуется аддитивно, у него есть радиус, цвет,
+затухание, тени (`shadows(true)`) и конус. Темнота (`ambient`) умножает мир,
+поэтому «свет в тени» и «свет на свету» отличаются числом, а не на глаз.
+
+## 2. Маски препятствий
+
+У каждого отрезка реестра есть биты, а у источника — маска: источник видит
+только те препятствия, у которых есть общие биты (§20.1).
+
+```js
+$.gfx.light.occluders([
+    { x: 260,  y: 220, w: 32, h: 160, mask: 1 },   // препятствие A
+    { x: 1020, y: 220, w: 32, h: 160, mask: 2 },   // препятствие B
+]);
+
+$('#lamp_a').occluderMask(1);   // видит A, не видит B → цель A в тени
+$('#lamp_a').occluderMask(2);   // не видит A → та же цель освещена
+$('#lamp_a').occluderMask();    // геттер
+```
+
+В примере это даёт **34.0** против **85.3** в одной и той же точке: маска — это
+не «выключить свет», а «какие препятствия источник считает».
+
+## 3. Динамический occluder
+
+Любой мир-узел со своим списком `.occluders([...])` — движущееся препятствие;
+координаты локальные, скрытый узел препятствием не считается:
+
+```js
+$('#crate').occluders([{ x: -16, y: -24, w: 32, h: 48 }]);
+$('#crate').at(1020, 300);   // между лампой и целью → цель темнеет
+$('#crate').at(1020, 120);   // ушёл → свет вернулся
+$('#crate').hide();          // скрыт → света не заслоняет
+```
+
+Замеры примера: **34.0** (между) → **86.6** (ушёл) → **86.6** (скрыт).
+Изменение сообщается областью: тени пересчитывают только источники рядом, а не
+все подряд (`$.gfx.light.changeRegions()`, `$.gfx.light.dynamicCount()`).
+
+## 4. Неосвещённые узлы и UI
+
+```js
+$('#sign').lit(false);   // ни света, ни тумана, ни темноты — виден всегда
+$('#sign').lit();        // геттер
+```
+
+Такой узел рисуется после мира и до интерфейса, поэтому RmlUi-HUD (панели,
+подписи) не темнеет вместе со сценой: в примере яркость HUD при
+`ambient 0.15 → 0.95` не меняется вовсе (**26.7 → 26.7**), а пол гаснет
+(**45.0 → 4.3**).
+
+## 5. Материал: normal-карта и flat fallback
+
+```js
+$.gfx.material('stone', {
+    normal: 'demos/litsprites/assets/normal.png',
+    normalConvention: 'opengl',
+    response: { diffuse: 1, ambient: 0.25 },
+});
+$('#crate').material('stone');
+$.gfx.material('stone').perPixelNormal;   // false — попиксельного света нет
+$.gfx.flatNormal();                       // [0.5, 0.5, 1] — нейтраль
+```
+
+Движок сохраняет normal-карту как данные материала и рисует нейтральную норму
+(§20.2): спрайт с материалом и спрайт без него выглядят одинаково (**94.0** и
+**94.0** в примере). Это заявленное ограничение, а не баг примера — для
+попиксельного света нужен второй сэмплер в спрайтовом конвейере.
+
+## 6. Атлас и отражение кадров
+
+```js
+const sheet = $.atlas.load('flip', 'demos/litsprites/assets/atlas.json', { mipmaps: true });
+const all = sheet.tagSprites('all');
+
+$('<sprite>', { id: 'frame_plain' }).at(300, 140).size(64, 64).frames(all).frame(0).appendTo($.world);
+$('<sprite>', { id: 'frame_flipx' }).at(400, 140).size(64, 64).frames(all).frame(0)
+    .flip(true, false).appendTo($.world);
+$('<sprite>', { id: 'frame_flipy' }).at(500, 140).size(64, 64).frames(all).frame(0)
+    .flip(false, true).appendTo($.world);
+```
+
+Атлас собран с `padding: 2` и `extrusion: 1` (край кадра продублирован наружу) —
+только при таком запасе `mipmaps: true` действительно включается, иначе страница
+грузится без мипмапов и кадр «протекает» на соседа (§22,
+`atlas_no_padding`). Проверяется это пикселями: кадр `half` (слева зелёный,
+справа красный, метка в углу) при `.flip(true, false)` меняет половины, а его
+правый край остаётся красным — цвет соседнего синего кадра не появляется.
+
+## Проверка поведения
+
+`tests/agent/litsprites_test.py` (27 проверок) меряет яркость прямо из PNG
+скриншота: тень против света, маска, динамический occluder, скрытый occluder,
+UI и `.lit(false)` под темнотой, материал с normal-картой, четыре угла кадра
+после отражений и край кадра против соседа. Тест проходит и в конфигурации без
+RE2D (`R2D_BINARY=build-2d/russiano2d`).
+
+
+---
+
+## Туториал: восстановление после сбоев (§31-7)
+
+<sub>источник: `docs/tutorial-recovery.md`</sub>
+
+# Туториал: восстановление после сбоев (§31-7)
+
+Как добавить в игру слоты, копию последнего корректного сохранения, горячую
+перезагрузку ассетов и проверку расхождений прогона. Всё — на существующем `$`;
+готовый пример — [`demos/recovery`](../demos/recovery/README.md), автоматическая
+приёмка — `tests/agent/recovery_test.py` (66 проверок).
+
+Разделы спецификации: §14 (save/restore), §26 (replay), §27 (hot reload),
+§17 (диагностика), §31-7 (этот пример).
+
+---
+
+## 1. Что считается «восстановлением»
+
+Сбой — это не только падение процесса. Игра должна переживать четыре вещи:
+
+| Сбой | Кто замечает | Что обязано остаться целым |
+|---|---|---|
+| запись не удалась (нет прав, диск, битый путь) | `$.save.save()` → `false`, `stats().last_error` | последний корректный слот и текущее состояние игры |
+| файл слота испорчен | `$.save.load()` берёт `.bak`, `stats().recovered` | значение последней корректной версии, посторонние слоты |
+| ассет не читается | `$.reload.reload()` → `ok:false` + код | last-known-good: игра продолжает работать |
+| прогон разошёлся | `$.replay.divergence()` | отчёт: первый tick, поля, ID, версии |
+
+Общий принцип: **ошибка до commit не уничтожает рабочее состояние**. Слот
+собирается во временной области и применяется только после проверок, а
+неудачная перезагрузка ассета не подменяет прежнее значение.
+
+## 2. Слоты: запись, копия, восстановление
+
+```js
+$.save.dir('build/recovery-saves');   // writable-каталог, вне дерева ассетов
+$.save.run().set('score', score);     // раздел прохождения (§14)
+$.save.profile().set('lang', 'ru');   // настройки: restartRun() их не сбрасывает
+
+const ok = $.save.save('run');
+if (!ok) reportToPlayer($.save.stats().last_error);
+```
+
+Протокол записи (`docs/highlevel/save.md` §2.3): временный файл → проверка
+чтением → копия предыдущей корректной версии в `slot-run.json.bak` → перезапись
+основного файла → проверка чтением; при провале проверки основной файл
+восстанавливается из копии. Слот «из будущего» (`version` больше поддерживаемой)
+**не перезаписывается** — `save()` вернёт `false`, а счётчик
+`stats().rejected_future` вырастет.
+
+Чтение и лечение:
+
+```js
+// load() при битом основном файле сам возьмёт .bak и посчитает stats().recovered
+if (!$.save.load('run')) show($.save.stats().last_error);
+
+// recover() лечит основной файл из копии: после него файл побайтово равен .bak
+$.save.recover('run');
+
+// verify() — не меняя ничего: { ok, backup, error }
+const v = $.save.verify('run');
+```
+
+`$.save.path(name)` даёт путь файла: по нему видно, куда именно пишет игра
+(проверяйте, что это writable-каталог, а не каталог установки).
+
+## 3. Отказ записи: человек и машина
+
+Строка в журнал — для человека; машине нужен структурный факт. `$.debug`
+собирает его в одном месте (`docs/highlevel/diag.md`):
+
+```js
+const ok = $.save.save('run', { fatal: true });
+if (!ok) {
+    const st = $.save.stats();
+    $.debug.reportError('$.save.write', new Error(st.last_error || 'запись не удалась'),
+                        { fatal: true, code: 'R2D_SAVE_WRITE' });
+}
+// позже: $.debug.errors() → [{ seq, code, subsystem, operation, message, … }]
+```
+
+**Ограничение ядра (проверено примером).** `save({ fatal: true })` сейчас не
+доходит до `$.debug` для стадий `write`/`temp` и для отказа «слот из будущего»:
+`writeSlotText()` вызывает `fail()`/`failWith()` без проброса `fatal`, поэтому
+`stats().last_failure` для стадии `temp` пуст. **Починено в ядре:** `fatal`
+пробрасывается на все стадии записи, отказ даёт `R2D_SAVE_TEMP` в структуре и в
+`$.debug.errors()`, поэтому обход больше не нужен. (Историческая справка: обход
+на стороне игры был —
+как выше: проверить `false` и сообщить самому. Когда ядро начнёт пробрасывать
+`fatal`.)
+
+Экран восстановления показывает игроку состояние и предлагает действия:
+«Повторить» (`load`), «Восстановить из копии» (`recover`), «Сбросить
+прохождение» (`$.save.restartRun()` — сбрасывает run/room, **сохраняя**
+profile/presentation).
+
+## 4. Битый ассет и горячая перезагрузка
+
+```js
+$.reload.watch('panel', {
+    kind: 'json',
+    path: 'assets/panel.json',
+    validate: (data) => data && data.version === 1 ? true : 'panel.json: version должен быть 1',
+    apply: (value) => { $.store.set('panel', value); },
+});
+$.reload.reload('panel');       // первая загрузка — тоже reload
+```
+
+Конвейер `read → validate → prepare → apply`: ошибка любой стадии не публикует
+значение и возвращает структуру:
+
+```js
+const r = $.reload.reload('panel');
+// битый JSON: { ok:false, stage:'validate', code:'R2D_RELOAD_PARSE', error:'…', version:1, changed:false }
+// после починки: { ok:true, stage:'applied', code:null, changed:true, version:2 }
+```
+
+Игра продолжает работать на прежнем значении (`$.reload.value('panel')`), версия
+не растёт, кадры идут. Исправленный файл применяется **без перезапуска**;
+`poll()` применяет только изменившееся на диске. Коды — `R2D_RELOAD_*` в
+`docs/highlevel/reload.md`.
+
+## 5. Прогон: запись, проигрывание, divergence
+
+Записывайте **ввод**, а не состояние, и применяйте его одной функцией в обе
+стороны:
+
+```js
+$.replay.actions(['left', 'right', 'jump'], 'actions/v1');
+$.replay.checkpoints({ every: 10 });          // state hash каждые 10 ticks
+
+$.replay.record(sampler, apply);              // sampler() → ввод кадра
+// … играем …
+const text = $.replay.toText();               // одна строка для файла/багрепорта
+$.replay.stop();
+```
+
+Проигрывание начинается с того же состояния мира (сбросьте позиции и
+`$.random.seed(...)`, если генератор влияет на симуляцию):
+
+```js
+$.replay.load(text);
+$.replay.play(apply);                         // та же apply, что при записи
+// …
+$.replay.divergence();
+// { ok:false, tick:10, expected:'ac2005e6', actual:'c3669809',
+//   fields:[{ field:'n6.x', expected:261834, actual:286834 }], ids:['n6'],
+//   versions:{ schema:'r2d.replay', replay:2, engine:{…}, rng:{…} }, content:{} }
+```
+
+Чистый прогон даёт `divergence() === null`. Отчёт называет **первый** расходящийся
+tick, поля (`nid.поле`) и ID узлов: этого достаточно, чтобы понять, что именно
+пошло не так. В hash входят RNG (кроме presentation-потоков) и узлы по `nid`
+(позиция, угол, скорость, наличие тела); косметика и wall-clock не входят.
+
+`engine.version`/`build` в заголовке JS-биндинги не отдают — их объявляет игра
+через `$.replay.identity({ version, build })`, иначе честно `null`.
+
+## 6. Как это проверить
+
+```bash
+python3 tools/run_tests.py recovery_test
+R2D_BINARY=build-2d/russiano2d python3 tools/run_tests.py recovery_test
+```
+
+Тест проверяет байты, коды и номера, а не «метод существует»:
+
+* битый слот → `stats().recovered = 1`, из `.bak` поднято значение v1,
+  посторонний слот `profile` побайтово не изменён;
+* `recover()` → основной файл побайтово равен `.bak`;
+* отказ записи → `false`, код **`R2D_SAVE_TEMP`** и стадия `temp`, запись в `$.debug.errors()`,
+  экран показывает отказ, кадры идут;
+* слот из будущего → `R2D_SAVE_FUTURE`, файл не изменён;
+* битый ассет → `R2D_RELOAD_PARSE`, версия не выросла, last-known-good жив;
+* починка → `changed:true`, версия 1 → 2;
+* replay: 24 кадра, checkpoint каждые 10, чистый прогон `null`, сдвиг после
+  кадра 7 → `tick = 10`, поле `n6.x`, ID `n6`.
+
+## 7. Границы
+
+* Атомарность замены слота не обещается: в `$.fs` нет `rename`/`fsync`,
+  защита — проверка записи и `.bak`.
+* Реплей воспроизводит только записанный ввод; настенные часы, сеть и
+  `Math.random` ломают соответствие, и движок об этом не догадается.
+* Смена размера текстуры — не hot reload (UV нормированы по старому размеру).
+* Внешний `.rcss` RmlUi кэширует по URL: правка связанного стиля даёт
+  `R2D_RELOAD_STYLE_CACHED`; стиль внутри `.rml` применяется сразу.

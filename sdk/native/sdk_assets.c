@@ -18,6 +18,8 @@ typedef struct TypeRule {
 
 // Порядок важен: более длинные суффиксы раньше коротких.
 static const TypeRule k_rules[] = {
+    { ".batch.json",      "sdk.manifest" },
+    { ".agent.json",      "sdk.agent-session" },
     { ".atlas.json",      "sprite.atlas" },
     { ".tilemap.json",    "tilemap" },
     { ".particles.json",  "particles" },

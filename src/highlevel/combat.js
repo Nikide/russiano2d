@@ -484,15 +484,33 @@ export function noteHit(attack, targetKey, now) {
 }
 
 /**
+ * Привести атаку к полной форме. Одна точка входа для всех читателей: атаку
+ * может собрать игра руками, её возвращает `reflectAttack`, и ни один из этих
+ * путей не обязан помнить про журналы попаданий. Отсутствующие поля создаются
+ * здесь, а не разбросанными `|| []` по коду — иначе `atk.hits.push()` падает
+ * там, где его не ждут (ровно этот дефект нашёл пример demos/melee).
+ */
+export function normalizeAttack(attack) {
+    if (!attack) return attack;
+    if (!Array.isArray(attack.hits)) attack.hits = [];
+    if (!attack.hit_targets) attack.hit_targets = {};
+    if (!attack.cooldown_until) attack.cooldown_until = {};
+    return attack;
+}
+
+/**
  * Политика отражения снаряда/атаки: создаётся НОВАЯ identity (новый id), у неё
  * новый владелец и команда, а старая помечается отражённой. Damage type и
  * множитель урона — по opts, потому что «отражённый вдвое сильнее» — правило
  * игры, а не движка.
+ *
+ * Отражённая атака по форме НЕ отличается от обычной: журналы попаданий
+ * (`hits`, `hit_targets`, `cooldown_until`) создаются сразу.
  */
 export function reflectAttack(spec, opts, makeId, now) {
     const o = opts || {};
     const src = spec || {};
-    const out = {
+    const out = normalizeAttack({
         id: makeId(),
         source: o.source !== undefined ? o.source : src.source,
         owner: o.owner !== undefined ? o.owner : src.owner,
@@ -508,8 +526,7 @@ export function reflectAttack(spec, opts, makeId, now) {
         hit_cooldown: o.hitCooldown !== undefined ? o.hitCooldown : (src.hit_cooldown || 0),
         onOwnerDeath: o.onOwnerDeath !== undefined ? o.onOwnerDeath : 'cancel',
         until: now + (o.window !== undefined ? o.window : (src.window === undefined ? 150 : src.window)) / 1000,
-        hit_targets: {},
-    };
+    });
     if (src) src.reflectedBy = out.id;
     return out;
 }
@@ -675,9 +692,17 @@ export function installCombat($) {
             return atk;
         },
 
-        /** Активные (не истёкшие и не отменённые) атаки — данные, без ссылок на узлы. */
-        attacks() {
-            return activeAttacks();
+        /**
+         * Активные (не истёкшие и не отменённые) атаки — данные, без ссылок на узлы.
+         *
+         * `filter` — необязательный отбор: строка/число = nid владельца, либо
+         * `{ owner, target, active }`:
+         *   * `owner` — только атаки этого владельца (nid);
+         *   * `target` — только те, что уже попали в эту цель (nid);
+         *   * `active: false` — включая истёкшие (по умолчанию только активные).
+         */
+        attacks(filter) {
+            return activeAttacks(filter);
         },
 
         /** Закрыть атаку: дальше она не попадает (reason inactive_window). */
@@ -728,7 +753,7 @@ export function installCombat($) {
             const atk = r.attack !== undefined ? attackOf(r.attack)
                       : (r.attackId !== undefined ? state.attacks.get(r.attackId) : null);
             const now = gameNow();
-            const transient = atk || {
+            const transient = normalizeAttack(atk || {
                 id: null,
                 source_id: source ? source.nid : null,
                 owner_id: source ? source.nid : null,
@@ -739,7 +764,7 @@ export function installCombat($) {
                 onOwnerDeath: 'continue', friendlyFire: !!r.friendlyFire,
                 impulse: r.impulse || null, dir: r.dir || null, data: r.data || null,
                 roles: ['hurtbox', 'movement'], hit_targets: {}, hits: [], cancelled: false,
-            };
+            });
             return applyDamage(transient, target, target, r, now);
         },
 
@@ -755,6 +780,9 @@ export function installCombat($) {
             const atk = attackOf(attack);
             const out = { attackId: atk ? atk.id : null, accepted: 0, rejected: 0, results: [] };
             if (!atk) return out;
+            // Атаку мог собрать и сторонний код: журналы попаданий приводим к
+            // полной форме один раз здесь, а не проверяем в каждом читателе.
+            normalizeAttack(atk);
             if (atk.cancelled || gameNow() > atk.until) {
                 out.reason = 'inactive_window';
                 return out;
@@ -825,22 +853,35 @@ export function installCombat($) {
         return e ? e.source : null;
     }
 
-    /** Атака по объекту или по id. */
+    /** Атака по объекту или по id. Форма приводится к полной (normalizeAttack). */
     function attackOf(what) {
         if (!what) return null;
-        if (typeof what === 'number') return state.attacks.get(what) || null;
-        return what.id !== undefined && what.until !== undefined ? what : null;
+        if (typeof what === 'number') return normalizeAttack(state.attacks.get(what) || null);
+        return what.id !== undefined && what.until !== undefined ? normalizeAttack(what) : null;
     }
 
-    function activeAttacks() {
+    /**
+     * Сводка атак. `filter`: строка/число — nid владельца; объект
+     * `{ owner, target, active }` — отбор по владельцу, по цели, которую атака
+     * уже задела, и по активности (по умолчанию только активные).
+     */
+    function activeAttacks(filter) {
         const now = gameNow();
+        const f = (typeof filter === 'string' || typeof filter === 'number')
+            ? { owner: filter } : (filter || {});
+        const onlyActive = f.active !== false;
         const out = [];
-        for (const atk of state.attacks.values()) {
+        for (const raw of state.attacks.values()) {
+            const atk = normalizeAttack(raw);
             if (atk.cancelled) continue;
+            const active = now <= atk.until;
+            if (onlyActive && !active) continue;
+            if (f.owner !== undefined && f.owner !== null && String(atk.owner_id) !== String(f.owner)) continue;
+            if (f.target !== undefined && f.target !== null && !atk.hit_targets[String(f.target)]) continue;
             out.push({
                 id: atk.id, source_id: atk.source_id, owner_id: atk.owner_id,
                 team: atk.team, amount: atk.amount, damageType: atk.damageType,
-                window: atk.window, until: atk.until, active: now <= atk.until,
+                window: atk.window, until: atk.until, active,
                 rehit: atk.rehit, hits: atk.hits.length, reflected: !!atk.reflected,
                 reflectedFrom: atk.reflectedFrom === undefined ? null : atk.reflectedFrom,
             });
@@ -885,6 +926,9 @@ export function installCombat($) {
     function applyDamage(atk, target, owner, extra, now) {
         const o = extra || {};
         const time = now === undefined ? gameNow() : now;
+        // Одна точка приведения формы: и `strike`, и `damageRequest`, и игра,
+        // собравшая атаку руками, приходят сюда — журналы попаданий должны быть.
+        normalizeAttack(atk);
         const response = {
             accepted: false, reason: null,
             attackId: atk.id,
@@ -895,6 +939,12 @@ export function installCombat($) {
             applied: 0, blocked: 0, hpBefore: 0, hpAfter: 0,
             death: false, zone: null, damageType: atk.damageType,
             area: o.area || null, role: o.role || null,
+            // Позиция цели — ФАКТ, известный движку; точка контакта, если её дал
+            // контекст, кладётся в nx/ny иначе null (не выдумываем).
+            x: target ? target.x : null,
+            y: target ? target.y : null,
+            nx: o.nx === undefined ? null : o.nx,
+            ny: o.ny === undefined ? null : o.ny,
         };
 
         const health = target ? models.get(target) || null : null;
@@ -919,6 +969,18 @@ export function installCombat($) {
         });
         if (reason) {
             response.reason = reason;
+            // §28: решение фильтра — отдельная запись, а не только следствие.
+            // Без неё по hit ID нельзя ответить на вопрос «ПОЧЕМУ не прошло».
+            note('combat:filter', target, {
+                attack: atk.id, accepted: false, reason,
+                input: {
+                    targetExists: !!(target && !target.removed),
+                    duplicate: !hit.allowed && hit.reason === 'duplicate',
+                    teamMismatch: teamMismatch(atk, target),
+                    iframes: target ? (target.iframes || 0) : 0,
+                    amount: atk.amount,
+                },
+            });
             note('damage', target, { attack: atk.id, accepted: false, reason });
             if (target && typeof target.emit === 'function') {
                 try { target.emit('damage', response); } catch (e) { /* игра не должна ронять бой */ }
@@ -927,6 +989,7 @@ export function installCombat($) {
         }
 
         response.accepted = true;
+        note('combat:filter', target, { attack: atk.id, accepted: true, reason: null });
         response.hpBefore = hp;
         if (health) {
             const zone = o.zone || (atk.data && atk.data.zone) || zoneForSlot(o.role || '');

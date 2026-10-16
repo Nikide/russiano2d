@@ -42,6 +42,8 @@ export function normalizeFrame(name, raw) {
         duration: Number(raw.duration) > 0 ? Number(raw.duration) : 0,
         rotated: !!box.rotated || !!raw.rotated,
         trimmed: !!raw.trimmed,
+        // Мультистраничный атлас: кадр знает свою страницу (индекс или имя).
+        page: raw.page === undefined ? null : raw.page,
     };
 }
 
@@ -88,6 +90,11 @@ export function parseAtlas(data) {
             if (tag.direction === 'reverse') list.reverse();
             out.tags[name] = list;
         }
+    }
+    // Размер страницы, картинка и масштаб читаются и БЕЗ frameTags: они есть у
+    // любого экспорта (TexturePacker/LibGDX тоже), а проверка кадров на выход
+    // за страницу без meta.size невозможна.
+    if (data.meta) {
         if (data.meta.size) out.meta.size = { w: Number(data.meta.size.w), h: Number(data.meta.size.h) };
         if (data.meta.image) out.meta.image = String(data.meta.image);
         if (data.meta.scale !== undefined) out.meta.scale = String(data.meta.scale);
@@ -130,16 +137,242 @@ export function parseAtlas(data) {
         }
     }
 
-    // Свой формат может нести теги отдельным полем.
-    if (!tags && data.tags && typeof data.tags === 'object') {
+    // Свой формат может нести теги отдельным полем. Обрабатываем его и при
+    // наличии frameTags: у наборов разные имена, и терять пользовательский тег
+    // из-за одного служебного поля нельзя.
+    if (data.tags && typeof data.tags === 'object') {
         for (const name of Object.keys(data.tags)) {
+            if (out.tags[name] !== undefined) continue;
             const value = data.tags[name];
             if (Array.isArray(value)) out.tags[String(name)] = value.map(String);
         }
     }
 
     out.meta.image = out.meta.image || (typeof data.image === 'string' ? data.image : null);
+
+    // --- Политика упаковки: страницы, padding и extrusion -------------------
+    // Мультистраничный атлас: `meta.pages` — список страниц (путь или
+    // {image}), а кадр несёт `page`. Без pages страница одна (meta.image).
+    const raw_pages = data.meta && Array.isArray(data.meta.pages) ? data.meta.pages
+        : (Array.isArray(data.pages) ? data.pages : null);
+    if (raw_pages) {
+        out.meta.pages = raw_pages.map((page, i) => {
+            if (typeof page === 'string') return { index: i, image: page, name: 'page' + i };
+            const p = page || {};
+            return {
+                index: i,
+                name: String(p.name === undefined ? 'page' + i : p.name),
+                image: typeof p.image === 'string' ? p.image : null,
+            };
+        });
+    } else {
+        out.meta.pages = [{ index: 0, name: 'page0', image: out.meta.image }];
+    }
+    for (const frame of out.frames) {
+        if (frame.page === null) frame.page = 0;
+        else if (typeof frame.page === 'string') {
+            const idx = out.meta.pages.findIndex((p) => p.name === frame.page);
+            frame.page = idx < 0 ? 0 : idx;
+        } else {
+            frame.page = Math.max(0, Number(frame.page) | 0);
+        }
+    }
+
+    // padding/extrusion — политика упаковщика; читается инструментами и
+    // проверкой качества (см. verifyAtlas), сам рендер её не пересчитывает.
+    if (data.meta) {
+        if (data.meta.padding !== undefined) out.meta.padding = Number(data.meta.padding) || 0;
+        if (data.meta.extrusion !== undefined) out.meta.extrusion = Number(data.meta.extrusion) || 0;
+        if (data.meta.materialPages && typeof data.meta.materialPages === 'object') {
+            out.meta.materialPages = data.meta.materialPages;
+        }
+        // Import manifest: content hash, версия импортёра, настройки, зависимости.
+        if (data.meta.import && typeof data.meta.import === 'object') {
+            const im = data.meta.import;
+            out.meta.import = {
+                version: im.version === undefined ? null : Number(im.version),
+                importer: im.importer === undefined ? null : String(im.importer),
+                contentHash: im.contentHash === undefined ? (im.hash === undefined ? null : String(im.hash))
+                                                          : String(im.contentHash),
+                settings: im.settings && typeof im.settings === 'object' ? im.settings : {},
+                dependencies: Array.isArray(im.dependencies) ? im.dependencies.map(String) : [],
+            };
+        }
+    }
+
+    // Повёрнутые кадры — отдельным списком: молча пропускать часть кадров
+    // production-клипа нельзя (см. buildSheet и verifyAtlas).
+    out.rotated = out.frames.filter((f) => f.rotated).map((f) => f.name);
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// Ошибки атласа: структурированно
+//
+// Раньше описание проблемы жило только строкой в журнале: игра не могла
+// отличить «нет картинки» от «нет кадров», а тест — проверить причину.
+// Теперь каждая ошибка идёт и в $.debug.reportError (код/подсистема/путь), и в
+// кольцо $.atlas.errors() — второе работает и без движка, в qjs-тестах.
+// ---------------------------------------------------------------------------
+const atlas_errors = [];
+let atlas_dollar = null;      // ставится installAtlas: нужен $.debug.reportError
+
+function atlasFail(where, code, message, extra) {
+    const entry = Object.assign({ code, message, where }, extra || {});
+    atlas_errors.push(entry);
+    if (atlas_errors.length > 64) atlas_errors.shift();
+    const opts = Object.assign({ code, subsystem: 'atlas', fatal: false }, extra || {});
+    // $.debug.reportError передаёт код/подсистему/пути в журнал диагностики.
+    // ctx.reportError — запасной путь: он старее и третьего аргумента не знает.
+    if (atlas_dollar && atlas_dollar.debug && typeof atlas_dollar.debug.reportError === 'function') {
+        atlas_dollar.debug.reportError(where, new Error(message), opts);
+    } else if (typeof ctx.reportError === 'function') {
+        ctx.reportError(where, new Error(message), opts);
+    } else {
+        ctx.log('$.atlas (' + code + '): ' + message);
+    }
+    return null;
+}
+
+/**
+ * Проверка данных атласа без загрузки: кадры, страницы, padding, теги,
+ * манифест импорта. Чистая функция — годится и SDK-инструменту, и тесту.
+ * Возвращает { ok, errors, warnings, frames, pages, format }.
+ */
+export function verifyAtlas(data, opts) {
+    const o = opts || {};
+    const parsed = parseAtlas(data);
+    const errors = [];
+    const warnings = [];
+    const frames = parsed.frames;
+    const pages = parsed.meta.pages || [];
+
+    if (!frames.length) {
+        errors.push({ code: 'atlas_no_frames', message: 'в данных атласа нет кадров' });
+    }
+    for (const name of parsed.rotated) {
+        errors.push({ code: 'atlas_rotated_frame',
+                      message: 'кадр "' + name + '" повёрнут в атласе',
+                      frame: name });
+    }
+
+    const size = parsed.meta.size;
+    if (size && size.w > 0 && size.h > 0) {
+        for (const f of frames) {
+            if (f.x < 0 || f.y < 0 || f.x + f.w > size.w || f.y + f.h > size.h) {
+                errors.push({ code: 'atlas_frame_out_of_page',
+                              message: 'кадр "' + f.name + '" выходит за страницу '
+                                  + size.w + '×' + size.h,
+                              frame: f.name });
+            }
+            if (f.page >= pages.length) {
+                errors.push({ code: 'atlas_frame_page_missing',
+                              message: 'у кадра "' + f.name + '" нет страницы ' + f.page,
+                              frame: f.name });
+            }
+        }
+        for (const page of pages) {
+            if (!page.image) {
+                errors.push({ code: 'atlas_page_no_image',
+                              message: 'у страницы "' + page.name + '" не указан файл' });
+            }
+        }
+    }
+
+    // Перекрытия и padding: перекрытие — ошибка упаковки, слишком маленький
+    // зазор — предупреждение (при linear-фильтрации и мипмапах сосед может
+    // «протечь»; политика — padding/extrusion в упаковщике).
+    const padding = parsed.meta.padding === undefined ? 0 : parsed.meta.padding;
+    for (let i = 0; i < frames.length; i++) {
+        for (let j = i + 1; j < frames.length; j++) {
+            const a = frames[i], b = frames[j];
+            if (a.page !== b.page) continue;
+            const gap_x = Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w));
+            const gap_y = Math.max(b.y - (a.y + a.h), a.y - (b.y + b.h));
+            if (gap_x < 0 && gap_y < 0) {
+                errors.push({ code: 'atlas_frames_overlap',
+                              message: 'кадры "' + a.name + '" и "' + b.name + '" перекрываются',
+                              frames: [a.name, b.name] });
+            } else {
+                const want = Math.max(1, padding);
+                if (gap_x < want && gap_y < want) {
+                    warnings.push({ code: padding > 0 ? 'atlas_padding_small' : 'atlas_no_padding',
+                                    message: 'кадры "' + a.name + '" и "' + b.name
+                                        + '" стоят вплотную (padding ' + padding
+                                        + ') — при linear-фильтрации и мипмапах возможна протечка',
+                                    frames: [a.name, b.name] });
+                }
+            }
+        }
+    }
+
+    if (frames.length && frames.every((f) => !f.duration)) {
+        warnings.push({ code: 'atlas_no_durations',
+                        message: 'ни у одного кадра нет длительности' });
+    }
+
+    // Power-of-two: не обязательна для современных GPU, но удобна для
+    // стриминга и старых бэкендов — предупреждаем, а не запрещаем.
+    const pot = (v) => v > 0 && (v & (v - 1)) === 0;
+    if (size && size.w > 0 && size.h > 0 && !(pot(size.w) && pot(size.h))) {
+        warnings.push({ code: 'atlas_page_not_pot',
+                        message: 'страница ' + size.w + '×' + size.h
+                            + ' не степень двойки (padding/PoT-политика упаковщика)' });
+    }
+
+    for (const tag of Object.keys(parsed.tags)) {
+        for (const frame_name of parsed.tags[tag]) {
+            if (!frames.some((f) => f.name === frame_name)) {
+                errors.push({ code: 'atlas_tag_frame_missing',
+                              message: 'тег "' + tag + '" ссылается на несуществующий кадр "'
+                                  + frame_name + '"' });
+            }
+        }
+    }
+
+    const manifest = parsed.meta.import;
+    if (manifest) {
+        if (!manifest.version) {
+            warnings.push({ code: 'atlas_manifest_version_missing',
+                            message: 'import-манифест без версии' });
+        } else if (o.manifestVersion !== undefined && manifest.version > o.manifestVersion) {
+            errors.push({ code: 'atlas_manifest_version',
+                          message: 'версия манифеста ' + manifest.version
+                              + ' новее поддерживаемой ' + o.manifestVersion });
+        }
+        if (o.importer && manifest.importer && manifest.importer !== o.importer) {
+            warnings.push({ code: 'atlas_importer_mismatch',
+                            message: 'манифест собран импортёром "' + manifest.importer
+                                + '", ожидался "' + o.importer + '"' });
+        }
+        if (!manifest.contentHash) {
+            warnings.push({ code: 'atlas_manifest_no_hash',
+                            message: 'в манифесте нет content hash — кэш не проверить' });
+        }
+    }
+
+    return {
+        ok: errors.length === 0,
+        errors, warnings,
+        frames: frames.length,
+        pages: pages.length,
+        format: parsed.format,
+        rotated: parsed.rotated.slice(),
+        manifest: manifest || null,
+    };
+}
+
+/**
+ * Путь ассета относительно файла-владельца (JSON атласа): абсолютные пути и
+ * схемы (`http:`, `file:`) остаются как есть. Тот же принцип, что у путей
+ * ресурсов (§4.2 спецификации) — никаких путей от рабочего каталога.
+ */
+export function resolveAssetPath(path, json_path) {
+    const p = String(path || '');
+    if (!p) return null;
+    if (/^([a-z]+:)?\//i.test(p)) return p;
+    const dir = String(json_path || '').replace(/[^/]*$/, '');
+    return dir + p;
 }
 
 /** Имя файла картинки для атласа: из данных или рядом с JSON. */
@@ -162,33 +395,110 @@ export function atlasImagePath(json_path, data) {
 /** Загруженный атлас: кадры-спрайты по имени, теги, картинка. */
 function buildSheet(name, spec, data, json_path) {
     const parsed = parseAtlas(data);
+    const where = '$.atlas.load("' + name + '")';
     if (!parsed.frames.length) {
-        ctx.log(`$.atlas.load("${name}"): в данных нет кадров — проверьте поле frames`);
-        return null;
+        return atlasFail(where, 'atlas_no_frames', 'в данных нет кадров — проверьте поле frames',
+                         { jsonPath: json_path || null });
     }
-    const image = spec.src || spec.image || atlasImagePath(json_path, data);
-    const texture = engine.loadTexture(image);
-    if (!(texture >= 0)) {
-        ctx.log(`$.atlas.load("${name}"): не удалось загрузить картинку "${image}"`);
-        return null;
+    // Повёрнутые кадры: молча пропускать часть production-клипа нельзя.
+    // Либо весь атлас отклоняется с точной диагностикой, либо автор явно
+    // разрешает взять регионы как есть (`allowRotated: true`).
+    if (parsed.rotated.length && spec.allowRotated !== true) {
+        return atlasFail(where, 'atlas_rotated_frame',
+                         'в атласе повёрнутые кадры (' + parsed.rotated.join(', ')
+                         + ') — выгрузите без поворота или укажите allowRotated: true',
+                         { jsonPath: json_path || null, data: { frames: parsed.rotated.slice() } });
+    }
+    if (parsed.rotated.length) {
+        ctx.log(where + ': повёрнутые кадры взяты как есть (allowRotated) — '
+              + parsed.rotated.join(', '));
+    }
+
+    // Страницы: у каждой свой файл. Пустая/отсутствующая страница — ошибка с
+    // кодом, а не пустой спрайт.
+    const pages = parsed.meta.pages && parsed.meta.pages.length
+        ? parsed.meta.pages : [{ index: 0, name: 'page0', image: null }];
+    const images = [];
+    const textures = [];
+    const page_mipmaps_used = [];
+    // Мипмапы разрешены только при политике упаковки с запасом.
+    const pad_meta = parsed.meta.padding === undefined ? 0 : parsed.meta.padding;
+    const ext_meta = parsed.meta.extrusion === undefined ? 0 : parsed.meta.extrusion;
+    const mipmapsAllowed = pad_meta >= 1 && ext_meta >= 1;
+    for (let i = 0; i < pages.length; i++) {
+        const page = pages[i];
+        // Путь страницы — относительно JSON атласа (как meta.image), а не
+        // рабочего каталога. atlasImagePath() уже подставляет каталог JSON,
+        // поэтому один и тот же путь дважды не префиксуем.
+        let image = null;
+        if (i === 0 && (spec.src || spec.image)) image = resolveAssetPath(spec.src || spec.image, json_path);
+        else if (page.image) image = resolveAssetPath(page.image, json_path);
+        else if (i === 0) image = atlasImagePath(json_path, data);
+        if (!image) {
+            return atlasFail(where, 'atlas_page_no_image',
+                             'у страницы "' + page.name + '" не указан файл',
+                             { jsonPath: json_path || null });
+        }
+        // Мипмапы атласа без padding/extrusion «протекают» на соседний кадр:
+        // грубые уровни усредняют всю страницу. Поэтому уровни включаются
+        // только при явной политике упаковки, иначе страница грузится без них
+        // (на нулевом уровне полутексельный отступ уже держит край).
+        let page_mipmaps = spec.mipmaps === true;
+        if (page_mipmaps && !mipmapsAllowed) {
+            ctx.log(where + ': страница "' + page.name + '" без padding/extrusion — '
+                  + 'мипмапы выключены, чтобы кадры не «протекали» друг в друга '
+                  + '(meta.padding >= 1 и meta.extrusion >= 1)');
+            page_mipmaps = false;
+        }
+        const texture = page_mipmaps
+            ? engine.loadTexture(image, { mipmaps: true })
+            : engine.loadTexture(image);
+        if (!(texture >= 0)) {
+            return atlasFail(where, 'atlas_page_missing',
+                             'не удалось загрузить страницу "' + page.name + '" ("' + image + '")',
+                             { assetPath: image, jsonPath: json_path || null });
+        }
+        images.push(image);
+        textures.push(texture);
+        page_mipmaps_used.push(page_mipmaps);
+    }
+    if (spec.allowRotated !== true && images.length === 0) {
+        return atlasFail(where, 'atlas_page_missing', 'у атласа нет ни одной страницы', {});
     }
 
     const sprites = {};
+    const sprite_page = {};
     for (const frame of parsed.frames) {
-        if (frame.rotated) {
-            ctx.log(`$.atlas.load("${name}"): кадр "${frame.name}" повёрнут в атласе — `
-                  + 'такие не поддержаны, выгрузите без поворота');
-            continue;
-        }
-        sprites[frame.name] = engine.createSprite(texture, frame.x, frame.y, frame.w, frame.h);
+        const page = frame.page >= 0 && frame.page < textures.length ? frame.page : 0;
+        sprites[frame.name] = engine.createSprite(textures[page], frame.x, frame.y, frame.w, frame.h);
+        sprite_page[frame.name] = page;
     }
 
     const sheet = {
         name,
-        image,
-        texture,
+        image: images[0] || null,
+        images,
+        texture: textures[0] || -1,
         format: parsed.format,
         meta: parsed.meta,
+        manifest: parsed.meta.import || null,
+        /** Страница кадра: индекс (или -1, если кадра нет). */
+        page(frame_name) {
+            const page = sprite_page[String(frame_name)];
+            return page === undefined ? -1 : page;
+        },
+        /** Описание страниц: [{ index, name, image, frames }]. */
+        pages() {
+            return pages.map((page, i) => ({
+                index: i,
+                name: page.name,
+                image: images[i] || null,
+                mipmaps: !!page_mipmaps_used[i],
+                frames: parsed.frames.filter((f) => f.page === i).map((f) => f.name),
+            }));
+        },
+        /** Проверка данных атласа: см. verifyAtlas. */
+        verify(opts) { return verifyAtlas(data, opts); },
 
         /** Спрайт кадра по имени; -1, если такого кадра нет. */
         frame(frame_name) {
@@ -255,13 +565,25 @@ function buildSheet(name, spec, data, json_path) {
             return info && info.duration ? info.duration : 0;
         },
 
-        /** Размер картинки атласа: [ширина, высота]. */
-        size() { return engine.textureSize(texture); },
+        /**
+         * Размер картинки атласа: [ширина, высота].
+         *
+         * Текстуру берём у самой оболочки (`this.texture`, первая страница):
+         * раньше здесь стояло свободное имя `texture`, которого в области
+         * видимости нет, и вызов падал с ReferenceError — при том что
+         * docs/highlevel/atlas.md этот метод обещает.
+         */
+        size() {
+            const id = this.texture !== undefined ? this.texture : (textures[0] || -1);
+            if (id < 0 || typeof engine.textureSize !== 'function') return [0, 0];
+            return engine.textureSize(id);
+        },
     };
     return sheet;
 }
 
 export function installAtlas($) {
+    atlas_dollar = $;
     const loaded = new Map();
 
     const atlas = {
@@ -316,6 +638,19 @@ export function installAtlas($) {
 
         /** Разобрать данные без загрузки — для отладки и тестов. */
         parse(data) { return parseAtlas(data); },
+
+        /**
+         * Проверка данных атласа без загрузки: кадры, страницы, padding,
+         * теги, import-манифест. `{ ok, errors, warnings, frames, pages }`.
+         */
+        verify(data, opts) { return verifyAtlas(data, opts); },
+
+        /** Кольцо структурированных ошибок атласа (работает и без движка). */
+        errors() { return atlas_errors.slice(); },
+        clearErrors() { atlas_errors.length = 0; return 0; },
+
+        /** Import-манифест загруженного атласа (или null). */
+        manifest(name) { return loaded.has(String(name)) ? loaded.get(String(name)).manifest : null; },
 
         /** Путь к картинке атласа по данным и пути JSON. */
         imagePath(json_path, data) { return atlasImagePath(json_path, data); },

@@ -39,6 +39,21 @@ python3 tests/doc_coverage_test.py
 python3 tests/doc_claims_test.py
 python3 tests/repository_hygiene_test.py
 
+# Чеклист §37 и программа приёмки §35 спецификации: обязательства архитектуры,
+# доказательство для каждого P0-пункта и gate производительности. Они дешёвые
+# (отчёт замера уже лежит в build/), поэтому идут перед каждым релизом.
+python3 tests/checklist_test.py
+python3 tests/acceptance_test.py
+python3 tests/format_extensions_test.py
+# §29: каждый зарегистрированный тип валидатора SDK обязан иметь работающую
+# проверку — корректный ассет проходит, сломанный выявляется до запуска.
+python3 tests/sdk_validation_test.py
+# §29: preview SDK и прямой запуск обязаны давать одни и те же данные —
+# сравниваем разбор SDK с разбором движка по числам.
+python3 tests/sdk_preview_parity_test.py
+# §31: примеры обязаны запускаться как проекты и быть описаны в документации.
+python3 tests/demos_examples_test.py
+
 # --- 2. Полный прогон тестов и обеих конфигураций ---------------------------
 # Дорого, но релиз — не место для «должно работать». SKIP_TESTS=1 оставлен для
 # случаев, когда прогон уже сделан вручную на этой же ревизии.
@@ -52,9 +67,21 @@ else
     step "Агентские тесты (полный набор)"
     R2D_TEST_TIMEOUT="${R2D_TEST_TIMEOUT:-600}" python3 tools/run_tests.py
 
+    step "Сборка встроила актуальные исходники"
+    # Движок не читает src/highlevel с диска: сборка встраивает модули в
+    # бинарник. Если шаг встраивания отстал или испортил escaping, движок
+    # падает на старте с «SyntaxError», а исходники выглядят целыми.
+    python3 tests/embed_sync_test.py
+    # Парсер QuickJS строже Node: незакрытая скобка вызова проходила
+    # `node --check`, но валила ВЕСЬ бандл на старте. Ловим это до сборки.
+    python3 tests/parse_all_test.py
+
     step "Сборка без RE2D: ключевые тесты"
     R2D_BINARY=build-2d/russiano2d R2D_TEST_TIMEOUT=400 python3 tools/run_tests.py \
         game_test re2d_gate_test demos_test foundations_test
+
+    step "Приёмка профиля 2D (установленное поведение)"
+    python3 tests/profile_2d_test.py
 fi
 
 # --- 3. Пересборка страниц сайта из docs/ -----------------------------------

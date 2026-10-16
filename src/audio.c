@@ -89,14 +89,23 @@ int r2d_audio_group(R2DAudio *a, const char *name)
     if (!a || !a->ready || !a->mixer || !name || !*name) return -1;
 
     for (int i = 0; i < a->group_count; ++i) {
-        if (SDL_strcmp(a->groups[i].name, name) == 0) return i;
+        if (a->group_used[i] && SDL_strcmp(a->groups[i].name, name) == 0) return i;
     }
-    if (a->group_count >= R2D_AUDIO_MAX_GROUPS) {
-        R2D_ERROR("достигнут лимит аудио-шин (%d)", R2D_AUDIO_MAX_GROUPS);
-        return -1;
+    // Свободный слот после destroy переиспользуем: индексы шин, которые уже
+    // держит JS, не должны съезжать, а лимит групп — не выгорать.
+    int slot = -1;
+    for (int i = 0; i < a->group_count; ++i) {
+        if (!a->group_used[i]) { slot = i; break; }
+    }
+    if (slot < 0) {
+        if (a->group_count >= R2D_AUDIO_MAX_GROUPS) {
+            R2D_ERROR("достигнут лимит аудио-шин (%d)", R2D_AUDIO_MAX_GROUPS);
+            return -1;
+        }
+        slot = a->group_count++;
     }
 
-    R2DAudioGroup *g = &a->groups[a->group_count];
+    R2DAudioGroup *g = &a->groups[slot];
     SDL_zero(*g);
     g->handle = MIX_CreateGroup(a->mixer);
     if (!g->handle) {
@@ -109,7 +118,28 @@ int r2d_audio_group(R2DAudio *a, const char *name)
     if (!MIX_SetGroupPostMixCallback(g->handle, r2d__group_fx, &g->fx)) {
         R2D_WARN("MIX_SetGroupPostMixCallback(%s): %s", g->name, SDL_GetError());
     }
-    return a->group_count++;
+    a->group_used[slot] = true;
+    return slot;
+}
+
+bool r2d_audio_group_destroy(R2DAudio *a, int group_id)
+{
+    if (!a || group_id < 0 || group_id >= a->group_count) return false;
+    if (!a->group_used[group_id]) return false;
+    R2DAudioGroup *g = &a->groups[group_id];
+    // Сначала снимаем колбэк и гасим эффект: хвост реверба не должен
+    // «доигрывать» в чужом миксе после освобождения шины.
+    if (g->handle) {
+        MIX_SetGroupPostMixCallback(g->handle, NULL, NULL);
+        MIX_DestroyGroup(g->handle);
+        g->handle = NULL;
+    }
+    r2d_audio_fx_shutdown(&g->fx);
+    SDL_zero(g->fx);
+    g->fx.kind = R2D_AUDIO_FX_NONE;
+    g->name[0] = '\0';
+    a->group_used[group_id] = false;
+    return true;
 }
 
 int r2d_audio_group_count(const R2DAudio *a) { return a ? a->group_count : 0; }
@@ -292,6 +322,185 @@ float r2d_audio_get_channel_pitch(const R2DAudio *a, int channel)
     return a->channel_pitch[channel];
 }
 
+
+// ---------------------------------------------------------------------------
+// Музыкальные слои (§25): один transport на все stem'ы
+//
+// Запуск каждого слоя отдельным вызовом из JS давал бы разное время старта
+// (два вызова в одном кадре всё равно попадают в разные буферы микшера).
+// Поэтому старт идёт ОДНОЙ нативной командой под локом микшера: SDL_mixer
+// фиксирует начало воспроизведения на одном sample-clock, и слои остаются в
+// фазе. Seek и pause — такие же групповые команды.
+// ---------------------------------------------------------------------------
+
+int r2d_audio_stems_set(R2DAudio *a, const int *sound_ids, int count)
+{
+    if (!a) return 0;
+    for (int i = 0; i < a->stem_count; ++i) {
+        if (a->stems[i]) {
+            MIX_StopTrack(a->stems[i], 0);
+            MIX_DestroyTrack(a->stems[i]);
+            a->stems[i] = NULL;
+        }
+    }
+    a->stem_count = 0;
+    a->stems_active = false;
+    a->stems_paused = false;
+    if (!a->ready || !a->mixer || !sound_ids || count <= 0) return 0;
+
+    const int n = count > R2D_AUDIO_MAX_STEMS ? R2D_AUDIO_MAX_STEMS : count;
+    for (int i = 0; i < n; ++i) {
+        const int id = sound_ids[i];
+        if (id < 0 || id >= R2D_AUDIO_MAX_SOUNDS || !a->sounds[id]) continue;
+        MIX_Track *track = MIX_CreateTrack(a->mixer);
+        if (!track) {
+            R2D_WARN("MIX_CreateTrack (слой %d): %s", i, SDL_GetError());
+            continue;
+        }
+        if (!MIX_SetTrackAudio(track, a->sounds[id])) {
+            MIX_DestroyTrack(track);
+            continue;
+        }
+        if (a->stem_gain[a->stem_count] <= 0.0f) a->stem_gain[a->stem_count] = 1.0f;
+        MIX_SetTrackGain(track, r2d__clamp01(a->stem_gain[a->stem_count]) * a->music_volume);
+        a->stems[a->stem_count++] = track;
+    }
+    return a->stem_count;
+}
+
+int r2d_audio_stem_count(const R2DAudio *a) { return a ? a->stem_count : 0; }
+
+bool r2d_audio_stems_start(R2DAudio *a, bool loop, float fade_ms, double start_ms,
+                           double loop_start_ms, double loop_end_ms)
+{
+    if (!a || !a->ready || a->stem_count <= 0) return false;
+    SDL_PropertiesID props = SDL_CreateProperties();
+    if (!props) return false;
+    SDL_SetNumberProperty(props, MIX_PROP_PLAY_LOOPS_NUMBER, loop ? -1 : 0);
+    if (start_ms > 0.0) {
+        SDL_SetNumberProperty(props, MIX_PROP_PLAY_START_MILLISECOND_NUMBER, (Sint64)(start_ms + 0.5));
+    }
+    // Конец петли задаём как «максимум» файла: SDL_mixer сам зациклит на
+    // loop_start, поэтому щели между итерациями не возникает.
+    if (loop_end_ms > 0.0) {
+        SDL_SetNumberProperty(props, MIX_PROP_PLAY_MAX_MILLISECONDS_NUMBER, (Sint64)(loop_end_ms + 0.5));
+    }
+    if (loop && loop_start_ms > 0.0) {
+        SDL_SetNumberProperty(props, MIX_PROP_PLAY_LOOP_START_MILLISECOND_NUMBER, (Sint64)(loop_start_ms + 0.5));
+    }
+    if (fade_ms > 0.0f) {
+        SDL_SetNumberProperty(props, MIX_PROP_PLAY_FADE_IN_MILLISECONDS_NUMBER, (Sint64)(fade_ms + 0.5f));
+    }
+
+    // Лок микшера: все PlayTrack попадают в один и тот же момент времени.
+    MIX_LockMixer(a->mixer);
+    for (int i = 0; i < a->stem_count; ++i) {
+        if (a->stems[i]) MIX_PlayTrack(a->stems[i], props);
+    }
+    MIX_UnlockMixer(a->mixer);
+    SDL_DestroyProperties(props);
+
+    a->stems_active = true;
+    a->stems_paused = false;
+    a->stems_loop_start_ms = loop_start_ms;
+    a->stems_loop_end_ms = loop_end_ms;
+    return true;
+}
+
+bool r2d_audio_stems_seek(R2DAudio *a, double seconds)
+{
+    if (!a || a->stem_count <= 0) return false;
+    if (seconds < 0.0) seconds = 0.0;
+    const Sint64 ms = (Sint64)(seconds * 1000.0 + 0.5);
+    MIX_LockMixer(a->mixer);
+    for (int i = 0; i < a->stem_count; ++i) {
+        if (!a->stems[i]) continue;
+        // Одна и та же миллисекунда для всех слоёв: SDL_mixer переводит её в
+        // кадры по формату своего файла, поэтому слои с одинаковым sample rate
+        // получают одинаковую позицию.
+        MIX_SetTrackPlaybackPosition(a->stems[i], MIX_TrackMSToFrames(a->stems[i], ms));
+    }
+    MIX_UnlockMixer(a->mixer);
+    return true;
+}
+
+void r2d_audio_stems_pause(R2DAudio *a, bool paused)
+{
+    if (!a || a->stem_count <= 0) return;
+    for (int i = 0; i < a->stem_count; ++i) {
+        if (!a->stems[i]) continue;
+        if (paused) MIX_PauseTrack(a->stems[i]);
+        else MIX_ResumeTrack(a->stems[i]);
+    }
+    a->stems_paused = paused;
+}
+
+bool r2d_audio_stems_paused(const R2DAudio *a) { return a ? a->stems_paused : false; }
+
+bool r2d_audio_stems_playing(const R2DAudio *a)
+{
+    if (!a || !a->stems_active || a->stems_paused) return false;
+    for (int i = 0; i < a->stem_count; ++i) {
+        if (!a->stems[i]) continue;
+        // Петля: у дорожки ещё есть итерации — транспорт играет.
+        if (MIX_GetTrackLoops(a->stems[i]) != 0) return true;
+        if (MIX_GetTrackRemaining(a->stems[i]) > 0) return true;
+    }
+    return false;
+}
+
+int r2d_audio_stem_loops(const R2DAudio *a, int index)
+{
+    if (!a || index < 0 || index >= a->stem_count || !a->stems[index]) return 0;
+    return MIX_GetTrackLoops(a->stems[index]);
+}
+
+long long r2d_audio_stem_remaining(const R2DAudio *a, int index)
+{
+    if (!a || index < 0 || index >= a->stem_count || !a->stems[index]) return -1;
+    return (long long)MIX_GetTrackRemaining(a->stems[index]);
+}
+
+void r2d_audio_stems_stop(R2DAudio *a, float fade_ms)
+{
+    if (!a || a->stem_count <= 0) return;
+    for (int i = 0; i < a->stem_count; ++i) {
+        if (!a->stems[i]) continue;
+        MIX_StopTrack(a->stems[i], MIX_TrackMSToFrames(a->stems[i], (Sint64)(fade_ms + 0.5f)));
+    }
+    a->stems_active = false;
+    a->stems_paused = false;
+}
+
+double r2d_audio_stem_time(const R2DAudio *a, int index)
+{
+    if (!a || index < 0 || index >= a->stem_count || !a->stems[index]) return -1.0;
+    const Sint64 frames = MIX_GetTrackPlaybackPosition(a->stems[index]);
+    if (frames < 0) return -1.0;
+    return (double)MIX_TrackFramesToMS(a->stems[index], frames) / 1000.0;
+}
+
+long long r2d_audio_stem_frames(const R2DAudio *a, int index)
+{
+    if (!a || index < 0 || index >= a->stem_count || !a->stems[index]) return -1;
+    return (long long)MIX_GetTrackPlaybackPosition(a->stems[index]);
+}
+
+void r2d_audio_stem_gain(R2DAudio *a, int index, float gain)
+{
+    if (!a || index < 0 || index >= a->stem_count) return;
+    a->stem_gain[index] = r2d__clamp01(gain);
+    if (a->stems[index]) MIX_SetTrackGain(a->stems[index], a->stem_gain[index] * a->music_volume);
+}
+
+float r2d_audio_get_stem_gain(const R2DAudio *a, int index)
+{
+    if (!a || index < 0 || index >= a->stem_count) return 0.0f;
+    return a->stem_gain[index];
+}
+
+double r2d_audio_stems_loop_start(const R2DAudio *a) { return a ? a->stems_loop_start_ms : 0.0; }
+
 void r2d_audio_set_music_pitch(R2DAudio *a, float ratio)
 {
     if (!a) return;
@@ -404,8 +613,10 @@ void r2d_audio_shutdown(R2DAudio *a)
             a->groups[i].handle = NULL;
         }
         r2d_audio_fx_shutdown(&a->groups[i].fx);
+        a->group_used[i] = false;
     }
     a->group_count = 0;
+    r2d_audio_stems_set(a, NULL, 0);
     if (a->music_track) {
         MIX_DestroyTrack(a->music_track);
         a->music_track = NULL;
@@ -704,12 +915,23 @@ void r2d_audio_set_sfx_volume(R2DAudio *a, float v)
 
 float r2d_audio_get_sfx_volume(const R2DAudio *a) { return a->sfx_volume; }
 
+static void r2d__apply_stem_gains(R2DAudio *a)
+{
+    if (!a) return;
+    for (int i = 0; i < a->stem_count; ++i) {
+        if (a->stems[i]) MIX_SetTrackGain(a->stems[i], r2d__clamp01(a->stem_gain[i]) * a->music_volume);
+    }
+}
+
 void r2d_audio_set_music_volume(R2DAudio *a, float v)
 {
+    if (!a) return;
     a->music_volume = r2d__clamp01(v);
     if (a->ready && a->music_track) {
         MIX_SetTrackGain(a->music_track, a->music_volume);
     }
+    // Слои живут на своих дорожках: громкость музыки обязана действовать и на них.
+    r2d__apply_stem_gains(a);
 }
 
 float r2d_audio_get_music_volume(const R2DAudio *a) { return a->music_volume; }

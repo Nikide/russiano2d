@@ -1,0 +1,36 @@
+<rml>
+<head>
+    <title>Recovery</title>
+    <style>
+        body { font-family: Open Sans; color: #dbe7f7; background-color: #0d1117; }
+        #rec-panel { position: absolute; left: 40px; top: 40px; width: 620px; padding: 18px; background-color: #161b22; border-width: 1px; border-color: #2b4366; border-radius: 10px; }
+        h1 { font-size: 24px; color: #ffb03a; margin-bottom: 8px; }
+        .row { margin-top: 6px; }
+        .label { color: #8b98a9; }
+        #rec-status { font-size: 20px; color: #ff5a3c; }
+        #rec-detail { font-size: 15px; color: #a7b6c9; }
+        #rec-slot { font-size: 15px; color: #a7b6c9; }
+        button { display: inline-block; margin: 6px 8px 0 0; padding: 8px 14px; background-color: #1f6feb; color: #ffffff; border-radius: 6px; }
+        button:hover { background-color: #388bfd; }
+    </style>
+</head>
+<body>
+    <div id="rec-panel">
+        <h1>Восстановление после сбоя</h1>
+        <div class="row"><span class="label">состояние: </span><span id="rec-status">готов</span></div>
+        <div class="row" id="rec-detail">всё в порядке</div>
+        <div class="row" id="rec-slot">слот: —</div>
+        <div class="row" id="rec-actions">
+            <button id="btn-retry">Повторить</button>
+            <button id="btn-restore">Восстановить из копии</button>
+            <button id="btn-reset">Сбросить прохождение</button>
+            <button id="btn-bad-save">Смоделировать сбой записи</button>
+            <button id="btn-future-slot">Слот из будущего</button>
+            <button id="btn-reload">Перезагрузить ассет</button>
+            <button id="btn-record">Записать прогон</button>
+            <button id="btn-play">Проиграть</button>
+            <button id="btn-play-shift">Проиграть со сдвигом</button>
+        </div>
+    </div>
+</body>
+</rml>

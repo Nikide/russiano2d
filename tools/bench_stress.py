@@ -26,7 +26,10 @@ import argparse
 import json
 import os
 import platform
+import re
+import resource
 import statistics
+import subprocess
 import sys
 import time
 
@@ -47,9 +50,32 @@ def percentile(values, p):
     return ordered[index]
 
 
-def measure(scene, frames, warmup):
-    """Прогнать сцену и вернуть отчёт по ней."""
-    with Agent(game=os.path.join("demos", "stress"), scene=scene, seed=7,
+def _backend_of(agent):
+    """GPU-бэкенд из stderr движка (metal/vulkan/d3d12) — часть конфигурации."""
+    text = agent.stderr_text()
+    m = re.search(r"GPU-бэкенд:\s*(\w+)", text)
+    return m.group(1) if m else None
+
+
+def _machine():
+    """Железо и ОС — часть конфигурации измерения."""
+    cpu = platform.processor() or platform.machine()
+    return {
+        "cpu": cpu,
+        "machine": platform.machine(),
+        "os": platform.platform(),
+    }
+
+
+def measure(scene, frames, warmup, game=None):
+    """Прогнать сцену и вернуть отчёт по ней.
+
+    `game` — каталог игры-стенда; по умолчанию штатная `demos/stress`. Другой
+    каталог нужен, когда измеряемая подсистема в штатных сценах не участвует
+    (например, световая карта: сцена «lights» рисует свет прямо в сцену).
+    """
+    game = game or os.path.join("demos", "stress")
+    with Agent(game=game, scene=scene, seed=7,
                fixed_dt=1.0 / 60.0, start_timeout=120, timeout=300) as a:
         a.step(warmup)
         counts = a.state().get("counts") or {}
@@ -73,12 +99,14 @@ def measure(scene, frames, warmup):
         prof = a.eval("engine.profile()")
         report = a.eval("$.debug.profiler.report()")
         debug_render = a.eval("$.debug.render()")
+        backend = _backend_of(a)
 
 
     zones = {row.get("name"): row.get("avg_ms") for row in (prof.get("zones") or [])}
     game_ms = (report or {}).get("логика игры", {}).get("avg_ms", 0.0)
     return {
         "scene": scene,
+        "game": game,
         "frames": frames,
         "warmup": warmup,
         "counts": counts,
@@ -93,6 +121,17 @@ def measure(scene, frames, warmup):
         "js_logic_ms": round(game_ms, 3),
         "zones_ms": {k: round(v, 3) for k, v in sorted(zones.items()) if isinstance(v, (int, float))},
         "profiler_frames": (prof.get("frames") or 0),
+        # Бэкенд и память: §35.2 требует называть конфигурацию измерения, иначе
+        # число p95 нельзя ни сравнить, ни воспроизвести.
+        "backend": backend,
+        # Память движка здесь НЕ измеряется: своего счётчика у него нет, `ps`
+        # из песочницы/CI недоступен, а RUSAGE_CHILDREN на macOS не учитывает
+        # детей без явного wait4 (проверено: возвращает 0). Метрика, которую
+        # нельзя измерить, честно помечена как отсутствующая (§35.2), а способ
+        # измерить — в примечании отчёта.
+        "engine_peak_rss_kb": None,
+        "draw_calls_detail": ((debug_render or {}).get("info") or {}).get("draws"),
+        "passes": ((debug_render or {}).get("info") or {}).get("passes"),
         # Что из кадра уходит в JS-подсистемы, сколько остаётся на всё прочее
         # (нативная физика, отрисовка) и сколько занимает GPU. GPU называется
         # GPU-временем только если движок снял его timestamp'ами.
@@ -109,6 +148,8 @@ def measure(scene, frames, warmup):
             "client_frame_ms — верхняя граница: включает агентский протокол и ожидание ответа.",
             "js_logic_ms и zones_ms — факты профайлера движка (fixed-dt).",
             "GPU time отсутствует: timestamp'ов GPU движок не снимает (§28).",
+            "Память движка не измерена: ps недоступен, RUSAGE_CHILDREN на macOS не считает детей. "
+            "Измерить вручную: /usr/bin/time -l ./build/russiano2d --game demos/stress --scene all",
         ],
     }
 
@@ -119,6 +160,9 @@ def main():
                         help="сцена стенда (можно повторять); по умолчанию все")
     parser.add_argument("--frames", type=int, default=600, help="кадров замера на сцену")
     parser.add_argument("--warmup", type=int, default=120, help="прогревочных кадров")
+    parser.add_argument("--game", default=None,
+                        help="каталог игры-стенда (по умолчанию demos/stress); "
+                             "нужен для сцен, которых в штатном стенде нет")
     parser.add_argument("--json", default=None, help="куда сохранить машиночитаемый отчёт")
     args = parser.parse_args()
 
@@ -127,7 +171,7 @@ def main():
     results = []
     for scene in scenes:
         try:
-            results.append(measure(scene, args.frames, args.warmup))
+            results.append(measure(scene, args.frames, args.warmup, args.game))
             row = results[-1]
             print("  %-8s узлов %-5s тел %-5s частиц %-5s свет %-3s  p50 %6.2f мс  p95 %6.2f мс  p99 %6.2f мс  логика %5.2f мс"
                   % (scene, row["counts"].get("nodes"), row["counts"].get("bodies"),
@@ -138,16 +182,32 @@ def main():
             print("  %-8s НЕ ИЗМЕРЕНО: %s" % (scene, exc))
             results.append({"scene": scene, "error": str(exc)})
 
+    try:
+        commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"],
+                                         cwd=ROOT, text=True).strip()
+    except Exception:                                 # noqa: BLE001
+        commit = None
     report = {
         "tool": "tools/bench_stress.py",
         "spec": "docs/PRODUCTION_READINESS.md §35.2",
         "binary": binary,
-        "platform": platform.platform(),
+        "commit": commit,
+        "machine": _machine(),
         "python": platform.python_version(),
         "cpu_count": os.cpu_count(),
+        "game": args.game or os.path.join("demos", "stress"),
+        "resolution": "1920x1080",
+        "target_fps": 60,
         "fixed_dt": 1.0 / 60.0,
         "frames": args.frames,
         "warmup": args.warmup,
+        "gate": {
+            # Предлагаемый gate базового профиля из §35.2: p95 <= 16,67 мс.
+            "p95_limit_ms": 1000.0 / 60.0,
+            "measured": "client_frame_ms.p95",
+            "note": "client_frame_ms — верхняя граница: включает агентский протокол, "
+                    "поэтому gate по ней осторожен. Факты движка — js_logic_ms/zones_ms.",
+        },
         "results": results,
     }
     if args.json:

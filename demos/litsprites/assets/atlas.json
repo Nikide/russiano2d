@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "image": "atlas.png",
+    "size": {
+      "w": 80,
+      "h": 20
+    },
+    "padding": 2,
+    "extrusion": 1
+  },
+  "frames": {
+    "half": {
+      "frame": {
+        "x": 2,
+        "y": 2,
+        "w": 16,
+        "h": 16
+      }
+    },
+    "blue": {
+      "frame": {
+        "x": 22,
+        "y": 2,
+        "w": 16,
+        "h": 16
+      }
+    },
+    "yellow": {
+      "frame": {
+        "x": 42,
+        "y": 2,
+        "w": 16,
+        "h": 16
+      }
+    },
+    "checker": {
+      "frame": {
+        "x": 62,
+        "y": 2,
+        "w": 16,
+        "h": 16
+      }
+    }
+  },
+  "tags": {
+    "all": [
+      "half",
+      "blue",
+      "yellow",
+      "checker"
+    ]
+  }
+}

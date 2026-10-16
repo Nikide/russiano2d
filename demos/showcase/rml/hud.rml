@@ -1,0 +1,16 @@
+<rml>
+<head>
+    <title>Runtime integration — HUD</title>
+    <link type="text/rcss" href="hud.rcss"/>
+</head>
+<body>
+    <div id="hud-panel">
+        <div id="hud-title">Runtime integration</div>
+        <div id="hud-score">—</div>
+        <div id="hud-room">—</div>
+        <div id="hud-lang">—</div>
+        <div id="hud-music">—</div>
+    </div>
+    <div id="hud-hint">H — язык · 1/2 — громкость слоёв · T — вставка · Enter — арена · Esc — отмена подготовки</div>
+</body>
+</rml>

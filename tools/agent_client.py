@@ -215,7 +215,7 @@ class Agent:
         self.requests = 0          # сколько запросов отправлено
         self.ready: Dict[str, Any] = {}   # стартовое событие {"event":"ready",...}
 
-        self._start(env)
+        self._start_with_retry(env)
 
     # --- запуск и остановка ---------------------------------------------------
 
@@ -238,6 +238,43 @@ class Agent:
             argv.append("--no-hot-reload")
         argv += [str(a) for a in self.extra_args]
         return argv
+
+    def _start_with_retry(self, env: Optional[Dict[str, str]]) -> None:
+        """Запустить движок, повторив попытку при ПЕРЕГРУЗКЕ машины.
+
+        Стартовый таймаут — не результат теста, а отказ инфраструктуры: под
+        полным прогоном (150+ тестов, часть из них параллельно у нескольких
+        исполнителей) движок иногда не успевает сказать ``ready`` за
+        ``start_timeout``. Раньше это выглядело как «тест провален», хотя
+        повторный запуск того же теста на том же дереве проходил. Повторяем
+        только ОТКАЗ СТАРТА (таймаут запуска/ready и ошибка создания процесса);
+        исключение самого движка (``ready`` пришёл, но с ``event: error``) —
+        настоящая ошибка и не повторяется.
+        """
+        attempts = max(1, int(os.environ.get("R2D_START_RETRIES", "3")))
+        last: Optional[BaseException] = None
+        for attempt in range(attempts):
+            try:
+                self._start(env)
+                return
+            except AgentError as exc:
+                last = exc
+                text = str(exc)
+                if "стартовое событие ready" not in text and "не удалось запустить" not in text:
+                    raise
+                # Процесс уже остановлен в _start; ждём и пробуем снова.
+                if attempt + 1 < attempts:
+                    print("  --   старт движка не удался (%s), повтор %d/%d"
+                          % (text.splitlines()[0][:80], attempt + 2, attempts))
+                    time.sleep(0.4 * (attempt + 1) ** 2)
+            except OSError as exc:
+                last = exc
+                if attempt + 1 < attempts:
+                    print("  --   процесс не создался (%s), повтор %d/%d"
+                          % (exc, attempt + 2, attempts))
+                    time.sleep(0.4 * (attempt + 1) ** 2)
+        assert last is not None
+        raise last
 
     def _start(self, env: Optional[Dict[str, str]]) -> None:
         """Запустить процесс и дождаться стартового события ``ready``."""

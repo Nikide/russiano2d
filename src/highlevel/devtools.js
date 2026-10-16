@@ -200,13 +200,14 @@ export function installDevTools($) {
     }
 
     const runtime = { open: false, doc: -1, frames: 0, snapshot: null };
-    function refreshRuntime() {
+    function refreshRuntime(force) {
         if (!runtime.open) return;
-        if (++runtime.frames % REFRESH_FRAMES !== 1) return;
+        if (!force && ++runtime.frames % REFRESH_FRAMES !== 1) return;
         runtime.snapshot = {
             stats: $.debug.stats(), profile: $.debug.profile(), limits: $.debug.limits(),
             gravity: $.world.gravity(), reloads: $.script.count(), error: $.script.error(), textures: $.debug.textures(),
             watches: $.debug.watches(),
+            assets: $.reload ? { stats: $.reload.stats(), list: $.reload.list(), graph: $.reload.graph() } : null,
         };
         const r = runtime.snapshot;
         const lines = Object.entries(r.stats).filter(([k,v]) => typeof v !== 'object')
@@ -219,6 +220,20 @@ export function installDevTools($) {
         engine.ui.setText(runtime.doc, 'rt-script', `Перезагрузок: ${r.reloads}. ${r.error}`);
         engine.ui.setText(runtime.doc, 'rt-textures', r.textures.map(t => t.id + ': ' + t.name + ' (' + t.width + ' x ' + t.height + ')').join(' | '));
         engine.ui.setText(runtime.doc, 'rt-watches', JSON.stringify(r.watches, null, 2));
+        // §27: индикатор хот-релоада — сколько ассетов под наблюдением, сколько
+        // неудачных, что случилось последним и сколько handle'ов ждёт
+        // освобождения (очередь §27).
+        if (r.assets) {
+            const st = r.assets.stats;
+            const last = st.last
+                ? `${st.last.ok ? 'ok' : 'FAILED'} ${st.last.stage}${st.last.code ? ' ' + st.last.code : ''} v${st.last.version}`
+                : '—';
+            engine.ui.setText(runtime.doc, 'rt-assets',
+                `под наблюдением: ${st.watched} | неудачных: ${st.failed} | версий применено: ${st.applied}` +
+                ` | ждут освобождения: ${st.pending_release} | последнее: ${last}`);
+        } else {
+            engine.ui.setText(runtime.doc, 'rt-assets', '$.reload не поставлен в этой сборке');
+        }
     }
     function openRuntime() {
         if (!engine.ui || typeof engine.ui.loadMarkup !== 'function') return false;
@@ -243,12 +258,30 @@ input { width: 85px; height: 24px; background-color: #203448; }
 <button id="rt-reload">Перезапустить (F5)</button><button id="rt-nodes">Инспектор узлов</button>
 <div class="rt-section">Таблицы runtime / текстуры</div><div id="rt-limits" class="rt-data"></div>
 <div id="rt-textures" class="rt-data"></div>
+<div class="rt-section">Ассеты §27 (hot reload)</div><div id="rt-assets" class="rt-data"></div>
+<button id="rt-assets-reload">Перезагрузить ассеты</button><button id="rt-assets-poll">Применить изменившиеся</button>
 <div class="rt-section">Наблюдения</div><div id="rt-watches" class="rt-data"></div>
 </div></body></rml>`);
             if (runtime.doc < 0) return false;
             engine.ui.on(runtime.doc, 'rt-reset', 'click', () => $.debug.profileReset());
             engine.ui.on(runtime.doc, 'rt-reload', 'click', () => $.script.request('RmlUi DevTools'));
             engine.ui.on(runtime.doc, 'rt-nodes', 'click', () => { closeRuntime(); open(); });
+            // §27: кнопки хот-релоада ассетов. Данные не трогают: применяется
+            // то, что уже прочитано и проверено конвейером $.reload.
+            if ($.reload) {
+                engine.ui.on(runtime.doc, 'rt-assets-reload', 'click', () => {
+                    const r = $.reload.reloadAll();
+                    engine.ui.setText(runtime.doc, 'rt-assets',
+                        `Перезагружено ${r.applied} из ${r.total}, ошибок ${r.failed}`);
+                    refreshRuntime(true);
+                });
+                engine.ui.on(runtime.doc, 'rt-assets-poll', 'click', () => {
+                    const r = $.reload.poll();
+                    engine.ui.setText(runtime.doc, 'rt-assets',
+                        `Изменилось ${r.applied}, ошибок ${r.failed}`);
+                    refreshRuntime(true);
+                });
+            }
             engine.ui.on(runtime.doc, 'rt-gravity', 'click', () => {
                 const x = engine.ui.getValue(runtime.doc, 'rt-gx');
                 const y = engine.ui.getValue(runtime.doc, 'rt-gy');
@@ -310,6 +343,20 @@ input { width: 85px; height: 24px; background-color: #203448; }
                 refreshed: state.refreshed,
             };
         },
+
+        /**
+         * §27: состояние хот-релоада ассетов — индикатор, список и граф.
+         * Тесты и внешние инструменты видят те же факты, что панель.
+         */
+        assets() {
+            if (!$.reload) return null;
+            return { indicator: $.reload.indicator(), stats: $.reload.stats(),
+                     list: $.reload.list(), graph: $.reload.graph() };
+        },
+
+        /** Нажать кнопки хот-релоада программно (без RmlUi): тесты и команды. */
+        assetsReload() { return $.reload ? $.reload.reloadAll() : null; },
+        assetsPoll() { return $.reload ? $.reload.poll() : null; },
 
         /** Перерисовать немедленно (тесты и внешние команды). */
         refresh() {

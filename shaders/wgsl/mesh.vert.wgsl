@@ -10,6 +10,9 @@ struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0)       texcoord: vec2<f32>,
     @location(1)       color:    vec4<f32>,
+    // Фрагментная стадия общая со спрайтами и читает биты получателя света
+    // (§20.1). Записать их обязана вершинная стадия — у меша маски нет.
+    @location(3) @interpolate(flat) mask: u32,
 };
 
 @vertex
@@ -22,5 +25,6 @@ fn main(
     out.position = vec4<f32>(a_position, 1.0);
     out.texcoord = a_texcoord;
     out.color    = a_color;
+    out.mask     = 0xFFFFFFFFu;
     return out;
 }

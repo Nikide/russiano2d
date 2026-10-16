@@ -584,6 +584,16 @@ bool r2d_render_filter(const R2DRenderer *r)
     return r ? r->filter_linear : false;
 }
 
+void r2d_render_set_snap(R2DRenderer *r, bool on)
+{
+    if (r) r->snap = on;
+}
+
+bool r2d_render_snap(const R2DRenderer *r)
+{
+    return r ? r->snap : false;
+}
+
 bool r2d_texture_free(R2DRenderer *r, int id)
 {
     if (!r || id < 0 || id >= r->texture_count) return false;
@@ -774,6 +784,16 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
     // Свет этого кадра ещё не ушёл в текстуру: если lightmap выключится или
     // кадр окажется в чужом render target, свет дорисует проход сцены.
     r->lightmap_used      = false;
+    // §20.1. Маски получателя и композит живут кадр: признак «есть маски»
+    // ставят команды спрайтов при сборке батча (они собираются после этого
+    // сброса — см. порядок кадра в main.c).
+    r->light_mask_used    = false;
+    r->light_composited   = false;
+    // Число проходов маски читается игрой из JS в начале кадра — то есть после
+    // этого сброса. Поэтому храним ещё и значение прошлого кадра.
+    r->prev_mask_passes   = r->stat_mask_passes;
+    r->stat_mask_nodes    = 0;
+    r->stat_mask_passes   = 0;
     r->batch_blend      = R2D_BLEND_ALPHA;
     r->batch_fx         = 0;
     r->fx_count         = 0;
@@ -781,6 +801,8 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
     r->bound_viewport   = -1;
     // -1 — «интерфейс ещё не помечен»: тогда все спрайты считаются миром.
     r->ui_cmd_start     = -1;
+    // -1 — «неосвещённый слой не помечен»: тогда свет ложится на все спрайты.
+    r->unlit_cmd_start  = -1;
     // Обрезки живут кадр: игра задаёт их заново.
     r->clip_count       = 0;
     r->clip_cur         = -1;
@@ -797,6 +819,13 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
 
 void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float h,
                     float angle, uint32_t color)
+{
+    // Без маски узел принимает все слои света — прежнее поведение.
+    r2d_batch_add_mask(r, sprite, x, y, w, h, angle, color, 0xFFFFFFFFu);
+}
+
+void r2d_batch_add_mask(R2DRenderer *r, int sprite, float x, float y, float w, float h,
+                        float angle, uint32_t color, uint32_t mask)
 {
     if (!r2d_sprite_alive(r, sprite)) {
         return;
@@ -817,6 +846,13 @@ void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float 
     c->fx    = r->batch_fx;
     c->filter = !r->sprites[sprite].force_nearest && (r->filter_linear || r->sprites[sprite].force_linear) ? 1 : 0;
     c->clip   = (int16_t)r->clip_cur;
+    // §20.1. Маска получателя: «все слои» — обычный случай, тогда и прохода
+    // маски в кадре не будет (см. r2d_render_light_mask_used).
+    c->mask   = mask;
+    if (mask != 0xFFFFFFFFu) {
+        r->light_mask_used = true;
+        r->stat_mask_nodes++;
+    }
 
     const R2DSprite *sp = &r->sprites[sprite];
     const uint8_t cr = (uint8_t)(color & 0xFF);
@@ -839,12 +875,20 @@ void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float 
     const float uu[4] = { sp->u0, sp->u1, sp->u1, sp->u0 };
     const float vv[4] = { sp->v0, sp->v0, sp->v1, sp->v1 };
 
+    // Снаппинг — только для осевых квадов: у повёрнутого спрайта округление
+    // вершин ломало бы форму. Позиция узла и тело при этом не меняются.
+    const bool snap_verts = r->snap && angle == 0.0f;
+
     R2DVertex *verts = &r->vertices[r->vertex_count];
     for (int i = 0; i < 4; ++i) {
         const float rx = lx[i] * cs - ly[i] * sn;
         const float ry = lx[i] * sn + ly[i] * cs;
-        const float px = x + rx;
-        const float py = y + ry;
+        float px = x + rx;
+        float py = y + ry;
+        if (snap_verts) {
+            px = floorf(px + 0.5f);
+            py = floorf(py + 0.5f);
+        }
 
         verts[i].x = px * inv_w - 1.0f;
         verts[i].y = 1.0f - py * inv_h;   // экранный Y направлен вниз
@@ -854,6 +898,7 @@ void r2d_batch_add(R2DRenderer *r, int sprite, float x, float y, float w, float 
         verts[i].g = cg;
         verts[i].b = cb;
         verts[i].a = ca;
+        verts[i].mask = mask;
     }
 
     const uint32_t base = (uint32_t)r->vertex_count;
@@ -892,6 +937,8 @@ static void r2d__pack_triangles(R2DRenderer *r, const float *verts, int vertex_c
     batch->vertex_offset = *count;
     batch->vertex_count  = vertex_count;
     batch->blend         = (uint8_t)blend;
+    // Слой источника: у сцены и меша он не используется («все слои»).
+    batch->layer         = 0xFFFFFFFFu;
 
     // Та же проекция, что и у спрайтов: пиксели логического экрана -> clip-space.
     // Добавки 0.5 на центр пикселя в спрайтовом пути нет, поэтому её нет и здесь.
@@ -909,6 +956,9 @@ static void r2d__pack_triangles(R2DRenderer *r, const float *verts, int vertex_c
         dst[i].g = r2d__color_f32(v[3]);
         dst[i].b = r2d__color_f32(v[4]);
         dst[i].a = r2d__color_f32(v[5]);
+        // Треугольники — не спрайты: маска получателя у них не своя, гейт
+        // света едет юниформой пакета (batch->layer).
+        dst[i].mask = 0xFFFFFFFFu;
     }
 
     *count += vertex_count;
@@ -974,9 +1024,34 @@ void r2d_batch_triangles_blend(R2DRenderer *r, const float *verts, int vertex_co
 void r2d_batch_light_triangles_blend(R2DRenderer *r, const float *verts,
                                      int vertex_count, int blend)
 {
+    // Без явного слоя источник освещает всех — прежнее поведение.
+    r2d_batch_light_triangles_layer(r, verts, vertex_count, blend, 0xFFFFFFFFu);
+}
+
+void r2d_batch_light_triangles_layer(R2DRenderer *r, const float *verts, int vertex_count,
+                                     int blend, uint32_t layer)
+{
+    const int before = r->light_batch_count;
     r2d__pack_triangles(r, verts, vertex_count, blend, R2D_BLEND_ADD,
                         &r->light_vertices, &r->light_vertex_count, &r->light_vertex_cap,
                         &r->light_batches, &r->light_batch_count, &r->light_batch_cap);
+    if (r->light_batch_count <= before) return;
+
+    // §20.1. Гейт по маске получателя передаётся юниформой на draw call,
+    // поэтому пакет света рвётся там, где меняется слой источника. Соседние
+    // вызовы с тем же слоем и режимом остаются ОДНИМ пакетом — цена не растёт.
+    R2DTriBatch *batch = &r->light_batches[r->light_batch_count - 1];
+    batch->layer = layer;
+    if (before > 0) {
+        const R2DTriBatch *prev = &r->light_batches[before - 1];
+        const bool same = prev->layer == layer && prev->blend == batch->blend &&
+                          prev->vertex_offset + prev->vertex_count == batch->vertex_offset;
+        if (same) {
+            // Склеиваем: тот же слой, тот же режим, вершины идут подряд.
+            r->light_batches[before - 1].vertex_count += batch->vertex_count;
+            r->light_batch_count--;
+        }
+    }
 }
 
 void r2d_batch_light_triangles(R2DRenderer *r, const float *verts, int vertex_count)
@@ -1116,17 +1191,19 @@ int r2d_render_user_shader_define(R2DRenderer *r, const char *name, const char *
     vb.pitch = sizeof(R2DVertex);
     vb.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
-    SDL_GPUVertexAttribute attrs[3];
+    SDL_GPUVertexAttribute attrs[4];
     SDL_zero(attrs);
     attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[0].offset = 0;
     attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[1].offset = sizeof(float) * 2;
     attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[2].offset = sizeof(float) * 4;
+    // §20.1: тот же вершинный шейдер, значит и тот же набор атрибутов.
+    attrs[3].location = 3; attrs[3].buffer_slot = 0; attrs[3].format = SDL_GPU_VERTEXELEMENTFORMAT_UINT; attrs[3].offset = sizeof(float) * 4 + 4;
 
     SDL_GPUGraphicsPipeline *pipes[R2D_BLEND_COUNT];
     SDL_zero(pipes);
     bool ok = true;
     for (int m = 0; m < R2D_BLEND_COUNT && ok; ++m) {
-        pipes[m] = r2d__create_pipeline(r->device, r->window, vertex, fragment, &vb, attrs, 3,
+        pipes[m] = r2d__create_pipeline(r->device, r->window, vertex, fragment, &vb, attrs, 4,
                                         (R2DBlendMode)m);
         if (!pipes[m]) {
             SDL_snprintf(r->user_shader_error, sizeof r->user_shader_error,
@@ -1238,6 +1315,36 @@ int r2d_batch_submit_blend(R2DRenderer *r, const float *transforms, const uint32
                            int count, int blend)
 {
     return r2d_batch_submit_fx(r, transforms, colors, NULL, count, blend);
+}
+
+int r2d_batch_submit_fx_mask(R2DRenderer *r, const float *transforms, const uint32_t *colors,
+                             const int32_t *fx, const uint32_t *masks, int count, int blend)
+{
+    if (count <= 0) return 0;
+    if (!transforms) {
+        R2D_ERROR("submitSprites: не передан массив трансформов");
+        return 0;
+    }
+    if (blend < 0 || blend >= R2D_BLEND_COUNT) blend = R2D_BLEND_ALPHA;
+
+    const uint8_t prev_blend = r->batch_blend;
+    const uint8_t prev_fx = r->batch_fx;
+    r->batch_blend = (uint8_t)blend;
+
+    const int before = r->cmd_count;
+    for (int i = 0; i < count; ++i) {
+        const float *t = transforms + (size_t)i * 6;
+        const uint32_t color = colors ? colors[i] : R2D_WHITE;
+        const int32_t index = fx ? fx[i] : 0;
+        // §20.1. Маска получателя света: без массива — «все слои».
+        const uint32_t mask = masks ? masks[i] : 0xFFFFFFFFu;
+        r->batch_fx = (uint8_t)((index > 0 && index < R2D_MAX_NODE_FX) ? index : 0);
+        r2d_batch_add_mask(r, (int)t[0], t[1], t[2], t[3], t[4], t[5], color, mask);
+    }
+
+    r->batch_blend = prev_blend;
+    r->batch_fx = prev_fx;
+    return r->cmd_count - before;
 }
 
 int r2d_batch_submit(R2DRenderer *r, const float *transforms, const uint32_t *colors, int count)
@@ -1515,13 +1622,63 @@ static void r2d__bind_pipeline(R2DRenderer *r, SDL_GPURenderPass *pass, uint8_t 
     SDL_BindGPUIndexBuffer(pass, &ib, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 }
 
+// ---------------------------------------------------------------------------
+// §20.1. Параметры спрайтовой фрагментной стадии.
+//
+// Стадия умеет три режима: обычный спрайт (0), запись маски получателя света
+// (1) и накопление света с гейтом (2). Режим — юниформа (SDL_PushGPUFragment
+// UniformData), а биты маски — атрибут вершины: так участок спрайтов остаётся
+// одним draw call.
+// ---------------------------------------------------------------------------
+typedef struct R2DSpriteParams {
+    float    mode;     // 0 — спрайт, 1 — маска, 2 — свет с гейтом
+    uint32_t layer;    // биты слоя источника (шейдер читает их как float-биты)
+    float    inv_w;    // 1/ширина маски (для режима 2)
+    float    inv_h;    // 1/высота маски
+} R2DSpriteParams;
+
+static void r2d__push_sprite_params(SDL_GPUCommandBuffer *cmd, float mode, uint32_t layer,
+                                    int mask_w, int mask_h)
+{
+    R2DSpriteParams p;
+    SDL_zero(p);
+    p.mode  = mode;
+    p.layer = layer;
+    p.inv_w = mask_w > 0 ? 1.0f / (float)mask_w : 0.0f;
+    p.inv_h = mask_h > 0 ? 1.0f / (float)mask_h : 0.0f;
+    SDL_PushGPUFragmentUniformData(cmd, 0, &p, (Uint32)sizeof p);
+}
+
+// Две выборки спрайтовой стадии: текстура пакета и маска получателя. Когда
+// масок в кадре нет, второй сэмплер — белая 1×1: он не читается (режим 0), но
+// привязать его обязательно, иначе рисует невалидный набор ресурсов.
+static void r2d__bind_sprite_samplers(R2DRenderer *r, SDL_GPURenderPass *pass,
+                                      int texture, SDL_GPUSampler *filter)
+{
+    SDL_GPUTextureSamplerBinding b[2];
+    SDL_zero(b);
+    b[0].texture = r->textures[texture].handle;
+    b[0].sampler = filter ? filter : r->sampler;
+    b[1].texture = (r->light_mask_used && r->light_mask_target)
+        ? r->light_mask_target : r->textures[r->white_texture].handle;
+    // Маска — биты, а не картинка: только point-фильтрация, иначе байты
+    // смешались бы на границе и гейт стал бы случайным.
+    b[1].sampler = r->sampler;
+    SDL_BindGPUFragmentSamplers(pass, 0, b, 2);
+}
+
 // Рисует диапазон спрайтов [from, to): соседние команды с одной текстурой и
 // одним режимом смешивания склеиваются в один draw call. bound_blend — «что
 // уже привязано» (-1 — ничего), состояние переживает вызовы, потому что
 // диапазоны рисуются в разных проходах и конвейер всё равно перепривяжется.
+/**
+ * @param mode 0 — обычная отрисовка спрайтов; 1 — запись маски получателя
+ *             света (§20.1): те же квады, но цвет — биты маски (конвейер без
+ *             смешивания и без z-буфера, текстура не читается).
+ */
 static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
                                    SDL_GPURenderPass *pass,
-                                   int from, int to, int *bound_blend)
+                                   int from, int to, int *bound_blend, int mode)
 {
     if (to <= from) return;
 
@@ -1543,19 +1700,24 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
         if (!end_of_run) continue;
 
         const int texture = r->sprites[r->cmds[run_start].sprite].texture;
-        const uint8_t mode = r->cmds[run_start].blend;
+        // Внимание: это РЕЖИМ СМЕШИВАНИЯ, а не режим стадии (параметр
+        // mode). Имена разведены намеренно: их совпадение уже приводило
+        // к тому, что проход маски писал картинку спрайта вместо битов.
+        const uint8_t blend_mode = r->cmds[run_start].blend;
         const uint8_t fx_index = r->cmds[run_start].fx;
         if (fx_index > 0) {
             // Шейдер узла: свой конвейер на каждый режим смешивания и
             // юниформы с видом эффекта и его параметрами.
             const R2DNodeFx *node_fx = &r->fx[fx_index];
-            const uint8_t pipe_mode = mode < R2D_BLEND_COUNT ? mode : R2D_BLEND_ALPHA;
+            const uint8_t pipe_mode = blend_mode < R2D_BLEND_COUNT ? blend_mode : R2D_BLEND_ALPHA;
             // Пользовательский шейдер — свой конвейер на каждый режим
             // смешивания; встроенные эффекты живут на общем конвейере.
-            SDL_GPUGraphicsPipeline *pipe =
-                node_fx->user > 0
+            // В режиме маски шейдер узла не нужен: биты маски пишет общий
+            // конвейер маски, а эффект узла на маску не влияет.
+            SDL_GPUGraphicsPipeline *pipe = mode == 1 ? r->light_mask_pipeline
+                : (node_fx->user > 0
                     ? r->user_shaders[node_fx->user].pipelines[pipe_mode]
-                    : r->fx_pipelines[pipe_mode];
+                    : r->fx_pipelines[pipe_mode]);
             if (pipe) {
                 SDL_BindGPUGraphicsPipeline(pass, pipe);
                 SDL_GPUBufferBinding vb;
@@ -1566,29 +1728,40 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
                 SDL_zero(ib);
                 ib.buffer = r->index_buffer;
                 SDL_BindGPUIndexBuffer(pass, &ib, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-
-                struct { float p[4]; float c[4]; } uni;
-                // Для встроенного шейдера первый параметр — вид эффекта;
-                // пользовательский вид не различает (у него свой конвейер).
-                uni.p[0] = node_fx->user > 0 ? 0.0f : (float)node_fx->kind;
-                uni.p[1] = node_fx->p1;
-                uni.p[2] = node_fx->p2;
-                uni.p[3] = node_fx->p3;
-                uni.c[0] = (float)(node_fx->color & 0xFF) / 255.0f;
-                uni.c[1] = (float)((node_fx->color >> 8) & 0xFF) / 255.0f;
-                uni.c[2] = (float)((node_fx->color >> 16) & 0xFF) / 255.0f;
-                uni.c[3] = (float)((node_fx->color >> 24) & 0xFF) / 255.0f;
-                SDL_PushGPUFragmentUniformData(cmd, 0, &uni, (Uint32)sizeof uni);
+                if (mode != 1) {
+                    struct { float p[4]; float c[4]; } uni;
+                    // Для встроенного шейдера первый параметр — вид эффекта;
+                    // пользовательский вид не различает (у него свой конвейер).
+                    uni.p[0] = node_fx->user > 0 ? 0.0f : (float)node_fx->kind;
+                    uni.p[1] = node_fx->p1;
+                    uni.p[2] = node_fx->p2;
+                    uni.p[3] = node_fx->p3;
+                    uni.c[0] = (float)(node_fx->color & 0xFF) / 255.0f;
+                    uni.c[1] = (float)((node_fx->color >> 8) & 0xFF) / 255.0f;
+                    uni.c[2] = (float)((node_fx->color >> 16) & 0xFF) / 255.0f;
+                    uni.c[3] = (float)((node_fx->color >> 24) & 0xFF) / 255.0f;
+                    SDL_PushGPUFragmentUniformData(cmd, 0, &uni, (Uint32)sizeof uni);
+                }
                 *bound_blend = -1;      // следующий обычный участок перебиндит пайплайн
             } else {
-                if ((int)mode != *bound_blend) {
-                    r2d__bind_pipeline(r, pass, mode);
-                    *bound_blend = (int)mode;
+                if (mode == 1) {
+                    if (r->light_mask_pipeline) {
+                        SDL_BindGPUGraphicsPipeline(pass, r->light_mask_pipeline);
+                    }
+                    *bound_blend = -1;
+                } else if ((int)blend_mode != *bound_blend) {
+                    r2d__bind_pipeline(r, pass, blend_mode);
+                    *bound_blend = (int)blend_mode;
                 }
             }
-        } else if ((int)mode != *bound_blend) {
-            r2d__bind_pipeline(r, pass, mode);
-            *bound_blend = (int)mode;
+        } else if (mode == 1) {
+            if (r->light_mask_pipeline) {
+                SDL_BindGPUGraphicsPipeline(pass, r->light_mask_pipeline);
+            }
+            *bound_blend = -1;
+        } else if ((int)blend_mode != *bound_blend) {
+            r2d__bind_pipeline(r, pass, blend_mode);
+            *bound_blend = (int)blend_mode;
         }
 
         // Обрезка участка: scissor ставится на ПРОХОД, поэтому его надо задать
@@ -1602,15 +1775,20 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
             SDL_SetGPUScissor(pass, &full);
         }
 
-        SDL_GPUTextureSamplerBinding tex_binding;
-        SDL_zero(tex_binding);
-        tex_binding.texture = r->textures[texture].handle;
         // Фильтр переключается на лету: nearest — пиксель-арт без размытия,
         // linear — сглаженный масштаб (текст, крупные спрайты). Сэмплер один
         // на участок, поэтому разные режимы просто разрывают участок.
-        tex_binding.sampler = (r->cmds[run_start].filter && r->linear_sampler)
+        SDL_GPUSampler *filter = (r->cmds[run_start].filter && r->linear_sampler)
             ? r->linear_sampler : r->sampler;
-        SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+        r2d__bind_sprite_samplers(r, pass, texture, filter);
+        // Режим стадии: 1 — запись маски, 0 — обычный спрайт. У узла со своим
+        // шейдером тот же слот 0 занят ЕГО юниформами (своя раскладка, 32
+        // байта): пушить туда параметры стадии нельзя — они перетёрли бы
+        // эффект. В режиме маски шейдер узла не рисует, поэтому параметры
+        // стадии нужны и там.
+        if (mode == 1 || fx_index == 0) {
+            r2d__push_sprite_params(cmd, mode == 1 ? 1.0f : 0.0f, 0xFFFFFFFFu, 0, 0);
+        }
 
         const Uint32 first_index = (Uint32)(run_start * 6);
         const Uint32 num_indices = (Uint32)((i - run_start) * 6);
@@ -1626,9 +1804,16 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
 // (режим смешивания), текстура всегда белая, потому что цвет приходит с вершин.
 // index_start — смещение диапазона в общем индексном буфере: у сцены и у света
 // lightmap диапазоны разные, а буфер один.
-static void r2d__draw_tri_batches(R2DRenderer *r, SDL_GPURenderPass *pass,
+/**
+ * @param is_light true — пакеты СВЕТА (§20.1): каждый пакет несёт свои биты
+ *        слоя источника, и свет получают только те пиксели, чья маска
+ *        получателя пересекается с этими битами. Для сцены режим стадии 0 —
+ *        поведение прежнее.
+ */
+static void r2d__draw_tri_batches(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
+                                  SDL_GPURenderPass *pass,
                                   const R2DTriBatch *batches, int count,
-                                  int index_start, int *bound_blend)
+                                  int index_start, int *bound_blend, bool is_light)
 {
     for (int b = 0; b < count; ++b) {
         const R2DTriBatch *tb = &batches[b];
@@ -1639,11 +1824,14 @@ static void r2d__draw_tri_batches(R2DRenderer *r, SDL_GPURenderPass *pass,
             *bound_blend = (int)tb->blend;
         }
 
-        SDL_GPUTextureSamplerBinding tex_binding;
-        SDL_zero(tex_binding);
-        tex_binding.texture = r->textures[r->white_texture].handle;
-        tex_binding.sampler = r->sampler;
-        SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+        // Белая 1×1 вместо текстуры: цвет приходит с вершин. Второй сэмплер —
+        // маска получателя света: у света она решает, куда свет вообще попадёт.
+        r2d__bind_sprite_samplers(r, pass, r->white_texture, r->sampler);
+        if (is_light) {
+            r2d__push_sprite_params(cmd, 2.0f, tb->layer, r->light_mask_w, r->light_mask_h);
+        } else {
+            r2d__push_sprite_params(cmd, 0.0f, 0xFFFFFFFFu, 0, 0);
+        }
 
         SDL_DrawGPUIndexedPrimitives(pass, (Uint32)tb->vertex_count, 1,
                                      (Uint32)(index_start + tb->vertex_offset), 0, 0);
@@ -1759,15 +1947,22 @@ void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURend
         const int ti = (mb->texture >= 0 && mb->texture < R2D_MAX_TEXTURES
                         && r->textures[mb->texture].handle)
                            ? mb->texture : r->white_texture;
-        tex.texture = r->textures[ti].handle;
-        tex.sampler = r->sampler;
-        SDL_BindGPUFragmentSamplers(pass, 0, &tex, 1);
+        // Меш рисует тот же спрайтовый фрагментный шейдер, поэтому ему нужны
+        // обе выборки и параметры стадии (режим 0 — текстура × цвет).
+        (void)tex;
+        r2d__bind_sprite_samplers(r, pass, ti, r->sampler);
+        r2d__push_sprite_params(cmd, 0.0f, 0xFFFFFFFFu, 0, 0);
         SDL_DrawGPUIndexedPrimitives(pass, (Uint32)mb->vertex_count, 1,
                                      (Uint32)(r->mesh_index_start + mb->vertex_offset), 0, 0);
         r->stat_draws++;
     }
     r->stat_mesh_cmds += r->mesh_batch_upload;
     r->stat_mesh_frames++;
+}
+
+void r2d_render_mark_unlit(R2DRenderer *r)
+{
+    if (r) r->unlit_cmd_start = r->cmd_count;
 }
 
 void r2d_render_draw_world(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
@@ -1779,26 +1974,48 @@ void r2d_render_draw_world(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
     // Интерфейс помечен JS-стороной; если метки нет — все спрайты считаются
     // миром (старое поведение, HUD тогда тоже под пост-обработкой).
     const int ui_from = r->ui_cmd_start >= 0 ? r->ui_cmd_start : r->cmd_count;
+    // Неосвещённый мировой слой: спрайты после этой метки рисуются ПОСЛЕ
+    // света, но ДО интерфейса. Без метки диапазон пуст и порядок прежний.
+    int unlit_from = r->unlit_cmd_start >= 0 ? r->unlit_cmd_start : ui_from;
+    if (unlit_from > ui_from) unlit_from = ui_from;
+    if (unlit_from < 0) unlit_from = 0;
 
     int bound_blend = -1;
     // Меш первым: он пишет глубину, по которой проверяются спрайты.
     r2d_render_draw_mesh(r, cmd, pass);
 
-    r2d__draw_sprite_range(r, cmd, pass, 0, ui_from, &bound_blend);
+    r2d__draw_sprite_range(r, cmd, pass, 0, unlit_from, &bound_blend, 0);
 
     r->stat_sprites = r->cmd_count;
 
     // Треугольники рисуем ПОСЛЕ всех спрайтов, белой текстурой, каждый свой
     // вызов со своим конвейером. Это осознанно: свет накладывается поверх сцены.
-    r2d__draw_tri_batches(r, pass, r->tri_batches, r->tri_batch_count,
-                          r->tri_index_start, &bound_blend);
+    r2d__draw_tri_batches(r, cmd, pass, r->tri_batches, r->tri_batch_count,
+                          r->tri_index_start, &bound_blend, false);
 
     // Свет, который не ушёл в lightmap (он выключен, идёт чужой render target
     // или не удалось создать текстуру), рисуем прямо в сцену — как до появления
     // lightmap. Иначе свет просто исчез бы.
     if (r->light_batch_count > 0 && !r->lightmap_used) {
-        r2d__draw_tri_batches(r, pass, r->light_batches, r->light_batch_count,
-                              r->light_index_start, &bound_blend);
+        // Запасной путь: свет рисуется прямо в сцену. Цели маски здесь нет,
+        // поэтому работает объявленный fallback — свет получают все (см.
+        // docs/highlevel/render.md §4.8).
+        r2d__draw_tri_batches(r, cmd, pass, r->light_batches, r->light_batch_count,
+                              r->light_index_start, &bound_blend, true);
+    }
+
+    // Композит световой карты: после освещённого мира и тумана, но ДО
+    // неосвещённого слоя — иначе `.lit(false)` получал бы свет поверх себя
+    // (нашлось замером: узел внутри радиуса источника при включённой карте
+    // света давал 255 вместо собственных 169).
+    r2d_render_light_composite(r, cmd, pass);
+    // Композит привязал свой конвейер: участок неосвещённого слоя обязан
+    // перебиндить спрайтовый, иначе он рисуется полноэкранным шейдером света.
+    bound_blend = -1;
+
+    // Неосвещённый мировой слой — после света, но под интерфейсом.
+    if (unlit_from < ui_from) {
+        r2d__draw_sprite_range(r, cmd, pass, unlit_from, ui_from, &bound_blend, 0);
     }
 }
 
@@ -1806,7 +2023,7 @@ void r2d_render_draw_ui(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURender
 {
     if (r->ui_cmd_start < 0) return;
     int bound_blend = -1;
-    r2d__draw_sprite_range(r, cmd, pass, r->ui_cmd_start, r->cmd_count, &bound_blend);
+    r2d__draw_sprite_range(r, cmd, pass, r->ui_cmd_start, r->cmd_count, &bound_blend, 0);
 }
 
 void r2d_render_draw(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass)
@@ -1920,6 +2137,10 @@ bool r2d_render_post_enabled(const R2DRenderer *r)
     if (!r || !r->post_pipeline) return false;
     const R2DPostParams *p = &r->post;
     if (p->enabled <= 0.5f) return false;
+    // Экранное искажение (§46) само по себе включает проход: без этой строки
+    // волна/шум/сдвиг каналов молча не применялись бы — кадр уходил прямо в
+    // swapchain, и «параметр дошёл» выдавалось бы за работающий эффект.
+    if (p->distort > 0.0001f) return true;
     return p->glow > 0.0001f || p->vignette > 0.0001f || p->chromatic > 0.0001f
         || p->lens > 0.0001f || p->grain > 0.0001f || p->scanline > 0.0001f
         || p->posterize > 1.5f || p->tint_amount > 0.0001f || p->blood > 0.0001f
@@ -1986,15 +2207,27 @@ void r2d_render_post(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPas
     // binding 0 — сцена, binding 1 — готовая размытая яркая часть (bloom).
     // Если свечения не было, туда уходит чёрная текстура 1×1 и вклад нулевой,
     // а флаг bloom_ready заставляет шейдер взять запасную ветку.
-    SDL_GPUTextureSamplerBinding binding[2];
+    SDL_GPUTextureSamplerBinding binding[3];
     SDL_zero(binding);
     binding[0].texture = r->scene_target;
     binding[0].sampler = r->sampler;
     binding[1].texture = r->bloom_result ? r->bloom_result : r->black_texture;
     binding[1].sampler = r->linear_sampler ? r->linear_sampler : r->sampler;
-    SDL_BindGPUFragmentSamplers(pass, 0, binding, 2);
+    // Шум для экранного искажения: без него привязка обязана быть валидной,
+    // поэтому вместо пустой текстуры идёт та же чёрная заглушка (искажение
+    // тогда просто не сдвигает UV — лучше, чем падение прохода).
+    binding[2].texture = r->noise_texture ? r->noise_texture : r->black_texture;
+    binding[2].sampler = r->sampler;
+    SDL_BindGPUFragmentSamplers(pass, 0, binding, 3);
 
-    // Push-константы: шесть vec4, раскладка совпадает с R2DPostParams.
+    // Девять vec4: раскладка совпадает с R2DPostParams и с блоком PostParams
+    // в shaders/post.frag.glsl. Время эффекта пишется двумя float (lo/hi):
+    // одного 32-битного поля не хватало на долгие сессии.
+    {
+        const double t = (double)SDL_GetTicks() / 1000.0;
+        r->post.post_time_lo = (float)t;
+        r->post.post_time_hi = (float)(t - (double)r->post.post_time_lo);
+    }
     SDL_PushGPUFragmentUniformData(cmd, 0, &r->post, (Uint32)sizeof(R2DPostParams));
     SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
     r->stat_draws++;
@@ -2334,6 +2567,16 @@ bool r2d_render_lightmap_enabled(const R2DRenderer *r)
     return r && r->lightmap_on;
 }
 
+bool r2d_render_light_mask_used(const R2DRenderer *r)
+{
+    return r && r->light_mask_used;
+}
+
+int r2d_render_light_mask_nodes(const R2DRenderer *r)
+{
+    return r ? r->stat_mask_nodes : 0;
+}
+
 void r2d_render_lightmap_set(R2DRenderer *r, bool on, float intensity, float soft)
 {
     if (!r) return;
@@ -2366,6 +2609,11 @@ static bool r2d__lightmap_ready(R2DRenderer *r, int w, int h)
 
     if (r->light_target) { SDL_ReleaseGPUTexture(r->device, r->light_target); r->light_target = NULL; }
     if (r->light_blur)   { SDL_ReleaseGPUTexture(r->device, r->light_blur);   r->light_blur = NULL; }
+    // §20.1: цель маски обязана быть того же размера, что карта света.
+    if (r->light_mask_target) {
+        SDL_ReleaseGPUTexture(r->device, r->light_mask_target);
+        r->light_mask_target = NULL;
+    }
 
     r->light_target = r2d__create_bloom_texture(r, lw, lh);
     r->light_blur   = r2d__create_bloom_texture(r, lw, lh);
@@ -2380,6 +2628,138 @@ static bool r2d__lightmap_ready(R2DRenderer *r, int w, int h)
     return true;
 }
 
+/**
+ * §20.1. Цель и конвейер маски получателя света.
+ *
+ * Маска живёт в половинном разрешении — ровно как карта света: гейт читается
+ * при накоплении света, то есть на той же сетке. Формат цели — формат кадра
+ * (как у сцены и световой карты), иначе спрайтовый конвейер к ней не подойдёт.
+ */
+static bool r2d__light_mask_ready(R2DRenderer *r)
+{
+    if (!r || !r->device || !r->light_target) return false;
+
+    if (!r->light_mask_pipeline) {
+        SDL_GPUShader *vs = r2d__make_shader(r->device, &r2d_shader_sprite_vert,
+                                             SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
+        SDL_GPUShader *fs = r2d__make_shader(r->device, &r2d_shader_sprite_frag,
+                                             SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 2);
+        if (!vs || !fs) {
+            if (vs) SDL_ReleaseGPUShader(r->device, vs);
+            if (fs) SDL_ReleaseGPUShader(r->device, fs);
+            R2D_ERROR("конвейер маски света: SDL_CreateGPUShader: %s", SDL_GetError());
+            return false;
+        }
+
+        SDL_GPUVertexBufferDescription vb;
+        SDL_zero(vb);
+        vb.slot = 0;
+        vb.pitch = sizeof(R2DVertex);
+        vb.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+        SDL_GPUVertexAttribute attribs[4];
+        SDL_zero(attribs);
+        attribs[0].location = 0; attribs[0].buffer_slot = 0; attribs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attribs[0].offset = offsetof(R2DVertex, x);
+        attribs[1].location = 1; attribs[1].buffer_slot = 0; attribs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attribs[1].offset = offsetof(R2DVertex, u);
+        attribs[2].location = 2; attribs[2].buffer_slot = 0; attribs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attribs[2].offset = offsetof(R2DVertex, r);
+        attribs[3].location = 3; attribs[3].buffer_slot = 0; attribs[3].format = SDL_GPU_VERTEXELEMENTFORMAT_UINT; attribs[3].offset = offsetof(R2DVertex, mask);
+
+        SDL_GPUColorTargetDescription target;
+        SDL_zero(target);
+        target.format = SDL_GetGPUSwapchainTextureFormat(r->device, r->window);
+        // Смешивание выключено: маска ЗАМЕНЯЕТ значение в пикселе, а не
+        // складывается с ним (иначе биты «протекали» бы из соседей).
+        target.blend_state.enable_blend = false;
+
+        SDL_GPUGraphicsPipelineCreateInfo pipe;
+        SDL_zero(pipe);
+        pipe.vertex_shader   = vs;
+        pipe.fragment_shader = fs;
+        pipe.primitive_type  = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+        pipe.vertex_input_state.num_vertex_buffers         = 1;
+        pipe.vertex_input_state.vertex_buffer_descriptions = &vb;
+        pipe.vertex_input_state.num_vertex_attributes      = 4;
+        pipe.vertex_input_state.vertex_attributes          = attribs;
+        pipe.target_info.num_color_targets         = 1;
+        pipe.target_info.color_target_descriptions = &target;
+        // Z-буфера в проходе маски нет: он про неё ничего не знает.
+        pipe.target_info.has_depth_stencil_target  = false;
+        pipe.depth_stencil_state.enable_depth_test  = false;
+        pipe.depth_stencil_state.enable_depth_write = false;
+        pipe.rasterizer_state.fill_mode  = SDL_GPU_FILLMODE_FILL;
+        pipe.rasterizer_state.cull_mode  = SDL_GPU_CULLMODE_NONE;
+        pipe.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        pipe.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+        r->light_mask_pipeline = SDL_CreateGPUGraphicsPipeline(r->device, &pipe);
+        SDL_ReleaseGPUShader(r->device, vs);
+        SDL_ReleaseGPUShader(r->device, fs);
+        if (!r->light_mask_pipeline) {
+            R2D_ERROR("конвейер маски света: SDL_CreateGPUGraphicsPipeline: %s", SDL_GetError());
+            return false;
+        }
+    }
+
+    if (r->light_mask_target && r->light_mask_w == r->light_w && r->light_mask_h == r->light_h) {
+        return true;
+    }
+    if (r->light_mask_target) {
+        SDL_ReleaseGPUTexture(r->device, r->light_mask_target);
+        r->light_mask_target = NULL;
+    }
+    r->light_mask_target = r2d__create_bloom_texture(r, r->light_w, r->light_h);
+    if (!r->light_mask_target) {
+        R2D_ERROR("SDL_CreateGPUTexture (маска света): %s", SDL_GetError());
+        return false;
+    }
+    r->light_mask_w = r->light_w;
+    r->light_mask_h = r->light_h;
+    return true;
+}
+
+/**
+ * §20.1. Проход маски: те же квады мира, но в цель уходят биты получателя.
+ * Цель очищается в «принимает все слои» (0xFFFFFFFF) — фон и всё, что маску не
+ * объявляло, ведут себя как раньше.
+ */
+static bool r2d__draw_light_mask(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
+{
+    if (!r->light_mask_used) return false;
+    // Конвейер и цель создаются здесь же: до первого кадра с маской их нет.
+    if (!r2d__light_mask_ready(r)) return false;
+
+    SDL_GPUColorTargetInfo target;
+    SDL_zero(target);
+    target.texture = r->light_mask_target;
+    target.clear_color = (SDL_FColor){ 1.0f, 1.0f, 1.0f, 1.0f };
+    target.load_op  = SDL_GPU_LOADOP_CLEAR;
+    target.store_op = SDL_GPU_STOREOP_STORE;
+
+    SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
+    if (!pass) return false;
+
+    SDL_GPUBufferBinding vb;
+    SDL_zero(vb);
+    vb.buffer = r->vertex_buffer;
+    SDL_BindGPUVertexBuffers(pass, 0, &vb, 1);
+    SDL_GPUBufferBinding ib;
+    SDL_zero(ib);
+    ib.buffer = r->index_buffer;
+    SDL_BindGPUIndexBuffer(pass, &ib, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+
+    // Границы те же, что у мирового прохода: интерфейс в маске не участвует
+    // (он и не освещается), а неосвещённый слой — участвует: если он перекрыт
+    // спрайтом с маской, биты должны быть его.
+    const int world_end = r->ui_cmd_start >= 0 ? r->ui_cmd_start : r->cmd_count;
+    int bound = -1;
+    r2d__draw_sprite_range(r, cmd, pass, 0, world_end, &bound, 1);
+
+    SDL_EndGPURenderPass(pass);
+    r->stat_passes++;
+    r->stat_mask_passes++;
+    return true;
+}
+
 bool r2d_render_draw_lights(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
 {
     if (!r || !cmd || !r->lightmap_on) return false;
@@ -2389,6 +2769,11 @@ bool r2d_render_draw_lights(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
     // r2d_render_draw_world): терять свет нельзя ни при каких условиях.
     if (r->bound_viewport >= 0) return false;
     if (!r2d__lightmap_ready(r, r->screen_w, r->screen_h)) return false;
+
+    // 0. Маска получателя света: пишется ДО накопления света, потому что гейт
+    // читается в самом накоплении. Без масок в кадре прохода нет вовсе.
+    r2d__draw_light_mask(r, cmd);
+
 
     // 1. Накопление: чёрный фон, дальше свет складывается аддитивно.
     {
@@ -2403,8 +2788,8 @@ bool r2d_render_draw_lights(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
         if (!pass) return false;
 
         int bound_blend = -1;
-        r2d__draw_tri_batches(r, pass, r->light_batches, r->light_batch_count,
-                              r->light_index_start, &bound_blend);
+        r2d__draw_tri_batches(r, cmd, pass, r->light_batches, r->light_batch_count,
+                              r->light_index_start, &bound_blend, true);
         SDL_EndGPURenderPass(pass);
         r->stat_passes++;
     }
@@ -2449,12 +2834,19 @@ bool r2d_render_draw_lights(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
     return true;
 }
 
+/**
+ * Накладывает накопленный свет на сцену. Идемпотентно: вызывается из
+ * мирового прохода ПЕРЕД неосвещённым слоем (иначе `.lit(false)` не работал бы
+ * при включённой световой карте — свет ложился бы поверх него), а вызов из
+ * main.c после мирового прохода становится пустым.
+ */
 void r2d_render_light_composite(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
                                 SDL_GPURenderPass *pass)
 {
     if (!r || !cmd || !pass) return;
     if (!r->lightmap_on || !r->lightmap_used || !r->light_target) return;
     if (!r->light_composite_pipeline) return;
+    if (r->light_composited) return;
 
     SDL_BindGPUGraphicsPipeline(pass, r->light_composite_pipeline);
 
@@ -2470,6 +2862,7 @@ void r2d_render_light_composite(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
     SDL_PushGPUFragmentUniformData(cmd, 0, &params, (Uint32)sizeof params);
     SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
     r->stat_draws++;
+    r->light_composited = true;
 }
 
 bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
@@ -2493,15 +2886,18 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
 
     SDL_GPUShader *vs = r2d__make_shader(device, &r2d_shader_sprite_vert,
                                           SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
+    // §20.1: у спрайтовой фрагментной стадии теперь две выборки (текстура и
+    // маска получателя света) и юниформ-буфер с режимом стадии.
     SDL_GPUShader *fs = r2d__make_shader(device, &r2d_shader_sprite_frag,
-                                          SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 1);
+                                          SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 2);
     if (!vs || !fs) {
         if (vs) SDL_ReleaseGPUShader(device, vs);
         if (fs) SDL_ReleaseGPUShader(device, fs);
         return false;
     }
 
-    SDL_GPUVertexAttribute attribs[3];
+    // §20.1: четыре атрибута — позиция, UV, цвет и биты получателя света.
+    SDL_GPUVertexAttribute attribs[4];
     SDL_zero(attribs);
     attribs[0].location    = 0;
     attribs[0].buffer_slot = 0;
@@ -2517,6 +2913,12 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     attribs[2].buffer_slot = 0;
     attribs[2].format      = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
     attribs[2].offset      = offsetof(R2DVertex, r);
+    // §20.1: биты получателя света. UINT, а не NORM: это битовая маска, а не
+    // цвет — нормализация превратила бы её в дробь и потеряла бы биты.
+    attribs[3].location    = 3;
+    attribs[3].buffer_slot = 0;
+    attribs[3].format      = SDL_GPU_VERTEXELEMENTFORMAT_UINT;
+    attribs[3].offset      = offsetof(R2DVertex, mask);
 
     SDL_GPUVertexBufferDescription vbuf;
     SDL_zero(vbuf);
@@ -2527,7 +2929,7 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     // Конвейер на каждый режим смешивания: рисовать разными режимами в одном
     // render pass можно, переключая пайплайн перед сменой режима у батча.
     for (int m = 0; m < R2D_BLEND_COUNT; ++m) {
-        r->pipelines[m] = r2d__create_pipeline(device, window, vs, fs, &vbuf, attribs, 3,
+        r->pipelines[m] = r2d__create_pipeline(device, window, vs, fs, &vbuf, attribs, 4,
                                                 (R2DBlendMode)m);
         if (!r->pipelines[m]) {
             R2D_ERROR("SDL_CreateGPUGraphicsPipeline (blend=%d): %s", m, SDL_GetError());
@@ -2632,6 +3034,31 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
         }
     }
 
+    // Процедурный шум для экранного искажения (§46). Генерируется здесь, а не
+    // берётся из ассета: эффект обязан работать без файлов у игры, а сам шум —
+    // это лишь поле дрожания, его художественная ценность нулевая.
+    {
+        const int N = 64;
+        Uint32 pixels[N * N];
+        Uint32 seed = 0x9e3779b9u;
+        for (int i = 0; i < N * N; i++) {
+            // xorshift32: одинаковый на всех платформах, без libc rand.
+            seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+            const Uint32 v = seed;
+            const Uint8 r8 = (Uint8)(v & 0xff);
+            const Uint8 g8 = (Uint8)((v >> 8) & 0xff);
+            const Uint8 b8 = (Uint8)((v >> 16) & 0xff);
+            pixels[i] = (Uint32)r8 | ((Uint32)g8 << 8) | ((Uint32)b8 << 16) | 0xff000000u;
+        }
+        SDL_GPUTexture *noise = r2d__create_texture(r, N, N);
+        if (noise && r2d__upload_pixels(r, noise, pixels, N, N, 4, false)) {
+            r->noise_texture = noise;
+        } else {
+            R2D_WARN("не удалось создать текстуру шума для искажения экрана");
+            if (noise) SDL_ReleaseGPUTexture(device, noise);
+        }
+    }
+
     // Пост-обработка. Если шейдер не собрался или бэкенд его не принял,
     // движок просто рисует кадр напрямую в swapchain — это не фатально.
     r->post_pipeline = r2d__create_post_pipeline(r);
@@ -2662,13 +3089,15 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
             vb.pitch = sizeof(R2DVertex);
             vb.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
-            SDL_GPUVertexAttribute attrs[3];
+            SDL_GPUVertexAttribute attrs[4];
             SDL_zero(attrs);
             attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[0].offset = 0;
             attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[1].offset = sizeof(float) * 2;
             attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[2].offset = sizeof(float) * 4;
+            // §20.1: вершинный шейдер спрайтов читает и биты получателя света.
+            attrs[3].location = 3; attrs[3].buffer_slot = 0; attrs[3].format = SDL_GPU_VERTEXELEMENTFORMAT_UINT; attrs[3].offset = sizeof(float) * 4 + 4;
 
-            r->fx_pipelines[mode] = r2d__create_pipeline(device, window, fx_vs, fx_fs, &vb, attrs, 3,
+            r->fx_pipelines[mode] = r2d__create_pipeline(device, window, fx_vs, fx_fs, &vb, attrs, 4,
                                                           (R2DBlendMode)mode);
             if (!r->fx_pipelines[mode]) {
                 R2D_WARN("шейдер узла недоступен для режима %d: %s", mode, SDL_GetError());
@@ -2717,6 +3146,7 @@ void r2d_render_shutdown(R2DRenderer *r)
     if (r->sampler)  SDL_ReleaseGPUSampler(r->device, r->sampler);
     if (r->linear_sampler) SDL_ReleaseGPUSampler(r->device, r->linear_sampler);
     if (r->black_texture)  SDL_ReleaseGPUTexture(r->device, r->black_texture);
+    if (r->noise_texture)  SDL_ReleaseGPUTexture(r->device, r->noise_texture);
     for (int m = 0; m < R2D_BLEND_COUNT; ++m) {
         if (r->pipelines[m]) SDL_ReleaseGPUGraphicsPipeline(r->device, r->pipelines[m]);
         if (r->fx_pipelines[m]) SDL_ReleaseGPUGraphicsPipeline(r->device, r->fx_pipelines[m]);
@@ -2744,6 +3174,8 @@ void r2d_render_shutdown(R2DRenderer *r)
     SDL_free(r->tri_batches);
     SDL_free(r->light_vertices);
     SDL_free(r->light_batches);
+    if (r->light_mask_target && r->device) SDL_ReleaseGPUTexture(r->device, r->light_mask_target);
+    if (r->light_mask_pipeline && r->device) SDL_ReleaseGPUGraphicsPipeline(r->device, r->light_mask_pipeline);
     SDL_free(r->vertices);
     SDL_free(r->indices);
     SDL_zero(*r);
@@ -2820,6 +3252,17 @@ static JSValue r2d__js_set_post(JSContext *ctx, JSValueConst this_val,
     // движок каждый кадр — из JS он не приходит.
     p.bloom_threshold = r2d__js_arg_float(ctx, argc, argv, 20, p.bloom_threshold);
     p.bloom_radius    = r2d__js_arg_float(ctx, argc, argv, 21, p.bloom_radius);
+    // §46: экранное искажение. Идёт тем же вызовом, а не отдельным API: это
+    // часть того же пост-прохода, и держать два состояния значило бы
+    // рассинхронизировать «включено/выключено».
+    p.distort         = r2d__js_arg_float(ctx, argc, argv, 22, p.distort);
+    p.wave_amp        = r2d__js_arg_float(ctx, argc, argv, 23, p.wave_amp);
+    p.wave_freq       = r2d__js_arg_float(ctx, argc, argv, 24, p.wave_freq);
+    p.wave_speed      = r2d__js_arg_float(ctx, argc, argv, 25, p.wave_speed);
+    p.wave_axis       = r2d__js_arg_float(ctx, argc, argv, 26, p.wave_axis);
+    p.noise_amount    = r2d__js_arg_float(ctx, argc, argv, 27, p.noise_amount);
+    p.noise_scale     = r2d__js_arg_float(ctx, argc, argv, 28, p.noise_scale);
+    p.channel_shift   = r2d__js_arg_float(ctx, argc, argv, 29, p.channel_shift);
 
     r2d_render_set_post(r, &p);
     return JS_TRUE;
@@ -2856,6 +3299,14 @@ static JSValue r2d__js_get_post(JSContext *ctx, JSValueConst this_val,
     JS_SetPropertyStr(ctx, o, "blood",     JS_NewFloat64(ctx, p ? (double)p->blood : 0.0));
     JS_SetPropertyStr(ctx, o, "bloom_threshold",
                       JS_NewFloat64(ctx, p ? (double)p->bloom_threshold : 0.75));
+    JS_SetPropertyStr(ctx, o, "distort",       JS_NewFloat64(ctx, p ? (double)p->distort : 0.0));
+    JS_SetPropertyStr(ctx, o, "wave_amp",      JS_NewFloat64(ctx, p ? (double)p->wave_amp : 0.0));
+    JS_SetPropertyStr(ctx, o, "wave_freq",     JS_NewFloat64(ctx, p ? (double)p->wave_freq : 24.0));
+    JS_SetPropertyStr(ctx, o, "wave_speed",    JS_NewFloat64(ctx, p ? (double)p->wave_speed : 6.0));
+    JS_SetPropertyStr(ctx, o, "wave_axis",     JS_NewFloat64(ctx, p ? (double)p->wave_axis : 0.0));
+    JS_SetPropertyStr(ctx, o, "noise_amount",  JS_NewFloat64(ctx, p ? (double)p->noise_amount : 0.0));
+    JS_SetPropertyStr(ctx, o, "noise_scale",   JS_NewFloat64(ctx, p ? (double)p->noise_scale : 8.0));
+    JS_SetPropertyStr(ctx, o, "channel_shift", JS_NewFloat64(ctx, p ? (double)p->channel_shift : 0.0));
     JS_SetPropertyStr(ctx, o, "bloom_radius",
                       JS_NewFloat64(ctx, p ? (double)p->bloom_radius : 1.0));
     // bloom_ready — факт этого кадра: считалось ли свечение отдельными
@@ -2892,7 +3343,28 @@ static JSValue r2d__js_render_info(JSContext *ctx, JSValueConst this_val,
     JS_SetPropertyStr(ctx, o, "fx_pipelines", JS_NewBool(ctx, r && r->fx_pipelines[0] != NULL));
     JS_SetPropertyStr(ctx, o, "fx_cmds", JS_NewInt32(ctx, r ? r->stat_fx_cmds : 0));
     JS_SetPropertyStr(ctx, o, "draws", JS_NewInt32(ctx, r ? r->stat_draws : 0));
+    // Презентация: снаппинг вершин и число конвейеров (вариантов пайплайнов).
+    // Постоянная смена материала не должна плодить варианты — их потолок
+    // виден здесь: 4 режима смешивания + 4 под шейдер узла.
+    JS_SetPropertyStr(ctx, o, "snap", JS_NewBool(ctx, r && r->snap));
+    JS_SetPropertyStr(ctx, o, "sprite_pipelines", JS_NewInt32(ctx, R2D_BLEND_COUNT));
+    {
+        int fx_ready = 0;
+        for (int i = 0; r && i < R2D_BLEND_COUNT; ++i) if (r->fx_pipelines[i]) fx_ready++;
+        JS_SetPropertyStr(ctx, o, "fx_pipelines_ready", JS_NewInt32(ctx, fx_ready));
+    }
     return o;
+}
+
+// engine.setSnap(on)/engine.renderSnap() — презентационный снаппинг вершин.
+static JSValue r2d__js_set_snap(JSContext *ctx, JSValueConst this_val,
+                                int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DRenderer *r = s ? s->renderer : NULL;
+    if (argc >= 1 && r) r->snap = JS_ToBool(ctx, argv[0]) != 0;
+    return JS_NewBool(ctx, r && r->snap);
 }
 
 static JSValue r2d__js_post_supported(JSContext *ctx, JSValueConst this_val,
@@ -2902,6 +3374,17 @@ static JSValue r2d__js_post_supported(JSContext *ctx, JSValueConst this_val,
     R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
     R2DRenderer *r = s ? s->renderer : NULL;
     return JS_NewBool(ctx, r && r->post_pipeline != NULL);
+}
+
+// engine.markUnlit() — «дальше идёт неосвещённый мировой слой»: без света,
+// тумана и темноты, но под интерфейсом (узлы с .lit(false)).
+static JSValue r2d__js_mark_unlit(JSContext *ctx, JSValueConst this_val,
+                                  int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    if (s && s->renderer) r2d_render_mark_unlit(s->renderer);
+    return JS_UNDEFINED;
 }
 
 // engine.markUI() — «дальше идёт интерфейс». С пост-обработкой HUD рисуется
@@ -3014,11 +3497,32 @@ static JSValue r2d__js_submit_sprites(JSContext *ctx, JSValueConst this_val,
         }
     }
 
+    // §20.1. Шестой аргумент — биты получателя света (Uint32Array), по одному
+    // на спрайт. Без него у всех «все слои»: поведение и цена прежние.
+    const uint32_t *mask = NULL;
+    JSValue mask_ab = JS_UNDEFINED;
+    if (argc >= 6 && !JS_IsUndefined(argv[5]) && !JS_IsNull(argv[5])) {
+        size_t moff = 0, mlen = 0, mbpe = 0;
+        mask_ab = JS_GetTypedArrayBuffer(ctx, argv[5], &moff, &mlen, &mbpe);
+        if (!JS_IsException(mask_ab)) {
+            size_t msize = 0;
+            uint8_t *mbase = JS_GetArrayBuffer(ctx, &msize, mask_ab);
+            if (mbase && mlen / sizeof(uint32_t) >= (size_t)count) {
+                mask = (const uint32_t *)(mbase + moff);
+            }
+        } else {
+            JS_FreeValue(ctx, mask_ab);
+            mask_ab = JS_UNDEFINED;
+        }
+    }
+
     const int blend = r2d__js_blend_arg(ctx, argc, argv, 3);
-    const int drawn = r2d_batch_submit_fx(s->renderer, transforms, colors, fx, count, blend);
+    const int drawn = r2d_batch_submit_fx_mask(s->renderer, transforms, colors, fx, mask,
+                                               count, blend);
 
     if (!JS_IsUndefined(colors_ab)) JS_FreeValue(ctx, colors_ab);
     if (!JS_IsUndefined(fx_ab)) JS_FreeValue(ctx, fx_ab);
+    if (!JS_IsUndefined(mask_ab)) JS_FreeValue(ctx, mask_ab);
     JS_FreeValue(ctx, ab);
     return JS_NewInt32(ctx, drawn);
 }
@@ -3123,7 +3627,15 @@ static JSValue r2d__js_submit_light_triangles(JSContext *ctx, JSValueConst this_
 
     if (count > 0) {
         const int blend = r2d__js_blend_arg(ctx, argc, argv, 2);
-        r2d_batch_light_triangles_blend(s->renderer, (const float *)(base + off), count, blend);
+        // §20.1. Четвёртый аргумент — биты слоя источника (0xFFFFFFFF — все
+        // получатели, прежнее поведение). Пакет света рвётся по смене слоя.
+        uint32_t layer = 0xFFFFFFFFu;
+        if (argc >= 4 && !JS_IsUndefined(argv[3]) && !JS_IsNull(argv[3])) {
+            double v = 0;
+            if (!JS_ToFloat64(ctx, &v, argv[3])) layer = (uint32_t)v;
+        }
+        r2d_batch_light_triangles_layer(s->renderer, (const float *)(base + off), count,
+                                        blend, layer);
     }
 
     JS_FreeValue(ctx, ab);
@@ -3137,6 +3649,19 @@ static JSValue r2d__js_submit_light_triangles(JSContext *ctx, JSValueConst this_
 // выключает карту света: { on, intensity, soft } уходит в рендерер, который
 // решает, рисовать свет в текстуру или прямо в сцену.
 // ---------------------------------------------------------------------------
+
+// engine.lightMaskPasses() — сколько раз за прошлый кадр писалась маска
+// получателя света (§20.1). Ноль — масок в кадре не было.
+static JSValue r2d__js_light_mask_passes(JSContext *ctx, JSValueConst this_val,
+                                         int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2D_UNUSED(argc);
+    R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    if (!s || !s->renderer) return JS_NewInt32(ctx, 0);
+    return JS_NewInt32(ctx, s->renderer->prev_mask_passes);
+}
 
 static JSValue r2d__js_light_map(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
@@ -3331,7 +3856,8 @@ void r2d_render_register_js(JSContext *ctx, JSValue engine)
     // общая точка сборки, править её нельзя. Без 4-го аргумента поведение
     // прежнее (alpha), поэтому старые игры не замечают подмены.
     if (r) {
-        r2d__js_set_fn(ctx, engine, "submitSprites",   r2d__js_submit_sprites, 5);
+        r2d__js_set_fn(ctx, engine, "submitSprites",   r2d__js_submit_sprites, 6);
+        r2d__js_set_fn(ctx, engine, "lightMaskPasses", r2d__js_light_mask_passes, 0);
         r2d__js_set_fn(ctx, engine, "submitTriangles", r2d__js_submit_triangles, 3);
         // Свет для lightmap: свой список, свой проход, тот же формат вершин.
         r2d__js_set_fn(ctx, engine, "submitLightTriangles", r2d__js_submit_light_triangles, 3);
@@ -3352,11 +3878,13 @@ void r2d_render_register_js(JSContext *ctx, JSValue engine)
     // Позиционные аргументы: отсутствующие сохраняют текущее значение, чтобы
     // игра могла менять один эффект, не переписывая остальные. Последний
     // аргумент — время (нужно зерну).
-    r2d__js_set_fn(ctx, engine, "setPost", r2d__js_set_post, 22);
+    r2d__js_set_fn(ctx, engine, "setPost", r2d__js_set_post, 30);
     r2d__js_set_fn(ctx, engine, "getPost", r2d__js_get_post, 0);
     r2d__js_set_fn(ctx, engine, "postSupported", r2d__js_post_supported, 0);
     r2d__js_set_fn(ctx, engine, "renderInfo", r2d__js_render_info, 0);
+    r2d__js_set_fn(ctx, engine, "setSnap", r2d__js_set_snap, 1);
     r2d__js_set_fn(ctx, engine, "markUI", r2d__js_mark_ui, 0);
+    r2d__js_set_fn(ctx, engine, "markUnlit", r2d__js_mark_unlit, 0);
 
     // --- engine.viewport.*: render target игры ------------------------------
     JSValue vp = JS_NewObject(ctx);

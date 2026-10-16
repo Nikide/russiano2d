@@ -113,6 +113,60 @@ def main():
         a.step(2)
         check(a.eval("globalThis.__gone") == 0, "исчезнувшая цель даёт null, а не исключение")
 
+        # --- §11: stay / once / cooldown ---------------------------------------
+        a.eval("$.store.set('stayN', 0); $.store.set('onceN', 0); $.store.set('cdN', 0);"
+               " $.triggers.zone({ id: 'stayzone', x: 100, y: 100, w: 120, h: 120,"
+               "   detect: 'player', stay_ms: 50,"
+               "   onStay: () => $.store.set('stayN', $.store.get('stayN') + 1) });"
+               " $.triggers.zone({ id: 'oncezone', x: 100, y: 100, w: 120, h: 120,"
+               "   detect: 'player', once: true,"
+               "   onEnter: () => $.store.set('onceN', $.store.get('onceN') + 1) });"
+               " $.triggers.zone({ id: 'cdzone', x: 100, y: 100, w: 120, h: 120,"
+               "   detect: 'player', cooldown: 1500,"
+               "   onEnter: () => $.store.set('cdN', $.store.get('cdN') + 1) });"
+               " true")
+        move(a, "#hero", 100, 100)          # игрок внутри всех трёх зон
+        a.step(20)                          # 20 кадров ≈ 333 мс игрового времени
+        stay = a.eval("$.store.get('stayN')")
+        check(3 <= stay <= 12,
+              "stay приходит по интервалу 50 мс, а не каждый кадр (%s за 20 кадров)" % stay)
+        check(a.eval("$.store.get('onceN')") == 1, "once: ровно один enter")
+
+        # cooldown: уходим и возвращаемся в окне 1.5 с — входа нет
+        cd_first = a.eval("$.store.get('cdN')")
+        move(a, "#hero", 700, 100)
+        a.step(2)
+        move(a, "#hero", 100, 100)
+        a.step(3)
+        check(a.eval("$.store.get('cdN')") == cd_first,
+              "cooldown гасит повторный вход в окне (%s)" % a.eval("$.store.get('cdN')"))
+        # ...а вне окна вход снова работает
+        move(a, "#hero", 700, 100)
+        a.step(100)                          # ≈ 1.7 с игрового времени
+        move(a, "#hero", 100, 100)
+        a.step(3)
+        check(a.eval("$.store.get('cdN')") == cd_first + 1,
+              "после окна cooldown вход снова проходит (%s)" % a.eval("$.store.get('cdN')"))
+
+        # once не повторяется при повторном входе, reset() перевзводит
+        move(a, "#hero", 700, 100)
+        a.step(2)
+        move(a, "#hero", 100, 100)
+        a.step(2)
+        check(a.eval("$.store.get('onceN')") == 1, "once не повторяется при повторном входе")
+        a.eval("$.triggers.reset('#oncezone'); true")
+        a.step(2)
+        check(a.eval("$.store.get('onceN')") == 2, "reset() перевзвёл once-зону")
+
+        # --- создание внутри зоны даёт enter на следующем кадре ----------------
+        a.eval("$.store.set('bornN', 0);"
+               " $.triggers.zone({ id: 'borntown', x: 300, y: 300, w: 200, h: 200,"
+               "   detect: 'player', onEnter: () => $.store.set('bornN', $.store.get('bornN') + 1) });"
+               " $('#hero').at(300, 300); true")
+        a.step(2)
+        check(a.eval("$.store.get('bornN')") == 1,
+              "цель, оказавшаяся в зоне (создание/телепорт), получает enter следующим кадром")
+
         # --- clear ------------------------------------------------------------
         a.eval("$.triggers.clear(); true")
         check(a.eval("$.triggers.list().length") == 0, "clear убирает зоны")

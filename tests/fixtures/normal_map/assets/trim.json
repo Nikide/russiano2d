@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "image": "trim.png",
+    "size": {
+      "w": 16,
+      "h": 16
+    }
+  },
+  "frames": {
+    "trim": {
+      "frame": {
+        "x": 4,
+        "y": 4,
+        "w": 8,
+        "h": 8
+      },
+      "trimmed": true,
+      "spriteSourceSize": {
+        "x": 4,
+        "y": 4,
+        "w": 8,
+        "h": 8
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      }
+    }
+  },
+  "tags": {
+    "all": [
+      "trim"
+    ]
+  }
+}

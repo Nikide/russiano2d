@@ -12,9 +12,10 @@
 
 import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
 import {
-    damageReason, hitAllowed, noteHit, reflectAttack, REFUSAL_REASONS,
+    damageReason, hitAllowed, noteHit, reflectAttack, REFUSAL_REASONS, normalizeAttack,
 } from '../../src/highlevel/combat.js';
 import { approachValue, groundSlope, controlsScheme } from '../../src/highlevel/api.js';
+import { isDamageResponse, resolvePoint, resolveNode } from '../../src/highlevel/hits.js';
 
 // --- Причины отказа: каждая фактическая, не выдуманная ----------------------
 
@@ -133,6 +134,63 @@ test('reflectAttack: новая identity и новые owner/team', () => {
     eq(src.reflectedBy, 10, 'старая атака помечена');
     eq(out.damageType, 'bullet', 'тип урона сохраняется, если не задан');
     near(out.until, 100.15, 1e-9, 'окно отсчитывается от момента отражения');
+});
+
+test('reflectAttack: отражённая атака по форме не отличается от обычной', () => {
+    let next = 1;
+    const out = reflectAttack({ id: 7, amount: 10, window: 100 }, {}, () => next++, 0);
+    truthy(Array.isArray(out.hits), 'журнал попаданий создан');
+    eq(out.hits.length, 0, 'журнал пуст');
+    truthy(out.hit_targets !== undefined && out.hit_targets !== null, 'hit_targets создан');
+    truthy(out.cooldown_until !== undefined && out.cooldown_until !== null, 'cooldown_until создан');
+    // Дедупликация и запись попадания работают без ручной правки объекта.
+    eq(hitAllowed(out, 5, 0.01).allowed, true);
+    noteHit(out, 5, 0.01);
+    eq(hitAllowed(out, 5, 0.02).reason, 'duplicate');
+    eq(out.hits.length, 0, 'noteHit не пишет в hits (пишет applyDamage)');
+});
+
+test('normalizeAttack: атака, собранная руками, получает журналы', () => {
+    const raw = { id: 1, until: 10, amount: 5 };
+    const same = normalizeAttack(raw);
+    eq(same, raw, 'мутирует и возвращает ту же атаку');
+    truthy(Array.isArray(raw.hits), 'hits создан');
+    truthy(raw.hit_targets !== undefined, 'hit_targets создан');
+    truthy(raw.cooldown_until !== undefined, 'cooldown_until создан');
+    // Повторный вызов не затирает уже накопленный журнал.
+    raw.hits.push({ target_id: 1 });
+    raw.hit_targets[1] = 0.5;
+    normalizeAttack(raw);
+    eq(raw.hits.length, 1, 'журнал не пересоздаётся');
+    eq(raw.hit_targets[1], 0.5);
+    eq(normalizeAttack(null), null, 'null безопасен');
+});
+
+// --- §9-ответ как вход presentation -----------------------------------------
+
+test('isDamageResponse: ответ §9 отличается от узла и точки', () => {
+    const response = {
+        accepted: true, applied: 25, target_id: 'n7', targetNodeId: 'n7',
+        attackId: 3, x: 100, y: 200, death: false,
+    };
+    eq(isDamageResponse(response), true);
+    eq(isDamageResponse({ x: 1, y: 2 }), false, 'точка — не ответ');
+    eq(isDamageResponse({ nodes: [], x: 1 }), false, 'обёртка — не ответ');
+    eq(isDamageResponse(null), false);
+});
+
+test('resolvePoint: точку даёт сам ответ §9', () => {
+    const response = { accepted: true, applied: 5, target_id: 'n1', x: 120, y: 80 };
+    const p = resolvePoint(response);
+    eq(p.x, 120);
+    eq(p.y, 80);
+});
+
+test('resolveNode: цель ответа ищется по nid, а не по ссылке на узел', () => {
+    // В юнит-тесте (без движка) реестра узлов нет — функция обязана вернуть
+    // null, а не бросить и не принять сам ответ за узел.
+    const response = { accepted: true, applied: 5, target_id: 'n1', targetNodeId: 'n1', x: 1, y: 2 };
+    eq(resolveNode(response), null, 'нет узла с таким nid — null');
 });
 
 // --- §8: ускорение и угол поверхности --------------------------------------

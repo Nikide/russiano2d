@@ -9,6 +9,7 @@
 // ===========================================================================
 
 import { escapeHtml, joinPath, dirOf, absolutePath } from '../lib/model.js';
+import { createPanel } from '../lib/panel_check.js';
 import * as views from '../lib/views.js';
 
 export const standalone = true;
@@ -53,6 +54,62 @@ function create(app) {
     };
     const rect = () => doc.rect('dt-view') || { x: 0, y: 0, w: 0, h: 0 };
     const val = (id) => String(doc.value(id) || '').trim();
+    // §29: панель проверки сессии — тот же JSON-валидатор, что CLI.
+    let panel = null;
+    let sessionFile = null;
+
+    function makePanel(file) {
+        sessionFile = file || sessionFile;
+        panel = createPanel(app, {
+            label: 'DevTools',
+            paths: () => (sessionFile ? [sessionFile] : []),
+            primary: () => sessionFile,
+            report: () => devReport(),
+        });
+        return panel;
+    }
+
+    /** Отчёт DevTools: scoped lifecycle, validation reports и фикстуры приёмки. */
+    function devReport() {
+        const list = ($.fs.list('tests/agent') || []).filter((f) => /_test\.py$/.test(f));
+        const notes = [];
+        if (!list.length) notes.push('фикстуры приёмки не найдены: tests/agent недоступен из SDK');
+        if (!s.report) notes.push('сессия ещё не запускалась: lifecycle не подтверждён');
+        return {
+            project: s.game || null,
+            sessionFile,
+            commands: Object.keys(s.cmds).filter((k) => s.cmds[k]).length,
+            entities: s.entities.length,
+            lifecycle: s.report ? (s.report.ok ? 'session ok' : 'session with diagnostics') : 'idle',
+            validationReports: s.report && s.report.diagnostics ? s.report.diagnostics.length : 0,
+            fixtures: list.length,
+            fixturesSample: list.slice(0, 5),
+            notes,
+        };
+    }
+
+    async function validateSession() {
+        const f = form();
+        if (!f.game) { fail('SDK_USAGE', 'Укажите каталог игры'); return { ok: false, diagnostics: [] }; }
+        let session;
+        try { session = buildSession(f); } catch (e) { fail('SDK_DEVTOOLS_SESSION', e && e.message ? e.message : String(e)); return { ok: false, diagnostics: [] }; }
+        const file = joinPath($.fs.basePath() || '.', 'build/sdk_devtools/session.agent.json');
+        if (!$.fs.write(file, JSON.stringify(session, null, 2))) { fail('SDK_WRITE_FAILED', 'Не удалось записать ' + file); return { ok: false, diagnostics: [] }; }
+        if (!panel) makePanel(file);
+        const r = await panel.validate();
+        s.diagnostics = r.diagnostics;
+        renderAll();
+        return r;
+    }
+
+    function previewSession() {
+        if (!panel) makePanel(sessionFile);
+        const r = panel.preview();
+        renderAll();
+        return r;
+    }
+
+    function report() { if (!panel) makePanel(sessionFile); return panel.report(); }
 
     function openProject(abs) {
         s.active = true;
@@ -162,6 +219,11 @@ function create(app) {
         doc.html('dt-profile', prof);
         doc.text('dt-log', escapeHtml(s.report ? JSON.stringify(s.report.responses || s.report, null, 1).slice(0, 6000) : ''));
         placeShot();
+        if (panel) {
+            const rep = panel.report();
+            doc.text('dt-report', escapeHtml('lifecycle: ' + rep.lifecycle + ' · команд ' + rep.commands + ' · фикстур ' + rep.fixtures +
+                ' · ошибок ' + panel.state.summary.errors + ' · предупреждений ' + panel.state.summary.warnings));
+        }
         doc.text('dt-hud', escapeHtml(s.shotInfo ? 'кадр игры ' + s.shotInfo.width + '×' + s.shotInfo.height + ' · ' + (s.stateObj ? 'кадр ' + s.stateObj.frame : '') : 'скриншот появится после запуска'));
     }
 
@@ -191,6 +253,8 @@ function create(app) {
         doc.on('dt-back', 'click', () => close());
         doc.on('dt-run', 'click', () => run());
         doc.on('dt-save', 'click', () => saveSession());
+        doc.on('dt-validate', 'click', () => validateSession());
+        doc.on('dt-preview', 'click', () => previewSession());
         doc.on('dt-cmds', 'click', (id, ev, key) => { if (key) { s.cmds[key] = !s.cmds[key]; renderCmds(); } });
         doc.on('dt-entities', 'click', (id, ev, key) => { if (key !== '' && key !== undefined) { s.selected = parseInt(key, 10); renderAll(); } });
     }
@@ -198,13 +262,16 @@ function create(app) {
     $.update(() => { if (s.active) placeShot(); });
 
     const api = {
-        state: s, openProject, close, run, saveSession,
+        state: s, openProject, close, run, saveSession, validateSession, previewSession, report,
+        get panel() { return panel; },
         select(i) { s.selected = i; renderAll(); return s.selected; },
         toggle(cmd) { s.cmds[cmd] = !s.cmds[cmd]; renderCmds(); return s.cmds[cmd]; },
         snapshot() {
             return {
                 active: s.active, busy: s.busy, game: s.game, ok: s.report ? !!s.report.ok : null, entities: s.entities.length, selected: s.selected,
                 frame: s.stateObj ? s.stateObj.frame : null, profile: !!s.profile, screenshot: !!s.node, codes: s.diagnostics.map((d) => d.code),
+                panel: panel ? panel.snapshot() : null,
+                report: panel ? panel.report() : null,
             };
         },
     };

@@ -49,7 +49,45 @@ let gamepad_was_connected = false;
 // Настройки осей. Мёртвая зона гасит дребезг стика: под ним ось считается
 // нулевой. 0.2 по умолчанию — привычное значение для геймпадов.
 const input_state = { deadzone: 0.2 };
+
+// §15: контексты ввода. Одно действие (confirm, attack) объявлено в нескольких
+// контекстах, и вопрос «кто его съел» решается не порядком подписок, а
+// приоритетом активного контекста. Без этого confirm одновременно закрывает
+// реплику и запускает атаку.
+const CONTEXTS = ['gameplay', 'menu', 'dialogue', 'loading'];
+const contexts = new Map();              // имя → запись контекста
+const waiters = [];                      // ожидания «следующего ввода» (rebind)
+const devices = new Map();               // слот → { serial, player, held, last_seen }
+let consumes = null;                     // { action, context, at } — что уже съедено
+const CONSUME_MS = 120;                  // окно, в котором повторное чтение видит съеденное
+const AMBIGUOUS_GAP = 0.12;              // гистерезис: ниже порога — «не действие»
+
 const BINDINGS_KEY = 'input.bindings';   // ключ $.store для save/loadBindings()
+const DEFAULTS_KEY = 'input.defaults';   // эталонные привязки для resetDefaults()
+
+let waiter_seq = 1;                      // номера ожиданий захвата ввода
+let default_binds = new Map();           // эталон привязок для resetDefaults()
+let context_order = 0;                   // порядок включения контекстов
+const axis_actions = new Map();          // имя действия оси → настройки (§15)
+
+// Подписи кнопок геймпада для UI: игра показывает их, а не «Button 0».
+// Раскладка Xbox — самая распространённая; для других геймпадов подписи
+// отличаются, но перепутать кнопки хуже, чем показать привычное имя.
+const PAD_GLYPHS = {
+    a: 'A', b: 'B', x: 'X', y: 'Y',
+    back: 'Back', guide: 'Guide', start: 'Start',
+    leftstick: 'LS', rightstick: 'RS',
+    leftshoulder: 'LB', rightshoulder: 'RB',
+    dpup: 'D-Pad ↑', dpdown: 'D-Pad ↓', dpleft: 'D-Pad ←', dpright: 'D-Pad →',
+};
+
+/** Включить/выключить контекст, запомнив порядок включения. */
+function setActive(c, on) {
+    if (!!on === c.active) return c;
+    c.active = !!on;
+    if (on) c.order = context_order++;
+    return c;
+}
 
 /** Погасить дребезг оси: всё, что меньше мёртвой зоны, — ноль. */
 function applyDeadzone(value) {
@@ -80,6 +118,41 @@ function isGamepadKey(name) {
     return String(name).toLowerCase().startsWith('gamepad.');
 }
 
+// Синтетический ввод (§15): нажатия, которые «сделала» игра или тест.
+// Живут один кадр (synth_tap) или до явного отпускания (synth_held) и
+// участвуют в том же разрешении действий, что настоящие клавиши.
+const synth_tap = new Set();      // нажатия, видимые в текущем кадре
+const synth_next = new Set();     // нажатия, заказанные на следующий кадр
+const synth_held = new Set();     // удерживаемые синтетические клавиши
+let synth_seen = false;
+
+/** Контекст по имени; отсутствующий создаётся выключенным. */
+function contextOf(name) {
+    const key = String(name === undefined || name === null ? 'gameplay' : name);
+    let c = contexts.get(key);
+    if (!c) {
+        c = { name: key, active: false, priority: CONTEXTS.indexOf(key) >= 0 ? 0 : 0,
+              binds: new Map() };
+        contexts.set(key, c);
+    }
+    return c;
+}
+
+/** Активные контексты: по убыванию приоритета, затем по порядку включения. */
+function activeContexts() {
+    const out = [];
+    for (const c of contexts.values()) if (c.active) out.push(c);
+    out.sort((a, b) => (b.priority - a.priority) || (a.order - b.order));
+    return out;
+}
+
+/** Недавно ли это действие уже потреблено другим контекстом. */
+function recentlyConsumed(action) {
+    if (!consumes || consumes.action !== action) return false;
+    const now = typeof engine !== 'undefined' && engine ? (engine.frame || 0) : 0;
+    return now - consumes.at <= 2;
+}
+
 export function installInput($) {
     const input = {
         // --- Клавиши --------------------------------------------------------
@@ -89,7 +162,29 @@ export function installInput($) {
 
         _any(name, kind, seen) {
             if (Array.isArray(name)) return name.some((n) => input._any(n, kind, seen));
-            if (isGamepadKey(name)) return input.gamepad(0)[kind](String(name).split('.')[1]);
+            // Кнопки геймпада: у объекта слота есть down(), но не down/released —
+            // отсутствие метода означает «состояния нет», а не падение. Раньше
+            // здесь был TypeError: not a function, и он убивал `released()`
+            // целиком (нашлось тестом §15).
+            if (isGamepadKey(name)) {
+                const btn = String(name).split('.')[1];
+                const pad = input.gamepad(0);
+                if (typeof pad[kind] !== 'function') return false;
+                return !!pad[kind](btn);
+            }
+
+            // §15: явно потреблённое действие не видит НИКТО — ни контексты,
+            // ни общий слой привязок. Именно это требование «один confirm не
+            // должен одновременно закрывать реплику и выполнять атаку»: меню
+            // обработало ввод и погасило его для остальных.
+            if (kind === 'pressed' && recentlyConsumed(name)) return false;
+
+            // Действие, объявленное в активном контексте, спрашивается у самого
+            // приоритетного такого контекста.
+            if (kind === 'pressed' && !binds.has(name)) {
+                const owner = activeContexts().find((c) => c.binds.has(name));
+                if (owner) return owner.binds.get(name).some((k) => input._any(k, kind, seen));
+            }
 
             // Защита от самоссылки: привязка вроде bind('up', ['w', 'up'])
             // раньше уходила в бесконечную рекурсию, потому что имя действия
@@ -112,9 +207,9 @@ export function installInput($) {
                 if (kind === 'pressed') return engine.mousePressed(button);
                 return false;
             }
-            if (kind === 'down') return engine.keyDown(code);
-            if (kind === 'pressed') return engine.keyPressed(code);
-            return engine.keyReleased(code);
+            if (kind === 'down') return engine.keyDown(code) || synth_held.has(code) || synth_tap.has(code);
+            if (kind === 'pressed') return engine.keyPressed(code) || (synth_seen && synth_tap.has(code));
+            return engine.keyReleased(code) || (synth_seen && synth_tap.has(code));
         },
 
         /** Ось -1..1 по двум именам (клавиша, действие или кнопка геймпада). */
@@ -415,9 +510,48 @@ export function installInput($) {
             return restored > 0;
         },
 
+        /**
+         * Виртуальное (скриптовое) нажатие клавиши.
+         *
+         * Ввод от скрипта идёт тем же путём, что и настоящий: `down/pressed/
+         * released`, действия, контексты и потребление видят его одинаково.
+         * Это и есть требование §15 «virtual input использует тот же action
+         * resolution» — и заодно единственный способ надёжно протестировать
+         * ввод: настоящая клавиша живёт один кадр, а скрипт может попросить
+         * нажатие ровно на своём кадре.
+         *
+         *   $.input.synthPress('space');   // нажато ровно в этом кадре
+         *   $.input.synthDown('space');    // держится
+         *   $.input.synthRelease('space');
+         *   $.input.synthClear();
+         */
+        synthPress(name) {
+            // Всегда заказываем на ближайший кадр, а не пишем прямо в текущий:
+            // начало кадра чистит видимый набор, поэтому «немедленная» запись
+            // терялась, если её сделали между кадрами (нашлось тестом §15).
+            synth_next.add(scancodeOf(name));
+            return input;
+        },
+        synthDown(name) { synth_held.add(scancodeOf(name)); return input; },
+        synthRelease(name) { synth_held.delete(scancodeOf(name)); return input; },
+        synthClear() { synth_held.clear(); synth_tap.clear(); synth_next.clear(); return input; },
+        /** Правило: синтетические нажатия видны в этом кадре или нет. */
+        synthSeen() { return synth_seen; },
+        synthRule(enabled) { synth_seen = !!enabled; return input; },
+
         /** Клавиши, нажатые в этом кадре (имена для $.input.on). */
-        _pressedCodes() { return engine.keysPressed(); },
-        _releasedCodes() { return engine.keysReleased(); },
+        _pressedCodes() {
+            const out = engine.keysPressed().slice();
+            if (!synth_seen) return out;
+            for (const code of synth_tap) if (!out.includes(code)) out.push(code);
+            return out;
+        },
+        _releasedCodes() {
+            const out = engine.keysReleased().slice();
+            if (!synth_seen) return out;
+            for (const code of synth_tap) if (!out.includes(code)) out.push(code);
+            return out;
+        },
 
         /**
          * Виброотклик: трясёт первый подключённый геймпад и возвращает true,
@@ -446,6 +580,275 @@ export function installInput($) {
 
         /** Остановить вибрацию — то же, что `$.input.rumble(0)`. */
         stopRumble() { return rumble(0, 0); },
+
+        // --- §15: контексты, потребление и захват ввода -----------------------
+
+        /**
+         * Объявить/включить контекст ввода.
+         *
+         *   $.input.context('menu', { active: true, priority: 10, binds: { confirm: ['space','gamepad.a'] } });
+         *   $.input.context('gameplay').active(true);
+         *   $.input.context()                       // список контекстов
+         *
+         * `active(true)` поднимает контекст наверх стека потребления: пока он
+         * активен, `pressed(action)` отдаёт действие именно ему, а не тому, кто
+         * успел подписаться раньше. Это и есть ответ на «один confirm не должен
+         * закрывать реплику и бить одновременно».
+         */
+        context(name, opts) {
+            if (name === undefined) {
+                const out = [];
+                for (const c of contexts.values()) {
+                    out.push({ name: c.name, active: c.active, priority: c.priority,
+                               binds: Object.fromEntries(c.binds) });
+                }
+                out.sort((a, b) => b.priority - a.priority);
+                return out;
+            }
+            const c = contextOf(name);
+            if (opts && typeof opts === 'object') {
+                if (opts.priority !== undefined) c.priority = Number(opts.priority) || 0;
+                if (opts.binds && typeof opts.binds === 'object') {
+                    for (const action of Object.keys(opts.binds)) {
+                        c.binds.set(action, Array.isArray(opts.binds[action])
+                            ? opts.binds[action].slice() : [opts.binds[action]]);
+                    }
+                }
+                if (opts.active !== undefined) setActive(c, !!opts.active);
+            }
+            // Обёртка, чтобы `$.input.context('menu').active(true)` читалось
+            // как обычная цепочка $.
+            const view = {
+                name: c.name,
+                active(value) {
+                    if (value === undefined) return c.active;
+                    setActive(c, !!value);
+                    return view;
+                },
+                priority(value) {
+                    if (value === undefined) return c.priority;
+                    c.priority = Number(value) || 0;
+                    return view;
+                },
+                bind(action, keys) { c.binds.set(action, Array.isArray(keys) ? keys.slice() : [keys]); return view; },
+                binds() { return Object.fromEntries(c.binds); },
+            };
+            return view;
+        },
+
+        /** Явно выключить контекст (то же, что `.active(false)`). */
+        contextOff(name) { setActive(contextOf(name), false); return input; },
+
+        /**
+         * Потребление действия активными контекстами.
+         *
+         *   if ($.input.consume('confirm')) { ... }     // я обработал confirm
+         *   $.input.consumed()                          // кто съел ввод в кадре
+         *   $.input.consume()                           // сбросить отметку
+         *
+         * Потребление действует на кадр и на 2 кадра вперёд: если меню закрыло
+         * реплику на `pressed`, gameplay в этом же кадре уже не должен видеть
+         * то же нажатие. Сбрасывается само на следующем кадре.
+         */
+        consume(action) {
+            if (action === undefined) { consumes = null; return input; }
+            const c = activeContexts()[0];
+            consumes = { action: String(action), context: c ? c.name : null,
+                         at: typeof engine !== 'undefined' && engine ? (engine.frame || 0) : 0 };
+            return true;
+        },
+
+        /** Что и кем потреблено в этом кадре (для отладки и §28). */
+        consumed() { return consumes ? Object.assign({}, consumes) : null; },
+
+        /** Ожидание следующего подходящего ввода: перепривязка «нажми клавишу». */
+        waitForInput(opts) {
+            const o = opts || {};
+            const waiter = {
+                id: 'w' + (waiter_seq++),
+                action: o.action === undefined ? null : String(o.action),
+                resolve: null, reject: null,
+                timeout_ms: Number(o.timeout || o.timeout_ms || 0) || 0,
+                started: typeof engine !== 'undefined' && engine ? (engine.frame || 0) : 0,
+                // Игнорируем УЖЕ УДЕРЖАННЫЕ клавиши: иначе захват ловит ту же
+                // кнопку, которой игрок открыл экран перенастройки. Набор
+                // фиксируется сейчас и не меняется — иначе отпускание кнопки
+                // съедало бы собственное нажатие.
+                // Явный список того, что игнорировать; пустой по умолчанию:
+                // удержанные клавиши не дают нового фронта нажатия и так.
+                ignore: Array.isArray(o.ignore) ? o.ignore.slice() : [],
+                onDone: typeof o.onDone === 'function' ? o.onDone : null,
+                promise: null,
+            };
+            waiter.promise = new Promise((resolve, reject) => { waiter.resolve = resolve; waiter.reject = reject; });
+            waiters.push(waiter);
+            return waiter.promise;
+        },
+
+        /** Сколько ожиданий захвата сейчас висит. */
+        waiters() { return waiters.length; },
+
+        /** Отменить все ожидания (например, экран перенастройки закрыли). */
+        cancelWaits(reason) {
+            while (waiters.length) {
+                const w = waiters.pop();
+                if (w.onDone) w.onDone(null, reason || 'cancel');
+                w.reject(new Error(reason || 'cancel'));
+            }
+            return input;
+        },
+
+        /**
+         * Конфликт привязок: какие ещё действия используют эти клавиши.
+         * Возвращает `[{ action, keys }]` без самого переназначаемого действия.
+         */
+        conflicts(action, keys) {
+            const want = (Array.isArray(keys) ? keys : [keys]).filter((k) => typeof k === 'string')
+                .map((k) => k.toLowerCase());
+            const out = [];
+            for (const [name, list] of binds) {
+                if (name === action) continue;
+                const shared = list.filter((k) => want.includes(String(k).toLowerCase()));
+                if (shared.length) out.push({ action: name, keys: shared });
+            }
+            for (const c of contexts.values()) {
+                for (const [name, list] of c.binds) {
+                    if (name === action) continue;
+                    const shared = list.filter((k) => want.includes(String(k).toLowerCase()));
+                    if (shared.length) out.push({ action: name, context: c.name, keys: shared });
+                }
+            }
+            return out;
+        },
+
+        /** Запомнить текущие привязки как эталон для resetDefaults(). */
+        markDefaults() {
+            default_binds = new Map();
+            for (const [a, k] of binds) default_binds.set(a, k.slice());
+            return input;
+        },
+
+        /** Вернуть привязки к эталону (markDefaults или первой загрузке). */
+        resetDefaults() {
+            if (default_binds.size === 0) {
+                ctx.log('$.input.resetDefaults: эталон не задан — вызовите $.input.markDefaults() после объявления привязок');
+                return false;
+            }
+            binds.clear();
+            for (const [a, k] of default_binds) binds.set(a, k.slice());
+            return true;
+        },
+
+        /** Что игрок реально видит на кнопках: подписи для текущего устройства. */
+        glyphs(action) {
+            const list = binds.get(action) || [];
+            const pad = typeof engineOf().padConnected === 'function' && engineOf().padConnected();
+            const out = [];
+            for (const key of list) {
+                const k = String(key);
+                if (k.startsWith('gamepad.')) {
+                    if (pad) out.push(PAD_GLYPHS[k.split('.')[1].toLowerCase()] || k.split('.')[1]);
+                } else {
+                    out.push(k.replace(/^left|^right/, (m) => m).toUpperCase());
+                }
+            }
+            return out;
+        },
+
+        /**
+         * Политика устройств: слот геймпада → игрок. Перестановка слотов НЕ
+         * должна молча менять игрока: слот закрепляется за игроком, пока
+         * устройство подключено, а освободившийся слот достаётся новому
+         * устройству только по явному `assign`.
+         */
+        device(slot) {
+            const i = Math.max(0, Math.floor(Number(slot) || 0));
+            if (!devices.has(i)) devices.set(i, { serial: null, player: i, held: new Set() });
+            const d = devices.get(i);
+            return {
+                slot: i,
+                player() { return d.player; },
+                assign(player) { d.player = Math.max(0, Math.floor(Number(player) || 0)); return this; },
+                connected() {
+                    const api = engineOf();
+                    if (typeof api.padConnectedAt === 'function') return !!api.padConnectedAt(i);
+                    return i === 0 && typeof api.padConnected === 'function' && !!api.padConnected();
+                },
+                held() { return [...d.held]; },
+            };
+        },
+
+        /** Все слоты устройств с их игроками. */
+        devices() {
+            const out = [];
+            for (const [slot, d] of devices) out.push({ slot, player: d.player, serial: d.serial, held: [...d.held] });
+            return out;
+        },
+
+        /**
+         * Сбросить состояние удержаний: вызывается автоматически при
+         * отключении геймпада, но игру это тоже касается — после отключения
+         * «зажатая» кнопка не должна остаться зажатой навсегда.
+         */
+        resetHeld(slot) {
+            const d = devices.get(Math.max(0, Math.floor(Number(slot) || 0)));
+            if (!d) return false;
+            d.held.clear();
+            // Сбрасываем и внутреннее состояние «был нажат», иначе первый
+            // pressed после переподключения придёт как released.
+            for (let i = 0; i < pad_prev.length; i++) pad_prev[i] = false;
+            return true;
+        },
+
+        /** Осталась ли «зажатой» кнопка, которой уже нет на устройстве. */
+        stuck() {
+            const out = [];
+            for (const [slot, d] of devices) {
+                const api = engineOf();
+                const live = typeof api.padConnectedAt === 'function' ? !!api.padConnectedAt(slot) : slot === 0;
+                if (!live && d.held.size) out.push({ slot, held: [...d.held] });
+            }
+            return out;
+        },
+
+        // --- Аналоговые оси: порог и гистерезис (§15) -------------------------
+
+        /**
+         * Ось как ДЕЙСТВИЕ: значение выше порога считается нажатием, но чтобы
+         * отпустить, стик должен вернуться ниже порога минус гистерезис —
+         * иначе на границе получается дребезг.
+         *
+         *   $.input.axisAction('moveleft', { axis: 'leftx', sign: -1, threshold: 0.4 });
+         *   $.input.axisAction('moveleft')   // true/false
+         */
+        axisAction(name, opts) {
+            if (opts && typeof opts === 'object') {
+                axis_actions.set(String(name), {
+                    axis: opts.axis === undefined ? 'leftx' : opts.axis,
+                    sign: Number(opts.sign || 1) < 0 ? -1 : 1,
+                    threshold: opts.threshold === undefined ? 0.4 : Number(opts.threshold),
+                    hysteresis: opts.hysteresis === undefined ? AMBIGUOUS_GAP : Number(opts.hysteresis),
+                    active: false,
+                });
+                return input;
+            }
+            const a = axis_actions.get(String(name));
+            if (!a) return false;
+            const raw = input.padAxis(a.axis) * a.sign;
+            const limit = a.active ? a.threshold - a.hysteresis : a.threshold;
+            a.active = raw > limit;
+            return a.active;
+        },
+
+        /** Определённые действия осей — для отладки и меню. */
+        axisActions() {
+            const out = {};
+            for (const [name, a] of axis_actions) {
+                out[name] = { axis: a.axis, sign: a.sign, threshold: a.threshold,
+                              hysteresis: a.hysteresis, active: a.active };
+            }
+            return out;
+        },
     };
 
     ctx.input = input;
@@ -568,8 +971,93 @@ function keyName(code) {
     return name;
 }
 
+/**
+ * Открыть окно синтетического ввода на текущий кадр.
+ *
+ * Разовые нажатия гасятся здесь, а НЕ в конце кадра: кадр состоит из
+ * нескольких шагов (ввод → таймеры → логика игры → рендер), и если погасить
+ * нажатие в конце tickInput, логика игры его уже не увидит — проверено тестом.
+ * Заказанное до кадра (`synth_next`) переносится в видимые в этом кадре.
+ */
+function startSynthFrame() {
+    synth_tap.clear();
+    for (const code of synth_next) synth_tap.add(code);
+    synth_next.clear();
+    synth_seen = true;
+}
+
+/**
+ * Состояние устройств ввода (§15).
+ *
+ * Отдельная функция, а не «побочный эффект события»: отключение геймпада во
+ * время удержания кнопки обязано сбросить удержание, даже если игра не
+ * подписана на gamepadOff. Иначе действие остаётся «зажатым» навсегда.
+ */
+function tickDevices() {
+    const api = engineOf();
+    const slots = typeof api.padSlots === 'function' ? Math.max(1, api.padSlots()) : 4;
+    for (let i = 0; i < Math.max(4, slots); i++) {
+        let d = devices.get(i);
+        if (!d) { d = { serial: null, player: i, held: new Set() }; devices.set(i, d); }
+        const live = typeof api.padConnectedAt === 'function'
+            ? !!api.padConnectedAt(i)
+            : (i === 0 && typeof api.padConnected === 'function' && !!api.padConnected());
+        if (!live) {
+            if (d.held.size) d.held.clear();
+            d.serial = null;
+            continue;
+        }
+        for (let b = 0; b < 32; b++) {
+            const val = typeof api.padDownAt === 'function'
+                ? !!api.padDownAt(i, b)
+                : (i === 0 ? !!api.padDown(b) : false);
+            if (val) d.held.add(b); else d.held.delete(b);
+        }
+    }
+}
+
+/**
+ * Ожидания «нажми клавишу» (§15). Раз в кадр смотрим, что игрок нажал, и
+ * отдаём первому ожидающему. Удержанные клавиши не считаются: иначе захват
+ * ловит ту самую кнопку, которой открыли экран перенастройки.
+ */
+function tickWaiters() {
+    if (waiters.length === 0) return;
+    const frame = typeof engine !== 'undefined' && engine ? (engine.frame || 0) : 0;
+    // Нажатие начинается отпусканием: пока кнопка держится, ждать нечего.
+    // Игнор фиксируется в момент запроса захвата (см. waitForInput) и БОЛЬШЕ не
+    // пополняется: раньше сюда попадало и отпускание той же кнопки, из-за чего
+    // обычный тап не ловился — ожидание висело до таймаута (нашлось тестом §15).
+    const pressed = engine.keysPressed();
+    for (let i = waiters.length - 1; i >= 0; i--) {
+        const w = waiters[i];
+        if (w.timeout_ms > 0 && (frame - w.started) * (1000 / 60) > w.timeout_ms) {
+            waiters.splice(i, 1);
+            if (w.onDone) w.onDone(null, 'timeout');
+            w.reject(new Error('timeout'));
+            continue;
+        }
+        const hit = pressed.find((code) => !w.ignore.includes(code));
+        if (hit !== undefined) {
+            waiters.splice(i, 1);
+            const named = keyName(hit);
+            if (w.onDone) w.onDone(named);
+            w.resolve(named);
+        }
+    }
+}
+
 /** Вызывается из $.time каждый кадр: рассылает $.input.on('key'/'mouse'/'wheel'). */
 export function tickInput() {
+    // §15: состояние устройств и захват ввода должны работать даже без
+    // подписок на события — иначе отключённый геймпад оставлял бы «зажатую»
+    // кнопку до тех пор, пока игра не подписалась на что-нибудь.
+    tickDevices();
+    tickWaiters();
+    // Синтетический ввод должен быть разрешён в начале кадра и погашен в
+    // конце: иначе нажатие либо не видно игре, либо живёт лишний кадр.
+    startSynthFrame();
+
     if (listeners.size === 0) return;
 
     if (listeners.has('key')) {

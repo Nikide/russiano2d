@@ -1,0 +1,8 @@
+<rml>
+<head><title>ui_contract hud</title></head>
+<body>
+<div id="hp_text">HP</div>
+<div id="ammo_text">AMMO</div>
+<div id="missing_never">x</div>
+</body>
+</rml>

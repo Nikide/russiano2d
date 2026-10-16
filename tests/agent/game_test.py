@@ -12,11 +12,21 @@
 #   R2D_BINARY=build-2d/russiano2d python3 tests/agent/game_test.py
 # ===========================================================================
 
+import atexit
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent, ROOT   # noqa: E402
+
+#: Свой файл прогресса для ЭТОГО прогона.
+#:
+#: `$.store` пишет save.json относительно рабочего каталога движка, то есть в
+#: корень репозитория. Пока тест шёл, другой прогон (у команды их бывает
+#: несколько параллельно) успевал записать туда СВОЙ прогресс кампании, и тест
+#: «меню → первый уровень» открывал уже второй уровень. Поэтому каждый прогон
+#: получает личный файл: изоляция не мешает проверке и убирает ложные падения.
+STORE = os.path.join(ROOT, "build", "test_game_save_%d.json" % os.getpid())
 
 #: Уровни кампании и их отличительные признаки: сколько монет минимум,
 #: ожидаемые классы узлов. Данные, а не ветвления в тесте.
@@ -30,6 +40,16 @@ LEVELS = {
 FAILURES = []
 
 
+@atexit.register
+def _cleanup():
+    """Убрать личный файл прогресса: он не часть репозитория."""
+    try:
+        if os.path.exists(STORE):
+            os.remove(STORE)
+    except OSError:
+        pass
+
+
 def check(condition, message):
     print(("  ok   " if condition else "  FAIL ") + message)
     if not condition:
@@ -40,12 +60,20 @@ def errors_of(a):
     return [line for line in a.stderr_text().splitlines() if "$: ошибка" in line]
 
 
-def reset_progress():
-    """Сбросить прогресс кампании: тест проверяет путь «с нуля» (меню → первый
-    уровень), а сохранение с прошлого запуска открыло бы сразу второй уровень."""
-    path = os.path.join(ROOT, "save.json")
-    if os.path.exists(path):
-        os.remove(path)
+def reset_progress(a=None):
+    """Дать прогону чистый и ЛИЧНЫЙ прогресс.
+
+    Проверяется путь «с нуля» (меню → первый уровень), поэтому состояния быть
+    не должно; а личный файл нужен, чтобы параллельный прогон не подменил
+    прогресс через общий save.json.
+    """
+    for path in (STORE, os.path.join(ROOT, "save.json")):
+        if os.path.exists(path):
+            os.remove(path)
+    if a is not None:
+        # Файл переключаем ДО первого кадра: меню читает прогресс при входе.
+        a.eval("$.store.file(%s); $.store.clear(); void 0" % repr(os.path.relpath(STORE, ROOT)))
+    _cleanup()
 
 
 def main():
@@ -54,6 +82,9 @@ def main():
 
     # --- Меню и первый уровень ---------------------------------------------
     with Agent(game="game", seed=7) as a:
+        # Переключаем хранилище на личный файл ДО первого кадра: меню читает
+        # прогресс при входе и иначе увидел бы чужой save.json.
+        reset_progress(a)
         a.step(5)
         names = a.eval("$.scene.names().join(',')")
         check(a.eval("$.scene.current()") == "menu", "игра начинается с меню")

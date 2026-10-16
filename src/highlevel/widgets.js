@@ -872,6 +872,56 @@ function installUiApi($) {
     ui.focusNext = function () { moveFocus(1); return ui; };
     ui.focusPrev = function () { moveFocus(-1); return ui; };
 
+    // --- §16: стек фокуса, модальность, верхний контекст ---------------------
+
+    /** Кто ждёт фокуса в стеке (сверху вниз) — проверка «фокус вернулся». */
+    ui.focusStack = function () { return focusStackIds(); };
+
+    /** Запомнить текущий фокус и перевести его на узел (для своих окон). */
+    ui.pushFocus = function (target) {
+        pushFocus(target === undefined ? null : resolveNode(target));
+        return ui;
+    };
+
+    /** Вернуть фокус из стека. Возвращает id узла или null. */
+    ui.restoreFocus = function () {
+        const node = restoreFocus();
+        return node ? (node.id || node.tag) : null;
+    };
+
+    /** Открыто ли модальное окно (верхний видимый <ui.dialog>). */
+    ui.modalOpen = function () { return !!modalNode(); };
+
+    /**
+     * §16: заблокирован ли игровой ввод модальным окном.
+     *
+     * Модальное окно гасит `pressed()` игровых действий само (§15 consume), а
+     * удержания (`down`) проверять должно игра — так устроен ввод: consume
+     * действует на край нажатия. Контракт один:
+     *
+     *   if ($.ui.inputBlocked()) return;   // в начале игровой логики
+     */
+    ui.inputBlocked = function () { return !!modalNode(); };
+
+    /** Контекст ввода, который занимает модальное окно (или null). */
+    ui.modalContext = function () { return modalNode() ? 'ui.modal' : null; };
+
+    /**
+     * §16: закрыть верхний контекст (Escape/back). Порядок: модальное окно →
+     * захват ввода → фокус. Возвращает true, если что-то закрыли.
+     */
+    ui.closeTop = function () {
+        const modal = modalNode();
+        if (modal) { cancelDialog(modal); return true; }
+        if (typeof $ !== 'undefined' && $.input && typeof $.input.waiters === 'function'
+            && $.input.waiters() > 0) {
+            $.input.cancelWaits('escape');
+            return true;
+        }
+        if (focus_node) { setFocus(null); return true; }
+        return false;
+    };
+
     /** Снять фокус (без аргумента — с текущего, с аргументом — с указанного). */
     ui.blur = function (target) {
         if (target === undefined) { setFocus(null); return ui; }
@@ -987,6 +1037,95 @@ function setFocus(node) {
     focus_node = node || null;
     if (old) old.emit('blur', {});
     if (focus_node) focus_node.emit('focus', {});
+}
+
+// --- §16: стек фокуса -------------------------------------------------------
+// Модальное окно уводит фокус внутрь себя, а при закрытии фокус обязан
+// ВЕРНУТЬСЯ туда, где был (иначе после закрытия диалога игра теряет
+// управление с клавиатуры). Стек — единственная память об этом.
+const focus_stack = [];
+
+/** Запомнить текущий фокус и поставить новый (стек растёт на один). */
+function pushFocus(node) {
+    // Повторный push того же узла не плодит записи: иначе закрытие возвращало
+    // бы фокус по кругу на тот же диалог.
+    if (node && focus_stack[focus_stack.length - 1] === focus_node) return focus_node;
+    if (focus_node) focus_stack.push(focus_node);
+    setFocus(node || null);
+    return focus_node;
+}
+
+/** Вернуть фокус из стека. Возвращает узел, которому фокус вернули (или null). */
+function restoreFocus() {
+    while (focus_stack.length) {
+        const prev = focus_stack.pop();
+        if (!prev) continue;
+        // Узел мог быть уничтожен вместе со своим окном — тогда берём следующий.
+        if (prev.dead || prev.destroyed) continue;
+        setFocus(prev);
+        return prev;
+    }
+    return null;
+}
+
+/** Кто в стеке (сверху вниз) — для отладки и проверок. */
+function focusStackIds() {
+    const out = [];
+    for (let i = focus_stack.length - 1; i >= 0; i--) {
+        const n = focus_stack[i];
+        if (n) out.push(n.id || n.tag);
+    }
+    return out;
+}
+
+// --- §16: модальность и ввод ------------------------------------------------
+// Модальным считается верхний видимый <ui.dialog>. Пока он открыт:
+//   * его контекст ввода активен («ui.modal», приоритет выше игрового);
+//   * нажатия действий, объявленных в других контекстах, ПОТРЕБЛЯЮТСЯ —
+//     игра не увидит pressed() того же действия (§15, consume);
+//   * удержания (down) игра обязана проверять через $.ui.inputBlocked():
+//     consume() гасит только край нажатия, так устроен §15.
+let modal_open = false;
+let modal_context_was_active = false;
+
+function modalNode() { return activeDialog(); }
+
+/** Включить/выключить модальный режим ровно на переходах. */
+function syncModal(input) {
+    const modal = modalNode();
+    const open = !!modal;
+    if (open === modal_open) return modal;
+    modal_open = open;
+    if (open) {
+        // Контекст: приоритет выше игровых, чтобы pressed() достался окну.
+        // Мок ввода в qjs-тестах контекстов не знает — тогда работает только
+        // блокировка внутри widgets (мышь/клавиатура окна), а не consume().
+        const ctxView = typeof input.context === 'function'
+            ? input.context('ui.modal', { priority: 100, active: true }) : null;
+        modal_context_was_active = !!(ctxView && ctxView.active && ctxView.active());
+        // Фокус — на первый управляемый элемент окна, прежний запоминаем.
+        const inside = focusables().filter((n) => isDescendantOf(n, modal));
+        pushFocus(inside.length ? inside[0] : modal);
+    } else {
+        if (typeof input.contextOff === 'function') input.contextOff('ui.modal');
+        restoreFocus();
+    }
+    return modal;
+}
+
+/** Погасить pressed() игровых действий, пока открыто модальное окно. */
+function consumeGameActions(input) {
+    if (typeof input.context !== 'function' || typeof input.consume !== 'function') return;
+    const all = input.context();
+    const own = [];
+    for (const c of all) {
+        if (c.name === 'ui.modal') { own.push(c); continue; }
+        if (!c.active || !c.binds) continue;
+        for (const action of Object.keys(c.binds)) {
+            if (input.pressed(action)) input.consume(action);
+        }
+    }
+    void own;
 }
 
 // ---------------------------------------------------------------------------
@@ -2108,9 +2247,21 @@ export function tickWidgets(dt) {
         if (node.tag === 'ui.input') syncInput(node);
     }
 
-    const modal = activeDialog();
+    let modal = syncModal(input);
+    if (modal) consumeGameActions(input);
+    // §16: Escape/back закрывает верхний контекст, когда модального окна нет:
+    // сначала захват ввода (перенастройка управления), потом фокус.
+    if (!modal) {
+        const back = input.pressed('escape') || input.pressed('gamepad.b');
+        if (back && ui.closeTop()) input.consume('escape');
+    }
     tickKeyboard(input, modal);
     tickMouse(input, modal);
+    // §16: окно могло закрыться ПРЯМО СЕЙЧАС (Escape внутри tickDialogKeys,
+    // клик по кнопке выбора). Возврат фокуса и снятие контекста обязаны
+    // случиться в этом же кадре, иначе игрок один кадр остаётся без фокуса,
+    // а стек выглядит «непустым» уже после закрытия.
+    if (modal && !modalNode()) modal = syncModal(input);
 }
 
 // ---------------------------------------------------------------------------

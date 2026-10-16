@@ -111,8 +111,13 @@ frame 120:
   честное ограничение первой версии, а не забывчивость.
 
 Чекпоинтов (утверждений вида `frame 120: #hero.position ~= [420, 200]`) в
-формате пока нет: состояние сверяет игра — `$.replay.verify` для ввода и
+C-формате CLI нет: состояние сверяет игра — `$.replay.verify` для ввода и
 `$.test.near/equal` для мира ([TESTING.md](TESTING.md)).
+
+**JS-формат `$.replay` (версия 2, §26) чекпоинты умеет:** `$.replay.checkpoints`
+снимает state hash на заданных simulation ticks, `$.replay.divergence()` отдаёт
+первый расходящийся tick, поля (`nid.поле`), IDs и версии данных. Подробности —
+[highlevel/replay.md](highlevel/replay.md) §2.2.
 
 ---
 
@@ -132,29 +137,34 @@ frame 120:
 | CLI `--replay <файл>` | есть | там же — `r2d_replay_play`, подстановка через виртуальный ввод |
 | Версионированный формат | есть | `{"r2d_replay":1, …}`, чужую версию отвергаем с объяснением |
 | Версия движка, игра, шаг, зерно в заголовке | есть | `version`, `game`, `fixed_dt`, `seed` |
-| Запись ввода по кадрам | есть (JS) | `$.replay.record(sampler, apply)` — [replay.js:276-357](../src/highlevel/replay.js#L276-L357) |
-| Воспроизведение | есть (JS) | `$.replay.play(apply?)` — [replay.js:151-169](../src/highlevel/replay.js#L151-L169) |
-| Формат | JSON-текст, не `.r2replay` | `{ header: {seed, dt, frame, frames}, frames: [[f, d], …] }` — [replay.js:201-206](../src/highlevel/replay.js#L201-L206) |
-| Заголовок с зерном и шагом | есть | `seed: engine.seed`, `dt: engine.fixedDt` — [replay.js:240-252](../src/highlevel/replay.js#L240-L252) |
-| Лимит записи и счётчик потерь | есть | `MAX_FRAMES = 36000`, `dropped()` — [replay.js:27](../src/highlevel/replay.js#L27), [:93-97](../src/highlevel/replay.js#L93-L97) |
-| Сравнение двух записей | есть | `compareReplays(a, b)` → `{ same, count, first }` — [replay.js:227-235](../src/highlevel/replay.js#L227-L235) |
-| Проверка ввода | есть | `verify(sampler)` — [replay.js:310-320](../src/highlevel/replay.js#L310-L320) |
-| Мир не сериализуется по кадрам | соблюдено | лимит кадра 4096 символов — [replay.js:28-29](../src/highlevel/replay.js#L28-L29), [highlevel/replay.md](highlevel/replay.md) §3 |
+| Запись ввода по кадрам | есть (JS) | `$.replay.record(sampler, apply)` — [replay.js](../src/highlevel/replay.js) |
+| Воспроизведение | есть (JS) | `$.replay.play(apply?)` — [replay.js](../src/highlevel/replay.js) |
+| Формат | JSON-текст, не `.r2replay` | `{ header: {schema, version, engine, content, seed, streams, dt, input, checkpoints}, frames: [[f, d], …], checks: [...] }` — [replay.js](../src/highlevel/replay.js) |
+| Schema и версия записи | есть (JS v2) | `schema: 'r2d.replay'`, `version: 2`; чужую схему и версию «из будущего» `load()` отклоняет с причиной — `replayHeadProblem()` |
+| Заголовок: RNG, content, input mapping, ID движка | есть (JS v2) | `streams` (`$.random.state()`), `content` (`$.save.contents()`), `input.{mapping,actions}`, `engine.{version,build}` через `$.replay.identity()` |
+| Ввод на уровне actions | есть (JS v2) | `$.replay.actions([...])`; незнакомое действие отсекается и считается в `unknownActions()`, raw — рядом для диагностики |
+| Checkpoints state hash и divergence | есть (JS v2) | `checkpoints({every})`, `divergence()` → первый tick, поля, IDs, версии; hash без wall-clock/GPU/presentation |
+| Лимит записи и счётчик потерь | есть | `MAX_FRAMES = 36000`, `dropped()` — [replay.js](../src/highlevel/replay.js) |
+| Сравнение двух записей | есть | `compareReplays(a, b)` → `{ same, count, first }` — [replay.js](../src/highlevel/replay.js) |
+| Проверка ввода | есть | `verify(sampler)` — [replay.js](../src/highlevel/replay.js) |
+| Мир не сериализуется по кадрам | соблюдено | лимит кадра 4096 символов — [replay.js](../src/highlevel/replay.js), [highlevel/replay.md](highlevel/replay.md) §3 |
 | Детерминированный прогон | есть | `--fixed-dt` ([app.c:688-693](../src/app.c#L688-L693)), `--seed` ([main.c:552-553](../src/main.c#L552-L553)), фиксированный шаг физики 1/60 ([main.c:217-226](../src/main.c#L217-L226)) |
 | Управляемый ввод | есть | виртуальный ввод агента ([app.c:670-684](../src/app.c#L670-L684)), команды `key`/`keys`/`touch`/`pad`/`mouse`/… |
 | Тесты воспроизведения | есть | [tests/agent/highlevel_replay_test.py](../tests/agent/highlevel_replay_test.py) (seed 777, fixed-dt 1/60), [tests/js/replay_test.mjs](../tests/js/replay_test.mjs) |
 
 **Чего нет:**
 
-* версии формата: `load()` проверяет только `Array.isArray(obj.frames)`
-  ([replay.js:122-125](../src/highlevel/replay.js#L122-L125));
-* версии движка, идентификатора игры и конфигурации рантайма в заголовке
-  (игра может дописать своё через `start(extra)`, но это необязательно);
-* чекпоинтов состояния и хеша мира;
+* в C-формате CLI: идентификатора игры/контента и checkpoints состояния
+  (JS-формат `$.replay` v2 это умеет — см. таблицу выше);
+* ID сборки в JS-заголовке: **исправлено** — движок отдаёт `engine.version`
+  (версия проекта из CMake), а `$.replay.identity()` без аргумента возвращает
+  разрешённый паспорт; игра может уточнить ID через
+  `$.replay.identity({ version, build })`, и явное значение важнее
+  автоматического. В C-формате CLI этого по-прежнему нет;
 * команд реплея в агентском протоколе — сценарий разыгрывается вручную
   ([highlevel/agent.md](highlevel/agent.md) §4);
 * сериализации самого процесса (перед `play()` мир возвращает в начальное
-  состояние сама игра).
+  состояние сама игра — для этого есть `$.save`).
 
 ---
 
@@ -188,8 +198,9 @@ frame 120:
    ([main.c](../src/main.c), [random.js](../src/highlevel/random.js)). Раньше
    без `--seed` движок отдавал `engine.seed = 0`, а генератор работал от 12345.
 
-Осталось сделать в самой записи: версию формата, идентификатор игры и чекпоинты
-(§2, §5).
+В JS-записи (`$.replay` v2) версия формата, ID движка/сборки, content, actions и
+чекпоинты состояния уже есть (§2, §5 — сделано пакетом W2-C). В C-формате CLI
+идентификатор игры и чекпоинты ещё нет.
 
 ---
 
