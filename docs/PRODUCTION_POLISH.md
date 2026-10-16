@@ -2715,9 +2715,9 @@ job CI), у каждого незакрытого пункта — причин�
 
 ## Presentation
 
-- [ ] renderer resize — причина: отдельного теста на смену размера окна нет — нужен прогон с реальным изменением размера окна, а не только viewport
+- [x] renderer resize — `tests/agent/renderer_resize_test.py` (несколько смен размера кадра: viewport, непустой кадр, отсутствие роста целей/текстур, совпадение worldToScreen с фактической отрисовкой)
 - [x] render targets — `tests/agent/render_target_lifecycle_test.py`
-- [ ] blend — причина: golden-сцены §40.2 не собраны — сравнения эталонных кадров по блендингу пока нет
+- [x] blend — `tests/agent/blend_golden_test.py` + эталоны `tests/fixtures/blend_golden/golden/`
 - [x] sorting — `tests/agent/sort_contract_test.py`
 - [x] pixel snap — `tests/agent/highlevel_presentation_test.py`
 - [x] integer scale — `tests/agent/highlevel_presentation_test.py`
