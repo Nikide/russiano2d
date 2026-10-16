@@ -170,7 +170,9 @@ def measure_windows(a, windows=3, frames=130):
     return {
         "gpu_ms": median("gpu_ms"), "gpu_spread": spread("gpu_ms"),
         "gpu_samples": values("gpu_ms"),
-        "draw_cpu": median("draw_cpu"), "ui_cpu": median("ui_cpu"),
+        "draw_cpu": median("draw_cpu"), "draw_spread": spread("draw_cpu"),
+        "draw_samples": values("draw_cpu"),
+        "ui_cpu": median("ui_cpu"),
     }
 
 

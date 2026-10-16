@@ -140,8 +140,15 @@ $.alive.tick(dt);                        // один тик на все прив
 | `$.alive.createPsyche(raw)` | то же ядро без подсистемы (для тестов и своих генераторов) |
 | `$.alive.director(opts)` | режиссёр рейда; `opts.lootValue()` вызывается сам. Состояние — **геттеры**, не методы: `enabled`, `phase`, `time` (с), `hunts`, `knobs`, `assignments`; методы — `start/stop/tick/objectiveFor/pickEnemies/save/load` |
 | `$.alive.createDirector(opts)` | чистое ядро режиссёра; `opts` накладываются на `DIRECTOR` (`tick` 4 с, `spareTime` 120 с, `loaded` 900, `richLate` 450, `lateTime` 300 с, `huntGap` [35, 55] с, `huntTtl` 28 с) |
-| `$.alive.attach(what, raw)` | дать психику узлу (`#npc`, обёртка, узел); возвращает психику или `null` |
-| `$.alive.of(what)` | психика узла или `null` |
+| `what` у `attach`/`of` — это `#id`, обычный селектор (`'.goblin'`, `'player'`),
+обёртка или узел. **Промах слышен**: селектор, который ни к чему не подошёл,
+один раз пишет в журнал `$.alive.of: узел "#…" не найден — верну null` и
+возвращает `null` (возврат прежний: код проверяет `if (!mind)`). Повторные
+промахи того же селектора молчат, пока он не начнёт разрешаться, — вызов в
+кадре журнал не заливает.
+
+`$.alive.attach(what, raw)` | дать психику узлу (`#npc`, обёртка, узел); возвращает психику или `null` |
+| `$.alive.of(what)` | психика узла или `null`; `what` — `#id`, селектор, обёртка или узел |
 | `$.alive.tick(dt)` | тик всех привязанных: возвращает число обновлённых узлов; ставит узлу `fear`, `pulse`, `stress`, `broken` |
 | `$.alive.types()` | 44 психотипа (ключи `TYPE_BIAS`) |
 | `$.alive.typeBias(id)` | `{ fg, rg, fr, br: [5] }` или `null` |

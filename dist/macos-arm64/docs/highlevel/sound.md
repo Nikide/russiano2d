@@ -22,6 +22,7 @@ $.sound.crossfade('battle.ogg', 1.5);
 | `seek(handle, seconds)` / `position(handle)` / `durationOf(handle)` | перемотка и позиция |
 | `priorityOf(handle)` / `busy()` | с каким приоритетом играет канал и сколько каналов занято |
 | `playAt(file, x, y, opts?)` | позиционно от камеры |
+| — | `playAt` принимает и `where` вместо `x, y`: точку `{x, y}`, узел, обёртку или селектор. Промах селектора пишет ОДНО сообщение на пару «место + цель» (`$.sound.playAt: селектор "#…" ни к чему не подошёл — беру точку (0, 0)`) и считает от `(0, 0)`; возврат прежний |
 | `stopAll()` / `stop(handle)` / `playing(handle)` / `count()` | управление каналами |
 | `channel(ch)` | что звучит на канале сейчас: `{ playing, volume, pan, pitch, effect, position, duration }` |
 | `activeChannels()` | сколько каналов занято |

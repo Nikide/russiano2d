@@ -6,7 +6,7 @@
 между кадрами.
 
 ```js
-$.world.bsp.build($.world.bsp.fromLines(walls));
+$.world.bsp.build(walls);   // [[x1,y1,x2,y2], …] или Float32Array
 const order = $.world.bsp.order($.camera.pos());     // [{ index, x1, y1, x2, y2 }]
 for (const s of order) $.gfx.draw.line(s.x1, s.y1, s.x2, s.y2, '#8899aa');
 $.world.bsp.clear();                                  // в onExit сцены
@@ -25,7 +25,13 @@ $.world.bsp.clear();                                  // в onExit сцены
 | `segment(index)` | `{ index, x1, y1, x2, y2, tag, split }` |
 | `clear()` | освободить дерево |
 
-`from` — `{x, y}`, `[x, y]`, узел, обёртка или селектор.
+`from` — `{x, y}`, `[x, y]`, узел, обёртка или селектор. **Промах слышен**:
+селектор, который ни к чему не подошёл, один раз пишет в журнал
+`$.world.bsp.order: селектор "#…" ни к чему не подошёл — беру точку (0, 0)` и
+работает от `(0, 0)` (возврат прежний); `$.world.bsp.segment(index)` с индексом
+вне `0..count()-1` пишет `индекс 5 вне 0..3 — верну null` и возвращает `null`.
+Повторные промахи того же селектора/индекса молчат (дедупликация по паре
+«место + цель») — обход в кадре журнал не заливает.
 
 ## 2. Чистые помощники
 
