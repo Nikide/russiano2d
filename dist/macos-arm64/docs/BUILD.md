@@ -173,22 +173,32 @@ R2D_BINARY=build-2d/russiano2d python3 tests/agent/re2d_gate_test.py    # build-
 
 ## Дистрибутив: что внутри и как проверить
 
-Упаковка — `tools/release.py` (её же вызывают `tools/autobuild.py` для пяти
-платформ и `tools/ci_package.py` в CI). Пакет платформы лежит в
+Упаковка — `tools/release.py`: её вызывают `tools/autobuild.py` при локальной
+сборке и `tools/ci_package.py` в CI. Пакет платформы лежит в
 `dist/<платформа>/` (или `dist-ci/` в CI), рядом — архив и контрольные суммы:
 
 ```sh
 python3 tools/release.py --version 0.2.0            # выпуск: версия, сборка, тесты, пакет, тег
 python3 tools/release.py --package-only --platform macos-arm64 \
     --binary build/russiano2d --out dist            # только пакет (режим CI)
-python3 tools/autobuild.py --platforms auto         # пять платформ (Docker для чужих)
+python3 tools/autobuild.py --platforms auto         # macOS этой машины (+ Linux в Docker)
 ```
+
+Имя архива собирает `release.archive_name(platform, version)`, версия в нём —
+из `CMakeLists.txt`:
 
 | Платформа | Архив | Бинарник |
 |---|---|---|
-| `linux-x86_64`, `linux-aarch64` | `russiano2d-<платформа>.tar.gz` | `russiano2d` |
-| `macos-arm64`, `macos-x86_64` | `russiano2d-<платформа>.tar.gz` | `russiano2d` |
-| `windows-x86_64` | `russiano2d-<платформа>.zip` | `russiano2d.exe` |
+| `linux-x86_64`, `linux-aarch64` | `russiano2d-v<версия>-<платформа>.tar.gz` | `russiano2d` |
+| `macos-arm64`, `macos-x86_64` | `russiano2d-v<версия>-<платформа>.tar.gz` | `russiano2d` |
+| `windows-x86_64` | `russiano2d-v<версия>-<платформа>.zip` | `russiano2d.exe` |
+
+`tools/ci_package.py` падает, если собранный архив не совпал с этим именем, а
+`release.prune_stale_archives()` убирает из каталога релиза архив той же
+платформы со старым (безверсионным) именем. Windows x86_64, Linux x86_64 и
+Linux aarch64 собирает GitHub Actions по тегу; `tools/autobuild.py` умеет
+собрать их в контейнере локально, но это проверка и паритет с CI, а не путь
+релиза.
 
 **Что внутри.** Бинарник движка и `r2d-sdk[.exe]` (рядом, один каталог),
 каталог `lib/` с внешними библиотеками и переписанными `@rpath`/`$ORIGIN`
@@ -204,7 +214,10 @@ python3 tools/autobuild.py --platforms auto         # пять платформ 
 
 **Контрольные суммы.** `dist/<платформа>/SHA256SUMS.txt` — хеши всех файлов
 пакета (кроме самого файла сумм, сортировка по имени); `dist/SHA256SUMS.txt` —
-хеши архивов всего релиза. `VERSION` — версия из `CMakeLists.txt`
+хеши архивов витрины, по строке на каждый `*.tar.gz`/`*.zip` (пересчитывает
+`tools/fetch_release_assets.py`). У релиза на GitHub свой `SHA256SUMS.txt`:
+CI считает его по трём архивам, `tools/attach_macos_release.py` — по пяти.
+`VERSION` — версия из `CMakeLists.txt`
 (см. [RELEASING.md](RELEASING.md) «Одна версия на проект»).
 
 **Воспроизводимость.** Архивы пишутся с фиксированным временем записей,

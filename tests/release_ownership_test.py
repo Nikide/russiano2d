@@ -50,6 +50,10 @@ def read(rel):
         return handle.read()
 
 
+def exists(rel):
+    return os.path.exists(os.path.join(ROOT, rel))
+
+
 def tracked(*suffixes):
     out = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines()
     return [n for n in out if n.endswith(suffixes)]
@@ -104,7 +108,16 @@ def test_workflow_ownership():
 
 def test_local_scripts_do_not_duplicate_ci():
     print("\n== §4.7: локальные скрипты не дублируют CI ==")
+    # Скрипты выпуска — локальные: они собирают macOS на рабочей машине и
+    # публикуют сайт, в публичные репозитории не уезжают (.gitignore). Гейт
+    # поэтому проверяет две вещи: их НЕТ в git и, если файл есть на диске, он
+    # не собирает чужие платформы и не создаёт релизы.
     for name in LOCAL_SCRIPTS:
+        in_git = subprocess.run(["git", "ls-files", "--error-unmatch", name],
+                                cwd=ROOT, capture_output=True).returncode == 0
+        check(not in_git, "%s не отслеживается git (локальный выпуск)" % name)
+        if not exists(name):
+            continue
         text = read(name)
         check("gh release" not in text,
               "%s не создаёт и не трогает GitHub Release" % name)
@@ -114,6 +127,8 @@ def test_local_scripts_do_not_duplicate_ci():
 
     # Любой вызов autobuild.py в локальных скриптах обязан быть macOS-only.
     for name in LOCAL_SCRIPTS:
+        if not exists(name):
+            continue
         text = read(name)
         for num, line in enumerate(text.splitlines(), 1):
             if "tools/autobuild.py" not in line:
@@ -123,6 +138,8 @@ def test_local_scripts_do_not_duplicate_ci():
                   "%s:%d собирает локально только macOS (в строке: %s)"
                   % (name, num, ", ".join(bad) or "macOS"))
 
+    if not exists("build_and_push.sh"):
+        return
     build = read("build_and_push.sh")
     check("macos-arm64,macos-x86_64" in build or "macos-arm64,macos-x86_64" in build,
           "build_and_push.sh по умолчанию собирает macOS-профили")
@@ -155,6 +172,42 @@ def test_artifact_name_contract():
         check("archive_name(" in read(name), "%s использует контракт имени" % name)
 
 
+def test_other_host_pipelines():
+    print("\n== Mos.Hub и GitVerse: Linux/Windows собирают они, macOS — из dist/ ==")
+    gitlab = read(".gitlab-ci.yml")
+    gitverse = read(".gitverse/workflows/build.yaml")
+
+    # GitLab (Mos.Hub) — .gitlab-ci.yml.
+    check("linux-x86_64:" in gitlab and "windows-x86_64:" in gitlab,
+          "GitLab собирает Linux x86_64 и Windows x86_64")
+    check("mingw-w64" in gitlab, "Windows на GitLab собирается кросс-сборкой MinGW")
+    check("macos-artifacts:" in gitlab and "dist/russiano2d-v" in gitlab,
+          "macOS на GitLab НЕ собирается, а берётся из витрины dist/")
+    check(re.search(r"macos-\d|macos-latest|macos-arm64:", gitlab) is None,
+          "в .gitlab-ci.yml нет сборки macOS")
+    check("release:" in gitlab and "needs: [linux-x86_64, windows-x86_64, macos-artifacts]" in gitlab,
+          "релиз GitLab зависит от всех трёх наборов артефактов")
+    check("$CI_COMMIT_TAG =~" in gitlab, "релиз GitLab создаётся только по тегу vX.Y.Z")
+
+    # GitVerse — свой формат (.gitverse/workflows/), .gitlab-ci.yml он не читает.
+    check("runs-on: ubuntu-latest" in gitverse, "GitVerse использует облачный раннер ubuntu-latest")
+    check("linux-x86_64:" in gitverse and "windows-x86_64:" in gitverse,
+          "GitVerse собирает Linux x86_64 и Windows x86_64")
+    check("mingw-w64" in gitverse, "Windows на GitVerse собирается кросс-сборкой MinGW")
+    check("macos-artifacts:" in gitverse and "dist/russiano2d-v" in gitverse,
+          "macOS на GitVerse НЕ собирается, а берётся из витрины dist/")
+    check(re.search(r"macos-\d|macos-latest", gitverse) is None,
+          "в workflow GitVerse нет сборки macOS")
+    check("actions/create-release@v1" in gitverse and "GITVERSE_API_KEY" in gitverse,
+          "релиз GitVerse создаётся экшеном create-release (нужен секрет GITVERSE_API_KEY)")
+    check("refs/tags/" in gitverse, "релиз GitVerse создаётся только по тегу")
+
+    # Оба пайплайна обязаны собирать Windows без macOS-раннеров и с проверкой версии.
+    for name, text in ((".gitlab-ci.yml", gitlab), (".gitverse/workflows/build.yaml", gitverse)):
+        check("read_version()" in text, "%s сверяет версию проекта" % name)
+        check("ci_package.py" in text, "%s упаковывает тем же кодом, что и остальные" % name)
+
+
 def test_macos_attachment_is_documented():
     print("\n== §4.7 шаг 5: macOS прикладывается к релизу CI ==")
     attach = read("tools/attach_macos_release.py")
@@ -173,6 +226,7 @@ def main():
     test_workflow_ownership()
     test_local_scripts_do_not_duplicate_ci()
     test_artifact_name_contract()
+    test_other_host_pipelines()
     test_macos_attachment_is_documented()
     print("\nВсе проверки пройдены" if not FAILURES else "\nПРОВАЛЕНО: %d" % len(FAILURES))
     for line in FAILURES:

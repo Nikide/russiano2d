@@ -1,0 +1,204 @@
+# ---------------------------------------------------------------------------
+# GitVerse CI/CD: Linux x86_64 + Windows x86_64 (MinGW) и релиз по тегу.
+#
+# GitVerse читает workflow из .gitverse/workflows/ (и, для совместимости,
+# из .github/workflows/), формат — Actions-подобный. .gitlab-ci.yml здесь не
+# используется: он для Mos.Hub (GitLab CI).
+#
+# Разделение ответственности — docs/RELEASING.md:
+#   * Linux и Windows собираются и упаковываются здесь;
+#   * macOS НЕ собирается (macOS-раннеров нет): готовые архивы лежат в dist/
+#     репозитория — job macos-artifacts забирает их оттуда;
+#   * релиз создаётся только по тегу vX.Y.Z экшеном actions/create-release,
+#     в него попадают архивы всех трёх платформ.
+#
+# Что нужно один раз настроить в репозитории на GitVerse:
+#   секрет GITVERSE_API_KEY (Settings → Secrets) с правом создавать релизы.
+#   Без него job release упадёт — это видимая ошибка, а не «тихий» пропуск.
+# ---------------------------------------------------------------------------
+
+name: Build and release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  # --- Быстрые гейты: доки, переносимость, контракт упаковки ----------------
+  static:
+    name: static gates (docs, portability, packaging)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3 git
+      - run: python3 tests/portability_test.py
+      - run: python3 tests/doc_coverage_test.py
+      - run: python3 tests/doc_claims_test.py
+      - run: python3 tests/format_extensions_test.py
+      - run: python3 tests/checklist_test.py
+      - run: python3 tests/acceptance_test.py
+      - run: python3 tests/repository_hygiene_test.py
+      - run: python3 tests/package_docs_refresh_test.py
+      - run: python3 tests/release_ownership_test.py
+
+  # --- Linux x86_64 ---------------------------------------------------------
+  linux-x86_64:
+    name: Linux x86_64
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Зависимости
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential cmake ninja-build pkg-config \
+            libfreetype-dev patchelf libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev \
+            libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev libudev-dev \
+            libdbus-1-dev libcurl4-openssl-dev xvfb mesa-vulkan-drivers
+      - name: Сборка (RE2D on и off)
+        run: |
+          cmake -S . -B build-ci -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-ci --config Release --parallel 4
+          cmake -S . -B build-2d-ci -DCMAKE_BUILD_TYPE=Release -DR2D_ENABLE_RE2D=OFF
+          cmake --build build-2d-ci --config Release --parallel 4
+      - name: Тесты
+        run: |
+          python3 tools/ci_verify.py --build-dir build-ci --re2d on
+          python3 tools/ci_verify.py --build-dir build-2d-ci --re2d off
+      - name: Пакет
+        run: python3 tools/ci_package.py --build-dir build-ci --platform linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-x86_64
+          path: |
+            dist-ci/*.tar.gz
+            dist-ci/SHA256SUMS.txt
+          retention-days: 30
+          if-no-files-found: error
+
+  # --- Windows x86_64: кросс-сборка MinGW -----------------------------------
+  windows-x86_64:
+    name: Windows x86_64 (MinGW)
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      FREETYPE_URL: "https://archive.ubuntu.com/ubuntu/pool/main/f/freetype/freetype_2.13.2+dfsg.orig.tar.xz"
+      FREETYPE_SHA256: "48c78a4194adfcd15a4d089f3206dab8454c311f5577f3ef7eaef95f777f86e6"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Зависимости и FreeType для MinGW
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential cmake ninja-build pkg-config python3 \
+            mingw-w64 xz-utils curl zip
+          curl -fL --connect-timeout 10 --max-time 300 --retry 5 --retry-delay 3 \
+            -o /tmp/freetype.tar.xz "$FREETYPE_URL"
+          echo "$FREETYPE_SHA256  /tmp/freetype.tar.xz" | sha256sum -c -
+          mkdir -p /tmp/freetype && tar -xJf /tmp/freetype.tar.xz -C /tmp/freetype --strip-components=1
+          cd /tmp/freetype
+          ./configure --host=x86_64-w64-mingw32 --prefix=/usr/x86_64-w64-mingw32 \
+            --without-harfbuzz --without-bzip2 --without-brotli --without-png --without-zlib \
+            --enable-static --disable-shared
+          make -j"$(nproc)" && sudo make install
+      - name: Сборка
+        run: |
+          cmake -S . -B build-win -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+            -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+            -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
+            -DCMAKE_FIND_ROOT_PATH=/usr/x86_64-w64-mingw32 \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY
+          cmake --build build-win --config Release --parallel 4
+      - name: Пакет
+        run: python3 tools/ci_package.py --build-dir build-win --platform windows-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-x86_64
+          path: |
+            dist-ci/*.zip
+            dist-ci/SHA256SUMS.txt
+          retention-days: 30
+          if-no-files-found: error
+
+  # --- macOS: забираем готовые архивы из витрины dist/ ----------------------
+  macos-artifacts:
+    name: macOS (из dist/)
+    needs: static
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Забрать macOS-архивы версии проекта
+        run: |
+          set -e
+          version=$(python3 -c "import sys; sys.path.insert(0,'tools'); import release; print(release.read_version())")
+          echo "версия проекта: $version"
+          mkdir -p out
+          found=0
+          for a in dist/russiano2d-v$version-macos-*.tar.gz; do
+            [ -e "$a" ] || continue
+            cp "$a" out/ && found=$((found+1)); echo "забран из витрины: $a"
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "!! в dist/ нет macOS-архивов версии $version — соберите локально:"
+            echo "   python3 tools/autobuild.py --platforms macos-arm64,macos-x86_64 --out dist"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: out/*.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+  # --- Релиз по тегу vX.Y.Z ------------------------------------------------
+  release:
+    name: Release ${{ gitverse.ref_name }}
+    needs: [linux-x86_64, windows-x86_64, macos-artifacts]
+    if: startsWith(gitverse.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Проверить, что тег совпадает с версией проекта
+        run: |
+          version=$(python3 -c "import sys; sys.path.insert(0,'tools'); import release; print(release.read_version())")
+          test "v$version" = "${{ gitverse.ref_name }}" || {
+            echo "!! тег ${{ gitverse.ref_name }} не совпадает с версией проекта v$version"; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Разложить архивы в один каталог
+        run: |
+          mkdir -p release-files
+          find artifacts -type f -name '*.tar.gz' -exec cp {} release-files/ \;
+          find artifacts -type f -name '*.zip' -exec cp {} release-files/ \;
+          ls -la release-files/
+          # linux + windows + два macOS-архива
+          test "$(find release-files -type f | wc -l)" -eq 4
+      - name: Создать релиз с артефактами трёх платформ
+        uses: actions/create-release@v1
+        with:
+          api_key: ${{ secrets.GITVERSE_API_KEY }}
+          title: Russiano2D ${{ gitverse.ref_name }}
+          body: |
+            Linux x86_64 и Windows x86_64 (MinGW) собраны CI на GitVerse.
+            macOS (arm64, x86_64) собран на рабочем Mac и взят из dist/ репозитория.
+            Контрольные суммы лежат внутри архивов (SHA256SUMS.txt).
+          files: |
+            release-files/*.tar.gz
+            release-files/*.zip
+          draft: false
+          pre_release: false
