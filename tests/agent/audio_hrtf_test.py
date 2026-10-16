@@ -136,6 +136,33 @@ def band_energy(v, rate, start=4000):
     return e_low, e_high
 
 
+def band_db(v, rate, start=4000, bands=24, low=300.0, high=8000.0):
+    """Уровни по полосам (фильтр Гёрцеля) — спектр сигнала в дБ.
+
+    Метрика фронт/тыл: лог-спектральное расстояние между передаточными
+    функциями двух положений при ОДНОМ боковом смещении. HF/LF-отношение
+    видит только наклон, а LSD ловит и провалы/пики — он и назван в доке.
+    """
+    import math as _m
+    out = []
+    for k in range(bands):
+        freq = low * (high / low) ** (k / (bands - 1.0))
+        w = 2.0 * _m.pi * freq / rate
+        coeff = 2.0 * _m.cos(w)
+        s1 = s2 = 0.0
+        for i in range(start, len(v)):
+            s0 = v[i] + coeff * s1 - s2
+            s2, s1 = s1, s0
+        power = s1 * s1 + s2 * s2 - coeff * s1 * s2
+        out.append(10.0 * _m.log10(max(1e-18, power / max(1, len(v) - start))))
+    return out
+
+
+def lsd(a_db, b_db):
+    """Лог-спектральное расстояние, дБ (RMS разницы уровней по полосам)."""
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a_db, b_db)) / len(a_db))
+
+
 def play(a, backend, sound, x, y, loop=True, maxdist=100000):
     a.eval("$.audio.clear(); $.sound.stopAll(0); 'ok'")
     a.step(2)
@@ -229,6 +256,9 @@ def main():
         check(abs(rear_ratio - front_ratio) >= 1.5,
               "фронт и тыл при одном |азимуте| различимы (метрика HF/LF): %.2f дБ"
               % (rear_ratio - front_ratio))
+        syn_lsd = lsd(band_db(Rf, rate), band_db(Rb, rate))
+        print("  --   фронт/тыл (LSD, 24 полосы 300 Гц–8 кГц): %.2f дБ" % syn_lsd)
+        check(syn_lsd >= 1.0, "фронт и тыл различимы по LSD: %.2f дБ" % syn_lsd)
 
         # --- Настоящая HRTF (Steam Audio): те же метрики на живом выходе ------
         print("\n  ==  backend 'steam' (настоящая HRTF)  ==")
@@ -243,8 +273,9 @@ def main():
             ild_noise = db(rms(R), rms(L))
             print("  --   ITD(шум, +90°): лаг %d сэмплов = %.3f мс; ILD(шум): %.2f дБ"
                   % (steam_lag, -steam_lag / rate * 1000.0, ild_noise))
-            print("  --   (у HRTF Steam Audio в этой сборке межушной задержки нет — "
-                  "измерено, поэтому ITD даёт модель; ILD/тень/фронт-тыл — HRTF)")
+            print("  --   по умолчанию itd:'auto': у библиотеки своей задержки нет "
+                  "(измерено 0.000 мс ниже на itd:'off'), поэтому её добавляет модель — ГИБРИД;")
+            print("  --   ILD/тень/фронт-тыл выше сняты с библиотечного спектра (задержка на них не влияет)")
             check(ild_noise >= 10.0, "HRTF: ILD на 90° не меньше 10 дБ: %.2f дБ" % ild_noise)
             low_l, high_l = band_energy(L, rate)
             low_r, high_r = band_energy(R, rate)
@@ -269,6 +300,35 @@ def main():
                   % (d_front, d_rear, d_rear - d_front))
             check(abs(d_rear - d_front) >= 0.3,
                   "HRTF: фронт и тыл различимы: %.2f дБ" % (d_rear - d_front))
+            steam_lsd = lsd(band_db(Rf, rate), band_db(Rb, rate))
+            print("  --   HRTF фронт/тыл (LSD, 24 полосы 300 Гц–8 кГц): %.2f дБ" % steam_lsd)
+            check(steam_lsd >= 0.5, "HRTF: фронт и тыл различимы по LSD: %.2f дБ" % steam_lsd)
+
+            # --- Гибрид ITD: библиотечный спектр + наша задержка -------------
+            st_auto = a.eval("$.audio.hrtf({ backend: 'steam', itd: 'auto' })")
+            print("  --   hrtf(steam, itd:'auto') → backend=%s, itd=%s, itd_source=%s"
+                  % (st_auto["backend"], st_auto["itd"], st_auto["itd_source"]))
+            check(st_auto["itd_source"] in ("model", "backend"),
+                  "геттер называет источник ITD: %s" % st_auto["itd_source"])
+            L, R, rate = measure(a, "steam", noise_path(), 350, 0)
+            hyb = corr_lag(L, R)
+            hyb_ms = -hyb / rate * 1000.0
+            print("  --   гибрид ITD (steam, itd:'auto'): лаг %d = %.3f мс" % (hyb, hyb_ms))
+            if st_auto["itd_source"] == "model":
+                check(0.5 <= hyb_ms <= 0.8,
+                      "гибрид даёт модельный ITD 0.5–0.8 мс: %.3f мс" % hyb_ms)
+            else:
+                check(hyb == 0, "ITD даёт сам backend, модель его не дублирует: лаг %d" % hyb)
+
+            st_off = a.eval("$.audio.hrtf({ backend: 'steam', itd: 'off' })")
+            check(st_off["itd_source"] == "none",
+                  "itd:'off' честно сообщает, что задержки нет: %s" % st_off["itd_source"])
+            L, R, rate = measure(a, "steam", noise_path(), 350, 0)
+            pure = corr_lag(L, R)
+            print("  --   чистый выход библиотеки (steam, itd:'off'): лаг %d = %.3f мс"
+                  % (pure, -pure / rate * 1000.0))
+            check(abs(pure) <= 1, "itd:'off' — ровно библиотечный выход: лаг %d" % pure)
+            a.eval("$.audio.hrtf({ backend: 'steam', itd: 'auto' })")
 
         # --- Два backend'а — два разных пути ----------------------------------
         La, Ra, _ = measure(a, "synthetic", noise_path(), 350, 0)

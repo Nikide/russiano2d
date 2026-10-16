@@ -89,6 +89,10 @@ typedef struct R2DAudioBinaural {
     float mix;         // 0 — сухой сигнал, 1 — полностью бинауральный
     int   rate;        // частота микшера (обновляется из колбэка)
 
+    // Режим канала: 0 — выключено, 1 — полная модель, 2 — ТОЛЬКО ITD
+    // (гибрид: межушную задержку добавляем поверх Steam-выхода, у которого
+    // своей задержки нет — измерено, см. tests/agent/audio_hrtf_test.py).
+    unsigned char mode[R2D_AUDIO_CHANNELS];
     bool  active[R2D_AUDIO_CHANNELS];
     float az[R2D_AUDIO_CHANNELS];                  // рад: 0 спереди, +pi/2 справа
     float line[R2D_AUDIO_CHANNELS][R2D_BINAURAL_DELAY];
@@ -327,6 +331,9 @@ void r2d_audio_binaural_set(R2DAudio *,bool on,float head,float far_gain,float r
 void r2d_audio_binaural_get(const R2DAudio *,bool *on,float *head,float *far_gain,float *rear_gain,float *mix);
 // Канал: `active=false` — канал вне бинаурального режима (обычная панорама).
 void r2d_audio_binaural_channel(R2DAudio *,int channel,bool active,float azimuth);
+// Гибрид: ТОЛЬКО межушная задержка (дробная), без ILD/тени/полки. Нужен там,
+// где backend даёт свой спектр, но своей задержки не имеет (steam).
+void r2d_audio_itd_channel(R2DAudio *,int channel,bool active,float azimuth);
 
 // --- Диагностический захват PCM (тесты) -------------------------------------
 // Захват идёт с post-mix: то, что слышит игрок, вместе с шинами и ревербом.

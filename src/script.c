@@ -3667,6 +3667,21 @@ static JSValue r2d__js_audio_set_channel_binaural(JSContext *ctx, JSValueConst t
     return JS_TRUE;
 }
 
+// engine.audio.setChannelItd(channel, active, azimuth) — гибрид: только
+// межушная задержка поверх того, что уже посчитал backend (см. audio.c).
+static JSValue r2d__js_audio_set_channel_itd(JSContext *ctx, JSValueConst this_val,
+                                             int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    r2d_audio_itd_channel(s->audio,
+                          r2d__arg_int(ctx, argc, argv, 0, -1),
+                          r2d__arg_bool(ctx, argc, argv, 1, false),
+                          (float)r2d__arg_num(ctx, argc, argv, 2, 0));
+    return JS_TRUE;
+}
+
 // --- Диагностический захват PCM ---------------------------------------------
 // engine.audio.captureStart(frames) — начать захват итогового микса.
 // engine.audio.captured() → { done, frames, samples: [...] } — interleaved L,R.
@@ -5703,6 +5718,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, audio, "binaural", r2d__js_audio_binaural_get, 0);
     r2d__set_fn(ctx, audio, "setBinaural", r2d__js_audio_binaural_set, 5);
     r2d__set_fn(ctx, audio, "setChannelBinaural", r2d__js_audio_set_channel_binaural, 3);
+    r2d__set_fn(ctx, audio, "setChannelItd", r2d__js_audio_set_channel_itd, 3);
     // Диагностический захват итогового микса — для тестов.
     r2d__set_fn(ctx, audio, "captureStart", r2d__js_audio_capture_start, 1);
     r2d__set_fn(ctx, audio, "captured", r2d__js_audio_captured, 0);

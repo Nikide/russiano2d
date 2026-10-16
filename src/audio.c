@@ -268,11 +268,64 @@ const char *r2d_audio_effect_name(int index)
 //      20 кГц → 2 кГц по |az| плюс ослабление дальнего уха до -4 дБ;
 //   4. «сзади»: полка +4 дБ выше 3 кГц на обоих ушах при |az| > 90°;
 //   5. mix подмешивает сухой сигнал (1 — только бинаурально).
+/**
+ * ITD по Вудворту: (a/c)·(|az| + sin|az|) секунд, в сэмплах (дробное).
+ * 0.0875 м и 343 м/с дают 0.656 мс на 90° — это и проверяет тест.
+ */
+static float r2d__itd_samples(const R2DAudioBinaural *b, float aaz, int rate)
+{
+    return (b->head / 343.0f) * (aaz + sinf(aaz)) * (float)rate;
+}
+
+/**
+ * Гибрид: к готовому стерео (например, выходу Steam Audio) добавляется ТОЛЬКО
+ * межушная задержка — дальнее ухо читается из линии с дробной задержкой,
+ * ближнее идёт как есть. Спектр (ILD, тень, подсказки библиотеки) не трогаем:
+ * это ровно то, что просил `itd: 'model'` при backend 'steam'.
+ */
+static void r2d__itd_process(R2DAudio *a, int ch, const SDL_AudioSpec *spec,
+                             float *pcm, int samples)
+{
+    R2DAudioBinaural *b = &a->binaural;
+    if (!b->on || ch < 0 || ch >= R2D_AUDIO_CHANNELS || b->mode[ch] != 2) return;
+
+    const int channels = (spec && spec->channels > 0) ? spec->channels : 2;
+    if (channels != 2 || !pcm || samples < 2) return;
+    const int rate = (spec && spec->freq > 0) ? spec->freq : b->rate;
+    if (rate <= 0) return;
+    b->rate = rate;
+
+    const float az = b->az[ch];
+    const float aaz = fabsf(az);
+    if (aaz < 0.02f) return;                    // центр: задержки нет
+
+    const float itd = r2d__itd_samples(b, aaz, rate);
+    const int idelay = (int)itd;
+    const float frac = itd - (float)idelay;
+    const bool far_is_left = az > 0.0f;         // источник справа → дальнее левое
+
+    float *line = b->line[ch];
+    int pos = b->pos[ch];
+    for (int i = 0; i + 1 < samples; i += 2) {
+        const float far_in = far_is_left ? pcm[i] : pcm[i + 1];
+        line[pos] = far_in;
+        int p = pos - idelay;
+        while (p < 0) p += R2D_BINAURAL_DELAY;
+        int q = p - 1;
+        while (q < 0) q += R2D_BINAURAL_DELAY;
+        const float far_out = line[p] * (1.0f - frac) + line[q] * frac;
+        if (far_is_left) pcm[i] = far_out;
+        else             pcm[i + 1] = far_out;
+        pos = (pos + 1) % R2D_BINAURAL_DELAY;
+    }
+    b->pos[ch] = pos;
+}
+
 static void r2d__binaural_process(R2DAudio *a, int ch, const SDL_AudioSpec *spec,
                                   float *pcm, int samples)
 {
     R2DAudioBinaural *b = &a->binaural;
-    if (!b->on || ch < 0 || ch >= R2D_AUDIO_CHANNELS || !b->active[ch]) return;
+    if (!b->on || ch < 0 || ch >= R2D_AUDIO_CHANNELS || b->mode[ch] != 1) return;
 
     const int channels = (spec && spec->channels > 0) ? spec->channels : 2;
     if (channels < 2 || !pcm || samples < 2) return;
@@ -289,7 +342,7 @@ static void r2d__binaural_process(R2DAudio *a, int ch, const SDL_AudioSpec *spec
     const float half_pi = SDL_PI_F * 0.5f;
     const float t = aaz > half_pi ? 1.0f : aaz / half_pi;      // 0..1
     // ITD: Вудворт, максимум (0.0875/343)·(pi/2+1) = 0.656 мс на 90°.
-    const float itd = (b->head / 343.0f) * (aaz + sinf(aaz)) * (float)rate;
+    const float itd = r2d__itd_samples(b, aaz, rate);
     const int   idelay = (int)itd;
     const float frac = itd - (float)idelay;
     // Тень головы: срез падает 20 кГц → 2 кГц; на 0° фильтр не работает.
@@ -382,7 +435,12 @@ static void SDLCALL r2d__track_spatial(void *userdata,MIX_Track *track,const SDL
     R2DChannelCb *cb=(R2DChannelCb *)userdata;
     if(!cb)return;
     r2d_audio_spatial_process(cb->fx?cb->fx->spatial:NULL,spec,pcm,samples);
-    if(cb->owner&&cb->channel>=0)r2d__binaural_process(cb->owner,cb->channel,spec,pcm,samples);
+    if(cb->owner&&cb->channel>=0){
+        // Порядок: сначала backend (Steam), потом наша задержка поверх него —
+        // так работает гибрид `itd: 'model'` при backend 'steam'.
+        r2d__itd_process(cb->owner,cb->channel,spec,pcm,samples);
+        r2d__binaural_process(cb->owner,cb->channel,spec,pcm,samples);
+    }
 }
 
 bool r2d_audio_set_channel_effect(R2DAudio *a, int channel, const char *kind,
@@ -757,6 +815,7 @@ void r2d_audio_shutdown(R2DAudio *a)
     a->capture = NULL;
     a->capture_cap = 0;
     a->binaural.on = false;
+    memset(a->binaural.mode, 0, sizeof a->binaural.mode);
 
     for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
         if (a->channels[i]) MIX_DestroyTrack(a->channels[i]);
@@ -1119,10 +1178,10 @@ void r2d_audio_binaural_get(const R2DAudio *a,bool *on,float *head,float *far_ga
     if(mix)*mix=b->mix;
 }
 
-void r2d_audio_binaural_channel(R2DAudio *a,int channel,bool active,float azimuth) {
+static void r2d__binaural_channel_mode(R2DAudio *a,int channel,bool active,float azimuth,unsigned char mode) {
     if(!a||channel<0||channel>=R2D_AUDIO_CHANNELS)return;
     R2DAudioBinaural *b=&a->binaural;
-    if(!active){b->active[channel]=false;return;}
+    if(!active){b->active[channel]=false;b->mode[channel]=0;return;}
     // Азимут нормализуем в (-pi, pi]: мусор (NaN/inf) выключает канал, иначе
     // фильтры «залипли» бы в NaN и звук пропал бы совсем.
     if(!isfinite(azimuth)){b->active[channel]=false;return;}
@@ -1137,6 +1196,15 @@ void r2d_audio_binaural_channel(R2DAudio *a,int channel,bool active,float azimut
     }
     b->az[channel]=az;
     b->active[channel]=true;
+    b->mode[channel]=mode;
+}
+
+void r2d_audio_binaural_channel(R2DAudio *a,int channel,bool active,float azimuth) {
+    r2d__binaural_channel_mode(a,channel,active,azimuth,1);
+}
+
+void r2d_audio_itd_channel(R2DAudio *a,int channel,bool active,float azimuth) {
+    r2d__binaural_channel_mode(a,channel,active,azimuth,2);
 }
 
 bool r2d_audio_capture_start(R2DAudio *a,int frames) {

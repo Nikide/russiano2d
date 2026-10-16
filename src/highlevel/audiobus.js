@@ -667,10 +667,19 @@ function applyDirect(target, key, value, onChange) {
 //
 // Выключено по умолчанию: пока игра не попросила, ни один сэмпл не меняется.
 // ---------------------------------------------------------------------------
+// Даёт ли Steam-бэкенд СВОЮ межушную задержку. Измерено на живом выходе
+// (tests/agent/audio_hrtf_test.py: кросс-корреляция L/R на 90° = 0 сэмплов,
+// rho при нулевом лаге 0.48 при остатке 0.77 — то есть библиотека фильтрует,
+// но не задерживает). Если в новой сборке Steam Audio это изменится, число
+// надо перемерить и переписать константу — иначе получим двойной ITD.
+const STEAM_BACKEND_HAS_ITD = false;
+
 const hrtf_state = {
     on: false,
     backend: 'auto',      // что просили: 'auto' | 'steam' | 'synthetic'
     active: null,         // что реально работает: 'steam' | 'synthetic' | null
+    itd: 'auto',          // политика задержки: 'auto' | 'model' | 'off'
+    itd_source: 'none',   // кто её даёт сейчас: 'backend' | 'model' | 'none'
     reason: 'выключено',  // почему выбран именно этот backend
     head: 0.0875,         // радиус головы, м
     farGain: 0.63,        // ослабление дальнего уха на 90° (-4 дБ)
@@ -721,10 +730,31 @@ export function hrtfActive() {
 }
 
 /** Снимок состояния для $.audio.hrtf() и тестов. */
+/**
+ * Кто даёт межушную задержку при текущем backend и политике `itd`.
+ *
+ *   'backend' — её даёт сам backend (у Steam Audio в нашей сборке её НЕТ:
+ *               измерено 0 мс, см. STEAM_BACKEND_HAS_ITD);
+ *   'model'   — задержку добавляет наша модель (в синтетике она и так есть,
+ *               в steam это ГИБРИД: библиотечный спектр + наша задержка);
+ *   'none'    — политика 'off' либо режим выключен.
+ */
+function resolveItdSource() {
+    if (!hrtf_state.on || hrtf_state.active === null) return 'none';
+    if (hrtf_state.itd === 'off') return 'none';
+    if (hrtf_state.itd === 'model') return 'model';
+    // 'auto': если backend своей задержки не даёт — добавляем свою.
+    if (hrtf_state.active === 'steam') return STEAM_BACKEND_HAS_ITD ? 'backend' : 'model';
+    return 'model';           // синтетика: задержка внутри модели
+}
+
 export function hrtfInfo() {
+    hrtf_state.itd_source = resolveItdSource();
     return {
         on: hrtf_state.on,
         backend: hrtf_state.active,
+        itd: hrtf_state.itd,
+        itd_source: hrtf_state.itd_source,
         requested: hrtf_state.backend,
         reason: hrtf_state.reason,
         steam: hrtfBackendAvailable(),
@@ -757,7 +787,15 @@ export function applyHrtfChannel(channel, dx, dy, gain, cutoff) {
         const ok = a.worldChannel(channel, true, true, right, up, back,
                                   clamp01(gain === undefined ? 1 : gain),
                                   cutoff === undefined ? 22000 : cutoff);
-        if (ok === true) return 'steam';
+        if (ok === true) {
+            // Гибрид: библиотека даёт спектр, свою задержку добавляет модель —
+            // ровно когда политика 'auto' (или 'model') и backend ею не богат.
+            const need_model_itd = resolveItdSource() === 'model';
+            if (typeof a.setChannelItd === 'function') {
+                a.setChannelItd(channel, need_model_itd, need_model_itd ? Math.atan2(dx, -dy) : 0);
+            }
+            return 'steam';
+        }
         // Бэкенд отказал на конкретном канале — честно уходим в модель.
         hrtf_state.active = (typeof a.setBinaural === 'function') ? 'synthetic' : null;
         hrtf_state.reason = 'HRTF-бэкенд отказал на канале ' + channel;
@@ -767,6 +805,8 @@ export function applyHrtfChannel(channel, dx, dy, gain, cutoff) {
     // Канал мог остаться в Steam-режиме (смена backend на лету) — снимаем его,
     // иначе библиотека продолжит обрабатывать канал по своим параметрам.
     if (typeof a.worldChannel === 'function') a.worldChannel(channel, false, false, 0, 0, -1, 1, 22000);
+    // Модель считает ITD сама — гибридный слой не нужен.
+    if (typeof a.setChannelItd === 'function') a.setChannelItd(channel, false, 0);
     // Источник ровно на слушателе — это центр, а не «сзади»: у atan2(0, -0)
     // знак нуля решает всё, и без этой ветки звук «под ногами» уезжал назад.
     const centered = Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9;
@@ -781,6 +821,7 @@ export function clearHrtfChannel(channel) {
     const a = audio();
     if (!a || !(channel >= 0)) return;
     if (typeof a.setChannelBinaural === 'function') a.setChannelBinaural(channel, false, 0);
+    if (typeof a.setChannelItd === 'function') a.setChannelItd(channel, false, 0);
     if (typeof a.worldChannel === 'function') a.worldChannel(channel, false, false, 0, 0, -1, 1, 22000);
 }
 
@@ -1222,15 +1263,35 @@ export function installAudiobus($) {
                 if (Number.isFinite(v)) hrtf_state[key] = v;
             }
             if (o.up !== undefined) hrtf_state.up = o.up === true;
+            if (o.itd !== undefined) {
+                const itd = String(o.itd);
+                if (itd !== 'auto' && itd !== 'model' && itd !== 'off') {
+                    log(`$.audio.hrtf: неизвестная политика itd "${itd}" — ожидается auto/model/off`);
+                    return hrtfInfo();
+                }
+                hrtf_state.itd = itd;
+            }
             resolveHrtfBackend();
             if (engine_audio && typeof engine_audio.setBinaural === 'function') {
-                engine_audio.setBinaural(hrtfActive() && hrtf_state.active === 'synthetic',
+                // Глобальный флаг теперь включает бинауральный слой целиком:
+                // полную модель (mode 1) или ТОЛЬКО задержку-гибрид (mode 2).
+                // Что именно применять — решает режим канала, поэтому в
+                // steam-режиме полная модель сама по себе не включится.
+                engine_audio.setBinaural(hrtfActive(),
                                          hrtf_state.head, hrtf_state.farGain,
                                          hrtf_state.rearGain, hrtf_state.mix);
             }
             if (!hrtfActive()) {
                 for (const handle of handles) clearHrtfChannel(handle.channel);
                 if (ctx.sound_sources) for (const channel of ctx.sound_sources.keys()) clearHrtfChannel(channel);
+            } else if (engine_audio && typeof engine_audio.setChannelItd === 'function') {
+                // Сменили политику ITD на лету: у уже играющих каналов надо
+                // переключить гибридный слой, иначе он останется как был.
+                const need_model_itd = resolveItdSource() === 'model'
+                    && hrtf_state.active === 'steam';
+                for (const handle of handles) {
+                    if (handle.channel >= 0) engine_audio.setChannelItd(handle.channel, need_model_itd, 0);
+                }
             }
             return hrtfInfo();
         },

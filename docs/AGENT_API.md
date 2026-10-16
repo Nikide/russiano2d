@@ -477,10 +477,16 @@ $.test.near(x, 100, 0.5, 'игрок у отметки');
 
 | Вызов | Что делает |
 |---|---|
-| `$.audio.hrtf()` | состояние: `{on, backend, requested, reason, steam, head, farGain, rearGain, mix, up}`. `backend` — **фактический**: `'steam'` (настоящая HRTF, Steam Audio) или `'synthetic'` (встроенная модель: ITD, ILD, тень головы, подсказка «сзади»), `null` — выключено |
-| `$.audio.hrtf(true)` / `{backend, itd, head, farGain, rearGain, mix, up}` | включить/настроить. По умолчанию **выключено**: обычный звук не меняется. `backend:'steam'` требует доступной HRTF, иначе честно остаётся модель и в `reason` пишется причина |
+| `$.audio.hrtf()` | состояние: `{on, backend, requested, itd, itd_source, reason, steam, head, farGain, rearGain, mix, up}`. `backend` — **фактический**: `'steam'` (настоящая HRTF, Steam Audio) или `'synthetic'` (встроенная модель: ITD, ILD, тень головы, подсказка «сзади»), `null` — выключено. `itd_source` — кто даёт межушную задержку сейчас: `'model'` (гибрид: у Steam Audio своей задержки нет — измерено 0 мс), `'backend'`, `'none'` |
+| `$.audio.hrtf(true)` / `{backend, itd, head, farGain, rearGain, mix, up}` | включить/настроить. По умолчанию **выключено**: обычный звук не меняется. `backend`: `'auto'`(по умолчанию)/`'steam'`/`'synthetic'`; `backend:'steam'` требует доступной HRTF, иначе честно остаётся модель и в `reason` пишется причина. `itd`: `'auto'`(по умолчанию)/`'model'`/`'off'` — при `'auto'` в steam-режиме межушную задержку добавляет **наша модель** (гибрид, видно в `itd_source`), `'off'` — ровно библиотечный выход без задержки |
 | `$.audio.captureStart(frames)` | начать захват **post-mix** (то, что слышит игрок: после шин и реверба) |
 | `$.audio.captured()` | `{frames, rate, samples:[L,R,…]}`; `rate` — из спека микшера, а не угаданное число |
+| `engine.audio.hrtfAvailable()` | поднялась ли **настоящая** HRTF (Steam Audio) в этой сборке |
+| `engine.audio.worldChannel(ch, on, hrtf, right, up, back, gain, cutoff)` | канал в режим Spatial Audio (Steam): направление, громкость, срез окклюзии; `false` — бэкенд недоступен |
+| `engine.audio.binaural()` / `setBinaural(on, head, farGain, rearGain, mix)` | состояние модели-фолбэка: радиус головы (м), усиление дальнего уха, полка «сзади», доля влажного сигнала |
+| `engine.audio.setChannelBinaural(ch, on, azimuth)` | полная модель на канале (азимут в радианах: 0 — спереди, +π/2 — справа) |
+| `engine.audio.setChannelItd(ch, on, azimuth)` | **гибрид**: только межушная задержка поверх того, что посчитал backend |
+| `engine.audio.captureStart(frames)` / `captured()` / `captureClear()` | диагностический захват микса: `captured()` → `{frames, rate, done, samples}` |
 | `$.audio.captureClear()` | остановить и очистить захват |
 
 Измеренные факты (32768 кадров @44.1 кГц), чтобы не гадать: модель даёт ITD
