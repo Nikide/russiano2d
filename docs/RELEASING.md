@@ -200,3 +200,29 @@ python3 tests/macos_package_smoke_test.py                             # паке
 ```
 
 Состав архива и таблица платформ — [BUILD.md](BUILD.md), раздел «Дистрибутив».
+
+## Mos.Hub (GitLab): пайплайн запускается только вручную
+
+У раннеров Mos.Hub (K8s, пространство `appsechub-runners-prod`) **закрыт egress в
+интернет**: `apt-get update` не достаёт `archive.ubuntu.com` (IPv6 — network
+unreachable, IPv4 — timeout), а сборка тянет зависимости через CMake
+`FetchContent` (SDL3, QuickJS-ng, Box2D, RmlUi, glslang, FreeType-тарболл с
+`archive.ubuntu.com`). Поэтому на коммит любой job падал на первом шаге — не
+из-за кода, а из-за сети раннера.
+
+Сейчас в `.gitlab-ci.yml` стоит блок `workflow:` с правилами «только `web`,
+`api`, `schedule`, `trigger`», то есть **на push, коммит и тег пайплайн не
+запускается вовсе**. Файл при этом остался рабочим: джобы, стадии и релиз по
+тегу на месте.
+
+Чтобы вернуть автоматические запуски, нужно одно из двух:
+1. **Открыть egress раннеру** — `archive.ubuntu.com`, `security.ubuntu.com`,
+   `github.com`, `codeload.github.com` (тогда достаточно удалить блок
+   `workflow:` и вернуть `apt-get`-шаги);
+2. **Свой образ** — предустановленный тулчейн + прогретый кэш `FetchContent`
+   (`FETCHCONTENT_BASE_DIR`) и `image:` из реестра Mos.Hub; тогда джобы работают
+   без сети вообще.
+
+Пока ни того, ни другого нет, сборка Linux/Windows на Mos.Hub не выполняется:
+Windows-архивы делает GitHub Actions (MinGW-кросс-компиляция), Linux — там же,
+macOS — на рабочем Mac и лежит в `dist/`.

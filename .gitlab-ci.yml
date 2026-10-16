@@ -15,6 +15,33 @@
 # раннер с этим тегом).
 # ---------------------------------------------------------------------------
 
+# --- Почему пайплайн НЕ запускается на коммиты ---------------------------------
+# У раннеров Mos.Hub (пространство appsechub-runners-prod, K8s) закрыт egress в
+# интернет: `apt-get update` не достаёт archive.ubuntu.com (IPv6 — network
+# unreachable, IPv4 — timeout), а сборка тянет зависимости через CMake
+# FetchContent (SDL3, QuickJS, Box2D, RmlUi, glslang, FreeType-тарболл с
+# archive.ubuntu.com). Поэтому любой job падает на первом же шаге — не из-за
+# кода, а из-за сети раннера.
+#
+# Решение: на push/коммит/тег пайплайн не запускается ВООБЩЕ, чтобы не плодить
+# красные статусы и не тратить время. Запуск — только вручную из веб-интерфейса
+# (CI/CD → Run pipeline) или по API/расписанию, когда раннер починят.
+#
+# Чтобы вернуть авто-запуск, достаточно удалить блок `workflow:` ниже — файл
+# намеренно оставлен рабочим (джобы, стадии, релиз по тегу).
+#
+# Что нужно, чтобы сборка здесь заработала: (а) открыть egress раннеру для
+# archive.ubuntu.com/security.ubuntu.com/github.com/codeload.github.com, либо
+# (б) перевести джобы на собственный образ с предустановленным тулчейном и
+# прогретым кэшем FetchContent. Подробности — docs/RELEASING.md.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+    - when: never
+
 stages: [static, build, package, release]
 
 default:
