@@ -222,7 +222,7 @@ if(MSVC)
     # Это обход ошибки тулчейна (MSVC 14.44.35207), а не решение: когда раннер
     # обновит компилятор, /O1 можно снять и вернуть /O2 (проверка — зелёный
     # windows-x86_64 в CI).
-    target_compile_options(russiano2d PRIVATE /O1)
+    target_compile_options(russiano2d PRIVATE /O1 /Od)
     set_target_properties(russiano2d PROPERTIES
         VS_GLOBAL_MultiProcessorCompilation "false")
 endif()
