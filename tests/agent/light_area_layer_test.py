@@ -22,6 +22,7 @@
 
 import os
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", ".."))
@@ -44,8 +45,13 @@ def check(condition, message):
         FAILURES.append(message)
 
 
+SHOTS = tempfile.mkdtemp(prefix="r2d-light-area-")
+
+
 def pair(a, name):
-    img = read_png(a.screenshot(name))
+    # Скриншоты — во временный каталог: корень репозитория не должен собирать
+    # отладочные PNG (их потом приходится вычищать руками).
+    img = read_png(a.screenshot(os.path.join(SHOTS, name)))
     return luma(img, *RECV_1), luma(img, *RECV_2)
 
 

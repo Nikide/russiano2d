@@ -80,31 +80,37 @@ export function installDebug($) {
         /**
          * Примитивы поверх кадра. Принимают точки, узлы и селекторы:
          *   $.debug.draw.line('#hero', '#exit', 'yellow');
+         *
+         * Координаты — МИРОВЫЕ: `$.gfx.draw.*` рисует в координатах окна
+         * (см. docs/highlevel/fx.md), а отладка обязана липнуть к объектам,
+         * поэтому мир→экран переводим здесь. Раньше перевода не было, и при
+         * сдвинутой камере линия между узлами уезжала ровно на её смещение —
+         * поймано пиксельной проверкой в devtools (§21).
          */
         draw: {
             line(a, b, color, width) {
-                const p = point(a), q = point(b);
+                const p = toScreen(point(a)), q = toScreen(point(b));
                 ctx.gfx.draw.line(p.x, p.y, q.x, q.y, color, width);
             },
             rect(a, b, color) {
-                const p = point(a), q = point(b);
+                const p = toScreen(point(a)), q = toScreen(point(b));
                 ctx.gfx.draw.rect(Math.min(p.x, q.x), Math.min(p.y, q.y),
                                   Math.abs(q.x - p.x), Math.abs(q.y - p.y), color);
             },
             circle(a, r, color) {
-                const p = point(a);
+                const p = toScreen(point(a));
                 ctx.gfx.draw.circle(p.x, p.y, r, color);
             },
             ring(a, r, color, width) {
-                const p = point(a);
+                const p = toScreen(point(a));
                 ctx.gfx.draw.ring(p.x, p.y, r, color, width);
             },
             text(text, a, color, size) {
-                const p = point(a);
+                const p = toScreen(point(a));
                 ctx.gfx.draw.text(text, p.x, p.y, color, size);
             },
             arrow(a, b, color) {
-                const p = point(a), q = point(b);
+                const p = toScreen(point(a)), q = toScreen(point(b));
                 ctx.gfx.draw.arrow(p.x, p.y, q.x, q.y, color);
             },
         },
@@ -330,6 +336,17 @@ export function installDebug($) {
 function evalWatch(w) {
     try { return typeof w.value === 'function' ? w.value() : w.value; }
     catch (e) { return `ошибка: ${e}`; }
+}
+
+/**
+ * Мир → экран для отладочных примитивов. Камера может отсутствовать (тесты без
+ * мира) — тогда координаты остаются как есть, а не превращаются в NaN.
+ */
+function toScreen(p) {
+    const cam = ctx.camera;
+    if (!cam || typeof cam.worldToScreen !== 'function') return p;
+    const s = cam.worldToScreen(p);
+    return (s && typeof s.x === 'number') ? s : p;
 }
 
 function point(what) {
