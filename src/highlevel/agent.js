@@ -24,8 +24,22 @@ const tests = { total: 0, failed: 0, failures: [], details: [] };
 
 const round2 = (v) => Math.round(v * 100) / 100;
 
+/**
+ * Есть ли у узла компонент здоровья.
+ *
+ * Признак ровно один и он фактический: `max_hp > 0`. Другого у узла нет —
+ * `.health()`, `.hp()` и `.maxHp()` пишут только `max_hp`/`cur_hp`, а тег
+ * `<enemy>` задаёт их умолчанием. Узел без здоровья (`<rect>`, `<sprite>` с
+ * классом врага) остаётся с нулями, и раньше снимок объявлял его мёртвым:
+ * `{hp: 0, max_hp: 0, alive: false}` — автоматическая проверка «враг жив?»
+ * давала ложный отрицательный (отчёт BASHNYA A6).
+ */
+function hasHealth(node) {
+    return Number(node.max_hp) > 0;
+}
+
 function nodeBrief(node) {
-    return {
+    const brief = {
         uid: node.uid,
         id: node.id || null,
         tag: node.tag,
@@ -35,10 +49,7 @@ function nodeBrief(node) {
         w: round2(node.w),
         h: round2(node.h),
         angle: round2(node.angle),
-        hp: round2(node.cur_hp),
-        max_hp: round2(node.max_hp),
         team: node.team,
-        alive: node.cur_hp > 0 && !node.removed,
         visible: node.visible,
         body: node.body,
         ui: !!node.attrs.ui,
@@ -48,6 +59,27 @@ function nodeBrief(node) {
         // снимке, чтобы автотест мог проверить доступность интерфейса.
         aria: node.aria || null,
     };
+    if (hasHealth(node)) {
+        brief.hp = round2(node.cur_hp);
+        brief.max_hp = round2(node.max_hp);
+        brief.alive = node.cur_hp > 0 && !node.removed;
+    } else {
+        // Здоровья нет — значит «жив ли» неизвестно, а не «мёртв»: `null`
+        // честнее выдуманного false, и hp/max_hp не подставляются нулями.
+        brief.alive = null;
+    }
+    return brief;
+}
+
+/** Оставить в описании только запрошенные поля (порядок — как просили). */
+function trimFields(brief, fields) {
+    if (!Array.isArray(fields) || fields.length === 0) return brief;
+    const out = {};
+    for (const name of fields) {
+        const key = String(name);
+        if (Object.prototype.hasOwnProperty.call(brief, key)) out[key] = brief[key];
+    }
+    return out;
 }
 
 export function installAgent($) {
@@ -82,10 +114,40 @@ export function installAgent($) {
         },
 
         /** Полный снимок — то, что уходит в ответ на команду `state`. */
-        snapshot() {
+        /**
+         * @param {object} [opts] урезание снимка (отчёт BASHNYA A8):
+         *   `entities: { limit, sel, fields }` — команда `state` передаёт это
+         *   из протокола. Без параметров снимок прежний и полный.
+         */
+        snapshot(opts) {
+            const trim = (opts && typeof opts === 'object' && opts.entities
+                          && typeof opts.entities === 'object') ? opts.entities : null;
             const world = ctx.world ? ctx.world._state : null;
             const entities = ctx.nodes.filter((n) => !n.attrs.ui && !n.classes.has('world-bound'));
             const ui_nodes = ctx.nodes.filter((n) => n.attrs.ui);
+
+            let listed = entities;
+            let meta = null;
+            if (trim) {
+                // Селектор разбирает тот же `$`, что и везде: второй реализации
+                // поиска быть не должно. Порядок узлов сохраняем — снимок
+                // остаётся предсказуемым.
+                if (trim.sel) {
+                    const picked = new Set(query(String(trim.sel)));
+                    listed = listed.filter((n) => picked.has(n));
+                }
+                const limit = Number(trim.limit);
+                if (Number.isFinite(limit) && limit > 0 && listed.length > limit) {
+                    listed = listed.slice(0, limit);
+                }
+                meta = {
+                    total: entities.length,
+                    shown: listed.length,
+                    sel: trim.sel === undefined ? null : String(trim.sel),
+                    limit: Number.isFinite(limit) && limit > 0 ? limit : null,
+                    fields: Array.isArray(trim.fields) ? trim.fields.map(String) : null,
+                };
+            }
 
             const snap = {
                 frame: engineOf().frame,
@@ -102,12 +164,15 @@ export function installAgent($) {
                     followed: ctx.camera.followed() ? describeTarget(ctx.camera.followed()) : null,
                 } : null,
                 world: world ? {
+                    // count — ВСЕГДА сколько сущностей в мире, а не сколько
+                    // попало в урезанный список: иначе инструмент решил бы,
+                    // что мир опустел.
                     count: entities.length,
                     gravity: world.gravity,
                     bounds: world.bounds,
                     bodies: engineOf().bodyCount(),
                 } : { count: entities.length, bodies: engineOf().bodyCount() },
-                entities: entities.map(nodeBrief),
+                entities: listed.map((n) => trimFields(nodeBrief(n), trim && trim.fields)),
                 ui: ui_nodes.map(nodeBrief),
                 tests: {
                     total: tests.total,
@@ -116,6 +181,9 @@ export function installAgent($) {
                     details: tests.details.slice(0, 20),
                 },
             };
+            // Мета урезания — только когда урезали: полный снимок остаётся
+            // байт-в-байт прежним (на него опираются существующие тесты).
+            if (meta) snap.entities_meta = meta;
 
             const player = ctx.nodes.find((n) => n.tag === 'player' || n.classes.has('player'));
             if (player) {
@@ -143,7 +211,9 @@ export function installAgent($) {
          */
         install() {
             const eng = engineOf();
-            eng.setSnapshot(() => agent.snapshot());
+            // Параметры урезания приходят из команды `state` (A8) и передаются
+            // снимку как есть; без параметров поведение прежнее.
+            eng.setSnapshot((opts) => agent.snapshot(opts));
             if (typeof eng.setAgentQuery === 'function') {
                 eng.setAgentQuery((sel, mode, limit) => {
                     if (mode === 'count') return query(sel || '*').length;

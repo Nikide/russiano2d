@@ -46,6 +46,7 @@
 #include <SDL3/SDL.h>
 
 #include <math.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -172,32 +173,122 @@ static R2DScript *r2d__script_of(JSContext *ctx)
 static JSValue r2d__js_set_resolve_transforms(JSContext *ctx, JSValueConst this_val,
                                               int argc, JSValueConst *argv);
 
+/**
+ * На сколько сегментов склейка «каталог импортирующего модуля + спецификатор»
+ * уходит ВЫШЕ каталога игры.
+ *
+ * Нужна потому, что r2d_module_path() (общее правило с упаковщиком) такие
+ * сегменты просто отбрасывает: «../../shared/x.js» из «apps/game/main.js»
+ * превращалось в «shared/x.js» — путь внутри каталога игры, где файла нет
+ * (или, хуже, лежит одноимённый двойник). Молчаливая подстановка чужого пути
+ * и была жалобой A2.
+ *
+ * Правило после этой правки: относительный спецификатор резолвится от
+ * файла-источника, `..` нормализуется, подъём вверх разрешён, пока файл
+ * существует. «Вне каталога игры» — это не запрет подъёма, а сообщение «там,
+ * куда ведёт путь, файла нет». Встроенные модули движка (`r2d/*`) до этой
+ * проверки не доходят: их отдаёт таблица исходников в бинарнике.
+ */
+static int r2d__module_escape_depth(const char *base_name, const char *name)
+{
+    if (!name || !*name || name[0] == '/') return 0;
+
+    char path[4096];
+    const bool is_relative = (name[0] == '.' &&
+                              (name[1] == '/' || (name[1] == '.' && name[2] == '/')));
+
+    if (is_relative && base_name && *base_name) {
+        char dir[4096];
+        size_t i = 0;
+        for (; base_name[i] && i + 1 < sizeof dir; ++i) dir[i] = base_name[i];
+        dir[i] = '\0';
+        char *slash = SDL_strrchr(dir, '/');
+        if (slash) *slash = '\0'; else dir[0] = '\0';
+        if (dir[0]) SDL_snprintf(path, sizeof path, "%s/%s", dir, name);
+        else        SDL_snprintf(path, sizeof path, "%s", name);
+    } else {
+        SDL_snprintf(path, sizeof path, "%s", name);
+    }
+
+    int depth = 0;
+    int escape = 0;
+    const char *p = path;
+    while (*p) {
+        const char *seg = p;
+        while (*p && *p != '/') p++;
+        const size_t seg_len = (size_t)(p - seg);
+        if (*p == '/') p++;
+
+        if (seg_len == 0) continue;                            // пустой сегмент
+        if (seg_len == 1 && seg[0] == '.') continue;           // текущий каталог
+        if (seg_len == 2 && seg[0] == '.' && seg[1] == '.') {  // подъём
+            // Выше корня подъём не «схлопывается»: именно столько сегментов
+            // путь уходит за каталог игры (r2d_module_path их отбрасывает).
+            if (depth > 0) depth--;
+            else escape++;
+            continue;
+        }
+        depth++;
+    }
+    return escape;
+}
+
 static char *r2d__module_normalize(JSContext *ctx, const char *base_name,
                                     const char *name, void *opaque)
 {
     R2D_UNUSED(opaque);
     if (!name || !*name) return NULL;
 
+    // Абсолютный спецификатор молча приклеивался к каталогу игры: '/x/y.js'
+    // превращался в '<game>/x/y.js' и «не находился» с чужого пути в тексте
+    // ошибки. Пространство имён модулей — от каталога игры (иначе релизная
+    // сборка с байткодом не смогла бы адресовать модуль), поэтому абсолютный
+    // путь отклоняем явно, а не угадываем, что имел в виду автор.
+    if (name[0] == '/') {
+        JS_ThrowReferenceError(ctx, "абсолютный путь в import не поддержан: '%s' — "
+                               "модули адресуются от каталога игры (код R2D_MODULE_ABSOLUTE_PATH)",
+                               name);
+        return NULL;
+    }
+
+    // r2d_module_path() — общее правило с упаковщиком: имя модуля НИКОГДА не
+    // выходит за каталог игры. Для импортов вверх по дереву (инструменты рядом
+    // с игрой) этого мало: считаем, на сколько сегментов путь уходит выше
+    // корня, и восстанавливаем настоящий относительный путь.
+    const int escape = r2d__module_escape_depth(base_name, name);
+
     char norm[4096];
     r2d_module_path(base_name, name, norm, sizeof norm);
 
+    char canonical[4096];
+    if (escape > 0) {
+        size_t used = 0;
+        for (int i = 0; i < escape && used + 4 < sizeof canonical; ++i) {
+            canonical[used++] = '.'; canonical[used++] = '.'; canonical[used++] = '/';
+        }
+        canonical[used] = '\0';
+        SDL_snprintf(canonical + used, sizeof canonical - used, "%s", norm);
+    } else {
+        SDL_snprintf(canonical, sizeof canonical, "%s", norm);
+    }
+
     // Короткий алиас: import $ from 'r2d'. Приводим к настоящему пути модуля,
     // иначе относительные импорты внутри него искались бы от корня игры.
-    if (SDL_strcmp(norm, "r2d") == 0) return js_strdup(ctx, "r2d/index.js");
+    if (SDL_strcmp(canonical, "r2d") == 0) return js_strdup(ctx, "r2d/index.js");
 
     // Внутренние модули $ (r2d/native.js с движком и прочие) видны только
     // самим модулям r2d/*. Игре доступен один вход — 'r2d' ($): низкий
     // уровень без пересборки движка не достать.
-    const bool internal = SDL_strncmp(norm, "r2d/", 4) == 0 &&
-                          SDL_strcmp(norm, "r2d/index.js") != 0;
+    const bool internal = SDL_strncmp(canonical, "r2d/", 4) == 0 &&
+                          SDL_strcmp(canonical, "r2d/index.js") != 0;
     const bool from_engine = base_name && SDL_strncmp(base_name, "r2d/", 4) == 0;
     if (internal && !from_engine) {
         JS_ThrowReferenceError(ctx, "модуль '%s' — внутренний модуль движка; игре доступен "
-                               "только import $ from 'r2d'", norm);
+                               "только import $ from 'r2d'", canonical);
         return NULL;
     }
 
-    return js_strdup(ctx, norm);
+    return js_strdup(ctx, canonical);
 }
 
 // Компилирует исходник встроенного модуля (текст уже в бинарнике).
@@ -240,7 +331,15 @@ static JSModuleDef *r2d__module_loader(JSContext *ctx, const char *module_name, 
     const R2dEmbeddedModule *mod = r2d__find_embedded(module_name);
     if (!mod) {
         char msg[512];
-        SDL_snprintf(msg, sizeof msg, "модуль '%s' не встроен в бинарник", module_name);
+        // Модуль вне каталога игры в таблицу байткода не попадает по построению
+        // (упаковщик ходит от каталога игры) — говорим это прямо, а не «не найден».
+        if (SDL_strncmp(module_name, "../", 3) == 0) {
+            SDL_snprintf(msg, sizeof msg, "модуль вне каталога игры не найден: '%s' — "
+                         "в упакованную сборку попадают только модули внутри каталога игры "
+                         "(код R2D_MODULE_OUTSIDE_GAME)", module_name);
+        } else {
+            SDL_snprintf(msg, sizeof msg, "модуль '%s' не встроен в бинарник", module_name);
+        }
         JS_ThrowReferenceError(ctx, "%s", msg);
         r2d__note_error(s, msg);
         return NULL;
@@ -296,6 +395,29 @@ static JSModuleDef *r2d__module_loader(JSContext *ctx, const char *module_name, 
 
     char full_path[4096];
     SDL_snprintf(full_path, sizeof full_path, "%s/%s", s->game_dir, module_name);
+
+    // Импорт вверх по дереву РАЗРЕШЁН, пока файл существует: относительный
+    // спецификатор резолвится от файла-источника (как в Node/браузере), `..`
+    // нормализуется, и общий код рядом с игрой — обычный случай, а не ошибка.
+    // Ошибка здесь означает только одно: за каталогом игры файла НЕТ. Раньше
+    // такой спецификатор молча склеивался с каталогом игры и вёл в чужое место
+    // (или в одноимённый файл-двойник внутри игры).
+    //
+    // Собственные модули движка (r2d/*: слой $, bootstrap) сюда не доходят —
+    // они отдаются таблицей встроенных исходников выше по функции, поэтому
+    // проверка не может отрезать загрузчик.
+    if (SDL_strncmp(module_name, "../", 3) == 0) {
+        SDL_PathInfo info;
+        if (!(SDL_GetPathInfo(full_path, &info) && info.type == SDL_PATHTYPE_FILE)) {
+            char msg[1200];
+            SDL_snprintf(msg, sizeof msg,
+                         "модуль вне каталога игры не найден: '%s' (искал '%s'); "
+                         "код R2D_MODULE_OUTSIDE_GAME", module_name, full_path);
+            JS_ThrowReferenceError(ctx, "%s", msg);
+            r2d__note_error(s, msg);
+            return NULL;
+        }
+    }
 
     size_t size = 0;
     char *buf = (char *)SDL_LoadFile(full_path, &size);
@@ -4346,6 +4468,43 @@ static JSValue r2d__js_fs_read_text(JSContext *ctx, JSValueConst this_val, int a
     return out;
 }
 
+// Последний отказ файловой записи: путь и системная причина (read-only,
+// EACCES, ENOENT). Рантайм в движке один (r2d_script_init зовётся один раз),
+// поэтому хватает буфера на процесс — тянуть поле через script.h ради того же
+// одного значения незачем.
+static char r2d__fs_error[1024];
+
+/**
+ * Собрать человеческую причину отказа и запомнить её для engine.fs.lastError().
+ *
+ * SDL_SaveFile() отдаёт общее «Error writing to file», а настоящая причина
+ * (каталог только для чтения, нет прав, нет каталога) лежит в errno. Поэтому
+ * называем обе: по одной строке видно и что случилось, и почему.
+ */
+static void r2d__fs_note_failure(const char *action, const char *code,
+                                 const char *full, int err, const char *extra)
+{
+    const char *sys = (err > 0) ? strerror(err) : NULL;
+    const char *sdl = SDL_GetError();
+    // SDL часто пересказывает ту же причину своими словами («Couldn't open
+    // ...: Permission denied») — тогда оставляем системную форму с errno, а
+    // пересказ не дублируем: строка должна читаться, а не повторяться.
+    const bool sdl_adds = sdl && *sdl && SDL_strstr(sdl, full) == NULL &&
+                          (!sys || SDL_strstr(sdl, sys) == NULL);
+    char reason[512];
+    if (sys && sdl_adds) {
+        SDL_snprintf(reason, sizeof reason, "%s (errno %d); %s", sys, err, sdl);
+    } else if (sys) {
+        SDL_snprintf(reason, sizeof reason, "%s (errno %d)", sys, err);
+    } else if (sdl && *sdl) {
+        SDL_snprintf(reason, sizeof reason, "%s", sdl);
+    } else {
+        SDL_snprintf(reason, sizeof reason, "причина не сообщена системой");
+    }
+    SDL_snprintf(r2d__fs_error, sizeof r2d__fs_error, "не удалось %s \"%s\": %s%s (код %s)",
+                 action, full, reason, extra ? extra : "", code);
+}
+
 static JSValue r2d__js_fs_write(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -4364,18 +4523,46 @@ static JSValue r2d__js_fs_write(JSContext *ctx, JSValueConst this_val, int argc,
 
     // Каталог назначения может не существовать — создаём (SDL_SaveFile сам
     // этого не делает), иначе сохранение молча ломается.
+    char dir_error[320];
+    dir_error[0] = '\0';
     char dir[4096];
     SDL_snprintf(dir, sizeof dir, "%s", full);
     char *slash = SDL_strrchr(dir, '/');
     if (slash) {
         *slash = '\0';
-        if (dir[0]) SDL_CreateDirectory(dir);
+        if (dir[0] && !SDL_CreateDirectory(dir)) {
+            // Каталога нет и создать его нечем (например, родитель только для
+            // чтения) — это и есть причина будущего ENOENT, называем её сразу.
+            SDL_PathInfo info;
+            if (!(SDL_GetPathInfo(dir, &info) && info.type == SDL_PATHTYPE_DIRECTORY)) {
+                SDL_snprintf(dir_error, sizeof dir_error, "; каталог \"%s\" не создан", dir);
+            }
+        }
     }
 
+    errno = 0;
     const size_t len = text ? SDL_strlen(text) : 0;
     const bool ok = SDL_SaveFile(full, text ? text : "", len);
+    const int err = errno;
     if (text) JS_FreeCString(ctx, text);
+
+    if (!ok) {
+        // Строку в журнал печатает вызывающий слой ($.fs/$.store): только он
+        // знает и относительный путь игры, и куда писать диагностику. Здесь
+        // причина только собирается — иначе на один отказ вышло бы две строки.
+        r2d__fs_note_failure("записать", "R2D_FS_WRITE_FAILED", full, err, dir_error);
+    } else {
+        r2d__fs_error[0] = '\0';
+    }
     return ok ? JS_TRUE : JS_FALSE;
+}
+
+// engine.fs.lastError() → строка последнего отказа записи ("" — отказов не было).
+static JSValue r2d__js_fs_last_error(JSContext *ctx, JSValueConst this_val,
+                                     int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    return JS_NewString(ctx, r2d__fs_error);
 }
 
 static JSValue r2d__js_fs_exists(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -4794,13 +4981,31 @@ bool r2d_script_eval(R2DScript *s, const char *code, char **out_json, char **out
     return ok;
 }
 
-bool r2d_script_snapshot(R2DScript *s, char **out_json, char **out_error)
+bool r2d_script_snapshot(R2DScript *s, const char *opts_json,
+                          char **out_json, char **out_error)
 {
     if (out_json) *out_json = NULL;
     if (out_error) *out_error = NULL;
     if (!s || !s->ctx || JS_IsUndefined(s->snapshot_fn)) return false;
 
-    JSValue value = JS_Call(s->ctx, s->snapshot_fn, JS_UNDEFINED, 0, NULL);
+    // Параметры снимка (урезание списка сущностей) приходят из команды `state`
+    // строкой JSON: разбираем её здесь и отдаём провайдеру аргументом. Игра,
+    // которой параметры не нужны, видит их как undefined и работает как раньше.
+    JSValue opts = JS_UNDEFINED;
+    int argc = 0;
+    if (opts_json && *opts_json) {
+        opts = JS_ParseJSON(s->ctx, opts_json, SDL_strlen(opts_json), "<state opts>");
+        if (JS_IsException(opts)) {
+            JSValue exc = JS_GetException(s->ctx);
+            JS_FreeValue(s->ctx, exc);
+            opts = JS_UNDEFINED;      // мусор в параметрах не должен ломать снимок
+        } else {
+            argc = 1;
+        }
+    }
+
+    JSValue value = JS_Call(s->ctx, s->snapshot_fn, JS_UNDEFINED, argc, &opts);
+    if (!JS_IsUndefined(opts)) JS_FreeValue(s->ctx, opts);
     if (JS_IsException(value)) {
         JSValue exc = JS_GetException(s->ctx);
         const char *text = JS_ToCString(s->ctx, exc);
@@ -5406,6 +5611,9 @@ static JSValue r2d__make_engine(JSContext *ctx)
     JSValue fs = JS_NewObject(ctx);
     r2d__set_fn(ctx, fs, "readText", r2d__js_fs_read_text, 1);
     r2d__set_fn(ctx, fs, "write", r2d__js_fs_write, 2);
+    // Причина последнего отказа записи: `$.fs`/`$.store` печатают её одной
+    // строкой — раньше отказ записи не был виден вообще (отчёт BASHNYA A5).
+    r2d__set_fn(ctx, fs, "lastError", r2d__js_fs_last_error, 0);
     r2d__set_fn(ctx, fs, "exists", r2d__js_fs_exists, 1);
     r2d__set_fn(ctx, fs, "remove", r2d__js_fs_remove, 1);
     r2d__set_fn(ctx, fs, "list", r2d__js_fs_list, 1);

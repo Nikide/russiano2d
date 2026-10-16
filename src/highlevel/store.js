@@ -19,6 +19,42 @@ const state = {
     dirty: false,
 };
 
+/**
+ * Отказ записи файла: РОВНО ОДНА строка, в которой есть путь и причина (§17,
+ * отчёт BASHNYA A5). Причину называет движок (`engine.fs.lastError()`:
+ * read-only/EROFS, EACCES, ENOENT — с абсолютным путём), а `$` кладёт её и в
+ * журнал, и в структурную диагностику `$.debug.errors()` с кодом
+ * R2D_FS_WRITE_FAILED и recoverable: true.
+ *
+ * Строка, а не `new Error(...)`: у ошибки печатался бы ещё и стек, а на
+ * обычный «диск только для чтения» стек не нужен — он превратил бы одну
+ * строку в пять (условие приёмки: ровно одна строка, и тишина при успехе).
+ *
+ * Почему это важно: в поставке базовый каталог — каталог бинарника, он бывает
+ * только для чтения. Игра при этом «работает», а прогресс не сохраняется, и
+ * раньше узнать об этом было неоткуда.
+ */
+function reportWriteFailure($, path, where) {
+    const from_engine = (typeof engine.fs.lastError === 'function' ? engine.fs.lastError() : '') || '';
+    const message = from_engine || `не удалось записать "${path}": причина не сообщена движком`;
+    const opts = {
+        code: 'R2D_FS_WRITE_FAILED',
+        subsystem: 'fs',
+        recoverable: true,
+        assetPath: String(path),
+    };
+    if ($ && $.debug && typeof $.debug.reportError === 'function') {
+        $.debug.reportError(where, message, opts);
+        return message;
+    }
+    if (ctx.reportError) {
+        ctx.reportError(where, message);
+        return message;
+    }
+    ctx.log('$: ' + message);
+    return message;
+}
+
 export function installStore($) {
     const fs = {
         /** Текст файла или null, если файла нет. */
@@ -41,11 +77,16 @@ export function installStore($) {
         write(path, data) {
             const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
             const ok = engine.fs.write(path, text);
-            if (!ok) ctx.log(`$: не удалось записать "${path}"`);
+            if (!ok) reportWriteFailure($, path, '$.fs.write');
             return ok;
         },
 
-        writeJSON(path, value) { return fs.write(path, JSON.stringify(value, null, 2)); },
+        writeJSON(path, value) {
+            const text = JSON.stringify(value, null, 2);
+            const ok = engine.fs.write(path, text);
+            if (!ok) reportWriteFailure($, path, '$.fs.writeJSON');
+            return ok;
+        },
 
         exists(path) { return engine.fs.exists(path); },
 

@@ -136,7 +136,12 @@ bool r2d_script_eval(R2DScript *s, const char *code, char **out_json, char **out
 
 // Снимок состояния: вызывает провайдер, зарегистрированный игрой через
 // engine.setSnapshot(fn). Если провайдера нет — возвращает false.
-bool r2d_script_snapshot(R2DScript *s, char **out_json, char **out_error);
+//
+// `opts_json` — необязательный JSON-объект параметров снимка (команда `state`
+// передаёт так `entities: {limit, sel, fields}`), он разбирается и уходит
+// провайдеру единственным аргументом. NULL — полный снимок, как раньше.
+bool r2d_script_snapshot(R2DScript *s, const char *opts_json,
+                          char **out_json, char **out_error);
 
 // Агентская инспекция для команд `query`/`inspect`/`profile`: зовёт JS-функцию,
 // зарегистрированную игрой через `engine.setAgentQuery(fn)`. `sel` — селектор

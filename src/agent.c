@@ -192,13 +192,69 @@ static void cmd_frames(R2DAgent *a, const R2dJson *req)
     send_ok_end(&sb);
 }
 
+/**
+ * Параметры урезания снимка из команды `state` (отчёт BASHNYA A8):
+ *
+ *   {"cmd":"state","entities":{"limit":50,"sel":".enemy","fields":["id","x","y"]}}
+ *
+ * Собираем их обратно в JSON-строку и отдаём провайдеру снимка: режется
+ * JS-сторона (`$.agent.snapshot`), потому что именно она собирает сущности.
+ * NULL — параметров нет, снимок полный, как раньше.
+ */
+static char *entities_opts_json(const R2dJson *req)
+{
+    const R2dJson *opts = r2d_json_get(req, "entities");
+    if (!opts || opts->type != R2D_JSON_OBJ) return NULL;
+
+    R2dSb sb;
+    r2d_sb_init(&sb);
+    // Обёртка та же, что в запросе: провайдер снимка читает opts.entities,
+    // поэтому форма параметров не меняется по дороге C → JS.
+    r2d_sb_puts(&sb, "{\"entities\":{");
+    bool first = true;
+
+    const R2dJson *limit = r2d_json_get(opts, "limit");
+    if (limit && limit->type == R2D_JSON_NUM) {
+        r2d_sb_puts(&sb, "\"limit\":");
+        r2d_sb_put_json_number(&sb, limit->number);
+        first = false;
+    }
+
+    const R2dJson *sel = r2d_json_get(opts, "sel");
+    if (sel && sel->type == R2D_JSON_STR && sel->string && *sel->string) {
+        if (!first) r2d_sb_puts(&sb, ",");
+        r2d_sb_puts(&sb, "\"sel\":");
+        r2d_sb_put_json_string(&sb, sel->string);
+        first = false;
+    }
+
+    const R2dJson *fields = r2d_json_get(opts, "fields");
+    if (fields && fields->type == R2D_JSON_ARR && fields->count > 0) {
+        if (!first) r2d_sb_puts(&sb, ",");
+        r2d_sb_puts(&sb, "\"fields\":[");
+        int written = 0;
+        for (int i = 0; i < fields->count; ++i) {
+            const R2dJson *f = r2d_json_at(fields, i);
+            if (!f || f->type != R2D_JSON_STR || !f->string || !*f->string) continue;
+            if (written++) r2d_sb_puts(&sb, ",");
+            r2d_sb_put_json_string(&sb, f->string);
+        }
+        r2d_sb_puts(&sb, "]");
+    }
+
+    r2d_sb_puts(&sb, "}}");
+    return r2d_sb_take(&sb);
+}
+
 // Снимок состояния: сначала спрашиваем игру (engine.setSnapshot), если она
 // ничего не зарегистрировала — отдаём встроенный минимум.
 static void cmd_state(R2DAgent *a, const R2dJson *req)
 {
     char *json = NULL;
     char *err = NULL;
-    bool ok = r2d_script_snapshot(a->script, &json, &err);
+    char *opts = entities_opts_json(req);
+    bool ok = r2d_script_snapshot(a->script, opts, &json, &err);
+    SDL_free(opts);
 
     R2dSb sb;
     begin_response(&sb, req, true);
