@@ -1914,11 +1914,14 @@ export function installDevTools($) {
     function eventsData() {
         const on = call(() => $.trace.on(), false);
         const dropped = call(() => $.trace.dropped(), 0) || 0;
-        let all = call(() => $.trace.list(), []) || [];
-        if (runtime.events.paused && runtime.events.snapshot) all = runtime.events.snapshot;
+        // all — живой журнал (по нему считаем записи и потери), shown — то, что
+        // панель показывает: на паузе это замороженный снимок.
+        const all = call(() => $.trace.list(), []) || [];
+        let shown = all;
+        if (runtime.events.paused && runtime.events.snapshot) shown = runtime.events.snapshot;
         else runtime.events.snapshot = all;
         const filter = runtime.events.filter;
-        const list = filter ? all.filter((e) => String(e.kind).indexOf(filter) >= 0) : all;
+        const list = filter ? shown.filter((e) => String(e.kind).indexOf(filter) >= 0) : shown;
         const tail = list.slice(-EVENTS_ROWS);
         const rows = tail.slice().reverse();
         const text = rows.length
@@ -1935,7 +1938,10 @@ export function installDevTools($) {
                 if (id !== null) { hit = { id, chain: call(() => $.trace.hit(id), null) }; break; }
             }
         }
-        let detail = `записей ${all.length} из ${call(() => $.trace.limit, NA)} | фильтр: ${filter || 'нет'}`
+        const limit = call(() => $.trace.limit, null);
+        let detail = `записей ${all.length}${limit === null ? '' : ' из ' + limit}`
+            + (runtime.events.paused ? ` (показан снимок ${shown.length})` : '')
+            + ` | фильтр: ${filter || 'нет'}`
             + ` | потеряно переполнением: ${dropped} | пауза: ${runtime.events.paused ? 'да' : 'нет'}`;
         if (hit && hit.chain) {
             detail += `\nцепочка hit #${hit.id}: найдена ${hit.chain.found ? 'да' : 'нет'},`

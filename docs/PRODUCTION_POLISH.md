@@ -2738,7 +2738,7 @@ job CI), у каждого незакрытого пункта — причин�
 - [x] entity inspector — `tests/agent/devtools_test.py`
 - [x] world picking — `tests/agent/devtools_pick_test.py`
 - [x] physics overlay — вкладка PHYSICS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_physics_test.py` (контуры из `engine.devtools.shapes()` + трансформ узла, режимы all/selected/off, подсветка выбранного тела пиксельно)
-- [ ] event timeline — причина: журнал и продюсеры готовы (`tests/agent/trace_producers_test.py`), вкладка EVENTS не собрана
+- [x] event timeline — вкладка EVENTS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_events_test.py` (журнал `$.trace`, фильтр по виду события, очистка, честный счёт вытесненных записей)
 - [x] watches — `tests/agent/devtools_test.py`
 - [x] render inspector — вкладка RENDER в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_render_test.py` (счётчики `engine.renderInfo()`, цели, текстуры, батчи/вызовы, состояние viewport)
 - [ ] audio inspector — причина: данные есть (`tests/agent/audio_runtime_test.py`), вкладка AUDIO не собрана
