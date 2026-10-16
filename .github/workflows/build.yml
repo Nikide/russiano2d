@@ -116,18 +116,27 @@ jobs:
           SDL_GPU_DRIVER: vulkan
           # Mesa 25.2.8 (lavapipe) падает SIGSEGV внутри vkCreateGraphicsPipelines,
           # когда её ДИСКОВЫЙ кэш шейдеров уже прогрет предыдущим запуском движка
-          # в том же job: первый запуск (sdk_cli_test) кэш пишет, второй
-          # (sdk_studios_test) падает ещё до события ready. Проверено локально в
-          # контейнере с той же версией mesa: холодный кэш — 0, прогретый — 139,
-          # с MESA_SHADER_CACHE_DISABLE — 0. Кэш шейдеров здесь не нужен: шаг
+          # в том же job: первый запуск кэш пишет, следующий падает ещё до события
+          # ready. Воспроизведено в контейнере с той же версией mesa: холодный
+          # кэш — 0, прогретый — 139. Одного MESA_SHADER_CACHE_DISABLE мало
+          # (на 4-м запуске падение возвращалось), поэтому ниже каждый тест
+          # получает СВОЙ пустой каталог кэша. Кэш шейдеров здесь не нужен: шаг
           # проверяет SDK, а не скорость компиляции шейдеров.
           MESA_SHADER_CACHE_DISABLE: "true"
         run: |
-          xvfb-run -a python3 tests/agent/sdk_cli_test.py
-          xvfb-run -a python3 tests/agent/sdk_studios_test.py
-          xvfb-run -a python3 tests/agent/sdk_package_test.py
-          xvfb-run -a python3 tests/agent/build_test.py
-          xvfb-run -a python3 tests/agent/ui_virtual_mouse_test.py
+          # Каждый тест — отдельный запуск с пустым каталогом кэша: тогда
+          # lavapipe никогда не читает прогретый кэш, а в логе видно, какой
+          # именно тест упал (раньше шаг падал целиком без указания теста).
+          fail=0
+          for t in sdk_cli_test sdk_studios_test sdk_package_test build_test ui_virtual_mouse_test; do
+            echo "── $t"
+            if MESA_SHADER_CACHE_DIR="$(mktemp -d)" xvfb-run -a python3 "tests/agent/$t.py"; then
+              echo "── $t: ok"
+            else
+              echo "── $t: FAIL"; fail=1
+            fi
+          done
+          exit "$fail"
       # Re2D World acceptance and golden images (re2d_world_renderer_test.py,
       # sdk_world_studio_test.py, re2d_world_acceptance_test.py, re2d_dust2_test.py,
       # tools/re2d_world_goldens.py) убраны вместе с 3D-авторингом SDK: команды

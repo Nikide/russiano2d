@@ -359,6 +359,21 @@ bool r2d_payload_attach_self(void)
                            ((uint32_t)footer[86] << 16) | ((uint32_t)footer[87] << 24);
     const bool encrypted = (flags & 1u) != 0;
 
+    // Поля футера копируем СЕЙЧАС, пока буфер файла жив: ниже он освобождается
+    // (файл целиком в памяти не нужен), а `footer` указывает внутрь него.
+    // Раньше nonce/tag/ключ читались уже после SDL_free(bytes) — это
+    // use-after-free: на glibc большой блок возвращается системе по munmap и
+    // чтение падало SIGSEGV в r2d_chacha20_block, то есть зашифрованная
+    // standalone-сборка не запускалась на Linux вовсе (§3.3, P0).
+    uint8_t aad[8];
+    uint8_t nonce_copy[R2D_NONCE_SIZE];
+    uint8_t tag_copy[R2D_TAG_SIZE];
+    uint8_t key_blob[R2D_KEY_SIZE];
+    memcpy(aad, footer, sizeof aad);
+    memcpy(nonce_copy, footer + 24, sizeof nonce_copy);
+    memcpy(tag_copy, footer + 36, sizeof tag_copy);
+    memcpy(key_blob, footer + 52, sizeof key_blob);
+
     // Проверяем без переполнения: offset и size приходят из футера, и их сумма
     // могла обернуться по модулю 2^64 — тогда memcpy читал бы до буфера.
     if (size == 0 || offset > file_size - R2D_FOOTER_SIZE ||
@@ -377,15 +392,8 @@ bool r2d_payload_attach_self(void)
     SDL_free(bytes);   // сам исполняемый файл целиком в памяти не нужен
 
     if (encrypted) {
-        const uint8_t *nonce = footer + 24;
-        const uint8_t *tag = footer + 36;
         uint8_t key[R2D_KEY_SIZE];
-        unwrap_key(footer + 52, nonce, key);
-
-        // Тег считается по магии и версии футера — ровно так же, как при
-        // сборке (смещение и размер в тег не входят: они дописываются позже).
-        uint8_t aad[8];
-        memcpy(aad, footer, sizeof aad);
+        unwrap_key(key_blob, nonce_copy, key);
 
         uint8_t *plain = (uint8_t *)SDL_malloc(size);
         if (!plain) {
@@ -393,7 +401,8 @@ bool r2d_payload_attach_self(void)
             SDL_free(container);
             return false;
         }
-        const bool ok = r2d_aead_decrypt(key, nonce, aad, sizeof aad, container, size, plain, tag);
+        const bool ok = r2d_aead_decrypt(key, nonce_copy, aad, sizeof aad,
+                                         container, size, plain, tag_copy);
         r2d_secure_zero(key, sizeof key);
         r2d_secure_zero(container, size);
         SDL_free(container);
