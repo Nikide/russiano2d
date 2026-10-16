@@ -60,6 +60,10 @@ $.ready(() => {
     $('<player>', { id: 'parker' }).at(2500, 200).size(26, 30)
         .health(100).controls('arrows').attr({ friction: 1.0 })
         .collision(26, 30).appendTo($.world);
+    // Тот же игрок, но с трением по умолчанию (0.3 < tan 30° = 0.577): на нём
+    // видно остаточное «ползание» вниз по склону, которое тест ограничивает.
+    $('<player>', { id: 'parker-default' }).at(2560, 200).size(26, 30)
+        .health(100).controls('arrows').collision(26, 30).appendTo($.world);
     $('<player>', { id: 'corner' }).at(2440, 150).size(26, 30)
         .health(100).controls('arrows').attr({ friction: 1.0 })
         .collision(26, 30).appendTo($.world);

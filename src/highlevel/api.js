@@ -3141,27 +3141,37 @@ function dispatchContacts() {
             info.ownerB = nb ? wrapOne(area_b ? areaOwnerNode(nb, area_b) : nb) : null;
         }
 
+        // Каждому участнику — СВОЙ объект события. Общий `info`, который
+        // мутировали между двумя emit'ами, отдавал обработчику чужие псевдонимы,
+        // если тот сохранил e.data (журнал, трассировка §23, отложенный разбор):
+        // к моменту чтения `self/selfArea/selfOwner` в объекте уже лежали
+        // значения ПРОТИВНИКА. Шесть §7-полей (areaA/areaB/roleA/roleB/ownerA/
+        // ownerB) остаются общими и стабильными: это факт контакта, а не сторона.
         if (na) {
-            info.self = wrapOne(na);
-            info.other = nb ? wrapOne(nb) : null;
-            info.selfArea = info.areaA || null;
-            info.otherArea = info.areaB || null;
-            info.selfShape = c.shapeA;
-            info.otherShape = c.shapeB;
-            info.selfOwner = info.ownerA || info.self;
-            info.otherOwner = info.ownerB || info.other;
-            try { na.emit(name, info); } catch (e) { reportError(`событие ${name}`, e); }
+            const view_a = Object.assign({}, info, {
+                self: wrapOne(na),
+                other: nb ? wrapOne(nb) : null,
+                selfArea: info.areaA || null,
+                otherArea: info.areaB || null,
+                selfShape: c.shapeA,
+                otherShape: c.shapeB,
+                selfOwner: info.ownerA || wrapOne(na),
+                otherOwner: info.ownerB || (nb ? wrapOne(nb) : null),
+            });
+            try { na.emit(name, view_a); } catch (e) { reportError(`событие ${name}`, e); }
         }
         if (nb) {
-            info.self = wrapOne(nb);
-            info.other = na ? wrapOne(na) : null;
-            info.selfArea = info.areaB || null;
-            info.otherArea = info.areaA || null;
-            info.selfShape = c.shapeB;
-            info.otherShape = c.shapeA;
-            info.selfOwner = info.ownerB || info.self;
-            info.otherOwner = info.ownerA || info.other;
-            try { nb.emit(name, info); } catch (e) { reportError(`событие ${name}`, e); }
+            const view_b = Object.assign({}, info, {
+                self: wrapOne(nb),
+                other: na ? wrapOne(na) : null,
+                selfArea: info.areaB || null,
+                otherArea: info.areaA || null,
+                selfShape: c.shapeB,
+                otherShape: c.shapeA,
+                selfOwner: info.ownerB || wrapOne(nb),
+                otherOwner: info.ownerA || (na ? wrapOne(na) : null),
+            });
+            try { nb.emit(name, view_b); } catch (e) { reportError(`событие ${name}`, e); }
         }
     }
 }

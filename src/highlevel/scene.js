@@ -793,6 +793,37 @@ export function installScene($) {
             return scene.load(name, opts);
         },
 
+        /**
+         * Забыть текущую сцену, не загружая новую.
+         *
+         * Нужно тому, кто владеет миром сцены снаружи: `$.room.unload()`
+         * закрывает комнату и её область, и машина сцен не должна остаться с
+         * именем исчезнувшего мира. Иначе `$.scene.current()` обещает комнату,
+         * которой уже нет, сейв пишет `scene: 'room:<id>'` для мира без неё, а
+         * `$.room.adopt()` на таком снимке падает (R2D_ROOM_ADOPT) — §10 требует,
+         * чтобы идентичность сцены/комнаты совпадала с фактическим миром.
+         */
+        clearCurrent(reason) {
+            if (!state.current_name && !state.current) return false;
+            const prev = state.current;
+            const name = state.current_name;
+            if (prev && typeof prev.exit === 'function') {
+                try { prev.exit(ctx.$); } catch (e) {
+                    ctx.log(`$: ошибка в exit сцены "${name}": ${e}`);
+                }
+            }
+            state.current = null;
+            state.current_name = '';
+            state.pending = null;
+            state.pending_opts = null;
+            if (state.scope_name) {
+                const scope = getScope(state.scope_name);
+                state.scope_name = null;
+                if (scope) scope.close({ immediate: true, reason: reason || 'сцена выгружена' });
+            }
+            return true;
+        },
+
         /** Вернуться к сцене из стека. */
         pop(opts) {
             const prev = stack.pop();
@@ -1445,10 +1476,23 @@ export function installSceneRooms($) {
         unload() {
             if (!current) return false;
             const scope = current.scope ? getScope(current.scope) : null;
+            const scene_name = 'room:' + current.id;
             current = null;
             ctx.roomState = null;
-            if (!scope) return false;
-            return scope.close({ immediate: true, reason: 'комната выгружена' });
+            // Комната — это сцена ('room:<id>', см. register): если выгрузили её,
+            // машина сцен не должна продолжать указывать на несуществующий мир.
+            // Иначе `$.scene.current()` обещал комнату, которой уже нет, сейв
+            // записывал `scene: 'room:<id>'` для мира без неё, а `$.room.adopt()`
+            // на таком снимке падал с R2D_ROOM_ADOPT (§10: идентичность
+            // сцены/комнаты должна совпадать с фактическим миром).
+            // Комната закрыта, если закрыта её область ИЛИ снята идентичность
+            // сцены: закрытие области сцены могло произойти уже внутри
+            // clearCurrent, и тогда повторный close вернёт false — это не отказ.
+            const cleared = state.current_name === scene_name && $.scene
+                && typeof $.scene.clearCurrent === 'function'
+                ? $.scene.clearCurrent('комната выгружена') : false;
+            if (!scope) return cleared;
+            return scope.close({ immediate: true, reason: 'комната выгружена' }) || cleared;
         },
 
         stats() {
