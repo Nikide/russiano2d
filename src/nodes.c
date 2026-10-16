@@ -48,7 +48,7 @@
     X(age) X(life) X(end_size) X(t) X(v) X(_uk)                                   \
     X(_anchor) X(anchorLeft) X(anchorTop) X(anchorRight) X(anchorBottom)           \
     X(offsetLeft) X(offsetTop) X(offsetRight) X(offsetBottom) X(themeName)         \
-    X(_style) X(_styleStates)                                                      \
+    X(_style) X(_styleStates) X(material)                                          \
     X(local_mode) X(local_x) X(local_y) X(local_angle) X(local_scale_x)             \
     X(local_scale_y) X(_t_gen) X(_t_busy) X(_t_wx) X(_t_wy) X(_t_wa) X(_t_wsx) X(_t_wsy)
 
@@ -766,6 +766,11 @@ static bool needs_js(JSContext *ctx, JSValueConst node, int rk)
     if (!plain_kind) return true;
     if (rk == RK_SPECIAL) return true;
     if (attrs_truthy(ctx, node, A.clip)) return true;
+    // Материал узла живёт только в JS (render.js, baseColor умножает
+    // mat.tint): нативный быстрый проход знает color/tint УЗЛА, но не
+    // материал. Без этой проверки $.gfx.material(...).tint молча не
+    // применялся — нашлось при проверке честности материалов (§43).
+    if (attrs_truthy(ctx, node, A.material)) return true;
     if (rk == RK_TEXT) return num_prop(ctx, node, A.shake_timer) > 0;
     if (truthy_prop(ctx, node, A.shadow) || truthy_prop(ctx, node, A.outline) ||
         truthy_prop(ctx, node, A.nine_slice)) return true;
