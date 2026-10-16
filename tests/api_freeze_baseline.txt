@@ -1434,6 +1434,8 @@ $.physics
 $.physics.clear
 $.physics.errors
 $.physics.report
+$.physics.shapeCount
+$.physics.shapeEnabled
 $.pick
 $.pickAll
 $.pool
