@@ -28,7 +28,7 @@
 import { engine } from './native.js';
 import {
     ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
-    packColor, sheetFrames,
+    packColor, sheetFrames, areaListOf, areaDefine,
 } from './core.js';
 
 // ---------------------------------------------------------------------------
@@ -291,8 +291,64 @@ export function nodeToData(node) {
         ...(node.kind && node.kind !== '2d' ? { kind: String(node.kind) } : null),
 
         attrs: attrs === undefined ? {} : attrs,
+        // Области (§40, §7.3) — часть узла, а не отдельные узлы: без них после
+        // загрузки у актёра не осталось бы ни хитбокса, ни hurtbox, а
+        // выключенная область молча вернулась бы включённой (§10).
+        ...(areasField(node) ? { areas: areasField(node) } : null),
         children: (node.child_nodes || []).map(nodeToData),
     };
+}
+
+/**
+ * Области узла в виде данных (§10): геометрия, роли, фильтры и включённость.
+ * Ссылка на владельца-узел записывается как `ownerNid`: на момент создания
+ * узла соседей ещё нет, ссылку достраивает areaResolveOwners() после загрузки.
+ */
+function areasField(node) {
+    const list = areaListOf(node);
+    if (!list || !list.length) return null;
+    return list.map((a) => {
+        const out = {
+            name: a.name,
+            role: a.role,
+            shape: a.kind === 1 ? 'circle' : (a.kind === 2 ? 'capsule' : (a.kind === 3 ? 'polygon' : 'box')),
+            x: a.x, y: a.y, angle: a.angle,
+            w: a.w, h: a.h, radius: a.radius,
+            sensor: a.sensor === true,
+            contacts: a.contacts === true,
+            enabled: a.enabled !== false,
+        };
+        if (a.points) out.points = a.points.slice();
+        if (a.polyRadius) out.polyRadius = a.polyRadius;
+        if (a.layer !== undefined) out.layer = a.layer;
+        if (a.mask !== undefined) out.mask = a.mask;
+        if (a.group !== undefined) out.group = a.group;
+        const owner = a.owner;
+        if (owner && typeof owner === 'object') {
+            const ownerNode = owner.nodes ? owner.nodes[0] : owner;
+            if (ownerNode && ownerNode.nid) out.ownerNid = String(ownerNode.nid);
+        } else if (owner !== null && owner !== undefined) {
+            out.owner = owner;
+        }
+        return out;
+    });
+}
+
+/** Восстановить область узла из данных save() (§10). */
+function restoreArea(node, data) {
+    if (!data || !data.name) return;
+    areaDefine(node, String(data.name), {
+        role: data.role,
+        shape: data.shape,
+        x: data.x, y: data.y, angle: data.angle,
+        w: data.w, h: data.h, radius: data.radius,
+        points: data.points, polyRadius: data.polyRadius,
+        sensor: data.sensor, contacts: data.contacts,
+        layer: data.layer, mask: data.mask, group: data.group,
+        enabled: data.enabled,
+        owner: data.owner,
+        ownerNid: data.ownerNid,
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -430,6 +486,9 @@ export function applyData(data, parent) {
     else if (typeof data.body === 'string') node.setBody(data.body);
     else if (node.body_kind) node.setBody(node.body_kind);
     if (node.body >= 0) engine.setGravityScale(node.body, node.gravity_on === false ? 0 : 1);
+
+    // Области восстанавливаем после тела: форма живёт на теле узла (§10).
+    for (const areaData of (data.areas || [])) restoreArea(node, areaData);
 
     if (data.tags) for (const extra of [].concat(data.tags)) node.addTag(extra);
     if (data.data && typeof data.data === 'object') {

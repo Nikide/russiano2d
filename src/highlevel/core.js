@@ -1175,6 +1175,7 @@ export function areaDefine(node, name, opts) {
             name: String(name),
             role: o.role === undefined ? String(name) : String(o.role),
             owner: o.owner === undefined ? null : o.owner,
+            owner_nid: null,
             kind: 0, w: 32, h: 32, radius: 0, polyRadius: 0,
             x: 0, y: 0, angle: 0,
             sensor: true, contacts: false,
@@ -1186,6 +1187,12 @@ export function areaDefine(node, name, opts) {
     }
     if (o.role !== undefined) area.role = String(o.role);
     if (o.owner !== undefined) area.owner = o.owner;
+    // Владелец-узел из сейва: ссылки на момент создания узла ещё нет —
+    // запоминаем nid и достраиваем ссылку после загрузки мира
+    // (areaResolveOwners).
+    if (o.ownerNid !== undefined && o.ownerNid !== null) {
+        area.owner_nid = String(o.ownerNid);
+    }
     // shape — основное имя, type — псевдоним (как в $.world.zone).
     if (o.shape !== undefined) area.kind = areaKindOf(o.shape, area.kind);
     if (o.type !== undefined) area.kind = areaKindOf(o.type, area.kind);
@@ -1257,6 +1264,35 @@ export function areaOwnerNode(node, area) {
     if (o instanceof Node) return o;
     if (o && o.nodes && o.nodes.length) return o.nodes[0];
     return node;
+}
+
+/**
+ * Разрешить отложенных владельцев областей (§10).
+ *
+ * В сейве владелец-узел записан не ссылкой, а `nid` — на момент создания узла
+ * соседей ещё нет, и ссылку взять неоткуда. После загрузки всего мира узлы уже
+ * существуют, поэтому проход достраивает ссылки; ненайденный владелец остаётся
+ * неразрешённым (область по-прежнему считает владельцем свой узел) и попадает
+ * в счётчик `missing`, а не превращается в молчаливо потерянную связь.
+ */
+export function areaResolveOwners() {
+    const index = new Map();
+    for (const node of ctx.nodes || []) {
+        if (node && !node.removed && node.nid) index.set(String(node.nid), node);
+    }
+    let resolved = 0;
+    let missing = 0;
+    for (const node of ctx.nodes || []) {
+        const list = node && node.area_list;
+        if (!list) continue;
+        for (const area of list) {
+            if (!area.owner_nid) continue;
+            const owner = index.get(String(area.owner_nid));
+            if (owner) { area.owner = owner; area.owner_nid = null; resolved++; }
+            else missing++;
+        }
+    }
+    return { resolved, missing };
 }
 
 /**

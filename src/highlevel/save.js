@@ -24,7 +24,7 @@
 // ===========================================================================
 
 import { engine } from './native.js';
-import { ctx, assignNid } from './core.js';
+import { ctx, assignNid, areaResolveOwners } from './core.js';
 import { sanitize } from './prefab.js';
 import { PRESENTATION_STREAMS } from './random.js';
 
@@ -1005,6 +1005,9 @@ export function installSave($) {
                 const wrapper = prefab().load(world);
                 const roots = wrapper && wrapper.nodes ? wrapper.nodes : [];
                 result.nodes = roots.length;
+                // Владельцы областей записаны в данных как nid: ссылку можно
+                // достроить только когда загружен весь мир (§10).
+                result.area_owners = areaResolveOwners();
             }
             staged = (ctx.nodes || []).filter((n) => n && !n.removed && !before.has(n));
         } catch (e) {
