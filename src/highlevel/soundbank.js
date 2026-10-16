@@ -89,21 +89,58 @@ export function bankVolume(spec, rng) {
 }
 
 /**
+ * Генератор по умолчанию для разброса высоты/громкости.
+ *
+ * Берём ДВИЖКОВЫЙ (`ctx.random`): он сеется `--seed`, поэтому разброс
+ * воспроизводим в прогонах и тестах. Если движка нет (юнит-харнесс) —
+ * обычный `Math.random`.
+ */
+function defaultRandom() {
+    const r = ctx && ctx.random;
+    if (r) {
+        if (typeof r.float === 'function') return () => r.float();
+        if (typeof r.value === 'function') return () => r.value();
+        if (typeof r.next === 'function') return () => r.next();
+    }
+    return () => Math.random();
+}
+
+/**
  * Высота банка: `pitch` — доля разброса (0.06 = ±6%), либо диапазон.
  * Возвращает множитель: 1.0 — без сдвига.
  */
-export function bankPitch(spec, rng) {
+export function bankPitch(spec, rng, extra) {
     const raw = spec && spec.pitch;
-    const random = typeof rng === 'function' ? rng : () => 0;
-    if (Array.isArray(raw)) {
-        const lo = Number(raw[0]);
-        const hi = Number(raw[1] === undefined ? raw[0] : raw[1]);
-        if (!Number.isFinite(lo)) return 1;
-        return lo + ((Number.isFinite(hi) ? hi : lo) - lo) * random();
-    }
-    const spread = Number(raw);
-    if (!Number.isFinite(spread) || spread === 0) return 1;
-    return 1 + (random() * 2 - 1) * spread;
+    // Генератор по умолчанию — ДВИЖКОВЫЙ: раньше здесь стояло `() => 0`, и
+    // диапазон высоты всегда давал нижнюю границу (замер BASHNYA: 12 вызовов
+    // `playBank` → одна и та же высота). Сид движка сохраняет
+    // воспроизводимость прогонов, а `opts.rng` продолжает перебивать.
+    const random = typeof rng === 'function' ? rng : defaultRandom();
+    const spread_extra = Number(extra);
+    const base = (() => {
+        if (Array.isArray(raw)) {
+            const lo = Number(raw[0]);
+            const hi = Number(raw[1] === undefined ? raw[0] : raw[1]);
+            if (!Number.isFinite(lo)) return 1;
+            return lo + ((Number.isFinite(hi) ? hi : lo) - lo) * random();
+        }
+        const spread = Number(raw);
+        if (!Number.isFinite(spread) || spread === 0) return 1;
+        return 1 + (random() * 2 - 1) * spread;
+    })();
+    // Диапазон проверяем ДО приведения к числу: у массива Number(...) = NaN,
+    // и разброс молча терялся (поймано живой пробой).
+    if (!Array.isArray(extra) && (!Number.isFinite(spread_extra) || spread_extra === 0)) return base;
+    // `pitchRange` из вызова — разброс ПОВЕРХ множителя `pitch`: диапазон
+    // [lo, hi] или доля (±доля). Так игра может варьировать высоту конкретного
+    // вызова, не переобъявляя банк.
+    const jitter = Array.isArray(extra) ? (() => {
+        const lo = Number(extra[0]);
+        const hi = Number(extra[1] === undefined ? extra[0] : extra[1]);
+        if (!Number.isFinite(lo) || !Number.isFinite(hi)) return 1;
+        return lo + (hi - lo) * random();
+    })() : 1 + (random() * 2 - 1) * Math.abs(spread_extra);
+    return base * jitter;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +210,9 @@ export function installSoundBank($) {
             entry.last = time;
 
             const volume = bankVolume(entry.spec, o.rng) * (o.volume === undefined ? 1 : Number(o.volume));
-            const pitch = bankPitch(entry.spec, o.rng) * (o.pitch === undefined ? 1 : Number(o.pitch));
+            const pitch = bankPitch(entry.spec, o.rng,
+                                    o.pitchRange === undefined ? entry.spec.pitchRange : o.pitchRange)
+                        * (o.pitch === undefined ? 1 : Number(o.pitch));
             const player = sound();
             if (!player || typeof player.play !== 'function') return file;
             const channel = player.play(file, Object.assign({}, o, { volume, pitch }));

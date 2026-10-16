@@ -101,7 +101,7 @@ export function installClip($) {
         /** Внутреннее: клип как есть (для `.animate`), без копий. */
         _raw(name) { return clips.get(String(name)) || null; },
     };
-    ctx.clip = api;
+    ctx._clip = api;
     $.clip = api;
     return api;
 }

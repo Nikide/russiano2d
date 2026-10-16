@@ -306,6 +306,7 @@ $.csv.quoteField
 $.csv.stringify
 $.ctx
 $.ctx.$
+$.ctx._clip
 $.ctx._stopSceneSound
 $.ctx.agent
 $.ctx.alive
@@ -315,7 +316,6 @@ $.ctx.byBody
 $.ctx.byId
 $.ctx.camera
 $.ctx.cels
-$.ctx.clip
 $.ctx.collision
 $.ctx.combat
 $.ctx.console

@@ -1119,8 +1119,8 @@ function installNodeMethods($) {
         return this.eachNode((_, el) => {
             const node = el;
             if (clip_name !== undefined && clip_name !== null) {
-                const clip = ctx.clip && typeof ctx.clip._raw === 'function'
-                    ? ctx.clip._raw(clip_name) : null;
+                const clip = ctx._clip && typeof ctx._clip._raw === 'function'
+                    ? ctx._clip._raw(clip_name) : null;
                 if (!clip) {
                     ctx.log(`$: .animate("${clip_name}") — клип не объявлен (см. $.clip.define)`);
                     return;

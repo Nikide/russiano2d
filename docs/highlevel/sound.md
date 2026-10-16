@@ -156,9 +156,11 @@ $.sound.stopMusic(300);                            // прежнее имя, т�
 ```
 
 `music`, `musicPlaying`, `musicStop`, `musicPitch`, `crossfade` живут в `$.sound`
-и **продублированы в `$.audio`** (`$.audio.music/musicPlaying/musicStop`
-делегируют в `$.sound`): раньше `$.audio.musicPlaying` не существовало, хотя
-`$.sound.musicPlaying` было, и это ловило и игрока, и агента.
+и **продублированы в `$.audio`**: `$.audio.music(path, opts)`,
+`$.audio.musicPlaying()`, `$.audio.musicStop(ms)` — тонкие делегаты в `$.sound`
+(поведение одно, имена ищутся в обоих пространствах). Раньше
+`$.audio.musicPlaying` не существовало, хотя `$.sound.musicPlaying` было, и это
+ловило и игрока, и агента.
 
 **Незагружаемый звук — громкий отказ.** `$.sound.music('нет/такого.ogg')` больше
 не «делает вид, что завёл трек»: в `$.debug.errors()` появляется запись

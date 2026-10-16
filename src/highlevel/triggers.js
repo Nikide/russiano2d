@@ -331,7 +331,11 @@ function tickActivation() {
             const bounds = activationBounds(node);
             const now = activationInside(bounds, rects, was,
                                          watcher.enter_margin, watcher.exit_margin);
+            // `wakeForever`: после первого входа выход игнорируется — состояние
+            // «внутри» и обработка остаются включёнными.
+            if (!now && watcher.wake_forever && watcher.entered.has(node)) continue;
             if (now === was) continue;
+            if (now) watcher.entered.add(node);
             watcher.inside.set(node, now);
             const payload = {
                 activation: watcher.name,
@@ -372,6 +376,10 @@ function makeWatcher(nodes, opts) {
         inside: new Map(),
         rects: [],
         region,
+        // H8: `wakeForever` — разбудили и больше не усыпляем. Узел, вышедший из
+        // зоны, не должен глохнуть на полпути (запрос BASHNYA).
+        wake_forever: o.wakeForever === true,
+        entered: new Set(),
         opts: o,
         enter_margin: margin,
         exit_margin: margin + hysteresis,
@@ -1001,6 +1009,8 @@ export function installTriggers($) {
          *                 `region:enter`/`region:exit`;
          *   event       — базовое имя событий (по умолчанию screen или region);
          *   once        — сработать один раз при первом входе и отписаться;
+         *   wakeForever — после первого входа выход игнорируется: узел,
+         *                 разбуженный зоной, больше не усыпляется (H8);
          *   onEnter/onExit — колбэки дополнительно к событиям узла.
          *
          * Возвращает ручку `{ stop(), active(), nodes(), inside(node), rects() }`.
