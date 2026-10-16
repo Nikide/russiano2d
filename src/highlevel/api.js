@@ -229,6 +229,14 @@ export function createApi() {
                 // { frames } в конструкторе делал бы то же, что .frames():
                 // без этого лист молча превращался в обычный атрибут.
                 if (attrs && attrs.frames !== undefined) applyFrames(node, attrs.frames);
+                // { parent } — та же дорога, что у .appendTo(): узел, обёртка
+                // или СЕЛЕКТОР. Привязка делается здесь, а не в конструкторе:
+                // к этому моменту применены все атрибуты (x/y/scale), поэтому
+                // keep-world для локальных узлов считает позицию правильно, а
+                // промах селектора попадает в журнал, а не в тишину (task-46).
+                if (props && props.parent !== undefined) {
+                    attachToTarget(wrapOne(node), props.parent, {}, 'parent');
+                }
                 // §5: узел, созданный в контексте $.scene.scope(...) или с
                 // атрибутом { scope }, принадлежит области владения.
                 if (typeof ctx.scopeTrack === 'function') ctx.scopeTrack(node);
@@ -423,7 +431,7 @@ export function createApi() {
     $.pick = function (point) {
         // Без точки — просто то, что уже подсвечено курсором в этом кадре.
         if (point === undefined) return ctx.hovered ? wrapOne(ctx.hovered) : wrap([]);
-        const world = resolvePoint(point);
+        const world = resolvePoint(point, 'pick');
         // Точка приходит в МИРОВЫХ координатах (как $.input.mouseWorld()), а
         // попадание считается по нарисованному месту: переводим её на экран.
         const screen = ctx.camera ? ctx.camera.worldToScreen(world) : world;
@@ -448,7 +456,7 @@ export function createApi() {
 
     /** Все мировые узлы под точкой (нижние первыми). */
     $.pickAll = function (point) {
-        const world = resolvePoint(point);
+        const world = resolvePoint(point, 'pickAll');
         const screen = ctx.camera ? ctx.camera.worldToScreen(world) : world;
         const zoom = ctx.camera ? (ctx.camera.zoom() || 1) : 1;
         const found = [];
@@ -701,7 +709,7 @@ function installNodeMethods($) {
         if (typeof x === 'object') { ease = ms; ms = y; y = x.y; x = x.x; }
         if (typeof x === 'string' || (x && x.tag) || x instanceof Wrapper) {
             // .moveTo('#hero', speed) — двигаться к цели с этой скоростью.
-            return this.eachNode((_, el) => stepTowards(el, x, y));
+            return this.eachNode((_, el) => stepTowards(el, x, y, 'moveTo'));
         }
         if (!(ms > 0)) return this.at(x, y);
         const promises = [];
@@ -871,7 +879,7 @@ function installNodeMethods($) {
     def('lookAt', function (target) {
         return this.eachNode((_, el) => {
             const node = el;
-            const p = resolvePoint(target);
+            const p = resolvePoint(target, 'lookAt');
             setWorldAngle(node, Math.atan2(p.y - node.y, p.x - node.x));
         });
     });
@@ -930,23 +938,23 @@ function installNodeMethods($) {
     def('layer', function (n) { return this.eachNode((_, el) => { (el).layer = n; }); });
 
     defGet('distanceTo', function (node, target) {
-        const p = resolvePoint(target);
+        const p = resolvePoint(target, 'distanceTo');
         return Math.hypot(p.x - node.x, p.y - node.y);
     }, 0);
 
     defGet('directionTo', function (node, target) {
-        const p = resolvePoint(target);
+        const p = resolvePoint(target, 'directionTo');
         const d = Math.hypot(p.x - node.x, p.y - node.y) || 1;
         return { x: (p.x - node.x) / d, y: (p.y - node.y) / d };
     }, { x: 0, y: 0 });
 
     defGet('angleTo', function (node, target) {
-        const p = resolvePoint(target);
+        const p = resolvePoint(target, 'angleTo');
         return Math.atan2(p.y - node.y, p.x - node.x);
     }, 0);
 
     defGet('rayTo', function (node, target) {
-        const p = resolvePoint(target);
+        const p = resolvePoint(target, 'rayTo');
         return ctx.world.raycast({ x: node.x, y: node.y }, p);
     }, null);
 
@@ -957,7 +965,7 @@ function installNodeMethods($) {
      * можно перебить через `opts` (`w`, `h`, `capsule`, `mask`, `ignore`).
      */
     defGet('sweepTo', function (node, target, opts) {
-        const p = resolvePoint(target);
+        const p = resolvePoint(target, 'sweepTo');
         const o = opts || {};
         // Явная форма в opts важнее хитбокса узла: иначе `{ w, h }` из opts
         // перебивалось бы halfW/halfH, подставленными из узла.
@@ -1612,7 +1620,8 @@ function installNodeMethods($) {
             const node = this.nodes[0];
             return node ? node.collision_mask : 0xffffffff;
         }
-        const bits = layerBitsOf(value);
+        const bits = layerBitsOf(value, 'mask');
+        if (bits === null) return this;
         return this.eachNode((_, node) => { node.set('mask', bits); });
     });
 
@@ -1622,7 +1631,8 @@ function installNodeMethods($) {
             const node = this.nodes[0];
             return node ? node.layer_bits : 1;
         }
-        const bits = layerBitsOf(value);
+        const bits = layerBitsOf(value, 'layerBits');
+        if (bits === null) return this;
         return this.eachNode((_, node) => { node.set('layerBits', bits); });
     });
 
@@ -1636,7 +1646,7 @@ function installNodeMethods($) {
         if (!self) return arguments.length < 2 ? false : this;
 
         if (arguments.length < 2) {
-            const other = resolveNodeArg(target);
+            const other = resolveNodeArg(target, 'collidesWith');
             if (!other) return false;
             if (self.collision_group !== 0 && self.collision_group === other.collision_group) {
                 return self.collision_group > 0;
@@ -1645,7 +1655,8 @@ function installNodeMethods($) {
                    ((other.collision_mask & (self.layer_bits >>> 0)) !== 0);
         }
 
-        const bits = layerBitsOf(target);
+        const bits = layerBitsOf(target, 'collidesWith');
+        if (bits === null) return this;
         return this.eachNode((_, node) => {
             const next = on === false ? (node.collision_mask & ~bits) : (node.collision_mask | bits);
             node.set('mask', next >>> 0);
@@ -1709,7 +1720,7 @@ function installNodeMethods($) {
 
     /** Двигаться в сторону цели со скоростью. dt не нужен: скорость в px/с. */
     def('moveTowards', function (target, speed) {
-        return this.eachNode((_, el) => stepTowards(el, target, speed));
+        return this.eachNode((_, el) => stepTowards(el, target, speed, 'moveTowards'));
     });
 
     /** В Box2D скольжение вдоль стен делает сам решатель — метод задаёт скорость. */
@@ -1878,22 +1889,31 @@ function installNodeMethods($) {
     // оставляет локальные координаты — узел переезжает в систему родителя.
 
     def('appendTo', function (parent, opts) {
-        const target = resolveContainer(parent);
-        const keep = keepPolicy(opts);
-        return this.eachNode((_, el) => attachNode(el, target, keep));
+        return attachToTarget(this, parent, opts, 'appendTo');
     });
 
-    def('prependTo', function (parent, opts) { return Wrapper.prototype.appendTo.call(this, parent, opts); });
+    def('prependTo', function (parent, opts) {
+        return attachToTarget(this, parent, opts, 'prependTo');
+    });
 
     def('append', function (child, opts) {
-        const nodes = child instanceof Wrapper ? child.nodes : (child && child.tag ? [child] : []);
+        const nodes = resolveChildNodes(child, 'append');
+        if (!nodes) return this;
         const keep = keepPolicy(opts);
         return this.eachNode((_, el) => {
             const node = el;
             for (const c of nodes) attachNode(c, node, keep);
         });
     });
-    def('prepend', function (child, opts) { return Wrapper.prototype.append.call(this, child, opts); });
+    def('prepend', function (child, opts) {
+        const nodes = resolveChildNodes(child, 'prepend');
+        if (!nodes) return this;
+        const keep = keepPolicy(opts);
+        return this.eachNode((_, el) => {
+            const node = el;
+            for (const c of nodes) attachNode(c, node, keep);
+        });
+    });
 
     // Несколько узлов разом — одна уборка реестра в конце вызова, как в
     // $.batch: иначе каждый destroy() искал свой узел и сдвигал хвост
@@ -2320,7 +2340,13 @@ function isDescendant(parent, node) {
  * «Мир» — это отсутствие узла-родителя, поэтому для него возвращается null:
  * узлы мира и так лежат в общем реестре, а строка в parent_node ломала
  * наследование и destroy().
+ *
+ * Строку-селектор разрешает `resolveAttachTarget` (там же сообщение о промахе):
+ * «мир» и «цель не найдена» — разные вещи, и путать их нельзя, иначе промах
+ * выглядел бы как «узел уехал в мир».
  */
+const MISS = { miss: true };
+
 function resolveContainer(parent) {
     if (parent === null || parent === undefined) return null;
     if (parent === ctx.world || parent === ctx.$.world) return null;
@@ -2329,14 +2355,83 @@ function resolveContainer(parent) {
     return null;
 }
 
-function resolvePoint(target) {
+/**
+ * Точка из аргумента: `{x, y}`, массив, узел, обёртка или селектор.
+ *
+ * `method` — имя публичного метода для сообщения о промахе селектора: раньше
+ * `$('#hero').lookAt('#нет-такого')` молча целился в (0, 0). Поведение
+ * (запасная точка) сохранено, но теперь о промахе сказано в журнале.
+ */
+    // Цель-контейнер у appendTo/prependTo: строка-селектор разрешается так же,
+// как в `$(selector)` (task-46: раньше строковая форма — ровно та, что
+// стоит в доке, — молча ни к чему не прикрепляла узел). Промах селектора не
+// тишина: пишем в журнал и НЕ прикрепляем (иначе узел уехал бы в мир, то
+// есть выглядел бы прикреплённым не туда).
+function resolveAttachTarget(parent, method) {
+    if (typeof parent === 'string') {
+        const found = query(parent);
+        if (!found.length) {
+            ctx.log(`$.${method}: селектор "${parent}" ни к чему не подошёл — узел не прикреплён`);
+            return MISS;
+        }
+        if (found.length > 1) {
+            ctx.log(`$.${method}: селектор "${parent}" подошёл к ${found.length} узлам — беру первый`);
+        }
+        return found[0];
+    }
+    if (parent instanceof Wrapper) {
+        if (!parent.nodes.length) {
+            ctx.log(`$.${method}: обёртка пуста (селектор ни к чему не подошёл) — узел не прикреплён`);
+            return MISS;
+        }
+        return parent.nodes[0];
+    }
+    return resolveContainer(parent);
+}
+
+function attachToTarget(api, parent, opts, method) {
+    const target = resolveAttachTarget(parent, method);
+    if (target === MISS) return api;
+    const keep = keepPolicy(opts);
+    return api.eachNode((_, el) => attachNode(el, target, keep));
+}
+
+    // Дети для .append()/.prepend(): узел, обёртка или селектор. Раньше всё,
+// что не узел и не обёртка, молча игнорировалось — теперь про это сказано.
+function resolveChildNodes(child, method) {
+    if (child instanceof Wrapper) return child.nodes;
+    if (child && child.tag) return [child];
+    if (typeof child === 'string') {
+        const found = query(child);
+        if (!found.length) {
+            ctx.log(`$.${method}: селектор "${child}" ни к чему не подошёл — узлы не добавлены`);
+            return null;
+        }
+        return found;
+    }
+    ctx.log(`$.${method}: ожидался узел, обёртка или селектор, а получено `
+          + `${child === null ? 'null' : typeof child} — ничего не добавлено`);
+    return null;
+}
+
+function resolvePoint(target, method) {
     if (typeof target === 'string') {
         const node = query(target)[0];
-        return node ? { x: node.x, y: node.y } : { x: 0, y: 0 };
+        if (!node) {
+            ctx.log(`$.${method || 'цель'}: селектор "${target}" ни к чему не подошёл — `
+                  + 'беру точку (0, 0)');
+            return { x: 0, y: 0 };
+        }
+        return { x: node.x, y: node.y };
     }
     if (target instanceof Wrapper) {
         const node = target.nodes[0];
-        return node ? { x: node.x, y: node.y } : { x: 0, y: 0 };
+        if (!node) {
+            ctx.log(`$.${method || 'цель'}: обёртка пуста (селектор ни к чему не подошёл) — `
+                  + 'беру точку (0, 0)');
+            return { x: 0, y: 0 };
+        }
+        return { x: node.x, y: node.y };
     }
     if (target && target.tag) return { x: target.x, y: target.y };
     if (Array.isArray(target)) return { x: target[0], y: target[1] };
@@ -2345,11 +2440,22 @@ function resolvePoint(target) {
 }
 
 /** Один узел из аргумента: узел, обёртка или селектор. */
-function resolveNodeArg(target) {
+function resolveNodeArg(target, method) {
     if (!target) return null;
-    if (target instanceof Wrapper) return target.nodes[0] || null;
+    if (target instanceof Wrapper) {
+        if (!target.nodes.length && method) {
+            ctx.log(`$.${method}: обёртка пуста (селектор ни к чему не подошёл)`);
+        }
+        return target.nodes[0] || null;
+    }
     if (target && target.tag) return target;
-    if (typeof target === 'string') return query(target)[0] || null;
+    if (typeof target === 'string') {
+        const node = query(target)[0];
+        if (!node && method) {
+            ctx.log(`$.${method}: селектор "${target}" ни к чему не подошёл`);
+        }
+        return node || null;
+    }
     return null;
 }
 
@@ -2357,15 +2463,30 @@ function resolveNodeArg(target) {
  * Биты слоёв из аргумента: число, узел, обёртка или селектор. Для нескольких
  * узлов биты складываются по ИЛИ — так .mask('.wall') означает «сталкиваться
  * со всеми слоями, в которых есть стены».
+ *
+ * `null` — селектор ни к чему не подошёл: вызывающий обязан НЕ менять маску.
+ * Раньше промах давал 0 бит, то есть типичная опечатка в `.mask('#стена')`
+ * молча выключала столкновения у узла (task-46).
  */
-function layerBitsOf(value) {
+function layerBitsOf(value, method) {
     if (typeof value === 'number') return value >>> 0;
     if (value === null || value === undefined) return 0;
     let list;
-    if (value instanceof Wrapper) list = value.nodes;
-    else if (value && value.tag) list = [value];
-    else if (typeof value === 'string') list = query(value);
-    else return 0;
+    if (value instanceof Wrapper) {
+        if (!value.nodes.length) {
+            if (method) ctx.log(`$.${method}: обёртка пуста — биты слоя не изменены`);
+            return null;
+        }
+        list = value.nodes;
+    } else if (value && value.tag) list = [value];
+    else if (typeof value === 'string') {
+        list = query(value);
+        if (!list.length) {
+            ctx.log(`$.${method || 'layerBits'}: селектор "${value}" ни к чему не подошёл — `
+                  + 'биты слоя не изменены');
+            return null;
+        }
+    } else return 0;
 
     let bits = 0;
     for (let i = 0; i < list.length; i++) bits |= (list[i].layer_bits >>> 0);
@@ -2374,9 +2495,9 @@ function layerBitsOf(value) {
 
 function vectorOf(list) { return { x: list[0], y: list[1] }; }
 
-function stepTowards(node, target, speed) {
+function stepTowards(node, target, speed, method) {
     if (!node) return;
-    const p = resolvePoint(target);
+    const p = resolvePoint(target, method);
     const dx = p.x - node.x;
     const dy = p.y - node.y;
     const d = Math.hypot(dx, dy);

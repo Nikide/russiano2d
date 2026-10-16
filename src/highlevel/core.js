@@ -1654,7 +1654,10 @@ export class Node {
             const value = attrs[key];
             if (key === 'class') { this.addClass(value); continue; }
             if (key === 'tag') { this.addTag(value); continue; }
-            if (key === 'parent') { this.appendTo(value); continue; }
+            // Привязку к родителю делает слой `$` сразу после конструктора:
+            // здесь у узла ещё нет обёртки, а `appendTo` живёт на обёртке
+            // (прежний `this.appendTo(value)` падал с «not a function», task-46).
+            if (key === 'parent') { this.attrs.parent = value; continue; }
             if (key === 'script') { this.attrs.script = value; continue; }
             if (key === 'on') {
                 for (const ev of Object.keys(value)) this.on(ev, value[ev]);
