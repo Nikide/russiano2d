@@ -887,6 +887,20 @@ let light_segments_version = 0;
 let light_prepared_version = -1;
 let light_debug = false;
 
+// §37. Lighting Debugger: что именно показывает оверлей. Как и остальные
+// оверлеи, по умолчанию выключен целиком (`light_debug === false`): включённый
+// рисует поверхности поверх кадра, выключенный не стоит ничего.
+const LIGHT_DEBUG_FLAGS = ['occluders', 'sources', 'labels', 'mask', 'degrade'];
+const light_debug_flags = {
+    occluders: true,   // отрезки-препятствия (границы теней) — прежний вид
+    sources: true,     // радиус и центр каждого НАРИСОВАННОГО источника
+    labels: true,      // подписи: индекс, радиус, интенсивность, слой, тень
+    mask: true,        // строка про путь масок и слой по умолчанию
+    degrade: true,     // строка про деградацию по бюджетам
+};
+/** Факты последнего кадра оверлея (null — оверлей выключен). */
+let light_debug_last = null;
+
 // Умолчания тегов света и тумана объявляются здесь, а не в installGfx: это
 // статические данные, и они должны быть видны всем, кто импортирует модуль
 // (в том числе qjs-тестам без движка). Отрисовщики тегов ставит installGfx.
@@ -1978,20 +1992,181 @@ function drawGlobalAmbient() {
     tri_blend_cur = prev;
 }
 
-/** Отладка: показать отрезки-препятствия, по которым считаются тени. */
+/**
+ * §37. Отладка света: отрезки-препятствия (по ним считаются тени), радиус и
+ * центр каждого НАРИСОВАННОГО источника, подписи со слоем/интенсивностью и
+ * признак деградации по бюджетам.
+ *
+ * Список источников берётся у `engine.devtools.lights()` — это ровно те
+ * источники, которые JS-путь света опубликовал в этом кадре. Если публикации
+ * нет (старый SDK), оверлей честно рисует нуль окружностей, а не «похожие»
+ * позиции из узлов: своего списка света у оверлея нет.
+ */
 function drawLightDebug(cam) {
-    const count = Math.floor(light_segments.length / 4);
-    if (count <= 0) return;
-    const color = engine.rgba(255, 80, 80, 170);
-    for (let s = 0; s < count; s++) {
-        const o = s * 4;
-        const x1 = (light_segments[o] - cam.x) * cam.zoom + cam.w / 2 + cam.shake_x;
-        const y1 = (light_segments[o + 1] - cam.y) * cam.zoom + cam.h / 2 + cam.shake_y;
-        const x2 = (light_segments[o + 2] - cam.x) * cam.zoom + cam.w / 2 + cam.shake_x;
-        const y2 = (light_segments[o + 3] - cam.y) * cam.zoom + cam.h / 2 + cam.shake_y;
-        pushLine(x1, y1, x2, y2, 1, color);
+    const marks = {
+        sources: 0, occluders: 0, labels: 0, texts: 0, reason: null,
+        sourcesAvailable: false, rings: [],
+        primitives: { rects: 0, lines: 0, circles: 0, rings: 0, texts: 0 },
+    };
+    const d = (ctx.debug && ctx.debug.draw) ? ctx.debug.draw : null;
+
+    // --- границы теней: отрезки реестра препятствий ------------------------
+    if (light_debug_flags.occluders) {
+        const count = Math.floor(light_segments.length / 4);
+        if (count > 0 && d) {
+            for (let s = 0; s < count; s++) {
+                const o = s * 4;
+                d.line({ x: light_segments[o], y: light_segments[o + 1] },
+                       { x: light_segments[o + 2], y: light_segments[o + 3] },
+                       '#ff5050aa', 1);
+                marks.primitives.lines++;
+            }
+            marks.occluders = count;
+        } else if (count > 0) {
+            // $.debug.draw нет — рисуем прежним путём (экранные координаты).
+            const color = engine.rgba(255, 80, 80, 170);
+            for (let s = 0; s < count; s++) {
+                const o = s * 4;
+                const x1 = (light_segments[o] - cam.x) * cam.zoom + cam.w / 2 + cam.shake_x;
+                const y1 = (light_segments[o + 1] - cam.y) * cam.zoom + cam.h / 2 + cam.shake_y;
+                const x2 = (light_segments[o + 2] - cam.x) * cam.zoom + cam.w / 2 + cam.shake_x;
+                const y2 = (light_segments[o + 3] - cam.y) * cam.zoom + cam.h / 2 + cam.shake_y;
+                pushLine(x1, y1, x2, y2, 1, color);
+            }
+            marks.occluders = count;
+        }
     }
+
+    // --- радиусы и центры источников ---------------------------------------
+    const lights = (engine.devtools && typeof engine.devtools.lights === 'function')
+        ? engine.devtools.lights() : null;
+    marks.sourcesAvailable = lights !== null;
+    if (light_debug_flags.sources && lights) {
+        if (!d) {
+            marks.reason = 'no_debug_draw';
+        } else {
+            for (let i = 0; i < lights.length; i++) {
+                const l = lights[i];
+                const radius = Number(l.radius);
+                if (!Number.isFinite(l.x) || !Number.isFinite(l.y) || !Number.isFinite(radius)) continue;
+                // Радиус источника — в мировых пикселях, а $.debug.draw.circle
+                // принимает радиус уже в экранных (точку он переводит сам):
+                // без множителя зума окружность разошлась бы с нарисованным
+                // светом при zoom != 1.
+                const r_px = radius * (cam.zoom || 1);
+                const color = l.shadow ? '#ffd166cc' : '#57d3ffcc';
+                // Радиус — КОЛЬЦОМ, а не залитым диском: залитый круг радиусом
+                // 400 px закрыл бы собой весь кадр и саму отлаживаемую сцену.
+                d.ring({ x: l.x, y: l.y }, r_px, color, 2);
+                marks.primitives.rings++;
+                // Центр — точка, а не «крестик на глаз».
+                d.circle({ x: l.x, y: l.y }, 3, '#ff5a4aee');
+                marks.primitives.circles++;
+                d.line({ x: l.x - 6, y: l.y }, { x: l.x + 6, y: l.y }, '#ff5a4aee', 1);
+                d.line({ x: l.x, y: l.y - 6 }, { x: l.x, y: l.y + 6 }, '#ff5a4aee', 1);
+                marks.primitives.lines += 2;
+                marks.sources++;
+                // Точка на экране — тем же преобразованием, что и рисование
+                // (frameViewPoint + тряска): по ней тест сверяет оверлей с
+                // $.camera.worldToScreen, а не с приблизительной формулой.
+                const v = frameViewPoint(cam, l.x, l.y);
+                marks.rings.push({
+                    index: i, x: l.x, y: l.y, radius,
+                    screen: { x: v.x + cam.shake_x, y: v.y + cam.shake_y },
+                    r_px, intensity: l.intensity, shadow: l.shadow === true, layer: l.layer,
+                });
+                if (light_debug_flags.labels) {
+                    d.text(`#${i} r=${Math.round(radius)} i=${l.intensity}`
+                           + ` L=0x${(l.layer >>> 0).toString(16)}${l.shadow ? ' тень' : ''}`,
+                           { x: l.x, y: l.y - r_px - 6 }, '#d8e2ee', 12);
+                    marks.primitives.texts++;
+                    marks.labels++;
+                }
+            }
+        }
+    }
+
+    if (d) {
+        // --- слои/маски: объявленный путь, а не догадка ---------------------
+        if (light_debug_flags.mask) {
+            const path = light_api.maskPath();
+            d.text(`маски: ${path.reason}${path.supported ? '' : ' (fallback: все получатели)'}`
+                   + `  слой по умолчанию 0x${(light_layer_default >>> 0).toString(16)}`,
+                   { x: cam.x - cam.w / (2 * (cam.zoom || 1)) + 6,
+                     y: cam.y - cam.h / (2 * (cam.zoom || 1)) + 18 }, '#8fd1ff', 12);
+            marks.primitives.texts++;
+            marks.texts++;
+        }
+        // --- деградация: что реально случилось с бюджетами ------------------
+        if (light_debug_flags.degrade &&
+            (light_frame.culledLights > 0 || light_frame.degradedRays > 0 || light_frame.degradedSegments > 0)) {
+            d.text(`деградация: без теней ${light_frame.culledLights},`
+                   + ` лучей ${light_frame.degradedRays}, отрезков ${light_frame.degradedSegments}`
+                   + ` (лимиты: теней ${light_quality.maxShadowLights},`
+                   + ` лучей ${light_quality.maxRays}, отрезков ${light_quality.maxSegments})`,
+                   { x: cam.x - cam.w / (2 * (cam.zoom || 1)) + 6,
+                     y: cam.y - cam.h / (2 * (cam.zoom || 1)) + 34 }, '#ff9f43', 12);
+            marks.primitives.texts++;
+            marks.texts++;
+        }
+    }
+    light_debug_last = marks;
 }
+
+/**
+ * §37. Факты оверлея света: что нарисовано в последнем кадре и с какими
+ * числами. Источники — из `engine.devtools.lights()` (список кадра), поэтому
+ * «нарисовано окружностей» и «источников в кадре» считаются из одного
+ * источника, а не из двух похожих.
+ */
+function lightDebugFacts() {
+    const has = !!(engine.devtools && typeof engine.devtools.lights === 'function');
+    const lights = has ? engine.devtools.lights() : null;
+    const last = light_debug_last;
+    return {
+        on: light_debug,
+        flags: LIGHT_DEBUG_FLAGS.reduce((acc, key) => { acc[key] = light_debug_flags[key]; return acc; }, {}),
+        sourcesAvailable: has,
+        sources: lights ? lights.length : null,
+        sourcesDropped: has && typeof engine.devtools.lightsDropped === 'function'
+            ? engine.devtools.lightsDropped() : null,
+        sourcesDrawn: light_frame.lights,
+        occluders: Math.floor(light_segments.length / 4),
+        quality: {
+            maxShadowLights: light_quality.maxShadowLights,
+            maxRays: light_quality.maxRays,
+            maxSegments: light_quality.maxSegments,
+        },
+        degradation: {
+            culledLights: light_frame.culledLights,
+            degradedRays: light_frame.degradedRays,
+            degradedSegments: light_frame.degradedSegments,
+            skipped: light_frame.skipped,
+            warned: {
+                shadows: light_warned.shadows, rays: light_warned.rays,
+                segments: light_warned.segments,
+            },
+        },
+        maskPath: light_api.maskPath(),
+        layerDefault: light_layer_default >>> 0,
+        // Что выпущено в кадр. null — оверлей выключен и кадр не менялся.
+        drawn: last ? {
+            reason: last.reason,
+            sourcesAvailable: last.sourcesAvailable,
+            sources: last.sources,
+            occluders: last.occluders,
+            labels: last.labels,
+            texts: last.texts,
+            primitives: Object.assign({}, last.primitives),
+            rings: last.rings.map((r) => ({
+                index: r.index, x: r.x, y: r.y, radius: r.radius,
+                screen: { x: r.screen.x, y: r.screen.y },
+                r_px: r.r_px, intensity: r.intensity, shadow: r.shadow, layer: r.layer,
+            })),
+        } : null,
+    };
+}
+
 
 /** Свет, отложенный до тумана: рисуется уже поверх дымки. */
 function flushDeferredLights() {
@@ -2128,8 +2303,43 @@ const light_api = {
         }
         return engine.light.visibility(Float32Array.from(light_segments), x, y);
     },
-    /** Показать препятствия красными отрезками. */
-    debug(on) { light_debug = on !== false; return light_api; },
+    /**
+     * §37. Отладочный оверлей света. По умолчанию ВЫКЛЮЧЕН и кадр не меняет.
+     *
+     * ```js
+     * $.gfx.light.debug(true);                        // всё: тени + источники
+     * $.gfx.light.debug({ sources: true, labels: false });
+     * $.gfx.light.debug({ occluders: false });        // только источники
+     * $.gfx.light.debug(false);                       // выключить
+     * const facts = $.gfx.light.debug();              // что нарисовано
+     * ```
+     *
+     * `true`/`false` — прежний булев вид (совместимость): `true` включает
+     * оверлей с умолчаниями. Без аргумента — факты: сколько окружностей
+     * нарисовано, где именно и что показано про слои и деградацию.
+     */
+    debug(opts) {
+        if (opts === undefined) return lightDebugFacts();
+        if (opts === false || opts === null) {
+            light_debug = false;
+            light_debug_last = null;
+            return light_api;
+        }
+        if (opts === true) {
+            light_debug = true;
+            return light_api;
+        }
+        if (typeof opts === 'object') {
+            if (opts.on !== undefined) light_debug = opts.on !== false;
+            for (const key of LIGHT_DEBUG_FLAGS) {
+                if (opts[key] !== undefined) light_debug_flags[key] = opts[key] !== false;
+            }
+            if (!light_debug) light_debug_last = null;
+            return light_api;
+        }
+        ctx.log('$.gfx.light.debug: ожидается true/false или { on, occluders, sources, labels, mask, degrade }');
+        return light_api;
+    },
     debugOn() { return light_debug; },
     /** Темнота поверх кадра: ambient({ level, color }), ambient.off(). */
     ambient,
@@ -3731,6 +3941,7 @@ export function installGfx($) {
             // проходе, здесь — экранный $.gfx.fog(); поверх дымки идёт свет,
             // помеченный .punch(true): фонарь «прорезает» туман.
             if (light_debug) drawLightDebug(cam);
+            else light_debug_last = null;
             if (fog_params) drawGlobalFog();
             // Темнота — после тумана: ночь гасит и дымку, а свет с .punch(true)
             // рисуется уже после неё и потому прорезает и туман, и темноту.

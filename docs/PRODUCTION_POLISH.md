@@ -2742,15 +2742,15 @@ job CI), у каждого незакрытого пункта — причин�
 - [x] watches — `tests/agent/devtools_test.py`
 - [x] render inspector — вкладка RENDER в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_render_test.py` (счётчики `engine.renderInfo()`, цели, текстуры, батчи/вызовы, состояние viewport)
 - [x] audio inspector — вкладка AUDIO в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_audio_test.py` (активные голоса, шины, стоп выбранного канала; остановка свободного канала честно отвечает отказом, а не успехом)
-- [ ] input inspector — причина: вкладка INPUT не собрана (данные `$.input.*` есть)
-- [ ] asset monitor — причина: вкладка ASSETS показывает реестр загрузок, отдельного монитора цен/времени загрузки нет
+- [x] input inspector — вкладка INPUT в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_audio_test.py` (действия и привязки, что нажато сейчас, конфликты через `$.input.conflicts(action, keys)`, ожидания захвата, устройства, залипшие клавиши)
+- [x] asset monitor — вкладка ASSETS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_render_test.py` (тип, состояние, версия, зависимости, размер и последняя загрузка из `$.reload.list()`; неизвестный размер — честное «—»)
 - [x] resource/memory stats — вкладка RESOURCE/MEMORY в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_memory_test.py` (счётчики и пределы с дельтами, детектор монотонного роста с обеих сторон: подозрение на росте, тишина на стабильных числах)
 - [x] tilemap debugger — `$.tilemap.debug()` в `src/highlevel/tilemap.js`, проверки в `tests/agent/tilemap_debug_test.py` (сетка и солиды сверяются с `solidAt`, включение/выключение видно пиксельно)
 - [x] animation debugger — `$.anim.debug()` в `src/highlevel/animplayer.js`, проверки в `tests/agent/anim_debug_test.py` (клип, время, скорость, окна удара и дорожки сверяются с `$.anim.playersOn()/nodeState()`, выключение возвращает обычный вид)
 - [x] camera debugger — `$.camera.debug()` в `src/highlevel/camera.js`, проверки в `tests/agent/camera_debug_test.py` (лимиты, deadzone и зоны сверяются с `$.camera.limits()/deadzone()` и зонами камеры, выключение убирает оверлей)
-- [ ] lighting debugger — причина: список источников есть (`engine.devtools.lights()`), оверлей не собран
+- [x] lighting debugger — `$.gfx.light.debug()` в `src/highlevel/render.js`, проверки в `tests/agent/light_debug_test.py` (центры и радиусы нарисованных источников сверяются с `engine.devtools.lights()`, при выключенном свете оверлея нет)
 - [x] console — вкладка CONSOLE в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_console_test.py` (команды поверх существующих API, история, честный отказ на неизвестную команду)
-- [ ] frame stepping — причина: управление шагами кадра из панели не собрано
+- [x] frame stepping — вкладка ШАГ в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_console_test.py` (пауза, шаг кадра, 10 кадров, hit-stop, замедление, сброс). Отдельного шага физики нет: публичного API одного шага симуляции движок не отдаёт — панель пишет это честно и показывает реальное число шагов в кадре (`$.time.lastSteps()`)
 - [x] debug report export — вкладка REPORT в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_report_test.py` (снимок счётчиков/пределов/диагностики/профиля и версия, копирование)
 
 ## Tooling
@@ -2780,7 +2780,7 @@ job CI), у каждого незакрытого пункта — причин�
 - [x] reproducible package — `tools/agents_doc.py` — детерминированная перепаковка через `release.write_archive`
 - [x] licenses — `tools/release.py` — лицензии входят в пакет, проверяет `tests/agent/sdk_package_test.py`
 - [x] docs match runtime — `tests/doc_claims_test.py`
-- [ ] no P0 defects — причина: §6.3 (сползание на склоне, 11 px за 120 кадров) остаётся — правка интеграции контроллера/трения не сделана
+- [x] no P0 defects — §6.3 закрыт: сползание на склоне 30° без ввода не больше 1 px за 120 кадров (после правки измерено 0.000 px) и не больше 2 px за 600 кадров, `tests/agent/slope_hold_test.py` + `tests/agent/highlevel_physics_slopes_test.py`
 - [x] Windows/Linux CI green — `.github/workflows/build.yml`, прогон 38862722918: static, linux-x86_64, linux-aarch64 и windows-x86_64 (кросс-сборка MinGW) зелёные, артефакты `release-linux-x86_64`, `release-linux-aarch64`, `release-windows-x86_64` собраны
 - [x] локальный macOS acceptance green — `tests/macos_package_smoke_test.py` + полный локальный набор `tools/run_tests.py`
 - [ ] API freeze declared — причина: заморозка API объявляется на выпуске (PASS 7) после закрытия инспекторов

@@ -2805,6 +2805,7 @@ function drawAnimDebug() {
     const text = (value, x, y, color, size) => {
         d.text(value, { x, y }, color, size);
         marks.primitives.texts++;
+        marks.texts++;
     };
 
     const maxBars = Math.max(1, Math.round(anim_debug.bars));

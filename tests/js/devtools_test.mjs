@@ -125,4 +125,51 @@ test('HITCH без движка честно говорит, что захват
     eq($.devtools.hitchClear(), false, 'очистка без движка — false');
 });
 
+test('PASS 4: инспекторы без движка не выдумывают данные', () => {
+    const $ = createApi();
+    const phys = $.devtools.physics();
+    eq(phys.bodies.length, 0, 'тел без движка нет');
+    truthy(phys.text.indexOf('Тел в мире нет') >= 0, 'честный текст вместо пустоты');
+    eq($.devtools.physicsOverlay('off'), 'off', 'режим оверлея читается');
+    eq($.devtools.physicsOverlay('nope'), false, 'чужой режим отклонён');
+
+    const r = $.devtools.render();
+    eq(r.info, null, 'renderInfo без движка — null');
+    eq(r.targets.length, 0, 'целей нет');
+    truthy(r.text.info.indexOf('нет данных') >= 0, 'честное «нет данных»');
+
+    const ev = $.devtools.events();
+    eq(ev.count, 0, 'журнал пуст');
+    truthy(ev.text.list.indexOf('Журнал выключен') >= 0, 'сказано, что журнал выключен');
+    eq($.devtools.eventsFilter('x'), 'x', 'фильтр принимается');
+    eq($.devtools.eventsPause(true), true, 'пауза журнала переключается');
+
+    const au = $.devtools.audio();
+    eq(au.buses.length, 0, 'шин нет');
+    eq(au.channels.length, $.sound.busy().total, 'каналов столько, сколько в $.sound.busy()');
+    eq(au.channels.every((c) => c.playing === false), true, 'все каналы честно свободны');
+    eq($.devtools.audioStop(0), false, 'стоп канала без движка — false');
+
+    const inp = $.devtools.input();
+    eq(inp.actions.length, 0, 'действий нет');
+    eq(inp.conflicts.length, 0, 'конфликтов нет');
+
+    const mem = $.devtools.memory();
+    truthy(mem.text.leaks.length > 0, 'о росте сказано словами');
+    eq($.devtools.memoryBaseline(), true, 'базовая линия ставится');
+
+    const st = $.devtools.timeStep();
+    truthy(typeof st.paused === 'boolean' || st.paused === null, 'пауза — факт или N/A');
+    truthy(st.text.state.indexOf('пауза') >= 0, 'строка состояния описывает паузу');
+    eq($.devtools.step(), 1, 'шаг кадра принимает 1 кадр');
+    eq($.devtools.timeScale('abc'), null, 'невалидный масштаб отклонён');
+
+    const rep = $.devtools.report();
+    truthy(rep.text.indexOf('R2D DevTools report') === 0, 'отчёт начинается с заголовка');
+    truthy(rep.snapshot.frame === null || typeof rep.snapshot.frame === 'number',
+           'кадр — число или N/A, но не выдумка');
+    truthy(JSON.parse(rep.json).counters !== null, 'JSON отчёта разбирается');
+    truthy($.devtools.copyReport('text').length > 0, 'копирование отчёта возвращает текст');
+});
+
 finish();
