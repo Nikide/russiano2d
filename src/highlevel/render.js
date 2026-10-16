@@ -2076,9 +2076,11 @@ function drawLightDebug(cam) {
                     r_px, intensity: l.intensity, shadow: l.shadow === true, layer: l.layer,
                 });
                 if (light_debug_flags.labels) {
+                    // Подпись — на диагонали кольца, а не над ним: у источника
+                    // радиусом 400 px подпись «над кругом» уехала бы за кадр.
                     d.text(`#${i} r=${Math.round(radius)} i=${l.intensity}`
                            + ` L=0x${(l.layer >>> 0).toString(16)}${l.shadow ? ' тень' : ''}`,
-                           { x: l.x, y: l.y - r_px - 6 }, '#d8e2ee', 12);
+                           { x: l.x + r_px * 0.7 + 4, y: l.y - r_px * 0.7 }, '#d8e2ee', 12);
                     marks.primitives.texts++;
                     marks.labels++;
                 }
