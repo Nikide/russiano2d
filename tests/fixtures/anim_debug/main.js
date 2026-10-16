@@ -1,0 +1,47 @@
+// ===========================================================================
+// Фикстура §36: Animation Debugger (tests/agent/anim_debug_test.py).
+//
+// Сцена намеренно статичная: у героя ровно один клип с gameplay-окном
+// `attack` (маркеры open 150 мс / close 400 мс) и точками событий. Второй
+// плеер — фоновая петля, чтобы `$.anim.debug(sel)` можно было проверить на
+// выборе узла: оверлей обязан показывать плееров ВЫБРАННОГО узла, а не всех.
+//
+// Герой не двигается: тесту нужны кадры, которые отличаются ТОЛЬКО оверлеем
+// (скриншот до/после), поэтому движение вынесено в поворот, а пауза плеера
+// замораживает и его.
+// ===========================================================================
+
+$.ready(() => {
+    $.world.gravity(0, 0).color('#101820').bounds(0, 0, 800, 600);
+
+    $('<rect>', { id: 'hero' }).at(400, 300).size(48, 48).color('#e8e8f0').appendTo($.world);
+    $('<rect>', { id: 'other' }).at(120, 120).size(24, 24).color('#8090a0').appendTo($.world);
+
+    // Клип удара: окно открывается на 150 мс и закрывается на 400 мс — ровно
+    // те числа, которые обязан показать оверлей (и по которым играет хитбокс).
+    $.anim.clip('attack', {
+        duration: 600,
+        loop: 'once',
+        tracks: [
+            { type: 'rotation', keys: [{ t: 0, v: 0 }, { t: 600, v: 0.5 }] },
+            { type: 'alpha', keys: [{ t: 0, v: 1 }, { t: 600, v: 1 }] },
+        ],
+        events: [
+            { at: 0, name: 'attack-start' },
+            { at: 150, name: 'attack-open', window: 'attack', windowPhase: 'open' },
+            { at: 400, name: 'attack-close', window: 'attack', windowPhase: 'close' },
+            { at: 600, name: 'attack-end' },
+        ],
+    });
+
+    // Фоновая петля второго узла: она не должна попадать в отчёт по герою.
+    $.anim.clip('idle', {
+        duration: 1000,
+        loop: 'loop',
+        tracks: [{ type: 'alpha', keys: [{ t: 0, v: 1 }, { t: 1000, v: 1 }] }],
+        events: [{ at: 500, name: 'idle-pulse' }],
+    });
+
+    $.anim.player('hero').target('#hero').play('attack');
+    $.anim.player('other').target('#other').play('idle');
+});

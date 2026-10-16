@@ -2746,7 +2746,7 @@ job CI), у каждого незакрытого пункта — причин�
 - [ ] asset monitor — причина: вкладка ASSETS показывает реестр загрузок, отдельного монитора цен/времени загрузки нет
 - [x] resource/memory stats — вкладка RESOURCE/MEMORY в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_memory_test.py` (счётчики и пределы с дельтами, детектор монотонного роста с обеих сторон: подозрение на росте, тишина на стабильных числах)
 - [x] tilemap debugger — `$.tilemap.debug()` в `src/highlevel/tilemap.js`, проверки в `tests/agent/tilemap_debug_test.py` (сетка и солиды сверяются с `solidAt`, включение/выключение видно пиксельно)
-- [ ] animation debugger — причина: вкладка отладки анимации (клипы/окна/дорожки) не собрана
+- [x] animation debugger — `$.anim.debug()` в `src/highlevel/animplayer.js`, проверки в `tests/agent/anim_debug_test.py` (клип, время, скорость, окна удара и дорожки сверяются с `$.anim.playersOn()/nodeState()`, выключение возвращает обычный вид)
 - [x] camera debugger — `$.camera.debug()` в `src/highlevel/camera.js`, проверки в `tests/agent/camera_debug_test.py` (лимиты, deadzone и зоны сверяются с `$.camera.limits()/deadzone()` и зонами камеры, выключение убирает оверлей)
 - [ ] lighting debugger — причина: список источников есть (`engine.devtools.lights()`), оверлей не собран
 - [x] console — вкладка CONSOLE в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_console_test.py` (команды поверх существующих API, история, честный отказ на неизвестную команду)

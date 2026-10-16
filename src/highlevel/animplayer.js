@@ -2637,6 +2637,259 @@ export function advancePlayer(player, dtMs) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// §36. Отладочный оверлей анимации (Animation Debugger).
+//
+// Показывает по выбранному узлу: текущий клип, время и нормированное время,
+// скорость, режим повтора, часы, активные слои/дорожки, gameplay-окна
+// (`attack` и т.п.) и точки событий клипа. Всё это — данные самих плееров
+// (`playersOn`/`state()`/`bindings()`/маркеры клипа), а не вторая правда:
+// оверлей ничего не хранит и ничего не додумывает.
+//
+// Рисуется через $.debug.draw.* в МИРОВЫХ координатах, над узлом. По
+// умолчанию выключен: у выключенного оверлея цена ноль, и кадр он не меняет.
+// ---------------------------------------------------------------------------
+const anim_debug = {
+    on: false,
+    sel: null,          // узел/селектор/обёртка; null — оверлей выключен
+    player: null,       // имя плеера; null — все плееры узла
+    bar: true,          // полоса клипа с прогрессом
+    windows: true,      // подсветка gameplay-окон на полосе
+    events: true,       // точки событий клипа
+    tracks: true,       // подпись активных дорожек
+    text: true,
+    bars: 4,            // сколько полос рисуем (кроссфейд — это два слоя)
+    last: null,         // факты последнего нарисованного кадра
+};
+
+const ANIM_DEBUG_COLORS = {
+    bar: '#1b2430cc',
+    progress: '#57d3ff99',
+    window: '#ff5a4a99',
+    event: '#ffd166',
+    text: '#d8e2ee',
+    paused: '#ff9f43',
+};
+
+/** Примитивы оверлея: только $.debug.draw (мировые координаты). */
+function animDebugDraw() {
+    const d = ctx && ctx.debug;
+    return d && d.draw ? d.draw : null;
+}
+
+/** Узел по селектору/узлу/обёртке/nid; null — узел неизвестен. */
+function resolveDebugNode(sel) {
+    if (sel === null || sel === undefined) return null;
+    if (typeof sel === 'string') return query(sel)[0] || null;
+    if (typeof sel === 'number') return ctx.nodes[sel] || null;
+    if (sel.nodes) return sel.nodes[0] || null;
+    if (sel.tag) return sel;
+    return null;
+}
+
+/**
+ * Интервалы gameplay-окон клипа по его же маркерам: `open` открывает окно,
+ * `close` закрывает. Это ровно то, что делает сам плеер при проигрывании, —
+ * поэтому «окно на оверлее» и «окно в игре» не могут разойтись.
+ */
+function animDebugWindowSpans(timeline) {
+    const opened = new Map();
+    const spans = [];
+    for (const ev of timeline.events) {
+        if (!ev.window) continue;
+        if (ev.windowPhase === 'open') {
+            opened.set(ev.window, ev.at);
+        } else if (ev.windowPhase === 'close') {
+            spans.push({ name: ev.window, openAt: opened.has(ev.window) ? opened.get(ev.window) : null, closeAt: ev.at });
+            opened.delete(ev.window);
+        }
+    }
+    for (const [name, at] of opened) spans.push({ name, openAt: at, closeAt: null });
+    return spans;
+}
+
+/**
+ * Отчёт по выбранному узлу — ОДИН источник и для полосы в кадре, и для фактов
+ * `$.anim.debug()`. Возвращает значения (числа/строки), а не объекты плееров:
+ * отчёт уходит в JSON панели и теста.
+ */
+function animDebugReport() {
+    const out = { node: null, players: [], windows: [], tracks: [], events: [], capped: false };
+    if (!anim_debug.on) return out;
+    const node = resolveDebugNode(anim_debug.sel);
+    if (!node || node.removed) return out;
+    out.node = { nid: node.nid, x: node.x, y: node.y, w: node.w, h: node.h };
+    let list = playersOn(node);
+    if (anim_debug.player) list = list.filter((p) => p.name === String(anim_debug.player));
+
+    for (const player of list) {
+        const state = player.state();
+        const primary = player.primary();
+        const timeline = primary ? primary.timeline : null;
+        const time = player.time();
+        const duration = timeline ? timeline.duration : 0;
+        out.players.push({
+            name: player.name,
+            clip: player.clip(),
+            clips: player.clipNames(),
+            time,
+            duration,
+            normalized: duration > 0 ? time / duration : null,
+            speed: player.speed(),
+            // Эффективный режим повтора слоя ('once' у клипа) и отдельно —
+            // переопределение плеера: иначе «loop: null» читалось бы как
+            // «неизвестно», хотя клип всё знает.
+            loop: primary ? primary.loop : null,
+            loopOverride: player.loop(),
+            clock: state.clock,
+            paused: state.paused === true,
+            total: player.total(),
+            playing: player.playing(),
+            slots: state.slots.map((s) => ({
+                slot: s.slot, clip: s.clip, weight: s.weight,
+                loop: s.loop, speed: s.speed, offset: s.offset,
+            })),
+        });
+        if (timeline) {
+            for (const span of animDebugWindowSpans(timeline)) {
+                out.windows.push({
+                    player: player.name, clip: timeline.name, name: span.name,
+                    openAt: span.openAt, closeAt: span.closeAt,
+                    open: player.window(span.name),
+                });
+            }
+            for (const ev of timeline.events) {
+                if (out.events.length >= 256) { out.capped = true; break; }
+                out.events.push({
+                    player: player.name, clip: timeline.name,
+                    id: markerId(ev), name: ev.name, at: ev.at, kind: ev.kind,
+                    window: ev.window, windowPhase: ev.windowPhase,
+                });
+            }
+        }
+        for (const b of player.bindings()) {
+            out.tracks.push({
+                player: player.name, clip: b.clip, id: b.id, binding: b.binding,
+                target: b.target, mode: b.mode, resolved: b.resolved,
+            });
+        }
+    }
+    return out;
+}
+
+/** Пустые факты кадра: рисуем ничего и говорим почему. */
+function animDebugEmpty(reason) {
+    return { reason, bars: 0, ticks: 0, windows: 0, texts: 0, primitives: { rects: 0, lines: 0, texts: 0 } };
+}
+
+/** Оверлей кадра. Полоса клипа, окна, события и подписи — над узлом. */
+function drawAnimDebug() {
+    const d = animDebugDraw();
+    if (!d) { anim_debug.last = animDebugEmpty('no_debug_draw'); return; }
+    const rep = animDebugReport();
+    if (!rep.node) { anim_debug.last = animDebugEmpty(anim_debug.on ? 'no_node' : 'off'); return; }
+    if (!rep.players.length) { anim_debug.last = animDebugEmpty('no_player'); return; }
+
+    const marks = animDebugEmpty(null);
+    const node = rep.node;
+    const W = 168, H = 8;
+    const rect = (x, y, w, h, color) => {
+        if (w <= 0 || h <= 0) return;
+        d.rect({ x, y }, { x: x + w, y: y + h }, color);
+        marks.primitives.rects++;
+    };
+    const line = (x1, y1, x2, y2, color, width) => {
+        d.line({ x: x1, y: y1 }, { x: x2, y: y2 }, color, width);
+        marks.primitives.lines++;
+    };
+    const text = (value, x, y, color, size) => {
+        d.text(value, { x, y }, color, size);
+        marks.primitives.texts++;
+    };
+
+    const maxBars = Math.max(1, Math.round(anim_debug.bars));
+    for (let i = 0; i < rep.players.length && i < maxBars; i++) {
+        const p = rep.players[i];
+        const y0 = (node.y || 0) - ((node.h || 24) / 2) - 24 - i * 30;
+        const x0 = (node.x || 0) - W / 2;
+        const frac = p.duration > 0 ? Math.max(0, Math.min(1, p.time / p.duration)) : 0;
+
+        if (anim_debug.bar) {
+            rect(x0, y0, W, H, ANIM_DEBUG_COLORS.bar);
+            rect(x0, y0, W * frac, H, ANIM_DEBUG_COLORS.progress);
+            marks.bars++;
+        }
+        // Окна (attack и т.п.) — отрезками на полосе: интервалы взяты из
+        // маркеров самого клипа, а не из «сколько-то похожего» времени.
+        if (anim_debug.windows && p.duration > 0) {
+            for (const w of rep.windows) {
+                if (w.player !== p.name || w.openAt === null) continue;
+                const from = Math.min(w.openAt, p.duration);
+                const to = w.closeAt === null ? p.duration : Math.min(w.closeAt, p.duration);
+                rect(x0 + W * (from / p.duration), y0 - 3, W * ((to - from) / p.duration), H + 6,
+                     ANIM_DEBUG_COLORS.window);
+                marks.windows++;
+            }
+        }
+        // Точки событий — засечками под полосой.
+        if (anim_debug.events && p.duration > 0) {
+            let ticks = 0;
+            for (const ev of rep.events) {
+                if (ev.player !== p.name) continue;
+                if (ticks >= 32) break;
+                const x = x0 + W * (Math.max(0, Math.min(p.duration, ev.at)) / p.duration);
+                line(x, y0 + H + 1, x, y0 + H + 6, ANIM_DEBUG_COLORS.event, 1);
+                ticks++;
+                marks.ticks++;
+            }
+        }
+        if (anim_debug.text) {
+            const loop = p.loop === null || p.loop === undefined ? 'как в клипе' : String(p.loop);            text(`${p.name}: ${p.clip === null ? '—' : p.clip} `
+                 + `${Math.round(p.time)}/${Math.round(p.duration)} мс`
+                 + `  скорость ${p.speed}  повтор ${loop}${p.paused ? '  ПАУЗА' : ''}`,
+                 x0, y0 - 8, p.paused ? ANIM_DEBUG_COLORS.paused : ANIM_DEBUG_COLORS.text, 12);
+            if (anim_debug.tracks) {
+                const names = rep.tracks.filter((t) => t.player === p.name)
+                    .map((t) => `${t.id}@${t.target === null || t.target === undefined ? '—' : t.target}`
+                        + (t.resolved ? '' : '!'));
+                const shown = names.slice(0, 4).join(', ');
+                text(`дорожки: ${names.length}${shown ? ' — ' + shown : ''}`
+                     + (names.length > 4 ? ' …' : ''),
+                     x0, y0 + H + 10, ANIM_DEBUG_COLORS.text, 11);
+            }
+        }
+    }
+    if (anim_debug.text && anim_debug.windows) {
+        const open = rep.windows.filter((w) => w.open).map((w) => w.name);
+        const anchor = { x: (node.x || 0) - W / 2, y: (node.y || 0) + ((node.h || 24) / 2) + 16 };
+        const spans = rep.windows.map((w) => `${w.name} `
+            + (w.openAt === null ? '?' : Math.round(w.openAt))
+            + (w.closeAt === null ? '…' : '..' + Math.round(w.closeAt)));
+        text(`окна: ${open.length ? open.join(', ') : 'нет'}`
+             + (spans.length ? `  [${spans.join('; ')}]` : ''),
+             anchor.x, anchor.y, ANIM_DEBUG_COLORS.text, 11);
+    }
+    anim_debug.last = marks;
+}
+
+/** Факты оверлея: состояние переключателей + отчёт по цели + что нарисовано. */
+function animDebugFacts() {
+    const rep = animDebugReport();
+    return {
+        on: anim_debug.on,
+        sel: anim_debug.sel === null ? null : (typeof anim_debug.sel === 'string'
+            ? anim_debug.sel : 'nid' + (rep.node ? rep.node.nid : '?')),
+        player: anim_debug.player,
+        node: rep.node,
+        players: rep.players,
+        windows: rep.windows,
+        tracks: rep.tracks,
+        events: rep.events,
+        eventsCapped: rep.capped,
+        drawn: anim_debug.last ? Object.assign({}, anim_debug.last) : null,
+    };
+}
+
 /**
  * Шаг всех плееров; вызывается из api.js раз в кадр, сразу после tickAnim.
  *
@@ -2646,6 +2899,14 @@ export function advancePlayer(player, dtMs) {
  * при нулевом игровом dt (пауза/hit-stop).
  */
 export function tickAnimPlayer(dt) {
+    tickPlayers(dt);
+    // §36. Оверлей рисуется и при нулевом dt: пауза/шаг — основной сценарий
+    // отладки анимации, и замороженный плеер обязан быть виден в кадре.
+    if (anim_debug.on) drawAnimDebug();
+    else anim_debug.last = null;
+}
+
+function tickPlayers(dt) {
     const ms = dt > 0 ? dt * 1000 : 0;
     tick_list.length = 0;
     let presentation = false;
@@ -2796,6 +3057,67 @@ export function installAnimPlayer($) {
     anim.nodeState = (node) => nodeAnimState(node);
     /** Восстановить плееров узла; report — структурированная жалоба ($.save). */
     anim.restoreNodeState = (node, data, report) => restoreNodeAnimState(node, data, report);
+
+    /**
+     * §36. Отладочный оверлей анимации: клип, время, скорость, окна, дорожки,
+     * события — над выбранным узлом. По умолчанию ВЫКЛЮЧЕН и кадр не меняет.
+     *
+     * ```js
+     * $.anim.debug('#hero');                       // включить для героя
+     * $.anim.debug('#hero', { player: 'hero' });   // только один плеер
+     * $.anim.debug('#hero', { windows: false });   // без окон на полосе
+     * $.anim.debug(false);                         // выключить
+     * const facts = $.anim.debug();                // что показано и нарисовано
+     * ```
+     *
+     * Данные берутся у самих плееров (`playersOn`/`state()`/`bindings()`) и у
+     * маркеров клипа, поэтому окно `attack` на оверлее — то же окно, что
+     * открывает игровой хитбокс. Ничего неизвестного не показывается.
+     */
+    anim.debug = (sel, opts) => {
+        if (sel === undefined) return animDebugFacts();
+        if (sel === false || sel === null) {
+            anim_debug.on = false;
+            anim_debug.sel = null;
+            anim_debug.last = null;
+            return animDebugFacts();
+        }
+        if (sel === true) {
+            // true без селектора: цель — плеер по умолчанию.
+            const node = defaultPlayer().node || null;
+            if (!node) {
+                ctx.log('$.anim.debug(true): у плеера по умолчанию нет цели — укажите селектор узла');
+                return animDebugFacts();
+            }
+            anim_debug.sel = node;
+            anim_debug.on = true;
+        } else {
+            const node = resolveDebugNode(sel);
+            if (!node) {
+                ctx.log('$.anim.debug: узел не найден — оверлей не включён');
+                return animDebugFacts();
+            }
+            anim_debug.sel = node;
+            anim_debug.on = true;
+        }
+        if (opts && typeof opts === 'object') {
+            if (opts.on !== undefined) anim_debug.on = opts.on !== false;
+            if (opts.player !== undefined) anim_debug.player = opts.player === null ? null : String(opts.player);
+            for (const key of ['bar', 'windows', 'events', 'tracks', 'text']) {
+                if (opts[key] !== undefined) anim_debug[key] = opts[key] !== false;
+            }
+            if (opts.bars !== undefined) {
+                const bars = Math.round(Number(opts.bars));
+                if (Number.isFinite(bars) && bars > 0) anim_debug.bars = bars;
+                else ctx.log('$.anim.debug: bars — положительное число');
+            }
+        } else if (opts !== undefined) {
+            ctx.log('$.anim.debug: opts — объект { on, player, bar, windows, events, tracks, text, bars }');
+        }
+        if (!anim_debug.on) anim_debug.last = null;
+        return animDebugFacts();
+    };
+
     anim.reset = () => { defaultPlayer().reset(); return anim; };
     anim.clock = (value) => {
         if (value === undefined) return defaultPlayer().clock();
