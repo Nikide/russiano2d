@@ -12,6 +12,7 @@
 #   python3 tests/agent/highlevel_timeline_test.py
 # ===========================================================================
 
+import json
 import os
 import sys
 
@@ -40,20 +41,88 @@ def check(condition, message):
         FAILURES.append(message)
 
 
-def play(a, picks, limit=600):
-    """Пройти новеллу: «дальше» на репликах, варианты — по индексам picks."""
+# Состояние новеллы одним запросом: и для шага, и для диагностики. Отдельные
+# eval на каждое поле стоили бы лишние round-trip'ы на каждой из сотен итераций.
+PLAY_STATE = """(() => {
+    const st = $.timeline.state();
+    const vn = globalThis.__vn || null;
+    return JSON.stringify({
+        running: $.timeline.running(), waiting: st.waiting, beats: st.beats,
+        ticks: st.ticks, location: st.location, ending: st.ending,
+        dialog_open: $.dialog.isOpen(), typing: $.dialog.isTyping(),
+        dialog_page: $.dialog.page(), dialog_pages: $.dialog.pageCount(),
+        choices: $.timeline.choices().map((c) => c.text),
+        vn: vn ? { beats: vn.beats, says: vn.says.length, choices: vn.choices.length,
+                   endings: vn.endings, locations: vn.locations.length } : null,
+    });
+})()"""
+
+
+def play(a, picks, limit=600, stall_limit=40):
+    """Пройти новеллу: «дальше» на репликах, варианты — по индексам picks.
+
+    Ждёт с пределом и объясняет остановку. Новелла, вставшая намертво, раньше
+    стоила ровно ``limit`` итераций молчания (82 с в наборе, а в худшем случае
+    — упор в таймаут харнесса) и не говорила, чего именно ждала. Здесь прогресс
+    отслеживается по отпечатку состояния: если ``stall_limit`` итераций подряд
+    не меняется ни бит, ни реплика, ни развилка, ни локация, ни ожидание —
+    прогон признаётся вставшим, печатается диагностика и возвращается False.
+    Диагностика отвечает на вопросы «сколько прошло», «что ждали», «на каком
+    бите», «что с диалогом» — по ней видно, дефект это теста или продукта.
+    """
     used = 0
-    for _ in range(limit):
-        if not a.eval("$.timeline.running()"):
+    fingerprint = None
+    still = 0
+    last_choice = None
+    history = []
+    for iteration in range(1, limit + 1):
+        state = json.loads(a.eval(PLAY_STATE))
+        if not state["running"]:
             return True
-        choices = a.eval("$.timeline.choices().map(c => c.text)")
+        vn = state["vn"] or {}
+        mark = (state["beats"], vn.get("says"), vn.get("choices"), state["location"],
+                state["waiting"], state["dialog_open"], state["ending"])
+        if mark == fingerprint:
+            still += 1
+        else:
+            still = 0
+            fingerprint = mark
+            if len(history) < 12:
+                history.append({"итерация": iteration, "биты": state["beats"],
+                                "ожидание": state["waiting"],
+                                "диалог": "открыт" if state["dialog_open"] else "закрыт"})
+        if still >= stall_limit or iteration >= limit:
+            why = ("прогресса нет %d итераций подряд" % still if still >= stall_limit
+                   else "исчерпан предел итераций (%d)" % limit)
+            print("  --   новелла не дошла до конца: %s" % why)
+            print("  --   ждали: waiting=%s, диалог %s (страница %s из %s, печать %s),"
+                  " выборов %d"
+                  % (state["waiting"], "открыт" if state["dialog_open"] else "закрыт",
+                     state["dialog_page"], state["dialog_pages"], state["typing"],
+                     len(state["choices"])))
+            print("  --   бит %s, ticks %s, локация %r, концовка %s"
+                  % (state["beats"], state["ticks"], state["location"],
+                     state["ending"] if state["ending"] else "нет"))
+            if vn:
+                print("  --   счётчики новеллы: beats %s, says %s, choices %s,"
+                      " локаций %s, концовок %s"
+                      % (vn.get("beats"), vn.get("says"), vn.get("choices"),
+                         vn.get("locations"), vn.get("endings")))
+            if last_choice:
+                print("  --   последний выбор: #%d %r" % last_choice)
+            for row in history:
+                print("  --   ход: %s" % row)
+            return False
+
+        choices = state["choices"]
         if choices:
             index = picks[used] if used < len(picks) else 0
             used += 1
+            last_choice = (index, choices[index] if index < len(choices) else "")
             a.eval(f"$.dialog.choose({index})")
             continue
         a.step(8)
-        if a.eval("$.timeline.state().waiting") == "say":
+        if state["waiting"] == "say":
             a.eval("$.dialog.next()")
     return False
 
