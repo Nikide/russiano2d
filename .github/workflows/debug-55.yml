@@ -42,7 +42,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          # Глубина 0 обязательна: checkout с конкретным SHA делает
+          # `git fetch --depth=1 origin <sha>`, а GitHub отдавать произвольный
+          # SHA не умеет — прогон 38960309824 упал именно на этом («The process
+          # '/usr/bin/git' failed with exit code 1»), и все шаги ушли в skipped.
+          fetch-depth: 0
+      - name: Переключение на проверяемый ref
+        if: ${{ inputs.ref != '' }}
+        run: |
+          git checkout --force "${{ inputs.ref }}"
+          git log -1 --format='%h %ad %s' --date=iso
       - name: Что проверяем
         run: git log -1 --format='%h %ad %s' --date=iso
       - name: Linux dependencies
