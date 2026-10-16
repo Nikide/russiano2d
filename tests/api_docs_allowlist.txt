@@ -1,0 +1,115 @@
+# Исключения гейта tests/api_docs_sync_test.py — «у публичного имени есть документация».
+#
+# Формат: <образец>  # <категория>: <причина>
+#   образец   — точное имя ($.store.keys) или неймспейс целиком ($.sound.*)
+#   категория — internal | debt | dead | re2d (печатается в сводке отчёта)
+#
+# Это ВРЕМЕННЫЙ список долга, а не разрешение не документировать:
+#   * строка без причины — провал гейта;
+#   * строка, которая уже ничего не покрывает (долг закрыт), — тоже провал:
+#     гейт просит её снять, поэтому список умеет только уменьшаться;
+#   * новые имена в allowlist не попадают: их документируют сразу.
+#
+# Русские алиасы ($.ввод.*, $.камера.*) отдельных строк НЕ требуют: они считаются
+# задокументированными ровно тогда, когда задокументирован английский оригинал,
+# поэтому здесь только английские имена.
+
+# --- внутренние биндинги C: не часть $ API, справочник им — docs/internal/ ---
+
+# --- в работе (task-26, debug-overlays) ---
+
+# --- task-27 (runtime-assets) закрыт: $.net/$.proc/$.replay описаны полностью ---
+# Долг снят: полные перечни имён — в docs/highlevel/net.md (§9.1), proc.md (§3.1),
+# replay.md (§1.1). Строка про $.net.host_ снята вместе с именем: оно удалено из
+# публичной поверхности (внутренняя переменная, вызовов не было).
+
+# --- в работе (задача runtime-core про геймпады) ---
+$.input.*            # debt: в работе (задача runtime-core про геймпады) — 24 имён без полного перечня в docs/highlevel/input.md
+
+# --- долг, ещё не распределённый между задачами (числа — в отчёте task-25) ---
+$.activation.clear           # debt: не распределён — имя без упоминания в docs/**/*.md
+$.activation.stats           # debt: не распределён — имя без упоминания в docs/**/*.md
+$.agent.frame                # debt: не распределён — имя без упоминания в docs/**/*.md
+$.agent.time                 # debt: не распределён — имя без упоминания в docs/**/*.md
+$.anim.*             # debt: не распределён — 3 имён, страница docs/highlevel/anim.md без полного перечня
+$.atlas.clearErrors          # debt: не распределён — имя без упоминания в docs/**/*.md
+$.audio.getMasterVolume      # debt: не распределён — имя без упоминания в docs/**/*.md
+$.audio.volumeOf             # debt: не распределён — имя без упоминания в docs/**/*.md
+$.barks.*            # debt: не распределён — 5 имён, страница docs/highlevel/barks.md без полного перечня
+$.cels.*             # debt: не распределён — 9 имён, страница docs/highlevel/cels.md без полного перечня
+$.collision.bits             # debt: не распределён — имя без упоминания в docs/**/*.md
+$.collision.of               # debt: не распределён — имя без упоминания в docs/**/*.md
+$.combat.*           # debt: не распределён — 4 имён, страница docs/highlevel/combat.md без полного перечня
+$.console.*          # debt: не распределён — 4 имён, страница docs/highlevel/console.md без полного перечня
+$.curve.*            # debt: не распределён — 5 имён, страница docs/highlevel/curve.md без полного перечня
+$.debug.isOn                 # debt: не распределён — имя без упоминания в docs/**/*.md
+$.debug.off                  # debt: не распределён — имя без упоминания в docs/**/*.md
+$.dialog.*           # debt: не распределён — 8 имён, страница docs/highlevel/dialog.md без полного перечня
+$.easing                     # debt: не распределён — имя без упоминания в docs/**/*.md
+$.gfx.*              # debt: не распределён — 3 имён, страница docs/highlevel/gfx.md без полного перечня
+$.grid.*             # debt: не распределён — 5 имён, страница docs/highlevel/grid.md без полного перечня
+$.hits.pool                  # debt: не распределён — имя без упоминания в docs/**/*.md
+$.i18n.*             # debt: не распределён — 3 имён, страница docs/highlevel/i18n.md без полного перечня
+$.inv.*              # debt: не распределён — 11 имён, страница docs/highlevel/inv.md без полного перечня
+$.items.*            # debt: не распределён — 8 имён, страница docs/highlevel/items.md без полного перечня
+$.layers.*           # debt: не распределён — 5 имён, страница docs/highlevel/layers.md без полного перечня
+$.loading.watch              # debt: не распределён — имя без упоминания в docs/**/*.md
+$.loading.watched            # debt: не распределён — имя без упоминания в docs/**/*.md
+$.nav.*              # debt: не распределён — 6 имён, страница docs/highlevel/nav.md без полного перечня
+$.physics.*          # debt: не распределён — 4 имён, страница docs/highlevel/physics.md без полного перечня
+$.pool.tick                  # debt: не распределён — имя без упоминания в docs/**/*.md
+$.prefab.*           # debt: не распределён — 3 имён, страница docs/highlevel/prefab.md без полного перечня
+$.processing.*       # debt: не распределён — 5 имён, страница docs/highlevel/processing.md без полного перечня
+$.quest.*            # debt: не распределён — 4 имён, страница docs/highlevel/quest.md без полного перечня
+$.raid.*             # debt: не распределён — 11 имён, страница docs/highlevel/raid.md без полного перечня
+$.random.gaussian            # debt: не распределён — имя без упоминания в docs/**/*.md
+$.random.streamNames         # debt: не распределён — имя без упоминания в docs/**/*.md
+$.real2d.*           # debt: не распределён — 5 имён, страница docs/highlevel/real2d.md без полного перечня
+$.reload.*           # debt: не распределён — 3 имён, страница docs/highlevel/reload.md без полного перечня
+$.resource.names             # debt: не распределён — имя без упоминания в docs/**/*.md
+$.room.*             # debt: не распределён — 7 имён, страница docs/highlevel/room.md без полного перечня
+$.rotSprite.dispose          # debt: не распределён — имя без упоминания в docs/**/*.md
+$.rotSprite.info             # debt: не распределён — имя без упоминания в docs/**/*.md
+$.save.*             # debt: не распределён — 5 имён, страница docs/highlevel/save.md без полного перечня
+$.scene.*            # debt: не распределён — 7 имён, страница docs/highlevel/scene.md без полного перечня
+$.screen.*           # debt: не распределён — 6 имён, страница docs/highlevel/screen.md без полного перечня
+$.sdk.active                 # debt: не распределён — имя без упоминания в docs/**/*.md
+$.sdk.paths                  # debt: не распределён — имя без упоминания в docs/**/*.md
+$.signal.*           # debt: не распределён — 3 имён, страница docs/highlevel/signal.md без полного перечня
+$.sound.*            # debt: не распределён — 14 имён, страница docs/highlevel/sound.md без полного перечня
+$.state.*            # debt: не распределён — 7 имён, страница docs/highlevel/state.md без полного перечня
+$.steps.*            # debt: не распределён — 5 имён, страница docs/highlevel/steps.md без полного перечня
+$.store.*            # debt: не распределён — 5 имён, страница docs/highlevel/store.md без полного перечня
+$.story.*            # debt: не распределён — 3 имён, страница docs/highlevel/story.md без полного перечня
+$.test.falsy                 # debt: не распределён — имя без упоминания в docs/**/*.md
+$.tilemap.*          # debt: не распределён — 12 имён, страница docs/highlevel/tilemap.md без полного перечня
+$.time.*             # debt: не распределён — 9 имён, страница docs/highlevel/time.md без полного перечня
+$.timeline.*         # debt: не распределён — 10 имён, страница docs/highlevel/timeline.md без полного перечня
+$.ui.*               # debt: не распределён — 6 имён, страница docs/highlevel/ui.md без полного перечня
+$.window.cursors             # debt: не распределён — имя без упоминания в docs/**/*.md
+$.window.off                 # debt: не распределён — имя без упоминания в docs/**/*.md
+$.world.*            # debt: не распределён — 11 имён, страница docs/highlevel/world.md без полного перечня
+engine.bodyGeneration        # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.clearPhysicsErrors    # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.contactStay           # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.cursorVisible         # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.depth                 # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.isAwake               # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.lightMaskPasses       # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.markUnlit             # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.netMode               # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.physicsErrors         # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.postSupported         # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.profileEnabled        # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.rotSpriteChanged      # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.rotSpriteDispose      # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.rotSpriteFileStamp    # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.rotSpriteInfo         # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.rotSpritePose         # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.rotSpriteRig          # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.rotSpriteStyle        # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.setContactStay        # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.setGravityScale       # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.setSnap               # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.setSpriteFilter       # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.spriteFilter          # debt: не распределён — имя без упоминания в docs/**/*.md

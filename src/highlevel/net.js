@@ -670,7 +670,6 @@ export function installNet($) {
         isClient() { return role === 'client'; },
         online() { return role !== 'offline'; },
         port() { return port; },
-        host_() { return host; },
         playerCount() { return authority.playerCount(); },
 
         /** Сервер: мир считает этот узел. */
