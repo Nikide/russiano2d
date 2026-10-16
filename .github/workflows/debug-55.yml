@@ -12,16 +12,25 @@ name: debug-55 (диагностика падений CI 1.2.1)
 # Ветка/рана — временные: после диагноза файл удаляется.
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Коммит/тег для проверки (пусто = эта ветка)'
+        required: false
+        default: ''
+      sanitize:
+        description: '1 = Debug+ASan/UBSan, 0 = Release (быстрый бисект)'
+        required: false
+        default: '1'
   push:
     branches: ['ci/task-55-debug']
 permissions:
   contents: read
 concurrency:
-  group: debug-55-${{ github.ref }}
+  group: debug-55-${{ github.ref }}-${{ inputs.ref }}
   cancel-in-progress: true
 jobs:
   repro:
-    name: repro (${{ matrix.platform }})
+    name: repro (${{ matrix.platform }}, ${{ inputs.ref || github.sha }})
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +41,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Что проверяем
+        run: git log -1 --format='%h %ad %s' --date=iso
       - name: Linux dependencies
         run: |
           sudo apt-get update
@@ -40,10 +53,24 @@ jobs:
             libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev \
             libgl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
             libcurl4-openssl-dev xvfb mesa-vulkan-drivers gdb
-      - name: Configure (Debug + ASan/UBSan)
-        run: cmake -S . -B build-dbg -DCMAKE_BUILD_TYPE=Debug -DR2D_SANITIZE=ON
+      - name: Configure
+        run: |
+          if [ "${{ inputs.sanitize || '1' }}" = "1" ]; then
+            cmake -S . -B build-dbg -DCMAKE_BUILD_TYPE=Debug -DR2D_SANITIZE=ON
+          else
+            cmake -S . -B build-dbg -DCMAKE_BUILD_TYPE=Release
+          fi
       - name: Build engine and SDK
-        run: cmake --build build-dbg --config Debug --parallel 4
+        # ASAN_OPTIONS на самой сборке: генератор r2d_embed_js течёт на 8 КБ, и
+        # LeakSanitizer валит шаг генерации заголовка (проверено прогоном
+        # 38959450934: «gmake … r2d_js_data.h Error 1», SUMMARY 8042 byte(s) leaked).
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: |
+          cmake --build build-dbg --config Debug --parallel 4 --target russiano2d
+          # r2d-sdk нужен только сценарию C; в старых ref его может не быть.
+          cmake --build build-dbg --config Debug --parallel 4 --target r2d-sdk \
+            || echo "цели r2d-sdk нет — сценарий C будет пропущен"
       - name: Диагностика A — движок на фикстуре hello (падение aarch64)
         if: always()
         run: |
@@ -72,6 +99,7 @@ jobs:
           set +e
           export ASAN_OPTIONS=detect_leaks=0:abort_on_error=0:log_path=/tmp/asan
           export UBSAN_OPTIONS=print_stacktrace=1
+          if [ ! -x build-dbg/r2d-sdk ]; then echo "r2d-sdk нет — сценарий C пропущен"; exit 0; fi
           rm -rf /tmp/pkg-game
           echo "── C1. r2d-sdk new blank"
           timeout 120 xvfb-run -a build-dbg/r2d-sdk new blank /tmp/pkg-game --name "Debug game" \
