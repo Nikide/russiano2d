@@ -85,7 +85,7 @@ windows-x86_64:
   before_script:
     - apt-get update -qq
     - apt-get install -y -qq build-essential cmake ninja-build pkg-config git python3
-      mingw-w64 xz-utils curl zip
+      mingw-w64 xz-utils curl zip glslang-tools spirv-cross
     - |
       set -e
       curl -fL --connect-timeout 10 --max-time 300 --retry 5 --retry-delay 3 \

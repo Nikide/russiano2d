@@ -101,7 +101,7 @@ jobs:
           set -e
           sudo apt-get update -qq
           sudo apt-get install -y -qq build-essential cmake ninja-build pkg-config python3 \
-            mingw-w64 xz-utils curl zip
+            mingw-w64 xz-utils curl zip glslang-tools spirv-cross
           curl -fL --connect-timeout 10 --max-time 300 --retry 5 --retry-delay 3 \
             -o /tmp/freetype.tar.xz "$FREETYPE_URL"
           echo "$FREETYPE_SHA256  /tmp/freetype.tar.xz" | sha256sum -c -

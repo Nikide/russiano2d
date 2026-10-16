@@ -181,6 +181,11 @@ def test_other_host_pipelines():
     check("linux-x86_64:" in gitlab and "windows-x86_64:" in gitlab,
           "GitLab собирает Linux x86_64 и Windows x86_64")
     check("mingw-w64" in gitlab, "Windows на GitLab собирается кросс-сборкой MinGW")
+    # Кросс-сборка не умеет собрать glslang/spirv-cross для хоста — CMake
+    # останавливается с «для кросс-сборки нужны хост-инструменты». Проверено
+    # запуском job'а в контейнере: без этих пакетов конфигурация не проходит.
+    check("glslang-tools" in gitlab and "spirv-cross" in gitlab,
+          "для кросс-сборки на GitLab ставятся хост-инструменты шейдеров")
     check("macos-artifacts:" in gitlab and "dist/russiano2d-v" in gitlab,
           "macOS на GitLab НЕ собирается, а берётся из витрины dist/")
     check(re.search(r"macos-\d|macos-latest|macos-arm64:", gitlab) is None,
@@ -194,6 +199,8 @@ def test_other_host_pipelines():
     check("linux-x86_64:" in gitverse and "windows-x86_64:" in gitverse,
           "GitVerse собирает Linux x86_64 и Windows x86_64")
     check("mingw-w64" in gitverse, "Windows на GitVerse собирается кросс-сборкой MinGW")
+    check("glslang-tools" in gitverse and "spirv-cross" in gitverse,
+          "для кросс-сборки на GitVerse ставятся хост-инструменты шейдеров")
     check("macos-artifacts:" in gitverse and "dist/russiano2d-v" in gitverse,
           "macOS на GitVerse НЕ собирается, а берётся из витрины dist/")
     check(re.search(r"macos-\d|macos-latest", gitverse) is None,
