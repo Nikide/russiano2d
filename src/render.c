@@ -669,14 +669,26 @@ int r2d_sprite_create(R2DRenderer *r, int texture, float sx, float sy, float sw,
         R2D_ERROR("r2d_sprite_create: неверная текстура %d", texture);
         return -1;
     }
-    if (!r2d__grow((void **)&r->sprites, &r->sprite_cap, r->sprite_count + 1, sizeof(R2DSprite))) {
-        return -1;
+    // Слот мёртвого спрайта переиспользуется: $.viewport.create()/destroy()
+    // заводит спрайт истории кадра на каждый цикл, а r2d_sprite_create только
+    // дописывал строку — таблица росла линейно (100 циклов → +100 записей,
+    // замерено tests/agent/render_target_lifecycle_test.py). Живые строки не
+    // трогаем: освободившиеся отдаём по порядку.
+    int slot = -1;
+    for (int i = 0; i < r->sprite_count; ++i) {
+        if (!r->sprites[i].alive) { slot = i; break; }
+    }
+    if (slot < 0) {
+        if (!r2d__grow((void **)&r->sprites, &r->sprite_cap, r->sprite_count + 1, sizeof(R2DSprite))) {
+            return -1;
+        }
+        slot = r->sprite_count++;
     }
 
     const float tw = (float)r->textures[texture].width;
     const float th = (float)r->textures[texture].height;
 
-    R2DSprite *s = &r->sprites[r->sprite_count];
+    R2DSprite *s = &r->sprites[slot];
     s->texture = texture;
     // Полтексельный отступ: край квада попадает ровно на границу текселя, и
     // при выборке по центру пикселя затягивался соседний кадр атласа.
@@ -698,7 +710,7 @@ int r2d_sprite_create(R2DRenderer *r, int texture, float sx, float sy, float sw,
     s->force_linear = false;
     s->alive  = true;
 
-    return r->sprite_count++;
+    return slot;
 }
 
 bool r2d_sprite_alive(const R2DRenderer *r, int id)
