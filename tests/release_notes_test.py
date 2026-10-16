@@ -65,21 +65,28 @@ def make_repo(path):
     git(["commit", "-q", "-m", "Мелочи по коду"], path)
     git(["tag", "v1.0.0"], path)
 
-    # Коммиты этой волны: по одному на каждую группу правил.
+    # Коммиты этой волны: по одному на каждую группу правил. Темы подобраны
+    # ТАК, ЧТОБЫ ТЕЛО ТЯНУЛО В ДРУГУЮ ГРУППУ: это проверка смысла («тема важнее
+    # тела»), а не механики — если кто-то вернёт сопоставление по всему
+    # сообщению, «Комплект шумов» уедет в «Исправления» и тест упадёт.
     messages = [
-        "Исправлено падение камеры на границе уровня",
-        "Добавлено свечение спрайтов",
-        "Документация: раздел про свет",
-        "Тесты: гейт на свет",
-        "Сборка: cmake правит флаги",
-        "Мелочи по коду без ключевых слов",
+        ("P0: standalone-сборка падала SIGABRT на грузе (.r2d4 и шрифт)", ""),
+        ("Комплект шумов: $.noise на FastNoiseLite (OpenSimplex2, Perlin, Cellular)",
+         "Попутно исправлена устаревшая строка в AGENT_API."),
+        ("Удалено из публичной поверхности: $.net.host_", ""),
+        ("Документация: раздел про свет", ""),
+        ("Тесты: гейт на свет", ""),
+        ("Версия: линия 2.x, поверхность заморожена",
+         "Добавлены новые имена в снимок заморозки."),
+        ("Мелочи по коду без ключевых слов", ""),
     ]
-    for index, message in enumerate(messages):
+    for index, (subject, extra) in enumerate(messages):
         name = os.path.join(path, "file%d.txt" % index)
         with open(name, "w", encoding="utf-8") as handle:
-            handle.write(message + "\n")
+            handle.write(subject + "\n")
         git(["add", os.path.basename(name)], path)
-        git(["commit", "-q", "-m", message + "\n\nПодробность с числом: %d." % index], path)
+        body = "\n\n".join(filter(None, [extra, "Подробность с числом: %d." % index]))
+        git(["commit", "-q", "-m", subject + "\n\n" + body], path)
 
     # Рукописный раздел ЭТОЙ волны (его не было на прошлом теге) — он должен
     # переехать в секцию версии. Дописываем в тот же коммит, чтобы в диапазоне
@@ -119,21 +126,36 @@ def main():
         check(result.returncode == 0, "генератор отработал (--dry-run): %s" % result.stderr.strip())
         out = result.stdout
         check("Russiano2D 1.1.0 — 2026-02-02" in out, "заметки названы версией и датой")
-        check("6 коммитов" in out, "в шапке секции — число коммитов этого диапазона (6)")
+        check("7 коммитов" in out, "в шапке секции — число коммитов этого диапазона (7)")
         check("Мелочи по коду" not in out.split("###")[0] or True, "заголовок заметок на месте")
         # Коммит до тега не должен попадать в диапазон: он «Мелочи по коду» —
         # а такой же коммит есть и после тега, поэтому смотрим число.
         commits = module.collect_commits("v1.0.0", "HEAD", repo)
-        check(len(commits) == 6, "в диапазоне v1.0.0..HEAD ровно 6 коммитов (получено %d)" % len(commits))
+        check(len(commits) == 7, "в диапазоне v1.0.0..HEAD ровно 7 коммитов (получено %d)" % len(commits))
         all_commits = module.collect_commits(None, "HEAD", repo)
-        check(len(all_commits) == 7, "без диапазона видна вся история: 7 коммитов (6 волны + тег)")
+        check(len(all_commits) == 8, "без диапазона видна вся история: 8 коммитов (7 волны + тег)")
         groups = module.build_groups(commits)
-        check(len(groups) == 6, "коммиты разложены по 6 группам (получено %d)" % len(groups))
+        check(len(groups) == 7, "коммиты разложены по 7 группам (получено %d)" % len(groups))
         check([title for title, _members in groups] ==
-              ["Исправления", "Добавлено", "Документация", "Тесты и гейты", "Сборка и версии", "Прочее"],
+              ["Исправления", "Добавлено", "Удалено и изменено", "Документация",
+               "Тесты и гейты", "Сборка и версии", "Прочее"],
               "порядок групп — из правил: %s" % [title for title, _ in groups])
         check(all(len(members) == 1 for _title, members in groups),
               "по одному коммиту на группу: %s" % {t: len(m) for t, m in groups})
+
+        # --- 1.1 Смысл группировки: тема важнее тела ---------------------------
+        grouped = {member["subject"]: title for title, members in groups for member in members}
+        check(grouped.get("Комплект шумов: $.noise на FastNoiseLite (OpenSimplex2, Perlin, Cellular)")
+              == "Добавлено",
+              "«Комплект шумов» с «исправлена» в теле — это «Добавлено», а не «Исправления»")
+        check(grouped.get("Версия: линия 2.x, поверхность заморожена") == "Сборка и версии",
+              "«Версия: …» — «Сборка и версии», хотя в теле «добавлены новые имена»")
+        check(grouped.get("Удалено из публичной поверхности: $.net.host_") == "Удалено и изменено",
+              "удаление публичного имени попадает в свою группу, а не в «Добавлено»")
+        check(module.group_of({"subject": "Новая подсистема", "body": ""}) == "Добавлено",
+              "«нов» в начале слова — «Добавлено»")
+        check(module.group_of({"subject": "Решено не обновлять зависимости", "body": ""}) == "Прочее",
+              "«обновлять» не считается за «нов» (ключевое слово ищется с начала слова)")
 
         # --- 2. Полнота и подложенная потеря коммита --------------------------
         check(module.check_commit_coverage(commits, module.build_notes_body(commits, "1.1.0", "2026-02-02")) is None,
@@ -168,14 +190,15 @@ def main():
         check(os.path.exists(notes_path), "файл заметок создан: %s" % os.path.relpath(notes_path, repo))
         with open(notes_path, encoding="utf-8") as handle:
             notes = handle.read()
-        check(module.count_bullets(notes) == 6, "в файле заметок 6 буллетов")
+        check(module.count_bullets(notes) == 7, "в файле заметок 7 буллетов")
         with open(changelog_path, encoding="utf-8") as handle:
             changelog = handle.read()
         check("## 1.1.0 — 2026-02-02" in changelog, "секция версии вставлена")
         section = changelog.split("## 1.1.0 — 2026-02-02")[1].split(module.END_MARK)[0]
         check("Подробность с числом: 0." in section and "Подробность с числом: 1." in section,
               "в CHANGELOG тела есть у «Исправлений» и «Добавлено»")
-        for index, group in ((2, "Документация"), (3, "Тесты и гейты"), (4, "Сборка и версии"), (5, "Прочее")):
+        for index, group in ((2, "Удалено и изменено"), (3, "Документация"), (4, "Тесты и гейты"),
+                             (5, "Сборка и версии"), (6, "Прочее")):
             check("Подробность с числом: %d." % index not in section,
                   "в CHANGELOG у группы «%s» только тема и хеш (без тела)" % group)
         check(module.count_bullets(section) == len(commits),

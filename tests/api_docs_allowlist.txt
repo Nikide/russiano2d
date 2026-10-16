@@ -52,10 +52,6 @@ engine.setGravityScale       # internal: биндинг C-уровня (engine.s
 engine.setSnap               # internal: биндинг C-уровня (engine.setSnap), игры его не зовут; справочник — docs/internal/NATIVE.md
 
 # --- долг: task-31 (debug-overlays) ---
-$.combat.*                   # debt: 4 имён, страница docs/highlevel/combat.md без полного перечня; в работе (task-31)
-$.dialog.*                   # debt: 8 имён, страница docs/highlevel/dialog.md без полного перечня; в работе (task-31)
-$.grid.*                     # debt: 5 имён, страница docs/highlevel/grid.md без полного перечня; в работе (task-31)
-$.i18n.*                     # debt: 3 имён, страница docs/highlevel/i18n.md без полного перечня; в работе (task-31)
 $.nav.*                      # debt: 6 имён, страница docs/highlevel/nav.md без полного перечня; в работе (task-31)
 $.quest.*                    # debt: 4 имён, страница docs/highlevel/quest.md без полного перечня; в работе (task-31)
 $.raid.*                     # debt: 11 имён, страница docs/highlevel/raid.md без полного перечня; в работе (task-31)
