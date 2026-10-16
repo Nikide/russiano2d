@@ -2130,13 +2130,46 @@ function flushAllTiles($, cam, worldY) {
 }
 
 /** Принимает состояние, узел, обёртку или селектор — всегда даёт состояние. */
-function resolveTm(tm) {
+/**
+ * Промах цели — ОДИН раз на пару «место + цель» (правило task-46…49): ключ —
+ * СЫРАЯ цель, после успешного разрешения серия начинается заново. Для карт это
+ * особенно важно: `solidAt`/`layer`/`visibleTiles` зовутся в игровом цикле,
+ * и без дедупликации опечатка в селекторе залила бы журнал за секунды.
+ */
+const tm_missed = new Set();
+
+function missTm(where, what, message) {
+    const key = where + ' ' + what;
+    if (tm_missed.has(key)) return;
+    tm_missed.add(key);
+    ctx.log(`$.tilemap.${where}: ${message}`);
+}
+
+function tmResolved(where, what) { tm_missed.delete(where + ' ' + what); }
+
+function resolveTm(tm, where) {
     if (!tm) return null;
     if (tm.layers && tm.node) return tm;
     if (tm instanceof Wrapper) return tm.nodes[0] ? ensureTilemap(tm.nodes[0]) : null;
     if (typeof tm === 'string') {
         const node = query(tm)[0];
-        return node ? ensureTilemap(node) : null;
+        if (!node) {
+            if (where) {
+                missTm(where, tm, `карта "${tm}" не найдена — возвращаю умолчание (false/0/null)`);
+            }
+            return null;
+        }
+        // Найден узел, но это не карта: состояния у него нет, все ответы будут
+        // умолчаниями — про это тоже говорим (раньше это выглядело как «пустая карта»).
+        if (node.tag !== 'tilemap') {
+            if (where) {
+                missTm(where, tm, `узел "${tm}" — не карта (<${node.tag}>), данных нет — `
+                                + 'возвращаю умолчание (false/0/null)');
+            }
+            return ensureTilemap(node);
+        }
+        if (where) tmResolved(where, tm);
+        return ensureTilemap(node);
     }
     if (tm.tag) return ensureTilemap(tm);
     return null;
@@ -3096,7 +3129,7 @@ export function installTilemap($) {
         },
 
         /** Активный слой карты: $.tilemap.layer('#map', 1). */
-        layer(tm, index) {            const st = resolveTm(tm);
+        layer(tm, index) {            const st = resolveTm(tm, 'layer');
             if (!st) return null;
             if (index === undefined) return st.active;
             if (st.layers[index]) st.active = index;
@@ -3113,7 +3146,7 @@ export function installTilemap($) {
 
         /** Полосы непроходимых тайлов слоя — то, что уходит в физику. */
         runsOf(tm, layerIndex) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'runsOf');
             if (!st) return [];
             const layer = activeLayer(st, layerIndex);
             if (!layer) return [];
@@ -3126,7 +3159,7 @@ export function installTilemap($) {
          * показана целиком. Точная геометрия тел — в `$.tilemap.shapesOf()`.
          */
         rectsOf(tm, layerIndex) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'rectsOf');
             if (!st) return [];
             const layer = activeLayer(st, layerIndex);
             if (!layer) return [];
@@ -3145,7 +3178,7 @@ export function installTilemap($) {
          * `full` — покрывает ли форма клетку целиком.
          */
         shapesOf(tm, layerIndex) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'shapesOf');
             if (!st) return [];
             const layer = activeLayer(st, layerIndex);
             if (!layer) return [];
@@ -3160,7 +3193,7 @@ export function installTilemap($) {
 
         /** Результат сборки тел карты (или слоя): см. `.collisionResult()`. */
         resultOf(tm, layerIndex) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'resultOf');
             if (!st) return null;
             if (layerIndex !== undefined) {
                 const layer = activeLayer(st, layerIndex);
@@ -3196,7 +3229,7 @@ export function installTilemap($) {
          * слоем: `solidAt(tm, tx, ty, 1)`.
          */
         solidAt(tm, tx, ty, layerIndex) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'solidAt');
             if (!st) return false;
             if (layerIndex === undefined) return anySolidAt(st, tx, ty);
             const layer = activeLayer(st, layerIndex);
@@ -3208,7 +3241,7 @@ export function installTilemap($) {
          * или null. Клеточная занятость — `solidAt`, она не то же самое.
          */
         shapeAt(tm, tx, ty, layerIndex) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'shapeAt');
             if (!st) return null;
             const layer = activeLayer(st, layerIndex);
             if (!layer) return null;
@@ -3232,7 +3265,7 @@ export function installTilemap($) {
          * `solidAt`: активным мог быть фон). Со слоем — прежний ответ по нему.
          */
         cellQuery(tm, layerIndex) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'cellQuery');
             if (!st) return () => false;
             if (layerIndex === undefined) return (tx, ty) => anySolidAt(st, tx, ty);
             const layer = activeLayer(st, layerIndex);
@@ -3244,7 +3277,7 @@ export function installTilemap($) {
 
         /** Дескриптор тайла id: visual region, форма, маски, occluder, tags. */
         tileDef(tm, id, layerIndex) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'tileDef');
             if (!st) return null;
             const layer = activeLayer(st, layerIndex);
             if (!layer || !layer.defs) return null;
@@ -3259,7 +3292,7 @@ export function installTilemap($) {
          * handle текстуры: сырой ресурсный ID наружу не выходит.
          */
         visualOf(tm, id, layerIndex) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'visualOf');
             if (!st) return null;
             const layer = activeLayer(st, layerIndex);
             if (!layer) return null;
@@ -3270,7 +3303,7 @@ export function installTilemap($) {
 
         /** Таблица visual ID слоя (в порядке id): записи или null. */
         visualTable(tm, layerIndex) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'visualTable');
             if (!st) return [];
             const layer = activeLayer(st, layerIndex);
             if (!layer) return [];
@@ -3299,13 +3332,13 @@ export function installTilemap($) {
          * `.tileOccluders(true)`.
          */
         occludersOf(tm, layerIndex) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'occludersOf');
             return st ? tileLightSegments(st, layerIndex) : [];
         },
 
         /** Габарит агента против реальной геометрии: как `.fitsAt()` узла. */
         fitsAt(tm, x, y, opts) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'fitsAt');
             if (!st) return false;
             return fitsAt(st, num(x, st.node.x), num(y, st.node.y), agentFootprint(st, opts));
         },
@@ -3316,7 +3349,7 @@ export function installTilemap($) {
 
         /** Включить/выключить Y-sort карты из пространства имён. */
         ysort(tm, on) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'ysort');
             if (!st) return null;
             st.ysort = on !== false;
             st.ysortFrame = -1;
@@ -3331,7 +3364,7 @@ export function installTilemap($) {
          * cam можно не передавать — возьмётся текущая камера.
          */
         visibleTiles(tm, cam, opts) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'visibleTiles');
             return st ? collectVisibleTiles(st, resolveCam(cam), opts) : [];
         },
 
@@ -3341,7 +3374,7 @@ export function installTilemap($) {
          * ней; после сущности — над ней.
          */
         flushTilesUpTo(tm, cam, worldY) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'flushTilesUpTo');
             return st ? flushTilesUpTo($, st, resolveCam(cam), worldY) : 0;
         },
 
@@ -3350,7 +3383,7 @@ export function installTilemap($) {
 
         /** Сброс курсора полос — нужен тестам и ручному управлению кадром. */
         ysortReset(tm) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'ysortReset');
             if (!st) return false;
             st.ysortFrame = -1;
             st.ysortTiles = null;
@@ -3366,7 +3399,7 @@ export function installTilemap($) {
          * $.tilemap.terrain(tm, 'grass') — получить его.
          */
         terrain(tm, spec) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'terrain');
             if (!st) return null;
             if (typeof spec === 'string' || spec === undefined) {
                 return spec === undefined ? Object.keys(st.terrains) : (st.terrains[spec] || null);
@@ -3376,7 +3409,7 @@ export function installTilemap($) {
 
         /** Загрузка набора(ов) террейнов из сохранённых данных карты. */
         loadTerrains(tm, data) {
-            const st = resolveTm(tm);
+            const st = resolveTm(tm, 'loadTerrains');
             if (!st) return 0;
             let count = 0;
             for (const name of Object.keys(data || {})) {

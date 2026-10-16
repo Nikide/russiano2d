@@ -219,25 +219,73 @@ export function installUi($) {
         return value;
     }
 
+    /**
+     * Цели по селектору для методов `$.ui.*` — с ОДНИМ сообщением на пару
+     * «место + цель» (правило task-46…49): методы зовутся в UI-цикле, поэтому
+     * дедупликация обязательна, иначе опечатка в имени заливает журнал.
+     *
+     * Возвращает список узлов. Пустой список = промах (сообщение уже сказано).
+     * `many` — как трактовать несколько совпадений:
+     *   'all'   — применяю ко всем (множественный API: `show/hide/bar/label/aria`);
+     *   'first' — беру первый (геттеры `aria`/`ariaOf`: вернуть можно только одно).
+     */
+    const ui_missed = new Set();
+
+    function uiTargets(where, sel, many) {
+        const list = typeof sel === 'string'
+            ? query(sel)
+            : (sel && sel.nodes ? sel.nodes : (sel && sel.tag ? [sel] : []));
+        if (typeof sel !== 'string') return list;
+        const key = where + ' ' + sel;
+        if (!list.length) {
+            if (!ui_missed.has(key)) {
+                ui_missed.add(key);
+                ctx.log(`$.ui.${where}: селектор "${sel}" ни к чему не подошёл — ничего не меняю`);
+            }
+            return list;
+        }
+        ui_missed.delete(key);
+        // Селектор-СПИСОК (`'#a, #b'`) — множественность заявлена автором, это
+        // обычная форма из доки: молчим. Одиночный селектор, подошедший к
+        // нескольким узлам, называем вслух — раньше это было молчаливое
+        // «применил ко всем».
+        const listed = sel.indexOf(',') >= 0;
+        if (list.length > 1 && !listed) {
+            const mkey = key + ' (много)';
+            if (!ui_missed.has(mkey)) {
+                ui_missed.add(mkey);
+                ctx.log(`$.ui.${where}: селектор "${sel}" подошёл к ${list.length} узлам — `
+                      + (many === 'first' ? 'беру первый' : 'применяю ко всем'));
+            }
+        }
+        return list;
+    }
+
     const ui = {
         // --- Узлы <ui.*> -----------------------------------------------------
 
-        /** Показать/скрыть любой узел интерфейса по селектору. */
-        show(sel) { query(sel).forEach((n) => { n.visible = true; }); return ui; },
-        hide(sel) { query(sel).forEach((n) => { n.visible = false; }); return ui; },
+        /** Показать/скрыть узлы интерфейса по селектору (несколько — все). */
+        show(sel) {
+            for (const n of uiTargets('show', sel, 'all')) n.visible = true;
+            return ui;
+        },
+        hide(sel) {
+            for (const n of uiTargets('hide', sel, 'all')) n.visible = false;
+            return ui;
+        },
 
         /** Полоса здоровья/прогресса: $.ui.bar('#hp', 0.5). */
         bar(sel, value, max) {
-            query(sel).forEach((n) => {
+            for (const n of uiTargets('bar', sel, 'all')) {
                 n.value = value;
                 if (max !== undefined) n.max_value = max;
-            });
+            }
             return ui;
         },
 
         /** Текст любого ui-узла. */
         label(sel, text) {
-            query(sel).forEach((n) => { n.text = String(text); });
+            for (const n of uiTargets('label', sel, 'all')) n.text = String(text);
             return ui;
         },
 
@@ -282,7 +330,9 @@ export function installUi($) {
          * ничего не произносит: озвучивает оболочка, читающая снимок.
          */
         aria(sel, props) {
-            const list = typeof sel === 'string' ? query(sel) : sel;
+            // Без props — геттер: вернуть можно только одно значение, поэтому
+            // при нескольких совпадениях берётся первый (и об этом сказано).
+            const list = uiTargets('aria', sel, props ? 'all' : 'first');
             if (!props) return list.length ? (list[0].aria || null) : null;
             for (const node of list) {
                 node.aria = Object.assign({}, node.aria || {}, props);
@@ -299,7 +349,7 @@ export function installUi($) {
 
         /** Семантика узла (или null) — удобно в проверках. */
         ariaOf(sel) {
-            const list = typeof sel === 'string' ? query(sel) : sel;
+            const list = uiTargets('ariaOf', sel, 'first');
             return list.length ? (list[0].aria || null) : null;
         },
 
@@ -451,10 +501,10 @@ export function installUi($) {
          */
         persist(...targets) {
             for (const sel of targets) {
-                query(sel).forEach((n) => {
+                for (const n of uiTargets('persist', sel, 'all')) {
                     if (n.classes && typeof n.classes.add === 'function') n.classes.add('scene-persistent');
                     n.attrs.persistent = true;
-                });
+                }
             }
             return ui;
         },
@@ -462,10 +512,10 @@ export function installUi($) {
         /** Снять постоянство: узел снова принадлежит сцене. */
         transient(...targets) {
             for (const sel of targets) {
-                query(sel).forEach((n) => {
+                for (const n of uiTargets('transient', sel, 'all')) {
                     if (n.classes && typeof n.classes.remove === 'function') n.classes.remove('scene-persistent');
                     n.attrs.persistent = false;
-                });
+                }
             }
             return ui;
         },

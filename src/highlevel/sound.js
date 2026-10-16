@@ -328,7 +328,7 @@ export function installSound($) {
         /** Звук в точке мира: панорама по X относительно камеры, тише по Z. */
         playAt(what, where, opts) {
             const o = Object.assign({ max: 700 }, opts);
-            const pos = toPoint(where);
+            const pos = toPoint(where, 'playAt');
             const cam = listenerPoint();
             const dx = pos.x - cam.x;
             const dy = pos.y - cam.y;
@@ -563,10 +563,33 @@ function listenerPoint() {
     return ctx.camera ? ctx.camera.pos() : { x: 0, y: 0 };
 }
 
-function toPoint(where) {
+/**
+ * Промах цели — ОДИН раз на пару «место + цель» (правило task-46…49): ключ —
+ * СЫРАЯ цель, после успешного разрешения серия начинается заново.
+ */
+const sound_missed = new Set();
+
+function missSound(where, what, message) {
+    const key = where + ' ' + what;
+    if (sound_missed.has(key)) return;
+    sound_missed.add(key);
+    ctx.log(`$.sound.${where}: ${message}`);
+}
+
+function soundResolved(where, what) { sound_missed.delete(where + ' ' + what); }
+
+function toPoint(where, method) {
     if (typeof where === 'string') {
         const node = query(where)[0];
-        return node ? { x: node.x, y: node.y } : { x: 0, y: 0 };
+        if (node) {
+            if (method) soundResolved(method, where);
+            return { x: node.x, y: node.y };
+        }
+        if (method) {
+            missSound(method, where,
+                      `селектор "${where}" ни к чему не подошёл — беру точку (0, 0)`);
+        }
+        return { x: 0, y: 0 };
     }
     if (typeof where === 'object' && where && where.nodes) {
         const node = where.nodes[0];
