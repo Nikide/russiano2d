@@ -4,6 +4,27 @@
 // Всё игровое время идёт отсюда: твины, $.time.wait(), периодические вызовы и
 // обновление камеры тикают в одном месте. Пауза останавливает их все сразу.
 //
+// ЧЕТЫРЕ ШКАЛЫ (§50). У каждой — свой геттер, и путать их нельзя:
+//
+//   * simulation — фиксированный шаг игры: tick(), simTime(), simDt(),
+//     lastSteps(), onTick(). Масштабируется timeScale, стоит на паузе,
+//     в заморозке и при scale(0).
+//   * presentation — реальное время кадра: presentationDelta() (= rawDelta()),
+//     presentationTime(). НЕ масштабируется ничем: идёт при scale(0), на
+//     паузе и в hit-stop. На нём живут интерфейс, VFX, тряска камеры,
+//     анимации камеры и DevTools — кнопки обязаны работать и на паузе
+//     (docs/highlevel/time.md §1.1).
+//   * real — часы движка: realNow() (секунды с запуска, шагами кадра),
+//     perfNow() (монотонные миллисекунды), frame(), fps().
+//   * gameplay — delta()/now(): presentation × scale, остановленное паузой
+//     и заморозкой. Это то, чем меряется игровая логика.
+//
+// Масштаб принимает только конечные неотрицательные числа: отрицательное и
+// NaN — это 0 (полный стоп, как и в C: `src/script.c`, engine.setTimeScale),
+// бесконечность — потолок SCALE_MAX. Не-конечное значение, доехавшее до C,
+// умножило бы время шага физики и утекло бы в позиции тел как NaN — поэтому
+// потолок стоит на стороне JS, до моста.
+//
 // Здесь же живёт «ощущение удара» по времени:
 //   * $.time.freeze(ms) / $.time.hitStop(ms) — заморозка игрового времени:
 //     логика, твины, анимации и таймеры стоят, кадр рисуется;
@@ -48,10 +69,26 @@ import { processingAllows } from './triggers.js';
 const SIM_DT = Math.fround(1 / 60);
 const SIM_MAX_STEPS = 5;
 
+/**
+ * Потолок масштаба времени. Не косметика: не-конечный множитель уходит в C
+ * (`engine.setTimeScale`) и умножает время шага Box2D — тела получают
+ * inf/NaN-скорости, а из них позиции. 100× — уже абсурдная скорость, при
+ * которой мир не «ломается», а просто идёт вразнос по подшагам (SIM_MAX_STEPS).
+ */
+const SCALE_MAX = 100;
+
+/** Масштаб из пользовательского значения: конечное число в [0, SCALE_MAX]. */
+function clampScale(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return n > 0 ? SCALE_MAX : 0;   // +Infinity → потолок; NaN, -Infinity → стоп
+    return Math.max(0, Math.min(SCALE_MAX, n));
+}
+
 const state = {
     scale: 1,
     paused: false,
-    scaled_time: 0,
+    scaled_time: 0,        // gameplay-время: презентационное × масштаб (§50)
+    presentation_time: 0,  // реальное время кадра: сумма engine.dt, не масштабируется
     intervals: [],
     next_id: 1,
     // --- Заморозка (hit-stop / freeze frames) ------------------------------
@@ -256,16 +293,34 @@ function stepSimulation(raw) {
 
 export function installTime($) {
     const time = {
+        // --- gameplay-часы: presentation × scale ---------------------------
         /** Дельта кадра в секундах с учётом $.time.scale, заморозки и паузы. */
         delta() {
             if (state.paused || state.frame_frozen || isFrozen()) return 0;
             return engine.dt * state.scale * combineSlow(state.slow, 1);
         },
-        /** Дельта без масштабирования — для интерфейса и эффектов. */
-        rawDelta() { return engine.dt; },
-        /** Игровое время в секундах (сумма дельт). */
+        /** Игровое время в секундах (сумма дельт): стоит на паузе и scale(0). */
         now() { return state.scaled_time; },
-        /** Время с запуска движка. */
+
+        // --- presentation-часы: реальное время кадра -----------------------
+        /**
+         * Дельта реального времени кадра в секундах: не масштабируется
+         * `scale()`, не обнуляется паузой и заморозкой. Это часы интерфейса,
+         * VFX, тряски камеры и DevTools — они обязаны идти при `scale(0)`.
+         */
+        presentationDelta() { return engine.dt; },
+
+        /** Дельта без масштабирования — прежнее имя `presentationDelta()`. */
+        rawDelta() { return engine.dt; },
+
+        /**
+         * Реальное время кадра в секундах: сумма `engine.dt` с запуска.
+         * Продолжает расти при `scale(0)`, паузе и hit-stop.
+         */
+        presentationTime() { return state.presentation_time; },
+
+        // --- часы движка: real time ----------------------------------------
+        /** Время с запуска движка (секунды, шагами кадра). */
         realNow() { return engine.time; },
         /** Монотонные миллисекунды для замеров внутри кадра (realNow идёт шагами кадра). */
         perfNow() { return typeof engine.now === 'function' ? engine.now() : engine.time * 1000; },
@@ -277,10 +332,15 @@ export function installTime($) {
          * замедляет и логику кадра, и мир Box2D, `scale(0)` останавливает оба.
          * `pause()`/`freeze()` не затирают это значение — они лишь обнуляют
          * итоговый множитель на своё время.
+         *
+         * Принимает только конечные неотрицательные числа: отрицательное и
+         * NaN читаются как 0 (полный стоп), `Infinity` — как потолок
+         * `SCALE_MAX` (100). Так не-конечный множитель не доезжает до C и не
+         * превращает позиции тел в NaN.
          */
         scale(value) {
             if (value === undefined) return state.scale;
-            state.scale = Math.max(0, Number(value) || 0);
+            state.scale = clampScale(value);
             pushPhysicsScale();
             return time;
         },
@@ -634,6 +694,9 @@ function stepSlow(raw) {
  */
 export function tickTime() {
     const raw = engine.dt;
+    // §50: presentation-часы идут всегда — ни масштаб, ни пауза, ни заморозка
+    // их не трогают. Именно на них живут интерфейс, VFX, тряска и DevTools.
+    state.presentation_time += raw;
     // Заморожен ли ТЕКУЩИЙ кадр — решаем до списания счётчика, а запоминаем
     // до конца кадра: $.time.delta() зовут и подсистемы после этого тика, и
     // ответ у них обязан совпадать с dt, на котором шёл кадр.

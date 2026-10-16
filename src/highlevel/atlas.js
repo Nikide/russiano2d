@@ -52,23 +52,36 @@ export function normalizeFrame(name, raw) {
  * Формат определяется по содержимому: массив/объект `frames` и наличие тегов.
  */
 export function parseAtlas(data) {
-    const out = { frames: [], tags: {}, meta: {}, format: 'unknown' };
+    const out = { frames: [], tags: {}, meta: {}, format: 'unknown',
+                  // Диагностика данных: что молча пропало и что объявлено дважды.
+                  invalid_frames: [], duplicate_frames: [], duplicate_tags: [] };
     if (!data || typeof data !== 'object') return out;
+
+    const seen = new Set();
+    const pushFrame = (frame, fallback_name) => {
+        if (!frame) {
+            out.invalid_frames.push(String(fallback_name));
+            return;
+        }
+        if (seen.has(frame.name)) out.duplicate_frames.push(frame.name);
+        seen.add(frame.name);
+        out.frames.push(frame);
+    };
 
     const raw_frames = data.frames;
     if (Array.isArray(raw_frames)) {
         // TexturePacker / LibGDX: массив с filename.
         out.format = 'array';
-        for (const entry of raw_frames) {
-            const frame = normalizeFrame(entry && entry.filename, entry);
-            if (frame) out.frames.push(frame);
+        for (let i = 0; i < raw_frames.length; i++) {
+            const entry = raw_frames[i];
+            const name = entry && entry.filename !== undefined ? entry.filename : ('#' + i);
+            pushFrame(normalizeFrame(name, entry), name);
         }
     } else if (raw_frames && typeof raw_frames === 'object') {
         // Aseprite (объект) или простой свой формат.
         out.format = data.meta ? 'aseprite' : 'map';
         for (const name of Object.keys(raw_frames)) {
-            const frame = normalizeFrame(name, raw_frames[name]);
-            if (frame) out.frames.push(frame);
+            pushFrame(normalizeFrame(name, raw_frames[name]), name);
         }
     }
 
@@ -88,6 +101,9 @@ export function parseAtlas(data) {
             // имена: собираем по индексам уже разобранных кадров.
             for (let i = lo; i <= hi && i < out.frames.length; ++i) list.push(out.frames[i].name);
             if (tag.direction === 'reverse') list.reverse();
+            // Одно имя дважды: побеждает последнее объявление — но это факт,
+            // о котором обязан узнать вызывающий (§45: duplicate tag).
+            if (out.tags[name] !== undefined) out.duplicate_tags.push(name);
             out.tags[name] = list;
         }
     }
@@ -217,7 +233,8 @@ export function parseAtlas(data) {
 const atlas_errors = [];
 let atlas_dollar = null;      // ставится installAtlas: нужен $.debug.reportError
 
-function atlasFail(where, code, message, extra) {
+/** Запись диагностики атласа: кольцо ошибок + $.debug.reportError. */
+function atlasReport(where, code, message, extra) {
     const entry = Object.assign({ code, message, where }, extra || {});
     atlas_errors.push(entry);
     if (atlas_errors.length > 64) atlas_errors.shift();
@@ -231,6 +248,11 @@ function atlasFail(where, code, message, extra) {
     } else {
         ctx.log('$.atlas (' + code + '): ' + message);
     }
+    return null;
+}
+
+function atlasFail(where, code, message, extra) {
+    atlasReport(where, code, message, extra);
     return null;
 }
 
@@ -249,6 +271,24 @@ export function verifyAtlas(data, opts) {
 
     if (!frames.length) {
         errors.push({ code: 'atlas_no_frames', message: 'в данных атласа нет кадров' });
+    }
+    // Кадр без прямоугольника раньше просто исчезал: в листе его нет, а игра
+    // узнавала об этом только по «нет кадра». Теперь это названо.
+    for (const name of parsed.invalid_frames || []) {
+        errors.push({ code: 'atlas_frame_invalid',
+                      message: 'кадр "' + name + '" пропущен: нет прямоугольника x/y/w/h',
+                      frame: name });
+    }
+    // Одно имя дважды — спрайты перекрыли бы друг друга (виден только последний).
+    for (const name of parsed.duplicate_frames || []) {
+        errors.push({ code: 'atlas_duplicate_frame',
+                      message: 'кадр "' + name + '" объявлен дважды — остался бы только последний',
+                      frame: name });
+    }
+    // Тег-дубликат: берётся последнее объявление, но это предупреждение, а не тишина.
+    for (const name of parsed.duplicate_tags || []) {
+        warnings.push({ code: 'atlas_duplicate_tag',
+                        message: 'тег "' + name + '" объявлен дважды — взят последний' });
     }
     for (const name of parsed.rotated) {
         errors.push({ code: 'atlas_rotated_frame',
@@ -413,6 +453,24 @@ function buildSheet(name, spec, data, json_path) {
         ctx.log(where + ': повёрнутые кадры взяты как есть (allowRotated) — '
               + parsed.rotated.join(', '));
     }
+    // Два кадра с одним именем: второй спрайт перекрыл бы первый в таблице, и
+    // «лишний» остался бы жить в движке без ссылки. Такой атлас отклоняем.
+    if (parsed.duplicate_frames && parsed.duplicate_frames.length) {
+        return atlasFail(where, 'atlas_duplicate_frame',
+                         'кадры объявлены дважды: ' + parsed.duplicate_frames.join(', ')
+                         + ' — имена кадров должны быть уникальны',
+                         { jsonPath: json_path || null,
+                           data: { frames: parsed.duplicate_frames.slice() } });
+    }
+    // Кадр без прямоугольника не роняет атлас, но и не исчезает молча: чиним
+    // диагностику, а рабочие кадры остаются.
+    if (parsed.invalid_frames && parsed.invalid_frames.length) {
+        atlasReport(where, 'atlas_frame_invalid',
+                    'кадры пропущены (нет прямоугольника x/y/w/h): '
+                    + parsed.invalid_frames.join(', '),
+                    { jsonPath: json_path || null,
+                      data: { frames: parsed.invalid_frames.slice() } });
+    }
 
     // Страницы: у каждой свой файл. Пустая/отсутствующая страница — ошибка с
     // кодом, а не пустой спрайт.
@@ -509,6 +567,12 @@ function buildSheet(name, spec, data, json_path) {
         /** Имена кадров по порядку атласа. */
         frames() { return parsed.frames.map((f) => f.name); },
 
+        /**
+         * Кадры, пропущенные из-за отсутствия прямоугольника: атлас собран из
+         * рабочих, но о потере сказано и здесь, и в $.atlas.errors().
+         */
+        invalidFrames() { return (parsed.invalid_frames || []).slice(); },
+
         /** Кадр целиком: { name, x, y, w, h, duration }. */
         info(frame_name) {
             return parsed.frames.find((f) => f.name === String(frame_name)) || null;
@@ -582,9 +646,30 @@ function buildSheet(name, spec, data, json_path) {
     return sheet;
 }
 
+/**
+ * Подпись сборки атласа: всё, что влияет на созданные движком ресурсы
+ * (страницы, прямоугольники кадров, мипмапы, разрешение поворотов). По ней
+ * `$.atlas.load` узнаёт, что данные не изменились и спрайты можно
+ * переиспользовать, а не создавать заново.
+ */
+function sheetSignature(spec, data, json_path) {
+    const parsed = parseAtlas(data);
+    return JSON.stringify({
+        src: spec.src || spec.image || null,
+        json: json_path || null,
+        mipmaps: spec.mipmaps === true,
+        allowRotated: spec.allowRotated === true,
+        pages: (parsed.meta.pages || []).map((p) => p.image || null),
+        frames: parsed.frames.map((f) => [f.name, f.x, f.y, f.w, f.h, f.page]),
+    });
+}
+
 export function installAtlas($) {
     atlas_dollar = $;
     const loaded = new Map();
+    // Сборки по имени: переживают `unload`, поэтому повторная загрузка тех же
+    // данных не создаёт новых спрайтов (они в движке не освобождаются).
+    const builds = new Map();
 
     const atlas = {
         /**
@@ -592,6 +677,10 @@ export function installAtlas($) {
          * картинке берётся из данных (`meta.image`), его можно перебить
          * `spec.src`. Без второго аргумента используется уже прочитанный
          * `spec.data` — удобно, когда JSON пришёл по сети.
+         *
+         * Повторный вызов с тем же именем возвращает уже собранный лист, а
+         * после `unload` те же данные переиспользуют прежнюю сборку: спрайты в
+         * движке не освобождаются, и цикл `unload` → `load` не растит их число.
          */
         load(name, path, spec) {
             const key = String(name);
@@ -621,8 +710,22 @@ export function installAtlas($) {
                 }
             }
 
+            // Те же данные — та же сборка: спрайты уже созданы, повторно их
+            // создавать нельзя (в движке нет freeSprite, счётчик только растёт).
+            const cached = builds.get(key);
+            if (cached && cached.data === data) {
+                loaded.set(key, cached.sheet);
+                return cached.sheet;
+            }
+            const signature = sheetSignature(opts, data, json_path);
+            if (cached && cached.signature === signature) {
+                loaded.set(key, cached.sheet);
+                return cached.sheet;
+            }
+
             const sheet = buildSheet(key, opts, data, json_path);
             if (!sheet) return null;
+            builds.set(key, { signature, data, sheet });
             loaded.set(key, sheet);
             return sheet;
         },
@@ -633,8 +736,20 @@ export function installAtlas($) {
         /** Имена загруженных атласов. */
         names() { return [...loaded.keys()]; },
 
-        /** Забыть атлас (спрайты остаются у движка — их выгружает freeTexture). */
-        unload(name) { return loaded.delete(String(name)); },
+        /**
+         * Забыть атлас (спрайты остаются у движка — их выгружает freeTexture).
+         *
+         * Сборка по умолчанию сохраняется: повторная загрузка тех же данных
+         * вернёт её без новых спрайтов. `{ drop: true }` выбрасывает и её.
+         */
+        unload(name, opts) {
+            const key = String(name);
+            if (opts && opts.drop === true) builds.delete(key);
+            return loaded.delete(key);
+        },
+
+        /** Имена сборок, готовых к переиспользованию после unload. */
+        builds() { return [...builds.keys()]; },
 
         /** Разобрать данные без загрузки — для отладки и тестов. */
         parse(data) { return parseAtlas(data); },

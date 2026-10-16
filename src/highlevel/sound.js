@@ -272,12 +272,22 @@ export function installSound($) {
      * Взять канал под владение текущей области сцены: при её закрытии звук
      * глушится. Так выгрузка комнаты убирает и её звук, а не только узлы
      * (§8.2). Игра может оставить звук жить дольше области — `{ keep: true }`.
+     *
+     * Какую область считать текущей:
+     *   * внутри `$.scene.scope('room', () => …)`, сборки prefab и комнаты
+     *     (`$.room.enter`) движок ведёт `ctx.scope_current` — берём ЕГО, иначе
+     *     звук комнаты уходил бы в чужую (анонимную) область и переживал
+     *     выгрузку комнаты;
+     *   * вне области — прежний анонимный владелец `$.scene.scope()`: так
+     *     ведёт себя игра, играющая звук на верхнем уровне, и так её звук
+     *     снимается вместе с областью загрузчика (`$.scene.load(..., {scope:true})`).
      */
     function ownChannel(channel, opts) {
         if (!(channel >= 0) || (opts && opts.keep === true)) return channel;
         const scene = ctx.scene;
         if (!scene || typeof scene.scope !== 'function') return channel;
-        const scope = scene.scope();
+        const current = ctx.scope_current;
+        const scope = (current && typeof current.sound === 'function') ? current : scene.scope();
         if (scope && typeof scope.sound === 'function') scope.sound(channel, opts && opts.fade);
         return channel;
     }

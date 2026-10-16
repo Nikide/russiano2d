@@ -59,6 +59,35 @@ const PITCH_LIMIT = 85 * Math.PI / 180;   // строго меньше 90°: и�
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
 
+// ---------------------------------------------------------------------------
+// Защита от мусора на входе (§49)
+//
+// Камера — общий множитель для ВСЕЙ отрисовки: одна NaN в cam.x превращает в
+// NaN мировые координаты экрана, отсечение, пикинг и позиции спрайтов, а в JSON
+// это выглядит как null. Раньше так и было: zoom(NaN), at(NaN, NaN),
+// shake(NaN), limits(NaN, …) и follow({ offset: [NaN, 0] }) утекали в кадр.
+// Теперь у каждого входа определённый ответ:
+//   * координата/размер/зум — только конечное число; иначе значение не меняется;
+//   * амплитуда тряски — конечное число > 0; иначе это «стоп»;
+//   * доля сглаживания — [0, 1]; NaN — мгновенное слежение (0), ±∞ — край.
+// ---------------------------------------------------------------------------
+
+/** Конечное число или `fallback` (NaN, ±Infinity, не-число). */
+function finiteNum(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+/** Доля сглаживания `smooth`: [0, 1]; NaN — 0 (мгновенно), ±∞ — край диапазона. */
+function clampSmooth(value, fallback) {
+    const n = Number(value);
+    if (Number.isNaN(n)) return 0;
+    if (n === Infinity) return 1;
+    if (n === -Infinity) return 0;
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0, Math.min(1, n));
+}
+
 /** Угол в диапазон (-π, π]: yaw не должен расти бесконечно при вращении мышью. */
 function wrapAngle(a) {
     if (a > Math.PI || a <= -Math.PI) {
@@ -167,9 +196,13 @@ function stepLookahead(node, dt) {
 /** Мёртвая зона: число (квадрат) или [w, h]. false/null — выключить. */
 function parseDeadzone(value) {
     if (value === false || value === null) return null;
-    if (Array.isArray(value)) return { w: Math.max(0, Number(value[0]) || 0), h: Math.max(0, Number(value[1]) || 0) };
-    if (typeof value === 'object') return { w: Math.max(0, Number(value.w) || 0), h: Math.max(0, Number(value.h) || 0) };
-    const n = Math.max(0, Number(value) || 0);
+    if (Array.isArray(value)) {
+        return { w: Math.max(0, finiteNum(value[0], 0)), h: Math.max(0, finiteNum(value[1], 0)) };
+    }
+    if (typeof value === 'object') {
+        return { w: Math.max(0, finiteNum(value.w, 0)), h: Math.max(0, finiteNum(value.h, 0)) };
+    }
+    const n = Math.max(0, finiteNum(value, 0));
     return { w: n, h: n };
 }
 
@@ -177,10 +210,10 @@ function parseDeadzone(value) {
 function parseLookahead(value) {
     if (value === false || value === null) return { x: 0, y: 0 };
     if (typeof value === 'object') {
-        const x = Math.max(0, Number(value.x) || 0);
-        return { x, y: Math.max(0, value.y === undefined ? x : (Number(value.y) || 0)) };
+        const x = Math.max(0, finiteNum(value.x, 0));
+        return { x, y: Math.max(0, value.y === undefined ? x : finiteNum(value.y, 0)) };
     }
-    const n = Math.max(0, Number(value) || 0);
+    const n = Math.max(0, finiteNum(value, 0));
     return { x: n, y: n };
 }
 
@@ -285,12 +318,13 @@ export function installCamera($, viewports) {
         if (o.bounds === null) return null;
         if (o.bounds !== undefined) {
             return {
-                x: Number(o.bounds.x) || 0, y: Number(o.bounds.y) || 0,
-                w: Number(o.bounds.w) || 0, h: Number(o.bounds.h) || 0,
+                x: finiteNum(o.bounds.x, 0), y: finiteNum(o.bounds.y, 0),
+                w: finiteNum(o.bounds.w, 0), h: finiteNum(o.bounds.h, 0),
             };
         }
         if (o.w !== undefined) {
-            return { x: Number(o.x) || 0, y: Number(o.y) || 0, w: Number(o.w) || 0, h: Number(o.h) || 0 };
+            return { x: finiteNum(o.x, 0), y: finiteNum(o.y, 0),
+                     w: finiteNum(o.w, 0), h: finiteNum(o.h, 0) };
         }
         return undefined;
     }
@@ -313,11 +347,14 @@ export function installCamera($, viewports) {
         const z = entry.data || {};
         if (z.bounds !== undefined) {
             cam.limits = z.bounds === null ? null : {
-                x: z.bounds.x, y: z.bounds.y, w: z.bounds.w, h: z.bounds.h,
+                x: finiteNum(z.bounds.x, 0), y: finiteNum(z.bounds.y, 0),
+                w: finiteNum(z.bounds.w, 0), h: finiteNum(z.bounds.h, 0),
             };
         }
-        if (z.zoom !== undefined) cam.zoom = z.zoom;
-        if (z.offset !== undefined) cam.offset = { x: z.offset[0] || 0, y: z.offset[1] || 0 };
+        if (z.zoom !== undefined) cam.zoom = Math.max(0.01, finiteNum(z.zoom, cam.zoom));
+        if (z.offset !== undefined) {
+            cam.offset = { x: finiteNum(z.offset[0], 0), y: finiteNum(z.offset[1], 0) };
+        }
         if (z.follow !== undefined) {
             if (z.follow === null) { cam.target = null; }
             else {
@@ -325,10 +362,15 @@ export function installCamera($, viewports) {
                 cam.target = wanted ? (wanted.nodes ? wanted.nodes[0] : wanted) : null;
             }
         }
-        if (z.smooth !== undefined) cam.smooth = z.smooth;
+        if (z.smooth !== undefined) cam.smooth = clampSmooth(z.smooth, cam.smooth);
         if (z.deadzone !== undefined) cam.deadzone = parseDeadzone(z.deadzone);
-        if (z.lookahead !== undefined) cam.lookahead = z.lookahead;
-        if (z.at !== undefined) { cam.x = z.at[0]; cam.y = z.at[1]; }
+        // Раньше lookahead зоны писался прямо в cam.lookahead: ось Y не
+        // заполнялась, а мусор уходил в кадр. Теперь это общий разбор.
+        if (z.lookahead !== undefined) applyLookahead(z.lookahead);
+        if (z.at !== undefined) {
+            cam.x = finiteNum(z.at[0], cam.x);
+            cam.y = finiteNum(z.at[1], cam.y);
+        }
         clampToLimits();
     }
 
@@ -495,8 +537,13 @@ export function installCamera($, viewports) {
     const camera = {
         at(x, y) {
             if (x === undefined) return { x: cam.x, y: cam.y };
-            if (typeof x === 'object') { cam.x = x.x; cam.y = x.y; }
-            else { cam.x = x; cam.y = y; }
+            if (typeof x === 'object') {
+                cam.x = finiteNum(x.x, cam.x);
+                cam.y = finiteNum(x.y, cam.y);
+            } else {
+                cam.x = finiteNum(x, cam.x);
+                cam.y = finiteNum(y, cam.y);
+            }
             clampToLimits();
             return camera;
         },
@@ -517,9 +564,6 @@ export function installCamera($, viewports) {
         pip(rect, opts) { return viewports.pip(rect, opts); },
         pipClear() { return viewports.pipClear(); },
         pipInfo() { return viewports.pipInfo(); },
-        minimap(rect, opts) { return viewports.minimap(rect, opts); },
-
-        // Картинка в картинке и миникарта (viewports.md §3.1).
         minimap(rect, opts) { return viewports.minimap(rect, opts); },
 
         pos() { return { x: cam.x, y: cam.y }; },
@@ -549,14 +593,20 @@ export function installCamera($, viewports) {
             const known = typeof selector === 'string' || typeof selector === 'number' ||
                 (selector && (selector.tag || selector.nodes));
             cam.target = known ? selector : null;
-            cam.offset = { x: o.offset ? o.offset[0] : (o.x || 0), y: o.offset ? o.offset[1] : (o.y || 0) };
-            cam.smooth = o.smooth === undefined ? 0.12 : o.smooth;
+            cam.offset = {
+                x: o.offset ? finiteNum(o.offset[0], 0) : finiteNum(o.x, 0),
+                y: o.offset ? finiteNum(o.offset[1], 0) : finiteNum(o.y, 0),
+            };
+            // smooth — доля в [0, 1]: больше единицы означало «остаётся больше
+            // расстояния, чем есть», и камера расходилась (проверено тестом:
+            // smooth=2 уводил её на десятки тысяч пикселей).
+            cam.smooth = clampSmooth(o.smooth === undefined ? 0.12 : o.smooth, 0.12);
             // Раньше deadzone в follow() молча игнорировался: в доке пример был,
             // а камера его не читала. Теперь это обычная настройка слежения.
             if (o.deadzone !== undefined) cam.deadzone = parseDeadzone(o.deadzone);
             if (o.lookahead !== undefined) applyLookahead(o.lookahead, o.lookaheadSmooth);
-            else if (o.lookaheadSmooth !== undefined) cam.lookahead_smooth = Number(o.lookaheadSmooth) || 0;
-            if (o.zoom !== undefined) cam.zoom = o.zoom;
+            else if (o.lookaheadSmooth !== undefined) cam.lookahead_smooth = clampSmooth(o.lookaheadSmooth, cam.lookahead_smooth);
+            if (o.zoom !== undefined) camera.zoom(o.zoom);
             cam.prev_target = null;          // смена цели — вынос считаем заново
             return camera;
         },
@@ -606,31 +656,31 @@ export function installCamera($, viewports) {
         /** Вернуть камеру в снятое состояние (`snapshot()`). */
         restore(state) {
             if (!state) return camera;
-            cam.x = state.x; cam.y = state.y;
-            cam.zoom = Math.max(0.01, state.zoom);
-            cam.rotation = Number(state.rotation) || 0;
+            cam.x = finiteNum(state.x, cam.x); cam.y = finiteNum(state.y, cam.y);
+            cam.zoom = Math.max(0.01, finiteNum(state.zoom, 1));
+            cam.rotation = finiteNum(state.rotation, 0);
             // Поля вида: снимок из старой версии их не содержит — берём умолчания.
             cam.kind = state.kind && typeof state.kind === 'string' ? state.kind : KIND_2D;
-            cam.yaw = Number(state.yaw) || 0;
-            cam.pitch = Number(state.pitch) || 0;
-            cam.eye = state.eye === undefined ? 48 : Number(state.eye);
-            cam.fov = state.fov === undefined ? 70 * DEG : Number(state.fov);
-            cam.fog_far = Number(state.fogFar) || 0;
-            cam.fog_min = state.fogMin === undefined ? 0.25 : Number(state.fogMin);
+            cam.yaw = finiteNum(state.yaw, 0);
+            cam.pitch = finiteNum(state.pitch, 0);
+            cam.eye = state.eye === undefined ? 48 : finiteNum(state.eye, 48);
+            cam.fov = state.fov === undefined ? 70 * DEG : finiteNum(state.fov, 70 * DEG);
+            cam.fog_far = finiteNum(state.fogFar, 0);
+            cam.fog_min = state.fogMin === undefined ? 0.25 : finiteNum(state.fogMin, 0.25);
             cam.target = state.target || null;
-            cam.offset.x = state.offset ? state.offset.x : 0;
-            cam.offset.y = state.offset ? state.offset.y : 0;
-            cam.smooth = state.smooth || 0;
+            cam.offset.x = state.offset ? finiteNum(state.offset.x, 0) : 0;
+            cam.offset.y = state.offset ? finiteNum(state.offset.y, 0) : 0;
+            cam.smooth = clampSmooth(state.smooth === undefined ? 0 : state.smooth, 0);
             cam.limits = state.limits ? Object.assign({}, state.limits) : null;
             cam.deadzone = state.deadzone ? Object.assign({}, state.deadzone) : null;
             // Снимок из старой версии выноса не содержит — это не ошибка:
             // камера возвращается без lookahead, как и была до его включения.
             const lead = state.lookahead;
             if (lead) {
-                cam.lookahead = Math.max(0, Number(lead.x) || 0);
-                cam.lookahead_y = Math.max(0, Number(lead.y) || 0);
-                cam.lookahead_smooth = lead.smooth === undefined ? cam.lookahead_smooth
-                                                                 : Math.max(0, Math.min(1, Number(lead.smooth) || 0));
+                cam.lookahead = Math.max(0, finiteNum(lead.x, 0));
+                cam.lookahead_y = Math.max(0, finiteNum(lead.y, 0));
+                cam.lookahead_smooth = lead.smooth === undefined
+                    ? cam.lookahead_smooth : clampSmooth(lead.smooth, cam.lookahead_smooth);
             }
             cam.prev_target = null;
             resetLead();
@@ -650,11 +700,11 @@ export function installCamera($, viewports) {
             // В Re2D «поворот кадра» — это куда смотрим (yaw); у 2D-кадра свой крен.
             if (cam.kind === KIND_RE2D) {
                 if (value === undefined) return cam.yaw;
-                cam.yaw = wrapAngle(Number(value) || 0);
+                cam.yaw = wrapAngle(finiteNum(value, 0));
                 return camera;
             }
             if (value === undefined) return cam.rotation;
-            cam.rotation = Number(value) || 0;
+            cam.rotation = finiteNum(value, 0);
             return camera;
         },
 
@@ -694,36 +744,36 @@ export function installCamera($, viewports) {
         /** Куда смотрим, градусы (в Re2D это же поле читает rotation() в радианах). */
         yaw(value) {
             if (value === undefined) return cam.yaw / DEG;
-            cam.yaw = wrapAngle((Number(value) || 0) * DEG);
+            cam.yaw = wrapAngle(finiteNum(value, 0) * DEG);
             return camera;
         },
 
         /** Наклон вверх-вниз, градусы; зажат в ±85°. */
         pitch(value) {
             if (value === undefined) return cam.pitch / DEG;
-            cam.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, (Number(value) || 0) * DEG));
+            cam.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, finiteNum(value, 0) * DEG));
             return camera;
         },
 
         /** Высота глаз над полом (пиксели мира). */
         eye(value) {
             if (value === undefined) return cam.eye;
-            cam.eye = Number(value) || 0;
+            cam.eye = finiteNum(value, 0);
             return camera;
         },
 
         /** Вертикальный угол обзора, градусы (до зума). */
         fov(value) {
             if (value === undefined) return cam.fov / DEG;
-            cam.fov = Math.max(5, Math.min(170, Number(value) || 70)) * DEG;
+            cam.fov = Math.max(5, Math.min(170, finiteNum(value, 70))) * DEG;
             return camera;
         },
 
         /** Затемнение с расстоянием: `fog(far, min)`; `fog(0)` выключает. */
         fog(far, min) {
             if (far === undefined) return { far: cam.fog_far, min: cam.fog_min };
-            cam.fog_far = Math.max(0, Number(far) || 0);
-            if (min !== undefined) cam.fog_min = Math.max(0, Math.min(1, Number(min) || 0));
+            cam.fog_far = Math.max(0, finiteNum(far, 0));
+            if (min !== undefined) cam.fog_min = Math.max(0, Math.min(1, finiteNum(min, 0)));
             return camera;
         },
 
@@ -733,8 +783,8 @@ export function installCamera($, viewports) {
          * геймпада или теста.
          */
         look(dx, dy) {
-            cam.yaw = wrapAngle(cam.yaw + (Number(dx) || 0) * cam.look_sens);
-            cam.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, cam.pitch - (Number(dy) || 0) * cam.look_sens));
+            cam.yaw = wrapAngle(cam.yaw + finiteNum(dx, 0) * cam.look_sens);
+            cam.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, cam.pitch - finiteNum(dy, 0) * cam.look_sens));
             return camera;
         },
 
@@ -772,19 +822,24 @@ export function installCamera($, viewports) {
 
         zoom(value) {
             if (value === undefined) return cam.zoom;
-            cam.zoom = Math.max(0.01, value);
+            // Только конечное число: zoom(NaN) раньше уносил в NaN половину
+            // кадра, отсечение и worldToScreen. Мусор — «зум не меняется».
+            const z = finiteNum(value, cam.zoom);
+            cam.zoom = Math.max(0.01, z);
             clampToLimits();
             return camera;
         },
 
         zoomTo(value, ms) {
             const from = cam.zoom;
-            return animate(ms, (p) => { cam.zoom = from + (value - from) * p; });
+            const to = finiteNum(value, from);
+            return animate(ms, (p) => { cam.zoom = Math.max(0.01, from + (to - from) * p); });
         },
 
         panTo(x, y, ms) {
             const fx = cam.x, fy = cam.y;
-            return animate(ms, (p) => { cam.x = fx + (x - fx) * p; cam.y = fy + (y - fy) * p; clampToLimits(); });
+            const tx = finiteNum(x, fx), ty = finiteNum(y, fy);
+            return animate(ms, (p) => { cam.x = fx + (tx - fx) * p; cam.y = fy + (ty - fy) * p; clampToLimits(); });
         },
 
         // --- §19: зоны камеры и аренда управления ----------------------------
@@ -871,14 +926,19 @@ export function installCamera($, viewports) {
          *  полноценную тряску 4 px / 250 мс, и остановить её публично было
          *  нечем). */
         shake(intensity, ms) {
-            const amp = intensity === undefined ? 4 : Math.max(0, intensity);
-            if (amp === 0) {
+            // Амплитуда — конечное число > 0. NaN/Infinity/отрицательное — это
+            // «стоп», а не NaN в shake_x: раньше shake(NaN) делал cam.shake_amp
+            // NaN, и сдвиг кадра (а с ним worldToScreen) становился NaN.
+            const amp = intensity === undefined ? 4 : finiteNum(intensity, 0);
+            if (!(amp > 0)) {
                 cam.shake_amp = 0;
                 cam.shake_total = cam.shake_t = 0;
+                cam.shake_x = cam.shake_y = 0;
                 return camera;
             }
+            const dur = ms === undefined ? 250 : finiteNum(ms, 250);
             cam.shake_amp = Math.max(cam.shake_amp, amp);
-            cam.shake_total = cam.shake_t = (ms === undefined ? 250 : Math.max(0, ms)) / 1000;
+            cam.shake_total = cam.shake_t = Math.max(0, dur) / 1000;
             return camera;
         },
 
@@ -888,7 +948,10 @@ export function installCamera($, viewports) {
          */
         limits(x, y, w, h) {
             if (x === undefined) return cam.limits ? { x: cam.limits.x, y: cam.limits.y, w: cam.limits.w, h: cam.limits.h } : null;
-            cam.limits = (x === null) ? null : { x, y, w, h };
+            // Не-конечные числа читаются как 0: иначе clampToLimits() разносил
+            // NaN по обеим координатам камеры.
+            cam.limits = (x === null) ? null
+                : { x: finiteNum(x, 0), y: finiteNum(y, 0), w: finiteNum(w, 0), h: finiteNum(h, 0) };
             clampToLimits();
             return camera;
         },
@@ -901,8 +964,8 @@ export function installCamera($, viewports) {
         deadzone(w, h) {
             if (w === undefined) return cam.deadzone ? { w: cam.deadzone.w, h: cam.deadzone.h } : null;
             if (w === null || w === false) { cam.deadzone = null; return camera; }
-            const n = Number(w) || 0;
-            cam.deadzone = { w: n, h: h === undefined ? n : (Number(h) || 0) };
+            const n = Math.max(0, finiteNum(w, 0));
+            cam.deadzone = { w: n, h: h === undefined ? n : Math.max(0, finiteNum(h, 0)) };
             return camera;
         },
 

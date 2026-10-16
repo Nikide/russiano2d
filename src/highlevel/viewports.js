@@ -67,6 +67,27 @@ export function splitLayout(count, width, height) {
 }
 
 /**
+ * Регион камеры, приведённый к четырём конечным числам.
+ *
+ * Явный прямоугольник — как задан (без него значения берутся из размера кадра).
+ * Регион `null`/`undefined` — ВЕСЬ кадр: `$.camera.add('p2')` без региона обязан
+ * работать, а не ронять кадр. Раньше `regionCamera` читала `r.w` у `null` и
+ * падала с «cannot read property 'w' of null» на каждой отрисовке; NaN в
+ * регионе так же уносил камеру в NaN.
+ */
+export function regionOf(rect, width, height) {
+    const W = Math.max(1, num(width, 1));
+    const H = Math.max(1, num(height, 1));
+    if (!rect || typeof rect !== 'object') return { x: 0, y: 0, w: W, h: H };
+    return {
+        x: num(rect.x, 0),
+        y: num(rect.y, 0),
+        w: Math.max(1, num(rect.w, W)),
+        h: Math.max(1, num(rect.h, H)),
+    };
+}
+
+/**
  * Камера, чей кадр ровно накрывает регион `r`.
  *
  * Вывод: точка мира `c` (центр камеры) должна попасть в центр региона, а
@@ -77,9 +98,10 @@ export function splitLayout(count, width, height) {
 export function regionCamera(cam, r, width, height) {
     const W = Math.max(1, num(width, 1));
     const H = Math.max(1, num(height, 1));
-    const zoom = W / Math.max(1, num(r.w, W));
-    const cx = r.x + r.w / 2;             // куда регион должен попасть на экране
-    const cy = r.y + r.h / 2;
+    const reg = regionOf(r, W, H);
+    const zoom = W / reg.w;
+    const cx = reg.x + reg.w / 2;         // куда регион должен попасть на экране
+    const cy = reg.y + reg.h / 2;
     // Сдвиг считаем от центра КАДРА к центру РЕГИОНА и ВЫЧИТАЕМ его из позиции:
     // камера ставит свою точку в центр кадра, значит, чтобы точка осталась
     // на месте, саму камеру надо отодвинуть в противоположную сторону.
@@ -101,7 +123,7 @@ export function regionCamera(cam, r, width, height) {
         bg: cam.bg,
         // РЕГИОН едет в `_region`; `w`/`h` — размер КАДРА, как у главной
         // камеры. Путать их нельзя: `w`/`h` читает setView как центр кадра.
-        _region: { ...r },
+        _region: { ...reg },
         w: W,
         h: H,
     };
@@ -120,9 +142,12 @@ export function viewCams(cam) {
         if (!name) { const c = { ...cam }; c._name = ''; c._rect = null; out.push(c); continue; }
         const view = extra.get(name);
         if (!view) continue;
-        const c = regionCamera(view, view.rect, W, H);
+        const reg = regionOf(view.rect, W, H);
+        const c = regionCamera(view, reg, W, H);
         c._name = name;
-        c._rect = view.rect ? { ...view.rect } : null;
+        // В `_rect` едет ДЕЙСТВУЮЩИЙ регион: `add('p2')` без прямоугольника
+        // занимает весь кадр, и `views()` обязан показать это, а не null.
+        c._rect = reg;
         out.push(c);
     }
     // Главной в списке могло не оказаться (пользователь задал порядок) —
@@ -148,7 +173,7 @@ function syncPip() {
     if (typeof pip.at === 'object' && pip.at !== null) {
         x = num(pip.at.x, null);
         y = num(pip.at.y, null);
-    } else {
+    } else if (typeof pip.at === 'string') {
         // query() отдаёт МАССИВ узлов, а не узел.
         const found = query(pip.at);
         const node = Array.isArray(found) ? found[0] : found;

@@ -566,16 +566,25 @@ function tickEmitter(node, dt) {
 
 /** Кадровый шаг всех эмиттеров. Вызывается из игрового цикла (api.js). */
 export function tickParticles(dt) {
-    if (!(dt > 0)) return;
+    // Сырое время кадра — то, чем живут presentation-эмиттеры. Вызывающий
+    // обычно передаёт его же (api.js), но если пришёл игровой dt (0 на паузе),
+    // презентационные часы всё равно должны идти.
+    const raw = (typeof engine.dt === 'number' && engine.dt > 0) ? engine.dt : dt;
+    if (!(dt > 0) && !(raw > 0)) return;
+    // Часы выбираются ПО КАЖДОМУ эмиттеру. `dt` из api.js — реальное время
+    // кадра, поэтому эмиттеру с игровыми часами нужен игровой шаг из $.time:
+    // при `scale(0)`, паузе и hit-stop он равен нулю, и частицы стоят вместе с
+    // миром (§21, §50). Раньше сюда попадал сырой dt, и «игровые» частицы
+    // продолжали лететь при scale(0), хотя тела Box2D стояли.
+    // Без модуля времени (qjs-харнесс) остаётся сырой dt — как и было.
+    const sim_dt = (ctx.time && typeof ctx.time.delta === 'function') ? ctx.time.delta() : dt;
     // Нет эмиттеров — шагу нечего делать, и прохода по реестру тоже нет:
     // срез по тегу держит индекс реестра (§5, P2 отчёта).
     const nodes = nodesByTag('particles');
     for (let i = 0; i < nodes.length; i++) {
         const st = states.get(nodes[i]);
-        // Часы выбираются ПО КАЖДОМУ эмиттеру: иначе один «живущий на паузе»
-        // эффект тянул бы за собой все остальные.
         const clock = st && st.params && st.params.clock === 'presentation';
-        const step = clock && typeof engine.dt === 'number' ? engine.dt : dt;
+        const step = clock ? raw : sim_dt;
         tickEmitter(nodes[i], step);
     }
 }

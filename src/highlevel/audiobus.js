@@ -267,6 +267,12 @@ function createBus(name, opts) {
     const a = audio();
     if (a && typeof a.group === 'function') {
         try { bus.group = a.group(name); } catch (e) { bus.group = -1; }
+        // Группа кончилась (лимит движка) — это факт, о котором игра обязана
+        // узнать: без группы у шины не будет ни эффекта, ни общего микса.
+        if (!(bus.group >= 0)) {
+            log(`$.audio.bus("${name}"): движок не выдал группу микшера (лимит шин) — `
+                + 'громкость шины работает, эффект на её звуки не ляжет');
+        }
     }
     buses.set(name, bus);
     return bus;
@@ -451,6 +457,10 @@ function makeHandle(what, busName, channel, baseVolume, pan) {
         // null — эффект берётся с шины; иначе личная настройка handle.
         fx: null,
         fxParams: {},
+        // Приоритет вытеснения голоса (как его просили) и скорость: движок
+        // хранит своё значение — сверять его надо с $.sound.priorityOf(channel).
+        priority: 0,
+        pitch: 1,
 
         /** Остановить звук. fadeMs > 0 — плавно гасит канал средствами движка. */
         stop(fadeMs) {
@@ -533,17 +543,30 @@ function makeHandle(what, busName, channel, baseVolume, pan) {
     return handle;
 }
 
-/** Запускает звук и ставит его под управление шины. Никогда не бросает. */
-function spawn(what, busName, volume, pan, loop) {
+/**
+ * Запускает звук и ставит его под управление шины. Никогда не бросает.
+ *
+ * `extra` — то, что относится к КАНАЛУ, а не к шине: `priority` (вытеснение
+ * голосов), `pitch` (скорость) и `keep` (звук переживает выгрузку области).
+ * Раньше эти поля не доходили до `$.sound.play`, и `$.audio.play(..., {
+ * priority })` молча играл с приоритетом 0 — то есть ровно так, как если бы
+ * приоритета не было: важная реплика вытеснялась первым же шагом по траве.
+ */
+function spawn(what, busName, volume, pan, loop, extra) {
     const bus = resolveBus(busName);
+    const o = extra || {};
     let channel = -1;
     if (api_$ && api_$.sound && typeof api_$.sound.play === 'function') {
+        const play_opts = {
+            volume: clamp01(volume) * effectiveGain(buses, bus.name),
+            pan: clampPan(pan),
+            loop: !!loop,
+        };
+        if (o.priority !== undefined) play_opts.priority = Number(o.priority) || 0;
+        if (o.pitch !== undefined) play_opts.pitch = o.pitch;
+        if (o.keep === true) play_opts.keep = true;
         try {
-            channel = api_$.sound.play(what, {
-                volume: clamp01(volume) * effectiveGain(buses, bus.name),
-                pan: clampPan(pan),
-                loop: !!loop,
-            });
+            channel = api_$.sound.play(what, play_opts);
         } catch (e) {
             // Битый путь или выключенный звук не должны ронять кадр.
             channel = -1;
@@ -551,6 +574,8 @@ function spawn(what, busName, volume, pan, loop) {
         }
     }
     const handle = makeHandle(what, bus.name, channel, clamp01(volume), pan);
+    handle.priority = o.priority === undefined ? 0 : (Number(o.priority) || 0);
+    if (o.pitch !== undefined) handle.pitch = Number(o.pitch) || 1;
     // Движок переиспользует освободившиеся каналы: если старый handle ещё не
     // успели вычистить, снимаем его, иначе он будет менять громкость чужому звуку.
     if (channel >= 0) {
@@ -810,6 +835,17 @@ export function installAudiobus($) {
         /** Снять все шины, остановить их звуки, вернуть слушателя камере. */
         clear() {
             for (const handle of handles.slice()) handle.stop(0);
+            // Группы микшера — ресурс движка (их всего 8). Без destroy они
+            // выгорают: после нескольких `bus()` + `clear()` следующая шина
+            // молча остаётся без группы, и её эффект не применяется вовсе.
+            const a = audio();
+            if (a && typeof a.destroyGroup === 'function') {
+                buses.forEach((bus) => {
+                    if (!(bus.group >= 0)) return;
+                    try { a.destroyGroup(bus.group); } catch (e) { /* группа уже свободна */ }
+                    bus.group = -1;
+                });
+            }
             buses.clear();
             fades.length = 0;
             manual_listener = null;
@@ -907,6 +943,10 @@ export function installAudiobus($) {
         /**
          * play('hit.ogg', { bus, volume, pan, loop, at: [x,y], falloff })
          * → handle живого звука. Без шины звук идёт в 'sfx'.
+         *
+         * Поля канала идут и дальше, в `$.sound.play`: `priority` (при
+         * нехватке голосов вытесняется самый неважный звук), `pitch`
+         * (скорость) и `keep: true` (звук переживает выгрузку области).
          */
         play(what, opts) {
             const o = opts || {};
@@ -918,7 +958,7 @@ export function installAudiobus($) {
                 volume *= pg.gain;
                 pan = pg.pan;
             }
-            return spawn(what, busName, volume, pan, o.loop);
+            return spawn(what, busName, volume, pan, o.loop, o);
         },
 
         /** Позиционный звук: панорама и затухание от слушателя/камеры. */
@@ -932,14 +972,14 @@ export function installAudiobus($) {
             // затухание, и раскладку по колонкам.
             if (ctx.audio_spatial === 'sdl') {
                 const l = listenerPoint();
-                const handle = spawn(what, busName, o.volume === undefined ? 1 : Number(o.volume), 0, o.loop);
+                const handle = spawn(what, busName, o.volume === undefined ? 1 : Number(o.volume), 0, o.loop, o);
                 if (handle.channel >= 0) applySpatial(handle.channel, px - l.x, py - l.y);
                 return handle;
             }
 
             const pg = panAndGain(listenerPoint(), { x: px, y: py }, o.falloff);
             const volume = (o.volume === undefined ? 1 : Number(o.volume)) * pg.gain;
-            return spawn(what, busName, volume, pg.pan, o.loop);
+            return spawn(what, busName, volume, pg.pan, o.loop, o);
         },
 
         /**

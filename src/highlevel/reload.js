@@ -1094,6 +1094,46 @@ export function remapNodeSprites(nodes, old_to_new) {
     return remapped;
 }
 
+/**
+ * Проверка точки входа на синтаксис ДО перезапуска рантайма (§46).
+ *
+ * Зачем: движок пересоздаёт JS-контекст ДО компиляции новой версии, поэтому
+ * несобираемый файл не «оставляет прежний код живым» — он уносит его с собой.
+ * Проверка здесь — единственная возможность отказаться от перезапуска, пока
+ * прежний рантайм ещё работает.
+ *
+ * Компиляция тела как скрипта (`new Function`) — это именно проверка
+ * синтаксиса: код не выполняется. Модульный синтаксис (`import`/`export`,
+ * top-level await) так не проверяется, поэтому в этих случаях возвращается
+ * `checked: false` — обещать проверку, которой не было, нельзя.
+ */
+export function checkEntrySyntax($, file) {
+    const fs = $ && $.fs;
+    if (!fs || typeof fs.readText !== 'function') {
+        return { ok: true, checked: false, reason: 'нет $.fs — читать точку входа нечем' };
+    }
+    const text = fs.readText(file);
+    if (text === null || text === undefined) {
+        return { ok: true, checked: false, reason: `файл "${file}" не прочитан` };
+    }
+    if (/^[ \t]*(import|export)\b/m.test(text)) {
+        return { ok: true, checked: false,
+                 reason: 'модульный синтаксис (import/export): проверить может только сам движок' };
+    }
+    try {
+        new Function(text);
+    } catch (err) {
+        const message = String(err && err.message ? err.message : err);
+        // Модульные конструкции, которых `new Function` не принимает: это не
+        // ошибка игры — помечаем проверку невыполненной, а не «файл плохой».
+        if (/await|import|export/i.test(message)) {
+            return { ok: true, checked: false, reason: 'модульная конструкция: ' + message };
+        }
+        return { ok: false, checked: true, code: 'R2D_RELOAD_SYNTAX', error: message };
+    }
+    return { ok: true, checked: true };
+}
+
 export function installReload($) {
     const dbg = $ && $.debug;
 
@@ -1190,13 +1230,35 @@ export function installReload($) {
         // --- Три РАЗНЫЕ операции (§27) ---------------------------------------
         /**
          * Перезагрузить ПОВЕДЕНИЕ: перезапуск JS-рантайма на границе кадра.
+         *
+         * Перед запросом точка входа (`main.js`) проверяется на синтаксис:
+         * движок пересоздаёт контекст ДО компиляции новой версии, поэтому
+         * несобираемый файл унёс бы с собой живой рантайм. Не прошедшая
+         * проверку сборка НЕ запрашивается — прежний код продолжает работать,
+         * а результат честно говорит, что именно не собралось.
+         *
+         * Проверка — ровно одна: файл `main.js` как скрипт. Модульный синтаксис
+         * (`import`/`export`) так не проверить, поэтому в этом случае результат
+         * сообщает `checked: false` — обещать проверку, которой не было, нельзя.
+         *
          * Произвольные замыкания не сохраняются — это не обещание движка;
          * для сохранения логического состояния используйте $.reload.restartScene
          * или $.save.
          */
-        behavior(reason) {
+        behavior(reason, opts) {
+            const o = opts || {};
+            const file = o.file === undefined ? 'main.js' : String(o.file);
+            const verdict = (o.check === false) ? { ok: true, checked: false, reason: 'проверка выключена вызывающим' }
+                                                : checkEntrySyntax($, file);
+            if (!verdict.ok) {
+                return { ok: false, operation: 'behavior', request: false, file,
+                         checked: true, code: verdict.code, error: verdict.error,
+                         note: 'перезапуск не запрошен: новая версия не компилируется — прежний код продолжает работать' };
+            }
             const request = $ && $.script ? $.script.request(reason === undefined ? 'reload поведения' : reason) : false;
-            return { ok: !!request, operation: 'behavior', request,
+            return { ok: !!request, operation: 'behavior', request, file,
+                     checked: verdict.checked,
+                     check_note: verdict.checked ? '' : (verdict.reason || ''),
                      note: 'перезапуск рантайма: замыкания не сохраняются' };
         },
 
