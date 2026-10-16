@@ -353,6 +353,9 @@ $('#marker').worldPoint(0, 0);   // → { x: 80, y: 200 }  (родитель з�
 // alpha и visible НАСЛЕДУЮТСЯ: скрытый родитель скрывает детей,
 // прозрачности перемножаются (modulate)
 .visible(false) .show() .hide()
+.isVisible()                              // → bool: виден ли узел (поле visible, без учёта родителей)
+.depthRelative(true) .isDepthRelative()   // глубина складывается с глубиной родителя / → bool
+.effectiveDepth()                         // → number: глубина с учётом родителя (для отладки порядка)
 .fadeIn(200) .fadeOut(300)                // → Promise
 .shader('flash', { color: '#ff8080', amount: 0.7 })   // шейдер узла (эффект)
 .shaderParam('amount', 0.4)               // один параметр эффекта
@@ -391,6 +394,11 @@ $.gfx.filter(true)                        // линейная фильтраци
 .dropThrough(250)                           // спрыгнуть вниз сквозь one-way на 250 мс
 .sensor(true)                               // зона: ловит, но не толкает
 .contacts(true | false)                     // события контакта
+.contactsStay(true)                         // ещё и фаза 'stay' — «касание держится» каждый кадр
+.externalVelocity(vx, vy, 150)              // внешняя скорость (урон, отдача, ветер), гаснет за 150 мс игрового времени
+.externalVelocity()                         // → { x, y, ms, left } или null
+.ground()                                   // → опора под узлом (луч по ширине тела) или null, см. ниже
+.onCeiling()                                // → bool: потолок над узлом (лучи вверх)
 .sleeping()                                 // → bool: усыпил ли Box2D тело
 .allowSleep(false)                          // не усыплять тело (игра ведёт его скоростью)
 .angularVelocity() .angularVelocity(2)      // угловая скорость тела, рад/с
@@ -511,6 +519,7 @@ $('#hero').areaOverlap('sword');        // кто внутри ПРЯМО СЕЙ
 | `.areaOn(name, on)` | включить/выключить; без `on` — текущее состояние |
 | `.areas()` | список описаний областей узла |
 | `.areaOverlap(name, opts?)` | пересечения области сейчас (явный запрос) |
+| `.hitbox(name, opts?)` / `.hurtbox(name, opts?)` / `.interaction(name, opts?)` | объявить область с ролью: «чем бью», «куда бьют», «подбор/двери/зоны взаимодействия» — это `.area()` с предзаполненной ролью |
 
 `opts`: `shape` (`'box'`/`'circle'`/`'capsule'`/`'polygon'`), `w`/`h`, `radius`,
 `points`, `x`/`y`/`angle` (локальные, пиксели и радианы), `sensor`, `contacts`,

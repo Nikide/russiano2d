@@ -37,6 +37,7 @@ static:
     - python3 tests/portability_test.py
     - python3 tests/doc_coverage_test.py
     - python3 tests/doc_claims_test.py
+    - python3 tests/api_docs_sync_test.py
     - python3 tests/format_extensions_test.py
     - python3 tests/checklist_test.py
     - python3 tests/acceptance_test.py

@@ -89,27 +89,27 @@ $.ui.*               # debt: не распределён — 6 имён, стр�
 $.window.cursors             # debt: не распределён — имя без упоминания в docs/**/*.md
 $.window.off                 # debt: не распределён — имя без упоминания в docs/**/*.md
 $.world.*            # debt: не распределён — 11 имён, страница docs/highlevel/world.md без полного перечня
-engine.bodyGeneration        # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.clearPhysicsErrors    # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.contactStay           # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.cursorVisible         # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.depth                 # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.isAwake               # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.lightMaskPasses       # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.markUnlit             # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.netMode               # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.physicsErrors         # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.postSupported         # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.profileEnabled        # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.rotSpriteChanged      # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.rotSpriteDispose      # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.rotSpriteFileStamp    # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.rotSpriteInfo         # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.rotSpritePose         # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.rotSpriteRig          # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.rotSpriteStyle        # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.setContactStay        # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.setGravityScale       # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.setSnap               # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.setSpriteFilter       # debt: не распределён — имя без упоминания в docs/**/*.md
-engine.spriteFilter          # debt: не распределён — имя без упоминания в docs/**/*.md
+engine.bodyGeneration        # internal: биндинг C-уровня (engine.bodyGeneration), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.clearPhysicsErrors    # internal: биндинг C-уровня (engine.clearPhysicsErrors), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.contactStay           # internal: биндинг C-уровня (engine.contactStay), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.cursorVisible         # internal: биндинг C-уровня (engine.cursorVisible), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.depth                 # internal: биндинг C-уровня (engine.depth), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.isAwake               # internal: биндинг C-уровня (engine.isAwake), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.lightMaskPasses       # internal: биндинг C-уровня (engine.lightMaskPasses), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.markUnlit             # internal: биндинг C-уровня (engine.markUnlit), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.netMode               # internal: биндинг C-уровня (engine.netMode), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.physicsErrors         # internal: биндинг C-уровня (engine.physicsErrors), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.postSupported         # internal: биндинг C-уровня (engine.postSupported), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.profileEnabled        # internal: биндинг C-уровня (engine.profileEnabled), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.rotSpriteChanged      # internal: биндинг C-уровня (engine.rotSpriteChanged), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.rotSpriteDispose      # internal: биндинг C-уровня (engine.rotSpriteDispose), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.rotSpriteFileStamp    # internal: биндинг C-уровня (engine.rotSpriteFileStamp), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.rotSpriteInfo         # internal: биндинг C-уровня (engine.rotSpriteInfo), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.rotSpritePose         # internal: биндинг C-уровня (engine.rotSpritePose), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.rotSpriteRig          # internal: биндинг C-уровня (engine.rotSpriteRig), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.rotSpriteStyle        # internal: биндинг C-уровня (engine.rotSpriteStyle), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.setContactStay        # internal: биндинг C-уровня (engine.setContactStay), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.setGravityScale       # internal: биндинг C-уровня (engine.setGravityScale), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.setSnap               # internal: биндинг C-уровня (engine.setSnap), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.setSpriteFilter       # internal: биндинг C-уровня (engine.setSpriteFilter), игры его не зовут; справочник — docs/internal/NATIVE.md
+engine.spriteFilter          # internal: биндинг C-уровня (engine.spriteFilter), игры его не зовут; справочник — docs/internal/NATIVE.md
