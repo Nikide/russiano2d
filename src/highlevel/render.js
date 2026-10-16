@@ -1841,7 +1841,12 @@ function drawLightAreaNode(node, t, cam) {
 
     // Как и у <light>: с включённым lightmap свет уходит в свой слой.
     const prev_layer = tri_layer_cur;
-    if (lightmap_on) tri_layer_cur = 1;
+    // Слой площадного света берётся у узла так же, как у точечного: раньше
+    // здесь стояла жёсткая единица, поэтому `.lightLayer(bits)` у <lightarea>
+    // при включённой карте света молча не действовал — свет уходил в слой 1
+    // независимо от объявленного. Нашлось при отдаче списка источников в
+    // DevTools: объявленный слой и применённый расходились.
+    if (lightmap_on) tri_layer_cur = lightLayerOf(node);
 
     const zoom = cam.zoom;
     const radius_world = Math.max(0.5, node.radius);
