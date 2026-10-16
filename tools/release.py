@@ -790,12 +790,25 @@ def package_platform(
     _write_global_sums(out_dir)
 
 
+#: Мусор операционной системы и Python, который не должен попадать в пакет:
+#: `.DS_Store` создаётся Finder'ом при любом просмотре каталога и уезжал внутрь
+#: архива (нашли в 0.1.35-macos-arm64), `__pycache__` — от локальных прогонов.
+ARCHIVE_SKIP_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini"}
+ARCHIVE_SKIP_DIRS = {"__pycache__", ".git", ".idea", ".vscode"}
+
+
 def archive_members(target: str) -> List[str]:
-    """Отсортированные относительные пути файлов пакета (для архива)."""
+    """Отсортированные относительные пути файлов пакета (для архива).
+
+    Системный мусор отфильтровывается здесь, а не «руками перед упаковкой»:
+    иначе он возвращается при первом же просмотре каталога в Finder.
+    """
     members: List[str] = []
     for root, dirs, names in os.walk(target):
-        dirs.sort()
+        dirs[:] = sorted(d for d in dirs if d not in ARCHIVE_SKIP_DIRS)
         for name in sorted(names):
+            if name in ARCHIVE_SKIP_NAMES or name.endswith(".pyc"):
+                continue
             full = os.path.join(root, name)
             if os.path.isfile(full):
                 members.append(os.path.relpath(full, target))
