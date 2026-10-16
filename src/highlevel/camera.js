@@ -865,10 +865,20 @@ export function installCamera($, viewports) {
         /** Что сейчас управляет камерой: активные зоны и аренды по приоритету. */
         control() { return zones.describe(); },
 
-        /** Тряска: амплитуда в пикселях, длительность в миллисекундах. */
+        /** Тряска: амплитуда в пикселях, длительность в миллисекундах.
+         *  `shake(0, 0)` — явный «стоп»: ноль амплитуды гасит тряску, а не
+         *  превращается в значение по умолчанию (раньше `|| 4` делал из нуля
+         *  полноценную тряску 4 px / 250 мс, и остановить её публично было
+         *  нечем). */
         shake(intensity, ms) {
-            cam.shake_amp = Math.max(cam.shake_amp, intensity || 4);
-            cam.shake_total = cam.shake_t = (ms || 250) / 1000;
+            const amp = intensity === undefined ? 4 : Math.max(0, intensity);
+            if (amp === 0) {
+                cam.shake_amp = 0;
+                cam.shake_total = cam.shake_t = 0;
+                return camera;
+            }
+            cam.shake_amp = Math.max(cam.shake_amp, amp);
+            cam.shake_total = cam.shake_t = (ms === undefined ? 250 : Math.max(0, ms)) / 1000;
             return camera;
         },
 

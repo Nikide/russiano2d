@@ -25,7 +25,7 @@
 // ===========================================================================
 
 import { engine } from './native.js';
-import { ctx, makeRandom } from './core.js';
+import { ctx, makeRandom, fxReseed } from './core.js';
 import { lerp } from './mathx.js';
 
 /** Зерно по умолчанию — то же, что подставляет api.js без --seed. */
@@ -771,5 +771,9 @@ export function installRandom($) {
     const random = makeGenerator(seed);
     $.random = random;
     ctx.random = random;
+    // Косметический генератор (тряска, джиттер) засеваем тем же зерном сессии:
+    // он остаётся отдельным потоком (§11), но перестаёт быть одинаковым во всех
+    // запусках — иначе «разный --seed — разный прогон» неверно для картинки.
+    fxReseed(seed);
     return random;
 }

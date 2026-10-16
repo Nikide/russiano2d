@@ -146,6 +146,36 @@ def main():
         if FAILURES:
             print(a.stderr_tail(15))
 
+    # --- 8. Косметика засеяна зерном сессии, а не константой --------------
+    # Иначе дрожание картинки было бы побитово одинаковым в каждом запуске, и
+    # «разный --seed — разный прогон» переставало быть правдой для косметики.
+    peaks = {}
+    for seed in (1, 2):
+        with Agent(game=GAME, seed=seed, fixed_dt=1.0 / 60.0) as a:
+            a.step(3)
+            a.eval("__rng.reset()")
+            a.eval("globalThis.__cosmetic = true")
+            a.step(40)
+            peaks[seed] = a.eval("__rng.read().metrics.shake_max")
+    check(peaks[1] > 0 and peaks[2] > 0 and peaks[1] != peaks[2],
+          "разные --seed дают разный косметический шум (%.6f против %.6f)"
+          % (peaks[1], peaks[2]))
+
+    # --- 9. $.camera.shake(0, 0) — публичный «стоп», а не «по умолчанию» --
+    # Раньше нулевая амплитуда означала 4 px: остановить тряску было нечем.
+    with Agent(game=GAME, seed=1, fixed_dt=1.0 / 60.0) as a:
+        a.step(3)
+        a.eval("__rng.reset()")
+        a.eval("globalThis.__cosmetic = true")
+        a.step(10)
+        before = a.eval("__rng.read().metrics.shake_max")
+        a.eval("$.camera.shake(0, 0)")
+        a.eval("__rng.reset()")
+        a.step(1)
+        after = a.eval("__rng.read().metrics.shake_max")
+        check(before > 0 and after == 0,
+              "$.camera.shake(0, 0) гасит тряску (до %.6f, после %.6f)" % (before, after))
+
     print("Все проверки пройдены" if not FAILURES else "ПРОВАЛЕНО: %d" % len(FAILURES))
     return 1 if FAILURES else 0
 
