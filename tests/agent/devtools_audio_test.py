@@ -73,9 +73,25 @@ def main():
         bus = [b for b in au["buses"] if b["name"] == "sfx-test"][0]
         check(abs(bus["volume"] - 0.8) < 1e-6, "громкость шины 0.8 из $.audio.buses()")
         check(safe(au["text"]["info"]) == ui(a, doc, "rt-audio-info")
-              and safe(au["text"]["buses"]) == ui(a, doc, "rt-audio-buses")
-              and safe(au["text"]["channels"]) == ui(a, doc, "rt-audio-channels"),
-              "все блоки AUDIO в панели = данным audio()")
+              and safe(au["text"]["buses"]) == ui(a, doc, "rt-audio-buses"),
+              "блоки info и шин в панели = данным audio()")
+        # Каналов 128, поэтому панель показывает ЗАНЯТЫЕ и итог «занято N из M»
+        # (простыня по всем не влезает в буфер engine.ui.getText — 8192 байта).
+        # Проверяем не «показано всё», а что показанное = данным API.
+        busy_channels = [c for c in au["channels"] if c["playing"]]
+        panel_channels = ui(a, doc, "rt-audio-channels")
+        head = panel_channels.split("\n")[0]
+        check(head.startswith("занято %d из %d" % (len(busy_channels), len(au["channels"]))),
+              "итог блока каналов = данным ($.sound.busy() → %s, всего %s): %r"
+              % (busy["active"], busy["total"], head))
+        shown_rows = [r for r in panel_channels.split("\n")[1:] if r.strip()]
+        check(len(shown_rows) == min(len(busy_channels), 8),
+              "построчно показаны только занятые каналы (%d из %d)"
+              % (len(shown_rows), len(busy_channels)))
+        check(all("свободен" not in r for r in shown_rows),
+              "свободные каналы в панель не попадают (панель читается целиком)")
+        check(len(panel_channels) < 8192,
+              "payload блока каналов влезает в буфер getText (%d символов)" % len(panel_channels))
 
         # mute шины через API и кнопку панели
         check(a.eval("$.devtools.audioBus('mute', 'sfx-test', true)") is True,

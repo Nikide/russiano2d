@@ -2022,16 +2022,31 @@ export function installDevTools($) {
                 + ` родитель ${info.parent || COPY_NONE} эффект ${info.effect || '—'}`;
         });
         const buses_text = bus_rows.length ? bus_rows.join('\n') : "шин нет ($.audio.bus('имя', {…})).";
-        const channels_text = channels.length
-            ? channels.map((c) => `канал ${c.index}: ${c.playing ? 'играет' : 'свободен'}`
-                + ` громкость ${numOrNa(c.volume)} панорама ${numOrNa(c.pan)} питч ${numOrNa(c.pitch)}`
-                + ` позиция ${c.position === null || c.position < 0 ? NA : numText(c.position, 2)}`
-                + `/${c.duration === null || c.duration < 0 ? NA : numText(c.duration, 2)}`
-                + ` эффект ${c.effect || '—'}`).join('\n')
+        // Каналов теперь 128 (было 16): строка на каждый — это 11 025 символов
+        // payload, а engine.ui.getText копирует текст в буфер 8192 байта и
+        // обрывал его посреди строки (первая разница ровно на 5290 символах с
+        // кириллицей). Поэтому показываем только ЗАНЯТЫЕ каналы и итог:
+        // человеку 128 строк «свободен» всё равно бесполезны, а панель обязана
+        // читаться целиком. Итог «занято N из M» — факт из того же busy().
+        const busy_channels = channels.filter((c) => c.playing);
+        const shown = busy_channels.slice(0, AUDIO_BUSY_ROWS);
+        const rows = shown.map((c) => `канал ${c.index}: играет`
+            + ` громкость ${numOrNa(c.volume)} панорама ${numOrNa(c.pan)} питч ${numOrNa(c.pitch)}`
+            + ` позиция ${c.position === null || c.position < 0 ? NA : numText(c.position, 2)}`
+            + `/${c.duration === null || c.duration < 0 ? NA : numText(c.duration, 2)}`
+            + ` эффект ${c.effect || '—'}`);
+        const total_channels = channels.length;
+        const head = total_channels
+            ? `занято ${busy_channels.length} из ${total_channels}`
+                + (busy_channels.length > shown.length ? ` (показаны первые ${shown.length})` : '')
             : 'каналов нет.';
+        const channels_text = [head].concat(rows).join('\n');
         return { busy, playing, sfx, music, master, muted, buses, handles, channels,
-                 text: { info: info_text, buses: buses_text, channels: channels_text } };
+                 busy_channels, text: { info: info_text, buses: buses_text, channels: channels_text } };
     }
+
+    //: Сколько занятых каналов показывать построчно: панель читается целиком.
+    const AUDIO_BUSY_ROWS = 8;
 
     function numOrNa(v) {
         return isNum(v) ? numText(v, 2) : NA;
