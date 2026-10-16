@@ -2420,6 +2420,22 @@ export function wrap(nodes) { return new Wrapper(Array.isArray(nodes) ? nodes.sl
  * 0,8 (замер в QuickJS), поэтому горячие циклы ядра ходят через
  * `eachNode()` и не создают обёртку вовсе.
  */
+/**
+ * Выдать узлу НОВЫЙ uid — то есть поставить его «последним» в порядке отрисовки
+ * при равной глубине (полный ключ сортировки: `layer` → `depth` → `uid`,
+ * см. docs/highlevel/render.md §4.5).
+ *
+ * Зачем отдельная функция: узел, живущий между выдачами (пул), сохранял uid
+ * ПЕРВОГО создания, поэтому свежая выдача вставала НИЖЕ ранее выданных, а
+ * порядок зависел от того, освободился ли узел к этому моменту — между
+ * прогонами он не воспроизводился (BASHNYA, пункт I10).
+ */
+export function refreshUid(node) {
+    if (!node) return 0;
+    node.uid = next_uid++;
+    return node.uid;
+}
+
 export function wrapOne(node) {
     return new Wrapper([node]);
 }
