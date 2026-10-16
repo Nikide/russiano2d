@@ -214,3 +214,14 @@ $.signal.once('enemy:died', () => $.log('Первый!'));
 build/_deps/quickjs-build/qjs tests/js/signal_test.mjs
 python3 tests/agent/highlevel_state_test.py     # после сборки движка
 ```
+
+
+## Полный перечень имён: production-события (§13)
+
+Проверено на живом движке (0.1.35).
+
+| Имя | Сигнатура | Проверено запуском |
+|---|---|---|
+| `$.signal.event(name, data, opts)` | `→ объект события` | готовит событие: `{ id, name, tick, source, target, data }`. `id` — `ev<N>:<имя>` (N растёт), `tick` — тик симуляции, селекторы в `opts.source/target` нормализуются в id узлов **без `#`** (`'#hero'` → `'hero'`), ссылок на native handles нет |
+| `$.signal.eventOf(name, data, opts)` | `→ объект события` | то же событие, что `$.signal.event` (синоним для трассировки без рассылки) |
+| `$.signal.emitEvent(ev)` | `→ number` | рассылает ГОТОВОЕ событие: подписчики получают сам объект `ev` (а не копию payload); возвращает число вызванных подписчиков, без подписок — `0` |

@@ -39,6 +39,37 @@ $.ready(() => {
 Поля навесного: `slot`, множители (`spread`, `recoil`, `ammo`, `damage`, `rpm`,
 `reload`, `velocity`, `falloff`) и добавки (`pellets`, `penetration`).
 
+## 1.1. Поверхность `$.weapons` — все публичные имена
+
+Снято с живого движка (`Object.keys($.weapons)` — 23 имени) и проверено
+вызовами на фикстуре `tests/fixtures/hello`. Полные имена нужны гейту
+`tests/api_docs_sync_test.py`.
+
+| Имя | Факт |
+|---|---|
+| `$.weapons.define(def)` | описать ствол; без `id` возвращает `null` и пишет в лог |
+| `$.weapons.defineMod(def)` | описать навесное; без `id` — `null` |
+| `$.weapons.get(id)` | описание ствола **или мода** (один реестр на оба) либо `null` |
+| `$.weapons.mod(id)` | описание только мода или `null` |
+| `$.weapons.has(id)` | есть ли **ствол** с таким id (`bool`; моды не считает) |
+| `$.weapons.ids()` | id всех стволов |
+| `$.weapons.modIds()` | id всех модов |
+| `$.weapons.list()` | описания стволов (массив объектов из `define`) |
+| `$.weapons.clear()` | очистить оба реестра; возвращает число удалённых записей (стволы + моды) |
+| `$.weapons.load(data)` | пачка стволов: массив или `{ weapons: [...] }`; возвращает число загруженных |
+| `$.weapons.loadMods(data)` | пачка навесного: массив или `{ mods: [...] }`; число загруженных |
+| `$.weapons.loadFile(source)` | строка — путь для `$.fs.readJSON` (стволы + моды, возвращает сумму); объект — как `load()`; без `$.fs` пишет в лог и отдаёт 0 |
+| `$.weapons.create(id)` | ствол в руках: полный магазин, `report()` → `{ id, mode, magazine, capacity, reloading, reloadLeft, heat, recoil, shots }` |
+| `$.weapons.createWeapon(id, opts)` | чистое ядро ствола; `opts.defs`/`opts.mods` — базы описаний |
+| `$.weapons.createWeapons()` | пустая база: `define/defineMod/get/mod/has/ids/modIds/list/clear/load/loadMods` |
+| `$.weapons.give(what, id)` | дать ствол узлу (`#hero`, обёртка, узел); возвращает ствол или `null`, если узел не найден |
+| `$.weapons.of(what)` | ствол в руках узла или `null` |
+| `$.weapons.tickAll(dt)` | тик всех стволов в руках; возвращает число проткнутых стволов |
+| `$.weapons.combineStats(base, mods)` | характеристики с навесным: `mult` умножает, `add` складывает. **`add` работает только для `pellets` и `penetration`** — `add: { ammo: 10 }` молча игнорируется (проверено: магазин остался 30). Округления: `ammo`/`pellets` целые (≥0 / ≥1), `rpm` ≥ 1, остальные ≥ 0; поля, которых нет в `base`, в результат не добавляются |
+| `$.weapons.falloff(damage, distance, falloffStart)` | до порога — полный урон, дальше падает до 40% на удвоенной дистанции и ниже не идёт: `falloff(35, 400, 400) = 35`, `falloff(35, 800, 400) = 14`, `falloff(35, 100000, 400) = 14` |
+| `$.weapons.penetrationAgainst(penetration, armorClass)` | класс брони после пробития: `max(0, cls − floor(pen))`, `cls` зажат 0…6; `penetrationAgainst(0, 3) = 3`, `(1, 3) = 2`, `(3, 3) = 0`, `(2, 0) = 0` |
+| `$.weapons.spreadFor(spread, recoil, heat)` | разброс выстрела в градусах: `spread × (1 + 2·heat) + recoil × heat`, `heat` зажат 0…1; `spreadFor(1.4, 1.1, 0) = 1.4`, `(…, 0.5) = 3.35`, `(…, 1) = 5.3` |
+
 ## 2. Ствол в руках
 
 | Вызов | Возвращает |

@@ -17,26 +17,65 @@ $.camera.panTo(1200, 400, 0.8);          // плавный наезд (катс�
 
 ## 1. Методы
 
-| Вызов | Смысл |
+Все имена — с полным путём `$.camera.*`: по ним гейт
+`tests/api_docs_sync_test.py` сверяет публичную поверхность с документацией.
+Значения сняты с живого движка (фикстура `tests/fixtures/hello`, 4 кадра).
+
+| Вызов | Смысл и факт |
 |---|---|
-| `follow(target, opts?)` / `unfollow()` / `followed()` | слежение за узлом |
-| `pos()` / `x()` / `y()` | положение камеры в мире |
-| `at(x, y)` | поставить камеру мгновенно |
-| `panTo(x, y, seconds?)` | плавный наезд к точке |
-| `zoom(value?)` / `zoomTo(value, seconds?, easing?)` | зум и плавный зум |
-| `rotation(value?)` / `rotateTo(value, ms?)` | поворот кадра (радианы) и плавный поворот |
-| `shake(amount, seconds?)` | тряска (сила, время) |
-| `limits(x, y, w, h)` / `limits()` / `limits(null)` | границы камеры: сеттер / геттер / снять |
-| `deadzone(w, h?)` / `deadzone()` / `deadzone(false)` | зона свободы цели: сеттер / геттер / снять |
-| `lookahead(px?, smooth?)` / `lookahead()` | вынос вперёд по движению; геттер `{ x, y, smooth }` |
-| `viewport(w, h)` | логический размер кадра для пересчёта |
-| `split(n)` / `add` / `remove` / `views()` | несколько камер — см. [viewports.md](viewports.md) |
-| `worldToScreen(x, y)` / `screenToWorld(x, y)` | перевод координат |
-| `isOnScreen(node, margin?)` | видно ли узел (для отсечения) |
-| `cameraTransform()` | матрица камеры (для своих расчётов) |
-| `snapshot()` / `restore(state)` | снимок и возврат всего состояния слежения |
-| `info()` | факты о камере структурой (включая `lookahead`, `deadzone`, `limits`) |
-| `kind()`, `yaw()`, `pitch()`, `eye()`, `fov()`, `fog()`, `look()`, `mouseLook()` | вид Re2D (§5) |
+| `$.camera.pos()` | `{ x, y }` — центр камеры в мировых координатах |
+| `$.camera.x()` / `$.camera.y()` | та же координата по отдельности (число) |
+| `$.camera.at(x, y)` | поставить мгновенно; без аргументов — геттер `{ x, y }`; возвращает камеру |
+| `$.camera.panTo(x, y, ms)` | плавный наезд, **миллисекунды**; возвращает Promise. Проверено: `panTo(300, 0, 300)` на 150-й мс даёт ровно 150 px |
+| `$.camera.zoom(value?)` | зум: геттер/сеттер, значение зажимается в `>= 0.01` |
+| `$.camera.zoomTo(value, ms)` | плавный зум, **миллисекунды** (Promise). Проверено: `zoomTo(2, 100)` доходит за ~100 мс |
+| `$.camera.rotation(rad?)` | поворот кадра в радианах: геттер/сеттер |
+| `$.camera.rotateTo(rad, ms)` | плавный поворот, **миллисекунды** (Promise) |
+| `$.camera.shake(amp?, ms?)` | тряска: амплитуда px (по умолчанию 4) и время **в миллисекундах** (по умолчанию 250); `shake(0, 0)` — стоп |
+| `$.camera.follow(target, opts?)` | слежение; `opts`: `smooth` (0.12), `deadzone`, `lookahead`, `lookaheadSmooth` (0.9), `offset`, `zoom` |
+| `$.camera.unfollow()` | снять слежение (возвращает камеру) |
+| `$.camera.followed()` | обёртка узла-цели или `null` |
+| `$.camera.lookahead(px?, smooth?)` | вынос вперёд; без аргументов — `{ x, y, smooth }` |
+| `$.camera.limits(x, y, w, h)` | границы камеры: сеттер; `limits(null)` — снять; `limits()` — `{x,y,w,h}` или `null` |
+| `$.camera.deadzone(w, h?)` | мёртвая зона: сеттер; `deadzone(false)` — снять; `deadzone()` — `{w,h}` или `null` |
+| `$.camera.viewport()` | видимый прямоугольник **мира** `{ x, y, w, h }` (аргументов не принимает: в прежней доке стояло `viewport(w, h)` — это неверно) |
+| `$.camera.worldToScreen(p)` | мир → экран; в Re2D — `{ x, y, scale, depth, visible }` |
+| `$.camera.screenToWorld(p)` | экран → мир; в Re2D — точка на полу или `null` |
+| `$.camera.isOnScreen(what, margin?)` | видно ли узел/точку; запас по умолчанию 64 px |
+| `$.camera.snapshot()` | снимок конфигурации (цель, зум, границы, зона, вид) |
+| `$.camera.restore(state)` | вернуть камеру из снимка `$.camera.snapshot()`; `restore(null)` ничего не меняет |
+| `$.camera.info()` | факты структурой: `{ kind, x, y, eye, yaw, pitch, fov, zoom, fogFar, fogMin, mouseLook, sensitivity, target, smooth, deadzone, lookahead, limits }` (углы в градусах) |
+| `$.camera.kind(name?)` | вид камеры: `'2d'` или `'re2d'` |
+| `$.camera.eye(h?)` | высота глаз Re2D в пикселях мира, по умолчанию 48 |
+| `$.camera.yaw(deg?)` | куда смотрим (градусы, диапазон (−180, 180]) |
+| `$.camera.pitch(deg?)` | наклон (градусы, зажат в ±85°) |
+| `$.camera.fov(deg?)` | вертикальный угол обзора: 5…170°, по умолчанию 70 |
+| `$.camera.fog(far, min?)` | затемнение с расстоянием; `fog(0)` выключает |
+| `$.camera.look(dx, dy)` | повернуть на сдвиг мыши в пикселях |
+| `$.camera.mouseLook(on? \| { on, sensitivity })` | взгляд мышью с захватом; чувствительность 0.0025 рад/px |
+| `$.camera.zone(name?, opts?)` | зоны: `zone()` — список, `zone(name)` — описание, `zone(name, opts)` — объявить (`true`) |
+| `$.camera.enter(name?)` | войти в зону: id аренды или `false` |
+| `$.camera.leave(name)` | выйти из зоны, вернув прежнюю конфигурацию (`bool`) |
+| `$.camera.lease(opts)` | временная аренда камеры: запись `{ id, kind, name, owner, priority, … }` |
+| `$.camera.release(handle?)` | снять аренду по записи/имени; без аргумента — все |
+| `$.camera.control()` | кто управляет: `{ zones, leases, active }` |
+| `$.camera.add(name, opts?)` | дополнительная камера ([viewports.md](viewports.md)) |
+| `$.camera.remove(name)` | убрать камеру (`bool`) |
+| `$.camera.list()` | имена дополнительных камер |
+| `$.camera.camCount()` | сколько камер рисуется (главная + вторичные) |
+| `$.camera.split(n, opts?)` | разложить `n` камер по кадру |
+| `$.camera.viewAt(name, x, y)` | куда смотрит камера `name` |
+| `$.camera.viewZoom(name, value)` | зум камеры `name` |
+| `$.camera.region(name, rect?)` | регион камеры: геттер/сеттер `{ x, y, w, h }` или `null` |
+| `$.camera.views()` | действующие регионы всех камер |
+| `$.camera.pip(rect?, opts?)` | картинка в картинке: `{ x, y, w, h }` (без аргументов — текущий прямоугольник или `null`) |
+| `$.camera.pipClear()` | убрать PIP |
+| `$.camera.pipInfo()` | `{ ...rect, zoom, alpha, bg, at }` или `null` |
+| `$.camera.minimap(rect, opts?)` | PIP-миникарта за узлом: зум 0.6, прозрачность 0.85, без фона; возвращает `{ x, y, w, h }` |
+| `$.camera.debug(opts?)` | §34: оверлей (лимиты, мёртвая зона, цель, зоны); без аргументов — факты кадра |
+| `$.camera._state` | внутреннее состояние камеры — **только чтение** (так его использует §34-оверлей) |
+| `$.camera._tick(dt)` | внутренний кадровый шаг: зовёт `$.time` каждый кадр, вручную не вызывать |
+
 
 ## 1.0. Слежение платформера
 

@@ -51,18 +51,30 @@ $.cutscene.blocking();       // true, пока ввод забран — для 
 
 ## 2. Методы
 
-| Вызов | Смысл |
+Снято с живого движка (`Object.keys($.cutscene)` — 18 имён) и проверено вызовами
+на фикстуре `tests/fixtures/hello`. Полные имена нужны гейту
+`tests/api_docs_sync_test.py`.
+
+| Имя | Смысл и факт |
 |---|---|
-| `define(name, steps)` / `has` / `names` / `remove` | реестр сценариев |
-| `duration(name)` | сколько миллисекунд займёт сценарий |
-| `play(name, opts?)` | играть в текущей сцене; `opts.take: false` — не забирать ввод |
-| `stop()` | остановить и вернуть управление и камеру |
-| `skip()` | пропустить шаги с `skip: true` |
-| `running()` / `runningName(name)` / `progress()` | что играется сейчас |
-| `blocking()` | ввод забран — своё ИИ и ввод должны молчать |
-| `letterbox()` | текущие полосы |
-| `state()` / `describe()` | снимок состояния (для отладки и агента) |
-| `on('end', fn)` / `off` | конец сценария (получает имя) |
+| `$.cutscene.define(name, steps)` | описать сценарий (повторное имя перезаписывает); возвращает сам `$.cutscene` |
+| `$.cutscene.has(name)` | есть ли сценарий (`bool`) |
+| `$.cutscene.names()` | имена описанных сценариев |
+| `$.cutscene.remove(name)` | удалить сценарий (`bool`: был ли он) |
+| `$.cutscene.duration(name)` | длительность в **миллисекундах** (сумма `ms` всех шагов); неизвестное имя — `0`. Проверено: `[{letterbox, ms:200},{wait:300},{letterbox}]` → 500 |
+| `$.cutscene.play(name, opts?)` | играть в текущей сцене; `opts.take: false` — не забирать ввод; неизвестное имя → `false` |
+| `$.cutscene.stop()` | остановить, вернуть управление и камеру; `false`, если ничего не играло |
+| `$.cutscene.skip()` | пометить сценарий пропускаемым: шаги с `skip: true` переходят сразу |
+| `$.cutscene.running()` | идёт ли сценарий (`bool`) |
+| `$.cutscene.runningName(name)` | идёт ли **именно этот** сценарий (`bool`) |
+| `$.cutscene.progress()` | `{ name, index, total, running }` — шаг, на котором стоим |
+| `$.cutscene.blocking()` | ввод забран (`bool`) — своё ИИ и ввод должны молчать |
+| `$.cutscene.letterbox()` | полосы кадра: `0` — нет, `0…0.5` — доля высоты |
+| `$.cutscene.state()` | `{ name, input_taken, letterbox, camera_saved, saved_controls }` |
+| `$.cutscene.describe()` | `{ name, running, step, steps, elapsed, input_taken, letterbox, waiting }`; `elapsed` — **мс** (округлён), `waiting` — шаг с длительностью |
+| `$.cutscene.on(event, fn)` | подписка; событие одно — `'end'` (получает имя сценария); возвращает `$.cutscene` |
+| `$.cutscene.off(event, fn)` | отписка; возвращает `$.cutscene` |
+| `$.cutscene.tick(dt)` | кадровый шаг, `dt` в **секундах**; зовёт `tickCutscene` из кадра (`api.js`) до применения управления — вручную не вызывать |
 
 Чистые функции: `normalizeSteps(steps)`, `stepsDuration(steps)`, `pointOf(value)`.
 
