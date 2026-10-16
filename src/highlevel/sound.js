@@ -268,6 +268,20 @@ export function installSound($) {
         if ($.trace && typeof $.trace.note === 'function') $.trace.note('audio', null, data);
     }
 
+    /**
+     * Взять канал под владение текущей области сцены: при её закрытии звук
+     * глушится. Так выгрузка комнаты убирает и её звук, а не только узлы
+     * (§8.2). Игра может оставить звук жить дольше области — `{ keep: true }`.
+     */
+    function ownChannel(channel, opts) {
+        if (!(channel >= 0) || (opts && opts.keep === true)) return channel;
+        const scene = ctx.scene;
+        if (!scene || typeof scene.scope !== 'function') return channel;
+        const scope = scene.scope();
+        if (scope && typeof scope.sound === 'function') scope.sound(channel, opts && opts.fade);
+        return channel;
+    }
+
     const sound = {
         /**
          * play('hit.wav', { volume, pan, loop, pitch, priority }) → id канала
@@ -294,6 +308,7 @@ export function installSound($) {
             // унаследовал бы чужой pitch.
             if (channel >= 0) engine.audio.setChannelPitch(channel, o.pitch === undefined ? 1 : o.pitch);
             if (channel >= 0) {
+                ownChannel(channel, o);
                 noteAudio({ action: 'play', name: String(what), channel,
                             loop: o.loop === true, volume: o.volume === undefined ? 1 : o.volume });
             }

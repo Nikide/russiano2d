@@ -61,7 +61,7 @@ const scopes = new Map();     // имя → scope (active или closing)
 const closing_scopes = [];    // closing, ждут безопасной фазы
 let scope_seq = 0;
 
-const BUCKETS = ['node', 'signal', 'wait', 'timer', 'task', 'flow', 'resource'];
+const BUCKETS = ['node', 'signal', 'wait', 'timer', 'task', 'flow', 'resource', 'sound'];
 
 function emptyBuckets() {
     const b = {};
@@ -124,6 +124,24 @@ function createScope(name, opts) {
                 if (scope.own('node', node, () => { if (!node.removed) node.destroy(); })) taken++;
             }
             return taken;
+        },
+
+        /**
+         * Взять канал звука под владение: при закрытии области он глушится
+         * (с плавным затуханием, если оно задано). Игра может оставить звук
+         * жить дольше области — `$.sound.play(..., { keep: true })`.
+         */
+        sound(channel, fadeMs) {
+            const ch = Number(channel);
+            if (!(ch >= 0)) return false;
+            const fade = Number(fadeMs) || 0;
+            return scope.own('sound', ch, () => {
+                // Через ctx.sound: scene.js не тянет нативный слой сам, а
+                // модуль звука может быть не установлен (урезанная сборка).
+                if (!ctx.sound || typeof ctx.sound.stop !== 'function') return;
+                if (typeof ctx.sound.playing === 'function' && !ctx.sound.playing(ch)) return;
+                ctx.sound.stop(ch, fade);
+            }, { channel: ch });
         },
 
         /** Вернуть ресурс владельцу (область его больше не трогает). */
@@ -253,6 +271,10 @@ function finalizeScope(scope, reason) {
     }
     for (const entry of scope._items.resource.splice(0)) {
         try { entry.cancel(why); } catch (e) { /* ресурс уже освобождён */ }
+    }
+    // Звук глушим ДО узлов: канал ещё держит ссылку на источник-узел.
+    for (const entry of scope._items.sound.splice(0)) {
+        try { entry.cancel(why); } catch (e) { /* канал уже свободен */ }
     }
     for (const entry of scope._items.node.splice(0)) {
         const node = entry.item;
