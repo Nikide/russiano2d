@@ -159,6 +159,12 @@ export function createGeneratorScheduler(generator, opts) {
  */
 let active = new Set();
 
+/** Текст исключения для журнала: message, иначе приведение к строке. */
+function errorText(e) {
+    if (!e) return 'без текста';
+    return e.message ? String(e.message) : String(e);
+}
+
 /** Одна задача: шаг планировщика и ОДНО завершение. */
 function stepTask(item, dt) {
     if (!item || item.done_called) return;
@@ -167,7 +173,17 @@ function stepTask(item, dt) {
     if (item.label && item.loading && typeof item.loading.progress === 'function') {
         item.loading.progress(scheduler.progress(), item.label);
     }
-    if (finished || scheduler.aborted) item.finish(scheduler.aborted);
+    if (finished || scheduler.aborted) {
+        // Исключение внутри работы раньше проглатывалось молча: задача просто
+        // «заканчивалась», и причину искали час (регрессия A1: story/dialog
+        // присваивали свойства нерасширяемой обёртке). Теперь одна строка в
+        // журнал на задачу — с её именем и текстом исключения.
+        if (scheduler.aborted && !item.reported_abort) {
+            item.reported_abort = true;
+            ctx.log(`$.task: задача${item.label ? ` «${item.label}»` : ''} ПРЕРВАНА исключением: ${errorText(scheduler.error)}`);
+        }
+        item.finish(scheduler.aborted);
+    }
 }
 
 /**
@@ -204,16 +220,24 @@ export function installTask($) {
         const loading = ctx.loading || ($ && $.loading) || null;
         if (label && loading && typeof loading.show === 'function') loading.show({ title: label });
 
+        // Отмена приходит двумя путями: игра зовёт `abort()` или планировщик
+        // поймал исключение. Раньше `task.aborted` знал только про первый,
+        // поэтому проверка `if (task.aborted)` у вызывающего не срабатывала на
+        // упавшей задаче — и сценка выглядела доигранной.
+        let aborted_by_caller = false;
         const task = {
             scheduler,
             label,
             loading,
             done_called: false,
-            aborted: false,
+            /** Отменена ли задача — игрой ИЛИ исключением внутри работы. */
+            get aborted() { return aborted_by_caller || scheduler.aborted; },
+            /** Исключение, из-за которого задача прервалась (или null). */
+            get error() { return scheduler.error || null; },
             /** Отменить: работа не докрутится до конца, `done` придёт один раз. */
             abort() {
                 if (task.done_called) return false;
-                task.aborted = true;
+                aborted_by_caller = true;
                 scheduler.abort();
                 task.finish(true);
                 return true;

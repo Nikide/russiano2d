@@ -977,6 +977,15 @@ function step() {
         const beat = frame.list[frame.index++];
         run.beats++;
         const action = runBeat(beat);
+        // След последнего бита: без него «встал, ничего не ждём» не отличить
+        // от «встал на бите, который вернул stop». Видно в $.timeline.state().
+        // `run` проверяем: бит концовки обнуляет прогон прямо внутри runBeat.
+        if (run) {
+            run.last_action = action;
+            run.last_index = frame.index - 1;
+            run.last_beat = beat && typeof beat === 'object'
+                ? Object.keys(beat).join(',') : typeof beat;
+        }
         if (action === 'hold') return;
         if (action === 'stop') return;
     }
@@ -2018,10 +2027,22 @@ export function tickTimeline(dt) {
 
     // 3. Отложенное продолжение: шаг всегда делается в кадре, а не внутри
     //    обработчика диалога (см. installTimeline).
+    // Самовосстановление: живой прогон без ожидания ('wait'/'say'/'tween'/'anim')
+    // и без заказанного шага сам не двинется — это дедлок. Такой состояние
+    // ловилось новеллой после ветки выбора: `waiting=None`, диалог закрыт,
+    // биты стоят, а `requestStep()` в этот момент никто не позвал. Просим шаг
+    // сами: лишним он не будет — `step()` сразу выходит, если ждать всё-таки
+    // нужно, а `step_pending` переживает висящий hold (см. ниже).
+    if (run && !run.wait && !run.step_pending) run.step_pending = true;
     if (run.step_pending) {
         run.step_pending = false;
         step();
         if (!run) return;
+        // Шаг не состоялся, потому что висел hold ('say'/'tween'/'anim'):
+        // флаг обязан остаться, иначе прогон встанет навсегда — hold снимут,
+        // а продолжить будет некому (нашлось тестом новеллы: waiting=None,
+        // диалог закрыт, beats не растут).
+        if (run.wait) run.step_pending = true;
     }
 
     // 4. Риги: дыхание, дрожь, применение позы к узлу.
@@ -2200,8 +2221,21 @@ function runState() {
         ending: run.ending ? run.ending.id : null,
         ended: run.ended,
         location: run.location,
-        waiting: run.wait ? run.wait.kind : null,
+        // `waiting: null` при ЖИВОМ hold'е — худший вид простоя: шаг не идёт,
+        // а диагностика говорит «ничего не ждём». Поэтому kind показываем
+        // честно даже пустым, а рядом — состав самого объекта ожидания.
+        waiting: run.wait ? (run.wait.kind || 'без-kind') : null,
+        wait_keys: run.wait ? Object.keys(run.wait).join(',') : null,
         wait_left: run.wait && run.wait.left !== undefined ? Math.round(run.wait.left) : (run.wait ? run.wait.ms : null),
+        // Диагностика простоя: «ждём null, шага нет» раньше не отличалось от
+        // «ждём и вот-вот пойдёт». Теперь видно и флаг отложенного шага, и
+        // позицию внутри кадра — по этим полям ловится дедлок после ветки.
+        step_pending: run.step_pending,
+        frame_index: frame ? frame.index : null,
+        frame_len: frame ? frame.list.length : null,
+        last_action: run.last_action || null,
+        last_index: run.last_index === undefined ? null : run.last_index,
+        last_beat: run.last_beat || null,
         timers: run.timers.length,
         beats: run.beats,
         ticks: run.ticks,

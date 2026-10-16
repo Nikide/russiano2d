@@ -191,9 +191,11 @@ export function installStory($) {
 
     function say(who, text, emotion) {
         const u = ensureUi();
-        u.who.text = who || '';
+        // Обёртка узла НЕ расширяется (core.js: Object.preventExtensions), поэтому
+        // `.text = ...` — это TypeError, а не «поставить текст». Ставим методом.
+        u.who.text(who || '');
         const tail = emotion ? ` (${emotion})` : '';
-        u.line.text = (who ? who + tail + ': ' : '') + text;
+        u.line.text((who ? who + tail + ': ' : '') + text);
         const info = { who: who || '', text, emotion: emotion || '' };
         story.last_line = info;
         emit('story:line', info);
@@ -500,7 +502,16 @@ export function installStory($) {
         showBars(!free);
         applyLock(locked);
 
-        const done = () => finish(spec, script);
+        // `done` получает признак отмены: если задача упала (исключение внутри
+        // генератора), сценка не должна выглядеть как доигранная. Текст самой
+        // ошибки уже печатает $.task — здесь важно не молчать о факте.
+        const done = (aborted) => {
+            if (aborted) {
+                const why = task && task.error ? ` — ${task.error.message || task.error}` : '';
+                ctx.log(`$.story: сценка прервана (задача упала)${why}`);
+            }
+            finish(spec, script);
+        };
         const gen = exec(script, startAt);
 
         if (ctx.task && typeof ctx.task.each === 'function') {
