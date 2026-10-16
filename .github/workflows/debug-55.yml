@@ -122,6 +122,28 @@ jobs:
           timeout 60 xvfb-run -a build-dbg/russiano2d --headless --frames 8 \
             --game /tmp/pkg-game > /tmp/c_engine.log 2>&1
           echo "код: $?"; tail -20 /tmp/c_engine.log
+      - name: Диагностика D — агентский старт БЕЗ xvfb (offscreen/dummy)
+        # Проверяем обход для CI: если падение живёт в X11-пути под xvfb, то
+        # offscreen/dummy-видеодрайвер должен его снять.
+        if: always()
+        run: |
+          set +e
+          cat > /tmp/d.py <<'PY'
+          import sys
+          sys.path.insert(0, "tools")
+          from agent_client import Agent
+          drv = sys.argv[1]
+          with Agent(game="tests/fixtures/hello", seed=1, headless=True,
+                     start_timeout=40, env={"SDL_VIDEODRIVER": drv}) as a:
+              a.step(5)
+              print("агентский старт ок, кадр", a.eval("engine.frame"))
+          PY
+          for drv in offscreen dummy; do
+            echo "── D.$drv (без xvfb)"
+            timeout 120 python3 /tmp/d.py "$drv" > /tmp/d_$drv.log 2>&1
+            echo "код: $?"
+            tail -12 /tmp/d_$drv.log
+          done
       - name: Отчёты санитайзеров
         if: always()
         run: |
