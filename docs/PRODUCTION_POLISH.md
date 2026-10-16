@@ -2741,7 +2741,7 @@ job CI), у каждого незакрытого пункта — причин�
 - [x] event timeline — вкладка EVENTS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_events_test.py` (журнал `$.trace`, фильтр по виду события, очистка, честный счёт вытесненных записей)
 - [x] watches — `tests/agent/devtools_test.py`
 - [x] render inspector — вкладка RENDER в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_render_test.py` (счётчики `engine.renderInfo()`, цели, текстуры, батчи/вызовы, состояние viewport)
-- [ ] audio inspector — причина: данные есть (`tests/agent/audio_runtime_test.py`), вкладка AUDIO не собрана
+- [x] audio inspector — вкладка AUDIO в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_audio_test.py` (активные голоса, шины, стоп выбранного канала; остановка свободного канала честно отвечает отказом, а не успехом)
 - [ ] input inspector — причина: вкладка INPUT не собрана (данные `$.input.*` есть)
 - [ ] asset monitor — причина: вкладка ASSETS показывает реестр загрузок, отдельного монитора цен/времени загрузки нет
 - [ ] resource/memory stats — причина: счётчики есть (`$.debug.counters()/limits()`), сводки памяти в панели нет

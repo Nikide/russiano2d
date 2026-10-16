@@ -2033,12 +2033,19 @@ export function installDevTools($) {
         return isNum(v) ? numText(v, 2) : NA;
     }
 
+    /**
+     * §29: остановить канал. «Остановлен» возвращаем только если голос там
+     * действительно играл: $.sound.stop() возвращает API-объект, а не признак,
+     * и врать об успехе пустого канала нельзя.
+     */
     function audioStop(channel) {
         const i = Math.floor(Number(channel));
         if (!Number.isFinite(i) || i < 0) return false;
-        const ok = call(() => $.sound.stop(i), false);
+        const before = call(() => $.sound.channel(i), null);
+        const was_playing = !!(before && before.playing === true);
+        call(() => $.sound.stop(i), null);
         refreshRuntime(true);
-        return ok !== false;
+        return was_playing;
     }
 
     function audioBusControl(what, name, value) {
