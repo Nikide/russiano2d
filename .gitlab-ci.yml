@@ -65,6 +65,7 @@ static:
     - python3 tests/doc_coverage_test.py
     - python3 tests/doc_claims_test.py
     - python3 tests/api_docs_sync_test.py
+    - python3 tests/release_notes_test.py
     - python3 tests/format_extensions_test.py
     - python3 tests/checklist_test.py
     - python3 tests/acceptance_test.py
@@ -191,12 +192,19 @@ release:
   release:
     tag_name: $CI_COMMIT_TAG
     name: "Russiano2D $CI_COMMIT_TAG"
+    # Декларативный `release:` GitLab не читает описание из файла (переменные
+    # подставляются, а `$(cat …)` — нет), поэтому тело короткое, а полные
+    # заметки из dist/RELEASE_NOTES_<версия>.md приложены ссылкой: файл лежит
+    # в репозитории на этом теге, его пишет tools/release_notes.py.
     description: |
       Собрано CI: Linux x86_64, Windows x86_64 (MinGW).
       macOS (arm64, x86_64) собран на рабочем Mac и взят из dist/ репозитория.
       Контрольные суммы — в архивах и в SHA256SUMS.txt артефактов job'ов.
+      Полные заметки релиза — по ссылке «Заметки релиза» ниже.
     assets:
       links:
+        - name: "Заметки релиза"
+          url: "$CI_PROJECT_URL/-/raw/$CI_COMMIT_TAG/dist/RELEASE_NOTES_${CI_COMMIT_TAG#v}.md"
         - name: "Linux x86_64"
           url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/dist-ci/russiano2d-v${CI_COMMIT_TAG#v}-linux-x86_64.tar.gz?job=linux-x86_64"
         - name: "Windows x86_64"

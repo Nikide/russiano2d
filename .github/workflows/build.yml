@@ -46,6 +46,7 @@ jobs:
           python3 tests/doc_coverage_test.py
           python3 tests/doc_claims_test.py
           python3 tests/api_docs_sync_test.py
+          python3 tests/release_notes_test.py
           python3 tests/format_extensions_test.py
           python3 tests/checklist_test.py
           python3 tests/acceptance_test.py
@@ -249,6 +250,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Заметки релиза лежат в репозитории (dist/RELEASE_NOTES_<версия>.md — их
+      # пишет tools/release_notes.py на шаге bump локального выпуска), поэтому
+      # релизному job'у нужен checkout: без него тело релиза собирать не из чего.
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: release-*
@@ -286,6 +291,18 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -eu
+          # Тело релиза — из заметок репозитория (tools/release_notes.py), плюс
+          # честная приписка о том, что macOS прикладывается отдельным шагом.
+          version="${GITHUB_REF_NAME#v}"
+          notes_file="dist/RELEASE_NOTES_${version}.md"
+          platform_text="Windows и Linux собраны GitHub Actions. macOS (arm64, x86_64) собирается локально на рабочем Mac, проверяется там же и прикладывается к этому релизу шагом \`python3 tools/attach_macos_release.py\`; после него в SHA256SUMS.txt пять архивов. До этого момента релиз неполный."
+          if [ -f "$notes_file" ]; then
+            { cat "$notes_file"; printf '\n---\n\n%s\n' "$platform_text"; } > release-body.md
+            echo "тело релиза собрано из $notes_file"
+          else
+            printf 'Заметок %s в репозитории нет — релиз без них.\n\n%s\n' "$notes_file" "$platform_text" > release-body.md
+            echo "!! в репозитории нет $notes_file — тело релиза только из приписки"
+          fi
           cd artifacts
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             # Повторный прогон workflow не должен затирать манифест: к этому
@@ -297,8 +314,7 @@ jobs:
             # macOS здесь сознательно отсутствует: он собирается локально и
             # добавляется отдельным документированным шагом к ЭТОМУ релизу.
             gh release create "$GITHUB_REF_NAME" --verify-tag \
-              --title "Russiano2D $GITHUB_REF_NAME" --generate-notes \
-              --notes "Windows и Linux собраны GitHub Actions. macOS (arm64, x86_64) собирается локально на рабочем Mac, проверяется там же и прикладывается к этому релизу шагом \`python3 tools/attach_macos_release.py\`; после него в SHA256SUMS.txt пять архивов. До этого момента релиз неполный."
+              --title "Russiano2D $GITHUB_REF_NAME" --notes-file ../release-body.md
             gh release upload "$GITHUB_REF_NAME" ./* --clobber
           fi
           gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' | sort

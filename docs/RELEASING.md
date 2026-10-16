@@ -71,7 +71,70 @@
 не блокирует остальные. История не переписывается.
 
 `ALLOW_PARTIAL=1` разрешает частичный набор macOS-архивов. `SITE=0` отключает
-сайт, `BUMP=0`/`TAG=0` — bump и тег, `KEEP_DIST=0` — binaries в коммит.
+сайт, `BUMP=0`/`TAG=0` — bump и тег, `KEEP_DIST=0` — binaries в коммит,
+`NOTES=0` — сборку заметок из коммитов (см. ниже).
+
+## Заметки релиза из коммитов
+
+Релизную секцию CHANGELOG больше не пишут руками: её собирает
+`tools/release_notes.py` из коммитов диапазона `предыдущий тег..HEAD`.
+
+```sh
+python3 tools/release_notes.py --dry-run          # показать заметки, ничего не писать
+python3 tools/release_notes.py                    # dist/RELEASE_NOTES_<версия>.md
+python3 tools/release_notes.py --write-changelog  # + секция версии в CHANGELOG.md
+python3 tools/release_notes.py --from v0.1.35 --version 1.2.0 --date 2026-10-16
+```
+
+`build_and_push.sh` вызывает генератор сам — **после bump и до коммита** (шаг
+«Релизные заметки»), поэтому релизный коммит уже содержит и секцию в
+`CHANGELOG.md`, и файл `dist/RELEASE_NOTES_<версия>.md`. Путь печатается в логе;
+`NOTES=0` отключает шаг, падение генератора останавливает выпуск.
+
+Что делает генератор:
+
+* берёт `git log <прошлый тег>..HEAD --no-merges` (тег вида `vX.Y.Z`, достижимый
+  из HEAD; `--from` переопределяет, без тегов — вся история);
+* раскладывает коммиты по группам правилом «первое совпадение» —
+  `GROUP_RULES` в начале `tools/release_notes.py`: **Исправления → Добавлено →
+  Документация → Тесты и гейты → Сборка и версии → Прочее**. Каждый коммит
+  попадает ровно в одну группу, порядок групп — порядок правил;
+* печатает тему коммита, его хеш и до 12 строк тела (длинные строки подрезаются);
+* ставит в шапку секции число коммитов: «N коммитов в релизе».
+
+**Рукописный текст не теряется.** Разделы `## Не выпущено — …`, появившиеся после
+прошлого тега, переезжают под «### Подробности (написано вручную)» внутрь секции
+версии; у них опускается только уровень заголовка (`##` → `###`), текст остаётся
+байт в байт. Разделы, которые были в CHANGELOG уже на прошлом теге, остаются на
+месте: `--manual new|all|none` (по умолчанию `new`) управляет этим выбором.
+
+Повторный прогон идемпотентен: машинная часть секции лежит между маркерами
+`release-notes:begin` / `release-notes:end` и перезаписывается, всё вне маркеров
+(в том числе «Подробности») не трогается. Если генератор сгруппировал неудачно —
+правьте текст **вне маркеров** или меняйте `GROUP_RULES`; руками секцию не
+дублируйте, следующий прогон перезапишет только машинную часть.
+
+Секция версии защищена тестом `tests/release_notes_test.py` (временный
+git-репозиторий): диапазон, группировка, «число буллетов == числу коммитов»,
+сохранность рукописных разделов, `--dry-run` ничего не пишет, идемпотентность.
+
+## Куда попадают заметки
+
+`dist/RELEASE_NOTES_<версия>.md` лежит в релизном коммите и уезжает в тег, поэтому
+доступен всем трём хостингам без артефактов:
+
+* **GitHub** — `.github/workflows/build.yml`, job `release`: тело релиза
+  собирается из этого файла (`gh release create --notes-file`) плюс приписка про
+  macOS, который прикладывается отдельным шагом;
+* **GitLab/Mos.Hub** — `.gitlab-ci.yml`, job `release`: декларативный
+  `release:` не умеет читать описание из файла, поэтому полные заметки приложены
+  ссылкой «Заметки релиза» (`/-/raw/<тег>/dist/RELEASE_NOTES_<версия>.md`);
+* **GitVerse** — `.gitverse/workflows/build.yaml`, job `release`: шаг собирает
+  `release-body.md` из файла заметок, релиз создаётся с `body_path`.
+
+Если файла заметок в теге нет (например, выпуск делали в обход
+`build_and_push.sh`), все три пайплайна не падают, а создают релиз с одной
+припиской и пишут об этом в лог.
 
 ## Полный порядок выпуска
 
@@ -221,7 +284,41 @@ unreachable, IPv4 — timeout), а сборка тянет зависимост�
    `workflow:` и вернуть `apt-get`-шаги);
 2. **Свой образ** — предустановленный тулчейн + прогретый кэш `FetchContent`
    (`FETCHCONTENT_BASE_DIR`) и `image:` из реестра Mos.Hub; тогда джобы работают
-   без сети вообще.
+   без сети вообще. Состав такого образа уже разобран, чтобы не собирать его
+   заново с нуля (заготовка `docker/ci/Dockerfile` удалена как мёртвая — здесь
+   то, что в ней было по делу):
+   * **пакеты**: `build-essential cmake ninja-build pkg-config git python3
+     libfreetype-dev patchelf libx11-dev libxext-dev libxrandr-dev
+     libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev
+     libxkbcommon-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev
+     libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+     libcurl4-openssl-dev xvfb mesa-vulkan-drivers libgl1-mesa-dri` — это
+     Linux-джоба; для MinGW-кросс-сборки добавляются `mingw-w64 xz-utils curl
+     zip unzip ca-certificates glslang-tools spirv-cross` (последние два —
+     хост-инструменты шейдеров, `cmake/Shaders.cmake` требует их именно для
+     кросс-сборки);
+   * **прогретый кэш**: `/opt/r2d-deps` как `FETCHCONTENT_BASE_DIR`. Пины брать
+     не из головы, а из наших `cmake/*.cmake` — там 16 объявлений
+     `FetchContent_Declare` (SDL3, SDL3_image, SDL3_mixer, SDL3_net, quickjs,
+     box2d, RmlUi, visibility, stb, glslang, SPIRV-Cross, r2d_freetype,
+     r2d_steam_audio, tracy, r2d_tinyexr, zstd). Прогрев делается штатным
+     `cmake -DFETCHCONTENT_BASE_DIR=...` по мини-проекту с теми же
+     объявлениями: важны не только скачанные исходники, но и ШТАМПЫ шагов
+     загрузки в `<имя>-subbuild`, иначе CMake полезет в сеть повторно;
+   * джобы запускаются с `-DFETCHCONTENT_BASE_DIR=/opt/r2d-deps
+     -DFETCHCONTENT_UPDATES_DISCONNECTED=ON` (на CMake ≥ 3.30 ещё
+     `-DFETCHCONTENT_FULLY_DISCONNECTED=ON`; в ubuntu:24.04 CMake 3.28, где
+     второго флага нет);
+   * FreeType лежит отдельным тарболлом с `archive.ubuntu.com`: Linux-джоба
+     берёт его из `libfreetype-dev`, а Windows-джоба собирает статически под
+     MinGW — значит тарболл нужен в образе (`/opt/r2d-cache/freetype.tar.xz`,
+     SHA256 сверить с пином `URL_HASH` из `cmake/Dependencies.cmake`);
+   * джобу `release` нельзя оставлять на `registry.gitlab.com/gitlab-org/release-cli`:
+     этот образ тянется из интернета и без egress недоступен. Рабочая замена —
+     создавать релиз из своего образа через API самого Mos.Hub
+     (`curl "$CI_API_V4_URL/projects/$CI_PROJECT_ID/releases"` с
+     `JOB-TOKEN: $CI_JOB_TOKEN`): сервер GitLab раннеру доступен даже без
+     внешней сети, в отличие от реестра gitlab.com.
 
 Пока ни того, ни другого нет, сборка Linux/Windows на Mos.Hub не выполняется:
 Windows-архивы делает GitHub Actions (MinGW-кросс-компиляция), Linux — там же,

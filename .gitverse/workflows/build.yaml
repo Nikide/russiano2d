@@ -41,6 +41,7 @@ jobs:
       - run: python3 tests/portability_test.py
       - run: python3 tests/doc_coverage_test.py
       - run: python3 tests/doc_claims_test.py
+      - run: python3 tests/release_notes_test.py
       - run: python3 tests/format_extensions_test.py
       - run: python3 tests/checklist_test.py
       - run: python3 tests/acceptance_test.py
@@ -188,15 +189,29 @@ jobs:
           ls -la release-files/
           # linux + windows + два macOS-архива
           test "$(find release-files -type f | wc -l)" -eq 4
+      - name: Собрать тело релиза из заметок репозитория
+        run: |
+          version="${gitverse.ref_name#v}"
+          notes="dist/RELEASE_NOTES_${version}.md"
+          platform="Linux x86_64 и Windows x86_64 (MinGW) собраны CI на GitVerse.
+          macOS (arm64, x86_64) собран на рабочем Mac и взят из dist/ репозитория.
+          Контрольные суммы лежат внутри архивов (SHA256SUMS.txt)."
+          if [ -f "$notes" ]; then
+            { cat "$notes"; printf '\n---\n\n%s\n' "$platform"; } > release-body.md
+            echo "тело релиза собрано из $notes"
+          else
+            printf 'Заметок %s в репозитории нет — релиз без них.\n\n%s\n' "$notes" "$platform" > release-body.md
+            echo "!! в репозитории нет $notes — тело релиза только из приписки"
+          fi
+          head -5 release-body.md
       - name: Создать релиз с артефактами трёх платформ
         uses: actions/create-release@v1
         with:
           api_key: ${{ secrets.GITVERSE_API_KEY }}
           title: Russiano2D ${{ gitverse.ref_name }}
-          body: |
-            Linux x86_64 и Windows x86_64 (MinGW) собраны CI на GitVerse.
-            macOS (arm64, x86_64) собран на рабочем Mac и взят из dist/ репозитория.
-            Контрольные суммы лежат внутри архивов (SHA256SUMS.txt).
+          # body_path — заметки из репозитория (tools/release_notes.py кладёт их
+          # в dist/RELEASE_NOTES_<версия>.md ещё в релизном коммите).
+          body_path: release-body.md
           files: |
             release-files/*.tar.gz
             release-files/*.zip
