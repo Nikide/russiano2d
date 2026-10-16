@@ -30,6 +30,27 @@ FAILURES = []
 GAME = os.path.join("tests", "fixtures", "save_areas")
 SLOT = "build/test_saves/slot-9.json"
 
+#: Поля, которые законно меняются от сохранения к сохранению: это метаданные
+#: момента, а не состояние мира.
+VOLATILE = ("saved_at", "saved_frame", "time")
+
+
+def same_payload(first, second):
+    """Сравнить два сейва без полей момента (§10: данные не должны «плыть»)."""
+    import json
+
+    def strip(value):
+        if isinstance(value, dict):
+            return {k: strip(v) for k, v in value.items() if k not in VOLATILE}
+        if isinstance(value, list):
+            return [strip(v) for v in value]
+        return value
+
+    try:
+        return strip(json.loads(first)) == strip(json.loads(second))
+    except Exception:
+        return False
+
 
 def check(condition, message):
     print(("  ok   " if condition else "  FAIL ") + message)
@@ -75,6 +96,15 @@ def main():
         result = a.eval("$.save.load(9)")
         check(result is True, "слот загружен (load вернул true): %s" % (result,))
         a.step(3)
+
+        # save → load → save обязан дать те же ДАННЫЕ (кроме метаданных времени):
+        # иначе каждое сохранение после загрузки копило бы расхождения —
+        # порядок областей, лишние поля, потерянные флаги.
+        first = a.eval("$.fs.readText('%s')" % SLOT)
+        a.eval("$.save.save(10)")
+        second = a.eval("$.fs.readText('build/test_saves/slot-10.json')")
+        check(isinstance(first, str) and same_payload(first, second),
+              "save → load → save даёт те же данные")
 
         after_guard = area_of(a, "guard", "hurtbox")
         after_blade = area_of(a, "blade", "attack")
