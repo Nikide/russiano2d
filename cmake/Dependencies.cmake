@@ -208,6 +208,30 @@ if(R2D_ENABLE_RMLUI)
     endif()
 
     FetchContent_MakeAvailable(RmlUi)
+
+    # --- Обход внутренней ошибки компилятора MSVC в исходниках Debugger -------
+    # На windows-2022 (MSVC 14.44) сборка Release падает не на нашем коде, а
+    # внутренней ошибкой CL.exe: «INTERNAL COMPILER ERROR in CL.exe» с кодом
+    # 0xE06D7363 и стеком CloseTypeServerPDB на файлах RmlUi из Source/Debugger
+    # (ElementDebugDocument/ElementInfo/ElementDataModels/Geometry). Ошибка
+    # появилась между v0.1.31 и v0.1.32 и валит всю Windows-сборку, поэтому
+    # нужен обход, а не ожидание патча компилятора:
+    #   * /Zf — генерация PDB без общего type server: именно на него ссылается
+    #     стек упавшего компилятора при параллельной сборке (/MP);
+    #   * /Od для Debugger — код отладочных панелей RmlUi не горячий (он нужен
+    #     DevTools), а тяжёлые оптимизации на его шаблонах и роняют CL.
+    # Оба флага только для MSVC и только для целей RmlUi: остальные платформы
+    # и остальной код собираются ровно как раньше.
+    if(MSVC)
+        foreach(_r2d_target rmlui rmlui_debugger rmlui_core)
+            if(TARGET ${_r2d_target})
+                target_compile_options(${_r2d_target} PRIVATE /Zf)
+            endif()
+        endforeach()
+        if(TARGET rmlui_debugger)
+            target_compile_options(rmlui_debugger PRIVATE /Od)
+        endif()
+    endif()
     # Бэкенды RmlUi под SDL_GPU не собираются автоматически (каталог Backends/
     # подключается только вместе с сэмплами). Компилируем нужные файлы сами —
     # см. src/CMakeLists.txt.

@@ -86,7 +86,13 @@ jobs:
           fi
           cmake -S . -B build-ci -DCMAKE_BUILD_TYPE=Release "${flags[@]}"
       - name: Build engine and SDK (RE2D on)
-        run: cmake --build build-ci --config Release --parallel 4
+        run: |
+          # Windows: 2 параллельных проекта вместо 4 — внутренняя ошибка CL.exe
+          # в исходниках RmlUi Debugger возникает при параллельной сборке
+          # (стек CloseTypeServerPDB), а раннер выдаёт 7 ГБ на всех.
+          parallel=4
+          if [[ "$RUNNER_OS" == Windows ]]; then parallel=2; fi
+          cmake --build build-ci --config Release --parallel "$parallel"
       - name: Configure (RE2D off)
         run: |
           flags=()
