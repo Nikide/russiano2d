@@ -21,20 +21,23 @@
 #   * $.ctx/$.math/$.fn — владелец гейта (task-25).
 
 # --- долг: task-30 (devtools-ui) ---
-$.sound.*                    # debt: 14 имён, страница docs/highlevel/sound.md без полного перечня; в работе (task-30)
-$.tilemap.*                  # debt: 12 имён, страница docs/highlevel/tilemap.md без полного перечня; в работе (task-30)
 
 # --- долг: task-30/task-31 (engine.* — рендерные/прочие) ---
-engine.bodyGeneration        # internal: биндинг C-уровня (engine.bodyGeneration), игры его не зовут; справочник — docs/internal/NATIVE.md
-engine.clearPhysicsErrors    # internal: биндинг C-уровня (engine.clearPhysicsErrors), игры его не зовут; справочник — docs/internal/NATIVE.md
-engine.contactStay           # internal: биндинг C-уровня (engine.contactStay), игры его не зовут; справочник — docs/internal/NATIVE.md
-engine.isAwake               # internal: биндинг C-уровня (engine.isAwake), игры его не зовут; справочник — docs/internal/NATIVE.md
-engine.netMode               # internal: биндинг C-уровня (engine.netMode), игры его не зовут; справочник — docs/internal/NATIVE.md
-engine.physicsErrors         # internal: биндинг C-уровня (engine.physicsErrors), игры его не зовут; справочник — docs/internal/NATIVE.md
-engine.profileEnabled        # internal: биндинг C-уровня (engine.profileEnabled), игры его не зовут; справочник — docs/internal/NATIVE.md
-engine.setContactStay        # internal: биндинг C-уровня (engine.setContactStay), игры его не зовут; справочник — docs/internal/NATIVE.md
-engine.setGravityScale       # internal: биндинг C-уровня (engine.setGravityScale), игры его не зовут; справочник — docs/internal/NATIVE.md
-engine.setSnap               # internal: биндинг C-уровня (engine.setSnap), игры его не зовут; справочник — docs/internal/NATIVE.md
+# Причина `internal` проверена: ни одно из имён не вызывается из игрового кода
+# (в src/highlevel/*.js вхождений нет, кроме внутренних вызовов JS-слоя движка),
+# это биндинги C. Ссылка на справочник указана там, где он имя действительно
+# описывает; для остальных в docs/internal/NATIVE.md записи нет — они названы
+# кандидатами на строку справочника (вне зоны правки task-31).
+engine.bodyGeneration        # internal: поколение тела для genA/genB событий контакта (src/script.c:1227); в NATIVE.md не описан — кандидат на строку справочника
+engine.clearPhysicsErrors    # internal: очистить кольцо ошибок физики (src/script.c:5979); в NATIVE.md не описан — кандидат на строку справочника
+engine.contactStay           # internal: читает фазу `stay` контакта тела — opt-in (src/script.c:1205); в NATIVE.md не описан — кандидат на строку справочника
+engine.isAwake               # internal: биндинг C-уровня, игры его не зовут; справочник — docs/internal/NATIVE.md (строка 2567)
+engine.netMode               # internal: биндинг C-уровня, игры его не зовут; справочник — docs/internal/NATIVE.md (строка 2568)
+engine.physicsErrors         # internal: кольцо ошибок физики {total, overflow, errors[]} (src/script.c:1249); в NATIVE.md не описан — кандидат на строку справочника
+engine.profileEnabled        # internal: биндинг C-уровня, игры его не зовут; справочник — docs/internal/NATIVE.md (строка 2561)
+engine.setContactStay        # internal: включает фазу `stay` у тела (src/script.c:1205); в NATIVE.md не описан — кандидат на строку справочника
+engine.setGravityScale       # internal: биндинг C-уровня, игры его не зовут; справочник — docs/internal/NATIVE.md (строка 2567)
+engine.setSnap               # internal: презентационный снаппинг вершин (src/render.c:3791), зовёт JS-слой движка (render.js:3711); в NATIVE.md не описан — кандидат на строку справочника
 
 # --- task-31 (debug-overlays) закрыт: $.world, $.items/$.inv, $.cels, $.barks, ---
 # --- $.activation, $.agent, $.anim, $.collision, $.loading, $.random, $.combat,  ---
