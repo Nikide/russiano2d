@@ -38,6 +38,20 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# --- MSVC: обход внутренней ошибки компилятора ------------------------------
+# На windows-2022 (MSVC 14.44.35207) сборка Release падает не на нашем коде, а
+# внутренней ошибкой компилятора: «INTERNAL COMPILER ERROR in CL.exe»
+# (код 0xE06D7363) в фазе кодогенерации проекта russiano2d, стек — через
+# CloseTypeServerPDB, то есть через общий PDB-сервер типов, который CL держит
+# при /Zi. Ошибка появилась между v0.1.31 и v0.1.32 и валит весь Windows-джоб;
+# проверено, что /Zf и отключение /MP её НЕ лечат, поэтому убираем сам сервер
+# типов: /Z7 кладёт отладочную информацию в .obj, общего PDB-сервера нет.
+# Цена — крупнее объектные файлы на Windows; Release-оптимизация не меняется.
+# Флаг только для MSVC: остальные платформы собираются как раньше.
+if(MSVC)
+    add_compile_options(/Z7)
+endif()
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Тип сборки" FORCE)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)

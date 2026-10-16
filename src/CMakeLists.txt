@@ -218,7 +218,9 @@ set_target_properties(russiano2d PROPERTIES
 # Проектная параллельность (MSBuild /m) сохраняется: файлов много, а времени
 # на Windows-раннере хватает. Оба параметра действуют только для MSVC/VS.
 if(MSVC)
-    target_compile_options(russiano2d PRIVATE /Zf)
+    # /Zf не помог (проверено прогоном CI), а /Z7 уже включён глобально в
+    # корневом CMakeLists — здесь только снимаем /MP у этого проекта, чтобы
+    # кодогенерация не шла общей пачкой.
     set_target_properties(russiano2d PROPERTIES
         VS_GLOBAL_MultiProcessorCompilation "false")
 endif()

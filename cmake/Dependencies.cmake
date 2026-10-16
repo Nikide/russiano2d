@@ -230,7 +230,6 @@ if(R2D_ENABLE_RMLUI)
                 get_target_property(_r2d_target_type ${_r2d_target} TYPE)
                 if(NOT _r2d_target_type STREQUAL "INTERFACE_LIBRARY")
                     target_compile_options(${_r2d_target} PRIVATE
-                        /Zf          # PDB без общего type server (стек падения CL)
                         $<$<STREQUAL:${_r2d_target},rmlui_debugger>:/Od>)  # Debugger не горячий
                 endif()
             endif()
