@@ -85,8 +85,12 @@ def refresh_out_dir(out_dir: str, version: str) -> int:
         with open(os.path.join(target,'SHA256SUMS.txt'),'w') as out:
             out.write(''.join(sha+'  '+rel+'\n' for rel,sha in sorted(entries)))
         fmt=release.PLATFORMS[name][2]
-        base=os.path.join(out_dir,'russiano2d-'+name)
-        shutil.make_archive(base,'zip' if fmt=='zip' else 'gztar',root_dir=target)
+        # Архив пересобираем тем же кодом, что и релиз (release.write_archive):
+        # shutil.make_archive кладёт в архив текущее время файлов, и «та же
+        # ревизия — тот же SHA256» перестаёт быть правдой ровно после
+        # обновления документов.
+        base=os.path.join(out_dir, release.archive_name(name, version))
+        release.write_archive(target, base, fmt)
         agents = os.path.join(target, "AGENTS.md")
         if os.path.exists(agents):
             print("  %s — %d КБ" % (agents, os.path.getsize(agents) // 1024))
@@ -94,6 +98,12 @@ def refresh_out_dir(out_dir: str, version: str) -> int:
     if updated == 0:
         print("в %s нет папок платформ" % out_dir, file=sys.stderr)
         return 1
+    # Архивы платформ, которые тут обновлялись, обязаны носить единственное
+    # актуальное имя: рядом со свежим архивом не должно остаться старого.
+    for stale in release.prune_stale_archives(
+            out_dir, [n for n in sorted(os.listdir(out_dir))
+                      if os.path.isdir(os.path.join(out_dir, n))], version):
+        print("  убран устаревший архив: %s" % stale)
     release._write_global_sums(out_dir)
     print("обновлено платформ и архивов: %d" % updated)
     return 0

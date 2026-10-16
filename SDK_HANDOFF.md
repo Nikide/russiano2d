@@ -196,12 +196,18 @@ build_and_push с независимым push на три хоста; запус
 - CI: five native Release runners (macOS arm64/x86_64, Linux x86_64/aarch64,
   Windows x86_64), native+JS+SDK batch, Linux GUI, пять архивов и SHA256 в
   GitHub Release только после успеха всех jobs. Runner labels сверены с GitHub docs.
+  **Историческая запись:** с 2026-10-16 владение сборками другое — macOS убран из
+  матрицы CI и собирается локально, CI собирает Windows/Linux, создаёт релиз и
+  выкладывает три архива; macOS прикладывается шагом
+  `tools/attach_macos_release.py`. Актуально — [docs/RELEASING.md](docs/RELEASING.md).
 - autobuild: macOS x86_64 cross FreeType static для нужной архитектуры, SDK
   копируется и из Docker context path; отдельные Docker builder images по CPU,
   чтобы не маркировать ARM executable как Linux x86_64.
 - build_and_push: defaults all five platforms; независимые pushes и verification
   трёх хостов, duplicate URL dedup, bounded push timeout, machine JSON report;
   недоступность зеркала не отменяет другие зеркала и сайт.
+  **Историческая запись:** теперь локальный скрипт собирает только macOS и
+  отвергает не-macOS платформу в `PLATFORMS`.
 - Проверки: actionlint passed; bash syntax/py_compile/diff check passed;
   publish_refs_test (реальные temp bare repos с одним отказом) passed;
   site_prune_test (mock FTP, удаление только doc/, retry) passed;

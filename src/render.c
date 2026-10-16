@@ -3038,7 +3038,10 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     // берётся из ассета: эффект обязан работать без файлов у игры, а сам шум —
     // это лишь поле дрожания, его художественная ценность нулевая.
     {
-        const int N = 64;
+        // Размер — константа времени компиляции: в C `const int N = 64` не
+        // константное выражение, поэтому `Uint32 pixels[N * N]` было бы VLA,
+        // а runtime-sized массивы MSVC не принимает вовсе (C2057/C2133).
+        enum { N = 64 };
         Uint32 pixels[N * N];
         Uint32 seed = 0x9e3779b9u;
         for (int i = 0; i < N * N; i++) {

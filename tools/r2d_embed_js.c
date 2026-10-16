@@ -105,8 +105,16 @@ int main(int argc, char **argv)
         }
         char *list = strdup(argv[++i]);
         if (!list) return 1;
-        for (char *tok = strtok(list, ","); tok && exclude_count < 32; tok = strtok(NULL, ",")) {
-            exclude[exclude_count++] = tok;
+        // Разбор вручную, а не через strtok: у strtok состояние глобальное и
+        // он ломается, если разбор окажется вложенным в другой разбор.
+        for (char *p = list; *p && exclude_count < 32; ) {
+            while (*p == ',' || *p == ' ' || *p == '\t') ++p;
+            if (!*p) break;
+            char *start = p;
+            while (*p && *p != ',') ++p;
+            if (*p) { *p++ = '\0'; }
+            while (p > start && (p[-1] == ' ' || p[-1] == '\t')) *--p = '\0';
+            exclude[exclude_count++] = start;
         }
         // list намеренно не освобождаем: токены живут до конца main, а утечка
         // на выходе процесса дешевле ошибки «освободили то, чем пользуемся».

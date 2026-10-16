@@ -611,6 +611,44 @@ def binary_platform(path: str) -> str:
         return 'unsupported'
 
 
+def archive_name(platform_name: str, version: str) -> str:
+    """Имя архива релиза — единый контракт имени артефакта.
+
+    Имя собирается в одном месте, потому что его читают сразу четыре стороны:
+    локальная упаковка, пакет в CI, шаг прикладывания macOS-архива к уже
+    созданному GitHub Release и проверки в тестах. Версия в имени — требование
+    §58 плана дополировки: файл релиза обязан быть предсказуемым, а не
+    «russiano2d-linux-x86_64.tar.gz» без номера.
+    """
+    return "russiano2d-v%s-%s.%s" % (version, platform_name, PLATFORMS[platform_name][2])
+
+
+def prune_stale_archives(out_dir: str, platforms: Sequence[str], version: str) -> List[str]:
+    """Убрать из ``out_dir`` архивы этих платформ с другим именем.
+
+    Имя артефакта теперь содержит версию (``archive_name``), поэтому после
+    переименования в каталоге релиза оставался бы старый файл без версии — и в
+    Dist-хранилище, и в ``SHA256SUMS.txt``, и на странице загрузок оказались бы
+    два архива одной платформы. Чужие платформы не трогаем: их обновляет тот,
+    кто их собирает (CI или шаг скачивания артефактов).
+    """
+    removed: List[str] = []
+    directory = os.path.join(ROOT, out_dir)
+    if not os.path.isdir(directory):
+        return removed
+    keep = {archive_name(name, version) for name in platforms}
+    # Имя платформы в конце: и старое «russiano2d-linux-x86_64.tar.gz», и
+    # архив прошлой версии «russiano2d-v0.1.32-linux-x86_64.tar.gz».
+    patterns = [re.compile(r"^russiano2d-(?:v[\d.]+-)?%s\.(?:tar\.gz|zip)$"
+                           % re.escape(name)) for name in platforms]
+    for name in sorted(os.listdir(directory)):
+        if name in keep or not any(p.match(name) for p in patterns):
+            continue
+        os.remove(os.path.join(directory, name))
+        removed.append(name)
+    return removed
+
+
 def package_platform(
     runner: Runner,
     platform_name: str,
@@ -630,7 +668,7 @@ def package_platform(
     log("4. Упаковка %s" % platform_name)
     target = os.path.join(ROOT, out_dir, platform_name)
     archive_ext = PLATFORMS[platform_name][2]
-    archive = os.path.join(ROOT, out_dir, "russiano2d-%s.%s" % (platform_name, archive_ext))
+    archive = os.path.join(ROOT, out_dir, archive_name(platform_name, version))
 
     if runner.dry_run:
         log("    каталог пакета: %s" % target)
@@ -742,6 +780,11 @@ def package_platform(
     os.makedirs(os.path.join(ROOT, out_dir), exist_ok=True)
     write_archive(target, archive, archive_ext)
     log("    архив: %s" % archive)
+
+    # Старое имя того же архива (без версии) рядом не оставляем: иначе в
+    # каталоге релиза лежали бы две копии одной платформы.
+    for stale in prune_stale_archives(out_dir, [platform_name], version):
+        log("    убран устаревший архив: %s" % stale)
 
     # Сводные суммы по архивам всего релиза.
     _write_global_sums(out_dir)

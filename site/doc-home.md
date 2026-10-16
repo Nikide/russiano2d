@@ -117,10 +117,11 @@ WebGPU, см. [docs/WEB_EXPORT.md](docs/WEB_EXPORT.md)).
 
 ## Как собрать бинарник движка
 
-> **Хотите просто поиграть — забирайте готовое.** Под Linux и Windows сборки
-> собирает CI на GitVerse по тегу и кладёт в
-> [релизы](https://gitverse.ru/Nikide/russiano2d/releases); сборка под macOS
-> лежит в `dist/` репозитория. Ниже — как собрать самому из исходников.
+> **Хотите просто поиграть — забирайте готовое.** Windows и Linux собирает
+> GitHub Actions по тегу и выкладывает в
+> [релизы](https://github.com/Nikide/russiano2d/releases); macOS собирается
+> локально и прикладывается к тому же релизу. Все платформы лежат и в `dist/`
+> репозитория. Ниже — как собрать самому из исходников.
 
 Нужны **CMake 3.24+**, компилятор с C11 и C++20 (AppleClang, GCC, Clang, MSVC) и
 Git: зависимости тянутся через CMake `FetchContent` при первой конфигурации.
@@ -146,21 +147,28 @@ Box2D, RmlUi, glslang и SPIRV-Cross. Дальше сборка инкремен
 подхватит его и не будет собирать заново. Так же подхватывается системный
 libcurl — с ним `$.http` умеет и `https`.
 
-### Автосборка всех платформ в `dist/`
+### Автосборка macOS в `dist/`
 
-Одной командой — что можно собрать на этой машине:
+Локальная машина собирает только macOS (Windows и Linux собирает CI по тегу):
 
 ```bash
-python3 tools/autobuild.py --with-windows
+python3 tools/autobuild.py --platforms macos-arm64,macos-x86_64
 ```
 
 * **macOS** собирается нативно;
-* **Linux** — в контейнере `ubuntu:24.04` (образ-сборщик:
-  `tools/docker/Dockerfile.linux-builder`), репозиторий монтируется внутрь,
-  поэтому артефакты остаются на диске рядом с проектом;
-* **Windows** — кросс-компиляция MinGW в том же контейнере;
-* каждая платформа упаковывается штатным релизным кодом в `dist/<платформа>/`
-  вместе с архивом, и рядом пишется общий `dist/SHA256SUMS.txt`.
+* собранное упаковывается штатным релизным кодом в `dist/<платформа>/`
+  вместе с архивом `russiano2d-v<версия>-<платформа>.tar.gz`, и рядом пишется
+  общий `dist/SHA256SUMS.txt`.
+
+В матрице CI три платформы: `windows-x86_64`, `linux-x86_64`, `linux-aarch64`;
+CI собирает и тестирует их, пакует и по тегу создаёт Release.
+`tools/autobuild.py` всё ещё умеет собирать чужие
+платформы: Linux — в контейнере `ubuntu:24.04` (образ-сборщик:
+`tools/docker/Dockerfile.linux-builder`, репозиторий монтируется внутрь),
+Windows — кросс-компиляцией MinGW в том же контейнере. Но это инструмент
+локальной проверки и паритета с CI, а не путь релиза: `build_and_push.sh`
+отвергает не-macOS платформу в `PLATFORMS`. Готовые артефакты CI попадают в
+витрину `dist/` скачиванием — `python3 tools/fetch_release_assets.py`.
 
 Полезные флаги: `--debug`, `--jobs N`, `--platforms macos-arm64,linux-x86_64`,
 `--with-windows`, `--out DIR`. Нужен запущенный Docker Desktop — без него
@@ -179,29 +187,33 @@ python3 tools/autobuild.py --with-windows
 
 ### Сборка под Windows и Linux
 
-**Готовые сборки лежат в [`dist/`](dist/) этого же репозитория** — отдельной
-выгрузки релизов нет, качать оттуда:
+**Готовые сборки лежат в [`dist/`](dist/) этого же репозитория**; те же архивы
+выложены в [Releases](https://github.com/Nikide/russiano2d/releases) — качать
+можно и оттуда:
 
 * [dist/ на hub.mos.ru](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/dist)
 * [dist/ на GitVerse](https://gitverse.ru/Nikide/russiano2d/content/main/dist)
 
 Внутри — пакеты под macOS (arm64/x86_64), Linux (x86_64/aarch64) и Windows (x86_64):
-архивы `russiano2d-<платформа>.tar.gz` / `.zip`, распакованные каталоги и
-`SHA256SUMS.txt` для проверки. Собирает и кладёт их туда локальный
-`build_and_push.sh`; он же поднимает версию и ставит тег `vX.Y.Z`.
+архивы `russiano2d-v<версия>-<платформа>.tar.gz` / `.zip`, распакованные каталоги
+и `SHA256SUMS.txt` для проверки. macOS кладёт туда локальный `build_and_push.sh`
+(сборка, тесты, пакет; он же поднимает версию и ставит тег `vX.Y.Z`), архивы
+Windows и Linux скачивает из CI-релиза `python3 tools/fetch_release_assets.py`.
 
 [GitHub workflow](.github/workflows/build.yml) по тегу собирает и проверяет
-macOS arm64/x86_64, Linux x86_64/aarch64 и Windows x86_64, затем публикует
-пять SDK-пакетов и checksums в [Releases](https://github.com/Nikide/russiano2d/releases).
+Windows x86_64, Linux x86_64/aarch64, пакует три архива, считает
+`SHA256SUMS.txt` и создаёт **один** Release на тег. macOS в матрице нет
+намеренно: он собирается локально, а к тому же релизу его прикладывает
+`python3 tools/attach_macos_release.py` — после этого в релизе пять архивов.
 `build_and_push.sh` независимо отправляет ветку/тег в GitHub, hub.mos.ru и GitVerse
 и пересобирает сайт из актуальной документации.
 
-Собрать руками:
+Собрать руками (локальная проверка, не выпуск релиза):
 
 ```bash
 python3 tools/autobuild.py --with-windows        # macOS + Linux + Windows (Docker)
 python3 tools/autobuild.py --no-docker \
-    --platforms linux-x86_64,windows-x86_64      # без Docker, кросс-компиляция MinGW
+    --platforms linux-x86_64,windows-x86_64      # Linux-хост с mingw-w64, без Docker
 ```
 
 Под Windows нужен MSVC (или MSYS2/MinGW) и CMake — команды те же, что выше,
@@ -209,8 +221,9 @@ python3 tools/autobuild.py --no-docker \
 компилятор.
 
 Выпуск версии целиком: `build_and_push.sh` поднимает патч-версию
-(`0.1.0 → 0.1.1`), собирает все платформы, коммитит, пушит ветку и тег на оба
-хостинга. Версию можно поднять и отдельно:
+(`0.1.0 → 0.1.1`), собирает macOS (arm64 и x86_64), коммитит, ставит тег `vX.Y.Z`
+и пушит ветку и тег в GitHub, hub.mos.ru и GitVerse; Windows и Linux по этому
+тегу собирает CI. Версию можно поднять и отдельно:
 
 ```bash
 python3 tools/release.py --bump                 # 0.1.0 → 0.1.1
@@ -554,8 +567,10 @@ assets/
 tools/
   agent_client.py           клиент протокола агента на Python
   run_tests.py              раннер агентских тестов
-  autobuild.py              сборка всех платформ в dist/ (Linux и Windows — в контейнере)
+  autobuild.py              локальная сборка в dist/ (Windows и Linux — проверка в контейнере)
   release.py                выпуск релиза: версия, сборка, тесты, упаковка, тег
+  fetch_release_assets.py   скачивание архивов CI в dist/ (сам ничего не собирает)
+  attach_macos_release.py   прикладывание macOS-архивов к релизу, созданному CI
   agents_doc.py             сборка AGENTS.md и README.md для dist/ из docs/
   bench_highlevel.py        стенд производительности $ (docs/HIGH_LEVEL_API_PERF.md)
   bench_storage.mjs         микрозамер раскладки данных массовых сущностей (qjs)
@@ -567,7 +582,7 @@ tools/
   r2d_embed_icons.c         встраивание шрифта иконок
   r2d_pack.c                упаковщик скриптов в байткод QuickJS
 tests/
-  agent/                    тесты, которые гоняет агент (79 файлов *_test.py)
+  agent/                    тесты, которые гоняет агент (*_test.py; список — `python3 tools/run_tests.py --list`)
   fixtures/                 маленькие игры для тестов
 docs/
   HIGH_LEVEL_API.md         полный справочник по $
@@ -591,7 +606,7 @@ dist/
     AGENTS.md               то же для ИИ-агента + ВСЯ документация движка внутри
     russiano2d              движок
     russiano2d-platformer   собранная игра-платформер (там, где её удалось собрать)
-  russiano2d-<платформа>.tar.gz  тот же каталог архивом
+  russiano2d-v<версия>-<платформа>.tar.gz   тот же каталог архивом
 ```
 
 Сборка кладётся в `dist/<платформа>/` целиком: бинарники, ассеты, `README.md`
@@ -697,8 +712,8 @@ continuous slopes, свет/тени/туман и shared sample depth с Re2DSp
 Состояние и команды — [SDK](docs/SDK.md), [Re2DSprite](docs/RE2DSPRITE_GUIDE.md),
 [Re2D World](docs/RE2D_WORLD_GUIDE.md), [персонажи в новом мире](docs/re2d/RE2DSPRITE_WORLD.md)
 и [миграция](docs/re2d/RE2D_MIGRATION.md). `dist/` содержит опубликованные снимки
-версии 0.1.22: новый SDK в них ещё не упакован. Не смешивайте возможности текущих
-исходников с возможностями старого скачанного бинарника.
+конкретной версии — сверяйтесь с `VERSION` и `SHA256SUMS.txt` внутри пакета:
+возможности текущих исходников и давно скачанного бинарника могут расходиться.
 
 ## Документация
 
@@ -750,8 +765,9 @@ continuous slopes, свет/тени/туман и shared sample depth с Re2DSp
 [GitVerse](https://gitverse.ru/Nikide/russiano2d) остаются в конфигурации.
 Готовые пакеты лежат в [`dist/`](dist/); это снимки конкретной версии.
 
-`build_and_push.sh` поднимает версию, собирает платформы, коммитит и пушит ветку
-и новый tag `vX.Y.Z` независимо в GitHub, hub.mos.ru и GitVerse.
+`build_and_push.sh` поднимает версию, собирает macOS, коммитит и пушит ветку
+и новый tag `vX.Y.Z` независимо в GitHub, hub.mos.ru и GitVerse; Windows и Linux
+по этому тегу собирает CI.
 `REMOTES=...` меняет список целей; отказ одного хоста не блокирует остальные и сайт.
 CI запускается на version tags. Не использовать `--mirror` для публикации.
 Подробности — [docs/RELEASING.md](docs/RELEASING.md).

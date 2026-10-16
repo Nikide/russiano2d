@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "audio_fx.h"
+#include "r2d.h"   // R2D_PI: своя константа вместо M_PI (его нет в MSVC без _USE_MATH_DEFINES)
 
 static int failures = 0;
 static int checks = 0;
@@ -53,7 +54,7 @@ static double energy(const float *pcm, int samples)
 static void fill_sine(float *pcm, int frames, int rate, float freq, float amp)
 {
     for (int f = 0; f < frames; ++f) {
-        const float v = amp * sinf(2.0f * (float)M_PI * freq * (float)f / (float)rate);
+        const float v = amp * sinf(2.0f * (float)R2D_PI * freq * (float)f / (float)rate);
         pcm[f * 2 + 0] = v;
         pcm[f * 2 + 1] = v;
     }

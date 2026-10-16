@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# Локальная сборка, patch bump, коммит и публикация нового тега на GitHub.
-# GitHub Actions запускается только по тегу vX.Y.Z.
+# Локальная macOS-сборка, patch bump, коммит, тег и публикация.
+# GitHub Actions запускается только по тегу vX.Y.Z и собирает Windows/Linux.
+#
+# Владение сборками (RUSSIANO2D_PRODUCTION_POLISH.md §4.6–4.8, docs/RELEASING.md):
+# этот скрипт — НЕ второй CI. Он собирает только macOS на рабочем Mac; сборка
+# Linux (в том числе кросс-сборка через Docker), сборка Windows, их упаковка,
+# контрольные суммы и создание GitHub Release — ответственность CI. Локальный
+# скрипт никогда не создаёт релиз: он лишь может приложить macOS-архивы к уже
+# созданному CI релизу отдельным документированным шагом.
 #
 # ./build_and_push.sh "Сообщение коммита"
 # SITE=0 ./build_and_push.sh   # без публикации сайта
@@ -100,8 +107,25 @@ else
 fi
 
 # --- 1. Сборка -------------------------------------------------------------
+# Локально собираются только macOS-профили. Linux и Windows собирает CI: если
+# сюда передать их через PLATFORMS, это снова превратит скрипт во второй
+# CI-сервер и породит второй источник артефактов. Поэтому не-macOS платформы
+# отвергаются явно, а не «на всякий случай» собираются в Docker.
+LOCAL_PLATFORMS="${PLATFORMS:-macos-arm64,macos-x86_64}"
+for platform in ${LOCAL_PLATFORMS//,/ }; do
+    case "$platform" in
+        macos-*) ;;
+        *)
+            echo "!! PLATFORMS=$LOCAL_PLATFORMS: платформа $platform не собирается локально."
+            echo "   Windows и Linux собирает GitHub Actions по тегу (§4.6);"
+            echo "   локальная сборка — только macos-arm64/macos-x86_64."
+            exit 1
+            ;;
+    esac
+done
+
 build_status=0
-python3 tools/autobuild.py --platforms "${PLATFORMS:-macos-arm64,macos-x86_64,linux-x86_64,linux-aarch64,windows-x86_64}" || build_status=$?
+python3 tools/autobuild.py --platforms "$LOCAL_PLATFORMS" || build_status=$?
 
 if [ "$build_status" -ne 0 ]; then
     echo
@@ -221,7 +245,11 @@ python3 tools/publish_refs.py --remotes $REMOTES --refs "${push_list[@]}" || pus
 
 step "Готово $(date '+%Y-%m-%d %H:%M:%S')"
 git log --oneline -1
-echo "сборки лежат в dist/ — их и раздают как релиз"
+echo "локально собраны только macOS-пакеты (dist/macos-*)."
+echo "Windows и Linux собирает GitHub Actions по тегу v$new_version и создаёт релиз."
+echo "когда workflow закончится, приложите macOS к тому же релизу:"
+echo "    python3 tools/attach_macos_release.py --dry-run"
+echo "    python3 tools/attach_macos_release.py"
 echo "лог: $LOG"
 
 # --- 6. Сайт ----------------------------------------------------------------

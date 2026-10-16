@@ -39,7 +39,7 @@ def main():
         out1, out2 = tmp + '/out1', tmp + '/out2'
         release.package_platform(release.Runner(False), platform,
                                  ENGINE_BINARY, out1, False, version)
-        archive = Path(out1) / ('russiano2d-' + platform + '.' + release.PLATFORMS[platform][2])
+        archive = Path(out1) / release.archive_name(platform, version)
         unpack = Path(tmp) / 'unpacked'
         unpack.mkdir()
         if platform.startswith('windows'):

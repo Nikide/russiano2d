@@ -1,4 +1,13 @@
 name: Build, test and release
+# Владение сборками (RUSSIANO2D_PRODUCTION_POLISH.md §4.5–4.9, docs/RELEASING.md):
+#
+#   * GitHub runners собирают ТОЛЬКО Windows x86_64 и Linux x86_64/aarch64,
+#     прогоняют их тесты, пакуют архивы, считают SHA256SUMS и создают ровно
+#     один GitHub Release по тегу vX.Y.Z;
+#   * macOS в матрице нет намеренно: он собирается, тестируется и пакуется
+#     локально на рабочем Mac и прикладывается к уже созданному релизу
+#     документированным шагом (tools/attach_macos_release.py). Дублировать
+#     ту же работу hosted-раннером нельзя — это второй источник артефактов.
 on:
   push:
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
@@ -9,15 +18,49 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  # Быстрые платформо-независимые гейты: доки, переносимость, контракт версии и
+  # упаковки. Идут первыми и в одном экземпляре, чтобы сборка не тратила
+  # полтора часа на ревизию, где уже разошлась документация или имя артефакта.
+  static:
+    name: static gates (docs, portability, version)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version tag matches project version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'tools')
+          import release
+          expected = 'v' + release.read_version()
+          actual = os.environ['GITHUB_REF_NAME']
+          assert actual == expected, 'тег %s не совпадает с версией проекта %s' % (actual, expected)
+          print('  ok   тег %s == версия проекта' % actual)
+          PY
+      - name: Portability gates (M_PI, strtok_r, VLA)
+        run: python3 tests/portability_test.py
+      - name: Documentation gates
+        run: |
+          python3 tests/doc_coverage_test.py
+          python3 tests/doc_claims_test.py
+          python3 tests/format_extensions_test.py
+          python3 tests/checklist_test.py
+          python3 tests/acceptance_test.py
+          python3 tests/repository_hygiene_test.py
+      - name: Packaging contract (artifact name, deterministic archive)
+        run: |
+          python3 tests/package_docs_refresh_test.py
+          python3 tests/release_ownership_test.py
   build:
+    needs: static
     strategy:
       fail-fast: false
       matrix:
         include:
           - {platform: linux-x86_64, runner: ubuntu-24.04}
           - {platform: linux-aarch64, runner: ubuntu-24.04-arm}
-          - {platform: macos-arm64, runner: macos-14}
-          - {platform: macos-x86_64, runner: macos-15-intel}
           - {platform: windows-x86_64, runner: windows-2022}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
@@ -35,35 +78,24 @@ jobs:
             libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev \
             libgl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
             libcurl4-openssl-dev xvfb mesa-vulkan-drivers
-      - name: macOS dependencies
-        if: runner.os == 'macOS'
-        run: brew install freetype ninja pkg-config
-      - name: Configure
+      - name: Configure (RE2D on)
         run: |
           flags=()
           if [[ "$RUNNER_OS" == Windows ]]; then
             flags+=("-DR2D_BUNDLED_FREETYPE=ON" '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>')
           fi
           cmake -S . -B build-ci -DCMAKE_BUILD_TYPE=Release "${flags[@]}"
-      - name: Build engine and SDK
+      - name: Build engine and SDK (RE2D on)
         run: cmake --build build-ci --config Release --parallel 4
-      - name: Configure and build platformer (RE2D off)
+      - name: Configure (RE2D off)
         run: |
           flags=()
           if [[ "$RUNNER_OS" == Windows ]]; then
             flags+=("-DR2D_BUNDLED_FREETYPE=ON" '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>')
           fi
           cmake -S . -B build-2d-ci -DCMAKE_BUILD_TYPE=Release -DR2D_ENABLE_RE2D=OFF "${flags[@]}"
-          cmake --build build-2d-ci --config Release --parallel 4
-      - name: Validate version tag
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          python - <<'PY'
-          import os, sys
-          sys.path.insert(0, 'tools')
-          import release
-          assert os.environ['GITHUB_REF_NAME'] == 'v' + release.read_version()
-          PY
+      - name: Build engine and SDK (RE2D off)
+        run: cmake --build build-2d-ci --config Release --parallel 4
       - name: Native and JavaScript tests (RE2D on)
         run: python tools/ci_verify.py --build-dir build-ci --re2d on
       - name: Native and JavaScript tests (RE2D off)
@@ -95,8 +127,11 @@ jobs:
             dist-ci/*.tar.gz
             dist-ci/*.zip
           if-no-files-found: error
+  # Единственный владелец GitHub Releases: локальный скрипт релиз не создаёт
+  # никогда. Один тег — один релиз; архивов ровно столько, сколько платформ
+  # собирает CI (macOS прикладывается позже и пересчитывает SHA256SUMS).
   release:
-    needs: build
+    needs: [static, build]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     permissions:
@@ -107,16 +142,51 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: artifacts
-      - name: Publish all five packages
+      - name: Verify archives match the release artifact contract
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'tools')
+          import release
+          from pathlib import Path
+          version = release.read_version()
+          expected = sorted(release.archive_name(p, version)
+                            for p in ('linux-x86_64', 'linux-aarch64', 'windows-x86_64'))
+          actual = sorted(f.name for f in Path('artifacts').iterdir() if f.is_file())
+          assert actual == expected, 'архивы не совпали с контрактом:\n  ждали: %s\n  нашли: %s' % (expected, actual)
+          print('  ok   архивы по контракту: %s' % ', '.join(actual))
+          PY
+      - name: Checksums
+        run: |
+          set -eu
+          cd artifacts
+          # Явный список файлов: `sha256sum *` захватил бы сам SHA256SUMS.txt —
+          # он создаётся редиректом до раскрытия маски, и в опубликованный
+          # манифест попадала строка с хешем пустого файла.
+          rm -f SHA256SUMS.txt
+          sha256sum ./*.tar.gz ./*.zip > SHA256SUMS.txt
+          test "$(wc -l < SHA256SUMS.txt)" -eq 3
+          cat SHA256SUMS.txt
+      - name: Publish the single release for this tag
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -eu
           cd artifacts
-          test "$(find . -maxdepth 1 -type f | wc -l)" -eq 5
-          sha256sum * > SHA256SUMS.txt
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" --verify-tag --title "Russiano2D $GITHUB_REF_NAME" --generate-notes
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # Повторный прогон workflow не должен затирать манифест: к этому
+            # моменту к релизу уже могли приложить macOS-архивы, и в
+            # SHA256SUMS.txt пять строк вместо трёх.
+            echo "релиз $GITHUB_REF_NAME уже существует — прикладываю только архивы, манифест не перезаписываю"
+            gh release upload "$GITHUB_REF_NAME" ./*.tar.gz ./*.zip --clobber
+          else
+            # macOS здесь сознательно отсутствует: он собирается локально и
+            # добавляется отдельным документированным шагом к ЭТОМУ релизу.
+            gh release create "$GITHUB_REF_NAME" --verify-tag \
+              --title "Russiano2D $GITHUB_REF_NAME" --generate-notes \
+              --notes "Windows и Linux собраны GitHub Actions. macOS (arm64, x86_64) собирается локально на рабочем Mac, проверяется там же и прикладывается к этому релизу шагом \`python3 tools/attach_macos_release.py\`; после него в SHA256SUMS.txt пять архивов. До этого момента релиз неполный."
+            gh release upload "$GITHUB_REF_NAME" ./* --clobber
           fi
-          gh release upload "$GITHUB_REF_NAME" ./* --clobber
+          gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' | sort

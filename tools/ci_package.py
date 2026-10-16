@@ -1,4 +1,10 @@
-"""Normalize multi-config executables, collect libraries, package with SDK."""
+"""Normalize multi-config executables, collect libraries, package with SDK.
+
+Имя готового архива проверяется здесь же: контракт имени артефакта
+(``release.archive_name``) обязан совпасть с тем, что реально лежит в
+``dist-ci/``. Иначе Release уехал бы с файлом, которого не ждёт ни локальный
+шаг прикладывания macOS, ни проверки в тестах.
+"""
 import argparse
 from pathlib import Path
 import shutil
@@ -23,3 +29,9 @@ for dll in list(build.rglob('*.dll')):
 if a.platform.startswith('linux'):
     autobuild.collect_native_libs(build/('russiano2d'+suffix))
 subprocess.run([sys.executable,'tools/release.py','--package-only','--platform',a.platform,'--binary',str(build/('russiano2d'+suffix)),'--out','dist-ci','--force'],check=True)
+expected=Path('dist-ci')/release.archive_name(a.platform,release.read_version())
+if not expected.is_file():
+    print('  FAIL нет архива с ожидаемым именем: %s' % expected, file=sys.stderr)
+    print('       в dist-ci/: %s' % ', '.join(sorted(f.name for f in Path('dist-ci').glob('russiano2d-*'))), file=sys.stderr)
+    sys.exit(1)
+print('  ok   имя артефакта по контракту: %s' % expected.name)

@@ -609,14 +609,30 @@ static void relative_path(const char *from_dir, const char *to, char *out, size_
     strncat(out, to + common, cap - strlen(out) - 1);
 }
 
+// Следующий сегмент строки до разделителя. Нужен вместо strtok_r/strtok_s:
+// strtok_r — POSIX и на MSVC не линкуется, а strtok держит состояние глобально
+// и ломается, если разбор вложен в другой разбор. Поведение то же, что у
+// strtok_r: пустые сегменты пропускаются, строка портится нулями на месте
+// разделителей, конец строки даёт NULL.
+static char *sdk_next_field(char **cursor, char sep)
+{
+    char *p = *cursor;
+    while (*p == sep) ++p;
+    if (!*p) { *cursor = p; return NULL; }
+    char *start = p;
+    while (*p && *p != sep) ++p;
+    if (*p) { *p = '\0'; *cursor = p + 1; } else { *cursor = p; }
+    return start;
+}
+
 // Разбор «idle:0-3,walk:4-9» → массив тегов в JSON-тексте.
 static bool tags_from_spec(const char *spec, int frame_count, R2dSb *json, SdkReport *rep)
 {
     char buf[1024];
     snprintf(buf, sizeof buf, "%s", spec);
     bool first = true;
-    char *save = NULL;
-    for (char *item = strtok_r(buf, ",", &save); item; item = strtok_r(NULL, ",", &save)) {
+    char *cursor = buf;
+    for (char *item = sdk_next_field(&cursor, ','); item; item = sdk_next_field(&cursor, ',')) {
         char *colon = strchr(item, ':');
         int from = 0, to = 0;
         if (!colon || sscanf(colon + 1, "%d-%d", &from, &to) != 2) {

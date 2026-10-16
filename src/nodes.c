@@ -1097,14 +1097,14 @@ static double ease_eval(int id, double t)
             : (pow(2 * t - 2, 2) * (3.5949095 * (t * 2 - 2) + 2.5949095) + 2) / 2;
     case 15:                                                                     // easeOutElastic
         return t == 0 ? 0 : t == 1 ? 1
-            : pow(2, -10 * t) * sin((t * 10 - 0.75) * ((2 * M_PI) / 3)) + 1;
+            : pow(2, -10 * t) * sin((t * 10 - 0.75) * ((2 * R2D_PI) / 3)) + 1;
     case 16:                                                                     // easeInElastic
         return t == 0 ? 0 : t == 1 ? 1
-            : -pow(2, 10 * t - 10) * sin((t * 10 - 10.75) * ((2 * M_PI) / 3));
+            : -pow(2, 10 * t - 10) * sin((t * 10 - 10.75) * ((2 * R2D_PI) / 3));
     case 17: return ease_out_bounce(t);                                          // easeOutBounce
     case 18: return 1 - ease_out_bounce(1 - t);                                  // easeInBounce
-    case 19: return 1 - cos((t * M_PI) / 2);                                     // easeInSine
-    case 20: return sin((t * M_PI) / 2);                                         // easeOutSine
+    case 19: return 1 - cos((t * R2D_PI) / 2);                                   // easeInSine
+    case 20: return sin((t * R2D_PI) / 2);                                       // easeOutSine
     case 21: return t < 1 ? 0 : 1;                                               // step
     default: return t;
     }
