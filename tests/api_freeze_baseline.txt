@@ -645,6 +645,7 @@ $.fn.emissive
 $.fn.emit
 $.fn.emitting
 $.fn.every
+$.fn.expose
 $.fn.externalVelocity
 $.fn.fadeIn
 $.fn.fadeOut
