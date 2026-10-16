@@ -259,6 +259,15 @@ function soundId(what) {
 }
 
 export function installSound($) {
+    /**
+     * Запись в журнал событий (§23, вкладка EVENTS): «звук поставлен/снят».
+     * `$.trace.note` сам ничего не делает, когда трассировка выключена, поэтому
+     * вызов безопасен на горячем пути.
+     */
+    function noteAudio(data) {
+        if ($.trace && typeof $.trace.note === 'function') $.trace.note('audio', null, data);
+    }
+
     const sound = {
         /**
          * play('hit.wav', { volume, pan, loop, pitch, priority }) → id канала
@@ -284,6 +293,10 @@ export function installSound($) {
             // ставим её всегда: без этого следующий звук на том же канале
             // унаследовал бы чужой pitch.
             if (channel >= 0) engine.audio.setChannelPitch(channel, o.pitch === undefined ? 1 : o.pitch);
+            if (channel >= 0) {
+                noteAudio({ action: 'play', name: String(what), channel,
+                            loop: o.loop === true, volume: o.volume === undefined ? 1 : o.volume });
+            }
             return channel;
         },
 
@@ -392,8 +405,16 @@ export function installSound($) {
             return sound;
         },
 
-        stopAll(fadeMs) { engine.audio.stopAll(fadeMs === undefined ? 0 : fadeMs); return sound; },
-        stop(channel, fadeMs) { engine.audio.stop(channel, fadeMs === undefined ? 0 : fadeMs); return sound; },
+        stopAll(fadeMs) {
+            engine.audio.stopAll(fadeMs === undefined ? 0 : fadeMs);
+            noteAudio({ action: 'stopAll', fade: fadeMs === undefined ? 0 : fadeMs });
+            return sound;
+        },
+        stop(channel, fadeMs) {
+            engine.audio.stop(channel, fadeMs === undefined ? 0 : fadeMs);
+            noteAudio({ action: 'stop', channel, fade: fadeMs === undefined ? 0 : fadeMs });
+            return sound;
+        },
         playing(channel) { return engine.audio.playing(channel); },
 
         /**

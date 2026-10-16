@@ -45,6 +45,21 @@ const binds = new Map();          // имя действия → [имена к�
 const listeners = new Map();      // 'key' | 'mouse' | 'wheel' | 'gamepadOn' | 'gamepadOff'
 const prev_mouse = { buttons: 0 };
 let gamepad_was_connected = false;
+let api = null;                   // $, поставленный installInput: нужен для $.trace
+
+/**
+ * Запись ввода в журнал событий (§23, вкладка EVENTS). `$.trace.note` сам
+ * ничего не делает при выключенной трассировке, поэтому вызов безопасен на
+ * рёбрах ввода — а они дешёвые: нажатие/отпускание, а не каждый кадр.
+ */
+function noteInput(data) {
+    if (api && api.trace && typeof api.trace.note === 'function') api.trace.note('input', null, data);
+}
+
+/** Идёт ли трассировка: тогда рёбра ввода собираются даже без подписчиков. */
+function tracing() {
+    return !!(api && api.trace && typeof api.trace.on === 'function' && api.trace.on());
+}
 
 // Настройки осей. Мёртвая зона гасит дребезг стика: под ним ось считается
 // нулевой. 0.2 по умолчанию — привычное значение для геймпадов.
@@ -154,6 +169,7 @@ function recentlyConsumed(action) {
 }
 
 export function installInput($) {
+    api = $;
     const input = {
         // --- Клавиши --------------------------------------------------------
         down(name) { return input._any(name, 'down'); },
@@ -530,10 +546,19 @@ export function installInput($) {
             // начало кадра чистит видимый набор, поэтому «немедленная» запись
             // терялась, если её сделали между кадрами (нашлось тестом §15).
             synth_next.add(scancodeOf(name));
+            noteInput({ action: 'key down', key: String(name), code: scancodeOf(name), synth: true });
             return input;
         },
-        synthDown(name) { synth_held.add(scancodeOf(name)); return input; },
-        synthRelease(name) { synth_held.delete(scancodeOf(name)); return input; },
+        synthDown(name) {
+            synth_held.add(scancodeOf(name));
+            noteInput({ action: 'key down', key: String(name), code: scancodeOf(name), synth: true, hold: true });
+            return input;
+        },
+        synthRelease(name) {
+            synth_held.delete(scancodeOf(name));
+            noteInput({ action: 'key up', key: String(name), code: scancodeOf(name), synth: true });
+            return input;
+        },
         synthClear() { synth_held.clear(); synth_tap.clear(); synth_next.clear(); return input; },
         /** Правило: синтетические нажатия видны в этом кадре или нет. */
         synthSeen() { return synth_seen; },
@@ -1058,33 +1083,44 @@ export function tickInput() {
     // конце: иначе нажатие либо не видно игре, либо живёт лишний кадр.
     startSynthFrame();
 
-    if (listeners.size === 0) return;
+    // Трассировка собирает рёбра ввода даже без подписчиков: вкладке EVENTS
+    // (§23) нужен журнал того, что реально нажимали, а не только то, на что
+    // игра подписалась.
+    const trace_edges = tracing();
+    if (listeners.size === 0 && !trace_edges) return;
 
-    if (listeners.has('key')) {
+    if (listeners.has('key') || trace_edges) {
         const pressed = engine.keysPressed();
         const released = engine.keysReleased();
         for (let i = 0; i < pressed.length; i++) {
-            emit('key', { key: keyName(pressed[i]), code: pressed[i], pressed: true, down: true, shift: shift(), ctrl: ctrl(), alt: alt(), frame: engine.frame });
+            noteInput({ action: 'key down', key: keyName(pressed[i]), code: pressed[i] });
+            if (listeners.has('key')) emit('key', { key: keyName(pressed[i]), code: pressed[i], pressed: true, down: true, shift: shift(), ctrl: ctrl(), alt: alt(), frame: engine.frame });
         }
         for (let i = 0; i < released.length; i++) {
-            emit('key', { key: keyName(released[i]), code: released[i], pressed: false, down: false, shift: shift(), ctrl: ctrl(), alt: alt(), frame: engine.frame });
+            noteInput({ action: 'key up', key: keyName(released[i]), code: released[i] });
+            if (listeners.has('key')) emit('key', { key: keyName(released[i]), code: released[i], pressed: false, down: false, shift: shift(), ctrl: ctrl(), alt: alt(), frame: engine.frame });
         }
     }
-    if (listeners.has('mouse')) {
+    if (listeners.has('mouse') || trace_edges) {
         for (const [name, id] of Object.entries(MOUSE_BUTTONS)) {
             if (engine.mousePressed(id)) {
-                emit('mouse', { button: name, x: engine.mouseX, y: engine.mouseY, pressed: true, frame: engine.frame });
+                noteInput({ action: 'mouse down', button: name, x: engine.mouseX, y: engine.mouseY });
+                if (listeners.has('mouse')) emit('mouse', { button: name, x: engine.mouseX, y: engine.mouseY, pressed: true, frame: engine.frame });
             }
         }
     }
-    if (listeners.has('wheel') && engine.wheel !== 0) {
-        emit('wheel', { x: 0, y: engine.wheel, frame: engine.frame });
+    if ((listeners.has('wheel') || trace_edges) && engine.wheel !== 0) {
+        noteInput({ action: 'wheel', delta: engine.wheel, x: engine.mouseX, y: engine.mouseY });
+        if (listeners.has('wheel')) emit('wheel', { x: 0, y: engine.wheel, frame: engine.frame });
     }
-    if (listeners.has('gamepadOn') || listeners.has('gamepadOff')) {
+    if (listeners.has('gamepadOn') || listeners.has('gamepadOff') || trace_edges) {
         const now = pad_connected(0);
         if (now !== gamepad_was_connected) {
             gamepad_was_connected = now;
-            emit(now ? 'gamepadOn' : 'gamepadOff', { index: 0 });
+            noteInput({ action: now ? 'gamepad on' : 'gamepad off', index: 0 });
+            if (listeners.has('gamepadOn') || listeners.has('gamepadOff')) {
+                emit(now ? 'gamepadOn' : 'gamepadOff', { index: 0 });
+            }
         }
     }
 }
