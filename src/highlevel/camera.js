@@ -472,7 +472,12 @@ export function installCamera($, viewports) {
         },
         info(name) {
             const z = zone_defs.get(String(name));
-            if (!z) return null;
+            if (!z) {
+                // Промах по имени зоны — тем же правилом, что промах селектора
+                // (task-47): сообщение один раз на имя, возврат прежний (null).
+                missTarget('camera.zone', name, `зона "${name}" не найдена — верну null`);
+                return null;
+            }
             return {
                 name: z.name, priority: z.priority, bounds: z.bounds || null,
                 zoom: z.zoom === undefined ? null : z.zoom,
@@ -678,7 +683,7 @@ export function installCamera($, viewports) {
         /** Узел, за которым следим сейчас (или null). */
         followed() {
             if (!cam.target) return null;
-            const node = resolveTarget(cam.target);
+            const node = resolveTarget(cam.target, 'camera.followed');
             return node ? wrapOne(node) : null;
         },
 
@@ -1056,7 +1061,7 @@ export function installCamera($, viewports) {
         },
 
         worldToScreen(p) {
-            const pt = toPoint(p);
+            const pt = toPoint(p, 'camera.worldToScreen');
             if (cam.kind === KIND_RE2D) return re2dWorldToScreen(pt, p);
             const state = { x: cam.x, y: cam.y, zoom: cam.zoom, rotation: cam.rotation };
             const out = frameWorldToScreen(state, pt.x, pt.y, engine.width, engine.height);
@@ -1067,7 +1072,7 @@ export function installCamera($, viewports) {
         },
 
         screenToWorld(p) {
-            const pt = toPoint(p);
+            const pt = toPoint(p, 'camera.screenToWorld');
             if (cam.kind === KIND_RE2D) {
                 // Пиксель → точка на полу (или на высоте p.z): луч из глаз.
                 applyRe2dView(cameraTransform());
@@ -1092,7 +1097,7 @@ export function installCamera($, viewports) {
             if (cam.kind === KIND_RE2D) {
                 if (typeof what === 'string') return query(what).some((n) => camera.isOnScreen(n, margin));
                 if (typeof what === 'object' && what && what.tag && what.attrs.ui) return true;
-                const s = re2dWorldToScreen(toPoint(what), what);
+                const s = re2dWorldToScreen(toPoint(what, 'camera.isOnScreen'), what);
                 return s.visible && s.x >= -pad && s.x <= engine.width + pad
                     && s.y >= -pad && s.y <= engine.height + pad;
             }
@@ -1104,7 +1109,7 @@ export function installCamera($, viewports) {
                 return Math.abs(what.x - cam.x) <= half_w + what.w / 2 &&
                        Math.abs(what.y - cam.y) <= half_h + what.h / 2;
             }
-            const pt = toPoint(what);
+            const pt = toPoint(what, 'camera.isOnScreen');
             return Math.abs(pt.x - cam.x) <= half_w && Math.abs(pt.y - cam.y) <= half_h;
         },
 
@@ -1126,7 +1131,7 @@ export function installCamera($, viewports) {
                 if (m && (m.x || m.y)) camera.look(m.x, m.y);
             }
             if (cam.target) {
-                const node = resolveTarget(cam.target);
+                const node = resolveTarget(cam.target, 'camera.follow', true);
                 if (!node) {
                     // Цель ещё не создана (селектор разрешается лениво):
                     // прошлую позицию не храним, иначе первый кадр после
@@ -1379,18 +1384,67 @@ function re2dWorldToScreen(pt, source) {
     return { x: out[0], y: out[1], scale: out[3], depth: out[2], visible };
 }
 
-function resolveTarget(target) {
-    if (typeof target === 'string') return query(target)[0] || null;
+/**
+ * Промах цели — ОДИН раз на пару «место + цель» (правило task-47: цель-селектор
+ * либо разрешается, либо промах слышен; повторные промахи журнал не заливают).
+ *
+ * Для слежения это особенно важно: `follow('#hero')` хранит селектор как есть,
+ * а разрешает его КАЖДЫЙ кадр — узел может появиться позже (осознанная
+ * ленивость). Поэтому у ленивой дороги своя формулировка: «пока не найден,
+ * жду», а не «ошибка».
+ */
+const missed_targets = new Set();
+
+function missTarget(where, what, message) {
+    // Ключ — СЫРАЯ цель (селектор/имя): targetResolved() снимает тот же ключ.
+    const key = where + ' ' + what;
+    if (missed_targets.has(key)) return;
+    missed_targets.add(key);
+    ctx.log(`$.${where}: ${message}`);
+}
+
+function targetResolved(where, what) {
+    missed_targets.delete(where + ' ' + what);
+}
+
+function resolveTarget(target, where, lazy) {
+    if (typeof target === 'string') {
+        const node = query(target)[0] || null;
+        if (node) {
+            if (where) targetResolved(where, target);
+            return node;
+        }
+        if (where) {
+            missTarget(where, target, lazy
+                ? `цель "${target}" пока не найдена — жду появления узла`
+                : `селектор "${target}" ни к чему не подошёл — верну null`);
+        }
+        return null;
+    }
     if (typeof target === 'number') return ctx.nodes[target] || null;
     if (target && target.nodes) return target.nodes[0] || null;
     if (target && target.tag) return target;
     return null;
 }
 
-function toPoint(p) {
+function toPoint(p, where) {
     if (p === undefined || p === null) return { x: 0, y: 0 };
-    if (typeof p === 'string') { const n = query(p)[0]; return n ? { x: n.x, y: n.y } : { x: 0, y: 0 }; }
-    if (typeof p === 'object' && p.nodes) return p.nodes[0] ? { x: p.nodes[0].x, y: p.nodes[0].y } : { x: 0, y: 0 };
+    if (typeof p === 'string') {
+        const n = query(p)[0];
+        if (n) {
+            if (where) targetResolved(where, p);
+            return { x: n.x, y: n.y };
+        }
+        if (where) {
+            missTarget(where, p, `селектор "${p}" ни к чему не подошёл — беру (0, 0)`);
+        }
+        return { x: 0, y: 0 };
+    }
+    if (typeof p === 'object' && p.nodes) {
+        const n = p.nodes[0];
+        if (!n && where) missTarget(where, '(пустая обёртка)', 'обёртка пуста — беру (0, 0)');
+        return n ? { x: n.x, y: n.y } : { x: 0, y: 0 };
+    }
     if (typeof p === 'object' && p.tag) return { x: p.x, y: p.y };
     return { x: p.x || 0, y: p.y || 0 };
 }

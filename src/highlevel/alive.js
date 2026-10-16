@@ -34,7 +34,7 @@
 // поэтому поведение целиком проверяет юнит-тест (tests/js/alive_test.mjs).
 // ===========================================================================
 
-import { ctx } from './core.js';
+import { ctx, query } from './core.js';
 
 // ---------------------------------------------------------------------------
 // Чистая часть: пороги и таблицы
@@ -961,7 +961,15 @@ export function installAlive($) {
 
         /** Психотипы и их поправки — для интерфейса и тестов. */
         types() { return Object.keys(TYPE_BIAS); },
-        typeBias(id) { return TYPE_BIAS[id] ? Object.assign({}, TYPE_BIAS[id]) : null; },
+        typeBias(id) {
+            // Неизвестный психотип — не тишина (правило task-47): сообщение один
+            // раз на id, возврат прежний (null — «такого типа нет»).
+            if (!TYPE_BIAS[id]) {
+                missTarget('alive.typeBias', id, `тип "${id}" неизвестен — верну null`);
+                return null;
+            }
+            return Object.assign({}, TYPE_BIAS[id]);
+        },
         traits() { return TRAIT_NAMES.slice(); },
         traitDefaults() { return Object.assign({}, TRAIT_DEFAULTS); },
         breakKinds() { return BREAK_KINDS.slice(); },
@@ -972,15 +980,16 @@ export function installAlive($) {
 
         /** Дать психику узлу: `$.alive.attach('#npc', 'rookie')`. */
         attach(what, raw) {
-            const node = nodeOf(what);
-            if (!node) { ctx.log('$.alive.attach: узел не найден'); return null; }
+            // Сообщение о промахе говорит nodeOf (одно на пару «место + цель»).
+            const node = nodeOf(what, 'alive.attach');
+            if (!node) return null;
             const mind = createPsyche(raw);
             minds.set(node, mind);
             return mind;
         },
 
         /** Психика узла (или null). */
-        of(what) { const node = nodeOf(what); return node ? (minds.get(node) || null) : null; },
+        of(what) { const node = nodeOf(what, 'alive.of'); return node ? (minds.get(node) || null) : null; },
 
         /**
          * Тик всех привязанных психик: `$.alive.tick(dt)`.
@@ -1031,13 +1040,53 @@ export function installAlive($) {
     return api;
 }
 
-/** Узел по обёртке, узлу или селектору. */
-function nodeOf(what) {
+/**
+ * Промах цели — ОДИН раз на пару «место + цель» (правило task-47, общее для
+ * движка: цель-селектор либо разрешается, либо промах слышен). Повторные
+ * промахи того же селектора молчат, пока он не начнёт разрешаться: иначе
+ * `$.alive.of('#npc')` в кадре залил бы журнал.
+ */
+const missed_targets = new Set();
+
+function missTarget(where, what, message) {
+    // Ключ — СЫРАЯ цель (селектор/id), а не текст сообщения: иначе
+    // targetResolved() не найдёт ключ и серия промахов останется «глухой».
+    const key = where + ' ' + what;
+    if (missed_targets.has(key)) return;
+    missed_targets.add(key);
+    ctx.log(`$.${where}: ${message}`);
+}
+
+function targetResolved(where, what) {
+    missed_targets.delete(where + ' ' + what);
+}
+
+/**
+ * Узел по обёртке, узлу или селектору.
+ *
+ * Строка разрешается как id (прежнее поведение, `#` необязателен), а если id
+ * нет — обычным селектором через `query()`: раньше `$.alive.of('.goblin')`
+ * молча возвращал null, хотя такой узел в мире есть. Промах слышен (см.
+ * missTarget), возврат прежний — null.
+ */
+function nodeOf(what, where) {
     if (!what) return null;
     if (typeof what === 'string') {
         const byId = ctx.byId;
-        return byId && byId.get ? (byId.get(String(what).replace(/^#/, '')) || null) : null;
+        const id = String(what).replace(/^#/, '');
+        const node = (byId && byId.get ? byId.get(id) : null) || query(what)[0] || null;
+        if (node) {
+            if (where) targetResolved(where, what);
+            return node;
+        }
+        if (where) missTarget(where, what, `узел "${what}" не найден — верну null`);
+        return null;
     }
-    if (what.nodes) return what.nodes[0] || null;
+    if (what.nodes) {
+        if (!what.nodes.length && where) {
+            missTarget(where, '(пустая обёртка)', 'обёртка пуста — верну null');
+        }
+        return what.nodes[0] || null;
+    }
     return what.tag ? what : null;
 }

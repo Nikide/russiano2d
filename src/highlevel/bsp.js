@@ -9,7 +9,7 @@
 // `{ x1, y1, x2, y2, tag }` вместо плоского массива), и оставляет дерево
 // живым между кадрами — построение дорогое, обход дешёвый.
 //
-//   $.world.bsp.build($.world.bsp.fromLines(walls));
+//   $.world.bsp.build(walls);   // [[x1,y1,x2,y2], …] или Float32Array
 //   const order = $.world.bsp.order(cam.pos());     // [{ index, ...segment }]
 //   for (const s of order) $.gfx.draw.line(s.x1, s.y1, s.x2, s.y2, '#8899aa');
 //   $.world.bsp.clear();                            // в onExit сцены
@@ -101,7 +101,14 @@ export function installBsp($) {
         /** Отрезок по индексу: { index, x1, y1, x2, y2, tag, split } | null. */
         segment(index) {
             if (!engine.bsp) return null;
-            const raw = engine.bsp.segment(index | 0);
+            const i = Number(index);
+            const total = bsp.count();
+            if (!Number.isFinite(i) || i < 0 || i >= total) {
+                missTarget('world.bsp.segment', index,
+                           `индекс ${index} вне 0..${Math.max(0, total - 1)} — верну null`);
+                return null;
+            }
+            const raw = engine.bsp.segment(i | 0);
             if (!raw) return null;
             return {
                 index: index | 0,
@@ -117,7 +124,7 @@ export function installBsp($) {
          */
         order(from, opts) {
             if (!engine.bsp) return [];
-            const p = resolvePoint(from);
+            const p = resolvePoint(from, 'world.bsp.order');
             const far = !(opts && opts.near);
             const idx = engine.bsp.order(p.x, p.y, far);
             if (!idx) return [];
@@ -129,7 +136,7 @@ export function installBsp($) {
         /** Индексы без разбора в объекты (когда нужен только порядок). */
         indices(from, opts) {
             if (!engine.bsp) return [];
-            const p = resolvePoint(from);
+            const p = resolvePoint(from, 'world.bsp.indices');
             return engine.bsp.order(p.x, p.y, !(opts && opts.near)) || [];
         },
     };
@@ -139,15 +146,43 @@ export function installBsp($) {
     return bsp;
 }
 
+/**
+ * Промах цели — ОДИН раз на пару «место + цель» (правило task-47: цель-селектор
+ * либо разрешается, либо промах слышен; повторные промахи журнал не заливают).
+ */
+const missed_targets = new Set();
+
+function missTarget(where, what, message) {
+    // Ключ — СЫРАЯ цель (селектор/индекс): targetResolved() снимает тот же ключ.
+    const key = where + ' ' + what;
+    if (missed_targets.has(key)) return;
+    missed_targets.add(key);
+    ctx.log(`$.${where}: ${message}`);
+}
+
+function targetResolved(where, what) {
+    missed_targets.delete(where + ' ' + what);
+}
+
 /** Точка из узла, обёртки, селектора, `{x,y}` или `[x, y]`. */
-function resolvePoint(target) {
+function resolvePoint(target, where) {
     if (!target) return { x: 0, y: 0 };
     if (typeof target === 'string') {
         const node = query(target)[0];
-        return node ? { x: node.x, y: node.y } : { x: 0, y: 0 };
+        if (node) {
+            if (where) targetResolved(where, target);
+            return { x: node.x, y: node.y };
+        }
+        if (where) {
+            missTarget(where, target, `селектор "${target}" ни к чему не подошёл — беру точку (0, 0)`);
+        }
+        return { x: 0, y: 0 };
     }
     if (target.nodes) {
         const node = target.nodes[0];
+        if (!node && where) {
+            missTarget(where, '(пустая обёртка)', 'обёртка пуста — беру точку (0, 0)');
+        }
         return node ? { x: node.x, y: node.y } : { x: 0, y: 0 };
     }
     if (target.tag) return { x: target.x, y: target.y };
