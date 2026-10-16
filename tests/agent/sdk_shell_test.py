@@ -68,7 +68,12 @@ def main():
         shown = "%s.%s.%s %s:%s" % (first[8:10], first[5:7], first[0:4], first[11:13], first[14:16])
         check(shown in cards[reg["tools"][0]["id"]], "карточки показывают last_updated (%s)" % shown)
         check(all("Открыть" in c for c in cards.values()), "у валидных записей есть кнопка")
-        check(a.eval(f"{DOC}.rect('view-tools').h") == 0, "скрытый экран инструментов не занимает места")
+        # Контракт task-56: у скрытого элемента честного rect нет (null), а
+        # геометрия раскладки — нулевая. Проверяем оба факта, а не только «0».
+        check(a.eval(f"{DOC}.rect('view-tools')") is None,
+              "у скрытого экрана нет честного rect (null)")
+        check(a.eval(f"({DOC}.layoutRect('view-tools') || {{}}).h || 0") == 0,
+              "скрытый экран инструментов не занимает места (layoutRect.h = 0)")
         check(a.eval(f"{DOC}.rect('view-projects').h") > 100, "активный экран проектов имеет геометрию")
 
         # Снимок агента: оболочка видна через стандартную команду state.

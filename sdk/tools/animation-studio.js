@@ -106,7 +106,9 @@ export function createStudio(app) {
         return { stopped: !s.playing, frame: currentIndex(), before };
     }
 
-    function slotRect() { return doc.rect('an-view') || { x: 0, y: 0, w: 0, h: 0 }; }
+    // layoutRect: нужна вычисленная геометрия; rect() с task-56
+    // честно отдаёт null, если элемент скрыт.
+    function slotRect() { return doc.layoutRect('an-view') || { x: 0, y: 0, w: 0, h: 0 }; }
 
     function note(severity, code, message) {
         const d = { code, severity, asset: s.session ? s.session.path : null, location: null, message, details: null };

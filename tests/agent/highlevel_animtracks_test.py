@@ -142,7 +142,10 @@ def main():
         check(bx < -10, f"второй персонаж идёт своим target'ом ({bx:.1f})")
         lives = a.eval(f"parseFloat({DOC}.value('lives'))")
         check(lives < 3, f"RmlUi-элемент получает значение дорожки ui.value ({lives})")
-        check(a.eval(f"{DOC}.rect('fade')") is not None,
+        # layoutRect: проверяем, что документ загружен и элемент разложен.
+        # rect() здесь не годится — с task-56 он честно отдаёт null, если
+        # документ/элемент скрыт, и это не про «загружен ли документ».
+        check(a.eval(f"{DOC}.layoutRect('fade')") is not None,
               "RmlUi-документ загружен, ui.style пишет в его элемент")
         ui_binds = a.eval("JSON.stringify($.anim.player('squad').bindings().filter(b => b.binding.indexOf('ui.') === 0))")
         import json as _json

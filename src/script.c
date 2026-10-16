@@ -2962,6 +2962,29 @@ static JSValue r2d__js_ui_rect(JSContext *ctx, JSValueConst this_val, int argc, 
     return result;
 }
 
+// engine.ui.layoutRect(doc, id) → бокс раскладки даже для скрытого элемента.
+// Отдельное имя, а не флаг у rect(): у rect() контракт «видимое или null»
+// (H1), и размывать его флагом значило бы вернуть ту же ложь.
+static JSValue r2d__js_ui_layout_rect(JSContext *ctx, JSValueConst this_val,
+                                      int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    JSValue result = JS_NULL;
+    float r[4];
+    if (s && s->gui && element && r2d_gui_get_layout_rect(s->gui, doc, element, r)) {
+        result = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, result, "x", JS_NewFloat64(ctx, r[0]));
+        JS_SetPropertyStr(ctx, result, "y", JS_NewFloat64(ctx, r[1]));
+        JS_SetPropertyStr(ctx, result, "w", JS_NewFloat64(ctx, r[2]));
+        JS_SetPropertyStr(ctx, result, "h", JS_NewFloat64(ctx, r[3]));
+    }
+    if (element) JS_FreeCString(ctx, element);
+    return result;
+}
+
 static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -6183,6 +6206,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, ui, "getAttr", r2d__js_ui_get_attr, 3);
     r2d__set_fn(ctx, ui, "setAttr", r2d__js_ui_set_attr, 4);
     r2d__set_fn(ctx, ui, "rect", r2d__js_ui_rect, 2);
+    r2d__set_fn(ctx, ui, "layoutRect", r2d__js_ui_layout_rect, 2);
     r2d__set_fn(ctx, ui, "click", r2d__js_ui_click, 2);
 
     // Иконки Material Design: встроены в бинарник, доступны по имени.

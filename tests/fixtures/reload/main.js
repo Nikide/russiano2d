@@ -84,7 +84,10 @@ $.ready(() => {
         },
         hud_width: () => {
             const doc = $.ui.doc('ui/hud.rml');
-            const r = doc && doc.id >= 0 ? doc.rect('hud-line') : null;
+            // layoutRect, а не rect: проверяем ВЫЧИСЛЕННУЮ ширину из .rcss,
+            // а не видимость. rect() с task-56 честно отдаёт null, если элемент
+            // (или его предок) скрыт, и возвращал бы 0 вместо ширины.
+            const r = doc && doc.id >= 0 ? doc.layoutRect('hud-line') : null;
             return r ? Math.round(r.w) : 0;
         },
         map_cell: (x, y) => $('#map').tileAt(x, y),

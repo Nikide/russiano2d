@@ -1,5 +1,26 @@
 # История изменений
 
+## Не выпущено — H1 без регрессий: `rect()` честный, `layoutRect()` для раскладки (task-56, 2026-10-17)
+
+После честного `rect()` (скрытый элемент → `null`) упали три проверки, которые
+читали геометрию скрытого элемента: `highlevel_animtracks_test`,
+`highlevel_reload_test` («ширина 120 → 0»), `sdk_shell_test`
+(`TypeError: cannot read property 'h' of null`). Разбор: это не «тесты сломались»,
+а **нехватка второго доступа** — видимость и раскладка это разные вопросы.
+
+- `engine.ui.layoutRect(doc, id)` и `$.ui.doc().layoutRect(id)` — бокс раскладки,
+  работает и для скрытого элемента (`display:none` → нулевой бокс). Новые
+  публичные имена; заморозка API не изменилась (проверено `api_freeze_test`).
+- Вызывающие переведены на правильный вопрос: `tests/fixtures/reload/main.js`
+  (`hud_width()` — это вычисленная из `.rcss` ширина), `highlevel_animtracks_test`
+  («документ загружен и элемент разложен»), `sdk_shell_test` (скрытый экран:
+  `rect()` → `null` **и** `layoutRect().h` = 0 — проверяются оба факта),
+  `sdk/lib/studio_host.js`, `sdk/tools/animation-studio.js`.
+- Числа: три падавшие проверки — «Все проверки пройдены» после правки;
+  `highlevel_animtracks_test`, `highlevel_reload_test`, `sdk_shell_test` зелёные.
+- Документация: `docs/highlevel/ui.md` — «`rect()` и `layoutRect()`: видимость
+  против раскладки» с правилом выбора.
+
 ## Не выпущено — движок не падает на старте на программном Vulkan (task-55, 2026-10-17)
 
 На Linux-раннерах с программным Vulkan (Mesa lavapipe) движок **не запускался

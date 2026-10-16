@@ -659,6 +659,23 @@ bool r2d_gui_click(R2DGui *g, int doc, const char *element_id)
     return true;
 }
 
+// Геометрия РАСКЛАДКИ: последний посчитанный бокс, даже если элемент сейчас
+// скрыт. Нужна тем, кто проверяет вычисленные размеры (тесты раскладки,
+// инструменты SDK), а не видимость. `r2d_gui_get_rect` для этого не годится:
+// он честно отвечает «невидим» (H1 из аудита костылей BASHNYA).
+bool r2d_gui_get_layout_rect(R2DGui *g, int doc, const char *element_id, float out[4])
+{
+    Rml::Element *el = r2d__element(g, doc, element_id);
+    if (!el || !out) return false;
+    const Rml::Vector2f pos = el->GetAbsoluteOffset(Rml::BoxArea::Border);
+    const Rml::Vector2f size = el->GetBox().GetSize(Rml::BoxArea::Border);
+    out[0] = pos.x;
+    out[1] = pos.y;
+    out[2] = size.x;
+    out[3] = size.y;
+    return true;
+}
+
 bool r2d_gui_get_rect(R2DGui *g, int doc, const char *element_id, float out[4])
 {
     Rml::Element *el = r2d__element(g, doc, element_id);

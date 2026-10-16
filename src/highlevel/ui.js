@@ -759,6 +759,10 @@ function makeDoc(id, path) {
         text(element, text) { engine.ui.setText(id, element, String(text)); return this; },
         html(element, html) { engine.ui.setHtml(id, element, html); return this; },
         cls(element, name, add) { engine.ui.setClass(id, element, name, add !== false); return this; },
+        // Геометрия раскладки: работает и для скрытого элемента (в отличие от
+        // `rect`, который честно отдаёт null — H1). Нужна тем, кто проверяет
+        // вычисленные размеры, а не видимость.
+        layoutRect(element) { return engine.ui.layoutRect(id, String(element)); },
         style(element, property, value) { engine.ui.setProperty(id, element, property, value); return this; },
         /** Значение поля ввода (`<input>`, `<textarea>`, `<select>`) или атрибута value; null — нет элемента. */
         value(element) { return engine.ui.getValue(id, element); },
