@@ -75,7 +75,26 @@ GOLD_README_4X4 = [
     [0.11314, 0.16216, 0.21076, 0.25871],   # x = 3
 ]
 
+#: Поточечный допуск сверки: прощает float32-округление и разницу реализаций.
 TOL = 1e-6
+
+#: Порог МАКСИМАЛЬНОГО отклонения по всем точкам, сверенным с эталоном.
+#:
+#: Эталон — не «похожие числа», а вывод НЕПАТЧЕННОГО заголовка апстрима:
+#: third_party/fastnoise_lite/reference.cpp собирается с
+#: third_party/fastnoise_lite/FastNoiseLite.h (пин 785f37a9ad76e283586a379675085f2063ae03f7)
+#: и печатает таблицу, замороженную в GOLD ниже. Поэтому наша обёртка обязана
+#: повторять его почти побитово: измеренный максимум — единицы 1e-10 на точку,
+#: и порог 1e-9 оставляет запас на смену компилятора или платформы, оставаясь в
+#: 1000 раз строже контрактного TOL: незамеченной деградация точности не пройдёт.
+MAX_DEV = 1e-9
+
+#: Опубликованные в апстриме числа (таблица 4×4 и пример warp) напечатаны с
+#: пятью знаками — к ним отдельный допуск, и в максимум отклонения они не идут.
+PUBLISHED_TOL = 1e-5
+
+#: (точка, |наше − эталон|) по всем сверкам с reference.cpp.
+REFERENCE_DEVIATIONS = []
 
 
 def check(condition, message):
@@ -86,6 +105,22 @@ def check(condition, message):
 
 def close(got, want, tol=TOL):
     return got is not None and abs(got - want) <= tol
+
+
+def compare_reference(label, got, want):
+    """Сверить точку с эталоном reference.cpp и запомнить её отклонение.
+
+    Само по себе `abs(got - want) <= TOL` не отвечает на вопрос «насколько
+    точно мы совпали»: 9.9e-7 и 4e-10 проходят одинаково. Поэтому отклонение
+    копится, а в конце проверяется максимум отдельным порогом MAX_DEV.
+    """
+    if not isinstance(got, (int, float)) or isinstance(got, bool):
+        check(False, "эталон апстрима: %s — не число (%s)" % (label, got))
+        return
+    deviation = abs(got - want)
+    REFERENCE_DEVIATIONS.append((label, deviation))
+    check(deviation <= TOL,
+          "эталон апстрима: %-30s %.9g (у нас %.9g)" % (label, want, got))
 
 
 def main():
@@ -105,30 +140,23 @@ def main():
         # --- Эталон апстрима: источники --------------------------------------
         for name in ("simplex2", "simplex2S", "perlin", "value", "cubic", "cellular"):
             got = a.eval("$.noise.%s(12.5, -3.25, { seed: 1337 })" % name)
-            check(close(got, GOLD["src_" + name]),
-                  "эталон апстрима: %-9s %.9g (у нас %.9g)"
-                  % (name, GOLD["src_" + name], got))
+            compare_reference("источник %s" % name, got, GOLD["src_" + name])
 
         # --- Эталон: 3D -------------------------------------------------------
         got3 = a.eval("$.noise.create({ seed: 1337, source: 'perlin' })"
                       ".get3(12.5, -3.25, 0.75)")
-        check(close(got3, GOLD["perlin3d"]),
-              "эталон апстрима: perlin 3D %.9g (у нас %.9g)" % (GOLD["perlin3d"], got3))
+        compare_reference("perlin 3D", got3, GOLD["perlin3d"])
 
         # --- Эталон: фракталы -------------------------------------------------
         for name in ("fbm", "ridged", "pingpong"):
             got = a.eval("$.noise.%s(12.5, -3.25, { seed: 1337, octaves: 5 })" % name)
-            check(close(got, GOLD["frac_" + name]),
-                  "эталон апстрима: %-8s %.9g (у нас %.9g)"
-                  % (name, GOLD["frac_" + name], got))
+            compare_reference("фрактал %s" % name, got, GOLD["frac_" + name])
 
         # --- Эталон: cellular, метрики расстояния -----------------------------
         for dist in ("euclidean", "euclideanSq", "manhattan", "hybrid"):
             got = a.eval("$.noise.cellular(12.5, -3.25, "
                          "{ seed: 1337, cellularDistance: '%s' })" % dist)
-            check(close(got, GOLD["cell_" + dist]),
-                  "эталон апстрима: cellular/%-11s %.9g (у нас %.9g)"
-                  % (dist, GOLD["cell_" + dist], got))
+            compare_reference("cellular/%s" % dist, got, GOLD["cell_" + dist])
         values = [a.eval("$.noise.cellular(12.5, -3.25, "
                          "{ seed: 1337, cellularDistance: '%s' })" % d)
                   for d in ("euclidean", "euclideanSq", "manhattan", "hybrid")]
@@ -140,9 +168,23 @@ def main():
                     "distance2Sub", "distance2Mul", "distance2Div"):
             got = a.eval("$.noise.cellular(12.5, -3.25, { seed: 1337, "
                          "cellularDistance: 'hybrid', cellularReturn: '%s' })" % ret)
-            check(close(got, GOLD["cellret_" + ret]),
-                  "эталон апстрима: cellularReturn/%-12s %.9g (у нас %.9g)"
-                  % (ret, GOLD["cellret_" + ret], got))
+            compare_reference("cellularReturn/%s" % ret, got, GOLD["cellret_" + ret])
+
+        # --- Максимум отклонения от эталона ------------------------------------
+        # Поточечный TOL отвечает «прошло/не прошло», но не «насколько точно».
+        # Здесь считается фактический максимум по всем сверенным точкам и
+        # проверяется отдельным порогом: число печатается, потому что его
+        # цитирует журнал решений (docs/internal/DEPENDENCY_DECISIONS.md).
+        if REFERENCE_DEVIATIONS:
+            worst = max(REFERENCE_DEVIATIONS, key=lambda item: item[1])
+            print("  --   максимум отклонения от эталона reference.cpp: %.3g"
+                  " (худшая точка: %s), точек %d, порог %.0e"
+                  % (worst[1], worst[0], len(REFERENCE_DEVIATIONS), MAX_DEV))
+            check(worst[1] <= MAX_DEV,
+                  "максимум отклонения %.3g ≤ %.0e (худшая точка: %s)"
+                  % (worst[1], MAX_DEV, worst[0]))
+        else:
+            check(False, "ни одной сверки с эталоном reference.cpp не выполнено")
 
         # --- Эталон: domain warp (пример из README апстрима) -------------------
         warp = a.eval("$.noise.create({ seed: 1337, warpType: 'simplex2', warpAmp: 1.5 })"
@@ -165,21 +207,26 @@ def main():
         # --- Эталон: таблица 4×4 из теста апстрима ----------------------------
         # Сравниваем через field(): апстрим пишет noiseData[x][y], а наше поле
         # построчное по y, поэтому значение (x, y) берётся как field[y*w + x].
-        mismatch = a.eval("""(() => {
+        published = a.eval("""(() => {
             const w = 4, h = 4;
             const f = $.noise.field({ w, h, seed: 1337 });
-            let bad = 0;
+            let bad = 0, maxdev = 0;
             for (let x = 0; x < w; x++)
                 for (let y = 0; y < h; y++) {
                     const v = f[y * w + x];        // (x, y) в нашем порядке
-                    if (Math.abs(v - GOLD_4X4[x][y]) > 1e-5) bad++;
+                    const d = Math.abs(v - GOLD_4X4[x][y]);
+                    if (d > maxdev) maxdev = d;
+                    if (d > PUBLISHED_TOL) bad++;
                 }
-            return bad;
+            return { bad, maxdev };
         })()""".replace("GOLD_4X4", "[%s]" % ",".join(
-            "[" + ",".join("%.5f" % v for v in row) + "]" for row in GOLD_README_4X4)))
-        check(mismatch == 0,
-              "field() совпадает с опубликованной таблицей 4×4 апстрима (%s расхождений)"
-              % mismatch)
+            "[" + ",".join("%.5f" % v for v in row) + "]" for row in GOLD_README_4X4))
+                 .replace("PUBLISHED_TOL", "%.0e" % PUBLISHED_TOL)) or {}
+        print("  --   максимум отклонения от ОПУБЛИКОВАННОЙ таблицы 4×4 (5 знаков): %.3g"
+              " (порог %.0e)" % (published.get("maxdev", -1), PUBLISHED_TOL))
+        check(published.get("bad") == 0,
+              "field() совпадает с опубликованной таблицей 4×4 апстрима (%s расхождений,"
+              " максимум %.3g)" % (published.get("bad"), published.get("maxdev", -1)))
 
         # --- Массовый путь побитово равен поштучному --------------------------
         diff = a.eval("""(() => {
@@ -245,8 +292,8 @@ def main():
               "одинаковые параметры дают одинаковый результат (%.9g)" % (octaves[2] if octaves else 0))
         check(octaves[0] != octaves[1] and octaves[1] != octaves[2],
               "octaves меняет результат: %s" % ["%.6g" % v for v in octaves])
-        check(close(octaves[2], GOLD["frac_fbm"]),
-              "fbm с 5 октавами совпадает с эталоном (%.9g)" % (octaves[2] if octaves else 0))
+        compare_reference("fbm 5 октав (повтор)", octaves[2] if octaves else None,
+                          GOLD["frac_fbm"])
 
         # --- Параметры: имена → номера -----------------------------------------
         params = a.eval("$.noise.params({ source: 'cellular', cellularDistance: 'hybrid', "
