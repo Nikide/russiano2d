@@ -199,6 +199,12 @@ endif()
 
 add_executable(russiano2d ${R2D_SOURCES})
 
+# Тестовая сборка: см. R2D_TEST_FREE_POISON в корневом CMakeLists.txt.
+# В релизном пути определения нет — ни одной лишней инструкции.
+if(R2D_TEST_FREE_POISON)
+    target_compile_definitions(russiano2d PRIVATE R2D_TEST_FREE_POISON=1)
+endif()
+
 # Комплект шумов: C-фасад над вендоренным FastNoiseLite (свой cmake-файл, чтобы
 # не пересекаться правками с Tracy/Zstd/RmlUi).
 include(Noise)

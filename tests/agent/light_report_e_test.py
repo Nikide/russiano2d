@@ -164,22 +164,35 @@ def main():
                ".emissive({ color: 'auto', radius: 200, intensity: 1 }).appendTo($.world); 'ok'" % PNG)
         a.step(4)
         sprite = a.eval("$('#fire').get(0).sprite")
-        got = a.eval("engine.textureAverageColor(%s, true)" % sprite)
+        # Спрашиваем ИМЕННО текстуру (`isSprite=false`): ленивый подсчёт региона
+        # (см. ниже) умеет достать цвет кадра заново, и на тестовой сборке с
+        # затиранием пикселей он бы «спас» сломанный средний цвет текстуры.
+        # Проверка обязана ловить именно его — это и есть контракт «снят один раз
+        # при создании текстуры».
+        tex = a.eval("engine.loadTexture('%s')" % PNG)
+        got = a.eval("engine.textureAverageColor(%s, false)" % tex)
+        got_sprite = a.eval("engine.textureAverageColor(%s, true)" % sprite)
         expected = png_average(PNG)
         number("E1: независимый подсчёт PNG %s, движок %s"
                % (["%.2f" % v for v in expected],
                   ["%.2f" % v for v in got] if got else got))
+        number("E1: тот же цвет через спрайт: %s"
+               % (["%.2f" % v for v in got_sprite] if got_sprite else got_sprite))
         check(got is not None,
               "E1: средний цвет текстуры вообще есть (было null из-за чтения "
-              "освобождённой поверхности)")
-        if got:
-            check(all(abs(float(x) - y) <= 0.5 for x, y in zip(got[:3], expected)),
-                  "E1: средний цвет спрайта совпал с независимым подсчётом "
-                  "(допуск 0.5): %s против %s"
-                  % (["%.2f" % v for v in got[:3]], ["%.2f" % v for v in expected]))
-            check(not (abs(got[0] - 255) < 1 and abs(got[1] - 255) < 1),
-                  "E1: цвет не белый (у BASHNYA автоцвет всегда давал "
-                  "[255,255,255,255])")
+              "освобождённой поверхности; на тестовой сборке R2D_TEST_FREE_POISON "
+              "это ловится детерминированно)")
+        # Три проверки намеренно независимы: при отсутствии цвета падают ВСЕ три,
+        # а не «пропускаются» — иначе тестовая сборка с затиранием пикселей
+        # показала бы один провал вместо трёх.
+        values = [float(v) for v in got[:3]] if got else None
+        check(values is not None and all(abs(x - y) <= 0.5 for x, y in zip(values, expected)),
+              "E1: средний цвет текстуры совпал с независимым подсчётом "
+              "(допуск 0.5): %s против %s"
+              % (["%.2f" % v for v in values] if values else got, ["%.2f" % v for v in expected]))
+        check(values is not None and not (abs(values[0] - 255) < 1 and abs(values[1] - 255) < 1),
+              "E1: цвет есть и он не белый (у BASHNYA автоцвет всегда давал "
+              "[255,255,255,255])")
         number("E1: цвет света берём из записи эмиттера в сцене демо (см. E9 ниже)")
         check(getattr(main, "_e1_ready", False) is False or True,
               "E1: 'auto' распознан и цвет известен")

@@ -867,6 +867,16 @@ static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps)
         thumb_scale = tmp.thumb_scale;
     }
 
+#if defined(R2D_TEST_FREE_POISON) && R2D_TEST_FREE_POISON
+    // Тестовая сборка (R2D_TEST_FREE_POISON=ON, docs/TESTING.md): затираем
+    // пиксели ПЕРЕД освобождением поверхности. Так UB «освободил и прочитал»
+    // (средний цвет считался после SDL_DestroySurface — дефект E1 отчёта
+    // BASHNYA) проявляется детерминированно: без затирания освобождённая
+    // память часто ещё содержит пиксели, и тест на старом коде ЗЕЛЁНЫЙ.
+    if (rgba->pixels && rgba->h > 0) {
+        SDL_memset(rgba->pixels, 0, (size_t)rgba->pitch * (size_t)rgba->h);
+    }
+#endif
     if (rgba != loaded) SDL_DestroySurface(rgba);
     SDL_DestroySurface(loaded);
 
