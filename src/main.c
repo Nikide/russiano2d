@@ -39,8 +39,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef R2D_TRACY
+// Клиент Tracy (BSD-3-Clause) — только в сборке с -DR2D_TRACY=ON, см.
+// cmake/Tracy.cmake. Без опции ни заголовок, ни библиотека не подключаются.
+#include <tracy/TracyC.h>
+#endif
+
 #define R2D_FIXED_DT      (1.0f / 60.0f)
 #define R2D_MAX_SUBSTEPS  5
+
+#ifdef R2D_TRACY
+// Пул и ресурсы кадра для Tracy: числа уже посчитаны рендером (R2DRenderer —
+// публичная структура), своих счётчиков не заводим. Смысл — видеть рядом с
+// зонами, растут ли текстуры/спрайты/команды от кадра к кадру.
+static void r2d__tracy_renderer_plots(const R2DRenderer *r)
+{
+    if (!r) return;
+    TracyCPlotI("draw calls за кадр", r->stat_draws);
+    TracyCPlotI("батчи за кадр", r->stat_batches);
+    TracyCPlotI("спрайты за кадр", r->stat_sprites);
+    TracyCPlotI("вершины за кадр", r->stat_vertices);
+    TracyCPlotI("текстуры", r->texture_count);
+    TracyCPlotI("спрайты в пуле", r->sprite_count);
+    TracyCPlotI("команды в буфере", r->cmd_count);
+    TracyCPlotI("загрузка VB/IB, КБ", (int64_t)(r->stat_upload_bytes / 1024));
+}
+#endif
 
 // --- Мосты «событие SDL → подсистема» (нужны, чтобы не тащить контекст) ------
 
@@ -484,6 +508,13 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
     // Закрываем кадр профайлера: dt — реальное время кадра, разница с суммой
     // зон показывает неучтённое (ожидание GPU, планировщик).
     r2d_prof_frame_end(app->dt * 1000.0f);
+
+#ifdef R2D_TRACY
+    // Граница кадра для Tracy: та же точка, где наш профайлер закрывает кадр,
+    // поэтому кадры в обоих инструментах совпадают.
+    TracyCFrameMark;
+    r2d__tracy_renderer_plots(fc->renderer);
+#endif
 
     // --- Перезапуск скриптов на границе кадра ---------------------------------
     // Кадр уже отрисован, профайлер закрыт, JS-вызовов в этом кадре больше не

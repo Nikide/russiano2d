@@ -22,6 +22,12 @@
 #include <SDL3/SDL.h>
 #include <string.h>
 
+#ifdef R2D_TRACY
+// Клиент Tracy (BSD-3-Clause) подключается только опцией -DR2D_TRACY=ON
+// (cmake/Tracy.cmake). Без неё файл не меняется ни на байт.
+#include <tracy/TracyC.h>
+#endif
+
 // Окно наблюдения: средние и пики считаются по последним кадрам.
 #define R2D_PROF_WINDOW 120
 // Буфер истории у вызывающего (script.c) рассчитан на R2D_PROF_WINDOW_MAX из
@@ -51,6 +57,74 @@ static const char *ZONE_NAMES[R2D_PROF_COUNT] = {
 static const char *GPU_ZONE_NAMES[R2D_PROF_GPU_COUNT] = {
     "GPU: кадр",
 };
+
+// --- Tracy: те же зоны, что видит оверлей -----------------------------------
+//
+// Правило «один источник правды»: зона начинается и заканчивается только в
+// r2d_prof_begin/end. Tracy получает ровно эти зоны и ровно эти имена — имена
+// берутся из ZONE_NAMES выше, отдельной таблицы имён нет. Второй системы зон
+// не появляется: новый инструмент читает тот же единственный источник.
+//
+// Цена при выключенном сервере: клиент собирается с TRACY_ON_DEMAND (см.
+// cmake/Tracy.cmake), поэтому без подключённого tracy-profiler на зону
+// остаётся одна проверка «подключён ли» — ни буферов, ни блокировок.
+#ifdef R2D_TRACY
+
+static struct ___tracy_source_location_data g_tracy_zone[R2D_PROF_COUNT];
+static TracyCZoneCtx g_tracy_ctx[R2D_PROF_COUNT];
+static bool          g_tracy_zones_ready = false;
+
+// Мьютекс слотов GPU-замера — единственный лок профайлера. В Tracy он виден
+// как объект синхронизации: по таймлайну понятно, ждёт ли кадр поток опроса
+// fence или наоборот.
+static TracyCLockCtx g_tracy_lock = NULL;
+
+// Источник локации зоны заполняется один раз и живёт до конца процесса: клиент
+// Tracy отдаёт серверу указатель на него, поэтому структура обязана быть
+// статической. Вызывается только из r2d_prof_begin (главный поток).
+static void r2d__tracy_zones_init(void)
+{
+    if (g_tracy_zones_ready) return;
+    for (int i = 0; i < R2D_PROF_COUNT; i++) {
+        g_tracy_zone[i].name = ZONE_NAMES[i];   // одно имя на оба профайлера
+        g_tracy_zone[i].function = "r2d_prof_begin";
+        g_tracy_zone[i].file = __FILE__;
+        g_tracy_zone[i].line = 0;   // зона начинается в вызывающем коде
+        g_tracy_zone[i].color = 0;  // 0 — Tracy подберёт цвет сам
+    }
+    g_tracy_zones_ready = true;
+}
+
+// Графики кадра: те же числа, что показывает оверлей, — из того же кольца.
+static void r2d__tracy_frame_plots(double real, double zones)
+{
+    TracyCPlotF("кадр: реальное время, мс", (float)real);
+    TracyCPlotF("кадр: сумма зон, мс", (float)zones);
+    TracyCPlotF("кадр: неучтённое, мс",
+                (float)(real > zones ? real - zones : 0.0));
+    TracyCPlotI("hitch: поймано всего", (int64_t)r2d_prof_hitch_total());
+}
+
+#endif  // R2D_TRACY
+
+// Мьютексы профайлера: с Tracy отмечаем вход/выход из лока, без Tracy — это
+// ровно прежние SDL_LockMutex/SDL_UnlockMutex.
+#ifdef R2D_TRACY
+static void r2d__lock(SDL_Mutex *m)
+{
+    if (g_tracy_lock) TracyCLockBeforeLock(g_tracy_lock);
+    SDL_LockMutex(m);
+    if (g_tracy_lock) TracyCLockAfterLock(g_tracy_lock);
+}
+static void r2d__unlock(SDL_Mutex *m)
+{
+    SDL_UnlockMutex(m);
+    if (g_tracy_lock) TracyCLockAfterUnlock(g_tracy_lock);
+}
+#else
+#  define r2d__lock(m)   SDL_LockMutex(m)
+#  define r2d__unlock(m) SDL_UnlockMutex(m)
+#endif
 
 static bool   g_enabled = true;
 static Uint64 g_freq = 0;
@@ -115,7 +189,7 @@ static void r2d__gpu_harvest(void)
     SDL_GPUFence *done[R2D_PROF_GPU_SLOTS];
     int n = 0;
 
-    SDL_LockMutex(g_gpu_lock);
+    r2d__lock(g_gpu_lock);
     for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
         if (!g_gpu_slots[i].ready) continue;
         g_gpu_ms = (float)g_gpu_slots[i].elapsed_ms;
@@ -123,7 +197,7 @@ static void r2d__gpu_harvest(void)
         g_gpu_slots[i].fence = NULL;
         g_gpu_slots[i].ready = false;
     }
-    SDL_UnlockMutex(g_gpu_lock);
+    r2d__unlock(g_gpu_lock);
 
     for (int i = 0; i < n; i++) {
         if (done[i]) SDL_ReleaseGPUFence(g_gpu_device, done[i]);
@@ -136,6 +210,12 @@ static int SDLCALL r2d__gpu_poll_thread(void *user)
 {
     SDL_GPUDevice *device = (SDL_GPUDevice *)user;
 
+#ifdef R2D_TRACY
+    // Имя потока в таймлайне: видно, что ожидание fence — это отдельный поток,
+    // а не «залипший» кадр.
+    TracyCSetThreadName("профайлер: опрос fence");
+#endif
+
     for (;;) {
         SDL_WaitSemaphore(g_gpu_wake);
         if (SDL_GetAtomicInt(&g_gpu_stop)) break;
@@ -144,7 +224,7 @@ static int SDLCALL r2d__gpu_poll_thread(void *user)
             SDL_GPUFence *fence = NULL;
             double submit_ms = 0.0;
 
-            SDL_LockMutex(g_gpu_lock);
+            r2d__lock(g_gpu_lock);
             for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
                 if (g_gpu_slots[i].fence && !g_gpu_slots[i].ready) {
                     fence = g_gpu_slots[i].fence;
@@ -152,7 +232,7 @@ static int SDLCALL r2d__gpu_poll_thread(void *user)
                     break;
                 }
             }
-            SDL_UnlockMutex(g_gpu_lock);
+            r2d__unlock(g_gpu_lock);
 
             if (!fence) break;   // всё опрошено — спим до следующего кадра
 
@@ -162,7 +242,7 @@ static int SDLCALL r2d__gpu_poll_thread(void *user)
             }
             const double elapsed = r2d__now_ms() - submit_ms;
 
-            SDL_LockMutex(g_gpu_lock);
+            r2d__lock(g_gpu_lock);
             for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
                 if (g_gpu_slots[i].fence == fence) {
                     g_gpu_slots[i].elapsed_ms = elapsed;
@@ -170,7 +250,7 @@ static int SDLCALL r2d__gpu_poll_thread(void *user)
                     break;
                 }
             }
-            SDL_UnlockMutex(g_gpu_lock);
+            r2d__unlock(g_gpu_lock);
         }
     }
     return 0;
@@ -190,6 +270,12 @@ void r2d_prof_gpu_init(SDL_GPUDevice *device)
         r2d_prof_gpu_shutdown();
         return;
     }
+#ifdef R2D_TRACY
+    // Лок объявляем Tracy ровно тогда, когда он реально существует.
+    TracyCLockAnnounce(g_tracy_lock);
+    TracyCLockCustomName(g_tracy_lock, "профайлер: слоты GPU-замера",
+                         sizeof("профайлер: слоты GPU-замера") - 1);
+#endif
 
     SDL_SetAtomicInt(&g_gpu_stop, 0);
     g_gpu_thread = SDL_CreateThread(r2d__gpu_poll_thread, "r2d_gpu_prof", device);
@@ -211,7 +297,7 @@ void r2d_prof_gpu_shutdown(void)
     }
 
     if (g_gpu_lock) {
-        SDL_LockMutex(g_gpu_lock);
+        r2d__lock(g_gpu_lock);
         for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
             if (g_gpu_slots[i].fence && g_gpu_device) {
                 SDL_ReleaseGPUFence(g_gpu_device, g_gpu_slots[i].fence);
@@ -220,9 +306,16 @@ void r2d_prof_gpu_shutdown(void)
             g_gpu_slots[i].ready = false;
             g_gpu_slots[i].elapsed_ms = 0.0;
         }
-        SDL_UnlockMutex(g_gpu_lock);
+        r2d__unlock(g_gpu_lock);
         SDL_DestroyMutex(g_gpu_lock);
         g_gpu_lock = NULL;
+#ifdef R2D_TRACY
+        // Лок исчез — снимаем и его объект в Tracy (порядок: после Destroy).
+        if (g_tracy_lock) {
+            TracyCLockTerminate(g_tracy_lock);
+            g_tracy_lock = NULL;
+        }
+#endif
     }
     if (g_gpu_wake) {
         SDL_DestroySemaphore(g_gpu_wake);
@@ -247,7 +340,7 @@ void r2d_prof_gpu_submit(SDL_GPUFence *fence)
     r2d__gpu_harvest();
 
     bool placed = false;
-    SDL_LockMutex(g_gpu_lock);
+    r2d__lock(g_gpu_lock);
     for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
         if (g_gpu_slots[i].fence) continue;
         g_gpu_slots[i].fence = fence;
@@ -257,7 +350,7 @@ void r2d_prof_gpu_submit(SDL_GPUFence *fence)
         placed = true;
         break;
     }
-    SDL_UnlockMutex(g_gpu_lock);
+    r2d__unlock(g_gpu_lock);
 
     if (!placed) {   // GPU отстал больше чем на R2D_PROF_GPU_SLOTS кадров
         SDL_ReleaseGPUFence(g_gpu_device, fence);
@@ -316,6 +409,16 @@ void r2d_prof_begin(R2DProfileZone zone)
         g_work_open = true;
         g_work_start = r2d__now_ms();
     }
+#ifdef R2D_TRACY
+    // Зона Tracy начинается ровно здесь же, где зона нашего профайлера:
+    // отдельного списка зон не существует. Повторный begin без end (наш
+    // профайлер просто перезапускает таймер) второй зоны не создаёт — иначе
+    // получилась бы пара begin/end, которой нет в источнике правды.
+    if (!g_running[zone]) {
+        r2d__tracy_zones_init();
+        g_tracy_ctx[zone] = ___tracy_emit_zone_begin(&g_tracy_zone[zone], 1);
+    }
+#endif
     g_start[zone] = SDL_GetPerformanceCounter();
     g_running[zone] = true;
 }
@@ -323,6 +426,9 @@ void r2d_prof_begin(R2DProfileZone zone)
 void r2d_prof_end(R2DProfileZone zone)
 {
     if (!g_enabled || zone < 0 || zone >= R2D_PROF_COUNT || !g_running[zone]) return;
+#ifdef R2D_TRACY
+    ___tracy_emit_zone_end(g_tracy_ctx[zone]);
+#endif
     const Uint64 freq = g_freq ? g_freq : (g_freq = SDL_GetPerformanceFrequency());
     const double ms = (double)(SDL_GetPerformanceCounter() - g_start[zone]) * 1000.0 / (double)freq;
     g_acc[zone] += ms;
@@ -368,6 +474,11 @@ void r2d_prof_frame_end(float real_ms)
     // кольце, поэтому причина захвата указывает на тот же кадр.
     g_frame_no++;
     r2d__hitch_frame(g_span[g_head], real, work);
+
+#ifdef R2D_TRACY
+    // Графики кадра: те же числа, что показывает оверлей, — из того же кольца.
+    r2d__tracy_frame_plots(real, total);
+#endif
 
     g_head = (g_head + 1) % R2D_PROF_WINDOW;
     if (g_filled < R2D_PROF_WINDOW) g_filled++;

@@ -2623,3 +2623,31 @@ GPU FINAL own shared color/owner/depth targets и direct texture copy; diagnosti
 Настройки вида переживают смену размера растра; в текстуру загружается только изменённая область (`R3Work.touched`).
 
 Окно: щелчок по окну без фокуса клавиатуры поднимает его (`SDL_RaiseWindow`), при получении фокуса захват мыши применяется заново (`src/app.c`).
+
+## Рендер-биндинги, которые зовёт ТОЛЬКО наш JS-слой (не игра)
+
+Проверено вызовом на живом движке (фикстура `within`, `engine.*` доступен через агентский `eval`)
+и поиском вызовов: ни один из них не встречается в `demos/`, `games/`, `game/`, `sdk/` —
+все вызовы лежат в `src/highlevel/*.js`, то есть это внутренний контракт нашего же слоя `$`.
+
+| Биндинг | Что читает/пишет C | Проверено |
+|---|---|---|
+| `engine.spriteFilter()` | читает режим фильтрации спрайтов: `false` — линейная (по умолчанию), `true` — ближайшая | `engine.spriteFilter()` → `false` |
+| `engine.setSpriteFilter('nearest'\|'linear'\|bool)` | пишет тот же режим; возвращает новое состояние | `setSpriteFilter('nearest')` → `true`, затем `spriteFilter()` → `true` |
+| `engine.depth(value?)` | без аргумента читает, с числом пишет глубину относительного слоя для следующего диапазона команд | `engine.depth(0.5)` → `true` |
+| `engine.markUnlit()` | помечает начало диапазона команд как «неосвещённый слой» (рисуется без света/тумана, но под UI) | вызов принимается без ошибок |
+| `engine.lightMaskPasses()` | счётчик проходов записи маски получателя света в кадре | `0` при выключенной световой карте |
+| `engine.postSupported()` | собран ли конвейер пост-обработки в этой сборке | `true` на Metal-сборке |
+| `engine.cursorVisible(flag?)` | без аргумента читает видимость курсора (SDL), с флагом пишет | `engine.cursorVisible()` → `true` |
+| `engine.rotSpriteInfo(handle)` | метаданные RotSprite: размеры, кадры, стиль | требует **C-хендл**, на селектор отвечает `TypeError: RotSprite object expected` |
+| `engine.rotSpritePose(handle)` | текущая поза скелета RotSprite | то же |
+| `engine.rotSpriteRig(handle)` | описание рига (кости/суставы) | то же |
+| `engine.rotSpriteStyle(handle)` | стиль отрисовки (палитра/контур) | то же |
+| `engine.rotSpriteStyle(handle, style)` | пишет стиль и возвращает признак изменения | то же |
+| `engine.rotSpriteChanged(handle)` | изменился ли синтез с прошлого кадра (нужен ли ре-upload текстуры) | то же |
+| `engine.rotSpriteFileStamp(path)` | время правки файла спрайта (для hot-reload); на не-хендл отдаёт `null` | `null` |
+| `engine.rotSpriteDispose(handle)` | освобождает ресурсы RotSprite | то же |
+
+Все `rotSprite*` вызываются из `src/highlevel/rotsprite.js` — игра работает с `$.rotSprite.*`,
+а не с этими биндингами. Хендл — непрозрачный объект C, поэтому «позвать по имени селектора»
+невозможно: это и есть доказательство, что уровень внутренний.

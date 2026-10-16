@@ -66,6 +66,10 @@ option(R2D_EMBED_SCRIPTS  "Встроить скрипты в бинарник �
 set(R2D_EMBED_DIR "game" CACHE STRING
     "Каталог игры, скрипты которой встраиваются при R2D_EMBED_SCRIPTS=ON (например demos)")
 option(R2D_SANITIZE       "Включить ASan/UBSan (только для Debug)"      OFF)
+# Tracy — профайлер реального времени для разработки (BSD-3-Clause). По
+# умолчанию OFF: релизная сборка не тянет Tracy вообще. Подключение — в
+# cmake/Tracy.cmake, что видно и чего не видно — docs/BUILD.md.
+option(R2D_TRACY          "Подключить профайлер реального времени Tracy (только для разработки)" OFF)
 
 if(R2D_SANITIZE AND NOT MSVC)
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -118,6 +122,14 @@ if(NOT EMSCRIPTEN)
     add_subdirectory(sdk/native)
 endif()
 
+# Tracy подключается после цели движка: он линкуется в russiano2d, а не в
+# SDK и хостовые тесты. При R2D_TRACY=OFF (по умолчанию) файл выходит сразу.
+include(Tracy)
+
+# zstd (BSD-3) — сжатие груза игры; тоже после цели движка и своим файлом,
+# чтобы не пересекаться правками в cmake/Dependencies.cmake (см. cmake/Zstd.cmake).
+include(Zstd)
+
 message(STATUS "")
 message(STATUS "── russiano2d ${PROJECT_VERSION} ──────────────────────────────")
 message(STATUS "  Тип сборки ...... ${CMAKE_BUILD_TYPE}")
@@ -127,4 +139,5 @@ message(STATUS "  Звук ............ ${R2D_ENABLE_AUDIO}")
 message(STATUS "  Сеть ............ ${R2D_ENABLE_NET}")
 message(STATUS "  Hot reload ...... ${R2D_ENABLE_HOTRELOAD}")
 message(STATUS "  Байткод скриптов  ${R2D_EMBED_SCRIPTS}")
+message(STATUS "  Tracy ........... ${R2D_TRACY}")
 message(STATUS "───────────────────────────────────────────────────────────")
