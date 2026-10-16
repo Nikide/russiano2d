@@ -71,6 +71,13 @@ export function installClip($) {
                 return null;
             }
             const fps = Number(o.fps);
+            // Обработчики клипа — САХАР над событиями узла: при применении клипа
+            // они подписываются на `anim:end`/`anim:frame` того же узла. Второго
+            // механизма «клип доиграл» не заводим: два пути разъедутся.
+            const handlers = {
+                end: typeof o.onEnd === 'function' ? o.onEnd : null,
+                frame: typeof o.onFrame === 'function' ? o.onFrame : null,
+            };
             const clip = {
                 name: id,
                 frames: frames,
@@ -79,6 +86,8 @@ export function installClip($) {
                 pivot: clipPivot(o.pivot),
                 duration: frames.length / (Number.isFinite(fps) && fps > 0 ? fps : 12),
                 skipped: list.length - frames.length,
+                onEnd: handlers.end,
+                onFrame: handlers.frame,
             };
             clips.set(id, clip);
             return clip;

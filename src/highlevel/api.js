@@ -1173,6 +1173,22 @@ function installNodeMethods($) {
                 }
                 node.frames = clip.frames.slice();
                 node.setSprite(node.frames[0]);
+                // Обработчики клипа (onEnd/onFrame) — подписка на события ЭТОГО
+                // узла; повторное применение снимает прежние подписки, чтобы не
+                // копились (иначе клик «доиграл» выстрелил бы дважды).
+                if (node._clip_events) {
+                    if (node._clip_events.end) node.off('anim:end', node._clip_events.end);
+                    if (node._clip_events.frame) node.off('anim:frame', node._clip_events.frame);
+                    node._clip_events = null;
+                }
+                if (clip.onEnd || clip.onFrame) {
+                    node._clip_events = {
+                        end: clip.onEnd ? (e) => clip.onEnd(e.data) : null,
+                        frame: clip.onFrame ? (e) => clip.onFrame(e.data) : null,
+                    };
+                    if (node._clip_events.end) node.on('anim:end', node._clip_events.end);
+                    if (node._clip_events.frame) node.on('anim:frame', node._clip_events.frame);
+                }
                 node.anim = {
                     from: 0,
                     to: node.frames.length - 1,
@@ -3561,10 +3577,23 @@ function animateSprites() {
         anim.t += dt * anim.speed;
         const span = anim.to - anim.from + 1;
         let index = anim.from + Math.floor(anim.t) % span;
+        // Событие КАДРА — только когда кадр действительно сменился: иначе
+        // слушатель получал бы вызовы на каждом тике (цена и смысл).
+        if (anim.last_index !== index) {
+            anim.last_index = index;
+            node.emit('anim:frame', { frame: index, frame_in_clip: index - anim.from,
+                                      clip: anim.clip || null, anim });
+        }
         if (!anim.loop && Math.floor(anim.t) >= span) {
             anim.playing = false;
             index = anim.to;
-            node.emit('animEnd', { anim });
+            node.emit('anim:end', { clip: anim.clip || null, loops: 1, anim });
+            node.emit('animEnd', { anim });   // прежнее имя: оставлено для совместимости
+        } else if (anim.loop && Math.floor(anim.t) >= span) {
+            // Петля: считаем циклы и сообщаем о каждом — «доиграл» для клипа с
+            // повтором случается на каждом обороте (описано в доках).
+            anim.loops = (anim.loops || 0) + 1;
+            node.emit('anim:end', { clip: anim.clip || null, loops: anim.loops, anim });
         }
         node.sprite = node.frames[index];
         node.frame_index = index;
