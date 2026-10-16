@@ -2784,15 +2784,28 @@ function probeGround(node, opts) {
         if (!hit) continue;
         const slope = groundSlope(hit.normal.x, hit.normal.y);
         const distance = Math.hypot(hit.point.x - node.x, hit.point.y - node.y);
+        const candidate = {
+            hit, body: hit.body, node: hit.node || null,
+            x: hit.point.x, y: hit.point.y,
+            nx: hit.normal.x, ny: hit.normal.y,
+            slope, distance,
+        };
+        // Односторонняя платформа — опора, только если тело НАД её лицевой
+        // стороной. При подъёме снизу луч ещё видит её верх, и без этой
+        // проверки onFloor() два кадра рапортовал «на земле», пока тело внутри
+        // платформы: нажатый в этот момент прыжок считался прыжком с земли
+        // (и не тратил воздушный запас). Та же проверка, что и у спрыгивания.
+        if (candidate.node && candidate.node.one_way) {
+            if (!isOneWayTop(node, candidate)) continue;
+            // Низ тела не должен быть ниже поверхности больше, чем допуск:
+            // иначе это проход сквозь платформу, а не опора на ней (мгновенное
+            // перекрытие на кадре подъёма).
+            if (b.y1 > candidate.y + tolerance) continue;
+        }
         // Лучше та опора, что «горизонтальнее»; при равном угле — ближе.
         if (!best || slope < best.slope - 1e-6
             || (Math.abs(slope - best.slope) <= 1e-6 && distance < best.distance)) {
-            best = {
-                hit, body: hit.body, node: hit.node || null,
-                x: hit.point.x, y: hit.point.y,
-                nx: hit.normal.x, ny: hit.normal.y,
-                slope, distance,
-            };
+            best = candidate;
         }
     }
     if (!best) return null;
