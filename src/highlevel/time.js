@@ -328,6 +328,22 @@ export function installTime($) {
         frame() { return engine.frame; },
 
         /**
+         * Сколько таймеров сейчас живо: `{ after, every, waits, total }`.
+         *
+         * Публичный счётчик нужен панели PERF: раньше там всегда стояло «N/A»,
+         * хотя числа есть внутри (шаг симуляции и `wait`). Считаем по реальным
+         * структурам, а не по счётчику вызовов: мёртвые записи вычищаются
+         * шагом (см. tickTimers).
+         */
+        timers() {
+            const list = state.sim.timers;
+            const after = list.filter((t) => t && t.alive && !t.repeat).length;
+            const every = list.filter((t) => t && t.alive && t.repeat).length;
+            const waits = state.intervals.filter((w) => w && w.alive !== false).length;
+            return { after, every, waits, total: after + every + waits };
+        },
+
+        /**
          * Масштаб игрового времени. Он же — множитель шага физики: `scale(0.5)`
          * замедляет и логику кадра, и мир Box2D, `scale(0)` останавливает оба.
          * `pause()`/`freeze()` не затирают это значение — они лишь обнуляют
