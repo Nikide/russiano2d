@@ -72,7 +72,10 @@ const $ = createApi();          // свой экземпляр API (тесты, 
 * `dispatchContacts()` дописывает в событие `shapeA/shapeB`, `areaA/areaB`,
   `roleA/roleB`, `ownerA/ownerB`, `selfArea/otherArea`, `selfOwner/otherOwner` —
   сенсор и логический владелец приходят раздельно (§40);
-* методы областей `.area`, `.areaOn`, `.areas`, `.areaOverlap`.
+* методы областей `.area`, `.areaOn`, `.areas`, `.areaOverlap` (у
+  `.areaOverlap` фильтр односторонний — решает маска области; прежний
+  двусторонний режим остался явным `{ both: true }`, см.
+  [collision.md](collision.md) §5).
 
 Подробности и ограничения — [core.md](core.md) §6–7 и
 [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) (§6 «Локальные трансформы», §8 «Области

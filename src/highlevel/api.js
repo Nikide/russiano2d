@@ -1056,10 +1056,28 @@ function installNodeMethods($) {
         });
     });
 
+    /**
+     * Показать конкретный кадр листа: `.frame(3)`.
+     *
+     * Меняет и `node.sprite` (что рисуется), и `node.frame_index` (какой это
+     * кадр): поле читают prefab-сериализация (§14), сохранение и DevTools, и
+     * раньше его двигали только дорожки `.animate()` — после `.stopAnim();
+     * .frame(0)` рисовался кадр 0, а `frame_index` оставался последним кадром
+     * анимации (A4 отчёта BASHNYA). Индекс вне листа ничего не меняет: состояние
+     * остаётся согласованным с нарисованным спрайтом.
+     */
     def('frame', function (index) {
         return this.eachNode((_, el) => {
             const node = el;
-            if (node.frames && node.frames[index] !== undefined) node.sprite = node.frames[index];
+            if (!node.frames) return;
+            // Приводим к целому числу: frame_index — публичное число, строка или
+            // дробь в нём ломали бы prefab и сравнение с frames.indexOf(sprite).
+            // null/undefined — «кадра не просили»: ничего не меняем.
+            if (index === null || index === undefined) return;
+            const i = Math.trunc(Number(index));
+            if (!Number.isFinite(i) || node.frames[i] === undefined) return;
+            node.sprite = node.frames[i];
+            node.frame_index = i;
         });
     });
 
@@ -1243,9 +1261,32 @@ function installNodeMethods($) {
      * вызовом без ожидания нового движения; выключенная область не возвращает
      * никого. Результат: `[{ node, owner, body, shape, area, role }]`, где
      * `node` — узел цели, `owner` — логический владелец области.
+     *
+     * Фильтр — как у ВСЕХ запросов движка (`$.world.raycast`,
+     * `$.world.queryPoint/Box/Circle`, `engine.castShape`): у запроса нет
+     * своего слоя, поэтому решает ТОЛЬКО маска области, а маска цели не
+     * участвует. Иначе маска чужого тела решала бы, увидит ли его моя область
+     * (A3 отчёта BASHNYA: цель со слоем 0x2 и маской 0x1|0x4 не находилась
+     * областью со слоем 0x8, хотя область её видит).
+     *
+     * Осознанное исключение одно и то же во всех запросах: тело с маской 0
+     * («не сталкивается ни с кем») Box2D не отдаёт ни одному запросу.
+     *
+     * Прежний двусторонний фильтр Box2D (маска цели тоже проверяется) остался
+     * доступен явно: `{ both: true }` — для кода, который на него полагался.
      */
     defGet('areaOverlap', function (node, name, opts) {
-        return areaOverlap(node, String(name), opts);
+        const o = opts || {};
+        // Двусторонний режим по явной просьбе (или свой слой запроса задан
+        // вручную): ядро возьмёт слой области, и Box2D проверит фильтр в обе
+        // стороны — ровно как до A3.
+        if (o.both === true || o.category !== undefined) {
+            return areaOverlap(node, String(name), o);
+        }
+        // Односторонний запрос: категория запроса — «все биты» (у запроса нет
+        // слоя), маска — маска области. Ровно это делает r2d__query_filter для
+        // лучей и запросов в C.
+        return areaOverlap(node, String(name), Object.assign({}, o, { category: 0xFFFFFFFF }));
     }, []);
     def('show', function () { return this.visible(true); });
     def('hide', function () { return this.visible(false); });
