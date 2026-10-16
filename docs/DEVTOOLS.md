@@ -9,8 +9,10 @@ DevTools — это **инспектор и отладчик**. Это **не** 
 авторинга игры: уровень и логика по-прежнему описываются кодом и данными.
 DevTools ничего не «сохраняет как проект» и не становится источником истины.
 
-Статус: первый срез реализован (RmlUi-панель F1/F2 и `$.devtools`, см. §9);
-остальное — план ([ROADMAP.md](ROADMAP.md) фаза 8).
+Статус: **панели собраны и покрыты тестами** — 14 вкладок диагностики (F1),
+инспектор сущности (F2), picking, детектор hitch и 75 методов `$.devtools`.
+Что именно есть, а чего ещё нет — §9. Справка по API —
+[highlevel/devtools.md](highlevel/devtools.md).
 
 ---
 
@@ -23,83 +25,86 @@ DevTools ничего не «сохраняет как проект» и не с
 специализированного отрисованного содержимого (см. §4). RmlUi владеет
 окружающим интерфейсом, вёрсткой и раскладкой.
 
+Разметка собирается **кодом** (`engine.ui.loadMarkup`), `.rml`-файл игры не
+нужен: панель обязана работать в любой игре без ассетов.
+
 ---
 
-## 2. Панели (кандидаты)
+## 2. Панели
 
-```text
-WORLD
-ENTITIES
-EVENTS
-PHYSICS
-BSP
-NAV
-AUDIO
-RENDER
-PERF
-AGENT
-```
+Реализованы две панели, обе на RmlUi:
+
+* **F1 — диагностика runtime** (`$.devtools.openRuntime()`, `$.debug.on()`,
+  `--overlay`): 14 вкладок — `perf`, `hitch`, `physics`, `render`, `events`,
+  `tree`, `diag`, `audio`, `input`, `assets`, `memory`, `console`, `step`,
+  `watch`. Переключение — кнопки `rt-tab-<имя>` или `$.devtools.tab(name)`.
+  Экспорт отчёта (§39) — внутри вкладки `diag` (отдельной вкладки REPORT нет).
+* **F2 — инспектор сущности** (`$.devtools.open()`, `$.devtools.toggle()`):
+  список → выбор → секции `Identity / Transform / Gameplay / Physics /
+  Presentation`, поиск, фильтры, picking, копирование селектора/ID/JS.
+
+Панелей WORLD, BSP, NAV как отдельных вкладок нет: их данные доступны
+оверлеями подсистем (§4) и в инспекторе.
 
 ---
 
 ## 3. Инспектор сущности
 
-Выбор `#hero` может показывать:
+Секции инспектора — те же понятия, что у `$` и у агентского протокола
+(один introspection API, см. §7):
 
 ```text
 #hero
 
-Transform
-  position
-  rotation
-  scale
-
-Physics
-  velocity
-  body
-  contacts
-
-Gameplay
-  health
-  state
-
-Events
-  recent events
-
-Debug
-  source
-  prefab
-  trace
+Identity      id, uid, nid, tag, kind, классы, prefab, источник
+Transform     position, rotation, scale, размеры
+Gameplay      здоровье, команда, состояние, живость
+Physics       тело, тип, скорость, фильтры, контакты
+Presentation  видимость, альфа, слой, спрайт, ui/aria
 ```
 
-Значения, безопасные для изменения, **могут** правиться на лету — но см. §6
-(источник истины).
+Секции переключаются `$.devtools.section(name)`, данные всех секций разом
+отдаёт `$.devtools.inspect(sel)`; выборка списка с поиском и фильтрами —
+`$.devtools.list()`, состояние панели — `$.devtools.panel()`.
+
+Значения в панели **только читаются**. Правки на лету и «Export override» —
+см. §9 («чего ещё нет»).
 
 ---
 
 ## 4. Визуализация
 
-Нативные custom-элементы RmlUi **могут** визуализировать:
+Реализовано оверлеями поверх кадра (по умолчанию выключены и кадр не меняют):
 
-* формы коллизий;
-* BSP;
-* навигацию;
-* пространственные индексы;
-* зоны видимости;
-* графики профайлера.
+* формы коллизий — вкладка PHYS, режимы «все / только выбранный / выключить»
+  (`$.devtools.physicsOverlay(mode)`, контуры из `engine.devtools.shapes()`);
+* сетка тайлмапа, твёрдые клетки, координаты под курсором —
+  `$.tilemap.debug(...)`;
+* анимация: клип, время, слои, окна удара, точки событий —
+  `$.anim.debug(sel, ...)`;
+* камера: deadzone, лимиты, зоны, цель follow, зум — `$.camera.debug(...)`;
+* свет: радиусы/центры нарисованных источников, деградация теней —
+  `$.gfx.light.debug(...)`;
+* ручные примитивы для игры и тестов — `$.debug.draw.*`.
+
+Не реализовано как инструмент: визуализация BSP, навигации, пространственных
+индексов и зон видимости (доступны только ручные примитивы `$.debug.draw`).
 
 ---
 
 ## 5. Выбор сущности (picking)
 
-Клик по сущности в превью мира должен давать **ту же идентичность**, что
-понимает `$`:
+Клик по миру даёт **ту же идентичность**, что понимает `$`:
 
 ```text
 кликнули сущность → #goblin_12
 ```
 
-DevTools должен позволять **скопировать полезный селектор**.
+`$.devtools.pickMode(true)` включает режим, `$.devtools.pickAt(x, y)` выбирает
+по экранной точке (тем же путём, что клик мышью), `$.devtools.picked()` отдаёт
+`{ selector, source, x, y }`, `pickHover()` — uid под курсором. Скопировать
+полезный селектор: `copySelector()` / `copyNodeId()` / `copyJs()`,
+результат — в `lastCopied()`. Проверка — `tests/agent/devtools_pick_test.py`.
 
 ---
 
@@ -122,13 +127,19 @@ Export override
 $('#guard').at(420, 120);
 ```
 
+Сейчас реализованы копирования (`Copy selector` / `Copy node ID` / `Copy JS`,
+`Copy report`); правок значений и `Export override` нет — панель читает мир,
+кроме явных действий (mute/solo шины, стоп канала, пауза и масштаб времени,
+шаг кадра, очистка журналов и захватов).
+
 ---
 
 ## 7. Интеграция с агентом
 
-DevTools и агентский протокол **должны опираться на один introspection API**.
-Нельзя независимо реализовывать «инспекцию для DevTools» и «инспекцию для
-агента» с несовместимой семантикой.
+DevTools и агентский протокол **опираются на один introspection API**:
+`$.agent.nodes/node`, `$.debug.*`, `$.trace`, `$.sound/$.audio`, `$.input`,
+`$.reload`. Нельзя независимо реализовывать «инспекцию для DevTools» и
+«инспекцию для агента» с несовместимой семантикой.
 
 ```text
             Debug/Inspection API
@@ -137,85 +148,71 @@ DevTools и агентский протокол **должны опиратьс�
            DevTools        Protocol
 ```
 
+Каждая вкладка отдаёт **машиночитаемый JSON** теми же методами, что рисуют её
+содержимое (`$.devtools.perf()`, `.hitch()`, `.physics()`, `.render()`,
+`.events()`, `.audio()`, `.input()`, `.assetsTab()`, `.memory()`, `.timeStep()`,
+`.report()`, `.hitch()`, …). Тесты вкладок сравнивают видимое в панели с этими
+данными, поэтому панель не может «показать одно, а отдать другое».
+
 ---
 
 ## 8. Критерии приёмки
 
 DevTools умеет:
 
-* список сущностей;
-* выбор одной;
-* инспекцию базового состояния;
-* показ метрик движка;
-* использование **только RmlUi** для обычного интерфейса;
-* работу, не превращаясь в источник истины.
-
-Первый полезный срез (из [ROADMAP.md](ROADMAP.md) фаза 8):
-
-```text
-список сущностей → выбрать → инспекция свойств →
-transform/physics/state → скопировать селектор
-```
+* список сущностей и выбор одной — ✅ (`list()`, `select()`, `selectBy()`);
+* инспекцию состояния по секциям — ✅ (5 секций, `inspect()`);
+* метрики движка и профиль кадра — ✅ (PERF, ПРОФИЛЬ, перцентили, hitch);
+* инспекторы подсистем — ✅ (PHYS, RENDER, EVENTS, AUDIO, INPUT, ASSETS, MEM);
+* picking из мира с копированием селектора — ✅ (`pickMode`, `pickAt`);
+* только RmlUi для обычного интерфейса — ✅ (ImGui не используется);
+* работу, не превращаясь в источник истины — ✅ (панель читает; правок нет).
 
 ---
 
 ## 9. Что уже есть в движке
 
-**Первый срез DevTools сделан (2026-10-07): `$.devtools`** — панель
-«список сущностей → выбор → свойства → скопировать селектор», целиком на RmlUi
-(документ собирается кодом через `engine.ui.loadMarkup`, `.rml` в игре не
-нужен). Открывается по **F2**: [highlevel/devtools.md](highlevel/devtools.md).
+`$.devtools` — **75 публичных имён** на 0.1.34 (полный список и семантика —
+[highlevel/devtools.md](highlevel/devtools.md)), 14 вкладок F1, инспектор F2,
+детектор hitch (`engine.hitch.*`, вкладка HITCH), picking, экспорт отчёта (§39)
+и консоль команд (§31). Всё видимое в панели доступно как JSON; тесты вкладок
+сверяют одно с другим.
 
-Что в нём уже есть:
-
-| Требование §8 | Состояние |
+| Тест | Что закрывает |
 |---|---|
-| Список сущностей | ✅ до 24 строк из `$.agent.nodes('*')` |
-| Выбор одной | ✅ клик по строке или `$.devtools.selectBy('#hero')` |
-| Инспекция базового состояния | ✅ transform, тело, здоровье, команда, живость, видимость, `aria` |
-| Метрики движка | ⬜ панель PERF пока не подключена (есть `$.debug.profile()`) |
-| Только RmlUi для обычного интерфейса | ✅ ImGui не используется |
-| Не источник истины | ✅ панель только читает и копирует селектор |
+| `tests/agent/devtools_test.py` | инспектор F2: список, выбор, секции, поиск, фильтры, копирование |
+| `tests/agent/devtools_perf_test.py` | PERF / ПРОФИЛЬ / ДИАГ / НАБЛЮД: сводка, график, перцентили, дерево зон |
+| `tests/agent/devtools_hitch_test.py` | HITCH: искусственный долгий кадр, причина, порог, очистка |
+| `tests/agent/devtools_physics_test.py` | PHYS: таблица тел и оверлей форм |
+| `tests/agent/devtools_render_test.py` | RENDER / ASSETS |
+| `tests/agent/devtools_events_test.py` | EVENTS: журнал `$.trace`, фильтр, пауза, потери |
+| `tests/agent/devtools_audio_test.py` | AUDIO / INPUT |
+| `tests/agent/devtools_memory_test.py` | MEM: счётчики, пределы, дельты, подозрение на рост |
+| `tests/agent/devtools_console_test.py` | КОНСОЛЬ / ШАГ: команды, история, шаг кадра |
+| `tests/agent/devtools_report_test.py` | ДИАГ и экспорт отчёта (§39) |
+| `tests/agent/devtools_pick_test.py` | picking: клик по миру, подсветка, копирование |
+| `tests/agent/devtools_backend_test.py` | данные бэкенда: формы, свет, `renderInfo()` |
+| `tests/agent/sdk_runtime_ui_test.py` | панель F1 целиком, гравитация, перезапуск скриптов |
+| `tests/js/devtools_test.mjs` | логика панели без GUI (qjs) |
+| `tests/agent/tilemap_debug_test.py`, `anim_debug_test.py`, `camera_debug_test.py`, `light_debug_test.py` | оверлеи подсистем (§4) |
+| `tests/agent/debug_diagnostics_test.py`, `highlevel_perf_test.py` | профиль, история кадра, перцентили |
 
-Чего ещё нет: правки значений на лету, визуализации коллизий/BSP/навигации,
-таймлайна событий, панелей WORLD/EVENTS/AUDIO/RENDER, «Copy JS / Export
-override». Заготовки для них — ниже.
+**Чего ещё нет** (осознанно, а не «потеряно»):
 
-| Заготовка | Что даёт | Где |
-|---|---|---|
-| `$.agent.snapshot()` | `frame, time, dt, fps, paused, scene, window, camera, world, entities[], ui[], player, tests` + поля `expose` | [agent.js:76-120](../src/highlevel/agent.js#L76-L120) |
-| `$.agent.node(sel)` / `nodes(sel)` | краткое описание узла / список описаний | [agent.js:24-46](../src/highlevel/agent.js#L24-L46), [:58-67](../src/highlevel/agent.js#L58-L67) |
-| `$.agent.expose(name, fn)` | свои поля в снимке | [agent.js:70-73](../src/highlevel/agent.js#L70-L73) |
-| `engine.setSnapshot` | снимок уходит в ответ на команду `state` | [agent.js:123-126](../src/highlevel/agent.js#L123-L126), [agent.c:195-225](../src/agent.c#L195-L225) |
-| `$.debug.stats()` / `counters()` / `limits()` | счётчики, занятость и потолки таблиц | [debug.js:33-71](../src/highlevel/debug.js#L33-L71) |
-| `$.debug.profile()` | зоны кадра, GPU-время, пики | [script.c:358-391](../src/script.c#L358-L391), зоны [profile.h:41-48](../src/profile.h#L41-L48) |
-| `$.debug.profiler.*` | свои замеры | [debug.js:145-221](../src/highlevel/debug.js#L145-L221) |
-| `$.debug.draw.*`, `$.debug.watch()` | отладочная отрисовка и наблюдения (принимают селекторы) | [debug.js:72-118](../src/highlevel/debug.js#L72-L118) |
-| `engine.depthInfo()`, `engine.fontStats()`, `engine.renderInfo()` | глубина/меш, атлас глифов, проходы рендера | [script.c:4028](../src/script.c#L4028), [:4190](../src/script.c#L4190) |
-| Курсор и выбор в мире | `attrs.picked`/`hovered` | [api.js:1851-1890](../src/highlevel/api.js#L1851-L1890) |
-| Диагностика F1 (RmlUi) | статистика, профиль, физика, текстуры, скрипты, watches | [devtools.js](../src/highlevel/devtools.js) |
-
-**Чего ещё нет:**
-
-* правок значений на лету и их экспорта (value / JS / override);
-* picking из мира в панель: клик/ховер по узлам интерфейса есть
-  ([ui.js:160-202](../src/highlevel/ui.js#L160-L202)), но клик по спрайту в
-  сцене пока не превращается в селектор панели;
-* панелей WORLD / EVENTS / PHYSICS / BSP / NAV / AUDIO / RENDER / PERF —
-  уже есть диагностика статистики/профиля, гравитации, скриптов и текстур; специализированные визуализации остаются;
-* визуализации коллизий, BSP, навигации и зон видимости как инструмента
-  (есть только ручные примитивы `$.debug.draw`);
-* таймлайна событий — `$.watch` (реактивные запросы) даёт материал, но
-  панели на нём ещё нет.
+* правок значений на лету и их экспорта (value / JS / override) — см. §6;
+* отдельных панелей WORLD / BSP / NAV и визуализации этих подсистем как
+  инструмента;
+* редактора сцены и записи проекта — это вне философии R2D (§1).
 
 **ImGui удалён (2026-10-09).** F1, `--overlay` и `$.debug.on()` используют
-RmlUi диагностику существующего DevTools, F2 — инспектор узлов.
+RmlUi диагностику DevTools, F2 — инспектор узлов.
 
 ---
 
 ## 10. Связанные документы
 
 [UI_RMLUI_LAW.md](UI_RMLUI_LAW.md) — закон интерфейса,
+[highlevel/devtools.md](highlevel/devtools.md) — справочник `$.devtools`,
 [AGENT_API.md](AGENT_API.md) и [highlevel/agent.md](highlevel/agent.md) —
 агентский протокол и снимок, [highlevel/debug.md](highlevel/debug.md) —
 `$.debug`/`$.console`, [ROADMAP.md](ROADMAP.md) — фаза 8.
