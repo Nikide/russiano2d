@@ -24,6 +24,12 @@ const CLICK_SFX = 'demos/assets/audio/sfx/ui_click.ogg';
 
 const DEMOS = [
     {
+        scene: 'settings',
+        icon: 'settings',
+        title: 'Настройки',
+        hint: 'Эталонное меню: графика, звук, управление, язык — всё на лету',
+    },
+    {
         scene: 'shooter_witch',
         // В меню ведём в интро демо; сам бой остаётся сценой для тестов и
         // агента: --scene shooter_witch.
