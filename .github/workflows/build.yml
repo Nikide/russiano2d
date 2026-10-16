@@ -55,8 +55,6 @@ jobs:
           python3 tests/release_ownership_test.py
       - name: §66 acceptance checklist (evidence or reason for every item)
         run: python3 tests/production_polish_checklist_test.py
-      - name: §63 public API freeze (surface matches the snapshot)
-        run: python3 tests/api_freeze_test.py
   build:
     needs: static
     strategy:
@@ -164,6 +162,13 @@ jobs:
       - name: Web export (honest skip without emsdk)
         if: matrix.platform != 'windows-x86_64'
         run: python tools/ci_verify.py --build-dir build-ci --web
+      - name: §63 public API freeze (surface matches the snapshot)
+        # Гейту нужен собранный движок (он снимает поверхность с живого `$`),
+        # поэтому он живёт здесь, а не в статическом шаге: там бинарника нет.
+        # Для windows-кросс-сборки пропускается — бинарник под Windows, а
+        # раннер Linux.
+        if: matrix.platform != 'windows-x86_64'
+        run: R2D_BINARY=build-ci/russiano2d python3 tests/api_freeze_test.py
       - name: Linux SDK GUI regressions
         # Только настоящий Linux: у windows-кросс-сборки раннер тоже Linux, но
         # бинарник под Windows и запустить его здесь нельзя.
