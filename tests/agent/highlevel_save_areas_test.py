@@ -78,9 +78,10 @@ def main():
         a.eval("$('#blade').area('attack', { w: 64, h: 24 })")
         a.step(2)
 
-        check(a.eval("$.save.save(9)") is True, "слот 9 записан")
         a.eval("$.save.dir('build/test_saves')")
-        a.eval("$.save.save(9)")
+        check(a.eval("$.save.dir()") == "build/test_saves",
+              "каталог слотов переведён в build/test_saves")
+        check(a.eval("$.save.save(9)") is True, "слот 9 записан")
         payload_path = SLOT
         check(a.eval("$.fs.exists('%s')" % payload_path) is True, "файл слота на диске")
         check(a.eval("$.fs.readText('%s').indexOf('\"areas\"') >= 0" % payload_path) is True,

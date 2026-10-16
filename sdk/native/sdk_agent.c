@@ -45,8 +45,10 @@ int sdk_cmd_agent(const SdkArgs *a) {
     }
     for(int i=0;i<requests->count;i++) {
         const R2dJson *req=requests->items[i];const char *cmd=r2d_json_str(r2d_json_get(req,"cmd"),NULL);
-        if(req->type!=R2D_JSON_OBJ || !cmd || !cmd[0] || (!strcmp(cmd,"quit") && i!=requests->count-1)) {
-            sdk_diag(&rep,SDK_ERROR,"SDK_AGENT_REQUEST",path,NULL,NULL,"request %d: нужен cmd, quit допустим только последним",i);goto finish;
+        const R2dJson *opt=r2d_json_get(req,"optional");
+        if(req->type!=R2D_JSON_OBJ || !cmd || !cmd[0] || (!strcmp(cmd,"quit") && i!=requests->count-1) ||
+           (opt && opt->type!=R2D_JSON_BOOL)) {
+            sdk_diag(&rep,SDK_ERROR,"SDK_AGENT_REQUEST",path,NULL,NULL,"request %d: нужен cmd (quit допустим только последним), optional — true/false",i);goto finish;
         }
     }
     char engine[1536],dir[1536],gamepath[2048],seed[40];
@@ -73,7 +75,18 @@ int sdk_cmd_agent(const SdkArgs *a) {
         R2dJson *response=r2d_json_parse(line.data,err,sizeof err);
         if(!response || response->type!=R2D_JSON_OBJ){sdk_diag(&rep,SDK_ERROR,"SDK_AGENT_RESPONSE",gamepath,NULL,NULL,"Ответ %d не JSON-объект",i);r2d_json_free(response);break;}
         if(completed++)r2d_sb_putc(&replies,',');sdk_json_put_compact(&replies,response);
-        if(!r2d_json_bool(r2d_json_get(response,"ok"),false))failed++;
+        if(!r2d_json_bool(r2d_json_get(response,"ok"),false)) {
+            // `optional: true` — запрос, который физически может не получиться
+            // (например снимок кадра при скрытом окне на Vulkan: swapchain пуст).
+            // Такой отказ не валит сессию, но и не молчит: причина уходит в
+            // диагностику отчёта, а не превращается в «ok:true» без файла.
+            const R2dJson *opt=r2d_json_get(req,"optional");
+            if(opt && opt->type==R2D_JSON_BOOL && r2d_json_bool(opt,false)) {
+                sdk_diag(&rep,SDK_WARNING,"SDK_AGENT_OPTIONAL",gamepath,NULL,NULL,
+                         "request %d (%s): %s",i, r2d_json_str(r2d_json_get(req,"cmd"),"?"),
+                         r2d_json_str(r2d_json_get(response,"error"),"не выполнено"));
+            } else failed++;
+        }
         r2d_json_free(response);
     }
     // End the same live session; never leave a child process waiting on stdin.

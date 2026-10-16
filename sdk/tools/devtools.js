@@ -39,7 +39,10 @@ export function buildSession(f) {
     if (f.cmds.state) requests.push({ cmd: 'state' });
     if (f.cmds.query) requests.push({ cmd: 'query', sel: f.sel || '*', limit: Math.max(0, parseInt(f.limit, 10) || 0) });
     if (f.cmds.profile) requests.push({ cmd: 'profile', sel: f.sel || '*' });
-    if (f.cmds.screenshot) requests.push({ cmd: 'screenshot', path: f.shot });
+    // Скриншот — best-effort: у скрытого окна на Vulkan swapchain пуст, и
+    // снимок невозможен физически. Запрос помечен `optional`, чтобы сессия не
+    // считалась проваленной, но причина отказа видна в отчёте (не молчание).
+    if (f.cmds.screenshot) requests.push({ cmd: 'screenshot', path: f.shot, optional: true });
     const session = { version: 1, game: f.game, seed: Math.max(0, parseInt(f.seed, 10) || 0), timeoutMs: 60000, requests };
     if (f.scene) session.scene = f.scene;
     return session;
@@ -173,6 +176,7 @@ function create(app) {
     /** Разложить ответы протокола по панелям. */
     function ingest(json, f) {
         s.entities = []; s.profile = null; s.stateObj = null; s.selected = -1; s.shotInfo = null;
+        s.shotError = null;
         s.diagnostics = json && json.diagnostics ? json.diagnostics : [];
         const responses = json && json.responses ? json.responses : [];
         for (const r of responses) {
@@ -180,13 +184,15 @@ function create(app) {
             if (Array.isArray(r.nodes)) s.entities = r.nodes;
             if (r.profile) s.profile = r.profile;
             if (r.path && r.width) s.shotInfo = r;
+            if (r.ok === false && r.error && /screenshot/i.test(String(r.error))) s.shotError = String(r.error);
         }
         killShot();
         if (s.shotInfo && $.fs.exists(s.shotInfo.path)) {
             s.shotPath = s.shotInfo.path;
             s.node = $('<sprite>', { src: s.shotPath }).appendTo($.world);
         }
-        doc.text('dt-state', escapeHtml(json && json.ok ? 'готово: ответов ' + responses.length + (s.entities.length ? ', сущностей ' + s.entities.length : '') : 'есть ошибки (см. диагностику)'));
+        if (s.shotError) doc.text('dt-state', escapeHtml('скриншот недоступен: ' + s.shotError));
+        else doc.text('dt-state', escapeHtml(json && json.ok ? 'готово: ответов ' + responses.length + (s.entities.length ? ', сущностей ' + s.entities.length : '') : 'есть ошибки (см. диагностику)'));
     }
 
     function nodeLabel(n) { return (n.tag || '?') + (n.id ? '#' + n.id : '') + (n.class ? '.' + String(n.class).split(/\s+/).join('.') : (n.classes && n.classes.length ? '.' + n.classes.join('.') : '')); }
@@ -270,6 +276,7 @@ function create(app) {
             return {
                 active: s.active, busy: s.busy, game: s.game, ok: s.report ? !!s.report.ok : null, entities: s.entities.length, selected: s.selected,
                 frame: s.stateObj ? s.stateObj.frame : null, profile: !!s.profile, screenshot: !!s.node, codes: s.diagnostics.map((d) => d.code),
+                screenshotError: s.shotError || null,
                 panel: panel ? panel.snapshot() : null,
                 report: panel ? panel.report() : null,
             };

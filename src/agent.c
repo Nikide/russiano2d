@@ -647,6 +647,18 @@ static bool command_screenshot(R2DAgent *a, const R2DAgentHooks *hooks, const R2
         return false;
     }
 
+    // Кадр мог быть отрисован без изображения: у скрытого окна на Vulkan SDL
+    // отдаёт NULL-swapchain (не ошибка драйвера, см. SDL_gpu_vulkan.c), и
+    // копировать в PNG нечего. Раньше команда всё равно отвечала ok:true с
+    // размером кадра — вызывающий считал снимок сделанным, файла не было, и
+    // это выяснялось только глазами. Теперь молчаливого успеха нет: причина
+    // названа, а путь к отсутствующему файлу не выдаётся за результат.
+    if (!SDL_GetPathInfo(full, NULL)) {
+        send_error(req, "screenshot: кадр не содержит изображения — окно скрыто "
+                        "(--headless) или нет доступного swapchain; запустите без --headless");
+        return true;
+    }
+
     R2dSb sb;
     begin_response(&sb, req, true);
     r2d_sb_puts(&sb, ",\"path\":");

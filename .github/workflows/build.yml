@@ -108,6 +108,14 @@ jobs:
           R2D_SDK_BINARY: build-ci/r2d-sdk
           R2D_BINARY: build-ci/russiano2d
           SDL_GPU_DRIVER: vulkan
+          # Mesa 25.2.8 (lavapipe) падает SIGSEGV внутри vkCreateGraphicsPipelines,
+          # когда её ДИСКОВЫЙ кэш шейдеров уже прогрет предыдущим запуском движка
+          # в том же job: первый запуск (sdk_cli_test) кэш пишет, второй
+          # (sdk_studios_test) падает ещё до события ready. Проверено локально в
+          # контейнере с той же версией mesa: холодный кэш — 0, прогретый — 139,
+          # с MESA_SHADER_CACHE_DISABLE — 0. Кэш шейдеров здесь не нужен: шаг
+          # проверяет SDK, а не скорость компиляции шейдеров.
+          MESA_SHADER_CACHE_DISABLE: "true"
         run: |
           xvfb-run -a python3 tests/agent/sdk_cli_test.py
           xvfb-run -a python3 tests/agent/sdk_studios_test.py

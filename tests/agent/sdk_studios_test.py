@@ -485,7 +485,13 @@ def main():
             a.step(3)
         s = st(a, "devtools")
         check(s["ok"] is True and s["entities"] >= 6, "DevTools: игра запущена протоколом, получены сущности (%s)" % s["entities"])
-        check(s["profile"] and s["screenshot"] and s["frame"] == 61, "DevTools: профиль кадра, скриншот и номер кадра (60 шагов + ping): %s" % s)
+        # Скриншот — best-effort: у скрытого окна на Vulkan swapchain пуст, и
+        # кадра для снимка физически нет (SDL отдаёт NULL не как ошибку). Тогда
+        # студия обязана НАЗВАТЬ причину, а не показывать «готово» без картинки:
+        # проверяем либо снимок, либо явную причину отказа.
+        check(s["profile"] and s["frame"] == 61 and (s["screenshot"] or s["screenshotError"]),
+              "DevTools: профиль кадра и номер кадра; скриншот или причина отказа: %s"
+              % {k: s.get(k) for k in ("profile", "screenshot", "screenshotError", "frame")})
         a.eval("$.sdkApp.studios.devtools.select(4); 1")
         check("hero" in (a.eval(f"{DTD}.content('dt-node')") or "") or "player" in (a.eval(f"{DTD}.content('dt-node')") or ""), "выбранная сущность описана полями $.agent")
         out_session = a.eval("$.sdkApp.studios.devtools.saveSession().then ? 1 : $.sdkApp.studios.devtools.saveSession()")
