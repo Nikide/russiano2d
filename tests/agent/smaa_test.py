@@ -145,6 +145,35 @@ def measure_profile(a, frames=130):
     }
 
 
+def measure_windows(a, windows=3, frames=130):
+    """Несколько окон наблюдения: медиана и разброс.
+
+    Одно окно в 130 кадров на нагруженной машине даёт разброс GPU-времени
+    больше, чем стоит сам проход SMAA на 1280x720 (~0.1 мс против ±0.2 мс шума),
+    поэтому судить по нему нельзя: именно на этом тест и флакует. Медиана
+    устойчивее одиночного замера, а разброс нужен, чтобы допуск был выведен из
+    шума машины, а не выбран «на глаз».
+    """
+    samples = [measure_profile(a, frames) for _ in range(max(1, windows))]
+
+    def values(key):
+        return [s[key] for s in samples if s.get(key) is not None]
+
+    def median(key):
+        vals = sorted(values(key))
+        return vals[len(vals) // 2] if vals else None
+
+    def spread(key):
+        vals = values(key)
+        return (max(vals) - min(vals)) if len(vals) > 1 else 0.0
+
+    return {
+        "gpu_ms": median("gpu_ms"), "gpu_spread": spread("gpu_ms"),
+        "gpu_samples": values("gpu_ms"),
+        "draw_cpu": median("draw_cpu"), "ui_cpu": median("ui_cpu"),
+    }
+
+
 def run_scene(a):
     a.step(4)
     a.eval(SCENE)
@@ -291,23 +320,45 @@ def main():
               "цена прохода измерена профайлером движка")
 
     # --- 7. Цена на 1280x720 и 1920x1080 -------------------------------------
+    # Замер по времени — единственное место теста, зависящее от нагрузки
+    # (наблюдение 2026-10-16: 1 провал из 3 при load ~4.8, падала именно эта
+    # строка). Поэтому здесь медиана по нескольким окнам и допуск, выведенный из
+    # измеренного разброса. Смысл проверки сохранён: «SMAA ускорил кадр» —
+    # по-прежнему провал. Положительный сигнал «проход реально работает» берут
+    # на себя детерминированные проверки выше (smaa_steps/smaa_on, кадр
+    # отличается от кадра без AA, лестничных пикселей меньше) — они от нагрузки
+    # не плывут, в отличие от миллисекунд.
     costs = {}
     for (w, h) in ((1280, 720), (1920, 1080)):
         with Agent(game=GAME, seed=17, extra_args=["--width", str(w), "--height", str(h)]) as a:
             run_scene(a)
             a.step(20)
-            off = measure_profile(a, 130)
+            off = measure_windows(a)
             a.eval("$.gfx.smaa(true)")
-            on = measure_profile(a, 130)
+            on = measure_windows(a)
             costs[(w, h)] = (off, on)
             gpu_off = "N/A" if off["gpu_ms"] is None else "%.3f" % off["gpu_ms"]
             gpu_on = "N/A" if on["gpu_ms"] is None else "%.3f" % on["gpu_ms"]
-            print("       %dx%d: GPU %s → %s мс | draw CPU %.3f → %.3f | UI CPU %.3f → %.3f"
-                  % (w, h, gpu_off, gpu_on, off["draw_cpu"], on["draw_cpu"],
-                     off["ui_cpu"], on["ui_cpu"]))
+            print("       %dx%d: GPU %s → %s мс (окна: %s → %s) | draw CPU %.3f → %.3f"
+                  " | UI CPU %.3f → %.3f"
+                  % (w, h, gpu_off, gpu_on,
+                     ["%.3f" % v for v in off["gpu_samples"]],
+                     ["%.3f" % v for v in on["gpu_samples"]],
+                     off["draw_cpu"], on["draw_cpu"], off["ui_cpu"], on["ui_cpu"]))
             check(on["draw_cpu"] is not None, "цена на %dx%d измерена" % (w, h))
-            check((on["gpu_ms"] or 0) >= (off["gpu_ms"] or 0) - 0.05,
-                  "SMAA не ускоряет кадр (числа напечатаны выше)")
+            if off["gpu_ms"] is None or on["gpu_ms"] is None:
+                print("  --   GPU-время на %dx%d недоступно — сравнение пропущено" % (w, h))
+                continue
+            # Допуск — шум машины (двойной разброс окон), но не меньше 0.05 мс:
+            # дрожание под нагрузкой провалом не считается, а «SMAA ускорил
+            # кадр» остаётся провалом. На 1920x1080 цена прохода (~0.5 мс) лежит
+            # заведомо выше шума, на 1280x720 (~0.1 мс) — сравнима с ним, и
+            # именно поэтому здесь нельзя судить по одному окну.
+            tol = max(0.05, 2.0 * max(off["gpu_spread"], on["gpu_spread"]))
+            check(on["gpu_ms"] >= off["gpu_ms"] - tol,
+                  "SMAA не ускоряет кадр: медиана %.3f → %.3f мс, разброс окон %.3f,"
+                  " допуск %.3f" % (off["gpu_ms"], on["gpu_ms"],
+                                    max(off["gpu_spread"], on["gpu_spread"]), tol))
 
     print()
     if FAILURES:
