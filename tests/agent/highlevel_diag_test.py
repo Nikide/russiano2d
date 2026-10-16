@@ -66,6 +66,24 @@ def main():
         check(s.get("total", 0) >= 25, "все повторы посчитаны (%s)" % s.get("total"))
         check(s.get("suppressed", 0) > 0,
               "повторы подавлены со счётчиком: %s" % s.get("suppressed"))
+        # §15: подавление обязано быть ВИДИМЫМ — не только «сколько потеряно»,
+        # но и что именно повторялось, с числом повторов.
+        repeated = s.get("repeated") or []
+        row = next((r for r in repeated if "сломанный кадр" in str(r.get("message"))), None)
+        check(row is not None, "сводка называет повторяющееся сообщение: %s" % repeated[:1])
+        if row:
+            check(row.get("count", 0) >= 25,
+                  "у сообщения виден счётчик повторов: %s" % row.get("count"))
+            check(row.get("printed", 0) > 0 and row.get("suppressed", 0) > 0,
+                  "напечатанные и подавленные повторы различимы (%s/%s)"
+                  % (row.get("printed"), row.get("suppressed")))
+        entry_repeats = (a.eval("$.debug.errors()") or [{}])[-1].get("repeats")
+        check(isinstance(entry_repeats, int) and entry_repeats > 1,
+              "у записи журнала есть счётчик повторов: %s" % entry_repeats)
+        # Строка с «repeated xN» уходит в журнал движка: без неё подавление было
+        # бы молчаливым (в агенте журнал движка — stderr).
+        check("repeated x" in a.stderr_tail(),
+              "в журнале есть пометка повторов (repeated xN)")
 
         # --- Неустранимая ошибка ----------------------------------------------
         a.eval("globalThis.__throw_scene = true; void $.scene.load('broken', { transition: 'none' })")

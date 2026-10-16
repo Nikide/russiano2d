@@ -25,11 +25,17 @@ import { ctx, wrapOne } from './core.js';
 const LIMIT = 128;
 /** Сколько первых повторов одного и того же сообщения печатать. */
 const REPEAT_LOG_LIMIT = 3;
+/**
+ * Как часто напоминать о подавленных повторах. §15 запрещает молчаливое
+ * исчезновение: у каждой записи есть счётчик `repeats`, а лог раз в N повторов
+ * печатает строку с «repeated xN» — поток строк при этом остаётся ограничен.
+ */
+const REPEAT_NOTICE_EVERY = 10;
 
 const entries = [];
 let next_seq = 1;
 let dropped = 0;
-const repeats = new Map();   // ключ → { count, lost }
+const repeats = new Map();   // ключ → { count, lost, printed, code, operation, message }
 
 /**
  * Классификатор: из подписи места выводится код и подсистема.
@@ -100,29 +106,43 @@ export function report(where, error, opts) {
         source: sourceOf(error),
         frame: ctx.time && typeof ctx.time.frame === 'function' ? ctx.time.frame() : -1,
         data: o.data === undefined ? null : o.data,
+        //: Сколько раз подряд повторилось это же сообщение (§15): 1 — первый раз.
+        repeats: 1,
     };
     remember(entry);
 
     // Подавление повторов: ключ — код + место + текст. Первые несколько
-    // повторов печатаем, остальные считаем: иначе один сломанный кадр
-    // превращает stderr в поток и прячет остальные ошибки.
+    // повторов печатаем, дальше — раз в REPEAT_NOTICE_EVERY: иначе один
+    // сломанный кадр превращает stderr в поток и прячет остальные ошибки, но
+    // и молчать нельзя (§15). Счётчик повторов виден и в записи (`repeats`),
+    // и в сводке (`repeated`), и в тексте строки — «repeated x37».
     const key = entry.code + '|' + entry.operation + '|' + entry.message;
     const seen = repeats.get(key);
     if (seen === undefined) {
-        repeats.set(key, { count: 1, lost: 0 });
-        print(entry, error);
+        repeats.set(key, {
+            count: 1, lost: 0, printed: 1,
+            code: entry.code, operation: entry.operation, message: entry.message,
+        });
+        entry.repeats = 1;
+        print(entry, error, 1);
     } else {
         seen.count++;
-        if (seen.count <= REPEAT_LOG_LIMIT) print(entry, error);
-        else seen.lost++;
+        entry.repeats = seen.count;
+        if (seen.count <= REPEAT_LOG_LIMIT || seen.count % REPEAT_NOTICE_EVERY === 0) {
+            seen.printed++;
+            print(entry, error, seen.count);
+        } else {
+            seen.lost++;
+        }
     }
     return entry;
 }
 
-function print(entry, error) {
+function print(entry, error, count) {
     const stack = error && error.stack ? `\n${error.stack}` : '';
     const tail = entry.recoverable ? '' : ' [неустранимая]';
-    ctx.log(`$: ошибка в ${entry.operation}: ${entry.message}${tail}${stack}`);
+    const repeated = count > 1 ? ` (repeated x${count})` : '';
+    ctx.log(`$: ошибка в ${entry.operation}: ${entry.message}${tail}${repeated}${stack}`);
 }
 
 /** Оформление исключения движка (те же поля, что у report). */
@@ -147,13 +167,27 @@ export function summary() {
         if (!e.recoverable) fatal++;
     }
     let lost = 0;
-    for (const v of repeats.values()) lost += v.lost;
+    // Построчные счётчики повторов: по сводке видно, ЧТО именно повторялось,
+    // а не только «сколько строк подавлено» (§15: suppression должен быть
+    // видимым). Сортируем по убыванию частоты — самое шумное сверху.
+    const repeated = [];
+    for (const v of repeats.values()) {
+        lost += v.lost;
+        if (v.count > 1) {
+            repeated.push({
+                code: v.code, operation: v.operation, message: v.message,
+                count: v.count, printed: v.printed, suppressed: v.lost,
+            });
+        }
+    }
+    repeated.sort((a, b) => b.count - a.count || (a.code < b.code ? -1 : 1));
     return {
         total: entries.length,
         fatal,
         dropped,       // вытеснено кольцом
         suppressed: lost,   // не напечатано из-за подавления повторов
         by_code, by_subsystem, by_operation,
+        repeated,      // повторы по сообщениям: count/printed/suppressed
         // Явный флаг для приёмки: журнал чист, если нет неустранимых ошибок.
         clean: fatal === 0,
     };
