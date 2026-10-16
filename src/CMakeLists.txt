@@ -204,6 +204,25 @@ add_executable(russiano2d ${R2D_SOURCES})
 set_target_properties(russiano2d PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
+# --- Обход внутренней ошибки MSVC 14.44 при кодогенерации --------------------
+# На windows-2022 сборка Release падает не на нашем коде как таковом, а
+# внутренней ошибкой компилятора: «INTERNAL COMPILER ERROR in CL.exe» (код
+# 0xE06D7363) в фазе «Generating Code...» этого проекта; стек идёт через
+# CloseTypeServerPDB, то есть через общий PDB-сервер типов, который CL держит
+# при параллельной компиляции нескольких файлов в одном процессе (/MP).
+# Ошибка появилась между v0.1.31 и v0.1.32 (в CI зелёной Windows-сборки с тех
+# пор не было) и валит весь Windows-джоб, поэтому нужен обход:
+#   * /Zf — PDB без общего type server (ровно то, на что указывает стек);
+#   * MultiProcessorCompilation=false — по одному файлу на процесс CL: фаза
+#     кодогенерации перестаёт быть общей для пачки файлов.
+# Проектная параллельность (MSBuild /m) сохраняется: файлов много, а времени
+# на Windows-раннере хватает. Оба параметра действуют только для MSVC/VS.
+if(MSVC)
+    target_compile_options(russiano2d PRIVATE /Zf)
+    set_target_properties(russiano2d PROPERTIES
+        VS_GLOBAL_MultiProcessorCompilation "false")
+endif()
+
 # --- Веб-сборка (Emscripten) -------------------------------------------------
 # На выходе — russiano2d.html + .js + .wasm + .data: груз игры монтируется в
 # виртуальную ФС MEMFS, поэтому файлы читаются движком как обычные (SDL_GetPathInfo
