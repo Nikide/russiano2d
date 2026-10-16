@@ -20,6 +20,9 @@
 
 import { engine } from './native.js';
 import { ctx, query } from './core.js';
+// Бинауральный режим живёт в audiobus.js ($.audio.hrtf) — здесь только
+// переиспользуется расчёт направления: второй формулы азимута быть не должно.
+import { applyHrtfChannel, hrtfActive } from './audiobus.js';
 
 // Масштаб мира: 32 пикселя = 1 метр (тот же, что у физики, docs/internal/NATIVE.md).
 export const PX_PER_METER = 32;
@@ -386,33 +389,44 @@ function tickSources() {
         // В 3D-режиме и панораму, и затухание считает SDL_mixer — своими
         // руками их применять нельзя, получится двойное ослабление.
         const falloff = spatial ? 1 : Math.max(0, 1 - dist / src.max);
-        if (!spatial) {
-            const pan = Math.max(-1, Math.min(1, dx / Math.max(1, src.max * 0.5)));
-            engine.audio.setChannelPan(channel, pan);
-        }
 
         // Чаща глушит звук: сколько деревьев легло между источником и ухом.
         const muffle = obstacleMuffle(listener, { x: src.x, y: src.y });
         src.muffle = muffle;
-        if (muffle > 0.001) {
-            const cutoff = state.cutoff_clear
-                + (state.cutoff_dense - state.cutoff_clear) * muffle;
-            if (!spatial) engine.audio.setChannelVolume(channel, src.volume * falloff * (1 - muffle * 0.5));
-            engine.audio.setChannelEffect(channel, 'lowpass', Math.round(cutoff), 0);
-            continue;
-        }
 
-        if (state.occlusion && ctx.world && ctx.world.lineOfSight && dist > 1) {
+        // Одна и та же громкость и один и тот же срез окклюзии идут и в обычный
+        // путь, и в бинауральный: настоящая HRTF (steam) получает их аргументами
+        // и делает всё сама, модель (synthetic) берёт только панораму, а
+        // громкость/lowpass остаются каналу (эффекты канала идут ДО модели).
+        let cutoff = 0;              // 0 — фильтр не нужен
+        let gain_scale = 1;
+        if (muffle > 0.001) {
+            cutoff = state.cutoff_clear
+                + (state.cutoff_dense - state.cutoff_clear) * muffle;
+            gain_scale = 1 - muffle * 0.5;
+        } else if (state.occlusion && ctx.world && ctx.world.lineOfSight && dist > 1) {
             const open = ctx.world.lineOfSight({ x: listener.x, y: listener.y }, { x: src.x, y: src.y });
             if (!open) {
                 // За стеной: глушим верх и слегка придавливаем.
-                engine.audio.setChannelVolume(channel, src.volume * falloff * 0.55);
-                engine.audio.setChannelEffect(channel, 'lowpass', 700, 0);
-                continue;
+                cutoff = 700;
+                gain_scale = 0.55;
             }
         }
-        engine.audio.setChannelVolume(channel, src.volume * falloff);
-        engine.audio.setChannelEffect(channel, 'none', 0, 0);
+        const gain = src.volume * falloff * gain_scale;
+
+        if (hrtfActive()) {
+            const applied = applyHrtfChannel(channel, dx, dy, gain, cutoff > 0 ? cutoff : 22000);
+            if (applied === 'steam') continue;      // HRTF сделала всё сама
+            // synthetic: панораму построила модель, дальше обычные громкость
+            // и фильтр окклюзии.
+        } else if (!spatial) {
+            const pan = Math.max(-1, Math.min(1, dx / Math.max(1, src.max * 0.5)));
+            engine.audio.setChannelPan(channel, pan);
+        }
+
+        if (!spatial) engine.audio.setChannelVolume(channel, gain);
+        engine.audio.setChannelEffect(channel, cutoff > 0 ? 'lowpass' : 'none',
+                                      cutoff > 0 ? Math.round(cutoff) : 0, 0);
     }
 }
 

@@ -67,6 +67,47 @@ typedef struct MIX_Group MIX_Group;
 // sample-clock, а seek/pause применяются ко всем сразу (см. §25).
 #define R2D_AUDIO_MAX_STEMS 8
 
+// --- Бинауральная модель для 2D (этап 1 «ХРТФ в 2D») -------------------------
+//
+// Синтетическая модель БЕЗ HRIR-датасетов: межушная задержка (ITD, дробная —
+// линейная интерполяция), межушная разница уровней (ILD), тень головы
+// (однополюсный ФНЧ на дальнем ухе, срез падает с |азимутом|) и подсказка
+// «сзади» (полка ВЧ). Высоты НЕТ: только азимут и дистанция (дистанцию и
+// общий gain по-прежнему считает JS). Это НЕ «настоящая HRTF»: настоящая —
+// Steam Audio (r2d_audio_world_channel), модель работает фолбэком там, где
+// HRTF-бэкенд не поднялся. Какой backend звучит, видно в $.audio.hrtf().
+//
+// Выключена по умолчанию: при `on == false` обработка не вызывается вовсе, и
+// PCM канала побитово равен прежнему.
+#define R2D_BINAURAL_DELAY 64   // сэмплов: 0.66 мс при 48 кГц ≈ 32, с запасом
+
+typedef struct R2DAudioBinaural {
+    bool  on;
+    float head;        // радиус головы, м (0.0875 — средний)
+    float far_gain;    // усиление дальнего уха на 90° (0..1; 0.63 = -4 дБ)
+    float rear_gain;   // полка ВЧ сзади, линейный множитель (1.585 = +4 дБ)
+    float mix;         // 0 — сухой сигнал, 1 — полностью бинауральный
+    int   rate;        // частота микшера (обновляется из колбэка)
+
+    bool  active[R2D_AUDIO_CHANNELS];
+    float az[R2D_AUDIO_CHANNELS];                  // рад: 0 спереди, +pi/2 справа
+    float line[R2D_AUDIO_CHANNELS][R2D_BINAURAL_DELAY];
+    int   pos[R2D_AUDIO_CHANNELS];
+    float lp_near[R2D_AUDIO_CHANNELS];             // ФНЧ тени: ближнее ухо
+    float lp_far[R2D_AUDIO_CHANNELS];              // ФНЧ тени: дальнее ухо
+    float lp_far_low[R2D_AUDIO_CHANNELS];          // НЧ-часть дальнего уха (ILD)
+    float shelf[R2D_AUDIO_CHANNELS][2];            // ФНЧ полки «сзади» по ушам
+} R2DAudioBinaural;
+
+// Контекст raw-колбэка канала: сам эффект плюс владелец и номер канала, без
+// которых бинауральная модель не достанет своё состояние (колбэк получает
+// только userdata). У шин контекст не заводится — там owner == NULL.
+typedef struct R2DChannelCb {
+    R2DAudioFx      *fx;
+    struct R2DAudio *owner;
+    int              channel;
+} R2DChannelCb;
+
 typedef struct R2DAudioGroup {
     MIX_Group *handle;
     char       name[32];
@@ -113,8 +154,20 @@ typedef struct R2DAudio {
     bool   group_used[R2D_AUDIO_MAX_GROUPS];
 
     R2DAudioFx fx[R2D_AUDIO_CHANNELS];
+    R2DChannelCb chan_cb[R2D_AUDIO_CHANNELS];   // userdata raw-колбэка канала
     int    fx_freq;        // частота микшера, нужна для пересчёта мс → кадры
     int    fx_channels;    // 1 или 2, из формата микшера
+
+    // Бинауральная модель (фолбэк без Steam Audio): по умолчанию выключена.
+    R2DAudioBinaural binaural;
+
+    // Диагностический захват итогового микса (post-mix, после реверба): нужен
+    // тестам, чтобы МЕРИТЬ PCM, а не доверять коду. Играм не нужен.
+    float        *capture;       // interleaved L,R
+    int           capture_cap;   // сколько кадров просили
+    int           capture_len;   // сколько записали
+    int           capture_rate;  // частота микшера в момент захвата, Гц
+    SDL_AtomicInt capture_on;
 
     // Реверберация помещения: одна на весь микс (MIX_SetPostMixCallback),
     // как комната — она звучит для всех источников сразу.
@@ -264,3 +317,20 @@ float r2d_audio_get_music_volume(const R2DAudio *a);
 
 // World adapter reuses mixer channels and their generation, never a second device.
 bool r2d_audio_world_channel(R2DAudio *,int,bool,bool,float,float,float,float,float);
+
+// Настоящая HRTF доступна в этой сборке и поднялась (Steam Audio).
+bool r2d_audio_hrtf_available(const R2DAudio *);
+
+// --- Бинауральная модель (фолбэк, этап 1 «ХРТФ в 2D») -----------------------
+// `on=false` возвращает движок к прежнему поведению: обработка не вызывается.
+void r2d_audio_binaural_set(R2DAudio *,bool on,float head,float far_gain,float rear_gain,float mix);
+void r2d_audio_binaural_get(const R2DAudio *,bool *on,float *head,float *far_gain,float *rear_gain,float *mix);
+// Канал: `active=false` — канал вне бинаурального режима (обычная панорама).
+void r2d_audio_binaural_channel(R2DAudio *,int channel,bool active,float azimuth);
+
+// --- Диагностический захват PCM (тесты) -------------------------------------
+// Захват идёт с post-mix: то, что слышит игрок, вместе с шинами и ревербом.
+bool r2d_audio_capture_start(R2DAudio *,int frames);
+int  r2d_audio_capture_len(const R2DAudio *);
+const float *r2d_audio_capture_data(const R2DAudio *);
+void r2d_audio_capture_clear(R2DAudio *);

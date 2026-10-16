@@ -3587,6 +3587,133 @@ static JSValue r2d__js_audio_set_channel_3d(JSContext *ctx, JSValueConst this_va
     return JS_NewBool(ctx, ok);
 }
 
+// --- Бинауральный режим (этап 1 «ХРТФ в 2D») --------------------------------
+//
+// engine.audio.hrtfAvailable() — поднялась ли НАСТОЯЩАЯ HRTF (Steam Audio).
+// engine.audio.worldChannel(...) — включает для канала путь Spatial Audio:
+//   (channel, enabled, hrtf, right, up, back, gain, cutoff),
+// где hrtf=true требует доступного HRTF-бэкенда (иначе false — вызывающий
+// обязан сказать об этом честно, а не делать вид, что включил).
+static JSValue r2d__js_audio_hrtf_available(JSContext *ctx, JSValueConst this_val,
+                                            int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewBool(ctx, s && s->audio && r2d_audio_hrtf_available(s->audio));
+}
+
+static JSValue r2d__js_audio_world_channel(JSContext *ctx, JSValueConst this_val,
+                                           int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    const bool ok = r2d_audio_world_channel(s->audio,
+                                            r2d__arg_int(ctx, argc, argv, 0, -1),
+                                            r2d__arg_bool(ctx, argc, argv, 1, false),
+                                            r2d__arg_bool(ctx, argc, argv, 2, false),
+                                            (float)r2d__arg_num(ctx, argc, argv, 3, 0),
+                                            (float)r2d__arg_num(ctx, argc, argv, 4, 0),
+                                            (float)r2d__arg_num(ctx, argc, argv, 5, -1),
+                                            (float)r2d__arg_num(ctx, argc, argv, 6, 1),
+                                            (float)r2d__arg_num(ctx, argc, argv, 7, 22000));
+    return JS_NewBool(ctx, ok);
+}
+
+// engine.audio.binaural(on, head, farGain, rearGain, mix) — модель-фолбэк.
+static JSValue r2d__js_audio_binaural_set(JSContext *ctx, JSValueConst this_val,
+                                          int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    r2d_audio_binaural_set(s->audio,
+                           r2d__arg_bool(ctx, argc, argv, 0, false),
+                           (float)r2d__arg_num(ctx, argc, argv, 1, 0.0875),
+                           (float)r2d__arg_num(ctx, argc, argv, 2, 0.63),
+                           (float)r2d__arg_num(ctx, argc, argv, 3, 1.585),
+                           (float)r2d__arg_num(ctx, argc, argv, 4, 1.0));
+    return JS_TRUE;
+}
+
+// engine.audio.binaural() → { on, head, farGain, rearGain, mix }
+static JSValue r2d__js_audio_binaural_get(JSContext *ctx, JSValueConst this_val,
+                                          int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    bool on = false; float head = 0.0875f, far_gain = 0.63f, rear_gain = 1.585f, mix = 1.0f;
+    if (s && s->audio) r2d_audio_binaural_get(s->audio, &on, &head, &far_gain, &rear_gain, &mix);
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "on", JS_NewBool(ctx, on));
+    JS_SetPropertyStr(ctx, o, "head", JS_NewFloat64(ctx, head));
+    JS_SetPropertyStr(ctx, o, "farGain", JS_NewFloat64(ctx, far_gain));
+    JS_SetPropertyStr(ctx, o, "rearGain", JS_NewFloat64(ctx, rear_gain));
+    JS_SetPropertyStr(ctx, o, "mix", JS_NewFloat64(ctx, mix));
+    return o;
+}
+
+// engine.audio.setChannelBinaural(channel, active, azimuth)
+static JSValue r2d__js_audio_set_channel_binaural(JSContext *ctx, JSValueConst this_val,
+                                                  int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    r2d_audio_binaural_channel(s->audio,
+                               r2d__arg_int(ctx, argc, argv, 0, -1),
+                               r2d__arg_bool(ctx, argc, argv, 1, false),
+                               (float)r2d__arg_num(ctx, argc, argv, 2, 0));
+    return JS_TRUE;
+}
+
+// --- Диагностический захват PCM ---------------------------------------------
+// engine.audio.captureStart(frames) — начать захват итогового микса.
+// engine.audio.captured() → { done, frames, samples: [...] } — interleaved L,R.
+// Отдаём обычным массивом: агентский протокол — JSON, а Float32Array в него не
+// сериализуется. Тест обязан МЕРИТЬ буфер, а не доверять коду.
+static JSValue r2d__js_audio_capture_start(JSContext *ctx, JSValueConst this_val,
+                                           int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->audio) return JS_FALSE;
+    return JS_NewBool(ctx, r2d_audio_capture_start(s->audio, r2d__arg_int(ctx, argc, argv, 0, 0)));
+}
+
+static JSValue r2d__js_audio_captured(JSContext *ctx, JSValueConst this_val,
+                                      int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    R2DAudio *a = s ? s->audio : NULL;
+    const int len = a ? r2d_audio_capture_len(a) : 0;
+    const float *data = a ? r2d_audio_capture_data(a) : NULL;
+    JSValue arr = JS_NewArray(ctx);
+    for (int i = 0; i < len * 2; i++) {
+        JS_SetPropertyUint32(ctx, arr, (uint32_t)i, JS_NewFloat64(ctx, data ? data[i] : 0.0));
+    }
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "frames", JS_NewInt32(ctx, len));
+    // Частота нужна тесту, чтобы переводить задержку в миллисекунды, а не
+    // угадывать её: 0.65 мс при 44.1 и 48 кГц — это разные числа сэмплов.
+    JS_SetPropertyStr(ctx, o, "rate", JS_NewInt32(ctx, a ? a->capture_rate : 0));
+    JS_SetPropertyStr(ctx, o, "done", JS_NewBool(ctx, len > 0 && a && SDL_GetAtomicInt(&a->capture_on) == 0));
+    JS_SetPropertyStr(ctx, o, "captured", JS_NewBool(ctx, len > 0));
+    JS_SetPropertyStr(ctx, o, "samples", arr);
+    return o;
+}
+
+// engine.audio.captureClear()
+static JSValue r2d__js_audio_capture_clear(JSContext *ctx, JSValueConst this_val,
+                                           int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    if (s && s->audio) r2d_audio_capture_clear(s->audio);
+    return JS_TRUE;
+}
+
 // --- Иконки Material Design (встроены в бинарник) ---------------------------
 // engine.ui.icon("home") возвращает сам символ, его можно вклеить в любой текст
 // интерфейса: RmlUi подставит глиф из запасного шрифта.
@@ -5570,6 +5697,16 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, audio, "setStemGain", r2d__js_audio_set_stem_gain, 2);
     r2d__set_fn(ctx, audio, "stemGain", r2d__js_audio_stem_gain, 1);
     r2d__set_fn(ctx, audio, "setChannel3D", r2d__js_audio_set_channel_3d, 5);
+    // Бинауральный режим: настоящая HRTF (Steam Audio) и модель-фолбэк.
+    r2d__set_fn(ctx, audio, "hrtfAvailable", r2d__js_audio_hrtf_available, 0);
+    r2d__set_fn(ctx, audio, "worldChannel", r2d__js_audio_world_channel, 8);
+    r2d__set_fn(ctx, audio, "binaural", r2d__js_audio_binaural_get, 0);
+    r2d__set_fn(ctx, audio, "setBinaural", r2d__js_audio_binaural_set, 5);
+    r2d__set_fn(ctx, audio, "setChannelBinaural", r2d__js_audio_set_channel_binaural, 3);
+    // Диагностический захват итогового микса — для тестов.
+    r2d__set_fn(ctx, audio, "captureStart", r2d__js_audio_capture_start, 1);
+    r2d__set_fn(ctx, audio, "captured", r2d__js_audio_captured, 0);
+    r2d__set_fn(ctx, audio, "captureClear", r2d__js_audio_capture_clear, 0);
     JS_SetPropertyStr(ctx, engine, "audio", audio);
 
     // 2D BSP-дерево: порядок отрисовки без z-буфера на произвольной геометрии.

@@ -176,6 +176,10 @@ endif()   # R2D_ENABLE_RE2D
 if(TARGET R2D_SteamAudio)
     add_executable(r2d_audio_spatial_test audio/spatial_test.c "${CMAKE_SOURCE_DIR}/src/audio_spatial.c")
     target_include_directories(r2d_audio_spatial_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+    # Тот же define, что у движка (src/CMakeLists.txt): без него audio_spatial.c
+    # компилируется БЕЗ Steam Audio, тест проверяет фолбэк-панораму и три его
+    # проверки (инициализация HRTF, фронт/тыл, высота) падают «не по делу».
+    target_compile_definitions(r2d_audio_spatial_test PRIVATE R2D_STEAM_AUDIO=1)
     target_link_libraries(r2d_audio_spatial_test PRIVATE SDL3::SDL3 R2D_SteamAudio)
     if(NOT MSVC)
         target_link_libraries(r2d_audio_spatial_test PRIVATE m)

@@ -298,3 +298,14 @@ bool r2d_audio_set_channel_3d(R2DAudio *a, int channel, float x, float y, float 
 }
 
 bool r2d_audio_world_channel(R2DAudio *a,int c,bool enabled,bool hrtf,float x,float y,float z,float gain,float cutoff){(void)a;(void)c;(void)enabled;(void)hrtf;(void)x;(void)y;(void)z;(void)gain;(void)cutoff;return false;}
+
+// --- Бинауральная модель и диагностический захват (сборка без звука) --------
+// Заглушки: интерфейс тот же, поведения нет — честный отказ вместо тихой лжи.
+bool r2d_audio_hrtf_available(const R2DAudio *a){(void)a;return false;}
+void r2d_audio_binaural_set(R2DAudio *a,bool on,float head,float far_gain,float rear_gain,float mix){(void)a;(void)on;(void)head;(void)far_gain;(void)rear_gain;(void)mix;}
+void r2d_audio_binaural_get(const R2DAudio *a,bool *on,float *head,float *far_gain,float *rear_gain,float *mix){(void)a;if(on)*on=false;if(head)*head=0.0875f;if(far_gain)*far_gain=0.63f;if(rear_gain)*rear_gain=1.585f;if(mix)*mix=1.0f;}
+void r2d_audio_binaural_channel(R2DAudio *a,int channel,bool active,float azimuth){(void)a;(void)channel;(void)active;(void)azimuth;}
+bool r2d_audio_capture_start(R2DAudio *a,int frames){(void)a;(void)frames;return false;}
+int r2d_audio_capture_len(const R2DAudio *a){(void)a;return 0;}
+const float *r2d_audio_capture_data(const R2DAudio *a){(void)a;return NULL;}
+void r2d_audio_capture_clear(R2DAudio *a){(void)a;}

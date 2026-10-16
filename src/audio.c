@@ -6,6 +6,10 @@
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
 
+#include <math.h>       // sinf/expf/fabsf: бинауральная модель
+#include <string.h>     // memset: сброс линии задержки канала
+#include <stdlib.h>     // SDL_realloc-совместимые размеры
+
 // ---------------------------------------------------------------------------
 
 static float r2d__clamp01(float v)
@@ -46,8 +50,30 @@ static void SDLCALL r2d__post_mix(void *userdata, MIX_Mixer *mixer,
 {
     R2D_UNUSED(mixer);
     R2DAudio *a = (R2DAudio *)userdata;
-    if (!a || !a->reverb_on || !spec || !pcm || samples <= 0) return;
-    r2d_reverb_process(&a->reverb, pcm, samples, spec->channels);
+    if (!a || !spec || !pcm || samples <= 0) return;
+    if (a->reverb_on) r2d_reverb_process(&a->reverb, pcm, samples, spec->channels);
+
+    // Диагностический захват — ПОСЛЕ реверба: тест меряет то, что слышит
+    // игрок, а не промежуточный буфер. Работает независимо от бинаурального
+    // режима (нужен и для проверки «выключено = как раньше»).
+    if (SDL_GetAtomicInt(&a->capture_on) && a->capture && spec->channels >= 2) {
+        const int ch = spec->channels;
+        a->capture_rate = spec->freq;
+        int frames = samples / ch;
+        const int left = a->capture_cap - a->capture_len;
+        if (frames > left) frames = left;
+        // Пишем в локальный счётчик, а публикуем ЦЕЛЫМ числом кадров: иначе
+        // читатель (JS/тест) мог увидеть нечётное число и получить половину кадра —
+        // L уже записан, R ещё нет (гонка аудиопотока с чтением).
+        int written = a->capture_len;
+        for (int i = 0; i < frames; i++) {
+            a->capture[written * 2]     = pcm[i * ch];
+            a->capture[written * 2 + 1] = pcm[i * ch + 1];
+            written++;
+        }
+        a->capture_len = written;
+        if (written >= a->capture_cap) SDL_SetAtomicInt(&a->capture_on, 0);
+    }
 }
 
 bool r2d_audio_set_room(R2DAudio *a, float wet, float room, float damp, float width)
@@ -230,17 +256,133 @@ const char *r2d_audio_effect_name(int index)
     return r2d_audio_fx_name(index);
 }
 
+// Бинауральная модель (фолбэк без Steam Audio). Вызывается из raw-колбэка
+// канала ПОСЛЕ обычных эффектов: окклюзия (lowpass из acoustics.js) успевает
+// приглушить источник, а ITD/тень головы работают по приглушённому сигналу.
+//
+// Что делает на каждый кадр:
+//   1. mono = (L+R)/2 — при включённой модели JS держит панораму в центре;
+//   2. ITD: задержка дальнего уха по Вудворту (a/c)·(|az| + sin|az|), читается
+//      дробно (линейная интерполяция) из общей линии задержки;
+//   3. ILD и тень головы: однополюсный ФНЧ на дальнем ухе со срезом
+//      20 кГц → 2 кГц по |az| плюс ослабление дальнего уха до -4 дБ;
+//   4. «сзади»: полка +4 дБ выше 3 кГц на обоих ушах при |az| > 90°;
+//   5. mix подмешивает сухой сигнал (1 — только бинаурально).
+static void r2d__binaural_process(R2DAudio *a, int ch, const SDL_AudioSpec *spec,
+                                  float *pcm, int samples)
+{
+    R2DAudioBinaural *b = &a->binaural;
+    if (!b->on || ch < 0 || ch >= R2D_AUDIO_CHANNELS || !b->active[ch]) return;
+
+    const int channels = (spec && spec->channels > 0) ? spec->channels : 2;
+    if (channels < 2 || !pcm || samples < 2) return;
+    const int rate = (spec && spec->freq > 0) ? spec->freq : b->rate;
+    if (rate <= 0) return;
+    b->rate = rate;
+
+    const float az = b->az[ch];
+    const float aaz = fabsf(az);
+    // Мёртвая зона у фронта: на 0° модель обязана совпасть с моно (иначе
+    // «моно-совместимость» выполнялась бы только приблизительно).
+    if (aaz < 0.02f) return;
+
+    const float half_pi = SDL_PI_F * 0.5f;
+    const float t = aaz > half_pi ? 1.0f : aaz / half_pi;      // 0..1
+    // ITD: Вудворт, максимум (0.0875/343)·(pi/2+1) = 0.656 мс на 90°.
+    const float itd = (b->head / 343.0f) * (aaz + sinf(aaz)) * (float)rate;
+    const int   idelay = (int)itd;
+    const float frac = itd - (float)idelay;
+    // Тень головы: срез падает 20 кГц → 2 кГц; на 0° фильтр не работает.
+    const float cut = 20000.0f + (2000.0f - 20000.0f) * t;
+    const float alpha = 1.0f - expf(-2.0f * SDL_PI_F * cut / (float)rate);
+    // «Сзади»: полка выше 3 кГц, только для задней полусферы.
+    const bool rear = aaz > half_pi;
+    const float shelf_alpha = 1.0f - expf(-2.0f * SDL_PI_F * 3000.0f / (float)rate);
+    const float far_gain = 1.0f + (b->far_gain - 1.0f) * t;
+    const float dry = 1.0f - b->mix;
+    // ILD частотозависима: ослабляем дальнее ухо только ВЫШЕ ~1.2 кГц
+    // (полка), иначе на 200 Гц разница была бы такой же, как на 4 кГц —
+    // а у головы на низах тень не работает.
+    const float low_alpha = 1.0f - expf(-2.0f * SDL_PI_F * 1200.0f / (float)rate);
+
+    float *line = b->line[ch];
+    int pos = b->pos[ch];
+    float lp_near = b->lp_near[ch];
+    float lp_far = b->lp_far[ch];
+    float lp_far_low = b->lp_far_low[ch];
+    float shelf_l = b->shelf[ch][0];
+    float shelf_r = b->shelf[ch][1];
+
+    const bool near_left = az < 0.0f;      // азимут < 0 — источник слева
+    for (int i = 0; i + 1 < samples; i += 2) {
+        const float mono = 0.5f * (pcm[i] + pcm[i + 1]);
+        line[pos] = mono;
+        int p = pos - idelay;
+        while (p < 0) p += R2D_BINAURAL_DELAY;
+        int q = p - 1;
+        while (q < 0) q += R2D_BINAURAL_DELAY;
+        const float far_raw = line[p] * (1.0f - frac) + line[q] * frac;
+        const float near_raw = mono;
+
+        // Тень: ФНЧ на дальнем ухе (ближнее — без фильтра).
+        lp_near += alpha * (near_raw - lp_near);
+        lp_far  += alpha * (far_raw  - lp_far);
+        // ILD-полка: НЧ дальнего уха идут без ослабления, ВЧ — с far_gain.
+        lp_far_low += low_alpha * (lp_far - lp_far_low);
+        float e_near = near_raw;
+        float e_far  = lp_far_low + far_gain * (lp_far - lp_far_low);
+
+        if (rear) {
+            // Полка +rear_gain выше 3 кГц: y = lp + g·(x − lp).
+            shelf_l += shelf_alpha * (e_near - shelf_l);
+            shelf_r += shelf_alpha * (e_far - shelf_r);
+            e_near = shelf_l + b->rear_gain * (e_near - shelf_l);
+            e_far  = shelf_r + b->rear_gain * (e_far - shelf_r);
+        }
+
+        const float l_bin = (near_left ? e_near : e_far);
+        const float r_bin = (near_left ? e_far : e_near);
+        pcm[i]     = pcm[i] * dry + l_bin * b->mix;
+        pcm[i + 1] = pcm[i + 1] * dry + r_bin * b->mix;
+
+        pos = (pos + 1) % R2D_BINAURAL_DELAY;
+    }
+
+    b->pos[ch] = pos;
+    b->lp_near[ch] = lp_near;
+    b->lp_far[ch] = lp_far;
+    b->lp_far_low[ch] = lp_far_low;
+    b->shelf[ch][0] = shelf_l;
+    b->shelf[ch][1] = shelf_r;
+    if (isnan(lp_far) || isnan(lp_near)) {   // мусорный азимут не должен «залипать»
+        b->lp_near[ch] = b->lp_far[ch] = b->lp_far_low[ch] = 0.0f;
+        b->shelf[ch][0] = b->shelf[ch][1] = 0.0f;
+    }
+}
+
 static void SDLCALL r2d__track_fx(void *userdata, MIX_Track *track,
                                   const SDL_AudioSpec *spec, float *pcm, int samples)
 {
     R2D_UNUSED(track);
-    r2d_audio_fx_process((R2DAudioFx *)userdata, spec, pcm, samples);
-
+    R2DChannelCb *cb = (R2DChannelCb *)userdata;
+    if (!cb) return;
+    // Только эффекты канала: raw-буфер МОНО (spec->channels == 1), а
+    // бинауральная модель строит стерео — ей нужен cooked-буфер (ниже).
+    r2d_audio_fx_process(cb->fx, spec, pcm, samples);
 }
 
 
+// Cooked-колбэк канала: сюда приходит СТЕРЕО-буфер устройства. Здесь живут два
+// взаимно исключающих пути (какой именно — решает $.audio.hrtf().backend):
+//   * Steam Audio (r2d_audio_spatial_process) — настоящая HRTF;
+//   * встроенная модель (r2d__binaural_process) — фолбэк без датасетов.
+// Порядок важен: эффекты канала (raw) уже применены, здесь только панорама.
 static void SDLCALL r2d__track_spatial(void *userdata,MIX_Track *track,const SDL_AudioSpec *spec,float *pcm,int samples) {
-    R2D_UNUSED(track);r2d_audio_spatial_process(userdata,spec,pcm,samples);
+    R2D_UNUSED(track);
+    R2DChannelCb *cb=(R2DChannelCb *)userdata;
+    if(!cb)return;
+    r2d_audio_spatial_process(cb->fx?cb->fx->spatial:NULL,spec,pcm,samples);
+    if(cb->owner&&cb->channel>=0)r2d__binaural_process(cb->owner,cb->channel,spec,pcm,samples);
 }
 
 bool r2d_audio_set_channel_effect(R2DAudio *a, int channel, const char *kind,
@@ -568,9 +710,12 @@ bool r2d_audio_init(R2DAudio *a)
     }
 
     // Реверберация: буферы под частоту микшера и один колбэк на весь микс.
+    // Колбэк ставим ВСЕГДА (даже если реверб не поднялся): через него же идёт
+    // диагностический захват PCM, которым тесты меряют итоговый микс.
     if (!r2d_reverb_init(&a->reverb, a->fx_freq)) {
         R2D_WARN("не удалось подготовить реверберацию — комната будет сухой");
-    } else if (!MIX_SetPostMixCallback(a->mixer, r2d__post_mix, a)) {
+    }
+    if (!MIX_SetPostMixCallback(a->mixer, r2d__post_mix, a)) {
         R2D_WARN("MIX_SetPostMixCallback: %s", SDL_GetError());
         r2d_reverb_shutdown(&a->reverb);
     }
@@ -580,11 +725,20 @@ bool r2d_audio_init(R2DAudio *a)
     // аудиопотоком, а сам эффект задаётся полем kind. Буферы (линия задержки,
     // хвост реверба) выделяет модуль эффектов лениво — при включении эффекта.
     a->spatial=r2d_audio_spatial_create(a->fx_freq,a->fx_channels);
+    a->binaural.on=false;
+    a->binaural.head=0.0875f;      // средний радиус головы, м
+    a->binaural.far_gain=0.63f;    // -4 дБ на дальнем ухе при 90°
+    a->binaural.rear_gain=1.585f;  // +4 дБ полки ВЧ сзади
+    a->binaural.mix=1.0f;
+    a->binaural.rate=a->fx_freq>0?a->fx_freq:44100;
     for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
         a->fx[i].spatial=r2d_audio_spatial_channel(a->spatial,i);
         a->fx[i].kind = R2D_AUDIO_FX_NONE;
-        MIX_SetTrackRawCallback(a->channels[i], r2d__track_fx, &a->fx[i]);
-        MIX_SetTrackCookedCallback(a->channels[i],r2d__track_spatial,a->fx[i].spatial);
+        a->chan_cb[i].fx=&a->fx[i];
+        a->chan_cb[i].owner=a;
+        a->chan_cb[i].channel=i;
+        MIX_SetTrackRawCallback(a->channels[i], r2d__track_fx, &a->chan_cb[i]);
+        MIX_SetTrackCookedCallback(a->channels[i],r2d__track_spatial,&a->chan_cb[i]);
     }
     return true;
 }
@@ -598,6 +752,11 @@ void r2d_audio_shutdown(R2DAudio *a)
     MIX_SetPostMixCallback(a->mixer, NULL, NULL);
     r2d_reverb_shutdown(&a->reverb);
     a->reverb_on = false;
+    r2d_audio_capture_clear(a);
+    SDL_free(a->capture);
+    a->capture = NULL;
+    a->capture_cap = 0;
+    a->binaural.on = false;
 
     for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
         if (a->channels[i]) MIX_DestroyTrack(a->channels[i]);
@@ -935,6 +1094,66 @@ void r2d_audio_set_music_volume(R2DAudio *a, float v)
 }
 
 float r2d_audio_get_music_volume(const R2DAudio *a) { return a->music_volume; }
+
+bool r2d_audio_hrtf_available(const R2DAudio *a) {
+    return a && a->spatial && r2d_audio_spatial_hrtf(a->spatial);
+}
+
+void r2d_audio_binaural_set(R2DAudio *a,bool on,float head,float far_gain,float rear_gain,float mix) {
+    if(!a)return;
+    R2DAudioBinaural *b=&a->binaural;
+    b->on=on;
+    if(head>0.01f&&head<1.0f)b->head=head;
+    if(far_gain>0.0f&&far_gain<=1.0f)b->far_gain=far_gain;
+    if(rear_gain>=1.0f&&rear_gain<=8.0f)b->rear_gain=rear_gain;
+    if(mix>=0.0f&&mix<=1.0f)b->mix=mix;
+}
+
+void r2d_audio_binaural_get(const R2DAudio *a,bool *on,float *head,float *far_gain,float *rear_gain,float *mix) {
+    if(!a)return;
+    const R2DAudioBinaural *b=&a->binaural;
+    if(on)*on=b->on;
+    if(head)*head=b->head;
+    if(far_gain)*far_gain=b->far_gain;
+    if(rear_gain)*rear_gain=b->rear_gain;
+    if(mix)*mix=b->mix;
+}
+
+void r2d_audio_binaural_channel(R2DAudio *a,int channel,bool active,float azimuth) {
+    if(!a||channel<0||channel>=R2D_AUDIO_CHANNELS)return;
+    R2DAudioBinaural *b=&a->binaural;
+    if(!active){b->active[channel]=false;return;}
+    // Азимут нормализуем в (-pi, pi]: мусор (NaN/inf) выключает канал, иначе
+    // фильтры «залипли» бы в NaN и звук пропал бы совсем.
+    if(!isfinite(azimuth)){b->active[channel]=false;return;}
+    float az=fmodf(azimuth+SDL_PI_F,2.0f*SDL_PI_F);
+    if(az<0.0f)az+=2.0f*SDL_PI_F;
+    az-=SDL_PI_F;
+    if(!b->active[channel]){          // новый источник: чистое состояние
+        b->pos[channel]=0;
+        b->lp_near[channel]=b->lp_far[channel]=b->lp_far_low[channel]=0.0f;
+        b->shelf[channel][0]=b->shelf[channel][1]=0.0f;
+        memset(b->line[channel],0,sizeof b->line[channel]);
+    }
+    b->az[channel]=az;
+    b->active[channel]=true;
+}
+
+bool r2d_audio_capture_start(R2DAudio *a,int frames) {
+    if(!a||frames<=0)return false;
+    if(frames>a->capture_cap){
+        float *next=(float *)SDL_realloc(a->capture,(size_t)frames*2*sizeof(float));
+        if(!next)return false;
+        a->capture=next;a->capture_cap=frames;
+    }
+    a->capture_len=0;
+    SDL_SetAtomicInt(&a->capture_on,1);
+    return true;
+}
+
+int r2d_audio_capture_len(const R2DAudio *a){return a?a->capture_len:0;}
+const float *r2d_audio_capture_data(const R2DAudio *a){return a?a->capture:NULL;}
+void r2d_audio_capture_clear(R2DAudio *a){if(a){a->capture_len=0;SDL_SetAtomicInt(&a->capture_on,0);}}
 
 bool r2d_audio_world_channel(R2DAudio *a,int c,bool enabled,bool hrtf,float x,float y,float z,float gain,float cutoff) {
     if(!a||!a->ready||c<0||c>=R2D_AUDIO_CHANNELS||!a->spatial)return false;

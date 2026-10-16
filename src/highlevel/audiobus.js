@@ -441,6 +441,10 @@ function applyEffectToHandle(handle) {
 function removeHandle(handle) {
     const i = handles.indexOf(handle);
     if (i >= 0) handles.splice(i, 1);
+    // Канал освободился (стоп, доиграл, вытеснен) — снимаем с него
+    // бинауральное состояние, иначе следующий звук на этом канале унаследует
+    // чужой азимут.
+    if (handle && handle.channel >= 0) clearHrtfChannel(handle.channel);
     for (let k = fades.length - 1; k >= 0; k--) {
         if (fades[k].target === handle) fades.splice(k, 1);
     }
@@ -650,6 +654,136 @@ function applyDirect(target, key, value, onChange) {
 // Установка пространства имён $.audio
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Бинауральный режим (этап 1 «ХРТФ в 2D»)
+//
+// Два backend'а, и оба называют себя честно:
+//   * 'steam'     — НАСТОЯЩАЯ HRTF (Steam Audio, уже в бинарнике): направление
+//                   уходит в r2d_audio_world_channel(..., hrtf=true, ...), а
+//                   панораму/ITD/ILD/тень считает библиотека;
+//   * 'synthetic' — встроенная модель (ITD дробной задержкой, ILD, ФНЧ-тень,
+//                   полка «сзади»), работает там, где HRTF-бэкенд не поднялся.
+// `$.audio.hrtf().backend` всегда говорит, ЧТО звучит сейчас (null — ничего).
+//
+// Выключено по умолчанию: пока игра не попросила, ни один сэмпл не меняется.
+// ---------------------------------------------------------------------------
+const hrtf_state = {
+    on: false,
+    backend: 'auto',      // что просили: 'auto' | 'steam' | 'synthetic'
+    active: null,         // что реально работает: 'steam' | 'synthetic' | null
+    reason: 'выключено',  // почему выбран именно этот backend
+    head: 0.0875,         // радиус головы, м
+    farGain: 0.63,        // ослабление дальнего уха на 90° (-4 дБ)
+    rearGain: 1.585,      // полка ВЧ сзади (+4 дБ)
+    mix: 1,               // 0 — сухо, 1 — полностью бинаурально
+    up: false,            // true: вертикаль карты = высота; иначе = «сзади»
+};
+
+/** Доступна ли НАСТОЯЩАЯ HRTF (Steam Audio) в этой сборке. */
+export function hrtfBackendAvailable() {
+    const a = audio();
+    return !!(a && typeof a.hrtfAvailable === 'function' && a.hrtfAvailable());
+}
+
+/**
+ * Выбрать backend по запросу и доступности. Возвращает имя работающего
+ * backend'а или null; причина отказа пишется в state.reason (её читает
+ * `$.audio.hrtf().reason` — вместо тихого «всё хорошо»).
+ */
+export function resolveHrtfBackend() {
+    const a = audio();
+    const steam = hrtfBackendAvailable();
+    const synthetic = !!(a && typeof a.setBinaural === 'function');
+    if (!hrtf_state.on) {
+        hrtf_state.active = null;
+        hrtf_state.reason = 'выключено';
+        return null;
+    }
+    const want = hrtf_state.backend;
+    if ((want === 'auto' || want === 'steam') && steam) {
+        hrtf_state.active = 'steam';
+        hrtf_state.reason = '';
+        return 'steam';
+    }
+    if (want === 'steam' && !steam) {
+        hrtf_state.active = synthetic ? 'synthetic' : null;
+        hrtf_state.reason = 'настоящая HRTF (Steam Audio) недоступна в этой сборке';
+        return hrtf_state.active;
+    }
+    hrtf_state.active = synthetic ? 'synthetic' : null;
+    hrtf_state.reason = synthetic ? '' : 'бинауральная модель недоступна в этой сборке';
+    return hrtf_state.active;
+}
+
+/** Работает ли бинауральный режим прямо сейчас. */
+export function hrtfActive() {
+    return hrtf_state.on && hrtf_state.active !== null;
+}
+
+/** Снимок состояния для $.audio.hrtf() и тестов. */
+export function hrtfInfo() {
+    return {
+        on: hrtf_state.on,
+        backend: hrtf_state.active,
+        requested: hrtf_state.backend,
+        reason: hrtf_state.reason,
+        steam: hrtfBackendAvailable(),
+        head: hrtf_state.head,
+        farGain: hrtf_state.farGain,
+        rearGain: hrtf_state.rearGain,
+        mix: hrtf_state.mix,
+        up: hrtf_state.up,
+    };
+}
+
+/**
+ * Бинауральная обработка канала по смещению (dx, dy) от слушателя.
+ * Возвращает имя backend'а, который всё сделал сам ('steam' — включая
+ * громкость и окклюзию), 'synthetic' — если модель взяла только панораму
+ * (громкость и lowpass остаются вызывающему), или false, если режим выключен.
+ */
+export function applyHrtfChannel(channel, dx, dy, gain, cutoff) {
+    if (!hrtfActive() || !(channel >= 0)) return false;
+    const a = audio();
+    if (!a) return false;
+    if (hrtf_state.active === 'steam') {
+        // Steam Audio: x — вправо, y — вверх, z — назад (слушатель смотрит в -z).
+        // В 2D по умолчанию вертикаль карты — это «перед/назад» (up: false);
+        // с up: true она становится высотой, а «перед/назад» пропадает.
+        const norm = Math.hypot(dx, dy);
+        const right = norm > 1e-6 ? dx / norm : 0;
+        const up = hrtf_state.up && norm > 1e-6 ? -dy / norm : 0;
+        const back = (!hrtf_state.up && norm > 1e-6) ? dy / norm : -1;
+        const ok = a.worldChannel(channel, true, true, right, up, back,
+                                  clamp01(gain === undefined ? 1 : gain),
+                                  cutoff === undefined ? 22000 : cutoff);
+        if (ok === true) return 'steam';
+        // Бэкенд отказал на конкретном канале — честно уходим в модель.
+        hrtf_state.active = (typeof a.setBinaural === 'function') ? 'synthetic' : null;
+        hrtf_state.reason = 'HRTF-бэкенд отказал на канале ' + channel;
+        if (!hrtfActive()) return false;
+    }
+    // Модель: азимут в плоскости карты. 0 — спереди, +pi/2 — справа.
+    // Канал мог остаться в Steam-режиме (смена backend на лету) — снимаем его,
+    // иначе библиотека продолжит обрабатывать канал по своим параметрам.
+    if (typeof a.worldChannel === 'function') a.worldChannel(channel, false, false, 0, 0, -1, 1, 22000);
+    // Источник ровно на слушателе — это центр, а не «сзади»: у atan2(0, -0)
+    // знак нуля решает всё, и без этой ветки звук «под ногами» уезжал назад.
+    const centered = Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9;
+    const az = centered ? 0 : Math.atan2(dx, -dy);
+    a.setChannelBinaural(channel, true, az);
+    if (typeof a.setChannelPan === 'function') a.setChannelPan(channel, 0);
+    return 'synthetic';
+}
+
+/** Снять с канала бинауральное состояние (стоп, смена режима, уборка). */
+export function clearHrtfChannel(channel) {
+    const a = audio();
+    if (!a || !(channel >= 0)) return;
+    if (typeof a.setChannelBinaural === 'function') a.setChannelBinaural(channel, false, 0);
+    if (typeof a.worldChannel === 'function') a.worldChannel(channel, false, false, 0, 0, -1, 1, 22000);
+}
+
 export function installAudiobus($) {
     if (installed && api_$ === $) return $.audio;
     api_$ = $;
@@ -835,6 +969,7 @@ export function installAudiobus($) {
         /** Снять все шины, остановить их звуки, вернуть слушателя камере. */
         clear() {
             for (const handle of handles.slice()) handle.stop(0);
+            if (ctx.sound_sources) for (const channel of Array.from(ctx.sound_sources.keys())) clearHrtfChannel(channel);
             // Группы микшера — ресурс движка (их всего 8). Без destroy они
             // выгорают: после нескольких `bus()` + `clear()` следующая шина
             // молча остаётся без группы, и её эффект не применяется вовсе.
@@ -977,9 +1112,25 @@ export function installAudiobus($) {
                 return handle;
             }
 
-            const pg = panAndGain(listenerPoint(), { x: px, y: py }, o.falloff);
+            const l = listenerPoint();
+            const pg = panAndGain(l, { x: px, y: py }, o.falloff);
             const volume = (o.volume === undefined ? 1 : Number(o.volume)) * pg.gain;
-            return spawn(what, busName, volume, pg.pan, o.loop, o);
+            const handle = spawn(what, busName, volume, pg.pan, o.loop, o);
+            // Бинауральный режим: направление уходит в движок (настоящая HRTF
+            // или модель), панораму тогда строит он, а не JS.
+            if (handle.channel >= 0 && hrtfActive()) {
+                const applied = applyHrtfChannel(handle.channel, px - l.x, py - l.y,
+                                                 clamp01(handle.baseVolume * effectiveGain(buses, handle.bus)) * pg.gain);
+                if (applied === 'steam' && ctx.sound_sources) {
+                    // Держим направление живым: acoustics.js пересчитывает его
+                    // каждый кадр (там же окклюзия и препятствия).
+                    ctx.sound_sources.set(handle.channel, {
+                        x: px, y: py, max: o.falloff && o.falloff.max ? o.falloff.max : DEFAULT_MAX_DISTANCE,
+                        volume: handle.baseVolume, node: null, bus: handle.bus,
+                    });
+                }
+            }
+            return handle;
         },
 
         /**
@@ -1018,6 +1169,99 @@ export function installAudiobus($) {
             if (x && (x.nodes || x.tag)) { manual_listener = x; return audioNs; }
             if (x && typeof x === 'object') manual_listener = { x: Number(x.x) || 0, y: Number(x.y) || 0 };
             else manual_listener = { x: Number(x) || 0, y: Number(y) || 0 };
+            return audioNs;
+        },
+
+        // --- Бинауральный режим (этап 1 «ХРТФ в 2D») -------------------------
+
+        /**
+         * Бинауральное панорамирование позиционных звуков.
+         *
+         *   $.audio.hrtf();                      // состояние (геттер)
+         *   $.audio.hrtf(true);                  // включить, backend 'auto'
+         *   $.audio.hrtf({ backend: 'steam' });  // только настоящая HRTF
+         *   $.audio.hrtf({ backend: 'synthetic', rearGain: 1.4, mix: 0.8 });
+         *   $.audio.hrtf(false);                 // выключить (звук как раньше)
+         *
+         * `backend`: 'auto' (steam, если поднялся, иначе модель), 'steam'
+         * (настоящая HRTF Steam Audio), 'synthetic' (встроенная модель ITD/ILD/
+         * тень головы). Геттер всегда называет ФАКТИЧЕСКИЙ backend в поле
+         * `backend` (null — режим не работает) и причину в `reason`.
+         *
+         * `up: true` — вертикаль карты считается высотой (у модели высоты нет,
+         * она честно скажет об этом); по умолчанию вертикаль карты — это
+         * «перед/назад», потому что в 2D плоскости высоты у источника нет.
+         */
+        hrtf(arg) {
+            if (arg === undefined) return hrtfInfo();
+            const engine_audio = audio();
+            if (arg === false || arg === null) {
+                hrtf_state.on = false;
+                resolveHrtfBackend();
+                if (engine_audio && typeof engine_audio.setBinaural === 'function') {
+                    engine_audio.setBinaural(false, hrtf_state.head, hrtf_state.farGain,
+                                             hrtf_state.rearGain, hrtf_state.mix);
+                }
+                for (const handle of handles) clearHrtfChannel(handle.channel);
+                if (ctx.sound_sources) for (const channel of ctx.sound_sources.keys()) clearHrtfChannel(channel);
+                return hrtfInfo();
+            }
+            const o = (arg === true) ? {} : (arg || {});
+            if (o.backend !== undefined) {
+                const want = String(o.backend);
+                if (want !== 'auto' && want !== 'steam' && want !== 'synthetic') {
+                    log(`$.audio.hrtf: неизвестный backend "${want}" — ожидается auto/steam/synthetic`);
+                    return hrtfInfo();
+                }
+                hrtf_state.backend = want;
+            }
+            hrtf_state.on = o.on === undefined ? true : o.on !== false;
+            for (const key of ['head', 'farGain', 'rearGain', 'mix']) {
+                if (o[key] === undefined) continue;
+                const v = Number(o[key]);
+                if (Number.isFinite(v)) hrtf_state[key] = v;
+            }
+            if (o.up !== undefined) hrtf_state.up = o.up === true;
+            resolveHrtfBackend();
+            if (engine_audio && typeof engine_audio.setBinaural === 'function') {
+                engine_audio.setBinaural(hrtfActive() && hrtf_state.active === 'synthetic',
+                                         hrtf_state.head, hrtf_state.farGain,
+                                         hrtf_state.rearGain, hrtf_state.mix);
+            }
+            if (!hrtfActive()) {
+                for (const handle of handles) clearHrtfChannel(handle.channel);
+                if (ctx.sound_sources) for (const channel of ctx.sound_sources.keys()) clearHrtfChannel(channel);
+            }
+            return hrtfInfo();
+        },
+
+        // --- Диагностический захват PCM (для тестов) -------------------------
+
+        /**
+         * Снять итоговый микс в буфер: `$.audio.captureStart(frames)`, затем
+         * `$.audio.captured()` → `{ frames, done, samples: [L,R,L,R,…] }`.
+         *
+         * Захват идёт с post-mix (после шин и реверба) — то, что слышит игрок.
+         * Это диагностический путь для тестов: проверить ITD/ILD/тень можно
+         * только по PCM, а не по флагам. Играм он не нужен.
+         */
+        captureStart(frames) {
+            const a = audio();
+            if (!a || typeof a.captureStart !== 'function') return false;
+            return a.captureStart(Math.max(1, Math.floor(Number(frames) || 0))) === true;
+        },
+
+        /** Что уже записано: `{ frames, done, samples }` (samples — L,R,L,R…). */
+        captured() {
+            const a = audio();
+            if (!a || typeof a.captured !== 'function') return { frames: 0, done: false, samples: [] };
+            return a.captured();
+        },
+
+        /** Очистить буфер захвата (и остановить его). */
+        captureClear() {
+            const a = audio();
+            if (a && typeof a.captureClear === 'function') a.captureClear();
             return audioNs;
         },
 
