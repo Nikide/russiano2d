@@ -49,7 +49,7 @@ $.ready(() => {
     foe.frames = [white, white, white, white];
     $('#foe').animate({ from: 0, to: 3, speed: 10, loop: false });
     $.store.set('animEnds', 0);
-    $('#foe').on('animEnd', () => $.store.set('animEnds', $.store.get('animEnds') + 1));
+    $('#foe').on('anim:end', () => $.store.set('animEnds', $.store.get('animEnds') + 1));
 
     // --- Таймер смерти по симуляционным часам ------------------------------
     $('<enemy>', { id: 'doomed' }).at(900, 500).size(28, 40).appendTo($.world);

@@ -3588,7 +3588,6 @@ function animateSprites() {
             anim.playing = false;
             index = anim.to;
             node.emit('anim:end', { clip: anim.clip || null, loops: 1, anim });
-            node.emit('animEnd', { anim });   // прежнее имя: оставлено для совместимости
         } else if (anim.loop && Math.floor(anim.t) >= span) {
             // Петля: считаем циклы и сообщаем о каждом — «доиграл» для клипа с
             // повтором случается на каждом обороте (описано в доках).
