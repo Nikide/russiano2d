@@ -199,6 +199,10 @@ endif()
 
 add_executable(russiano2d ${R2D_SOURCES})
 
+# Комплект шумов: C-фасад над вендоренным FastNoiseLite (свой cmake-файл, чтобы
+# не пересекаться правками с Tracy/Zstd/RmlUi).
+include(Noise)
+
 # Кладём бинарник в корень сборки, чтобы из него работали относительные пути
 # game/ и assets/, скопированные шагом POST_BUILD ниже.
 set_target_properties(russiano2d PROPERTIES

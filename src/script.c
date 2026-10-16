@@ -8,6 +8,7 @@
 
 #include "script.h"
 
+#include "noise.h"
 #include "profile.h"
 // RE2D — необязательный слой 3D-авторинга спрайтов (см. src/CMakeLists.txt,
 // R2D_ENABLE_RE2D). При выключенной опции ни заголовков, ни биндингов нет:
@@ -5446,6 +5447,368 @@ static void r2d__install_hitch(JSContext *ctx, JSValue engine)
 }
 
 
+// ---------------------------------------------------------------------------
+// Биндинги: комплект шумов (FastNoiseLite, src/noise.cpp)
+//
+// Числа считает апстрим; здесь — разбор конфигурации из JS и массовые вызовы.
+// Имена источников/фракталов и значения по умолчанию живут в JS ($.noise):
+// движку передаются числа, поэтому строковые имена не дублируются в C, а
+// docs/highlevel/noise.md остаётся единственным местом с человекочитаемыми
+// названиями.
+//
+// Последняя конфигурация кэшируется: поштучные вызовы идут тысячами, и
+// пересобирать генератор на каждый вызов незачем. Сравнение структур дешевле
+// повторного разбора объекта, а честность не страдает — параметры те же.
+// ---------------------------------------------------------------------------
+
+static R2DNoise      *g_noise = NULL;
+static R2DNoiseConfig g_noise_cfg;
+static bool           g_noise_cfg_valid = false;
+
+// Отпускает генератор шума. Зовётся при выключении скриптов: кэш принадлежит
+// движку, а не рантайму QuickJS.
+static void r2d__noise_cache_free(void)
+{
+    if (g_noise) r2d_noise_destroy(g_noise);
+    g_noise = NULL;
+    g_noise_cfg_valid = false;
+}
+
+// Числовое поле конфигурации. Отсутствие поля — не ошибка (берётся значение по
+// умолчанию), а вот строка или объект на месте числа — ошибка: молча привести
+// их к нулю значило бы считать не тот шум, о котором просили.
+static bool r2d__noise_field(JSContext *ctx, JSValueConst obj, const char *name,
+                             double *out)
+{
+    JSValue value = JS_GetPropertyStr(ctx, obj, name);
+    if (JS_IsUndefined(value) || JS_IsNull(value)) {
+        JS_FreeValue(ctx, value);
+        return true;   // поля нет — остаётся значение по умолчанию
+    }
+    if (!JS_IsNumber(value)) {
+        JS_FreeValue(ctx, value);
+        JS_ThrowTypeError(ctx, "noise: поле %s должно быть числом", name);
+        return false;
+    }
+    double number = 0.0;
+    const int rc = JS_ToFloat64(ctx, &number, value);
+    JS_FreeValue(ctx, value);
+    if (rc) return false;
+    *out = number;
+    return true;
+}
+
+static bool r2d__noise_parse(JSContext *ctx, JSValueConst obj, R2DNoiseConfig *cfg)
+{
+    if (!JS_IsObject(obj)) {
+        JS_ThrowTypeError(ctx, "noise: первый аргумент — объект параметров");
+        return false;
+    }
+    r2d_noise_config_defaults(cfg);
+
+    double v = 0.0;
+#define R2D_NOISE_READ(field)                                            \
+    do {                                                                 \
+        if (!r2d__noise_field(ctx, obj, #field, &v)) return false;        \
+        cfg->field = (int)v;                                             \
+    } while (0)
+    // Целые поля читаются как double и приводятся к int: так одно и то же
+    // поле не принимает «1.7 источника» тихо, а проверка диапазона ниже
+    // ловит значение вне перечисления.
+    R2D_NOISE_READ(source);
+    R2D_NOISE_READ(seed);
+    R2D_NOISE_READ(fractal);
+    R2D_NOISE_READ(octaves);
+    R2D_NOISE_READ(cell_distance);
+    R2D_NOISE_READ(cell_return);
+    R2D_NOISE_READ(warp_type);
+    R2D_NOISE_READ(warp_fractal);
+    R2D_NOISE_READ(warp_octaves);
+    R2D_NOISE_READ(rotation3d);
+#undef R2D_NOISE_READ
+
+    const char *floats[] = {
+        "frequency", "lacunarity", "gain", "weighted_strength",
+        "pingpong_strength", "cell_jitter", "warp_amp", "warp_lacunarity",
+        "warp_gain",
+    };
+    float *targets[] = {
+        &cfg->frequency, &cfg->lacunarity, &cfg->gain, &cfg->weighted_strength,
+        &cfg->pingpong_strength, &cfg->cell_jitter, &cfg->warp_amp,
+        &cfg->warp_lacunarity, &cfg->warp_gain,
+    };
+    for (size_t i = 0; i < sizeof(floats) / sizeof(floats[0]); ++i) {
+        if (!r2d__noise_field(ctx, obj, floats[i], &v)) return false;
+        *targets[i] = (float)v;
+    }
+
+    if (!r2d_noise_config_valid(cfg)) {
+        JS_ThrowRangeError(ctx,
+                           "noise: параметры вне пределов (frequency > 0, "
+                           "octaves 1..%d, lacunarity > 0, gain 0..1, "
+                           "weighted_strength 0..1, pingpong_strength 0..100, "
+                           "cell_jitter 0..2, warp_amp >= 0)",
+                           R2D_NOISE_MAX_OCTAVES);
+        return false;
+    }
+    return true;
+}
+
+// Генератор под текущую конфигурацию: переиспользует прежний, если параметры
+// не изменились. NULL — конфигурация не разобралась (исключение уже брошено).
+static R2DNoise *r2d__noise_ready(JSContext *ctx, JSValueConst obj)
+{
+    R2DNoiseConfig cfg;
+    if (!r2d__noise_parse(ctx, obj, &cfg)) return NULL;
+    if (g_noise && g_noise_cfg_valid &&
+        memcmp(&g_noise_cfg, &cfg, sizeof(cfg)) == 0) {
+        return g_noise;
+    }
+    r2d__noise_cache_free();
+    g_noise = r2d_noise_create(&cfg);
+    if (!g_noise) {
+        JS_ThrowRangeError(ctx, "noise: не удалось создать генератор");
+        return NULL;
+    }
+    g_noise_cfg = cfg;
+    g_noise_cfg_valid = true;
+    return g_noise;
+}
+
+// engine.noiseDefaults() → параметры по умолчанию из C. Нужны, чтобы JS и
+// тесты видели одно и то же число, а не две копии умолчаний.
+static JSValue r2d__js_noise_defaults(JSContext *ctx, JSValueConst this_val,
+                                      int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DNoiseConfig cfg;
+    r2d_noise_config_defaults(&cfg);
+    JSValue o = JS_NewObject(ctx);
+#define R2D_NOISE_PUT_INT(name) JS_SetPropertyStr(ctx, o, #name, JS_NewInt32(ctx, cfg.name))
+#define R2D_NOISE_PUT_FLOAT(name) JS_SetPropertyStr(ctx, o, #name, JS_NewFloat64(ctx, cfg.name))
+    R2D_NOISE_PUT_INT(source);
+    R2D_NOISE_PUT_INT(seed);
+    R2D_NOISE_PUT_FLOAT(frequency);
+    R2D_NOISE_PUT_INT(fractal);
+    R2D_NOISE_PUT_INT(octaves);
+    R2D_NOISE_PUT_FLOAT(lacunarity);
+    R2D_NOISE_PUT_FLOAT(gain);
+    R2D_NOISE_PUT_FLOAT(weighted_strength);
+    R2D_NOISE_PUT_FLOAT(pingpong_strength);
+    R2D_NOISE_PUT_INT(cell_distance);
+    R2D_NOISE_PUT_INT(cell_return);
+    R2D_NOISE_PUT_FLOAT(cell_jitter);
+    R2D_NOISE_PUT_INT(warp_type);
+    R2D_NOISE_PUT_FLOAT(warp_amp);
+    R2D_NOISE_PUT_INT(warp_fractal);
+    R2D_NOISE_PUT_INT(warp_octaves);
+    R2D_NOISE_PUT_FLOAT(warp_lacunarity);
+    R2D_NOISE_PUT_FLOAT(warp_gain);
+    R2D_NOISE_PUT_INT(rotation3d);
+#undef R2D_NOISE_PUT_INT
+#undef R2D_NOISE_PUT_FLOAT
+    JS_SetPropertyStr(ctx, o, "max_octaves", JS_NewInt32(ctx, R2D_NOISE_MAX_OCTAVES));
+    return o;
+}
+
+// engine.noise2(cfg, x, y) / engine.noise3(cfg, x, y, z) — поштучный вызов.
+static JSValue r2d__js_noise2(JSContext *ctx, JSValueConst this_val,
+                              int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 3) {
+        JS_ThrowTypeError(ctx, "engine.noise2(cfg, x, y)");
+        return JS_EXCEPTION;
+    }
+    R2DNoise *noise = r2d__noise_ready(ctx, argv[0]);
+    if (!noise) return JS_EXCEPTION;
+    const float x = (float)r2d__arg_num(ctx, argc, argv, 1, 0.0);
+    const float y = (float)r2d__arg_num(ctx, argc, argv, 2, 0.0);
+    return JS_NewFloat64(ctx, r2d_noise_get2(noise, x, y));
+}
+
+static JSValue r2d__js_noise3(JSContext *ctx, JSValueConst this_val,
+                              int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 4) {
+        JS_ThrowTypeError(ctx, "engine.noise3(cfg, x, y, z)");
+        return JS_EXCEPTION;
+    }
+    R2DNoise *noise = r2d__noise_ready(ctx, argv[0]);
+    if (!noise) return JS_EXCEPTION;
+    const float x = (float)r2d__arg_num(ctx, argc, argv, 1, 0.0);
+    const float y = (float)r2d__arg_num(ctx, argc, argv, 2, 0.0);
+    const float z = (float)r2d__arg_num(ctx, argc, argv, 3, 0.0);
+    return JS_NewFloat64(ctx, r2d_noise_get3(noise, x, y, z));
+}
+
+// engine.noiseWarp2(cfg, x, y) → [x, y]: сдвиг точки доменным warp'ом.
+static JSValue r2d__js_noise_warp2(JSContext *ctx, JSValueConst this_val,
+                                   int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 3) {
+        JS_ThrowTypeError(ctx, "engine.noiseWarp2(cfg, x, y)");
+        return JS_EXCEPTION;
+    }
+    R2DNoise *noise = r2d__noise_ready(ctx, argv[0]);
+    if (!noise) return JS_EXCEPTION;
+    const float x = (float)r2d__arg_num(ctx, argc, argv, 1, 0.0);
+    const float y = (float)r2d__arg_num(ctx, argc, argv, 2, 0.0);
+    float wx = x, wy = y;
+    r2d_noise_warp2(noise, x, y, &wx, &wy);
+    JSValue out = JS_NewArray(ctx);
+    JS_SetPropertyUint32(ctx, out, 0, JS_NewFloat64(ctx, wx));
+    JS_SetPropertyUint32(ctx, out, 1, JS_NewFloat64(ctx, wy));
+    return out;
+}
+
+static JSValue r2d__js_noise_warp3(JSContext *ctx, JSValueConst this_val,
+                                   int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 4) {
+        JS_ThrowTypeError(ctx, "engine.noiseWarp3(cfg, x, y, z)");
+        return JS_EXCEPTION;
+    }
+    R2DNoise *noise = r2d__noise_ready(ctx, argv[0]);
+    if (!noise) return JS_EXCEPTION;
+    const float x = (float)r2d__arg_num(ctx, argc, argv, 1, 0.0);
+    const float y = (float)r2d__arg_num(ctx, argc, argv, 2, 0.0);
+    const float z = (float)r2d__arg_num(ctx, argc, argv, 3, 0.0);
+    float wx = x, wy = y, wz = z;
+    r2d_noise_warp3(noise, x, y, z, &wx, &wy, &wz);
+    JSValue out = JS_NewArray(ctx);
+    JS_SetPropertyUint32(ctx, out, 0, JS_NewFloat64(ctx, wx));
+    JS_SetPropertyUint32(ctx, out, 1, JS_NewFloat64(ctx, wy));
+    JS_SetPropertyUint32(ctx, out, 2, JS_NewFloat64(ctx, wz));
+    return out;
+}
+
+// Общий разбор аргументов массовых вызовов: (cfg, w, h, [z,] x0, y0, sx, sy).
+static bool r2d__noise_field_args(JSContext *ctx, int argc, JSValueConst *argv,
+                                  bool with_z, R2DNoise **noise, int *w, int *h,
+                                  double *z, double *x0, double *y0,
+                                  double *sx, double *sy)
+{
+    const int need = with_z ? 8 : 7;
+    if (argc < need) {
+        JS_ThrowTypeError(ctx, with_z ? "engine.noiseField3(cfg, w, h, z, x0, y0, sx, sy)"
+                                      : "engine.noiseField(cfg, w, h, x0, y0, sx, sy)");
+        return false;
+    }
+    *noise = r2d__noise_ready(ctx, argv[0]);
+    if (!*noise) return false;
+
+    *w = r2d__arg_int(ctx, argc, argv, 1, 0);
+    *h = r2d__arg_int(ctx, argc, argv, 2, 0);
+    // Предел 8192×8192 = 64 млн значений (256 МБ на float) — защита от
+    // случайного «поля на весь мир» в одном вызове.
+    if (*w <= 0 || *h <= 0 || *w > 8192 || *h > 8192) {
+        JS_ThrowRangeError(ctx, "noise: размер поля должен быть 1..8192 по обеим осям");
+        return false;
+    }
+    int index = 3;
+    *z = 0.0;
+    if (with_z) *z = r2d__arg_num(ctx, argc, argv, index++, 0.0);
+    *x0 = r2d__arg_num(ctx, argc, argv, index++, 0.0);
+    *y0 = r2d__arg_num(ctx, argc, argv, index++, 0.0);
+    *sx = r2d__arg_num(ctx, argc, argv, index++, 1.0);
+    *sy = r2d__arg_num(ctx, argc, argv, index++, 1.0);
+    return true;
+}
+
+// engine.noiseField(cfg, w, h, x0, y0, sx, sy) → Float32Array (w*h).
+static JSValue r2d__js_noise_field(JSContext *ctx, JSValueConst this_val,
+                                   int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DNoise *noise = NULL;
+    int w = 0, h = 0;
+    double z = 0.0, x0 = 0.0, y0 = 0.0, sx = 1.0, sy = 1.0;
+    if (!r2d__noise_field_args(ctx, argc, argv, false, &noise, &w, &h,
+                               &z, &x0, &y0, &sx, &sy)) {
+        return JS_EXCEPTION;
+    }
+    const size_t count = (size_t)w * (size_t)h;
+    float *buf = (float *)SDL_malloc(count * sizeof(float));
+    if (!buf) {
+        JS_ThrowOutOfMemory(ctx);
+        return JS_EXCEPTION;
+    }
+    r2d_noise_field2(noise, buf, w, h, x0, y0, sx, sy);
+    // r2d__js_float32_copy копирует: буфер можно отпускать сразу, владение
+    // остаётся у JS-массива и не зависит от времени жизни генератора.
+    JSValue out = r2d__js_float32_copy(ctx, buf, (int)count);
+    SDL_free(buf);
+    return out;
+}
+
+static JSValue r2d__js_noise_field3(JSContext *ctx, JSValueConst this_val,
+                                    int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DNoise *noise = NULL;
+    int w = 0, h = 0;
+    double z = 0.0, x0 = 0.0, y0 = 0.0, sx = 1.0, sy = 1.0;
+    if (!r2d__noise_field_args(ctx, argc, argv, true, &noise, &w, &h,
+                               &z, &x0, &y0, &sx, &sy)) {
+        return JS_EXCEPTION;
+    }
+    const size_t count = (size_t)w * (size_t)h;
+    float *buf = (float *)SDL_malloc(count * sizeof(float));
+    if (!buf) {
+        JS_ThrowOutOfMemory(ctx);
+        return JS_EXCEPTION;
+    }
+    r2d_noise_field3(noise, buf, w, h, (float)z, x0, y0, sx, sy);
+    JSValue out = r2d__js_float32_copy(ctx, buf, (int)count);
+    SDL_free(buf);
+    return out;
+}
+
+// engine.noiseFieldRGBA(cfg, w, h, x0, y0, sx, sy) → Uint8Array (w*h*4):
+// серые пиксели, готовые для engine.textureFromPixels — без поштучного JS.
+static JSValue r2d__js_noise_field_rgba(JSContext *ctx, JSValueConst this_val,
+                                        int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DNoise *noise = NULL;
+    int w = 0, h = 0;
+    double z = 0.0, x0 = 0.0, y0 = 0.0, sx = 1.0, sy = 1.0;
+    if (!r2d__noise_field_args(ctx, argc, argv, false, &noise, &w, &h,
+                               &z, &x0, &y0, &sx, &sy)) {
+        return JS_EXCEPTION;
+    }
+    const size_t bytes = (size_t)w * (size_t)h * 4u;
+    uint8_t *buf = (uint8_t *)SDL_malloc(bytes);
+    if (!buf) {
+        JS_ThrowOutOfMemory(ctx);
+        return JS_EXCEPTION;
+    }
+    r2d_noise_field2_rgba(noise, buf, w, h, x0, y0, sx, sy);
+    JSValue out = JS_NewUint8ArrayCopy(ctx, buf, bytes);
+    SDL_free(buf);
+    return out;
+}
+
+// engine.noise.* — комплект шумов для $.noise.
+static void r2d__install_noise(JSContext *ctx, JSValue engine)
+{
+    JSValue noise = JS_NewObject(ctx);
+    r2d__set_fn(ctx, noise, "defaults", r2d__js_noise_defaults, 0);
+    r2d__set_fn(ctx, noise, "get2",     r2d__js_noise2, 3);
+    r2d__set_fn(ctx, noise, "get3",     r2d__js_noise3, 4);
+    r2d__set_fn(ctx, noise, "warp2",    r2d__js_noise_warp2, 3);
+    r2d__set_fn(ctx, noise, "warp3",    r2d__js_noise_warp3, 4);
+    r2d__set_fn(ctx, noise, "field",    r2d__js_noise_field, 7);
+    r2d__set_fn(ctx, noise, "field3",   r2d__js_noise_field3, 8);
+    r2d__set_fn(ctx, noise, "fieldRGBA", r2d__js_noise_field_rgba, 7);
+    JS_SetPropertyStr(ctx, engine, "noise", noise);
+}
+
+
 static JSValue r2d__make_engine(JSContext *ctx)
 {
 
@@ -5469,6 +5832,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "setResolveTransforms", r2d__js_set_resolve_transforms, 1);
     r2d__install_window(ctx, engine);
     r2d__install_hitch(ctx, engine);
+    r2d__install_noise(ctx, engine);
     r2d__set_fn(ctx, engine, "setExit", r2d__js_set_exit, 1);
     r2d__set_fn(ctx, engine, "setSnapshot", r2d__js_set_snapshot, 1);
     r2d__set_fn(ctx, engine, "setAgentQuery", r2d__js_set_agent_query, 1);
@@ -6400,6 +6764,9 @@ void r2d_script_shutdown(R2DScript *s)
     // Асинхронные задания держат буферы и поток: закрываем до контекста.
     r2d_async_shutdown();
     r2d_bsp_free(&s->bsp);
+    // Генератор шумов принадлежит движку, а не рантайму: отпускаем здесь,
+    // иначе он пережил бы выключение скриптов.
+    r2d__noise_cache_free();
     r2d__destroy_context(s);
 }
 

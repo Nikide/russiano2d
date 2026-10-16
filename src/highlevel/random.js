@@ -800,6 +800,359 @@ export function hashCells(values) {
 }
 
 // ---------------------------------------------------------------------------
+// Комплект шумов: $.noise
+//
+// Здесь — имена и параметры; сами числа считает FastNoiseLite
+// (third_party/fastnoise_lite → src/noise.cpp) через engine.noise.*. Набор:
+// OpenSimplex2, OpenSimplex2S, Perlin, Value, ValueCubic, Cellular (Worley) с
+// метриками расстояния и типами возврата, фракталы fBm/Ridged/PingPong поверх
+// любого источника, domain warp (одна итерация или фрактальный), 2D и 3D.
+//
+// Правило зерна то же, что у остальных шумов движка: без явного `seed` берётся
+// зерно сессии ($.random.seed()), а явно переданное побеждает всегда. Поэтому
+// «разный --seed — разный мир» верно и для этого набора.
+//
+// Два пути вызова:
+//   * поштучный — `$.noise.simplex2(x, y, opts)`: удобно для запросов и логики;
+//   * массовый — `$.noise.field({ w, h, ... })` / `fieldRGBA(...)`: сетка
+//     считается в C одним вызовом. На 65 536 точках это разница в десятки раз,
+//     потому что поштучный путь платит за каждый переход JS→C.
+// Массовый путь даёт ровно те же числа, что поштучный: и там и там считает одна
+// и та же функция апстрима (проверяется тестом на побитовое совпадение).
+// ---------------------------------------------------------------------------
+
+/** Источники шума: имя → номер в C-контракте (R2DNoiseSource). */
+export const NOISE_SOURCES = {
+    simplex2: 0,
+    simplex2S: 1,
+    perlin: 2,
+    value: 3,
+    cubic: 4,
+    cellular: 5,
+};
+
+/** Фрактальные режимы: имя → номер (R2DNoiseFractal). */
+export const NOISE_FRACTALS = { none: 0, fbm: 1, ridged: 2, pingpong: 3 };
+
+/** Метрики расстояния cellular (R2DNoiseCellDistance). */
+export const NOISE_CELL_DISTANCES = {
+    euclidean: 0,
+    euclideanSq: 1,
+    manhattan: 2,
+    hybrid: 3,
+};
+
+/** Что возвращает cellular (R2DNoiseCellReturn). */
+export const NOISE_CELL_RETURNS = {
+    value: 0,
+    distance: 1,
+    distance2: 2,
+    distance2Add: 3,
+    distance2Sub: 4,
+    distance2Mul: 5,
+    distance2Div: 6,
+};
+
+/** Типы domain warp (R2DNoiseWarpType). */
+export const NOISE_WARP_TYPES = { simplex2: 0, simplex2Reduced: 1, basicGrid: 2 };
+
+/** Фрактал внутри domain warp (R2DNoiseWarpFractal). */
+export const NOISE_WARP_FRACTALS = { none: 0, progressive: 1, independent: 2 };
+
+/** Повороты осей для 3D (R2DNoiseRotation3D) — у апстрима их ровно два. */
+export const NOISE_ROTATIONS = { none: 0, improveXY: 1, improveXZ: 2 };
+
+function noiseNames(table) {
+    return Object.keys(table);
+}
+
+/** Значение перечисления: именем или номером. Мусор — ошибка, а не «взяли 0». */
+function noiseEnum(table, value, fallback, what) {
+    if (value === undefined || value === null) return fallback;
+    const names = Object.keys(table);
+    if (typeof value === 'number') {
+        if (Number.isInteger(value) && value >= 0 && value < names.length) return value;
+        throw new Error('$.noise: ' + what + ' = ' + value + ' вне диапазона 0..' +
+                        (names.length - 1));
+    }
+    const key = String(value);
+    if (Object.prototype.hasOwnProperty.call(table, key)) return table[key];
+    throw new Error('$.noise: неизвестное ' + what + ' «' + key + '» (есть: ' +
+                    names.join(', ') + ')');
+}
+
+function noiseNumber(value, fallback, what, lo, hi) {
+    if (value === undefined || value === null) return fallback;
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        throw new Error('$.noise: ' + what + ' должно быть числом, получено ' + value);
+    }
+    if (number < lo || number > hi) {
+        throw new Error('$.noise: ' + what + ' = ' + number + ' вне диапазона ' + lo + '..' + hi);
+    }
+    return number;
+}
+
+function noiseInteger(value, fallback, what, lo, hi) {
+    return Math.trunc(noiseNumber(value, fallback, what, lo, hi));
+}
+
+/**
+ * Нормализовать параметры шума: имена → номера, умолчания → числа.
+ *
+ * Возвращает { c, names }: `c` — конфигурация ровно в том виде, в каком её
+ * ждёт движок (engine.noise.*), `names` — те же значения человекочитаемо (для
+ * $.noise.params и отладки). Лишние поля (w/h/x0/step для field) игнорируются:
+ * их читает только массовый путь.
+ */
+export function noiseParams(opts, sessionSeed) {
+    const o = opts || {};
+    const sourceId = noiseEnum(NOISE_SOURCES, o.source, NOISE_SOURCES.simplex2, 'source');
+    const fractalId = noiseEnum(NOISE_FRACTALS, o.fractal, NOISE_FRACTALS.none, 'fractal');
+    // Канонические имена — cellularDistance/cellularReturn (как в доке); короткие
+    // cellDistance/cellReturn приняты как синонимы, чтобы не спотыкаться о них.
+    const cellDistanceId = noiseEnum(NOISE_CELL_DISTANCES,
+                                     o.cellularDistance === undefined ? o.cellDistance
+                                                                      : o.cellularDistance,
+                                     NOISE_CELL_DISTANCES.euclideanSq, 'cellularDistance');
+    const cellReturnId = noiseEnum(NOISE_CELL_RETURNS,
+                                   o.cellularReturn === undefined ? o.cellReturn
+                                                                  : o.cellularReturn,
+                                   NOISE_CELL_RETURNS.distance, 'cellularReturn');
+    const warpTypeId = noiseEnum(NOISE_WARP_TYPES, o.warpType,
+                                 NOISE_WARP_TYPES.simplex2, 'warpType');
+    const warpFractalId = noiseEnum(NOISE_WARP_FRACTALS, o.warpFractal,
+                                    NOISE_WARP_FRACTALS.none, 'warpFractal');
+    const rotationId = noiseEnum(NOISE_ROTATIONS, o.rotation3d, NOISE_ROTATIONS.none,
+                                 'rotation3d');
+
+    // У апстрима fractal-режим один на объект: он же включает фрактальный warp.
+    // Поэтому «фрактальный шум и фрактальный warp сразу» невозможно — говорим
+    // об этом прямо, а не подменяем одно другим молча.
+    if (fractalId !== NOISE_FRACTALS.none && warpFractalId !== NOISE_WARP_FRACTALS.none) {
+        throw new Error('$.noise: fractal и warpFractal в одном генераторе ' +
+                        'несовместимы (у FastNoiseLite один fractal-режим на объект): ' +
+                        'нужен либо фрактальный шум, либо фрактальный warp — ' +
+                        'создайте два $.noise.create()');
+    }
+
+    const seed = (o.seed === undefined || o.seed === null)
+        ? (Number(sessionSeed) | 0)
+        : (Math.trunc(Number(o.seed)) | 0);
+
+    const sourceName = Object.keys(NOISE_SOURCES).find((k) => NOISE_SOURCES[k] === sourceId);
+    const fractalName = Object.keys(NOISE_FRACTALS).find((k) => NOISE_FRACTALS[k] === fractalId);
+
+    const c = {
+        source: sourceId,
+        seed: seed,
+        frequency: noiseNumber(o.frequency, 0.01, 'frequency', 1e-6, 10000),
+        fractal: fractalId,
+        octaves: noiseInteger(o.octaves, 3, 'octaves', 1, 12),
+        lacunarity: noiseNumber(o.lacunarity, 2, 'lacunarity', 1e-6, 100),
+        gain: noiseNumber(o.gain, 0.5, 'gain', 0, 1),
+        weighted_strength: noiseNumber(o.weightedStrength, 0, 'weightedStrength', 0, 1),
+        pingpong_strength: noiseNumber(o.pingPongStrength, 2, 'pingPongStrength', 0, 100),
+        cell_distance: cellDistanceId,
+        cell_return: cellReturnId,
+        cell_jitter: noiseNumber(o.cellJitter === undefined ? o.cellularJitter : o.cellJitter, 1, 'cellJitter', 0, 2),
+        warp_type: warpTypeId,
+        warp_amp: noiseNumber(o.warpAmp, 1, 'warpAmp', 0, 10000),
+        warp_fractal: warpFractalId,
+        warp_octaves: noiseInteger(o.warpOctaves, 3, 'warpOctaves', 1, 12),
+        warp_lacunarity: noiseNumber(o.warpLacunarity, 2, 'warpLacunarity', 1e-6, 100),
+        warp_gain: noiseNumber(o.warpGain, 0.5, 'warpGain', 0, 1),
+        rotation3d: rotationId,
+    };
+
+    const names = {
+        source: sourceName,
+        fractal: fractalName,
+        cellDistance: Object.keys(NOISE_CELL_DISTANCES)
+            .find((k) => NOISE_CELL_DISTANCES[k] === cellDistanceId),
+        cellReturn: Object.keys(NOISE_CELL_RETURNS)
+            .find((k) => NOISE_CELL_RETURNS[k] === cellReturnId),
+        warpType: Object.keys(NOISE_WARP_TYPES).find((k) => NOISE_WARP_TYPES[k] === warpTypeId),
+        warpFractal: Object.keys(NOISE_WARP_FRACTALS)
+            .find((k) => NOISE_WARP_FRACTALS[k] === warpFractalId),
+        rotation3d: Object.keys(NOISE_ROTATIONS).find((k) => NOISE_ROTATIONS[k] === rotationId),
+    };
+    return { c, names };
+}
+
+// Кэш генераторов для поштучных вызовов: ключ — конфигурация целиком, поэтому
+// смена зерна сессии или любого параметра даёт другой генератор, а не «старый
+// с другими числами». Ограничен, как PERM_CACHE выше: игровой код не должен
+// растить память, перебирая параметры в кадре.
+const NOISE_CACHE = new Map();
+const NOISE_CACHE_MAX = 32;
+
+function noiseFieldGrid(opts, what) {
+    const o = opts || {};
+    const w = Math.trunc(Number(o.w === undefined ? o.width : o.w));
+    const h = Math.trunc(Number(o.h === undefined ? o.height : o.h));
+    if (!(w > 0) || !(h > 0)) {
+        throw new Error('$.noise.' + what + ': нужны w и h больше нуля (получено ' +
+                        o.w + '×' + o.h + ')');
+    }
+    const step = o.step === undefined ? 1 : Number(o.step);
+    return {
+        w: w,
+        h: h,
+        z: o.z === undefined ? 0 : Number(o.z),
+        x0: o.x0 === undefined ? 0 : Number(o.x0),
+        y0: o.y0 === undefined ? 0 : Number(o.y0),
+        sx: o.stepX === undefined ? step : Number(o.stepX),
+        sy: o.stepY === undefined ? step : Number(o.stepY),
+    };
+}
+
+/** Собрать объект-генератор поверх уже нормализованной конфигурации. */
+function makeNoiseGenerator(config, names) {
+    const native = engine && engine.noise ? engine.noise : null;
+    if (native === null) {
+        throw new Error('$.noise: движок собран без комплекта шумов (engine.noise нет)');
+    }
+    const c = config;
+    return {
+        /** Параметры генератора: имена и числовая конфигурация для движка. */
+        params() {
+            const out = Object.assign({}, names);
+            out.seed = c.seed;
+            out.c = Object.assign({}, c);
+            return out;
+        },
+        get2(x, y) { return native.get2(c, x, y); },
+        get3(x, y, z) { return native.get3(c, x, y, z); },
+        /** Сдвиг точки доменным warp'ом: [x, y] (или [x, y, z]). */
+        warp2(x, y) { return native.warp2(c, x, y); },
+        warp3(x, y, z) { return native.warp3(c, x, y, z); },
+        /** Warp + шум в искажённой точке — то, ради чего warp обычно и берут. */
+        warped2(x, y) {
+            const warped = native.warp2(c, x, y);
+            return native.get2(c, warped[0], warped[1]);
+        },
+        warped3(x, y, z) {
+            const warped = native.warp3(c, x, y, z);
+            return native.get3(c, warped[0], warped[1], warped[2]);
+        },
+        /** Поле w×h, Float32Array построчно. Те же числа, что get2. */
+        field(opts) {
+            const g = noiseFieldGrid(opts, 'field');
+            return native.field(c, g.w, g.h, g.x0, g.y0, g.sx, g.sy);
+        },
+        /** Слой 3D-поля при фиксированном z. */
+        field3(opts) {
+            const g = noiseFieldGrid(opts, 'field3');
+            return native.field3(c, g.w, g.h, g.z, g.x0, g.y0, g.sx, g.sy);
+        },
+        /** Сразу пиксели RGBA (серые) — для engine.textureFromPixels. */
+        fieldRGBA(opts) {
+            const g = noiseFieldGrid(opts, 'fieldRGBA');
+            return native.fieldRGBA(c, g.w, g.h, g.x0, g.y0, g.sx, g.sy);
+        },
+    };
+}
+
+function noiseCacheKey(c) {
+    let key = '';
+    for (const name of Object.keys(c)) key += c[name] + ',';
+    return key;
+}
+
+/**
+ * Создать генератор шума с параметрами (см. $.noise.params).
+ * Явный вызов стоит один раз: переиспользуйте генератор в цикле — тогда
+ * накладные расходы на разбор параметров платятся однажды.
+ */
+export function createNoiseGenerator(opts, sessionSeed) {
+    const parsed = noiseParams(opts, sessionSeed);
+    return makeNoiseGenerator(parsed.c, parsed.names);
+}
+
+/** Генератор для поштучного вызова: кэш по конфигурации. */
+function cachedNoise(opts, sessionSeed) {
+    const parsed = noiseParams(opts, sessionSeed);
+    const key = noiseCacheKey(parsed.c);
+    const hit = NOISE_CACHE.get(key);
+    if (hit) return hit;
+    const generator = makeNoiseGenerator(parsed.c, parsed.names);
+    if (NOISE_CACHE.size >= NOISE_CACHE_MAX) {
+        NOISE_CACHE.delete(NOISE_CACHE.keys().next().value);
+    }
+    NOISE_CACHE.set(key, generator);
+    return generator;
+}
+
+/** Одна точка: источник + (необязательно) фрактал. */
+function noiseAt(source, fractal, x, y, z, opts, sessionSeed) {
+    const options = Object.assign({}, opts);
+    // Имя функции уже задаёт источник (simplex2/perlin/...). Если в параметрах
+    // передан ДРУГОЙ source, это почти всегда опечатка: молча взять один из
+    // двух — значит посчитать не тот шум, о котором просили.
+    if (options.source !== undefined &&
+        noiseEnum(NOISE_SOURCES, options.source, NOISE_SOURCES[source], 'source') !==
+            NOISE_SOURCES[source]) {
+        throw new Error('$.noise.' + source + ': source задан и именем функции, и ' +
+                        'параметрами — уберите одно из двух');
+    }
+    if (fractal !== undefined && options.fractal !== undefined &&
+        noiseEnum(NOISE_FRACTALS, options.fractal, NOISE_FRACTALS[fractal], 'fractal') !==
+            NOISE_FRACTALS[fractal]) {
+        throw new Error('$.noise.' + fractal + ': fractal задан и именем функции, и ' +
+                        'параметрами — уберите одно из двух');
+    }
+    options.source = source;
+    if (fractal !== undefined) options.fractal = fractal;
+    const generator = cachedNoise(options, sessionSeed);
+    return z === undefined ? generator.get2(x, y) : generator.get3(x, y, z);
+}
+
+/** Собрать $.noise. `sessionSeed()` читает зерно сессии в момент вызова. */
+export function makeNoiseApi(sessionSeed) {
+    const api = {
+        sources() { return noiseNames(NOISE_SOURCES); },
+        fractals() { return noiseNames(NOISE_FRACTALS); },
+        cellularDistances() { return noiseNames(NOISE_CELL_DISTANCES); },
+        cellularReturns() { return noiseNames(NOISE_CELL_RETURNS); },
+        warpTypes() { return noiseNames(NOISE_WARP_TYPES); },
+        warpFractals() { return noiseNames(NOISE_WARP_FRACTALS); },
+        rotations() { return noiseNames(NOISE_ROTATIONS); },
+        /** Значения по умолчанию — из C: одна копия умолчаний на движок. */
+        defaults() {
+            return (engine && engine.noise) ? engine.noise.defaults() : null;
+        },
+        /** Нормализованные параметры: что именно уйдёт в движок. */
+        params(opts) { return noiseParams(opts, sessionSeed()); },
+        create(opts) { return createNoiseGenerator(opts, sessionSeed()); },
+    };
+
+    // Поштучные обёртки: имя источника (или фрактала) + необязательные opts.
+    for (const source of noiseNames(NOISE_SOURCES)) {
+        api[source] = (x, y, opts) => noiseAt(source, undefined, x, y, undefined, opts, sessionSeed());
+    }
+    for (const fractal of ['fbm', 'ridged', 'pingpong']) {
+        api[fractal] = (x, y, opts) => noiseAt(NOISE_SOURCES.simplex2, fractal, x, y, undefined, opts, sessionSeed());
+    }
+    /** 3D-точка: $.noise.point3(x, y, z, opts). */
+    api.point3 = (x, y, z, opts) => noiseAt(NOISE_SOURCES.simplex2, undefined, x, y, z, opts, sessionSeed());
+
+    /** Domain warp точки без шума: [x, y]. */
+    api.domainWarp = (x, y, opts) => cachedNoise(opts, sessionSeed()).warp2(x, y);
+    api.domainWarp3 = (x, y, z, opts) => cachedNoise(opts, sessionSeed()).warp3(x, y, z);
+    /** Warp + шум в искажённой точке. */
+    api.warped = (x, y, opts) => cachedNoise(opts, sessionSeed()).warped2(x, y);
+    api.warped3 = (x, y, z, opts) => cachedNoise(opts, sessionSeed()).warped3(x, y, z);
+
+    /** Поле w×h (Float32Array): один вызов в C на все точки. */
+    api.field = (opts) => cachedNoise(opts, sessionSeed()).field(opts);
+    api.field3 = (opts) => cachedNoise(opts, sessionSeed()).field3(opts);
+    /** Поле сразу пикселями RGBA (Uint8Array) — в engine.textureFromPixels. */
+    api.fieldRGBA = (opts) => cachedNoise(opts, sessionSeed()).fieldRGBA(opts);
+    return api;
+}
+
+// ---------------------------------------------------------------------------
 // Установка
 // ---------------------------------------------------------------------------
 
@@ -815,6 +1168,10 @@ export function installRandom($) {
     const random = makeGenerator(seed);
     $.random = random;
     ctx.random = random;
+    // Комплект шумов: своё пространство имён, но то же зерно сессии. Читаем его
+    // в момент вызова (random.seed()), поэтому $.random.seed(n) влияет и на шум,
+    // а явно переданный seed в параметрах побеждает всегда.
+    $.noise = makeNoiseApi(() => random.seed());
     // Косметический генератор (тряска, джиттер) засеваем тем же зерном сессии:
     // он остаётся отдельным потоком (§11), но перестаёт быть одинаковым во всех
     // запусках — иначе «разный --seed — разный прогон» неверно для картинки.

@@ -26,6 +26,7 @@ Russiano2D собирается из исходников и тянет зави
 | ufbx | vendored, `third_party/ufbx` | MIT **или** public domain (на выбор) |
 | stb_truetype (`nothings/stb`) | `2c980bb` (1.26) | public domain / MIT (dual) |
 | SDL_net | `30dd38a` | zlib |
+| FastNoiseLite | vendored, `third_party/fastnoise_lite` (`785f37a`, `Cpp/FastNoiseLite.h`) | MIT |
 | Tracy | `v0.14.1` (`30997d5`) — только при `-DR2D_TRACY=ON` | BSD-3-Clause |
 | zstd | `v1.5.7` (`ac66b19`) — только при `R2D_ENABLE_ZSTD=ON` (по умолчанию) | BSD-3-Clause |
 | SMAA (техника) | эталонная реализация `iryoku/smaa` (`master`), **код не вендорился** — своя реализация в `shaders/post.frag.glsl`; см. раздел ниже | MIT (у эталонной реализации) |
@@ -168,6 +169,28 @@ C-обёртка — `src/light.cpp`.
 * Библиотека линкуется **только** в движок (`russiano2d`): хостовый C-тест
   разбора груза (`r2d_payload_test`) компилирует `src/payload.c` без
   `R2D_ENABLE_ZSTD` и проверяет старый формат.
+
+### FastNoiseLite — MIT
+Комплект шумов для процедурной генерации: OpenSimplex2, OpenSimplex2S, Perlin,
+Value, ValueCubic, Cellular (Worley) с метриками расстояния и типами возврата,
+фракталы fBm/Ridged/PingPong, domain warp (2D и 3D). Из него собран публичный
+`$.noise` и массовые поля для текстур/тайлмапов.
+
+* **Заголовок вендорен как есть**: `third_party/fastnoise_lite/FastNoiseLite.h`,
+  коммит `785f37a9ad76e283586a379675085f2063ae03f7` (`Cpp/FastNoiseLite.h`),
+  SHA-256 `47a29750dfe13d15651febd235f3c26b1cc57af7c6e26583b838fd7ab5215dc2`.
+  Правок внутри нет — иначе эталонные значения перестали бы совпадать.
+* Лицензия MIT (Copyright (c) 2023 Jordan Peck, Contributors), полный текст —
+  `third_party/fastnoise_lite/LICENSE`. Уведомление обязано сохраняться в
+  поставке: заголовок компилируется прямо в `russiano2d` (тонкий C-фасад —
+  `src/noise.cpp`, объявления — `src/noise.h`).
+* Пин, SHA и порядок обновления (с перегенерацией эталона) описаны в
+  `third_party/fastnoise_lite/README.md`; эталон — в
+  `third_party/fastnoise_lite/reference.cpp` и
+  `tests/agent/noise_set_test.py`.
+* В апстриме есть и порт на C (`C/FastNoiseLite.h`) — он **не взят**: у
+  канонического C++-заголовка есть опубликованные эталонные значения, на них и
+  держится проверка.
 
 ### glslang и SPIRV-Cross — Apache-2.0
 Инструменты сборки шейдеров: GLSL → SPIR-V (`glslangValidator`) и

@@ -549,6 +549,29 @@ $.test.near(x, 100, 0.5, 'игрок у отметки');
 видно в `itd`), высоты нет ни в одном 2D-бэкенде — только азимут и дистанция.
 Подробности — [highlevel/audiobus.md](highlevel/audiobus.md) §3.9.
 
+## 7.2. Шумы: `$.noise` (комплект OpenSimplex2/Perlin/Cellular + фракталы)
+
+Для генерации миров, текстур и тайлмапов из скриптов и автотестов. Числа
+считает FastNoiseLite (MIT, пин и эталон — в
+[highlevel/noise.md](highlevel/noise.md) §8), поэтому значения совпадают с
+апстримом: `tests/agent/noise_set_test.py` сверяет их с таблицей, снятой с
+непатченного заголовка.
+
+| Вызов | Что делает |
+|---|---|
+| `$.noise.simplex2(x, y, opts)` | OpenSimplex2; есть также `simplex2S`, `perlin`, `value`, `cubic`, `cellular`, `point3(x,y,z,opts)` для 3D |
+| `$.noise.fbm(x, y, opts)` / `ridged` / `pingpong` | фракталы поверх любого источника (`octaves`, `lacunarity`, `gain`, `pingPongStrength`) |
+| `$.noise.field({w,h,...})` → Float32Array | поле одним вызовом: 256×256 — 0.5 мс (simplex2), 2.8 мс (fbm 5 октав) против 22.7 мс поштучно; побитово совпадает с `get2` |
+| `$.noise.fieldRGBA({w,h,...})` → Uint8Array | сразу пиксели RGBA для `engine.textureFromPixels` |
+| `$.noise.field3` / `domainWarp` / `domainWarp3` / `warped` / `warped3` | слой 3D-шума и domain warp (сдвиг координат / сдвиг + шум) |
+| `$.noise.create(opts)` | явный генератор: `get2/get3/warp2/warp3/warped2/warped3/field/field3/fieldRGBA/params` |
+| `$.noise.params(opts)` / `defaults()` | что именно уйдёт в движок (имена + числа) / умолчания из C |
+| `$.noise.sources()` / `fractals()` / `cellularDistances()` / `cellularReturns()` / `warpTypes()` / `warpFractals()` / `rotations()` | списки допустимых значений |
+
+Зерно: без явного `seed` берётся зерно сессии (`--seed`, `$.random.seed(n)`),
+явное — побеждает. Мусорные параметры отвергаются ошибкой, а не «взяли 0».
+Существующие `$.random.noise1D/noise2D/simplex2D/noise` не изменились.
+
 ## 8. Если что-то не работает
 
 | Симптом | Причина и лечение |
@@ -574,7 +597,7 @@ $.test.near(x, 100, 0.5, 'игрок у отметки');
 | **128 звуковых каналов** на всю игру (было 16) | когда все заняты, движок вытесняет звук с наименьшим `priority`; если вытеснить некого, `$.sound.play()` возвращает `-1`. В плотной сцене задавайте `priority` явно; фактический предел — `$.sound.channels()`, занятость — `$.sound.busy()` → `{active, free, total}`, подробности — [highlevel/sound.md](highlevel/sound.md) |
 | **Пул эмиттеров `$.hits` — 8 слотов** | девятый одновременный удар переиспользует первый слот (живые частицы прошлого залпа обрываются); [highlevel/hits.md](highlevel/hits.md) |
 | `$.random.seed(n)` пересевает **все** созданные потоки | независимость потоков сохраняется, пока не зовёте `seed()` повторно; после него последовательность каждого потока пересчитывается от нового зерна ([highlevel/random.md](highlevel/random.md) §4) |
-| Функции шума **игнорируют `--seed`** | `$.random.noise1D/noise2D/simplex2D/noise` берут зерно из аргумента (по умолчанию `0`), а не из `--seed`: при разных `--seed` карта шума одинаковая. Это другой детерминизм — «одинаковый всегда», а не «одинаковый при одном зерне» |
+| Функции шума берут зерно **сессии** по умолчанию | `$.random.noise1D/noise2D/simplex2D/noise` и весь `$.noise` без явного `seed` используют зерно сессии (`--seed`, `$.random.seed(n)`), а явно переданное зерно побеждает всегда. Раньше функции шума игнорировали `--seed` (брали своё `0`) — это исправлено по C1 отчёта BASHNYA, проверка — `tests/agent/noise_seed_test.py` и `tests/agent/noise_set_test.py` |
 | `--agent` **отключает hot reload** | слежение за файлами выключается вместе с агентским режимом (`hot_reload = opt_hot_reload && !opt_agent`), `engine.hotReload()` в этом режиме возвращает `false`; перезапуск скриптов вручную — команда `reload` |
 | **Код возврата — не единственный вердикт** | однократно наблюдался SIGABRT (134) на выходе в `main → SDL_Quit → SDL_QuitFilesystem`; на ~500 прогонах он не повторился. Проверяйте ещё и строки `ok`/`FAIL`, как это делает раннер тестов |
 | Чего **нет** (частые догадки) | `$.mathx` — неймспейс называется `$.math` ([highlevel/mathx.md](highlevel/mathx.md)); `$.camera.visibleRect()`, `$.time.fixed`, `queueFree` не существуют. Вместо `visibleRect` — `$.camera.worldToScreen`/`isOnScreen`; вместо `$.time.fixed` — `$.time.simDt`/`delta`; вместо `queueFree` — `node.destroy()` (немедленно) или `$.scene`-область для отложенной уборки |
