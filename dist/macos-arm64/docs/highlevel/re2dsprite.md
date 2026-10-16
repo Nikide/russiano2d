@@ -142,7 +142,7 @@ Pose synthesis budget и camera quantization задаются world.quality, н�
 разрешение синтеза (≤2048), 24 числа света и вид `{eye, window, cull, motionLod}`
 (для v2 вызов отклоняется), и `engine.rotSpritePrepare(handle)` — подготовка
 ресурсов синтеза. Обёртка зовёт их сама по `projection` из character.json; вручную
-они нужны только при работе с `engine.*` напрямую ([internal/NATIVE.md](../internal/NATIVE.md)).
+они нужны только при работе с `engine.*` напрямую (`internal/NATIVE.md`).
 
 ## v3
 

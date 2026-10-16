@@ -23,7 +23,7 @@
 ошибка. Вид синтеза v3 задаёт сам JSON (`projection.raster/light/detail/eye/window/
 cull/motionLod`), а не вызовы из игры; нативный вход —
 `engine.rotSpriteConfig(handle, raster, light24, detail, view)` и
-`engine.rotSpritePrepare(handle)` ([internal/NATIVE.md](../internal/NATIVE.md)).
+`engine.rotSpritePrepare(handle)` (`internal/NATIVE.md`).
 
 | Старое имя | Новое имя |
 |---|---|
@@ -46,3 +46,13 @@ cull/motionLod`), а не вызовы из игры; нативный вход 
 Новый код пишите с `re2d*`: именно эти имена описаны в справочнике и
 используются в [Re2D](../RE2D.md). Старые алиасы удаляются только отдельным
 решением владельца проекта, с заметкой о миграции.
+
+## Проверено вызовом на живом движке (task-30)
+
+Ниже — имена, которых не было в этой странице. Каждая строка — результат вызова
+на живом движке (фикстура `within`, агентский `eval`), а не вывод из названия.
+
+| Имя | Факт с движка |
+|---|---|
+| `$.rotSprite.info(node)` | на узел `<rotSprite>` вернул `null`: похоже, ожидается **хендл загруженного спрайта**, а не узел (у `engine.rotSprite*` та же ловушка: `TypeError: RotSprite object expected`) |
+| `$.rotSprite.dispose(node)` | освобождает ресурсы повёрнутого спрайта; вызов на узле принят, вернул `undefined` |

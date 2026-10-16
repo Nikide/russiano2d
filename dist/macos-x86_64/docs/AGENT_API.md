@@ -229,6 +229,24 @@
 стороны ([AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md)
 правила 8–9).
 
+### 3.3.4. Пост-обработка и SMAA — `$.gfx.smaa()`
+
+Состояние пост-антиалиасинга видно из агентского прогона и проверяемо: сменить
+его можно через `eval` (`$.gfx.smaa(true)`, `$.gfx.smaa({preset:'high'})`,
+`$.gfx.smaa({pixelArt:true})`), а прочитать — `$.gfx.smaa()` либо
+`engine.renderInfo()`:
+
+| Поле | Смысл |
+|---|---|
+| `renderInfo().smaa_available` | собран ли SMAA-вариант шейдера в этой сборке (в веб-сборке — `false`) |
+| `renderInfo().smaa_on`, `smaa_steps` | включён ли AA и сколько шагов поиска ушло в шейдер (0 — выключен) |
+| `renderInfo().smaa_pipeline` | создался ли конвейер SMAA (отличает «выключено» от «не собралось») |
+| `$.gfx.smaa()` | `{ available, on, preset, steps, pixel_art, active, post, reason }` |
+
+Выключенный SMAA не меняет кадр: это проверяется побитово в
+`tests/agent/smaa_test.py`. Порядок проходов и цена — в
+[highlevel/render.md](highlevel/render.md) §4.8.
+
 ### 3.4. Вычисление кода
 
 | `cmd` | Параметры | Ответ |
@@ -272,9 +290,40 @@
 | `mouse` | `button`: `1` ЛКМ, `2` СКМ, `3` ПКМ; `action`: `"down"`, `"up"`, `"click"` | `{"ok":true,"button":1,"action":"click"}` |
 | `mouseMove` | `dx`, `dy` (относительное смещение) либо `x`, `y` (абсолютная позиция, в логических точках) | `{"ok":true,"x":..,"y":..}` — позиция мыши **до** применения (см. ниже) |
 | `touch` | `finger` (номер пальца, по умолчанию `0`), `x`, `y`, `action`: `"down"`, `"up"` (по умолчанию `down`), `"clear"` (снять все касания) | `{"ok":true}` |
-| `pad` | `slot` (номер геймпада), затем либо `button` (номер кнопки) + `down` (bool, по умолчанию `true`), либо `axis` (номер оси) + `value` (number) | `{"ok":true}`; без `button`/`axis` — ошибка `pad: нужен button или axis` |
+| `pad` | `slot` (номер геймпада 0..3), затем либо `button` + `down` (bool, по умолчанию `true`), либо `axis` + `value` (number), либо `reset` (bool) | `{"ok":true}`; без `button`/`axis`/`reset` — ошибка `pad: нужен button, axis или reset` |
 | `wheel` | `amount` (number) | `{"ok":true,"amount":..}` |
 | `text` | `text` (строка, UTF-8) — символы, которые игрок «набрал» в этом кадре | `{"ok":true,"text":"..."}` |
+
+**Команда `pad`: кнопки и оси — номерами SDL или именами.** `button` принимает
+номер `SDL_GamepadButton` (0..14) **или** имя в написании SDL: `"a"`, `"b"`,
+`"x"`, `"y"`, `"back"`, `"guide"`, `"start"`, `"leftstick"`, `"rightstick"`,
+`"leftshoulder"`, `"rightshoulder"`, `"dpup"`, `"dpdown"`, `"dpleft"`,
+`"dpright"`. `axis` — номер 0..5 или имя: `"leftx"`, `"lefty"`, `"rightx"`,
+`"righty"`, `"lefttrigger"`, `"righttrigger"`. Курки — оси **0..1** (не −1..1),
+стики −1..1. Неизвестное имя — явный отказ (`pad: неизвестная кнопка …`), а не
+молчаливое «ничего не нажали»; слот вне 0..3 — тоже отказ.
+
+```jsonc
+{"cmd":"pad","slot":0,"button":"a","down":true}       // нажать A на первом
+{"cmd":"pad","slot":0,"button":1,"down":false}        // отпустить B номером
+{"cmd":"pad","slot":1,"axis":"lefttrigger","value":0.8}
+{"cmd":"pad","slot":0,"reset":true}                   // снять всю инъекцию слота
+```
+
+Инъекция живёт до отпускания или до `reset`, действует на последующие кадры и
+**не делает слот подключённым**: `$.input.gamepad(0).connected()` остаётся
+`false`, а `$.input.padState(0)` показывает `virtual: true` — это и есть
+признак «в слот пишет агент, железа нет». Проверять состояние удобно так:
+
+```python
+a.cmd("pad", slot=0, button="a", down=True); a.step(1)
+state = a.eval("$.input.padState(0)")     # down: ['a'], pressed: ['a'], axes: {...}
+a.cmd("pad", slot=0, reset=True); a.step(1)   # залипания не остаётся
+```
+
+`reset` приводит слот ровно в то состояние, что и отключение устройства: кнопки,
+фронты и оси обнуляются, удержания в `$.input.devices()` чистые,
+`$.input.stuck()` пуст. Тест: `tests/agent/gamepad_test.py` (51 проверка).
 
 **Имена команд — ровно в camelCase, как в таблице.** `mousemove` или
 `mouse_move` не «молча не работают», а получают явный отказ:
@@ -310,7 +359,7 @@
 `tap` — нажатие ровно на один кадр (на следующий `step`), то есть `keyPressed`
 в JS сработает один раз.
 
-Имена клавиш — как в `engine.scancode()` (см. [internal/NATIVE.md](internal/NATIVE.md), раздел 5):
+Имена клавиш — как в `engine.scancode()` (см. `internal/NATIVE.md`, раздел 5):
 `"A"`…`"Z"`, `"Space"`, `"Return"`, `"Escape"`, `"Left"`, `"F1"`, `"Left Shift"`…
 Неизвестное имя → `{"ok":false,"error":"неизвестная клавиша: X"}`.
 
@@ -344,8 +393,11 @@
 **Откуда взять.** Клиент и раннер лежат в **репозитории движка**
 (`tools/agent_client.py`, `tools/run_tests.py`) — это инструменты разработки, а
 не часть поставки. В дистрибутиве (`dist/russiano2d-<платформа>/`) их нет: там
-только бинарники, `docs/`, `game/`, `sdk/` и `SDK_HANDOFF.md`; `sdk/tools/*` —
-это инструменты SDK на JS, а не клиент протокола. Поэтому:
+только бинарники, публичная документация `docs/`, `game/`, `sdk/` и файлы
+лицензий; `sdk/tools/*` — это инструменты SDK на JS, а не клиент протокола.
+Внутренние документы движка (справочник C-биндингов, журналы приёмки и отчёты)
+в поставку не входят — см. «Что попадает в поставку» в [RELEASING.md](RELEASING.md).
+Поэтому:
 
 * работаете из репозитория — просто `sys.path.insert(0, "tools")`;
 * работаете только с дистрибутивом — либо возьмите `tools/agent_client.py` из
@@ -471,6 +523,58 @@ $.test.near(x, 100, 0.5, 'игрок у отметки');
 (в агентском режиме это stderr) и складываются в `state.tests`, поэтому их
 видно и человеку, и программе.
 
+## 7.1. Звук: бинауральный режим и захват выхода
+
+Появились в 1.2.0; для агентских прогонов полезны и как API, и как диагностика.
+
+| Вызов | Что делает |
+|---|---|
+| `.emissive({color, radius, intensity, shadows, bloom})` | Emission-спрайт: узел сам светит на окружение (карта света + бюджет `<light>`). `color:'auto'` — средний цвет пикселей спрайта (кешируется). `false` — выключить |
+| `$.gfx.light.emitters()` | Излучатели последнего кадра: `[{node, color, radius, intensity, shadows, bloom, gives_light, degraded, auto_color, auto_color_known}]` |
+| `$.gfx.light.stats()` / `qualityReport()` | Числа деградации: `emitters`, `emitterLights`, `emitterDegraded` |
+| `engine.textureAverageColor(id, isSprite?)` | Средний цвет непрозрачных пикселей (0..255) или `null`; считается один раз при создании текстуры |
+| `$.audio.hrtf()` | состояние: `{on, backend, requested, itd, itd_source, reason, steam, head, farGain, rearGain, mix, up}`. `backend` — **фактический**: `'steam'` (настоящая HRTF, Steam Audio) или `'synthetic'` (встроенная модель: ITD, ILD, тень головы, подсказка «сзади»), `null` — выключено. `itd_source` — кто даёт межушную задержку сейчас: `'model'` (гибрид: у Steam Audio своей задержки нет — измерено 0 мс), `'backend'`, `'none'` |
+| `$.audio.hrtf(true)` / `{backend, itd, head, farGain, rearGain, mix, up}` | включить/настроить. По умолчанию **выключено**: обычный звук не меняется. `backend`: `'auto'`(по умолчанию)/`'steam'`/`'synthetic'`; `backend:'steam'` требует доступной HRTF, иначе честно остаётся модель и в `reason` пишется причина. `itd`: `'auto'`(по умолчанию)/`'model'`/`'off'` — при `'auto'` в steam-режиме межушную задержку добавляет **наша модель** (гибрид, видно в `itd_source`), `'off'` — ровно библиотечный выход без задержки |
+| `$.audio.captureStart(frames)` | начать захват **post-mix** (то, что слышит игрок: после шин и реверба) |
+| `$.audio.captured()` | `{frames, rate, samples:[L,R,…]}`; `rate` — из спека микшера, а не угаданное число |
+| `engine.audio.hrtfAvailable()` | поднялась ли **настоящая** HRTF (Steam Audio) в этой сборке |
+| `engine.audio.worldChannel(ch, on, hrtf, right, up, back, gain, cutoff)` | канал в режим Spatial Audio (Steam): направление, громкость, срез окклюзии; `false` — бэкенд недоступен |
+| `engine.audio.binaural()` / `setBinaural(on, head, farGain, rearGain, mix)` | состояние модели-фолбэка: радиус головы (м), усиление дальнего уха, полка «сзади», доля влажного сигнала |
+| `engine.audio.setChannelBinaural(ch, on, azimuth)` | полная модель на канале (азимут в радианах: 0 — спереди, +π/2 — справа) |
+| `engine.audio.setChannelItd(ch, on, azimuth)` | **гибрид**: только межушная задержка поверх того, что посчитал backend |
+| `engine.audio.captureStart(frames)` / `captured()` / `captureClear()` | диагностический захват микса: `captured()` → `{frames, rate, done, samples}` |
+| `$.audio.captureClear()` | остановить и очистить захват |
+
+Измеренные факты (32768 кадров @44.1 кГц), чтобы не гадать: модель даёт ITD
+0.658 мс на +90°, ILD 10.11 дБ на 4 кГц против 0.13 дБ на 200 Гц, тень −15.58 дБ,
+фронт/тыл +2.05 дБ; настоящая HRTF — ILD 10.34/0.24 дБ, тень −20.54 дБ, но
+**своей межушной задержки не имеет** (в steam-режиме ITD добавляет модель, и это
+видно в `itd`), высоты нет ни в одном 2D-бэкенде — только азимут и дистанция.
+Подробности — [highlevel/audiobus.md](highlevel/audiobus.md) §3.9.
+
+## 7.2. Шумы: `$.noise` (комплект OpenSimplex2/Perlin/Cellular + фракталы)
+
+Для генерации миров, текстур и тайлмапов из скриптов и автотестов. Числа
+считает FastNoiseLite (MIT, пин и эталон — в
+[highlevel/noise.md](highlevel/noise.md) §8), поэтому значения совпадают с
+апстримом: `tests/agent/noise_set_test.py` сверяет их с таблицей, снятой с
+непатченного заголовка.
+
+| Вызов | Что делает |
+|---|---|
+| `$.noise.simplex2(x, y, opts)` | OpenSimplex2; есть также `simplex2S`, `perlin`, `value`, `cubic`, `cellular`, `point3(x,y,z,opts)` для 3D |
+| `$.noise.fbm(x, y, opts)` / `ridged` / `pingpong` | фракталы поверх любого источника (`octaves`, `lacunarity`, `gain`, `pingPongStrength`) |
+| `$.noise.field({w,h,...})` → Float32Array | поле одним вызовом: 256×256 — 0.5 мс (simplex2), 2.8 мс (fbm 5 октав) против 22.7 мс поштучно; побитово совпадает с `get2` |
+| `$.noise.fieldRGBA({w,h,...})` → Uint8Array | сразу пиксели RGBA для `engine.textureFromPixels` |
+| `$.noise.field3` / `domainWarp` / `domainWarp3` / `warped` / `warped3` | слой 3D-шума и domain warp (сдвиг координат / сдвиг + шум) |
+| `$.noise.create(opts)` | явный генератор: `get2/get3/warp2/warp3/warped2/warped3/field/field3/fieldRGBA/params` |
+| `$.noise.params(opts)` / `defaults()` | что именно уйдёт в движок (имена + числа) / умолчания из C |
+| `$.noise.sources()` / `fractals()` / `cellularDistances()` / `cellularReturns()` / `warpTypes()` / `warpFractals()` / `rotations()` | списки допустимых значений |
+
+Зерно: без явного `seed` берётся зерно сессии (`--seed`, `$.random.seed(n)`),
+явное — побеждает. Мусорные параметры отвергаются ошибкой, а не «взяли 0».
+Существующие `$.random.noise1D/noise2D/simplex2D/noise` не изменились.
+
 ## 8. Если что-то не работает
 
 | Симптом | Причина и лечение |
@@ -481,7 +585,7 @@ $.test.near(x, 100, 0.5, 'игрок у отметки');
 | `--frames`/`--seconds` не останавливают прогон | в `--agent` они не действуют (см. §1): закрывайте stdin, шлите `quit` или считайте кадры сами |
 | Скриншот чёрный | кадр не отрисован: проверьте, что прошёл хотя бы один `step`, и что игра рисует что-то в кадре |
 | `console is not defined` в `$.ready` | в JS-контексте нет `console` — используйте `$.log`/`$.logger` (см. вступление) |
-| `error: неизвестная клавиша` | имя клавиши не понимает SDL: см. таблицу в [internal/NATIVE.md](internal/NATIVE.md#5-ввод) |
+| `error: неизвестная клавиша` | имя клавиши не понимает SDL: см. таблицу в `internal/NATIVE.md` |
 | `eval` вернул строку вместо объекта | в результате была ссылка на себя: см. §3.4, проверяйте `typeof result` |
 | Код возврата процесса — 134 (SIGABRT) | см. «Ограничения» ниже: падение на выходе наблюдалось однократно, вердикт по коду возврата ненадёжен |
 
@@ -489,14 +593,14 @@ $.test.near(x, 100, 0.5, 'игрок у отметки');
 
 Ниже — не дефекты, а свойства 0.1.34, о которые легко споткнуться при переносе
 игры и в автопроверках (раздел C отчёта внешней команды,
-[EXTERNAL_FEEDBACK.md](EXTERNAL_FEEDBACK.md)).
+`EXTERNAL_FEEDBACK.md`).
 
 | Ограничение | Что это значит на практике |
 |---|---|
 | **128 звуковых каналов** на всю игру (было 16) | когда все заняты, движок вытесняет звук с наименьшим `priority`; если вытеснить некого, `$.sound.play()` возвращает `-1`. В плотной сцене задавайте `priority` явно; фактический предел — `$.sound.channels()`, занятость — `$.sound.busy()` → `{active, free, total}`, подробности — [highlevel/sound.md](highlevel/sound.md) |
 | **Пул эмиттеров `$.hits` — 8 слотов** | девятый одновременный удар переиспользует первый слот (живые частицы прошлого залпа обрываются); [highlevel/hits.md](highlevel/hits.md) |
 | `$.random.seed(n)` пересевает **все** созданные потоки | независимость потоков сохраняется, пока не зовёте `seed()` повторно; после него последовательность каждого потока пересчитывается от нового зерна ([highlevel/random.md](highlevel/random.md) §4) |
-| Функции шума **игнорируют `--seed`** | `$.random.noise1D/noise2D/simplex2D/noise` берут зерно из аргумента (по умолчанию `0`), а не из `--seed`: при разных `--seed` карта шума одинаковая. Это другой детерминизм — «одинаковый всегда», а не «одинаковый при одном зерне» |
+| Функции шума берут зерно **сессии** по умолчанию | `$.random.noise1D/noise2D/simplex2D/noise` и весь `$.noise` без явного `seed` используют зерно сессии (`--seed`, `$.random.seed(n)`), а явно переданное зерно побеждает всегда. Раньше функции шума игнорировали `--seed` (брали своё `0`) — это исправлено по C1 отчёта BASHNYA, проверка — `tests/agent/noise_seed_test.py` и `tests/agent/noise_set_test.py` |
 | `--agent` **отключает hot reload** | слежение за файлами выключается вместе с агентским режимом (`hot_reload = opt_hot_reload && !opt_agent`), `engine.hotReload()` в этом режиме возвращает `false`; перезапуск скриптов вручную — команда `reload` |
 | **Код возврата — не единственный вердикт** | однократно наблюдался SIGABRT (134) на выходе в `main → SDL_Quit → SDL_QuitFilesystem`; на ~500 прогонах он не повторился. Проверяйте ещё и строки `ok`/`FAIL`, как это делает раннер тестов |
 | Чего **нет** (частые догадки) | `$.mathx` — неймспейс называется `$.math` ([highlevel/mathx.md](highlevel/mathx.md)); `$.camera.visibleRect()`, `$.time.fixed`, `queueFree` не существуют. Вместо `visibleRect` — `$.camera.worldToScreen`/`isOnScreen`; вместо `$.time.fixed` — `$.time.simDt`/`delta`; вместо `queueFree` — `node.destroy()` (немедленно) или `$.scene`-область для отложенной уборки |
@@ -513,3 +617,8 @@ $.test.near(x, 100, 0.5, 'игрок у отметки');
 ```bash
 R2D_TEST_AUDIO=real python3 tests/agent/highlevel_sound_seek_test.py
 ```
+
+| `$.window.displayModes()` | режимы дисплея: `[{width, height, refresh, desktop}]` (в headless список пуст — норма) |
+| `$.window.fullscreen({mode, width, height, refresh})` | `'desktop'`/`'exclusive'`/`'windowed'`; неизвестная опция → `{error, option}` и режим НЕ меняется; `fullscreen(true)` = desktop (совместимость) |
+| `$.window.state().fullscreen_mode` | факт: `'windowed' \| 'desktop' \| 'exclusive'`; инвариант `fullscreen === (fullscreen_mode !== 'windowed')` |
+| `$.window.hotkey(клавиша\|false)` | горячая клавиша фуллскрина: по умолчанию **F11**, `false` — отвязать |

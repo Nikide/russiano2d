@@ -128,6 +128,43 @@ $.alive.tick(dt);                        // один тик на все прив
 `tick` ставит узлу `fear`, `pulse`, `stress`, `broken` — игра читает их для
 анимации и интерфейса.
 
+## 8.1. Поверхность `$.alive` — все публичные имена
+
+Снято с живого движка (`Object.keys($.alive)` — 30 имён; факты проверены
+вызовами на фикстуре `tests/fixtures/hello`). Полные имена нужны гейту
+`tests/api_docs_sync_test.py`.
+
+| Имя | Факт |
+|---|---|
+| `$.alive.psyche(raw)` | психика: строка-психотип или описание; `psyche('veteran', { skill: 0.7 })` → `{ type: 'veteran', fear: 0, pulse: 62, stress: 0, … }` |
+| `$.alive.createPsyche(raw)` | то же ядро без подсистемы (для тестов и своих генераторов) |
+| `$.alive.director(opts)` | режиссёр рейда; `opts.lootValue()` вызывается сам. Состояние — **геттеры**, не методы: `enabled`, `phase`, `time` (с), `hunts`, `knobs`, `assignments`; методы — `start/stop/tick/objectiveFor/pickEnemies/save/load` |
+| `$.alive.createDirector(opts)` | чистое ядро режиссёра; `opts` накладываются на `DIRECTOR` (`tick` 4 с, `spareTime` 120 с, `loaded` 900, `richLate` 450, `lateTime` 300 с, `huntGap` [35, 55] с, `huntTtl` 28 с) |
+| `$.alive.attach(what, raw)` | дать психику узлу (`#npc`, обёртка, узел); возвращает психику или `null` |
+| `$.alive.of(what)` | психика узла или `null` |
+| `$.alive.tick(dt)` | тик всех привязанных: возвращает число обновлённых узлов; ставит узлу `fear`, `pulse`, `stress`, `broken` |
+| `$.alive.types()` | 44 психотипа (ключи `TYPE_BIAS`) |
+| `$.alive.typeBias(id)` | `{ fg, rg, fr, br: [5] }` или `null` |
+| `$.alive.traits()` | 14 имён черт |
+| `$.alive.traitDefaults()` | копия 14 значений по умолчанию |
+| `$.alive.TRAIT_DEFAULTS` | те же значения как объект (не копия) |
+| `$.alive.TYPE_BIAS` | таблица психотипов (объект) |
+| `$.alive.TRAIT_NAMES` | массив 14 имён черт |
+| `$.alive.BREAK_STRESS` | `0.72` — порог стресса, на котором проверяется срыв |
+| `$.alive.PULSE_REST` / `$.alive.PULSE_MAX` / `$.alive.PULSE_TUNNEL` | `62` / `200` / `140` — пульс покоя, предел, порог туннельного зрения |
+| `$.alive.breakKinds()` | `['panic', 'rage', 'freeze', 'surrender', 'prayer', 'stare']` |
+| `$.alive.breakTitles()` | русские названия видов срыва (7 записей, включая `vomit`) |
+| `$.alive.phases()` | `['spare', 'even', 'press']` |
+| `$.alive.phaseTitle(phase)` | русское название фазы, а для неизвестной — сама строка |
+| `$.alive.knobsFor(phase)` | `{ mercy, let_win, focus }`: `spare` → `{0.6, 0.4, 0}`, `even` → `{0.2, 0, 0}`, `press` → `{0, 0, 0.7}` |
+| `$.alive.clamp(value, lo, hi)` | число в диапазон; не-число даёт `lo` |
+| `$.alive.moveToward(current, target, maxDelta)` | шаг к цели не больше `maxDelta` |
+| `$.alive.makeRandom(seed)` | детерминированный ГПСЧ: `{ next(), range(lo, hi), chance(p), pick(list) }` — одинаковый сид даёт одинаковую последовательность |
+| `$.alive.normalizeSpec(raw)` | `{ type, traits, skill, role, squadId, leader, seed, ocean }`; черты зажаты (`morale` −1…1, остальные 0…1), `skill` 0…1 |
+| `$.alive.makeBias(type, traits, neuroticism)` | профиль акцентуации `{ fg, rg, fr, br: [5] }` |
+| `$.alive.pickHunter(list, assignments, playerX)` | `{ id, pos }` или `null`; пропускает мёртвых, уже назначенных, дерущихся, `mad` и `hostile: false` |
+| `$.alive.kitScore(kit)` | `damage / max(0.05, fireRate) + parts * 10` — чем хуже снаряжение, тем меньше очко |
+
 ## 9. Ограничения (честно)
 
 * **тело не переносилось**: `alive_npc_core.gd` (1 289 строк), `alive_mover.gd`,

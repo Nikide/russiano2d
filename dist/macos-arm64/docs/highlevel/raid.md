@@ -34,8 +34,9 @@ $.ready(() => {
 |---|---|
 | `$.raid.start(spec?)` | создать план, сгенерировать и сделать текущим |
 | `$.raid.create(spec)` | создать план, не делая текущим |
-| `$.raid.current()` / `end()` | текущий рейд / закончить |
-| `$.raid.heightAt(x)` / `stream(x)` | рельеф и стриминг текущего рейда |
+| `$.raid.current()` | текущий рейд (или `null`, если рейда нет) |
+| `$.raid.end()` | закончить рейд: возвращает закрытый план и очищает текущий |
+| `$.raid.heightAt(x)` / `$.raid.stream(x)` | рельеф и стриминг текущего рейда |
 
 `spec`: `seed`, `width` (по умолчанию 2400 тайлов), `chunk` (32), `radius`
 (окно стриминга), `groundY`, `street`, `relief`, `lootCap`, `npcCap`,
@@ -117,7 +118,60 @@ $.raid.start(data);                     // продолжить тот же ре
 * **нет бюджета спавна по радиусу**: капы (`lootCap`/`npcCap`) глобальные, а
   «сколько держать в памяти» решает окно стриминга.
 
-## 8. Проверка
+## 8. Чистые помощники плана
+
+Ядро рейда (createRaid и его генераторы) движка не касается: районы, рельеф,
+постройки, выходы и наполнение — функции от сида. Они открыты наружу, потому
+что ими пользуются тесты (`tests/js/raid_test.mjs`) и собственные генераторы
+игры: можно взять раскладку районов и планировку домов, а мир построить
+по-своему, не поднимая подсистему целиком.
+
+| Вызов | Возвращает |
+|---|---|
+| `$.raid.createRaid(spec)` | новый план рейда (то же, что `$.raid.create`), текущим он не становится |
+| `$.raid.makeRandom(seed)` | детерминированный генератор `{ next, int, range, pick, chance }` — xorshift32 с размешиванием сида финализатором MurmurHash3 |
+| `$.raid.heightNoise(x, seed, octaves?)` | рельеф в примерном диапазоне `[-1, 1]`: сумма синусов с ростом частоты (по умолчанию 3 октавы) |
+| `$.raid.layoutDistricts(width, seed, spec?)` | районы слева направо: `{ id, title, kind, from, to, forest, loot, relief, buildings }`; третий аргумент — своя раскладка вместо стандартных пяти |
+| `$.raid.districtAt(districts, x)` | район на координате: левее мира — первый, правее — последний, пустой список — `null` |
+| `$.raid.planBuildings(district, seed, spec)` | дома района вдоль «улицы»: `{ x, y, w, h, kind, district, rooms }`; `spec` — `{ street, groundY }` |
+| `$.raid.planExits(districts, seed)` | выходы: по одному на район плюс `far` — «дальний выход» на краю карты |
+| `$.raid.planSpawns(districts, seed, spec)` | `{ loot, npcs }` — план тайников и NPC по районам с учётом `lootCap`/`npcCap` |
+| `$.raid.planStream(x, chunk, radius)` | `{ load, keep }`: номера чанков на загрузку и множество нужных (отрицательные в загрузку не попадают) |
+| `$.raid.chunkIndex(x, chunk)` | номер чанка по координате |
+
+Проверено на живом движке (фикстура `bare`, seed 777):
+
+```js
+$.raid.chunkIndex(95, 32);                    // 2
+$.raid.chunkIndex(-5, 32);                    // -1
+$.raid.planStream(0, 32, 2).load;             // [0, 1, 2]
+$.raid.layoutDistricts(2400, 777).map(d => [d.id, d.from, d.to]);
+// [['village',0,375], ['pgt',375,770], ['city',770,1320],
+//  ['industry',1320,1770], ['swamp',1770,2400]]
+$.raid.districtAt($.raid.layoutDistricts(2400, 777), -10).id;   // 'village'
+$.raid.planExits($.raid.layoutDistricts(2400, 777), 777).map(e => e.key);
+// ['village','pgt','city','industry','swamp','far']
+$.raid.planSpawns($.raid.layoutDistricts(2400, 777), 777,
+                  { lootCap: 20, npcCap: 7 });  // { loot: 20, npcs: 7 }
+$.raid.heightNoise(500, 777, 3);              // -0.098…
+```
+
+Три детали, о которые легко споткнуться:
+
+* ноль в параметре означает «по умолчанию», а не минимум: `chunk = 0` — это 32,
+  `radius = 0` — это 2, поэтому `$.raid.chunkIndex(95, 0)` возвращает 2, а
+  `$.raid.planStream(0, 32, 0).load` — `[0, 1, 2]`; в самом плане
+  (`$.raid.start`/`$.raid.create`) границы другие: `chunk` поднимается до 8,
+  `width` — до 64, отрицательный `radius` становится 0 (проверено:
+  `$.raid.createRaid({ chunk: 2, width: 10, radius: -3 })` → 8 / 64 / 0);
+* координата левее нуля даёт отрицательные номера чанков, и в загрузку такие
+  номера не попадают: `$.raid.planStream(-70, 32, 1).load` — пустой список;
+* `$.raid.layoutDistricts` тянет последний район до края мира: округления
+  оставляют правый край занятым (в примере выше `swamp` кончается на 2400);
+* `$.raid.createRaid` возвращает план со `generated: false` — районы, дома и
+  наполнение считаются при `generate()`, а `$.raid.start` делает это сразу.
+
+## 9. Проверка
 
 ```bash
 # детерминированность, раскладка районов, дома, выходы, капы, стриминг, погода

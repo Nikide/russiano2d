@@ -36,21 +36,21 @@ const dir = $.math.vecNormalize($.math.vecSub(hero.pos(), enemy.pos()));
 
 | Функция | Назначение |
 |---|---|
-| `clamp(v, lo, hi) → number` | Ограничить значение диапазоном `[lo, hi]` |
-| `lerp(a, b, t) → number` | Линейная интерполяция; `t` может выходить за `[0,1]` |
-| `inverseLerp(a, b, v) → number` | Доля пути от `a` к `b`; при `a === b` → `0` |
-| `remap(v, inMin, inMax, outMin, outMax) → number` | Пересчёт значения из одного диапазона в другой |
-| `moveTowards(cur, target, maxDelta) → number` | Шаг к цели не больше `maxDelta`, без перелёта |
-| `smoothstep(edge0, edge1, x) → number` | S-кривая 0…1 между границами |
-| `approach(cur, target, rate, dt) → number` | Экспоненциальное сглаживание, не зависящее от FPS |
-| `wrap(v, min, max) → number` | Завернуть в `[min, max)` |
-| `pingPong(v, len) → number` | «Туда-обратно» 0…len…0 с периодом `2*len` |
-| `snap(v, step) → number` | Притянуть к шагу сетки (`snap(37, 16)` → `32`) |
-| `angleDiff(from, to) → number` | Кратчайшая разница углов в `[-π, π]` |
-| `deg(radians) → number` | Радианы → градусы |
-| `rad(degrees) → number` | Градусы → радианы |
-| `sign(v) → number` | `-1`, `0` или `1` |
-| `roundTo(v, digits) → number` | Округлить до `digits` знаков (`digits < 0` — до десятков) |
+| `$.math.clamp(v, lo, hi) → number` | Ограничить значение диапазоном `[lo, hi]` |
+| `$.math.lerp(a, b, t) → number` | Линейная интерполяция; `t` может выходить за `[0,1]` |
+| `$.math.inverseLerp(a, b, v) → number` | Доля пути от `a` к `b`; при `a === b` → `0` |
+| `$.math.remap(v, inMin, inMax, outMin, outMax) → number` | Пересчёт значения из одного диапазона в другой |
+| `$.math.moveTowards(cur, target, maxDelta) → number` | Шаг к цели не больше `maxDelta`, без перелёта |
+| `$.math.smoothstep(edge0, edge1, x) → number` | S-кривая 0…1 между границами |
+| `$.math.approach(cur, target, rate, dt) → number` | Экспоненциальное сглаживание, не зависящее от FPS |
+| `$.math.wrap(v, min, max) → number` | Завернуть в `[min, max)` |
+| `$.math.pingPong(v, len) → number` | «Туда-обратно» 0…len…0 с периодом `2*len` |
+| `$.math.snap(v, step) → number` | Притянуть к шагу сетки (`snap(37, 16)` → `32`) |
+| `$.math.angleDiff(from, to) → number` | Кратчайшая разница углов в `[-π, π]` |
+| `$.math.deg(radians) → number` | Радианы → градусы |
+| `$.math.rad(degrees) → number` | Градусы → радианы |
+| `$.math.sign(v) → number` | `-1`, `0` или `1` |
+| `$.math.roundTo(v, digits) → number` | Округлить до `digits` знаков (`digits < 0` — до десятков) |
 
 Особые случаи, на которые опираются тесты:
 
@@ -78,18 +78,18 @@ const fade = $.math.smoothstep(0, 0.4, t);
 
 | Функция | Назначение |
 |---|---|
-| `vec2(x, y) → {x,y}` | Вектор из двух чисел |
-| `vecLength(v) → number` | Длина |
-| `vecLengthSq(v) → number` | Квадрат длины — дешевле для сравнений |
-| `vecNormalize(v) → {x,y}` | Единичный вектор; нулевой остаётся нулевым |
-| `vecAdd(a, b)`, `vecSub(a, b) → {x,y}` | Сумма и разность (`a - b`) |
-| `vecScale(v, s) → {x,y}` | Умножение на число |
-| `vecDot(a, b) → number` | Скалярное произведение |
-| `vecDist(a, b) → number` | Расстояние между точками |
-| `vecLerp(a, b, t) → {x,y}` | Интерполяция между векторами |
-| `vecRotate(v, angle) → {x,y}` | Поворот на угол (радианы) |
-| `vecFromAngle(angle, length) → {x,y}` | Вектор из угла, длина по умолчанию `1` |
-| `vecAngle(v) → number` | Угол вектора, `atan2(y, x)` |
+| `$.math.vec2(x, y) → {x,y}` | Вектор из двух чисел |
+| `$.math.vecLength(v) → number` | Длина |
+| `$.math.vecLengthSq(v) → number` | Квадрат длины — дешевле для сравнений |
+| `$.math.vecNormalize(v) → {x,y}` | Единичный вектор; нулевой остаётся нулевым |
+| `$.math.vecAdd(a, b)`, `$.math.vecSub(a, b) → {x,y}` | Сумма и разность (`a - b`) |
+| `$.math.vecScale(v, s) → {x,y}` | Умножение на число |
+| `$.math.vecDot(a, b) → number` | Скалярное произведение |
+| `$.math.vecDist(a, b) → number` | Расстояние между точками |
+| `$.math.vecLerp(a, b, t) → {x,y}` | Интерполяция между векторами |
+| `$.math.vecRotate(v, angle) → {x,y}` | Поворот на угол (радианы) |
+| `$.math.vecFromAngle(angle, length) → {x,y}` | Вектор из угла, длина по умолчанию `1` |
+| `$.math.vecAngle(v) → number` | Угол вектора, `atan2(y, x)` |
 
 ```js
 const toHero = $.math.vecSub(hero.pos(), turret.pos());
@@ -102,12 +102,12 @@ if ($.math.vecLength(toHero) < 300 && $.math.vecDot(aim, $.math.vecNormalize(toH
 
 | Функция | Назначение |
 |---|---|
-| `rect(x, y, w, h) → {x,y,w,h}` | Прямоугольник по левому верхнему углу |
-| `rectContains(r, point)` / `rectContains(r, x, y) → bool` | Точка внутри; границы включительно |
-| `rectOverlap(a, b) → bool` | Пересекаются ли (касание краями — нет) |
-| `rectIntersect(a, b) → {x,y,w,h}` \| `null` | Пересечение или `null` |
-| `rectCenter(r) → {x,y}` | Центр |
-| `rectGrow(r, amount) → {x,y,w,h}` | Расширить (`amount < 0` — сжать) |
+| `$.math.rect(x, y, w, h) → {x,y,w,h}` | Прямоугольник по левому верхнему углу |
+| `$.math.rectContains(r, point)` / `$.math.rectContains(r, x, y) → bool` | Точка внутри; границы включительно |
+| `$.math.rectOverlap(a, b) → bool` | Пересекаются ли (касание краями — нет) |
+| `$.math.rectIntersect(a, b) → {x,y,w,h}` \| `null` | Пересечение или `null` |
+| `$.math.rectCenter(r) → {x,y}` | Центр |
+| `$.math.rectGrow(r, amount) → {x,y,w,h}` | Расширить (`amount < 0` — сжать) |
 
 ```js
 const view = $.math.rect(cam.x - cam.w / 2, cam.y - cam.h / 2, cam.w, cam.h);

@@ -40,23 +40,49 @@ $.real2d.dispose(id);
 
 | Вызов | Возвращает | Назначение |
 |---|---|---|
-| `load(path)` | `number` | id контейнера; повторный вызов отдаёт тот же id |
-| `frame(id, opts)` | `number` | id спрайта в общем батче движка |
-| `pixels(id)` | `Uint8Array` | **копия** RGBA8 последнего кадра на момент вызова (для проверок) |
-| `info(id)` | `object` | canvas, atlas, rank, dim, счётчики кадра, фазы `ms`, `last_error` |
-| `provenance(id, x, y)` | `object\|null` | цепочка patch → треугольник → UV для пикселя |
-| `provenanceMap(id)` | `Uint16Array` | индекс патча+1 на пиксель (нужен рендер с `provenance`) |
-| `atlasPixels(id)` | `Uint8Array` | копия атласа (или подменённого) — для доказательных мутаций |
-| `patchWeights(id, yaw)` | `array` | что решил движок: `gate`, перенос, масштаб по патчам |
-| `debugSetAtlas(id, bytes)` | `bool` | подмена атласа целиком (доказательные тесты) |
-| `handles()` | `Map` | путь → `{ id, users }`: что уже загружено (отладка и тесты) |
-| `yaw(rad)` | `number` | нормализовать угол в `0..2π` (та же функция, что у `.real2dYaw()`); нечисло — `RangeError` |
-| `dispose(id)` | `bool` | освободить ассет и его текстуру |
+| `$.real2d.load(path)` | `number` | id контейнера `.r2d4`; повторный вызов отдаёт тот же id и увеличивает счётчик пользователей |
+| `$.real2d.frame(id, opts)` | `number` | id спрайта в общем батче движка |
+| `$.real2d.pixels(id)` | `Uint8Array` | **копия** RGBA8 последнего кадра на момент вызова (для проверок) |
+| `$.real2d.info(id)` | `object` | структурные факты ассета и кадра: `canvas`, `atlas_w`/`atlas_h`, `patches`, `rings`, `rank`, `dim`, `features`, счётчики кадра (`triangles_drawn`, `patches_drawn`, `pixels_tested`, `pixels_written`, `fold_rejects`, `max_coverage`), фазы `ms`, `last_error` |
+| `$.real2d.provenance(id, x, y)` | `object\|null` | что попало в пиксель: `{ patch, triangle, x, y, rgba }` (нужен рендер с `provenance: true`) |
+| `$.real2d.provenanceMap(id)` | `Uint16Array` | индекс патча+1 на пиксель (нужен рендер с `provenance`) |
+| `$.real2d.atlasPixels(id)` | `Uint8Array` | копия атласа (или подменённого) — для доказательных мутаций |
+| `$.real2d.patchWeights(id, yaw)` | `array` | что решил движок по каждому патчу: `{ id, ring, gate, depth, dx, dy, sx, sy }` |
+| `$.real2d.debugSetAtlas(id, bytes)` | `bool` | подмена атласа целиком (доказательные тесты) |
+| `$.real2d.handles()` | `Map` | снимок «путь → `{ id, users }`»: что уже загружено (отладка и тесты) |
+| `$.real2d.yaw(rad)` | `number` | нормализовать угол в **(-π, π]** — та же функция, что у `.real2dYaw()`; нечисло — `RangeError` |
+| `$.real2d.dispose(id)` | `bool` | освободить ассет и его текстуру; запись в `handles` тоже снимается |
 
 `frame` принимает `{ yaw, blink, mouth, scale, validate, provenance }`:
 `yaw` — радианы, `blink`/`mouth` — 0..1, `scale` — размер растра 128..1024,
 `validate` включает счётчик записей на пиксель (проверка fill rule),
 `provenance` — запись цепочки для `provenance()`.
+
+Проверено на живом движке (`demos/real2d`, ассет `head_real2d_v4.r2d4`):
+`$.real2d.yaw(-1)` → `-1`, `$.real2d.yaw(7)` → `0.7168…`;
+`$.real2d.handles()` → `Map(1) { 'assets/head_real2d_v4.r2d4' => { id: 0, users: 1 } }`,
+повторный `$.real2d.load` того же пути даёт тот же `id` и `users: 3`;
+`$.real2d.patchWeights(0, 1.05)` → 11 патчей с `gate`/`depth`/`dx`/`dy`/`sx`/`sy`;
+`$.real2d.provenanceMap(0)` → `Uint16Array(65536)`, 32081 ненулевых пикселей;
+`$.real2d.atlasPixels(0)` → `Uint8Array(6 290 064)`;
+`$.real2d.provenance(0, 128, 128)` → `{ patch: 'hair_back_mass', triangle: 25, x: 128, y: 128, rgba: [48, 49, 69, 255] }`.
+
+### Владелец памяти: контейнер читается из груза
+
+`$.real2d.load` читает `.r2d4` через `r2d_vfs_read()`: в собранной игре это
+указатель **внутрь буфера груза**, а не отдельная копия. Освобождать такой
+указатель разрешено только через `r2d_vfs_free()` — для груза это no-op, для
+файла с диска — `SDL_free`. Прямой `free()` здесь давал `SIGABRT` (`malloc:
+pointer being freed was not allocated`) ровно тогда, когда игра переезжала из
+каталога в груз: на диске всё работало, в standalone-сборке падало. Починка —
+commit `5ffafce` (4 места в `src/real2d4.c`, столько же в `src/font.c`:
+там тот же класс ошибки ломал выход и перезагрузку шрифта), числа из коммита:
+демо `demos/real2d` в standalone падало 3 раза из 3, после починки — 0 из 3.
+
+Контракт сторожит `tests/agent/real2d_payload_crash_test.py`: статический
+разбор владения указателями (ловит `free()` по результату `r2d_vfs_read`,
+у сторожа есть самопроверка на заведомо плохом коде) плюс честная сборка
+standalone-демо и headless-прогон.
 
 ## Узел `<real2d>`
 

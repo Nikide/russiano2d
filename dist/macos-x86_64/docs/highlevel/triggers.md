@@ -322,10 +322,11 @@ $.activation.watch('#trap', { region: { x: 1200, y: 300, w: 400, h: 400 } });
 
 | Метод | Назначение |
 |---|---|
-| `watch(what, opts)` | наблюдение; ручка `{ stop(), active(), nodes(), inside(node), rects() }` |
-| `visible(what, opts)` | виден ли узел сейчас (одноразовая проверка) |
-| `auto(what, opts)` | включать/выключать обработку по видимости |
-| `stats()` / `clear()` | `{ watchers, nodes }` / снять все наблюдения |
+| `$.activation.watch(what, opts)` | наблюдение; ручка `{ stop(), active(), nodes(), inside(node), rects() }` |
+| `$.activation.visible(what, opts)` | виден ли узел сейчас (одноразовая проверка) |
+| `$.activation.auto(what, opts)` | включать/выключать обработку по видимости |
+| `$.activation.stats()` | `{ watchers, nodes }` — наблюдателей и узлов под наблюдением (проверено: `watch('#hero')` → `{watchers: 1, nodes: 1}`) |
+| `$.activation.clear()` | снять ВСЕ наблюдения (смена сцены, тесты): ручки помечаются `alive = false`; возвращает `$.activation` |
 
 `auto(what, opts)`: `on`/`off` — наборы политик (по умолчанию `on: true`,
 `off` — «неактивный»), `areas: ['sense']` — включать и выключать sensor-области

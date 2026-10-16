@@ -112,6 +112,30 @@ $.cels.tick(dt);                                 // один тик на все 
 `termination`, при решении повторно посещённый узел пропускается. Без этого
 стек QuickJS кончался с `Maximum call stack size exceeded`.
 
+## 5.1. Поверхность `$.cels` — все публичные имена
+
+Снято с живого движка (`Object.keys($.cels)`), факты проверены вызовами.
+
+| Имя | Факт |
+|---|---|
+| `$.cels.define(name, raw)` | описать граф по имени; без имени — `null` и запись в лог; возвращает нормализованный граф `{ root, drivers, fps, mirrorDriver }` |
+| `$.cels.get(name)` | граф по имени или `null` |
+| `$.cels.has(name)` | есть ли граф (`bool`) |
+| `$.cels.names()` | имена графов |
+| `$.cels.remove(name)` | удалить граф (`bool`) |
+| `$.cels.clear()` | очистить библиотеку; возвращает число удалённых графов |
+| `$.cels.load(data)` | загрузить графы из `{ graphs: {...} }` или `{ имя: spec }` |
+| `$.cels.create(name, drivers?)` | состояние графа по имени или `null`, если графа нет; второй аргумент — начальные водители |
+| `$.cels.attach(what, name, opts?)` | привязать граф к узлу (`opts`: `sprites`, `fields`, `flipX`, `onCel`); кадр применяется сразу |
+| `$.cels.of(what)` | состояние графа узла или `null` |
+| `$.cels.state(what, values)` | задать водителей узлу (или `null`, если граф не привязан) |
+| `$.cels.tick(dt)` | тик всех привязанных графов; `dt` в секундах; возвращает число обновлённых узлов |
+| `$.cels.tickNode(what, dt)` | тик одного узла; возвращает состояние графа или `null` |
+| `$.cels.createCelRuntime(spec)` | чистое ядро: состояние графа из `{ graph, drivers }` |
+| `$.cels.createCelLibrary()` | чистая библиотека графов: `define/get/has/names/remove/clear/load` |
+| `$.cels.parseGraph(raw)` | разбор описания графа в нормализованный вид; `parseGraph(null)` → корень `termination` |
+| `$.cels.resolveIndex(state, driver, size, next?)` | индекс кадра по значению водителя: `driver` — `{ name, percentage?, auto? }`, `size` — число кадров, `next` — сдвиг для `auto`; `percentage` читается как доля 0…1, иначе целое по модулю |
+
 ## 6. Ограничения
 
 * **граф показывает имена кадров, а не рисует**: связка с атласами — на игре

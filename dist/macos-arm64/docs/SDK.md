@@ -3,12 +3,12 @@
 Статус документа: описывает **фактическое** состояние SDK (не цель). Целевая
 архитектура и законы — спецификация «Следующая цель SDK AGENT.md»: она снята с
 текущей документации и удалена из репозитория, текст доступен только в истории
-Git (`git log --diff-filter=D -- "к удалению.md"`, файл удалён после f70762a);
-проверки — [SDK_VERIFICATION.md](SDK_VERIFICATION.md); журнал работы —
-[SDK_HANDOFF.md](../SDK_HANDOFF.md).
+Git (`git log --diff-filter=D -- "к удалению.md"`, файл удалён после f70762a).
 
-Недостающие возможности и критерии их приёмки —
-[SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md).
+Как проверяется то, что здесь написано, — в `docs/TESTING.md` (гейты и тесты,
+в том числе по этому документу). Внутренние журналы работы над SDK и очередь
+незакрытых возможностей в поставку не входят — они живут только в репозитории
+движка.
 
 ```text
 GAME = CODE + DATA          SDK = R2D-приложение + инструменты для CODE + DATA
@@ -209,7 +209,7 @@ CI вызывает SDK native tests, CLI, batch manifest,
 
 | Фаза | Статус по acceptance §60–67 | Проверка |
 |---|---|---|
-| 0 Audit | IMPLEMENTED | SDK_HANDOFF.md, последующий аудит SDK_VERIFICATION.md |
+| 0 Audit | IMPLEMENTED | внутренние журналы аудита SDK (в поставку не входят) |
 | 1 Shell | IMPLEMENTED | sdk_shell_test, sdk_cli_test |
 | 2 Classic 2D vertical slice | IMPLEMENTED | sdk_classic2d_test |
 | 3 Студии данных Classic 2D | IMPLEMENTED | sdk_studios_test, sdk_data_parity_test |
@@ -448,7 +448,9 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 `highlevel_game_path_test.py` и `neon_courier_test.py`. Для автономного текста
 проект явно содержит Open Sans с лицензией.
 
-Полная сверка философии и большого гайдлайна — [SDK_VERIFICATION.md](SDK_VERIFICATION.md).
+Полная сверка философии и большого гайдлайна — во внутреннем журнале проверок
+(в поставку не входит); публичная сторона — `docs/PHILOSOPHY.md` и гейты
+`tests/doc_claims_test.py`, `tests/doc_coverage_test.py`.
 
 ## 16. Завершение рабочего процесса (2026-10-09)
 
@@ -467,7 +469,7 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
   `$.sdkApp.recovery.snapshot()/flush()/restore(abs)/discard(abs)/offer(abs)`.
 
 Новые регрессии: sdk_runtime_ui / sdk_package / sdk_recovery. Подробные
-доказательства — SDK_HANDOFF и SDK_VERIFICATION.
+доказательства — во внутренних журналах движка (в поставку не входят).
 
 ### Типы валидаторов
 

@@ -55,28 +55,61 @@ $.devtools.hitch();                   // те же факты, что видно
 
 ## 2. Машиночитаемый доступ к вкладкам
 
+Факты сняты с живого движка (`Object.keys($.devtools)` — 75 публичных имён плюс
+сам `$.devtools`; вызовы проверены на фикстуре `tests/fixtures/hello`). Полные
+имена нужны гейту `tests/api_docs_sync_test.py`.
+
 | Вызов | Что отдаёт |
 |---|---|
-| `perf()` | `{ tab, rows, summary, text:{summary,stats,source}, graph:{source,stats,stats_source,bars,samples,floor_ms} }` |
-| `tree()` | дерево зон: движковые ряды + пользовательские зоны |
-| `watches()` / `watchThreshold(n)` / `watchReset()` | наблюдения и их порог |
-| `hitch()` | `{ available, count, total, threshold, selected, rows[], capture, text }` |
-| `hitchSelect(i)` / `hitchThreshold(ms)` / `hitchClear()` | выбор захвата, порог детектора, очистка |
-| `physics()` | `{ mode, bodies[], overlay, text }` |
-| `physicsOverlay(mode)` | `'off' \| 'all' \| 'selected'` (без аргумента — чтение) |
-| `render()` | `{ info, targets[], textures, viewport, lights, lights_dropped, text }` |
-| `events()` | `{ on, count, dropped, filter, paused, rows[], hit, text }` |
-| `eventsFilter(f)` / `eventsPause(on)` / `eventsClear()` | фильтр, пауза, очистка журнала |
-| `audio()` | `{ busy, playing, sfx, music, master, buses, handles[], channels[], text }` |
-| `audioStop(channel)` / `audioBus(what, name, value)` | стоп канала; mute/solo/громкость шины |
-| `input()` | `{ actions, bindings, conflicts, waiters, stuck, consumed, devices, pads, slots, mouse, text }` |
-| `assetsTab()` | `{ available, list[], stats, text }` |
-| `memory()` / `memoryBaseline()` | счётчики, пределы, дельты, серии замеров, подозрения на утечку |
-| `consoleRun(line)` / `consoleClear()` / `consoleHistory()` / `consoleLog()` / `consoleLast()` | консоль панели |
-| `timeStep()` / `step()` / `steps(n)` / `pause(on)` / `timeScale(v)` / `timeControl(what)` | время и шаг кадра |
-| `report()` / `copyReport()` | `{ snapshot, text, json }` — отчёт §39 |
-| `openRuntime()` / `closeRuntime()` / `runtimeOpen()` / `refreshRuntime()` / `runtimePanel()` | панель F1 целиком |
-| `tickOverlay()` / `tickStep()` | кадровый шаг оверлея форм и «шага кадра» (зовёт движок) |
+| `$.devtools.perf()` | `{ tab, rows, summary, text:{summary,stats,source}, graph:{source,stats,stats_source,bars,samples,floor_ms} }` |
+| `$.devtools.tree()` | дерево зон: движковые ряды + пользовательские зоны |
+| `$.devtools.watches()` | наблюдения `$.debug.watches()` с previous/delta/min/max/порогом |
+| `$.devtools.watchThreshold(name, value)` | порог наблюдения по имени; `null`/`false`/без значения — снять; `bool` (неизвестное имя — `false`) |
+| `$.devtools.watchReset()` | сбросить накопленные previous/min/max (`true`) |
+| `$.devtools.hitch()` | `{ available, count, total, threshold, selected, rows[], capture, text }` |
+| `$.devtools.hitchSelect(index)` | выбрать захват по индексу движка (0 — самый старый); `bool` |
+| `$.devtools.hitchThreshold(ms)` | без аргумента — текущий порог (число или `null`); с числом > 0 — выставить и вернуть его; мусор — `null` |
+| `$.devtools.hitchClear()` | очистить кольцо захватов; `bool` (есть ли детектор) |
+| `$.devtools.physics()` | `{ mode, bodies[], overlay, text }` |
+| `$.devtools.physicsOverlay(mode)` | `'off' \| 'all' \| 'selected'`; без аргумента — чтение, неизвестный режим — `false` |
+| `$.devtools.render()` | `{ info, targets[], textures, viewport, lights, lights_dropped, text }` |
+| `$.devtools.events()` | `{ on, count, dropped, filter, paused, rows[], hit, text }` |
+| `$.devtools.eventsFilter(kind)` | фильтр журнала `$.trace`; возвращает строку фильтра (пустая — снять) |
+| `$.devtools.eventsPause(on)` | пауза журнала; без аргумента — переключить; возвращает новое состояние |
+| `$.devtools.eventsClear()` | очистить журнал (`true`) |
+| `$.devtools.audio()` | `{ busy, playing, sfx, music, master, buses, handles, channels[], text }` |
+| `$.devtools.audioStop(channel)` | стоп канала по номеру; `bool` — играл ли он до остановки |
+| `$.devtools.audioBus(what, name, value)` | `what`: `'mute' \| 'solo' \| 'volume'`; `bool` |
+| `$.devtools.input()` | `{ actions, bindings, conflicts, waiters, stuck, consumed, devices, pads, slots, mouse, text }` |
+| `$.devtools.assetsTab()` | `{ available, list[], stats, text }` |
+| `$.devtools.assets()` | `{ indicator, stats, list, graph }` — хот-релоад (§27); без `$.reload` — `null` |
+| `$.devtools.assetsReload()` | `$.reload.reloadAll()` (или `null` без `$.reload`) |
+| `$.devtools.assetsPoll()` | `$.reload.poll()` (или `null`) |
+| `$.devtools.memory()` | `{ counters, limits, deltas, samples, series, window_frames, leaks, text }` |
+| `$.devtools.memoryBaseline()` | снять новую базовую линию для дельт |
+| `$.devtools.consoleRun(line)` | выполнить строку: `{ line, ok, out }` (история ведётся) |
+| `$.devtools.consoleClear()` | очистить лог консоли (`true`) |
+| `$.devtools.consoleHistory()` | массив введённых строк |
+| `$.devtools.consoleLog()` | массив строк лога (`> команда` и вывод) |
+| `$.devtools.consoleLast()` | последняя команда: `{ line, ok, out }` |
+| `$.devtools.timeStep()` | `{ paused, scale, sim, pres, steps, freeze_left, slow_count, step_left, text:{state,notes} }` |
+| `$.devtools.step()` | шаг одного кадра: возвращает `1` |
+| `$.devtools.steps(n)` | шаг `n` кадров (зажато 1…600); возвращает фактическое число |
+| `$.devtools.pause(on)` | пауза; без аргумента — переключить; возвращает новое состояние |
+| `$.devtools.timeScale(x)` | масштаб времени `x >= 0`; возвращает `x` или `null` на мусоре |
+| `$.devtools.timeControl(what, value)` | `'hitStop' \| 'freeze' \| 'slow' \| 'reset'`; `bool` |
+| `$.devtools.report()` | `{ snapshot, text, json }` — отчёт §39 |
+| `$.devtools.copyReport(what)` | скопировать отчёт: `'json'` или текст; возвращает скопированную строку |
+| `$.devtools.openRuntime()` | открыть панель F1 (`bool`; без RmlUi — `false`) |
+| `$.devtools.closeRuntime()` | закрыть панель F1 |
+| `$.devtools.runtimeOpen()` | открыта ли F1 (`bool`) |
+| `$.devtools.refreshRuntime(force)` | перерисовать F1; без `force` — раз в 6 кадров |
+| `$.devtools.runtimePanel()` | `{ open, doc, tab, frames, snapshot }` |
+| `$.devtools.tab(name)` | переключить вкладку F1; `bool` (`false` на неизвестной) |
+| `$.devtools.tabName()` | имя текущей вкладки F1 |
+| `$.devtools.tickOverlay()` | кадровый шаг оверлея форм физики (§25) |
+| `$.devtools.tickStep()` | кадровый шаг «шага кадра»: после N кадров возвращает паузу (§33) |
+| `$.devtools.tickPick()` | кадровый шаг picking: подсветка bounds и выбор кликом по миру |
 
 Чего нельзя измерить — панель не выдумывает: неизвестное значение выводится
 как `N/A` или `—`, пустой hitch-список — «захватов нет», причины захвата нет —
@@ -84,30 +117,37 @@ $.devtools.hitch();                   // те же факты, что видно
 
 ## 3. Инспектор сущности (F2)
 
-| Вызов | Смысл |
+| Вызов | Смысл и факт |
 |---|---|
-| `open()` / `close()` / `toggle()` / `isOpen()` | панель; в сборке без RmlUi `open()` честно вернёт `false` |
-| `panel()` | `{ open, doc, rows, entities, selected, selected_nid, selector, refreshed, search, search_kind, filters, offset, section, pick, pick_hover, picked }` |
-| `list()` | текущая выборка: `{ uid, nid, selector, tag, kind, class, prefab, state, body, visible, active, room }` |
-| `select(uid)` / `selectBy(sel)` / `selector()` | выбор строки / по селектору `$` / селектор выбранного |
-| `inspect(sel)` | `{ found, uid, nid, selector, sections }` — данные всех секций |
-| `section(name)` / `sectionName()` | `identity`, `transform`, `gameplay`, `physics`, `presentation` |
-| `search(text)` / `searchText()` | поиск по selector/ID/tag/kind/prefab/state (пустая строка снимает) |
-| `filter(name, value)` / `filters()` | фильтры `visible`, `physics`, `active`, `room` |
-| `refresh()` | перерисовать немедленно и вернуть `panel()` |
+| `$.devtools.open()` / `$.devtools.close()` / `$.devtools.toggle()` / `$.devtools.isOpen()` | панель; в сборке без RmlUi `open()` честно вернёт `false`. `toggle()` открывает закрытую и закрывает открытую (возвращает `true` при открытии) |
+| `$.devtools.panel()` | `{ open, doc, rows, entities, selected, selected_nid, selector, refreshed, search, search_kind, filters, offset, section, pick, pick_hover, picked }` |
+| `$.devtools.list()` | текущая выборка: `{ uid, nid, selector, tag, kind, class, prefab, state, body, visible, active, room }` |
+| `$.devtools.select(uid)` | выбрать строку по uid |
+| `$.devtools.selectBy(sel)` | выбрать по селектору `$`; возвращает селектор |
+| `$.devtools.selector()` | селектор выбранной сущности — то, что копирует кнопка |
+| `$.devtools.inspect(sel)` | `{ found, uid, nid, selector, sections }` — данные всех секций |
+| `$.devtools.section(name)` | `identity`, `transform`, `gameplay`, `physics`, `presentation`; `bool` (неизвестная — `false`) |
+| `$.devtools.sectionName()` | имя текущей секции |
+| `$.devtools.search(text)` | поиск по selector/ID/tag/kind/prefab/state (пустая строка снимает); возвращает текст запроса |
+| `$.devtools.searchText()` | `{ text, kind }` — запрос и его вид (`text` или `selector`) |
+| `$.devtools.filter(name, value)` | фильтры `visible`, `physics`, `active`, `room`; `bool` (неизвестное имя — `false`) |
+| `$.devtools.filters()` | `{ visible, physics, active, room }` — копия состояния |
+| `$.devtools.refresh()` | перерисовать немедленно и вернуть `$.devtools.panel()` |
 
 Клавиша **F2** открывает и закрывает инспектор, **F1** — панель диагностики
 (`$.debug.toggle()`, [debug.md](debug.md)).
 
 ## 4. Picking (§21)
 
-| Вызов | Смысл |
+| Вызов | Смысл и факт |
 |---|---|
-| `pickMode(on)` / `pickOn()` | режим «Pick entity»: клик по миру выбирает сущность |
-| `pickAt(x, y)` | выбрать по **экранной** точке — тем же путём, что клик мышью (нет узла под точкой → `null`) |
-| `picked()` | последний выбор: `{ uid, nid, selector, source, tag, screen:{x,y}, world:{x,y} }` |
-| `pickHover()` | uid узла под курсором |
-| `copySelector()` / `copyNodeId()` / `copyJs()` / `lastCopied()` | что реально ушло в буфер обмена |
+| `$.devtools.pickMode(on)` | режим «Pick entity»: клик по миру выбирает сущность; возвращает новое состояние |
+| `$.devtools.pickOn()` | включён ли режим (`bool`) |
+| `$.devtools.pickAt(x, y)` | выбрать по **экранной** точке — тем же путём, что клик мышью (нет узла под точкой → `null`) |
+| `$.devtools.picked()` | последний выбор: `{ uid, nid, selector, source, tag, screen:{x,y}, world:{x,y} }` |
+| `$.devtools.pickHover()` | uid узла под курсором (или `null`) |
+| `$.devtools.copySelector()` / `$.devtools.copyNodeId()` / `$.devtools.copyJs()` | скопировать селектор / стабильный nid / `$('#id')`-код; `bool` |
+| `$.devtools.lastCopied()` | что реально ушло в буфер: `{ what, text }` |
 
 Выбранный узел подсвечивается bounds (`$.debug.draw.rect`), выбранная строка
 списка — классом `sel`. Проверка — `devtools_pick_test.py` (сравнивает

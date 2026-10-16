@@ -33,7 +33,10 @@ $.ready(() => {
 | `$.collision.define(name, bit, opts?)` | объявить имя для бита; `opts.all: true` — «сталкиваться со всеми» сразу |
 | `$.collision.remove(name)` | забыть имя |
 | `$.collision.clear()` | очистить реестр |
-| `$.collision.has(name)` / `bits(name)` | есть ли имя / бит по имени |
+| `$.collision.has(name)` | есть ли имя (`bool`) |
+| `$.collision.bits(name)` | бит по имени: принимает имя, число, hex-строку или выражение с `|`. Проверено: `bits('solid2')` → 4, `bits('solid2\|solid2')` → 4, `bits(4)` → 4, неизвестное имя → 0 |
+| `$.collision.apply(target, name, opts?)` | поставить слой узлу: пишет `attrs.layer` (имя) и `layerBits` (бит), маску — из `opts` или из слоя |
+| `$.collision.of(target)` | имя слоя узла или `null`. **Принимает узел или обёртку** — селектор-строка не разворачивается и даёт `null` (проверено: `of($('#hero'))` → `'player'`, `of('#hero')` → `null`) |
 | `$.collision.names()` | имена по алфавиту |
 | `$.collision.list()` | `[{ name, bit, mask }]` |
 | `$.collision.freeBit()` | бит, ещё не занятый ни одним именем |

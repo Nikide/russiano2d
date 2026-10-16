@@ -24,7 +24,7 @@ $.update(dt => {
 
 Схема движка — **C → `$`**: нативное ядро (текстуры, тела, батчинг, RmlUi, BSP,
 свет) спрятано под `$` и игре не видно — глобального `engine` нет, импортировать
-можно только `'r2d'`. Внутренний справочник ядра — [internal/NATIVE.md](internal/NATIVE.md), как это
+можно только `'r2d'`. Внутренний справочник ядра — `internal/NATIVE.md`, как это
 устроено — [highlevel/native.md](highlevel/native.md).
 
 ---
@@ -203,7 +203,7 @@ $('.enemy').within({ x: 0, y: 0 }, 200)   // цель — точка, узел, 
 `$.debug.queryStats()` (§24).
 
 Предел нативного запроса — 256 тел (`R2D_MAX_QUERY`, §14 в
-[internal/NATIVE.md](internal/NATIVE.md)). Если кандидатов больше, выборка обрезана: признак виден в
+`internal/NATIVE.md`). Если кандидатов больше, выборка обрезана: признак виден в
 `$.debug.queryStats().truncated`. Для очень плотных сцен это значит, что
 `within()` — про «кто рядом», а не про полный перебор мира.
 
@@ -328,7 +328,7 @@ $('#weapon').worldTransform();     // → { x, y, angle, sx, sy } с учёто�
   $('#hero').flip(true);                     // сенсор зеркалится вместе с оружием
   ```
 * Проход пересчёта пакетный (`engine.nodes.resolveTransforms`, §39 в
-  [internal/NATIVE.md](internal/NATIVE.md)); в проекте без локальных узлов он
+  `internal/NATIVE.md`); в проекте без локальных узлов он
   выходит на первой строке. Локальные значения можно твинить как поля:
   `.tween({ local_x: 40 }, 500)`.
 
@@ -353,6 +353,9 @@ $('#marker').worldPoint(0, 0);   // → { x: 80, y: 200 }  (родитель з�
 // alpha и visible НАСЛЕДУЮТСЯ: скрытый родитель скрывает детей,
 // прозрачности перемножаются (modulate)
 .visible(false) .show() .hide()
+.isVisible()                              // → bool: виден ли узел (поле visible, без учёта родителей)
+.depthRelative(true) .isDepthRelative()   // глубина складывается с глубиной родителя / → bool
+.effectiveDepth()                         // → number: глубина с учётом родителя (для отладки порядка)
 .fadeIn(200) .fadeOut(300)                // → Promise
 .shader('flash', { color: '#ff8080', amount: 0.7 })   // шейдер узла (эффект)
 .shaderParam('amount', 0.4)               // один параметр эффекта
@@ -391,6 +394,11 @@ $.gfx.filter(true)                        // линейная фильтраци
 .dropThrough(250)                           // спрыгнуть вниз сквозь one-way на 250 мс
 .sensor(true)                               // зона: ловит, но не толкает
 .contacts(true | false)                     // события контакта
+.contactsStay(true)                         // ещё и фаза 'stay' — «касание держится» каждый кадр
+.externalVelocity(vx, vy, 150)              // внешняя скорость (урон, отдача, ветер), гаснет за 150 мс игрового времени
+.externalVelocity()                         // → { x, y, ms, left } или null
+.ground()                                   // → опора под узлом (луч по ширине тела) или null, см. ниже
+.onCeiling()                                // → bool: потолок над узлом (лучи вверх)
 .sleeping()                                 // → bool: усыпил ли Box2D тело
 .allowSleep(false)                          // не усыплять тело (игра ведёт его скоростью)
 .angularVelocity() .angularVelocity(2)      // угловая скорость тела, рад/с
@@ -458,7 +466,7 @@ $.world.bodyAt(x, y, { mask: 0x2 });                  // кто из враго�
 отстаёт. Трение платформы на перенос не влияет.
 
 **Суставы.** `.joint(цель, opts)` возвращает id; `opts` — как в
-[internal/NATIVE.md](internal/NATIVE.md#enginecreatejointopts--enginedestroyjointid), плюс сокращения:
+`internal/NATIVE.md`, плюс сокращения:
 `a`/`b` — точки крепления в мировых пикселях. Для `revolute` и `weld` вторая
 точка по умолчанию совпадает с первой (крепление в одну точку), для
 `distance` — берутся центры тел. Уничтожение: `$.world.destroyJoint(id)`,
@@ -511,6 +519,7 @@ $('#hero').areaOverlap('sword');        // кто внутри ПРЯМО СЕЙ
 | `.areaOn(name, on)` | включить/выключить; без `on` — текущее состояние |
 | `.areas()` | список описаний областей узла |
 | `.areaOverlap(name, opts?)` | пересечения области сейчас (явный запрос) |
+| `.hitbox(name, opts?)` / `.hurtbox(name, opts?)` / `.interaction(name, opts?)` | объявить область с ролью: «чем бью», «куда бьют», «подбор/двери/зоны взаимодействия» — это `.area()` с предзаполненной ролью |
 
 `opts`: `shape` (`'box'`/`'circle'`/`'capsule'`/`'polygon'`), `w`/`h`, `radius`,
 `points`, `x`/`y`/`angle` (локальные, пиксели и радианы), `sensor`, `contacts`,
@@ -1535,7 +1544,7 @@ $.update(() => {
 
 Физика в этой таблице не отдельной подсистемой, а частью ядра: формы тел,
 односторонние платформы, события контакта и суставы описаны в разделе 8 выше
-и в [internal/NATIVE.md](internal/NATIVE.md).
+и в `internal/NATIVE.md`.
 
 ### Свет в стиле Candle (`<light>`, `<lightarea>`, `<fog>`)
 
@@ -1651,7 +1660,7 @@ $.ready(() => {
   `registerNodeRenderer` и общий батч `$.gfx.push`, поэтому лишних draw call'ов
   не появляется.
 * **Аудио-шины** пересчитывают громкость живых каналов через новые
-  `engine.audio.setChannelVolume/setChannelEffect` (см. [internal/NATIVE.md](internal/NATIVE.md)).
+  `engine.audio.setChannelVolume/setChannelEffect` (см. `internal/NATIVE.md`).
 * **Blend-режимы** работают на уровне узла (`.blend('add')`) и кадра
   (`$.blend('add')`); движок сам режет батч на участки с одинаковым режимом,
   так что порядок отрисовки не меняется.
@@ -2052,7 +2061,7 @@ $.ready(() => {
 [screen.md](highlevel/screen.md), [font.md](highlevel/font.md).
 
 Дальше: [AGENT_API.md](AGENT_API.md) — как этим управлять программой,
-[RECIPES](tutorial-platformer.md) и [internal/NATIVE.md](internal/NATIVE.md) — низкий уровень.
+[RECIPES](tutorial-platformer.md) и `internal/NATIVE.md` — низкий уровень.
 
 Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](RE2DSPRITE_V2.md),
 [API `$`](highlevel/re2dsprite.md). Демо `re2dsprite` — equipment, волосы,

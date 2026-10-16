@@ -50,7 +50,7 @@ build/_deps/quickjs-build/qjs tests/js/simplex_noise_test.mjs
 | `pick(list) → any` | Случайный элемент; пустой список → `undefined` |
 | `chance(p) → bool` | `true` с вероятностью `p` (`chance(1)` — всегда, `chance(0)` — никогда) |
 | `shuffle(list) → array` | Копия списка в случайном порядке (исходный не меняется) |
-| `gaussian() → number` | Нормальное распределение: среднее 0, отклонение 1 |
+| `$.random.gaussian() → number` | Нормальное распределение: среднее 0, отклонение 1 (Бокс—Мюллер; ровно два вызова `next()` на число — последовательность предсказуема) |
 | `weighted(list) → any` | Выбор с весами (форматы ниже) |
 | `noise1D(x, seed?) → number` | Значение-шум 1D в `[0, 1)` (v1, заморожен); без `seed` — зерно генератора |
 | `noise2D(x, y, seed?) → number` | Значение-шум 2D в `[0, 1)` (v1, заморожен); без `seed` — зерно генератора |
@@ -59,7 +59,7 @@ build/_deps/quickjs-build/qjs tests/js/simplex_noise_test.mjs
 | `algorithms() → array` | Метаданные алгоритмов шума (имя, версия, диапазон, seed mapping) |
 | `hashCells(values) → string` | Стабильный hash сетки/списка (8 hex) — для validation, см. §6 |
 | `stream(name, opts?) → generator` | Именованный изолированный поток, см. §4; `{ independent: true }` — свой навсегда |
-| `streamNames() → array` | Уже созданные потоки |
+| `$.random.streamNames() → array` | Уже созданные потоки (пустой массив, если ни один не создан — проверено на живом движке) |
 | `state() → object` | Снимок состояния с version/algorithm ID, см. §5 |
 | `restore(snapshot) → $.random` | Продолжить с сохранённой точки; чужой снимок → ошибка |
 | `validateState(snapshot) → true \| string` | Проверка снимка без исключения |
@@ -93,6 +93,13 @@ const x = $.random.range(0, arena.w);
 ---
 
 ## 2. Шум
+
+> Полноценный комплект шумов для генерации миров, текстур и тайлмапов живёт в
+> отдельном пространстве имён — [`$.noise`](noise.md): OpenSimplex2/2S, Perlin,
+> Value, ValueCubic, Cellular (Worley) с метриками и типами возврата, фракталы
+> fBm/Ridged/PingPong, domain warp, 2D/3D и массовые поля `field()`.
+> Здесь, в `$.random`, остаётся «наш» замороженный шум v1: последовательности
+> ниже менять нельзя.
 
 ### 2.1. Алгоритмы и их контракт
 

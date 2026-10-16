@@ -42,7 +42,7 @@ $.replay.play();                   // если apply не передать, во
 | `play(apply?)` | воспроизведение «из коробки»; `apply` — та же функция, что при записи |
 | `verify(sampler)` | сравнить текущий ввод с записью: `{ same, count, first }` |
 | `start(extra?)` | начать запись вручную (старая стирается); `extra` — поля в заголовок |
-| `record(value, frame?)` | записать кадр вручную (низкий уровень; см. `_push`) |
+| `record(sampler, apply)` | **в собранном движке это запись «из коробки»**: `installReplay` заменяет низкоуровневый `record(value, frame)` на обёртку со сборщиком ввода. Кадр ядром пишет `$.replay._push` |
 | `stop()` | остановить запись или проигрывание |
 | `play(from?)` | начать воспроизведение (можно с кадра) |
 | `tick()` | ввод текущего кадра проигрывания; `null` — записи нет или кадр пуст |
@@ -65,6 +65,47 @@ $.replay.play();                   // если apply не передать, во
 `compareReplays(a, b)` (даёт `{ same, count, first }`), `normalizeReplayHead`,
 `replayHeadProblem`, `gameplaySnapshot`, `hashOfValues`, `REPLAY_SCHEMA`,
 `REPLAY_VERSION`, `MAX_CHECKPOINTS`, `PRESENTATION_STREAMS`.
+
+## 1.1. Полный справочник имён
+
+Проверено запуском в обычной 2D-игре (`tests/fixtures/hello`) и юнит-тестом
+`tests/js/replay_test.mjs`. Кадр — номер кадра движка (`engine.frame`), tick —
+номер от начала записи/проигрывания.
+
+| Имя | Что делает | Возврат |
+|---|---|---|
+| `$.replay.start(extra?)` | начать запись вручную (старая стирается); `extra` — поля в заголовок | сам `$.replay` |
+| `$.replay.record(sampler, apply)` | запись «из коробки»: обвязку `$.update` ставит движок, `sampler()` даёт ввод кадра, `apply(input)` его применяет | сам `$.replay` |
+| `$.replay.play(apply?)` | воспроизведение «из коробки»; без `apply` берётся функция, переданная при записи | сам `$.replay` |
+| `$.replay.stop()` | остановить запись или проигрывание | сам `$.replay` |
+| `$.replay.verify(sampler)` | сравнить ввод, который игра выдала бы сейчас, с записанным (регресс без второго процесса) | `{ same, count, first }` |
+| `$.replay.load(data)` | загрузить реплей из структуры или JSON-текста | `true`/`false` + строка в журнал |
+| `$.replay.toText()` | запись в текст (для файла) | строка JSON |
+| `$.replay.size()` | размер записи в текстовом виде | **байты** (длина текста) |
+| `$.replay.clear()` | стереть запись | сам `$.replay` |
+| `$.replay.mode()` | режим ядра | `'idle'` \| `'recording'` \| `'playing'` |
+| `$.replay.isRecording()` | идёт запись | `bool` |
+| `$.replay.isPlaying()` | идёт проигрывание | `bool` |
+| `$.replay.length()` | сколько кадров записано | целое |
+| `$.replay.position()` | курсор проигрывания | индекс кадра |
+| `$.replay.dropped()` | сколько кадров потеряно (переполнение записи) | целое |
+| `$.replay.tick()` | ввод текущего кадра проигрывания и переход к следующему | строка ввода или `null` (конец записи) |
+| `$.replay.skip(count)` | перемотать вперёд без проигрывания | новый курсор |
+| `$.replay.at(index)` | кадр по индексу | `{ f, d, a }` или `null` |
+| `$.replay.frames()` | все кадры | массив `{ f: кадр, d: ввод, a: actions }` |
+| `$.replay.header()` | заголовок-паспорт прогона (копия) | объект |
+| `$.replay.forApply(value)` | привести записанное к форме для `apply`: для actions — `{ actions, raw }` | значение для `apply` |
+| `$.replay.actions(list, mapping?)` | разрешённые действия и версия input mapping (пишутся в заголовок) | сам `$.replay` |
+| `$.replay.identity(value?)` | паспорт сборки для заголовка: `{ version, build }`; без аргумента — текущий (версия движка, не `null`) | объект или сам `$.replay` |
+| `$.replay.checkpoints(opts)` | политика проверки состояния: `{ every, max?, snapshot? }`; `every` — каждые N simulation ticks (0 — не проверять) | сам `$.replay` |
+| `$.replay.stateProvider(fn)` | свой снимок состояния: `() => ({ labels, values })` | сам `$.replay` |
+| `$.replay.verifyState(tick?)` | проверить состояние на текущем (или заданном) tick | результат проверки |
+| `$.replay.divergence()` | первое расхождение state hash | объект с tick/полями/версиями или `null` |
+| `$.replay.checkpointsList()` | записанные проверки | массив `{ tick, hash }` |
+| `$.replay.checkpointAt(tick)` | проверка на tick целиком | объект или `null` |
+| `$.replay.unknownActions()` | сколько действий не прошло по списку разрешённых | целое |
+| `$.replay.onEnd` | ваш обработчик конца воспроизведения (поле, не метод) | — |
+| `$.replay._push(value, frame, tick)` | **внутреннее**: запись кадра ядром в обход проверки режима; публичный `record` принимает сборщик ввода, поэтому хук зовёт `_push`. Используется `src/highlevel/replay.js` и `tests/js/replay_test.mjs` | `bool` |
 
 ## 2. Заголовок — паспорт прогона (§26)
 
