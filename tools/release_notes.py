@@ -57,8 +57,21 @@ GROUP_RULES = (
 #: Группа-приёмник для коммитов, не подошедших ни под одно правило.
 FALLBACK_GROUP = GROUP_RULES[-1][0]
 
-#: Сколько строк тела коммита попадает в заметки (заметки — не простыня).
+#: Сколько строк тела коммита попадает в ПОДРОБНУЮ форму (заметки — не простыня).
 BODY_LIMIT = 12
+
+#: Группы, у которых тело коммита вообще уместно в секции CHANGELOG. Для файла
+#: заметок тела не выводятся никогда: это витрина для страницы релиза, её читают
+#: глазами, а не ищут в ней подробности.
+BODY_GROUPS = ("Исправления", "Добавлено")
+
+#: Режимы вывода:
+#:   compact   — только тема и короткий хеш, одна строка на коммит (файл заметок);
+#:   changelog — тела у BODY_GROUPS, у остальных групп только тема и хеш (CHANGELOG);
+#:   full      — тела у всех (флаг --full: «как было», для разбора полётов).
+MODE_COMPACT = "compact"
+MODE_CHANGELOG = "changelog"
+MODE_FULL = "full"
 
 #: Длина строки тела в заметках: длинные абзацы подрезаются.
 BODY_LINE_LIMIT = 220
@@ -145,8 +158,21 @@ def build_groups(commits):
     return groups
 
 
-def build_notes_body(commits, version, date, indent=""):
-    """Тело секции: «<N> коммитов» + группы с буллетами (без заголовка версии)."""
+def show_body(title, mode):
+    """Нужно ли печатать тело коммита в этой группе при таком режиме."""
+    if mode == MODE_FULL:
+        return True
+    if mode == MODE_CHANGELOG:
+        return title in BODY_GROUPS
+    return False
+
+
+def build_notes_body(commits, version, date, mode=MODE_COMPACT, indent=""):
+    """Тело секции: «<N> коммитов» + группы с буллетами (без заголовка версии).
+
+    Один буллет на коммит — в любом режиме: это и есть проверка «ничего не
+    потерялось» (tests/release_notes_test.py).
+    """
     groups = build_groups(commits)
     lines = ["%s%d %s в релизе." % (indent, len(commits), plural(len(commits), "коммит", "коммита", "коммитов")),
              ""]
@@ -155,16 +181,21 @@ def build_notes_body(commits, version, date, indent=""):
         lines.append("")
         for commit in members:
             lines.append("%s- %s (`%s`)" % (indent, commit["subject"], commit["hash"][:9]))
-            for line in body_lines(commit):
-                lines.append("%s  %s" % (indent, line))
+            if show_body(title, mode):
+                for line in body_lines(commit):
+                    lines.append("%s  %s" % (indent, line))
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
 
-def build_notes(commits, version, date):
-    """Полный текст файла заметок (он же прикладывается к релизу)."""
+def build_notes(commits, version, date, mode=MODE_COMPACT):
+    """Полный текст файла заметок (он же прикладывается к релизу).
+
+    По умолчанию — компактная форма: страница релиза это витрина, а не зеркало
+    `git log`. Подробности — флагом `--full` или в секции CHANGELOG.
+    """
     header = "# Russiano2D %s — %s\n\n" % (version, date)
-    return header + build_notes_body(commits, version, date)
+    return header + build_notes_body(commits, version, date, mode)
 
 
 def count_bullets(text):
@@ -265,25 +296,25 @@ def append_manual(section_text, manual):
     return section_text.rstrip() + "\n\n" + block
 
 
-def generated_between(commits, version, date):
+def generated_between(commits, version, date, mode=MODE_CHANGELOG):
     """Ровно то, что лежит МЕЖДУ маркерами (одна каноническая форма).
 
     Общая функция для первичной вставки и для повторного прогона: иначе
     «сгенерированная часть» менялась бы сама по себе (лишняя пустая строка) и
     идемпотентность ломалась бы на ровном месте.
     """
-    return "\n" + build_notes_body(commits, version, date) + "\n"
+    return "\n" + build_notes_body(commits, version, date, mode) + "\n"
 
 
-def render_section(version, date, commits, manual):
+def render_section(version, date, commits, manual, mode=MODE_CHANGELOG):
     """Секция версии: заголовок, маркеры со сгенерированными группами, подробности."""
     parts = ["## %s — %s\n" % (version, date), "\n", BEGIN_MARK + "\n",
-             generated_between(commits, version, date), END_MARK + "\n"]
+             generated_between(commits, version, date, mode), END_MARK + "\n"]
     text = "".join(parts)
     return append_manual(text, manual)
 
 
-def insert_into_changelog(changelog_text, version, date, commits, manual):
+def insert_into_changelog(changelog_text, version, date, commits, manual, mode=MODE_CHANGELOG):
     """Вставить/обновить секцию версии, сохранив рукописные разделы.
 
     Идемпотентность: у существующей секции перезаписывается только то, что
@@ -307,7 +338,7 @@ def insert_into_changelog(changelog_text, version, date, commits, manual):
         match = pattern.match(body)
         if match:
             before, _generated, after = match.groups()
-            new_body = before + generated_between(commits, version, date) + after
+            new_body = before + generated_between(commits, version, date, mode) + after
         else:
             # Секцию этой версии написал человек (маркеров нет) — сгенерированную
             # часть не изобретаем, только дописываем новые рукописные разделы.
@@ -320,7 +351,7 @@ def insert_into_changelog(changelog_text, version, date, commits, manual):
     # другого разбора того же текста, и совпадение по id() не находится — тогда
     # перенесённые разделы остались бы ещё и на старом месте (дубль).
     moved = {section["title"] for section in manual}
-    new_text = head + render_section(version, date, commits, manual)
+    new_text = head + render_section(version, date, commits, manual, mode)
     for section in sections:
         if section["title"] in moved:
             continue
@@ -360,6 +391,10 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true", help="напечатать заметки и ничего не писать")
     parser.add_argument("--write-changelog", action="store_true",
                         help="вставить секцию версии в CHANGELOG (по умолчанию пишется только файл заметок)")
+    parser.add_argument("--full", action="store_true",
+                        help="подробная форма: тела коммитов у всех групп (по умолчанию "
+                             "файл заметок — компактный, а в CHANGELOG тела только у "
+                             "«Исправлений» и «Добавлено»)")
     parser.add_argument("--manual", choices=("new", "all", "none"), default="new",
                         help="какие рукописные разделы «Не выпущено» переносить в секцию версии: "
                              "new — появившиеся после прошлого тега (по умолчанию), all — все, none — ни одного")
@@ -381,9 +416,11 @@ def main(argv=None):
     from_ref = args.from_ref if args.from_ref is not None else previous_tag(cwd)
 
     commits = collect_commits(from_ref, args.to_ref, cwd)
-    notes = build_notes(commits, version, date)
+    notes_mode = MODE_FULL if args.full else MODE_COMPACT
+    changelog_mode = MODE_FULL if args.full else MODE_CHANGELOG
+    notes = build_notes(commits, version, date, notes_mode)
 
-    problem = check_commit_coverage(commits, build_notes_body(commits, version, date))
+    problem = check_commit_coverage(commits, build_notes_body(commits, version, date, notes_mode))
     if problem:
         print("!! %s" % problem, file=sys.stderr)
         return 1
@@ -414,7 +451,7 @@ def main(argv=None):
         elif args.manual == "new":
             old_titles = sections_at_ref(changelog_path, from_ref, cwd)
             manual = [section for section in manual if section["title"] not in old_titles]
-        updated = insert_into_changelog(changelog, version, date, commits, manual)
+        updated = insert_into_changelog(changelog, version, date, commits, manual, changelog_mode)
         with open(changelog_path, "w", encoding="utf-8") as handle:
             handle.write(updated)
         print("CHANGELOG: секция %s обновлена (перенесено рукописных разделов: %d)"

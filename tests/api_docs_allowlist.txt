@@ -52,23 +52,12 @@ engine.setGravityScale       # internal: биндинг C-уровня (engine.s
 engine.setSnap               # internal: биндинг C-уровня (engine.setSnap), игры его не зовут; справочник — docs/internal/NATIVE.md
 
 # --- долг: task-31 (debug-overlays) ---
-$.activation.clear           # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
-$.activation.stats           # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
-$.agent.frame                # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
-$.agent.time                 # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
-$.anim.*                     # debt: 3 имён, страница docs/highlevel/anim.md без полного перечня; в работе (task-31)
-$.collision.bits             # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
-$.collision.of               # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
 $.combat.*                   # debt: 4 имён, страница docs/highlevel/combat.md без полного перечня; в работе (task-31)
 $.dialog.*                   # debt: 8 имён, страница docs/highlevel/dialog.md без полного перечня; в работе (task-31)
 $.grid.*                     # debt: 5 имён, страница docs/highlevel/grid.md без полного перечня; в работе (task-31)
 $.i18n.*                     # debt: 3 имён, страница docs/highlevel/i18n.md без полного перечня; в работе (task-31)
-$.loading.watch              # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
-$.loading.watched            # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
 $.nav.*                      # debt: 6 имён, страница docs/highlevel/nav.md без полного перечня; в работе (task-31)
 $.quest.*                    # debt: 4 имён, страница docs/highlevel/quest.md без полного перечня; в работе (task-31)
 $.raid.*                     # debt: 11 имён, страница docs/highlevel/raid.md без полного перечня; в работе (task-31)
-$.random.gaussian            # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
-$.random.streamNames         # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
 $.real2d.*                   # debt: 5 имён, страница docs/highlevel/real2d.md без полного перечня; в работе (task-31)
 $.story.*                    # debt: 3 имён, страница docs/highlevel/story.md без полного перечня; в работе (task-31)

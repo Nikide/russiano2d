@@ -143,6 +143,19 @@ def main():
         check(problem is not None and "потеряна" in problem,
               "подложенная потеря коммита ломает проверку: %s" % problem)
 
+        # --- 2.1 Формат: заметки компактные, CHANGELOG подробный --------------
+        check("Подробность с числом" not in out,
+              "компактные заметки не содержат тел коммитов")
+        longest = max(len(line) for line in out.splitlines())
+        check(longest < 200, "в компактных заметках нет длинных строк (максимум %d)" % longest)
+        full_out = run_tool(repo, "--dry-run", "--full").stdout
+        check("Подробность с числом: 5." in full_out,
+              "--full возвращает тела всех групп (включая «Прочее»)")
+        check(module.count_bullets(full_out) == len(commits),
+              "в подробной форме буллетов столько же, сколько коммитов")
+        check("Пользователь:" not in out and "Пользователь:" not in full_out.split("Подробность")[0],
+              "маркеры внутреннего текста в шапку заметок не попали")
+
         # --- 3. --dry-run ничего не пишет -------------------------------------
         check(not os.path.exists(notes_path), "--dry-run не создал файл заметок")
         with open(changelog_path, encoding="utf-8") as handle:
@@ -159,6 +172,14 @@ def main():
         with open(changelog_path, encoding="utf-8") as handle:
             changelog = handle.read()
         check("## 1.1.0 — 2026-02-02" in changelog, "секция версии вставлена")
+        section = changelog.split("## 1.1.0 — 2026-02-02")[1].split(module.END_MARK)[0]
+        check("Подробность с числом: 0." in section and "Подробность с числом: 1." in section,
+              "в CHANGELOG тела есть у «Исправлений» и «Добавлено»")
+        for index, group in ((2, "Документация"), (3, "Тесты и гейты"), (4, "Сборка и версии"), (5, "Прочее")):
+            check("Подробность с числом: %d." % index not in section,
+                  "в CHANGELOG у группы «%s» только тема и хеш (без тела)" % group)
+        check(module.count_bullets(section) == len(commits),
+              "в секции CHANGELOG буллетов столько же, сколько коммитов")
         check("### Подробности (написано вручную)" in changelog, "рукописные подробности под своим подзаголовком")
         check("### Не выпущено — эта волна (2026-02-02)" in changelog,
               "раздел этой волны перенесён внутрь секции версии")
