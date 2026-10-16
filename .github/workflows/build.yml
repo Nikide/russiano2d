@@ -204,6 +204,29 @@ jobs:
             dist-ci/*.tar.gz
             dist-ci/*.zip
           if-no-files-found: error
+  # Наблюдение за MSVC: сборка Windows родным компилятором. Сейчас она падает
+  # внутренней ошибкой CL.exe (см. комментарий у матрицы), поэтому задача
+  # необязательная: падение не блокирует релиз, но остаётся видимым в CI. Когда
+  # раннер обновит тулчейн, задача станет зелёной — тогда Windows можно вернуть
+  # на MSVC (артефакт при этом собирается MinGW-кросс-сборкой и не меняется).
+  windows-msvc-diagnostic:
+    needs: static
+    runs-on: windows-2022
+    continue-on-error: true
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (MSVC, Release)
+        run: |
+          cmake -S . -B build-msvc -DCMAKE_BUILD_TYPE=Release \
+            -DR2D_BUNDLED_FREETYPE=ON \
+            '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>'
+      - name: Build engine (MSVC)
+        run: cmake --build build-msvc --config Release --parallel 2
+
   # Единственный владелец GitHub Releases: локальный скрипт релиз не создаёт
   # никогда. Один тег — один релиз; архивов ровно столько, сколько платформ
   # собирает CI (macOS прикладывается позже и пересчитывает SHA256SUMS).

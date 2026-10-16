@@ -85,9 +85,20 @@ def test_workflow_ownership():
     workflow = read(WORKFLOW)
     runners = re.findall(r"runner:\s*([\w\-.]+)", workflow)
     platforms = re.findall(r"platform:\s*([\w\-.]+)", workflow)
-    check("windows-x86_64" in platforms and any("windows" in r for r in runners),
+    # Windows-артефакт приходит из hosted-раннера кросс-сборкой MinGW: MSVC
+    # 14.44 падает внутренней ошибкой CL.exe, а платформа нужна (подробности —
+    # в комментарии у матрицы и в docs/RELEASING.md). Родная MSVC-сборка
+    # остаётся в workflow необязательной задачей-наблюдением, иначе про ошибку
+    # тулчейна никто не вспомнит.
+    check("windows-x86_64" in platforms and bool(runners),
           "Windows x86_64 собирается hosted-раннером (платформы %s, раннеры %s)"
           % (platforms, runners))
+    check("x86_64-w64-mingw32-gcc" in workflow,
+          "Windows собирается кросс-сборкой MinGW (тулчейн назван в workflow)")
+    check("windows-msvc-diagnostic" in workflow and "continue-on-error: true" in workflow,
+          "наблюдение за MSVC осталось, но не блокирует релиз")
+    check(not any("windows-" in r for r in runners),
+          "Windows не занимает hosted Windows-раннер в обязательных задачах (%s)" % runners)
     check("linux-x86_64" in platforms and "linux-aarch64" in platforms,
           "Linux x86_64 и aarch64 оба в матрице (%s)" % platforms)
     check(not any("macos" in r.lower() for r in runners + platforms),
