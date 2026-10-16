@@ -3977,10 +3977,15 @@ export function installGfx($) {
         return this.eachNode((_, el) => {
             const node = el;
             node.attrs.material = value;
-            if (value && typeof value === 'object') {
+            // lit берём и у материала ПО ИМЕНИ: иначе `lit: false`, объявленный
+            // в $.gfx.material('имя', {...}), работал бы только при передаче
+            // материала объектом, а у именованного молча терялся — кадр
+            // совпадал с «без материала» (нашлось проверкой §43).
+            const mat = typeof value === 'string' ? (materials.get(value) || null) : value;
+            if (mat && typeof mat === 'object') {
                 // lit материала управляет тем же признаком, что и .lit():
                 // второй таблицы «неосвещённых» нет.
-                const lit = value.lit !== false;
+                const lit = mat.lit !== false;
                 if (node.attrs.lit === lit && !lit) return;
                 if ((node.attrs.lit !== false) !== lit) touchRegistry();
                 node.attrs.lit = lit;
