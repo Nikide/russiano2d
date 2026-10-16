@@ -982,6 +982,16 @@ function doSwitch() {
 
     const scoped = !!opts.scope;
     const prev = state.current;
+    // Сцена закончилась — её звук гаснет (музыка, play, playAt), с затуханием.
+    // Зовём ДО exit(): звук, запущенный в exit(), принадлежит уже новой сцене
+    // и не должен гаснуть вместе со старой. `{ keep: true }` переживает переход.
+    if (typeof ctx._stopSceneSound === 'function') {
+        const stopped = ctx._stopSceneSound(opts.audio_fade);
+        if (stopped > 0) {
+            ctx.log(`$.scene: смена "${state.current_name}" → "${name}": снято звуков ${stopped}`
+                    + ` (затухание ${opts.audio_fade === undefined ? 250 : opts.audio_fade} мс)`);
+        }
+    }
     if (prev && typeof prev.exit === 'function') {
         try { prev.exit(ctx.$); } catch (e) { ctx.log(`$: ошибка в exit сцены "${state.current_name}": ${e}`); }
     }

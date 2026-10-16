@@ -296,6 +296,7 @@ $.csv.quoteField
 $.csv.stringify
 $.ctx
 $.ctx.$
+$.ctx._stopSceneSound
 $.ctx.agent
 $.ctx.alive
 $.ctx.audio

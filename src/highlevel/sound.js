@@ -282,6 +282,38 @@ export function installSound($) {
      *     ведёт себя игра, играющая звук на верхнем уровне, и так её звук
      *     снимается вместе с областью загрузчика (`$.scene.load(..., {scope:true})`).
      */
+    // Что запустила САМА сцена: каналы и музыка, взятые вне именованной области
+    // и комнаты. При смене сцены (`$.scene.load`) они гаснут — как и обещает
+    // модель владельца. Переживает переход только `{ keep: true }`.
+    const scene_channels = new Set();
+    let scene_music = false;
+    let scene_fade_ms = 250;      // затухание по умолчанию, мс
+
+    /**
+     * Погасить всё, что запустила уходящая сцена. Возвращает число снятых
+     * звуков (музыка считается за один) — это видно тесту и журналу.
+     */
+    function stopSceneOwned(fade) {
+        const ms = fade === undefined ? scene_fade_ms : Math.max(0, Number(fade) || 0);
+        let stopped = 0;
+        for (const channel of scene_channels) {
+            if (engine.audio.playing(channel)) {
+                engine.audio.stop(channel, ms);
+                stopped++;
+            }
+            scene_channels.delete(channel);
+        }
+        if (scene_music) {
+            if (engine.audio.musicPlaying()) {
+                engine.audio.stopMusic(ms);
+                stopped++;
+            }
+            scene_music = false;
+            if (ctx.state_music) ctx.state_music = null;
+        }
+        return stopped;
+    }
+
     function ownChannel(channel, opts) {
         if (!(channel >= 0) || (opts && opts.keep === true)) return channel;
         const scene = ctx.scene;
@@ -289,8 +321,14 @@ export function installSound($) {
         const current = ctx.scope_current;
         const scope = (current && typeof current.sound === 'function') ? current : scene.scope();
         if (scope && typeof scope.sound === 'function') scope.sound(channel, opts && opts.fade);
+        // Владелец — область сцены (не именованная область и не комната): так
+        // звук снимается вместе со сменой сцены, а не живёт до конца игры.
+        if (!current) scene_channels.add(channel);
         return channel;
     }
+
+    // Смена сцены зовёт это: сцена закончилась — её звук гаснет (с затуханием).
+    ctx._stopSceneSound = stopSceneOwned;
 
     const sound = {
         /**
@@ -366,6 +404,8 @@ export function installSound($) {
 
         /** Музыка. crossfadeMs — плавно заменить текущую дорожку. */
         music(what, opts) {
+            const music_opts = opts || {};
+            if (music_opts.keep !== true) scene_music = true;
             const o = opts || {};
             const id = soundId(what);
             if (id < 0) return sound;
