@@ -168,7 +168,9 @@ jobs:
         # Для windows-кросс-сборки пропускается — бинарник под Windows, а
         # раннер Linux.
         if: matrix.platform != 'windows-x86_64'
-        run: R2D_BINARY=build-ci/russiano2d python3 tests/api_freeze_test.py
+        # Через xvfb: гейт запускает движок, а на раннере нет видеодисплея
+        # (SDL_Init: No available video device — так же, как у SDK-регрессий).
+        run: R2D_BINARY=build-ci/russiano2d xvfb-run -a python3 tests/api_freeze_test.py
       - name: Linux SDK GUI regressions
         # Только настоящий Linux: у windows-кросс-сборки раннер тоже Linux, но
         # бинарник под Windows и запустить его здесь нельзя.
