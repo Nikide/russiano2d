@@ -583,6 +583,15 @@ static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps)
         return -1;
     }
 
+    // Средний цвет снимаем ДО освобождения поверхностей. Раньше он считался
+    // ниже, уже после SDL_DestroySurface(rgba) — то есть читал освобождённую
+    // память: has_avg оставался false (или в avg попадал мусор), и `color:'auto'`
+    // у emissive-спрайтов молча становился белым (находка BASHNYA E1:
+    // auto_color_known:false, цвет [255,255,255]).
+    float avg[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    bool has_avg = false;
+    r2d__texture_average(rgba->pixels, w, h, rgba->pitch, avg, &has_avg);
+
     if (rgba != loaded) SDL_DestroySurface(rgba);
     SDL_DestroySurface(loaded);
 
@@ -592,8 +601,8 @@ static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps)
     t->width  = w;
     t->height = h;
     t->alive  = true;
-    t->has_avg = false;
-    r2d__texture_average(rgba->pixels, w, h, rgba->pitch, t->avg, &t->has_avg);
+    SDL_memcpy(t->avg, avg, sizeof avg);
+    t->has_avg = has_avg;
     SDL_snprintf(t->name, sizeof t->name, "%s", path);
 
     R2D_LOG("текстура #%d: %s (%dx%d)", id, path, w, h);
@@ -625,6 +634,16 @@ void r2d_render_set_snap(R2DRenderer *r, bool on)
 bool r2d_render_snap(const R2DRenderer *r)
 {
     return r ? r->snap : false;
+}
+
+int r2d_texture_users(const R2DRenderer *r, int id)
+{
+    if (!r || id < 0 || id >= r->texture_count || !r->textures[id].alive) return 0;
+    int users = 0;
+    for (int i = 0; i < r->sprite_count; ++i) {
+        if (r->sprites[i].alive && r->sprites[i].texture == id) users++;
+    }
+    return users;
 }
 
 bool r2d_texture_free(R2DRenderer *r, int id)

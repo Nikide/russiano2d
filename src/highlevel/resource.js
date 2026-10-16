@@ -34,6 +34,92 @@ import { makeCurve, makeGradient } from './curve.js';
 export const RESOURCE_KINDS = ['texture', 'sprite', 'sheet', 'sound', 'json', 'text', 'data',
                               'curve', 'gradient'];
 
+/**
+ * Освободить текстуру (или все текстуры), загруженные из этого пути.
+ *
+ * Зачем отдельно от реестра: узлы, атласы и листы кадров грузят текстуры по
+ * пути напрямую (`engine.loadTexture`), минуя `$.resource`, и раньше освободить
+ * их было нечем — потоковая анимация (много крупных кадров по очереди) копила
+ * GPU-память. Замер BASHNYA: 64 оверлея 1672×941 = 402 МБ, `free` по пути
+ * отвечал «такого ресурса нет».
+ *
+ * Возврат: `{ ok, busy, users, mb, freed, error }`.
+ *   ok: true    — выгружено (сколько МБ вернулось в `freed`);
+ *   busy: true  — на текстуру ссылаются живые спрайты: НЕ выгружаем;
+ *   error       — текстуры с таким путём нет.
+ */
+/**
+ * Спрайты, которые сейчас держат живые узлы (и кадры атласа, если он подключён).
+ * Всё остальное — кэш JS, его погасить можно.
+ */
+function liveSprites() {
+    const live = new Set();
+    const nodes = ctx.nodes || [];
+    for (let i = 0; i < nodes.length; ++i) {
+        const node = nodes[i];
+        if (!node || node.removed) continue;
+        if (typeof node.sprite === 'number' && node.sprite >= 0) live.add(node.sprite);
+    }
+    const atlas = ctx.atlas;
+    if (atlas && typeof atlas.list === 'function') {
+        for (const entry of atlas.list() || []) {
+            if (entry && typeof entry.sprite === 'number' && entry.sprite >= 0) live.add(entry.sprite);
+            for (const frame of (entry && entry.frames) || []) {
+                const id = typeof frame === 'number' ? frame : (frame && frame.sprite);
+                if (typeof id === 'number' && id >= 0) live.add(id);
+            }
+        }
+    }
+    return live;
+}
+
+function freeTextureByPath(path) {
+    const name = String(path === undefined || path === null ? '' : path);
+    if (!engine || typeof engine.textureList !== 'function' || typeof engine.freeTexture !== 'function') {
+        return { ok: false, busy: false, users: 0, mb: 0, freed: 0, error: 'движок не даёт список текстур' };
+    }
+    // Список может быть не массивом (в юнит-харнессе движок — заглушка):
+    // защищаемся, а не падаем «not a function» на ровном месте.
+    let list = [];
+    try {
+        list = engine.textureList() || [];
+        if (!Array.isArray(list)) list = [];
+    } catch (e) { list = []; }
+    const matches = list.filter((t) => t && (t.path === name
+        || (name.length > 0 && t.path.endsWith('/' + name))));
+    if (!matches.length) {
+        return { ok: false, busy: false, users: 0, mb: 0, freed: 0, error: 'текстуры с таким путём нет' };
+    }
+    // Спрайты бывают двух сортов: те, что держит ЖИВОЙ узел (или атлас), и те,
+    // что остались только в кэше JS. Первые трогать нельзя — узел молча остался
+    // бы без картинки; вторые можно погасить вместе с текстурой, иначе
+    // потоковая анимация не освободит память никогда (кэш держит спрайт по
+    // пути даже после удаления узла).
+    const live = liveSprites();
+    let busy = 0;
+    for (const t of matches) {
+        if (typeof engine.textureSprites !== 'function') { busy += t.users; continue; }
+        const sprites = engine.textureSprites(t.id) || [];
+        for (const sprite of sprites) if (live.has(sprite)) busy++;
+    }
+    if (busy > 0) {
+        ctx.log(`$.resource.free("${name}"): текстуру держат живые узлы/атлас (${busy}) — `
+                + 'не выгружаю; сначала уберите узлы, которые её используют');
+        return { ok: false, busy: true, users: busy, mb: 0, freed: 0,
+                 error: `текстура используется (${busy})` };
+    }
+    let freed = 0;
+    for (const t of matches) {
+        const mb = (t.bytes || 0) / (1024 * 1024);
+        if (engine.freeTexture(t.id)) freed += mb;
+    }
+    // Кэши JS держат и путь, и спрайты по нему: без сброса повторная загрузка
+    // вернула бы мёртвый id.
+    forgetTexture(name);
+    return { ok: freed > 0, busy: false, users: 0, mb: freed, freed: freed,
+             error: freed > 0 ? null : 'движок не выгрузил текстуру' };
+}
+
 const IMAGE_EXT = /\.(png|jpg|jpeg|bmp|gif|webp|tga|avif)$/i;
 const SOUND_EXT = /\.(wav|ogg|mp3|flac|opus|m4a|aac)$/i;
 const JSON_EXT = /\.(json|save)$/i;
@@ -1127,8 +1213,41 @@ export function installResource($) {
         /** Отпустить ссылку. Возвращает остаток ссылок (0 — ресурс выгружен). */
         free(name) {
             const res = registry.free(name);
-            return res.ok ? res.refs : -1;
+            if (res.ok) return res.refs;
+            // Не именованный ресурс? Тогда это может быть ПУТЬ текстуры,
+            // загруженной спрайтом (узлом, атласом, листом кадров) — именно так
+            // грузится потоковая анимация оверлеев. Такую текстуру тоже
+            // освобождаем, но ТОЛЬКО если на неё не ссылается ни один живой
+            // спрайт: иначе r2d_texture_free погасил бы спрайты, и узел молча
+            // остался бы без картинки.
+            const byPath = freeTextureByPath(name);
+            if (byPath.ok || byPath.busy) return byPath.ok ? 0 : -1;
+            return -1;
         },
+
+        /**
+         * Сколько памяти занимают живые текстуры и кто их держит:
+         * `[{ id, path, w, h, users, mb }]`. `users` — живые спрайты; пока их
+         * больше нуля, текстура не выгружается.
+         */
+        textures() {
+            if (!engine || typeof engine.textureList !== 'function') return [];
+            return engine.textureList().map((t) => ({
+                id: t.id,
+                path: t.path,
+                w: t.w,
+                h: t.h,
+                users: t.users,
+                mb: Math.round((t.bytes / (1024 * 1024)) * 1000) / 1000,
+            }));
+        },
+
+        /**
+         * Освободить текстуру по пути (то же, что `free`, но с отчётом):
+         * `{ ok, busy, users, mb, error }`. Текстура, которую держит живой
+         * спрайт, НЕ выгружается — вернётся `busy: true` и число `users`.
+         */
+        freeTexture(path) { return freeTextureByPath(path); },
 
         /** Отпустить все ссылки: число выгруженных ресурсов. */
         freeAll() { return registry.freeAll(); },

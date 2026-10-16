@@ -1654,6 +1654,7 @@ $.resource.define
 $.resource.error
 $.resource.free
 $.resource.freeAll
+$.resource.freeTexture
 $.resource.get
 $.resource.has
 $.resource.info
@@ -1667,6 +1668,7 @@ $.resource.remove
 $.resource.request
 $.resource.requests
 $.resource.stats
+$.resource.textures
 $.room
 $.room._emit
 $.room.adopt
@@ -3028,7 +3030,10 @@ engine.textInput
 engine.textInputArea
 engine.textureAverageColor
 engine.textureFromPixels
+engine.textureList
 engine.textureSize
+engine.textureSprites
+engine.textureUsers
 engine.timeScale
 engine.touch
 engine.touchCount

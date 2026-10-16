@@ -622,3 +622,6 @@ R2D_TEST_AUDIO=real python3 tests/agent/highlevel_sound_seek_test.py
 | `$.window.fullscreen({mode, width, height, refresh})` | `'desktop'`/`'exclusive'`/`'windowed'`; неизвестная опция → `{error, option}` и режим НЕ меняется; `fullscreen(true)` = desktop (совместимость) |
 | `$.window.state().fullscreen_mode` | факт: `'windowed' \| 'desktop' \| 'exclusive'`; инвариант `fullscreen === (fullscreen_mode !== 'windowed')` |
 | `$.window.hotkey(клавиша\|false)` | горячая клавиша фуллскрина: по умолчанию **F11**, `false` — отвязать |
+| `$.resource.textures()` | живые текстуры: `[{id, path, w, h, users, mb}]`; `users` — сколько ЖИВЫХ узлов её держат |
+| `$.resource.freeTexture(path)` | освободить текстуру по пути: `{ok, busy, users, mb, freed, error}`; занятую живым узлом НЕ выгружает |
+| `engine.textureUsers(id)` / `engine.textureList()` / `engine.textureSprites(id)` | служебные: пользователи текстуры, список живых текстур, спрайты текстуры |

@@ -478,6 +478,11 @@ int  r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h);
 // Выгрузка текстуры: GPU-ресурс освобождается, слот переиспользуется, спрайты
 // этой текстуры гасятся. Белую текстуру выгрузить нельзя (вернёт false).
 bool r2d_texture_free(R2DRenderer *r, int id);
+
+// Сколько ЖИВЫХ спрайтов ссылается на текстуру. Нужно, чтобы не выгрузить
+// текстуру, которой ещё пользуется узел: r2d_texture_free гасит такие спрайты
+// (это правильно при явной выгрузке), но вызывающий обязан сначала спросить.
+int r2d_texture_users(const R2DRenderer *r, int id);
 // Фильтрация спрайтов: false — nearest (пиксель-арт, как раньше), true —
 // линейная (сглаженный масштаб: текст, крупные спрайты, зум).
 void r2d_render_set_filter(R2DRenderer *r, bool linear);

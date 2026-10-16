@@ -2247,6 +2247,61 @@ static JSValue r2d__js_free_texture(JSContext *ctx, JSValueConst this_val, int a
     return JS_NewBool(ctx, r2d_texture_free(s->renderer, id));
 }
 
+// engine.textureUsers(id) → сколько живых спрайтов ссылается на текстуру.
+// osvobozhdat' текстуру, которую ещё используют, нельзя: r2d_texture_free гасит
+// такие спрайты, и узел молча останется без картинки.
+static JSValue r2d__js_texture_users(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s || !s->renderer) return JS_NewInt32(ctx, 0);
+    return JS_NewInt32(ctx, r2d_texture_users(s->renderer, r2d__arg_int(ctx, argc, argv, 0, -1)));
+}
+
+// engine.textureSprites(id) → [spriteId…] — какие спрайты ссылаются на текстуру.
+// Нужно, чтобы отличить «спрайт держит только кэш JS» от «спрайт держит живой
+// узел»: во втором случае текстуру выгружать нельзя.
+static JSValue r2d__js_texture_sprites(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue out = JS_NewArray(ctx);
+    if (!s || !s->renderer) return out;
+    R2DRenderer *r = s->renderer;
+    const int id = r2d__arg_int(ctx, argc, argv, 0, -1);
+    int n = 0;
+    for (int i = 0; i < r->sprite_count; ++i) {
+        if (!r->sprites[i].alive || r->sprites[i].texture != id) continue;
+        JS_SetPropertyUint32(ctx, out, (uint32_t)n++, JS_NewInt32(ctx, i));
+    }
+    return out;
+}
+
+// engine.textureList() → [{id, path, w, h, users, bytes}] — живые текстуры для
+// освобождения по пути и для отчёта о памяти.
+static JSValue r2d__js_texture_list(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue out = JS_NewArray(ctx);
+    if (!s || !s->renderer) return out;
+    R2DRenderer *r = s->renderer;
+    int n = 0;
+    for (int i = 0; i < r->texture_count; ++i) {
+        if (!r->textures[i].alive) continue;
+        JSValue o = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, o, "id", JS_NewInt32(ctx, i));
+        JS_SetPropertyStr(ctx, o, "path", JS_NewString(ctx, r2d_texture_name(r, i)));
+        JS_SetPropertyStr(ctx, o, "w", JS_NewInt32(ctx, r->textures[i].width));
+        JS_SetPropertyStr(ctx, o, "h", JS_NewInt32(ctx, r->textures[i].height));
+        JS_SetPropertyStr(ctx, o, "users", JS_NewInt32(ctx, r2d_texture_users(r, i)));
+        JS_SetPropertyStr(ctx, o, "bytes",
+                          JS_NewFloat64(ctx, (double)r->textures[i].width * r->textures[i].height * 4.0));
+        JS_SetPropertyUint32(ctx, out, (uint32_t)n++, o);
+    }
+    return out;
+}
+
 // engine.reloadTexture(id, path) → { ok, code, reason, w, h, ow, oh } (§27).
 //
 // Перезагрузка текстуры НА МЕСТЕ: картинка читается с диска (или из груза) и
@@ -6017,6 +6072,9 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, engine, "freeTexture", r2d__js_free_texture, 1);
     // §27: перезагрузка текстуры на месте и чтение байтов файла.
     r2d__set_fn(ctx, engine, "reloadTexture", r2d__js_reload_texture, 2);
+    r2d__set_fn(ctx, engine, "textureUsers", r2d__js_texture_users, 1);
+    r2d__set_fn(ctx, engine, "textureList", r2d__js_texture_list, 0);
+    r2d__set_fn(ctx, engine, "textureSprites",  r2d__js_texture_sprites, 1);
     r2d__set_fn(ctx, engine, "readBytes", r2d__js_read_bytes, 1);
     r2d__set_fn(ctx, engine, "requestReload", r2d__js_request_reload, 1);
     r2d__set_fn(ctx, engine, "reloadPending", r2d__js_reload_pending, 0);
