@@ -118,6 +118,9 @@ $.audio.acoustics
 $.audio.acousticsState
 $.audio.bus
 $.audio.buses
+$.audio.captureClear
+$.audio.captureStart
+$.audio.captured
 $.audio.clear
 $.audio.damping
 $.audio.dbToLinear
@@ -129,6 +132,7 @@ $.audio.fadeHandle
 $.audio.gain
 $.audio.getMasterVolume
 $.audio.handles
+$.audio.hrtf
 $.audio.linearToDb
 $.audio.listener
 $.audio.masterVolume
