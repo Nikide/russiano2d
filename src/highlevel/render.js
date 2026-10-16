@@ -3671,8 +3671,31 @@ export function installGfx($) {
         rgba(r, g, b, a) { return engine.rgba(r, g, b, a === undefined ? 255 : a); },
         color4(hex, alpha) { return withAlpha(packColor(hex), alpha === undefined ? 1 : alpha); },
 
-        /** Сколько спрайтов/треугольников ушло в кадр — для $.debug.stats(). */
-        stats() { return { ...state.stats }; },
+        /**
+         * Сколько спрайтов/треугольников ушло в кадр, плюс ПАМЯТЬ ТЕКСТУР:
+         * `sprites`, `triangles`, `texts`, `nodes`, `raw_count`, `raw_texts`,
+         * `textures` (сколько живых текстур), `texture_bytes` и `texture_mb`.
+         *
+         * Числа текстур берутся из того же реестра, что и `$.resource.textures()`,
+         * поэтому видны и текстуры, загруженные СПРАЙТАМИ ПО ПУТИ, а не только
+         * именованные ресурсы: без этого игру нельзя было продiagnostировать по
+         * памяти, кроме строк журнала (пункт F3 отчёта BASHNYA).
+         */
+        stats() {
+            const out = { ...state.stats };
+            if (typeof engine.renderInfo === 'function') {
+                const info = engine.renderInfo() || {};
+                const tex = info.textures || {};
+                const count = Number(tex.count) || 0;
+                const pixels = Number(tex.pixels) || 0;
+                out.textures = count;
+                out.textures_max = Number(tex.max) || 0;
+                // RGBA8: 4 байта на пиксель — это то, что реально в GPU.
+                out.texture_bytes = pixels * 4;
+                out.texture_mb = Math.round((pixels * 4 / (1024 * 1024)) * 100) / 100;
+            }
+            return out;
+        },
 
         /**
          * Z-буфер: `$.gfx.depth(true)` — включить тест глубины (по умолчанию

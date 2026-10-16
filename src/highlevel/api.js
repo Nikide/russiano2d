@@ -1333,9 +1333,20 @@ function installNodeMethods($) {
             const node = this.nodes[0];
             return node && node.shader_name ? node.shader_name : 'none';
         }
-        const custom = value !== null && ctx.gfx && typeof ctx.gfx.userShaders === 'function'
+        // `null`, `false`, `'none'` и пустая строка — все означают «снять
+        // эффект». Раньше `false` уходил в ветку «неизвестный эффект» и узел
+        // МОЛЧА оставался со старым шейдером: выключить искажение из игры было
+        // нельзя, только пересоздать узел (пункт E10 отчёта BASHNYA).
+        const off = value === null || value === false || value === 0 || value === ''
+            || String(value) === 'none';
+        if (!off && !this.nodes.length) {
+            ctx.log(`$: .shader("${value}") — узел не найден (пустая выборка), `
+                  + 'эффект не поставлен');
+            return this;
+        }
+        const custom = !off && ctx.gfx && typeof ctx.gfx.userShaders === 'function'
             && ctx.gfx.userShaders().indexOf(String(value)) >= 0;
-        if (value !== null && !FX_NAMES.has(String(value)) && !custom) {
+        if (!off && !FX_NAMES.has(String(value)) && !custom) {
             const known = Array.from(FX_NAMES);
             if (ctx.gfx && typeof ctx.gfx.userShaders === 'function') {
                 known.push(...ctx.gfx.userShaders());
@@ -1346,7 +1357,7 @@ function installNodeMethods($) {
             return this;
         }
         return this.eachNode((_, node) => {
-            if (value === null || String(value) === 'none') {
+            if (off) {
                 node.shader_name = null;
                 node.shader_params = null;
                 return;
