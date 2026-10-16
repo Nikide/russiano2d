@@ -21,7 +21,7 @@ import {
     invalidateNodeTransform,
     installTransformResolution, areaDefine, areaEnable, areaFind, areaListOf,
     areaInfo, areaOverlap, areaByIndex, areaOwnerNode,
-} from './core.js';
+    flushPhysAttrReports } from './core.js';
 import { installWorld } from './world.js';
 import { installCamera, cameraTransform } from './camera.js';
 import { installViewports } from './viewports.js';
@@ -2121,6 +2121,10 @@ function installFrameHooks($) {
         // и герой «проползёт» лишние пиксели (docs/TASKS.md §3).
         prof('катсцена'); tickCutscene(dt);
         prof('анимация+ввод'); animateSprites(); tickWorldHover(); applyControls(dt);
+        // Отложенные сообщения о физических атрибутах, выставленных после
+        // создания тела (§6.6): проверяем раз в кадр, когда уже видно,
+        // пересоздавали тело или нет.
+        flushPhysAttrReports();
         // Клипы, машины состояний и таймлайны тикают игровым временем, а не
         // сырым dt: иначе пауза и масштаб времени двигали твины, но не
         // анимацию персонажа. Интерфейс (экраны, диалоги, виджеты) остаётся

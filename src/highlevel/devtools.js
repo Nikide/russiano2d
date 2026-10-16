@@ -35,6 +35,7 @@ const ROWS = 24;              // сколько строк списка; ост�
 const REFRESH_FRAMES = 6;     // 10 Гц при 60 к/с: дешевле, чем каждый кадр
 const HISTORY_MAX = 300;      // своё кольцо кадров, если движок не даёт history
 const GRAPH_BARS = 48;        // столбцов в графике кадра
+const HITCH_ROWS = 8;          // сколько захватов §18 видно в списке
 const GRAPH_H = 56;           // высота области графика, px
 const GRAPH_FLOOR_MS = 50;    // нижняя граница шкалы: 16.67 мс × 3
 const FRAME_BUDGET_MS = 16.67; // бюджет кадра 60 к/с — порог подсветки
@@ -43,7 +44,7 @@ const COPY_NONE = '—';
 
 // Вкладки панели F1 и секции инспектора F2. Имена совпадают с id элементов
 // `tab-<имя>`: по ним же переключается класс hidden.
-const TABS = ['perf', 'tree', 'diag', 'assets', 'watch'];
+const TABS = ['perf', 'hitch', 'tree', 'diag', 'assets', 'watch'];
 const SECTIONS = ['identity', 'transform', 'gameplay', 'physics', 'presentation'];
 
 // ---------------------------------------------------------------------------
@@ -60,7 +61,7 @@ body { width: 100%; height: 100%; font-family: "Open Sans"; font-size: 13px; col
       background-color: rgba(9,13,20,0.94); border-width: 1px; border-color: #33415a; }
 #dt-title { display: block; padding: 4px 10px; color: #8fd8ff; }
 #dt-bar { position: absolute; left: 10px; top: 28px; width: 740px; }
-#dt-search { width: 140px; height: 24px; background-color: #203448; }
+#dt-search { width: 140px; height: 24px; background-color: #203448; vertical-align: middle; }
 #dt-list { position: absolute; left: 10px; top: 58px; width: 330px; height: 380px; }
 #dt-secbar { position: absolute; left: 348px; top: 58px; }
 #dt-inspect { position: absolute; left: 348px; top: 88px; width: 402px; height: 348px; }
@@ -72,9 +73,9 @@ body { width: 100%; height: 100%; font-family: "Open Sans"; font-size: 13px; col
 .dt-sec { display: block; white-space: pre-wrap; font-size: 11px; }
 .dt-sec span { display: block; }
 .dt-sec b { color: #8fd8ff; }
-button { padding: 3px 8px; margin: 1px; }
+button { padding: 3px 8px; margin: 1px; vertical-align: middle; }
 button.on { background-color: #3d6a8f; color: #ffffff; }
-input { width: 85px; height: 24px; background-color: #203448; }
+input { width: 85px; height: 24px; background-color: #203448; vertical-align: middle; }
 .hidden { display: none; }
 </style>
 </head>
@@ -125,6 +126,7 @@ body { width: 100%; height: 100%; font-family: "Open Sans"; font-size: 13px; col
 #rt-tabs { position: absolute; left: 10px; top: 28px; }
 .rt-tab { padding: 3px 8px; margin: 1px; }
 .rt-tab.on { background-color: #3d6a8f; color: #ffffff; }
+button.on { background-color: #3d6a8f; color: #ffffff; }
 .rt-section { display: block; color: #8fd8ff; font-size: 12px; }
 .rt-data { display: block; white-space: pre-wrap; font-size: 11px; }
 .hidden { display: none; }
@@ -148,14 +150,30 @@ body { width: 100%; height: 100%; font-family: "Open Sans"; font-size: 13px; col
 #rt-assets { position: absolute; left: 0px; top: 20px; width: 740px; height: 60px; }
 #rt-assets-buttons { position: absolute; left: 0px; top: 90px; }
 #rt-watches { position: absolute; left: 0px; top: 20px; width: 740px; height: 240px; }
+#tab-hitch { position: absolute; left: 10px; top: 58px; width: 740px; height: 380px; }
+#rt-hitch-buttons { position: absolute; left: 0px; top: 24px; }
+#rt-hitch-list { position: absolute; left: 0px; top: 58px; width: 360px; height: 150px;
+                 overflow: hidden; }
+#rt-hitch-empty { position: absolute; left: 0px; top: 58px; color: #a8b8cc; }
+#rt-hitch-detail { position: absolute; left: 372px; top: 58px; width: 368px; height: 150px; }
+#rt-hitch-zones { position: absolute; left: 0px; top: 216px; width: 360px; height: 158px; }
+#rt-hitch-graph { position: absolute; left: 372px; top: 232px; width: 368px; height: 56px;
+                  background-color: #101a28; }
+#rt-hitch-graph-labels { position: absolute; left: 372px; top: 292px; width: 368px; }
+#rt-hitch-note { position: absolute; left: 372px; top: 330px; width: 368px; color: #a8b8cc; }
+.rt-row { display: block; padding: 1px 4px; font-size: 11px; }
+.rt-row.sel { background-color: #1d2c44; color: #ffffff; }
+.rt-row.gone { display: none; }
+.rt-hbar { position: absolute; bottom: 0px; width: 44px; background-color: #4a9ad4; }
+.rt-hbar.peak { background-color: #d45a4a; }
 #rt-watch-buttons { position: absolute; left: 0px; top: 270px; }
 #rt-tools { position: absolute; left: 10px; top: 446px; width: 740px; }
 #rt-error { display: block; font-size: 11px; color: #ffb0a0; }
 .rt-bar { position: absolute; bottom: 0px; width: 5px; background-color: #4a9ad4; }
 .rt-bar.over { background-color: #d4a24a; }
 .rt-bar.peak { background-color: #d45a4a; }
-button { padding: 3px 8px; margin: 1px; }
-input { width: 85px; height: 24px; background-color: #203448; }
+button { padding: 3px 8px; margin: 1px; vertical-align: middle; }
+input { width: 85px; height: 24px; background-color: #203448; vertical-align: middle; }
 </style>
 </head>
 <body>
@@ -163,6 +181,7 @@ input { width: 85px; height: 24px; background-color: #203448; }
   <div id="rt-title">DevTools R2D (F1 — закрыть)</div>
   <div id="rt-tabs">
     <button id="rt-tab-perf" class="rt-tab">PERF</button>
+    <button id="rt-tab-hitch" class="rt-tab">HITCH</button>
     <button id="rt-tab-tree" class="rt-tab">ПРОФИЛЬ</button>
     <button id="rt-tab-diag" class="rt-tab">ДИАГНОСТИКА</button>
     <button id="rt-tab-assets" class="rt-tab">АССЕТЫ</button>
@@ -185,6 +204,25 @@ input { width: 85px; height: 24px; background-color: #203448; }
     <div class="rt-section">Иерархический профиль (§17.3–17.4): движковые зоны и $.debug.profiler.*</div>
     <div id="rt-tree-left" class="rt-data"></div>
     <div id="rt-tree-right" class="rt-data"></div>
+  </div>
+
+  <div id="tab-hitch" class="hidden">
+    <div class="rt-section">Захваты долгих кадров (§18). Порог: <span id="rt-hitch-threshold"></span></div>
+    <div id="rt-hitch-buttons">
+      <button id="rt-hitch-th-16">16.67 мс</button>
+      <button id="rt-hitch-th-25">25 мс</button>
+      <button id="rt-hitch-th-33">33 мс</button>
+      <button id="rt-hitch-th-50">50 мс</button>
+      <input id="rt-hitch-th-custom" type="text"/><button id="rt-hitch-th-apply">Свой порог</button>
+      <button id="rt-hitch-clear">Очистить</button>
+    </div>
+    <div id="rt-hitch-list"></div>
+    <div id="rt-hitch-empty" class="rt-data">захватов нет</div>
+    <div id="rt-hitch-detail" class="rt-data"></div>
+    <div id="rt-hitch-zones" class="rt-data"></div>
+    <div id="rt-hitch-graph"></div>
+    <div id="rt-hitch-graph-labels" class="rt-data"></div>
+    <div id="rt-hitch-note" class="rt-data"></div>
   </div>
 
   <div id="tab-diag" class="hidden">
@@ -444,8 +482,10 @@ export function installDevTools($) {
 
     function textMatch(node, brief, q) {
         const s = q.toLowerCase();
+        // kind берём у самого узла: в nodeBrief он есть только для не-2D
+        // (снимок 2D-игры не меняется), а поиск по kind нужен и для «2d».
         const parts = [
-            brief.id, brief.tag, brief.class, brief.kind, brief.state,
+            brief.id, brief.tag, brief.class, node.kind, brief.state,
             prefabName(node), node.attrs ? node.attrs.state : null,
         ];
         for (const p of parts) {
@@ -513,6 +553,30 @@ export function installDevTools($) {
         return { rows: clean, html, text };
     }
 
+    /**
+     * Связь узла с ассетом §27: среди ассетов под наблюдением ($.reload.list)
+     * ищем тот, чьё имя или путь совпадает с source/prefab узла. Ничего не
+     * додумываем: нет совпадения — «—».
+     */
+    function reloadMatch(node) {
+        if (!$.reload || typeof $.reload.list !== 'function') return null;
+        const wanted = [];
+        if (node.attrs && node.attrs.script) wanted.push(String(node.attrs.script));
+        const prefab = prefabName(node);
+        if (prefab) wanted.push(String(prefab));
+        if (wanted.length === 0) return null;
+        const list = call(() => $.reload.list(), []) || [];
+        for (const item of list) {
+            if (!item) continue;
+            for (const key of [item.name, item.path]) {
+                if (key && wanted.indexOf(String(key)) >= 0) {
+                    return { name: item.name, kind: item.kind, version: item.version, status: item.status };
+                }
+            }
+        }
+        return null;
+    }
+
     function identitySection(node) {
         const room = call(() => (ctx.scene ? ctx.scene.current() : null), null);
         // Владелец — область §5: показываем текущую комнату только если узел
@@ -520,6 +584,7 @@ export function installDevTools($) {
         const room_set = roomNodeSet();
         const owner = room_set && room_set.has(node.uid) ? String(room) : COPY_NONE;
         const tags = call(() => node.get('tags'), '');
+        const asset = reloadMatch(node);
         return sectionRows([
             ['selector', selectorOf(node)],
             ['nid', node.nid],
@@ -530,6 +595,7 @@ export function installDevTools($) {
             ['tags', tags || COPY_NONE],
             ['prefab', prefabName(node) || COPY_NONE],
             ['source', sourceOf(node)],
+            ['ассет ($.reload)', asset ? `${asset.name} v${asset.version} (${asset.status})` : COPY_NONE],
             ['owner (room)', owner],
             ['scene', room === null || room === undefined ? COPY_NONE : String(room)],
         ]);
@@ -573,8 +639,17 @@ export function installDevTools($) {
         const contacts = call(() => $.debug.contacts(), []) || [];
         const mine = contacts.filter((c) => c.self === node.nid || c.other === node.nid);
         const ground = a && a.ground ? (a.ground.on ? `да${a.ground.oneWay ? ' (one-way)' : ''}` : 'нет') : NA;
+        // Формы тела — из engine.devtools.shapes (список, а не только число).
+        const shape_list = node.body >= 0 && engine.devtools && typeof engine.devtools.shapes === 'function'
+            ? call(() => engine.devtools.shapes(node.body), null) : null;
+        const shapes = Array.isArray(shape_list)
+            ? (shape_list.length
+                ? shape_list.map((x) => `${x.kind}${x.sensor ? ' (sensor)' : ''}`).join(', ')
+                : 'нет')
+            : COPY_NONE;
         return sectionRows([
             ['body', body],
+            ['формы (shapes)', shapes],
             ['скорость', vel ? `${round2(vel[0])}, ${round2(vel[1])} px/с` : COPY_NONE],
             ['области', areas || COPY_NONE],
             ['контакты (за шаг)', String(mine.length)],
@@ -698,6 +773,8 @@ export function installDevTools($) {
             screen: { x: round2(p.x), y: round2(p.y) },
             world: { x: round2(hit.world.x), y: round2(hit.world.y) },
         };
+        // §21: панель обязана показать, что именно выбрано и откуда узел.
+        status(`Pick: ${state.last_pick.selector} (источник: ${state.last_pick.source})`);
         return state.last_pick;
     }
 
@@ -706,6 +783,11 @@ export function installDevTools($) {
         if (!node || !$.debug || !$.debug.draw) return;
         const hw = Math.abs(node.w) / 2;
         const hh = Math.abs(node.h) / 2;
+        // Координаты МИРОВЫЕ: `$.debug.draw.*` принимает мир и переводит его в
+        // экранные сам (docs/highlevel/fx.md, «$.debug.draw.* — мировые,
+        // переводит модуль отладки»). Переводить здесь второй раз нельзя —
+        // рамка уехала бы на смещение камеры (проверено пиксельно в
+        // tests/agent/devtools_pick_test.py).
         call(() => $.debug.draw.rect({ x: node.x - hw, y: node.y - hh },
                                      { x: node.x + hw, y: node.y + hh }, color), null);
     }
@@ -916,8 +998,9 @@ export function installDevTools($) {
         tab: 'perf',
         graph_samples: [],       // свои замеры, когда движок не отдаёт history
         watch_stats: new Map(),  // имя → { prev, min, max, threshold }
-        last_perf: null,
-        last_tree: null,
+        // §18: выбранный захват. pinned=false — панель сама показывает самый
+        // свежий; pinned=true — выбор сделан кликом и не перебивается новыми.
+        hitch: { selected: null, pinned: false },
     };
 
     // --- §17.1: сводка кадра ------------------------------------------------
@@ -968,17 +1051,23 @@ export function installDevTools($) {
         const gpu_available = !!(prof && prof.gpu_available === true);
         const gpu_ms = gpu_available && prof && isNum(prof.gpu_ms) && prof.gpu_ms >= 0 ? prof.gpu_ms : null;
 
-        // Формы: сумма по живым телам (engine.shapeCount — единственный
-        // источник). Дубли body id не считаем дважды.
+        // Формы: сумма по живым телам. Источника два, и оба честные:
+        // engine.devtools.shapes(body) (подробный список форм) и
+        // engine.shapeCount(body) — им пользуются, если первого нет.
+        // Дубли body id не считаем дважды.
         let shapes = null;
-        if (typeof engine.shapeCount === 'function') {
+        const shapesOf = (typeof engine.devtools === 'object' && engine.devtools &&
+                          typeof engine.devtools.shapes === 'function')
+            ? (body) => call(() => (engine.devtools.shapes(body) || []).length, null)
+            : (typeof engine.shapeCount === 'function' ? (body) => call(() => engine.shapeCount(body), null) : null);
+        if (shapesOf) {
             const seen = new Set();
             let sum = 0;
             for (const node of ctx.nodes) {
                 if (node.removed || !(node.body >= 0)) continue;
                 if (seen.has(node.body)) continue;
                 seen.add(node.body);
-                const n = call(() => engine.shapeCount(node.body), null);
+                const n = shapesOf(node.body);
                 if (isNum(n)) sum += n;
             }
             shapes = seen.size > 0 ? sum : 0;
@@ -996,20 +1085,24 @@ export function installDevTools($) {
             ['ui_ms', 'UI', zone('интерфейс (RmlUi)') !== null ? zone('интерфейс (RmlUi)') : subTime(report, ['интерфейс']), 'мс', 'engine.profile().rows / $.debug.profiler'],
             ['audio_ms', 'звук', subTime(report, ['шины звука', 'акустика']), 'мс', '$.debug.profiler.report()'],
             ['contacts', 'контактов (живых)', isNum(limits.contact_events) ? limits.contact_events : null, '', 'engine.limits().contact_events'],
-            ['draw_calls', 'draw calls', info && isNum(info.draws) ? info.draws : null, '', 'engine.renderInfo().draws'],
-            ['batches', 'батчи', null, '', 'движок не отдаёт счётчик батчей в JS'],
+            ['draw_calls', 'draw calls', info && isNum(info.draw_calls) ? info.draw_calls
+                : (info && isNum(info.draws) ? info.draws : null), '', 'engine.renderInfo().draw_calls'],
+            ['batches', 'батчи', info && isNum(info.batches) ? info.batches : null, '', 'engine.renderInfo().batches'],
             ['sprites', 'спрайтов за кадр', isNum(stats.sprites) ? stats.sprites : null, '', '$.debug.stats().sprites'],
             ['particles', 'частиц', isNum(counters.particles) ? counters.particles : null, '', '$.debug.counters().particles'],
             ['lights', 'источников света', light && isNum(light.lights) ? light.lights : null, '', '$.gfx.light.stats().lights'],
             ['shadow_lights', 'источников с тенями', light && isNum(light.shadowLights) ? light.shadowLights : null, '', '$.gfx.light.stats().shadowLights'],
             ['bodies', 'тел', isNum(counters.bodies) ? counters.bodies : null, '', '$.debug.counters().bodies'],
-            ['shapes', 'форм', shapes, '', 'Σ engine.shapeCount(тело)'],
+            ['shapes', 'форм', shapes, '', 'Σ engine.devtools.shapes(тело).length'],
             ['nodes', 'узлов', isNum(counters.nodes) ? counters.nodes : null, '', '$.debug.counters().nodes'],
             ['timers', 'таймеров', null, '', 'нет публичного счётчика таймеров'],
             ['tweens', 'твинов', isNum(counters.tweens) ? counters.tweens : null, '', '$.debug.counters().tweens'],
             ['audio_voices', 'голосов звука', isNum(stats.sounds) ? stats.sounds : null, '', '$.debug.stats().sounds'],
-            ['textures', 'текстур', isNum(limits.textures) ? limits.textures : textures.length, '', 'engine.limits().textures'],
-            ['render_targets', 'render targets', null, '', 'движок не отдаёт счётчик render target в JS'],
+            ['textures', 'текстур', isNum(limits.textures) ? limits.textures
+                : (info && info.textures && isNum(info.textures.count) ? info.textures.count : textures.length),
+                '', 'engine.limits().textures'],
+            ['render_targets', 'render targets', info && Array.isArray(info.targets) ? info.targets.length : null,
+                '', 'engine.renderInfo().targets'],
         ];
 
         const rows_out = rows_spec.map(([key, label, value, unit, source]) => {
@@ -1231,6 +1324,184 @@ export function installDevTools($) {
         return true;
     }
 
+    // --- §18: захваты долгих кадров (hitch detector) ------------------------
+
+    /** Биндинги движка (без них вкладка честно скажет, что данных нет). */
+    function hitchApi() {
+        const h = (typeof engine === 'undefined') ? null : engine.hitch;
+        if (!h || typeof h.count !== 'function' || typeof h.get !== 'function') return null;
+        return h;
+    }
+
+    /** Один захват в терминах панели: только факты из записи движка. */
+    function normalizeCapture(index, c) {
+        if (!c || typeof c !== 'object') return null;
+        const center = isNum(c.center) ? c.center : 0;
+        const zones = Array.isArray(c.zones) ? c.zones : [];
+        const zoneRows = (zones[center] && Array.isArray(zones[center]) ? zones[center] : [])
+            .map((z) => ({
+                name: z && z.name ? String(z.name) : COPY_NONE,
+                ms: z && isNum(z.ms) ? z.ms : null,
+            }));
+        return {
+            index,
+            frame: isNum(c.frame) ? c.frame : null,
+            frame_ms: isNum(c.frame_ms) ? c.frame_ms : null,
+            real_ms: isNum(c.real_ms) ? c.real_ms : null,
+            threshold_ms: isNum(c.threshold_ms) ? c.threshold_ms : null,
+            center,
+            filled: isNum(c.filled) ? c.filled : 0,
+            zones_ms: isNum(c.zones_ms) ? c.zones_ms : null,
+            unaccounted_ms: isNum(c.unaccounted_ms) ? c.unaccounted_ms : null,
+            reason: c.reason ? String(c.reason) : null,
+            reason_zone: isNum(c.reason_zone) ? c.reason_zone : null,
+            reason_ms: isNum(c.reason_ms) ? c.reason_ms : null,
+            ms: Array.isArray(c.ms) ? c.ms.filter(isNum) : [],
+            zones_count: zones.length,
+            zone_rows: zoneRows,
+            context_before: center,
+            context_after: Math.max(0, (isNum(c.filled) ? c.filled : 0) - center - 1),
+        };
+    }
+
+    /** Причина захвата: имя зоны из записи + её время (§18). */
+    function hitchReasonText(rec) {
+        if (!rec || !rec.reason) return COPY_NONE;
+        const where = rec.reason_zone === null ? '' : ` (зона #${rec.reason_zone})`;
+        return `${rec.reason}${where}${rec.reason_ms !== null ? ' — ' + msText(rec.reason_ms) : ''}`;
+    }
+
+    /**
+     * Строка списка захватов (§18): номер кадра, время кадра, порог и причина.
+     * Формат намеренно короткий — строка списка должна остаться одной строкой,
+     * иначе восемь захватов не помещаются в свою область панели.
+     */
+    function hitchRowText(rec) {
+        const cause = rec.reason
+            ? rec.reason + (rec.reason_ms !== null ? ' ' + msText(rec.reason_ms) : '')
+            : COPY_NONE;
+        return `кадр ${rec.frame === null ? COPY_NONE : rec.frame}: ${msText(rec.frame_ms)}`
+            + `, порог ${rec.threshold_ms === null ? NA : numText(rec.threshold_ms, 0)}`
+            + `, ${cause}`;
+    }
+
+    function hitchData() {
+        const h = hitchApi();
+        if (!h) {
+            return {
+                available: false, count: 0, total: 0, threshold: null,
+                list: [], selected: null, capture: null,
+                text: { list: '', detail: 'Захватов нет: движок без hitch-детектора.',
+                        zones: '', graph: '', threshold: NA },
+            };
+        }
+        const count = call(() => h.count(), 0) || 0;
+        const total = call(() => h.total(), 0) || 0;
+        const threshold = call(() => (typeof h.threshold === 'function' ? h.threshold() : null), null);
+        const list = [];
+        for (let i = 0; i < count; i++) {
+            const rec = normalizeCapture(i, call(() => h.get(i), null));
+            if (rec) list.push(rec);
+        }
+        // Выбор: пока захват не выбран кликом, показываем самый свежий
+        // (get(0) — самый старый, get(count-1) — новый). Иначе новый захват
+        // «уезжал» бы вниз списка, а панель продолжала показывать старый.
+        let selected = null;
+        if (runtime.hitch.pinned && runtime.hitch.selected !== null
+            && runtime.hitch.selected >= 0 && runtime.hitch.selected < list.length) {
+            selected = runtime.hitch.selected;
+        } else {
+            runtime.hitch.pinned = false;
+            selected = list.length > 0 ? list.length - 1 : null;
+        }
+        runtime.hitch.selected = selected;
+        const capture = selected === null ? null : list[selected];
+
+        // Тексты — те же, что уходят в панель.
+        const listText = list.map(hitchRowText).join('\n');
+        let detail = 'Захватов нет: долгих кадров выше порога не было.';
+        let zonesText = '';
+        let graphText = '';
+        if (capture) {
+            detail = `Выбран захват #${capture.index} (i=${capture.index}): кадр `
+                + `${capture.frame === null ? COPY_NONE : capture.frame}\n`
+                + `кадр ${msText(capture.frame_ms)} | реальный dt ${msText(capture.real_ms)}`
+                + ` | порог ${capture.threshold_ms === null ? NA : numText(capture.threshold_ms, 2)} мс\n`
+                + `зоны кадра ${msText(capture.zones_ms)} | неучтено ${msText(capture.unaccounted_ms)}`
+                + ` | контекст ${intText(capture.filled)} (${capture.context_before} до / ${capture.context_after} после)\n`
+                + `причина: ${hitchReasonText(capture)}`;
+            zonesText = capture.zone_rows.length
+                ? capture.zone_rows.map((z, i) =>
+                    `${i === capture.reason_zone ? '→ ' : '  '}${z.name}: ${msText(z.ms)}`).join('\n')
+                  + `\nИтого зон: ${msText(capture.zones_ms)}`
+                : 'Разбивки по зонам у этого захвата нет.';
+            const top = Math.max(0.001, capture.ms.length ? Math.max.apply(null, capture.ms) : 0);
+            graphText = capture.ms.map((v, i) => {
+                const label = i === capture.center ? 'всплеск' : (i < capture.center ? '-' + (capture.center - i) : '+' + (i - capture.center));
+                return `${label}: ${numText(v, 2)} мс`;
+            }).join(' | ');
+            graphText += `\nшкала 0…${numText(top, 2)} мс (${capture.ms.length} кадров контекста)`;
+        }
+        return {
+            available: true, count, total,
+            threshold: isNum(threshold) ? threshold : null,
+            list, selected, capture,
+            text: {
+                list: listText, detail, zones: zonesText, graph: graphText,
+                threshold: isNum(threshold) ? numText(threshold, 2) + ' мс' : NA,
+            },
+        };
+    }
+
+    /** Микро-график ms[] (§18): всплеск в центре — красный столбец. */
+    function hitchGraphHtml(capture) {
+        if (!capture || capture.ms.length === 0) return '';
+        const top = Math.max(0.001, Math.max.apply(null, capture.ms));
+        return capture.ms.map((v, i) => {
+            const h = Math.max(1, Math.min(GRAPH_H, Math.round((v / top) * GRAPH_H)));
+            return `<div class="rt-hbar${i === capture.center ? ' peak' : ''}" id="rt-hitch-bar-${i}" `
+                + `style="left: ${i * 62}px; height: ${h}px;"></div>`;
+        }).join('');
+    }
+
+    function hitchSelect(index) {
+        const h = hitchApi();
+        if (!h) return false;
+        const i = Math.floor(Number(index));
+        if (!Number.isFinite(i)) return false;
+        const count = call(() => h.count(), 0) || 0;
+        if (i < 0 || i >= count) return false;
+        runtime.hitch.selected = i;
+        runtime.hitch.pinned = true;    // выбор сделан явно — авто-режим выключен
+        refreshRuntime(true);
+        return true;
+    }
+
+    /** Порог детектора: без аргумента — прочитать, с числом — выставить (§18). */
+    function hitchThreshold(ms) {
+        const h = hitchApi();
+        if (!h || typeof h.threshold !== 'function') return null;
+        if (ms === undefined) {
+            const v = call(() => h.threshold(), null);
+            return isNum(v) ? v : null;
+        }
+        const value = Number(ms);
+        if (!Number.isFinite(value) || value <= 0) return null;
+        const v = call(() => h.threshold(value), null);
+        refreshRuntime(true);
+        return isNum(v) ? v : null;
+    }
+
+    function hitchClear() {
+        const h = hitchApi();
+        if (!h || typeof h.clear !== 'function') return false;
+        call(() => h.clear(), null);
+        runtime.hitch.selected = null;
+        runtime.hitch.pinned = false;
+        refreshRuntime(true);
+        return true;
+    }
+
     // --- Обновление панели F1 ----------------------------------------------
 
     function refreshRuntime(force) {
@@ -1256,7 +1527,6 @@ export function installDevTools($) {
 
         // §17: сводка, график и перцентили.
         const perf = perfData();
-        runtime.last_perf = perf;
         // Свои замеры копим только когда движок не отдаёт history (§17.2):
         // иначе график рисовался бы по второму источнику.
         const has_history = !!(r.profile && Array.isArray(r.profile.history) && r.profile.history.length > 0);
@@ -1273,7 +1543,6 @@ export function installDevTools($) {
 
         // §17.3–17.4: дерево.
         const tree = treeData();
-        runtime.last_tree = tree;
         uiSetText(doc, 'rt-tree-left', tree.text.left);
         uiSetText(doc, 'rt-tree-right', tree.text.right);
 
@@ -1287,6 +1556,34 @@ export function installDevTools($) {
         uiSetText(doc, 'rt-limits', Object.entries(r.limits).map(([k, v]) => k + ': ' + v).join(' | '));
         uiSetText(doc, 'rt-textures', r.textures.map((t) => t.id + ': ' + t.name + ' (' + t.width + ' x ' + t.height + ')').join(' | '));
         uiSetText(doc, 'rt-watches', watchText());
+
+        // §18: захваты долгих кадров. Список — фиксированные строки (создаются
+        // один раз при открытии), поэтому слушатели кликов не теряются.
+        const hitch = hitchData();
+        uiSetText(doc, 'rt-hitch-threshold', hitch.text.threshold);
+        uiSetText(doc, 'rt-hitch-detail', hitch.text.detail);
+        uiSetText(doc, 'rt-hitch-zones', hitch.text.zones);
+        uiSetText(doc, 'rt-hitch-graph-labels', hitch.text.graph);
+        uiSetHtml(doc, 'rt-hitch-graph', hitchGraphHtml(hitch.capture));
+        uiSetClass(doc, 'rt-hitch-empty', 'hidden', hitch.count > 0);
+        const order = hitch.list.slice().reverse();     // свежие сверху
+        for (let i = 0; i < HITCH_ROWS; i++) {
+            const rec = order[i] || null;
+            const id = `rt-hitch-row-${i}`;
+            if (!rec) {
+                uiSetClass(doc, id, 'gone', true);
+                continue;
+            }
+            uiSetText(doc, id, hitchRowText(rec));
+            uiSetClass(doc, id, 'gone', false);
+            uiSetClass(doc, id, 'sel', rec.index === hitch.selected);
+        }
+        for (const [preset, element] of [[16.67, 'rt-hitch-th-16'], [25, 'rt-hitch-th-25'],
+                                         [33, 'rt-hitch-th-33'], [50, 'rt-hitch-th-50']]) {
+            uiSetClass(doc, element, 'on',
+                       hitch.threshold !== null && Math.abs(hitch.threshold - preset) < 0.005);
+        }
+
         // §27: индикатор хот-релоада — сколько ассетов под наблюдением, сколько
         // неудачных, что случилось последним и сколько handle'ов ждёт
         // освобождения (очередь §27).
@@ -1351,6 +1648,39 @@ export function installDevTools($) {
                 refreshRuntime(true);
             });
             engine.ui.on(runtime.doc, 'rt-watch-reset', 'click', () => { watchReset(); refreshRuntime(true); });
+            // §18: строки списка захватов создаются ОДИН раз — на них висят
+            // обработчики выбора, поэтому пересобирать разметку нельзя.
+            uiSetHtml(runtime.doc, 'rt-hitch-list', Array.from({length: HITCH_ROWS}, (_, i) =>
+                `<div class="rt-row" id="rt-hitch-row-${i}"></div>`).join(''));
+            for (let i = 0; i < HITCH_ROWS; i++) {
+                engine.ui.on(runtime.doc, `rt-hitch-row-${i}`, 'click', () => {
+                    // Строки идут свежими сверху: i-я строка — захват (count-1-i).
+                    const count = call(() => (hitchApi() ? hitchApi().count() : 0), 0) || 0;
+                    const index = count - 1 - i;
+                    if (index >= 0) hitchSelect(index);
+                });
+            }
+            engine.ui.on(runtime.doc, 'rt-hitch-th-16', 'click', () => { hitchThreshold(16.67); });
+            engine.ui.on(runtime.doc, 'rt-hitch-th-25', 'click', () => { hitchThreshold(25); });
+            engine.ui.on(runtime.doc, 'rt-hitch-th-33', 'click', () => { hitchThreshold(33); });
+            engine.ui.on(runtime.doc, 'rt-hitch-th-50', 'click', () => { hitchThreshold(50); });
+            engine.ui.on(runtime.doc, 'rt-hitch-th-apply', 'click', () => {
+                const raw = String(uiValue(runtime.doc, 'rt-hitch-th-custom') === null
+                    ? '' : uiValue(runtime.doc, 'rt-hitch-th-custom')).trim().replace(',', '.');
+                const value = Number(raw);
+                if (!raw || !Number.isFinite(value) || value <= 0) {
+                    uiSetText(runtime.doc, 'rt-hitch-note', 'Порог: нужно число больше нуля (мс).');
+                    return;
+                }
+                const set = hitchThreshold(value);
+                uiSetText(runtime.doc, 'rt-hitch-note', set === null
+                    ? 'Порог не применён: hitch-детектор недоступен.'
+                    : `Порог ${numText(set, 2)} мс применён.`);
+            });
+            engine.ui.on(runtime.doc, 'rt-hitch-clear', 'click', () => {
+                hitchClear();
+                uiSetText(runtime.doc, 'rt-hitch-note', 'Кольцо захватов очищено.');
+            });
             // §27: кнопки хот-релоада ассетов. Данные не трогают: применяется
             // то, что уже прочитано и проверено конвейером $.reload.
             if ($.reload) {
@@ -1429,6 +1759,41 @@ export function installDevTools($) {
         watchThreshold,
         watchReset,
 
+        /**
+         * §18: захваты долгих кадров — то же, что видно на вкладке HITCH:
+         * список (свежие сверху), выбранный захват с разбивкой по зонам и
+         * текстами строк. Нет данных — count 0 и честный текст.
+         */
+        hitch() {
+            const h = hitchData();
+            return {
+                available: h.available, count: h.count, total: h.total,
+                threshold: h.threshold, selected: h.selected,
+                rows: h.list.slice().reverse().map((rec) => ({
+                    index: rec.index, frame: rec.frame, frame_ms: rec.frame_ms,
+                    threshold_ms: rec.threshold_ms, reason: rec.reason,
+                    reason_zone: rec.reason_zone, reason_ms: rec.reason_ms,
+                    text: hitchRowText(rec),
+                })),
+                capture: h.capture ? {
+                    index: h.capture.index, frame: h.capture.frame, frame_ms: h.capture.frame_ms,
+                    real_ms: h.capture.real_ms, threshold_ms: h.capture.threshold_ms,
+                    center: h.capture.center, filled: h.capture.filled,
+                    zones_ms: h.capture.zones_ms, unaccounted_ms: h.capture.unaccounted_ms,
+                    reason: h.capture.reason, reason_zone: h.capture.reason_zone,
+                    reason_ms: h.capture.reason_ms, ms: h.capture.ms,
+                    zone_rows: h.capture.zone_rows,
+                } : null,
+                text: h.text,
+            };
+        },
+        /** §18: выбрать захват по индексу движка (0 — самый старый). */
+        hitchSelect,
+        /** §18: порог детектора — прочитать (без аргумента) или выставить. */
+        hitchThreshold,
+        /** §18: очистить кольцо захватов. */
+        hitchClear,
+
         /** Открыть панель (в сборке без RmlUi честно вернёт false). */
         open,
         close,
@@ -1459,6 +1824,28 @@ export function installDevTools($) {
 
         /** §20: данные всех секций выбранного узла (те же, что в панели). */
         inspect,
+
+        /**
+         * §20: текущая выборка списка с учётом поиска и фильтров — те же
+         * факты, что видны в панели. Порядок совпадает с порядком строк.
+         */
+        list() {
+            const room = roomNodeSet();
+            return filtered().map(({ brief, node }) => ({
+                uid: node.uid,
+                nid: node.nid,
+                selector: selectorOf(node),
+                tag: node.tag,
+                kind: node.kind,
+                class: [...node.classes].join(' ') || null,
+                prefab: prefabName(node) || null,
+                state: node.attrs && node.attrs.state !== undefined ? node.attrs.state : null,
+                body: isNum(brief.body) ? brief.body : null,
+                visible: brief.visible === true,
+                active: call(() => effectiveProcessing(node).update !== false, null),
+                room: room ? room.has(node.uid) : null,
+            }));
+        },
 
         /** §21: режим Pick entity. */
         pickMode(on) { return setPick(on); },

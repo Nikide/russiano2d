@@ -555,6 +555,43 @@ let next_nid = 1;
 const nid_digits = new Set(['n', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
 
 /** Назначить узлу новый nid (вызывается при создании, если его ещё нет). */
+//: Узлы, которым физический атрибут выставили ПОСЛЕ создания тела. Проверяем
+//: не сразу, а на следующем кадре: `.body()`/`.collision()` пересоздают тело и
+//: читают attrs заново, поэтому мгновенное сообщение было бы ложным — именно
+//: так оно и сработало на демо melee («трение задаётся до .collision(): тело
+//: пересоздаётся и читает attrs»). Сообщаем, только если тело с тех пор не
+//: пересоздавали: значит значение действительно не применилось.
+const phys_pending = [];
+
+function notePhysAttr(node, key, value) {
+    phys_pending.push({ node, key, value, body: node.body, gen: node._body_gen || 0 });
+}
+
+/** Вызывается раз в кадр (api.js). Дёшево: список обычно пуст. */
+export function flushPhysAttrReports() {
+    if (phys_pending.length === 0) return;
+    for (let i = phys_pending.length - 1; i >= 0; i--) {
+        const p = phys_pending[i];
+        const node = p.node;
+        if (!node || node.removed) { phys_pending.splice(i, 1); continue; }
+        if ((node._body_gen || 0) !== p.gen || node.body !== p.body) {
+            phys_pending.splice(i, 1);   // тело пересоздали — значение прочитано
+            continue;
+        }
+        phys_pending.splice(i, 1);
+        diagReport('$.attr', new Error(
+            `$.attr('${p.key}') после создания тела не меняет физику: ` +
+            'Box2D читает это число один раз, при создании тела'), {
+            code: 'R2D_ATTR_AFTER_BODY',
+            subsystem: 'physics',
+            operation: 'attr',
+            nodeId: node.id,
+            recoverable: true,
+            data: { attr: p.key, value: p.value, body: p.body },
+        });
+    }
+}
+
 export function assignNid(node) {
     if (!node || typeof node !== 'object') return null;
     if (node.nid === undefined || node.nid === null || node.nid === '') {
@@ -1677,16 +1714,7 @@ export class Node {
             const was = this.attrs[key];
             this.attrs[key] = value;
             if (was !== value && this.body >= 0 && value !== undefined && value !== null) {
-                diagReport('$.attr', new Error(
-                    `$.attr('${key}') после создания тела не меняет физику: ` +
-                    'Box2D читает это число один раз, при создании тела'), {
-                    code: 'R2D_ATTR_AFTER_BODY',
-                    subsystem: 'physics',
-                    operation: 'attr',
-                    nodeId: this.id,
-                    recoverable: true,
-                    data: { attr: key, value, body: this.body },
-                });
+                notePhysAttr(this, key, value);
             }
             return this;
         }
@@ -1874,6 +1902,9 @@ export class Node {
         if (want_contacts) opts.contacts = true;
 
         this.body = engine.createBody(opts);
+        // Поколение тела: по нему отложенная проверка атрибутов понимает, что
+        // тело пересоздали и значение всё-таки прочитано.
+        this._body_gen = (this._body_gen || 0) + 1;
         this.body_kind = kind;
         if (this.body < 0) {
             ctx.log(`$: не удалось создать тело для <${this.tag}>`);

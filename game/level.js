@@ -118,11 +118,14 @@ export function makeLevel(spec) {
                         .attr({ damage: 25, spike: true })
                         .appendTo(world);
                 } else if (cell === 'C') {
-                    $('<rect>', { class: 'crate' }).at(x, y).size(TILE, TILE)
+                    // Плотность и трение — в конструктор: Box2D читает их один раз,
+                    // при создании тела, поэтому .attr() после .body() ничего бы не
+                    // изменил (раньше это молчало — §6.6 плана дополировки).
+                    $('<rect>', { class: 'crate', density: 0.8, friction: 0.5 })
+                        .at(x, y).size(TILE, TILE)
                         .body('dynamic')
                         .sprite({ src: 'assets/atlas.png', cols: 4, rows: 1, cw: TILE, ch: TILE })
                         .frame(FRAME.crate)
-                        .attr({ density: 0.8, friction: 0.5 })
                         .appendTo(world);
                 } else if (cell === 'o') {
                     state.totalCoins++;

@@ -25,7 +25,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
-from agent_client import Agent   # noqa: E402
+from agent_client import Agent, ROOT   # noqa: E402
 
 GAME = os.path.join("tests", "fixtures", "bare")
 FAILURES = []
@@ -66,6 +66,15 @@ def check(condition, message):
 def arm(a, frames=1, ms=SPIKE_MS):
     """Взвести спайк: следующие `frames` кадров удлиняются на `ms` мс."""
     a.eval("globalThis.__spike(%d, %s)" % (frames, ms))
+
+
+def click(a, doc, element_id):
+    """Настоящий клик мышью по элементу RmlUi (не программный click())."""
+    r = a.eval("engine.ui.rect(%s,%r)" % (doc, element_id))
+    a.mouse_move(x=r["x"] + r["w"] / 2, y=r["y"] + r["h"] / 2)
+    a.step(3)
+    a.mouse(button=1, action="click")
+    a.step(3)
 
 
 def main():
@@ -177,6 +186,124 @@ def main():
               "кольцо отдаёт захваты по времени: get(0) старее get(count-1) (%s < %s)"
               % (oldest.get("frame"), newest.get("frame")))
         check(a.eval("engine.hitch.get(%d)" % n) is None, "get(count) → null")
+
+        # --- §18 в панели DevTools: вкладка HITCH ------------------------------
+        # Детектор уже проверен выше как таковой; здесь проверяется, что панель
+        # показывает ТЕ ЖЕ факты и что её кнопки действительно управляют им.
+        a.eval("engine.hitch.threshold(50)")
+        a.eval("engine.hitch.clear()")
+        check(a.eval("$.devtools.openRuntime()") is True, "панель F1 открылась документом RmlUi")
+        doc = a.eval("$.devtools.runtimePanel().doc")
+        click(a, doc, "rt-tab-hitch")
+        check(a.eval("$.devtools.tabName()") == "hitch", "клик открыл вкладку HITCH")
+        a.step(8)
+
+        empty = a.eval("$.devtools.hitch()")
+        check(empty["count"] == 0 and "Захватов нет" in empty["text"]["detail"],
+              "пустое кольцо — честное «захватов нет», а не нули-числа")
+        check(a.eval("engine.ui.getText(%s,'rt-hitch-detail')" % doc).startswith("Захватов нет"),
+              "в панели сказано то же самое")
+        check(a.eval("engine.ui.getText(%s,'rt-hitch-threshold')" % doc) == "50.00 мс",
+              "текущий порог показан в панели")
+
+        arm(a, 1, SPIKE_MS)
+        a.step(9)       # спайк, кадры контекста и цикл обновления панели (10 Гц)
+        cap = a.eval("engine.hitch.get(0)")
+        h = a.eval("$.devtools.hitch()")
+        check(h["count"] == 1, "захват виден в панели (count=%s)" % h["count"])
+        row = h["rows"][0]
+        check(row["frame"] == cap["frame"] and abs(row["frame_ms"] - cap["frame_ms"]) < 1e-6,
+              "строка захвата несёт номер кадра и его время (кадр %s, %.2f мс)"
+              % (row["frame"], row["frame_ms"]))
+        check(row["reason"] == cap["reason"],
+              "причина строки = engine.hitch.get(0).reason (%r)" % row["reason"])
+        check(row["reason_zone"] == cap["reason_zone"],
+              "индекс зоны строки = engine.hitch.get(0).reason_zone (%s)" % row["reason_zone"])
+        check(row["threshold_ms"] == cap["threshold_ms"],
+              "в строке записан порог захвата (%s мс)" % row["threshold_ms"])
+        zone = (cap.get("zones") or [])[cap.get("center", 0)][cap["reason_zone"]]
+        check(zone["name"] == cap["reason"] and abs(zone["ms"] - cap["reason_ms"]) < 1e-6,
+              "reason/reason_zone указывают на самую дорогую зону кадра (%s)" % zone["name"])
+
+        ui_row = a.eval("engine.ui.getText(%s,'rt-hitch-row-0')" % doc)
+        check(row["text"] == ui_row and ("кадр %s" % cap["frame"]) in ui_row,
+              "строка в панели: %s" % ui_row)
+        check(a.eval("engine.ui.getText(%s,'rt-hitch-detail')" % doc) == h["text"]["detail"],
+              "детали выбранного захвата в панели = данные")
+        check(a.eval("engine.ui.getText(%s,'rt-hitch-zones')" % doc) == h["text"]["zones"],
+              "разбивка по зонам в панели = данные")
+        check(cap["reason"] in h["text"]["zones"], "причина помечена в разбивке по зонам")
+        check("всплеск" in h["text"]["graph"] and ("%.2f" % cap["frame_ms"]) in h["text"]["graph"],
+              "микро-график подписан временами кадров контекста")
+
+        # Столбцы микро-графика: высота = ms[], всплеск в центре — выше соседей.
+        top = max(cap["ms"]) if cap["ms"] else 0.0
+        heights_ok = True
+        for i, value in enumerate(cap["ms"]):
+            want = 1 if top <= 0 else max(1, min(56, int(round(value / top * 56))))
+            r = a.eval("engine.ui.rect(%s,'rt-hitch-bar-%d')" % (doc, i))
+            if not r or r["w"] <= 0 or abs(r["h"] - want) > 1:
+                heights_ok = False
+                print("       столбец %d: rect=%s данные=%s" % (i, r, want))
+        check(heights_ok, "высота столбцов микро-графика = ms[] (%d кадров)" % len(cap["ms"]))
+        bar_center = a.eval("engine.ui.rect(%s,'rt-hitch-bar-%d')" % (doc, cap["center"]))
+        bar_first = a.eval("engine.ui.rect(%s,'rt-hitch-bar-0')" % doc)
+        check(bar_center and bar_first and bar_center["h"] > bar_first["h"],
+              "всплеск на графике выше соседнего кадра (%s > %s)"
+              % (bar_center["h"] if bar_center else None, bar_first["h"] if bar_first else None))
+        a.screenshot(os.path.join(ROOT, "build", "devtools_hitch_tab.png"))
+
+        # --- Выбор захвата: по умолчанию свежий, клик по строке — явный --------
+        arm(a, 1, SPIKE_MS)
+        a.step(9)
+        h2 = a.eval("$.devtools.hitch()")
+        check(h2["count"] == 2, "второй долгий кадр добавил захват (%s)" % h2["count"])
+        newest = a.eval("engine.hitch.get(%d)" % (h2["count"] - 1))
+        check(h2["selected"] == h2["count"] - 1 and h2["rows"][0]["frame"] == newest["frame"],
+              "по умолчанию показан самый свежий захват (кадр %s), а не старый"
+              % h2["rows"][0]["frame"])
+        check(("кадр %s" % newest["frame"]) in h2["text"]["detail"],
+              "детали описывают свежий захват (кадр %s)" % newest["frame"])
+        click(a, doc, "rt-hitch-row-1")
+        selected_old = a.eval("$.devtools.hitch()")
+        older = a.eval("engine.hitch.get(0)")
+        check(selected_old["selected"] == 0 and older["frame"] in
+              [r["frame"] for r in selected_old["rows"]],
+              "клик по второй строке выбрал более старый захват (#%s)" % selected_old["selected"])
+        check(("кадр %s" % older["frame"]) in selected_old["text"]["detail"],
+              "детали переключились на выбранный захват")
+        check(("кадр %s" % older["frame"]) in
+              a.eval("engine.ui.getText(%s,'rt-hitch-detail')" % doc),
+              "панель показывает выбранный захват")
+        a.eval("$.devtools.hitchClear()")
+        a.step(8)
+
+        # --- Порог и очистка кнопками панели -----------------------------------
+        check(a.eval("$.devtools.hitchThreshold(25)") == 25, "DevTools выставляет порог 25 мс")
+        check(a.eval("engine.hitch.threshold()") == 25, "движок принял порог из DevTools")
+        click(a, doc, "rt-hitch-th-33")
+        check(a.eval("engine.hitch.threshold()") == 33, "кнопка 33 мс выставила порог движку")
+        click(a, doc, "rt-hitch-th-16")
+        check(abs(a.eval("engine.hitch.threshold()") - 16.67) < 1e-6, "кнопка 16.67 мс")
+        a.eval("engine.ui.setValue(%s,'rt-hitch-th-custom','17.5')" % doc)
+        click(a, doc, "rt-hitch-th-apply")
+        check(abs(a.eval("engine.hitch.threshold()") - 17.5) < 1e-6, "свой порог из поля")
+        a.eval("engine.ui.setValue(%s,'rt-hitch-th-custom','abc')" % doc)
+        click(a, doc, "rt-hitch-th-apply")
+        check(abs(a.eval("engine.hitch.threshold()") - 17.5) < 1e-6,
+              "невалидный ввод порог не меняет")
+        check("число" in a.eval("engine.ui.getText(%s,'rt-hitch-note')" % doc),
+              "панель объяснила, что нужен число больше нуля")
+
+        click(a, doc, "rt-hitch-clear")
+        check(a.eval("engine.hitch.count()") == 0, "кнопка «Очистить» очистила кольцо")
+        a.step(8)
+        check(a.eval("engine.ui.getText(%s,'rt-hitch-detail')" % doc).startswith("Захватов нет"),
+              "панель вернулась к честному «захватов нет»")
+        check(abs(a.eval("engine.hitch.threshold()") - 17.5) < 1e-6,
+              "очистка кольца не трогает порог")
+        a.eval("engine.hitch.threshold(50)")
+        a.eval("$.devtools.closeRuntime()")
 
         errors = [line for line in a.stderr_text().splitlines() if "$: ошибка" in line]
         check(not errors, "нет ошибок игрового кода: %s" % errors[:2])

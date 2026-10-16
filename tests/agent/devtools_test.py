@@ -58,6 +58,24 @@ def main():
         check(a.eval("$.devtools.selectBy('.goblin')") == "#enemy0",
               "без id выбирается первый подходящий и берётся его id")
 
+        # --- §20 ENTITY 2.0: секции, поиск и фильтры ---------------------------
+        doc = p["doc"]
+        check(a.eval("$.devtools.sectionName()") == "identity", "секция по умолчанию — Identity")
+        r = a.eval("engine.ui.rect(%s,'dt-secbtn-physics')" % doc)
+        check(r["w"] > 0 and r["h"] > 0, "кнопка секции Physics доступна мыши")
+        check(a.eval("$.devtools.section('physics')") is True, "секция Physics включается")
+        a.step(2)   # раскладка RmlUi идёт в конце кадра: бокс читаем после него
+        check(a.eval("engine.ui.rect(%s,'tab-physics')" % doc)["w"] > 0,
+              "содержимое секции Physics показано (setClass hidden)")
+        check(a.eval("$.devtools.section('nope')") is False, "чужая секция отклонена")
+        a.eval("$.devtools.section('identity')")
+        check(a.eval("$.devtools.search('hero')") == "hero", "поиск по тексту принимается")
+        check(panel(a)["entities"] == 1, "поиск сузил список до одного узла")
+        check(a.eval("$.devtools.search('')") == "", "пустой поиск снимает фильтр")
+        check(panel(a)["entities"] >= 6, "снятие поиска вернуло список")
+        check(a.eval("$.devtools.filter('visible', true)") is True, "фильтр visible включается")
+        check(a.eval("$.devtools.filter('visible', false)") is False, "и выключается")
+
         # --- F2 переключает панель --------------------------------------------
         a.key("F2", "tap")
         a.step(2)
