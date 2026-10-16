@@ -122,7 +122,12 @@ def main():
         with Agent(binary=output, game=None, cwd=tmp) as game:
             game.step(5)
             check(game.eval('$.world.count()') > 0, 'игра из пакетного SDK работает самостоятельно')
-        with Agent(binary=engine, game='sdk', cwd=str(unpack), timeout=60) as a:
+        # Окно видимое: снимок кадра требует настоящего swapchain, а у скрытого
+        # окна на Vulkan SDL отдаёт NULL (и движок честно отвечает ошибкой).
+        # В CI этот шаг идёт под Xvfb, поэтому видимое окно — рабочий путь, и
+        # снимок из РАСПАКОВАННОГО пакета проверяется по-настоящему.
+        with Agent(binary=engine, game='sdk', cwd=str(unpack), timeout=60,
+                   headless=False) as a:
             def idle():
                 for _ in range(500):
                     a.step(2)
