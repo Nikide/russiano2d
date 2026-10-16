@@ -115,8 +115,17 @@ const R2dPayload *r2d_payload_active(void);
 const char *r2d_payload_entry(void);
 
 // Читает файл: сначала из груза, затем с диска (через base_path).
-// Возвращает указатель и размер; для диска данные нужно освободить через
-// r2d_vfs_free(). Для груза указатель смотрит в память груза и не освобождается.
+//
+// ВЛАДЕЛЕЦ ВОЗВРАЩЁННОГО УКАЗАТЕЛЯ — ГРУЗ. Освобождать ТОЛЬКО через
+// r2d_vfs_free(): для указателя внутрь груза это no-op, для буфера с диска —
+// SDL_free. Прямой free()/SDL_free() по результату r2d_vfs_read — это P0:
+//
+//   malloc: pointer being freed was not allocated → SIGABRT (task-33).
+//
+// Так падали загрузка контейнера .r2d4 (src/real2d4.c, $.real2d.load) и выход
+// после шрифта из груза (src/font.c, r2d_font_shutdown) — в обоих случаях
+// «работало, пока файл лежал на диске, и падало, когда он переехал в груз».
+// Контракт проверяется сторожем: `tests/agent/real2d_payload_crash_test.py`.
 uint8_t *r2d_vfs_read(const char *path, size_t *out_size);
 void     r2d_vfs_free(uint8_t *data);
 
