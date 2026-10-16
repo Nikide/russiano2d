@@ -16,16 +16,17 @@ Russiano2D собирается из исходников и тянет зави
 | SDL3_mixer | `release-3.2.4` (`72a8186`) | zlib |
 | QuickJS-ng | `v0.10.1` (`3c9afc9`) | MIT |
 | Box2D | `v3.1.1` (`8c66146`) | MIT |
-| RmlUi | `6.3` (`ba95ffe`) | MIT |
+| RmlUi | `6.3` (`ba95ffe`) — см. сноску ниже | MIT |
 | FreeType | bundled 2.13.2 / системная версия | FreeType License (FTL) |
 | trylock/visibility | `master` (`71eb5c0`) | MIT |
 | glslang | `16.6.0` | Apache-2.0 (части — BSD-3-Clause / MIT) |
 | SPIRV-Cross | `vulkan-sdk-1.4.363.0` | Apache-2.0 |
-| Steam Audio | vendored, `third_party/steam_audio` | Apache-2.0 (бинауральная HRTF, окклюзия) |
+| Steam Audio **4.8.1** | vendored, `third_party/steam_audio`; пин — `cmake/SteamAudio.cmake` (steamaudio_4.8.1.zip, SHA256 `4a0aa5ec…1d5449`), лицензия кладётся в поставку (`share/licenses/steam_audio`) | Apache-2.0. Используется для настоящей HRTF (бинауральная панорама 3D-миров через `r2d_audio_world_channel`) и окклюзии; с task-18 — как backend `'steam'` в 2D-режиме `$.audio.hrtf()` |
 | tinyexr | vendored, `third_party/tinyexr` | BSD-3-Clause |
 | ufbx | vendored, `third_party/ufbx` | MIT **или** public domain (на выбор) |
 | stb_truetype (`nothings/stb`) | `2c980bb` (1.26) | public domain / MIT (dual) |
 | SDL_net | `30dd38a` | zlib |
+| Tracy | `v0.14.1` (`30997d5`) — только при `-DR2D_TRACY=ON` | BSD-3-Clause |
 | Noto Sans | файл в репозитории | SIL OFL 1.1 |
 | LatoLatin | файл в репозитории | SIL OFL 1.1 |
 | Open Sans | файл в репозитории (`OpenSans-Regular.ttf`) | SIL OFL 1.1 |
@@ -36,6 +37,22 @@ Russiano2D собирается из исходников и тянет зави
 распространяются вместе с исходниками, а уведомления обязаны сохраняться в
 поставке. Шрифты и иконки лежат в репозитории вместе с текстами лицензий
 (`assets/fonts/LICENSE-*.txt`).
+
+**RmlUi — статус версии (проверено 2026-10-16, апстрим `mikke89/RmlUi`):**
+
+* `6.3` (`ba95ffe`, 2026-08-22) — **последний тег апстрима**; новее тегов нет,
+  ветки поддержки `6.3.x` тоже нет.
+* `master` — объявленная версия `6.4-dev`, HEAD `e74ad4ed`; после 6.3 там 13
+  коммитов: box shadows (прозрачные и нулевые), относительные пути в
+  `@font-face`, выбор ближайшего скролл-контейнера по направлению колеса,
+  удаление бэкенда SDL_renderer, Vulkan/MoltenVK-совместимость, `operator[]`
+  вместо неявного преобразования в указатель у `Colour`/`Vector` (#1018).
+* **ОСОЗНАННО НЕ ОБНОВЛЯЕМ** на `6.4-dev`: это нерелизная версия, решение
+  пользователя — оставить стабильный тег. Откат/обновление — одна строка пина
+  в `cmake/Dependencies.cmake`.
+* Патч `third_party/patches/rmlui-webgpu.patch` **проверен на master**: файл
+  `Backends/RmlUi_Renderer_SDL_GPU.cpp` там байт-в-байт совпадает с 6.3, WGSL
+  апстрим так и не принял — патч остаётся нужным и на новой версии.
 
 Состав и лицензии сверены с `README.md` (раздел «Лицензии сторонних
 компонентов») и с `cmake/Dependencies.cmake` / `cmake/Shaders.cmake`.
