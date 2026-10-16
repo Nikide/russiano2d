@@ -76,7 +76,12 @@ INTERNAL_DOCS = (
 #:     world, physics, save, scene, tilemap, devtools, net, proc, replay, noise …);
 #:   * `docs/AGENT_API.md` — протокол агентского режима: им пользуются те, кто
 #:     пишет автопроверки игры;
-#:   * `docs/HIGH_LEVEL_API.md` — общий контракт `$`.
+#:   * `docs/HIGH_LEVEL_API.md` — общий контракт `$`;
+#:   * `docs/tutorial-first-game.md`, `docs/BUILD.md`, `docs/demos.md` — вход для
+#:     того, кто впервые скачал движок: «первая игра», «как собрать её в один
+#:     файл» и разбор демо. Возвращены на сайт решением владельца проекта:
+#:     страницей сайта их читать лучше, чем markdown'ом в репозитории, — но
+#:     именно эти три, а не «все туториалы сразу»: список остаётся allow-list.
 #:
 #: Всё прочее на сайт не идёт: архитектура, философия, законы UI, задачи и
 #: роадмап, туториалы, демо, RE2D, внутренние журналы и отчёты, SDK-документы,
@@ -87,6 +92,9 @@ SITE_DOCS = (
     "docs/AGENT_API.md",
     "docs/HIGH_LEVEL_API.md",
     "docs/highlevel",
+    "docs/tutorial-first-game.md",
+    "docs/BUILD.md",
+    "docs/demos.md",
 )
 
 
