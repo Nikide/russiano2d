@@ -242,3 +242,15 @@ build/_deps/quickjs-build/qjs tests/js/atlas_test.mjs
 # движок: страницы, мипмапы/padding, отсутствующая страница, поворот
 python3 tests/agent/highlevel_atlas_test.py
 ```
+
+## Кэш сборок и выгрузка
+
+`$.atlas.unload(name)` теперь «забыть сборку, но оставить её в кэше»: повторная
+загрузка того же имени переиспользует уже собранные спрайты, а не создаёт новые
+(раньше 100 циклов `unload → load` давали +200 спрайтов в рендерере).
+`$.atlas.unload(name, { drop: true })` выбрасывает и саму сборку,
+`$.atlas.builds()` перечисляет сохранённые имена.
+
+Диагностика данных: `atlas_frame_invalid` и `atlas_duplicate_frame` — ошибки,
+`atlas_duplicate_tag` — предупреждение; `sheet.invalidFrames()` перечисляет
+кадры, которые не удалось прочитать.

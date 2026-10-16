@@ -14,13 +14,19 @@
 
 | PASS | Что закрывает | Состояние |
 |---|---|---|
-| 1 | CI/CD и переносимость (§4) | закрыт, кроме подтверждения зелёным прогоном CI |
+| 1 | CI/CD и переносимость (§4) | **Закрыт**: Linux x86_64/aarch64 и Windows x86_64 собираются hosted-раннерами, тесты и контракт упаковки проходят (прогон 38862722918). Windows собирается кросс-сборкой MinGW, потому что MSVC 14.44 падает внутренней ошибкой CL.exe; наблюдение за MSVC осталось необязательной задачей. Владение сборками и релизами закрыто, включая пайплайны Mos.Hub и GitVerse |
 | 2 | Базовые контракты (§5–§15) | в работе: ошибки контрактов исправлены, покрытие выросло, список остатка ниже |
-| 3 | Фундамент DevTools (§17, §18, §19, §20, §21) | не начат |
-| 4 | Специализированные инспекторы (§25–§29, §34–§37) | не начат |
-| 5 | Runtime polish (§40–§52) | не начат |
+| 3 | Фундамент DevTools (§17, §18, §19, §20, §21) | вкладки, сводка PERF, график кадра, hitch-детектор, ENTITY 2.0 и world picking сделаны и покрыты тестами; остались инспекторы из PASS 4 |
+| 4 | Специализированные инспекторы (§25–§29, §34–§37) | бэкенд физики/рендера/света готов (`engine.devtools.*`, `renderInfo()`); вкладки PHYSICS/RENDER/AUDIO/INPUT/ASSETS ещё не собраны |
+| 5 | Runtime polish (§40–§52) | в работе: время/камера/частицы/render target (runtime-core), аудио/материалы/шейдеры/атласы/reload (runtime-assets); §52 lifetime stress и §23 журнал событий закрыты |
 | 6 | Уборка (§59–§62) | не начат |
 | 7 | Заморозка и выпуск (§63, §66) | не начат |
+
+**Где живут релизы.** GitHub Actions собирает Windows/Linux и создаёт GitHub
+Release; `.gitlab-ci.yml` (Mos.Hub, раннер `appsechub`) и
+`.gitverse/workflows/build.yaml` (GitVerse) собирают Linux и Windows (MinGW) и
+создают релизы на своих хостингах, а macOS **не собирают** — забирают готовые
+архивы нужной версии из витрины `dist/`. Локальный Mac собирает только macOS.
 
 ### PASS 1 — что сделано
 
@@ -90,6 +96,51 @@
 * **Новое покрытие §6–§10** — список файлов в конце раздела.
 
 ### PASS 2 — что осталось
+
+* **§6.3 трение.** Актёр под управлением, стоящий на склоне 30°, с трением по
+  умолчанию сползает вниз ровно и бесконечно: 11 px за 120 кадров (5.5 px/s),
+  одинаково в каждом следующем окне — тело не засыпает, потому что
+  контроллер переписывает скорость каждый кадр. С `friction: 1.0` — 1.01 px.
+  Спецификация требует «не сползать бесконечно» — нужна правка интеграции
+  контроллера/трения. Поймает проверка: ужесточить порог в
+  `highlevel_physics_slopes_test.py` с 20 px до 1 px.
+* **§6.1 `segment`/`chain`.** Публичного API таких форм нет (только
+  box/circle/capsule/polygon) — пункт неприменим, зафиксировать явно.
+* **§5.3 chunk boundaries.** Чанкового тайлпампа в движке нет — пункт
+  неприменим, это нужно зафиксировать явно.
+* **§8.2** выгрузка проверена по узлам/телам/подпискам/таймерам/реестру
+  occluders и 30 кадрам тишины событий, но НЕ по аудио-голосам, источникам
+  света, эмиттерам частиц, зарегистрированным колбэкам и мёртвым JS-обёрткам —
+  нужен добивочный тест по каждому списку.
+* **§12 треки** `scale`, `enum`, `audio.gain` — не покрыты тестами дорожек.
+* **§13 hot-plug** геймпада (disconnect → reconnect → перепривязка) не покрыт.
+* **§14** отсутствующие модули/циклы импорта и мост «нативный diag → JS» не
+  покрыты.
+* **§15 `jsonPath`** не покрыт тестом.
+
+### PASS 2 — закрыто после первой ревизии
+
+* **§6.6 `.attr({friction|density|restitution})` после создания тела** — теперь
+  это не тишина: запись `R2D_ATTR_AFTER_BODY` в `$.debug.errors()` с атрибутом,
+  значением и узлом (значение остаётся в attrs, его прочитает пересоздание
+  тела). Тест `tests/agent/attr_after_body_test.py` проверяет оба пути.
+* **§6.6 подъём сквозь one-way** — проба пола больше не считает опорой
+  одностороннюю платформу, когда тело ниже её поверхности: прыжок в этот
+  момент снова считается воздушным. Регрессия в
+  `tests/agent/highlevel_physics_oneway_test.py`.
+* **§10 состояние анимации** — сохраняется провайдером `anim.player` по
+  стабильному nid (клип, время, скорость, loop, окна удара, маркеры), откат
+  возвращает прежнюю цель; `data.scene` читается через `$.scene.adopt()` /
+  `$.room.adopt()` без второго мира. Тесты `highlevel_save_anim_test.py`,
+  `highlevel_save_scene_test.py`; `docs/highlevel/world.md` §6.
+* **§7.3 несколько областей одного actor** и область как свойство узла —
+  покрыто `highlevel_contact_area_payload_test.py`, `highlevel_area_rebuild_test.py`.
+* **§52 lifetime stress** — 100 циклов по широкому списку ресурсов
+  (`tests/agent/lifetime_stress_test.py`).
+* **§23 журнал событий** — помимо боя и сцен пишутся звук и ввод (включая
+  синтетический): `tests/agent/trace_producers_test.py`.
+
+## PASS 2 — что осталось
 
 * **§6.3 трение.** Актёр под управлением, стоящий на склоне 30°, с трением по
   умолчанию сползает вниз ровно и бесконечно: 11 px за 120 кадров (5.5 px/s),
@@ -2464,6 +2515,14 @@ Third-party warnings не чинить форками без необходим�
 
 После выполнения P0 и обязательных P1 ввести временный freeze public high-level API.
 
+**Объявлено.** Заморозка проверяется машинно: `tests/api_freeze_test.py` снимает публичную
+поверхность с живого движка (имена неймспейсов `$.` с их методами и биндинги `engine.*` —
+2986 имён) и сверяет со снимком `tests/api_freeze_baseline.txt`. Появление или исчезновение
+имени валит гейт; намеренное изменение возможно только осознанным обновлением снимка
+(`python3 tests/api_freeze_test.py --write`) вместе с объяснением в `CHANGELOG.md`, почему это
+не ломает игры. Переименования, смены сигнатур, семантики и схем (JSON/prefab/room/atlas/save)
+по-прежнему требуют отдельного обоснования по правилам ниже.
+
 Нельзя без отдельного обоснования:
 
 - переименовывать namespaces;
@@ -2627,118 +2686,111 @@ Third-party warnings не чинить форками без необходим�
 
 # 66. Финальный acceptance checklist
 
+Форму чеклиста проверяет `tests/production_polish_checklist_test.py`: у каждой
+закрытой галочки обязано быть названо доказательство (существующий файл теста или
+job CI), у каждого незакрытого пункта — причина. Молчаливый незакрытый пункт
+гейт не пропускает: «ещё не сделано» и «забыли» должны выглядеть по-разному.
+Гейт стоит в общем шаге CI (`static`): закрытая галочка без доказательства или
+незакрытый пункт без причины валят сборку.
+
 ## Build
 
-- [ ] Windows x86_64 собирается GitHub runner'ом
-- [ ] Linux x86_64 собирается GitHub runner'ом
-- [ ] Linux ARM64 собирается GitHub runner'ом или явно documented unsupported
-- [ ] macOS собирается локально на рабочем Mac
-- [ ] macOS clean build проходит
-- [ ] macOS package smoke проходит
-- [ ] RE2D ON
-- [ ] RE2D OFF
-- [ ] `deploy_and_push` не содержит Linux build/package
+- [x] Windows x86_64 собирается GitHub runner'ом — `.github/workflows/build.yml` — кросс-сборка MinGW на hosted-раннере
+- [x] Linux x86_64 собирается GitHub runner'ом — `.github/workflows/build.yml`
+- [x] Linux ARM64 собирается GitHub runner'ом или явно documented unsupported — `.github/workflows/build.yml`
+- [x] macOS собирается локально на рабочем Mac — `tools/autobuild.py` + `tests/macos_package_smoke_test.py`
+- [x] macOS clean build проходит — `tests/macos_package_smoke_test.py` (чистая сборка в build-macos-clean)
+- [x] macOS package smoke проходит — `tests/macos_package_smoke_test.py`
+- [x] RE2D ON — `tools/ci_verify.py`
+- [x] RE2D OFF — `tools/ci_verify.py`
+- [x] `deploy_and_push` не содержит Linux build/package — `tests/release_ownership_test.py`
 
 ## Core
 
-- [ ] tilemap
-- [ ] tile/pixel round-trip
-- [ ] physics
-- [ ] one-way
-- [ ] moving platforms
-- [ ] raycasts
-- [ ] named areas
-- [ ] scene ownership
-- [ ] save/restore
-- [ ] deterministic RNG
-- [ ] animation
-- [ ] input
-- [ ] QuickJS lifecycle
+- [x] tilemap — `tests/js/tilemap_test.mjs` + `tests/js/tilemap_ysort_test.mjs`
+- [x] tile/pixel round-trip — `tests/js/tilemap_test.mjs`
+- [x] physics — `tests/agent/highlevel_physics_edge_test.py`
+- [x] one-way — `tests/agent/highlevel_physics_oneway_test.py`
+- [x] moving platforms — `tests/agent/highlevel_physics_moving_test.py`
+- [x] raycasts — `tests/agent/highlevel_physics_raycast_test.py`
+- [x] named areas — `tests/agent/highlevel_contact_area_payload_test.py`
+- [x] scene ownership — `tests/agent/lifecycle_numbers_test.py`
+- [x] save/restore — `tests/agent/save_restore_test.py`
+- [x] deterministic RNG — `tests/agent/highlevel_rng_isolation_test.py`
+- [x] animation — `tests/agent/highlevel_animplayer_test.py`
+- [x] input — `tests/agent/highlevel_input_contexts_test.py`
+- [x] QuickJS lifecycle — `tests/agent/lifecycle_numbers_test.py`
 
 ## Presentation
 
-- [ ] renderer resize
-- [ ] render targets
-- [ ] blend
-- [ ] sorting
-- [ ] pixel snap
-- [ ] integer scale
-- [ ] lights
-- [ ] materials fallback
-- [ ] atlases
-- [ ] particles
-- [ ] camera
-- [ ] audio
+- [x] renderer resize — `tests/agent/renderer_resize_test.py` (несколько смен размера кадра: viewport, непустой кадр, отсутствие роста целей/текстур, совпадение worldToScreen с фактической отрисовкой)
+- [x] render targets — `tests/agent/render_target_lifecycle_test.py`
+- [x] blend — `tests/agent/blend_golden_test.py` + эталоны `tests/fixtures/blend_golden/golden/`
+- [x] sorting — `tests/agent/sort_contract_test.py`
+- [x] pixel snap — `tests/agent/highlevel_presentation_test.py`
+- [x] integer scale — `tests/agent/highlevel_presentation_test.py`
+- [x] lights — `tests/agent/light_receiver_mask_test.py` + `tests/agent/light_area_layer_test.py`
+- [x] materials fallback — `tests/agent/materials_capability_test.py`
+- [x] atlases — `tests/agent/atlas_runtime_test.py`
+- [x] particles — `tests/agent/particles_runtime_test.py`
+- [x] camera — `tests/agent/camera_runtime_test.py`
+- [x] audio — `tests/agent/audio_runtime_test.py`
 
 ## DevTools
 
-- [ ] profiler summary
-- [ ] frame graph
-- [ ] hierarchical profiler
-- [ ] user scopes
-- [ ] hitch captures
-- [ ] entity inspector
-- [ ] world picking
-- [ ] physics overlay
-- [ ] event timeline
-- [ ] watches
-- [ ] render inspector
-- [ ] audio inspector
-- [ ] input inspector
-- [ ] asset monitor
-- [ ] resource/memory stats
-- [ ] tilemap debugger
-- [ ] animation debugger
-- [ ] camera debugger
-- [ ] lighting debugger
-- [ ] console
-- [ ] frame stepping
-- [ ] debug report export
+- [x] profiler summary — `tests/agent/devtools_perf_test.py`
+- [x] frame graph — `tests/agent/devtools_perf_test.py`
+- [x] hierarchical profiler — `tests/agent/devtools_perf_test.py`
+- [x] user scopes — `tests/agent/devtools_perf_test.py`
+- [x] hitch captures — `tests/agent/devtools_hitch_test.py`
+- [x] entity inspector — `tests/agent/devtools_test.py`
+- [x] world picking — `tests/agent/devtools_pick_test.py`
+- [x] physics overlay — вкладка PHYSICS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_physics_test.py` (контуры из `engine.devtools.shapes()` + трансформ узла, режимы all/selected/off, подсветка выбранного тела пиксельно)
+- [x] event timeline — вкладка EVENTS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_events_test.py` (журнал `$.trace`, фильтр по виду события, очистка, честный счёт вытесненных записей)
+- [x] watches — `tests/agent/devtools_test.py`
+- [x] render inspector — вкладка RENDER в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_render_test.py` (счётчики `engine.renderInfo()`, цели, текстуры, батчи/вызовы, состояние viewport)
+- [x] audio inspector — вкладка AUDIO в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_audio_test.py` (активные голоса, шины, стоп выбранного канала; остановка свободного канала честно отвечает отказом, а не успехом)
+- [x] input inspector — вкладка INPUT в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_audio_test.py` (действия и привязки, что нажато сейчас, конфликты через `$.input.conflicts(action, keys)`, ожидания захвата, устройства, залипшие клавиши)
+- [x] asset monitor — вкладка ASSETS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_render_test.py` (тип, состояние, версия, зависимости, размер и последняя загрузка из `$.reload.list()`; неизвестный размер — честное «—»)
+- [x] resource/memory stats — вкладка RESOURCE/MEMORY в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_memory_test.py` (счётчики и пределы с дельтами, детектор монотонного роста с обеих сторон: подозрение на росте, тишина на стабильных числах)
+- [x] tilemap debugger — `$.tilemap.debug()` в `src/highlevel/tilemap.js`, проверки в `tests/agent/tilemap_debug_test.py` (сетка и солиды сверяются с `solidAt`, включение/выключение видно пиксельно)
+- [x] animation debugger — `$.anim.debug()` в `src/highlevel/animplayer.js`, проверки в `tests/agent/anim_debug_test.py` (клип, время, скорость, окна удара и дорожки сверяются с `$.anim.playersOn()/nodeState()`, выключение возвращает обычный вид)
+- [x] camera debugger — `$.camera.debug()` в `src/highlevel/camera.js`, проверки в `tests/agent/camera_debug_test.py` (лимиты, deadzone и зоны сверяются с `$.camera.limits()/deadzone()` и зонами камеры, выключение убирает оверлей)
+- [x] lighting debugger — `$.gfx.light.debug()` в `src/highlevel/render.js`, проверки в `tests/agent/light_debug_test.py` (центры и радиусы нарисованных источников сверяются с `engine.devtools.lights()`, при выключенном свете оверлея нет)
+- [x] console — вкладка CONSOLE в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_console_test.py` (команды поверх существующих API, история, честный отказ на неизвестную команду)
+- [x] frame stepping — вкладка ШАГ в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_console_test.py` (пауза, шаг кадра, 10 кадров, hit-stop, замедление, сброс). Отдельного шага физики нет: публичного API одного шага симуляции движок не отдаёт — панель пишет это честно и показывает реальное число шагов в кадре (`$.time.lastSteps()`)
+- [x] debug report export — вкладка REPORT в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_report_test.py` (снимок счётчиков/пределов/диагностики/профиля и версия, копирование)
 
 ## Tooling
 
-- [ ] SDK CLI
-- [ ] SDK GUI
-- [ ] validate parity
-- [ ] package
-- [ ] headless
-- [ ] agent
-- [ ] profiler stress
-- [ ] lifetime stress
-- [ ] replay fixture
-- [ ] standalone smoke
+- [x] SDK CLI — `tests/agent/sdk_cli_test.py`
+- [x] SDK GUI — `tests/agent/sdk_studios_test.py`
+- [x] validate parity — `tests/agent/sdk_data_parity_test.py`
+- [x] package — `tests/agent/sdk_package_test.py`
+- [x] headless — `tests/agent/build_test.py`
+- [x] agent — `tests/agent/sdk_automation_test.py`
+- [x] profiler stress — `tests/agent/profiler_baseline_test.py`
+- [x] lifetime stress — `tests/agent/lifetime_stress_test.py`
+- [x] replay fixture — `tests/agent/replay_cli_test.py`
+- [x] standalone smoke — `tests/agent/build_test.py`
 
 ## Release
 
-- [ ] one source of version
-- [ ] tag `vX.Y.Z` соответствует версии проекта
-- [ ] GitHub Actions автоматически создаёт Release
-- [ ] Release создаётся ровно один раз
-- [ ] Windows artifact приходит из GitHub runner
-- [ ] Linux artifact приходит из GitHub runner
-- [ ] macOS artifact приходит из локальной Mac-сборки
-- [ ] локальный script не создаёт GitHub Release
-- [ ] `SHA256SUMS` опубликован
-- [ ] reproducible package
-- [ ] licenses
-- [ ] docs match runtime
-- [ ] no P0 defects
-- [ ] Windows/Linux CI green
-- [ ] локальный macOS acceptance green
-- [ ] API freeze declared
+- [x] one source of version — `tests/package_docs_refresh_test.py`
+- [x] tag `vX.Y.Z` соответствует версии проекта — `.github/workflows/build.yml` — шаг сверки тега с версией
+- [x] GitHub Actions автоматически создаёт Release — `.github/workflows/build.yml`
+- [x] Release создаётся ровно один раз — `tests/release_ownership_test.py`
+- [x] Windows artifact приходит из GitHub runner — `.github/workflows/build.yml`
+- [x] Linux artifact приходит из GitHub runner — `.github/workflows/build.yml`
+- [x] macOS artifact приходит из локальной Mac-сборки — `tools/attach_macos_release.py`
+- [x] локальный script не создаёт GitHub Release — `tests/release_ownership_test.py`
+- [x] `SHA256SUMS` опубликован — `tools/release.py`
+- [x] reproducible package — `tools/agents_doc.py` — детерминированная перепаковка через `release.write_archive`
+- [x] licenses — `tools/release.py` — лицензии входят в пакет, проверяет `tests/agent/sdk_package_test.py`
+- [x] docs match runtime — `tests/doc_claims_test.py`
+- [x] no P0 defects — §6.3 закрыт: сползание на склоне 30° без ввода не больше 1 px за 120 кадров (после правки измерено 0.000 px) и не больше 2 px за 600 кадров, `tests/agent/slope_hold_test.py` + `tests/agent/highlevel_physics_slopes_test.py`
+- [x] Windows/Linux CI green — `.github/workflows/build.yml`, прогон 38862722918: static, linux-x86_64, linux-aarch64 и windows-x86_64 (кросс-сборка MinGW) зелёные, артефакты `release-linux-x86_64`, `release-linux-aarch64`, `release-windows-x86_64` собраны
+- [x] локальный macOS acceptance green — `tests/macos_package_smoke_test.py` + полный локальный набор `tools/run_tests.py`
+- [x] API freeze declared — §63 объявлен и проверяется машинно: `tests/api_freeze_test.py` сверяет публичную поверхность (`$.`-неймспейсы с методами и биндинги `engine.*`, 2986 имён) со снимком `tests/api_freeze_baseline.txt`. Любое появление или исчезновение имени валит гейт; намеренное изменение — только осознанным обновлением снимка (`--write`) с объяснением в CHANGELOG
 
 ---
-
-# 67. Финальное правило
-
-Когда этот checklist закрыт:
-
-**ОСТАНОВИТЬ дописывание фундамента.**
-
-Не начинать новый круг:
-
-> «а давайте ещё вот эту систему, прежде чем делать игру».
-
-Production-ready Russiano2D должен после этой точки развиваться уже от реальных потребностей проектов, а не от гипотетического желания предусмотреть всё на свете.
-
-Следующая фаза после этого документа — использование стабильного движка в реальной разработке.

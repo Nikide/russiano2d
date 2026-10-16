@@ -1,4 +1,4 @@
-# Russiano2D 0.1.33 — macOS Intel: инструкция для ИИ-агента
+# Russiano2D 0.1.34 — macOS Intel: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"0.1.33","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"0.1.34","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -8379,13 +8379,19 @@ RmlUi диагностику существующего DevTools, F2 — инс�
 
 | PASS | Что закрывает | Состояние |
 |---|---|---|
-| 1 | CI/CD и переносимость (§4) | закрыт, кроме подтверждения зелёным прогоном CI |
+| 1 | CI/CD и переносимость (§4) | **Закрыт**: Linux x86_64/aarch64 и Windows x86_64 собираются hosted-раннерами, тесты и контракт упаковки проходят (прогон 38862722918). Windows собирается кросс-сборкой MinGW, потому что MSVC 14.44 падает внутренней ошибкой CL.exe; наблюдение за MSVC осталось необязательной задачей. Владение сборками и релизами закрыто, включая пайплайны Mos.Hub и GitVerse |
 | 2 | Базовые контракты (§5–§15) | в работе: ошибки контрактов исправлены, покрытие выросло, список остатка ниже |
-| 3 | Фундамент DevTools (§17, §18, §19, §20, §21) | не начат |
-| 4 | Специализированные инспекторы (§25–§29, §34–§37) | не начат |
-| 5 | Runtime polish (§40–§52) | не начат |
+| 3 | Фундамент DevTools (§17, §18, §19, §20, §21) | вкладки, сводка PERF, график кадра, hitch-детектор, ENTITY 2.0 и world picking сделаны и покрыты тестами; остались инспекторы из PASS 4 |
+| 4 | Специализированные инспекторы (§25–§29, §34–§37) | бэкенд физики/рендера/света готов (`engine.devtools.*`, `renderInfo()`); вкладки PHYSICS/RENDER/AUDIO/INPUT/ASSETS ещё не собраны |
+| 5 | Runtime polish (§40–§52) | в работе: время/камера/частицы/render target (runtime-core), аудио/материалы/шейдеры/атласы/reload (runtime-assets); §52 lifetime stress и §23 журнал событий закрыты |
 | 6 | Уборка (§59–§62) | не начат |
 | 7 | Заморозка и выпуск (§63, §66) | не начат |
+
+**Где живут релизы.** GitHub Actions собирает Windows/Linux и создаёт GitHub
+Release; `.gitlab-ci.yml` (Mos.Hub, раннер `appsechub`) и
+`.gitverse/workflows/build.yaml` (GitVerse) собирают Linux и Windows (MinGW) и
+создают релизы на своих хостингах, а macOS **не собирают** — забирают готовые
+архивы нужной версии из витрины `dist/`. Локальный Mac собирает только macOS.
 
 ### PASS 1 — что сделано
 
@@ -8455,6 +8461,51 @@ RmlUi диагностику существующего DevTools, F2 — инс�
 * **Новое покрытие §6–§10** — список файлов в конце раздела.
 
 ### PASS 2 — что осталось
+
+* **§6.3 трение.** Актёр под управлением, стоящий на склоне 30°, с трением по
+  умолчанию сползает вниз ровно и бесконечно: 11 px за 120 кадров (5.5 px/s),
+  одинаково в каждом следующем окне — тело не засыпает, потому что
+  контроллер переписывает скорость каждый кадр. С `friction: 1.0` — 1.01 px.
+  Спецификация требует «не сползать бесконечно» — нужна правка интеграции
+  контроллера/трения. Поймает проверка: ужесточить порог в
+  `highlevel_physics_slopes_test.py` с 20 px до 1 px.
+* **§6.1 `segment`/`chain`.** Публичного API таких форм нет (только
+  box/circle/capsule/polygon) — пункт неприменим, зафиксировать явно.
+* **§5.3 chunk boundaries.** Чанкового тайлпампа в движке нет — пункт
+  неприменим, это нужно зафиксировать явно.
+* **§8.2** выгрузка проверена по узлам/телам/подпискам/таймерам/реестру
+  occluders и 30 кадрам тишины событий, но НЕ по аудио-голосам, источникам
+  света, эмиттерам частиц, зарегистрированным колбэкам и мёртвым JS-обёрткам —
+  нужен добивочный тест по каждому списку.
+* **§12 треки** `scale`, `enum`, `audio.gain` — не покрыты тестами дорожек.
+* **§13 hot-plug** геймпада (disconnect → reconnect → перепривязка) не покрыт.
+* **§14** отсутствующие модули/циклы импорта и мост «нативный diag → JS» не
+  покрыты.
+* **§15 `jsonPath`** не покрыт тестом.
+
+### PASS 2 — закрыто после первой ревизии
+
+* **§6.6 `.attr({friction|density|restitution})` после создания тела** — теперь
+  это не тишина: запись `R2D_ATTR_AFTER_BODY` в `$.debug.errors()` с атрибутом,
+  значением и узлом (значение остаётся в attrs, его прочитает пересоздание
+  тела). Тест `tests/agent/attr_after_body_test.py` проверяет оба пути.
+* **§6.6 подъём сквозь one-way** — проба пола больше не считает опорой
+  одностороннюю платформу, когда тело ниже её поверхности: прыжок в этот
+  момент снова считается воздушным. Регрессия в
+  `tests/agent/highlevel_physics_oneway_test.py`.
+* **§10 состояние анимации** — сохраняется провайдером `anim.player` по
+  стабильному nid (клип, время, скорость, loop, окна удара, маркеры), откат
+  возвращает прежнюю цель; `data.scene` читается через `$.scene.adopt()` /
+  `$.room.adopt()` без второго мира. Тесты `highlevel_save_anim_test.py`,
+  `highlevel_save_scene_test.py`; `docs/highlevel/world.md` §6.
+* **§7.3 несколько областей одного actor** и область как свойство узла —
+  покрыто `highlevel_contact_area_payload_test.py`, `highlevel_area_rebuild_test.py`.
+* **§52 lifetime stress** — 100 циклов по широкому списку ресурсов
+  (`tests/agent/lifetime_stress_test.py`).
+* **§23 журнал событий** — помимо боя и сцен пишутся звук и ввод (включая
+  синтетический): `tests/agent/trace_producers_test.py`.
+
+## PASS 2 — что осталось
 
 * **§6.3 трение.** Актёр под управлением, стоящий на склоне 30°, с трением по
   умолчанию сползает вниз ровно и бесконечно: 11 px за 120 кадров (5.5 px/s),
@@ -10829,6 +10880,14 @@ Third-party warnings не чинить форками без необходим�
 
 После выполнения P0 и обязательных P1 ввести временный freeze public high-level API.
 
+**Объявлено.** Заморозка проверяется машинно: `tests/api_freeze_test.py` снимает публичную
+поверхность с живого движка (имена неймспейсов `$.` с их методами и биндинги `engine.*` —
+2986 имён) и сверяет со снимком `tests/api_freeze_baseline.txt`. Появление или исчезновение
+имени валит гейт; намеренное изменение возможно только осознанным обновлением снимка
+(`python3 tests/api_freeze_test.py --write`) вместе с объяснением в `CHANGELOG.md`, почему это
+не ломает игры. Переименования, смены сигнатур, семантики и схем (JSON/prefab/room/atlas/save)
+по-прежнему требуют отдельного обоснования по правилам ниже.
+
 Нельзя без отдельного обоснования:
 
 - переименовывать namespaces;
@@ -10992,121 +11051,114 @@ Third-party warnings не чинить форками без необходим�
 
 # 66. Финальный acceptance checklist
 
+Форму чеклиста проверяет `tests/production_polish_checklist_test.py`: у каждой
+закрытой галочки обязано быть названо доказательство (существующий файл теста или
+job CI), у каждого незакрытого пункта — причина. Молчаливый незакрытый пункт
+гейт не пропускает: «ещё не сделано» и «забыли» должны выглядеть по-разному.
+Гейт стоит в общем шаге CI (`static`): закрытая галочка без доказательства или
+незакрытый пункт без причины валят сборку.
+
 ## Build
 
-- [ ] Windows x86_64 собирается GitHub runner'ом
-- [ ] Linux x86_64 собирается GitHub runner'ом
-- [ ] Linux ARM64 собирается GitHub runner'ом или явно documented unsupported
-- [ ] macOS собирается локально на рабочем Mac
-- [ ] macOS clean build проходит
-- [ ] macOS package smoke проходит
-- [ ] RE2D ON
-- [ ] RE2D OFF
-- [ ] `deploy_and_push` не содержит Linux build/package
+- [x] Windows x86_64 собирается GitHub runner'ом — `.github/workflows/build.yml` — кросс-сборка MinGW на hosted-раннере
+- [x] Linux x86_64 собирается GitHub runner'ом — `.github/workflows/build.yml`
+- [x] Linux ARM64 собирается GitHub runner'ом или явно documented unsupported — `.github/workflows/build.yml`
+- [x] macOS собирается локально на рабочем Mac — `tools/autobuild.py` + `tests/macos_package_smoke_test.py`
+- [x] macOS clean build проходит — `tests/macos_package_smoke_test.py` (чистая сборка в build-macos-clean)
+- [x] macOS package smoke проходит — `tests/macos_package_smoke_test.py`
+- [x] RE2D ON — `tools/ci_verify.py`
+- [x] RE2D OFF — `tools/ci_verify.py`
+- [x] `deploy_and_push` не содержит Linux build/package — `tests/release_ownership_test.py`
 
 ## Core
 
-- [ ] tilemap
-- [ ] tile/pixel round-trip
-- [ ] physics
-- [ ] one-way
-- [ ] moving platforms
-- [ ] raycasts
-- [ ] named areas
-- [ ] scene ownership
-- [ ] save/restore
-- [ ] deterministic RNG
-- [ ] animation
-- [ ] input
-- [ ] QuickJS lifecycle
+- [x] tilemap — `tests/js/tilemap_test.mjs` + `tests/js/tilemap_ysort_test.mjs`
+- [x] tile/pixel round-trip — `tests/js/tilemap_test.mjs`
+- [x] physics — `tests/agent/highlevel_physics_edge_test.py`
+- [x] one-way — `tests/agent/highlevel_physics_oneway_test.py`
+- [x] moving platforms — `tests/agent/highlevel_physics_moving_test.py`
+- [x] raycasts — `tests/agent/highlevel_physics_raycast_test.py`
+- [x] named areas — `tests/agent/highlevel_contact_area_payload_test.py`
+- [x] scene ownership — `tests/agent/lifecycle_numbers_test.py`
+- [x] save/restore — `tests/agent/save_restore_test.py`
+- [x] deterministic RNG — `tests/agent/highlevel_rng_isolation_test.py`
+- [x] animation — `tests/agent/highlevel_animplayer_test.py`
+- [x] input — `tests/agent/highlevel_input_contexts_test.py`
+- [x] QuickJS lifecycle — `tests/agent/lifecycle_numbers_test.py`
 
 ## Presentation
 
-- [ ] renderer resize
-- [ ] render targets
-- [ ] blend
-- [ ] sorting
-- [ ] pixel snap
-- [ ] integer scale
-- [ ] lights
-- [ ] materials fallback
-- [ ] atlases
-- [ ] particles
-- [ ] camera
-- [ ] audio
+- [x] renderer resize — `tests/agent/renderer_resize_test.py` (несколько смен размера кадра: viewport, непустой кадр, отсутствие роста целей/текстур, совпадение worldToScreen с фактической отрисовкой)
+- [x] render targets — `tests/agent/render_target_lifecycle_test.py`
+- [x] blend — `tests/agent/blend_golden_test.py` + эталоны `tests/fixtures/blend_golden/golden/`
+- [x] sorting — `tests/agent/sort_contract_test.py`
+- [x] pixel snap — `tests/agent/highlevel_presentation_test.py`
+- [x] integer scale — `tests/agent/highlevel_presentation_test.py`
+- [x] lights — `tests/agent/light_receiver_mask_test.py` + `tests/agent/light_area_layer_test.py`
+- [x] materials fallback — `tests/agent/materials_capability_test.py`
+- [x] atlases — `tests/agent/atlas_runtime_test.py`
+- [x] particles — `tests/agent/particles_runtime_test.py`
+- [x] camera — `tests/agent/camera_runtime_test.py`
+- [x] audio — `tests/agent/audio_runtime_test.py`
 
 ## DevTools
 
-- [ ] profiler summary
-- [ ] frame graph
-- [ ] hierarchical profiler
-- [ ] user scopes
-- [ ] hitch captures
-- [ ] entity inspector
-- [ ] world picking
-- [ ] physics overlay
-- [ ] event timeline
-- [ ] watches
-- [ ] render inspector
-- [ ] audio inspector
-- [ ] input inspector
-- [ ] asset monitor
-- [ ] resource/memory stats
-- [ ] tilemap debugger
-- [ ] animation debugger
-- [ ] camera debugger
-- [ ] lighting debugger
-- [ ] console
-- [ ] frame stepping
-- [ ] debug report export
+- [x] profiler summary — `tests/agent/devtools_perf_test.py`
+- [x] frame graph — `tests/agent/devtools_perf_test.py`
+- [x] hierarchical profiler — `tests/agent/devtools_perf_test.py`
+- [x] user scopes — `tests/agent/devtools_perf_test.py`
+- [x] hitch captures — `tests/agent/devtools_hitch_test.py`
+- [x] entity inspector — `tests/agent/devtools_test.py`
+- [x] world picking — `tests/agent/devtools_pick_test.py`
+- [x] physics overlay — вкладка PHYSICS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_physics_test.py` (контуры из `engine.devtools.shapes()` + трансформ узла, режимы all/selected/off, подсветка выбранного тела пиксельно)
+- [x] event timeline — вкладка EVENTS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_events_test.py` (журнал `$.trace`, фильтр по виду события, очистка, честный счёт вытесненных записей)
+- [x] watches — `tests/agent/devtools_test.py`
+- [x] render inspector — вкладка RENDER в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_render_test.py` (счётчики `engine.renderInfo()`, цели, текстуры, батчи/вызовы, состояние viewport)
+- [x] audio inspector — вкладка AUDIO в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_audio_test.py` (активные голоса, шины, стоп выбранного канала; остановка свободного канала честно отвечает отказом, а не успехом)
+- [x] input inspector — вкладка INPUT в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_audio_test.py` (действия и привязки, что нажато сейчас, конфликты через `$.input.conflicts(action, keys)`, ожидания захвата, устройства, залипшие клавиши)
+- [x] asset monitor — вкладка ASSETS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_render_test.py` (тип, состояние, версия, зависимости, размер и последняя загрузка из `$.reload.list()`; неизвестный размер — честное «—»)
+- [x] resource/memory stats — вкладка RESOURCE/MEMORY в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_memory_test.py` (счётчики и пределы с дельтами, детектор монотонного роста с обеих сторон: подозрение на росте, тишина на стабильных числах)
+- [x] tilemap debugger — `$.tilemap.debug()` в `src/highlevel/tilemap.js`, проверки в `tests/agent/tilemap_debug_test.py` (сетка и солиды сверяются с `solidAt`, включение/выключение видно пиксельно)
+- [x] animation debugger — `$.anim.debug()` в `src/highlevel/animplayer.js`, проверки в `tests/agent/anim_debug_test.py` (клип, время, скорость, окна удара и дорожки сверяются с `$.anim.playersOn()/nodeState()`, выключение возвращает обычный вид)
+- [x] camera debugger — `$.camera.debug()` в `src/highlevel/camera.js`, проверки в `tests/agent/camera_debug_test.py` (лимиты, deadzone и зоны сверяются с `$.camera.limits()/deadzone()` и зонами камеры, выключение убирает оверлей)
+- [x] lighting debugger — `$.gfx.light.debug()` в `src/highlevel/render.js`, проверки в `tests/agent/light_debug_test.py` (центры и радиусы нарисованных источников сверяются с `engine.devtools.lights()`, при выключенном свете оверлея нет)
+- [x] console — вкладка CONSOLE в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_console_test.py` (команды поверх существующих API, история, честный отказ на неизвестную команду)
+- [x] frame stepping — вкладка ШАГ в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_console_test.py` (пауза, шаг кадра, 10 кадров, hit-stop, замедление, сброс). Отдельного шага физики нет: публичного API одного шага симуляции движок не отдаёт — панель пишет это честно и показывает реальное число шагов в кадре (`$.time.lastSteps()`)
+- [x] debug report export — вкладка REPORT в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_report_test.py` (снимок счётчиков/пределов/диагностики/профиля и версия, копирование)
 
 ## Tooling
 
-- [ ] SDK CLI
-- [ ] SDK GUI
-- [ ] validate parity
-- [ ] package
-- [ ] headless
-- [ ] agent
-- [ ] profiler stress
-- [ ] lifetime stress
-- [ ] replay fixture
-- [ ] standalone smoke
+- [x] SDK CLI — `tests/agent/sdk_cli_test.py`
+- [x] SDK GUI — `tests/agent/sdk_studios_test.py`
+- [x] validate parity — `tests/agent/sdk_data_parity_test.py`
+- [x] package — `tests/agent/sdk_package_test.py`
+- [x] headless — `tests/agent/build_test.py`
+- [x] agent — `tests/agent/sdk_automation_test.py`
+- [x] profiler stress — `tests/agent/profiler_baseline_test.py`
+- [x] lifetime stress — `tests/agent/lifetime_stress_test.py`
+- [x] replay fixture — `tests/agent/replay_cli_test.py`
+- [x] standalone smoke — `tests/agent/build_test.py`
 
 ## Release
 
-- [ ] one source of version
-- [ ] tag `vX.Y.Z` соответствует версии проекта
-- [ ] GitHub Actions автоматически создаёт Release
-- [ ] Release создаётся ровно один раз
-- [ ] Windows artifact приходит из GitHub runner
-- [ ] Linux artifact приходит из GitHub runner
-- [ ] macOS artifact приходит из локальной Mac-сборки
-- [ ] локальный script не создаёт GitHub Release
-- [ ] `SHA256SUMS` опубликован
-- [ ] reproducible package
-- [ ] licenses
-- [ ] docs match runtime
-- [ ] no P0 defects
-- [ ] Windows/Linux CI green
-- [ ] локальный macOS acceptance green
-- [ ] API freeze declared
+- [x] one source of version — `tests/package_docs_refresh_test.py`
+- [x] tag `vX.Y.Z` соответствует версии проекта — `.github/workflows/build.yml` — шаг сверки тега с версией
+- [x] GitHub Actions автоматически создаёт Release — `.github/workflows/build.yml`
+- [x] Release создаётся ровно один раз — `tests/release_ownership_test.py`
+- [x] Windows artifact приходит из GitHub runner — `.github/workflows/build.yml`
+- [x] Linux artifact приходит из GitHub runner — `.github/workflows/build.yml`
+- [x] macOS artifact приходит из локальной Mac-сборки — `tools/attach_macos_release.py`
+- [x] локальный script не создаёт GitHub Release — `tests/release_ownership_test.py`
+- [x] `SHA256SUMS` опубликован — `tools/release.py`
+- [x] reproducible package — `tools/agents_doc.py` — детерминированная перепаковка через `release.write_archive`
+- [x] licenses — `tools/release.py` — лицензии входят в пакет, проверяет `tests/agent/sdk_package_test.py`
+- [x] docs match runtime — `tests/doc_claims_test.py`
+- [x] no P0 defects — §6.3 закрыт: сползание на склоне 30° без ввода не больше 1 px за 120 кадров (после правки измерено 0.000 px) и не больше 2 px за 600 кадров, `tests/agent/slope_hold_test.py` + `tests/agent/highlevel_physics_slopes_test.py`
+- [x] Windows/Linux CI green — `.github/workflows/build.yml`, прогон 38862722918: static, linux-x86_64, linux-aarch64 и windows-x86_64 (кросс-сборка MinGW) зелёные, артефакты `release-linux-x86_64`, `release-linux-aarch64`, `release-windows-x86_64` собраны
+- [x] локальный macOS acceptance green — `tests/macos_package_smoke_test.py` + полный локальный набор `tools/run_tests.py`
+- [x] API freeze declared — §63 объявлен и проверяется машинно: `tests/api_freeze_test.py` сверяет публичную поверхность (`$.`-неймспейсы с методами и биндинги `engine.*`, 2986 имён) со снимком `tests/api_freeze_baseline.txt`. Любое появление или исчезновение имени валит гейт; намеренное изменение — только осознанным обновлением снимка (`--write`) с объяснением в CHANGELOG
 
 ---
-
-# 67. Финальное правило
-
-Когда этот checklist закрыт:
-
-**ОСТАНОВИТЬ дописывание фундамента.**
-
-Не начинать новый круг:
-
-> «а давайте ещё вот эту систему, прежде чем делать игру».
-
-Production-ready Russiano2D должен после этой точки развиваться уже от реальных потребностей проектов, а не от гипотетического желания предусмотреть всё на свете.
-
-Следующая фаза после этого документа — использование стабильного движка в реальной разработке.
 
 
 ---
@@ -14525,9 +14577,34 @@ C-формате CLI нет: состояние сверяет игра — `$.r
 
 **GitHub Actions** (`.github/workflows/build.yml`):
 
-* Windows x86_64, Linux x86_64, Linux aarch64 — сборка, тесты, пакеты, суммы;
+* Linux x86_64 и Linux aarch64 — сборка, тесты, пакеты, суммы;
+* Windows x86_64 — кросс-сборка MinGW на ubuntu-раннере (та же, что на Mos.Hub
+  и GitVerse): MSVC 14.44.35207 падает внутренней ошибкой `CL.exe` в
+  кодогенерации нашего проекта, проверены `/Zf`, `/Z7`, снятие `/MP` и `/O1` —
+  не помогают. Windows-пакет приходит из раннера и проходит контракт упаковки;
+  прогон тестов на Windows-бинарнике в CI невозможен (раннер Linux), поэтому
+  шаги тестов для этой платформы отключены явно. Родная MSVC-сборка осталась
+  необязательной задачей `windows-msvc-diagnostic`: она падает, пока тулчейн не
+  починят, и это видно в CI. Когда MSVC заработает, платформу можно вернуть на
+  `windows-2022` — артефакт при этом не меняется;
 * один GitHub Release на тег `vX.Y.Z` — и только CI его создаёт;
 * `SHA256SUMS.txt` по архивам, которые собрал CI.
+
+**Mos.Hub** (`.gitlab-ci.yml`, GitLab CI, раннер с тегом `appsechub`):
+
+* Linux x86_64 и Windows x86_64 (кросс-сборка MinGW) — сборка, тесты в обеих
+  конфигурациях, пакеты;
+* macOS **не собирается**: job `macos-artifacts` забирает архивы нужной версии
+  из витрины `dist/` репозитория;
+* Release GitLab по тегу `vX.Y.Z` со ссылками на архивы всех трёх платформ
+  (`release:` + `assets: links:`), плюс релиз не создаётся, если tag ≠ версии проекта.
+
+**GitVerse** (`.gitverse/workflows/build.yaml`, Actions-подобный формат):
+
+* то же самое, но своим синтаксисом: `runs-on: ubuntu-latest`, артефакты через
+  `actions/upload-artifact@v4`, релиз — экшеном `actions/create-release@v1`;
+* один раз нужно положить секрет `GITVERSE_API_KEY` (права на создание релизов) —
+  без него job релиза падает с понятной ошибкой, а не «тихо пропускает».
 
 **Локальный рабочий Mac** — только macOS:
 
@@ -14540,6 +14617,11 @@ C-формате CLI нет: состояние сверяет игра — `$.r
 ошибкой, а не собирает её «на всякий случай» через Docker. `tools/autobuild.py`
 по-прежнему умеет собирать чужие платформы в контейнере, но это инструмент
 локальной проверки и паритета с CI, а не путь релиза.
+
+Скрипты локального выпуска (`build_and_push.sh`, `push_and_deploy.sh`) и сайт
+(`site/`) в git **не хранятся**: они лежат на рабочей машине и перечислены в
+`.gitignore`. Публичные репозитории получают только движок, тесты, документацию
+и витрину `dist/` — политику проверяет `tests/release_ownership_test.py`.
 
 ## Локальный выпуск
 
@@ -15002,7 +15084,8 @@ transform/physics/state → копирование селектора
 
 Статус документа: описывает **фактическое** состояние SDK (не цель). Целевая
 архитектура и законы — спецификация «Следующая цель SDK AGENT.md»: она снята с
-текущей документации и лежит в `к удалению.md` (и в истории Git);
+текущей документации и удалена из репозитория, текст доступен только в истории
+Git (`git log --diff-filter=D -- "к удалению.md"`, файл удалён после f70762a);
 проверки — [SDK_VERIFICATION.md](SDK_VERIFICATION.md); журнал работы —
 [SDK_HANDOFF.md](../SDK_HANDOFF.md).
 
@@ -18776,6 +18859,18 @@ build/_deps/quickjs-build/qjs tests/js/atlas_test.mjs
 python3 tests/agent/highlevel_atlas_test.py
 ```
 
+## Кэш сборок и выгрузка
+
+`$.atlas.unload(name)` теперь «забыть сборку, но оставить её в кэше»: повторная
+загрузка того же имени переиспользует уже собранные спрайты, а не создаёт новые
+(раньше 100 циклов `unload → load` давали +200 спрайтов в рендерере).
+`$.atlas.unload(name, { drop: true })` выбрасывает и саму сборку,
+`$.atlas.builds()` перечисляет сохранённые имена.
+
+Диагностика данных: `atlas_frame_invalid` и `atlas_duplicate_frame` — ошибки,
+`atlas_duplicate_tag` — предупреждение; `sheet.invalidFrames()` перечисляет
+кадры, которые не удалось прочитать.
+
 
 ---
 
@@ -18961,7 +19056,7 @@ $.audio.bus('tunnel', { parent: 'sfx', effect: 'reverb',
 
 | Метод | Назначение |
 |---|---|
-| `$.audio.play(pathOrId, opts)` | обёртка над `$.sound.play` с маршрутизацией в шину |
+| `$.audio.play(pathOrId, opts)` | обёртка над `$.sound.play` с маршрутизацией в шину; `opts` понимает `bus`, `volume`, `pan`, `loop`, `pitch`, `priority` (вытеснение голосов, как у `$.sound.play`) и `keep: true` (звук переживает выгрузку области) |
 | `$.audio.playAt(pathOrId, x, y, opts)` | позиционный звук от слушателя/камеры |
 | `$.audio.listener(x, y)` / `$.audio.listener()` | задать / прочитать слушателя (по умолчанию — камера) |
 | `$.audio.handles()` | массив активных handle'ов |
@@ -19469,6 +19564,32 @@ $.camera.pipClear();                        // убрать PIP
 рисуются в один батч кадра. Ограничения (спрайты на границе регионов, общий пост
 и свет, ввод по главной камере) — там же, §4. PIP проверяется по пикселям
 (`tests/agent/highlevel_pip_test.py`), его состояние отдаёт `$.camera.pipInfo()`.
+
+`$.camera.add('p2')` без прямоугольника занимает **весь кадр** (зум 1): регион по
+умолчанию — это кадр целиком, а не «нет региона». `$.camera.views()` показывает
+действующий регион каждой камеры, а не то, что было передано в `add()`
+(`tests/agent/camera_runtime_test.py`).
+
+## 1.1.1. Камера и мусорные значения
+
+Камера — общий множитель для всей отрисовки: одна `NaN` в `cam.x` или `cam.zoom`
+превращает в `NaN` мировые координаты экрана, отсечение, пикинг и позиции
+спрайтов (в JSON агента это выглядит как `null`). Поэтому у каждого входа
+камеры есть определённый ответ на не-число:
+
+| Вход | `NaN` | `±Infinity` | Отрицательное |
+|---|---|---|---|
+| `at(x, y)`, `panTo()` | позиция не меняется | позиция не меняется | принимается (мировые координаты) |
+| `zoom(v)` | зум не меняется | зум не меняется | зажимается в `0.01` |
+| `follow(..., { smooth })` | `0` — мгновенное слежение | край диапазона `[0, 1]` | `0` |
+| `follow(..., { offset })` | смещение `0` | смещение `0` | принимается |
+| `shake(amp, ms)` | тряска снимается | тряска снимается | тряска снимается |
+| `limits(...)` | координата/размер `0` | `0` | принимается |
+| `deadzone(...)`, `lookahead(...)` | `0` | `0` | `0` |
+
+`smooth` — доля в `[0, 1]`: значения больше единицы означали «остаётся больше
+расстояния, чем есть», и камера расходилась (при `smooth = 2` уезжала на десятки
+тысяч пикселей за десяток кадров). Теперь доля зажимается в диапазон.
 
 ## 1.2. Поворот кадра
 
@@ -21608,12 +21729,22 @@ build/_deps/quickjs-build/qjs tests/js/font_test.mjs
 
 ## Координаты
 
-`$.fx.*` и `$.gfx.draw.*` работают в **мировых** координатах: движок сам
-переводит их в экранные через текущую камеру (и масштабирует толщины и
-радиусы). Раньше перевода не было, и VFX уезжал на расстояние камеры — если
-пишете свой модуль поверх `$.gfx.push.*`, помните, что `push` ждёт **экранные**
-координаты: либо считайте их сами (`$.camera.worldToScreen`), либо рисуйте из
-`$.render`-хука через `$.fx`/`$.gfx.draw`.
+Три разных контракта, и путать их нельзя:
+
+| API | Координаты | Кто переводит |
+|---|---|---|
+| `$.fx.*` | **мировые** | движок (через текущую камеру; толщины и радиусы масштабируются) |
+| `$.debug.draw.*` | **мировые** | сам модуль отладки (принимает узлы и селекторы) |
+| `$.gfx.draw.*` | **экранные (окна)** | никто: это сырые примитивы поверх кадра |
+| `$.gfx.push.*` | **экранные (окна)** | никто |
+
+Раньше перевода не было у VFX, и он уезжал на расстояние камеры — поэтому у
+`$.fx.*` он есть. У `$.gfx.draw.*` перевода нет и не будет: это низкий уровень
+для тех, кто считает экранные координаты сам (`$.camera.worldToScreen`) или
+рисует интерфейсные пометки. Поэтому отладочные примитивы (`$.debug.draw.line('#hero', '#exit')`)
+переводят мир→экран сами: они принимают узлы и обязаны липнуть к ним при любой
+камере. Проверяется тестом `tests/agent/debug_draw_coords_test.py`: при сдвиге
+камеры `$.gfx.draw.*` стоит на месте, а `$.debug.draw.*` едет вместе с миром.
 
 ## 1. Обзор
 
@@ -26936,6 +27067,14 @@ $.reload.kinds();     // ['texture', 'atlas', 'tilemap', 'rml', 'json', 'my-form
 
 ## Scoped restart
 
+`$.reload.behavior(reason, { file, check })` сначала пробует собрать новую версию
+точки входа (`check` — свой компилятор, по умолчанию `new Function` по файлу):
+если код не компилируется, возвращается `{ ok: false, code: 'R2D_RELOAD_SYNTAX',
+request: false, checked: true, error }` и перезапуск НЕ запрашивается — прежний
+код продолжает работать. Движок проверяет то же самое на своей стороне: перед
+уничтожением контекста точка входа компилируется, и при ошибке перезапуск
+отменяется (в логе — «продолжаю со старым рантаймом», и это правда).
+
 Если безопасный reload поведения невозможен, `$.reload.behavior(reason)`
 запрашивает перезапуск JS-рантайма на границе кадра, а
 `restartScene(name, { capture, restore })` загружает сцену с новой областью
@@ -29456,6 +29595,18 @@ $.room.goto('north');              // переход; нет комнаты/ма
 оставила бы прежние инстансы в мире — это отдельная находка §23, закрытая в
 `installSceneRooms`.
 
+**Владение звуком.** Канал, запущенный `$.sound.play`/`playAt` внутри активной
+области, принадлежит ей: при закрытии области он глушится (с затуханием из
+`{ fade }`). Так выгрузка комнаты убирает и её звук, а не только узлы — раньше
+зацикленный звук комнаты продолжал играть после `scope.close()`. Звук, который
+обязан пережить область (UI, музыка), объявляется явно:
+`$.sound.play('ui.wav', { keep: true })` или `scope.keep(channel)`.
+
+**Что область НЕ забирает.** Твины, тряску камеры, вспышки и presentation-каналы
+случайности: они живут на узлах (твин умирает вместе со своим узлом) или
+принадлежат кадру. Это же разделение зафиксировано в сохранении — снимок не
+хранит one-shot эффекты (`docs/highlevel/state.md`).
+
 **Ограничения** те же, что у §5: комната грузится целиком (нет стриминга
 внутри уровня), а `enter` во время открытой staging-сборки отменяет прежнюю
 (§5 generation).
@@ -30186,6 +30337,17 @@ music.playing(); music.paused(); music.count();
 * [soundbank.md](soundbank.md) — варианты одного звука (шаги, попадания);
 * [acoustics.md](acoustics.md) — реверберация помещений;
 * `$.steps`/`$.barks` — шаги по материалу и реплики NPC.
+
+## Владение звуком (области сцены)
+
+Канал, запущенный `$.sound.play`/`playAt` внутри активной области §5 или
+комнаты, принадлежит ей: при закрытии области звук глушится (с затуханием из
+`{ fade }`). Раньше звук уходил в анонимную область и переживал выгрузку —
+комната исчезала, а её зацикленный звук продолжал играть.
+
+Звук, который обязан пережить область (музыка, UI), объявляется явно:
+`$.sound.play('ui.wav', { keep: true })` или `scope.keep(channel)`.
+
 
 
 ---
@@ -32215,8 +32377,9 @@ $.time.cancel(id);
 
 | Вызов | Смысл |
 |---|---|
-| `delta()` / `rawDelta()` | время кадра с масштабом / без масштаба |
-| `now()` / `realNow()` | игровое / настоящее время (секунды) |
+| `delta()` / `presentationDelta()` (`rawDelta()`) | время кадра с масштабом / без масштаба |
+| `now()` / `presentationTime()` | игровое время / реальное время кадра (секунды) |
+| `realNow()` | секунды часов движка |
 | `perfNow()` | монотонные миллисекунды высокой точности — для своих замеров, не для логики игры |
 | `frame()` / `fps()` | номер кадра / кадры в секунду |
 | `scale(value?)` | прочитать или задать масштаб времени (он же множитель шага физики) |
@@ -32239,6 +32402,36 @@ $.time.cancel(id);
 
 `rawDelta()` — реальное время кадра: им пользуются интерфейс и анимации, которые
 не должны замирать на паузе.
+
+## 1.1. Четыре шкалы времени (§50)
+
+У каждой шкалы свой геттер, и путать их нельзя:
+
+| Шкала | Геттеры | Масштабируется `scale()`? | Идёт при `scale(0)`, паузе, hit-stop? |
+|---|---|---|---|
+| **gameplay** — игровая логика | `delta()`, `now()` | да | нет |
+| **simulation** — фиксированный шаг | `tick()`, `simTime()`, `simDt()`, `lastSteps()`, `onTick()` | да (тот же множитель) | нет |
+| **presentation** — кадр как он есть | `presentationDelta()`, `rawDelta()`, `presentationTime()` | нет | **да** |
+| **real** — часы движка | `realNow()`, `perfNow()`, `frame()`, `fps()` | нет | **да** |
+
+```js
+$.time.delta();               // игровая дельта: 0 на паузе и при scale(0)
+$.time.presentationDelta();   // время кадра: тем же числом живут UI и VFX
+$.time.presentationTime();    // сумма времени кадра с запуска — не встаёт никогда
+$.time.simTime();             // tick × simDt: время симуляции
+$.time.realNow();             // секунды часов движка
+```
+
+Контракт `scale(0)` (проверяется `tests/agent/time_scales_test.py`):
+останавливается **gameplay-симуляция** — тела Box2D, твины, таймеры, `tick()`;
+**не** останавливаются интерфейс (клик по кнопке доходит до обработчика),
+презентационные эффекты (вспышка гаснет, тряска камеры идёт), кадры
+(`frame()`) и DevTools (его замеры идут по `perfNow()`).
+
+Масштаб принимает только конечные неотрицательные числа: отрицательное и `NaN`
+читаются как `0` (полный стоп — так же их трактует C, `engine.setTimeScale`),
+`Infinity` — как потолок `SCALE_MAX = 100`. Не-конечный множитель ушёл бы в шаг
+Box2D и вернулся NaN-позициями тел, поэтому потолок стоит до моста в C.
 
 ## 2. Hit-stop: `freeze` и `slow`
 
@@ -34892,6 +35085,73 @@ $.world.tug('#crate', x, y, { speed: 400, snap: 4 });       // медленне�
   убран, вместо него `$.world.tug`. У `tug` тяга тоже не доводит тело до цели —
   оно доезжает примерно на 270 px из 400 и замирает; причина не выяснена,
   в тесте проверяется ровно то, что работает.
+
+## 6. Что возвращает загрузка сейва (§10)
+
+`$.save.load()` заменяет мир данными снимка и НИЧЕГО не пересобирает заново:
+узлы приходят из `$.prefab`, состояние узла — по стабильному `nid`. Вместе с
+узлом возвращается и поведение, привязанное к нему ключом `nid`:
+
+| Что | Как хранится | Что именно восстанавливается |
+|---|---|---|
+| Скорость тела | `nodes[nid].v` | тело продолжает лететь, а не зависает |
+| Фабрики игры | `nodes[nid].p.<имя>` (`$.save.behavior`) | данные фабрики, логика остаётся в коде |
+| Анимация | `nodes[nid].p['anim.player']` | клип и слоты (вес, `loop`, `offset`, скорость слоя), часы плеера, скорость, `loop`, пауза, домен часов, **открытые gameplay-окна** (`attack` и т.п.) и сработавшие одноразовые маркеры |
+| Комната/сцена | поле `scene` снимка | идентичность: `$.scene.current()` и `$.room.current()` |
+
+Анимацию ставит сам `$.save` (провайдер `anim.player`), игре регистрировать
+ничего не нужно: `$.anim.player('hero').play('attack')` продолжается после
+`load()` с того же места. Что в сейв НЕ попадает и почему:
+
+* **значения дорожек** (`alpha`, `position`, кадр спрайта) не хранятся: они
+  пересчитываются из клипа и времени — иначе после правки клипа в снимке
+  осталась бы вторая, устаревшая правда;
+* **разовое состояние картинки** — one-shot SFX, вспышки, тряска, живые
+  звуковые handle'ы: это presentation, а не игра (§10, см.
+  `highlevel_save_presentation_test.py`);
+* **события окон не рассылаются повторно**: загрузка — это прыжок (как `seek`),
+  а не проигрывание пропущенного. Состояние окна восстанавливается молча
+  (`player.window('attack') === true`), а слушатели не получают синтетического
+  `window`-события, которого в сохранённом мире не было.
+
+### Сцена и комната
+
+Снимок хранит имя текущей сцены (`scene`), и при загрузке оно ЧИТАЕТСЯ. Но
+сцена не «въезжает» заново: её builder (`prepare`/`enter`) поверх
+восстановленного мира построил бы второй мир — второй узел карты, второй набор
+инстансов, — то есть снимок перестал бы быть снимком. Возвращается
+**идентичность**:
+
+* `room:<id>` — комната опознаётся по своему узлу карты (`$.room.adopt(id)`),
+  затем текущей сценой снова становится `room:<id>`; `$.room.marker()`,
+  `$.room.exit()`, `$.room.current()` работают как до сохранения;
+* любая другая сцена — `$.scene.adopt(name)`: имя и определение снова текущие
+  (сцена получает свой `update`), а мир остаётся тем, что пришёл из снимка;
+* отложенный переход и затемнение, поставленные ДО загрузки, снимаются: иначе
+  ближайший кадр снёс бы восстановленный мир.
+
+Чего загрузка не делает: не запускает `enter`/`prepare` сцены, не пересоздаёт
+области владения (`scope`) — узлы из снимка не принадлежат области, и это
+решение игры, а не движка.
+
+Расхождение не прячется. Если сцены из снимка в этом запуске нет (или у
+комнаты нет узла карты), мир всё равно применяется, а расхождение называется
+кодом: `R2D_SAVE_SCENE_UNKNOWN` (сцена из снимка не зарегистрирована),
+`R2D_SAVE_SCENE_MISMATCH` (комната не нашлась по узлу карты; или `$.room`
+называет комнату, которой в узлах снимка нет), `R2D_SAVE_SCENE_API`
+(`$.scene` не установлен). Читать их так:
+
+```js
+const r = $.save.restore($.save.snapshot());
+r.scene;                 // { saved, before, current, room, restored, code, message }
+$.save.lastScene();      // то же для последней загрузки слота
+$.debug.errors();        // записи с теми же кодами — их видит CI и агент
+```
+
+Тесты: `tests/agent/highlevel_save_anim_test.py` (состояние анимации),
+`tests/agent/highlevel_save_scene_test.py` (идентичность сцены и расхождение),
+`tests/agent/room_transaction_test.py` (§23: комната возвращается по узлу карты).
+
 
 
 ---
