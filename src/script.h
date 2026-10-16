@@ -38,6 +38,11 @@ typedef struct R2DScript {
     bool loaded;                  // скрипт успешно загружен
     bool has_update;              // определена функция onUpdate(dt)
     bool has_render;              // определена функция onRender()
+    // Прежние признаки на время перезапуска: если новая версия точки входа
+    // не компилируется, рантайм остаётся прежним и признаки возвращаются.
+    bool saved_loaded;
+    bool saved_has_update;
+    bool saved_has_render;
 
     // Zero-copy представление массива трансформов физики для JS.
     JSValue transforms_array;     // Float32Array поверх physics->transforms

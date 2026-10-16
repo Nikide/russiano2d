@@ -176,7 +176,7 @@ $.audio.bus('tunnel', { parent: 'sfx', effect: 'reverb',
 
 | Метод | Назначение |
 |---|---|
-| `$.audio.play(pathOrId, opts)` | обёртка над `$.sound.play` с маршрутизацией в шину |
+| `$.audio.play(pathOrId, opts)` | обёртка над `$.sound.play` с маршрутизацией в шину; `opts` понимает `bus`, `volume`, `pan`, `loop`, `pitch`, `priority` (вытеснение голосов, как у `$.sound.play`) и `keep: true` (звук переживает выгрузку области) |
 | `$.audio.playAt(pathOrId, x, y, opts)` | позиционный звук от слушателя/камеры |
 | `$.audio.listener(x, y)` / `$.audio.listener()` | задать / прочитать слушателя (по умолчанию — камера) |
 | `$.audio.handles()` | массив активных handle'ов |

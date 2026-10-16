@@ -1483,7 +1483,12 @@ static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, J
     JS_SetPropertyStr(ctx, o, "joints", JS_NewInt32(ctx, joints));
     JS_SetPropertyStr(ctx, o, "joints_max", JS_NewInt32(ctx, 64));
     JS_SetPropertyStr(ctx, o, "user_shaders", JS_NewInt32(ctx, shaders));
-    JS_SetPropertyStr(ctx, o, "user_shaders_max", JS_NewInt32(ctx, R2D_MAX_USER_SHADERS));
+    // Слот 0 занят обычным спрайтом: реально игра может занять на один
+    // шейдер меньше, и само сообщение движка при переполнении называет то
+    // же число. Раньше здесь стоял «сырой» максимум, и панель обещала
+    // на один больше, чем влезает.
+    JS_SetPropertyStr(ctx, o, "user_shaders_max",
+                      JS_NewInt32(ctx, R2D_MAX_USER_SHADERS - 1));
     JS_SetPropertyStr(ctx, o, "node_fx_max", JS_NewInt32(ctx, R2D_MAX_NODE_FX));
     // Занятость, а не только потолки: игра должна видеть, БЛИЗКО ли она к
     // пределу. Раньше вьюпорты, обработчики UI, документы и контакты отдавали
@@ -5703,6 +5708,33 @@ static void r2d__refresh_engine_props(R2DScript *s)
     }
 }
 
+/**
+ * Собирается ли текущая точка входа? Проверяем КОМПИЛЯЦИЮ в живом контексте,
+ * не выполняя код и не трогая мир: перезапуск обязан быть безопасным, а
+ * сообщение «продолжаю со старым рантаймом» — правдой. Раньше контекст
+ * уничтожался до компиляции, поэтому при синтаксической ошибке игра теряла и
+ * старый код, и глобалы, а в лог уходило обещание, которого никто не выполнял.
+ *
+ * Возвращает false только при доказанной ошибке компиляции; если проверить
+ * нельзя (встроенный байткод груза) — true: тогда решает обычный путь загрузки.
+ */
+static bool r2d__entry_compiles(R2DScript *s)
+{
+    if (!s->ctx || !s->entry_path[0]) return true;
+    size_t size = 0;
+    char *buf = (char *)SDL_LoadFile(s->entry_path, &size);
+    if (!buf) return true;   // файла нет — пусть обычный путь сообщит причину
+    JSValue compiled = JS_Eval(s->ctx, buf, size, s->entry_name,
+                               JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    SDL_free(buf);
+    if (JS_IsException(compiled)) {
+        r2d__capture_error(s);
+        return false;
+    }
+    JS_FreeValue(s->ctx, compiled);
+    return true;
+}
+
 static bool r2d__run_entry(R2DScript *s)
 {
     // Важно: JS_Eval для модуля возвращает Promise, а не namespace-объект.
@@ -5999,6 +6031,12 @@ void r2d_script_shutdown(R2DScript *s)
 
 bool r2d_script_reload(R2DScript *s)
 {
+    // Запоминаем состояние: если новая версия не компилируется, рантайм
+    // остаётся прежним, и признаки «есть update/render/загружено» должны
+    // остаться прежними, а не погаснуть.
+    s->saved_has_update = s->has_update;
+    s->saved_has_render = s->has_render;
+    s->saved_loaded = s->loaded;
     s->has_update = false;
     s->has_render = false;
     s->loaded = false;
@@ -6007,6 +6045,17 @@ bool r2d_script_reload(R2DScript *s)
     // id колбэков старого контекста: после пересоздания контекста тот же id
     // указывал бы на чужой обработчик (или ни на какой). Снимаем документы
     // вместе с контекстом — JS-сторона после перезагрузки всё равно пуста.
+    // Сначала убеждаемся, что новая версия вообще компилируется: иначе
+    // разрушать рабочий рантайм нельзя (см. r2d__entry_compiles).
+    if (!r2d__entry_compiles(s)) {
+        R2D_ERROR("перезапуск скриптов отменён: новая версия не компилируется — "
+                  "продолжаю со старым рантаймом");
+        s->has_update = s->saved_has_update;
+        s->has_render = s->saved_has_render;
+        s->loaded = s->saved_loaded;
+        return false;
+    }
+
     if (s->gui) r2d_gui_unload_all(s->gui);
 
     r2d__destroy_context(s);
