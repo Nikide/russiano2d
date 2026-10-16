@@ -1,0 +1,170 @@
+<rml>
+<!-- ===========================================================================
+     Эталонное меню настроек (демо demos/settings).
+
+     Закон интерфейса (docs/UI_RMLUI_LAW.md): меню, экраны и диалоги — только
+     документы RmlUi. Здесь разметка СТАТИЧЕСКАЯ: все строки видны глазами и
+     копируются как образец, а JS (index.js) только связывает их с настройками
+     по id. Динамическая генерация строк спрятала бы образец за шаблонными
+     строками JS.
+
+     Роли:
+       .tab   — вкладка (Графика/Звук/Управление/Язык);
+       .page  — содержимое вкладки, видно только у активной (.page.on);
+       .row   — строка настройки; .row.sel — кольцо выбора (клавиатура/геймпад);
+       .bar/.fill — ползунок: значение показывается заливкой и числом;
+       .key   — текущая клавиша действия (для вкладки «Управление»).
+
+     Идентификаторы: row-<имя> (строка), lbl-<имя> (подпись), val-<имя>
+     (значение), fill-<имя> (заливка ползунка). Имена совпадают с ключами
+     настроек в index.js — по ним JS ищет элементы.
+     =========================================================================== -->
+<head>
+    <link type="text/rcss" href="settings.rcss"/>
+    <title>Настройки — Russiano2D</title>
+</head>
+<body>
+    <div id="scrim"></div>
+
+    <div id="panel">
+        <div id="head">
+            <h1 id="title">Настройки</h1>
+            <span id="fps">— FPS</span>
+        </div>
+
+        <div id="tabs">
+            <button id="tab-graphics" class="tab">Графика</button>
+            <button id="tab-sound" class="tab">Звук</button>
+            <button id="tab-controls" class="tab">Управление</button>
+            <button id="tab-lang" class="tab">Язык</button>
+        </div>
+
+        <!-- ---------------------------------------------------------------
+             ГРАФИКА: режим окна, разрешение из displayModes(), масштаб
+             интерфейса, сглаживание SMAA, показ FPS.
+             --------------------------------------------------------------- -->
+        <div id="page-graphics" class="page on">
+            <div class="row" id="row-g-fullscreen">
+                <span class="label" id="lbl-g-fullscreen">Полный экран</span>
+                <span class="val" id="val-g-fullscreen">окно</span>
+            </div>
+            <div class="row" id="row-g-mode">
+                <span class="label" id="lbl-g-mode">Разрешение</span>
+                <span class="val" id="val-g-mode">—</span>
+            </div>
+            <div class="row" id="row-g-scale">
+                <span class="label" id="lbl-g-scale">Масштаб интерфейса</span>
+                <span class="bar"><span class="fill" id="fill-g-scale"></span></span>
+                <span class="val" id="val-g-scale">1.00×</span>
+            </div>
+            <div class="row" id="row-g-smaa">
+                <span class="label" id="lbl-g-smaa">Сглаживание SMAA</span>
+                <span class="val" id="val-g-smaa">выключено</span>
+            </div>
+            <div class="row" id="row-g-fps">
+                <span class="label" id="lbl-g-fps">Показывать FPS</span>
+                <span class="val" id="val-g-fps">да</span>
+            </div>
+            <p class="hint" id="hint-g">Режим применяется на лету: окно перестраивается без
+                перезапуска игры. После смены режима движку нужно несколько кадров
+                (4–6) — меню это учитывает и не проверяет ввод в тот же кадр.</p>
+        </div>
+
+        <!-- ---------------------------------------------------------------
+             ЗВУК: мастер/эффекты/музыка, mute, проверка «звук играет»
+             и факты о каналах (в движке 128 каналов, $.sound.busy()).
+             --------------------------------------------------------------- -->
+        <div id="page-sound" class="page">
+            <div class="row" id="row-s-master">
+                <span class="label" id="lbl-s-master">Общая громкость</span>
+                <span class="bar"><span class="fill" id="fill-s-master"></span></span>
+                <span class="val" id="val-s-master">80%</span>
+            </div>
+            <div class="row" id="row-s-sfx">
+                <span class="label" id="lbl-s-sfx">Эффекты</span>
+                <span class="bar"><span class="fill" id="fill-s-sfx"></span></span>
+                <span class="val" id="val-s-sfx">80%</span>
+            </div>
+            <div class="row" id="row-s-music">
+                <span class="label" id="lbl-s-music">Музыка</span>
+                <span class="bar"><span class="fill" id="fill-s-music"></span></span>
+                <span class="val" id="val-s-music">60%</span>
+            </div>
+            <div class="row" id="row-s-mute">
+                <span class="label" id="lbl-s-mute">Тишина</span>
+                <span class="val" id="val-s-mute">нет</span>
+            </div>
+            <div class="row" id="row-s-test">
+                <span class="label" id="lbl-s-test">Проверить звук</span>
+                <span class="val" id="val-s-test">нажмите Enter</span>
+            </div>
+            <p class="hint" id="hint-s">Каналов у движка 128 — сколько занято сейчас, видно
+                в строке состояния внизу.</p>
+        </div>
+
+        <!-- ---------------------------------------------------------------
+             УПРАВЛЕНИЕ: переназначение клавиш с захватом следующего нажатия
+             ($.input.waitForInput), сброс к эталону ($.input.resetDefaults)
+             и геймпад (кольцо выбора в этом меню).
+             --------------------------------------------------------------- -->
+        <div id="page-controls" class="page">
+            <div class="row key" id="row-c-jump">
+                <span class="label" id="lbl-c-jump">Прыжок</span>
+                <span class="key" id="val-c-jump">SPACE</span>
+            </div>
+            <div class="row key" id="row-c-left">
+                <span class="label" id="lbl-c-left">Влево</span>
+                <span class="key" id="val-c-left">A</span>
+            </div>
+            <div class="row key" id="row-c-right">
+                <span class="label" id="lbl-c-right">Вправо</span>
+                <span class="key" id="val-c-right">D</span>
+            </div>
+            <div class="row key" id="row-c-attack">
+                <span class="label" id="lbl-c-attack">Действие</span>
+                <span class="key" id="val-c-attack">J</span>
+            </div>
+            <div class="row" id="row-c-gamepad">
+                <span class="label" id="lbl-c-gamepad">Навигация геймпадом</span>
+                <span class="val" id="val-c-gamepad">да</span>
+            </div>
+            <div class="row" id="row-c-reset">
+                <span class="label" id="lbl-c-reset">Сбросить управление</span>
+                <span class="val" id="val-c-reset">Enter — сбросить</span>
+            </div>
+            <p class="hint" id="hint-c">Enter на строке клавиши — «нажмите новую клавишу»;
+                Esc отменяет захват. Конфликты движок показывает сам
+                ($.input.conflicts).</p>
+        </div>
+
+        <!-- ---------------------------------------------------------------
+             ЯЗЫК: переключение на лету через $.i18n — подписи этого же меню
+             перерисовываются без перезапуска.
+             --------------------------------------------------------------- -->
+        <div id="page-lang" class="page">
+            <div class="row" id="row-l-ru">
+                <span class="label" id="lbl-l-ru">Русский</span>
+                <span class="val" id="val-l-ru">выбран</span>
+            </div>
+            <div class="row" id="row-l-en">
+                <span class="label" id="lbl-l-en">English</span>
+                <span class="val" id="val-l-en">—</span>
+            </div>
+            <div class="row" id="row-l-reset">
+                <span class="label" id="lbl-l-reset">Сбросить все настройки</span>
+                <span class="val" id="val-l-reset">Enter — сбросить</span>
+            </div>
+            <p class="hint" id="hint-l">Словари лежат в index.js и грузятся через
+                $.i18n.add(); выбор сохраняется и применяется при следующем запуске.</p>
+        </div>
+
+        <div id="status">—</div>
+        <div id="foot">
+            <span>↑↓ / стик — выбор</span>
+            <span>←→ — значение</span>
+            <span>Enter / A — изменить</span>
+            <span>Esc / B — назад</span>
+        </div>
+    </div>
+</body>
+</rml>

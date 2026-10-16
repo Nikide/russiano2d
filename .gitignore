@@ -12,6 +12,8 @@ bin/
 dist-ci/
 dist-ci-*/
 save.json
+# Настройки демо demos/settings: файл игрока, в репозиторий не едет.
+settings.json
 # Прогресс демо-новеллы: у неё свой файл, чтобы не путаться с save.json игры.
 demos/vn_save.json
 cmake-build-*/

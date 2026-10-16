@@ -32,6 +32,9 @@ const MODULES = [
     './russi_vn/index.js',
     './rotsprite/index.js',
     './re2d_world/index.js',
+    // Эталонное меню настроек: четыре вкладки, всё на лету, сохранение в
+    // settings.json (docs/tutorial-settings.md).
+    './settings/index.js',
 ];
 
 $.ready(async ($) => {

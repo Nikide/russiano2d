@@ -93,6 +93,7 @@ SITE_DOCS = (
     "docs/HIGH_LEVEL_API.md",
     "docs/highlevel",
     "docs/tutorial-first-game.md",
+    "docs/tutorial-settings.md",
     "docs/BUILD.md",
     "docs/demos.md",
 )
