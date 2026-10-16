@@ -59,7 +59,9 @@ def main():
 
         count = a.eval("engine.audio.channelCount()")
         print("  каналов: %s" % count)
-        check(count == 16, "движок сообщает 16 эффект-каналов")
+        # Число берём у движка, а не из литерала: предел меняется (был 16,
+        # стал 128 — задача C4), и тест не должен краснеть от смены константы.
+        check(count >= 64, "движок сообщает предел эффект-каналов: %d" % count)
 
         # --- seek и position ---
         sid = a.eval("engine.audio.load('%s')" % tone)
@@ -162,7 +164,7 @@ def main():
 
         info = a.eval("JSON.stringify($.sound.busy())")
         print("  $.sound.busy(): %s" % info)
-        check('"total":16' in info, "$.sound.busy() знает лимит каналов")
+        check('"total":%d' % count in info, "$.sound.busy() знает лимит каналов (%d)" % count)
 
         a.eval("engine.audio.stopAll(0)")
 

@@ -493,15 +493,37 @@ export function installSound($) {
         /**
          * Сколько каналов занято: `$.sound.busy()`.
          *
-         * `active` — общее число играющих каналов из `engine.audio.activeChannels()`,
-         * `free` — сколько осталось (лимит движка, обычно 16 эффект-каналов).
+         * `active` — сколько каналов играет прямо сейчас
+         * (`engine.audio.activeChannels()`), `free` — сколько осталось,
+         * `total` — фактический предел движка (см. `$.sound.channels()`).
+         *
+         * Предел — не «деталь реализации»: при полном пуле движок вытесняет
+         * САМЫЙ НЕВАЖНЫЙ звук по `priority`, а если вытеснять некого,
+         * `play()` возвращает `-1`. В плотной сцене это штатный путь, поэтому
+         * смотреть `active`/`free` и ставить `priority` — обязательный приём,
+         * а не редкость (docs/highlevel/sound.md, docs/highlevel/audiobus.md).
          */
         busy() {
             const active = typeof engine.audio.activeChannels === 'function'
                 ? engine.audio.activeChannels() : 0;
             const total = typeof engine.audio.channelCount === 'function'
-                ? engine.audio.channelCount() : 16;
+                ? engine.audio.channelCount() : 0;
             return { active, free: Math.max(0, total - active), total };
+        },
+
+        /**
+         * Фактический предел эффект-каналов движка: `$.sound.channels()`.
+         *
+         * Число берётся у движка, а не из зашитой константы: было 16, стало 128
+         * (замеры цены — в `src/audio.h`). Сеттера нет намеренно: ёмкость пула —
+         * compile-time потолок (массивы каналов и треки SDL_mixer создаются на
+         * старте), а «мягкий» лимит в JS был бы вторым источником правды —
+         * игра отказывала бы себе в звуках, тогда как движок их принимает.
+         * Нужен меньший пул — управляйте приоритетами и смотрите `busy()`.
+         */
+        channels() {
+            return typeof engine.audio.channelCount === 'function'
+                ? engine.audio.channelCount() : 0;
         },
         activeChannels() { return engine.audio.activeChannels(); },
         duration(what) { return engine.audio.duration(soundId(what)); },

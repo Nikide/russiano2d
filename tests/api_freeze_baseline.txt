@@ -301,6 +301,7 @@ $.ctx.console
 $.ctx.csv
 $.ctx.curve
 $.ctx.debug
+$.ctx.defineTag
 $.ctx.devtools
 $.ctx.dialog
 $.ctx.engineFrame
@@ -1045,6 +1046,7 @@ $.hits.flash
 $.hits.knockback
 $.hits.on
 $.hits.play
+$.hits.pool
 $.hits.preset
 $.hits.presets
 $.hits.reduced
@@ -1796,6 +1798,7 @@ $.sound.bankFiles
 $.sound.bankNames
 $.sound.busy
 $.sound.channel
+$.sound.channels
 $.sound.count
 $.sound.crossfade
 $.sound.dbToLinear
@@ -2440,6 +2443,7 @@ $.звук.bankFiles
 $.звук.bankNames
 $.звук.busy
 $.звук.channel
+$.звук.channels
 $.звук.count
 $.звук.crossfade
 $.звук.dbToLinear

@@ -19,12 +19,18 @@ const state = {
     dirty: false,
 };
 
+/** Причина последнего отказа файловой операции от движка ('' — не было). */
+function lastFsError() {
+    return (typeof engine.fs.lastError === 'function' ? engine.fs.lastError() : '') || '';
+}
+
 /**
- * Отказ записи файла: РОВНО ОДНА строка, в которой есть путь и причина (§17,
- * отчёт BASHNYA A5). Причину называет движок (`engine.fs.lastError()`:
- * read-only/EROFS, EACCES, ENOENT — с абсолютным путём), а `$` кладёт её и в
- * журнал, и в структурную диагностику `$.debug.errors()` с кодом
- * R2D_FS_WRITE_FAILED и recoverable: true.
+ * Отказ файловой операции: РОВНО ОДНА строка, в которой есть путь и причина
+ * (§17, отчёты BASHNYA A5 и C5). Причину называет движок
+ * (`engine.fs.lastError()`: read-only/EROFS, EACCES, ENOENT, ENOTEMPTY —
+ * с абсолютным путём), а `$` кладёт её и в журнал, и в структурную диагностику
+ * `$.debug.errors()` с кодом `R2D_FS_WRITE_FAILED`/`R2D_FS_REMOVE_FAILED`
+ * и `recoverable: true`.
  *
  * Строка, а не `new Error(...)`: у ошибки печатался бы ещё и стек, а на
  * обычный «диск только для чтения» стек не нужен — он превратил бы одну
@@ -34,11 +40,11 @@ const state = {
  * только для чтения. Игра при этом «работает», а прогресс не сохраняется, и
  * раньше узнать об этом было неоткуда.
  */
-function reportWriteFailure($, path, where) {
-    const from_engine = (typeof engine.fs.lastError === 'function' ? engine.fs.lastError() : '') || '';
-    const message = from_engine || `не удалось записать "${path}": причина не сообщена движком`;
+function reportFsFailure($, path, where, code) {
+    const from_engine = lastFsError();
+    const message = from_engine || `не удалось выполнить ${where} для "${path}": причина не сообщена движком`;
     const opts = {
-        code: 'R2D_FS_WRITE_FAILED',
+        code,
         subsystem: 'fs',
         recoverable: true,
         assetPath: String(path),
@@ -53,6 +59,14 @@ function reportWriteFailure($, path, where) {
     }
     ctx.log('$: ' + message);
     return message;
+}
+
+function reportWriteFailure($, path, where) {
+    return reportFsFailure($, path, where, 'R2D_FS_WRITE_FAILED');
+}
+
+function reportRemoveFailure($, path) {
+    return reportFsFailure($, path, '$.fs.remove', 'R2D_FS_REMOVE_FAILED');
 }
 
 export function installStore($) {
@@ -93,7 +107,20 @@ export function installStore($) {
         /** Список файлов в каталоге (пути, отсортированы). */
         list(dir) { return engine.fs.list(dir); },
 
-        remove(path) { return engine.fs.remove(path); },
+        /**
+         * Удалить файл. Идемпотентно: если файла нет — это НЕ отказ, и в журнал
+         * ничего не пишется (возврат `false`: на нём держится различение
+         * «удалил» и «и так нет», см. `$.save.remove`). Настоящий отказ (нет
+         * прав, непустой каталог) виден одной строкой с путём и причиной и
+         * записью `R2D_FS_REMOVE_FAILED` в `$.debug.errors()` (отчёт C5).
+         */
+        remove(path) {
+            const ok = engine.fs.remove(path);
+            // Причину движок заполняет ТОЛЬКО для настоящего отказа: у
+            // отсутствующего файла она пуста, и мы молчим.
+            if (!ok && lastFsError()) reportRemoveFailure($, path);
+            return ok;
+        },
 
         /** Абсолютный путь к чему угодно внутри каталога игры — для логов. */
         basePath() { return engine.basePath || ''; },

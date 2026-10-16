@@ -54,6 +54,10 @@ def main():
     shutil.rmtree(READONLY_DIR, ignore_errors=True)
     os.makedirs(READONLY_DIR)
     os.symlink(os.path.join(ROOT, "assets"), os.path.join(READONLY_DIR, "assets"))
+    # Файл внутри: каталог непустой (проверка ENOTEMPTY) и есть что удалять
+    # там, где прав на запись в каталог нет (проверка EACCES).
+    with open(os.path.join(READONLY_DIR, "keep.json"), "w", encoding="utf-8") as handle:
+        handle.write("{}")
     os.chmod(READONLY_DIR, stat.S_IRUSR | stat.S_IXUSR)
     readonly_blocked = os.geteuid() != 0
     print("  --   базовый каталог только для чтения: %s (chmod действует: %s)"
@@ -141,6 +145,87 @@ def main():
                         check(("Permission denied" in entry.get("message", ""))
                               or ("Read-only" in entry.get("message", "")),
                               "%s: причина в тексте записи: %s" % (name, entry.get("message", ""))[:110])
+
+        # ------------------------------------------------------------------
+        # C5: удаление — идемпотентно молчит, но настоящий отказ виден
+        # ------------------------------------------------------------------
+        with Agent(game=GAME, seed=5) as a:
+            a.step(3)
+            # «Файла нет» — не отказ: тишина и ни одной записи в диагностике.
+            a.eval("$.debug.clearErrors(); 'ok'")
+            before = len(a.stderr_text().splitlines())
+            missing_remove = a.eval("$.fs.remove(%s)" % quote(os.path.join(READONLY_DIR, "gone.json")))
+            a.step(1)
+            quiet = fresh_lines(a, before)
+            print("  --   удаление отсутствующего файла: %s, новых строк %d" % (missing_remove, len(quiet)))
+            check(missing_remove is False and not quiet,
+                  "отсутствующий файл: удалять нечего — тишина (идемпотентность): %s" % quiet)
+            check(a.eval("$.debug.errors().length") == 0,
+                  "отсутствующий файл не оставил записей в $.debug.errors()")
+
+            # Настоящий отказ: непустой каталог. Одна строка с путём и причиной.
+            a.eval("$.debug.clearErrors(); 'ok'")
+            before = len(a.stderr_text().splitlines())
+            busy_dir = a.eval("$.fs.remove(%s)" % quote(READONLY_DIR))
+            a.step(1)
+            lines = fresh_lines(a, before)
+            entries = a.eval("$.debug.errors()")
+            print("  --   удаление непустого каталога: %s" % busy_dir)
+            for line in lines:
+                print("       | " + line)
+            check(busy_dir is False, "непустой каталог не удалён (false)")
+            check(len(lines) == 1, "ровно одна строка в журнале (получено %d)" % len(lines))
+            if lines:
+                check("R2D_FS_REMOVE_FAILED" in lines[0], "строка называет код отказа")
+                check(READONLY_DIR in lines[0], "строка называет путь")
+                check(any(word in lines[0] for word in ("Directory not empty", "errno 66",
+                                                        "Not a directory", "Permission denied",
+                                                        "errno 13")),
+                      "строка называет причину: %s" % lines[0][:130])
+            check(len(entries) == 1 and entries[0].get("code") == "R2D_FS_REMOVE_FAILED",
+                  "структурная запись R2D_FS_REMOVE_FAILED: %s" % [e.get("code") for e in entries])
+            if entries:
+                entry = entries[0]
+                check(entry.get("subsystem") == "fs" and entry.get("recoverable") is True,
+                      "подсистема fs, recoverable=true")
+                check(entry.get("assetPath") == READONLY_DIR,
+                      "запись помнит путь: %s" % entry.get("assetPath"))
+
+            # Отказ по правам: файл внутри каталога без права записи.
+            if readonly_blocked:
+                a.eval("$.debug.clearErrors(); 'ok'")
+                before = len(a.stderr_text().splitlines())
+                denied = a.eval("$.fs.remove(%s)" % quote(os.path.join(READONLY_DIR, "keep.json")))
+                a.step(1)
+                lines = fresh_lines(a, before)
+                entries = a.eval("$.debug.errors()")
+                print("  --   удаление файла из каталога без прав: %s" % denied)
+                for line in lines:
+                    print("       | " + line)
+                check(denied is False and len(lines) == 1,
+                      "отказ по правам: false и одна строка (получено %d)" % len(lines))
+                check(bool(lines) and ("Permission denied" in lines[0] or "errno 13" in lines[0]),
+                      "причина названа системой: %s" % (lines[0] if lines else "нет"))
+                check(len(entries) == 1 and entries[0].get("code") == "R2D_FS_REMOVE_FAILED",
+                      "структурная запись R2D_FS_REMOVE_FAILED на отказе по правам")
+
+            # Успешное удаление молчит (тишина — не только на ошибке).
+            ok_dir = os.path.join(ROOT, "build", "fs_remove_ok")
+            shutil.rmtree(ok_dir, ignore_errors=True)
+            os.makedirs(ok_dir)
+            ok_file = os.path.join(ok_dir, "temp.json")
+            with open(ok_file, "w", encoding="utf-8") as handle:
+                handle.write("{}")
+            a.eval("$.debug.clearErrors(); 'ok'")
+            before = len(a.stderr_text().splitlines())
+            removed = a.eval("$.fs.remove(%s)" % quote(ok_file))
+            a.step(1)
+            lines = fresh_lines(a, before)
+            print("  --   успешное удаление: %s, новых строк %d" % (removed, len(lines)))
+            check(removed is True and not lines and a.eval("$.debug.errors().length") == 0,
+                  "успешное удаление не пишет ни строки: %s" % lines)
+            check(not os.path.exists(ok_file), "файл действительно удалён")
+            shutil.rmtree(ok_dir, ignore_errors=True)
 
         # ------------------------------------------------------------------
         # Детерминированный недоступный путь (не зависит от прав)

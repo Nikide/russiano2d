@@ -4599,11 +4599,24 @@ static JSValue r2d__js_fs_remove(JSContext *ctx, JSValueConst this_val, int argc
     // SDL 3.4.16: missing → true, ошибка только на запрет доступа). Из-за этого
     // $.fs.remove() врал, а $.save.remove() «удалял» пустые слоты. Спрашиваем
     // о существовании сами — это и есть разница между «удалил» и «и так нет».
+    //
+    // «И так нет» — НЕ отказ: причина не запоминается, и вызывающий слой молчит
+    // (идемпотентная уборка не должна шуметь). Настоящий отказ (нет прав,
+    // непустой каталог) называет себя через engine.fs.lastError() с кодом
+    // R2D_FS_REMOVE_FAILED — см. store.js.
     if (!SDL_GetPathInfo(full, NULL)) {
         SDL_SetError("файла нет: %s", full);
+        r2d__fs_error[0] = '\0';
         return JS_FALSE;
     }
-    return SDL_RemovePath(full) ? JS_TRUE : JS_FALSE;
+
+    errno = 0;
+    if (SDL_RemovePath(full)) {
+        r2d__fs_error[0] = '\0';
+        return JS_TRUE;
+    }
+    r2d__fs_note_failure("удалить", "R2D_FS_REMOVE_FAILED", full, errno, NULL);
+    return JS_FALSE;
 }
 
 typedef struct R2DFsEnum {
