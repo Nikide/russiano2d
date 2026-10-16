@@ -150,6 +150,35 @@ function patchNode() {
     };
 }
 
+/**
+ * Один смысл видимости для узла-слоя: ЛЮБАЯ запись `node.visible` (в том числе
+ * из обёртки — `.hide()/.show()/.visible(flag)`) идёт тем же путём, что
+ * `$.layers.show/hide(name)` — глубоко, через `applyLayerVisibility`.
+ *
+ * Иначе получались два разных смысла, и смесь «глубоко спрятали
+ * (`$.layers.hide`) — поверхностно показали (`layer.show()`)" оставляла слой
+ * пустым (BASHNYA E8). Для обычных узлов поведение прежнее: флаг ставится
+ * только самому узлу.
+ *
+ * Почему аксессор на узле, а не патч `Wrapper.prototype.visible`: подсистемы
+ * ставятся РАНЬШЕ, чем ядро объявляет `.visible()`, и ядро перезаписывает
+ * обёртку; аксессор на узле-слое от порядка установки не зависит, а свой флаг
+ * живёт в НЕперечисляемом `__visible_flag`, чтобы не попадать в переборы
+ * свойств (дампы/снимки) и в заморозку публичных имён.
+ */
+function installLayerVisibility(node) {
+    const initial = node.visible !== false;
+    Object.defineProperty(node, '__visible_flag', {
+        value: initial, writable: true, enumerable: false, configurable: true,
+    });
+    Object.defineProperty(node, 'visible', {
+        configurable: true,
+        enumerable: true,
+        get() { return node.__visible_flag; },
+        set(value) { applyLayerVisibility(node, value !== false); },
+    });
+}
+
 function setLayerField(node, key, value) {
     switch (key) {
     case 'name': {
@@ -192,6 +221,7 @@ function initLayerNode(node) {
     if (!node.internal && registry.get(node.layer_name) !== node) registry.set(node.layer_name, node);
     node.attrs.name = node.layer_name;
     node.attrs.order = node.layer_order;
+    installLayerVisibility(node);
     return node;
 }
 
@@ -442,6 +472,26 @@ function setVisibleDeep(layer, value) {
     }
 }
 
+/**
+ * ЕДИНАЯ точка смены видимости слоя: сам слой и все потомки.
+ *
+ * До неё было два разных смысла: `$.layers.hide/show(name)` гасили и
+ * показывали глубоко, а `.hide()/.show()/.visible()` у узла-слоя (обёртка)
+ * трогали только сам узел. Из-за этого смесь «глубоко спрятали — поверхностно
+ * показали» оставляла слой нарисованным ПУСТЫМ: `layer.visible = true`, а дети
+ * `visible = false` (BASHNYA E8: «`layer.show()` не возвращает детей после
+ * `hide()`»). Теперь обе дороги идут сюда, и смешанные вызовы безопасны.
+ *
+ * Образец полосы (`.repeat()`) обязан остаться скрытым: полосы рисует
+ * отрисовщик слоя, иначе картинка удвоилась бы.
+ */
+function applyLayerVisibility(node, value) {
+    node.__visible_flag = value;
+    setVisibleDeep(node, value);
+    const group = repeats.get(node);
+    if (group && group.template && !group.template.removed) group.template.visible = false;
+}
+
 function sortedLayers() {
     const out = [];
     for (const node of ctx.nodes) {
@@ -673,20 +723,14 @@ export function installLayers($) {
         show(name) {
             const node = findByName(name);
             if (!node) return false;
-            node.visible = true;
-            setVisibleDeep(node, true);
-            // Образец полосы обязан остаться скрытым: его рисует отрисовщик
-            // слоя, иначе картинка удвоилась бы.
-            const group = repeats.get(node);
-            if (group && group.template && !group.template.removed) group.template.visible = false;
+            applyLayerVisibility(node, true);
             return true;
         },
 
         hide(name) {
             const node = findByName(name);
             if (!node) return false;
-            node.visible = false;
-            setVisibleDeep(node, false);
+            applyLayerVisibility(node, false);
             return true;
         },
 

@@ -272,9 +272,21 @@ function normalizeShape(spec, tile) {
 }
 
 /** Visual region: [tx,ty,w,h] | [source,tx,ty,w,h] | { source, tx, ty, w, h }. */
+/**
+ * Нормализует visual region тайла.
+ *
+ * Размер отрисовки (BASHNYA E4):
+ *   * без `fit`/`scale` — как раньше: регион рисуется 1:1 в мировых пикселях
+ *     (`w×h` пикселей текстуры, умноженные на масштаб узла карты);
+ *   * `fit: 'cell'` — регион = картинка, растягиваемая В КЛЕТКУ: рисуется ровно
+ *     `tile × tile` (клетка слоя), пропорции НЕ сохраняются — так HD-лист
+ *     256×256 ложится на клетку 64 без ручного уменьшения арта;
+ *   * `scale: k` — множитель размера региона (`k > 0`), ортогонален `fit`.
+ */
 function normalizeVisual(spec) {
     if (!spec) return null;
     let source = 0, tx = 0, ty = 0, w = 0, h = 0;
+    let fit = null, scale = 1;
     if (Array.isArray(spec)) {
         if (spec.length === 4) { tx = spec[0] | 0; ty = spec[1] | 0; w = spec[2] | 0; h = spec[3] | 0; }
         else if (spec.length >= 5) { source = spec[0] | 0; tx = spec[1] | 0; ty = spec[2] | 0; w = spec[3] | 0; h = spec[4] | 0; }
@@ -289,9 +301,27 @@ function normalizeVisual(spec) {
             w = spec.w | 0;
             h = spec.h | 0;
         }
+        if (spec.fit === 'cell' || spec.fit === true) fit = 'cell';
+        const k = Number(spec.scale);
+        if (Number.isFinite(k) && k > 0) scale = k;
     } else return null;
     if (!(w > 0) || !(h > 0)) return null;
-    return { source: source < 0 ? 0 : source, tx, ty, w, h };
+    return { source: source < 0 ? 0 : source, tx, ty, w, h, fit, scale };
+}
+
+/**
+ * Размер отрисовки клетки тайла: `{ w, h }` в ТЕХ ЖЕ единицах, что пришли
+ * (экранные пиксели кадра), по записи `layer.visuals`.
+ *
+ * `tile_w`/`tile_h` — размер клетки на экране (с учётом зума/масштаба узла),
+ * `node_scale_x/y` — масштаб узла карты. Умолчание (без `fit`) повторяет
+ * прежнюю формулу: `v.w * node_scale`.
+ */
+function visualDrawSize(v, tile_w, tile_h, node_scale_x, node_scale_y) {
+    if (!v) return null;
+    if (v.fit === 'cell') return { w: tile_w, h: tile_h };
+    const k = v.scale === undefined ? 1 : v.scale;
+    return { w: v.w * node_scale_x * k, h: v.h * node_scale_y * k };
 }
 
 /** Маски/флаги тела. null — «как у всех» (умолчания движка). */
@@ -980,7 +1010,12 @@ export function collectVisibleTiles(state, cam, opts) {
                 let vw = tw, vh = th;
                 if (layer.custom_visual && layer.visuals) {
                     const v = layer.visuals[id - 1];
-                    if (v) { vw = v.w * Math.abs(sx); vh = v.h * Math.abs(sy); }
+                    if (v) {
+                        // Те же правила размера, что в отрисовке (fit/scale).
+                        const size = visualDrawSize(v, tw, th, Math.abs(sx), Math.abs(sy));
+                        vw = size.w;
+                        vh = size.h;
+                    }
                 }
                 list.push({
                     tx: tx + ox, ty: ty + oy, id, li, layer: li,
@@ -1217,8 +1252,9 @@ function layerFramesLegacy(layer) {
 
 /**
  * Путь с дескрипторами: спрайт id берётся из visual region своего источника.
- * `layer.visuals[id-1]` — каноническая запись { id, source, tx, ty, w, h } или
- * null; она же отдаётся через $.tilemap.visualOf/visualTable.
+ * `layer.visuals[id-1]` — каноническая запись { id, source, tx, ty, w, h, fit, scale }
+ * или null; она же отдаётся через $.tilemap.visualOf/visualTable. `fit: 'cell'`
+ * растягивает регион в клетку, `scale` — множитель размера (BASHNYA E4).
  */
 function layerFramesVisual(layer) {
     const sources = layer.sources && layer.sources.length ? layer.sources : (layer.src ? [layer.src] : []);
@@ -1250,11 +1286,16 @@ function layerFramesVisual(layer) {
         const v = def && def.visual ? def.visual : null;
         if (v) {
             const tex = texs[v.source] !== undefined ? texs[v.source] : -1;
-            const entry = { id, source: v.source, tx: v.tx, ty: v.ty, w: v.w, h: v.h };
+            const entry = { id, source: v.source, tx: v.tx, ty: v.ty, w: v.w, h: v.h,
+                            fit: v.fit === undefined ? null : v.fit,
+                            scale: v.scale === undefined ? 1 : v.scale };
             visuals.push(entry);
             if (tex >= 0) frames.push(engine.createSprite(tex, v.tx, v.ty, v.w, v.h));
             else frames.push(-1);
             if (v.source !== 0 || v.w !== layer.tile || v.h !== layer.tile) custom = true;
+            // `fit`/`scale` меняют размер отрисовки, поэтому нативный батч по
+            // клеткам (он рисует ровно клетку) для такого слоя не годится.
+            if (entry.fit === 'cell' || entry.scale !== 1) custom = true;
             continue;
         }
         visuals.push(null);
@@ -1458,6 +1499,25 @@ function occupiedPredicate(layer) {
     if (!layer.defs) return fallbackSolidPred(layer);
     if (!layer._occ_pred) layer._occ_pred = (x, y) => !!cellDef(layer, x, y);
     return layer._occ_pred;
+}
+
+/**
+ * Занята ли клетка ЛЮБЫМ слоем, дающим коллизии (логические координаты).
+ *
+ * Зачем отдельно от `logicalDef(activeLayer)`: без номера слоя `solidAt`
+ * отвечал только за АКТИВНЫЙ слой, а активным мог оказаться фон
+ * (`solid: false`) — тогда «просто `solidAt`» возвращал карту, где свободно
+ * ВСЁ, что хуже, чем чтение одного слоя (на этом обожглась BASHNYA: неверная
+ * модель проходимости уровня). Тот же контракт уже был у `fitsAt()`, который
+ * перебирает все слои с коллизиями, — теперь он один на оба предиката.
+ */
+function anySolidAt(st, tx, ty) {
+    const x = tx | 0, y = ty | 0;
+    for (const layer of st.layers) {
+        if (!layerSolidOn(layer)) continue;
+        if (logicalDef(layer, x, y)) return true;
+    }
+    return false;
 }
 
 /** Публичная копия дескриптора: наружу не отдаём внутренние ссылки. */
@@ -2699,6 +2759,9 @@ export function installTilemap($) {
      */
     defGet('solidAt', function (node, tx, ty, layerIndex) {
         const tm = ensureTilemap(node);
+        // Без номера слоя — «занято ли чем-нибудь из слоёв коллизий»,
+        // а не «активным слоем»: активным может быть фон (см. anySolidAt).
+        if (layerIndex === undefined) return anySolidAt(tm, tx, ty);
         const layer = activeLayer(tm, layerIndex);
         if (!layer) return false;
         return !!logicalDef(layer, tx | 0, ty | 0);
@@ -2923,8 +2986,13 @@ export function installTilemap($) {
                     if (layer.custom_visual && layer.visuals) {
                         const v = layer.visuals[id - 1];
                         if (v && node.w > 0 && node.h > 0) {
-                            dw = v.w * (bw / node.w);
-                            dh = v.h * (bh / node.h);
+                            // Умолчание — прежняя формула (регион 1:1 в мировых
+                            // пикселях); `fit: 'cell'` растягивает регион в
+                            // клетку, `scale` — множитель (BASHNYA E4).
+                            const size = visualDrawSize(v, tile_w, tile_h,
+                                                        bw / node.w, bh / node.h);
+                            dw = size.w;
+                            dh = size.h;
                         }
                     }
                     $.gfx.push.sprite(sprite, ox + (tx + 0.5) * tile_w, sy, dw, dh, 0, color,
@@ -3118,10 +3186,19 @@ export function installTilemap($) {
             };
         },
 
-        /** Занята ли клетка коллизией (логические координаты). */
+        /**
+         * Занята ли клетка коллизией (логические координаты).
+         *
+         * Без номера слоя — «занята ли клетка ЛЮБЫМ слоем, дающим коллизии»
+         * (как `fitsAt`): активным слоем может оказаться фон с `solid: false`,
+         * и тогда прежний ответ «свободно везде» давал неверную модель
+         * проходимости. Третий аргумент по-прежнему ограничивает ответ одним
+         * слоем: `solidAt(tm, tx, ty, 1)`.
+         */
         solidAt(tm, tx, ty, layerIndex) {
             const st = resolveTm(tm);
             if (!st) return false;
+            if (layerIndex === undefined) return anySolidAt(st, tx, ty);
             const layer = activeLayer(st, layerIndex);
             return layer ? !!logicalDef(layer, tx | 0, ty | 0) : false;
         },
@@ -3150,10 +3227,14 @@ export function installTilemap($) {
         /**
          * Предикат «клетка занята» для `$.grid`/`$.nav`: сетка у них клеточная,
          * поэтому ответ тоже клеточный. Точную форму проверяет `.fitsAt()`.
+         *
+         * Без номера слоя — занятость ЛЮБЫМ слоем коллизий (та же грабля, что у
+         * `solidAt`: активным мог быть фон). Со слоем — прежний ответ по нему.
          */
         cellQuery(tm, layerIndex) {
             const st = resolveTm(tm);
             if (!st) return () => false;
+            if (layerIndex === undefined) return (tx, ty) => anySolidAt(st, tx, ty);
             const layer = activeLayer(st, layerIndex);
             if (!layer) return () => false;
             const ox = layer.origin_x | 0, oy = layer.origin_y | 0;
