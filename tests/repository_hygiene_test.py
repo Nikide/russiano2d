@@ -39,7 +39,11 @@ def verify_sums(data, reader, label):
 
 
 existing = [name for name in TRACKED if (ROOT / name).exists()]
-check(not [n for n in existing if junk(n)], 'tracked files contain no OS/Python caches')
+# Подсказка при провале: раньше гейт просто говорил FAIL, и человек шёл искать,
+# откуда в индексе .DS_Store (обычно из Finder) и как починить архив.
+_cached = [n for n in existing if junk(n)]
+check(not _cached, 'tracked files contain no OS/Python caches' + (
+    ' — снять с учёта: git rm --cached ' + ' '.join(_cached) if _cached else ''))
 check(not [n for n in existing if re.search(r'(^|/)_tmp_|\.cleanup\.tmp$', n)], 'tracked files contain no temporary scratch files')
 missing = []
 for name in existing:
@@ -66,7 +70,9 @@ for path in sorted((ROOT / 'dist').glob('russiano2d-*')):
     if path.suffix == '.zip':
         with zipfile.ZipFile(path) as archive:
             names = archive.namelist()
-            check(not [n for n in names if junk(n)], path.name + ': no OS/Python caches')
+            check(not [n for n in names if junk(n)], path.name + ': no OS/Python caches' + (
+                ' — перепакуйте: python3 tools/autobuild.py --platforms macos-arm64,'
+                'macos-x86_64 --out dist (упаковщик фильтрует .DS_Store/__pycache__)'))
             manifests = [n for n in names if PurePosixPath(n).name == 'SHA256SUMS.txt']
             check(len(manifests) == 1, path.name + ': one package manifest')
             for manifest in manifests:
@@ -75,7 +81,9 @@ for path in sorted((ROOT / 'dist').glob('russiano2d-*')):
     elif path.name.endswith('.tar.gz'):
         with tarfile.open(path) as archive:
             names = archive.getnames()
-            check(not [n for n in names if junk(n)], path.name + ': no OS/Python caches')
+            check(not [n for n in names if junk(n)], path.name + ': no OS/Python caches' + (
+                ' — перепакуйте: python3 tools/autobuild.py --platforms macos-arm64,'
+                'macos-x86_64 --out dist (упаковщик фильтрует .DS_Store/__pycache__)'))
             manifests = [n for n in names if PurePosixPath(n).name == 'SHA256SUMS.txt']
             check(len(manifests) == 1, path.name + ': one package manifest')
             for manifest in manifests:
