@@ -35,6 +35,21 @@ export const RESOURCE_KINDS = ['texture', 'sprite', 'sheet', 'sound', 'json', 't
                               'curve', 'gradient'];
 
 /**
+ * Байты живых текстур (RGBA8: 4 байта на пиксель) — по реестру движка,
+ * поэтому в счёт попадают и текстуры, загруженные спрайтами по пути.
+ */
+function textureBytes() {
+    if (!engine || typeof engine.textureList !== 'function') return 0;
+    let pixels = 0;
+    try {
+        for (const t of engine.textureList() || []) {
+            pixels += (Number(t.w) || 0) * (Number(t.h) || 0);
+        }
+    } catch (e) { return 0; }
+    return pixels * 4;
+}
+
+/**
  * Освободить текстуру (или все текстуры), загруженные из этого пути.
  *
  * Зачем отдельно от реестра: узлы, атласы и листы кадров грузят текстуры по
@@ -1240,6 +1255,44 @@ export function installResource($) {
                 users: t.users,
                 mb: Math.round((t.bytes / (1024 * 1024)) * 1000) / 1000,
             }));
+        },
+
+        /**
+         * Прогреть текстуры ПО ПУТИ, не создавая узлов:
+         * `$.resource.preloadTexture('art/level1.png')` или списком.
+         *
+         * Возврат: `{ loaded, failed, failedPaths, mb }` — сколько загрузилось,
+         * сколько не нашлось (с путями) и сколько мегабайт теперь занято этими
+         * текстурами. Раньше прогрев делали выбрасываемыми спрайтами: игра
+         * создавала узел за кадром и убирала его (`bootstrap.js:425-431`).
+         */
+        preloadTexture(paths) {
+            const list = Array.isArray(paths) ? paths : [paths];
+            const out = { loaded: 0, failed: 0, failedPaths: [], mb: 0 };
+            if (!engine || typeof engine.loadTexture !== 'function') return out;
+            const before = textureBytes();
+            for (const item of list) {
+                const path = String(item === undefined || item === null ? '' : item);
+                if (!path) { out.failed++; out.failedPaths.push(path); continue; }
+                const id = engine.loadTexture(path);
+                if (id >= 0) out.loaded++;
+                else { out.failed++; out.failedPaths.push(path); }
+            }
+            out.mb = Math.round(((textureBytes() - before) / (1024 * 1024)) * 1000) / 1000;
+            return out;
+        },
+
+        /**
+         * Сколько текстур живёт и сколько они занимают:
+         * `{ count, mb, users }` — `users` это сумма живых узлов, держащих
+         * текстуры. Агрегат того же, что отдаёт `$.gfx.stats()`.
+         */
+        textureStats() {
+            const list = typeof engine.textureList === 'function' ? (engine.textureList() || []) : [];
+            let users = 0;
+            for (const t of list) users += Number(t.users) || 0;
+            const bytes = textureBytes();
+            return { count: list.length, mb: Math.round((bytes / (1024 * 1024)) * 1000) / 1000, users: users };
         },
 
         /**

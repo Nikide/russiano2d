@@ -383,3 +383,23 @@ function showFrame(path, nextPath) {
 Правила те же, что выше: пока кадр держит живой узел, `freeTexture` отвечает
 `busy` и НЕ выгружает — сначала уберите узел (или переиспользуйте его, подменив
 `sprite`), и только потом освобождайте путь.
+
+### Прогрев текстур по пути: `preloadTexture` и `textureStats`
+
+```js
+const r = $.resource.preloadTexture(['art/level1.png', 'art/hud.png']);
+// { loaded: 2, failed: 0, failedPaths: [], mb: 8 }
+
+$.resource.textureStats();     // { count: 4, mb: 8.25, users: 16 }
+$.resource.freeTexture('art/level1.png');   // освободить, когда узел убран
+```
+
+`preloadTexture(path | [paths])` грузит текстуры **без узлов** — раньше прогрев
+делали выбрасываемыми спрайтами (создать узел за кадром и убрать). Счётчики
+`textureStats()` (`count`, `mb`, `users`) — то же, что отдаёт `$.gfx.stats()`,
+и включают текстуры, загруженные спрайтами по пути: по ним рисуется полоска
+загрузки.
+
+Порядок для потоковой загрузки уровня: `preloadTexture` → показать прогресс по
+`textureStats()` → `freeTexture` для того, что больше не нужно (освобождается
+только то, что не держит живой узел).

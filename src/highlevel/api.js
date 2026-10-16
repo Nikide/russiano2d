@@ -134,6 +134,52 @@ const globals = new Map();   // имя события → [обработчик�
  * Лист задаётся как { src, cols, rows, cw, ch }. Живёт на уровне модуля,
  * потому что нужен и фабрике узлов, и методам узла (разные области видимости).
  */
+/**
+ * Какие параметры принимает эффект: имя → «число» | «цвет».
+ *
+ * Зачем таблица: раньше `.shader('wave', { amplitude: NaN })` и опечатка
+ * (`{ amplitud: 0.5 }`) проходили МОЛЧА — параметр превращался в значение по
+ * умолчанию, эффект «не работал», и узнать причину было неоткуда (пункт I13
+ * отчёта BASHNYA). Теперь неизвестное имя и нечисло называют себя.
+ */
+const FX_PARAMS = {
+    flash:    { amount: 'number', color: 'color' },
+    dissolve: { threshold: 'number', scale: 'number', color: 'color' },
+    chroma:   { offset: 'number', color: 'color' },
+    wave:     { amplitude: 'number', amount: 'number', frequency: 'number',
+                phase: 'number', time: 'number', color: 'color' },
+};
+
+/** Проверка одного параметра: '' — ок, иначе причина. */
+function shaderParamProblem(effect, name, value) {
+    const table = FX_PARAMS[effect];
+    if (!table) return '';                       // свой шейдер: контракт p1..p3, color
+    const kind = table[name];
+    if (!kind) {
+        return `неизвестный параметр "${name}" (у эффекта ${effect}: ${Object.keys(table).join(', ')})`;
+    }
+    if (kind === 'color') return '';             // цвет принимает строку/число/массив
+    if (value === null || value === undefined || value === '') return '';
+    if (typeof value === 'boolean' || !Number.isFinite(Number(value))) {
+        return `параметр "${name}" должен быть числом, получено ${JSON.stringify(value)}`;
+    }
+    return '';
+}
+
+/** Сообщить о проблеме параметра: журнал + структурная ошибка. */
+function reportShaderParam(where, effect, problem) {
+    const message = `${where}: ${problem}`;
+    const debug = ctx.$ && ctx.$._debug_public ? ctx.$._debug_public : (ctx.$ && ctx.$.debug);
+    if (debug && typeof debug.reportError === 'function') {
+        debug.reportError(where, message, {
+            code: 'R2D_SHADER_PARAM_INVALID', subsystem: 'shader',
+            recoverable: true, effect: String(effect),
+        });
+    } else {
+        ctx.log('$: ' + message);
+    }
+}
+
 function applyFrames(node, spec) {
     if (spec && spec.src) {
         resolveSprite(spec);
@@ -1412,7 +1458,14 @@ function installNodeMethods($) {
                 return;
             }
             node.shader_name = String(value);
-            node.shader_params = params === undefined ? {} : Object.assign({}, params);
+            const raw = params === undefined ? {} : Object.assign({}, params);
+            const clean = {};
+            for (const key of Object.keys(raw)) {
+                const problem = shaderParamProblem(String(value), key, raw[key]);
+                if (problem) { reportShaderParam(`.shader("${value}")`, value, problem); continue; }
+                clean[key] = raw[key];
+            }
+            node.shader_params = clean;
         });
     });
 
@@ -1432,6 +1485,13 @@ function installNodeMethods($) {
         return this.eachNode((_, node) => {
             if (!node.shader_name) return;
             if (!node.shader_params) node.shader_params = {};
+            // Один параметр проверяем так же, как набор в .shader(): опечатка и
+            // NaN должны называть себя, а не превращаться в «по умолчанию».
+            const problem = shaderParamProblem(node.shader_name, String(name), value);
+            if (problem) {
+                reportShaderParam(`.shaderParam("${name}")`, node.shader_name, problem);
+                return;
+            }
             node.shader_params[String(name)] = value;
         });
     });

@@ -1676,12 +1676,14 @@ $.resource.list
 $.resource.load
 $.resource.names
 $.resource.preload
+$.resource.preloadTexture
 $.resource.publish
 $.resource.reload
 $.resource.remove
 $.resource.request
 $.resource.requests
 $.resource.stats
+$.resource.textureStats
 $.resource.textures
 $.room
 $.room._emit

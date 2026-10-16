@@ -729,3 +729,5 @@ R2D_TEST_AUDIO=real python3 tests/agent/highlevel_sound_seek_test.py
 | `$.sound.musicStop(ms?)` | остановить музыку (то же, что `stopMusic`) |
 | `$.sound.stemsState()` | состояние музыкальных слоёв, поля как у `engine.audio.stemsState()` |
 | `$.clip.define/get/list/remove` | клипы покадровой анимации (см. `docs/highlevel/clip.md`) |
+| `$.resource.preloadTexture(path \| [paths])` | прогреть текстуры по пути без узлов: `{loaded, failed, failedPaths, mb}` |
+| `$.resource.textureStats()` | `{count, mb, users}` — сколько текстур, МБ и живых держателей |
