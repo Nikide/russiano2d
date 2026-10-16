@@ -77,6 +77,9 @@ bool r2d_gui_set_attr(R2DGui *g, int doc, const char *element_id, const char *na
 bool r2d_gui_click(R2DGui *g, int doc, const char *element_id);
 // Абсолютный прямоугольник элемента в координатах окна: x, y, w, h.
 bool r2d_gui_get_rect(R2DGui *g, int doc, const char *element_id, float out[4]);
+// Геометрия раскладки: тот же бокс, но без проверки видимости (для проверок
+// вычисленных размеров и инструментов; видимость спрашивайте у get_rect).
+bool r2d_gui_get_layout_rect(R2DGui *g, int doc, const char *element_id, float out[4]);
 
 // Подписка на событие элемента. callback_id трактуется скриптовым слоем.
 bool r2d_gui_add_listener(R2DGui *g, int doc, const char *element_id,
