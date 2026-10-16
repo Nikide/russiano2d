@@ -38,6 +38,14 @@ const GAMEPAD_AXES = {
     leftx: 0, lefty: 1, rightx: 2, righty: 3, lefttrigger: 4, righttrigger: 5,
 };
 
+//: Канонические имена кнопок и осей — в том порядке, в каком их перечисляет
+//: `$.input.padState()`. Псевдонимы (south/east/…) живут отдельно, чтобы
+//: снимок состояния не показывал одну кнопку дважды.
+const GAMEPAD_BUTTON_NAMES = ['a', 'b', 'x', 'y', 'back', 'guide', 'start',
+                              'leftstick', 'rightstick', 'leftshoulder', 'rightshoulder',
+                              'dpup', 'dpdown', 'dpleft', 'dpright'];
+const GAMEPAD_AXIS_NAMES = ['leftX', 'leftY', 'rightX', 'rightY', 'leftTrigger', 'rightTrigger'];
+
 const MOUSE_BUTTONS = { left: 1, middle: 2, right: 3, x1: 4, x2: 5 };
 
 const code_cache = new Map();
@@ -282,6 +290,50 @@ export function installInput($) {
         padDown(button) {
             const index = typeof button === 'string' ? (GAMEPAD_BUTTONS[button.toLowerCase()] ?? -1) : button;
             return index < 0 ? false : engine.padDown(index);
+        },
+
+        /**
+         * Состояние слота геймпада одним объектом — для отладочного оверлея,
+         * экрана настроек и тестов (один вызов вместо пятнадцати):
+         *
+         *   $.input.padState(0)
+         *   // { slot: 0, connected: false, virtual: true,
+         *   //   down: ['a'], pressed: [], held: [0],
+         *   //   axes: { leftX: 0.5, leftY: 0, …, leftTrigger: 0, rightTrigger: 0 } }
+         *
+         *   * `down` — кнопки, удерживаемые сейчас; `pressed` — фронты этого
+         *     кадра (одно нажатие = один кадр с `true`);
+         *   * `axes` — СЫРЫЕ значения: мёртвая зона применяется там, где ось
+         *     читают (`$.input.vec()`, `$.input.axis()`), а не в снимке;
+         *     курки идут 0..1, как их отдаёт SDL (не −1..1);
+         *   * `virtual` — состояние есть, а устройства нет: так выглядит слот,
+         *     в который пишет агентская команда `pad` (см. docs/AGENT_API.md);
+         *   * `held` — то же, что помнит слой устройств (`$.input.device(slot).held()`).
+         */
+        padState(slot) {
+            const i = Math.max(0, Math.floor(Number(slot) || 0));
+            const pad = input.gamepad(i);
+            const down = [];
+            const pressed = [];
+            for (const name of GAMEPAD_BUTTON_NAMES) {
+                if (pad.down(name)) down.push(name);
+                if (pad.pressed(name)) pressed.push(name);
+            }
+            const axes = {};
+            for (const name of GAMEPAD_AXIS_NAMES) axes[name] = pad.axis(name);
+            const d = devices.get(i);
+            const connected = pad.connected();
+            const active = down.length > 0 || pressed.length > 0
+                || GAMEPAD_AXIS_NAMES.some((n) => axes[n] !== 0);
+            return {
+                slot: i,
+                connected,
+                virtual: !connected && active,
+                down,
+                pressed,
+                held: d ? [...d.held] : [],
+                axes,
+            };
         },
 
         /**
@@ -829,9 +881,8 @@ export function installInput($) {
         stuck() {
             const out = [];
             for (const [slot, d] of devices) {
-                const api = engineOf();
-                const live = typeof api.padConnectedAt === 'function' ? !!api.padConnectedAt(slot) : slot === 0;
-                if (!live && d.held.size) out.push({ slot, held: [...d.held] });
+                if (padSlotLive(slot) || d.held.size === 0) continue;
+                out.push({ slot, held: [...d.held] });
             }
             return out;
         },
@@ -1018,15 +1069,37 @@ function startSynthFrame() {
  * время удержания кнопки обязано сбросить удержание, даже если игра не
  * подписана на gamepadOff. Иначе действие остаётся «зажатым» навсегда.
  */
+/**
+ * Жив ли слот: устройство подключено ИЛИ в слот пишет инъекция.
+ *
+ * Второе важно и для игры, и для тестов: команда `pad` (docs/AGENT_API.md)
+ * наполняет слот без железа — в CI его иначе не проверить. Слот, который
+ * ничего не отдаёт и ничем не управляется, считается мёртвым, и удержания по
+ * нему сбрасываются (это и есть защита от «залипшей» кнопки).
+ */
+function padSlotLive(i) {
+    const api = engineOf();
+    if (typeof api.padConnectedAt === 'function') {
+        if (api.padConnectedAt(i)) return true;
+    } else if (i === 0 && typeof api.padConnected === 'function' && api.padConnected()) {
+        return true;
+    }
+    if (typeof api.padDownAt === 'function') {
+        for (let b = 0; b < 32; b++) if (api.padDownAt(i, b)) return true;
+    }
+    if (typeof api.padAxisAt === 'function') {
+        for (let a = 0; a < 8; a++) if (api.padAxisAt(i, a) !== 0) return true;
+    }
+    return false;
+}
+
 function tickDevices() {
     const api = engineOf();
     const slots = typeof api.padSlots === 'function' ? Math.max(1, api.padSlots()) : 4;
     for (let i = 0; i < Math.max(4, slots); i++) {
         let d = devices.get(i);
         if (!d) { d = { serial: null, player: i, held: new Set() }; devices.set(i, d); }
-        const live = typeof api.padConnectedAt === 'function'
-            ? !!api.padConnectedAt(i)
-            : (i === 0 && typeof api.padConnected === 'function' && !!api.padConnected());
+        const live = padSlotLive(i);
         if (!live) {
             if (d.held.size) d.held.clear();
             d.serial = null;

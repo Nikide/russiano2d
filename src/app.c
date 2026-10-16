@@ -1153,6 +1153,25 @@ void r2d_app_virtual_gamepad_axis(R2DApp *app, int slot, int axis, float value)
     app->pad_virt_axes[slot][axis] = value;
 }
 
+// Полный сброс слота: инъекция, текущее и прошлое состояние кнопок, оси.
+//
+// Зачем отдельная функция: «кнопка была нажата в момент отключения и осталась
+// нажатой навсегда» — классический дефект геймпадного ввода. Для настоящего
+// устройства его закрывает r2d__close_gamepad_id (обнуляет cur/prev/axes), а
+// для инъекции агента — этот сброс: команда `pad { reset: true }`
+// (docs/AGENT_API.md) приводит слот в то же состояние, что и отключение, и
+// тест проверяет, что залипания не осталось.
+void r2d_app_virtual_gamepad_reset(R2DApp *app, int slot)
+{
+    if (!app || slot < 0 || slot >= R2D_MAX_GAMEPADS) return;
+    SDL_zero(app->pad_virt_buttons[slot]);
+    SDL_zero(app->pad_virt_axes[slot]);
+    SDL_zero(app->pad_virt_seen[slot]);
+    SDL_zero(app->pad_buttons_cur[slot]);
+    SDL_zero(app->pad_buttons_prev[slot]);
+    SDL_zero(app->pad_axes[slot]);
+}
+
 void r2d_app_virtual_mouse(R2DApp *app, int button, bool down)
 {
     if (button < SDL_BUTTON_LEFT || button > SDL_BUTTON_X2) return;

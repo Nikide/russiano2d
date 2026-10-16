@@ -22,6 +22,119 @@ const docs = new Map();
 // настройка игрока, и он не должен сбрасываться при createApi().
 let state_scale = 1;
 
+// ---------------------------------------------------------------------------
+// §15. Навигация интерфейса геймпадом
+//
+// Без неё игра на геймпаде неиграбельна: в меню не войти. Своего фокус-
+// менеджера здесь НЕТ: слой превращает состояние геймпада в те же
+// синтетические клавиши, которые уже читают экраны (screen.js), виджеты
+// (widgets.js: кольцо фокуса, списки, ползунки, поля ввода) и диалоги.
+// Поэтому `$.ui.focusedId()`/`focusNext()`/стек фокуса, автоповтор и кольцо
+// фокуса ведут себя ровно так же, как при игре с клавиатуры.
+//
+//   $.ui.gamepadNavigation(true);        // включить (по умолчанию выключено)
+//   $.ui.gamepadNavigation(true, { repeatDelay: 0.5, repeatRate: 0.1, axisThreshold: 0.6 });
+//
+// Раскладка: d-pad и левый стик — фокус, `A` — подтвердить (Return), `B` —
+// отмена (Escape). Кнопки d-pad приоритетнее стика: у игрока остаётся точный
+// ввод. Автоповтор: первое нажатие сразу, дальше пауза `repeatDelay`, затем
+// `repeatRate` между повторами.
+//
+// Чего слой НЕ делает: документы RmlUi (DevTools, `.rml`) получают ввод
+// событиями SDL, а синтетические клавиши `$` живут в JS. Для них нужен мост
+// «геймпад → SDL-событие клавиши» в C; это отдельная работа, и в отчёте она
+// отмечена как незакрытая (см. docs/highlevel/input.md §15).
+// ---------------------------------------------------------------------------
+
+const nav = {
+    on: false,
+    repeat_delay: 0.4,      // секунды до первого автоповтора
+    repeat_rate: 0.12,      // секунды между повторами
+    axis_threshold: 0.5,    // порог стика (мёртвая зона — отдельно, в $.input)
+    dir: '',                // направление, удерживаемое сейчас
+    t: 0,
+    a: false,               // были ли A/B нажаты в прошлый тик (свой фронт)
+    b: false,
+};
+
+/**
+ * Отдавать ли направление СЫРОЙ стрелкой вместо обхода по Tab.
+ *
+ * В `$`-UI стрелки читают не все контролы, а конкретные: экран (screen.js
+ * tickScreen) и диалог (dialog.js tickDialog) ведут ими свой фокус, списки,
+ * ползунки, прокрутка и поля ввода — своё состояние (widgets.js). У кнопок и
+ * флажков стрелка означает «следующий контрол», а обход в `$`-UI делает Tab —
+ * второй фокус-менеджер не нужен, поэтому туда уходит Tab (+Shift назад).
+ */
+function navRawDirection(dir, $) {
+    if ($.screen && typeof $.screen.isOpen === 'function' && $.screen.isOpen()) return true;
+    if ($.ui && typeof $.ui.modalOpen === 'function' && $.ui.modalOpen()) return true;
+    const focused = $.ui && typeof $.ui.focused === 'function' ? $.ui.focused() : null;
+    const node = focused && typeof focused.get === 'function' ? focused.get(0) : null;
+    if (!node) return false;
+    return !(node.tag === 'ui.button' || node.tag === 'ui.checkbox');
+}
+
+/** Направление по d-pad/стику: кнопки точнее, поэтому они первые. */
+function navDirection(pad) {
+    if (pad.down('dpup')) return 'up';
+    if (pad.down('dpdown')) return 'down';
+    if (pad.down('dpleft')) return 'left';
+    if (pad.down('dpright')) return 'right';
+    const x = pad.axis('leftX');
+    const y = pad.axis('leftY');
+    if (Math.abs(y) >= nav.axis_threshold) return y < 0 ? 'up' : 'down';
+    if (Math.abs(x) >= nav.axis_threshold) return x < 0 ? 'left' : 'right';
+    return '';
+}
+
+/** Кадр навигации: направление, автоповтор, подтвердить/отмена. */
+function tickGamepadNav($, dt) {
+    if (!nav.on || !$.input || typeof $.input.gamepad !== 'function') return;
+    if (typeof $.input.synthPress !== 'function') return;
+    const pad = $.input.gamepad(0);
+    const dir = navDirection(pad);
+    // Куда уходит направление: сырой стрелкой (экран, диалог, список, ползунок)
+    // или обходом по Tab — единственным обходом контролов в `$`-UI.
+    const raw = dir ? navRawDirection(dir, $) : false;
+    const key = raw ? dir : 'tab';
+    const backward = dir === 'up' || dir === 'left';
+    if (dir && !raw) {
+        // Обратный обход: widgets.js смотрит down('lshift').
+        if (backward) $.input.synthDown('lshift');
+        else $.input.synthRelease('lshift');
+    } else {
+        $.input.synthRelease('lshift');
+    }
+    if (!dir) {
+        nav.dir = '';
+        nav.t = 0;
+    } else if (dir !== nav.dir) {
+        nav.dir = dir;
+        nav.t = 0;
+        $.input.synthPress(key);                 // первый шаг — сразу
+    } else {
+        nav.t += dt;
+        if (nav.t >= nav.repeat_delay) {
+            nav.t -= nav.repeat_rate;            // остаток не теряем: темп ровный
+            $.input.synthPress(key);
+        }
+    }
+    // Подтвердить/отмена — теми же клавишами, что читают экраны и виджеты.
+    //
+    // Фронт считаем сами по УРОВНЮ кнопки, а не через `pad.pressed()`: у того
+    // фронт живёт ровно один кадр движка, и тик интерфейса, пропустивший этот
+    // кадр (агентская инъекция применяется между кадрами), терял бы нажатие
+    // целиком. Свой фронт переживает пропуск: кнопка всё ещё нажата — значит
+    // для интерфейса она нажата только что.
+    const a = pad.down('a');
+    const b = pad.down('b');
+    if (a && !nav.a) $.input.synthPress('enter');
+    if (b && !nav.b) $.input.synthPress('escape');
+    nav.a = a;
+    nav.b = b;
+}
+
 /**
  * Узел внутри поддерева `ancestor`? Нужен, чтобы модальный диалог пропускал
  * ввод своим детям (кнопкам окна), но блокировал всё остальное.
@@ -448,9 +561,49 @@ export function installUi($) {
         iconNames() { return engine.ui.iconNames(); },
         iconCount() { return engine.ui.iconCount(); },
 
+        /**
+         * Навигация интерфейса геймпадом (§15): d-pad и левый стик ведут
+         * фокус с автоповтором, `A` подтверждает, `B` отменяет. Без аргумента —
+         * геттер. По умолчанию выключено: игра включает сама, чтобы поведение
+         * существующих игр не менялось.
+         *
+         *   $.ui.gamepadNavigation(true);
+         *   $.ui.gamepadNavigation(true, { repeatDelay: 0.5, repeatRate: 0.1 });
+         *
+         * Подробности и ограничения (документы RmlUi этим путём не ходят) —
+         * docs/highlevel/input.md §15.
+         */
+        gamepadNavigation(on, opts) {
+            if (on === undefined) return nav.on;
+            nav.on = !!on;
+            if (opts && typeof opts === 'object') {
+                if (opts.repeatDelay !== undefined) {
+                    nav.repeat_delay = Math.max(0, Number(opts.repeatDelay) || 0);
+                }
+                if (opts.repeatRate !== undefined) {
+                    nav.repeat_rate = Math.max(0.01, Number(opts.repeatRate) || 0.12);
+                }
+                if (opts.axisThreshold !== undefined) {
+                    nav.axis_threshold = Math.min(1, Math.max(0.05, Number(opts.axisThreshold) || 0.5));
+                }
+            }
+            if (!nav.on) { nav.dir = ''; nav.t = 0; }
+            return ui;
+        },
+
         /** Внутреннее: обработка наведения и кликов по ui-узлам. */
         _tick() {
             ensureTrHook();
+            // Геймпад → синтетические клавиши: до обработки ввода подсистемами
+            // (порядок кадра: этот тик идёт последним, поэтому нажатие видно
+            // со следующего кадра — так же, как у клавиатуры в записи/реплее).
+            if (nav.on) {
+                const time = ctx.time;
+                const dt = time && typeof time.presentationDelta === 'function'
+                    ? time.presentationDelta()
+                    : (time && typeof time.rawDelta === 'function' ? time.rawDelta() : 1 / 60);
+                tickGamepadNav($, dt);
+            }
             // §16: привязки данных — до обработки ввода, чтобы игрок видел
             // актуальные значения в том же кадре.
             for (let i = 0; i < bindings.length; i++) applyBinding(bindings[i], false);

@@ -588,21 +588,72 @@ static bool command_touch(R2DAgent *a, const R2dJson *req)
     return true;
 }
 
+// Виртуальный геймпад: сброс слота живёт в app.c рядом с инъекцией.
+extern void r2d_app_virtual_gamepad_reset(R2DApp *app, int slot);
+
+/** Кнопка из JSON: номер или имя SDL («a», «dpup»). -1 — не распознано. */
+static int r2d__pad_button_arg(const R2dJson *v)
+{
+    if (!v) return -1;
+    if (v->type == R2D_JSON_STR) {
+        const SDL_GamepadButton b = SDL_GetGamepadButtonFromString(v->string);
+        return b == SDL_GAMEPAD_BUTTON_INVALID ? -1 : (int)b;
+    }
+    const int n = r2d_json_int(v, -1);
+    return (n < 0 || n >= SDL_GAMEPAD_BUTTON_COUNT) ? -1 : n;
+}
+
+/** Ось из JSON: номер или имя SDL («leftx», «lefttrigger»). -1 — не распознано. */
+static int r2d__pad_axis_arg(const R2dJson *v)
+{
+    if (!v) return -1;
+    if (v->type == R2D_JSON_STR) {
+        const SDL_GamepadAxis ax = SDL_GetGamepadAxisFromString(v->string);
+        return ax == SDL_GAMEPAD_AXIS_INVALID ? -1 : (int)ax;
+    }
+    const int n = r2d_json_int(v, -1);
+    return (n < 0 || n >= SDL_GAMEPAD_AXIS_COUNT) ? -1 : n;
+}
+
 // pad {slot, button|axis, down|value} — виртуальный геймпад.
+//
+// `button`/`axis` принимают НОМЕР (SDL_GamepadButton/SDL_GamepadAxis) или ИМЯ
+// в написании SDL: «a», «dpup», «leftx», «lefttrigger». `reset: true` снимает
+// всё, что накопила инъекция по слоту, — тем же состоянием, что и отключение
+// устройства: тест проверяет, что зажатая кнопка не остаётся нажатой.
 static bool command_pad(R2DAgent *a, const R2dJson *req)
 {
     const int slot = r2d_json_int(r2d_json_get(req, "slot"), 0);
+    const int slots = r2d_pad_slot_count();
+    if (slot < 0 || slot >= slots) {
+        send_error(req, "pad: слот вне диапазона");
+        return true;
+    }
+    if (r2d_json_bool(r2d_json_get(req, "reset"), false)) {
+        r2d_app_virtual_gamepad_reset(a->app, slot);
+        send_ok(req);
+        return true;
+    }
     const R2dJson *button = r2d_json_get(req, "button");
     const R2dJson *axis = r2d_json_get(req, "axis");
 
     if (button) {
-        r2d_app_virtual_gamepad(a->app, slot, r2d_json_int(button, -1),
-                                r2d_json_bool(r2d_json_get(req, "down"), true));
+        const int b = r2d__pad_button_arg(button);
+        if (b < 0) {
+            send_error(req, "pad: неизвестная кнопка (номер 0..14 или имя SDL: \"a\", \"dpup\")");
+            return true;
+        }
+        r2d_app_virtual_gamepad(a->app, slot, b, r2d_json_bool(r2d_json_get(req, "down"), true));
     } else if (axis) {
-        r2d_app_virtual_gamepad_axis(a->app, slot, r2d_json_int(axis, -1),
+        const int ax = r2d__pad_axis_arg(axis);
+        if (ax < 0) {
+            send_error(req, "pad: неизвестная ось (номер 0..5 или имя SDL: \"leftx\", \"lefttrigger\")");
+            return true;
+        }
+        r2d_app_virtual_gamepad_axis(a->app, slot, ax,
                                      (float)r2d_json_num(r2d_json_get(req, "value"), 0));
     } else {
-        send_error(req, "pad: нужен button или axis");
+        send_error(req, "pad: нужен button, axis или reset");
         return true;
     }
     send_ok(req);
