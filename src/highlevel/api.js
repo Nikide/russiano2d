@@ -77,6 +77,7 @@ import { installScript } from './script.js';
 import { installStory } from './story.js';
 import { installQuest } from './quest.js';
 import { installSoundBank } from './soundbank.js';
+import { installClip } from './clip.js';
 import { installSteps, installBarks } from './steps.js';
 import { installItems } from './items.js';
 import { installCombat } from './combat.js';
@@ -421,7 +422,19 @@ export function createApi() {
     $.now = () => ctx.time.now();
     $.wait = (ms) => wait(ms);
     $.sequence = (steps) => sequence(steps);
-    $.find = (sel) => query(sel);
+    /**
+     * Все узлы по селектору — ОБЁРТКА, как у `$()` (task-58, H6).
+     *
+     * Раньше здесь был сырой массив узлов, и один и тот же по смыслу вызов вёл
+     * себя по-разному: `$.find('.x')[0].get(0)` читал АТРИБУТ "0" (у сырого узла
+     * `get` — геттер атрибутов), а `$('.x').get(0)` отдавал узел; у сырого узла
+     * нет `.size()`, зато есть числовое поле `size`. Теперь тип один: обёртка
+     * (итерируемая — `for…of` даёт узлы, есть `.length`, `.get(i)`, `.each`).
+     * Сырой массив остался явным `$.findNodes(sel)`.
+     */
+    $.find = (sel) => wrap(query(sel));
+    /** Сырые узлы по селектору — то, что `$.find` возвращал до 1.2.1. */
+    $.findNodes = (sel) => query(sel);
     $.count = (sel) => query(sel).length;
     /**
      * Верхний мировой узел под курсором (или под точкой `{x, y}`/`[x, y]`).
@@ -502,6 +515,7 @@ export function createApi() {
     installStory($);             // сценки: $.story (DSL)
     installQuest($);             // задания: $.quest
     installSoundBank($);         // банки звуков: $.sound.playBank
+    installClip($);              // клипы анимации: $.clip
     installSteps($);             // шаги по материалу: $.steps
     installBarks($);             // реплики NPC: $.barks
     installItems($);             // предметы и инвентарь: $.items, $.inv
@@ -733,6 +747,8 @@ function installNodeMethods($) {
             const node = el;
             node.w = w;
             node.h = h === undefined ? w : h;
+            // H10: размер задан явно — смена листа его больше не перепишет.
+            node.size_locked = true;
             if (node.body >= 0) node.syncBodySize();
         });
     });
@@ -1089,11 +1105,44 @@ function installNodeMethods($) {
         });
     });
 
-    /** Анимация по кадрам листа: .animate({ from: 0, to: 5, speed: 12, loop: true }) */
+    /**
+     * Анимация по кадрам листа: `.animate({ from: 0, to: 5, speed: 12, loop: true })`
+     * или по именованному клипу: `.animate({ clip: 'walk' })` / `.animate('walk')`.
+     *
+     * Клип (`$.clip.define`) задаёт кадры (в том числе с РАЗНЫХ листов), `fps`,
+     * `loop` и `pivot`; пивот двигает только точку вращения — размер узла клип
+     * не меняет (граница с H10).
+     */
     def('animate', function (spec) {
-        const cfg = typeof spec === 'object' ? spec : { name: spec };
+        const cfg = typeof spec === 'object' && spec !== null ? spec : { clip: spec };
+        const clip_name = cfg.clip === undefined && typeof spec === 'string' ? spec : cfg.clip;
         return this.eachNode((_, el) => {
             const node = el;
+            if (clip_name !== undefined && clip_name !== null) {
+                const clip = ctx.clip && typeof ctx.clip._raw === 'function'
+                    ? ctx.clip._raw(clip_name) : null;
+                if (!clip) {
+                    ctx.log(`$: .animate("${clip_name}") — клип не объявлен (см. $.clip.define)`);
+                    return;
+                }
+                node.frames = clip.frames.slice();
+                node.setSprite(node.frames[0]);
+                node.anim = {
+                    from: 0,
+                    to: node.frames.length - 1,
+                    speed: clip.fps,
+                    loop: clip.loop,
+                    t: 0,
+                    playing: true,
+                    clip: clip.name,
+                };
+                if (clip.pivot) {
+                    node.pivot_x = clip.pivot[0];
+                    node.pivot_y = clip.pivot[1];
+                }
+                touchRegistry();
+                return;
+            }
             if (!node.frames) {
                 ctx.log('$: .animate() — у узла нет кадров; используйте .frames({src, cols, rows, cw, ch})');
                 return;

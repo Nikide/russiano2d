@@ -249,14 +249,50 @@ const loaded = new Map();     // путь → id звука
 
 function soundId(what) {
     if (typeof what === 'number') return what;
+    // Запись трека из `ctx.state_music` ({ path, volume }): по ней timeline
+    // восстанавливает музыку после интро. Раньше объект уезжал прямо в
+    // load(), загрузка падала, и восстановление молча ничего не делало —
+    // «состояние музыки не вернулось» в highlevel_ui_contract.
+    if (what && typeof what === 'object' && typeof what.path === 'string') return soundId(what.path);
     if (!what) return -1;
     if (loaded.has(what)) return loaded.get(what);
     // Расширение можно не писать: движок сам перебирает wav/ogg/mp3/flac.
     const id = engine.audio.load(what);
     loaded.set(what, id);
-    if (id < 0) ctx.log(`$: не удалось загрузить звук "${what}"`);
+    if (id < 0) reportSoundLoadFailure(what);
     return id;
 }
+
+/**
+ * Не удалось загрузить звук — говорим об этом ГРОМКО.
+ *
+ * Раньше здесь была одна строка журнала, а `play`/`music`/`crossfade`
+ * возвращали объект, похожий на успех: музыка «запускалась», а в игре стояла
+ * тишина (пункт из разведки inspector-backend). Теперь ошибка уходит в
+ * `$.debug.errors()` структурой (её видит и игра, и агент) и одной понятной
+ * строкой с путём.
+ */
+function reportSoundLoadFailure(what) {
+    const path = String(what);
+    const message = `не удалось загрузить звук "${path}" — файла нет или формат не поддержан`;
+    // Порядок как в store.js: сначала публичный $.debug (он даёт структурную
+    // запись с кодом), затем внутренний ctx.reportError, затем строка журнала.
+    const dbg = ($root && $root.debug) || $debugApi;
+    if (dbg && typeof dbg.reportError === 'function') {
+        dbg.reportError('$.sound', message, {
+            code: 'R2D_SOUND_LOAD_FAILED', subsystem: 'sound',
+            recoverable: true, assetPath: path,
+        });
+    } else if (ctx.reportError) {
+        ctx.reportError('$.sound', message);
+    } else {
+        ctx.log('$: ' + message);
+    }
+    ctx.state_sound_error = { code: 'R2D_SOUND_LOAD_FAILED', path, message };
+}
+
+let $debugApi = null;   // $.debug: структурные ошибки (R2D_SOUND_LOAD_FAILED)
+let $root = null;       // корень `$`: нужен в момент ошибки, а не при установке
 
 export function installSound($) {
     /**
@@ -309,10 +345,17 @@ export function installSound($) {
                 stopped++;
             }
             scene_music = false;
-            if (ctx.state_music) ctx.state_music = null;
+            // Запись «какой трек просили» НЕ стираем: по ней timeline
+            // восстанавливает музыку после интро (`snap.music.track`), и если
+            // её обнулить, восстановление молча превращалось в «остановить»
+            // (нашлось прогоном highlevel_ui_contract — «состояние музыки не
+            // вернулось»). Играет музыка или нет — показывает musicPlaying().
         }
         return stopped;
     }
+
+    $debugApi = $.debug || null;
+    $root = $;
 
     function ownChannel(channel, opts) {
         if (!(channel >= 0) || (opts && opts.keep === true)) return channel;
@@ -404,9 +447,8 @@ export function installSound($) {
 
         /** Музыка. crossfadeMs — плавно заменить текущую дорожку. */
         music(what, opts) {
-            const music_opts = opts || {};
-            if (music_opts.keep !== true) scene_music = true;
             const o = opts || {};
+            if (o.keep !== true) scene_music = true;
             const id = soundId(what);
             if (id < 0) return sound;
             engine.audio.setMusicPitch(o.pitch === undefined ? 1 : o.pitch);
@@ -433,8 +475,25 @@ export function installSound($) {
         },
 
         stopMusic(ms) { engine.audio.stopMusic(ms === undefined ? 0 : ms); ctx.state_music = null; return sound; },
+
+        /**
+         * Остановить музыку: то же, что `stopMusic(ms)`, но под очевидным
+         * именем — игра ищет именно его (разведка inspector-backend: `musicStop`
+         * не существовал, хотя `music`/`musicPitch`/`musicPlaying` есть).
+         */
+        musicStop(ms) { return sound.stopMusic(ms); },
         pauseMusic(paused) { engine.audio.pauseMusic(!!paused); return sound; },
         musicPlaying() { return engine.audio.musicPlaying(); },
+
+        /**
+         * Состояние музыкальных слоёв ровно в том виде, в каком его отдаёт
+         * движок: `{ count, playing, paused, loopStart, loops, remaining }`.
+         * Публичная обёртка нужна, чтобы игре не приходилось читать внутренний
+         * биндинг `engine.audio.stemsState()` (пункт H5 отчёта BASHNYA).
+         */
+        stemsState() {
+            return typeof engine.audio.stemsState === 'function' ? engine.audio.stemsState() : null;
+        },
 
         /** Общая громкость: число (0..1) или `{ db: -6 }`. */
         volume(value) {

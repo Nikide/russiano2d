@@ -1328,6 +1328,30 @@ export function installAudiobus($) {
 
         // --- Живые ручки ----------------------------------------------------
 
+        // --- Музыка: те же имена, что в $.sound ---------------------------
+        // Разнобой (`$.audio.musicPlaying` нет, а `$.sound.musicPlaying` есть)
+        // ловил игрока и агента: методы делегируют в $.sound, поведение одно.
+
+        /** Играет ли музыка (делегат `$.sound.musicPlaying()`). */
+        musicPlaying() {
+            const s = ctx.sound || ($ && $.sound);
+            return s && typeof s.musicPlaying === 'function' ? s.musicPlaying() : false;
+        },
+
+        /** Остановить музыку: `$.audio.musicStop(ms)` (делегат `$.sound.musicStop`). */
+        musicStop(ms) {
+            const s = ctx.sound || ($ && $.sound);
+            if (s && typeof s.musicStop === 'function') s.musicStop(ms);
+            return audioNs;
+        },
+
+        /** Запустить музыку: `$.audio.music(path, opts)` (делегат `$.sound.music`). */
+        music(what, opts) {
+            const s = ctx.sound || ($ && $.sound);
+            if (s && typeof s.music === 'function') s.music(what, opts);
+            return audioNs;
+        },
+
         /** Активные звуки, запущенные через $.audio. */
         handles() { return handles.slice(); },
 
