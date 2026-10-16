@@ -2740,7 +2740,7 @@ job CI), у каждого незакрытого пункта — причин�
 - [x] physics overlay — вкладка PHYSICS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_physics_test.py` (контуры из `engine.devtools.shapes()` + трансформ узла, режимы all/selected/off, подсветка выбранного тела пиксельно)
 - [ ] event timeline — причина: журнал и продюсеры готовы (`tests/agent/trace_producers_test.py`), вкладка EVENTS не собрана
 - [x] watches — `tests/agent/devtools_test.py`
-- [ ] render inspector — причина: данные есть (`engine.renderInfo()`), вкладка RENDER не собрана
+- [x] render inspector — вкладка RENDER в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_render_test.py` (счётчики `engine.renderInfo()`, цели, текстуры, батчи/вызовы, состояние viewport)
 - [ ] audio inspector — причина: данные есть (`tests/agent/audio_runtime_test.py`), вкладка AUDIO не собрана
 - [ ] input inspector — причина: вкладка INPUT не собрана (данные `$.input.*` есть)
 - [ ] asset monitor — причина: вкладка ASSETS показывает реестр загрузок, отдельного монитора цен/времени загрузки нет
