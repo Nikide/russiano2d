@@ -813,13 +813,14 @@ def package_platform(
     # SHA256SUMS.txt внутри пакета: хеши файлов относительно каталога.
     sums_path = os.path.join(target, "SHA256SUMS.txt")
     entries: List[str] = []
-    for root, _dirs, names in os.walk(target):
-        for name in sorted(names):
-            full = os.path.join(root, name)
-            relative = os.path.relpath(full, target)
-            if relative == "SHA256SUMS.txt":
-                continue
-            entries.append("%s  %s" % (sha256_file(full), relative))
+    # Тот же обход, что и для архива: фильтр мусора (.DS_Store, __pycache__ и т.п.)
+    # ОБЯЗАН применяться и здесь. Раньше манифест считался своим os.walk, из-за чего
+    # в SHA256SUMS попадал .DS_Store, которого в самом архиве уже не было: гейт
+    # repository_hygiene ловил «archives: checksums ['.DS_Store']» (v1.2.0).
+    for relative in archive_members(target):
+        if relative == "SHA256SUMS.txt":
+            continue
+        entries.append("%s  %s" % (sha256_file(os.path.join(target, relative)), relative))
     entries.sort(key=lambda line: line.split("  ", 1)[1])
     with open(sums_path, "w", encoding="utf-8") as handle:
         handle.write("\n".join(entries) + "\n")
