@@ -138,4 +138,5 @@ $.hits.play(info, { particles: false, hitStop: 0, slow: 400, slowScale: 0.2 });
 
 | Имя | Факт с движка |
 |---|---|
-| `$.hits.pool(n?)` | размер кольца эмиттеров искр, диапазон 1..64. Без аргумента — геттер (по умолчанию `8`); `$.hits.pool(16)` → `true`, `$.hits.pool(99)` → `false` (вне диапазона) |
+| `$.hits.pool(n?)` | размер кольца эмиттеров искр, диапазон 1..64 (выше 64 живых эмиттеров больше, чем ударов успевает случиться за кадр, и пул перестаёт экономить узлы). Без аргумента — геттер (по умолчанию `8`); `$.hits.pool(16)` → `true`, `$.hits.pool(99)` → `false` (вне диапазона) |
+| `$.hits.play(what, { only: [...] })` | белый список частей пресета (BASHNYA H9): поля вне списка НЕЙТРАЛЬНЫ — `particles`/`flash`/`screen` → `null`, `shake`/`hitStop`/`knockback`/`squash`/`slow` → `0`, `sound` → `''`. Явные поля `opts` главнее списка. Замер: пресет `crit` целиком даёт `shake 7, hitStop 110, squash 0.35, screen`; он же с `only: ['particles','flash']` — `shake 0, hitStop 0, squash 0, knockback 0, screen null, sound ''`, а частицы и вспышка на месте |

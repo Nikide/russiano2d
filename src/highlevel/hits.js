@@ -63,6 +63,19 @@ const DEFAULTS = {
     target: 'self',      // кому достаётся фидбек: 'self' (узел события) | 'other'
 };
 
+/**
+ * Нейтральные значения для `only` (H9): «этого воздействия нет».
+ *
+ * `DEFAULTS` — не «выключено», а «обычный удар» (shake 3, hitStop 60, squash 0.22),
+ * поэтому белый список `only: ['particles','flash']` обнуляет остальное именно
+ * здесь; поля вне списка, для которых нейтрального значения нет (длительности,
+ * cooldown, target), берутся из `DEFAULTS` — амплитуда у них нулевая.
+ */
+const NEUTRAL = {
+    particles: null, flash: null, screen: null,
+    shake: 0, hitStop: 0, slow: 0, knockback: 0, squash: 0, sound: '',
+};
+
 const PRESETS = {
     // Умолчание для `$('#enemy').on('hit', $.hitFx)`: заметно, но не орёт.
     // Вспышки экрана здесь нет — она для crit/death: иначе каждый контакт
@@ -110,13 +123,28 @@ export function mergeSpec(presets, name, opts) {
         out[key] = (base && typeof base === 'object' && !Array.isArray(base))
             ? Object.assign({}, base) : base;
     }
-    // Без имени работает пресет `hit`: `$.hitFx(info)` — та самая одна строка.
+    // Без имени работает пресет `hit`: `$.hitFx(info)` — та самая строка.
     const layers = [presets[name === undefined || name === null ? 'hit' : name], opts];
-    for (const layer of layers) {
+    // H9: `only: ['particles','flash']` — белый список ПОВЕРХ пресета: ключи вне
+    // списка остаются нейтральными (DEFAULTS), явные поля opts по-прежнему
+    // главнее. До этого `only` принимался и молча игнорировался, поэтому
+    // «только частицы и вспышка» приходилось собирать перечислением нулей.
+    const only = (opts && Array.isArray(opts.only)) ? new Set(opts.only.map(String)) : null;
+    if (only) {
+        for (const key of Object.keys(out)) {
+            if (only.has(key)) continue;
+            out[key] = NEUTRAL[key] !== undefined ? NEUTRAL[key] : out[key];
+        }
+    }
+    for (let li = 0; li < layers.length; li++) {
+        const layer = layers[li];
         if (!layer) continue;
+        const is_preset_layer = li === 0;
         for (const key of Object.keys(layer)) {
             const v = layer[key];
             if (v === undefined) continue;
+            if (key === 'only') continue;
+            if (only && is_preset_layer && !only.has(key)) continue;
             const base = out[key];
             out[key] = (v && typeof v === 'object' && !Array.isArray(v) &&
                         base && typeof base === 'object' && !Array.isArray(base))
