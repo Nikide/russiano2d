@@ -39,6 +39,8 @@ export const ctx = {
     // и любое предупреждение внутри подсистемы роняло весь тест (так и вышло
     // с предметами: add() писал предупреждение — и тест падал «не влезло»).
     log: (msg) => {
+        // A7: «неизвестный тег» — одна строка на имя тега, а не на узел.
+        if (unknownTagAlreadyReported(msg)) return;
         if (typeof engine !== 'undefined' && engine && typeof engine.log === 'function') {
             engine.log(msg);
         } else if (typeof console !== 'undefined' && console && typeof console.log === 'function') {
@@ -46,6 +48,60 @@ export const ctx = {
         }
     },
 };
+
+// ---------------------------------------------------------------------------
+// A7. «Неизвестный тег» — одна строка на имя, а не на узел
+//
+// Узел с незнакомым тегом создаётся и работает (класс, тело, коллизия,
+// селектор), но предупреждение писалось на КАЖДЫЙ узел: уровень с ~50 врагами
+// и ~70 ловушками давал 106–125 строк шума за загрузку, и настоящие сообщения
+// в журнале тонули (docs/EXTERNAL_FEEDBACK.md, A7).
+//
+// Текст пишут четыре места (api.js — «создаю пустой узел», world.js, prefab.js,
+// pool.js), но про один и тот же тег он один: «неизвестный тег <имя>». Поэтому
+// повторы гасятся здесь, на общем журнале: каждое имя сообщается один раз за
+// запуск. Запоминается именно ИМЯ: «создаю пустой узел» и «возьмите
+// существующий» — про один тег, и второй раз это уже шум.
+// ---------------------------------------------------------------------------
+
+const unknown_tag_re = /неизвестный тег <([^>]+)>/;
+const unknown_tags = new Set();
+
+/** true — про это имя тега уже сообщали (значит, писать не нужно). */
+function unknownTagAlreadyReported(msg) {
+    // Дешёвая проверка до регулярки: журнал может звать и горячий код игры.
+    if (typeof msg !== 'string' || msg.indexOf('неизвестный тег') < 0) return false;
+    const m = unknown_tag_re.exec(msg);
+    if (!m) return false;
+    if (unknown_tags.has(m[1])) return true;
+    unknown_tags.add(m[1]);
+    return false;
+}
+
+/** Имена тегов, про которые журнал уже предупредил (для тестов и диагностики). */
+export function reportedUnknownTags() { return Array.from(unknown_tags); }
+
+/**
+ * Объявить свой тег: `$.tag.define('walker', { body: 'dynamic', w: 24, h: 32 })`.
+ *
+ * Умолчания — те же поля, что у встроенных тегов (см. TAGS): тело, размеры,
+ * цвет, `sprite`, `ui` и прочее. После объявления тег перестаёт быть
+ * «неизвестным»: предупреждения про него нет вовсе, а узлы получают эти
+ * умолчания. Объект копируется — правка умолчаний вызывающим на тег не влияет.
+ *
+ * Публичный фасад (`$.tag.define`) ставит api.js: ядро отдаёт саму операцию,
+ * чтобы объявление тега не заводило вторую таблицу тегов рядом с TAGS.
+ */
+export function defineTag(name, defaults) {
+    const key = String(name === undefined || name === null ? '' : name).trim();
+    if (!key) return null;
+    const base = defaults && typeof defaults === 'object' ? Object.assign({}, defaults) : {};
+    TAGS[key] = base;
+    return base;
+}
+
+// Ядро доступно подсистемам и юнит-тестам qjs; публикует это api.js как $.tag.
+ctx.defineTag = defineTag;
 
 // ---------------------------------------------------------------------------
 // Версия реестра и сводки по нему
@@ -2189,6 +2245,13 @@ export class Wrapper {
     constructor(nodes) {
         this.nodes = nodes || [];
         this.length = this.nodes.length;
+        // A1: присваивание неизвестного свойства обёртке не должно молча
+        // исчезать. Игровые модули — строгий режим, поэтому запись нового
+        // свойства в нерасширяемый объект бросает TypeError с именем свойства и
+        // строкой кода: `$('#r').foo = 1` больше не создаёт мёртвое JS-поле
+        // (раньше так же молча терялся `node.x = 500` — docs/EXTERNAL_FEEDBACK.md, A1).
+        // Поля `.x/.y/.w/.h` — аксессоры прототипа (ниже), их это не касается.
+        Object.preventExtensions(this);
     }
 
     [Symbol.iterator]() { return this.nodes[Symbol.iterator](); }
@@ -2254,6 +2317,72 @@ let wrapper_proto_ready = false;
 export function def(name, fn) {
     Wrapper.prototype[name] = fn;
 }
+
+// ---------------------------------------------------------------------------
+// A1. Поля узла на обёртке: `.x`, `.y`, `.w`, `.h`
+//
+// `$('#r').x` давало `undefined`, а `$('#r').x = 500` молча вешало на обёртку
+// обычное JS-свойство и узел не двигало (docs/EXTERNAL_FEEDBACK.md, A1). На
+// этом же потерялся пример самого движка: game/level.js сравнивал `hero.x` со
+// `spike.x` (оба `undefined` — отбрасывание всегда в одну сторону) и «поправлял»
+// позицию платформы через `node.x = …`, то есть не поправлял вовсе.
+//
+// Аксессоры тонкие, без второго источника правды: чтение — через Node.get()
+// (тот же разбор имён, что у `.attr()`), запись — через setWorldPosition() и
+// syncBodySize(), то есть ровно тем же путём, что `.at()` и `.size()`. Запись
+// действует на ВСЮ выборку (как `.at(0, 0)`), а не на первый узел.
+//
+// `.angle`, `.scale`, `.width`, `.height` аксессорами НЕ сделаны намеренно: это
+// методы прототипа (`.angle(rad)`, `.scale(sx, sy)`, …), и свойство с тем же
+// именем их бы затёрло. Читаются они как и раньше — `.rotation()`, `.size()`.
+// ---------------------------------------------------------------------------
+
+//: О нечисловой записи сообщаем один раз на имя поля, а не каждый кадр.
+const field_warned = new Set();
+
+/**
+ * Число из значения или null. Принимаются конечные числа и строки с числом
+ * («80» из поля ввода — да), а `NaN`, `±Infinity`, `null`, `undefined`,
+ * булевы, пустая строка и объекты — нет: `Number(null)` равен нулю, и без этой
+ * строгости `wrapper.x = null` молча переносил бы узел в начало координат.
+ */
+function fieldNumber(value) {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value === 'string' && value.trim() !== '') {
+        const v = Number(value);
+        return Number.isFinite(v) ? v : null;
+    }
+    return null;
+}
+
+function warnBadField(name, value) {
+    if (field_warned.has(name)) return;
+    field_warned.add(name);
+    ctx.log(`$: .${name} = ${String(value)} — не число; поле узла не изменено`);
+}
+
+function defineWrapperField(name, apply) {
+    Object.defineProperty(Wrapper.prototype, name, {
+        get() {
+            const node = this.nodes[0];
+            if (!node) return 0;                       // пустая выборка — как .pos()
+            const v = fieldNumber(node.get(name));
+            return v === null ? 0 : v;
+        },
+        set(value) {
+            const v = fieldNumber(value);
+            if (v === null) { warnBadField(name, value); return; }
+            this.eachNode((_, node) => apply(node, v));
+        },
+        enumerable: false,
+        configurable: true,
+    });
+}
+
+defineWrapperField('x', (node, v) => setWorldPosition(node, v, node.y));
+defineWrapperField('y', (node, v) => setWorldPosition(node, node.x, v));
+defineWrapperField('w', (node, v) => { node.w = v; if (node.body >= 0) node.syncBodySize(); });
+defineWrapperField('h', (node, v) => { node.h = v; if (node.body >= 0) node.syncBodySize(); });
 
 /** Метод-геттер первого узла (или значение по умолчанию). */
 export function defGet(name, fn, defValue) {
