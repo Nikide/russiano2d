@@ -44,4 +44,41 @@ with tempfile.TemporaryDirectory() as tmp:
     assert agents_doc.refresh_out_dir(str(root),version)==0
     assert hashlib.sha256((root/archive_name).read_bytes()).hexdigest()==first, \
         'повторная упаковка после обновления документов изменила архив'
-print('PASS: docs, tarball, inner/global SHA256 synchronized; obsolete page removed; repack reproducible')
+
+    # --- Новое правило: внутренние рабочие документы не едут в поставку -------
+    # (tools/release.py: INTERNAL_DOCS). Проверяются ОБЕ двери: каталог docs/ в
+    # пакете и склеенный AGENTS.md.
+    leaked=[]
+    for path in (target/'docs').rglob('*.md'):
+        rel=str(path.relative_to(target))
+        if release.is_internal_doc(rel):
+            leaked.append(rel)
+    assert not leaked, 'внутренние документы попали в пакет: %s' % leaked
+    assert not (target/'SDK_HANDOFF.md').exists(), 'журнал SDK_HANDOFF.md попал в пакет'
+    packaged=sorted(str(p.relative_to(target/'docs')) for p in (target/'docs').rglob('*.md'))
+    expected=sorted(str(p.relative_to('docs')) for p in Path('docs').rglob('*.md')
+                    if not release.is_internal_doc(str(p)))
+    assert packaged==expected, ('состав публичных документов в пакете разошёлся с репозиторием: '
+        'лишние %s, потеряны %s' % (sorted(set(packaged)-set(expected)), sorted(set(expected)-set(packaged))))
+    agents_text=(target/'AGENTS.md').read_text()
+    # Содержимое внутреннего документа в приложении видно по обёртке, которую
+    # ставит agents_docs_appendix(): TOC-строка и маркер источника. Проверять
+    # просто имя файла нельзя: публичные доки упоминают его как указатель.
+    internal_files=[]
+    for entry in release.INTERNAL_DOCS:
+        path=Path(entry)
+        if path.is_dir():
+            internal_files += sorted(str(p) for p in path.rglob('*.md'))
+        elif path.is_file():
+            internal_files.append(str(path))
+    assert internal_files, 'список INTERNAL_DOCS не нашёл ни одного файла — правило перестало работать'
+    for name in internal_files:
+        assert ('<sub>источник: `%s`</sub>' % name) not in agents_text, \
+            'внутренний документ %s уехал в приложение AGENTS.md' % name
+        assert ('— `%s`' % name) not in agents_text, \
+            'внутренний документ %s попал в оглавление AGENTS.md' % name
+    assert 'docs/HIGH_LEVEL_API.md' in agents_text and 'docs/highlevel/' in agents_text, \
+        'публичная документация из AGENTS.md пропала'
+    print('PASS: docs, tarball, inner/global SHA256 synchronized; obsolete page removed; '
+          'repack reproducible; внутренние документы не попали ни в docs/, ни в AGENTS.md '
+          '(публичных .md в пакете: %d)' % len(packaged))

@@ -73,6 +73,28 @@ VERSION_FILE = "VERSION"
 #: Файлы, которые кладутся в каждый пакет рядом с бинарником.
 DOC_FILES = ("CHANGELOG.md", "THIRD_PARTY_NOTICES.md", "LICENSE")
 
+#: Внутренние документы, публикующиеся правила и фильтры копирования живут в
+#: tools/public_docs.py: то же правило использует сайт документации
+#: (site/build-doc.py, файл вне репозитория), и разъезжаться им нельзя.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from public_docs import (  # noqa: E402  (импорт после правки sys.path)
+    INTERNAL_DOCS,
+    PACKAGE_IGNORE,
+    internal_files,
+    is_internal_doc,
+    package_ignore,
+    public_docs_ignore,
+)
+
+#: Корневые элементы пакета (кладутся рядом с бинарником).
+PACKAGE_ROOT_ENTRIES = ("sdk", "sdk_tools.json", "SDK_HANDOFF.md",
+                        "Следующая цель SDK AGENT.md", "docs")
+
+
+def package_root_entries() -> List[str]:
+    """Корневые элементы пакета без внутренних документов."""
+    return [name for name in PACKAGE_ROOT_ENTRIES if not is_internal_doc(name)]
+
 #: Шаблоны README.md и AGENTS.md для пакета платформы.
 TEMPLATE_DIR = os.path.join(ROOT, "tools", "templates")
 
@@ -355,8 +377,7 @@ def collect_runtime_files(
     suffix = '.exe' if binary.lower().endswith('.exe') else ''
     sdk_binary = os.path.join(os.path.dirname(binary), 'r2d-sdk' + suffix)
     files.append((sdk_binary, 'r2d-sdk' + suffix))
-    for name in ('sdk', 'sdk_tools.json', 'SDK_HANDOFF.md',
-                 'Следующая цель SDK AGENT.md', 'docs'):
+    for name in package_root_entries():
         files.append((name, name))
     for name in DOC_FILES:
         if os.path.exists(os.path.join(ROOT, name)):
@@ -391,10 +412,12 @@ AGENTS_DOC_ORDER = (
 
 
 def agents_doc_files() -> List[str]:
-    """Все документы движка: ``docs/*.md`` и ``docs/highlevel/*.md``.
+    """ПУБЛИЧНЫЕ документы движка: ``docs/*.md`` и ``docs/highlevel/*.md``.
 
     Список не задаётся руками: новый файл в docs/ попадёт в AGENTS.md сам,
-    поэтому документ не может разойтись с документацией.
+    поэтому документ не может разойтись с документацией. Исключение одно —
+    `INTERNAL_DOCS`: внутренние рабочие документы в поставку не идут (иначе
+    чужой отчёт и наши журналы приёмки уезжали бы в пакет одним файлом).
     """
     found = [
         os.path.relpath(path, ROOT)
@@ -402,6 +425,7 @@ def agents_doc_files() -> List[str]:
             glob.glob(os.path.join(ROOT, "docs", "*.md"))
             + glob.glob(os.path.join(ROOT, "docs", "highlevel", "*.md"))
         )
+        if not is_internal_doc(os.path.relpath(path, ROOT))
     ]
     preferred = [name for name in AGENTS_DOC_ORDER if name in found]
     rest = sorted(name for name in found if name not in preferred)
@@ -737,8 +761,10 @@ def package_platform(
             log("    пропускаю отсутствующий %s" % source)
             continue
         if os.path.isdir(source_path):
+            # package_ignore = мусор ОС + INTERNAL_DOCS: каталог `docs/` едет в
+            # пакет без внутренних рабочих документов, но с публичными.
             shutil.copytree(source_path, dest_path, dirs_exist_ok=True,
-                            ignore=shutil.ignore_patterns(".DS_Store", "__pycache__", "*.pyc", "*.pyo", "state.local.json", "native", "CMakeLists.txt"))
+                            ignore=package_ignore)
         else:
             shutil.copy2(source_path, dest_path)
             if source == binary or dest == 'r2d-sdk' + suffix:

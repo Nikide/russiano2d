@@ -48,8 +48,8 @@
 | Тесты | да | `python3 tools/run_tests.py` (79 агентских на дату фазы, сейчас 125), `tests/js/*_test.mjs` (79, сейчас 94) |
 | Стражи доков | да | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py` |
 | Инвентаризация `$` | да | [TASKS.md](TASKS.md), [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) |
-| Агентский протокол | да | [AGENT_API.md](AGENT_API.md), [src/agent.c](../src/agent.c) |
-| RmlUi | да | [src/gui.cpp](../src/gui.cpp), `internal/NATIVE.md` §9 |
+| Агентский протокол | да | [AGENT_API.md](AGENT_API.md), `src/agent.c` |
+| RmlUi | да | `src/gui.cpp`, низкоуровневый GUI (`engine.gui*`) |
 | Замеры | частично | `$.debug.profile()`, `tools/bench_highlevel.py`, `--stats` |
 | **CI прогоняет сборку/тесты** | **настроен** | [.github/workflows/build.yml](../.github/workflows/build.yml): сборка, native/JS/SDK и агентские проверки; удалённый запуск отдельно не подтверждён |
 
@@ -70,18 +70,18 @@ $('.enemy').within('#hero', 500);
 
 * `$('.enemy').within('#hero', 500)` — цель принимает селектор, узел, обёртку
   или точку `{x, y}`; расстояние считается по центру узла
-  ([core.js](../src/highlevel/core.js) — метод `Wrapper.within`, чистая
+  (`core.js` — метод `Wrapper.within`, чистая
   `withinRadius`);
 * узлы **с телом** отбирает нативный `engine.queryCircle(x, y, r, mask)`
-  ([physics.c](../src/physics.c) — `r2d_physics_query_circle`, broadphase
+  (`physics.c` — `r2d_physics_query_circle`, broadphase
   `b2World_OverlapAABB` + отсев по расстоянию, сортировка по расстоянию);
   узлы **без тела** проверяются по координатам — спрайты и зоны не теряются;
 * массовая операция поверх выборки — существующие `.remove()`, `.damage()`,
   `.stopAll()`: `$('.goblin').within('#hero', 250).remove()`;
 * прежнее `$('.enemy')` не изменилось: это фильтрация по индексу реестра в JS
-  ([core.js:1297](../src/highlevel/core.js#L1297),
-  [core.js:1442](../src/highlevel/core.js#L1442));
-* лимит ответа запроса — 256 ([physics.h:249](../src/physics.h#L249)).
+  (`core.js:1297`,
+  `core.js:1442`);
+* лимит ответа запроса — 256 (`physics.h:249`).
 
 Проверка: `tests/agent/highlevel_within_test.py` (28 проверок, фикстура
 `tests/fixtures/within`) и `tests/js/within_test.mjs` (6 проверок чистой
@@ -102,14 +102,14 @@ $('.enemy').within('#hero', 500);
 
 * `engine.queryStats()` → `{ calls, candidates, results, ms, cap, truncated }` —
   только факты о последнем `engine.queryCircle`
-  ([script.c](../src/script.c), `internal/NATIVE.md` §16);
+  (`script.c`, нативный слой);
 * `$.debug.queryStats()` — то же из игры
-  ([debug.js](../src/highlevel/debug.js));
+  (`debug.js`);
 * профилировщик по-прежнему знает только зоны кадра — `UPDATE`, `RENDER_JS`,
   `PHYSICS`, `ACQUIRE`, `UPLOAD`, `DRAW`, `UI`, `OTHER`
-  ([profile.h:41-48](../src/profile.h#L41-L48), [script.c:358-391](../src/script.c#L358-L391));
+  (`profile.h:41-48`, `script.c:358-391`);
 * `$.debug.limits()` отдаёт лимиты и занятость таблиц
-  ([debug.js:67-71](../src/highlevel/debug.js#L67-L71));
+  (`debug.js:67-71`);
 * операторов `nearest` / `inside` / `visibleFrom` / `limit` пока нет.
 
 ---
@@ -127,13 +127,13 @@ $('.enemy').within('#hero', 500);
   `node` — краткое описание узла или `null`, если селектор ничего не нашёл;
 * разбор селектора остался в JS (`$.agent.node/nodes`), C только перевозит
   строку: у DevTools, агента и игры **одна** реализация поиска
-  ([agent.c](../src/agent.c) — `cmd_query`/`cmd_inspect`,
-  [script.c](../src/script.c) — `r2d_script_agent_query`,
-  [agent.js](../src/highlevel/agent.js) — `install()` и `nodes(sel, limit)`);
+  (`agent.c` — `cmd_query`/`cmd_inspect`,
+  `script.c` — `r2d_script_agent_query`,
+  `agent.js` — `install()` и `nodes(sel, limit)`);
   игра на «голом» `engine.*` получает понятную ошибку, а не пустоту;
 * структурный снимок мира по-прежнему есть: `$.agent.snapshot()`
-  ([agent.js:76-120](../src/highlevel/agent.js#L76-L120)) и команда `state`
-  протокола ([agent.c:195-225](../src/agent.c#L195));
+  (`agent.js:76-120`) и команда `state`
+  протокола (`agent.c:195-225`);
 * игровые поля (текст, состояние FSM, инвентарь) в снимок не попадают —
   добавляются игрой через `$.agent.expose`;
 * команды `why` нет: движок не сочиняет объяснений
@@ -154,15 +154,15 @@ $('.enemy').within('#hero', 500);
 * **`profile`** — `{"cmd":"profile","sel":".enemy","x":100,"y":100,"radius":500}`
   → `{sel, count, bodies, query:{native, candidates, results, ms, cap, truncated},
   frame:{frame_ms, zones[]}, allocations:null}`
-  ([agent.c](../src/agent.c) — `cmd_profile`, [AGENT_API.md](AGENT_API.md) §3.3.3);
+  (`agent.c` — `cmd_profile`, [AGENT_API.md](AGENT_API.md) §3.3.3);
   число сущностей по селектору считает игровой JS (тот же код, что `query`),
   нативный поиск меряется через `r2d_physics_query_circle`, зоны кадра — через
   `r2d_prof_*`. `allocations` — `null`: движок их не измеряет и не притворяется;
 * есть `$.debug.profile()` (зоны кадра, GPU-время), `$.debug.profiler.*`,
-  `$.debug.watch()`, `$.debug.draw.*` ([debug.js:72-221](../src/highlevel/debug.js#L72-L221));
+  `$.debug.watch()`, `$.debug.draw.*` (`debug.js:72-221`);
 * есть `engine.profile()`, `engine.limits()`, `engine.depthInfo()`,
   `engine.fontStats()`, `engine.renderInfo()`
-  ([script.c:3959](../src/script.c#L3959), [:4039](../src/script.c#L4039));
+  (`script.c:3959`, `:4039`);
 * команды `trace` нет; единой трассировки событий (кто кого ударил, кто умер)
   тоже нет — это следующий шаг фазы.
 
@@ -176,13 +176,13 @@ $('.enemy').within('#hero', 500);
 **Состояние: CLI и формат реализованы (2026-10-07); чекпоинтов нет.**
 
 * **`--record <файл>` / `--replay <файл>`** — запись ввода кадра и
-  воспроизведение через виртуальный ввод ([main.c](../src/main.c),
-  [replay.c](../src/replay.c)); формат — JSON-строки с версионированным
+  воспроизведение через виртуальный ввод (`main.c`,
+  `replay.c`); формат — JSON-строки с версионированным
   заголовком (`r2d_replay`, версия движка, игра, шаг, зерно), чужая версия
   отвергается с объяснением;
 * есть JS-подсистема `$.replay` (запись ввода по кадрам, JSON, лимит
   36 000 кадров, `verify`, `compareReplays`) —
-  [replay.js](../src/highlevel/replay.js), [highlevel/replay.md](highlevel/replay.md);
+  `replay.js`, [highlevel/replay.md](highlevel/replay.md);
 * **нет** чекпоинтов (утверждений о состоянии на кадре) и хеша мира, нет
   команд реплея в агентском протоколе: сценарий разыгрывается командами
   `key`/`step`, а состояние сверяет игра.
@@ -198,7 +198,7 @@ $('.enemy').within('#hero', 500);
 
 * **`$.expect(селектор)`** — утверждения в понятиях мира: `exists()`, `empty()`,
   `count(n)`, `hp(n)`, `prop(имя, значение)`, `positionNear(x, y, eps?)`,
-  `state(значение)` ([agent.js](../src/highlevel/agent.js),
+  `state(значение)` (`agent.js`,
   [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) §25.1);
 * счётчик общий с `$.test.*`, поэтому `results()`/`report()` и снимок агента
   видят и утверждения, и ручные проверки;
@@ -224,13 +224,13 @@ $('.enemy').within('#hero', 500);
   составу выборки: узел попал под селектор или перестал подходить (сменил
   класс, удалён, вышел из `within()`). Возвращает handle `{ stop, size, active,
   selector }`; `$.watch.count/list/clear` — диагностика и снятие
-  ([watch.js](../src/highlevel/watch.js), [watch.md](highlevel/watch.md));
+  (`watch.js`, [watch.md](highlevel/watch.md));
 * сравнение по `uid`: пересозданный узел — новое вхождение, удалённый не
   путается с чужим; по умолчанию первый тик молчит (`immediate: true` — иначе);
 * шаг встроен в кадр `$` (`tickWatch` после триггеров); кадр без наблюдений
   ничего не стоит;
 * зоны `<trigger>` с событиями `enter`/`leave` остаются для пересечений в мире
-  ([triggers.js](../src/highlevel/triggers.js), [highlevel/triggers.md](highlevel/triggers.md));
+  (`triggers.js`, [highlevel/triggers.md](highlevel/triggers.md));
 * проверки: `tests/js/watch_test.mjs` (5 наборов без движка) и
   `tests/agent/watch_test.py` (в движке).
 
@@ -250,7 +250,7 @@ transform/physics/state → копирование селектора
 
 * панель — **RmlUi-документ, собранный кодом** (`engine.ui.loadMarkup`), без
   `.rml` в игре и без ImGui: закон UI соблюдён
-  ([devtools.js](../src/highlevel/devtools.js), [devtools.md](highlevel/devtools.md));
+  (`devtools.js`, [devtools.md](highlevel/devtools.md));
 * список сущностей → выбор → инспекция (transform, тело, здоровье, команда,
   живость, видимость, `aria`) → **копирование селектора** в буфер обмена;
 * открывается по **F2**, обновляется раз в 6 кадров, обработчики вешаются один

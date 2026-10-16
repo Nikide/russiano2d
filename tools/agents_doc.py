@@ -68,10 +68,19 @@ def refresh_out_dir(out_dir: str, version: str) -> int:
             continue
         # Refresh source documentation too, then regenerate checksums AND the
         # archive. Editing only AGENTS/README made dist differ from its tarball.
+        # Копируем только ПУБЛИЧНУЮ документацию: внутренние рабочие документы
+        # (docs/internal/**, журналы приёмки и отчёты, SDK_HANDOFF.md) в поставку
+        # не идут — правило INTERNAL_DOCS в tools/release.py.
         docs = os.path.join(target, 'docs')
         if os.path.isdir(docs): shutil.rmtree(docs)
-        shutil.copytree(os.path.join(ROOT, 'docs'), docs, ignore=shutil.ignore_patterns('.DS_Store', '__pycache__'))
-        for source in ('SDK_HANDOFF.md', 'Следующая цель SDK AGENT.md', *release.DOC_FILES):
+        shutil.copytree(os.path.join(ROOT, 'docs'), docs, ignore=release.package_ignore)
+        for source in release.package_root_entries():
+            if source == 'docs':
+                continue
+            path = os.path.join(ROOT, source)
+            if os.path.isfile(path):
+                shutil.copy2(path, os.path.join(target, source))
+        for source in release.DOC_FILES:
             if os.path.isfile(os.path.join(ROOT, source)):
                 shutil.copy2(os.path.join(ROOT, source), os.path.join(target, source))
         release.render_platform_docs(target, name, version)

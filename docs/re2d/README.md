@@ -15,8 +15,8 @@
 | [Sprite authoring](../RE2DSPRITE_GUIDE.md) | PNG/JSON/rig/animation creation |
 | [Sprite mathematics](../RE2DSPRITE_MATH.md) | source-linked equations, sample-depth reconstruction |
 
-Совместимость: [legacy API](../highlevel/re2d_legacy.md), historical CPU performance. Их прежние limitations не описывают новый renderer.
+Совместимость: [legacy API](../highlevel/re2d_legacy.md). Прежние limitations старого CPU-compositor не описывают новый renderer.
 
-Implementation/requirements evidence: [source plan](RE2D_WORLD_GZDOOM_RENDERER_PLAN.md), [behavior](RE2D_RENDERER_BEHAVIOR.md), reference rules, phase evidence, 17-point audit, [benchmark JSON](RE2D_RENDERER_BENCHMARK.json).
+Implementation/requirements evidence: [behavior](RE2D_RENDERER_BEHAVIOR.md), [benchmark JSON](RE2D_RENDERER_BENCHMARK.json). План реализации, заметки по GZDoom и аудит приёмки документов — внутренние документы движка, в поставку SDK не входят.
 
-Последние local results находятся в `SDK_HANDOFF.md`; наличие документа или configured CI не является hosted run/visual observation evidence. Runtime examples: demos/re2d_world_renderer_lab/acceptance и demos/re2d_dust2.
+Последние локальные прогоны — во внутреннем журнале SDK (в поставку не входит); наличие документа или configured CI не является hosted run/visual observation evidence. Runtime examples: demos/re2d_world_renderer_lab/acceptance и demos/re2d_dust2.

@@ -69,6 +69,6 @@ Old historical CPU benchmark относится к прежнему compositor. 
 
 ## Regression checklist
 
-Проверить spawn/load/reload/despawn; lower/upper same-XY support и ray; door closed/open; перекрытие спрайта стеной и мостом; sockets/equipment; вспышку на спрайте, стене и полу; fog/material diagnostics; управление рядом со ступенями; invalid data rollback. Рабочие образцы и exact checks — [World guide](../RE2D_WORLD_GUIDE.md), [sprite integration](RE2DSPRITE_WORLD.md), document audit.
+Проверить spawn/load/reload/despawn; lower/upper same-XY support и ray; door closed/open; перекрытие спрайта стеной и мостом; sockets/equipment; вспышку на спрайте, стене и полу; fog/material diagnostics; управление рядом со ступенями; invalid data rollback. Рабочие образцы и exact checks — [World guide](../RE2D_WORLD_GUIDE.md), [sprite integration](RE2DSPRITE_WORLD.md).
 
 Legacy reference: [re2d_legacy.md](../highlevel/re2d_legacy.md). Новый reference: [runtime](RE2D_WORLD_RUNTIME.md). Public aliases rotSprite/rot* сохранены, новый код использует re2dSprite/re2d*.
