@@ -26,6 +26,7 @@
 import { engine } from './native.js';
 import { ctx, assignNid } from './core.js';
 import { sanitize } from './prefab.js';
+import { PRESENTATION_STREAMS } from './random.js';
 
 export const SAVE_FORMAT = 'r2d.save';
 export const SAVE_VERSION = 3;          // 1 — $.store.save(), 2 — слоты, 3 — namespaces (§14)
@@ -810,11 +811,34 @@ export function installSave($) {
 
     function rngApi() { return $.random || ctx.random || null; }
 
-    /** Снимок RNG для слота/replay: {version, algorithm, seed, value, streams}. */
+    /**
+     * Снимок RNG для слота/replay: {version, algorithm, seed, value, streams}.
+     *
+     * Потоки косметики (частицы, тряска камеры, декоративный шум) в слот НЕ
+     * попадают: §10 требует не сохранять presentation-only random. Иначе
+     * загрузка слота откатывала бы картинку к моменту сохранения — то есть
+     * косметика вела бы себя как gameplay-состояние, а шум частиц после
+     * загрузки повторялся бы один в один.
+     */
     function rngState() {
         const r = rngApi();
         if (!r || typeof r.state !== 'function') return null;
-        try { return r.state(); } catch (e) { return null; }
+        let snapshot;
+        try { snapshot = r.state(); } catch (e) { return null; }
+        if (!snapshot || typeof snapshot !== 'object') return snapshot;
+        const streams = snapshot.streams;
+        if (!streams || typeof streams !== 'object') return snapshot;
+        const kept = {};
+        let dropped = 0;
+        for (const name of Object.keys(streams)) {
+            if (PRESENTATION_STREAMS.indexOf(name) >= 0) { dropped++; continue; }
+            kept[name] = streams[name];
+        }
+        if (!dropped) return snapshot;
+        const out = Object.assign({}, snapshot);
+        if (Object.keys(kept).length) out.streams = kept;
+        else delete out.streams;
+        return out;
     }
 
     function rngRestore(snapshot) {

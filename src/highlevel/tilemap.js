@@ -1415,7 +1415,16 @@ function cellDef(layer, tx, ty) {
     const id = (layer.source || layer.data)[idx];
     const def = layer.defs ? layer.defs[id | 0] : null;
     if (def) return def.solid ? def : null;
-    if (!layer.defs) return null;                 // слой без таблицы — legacy-путь
+    if (!layer.defs) {
+        // Legacy-слой без таблицы `tiles`: клетка и есть тело, а форму задаёт
+        // слоевой предикат `solid`. Здесь возвращался null, и `solidAt` для
+        // карты с `solid: true` отвечал false ВСЕГДА — при том что тела для тех
+        // же клеток физика строила (occupiedPredicate спрашивает тот же
+        // предикат). Один контракт вместо двух: solidAt обязан совпадать с
+        // тем, из чего собраны тела.
+        if (!layerSolidOn(layer)) return null;
+        return fallbackSolidPred(layer)(tx, ty) ? layerFullDef(layer) : null;
+    }
     return fallbackSolidPred(layer)(tx, ty) ? layerFullDef(layer) : null;
 }
 

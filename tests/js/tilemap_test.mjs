@@ -644,4 +644,88 @@ test('tileSize сбрасывает вычисленные cols/rows и реже
     }
 });
 
+// ---------------------------------------------------------------------------
+// §5.1 плана дополировки: solidAt — единый контракт занятости клетки.
+//
+// Legacy-карта (без таблицы `tiles`) обязана отвечать по слоевому предикату
+// `solid`: это ровно тот предикат, из которого физика строит тела
+// (occupiedPredicate → fallbackSolidPred). Раньше solidAt для такой карты
+// отвечал false ВСЕГДА — сетка, навигация и occluder видели проходимую карту
+// там, где стояли тела.
+// ---------------------------------------------------------------------------
+test('§5.1 solidAt: legacy-карта (solid: true, без таблицы tiles) занята по тайлам', () => {
+    const t = $.tilemap.create({
+        id: 'legacy', tile: 32, solid: true, data: [1, 0, 0, 2], mapW: 2, mapH: 2,
+    });
+    tickTilemap(1 / 60);
+    truthy(t.solidAt(0, 0), 'тайл 1 — клетка занята');
+    falsy(t.solidAt(1, 0), 'пустая клетка не занята');
+    falsy(t.solidAt(0, 1), 'пустая клетка не занята');
+    truthy(t.solidAt(1, 1), 'тайл 2 — клетка занята');
+    falsy(t.solidAt(-1, 0), 'слева за картой — не занята');
+    falsy(t.solidAt(2, 0), 'справа за картой — не занята');
+    falsy(t.solidAt(0, -1), 'сверху за картой — не занята');
+    falsy(t.solidAt(0, 2), 'снизу за картой — не занята');
+
+    // Без таблицы `tiles` клетка и есть тело: solidAt и shapeAt совпадают.
+    const shape = t.shapeAt(0, 0);
+    truthy(shape && shape.full === true, 'legacy-клетка — полная клетка');
+    eq(t.shapeAt(1, 0), null, 'у пустой клетки формы нет');
+    eq($.tilemap.shapesOf('#legacy').length, 2, 'тел столько же, сколько занятых клеток');
+});
+
+test('§5.1 solidAt: solid: false не делает клетки занятыми', () => {
+    const t = $.tilemap.create({
+        id: 'nosolid', tile: 32, solid: false, data: [1, 1, 1, 1], mapW: 2, mapH: 2,
+    });
+    tickTilemap(1 / 60);
+    falsy(t.solidAt(0, 0), 'слой явно выключен из коллизий');
+    falsy(t.solidAt(1, 1), 'и это не зависит от клетки');
+    eq($.tilemap.shapesOf('#nosolid').length, 0, 'и тел у него нет');
+});
+
+test('§5.1 solidAt: solid как список id — заняты только перечисленные тайлы', () => {
+    const t = $.tilemap.create({
+        id: 'ids', tile: 32, solid: [2], data: [1, 2, 3, 0], mapW: 2, mapH: 2,
+    });
+    tickTilemap(1 / 60);
+    falsy(t.solidAt(0, 0), 'тайл 1 не в списке');
+    truthy(t.solidAt(1, 0), 'тайл 2 в списке');
+    falsy(t.solidAt(0, 1), 'тайл 3 не в списке');
+    falsy(t.solidAt(1, 1), 'пустая клетка');
+});
+
+// ---------------------------------------------------------------------------
+// §5.2 плана: tile → pixel → tile обязан вернуть исходную логическую клетку.
+// Проверяются сочетания тайла, origin и клеток, включая отрицательные.
+// ---------------------------------------------------------------------------
+test('§5.2 tile↔pixel round-trip: тайлы 16/32/128, origin 0 и ≠0, отрицательные клетки', () => {
+    const cells = [[0, 0], [1, 1], [2, 2], [-1, 0], [0, -1], [-5, 7]];
+    for (const tile of [16, 32, 128]) {
+        for (const origin of [[0, 0], [7, -3]]) {
+            const geom = { tile, cols: 8, rows: 16, origin_x: origin[0], origin_y: origin[1] };
+            for (const [tx, ty] of cells) {
+                const p = tileToPixel(geom, tx, ty);
+                const back = pixelToTile(geom, p.x, p.y);
+                eq(back.tx, tx,
+                   `тайл ${tile}, origin ${origin[0]},${origin[1]}: клетка ${tx} вернулась по X`);
+                eq(back.ty, ty,
+                   `тайл ${tile}, origin ${origin[0]},${origin[1]}: клетка ${ty} вернулась по Y`);
+            }
+        }
+    }
+    // Нецентровой пиксель внутри клетки принадлежит той же клетке: иначе
+    // round-trip прошёл бы и у сломанного floor().
+    for (const tile of [16, 128]) {
+        const geom = { tile, cols: 8, rows: 16, origin_x: 3, origin_y: -2 };
+        for (const [tx, ty] of cells) {
+            const p = tileToPixel(geom, tx, ty);
+            const left = pixelToTile(geom, p.x - tile / 2 + 0.5, p.y);
+            const top = pixelToTile(geom, p.x, p.y - tile / 2 + 0.5);
+            eq(left.tx, tx, `тайл ${tile}: левый край клетки ${tx} принадлежит ей`);
+            eq(top.ty, ty, `тайл ${tile}: верхний край клетки ${ty} принадлежит ей`);
+        }
+    }
+});
+
 finish();

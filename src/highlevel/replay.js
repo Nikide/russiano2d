@@ -32,7 +32,7 @@
 
 import { engine } from './native.js';
 import { ctx } from './core.js';
-import { hashCells } from './random.js';
+import { hashCells, PRESENTATION_STREAMS } from './random.js';
 
 /** Предел записи: 10 минут при 60 к/с. Дальше предупреждаем и останавливаемся. */
 export const MAX_FRAMES = 36000;
@@ -46,8 +46,10 @@ export const MAX_CHECKPOINTS = 1024;
 /** Сколько полей показывает divergence report. */
 export const MAX_DIVERGENCE_FIELDS = 24;
 
-/** Потоки RNG, которые НЕ влияют на gameplay-расхождение (§26). */
-export const PRESENTATION_STREAMS = ['presentation'];
+/** Потоки RNG, которые НЕ влияют на gameplay-расхождение (§26).
+ *  Список живёт рядом с самим генератором (random.js): его читают и реплей,
+ *  и сейв, а две копии списка разошлись бы. */
+export { PRESENTATION_STREAMS };
 
 function plainObject(value) {
     return !!value && typeof value === 'object' && !Array.isArray(value);

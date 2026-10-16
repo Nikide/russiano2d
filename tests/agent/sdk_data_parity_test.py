@@ -27,6 +27,21 @@ DRIVER = os.path.join(ROOT, "tests", "js", "sdk_parity_driver.mjs")
 SUFFIX = {"tilemap": ".tilemap.json", "particles": ".particles.json", "collision": ".collision.json", "layers": ".layers.json",
           "fonts": ".fonts.json", "audio": ".audio.json", "input": ".input.json", "rml": ".rml", "rcss": ".rcss"}
 
+#: Коды, которые нативная проверка может выдать, а JS-модель — нет по
+#: устройству, а не по расхождению правил: `*_FILE_MISSING` — это проверка
+#: ссылки на файл НА ДИСКЕ рядом с JSON (`sdk/native/sdk_data.c`, «файл не
+#: найден рядом с JSON»; публичный код — с префиксом вида `SDK_AUDIO_`), а
+#: JS-модель формата получает уже разобранный объект и файловой системы не
+#: видит (движок её SDK-инструментам не даёт). Такие коды исключены из
+#: сравнения, но их наличие проверяется отдельно — иначе паритет «зеленел» бы
+#: на том, что нативная сторона перестала проверять ссылки.
+NATIVE_ONLY_SUFFIXES = ("_FILE_MISSING",)
+
+
+def native_only(code):
+    """Код требует файловой системы — JS-модель его выдать не может."""
+    return any(code.endswith(suffix) for suffix in NATIVE_ONLY_SUFFIXES)
+
 BASES = {
     "tilemap": {"version": 1, "tile": 16, "src": "assets/tiles.png", "cols": 16, "solid": [1, 2], "autotile": {"mode": "bit16", "base": 1, "solid": [1]},
                 "layers": [{"name": "ground", "depth": 0, "solid": True, "data": [[1, 0, 2], [0, 3, 0]]},
@@ -150,6 +165,7 @@ def main():
 
     fails = 0
     checked = 0
+    native_only_seen = 0
     for kind, path in files:
         r = subprocess.run([SDK, "validate", path], capture_output=True, text=True, timeout=30)
         try:
@@ -158,7 +174,9 @@ def main():
             print("  FAIL нет JSON от r2d-sdk для", path, r.stdout[:200], r.stderr[:200])
             fails += 1
             continue
-        c_sig = sorted(d["severity"] + ":" + d["code"] for d in out["diagnostics"])
+        c_all = sorted(d["severity"] + ":" + d["code"] for d in out["diagnostics"])
+        native_only_seen += sum(1 for s in c_all if native_only(s))
+        c_sig = [s for s in c_all if not native_only(s)]
         j_sig = js[path]
         checked += 1
         if c_sig != j_sig:
@@ -167,6 +185,10 @@ def main():
                 print("  FAIL %s\n       JS %s\n       C  %s" % (os.path.relpath(path, ROOT), j_sig, c_sig))
                 print("       " + open(path, encoding="utf-8").read()[:300].replace("\n", "\\n"))
     print(("  ok   " if not fails else "  FAIL ") + "паритет JS и C: проверено файлов %d, расхождений %d" % (checked, fails))
+    # Исключённые из сравнения коды не должны исчезнуть совсем: иначе «паритет»
+    # получился бы за счёт того, что нативная проверка перестала их выдавать.
+    print(("  ok   " if native_only_seen else "  FAIL ")
+          + "нативная проверка видит отсутствующие файлы-ссылки (%d диагностик)" % native_only_seen)
     base_ok = all(js[p] == [] or all(not s.startswith("error:") for s in js[p]) for k, p in files[:1])
     print("  ok   базовые документы проходят без ошибок" if base_ok else "  FAIL базовый документ с ошибками")
     if fails or not base_ok:

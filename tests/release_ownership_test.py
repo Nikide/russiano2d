@@ -32,6 +32,10 @@ LOCAL_SCRIPTS = ("build_and_push.sh", "push_and_deploy.sh")
 #: Платформы, сборка которых — ответственность CI, а не локальной машины.
 CI_ONLY_PLATFORMS = ("linux-x86_64", "linux-aarch64", "windows-x86_64")
 
+#: Файл самой проверки: искомая строка встречается в нём по необходимости —
+#: он её и ищет. Из сканирования исключается, иначе гейт краснеет на себе.
+SELF = "tests/release_ownership_test.py"
+
 FAILURES = []
 
 
@@ -55,7 +59,7 @@ def test_single_release_owner():
     print("\n== §4.8: единственный владелец GitHub Release ==")
     offenders = []
     for name in tracked(".sh", ".py", ".yml", ".yaml", ".js", ".mjs"):
-        if name.startswith("dist/"):
+        if name.startswith("dist/") or name == SELF:
             continue
         text = read(name)
         for num, line in enumerate(text.splitlines(), 1):
@@ -138,7 +142,7 @@ def test_artifact_name_contract():
     # Никто не склеивает имя архива вручную: только через контракт.
     offenders = []
     for name in tracked(".py", ".sh"):
-        if name.startswith("dist/") or name == "tools/release.py":
+        if name.startswith("dist/") or name in ("tools/release.py", SELF):
             continue
         for num, line in enumerate(read(name).splitlines(), 1):
             if re.search(r"""russiano2d-['"]?\s*[%+]""", line):
