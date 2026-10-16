@@ -262,6 +262,10 @@ const state = {
     // Пул эмиттеров: удара много, узлов должно быть мало.
     emitters: [],
     next_emitter: 0,
+    // Сколько эмиттеров в кольце. 8 — прежнее поведение; настраивается
+    // $.hits.pool(n). Потолок 64: выше живых эмиттеров больше, чем ударов
+    // успевает случиться за кадр, и пул перестаёт экономить узлы.
+    pool_size: 8,
     plays: 0,
     // §21: настройки «меньше вспышек и тряски». Это НЕ выключатель боя: урон,
     // события и счётчики остаются теми же, меняется только presentation.
@@ -466,6 +470,25 @@ export function installHits($) {
             return node;
         },
 
+        /**
+         * Размер кольца эмиттеров искр: `$.hits.pool(16)`. Без аргумента — геттер.
+         *
+         * Дефолт 8: девятый одновременный удар переиспользует первый слот, и
+         * залп первого удара обрывается (`restart()` чистит пул эмиттера).
+         * Диапазон 1..64; вне диапазона — `false` и строка в журнал, размер не
+         * меняется. Пул экономит узлы: без кольца каждый удар заводил бы свой.
+         */
+        pool(size) {
+            if (size === undefined) return state.pool_size;
+            const n = Math.floor(Number(size));
+            if (!Number.isFinite(n) || n < 1 || n > 64) {
+                ctx.log(`$.hits.pool: ${size} вне диапазона 1..64 — размер не изменён`);
+                return false;
+            }
+            state.pool_size = n;
+            return true;
+        },
+
         /** Сколько фидбеков сыграно и сколько таймлайнов живо — для отладки. */
         stats() {
             return { plays: state.plays, tweens: state.tweens.length, emitters: state.emitters.length };
@@ -584,7 +607,7 @@ function spawnBurst(point, spec) {
         amount: Math.max(1, Math.floor(Number(p.amount) || 12)),
         max_particles: Math.max(1, Math.floor(Number(p.max_particles) || 48)),
     });
-    const slot = state.next_emitter++ % 8;
+    const slot = state.next_emitter++ % state.pool_size;
     let handle = state.emitters[slot];
     if (!handle) {
         const created = $('<particles>', Object.assign({}, emitter_spec, { id: `__hitfx_${slot}` }));

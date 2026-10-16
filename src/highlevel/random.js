@@ -10,12 +10,20 @@
 //   $.random.seed(7);
 //   $.random.int(1, 6);            // кубик, 1..6 включительно
 //   $.random.weighted([{ value: 'меч', weight: 1 }, { value: 'мусор', weight: 9 }]);
-//   $.random.noise1D(x / 64);      // гладкий рельеф (value noise), не зависит от seed()
+//   $.random.noise1D(x / 64);      // гладкий рельеф: зерно сессии (--seed)
 //   $.random.simplex2D(x / 32, y / 32, { seed: 7 });   // симплекс-шум §43
 //
 // Детерминизм: одна и та же последовательность вызовов после seed(n) даёт
 // одну и ту же последовательность чисел — на этом стоят юнит-тесты и прогон
 // с фиксированным шагом.
+//
+// ЗЕРНО ШУМА (C1 отчёта BASHNYA). `noise1D/noise2D/simplex2D/noise` — чистые
+// функции координаты, но зерно по умолчанию берут у СВОЕГО генератора: у
+// `$.random` это зерно сессии (`--seed` либо `$.random.seed(n)`), у потока —
+// зерно потока. Явно переданное зерно (`noise2D(x, y, 42)`,
+// `simplex2D(x, y, { seed: 7 })`) побеждает всегда. До этого правки дефолт был
+// жёстким нулём, и смена `--seed` не меняла карту шума — «другой детерминизм»,
+// на который и пожаловалась внешняя команда.
 //
 // Что добавлено по §26/§43 (не меняя существующие последовательности):
 //   * state()/restore() — снимок состояния ГПСЧ с version/algorithm ID;
@@ -178,14 +186,25 @@ function buildGenerator(seedInput, allowStreams) {
         return snapshot;
     }
 
-    /** Создать (или взять) именованный поток, изолированный от default. */
-    function stream(name) {
+    /**
+     * Создать (или взять) именованный поток, изолированный от default.
+     *
+     * `opts.independent: true` — поток, который `seed(n)` родителя НЕ
+     * переразворачивает: один раз получив зерно (из `opts.seed` или выведенное
+     * из текущего базового), он дальше живёт своей жизнью. Нужен там, где
+     * смена зерна сессии не должна менять уже идущую партию (сетевой матч,
+     * косметика записи, побочный генератор плагина).
+     */
+    function stream(name, opts) {
         const key = String(name === undefined || name === null ? '' : name);
         if (key === '') throw new Error('$.random.stream: нужно имя потока');
+        const o = opts && typeof opts === 'object' ? opts : {};
+        const independent = o.independent === true;
         let sub = streams.get(key);
         if (!sub) {
-            const child = buildGenerator(streamSeed(current, key), false);
-            sub = { rng: child.rng, reseed: child.reseed };
+            const explicit = o.seed === undefined || o.seed === null ? null : (Number(o.seed) >>> 0);
+            const child = buildGenerator(explicit === null ? streamSeed(current, key) : explicit, false);
+            sub = { rng: child.rng, reseed: child.reseed, independent };
             streams.set(key, sub);
         }
         return sub.rng;
@@ -198,7 +217,12 @@ function buildGenerator(seedInput, allowStreams) {
             reseed(value);
             // Зерно задаёт всю сессию: уже созданные потоки разворачиваются
             // заново из нового базового зерна, а не продолжают старую.
-            for (const [name, sub] of streams) sub.reseed(streamSeed(current, name));
+            // Исключение — независимые потоки (`stream(name, {independent:true})`):
+            // их зерно выдано один раз, и чужой seed() его не трогает.
+            for (const [name, sub] of streams) {
+                if (sub.independent) continue;
+                sub.reseed(streamSeed(current, name));
+            }
             return rng;
         },
 
@@ -229,17 +253,25 @@ function buildGenerator(seedInput, allowStreams) {
         /** Выбор с весами (см. weightedPick). */
         weighted(list) { return weightedPick(list, rng); },
 
-        /** Значение-шум 1D в [0, 1] — от координаты, а не от состояния ГПСЧ. */
-        noise1D(x, noiseSeed) { return noise1D(x, noiseSeed); },
+        /**
+         * Значение-шум 1D в [0, 1] — от координаты, а не от состояния ГПСЧ.
+         * Без аргумента зерно берётся у этого генератора (у `$.random` —
+         * зерно сессии), явно переданное побеждает.
+         */
+        noise1D(x, noiseSeed) {
+            return noise1D(x, noiseSeed === undefined || noiseSeed === null ? current : noiseSeed);
+        },
 
         /** Значение-шум 2D в [0, 1] — годится для рельефа и биомов. */
-        noise2D(x, y, noiseSeed) { return noise2D(x, y, noiseSeed); },
+        noise2D(x, y, noiseSeed) {
+            return noise2D(x, y, noiseSeed === undefined || noiseSeed === null ? current : noiseSeed);
+        },
 
         /** Симплекс-шум 2D в [0, 1], именованный алгоритм §43. */
-        simplex2D(x, y, opts) { return simplex2D(x, y, opts); },
+        simplex2D(x, y, opts) { return simplex2D(x, y, withNoiseSeed(opts, current)); },
 
         /** Источник шума с параметрами: noise({ algorithm, seed, frequency }). */
-        noise(opts) { return createNoise(opts); },
+        noise(opts) { return createNoise(withNoiseSeed(opts, current)); },
 
         /** Список именованных алгоритмов шума с метаданными. */
         algorithms() { return noiseAlgorithms(); },
@@ -329,6 +361,18 @@ export function streamSeed(baseSeed, name) {
         h = Math.imul(h, 0x01000193);
     }
     return (((Number(baseSeed) || 0) >>> 0) ^ h ^ 0x9e3779b9) >>> 0;
+}
+
+/**
+ * Опции шума с зерном по умолчанию: подставляем зерно генератора ТОЛЬКО когда
+ * своего зерна нет — явное (в том числе 0) всегда побеждает.
+ */
+function withNoiseSeed(opts, seed) {
+    if (opts && typeof opts === 'object') {
+        if (opts.seed !== undefined && opts.seed !== null) return opts;
+        return Object.assign({}, opts, { seed });
+    }
+    return { seed };
 }
 
 /** Список Фишера—Йетса на переданном генераторе. Возвращает новый массив. */

@@ -104,11 +104,14 @@ def main():
         check(a.eval("$.random.seed(12345); $.random.shuffle([1,2,3,4,5,6,7,8]).join(',')") ==
               ",".join(str(v) for v in legacy_shuffle), "legacy shuffle без изменений")
 
+        # Зерно задаём явно: это эталон АЛГОРИТМА v1, а не дефолта. С 0.1.35
+        # шум без зерна берёт зерно сессии (--seed / $.random.seed), поэтому
+        # «без аргумента» больше не означает «зерно 0» — см. noise_seed_test.py.
         got = a.eval("[[0,0],[1.5,1.5],[-3.25,7.5],[100.125,-0.25]].map(function(p){"
-                     " return $.random.noise2D(p[0], p[1]); })")
-        check(close_list(got, legacy["noise2D"]), "legacy value noise noise2D без изменений")
-        got = a.eval("[0,0.5,3.25,-7.5,100.125].map(function(x){ return $.random.noise1D(x); })")
-        check(close_list(got, legacy["noise1D"]), "legacy value noise noise1D без изменений")
+                     " return $.random.noise2D(p[0], p[1], 0); })")
+        check(close_list(got, legacy["noise2D"]), "legacy value noise noise2D без изменений (алгоритм v1, зерно 0)")
+        got = a.eval("[0,0.5,3.25,-7.5,100.125].map(function(x){ return $.random.noise1D(x, 0); })")
+        check(close_list(got, legacy["noise1D"]), "legacy value noise noise1D без изменений (алгоритм v1, зерно 0)")
 
         # --- 3. Эталонные samples симплекс-шума ----------------------------
         worst = 0.0
