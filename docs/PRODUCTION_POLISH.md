@@ -2515,6 +2515,14 @@ Third-party warnings не чинить форками без необходим�
 
 После выполнения P0 и обязательных P1 ввести временный freeze public high-level API.
 
+**Объявлено.** Заморозка проверяется машинно: `tests/api_freeze_test.py` снимает публичную
+поверхность с живого движка (имена неймспейсов `$.` с их методами и биндинги `engine.*` —
+2986 имён) и сверяет со снимком `tests/api_freeze_baseline.txt`. Появление или исчезновение
+имени валит гейт; намеренное изменение возможно только осознанным обновлением снимка
+(`python3 tests/api_freeze_test.py --write`) вместе с объяснением в `CHANGELOG.md`, почему это
+не ломает игры. Переименования, смены сигнатур, семантики и схем (JSON/prefab/room/atlas/save)
+по-прежнему требуют отдельного обоснования по правилам ниже.
+
 Нельзя без отдельного обоснования:
 
 - переименовывать namespaces;
@@ -2783,6 +2791,6 @@ job CI), у каждого незакрытого пункта — причин�
 - [x] no P0 defects — §6.3 закрыт: сползание на склоне 30° без ввода не больше 1 px за 120 кадров (после правки измерено 0.000 px) и не больше 2 px за 600 кадров, `tests/agent/slope_hold_test.py` + `tests/agent/highlevel_physics_slopes_test.py`
 - [x] Windows/Linux CI green — `.github/workflows/build.yml`, прогон 38862722918: static, linux-x86_64, linux-aarch64 и windows-x86_64 (кросс-сборка MinGW) зелёные, артефакты `release-linux-x86_64`, `release-linux-aarch64`, `release-windows-x86_64` собраны
 - [x] локальный macOS acceptance green — `tests/macos_package_smoke_test.py` + полный локальный набор `tools/run_tests.py`
-- [ ] API freeze declared — причина: заморозка API объявляется на выпуске (PASS 7) после закрытия инспекторов
+- [x] API freeze declared — §63 объявлен и проверяется машинно: `tests/api_freeze_test.py` сверяет публичную поверхность (`$.`-неймспейсы с методами и биндинги `engine.*`, 2986 имён) со снимком `tests/api_freeze_baseline.txt`. Любое появление или исчезновение имени валит гейт; намеренное изменение — только осознанным обновлением снимка (`--write`) с объяснением в CHANGELOG
 
 ---

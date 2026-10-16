@@ -2878,8 +2878,10 @@ function animDebugFacts() {
     const rep = animDebugReport();
     return {
         on: anim_debug.on,
-        sel: anim_debug.sel === null ? null : (typeof anim_debug.sel === 'string'
-            ? anim_debug.sel : 'nid' + (rep.node ? rep.node.nid : '?')),
+        // Ярлык цели: селектор как есть, живой узел — по nid, исчезнувший —
+        // null (выдумывать nid нечего).
+        sel: typeof anim_debug.sel === 'string' ? anim_debug.sel
+            : (rep.node ? 'nid' + rep.node.nid : null),
         player: anim_debug.player,
         node: rep.node,
         players: rep.players,

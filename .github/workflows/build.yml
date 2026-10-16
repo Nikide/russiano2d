@@ -55,6 +55,8 @@ jobs:
           python3 tests/release_ownership_test.py
       - name: §66 acceptance checklist (evidence or reason for every item)
         run: python3 tests/production_polish_checklist_test.py
+      - name: §63 public API freeze (surface matches the snapshot)
+        run: python3 tests/api_freeze_test.py
   build:
     needs: static
     strategy:

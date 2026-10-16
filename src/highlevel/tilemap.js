@@ -2998,7 +2998,8 @@ export function installTilemap($) {
                 if (opts.map !== undefined) {
                     tm_debug.map = opts.map === null ? null : opts.map;
                     if (tm_debug.map !== null && !resolveTm(tm_debug.map)) {
-                        ctx.log('$.tilemap.debug: карта не найдена — оверлей покажет активную');
+                        ctx.log('$.tilemap.debug: карта не найдена — оверлей ничего не рисует '
+                            + '(в фактах reason: no_map)');
                     }
                 }
                 if (opts.mode !== undefined) {
