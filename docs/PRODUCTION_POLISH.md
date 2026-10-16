@@ -2744,14 +2744,14 @@ job CI), у каждого незакрытого пункта — причин�
 - [x] audio inspector — вкладка AUDIO в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_audio_test.py` (активные голоса, шины, стоп выбранного канала; остановка свободного канала честно отвечает отказом, а не успехом)
 - [ ] input inspector — причина: вкладка INPUT не собрана (данные `$.input.*` есть)
 - [ ] asset monitor — причина: вкладка ASSETS показывает реестр загрузок, отдельного монитора цен/времени загрузки нет
-- [ ] resource/memory stats — причина: счётчики есть (`$.debug.counters()/limits()`), сводки памяти в панели нет
-- [ ] tilemap debugger — причина: режим отладки тайлмапа (сетка/чанки/солиды) не собран
+- [x] resource/memory stats — вкладка RESOURCE/MEMORY в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_memory_test.py` (счётчики и пределы с дельтами, детектор монотонного роста с обеих сторон: подозрение на росте, тишина на стабильных числах)
+- [x] tilemap debugger — `$.tilemap.debug()` в `src/highlevel/tilemap.js`, проверки в `tests/agent/tilemap_debug_test.py` (сетка и солиды сверяются с `solidAt`, включение/выключение видно пиксельно)
 - [ ] animation debugger — причина: вкладка отладки анимации (клипы/окна/дорожки) не собрана
-- [ ] camera debugger — причина: оверлей камеры (зоны, лимиты, deadzone) не собран
+- [x] camera debugger — `$.camera.debug()` в `src/highlevel/camera.js`, проверки в `tests/agent/camera_debug_test.py` (лимиты, deadzone и зоны сверяются с `$.camera.limits()/deadzone()` и зонами камеры, выключение убирает оверлей)
 - [ ] lighting debugger — причина: список источников есть (`engine.devtools.lights()`), оверлей не собран
-- [ ] console — причина: консоль с историей и командами не собрана
+- [x] console — вкладка CONSOLE в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_console_test.py` (команды поверх существующих API, история, честный отказ на неизвестную команду)
 - [ ] frame stepping — причина: управление шагами кадра из панели не собрано
-- [ ] debug report export — причина: экспорт отчёта (снимок + диагностика) не собран
+- [x] debug report export — вкладка REPORT в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_report_test.py` (снимок счётчиков/пределов/диагностики/профиля и версия, копирование)
 
 ## Tooling
 

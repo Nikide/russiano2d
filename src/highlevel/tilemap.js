@@ -2132,8 +2132,282 @@ function resolveCam(cam) {
 }
 
 // ---------------------------------------------------------------------------
-// Установка
+// §35. Отладочный оверлей TileMap.
+//
+// Что показывает: сетку логических клеток, твёрдые клетки (клеточная
+// занятость — тот же предикат, что у solidAt), частичные формы, occluder'ы и
+// координаты клетки под курсором. Рисуется поверх кадра через $.debug.draw.*
+// в МИРОВЫХ координатах: тайлмап-рендер не дублируется, тайлы не
+// перерисовываются — только геометрия сетки и подсветка.
+//
+// По умолчанию всё выключено: у выключенного оверлея нулевая цена, и кадр он
+// не меняет. Значения берутся только из самой карты: чего карта не знает —
+// не рисуется (нет клетки под курсором — нет подписи).
 // ---------------------------------------------------------------------------
+const TM_DEBUG_FLAGS = ['grid', 'solid', 'partial', 'occluders', 'cursor', 'text'];
+const TM_DEBUG_MODES = ['all', 'collision'];
+
+const tm_debug = {
+    on: false,
+    map: null,          // узел/обёртка/селектор; null — активная карта (первая)
+    mode: 'all',        // 'all' — вся сетка, 'collision' — только занятые клетки
+    grid: true,
+    solid: true,
+    partial: false,     // клетки с неполной формой (тонкие платформы)
+    occluders: false,   // клетки-препятствия света
+    cursor: true,
+    text: true,
+    cap: 4096,          // предел клеток в кадре: карта 200×200 иначе съест кадр
+    last: null,         // факты последнего нарисованного кадра
+};
+
+const TM_DEBUG_COLORS = {
+    grid: '#4a6b8a',
+    solid: '#ff5a4a',
+    partial: '#ffb020',
+    occluder: '#b07cff',
+    cursor: '#8fd1ff',
+    text: '#d8e2ee',
+};
+
+/** Примитивы оверлея: только $.debug.draw (мировые координаты). */
+function tilemapDebugDraw() {
+    const d = ctx && ctx.debug;
+    return d && d.draw ? d.draw : null;
+}
+
+/** Карта, за которой следит оверлей: выбранная или первая живая. */
+function tilemapDebugState() {
+    if (tm_debug.map !== null && tm_debug.map !== undefined) return resolveTm(tm_debug.map);
+    for (const [node, tm] of STATES) {
+        if (!node.removed && node.in_registry) return tm;
+    }
+    return null;
+}
+
+/** Ярлык карты для фактов: id узла, иначе nid. */
+function tilemapDebugLabel(st) {
+    if (!st || !st.node) return null;
+    const id = st.node.id;
+    return id === undefined || id === null ? 'nid' + st.node.nid : String(id);
+}
+
+/** Прямоугольник клетки в мировых координатах (не путать с локальными rects). */
+function tilemapCellRect(geom, tx, ty) {
+    const c = tileToPixel(geom, tx, ty);
+    const tw = (geom.tile || 32) * Math.abs(geomScale(geom, 0));
+    const th = (geom.tile || 32) * Math.abs(geomScale(geom, 1));
+    return { x: c.x - tw / 2, y: c.y - th / 2, w: tw, h: th };
+}
+
+/** Клетка под курсором мыши: экран → мир → клетка (или null). */
+function tilemapDebugCursor(geom) {
+    const input = ctx && ctx.input;
+    if (!input || typeof input.mouse !== 'function') return null;
+    const m = input.mouse();
+    if (!m || !Number.isFinite(m.x) || !Number.isFinite(m.y)) return null;
+    const camera = ctx.camera;
+    let world = null;
+    if (camera && typeof camera.screenToWorld === 'function') world = camera.screenToWorld(m);
+    if (!world || !Number.isFinite(world.x) || !Number.isFinite(world.y)) return null;
+    const cell = pixelToTile(geom, world.x, world.y);
+    const index = tileIndexAt(geom, cell.tx, cell.ty);
+    return {
+        tx: cell.tx, ty: cell.ty,
+        screen: { x: m.x, y: m.y },
+        world: { x: world.x, y: world.y },
+        index,
+        inMap: index >= 0,
+    };
+}
+
+/** Пустые факты кадра: оверлею нечего рисовать, и он это честно сообщает. */
+function tilemapDebugEmpty(reason) {
+    return {
+        map: null, layer: null, mode: tm_debug.mode, reason,
+        cells: 0, solids: 0, partial: 0, occluders: 0, capped: false,
+        range: null, cursor: null, solidCells: [],
+        primitives: { rects: 0, lines: 0, texts: 0 },
+    };
+}
+
+/**
+ * Кадр оверлея TileMap. Вызывается из tickTilemap — то есть в фазе
+ * обновления, до сборки батча: $.debug.draw кладёт примитивы в очередь
+ * текущего кадра, и они попадают в тот же кадр, что увидит игрок.
+ *
+ * Рисуется только ВИДИМАЯ часть карты (тот же visibleRange, что у рендера) и
+ * не больше `cap` клеток: иначе карта 200×200 выдала бы 40 000 прямоугольников
+ * в кадр. Если предел сработал — это видно в фактах (`capped: true`), а не
+ * замалчивается.
+ */
+function drawTilemapDebug() {
+    const d = tilemapDebugDraw();
+    if (!d) { tm_debug.last = tilemapDebugEmpty('no_debug_draw'); return; }
+    const st = tilemapDebugState();
+    if (!st) { tm_debug.last = tilemapDebugEmpty('no_map'); return; }
+    const layer = activeLayer(st);
+    if (!layer) { tm_debug.last = tilemapDebugEmpty('no_layer'); return; }
+
+    const geom = geomOf(st);
+    const ox = layer.origin_x | 0, oy = layer.origin_y | 0;
+    const node = st.node;
+    const cam = cameraTransform();
+    const vis = visibleRange(layer, {
+        x: node.x, y: node.y, w: node.w, h: node.h,
+        scale_x: node.scale_x, scale_y: node.scale_y,
+    }, cam);
+
+    const marks = tilemapDebugEmpty(null);
+    marks.map = tilemapDebugLabel(st);
+    marks.layer = st.active;
+    marks.range = { x0: vis.x0 + ox, y0: vis.y0 + oy, x1: vis.x1 + ox, y1: vis.y1 + oy };
+    if (vis.x1 < vis.x0 || vis.y1 < vis.y0) { tm_debug.last = marks; return; }
+
+    const rect = (r, color) => {
+        d.rect({ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, color);
+        marks.primitives.rects++;
+    };
+
+    // --- сетка логических клеток ------------------------------------------
+    // Рисуем линии по границам ВИДИМОГО диапазона: (cols+1) + (rows+1) линий
+    // вместо четырёх на клетку.
+    if (tm_debug.mode === 'all' && tm_debug.grid) {
+        const first = tilemapCellRect(geom, vis.x0 + ox, vis.y0 + oy);
+        const last = tilemapCellRect(geom, vis.x1 + ox, vis.y1 + oy);
+        const left = first.x, top = first.y;
+        const right = last.x + last.w, bottom = last.y + last.h;
+        for (let i = 0; i <= (vis.x1 - vis.x0) + 1; i++) {
+            const x = left + i * first.w;
+            d.line({ x, y: top }, { x, y: bottom }, TM_DEBUG_COLORS.grid, 1);
+            marks.primitives.lines++;
+        }
+        for (let j = 0; j <= (vis.y1 - vis.y0) + 1; j++) {
+            const y = top + j * first.h;
+            d.line({ x: left, y }, { x: right, y }, TM_DEBUG_COLORS.grid, 1);
+            marks.primitives.lines++;
+        }
+    }
+
+    // --- клетки -------------------------------------------------------------
+    for (let by = vis.y0; by <= vis.y1; by++) {
+        for (let bx = vis.x0; bx <= vis.x1; bx++) {
+            if (marks.cells >= tm_debug.cap) { marks.capped = true; break; }
+            const tx = bx + ox, ty = by + oy;
+            // Тот же предикат, что у solidAt(): клеточная занятость, а не форма.
+            const occupied = !!cellDef(layer, bx, by);
+            if (tm_debug.mode === 'collision' && !occupied) continue;
+            marks.cells++;
+            const r = tilemapCellRect(geom, tx, ty);
+            if (tm_debug.solid && occupied) {
+                rect(r, TM_DEBUG_COLORS.solid + '66');
+                marks.solids++;
+                if (marks.solidCells.length < tm_debug.cap) marks.solidCells.push([tx, ty]);
+            }
+            if (tm_debug.partial) {
+                const def = cellDef(layer, bx, by);
+                if (def && def.shape && !def.shape.full) {
+                    rect({ x: r.x + 1, y: r.y + 1, w: r.w - 2, h: r.h - 2 },
+                         TM_DEBUG_COLORS.partial + '80');
+                    marks.partial++;
+                }
+            }
+            if (tm_debug.occluders && occluderRectsAt(layer, bx, by)) {
+                rect({ x: r.x + 2, y: r.y + 2, w: r.w - 4, h: r.h - 4 },
+                     TM_DEBUG_COLORS.occluder + '99');
+                marks.occluders++;
+            }
+        }
+        if (marks.capped) break;
+    }
+
+    // --- клетка под курсором ------------------------------------------------
+    if (tm_debug.cursor) {
+        const c = tilemapDebugCursor(geom);
+        if (c && c.inMap) {
+            const r = tilemapCellRect(geom, c.tx, c.ty);
+            rect(r, TM_DEBUG_COLORS.cursor + '40');
+            const def = cellDef(layer, c.tx - ox, c.ty - oy);
+            marks.cursor = {
+                tx: c.tx, ty: c.ty,
+                screen: c.screen, world: c.world,
+                index: c.index,
+                inMap: true,
+                occupied: !!def,
+                id: (layer.data[c.index] | 0),
+            };
+            if (tm_debug.text) {
+                const label = `клетка ${c.tx},${c.ty}  idx ${c.index}  id ${marks.cursor.id}  `
+                    + (marks.cursor.occupied ? 'занята' : 'свободна');
+                d.text(label, { x: r.x, y: r.y - 4 }, TM_DEBUG_COLORS.text, 13);
+                marks.primitives.texts++;
+            }
+        } else if (c) {
+            // Курсор вне карты: координаты известны, занятости нет — показываем
+            // только то, что известно, и не выдумываем клетку.
+            marks.cursor = {
+                tx: c.tx, ty: c.ty, screen: c.screen, world: c.world,
+                index: -1, inMap: false, occupied: null, id: null,
+            };
+            if (tm_debug.text) {
+                d.text(`вне карты  ${c.tx},${c.ty}`,
+                       { x: c.world.x, y: c.world.y }, TM_DEBUG_COLORS.text, 13);
+                marks.primitives.texts++;
+            }
+        }
+    }
+
+    // --- строка состояния оверлея ------------------------------------------
+    if (tm_debug.text) {
+        const geom_label = `#${marks.map}  слой ${st.active}  режим ${tm_debug.mode}`
+            + `  клетка ${geom.tile}px  origin ${ox},${oy}`
+            + `  видно ${(vis.x1 - vis.x0) + 1}x${(vis.y1 - vis.y0) + 1}`
+            + (marks.capped ? '  (обрезано cap)' : '');
+        const anchor = tilemapCellRect(geom, marks.range.x0, marks.range.y0);
+        d.text(geom_label, { x: anchor.x + 2, y: anchor.y - 6 }, TM_DEBUG_COLORS.text, 13);
+        marks.primitives.texts++;
+    }
+
+    tm_debug.last = marks;
+}
+
+/** Факты оверлея: то же, что нарисовано, плюс состояние переключателей. */
+function tilemapDebugFacts() {
+    const st = tilemapDebugState();
+    let map = null, layer = null, geom = null;
+    if (st) {
+        const l = activeLayer(st);
+        map = tilemapDebugLabel(st);
+        layer = st.active;
+        geom = geomOf(st);
+    }
+    const last = tm_debug.last;
+    return {
+        on: tm_debug.on,
+        mode: tm_debug.mode,
+        flags: TM_DEBUG_FLAGS.reduce((acc, key) => { acc[key] = tm_debug[key]; return acc; }, {}),
+        map,
+        layer,
+        tile: geom ? geom.tile : null,
+        origin: geom ? { x: geom.origin_x | 0, y: geom.origin_y | 0 } : null,
+        cols: geom ? geom.cols : null,
+        rows: geom ? geom.rows : null,
+        cap: tm_debug.cap,
+        // Факты кадра: null — оверлей выключен и кадр не менялся.
+        drawn: last ? {
+            reason: last.reason,
+            range: last.range,
+            cells: last.cells,
+            solids: last.solids,
+            partial: last.partial,
+            occluders: last.occluders,
+            capped: last.capped,
+            solidCells: last.solidCells.map((c) => [c[0], c[1]]),
+            cursor: last.cursor,
+            primitives: last.primitives,
+        } : null,
+    };
+}
 
 export function installTilemap($) {
     // Дополняем объявление тега, не трогая поля из core.js (body, w, h, src, tile):
@@ -2690,9 +2964,67 @@ export function installTilemap($) {
             return w;
         },
 
+        /**
+         * §35. Отладочный оверлей TileMap: сетка клеток, подсветка твёрдых
+         * клеток (та же клеточная занятость, что у `solidAt`), частичные
+         * формы, occluder'ы и координаты клетки под курсором. По умолчанию
+         * ВЫКЛЮЧЕН и кадр не меняет.
+         *
+         * ```js
+         * $.tilemap.debug(true);                          // вся сетка + твёрдые
+         * $.tilemap.debug({ map: '#level', mode: 'collision' });  // только коллизии
+         * $.tilemap.debug({ partial: true, occluders: true });
+         * $.tilemap.debug(false);                         // выключить
+         * const facts = $.tilemap.debug();                // что нарисовано
+         * ```
+         *
+         * Примитивы рисуются через `$.debug.draw.*` в мировых координатах —
+         * тайлмап-рендер при этом не дублируется. В фактах — только то, что
+         * карта знает: нет клетки под курсором — `cursor: null`.
+         */
+        debug(opts) {
+            if (opts === undefined) return tilemapDebugFacts();
+            if (opts === false || opts === null) {
+                tm_debug.on = false;
+                tm_debug.last = null;
+                return tilemapDebugFacts();
+            }
+            if (opts === true) {
+                tm_debug.on = true;
+                return tilemapDebugFacts();
+            }
+            if (typeof opts === 'object') {
+                if (opts.on !== undefined) tm_debug.on = opts.on !== false;
+                if (opts.map !== undefined) {
+                    tm_debug.map = opts.map === null ? null : opts.map;
+                    if (tm_debug.map !== null && !resolveTm(tm_debug.map)) {
+                        ctx.log('$.tilemap.debug: карта не найдена — оверлей покажет активную');
+                    }
+                }
+                if (opts.mode !== undefined) {
+                    const mode = String(opts.mode);
+                    if (TM_DEBUG_MODES.indexOf(mode) >= 0) tm_debug.mode = mode;
+                    else ctx.log(`$.tilemap.debug: режим "${mode}" неизвестен; `
+                        + `доступны: ${TM_DEBUG_MODES.join(', ')} — режим не изменён`);
+                }
+                for (const key of TM_DEBUG_FLAGS) {
+                    if (opts[key] !== undefined) tm_debug[key] = opts[key] !== false;
+                }
+                if (opts.cap !== undefined) {
+                    const cap = Math.round(Number(opts.cap));
+                    if (Number.isFinite(cap) && cap > 0) tm_debug.cap = cap;
+                    else ctx.log('$.tilemap.debug: cap — положительное число');
+                }
+                if (!tm_debug.on) tm_debug.last = null;
+                return tilemapDebugFacts();
+            }
+            ctx.log('$.tilemap.debug: ожидается true/false или { on, map, mode, grid, solid, '
+                + 'partial, occluders, cursor, text, cap }');
+            return tilemapDebugFacts();
+        },
+
         /** Активный слой карты: $.tilemap.layer('#map', 1). */
-        layer(tm, index) {
-            const st = resolveTm(tm);
+        layer(tm, index) {            const st = resolveTm(tm);
             if (!st) return null;
             if (index === undefined) return st.active;
             if (st.layers[index]) st.active = index;
@@ -3037,7 +3369,12 @@ export function tickTilemap(dt) {
     // (§5, P2 отчёта). Живые состояния держим отдельно: карта, удалённая до
     // первого tick, обязана освободить ресурсы.
     const maps = nodesByTag('tilemap');
-    if (maps.length === 0 && STATES.size === 0) return;
+    if (maps.length === 0 && STATES.size === 0) {
+        // §35: оверлею нечего показывать — и он это фиксирует, а не рисует
+        // «последнее известное».
+        if (tm_debug.on) tm_debug.last = tilemapDebugEmpty('no_map');
+        return;
+    }
 
     const stale = [];
     for (let i = 0; i < maps.length; i++) ensureTilemap(maps[i]);
@@ -3049,6 +3386,10 @@ export function tickTilemap(dt) {
     // Узлы, удалённые до первого tick, снимаем здесь (destroy() не всегда
     // успевает вызвать слушателя, если карта ещё ни разу не строилась).
     for (const node of stale) releaseTilemap(node);
+
+    // §35: оверлей — последним: он читает уже пересобранное состояние карты.
+    if (tm_debug.on) drawTilemapDebug();
+    else tm_debug.last = null;
 }
 
 export { STATES as tilemapStates, layerFrames as tilemapLayerFrames };

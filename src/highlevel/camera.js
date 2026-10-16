@@ -97,6 +97,54 @@ function wrapAngle(a) {
     return a;
 }
 
+// ---------------------------------------------------------------------------
+// §34. Отладочный оверлей камеры: ЧТО показывать.
+//
+// Состояние живёт здесь, а рисует его сама камера в конце _tick() — в фазе
+// обновления кадра, до сборки батча. Рисовать «где-то ещё» нельзя: $.gfx.draw
+// чистит очередь примитивов каждый кадр, поэтому оверлей обязан выпускать
+// примитивы в том же кадре, который увидит игрок.
+//
+// По умолчанию всё выключено: у выключенного оверлея цена ноль, и кадр он не
+// меняет (проверяется скриншотом до/после в tests/agent/camera_debug_test.py).
+// ---------------------------------------------------------------------------
+const CAM_DEBUG_FLAGS = ['limits', 'deadzone', 'target', 'lookahead', 'viewport', 'zones', 'text'];
+
+const cam_debug = {
+    on: false,
+    limits: true,      // рамка $.camera.limits()
+    deadzone: true,    // рамка мёртвой зоны
+    target: true,      // крест цели и линия от камеры к ней
+    lookahead: true,   // вектор выноса
+    viewport: false,   // рамка видимого прямоугольника мира
+    zones: true,       // границы активных зон из $.camera.zone()
+    text: true,        // числовая строка (зум, сглаживание, тряска, вынос)
+    last: null,        // факты последнего нарисованного кадра
+};
+
+const CAM_DEBUG_COLORS = {
+    limits: '#57d3ff',
+    deadzone: '#ffd166',
+    target: '#ff5a4a',
+    lead: '#ff9f43',
+    viewport: '#8fd1ff',
+    zone: '#b07cff',
+    text: '#d8e2ee',
+};
+
+/** Примитивы оверлея: только через $.debug.draw (мировые координаты). */
+function cameraDebugDraw() {
+    const d = ctx && ctx.debug;
+    return d && d.draw ? d.draw : null;
+}
+
+/** Число для подписи: без хвостов и без выдуманных знаков. */
+function debugNum(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '—';
+    return String(Math.round(n * 100) / 100);
+}
+
 /**
  * Параметры нативного вида из состояния камеры (чистая функция, тестируется
  * без движка). Зум в Re2D сужает угол обзора, а не масштабирует кадр: при
@@ -969,6 +1017,41 @@ export function installCamera($, viewports) {
             return camera;
         },
 
+        /**
+         * §34. Отладочный оверлей камеры: мёртвая зона, границы, цель,
+         * вынос, текущий зум и якорь. По умолчанию ВЫКЛЮЧЕН — включённый
+         * оверлей рисует примитивы поверх кадра.
+         *
+         * ```js
+         * $.camera.debug(true);                    // всё, кроме рамки вида
+         * $.camera.debug({ viewport: true });      // добавить рамку вида
+         * $.camera.debug(false);                   // выключить
+         * const facts = $.camera.debug();          // факты последнего кадра
+         * ```
+         *
+         * Без аргументов возвращает ФАКТЫ камеры (и что именно нарисовано),
+         * а не саму камеру: по ним панель DevTools и тест сверяют оверлей с
+         * `$.camera.limits()` / `$.camera.deadzone()` / `$.camera.control()`.
+         * Ничего неизвестного оверлей не рисует: нет границ — нет рамки.
+         */
+        debug(opts) {
+            if (opts === undefined) return camDebugFacts();
+            if (opts === false || opts === null) {
+                cam_debug.on = false;
+            } else if (opts === true) {
+                cam_debug.on = true;
+            } else if (typeof opts === 'object') {
+                if (opts.on !== undefined) cam_debug.on = opts.on !== false;
+                for (const key of CAM_DEBUG_FLAGS) {
+                    if (opts[key] !== undefined) cam_debug[key] = opts[key] !== false;
+                }
+            } else {
+                ctx.log('$.camera.debug: ожидается true/false или { on, limits, deadzone, target, lookahead, viewport, zones, text }');
+            }
+            if (!cam_debug.on) cam_debug.last = null;
+            return camDebugFacts();
+        },
+
         worldToScreen(p) {
             const pt = toPoint(p);
             if (cam.kind === KIND_RE2D) return re2dWorldToScreen(pt, p);
@@ -1095,10 +1178,176 @@ export function installCamera($, viewports) {
                 cam.shake_amp = 0;
             }
             clampToLimits();
+            if (cam_debug.on) drawCameraDebug();
+            else cam_debug.last = null;
         },
 
         _state: cam,
     };
+
+    // -----------------------------------------------------------------------
+    // §34. Рисование оверлея и факты о нём.
+    //
+    // Факты — тот же источник, что и картинка: и то и другое считается из
+    // cam/зоны здесь, поэтому «нарисовано» и «показано панели» не могут
+    // разойтись. Всё, чего камера не знает (границ нет, цели нет), в фактах
+    // стоит null и в кадр не попадает.
+    // -----------------------------------------------------------------------
+
+    /** Ярлык цели: селектор как есть, узел — по стабильному nid. */
+    function targetLabel() {
+        if (cam.target === null || cam.target === undefined) return null;
+        if (typeof cam.target === 'string') return cam.target;
+        if (typeof cam.target === 'number') return 'nid' + cam.target;
+        const node = resolveTarget(cam.target);
+        return node ? 'nid' + node.nid : null;
+    }
+
+    /** Активные зоны и аренды с границами, которые у них реально есть. */
+    function controlAreas() {
+        const ctl = zones.describe();
+        return ctl.zones.concat(ctl.leases).map((row) => {
+            const info = row.kind === 'zone' ? zones.info(row.name) : null;
+            return {
+                id: row.id, name: row.name, owner: row.owner,
+                priority: row.priority, kind: row.kind,
+                bounds: info && info.bounds ? {
+                    x: info.bounds.x, y: info.bounds.y, w: info.bounds.w, h: info.bounds.h,
+                } : null,
+            };
+        });
+    }
+
+    /** Факты камеры для панели/теста: значения, а не ссылки на узлы. */
+    function camDebugFacts() {
+        const node = cam.target ? resolveTarget(cam.target) : null;
+        return {
+            on: cam_debug.on,
+            flags: CAM_DEBUG_FLAGS.reduce((acc, key) => { acc[key] = cam_debug[key]; return acc; }, {}),
+            kind: cam.kind,
+            target: targetLabel(),
+            targetPos: node ? { x: node.x, y: node.y } : null,
+            actual: { x: cam.x, y: cam.y },
+            desired: node
+                ? { x: node.x + cam.offset.x + cam.lead_x, y: node.y + cam.offset.y + cam.lead_y }
+                : null,
+            offset: { x: cam.offset.x, y: cam.offset.y },
+            lookahead: {
+                x: cam.lookahead, y: cam.lookahead_y,
+                leadX: cam.lead_x, leadY: cam.lead_y, smooth: cam.lookahead_smooth,
+            },
+            smooth: cam.smooth,
+            zoom: cam.zoom,
+            rotation: cam.rotation,
+            shake: { x: cam.shake_x, y: cam.shake_y },
+            deadzone: cam.deadzone ? { w: cam.deadzone.w, h: cam.deadzone.h } : null,
+            limits: cam.limits
+                ? { x: cam.limits.x, y: cam.limits.y, w: cam.limits.w, h: cam.limits.h }
+                : null,
+            viewport: camera.viewport(),
+            areas: controlAreas(),
+            active: zones.describe().active,
+            // Что именно выпущено в кадр: null — оверлей выключен либо
+            // рисовать нечем ($.debug.draw недоступен).
+            drawn: cam_debug.last ? Object.assign({}, cam_debug.last) : null,
+        };
+    }
+
+    /**
+     * Оверлей кадра. Рисуем ровно те факты, что перечислены в §34: границы,
+     * мёртвую зону, цель/вынос, при желании — рамку вида и активные зоны.
+     * RE2D-камера сюда не попадает: у неё нет ни мёртвой зоны, ни границ
+     * 2D-вида, и рисовать «по аналогии» значило бы выдумывать.
+     *
+     * Рамки — четырьмя отрезками, а не `rect`: `$.debug.draw.rect` заливает
+     * прямоугольник, и залитые границы камеры закрыли бы весь кадр.
+     */
+    function drawCameraDebug() {
+        const d = cameraDebugDraw();
+        if (!d) { cam_debug.last = null; return; }
+        const marks = { rects: 0, lines: 0, texts: 0, reason: null, boxes: [] };
+        if (cam.kind !== KIND_2D) {
+            marks.reason = 're2d';
+            cam_debug.last = marks;
+            return;
+        }
+        const line = (a, b, color, width) => { d.line(a, b, color, width); marks.lines++; };
+        /** Рамка прямоугольника: 4 отрезка, чтобы не заливать кадр. */
+        const box = (x0, y0, x1, y1, color, width) => {
+            const a = { x: x0, y: y0 }, b = { x: x1, y: y1 };
+            const c = { x: x1, y: y0 }, e = { x: x0, y: y1 };
+            line(a, c, color, width); line(c, b, color, width);
+            line(b, e, color, width); line(e, a, color, width);
+            marks.rects++;
+            marks.boxes.push([x0, y0, x1, y1]);
+        };
+        const node = cam.target ? resolveTarget(cam.target) : null;
+
+        if (cam_debug.limits && cam.limits) {
+            box(cam.limits.x, cam.limits.y, cam.limits.x + cam.limits.w, cam.limits.y + cam.limits.h,
+                CAM_DEBUG_COLORS.limits, 2);
+        }
+        if (cam_debug.viewport) {
+            const v = camera.viewport();
+            box(v.x, v.y, v.x + v.w, v.y + v.h, CAM_DEBUG_COLORS.viewport, 1);
+        }
+        if (cam_debug.deadzone && cam.deadzone) {
+            const hw = cam.deadzone.w / 2, hh = cam.deadzone.h / 2;
+            box(cam.x - hw, cam.y - hh, cam.x + hw, cam.y + hh, CAM_DEBUG_COLORS.deadzone, 2);
+        }
+        // Границы активных зон: только у тех, чьи границы объявлены данными.
+        if (cam_debug.zones) {
+            for (const area of controlAreas()) {
+                if (!area.bounds) continue;
+                box(area.bounds.x, area.bounds.y,
+                    area.bounds.x + area.bounds.w, area.bounds.y + area.bounds.h,
+                    CAM_DEBUG_COLORS.zone, 2);
+            }
+        }
+        if (cam_debug.target && node) {
+            line({ x: node.x - 8, y: node.y }, { x: node.x + 8, y: node.y }, CAM_DEBUG_COLORS.target, 2);
+            line({ x: node.x, y: node.y - 8 }, { x: node.x, y: node.y + 8 }, CAM_DEBUG_COLORS.target, 2);
+            // Где камера на самом деле и куда её тянет цель (с выносом).
+            line({ x: cam.x, y: cam.y }, { x: node.x, y: node.y }, CAM_DEBUG_COLORS.target, 1);
+            if (cam_debug.lookahead) {
+                line({ x: node.x, y: node.y },
+                     { x: node.x + cam.offset.x + cam.lead_x, y: node.y + cam.offset.y + cam.lead_y },
+                     CAM_DEBUG_COLORS.lead, 2);
+            }
+        }
+        if (cam_debug.text) {
+            const lines = [
+                `камера ${debugNum(cam.x)},${debugNum(cam.y)}  зум ${debugNum(cam.zoom)}`
+                    + `  сглаживание ${debugNum(cam.smooth)}`,
+            ];
+            if (cam.limits) {
+                lines.push(`границы ${debugNum(cam.limits.x)},${debugNum(cam.limits.y)}`
+                    + ` ${debugNum(cam.limits.w)}x${debugNum(cam.limits.h)}`);
+            }
+            if (cam.deadzone) {
+                lines.push(`мёртвая зона ${debugNum(cam.deadzone.w)}x${debugNum(cam.deadzone.h)}`);
+            }
+            if (cam.lookahead > 0 || cam.lookahead_y > 0) {
+                lines.push(`вынос ${debugNum(cam.lead_x)},${debugNum(cam.lead_y)}`
+                    + ` (макс ${debugNum(cam.lookahead)},${debugNum(cam.lookahead_y)})`);
+            }
+            if (cam.shake_x || cam.shake_y) {
+                lines.push(`тряска ${debugNum(cam.shake_x)},${debugNum(cam.shake_y)}`);
+            }
+            if (targetLabel()) lines.push(`цель ${targetLabel()}`);
+            // Якорь подписи — угол границ (если они есть), иначе центр вида:
+            // подпись не уезжает за кадр вместе с целью.
+            const anchor = cam.limits
+                ? { x: cam.limits.x + 6, y: cam.limits.y + 18 }
+                : { x: cam.x - engine.width / (2 * cam.zoom) + 6,
+                    y: cam.y - engine.height / (2 * cam.zoom) + 18 };
+            for (let i = 0; i < lines.length; i++) {
+                d.text(lines[i], { x: anchor.x, y: anchor.y + i * 16 }, CAM_DEBUG_COLORS.text, 13);
+                marks.texts++;
+            }
+        }
+        cam_debug.last = marks;
+    }
 
     ctx.camera = camera;
     return camera;

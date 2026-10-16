@@ -38,6 +38,7 @@ const GRAPH_BARS = 48;        // столбцов в графике кадра
 const HITCH_ROWS = 8;          // сколько захватов §18 видно в списке
 const EVENTS_ROWS = 14;        // сколько записей $.trace видно на вкладке
 const MEM_SAMPLES = 60;        // окно замеров счётчиков для поиска роста
+const LEAK_RUN = 5;            // сколько замеров подряд считать ростом
 const CONSOLE_HISTORY = 8;     // строк истории консоли
 const CONSOLE_LOG = 12;        // строк лога консоли
 const GRAPH_H = 56;           // высота области графика, px
@@ -1846,7 +1847,10 @@ export function installDevTools($) {
     // --- §26: рендер --------------------------------------------------------
 
     function renderData() {
-        const info = call(() => engine.renderInfo(), null);
+        // Без движка биндинг может вернуть не объект: панель обязана честно
+        // сказать «нет данных», а не показывать нули.
+        const info_raw = call(() => engine.renderInfo(), null);
+        const info = info_raw && typeof info_raw === 'object' ? info_raw : null;
         const textures = call(() => $.debug.textures(), []) || [];
         const limits = call(() => $.debug.limits(), {}) || {};
         const light = call(() => ($.gfx && $.gfx.light && $.gfx.light.stats ? $.gfx.light.stats() : null), null);
@@ -2191,26 +2195,31 @@ export function installDevTools($) {
         const limit_keys = Object.keys(limits);
         const limits_text = limit_keys.map((k) => `${k}: ${limits[k]}`).join(' | ');
 
-        // Подозрение на утечку: счётчик строго рос в каждом замере окна.
+        // Подозрение на утечку: счётчик рос в каждом из последних LEAK_RUN
+        // замеров. Ждать роста всё окно (60 замеров) бессмысленно: рост может
+        // начаться посреди окна, и «утечка» тогда не находилась бы вовсе.
         const leaks = [];
-        if (samples.length >= 5) {
+        if (samples.length >= LEAK_RUN + 1) {
             for (const k of counter_keys) {
                 let grew = true;
-                for (let i = 1; i < samples.length; i++) {
+                for (let i = samples.length - LEAK_RUN; i < samples.length; i++) {
                     const a = samples[i - 1].counters[k];
                     const b = samples[i].counters[k];
                     if (!isNum(a) || !isNum(b) || b <= a) { grew = false; break; }
                 }
-                if (grew) leaks.push({ key: k, from: samples[0].counters[k], to: last.counters[k], samples: samples.length });
+                if (grew) {
+                    leaks.push({ key: k, from: samples[samples.length - LEAK_RUN - 1].counters[k],
+                                 to: last.counters[k], samples: LEAK_RUN });
+                }
             }
         }
-        const leak_text = samples.length < 5
-            ? `замеров пока ${samples.length} из 5 — вывод о росте преждевременен`
+        const leak_text = samples.length < LEAK_RUN + 1
+            ? `замеров пока ${samples.length} из ${LEAK_RUN + 1} — вывод о росте преждевременен`
             : (leaks.length
-                ? leaks.map((l) => `растёт: ${l.key} ${l.from} → ${l.to} за ${l.samples} замеров`).join('\n')
-                : 'подозрений на утечку нет: ни один счётчик не растёт монотонно');
+                ? leaks.map((l) => `растёт последние ${l.samples} замеров: ${l.key} ${l.from} → ${l.to}`).join('\n')
+                : `подозрений на утечку нет: ни один счётчик не растёт ${LEAK_RUN} замеров подряд`);
         return {
-            counters, limits, samples: samples.length,
+            counters, limits, samples: samples.length, series: samples.slice(),
             window_frames: first && last ? last.frame - first.frame : 0,
             deltas: counter_keys.reduce((acc, k) => {
                 const was = base && isNum(base[k]) ? base[k] : null;
@@ -2365,7 +2374,9 @@ export function installDevTools($) {
     function timeControl(what, value) {
         if (what === 'hitStop') { call(() => $.time.hitStop(Number(value) || 0), null); }
         else if (what === 'freeze') { call(() => $.time.freeze(Number(value) || 0), null); }
-        else if (what === 'slow') { call(() => $.time.slow(Number(value) || 0.5, 1000), null); }
+        // Внимание: у $.time.slow(ms, factor) СНАЧАЛА миллисекунды, потом
+        // множитель (проверено на живом движке) — раньше аргументы путались.
+        else if (what === 'slow') { call(() => $.time.slow(1000, Number(value) || 0.5), null); }
         else if (what === 'reset') {
             runtime.step_left = 0;
             call(() => $.time.unfreeze(), null);
@@ -2728,6 +2739,8 @@ export function installDevTools($) {
                     audioBusControl(what, name, !(now === true));
                 });
             }
+            // §29: базовая линия счётчиков для дельт и поиска роста.
+            engine.ui.on(runtime.doc, 'rt-mem-baseline', 'click', () => { memBaseline(); });
             // §31: консоль — выполнить строку, очистить лог, повторить из истории.
             engine.ui.on(runtime.doc, 'rt-console-run', 'click', () => {
                 consoleRun(String(uiValue(runtime.doc, 'rt-console-input') === null
@@ -2947,7 +2960,8 @@ export function installDevTools($) {
         memory() {
             const m = memoryData();
             return { counters: m.counters, limits: m.limits, deltas: m.deltas,
-                     samples: m.samples, window_frames: m.window_frames, leaks: m.leaks, text: m.text };
+                     samples: m.samples, series: m.series, window_frames: m.window_frames,
+                     leaks: m.leaks, text: m.text };
         },
         memoryBaseline: memBaseline,
 
