@@ -185,6 +185,33 @@ def diff_stats(a_img, b_img):
 
 
 # ---------------------------------------------------------------------------
+# Журнал движка приходит АСИНХРОННО
+# ---------------------------------------------------------------------------
+def wait_log(a, needle, attempts=25, step=1):
+    """Дождаться строки в журнале движка с пределом, а не читать один раз.
+
+    stderr движка приезжает отдельным потоком и к моменту ответа на `eval` может
+    ещё не лежать в буфере клиента: на нагруженной машине строка опаздывает, и
+    однократное чтение даёт «сообщения нет» (наблюдение task-64: 2 провала из 5
+    при load ~3.6, при этом отдельно тест зелёный). Ждём до `attempts` шагов по
+    `step` кадров, каждый раз перечитывая буфер; возвращаем текст журнала.
+    """
+    text = a.stderr_text()
+    for _ in range(max(0, attempts)):
+        if needle in text:
+            return text
+        a.step(step)
+        text = a.stderr_text()
+    return text
+
+
+def log_tail(text, lines=6):
+    """Хвост журнала для диагностики: что было вместо ожидаемой строки."""
+    rows = [line.strip() for line in text.splitlines() if line.strip()]
+    return " | ".join(rows[-lines:])
+
+
+# ---------------------------------------------------------------------------
 # Реестр режимов: список берём у движка, а не из головы
 # ---------------------------------------------------------------------------
 def engine_modes(a):
@@ -194,13 +221,15 @@ def engine_modes(a):
     check(kept == "alpha",
           "неизвестный режим не меняет текущий (%s → %s)" % (UNKNOWN_MODE, kept))
 
+    log = wait_log(a, "доступны:")
     listed = None
     source = ""
-    for line in a.stderr_text().splitlines():
+    for line in log.splitlines():
         if "доступны:" in line:
             listed = [m.strip() for m in line.split("доступны:", 1)[1].split(",") if m.strip()]
             source = line.strip()
-    check(bool(listed), "движок сам назвал доступные режимы: %s" % (source or "сообщения нет"))
+    check(bool(listed), "движок сам назвал доступные режимы: %s"
+          % (source or "сообщения нет; хвост журнала: %s" % log_tail(log)))
     if not listed:
         return []
 
@@ -215,7 +244,7 @@ def engine_modes(a):
             roundtrip.append("%s → %s" % (mode, got))
     a.eval("$.blend('alpha'); 'ok'")
     check(not roundtrip, "каждый режим реестра принимается движком (%s)" % (roundtrip or "все"))
-    check(UNKNOWN_MODE in source and UNKNOWN_MODE in a.stderr_text(),
+    check(UNKNOWN_MODE in source and UNKNOWN_MODE in log,
           "диагностика назвала именно неизвестный режим (%s)" % UNKNOWN_MODE)
     return listed
 
@@ -356,8 +385,10 @@ def run(write_golden):
         check(stats is not None and stats[0] <= (px["w"] * px["h"]) * MAX_DIFF_SHARE,
               "кадр с неизвестным режимом совпал с alpha (различается %s px)"
               % (stats[0] if stats else "?"))
-        check(UNKNOWN_MODE in a.stderr_text(),
-              "движок записал в журнал, что режим %s неизвестен" % UNKNOWN_MODE)
+        log = wait_log(a, UNKNOWN_MODE)
+        check(UNKNOWN_MODE in log,
+              "движок записал в журнал, что режим %s неизвестен (хвост: %s)"
+              % (UNKNOWN_MODE, log_tail(log)))
 
         a.eval("$.fixture.mode('alpha'); 'ok'")
 
