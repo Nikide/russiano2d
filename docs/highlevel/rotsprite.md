@@ -23,7 +23,7 @@
 ошибка. Вид синтеза v3 задаёт сам JSON (`projection.raster/light/detail/eye/window/
 cull/motionLod`), а не вызовы из игры; нативный вход —
 `engine.rotSpriteConfig(handle, raster, light24, detail, view)` и
-`engine.rotSpritePrepare(handle)` ([internal/NATIVE.md](../internal/NATIVE.md)).
+`engine.rotSpritePrepare(handle)` (`internal/NATIVE.md`).
 
 | Старое имя | Новое имя |
 |---|---|

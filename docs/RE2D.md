@@ -46,6 +46,6 @@ flowchart LR
 | Перенести старую room/World игру | [Migration](re2d/RE2D_MIGRATION.md) |
 | Создать PNG/rig/animation персонажа | [Re2DSprite guide](RE2DSPRITE_GUIDE.md), [JSON](RE2DSPRITE_JSON.md), [математика](RE2DSPRITE_MATH.md) |
 | Измерить стоимость кадра | [Performance](RE2D_WORLD_PERF.md) |
-| Проверить исходные требования | [Document acceptance audit](re2d/RE2D_DOCUMENT_ACCEPTANCE_AUDIT.md) |
+| Проверить исходные требования | Document acceptance audit |
 
 Рабочие образцы: `demos/re2d_world_renderer_lab/acceptance` и `demos/re2d_dust2`. Dust2 — оригинальная Re2D-интерпретация маршрутов, а не точная геометрия Valve или законченная Counter-Strike игра. Данные и код являются источником истины, SDK RmlUi показывает и редактирует их.

@@ -24,7 +24,7 @@ $.update(dt => {
 
 Схема движка — **C → `$`**: нативное ядро (текстуры, тела, батчинг, RmlUi, BSP,
 свет) спрятано под `$` и игре не видно — глобального `engine` нет, импортировать
-можно только `'r2d'`. Внутренний справочник ядра — [internal/NATIVE.md](internal/NATIVE.md), как это
+можно только `'r2d'`. Внутренний справочник ядра — `internal/NATIVE.md`, как это
 устроено — [highlevel/native.md](highlevel/native.md).
 
 ---
@@ -203,7 +203,7 @@ $('.enemy').within({ x: 0, y: 0 }, 200)   // цель — точка, узел, 
 `$.debug.queryStats()` (§24).
 
 Предел нативного запроса — 256 тел (`R2D_MAX_QUERY`, §14 в
-[internal/NATIVE.md](internal/NATIVE.md)). Если кандидатов больше, выборка обрезана: признак виден в
+`internal/NATIVE.md`). Если кандидатов больше, выборка обрезана: признак виден в
 `$.debug.queryStats().truncated`. Для очень плотных сцен это значит, что
 `within()` — про «кто рядом», а не про полный перебор мира.
 
@@ -328,7 +328,7 @@ $('#weapon').worldTransform();     // → { x, y, angle, sx, sy } с учёто�
   $('#hero').flip(true);                     // сенсор зеркалится вместе с оружием
   ```
 * Проход пересчёта пакетный (`engine.nodes.resolveTransforms`, §39 в
-  [internal/NATIVE.md](internal/NATIVE.md)); в проекте без локальных узлов он
+  `internal/NATIVE.md`); в проекте без локальных узлов он
   выходит на первой строке. Локальные значения можно твинить как поля:
   `.tween({ local_x: 40 }, 500)`.
 
@@ -466,7 +466,7 @@ $.world.bodyAt(x, y, { mask: 0x2 });                  // кто из враго�
 отстаёт. Трение платформы на перенос не влияет.
 
 **Суставы.** `.joint(цель, opts)` возвращает id; `opts` — как в
-[internal/NATIVE.md](internal/NATIVE.md#enginecreatejointopts--enginedestroyjointid), плюс сокращения:
+`internal/NATIVE.md`, плюс сокращения:
 `a`/`b` — точки крепления в мировых пикселях. Для `revolute` и `weld` вторая
 точка по умолчанию совпадает с первой (крепление в одну точку), для
 `distance` — берутся центры тел. Уничтожение: `$.world.destroyJoint(id)`,
@@ -1544,7 +1544,7 @@ $.update(() => {
 
 Физика в этой таблице не отдельной подсистемой, а частью ядра: формы тел,
 односторонние платформы, события контакта и суставы описаны в разделе 8 выше
-и в [internal/NATIVE.md](internal/NATIVE.md).
+и в `internal/NATIVE.md`.
 
 ### Свет в стиле Candle (`<light>`, `<lightarea>`, `<fog>`)
 
@@ -1660,7 +1660,7 @@ $.ready(() => {
   `registerNodeRenderer` и общий батч `$.gfx.push`, поэтому лишних draw call'ов
   не появляется.
 * **Аудио-шины** пересчитывают громкость живых каналов через новые
-  `engine.audio.setChannelVolume/setChannelEffect` (см. [internal/NATIVE.md](internal/NATIVE.md)).
+  `engine.audio.setChannelVolume/setChannelEffect` (см. `internal/NATIVE.md`).
 * **Blend-режимы** работают на уровне узла (`.blend('add')`) и кадра
   (`$.blend('add')`); движок сам режет батч на участки с одинаковым режимом,
   так что порядок отрисовки не меняется.
@@ -2061,7 +2061,7 @@ $.ready(() => {
 [screen.md](highlevel/screen.md), [font.md](highlevel/font.md).
 
 Дальше: [AGENT_API.md](AGENT_API.md) — как этим управлять программой,
-[RECIPES](tutorial-platformer.md) и [internal/NATIVE.md](internal/NATIVE.md) — низкий уровень.
+[RECIPES](tutorial-platformer.md) и `internal/NATIVE.md` — низкий уровень.
 
 Re2DSprite v2: [большой PNG, мимика, костюмы и псевдоскелет](RE2DSPRITE_V2.md),
 [API `$`](highlevel/re2dsprite.md). Демо `re2dsprite` — equipment, волосы,

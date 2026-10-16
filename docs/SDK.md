@@ -4,11 +4,11 @@
 архитектура и законы — спецификация «Следующая цель SDK AGENT.md»: она снята с
 текущей документации и удалена из репозитория, текст доступен только в истории
 Git (`git log --diff-filter=D -- "к удалению.md"`, файл удалён после f70762a);
-проверки — [SDK_VERIFICATION.md](SDK_VERIFICATION.md); журнал работы —
-[SDK_HANDOFF.md](../SDK_HANDOFF.md).
+проверки — `SDK_VERIFICATION.md`; журнал работы —
+`SDK_HANDOFF.md`.
 
 Недостающие возможности и критерии их приёмки —
-[SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md).
+`SDK_IMPLEMENTATION_GAPS.md`.
 
 ```text
 GAME = CODE + DATA          SDK = R2D-приложение + инструменты для CODE + DATA
@@ -448,7 +448,7 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 `highlevel_game_path_test.py` и `neon_courier_test.py`. Для автономного текста
 проект явно содержит Open Sans с лицензией.
 
-Полная сверка философии и большого гайдлайна — [SDK_VERIFICATION.md](SDK_VERIFICATION.md).
+Полная сверка философии и большого гайдлайна — `SDK_VERIFICATION.md`.
 
 ## 16. Завершение рабочего процесса (2026-10-09)
 

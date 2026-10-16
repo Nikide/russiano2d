@@ -1,6 +1,6 @@
 # Re2D World: производительность и измерения
 
-Редакция 2026-10-10. Текущий renderer — native C + SDL_GPU. GPU world raster и CPU Re2DSprite pose synthesis — разные части кадра. Исторический отчёт прежнего CPU World сохранён [отдельно](re2d/RE2D_WORLD_CPU_HISTORY.md); он не описывает новый renderer.
+Редакция 2026-10-10. Текущий renderer — native C + SDL_GPU. GPU world raster и CPU Re2DSprite pose synthesis — разные части кадра. Исторический отчёт прежнего CPU World сохранён отдельно; он не описывает новый renderer.
 
 ## Финальный static stress
 
@@ -51,4 +51,4 @@ GPU timing fields — CPU wall/cache construction/submission/fence wait, не ha
 
 ## Что пока не подтверждено
 
-Hosted Linux/Vulkan run, fresh Web/WASM build, arbitrary animated50 actor60FPS и другие hardware/resolutions не подтверждены этим benchmark. CPU/GPU parity и local correctness checks не заменяют platform performance measurements. [Runtime profiler reference](re2d/RE2D_WORLD_RUNTIME.md#диагностика-и-полный-profiler-snapshot), [implementation evidence](re2d/RE2D_RENDERER_IMPLEMENTATION_PLAN.md), [audit](re2d/RE2D_DOCUMENT_ACCEPTANCE_AUDIT.md).
+Hosted Linux/Vulkan run, fresh Web/WASM build, arbitrary animated50 actor60FPS и другие hardware/resolutions не подтверждены этим benchmark. CPU/GPU parity и local correctness checks не заменяют platform performance measurements. [Runtime profiler reference](re2d/RE2D_WORLD_RUNTIME.md#диагностика-и-полный-profiler-snapshot), implementation evidence, audit.

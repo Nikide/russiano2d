@@ -159,7 +159,7 @@ $.ready(() => {
 * **Сначала философия — потом работа.** Агент не пишет в движок, пока не прочитал
   целиком [PHILOSOPHY.md](PHILOSOPHY.md) — конституцию движка. Это всё, что
   требует гейт. Остальные доки ([ARCHITECTURE.md](ARCHITECTURE.md), этот файл,
-  [internal/NATIVE.md](internal/NATIVE.md), [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md),
+  `internal/NATIVE.md`, [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md),
   а при правке `src/highlevel/**` — [highlevel/_CONTRACT.md](highlevel/_CONTRACT.md)
   и страница модуля `docs/highlevel/<имя>.md`) обязательны по правилам выше, но
   запись не блокируют. Гейт делает плагин

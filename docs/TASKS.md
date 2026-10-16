@@ -14,7 +14,7 @@ Re2D World и 3D-инструменты SDK остаются историчес�
 [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) и [highlevel/](highlevel/).
 
 Текущие доработки SDK/Re2D от 2026-10-10, включая Dust2, небо, анимации и
-звук, — [SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md).
+звук, — `SDK_IMPLEMENTATION_GAPS.md`.
 Этот список содержит отдельные критерии приёмки и не изменяет статус
 исторической сверки ниже.
 
@@ -53,7 +53,7 @@ Re2DSprite, GPU-путь SDL_GPU с CPU-эталоном и World audio (HRTF). 
 sweep/полный footprint, прохождение звука через материалы и реверберация.
 SDK генерирует лестницы и ступенчатые slopes; это не новые физические примитивы.
 Границы и очередь — [re2d/RE2D_WORLD_RUNTIME.md](re2d/RE2D_WORLD_RUNTIME.md),
-[SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md); измерения —
+`SDK_IMPLEMENTATION_GAPS.md`; измерения —
 [RE2D_WORLD_PERF.md](RE2D_WORLD_PERF.md).
 
 ## 4. SDK после acceptance фаз 0–7
@@ -68,7 +68,7 @@ source↔Re2D comparison, кисти поверхности, графическ�
 Baker использует dominant rigid ownership; просветы и швы sampling остаются.
 VRM expression запекается по выбору; MToon lighting/rim/outline не переносятся.
 Walk процедурный. Запись атомарна для каждого файла, а не всего asset package.
-Доказательства и визуальные ограничения — [SDK_VERIFICATION.md](SDK_VERIFICATION.md).
+Доказательства и визуальные ограничения — `SDK_VERIFICATION.md`.
 
 ## 5. Поставка и платформы
 
