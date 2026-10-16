@@ -516,6 +516,25 @@ const bg = engine.loadTexture('assets/backdrop.png', { mipmaps: true });
 const [w, h] = engine.textureSize(tex);
 ```
 
+### `engine.textureAverageColor(texture, isSprite?)`
+
+Средний цвет непрозрачных пикселей текстуры (или кадра атласа): считается один
+раз при регистрации текстуры и кешируется, в кадре работы не добавляет. Нужен
+игровому слою для «авто»-цвета излучателя: `.emissive({ color: 'auto' })`
+(`src/highlevel/render.js`) берёт цвет спрайта отсюда.
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `texture` | `number` | — | id текстуры |
+| `isSprite` | `boolean` | `false` | считать по кадру атласа, а не по всей текстуре |
+
+**Возвращает:** `[r, g, b, a]` (0…255) или `null`, если текстуры нет или в ней
+не нашлось непрозрачных пикселей.
+
+```js
+const average = engine.textureAverageColor(sprite, true);   // [r, g, b, a] | null
+```
+
 ### `engine.createSprite(texture, sx, sy, sw, sh)`
 
 Регистрирует прямоугольник внутри текстуры (кадр атласа). UV-координаты

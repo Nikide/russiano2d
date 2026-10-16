@@ -13,61 +13,33 @@
 # Русские алиасы ($.ввод.*, $.камера.*) отдельных строк НЕ требуют: они считаются
 # задокументированными ровно тогда, когда задокументирован английский оригинал,
 # поэтому здесь только английские имена.
+#
+# Закрыто и снято (история, чтобы не искали заново):
+#   * task-26 (debug-overlays): $.devtools/$.alive/$.weapons/$.cutscene/$.camera — 114 имён в доках;
+#   * task-27 (runtime-assets): $.net/$.proc/$.replay — полные перечни в net.md §9.1, proc.md §3.1, replay.md §1.1;
+#     $.net.host_ снят вместе с именем: убрано из публичной поверхности (внутренняя переменная, вызовов не было);
+#   * $.ctx/$.math/$.fn — владелец гейта (task-25).
 
-# --- внутренние биндинги C: не часть $ API, справочник им — docs/internal/ ---
+# --- долг: task-30 (devtools-ui) ---
+$.atlas.clearErrors          # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
+$.audio.getMasterVolume      # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
+$.audio.volumeOf             # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
+$.curve.*                    # debt: 5 имён, страница docs/highlevel/curve.md без полного перечня; в работе (task-30)
+$.easing                     # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
+$.gfx.*                      # debt: 3 имён, страница docs/highlevel/gfx.md без полного перечня; в работе (task-30)
+$.hits.pool                  # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
+$.layers.*                   # debt: 5 имён, страница docs/highlevel/layers.md без полного перечня; в работе (task-30)
+$.physics.*                  # debt: 4 имён, страница docs/highlevel/physics.md без полного перечня; в работе (task-30)
+$.rotSprite.dispose          # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
+$.rotSprite.info             # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
+$.screen.*                   # debt: 6 имён, страница docs/highlevel/screen.md без полного перечня; в работе (task-30)
+$.sound.*                    # debt: 14 имён, страница docs/highlevel/sound.md без полного перечня; в работе (task-30)
+$.tilemap.*                  # debt: 12 имён, страница docs/highlevel/tilemap.md без полного перечня; в работе (task-30)
+$.ui.*                       # debt: 6 имён, страница docs/highlevel/ui.md без полного перечня; в работе (task-30)
+$.window.cursors             # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
+$.window.off                 # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
 
-# --- в работе (task-26, debug-overlays) ---
-
-# --- task-27 (runtime-assets) закрыт: $.net/$.proc/$.replay описаны полностью ---
-# Долг снят: полные перечни имён — в docs/highlevel/net.md (§9.1), proc.md (§3.1),
-# replay.md (§1.1). Строка про $.net.host_ снята вместе с именем: оно удалено из
-# публичной поверхности (внутренняя переменная, вызовов не было).
-
-# --- в работе (задача runtime-core про геймпады) ---
-
-# --- долг, ещё не распределённый между задачами (числа — в отчёте task-25) ---
-$.activation.clear           # debt: не распределён — имя без упоминания в docs/**/*.md
-$.activation.stats           # debt: не распределён — имя без упоминания в docs/**/*.md
-$.agent.frame                # debt: не распределён — имя без упоминания в docs/**/*.md
-$.agent.time                 # debt: не распределён — имя без упоминания в docs/**/*.md
-$.anim.*             # debt: не распределён — 3 имён, страница docs/highlevel/anim.md без полного перечня
-$.atlas.clearErrors          # debt: не распределён — имя без упоминания в docs/**/*.md
-$.audio.getMasterVolume      # debt: не распределён — имя без упоминания в docs/**/*.md
-$.audio.volumeOf             # debt: не распределён — имя без упоминания в docs/**/*.md
-$.barks.*            # debt: не распределён — 5 имён, страница docs/highlevel/barks.md без полного перечня
-$.cels.*             # debt: не распределён — 9 имён, страница docs/highlevel/cels.md без полного перечня
-$.collision.bits             # debt: не распределён — имя без упоминания в docs/**/*.md
-$.collision.of               # debt: не распределён — имя без упоминания в docs/**/*.md
-$.combat.*           # debt: не распределён — 4 имён, страница docs/highlevel/combat.md без полного перечня
-$.curve.*            # debt: не распределён — 5 имён, страница docs/highlevel/curve.md без полного перечня
-$.dialog.*           # debt: не распределён — 8 имён, страница docs/highlevel/dialog.md без полного перечня
-$.easing                     # debt: не распределён — имя без упоминания в docs/**/*.md
-$.gfx.*              # debt: не распределён — 3 имён, страница docs/highlevel/gfx.md без полного перечня
-$.grid.*             # debt: не распределён — 5 имён, страница docs/highlevel/grid.md без полного перечня
-$.hits.pool                  # debt: не распределён — имя без упоминания в docs/**/*.md
-$.i18n.*             # debt: не распределён — 3 имён, страница docs/highlevel/i18n.md без полного перечня
-$.inv.*              # debt: не распределён — 11 имён, страница docs/highlevel/inv.md без полного перечня
-$.items.*            # debt: не распределён — 8 имён, страница docs/highlevel/items.md без полного перечня
-$.layers.*           # debt: не распределён — 5 имён, страница docs/highlevel/layers.md без полного перечня
-$.loading.watch              # debt: не распределён — имя без упоминания в docs/**/*.md
-$.loading.watched            # debt: не распределён — имя без упоминания в docs/**/*.md
-$.nav.*              # debt: не распределён — 6 имён, страница docs/highlevel/nav.md без полного перечня
-$.physics.*          # debt: не распределён — 4 имён, страница docs/highlevel/physics.md без полного перечня
-$.quest.*            # debt: не распределён — 4 имён, страница docs/highlevel/quest.md без полного перечня
-$.raid.*             # debt: не распределён — 11 имён, страница docs/highlevel/raid.md без полного перечня
-$.random.gaussian            # debt: не распределён — имя без упоминания в docs/**/*.md
-$.random.streamNames         # debt: не распределён — имя без упоминания в docs/**/*.md
-$.real2d.*           # debt: не распределён — 5 имён, страница docs/highlevel/real2d.md без полного перечня
-$.rotSprite.dispose          # debt: не распределён — имя без упоминания в docs/**/*.md
-$.rotSprite.info             # debt: не распределён — имя без упоминания в docs/**/*.md
-$.screen.*           # debt: не распределён — 6 имён, страница docs/highlevel/screen.md без полного перечня
-$.sound.*            # debt: не распределён — 14 имён, страница docs/highlevel/sound.md без полного перечня
-$.story.*            # debt: не распределён — 3 имён, страница docs/highlevel/story.md без полного перечня
-$.tilemap.*          # debt: не распределён — 12 имён, страница docs/highlevel/tilemap.md без полного перечня
-$.ui.*               # debt: не распределён — 6 имён, страница docs/highlevel/ui.md без полного перечня
-$.window.cursors             # debt: не распределён — имя без упоминания в docs/**/*.md
-$.window.off                 # debt: не распределён — имя без упоминания в docs/**/*.md
-$.world.*            # debt: не распределён — 11 имён, страница docs/highlevel/world.md без полного перечня
+# --- долг: task-30/task-31 (engine.* — рендерные/прочие) ---
 engine.bodyGeneration        # internal: биндинг C-уровня (engine.bodyGeneration), игры его не зовут; справочник — docs/internal/NATIVE.md
 engine.clearPhysicsErrors    # internal: биндинг C-уровня (engine.clearPhysicsErrors), игры его не зовут; справочник — docs/internal/NATIVE.md
 engine.contactStay           # internal: биндинг C-уровня (engine.contactStay), игры его не зовут; справочник — docs/internal/NATIVE.md
@@ -78,3 +50,30 @@ engine.profileEnabled        # internal: биндинг C-уровня (engine.p
 engine.setContactStay        # internal: биндинг C-уровня (engine.setContactStay), игры его не зовут; справочник — docs/internal/NATIVE.md
 engine.setGravityScale       # internal: биндинг C-уровня (engine.setGravityScale), игры его не зовут; справочник — docs/internal/NATIVE.md
 engine.setSnap               # internal: биндинг C-уровня (engine.setSnap), игры его не зовут; справочник — docs/internal/NATIVE.md
+
+# --- долг: task-31 (debug-overlays) ---
+$.activation.clear           # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
+$.activation.stats           # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
+$.agent.frame                # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
+$.agent.time                 # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
+$.anim.*                     # debt: 3 имён, страница docs/highlevel/anim.md без полного перечня; в работе (task-31)
+$.barks.*                    # debt: 5 имён, страница docs/highlevel/barks.md без полного перечня; в работе (task-31)
+$.cels.*                     # debt: 9 имён, страница docs/highlevel/cels.md без полного перечня; в работе (task-31)
+$.collision.bits             # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
+$.collision.of               # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
+$.combat.*                   # debt: 4 имён, страница docs/highlevel/combat.md без полного перечня; в работе (task-31)
+$.dialog.*                   # debt: 8 имён, страница docs/highlevel/dialog.md без полного перечня; в работе (task-31)
+$.grid.*                     # debt: 5 имён, страница docs/highlevel/grid.md без полного перечня; в работе (task-31)
+$.i18n.*                     # debt: 3 имён, страница docs/highlevel/i18n.md без полного перечня; в работе (task-31)
+$.inv.*                      # debt: 11 имён, страница docs/highlevel/inv.md без полного перечня; в работе (task-31)
+$.items.*                    # debt: 8 имён, страница docs/highlevel/items.md без полного перечня; в работе (task-31)
+$.loading.watch              # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
+$.loading.watched            # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
+$.nav.*                      # debt: 6 имён, страница docs/highlevel/nav.md без полного перечня; в работе (task-31)
+$.quest.*                    # debt: 4 имён, страница docs/highlevel/quest.md без полного перечня; в работе (task-31)
+$.raid.*                     # debt: 11 имён, страница docs/highlevel/raid.md без полного перечня; в работе (task-31)
+$.random.gaussian            # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
+$.random.streamNames         # debt: имя без упоминания в docs/**/*.md; в работе (task-31)
+$.real2d.*                   # debt: 5 имён, страница docs/highlevel/real2d.md без полного перечня; в работе (task-31)
+$.story.*                    # debt: 3 имён, страница docs/highlevel/story.md без полного перечня; в работе (task-31)
+$.world.*                    # debt: 11 имён, страница docs/highlevel/world.md без полного перечня; в работе (task-31)

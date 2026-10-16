@@ -19,7 +19,12 @@ $.agent.snapshot
 $.agent.time
 $.aliasTag
 $.alive
+$.alive.BREAK_STRESS = 0.72
+$.alive.PULSE_MAX = 200
+$.alive.PULSE_REST = 62
+$.alive.PULSE_TUNNEL = 140
 $.alive.TRAIT_DEFAULTS
+$.alive.TRAIT_NAMES = ["aggression","caution","curiosity","greed","jumpiness","patience","morale","skill","sociability","honesty","empathy","fear","madness","talkativeness"]
 $.alive.TYPE_BIAS
 $.alive.attach
 $.alive.breakKinds
@@ -623,6 +628,7 @@ $.fn.dropThrough
 $.fn.effectiveAlpha
 $.fn.effectiveDepth
 $.fn.effectivelyVisible
+$.fn.emissive
 $.fn.emit
 $.fn.emitting
 $.fn.every
@@ -1024,6 +1030,7 @@ $.gfx.stats
 $.gfx.text
 $.gfx.textureSize
 $.gfx.userShaders
+$.gfx.white = 0
 $.gfx.worldZoom
 $.grid
 $.grid.at
@@ -1191,6 +1198,8 @@ $.items.loadFile
 $.items.remove
 $.items.restore
 $.kinds
+$.kinds.Re2D = "re2d"
+$.kinds.TwoD = "2d"
 $.kinds.has
 $.kinds.list
 $.kinds.normalize
@@ -1904,6 +1913,7 @@ $.test.reset
 $.test.results
 $.test.truthy
 $.tilemap
+$.tilemap.BLOB47_LAYOUT = [0,1,2,3,19,4,5,6,7,23,38,39,55,8,9,10,11,27,12,13,14,15,31,46,47,63,76,77,78,79,95,110,111,127,137,139,155,141,143,159,175,191,205,207,223,239,255]
 $.tilemap.applyPadding
 $.tilemap.asciiToData
 $.tilemap.autotileMask
@@ -2034,6 +2044,7 @@ $.trace.clear
 $.trace.dropped
 $.trace.hit
 $.trace.hits
+$.trace.limit = 256
 $.trace.list
 $.trace.note
 $.trace.on
@@ -2443,6 +2454,7 @@ $.графика.stats
 $.графика.text
 $.графика.textureSize
 $.графика.userShaders
+$.графика.white = 0
 $.графика.worldZoom
 $.звук
 $.звук.activeChannels
@@ -2984,6 +2996,7 @@ engine.submitSprites
 engine.submitTriangles
 engine.textInput
 engine.textInputArea
+engine.textureAverageColor
 engine.textureFromPixels
 engine.textureSize
 engine.timeScale

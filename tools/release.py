@@ -163,12 +163,36 @@ def check_version(value: str) -> bool:
     return bool(re.fullmatch(r"\d+\.\d+\.\d+", value or ""))
 
 
-def bump_version(current: str) -> str:
-    """Поднять патч-версию на единицу: 0.1.0 → 0.1.1."""
+def bump_version(current: str, kind: str = "patch") -> str:
+    """Следующая версия от ``current``.
+
+    ``kind`` — что именно поднимаем:
+
+    * ``patch`` (по умолчанию) — 0.1.0 → 0.1.1;
+    * ``minor`` — 0.1.5 → 0.2.0;
+    * ``major`` — 0.1.5 → 1.0.0;
+    * явная версия ``X.Y.Z`` — берётся как есть (например ``1.2.0``), но
+      обязательно БОЛЬШЕ текущей: понижать версию молча нельзя.
+    """
     if not check_version(current):
         raise SystemExit("ошибка: версия %r не похожа на x.y.z" % current)
-    major, minor, patch = current.split(".")
-    return "%s.%s.%d" % (major, minor, int(patch) + 1)
+    major, minor, patch = (int(part) for part in current.split("."))
+    kind = (kind or "patch").strip()
+    if check_version(kind):
+        target = tuple(int(part) for part in kind.split("."))
+        if target <= (major, minor, patch):
+            raise SystemExit(
+                "ошибка: версия %s не больше текущей %s — понижение версии "
+                "делается вручную и осознанно" % (kind, current))
+        return "%d.%d.%d" % target
+    if kind == "patch":
+        return "%d.%d.%d" % (major, minor, patch + 1)
+    if kind == "minor":
+        return "%d.%d.0" % (major, minor + 1)
+    if kind == "major":
+        return "%d.0.0" % (major + 1)
+    raise SystemExit(
+        "ошибка: неизвестный вид подъёма версии %r (patch|minor|major|X.Y.Z)" % kind)
 
 
 def run_bump(options: "Options") -> int:
@@ -179,7 +203,8 @@ def run_bump(options: "Options") -> int:
     stderr, чтобы не попасть в подстановку.
     """
     current = read_version()
-    new_version = bump_version(current)
+    new_version = bump_version(current, getattr(options, "bump", "patch")
+                               if isinstance(getattr(options, "bump", None), str) else "patch")
     if options.dry_run:
         print("Сухой прогон: версия осталась бы %s → %s" % (current, new_version),
               file=sys.stderr)
@@ -963,6 +988,8 @@ def parse_args(argv: List[str]) -> Options:
             options.package_only = True
         elif arg == "--bump":
             options.bump = True
+        elif arg.startswith("--bump="):
+            options.bump = arg.split("=", 1)[1] or "patch"
         elif arg == "--with-demos":
             options.with_demos = True
         elif arg == "--extra":
@@ -978,6 +1005,8 @@ def parse_args(argv: List[str]) -> Options:
             options.skip_tests = True
         elif arg == "--skip-tag":
             options.skip_tag = True
+        elif arg == "--print-version":
+            options.print_version = True
         elif arg in ("--version", "--platform", "--build-dir", "--out", "--binary"):
             index += 1
             if index >= len(argv):
@@ -1019,6 +1048,11 @@ def confirm(question: str, assume_yes: bool) -> None:
 def main(argv: List[str]) -> int:
     """Точка входа: собрать план, при необходимости выполнить его."""
     options = parse_args(argv)
+
+    # --print-version: только версия, без сборки (её читают скрипты).
+    if getattr(options, "print_version", False):
+        print(read_version())
+        return 0
 
     # --bump ничего не собирает и не проверяет: только версия в CMakeLists.txt.
     if options.bump:

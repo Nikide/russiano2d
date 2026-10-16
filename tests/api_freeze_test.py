@@ -30,18 +30,49 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASELINE = os.path.join(ROOT, "tests", "api_freeze_baseline.txt")
 GAME = os.path.join("tests", "fixtures", "hello")
 
-#: Снимок поверхности: имена неймспейсов `$.` с их методами и биндинги engine.*.
-#: Функции верхнего уровня тоже попадают — они часть публичного API.
+#: Снимок поверхности: имена неймспейсов `$.` с их методами, ПУБЛИЧНЫЕ КОНСТАНТЫ
+#: со значениями (`$.alive.PULSE_MAX = 200`) и биндинги engine.*. Функции
+#: верхнего уровня тоже попадают — они часть публичного API.
+#:
+#: Почему значения: игра читает эти числа/строки/массивы напрямую
+#: (`$.alive.BREAK_STRESS`, `$.kinds.TwoD`, `$.tilemap.BLOB47_LAYOUT`), поэтому
+#: изменение значения — такое же изменение API, как переименование метода, и
+#: должно быть видно в диффе снимка. Раньше константы не попадали в снимок
+#: вовсе: `typeof` не функция и не объект — и они не защищались ни заморозкой,
+#: ни гейтом документации.
+#:
+#: Чего в снимке НЕТ (и почему): значения, которые зависят не от кода, а от
+#: запуска — флаги (`$.agent.active/headless/seed`, `$.debug.overlay`),
+#: возможности бэкенда (`$.viewport.supported`) и состояние мира
+#: (`$.ctx.*`: реестр узлов, таймеры, анимации, поля сил, режим аудио). Их имена
+#: перечисляются как раньше, но значения не сравниваются: иначе заморозка
+#: падала бы на другом бэкенде или после одного кадра игры.
+VOLATILE_VALUES = ("$.agent.", "$.debug.overlay", "$.ctx.", "$.viewport.supported",
+                   "$.отладка.overlay")
+
 SNAPSHOT = """(() => {
     const names = [];
     const isNs = (v) => v && typeof v === 'object' && !Array.isArray(v);
+    const volatile_values = %s;
+    const value_is_volatile = (name) => volatile_values.some((prefix) => name.startsWith(prefix));
+    const describe = (name, value) => {
+        let text;
+        try { text = JSON.stringify(value); } catch (e) { text = '<не сериализуется>'; }
+        if (text === undefined) text = '<undefined>';
+        if (text.length > 300) text = '<данных ' + text.length + ' символов>';
+        names.push(name + ' = ' + text);
+    };
     for (const key of Object.keys($).sort()) {
         names.push('$.' + key);
         const value = $[key];
         if (isNs(value)) {
             for (const sub of Object.keys(value).sort()) {
                 const kind = typeof value[sub];
-                if (kind === 'function' || isNs(value[sub])) names.push('$.' + key + '.' + sub);
+                const name = '$.' + key + '.' + sub;
+                if (kind === 'function' || isNs(value[sub])) { names.push(name); continue; }
+                if (value_is_volatile(name)) continue;
+                if (kind === 'number' || kind === 'string' || kind === 'boolean') describe(name, value[sub]);
+                else if (Array.isArray(value[sub])) describe(name, value[sub]);
             }
         }
     }
@@ -51,7 +82,17 @@ SNAPSHOT = """(() => {
         }
     }
     return names.sort();
-})()"""
+})()""" % (list(VOLATILE_VALUES),)
+
+
+def split_name(line):
+    """Имя из строки снимка: у констант за `=` идёт значение."""
+    return line.split(" = ", 1)[0]
+
+
+def value_of(line):
+    parts = line.split(" = ", 1)
+    return parts[1] if len(parts) > 1 else None
 
 
 def main():
@@ -76,21 +117,35 @@ def main():
     with open(BASELINE, encoding="utf-8") as handle:
         expected = [line.strip() for line in handle if line.strip()]
 
-    added = sorted(set(lines) - set(expected))
-    removed = sorted(set(expected) - set(lines))
-    print("§63 заморозка API: в снимке %d имён, в движке %d" % (len(expected), len(lines)))
+    expected_names = {split_name(line): value_of(line) for line in expected}
+    actual_names = {split_name(line): value_of(line) for line in lines}
+    added = sorted(set(actual_names) - set(expected_names))
+    removed = sorted(set(expected_names) - set(actual_names))
+    changed = sorted(name for name in set(expected_names) & set(actual_names)
+                     if expected_names[name] != actual_names[name])
+    constants = sum(1 for value in actual_names.values() if value is not None)
+    print("§63 заморозка API: в снимке %d имён (из них констант со значениями %d), "
+          "в движке %d" % (len(expected_names), constants, len(actual_names)))
+
+    def with_values(names):
+        return ", ".join("%s = %s" % (name, actual_names.get(name, expected_names.get(name)))
+                         for name in names[:8])
 
     failures = []
     if added:
         failures.append("появились без обновления снимка: %s" % ", ".join(added[:12]))
     if removed:
         failures.append("пропали (ломающее изменение!): %s" % ", ".join(removed[:12]))
+    if changed:
+        failures.append("изменились ЗНАЧЕНИЯ публичных констант (%d): %s"
+                        % (len(changed), with_values(changed)))
 
     print("  ok   поверхность совпадает со снимком" if not failures else "  FAIL " + "; ".join(failures))
     if failures:
         print("\nПРОВАЛЕНО: 1")
         print("  - если изменение намеренное (§63: переименование/сигнатура/семантика/"
-              "схема — только с обоснованием), обновите снимок: --write, и объясните в CHANGELOG")
+              "схема/значение константы — только с обоснованием), обновите снимок: "
+              "--write, и объясните в CHANGELOG")
         return 1
     print("\nВсе проверки пройдены (заморозка держится)")
     return 0

@@ -14,8 +14,11 @@
 # обязано пройти здешнюю проверку.
 #
 # Правила (ровно те, что описывают наш API и нашу документацию):
-#   1. имя встречается в `docs/**/*.md` буквально (с границей слова) —
-#      задокументировано;
+#   1. имя встречается в `docs/**/*.md` буквально (с границей слова) — и НЕ в
+#      строке с отрицанием: «`$.camera.visibleRect()` не существует» — это
+#      описание ОТСУТСТВИЯ, а не документация, поэтому такие строки в зачёт не
+#      идут (список признаков — NEGATION ниже). Иначе первое же имя, заведённое
+#      после списка «чего нет», считалось бы задокументированным;
 #   2. русский алиас (`$.ввод.tap`, `$.fn.высота`) считается задокументированным,
 #      если задокументирован его английский двойник по таблицам `ru.js`
 #      (`RU_NAMESPACES`, `RU_METHODS`). Пара «алиас → оригинал» проверяется:
@@ -34,6 +37,7 @@
 #   python3 tests/api_docs_sync_test.py --list     # что именно не описано
 # ===========================================================================
 
+import bisect
 import os
 import re
 import sys
@@ -43,6 +47,24 @@ BASELINE = os.path.join(ROOT, "tests", "api_freeze_baseline.txt")
 ALLOWLIST = os.path.join(ROOT, "tests", "api_docs_allowlist.txt")
 DOCS_DIR = os.path.join(ROOT, "docs")
 RU = os.path.join(ROOT, "src", "highlevel", "ru.js")
+
+#: Признаки отрицания. Строка с ними рядом с именем означает, что имя описано
+#: как НЕсуществующее, и в зачёт документации такое упоминание не идёт.
+#:
+#: Правило узкое намеренно: «нет» встречается и в описаниях живого API
+#: («`0` — нет полос», «если композиции нет»), поэтому
+#:   * сильные обороты («не существует», «отсутствует», «не поддержан»,
+#:     «заглушка»…) считаются в окне ±80 символов вокруг имени;
+#:   * короткое «нет» — только вплотную к имени (±15 символов);
+#:   * строка, начинающаяся с «Чего нет…» / «Чего у X нет…», исключает все
+#:     имена на этой строке целиком.
+NEGATION = re.compile(
+    r"(?:не\s+существу\w+|отсутству(?:ет|ют)\b|не\s+реализован\w+|не\s+поддерж\w+|"
+    r"заглушк\w*|удал[её]н\w*\s+из|убрано\s+из|больше\s+нет|нет\s+такого|нельзя|"
+    r"не\s+работа\w+)",
+    re.IGNORECASE)
+NEGATION_NEAR = re.compile(r"\bнет\b", re.IGNORECASE)
+NEGATION_LINE = re.compile(r"^\s*[|>#*\-\s]*чего\s+(?:у\s+[^:]{0,40}\s+)?нет\b", re.IGNORECASE)
 
 FAILURES = []
 
@@ -124,7 +146,9 @@ def main():
               % os.path.relpath(BASELINE, ROOT))
         return 1
     with open(BASELINE, encoding="utf-8") as handle:
-        names = [line.strip() for line in handle if line.strip()]
+        # У констант в снимке есть значение: `$.alive.PULSE_MAX = 200` — для
+        # проверки документации важно имя, а не значение.
+        names = [line.split(" = ", 1)[0].strip() for line in handle if line.strip()]
 
     with open(RU, encoding="utf-8") as handle:
         ru_source = handle.read()
@@ -144,8 +168,47 @@ def main():
     docs = read_docs()
     check(len(docs) > 100000, "документация прочитана (%d символов из docs/**/*.md)" % len(docs))
 
+    # Строки и их смещения: нужно понимать, в какой строке встретилось имя —
+    # упоминание в строке с отрицанием («этого нет», «не существует») не
+    # считается документацией, иначе список «чего нет» выдавал бы
+    # несуществующее имя за задокументированное.
+    docs_lines = docs.splitlines()
+    line_starts = [0]
+    for match in re.finditer(r"\n", docs):
+        line_starts.append(match.end())
+
+    negation_hits = []
+
+    def line_info(position):
+        """(текст строки, смещение внутри строки) для позиции в общем тексте."""
+        index = bisect.bisect_right(line_starts, position) - 1
+        if index < 0 or index >= len(docs_lines):
+            return ("", 0)
+        return (docs_lines[index], position - line_starts[index])
+
+    def negated_mention(line, start, end):
+        """Описывает ли эта строка имя как НЕсуществующее."""
+        stripped = re.sub(r"[*_`]", "", line)
+        if NEGATION_LINE.search(stripped):
+            return True
+        if NEGATION.search(line[max(0, start - 80):end + 80]):
+            return True
+        return NEGATION_NEAR.search(line[max(0, start - 15):end + 15]) is not None
+
     def literal(name):
-        return re.search(re.escape(name) + r"(?![A-Za-z0-9_$])", docs) is not None
+        """Есть ли БЕЗоговорочное упоминание имени в доках (не в списке «чего нет»)."""
+        found = False
+        negated = False
+        for match in re.finditer(re.escape(name) + r"(?![A-Za-z0-9_$])", docs):
+            line, offset = line_info(match.start())
+            if negated_mention(line, offset, offset + (match.end() - match.start())):
+                negated = True
+                continue
+            found = True
+            break
+        if not found and negated:
+            negation_hits.append(name)
+        return found
 
     def wrapper_method(member):
         if not member:
@@ -232,6 +295,10 @@ def main():
     if by_category:
         print("       долг по категориям allowlist: %s"
               % ", ".join("%s %d" % (name, size) for name, size in sorted(by_category.items())))
+    if negation_hits:
+        print("       упомянуты только в списках «чего нет» (в зачёт не идут): %d — %s%s"
+              % (len(negation_hits), ", ".join(sorted(negation_hits)[:5]),
+                 " и др." if len(negation_hits) > 5 else ""))
 
     check(not alias_problems,
           "у каждого русского алиаса есть английский оригинал в снимке"
