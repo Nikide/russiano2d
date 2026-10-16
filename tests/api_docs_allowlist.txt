@@ -22,22 +22,14 @@
 
 # --- долг: task-30 (devtools-ui) ---
 
-# --- долг: task-30/task-31 (engine.* — рендерные/прочие) ---
-# Причина `internal` проверена: ни одно из имён не вызывается из игрового кода
-# (в src/highlevel/*.js вхождений нет, кроме внутренних вызовов JS-слоя движка),
-# это биндинги C. Ссылка на справочник указана там, где он имя действительно
-# описывает; для остальных в docs/internal/NATIVE.md записи нет — они названы
-# кандидатами на строку справочника (вне зоны правки task-31).
-engine.bodyGeneration        # internal: поколение тела для genA/genB событий контакта (src/script.c:1227); в NATIVE.md не описан — кандидат на строку справочника
-engine.clearPhysicsErrors    # internal: очистить кольцо ошибок физики (src/script.c:5979); в NATIVE.md не описан — кандидат на строку справочника
-engine.contactStay           # internal: читает фазу `stay` контакта тела — opt-in (src/script.c:1205); в NATIVE.md не описан — кандидат на строку справочника
-engine.isAwake               # internal: биндинг C-уровня, игры его не зовут; справочник — docs/internal/NATIVE.md (строка 2567)
-engine.netMode               # internal: биндинг C-уровня, игры его не зовут; справочник — docs/internal/NATIVE.md (строка 2568)
-engine.physicsErrors         # internal: кольцо ошибок физики {total, overflow, errors[]} (src/script.c:1249); в NATIVE.md не описан — кандидат на строку справочника
-engine.profileEnabled        # internal: биндинг C-уровня, игры его не зовут; справочник — docs/internal/NATIVE.md (строка 2561)
-engine.setContactStay        # internal: включает фазу `stay` у тела (src/script.c:1205); в NATIVE.md не описан — кандидат на строку справочника
-engine.setGravityScale       # internal: биндинг C-уровня, игры его не зовут; справочник — docs/internal/NATIVE.md (строка 2567)
-engine.setSnap               # internal: презентационный снаппинг вершин (src/render.c:3791), зовёт JS-слой движка (render.js:3711); в NATIVE.md не описан — кандидат на строку справочника
+# --- engine.* (task-30/task-31) закрыт: все 10 имён описаны в справочнике -------
+# `docs/internal/NATIVE.md`: таблица «Что ещё есть в engine» (profileEnabled,
+# isAwake, setGravityScale, netMode) и подраздел «Контакты, ошибки физики и
+# снаппинг вершин» (bodyGeneration, contactStay, setContactStay, physicsErrors,
+# clearPhysicsErrors, setSnap). Причина `internal` проверена: из игрового кода
+# не вызываются — в `src/highlevel/*.js` вхождений `engine.X` нет, кроме
+# внутренних вызовов JS-слоя движка (debug.js, render.js, core.js, pool.js,
+# prefab.js). Строк исключений для них больше не требуется.
 
 # --- task-31 (debug-overlays) закрыт: $.world, $.items/$.inv, $.cels, $.barks, ---
 # --- $.activation, $.agent, $.anim, $.collision, $.loading, $.random, $.combat,  ---

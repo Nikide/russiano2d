@@ -2558,16 +2558,32 @@ internal/NATIVE.md описывает то, на чём стоит `$`; част
 | `engine.viewport.*` — render target игры | [highlevel/viewport.md](../highlevel/viewport.md), [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md) §23 |
 | `engine.http.*` — HTTP-запросы | [highlevel/http.md](../highlevel/http.md), `$.http` |
 | `engine.renderInfo()` (поле `post`), `engine.setPost`/`getPost`/`postSupported`, `engine.markUI` | [highlevel/render.md](../highlevel/render.md) §3, §5 |
-| `engine.profile`/`profileReset`/`profileEnabled` | §15 выше, `$.debug.profile()` |
+| `engine.profile`/`engine.profileReset`/`engine.profileEnabled` | §15 выше, `$.debug.profile()` |
 | `engine.freeTexture`, `setSpriteFilter`/`spriteFilter`, `textureFromPixels` | [highlevel/resource.md](../highlevel/resource.md), [highlevel/sprite.md](../highlevel/sprite.md) |
 | `engine.rotSpriteLoad/Pose/Style/Rig/Part/Info/Dispose`, `rotSpriteModelPose`, `rotSpriteFileStamp`, `rotSpriteChanged`, `rotSpritePrepare` — синтез 2D-персонажа из общего PNG | [highlevel/re2dsprite.md](../highlevel/re2dsprite.md), [RE2DSPRITE_V2.md](../RE2DSPRITE_V2.md) |
 | `engine.setDepth`/`depth`, `engine.depthInfo` | [highlevel/depth.md](../highlevel/depth.md), `$.gfx.depth` |
 | `engine.re2d.view/project/unproject/sprite/mesh/info`, `engine.re2d.worldStep(dt)`, флаг `engine.re2d.NO_SPLIT` — перспектива вида от первого лица | §16 выше, [RE2D.md](../RE2D.md) |
 | `engine.now()` — монотонное время, мс; `engine.mouseLock(on)` — захват курсора; `engine.setBodyEnabled`/`bodyEnabled` | §16 выше, [highlevel/window.md](../highlevel/window.md) |
-| `engine.bodyEnabled`/`isAwake`/`setAwake`/`setGravityScale`, `contactsOf`, `contactBetween` | §8 выше |
-| `engine.netHost`/`netJoin`/`netClose`/`netMode`/`netStatus`/`netSend`/`netPoll` | [highlevel/net.md](../highlevel/net.md), `$.net` |
+| `engine.bodyEnabled`/`engine.isAwake`/`engine.setAwake`/`engine.setGravityScale`, `engine.contactsOf`, `engine.contactBetween` | §8 выше |
+| `engine.netHost`/`engine.netJoin`/`engine.netClose`/`engine.netMode`/`engine.netStatus`/`engine.netSend`/`engine.netPoll` | [highlevel/net.md](../highlevel/net.md), `$.net` |
 | `engine.setCursor`/`cursorVisible`, `requestReload`/`reloadPending`/`hotReload` | [highlevel/window.md](../highlevel/window.md), [highlevel/script.md](../highlevel/script.md) |
 | `engine.audio.*` — шины, комнаты, группы, 3D | §10 выше, [highlevel/audiobus.md](../highlevel/audiobus.md) |
+| `engine.bodyGeneration`, `engine.contactStay`/`setContactStay`, `engine.physicsErrors`/`clearPhysicsErrors`, `engine.setSnap` | подраздел «Контакты, ошибки физики и снаппинг вершин» ниже |
+
+### Контакты, ошибки физики и снаппинг вершин
+
+У этих биндингов нет своего `$`-метода: их зовёт JS-слой движка (`$.physics`,
+`$.world.contacts`, `$.gfx.snap`), а игра работает через эти обёртки. Факты сняты
+вызовами на фикстуре `tests/fixtures/hello` (движок под `--agent`).
+
+| Биндинг | Что делает C | Как видно из `$` | Чем проверено |
+|---|---|---|---|
+| `engine.setContactStay(body, on)` | `r2d_physics_set_contact_stay` (`src/script.c:1203`): включает/выключает у тела фазу `stay` (событие продолжения контакта). Opt-in: обход контактов тела каждый кадр не бесплатный, поэтому по умолчанию тело получает только begin/end/hit. Возвращает `undefined` (в том числе когда физики нет) | `$`-обёртки нет — зовут игра и тесты | `engine.setContactStay(body, true)` → `undefined`, затем `engine.contactStay(body)` → `true` |
+| `engine.contactStay(body)` | `r2d_physics_contact_stay`: читает флаг фазы `stay`; без физики — `false` | — | до включения → `false`, после → `true` |
+| `engine.bodyGeneration(body)` | `r2d_physics_generation` (`src/script.c:1227`): поколение тела, `uint32`; `0`, если физики нет | `api.js` §7 (`bodyGenerationOf`): события контакта несут `genA`/`genB`, и запись с несовпавшим поколением отбрасывается — иначе id уничтоженного тела, переиспользованный новым телом, дал бы ложный контакт с чужим узлом | `engine.bodyGeneration($('#hero').get(0).body)` → `2` |
+| `engine.physicsErrors()` | кольцо ошибок физики (`src/script.c:1249`): форма не создалась, лимит тел. Отдаёт `{ total, overflow, errors: [{ code, body, shape, value, detail }] }`; `code` — `shape_invalid` / `body_limit` / `shape_index` / `unknown` | `$.physics.errors()` (`api.js`, §7) возвращает ровно этот объект; `$.physics.report()` переносит ошибки в журнал диагностики | пустое кольцо → `{ total: 0, overflow: false, errors: [] }` |
+| `engine.clearPhysicsErrors()` | `r2d_physics_clear_errors` (`src/script.c:1279`): очищает кольцо; возвращает `undefined` | `$.physics.clear()` — очистка; `$.physics.report()` — «перенести в журнал и очистить» | вызов → `undefined`, `$.physics.errors().errors` после — пусто |
+| `engine.setSnap(on)` | презентационный снаппинг вершин к целым пикселям (`src/render.c:3791`): пишет `r->snap` и возвращает новое состояние (`bool`) | `$.gfx.snap(on)` — геттер/сеттер поверх, по умолчанию выключен (`render.js` зовёт `engine.setSnap(!!on)` при смене режима презентации); состояние видно в `engine.renderInfo()` — поля `snap` и `viewport.snap` | `engine.setSnap(true)` → `true`, `renderInfo().viewport.snap` → `true`; `setSnap(false)` → `false` |
 
 ### Командная строка (дополнение к 1.5)
 
