@@ -61,7 +61,9 @@ def main():
         # против 64 в C) и молча терял лишние.
         check(lim["node_fx_max"] == 64, f"потолок эффектов узла: {lim['node_fx_max']} (в C — 64)")
         check(lim["viewports_max"] == 8, f"вьюпортов: {lim['viewports_max']}")
-        check(lim["user_shaders_max"] == 16, f"пользовательских шейдеров: {lim['user_shaders_max']}")
+        # 15, а не 16: слот 0 занят обычным спрайтом, и то же число называет
+        # сообщение движка при переполнении (было расхождение «в доке 16, влезает 15»).
+        check(lim["user_shaders_max"] == 15, f"пользовательских шейдеров: {lim['user_shaders_max']}")
         check(lim["gamepads_max"] == 4, f"слотов геймпада: {lim['gamepads_max']}")
 
         # Занятость тел растёт от действий игры.
