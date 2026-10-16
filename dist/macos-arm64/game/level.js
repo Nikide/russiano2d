@@ -250,6 +250,8 @@ export function makeLevel(spec) {
         for (let i = 0; i < state.bobbers.length; i++) {
             const [node, baseY, phase] = state.bobbers[i];
             if (node.removed) continue;
+            // node — обёртка (цепочка создания вернула её), и .y у обёртки —
+            // настоящий аксессор узла (A1): покачивание монет работает.
             node.y = baseY + Math.sin(state.time * 2.4 + phase) * 3;
         }
 
@@ -261,6 +263,8 @@ export function makeLevel(spec) {
             hero.damage(spike.attr('damage') || 20);
             // Отбрасывание шипом: сами задаём скорость (у .knockAway в этой
             // сборке нет — отдача телу живёт в $.hits.knockback).
+            // .x у обёртки — настоящий аксессор узла (A1): раньше здесь было
+            // `undefined < undefined`, и героя всегда отбрасывало в одну сторону.
             const dir = hero.x < spike.x ? -1 : 1;
             hero.velocity(dir * 200, -320);
         });
@@ -293,9 +297,13 @@ export function makeLevel(spec) {
             const offset = Math.sin(t) * range;
             node.velocity(Math.cos(t) * range * speed, 0);
             // Страховка от накопления ошибки: подправляем позицию к ожидаемой.
+            // Перемещение — через .at(): тот же путь, что у записи в .x, но
+            // видно, что узел переставляется вместе с телом (раньше `node.x = …`
+            // молча вешал JS-свойство на обёртку и не двигал ничего).
+            const p = node.pos();
             const target = node.attr('home_x');
-            if (target === undefined) node.attr('home_x', node.x);
-            node.x = (target === undefined ? node.x : target) + offset;
+            if (target === undefined) node.attr('home_x', p.x);
+            node.at((target === undefined ? p.x : target) + offset, p.y);
         }
 
         // Чекпойнты: касание запоминает точку возрождения (один раз на флаг).
