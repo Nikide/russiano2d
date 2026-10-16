@@ -724,8 +724,24 @@ function makeDoc(id, path) {
     return {
         id,
         path,
-        show() { engine.ui.show(id); return this; },
-        hide() { engine.ui.hide(id); return this; },
+        // Без аргумента — документ целиком. С аргументом — ЭЛЕМЕНТ документа:
+        // раньше `doc.hide('petals')` молча скрывал весь документ (аргумент
+        // игнорировался), и это был костыль BASHNYA H1: игру заставляли писать
+        // `doc.style(id,'display','none')`. Класс `hidden` — тот же, что у
+        // setClass, поэтому поведение совпадает с обходом, но без обхода.
+        show(element) {
+            if (element === undefined) engine.ui.show(id);
+            else this.style(element, 'display', '');
+            return this;
+        },
+        hide(element) {
+            if (element === undefined) engine.ui.hide(id);
+            // Инлайн-стиль, а не класс: у игры может не быть правила `.hidden`,
+            // и тогда класс не скрыл бы ничего. Ровно так же выглядит их обход
+            // `doc.style('petals','display','none')` — только без обхода.
+            else this.style(element, 'display', 'none');
+            return this;
+        },
         // Снимаем документ и выкидываем его из кэша: иначе $.ui.doc(path)
         // после unload() вернул бы ту же обёртку с мёртвым id.
         unload() {

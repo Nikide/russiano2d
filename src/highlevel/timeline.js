@@ -797,9 +797,26 @@ function applyRestore(def, state) {
     }
     if (snap.music && api && api.sound) {
         const m = snap.music;
-        if (m.track && api.sound.music) { api.sound.music(m.track, { loop: true }); report.music = m.track; }
-        else if (api.sound.stopMusic) { api.sound.stopMusic(); report.music = 'stopped'; }
-        else report.music = 'kept';
+        // В снапшот музыка кладётся ЗАПИСЬЮ `ctx.state_music` = {path, volume},
+        // а `$.sound.music()` ждёт путь или id. Передавать запись целиком —
+        // обход (его принимает soundId), который живёт до первого, кто про него
+        // не знает: `load()` падал, и восстановление молча ничего не делало.
+        // Разворачиваем запись здесь и возвращаем ещё и громкость — иначе
+        // «состояние музыки вернулось как было» врёт (играла тише/громче).
+        const rec = m.track && typeof m.track === 'object' ? m.track : null;
+        const track = rec ? rec.path : m.track;
+        const volume = rec && rec.volume !== undefined ? rec.volume : undefined;
+        if (m.playing === false) {
+            // До прогона музыки не было — возвращаем тишину, а не включаем трек.
+            if (api.sound.stopMusic) { api.sound.stopMusic(); report.music = 'stopped'; }
+            else report.music = 'kept';
+        } else if (track && api.sound.music) {
+            api.sound.music(track, volume === undefined ? { loop: true } : { loop: true, volume });
+            report.music = track;
+        } else if (api.sound.stopMusic) {
+            api.sound.stopMusic();
+            report.music = 'stopped';
+        } else report.music = 'kept';
     }
     if (snap.control && api && api.lock && api.lock.unlock) {
         // Управление возвращаем всегда: «залочено навсегда» — не контракт.

@@ -586,7 +586,18 @@ void r2d_gui_set_property(R2DGui *g, int doc, const char *element_id,
                            const char *property, const char *value)
 {
     if (Rml::Element *el = r2d__element(g, doc, element_id)) {
-        el->SetProperty(property ? property : "", value ? value : "");
+        const char *prop = property ? property : "";
+        const char *val = value ? value : "";
+        // Пустое значение = СНЯТЬ инлайн-свойство, а не «установить пустое»:
+        // иначе `doc.style(el,'display','')` (естественная запись «показать
+        // обратно») оставляла элемент скрытым. Появилось вместе с H1 из аудита
+        // костылей BASHNYA: doc.show(element) обязан возвращать элемент, а не
+        // делать вид.
+        if (val[0] == '\0') {
+            el->RemoveProperty(prop);
+        } else {
+            el->SetProperty(prop, val);
+        }
     }
 }
 
@@ -652,6 +663,18 @@ bool r2d_gui_get_rect(R2DGui *g, int doc, const char *element_id, float out[4])
 {
     Rml::Element *el = r2d__element(g, doc, element_id);
     if (!el || !out) return false;
+    // H1 (BASHNYA, аудит костылей): скрытый элемент не имеет честного
+    // прямоугольника. Раньше отдавали размеры «как до скрытия», и проверка
+    // «элемент есть и у него есть размер» оставалась зелёной, ничего не
+    // доказывая. IsVisible() учитывает display:none, visibility:hidden и
+    // скрытых предков — то есть скрытый раздел документа тоже.
+    // Ходим и по предкам: скрытый родитель делает элемент невидимым, иначе
+    // rect() продолжает врать ровно в том сценарии, ради которого чиним —
+    // автопроверка игры «элемент есть и у него есть размер» должна краснеть,
+    // когда раздел скрыт родителем, а не только сам по себе.
+    for (Rml::Element *node = el; node; node = node->GetParentNode()) {
+        if (!node->IsVisible(false)) return false;
+    }
     const Rml::Vector2f pos = el->GetAbsoluteOffset(Rml::BoxArea::Border);
     const Rml::Vector2f size = el->GetBox().GetSize(Rml::BoxArea::Border);
     out[0] = pos.x;

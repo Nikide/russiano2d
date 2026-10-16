@@ -477,6 +477,66 @@ static void cmd_eval(R2DAgent *a, const R2dJson *req)
     SDL_free(err);
 }
 
+// Есть ли в движке такое имя (отчёт BASHNYA H12: «нет интроспекции API»).
+//
+// Клиент спрашивает конкретные имена — списком или одним:
+//   {"cmd":"has","names":["$.audio.captureStart","$.sound.musicPlaying"]}
+//   ← {"ok":true,"has":{"$.audio.captureStart":true,"$.sound.musicPlaying":false}}
+// Полный список имён (их больше трёх тысяч, это ~60 КБ) намеренно НЕ отдаём:
+// снимок агента уже один раз раздувался до 168 КБ, второй раз не надо.
+// Ответ считает JS (`$.agent.has`), здесь только транспорт — одна реализация
+// правила «что считать существующим» на всех клиентов.
+static void cmd_has(R2DAgent *a, const R2dJson *req)
+{
+    const R2dJson *names = r2d_json_get(req, "names");
+    const R2dJson *single = r2d_json_get(req, "name");
+    if (!names && !single) {
+        send_error(req, "has: нужен параметр names (список) или name (одно имя)");
+        return;
+    }
+
+    R2dSb code;
+    r2d_sb_init(&code);
+    r2d_sb_puts(&code, "$.agent.has(");
+    if (names) {
+        if (names->type != R2D_JSON_ARR) {
+            send_error(req, "has: names должен быть массивом строк");
+            r2d_sb_free(&code);
+            return;
+        }
+        r2d_sb_putc(&code, '[');
+        for (int i = 0; i < names->count; ++i) {
+            const R2dJson *item = r2d_json_at(names, i);
+            if (i) r2d_sb_putc(&code, ',');
+            r2d_sb_put_json_string(&code, item && item->type == R2D_JSON_STR ? item->string : "");
+        }
+        r2d_sb_putc(&code, ']');
+    } else {
+        r2d_sb_put_json_string(&code, single->type == R2D_JSON_STR ? single->string : "");
+    }
+    r2d_sb_puts(&code, ")");
+
+    char *json = NULL;
+    char *err = NULL;
+    if (!r2d_script_eval(a->script, code.data, &json, &err)) {
+        send_error(req, err ? err : "has: $.agent.has недоступен: игра не вызвала $.agent.install()");
+        SDL_free(json);
+        SDL_free(err);
+        r2d_sb_free(&code);
+        return;
+    }
+
+    R2dSb sb;
+    begin_response(&sb, req, true);
+    r2d_sb_puts(&sb, ",\"has\":");
+    r2d_sb_puts(&sb, json ? json : "null");
+    send_ok_end(&sb);
+
+    SDL_free(json);
+    SDL_free(err);
+    r2d_sb_free(&code);
+}
+
 // ---------------------------------------------------------------------------
 // Ввод
 // ---------------------------------------------------------------------------
@@ -934,6 +994,8 @@ bool r2d_agent_serve(R2DAgent *a, const R2DAgentHooks *hooks)
             cmd_profile(a, req);
         } else if (SDL_strcmp(cmd, "eval") == 0) {
             cmd_eval(a, req);
+        } else if (SDL_strcmp(cmd, "has") == 0) {
+            cmd_has(a, req);
         } else if (SDL_strcmp(cmd, "step") == 0) {
             running = command_step(a, hooks, req);
         } else if (SDL_strcmp(cmd, "screenshot") == 0) {

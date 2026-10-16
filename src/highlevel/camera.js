@@ -1092,25 +1092,46 @@ export function installCamera($, viewports) {
          * запас в пикселях вокруг кадра (по умолчанию 64): рисуйте только то,
          * что попало, с запасом на ход объекта за кадр.
          */
-        isOnScreen(what, margin) {
+        isOnScreen(what, opts) {
+            // H8: второй аргумент — число (запас в пикселях, прежнее поведение)
+            // ИЛИ прямоугольник ЗОНЫ вокруг узла: { w, h, dx, dy } (смещение от
+            // узла) либо { x, y, w, h } (абсолютный центр). Раньше объект молча
+            // игнорировался: `isOnScreen(node, {w:8000,h:8000})` отвечал как
+            // `isOnScreen(node)`, и «зона пробуждения» не измерялась.
+            const zone = (opts && typeof opts === 'object') ? opts : null;
+            const margin = zone ? undefined : opts;
             const pad = margin === undefined ? 64 : Math.max(0, Number(margin) || 0);
+            const zone_w = zone ? Math.abs(Number(zone.w) || 0) / 2 : 0;
+            const zone_h = zone ? Math.abs(Number(zone.h) || 0) / 2 : 0;
+            const zoneOf = (x, y) => ({
+                x: zone && zone.x !== undefined ? Number(zone.x) : x + (zone ? Number(zone.dx) || 0 : 0),
+                y: zone && zone.y !== undefined ? Number(zone.y) : y + (zone ? Number(zone.dy) || 0 : 0),
+            });
             if (cam.kind === KIND_RE2D) {
-                if (typeof what === 'string') return query(what).some((n) => camera.isOnScreen(n, margin));
+                // Зона и здесь работает: смещаем точку на dx/dy, а w/h дают запас.
+                if (typeof what === 'string') return query(what).some((n) => camera.isOnScreen(n, opts));
                 if (typeof what === 'object' && what && what.tag && what.attrs.ui) return true;
-                const s = re2dWorldToScreen(toPoint(what, 'camera.isOnScreen'), what);
-                return s.visible && s.x >= -pad && s.x <= engine.width + pad
-                    && s.y >= -pad && s.y <= engine.height + pad;
+                const base = toPoint(what, 'camera.isOnScreen');
+                const shifted = zoneOf(base.x, base.y);
+                const s = re2dWorldToScreen(shifted, what);
+                const pad_x = pad + zone_w;
+                const pad_y = pad + zone_h;
+                return s.visible && s.x >= -pad_x && s.x <= engine.width + pad_x
+                    && s.y >= -pad_y && s.y <= engine.height + pad_y;
             }
             const half_w = engine.width / (2 * cam.zoom) + pad;
             const half_h = engine.height / (2 * cam.zoom) + pad;
-            if (typeof what === 'string') return query(what).some((n) => camera.isOnScreen(n, margin));
+            if (typeof what === 'string') return query(what).some((n) => camera.isOnScreen(n, opts));
             if (typeof what === 'object' && what && what.tag) {
                 if (what.attrs.ui) return true;
-                return Math.abs(what.x - cam.x) <= half_w + what.w / 2 &&
-                       Math.abs(what.y - cam.y) <= half_h + what.h / 2;
+                const c = zoneOf(what.x, what.y);
+                return Math.abs(c.x - cam.x) <= half_w + (zone ? zone_w : what.w / 2) &&
+                       Math.abs(c.y - cam.y) <= half_h + (zone ? zone_h : what.h / 2);
             }
             const pt = toPoint(what, 'camera.isOnScreen');
-            return Math.abs(pt.x - cam.x) <= half_w && Math.abs(pt.y - cam.y) <= half_h;
+            const c = zoneOf(pt.x, pt.y);
+            return Math.abs(c.x - cam.x) <= half_w + zone_w &&
+                   Math.abs(c.y - cam.y) <= half_h + zone_h;
         },
 
         /** Видимый прямоугольник мира — для отсечения и спавна. */

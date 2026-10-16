@@ -13,10 +13,63 @@ import { engineOf } from './core.js';
 // агент мог играть, не читая исходники игры.
 // ===========================================================================
 
-import { ctx, query, wrapOne } from './core.js';
+import { ctx, query, wrapOne, def } from './core.js';
 import { windowSnapshot } from './window.js';
 
 const exposed = new Map();
+
+// ---------------------------------------------------------------------------
+// H7 (отчёт BASHNYA): объявляемое наблюдаемое состояние СУЩНОСТИ.
+//
+// Глобальный аналог — `$.agent.expose('score', () => …)`. Здесь то же самое,
+// но на узле: игра объявляет, что о сущности ВИДНО снаружи (`node.expose({
+// clip:'walk', alert:2 })`), а агент/инспектор читает это из снимка — и только
+// если попросил поле в `fields` (иначе снимок не растёт: урок 168 КБ → 6 КБ).
+//
+// Имя `expose`, а не `state`: `node.state()` уже занят геттером машины
+// анимации (`anim.js:611` — возвращает текущее состояние FSM), и перегружать
+// публичный метод нельзя. Само состояние FSM отдаётся в снимке полем `state`
+// по запросу — этого хватает для исходного примера H7 (`attrs.clip`).
+// ---------------------------------------------------------------------------
+
+const EXPOSE_MAX_KEYS = 32;    // больше — не состояние, а свалка
+const EXPOSE_MAX_STR = 64;     // длинные строки в снимке никому не нужны
+
+/** Привести значение к тому, что безопасно класть в снимок. */
+function exposeClean(value) {
+    const kind = typeof value;
+    if (kind === 'number') return Number.isFinite(value) ? value : null;
+    if (kind === 'boolean') return value;
+    if (kind === 'string') {
+        return value.length > EXPOSE_MAX_STR ? value.slice(0, EXPOSE_MAX_STR) : value;
+    }
+    return null;   // объекты, массивы, функции, undefined → null
+}
+
+/** Мешок объявленного состояния узла (создаётся при первом обращении). */
+function exposeBag(node) {
+    if (!node.attrs) node.attrs = {};
+    if (!node.attrs.exposed || typeof node.attrs.exposed !== 'object') node.attrs.exposed = {};
+    return node.attrs.exposed;
+}
+
+function exposeSet(node, key, value) {
+    const bag = exposeBag(node);
+    const clean = exposeClean(value);
+    if (clean === null && value !== null && value !== undefined) {
+        // Вложенное/несериализуемое: ключ остаётся, значение — null. Так игрок
+        // видит «объявлено, но не отдаётся», а не молчаливую пропажу.
+        bag[key] = null;
+    } else if (value === undefined) {
+        delete bag[key];
+    } else {
+        bag[key] = clean;
+    }
+    const keys = Object.keys(bag);
+    for (const extra of keys.slice(EXPOSE_MAX_KEYS)) delete bag[extra];
+    return bag;
+}
+
 // failures — строки (совместимость с прежними тестами), details — те же провалы
 // структурой: субъект, ожидание, факт. Их забирает агент, чтобы падающий тест
 // оставлял разбираемый артефакт, а не только текст в логе.
@@ -38,7 +91,7 @@ function hasHealth(node) {
     return Number(node.max_hp) > 0;
 }
 
-function nodeBrief(node) {
+function nodeBrief(node, want) {
     const brief = {
         uid: node.uid,
         id: node.id || null,
@@ -68,6 +121,22 @@ function nodeBrief(node) {
         // честнее выдуманного false, и hp/max_hp не подставляются нулями.
         brief.alive = null;
     }
+
+    // H7: объявленное состояние и состояние FSM — только по запросу в fields.
+    // Без запроса этих полей в снимке нет вовсе, поэтому по умолчанию снимок
+    // не растёт (проверяется тестом agent_entity_state_test.py).
+    if (want) {
+        if (want.has('exposed')) {
+            brief.exposed = Object.assign({}, (node.attrs && node.attrs.exposed) || {});
+        }
+        if (want.has('state') || want.has('state_time')) {
+            // Читаем через обёртку, а не повторяем выражение из anim.js: одна
+            // реализация «какое сейчас состояние» на весь движок.
+            const wrapper = wrapOne(node);
+            if (want.has('state')) brief.state = wrapper.state();
+            if (want.has('state_time')) brief.state_time = wrapper.stateTime();
+        }
+    }
     return brief;
 }
 
@@ -81,6 +150,42 @@ function trimFields(brief, fields) {
     }
     return out;
 }
+
+// ---------------------------------------------------------------------------
+// H7: `$.fn.expose` — объявленное состояние сущности (метод узла).
+//
+// `node.expose()`                    → плоская копия объявленного
+// `node.expose({clip:'walk'})`       → слить (несколько ключей за раз)
+// `node.expose('clip')`              → одно значение
+// `node.expose('alert', 3)`          → записать один ключ
+// `node.expose('alert', undefined)`  → снять ключ
+//
+// Живёт рядом с `$.agent.expose` намеренно: это две половины одного механизма —
+// глобальные поля игры и поля отдельной сущности. В снимке агента видно по
+// `fields:["exposed"]`, в инспекторе — в карточке узла.
+// ---------------------------------------------------------------------------
+def('expose', function (first, second) {
+    const node = this.nodes[0];
+    const argc = arguments.length;
+
+    if (!node) return argc === 0 ? {} : this;
+    if (argc === 0) {
+        return Object.assign({}, (node.attrs && node.attrs.exposed) || {});
+    }
+    if (typeof first === 'string') {
+        if (argc === 1) {
+            const bag = (node.attrs && node.attrs.exposed) || {};
+            return Object.prototype.hasOwnProperty.call(bag, first) ? bag[first] : undefined;
+        }
+        exposeSet(node, first, second);
+        return this;
+    }
+    if (first && typeof first === 'object') {
+        for (const key of Object.keys(first)) exposeSet(node, key, first[key]);
+        return this;
+    }
+    return this;
+});
 
 export function installAgent($) {
     const agent = {
@@ -113,6 +218,34 @@ export function installAgent($) {
             return agent;
         },
 
+        /**
+         * Есть ли в движке такое имя: `$.agent.has('audio.captureStart')`;
+         * списком — `$.agent.has(['sound.musicPlaying', 'audio.captureStart'])`
+         * → `{...}`.
+         *
+         * Зачем: автотесту игры нужно отличать «метод есть» от «выражение не
+         * упало» (отчёт BASHNYA H12: харнесс проверял `eval_ok`, то есть
+         * отсутствие исключения, и считал это наличием возможности). Проверяем
+         * ФАКТ — `typeof` по пути от `$`, а не список версий и не догадки.
+         */
+        has(paths) {
+            const one = (path) => {
+                const parts = String(path).replace(/^\$\.?/, '').split('.').filter(Boolean);
+                let cur = $;
+                for (const part of parts) {
+                    if (cur === null || cur === undefined) return false;
+                    cur = cur[part];
+                }
+                return typeof cur !== 'undefined';
+            };
+            if (Array.isArray(paths)) {
+                const out = {};
+                for (const path of paths) out[String(path)] = one(path);
+                return out;
+            }
+            return one(paths);
+        },
+
         /** Полный снимок — то, что уходит в ответ на команду `state`. */
         /**
          * @param {object} [opts] урезание снимка (отчёт BASHNYA A8):
@@ -125,6 +258,12 @@ export function installAgent($) {
             const world = ctx.world ? ctx.world._state : null;
             const entities = ctx.nodes.filter((n) => !n.attrs.ui && !n.classes.has('world-bound'));
             const ui_nodes = ctx.nodes.filter((n) => n.attrs.ui);
+
+            // Поля, которые не отдаются по умолчанию (H7): `exposed` — что игра
+            // объявила через `node.expose(...)`, `state`/`state_time` — машина
+            // анимации. Их добавляем ТОЛЬКО когда клиент попросил их в fields.
+            const want = (trim && Array.isArray(trim.fields))
+                ? new Set(trim.fields.map(String)) : null;
 
             let listed = entities;
             let meta = null;
@@ -172,7 +311,7 @@ export function installAgent($) {
                     bounds: world.bounds,
                     bodies: engineOf().bodyCount(),
                 } : { count: entities.length, bodies: engineOf().bodyCount() },
-                entities: listed.map((n) => trimFields(nodeBrief(n), trim && trim.fields)),
+                entities: listed.map((n) => trimFields(nodeBrief(n, want), trim && trim.fields)),
                 ui: ui_nodes.map(nodeBrief),
                 tests: {
                     total: tests.total,

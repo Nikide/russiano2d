@@ -77,6 +77,7 @@ import { installScript } from './script.js';
 import { installStory } from './story.js';
 import { installQuest } from './quest.js';
 import { installSoundBank } from './soundbank.js';
+import { installClip } from './clip.js';
 import { installSteps, installBarks } from './steps.js';
 import { installItems } from './items.js';
 import { installCombat } from './combat.js';
@@ -133,6 +134,52 @@ const globals = new Map();   // имя события → [обработчик�
  * Лист задаётся как { src, cols, rows, cw, ch }. Живёт на уровне модуля,
  * потому что нужен и фабрике узлов, и методам узла (разные области видимости).
  */
+/**
+ * Какие параметры принимает эффект: имя → «число» | «цвет».
+ *
+ * Зачем таблица: раньше `.shader('wave', { amplitude: NaN })` и опечатка
+ * (`{ amplitud: 0.5 }`) проходили МОЛЧА — параметр превращался в значение по
+ * умолчанию, эффект «не работал», и узнать причину было неоткуда (пункт I13
+ * отчёта BASHNYA). Теперь неизвестное имя и нечисло называют себя.
+ */
+const FX_PARAMS = {
+    flash:    { amount: 'number', color: 'color' },
+    dissolve: { threshold: 'number', scale: 'number', color: 'color' },
+    chroma:   { offset: 'number', color: 'color' },
+    wave:     { amplitude: 'number', amount: 'number', frequency: 'number',
+                phase: 'number', time: 'number', color: 'color' },
+};
+
+/** Проверка одного параметра: '' — ок, иначе причина. */
+function shaderParamProblem(effect, name, value) {
+    const table = FX_PARAMS[effect];
+    if (!table) return '';                       // свой шейдер: контракт p1..p3, color
+    const kind = table[name];
+    if (!kind) {
+        return `неизвестный параметр "${name}" (у эффекта ${effect}: ${Object.keys(table).join(', ')})`;
+    }
+    if (kind === 'color') return '';             // цвет принимает строку/число/массив
+    if (value === null || value === undefined || value === '') return '';
+    if (typeof value === 'boolean' || !Number.isFinite(Number(value))) {
+        return `параметр "${name}" должен быть числом, получено ${JSON.stringify(value)}`;
+    }
+    return '';
+}
+
+/** Сообщить о проблеме параметра: журнал + структурная ошибка. */
+function reportShaderParam(where, effect, problem) {
+    const message = `${where}: ${problem}`;
+    const debug = ctx.$ && ctx.$._debug_public ? ctx.$._debug_public : (ctx.$ && ctx.$.debug);
+    if (debug && typeof debug.reportError === 'function') {
+        debug.reportError(where, message, {
+            code: 'R2D_SHADER_PARAM_INVALID', subsystem: 'shader',
+            recoverable: true, effect: String(effect),
+        });
+    } else {
+        ctx.log('$: ' + message);
+    }
+}
+
 function applyFrames(node, spec) {
     if (spec && spec.src) {
         resolveSprite(spec);
@@ -421,7 +468,19 @@ export function createApi() {
     $.now = () => ctx.time.now();
     $.wait = (ms) => wait(ms);
     $.sequence = (steps) => sequence(steps);
-    $.find = (sel) => query(sel);
+    /**
+     * Все узлы по селектору — ОБЁРТКА, как у `$()` (task-58, H6).
+     *
+     * Раньше здесь был сырой массив узлов, и один и тот же по смыслу вызов вёл
+     * себя по-разному: `$.find('.x')[0].get(0)` читал АТРИБУТ "0" (у сырого узла
+     * `get` — геттер атрибутов), а `$('.x').get(0)` отдавал узел; у сырого узла
+     * нет `.size()`, зато есть числовое поле `size`. Теперь тип один: обёртка
+     * (итерируемая — `for…of` даёт узлы, есть `.length`, `.get(i)`, `.each`).
+     * Сырой массив остался явным `$.findNodes(sel)`.
+     */
+    $.find = (sel) => wrap(query(sel));
+    /** Сырые узлы по селектору — то, что `$.find` возвращал до 1.2.1. */
+    $.findNodes = (sel) => query(sel);
     $.count = (sel) => query(sel).length;
     /**
      * Верхний мировой узел под курсором (или под точкой `{x, y}`/`[x, y]`).
@@ -502,6 +561,7 @@ export function createApi() {
     installStory($);             // сценки: $.story (DSL)
     installQuest($);             // задания: $.quest
     installSoundBank($);         // банки звуков: $.sound.playBank
+    installClip($);              // клипы анимации: $.clip
     installSteps($);             // шаги по материалу: $.steps
     installBarks($);             // реплики NPC: $.barks
     installItems($);             // предметы и инвентарь: $.items, $.inv
@@ -733,6 +793,8 @@ function installNodeMethods($) {
             const node = el;
             node.w = w;
             node.h = h === undefined ? w : h;
+            // H10: размер задан явно — смена листа его больше не перепишет.
+            node.size_locked = true;
             if (node.body >= 0) node.syncBodySize();
         });
     });
@@ -1089,11 +1151,60 @@ function installNodeMethods($) {
         });
     });
 
-    /** Анимация по кадрам листа: .animate({ from: 0, to: 5, speed: 12, loop: true }) */
+    /**
+     * Анимация по кадрам листа: `.animate({ from: 0, to: 5, speed: 12, loop: true })`
+     * или по именованному клипу: `.animate({ clip: 'walk' })` / `.animate('walk')`.
+     *
+     * Клип (`$.clip.define`) задаёт кадры (в том числе с РАЗНЫХ листов), `fps`,
+     * `loop` и `pivot`; пивот двигает только точку вращения — размер узла клип
+     * не меняет (граница с H10).
+     */
     def('animate', function (spec) {
-        const cfg = typeof spec === 'object' ? spec : { name: spec };
+        const cfg = typeof spec === 'object' && spec !== null ? spec : { clip: spec };
+        const clip_name = cfg.clip === undefined && typeof spec === 'string' ? spec : cfg.clip;
         return this.eachNode((_, el) => {
             const node = el;
+            if (clip_name !== undefined && clip_name !== null) {
+                const clip = ctx._clip && typeof ctx._clip._raw === 'function'
+                    ? ctx._clip._raw(clip_name) : null;
+                if (!clip) {
+                    ctx.log(`$: .animate("${clip_name}") — клип не объявлен (см. $.clip.define)`);
+                    return;
+                }
+                node.frames = clip.frames.slice();
+                node.setSprite(node.frames[0]);
+                // Обработчики клипа (onEnd/onFrame) — подписка на события ЭТОГО
+                // узла; повторное применение снимает прежние подписки, чтобы не
+                // копились (иначе клик «доиграл» выстрелил бы дважды).
+                if (node._clip_events) {
+                    if (node._clip_events.end) node.off('anim:end', node._clip_events.end);
+                    if (node._clip_events.frame) node.off('anim:frame', node._clip_events.frame);
+                    node._clip_events = null;
+                }
+                if (clip.onEnd || clip.onFrame) {
+                    node._clip_events = {
+                        end: clip.onEnd ? (e) => clip.onEnd(e.data) : null,
+                        frame: clip.onFrame ? (e) => clip.onFrame(e.data) : null,
+                    };
+                    if (node._clip_events.end) node.on('anim:end', node._clip_events.end);
+                    if (node._clip_events.frame) node.on('anim:frame', node._clip_events.frame);
+                }
+                node.anim = {
+                    from: 0,
+                    to: node.frames.length - 1,
+                    speed: clip.fps,
+                    loop: clip.loop,
+                    t: 0,
+                    playing: true,
+                    clip: clip.name,
+                };
+                if (clip.pivot) {
+                    node.pivot_x = clip.pivot[0];
+                    node.pivot_y = clip.pivot[1];
+                }
+                touchRegistry();
+                return;
+            }
             if (!node.frames) {
                 ctx.log('$: .animate() — у узла нет кадров; используйте .frames({src, cols, rows, cw, ch})');
                 return;
@@ -1363,7 +1474,14 @@ function installNodeMethods($) {
                 return;
             }
             node.shader_name = String(value);
-            node.shader_params = params === undefined ? {} : Object.assign({}, params);
+            const raw = params === undefined ? {} : Object.assign({}, params);
+            const clean = {};
+            for (const key of Object.keys(raw)) {
+                const problem = shaderParamProblem(String(value), key, raw[key]);
+                if (problem) { reportShaderParam(`.shader("${value}")`, value, problem); continue; }
+                clean[key] = raw[key];
+            }
+            node.shader_params = clean;
         });
     });
 
@@ -1383,6 +1501,13 @@ function installNodeMethods($) {
         return this.eachNode((_, node) => {
             if (!node.shader_name) return;
             if (!node.shader_params) node.shader_params = {};
+            // Один параметр проверяем так же, как набор в .shader(): опечатка и
+            // NaN должны называть себя, а не превращаться в «по умолчанию».
+            const problem = shaderParamProblem(node.shader_name, String(name), value);
+            if (problem) {
+                reportShaderParam(`.shaderParam("${name}")`, node.shader_name, problem);
+                return;
+            }
             node.shader_params[String(name)] = value;
         });
     });
@@ -3452,10 +3577,23 @@ function animateSprites() {
         anim.t += dt * anim.speed;
         const span = anim.to - anim.from + 1;
         let index = anim.from + Math.floor(anim.t) % span;
+        // Событие КАДРА — только когда кадр действительно сменился: иначе
+        // слушатель получал бы вызовы на каждом тике (цена и смысл).
+        if (anim.last_index !== index) {
+            anim.last_index = index;
+            node.emit('anim:frame', { frame: index, frame_in_clip: index - anim.from,
+                                      clip: anim.clip || null, anim });
+        }
         if (!anim.loop && Math.floor(anim.t) >= span) {
             anim.playing = false;
             index = anim.to;
-            node.emit('animEnd', { anim });
+            node.emit('anim:end', { clip: anim.clip || null, loops: 1, anim });
+            node.emit('animEnd', { anim });   // прежнее имя: оставлено для совместимости
+        } else if (anim.loop && Math.floor(anim.t) >= span) {
+            // Петля: считаем циклы и сообщаем о каждом — «доиграл» для клипа с
+            // повтором случается на каждом обороте (описано в доках).
+            anim.loops = (anim.loops || 0) + 1;
+            node.emit('anim:end', { clip: anim.clip || null, loops: anim.loops, anim });
         }
         node.sprite = node.frames[index];
         node.frame_index = index;

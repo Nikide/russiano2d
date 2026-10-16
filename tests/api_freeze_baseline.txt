@@ -12,6 +12,7 @@ $.agent
 $.agent.describe
 $.agent.expose
 $.agent.frame
+$.agent.has
 $.agent.install
 $.agent.node
 $.agent.nodes
@@ -141,6 +142,9 @@ $.audio.hrtf
 $.audio.linearToDb
 $.audio.listener
 $.audio.masterVolume
+$.audio.music
+$.audio.musicPlaying
+$.audio.musicStop
 $.audio.musicVolume
 $.audio.mute
 $.audio.obstacles
@@ -242,6 +246,12 @@ $.cels.resolveIndex
 $.cels.state
 $.cels.tick
 $.cels.tickNode
+$.clip
+$.clip._raw
+$.clip.define
+$.clip.get
+$.clip.list
+$.clip.remove
 $.collision
 $.collision.allExcept
 $.collision.apply
@@ -296,6 +306,7 @@ $.csv.quoteField
 $.csv.stringify
 $.ctx
 $.ctx.$
+$.ctx._clip
 $.ctx._stopSceneSound
 $.ctx.agent
 $.ctx.alive
@@ -543,6 +554,7 @@ $.emit
 $.exit
 $.expect
 $.find
+$.findNodes
 $.flow
 $.flow.active
 $.flow.after
@@ -633,6 +645,7 @@ $.fn.emissive
 $.fn.emit
 $.fn.emitting
 $.fn.every
+$.fn.expose
 $.fn.externalVelocity
 $.fn.fadeIn
 $.fn.fadeOut
@@ -1663,12 +1676,14 @@ $.resource.list
 $.resource.load
 $.resource.names
 $.resource.preload
+$.resource.preloadTexture
 $.resource.publish
 $.resource.reload
 $.resource.remove
 $.resource.request
 $.resource.requests
 $.resource.stats
+$.resource.textureStats
 $.resource.textures
 $.room
 $.room._emit
@@ -1855,6 +1870,7 @@ $.sound.music
 $.sound.musicLayers
 $.sound.musicPitch
 $.sound.musicPlaying
+$.sound.musicStop
 $.sound.musicVolume
 $.sound.mute
 $.sound.pauseMusic
@@ -1868,6 +1884,7 @@ $.sound.priorityOf
 $.sound.seek
 $.sound.sfxVolume
 $.sound.stems
+$.sound.stemsState
 $.sound.stop
 $.sound.stopAll
 $.sound.stopMusic
@@ -2508,6 +2525,7 @@ $.звук.music
 $.звук.musicLayers
 $.звук.musicPitch
 $.звук.musicPlaying
+$.звук.musicStop
 $.звук.musicVolume
 $.звук.mute
 $.звук.pauseMusic
@@ -2521,6 +2539,7 @@ $.звук.priorityOf
 $.звук.seek
 $.звук.sfxVolume
 $.звук.stems
+$.звук.stemsState
 $.звук.stop
 $.звук.stopAll
 $.звук.stopMusic

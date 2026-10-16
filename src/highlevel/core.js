@@ -1565,6 +1565,11 @@ export class Node {
         this.y = 0;
         this.w = defaults.w !== undefined ? defaults.w : 32;
         this.h = defaults.h !== undefined ? defaults.h : 32;
+        // H10: «размер задан явно» — флаг вместо прежней эвристики `w === 32`.
+        // Из-за неё `.size(32, 32)` не отличался от «размер не задавали», и
+        // смена листа (`.frames()`/`.sprite({cols,rows,cw,ch})`) переписывала
+        // габариты узла размером кадра.
+        this.size_locked = false;
         this.r = defaults.r;
         this.angle = 0;
         this.scale_x = 1;
@@ -1677,8 +1682,8 @@ export class Node {
         case 'id':      ctx.byId.set(String(value), this); this.id = String(value); return this;
         case 'x':       this.moveToX(Number(value)); return this;
         case 'y':       this.moveToY(Number(value)); return this;
-        case 'w': case 'width':  this.w = Number(value); return this;
-        case 'h': case 'height': this.h = Number(value); return this;
+        case 'w': case 'width':  this.w = Number(value); this.size_locked = true; return this;
+        case 'h': case 'height': this.h = Number(value); this.size_locked = true; return this;
         case 'hp':      this.max_hp = Math.max(this.max_hp, Number(value)); this.cur_hp = Number(value); return this;
         case 'maxHp':   this.max_hp = Number(value); this.cur_hp = Math.min(this.cur_hp, this.max_hp); return this;
         case 'speed':   this.speed = Number(value); this.attrs.speed = this.speed; return this;
@@ -1883,7 +1888,9 @@ export class Node {
         if (value === null || value === undefined) { this.sprite = this.default_sprite; return; }
         this.sprite = resolveSprite(value);
         const [w, h] = spriteSize(this.sprite);
-        if (w > 0 && (this.w === 32 || this.w === 0)) { this.w = w; this.h = h; }
+        // Размер из спрайта берём, только если его не задавали явно: иначе
+        // смена кадра/листа молча меняла габариты узла (H10).
+        if (w > 0 && !this.size_locked) { this.w = w; this.h = h; }
         return this;
     }
 
@@ -2384,8 +2391,14 @@ function defineWrapperField(name, apply) {
 
 defineWrapperField('x', (node, v) => setWorldPosition(node, v, node.y));
 defineWrapperField('y', (node, v) => setWorldPosition(node, node.x, v));
-defineWrapperField('w', (node, v) => { node.w = v; if (node.body >= 0) node.syncBodySize(); });
-defineWrapperField('h', (node, v) => { node.h = v; if (node.body >= 0) node.syncBodySize(); });
+defineWrapperField('w', (node, v) => {
+    node.w = v; node.size_locked = true;
+    if (node.body >= 0) node.syncBodySize();
+});
+defineWrapperField('h', (node, v) => {
+    node.h = v; node.size_locked = true;
+    if (node.body >= 0) node.syncBodySize();
+});
 
 /** Метод-геттер первого узла (или значение по умолчанию). */
 export function defGet(name, fn, defValue) {
