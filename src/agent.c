@@ -269,8 +269,19 @@ static void cmd_state(R2DAgent *a, const R2dJson *req)
         r2d_sb_put_json_number(&sb, a->app->fps);
         r2d_sb_puts(&sb, ",\"scene\":");
         r2d_sb_put_json_string(&sb, a->app->start_scene ? a->app->start_scene : "");
-        r2d_sb_puts(&sb, ",\"game\":null}");
-        if (err) R2D_WARN("снимок состояния не удался: %s", err);
+        r2d_sb_puts(&sb, ",\"game\":null");
+        // Провайдер снимка есть, но УПАЛ — это ошибка, а не «мало данных».
+        // Раньше клиент получал правдоподобный неполный ответ и не знал об
+        // этом (отчёт Lead по регрессу H7): теперь в ответе есть код и текст,
+        // плюс строка в журнал. Если провайдера нет вовсе (игра на голом
+        // engine.*) — это документированный минимум, и пометки нет.
+        if (err) {
+            R2D_ERROR("снимок состояния не удался: %s", err);
+            r2d_sb_puts(&sb, ",\"error\":{\"code\":\"R2D_AGENT_SNAPSHOT_FAILED\",\"message\":");
+            r2d_sb_put_json_string(&sb, err);
+            r2d_sb_puts(&sb, "}");
+        }
+        r2d_sb_putc(&sb, '}');
     }
     r2d_sb_puts(&sb, ",\"frame\":");
     r2d_sb_put_json_number(&sb, (double)a->app->frame);

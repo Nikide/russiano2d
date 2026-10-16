@@ -214,7 +214,7 @@ export function installAgent($) {
          * так команда `query` агентского протокола не гонит в JSON весь мир.
          */
         nodes(sel, limit) {
-            const list = query(sel || '*').map(nodeBrief);
+            const list = query(sel || '*').map((n) => nodeBrief(n));
             return limit > 0 && list.length > limit ? list.slice(0, limit) : list;
         },
 
@@ -358,7 +358,25 @@ export function installAgent($) {
             const eng = engineOf();
             // Параметры урезания приходят из команды `state` (A8) и передаются
             // снимку как есть; без параметров поведение прежнее.
-            eng.setSnapshot((opts) => agent.snapshot(opts));
+            eng.setSnapshot((opts) => {
+                try {
+                    return agent.snapshot(opts);
+                } catch (e) {
+                    // Снимок упал: C подставит аварийный минимум и пометит ответ
+                    // кодом R2D_AGENT_SNAPSHOT_FAILED. Здесь дублируем в машинную
+                    // диагностику, чтобы ошибку было видно и через
+                    // $.debug.errors(), а не только в логе.
+                    const dbg = ($.debug && typeof $.debug.reportError === 'function')
+                        ? $.debug
+                        : (ctx.debug && typeof ctx.debug.reportError === 'function' ? ctx.debug : null);
+                    if (dbg) {
+                        dbg.reportError('agent', e, {
+                            code: 'R2D_AGENT_SNAPSHOT_FAILED', fatal: false,
+                        });
+                    }
+                    throw e;
+                }
+            });
             if (typeof eng.setAgentQuery === 'function') {
                 eng.setAgentQuery((sel, mode, limit) => {
                     if (mode === 'count') return query(sel || '*').length;

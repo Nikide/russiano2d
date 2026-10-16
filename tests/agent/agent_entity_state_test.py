@@ -186,6 +186,33 @@ def main():
                   "поля по запросу доезжают и до UI-узлов: %s"
                   % (json.dumps(mine[:1], ensure_ascii=False)[:120] if mine else "нет"))
 
+        # --- 6. Сломанный снимок обязан быть СЛЫШЕН -------------------------
+        # Аварийный минимум без пометки — та же «тишина вместо ошибки»: клиент
+        # видит правдоподобный неполный ответ и не знает об этом.
+        a.eval("globalThis.__real_snapshot = $.agent.snapshot;"
+               " $.agent.snapshot = () => { throw new Error('тест: сломанный снимок'); };")
+        broken = a.cmd("state")
+        bstate = broken.get("state") or {}
+        berr = bstate.get("error") or {}
+        check(berr.get("code") == "R2D_AGENT_SNAPSHOT_FAILED",
+              "сломанный снимок помечен кодом в ответе: %s"
+              % json.dumps(berr, ensure_ascii=False)[:140])
+        check("тест: сломанный снимок" in str(berr.get("message", "")),
+              "в ответе есть текст исключения")
+        check("entities" not in bstate,
+              "аварийный ответ не выдаёт себя за полные данные (entities нет)")
+        check("R2D_AGENT_SNAPSHOT_FAILED" in a.eval(
+                  "JSON.stringify($.debug.errors ? $.debug.errors() : [])"),
+              "ошибка попала в машинную диагностику $.debug.errors()")
+        a.eval("$.agent.snapshot = globalThis.__real_snapshot;")
+        restored = a.cmd("state")
+        check(isinstance(restored["state"].get("entities"), list),
+              "после починки снимок снова настоящий (сущностей %s)"
+              % len(restored["state"].get("entities") or []))
+        log = a.stderr_text()
+        check("R2D_AGENT_SNAPSHOT_FAILED" in log or "снимок состояния не удался" in log,
+              "и в журнале есть строка об отказе снимка")
+
     print()
     if FAILURES:
         print("ПРОВАЛОВ: %d" % len(FAILURES))
