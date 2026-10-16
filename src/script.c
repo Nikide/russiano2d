@@ -436,6 +436,29 @@ static JSValue r2d__js_profile(JSContext *ctx, JSValueConst this_val,
     }
     JS_SetPropertyStr(ctx, o, "zones", zones);
     JS_SetPropertyStr(ctx, o, "rows", JS_DupValue(ctx, zones));
+
+    // История кадра и перцентили (§17.2): вкладке PERF нужен график кадра и
+    // хвост распределения, а не только среднее. Данные — из того же кольца
+    // профайлера, новых замеров здесь нет.
+    const R2DProfileStats st = r2d_prof_frame_stats();
+    JSValue stats = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, stats, "current", JS_NewFloat64(ctx, st.current));
+    JS_SetPropertyStr(ctx, stats, "min", JS_NewFloat64(ctx, st.min));
+    JS_SetPropertyStr(ctx, stats, "mean", JS_NewFloat64(ctx, st.mean));
+    JS_SetPropertyStr(ctx, stats, "p50", JS_NewFloat64(ctx, st.p50));
+    JS_SetPropertyStr(ctx, stats, "p95", JS_NewFloat64(ctx, st.p95));
+    JS_SetPropertyStr(ctx, stats, "p99", JS_NewFloat64(ctx, st.p99));
+    JS_SetPropertyStr(ctx, stats, "max", JS_NewFloat64(ctx, st.max));
+    JS_SetPropertyStr(ctx, stats, "count", JS_NewInt32(ctx, st.count));
+    JS_SetPropertyStr(ctx, o, "stats", stats);
+
+    float hist[R2D_PROF_WINDOW_MAX];
+    const int hist_n = r2d_prof_frame_history(hist, R2D_PROF_WINDOW_MAX);
+    JSValue history = JS_NewArray(ctx);
+    for (int i = 0; i < hist_n; i++) {
+        JS_SetPropertyUint32(ctx, history, (uint32_t)i, JS_NewFloat64(ctx, hist[i]));
+    }
+    JS_SetPropertyStr(ctx, o, "history", history);
     return o;
 }
 
@@ -453,6 +476,105 @@ static JSValue r2d__js_profile_enabled(JSContext *ctx, JSValueConst this_val,
     R2D_UNUSED(this_val);
     if (argc >= 1) r2d_prof_set_enabled(JS_ToBool(ctx, argv[0]) != 0);
     return JS_NewBool(ctx, r2d_prof_enabled());
+}
+
+// --- Hitch-детектор (§18): engine.hitch.* -----------------------------------
+// Захваты считает профайлер (src/profile.c), здесь — только доступ к ним.
+// Счётчики, сцена и диагностика добавляются к захвату на стороне JS: про них
+// знают $.debug.counters() и $.debug.limits(), а в C их нет.
+
+static JSValue r2d__js_hitch_count(JSContext *ctx, JSValueConst this_val,
+                                   int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    return JS_NewInt32(ctx, r2d_prof_hitch_count());
+}
+
+static JSValue r2d__js_hitch_total(JSContext *ctx, JSValueConst this_val,
+                                   int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    return JS_NewInt64(ctx, r2d_prof_hitch_total());
+}
+
+// engine.hitch.threshold() — прочитать, engine.hitch.threshold(ms) — выставить.
+// Возвращается фактический порог: мусор (NaN, ноль, минус) порог не меняет.
+static JSValue r2d__js_hitch_threshold(JSContext *ctx, JSValueConst this_val,
+                                       int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc >= 1 && !JS_IsUndefined(argv[0]) && !JS_IsNull(argv[0])) {
+        double ms = 0.0;
+        if (JS_ToFloat64(ctx, &ms, argv[0])) return JS_EXCEPTION;
+        r2d_prof_hitch_set_threshold((float)ms);
+    }
+    return JS_NewFloat64(ctx, r2d_prof_hitch_threshold());
+}
+
+static JSValue r2d__js_hitch_clear(JSContext *ctx, JSValueConst this_val,
+                                   int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    r2d_prof_hitch_clear();
+    return JS_UNDEFINED;
+}
+
+// engine.hitch.get(i) — захват или null. Кадры контекста отдаются только
+// заполненные: незаполненный слот — это не «кадр 0 мс», а отсутствие кадра,
+// и подставлять туда число нельзя.
+static JSValue r2d__js_hitch_get(JSContext *ctx, JSValueConst this_val,
+                                 int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 1) return JS_NULL;
+    int32_t index = 0;
+    if (JS_ToInt32(ctx, &index, argv[0])) return JS_EXCEPTION;
+
+    R2DHitchCapture cap;
+    if (!r2d_prof_hitch_get((int)index, &cap)) return JS_NULL;
+
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "frame", JS_NewInt64(ctx, cap.frame));
+    JS_SetPropertyStr(ctx, o, "frame_ms", JS_NewFloat64(ctx, cap.frame_ms));
+    JS_SetPropertyStr(ctx, o, "real_ms", JS_NewFloat64(ctx, cap.real_ms));
+    JS_SetPropertyStr(ctx, o, "threshold_ms", JS_NewFloat64(ctx, cap.threshold_ms));
+    JS_SetPropertyStr(ctx, o, "center", JS_NewInt32(ctx, cap.center));
+    JS_SetPropertyStr(ctx, o, "filled", JS_NewInt32(ctx, cap.filled));
+    JS_SetPropertyStr(ctx, o, "zones_ms", JS_NewFloat64(ctx, cap.zones_ms));
+    const float rest = cap.frame_ms - cap.zones_ms;
+    JS_SetPropertyStr(ctx, o, "unaccounted_ms",
+                      JS_NewFloat64(ctx, rest > 0.0f ? rest : 0.0f));
+
+    // Причина: имя самой дорогой зоны спайка; null — спайк вне измеренных зон
+    // (это честный ответ, а не отсутствие поля).
+    const char *reason_name = r2d_prof_zone_name(cap.reason);
+    JS_SetPropertyStr(ctx, o, "reason",
+                      reason_name ? JS_NewString(ctx, reason_name) : JS_NULL);
+    JS_SetPropertyStr(ctx, o, "reason_zone", JS_NewInt32(ctx, cap.reason));
+    JS_SetPropertyStr(ctx, o, "reason_ms", JS_NewFloat64(ctx, cap.reason_ms));
+
+    // Контекст: времена кадров и зоны каждого — в порядке «до → спайк → после».
+    JSValue ms = JS_NewArray(ctx);
+    for (int i = 0; i < cap.filled; i++) {
+        JS_SetPropertyUint32(ctx, ms, (uint32_t)i, JS_NewFloat64(ctx, cap.ms[i]));
+    }
+    JS_SetPropertyStr(ctx, o, "ms", ms);
+
+    JSValue zones = JS_NewArray(ctx);
+    for (int i = 0; i < cap.filled; i++) {
+        JSValue row = JS_NewArray(ctx);
+        for (int z = 0; z < R2D_PROF_COUNT; z++) {
+            JSValue cell = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, cell, "name",
+                              JS_NewString(ctx, r2d_prof_zone_name(z)));
+            JS_SetPropertyStr(ctx, cell, "ms",
+                              JS_NewFloat64(ctx, cap.zone_ms[i][z]));
+            JS_SetPropertyUint32(ctx, row, (uint32_t)z, cell);
+        }
+        JS_SetPropertyUint32(ctx, zones, (uint32_t)i, row);
+    }
+    JS_SetPropertyStr(ctx, o, "zones", zones);
+    return o;
 }
 
 static JSValue r2d__js_rgba(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -4946,6 +5068,18 @@ static void r2d__install_window(JSContext *ctx, JSValue engine)
     JS_SetPropertyStr(ctx, engine, "window", win);
 }
 
+// engine.hitch.* — доступ к захватам долгих кадров (§18).
+static void r2d__install_hitch(JSContext *ctx, JSValue engine)
+{
+    JSValue hitch = JS_NewObject(ctx);
+    r2d__set_fn(ctx, hitch, "count",     r2d__js_hitch_count, 0);
+    r2d__set_fn(ctx, hitch, "total",     r2d__js_hitch_total, 0);
+    r2d__set_fn(ctx, hitch, "get",       r2d__js_hitch_get, 1);
+    r2d__set_fn(ctx, hitch, "threshold", r2d__js_hitch_threshold, 1);
+    r2d__set_fn(ctx, hitch, "clear",     r2d__js_hitch_clear, 0);
+    JS_SetPropertyStr(ctx, engine, "hitch", hitch);
+}
+
 
 static JSValue r2d__make_engine(JSContext *ctx)
 {
@@ -4969,6 +5103,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     // §39: кадровый проход локальных трансформов (регистрирует core.js).
     r2d__set_fn(ctx, engine, "setResolveTransforms", r2d__js_set_resolve_transforms, 1);
     r2d__install_window(ctx, engine);
+    r2d__install_hitch(ctx, engine);
     r2d__set_fn(ctx, engine, "setExit", r2d__js_set_exit, 1);
     r2d__set_fn(ctx, engine, "setSnapshot", r2d__js_set_snapshot, 1);
     r2d__set_fn(ctx, engine, "setAgentQuery", r2d__js_set_agent_query, 1);

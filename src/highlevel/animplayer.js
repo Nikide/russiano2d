@@ -82,6 +82,13 @@ const EPS = 1e-9;
 const DEFAULT_PLAYER = 'main';
 
 /**
+ * Версия формата постоянного состояния плеера (§10). Растёт, если меняется
+ * НАБОР полей: загрузка слота другой версии обязана сказать об этом, а не
+ * молча восстановить половину.
+ */
+export const ANIM_STATE_VERSION = 1;
+
+/**
  * Имя типа дорожки по синониму: 'angle' → 'rotation', 'opacity' → 'alpha'…
  * Новые типы §41: visible, bool, enum, emitter, shape, light, ui, audio, method.
  */
@@ -1998,9 +2005,68 @@ export class AnimPlayer {
         return this.jump(ms, 'skip', opts);
     }
 
-    /** Восстановление позиции (save/load, replay): policy-фаза 'restore'. */
-    restore(ms, opts) {
-        return this.jump(ms, 'restore', opts);
+    /**
+     * Восстановление позиции (save/load, replay): policy-фаза 'restore'.
+     *
+     * С ОБЪЕКТОМ состояния — восстановить плеер целиком (§10):
+     * `player.restore(player.state())` возвращает клип, время, окна и маркеры.
+     * Разделение по типу аргумента оставлено ради совместимости: `restore(ms)`
+     * как перемотка работал до постоянного состояния и остаётся перемоткой.
+     */
+    restore(stateOrMs, opts) {
+        if (isObject(stateOrMs) && !Array.isArray(stateOrMs)) {
+            return restorePlayerState(this, stateOrMs, opts);
+        }
+        return this.jump(stateOrMs, 'restore', opts);
+    }
+
+    /**
+     * §10: постоянное состояние плеера для сейва — что игра обязана продолжить
+     * после `$.save.load()`:
+     *
+     *   * слоты (клип, вес, loop, offset, скорость слоя) — их у кроссфейда два;
+     *   * часы плеера (`time`), скорость, loop-переопределение, пауза, домен
+     *     часов и признак «домен задан явно»;
+     *   * ОТКРЫТЫЕ gameplay-окна (`attack` и т.п.) — по ним играет хитбокс;
+     *   * уже сработавшие one-shot маркеры, иначе после загрузки урон
+     *     нанесётся второй раз.
+     *
+     * Чего здесь НЕТ и почему — one-shot SFX, вспышки, тряска: это состояние
+     * картинки, а не игры (§10, highlevel_save_presentation_test.py). Значения
+     * дорожек тоже не хранятся: они пересчитываются из клипа и времени.
+     */
+    state() {
+        const slots = [];
+        for (const [slot, layer] of this.slots) {
+            slots.push({
+                slot,
+                clip: layer.timeline.name,
+                weight: layer.weight,
+                loop: layer.loop,
+                offset: layer.offset,
+                speed: layer.speed,
+                fired: Array.from(layer.fired_ever),
+            });
+        }
+        const windows = [];
+        for (const entry of this.window_state.values()) {
+            if (!entry || entry.open !== true) continue;     // закрытые окна — не состояние
+            windows.push({
+                name: entry.name,
+                at: entry.at,
+                clip: entry.clip === undefined ? null : entry.clip,
+            });
+        }
+        return {
+            clock: this.clockValue,
+            clockExplicit: this.clockExplicit === true,
+            speed: this.speedValue,
+            loop: this.loopValue === undefined ? null : this.loopValue,
+            paused: this.pausedFlag === true,
+            time: this.clock_ms,
+            slots,
+            windows,
+        };
     }
 
     jump(ms, phase, opts) {
@@ -2377,6 +2443,163 @@ function defaultPlayer() {
     return default_player;
 }
 
+// --- §10: постоянное состояние плеера (мост save ↔ анимация) ----------------
+//
+// Плеер — поведение узла-цели, поэтому его состояние живёт в снимке рядом с
+// состоянием узла (nodes[nid].p, ключ — стабильный nid), а не отдельной
+// секцией сейва: иначе появилась бы вторая система сохранения. Логика
+// восстановления — здесь, в animplayer.js: save.js только называет узел.
+
+/** Число из состояния снимка; мусор не должен превращаться в NaN в часах. */
+function stateNumber(value, fallback) {
+    const n = Number(value);
+    return isFinite(n) ? n : fallback;
+}
+
+/**
+ * Снять слои плеера ТИХО: без dispatch'ей 'window'/'finished' и без событий
+ * закрытия окон. Загрузка сейва — это прыжок (как seek), а не проигрывание
+ * пропущенного: слушатели не должны получить синтетических событий, которых в
+ * сохранённом мире не было.
+ */
+function clearPlayerLayers(player) {
+    for (const [slot, layer] of Array.from(player.slots.entries())) {
+        if (player.slots.get(slot) === layer) player.slots.delete(slot);
+        stopLayerAudio(player, layer, true);
+    }
+    player.window_state.clear();
+    return player;
+}
+
+/** §10: применить состояние из `player.state()` к этому же плееру. */
+function restorePlayerState(player, data, opts) {
+    if (!isObject(data)) throw new Error('$.anim.restore: состояние плеера — не объект');
+    const o = opts || {};
+    const report = typeof o.report === 'function' ? o.report : null;
+    const complain = (code, message) => {
+        if (report) report(code, message);
+        else ctx.log(message);
+    };
+    const slots = Array.isArray(data.slots) ? data.slots : [];
+    const windows = Array.isArray(data.windows) ? data.windows : [];
+
+    clearPlayerLayers(player);
+
+    // Часы и режимы плеера. Домен часов восстанавливается как есть: если игра
+    // его не задавала, он и дальше берётся из клипа (clockExplicit).
+    player.clockValue = CLOCKS.indexOf(String(data.clock)) >= 0 ? String(data.clock) : 'simulation';
+    player.clockExplicit = data.clockExplicit === true;
+    player.speedValue = Math.max(0, stateNumber(data.speed, 1));
+    player.loopValue = data.loop === null || data.loop === undefined ? null
+        : (LOOPS.indexOf(String(data.loop)) >= 0 ? String(data.loop) : null);
+    player.clock_ms = Math.max(0, stateNumber(data.time, 0));
+    player.pausedFlag = data.paused === true;
+
+    // Слои: тот же слот, тот же клип, те же вес/loop/offset/скорость. Клип
+    // ищется в реестре по имени — логика клипа в снимок не попадает (§10).
+    const missing = [];
+    const layers_by_clip = new Map();
+    for (const item of slots) {
+        if (!isObject(item)) continue;
+        const clip = String(item.clip === undefined || item.clip === null ? '' : item.clip);
+        if (!timelines.has(clip)) { missing.push(clip); continue; }
+        const slot = item.slot === undefined || item.slot === null ? 'base' : String(item.slot);
+        const layer = player.addLayer(clip, slot, {
+            weight: item.weight,
+            loop: item.loop,
+            offset: item.offset,
+            speed: item.speed,
+        });
+        if (!layer) { missing.push(clip); continue; }
+        for (const key of Array.isArray(item.fired) ? item.fired : []) {
+            layer.fired_ever.add(String(key));
+            player.fired_markers.add(String(key));
+        }
+        if (!layers_by_clip.has(clip)) layers_by_clip.set(clip, layer);
+    }
+
+    // Открытые gameplay-окна: состояние как есть, без события 'window'.
+    // Окно привязывается к своему слою, чтобы прерывание клипа его закрыло.
+    for (const w of windows) {
+        if (!isObject(w)) continue;
+        const name = String(w.name === undefined || w.name === null ? '' : w.name);
+        if (!name) continue;
+        const clip = w.clip === undefined || w.clip === null ? null : String(w.clip);
+        if (clip !== null && !timelines.has(clip)) missing.push(clip);
+        player.window_state.set(name, {
+            name,
+            open: true,
+            at: stateNumber(w.at, 0),
+            clip,
+            layer: clip === null ? null : (layers_by_clip.get(clip) || null),
+        });
+    }
+
+    // Дискретное состояние (visible/bool/enum/кадр/форма/эмиттер) пересчитывается
+    // из клипа и времени: в снимке его нет, и это правильно — иначе два
+    // источника правды разошлись бы после правки клипа.
+    player.applyValues(true);
+
+    if (missing.length) {
+        const unique = [...new Set(missing)];
+        complain('R2D_SAVE_ANIM_CLIP',
+            `$.anim: клипы из снимка не найдены (${unique.join(', ')}) — плеер "${player.name}" `
+            + 'восстановлен без них; проверьте content-версии клипов');
+    }
+    return player;
+}
+
+/** §10: живые плееры, чья цель — этот узел (мост save ↔ анимация). */
+export function playersOn(node) {
+    const out = [];
+    if (!node) return out;
+    for (const player of players) {
+        if (player.destroyed || player.node !== node) continue;
+        out.push(player);
+    }
+    return out;
+}
+
+/**
+ * §10: состояние плееров узла для сейва —
+ * `{ v, players: { имя плеера: state() } }` или null, если у узла их нет.
+ * Именно это кладёт в слот провайдер `anim.player` из save.js.
+ */
+export function nodeAnimState(node) {
+    const list = playersOn(node);
+    if (!list.length) return null;
+    const out = {};
+    for (const player of list) out[player.name] = player.state();
+    return { v: ANIM_STATE_VERSION, players: out };
+}
+
+/**
+ * §10: восстановить плееров узла из `nodeAnimState()`. Цель плеера
+ * переводится на живой узел (в снимке её нет — есть только nid), затем
+ * применяется состояние. `report(code, message)` — структурированная жалоба
+ * вызывающего: $.save передаёт свою, чтобы расхождение попало в last_failure,
+ * а не осталось строкой в журнале.
+ */
+export function restoreNodeAnimState(node, data, report) {
+    if (!isObject(data) || !isObject(data.players)) {
+        throw new Error('$.anim: состояние анимации узла — не объект { v, players }');
+    }
+    const version = Number(data.v);
+    if (version !== ANIM_STATE_VERSION) {
+        throw new Error(`$.anim: версия состояния анимации ${data.v} не поддерживается `
+            + `(нужна ${ANIM_STATE_VERSION})`);
+    }
+    const restored = [];
+    for (const name of Object.keys(data.players)) {
+        const player = getPlayer(name);
+        // Цель — восстановленный узел: старая уничтожена вместе с прошлым миром.
+        if (player.node !== node) player.target(node);
+        player.restore(data.players[name], { report });
+        restored.push(name);
+    }
+    return restored;
+}
+
 /** Завершение слоя: окна закрываются, звук гаснет (если не keep). */
 function finishLayer(player, layer, reason) {
     closeLayerWindows(player, layer, reason);
@@ -2556,7 +2779,23 @@ export function installAnimPlayer($) {
     };
     anim.seek = (ms, opts) => { defaultPlayer().seek(ms, opts); return anim; };
     anim.skip = (ms, opts) => { defaultPlayer().skip(ms, opts); return anim; };
-    anim.restore = (ms, opts) => { defaultPlayer().restore(ms, opts); return anim; };
+    /**
+     * `$.anim.restore(120)` — перемотка (policy-фаза 'restore');
+     * `$.anim.restore(state)` — вернуть плеер по умолчанию к состоянию (§10).
+     */
+    anim.restore = (stateOrMs, opts) => { defaultPlayer().restore(stateOrMs, opts); return anim; };
+    /** §10: постоянное состояние плеера по умолчанию (для сейва/реплея). */
+    anim.state = () => defaultPlayer().state();
+
+    // --- §10: мост save ↔ анимация ------------------------------------------
+    // $.save берёт состояние плееров узла отсюда (ключ — узел, ключ в слоте —
+    // стабильный nid) и сюда же его возвращает при загрузке.
+    /** Плееры, чья цель — этот узел. */
+    anim.playersOn = (node) => playersOn(node);
+    /** Состояние плееров узла: `{ v, players }` или null. */
+    anim.nodeState = (node) => nodeAnimState(node);
+    /** Восстановить плееров узла; report — структурированная жалоба ($.save). */
+    anim.restoreNodeState = (node, data, report) => restoreNodeAnimState(node, data, report);
     anim.reset = () => { defaultPlayer().reset(); return anim; };
     anim.clock = (value) => {
         if (value === undefined) return defaultPlayer().clock();

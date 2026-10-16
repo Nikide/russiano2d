@@ -789,6 +789,13 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
     // сброса — см. порядок кадра в main.c).
     r->light_mask_used    = false;
     r->light_composited   = false;
+    r->light_blur_used    = false;
+    r->scene_target_used  = false;
+    // §37. Список источников света живёт кадр: JS-путь света публикует его
+    // заново (drawLightNode → engine.devtools.light), а инспектор читает уже
+    // готовый список. Источников прошлого кадра здесь быть не должно.
+    r->light_reading_count   = 0;
+    r->light_reading_dropped = 0;
     // Число проходов маски читается игрой из JS в начале кадра — то есть после
     // этого сброса. Поэтому храним ещё и значение прошлого кадра.
     r->prev_mask_passes   = r->stat_mask_passes;
@@ -807,6 +814,7 @@ void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
     r->clip_count       = 0;
     r->clip_cur         = -1;
     r->stat_draws     = 0;
+    r->stat_batches   = 0;
     r->stat_passes    = 0;
     r->stat_fx_cmds   = 0;
     r->stat_sprites   = 0;
@@ -1795,6 +1803,7 @@ static void r2d__draw_sprite_range(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
         SDL_DrawGPUIndexedPrimitives(pass, num_indices, 1, first_index, 0, 0);
 
         r->stat_draws++;
+        r->stat_batches++;
         if (fx_index > 0) r->stat_fx_cmds += (i - run_start);
         run_start = i;
     }
@@ -1836,6 +1845,7 @@ static void r2d__draw_tri_batches(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
         SDL_DrawGPUIndexedPrimitives(pass, (Uint32)tb->vertex_count, 1,
                                      (Uint32)(index_start + tb->vertex_offset), 0, 0);
         r->stat_draws++;
+        r->stat_batches++;
     }
 }
 
@@ -1955,6 +1965,7 @@ void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURend
         SDL_DrawGPUIndexedPrimitives(pass, (Uint32)mb->vertex_count, 1,
                                      (Uint32)(r->mesh_index_start + mb->vertex_offset), 0, 0);
         r->stat_draws++;
+        r->stat_batches++;
     }
     r->stat_mesh_cmds += r->mesh_batch_upload;
     r->stat_mesh_frames++;
@@ -2168,7 +2179,11 @@ const R2DPostParams *r2d_render_get_post(const R2DRenderer *r)
 SDL_GPUTexture *r2d_render_scene_target(R2DRenderer *r, int w, int h)
 {
     if (!r || !r->device || w <= 0 || h <= 0) return NULL;
-    if (r->scene_target && r->scene_w == w && r->scene_h == h) return r->scene_target;
+    if (r->scene_target && r->scene_w == w && r->scene_h == h) {
+        // §25: факт «сцена этого кадра идёт в offscreen» для инспектора рендера.
+        r->scene_target_used = true;
+        return r->scene_target;
+    }
 
     if (r->scene_target) {
         SDL_ReleaseGPUTexture(r->device, r->scene_target);
@@ -2195,6 +2210,7 @@ SDL_GPUTexture *r2d_render_scene_target(R2DRenderer *r, int w, int h)
     }
     r->scene_w = w;
     r->scene_h = h;
+    r->scene_target_used = true;
     return r->scene_target;
 }
 
@@ -2827,6 +2843,8 @@ bool r2d_render_draw_lights(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
             SDL_EndGPURenderPass(pass);
             r->stat_draws++;
             r->stat_passes++;
+            // §25: буфер размытия света реально участвовал в кадре.
+            r->light_blur_used = true;
         }
     }
 
@@ -3321,6 +3339,158 @@ static JSValue r2d__js_get_post(JSContext *ctx, JSValueConst this_val,
     return o;
 }
 
+// ---------------------------------------------------------------------------
+// §19/§37. engine.devtools.* — данные инспекторов физики и света
+//
+// Живут здесь, а не в script.c: узел рендера уже владеет своими биндингами
+// (engine.renderInfo, engine.viewport.*), поэтому общая точка сборки не
+// правится. Второго источника истины нет: формы читаются прямо из Box2D, а
+// источники света приходят публикацией из JS-пути света (R2DLightReading).
+// ---------------------------------------------------------------------------
+
+/** Имя вида формы — то же, что у областей в JS (AREA_KINDS, core.js). */
+static const char *r2d__shape_kind_name(int kind)
+{
+    switch (kind) {
+    case R2D_SHAPE_CIRCLE:  return "circle";
+    case R2D_SHAPE_CAPSULE: return "capsule";
+    case R2D_SHAPE_POLYGON: return "polygon";
+    default:                return "box";
+    }
+}
+
+// §19. engine.devtools.shapes(body) → массив форм тела для overlay:
+// { index, kind, kindId, x, y, angle, halfW, halfH, radius, points[], pointCount,
+//   sensor, enabled, oneWay, layer, mask, group }.
+// Координаты локальные (система тела, пиксели): мировой контур — трансформ
+// тела из engine.getTransforms() плюс x/y/angle формы.
+static JSValue r2d__js_devtools_shapes(JSContext *ctx, JSValueConst this_val,
+                                       int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DPhysics *p = s ? s->physics : NULL;
+
+    JSValue arr = JS_NewArray(ctx);
+    if (!p || argc < 1) return arr;
+
+    int32_t body = -1;
+    if (JS_ToInt32(ctx, &body, argv[0])) return arr;
+
+    const int count = r2d_physics_shape_count(p, (int)body);
+    uint32_t n = 0;
+    for (int i = 0; i < count; ++i) {
+        R2DPhysShapeInfo info;
+        // Форма, тип которой движку неизвестен, в список не попадает: рисовать
+        // «похожий» контур вместо настоящего — та же выдумка, что и числа.
+        if (!r2d_physics_shape_info(p, (int)body, i, &info)) continue;
+
+        JSValue o = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, o, "index", JS_NewInt32(ctx, i));
+        JS_SetPropertyStr(ctx, o, "kind", JS_NewString(ctx, r2d__shape_kind_name(info.kind)));
+        JS_SetPropertyStr(ctx, o, "kindId", JS_NewInt32(ctx, info.kind));
+        JS_SetPropertyStr(ctx, o, "x", JS_NewFloat64(ctx, (double)info.cx));
+        JS_SetPropertyStr(ctx, o, "y", JS_NewFloat64(ctx, (double)info.cy));
+        JS_SetPropertyStr(ctx, o, "angle", JS_NewFloat64(ctx, (double)info.angle));
+        JS_SetPropertyStr(ctx, o, "halfW", JS_NewFloat64(ctx, (double)info.half_w));
+        JS_SetPropertyStr(ctx, o, "halfH", JS_NewFloat64(ctx, (double)info.half_h));
+        JS_SetPropertyStr(ctx, o, "radius", JS_NewFloat64(ctx, (double)info.radius));
+
+        JSValue pts = JS_NewArray(ctx);
+        for (int k = 0; k < info.point_count; ++k) {
+            JSValue pt = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, pt, "x", JS_NewFloat64(ctx, (double)info.points[k * 2]));
+            JS_SetPropertyStr(ctx, pt, "y", JS_NewFloat64(ctx, (double)info.points[k * 2 + 1]));
+            JS_SetPropertyUint32(ctx, pts, (uint32_t)k, pt);
+        }
+        JS_SetPropertyStr(ctx, o, "points", pts);
+        JS_SetPropertyStr(ctx, o, "pointCount", JS_NewInt32(ctx, info.point_count));
+
+        JS_SetPropertyStr(ctx, o, "sensor", JS_NewBool(ctx, info.sensor));
+        JS_SetPropertyStr(ctx, o, "enabled", JS_NewBool(ctx, info.enabled));
+        JS_SetPropertyStr(ctx, o, "oneWay", JS_NewBool(ctx, info.one_way));
+        JS_SetPropertyStr(ctx, o, "layer", JS_NewFloat64(ctx, (double)info.category_bits));
+        JS_SetPropertyStr(ctx, o, "mask", JS_NewFloat64(ctx, (double)info.mask_bits));
+        JS_SetPropertyStr(ctx, o, "group", JS_NewInt32(ctx, info.group_index));
+        JS_SetPropertyUint32(ctx, arr, n++, o);
+    }
+    return arr;
+}
+
+// §37. engine.devtools.light(x, y, radius, intensity, shadow, layer) —
+// публикация ОДНОГО реально нарисованного источника. Зовётся JS-путём света
+// (render.js, drawLightNode/drawLightAreaNode) один раз на источник за кадр.
+// Своего света в C нет, поэтому и «списка света» без публикации быть не может.
+static JSValue r2d__js_devtools_light(JSContext *ctx, JSValueConst this_val,
+                                      int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DRenderer *r = s ? s->renderer : NULL;
+    if (!r) return JS_FALSE;
+
+    if (r->light_reading_count >= R2D_MAX_LIGHT_READINGS) {
+        // Молча терять источники нельзя: список останется неполным, но
+        // инспектор узнает об этом из lightsDropped().
+        r->light_reading_dropped++;
+        return JS_FALSE;
+    }
+
+    double x = 0.0, y = 0.0, radius = 0.0, intensity = 0.0, layer = 0.0;
+    if (argc > 0) JS_ToFloat64(ctx, &x, argv[0]);
+    if (argc > 1) JS_ToFloat64(ctx, &y, argv[1]);
+    if (argc > 2) JS_ToFloat64(ctx, &radius, argv[2]);
+    if (argc > 3) JS_ToFloat64(ctx, &intensity, argv[3]);
+
+    R2DLightReading *rd = &r->light_readings[r->light_reading_count++];
+    rd->x         = (float)x;
+    rd->y         = (float)y;
+    rd->radius    = (float)radius;
+    rd->intensity = (float)intensity;
+    // shadow — итоговый флаг ПОСЛЕ деградации по бюджету теней: инспектор
+    // обязан видеть то, что случилось, а не то, что просили.
+    rd->shadow    = (argc > 4) && JS_ToBool(ctx, argv[4]) != 0;
+    if (argc > 5) JS_ToFloat64(ctx, &layer, argv[5]);
+    rd->layer     = (uint32_t)layer;
+    return JS_TRUE;
+}
+
+// engine.devtools.lights() → [{ index, x, y, radius, intensity, shadow, layer }].
+// Ровно то, что опубликовал JS-путь света в этом кадре, в порядке отрисовки.
+static JSValue r2d__js_devtools_lights(JSContext *ctx, JSValueConst this_val,
+                                       int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DRenderer *r = s ? s->renderer : NULL;
+
+    JSValue arr = JS_NewArray(ctx);
+    if (!r) return arr;
+    for (int i = 0; i < r->light_reading_count; ++i) {
+        const R2DLightReading *rd = &r->light_readings[i];
+        JSValue o = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, o, "index", JS_NewInt32(ctx, i));
+        JS_SetPropertyStr(ctx, o, "x", JS_NewFloat64(ctx, (double)rd->x));
+        JS_SetPropertyStr(ctx, o, "y", JS_NewFloat64(ctx, (double)rd->y));
+        JS_SetPropertyStr(ctx, o, "radius", JS_NewFloat64(ctx, (double)rd->radius));
+        JS_SetPropertyStr(ctx, o, "intensity", JS_NewFloat64(ctx, (double)rd->intensity));
+        JS_SetPropertyStr(ctx, o, "shadow", JS_NewBool(ctx, rd->shadow));
+        JS_SetPropertyStr(ctx, o, "layer", JS_NewFloat64(ctx, (double)rd->layer));
+        JS_SetPropertyUint32(ctx, arr, (uint32_t)i, o);
+    }
+    return arr;
+}
+
+// Сколько публикаций света не влезло в список за кадр (0 — список полный).
+static JSValue r2d__js_devtools_lights_dropped(JSContext *ctx, JSValueConst this_val,
+                                               int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DRenderer *r = s ? s->renderer : NULL;
+    return JS_NewInt32(ctx, r ? r->light_reading_dropped : 0);
+}
+
 // engine.renderInfo() → что происходило в кадре: пост, свечение, размеры
 // буферов и число полноэкранных проходов. Нужен тестам и отладке: по одним
 // параметрам поста не видно, действительно ли свечение считалось.
@@ -3346,6 +3516,91 @@ static JSValue r2d__js_render_info(JSContext *ctx, JSValueConst this_val,
     JS_SetPropertyStr(ctx, o, "fx_pipelines", JS_NewBool(ctx, r && r->fx_pipelines[0] != NULL));
     JS_SetPropertyStr(ctx, o, "fx_cmds", JS_NewInt32(ctx, r ? r->stat_fx_cmds : 0));
     JS_SetPropertyStr(ctx, o, "draws", JS_NewInt32(ctx, r ? r->stat_draws : 0));
+
+    // --- §25. Счётчики инспектора рендера -----------------------------------
+    // batches — пакеты, реально отправленные в этом кадре (участки спрайтов,
+    // пакеты треугольников, пакет меша). draw_calls — ВСЕ вызовы отрисовки:
+    // пакеты плюс полноэкранные проходы (пост, свечение, свет). Числа читаются
+    // из счётчиков GPU-вызовов, а не считаются «на глазок»: draw_calls — это
+    // ровно то же, что старое поле draws (оставлено для совместимости).
+    JS_SetPropertyStr(ctx, o, "batches", JS_NewInt32(ctx, r ? r->stat_batches : 0));
+    JS_SetPropertyStr(ctx, o, "draw_calls", JS_NewInt32(ctx, r ? r->stat_draws : 0));
+
+    // Цели кадра: имя, размер и факт участия в этом кадре. В списке только те
+    // цели, которые реально существуют (созданы) — «нулевых» записей нет,
+    // иначе инспектор показывал бы буфер, которого нет.
+    {
+        JSValue targets = JS_NewArray(ctx);
+        uint32_t n = 0;
+        if (r) {
+            struct { const char *name; SDL_GPUTexture *tex; int w, h; bool active; } list[] = {
+                { "scene",      r->scene_target,      r->scene_w,      r->scene_h,      r->scene_target_used },
+                { "bloom_a",    r->bloom_a,           r->bloom_w,      r->bloom_h,      r->bloom_result == r->bloom_a },
+                { "bloom_b",    r->bloom_b,           r->bloom_w,      r->bloom_h,      r->bloom_result == r->bloom_b },
+                { "light",      r->light_target,      r->light_w,      r->light_h,      r->lightmap_used },
+                { "light_blur", r->light_blur,        r->light_w,      r->light_h,      r->light_blur_used },
+                { "light_mask", r->light_mask_target, r->light_mask_w, r->light_mask_h, r->stat_mask_passes > 0 },
+                { "depth",      r->depth_texture,     r->depth_w,      r->depth_h,      r->depth_enabled && r->depth_texture != NULL },
+            };
+            for (size_t i = 0; i < sizeof list / sizeof list[0]; ++i) {
+                if (!list[i].tex) continue;
+                JSValue t = JS_NewObject(ctx);
+                JS_SetPropertyStr(ctx, t, "name", JS_NewString(ctx, list[i].name));
+                JS_SetPropertyStr(ctx, t, "w", JS_NewInt32(ctx, list[i].w));
+                JS_SetPropertyStr(ctx, t, "h", JS_NewInt32(ctx, list[i].h));
+                JS_SetPropertyStr(ctx, t, "active", JS_NewBool(ctx, list[i].active));
+                JS_SetPropertyUint32(ctx, targets, n++, t);
+            }
+            // Цели игры ($.viewport.create): каждая живёт в своём слоте.
+            for (int i = 0; i < R2D_MAX_VIEWPORTS; ++i) {
+                if (!r->viewports[i].used || !r->viewports[i].target) continue;
+                JSValue t = JS_NewObject(ctx);
+                char name[32];
+                SDL_snprintf(name, sizeof name, "viewport%d", i);
+                JS_SetPropertyStr(ctx, t, "name", JS_NewString(ctx, name));
+                JS_SetPropertyStr(ctx, t, "w", JS_NewInt32(ctx, r->viewports[i].w));
+                JS_SetPropertyStr(ctx, t, "h", JS_NewInt32(ctx, r->viewports[i].h));
+                JS_SetPropertyStr(ctx, t, "active", JS_NewBool(ctx, r->bound_viewport == i));
+                JS_SetPropertyUint32(ctx, targets, n++, t);
+            }
+        }
+        JS_SetPropertyStr(ctx, o, "targets", targets);
+    }
+
+    // Текстуры: сколько живых, потолок и суммарный размер в пикселях. Байты
+    // НЕ отдаём: таблица текстур не хранит ни формат, ни число мип-уровней, а
+    // считать «примерно по 4 байта» — выдуманное число (вьюпорты игры вообще
+    // создаются в формате swapchain). Число пикселей — измеренный факт.
+    {
+        JSValue tex = JS_NewObject(ctx);
+        int live = 0;
+        double pixels = 0.0;
+        if (r) {
+            for (int i = 0; i < r->texture_count; ++i) {
+                if (!r->textures[i].alive) continue;
+                live++;
+                pixels += (double)r->textures[i].width * (double)r->textures[i].height;
+            }
+        }
+        JS_SetPropertyStr(ctx, tex, "count", JS_NewInt32(ctx, live));
+        JS_SetPropertyStr(ctx, tex, "max", JS_NewInt32(ctx, R2D_MAX_TEXTURES));
+        JS_SetPropertyStr(ctx, tex, "pixels", JS_NewFloat64(ctx, pixels));
+        JS_SetPropertyStr(ctx, o, "textures", tex);
+    }
+
+    // Кадр: размер, в котором считалась сцена, метка интерфейса и снаппинг.
+    // Целочисленная шкала здесь НЕ отдаётся: она живёт в JS
+    // ($.gfx.integerScale/presentation) и к буферу кадра отношения не имеет.
+    {
+        JSValue vp = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, vp, "w", JS_NewInt32(ctx, r ? r->screen_w : 0));
+        JS_SetPropertyStr(ctx, vp, "h", JS_NewInt32(ctx, r ? r->screen_h : 0));
+        JS_SetPropertyStr(ctx, vp, "snap", JS_NewBool(ctx, r && r->snap));
+        // -1 — кадр идёт в swapchain, иначе индекс связанного render target.
+        JS_SetPropertyStr(ctx, vp, "bound", JS_NewInt32(ctx, r ? r->bound_viewport : -1));
+        JS_SetPropertyStr(ctx, o, "viewport", vp);
+    }
+
     // Презентация: снаппинг вершин и число конвейеров (вариантов пайплайнов).
     // Постоянная смена материала не должна плодить варианты — их потолок
     // виден здесь: 4 режима смешивания + 4 под шейдер узла.
@@ -3888,6 +4143,20 @@ void r2d_render_register_js(JSContext *ctx, JSValue engine)
     r2d__js_set_fn(ctx, engine, "setSnap", r2d__js_set_snap, 1);
     r2d__js_set_fn(ctx, engine, "markUI", r2d__js_mark_ui, 0);
     r2d__js_set_fn(ctx, engine, "markUnlit", r2d__js_mark_unlit, 0);
+
+    // --- engine.devtools.*: данные инспекторов (§19 физика, §37 свет) --------
+    // Регистрируется здесь, а не в script.c: рендерер уже владеет своими
+    // биндингами, и общая точка сборки остаётся нетронутой. Если сборка не
+    // имеет этого объекта (старый SDK), JS-путь света просто не публикует
+    // источники — проверка наличия функции обязательна на стороне JS.
+    {
+        JSValue devtools = JS_NewObject(ctx);
+        r2d__js_set_fn(ctx, devtools, "shapes",        r2d__js_devtools_shapes, 1);
+        r2d__js_set_fn(ctx, devtools, "light",         r2d__js_devtools_light, 6);
+        r2d__js_set_fn(ctx, devtools, "lights",        r2d__js_devtools_lights, 0);
+        r2d__js_set_fn(ctx, devtools, "lightsDropped", r2d__js_devtools_lights_dropped, 0);
+        JS_SetPropertyStr(ctx, engine, "devtools", devtools);
+    }
 
     // --- engine.viewport.*: render target игры ------------------------------
     JSValue vp = JS_NewObject(ctx);

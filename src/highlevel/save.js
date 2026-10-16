@@ -430,6 +430,7 @@ export function installSave($) {
         committed_nodes: 0,    // узлов в последнем commit
         behavior_loads: 0,     // вызовов фабрик поведения при restore
         last_failure: null,    // структура последнего отказа (для машины)
+        last_scene: null,      // идентичность сцены при последнем restore (§10)
     };
 
     // Разделы, у которых нет своего хранилища в $.store: профиль и косметика.
@@ -549,6 +550,9 @@ export function installSave($) {
      *   });
      *
      * match — тег ('walker'), имя класса ('.walker') или функция (node) → bool.
+     * На загрузке функция-отбор получает вторым аргументом данные снимка
+     * (`match(node, entry)`): провайдер, зависящий от живого состояния узла,
+     * иначе не увидел бы, что в слоте есть его данные.
      * Возвращает число зарегистрированных фабрик (для цепочки и тестов).
      */
     function addBehavior(match, provider, name) {
@@ -596,7 +600,10 @@ export function installSave($) {
         let applied = 0;
         for (const p of providers) {
             if (!entry || !plainObject(entry.p) || entry.p[p.name] === undefined) continue;
-            if (!p.match(node)) continue;
+            // Второй аргумент — данные снимка: провайдер, чей матч зависит от
+            // живого состояния (например, анимация ищет плеер на узле), иначе
+            // не смог бы узнать, что в снимке для этого узла есть его данные.
+            if (!p.match(node, entry)) continue;
             if (!p.provider || typeof p.provider.load !== 'function') continue;
             try {
                 p.provider.load(node, entry.p[p.name], { journal, save });
@@ -607,6 +614,82 @@ export function installSave($) {
             }
         }
         return applied;
+    }
+
+    // --- Состояние анимации (§10) -------------------------------------------
+    //
+    // Плеер — поведение узла-цели, поэтому в снимке оно лежит там же, где
+    // состояние остальных фабрик: `nodes[nid].p['anim.player']`. Ключ — тот же
+    // стабильный nid, второй системы сохранения не появляется: логика клипов
+    // остаётся в animplayer.js, снимок хранит только данные (клип, время,
+    // скорость, loop, слоты, открытые окна, сработавшие one-shot маркеры).
+    //
+    // Разовое (one-shot SFX, вспышки, тряска) сюда не попадает: это состояние
+    // картинки, а не игры (§10, highlevel_save_presentation_test.py).
+
+    const ANIM_PROVIDER = 'anim.player';
+
+    /** Мост из animplayer.js: он ставится вместе с $.anim (см. api.js). */
+    function animApi() {
+        const anim = $.anim || ctx.anim || null;
+        return anim && typeof anim.nodeState === 'function' ? anim : null;
+    }
+
+    function animSave(node) {
+        const anim = animApi();
+        return anim ? anim.nodeState(node) : null;
+    }
+
+    function animLoad(node, data, api) {
+        const anim = animApi();
+        if (!anim || typeof anim.restoreNodeState !== 'function') {
+            failWith('behavior', '$.save: нет $.anim — состояние анимации узла не восстановить',
+                { code: 'R2D_SAVE_ANIM_MISSING', details: { provider: ANIM_PROVIDER, nid: node.nid } });
+            return 0;
+        }
+        // Откат транзакции возвращает плеерам их прежнее состояние и прежнюю
+        // цель: restore до commit не должен оставлять плеер на узле, которого
+        // после отката не станет.
+        const journal = api && api.journal;
+        if (journal && typeof journal.onRollback === 'function') {
+            const before = [];
+            for (const name of Object.keys(data && data.players ? data.players : {})) {
+                const player = typeof anim.player === 'function' ? anim.player(name) : null;
+                if (!player || typeof player.state !== 'function') continue;
+                before.push({ player, node: player.node || null, state: player.state() });
+            }
+            journal.onRollback(() => {
+                for (const item of before) {
+                    // Цель возвращается КАК БЫЛА (в том числе null): узел, к
+                    // которому плеер привязался при подготовке, откат уничтожит.
+                    item.player.target(item.node);
+                    item.player.restore(item.state);
+                }
+            });
+        }
+        const report = (code, message) => failWith('behavior', message,
+            { code, details: { provider: ANIM_PROVIDER, nid: node.nid } });
+        const restored = anim.restoreNodeState(node, data, report);
+        return Array.isArray(restored) ? restored.length : 0;
+    }
+
+    /**
+     * Регистрация провайдера анимации. Матч на ЗАПИСИ — по живому плееру на
+     * узле; на ЗАГРУЗКЕ решает сам снимок (см. providerLoad): узел в новом
+     * мире ещё не привязан ни к какому плееру, и «нет плеера» означало бы
+     * «выбросить состояние» — тихую потерю вместо восстановления.
+     */
+    function addAnimProvider() {
+        return addBehavior((node, entry) => {
+            const anim = animApi();
+            if (!anim || !node) return false;
+            if (entry && plainObject(entry.p) && entry.p[ANIM_PROVIDER] !== undefined) return true;
+            const list = typeof anim.playersOn === 'function' ? anim.playersOn(node) : null;
+            if (Array.isArray(list)) return list.length > 0;
+            // Старая/урезанная подсистема без playersOn: не гадаем, а проверяем
+            // по состоянию — узел без плееров просто не даст данных.
+            return anim.nodeState(node) !== null;
+        }, { save: animSave, load: animLoad }, ANIM_PROVIDER);
     }
 
     // --- Журнал отката ------------------------------------------------------
@@ -663,6 +746,110 @@ export function installSave($) {
         const scene = ctx.scene;
         if (!scene || typeof scene.current !== 'function') return null;
         return scene.current();
+    }
+
+    /**
+     * §10: прочитать `data.scene` после того, как мир уже восстановлен.
+     *
+     * Мир из снимка — это и есть результат сцены, поэтому сцена НЕ
+     * пересобирается: `$.scene.load`/`$.room.enter` поверх восстановленного
+     * мира построили бы ВТОРОЙ мир (второй узел карты, второй набор инстансов),
+     * то есть снимок перестал бы быть снимком. Вместо этого восстанавливается
+     * ИДЕНТИЧНОСТЬ: комната — по своему узлу карты (`$.room.adopt(id)`), сцена —
+     * `$.scene.adopt(name)`. После этого `$.scene.current()` и `$.room.current()`
+     * называют тот мир, который реально лежит в узлах, и сцена снова получает
+     * свой `update` (api.js тикает текущую сцену).
+     *
+     * Если сцена в снимке есть, а в этом запуске её (или её узла карты) нет —
+     * это расхождение, и оно называется: код в `$.debug.errors()`,
+     * `$.save.lastScene()` и в поле `scene` результата restore. Молчаливого
+     * «в снимке одна сцена, а current() другая» не остаётся.
+     *
+     * Поле `scene` результата: `{ saved, before, current, room, restored, code,
+     * message }`. `restored` — имя сцены из снимка снова текущее; `code` не null,
+     * если что-то из идентичности вернуть не удалось (сцена не найдена —
+     * R2D_SAVE_SCENE_UNKNOWN, комната без узла карты или устаревшая комната в
+     * `$.room` — R2D_SAVE_SCENE_MISMATCH, нет $.scene — R2D_SAVE_SCENE_API).
+     */
+    function restoreScene(saved, opts) {
+        const o = opts || {};
+        const out = {
+            saved: saved === undefined || saved === null || saved === '' ? null : String(saved),
+            before: null, current: null, room: null, restored: false, code: null, message: null,
+        };
+        const scene = sceneApi();
+        out.before = scene && typeof scene.current === 'function' ? scene.current() : null;
+        out.current = out.before;
+        state.last_scene = out;
+        if (out.saved === null) return out;      // в снимке сцены нет — и расхождения нет
+
+        /** Расхождение: назвать кодом, а не строкой в журнале. */
+        const diagnose = (code, message) => {
+            out.code = code;
+            out.message = message;
+            ctx.log(message);
+            if ($.debug && typeof $.debug.reportError === 'function') {
+                $.debug.reportError('$.save.scene', new Error(message), {
+                    fatal: o.fatal === true,
+                    code,
+                    data: { saved: out.saved, current: out.current, room: out.room },
+                });
+            }
+            return out;
+        };
+
+        if (!scene || typeof scene.adopt !== 'function') {
+            return diagnose('R2D_SAVE_SCENE_API',
+                `$.save: снимок снят в сцене "${out.saved}", а $.scene не установлен — `
+                + 'сцену восстанавливает игра');
+        }
+
+        // Комната — сцена 'room:<id>' (scene.js): её мир опознаётся по узлу
+        // карты, поэтому сначала возвращаем комнату, потом имя сцены.
+        const roomApi = $.room || ctx.room || null;
+        if (out.saved.indexOf('room:') === 0) {
+            const id = out.saved.slice(5);
+            const adopted_room = roomApi && typeof roomApi.adopt === 'function' ? roomApi.adopt(id) : null;
+            if (!adopted_room || adopted_room.ok !== true || String(adopted_room.id) !== id) {
+                return diagnose('R2D_SAVE_SCENE_MISMATCH',
+                    `$.save: в снимке комната "${id}", но её узла карты в восстановленном мире нет `
+                    + `(${adopted_room && adopted_room.code ? adopted_room.code : 'room_adopt'}) — `
+                    + `комната не восстановлена, текущая сцена осталась "${out.current}"`);
+            }
+            out.room = id;
+        }
+
+        const adopted = scene.adopt(out.saved);
+        if (!adopted || adopted.ok !== true) {
+            return diagnose(adopted && adopted.code === 'scene_unknown'
+                    ? 'R2D_SAVE_SCENE_UNKNOWN' : 'R2D_SAVE_SCENE_MISMATCH',
+                `$.save: сцена "${out.saved}" из снимка не восстановлена `
+                + `(${adopted && adopted.message ? adopted.message : 'сцена не зарегистрирована'}) — `
+                + `мир из снимка на месте, но текущая сцена осталась "${out.current}"`);
+        }
+
+        out.restored = true;
+        out.current = out.saved;
+        if (out.before !== out.saved) {
+            ctx.log(`$.save: идентичность сцены восстановлена: "${out.before}" → "${out.saved}" `
+                + '(мир из снимка не пересобирается)');
+        }
+
+        // Не комната: имя сцены восстановлено, но `$.room` мог называть комнату
+        // прошлого мира. Доказательство, а не догадка: у комнаты, собранной
+        // build/commit, есть живой узел карты (`current().map`), и после
+        // подмены мира он помечен removed. Комнаты без карты не судим — у них
+        // такого признака нет, и выдумывать расхождение нельзя.
+        if (out.room === null && roomApi && typeof roomApi.current === 'function') {
+            const cur = roomApi.current();
+            if (cur && cur.id && cur.map && cur.map.removed) {
+                diagnose('R2D_SAVE_SCENE_MISMATCH',
+                    `$.save: сцена "${out.saved}" восстановлена, но $.room называет комнату `
+                    + `"${cur.id}", которой в узлах снимка нет — вернуть её: $.room.adopt()`);
+            }
+        }
+
+        return out;
     }
 
     // --- Части снимка ------------------------------------------------------
@@ -954,6 +1141,7 @@ export function installSave($) {
         const result = {
             ok: false, stage: 'read', nodes: 0, applied: 0, missing: [],
             providers: [], missing_providers: [], content: [], rollback_cleanups: 0, reason: null,
+            scene: null,
         };
 
         // 0. Обязательные подсистемы: проверяем ДО любых изменений мира.
@@ -1080,6 +1268,28 @@ export function installSave($) {
         if (o.rng !== false) rngRestore(data.namespaces.run.rng);
         journal.commit();
         restored_state = mapped_state;
+
+        // 7. Идентичность сцены/комнаты (§10): `data.scene` читается, а не
+        //    остаётся мёртвым полем; мир из снимка при этом не пересобирается.
+        //    Сбой этого шага не отменяет уже закоммиченный мир: расхождение
+        //    называется кодом, а не откатом.
+        try { result.scene = restoreScene(data.scene, o); }
+        catch (e) {
+            // Неожиданный сбой чтения идентичности не отменяет уже
+            // закоммиченный мир: называем его тем же кодом и идём дальше.
+            result.scene = {
+                saved: data.scene === undefined ? null : data.scene, before: null, current: null,
+                room: null, restored: false, code: 'R2D_SAVE_SCENE_MISMATCH', message: String(e),
+            };
+            state.last_scene = result.scene;
+            ctx.log('$.save: сцена из снимка не восстановлена — ' + e);
+            if ($.debug && typeof $.debug.reportError === 'function') {
+                $.debug.reportError('$.save.scene', new Error(String(e)), {
+                    fatal: false, code: 'R2D_SAVE_SCENE_MISMATCH',
+                    data: { saved: result.scene.saved },
+                });
+            }
+        }
 
         state.restores++;
         state.committed_nodes = staged.length;
@@ -1224,6 +1434,9 @@ export function installSave($) {
                 applyWorld(data.world, { clear: o.clear, speeds: o.speeds === false ? null : data.speeds });
                 applied = true;
             }
+            // §10: старый путь тоже читает сцену — иначе он один оставался бы
+            // молча расходящимся.
+            if (applied) restoreScene(data.scene, o);
             return applied;
         }
         return restoreTransactional(data, o).ok;
@@ -1488,6 +1701,14 @@ export function installSave($) {
 
         /** Структура последнего отказа (код, шаг, слот, версия) или null. */
         lastFailure() { return state.last_failure; },
+
+        /**
+         * §10: что стало с идентичностью сцены при последнем restore —
+         * `{ saved, before, current, room, restored, code, message }`.
+         * `code` не null, если сцена из снимка не восстановлена: молчаливого
+         * расхождения «в снимке room:a, а current() — room:b» не бывает.
+         */
+        lastScene() { return state.last_scene; },
 
         // --- Namespaces (§14) ----------------------------------------------
         /**
@@ -1821,9 +2042,14 @@ export function installSave($) {
                 autosave_slot: state.auto_slot,
                 last_error: state.last_error,
                 last_failure: state.last_failure,
+                last_scene: state.last_scene,
             };
         },
     };
+
+    // §10: постоянное состояние анимации — часть состояния узла, поэтому
+    // провайдер ставится вместе с модулем: игра не должна помнить про мост.
+    addAnimProvider();
 
     $.save = save;
     ctx.save = save;

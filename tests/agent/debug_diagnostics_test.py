@@ -127,6 +127,34 @@ def main():
         rows = prof.get("rows") or []
         check(isinstance(rows, list) and len(rows) > 0, "профиль содержит разбивку по зонам (%d)" % len(rows))
 
+        # --- §17.2: история кадра и перцентили --------------------------------
+        # Кольцо одно: история и статистика читают те же кадры, что и средние.
+        # Поэтому числа обязаны сходиться с уже известным размером окна, а
+        # перцентили — с фактической историей, а не быть «правдоподобными».
+        stats = prof.get("stats") or {}
+        history = prof.get("history")
+        hist_len = len(history) if isinstance(history, list) else history
+        check(isinstance(history, list) and len(history) > 0,
+              "профиль отдаёт историю кадров окна (%s значений)" % hist_len)
+        check(stats.get("count", 0) > 0,
+              "статистика окна непуста (count=%s)" % stats.get("count"))
+        check(hist_len == stats.get("count") == prof.get("frames"),
+              "history.length === stats.count === frames (%s)" % hist_len)
+
+        p = [stats.get(k) for k in ("min", "p50", "p95", "p99", "max")]
+        numeric = all(isinstance(v, (int, float)) for v in p)
+        check(numeric, "min/p50/p95/p99/max — числа (%s)" % (p,))
+        if numeric and isinstance(history, list) and history:
+            check(p == sorted(p),
+                  "перцентили не убывают: " + " ≤ ".join("%.2f" % v for v in p))
+            check(abs(p[0] - min(history)) < 1e-9 and abs(p[4] - max(history)) < 1e-9,
+                  "min/max совпадают с историей (%.2f … %.2f)"
+                  % (min(history), max(history)))
+            check(p[0] <= stats.get("mean", 0.0) <= p[4],
+                  "mean лежит между min и max (%.2f)" % stats.get("mean", 0.0))
+            check(abs(stats.get("current", -1) - history[-1]) < 1e-9,
+                  "current — последний кадр окна (%.2f)" % stats.get("current", -1))
+
         # --- Снимок не меняет симуляцию ---------------------------------------
         before = load(a, "__dbg.stats()")
         a.eval("JSON.stringify($.debug.anatomy('#hero'))")

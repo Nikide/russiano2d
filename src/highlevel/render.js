@@ -1766,6 +1766,14 @@ function drawLightNode(node, t, cam) {
             light_frame.shadowLights++;
         }
     }
+    // §37. Инспектору света нужен список источников, а в C уходит только веер
+    // треугольников — по нему позицию/радиус/intensity/shadow не восстановить.
+    // Публикуем факт: shadow здесь уже итоговый (после деградации по бюджету).
+    // Проверка наличия функции обязательна: в сборке без этого хука (старый
+    // SDK) путь света обязан работать как раньше.
+    if (engine.devtools && typeof engine.devtools.light === 'function') {
+        engine.devtools.light(t.x, t.y, radius_world, node.intensity, shadows, lightLayerOf(node));
+    }
     const want_rays = Math.round(attrs.segments === undefined ? 26 : attrs.segments);
     const samples = Math.max(6, Math.min(96, light_quality.maxRays, want_rays));
     if (want_rays > samples) {
@@ -1851,6 +1859,11 @@ function drawLightAreaNode(node, t, cam) {
         } else {
             light_frame.shadowLights++;
         }
+    }
+    // §37. Публикация источника для инспектора света — как у <light>: в C
+    // уходит только геометрия, параметров источника там нет. shadow — итоговый.
+    if (engine.devtools && typeof engine.devtools.light === 'function') {
+        engine.devtools.light(node.x, node.y, radius_world, node.intensity, shadows, lightLayerOf(node));
     }
     const src = shadows ? lightSegmentsFor(node) : null;
     const w = Math.abs(node.w), h = Math.abs(node.h);

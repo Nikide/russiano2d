@@ -993,6 +993,123 @@ int r2d_physics_shape_count(const R2DPhysics *p, int id)
     return b2Body_GetShapeCount(p->bodies[id]);
 }
 
+/**
+ * §19. Ящик в Box2D v3 — тоже полигон: отдельного типа формы нет.
+ *
+ * Отличаем прямоугольник по ГЕОМЕТРИИ контура: ровно 4 вершины, без
+ * скругления, соседние стороны перпендикулярны и контур замыкается в
+ * параллелограмм (третья сторона равна первой с обратным знаком, четвёртая —
+ * второй). Только тогда полуразмеры и угол — измеренный факт, а не догадка.
+ *
+ * Формы, которые движок создаёт как box (b2MakeBox/b2MakeOffsetBox), проходят
+ * эту проверку всегда, включая повёрнутые: угол поворота запечён в вершины,
+ * и мы возвращаем именно его.
+ */
+static bool r2d__poly_as_box(const b2Polygon *poly, R2DPhysShapeInfo *out)
+{
+    if (poly->count != 4 || poly->radius > 1e-4f) return false;
+
+    const b2Vec2 *v = poly->vertices;
+    const float ex = v[1].x - v[0].x, ey = v[1].y - v[0].y;   // сторона 1
+    const float fx = v[2].x - v[1].x, fy = v[2].y - v[1].y;   // сторона 2
+    const float gx = v[3].x - v[2].x, gy = v[3].y - v[2].y;   // сторона 3
+    const float hx = v[0].x - v[3].x, hy = v[0].y - v[3].y;   // сторона 4
+    const float le = sqrtf(ex * ex + ey * ey);
+    const float lf = sqrtf(fx * fx + fy * fy);
+    if (!(le > 0.0f) || !(lf > 0.0f)) return false;
+
+    // Прямой угол между соседними сторонами: |e·f| мал по сравнению с |e||f|.
+    if (fabsf(ex * fx + ey * fy) > 1e-3f * le * lf) return false;
+    // Замыкание: противоположные стороны равны и противоположны.
+    const float eps = 1e-4f * (le + lf);
+    if (fabsf(gx + ex) > eps || fabsf(gy + ey) > eps) return false;
+    if (fabsf(hx + fx) > eps || fabsf(hy + fy) > eps) return false;
+
+    out->kind   = R2D_SHAPE_BOX;
+    out->cx     = R2D_TO_PX(poly->centroid.x);
+    out->cy     = R2D_TO_PX(poly->centroid.y);
+    out->angle  = atan2f(ey, ex);
+    out->half_w = R2D_TO_PX(0.5f * le);
+    out->half_h = R2D_TO_PX(0.5f * lf);
+    out->radius = 0.0f;
+    return true;
+}
+
+/**
+ * §19. Геометрия формы для overlay DevTools.
+ *
+ * Читает то, что реально лежит в Box2D, и переводит в пиксели и систему тела.
+ * Ничего не выдумывает: если тип формы движку неизвестен (отрезок, цепочка),
+ * возвращает false, а не «похожую» геометрию.
+ */
+bool r2d_physics_shape_info(const R2DPhysics *p, int id, int index, R2DPhysShapeInfo *out)
+{
+    if (!p || !out) return false;
+    const b2ShapeId shape = r2d__shape_at(p, id, index);
+    if (!b2Shape_IsValid(shape)) return false;
+
+    R2DPhysShapeInfo info;
+    SDL_zero(info);
+
+    const b2Filter filter = b2Shape_GetFilter(shape);
+    info.category_bits = filter.categoryBits;
+    info.mask_bits     = filter.maskBits;
+    info.group_index   = filter.groupIndex;
+    info.sensor        = b2Shape_IsSensor(shape);
+    // Выключенная форма (нулевой фильтр) — тот же признак, что у §40: кто бы
+    // её ни выключил, источник истины один.
+    info.enabled       = r2d__shape_filter_enabled(shape);
+    info.one_way       = p->one_way[id];
+
+    switch (b2Shape_GetType(shape)) {
+    case b2_circleShape: {
+        const b2Circle c = b2Shape_GetCircle(shape);
+        info.kind   = R2D_SHAPE_CIRCLE;
+        info.cx     = R2D_TO_PX(c.center.x);
+        info.cy     = R2D_TO_PX(c.center.y);
+        info.radius = R2D_TO_PX(c.radius);
+        break;
+    }
+    case b2_capsuleShape: {
+        const b2Capsule c = b2Shape_GetCapsule(shape);
+        const float dx = c.center2.x - c.center1.x;
+        const float dy = c.center2.y - c.center1.y;
+        info.kind   = R2D_SHAPE_CAPSULE;
+        info.cx     = R2D_TO_PX(0.5f * (c.center1.x + c.center2.x));
+        info.cy     = R2D_TO_PX(0.5f * (c.center1.y + c.center2.y));
+        info.half_h = R2D_TO_PX(0.5f * sqrtf(dx * dx + dy * dy));
+        // Капсула нулевой длины — это круг: собственного угла у неё нет,
+        // поэтому angle остаётся нулём, а не случайным atan2(0, 0).
+        info.angle  = (dx == 0.0f && dy == 0.0f) ? 0.0f : atan2f(dy, dx);
+        info.radius = R2D_TO_PX(c.radius);
+        break;
+    }
+    case b2_polygonShape: {
+        const b2Polygon poly = b2Shape_GetPolygon(shape);
+        if (!r2d__poly_as_box(&poly, &info)) {
+            info.kind   = R2D_SHAPE_POLYGON;
+            info.cx     = R2D_TO_PX(poly.centroid.x);
+            info.cy     = R2D_TO_PX(poly.centroid.y);
+            info.radius = R2D_TO_PX(poly.radius);
+            int n = poly.count;
+            if (n > R2D_MAX_POLY_POINTS) n = R2D_MAX_POLY_POINTS;
+            if (n > B2_MAX_POLYGON_VERTICES) n = B2_MAX_POLYGON_VERTICES;
+            for (int i = 0; i < n; ++i) {
+                info.points[i * 2]     = R2D_TO_PX(poly.vertices[i].x);
+                info.points[i * 2 + 1] = R2D_TO_PX(poly.vertices[i].y);
+            }
+            info.point_count = n;
+        }
+        break;
+    }
+    default:
+        return false;
+    }
+
+    *out = info;
+    return true;
+}
+
 int r2d_physics_create_box(R2DPhysics *p, float x, float y, float half_w, float half_h,
                             float angle, int type, float density, float friction,
                             float restitution, bool fixed_rotation)

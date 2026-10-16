@@ -10,6 +10,10 @@
 // складывает готовое время в слот; главный поток забирает его в
 // r2d_prof_frame_end, не блокируясь. Когда профайлер выключен, ни один fence
 // не передаётся профайлеру и ни один запрос не делается.
+//
+// Кроме средних по окну профайлер отдаёт историю кадра с перцентилями (§17.2)
+// и ловит долгие кадры — hitch-детектор (§18). И то и другое читает то же
+// кольцо: второго профайлера здесь нет.
 // ===========================================================================
 
 #include "profile.h"
@@ -20,6 +24,10 @@
 
 // Окно наблюдения: средние и пики считаются по последним кадрам.
 #define R2D_PROF_WINDOW 120
+// Буфер истории у вызывающего (script.c) рассчитан на R2D_PROF_WINDOW_MAX из
+// profile.h: окно не должно его перерасти, иначе история молча обрежется.
+_Static_assert(R2D_PROF_WINDOW <= R2D_PROF_WINDOW_MAX,
+               "окно профайлера больше R2D_PROF_WINDOW_MAX");
 
 // Кольцо слотов GPU-замера: столько кадров могут быть «в полёте» до того, как
 // профайлер отпустит fence. Четырёх хватает с запасом: замер готовится за
@@ -55,10 +63,24 @@ static double g_acc[R2D_PROF_COUNT];
 // История: последняя колонка — полное время кадра.
 static double g_hist[R2D_PROF_WINDOW][R2D_PROF_COUNT + 1];
 static double g_real[R2D_PROF_WINDOW];   // реальное время кадра
+// Измеренная длительность кадра: интервал работы кадра, но не меньше того, что
+// движок считает временем кадра (см. шапку profile.h). Нужна для контекста
+// захватов.
+static double g_span[R2D_PROF_WINDOW];
 // GPU-история. -1 — в этом кадре замера не было (в среднее такие кадры не идут).
 static double g_hist_gpu[R2D_PROF_WINDOW][R2D_PROF_GPU_COUNT];
 static int    g_head = 0;
 static int    g_filled = 0;
+static long long g_frame_no = 0;   // номер кадра профайлера (с момента сброса)
+
+// Начало измеряемого интервала кадра: ставится на первой зоне после
+// закрытия предыдущего кадра. Так в интервал не попадает простой между
+// кадрами (в агентском режиме движок ждёт команду) — это не долгий кадр.
+static double g_work_start = 0.0;
+static bool   g_work_open  = false;
+
+// Hitch-детектор: реализация ниже, вызов из r2d_prof_frame_end.
+static void r2d__hitch_frame(double measured, double real, double work);
 
 // --- GPU-замер: состояние ---------------------------------------------------
 
@@ -290,6 +312,10 @@ const char *r2d_prof_gpu_note(void)
 void r2d_prof_begin(R2DProfileZone zone)
 {
     if (!g_enabled || zone < 0 || zone >= R2D_PROF_COUNT) return;
+    if (!g_work_open) {   // первая зона кадра — начало измеряемого интервала
+        g_work_open = true;
+        g_work_start = r2d__now_ms();
+    }
     g_start[zone] = SDL_GetPerformanceCounter();
     g_running[zone] = true;
 }
@@ -306,6 +332,8 @@ void r2d_prof_end(R2DProfileZone zone)
 void r2d_prof_frame_end(float real_ms)
 {
     if (!g_enabled) return;
+
+    const double now = r2d__now_ms();
 
     // GPU-замер готовится в фоне: забираем то, что успело дозреть (1–2 кадра
     // назад). Если ничего не готово — колонка остаётся «нет данных».
@@ -326,8 +354,21 @@ void r2d_prof_frame_end(float real_ms)
     }
     // Реальное время кадра кладём рядом: разница с суммой зон — неучтённое
     // (ожидание GPU, планировщик, события).
-    if (real_ms > 0.0f) g_real[g_head] = (double)real_ms;
-    else g_real[g_head] = total;
+    const double real = real_ms > 0.0f ? (double)real_ms : total;
+    g_real[g_head] = real;
+
+    // Измеренная длительность: интервал работы кадра, но не меньше того, что
+    // движок считает временем кадра. В детерминированном режиме dt фиксирован,
+    // и без второго слагаемого спайк внутри кадра был бы не виден.
+    const double work = g_work_open ? (now - g_work_start) : 0.0;
+    g_work_open = false;
+    g_span[g_head] = work > real ? work : real;
+
+    // Спайк ищем по измеренной длительности: времена зон этого кадра уже в
+    // кольце, поэтому причина захвата указывает на тот же кадр.
+    g_frame_no++;
+    r2d__hitch_frame(g_span[g_head], real, work);
+
     g_head = (g_head + 1) % R2D_PROF_WINDOW;
     if (g_filled < R2D_PROF_WINDOW) g_filled++;
 }
@@ -346,12 +387,18 @@ void r2d_prof_reset(void)
     memset(g_running, 0, sizeof(g_running));
     memset(g_hist, 0, sizeof(g_hist));
     memset(g_real, 0, sizeof(g_real));
+    memset(g_span, 0, sizeof(g_span));
     for (int f = 0; f < R2D_PROF_WINDOW; f++) {
         for (int i = 0; i < R2D_PROF_GPU_COUNT; i++) g_hist_gpu[f][i] = -1.0;
     }
     g_gpu_ms = -1.0f;
     g_head = 0;
     g_filled = 0;
+    g_frame_no = 0;
+    g_work_open = false;
+    // Захваты принадлежат профайлеру: сброс накопленного чистит и их. Порог —
+    // настройка пользователя, её сброс не трогает.
+    r2d_prof_hitch_clear();
 }
 
 bool r2d_prof_enabled(void) { return g_enabled; }
@@ -417,3 +464,228 @@ float r2d_prof_unaccounted_ms(void)
 }
 
 int r2d_prof_frames(void) { return g_filled; }
+
+// --- История кадра и перцентили (§17.2) -------------------------------------
+//
+// Второго профайлера здесь нет: и история, и статистика читают то же кольцо
+// g_real, что и средние. Сортировка — вставками по копии окна: 120 значений,
+// а вызывается статистика по запросу (engine.profile()), не в кадре.
+
+const char *r2d_prof_zone_name(int zone)
+{
+    if (zone < 0 || zone >= R2D_PROF_COUNT) return NULL;
+    return ZONE_NAMES[zone];
+}
+
+int r2d_prof_window(void) { return R2D_PROF_WINDOW; }
+
+int r2d_prof_frame_history(float *out, int max)
+{
+    if (!out || max <= 0 || g_filled == 0) return 0;
+
+    // Старые → новые. Пока кольцо не заполнено, физический порядок совпадает с
+    // хронологическим; после переполнения началом становится g_head.
+    const int n = g_filled < max ? g_filled : max;
+    const int first = (g_filled < R2D_PROF_WINDOW ? 0 : g_head) + (g_filled - n);
+    for (int i = 0; i < n; i++) {
+        out[i] = (float)g_real[(first + i) % R2D_PROF_WINDOW];
+    }
+    return n;
+}
+
+// Перцентиль по ВОЗРАСТАЮЩЕМУ массиву: метод ближайшего ранга, без
+// интерполяции — p95 это фактическое время кадра, а не среднее двух соседних.
+// Ранг ceil(q*n), индекс rank-1; целочисленно, без math.h.
+static float r2d__percentile(const double *sorted, int n, double q)
+{
+    if (n <= 0) return 0.0f;
+    const double rank = q * (double)n;
+    int idx = (int)rank;                       // floor
+    if ((double)idx < rank) idx++;              // ceil
+    idx--;                                      // 1-based ранг → индекс
+    if (idx < 0) idx = 0;
+    if (idx >= n) idx = n - 1;
+    return (float)sorted[idx];
+}
+
+R2DProfileStats r2d_prof_frame_stats(void)
+{
+    R2DProfileStats st;
+    memset(&st, 0, sizeof(st));
+    if (g_filled == 0) return st;
+
+    double sorted[R2D_PROF_WINDOW];
+    double sum = 0.0;
+    for (int f = 0; f < g_filled; f++) {
+        sorted[f] = g_real[f];
+        sum += g_real[f];
+    }
+    for (int i = 1; i < g_filled; i++) {   // сортировка вставками
+        const double v = sorted[i];
+        int j = i - 1;
+        while (j >= 0 && sorted[j] > v) {
+            sorted[j + 1] = sorted[j];
+            j--;
+        }
+        sorted[j + 1] = v;
+    }
+
+    st.count = g_filled;
+    st.min = (float)sorted[0];
+    st.max = (float)sorted[g_filled - 1];
+    st.mean = (float)(sum / (double)g_filled);
+    st.p50 = r2d__percentile(sorted, g_filled, 0.50);
+    st.p95 = r2d__percentile(sorted, g_filled, 0.95);
+    st.p99 = r2d__percentile(sorted, g_filled, 0.99);
+    // Текущий кадр — последний закрытый. После переполнения кольца это
+    // (g_head - 1), а не последний физический слот.
+    st.current = (float)g_real[(g_head + R2D_PROF_WINDOW - 1) % R2D_PROF_WINDOW];
+    return st;
+}
+
+// --- Hitch-детектор (§18) ---------------------------------------------------
+//
+// Кольцо последних захватов. Захват открывается на спайке и добирает кадры
+// «после» по мере их закрытия; контекст «до» и зоны берутся из того же кольца
+// истории, что читает engine.profile().
+
+// Захваты. head — слот следующей записи; count — сколько захватов в кольце.
+static R2DHitchCapture g_hitch[R2D_PROF_HITCH_MAX];
+static int       g_hitch_head  = 0;
+static int       g_hitch_count = 0;
+static int       g_hitch_open  = -1;   // захват, которому нужны кадры «после»
+static float     g_hitch_threshold = R2D_PROF_HITCH_DEFAULT_MS;
+static long long g_hitch_total = 0;
+static bool      g_hitch_prev_spike = false;   // прошлый кадр дал захват
+
+// Переносит строку кольца истории (row) в слот захвата.
+static void r2d__hitch_fill(R2DHitchCapture *c, int slot, int row, double measured)
+{
+    c->ms[slot] = (float)measured;
+    for (int z = 0; z < R2D_PROF_COUNT; z++) {
+        c->zone_ms[slot][z] = (float)g_hist[row][z];
+    }
+}
+
+// Причина спайка — самая дорогая зона кадра. Если измеренные зоны объясняют
+// меньше половины времени кадра, честнее сказать «вне зон» (-1), чем назвать
+// случайную зону: остальное — планировщик, события, ожидание вне замеров.
+static void r2d__hitch_reason(R2DHitchCapture *c, int row)
+{
+    double top = 0.0;
+    double sum = 0.0;
+    int top_zone = -1;
+    for (int z = 0; z < R2D_PROF_COUNT; z++) {
+        const double v = g_hist[row][z];
+        sum += v;
+        if (v > top) {
+            top = v;
+            top_zone = z;
+        }
+    }
+    c->zones_ms = (float)sum;
+    c->reason = -1;
+    c->reason_ms = 0.0f;
+    if (top_zone >= 0 && sum * 2.0 >= (double)c->frame_ms) {
+        c->reason = top_zone;
+        c->reason_ms = (float)top;
+    }
+}
+
+// Кадр закрыт: дописать его в открытый захват и, если он сам долгий,
+// открыть новый. Вызывается из r2d_prof_frame_end, когда кадр уже лежит в
+// кольце по индексу g_head, а g_filled ещё не учитывает этот кадр.
+// work — интервал работы этого кадра, real — dt движка.
+static void r2d__hitch_frame(double measured, double real, double work)
+{
+    // 1) Кадр «после» для открытого захвата.
+    if (g_hitch_open >= 0) {
+        R2DHitchCapture *c = &g_hitch[g_hitch_open];
+        if (c->filled < R2D_PROF_HITCH_FRAMES) {
+            r2d__hitch_fill(c, c->filled, g_head, measured);
+            c->filled++;
+        }
+        if (c->filled >= R2D_PROF_HITCH_FRAMES) g_hitch_open = -1;
+    }
+
+    const double thr = (double)g_hitch_threshold;
+    if (measured <= thr) {
+        g_hitch_prev_spike = false;
+        return;
+    }
+
+    // Эхо спайка в dt движка. dt описывает период, который ЗАКОНЧИЛСЯ в начале
+    // этого кадра, поэтому долгий кадр виден в нём ещё раз — уже как real_ms
+    // следующего. Если сам кадр по зонам короткий, а спайк был только что,
+    // это эхо одного события, а не второй долгий кадр.
+    if (g_hitch_prev_spike && work <= thr) {
+        g_hitch_prev_spike = false;
+        return;
+    }
+    g_hitch_prev_spike = true;
+
+    // 2) Спайк: предыдущий открытый захват закрываем — этот кадр уже стал его
+    //    кадром «после», а дальше идёт отдельная история.
+    g_hitch_total++;
+    g_hitch_open = -1;
+
+    R2DHitchCapture *c = &g_hitch[g_hitch_head];
+    memset(c, 0, sizeof(*c));
+    c->frame = g_frame_no;
+    c->frame_ms = (float)measured;
+    c->real_ms = (float)real;
+    c->threshold_ms = g_hitch_threshold;
+    c->reason = -1;
+
+    // Контекст «до»: на старте профайлера кадров может быть меньше.
+    int before = R2D_PROF_HITCH_CONTEXT;
+    if (before > g_filled) before = g_filled;
+    for (int k = before; k >= 1; k--) {
+        const int row = (g_head + R2D_PROF_WINDOW - k) % R2D_PROF_WINDOW;
+        r2d__hitch_fill(c, before - k, row, g_span[row]);
+    }
+    c->center = before;
+    r2d__hitch_fill(c, before, g_head, measured);   // сам спайк
+    c->filled = before + 1;
+    r2d__hitch_reason(c, g_head);
+
+    g_hitch_open = g_hitch_head;
+    g_hitch_head = (g_hitch_head + 1) % R2D_PROF_HITCH_MAX;
+    if (g_hitch_count < R2D_PROF_HITCH_MAX) g_hitch_count++;
+}
+
+float r2d_prof_hitch_threshold(void) { return g_hitch_threshold; }
+
+float r2d_prof_hitch_set_threshold(float ms)
+{
+    // Мусор (NaN, ноль, отрицательное) порог не меняет: молча превратить его в
+    // 1 мс значило бы заваливать кольцо захватами на каждом кадре.
+    if (!(ms >= R2D_PROF_HITCH_MIN_MS)) return g_hitch_threshold;
+    if (ms > R2D_PROF_HITCH_MAX_MS) ms = R2D_PROF_HITCH_MAX_MS;
+    g_hitch_threshold = ms;
+    return g_hitch_threshold;
+}
+
+int r2d_prof_hitch_count(void) { return g_hitch_count; }
+
+long long r2d_prof_hitch_total(void) { return g_hitch_total; }
+
+bool r2d_prof_hitch_get(int index, R2DHitchCapture *out)
+{
+    if (!out || index < 0 || index >= g_hitch_count) return false;
+    // Индекс 0 — самый старый из хранимых: кольцо пишет в g_hitch_head.
+    const int first = (g_hitch_head - g_hitch_count + R2D_PROF_HITCH_MAX)
+                      % R2D_PROF_HITCH_MAX;
+    *out = g_hitch[(first + index) % R2D_PROF_HITCH_MAX];
+    return true;
+}
+
+void r2d_prof_hitch_clear(void)
+{
+    memset(g_hitch, 0, sizeof(g_hitch));
+    g_hitch_head = 0;
+    g_hitch_count = 0;
+    g_hitch_open = -1;
+    g_hitch_total = 0;
+    g_hitch_prev_spike = false;
+}

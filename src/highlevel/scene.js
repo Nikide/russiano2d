@@ -832,6 +832,52 @@ export function installScene($) {
             return scene.load(prev, o);
         },
 
+        /**
+         * §10: вернуть ИДЕНТИЧНОСТЬ сцены после восстановления мира из снимка.
+         *
+         * Мир, пришедший из сейва, — это и есть результат сцены, поэтому её
+         * builder (`prepare`/`enter`) НЕ запускается: `load()` поверх
+         * восстановленного мира собрал бы второй мир (второй узел карты, второй
+         * набор инстансов), то есть снимок перестал бы быть снимком. Восстановить
+         * нужно ровно имя: `$.scene.current()` снова называет свой мир, а
+         * текущая сцена — снова получает `update` (api.js тикает её каждый кадр).
+         *
+         * Возвращает структуру: `{ ok, scene, code, message }`. Неизвестная
+         * сцена — честный отказ `{ ok: false, code: 'scene_unknown' }`, а не
+         * тихая подмена: вызывающий (`$.save.restore`) превращает его в
+         * структурированную диагностику R2D_SAVE_SCENE_UNKNOWN.
+         */
+        adopt(name, opts) {
+            const o = opts || {};
+            const key = name === undefined || name === null ? '' : String(name);
+            if (!key) return { ok: false, scene: key, code: 'scene_empty', message: 'нужно имя сцены' };
+            if (!scenes.has(key)) {
+                return { ok: false, scene: key, code: 'scene_unknown',
+                         message: `сцена "${key}" не зарегистрирована` };
+            }
+            if (state.current_name === key && state.current) {
+                return { ok: true, scene: key, adopted: false, already: true, message: null };
+            }
+            const definition = scenes.get(key);
+            state.current = typeof definition === 'object' ? definition : { enter: definition };
+            state.current_name = key;
+            // Отложенный переход, затемнение и ждущая регистрации сцена
+            // относятся к ПРОШЛОМУ миру: если их не снять, ближайший кадр
+            // снесёт восстановленный мир (сейв «загрузился» бы и тут же исчез),
+            // а `scene.add` выполнил бы старый запрос. §10: снимок главнее
+            // запроса, который был поставлен до него.
+            if (o.keepPending !== true) {
+                if (state.pending !== null && state.pending !== undefined) {
+                    ctx.log(`$: отложенный переход на "${state.pending}" снят — мир заменён снимком`);
+                }
+                state.pending = null;
+                state.pending_opts = null;
+                state.transition = null;
+                state.deferred = null;
+            }
+            return { ok: true, scene: key, adopted: true, already: false, message: null };
+        },
+
         stack() { return stack.slice(); },
 
         /** Правила перехода по умолчанию. */
@@ -1264,7 +1310,13 @@ export function installSceneRooms($) {
         try {
             const scope = ensureScope(scope_name, {});
             handle.scope_object = scope;
-            withScope(scope, () => buildInto($, room, scope, o));
+            const built = withScope(scope, () => buildInto($, room, scope, o));
+            // Собранное — в handle: `commit` публикует узел карты в текущей
+            // комнате, а по нему комната опознаётся после восстановления мира
+            // из снимка (§10: `current.map` — живой узел, а не догадка по id).
+            handle.map_node = built && built.map ? built.map : null;
+            handle.instances = built && Array.isArray(built.instances) ? built.instances : [];
+            handle.nodes = built ? Number(built.nodes) || 0 : 0;
             handle.stats = ctx.room_state === undefined ? null : null;
         } catch (e) {
             const scope = getScope(scope_name);
@@ -1452,9 +1504,20 @@ export function installSceneRooms($) {
          * мира из снимка (§14): узлы комнаты воссоздаются из данных, а
          * `$.room` должен снова знать, какая это была комната. Владение узлами
          * в этом случае у восстановленного мира, а не у staging-области.
+         *
+         * `adopt(id)` — вернуть КОНКРЕТНУЮ комнату: снимок (§10) хранит её имя
+         * (`scene: 'room:<id>'`), и взять «первую попавшуюся» комнату с узлом
+         * карты в мире означало бы молча подменить идентичность, если в
+         * восстановленном мире узлов карты несколько.
          */
-        adopt() {
+        adopt(id) {
+            const want = id === undefined || id === null ? null : String(id);
+            if (want !== null && !rooms.has(want)) {
+                return failResult(want, 'adopt', [{ code: 'room_missing_room', path: '',
+                    message: `комната "${want}" не зарегистрирована` }]);
+            }
             for (const room of rooms.values()) {
+                if (want !== null && room.id !== want) continue;
                 const map = room.tilemap;
                 if (!map) continue;
                 const sel = '#map_' + room.id;
@@ -1468,8 +1531,10 @@ export function installSceneRooms($) {
                 ctx.roomState = current;
                 return { ok: true, id: room.id, adopted: true, generation };
             }
-            return failResult(null, 'adopt', [{ code: 'room_adopt', path: '',
-                message: 'в мире нет узла карты ни одной зарегистрированной комнаты' }]);
+            return failResult(want, 'adopt', [{ code: 'room_adopt', path: '',
+                message: want === null
+                    ? 'в мире нет узла карты ни одной зарегистрированной комнаты'
+                    : `в мире нет узла карты комнаты "${want}" (#map_${want})` }]);
         },
 
         /** Выгрузить текущую комнату (узлы/подписки области закрываются). */
