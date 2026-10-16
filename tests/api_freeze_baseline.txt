@@ -2190,10 +2190,12 @@ $.window
 $.window.center
 $.window.cursor
 $.window.cursors
+$.window.displayModes
 $.window.focus
 $.window.focused
 $.window.fullscreen
 $.window.hide
+$.window.hotkey
 $.window.maximize
 $.window.minimize
 $.window.mouseLock

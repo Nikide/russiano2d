@@ -617,3 +617,8 @@ $.test.near(x, 100, 0.5, 'игрок у отметки');
 ```bash
 R2D_TEST_AUDIO=real python3 tests/agent/highlevel_sound_seek_test.py
 ```
+
+| `$.window.displayModes()` | режимы дисплея: `[{width, height, refresh, desktop}]` (в headless список пуст — норма) |
+| `$.window.fullscreen({mode, width, height, refresh})` | `'desktop'`/`'exclusive'`/`'windowed'`; неизвестная опция → `{error, option}` и режим НЕ меняется; `fullscreen(true)` = desktop (совместимость) |
+| `$.window.state().fullscreen_mode` | факт: `'windowed' \| 'desktop' \| 'exclusive'`; инвариант `fullscreen === (fullscreen_mode !== 'windowed')` |
+| `$.window.hotkey(клавиша\|false)` | горячая клавиша фуллскрина: по умолчанию **F11**, `false` — отвязать |

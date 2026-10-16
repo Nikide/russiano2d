@@ -5404,6 +5404,120 @@ static JSValue r2d__js_window_cursor(JSContext *ctx, JSValueConst this_val, int 
     return JS_NewString(ctx, s && s->app ? r2d_app_cursor(s->app) : "normal");
 }
 
+// --- Полноэкранные режимы (task-40) -----------------------------------------
+//
+// Три имени и одна честность: `displayModes()` отдаёт то, что реально есть у
+// дисплея (в headless список пуст — это норма, а не ошибка), `setFullscreenMode`
+// возвращает ФАКТИЧЕСКИ применённый режим (точного совпадения может не быть) и
+// причину отказа, если не вышло.
+
+static int r2d__fs_mode_from_string(const char *name) {
+    if (!name) return -1;
+    if (SDL_strcmp(name, "windowed") == 0 || SDL_strcmp(name, "off") == 0) return R2D_FULLSCREEN_OFF;
+    if (SDL_strcmp(name, "desktop") == 0) return R2D_FULLSCREEN_DESKTOP;
+    if (SDL_strcmp(name, "exclusive") == 0) return R2D_FULLSCREEN_EXCLUSIVE;
+    return -1;
+}
+
+static JSValue r2d__js_window_display_modes(JSContext *ctx, JSValueConst this_val,
+                                            int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue out = JS_NewArray(ctx);
+    if (!s || !s->app) return out;
+    const int display = SDL_GetDisplayForWindow(s->app->window);
+    R2DDisplayMode modes[64];
+    int have = r2d_app_display_modes(display, modes, 64);
+    if (have > 64) have = 64;
+    for (int i = 0; i < have; ++i) {
+        JSValue m = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, m, "width",   JS_NewInt32(ctx, modes[i].width));
+        JS_SetPropertyStr(ctx, m, "height",  JS_NewInt32(ctx, modes[i].height));
+        JS_SetPropertyStr(ctx, m, "refresh", JS_NewFloat64(ctx, modes[i].refresh));
+        JS_SetPropertyStr(ctx, m, "desktop", JS_NewBool(ctx, modes[i].desktop));
+        JS_SetPropertyUint32(ctx, out, (uint32_t)i, m);
+    }
+    return out;
+}
+
+static JSValue r2d__js_window_set_fullscreen_mode(JSContext *ctx, JSValueConst this_val,
+                                                  int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue o = JS_NewObject(ctx);
+    if (!s || !s->app) {
+        JS_SetPropertyStr(ctx, o, "ok", JS_FALSE);
+        JS_SetPropertyStr(ctx, o, "mode", JS_NewString(ctx, "windowed"));
+        JS_SetPropertyStr(ctx, o, "error", JS_NewString(ctx, "окна нет"));
+        return o;
+    }
+    const char *mode_name = r2d__arg_str(ctx, argc, argv, 0);
+    int mode = r2d__fs_mode_from_string(mode_name);
+    if (mode < 0) {
+        JS_SetPropertyStr(ctx, o, "ok", JS_FALSE);
+        JS_SetPropertyStr(ctx, o, "mode", JS_NewString(ctx, r2d_app_fullscreen_mode_name(s->app)));
+        JS_SetPropertyStr(ctx, o, "error",
+                          JS_NewString(ctx, "неизвестный режим (windowed|desktop|exclusive)"));
+        return o;
+    }
+    const int width   = r2d__arg_int(ctx, argc, argv, 1, 0);
+    const int height  = r2d__arg_int(ctx, argc, argv, 2, 0);
+    const double refresh = r2d__arg_num(ctx, argc, argv, 3, 0);
+    R2DDisplayMode used;
+    SDL_zero(used);
+    char err[256];
+    err[0] = '\0';
+    const bool ok = r2d_app_fullscreen_set(s->app, mode, width, height, (float)refresh,
+                                           &used, err, sizeof err);
+    JS_SetPropertyStr(ctx, o, "ok", JS_NewBool(ctx, ok));
+    JS_SetPropertyStr(ctx, o, "mode", JS_NewString(ctx, r2d_app_fullscreen_mode_name(s->app)));
+    JS_SetPropertyStr(ctx, o, "width", JS_NewInt32(ctx, used.width));
+    JS_SetPropertyStr(ctx, o, "height", JS_NewInt32(ctx, used.height));
+    JS_SetPropertyStr(ctx, o, "refresh", JS_NewFloat64(ctx, used.refresh));
+    JS_SetPropertyStr(ctx, o, "desktop", JS_NewBool(ctx, used.desktop));
+    // `exact` — совпал ли ФАКТИЧЕСКИ применённый режим с запрошенным. Игра
+    // должна видеть разницу, а не думать, что получила ровно то, что просила.
+    bool exact = true;
+    if (mode == R2D_FULLSCREEN_EXCLUSIVE && ok) {
+        if (width > 0 && used.width != width) exact = false;
+        if (height > 0 && used.height != height) exact = false;
+        if (refresh > 0.0 && used.refresh > 0.0f && fabs(used.refresh - refresh) > 0.5) exact = false;
+    }
+    JS_SetPropertyStr(ctx, o, "exact", JS_NewBool(ctx, exact));
+    if (!ok) JS_SetPropertyStr(ctx, o, "error", JS_NewString(ctx, err[0] ? err : "не удалось"));
+    return o;
+}
+
+static JSValue r2d__js_window_fullscreen_mode(JSContext *ctx, JSValueConst this_val,
+                                              int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewString(ctx, r2d_app_fullscreen_mode_name(s ? s->app : NULL));
+}
+
+// Фактические размеры и герцовка полноэкранного окна (для state()).
+static JSValue r2d__js_window_display_info(JSContext *ctx, JSValueConst this_val,
+                                           int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    int w = 0, h = 0;
+    float refresh = 0.0f;
+    if (s && s->app && s->app->window) {
+        SDL_GetWindowSizeInPixels(s->app->window, &w, &h);
+        const SDL_DisplayMode *m = SDL_GetWindowFullscreenMode(s->app->window);
+        if (m) refresh = m->refresh_rate;
+    }
+    JSValue arr = JS_NewArray(ctx);
+    JS_SetPropertyUint32(ctx, arr, 0, JS_NewInt32(ctx, w));
+    JS_SetPropertyUint32(ctx, arr, 1, JS_NewInt32(ctx, h));
+    JS_SetPropertyUint32(ctx, arr, 2, JS_NewFloat64(ctx, refresh));
+    return arr;
+}
+
 static void r2d__install_window(JSContext *ctx, JSValue engine)
 {
     JSValue win = JS_NewObject(ctx);
@@ -5413,6 +5527,10 @@ static void r2d__install_window(JSContext *ctx, JSValue engine)
     r2d__set_fn(ctx, win, "size",           r2d__js_window_size, 0);
     r2d__set_fn(ctx, win, "pixelSize",      r2d__js_window_pixel_size, 0);
     r2d__set_fn(ctx, win, "setFullscreen",  r2d__js_window_set_fullscreen, 1);
+    r2d__set_fn(ctx, win, "displayModes",   r2d__js_window_display_modes, 0);
+    r2d__set_fn(ctx, win, "setFullscreenMode", r2d__js_window_set_fullscreen_mode, 4);
+    r2d__set_fn(ctx, win, "fullscreenMode", r2d__js_window_fullscreen_mode, 0);
+    r2d__set_fn(ctx, win, "displayInfo",    r2d__js_window_display_info, 0);
     r2d__set_fn(ctx, win, "fullscreen",     r2d__js_window_is_fullscreen, 0);
     r2d__set_fn(ctx, win, "position",       r2d__js_window_position, 0);
     r2d__set_fn(ctx, win, "move",           r2d__js_window_move, 2);

@@ -41,6 +41,16 @@ typedef struct R2DApp {
     bool quit_requested;
     bool headless;       // окно создано скрытым (--headless)
 
+    // --- Фуллскрин (task-40) ------------------------------------------------
+    // Геометрия окна ДО входа в полноэкранный режим: без неё возврат в окно
+    // оставлял бы размер и позицию фуллскрина (пользователь терял своё окно).
+    int  fs_saved_x, fs_saved_y, fs_saved_w, fs_saved_h;
+    int  fs_mode;              // 0 — окно, 1 — desktop, 2 — exclusive
+    int  fs_restore_left;      // сколько кадров ещё дожимать возврат геометрии
+    bool fs_saved;             // сохранена ли геометрия окна
+    int  fs_display_w, fs_display_h;   // фактические размеры полноэкранного окна
+    float fs_refresh;          // фактическая герцовка (0 — неизвестна)
+
     // --- Детерминированный шаг (--fixed-dt) ---------------------------------
     // > 0 — время идёт ровно на эту величину за кадр, реальные таймеры не
     // читаются. Нужно агентам и CI: один и тот же сценарий даёт один и тот же
@@ -198,6 +208,45 @@ void r2d_app_center(R2DApp *app);
 
 void r2d_app_set_fullscreen(R2DApp *app, bool on);
 bool r2d_app_is_fullscreen(const R2DApp *app);
+
+// --- Полноэкранные режимы (task-40) -----------------------------------------
+//
+// Режим дисплея: разрешение, герцовка и формат пикселей. `desktop` — режим
+// рабочего стола (SDL_WINDOW_FULLSCREEN_DESKTOP, «безрамочный»): разрешение
+// дисплея, Alt-Tab и оверлеи работают, герцовку не выбираем.
+typedef struct R2DDisplayMode {
+    int    width;
+    int    height;
+    float  refresh;   // Гц, 0 — неизвестна
+    Uint32 format;    // SDL_PixelFormat
+    bool   desktop;   // true — режим рабочего стола
+} R2DDisplayMode;
+
+// Тип полноэкранного режима окна.
+enum {
+    R2D_FULLSCREEN_OFF = 0,   // окно
+    R2D_FULLSCREEN_DESKTOP,   // безрамочный фуллскрин (прежнее поведение)
+    R2D_FULLSCREEN_EXCLUSIVE, // эксклюзивный режим дисплея (меняет разрешение/герцовку)
+};
+
+// Режимы дисплея. Возвращает СКОЛЬКО ИХ ВСЕГО (даже если записали меньше, чем
+// max); 0 — режимов нет (headless/нет дисплея) — это норма, не ошибка.
+int r2d_app_display_modes(int display_id, R2DDisplayMode *out, int max);
+
+// Переключить полноэкранный режим.
+//   mode   — R2D_FULLSCREEN_*
+//   w/h/refresh — желаемый режим для EXCLUSIVE (0 — самый большой/любой)
+//   used   — ФАКТИЧЕСКИ применённый режим (может отличаться от желаемого:
+//            точного совпадения может не быть — тогда берём ближайший по
+//            площади, а `used` честно показывает, что вышло)
+//   err    — причина отказа (SDL_GetError и пояснение), если вернули false
+// Возвращает true, если окно переключено.
+bool r2d_app_fullscreen_set(R2DApp *app, int mode, int w, int h, float refresh,
+                            R2DDisplayMode *used, char *err, size_t errlen);
+
+// Имя текущего режима: "windowed" | "desktop" | "exclusive". Факт, а не
+// намерение: если система не дала режим, вернётся "windowed".
+const char *r2d_app_fullscreen_mode_name(const R2DApp *app);
 
 void r2d_app_set_position(R2DApp *app, int x, int y);
 void r2d_app_get_position(const R2DApp *app, int *x, int *y);

@@ -1,5 +1,7 @@
 #include "app.h"
 
+#include <math.h>   // fabsf: сравнение герцовки режима
+
 #include "payload.h"
 
 #include <SDL3/SDL.h>
@@ -257,7 +259,248 @@ void r2d_app_center(R2DApp *app)
 
 void r2d_app_set_fullscreen(R2DApp *app, bool on)
 {
-    if (app && app->window) SDL_SetWindowFullscreen(app->window, on);
+    if (!app || !app->window) return;
+    // Прежнее поведение осталось прежним: true — безрамочный фуллскрин
+    // (desktop), false — окно. Новая логика живёт в r2d_app_fullscreen_set.
+    r2d_app_fullscreen_set(app, on ? R2D_FULLSCREEN_DESKTOP : R2D_FULLSCREEN_OFF,
+                           0, 0, 0.0f, NULL, NULL, 0);
+}
+
+int r2d_app_display_modes(int display_id, R2DDisplayMode *out, int max)
+{
+    int count = 0;
+    SDL_DisplayMode **modes = SDL_GetFullscreenDisplayModes(display_id, &count);
+    if (!modes || count <= 0) return 0;
+    for (int i = 0; i < count; ++i) {
+        if (out && i < max) {
+            out[i].width   = modes[i]->w;
+            out[i].height  = modes[i]->h;
+            out[i].refresh = modes[i]->refresh_rate;
+            out[i].format  = modes[i]->format;
+            out[i].desktop = false;
+        }
+    }
+    SDL_free(modes);
+    return count;
+}
+
+const char *r2d_app_fullscreen_mode_name(const R2DApp *app)
+{
+    if (!app || !app->window) return "windowed";
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(app->window);
+    if (flags & SDL_WINDOW_FULLSCREEN) {
+        // Эксклюзив отличается от desktop тем, что у окна выставлен режим
+        // дисплея (SDL_SetWindowFullscreenMode), а не «режим рабочего стола».
+        return app->fs_mode == R2D_FULLSCREEN_EXCLUSIVE ? "exclusive" : "desktop";
+    }
+    return "windowed";
+}
+
+static void r2d__fs_note_error(char *err, size_t errlen, const char *what)
+{
+    if (!err || errlen == 0) return;
+    const char *detail = SDL_GetError();
+    if (!detail || !*detail) detail = "причина не сообщена";
+    SDL_snprintf(err, errlen, "%s: %s", what, detail);
+}
+
+bool r2d_app_fullscreen_set(R2DApp *app, int mode, int w, int h, float refresh,
+                            R2DDisplayMode *used, char *err, size_t errlen)
+{
+    if (err && errlen) err[0] = '\0';
+    if (!app || !app->window) {
+        if (err && errlen) SDL_snprintf(err, errlen, "окна нет");
+        return false;
+    }
+    if (used) SDL_zero(*used);
+
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(app->window);
+    const bool was_fullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0;
+
+    if (mode == R2D_FULLSCREEN_OFF) {
+        // Выход: сначала снимаем режим дисплея, потом фуллскрин, потом
+        // возвращаем геометрию — иначе окно остаётся размером с дисплей.
+        if (!SDL_SetWindowFullscreenMode(app->window, NULL) && was_fullscreen) {
+            r2d__fs_note_error(err, errlen, "SDL_SetWindowFullscreenMode(NULL)");
+        }
+        // Размер «оконного» состояния ставим ДО выхода из фуллскрина: на macOS
+        // SDL запоминает его как размер возврата (если ставить после выхода,
+        // окно остаётся полноэкранным — проверено живьём трижды).
+        if (app->fs_saved) {
+            SDL_SetWindowSize(app->window, app->fs_saved_w, app->fs_saved_h);
+        }
+        if (!SDL_SetWindowFullscreen(app->window, false) && was_fullscreen) {
+            r2d__fs_note_error(err, errlen, "SDL_SetWindowFullscreen(false)");
+            return false;
+        }
+        if (app->fs_saved) {
+            // Система применяет выход из фуллскрина НЕ в тот же вызов: одним
+            // SDL_SetWindowSize окно остаётся размером с дисплей (проверено
+            // живьём: 1920×1080 вместо 1280×720). Поэтому прокачиваем события
+            // и повторяем размер, пока он не совпадёт с сохранённым.
+            for (int attempt = 0; attempt < 40; ++attempt) {
+                SDL_SetWindowSize(app->window, app->fs_saved_w, app->fs_saved_h);
+                SDL_SetWindowPosition(app->window, app->fs_saved_x, app->fs_saved_y);
+#if SDL_VERSION_ATLEAST(3, 2, 0)
+                SDL_SyncWindow(app->window);
+#endif
+                SDL_PumpEvents();
+                int rw = 0, rh = 0;
+                SDL_GetWindowSizeInPixels(app->window, &rw, &rh);
+                if (rw == app->fs_saved_w && rh == app->fs_saved_h) break;
+                SDL_Delay(1);
+            }
+            int rw = 0, rh = 0;
+            SDL_GetWindowSizeInPixels(app->window, &rw, &rh);
+            app->fs_display_w = rw;
+            app->fs_display_h = rh;
+        }
+        app->fs_mode = R2D_FULLSCREEN_OFF;
+        return true;
+    }
+
+    // Геометрию запоминаем ОДИН раз — при входе из оконного режима.
+    if (!was_fullscreen) {
+        int x = 0, y = 0, sw = 0, sh = 0;
+        SDL_GetWindowPosition(app->window, &x, &y);
+        SDL_GetWindowSize(app->window, &sw, &sh);
+        app->fs_saved_x = x; app->fs_saved_y = y;
+        app->fs_saved_w = sw > 0 ? sw : (app->width > 0 ? app->width : 1280);
+        app->fs_saved_h = sh > 0 ? sh : (app->height > 0 ? app->height : 720);
+        app->fs_saved = true;
+    }
+
+    if (mode == R2D_FULLSCREEN_DESKTOP) {
+        if (!SDL_SetWindowFullscreenMode(app->window, NULL)) {
+            r2d__fs_note_error(err, errlen, "SDL_SetWindowFullscreenMode(NULL)");
+        }
+        if (!SDL_SetWindowFullscreen(app->window, true)) {
+            r2d__fs_note_error(err, errlen, "SDL_SetWindowFullscreen(true)");
+            return false;
+        }
+        app->fs_mode = R2D_FULLSCREEN_DESKTOP;
+        int dw = 0, dh = 0;
+        SDL_GetWindowSizeInPixels(app->window, &dw, &dh);
+        app->fs_display_w = dw; app->fs_display_h = dh; app->fs_refresh = 0.0f;
+        if (used) {
+            used->width = dw; used->height = dh; used->refresh = 0.0f;
+            used->desktop = true; used->format = SDL_PIXELFORMAT_UNKNOWN;
+        }
+        return true;
+    }
+
+    if (mode != R2D_FULLSCREEN_EXCLUSIVE) {
+        if (err && errlen) SDL_snprintf(err, errlen, "неизвестный режим %d", mode);
+        return false;
+    }
+
+    // Эксклюзив: ищем ближайший подходящий режим дисплея. Точного совпадения
+    // может не быть — тогда берём ближайший и ЧЕСТНО возвращаем его в `used`.
+    const int display = SDL_GetDisplayForWindow(app->window);
+    int count = 0;
+    SDL_DisplayMode **modes = SDL_GetFullscreenDisplayModes(display, &count);
+    if (!modes || count <= 0) {
+        if (modes) SDL_free(modes);
+        r2d__fs_note_error(err, errlen, "режимов дисплея нет (headless?)");
+        return false;
+    }
+    int best = -1;
+    long long best_score = -1;
+    for (int i = 0; i < count; ++i) {
+        const SDL_DisplayMode *m = modes[i];
+        if (w > 0 && h > 0 && (m->w != w || m->h != h)) continue;
+        if (refresh > 0.0f && m->refresh_rate > 0.0f
+            && fabsf(m->refresh_rate - refresh) > 0.5f) continue;
+        const long long score = (long long)m->w * m->h + (long long)(m->refresh_rate * 100.0f);
+        if (score > best_score) { best_score = score; best = i; }
+    }
+    if (best < 0) {
+        // Запрошенного нет — берём самый большой (и самый быстрый при равенстве).
+        for (int i = 0; i < count; ++i) {
+            const long long score = (long long)modes[i]->w * modes[i]->h
+                                  + (long long)(modes[i]->refresh_rate * 100.0f);
+            if (score > best_score) { best_score = score; best = i; }
+        }
+    }
+    if (best < 0) {
+        SDL_free(modes);
+        if (err && errlen) SDL_snprintf(err, errlen, "подходящего режима не нашлось");
+        return false;
+    }
+    SDL_DisplayMode *chosen = modes[best];
+    const int cw = chosen->w, chh = chosen->h;
+    const float crefresh = chosen->refresh_rate;
+    const Uint32 cformat = chosen->format;
+    if (!SDL_SetWindowFullscreenMode(app->window, chosen)) {
+        SDL_free(modes);
+        r2d__fs_note_error(err, errlen, "SDL_SetWindowFullscreenMode(режим)");
+        return false;
+    }
+    SDL_free(modes);
+    if (!SDL_SetWindowFullscreen(app->window, true)) {
+        r2d__fs_note_error(err, errlen, "SDL_SetWindowFullscreen(true)");
+        return false;
+    }
+    app->fs_mode = R2D_FULLSCREEN_EXCLUSIVE;
+    // Режим дисплея применён, но окно на части платформ (macOS) остаётся
+    // прежнего размера — drawable тогда не меняется, и «фуллскрин» выглядит
+    // как окно с растянутой картинкой. Дожимаем размер явно и, если SDL умеет,
+    // просим синхронизировать состояние окна с системой.
+    int dw = 0, dh = 0;
+    SDL_GetWindowSizeInPixels(app->window, &dw, &dh);
+    if (dw != cw || dh != chh) {
+        SDL_SetWindowSize(app->window, cw, chh);
+#if SDL_VERSION_ATLEAST(3, 2, 0)
+        SDL_SyncWindow(app->window);   // дождаться, пока система применит размер
+#endif
+        SDL_GetWindowSizeInPixels(app->window, &dw, &dh);
+    }
+    app->fs_display_w = dw > 0 ? dw : cw;
+    app->fs_display_h = dh > 0 ? dh : chh;
+    app->fs_refresh = crefresh;
+    if (used) {
+        used->width = cw; used->height = chh; used->refresh = crefresh;
+        used->format = cformat; used->desktop = false;
+    }
+    return true;
+}
+
+// Смена режима дисплея внешней силой (игрок переключил в системе, воткнул
+// монитор, повернул экран). Задача — не «сделать вид, что ничего не было», а
+// привести окно и состояние в согласованность:
+//   * обновляем фактические размеры/герцовку (их отдаёт state());
+//   * если мы в оконном режиме, но размер окна «уехал» (например, система
+//     вернула режим рабочего стола уже ПОСЛЕ нашего выхода из фуллскрина) —
+//     возвращаем сохранённую геометрию.
+// Дожим ограничен и запускается СОБЫТИЕМ, а не счётчиком кадров: так он
+// работает и в агентском режиме, и в обычном.
+static void r2d__fs_on_display_event(R2DApp *app, const SDL_Event *ev)
+{
+    if (!app || !app->window) return;
+    R2D_UNUSED(ev);
+    if (app->window) {
+        int w = 0, h = 0;
+        SDL_GetWindowSizeInPixels(app->window, &w, &h);
+        app->fs_display_w = w;
+        app->fs_display_h = h;
+        const SDL_DisplayMode *m = SDL_GetWindowFullscreenMode(app->window);
+        app->fs_refresh = m ? m->refresh_rate : 0.0f;
+    }
+    if (app->fs_mode != R2D_FULLSCREEN_OFF || !app->fs_saved) return;
+    int w = 0, h = 0;
+    SDL_GetWindowSizeInPixels(app->window, &w, &h);
+    if (w == app->fs_saved_w && h == app->fs_saved_h) return;
+    for (int attempt = 0; attempt < 40; ++attempt) {
+        SDL_SetWindowSize(app->window, app->fs_saved_w, app->fs_saved_h);
+        SDL_SetWindowPosition(app->window, app->fs_saved_x, app->fs_saved_y);
+#if SDL_VERSION_ATLEAST(3, 2, 0)
+        SDL_SyncWindow(app->window);
+#endif
+        SDL_PumpEvents();
+        SDL_GetWindowSizeInPixels(app->window, &w, &h);
+        if (w == app->fs_saved_w && h == app->fs_saved_h) break;
+        SDL_Delay(1);
+    }
 }
 
 bool r2d_app_is_fullscreen(const R2DApp *app)
@@ -602,6 +845,15 @@ void r2d_app_begin_frame(R2DApp *app)
                 SDL_SetWindowRelativeMouseMode(app->window, false);
                 SDL_SetWindowRelativeMouseMode(app->window, true);
             }
+            break;
+
+        case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
+        case SDL_EVENT_DISPLAY_ADDED:
+        case SDL_EVENT_DISPLAY_REMOVED:
+        case SDL_EVENT_DISPLAY_ORIENTATION:
+            // Решение №5: внешняя смена режима дисплея — приводим окно и
+            // состояние в согласованность (и возвращаем геометрию, если мы в окне).
+            r2d__fs_on_display_event(app, &ev);
             break;
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
