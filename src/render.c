@@ -2969,6 +2969,13 @@ static void r2d__blit_texture(R2DRenderer *r, SDL_GPUCommandBuffer *cmd,
                               SDL_GPUTexture *src, SDL_GPUTexture *dst, int w, int h)
 {
     if (!src || !dst) return;
+    // Копирование кадра идёт ТЕМ ЖЕ пайплайном, что и пост (все эффекты
+    // выключены — проход работает как копия), поэтому он нужен и здесь: показ
+    // render target'а игры без включённого поста — законный сценарий.
+    // Пайплайн ленивый (task-55), и без этой строки в проход уходил NULL:
+    // SDL_BindGPUGraphicsPipeline(pass, NULL) ронял бэкенд (SIGSEGV внутри
+    // drawPrimitives) ровно на жизненном цикле render target'а.
+    if (!r2d__ensure_post_pipeline(r)) return;
     SDL_GPUColorTargetInfo target;
     SDL_zero(target);
     target.texture = dst;

@@ -120,6 +120,31 @@ def main():
               % a.eval("engine.renderInfo().smaa_steps"))
         a.eval("$.gfx.smaa(false)")
 
+        # Регрессия, которую ленивое создание внесло и получило по шапке:
+        # показ render target'а игры без включённого поста использовал тот же
+        # пайплайн для копии кадра — без него в проход уходил NULL и бэкенд
+        # падал. Проверяем: цель создаётся, показывается и освобождается, а
+        # движок жив.
+        vid = a.eval("$.viewport.create(96, 64)")
+        check(isinstance(vid, int) and vid >= 0,
+              "render target создан без включённого поста (id=%s)" % vid)
+        a.eval("$.viewport.bind(%d)" % vid)
+        frames_before = a.eval("engine.frame")
+        a.step(3)
+        check(a.eval("engine.frame") > frames_before,
+              "движок жив после кадров с связанным render target'ом (%s → %s)"
+              % (frames_before, a.eval("engine.frame")))
+        # Семантику «bind живёт кадр» проверяет render_target_lifecycle_test;
+        # здесь важен только факт: копия кадра в цель не роняет бэкенд и
+        # переиспользует тот же пайплайн.
+        check(a.eval("$.viewport.destroy(%d)" % vid) is True, "цель освобождена")
+        a.eval("$.store.set('vp_bind', -1)")
+        a.step(2)
+        check(a.eval("$.viewport.count()") == 0, "после освобождения целей нет")
+        check(info(a).get("post_pipeline_creates") == 1,
+              "копия кадра в render target переиспользовала пайплайн (счётчик %s)"
+              % info(a).get("post_pipeline_creates"))
+
     print()
     if FAILURES:
         print("ПРОВАЛОВ: %d" % len(FAILURES))
