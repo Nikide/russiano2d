@@ -3090,6 +3090,22 @@ function applyControls(dt) {
                 self_vx = want_self;
             }
 
+            // §6.3: стоящий на склоне держится скоростью, а не трением Box2D
+            // (трение по умолчанию 0.2 < tan 30° тело не удерживает). Подробности
+            // и границы применимости — в комментарии к HOLD_SLOPE_DEG.
+            if (dt > 0 && vec.x === 0 && on_ground && self_vx === 0
+                && carry === null && !ext
+                && ground.slope >= HOLD_SLOPE_DEG * Math.PI / 180) {
+                const dx = ctl.hold_x === undefined ? 0 : node.x - ctl.hold_x;
+                const v_prev = ctl.hold_vx === undefined ? 0 : ctl.hold_vx;
+                const want = v_prev - dx / dt;
+                if (Math.abs(want) <= holdSpeedLimit(dt)) self_vx = want;
+                ctl.hold_vx = self_vx;
+                ctl.hold_x = node.x;
+            } else {
+                ctl.hold_vx = undefined;
+                ctl.hold_x = undefined;
+            }
             ctl.self_vx = self_vx;
 
             let target_vx = self_vx + (carry === null ? 0 : carry) + (ext ? ext.x : 0);
