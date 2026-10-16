@@ -1413,6 +1413,10 @@ static JSValue js_load(JSContext *ctx, JSValueConst self, int argc, JSValueConst
     uint8_t *bytes = NULL;
     size_t size = 0;
     if (r2d_vfs_has(full)) {
+        // Данные из груза: указатель смотрит ВНУТРЬ буфера груза, владелец —
+        // груз. Освобождать такие указатели можно только через r2d_vfs_free
+        // (он же освобождает буфер с диска) — free() здесь давал SIGABRT
+        // «pointer being freed was not allocated» (task-33).
         bytes = r2d_vfs_read(full, &size);
     } else {
         SDL_IOStream *io = SDL_IOFromFile(full, "rb");
@@ -1430,12 +1434,12 @@ static JSValue js_load(JSContext *ctx, JSValueConst self, int argc, JSValueConst
         }
     }
     if (!bytes || size < 64) {
-        free(bytes);
+        r2d_vfs_free(bytes);
         return JS_ThrowTypeError(ctx, "real2d.load: не прочитан контейнер %s", full);
     }
 
     R2d4Asset *a = (R2d4Asset *)calloc(1, sizeof *a);
-    if (!a) { free(bytes); return JS_ThrowOutOfMemory(ctx); }
+    if (!a) { r2d_vfs_free(bytes); return JS_ThrowOutOfMemory(ctx); }
     a->used = true;
     a->texture = a->sprite = -1;
     a->tex_size = 0;
@@ -1450,11 +1454,11 @@ static JSValue js_load(JSContext *ctx, JSValueConst self, int argc, JSValueConst
 
     char err[220];
     if (!load_manifest(a, bytes, size, err, sizeof err)) {
-        free(bytes);
+        r2d_vfs_free(bytes);
         asset_free(a);
         return JS_ThrowRangeError(ctx, "real2d.load: %s", err);
     }
-    free(bytes);
+    r2d_vfs_free(bytes);
 
     int size_px = a->default_size;
     int load_h = size_px;

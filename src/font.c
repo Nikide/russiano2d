@@ -495,7 +495,10 @@ void r2d_font_shutdown(void)
     R2DFont *font = g.fonts;
     while (font) {
         R2DFont *next = font->next;
-        free(font->data);
+        // Данные шрифта могут смотреть ВНУТРЬ груза: освобождать только через
+        // r2d_vfs_free (для груза это no-op). free() здесь давал SIGABRT при
+        // выходе, если шрифт был загружен из груза (task-33).
+        r2d_vfs_free(font->data);
         free(font);
         font = next;
     }
@@ -535,7 +538,8 @@ bool r2d_font_load(const char *name, const char *path)
     unsigned char *data = read_font_file(path, &size);
     if (!data || size == 0) {
         R2D_WARN("шрифт: не найден файл %s", path);
-        free(data);
+        // data может смотреть внутрь груза — освобождает только r2d_vfs_free.
+        r2d_vfs_free(data);
         return false;
     }
 
@@ -545,11 +549,13 @@ bool r2d_font_load(const char *name, const char *path)
     }
     if (!font) {
         font = (R2DFont *)calloc(1, sizeof *font);
-        if (!font) { free(data); return false; }
+        if (!font) { r2d_vfs_free(data); return false; }
         font->next = g.fonts;
         g.fonts = font;
     } else {
-        free(font->data);
+        // Перезагрузка шрифта с тем же именем: старые данные могли быть из
+        // груза — free() на них давал SIGABRT (task-33).
+        r2d_vfs_free(font->data);
         memset(font->cache, 0, sizeof font->cache);
     }
 
