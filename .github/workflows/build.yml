@@ -53,6 +53,8 @@ jobs:
         run: |
           python3 tests/package_docs_refresh_test.py
           python3 tests/release_ownership_test.py
+      - name: §66 acceptance checklist (evidence or reason for every item)
+        run: python3 tests/production_polish_checklist_test.py
   build:
     needs: static
     strategy:

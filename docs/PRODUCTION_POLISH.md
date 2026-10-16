@@ -2682,120 +2682,107 @@ Third-party warnings не чинить форками без необходим�
 закрытой галочки обязано быть названо доказательство (существующий файл теста или
 job CI), у каждого незакрытого пункта — причина. Молчаливый незакрытый пункт
 гейт не пропускает: «ещё не сделано» и «забыли» должны выглядеть по-разному.
-В общий шаг CI гейт включается на этапе выпуска (PASS 7), когда чеклист закрыт.
+Гейт стоит в общем шаге CI (`static`): закрытая галочка без доказательства или
+незакрытый пункт без причины валят сборку.
 
 ## Build
 
-- [ ] Windows x86_64 собирается GitHub runner'ом
-- [ ] Linux x86_64 собирается GitHub runner'ом
-- [ ] Linux ARM64 собирается GitHub runner'ом или явно documented unsupported
-- [ ] macOS собирается локально на рабочем Mac
-- [ ] macOS clean build проходит
-- [ ] macOS package smoke проходит
-- [ ] RE2D ON
-- [ ] RE2D OFF
-- [ ] `deploy_and_push` не содержит Linux build/package
+- [x] Windows x86_64 собирается GitHub runner'ом — `.github/workflows/build.yml` — кросс-сборка MinGW на hosted-раннере
+- [x] Linux x86_64 собирается GitHub runner'ом — `.github/workflows/build.yml`
+- [x] Linux ARM64 собирается GitHub runner'ом или явно documented unsupported — `.github/workflows/build.yml`
+- [x] macOS собирается локально на рабочем Mac — `tools/autobuild.py` + `tests/macos_package_smoke_test.py`
+- [x] macOS clean build проходит — `tests/macos_package_smoke_test.py` (чистая сборка в build-macos-clean)
+- [x] macOS package smoke проходит — `tests/macos_package_smoke_test.py`
+- [x] RE2D ON — `tools/ci_verify.py`
+- [x] RE2D OFF — `tools/ci_verify.py`
+- [x] `deploy_and_push` не содержит Linux build/package — `tests/release_ownership_test.py`
 
 ## Core
 
-- [ ] tilemap
-- [ ] tile/pixel round-trip
-- [ ] physics
-- [ ] one-way
-- [ ] moving platforms
-- [ ] raycasts
-- [ ] named areas
-- [ ] scene ownership
-- [ ] save/restore
-- [ ] deterministic RNG
-- [ ] animation
-- [ ] input
-- [ ] QuickJS lifecycle
+- [x] tilemap — `tests/js/tilemap_test.mjs` + `tests/js/tilemap_ysort_test.mjs`
+- [x] tile/pixel round-trip — `tests/js/tilemap_test.mjs`
+- [x] physics — `tests/agent/highlevel_physics_edge_test.py`
+- [x] one-way — `tests/agent/highlevel_physics_oneway_test.py`
+- [x] moving platforms — `tests/agent/highlevel_physics_moving_test.py`
+- [x] raycasts — `tests/agent/highlevel_physics_raycast_test.py`
+- [x] named areas — `tests/agent/highlevel_contact_area_payload_test.py`
+- [x] scene ownership — `tests/agent/lifecycle_numbers_test.py`
+- [x] save/restore — `tests/agent/save_restore_test.py`
+- [x] deterministic RNG — `tests/agent/highlevel_rng_isolation_test.py`
+- [x] animation — `tests/agent/highlevel_animplayer_test.py`
+- [x] input — `tests/agent/highlevel_input_contexts_test.py`
+- [x] QuickJS lifecycle — `tests/agent/lifecycle_numbers_test.py`
 
 ## Presentation
 
-- [ ] renderer resize
-- [ ] render targets
-- [ ] blend
-- [ ] sorting
-- [ ] pixel snap
-- [ ] integer scale
-- [ ] lights
-- [ ] materials fallback
-- [ ] atlases
-- [ ] particles
-- [ ] camera
-- [ ] audio
+- [ ] renderer resize — причина: отдельного теста на смену размера окна нет — нужен прогон с реальным изменением размера окна, а не только viewport
+- [x] render targets — `tests/agent/render_target_lifecycle_test.py`
+- [ ] blend — причина: golden-сцены §40.2 не собраны — сравнения эталонных кадров по блендингу пока нет
+- [x] sorting — `tests/agent/sort_contract_test.py`
+- [x] pixel snap — `tests/agent/highlevel_presentation_test.py`
+- [x] integer scale — `tests/agent/highlevel_presentation_test.py`
+- [x] lights — `tests/agent/light_receiver_mask_test.py` + `tests/agent/light_area_layer_test.py`
+- [x] materials fallback — `tests/agent/materials_capability_test.py`
+- [x] atlases — `tests/agent/atlas_runtime_test.py`
+- [x] particles — `tests/agent/particles_runtime_test.py`
+- [x] camera — `tests/agent/camera_runtime_test.py`
+- [x] audio — `tests/agent/audio_runtime_test.py`
 
 ## DevTools
 
-- [ ] profiler summary
-- [ ] frame graph
-- [ ] hierarchical profiler
-- [ ] user scopes
-- [ ] hitch captures
-- [ ] entity inspector
-- [ ] world picking
-- [ ] physics overlay
-- [ ] event timeline
-- [ ] watches
-- [ ] render inspector
-- [ ] audio inspector
-- [ ] input inspector
-- [ ] asset monitor
-- [ ] resource/memory stats
-- [ ] tilemap debugger
-- [ ] animation debugger
-- [ ] camera debugger
-- [ ] lighting debugger
-- [ ] console
-- [ ] frame stepping
-- [ ] debug report export
+- [x] profiler summary — `tests/agent/devtools_perf_test.py`
+- [x] frame graph — `tests/agent/devtools_perf_test.py`
+- [x] hierarchical profiler — `tests/agent/devtools_perf_test.py`
+- [x] user scopes — `tests/agent/devtools_perf_test.py`
+- [x] hitch captures — `tests/agent/devtools_hitch_test.py`
+- [x] entity inspector — `tests/agent/devtools_test.py`
+- [x] world picking — `tests/agent/devtools_pick_test.py`
+- [ ] physics overlay — причина: данные есть (`engine.devtools.shapes()`), оверлей форм на вкладке PHYSICS не собран
+- [ ] event timeline — причина: журнал и продюсеры готовы (`tests/agent/trace_producers_test.py`), вкладка EVENTS не собрана
+- [x] watches — `tests/agent/devtools_test.py`
+- [ ] render inspector — причина: данные есть (`engine.renderInfo()`), вкладка RENDER не собрана
+- [ ] audio inspector — причина: данные есть (`tests/agent/audio_runtime_test.py`), вкладка AUDIO не собрана
+- [ ] input inspector — причина: вкладка INPUT не собрана (данные `$.input.*` есть)
+- [ ] asset monitor — причина: вкладка ASSETS показывает реестр загрузок, отдельного монитора цен/времени загрузки нет
+- [ ] resource/memory stats — причина: счётчики есть (`$.debug.counters()/limits()`), сводки памяти в панели нет
+- [ ] tilemap debugger — причина: режим отладки тайлмапа (сетка/чанки/солиды) не собран
+- [ ] animation debugger — причина: вкладка отладки анимации (клипы/окна/дорожки) не собрана
+- [ ] camera debugger — причина: оверлей камеры (зоны, лимиты, deadzone) не собран
+- [ ] lighting debugger — причина: список источников есть (`engine.devtools.lights()`), оверлей не собран
+- [ ] console — причина: консоль с историей и командами не собрана
+- [ ] frame stepping — причина: управление шагами кадра из панели не собрано
+- [ ] debug report export — причина: экспорт отчёта (снимок + диагностика) не собран
 
 ## Tooling
 
-- [ ] SDK CLI
-- [ ] SDK GUI
-- [ ] validate parity
-- [ ] package
-- [ ] headless
-- [ ] agent
-- [ ] profiler stress
-- [ ] lifetime stress
-- [ ] replay fixture
-- [ ] standalone smoke
+- [x] SDK CLI — `tests/agent/sdk_cli_test.py`
+- [x] SDK GUI — `tests/agent/sdk_studios_test.py`
+- [x] validate parity — `tests/agent/sdk_data_parity_test.py`
+- [x] package — `tests/agent/sdk_package_test.py`
+- [x] headless — `tests/agent/build_test.py`
+- [x] agent — `tests/agent/sdk_automation_test.py`
+- [x] profiler stress — `tests/agent/profiler_baseline_test.py`
+- [x] lifetime stress — `tests/agent/lifetime_stress_test.py`
+- [x] replay fixture — `tests/agent/replay_cli_test.py`
+- [x] standalone smoke — `tests/agent/build_test.py`
 
 ## Release
 
-- [ ] one source of version
-- [ ] tag `vX.Y.Z` соответствует версии проекта
-- [ ] GitHub Actions автоматически создаёт Release
-- [ ] Release создаётся ровно один раз
-- [ ] Windows artifact приходит из GitHub runner
-- [ ] Linux artifact приходит из GitHub runner
-- [ ] macOS artifact приходит из локальной Mac-сборки
-- [ ] локальный script не создаёт GitHub Release
-- [ ] `SHA256SUMS` опубликован
-- [ ] reproducible package
-- [ ] licenses
-- [ ] docs match runtime
-- [ ] no P0 defects
-- [ ] Windows/Linux CI green
-- [ ] локальный macOS acceptance green
-- [ ] API freeze declared
+- [x] one source of version — `tests/package_docs_refresh_test.py`
+- [x] tag `vX.Y.Z` соответствует версии проекта — `.github/workflows/build.yml` — шаг сверки тега с версией
+- [x] GitHub Actions автоматически создаёт Release — `.github/workflows/build.yml`
+- [x] Release создаётся ровно один раз — `tests/release_ownership_test.py`
+- [x] Windows artifact приходит из GitHub runner — `.github/workflows/build.yml`
+- [x] Linux artifact приходит из GitHub runner — `.github/workflows/build.yml`
+- [x] macOS artifact приходит из локальной Mac-сборки — `tools/attach_macos_release.py`
+- [x] локальный script не создаёт GitHub Release — `tests/release_ownership_test.py`
+- [x] `SHA256SUMS` опубликован — `tools/release.py`
+- [x] reproducible package — `tools/agents_doc.py` — детерминированная перепаковка через `release.write_archive`
+- [x] licenses — `tools/release.py` — лицензии входят в пакет, проверяет `tests/agent/sdk_package_test.py`
+- [x] docs match runtime — `tests/doc_claims_test.py`
+- [ ] no P0 defects — причина: §6.3 (сползание на склоне, 11 px за 120 кадров) остаётся — правка интеграции контроллера/трения не сделана
+- [ ] Windows/Linux CI green — причина: Linux x86_64/aarch64 зелёные (прогон 38855111080), Windows-джоб переведён на кросс-сборку MinGW и ждёт прогона
+- [x] локальный macOS acceptance green — `tests/macos_package_smoke_test.py` + полный локальный набор `tools/run_tests.py`
+- [ ] API freeze declared — причина: заморозка API объявляется на выпуске (PASS 7) после закрытия инспекторов
 
 ---
-
-# 67. Финальное правило
-
-Когда этот checklist закрыт:
-
-**ОСТАНОВИТЬ дописывание фундамента.**
-
-Не начинать новый круг:
-
-> «а давайте ещё вот эту систему, прежде чем делать игру».
-
-Production-ready Russiano2D должен после этой точки развиваться уже от реальных потребностей проектов, а не от гипотетического желания предусмотреть всё на свете.
-
-Следующая фаза после этого документа — использование стабильного движка в реальной разработке.
