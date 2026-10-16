@@ -222,15 +222,20 @@ if(R2D_ENABLE_RMLUI)
     #     DevTools), а тяжёлые оптимизации на его шаблонах и роняют CL.
     # Оба флага только для MSVC и только для целей RmlUi: остальные платформы
     # и остальной код собираются ровно как раньше.
+    # INTERFACE-цели не принимают PRIVATE-опции (CMake прямо это запрещает), а
+    # среди целей RmlUi такие есть — поэтому фильтруем по типу, а не по имени.
     if(MSVC)
         foreach(_r2d_target rmlui rmlui_debugger rmlui_core)
             if(TARGET ${_r2d_target})
-                target_compile_options(${_r2d_target} PRIVATE /Zf)
+                get_target_property(_r2d_target_type ${_r2d_target} TYPE)
+                if(NOT _r2d_target_type STREQUAL "INTERFACE_LIBRARY")
+                    target_compile_options(${_r2d_target} PRIVATE
+                        /Zf          # PDB без общего type server (стек падения CL)
+                        $<$<STREQUAL:${_r2d_target},rmlui_debugger>:/Od>)  # Debugger не горячий
+                endif()
             endif()
         endforeach()
-        if(TARGET rmlui_debugger)
-            target_compile_options(rmlui_debugger PRIVATE /Od)
-        endif()
+        unset(_r2d_target_type)
     endif()
     # Бэкенды RmlUi под SDL_GPU не собираются автоматически (каталог Backends/
     # подключается только вместе с сэмплами). Компилируем нужные файлы сами —
