@@ -28,7 +28,39 @@ extern "C" {
 #define R2D_PAYLOAD_MAGIC    0x50324452u   // "R2DP" — начало контейнера
 #define R2D_FOOTER_MAGIC     0x46324452u   // "R2DF" — футер и его дубль в конце
 #define R2D_FOOTER_SIZE      128u
-#define R2D_PAYLOAD_VERSION  1u
+
+// --- Версия контейнера -------------------------------------------------------
+//
+// Версия стоит в заголовке ПЕРВЫМ полем после магии, поэтому «сжатый» и
+// «несжатый» груз различаются явно, а не угадываются по содержимому.
+//
+//   1 — исходная раскладка (её же пишет билдер без сжатия, байт в байт как
+//       раньше):
+//         [magic][version=1][entry_len][entry][count][файлы…]
+//   2 — раскладка с признаками (пишется только когда тело сжато):
+//         [magic][version=2][flags][raw_size u64][тело]
+//       где тело — те же [entry_len][entry][count][файлы…], но сжатые одним
+//       кадром zstd, а raw_size — размер тела до сжатия (проверяется при
+//       распаковке: иначе «распаковалось, но не то» прошло бы молча).
+//
+// Читатель понимает обе версии; всё, что больше R2D_PAYLOAD_VERSION_MAX, —
+// ошибка с кодом R2D_PAYLOAD_UNKNOWN_VERSION (не «мусор» и не тихий отказ).
+#define R2D_PAYLOAD_VERSION       1u
+#define R2D_PAYLOAD_VERSION_ZSTD  2u
+#define R2D_PAYLOAD_VERSION_MAX   R2D_PAYLOAD_VERSION_ZSTD
+
+// Признаки контейнера версии 2 (битовое поле flags).
+#define R2D_PAYLOAD_FLAG_ZSTD     1u
+#define R2D_PAYLOAD_FLAGS_KNOWN   R2D_PAYLOAD_FLAG_ZSTD
+
+// Уровень сжатия груза. КОНСТАНТА, а не умолчание библиотеки: от неё зависят
+// байты груза, то есть воспроизводимость упаковки (одинаковое дерево → один
+// SHA256). То же число задано в cmake/Zstd.cmake (R2D_ZSTD_LEVEL).
+#define R2D_PAYLOAD_ZSTD_LEVEL    19
+
+// Верхняя граница «правдоподобного» размера распакованного тела: защита от
+// испорченного заголовка, который иначе попросил бы гигабайты памяти.
+#define R2D_PAYLOAD_MAX_RAW       ((uint64_t)1 << 32)
 
 typedef struct R2dPayloadFile {
     char    *path;    // путь относительно корня проекта, напр. "demos/main.js"
@@ -40,9 +72,18 @@ typedef struct R2dPayload {
     R2dPayloadFile *files;
     int             file_count;
     char            entry[512];   // точка входа, напр. "demos/main.js"
-    uint8_t        *buffer;       // расшифрованный контейнер (владеем)
+    uint8_t        *buffer;       // контейнер, как он пришёл (владеем)
     size_t          buffer_size;
+    // Распакованное тело сжатого груза (владеем; NULL, если груз не сжат).
+    // Данные файлов указывают ВНУТРЬ него, поэтому r2d_vfs_free обязан знать
+    // оба диапазона — иначе освободил бы середину буфера.
+    uint8_t        *plain;
+    size_t          plain_size;
     bool            encrypted;
+    bool            compressed;   // тело груза было сжато zstd
+    // Диагностика старта: сколько заняла распаковка тела (0 — груз не сжат).
+    // Число честное — это замер самой операции, а не оценка по размеру.
+    double          decompress_ms;
 } R2dPayload;
 
 // Разбирает контейнер из памяти. При успехе buffer переходит во владение

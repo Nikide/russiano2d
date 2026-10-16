@@ -22,6 +22,13 @@
 
 #include <SDL3/SDL.h>
 
+#ifdef R2D_ENABLE_ZSTD
+// Сжатие груза. Уровень — константа формата (R2D_PAYLOAD_ZSTD_LEVEL): от неё
+// зависят байты груза и потому воспроизводимость упаковки. Библиотека
+// подключается пином из cmake/Zstd.cmake.
+#include <zstd.h>
+#endif
+
 #ifdef _WIN32
 #include <windows.h>   // GetModuleFileNameA, DWORD
 #endif
@@ -386,7 +393,10 @@ static void put_u64(uint8_t *p, uint64_t v)
     for (int i = 0; i < 8; ++i) p[i] = (uint8_t)(v >> (8 * i));
 }
 
-static uint8_t *build_container(const BuildState *st, const char *entry, size_t *out_size)
+// Тело контейнера: [entry_len][entry][count][файлы…]. Сжатие применяется
+// ИМЕННО к телу, а не к контейнеру целиком: заголовок (магия, версия, признаки)
+// обязан читаться без распаковки, иначе «сжат/не сжат» пришлось бы угадывать.
+static uint8_t *build_body(const BuildState *st, const char *entry, size_t *out_size)
 {
     size_t need = 12 + SDL_strlen(entry) + 4;
     for (int i = 0; i < st->file_count; ++i) {
@@ -397,8 +407,6 @@ static uint8_t *build_container(const BuildState *st, const char *entry, size_t 
     if (!buffer) return NULL;
 
     uint8_t *p = buffer;
-    put_u32(p, R2D_PAYLOAD_MAGIC); p += 4;
-    put_u32(p, R2D_PAYLOAD_VERSION); p += 4;
     put_u32(p, (uint32_t)SDL_strlen(entry)); p += 4;
     memcpy(p, entry, SDL_strlen(entry)); p += SDL_strlen(entry);
     put_u32(p, (uint32_t)st->file_count); p += 4;
@@ -413,6 +421,101 @@ static uint8_t *build_container(const BuildState *st, const char *entry, size_t 
 
     *out_size = (size_t)(p - buffer);
     return buffer;
+}
+
+// Сколько времени заняло сжатие — печатается в отчёте билдера (числа нужны
+// для приёмки: размер до/после и цена упаковки).
+typedef struct ContainerStats {
+    size_t body_size;      // тело до сжатия
+    size_t stored_size;    // тело в контейнере
+    double compress_ms;    // время сжатия
+    bool   compressed;     // тело сжато zstd
+} ContainerStats;
+
+static uint8_t *build_container(const BuildState *st, const char *entry, bool compress,
+                                size_t *out_size, ContainerStats *stats)
+{
+    size_t body_size = 0;
+    uint8_t *body = build_body(st, entry, &body_size);
+    if (!body) return NULL;
+
+    stats->body_size = body_size;
+    stats->stored_size = body_size;
+    stats->compress_ms = 0.0;
+    stats->compressed = false;
+
+    uint8_t *out = NULL;
+    size_t out_used = 0;
+
+#ifdef R2D_ENABLE_ZSTD
+    if (compress) {
+        const size_t bound = ZSTD_compressBound(body_size);
+        // Заголовок версии 2: магия, версия, признаки, размер до сжатия.
+        const size_t header = 8 + 4 + 8;
+        uint8_t *buf = (uint8_t *)SDL_malloc(header + bound);
+        if (!buf) {
+            SDL_free(body);
+            return NULL;
+        }
+        put_u32(buf + 0, R2D_PAYLOAD_MAGIC);
+        put_u32(buf + 4, R2D_PAYLOAD_VERSION_ZSTD);
+        put_u32(buf + 8, R2D_PAYLOAD_FLAG_ZSTD);
+        put_u64(buf + 12, (uint64_t)body_size);
+
+        const Uint64 t0 = SDL_GetTicksNS();
+        // Параметры задаём явно, а не «умолчаниями библиотеки»: от них зависят
+        // байты груза, то есть воспроизводимость упаковки.
+        ZSTD_CCtx *cctx = ZSTD_createCCtx();
+        if (!cctx) {
+            fprintf(stderr, "russiano2d build: не удалось создать контекст zstd\n");
+            SDL_free(buf);
+            SDL_free(body);
+            return NULL;
+        }
+        ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, R2D_PAYLOAD_ZSTD_LEVEL);
+        // Контрольная сумма кадра: без неё перевёрнутый байт мог бы «успешно»
+        // распаковаться в мусор (zstd по умолчанию целостность не проверяет), а
+        // повреждённый груз обязан отвергаться с ошибкой, а не подсовывать игре
+        // чужие пути. Цена — 4 байта на груз.
+        ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 1);
+        // Однопоточное сжатие — часть контракта воспроизводимости: многопоточный
+        // режим режет вход на блоки, и результат зависит от их числа.
+        ZSTD_CCtx_setParameter(cctx, ZSTD_c_nbWorkers, 0);
+        const size_t got = ZSTD_compress2(cctx, buf + header, bound, body, body_size);
+        ZSTD_freeCCtx(cctx);
+        stats->compress_ms = (double)(SDL_GetTicksNS() - t0) / 1e6;
+        if (ZSTD_isError(got)) {
+            fprintf(stderr, "russiano2d build: сжатие zstd не удалось: %s\n",
+                    ZSTD_getErrorName(got));
+            SDL_free(buf);
+            SDL_free(body);
+            return NULL;
+        }
+        out_used = header + got;
+        out = buf;
+        stats->stored_size = got;
+        stats->compressed = true;
+    }
+#endif
+
+    if (!out) {
+        // Версия 1 — та же раскладка, что была до появления сжатия: сборка без
+        // zstd (или с --no-compress) даёт байт в байт прежний контейнер.
+        const size_t header = 8;
+        out = (uint8_t *)SDL_malloc(header + body_size);
+        if (!out) {
+            SDL_free(body);
+            return NULL;
+        }
+        put_u32(out + 0, R2D_PAYLOAD_MAGIC);
+        put_u32(out + 4, R2D_PAYLOAD_VERSION);
+        memcpy(out + header, body, body_size);
+        out_used = header + body_size;
+    }
+
+    SDL_free(body);
+    *out_size = out_used;
+    return out;
 }
 
 static uint8_t *build_footer(uint64_t offset, uint64_t size, const uint8_t nonce[12],
@@ -673,6 +776,8 @@ static void print_usage(void)
         "  --no-assets         не добавлять ассеты, только скрипты\n"
         "  --encrypt           шифровать груз (по умолчанию: да, кроме macOS)\n"
         "  --no-encrypt        не шифровать груз (байткод всё равно нечитаем)\n"
+        "  --no-compress       не сжимать тело груза (формат версии 1: как было "
+        "до zstd)\n"
         "  --engine <файл>     какой движок взять за основу (по умолчанию — этот же файл)\n"
         "  --relink <папка>    вместо приписывания сгенерировать C-файл для пересборки\n"
         "  --list              только показать, что попадёт в груз\n"
@@ -700,6 +805,9 @@ int r2d_build_main(int argc, char **argv)
 #else
     bool encrypt = true;
 #endif
+    // Сжатие тела груза (zstd). Выключается --no-compress: тогда контейнер
+    // пишется в формате версии 1 — ровно так, как было до появления сжатия.
+    bool compress = true;
     bool list_only = false;
 
     for (int i = 2; i < argc; ++i) {
@@ -713,6 +821,7 @@ int r2d_build_main(int argc, char **argv)
         else if (SDL_strcmp(a, "--no-assets") == 0) with_assets = false;
         else if (SDL_strcmp(a, "--encrypt") == 0) encrypt = true;
         else if (SDL_strcmp(a, "--no-encrypt") == 0) encrypt = false;
+        else if (SDL_strcmp(a, "--no-compress") == 0) compress = false;
         else if (SDL_strcmp(a, "--list") == 0) list_only = true;
         else if (SDL_strcmp(a, "--help") == 0 || SDL_strcmp(a, "-h") == 0) { print_usage(); return 0; }
         else {
@@ -891,7 +1000,8 @@ int r2d_build_main(int argc, char **argv)
 
     // --- 3. Контейнер и шифрование ----------------------------------------
     size_t container_size = 0;
-    uint8_t *container = build_container(&st, entry_buf, &container_size);
+    ContainerStats cstats;
+    uint8_t *container = build_container(&st, entry_buf, compress, &container_size, &cstats);
     if (!container) {
         fprintf(stderr, "russiano2d build: нет памяти под контейнер\n");
         return 1;
@@ -939,6 +1049,23 @@ int r2d_build_main(int argc, char **argv)
 
     printf("\nИтого: скриптов %zu байт, ассетов %zu байт, контейнер %zu байт, файлов %d\n",
            scripts, assets, container_size, st.file_count);
+    // Числа сжатия печатаются всегда: по ним видно и выигрыш, и цену упаковки.
+    if (cstats.compressed) {
+        printf("Сжатие: тело %zu → %zu байт (%.1f%% от исходного, экономия %zu), "
+               "zstd уровень %d, %.1f мс\n",
+               cstats.body_size, cstats.stored_size,
+               100.0 * (double)cstats.stored_size / (double)(cstats.body_size ? cstats.body_size : 1),
+               cstats.body_size > cstats.stored_size ? cstats.body_size - cstats.stored_size : 0,
+               R2D_PAYLOAD_ZSTD_LEVEL, cstats.compress_ms);
+    } else {
+#ifdef R2D_ENABLE_ZSTD
+        printf("Сжатие: выключено (--no-compress) — тело %zu байт, формат версии 1\n",
+               cstats.body_size);
+#else
+        printf("Сжатие: недоступно (сборка без zstd) — тело %zu байт, формат версии 1\n",
+               cstats.body_size);
+#endif
+    }
     printf("Шифрование: %s\n", encrypt ? "ChaCha20-Poly1305 (RFC 8439)"
 #if defined(__APPLE__)
                                         : "выключено (на macOS так по умолчанию; включить — --encrypt)");
