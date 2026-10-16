@@ -349,6 +349,49 @@ export function createApi() {
         clear() {
             if (typeof engineOf().clearPhysicsErrors === 'function') engineOf().clearPhysicsErrors();
         },
+
+        /**
+         * Сколько форм (коллайдеров) у тела узла: `$.physics.shapeCount('#hero')`.
+         * `what` — узел, обёртка или селектор; 0, если тела нет.
+         */
+        shapeCount(what) {
+            const node = resolveNodeArg(what, 'physics.shapeCount');
+            if (!node || node.body < 0) return 0;
+            const eng = engineOf();
+            if (typeof eng.shapeCount !== 'function') return 0;
+            return Math.max(0, Number(eng.shapeCount(node.body)) || 0);
+        },
+
+        /**
+         * Форма (коллайдер) тела по индексу (I17):
+         *   `$.physics.shapeEnabled('#hero', 0)`        — геттер (`bool`);
+         *   `$.physics.shapeEnabled('#hero', 0, false)` — выключить форму;
+         *   `$.physics.shapeEnabled('#hero', 0, true)`  — включить обратно.
+         *
+         * Выключенная форма выходит из столкновений и запросов, но остаётся у
+         * тела: `engine.bodyEnabled()` продолжает отвечать `true`, узел живёт,
+         * падает и двигается, `.hide()` его не трогает. Это «выключить
+         * КОЛЛАЙДЕР», а не «выключить тело»: тело целиком выключается политикой
+         * `$('#x').processing({ physics: false })` (§44, `$.processing`).
+         *
+         * Индекс по умолчанию 0; `$.physics.shapeCount(what)` подскажет, сколько
+         * форм у узла. `false` — нет тела, нет формы с таким индексом или сборка
+         * без нужного биндинга.
+         */
+        shapeEnabled(what, index, on) {
+            const node = resolveNodeArg(what, 'physics.shapeEnabled');
+            if (!node || node.body < 0) return false;
+            const eng = engineOf();
+            const i = Math.max(0, Math.floor(Number(index) || 0));
+            if (on === undefined) {
+                return typeof eng.shapeEnabled === 'function'
+                    ? eng.shapeEnabled(node.body, i) === true : false;
+            }
+            if (typeof eng.setShapeEnabled !== 'function') return false;
+            // Фильтр формы (layerBits/mask/group) не трогаем: остаются умолчания
+            // движка, поэтому включение не меняет, с кем форма сталкивается.
+            return eng.setShapeEnabled(node.body, i, on !== false) === true;
+        },
     };
 
     // Мультикамерность ставится ДО камеры: камера публикует её методы у себя
@@ -3588,7 +3631,6 @@ function animateSprites() {
             anim.playing = false;
             index = anim.to;
             node.emit('anim:end', { clip: anim.clip || null, loops: 1, anim });
-            node.emit('animEnd', { anim });   // прежнее имя: оставлено для совместимости
         } else if (anim.loop && Math.floor(anim.t) >= span) {
             // Петля: считаем циклы и сообщаем о каждом — «доиграл» для клипа с
             // повтором случается на каждом обороте (описано в доках).

@@ -157,6 +157,62 @@ def main():
               "а по запросу поля — вырос: %d Б → %d Б (значит дело именно в fields)"
               % (ex_size, grown))
 
+        # --- 5. Регресс highlevel_timeline_test: несколько UI-узлов ----------
+        # `ui_nodes.map(nodeBrief)` передаёт вторым аргументом ИНДЕКС, и на
+        # втором UI-узле снимок падал с «TypeError: not a function» (у числа
+        # нет .has). Проверяем снимок с ТРЕМЯ ui-узлами.
+        a.eval("(() => { for (let i = 0; i < 3; ++i) {"
+               " const u = $('<ui.bar>', { id: 'ub' + i }); u.expose({ slot: i }); }"
+               " return true; })()")
+        try:
+            ui_snap = a.cmd("state")
+            ui_ok, ui_err = True, ""
+        except Exception as exc:                      # AgentError от движка
+            ui_snap, ui_ok, ui_err = None, False, str(exc)[:140]
+        check(ui_ok, "снимок не падает при нескольких UI-узлах (%s)" % (ui_err or "ok"))
+        if ui_ok:
+            # Аварийный минимум движка (когда JS снимка упал) НЕ содержит
+            # entities/ui — поэтому проверяем, что снимок настоящий.
+            ents = ui_snap["state"].get("entities")
+            check(isinstance(ents, list) and len(ents) >= NODES,
+                  "снимок настоящий, а не аварийный минимум: сущностей %s"
+                  % (len(ents) if isinstance(ents, list) else "нет"))
+            ui_list = ui_snap["state"].get("ui") or []
+            check(len(ui_list) >= 3, "в снимке %d UI-узлов" % len(ui_list))
+            _sz, ui_exposed = snapshot_size(a, fields=["id", "exposed"])
+            mine = [e for e in (ui_exposed["state"].get("ui") or [])
+                    if str(e.get("id", "")).startswith("ub")]
+            check(bool(mine) and "exposed" in mine[0],
+                  "поля по запросу доезжают и до UI-узлов: %s"
+                  % (json.dumps(mine[:1], ensure_ascii=False)[:120] if mine else "нет"))
+
+        # --- 6. Сломанный снимок обязан быть СЛЫШЕН -------------------------
+        # Аварийный минимум без пометки — та же «тишина вместо ошибки»: клиент
+        # видит правдоподобный неполный ответ и не знает об этом.
+        a.eval("globalThis.__real_snapshot = $.agent.snapshot;"
+               " $.agent.snapshot = () => { throw new Error('тест: сломанный снимок'); };")
+        broken = a.cmd("state")
+        bstate = broken.get("state") or {}
+        berr = bstate.get("error") or {}
+        check(berr.get("code") == "R2D_AGENT_SNAPSHOT_FAILED",
+              "сломанный снимок помечен кодом в ответе: %s"
+              % json.dumps(berr, ensure_ascii=False)[:140])
+        check("тест: сломанный снимок" in str(berr.get("message", "")),
+              "в ответе есть текст исключения")
+        check("entities" not in bstate,
+              "аварийный ответ не выдаёт себя за полные данные (entities нет)")
+        check("R2D_AGENT_SNAPSHOT_FAILED" in a.eval(
+                  "JSON.stringify($.debug.errors ? $.debug.errors() : [])"),
+              "ошибка попала в машинную диагностику $.debug.errors()")
+        a.eval("$.agent.snapshot = globalThis.__real_snapshot;")
+        restored = a.cmd("state")
+        check(isinstance(restored["state"].get("entities"), list),
+              "после починки снимок снова настоящий (сущностей %s)"
+              % len(restored["state"].get("entities") or []))
+        log = a.stderr_text()
+        check("R2D_AGENT_SNAPSHOT_FAILED" in log or "снимок состояния не удался" in log,
+              "и в журнале есть строка об отказе снимка")
+
     print()
     if FAILURES:
         print("ПРОВАЛОВ: %d" % len(FAILURES))

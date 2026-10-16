@@ -16,7 +16,8 @@
 // ===========================================================================
 
 import { engine } from './native.js';
-import { ctx, Node, TAGS, wrap, wrapOne, def, touchRegistry, dropFromRegistry } from './core.js';
+import { ctx, Node, TAGS, wrap, wrapOne, def, touchRegistry, dropFromRegistry,
+         refreshUid } from './core.js';
 import { noteNodeEffects } from './tween.js';
 
 // Ключи spec, которые описывают сам пул, а не атрибуты узла.
@@ -279,6 +280,11 @@ function spawnFrom(st, opts) {
     }
 
     resetNode(node, st);
+    // Порядок отрисовки при равной глубине задаёт uid (render.md §4.5), а узел
+    // пула живёт между выдачами: без обновления свежая выдача вставала бы под
+    // ранее выданными, и картинка зависела бы от истории переиспользования
+    // (пункт I10 отчёта BASHNYA).
+    refreshUid(node);
     applyAttrs(node, opts);
     restoreBody(node, st);
     attachNode(node, st);

@@ -9,6 +9,7 @@ $.activation.stats
 $.activation.visible
 $.activation.watch
 $.agent
+$.agent.capabilities
 $.agent.describe
 $.agent.expose
 $.agent.frame
@@ -1433,6 +1434,8 @@ $.physics
 $.physics.clear
 $.physics.errors
 $.physics.report
+$.physics.shapeCount
+$.physics.shapeEnabled
 $.pick
 $.pickAll
 $.pool
@@ -2170,6 +2173,7 @@ $.ui.transient
 $.ui.unbind
 $.update
 $.vec
+$.version
 $.viewport
 $.viewport.bind
 $.viewport.bound

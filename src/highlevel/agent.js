@@ -92,6 +92,12 @@ function hasHealth(node) {
 }
 
 function nodeBrief(node, want) {
+    // `want` — набор запрошенных полей, но вызывать nodeBrief приходится и
+    // через `.map(nodeBrief)`, где вторым аргументом приходит ИНДЕКС. Поэтому
+    // набор распознаём по типу: всё, что не Set, считаем «полей не просили».
+    // Без этой проверки снимок падал с «TypeError: not a function» на втором
+    // UI-узле (индекс 1 → want.has) — регресс, поймал highlevel_timeline_test.
+    const fields = want instanceof Set ? want : null;
     const brief = {
         uid: node.uid,
         id: node.id || null,
@@ -125,16 +131,16 @@ function nodeBrief(node, want) {
     // H7: объявленное состояние и состояние FSM — только по запросу в fields.
     // Без запроса этих полей в снимке нет вовсе, поэтому по умолчанию снимок
     // не растёт (проверяется тестом agent_entity_state_test.py).
-    if (want) {
-        if (want.has('exposed')) {
+    if (fields) {
+        if (fields.has('exposed')) {
             brief.exposed = Object.assign({}, (node.attrs && node.attrs.exposed) || {});
         }
-        if (want.has('state') || want.has('state_time')) {
+        if (fields.has('state') || fields.has('state_time')) {
             // Читаем через обёртку, а не повторяем выражение из anim.js: одна
             // реализация «какое сейчас состояние» на весь движок.
             const wrapper = wrapOne(node);
-            if (want.has('state')) brief.state = wrapper.state();
-            if (want.has('state_time')) brief.state_time = wrapper.stateTime();
+            if (fields.has('state')) brief.state = wrapper.state();
+            if (fields.has('state_time')) brief.state_time = wrapper.stateTime();
         }
     }
     return brief;
@@ -208,7 +214,7 @@ export function installAgent($) {
          * так команда `query` агентского протокола не гонит в JSON весь мир.
          */
         nodes(sel, limit) {
-            const list = query(sel || '*').map(nodeBrief);
+            const list = query(sel || '*').map((n) => nodeBrief(n));
             return limit > 0 && list.length > limit ? list.slice(0, limit) : list;
         },
 
@@ -244,6 +250,58 @@ export function installAgent($) {
                 return out;
             }
             return one(paths);
+        },
+
+        /**
+         * Что умеет ЭТОТ билд — одним маленьким ответом (отчёт BASHNYA I17).
+         *
+         * Зачем отдельно от `has`: `has('audio.captureStart')` отвечает про
+         * КОНКРЕТНОЕ имя (43 байта на вопрос), а здесь — про характер сборки:
+         * версия, платформа, GPU и какие подсистемы вообще есть. Игра сегодня
+         * угадывает это пробами в 16 местах, и каждая проба врёт по-своему,
+         * когда метод переименовали.
+         *
+         * Полного списка имён здесь НЕТ и не будет: их больше трёх тысяч
+         * (≈60 КБ, урок A8). Разделение такое: «есть ли имя X» — `has`,
+         * «что это за сборка» — `capabilities`.
+         *
+         * `env` (платформа и GPU) приходит из C: SDL_GetPlatform() и
+         * SDL_GetGPUDeviceDriver() доступны только там, а выдумывать их в JS
+         * нельзя.
+         */
+        capabilities(env) {
+            const e = (env && typeof env === 'object') ? env : {};
+            const eng = engineOf();
+            const platform = typeof e.platform === 'string' && e.platform ? e.platform : null;
+            const channels = ($.sound && typeof $.sound.channels === 'function')
+                ? Number($.sound.channels()) || 0 : 0;
+            const hrtf = ($.audio && typeof $.audio.hrtf === 'function') ? $.audio.hrtf() : null;
+            return {
+                version: typeof eng.version === 'string' ? eng.version : null,
+                platform,
+                gpu: typeof e.gpu === 'string' && e.gpu ? e.gpu : null,
+                agent: {
+                    mode: !!eng.agent,
+                    headless: !!eng.headless,
+                    fixed_dt: Number(eng.fixedDt) || 0,
+                },
+                systems: {
+                    audio: channels > 0,
+                    channels,
+                    // Фактический бэкенд HRTF: 'steam' | 'synthetic' | false,
+                    // если выключена (не «в сборке есть Steam Audio», а «работает
+                    // сейчас» — иначе клиент поверит в то, чего не слышно).
+                    hrtf: hrtf && hrtf.on ? (hrtf.backend || 'synthetic') : false,
+                    net: !!($.net && typeof $.net === 'object'),
+                    physics: !!($.physics && typeof $.physics === 'object'),
+                    timeline: !!($.timeline && typeof $.timeline === 'object'),
+                    ui: !!($.ui && typeof $.ui === 'object'),
+                    web: platform === 'Emscripten',
+                },
+                // Как спрашивать про конкретные имена — прямо в ответе, чтобы
+                // клиент не догадывался: точечный вопрос задаётся командой has.
+                probe: 'has',
+            };
         },
 
         /** Полный снимок — то, что уходит в ответ на команду `state`. */
@@ -312,7 +370,7 @@ export function installAgent($) {
                     bodies: engineOf().bodyCount(),
                 } : { count: entities.length, bodies: engineOf().bodyCount() },
                 entities: listed.map((n) => trimFields(nodeBrief(n, want), trim && trim.fields)),
-                ui: ui_nodes.map(nodeBrief),
+                ui: ui_nodes.map((n) => nodeBrief(n, want)),
                 tests: {
                     total: tests.total,
                     failed: tests.failed,
@@ -352,7 +410,25 @@ export function installAgent($) {
             const eng = engineOf();
             // Параметры урезания приходят из команды `state` (A8) и передаются
             // снимку как есть; без параметров поведение прежнее.
-            eng.setSnapshot((opts) => agent.snapshot(opts));
+            eng.setSnapshot((opts) => {
+                try {
+                    return agent.snapshot(opts);
+                } catch (e) {
+                    // Снимок упал: C подставит аварийный минимум и пометит ответ
+                    // кодом R2D_AGENT_SNAPSHOT_FAILED. Здесь дублируем в машинную
+                    // диагностику, чтобы ошибку было видно и через
+                    // $.debug.errors(), а не только в логе.
+                    const dbg = ($.debug && typeof $.debug.reportError === 'function')
+                        ? $.debug
+                        : (ctx.debug && typeof ctx.debug.reportError === 'function' ? ctx.debug : null);
+                    if (dbg) {
+                        dbg.reportError('agent', e, {
+                            code: 'R2D_AGENT_SNAPSHOT_FAILED', fatal: false,
+                        });
+                    }
+                    throw e;
+                }
+            });
             if (typeof eng.setAgentQuery === 'function') {
                 eng.setAgentQuery((sel, mode, limit) => {
                     if (mode === 'count') return query(sel || '*').length;
@@ -526,6 +602,12 @@ export function installAgent($) {
     ctx.agent = agent;
     ctx.test = test;
     ctx.expect = expect;
+
+    // I17: версия движка одной функцией. Низкий уровень отдаёт её свойством
+    // (`engine.version`), но игре и автотесту нужен короткий путь — и он же
+    // попадает в `capabilities` (см. §7.5 AGENT_API).
+    $.version = () => (typeof engineOf().version === 'string' ? engineOf().version : null);
+
     agent.install();
     return { agent, test, expect };
 }
