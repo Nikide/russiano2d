@@ -1864,8 +1864,13 @@ function emitterColorOf(node, spec) {
             let c = engine.textureAverageColor(sprite, true);
             if (!c || c.length < 4) c = engine.textureAverageColor(sprite, false);
             if (c && c.length >= 4) {
+                // Alpha у движка 0..255, а массив в packColor ожидает 0..1:
+                // раньше сюда уходило 255, превращаясь в 65025 & 0xff = 1 —
+                // свет 'auto' получался почти прозрачным (в 255 раз тусклее
+                // белого). Второй дефект того же пути, что и use-after-free
+                // (находка BASHNYA E1: цвет белый + свет тусклый).
                 color = packColor([Math.round(c[0]), Math.round(c[1]), Math.round(c[2]),
-                                   Math.round(c[3])], 1);
+                                   Math.max(0, Math.min(1, (c[3] === undefined ? 255 : c[3]) / 255))]);
             }
         }
         cached = { sprite, color };
@@ -2914,15 +2919,28 @@ function unlitActive() {
         const nodes = ctx.nodes;
         for (let i = 0; i < nodes.length; i++) {
             const node = nodes[i];
-            if (!node.removed && node.attrs && node.attrs.lit === false) { unlit_any = true; break; }
+            if (!node.removed && node.attrs
+                && (node.attrs.lit === false || lightMaskOf(node) === 0)) { unlit_any = true; break; }
         }
     }
     return unlit_any;
 }
 
 /** Неосвещённый мировой узел: свет/туман/темнота его не касаются. */
+/**
+ * Узел рисуется ПОСЛЕ световой карты («неосвещённый проход»).
+ *
+ * Кроме явного `.lit(false)` сюда попадает узел с `lightMask(0)`: ноль бит
+ * значит «не принимаю ни одного слоя света». Световая карта — один
+ * полноэкранный композит, per-node маску она не знает, поэтому без этого
+ * правила `.lightMask(0)` не резал бы вклад карты вовсе (находка BASHNYA E3:
+ * патч под источником 64.7 → 64.7). Партиальные маски (1, 2, 4…) по-прежнему
+ * работают только в прямом световом проходе — карта одна на кадр, и это
+ * записано в docs/highlevel/render.md §20.1.
+ */
 function unlitOf(node) {
-    return !!node.attrs && node.attrs.lit === false;
+    if (!!node.attrs && node.attrs.lit === false) return true;
+    return lightMaskOf(node) === 0;
 }
 
 /** Покомпонентное умножение двух упакованных цветов (alpha — минимум). */
@@ -4483,7 +4501,12 @@ export function installGfx($) {
             // умолчанию, а не ноль (ноль означал бы «не принимает ничего»).
             return raw === undefined || raw === null ? 0xFFFFFFFF : (raw >>> 0);
         }
-        return this.eachNode((_, el) => { (el).attrs.lightMask = bits >>> 0; });
+        // Маска решает, ПОПАДЁТ ли узел под световую карту (mask 0 = «не принимаю
+        // ни одного слоя» → неосвещённый проход), поэтому смена маски обязана
+        // сбросить кэш скана неосвещённых узлов — иначе кадр останется прежним.
+        this.eachNode((_, el) => { (el).attrs.lightMask = bits >>> 0; });
+        touchRegistry();
+        return this;
     });
 
     /**

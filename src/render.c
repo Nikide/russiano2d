@@ -425,6 +425,90 @@ static void r2d__texture_average(const void *pixels, int w, int h, int pitch,
     *has = true;
 }
 
+#define R2D_THUMB_MAX 64   // сторона миниатюры: дальше блоки, точность падает
+
+// Миниатюра среднего цвета по блокам. Нужна для спрайтов-регионов (атлас,
+// процедурный лист): без неё `color:'auto'` у кадра листа возвращал цвет всего
+// листа — заявленный «средний цвет спрайта» не выполнялся (находка BASHNYA E1).
+static void r2d__texture_thumb(const void *pixels, int w, int h, int pitch, R2DTexture *t)
+{
+    if (t->thumb) { SDL_free(t->thumb); t->thumb = NULL; }
+    t->thumb_w = t->thumb_h = 0;
+    t->thumb_scale = 1;
+    if (!pixels || w <= 0 || h <= 0) return;
+    int scale = 1;
+    const int longest = w > h ? w : h;
+    while (longest / scale > R2D_THUMB_MAX) scale *= 2;
+    const int tw = (w + scale - 1) / scale;
+    const int th = (h + scale - 1) / scale;
+    uint8_t *thumb = (uint8_t *)SDL_malloc((size_t)tw * (size_t)th * 4u);
+    if (!thumb) return;
+    const uint8_t *base = (const uint8_t *)pixels;
+    for (int by = 0; by < th; ++by) {
+        for (int bx = 0; bx < tw; ++bx) {
+            double sum[3] = { 0.0, 0.0, 0.0 };
+            double weight = 0.0;
+            int count = 0;
+            for (int y = by * scale; y < (by + 1) * scale && y < h; ++y) {
+                const uint8_t *row = base + (size_t)y * (size_t)pitch;
+                for (int x = bx * scale; x < (bx + 1) * scale && x < w; ++x) {
+                    const uint8_t *px = row + (size_t)x * 4u;
+                    ++count;
+                    const double a = px[3] / 255.0;
+                    if (px[3] < 16) continue;
+                    sum[0] += px[0] * a; sum[1] += px[1] * a; sum[2] += px[2] * a;
+                    weight += a;
+                }
+            }
+            uint8_t *out = thumb + ((size_t)by * (size_t)tw + (size_t)bx) * 4u;
+            if (weight > 0.0) {
+                out[0] = (uint8_t)(sum[0] / weight + 0.5);
+                out[1] = (uint8_t)(sum[1] / weight + 0.5);
+                out[2] = (uint8_t)(sum[2] / weight + 0.5);
+                out[3] = (uint8_t)(255.0 * weight / (double)(count > 0 ? count : 1) + 0.5);
+            } else {
+                out[0] = out[1] = out[2] = 0;
+                out[3] = 0;
+            }
+        }
+    }
+    t->thumb = thumb;
+    t->thumb_w = tw;
+    t->thumb_h = th;
+    t->thumb_scale = scale;
+}
+
+// Средний цвет ПРЯМОУГОЛЬНИКА текстуры (пиксельные координаты) по миниатюре.
+// Возвращает false, если миниатюры нет — тогда вызывающий честно скажет, что
+// цвета региона он не знает.
+static bool r2d__texture_average_region(const R2DTexture *t, int sx, int sy, int sw, int sh,
+                                        float out[4])
+{
+    if (!t || !t->thumb || t->thumb_w <= 0 || t->thumb_h <= 0 || sw <= 0 || sh <= 0) return false;
+    const int scale = t->thumb_scale > 0 ? t->thumb_scale : 1;
+    const int bx0 = sx / scale, by0 = sy / scale;
+    const int bx1 = (sx + sw - 1) / scale, by1 = (sy + sh - 1) / scale;
+    double sum[3] = { 0.0, 0.0, 0.0 };
+    double weight = 0.0;
+    for (int by = by0; by <= by1 && by < t->thumb_h; ++by) {
+        if (by < 0) continue;
+        for (int bx = bx0; bx <= bx1 && bx < t->thumb_w; ++bx) {
+            if (bx < 0) continue;
+            const uint8_t *px = t->thumb + ((size_t)by * (size_t)t->thumb_w + (size_t)bx) * 4u;
+            const double a = px[3] / 255.0;
+            if (a <= 0.0) continue;
+            sum[0] += px[0] * a; sum[1] += px[1] * a; sum[2] += px[2] * a;
+            weight += a;
+        }
+    }
+    if (weight <= 0.0) return false;
+    out[0] = (float)(sum[0] / weight);
+    out[1] = (float)(sum[1] / weight);
+    out[2] = (float)(sum[2] / weight);
+    out[3] = 255.0f;
+    return true;
+}
+
 int r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h)
 {
     if (!r || !r->device || w <= 0 || h <= 0 || w > 16384 || h > 16384) return -1;
@@ -449,7 +533,10 @@ int r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h)
     t->height = h;
     t->alive  = true;
     t->has_avg = false;
-    if (pixels) r2d__texture_average(pixels, w, h, w * 4, t->avg, &t->has_avg);
+    if (pixels) {
+        r2d__texture_average(pixels, w, h, w * 4, t->avg, &t->has_avg);
+        r2d__texture_thumb(pixels, w, h, w * 4, t);
+    }
     SDL_snprintf(t->name, sizeof t->name, "<memory %dx%d>", w, h);
     return slot;
 }
@@ -591,6 +678,16 @@ static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps)
     float avg[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     bool has_avg = false;
     r2d__texture_average(rgba->pixels, w, h, rgba->pitch, avg, &has_avg);
+    uint8_t *thumb = NULL;
+    int thumb_w = 0, thumb_h = 0, thumb_scale = 1;
+    {
+        // Миниатюру собираем здесь же: после DestroySurface пикселей уже нет.
+        R2DTexture tmp;
+        SDL_zero(tmp);
+        r2d__texture_thumb(rgba->pixels, w, h, rgba->pitch, &tmp);
+        thumb = tmp.thumb; thumb_w = tmp.thumb_w; thumb_h = tmp.thumb_h;
+        thumb_scale = tmp.thumb_scale;
+    }
 
     if (rgba != loaded) SDL_DestroySurface(rgba);
     SDL_DestroySurface(loaded);
@@ -603,6 +700,10 @@ static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps)
     t->alive  = true;
     SDL_memcpy(t->avg, avg, sizeof avg);
     t->has_avg = has_avg;
+    t->thumb = thumb;
+    t->thumb_w = thumb_w;
+    t->thumb_h = thumb_h;
+    t->thumb_scale = thumb_scale;
     SDL_snprintf(t->name, sizeof t->name, "%s", path);
 
     R2D_LOG("текстура #%d: %s (%dx%d)", id, path, w, h);
@@ -662,6 +763,9 @@ bool r2d_texture_free(R2DRenderer *r, int id)
     t->width = 0;
     t->height = 0;
     t->name[0] = '\0';
+    if (t->thumb) { SDL_free(t->thumb); t->thumb = NULL; }
+    t->thumb_w = t->thumb_h = 0;
+    t->thumb_scale = 1;
 
     for (int i = 0; i < r->sprite_count; ++i) {
         if (r->sprites[i].alive && r->sprites[i].texture == id) {
@@ -4317,9 +4421,34 @@ static JSValue r2d__js_texture_average_color(JSContext *ctx, JSValueConst this_v
     // цвет чужой текстуры с тем же номером.
     const bool is_sprite = argc > 1 && JS_ToBool(ctx, argv[1]) == 1;
     int tex = id;
+    float region[4];
+    bool have_region = false;
     if (is_sprite) {
         if (id < 0 || id >= r->sprite_count || !r->sprites[id].alive) return JS_NULL;
         tex = r->sprites[id].texture;
+        // Спрайт может быть РЕГИОНОМ листа (атлас, процедурный лист): тогда
+        // средний цвет текстуры — это цвет всего листа, а не кадра. Считаем
+        // регион по миниатюре; для спрайта во всю текстуру регион совпадает с
+        // ней, и ответ прежний — точный `avg`.
+        if (tex >= 0 && tex < r->texture_count && r->textures[tex].alive) {
+            const R2DTexture *t = &r->textures[tex];
+            const R2DSprite *sp = &r->sprites[id];
+            if (t->width > 0 && t->height > 0) {
+                const int sx = (int)(sp->u0 * (float)t->width + 0.5f);
+                const int sy = (int)(sp->v0 * (float)t->height + 0.5f);
+                const int sw = (int)((sp->u1 - sp->u0) * (float)t->width + 0.5f);
+                const int sh = (int)((sp->v1 - sp->v0) * (float)t->height + 0.5f);
+                const bool full = sx <= 0 && sy <= 0 && sw >= t->width && sh >= t->height;
+                if (!full) have_region = r2d__texture_average_region(t, sx, sy, sw, sh, region);
+            }
+        }
+    }
+    if (have_region) {
+        JSValue out = JS_NewArray(ctx);
+        for (int i = 0; i < 4; ++i) {
+            JS_SetPropertyUint32(ctx, out, (uint32_t)i, JS_NewFloat64(ctx, (double)region[i]));
+        }
+        return out;
     }
     if (tex < 0 || tex >= r->texture_count || !r->textures[tex].alive
         || !r->textures[tex].has_avg) {
