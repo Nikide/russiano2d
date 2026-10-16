@@ -14,13 +14,71 @@
 
 import json
 import os
+import struct
 import sys
+import zlib
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent   # noqa: E402
 
+# Разбор PNG — из соседнего теста света (та же практика, что в
+# light_area_layer_test.py и debug_draw_coords_test.py).
+sys.path.insert(0, os.path.dirname(__file__))
+from light_receiver_mask_test import read_png   # noqa: E402
+
 FAILURES = []
 SCENE = "russi_vn"
+SHOTS = os.path.join(os.path.dirname(__file__), "..", "..", "build")
+POSE_PNG = os.path.join(SHOTS, "timeline_pose.png")
+
+
+def make_pose_png(path, rgb=(0, 220, 0), size=64):
+    """Яркая одноцветная поза: по ней видно, нарисован ли слот."""
+    raw = b"".join(b"\x00" + bytes(rgb) * size for _ in range(size))
+
+    def chunk(tag, data):
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff))
+
+    with open(path, "wb") as handle:
+        handle.write(b"\x89PNG\r\n\x1a\n"
+                     + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+                     + chunk(b"IDAT", zlib.compress(raw))
+                     + chunk(b"IEND", b""))
+
+
+def count_pixels(path, white=True):
+    """Сколько пикселей кадра белые (>=240) или ярко-зелёные, и их габарит."""
+    width, height, channels, data = read_png(path)
+    total = 0
+    x0, y0, x1, y1 = width, height, -1, -1
+    for y in range(height):
+        for x in range(width):
+            offset = (y * width + x) * channels
+            r, g, b = data[offset], data[offset + 1], data[offset + 2]
+            hit = (r >= 240 and g >= 240 and b >= 240) if white else (g >= 150 and r <= 80 and b <= 80)
+            if not hit:
+                continue
+            total += 1
+            x0, y0 = min(x0, x), min(y0, y)
+            x1, y1 = max(x1, x), max(y1, y)
+    box = (x1 - x0 + 1, y1 - y0 + 1) if x1 >= 0 else (0, 0)
+    return total, box
+
+
+def play_cast(a, cast, tag):
+    """Открыть сцену таймлайна с этим cast и дождаться её перехода."""
+    a.eval("$.timeline.define('f4', { cast: %s, script: [ { show: 'hero', ms: 1 },"
+           " { wait: 30000 } ] }); 'ok'" % cast)
+    a.eval("$.timeline.play('f4'); 'ok'")
+    for _ in range(30):
+        if a.eval("$.scene.current()") == "f4":
+            break
+        a.step(5)
+    a.step(15)
+    path = os.path.join(SHOTS, "timeline_f4_%s.png" % tag)
+    a.screenshot(path)
+    return path
 
 # Что новелла обязана сделать: локации по порядку и обе концовки.
 LOGGER = """
@@ -216,6 +274,47 @@ def main():
         check(snapshot.get("vn_last_ending") == "hate", "агент видит последнюю концовку")
         check("vn_trust" in snapshot and "vn_pose" in snapshot,
               "агент видит «руси-метр» и позу героини")
+
+    # --- F4: слот без арта не рисуется --------------------------------------
+    #
+    # BASHNYA (PHASE 2, пункт F4): `cast: { hero: { name: 'Героиня' } }` без
+    # poses рисовал белый прямоугольник во весь рост поверх кадра. Проверяем
+    # факт по кадру: считаем белые пиксели и габарит пятна.
+    make_pose_png(POSE_PNG)
+    with Agent(game="demos", scene=SCENE, seed=7) as a:
+        a.step(40)
+        path = play_cast(a, "{ hero: { name: 'Героиня' } }", "no_art")
+        white, box = count_pixels(path, white=True)
+        print("  --   F4: cast без арта — белых пикселей %d, пятно %dx%d"
+              % (white, box[0], box[1]))
+        check(white == 0,
+              "F4: слот без poses не рисуется (белых пикселей %d, было 241776 в пятне 368x657)"
+              % white)
+        check(a.eval("$('#__tl_hero_hero').length") == 0, "F4: узел слота не создан")
+        # Только журнал движка: в stdout теста эти же слова есть в сообщениях,
+        # и проверка ловила бы саму себя.
+        check("cast: у персонажа" in a.stderr_text(),
+              "F4: журнал движка называет конфигурацию (cast без poses/арта)")
+
+        # Совместимость: с poses слот рисуется как раньше.
+        path = play_cast(a,
+                         "{ hero: { name: 'Героиня', poses: { neutral: '%s' },"
+                         " height: 0.5, bottom: 1.0, x: 0.5 } }" % POSE_PNG, "with_art")
+        green, box = count_pixels(path, white=False)
+        print("  --   F4: cast с poses — зелёных пикселей %d, пятно %dx%d"
+              % (green, box[0], box[1]))
+        check(green > 10000, "F4: с poses слот по-прежнему рисуется (%d пикселей)" % green)
+        check(a.eval("$('#__tl_hero_hero').get(0).sprite") >= 0, "F4: у слота есть текстура")
+
+        # Поза объявлена, файла нет: тоже без белого прямоугольника.
+        path = play_cast(a,
+                         "{ hero: { name: 'Героиня', poses: { neutral: 'build/нет_файла.png' } } }",
+                         "broken_path")
+        white, box = count_pixels(path, white=True)
+        print("  --   F4: битый путь позы — белых пикселей %d" % white)
+        check(white == 0, "F4: битый путь позы не даёт белого прямоугольника (%d)" % white)
+        check("cast: у персонажа" in a.stderr_text(),
+              "F4: журнал движка называет причину (поза не загрузилась)")
 
     print()
     if FAILURES:

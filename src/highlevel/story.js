@@ -83,39 +83,69 @@ export function installStory($) {
 
     // --- Служебные узлы сцены: полосы, кадр, затемнение, окно реплики ---------
 
+    /**
+     * Служебные узлы сценки — ЭКРАННЫЙ ОВЕРЛЕЙ (`<ui.*>`), а не мир-узлы.
+     *
+     * BASHNYA, пункт F2: кадр `image` был мир-спрайтом в мировых координатах,
+     * поэтому уезжал вместе с камерой и проигрывал по глубине любому мир-узлу
+     * (фон меню `#menu_bg`, depth 10, закрывал вступление целиком). Хуже:
+     * затемнение создавалось НЕПРОЗРАЧНЫМ и рисовалось поверх кадра — при
+     * запуске сценки из `enter()` кадр не был виден вовсе (замер: яркость
+     * центра 0.0 при белом кадре, 240.0 после правки).
+     *
+     * Узлы `<ui.*>` рисуются в экранном проходе поверх мира: ни камера, ни
+     * глубина мир-узлов на них не влияют. Порядок создания здесь = порядок
+     * отрисовки, поэтому затемнение создаётся ПОСЛЕДНИМ и стартует прозрачным:
+     * экран оно закрывает только по команде `fade out`.
+     */
     function ensureUi() {
         if (ui) return ui;
         const bars = [];
         const bar_h = Math.max(1, Math.round(engine.height * LETTERBOX));
+        const image = makeNode('<ui.image>', {
+            id: '__story_image', w: engine.width, h: engine.height,
+        }).at(engine.width / 2, engine.height / 2);
         for (const top of [true, false]) {
-            const bar = makeNode('<rect>', {
+            const bar = makeNode('<ui.panel>', {
                 id: top ? '__story_bar_top' : '__story_bar_bottom',
                 w: engine.width, h: bar_h, color: '#000000',
             });
             bar.at(engine.width / 2, top ? bar_h / 2 : engine.height - bar_h / 2);
             bars.push(bar);
         }
-        const image = makeNode('<sprite>', {
-            id: '__story_image', w: engine.width, h: engine.height,
-        }).at(engine.width / 2, engine.height / 2);
-        const fade = makeNode('<rect>', {
-            id: '__story_fade', w: engine.width, h: engine.height, color: '#000000',
-        }).at(engine.width / 2, engine.height / 2);
-        const panel = makeNode('<rect>', {
+        const panel = makeNode('<ui.panel>', {
             id: '__story_box', w: engine.width - 80, h: 120, color: '#10141ce8',
         }).at(engine.width / 2, engine.height - 90);
-        const who = makeNode('<text>', {
+        const who = makeNode('<ui.label>', {
             id: '__story_who', text: '', size: 20, color: '#ffd166',
         }).at(56, engine.height - 138);
-        const line = makeNode('<text>', {
+        const line = makeNode('<ui.label>', {
             id: '__story_line', text: '', size: 24, color: '#ffffff',
         }).at(56, engine.height - 102);
         const choices = makeNode('<ui.col>', { id: '__story_choices' })
             .at(engine.width / 2, engine.height - 250);
+        // Затемнение — последним: оно обязано быть выше кадра, полос и панели.
+        // Стартует прозрачным (0), иначе первый же показ сценки закрывает экран.
+        const fade = makeNode('<ui.panel>', {
+            id: '__story_fade', w: engine.width, h: engine.height, color: '#000000',
+        }).at(engine.width / 2, engine.height / 2).alpha(0);
 
         ui = { bars, image, fade, panel, who, line, choices, visible: false };
+        attachOverlay([image].concat(bars, [panel, who, line, choices, fade]));
         showUi(false);
         return ui;
+    }
+
+    /**
+     * Прикрепить оверлей к корню интерфейса: порядок узлов = порядок отрисовки
+     * (тем же способом это делает `$.timeline` для своего затемнения). Без
+     * `$.ui` узлы всё равно рисуются — привязка лишь фиксирует порядок.
+     */
+    function attachOverlay(parts) {
+        if (!$ || !$.ui || typeof $.ui.appendTo !== 'function') return;
+        for (const part of parts) {
+            try { part.appendTo($.ui); } catch (e) { /* интерфейса нет — не беда */ }
+        }
     }
 
     function showUi(on) {

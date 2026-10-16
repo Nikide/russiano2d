@@ -1840,6 +1840,39 @@ function layoutStage(def) {
 }
 
 /**
+ * Убрать узел персонажа из сцены: арта нет — слота быть не должно.
+ * (Узел мог остаться от прошлой конфигурации с позами.)
+ */
+function dropRig(stage, key) {
+    const rig = stage.rigs.get(key);
+    if (!rig) return;
+    try { rig.node.remove(); } catch (e) { report('$.timeline: уборка слота без арта', e); }
+    stage.rigs.delete(key);
+}
+
+/**
+ * Слот без арта: предупреждаем ОДИН раз на имя и не рисуем ничего.
+ *
+ * BASHNYA, пункт F4: персонаж, объявленный ради имени говорящего
+ * (`cast: { hero: { name: 'Героиня' } }` — без `poses`), получал узел без
+ * спрайта, и движок рисовал вместо него БЕЛЫЙ ПРЯМОУГОЛЬНИК во весь рост
+ * (замер: 368x657 px, 241 776 белых пикселей поверх кадра вступления). Это
+ * выглядит как баг отрисовки и уводит игру в ложную диагностику, поэтому
+ * конфигурация обязана быть названа в журнале.
+ */
+function warnNoArt(stage, key, why) {
+    if (!stage.no_art) stage.no_art = new Set();
+    if (stage.no_art.has(key)) return;
+    stage.no_art.add(key);
+    if (ctx && typeof ctx.log === 'function') {
+        ctx.log(why === 'art'
+            ? `cast: у персонажа "${key}" поза не загрузилась (нет файла?) — слот не рисуется`
+            : `cast: у персонажа "${key}" нет poses/арта — слот не рисуется `
+              + `(нужен только говорящий — задайте speaker у бита say)`);
+    }
+}
+
+/**
  * Собрать персонажей под новый прогон.
  *
  * Узлы живут на сцене (`stage.rigs`), а не в прогоне: иначе каждый перезапуск
@@ -1857,6 +1890,15 @@ function buildCast(def) {
         const member = def.cast[key];
         const poses = Object.keys(member.poses);
         const first = member.pose && member.poses[member.pose] ? member.pose : poses[0];
+
+        // Арта нет вовсе — слота быть не должно (см. warnNoArt). Персонаж
+        // остаётся в cast: по нему работает имя говорящего и `speakerOf`.
+        if (poses.length === 0) {
+            dropRig(stage, key);
+            warnNoArt(stage, key, 'poses');
+            continue;
+        }
+        if (stage.no_art) stage.no_art.delete(key);   // арт появился — предупреждение снимаем
 
         let rig = stage.rigs.get(key);
         if (!rig) {
@@ -1890,6 +1932,17 @@ function buildCast(def) {
         rig.el = rig.node.get(0);
         rig.pose = first || null;
         if (first) rig.node.sprite(member.poses[first]);
+        // Поза объявлена, а текстуры нет (файла нет/путь битый): без этой
+        // проверки движок нарисовал бы белый прямоугольник — тот же дефект,
+        // что и у cast без poses.
+        if (first) {
+            rig.el = rig.node.get(0);
+            if (rig.el.sprite < 0) {
+                dropRig(stage, key);
+                warnNoArt(stage, key, 'art');
+                continue;
+            }
+        }
         rig.scale = 1;
         rig.angle = 0;
         rig.alpha = 0;
