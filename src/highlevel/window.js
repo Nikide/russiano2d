@@ -70,6 +70,18 @@ function readState() {
         fullscreen: env.window.fullscreen(),
         // Факт, а не намерение: 'windowed' | 'desktop' | 'exclusive'.
         fullscreen_mode: mode,
+        // Менялся ли drawable при последней смене режима. Это ответ на вопрос
+        // «режим правда применился или SDL просто принял вызовы»: в headless
+        // окно скрыто, и без этого поля отчёт был зелёным ни о чём (находка
+        // проверяющего 1.2.0). null — режим ещё не меняли в этой сессии.
+        // Считается ЛЕНИВО: SDL применяет смену режима не в том же вызове, и
+        // синхронное сравнение размеров врало («false» при реально изменившемся
+        // drawable). Сравниваем размер ДО вызова с текущим; при отказе режима —
+        // честный false.
+        drawable_changed: last_fs
+            ? (last_fs.error ? false : (last_fs.from[0] !== size[0] || last_fs.from[1] !== size[1]))
+            : null,
+        last_mode_error: last_fs && last_fs.error ? last_fs.error : null,
         display_w: info[0], display_h: info[1], display_refresh: info[2],
     };
 }
@@ -129,7 +141,29 @@ export function installWindow($) {
             const env = engineOf();
             if (onOrOpts === undefined) return env.window.fullscreen();
             if (onOrOpts === null || typeof onOrOpts !== 'object') {
-                env.window.setFullscreenMode(onOrOpts ? 'desktop' : 'windowed', 0, 0, 0);
+                // Короткая форма `fullscreen(true|false)` идёт тем же путём, что
+                // и объектная: иначе state().drawable_changed оставался null
+                // после хоткея, хотя drawable менялся (нашлось проверкой
+                // видимого окна), а отказ режима выглядел успехом.
+                const short_mode = onOrOpts ? 'desktop' : 'windowed';
+                const before_short = env.window.size();
+                const res_short = env.window.setFullscreenMode(short_mode, 0, 0, 0);
+                const after_short = env.window.size();
+                const failed = res_short && res_short.ok === false;
+                last_fs = {
+                    mode: (res_short && res_short.mode) || short_mode,
+                    from: before_short, to: after_short,
+                    exact: !!(res_short && res_short.exact),
+                    error: failed ? (res_short.error || 'не удалось') : null,
+                };
+                if (!failed) hotkey_settle = Math.max(hotkey_settle, HOTKEY_SETTLE);
+                if (failed) {
+                    ctx.log('$.window.fullscreen: ' + short_mode + ' не удался — '
+                            + (res_short.error || 'причина не сообщена'));
+                    return { error: res_short.error || 'не удалось', mode: short_mode,
+                             drawable_changed: false };
+                }
+                last = null;      // состояние прочитаем заново после смены режима
                 return windowApi;
             }
             // Разбор опций: неизвестная — отказ с её ИМЕНЕМ. Молча принять
@@ -152,14 +186,28 @@ export function installWindow($) {
                         + '" (есть: windowed, desktop, exclusive)');
                 return { error: 'неизвестный режим', option: 'mode' };
             }
+            const before = env.window.size();
             const res = env.window.setFullscreenMode(mode,
                                                      Math.max(0, Math.floor(Number(opts.width) || 0)),
                                                      Math.max(0, Math.floor(Number(opts.height) || 0)),
                                                      Math.max(0, Number(opts.refresh) || 0));
+            const after = env.window.size();
             if (res && res.ok === false) {
+                // Режим НЕ применён: и в state(), и в отчёте это должно быть
+                // видно, а не выглядеть успехом (находка 1.2.0: headless
+                // рапортовал 'exclusive', хотя drawable не менялся).
+                last_fs = { mode: (res && res.mode) || mode,
+                            from: before, to: after, exact: false,
+                            error: res.error || 'не удалось' };
                 ctx.log('$.window.fullscreen: ' + mode + ' не удался — ' + (res.error || 'причина не сообщена'));
-                return { error: res.error || 'не удалось', mode: mode };
+                return { error: res.error || 'не удалось', mode: mode, drawable_changed: false };
             }
+            last_fs = { mode: (res && res.mode) || mode,
+                        from: before, to: after, exact: !!(res && res.exact), error: null };
+            // Смена режима (кем угодно — игрой или хоткеем) запускает выдержку
+            // хоткея: окно в эти кадры пересоздаётся и может не доставлять
+            // клавиатуру.
+            hotkey_settle = Math.max(hotkey_settle, HOTKEY_SETTLE);
             last = null;      // состояние прочитаем заново: режим мог не совпасть с запрошенным
             return windowApi;
         },
@@ -178,7 +226,10 @@ export function installWindow($) {
             // Без аргумента — текущая настройка (для тестов и отладки).
             if (onOrKey === undefined) {
                 return { key: hotkey_key, toggles: hotkey_toggles, frames: hotkey_seen_frames,
-                         last_down: hotkey_last_down, last_pressed: hotkey_last_pressed };
+                         last_down: hotkey_last_down, last_pressed: hotkey_last_pressed,
+                         settle: hotkey_settle, retry: hotkey_retry, target: hotkey_target,
+                         last_result: hotkey_last_retry_result,
+                         latch: hotkey_latch, acted: hotkey_acted };
             }
             if (onOrKey === false) { hotkey_key = null; return windowApi; }
             hotkey_key = (onOrKey === undefined || onOrKey === true) ? 'f11' : String(onOrKey);
@@ -186,7 +237,9 @@ export function installWindow($) {
         },
 
         toggleFullscreen() {
-            engineOf().window.setFullscreen(!engineOf().window.fullscreen());
+            // Через $.window.fullscreen, а не напрямую в биндинг: так смена
+            // режима попадает в state().drawable_changed и в выдержку хоткея.
+            windowApi.fullscreen(!engineOf().window.fullscreen());
             return windowApi;
         },
 
@@ -321,17 +374,64 @@ function hotkeyTick() {
     hotkey_last_down = is_down;
     hotkey_last_pressed = is_pressed;
     hotkey_seen_frames++;
+
+    // 1. Клавиша отпущена — защёлка снимается (накопленное нажатие обработано).
+    //    Раньше latch оставался true после отпускания, и одно нажатие могло
+    //    сработать дважды: acted сбрасывался, а защёлка нет.
+    if (!is_down && !is_pressed) {
+        hotkey_latch = false;
+        hotkey_acted = false;
+    }
+    // 2. Нажатие копим ПО УРОВНЮ: в агентском режиме ввод может примениться
+    //    после нашего опроса, и следующий кадр уже снимает down — защёлка
+    //    переживает пропущенный тик и не теряет нажатие.
     if (is_down || is_pressed) hotkey_latch = true;
+
+    // 3. ВЫДЕРЖКА ПОСЛЕ СМЕНЫ РЕЖИМА. Сразу после перехода окно пересоздаётся
+    //    и может потерять фокус ввода; в эти 1-2 кадра SDL вправе не доставлять
+    //    клавиатуру — F11 «не виден» не из-за среды, а из-за этого транзиента
+    //    (воспроизведено проверяющим 1.2.0: на чистом окне хоткей работает, а
+    //    сразу после перехода — нет). Нажатие не теряется: оно уже в защёлке.
+    if (hotkey_settle > 0) { hotkey_settle--; return; }
+
+    // 4. НОВОЕ НАЖАТИЕ — раньше повтора: иначе незакрытый повтор предыдущего
+    //    переключения съедал бы следующее нажатие.
     if (hotkey_latch && !hotkey_acted) {
         hotkey_acted = true;
         hotkey_toggles++;
         const env = engineOf();
         if (env && typeof env.window.fullscreen === 'function') {
-            windowFullscreen(!env.window.fullscreen());
+            hotkey_target = !env.window.fullscreen();
+            windowFullscreen(hotkey_target);
+            hotkey_last_retry_result = 'первое';
+            hotkey_settle = HOTKEY_SETTLE;      // 6 кадров: окно пересоздаётся
+            hotkey_retry = HOTKEY_RETRIES;      // право дожать цель
+        }
+        return;
+    }
+
+    // 5. ДОЖАТЬ НЕУДАВШЕЕСЯ ПЕРЕКЛЮЧЕНИЕ. Симптом «посчитано, но режим не
+    //    применился»: команда ушла, когда окно ещё доигрывало переход. Повторяем
+    //    ТУ ЖЕ цель, поэтому одно нажатие по-прежнему даёт один toggle.
+    if (hotkey_retry > 0) {
+        if (hotkeyReached()) { hotkey_retry = 0; }
+        else {
+            hotkey_retry--;
+            windowFullscreen(hotkey_target);
+            hotkey_last_retry_result = 'повтор';
+            hotkey_settle = HOTKEY_SETTLE;
+            return;
         }
     }
-    if (!is_down && !is_pressed) hotkey_acted = false;   // рука отпустила — можно снова
+
     hotkey_was_down = is_down;
+}
+
+/** Достигнута ли цель последнего переключения хоткея. */
+function hotkeyReached() {
+    const env = engineOf();
+    if (!env || typeof env.window.fullscreen !== 'function') return true;
+    return env.window.fullscreen() === (hotkey_target === true);
 }
 
 // Клавиша фуллскрина: опрос, а не перехват события — нажатие остаётся видно
@@ -344,16 +444,28 @@ let hotkey_acted = false;        // уже переключили на это н
 let hotkey_last_down = false;    // что видел опрос в последнем кадре
 let hotkey_last_pressed = false;
 let hotkey_seen_frames = 0;      // сколько кадров опрос реально работал
+let hotkey_settle = 0;           // кадров выдержки после смены режима
+let hotkey_retry = 0;            // попыток дожать не применившийся режим
+let hotkey_target = null;        // цель последнего переключения (true — фуллскрин)
+let hotkey_last_retry_result = null;   // 'первое' | 'повтор' — для диагностики
+const HOTKEY_SETTLE = 6;         // 4–6 кадров: окно пересоздаётся и теряет фокус
+const HOTKEY_RETRIES = 2;        // двух повторов хватает: 6+6+6 кадров на переход
 let windowFullscreen = null;   // ссылка на $.window.fullscreen (idempotent-путь)
+// Факт последней смены режима: режим, изменился ли drawable, чем кончилось.
+// Нужен для честного state() и для тестов (headless-проба).
+let last_fs = null;
 
 export function tickWindow() {
-    if (!last) return;   // окно ещё не установлено
-    // Горячая клавиша: опрос ЗДЕСЬ, потому что tickWindow гарантированно
-    // исполняется каждый кадр (через него же идёт состояние окна). Регистрация
-    // через $.update оказалась ненадёжной: в части сборок хук не вызывался ни
-    // разу (диагностика показывала frames: 0) — а защёлка по уровню ниже
-    // переживает даже пропущенный кадр.
+    // Горячая клавиша опрашивается ПЕРВОЙ и без гейта по снимку: `last`
+    // обнуляется при смене режима (см. fullscreen(): «состояние прочитаем
+    // заново»), и проверка `if (!last) return` НАВСЕГДА выключала F11 после
+    // первой же смены режима. Это и был «транзиент после перехода» (находка
+    // проверяющего 1.2.0): на чистом окне хоткей срабатывал один раз, дальше
+    // опрос не исполнялся вовсе, а диагностика показывала замершие frames.
+    // Регистрация через $.update тоже ненадёжна: в части сборок хук не
+    // вызывался ни разу; защёлка по уровню ниже переживает пропущенный кадр.
     hotkeyTick();
+    if (!last) return;   // окно ещё не установлено
     // Никто не слушает окно — не читаем его состояние (6 вызовов C за кадр) и
     // не строим объект. Так в большинстве игр и бывает (§3.7 отчёта); снимок
     // для сравнения обновляет сам on() в момент подписки.

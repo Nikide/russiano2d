@@ -455,9 +455,56 @@ bool r2d_app_fullscreen_set(R2DApp *app, int mode, int w, int h, float refresh,
 #endif
         SDL_GetWindowSizeInPixels(app->window, &dw, &dh);
     }
+    // ЧЕСТНОСТЬ ОТЧЁТА (находка проверяющего 1.2.0): «эксклюзив» считается
+    // применённым только если drawable ДЕЙСТВИТЕЛЬНО стал размером режима.
+    // На скрытом окне (--headless, под CI) SDL принимает оба вызова и может
+    // не изменить drawable — тогда state() рапортовал режим, которого нет, и
+    // проверка в CI была зелёной ни о чём. Отказываем честно и откатываем
+    // прежнее состояние окна, чтобы игра не осталась в «фуллскрине», которого нет.
+    if (dw != cw || dh != chh) {
+        const SDL_WindowFlags after_flags = SDL_GetWindowFlags(app->window);
+        const bool hidden = (after_flags & SDL_WINDOW_HIDDEN) != 0;
+        if (err && errlen) {
+            SDL_snprintf(err, errlen, "режим %dx%d не применён: %s, drawable %dx%d",
+                         cw, chh, hidden ? "окно скрыто (headless)" : "drawable не изменился",
+                         dw, dh);
+        }
+        SDL_SetWindowFullscreen(app->window, false);
+        SDL_SetWindowFullscreenMode(app->window, NULL);
+        if (app->fs_saved) {
+            SDL_SetWindowSize(app->window, app->fs_saved_w, app->fs_saved_h);
+            SDL_SetWindowPosition(app->window, app->fs_saved_x, app->fs_saved_y);
+        }
+#if SDL_VERSION_ATLEAST(3, 2, 0)
+        SDL_SyncWindow(app->window);
+#endif
+        SDL_PumpEvents();
+        int rw = 0, rh = 0;
+        SDL_GetWindowSizeInPixels(app->window, &rw, &rh);
+        app->fs_mode = R2D_FULLSCREEN_OFF;
+        app->fs_display_w = rw;
+        app->fs_display_h = rh;
+        app->fs_refresh = 0.0f;
+        if (used) {
+            used->width = rw; used->height = rh; used->refresh = 0.0f;
+            used->desktop = false; used->format = SDL_PIXELFORMAT_UNKNOWN;
+        }
+        return false;
+    }
     app->fs_display_w = dw > 0 ? dw : cw;
     app->fs_display_h = dh > 0 ? dh : chh;
     app->fs_refresh = crefresh;
+    // Диагностика для транзиента хоткея: SDL вправе не доставлять клавиатуру
+    // окну без фокуса ввода, и именно на кадры после смены режима приходится
+    // потеря фокуса (находка проверяющего 1.2.0). Пишем факт в журнал — по нему
+    // видно и в тестах, и в интерактивном прогоне.
+    {
+        const SDL_WindowFlags f = SDL_GetWindowFlags(app->window);
+        R2D_LOG("фуллскрин: режим %s (%dx%d), окно %s, фокус ввода %s",
+                r2d_app_fullscreen_mode_name(app), dw, dh,
+                (f & SDL_WINDOW_HIDDEN) ? "скрыто" : "видимо",
+                (f & SDL_WINDOW_INPUT_FOCUS) ? "есть" : "нет");
+    }
     if (used) {
         used->width = cw; used->height = chh; used->refresh = crefresh;
         used->format = cformat; used->desktop = false;

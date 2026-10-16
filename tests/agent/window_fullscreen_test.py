@@ -32,6 +32,31 @@ INVARIANT = ("(() => { const s = $.window.state();"
              " return s.fullscreen === (s.fullscreen_mode !== 'windowed'); })()")
 
 
+def press_f11(a, limit=24):
+    """Нажать F11 и дождаться результата.
+
+    Хоткей после смены режима держит выдержку 6 кадров (см. docs/highlevel/window.md),
+    поэтому «2 кадра и проверяем» — неверная проверка: она мерила не механику, а
+    свою нетерпеливость. Ждём факта (toggles вырос) с пределом кадров.
+    """
+    before = a.eval("$.window.hotkey().toggles")
+    mode_before = a.eval("$.window.state()['fullscreen_mode']")
+    a.key("f11", "down")
+    frames = 0
+    for _ in range(limit):
+        a.step(1)
+        frames += 1
+        if a.eval("$.window.hotkey().toggles") > before:
+            break
+    mode_after = a.eval("$.window.state()['fullscreen_mode']")
+    poll = a.eval("$.window.hotkey()")
+    held = a.eval("$.input.down('f11')")
+    a.key("f11", "up")
+    a.step(3)
+    return {"frames": frames, "before": before, "after": poll.get("toggles"),
+            "mode_before": mode_before, "mode_after": mode_after, "poll": poll, "held": held}
+
+
 def check(condition, message):
     print(("  ok   " if condition else "  FAIL ") + message)
     if not condition:
@@ -167,44 +192,57 @@ def main():
             # не отличить от «уже отпущено».
             a.eval("$.window.fullscreen(false); $.window.hotkey('f11')")
             a.step(2)
-            a.key("f11", "down")
-            a.step(2)
-            hot_state = a.eval("$.window.state()['fullscreen_mode']")
-            held = a.eval("$.input.down('f11')")
-            poll = a.eval("$.window.hotkey()")
-            number("F11 (удержание): режим %s, клавиша видна игре: %s, опрос: %s"
-                   % (hot_state, held, poll))
-            check(held is True, "нажатие НЕ съедено: игра видит его в $.input (%s)" % held)
-            check(poll.get("frames", 0) > 0, "опрос хоткея исполняется каждый кадр (%s кадров)" % poll.get("frames"))
-            if hot_state != "windowed":
-                check(True, "F11 переключает режим (стало %s)" % hot_state)
-            else:
-                # ОГРАНИЧЕНИЕ СРЕДЫ (наблюдение 2026-10-16): в агентском прогоне
-                # виртуальная клавиша протокола не видна ВНУТРИ кадра — опрос
-                # читает `$.input.down` каждый кадр (frames > 0), но всегда false,
-                # тогда как чтение через eval даёт true. В изоляции на фикстуре
-                # `hello` тот же хоткей срабатывает (toggles: 1, режим desktop),
-                # то есть механика жива, а не работает именно доставка
-                # виртуального ввода в кадр. Интерактивную клавиатуру агентский
-                # протокол не воспроизводит — проверить здесь нечем.
-                LIMITATIONS.append(
-                    "F11 в агентском прогоне: клавиша не съедена (input.down=true), но опрос "
-                    "не видит её в кадре (frames=%s, last_down=%s); в изоляции на hello хоткей "
-                    "срабатывает (toggles: 1). Ограничение доставки виртуального ввода."
-                    % (poll.get("frames"), poll.get("last_down")))
-                print("  --   ОГРАНИЧЕНИЕ СРЕДЫ: " + LIMITATIONS[-1])
-            a.key("f11", "up")
-            a.step(2)
+            first = press_f11(a)
+            number("F11: режим %s → %s, toggles %s → %s, сработал за %s кадров, опрос %s"
+                   % (first["mode_before"], first["mode_after"], first["before"], first["after"],
+                      first["frames"], first["poll"]))
+            check(first["held"] is True, "нажатие НЕ съедено: игра видит его в $.input (%s)" % first["held"])
+            check(first["poll"].get("frames", 0) > 0,
+                  "опрос хоткея исполняется каждый кадр (%s кадров)" % first["poll"].get("frames"))
+            check(first["poll"].get("last_down") is True,
+                  "опрос ВИДИТ клавишу в кадре (last_down=%s) — раньше здесь было "
+                  "«ограничение доставки виртуального ввода», а на деле опрос выключался "
+                  "гейтом по снимку окна" % first["poll"].get("last_down"))
+            check(first["after"] == first["before"] + 1,
+                  "одно нажатие = одно переключение: toggles %s → %s" % (first["before"], first["after"]))
+            check(first["mode_after"] != first["mode_before"],
+                  "F11 переключает режим: %s → %s" % (first["mode_before"], first["mode_after"]))
             back = a.eval("$.window.state()['fullscreen_mode']")
-            check(back == "windowed", "после F11 режим согласован (стало %s)" % back)
+            check(back == first["mode_after"],
+                  "после отпускания режим не откатился: %s (нажатие дало %s)"
+                  % (back, first["mode_after"]))
+
+            # --- F11 СРАЗУ ПОСЛЕ СМЕНЫ РЕЖИМА (транзиент) ----------------------
+            # Проверяющий 1.2.0 видел здесь «то посчитано, но не применено, то
+            # нажатия не видно». Причина оказалась не в среде: tickWindow()
+            # выходил по гейту `if (!last)`, а `last` обнуляется при смене
+            # режима — опрос хоткея выключался НАВСЕГДА после первого перехода.
+            # Держим окно в циклах и жмём сразу: нажатие обязано сработать.
+            for _cycle in range(5):
+                a.eval("$.window.fullscreen({ mode: 'desktop' })")
+                a.eval("$.window.fullscreen({ mode: 'exclusive' })")
+                a.eval("$.window.fullscreen(false)")
+            a.step(1)
+            cycled = press_f11(a, limit=30)
+            number("F11 после 5 циклов: режим %s → %s, toggles %s → %s, сработал за %s кадров"
+                   % (cycled["mode_before"], cycled["mode_after"], cycled["before"],
+                      cycled["after"], cycled["frames"]))
+            check(cycled["after"] == cycled["before"] + 1,
+                  "после 5 циклов F11 посчитан ровно один раз: %s → %s"
+                  % (cycled["before"], cycled["after"]))
+            check(cycled["mode_after"] != cycled["mode_before"],
+                  "и режим реально сменился: %s → %s" % (cycled["mode_before"], cycled["mode_after"]))
             a.eval("$.window.hotkey(false)")
+            mode_off_before = a.eval("$.window.state()['fullscreen_mode']")
+            off_toggles = a.eval("$.window.hotkey().toggles")
             a.key("f11", "down")
-            a.step(2)
+            a.step(20)
             after_off = a.eval("$.window.state()['fullscreen_mode']")
             a.key("f11", "up")
             a.step(2)
-            check(after_off == "windowed",
-                  "после hotkey(false) F11 больше не переключает (режим %s)" % after_off)
+            check(after_off == mode_off_before and a.eval("$.window.hotkey().toggles") == off_toggles,
+                  "после hotkey(false) F11 больше не переключает: %s → %s, toggles %s"
+                  % (mode_off_before, after_off, off_toggles))
             a.eval("$.window.hotkey('f11')")
 
             # --- Инвариант на всех четырёх состояниях --------------------------
@@ -235,6 +273,35 @@ def main():
     print()
     for line in NUMBERS:
         print("  --   " + line)
+    # --- Headless: «эксклюзив» не рапортует успех, которого нет -------------
+    # Правило: state().fullscreen_mode не говорит 'exclusive', если drawable не
+    # менялся. На машине с дисплеем скрытое окно может применить режим по-настоящему
+    # (тогда drawable меняется и успех честный); на X11-поде CI SDL принимает
+    # вызовы и НЕ меняет drawable — там обязателен отказ. Инвариант проверяем в
+    # обеих средах: либо отказ с причиной, либо смена drawable.
+    with Agent(game=GAME, seed=5) as a:
+        a.step(3)
+        pixels_before = a.eval("engine.window.pixelSize()")
+        result = a.eval("$.window.fullscreen({ mode: 'exclusive' })")
+        a.step(3)
+        state = a.eval("$.window.state()")
+        pixels_after = a.eval("engine.window.pixelSize()")
+        changed = list(pixels_before) != list(pixels_after)
+        number("headless exclusive: результат %s, drawable %s → %s, drawable_changed=%s"
+               % (result, pixels_before, pixels_after, state.get("drawable_changed")))
+        if isinstance(result, dict) and result.get("error"):
+            check(state["fullscreen_mode"] != "exclusive",
+                  "отказ честный: режим остался %s (в state не 'exclusive')" % state["fullscreen_mode"])
+            check(changed is False,
+                  "и drawable действительно не менялся: %s → %s" % (pixels_before, pixels_after))
+        else:
+            check(state["fullscreen_mode"] == "exclusive" and changed,
+                  "успех подтверждён сменой drawable: %s → %s" % (pixels_before, pixels_after))
+            check(state.get("drawable_changed") is True,
+                  "state().drawable_changed говорит правду (%s)" % state.get("drawable_changed"))
+        check("drawable_changed" in state,
+              "в state() есть поле drawable_changed — по нему CI отличает успех от тишины")
+
     if LIMITATIONS:
         print("\nОграничения среды (не провалы, с причиной):")
         for item in LIMITATIONS:
