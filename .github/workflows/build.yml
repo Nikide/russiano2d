@@ -97,7 +97,9 @@ jobs:
             # ДИАГНОСТИКА (временно): по одному файлу на процесс CL — тогда лог
             # называет файл, на котором падает компилятор, вместо безымянного
             # батча. После ответа лога свойства убираются.
-            msbuild_props=(-- /p:MultiProcessorCompilation=false /m:1)
+            # Дефис, а не слэш: Git Bash в windows-раннере превращает "/p:..."
+            # в путь "p:..." и MSBuild падает с MSB1008 (проверено прогоном).
+            msbuild_props=(-- -p:MultiProcessorCompilation=false -m:1)
           fi
           cmake --build build-ci --config Release --parallel "$parallel" "${msbuild_props[@]}"
       - name: Configure (RE2D off)
