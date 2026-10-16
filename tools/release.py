@@ -811,6 +811,9 @@ def package_platform(
         log("    внимание: в пакете нет LICENSE — см. THIRD_PARTY_NOTICES.md")
 
     # SHA256SUMS.txt внутри пакета: хеши файлов относительно каталога.
+    # Мусор Finder/питона — из дерева, а не только из списков (см. purge_junk).
+    purge_junk(target)
+
     sums_path = os.path.join(target, "SHA256SUMS.txt")
     entries: List[str] = []
     # Тот же обход, что и для архива: фильтр мусора (.DS_Store, __pycache__ и т.п.)
@@ -847,6 +850,30 @@ def package_platform(
 #: архива (нашли в 0.1.35-macos-arm64), `__pycache__` — от локальных прогонов.
 ARCHIVE_SKIP_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini"}
 ARCHIVE_SKIP_DIRS = {"__pycache__", ".git", ".idea", ".vscode"}
+
+
+def purge_junk(root: str) -> int:
+    """Удалить системный мусор из дерева пакета. Возвращает число удалённых.
+
+    Фильтровать только списки (архив, манифест) недостаточно: файлы остаются на
+    диске и уезжают в git через `git add -f dist` для KEEP_DIST. Ловили это
+    дважды — в релизном коммите v1.2.0 и при его пересборке, поэтому мусор
+    убирается из самого дерева сразу после сборки пакета.
+    """
+    removed = 0
+    for dirpath, dirs, names in os.walk(root, topdown=False):
+        for name in list(names) + list(dirs):
+            if name in ARCHIVE_SKIP_NAMES or name in ARCHIVE_SKIP_DIRS or name.endswith(".pyc"):
+                victim = os.path.join(dirpath, name)
+                try:
+                    if os.path.isdir(victim):
+                        shutil.rmtree(victim)
+                    else:
+                        os.remove(victim)
+                    removed += 1
+                except OSError:
+                    pass
+    return removed
 
 
 def archive_members(target: str) -> List[str]:
