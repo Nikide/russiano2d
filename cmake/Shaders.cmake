@@ -86,8 +86,12 @@ file(MAKE_DIRECTORY "${R2D_SHADER_DIR}")
 
 set(R2D_SHADER_ENTRIES "")
 
+# r2d_add_shader(имя стадия исходник [дополнительные-флаги-glslang])
+# Дополнительные флаги нужны вариантам одного исходника: SMAA — это тот же
+# post.frag.glsl, скомпилированный с -DR2D_SMAA_MODE=1 (см. §task-22).
 function(r2d_add_shader name stage source)
     set(basename "${name}_${stage}")
+    set(extra_args ${ARGN})
 
     # Веб-путь: GLSL-инструментов нет, источник — рукописный WGSL.
     if(R2D_SHADERS_WGSL_ONLY)
@@ -121,6 +125,7 @@ function(r2d_add_shader name stage source)
         OUTPUT "${spv}" "${msl}"
         COMMAND "${R2D_GLSLANG}"
                 -V --target-env vulkan1.1 --quiet
+                ${extra_args}
                 -o "${spv}" "${source}"
         COMMAND "${R2D_SPIRV_CROSS}"
                 "${spv}"
@@ -150,6 +155,13 @@ r2d_add_shader(sprite_fx frag "${CMAKE_SOURCE_DIR}/shaders/sprite_fx.frag.glsl")
 # Пост-обработка: полноэкранный проход по offscreen-текстуре сцены.
 r2d_add_shader(post vert "${CMAKE_SOURCE_DIR}/shaders/post.vert.glsl")
 r2d_add_shader(post frag "${CMAKE_SOURCE_DIR}/shaders/post.frag.glsl")
+# SMAA (§task-22): тот же пост-шейдер с включённым блоком SMAA. Выключенный
+# режим использует вариант выше и потому побитово не меняется.
+# Веб-сборка (WGSL) пока без SMAA: r2d_render_smaa_available() честно
+# возвращает false, кадр рисует обычный пост — без падений.
+if(NOT R2D_SHADERS_WGSL_ONLY)
+    r2d_add_shader(smaa frag "${CMAKE_SOURCE_DIR}/shaders/post.frag.glsl" -DR2D_SMAA_MODE=1)
+endif()
 
 # Bloom: яркий проход с понижением разрешения и разделяемое размытие.
 r2d_add_shader(bloom_pre frag "${CMAKE_SOURCE_DIR}/shaders/bloom_pre.frag.glsl")

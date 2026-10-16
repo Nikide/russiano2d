@@ -466,7 +466,55 @@ const post_params = {
     // амплитуды в долях экрана; channel_shift — сдвиг R/B в долях экрана.
     distort: 0, wave_amp: 0, wave_freq: 24, wave_speed: 6, wave_axis: 0,
     noise_amount: 0, noise_scale: 8, channel_shift: 0,
+    // SMAA (§task-22): число шагов поиска паттерна, 0 — выключено. Живёт в
+    // поле-запасе поста (_pad0 / u.p5.w), потому что это тот же проход.
+    smaa_steps: 0,
 };
+
+// --- SMAA (§task-22) --------------------------------------------------------
+// Пресеты качества = предельная длина поиска паттерна кромки в шейдере:
+// больше шагов — точнее длина кромки, дороже кадр.
+const SMAA_STEPS = { low: 2, medium: 4, high: 8 };
+
+// Состояние AA держим на JS-стороне (движок получает только шаги поиска).
+// Выключено по умолчанию: включение — осознанное решение игры.
+const smaa_state = { on: false, preset: 'medium', pixel_art: false };
+
+/**
+ * Отправляет шаги поиска в пост-проход. Выключенный SMAA — это ровно 0:
+ * шейдерный блок AA не выполняется, а C рисует прежний конвейер поста,
+ * поэтому кадр совпадает с кадром без SMAA побитово.
+ */
+function smaaApply() {
+    const info = typeof engine.renderInfo === 'function' ? engine.renderInfo() : null;
+    const available = info && typeof info.smaa_available === 'boolean' ? info.smaa_available : null;
+    const active = smaa_state.on && !smaa_state.pixel_art
+        && available !== false && post_params.enabled >= 0.5;
+    post_params.smaa_steps = active ? SMAA_STEPS[smaa_state.preset] : 0;
+    return active;
+}
+
+/** Состояние SMAA фактами: что просили, что действует и почему. */
+function smaaState() {
+    const info = typeof engine.renderInfo === 'function' ? engine.renderInfo() : null;
+    const available = info && typeof info.smaa_available === 'boolean' ? info.smaa_available : null;
+    const active = smaaApply() === true;
+    let reason = null;
+    if (!available) reason = 'веб-сборка WebGPU: SMAA-вариант шейдера не собран';
+    else if (!smaa_state.on) reason = 'выключен (по умолчанию)';
+    else if (smaa_state.pixel_art) reason = 'pixelArt: AA противоречит целочисленному скейлу и снапу';
+    else if (post_params.enabled < 0.5) reason = 'пост-обработка выключена: SMAA живёт в её проходе';
+    return {
+        available,
+        on: smaa_state.on,
+        preset: smaa_state.preset,
+        steps: SMAA_STEPS[smaa_state.preset],
+        pixel_art: smaa_state.pixel_art,
+        active,
+        post: post_params.enabled >= 0.5,
+        reason,
+    };
+}
 
 // Наборы камерных эффектов: от «тёплого мультика» до хоррора. Значения —
 // это те же параметры, что принимает $.gfx.post().
@@ -572,6 +620,9 @@ function pushPost() {
     if (typeof engine.setPost !== 'function') return;
     if (typeof engine.postSupported === 'function' && !engine.postSupported()) return;
     tickPostBlend((engine.dt || 0) * 1000);
+    // SMAA отправляется тем же вызовом: он часть этого прохода, и держать
+    // второе состояние значило бы рассинхронизировать «включено/выключено».
+    smaaApply();
     engine.setPost(post_params.glow, post_params.vignette, post_params.chromatic, post_params.lens,
                    post_params.center_x, post_params.center_y, post_params.radius,
                    post_params.grain, post_params.scanline, post_params.enabled,
@@ -584,7 +635,9 @@ function pushPost() {
                    // пост, чтобы «включено/выключено» не разъезжалось.
                    post_params.distort, post_params.wave_amp, post_params.wave_freq,
                    post_params.wave_speed, post_params.wave_axis,
-                   post_params.noise_amount, post_params.noise_scale, post_params.channel_shift);
+                   post_params.noise_amount, post_params.noise_scale, post_params.channel_shift,
+                   // SMAA: 0 — выключено, иначе шаги поиска (2/4/8).
+                   post_params.smaa_steps);
 }
 
 function ensureBuffers() {
@@ -3764,6 +3817,55 @@ export function installGfx($) {
          * $.gfx.post({ on: false });
          * ```
          */
+        /**
+         * SMAA — морфологический пост-антиалиасинг для сцены (§task-22).
+         *
+         * ```js
+         * $.gfx.smaa(true);                     // включить (пресет medium)
+         * $.gfx.smaa({ preset: 'high' });       // качество поиска паттерна
+         * $.gfx.smaa({ pixelArt: true });       // пиксель-арт: AA выключен
+         * $.gfx.smaa();                         // состояние: факты для агента
+         * ```
+         *
+         * Значения по умолчанию: выключено (`on: false`), пресет `medium`
+         * (4 шага поиска), `pixelArt: false`. Сглаживается ТОЛЬКО сцена:
+         * интерфейс (узлы UI и RmlUi) рисуется отдельными проходами после
+         * поста, поэтому текст остаётся резким (см. docs/highlevel/render.md).
+         *
+         * Возвращает то же состояние, что и геттер: `{ available, on, preset,
+         * steps, pixel_art, active, post, reason }`. Когда SMAA реально не
+         * может работать (пост выключен, пиксель-арт, веб-сборка), `active`
+         * равно false, а `reason` объясняет почему — выдуманных чисел нет.
+         */
+        smaa(opts) {
+            if (opts !== undefined && typeof opts !== 'boolean' && (opts === null || typeof opts !== 'object')) {
+                return smaaState();
+            }
+            if (typeof opts === 'boolean') opts = { on: opts };
+            if (opts) {
+                if (opts.on !== undefined) smaa_state.on = !!opts.on;
+                if (opts.preset !== undefined) {
+                    const preset = String(opts.preset).toLowerCase();
+                    if (SMAA_STEPS[preset] === undefined) {
+                        ctx.log(`$.gfx.smaa: неизвестный пресет "${opts.preset}" (есть low, medium, high)`);
+                    } else {
+                        smaa_state.preset = preset;
+                    }
+                }
+                if (opts.pixelArt !== undefined) smaa_state.pixel_art = !!opts.pixelArt;
+                // Любое включение явно — значит, оно и есть намерение игры:
+                // обновляем шаги и отправляем их в движок сразу, не ожидая кадра.
+                smaaApply();
+                pushPost();
+                const st = smaaState();
+                if (smaa_state.on && !st.active) {
+                    ctx.log(`$.gfx.smaa: включён, но не действует — ${st.reason}`);
+                }
+                return st;
+            }
+            return smaaState();
+        },
+
         post(opts) {
             if (typeof engine.postSupported !== 'function' || !engine.postSupported()) {
                 return opts === undefined ? null : gfx;

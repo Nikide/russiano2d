@@ -27,6 +27,8 @@ Russiano2D собирается из исходников и тянет зави
 | stb_truetype (`nothings/stb`) | `2c980bb` (1.26) | public domain / MIT (dual) |
 | SDL_net | `30dd38a` | zlib |
 | Tracy | `v0.14.1` (`30997d5`) — только при `-DR2D_TRACY=ON` | BSD-3-Clause |
+| zstd | `v1.5.7` (`ac66b19`) — только при `R2D_ENABLE_ZSTD=ON` (по умолчанию) | BSD-3-Clause |
+| SMAA (техника) | эталонная реализация `iryoku/smaa` (`master`), **код не вендорился** — своя реализация в `shaders/post.frag.glsl`; см. раздел ниже | MIT (у эталонной реализации) |
 | Noto Sans | файл в репозитории | SIL OFL 1.1 |
 | LatoLatin | файл в репозитории | SIL OFL 1.1 |
 | Open Sans | файл в репозитории (`OpenSans-Regular.ttf`) | SIL OFL 1.1 |
@@ -122,6 +124,50 @@ C-обёртка — `src/light.cpp`.
   где `R2D_TRACY=ON`.
 * Как включить, что видно и чего не видно — [`docs/BUILD.md`](docs/BUILD.md),
   раздел «Tracy: профайлер реального времени».
+
+### SMAA — MIT (у эталонной реализации; код не вендорился)
+
+`$.gfx.smaa()` (`shaders/post.frag.glsl`, блок `#if R2D_SMAA_MODE`) реализует
+технику **SMAA — Subpixel Morphological Antialiasing**, описанную Jimenez et al.
+(«SMAA: Enhanced Subpixel Morphological Antialiasing», 2012).
+
+* эталонная реализация: <https://github.com/iryoku/smaa> (файл `LICENSE.txt`),
+  Copyright (C) 2013 Jorge Jimenez, Jose I. Echevarria, Belen Masia,
+  Fernando Navarro, Diego Gutierrez — лицензия MIT-типа: «Permission is hereby
+  granted, free of charge…», с уточнением, что включать уведомление в бинарные
+  поставки не обязательно;
+* **наш код — свой**: ни шейдеры, ни area/search LUT-текстуры эталонной
+  реализации в репозиторий не копировались. Реализован вариант SMAA 1x без
+  LUT: детекция краёв по яркости с адаптацией к локальному контрасту, поиск
+  длины паттерна выборками в шейдере, вес кромки — линейная аппроксимация
+  площади. Поэтому таблица выше помечает строку как «техника»;
+* уведомление приведено здесь по требованию проектной практики (и потому что
+  техника и её авторство должны быть названы), а не потому, что лицензия этого
+  требует для бинарной поставки.
+
+### zstd — BSD-3-Clause
+Сжатие груза игры: билдер сжимает тело контейнера (`russiano2d build`), движок
+распаковывает его на старте — см. [`docs/BUILD.md`](docs/BUILD.md), раздел
+«Сжатие груза (zstd)». Подключается отдельным файлом
+[`cmake/Zstd.cmake`](cmake/Zstd.cmake) с пином `v1.5.7` / `ac66b19`.
+
+Что важно для поставки:
+
+* **Версия запинена коммитом, уровень сжатия — константа**
+  (`R2D_PAYLOAD_ZSTD_LEVEL` в `src/payload.h`, `R2D_ZSTD_LEVEL` в CMake):
+  байты груза зависят и от версии библиотеки, и от уровня, поэтому одинаковое
+  дерево обязано давать одинаковый груз. Проверяется
+  `tests/agent/payload_compression_test.py` (двойная сборка → один SHA256).
+* **Отключается целиком**: `-DR2D_ENABLE_ZSTD=OFF` — сборка без zstd, груз
+  пишется в прежнем формате (версия 1, без сжатия), библиотека не скачивается
+  и не линкуется. В веб-сборке (Emscripten) выключено по умолчанию.
+* **Собирается статически** из исходников (`ZSTD_BUILD_SHARED=OFF`), внутрь
+  попадают только compress/decompress. Текст лицензии BSD-3-Clause
+  распространяется вместе с исходниками zstd, а уведомление обязано
+  сохраняться при распространении сборок со сжатым грузом.
+* Библиотека линкуется **только** в движок (`russiano2d`): хостовый C-тест
+  разбора груза (`r2d_payload_test`) компилирует `src/payload.c` без
+  `R2D_ENABLE_ZSTD` и проверяет старый формат.
 
 ### glslang и SPIRV-Cross — Apache-2.0
 Инструменты сборки шейдеров: GLSL → SPIR-V (`glslangValidator`) и

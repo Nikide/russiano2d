@@ -3,6 +3,11 @@
 // ---------------------------------------------------------------------------
 // Пост-обработка russiano2d — фрагментная стадия.
 //
+// Этот же файл компилируется вторым вариантом с -DR2D_SMAA_MODE=1 (entry
+// smaa_frag): тогда к готовому кадру сцены применяется SMAA (§SMAA).
+// При R2D_SMAA_MODE = 0 весь блок SMAA вырезается препроцессором, поэтому
+// выключенный AA не меняет ни байта скомпилированного шейдера и кадра.
+//
 // Сцена приходит сюда уже отрисованной в offscreen-текстуру, поэтому эффекты
 // можно накладывать на готовый кадр: свечение, вигнетка, хроматическая
 // аберрация, зерно, скан-линии и — главное — линза (экранное искажение UV по
@@ -47,6 +52,107 @@ float r2d_hash(vec2 p)
 {
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
+
+#if R2D_SMAA_MODE
+// ---------------------------------------------------------------------------
+// SMAA (Subpixel Morphological Antialiasing) — Jimenez et al., MIT.
+//
+// Здесь SMAA 1x в варианте БЕЗ area/search-текстур: края детектируются по
+// яркости с адаптацией к локальному контрасту, длины паттернов ищутся прямо
+// в шейдере, а вес кромки — линейная аппроксимация площади перекрытия.
+// Причина: LUT-текстуры SMAA (160×560 + 64×64) пришлось бы вендорить и
+// загружать в GPU, а наш пост-проход уже читает сцену — поэтому поиск идёт
+// выборками, и лишнюю цену платят только пиксели кромки. Пресет качества
+// (u.p5.w = 2/4/8) ограничивает длину поиска паттерна.
+//
+// SMAA применяется к СЦЕНЕ и только к ней: интерфейс (узлы UI и RmlUi)
+// рисуется после поста отдельными проходами, поэтому текст не мылится.
+// ---------------------------------------------------------------------------
+#define SMAA_THRESHOLD 0.10          // порог яркости (SMAA по умолчанию)
+#define SMAA_LOCAL_CONTRAST 0.10     // адаптация к локальному контрасту
+#define SMAA_SEARCH_MAX 8            // верхняя граница поиска (пресет high)
+
+float r2d_smaa_luma(vec3 c)
+{
+    return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+float r2d_smaa_luma_at(vec2 uv, vec2 texel)
+{
+    return r2d_smaa_luma(texture(u_scene, uv + texel).rgb);
+}
+
+// Длина паттерна вдоль кромки: идём шагами по dir, пока перепад поперёк
+// кромки (по normal) остаётся выше порога. Ограничение — пресет качества.
+float r2d_smaa_search(vec2 uv, vec2 texel, vec2 dir, vec2 normal, float steps)
+{
+    float len = 0.0;
+    for (int i = 1; i <= SMAA_SEARCH_MAX; ++i) {
+        if (float(i) > steps) break;
+        vec2 p = uv + dir * (float(i) * texel);
+        float a = r2d_smaa_luma_at(p, -normal * texel);
+        float b = r2d_smaa_luma_at(p, normal * texel);
+        if (abs(a - b) < SMAA_THRESHOLD) break;
+        len += 1.0;
+    }
+    return len;
+}
+
+// Вес кромки: чем ближе пиксель к концу паттерна, тем больше перекрытие.
+// Середина длинной кромки не размывается (вес стремится к нулю).
+float r2d_smaa_weight(float up, float down)
+{
+    float len = up + down + 1.0;
+    float dist = min(up, down) + 0.5;
+    return clamp(0.5 * (1.0 - dist / len), 0.0, 0.5);
+}
+
+vec3 r2d_smaa_blend(vec2 uv, vec2 texel, vec3 color)
+{
+    float steps = clamp(u.p5.w, 2.0, float(SMAA_SEARCH_MAX));
+    vec2 px = texel;
+    // Перепад считается между ПРОТИВОПОЛОЖНЫМИ соседями (как в MLAA/SMAA):
+    // у пикселя на кромке один бок белый, другой чёрный. Проверка «центр против
+    // каждого соседа» ловила только пиксели самой линии и почти не срабатывала
+    // на ступеньках наклонной кромки.
+    float lt = r2d_smaa_luma_at(uv, vec2(0.0, -px.y));
+    float lb = r2d_smaa_luma_at(uv, vec2(0.0, px.y));
+    float ll = r2d_smaa_luma_at(uv, vec2(-px.x, 0.0));
+    float lr = r2d_smaa_luma_at(uv, vec2(px.x, 0.0));
+    float c  = r2d_smaa_luma_at(uv, vec2(0.0));
+    float local = max(max(max(lt, lb), max(ll, lr)), c) * SMAA_LOCAL_CONTRAST;
+    float d_h = abs(lt - lb);   // кромка идёт по горизонтали → сглаживаем по Y
+    float d_v = abs(ll - lr);   // кромка идёт по вертикали   → сглаживаем по X
+
+    // Горизонтальная кромка (перепад по вертикали) — сглаживаем по вертикали.
+    float w_h = 0.0;
+    float w_v = 0.0;
+    if (d_h > SMAA_THRESHOLD && d_h > local) {
+        float up = r2d_smaa_search(uv, px, vec2(0.0, -1.0), vec2(0.0, 1.0), steps);
+        float dn = r2d_smaa_search(uv, px, vec2(0.0, 1.0), vec2(0.0, 1.0), steps);
+        w_h = r2d_smaa_weight(up, dn);
+    }
+    if (d_v > SMAA_THRESHOLD && d_v > local) {
+        float lf = r2d_smaa_search(uv, px, vec2(-1.0, 0.0), vec2(1.0, 0.0), steps);
+        float rt = r2d_smaa_search(uv, px, vec2(1.0, 0.0), vec2(1.0, 0.0), steps);
+        w_v = r2d_smaa_weight(lf, rt);
+    }
+    if (w_h <= 0.0 && w_v <= 0.0) return color;
+
+    vec3 out_c = color;
+    if (w_h > 0.0) {
+        vec3 a = texture(u_scene, uv - vec2(0.0, px.y)).rgb;
+        vec3 b = texture(u_scene, uv + vec2(0.0, px.y)).rgb;
+        out_c = mix(out_c, (a + b) * 0.5, w_h);
+    }
+    if (w_v > 0.0) {
+        vec3 a = texture(u_scene, uv - vec2(px.x, 0.0)).rgb;
+        vec3 b = texture(u_scene, uv + vec2(px.x, 0.0)).rgb;
+        out_c = mix(out_c, (a + b) * 0.5, w_v);
+    }
+    return out_c;
+}
+#endif
 
 void main()
 {
@@ -186,5 +292,13 @@ void main()
         col.rgb = mix(col.rgb, vec3(0.42, 0.02, 0.05), u.p4.w * smoothstep(0.2, 0.85, db));
     }
 
+#if R2D_SMAA_MODE
+    // SMAA применяется к сцене после цветокоррекции: сглаживаем то, что видит
+    // глаз, а не сырые значения до грейдинга. Интерфейс в сцене отсутствует —
+    // он рисуется отдельными проходами после поста (см. main.c).
+    if (u.p5.w >= 1.5) {
+        col.rgb = r2d_smaa_blend(uv, vec2(1.0) / vec2(textureSize(u_scene, 0)), col.rgb);
+    }
+#endif
     o_color = vec4(clamp(col.rgb, 0.0, 1.0), 1.0);
 }

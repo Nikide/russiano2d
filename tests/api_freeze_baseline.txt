@@ -1018,6 +1018,7 @@ $.gfx.shaderError
 $.gfx.shaderPreamble
 $.gfx.shadersSupported
 $.gfx.size
+$.gfx.smaa
 $.gfx.snap
 $.gfx.stats
 $.gfx.text
@@ -1133,6 +1134,7 @@ $.input.padAxis
 $.input.padCount
 $.input.padDown
 $.input.padSlots
+$.input.padState
 $.input.pressed
 $.input.rebind
 $.input.released
@@ -1321,7 +1323,6 @@ $.net.engineBound
 $.net.get
 $.net.history
 $.net.host
-$.net.host_
 $.net.idOf
 $.net.interpolate
 $.net.isClient
@@ -2073,6 +2074,7 @@ $.ui.focusStack
 $.ui.focused
 $.ui.focusedId
 $.ui.fps
+$.ui.gamepadNavigation
 $.ui.has
 $.ui.hasIcon
 $.ui.hide
@@ -2314,6 +2316,7 @@ $.ввод.padAxis
 $.ввод.padCount
 $.ввод.padDown
 $.ввод.padSlots
+$.ввод.padState
 $.ввод.pressed
 $.ввод.rebind
 $.ввод.released
@@ -2434,6 +2437,7 @@ $.графика.shaderError
 $.графика.shaderPreamble
 $.графика.shadersSupported
 $.графика.size
+$.графика.smaa
 $.графика.snap
 $.графика.stats
 $.графика.text
@@ -2503,6 +2507,7 @@ $.интерфейс.focusStack
 $.интерфейс.focused
 $.интерфейс.focusedId
 $.интерфейс.fps
+$.интерфейс.gamepadNavigation
 $.интерфейс.has
 $.интерфейс.hasIcon
 $.интерфейс.hide

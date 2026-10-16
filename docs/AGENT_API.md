@@ -229,6 +229,24 @@
 стороны ([AGENT_IMPLEMENTATION_RULES.md](AGENT_IMPLEMENTATION_RULES.md)
 правила 8–9).
 
+### 3.3.4. Пост-обработка и SMAA — `$.gfx.smaa()`
+
+Состояние пост-антиалиасинга видно из агентского прогона и проверяемо: сменить
+его можно через `eval` (`$.gfx.smaa(true)`, `$.gfx.smaa({preset:'high'})`,
+`$.gfx.smaa({pixelArt:true})`), а прочитать — `$.gfx.smaa()` либо
+`engine.renderInfo()`:
+
+| Поле | Смысл |
+|---|---|
+| `renderInfo().smaa_available` | собран ли SMAA-вариант шейдера в этой сборке (в веб-сборке — `false`) |
+| `renderInfo().smaa_on`, `smaa_steps` | включён ли AA и сколько шагов поиска ушло в шейдер (0 — выключен) |
+| `renderInfo().smaa_pipeline` | создался ли конвейер SMAA (отличает «выключено» от «не собралось») |
+| `$.gfx.smaa()` | `{ available, on, preset, steps, pixel_art, active, post, reason }` |
+
+Выключенный SMAA не меняет кадр: это проверяется побитово в
+`tests/agent/smaa_test.py`. Порядок проходов и цена — в
+[highlevel/render.md](highlevel/render.md) §4.8.
+
 ### 3.4. Вычисление кода
 
 | `cmd` | Параметры | Ответ |
@@ -272,9 +290,40 @@
 | `mouse` | `button`: `1` ЛКМ, `2` СКМ, `3` ПКМ; `action`: `"down"`, `"up"`, `"click"` | `{"ok":true,"button":1,"action":"click"}` |
 | `mouseMove` | `dx`, `dy` (относительное смещение) либо `x`, `y` (абсолютная позиция, в логических точках) | `{"ok":true,"x":..,"y":..}` — позиция мыши **до** применения (см. ниже) |
 | `touch` | `finger` (номер пальца, по умолчанию `0`), `x`, `y`, `action`: `"down"`, `"up"` (по умолчанию `down`), `"clear"` (снять все касания) | `{"ok":true}` |
-| `pad` | `slot` (номер геймпада), затем либо `button` (номер кнопки) + `down` (bool, по умолчанию `true`), либо `axis` (номер оси) + `value` (number) | `{"ok":true}`; без `button`/`axis` — ошибка `pad: нужен button или axis` |
+| `pad` | `slot` (номер геймпада 0..3), затем либо `button` + `down` (bool, по умолчанию `true`), либо `axis` + `value` (number), либо `reset` (bool) | `{"ok":true}`; без `button`/`axis`/`reset` — ошибка `pad: нужен button, axis или reset` |
 | `wheel` | `amount` (number) | `{"ok":true,"amount":..}` |
 | `text` | `text` (строка, UTF-8) — символы, которые игрок «набрал» в этом кадре | `{"ok":true,"text":"..."}` |
+
+**Команда `pad`: кнопки и оси — номерами SDL или именами.** `button` принимает
+номер `SDL_GamepadButton` (0..14) **или** имя в написании SDL: `"a"`, `"b"`,
+`"x"`, `"y"`, `"back"`, `"guide"`, `"start"`, `"leftstick"`, `"rightstick"`,
+`"leftshoulder"`, `"rightshoulder"`, `"dpup"`, `"dpdown"`, `"dpleft"`,
+`"dpright"`. `axis` — номер 0..5 или имя: `"leftx"`, `"lefty"`, `"rightx"`,
+`"righty"`, `"lefttrigger"`, `"righttrigger"`. Курки — оси **0..1** (не −1..1),
+стики −1..1. Неизвестное имя — явный отказ (`pad: неизвестная кнопка …`), а не
+молчаливое «ничего не нажали»; слот вне 0..3 — тоже отказ.
+
+```jsonc
+{"cmd":"pad","slot":0,"button":"a","down":true}       // нажать A на первом
+{"cmd":"pad","slot":0,"button":1,"down":false}        // отпустить B номером
+{"cmd":"pad","slot":1,"axis":"lefttrigger","value":0.8}
+{"cmd":"pad","slot":0,"reset":true}                   // снять всю инъекцию слота
+```
+
+Инъекция живёт до отпускания или до `reset`, действует на последующие кадры и
+**не делает слот подключённым**: `$.input.gamepad(0).connected()` остаётся
+`false`, а `$.input.padState(0)` показывает `virtual: true` — это и есть
+признак «в слот пишет агент, железа нет». Проверять состояние удобно так:
+
+```python
+a.cmd("pad", slot=0, button="a", down=True); a.step(1)
+state = a.eval("$.input.padState(0)")     # down: ['a'], pressed: ['a'], axes: {...}
+a.cmd("pad", slot=0, reset=True); a.step(1)   # залипания не остаётся
+```
+
+`reset` приводит слот ровно в то состояние, что и отключение устройства: кнопки,
+фронты и оси обнуляются, удержания в `$.input.devices()` чистые,
+`$.input.stuck()` пуст. Тест: `tests/agent/gamepad_test.py` (51 проверка).
 
 **Имена команд — ровно в camelCase, как в таблице.** `mousemove` или
 `mouse_move` не «молча не работают», а получают явный отказ:

@@ -2155,11 +2155,105 @@ static SDL_GPUGraphicsPipeline *r2d__create_fullscreen_pipeline(R2DRenderer *r,
     return r2d__create_fullscreen_pipeline_blend(r, frag, R2D_BLEND_NONE);
 }
 
+// --- SMAA (§task-22): конвейер варианта post-шейдера с -DR2D_SMAA_MODE=1 ----
+//
+// SMAA живёт внутри пост-прохода: отдельного render target он не требует,
+// потому что читает ту же сцену (u_scene), что и пост. Конвейер — копия
+// пост-конвейера с другим фрагментным шейдером; когда AA выключен, рисует
+// прежний post_pipeline, поэтому выключенный режим не меняет кадр.
+//
+// Поля в R2DRenderer под этот конвейер нет (render.h правит другая задача),
+// поэтому указатель хранится в файловой статике вместе с устройством: при
+// смене устройства конвейер пересоздаётся, при shutdown — освобождается.
+static SDL_GPUGraphicsPipeline *g_smaa_pipeline = NULL;
+static SDL_GPUDevice          *g_smaa_device   = NULL;
+
+#ifndef __EMSCRIPTEN__
+static SDL_GPUGraphicsPipeline *r2d__create_smaa_pipeline(R2DRenderer *r)
+{
+    SDL_GPUShader *vs = r2d__make_shader(r->device, &r2d_shader_post_vert,
+                                          SDL_GPU_SHADERSTAGE_VERTEX, 0, 0);
+    SDL_GPUShader *fs = r2d__make_shader(r->device, &r2d_shader_smaa_frag,
+                                          SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 2);
+    if (!vs || !fs) {
+        if (vs) SDL_ReleaseGPUShader(r->device, vs);
+        if (fs) SDL_ReleaseGPUShader(r->device, fs);
+        return NULL;
+    }
+
+    SDL_GPUColorTargetDescription target;
+    SDL_zero(target);
+    target.format = SDL_GetGPUSwapchainTextureFormat(r->device, r->window);
+    target.blend_state.enable_blend = false;
+
+    SDL_GPUGraphicsPipelineCreateInfo pipe;
+    SDL_zero(pipe);
+    pipe.vertex_shader   = vs;
+    pipe.fragment_shader = fs;
+    pipe.primitive_type  = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    pipe.vertex_input_state.num_vertex_buffers    = 0;
+    pipe.vertex_input_state.num_vertex_attributes = 0;
+    pipe.target_info.num_color_targets         = 1;
+    pipe.target_info.color_target_descriptions = &target;
+    pipe.rasterizer_state.fill_mode  = SDL_GPU_FILLMODE_FILL;
+    pipe.rasterizer_state.cull_mode  = SDL_GPU_CULLMODE_NONE;
+    pipe.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+    pipe.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    SDL_GPUGraphicsPipeline *result = SDL_CreateGPUGraphicsPipeline(r->device, &pipe);
+    SDL_ReleaseGPUShader(r->device, vs);
+    SDL_ReleaseGPUShader(r->device, fs);
+    return result;
+}
+
+// Конвейер SMAA для этого устройства (создаётся один раз).
+static SDL_GPUGraphicsPipeline *r2d__smaa_pipeline(R2DRenderer *r)
+{
+    if (g_smaa_pipeline && g_smaa_device == r->device) return g_smaa_pipeline;
+    if (g_smaa_pipeline && g_smaa_device != r->device) {
+        // Устройство сменилось (перезапуск окна/бэкенда): старый конвейер
+        // принадлежал другому устройству и уже невалиден.
+        g_smaa_pipeline = NULL;
+        g_smaa_device = NULL;
+    }
+    g_smaa_pipeline = r2d__create_smaa_pipeline(r);
+    g_smaa_device = g_smaa_pipeline ? r->device : NULL;
+    return g_smaa_pipeline;
+}
+#endif   // __EMSCRIPTEN__
+
+// Доступен ли SMAA в этой сборке: веб-сборка (WebGPU) собирает только
+// WGSL-варианты, а SMAA-вариант пока GLSL-only — честно сообщаем об этом.
+bool r2d_render_smaa_available(const R2DRenderer *r)
+{
+#ifdef __EMSCRIPTEN__
+    (void)r;
+    return false;
+#else
+    return r != NULL;
+#endif
+}
+
+// Включён ли SMAA сейчас (поле-запас поста: 0 — выключено, 2/4/8 — шаги).
+bool r2d_render_smaa_on(const R2DRenderer *r)
+{
+    return r && r->post._pad0 >= 1.5f;
+}
+
+float r2d_render_smaa_steps(const R2DRenderer *r)
+{
+    return r ? r->post._pad0 : 0.0f;
+}
+
 bool r2d_render_post_enabled(const R2DRenderer *r)
 {
     if (!r || !r->post_pipeline) return false;
     const R2DPostParams *p = &r->post;
     if (p->enabled <= 0.5f) return false;
+    // SMAA (§task-22) — сам по себе причина считать проход: иначе включённый
+    // антиалиасинг молча ничего не делал бы у игры без других эффектов поста
+    // (у «нейтральных» параметров проход пропускается ради нулевой цены).
+    if (r2d_render_smaa_on(r)) return true;
     // Экранное искажение (§46) само по себе включает проход: без этой строки
     // волна/шум/сдвиг каналов молча не применялись бы — кадр уходил прямо в
     // swapchain, и «параметр дошёл» выдавалось бы за работающий эффект.
@@ -2230,7 +2324,19 @@ void r2d_render_post(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPas
 {
     if (!r || !r->post_pipeline || !r->scene_target || !cmd || !pass) return;
 
+#ifndef __EMSCRIPTEN__
+    // SMAA включается полем-запасом поста (0 — выключено): тогда рисует
+    // отдельный конвейер с -DR2D_SMAA_MODE=1, а выключенный путь остаётся
+    // прежним конвейером и прежним шейдером — кадр не меняется ни на бит.
+    SDL_GPUGraphicsPipeline *pipe = r->post_pipeline;
+    if (r2d_render_smaa_on(r)) {
+        SDL_GPUGraphicsPipeline *smaa = r2d__smaa_pipeline(r);
+        if (smaa) pipe = smaa;
+    }
+    SDL_BindGPUGraphicsPipeline(pass, pipe);
+#else
     SDL_BindGPUGraphicsPipeline(pass, r->post_pipeline);
+#endif
 
     // binding 0 — сцена, binding 1 — готовая размытая яркая часть (bloom).
     // Если свечения не было, туда уходит чёрная текстура 1×1 и вклад нулевой,
@@ -3153,6 +3259,14 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
 
 void r2d_render_shutdown(R2DRenderer *r)
 {
+#ifndef __EMSCRIPTEN__
+    // Конвейер SMAA живёт в файловой статике (в R2DRenderer поля нет).
+    if (g_smaa_pipeline && g_smaa_device) {
+        SDL_ReleaseGPUGraphicsPipeline(g_smaa_device, g_smaa_pipeline);
+    }
+    g_smaa_pipeline = NULL;
+    g_smaa_device = NULL;
+#endif
     // Рабочая память последовательного синтеза Re2DSprite. В сборке без RE2D
     // её никто не выделяет (src/rotsprite.c не компилируется), поэтому и
     // освобождать нечего — поле остаётся, чтобы структура рендерера была одна
@@ -3296,6 +3410,10 @@ static JSValue r2d__js_set_post(JSContext *ctx, JSValueConst this_val,
     p.noise_amount    = r2d__js_arg_float(ctx, argc, argv, 27, p.noise_amount);
     p.noise_scale     = r2d__js_arg_float(ctx, argc, argv, 28, p.noise_scale);
     p.channel_shift   = r2d__js_arg_float(ctx, argc, argv, 29, p.channel_shift);
+    // SMAA (§task-22): число шагов поиска паттерна (2/4/8 — пресеты качества).
+    // Поле _pad0 было запасом на выравнивание push-констант и никем не
+    // использовалось: раскладка vec4 не меняется, шейдер читает его как u.p5.w.
+    p._pad0           = r2d__js_arg_float(ctx, argc, argv, 30, p._pad0);
 
     r2d_render_set_post(r, &p);
     return JS_TRUE;
@@ -3617,6 +3735,17 @@ static JSValue r2d__js_render_info(JSContext *ctx, JSValueConst this_val,
     // Постоянная смена материала не должна плодить варианты — их потолок
     // виден здесь: 4 режима смешивания + 4 под шейдер узла.
     JS_SetPropertyStr(ctx, o, "snap", JS_NewBool(ctx, r && r->snap));
+    // SMAA (§task-22): доступность, включённость и число шагов поиска.
+    JS_SetPropertyStr(ctx, o, "smaa_available", JS_NewBool(ctx, r2d_render_smaa_available(r)));
+    JS_SetPropertyStr(ctx, o, "smaa_on", JS_NewBool(ctx, r2d_render_smaa_on(r)));
+    JS_SetPropertyStr(ctx, o, "smaa_steps", JS_NewFloat64(ctx, (double)r2d_render_smaa_steps(r)));
+#ifndef __EMSCRIPTEN__
+    // Готов ли конвейер SMAA (создаётся лениво при первом включении):
+    // поле нужно тестам и DevTools, чтобы отличать «выключено» от «не создался».
+    JS_SetPropertyStr(ctx, o, "smaa_pipeline", JS_NewBool(ctx, r && r2d__smaa_pipeline(r) != NULL));
+#else
+    JS_SetPropertyStr(ctx, o, "smaa_pipeline", JS_NewBool(ctx, false));
+#endif
     JS_SetPropertyStr(ctx, o, "sprite_pipelines", JS_NewInt32(ctx, R2D_BLEND_COUNT));
     {
         int fx_ready = 0;
@@ -4148,7 +4277,7 @@ void r2d_render_register_js(JSContext *ctx, JSValue engine)
     // Позиционные аргументы: отсутствующие сохраняют текущее значение, чтобы
     // игра могла менять один эффект, не переписывая остальные. Последний
     // аргумент — время (нужно зерну).
-    r2d__js_set_fn(ctx, engine, "setPost", r2d__js_set_post, 30);
+    r2d__js_set_fn(ctx, engine, "setPost", r2d__js_set_post, 31);
     r2d__js_set_fn(ctx, engine, "getPost", r2d__js_get_post, 0);
     r2d__js_set_fn(ctx, engine, "postSupported", r2d__js_post_supported, 0);
     r2d__js_set_fn(ctx, engine, "renderInfo", r2d__js_render_info, 0);
