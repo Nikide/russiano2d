@@ -249,10 +249,11 @@ const loaded = new Map();     // путь → id звука
 
 function soundId(what) {
     if (typeof what === 'number') return what;
-    // Запись трека из `ctx.state_music` ({ path, volume }): по ней timeline
-    // восстанавливает музыку после интро. Раньше объект уезжал прямо в
-    // load(), загрузка падала, и восстановление молча ничего не делало —
-    // «состояние музыки не вернулось» в highlevel_ui_contract.
+    // Запись трека из `ctx.state_music` ({ path, volume }): timeline кладёт её в
+    // снапшот и передаёт сюда при восстановлении. Без разворачивания пути
+    // `load()` молча падал, и «состояние музыки не возвращалось»
+    // (highlevel_ui_contract). ОДИН путь: разворачиваем здесь, снапшот хранит
+    // запись как есть.
     if (what && typeof what === 'object' && typeof what.path === 'string') return soundId(what.path);
     if (!what) return -1;
     if (loaded.has(what)) return loaded.get(what);
@@ -345,11 +346,12 @@ export function installSound($) {
                 stopped++;
             }
             scene_music = false;
-            // Запись «какой трек просили» НЕ стираем: по ней timeline
-            // восстанавливает музыку после интро (`snap.music.track`), и если
-            // её обнулить, восстановление молча превращалось в «остановить»
-            // (нашлось прогоном highlevel_ui_contract — «состояние музыки не
-            // вернулось»). Играет музыка или нет — показывает musicPlaying().
+            // Запись «какой трек просили» НЕ стираем: по ней timeline снимает
+            // снапшот (`snap.music.track`) и восстанавливает музыку после интро.
+            // С обнулённой записью восстановление молча превращалось в
+            // «остановить» — провал highlevel_ui_contract «состояние музыки
+            // вернулось как было». Играет музыка или нет — показывает
+            // musicPlaying().
         }
         return stopped;
     }
