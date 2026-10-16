@@ -115,6 +115,16 @@ typedef struct R2DTexture {
     int             thumb_w;
     int             thumb_h;
     int             thumb_scale;
+    // Пиксели текстуры в CPU-памяти. Появляются ТОЛЬКО когда их попросили для
+    // ленивого точного подсчёта региона кадра (`color:'auto'` у спрайта-кадра
+    // листа): большие листы декодируются по требованию, а не при загрузке, и
+    // живут под общим бюджетом рендерера (см. R2D_CPU_PIXELS_BUDGET).
+    uint8_t        *cpu;
+    int             cpu_w;
+    int             cpu_h;
+    int             cpu_pitch;
+    size_t          cpu_bytes;
+    uint32_t        cpu_stamp;      // для вытеснения по «давности»
 } R2DTexture;
 
 typedef struct R2DSprite {
@@ -124,6 +134,16 @@ typedef struct R2DSprite {
     bool  force_linear;   // smooth generated sprite, independent of frame filter
     bool  force_nearest;  // генерируемый пиксельный спрайт, независимо от режима кадра
     bool  alive;
+    // Ленивый кеш среднего цвета РЕГИОНА этого спрайта: 0 — не считали,
+    // 1 — посчитано (avg), 2 — посчитать нельзя (пикселей нет). Нужен
+    // `color:'auto'` у кадров листа: средний цвет всей текстуры — это цвет
+    // листа, а не кадра.
+    float  avg[4];
+    uint8_t avg_state;
+    // Точный прямоугольник спрайта в пикселях текстуры (то, что просили при
+    // создании). Из UV его приходилось бы восстанавливать с полупиксельной
+    // погрешностью, а для подсчёта цвета кадра нужен именно он.
+    int    px, py, pw, ph;
 } R2DSprite;
 
 typedef struct R2DDrawCmd {
@@ -305,6 +325,9 @@ typedef struct R2DRenderer {
     R2DSprite  *sprites;
     int          sprite_count;
     int          sprite_cap;
+    // Бюджет CPU-копий пикселей (ленивый подсчёт регионов) и штамп давности.
+    size_t       cpu_pixels_total;
+    uint32_t     cpu_stamp_next;
 
     R2DDrawCmd *cmds;
     int          cmd_count;

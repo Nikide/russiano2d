@@ -426,6 +426,180 @@ static void r2d__texture_average(const void *pixels, int w, int h, int pitch,
 }
 
 #define R2D_THUMB_MAX 64   // сторона миниатюры: дальше блоки, точность падает
+// Бюджет CPU-копий пикселей: они нужны только для точного подсчёта региона кадра
+// (`color:'auto'` у спрайта-кадра листа) и держатся, пока влезают. 64 МБ — это,
+// например, лист 4096x4096; при переполнении вытесняется самая давняя копия,
+// а при следующем обращении она декодируется заново.
+#define R2D_CPU_PIXELS_BUDGET (64u * 1024u * 1024u)
+// Потолок на ОДНУ копию: лист 6144x3073 — это 75 МБ и ~150 мс на декодирование
+// (замер). Такие листы точный цвет кадра не получают: остаётся приближение по
+// миниатюре, а в отчёте видно, что именно произошло (avg_state=2 у спрайта).
+#define R2D_CPU_PIXELS_MAX_ONE (16u * 1024u * 1024u)
+
+/** Освободить CPU-копию текстуры (учёт бюджета — здесь же). */
+static void r2d__texture_drop_cpu(R2DRenderer *r, R2DTexture *t)
+{
+    if (!t || !t->cpu) return;
+    SDL_free(t->cpu);
+    t->cpu = NULL;
+    if (r->cpu_pixels_total >= t->cpu_bytes) r->cpu_pixels_total -= t->cpu_bytes;
+    else r->cpu_pixels_total = 0;
+    t->cpu_bytes = 0;
+    t->cpu_w = t->cpu_h = t->cpu_pitch = 0;
+}
+
+/** Запомнить CPU-копию пикселей (уже RGBA32) с вытеснением по бюджету. */
+static bool r2d__texture_keep_cpu(R2DRenderer *r, int tex, const void *pixels,
+                                  int w, int h, int pitch)
+{
+    if (!r || tex < 0 || tex >= r->texture_count || !pixels || w <= 0 || h <= 0) return false;
+    R2DTexture *t = &r->textures[tex];
+    const size_t bytes = (size_t)w * (size_t)h * 4u;
+    if (bytes > R2D_CPU_PIXELS_MAX_ONE) return false;   // слишком большой лист
+    uint8_t *copy = (uint8_t *)SDL_malloc(bytes);
+    if (!copy) return false;
+    for (int y = 0; y < h; ++y) {
+        SDL_memcpy(copy + (size_t)y * (size_t)w * 4u,
+                   (const uint8_t *)pixels + (size_t)y * (size_t)pitch,
+                   (size_t)w * 4u);
+    }
+    r2d__texture_drop_cpu(r, t);
+    t->cpu = copy;
+    t->cpu_w = w;
+    t->cpu_h = h;
+    t->cpu_pitch = w * 4;
+    t->cpu_bytes = bytes;
+    t->cpu_stamp = ++r->cpu_stamp_next;
+    r->cpu_pixels_total += bytes;
+    // Вытесняем самые давние, пока не влезли в бюджет (только что взятую не трогаем).
+    while (r->cpu_pixels_total > R2D_CPU_PIXELS_BUDGET) {
+        int oldest = -1;
+        uint32_t oldest_stamp = 0xffffffffu;
+        for (int i = 0; i < r->texture_count; ++i) {
+            if (i == tex || !r->textures[i].cpu) continue;
+            if (r->textures[i].cpu_stamp < oldest_stamp) {
+                oldest_stamp = r->textures[i].cpu_stamp;
+                oldest = i;
+            }
+        }
+        if (oldest < 0) break;
+        r2d__texture_drop_cpu(r, &r->textures[oldest]);
+    }
+    return true;
+}
+
+/**
+ * Пиксели текстуры для точного подсчёта региона — ПО ТРЕБОВАНИЮ.
+ *
+ * У загруженного с диска листа пиксели освобождаются сразу после загрузки,
+ * поэтому для кадра нужно декодировать картинку ещё раз — но только если игра
+ * правда спросила `color:'auto'` у кадра, и только один раз на текстуру (дальше
+ * копия лежит в бюджете). При загрузке ничего не считается: лист 2048x2048
+ * (4 млн пикселей) не должен платить за кадр 8x8.
+ */
+static bool r2d__texture_ensure_cpu(R2DRenderer *r, int tex)
+{
+    if (!r || tex < 0 || tex >= r->texture_count) return false;
+    R2DTexture *t = &r->textures[tex];
+    if (!t->alive) return false;
+    if (t->cpu) { t->cpu_stamp = ++r->cpu_stamp_next; return true; }
+    if (t->name[0] == '<') return false;    // <memory WxH>: пути нет, только то, что сохранили при создании
+    // Размер проверяем ДО декодирования: у листа 6144x3073 копия — 75 МБ, и
+    // декодировать его ради отказа (143 мс, замер) нельзя. Для таких листов
+    // работает приближение по миниатюре.
+    if ((size_t)t->width * (size_t)t->height * 4u > R2D_CPU_PIXELS_MAX_ONE) return false;
+    SDL_Surface *loaded = NULL;
+    if (r2d_vfs_has(t->name)) {
+        size_t data_size = 0;
+        uint8_t *data = r2d_vfs_read(t->name, &data_size);
+        if (data) {
+            SDL_IOStream *io = SDL_IOFromConstMem(data, data_size);
+            if (io) loaded = IMG_Load_IO(io, true);
+            r2d_vfs_free(data);
+        }
+    } else {
+        loaded = IMG_Load(t->name);
+    }
+    if (!loaded) return false;
+    SDL_Surface *rgba = loaded;
+    if (loaded->format != SDL_PIXELFORMAT_RGBA32) {
+        rgba = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA32);
+        if (!rgba) { SDL_DestroySurface(loaded); return false; }
+    }
+    const bool ok = r2d__texture_keep_cpu(r, tex, rgba->pixels, rgba->w, rgba->h, rgba->pitch);
+    if (rgba != loaded) SDL_DestroySurface(rgba);
+    SDL_DestroySurface(loaded);
+    return ok;
+}
+
+/** Точный средний цвет прямоугольника по CPU-копии (то же правило, что у `avg`). */
+static bool r2d__texture_average_rect_cpu(const R2DTexture *t, int sx, int sy, int sw, int sh,
+                                          float out[4])
+{
+    if (!t || !t->cpu || sw <= 0 || sh <= 0) return false;
+    if (sx < 0) { sw += sx; sx = 0; }
+    if (sy < 0) { sh += sy; sy = 0; }
+    if (sx + sw > t->cpu_w) sw = t->cpu_w - sx;
+    if (sy + sh > t->cpu_h) sh = t->cpu_h - sy;
+    if (sw <= 0 || sh <= 0) return false;
+    double sum[3] = { 0.0, 0.0, 0.0 };
+    double weight = 0.0;
+    for (int y = sy; y < sy + sh; ++y) {
+        const uint8_t *row = t->cpu + (size_t)y * (size_t)t->cpu_pitch;
+        for (int x = sx; x < sx + sw; ++x) {
+            const uint8_t *px = row + (size_t)x * 4u;
+            if (px[3] < 16) continue;
+            const double a = px[3] / 255.0;
+            sum[0] += px[0] * a; sum[1] += px[1] * a; sum[2] += px[2] * a;
+            weight += a;
+        }
+    }
+    if (weight <= 0.0) return false;
+    out[0] = (float)(sum[0] / weight);
+    out[1] = (float)(sum[1] / weight);
+    out[2] = (float)(sum[2] / weight);
+    out[3] = 255.0f;
+    return true;
+}
+
+static bool r2d__texture_average_region(const R2DTexture *t, int sx, int sy, int sw, int sh,
+                                        float out[4]);
+
+/** Средний цвет региона спрайта: ленивый кеш на спрайт (avg_state). */
+static bool r2d__sprite_region_average(R2DRenderer *r, int sprite_id, float out[4])
+{
+    if (!r || sprite_id < 0 || sprite_id >= r->sprite_count) return false;
+    R2DSprite *sp = &r->sprites[sprite_id];
+    if (!sp->alive) return false;
+    if (sp->avg_state == 1) {
+        out[0] = sp->avg[0]; out[1] = sp->avg[1]; out[2] = sp->avg[2]; out[3] = sp->avg[3];
+        return true;
+    }
+    if (sp->avg_state == 2) return false;
+    const int tex = sp->texture;
+    if (tex < 0 || tex >= r->texture_count) return false;
+    R2DTexture *t = &r->textures[tex];
+    if (t->width <= 0 || t->height <= 0) return false;
+    const int sx = sp->pw > 0 ? sp->px : 0;
+    const int sy = sp->ph > 0 ? sp->py : 0;
+    const int sw = sp->pw > 0 ? sp->pw : t->width;
+    const int sh = sp->ph > 0 ? sp->ph : t->height;
+    float value[4];
+    bool ok = false;
+    if (r2d__texture_ensure_cpu(r, tex)) {
+        ok = r2d__texture_average_rect_cpu(t, sx, sy, sw, sh, value);
+    }
+    if (!ok) {
+        // Пикселей нет — честно фиксируем «посчитать нельзя» и пробуем миниатюру
+        // (приближение по блокам), чтобы не возвращать белый цвет молча.
+        ok = r2d__texture_average_region(t, sx, sy, sw, sh, value);
+    }
+    if (!ok) { sp->avg_state = 2; return false; }
+    sp->avg[0] = value[0]; sp->avg[1] = value[1]; sp->avg[2] = value[2]; sp->avg[3] = value[3];
+    sp->avg_state = 1;
+    out[0] = value[0]; out[1] = value[1]; out[2] = value[2]; out[3] = value[3];
+    return true;
+}
 
 // Миниатюра среднего цвета по блокам. Нужна для спрайтов-регионов (атлас,
 // процедурный лист): без неё `color:'auto'` у кадра листа возвращал цвет всего
@@ -536,6 +710,10 @@ int r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h)
     if (pixels) {
         r2d__texture_average(pixels, w, h, w * 4, t->avg, &t->has_avg);
         r2d__texture_thumb(pixels, w, h, w * 4, t);
+        // У текстуры из памяти нет пути: лениво декодировать её нечем, поэтому
+        // пиксели сохраняем сразу — иначе точный цвет кадра процедурного листа
+        // считать не от чего. Бюджет и вытеснение общие.
+        r2d__texture_keep_cpu(r, slot, pixels, w, h, w * 4);
     }
     SDL_snprintf(t->name, sizeof t->name, "<memory %dx%d>", w, h);
     return slot;
@@ -766,6 +944,7 @@ bool r2d_texture_free(R2DRenderer *r, int id)
     if (t->thumb) { SDL_free(t->thumb); t->thumb = NULL; }
     t->thumb_w = t->thumb_h = 0;
     t->thumb_scale = 1;
+    r2d__texture_drop_cpu(r, t);
 
     for (int i = 0; i < r->sprite_count; ++i) {
         if (r->sprites[i].alive && r->sprites[i].texture == id) {
@@ -845,6 +1024,9 @@ int r2d_sprite_create(R2DRenderer *r, int texture, float sx, float sy, float sw,
     const float th = (float)r->textures[texture].height;
 
     R2DSprite *s = &r->sprites[slot];
+    s->avg_state = 0;
+    s->px = (int)(sx + 0.5f); s->py = (int)(sy + 0.5f);
+    s->pw = (int)(sw + 0.5f); s->ph = (int)(sh + 0.5f);
     s->texture = texture;
     // Полтексельный отступ: край квада попадает ровно на границу текселя, и
     // при выборке по центру пикселя затягивался соседний кадр атласа.
@@ -4439,7 +4621,10 @@ static JSValue r2d__js_texture_average_color(JSContext *ctx, JSValueConst this_v
                 const int sw = (int)((sp->u1 - sp->u0) * (float)t->width + 0.5f);
                 const int sh = (int)((sp->v1 - sp->v0) * (float)t->height + 0.5f);
                 const bool full = sx <= 0 && sy <= 0 && sw >= t->width && sh >= t->height;
-                if (!full) have_region = r2d__texture_average_region(t, sx, sy, sw, sh, region);
+                // Не весь спрайт — значит кадр листа: ТОЧНЫЙ подсчёт по региону,
+                // лениво (первое обращение декодирует лист и кладёт копию в
+                // бюджет, дальше ответ берётся из кеша на спрайте).
+                if (!full) have_region = r2d__sprite_region_average(r, id, region);
             }
         }
     }
