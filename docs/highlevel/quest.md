@@ -73,14 +73,19 @@ $.quest.onFetch('medkit', 2);              // принесено предмет�
 |---|---|
 | `$.quest.define(def)` | описание задания |
 | `$.quest.loadFile(path \| массив)` | загрузить пачку заданий (`{ quests: [...] }` тоже) и вернуть число |
-| `$.quest.def(id)` / `definitions()` | описание / все описания по `order` |
+| `$.quest.def(id)` | описание одного задания |
+| `$.quest.definitions()` | все описания по `order` (пустая книга — `[]`) |
 | `$.quest.status(id)` | `locked` / `available` / `active` / `ready` / `done` |
-| `$.quest.accept(id)` / `cancel(id)` / `turnIn(id)` | взять / отменить / сдать |
+| `$.quest.accept(id)` | взять задание |
+| `$.quest.cancel(id)` | отменить: только `active` → статус `new`, прогресс целей очищается; возвращает `bool` (нет задания или оно не активно — `false`) |
+| `$.quest.turnIn(id)` | сдать и получить награду |
 | `$.quest.isReady(id)` | все цели выполнены |
 | `$.quest.progress(id, index, value?)` | прочитать или поставить прогресс цели |
 | `$.quest.line(id)` | строка журнала: «Выключить: 2 — 1/2» |
+| `$.quest.describe(objective)` | человеческая строка цели: `{ text }` — как есть; иначе по `kind`: `kill` → «Убить одичалых: 5 (лес)», `fetch` → «Принести: …», `haul`, `extract`, … |
+| `$.quest.createBook(opts?)` | чистое ядро книги заданий без движка (для тестов и своих книг): те же `definitions/cancel/describe/…` |
 | `$.quest.forGiver(giver)` | доступные, взятые и готовые задания выдающего |
-| `$.quest.save()` / `load(data)` | снимок и восстановление состояния |
+| `$.quest.save()` / `$.quest.load(data)` | снимок и восстановление состояния |
 | `$.quest.reset()` | новая игра |
 
 `turnIn` возвращает `{ ok, money, items, trust, flags }` — награду отдаёт игра

@@ -1,5 +1,30 @@
 # История изменений
 
+## Не выпущено — долг по докам, часть 4б: `$.gfx`, `$.ui`, `$.screen`, `$.curve`, `$.layers`, `$.physics` и хвосты (task-30, 2026-10-16)
+
+Закрыто **38 имён** в 15 строках allowlist (долг `debt` в моей части — ноль):
+`$.gfx.clipReset/registerNodeRenderer/registerUINodeRenderer/white`, `$.ui.show/hide/fps/scaleValue/iconCount/iconNames`,
+`$.screen.list/current/focusedNode/prev/off/remove`, `$.curve.sample/clear/normalizePoints/colorToBytes/packColorBytes`,
+`$.easing`, `$.layers.hide/toggle/sendToBack/repeatInfo/repeatOff`, `$.physics.errors/report/clear`,
+`$.audio.getMasterVolume/volumeOf`, `$.window.cursors/off`, `$.atlas.clearErrors`, `$.hits.pool`,
+`$.rotSprite.info/dispose`.
+
+Каждое имя описано **фактом вызова** на живом движке (раздел «Проверено вызовом на живом движке
+(task-30)» на странице своего неймспейса). Найденные при этом расхождения «имя ≠ поведение»:
+
+- `$.easing('outQuad', 0.5)` возвращает **`null`** (как и на неверном имени), `$.easing.list` — не функция;
+- `$.screen.add` **не существует** (`TypeError`), хотя `list/off/remove/current/prev/focusedNode` есть;
+- `$.ui.show` возвращает **обёртку узла** (цепочку), а не `true/false`; `hide` ставит `node.visible = false`;
+- `$.rotSprite.info(node)` на узел `<rotSprite>` даёт `null` — ожидается хендл загруженного спрайта (как у `engine.rotSprite*`);
+- `$.gfx.white` — **число `0`**, а не цвет;
+- `$.hits.pool(n)`: диапазон 1..64, `pool()` → `8`, `pool(16)` → `true`, `pool(99)` → `false`;
+- `$.window.cursors()` — ровно 6 курсоров: normal, hidden, crosshair, hand, text, wait;
+- `$.ui.iconCount() === $.ui.iconNames().length` (2235) — проверено равенством.
+
+`tests/api_docs_allowlist.txt`: было 87 строк (301 имя), стало 17 строк (60 имён) — из них 50 `debt`
+в зонах других задач (`$.sound`, `$.tilemap` и прочее) и 10 `internal` с доказательствами.
+Гейты: `api_docs_sync_test` и `doc_claims_test` зелёные (3040 имён).
+
 ## Не выпущено — линия 1.x: версия 1.2.0 (2026-10-16)
 
 Версия движка переходит с 0.1.x на **1.2.0**. Причина не косметическая: с этого

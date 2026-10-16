@@ -143,22 +143,36 @@ if ($.nav.lineOfSight('#guard', '#hero', grid)) $('#guard').lookAt('#hero');
 
 `grid` можно не передавать — возьмётся сетка по умолчанию.
 
-### Чистые функции (экспортируются из `nav.js`)
+### Чистые функции: те же ядра на пространстве имён `$.nav.*`
 
-Их гоняет qjs-тест без движка — см. `tests/js/nav_test.mjs`.
+Их гоняет qjs-тест без движка — см. `tests/js/nav_test.mjs`. Кроме импорта из
+`nav.js`, все они доступны как методы `$.nav` (факты проверены на живом движке):
 
 ```js
 import { astar, smoothPath, lineOfSight, makeGrid, heuristicValue } from './nav.js';
 ```
 
-* **`astar(spec, start, goal)`** — `spec = { cols, rows, blocked, cell,
+* **`astar(spec, start, goal)`** / **`$.nav.astar(spec, start, goal)`** — `spec = { cols, rows, blocked, cell,
   diagonal, heuristic, weights }`; `blocked` — массив/Uint8Array длины
   `cols*rows` или функция `(cx, cy) ⇒ bool`; `weights` — массив/число/функция
   стоимости. `start`/`goal` — **клетки** `{ cx, cy }`/`[cx, cy]`. Возвращает
   массив клеток или `null`. При `spec.partial` (то же, что `allowPartial`)
-  отдаёт путь до ближайшей достижимой клетки.
-* **`smoothPath(points, blockedFn)`** — `blockedFn(x1, y1, x2, y2) ⇒ bool`
-  (истина = отрезок перекрыт). Возвращает новый массив точек.
+  отдаёт путь до ближайшей достижимой клетки. Проверено: `blocked: (cx, cy) =>
+  cy === 1` и путь `(0,0) → (4,0)` — пять клеток; недостижимая цель — `null`.
+* **`smoothPath(points, blockedFn)`** / **`$.nav.smoothPath(points, blockedFn)`** — `blockedFn(x1, y1, x2, y2) ⇒ bool`
+  (истина = отрезок перекрыт). Возвращает новый массив точек: `[{0,0},{1,0},{2,0}]`
+  при свободном отрезке → `[{0,0},{2,0}]` (коллинеарная точка убрана).
+* **`$.nav.decomposeRects(blocked, cols, rows)`** — свободные клетки
+  прямоугольниками `[{ cx, cy, w, h }]` в клетках; прямоугольники не
+  пересекаются и покрывают ровно свободные клетки. Проверено: стена во второй
+  строке сетки 4×3 → два прямоугольника `4×1`.
+* **`$.nav.buildPortalGraph(rects)`** — граф порталов по прямоугольникам:
+  `{ portals, adjacency }` (перебор пар O(rects²); строится один раз, не в кадре).
+* **`$.nav.funnel(points, portals)`** — сглаживание пути по порталам: левая и
+  правая вершины портала определяются по направлению движения; без порталов
+  возвращает копию входа.
+* **`$.nav.tick(dt)`** — кадровый тик навигации (агенты `navigateTo`); его зовёт
+  движок сам, из игры вызывать не нужно.
 * **`heuristicValue(name, dx, dy)`** — значение эвристики в клетках.
 
 ---

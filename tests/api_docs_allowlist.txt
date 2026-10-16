@@ -21,23 +21,8 @@
 #   * $.ctx/$.math/$.fn — владелец гейта (task-25).
 
 # --- долг: task-30 (devtools-ui) ---
-$.atlas.clearErrors          # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
-$.audio.getMasterVolume      # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
-$.audio.volumeOf             # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
-$.curve.*                    # debt: 5 имён, страница docs/highlevel/curve.md без полного перечня; в работе (task-30)
-$.easing                     # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
-$.gfx.*                      # debt: 3 имён, страница docs/highlevel/gfx.md без полного перечня; в работе (task-30)
-$.hits.pool                  # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
-$.layers.*                   # debt: 5 имён, страница docs/highlevel/layers.md без полного перечня; в работе (task-30)
-$.physics.*                  # debt: 4 имён, страница docs/highlevel/physics.md без полного перечня; в работе (task-30)
-$.rotSprite.dispose          # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
-$.rotSprite.info             # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
-$.screen.*                   # debt: 6 имён, страница docs/highlevel/screen.md без полного перечня; в работе (task-30)
 $.sound.*                    # debt: 14 имён, страница docs/highlevel/sound.md без полного перечня; в работе (task-30)
 $.tilemap.*                  # debt: 12 имён, страница docs/highlevel/tilemap.md без полного перечня; в работе (task-30)
-$.ui.*                       # debt: 6 имён, страница docs/highlevel/ui.md без полного перечня; в работе (task-30)
-$.window.cursors             # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
-$.window.off                 # debt: имя без упоминания в docs/**/*.md; в работе (task-30)
 
 # --- долг: task-30/task-31 (engine.* — рендерные/прочие) ---
 engine.bodyGeneration        # internal: биндинг C-уровня (engine.bodyGeneration), игры его не зовут; справочник — docs/internal/NATIVE.md
@@ -51,9 +36,7 @@ engine.setContactStay        # internal: биндинг C-уровня (engine.s
 engine.setGravityScale       # internal: биндинг C-уровня (engine.setGravityScale), игры его не зовут; справочник — docs/internal/NATIVE.md
 engine.setSnap               # internal: биндинг C-уровня (engine.setSnap), игры его не зовут; справочник — docs/internal/NATIVE.md
 
-# --- долг: task-31 (debug-overlays) ---
-$.nav.*                      # debt: 6 имён, страница docs/highlevel/nav.md без полного перечня; в работе (task-31)
-$.quest.*                    # debt: 4 имён, страница docs/highlevel/quest.md без полного перечня; в работе (task-31)
-$.raid.*                     # debt: 11 имён, страница docs/highlevel/raid.md без полного перечня; в работе (task-31)
-$.real2d.*                   # debt: 5 имён, страница docs/highlevel/real2d.md без полного перечня; в работе (task-31)
-$.story.*                    # debt: 3 имён, страница docs/highlevel/story.md без полного перечня; в работе (task-31)
+# --- task-31 (debug-overlays) закрыт: $.world, $.items/$.inv, $.cels, $.barks, ---
+# --- $.activation, $.agent, $.anim, $.collision, $.loading, $.random, $.combat,  ---
+# --- $.dialog, $.grid, $.i18n, $.nav, $.quest, $.story — полные перечни имён   ---
+# --- на страницах docs/highlevel/*.md, факты с живого движка. Строк долга нет. ---
