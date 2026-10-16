@@ -1024,7 +1024,7 @@ export function installCamera($, viewports) {
          *
          * ```js
          * $.camera.debug(true);                    // всё, кроме рамки вида
-         * $.camera.debug({ viewport: true });      // добавить рамку вида
+         * $.camera.debug({ viewport: true });      // включить и добавить рамку вида
          * $.camera.debug(false);                   // выключить
          * const facts = $.camera.debug();          // факты последнего кадра
          * ```
@@ -1041,7 +1041,10 @@ export function installCamera($, viewports) {
             } else if (opts === true) {
                 cam_debug.on = true;
             } else if (typeof opts === 'object') {
-                if (opts.on !== undefined) cam_debug.on = opts.on !== false;
+                // Объект включает оверлей, если явно не сказано `on: false` —
+                // как $.gfx.light.map({…}): «покажи границы» без отдельного
+                // true было бы сюрпризом.
+                cam_debug.on = opts.on === undefined ? true : opts.on !== false;
                 for (const key of CAM_DEBUG_FLAGS) {
                     if (opts[key] !== undefined) cam_debug[key] = opts[key] !== false;
                 }

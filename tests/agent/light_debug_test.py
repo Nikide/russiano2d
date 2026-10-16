@@ -84,6 +84,20 @@ def near(a, b, tol=0.5):
     return abs(a - b) <= tol
 
 
+def diff_box(path_a, path_b, box):
+    """Сколько пикселей различается в прямоугольнике двух PNG."""
+    ia, ib = image(path_a), image(path_b)
+    if ia.size != ib.size:
+        return ia.size[0] * ia.size[1]
+    pa, pb = ia.load(), ib.load()
+    diff = 0
+    for y in range(max(0, box[1]), min(ia.size[1], box[3])):
+        for x in range(max(0, box[0]), min(ia.size[0], box[2])):
+            if pa[x, y] != pb[x, y]:
+                diff += 1
+    return diff
+
+
 def main():
     shots = os.path.join(ROOT, "build")
 
@@ -240,7 +254,36 @@ def main():
         only_occluders = calls(a)
         check(len(only_occluders["ring"]) == 0 and len(only_occluders["line"]) == a.eval("$.gfx.light.count()"),
               "без источников остаются только отрезки теней: %s" % len(only_occluders["line"]))
-        a.eval("$.gfx.light.debug(false)")
+
+        # --- подписи и инфо-строка действительно рисуются -----------------------
+        # Текст кадра ($.debug.draw.text → engine.drawText) уходит в батч ДО
+        # спрайтов мира, поэтому полноэкранный узел #base этой фикстуры его
+        # перекрывает (свойство порядка батчей в render.js, не оверлея).
+        # Чтобы проверить САМИ подписи, перекрывающий узел убираем и сверяем
+        # пиксели кадра: без оверлея и с ним.
+        a.eval("$.gfx.light.debug(false); $('#base').hide()")
+        a.step(3)
+        bare = a.screenshot(os.path.join(shots, "light_debug_no_base.png"))
+        a.eval(RESET)
+        a.eval("$.gfx.light.debug({ sources: false, occluders: false, mask: true, degrade: true })")
+        a.step(2)
+        info = a.screenshot(os.path.join(shots, "light_debug_info.png"))
+        check(diff_box(bare, info, (0, 0, 600, 40)) > 0,
+              "инфо-строка про маски/слой нарисована (%d пикселей)"
+              % diff_box(bare, info, (0, 0, 600, 40)))
+        a.eval(RESET)
+        a.eval("$.gfx.light.debug({ sources: true, occluders: false, labels: true, mask: false })")
+        a.step(2)
+        labels = a.screenshot(os.path.join(shots, "light_debug_labels.png"))
+        # Подпись источника area: на диагонали его кольца (729, 375) при
+        # радиусе 150 и источнике (620, 480).
+        anchor = a.eval("(() => { const l = $.gfx.light.debug().drawn.rings[1];"
+                        " return $.camera.worldToScreen({ x: l.x + l.r_px * 0.7 + 4,"
+                        " y: l.y - l.r_px * 0.7 }); })()")
+        check(diff_box(info, labels, (int(anchor["x"]), int(anchor["y"]) - 12,
+                                      int(anchor["x"]) + 150, int(anchor["y"]) + 6)) > 0,
+              "подпись источника (радиус/интенсивность/слой) нарисована у кольца")
+        a.eval("$('#base').show(); $.gfx.light.debug(false)")
 
     print()
     if FAILURES:

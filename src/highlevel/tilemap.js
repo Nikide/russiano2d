@@ -2994,7 +2994,10 @@ export function installTilemap($) {
                 return tilemapDebugFacts();
             }
             if (typeof opts === 'object') {
-                if (opts.on !== undefined) tm_debug.on = opts.on !== false;
+                // Объект включает оверлей, если явно не сказано `on: false`:
+                // $.tilemap.debug({ mode: 'collision' }) обязан показать сетку,
+                // а не «поменять режим у выключенного оверлея».
+                tm_debug.on = opts.on === undefined ? true : opts.on !== false;
                 if (opts.map !== undefined) {
                     tm_debug.map = opts.map === null ? null : opts.map;
                     if (tm_debug.map !== null && !resolveTm(tm_debug.map)) {

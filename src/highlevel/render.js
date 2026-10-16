@@ -2332,7 +2332,10 @@ const light_api = {
             return light_api;
         }
         if (typeof opts === 'object') {
-            if (opts.on !== undefined) light_debug = opts.on !== false;
+            // Объект включает оверлей, если явно не сказано `on: false` — как
+            // $.gfx.light.map({…}): «показать только источники» не должно
+            // требовать ещё одного вызова.
+            light_debug = opts.on === undefined ? true : opts.on !== false;
             for (const key of LIGHT_DEBUG_FLAGS) {
                 if (opts[key] !== undefined) light_debug_flags[key] = opts[key] !== false;
             }
