@@ -54,7 +54,8 @@ test('PERF без движка отдаёт N/A, а не выдуманные ч
     eq(perf.rows.length, 25, 'все метрики §17.1 на месте');
     eq(perf.summary.fps, null, 'FPS без движка неизвестен');
     eq(perf.summary.batches, null, 'батчи без движка неизвестны');
-    eq(perf.summary.timers, null, 'таймеры неизвестны и на движке — тут N/A');
+    eq(perf.summary.timers, 0, 'таймеры считает публичный $.time.timers() (пока 0)');
+    eq(perf.rows.filter((r) => r.key === 'timers')[0].measured, true, 'таймеры измерены, а не N/A');
     truthy(perf.text.summary.indexOf('N/A') >= 0, 'в тексте сводки честное N/A');
     eq(perf.graph.bars.length, 0, 'замеров нет — столбцов нет');
     eq(perf.graph.stats.current, null, 'перцентили без замеров — null');

@@ -36,6 +36,10 @@ const REFRESH_FRAMES = 6;     // 10 Гц при 60 к/с: дешевле, чем
 const HISTORY_MAX = 300;      // своё кольцо кадров, если движок не даёт history
 const GRAPH_BARS = 48;        // столбцов в графике кадра
 const HITCH_ROWS = 8;          // сколько захватов §18 видно в списке
+const EVENTS_ROWS = 14;        // сколько записей $.trace видно на вкладке
+const MEM_SAMPLES = 60;        // окно замеров счётчиков для поиска роста
+const CONSOLE_HISTORY = 8;     // строк истории консоли
+const CONSOLE_LOG = 12;        // строк лога консоли
 const GRAPH_H = 56;           // высота области графика, px
 const GRAPH_FLOOR_MS = 50;    // нижняя граница шкалы: 16.67 мс × 3
 const FRAME_BUDGET_MS = 16.67; // бюджет кадра 60 к/с — порог подсветки
@@ -44,7 +48,8 @@ const COPY_NONE = '—';
 
 // Вкладки панели F1 и секции инспектора F2. Имена совпадают с id элементов
 // `tab-<имя>`: по ним же переключается класс hidden.
-const TABS = ['perf', 'hitch', 'tree', 'diag', 'assets', 'watch'];
+const TABS = ['perf', 'hitch', 'physics', 'render', 'events', 'tree', 'diag',
+              'audio', 'input', 'assets', 'memory', 'console', 'step', 'watch'];
 const SECTIONS = ['identity', 'transform', 'gameplay', 'physics', 'presentation'];
 
 // ---------------------------------------------------------------------------
@@ -130,11 +135,37 @@ button.on { background-color: #3d6a8f; color: #ffffff; }
 .rt-section { display: block; color: #8fd8ff; font-size: 12px; }
 .rt-data { display: block; white-space: pre-wrap; font-size: 11px; }
 .hidden { display: none; }
-#tab-perf { position: absolute; left: 10px; top: 58px; width: 740px; height: 380px; }
-#tab-tree { position: absolute; left: 10px; top: 58px; width: 740px; height: 380px; }
-#tab-diag { position: absolute; left: 10px; top: 58px; width: 740px; height: 380px; }
-#tab-assets { position: absolute; left: 10px; top: 58px; width: 740px; height: 380px; }
-#tab-watch { position: absolute; left: 10px; top: 58px; width: 740px; height: 380px; }
+.rt-page { position: absolute; left: 10px; top: 76px; width: 740px; height: 388px; }
+.rt-tabrow { display: block; }
+#rt-phys-buttons { position: absolute; left: 0px; top: 22px; }
+#rt-phys-mode { color: #a8b8cc; font-size: 11px; }
+#rt-phys-table { position: absolute; left: 0px; top: 56px; width: 740px; height: 320px; overflow: hidden; }
+#rt-render-info { position: absolute; left: 0px; top: 20px; width: 740px; height: 96px; }
+#rt-render-targets { position: absolute; left: 0px; top: 132px; width: 740px; height: 96px; }
+#rt-render-textures { position: absolute; left: 0px; top: 244px; width: 740px; height: 130px; }
+#rt-events-buttons { position: absolute; left: 0px; top: 22px; }
+#rt-events-list { position: absolute; left: 0px; top: 58px; width: 740px; height: 200px; overflow: hidden; }
+#rt-events-detail { position: absolute; left: 0px; top: 266px; width: 740px; height: 116px; }
+#rt-audio-info { position: absolute; left: 0px; top: 20px; width: 740px; height: 96px; }
+#rt-audio-buses { position: absolute; left: 0px; top: 124px; width: 740px; height: 120px; }
+#rt-audio-channels { position: absolute; left: 0px; top: 252px; width: 740px; height: 120px; }
+#rt-audio-buttons { position: absolute; left: 0px; top: 88px; }
+#rt-input-info { position: absolute; left: 0px; top: 20px; width: 740px; height: 76px; }
+#rt-input-actions { position: absolute; left: 0px; top: 104px; width: 740px; height: 150px; overflow: hidden; }
+#rt-input-issues { position: absolute; left: 0px; top: 262px; width: 740px; height: 120px; }
+#rt-mem-counters { position: absolute; left: 0px; top: 20px; width: 740px; height: 96px; }
+#rt-mem-limits { position: absolute; left: 0px; top: 124px; width: 740px; height: 120px; overflow: hidden; }
+#rt-mem-leaks { position: absolute; left: 0px; top: 252px; width: 740px; height: 120px; }
+#rt-mem-buttons { position: absolute; left: 0px; top: 88px; }
+#rt-console-buttons { position: absolute; left: 0px; top: 22px; }
+#rt-console-log { position: absolute; left: 0px; top: 58px; width: 500px; height: 220px; overflow: hidden; }
+#rt-console-history { position: absolute; left: 512px; top: 58px; width: 228px; height: 220px; }
+#rt-step-state { position: absolute; left: 0px; top: 20px; width: 740px; height: 90px; }
+#rt-step-buttons { position: absolute; left: 0px; top: 118px; }
+#rt-step-scales { position: absolute; left: 0px; top: 154px; }
+#rt-step-notes { position: absolute; left: 0px; top: 200px; width: 740px; height: 180px; }
+#rt-report-text { position: absolute; left: 0px; top: 250px; width: 740px; height: 130px; overflow: hidden; font-size: 10px; }
+#rt-report-buttons { position: absolute; left: 0px; top: 214px; }
 #rt-perf-summary { position: absolute; left: 0px; top: 18px; width: 740px; height: 130px; }
 #rt-perf-graph-title { position: absolute; left: 0px; top: 154px; }
 #rt-perf-graph { position: absolute; left: 0px; top: 176px; width: 500px; height: ${GRAPH_H}px;
@@ -149,6 +180,7 @@ button.on { background-color: #3d6a8f; color: #ffffff; }
 #rt-textures { position: absolute; left: 0px; top: 300px; width: 740px; height: 70px; }
 #rt-assets { position: absolute; left: 0px; top: 20px; width: 740px; height: 60px; }
 #rt-assets-buttons { position: absolute; left: 0px; top: 90px; }
+#rt-assets-table { position: absolute; left: 0px; top: 120px; width: 740px; height: 250px; overflow: hidden; }
 #rt-watches { position: absolute; left: 0px; top: 20px; width: 740px; height: 240px; }
 #tab-hitch { position: absolute; left: 10px; top: 58px; width: 740px; height: 380px; }
 #rt-hitch-buttons { position: absolute; left: 0px; top: 24px; }
@@ -167,7 +199,7 @@ button.on { background-color: #3d6a8f; color: #ffffff; }
 .rt-hbar { position: absolute; bottom: 0px; width: 44px; background-color: #4a9ad4; }
 .rt-hbar.peak { background-color: #d45a4a; }
 #rt-watch-buttons { position: absolute; left: 0px; top: 270px; }
-#rt-tools { position: absolute; left: 10px; top: 446px; width: 740px; }
+#rt-tools { position: absolute; left: 10px; top: 470px; width: 740px; }
 #rt-error { display: block; font-size: 11px; color: #ffb0a0; }
 .rt-bar { position: absolute; bottom: 0px; width: 5px; background-color: #4a9ad4; }
 .rt-bar.over { background-color: #d4a24a; }
@@ -180,15 +212,27 @@ input { width: 85px; height: 24px; background-color: #203448; vertical-align: mi
 <div id="rt">
   <div id="rt-title">DevTools R2D (F1 — закрыть)</div>
   <div id="rt-tabs">
-    <button id="rt-tab-perf" class="rt-tab">PERF</button>
-    <button id="rt-tab-hitch" class="rt-tab">HITCH</button>
-    <button id="rt-tab-tree" class="rt-tab">ПРОФИЛЬ</button>
-    <button id="rt-tab-diag" class="rt-tab">ДИАГНОСТИКА</button>
-    <button id="rt-tab-assets" class="rt-tab">АССЕТЫ</button>
-    <button id="rt-tab-watch" class="rt-tab">НАБЛЮДЕНИЯ</button>
+    <div class="rt-tabrow">
+      <button id="rt-tab-perf" class="rt-tab">PERF</button>
+      <button id="rt-tab-hitch" class="rt-tab">HITCH</button>
+      <button id="rt-tab-physics" class="rt-tab">PHYS</button>
+      <button id="rt-tab-render" class="rt-tab">RENDER</button>
+      <button id="rt-tab-events" class="rt-tab">EVENTS</button>
+      <button id="rt-tab-tree" class="rt-tab">ПРОФИЛЬ</button>
+      <button id="rt-tab-diag" class="rt-tab">ДИАГ</button>
+    </div>
+    <div class="rt-tabrow">
+      <button id="rt-tab-audio" class="rt-tab">AUDIO</button>
+      <button id="rt-tab-input" class="rt-tab">INPUT</button>
+      <button id="rt-tab-assets" class="rt-tab">ASSETS</button>
+      <button id="rt-tab-memory" class="rt-tab">MEM</button>
+      <button id="rt-tab-console" class="rt-tab">КОНСОЛЬ</button>
+      <button id="rt-tab-step" class="rt-tab">ШАГ</button>
+      <button id="rt-tab-watch" class="rt-tab">НАБЛЮД</button>
+    </div>
   </div>
 
-  <div id="tab-perf">
+  <div id="tab-perf" class="rt-page">
     <div class="rt-section">Сводка кадра (§17.1). Неизмеряемое — N/A</div>
     <div id="rt-perf-summary" class="rt-data"></div>
     <div id="rt-perf-graph-title" class="rt-section">График кадра (§17.2): <span id="rt-perf-graph-src"></span></div>
@@ -200,13 +244,13 @@ input { width: 85px; height: 24px; background-color: #203448; vertical-align: mi
     </div>
   </div>
 
-  <div id="tab-tree" class="hidden">
+  <div id="tab-tree" class="rt-page hidden">
     <div class="rt-section">Иерархический профиль (§17.3–17.4): движковые зоны и $.debug.profiler.*</div>
     <div id="rt-tree-left" class="rt-data"></div>
     <div id="rt-tree-right" class="rt-data"></div>
   </div>
 
-  <div id="tab-hitch" class="hidden">
+  <div id="tab-hitch" class="rt-page hidden">
     <div class="rt-section">Захваты долгих кадров (§18). Порог: <span id="rt-hitch-threshold"></span></div>
     <div id="rt-hitch-buttons">
       <button id="rt-hitch-th-16">16.67 мс</button>
@@ -225,7 +269,103 @@ input { width: 85px; height: 24px; background-color: #203448; vertical-align: mi
     <div id="rt-hitch-note" class="rt-data"></div>
   </div>
 
-  <div id="tab-diag" class="hidden">
+  <div id="tab-physics" class="rt-page hidden">
+    <div class="rt-section">Физика (§25): таблица тел и оверлей форм поверх кадра</div>
+    <div id="rt-phys-buttons">
+      <button id="rt-phys-sel">Только выбранный</button>
+      <button id="rt-phys-all">Все</button>
+      <button id="rt-phys-off">Выключить</button>
+      <span id="rt-phys-mode"></span>
+    </div>
+    <div id="rt-phys-table" class="rt-data"></div>
+  </div>
+
+  <div id="tab-render" class="rt-page hidden">
+    <div class="rt-section">Рендер (§26): счётчики кадра</div>
+    <div id="rt-render-info" class="rt-data"></div>
+    <div class="rt-section">Цели рендера и viewport</div>
+    <div id="rt-render-targets" class="rt-data"></div>
+    <div class="rt-section">Текстуры</div>
+    <div id="rt-render-textures" class="rt-data"></div>
+  </div>
+
+  <div id="tab-events" class="rt-page hidden">
+    <div class="rt-section">События (§28): журнал $.trace</div>
+    <div id="rt-events-buttons">
+      <button id="rt-events-pause">Пауза журнала</button>
+      <button id="rt-events-clear">Очистить</button>
+      <input id="rt-events-filter" type="text"/><button id="rt-events-apply">Фильтр kind</button>
+      <button id="rt-events-hit">Цепочка hit</button>
+    </div>
+    <div id="rt-events-list" class="rt-data"></div>
+    <div id="rt-events-detail" class="rt-data"></div>
+  </div>
+
+  <div id="tab-audio" class="rt-page hidden">
+    <div class="rt-section">Звук (§29): голоса, шины, каналы</div>
+    <div id="rt-audio-info" class="rt-data"></div>
+    <div id="rt-audio-buttons">
+      <input id="rt-audio-ch" type="text"/><button id="rt-audio-stop">Стоп канал</button>
+      <input id="rt-audio-bus" type="text"/>
+      <button id="rt-audio-mute">Mute звука</button>
+      <button id="rt-audio-busmute">Mute шины</button>
+      <button id="rt-audio-bussolo">Solo шины</button>
+    </div>
+    <div id="rt-audio-buses" class="rt-data"></div>
+    <div id="rt-audio-channels" class="rt-data"></div>
+  </div>
+
+  <div id="tab-input" class="rt-page hidden">
+    <div class="rt-section">Ввод (§29): действия, привязки, устройства</div>
+    <div id="rt-input-info" class="rt-data"></div>
+    <div id="rt-input-actions" class="rt-data"></div>
+    <div id="rt-input-issues" class="rt-data"></div>
+  </div>
+
+  <div id="tab-memory" class="rt-page hidden">
+    <div class="rt-section">Ресурсы и память (§29): счётчики, пределы, рост</div>
+    <div id="rt-mem-counters" class="rt-data"></div>
+    <div id="rt-mem-buttons">
+      <button id="rt-mem-baseline">Сбросить базовую линию</button>
+    </div>
+    <div id="rt-mem-limits" class="rt-data"></div>
+    <div id="rt-mem-leaks" class="rt-data"></div>
+  </div>
+
+  <div id="tab-console" class="rt-page hidden">
+    <div class="rt-section">Консоль DevTools (§31): команды поверх существующих API</div>
+    <div id="rt-console-buttons">
+      <input id="rt-console-input" type="text"/><button id="rt-console-run">Выполнить</button>
+      <button id="rt-console-clear">Очистить лог</button>
+    </div>
+    <div id="rt-console-log" class="rt-data"></div>
+    <div id="rt-console-history"></div>
+  </div>
+
+  <div id="tab-step" class="rt-page hidden">
+    <div class="rt-section">Время и шаг кадра (§33)</div>
+    <div id="rt-step-state" class="rt-data"></div>
+    <div id="rt-step-buttons">
+      <button id="rt-step-pause">Пауза</button>
+      <button id="rt-step-resume">Продолжить</button>
+      <button id="rt-step-frame">Шаг кадра</button>
+      <button id="rt-step-frames10">10 кадров</button>
+      <button id="rt-step-hit">Hit-stop 120 мс</button>
+      <button id="rt-step-slow">Замедление 0.5×/1 с</button>
+      <button id="rt-step-reset">Сбросить время</button>
+    </div>
+    <div id="rt-step-scales">
+      <button id="rt-step-scale-01">0.1×</button>
+      <button id="rt-step-scale-025">0.25×</button>
+      <button id="rt-step-scale-05">0.5×</button>
+      <button id="rt-step-scale-1">1×</button>
+      <button id="rt-step-scale-2">2×</button>
+      <input id="rt-step-scale-custom" type="text"/><button id="rt-step-scale-apply">Свой</button>
+    </div>
+    <div id="rt-step-notes" class="rt-data"></div>
+  </div>
+
+  <div id="tab-diag" class="rt-page hidden">
     <div class="rt-section">Счётчики мира и кадра</div>
     <div id="rt-stats" class="rt-data"></div>
     <div class="rt-section">Профиль кадра CPU/GPU</div>
@@ -233,20 +373,26 @@ input { width: 85px; height: 24px; background-color: #203448; vertical-align: mi
     <button id="rt-reset">Сбросить профиль</button>
     <div class="rt-section">Таблицы runtime</div>
     <div id="rt-limits" class="rt-data"></div>
-    <div class="rt-section">Текстуры</div>
+    <div class="rt-section">Текстуры / отчёт (§39)</div>
     <div id="rt-textures" class="rt-data"></div>
+    <div id="rt-report-buttons">
+      <button id="rt-report-copy">Копировать текст отчёта</button>
+      <button id="rt-report-copy-json">Копировать JSON</button>
+    </div>
+    <div id="rt-report-text" class="rt-data"></div>
   </div>
 
-  <div id="tab-assets" class="hidden">
+  <div id="tab-assets" class="rt-page hidden">
     <div class="rt-section">Ассеты §27 (hot reload)</div>
     <div id="rt-assets" class="rt-data"></div>
+    <div id="rt-assets-table" class="rt-data"></div>
     <div id="rt-assets-buttons">
       <button id="rt-assets-reload">Перезагрузить ассеты</button>
       <button id="rt-assets-poll">Применить изменившиеся</button>
     </div>
   </div>
 
-  <div id="tab-watch" class="hidden">
+  <div id="tab-watch" class="rt-page hidden">
     <div class="rt-section">Наблюдения: значение / previous / delta / min / max / порог</div>
     <div id="rt-watches" class="rt-data"></div>
     <div id="rt-watch-buttons">
@@ -394,7 +540,14 @@ export function installDevTools($) {
 
     // Мостики к движку: без GUI (юнит-тест) они просто ничего не делают.
     function uiSetText(doc, id, text) {
-        if (typeof engine !== 'undefined' && engine.ui) engine.ui.setText(doc, id, text);
+        if (typeof engine === 'undefined' || !engine.ui) return;
+        // setText в RmlUi разбирает строку как разметку, поэтому имена ассетов
+        // и текстур вида «<memory 256x256>» превращались бы в элементы, а из
+        // панели пропадали бы символы. Угловые скобки показываем похожими
+        // знаками — это по-прежнему данные, но уже не разметка.
+        const safe = String(text === undefined || text === null ? '' : text)
+            .replace(/</g, '\u2039').replace(/>/g, '\u203a');
+        engine.ui.setText(doc, id, safe);
     }
     function uiSetClass(doc, id, cls, add) {
         if (typeof engine !== 'undefined' && engine.ui) engine.ui.setClass(doc, id, cls, add);
@@ -1001,6 +1154,11 @@ export function installDevTools($) {
         // §18: выбранный захват. pinned=false — панель сама показывает самый
         // свежий; pinned=true — выбор сделан кликом и не перебивается новыми.
         hitch: { selected: null, pinned: false },
+        phys_mode: 'off',            // §25: off | all | selected
+        events: { filter: '', paused: false, snapshot: null, force_hit: null },   // §28
+        mem: { samples: [], baseline: null },                    // §29
+        console: { history: [], log: [], last: null },           // §31
+        step_left: 0,                // §33: осталось кадров «шага»
     };
 
     // --- §17.1: сводка кадра ------------------------------------------------
@@ -1033,6 +1191,9 @@ export function installDevTools($) {
         const textures = call(() => $.debug.textures(), []) || [];
         const profiler_on = call(() => $.debug.profiler.isOn(), false);
         const report = profiler_on ? call(() => $.debug.profiler.report(), null) : null;
+        // Таймеры — публичный счётчик живых таймеров шага симуляции и ожиданий.
+        const timers = call(() => ($.time && typeof $.time.timers === 'function'
+            ? $.time.timers() : null), null);
 
         const zone = (name) => {
             for (const r of rows) if (r && r.name === name && r.valid !== false && isNum(r.ms)) return r.ms;
@@ -1095,7 +1256,8 @@ export function installDevTools($) {
             ['bodies', 'тел', isNum(counters.bodies) ? counters.bodies : null, '', '$.debug.counters().bodies'],
             ['shapes', 'форм', shapes, '', 'Σ engine.devtools.shapes(тело).length'],
             ['nodes', 'узлов', isNum(counters.nodes) ? counters.nodes : null, '', '$.debug.counters().nodes'],
-            ['timers', 'таймеров', null, '', 'нет публичного счётчика таймеров'],
+            ['timers', 'таймеров', timers && isNum(timers.total) ? timers.total : null, '',
+                '$.time.timers().total (after/every/waits)'],
             ['tweens', 'твинов', isNum(counters.tweens) ? counters.tweens : null, '', '$.debug.counters().tweens'],
             ['audio_voices', 'голосов звука', isNum(stats.sounds) ? stats.sounds : null, '', '$.debug.stats().sounds'],
             ['textures', 'текстур', isNum(limits.textures) ? limits.textures
@@ -1117,7 +1279,8 @@ export function installDevTools($) {
         for (let i = 0; i < rows_out.length; i += 3) {
             lines.push(rows_out.slice(i, i + 3).map((r) => r.text).join(' | '));
         }
-        return { rows: rows_out, summary, text: lines.join('\n'), profiler_on };
+        const summary_extra = { timers_detail: timers };
+        return { rows: rows_out, summary, text: lines.join('\n'), profiler_on, timers: summary_extra.timers_detail };
     }
 
     // --- §17.2: график кадра и перцентили -----------------------------------
@@ -1502,6 +1665,756 @@ export function installDevTools($) {
         return true;
     }
 
+    // =======================================================================
+    // PASS 4: инспекторы подсистем (§25–§29, §31, §33, §39).
+    //
+    // Правила те же, что у остальных вкладок: данные берём только из
+    // существующих подсистем, неизмеримое показываем как N/A или «нет данных»,
+    // разметку не пересобираем (setText/setHtml/setClass).
+    // =======================================================================
+
+    /** Массив/объект → построчный текст; пусто — пустая строка. */
+    function listText(value, itemFn) {
+        if (Array.isArray(value)) return value.length ? value.map(itemFn).join('\n') : '';
+        if (value && typeof value === 'object') {
+            return Object.keys(value).map((k) => `${k}: ${JSON.stringify(value[k])}`).join('\n');
+        }
+        return value === null || value === undefined ? '' : String(value);
+    }
+
+    /** Обрезка длинной строки для панели. */
+    function clip(text, max) {
+        const s = String(text === null || text === undefined ? '' : text);
+        return s.length > max ? s.slice(0, max) + '…' : s;
+    }
+
+    // --- §25: физика --------------------------------------------------------
+
+    const PHYS_COLORS = {
+        static: '#6f8fa8', kinematic: '#d4a24a', dynamic: '#4ad47a',
+        sensor: '#d4d24a', disabled: '#4a5560', selected: '#ff5a4a',
+    };
+
+    /** Узлы с телами: по одному на body id (тело может быть общим). */
+    function bodyNodes() {
+        const seen = new Set();
+        const out = [];
+        for (const node of ctx.nodes) {
+            if (node.removed || !(node.body >= 0) || seen.has(node.body)) continue;
+            seen.add(node.body);
+            out.push(node);
+        }
+        return out;
+    }
+
+    function shapesOfBody(body) {
+        const list = (typeof engine.devtools === 'object' && engine.devtools &&
+                      typeof engine.devtools.shapes === 'function')
+            ? call(() => engine.devtools.shapes(body), null) : null;
+        return Array.isArray(list) ? list : null;
+    }
+
+    function physRowText(r) {
+        const name = (r.selector || ('<' + r.tag + '>')).padEnd(16).slice(0, 16);
+        const v = r.vx === null || r.vy === null ? NA : `${numText(r.vx, 1)},${numText(r.vy, 1)}`;
+        const sleep = r.sleeping === null ? NA : (r.sleeping ? 'да' : 'нет');
+        const mass = r.mass === null ? NA : numText(r.mass, 2);
+        const kinds = r.kinds ? clip(r.kinds, 28) : NA;
+        return `${name} body ${r.body} ${r.type || '—'} m ${mass} v ${v}`
+            + ` w ${r.angular === null ? NA : numText(r.angular, 2)} sleep ${sleep}`
+            + ` слои 0x${r.layer.toString(16)}/0x${r.mask.toString(16)} g${r.group}`
+            + ` форм ${r.shapes === null ? NA : r.shapes} (${kinds})`;
+    }
+
+    function physicsData() {
+        const rows = [];
+        for (const node of bodyNodes()) {
+            const body = node.body;
+            const vel = call(() => engine.getVelocity(body), null);
+            const av = call(() => engine.getAngularVelocity(body), null);
+            const mass = call(() => engine.bodyMass(body), null);
+            const sleeping = call(() => engine.isSleeping(body), null);
+            const shapes = shapesOfBody(body);
+            rows.push({
+                uid: node.uid, selector: selectorOf(node), tag: node.tag, body,
+                type: node.body_kind || null,
+                mass: isNum(mass) ? mass : null,
+                vx: vel && isNum(vel[0]) ? vel[0] : null,
+                vy: vel && isNum(vel[1]) ? vel[1] : null,
+                angular: isNum(av) ? av : null,
+                sleeping: sleeping === null ? null : sleeping === true,
+                layer: node.layer_bits >>> 0, mask: node.collision_mask >>> 0,
+                group: node.collision_group | 0,
+                shapes: shapes ? shapes.length : null,
+                kinds: shapes ? shapes.map((sh) => `${sh.kind}${sh.sensor ? '(sensor)' : ''}`).join(', ') : null,
+                x: round2(node.x), y: round2(node.y), angle: isNum(node.angle) ? node.angle : 0,
+            });
+        }
+        const text = rows.length ? rows.map(physRowText).join('\n') : 'Тел в мире нет.';
+        return { mode: runtime.phys_mode, bodies: rows, text,
+                 overlay: runtime.phys_mode !== 'off' ? rows.length : 0 };
+    }
+
+    /** Точки формы в мировых координатах (форма задана локально телу). */
+    function shapeWorldPoints(node, sh) {
+        const body_angle = isNum(node.angle) ? node.angle : 0;
+        const local_angle = isNum(sh.angle) ? sh.angle : 0;
+        const rot = (lx, ly) => {
+            const a = body_angle;
+            const c = Math.cos(a), s = Math.sin(a);
+            const x = sh.x + lx, y = sh.y + ly;
+            return { x: node.x + x * c - y * s, y: node.y + x * s + y * c };
+        };
+        const kind = String(sh.kind || 'box');
+        if (kind === 'circle') {
+            const c = rot(0, 0);
+            return { kind, circle: { x: c.x, y: c.y, r: sh.radius || 0 } };
+        }
+        if (kind === 'capsule') {
+            const r = sh.radius || 0;
+            const half = sh.halfH || sh.halfW || 0;
+            // Ось капсулы задана углом формы: 90° — вертикальная (проверено
+            // на живом движке: rect 40×20 даёт halfH 10, radius 10, angle π/2).
+            const axis = Math.abs(Math.cos(local_angle)) > 0.5 ? { x: 1, y: 0 } : { x: 0, y: 1 };
+            const a = rot(-axis.x * half, -axis.y * half);
+            const b = rot(axis.x * half, axis.y * half);
+            return { kind, capsule: { a, b, r } };
+        }
+        const hw = sh.halfW || 0, hh = sh.halfH || 0;
+        if (Array.isArray(sh.points) && sh.points.length >= 4) {
+            const pts = [];
+            for (let i = 0; i + 1 < sh.points.length; i += 2) pts.push(rot(sh.points[i], sh.points[i + 1]));
+            return { kind: 'polygon', points: pts };
+        }
+        return { kind, points: [rot(-hw, -hh), rot(hw, -hh), rot(hw, hh), rot(-hw, hh)] };
+    }
+
+    function drawShapeOutline(node, sh, color) {
+        const w = shapeWorldPoints(node, sh);
+        if (w.circle || w.capsule) {
+            const c = w.circle || null;
+            if (c) {
+                call(() => $.debug.draw.ring({ x: c.x, y: c.y }, Math.max(0.5, c.r), color, 2), null);
+                return;
+            }
+            const cap = w.capsule;
+            call(() => $.debug.draw.line(cap.a, cap.b, color, 2), null);
+            call(() => $.debug.draw.ring(cap.a, Math.max(0.5, cap.r), color, 2), null);
+            call(() => $.debug.draw.ring(cap.b, Math.max(0.5, cap.r), color, 2), null);
+            return;
+        }
+        const pts = w.points || [];
+        for (let i = 0; i < pts.length; i++) {
+            const a = pts[i];
+            const b = pts[(i + 1) % pts.length];
+            call(() => $.debug.draw.line(a, b, color, 2), null);
+        }
+    }
+
+    /** Оверлей форм поверх кадра: §25, режим all/selected/off. */
+    function tickPhysicsOverlay() {
+        if (runtime.phys_mode === 'off' || !runtime.open || runtime.doc < 0) return;
+        const only_selected = runtime.phys_mode === 'selected';
+        for (const node of bodyNodes()) {
+            if (only_selected && node.uid !== state.selected_uid) continue;
+            const shapes = shapesOfBody(node.body) || [];
+            const selected = node.uid === state.selected_uid;
+            for (const sh of shapes) {
+                let color = PHYS_COLORS[node.body_kind] || PHYS_COLORS.static;
+                if (sh.enabled === false) color = PHYS_COLORS.disabled;
+                else if (sh.sensor === true) color = PHYS_COLORS.sensor;
+                if (selected) color = PHYS_COLORS.selected;
+                drawShapeOutline(node, sh, color);
+            }
+        }
+    }
+
+    function physOverlay(mode) {
+        if (mode !== undefined) {
+            const m = String(mode);
+            if (['off', 'all', 'selected'].indexOf(m) < 0) return false;
+            runtime.phys_mode = m;
+            if (runtime.doc >= 0) {
+                uiSetClass(runtime.doc, 'rt-phys-sel', 'on', m === 'selected');
+                uiSetClass(runtime.doc, 'rt-phys-all', 'on', m === 'all');
+                uiSetClass(runtime.doc, 'rt-phys-off', 'on', m === 'off');
+            }
+        }
+        return runtime.phys_mode;
+    }
+
+    // --- §26: рендер --------------------------------------------------------
+
+    function renderData() {
+        const info = call(() => engine.renderInfo(), null);
+        const textures = call(() => $.debug.textures(), []) || [];
+        const limits = call(() => $.debug.limits(), {}) || {};
+        const light = call(() => ($.gfx && $.gfx.light && $.gfx.light.stats ? $.gfx.light.stats() : null), null);
+        const lights = call(() => (engine.devtools && typeof engine.devtools.lights === 'function'
+            ? engine.devtools.lights() : null), null);
+        const dropped = call(() => (engine.devtools && typeof engine.devtools.lightsDropped === 'function'
+            ? engine.devtools.lightsDropped() : null), null);
+        const targets = info && Array.isArray(info.targets) ? info.targets : [];
+        const viewport = info && info.viewport ? info.viewport : null;
+
+        const info_text = !info ? 'нет данных: engine.renderInfo() недоступен'
+            : [
+                `батчей ${intOrNa(info.batches)} | draw calls ${intOrNa(info.draw_calls !== undefined ? info.draw_calls : info.draws)}`
+                    + ` | проходов ${intOrNa(info.passes)} | fx-команд ${intOrNa(info.fx_cmds)}`,
+                `пост-обработка: ${info.post ? 'да' : 'нет'} | bloom: ${info.bloom ? 'да' : 'нет'}`
+                    + ` | снап вершин: ${info.snap ? 'да' : 'нет'}`,
+                `текстуры: ${info.textures ? `${info.textures.count}/${info.textures.max}, пикселей ${info.textures.pixels}` : NA}`
+                    + ` | свет: ${light ? `${light.lights} (теней ${light.shadowLights})` : NA}`
+                    + ` | источников в списке: ${lights ? lights.length : NA}`
+                    + (dropped === null ? '' : `, отсечено бюджетом ${dropped}`),
+            ].join('\n');
+
+        const targets_text = [
+            viewport ? `viewport: ${viewport.w}×${viewport.h}, снап: ${viewport.snap ? 'да' : 'нет'}, bound: ${viewport.bound}` : 'viewport: нет данных',
+            targets.length
+                ? targets.map((t) => `цель ${t.name}: ${t.w}×${t.h}${t.active ? '' : ' (неактивна)'}`).join('\n')
+                : 'целей рендера нет.',
+        ].join('\n');
+
+        const textures_text = textures.length
+            ? `живых текстур ${textures.length} из ${limits.textures_max === undefined ? NA : limits.textures_max}\n`
+              + textures.map((t) => `#${t.id} ${clip(t.name, 28)} ${t.width}×${t.height}`).join('\n')
+            : 'текстур нет.';
+        return { info, targets, textures, viewport, lights, dropped,
+                 text: { info: info_text, targets: targets_text, textures: textures_text } };
+    }
+
+    function intOrNa(v) {
+        return isNum(v) ? String(Math.round(v)) : NA;
+    }
+
+    // --- §28: события ($.trace) --------------------------------------------
+
+    /** Источник/цель записи: nid — строка; всё прочее не печатаем в панель. */
+    function nidText(v) {
+        return typeof v === 'string' && v ? v : (v === null || v === undefined ? null : clip(String(v), 16));
+    }
+
+    function traceEntryText(e) {
+        const data = e.data === null || e.data === undefined ? '' : ' ' + clip(JSON.stringify(e.data), 90);
+        const src = nidText(e.source);
+        const dst = nidText(e.target);
+        const pair = (src || dst) ? ` ${src || '—'}→${dst || '—'}` : '';
+        return `#${e.n} кадр ${e.frame}: ${e.kind}${pair}${data}`;
+    }
+
+    /** id атаки в записи (если она боевая) — для $.trace.hit(§28). */
+    function hitIdOf(e) {
+        const d = e && e.data ? e.data : null;
+        if (!d) return null;
+        const id = d.attack !== undefined ? d.attack : (d.attackId !== undefined ? d.attackId : d.hit);
+        return isNum(id) ? id : null;
+    }
+
+    function eventsData() {
+        const on = call(() => $.trace.on(), false);
+        const dropped = call(() => $.trace.dropped(), 0) || 0;
+        let all = call(() => $.trace.list(), []) || [];
+        if (runtime.events.paused && runtime.events.snapshot) all = runtime.events.snapshot;
+        else runtime.events.snapshot = all;
+        const filter = runtime.events.filter;
+        const list = filter ? all.filter((e) => String(e.kind).indexOf(filter) >= 0) : all;
+        const tail = list.slice(-EVENTS_ROWS);
+        const rows = tail.slice().reverse();
+        const text = rows.length
+            ? rows.map(traceEntryText).join('\n')
+            : (on ? 'Записей нет.' : 'Журнал выключен: $.trace.on(true).');
+        // Связь с §28: цепочка последней боевой записи, у которой есть hit id.
+        let hit = null;
+        const forced = runtime.events.force_hit;
+        if (forced !== null && forced !== undefined) {
+            hit = { id: forced, chain: call(() => $.trace.hit(forced), null), forced: true };
+        } else {
+            for (let i = tail.length - 1; i >= 0; i--) {
+                const id = hitIdOf(tail[i]);
+                if (id !== null) { hit = { id, chain: call(() => $.trace.hit(id), null) }; break; }
+            }
+        }
+        let detail = `записей ${all.length} из ${call(() => $.trace.limit, NA)} | фильтр: ${filter || 'нет'}`
+            + ` | потеряно переполнением: ${dropped} | пауза: ${runtime.events.paused ? 'да' : 'нет'}`;
+        if (hit && hit.chain) {
+            detail += `\nцепочка hit #${hit.id}: найдена ${hit.chain.found ? 'да' : 'нет'},`
+                + ` полна ${hit.chain.complete ? 'да' : 'нет'}, шагов ${(hit.chain.steps || []).length}`;
+            for (const s of (hit.chain.steps || []).slice(0, 6)) {
+                detail += `\n  ${s.kind} кадр ${s.frame}` + (s.node ? ` узел ${s.node}` : '');
+            }
+        } else {
+            detail += '\nбоевых записей с hit id в журнале нет';
+        }
+        return { on, count: all.length, dropped, filter, paused: runtime.events.paused,
+                 entries: rows, hit, text: { list: text, detail } };
+    }
+
+    function eventsFilter(kind) {
+        runtime.events.filter = String(kind === undefined || kind === null ? '' : kind).trim();
+        refreshRuntime(true);
+        return runtime.events.filter;
+    }
+
+    function eventsPause(on) {
+        runtime.events.paused = on === undefined ? !runtime.events.paused : !!on;
+        refreshRuntime(true);
+        return runtime.events.paused;
+    }
+
+    function eventsClear() {
+        call(() => $.trace.clear(), null);
+        runtime.events.snapshot = null;
+        refreshRuntime(true);
+        return true;
+    }
+
+    // --- §29: звук ----------------------------------------------------------
+
+    function audioData() {
+        const busy = call(() => $.sound.busy(), null);
+        const playing = call(() => $.sound.playing(), null);
+        // Внимание: $.sound.sfxVolume()/musicVolume() — это ПРОСТРАНСТВА ИМЁН
+        // звуковой шины, а не геттеры. Громкости читаем у $.audio.* и
+        // $.sound.volume() (проверено на живом движке).
+        const sfx = call(() => (typeof $.audio.sfxVolume === 'function' ? $.audio.sfxVolume()
+            : $.sound.volume()), null);
+        const music = call(() => (typeof $.audio.musicVolume === 'function' ? $.audio.musicVolume() : null), null);
+        const master = call(() => $.audio.getMasterVolume(), null);
+        const muted = call(() => $.sound.mute(), null);
+        // $.audio.buses() отдаёт ОПИСАНИЯ шин ({name, volume, muted, solo…}),
+        // а не имена — панель обязана это учитывать.
+        const buses = (call(() => $.audio.buses(), []) || []).map((b) => (b && typeof b === 'object'
+            ? b : { name: String(b) }));
+        const handles = call(() => $.audio.handles(), []) || [];
+        const total = busy && isNum(busy.total) ? busy.total : 0;
+        const channels = [];
+        for (let i = 0; i < total; i++) {
+            const ch = call(() => $.sound.channel(i), null);
+            if (!ch) continue;
+            channels.push({ index: i, playing: ch.playing === true, volume: isNum(ch.volume) ? ch.volume : null,
+                            pan: isNum(ch.pan) ? ch.pan : null, pitch: isNum(ch.pitch) ? ch.pitch : null,
+                            position: isNum(ch.position) ? ch.position : null,
+                            duration: isNum(ch.duration) ? ch.duration : null,
+                            effect: ch.effect || null });
+        }
+        const info_text = [
+            `голосов: ${busy ? `${busy.active} занято, ${busy.free} свободно, всего ${busy.total}` : NA}`
+                + ` | музыка играет: ${playing === null ? NA : (playing ? 'да' : 'нет')}`,
+            `громкость: мастер ${numOrNa(master)} | sfx ${numOrNa(sfx)} | музыка ${numOrNa(music)}`
+                + ` | mute звука: ${muted === null ? NA : (muted === true ? 'да' : 'нет')}`,
+            `шин: ${buses.length}${buses.length ? ' (' + clip(buses.join(', '), 60) + ')' : ''} | handle'ов: ${handles.length}`,
+        ].join('\n');
+        const bus_rows = buses.map((info) => {
+            const name = info.name || COPY_NONE;
+            return `шина ${name}: громкость ${numOrNa(info.volume)}`
+                + ` mute ${info.muted === true ? 'да' : 'нет'} solo ${info.solo === true ? 'да' : 'нет'}`
+                + ` родитель ${info.parent || COPY_NONE} эффект ${info.effect || '—'}`;
+        });
+        const buses_text = bus_rows.length ? bus_rows.join('\n') : "шин нет ($.audio.bus('имя', {…})).";
+        const channels_text = channels.length
+            ? channels.map((c) => `канал ${c.index}: ${c.playing ? 'играет' : 'свободен'}`
+                + ` громкость ${numOrNa(c.volume)} панорама ${numOrNa(c.pan)} питч ${numOrNa(c.pitch)}`
+                + ` позиция ${c.position === null || c.position < 0 ? NA : numText(c.position, 2)}`
+                + `/${c.duration === null || c.duration < 0 ? NA : numText(c.duration, 2)}`
+                + ` эффект ${c.effect || '—'}`).join('\n')
+            : 'каналов нет.';
+        return { busy, playing, sfx, music, master, muted, buses, handles, channels,
+                 text: { info: info_text, buses: buses_text, channels: channels_text } };
+    }
+
+    function numOrNa(v) {
+        return isNum(v) ? numText(v, 2) : NA;
+    }
+
+    function audioStop(channel) {
+        const i = Math.floor(Number(channel));
+        if (!Number.isFinite(i) || i < 0) return false;
+        const ok = call(() => $.sound.stop(i), false);
+        refreshRuntime(true);
+        return ok !== false;
+    }
+
+    function audioBusControl(what, name, value) {
+        if (!name) return false;
+        const ok = call(() => (what === 'mute' ? $.audio.mute(String(name), value)
+            : what === 'solo' ? $.audio.solo(String(name), value)
+            : $.audio.volume(String(name), Number(value))), null);
+        refreshRuntime(true);
+        return ok !== null && ok !== undefined ? true : false;
+    }
+
+    // --- §29: ввод ----------------------------------------------------------
+
+    /**
+     * Конфликты привязок: у $.input.conflicts(action, keys) спрашиваем про
+     * каждое действие отдельно (без аргументов метод всегда возвращает пусто),
+     * повторные пары убираем.
+     */
+    function inputConflicts(bindings) {
+        const out = [];
+        const seen = new Set();
+        for (const action of Object.keys(bindings)) {
+            const list = call(() => $.input.conflicts(action, bindings[action]), null);
+            if (!Array.isArray(list)) continue;
+            for (const item of list) {
+                const other = item && item.action ? String(item.action) : COPY_NONE;
+                const keys = item && Array.isArray(item.keys) ? item.keys.join(', ') : '';
+                const id = `${action}<->${other}:${keys}`;
+                if (seen.has(id)) continue;
+                seen.add(id);
+                out.push({ action, other, keys });
+            }
+        }
+        return out;
+    }
+
+    function inputData() {
+        const actions = call(() => $.input.actions(), []) || [];
+        const bindings = call(() => $.input.bindings(), {}) || {};
+        const conflicts = inputConflicts(bindings);
+        const waiters = call(() => $.input.waiters(), []) || [];
+        const stuck = call(() => $.input.stuck(), []) || [];
+        const consumed = call(() => $.input.consumed(), null);
+        const devices = call(() => $.input.devices(), []) || [];
+        const pads = call(() => $.input.padCount(), null);
+        const slots = call(() => $.input.padSlots(), null);
+        const mouse = call(() => $.input.mouse(), null);
+        const rows = actions.map((a) => {
+            const d = call(() => $.input.describe(a), null) || {};
+            const keys = (d.keys && d.keys.length) ? d.keys.join(', ') : (bindings[a] || []).join(', ');
+            return `${String(a).padEnd(14).slice(0, 14)} клавиши: ${keys || COPY_NONE}`
+                + ` | нажато: ${d.down ? 'да' : 'нет'} | фронт: ${d.pressed ? 'да' : 'нет'}`;
+        });
+        const info_text = [
+            `действий: ${actions.length} | привязок: ${Object.keys(bindings).length}`
+                + ` | геймпадов подключено: ${pads === null ? NA : pads} из ${slots === null ? NA : slots}`,
+            `мышь: ${mouse ? `${numText(mouse.x, 0)}, ${numText(mouse.y, 0)}` : NA}`
+                + ` | shift/ctrl/alt: ${$.input.shiftDown() ? '1' : '0'}/${$.input.ctrlDown() ? '1' : '0'}/${$.input.altDown() ? '1' : '0'}`,
+            listText(devices, (d) => `слот ${d.slot}: игрок ${d.player}`
+                + ` serial ${d.serial === null ? COPY_NONE : d.serial}`
+                + ` удерживает ${(d.held || []).length}`) || 'устройств нет',
+        ].join('\n');
+        const actions_text = rows.length ? rows.join('\n') : 'Действий нет: $.input.bind("jump", ["Space"]).';
+        const issues = [
+            `конфликты привязок: ${conflicts.length}`,
+            listText(conflicts, (c) => '  ' + clip(JSON.stringify(c), 120)),
+            `ожидания ввода: ${waiters.length}`,
+            listText(waiters, (w) => '  ' + clip(JSON.stringify(w), 120)),
+            `залипшие клавиши: ${stuck.length}${stuck.length ? ' — ' + clip(JSON.stringify(stuck), 100) : ''}`,
+            `захват ввода (consumed): ${consumed === null || consumed === undefined ? NA : clip(JSON.stringify(consumed), 100)}`,
+        ].filter((line) => line !== '').join('\n');
+        return { actions, bindings, conflicts, waiters, stuck, consumed, devices, pads, slots, mouse,
+                 text: { info: info_text, actions: actions_text, issues } };
+    }
+
+    // --- §29: ассеты --------------------------------------------------------
+
+    function assetSizeOf(item, textures) {
+        for (const t of textures) {
+            if (t.name && (t.name === item.name || t.name === item.path)) {
+                return `${t.width}×${t.height} (текстура #${t.id})`;
+            }
+        }
+        return COPY_NONE;
+    }
+
+    function assetsData() {
+        if (!$.reload) return { available: false, list: [], stats: null,
+                                text: { table: '$.reload не поставлен в этой сборке', stats: '' } };
+        const list = call(() => $.reload.list(), []) || [];
+        const stats = call(() => $.reload.stats(), null);
+        const textures = call(() => $.debug.textures(), []) || [];
+        const rows = list.map((a) => ({
+            name: a.name, kind: a.kind, path: a.path, version: a.version, status: a.status,
+            deps: (a.deps || []).length,
+            size: assetSizeOf(a, textures),
+            last_frame: a.last && isNum(a.last.frame) ? a.last.frame : null,
+            last_ok: a.last ? a.last.ok === true : null,
+        }));
+        const table = rows.length
+            ? rows.map((r) => `${clip(r.name, 24).padEnd(24)} ${String(r.kind).padEnd(8)}`
+                + ` ${String(r.status).padEnd(10)} v${intOrNa(r.version)} deps ${r.deps}`
+                + ` размер ${r.size}`
+                + ` последнее ${r.last_frame === null ? COPY_NONE : `кадр ${r.last_frame} ${r.last_ok ? 'ok' : 'FAIL'}`}`).join('\n')
+            : "Наблюдаемых ассетов нет: $.reload.watch('имя', { kind: 'json', path: '…' }).";
+        const stats_text = stats
+            ? `под наблюдением ${stats.watched} | применено ${stats.applied} | неудачных ${stats.failed}`
+              + ` | ждут освобождения ${stats.pending_release}`
+              + ` | последнее: ${stats.last ? `${stats.last.ok ? 'ok' : 'FAILED'} ${stats.last.stage} v${stats.last.version}` : '—'}`
+            : 'нет статистики $.reload.';
+        return { available: true, list: rows, stats, text: { table, stats: stats_text } };
+    }
+
+    // --- §29: ресурсы и память ---------------------------------------------
+
+    function memSample() {
+        const counters = call(() => $.debug.counters(), null);
+        if (!counters) return;
+        const s = runtime.mem.samples;
+        const frame = call(() => $.time.frame(), 0);
+        if (s.length && s[s.length - 1].frame === frame) return;
+        s.push({ frame, counters: Object.assign({}, counters) });
+        while (s.length > MEM_SAMPLES) s.shift();
+    }
+
+    function memoryData() {
+        memSample();
+        const counters = call(() => $.debug.counters(), {}) || {};
+        const limits = call(() => $.debug.limits(), {}) || {};
+        const samples = runtime.mem.samples;
+        const base = runtime.mem.baseline || (samples.length ? samples[0].counters : null);
+        const first = samples.length ? samples[0] : null;
+        const last = samples.length ? samples[samples.length - 1] : null;
+
+        const counter_keys = Object.keys(counters);
+        const delta_text = counter_keys.map((k) => {
+            const now = counters[k];
+            const was = base && isNum(base[k]) ? base[k] : null;
+            const d = was === null || !isNum(now) ? null : now - was;
+            return `${k}: ${intOrNa(now)}${d === null ? '' : ` (Δ ${d >= 0 ? '+' : ''}${d})`}`;
+        }).join(' | ');
+
+        const limit_keys = Object.keys(limits);
+        const limits_text = limit_keys.map((k) => `${k}: ${limits[k]}`).join(' | ');
+
+        // Подозрение на утечку: счётчик строго рос в каждом замере окна.
+        const leaks = [];
+        if (samples.length >= 5) {
+            for (const k of counter_keys) {
+                let grew = true;
+                for (let i = 1; i < samples.length; i++) {
+                    const a = samples[i - 1].counters[k];
+                    const b = samples[i].counters[k];
+                    if (!isNum(a) || !isNum(b) || b <= a) { grew = false; break; }
+                }
+                if (grew) leaks.push({ key: k, from: samples[0].counters[k], to: last.counters[k], samples: samples.length });
+            }
+        }
+        const leak_text = samples.length < 5
+            ? `замеров пока ${samples.length} из 5 — вывод о росте преждевременен`
+            : (leaks.length
+                ? leaks.map((l) => `растёт: ${l.key} ${l.from} → ${l.to} за ${l.samples} замеров`).join('\n')
+                : 'подозрений на утечку нет: ни один счётчик не растёт монотонно');
+        return {
+            counters, limits, samples: samples.length,
+            window_frames: first && last ? last.frame - first.frame : 0,
+            deltas: counter_keys.reduce((acc, k) => {
+                const was = base && isNum(base[k]) ? base[k] : null;
+                acc[k] = was === null || !isNum(counters[k]) ? null : counters[k] - was;
+                return acc;
+            }, {}),
+            leaks,
+            text: { counters: `кадры ${first ? first.frame : NA}…${last ? last.frame : NA} (замеров ${samples.length})\n${delta_text}`,
+                    limits: limits_text, leaks: leak_text },
+        };
+    }
+
+    function memBaseline() {
+        memSample();
+        const s = runtime.mem.samples;
+        runtime.mem.baseline = s.length ? Object.assign({}, s[s.length - 1].counters) : null;
+        refreshRuntime(true);
+        return true;
+    }
+
+    // --- §31: консоль -------------------------------------------------------
+
+    /** Команды — тонкие обёртки над существующими API (§31). */
+    function consoleCommand(line) {
+        const parts = String(line).trim().split(/\s+/);
+        const cmd = (parts.shift() || '').toLowerCase();
+        const arg = parts.join(' ');
+        switch (cmd) {
+        case '': return { ok: false, out: 'пустая команда' };
+        case 'help': return { ok: true, out: 'pause | resume | step [N] | timescale X | reload | dump | errors | watches | goto-node SEL | physics [off|all|selected]' };
+        case 'pause': call(() => $.time.pause(), null); return { ok: true, out: 'пауза включена' };
+        case 'resume': call(() => $.time.resume(), null); return { ok: true, out: 'пауза снята' };
+        case 'step': {
+            const n = Math.max(1, Math.floor(Number(arg) || 1));
+            stepFrames(n);
+            return { ok: true, out: `шаг ${n} кадр(ов): время идёт, дальше пауза` };
+        }
+        case 'timescale': {
+            const x = Number(arg);
+            if (!Number.isFinite(x) || x < 0) return { ok: false, out: 'timescale: нужно неотрицательное число' };
+            call(() => $.time.scale(x), null);
+            return { ok: true, out: `масштаб времени ${x}` };
+        }
+        case 'reload': call(() => $.script.request('консоль DevTools'), null); return { ok: true, out: 'перезапуск скриптов запрошен' };
+        case 'dump': {
+            const r = reportData();
+            return { ok: true, out: `отчёт собран: ${r.text.split('\n').length} строк, ${r.json.length} байт JSON` };
+        }
+        case 'errors': {
+            const list = call(() => $.debug.errors(), []) || [];
+            const rep = call(() => $.debug.report(), null);
+            return { ok: true, out: `ошибок ${list.length}, неустранимых ${rep ? rep.fatal : NA}, журнал ${rep && rep.clean ? 'чист' : 'не чист'}` };
+        }
+        case 'watches': {
+            const w = call(() => $.debug.watches(), []) || [];
+            return { ok: true, out: w.length ? w.map((x) => `${x.name}: ${JSON.stringify(x.value)}`).join('\n') : 'наблюдений нет' };
+        }
+        case 'goto-node': {
+            if (!arg) return { ok: false, out: 'goto-node: нужен селектор' };
+            const sel = selectBy(arg);
+            return sel ? { ok: true, out: `выбрано: ${sel}` } : { ok: false, out: `узел не найден: ${arg}` };
+        }
+        case 'physics': {
+            const m = arg || 'all';
+            return physOverlay(m) ? { ok: true, out: `оверлей физики: ${m}` } : { ok: false, out: 'physics: off | all | selected' };
+        }
+        default: return { ok: false, out: `неизвестная команда: ${cmd} (help)` };
+        }
+    }
+
+    function consoleRun(line) {
+        const text = String(line === undefined || line === null ? '' : line).trim();
+        const res = consoleCommand(text);
+        runtime.console.history.push(text);
+        while (runtime.console.history.length > CONSOLE_HISTORY) runtime.console.history.shift();
+        runtime.console.log.push(`> ${text}\n${res.out}`);
+        while (runtime.console.log.length > CONSOLE_LOG) runtime.console.log.shift();
+        runtime.console.last = { line: text, ok: res.ok, out: res.out };
+        if (runtime.doc >= 0) {
+            uiSetText(runtime.doc, 'rt-console-log', consoleLogText());
+            uiSetValue(runtime.doc, 'rt-console-input', '');
+        }
+        refreshRuntime(true);
+        return runtime.console.last;
+    }
+
+    function consoleLogText() {
+        return runtime.console.log.length ? runtime.console.log.join('\n') : 'Консоль пуста. help — список команд.';
+    }
+
+    function consoleClear() {
+        runtime.console.log.length = 0;
+        if (runtime.doc >= 0) uiSetText(runtime.doc, 'rt-console-log', consoleLogText());
+        return true;
+    }
+
+    // --- §33: время и шаг кадра --------------------------------------------
+
+    function stepData() {
+        const paused = call(() => $.time.isPaused(), null);
+        const scale = call(() => $.time.scale(), null);
+        const sim = call(() => $.time.simTime(), null);
+        const pres = call(() => $.time.presentationTime(), null);
+        const steps = call(() => $.time.lastSteps(), null);
+        const freeze_left = call(() => $.time.freezeLeft(), null);
+        const slow_count = call(() => $.time.slowCount(), null);
+        const physical = call(() => $.time.physicsScale(), null);
+        const state = [
+            `кадр ${intOrNa(call(() => $.time.frame(), null))} | пауза: ${paused === null ? NA : (paused ? 'да' : 'нет')}`
+                + ` | масштаб ${numOrNa(scale)} (шаг физики ${numOrNa(physical)})`,
+            `simTime ${numOrNa(sim)} с | presentationTime ${numOrNa(pres)} с`
+                + ` | шагов симуляции в кадре ${intOrNa(steps)}`,
+            `hit-stop осталось ${freeze_left === null ? NA : msText(freeze_left)}`
+                + ` | активных замедлений ${intOrNa(slow_count)}`
+                + (runtime.step_left > 0 ? ` | шагаем: осталось ${runtime.step_left}` : ''),
+        ].join('\n');
+        const notes = [
+            'Шаг кадра: время идёт ровно N кадров, затем пауза возвращается сама.',
+            'Шага физики отдельно нет: движок не отдаёт публичного «одного шага симуляции»;',
+            'в кадре выполняется steps шагов фиксированного dt (см. выше).',
+            'Пауза останавливает логику и физику, но кадр и интерфейс продолжают рисоваться.',
+        ].join('\n');
+        return { paused, scale, sim, pres, steps, freeze_left, slow_count,
+                 step_left: runtime.step_left, text: { state, notes } };
+    }
+
+    /** Шаг кадра: возобновляем время на N кадров и снова ставим паузу. */
+    function stepFrames(n) {
+        const count = Math.max(1, Math.min(600, Math.floor(Number(n) || 1)));
+        runtime.step_left = count;
+        call(() => $.time.resume(), null);
+        refreshRuntime(true);
+        return count;
+    }
+
+    function pauseTime(on) {
+        const value = on === undefined ? !call(() => $.time.isPaused(), false) : !!on;
+        if (value) call(() => $.time.pause(), null);
+        else { runtime.step_left = 0; call(() => $.time.resume(), null); }
+        refreshRuntime(true);
+        return value;
+    }
+
+    function timeScale(x) {
+        const v = Number(x);
+        if (!Number.isFinite(v) || v < 0) return null;
+        call(() => $.time.scale(v), null);
+        refreshRuntime(true);
+        return v;
+    }
+
+    function timeControl(what, value) {
+        if (what === 'hitStop') { call(() => $.time.hitStop(Number(value) || 0), null); }
+        else if (what === 'freeze') { call(() => $.time.freeze(Number(value) || 0), null); }
+        else if (what === 'slow') { call(() => $.time.slow(Number(value) || 0.5, 1000), null); }
+        else if (what === 'reset') {
+            runtime.step_left = 0;
+            call(() => $.time.unfreeze(), null);
+            call(() => $.time.scale(1), null);
+            call(() => $.time.resume(), null);
+        } else return false;
+        refreshRuntime(true);
+        return true;
+    }
+
+    // --- §39: отчёт ---------------------------------------------------------
+
+    function reportData() {
+        const counters = call(() => $.debug.counters(), {}) || {};
+        const limits = call(() => $.debug.limits(), {}) || {};
+        const diag = call(() => $.debug.report(), null);
+        const prof = call(() => $.debug.profile(), null);
+        const stats = call(() => $.debug.stats(), {}) || {};
+        const info = call(() => engine.renderInfo(), null);
+        const hitch = call(() => (hitchApi() ? hitchApi().count() : null), null);
+        const timers = call(() => ($.time && $.time.timers ? $.time.timers() : null), null);
+        const scene = call(() => (ctx.scene ? ctx.scene.current() : null), null);
+        const snapshot = {
+            version: (typeof engine !== 'undefined' && engine.version) ? String(engine.version) : null,
+            frame: isNum(stats.frame) ? stats.frame : null,
+            fps: isNum(stats.fps) ? stats.fps : null,
+            scene: scene === null || scene === undefined ? null : String(scene),
+            counters, limits,
+            diagnostics: diag,
+            profile: prof ? { frame_ms: prof.frame_ms, frames: prof.frames, gpu_ms: prof.gpu_ms,
+                              gpu_available: prof.gpu_available, stats: prof.stats || null } : null,
+            render: info ? { batches: info.batches, draw_calls: info.draw_calls,
+                             targets: (info.targets || []).length,
+                             textures: info.textures || null } : null,
+            timers: timers || null,
+            hitch: hitch,
+        };
+        const text = [
+            `R2D DevTools report, версия ${snapshot.version || NA}`,
+            `кадр ${intOrNa(snapshot.frame)} | FPS ${numOrNa(snapshot.fps)} | сцена ${snapshot.scene || COPY_NONE}`,
+            `счётчики: ${Object.keys(counters).map((k) => `${k}=${counters[k]}`).join(' ')}`,
+            `пределы: ${Object.keys(limits).map((k) => `${k}=${limits[k]}`).join(' ')}`,
+            `диагностика: записей ${diag ? diag.total : NA}, неустранимых ${diag ? diag.fatal : NA},`
+                + ` вытеснено ${diag ? diag.dropped : NA}, журнал ${diag && diag.clean ? 'чист' : 'не чист'}`,
+            `профиль: кадр ${prof ? numText(prof.frame_ms, 2) : NA} мс, окно ${prof ? prof.frames : NA} кадров,`
+                + ` GPU ${prof && prof.gpu_available ? msText(prof.gpu_ms) : NA}`,
+            `рендер: батчей ${info ? intOrNa(info.batches) : NA}, draw calls ${info ? intOrNa(info.draw_calls) : NA},`
+                + ` целей ${info && info.targets ? info.targets.length : NA}`,
+            `таймеры: ${timers ? `after ${timers.after}, every ${timers.every}, waits ${timers.waits}` : NA}`
+                + ` | захватов hitch: ${hitch === null ? NA : hitch}`,
+        ].join('\n');
+        return { snapshot, text, json: call(() => JSON.stringify(snapshot, null, 1), '{}') };
+    }
+
+    function copyReport(what) {
+        const r = reportData();
+        const text = what === 'json' ? r.json : r.text;
+        state.last_copied = { what: what === 'json' ? 'report-json' : 'report-text', text };
+        if (typeof engine.setClipboard === 'function') engine.setClipboard(text);
+        return text;
+    }
+
     // --- Обновление панели F1 ----------------------------------------------
 
     function refreshRuntime(force) {
@@ -1598,6 +2511,73 @@ export function installDevTools($) {
         } else {
             uiSetText(doc, 'rt-assets', '$.reload не поставлен в этой сборке');
         }
+
+        // §25 PHYSICS: таблица тел + состояние оверлея.
+        const phys = physicsData();
+        uiSetText(doc, 'rt-phys-table', phys.text);
+        uiSetText(doc, 'rt-phys-mode',
+            `оверлей: ${phys.mode === 'off' ? 'выключен' : (phys.mode === 'all' ? 'все тела' : 'только выбранный')}`
+            + ` | тел ${phys.bodies.length}`);
+
+        // §26 RENDER.
+        const render = renderData();
+        uiSetText(doc, 'rt-render-info', render.text.info);
+        uiSetText(doc, 'rt-render-targets', render.text.targets);
+        uiSetText(doc, 'rt-render-textures', render.text.textures);
+
+        // §28 EVENTS.
+        const ev = eventsData();
+        uiSetText(doc, 'rt-events-list', ev.text.list);
+        uiSetText(doc, 'rt-events-detail', ev.text.detail);
+        uiSetClass(doc, 'rt-events-pause', 'on', ev.paused);
+
+        // §29 AUDIO.
+        const audio = audioData();
+        uiSetText(doc, 'rt-audio-info', audio.text.info);
+        uiSetText(doc, 'rt-audio-buses', audio.text.buses);
+        uiSetText(doc, 'rt-audio-channels', audio.text.channels);
+
+        // §29 INPUT.
+        const input = inputData();
+        uiSetText(doc, 'rt-input-info', input.text.info);
+        uiSetText(doc, 'rt-input-actions', input.text.actions);
+        uiSetText(doc, 'rt-input-issues', input.text.issues);
+
+        // §29 ASSETS: таблица наблюдаемых ассетов (строка статистики — выше).
+        const assets_tab = assetsData();
+        uiSetText(doc, 'rt-assets-table', assets_tab.text.table);
+
+        // §29 RESOURCE/MEMORY.
+        const mem = memoryData();
+        uiSetText(doc, 'rt-mem-counters', mem.text.counters);
+        uiSetText(doc, 'rt-mem-limits', mem.text.limits);
+        uiSetText(doc, 'rt-mem-leaks', mem.text.leaks);
+
+        // §31 CONSOLE: лог и история (строки истории созданы один раз).
+        uiSetText(doc, 'rt-console-log', consoleLogText());
+        const hist = runtime.console.history.slice().reverse();
+        for (let i = 0; i < CONSOLE_HISTORY; i++) {
+            const id = `rt-console-h-${i}`;
+            if (hist[i] === undefined) { uiSetClass(doc, id, 'gone', true); continue; }
+            uiSetText(doc, id, `> ${hist[i]}`);
+            uiSetClass(doc, id, 'gone', false);
+        }
+
+        // §33 STEP: состояние времени и подсветка активных кнопок.
+        const step = stepData();
+        uiSetText(doc, 'rt-step-state', step.text.state);
+        uiSetText(doc, 'rt-step-notes', step.text.notes);
+        uiSetClass(doc, 'rt-step-pause', 'on', step.paused === true);
+        for (const [value, element] of [[0.1, 'rt-step-scale-01'], [0.25, 'rt-step-scale-025'],
+                                         [0.5, 'rt-step-scale-05'], [1, 'rt-step-scale-1'],
+                                         [2, 'rt-step-scale-2']]) {
+            uiSetClass(doc, element, 'on',
+                       step.scale !== null && Math.abs(step.scale - value) < 1e-6);
+        }
+
+        // §39 REPORT: текст снимка (JSON копируется кнопкой).
+        uiSetText(doc, 'rt-report-text', reportData().text);
+
     }
 
     function setTab(name) {
@@ -1681,6 +2661,112 @@ export function installDevTools($) {
                 hitchClear();
                 uiSetText(runtime.doc, 'rt-hitch-note', 'Кольцо захватов очищено.');
             });
+            // §25: режим оверлея форм (off/all/selected).
+            engine.ui.on(runtime.doc, 'rt-phys-sel', 'click', () => { physOverlay('selected'); refreshRuntime(true); });
+            engine.ui.on(runtime.doc, 'rt-phys-all', 'click', () => { physOverlay('all'); refreshRuntime(true); });
+            engine.ui.on(runtime.doc, 'rt-phys-off', 'click', () => { physOverlay('off'); refreshRuntime(true); });
+            // §28: журнал событий — пауза, очистка, фильтр, цепочка hit.
+            engine.ui.on(runtime.doc, 'rt-events-pause', 'click', () => { eventsPause(); });
+            engine.ui.on(runtime.doc, 'rt-events-clear', 'click', () => { eventsClear(); });
+            engine.ui.on(runtime.doc, 'rt-events-apply', 'click', () => {
+                eventsFilter(String(uiValue(runtime.doc, 'rt-events-filter') === null
+                    ? '' : uiValue(runtime.doc, 'rt-events-filter')));
+            });
+            engine.ui.on(runtime.doc, 'rt-events-hit', 'click', () => {
+                const raw = String(uiValue(runtime.doc, 'rt-events-filter') === null
+                    ? '' : uiValue(runtime.doc, 'rt-events-filter')).trim();
+                const want = Number(raw);
+                const list = call(() => $.trace.list(), []) || [];
+                let id = Number.isFinite(want) && want > 0 ? Math.floor(want) : null;
+                if (id === null) {
+                    for (let i = list.length - 1; i >= 0; i--) {
+                        const v = hitIdOf(list[i]);
+                        if (v !== null) { id = v; break; }
+                    }
+                }
+                runtime.events.force_hit = id;
+                refreshRuntime(true);
+                if (id === null) {
+                    uiSetText(runtime.doc, 'rt-events-detail', 'боевых записей с hit id в журнале нет');
+                }
+            });
+            // §29: звук — стоп канала и mute/solo шины из полей панели.
+            engine.ui.on(runtime.doc, 'rt-audio-stop', 'click', () => {
+                const ch = Number(String(uiValue(runtime.doc, 'rt-audio-ch') === null
+                    ? '' : uiValue(runtime.doc, 'rt-audio-ch')).trim());
+                uiSetText(runtime.doc, 'rt-audio-info',
+                    audioStop(Number.isFinite(ch) ? ch : 0) ? 'канал остановлен' : 'канал не остановлен');
+            });
+            engine.ui.on(runtime.doc, 'rt-audio-mute', 'click', () => {
+                const now = call(() => $.sound.mute(), false);
+                call(() => $.sound.mute(!(now === true)), null);
+                refreshRuntime(true);
+            });
+            for (const [element, what] of [['rt-audio-busmute', 'mute'], ['rt-audio-bussolo', 'solo']]) {
+                engine.ui.on(runtime.doc, element, 'click', () => {
+                    const raw = String(uiValue(runtime.doc, 'rt-audio-bus') === null
+                        ? '' : uiValue(runtime.doc, 'rt-audio-bus')).trim();
+                    const name = raw || ((call(() => $.audio.buses(), []) || [])[0] || '');
+                    if (!name) {
+                        uiSetText(runtime.doc, 'rt-audio-info', 'шин нет: $.audio.bus("имя", {...})');
+                        return;
+                    }
+                    const now = call(() => $.audio[what](name), false);
+                    audioBusControl(what, name, !(now === true));
+                });
+            }
+            // §31: консоль — выполнить строку, очистить лог, повторить из истории.
+            engine.ui.on(runtime.doc, 'rt-console-run', 'click', () => {
+                consoleRun(String(uiValue(runtime.doc, 'rt-console-input') === null
+                    ? '' : uiValue(runtime.doc, 'rt-console-input')));
+            });
+            engine.ui.on(runtime.doc, 'rt-console-clear', 'click', () => { consoleClear(); });
+            uiSetHtml(runtime.doc, 'rt-console-history', Array.from({length: CONSOLE_HISTORY}, (_, i) =>
+                `<div class="rt-row" id="rt-console-h-${i}"></div>`).join(''));
+            for (let i = 0; i < CONSOLE_HISTORY; i++) {
+                engine.ui.on(runtime.doc, `rt-console-h-${i}`, 'click', () => {
+                    const hist = runtime.console.history;
+                    const line = hist[hist.length - 1 - i];
+                    if (line === undefined) return;
+                    uiSetValue(runtime.doc, 'rt-console-input', line);
+                    consoleRun(line);
+                });
+            }
+            // §33: время — пауза, шаг кадра, hit-stop, замедление, масштабы.
+            engine.ui.on(runtime.doc, 'rt-step-pause', 'click', () => { pauseTime(); });
+            engine.ui.on(runtime.doc, 'rt-step-resume', 'click', () => { pauseTime(false); });
+            engine.ui.on(runtime.doc, 'rt-step-frame', 'click', () => { stepFrames(1); });
+            engine.ui.on(runtime.doc, 'rt-step-frames10', 'click', () => { stepFrames(10); });
+            engine.ui.on(runtime.doc, 'rt-step-hit', 'click', () => { timeControl('hitStop', 120); });
+            engine.ui.on(runtime.doc, 'rt-step-slow', 'click', () => { timeControl('slow', 0.5); });
+            engine.ui.on(runtime.doc, 'rt-step-reset', 'click', () => { timeControl('reset'); });
+            for (const [element, value] of [['rt-step-scale-01', 0.1], ['rt-step-scale-025', 0.25],
+                                            ['rt-step-scale-05', 0.5], ['rt-step-scale-1', 1],
+                                            ['rt-step-scale-2', 2]]) {
+                engine.ui.on(runtime.doc, element, 'click', () => { timeScale(value); });
+            }
+            engine.ui.on(runtime.doc, 'rt-step-scale-apply', 'click', () => {
+                const raw = String(uiValue(runtime.doc, 'rt-step-scale-custom') === null
+                    ? '' : uiValue(runtime.doc, 'rt-step-scale-custom')).trim().replace(',', '.');
+                const x = Number(raw);
+                uiSetText(runtime.doc, 'rt-error', Number.isFinite(x) && x >= 0
+                    ? `Масштаб времени ${timeScale(x)}`
+                    : 'Масштаб: нужно неотрицательное число.');
+            });
+            // §39: отчёт — копирование текста и JSON.
+            engine.ui.on(runtime.doc, 'rt-report-copy', 'click', () => {
+                const text = copyReport('text');
+                runtime.console.log.push(`> dump\nотчёт (${text.length} байт) скопирован`);
+                while (runtime.console.log.length > CONSOLE_LOG) runtime.console.log.shift();
+                refreshRuntime(true);
+            });
+            engine.ui.on(runtime.doc, 'rt-report-copy-json', 'click', () => {
+                const text = copyReport('json');
+                runtime.console.log.push(`> dump json\nJSON (${text.length} байт) скопирован`);
+                while (runtime.console.log.length > CONSOLE_LOG) runtime.console.log.shift();
+                refreshRuntime(true);
+            });
+
             // §27: кнопки хот-релоада ассетов. Данные не трогают: применяется
             // то, что уже прочитано и проверено конвейером $.reload.
             if ($.reload) {
@@ -1793,6 +2879,97 @@ export function installDevTools($) {
         hitchThreshold,
         /** §18: очистить кольцо захватов. */
         hitchClear,
+        // --- PASS 4: инспекторы подсистем (§25–§33, §39) --------------------
+
+        /** §25: таблица тел — те же факты, что в панели. */
+        physics() {
+            const p = physicsData();
+            return { mode: p.mode, bodies: p.bodies, overlay: p.overlay, text: p.text };
+        },
+        /** §25: режим оверлея форм: 'off' | 'all' | 'selected' (без аргумента — чтение). */
+        physicsOverlay(mode) { return physOverlay(mode); },
+
+        /** §26: счётчики рендера, цели, текстуры, viewport. */
+        render() {
+            const r = renderData();
+            return { info: r.info, targets: r.targets, textures: r.textures, viewport: r.viewport,
+                     lights: r.lights, lights_dropped: r.dropped, text: r.text };
+        },
+
+        /** §28: журнал событий ($.trace) — записи, фильтр, потери, цепочка hit. */
+        events() {
+            const e = eventsData();
+            return { on: e.on, count: e.count, dropped: e.dropped, filter: e.filter,
+                     paused: e.paused, rows: e.entries, hit: e.hit, text: e.text };
+        },
+        eventsFilter,
+        eventsPause,
+        eventsClear,
+
+        /** §29: звук — голоса, шины, каналы. */
+        audio() {
+            const a = audioData();
+            return { busy: a.busy, playing: a.playing, sfx: a.sfx, music: a.music, master: a.master,
+                     buses: a.buses, handles: a.handles, channels: a.channels, text: a.text };
+        },
+        audioStop,
+        /** §29: mute/solo/громкость шины. */
+        audioBus(what, name, value) { return audioBusControl(what, name, value); },
+
+        /** §29: ввод — действия, привязки, конфликты, ожидания, устройства. */
+        input() {
+            const i = inputData();
+            return { actions: i.actions, bindings: i.bindings, conflicts: i.conflicts,
+                     waiters: i.waiters, stuck: i.stuck, consumed: i.consumed,
+                     devices: i.devices, pads: i.pads, slots: i.slots, mouse: i.mouse, text: i.text };
+        },
+
+        /** §29: ассеты — таблица наблюдаемых ассетов (§27 остаётся в assets()). */
+        assetsTab() {
+            const a = assetsData();
+            return { available: a.available, list: a.list, stats: a.stats, text: a.text };
+        },
+
+        /** §29: счётчики/пределы с дельтами и подозрением на рост. */
+        memory() {
+            const m = memoryData();
+            return { counters: m.counters, limits: m.limits, deltas: m.deltas,
+                     samples: m.samples, window_frames: m.window_frames, leaks: m.leaks, text: m.text };
+        },
+        memoryBaseline: memBaseline,
+
+        /** §31: консоль — выполнить строку, история, лог. */
+        consoleRun,
+        consoleClear,
+        consoleHistory() { return runtime.console.history.slice(); },
+        consoleLog() { return runtime.console.log.slice(); },
+        consoleLast() { return runtime.console.last; },
+
+        /** §33: состояние времени и шаг кадра. */
+        timeStep() { return stepData(); },
+        step() { return stepFrames(1); },
+        steps(n) { return stepFrames(n); },
+        pause: pauseTime,
+        timeScale,
+        timeControl,
+
+        /** §39: отчёт — снимок, текст, JSON и копирование. */
+        report() { return reportData(); },
+        copyReport,
+
+        /** Открыта ли панель F1 (нужно кадровым оверлеям вроде §25). */
+        runtimeOpen() { return runtime.open; },
+
+        /** Кадровый шаг оверлея физики (вызывает tickDevTools). */
+        tickOverlay() { tickPhysicsOverlay(); },
+        /** Кадровый шаг «шага кадра»: вернуть паузу после N кадров (§33). */
+        tickStep() {
+            if (runtime.step_left > 0) {
+                runtime.step_left--;
+                if (runtime.step_left === 0) call(() => $.time.pause(), null);
+            }
+        },
+
 
         /** Открыть панель (в сборке без RmlUi честно вернёт false). */
         open,
@@ -1930,4 +3107,9 @@ export function tickDevTools(dt) {
         // открыта и включён режим Pick entity.
         if (d.pickOn()) d.tickPick();
     }
+    // §25: оверлей форм физики живёт на панели F1 (runtime), а не на F2 —
+    // проверять надо именно её открытость.
+    if (d.runtimeOpen() && d.physicsOverlay() !== 'off') d.tickOverlay();
+    // §33: «шаг кадра» — вернуть паузу после запрошенного числа кадров.
+    d.tickStep();
 }

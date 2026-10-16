@@ -166,11 +166,11 @@ def main():
               "форм столько же, сколько даёт Σ engine.devtools.shapes(тело): %s" % shapes_expected)
         check(rows["physics_ms"]["measured"], "физика измерена движком (engine.profile().rows)")
 
-        # Неизмеримое — N/A, а не выдуманное число. Счётчики батчей и render
-        # target движок теперь отдаёт (renderInfo), а публичного счётчика
-        # таймеров по-прежнему нет — вот он и обязан быть N/A.
-        check(rows["timers"]["value"] is None and rows["timers"]["text"].endswith(" N/A"),
-              "таймеры: честное N/A (нет публичного счётчика)")
+        # Таймеры: публичный счётчик $.time.timers() (after/every/waits).
+        timers = a.eval("$.time.timers()")
+        check(rows["timers"]["measured"] and rows["timers"]["value"] == timers["total"],
+              "таймеров = $.time.timers().total (%s: after %s, every %s, waits %s)"
+              % (timers["total"], timers["after"], timers["every"], timers["waits"]))
 
         # GPU — только по факту замера.
         gpu_available = a.eval("engine.profile().gpu_available")

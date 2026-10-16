@@ -2737,7 +2737,7 @@ job CI), у каждого незакрытого пункта — причин�
 - [x] hitch captures — `tests/agent/devtools_hitch_test.py`
 - [x] entity inspector — `tests/agent/devtools_test.py`
 - [x] world picking — `tests/agent/devtools_pick_test.py`
-- [ ] physics overlay — причина: данные есть (`engine.devtools.shapes()`), оверлей форм на вкладке PHYSICS не собран
+- [x] physics overlay — вкладка PHYSICS в `src/highlevel/devtools.js`, проверки в `tests/agent/devtools_physics_test.py` (контуры из `engine.devtools.shapes()` + трансформ узла, режимы all/selected/off, подсветка выбранного тела пиксельно)
 - [ ] event timeline — причина: журнал и продюсеры готовы (`tests/agent/trace_producers_test.py`), вкладка EVENTS не собрана
 - [x] watches — `tests/agent/devtools_test.py`
 - [ ] render inspector — причина: данные есть (`engine.renderInfo()`), вкладка RENDER не собрана
