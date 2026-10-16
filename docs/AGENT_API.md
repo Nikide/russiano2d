@@ -526,6 +526,10 @@ $.test.near(x, 100, 0.5, 'игрок у отметки');
 
 | Вызов | Что делает |
 |---|---|
+| `.emissive({color, radius, intensity, shadows, bloom})` | Emission-спрайт: узел сам светит на окружение (карта света + бюджет `<light>`). `color:'auto'` — средний цвет пикселей спрайта (кешируется). `false` — выключить |
+| `$.gfx.light.emitters()` | Излучатели последнего кадра: `[{node, color, radius, intensity, shadows, bloom, gives_light, degraded, auto_color, auto_color_known}]` |
+| `$.gfx.light.stats()` / `qualityReport()` | Числа деградации: `emitters`, `emitterLights`, `emitterDegraded` |
+| `engine.textureAverageColor(id, isSprite?)` | Средний цвет непрозрачных пикселей (0..255) или `null`; считается один раз при создании текстуры |
 | `$.audio.hrtf()` | состояние: `{on, backend, requested, itd, itd_source, reason, steam, head, farGain, rearGain, mix, up}`. `backend` — **фактический**: `'steam'` (настоящая HRTF, Steam Audio) или `'synthetic'` (встроенная модель: ITD, ILD, тень головы, подсказка «сзади»), `null` — выключено. `itd_source` — кто даёт межушную задержку сейчас: `'model'` (гибрид: у Steam Audio своей задержки нет — измерено 0 мс), `'backend'`, `'none'` |
 | `$.audio.hrtf(true)` / `{backend, itd, head, farGain, rearGain, mix, up}` | включить/настроить. По умолчанию **выключено**: обычный звук не меняется. `backend`: `'auto'`(по умолчанию)/`'steam'`/`'synthetic'`; `backend:'steam'` требует доступной HRTF, иначе честно остаётся модель и в `reason` пишется причина. `itd`: `'auto'`(по умолчанию)/`'model'`/`'off'` — при `'auto'` в steam-режиме межушную задержку добавляет **наша модель** (гибрид, видно в `itd_source`), `'off'` — ровно библиотечный выход без задержки |
 | `$.audio.captureStart(frames)` | начать захват **post-mix** (то, что слышит игрок: после шин и реверба) |

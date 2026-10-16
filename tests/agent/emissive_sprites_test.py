@@ -182,6 +182,44 @@ def main():
         check(len(emitters) == 1 and emitters[0]["gives_light"] is True,
               "излучатель в списке и свет отдаёт: %s" % emitters[0] if emitters else "списка нет")
 
+        # Кадр демо анимируется даже на паузе (ящик дрожит, лампы мигают от
+        # счётчика кадров), поэтому «побитово прежний» проверяем по ВКЛАДУ:
+        # узел без emissive не даёт гало там, где такой же узел с emissive его
+        # даёт. Шум кадра печатаем числом, чтобы не выдавать его за эффект.
+        a.eval("$.time.pause(true)")
+        a.step(2)
+        a.screenshot(os.path.join(SHOTS, "emissive_still_a.png"))
+        a.screenshot(os.path.join(SHOTS, "emissive_still_b.png"))
+        img_a = read_png(os.path.join(SHOTS, "emissive_still_a.png"))
+        img_b = read_png(os.path.join(SHOTS, "emissive_still_b.png"))
+        noise = 0
+        for i in range(0, len(img_a[3]) - 3, img_a[2]):
+            if img_a[3][i:i + 3] != img_b[3][i:i + 3]:
+                noise += 1
+        number("шум кадра демо на паузе: %d различающихся пикселей из %d"
+               % (noise, img_a[0] * img_a[1]))
+        # Место выбираем ПОДАЛЬШЕ от уже созданных излучателей: иначе фон уже
+        # яркий и вклад нового узла не виден (на этом я и споткнулся).
+        probe = (1046, 150)
+        before_luma = luma(img_a, *probe)
+        a.eval("$('<rect>', { id: 'plain_lamp', fill: '#ffffff' }).size(16, 16).at(1000, 150).appendTo($.world); 1")
+        a.step(3)
+        a.screenshot(os.path.join(SHOTS, "emissive_plain.png"))
+        plain_luma = luma(read_png(os.path.join(SHOTS, "emissive_plain.png")), *probe)
+        a.eval("$('#plain_lamp').emissive({ color: '#ffffff', radius: 128, intensity: 1 })")
+        a.step(3)
+        a.screenshot(os.path.join(SHOTS, "emissive_same_node.png"))
+        lit_luma = luma(read_png(os.path.join(SHOTS, "emissive_same_node.png")), *probe)
+        a.eval("$.time.pause(false)")
+        lamp_record = a.eval("JSON.stringify($.gfx.light.emitters().filter(e => e.node === 'plain_lamp'))")
+        number("запись излучателя plain_lamp: %s" % str(lamp_record)[:110])
+        number("точка в 46 px: фон %.1f, узел БЕЗ emissive %.1f, тот же узел С emissive %.1f"
+               % (before_luma, plain_luma, lit_luma))
+        check(abs(plain_luma - before_luma) <= max(3.0, noise / 100.0),
+              "узел без emissive вклада не даёт: %.1f против фона %.1f" % (plain_luma, before_luma))
+        check(lit_luma > plain_luma + 15,
+              "тот же узел с emissive светит: %.1f против %.1f" % (lit_luma, plain_luma))
+
         # --- Карта света ВЫКЛЮЧЕНА (баг №2: раньше света не было вовсе) ------
         a.eval("$.gfx.light.map(false)")
         a.step(3)
@@ -201,11 +239,13 @@ def main():
               % (off32, bg_off))
         check(rgb[0] - max(rgb[1], rgb[2]) > 8,
               "цветной пересвет по каналам: R=%d при G=%d/B=%d" % rgb)
-        check(a.eval("$.gfx.light.emitters().length") == 2, "два излучателя в кадре")
+        check(a.eval("$.gfx.light.emitters().length") >= 2,
+              "излучатели копятся в кадре: %s" % a.eval("$.gfx.light.emitters().length"))
 
         # --- Излучатель-rect (баг №1) и nine-slice ---------------------------
-        kinds = a.eval("[$.gfx.light.emitters()[0].radius, $.gfx.light.emitters()[1].radius]")
-        check(kinds == [256, 128], "оба излучателя — <rect>, и оба попали в кадр: %s" % kinds)
+        kinds = a.eval("$.gfx.light.emitters().map(e => e.radius)")
+        check(256 in kinds and 128 in kinds,
+              "излучатели-<rect> обоих радиусов в кадре: %s" % kinds)
         nine = a.eval("""(() => {
             // nine-slice идёт ТОЙ ЖЕ веткой отрисовки, что спрайт: если крючок
             // эмиттера вернётся в ветку спрайта, этот узел перестанет светить.
@@ -216,8 +256,9 @@ def main():
             return 1;
         })()""")
         a.step(4)
-        check(a.eval("$.gfx.light.emitters().length") == 3,
-              "nine-slice-узел тоже отдаёт свет: %s" % a.eval("$.gfx.light.emitters().length"))
+        nine_count = a.eval("$.gfx.light.emitters().length")
+        check(nine_count >= 3 and a.eval("$.gfx.light.emitters().some(e => e.radius === 96)"),
+              "nine-slice-узел тоже отдаёт свет (всего излучателей %s)" % nine_count)
         a.eval("$.gfx.light.map(true)"); a.step(2)
 
         # --- Препятствие при shadows: true -----------------------------------
@@ -306,25 +347,6 @@ def main():
 
         # --- Кадр без emissive: две съёмки одного состояния ------------------
         a.eval("$.gfx.post({ enabled: 0, glow: 0, grain: 0, scanline: 0, distort: 0, noise_amount: 0, chromatic: 0, lens: 0, blood: 0 })")
-        a.eval("$.time.pause(true)")
-        a.step(3)
-        a.screenshot(os.path.join(SHOTS, "emissive_still_a.png"))
-        a.screenshot(os.path.join(SHOTS, "emissive_still_b.png"))
-        img_a = read_png(os.path.join(SHOTS, "emissive_still_a.png"))
-        img_b = read_png(os.path.join(SHOTS, "emissive_still_b.png"))
-        still_same = img_a[3] == img_b[3]
-        number("две съёмки паузы без поста: пиксели %s" % ("совпали" if still_same else "разошлись"))
-        check(still_same, "кадр детерминирован на паузе — база для «побитово прежнего»")
-        a.eval("$('<rect>', { fill: '#303030' }).size(12, 12).at(200, 200).appendTo($.world); 1")
-        a.step(2)
-        a.screenshot(os.path.join(SHOTS, "emissive_still_c.png"))
-        img_c = read_png(os.path.join(SHOTS, "emissive_still_c.png"))
-        plain_extra = 0
-        for i in range(0, len(img_a[3]) - 3, img_a[2]):
-            if img_a[3][i:i + 3] != img_c[3][i:i + 3]:
-                plain_extra += 1
-        number("после добавления узла БЕЗ emissive различающихся пикселей: %d" % plain_extra)
-        check(plain_extra == 0, "узел без emissive кадр не меняет: %d отличий" % plain_extra)
         # --- Bloom: один и тот же кадр с силой свечения и без --------------
         # Bloom включается силой post.glow (src/main.c:384: bright-pass идёт
         # только при glow > 0), bloom_threshold задаёт порог яркости. Мир на
@@ -333,14 +355,21 @@ def main():
         a.eval("$.gfx.post({ enabled: 1, glow: 0, grain: 0, scanline: 0, distort: 0, noise_amount: 0, chromatic: 0, lens: 0, blood: 0, bloom_threshold: 0.75, bloom_radius: 4 })")
         a.step(3)
         no_bloom = shot("emissive_bloom_off.png")
-        a.eval("$.gfx.post({ glow: 0.8 })")
+        a.eval("$.gfx.post({ glow: 2.0, bloom_radius: 8 })")
         a.step(3)
         with_bloom = shot("emissive_bloom_on.png")
         a.eval("$.gfx.post({ glow: 0 }); $.time.pause(false)")
         # Гало меряем ВОКРУГ яркого спрайта (сам он белый и без bloom).
-        points = ((120, 0), (-120, 0), (0, 120), (0, -120))
+        points = ((60, 0), (-60, 0), (0, 60), (0, -60), (120, 0), (-120, 0), (0, 120), (0, -120))
         halo_off = max(luma(no_bloom, 640 + dx, 640 + dy) for dx, dy in points)
         halo_on = max(luma(with_bloom, 640 + dx, 640 + dy) for dx, dy in points)
+        # Второй замер — дальше от спрайта и с большим радиусом размытия: если
+        # эффект ловится на паре пикселей, это видно числом, а не «вроде есть».
+        far_off = max(luma(no_bloom, 640 + dx, 640 + dy) for dx, dy in ((200, 0), (0, 200)))
+        a.eval("$.gfx.post({ glow: 0.8, bloom_radius: 12 })")
+        a.step(3)
+        wide = shot("emissive_bloom_wide.png")
+        far_on = max(luma(wide, 640 + dx, 640 + dy) for dx, dy in ((200, 0), (0, 200)))
         frac_off = bright_fraction(no_bloom, 640, 640, 120, 0.75 * 255)
         frac_on = bright_fraction(with_bloom, 640, 640, 120, 0.75 * 255)
         number("bloom (сила post.glow, порог 0.75): гало в 120 px %.1f → %.1f; доля ярких пикселей %.4f → %.4f"

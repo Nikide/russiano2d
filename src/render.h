@@ -99,6 +99,12 @@ typedef struct R2DTexture {
     int             width;
     int             height;
     bool            alive;
+    // Средний цвет непрозрачных пикселей (0..255), снятый ОДИН раз при
+    // создании текстуры. Нужен emissive-спрайтам для цвета 'auto': в кадре
+    // пиксели уже недоступны (SDL_Surface освобождается после загрузки),
+    // а стоимость подсчёта платится на загрузке, не в кадре.
+    float           avg[4];
+    bool            has_avg;
 } R2DTexture;
 
 typedef struct R2DSprite {

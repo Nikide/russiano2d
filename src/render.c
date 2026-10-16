@@ -396,6 +396,35 @@ static int r2d__texture_slot_alloc(R2DRenderer *r)
     return -1;
 }
 
+// Средний цвет непрозрачных пикселей RGBA32-буфера. Пиксели с alpha < 16 не
+// учитываются: у спрайта с прозрачной рамкой они бы «разбавили» цвет серым.
+static void r2d__texture_average(const void *pixels, int w, int h, int pitch,
+                                 float out[4], bool *has)
+{
+    out[0] = out[1] = out[2] = out[3] = 0.0f;
+    *has = false;
+    if (!pixels || w <= 0 || h <= 0) return;
+    const uint8_t *base = (const uint8_t *)pixels;
+    double sum[3] = { 0.0, 0.0, 0.0 };
+    double weight = 0.0;
+    for (int y = 0; y < h; ++y) {
+        const uint8_t *row = base + (size_t)y * (size_t)pitch;
+        for (int x = 0; x < w; ++x) {
+            const uint8_t *px = row + (size_t)x * 4u;
+            const double a = px[3] / 255.0;
+            if (px[3] < 16) continue;
+            sum[0] += px[0] * a; sum[1] += px[1] * a; sum[2] += px[2] * a;
+            weight += a;
+        }
+    }
+    if (weight <= 0.0) return;
+    out[0] = (float)(sum[0] / weight);
+    out[1] = (float)(sum[1] / weight);
+    out[2] = (float)(sum[2] / weight);
+    out[3] = 255.0f;
+    *has = true;
+}
+
 int r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h)
 {
     if (!r || !r->device || w <= 0 || h <= 0 || w > 16384 || h > 16384) return -1;
@@ -419,6 +448,8 @@ int r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h)
     t->width  = w;
     t->height = h;
     t->alive  = true;
+    t->has_avg = false;
+    if (pixels) r2d__texture_average(pixels, w, h, w * 4, t->avg, &t->has_avg);
     SDL_snprintf(t->name, sizeof t->name, "<memory %dx%d>", w, h);
     return slot;
 }
@@ -561,6 +592,8 @@ static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps)
     t->width  = w;
     t->height = h;
     t->alive  = true;
+    t->has_avg = false;
+    r2d__texture_average(rgba->pixels, w, h, rgba->pitch, t->avg, &t->has_avg);
     SDL_snprintf(t->name, sizeof t->name, "%s", path);
 
     R2D_LOG("текстура #%d: %s (%dx%d)", id, path, w, h);
@@ -4243,6 +4276,45 @@ static JSValue r2d__js_user_shader_supported(JSContext *ctx, JSValueConst this_v
     return JS_NewBool(ctx, r2d_render_user_shader_supported());
 }
 
+// engine.textureAverageColor(id, isSprite?) → [r, g, b, a] (0..255) или null.
+// `isSprite: true` — id это спрайт, берётся его текстура (см. ниже про столы).
+//
+// Средний цвет снимается один раз при создании текстуры (см.
+// r2d__texture_average) и лежит в R2DTexture. Нужен emissive-спрайтам: цвет
+// 'auto' берётся из пикселей спрайта, а в кадре пикселей уже нет — SDL_Surface
+// освобождается сразу после загрузки. В кадре стоимость нулевая.
+static JSValue r2d__js_texture_average_color(JSContext *ctx, JSValueConst this_val,
+                                             int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = (R2DScript *)JS_GetContextOpaque(ctx);
+    R2DRenderer *r = s ? s->renderer : NULL;
+    if (!r || argc < 1) return JS_NULL;
+    int32_t id = -1;
+    if (JS_ToInt32(ctx, &id, argv[0])) return JS_EXCEPTION;
+    // Идентификаторы текстур и спрайтов живут в РАЗНЫХ столах и могут
+    // совпадать по номеру, поэтому вид указывается явно: второй аргумент
+    // `true` — это спрайт (тогда берём его текстуру). Иначе легко вернуть
+    // цвет чужой текстуры с тем же номером.
+    const bool is_sprite = argc > 1 && JS_ToBool(ctx, argv[1]) == 1;
+    int tex = id;
+    if (is_sprite) {
+        if (id < 0 || id >= r->sprite_count || !r->sprites[id].alive) return JS_NULL;
+        tex = r->sprites[id].texture;
+    }
+    if (tex < 0 || tex >= r->texture_count || !r->textures[tex].alive
+        || !r->textures[tex].has_avg) {
+        return JS_NULL;   // честный null: «среднего цвета нет», а не чёрный
+    }
+    const float *avg = r->textures[tex].avg;
+    JSValue out = JS_NewArray(ctx);
+    for (int i = 0; i < 4; ++i) {
+        JS_SetPropertyUint32(ctx, out, (uint32_t)i,
+                             JS_NewFloat64(ctx, (double)avg[i]));
+    }
+    return out;
+}
+
 void r2d_render_register_js(JSContext *ctx, JSValue engine)
 {
     // Рендерер достаём из opaque контекста: r2d_render_register_js зовётся из
@@ -4261,6 +4333,8 @@ void r2d_render_register_js(JSContext *ctx, JSValue engine)
         // Свет для lightmap: свой список, свой проход, тот же формат вершин.
         r2d__js_set_fn(ctx, engine, "submitLightTriangles", r2d__js_submit_light_triangles, 3);
         r2d__js_set_fn(ctx, engine, "lightMap",             r2d__js_light_map, 3);
+        // Средний цвет спрайта/текстуры: нужен emissive-спрайтам для цвета 'auto'.
+        r2d__js_set_fn(ctx, engine, "textureAverageColor",  r2d__js_texture_average_color, 1);
         // Шейдер узла: JS ведёт таблицу эффектов на своей стороне, поэтому
         // запись в таблицу движка — явный вызов с индексом.
         r2d__js_set_fn(ctx, engine, "defineSpriteFx",  r2d__js_define_sprite_fx, 7);

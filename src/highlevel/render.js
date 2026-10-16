@@ -1024,7 +1024,19 @@ const light_warned = { shadows: false, rays: false, segments: false };
 const light_frame = {
     lights: 0, shadowLights: 0, culledLights: 0,
     degradedRays: 0, degradedSegments: 0, skipped: 0,
+    // Emission-спрайты (§task-28). Считаем их ОТДЕЛЬНО от <light>, но по тому
+    // же бюджету: emitters — сколько излучателей в кадре, emitterLights —
+    // сколько реально отдало свет, emitterDegraded — сколько осталось яркими
+    // без света (за лимитом). Молчаливого «свет пропал» быть не должно.
+    emitters: 0, emitterLights: 0, emitterDegraded: 0,
 };
+
+// Излучатели последнего кадра: узел, цвет, радиус, интенсивность, отдаёт ли
+// свет и почему нет. Публикуется через $.gfx.light.emitters().
+let emitters_frame = [];
+// Кеш цвета 'auto': узел → {sprite, color}. Пересчёт — только при смене
+// спрайта (другой кадр анимации), не каждый кадр.
+const emitter_auto_cache = new WeakMap();
 
 function lightWarnOnce(reason, message) {
     if (light_warned[reason]) return;
@@ -1796,6 +1808,171 @@ function lightShadowSlot(node, slot, cx, cy, radius, angles, src, segments, coun
     return dist;
 }
 
+// ---------------------------------------------------------------------------
+// Emission-спрайты: спрайт не только рисуется мимо освещения, но и САМ светит.
+//
+// Путь тот же, что у <light>: с включённым lightmap свет уходит в слой света
+// (lightLayerOf + pushGlow/pushLightFan), C копит его в текстуре света
+// аддитивно (R2D_BLEND_ADD), поэтому цвет эмиттера работает как цвет.
+// Бюджет — ОБЩИЙ: light_quality.maxShadowLights и light_frame, своих лимитов
+// рядом не заводим.
+// ---------------------------------------------------------------------------
+
+const EMITTER_DEFAULTS = {
+    color: 'auto',      // 'auto' — средний цвет пикселей спрайта (кешируется)
+    radius: 96,         // мировой радиус, px
+    intensity: 1,       // 0..2, как у <light>
+    shadows: false,     // геометрия тени у спрайта-излучателя обычно не нужна
+    bloom: false,       // кормить ли bloom-порог (яркость emissive ×2)
+    segments: 26,       // как attrs.segments у <light>
+    rings: 7,
+    falloff: 2,
+};
+
+/** Нормализовать описание эмиттера (без изменения входного объекта). */
+function normalizeEmitter(opts) {
+    const o = (opts && typeof opts === 'object') ? opts : {};
+    const num = (v, d) => (v === undefined || v === null || Number.isNaN(Number(v)) ? d : Number(v));
+    return {
+        color: o.color === undefined ? EMITTER_DEFAULTS.color : o.color,
+        radius: Math.max(0.5, num(o.radius, EMITTER_DEFAULTS.radius)),
+        intensity: Math.max(0, Math.min(2, num(o.intensity, EMITTER_DEFAULTS.intensity))),
+        shadows: o.shadows === true,
+        bloom: o.bloom === true,
+        segments: Math.max(6, Math.min(96, Math.round(num(o.segments, EMITTER_DEFAULTS.segments)))),
+        rings: Math.max(1, Math.min(16, Math.round(num(o.rings, EMITTER_DEFAULTS.rings)))),
+        falloff: num(o.falloff, EMITTER_DEFAULTS.falloff),
+    };
+}
+
+/**
+ * Цвет эмиттера. 'auto' — средний цвет пикселей спрайта, снятый ОДИН раз
+ * (`engine.textureAverageColor`, считается при создании текстуры) и
+ * закешированный на узле; пересчёт только при смене спрайта. В кадре — ноль
+ * работы на неизменившихся спрайтах.
+ */
+function emitterColorOf(node, spec) {
+    if (spec.color !== 'auto') return packColor(spec.color, 1);
+    const sprite = node.sprite >= 0 ? node.sprite : engine.whiteSprite;
+    let cached = emitter_auto_cache.get(node);
+    if (!cached || cached.sprite !== sprite) {
+        let color = null;
+        if (typeof engine.textureAverageColor === 'function' && sprite >= 0) {
+            // Сначала как спрайт, потом как текстуру: $.proc.toSprite отдаёт
+            // ТЕКСТУРУ, и её тоже рисуют как спрайт — без второй попытки у
+            // процедурного арта цвет 'auto' молча становился белым.
+            let c = engine.textureAverageColor(sprite, true);
+            if (!c || c.length < 4) c = engine.textureAverageColor(sprite, false);
+            if (c && c.length >= 4) {
+                color = packColor([Math.round(c[0]), Math.round(c[1]), Math.round(c[2]),
+                                   Math.round(c[3])], 1);
+            }
+        }
+        cached = { sprite, color };
+        emitter_auto_cache.set(node, cached);
+    }
+    return cached.color === null ? 0xffffffff : cached.color;   // нет пикселей — белый
+}
+
+/** Сколько непрозрачных пикселей дал спрайт — для честного 'auto' в отчёте. */
+function emitterAutoKnown(node, spec) {
+    if (spec.color !== 'auto') return true;
+    return emitterColorOf(node, spec) !== 0xffffffff;
+}
+
+/**
+ * Свет от спрайта-излучателя. Возвращает запись для $.gfx.light.emitters().
+ * За бюджетом свет НЕ отдаётся, но спрайт остаётся ярким (emissive-проход),
+ * и это видно в статистике — деградация, а не пропажа.
+ */
+function emitSpriteLight(node, t, cam) {
+    const spec = node.attrs && node.attrs.emitter;
+    if (!spec) return;
+    const power = node.alpha * spec.intensity;
+    const radius_world = Math.max(0.5, spec.radius);
+    const radius = Math.max(2, radius_world * cam.zoom);
+    const color = emitterColorOf(node, spec);
+    light_frame.emitters++;
+
+    let gives = power > 0.001;
+    let degraded = false;
+    if (gives && light_frame.emitterLights >= light_quality.maxShadowLights) {
+        gives = false;
+        degraded = true;
+        light_frame.emitterDegraded++;
+        lightWarnOnce('emitters', 'излучателей-спрайтов больше maxShadowLights='
+            + light_quality.maxShadowLights + ' — лишние светят только собой, на окружение '
+            + 'не отдают (числа: $.gfx.light.qualityReport())');
+    } else if (gives) {
+        light_frame.emitterLights++;
+    }
+
+    const record = {
+        node: node.id === undefined ? null : node.id,
+        // В движке цвет упакован как 0xAABBGGRR (engine.rgba(1,2,3,4) = 0x04030201),
+        // поэтому распаковываем именно в этом порядке — иначе в отчёте и тесте
+        // каналы путаются местами (проверено сверкой с engine.rgba).
+        color: [color & 255, (color >>> 8) & 255, (color >>> 16) & 255, (color >>> 24) & 255],
+        radius: radius_world,
+        intensity: spec.intensity,
+        shadows: spec.shadows,
+        bloom: spec.bloom,
+        auto_color: spec.color === 'auto',
+        auto_color_known: emitterAutoKnown(node, spec),
+        gives_light: gives,
+        degraded,
+    };
+    emitters_frame.push(record);
+    if (engine.devtools && typeof engine.devtools.light === 'function' && gives) {
+        // Тот же инспектор света, что у <light>: эмиттер видно в списке источников.
+        engine.devtools.light(t.x, t.y, radius_world, spec.intensity,
+                              spec.shadows && light_frame.shadowLights < light_quality.maxShadowLights,
+                              lightLayerOf(node));
+    }
+    // Выключенная карта света — не повод молчать: <light> в этом режиме
+    // рисует свет прямо в сцену, эмиттер обязан так же (иначе «спрайт не
+    // светит» — ровно то, на чём я и споткнулся живьём).
+    if (!gives) return;
+
+    // Как у <light>: с включённой картой света свет уходит в свой слой, без неё
+    // рисуется прямо в сцену (аддитивно). Раньше здесь слой ставился всегда, и
+    // при выключенной карте света эмиттер не светил вообще — поймано живьём.
+    const prev_layer = tri_layer_cur;
+    const prev_blend = tri_blend_cur;
+    if (lightmap_on) tri_layer_cur = lightLayerOf(node);
+
+    let shadows = spec.shadows;
+    if (shadows && light_frame.shadowLights >= light_quality.maxShadowLights) {
+        shadows = false;
+        light_frame.culledLights++;
+    } else if (shadows) {
+        light_frame.shadowLights++;
+    }
+
+    const curve = glowAlphaCurve({ falloff: spec.falloff, inner: 0 });
+    if (!shadows) {
+        pushGlow(t.x, t.y, radius, color, {
+            segments: spec.segments, rings: spec.rings, falloff: spec.falloff,
+            alphaAt: (k) => power * curve(k),
+        });
+    } else {
+        const angles = lightAnglesFor(node, false, node.angle, 0, 0, spec.segments);
+        const dist = lightDistScratch(angles.length);
+        lightSegmentsFor(node);
+        const near = lightCollectNear(node.x, node.y, radius_world, node._light_mask, node._light_own);
+        const world_dist = lightShadowSlot(node, 0, node.x, node.y, radius_world,
+                                           angles, node._light_own, light_cull, near, 1, 0);
+        for (let i = 0; i < angles.length; i++) {
+            dist[i] = Math.min(world_dist[i], radius_world) * cam.zoom;
+        }
+        pushLightFan(t.x, t.y, angles, dist, color, {
+            rings: spec.rings, falloff: spec.falloff, inner: 0, alpha: power, closed: true,
+        });
+    }
+    tri_blend_cur = prev_blend;
+    tri_layer_cur = prev_layer;
+}
+
 /** Свет: мягкое пятно либо веер с тенями и конусом. */
 function drawLightNode(node, t, cam) {
     const attrs = node.attrs || {};
@@ -2319,6 +2496,15 @@ const light_api = {
     dynamicSegments() { return light_dynamic.slice(); },
     /** Сколько областей изменений помнит движок теней (для тестов). */
     changeRegions() { return light_changes.length; },
+    /**
+     * Излучатели последнего кадра: `[{ node, color, radius, intensity, shadows,
+     * bloom, gives_light, degraded, auto_color, auto_color_known }]`.
+     *
+     * `gives_light: false` — спрайт светит только собой: либо выключен
+     * lightmap, либо кончился общий бюджет источников (`degraded: true`).
+     * Порядок — как в сцене. Список принадлежит кадру, копию можно держать.
+     */
+    emitters() { return emitters_frame.map((e) => Object.assign({}, e)); },
     /** Что произошло с лимитами в последнем кадре (для диагностики и тестов). */
     qualityReport() {
         return {
@@ -2328,7 +2514,11 @@ const light_api = {
             culledLights: light_frame.culledLights,
             degradedRays: light_frame.degradedRays,
             degradedSegments: light_frame.degradedSegments,
-            warned: { shadows: light_warned.shadows, rays: light_warned.rays, segments: light_warned.segments },
+            emitters: light_frame.emitters,
+            emitterLights: light_frame.emitterLights,
+            emitterDegraded: light_frame.emitterDegraded,
+            warned: { shadows: light_warned.shadows, rays: light_warned.rays,
+                      segments: light_warned.segments, emitters: light_warned.emitters },
         };
     },
     /** Сколько отрезков сейчас в реестре. */
@@ -2476,6 +2666,11 @@ const light_api = {
             culledLights: light_frame.culledLights,
             degradedRays: light_frame.degradedRays,
             degradedSegments: light_frame.degradedSegments,
+            // Emission-спрайты: сколько излучателей, сколько отдало свет и
+            // сколько деградировало по общему бюджету (см. $.gfx.light.emitters).
+            emitters: light_frame.emitters,
+            emitterLights: light_frame.emitterLights,
+            emitterDegraded: light_frame.emitterDegraded,
             indexAppended: light_stats.index_appended,
             indexRebuilt: light_stats.index_rebuilt,
             // Сколько отрезков реально прошло через индекс в этом кадре:
@@ -2507,6 +2702,10 @@ const light_api = {
         light_frame.degradedRays = 0;
         light_frame.degradedSegments = 0;
         light_frame.skipped = 0;
+        light_frame.emitters = 0;
+        light_frame.emitterLights = 0;
+        light_frame.emitterDegraded = 0;
+        if (emitters_frame.length) emitters_frame = [];
         return light_api;
     },
 };
@@ -2648,12 +2847,18 @@ function materialOf(node) {
     return null;
 }
 
-/** Есть ли в мире материалы, которым нужен проход после света (emissive). */
+/**
+ * Есть ли в мире материалы, которым нужен проход после света (emissive), либо
+ * emission-спрайты с `bloom: true` — им тот же проход нужен, чтобы перейти
+ * порог bloom (их спрайт рисуется аддитивно цветом эмиттера).
+ */
 function overlayMaterialsActive() {
     const list = sortedNodes();
     for (let i = 0; i < list.length; i++) {
-        const m = materialOf(list[i]);
+        const node = list[i];
+        const m = materialOf(node);
         if (m && m.emissive !== null && m.emissiveStrength > 0) return true;
+        if (node.attrs && node.attrs.emitter_bloom === true) return true;
     }
     return false;
 }
@@ -2748,13 +2953,22 @@ function drawEmissiveNodes(cam) {
     for (let i = 0; i < list.length; i++) {
         const node = list[i];
         const mat = materialOf(node);
-        if (!mat || mat.emissive === null || mat.emissiveStrength <= 0) continue;
+        const emitter = node.attrs ? node.attrs.emitter : null;
+        const emitter_bloom = !!(emitter && emitter.bloom);
+        const material_glow = !!(mat && mat.emissive !== null && mat.emissiveStrength > 0);
+        if (!material_glow && !emitter_bloom) continue;
         if (!node.visible || node.alpha <= 0) continue;
         // У залитых тегов (<rect>) своего спрайта нет: свечение рисуется белым
         // 1×1, как и сам прямоугольник.
         const sprite = node.sprite >= 0 ? node.sprite : engine.whiteSprite;
         const t = nodeTransform(node, cam);
-        const color = withAlpha(mat.emissive, mat.emissiveStrength * inheritedAlpha(node));
+        // Цвет: у материала — свой emissive; у emission-спрайта с bloom — цвет
+        // эмиттера на полной яркости, чтобы пиксель перешёл порог bloom
+        // (post_params.bloom_threshold, по умолчанию 0.75). Если есть и то и
+        // другое, побеждает материал: он задан явно.
+        const color = material_glow
+            ? withAlpha(mat.emissive, mat.emissiveStrength * inheritedAlpha(node))
+            : withAlpha(emitterColorOf(node, emitter), inheritedAlpha(node));
         pushSprite(sprite, t.x, t.y, t.w, t.h, node.angle, color, 'add');
     }
 }
@@ -3116,6 +3330,13 @@ function drawWorldNodeInner(node, cam) {
         break;
     }
     }
+    // Emission-спрайт: узел уже нарисован (в т.ч. emissive-проходом после
+    // света), а здесь он отдаёт свет окружению — тем же путём, что <light>.
+    // Вызов стоит ПОСЛЕ switch, потому что излучателем может быть и <rect>,
+    // и спрайт, и nine-slice: раньше стоял только в ветке спрайта, и на rect
+    // свет не появлялся вовсе (поймано живьём). Без attrs.emitter вызов
+    // ничего не делает — кадр прежний.
+    if (node.attrs.emitter) emitSpriteLight(node, t, cam);
 }
 
 /** Семейство шрифта узла: сам узел, ближайший предок или шрифт по умолчанию. */
@@ -4030,6 +4251,10 @@ export function installGfx($) {
             light_frame.degradedRays = 0;
             light_frame.degradedSegments = 0;
             light_frame.skipped = 0;
+            light_frame.emitters = 0;
+            light_frame.emitterLights = 0;
+            light_frame.emitterDegraded = 0;
+            if (emitters_frame.length) emitters_frame = [];
             // Таблица шейдеров узлов собирается заново: параметры (например,
             // фаза волны) меняются каждый кадр.
             fx_map.clear();
@@ -4270,6 +4495,45 @@ export function installGfx($) {
      * (api.js), и подменять его нельзя. Без аргумента — текущий слой (или слой
      * по умолчанию, см. `$.gfx.light.layer()`).
      */
+    /**
+     * Emission-спрайт: `.emissive({ color, radius, intensity, shadows, bloom })`.
+     *
+     * Спрайт не только рисуется мимо освещения (как `emissive` в материале), но
+     * и САМ светит на окружение — тем же путём, что `<light>`: с включённым
+     * lightmap его свет уходит в карту света. Параметры:
+     *
+     *   * `color` — `'auto'` (по умолчанию) берёт средний цвет пикселей спрайта
+     *     один раз и кеширует его на узле; либо явный цвет;
+     *   * `radius` — мировой радиус света, px (по умолчанию 96);
+     *   * `intensity` — 0…2, как у `<light>` (по умолчанию 1);
+     *   * `shadows` — считать ли препятствия (по умолчанию `false`: у
+     *     спрайта-излучателя теневая геометрия обычно не нужна);
+     *   * `bloom` — кормить ли bloom-порог: спрайт рисуется ярче (×2), чтобы
+     *     попасть в существующий bright-pass.
+     *
+     * `.emissive(false)` / `.emissive(null)` — выключить излучение (кадр
+     * возвращается к прежнему). Без аргумента — текущее описание или `null`.
+     *
+     * Это НЕ `.lit(false)`: `lit(false)` — «меня не освещают» (спрайт виден
+     * всегда, но никому не светит), emissive — «я свечусь и свечу».
+     */
+    def('emissive', function (opts) {
+        if (opts === undefined) {
+            if (!this.nodes.length) return null;
+            const spec = this.nodes[0].attrs.emitter;
+            return spec ? Object.assign({}, spec) : null;
+        }
+        const value = (opts === null || opts === false) ? null
+            : normalizeEmitter(opts === true ? {} : opts);
+        return this.eachNode((_, el) => {
+            const node = el;
+            node.attrs.emitter = value;
+            // Яркость спрайта: bloom-флаг кормит существующий порог (0.75),
+            // поэтому emissive-проход рисует его ярче. Материал не трогаем —
+            // узел без материала тоже должен светиться.
+            node.attrs.emitter_bloom = value ? value.bloom : false;
+        });
+    });
     def('lightLayer', function (bits) {
         if (bits === undefined) {
             return this.nodes.length ? (this.nodes[0].attrs.lightLayer >>> 0) : 0;
