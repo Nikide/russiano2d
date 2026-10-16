@@ -13,6 +13,12 @@ $.net.join('127.0.0.1', 7777);           // клиент: только ввод 
 $.net.on('join',  p => spawnPlayer(p));  // событие сервера
 $.net.on('leave', p => despawnPlayer(p));
 $.net.replicate('#hero', { owner: p });  // сервер объявляет репликацию
+
+Цель (`what`) у `replicate`, `unreplicate`, `ownerOf`, `idOf`, `owns`, `rewind` —
+`#id`, селектор, узел или обёртка. Промах селектора пишет ОДНО сообщение на пару
+«место + цель» (вызов в тике не заливает журнал), а возврат остаётся прежним:
+`replicate`/`unreplicate`/`ownerOf`/`idOf` → `0`, `owns` → `false`,
+`rewind` → `null`.
 $.net.send('input', { seq: 1, right: true });      // клиент → сервер
 $.net.on('input', (p, d) => applyInput(p, d));     // только на сервере
 $.net.on('snapshot', s => $.net.apply(s));         // клиент применяет правду

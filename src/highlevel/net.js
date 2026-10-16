@@ -30,7 +30,7 @@
 // ===========================================================================
 
 import { engine } from './native.js';
-import { ctx } from './core.js';
+import { ctx, query } from './core.js';
 
 // ---------------------------------------------------------------------------
 // Чистое ядро: сетевые идентификаторы
@@ -889,7 +889,7 @@ export function installNet($) {
          */
         rewind(what, now, delay) {
             if (role !== 'server' || !history) return null;
-            const node = nodeOf(what);
+            const node = nodeOf(what, 'net.rewind', 'верну null');
             if (!node) return null;
             const key = authority.ids.key(authority.ids.idOf(node));
             const d = delay === undefined ? api.latency() : Number(delay) || 0;
@@ -976,25 +976,34 @@ export function installNet($) {
 
         /** Сервер: объявить узел реплицируемым. */
         replicate(what, opts) {
-            const node = nodeOf(what);
-            if (!node) { ctx.log('$.net.replicate: узел не найден'); return 0; }
+            const node = nodeOf(what, 'net.replicate', 'верну 0');
+            if (!node) return 0;
             if (role !== 'server') { ctx.log('$.net.replicate: только сервер объявляет репликацию'); return 0; }
             return authority.replicate(node, opts);
         },
         /** Сервер: узел больше не реплицируется. */
         unreplicate(what) {
-            const node = nodeOf(what);
+            const node = nodeOf(what, 'net.unreplicate', 'верну 0');
             if (!node) return 0;
             return authority.unreplicate(node);
         },
         /** Чей узел: номер игрока или 0. */
-        ownerOf(what) { const node = nodeOf(what); return node ? authority.ownerOf(node) : 0; },
+        ownerOf(what) {
+            const node = nodeOf(what, 'net.ownerOf', 'верну 0');
+            return node ? authority.ownerOf(node) : 0;
+        },
         /** Может ли игрок управлять узлом. */
-        owns(player, what) { const node = nodeOf(what); return node ? authority.owns(player, node) : false; },
+        owns(player, what) {
+            const node = nodeOf(what, 'net.owns', 'верну false');
+            return node ? authority.owns(player, node) : false;
+        },
         /** Узлы игрока. */
         ownedBy(player) { return authority.ownedBy(player); },
         /** Сетевой id узла (0 — нет). */
-        idOf(what) { const node = nodeOf(what); return node ? authority.ids.idOf(node) : 0; },
+        idOf(what) {
+            const node = nodeOf(what, 'net.idOf', 'верну 0');
+            return node ? authority.ids.idOf(node) : 0;
+        },
         /** Узел по сетевому id. */
         nodeOfId(id) { return authority.ids.nodeOf(id); },
 
@@ -1182,12 +1191,39 @@ export function installNet($) {
     return api;
 }
 
-/** Узел по обёртке, узлу или селектору. */
-function nodeOf(what) {
+/**
+ * Промах цели — ОДИН раз на пару «место + цель» (правило task-46/47/48): ключ —
+ * СЫРАЯ цель, после успешного разрешения серия начинается заново. Раньше
+ * `$.net.replicate` писал на каждый вызов — тик в кадре заливал журнал.
+ */
+const net_missed = new Set();
+
+function missTarget(where, what, message) {
+    const key = where + ' ' + what;
+    if (net_missed.has(key)) return;
+    net_missed.add(key);
+    ctx.log(`$.${where}: ${message}`);
+}
+
+function targetResolved(where, what) { net_missed.delete(where + ' ' + what); }
+
+/**
+ * Узел по обёртке, узлу или селектору. Строка сначала ищется по id (прежнее
+ * поведение, `#` необязателен), затем обычным селектором: раньше `'.goblin'`
+ * молча не находился.
+ */
+function nodeOf(what, where, note) {
     if (!what) return null;
     if (typeof what === 'string') {
         const byId = ctx.byId;
-        return byId && byId.get ? (byId.get(String(what).replace(/^#/, '')) || null) : null;
+        const id = String(what).replace(/^#/, '');
+        const node = (byId && byId.get ? byId.get(id) : null) || query(what)[0] || null;
+        if (node) {
+            if (where) targetResolved(where, what);
+            return node;
+        }
+        if (where) missTarget(where, what, `узел "${what}" не найден${note ? ' — ' + note : ''}`);
+        return null;
     }
     if (what.nodes) return what.nodes[0] || null;
     return what.tag ? what : null;

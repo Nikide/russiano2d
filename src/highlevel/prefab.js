@@ -124,6 +124,20 @@ function ensureHooks() {
 
 function warn(message) { ctx.log('$.prefab: ' + message); }
 
+/**
+ * То же, но ОДИН раз на ключ (правило task-46/47/48): промах цели в кадре не
+ * должен заливать журнал. Ключ — сырая цель, а не текст сообщения.
+ */
+const warned_once = new Set();
+
+function warnOnce(key, message) {
+    if (warned_once.has(key)) return;
+    warned_once.add(key);
+    warn(message);
+}
+
+function targetResolved(key) { warned_once.delete(key); }
+
 function num(value, fallback) {
     return typeof value === 'number' && isFinite(value) ? value : fallback;
 }
@@ -356,12 +370,27 @@ function restoreArea(node, data) {
 // ---------------------------------------------------------------------------
 
 /** Родитель для load/instantiate: узел, обёртка, селектор или мир (null). */
-export function resolveParent(parent) {
+export function resolveParent(parent, where) {
     if (parent === undefined || parent === null) return null;
     if (parent === ctx.world) return null;
-    if (parent instanceof Wrapper) return parent.nodes[0] || null;
+    if (parent instanceof Wrapper) {
+        const node = parent.nodes[0] || null;
+        if (!node && where) warnOnce(where + ' (пустая обёртка)', `${where}: обёртка пуста — беру мир`);
+        return node;
+    }
     if (parent instanceof Node || (parent && parent.tag)) return parent;
-    if (typeof parent === 'string') return query(parent)[0] || null;
+    if (typeof parent === 'string') {
+        const node = query(parent)[0] || null;
+        if (node) {
+            if (where) targetResolved(where + ' ' + parent);
+            return node;
+        }
+        if (where) {
+            warnOnce(where + ' ' + parent,
+                     `${where}: селектор "${parent}" ни к чему не подошёл — беру мир`);
+        }
+        return null;
+    }
     return null;
 }
 
@@ -643,7 +672,10 @@ export function installPrefab($) {
         save(nodeOrSelector) {
             ensureHooks();
             const nodes = resolveNodes(nodeOrSelector);
-            if (nodes.length === 0) { warn('save: узел не найден'); return null; }
+            if (nodes.length === 0) {
+                warnOnce('prefab.save ' + String(nodeOrSelector), 'save: узел не найден');
+                return null;
+            }
             if (nodes.length === 1) return nodeToData(nodes[0]);
             return nodes.map(nodeToData);
         },
@@ -652,7 +684,7 @@ export function installPrefab($) {
         load(data, parent) {
             ensureHooks();
             if (data instanceof Node || data instanceof Wrapper) data = toDataArg(data);
-            const target = resolveParent(parent);
+            const target = resolveParent(parent, 'load');
             if (Array.isArray(data)) return wrap(data.map((d) => loadOne(d, target)).filter(Boolean));
             const node = loadOne(data, target);
             return node ? wrapOne(node) : wrap([]);
@@ -676,7 +708,7 @@ export function installPrefab($) {
             const list = Array.isArray(resolved) ? resolved : [resolved];
 
             const count = Math.max(1, Math.floor(num(o.count, 1)));
-            const parent = resolveParent(o.parent);
+            const parent = resolveParent(o.parent, 'instantiate');
             const roots = [];
             for (let i = 0; i < count; i++) {
                 // Копию делаем всегда, включая первую: иначе uniquifyIds()
@@ -885,7 +917,10 @@ function installNodeMethods($) {
 
     def('savePrefab', function (name) {
         const node = this.nodes[0];
-        if (!node) { warn('savePrefab: узел не найден'); return this; }
+        if (!node) {
+            warnOnce('prefab.savePrefab (пустая обёртка)', 'savePrefab: узел не найден — пустая обёртка');
+            return this;
+        }
         $.prefab.register(name, nodeToData(node));
         return this;
     });

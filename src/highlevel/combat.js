@@ -541,17 +541,43 @@ export function installCombat($) {
     /** §9: атаки этой сессии — identity и журнал попаданий. */
     const state = { next_id: 1, attacks: new Map(), nodes: new Map() };
 
-    function nodeOf(what) {
+    /**
+     * Промах цели — ОДИН раз на пару «место + цель» (правило task-46/47/48):
+     * ключ — СЫРАЯ цель, после успешного разрешения серия начинается заново.
+     * Раньше `$.combat.attach` писал на КАЖДЫЙ вызов — вызов в кадре заливал
+     * журнал (та же болезнь, что была у `$.task`).
+     */
+    const combat_missed = new Set();
+
+    function missTarget(where, what, message) {
+        const key = where + ' ' + what;
+        if (combat_missed.has(key)) return;
+        combat_missed.add(key);
+        ctx.log(`$.${where}: ${message}`);
+    }
+
+    function targetResolved(where, what) { combat_missed.delete(where + ' ' + what); }
+
+    /** Узел по обёртке, узлу или селектору; `where` — место для сообщения. */
+    function nodeOf(what, where, note) {
         if (!what) return null;
-        if (typeof what === 'string') return query(what)[0] || null;
+        if (typeof what === 'string') {
+            const node = query(what)[0] || null;
+            if (node) {
+                if (where) targetResolved(where, what);
+                return node;
+            }
+            if (where) missTarget(where, what, `узел "${what}" не найден${note ? ' — ' + note : ''}`);
+            return null;
+        }
         if (what.nodes) return what.nodes[0] || null;
         return what.tag ? what : null;
     }
 
     /** События модели ведут к полоске здоровья узла и его смерти. */
     function attach(what, opts) {
-        const node = nodeOf(what);
-        if (!node) { ctx.log('$.combat.attach: узел не найден'); return null; }
+        const node = nodeOf(what, 'combat.attach', 'верну null');
+        if (!node) return null;
         if (models.has(node)) return models.get(node);
         const spec = opts || {};
 
@@ -585,7 +611,9 @@ export function installCombat($) {
         /** Модель здоровья по узлу, обёртке или селектору. */
         health(what) {
             if (what === undefined) return createHealth();
-            const node = nodeOf(what);
+            // Узел найден, а модели нет — это законный ответ (null) и молчание;
+            // сообщение только про промах цели.
+            const node = nodeOf(what, 'combat.health', 'верну null');
             return node ? (models.get(node) || null) : null;
         },
 
@@ -597,7 +625,7 @@ export function installCombat($) {
 
         /** Отвязать (смерть, выход со сцены). */
         detach(what) {
-            const node = nodeOf(what);
+            const node = nodeOf(what, 'combat.detach', 'верну false');
             return node ? models.delete(node) : false;
         },
 
@@ -620,7 +648,7 @@ export function installCombat($) {
          * `opts.tick` — сколько секунд крови отсчитать сразу (обычно 0).
          */
         hit(what, weaponDamage, slot, opts) {
-            const node = nodeOf(what);
+            const node = nodeOf(what, 'combat.hit', 'верну null');
             if (!node) return null;
             const health = models.get(node) || attach(node);
             const spec = opts || {};
