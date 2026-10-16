@@ -15,7 +15,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
-from agent_client import Agent   # noqa: E402
+from agent_client import Agent, ROOT   # noqa: E402
 
 GAME = os.path.join("tests", "fixtures", "within")
 FAILURES = []
@@ -92,6 +92,82 @@ def main():
               "свободные каналы в панель не попадают (панель читается целиком)")
         check(len(panel_channels) < 8192,
               "payload блока каналов влезает в буфер getText (%d символов)" % len(panel_channels))
+
+        # --- Живые каналы: панель обязана показывать то же, что API ----------
+        # Занимаем каналы реально звучащим файлом фикстуры: до этого проверялась
+        # форма итога на пустом пуле, и построчные строки были пусты.
+        hit = os.path.join(ROOT, "tests", "fixtures", "lifecycle", "assets", "hit.wav")
+        # $.sound.play(путь, …) сам подгружает файл при первом обращении
+        # (engine.audio.load внутри soundId), отдельного load() у $.sound нет.
+        played = a.eval("""(function(){
+            var ids = [];
+            for (var i = 0; i < 3; ++i) {
+                ids.push($.sound.play(%r, { volume: 0.5 + 0.1 * i, pan: -0.5 + 0.5 * i,
+                                            pitch: 1 + 0.1 * i, priority: 10 + i, loop: true }));
+            }
+            return ids;
+        })()""" % hit)
+        a.step(6)
+        busy_live = a.eval("$.sound.busy()")
+        check(busy_live["active"] >= 3,
+              "три звука реально заняли каналы (active=%s, всего %s)"
+              % (busy_live["active"], busy_live["total"]))
+        check(len([x for x in played if x is not None and x >= 0]) == 3,
+              "play() вернул id каналов (%s)" % played)
+        panel_ch = ui(a, doc, "rt-audio-channels")
+        head = panel_ch.split("\n")[0]
+        check(head.startswith("занято %d из %d" % (busy_live["active"], busy_live["total"])),
+              "итог = $.sound.busy().active (%r)" % head)
+        rows = [r for r in panel_ch.split("\n")[1:] if r.strip()]
+        check(len(rows) == min(busy_live["active"], 8),
+              "построчных строк ровно min(занятых, 8): %d" % len(rows))
+        ch_api = [c for c in a.eval("$.devtools.audio()")["channels"] if c["playing"]]
+        check(len(ch_api) >= 1, "audio().channels отдаёт занятые каналы (%d)" % len(ch_api))
+        first = ch_api[0]
+        check(("канал %d: играет" % first["index"]) in panel_ch,
+              "строка первого занятого канала в панели (канал %d)" % first["index"])
+        check(abs(first["volume"] - 0.5) < 0.05 or abs(first["volume"] - 0.6) < 0.05
+              or abs(first["volume"] - 0.7) < 0.05,
+              "громкость занятого канала из API = заданной (%.2f)" % first["volume"])
+
+        # --- Граница компактности: занятых больше, чем строк ------------------
+        a.eval("""(function(){
+            for (var i = 0; i < 9; ++i) {
+                $.sound.play(%r, { volume: 0.3, priority: 1, loop: true });
+            }
+        })()""" % hit)
+        a.step(6)
+        busy9 = a.eval("$.sound.busy()")
+        panel9 = ui(a, doc, "rt-audio-channels")
+        rows9 = [r for r in panel9.split("\n")[1:] if r.strip()]
+        check(busy9["active"] >= 9, "занято 9+ каналов (active=%s)" % busy9["active"])
+        check(rows9 and len(rows9) <= 8, "строк всё равно не больше 8 (%d)" % len(rows9))
+        check(panel9.split("\n")[0].startswith("занято %d из %d" % (busy9["active"], busy9["total"])),
+              "итог показывает реальное число занятых, а не число строк (%r)"
+              % panel9.split("\n")[0])
+
+        # --- 100+ занятых: блок обязан влезать в буфер getText ----------------
+        a.eval("""(function(){
+            for (var i = 0; i < 128; ++i) {
+                $.sound.play(%r, { volume: 0.2, priority: 2, loop: true });
+            }
+        })()""" % hit)
+        a.step(8)
+        busy_many = a.eval("$.sound.busy()")
+        panel_many = ui(a, doc, "rt-audio-channels")
+        print("       занято %s из %s, блок каналов %d символов"
+              % (busy_many["active"], busy_many["total"], len(panel_many)))
+        check(busy_many["active"] >= 100,
+              "занято 100+ каналов (active=%s)" % busy_many["active"])
+        check(panel_many.split("\n")[0].startswith("занято %d из %d"
+                                                   % (busy_many["active"], busy_many["total"])),
+              "итог верен и при 100+ занятых (%r)" % panel_many.split("\n")[0])
+        check(len(panel_many) < 8192,
+              "блок влезает в буфер getText при 100+ занятых (%d символов)" % len(panel_many))
+        check(len(panel_many.split("\n")) - 1 <= 8,
+              "строк не больше 8 и при 100+ занятых")
+        a.eval("$.sound.stopAll ? $.sound.stopAll() : null")
+        a.step(4)
 
         # mute шины через API и кнопку панели
         check(a.eval("$.devtools.audioBus('mute', 'sfx-test', true)") is True,
