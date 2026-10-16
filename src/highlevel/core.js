@@ -17,6 +17,7 @@
 // импорты — иначе получилось бы кольцо импортов (мир знает про узлы, узлы про
 // мир, камера про мир и так далее).
 import { engine } from './native.js';
+import { report as diagReport } from './diag.js';
 export const ctx = {
     $: null,
     nodes: [],          // все живые узлы мира, в порядке создания
@@ -1667,6 +1668,28 @@ export class Node {
             this.attrs.src = value;
             if (TAGS[this.tag] && 'sprite' in TAGS[this.tag]) this.setSprite(value);
             return this;
+        case 'density': case 'friction': case 'restitution': {
+            // Box2D читает эти числа один раз — при создании тела. Раньше смена
+            // после .body() молча ничего не делала: игра думала, что поменяла
+            // трение, а физика жила со старым. Теперь расхождение видно в
+            // диагностике (и его можно поймать тестом), а значение остаётся в
+            // attrs — его прочитает пересоздание тела.
+            const was = this.attrs[key];
+            this.attrs[key] = value;
+            if (was !== value && this.body >= 0 && value !== undefined && value !== null) {
+                diagReport('$.attr', new Error(
+                    `$.attr('${key}') после создания тела не меняет физику: ` +
+                    'Box2D читает это число один раз, при создании тела'), {
+                    code: 'R2D_ATTR_AFTER_BODY',
+                    subsystem: 'physics',
+                    operation: 'attr',
+                    nodeId: this.id,
+                    recoverable: true,
+                    data: { attr: key, value, body: this.body },
+                });
+            }
+            return this;
+        }
         default:
             // Признаки, от которых зависят сводки подсистем (зоны, ui-узлы),
             // можно сменить и через .attr(): отмечаем реестр изменённым, иначе
