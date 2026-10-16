@@ -26,7 +26,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: debug-55-${{ github.ref }}-${{ inputs.ref }}
+  group: debug-55-${{ github.run_id }}
   cancel-in-progress: true
 jobs:
   repro:
@@ -144,6 +144,22 @@ jobs:
             echo "код: $?"
             tail -12 /tmp/d_$drv.log
           done
+      - name: Диагностика E — гейт обязан краснеть на подделанном эталоне
+        # Проверка требования «обход не скрывает падения»: подкладываем в снимок
+        # заморозки несуществующее имя и убеждаемся, что гейт падает. Если он
+        # остаётся зелёным — значит проверка стала пустой и обход что-то прячет.
+        if: always()
+        run: |
+          set +e
+          cp tests/api_freeze_baseline.txt /tmp/baseline.bak
+          echo "  $.no_such_engine_name_for_task55_probe" >> tests/api_freeze_baseline.txt
+          echo "── E. подделанный эталон (добавлено 1 имя)"
+          R2D_BINARY=build-dbg/russiano2d SDL_VIDEODRIVER=offscreen \
+            timeout 300 python3 tests/api_freeze_test.py > /tmp/e_gate.log 2>&1
+          code=$?
+          cp /tmp/baseline.bak tests/api_freeze_baseline.txt
+          echo "код: $code (ожидается 1 — гейт увидел лишнее имя)"
+          grep -m4 -E "FAIL|no_such_engine_name|ПРОВАЛ" /tmp/e_gate.log | head -4
       - name: Отчёты санитайзеров
         if: always()
         run: |
