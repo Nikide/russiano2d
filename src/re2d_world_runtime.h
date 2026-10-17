@@ -42,10 +42,15 @@ enum { R2D_WORLD_FRAME_ROTSPRITE = 0, R2D_WORLD_FRAME_ATLAS = 1, R2D_WORLD_FRAME
 // reference, not node lifetime. bottom/top are offsets from node.depth so a
 // moving actor needs no per-move native update; coordinates are read at trace
 // time, not every frame.
+#define R2D_WORLD_HIT_ZONES 4
+typedef struct { float from,to,multiplier; } R2DWorldHitZone;
 typedef struct R2DWorldHitEntry {
     JSValue node;
     float radius,bottom_offset,top_offset;
     int category;
+    // P3 multi-zone boss hit proxy: normalized height bands inside the cylinder.
+    R2DWorldHitZone zones[R2D_WORLD_HIT_ZONES];
+    int zone_count;
 } R2DWorldHitEntry;
 #define R2D_WORLD_MOVER_LIMIT 128
 #define R2D_WORLD_TRIGGER_LIMIT 256
@@ -178,6 +183,8 @@ bool r2d_world_atlas_unregister(JSContext *,R2DWorldRuntime *,JSValueConst);
 // Actor hit proxies for unified world+actor trace (P0-B). Not a physics body.
 bool r2d_world_hit_register(JSContext *,R2DWorldRuntime *,JSValueConst,float radius,float bottom,float top,int category);
 bool r2d_world_hit_unregister(JSContext *,R2DWorldRuntime *,JSValueConst);
+bool r2d_world_hit_zones(R2DWorldRuntime *,JSValueConst,const R2DWorldHitZone *,int);
+void r2d_world_hit_zone_info(const R2DWorldHitEntry *,float h,int *zone,float *multiplier);
 // 1 = hit, 0 = nothing, -1 = invalid input/exception.
 int r2d_world_trace_query(JSContext *,R2DWorldRuntime *,const float from[3],const float to[3],int mask,int ignore_node,R2DWorldTraceResult *);
 int r2d_world_trace_query_all(JSContext *,R2DWorldRuntime *,const float from[3],const float to[3],int mask,int ignore_node,R2DWorldTraceResult *out,int capacity);

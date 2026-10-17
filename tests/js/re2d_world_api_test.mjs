@@ -9,7 +9,7 @@
 //   build/_deps/quickjs-build/qjs tests/js/re2d_world_api_test.mjs
 // ===========================================================================
 
-import { test, eq, truthy, falsy, finish } from './_harness.mjs';
+import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
 import { createApi } from '../../src/highlevel/api.js';
 
 const calls = { atlasAdd: [], atlasRemove: [], actorAdd: [], actorRemove: [],
@@ -27,11 +27,12 @@ const native = {
     actorAdd: (node) => calls.actorAdd.push(node),
     actorRemove: (node) => calls.actorRemove.push(node),
     hitAdd: (...args) => calls.hitAdd.push(args),
+    hitZones: (node, zones) => calls.hitAdd.push(['zones', Array.from(zones)]),
     hitRemove: (node) => calls.hitRemove.push(node),
     trace: (...args) => {
         calls.trace.push(args);
         return { type: 2, fraction: 0.5, proxy: 0, node: 0, x: 1, y: 2, h: 3,
-                 surface: -1, span: 1, normalX: 0, normalY: -1 };
+                 surface: -1, span: 1, normalX: 0, normalY: -1, zone: 1, zoneMultiplier: 2.5 };
     },
     traceAll: (...args) => {
         calls.traceAll.push(args);
@@ -215,6 +216,19 @@ test('world.trace передаёт mask/ignore и возвращает узел 
     eq(hit.type, 2);
     eq(hit.node, enemy.get(0));
     eq(hit.proxy, 0);
+    eq(hit.zone, 1); eq(hit.zoneMultiplier, 2.5);
+    world.dispose();
+});
+
+test('world.hit zones: head/body bands уходят в native hitZones', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const boss = spawn('boss');
+    world.hit(boss, { radius: 60, height: 180, category: 'enemy', zones: [
+        { from: 0, to: .45, multiplier: 1 }, { from: .45, to: .8, multiplier: 2 },
+        { from: .8, to: 1, multiplier: 4 }] });
+    const zonesCall = calls.hitAdd.find(r => r[0] === 'zones');
+    eq(zonesCall[1].length, 9);
+    near(zonesCall[1][3], .45, 1e-5); near(zonesCall[1][6], .8, 1e-5); eq(zonesCall[1][8], 4);
     world.dispose();
 });
 

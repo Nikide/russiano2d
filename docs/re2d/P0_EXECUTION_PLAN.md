@@ -86,3 +86,14 @@
 | mirror/sky/link portals | math core done, renderer next | `r2d_world_portal_visual_test` (11) |
 | postprocess / color grade | next | — |
 | box impostor / slice-stack rendering | next | — |
+
+## P3 progress
+
+| Item | Status |
+|---|---|
+| multi-zone boss hit proxies | done: `world.hit({zones})`, trace zone/multiplier |
+| breakables + event | done (P1 core + runtime) |
+| conveyors | data + `conveyorAt`; controller applies game-side |
+| rotating polywalls | math core (`r2d_world_polywall_test`), runtime integration next |
+| polygon cells | authoring core (`r2d_world_polygon_test`), compiler rect-tiling next |
+

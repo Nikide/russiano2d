@@ -174,6 +174,19 @@ export default function install($) {
             player: world.spawn('player.start'), missing: world.spawn('nope'),
         }),
         particlesClear: () => world.particles.clear(),
+        bossProbe: () => {
+            if (world._bossNode) { world.remove(world._bossNode); world._bossNode.remove(); world._bossNode = null; }
+            const node = $('<sprite>', { id: 'lab-boss' }).at(800, 900).depth(0).size(150, 150).angle(-Math.PI / 2).hide().appendTo($.world);
+            world.hit(node, { radius: 55, height: 150, category: 'enemy', zones: [
+                { from: 0, to: .45, multiplier: 1 },
+                { from: .45, to: .8, multiplier: 2 },
+                { from: .8, to: 1, multiplier: 4 }] });
+            world._bossNode = node;
+            const head = world.trace({ from: { x: view.x, y: view.y, h: view.h }, to: { x: 800, y: 900, h: 140 }, mask: ['enemy'] });
+            const legs = world.trace({ from: { x: view.x, y: view.y, h: view.h }, to: { x: 800, y: 900, h: 20 }, mask: ['enemy'] });
+            return { head: head && { zone: head.zone, mult: head.zoneMultiplier },
+                     legs: legs && { zone: legs.zone, mult: legs.zoneMultiplier } };
+        },
         volumeProbe: () => {
             if (world._volume) { world._volume.remove(); world._volume = null; return {closed: true}; }
             const node = $('<sprite>', { id: 'lab-crate' })

@@ -367,7 +367,32 @@ bool r2d_world_hit_register(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node,
     if(w->hit_count==w->hit_capacity){int n=w->hit_capacity?w->hit_capacity*2:16;R2DWorldHitEntry *p=realloc(w->hit_entries,(size_t)n*sizeof *p);if(!p){JS_ThrowOutOfMemory(ctx);return false;}w->hit_entries=p;w->hit_capacity=n;}
     R2DWorldHitEntry *e=&w->hit_entries[w->hit_count++];
     e->node=JS_DupValue(ctx,node);e->radius=radius;e->bottom_offset=bottom;e->top_offset=top;e->category=category;
+    e->zone_count=0;
     return true;
+}
+bool r2d_world_hit_zones(R2DWorldRuntime *w,JSValueConst node,const R2DWorldHitZone *zones,int count)
+{
+    if(w->rendering||!zones||count<0||count>R2D_WORLD_HIT_ZONES)return false;
+    for(int i=0;i<w->hit_count;i++)if(same(node,w->hit_entries[i].node)){
+        R2DWorldHitEntry *e=&w->hit_entries[i];
+        for(int z=0;z<count;z++){
+            const R2DWorldHitZone *zone=&zones[z];
+            if(!isfinite(zone->from)||!isfinite(zone->to)||!isfinite(zone->multiplier)||
+               zone->from<0||zone->to>1||zone->to<=zone->from||zone->multiplier<0)return false;
+        }
+        for(int z=0;z<count;z++)e->zones[z]=zones[z];
+        e->zone_count=count;return true;
+    }
+    return false;
+}
+void r2d_world_hit_zone_info(const R2DWorldHitEntry *e,float h,int *zone,float *multiplier)
+{
+    *zone=-1;*multiplier=1.0f;
+    if(!e||e->zone_count<=0)return;
+    const float bottom=e->bottom_offset,top=e->top_offset,span=top-bottom;
+    if(!(span>0))return;
+    const float t=(h-bottom)/span;
+    for(int i=0;i<e->zone_count;i++)if(t>=e->zones[i].from&&t<=e->zones[i].to){*zone=i;*multiplier=e->zones[i].multiplier;return;}
 }
 bool r2d_world_hit_unregister(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node)
 {

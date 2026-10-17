@@ -22,6 +22,7 @@ $.render(() => world.render(view,400,240));
 | `world.add(target)` / `.remove(target)` | регистрирует/снимает Re2DSprite roots; add повторно того же узла не дублирует его |
 | `world.sprite(target, opts)` | регистрирует обычный узел как flat directional atlas sprite; см. раздел ниже |
 | `world.hit(target, opts)` / `world.hitRemove(target)` | регистрирует/снимает actor hit proxy для trace (P0-B) |
+| `world.hit(target, {zones})` | multi-zone boss hit proxy: head/body bands и damage multiplier |
 | `world.trace(opts)` / `world.traceAll(opts)` | ближайшее попадание / все попадания мира и actor-прокси |
 | `world.findCell/findWall/findSpan/findPortal(name)` | authored semantic ID → runtime handle (или null) |
 | `world.portalOpen(index, fraction)` / `portalFraction(index)` | плавное состояние портала 0..1 |
@@ -472,6 +473,25 @@ tint (lightning/exposure-lite) в worldStep; `skyAnimInfo` отдаёт yaw/phas
 start; переходы между зонами (камера в разных span) дают authored blend без
 нового renderer-прохода. Ограничения: multi-layer sky и sky portal как
 отдельный render pass — следующий шаг; fog не volumetric raymarching.
+
+## Multi-zone boss hit proxies (P3)
+
+```js
+world.hit(bossNode, { radius: 60, height: 180, category: 'enemy', zones: [
+  { from: 0,   to: .45, multiplier: 1 },   // legs
+  { from: .45, to: .8,  multiplier: 2 },   // body
+  { from: .8,  to: 1,   multiplier: 4 },   // head
+]});
+const hit = world.trace({ from, to, mask: ['enemy'] });
+hit.zone;            // 0..2 или -1
+hit.zoneMultiplier;  // 4 для головы
+```
+
+Зоны — нормализованные height-полосы внутри того же цилиндра, не отдельные
+хитбоксы: trace режет по authored `from/to`, возвращает зону и множитель.
+Максимум 4 зоны, `from<to` в 0..1, multiplier ≥ 0; невалидные полосы
+отклоняются без изменения registry. Ограничения: зоны вертикальные
+(горизонтальные/руки-сегменты — P3+); множитель применяет игра, не engine.
 
 ## Свет, материал, изменение мира
 

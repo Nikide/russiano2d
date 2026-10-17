@@ -731,6 +731,15 @@ function rendererWorldWrapper($, native) {
                 throw new RangeError('world.hit: radius >= 0 and top > bottom');
             const raw = rawOf(node);
             native.hitAdd(raw, radius, bottom, top, category);
+            if (Array.isArray(options.zones) && options.zones.length) {
+                const zones = new Float32Array(options.zones.length * 3);
+                options.zones.forEach((zone, index) => {
+                    zones[index * 3] = Number(zone.from ?? 0);
+                    zones[index * 3 + 1] = Number(zone.to ?? 1);
+                    zones[index * 3 + 2] = Number(zone.multiplier ?? 1);
+                });
+                native.hitZones(raw, zones);
+            }
             hitNodes.push(raw);
             if (typeof $(raw).on === 'function') $(raw).on('remove', () => {
                 const index = hitNodes.indexOf(raw);

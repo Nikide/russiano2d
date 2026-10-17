@@ -259,6 +259,11 @@ def main():
         check(changed_post > 1000, f"postprocess меняет итоговый 2D-кадр ({changed_post} px)")
         a.eval("boomerLab.postReset()")
 
+        boss = a.eval("JSON.stringify(boomerLab.bossProbe())")
+        check(boss is not None and '"zone":2' in boss and '"mult":4' in boss
+              and '"zone":0' in boss and '"mult":1' in boss,
+              f"multi-zone boss hit proxy: {boss}")
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 

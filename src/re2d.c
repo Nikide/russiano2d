@@ -576,7 +576,7 @@ static JSValue world_actor_remove(JSContext *ctx,JSValueConst self,int argc,JSVa
     if(argc<1)return JS_ThrowTypeError(ctx,"Re2D World: actorRemove(node)");
     return r2d_world_actor_unregister(ctx,w,argv[0])?JS_UNDEFINED:JS_EXCEPTION;
 }
-static JSValue trace_result_object(JSContext *ctx,const R2DWorldTraceResult *h)
+static JSValue trace_result_object(JSContext *ctx,const R2DWorldTraceResult *h,WorldHandle *w)
 {
     JSValue o=JS_NewObject(ctx);
     set_num(ctx,o,"type",h->type);set_num(ctx,o,"fraction",h->fraction);
@@ -584,6 +584,10 @@ static JSValue trace_result_object(JSContext *ctx,const R2DWorldTraceResult *h)
     set_num(ctx,o,"surface",h->surface);set_num(ctx,o,"span",h->span);
     set_num(ctx,o,"proxy",h->proxy);set_num(ctx,o,"node",h->node);
     set_num(ctx,o,"normalX",h->nx);set_num(ctx,o,"normalY",h->ny);
+    if(h->type==R2D_WORLD_TRACE_SPRITE&&w&&h->node>=0&&h->node<w->hit_count){
+        int zone=-1;float multiplier=1;r2d_world_hit_zone_info(&w->hit_entries[h->node],h->h,&zone,&multiplier);
+        set_num(ctx,o,"zone",zone);set_num(ctx,o,"zoneMultiplier",multiplier);
+    }else{set_num(ctx,o,"zone",-1);set_num(ctx,o,"zoneMultiplier",1);}
     return o;
 }
 static JSValue world_hit_add(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
@@ -592,6 +596,20 @@ static JSValue world_hit_add(JSContext *ctx,JSValueConst self,int argc,JSValueCo
     if(argc<5)return JS_ThrowTypeError(ctx,"Re2D World: hitAdd(node,radius,bottom,top,category)");
     float p[4];if(!world_numbers(ctx,argc-1,argv+1,4,p))return JS_EXCEPTION;
     return r2d_world_hit_register(ctx,w,argv[0],p[0],p[1],p[2],(int)p[3])?JS_UNDEFINED:JS_EXCEPTION;
+}
+static JSValue world_hit_zones(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<2||JS_GetTypedArrayType(argv[1])!=JS_TYPED_ARRAY_FLOAT32)
+        return JS_ThrowTypeError(ctx,"Re2D World: hitZones(node, Float32Array)");
+    float *values=NULL;size_t count=0;JSValue ab=f32_view(ctx,argv[1],&values,&count);
+    if(JS_IsException(ab))return JS_EXCEPTION;
+    if(count%3!=0||count/3>R2D_WORLD_HIT_ZONES){JS_FreeValue(ctx,ab);return JS_ThrowRangeError(ctx,"Re2D World: hitZones needs up to 4 (from,to,multiplier) triples");}
+    R2DWorldHitZone zones[R2D_WORLD_HIT_ZONES];
+    for(size_t i=0;i<count/3;i++){zones[i].from=values[i*3];zones[i].to=values[i*3+1];zones[i].multiplier=values[i*3+2];}
+    bool ok=r2d_world_hit_zones(w,argv[0],zones,(int)(count/3));
+    JS_FreeValue(ctx,ab);
+    return ok?JS_UNDEFINED:JS_ThrowRangeError(ctx,"Re2D World: hitZones needs a registered node with valid bands");
 }
 static JSValue world_hit_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -607,7 +625,7 @@ static JSValue world_trace(JSContext *ctx,JSValueConst self,int argc,JSValueCons
     int found=r2d_world_trace_query(ctx,w,from,to,(int)p[6],(int)p[7],&hit);
     if(found<0)return JS_EXCEPTION;
     if(!found)return JS_NULL;
-    return trace_result_object(ctx,&hit);
+    return trace_result_object(ctx,&hit,w);
 }
 static JSValue world_trace_all(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -621,7 +639,7 @@ static JSValue world_trace_all(JSContext *ctx,JSValueConst self,int argc,JSValue
     if(!hits)return JS_ThrowOutOfMemory(ctx);
     int written=r2d_world_trace_query_all(ctx,w,from,to,(int)p[6],(int)p[7],hits,count);
     if(written<0){free(hits);return JS_EXCEPTION;}
-    for(int i=0;i<written;i++)JS_SetPropertyUint32(ctx,array,(uint32_t)i,trace_result_object(ctx,&hits[i]));
+    for(int i=0;i<written;i++)JS_SetPropertyUint32(ctx,array,(uint32_t)i,trace_result_object(ctx,&hits[i],w));
     free(hits);return array;
 }
 static JSValue world_portal_open(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
@@ -1430,6 +1448,7 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"audioInfo",JS_NewCFunction(ctx,world_audio_info,"audioInfo",1));
     JS_SetPropertyStr(ctx,handle,"audioRemove",JS_NewCFunction(ctx,world_audio_remove,"audioRemove",1));
     JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",17));
+    JS_SetPropertyStr(ctx,handle,"hitZones",JS_NewCFunction(ctx,world_hit_zones,"hitZones",2));
     JS_SetPropertyStr(ctx,handle,"hitAdd",JS_NewCFunction(ctx,world_hit_add,"hitAdd",5));
     JS_SetPropertyStr(ctx,handle,"skyAnim",JS_NewCFunction(ctx,world_sky_anim,"skyAnim",4));
     JS_SetPropertyStr(ctx,handle,"skyAnimInfo",JS_NewCFunction(ctx,world_sky_anim_info,"skyAnimInfo",0));
