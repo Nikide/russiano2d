@@ -24,6 +24,7 @@ $.render(() => world.render(view,400,240));
 | `world.hit(target, opts)` / `world.hitRemove(target)` | регистрирует/снимает actor hit proxy для trace (P0-B) |
 | `world.trace(opts)` / `world.traceAll(opts)` | ближайшее попадание / все попадания мира и actor-прокси |
 | `world.findCell/findWall/findSpan/findPortal(name)` | authored semantic ID → runtime handle (или null) |
+| `world.portalOpen(index, fraction)` / `portalFraction(index)` | плавное состояние портала 0..1 |
 | `world.findSurface(name)` | имя стены/span → handle поверхности |
 | `world.controller(opts)` | нативный helper движения (sweep/slide/step/slope/jump) |
 | `world.mover(opts)` | нативный fixed-tick timeline двери/лифта/крашера/платформы |
@@ -148,6 +149,26 @@ Re2DSprite-регистрацию.
 determinism), `tests/agent/re2d_boomer_lab_test.py` (high-level API в живом
 кадре: маски, сортировка, стена перед дальним прокси), JS-контракт —
 `tests/js/re2d_world_api_test.mjs`.
+
+## Portals 2.0: smooth open fraction
+
+```js
+world.portalOpen(0, 0.4);        // 0 = закрыт, 1 = открыт
+world.portalFraction(0);         // 0.4
+world.portalClosed(0, true);     // бинарный вид, синхронно ставит fraction=0
+```
+
+Дробь режет авторский opening сверху: эффективный интервал
+`bottom + fraction*(top-bottom)` используется **одним кодом** для прохода
+контроллера/коллизии (`r2d_world_portal_passes`), окон видимости
+(`r2d_world_opening_between`/`portal_window`) и света. Поэтому дверь на
+промежуточной дроби реально перекрывает проход и видимость, а не только
+рисуется. `closed` остаётся бинарным представлением (`fraction <= 0`);
+`geometry_revision` растёт только при изменении значения. Двери/moverы
+с `portal`-целью теперь гоняют дробь плавно каждый fixed tick.
+
+Ограничения: дробь режет opening сверху (вертикальная дверь); вращающиеся/
+polyobject-двери — P1/P3; ответвления порталов и рекурсия не меняются.
 
 ## Player controller (P0-C)
 

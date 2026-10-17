@@ -16,7 +16,8 @@ const calls = { atlasAdd: [], atlasRemove: [], actorAdd: [], actorRemove: [],
                 hitAdd: [], hitRemove: [], trace: [], traceAll: [], dispose: 0,
                 moverCreate: [], moverIntent: [], moverRemove: [], moverInfo: [],
                 triggerCreate: [], triggerRemove: [], triggerTick: [], triggerUse: [], triggerShoot: [],
-                find: [], controllerCreate: [], controllerInit: [], controllerMove: [], controllerRemove: [] };
+                find: [], controllerCreate: [], controllerInit: [], controllerMove: [], controllerRemove: [],
+                portalOpen: [], portalFraction: [] };
 
 const native = {
     info: () => ({ poseBudget: 1, poseStep: 3 }),
@@ -61,6 +62,9 @@ const native = {
     controllerInit: (...args) => { calls.controllerInit.push(args); return { x: args[1], y: args[2], feet: args[3], vx: 0, vy: 0, vz: 0, span: 0, ceiling: 320, grounded: true }; },
     controllerMove: (...args) => { calls.controllerMove.push(args); return { x: args[1], y: args[2] - 1, feet: args[3], vx: 0, vy: -230, vz: 0, span: 0, ceiling: 320, grounded: true }; },
     controllerRemove: (token) => calls.controllerRemove.push(token),
+    portalClosed: () => {},
+    portalOpen: (index, fraction) => calls.portalOpen.push([index, fraction]),
+    portalFraction: (index) => { calls.portalFraction.push(index); return 0.5; },
 };
 
 engine.re2d = {
@@ -260,6 +264,15 @@ test('world.controller создаёт native config и двигает состо
     eq(calls.controllerRemove[calls.controllerRemove.length - 1], 21);
     throws(RangeError, () => world.controller({ radius: 0 }), 'controller radius > 0');
     throws(RangeError, () => world.controller({ slopeLimit: 90 }), 'controller slopeLimit 0..89');
+    world.dispose();
+});
+
+test('world.portalOpen задаёт smooth fraction, portalClosed остаётся бинарным', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    world.portalOpen(3, 0.25);
+    eq(JSON.stringify(calls.portalOpen[calls.portalOpen.length - 1]), '[3,0.25]');
+    eq(world.portalFraction(3), 0.5);
+    world.portalClosed(3, true);
     world.dispose();
 });
 

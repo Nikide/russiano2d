@@ -162,6 +162,13 @@ def main():
         check(fired and 'lab.use' in fired and seen and 'gate.main' in seen,
               f"trigger эмитит семантическое событие: fired={fired}, seen={seen}")
 
+        portal = a.eval("(function(){var w=$.re2dWorld.load('re2d_dust2/dust2.re2dworld');"
+                         "var n=w.info().portals;w.portalOpen(0,0.4);var f=w.portalFraction(0);"
+                         "w.portalClosed(0,true);var g=w.portalFraction(0);w.dispose();"
+                         "return JSON.stringify({n:n,f:f,g:g});})()")
+        check(portal is not None and '"n":' in portal and '"f":0.4' in portal and '"g":0' in portal,
+              f"portalOpen smooth fraction и бинарный portalClosed сосуществуют: {portal}")
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 

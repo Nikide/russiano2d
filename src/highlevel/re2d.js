@@ -500,6 +500,9 @@ function worldWrapper($, native) {
                     return this;
                 },
                 portalClosed(index, closed) { native.portalClosed(index, closed); return this; },
+                // Portal 2.0: smooth 0..1 state; `portalClosed` remains the binary view.
+                portalOpen(index, fraction) { native.portalOpen(index, fraction); return this; },
+                portalFraction(index) { return native.portalFraction(index); },
                 dispose() { native.dispose(); },
                 render(view, entities = [], width = 320, height = 180) {
                     const v = view;

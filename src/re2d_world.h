@@ -13,6 +13,11 @@ typedef struct {
     int cell_a,cell_b,first_opening,opening_count;
     float ax,ay,bx,by;
     bool closed;
+    // Portal 2.0: smooth open fraction 0..1. `closed` stays the binary view
+    // (fraction<=0); effective openings clip their top to
+    // bottom + fraction*(top-bottom), so doors/lifts can animate continuously
+    // while collision, visibility and light use the same clipped interval.
+    float open_fraction;
 } R2DWorldPortal;
 enum { R2D_WORLD_WALL, R2D_WORLD_FLOOR, R2D_WORLD_CEILING };
 typedef struct { int kind,primitive,cell,span; } R2DWorldSurface;
@@ -157,6 +162,10 @@ const R2DWorldSurface *r2d_world_surface(const R2DRe2dWorld *,int);
 // Opening admits an interval only if both adjacent free spans contain it.
 bool r2d_world_portal_passes(const R2DRe2dWorld *,int,float,float);
 bool r2d_world_portal_set_closed(R2DRe2dWorld *,int,bool);
+// Smooth portal state: fraction 0 = closed, 1 = fully open. Non-finite input is
+// rejected; values outside 0..1 are clamped. Returns false on invalid handle.
+bool r2d_world_portal_set_open(R2DRe2dWorld *,int,float);
+float r2d_world_portal_open_fraction(const R2DRe2dWorld *,int);
 bool r2d_world_opening_between(const R2DWorldSpan *,const R2DWorldSpan *,const R2DWorldPortal *,const R2DWorldOpening *,R2DWorldOpening *);
 bool r2d_world_span_set_heights(R2DRe2dWorld *,int,float,float);
 bool r2d_world_wall_opening(const R2DRe2dWorld *,int,R2DWorldOpening *);

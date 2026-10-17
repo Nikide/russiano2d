@@ -129,6 +129,7 @@ bool r2d_world_build_cells(R2DRe2dWorld *world,const R2DWorldWall *walls,int nw,
 #undef ALLOC
     if(nc)memcpy(next.cells,cells,(size_t)nc*sizeof *cells);
     if(np)memcpy(next.portals,portals,(size_t)np*sizeof *portals);
+    for(int i=0;i<np;i++)next.portals[i].open_fraction=next.portals[i].closed?0.0f:1.0f;
     if(no)memcpy(next.openings,openings,(size_t)no*sizeof *openings);
     int closure=authored_nw;for(int i=0;i<np;i++)for(int j=0;j<portals[i].opening_count;j++){next.wall_openings[closure]=portals[i].first_opening+j+1;next.wall_portals[closure++]=i+1;}
     next.cell_count=nc;next.portal_count=np;next.opening_count=no;
@@ -248,14 +249,40 @@ bool r2d_world_portal_passes(const R2DRe2dWorld *w,int i,float bottom,float top)
     return false;
 }
 bool r2d_world_portal_set_closed(R2DRe2dWorld *w,int i,bool closed)
-{ if(!w||i<0||i>=w->portal_count)return false;if(w->portals[i].closed!=closed){
-    R2DWorldPortal *p=&w->portals[i];p->closed=closed;w->geometry_revision++;
+{ if(!w||i<0||i>=w->portal_count)return false;if(w->portals[i].closed!=closed||w->portals[i].open_fraction!=(closed?0.0f:1.0f)){
+    R2DWorldPortal *p=&w->portals[i];p->closed=closed;p->open_fraction=closed?0.0f:1.0f;w->geometry_revision++;
     float bottom=INFINITY,top=-INFINITY;for(int j=0;j<p->opening_count;j++){const R2DWorldOpening *o=&w->openings[p->first_opening+j];bottom=fminf(bottom,o->bottom);top=fmaxf(top,o->top);}
     r2d_world_light_invalidate_box(w,fminf(p->ax,p->bx),fminf(p->ay,p->by),bottom,fmaxf(p->ax,p->bx),fmaxf(p->ay,p->by),top);
 }return true; }
+bool r2d_world_portal_set_open(R2DRe2dWorld *w,int i,float fraction)
+{
+    if(!w||i<0||i>=w->portal_count||!isfinite(fraction))return false;
+    if(fraction<0)fraction=0;if(fraction>1)fraction=1;
+    R2DWorldPortal *p=&w->portals[i];
+    bool closed=fraction<=0.0f;
+    if(p->open_fraction==fraction&&p->closed==closed)return true;
+    p->open_fraction=fraction;p->closed=closed;w->geometry_revision++;
+    float bottom=INFINITY,top=-INFINITY;for(int j=0;j<p->opening_count;j++){const R2DWorldOpening *o=&w->openings[p->first_opening+j];bottom=fminf(bottom,o->bottom);top=fmaxf(top,o->top);}
+    r2d_world_light_invalidate_box(w,fminf(p->ax,p->bx),fminf(p->ay,p->by),bottom,fmaxf(p->ax,p->bx),fmaxf(p->ay,p->by),top);
+    return true;
+}
+float r2d_world_portal_open_fraction(const R2DRe2dWorld *w,int i)
+{
+    if(!w||i<0||i>=w->portal_count)return -1.0f;
+    return w->portals[i].open_fraction;
+}
 bool r2d_world_opening_between(const R2DWorldSpan *a,const R2DWorldSpan *b,const R2DWorldPortal *p,const R2DWorldOpening *authored,R2DWorldOpening *out)
 {
-    out->bottom=authored->bottom;out->top=authored->top;const R2DWorldSpan *spans[2]={a,b};
+    out->bottom=authored->bottom;out->top=authored->top;
+    // Portal 2.0: a partially open door clips the authored opening from the top.
+    if(p) {
+        float fraction=p->open_fraction;
+        if(!isfinite(fraction))fraction=p->closed?0.0f:1.0f;
+        if(fraction<0)fraction=0;if(fraction>1)fraction=1;
+        const float span=out->top-out->bottom;
+        if(span>0)out->top=out->bottom+span*fraction;
+    }
+    const R2DWorldSpan *spans[2]={a,b};
     for(int i=0;i<2;i++){const R2DWorldSpan *s=spans[i];out->bottom=fmaxf(out->bottom,fmaxf(r2d_world_floor_height(s,p->ax,p->ay),r2d_world_floor_height(s,p->bx,p->by)));
         out->top=fminf(out->top,fminf(r2d_world_ceiling_height(s,p->ax,p->ay),r2d_world_ceiling_height(s,p->bx,p->by)));}
     return out->top>out->bottom;
@@ -370,7 +397,7 @@ bool r2d_world_load_json(R2DRe2dWorld *w,const char *text,char *err,size_t size)
     for(int i=0;i<ps->count;i++) {
         const R2dJson *o=ps->items[i],*ss=r2d_json_get(o,"openings"),*closed=r2d_json_get(o,"closed");R2DWorldPortal *p=&portals[i];
         if(!integer(o,"cellA",&p->cell_a)||!integer(o,"cellB",&p->cell_b)||!pair(o,"from",&p->ax,&p->ay)||!pair(o,"to",&p->bx,&p->by)||(closed&&closed->type!=R2D_JSON_BOOL)){error(err,size,"invalid portal fields",i);goto done;}
-        p->closed=closed&&closed->boolean;p->first_opening=opening;p->opening_count=ss->count;
+        p->closed=closed&&closed->boolean;p->first_opening=opening;p->opening_count=ss->count;p->open_fraction=p->closed?0.0f:1.0f;
         for(int j=0;j<ss->count;j++) {
             R2DWorldOpening *s=&opens[opening++];
             if(!number(ss->items[j],"bottom",&s->bottom)||!number(ss->items[j],"top",&s->top)){error(err,size,"invalid opening fields",opening-1);goto done;}

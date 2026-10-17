@@ -458,8 +458,9 @@ void r2d_world_mover_advance(R2DWorldRuntime *w,float dt)
         if(!moved&&!ev)continue;
         if(e->span>=0)r2d_world_span_set_heights(&w->world,e->span,e->mover.position,e->span_top);
         if(e->portal>=0){
-            if(ev&R2D_MOVER_EVENT_CLOSED)r2d_world_portal_set_closed(&w->world,e->portal,true);
-            if(ev&R2D_MOVER_EVENT_REOPENED)r2d_world_portal_set_closed(&w->world,e->portal,false);
+            // Smooth Portal 2.0: the mover timeline drives the open fraction, so
+            // collision/visibility/light see the door at every intermediate step.
+            r2d_world_portal_set_open(&w->world,e->portal,e->mover.fraction);
         }
     }
 }

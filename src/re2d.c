@@ -617,6 +617,18 @@ static JSValue world_trace_all(JSContext *ctx,JSValueConst self,int argc,JSValue
     for(int i=0;i<written;i++)JS_SetPropertyUint32(ctx,array,(uint32_t)i,trace_result_object(ctx,&hits[i]));
     free(hits);return array;
 }
+static JSValue world_portal_open(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[2];if(!w||!world_numbers(ctx,argc,argv,2,p))return JS_EXCEPTION;
+    if(!r2d_world_portal_set_open(&w->world,(int)p[0],p[1]))return JS_ThrowRangeError(ctx,"Re2D World: invalid portal or fraction");
+    return JS_UNDEFINED;
+}
+static JSValue world_portal_fraction(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    float fraction=r2d_world_portal_open_fraction(&w->world,(int)p[0]);
+    return fraction<0?JS_NULL:JS_NewFloat64(ctx,fraction);
+}
 static JSValue world_find(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv,int kind)
 {
     WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
@@ -916,6 +928,8 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"spanAt",JS_NewCFunction(ctx,world_span_query,"spanAt",3));
     JS_SetPropertyStr(ctx,handle,"surface",JS_NewCFunction(ctx,world_surface_query,"surface",1));
     JS_SetPropertyStr(ctx,handle,"portalClosed",JS_NewCFunction(ctx,world_portal_closed,"portalClosed",2));
+    JS_SetPropertyStr(ctx,handle,"portalOpen",JS_NewCFunction(ctx,world_portal_open,"portalOpen",2));
+    JS_SetPropertyStr(ctx,handle,"portalFraction",JS_NewCFunction(ctx,world_portal_fraction,"portalFraction",1));
     JS_SetPropertyStr(ctx,handle,"lighting",JS_NewCFunction(ctx,world_lighting_config,"lighting",6));
     JS_SetPropertyStr(ctx,handle,"spanLight",JS_NewCFunction(ctx,world_span_light,"spanLight",1));
     JS_SetPropertyStr(ctx,handle,"spanHeight",JS_NewCFunction(ctx,world_span_height,"spanHeight",3));

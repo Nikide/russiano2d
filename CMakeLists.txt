@@ -139,7 +139,7 @@ if(NOT EMSCRIPTEN)
         DEPENDS r2d_json_test r2d_crypto_test r2d_payload_test r2d_reverb_test
                 r2d_audio_fx_test r2d_profile_test r2d_bsp_test
                 r2d_re2d_test r2d_rotsprite_test r2d_re2d_world_test
-                r2d_re2d_atlas_test r2d_world_trace_test r2d_world_mover_test r2d_world_trigger_test r2d_world_controller_test r2d_re2d_semantic_test r2d_world_exr_test
+                r2d_re2d_atlas_test r2d_world_trace_test r2d_world_mover_test r2d_world_trigger_test r2d_world_controller_test r2d_re2d_semantic_test r2d_re2d_portal_test r2d_world_exr_test
                 r2d_sdk_core_test
                 r2d-sdk
         COMMENT "r2d_check: Unity C tests + QuickJS tests + SDK batch (CTest)"
