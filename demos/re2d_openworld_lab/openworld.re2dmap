@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "name": "Open world brush lab",
+  "regionSize": 256,
+  "world": {
+    "x": 0, "y": 0, "w": 2048, "h": 2048,
+    "bottom": 0, "top": 384,
+    "floorColor": "#8f8b82",
+    "ceilingColor": "#586070",
+    "sideColor": "#6f6250",
+    "boundary": "sky"
+  },
+  "brushes": [
+    { "id": "wall.west.a", "rect": [512, 0, 32, 896], "bottom": 0, "top": 384, "sideColor": "#6a5a44" },
+    { "id": "wall.west.b", "rect": [512, 1100, 32, 948], "bottom": 0, "top": 384, "sideColor": "#6a5a44" },
+    { "id": "wall.west.area", "rect": [512, 896, 32, 204], "bottom": 0, "top": 384, "tool": "areaportal" },
+    { "id": "wall.mid.a", "rect": [1200, 0, 32, 512], "bottom": 0, "top": 384, "sideColor": "#5f5140" },
+    { "id": "wall.mid.b", "rect": [1200, 704, 32, 1344], "bottom": 0, "top": 384, "sideColor": "#5f5140" },
+    { "id": "wall.mid.area", "rect": [1200, 512, 32, 192], "bottom": 0, "top": 384, "tool": "areaportal" },
+    { "id": "pillar.a", "rect": [256, 256, 96, 96], "bottom": 0, "top": 384, "sideColor": "#7a6a50" },
+    { "id": "pillar.b", "rect": [720, 256, 96, 96], "bottom": 0, "top": 320, "sideColor": "#7a6a50" },
+    { "id": "pillar.c", "rect": [256, 720, 96, 96], "bottom": 0, "top": 384, "sideColor": "#7a6a50" },
+    { "id": "pillar.d", "rect": [720, 720, 96, 96], "bottom": 0, "top": 320, "sideColor": "#7a6a50" },
+    { "id": "altar.nodraw", "rect": [1408, 256, 192, 128], "bottom": 0, "top": 96, "tool": "nodraw" },
+    { "id": "crate.clip", "rect": [1408, 768, 128, 128], "bottom": 0, "top": 160, "tool": "clip" },
+    { "id": "occluder.gate", "rect": [1216, 560, 8, 96], "bottom": 0, "top": 384, "tool": "occluder" },
+    { "id": "hint.door", "rect": [1200, 512, 32, 192], "bottom": 0, "top": 384, "tool": "hint" },
+    { "id": "sky.well", "rect": [1664, 1664, 192, 192], "bottom": 0, "top": 384, "tool": "sky" },
+    { "id": "trigger.bridge", "rect": [512, 896, 688, 204], "bottom": 0, "top": 384, "tool": "trigger" }
+  ],
+  "entities": [
+    { "id": "player.start", "kind": "player_spawn", "x": 128, "y": 128, "h": 0 },
+    { "id": "enemy.west", "kind": "enemy_spawn", "x": 320, "y": 512, "h": 0 },
+    { "id": "enemy.east", "kind": "enemy_spawn", "x": 1536, "y": 512, "h": 0 },
+    { "id": "light.west", "kind": "light", "x": 256, "y": 512, "h": 192 },
+    { "id": "light.east", "kind": "light", "x": 1536, "y": 1536, "h": 192 },
+    { "id": "door.mid", "kind": "door", "brush": "wall.mid.area" },
+    { "id": "audio.well", "kind": "audio_source", "x": 1728, "y": 1728, "h": 64 }
+  ]
+}

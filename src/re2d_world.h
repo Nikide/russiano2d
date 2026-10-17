@@ -5,7 +5,32 @@
 #include <stdint.h>
 
 // Specialised RE2D authoring primitives, never a triangle mesh.
-typedef struct { float x1,y1,x2,y2,bottom,top; uint32_t color; } R2DWorldWall;
+// Wall tool policy bits. `flags == 0` means the legacy default (every policy
+// enabled), so old author data, old baked maps and positional initializers stay
+// valid without changes. Non-zero flags are authored by the brush compiler and
+// travel through JSON/bake format v5.
+enum {
+    R2D_WALL_RENDER   = 1u << 0,
+    R2D_WALL_COLLIDE  = 1u << 1,
+    R2D_WALL_RAY      = 1u << 2, // gameplay hitscan + native shadow/light rays
+    R2D_WALL_SHADOW   = 1u << 3, // reserved query policy for renderer shadow passes
+    R2D_WALL_ACOUSTIC = 1u << 4, // reserved query policy for audio occlusion
+    R2D_WALL_SKY      = 1u << 5, // sky/clip boundary: no wall surface, collision stays
+    R2D_WALL_OCCLUDER = 1u << 6, // visibility blocker only
+    R2D_WALL_TOOL_HINT = 1u << 7,
+    R2D_WALL_TOOL_SKIP = 1u << 8
+};
+#define R2D_WALL_DEFAULT_POLICY (R2D_WALL_RENDER|R2D_WALL_COLLIDE|R2D_WALL_RAY|R2D_WALL_SHADOW|R2D_WALL_ACOUSTIC)
+typedef struct { float x1,y1,x2,y2,bottom,top; uint32_t color; uint16_t flags; } R2DWorldWall;
+// Effective policy bits; zero flags select the legacy all-on default.
+static inline uint16_t r2d_world_wall_bits(const R2DWorldWall *wall)
+{ return wall && wall->flags ? wall->flags : (uint16_t)R2D_WALL_DEFAULT_POLICY; }
+static inline bool r2d_world_wall_renders(const R2DWorldWall *wall)
+{ return (r2d_world_wall_bits(wall) & R2D_WALL_RENDER) != 0; }
+static inline bool r2d_world_wall_collides(const R2DWorldWall *wall)
+{ return (r2d_world_wall_bits(wall) & R2D_WALL_COLLIDE) != 0; }
+static inline bool r2d_world_wall_blocks_ray(const R2DWorldWall *wall)
+{ return (r2d_world_wall_bits(wall) & R2D_WALL_RAY) != 0; }
 typedef struct { float x,y,w,h,bottom,top; uint32_t floor_color,ceiling_color; float floor_a,floor_b,ceiling_a,ceiling_b; } R2DWorldSpan;
 // Topology is XY only. Span references remain indices into the native table.
 typedef struct { float x,y,w,h; int first_span,span_count; } R2DWorldCell;
@@ -25,6 +50,10 @@ typedef struct {
     // P2 mirror portal: no traversal into the far cell; a scissored reflected
     // world pass fills the portal window.
     bool mirror;
+    // Brush compiler marker: this portal is an areaportal. Runtime/region PVS
+    // treats it exactly like any other portal but uses the marker for streaming,
+    // diagnostics and areaportal-specific culling.
+    bool area_portal;
 } R2DWorldPortal;
 enum { R2D_WORLD_WALL, R2D_WORLD_FLOOR, R2D_WORLD_CEILING };
 typedef struct { int kind,primitive,cell,span; } R2DWorldSurface;
@@ -185,6 +214,14 @@ bool r2d_world_opening_between(const R2DWorldSpan *,const R2DWorldSpan *,const R
 bool r2d_world_span_set_heights(R2DRe2dWorld *,int,float,float);
 bool r2d_world_wall_opening(const R2DRe2dWorld *,int,R2DWorldOpening *);
 bool r2d_world_wall_solid(const R2DRe2dWorld *,int,float,float);
+// Tool-material policy for a wall. `flags == 0`/invalid handle returns the
+// legacy all-on policy. Render/collision/ray bits are enforced by the native
+// renderer, controller collision and ray/shadow paths; shadow/acoustic bits are
+// exposed for higher-level passes (sky/clip boundary contract).
+typedef struct { bool render, collision, hitscan, shadow, acoustic, sky, occluder; } R2DWorldWallPolicy;
+R2DWorldWallPolicy r2d_world_wall_policy(const R2DRe2dWorld *,int);
+bool r2d_world_portal_area(const R2DRe2dWorld *,int);
+bool r2d_world_portal_set_area(R2DRe2dWorld *,int,bool);
 
 void r2d_world_visibility_free(R2DWorldVisibility *);
 // Conservative native portal windows. Outside-world cameras use all surfaces.

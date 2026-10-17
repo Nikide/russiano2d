@@ -115,7 +115,7 @@ bool r2d_world_build_cells(R2DRe2dWorld *world,const R2DWorldWall *walls,int nw,
         for(int j=0;j<p->opening_count;j++) {
             if(total>=nw+no){free(all);return error(err,size,"opening ranges reused",i);}
             const R2DWorldOpening *o=&openings[p->first_opening+j];
-            all[total++]=(R2DWorldWall){p->ax,p->ay,p->bx,p->by,o->bottom,o->top,0xff605040};
+            all[total++]=(R2DWorldWall){p->ax,p->ay,p->bx,p->by,o->bottom,o->top,0xff605040,0};
         }
     }
     R2DRe2dWorld next={0};
@@ -321,6 +321,28 @@ bool r2d_world_wall_solid(const R2DRe2dWorld *w,int wall,float bottom,float top)
     R2DWorldOpening opening;if(!r2d_world_wall_opening(w,wall,&opening))return true;
     return bottom<opening.bottom||top>opening.top||(bottom==top&&top>=opening.top);
 }
+R2DWorldWallPolicy r2d_world_wall_policy(const R2DRe2dWorld *w,int wall)
+{
+    R2DWorldWallPolicy p={true,true,true,true,true,false,false};
+    if(!w||wall<0||wall>=w->wall_count)return p;
+    const uint16_t bits=r2d_world_wall_bits(&w->walls[wall]);
+    p.render=(bits&R2D_WALL_RENDER)!=0;
+    p.collision=(bits&R2D_WALL_COLLIDE)!=0;
+    p.hitscan=(bits&R2D_WALL_RAY)!=0;
+    p.shadow=(bits&R2D_WALL_SHADOW)!=0;
+    p.acoustic=(bits&R2D_WALL_ACOUSTIC)!=0;
+    p.sky=(bits&R2D_WALL_SKY)!=0;
+    p.occluder=(bits&R2D_WALL_OCCLUDER)!=0;
+    return p;
+}
+bool r2d_world_portal_area(const R2DRe2dWorld *w,int i)
+{ return w&&i>=0&&i<w->portal_count&&w->portals[i].area_portal; }
+bool r2d_world_portal_set_area(R2DRe2dWorld *w,int i,bool area)
+{
+    if(!w||i<0||i>=w->portal_count)return false;
+    if(w->portals[i].area_portal!=area){w->portals[i].area_portal=area;w->geometry_revision++;}
+    return true;
+}
 bool r2d_world_span_set_heights(R2DRe2dWorld *w,int index,float bottom,float top)
 {
     if(!w||index<0||index>=w->span_count||!isfinite(bottom)||!isfinite(top)||fabsf(bottom)>1e6f||fabsf(top)>1e6f||top<=bottom)return false;
@@ -416,6 +438,11 @@ bool r2d_world_load_json(R2DRe2dWorld *w,const char *text,char *err,size_t size)
     for(int i=0;i<ws->count;i++) {
         const R2dJson *o=ws->items[i];R2DWorldWall *s=&walls[i];
         if(!pair(o,"from",&s->x1,&s->y1)||!pair(o,"to",&s->x2,&s->y2)||!number(o,"bottom",&s->bottom)||!number(o,"top",&s->top)||!color(o,"color",&s->color)){error(err,size,"invalid wall fields",i);goto done;}
+        const R2dJson *flags=r2d_json_get(o,"flags");
+        if(flags){
+            if(flags->type!=R2D_JSON_NUM||!isfinite(flags->number)||flags->number<0||flags->number>65535||floorf(flags->number)!=flags->number){error(err,size,"invalid wall flags",i);goto done;}
+            s->flags=(uint16_t)flags->number;
+        }
     }
     int span=0,opening=0;
     for(int i=0;i<cs->count;i++) {
@@ -431,6 +458,9 @@ bool r2d_world_load_json(R2DRe2dWorld *w,const char *text,char *err,size_t size)
         const R2dJson *o=ps->items[i],*ss=r2d_json_get(o,"openings"),*closed=r2d_json_get(o,"closed");R2DWorldPortal *p=&portals[i];
         if(!integer(o,"cellA",&p->cell_a)||!integer(o,"cellB",&p->cell_b)||!pair(o,"from",&p->ax,&p->ay)||!pair(o,"to",&p->bx,&p->by)||(closed&&closed->type!=R2D_JSON_BOOL)){error(err,size,"invalid portal fields",i);goto done;}
         p->closed=closed&&closed->boolean;p->first_opening=opening;p->opening_count=ss->count;p->open_fraction=p->closed?0.0f:1.0f;
+        const R2dJson *sky=r2d_json_get(o,"sky"),*mirror=r2d_json_get(o,"mirror"),*area=r2d_json_get(o,"areaPortal");
+        if((sky&&sky->type!=R2D_JSON_BOOL)||(mirror&&mirror->type!=R2D_JSON_BOOL)||(area&&area->type!=R2D_JSON_BOOL)){error(err,size,"invalid portal tool flags",i);goto done;}
+        p->sky=sky&&sky->boolean;p->mirror=mirror&&mirror->boolean;p->area_portal=area&&area->boolean;
         for(int j=0;j<ss->count;j++) {
             R2DWorldOpening *s=&opens[opening++];
             if(!number(ss->items[j],"bottom",&s->bottom)||!number(ss->items[j],"top",&s->top)){error(err,size,"invalid opening fields",opening-1);goto done;}

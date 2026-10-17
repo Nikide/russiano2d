@@ -42,7 +42,11 @@ bool r2d_world_build(R2DRe2dWorld *w,const R2DWorldWall *walls,int nw,const R2DW
         for (int j=0;j<i;j++) {
             const R2DWorldSpan *p=&spans[j];
             float lo_x=fmaxf(s->x,p->x),lo_y=fmaxf(s->y,p->y),hi_x=fminf(s->x+s->w,p->x+p->w),hi_y=fminf(s->y+s->h,p->y+p->h);
-            if(lo_x<hi_x&&lo_y<hi_y) {
+            // Authored float coordinates can touch at e.g. 5004.7998 vs
+            // 5004.8; a sub-millimetre sliver is not an overlap and used to
+            // reject otherwise valid BASHNYA maps.
+            const float eps=1e-3f;
+            if(hi_x-lo_x>eps&&hi_y-lo_y>eps) {
                 bool s_above=true,p_above=true;
                 for(int corner=0;corner<4;corner++){float x=corner&1?hi_x:lo_x,y=corner&2?hi_y:lo_y;
                     if(r2d_world_floor_height(s,x,y)<r2d_world_ceiling_height(p,x,y))s_above=false;
@@ -86,6 +90,7 @@ bool r2d_world_blocked(const R2DRe2dWorld *w,float x,float y,float radius,float 
     if(!w || !finite6(x,y,radius,bottom,top,0) || radius<0 || top<=bottom) return true;
     for(int i=0;i<w->wall_count;i++) {
         const R2DWorldWall *s=&w->walls[i];
+        if(!r2d_world_wall_collides(s))continue;
         if(!r2d_world_wall_solid(w,i,bottom,top))continue;
         if(bottom>=s->top || top<=s->bottom) continue;
         float dx=s->x2-s->x1,dy=s->y2-s->y1;
@@ -99,6 +104,7 @@ static float cross(float ax,float ay,float bx,float by) {return ax*by-ay*bx;}
 static void wall_hit(const R2DRe2dWorld *w,int index,const float o[3],const float d[3],float lo,R2DWorldHit *hit)
 {
     const R2DSegment *s=&w->bsp.segments[index];const R2DWorldWall *wall=&w->walls[s->user];
+    if(!r2d_world_wall_blocks_ray(wall))return;
     float sx=s->x2-s->x1,sy=s->y2-s->y1,den=cross(d[0],d[1],sx,sy);
     if(fabsf(den)<1e-8f) return;
     float ax=s->x1-o[0],ay=s->y1-o[1];
@@ -123,6 +129,7 @@ static void ray_node(const R2DRe2dWorld *w,int node,const float o[3],const float
 static void primitive_wall_hit(const R2DRe2dWorld *w,int index,const float o[3],const float d[3],float lo,R2DWorldHit *hit)
 {
     const R2DWorldWall *s=&w->walls[index];
+    if(!r2d_world_wall_blocks_ray(s))return;
     float sx=s->x2-s->x1,sy=s->y2-s->y1,den=cross(d[0],d[1],sx,sy);if(fabsf(den)<1e-8f)return;
     float ax=s->x1-o[0],ay=s->y1-o[1],t=cross(ax,ay,sx,sy)/den,u=cross(ax,ay,d[0],d[1])/den,z=o[2]+t*d[2];
     if(t<lo||t>hit->t||u<0||u>1||z<s->bottom||z>s->top||!r2d_world_wall_solid(w,index,z,z))return;
@@ -254,6 +261,7 @@ static void image_row(const WorldImage *im,int x,int y,float o[3],float d[3],flo
 static void image_wall_segment(WorldImage *im,const R2DRe2dWorld *w,const R2DSegment *seg)
 {
     const R2DWorldWall *wall=&w->walls[seg->user];
+    if(!r2d_world_wall_renders(wall))return;
     int blend=r2d_world_surface_blend(w,seg->user);if(!im->decal&&(blend>=R2D_WORLD_TRANSLUCENT)!=im->translucent)return;
 
     if(im->visibility&&!im->visibility->surface_seen[seg->user])return;

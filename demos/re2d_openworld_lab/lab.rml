@@ -1,0 +1,1 @@
+<rml><head><title>Re2D Open World lab</title><link type="text/rcss" href="lab.rcss" /></head><body><div id="panel"><div id="title">Re2D Open World · brush compiler + region grid</div><div id="status"></div><div id="stats"></div><div id="keys">WASD walk · arrows look · F1 HUD · Esc exit</div></div></body></rml>

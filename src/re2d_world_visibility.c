@@ -141,6 +141,7 @@ bool r2d_world_visibility(const R2DRe2dWorld *w,const R2DRe2dView *v,float ortho
         for(int k=0;k<2;k++){f->surface_seen[plane+k]=1;f->surface_windows[plane+k]=f->windows[span];f->surfaces[f->surface_count++]=plane+k;}
         for(int k=w->span_wall_offsets[span];k<w->span_wall_offsets[span+1];k++) {
             int wall=w->span_wall_refs[k];
+            if(!r2d_world_wall_renders(&w->walls[wall]))continue;
             if(!r2d_world_wall_solid(w,wall,w->walls[wall].bottom,w->walls[wall].top))continue;
             R2DWorldWindow window=f->windows[span];
             if(!f->surface_seen[wall]){f->surface_seen[wall]=1;f->surface_windows[wall]=window;f->surfaces[f->surface_count++]=wall;}
@@ -148,6 +149,7 @@ bool r2d_world_visibility(const R2DRe2dWorld *w,const R2DRe2dView *v,float ortho
         }
     }
     if(start<0||ortho>0)for(int wall=0;wall<w->wall_count;wall++) {
+        if(!r2d_world_wall_renders(&w->walls[wall]))continue;
         if(!r2d_world_wall_solid(w,wall,w->walls[wall].bottom,w->walls[wall].top))continue;
         if(!f->surface_seen[wall]){f->surface_seen[wall]=1;f->surface_windows[wall]=full;f->surfaces[f->surface_count++]=wall;}
     }

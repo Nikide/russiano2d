@@ -13,11 +13,14 @@
 #include "sdk.h"
 #include "re2d_world_bake.h"
 #include "re2d_world_polygon.h"
+#include "re2d_world_region.h"
+#include "sdk_brush.h"
 
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define W_EPS 0.001f
 #define W_LIMIT 1000000.0f
@@ -35,12 +38,14 @@ typedef struct WCell {
     WSpan *spans;
     int    nspan;
     bool   generated;   // polygon compiler tile: runtime portals are auto-generated
+    bool   portal_authored; // brush compiler already emitted this cell's portals
 } WCell;
 
 typedef struct WWall {
     char  id[64];
     float x1, y1, x2, y2, bottom, top;
     char  color[40];
+    uint16_t flags;
 } WWall;
 
 typedef struct WOpening { float bottom, top; } WOpening;
@@ -50,6 +55,7 @@ typedef struct WPortal {
     float     x1, y1, x2, y2;
     WOpening *open;
     int       nopen;
+    bool      area_portal;
 } WPortal;
 
 // Скомпилированная ячейка (одна или несколько spans) с происхождением.
@@ -59,14 +65,25 @@ typedef struct CCell {
     int    nspan;
     char   owner[96];       // id источника: «hall», «stairs1#3»
     int    explicit_index;  // индекс в source.cells или -1
+    bool   portal_authored; // brush compiler portals must not be duplicated
 } CCell;
 
 typedef struct World {
     char     name[128];
     char *lighting_json,*lights_json;
+    char *entities_json;
     WCell   *cells;    int ncell;
     WWall   *walls;    int nwall;
     WPortal *portals;  int nportal;
+    // Brush authoring (#5) and region partition (R-04).
+    SdkBrushSpec *brushes; int nbrush;
+    SdkBrushStats brush_stats;
+    int nentities, npoint_entities, nbrush_entities;
+    int authored_lights;
+    float region_size;
+    int region_count, region_columns, region_rows, region_pvs_edges;
+    int *region_cell_counts;
+    double stage_load_ms, stage_compile_ms, stage_region_ms;
     // Скомпилированное
     CCell   *cc;       int ncc, cap_cc;
     WWall   *cw;       int ncw, cap_cw;
@@ -83,6 +100,9 @@ static void world_free(World *w)
     for (int i = 0; i < w->ncc; ++i) free(w->cc[i].spans);
     free(w->cc);
     free(w->cw);free(w->lighting_json);free(w->lights_json);
+    free(w->entities_json);
+    free(w->brushes);
+    free(w->region_cell_counts);
     memset(w, 0, sizeof *w);
 }
 
@@ -412,6 +432,405 @@ static bool parse_polygon(Ctx *c, const R2dJson *o, int index, const char *id, R
     return true;
 }
 
+static bool parse_brush_policy(Ctx *c, const R2dJson *o, int index, const char *id,
+                               SdkBrushTool tool, uint16_t *out)
+{
+    uint16_t flags = sdk_brush_tool_flags(tool);
+    const R2dJson *render = r2d_json_get(o, "render");
+    const R2dJson *collision = r2d_json_get(o, "collision");
+    const R2dJson *shadows = r2d_json_get(o, "shadows");
+    const R2dJson *cast = r2d_json_get(o, "castShadow");
+    const R2dJson *acoustic = r2d_json_get(o, "acoustic");
+    const R2dJson *explicit_flags = r2d_json_get(o, "flags");
+    if (explicit_flags) {
+        if (explicit_flags->type != R2D_JSON_NUM || !isfinite(explicit_flags->number) ||
+            explicit_flags->number < 0 || explicit_flags->number > 65535 ||
+            floor(explicit_flags->number) != explicit_flags->number) {
+            field_diag(c, "brushes", index, id, "flags", "flags — целое 0..65535");
+            return false;
+        }
+        *out = (uint16_t)explicit_flags->number;
+        return true;
+    }
+    if ((render && render->type != R2D_JSON_BOOL) ||
+        (collision && collision->type != R2D_JSON_BOOL) ||
+        (shadows && shadows->type != R2D_JSON_BOOL) ||
+        (cast && cast->type != R2D_JSON_BOOL) ||
+        (acoustic && acoustic->type != R2D_JSON_BOOL)) {
+        field_diag(c, "brushes", index, id, "render/collision/shadows",
+                   "render, collision, shadows, castShadow, acoustic — bool");
+        return false;
+    }
+    if ((render || collision || shadows || cast || acoustic) && flags == 0)
+        flags = (uint16_t)R2D_WALL_DEFAULT_POLICY;
+    if (render) {
+        if (render->boolean) flags |= R2D_WALL_RENDER;
+        else flags &= (uint16_t)~R2D_WALL_RENDER;
+    }
+    if (collision) {
+        if (collision->boolean) flags |= R2D_WALL_COLLIDE;
+        else flags &= (uint16_t)~R2D_WALL_COLLIDE;
+    }
+    if (shadows) {
+        if (shadows->boolean) flags |= R2D_WALL_SHADOW;
+        else flags &= (uint16_t)~R2D_WALL_SHADOW;
+    }
+    if (cast) {
+        if (cast->boolean) flags |= R2D_WALL_SHADOW;
+        else flags &= (uint16_t)~R2D_WALL_SHADOW;
+    }
+    if (acoustic) {
+        if (acoustic->boolean) flags |= R2D_WALL_ACOUSTIC;
+        else flags &= (uint16_t)~R2D_WALL_ACOUSTIC;
+    }
+    *out = flags;
+    return true;
+}
+
+static bool parse_brush(Ctx *c, const R2dJson *o, int index, SdkBrushSpec *brush)
+{
+    memset(brush, 0, sizeof *brush);
+    if (!get_id(c, o, "brushes", index, brush->id, sizeof brush->id)) return false;
+    const char *tool_name = r2d_json_str(r2d_json_get(o, "tool"), "solid");
+    if (!sdk_brush_tool_parse(tool_name, &brush->tool)) {
+        field_diag(c, "brushes", index, brush->id, "tool",
+                   "tool: solid|nodraw|sky|hint|skip|trigger|areaportal|clip|enemyclip|playerclip|occluder");
+        return false;
+    }
+    // Tool brushes that only affect the compiler never carve solid space.
+    bool solid = !(brush->tool == SDK_BRUSH_TOOL_HINT ||
+                   brush->tool == SDK_BRUSH_TOOL_SKIP ||
+                   brush->tool == SDK_BRUSH_TOOL_TRIGGER ||
+                   brush->tool == SDK_BRUSH_TOOL_AREAPORTAL ||
+                   brush->tool == SDK_BRUSH_TOOL_OCCLUDER);
+    const R2dJson *solid_json = r2d_json_get(o, "solid");
+    const R2dJson *carve_json = r2d_json_get(o, "carve");
+    if ((solid_json && solid_json->type != R2D_JSON_BOOL) ||
+        (carve_json && carve_json->type != R2D_JSON_BOOL)) {
+        field_diag(c, "brushes", index, brush->id, "solid", "solid/carve — bool");
+        return false;
+    }
+    if (solid_json) solid = solid_json->boolean;
+    if (carve_json) solid = carve_json->boolean;
+    brush->solid = solid;
+    brush->carve = solid;
+
+    if (!get_float(c, o, "brushes", index, brush->id, "bottom", &brush->bottom, true, 0) ||
+        !get_float(c, o, "brushes", index, brush->id, "top", &brush->top, true, 0))
+        return false;
+    if (!(brush->top > brush->bottom)) {
+        field_diag(c, "brushes", index, brush->id, "top", "top должен быть больше bottom");
+        return false;
+    }
+    if (!get_color(c, o, "brushes", index, brush->id, "sideColor",
+                   brush->side_color, sizeof brush->side_color, "#8f7a58") ||
+        !get_color(c, o, "brushes", index, brush->id, "floorColor",
+                   brush->floor_color, sizeof brush->floor_color, "#9a9a9a") ||
+        !get_color(c, o, "brushes", index, brush->id, "ceilingColor",
+                   brush->ceiling_color, sizeof brush->ceiling_color, "#6a7078"))
+        return false;
+    snprintf(brush->visgroup, sizeof brush->visgroup, "%s",
+             r2d_json_str(r2d_json_get(o, "visgroup"), ""));
+
+    const R2dJson *poly = r2d_json_get(o, "polygon");
+    if (poly) {
+        if (poly->type != R2D_JSON_ARR || poly->count < 3 || poly->count > SDK_BRUSH_MAX_POINTS) {
+            field_diag(c, "brushes", index, brush->id, "polygon", "polygon: 3..64 вершин [x,y]");
+            return false;
+        }
+        brush->ring_count = poly->count;
+        for (int i = 0; i < poly->count; i++) {
+            const R2dJson *pt = poly->items[i];
+            if (pt->type != R2D_JSON_ARR || pt->count != 2 ||
+                pt->items[0]->type != R2D_JSON_NUM || pt->items[1]->type != R2D_JSON_NUM ||
+                !isfinite(pt->items[0]->number) || !isfinite(pt->items[1]->number) ||
+                fabs(pt->items[0]->number) > W_LIMIT || fabs(pt->items[1]->number) > W_LIMIT) {
+                field_diag(c, "brushes", index, brush->id, "polygon", "вершина должна быть [x,y]");
+                return false;
+            }
+            brush->ring[i].x = (float)pt->items[0]->number;
+            brush->ring[i].y = (float)pt->items[1]->number;
+        }
+    } else {
+        float r[4];
+        if (!get_rect(c, o, "brushes", index, brush->id, "rect", r)) return false;
+        brush->ring_count = 4;
+        brush->ring[0] = (SdkBrushPoint){r[0], r[1]};
+        brush->ring[1] = (SdkBrushPoint){r[0] + r[2], r[1]};
+        brush->ring[2] = (SdkBrushPoint){r[0] + r[2], r[1] + r[3]};
+        brush->ring[3] = (SdkBrushPoint){r[0], r[1] + r[3]};
+    }
+    return parse_brush_policy(c, o, index, brush->id, brush->tool, &brush->wall_flags);
+}
+
+static bool load_brush_bounds(Ctx *c, const R2dJson *root, World *w)
+{
+    const R2dJson *region_size = r2d_json_get(root, "regionSize");
+    w->region_size = 1024.0f;
+    if (region_size) {
+        if (region_size->type != R2D_JSON_NUM || !isfinite(region_size->number) ||
+            region_size->number < 16.0 || region_size->number > W_LIMIT) {
+            field_diag(c, "world", 0, NULL, "regionSize", "regionSize — число 16..1000000");
+            return false;
+        }
+        w->region_size = (float)region_size->number;
+    }
+    if (w->nbrush == 0) return true;
+    SdkBrushBounds bounds;
+    memset(&bounds, 0, sizeof bounds);
+    const R2dJson *world = r2d_json_get(root, "world");
+    if (!world) world = r2d_json_get(root, "bounds");
+    bool derived = false;
+    if (world) {
+        float r[4], bottom = 0, top = 0;
+        const R2dJson *rect = r2d_json_get(world, "rect");
+        if (rect) {
+            if (!get_rect(c, world, "world", 0, NULL, "rect", r)) return false;
+        } else {
+            // Accept {x,y,w,h} as well as {rect:[...]}.
+            if (!get_float(c, world, "world", 0, NULL, "x", &r[0], true, 0) ||
+                !get_float(c, world, "world", 0, NULL, "y", &r[1], true, 0) ||
+                !get_float(c, world, "world", 0, NULL, "w", &r[2], true, 0) ||
+                !get_float(c, world, "world", 0, NULL, "h", &r[3], true, 0))
+                return false;
+            if (!(r[2] > 0) || !(r[3] > 0)) {
+                field_diag(c, "world", 0, NULL, "w", "world bounds: w/h > 0");
+                return false;
+            }
+        }
+        if (!get_float(c, world, "world", 0, NULL, "bottom", &bottom, true, 0) ||
+            !get_float(c, world, "world", 0, NULL, "top", &top, true, 0))
+            return false;
+        if (!(top > bottom)) {
+            field_diag(c, "world", 0, NULL, "top", "world bounds: top > bottom");
+            return false;
+        }
+        bounds.x = r[0]; bounds.y = r[1]; bounds.w = r[2]; bounds.h = r[3];
+        bounds.bottom = bottom; bounds.top = top;
+        if (!get_color(c, world, "world", 0, NULL, "floorColor",
+                       bounds.floor_color, sizeof bounds.floor_color, "#9a9a9a") ||
+            !get_color(c, world, "world", 0, NULL, "ceilingColor",
+                       bounds.ceiling_color, sizeof bounds.ceiling_color, "#6a7078") ||
+            !get_color(c, world, "world", 0, NULL, "sideColor",
+                       bounds.side_color, sizeof bounds.side_color, "#8f7a58"))
+            return false;
+        SdkBrushTool boundary = SDK_BRUSH_TOOL_SKY;
+        const char *boundary_name = r2d_json_str(r2d_json_get(world, "boundary"), "sky");
+        if (!sdk_brush_tool_parse(boundary_name, &boundary)) {
+            field_diag(c, "world", 0, NULL, "boundary", "boundary: sky|nodraw|clip|solid");
+            return false;
+        }
+        bounds.boundary_flags = sdk_brush_tool_flags(boundary);
+        if (bounds.boundary_flags == 0) bounds.boundary_flags = R2D_WALL_DEFAULT_POLICY;
+    } else {
+        // Derive a usable envelope with a one-cell margin around all brushes.
+        float minx = INFINITY, miny = INFINITY, maxx = -INFINITY, maxy = -INFINITY;
+        float bottom = INFINITY, top = -INFINITY;
+        for (int i = 0; i < w->nbrush; i++) {
+            const SdkBrushSpec *b = &w->brushes[i];
+            for (int p = 0; p < b->ring_count; p++) {
+                minx = fminf(minx, b->ring[p].x);
+                miny = fminf(miny, b->ring[p].y);
+                maxx = fmaxf(maxx, b->ring[p].x);
+                maxy = fmaxf(maxy, b->ring[p].y);
+            }
+            bottom = fminf(bottom, b->bottom);
+            top = fmaxf(top, b->top);
+        }
+        const float margin = 64.0f;
+        bounds.x = minx - margin; bounds.y = miny - margin;
+        bounds.w = (maxx - minx) + margin * 2.0f;
+        bounds.h = (maxy - miny) + margin * 2.0f;
+        bounds.bottom = bottom; bounds.top = top;
+        snprintf(bounds.floor_color, sizeof bounds.floor_color, "#9a9a9a");
+        snprintf(bounds.ceiling_color, sizeof bounds.ceiling_color, "#6a7078");
+        snprintf(bounds.side_color, sizeof bounds.side_color, "#8f7a58");
+        bounds.boundary_flags = sdk_brush_tool_flags(SDK_BRUSH_TOOL_SKY);
+        derived = true;
+    }
+    if (derived) {
+        char loc[2048];
+        snprintf(loc, sizeof loc, "{\"section\":\"brushes\",\"brushCount\":%d}", w->nbrush);
+        sdk_diag(c->rep, SDK_WARNING, "SDK_WORLD_BRUSH_BOUNDS_DERIVED", c->path, loc, NULL,
+                 "Карта без блока «world»: границы выведены из brushes с полями %g; авторский sky/clip-контур не задан",
+                 (double)64.0f);
+    }
+    // Compile and append.
+    SdkBrushOutput output;
+    SdkBrushStats stats;
+    char error[256] = {0};
+    clock_t started = clock();
+    if (!sdk_brush_compile(w->brushes, w->nbrush, &bounds, &output, &stats,
+                           error, sizeof error)) {
+        sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_BRUSH_COMPILE", c->path, NULL, NULL,
+                 "Компиляция brushes: %s", error);
+        sdk_brush_output_free(&output);
+        return false;
+    }
+    w->brush_stats = stats;
+    (void)started;
+    bool ok = true;
+    if (w->ncell + output.cell_count > W_MAX || w->nwall + output.wall_count > W_MAX ||
+        w->nportal + output.portal_count > W_MAX) {
+        sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_LIMIT", c->path, NULL, NULL,
+                 "Brushes превышают лимит %d cells/walls/portals", W_MAX);
+        ok = false;
+    }
+    if (ok && output.cell_count) {
+        WCell *grown = (WCell *)realloc(w->cells, (size_t)(w->ncell + output.cell_count) * sizeof(WCell));
+        if (!grown) ok = false;
+        else {
+            w->cells = grown;
+            for (int i = 0; i < output.cell_count; i++) {
+                const SdkBrushCell *bc = &output.cells[i];
+                WCell *cell = &w->cells[w->ncell + i];
+                memset(cell, 0, sizeof *cell);
+                snprintf(cell->id, sizeof cell->id, "%s", bc->owner);
+                cell->x = bc->x; cell->y = bc->y; cell->w = bc->w; cell->h = bc->h;
+                cell->nspan = bc->span_count;
+                cell->spans = (WSpan *)calloc((size_t)(cell->nspan ? cell->nspan : 1), sizeof(WSpan));
+                if (!cell->spans) { ok = false; break; }
+                for (int s = 0; s < cell->nspan; s++) {
+                    const SdkBrushSpan *bs = &output.spans[bc->first_span + s];
+                    cell->spans[s].bottom = bs->bottom;
+                    cell->spans[s].top = bs->top;
+                    snprintf(cell->spans[s].floor_c, sizeof cell->spans[s].floor_c, "%s", bs->floor_color);
+                    snprintf(cell->spans[s].ceil_c, sizeof cell->spans[s].ceil_c, "%s", bs->ceiling_color);
+                }
+                cell->generated = true;
+                cell->portal_authored = true;
+            }
+            if (ok) w->ncell += output.cell_count;
+        }
+    }
+    if (ok && output.wall_count) {
+        WWall *grown = (WWall *)realloc(w->walls, (size_t)(w->nwall + output.wall_count) * sizeof(WWall));
+        if (!grown) ok = false;
+        else {
+            w->walls = grown;
+            for (int i = 0; i < output.wall_count; i++) {
+                const SdkBrushWall *bw = &output.walls[i];
+                WWall *wall = &w->walls[w->nwall + i];
+                memset(wall, 0, sizeof *wall);
+                snprintf(wall->id, sizeof wall->id, "%s", bw->id);
+                wall->x1 = bw->x1; wall->y1 = bw->y1;
+                wall->x2 = bw->x2; wall->y2 = bw->y2;
+                wall->bottom = bw->bottom; wall->top = bw->top;
+                snprintf(wall->color, sizeof wall->color, "%s", bw->color);
+                wall->flags = bw->flags;
+            }
+            w->nwall += output.wall_count;
+        }
+    }
+    if (ok && output.portal_count) {
+        WPortal *grown = (WPortal *)realloc(w->portals, (size_t)(w->nportal + output.portal_count) * sizeof(WPortal));
+        if (!grown) ok = false;
+        else {
+            w->portals = grown;
+            for (int i = 0; i < output.portal_count; i++) {
+                const SdkBrushPortal *bp = &output.portals[i];
+                WPortal *portal = &w->portals[w->nportal + i];
+                memset(portal, 0, sizeof *portal);
+                snprintf(portal->id, sizeof portal->id, "%s", bp->id);
+                snprintf(portal->a, sizeof portal->a, "%s", output.cells[bp->cell_a].owner);
+                snprintf(portal->b, sizeof portal->b, "%s", output.cells[bp->cell_b].owner);
+                portal->x1 = bp->ax; portal->y1 = bp->ay;
+                portal->x2 = bp->bx; portal->y2 = bp->by;
+                portal->nopen = bp->opening_count;
+                portal->open = (WOpening *)calloc((size_t)(portal->nopen ? portal->nopen : 1), sizeof(WOpening));
+                if (!portal->open) { ok = false; break; }
+                for (int k = 0; k < portal->nopen; k++)
+                    portal->open[k] = (WOpening){output.openings[bp->first_opening + k].bottom,
+                                                 output.openings[bp->first_opening + k].top};
+                portal->area_portal = bp->area_portal;
+            }
+            if (ok) w->nportal += output.portal_count;
+        }
+    }
+    sdk_brush_output_free(&output);
+    return ok;
+}
+
+static bool entity_kind_known(const char *kind)
+{
+    static const char *const kinds[] = {
+        "player_spawn", "enemy_spawn", "item_spawn", "light", "audio_source",
+        "trigger", "camera_marker", "narrative_marker", "particle_emitter",
+        "door", "lift", "crusher", "moving_wall", "trigger_volume",
+        "fog_volume", "water_volume", "areaportal"
+    };
+    for (size_t i = 0; i < sizeof kinds / sizeof kinds[0]; i++)
+        if (!strcmp(kind, kinds[i])) return true;
+    return false;
+}
+
+static bool load_entities(Ctx *c, const R2dJson *root, World *w)
+{
+    const R2dJson *entities = r2d_json_get(root, "entities");
+    if (!entities) return true;
+    if (entities->type != R2D_JSON_ARR || entities->count > W_MAX) {
+        field_diag(c, "entities", -1, NULL, "entities", "entities — массив (до 65536)");
+        return false;
+    }
+    char (*ids)[64] = (char (*)[64])calloc((size_t)(entities->count ? entities->count : 1), 64);
+    if (!ids) return false;
+    bool ok = true;
+    for (int i = 0; i < entities->count && ok; i++) {
+        const R2dJson *o = entities->items[i];
+        if (o->type != R2D_JSON_OBJ) { field_diag(c, "entities", i, NULL, "entity", "entity — объект"); ok = false; break; }
+        if (!get_id(c, o, "entities", i, ids[i], sizeof ids[i])) { ok = false; break; }
+        for (int j = 0; j < i; j++) if (!strcmp(ids[j], ids[i])) {
+            char loc[2048];
+            snprintf(loc, sizeof loc, "{\"section\":\"entities\",\"index\":%d,\"id\":\"%s\"}", i, json_fragment(ids[i]));
+            sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_ID_DUPLICATE", c->path, loc, NULL,
+                     "entities: id «%s» повторяется", ids[i]);
+            ok = false;
+        }
+        if (!ok) break;
+        const char *kind = r2d_json_str(r2d_json_get(o, "kind"), "");
+        if (!entity_kind_known(kind)) {
+            field_diag(c, "entities", i, ids[i], "kind",
+                       "kind: player_spawn|enemy_spawn|item_spawn|light|audio_source|trigger|camera_marker|narrative_marker|particle_emitter|door|lift|crusher|moving_wall|trigger_volume|fog_volume|water_volume|areaportal");
+            ok = false;
+            break;
+        }
+        const R2dJson *brush = r2d_json_get(o, "brush");
+        if (brush && brush->type != R2D_JSON_STR) { field_diag(c, "entities", i, ids[i], "brush", "brush — строка id"); ok = false; break; }
+        if (brush && brush->string[0]) {
+            bool found = false;
+            for (int b = 0; b < w->nbrush; b++) if (!strcmp(w->brushes[b].id, brush->string)) found = true;
+            if (!found) {
+                field_diag(c, "entities", i, ids[i], "brush", "brush ссылается на несуществующий brush");
+                ok = false;
+                break;
+            }
+            w->nbrush_entities++;
+        } else {
+            w->npoint_entities++;
+            const char *xy[] = {"x", "y", "h"};
+            for (int a = 0; a < 3; a++) {
+                const R2dJson *v = r2d_json_get(o, xy[a]);
+                if (v && (v->type != R2D_JSON_NUM || !isfinite(v->number) || fabs(v->number) > W_LIMIT)) {
+                    field_diag(c, "entities", i, ids[i], xy[a], "координата должна быть конечным числом");
+                    ok = false;
+                    break;
+                }
+            }
+        }
+    }
+    free(ids);
+    if (ok) w->nentities = entities->count;
+    if (ok) {
+        R2dSb compact;
+        r2d_sb_init(&compact);
+        sdk_json_put_compact(&compact, entities);
+        free(w->entities_json);
+        w->entities_json = compact.data;
+    }
+    return ok;
+}
+
+
 static bool load_world(const char *path, World *w, SdkReport *rep, bool renderer)
 {
     memset(w, 0, sizeof *w);
@@ -431,6 +850,7 @@ static bool load_world(const char *path, World *w, SdkReport *rep, bool renderer
         return false;
     }
     snprintf(w->name, sizeof w->name, "%s", r2d_json_str(r2d_json_get(root, "name"), ""));
+    w->authored_lights = r2d_json_size(r2d_json_get(root, "lights"));
     if(renderer){
         const char *fields[]={"lighting","lights"};char **outputs[]={&w->lighting_json,&w->lights_json};
         for(int i=0;i<2;i++){const R2dJson *value=r2d_json_get(root,fields[i]);if(value){R2dSb copy;r2d_sb_init(&copy);sdk_json_put_compact(&copy,value);*outputs[i]=copy.data;}}
@@ -757,6 +1177,42 @@ static bool load_world(const char *path, World *w, SdkReport *rep, bool renderer
         }
     }
     free(sids);
+    // --- brushes (issue #5): authoring solids -> cells/spans/walls/portals ---
+    if (ok) {
+        const R2dJson *brushes = r2d_json_get(root, "brushes");
+        if (brushes) {
+            if (brushes->type != R2D_JSON_ARR || brushes->count > W_MAX) {
+                field_diag(&c, "brushes", -1, NULL, "brushes", "brushes — массив (до 65536)");
+                ok = false;
+            } else {
+                w->nbrush = brushes->count;
+                w->brushes = (SdkBrushSpec *)calloc((size_t)(w->nbrush ? w->nbrush : 1),
+                                                    sizeof(SdkBrushSpec));
+                if (!w->brushes) ok = false;
+                for (int i = 0; ok && i < w->nbrush; i++) {
+                    if (brushes->items[i]->type != R2D_JSON_OBJ) {
+                        field_diag(&c, "brushes", i, NULL, "brush", "brush — объект");
+                        ok = false;
+                        break;
+                    }
+                    if (!parse_brush(&c, brushes->items[i], i, &w->brushes[i])) {
+                        ok = false;
+                        break;
+                    }
+                    for (int j = 0; j < i; j++) if (!strcmp(w->brushes[j].id, w->brushes[i].id)) {
+                        char loc[2048];
+                        snprintf(loc, sizeof loc, "{\"section\":\"brushes\",\"index\":%d,\"id\":\"%s\"}", i,
+                                 json_fragment(w->brushes[i].id));
+                        sdk_diag(rep, SDK_ERROR, "SDK_WORLD_ID_DUPLICATE", path, loc, NULL,
+                                 "brushes: id «%s» повторяется", w->brushes[i].id);
+                        ok = false;
+                    }
+                }
+            }
+        }
+    }
+    if (ok) ok = load_brush_bounds(&c, root, w);
+    if (ok) ok = load_entities(&c, root, w);
     r2d_json_free(root);
     return ok;
 }
@@ -1033,6 +1489,7 @@ static void build_compiled(World *w)
         memcpy(c->spans, w->cells[i].spans, (size_t)c->nspan * sizeof(WSpan));
         snprintf(c->owner, sizeof c->owner, "%s", w->cells[i].id);
         c->explicit_index = w->cells[i].generated ? -1 : i;
+        c->portal_authored = w->cells[i].portal_authored;
     }
     for (int i = 0; i < ntail; ++i) {
         CCell *c = add_cc(w);
@@ -1065,6 +1522,7 @@ static void put_description(const World *w, R2dSb *sb, bool pretty, bool ids)
         r2d_sb_puts(sb, "],\"bottom\":"); put_num(sb, wl->bottom);
         r2d_sb_puts(sb, ",\"top\":"); put_num(sb, wl->top);
         r2d_sb_puts(sb, ",\"color\":"); r2d_sb_put_json_string(sb, wl->color);
+        if (wl->flags) r2d_sb_printf(sb, ",\"flags\":%u", (unsigned)wl->flags);
         r2d_sb_putc(sb, '}');
     }
     r2d_sb_printf(sb, "%s],%s\"cells\":[", nl, nl);
@@ -1170,13 +1628,16 @@ static bool put_renderer_description(const World *w,R2dSb *sb,SdkReport *rep,con
         put_num(sb,p->x1);r2d_sb_putc(sb,',');put_num(sb,p->y1);r2d_sb_puts(sb,"],\"to\":[");put_num(sb,p->x2);r2d_sb_putc(sb,',');put_num(sb,p->y2);
         r2d_sb_puts(sb,"],\"openings\":[");
         for(int j=0;j<p->nopen;j++)r2d_sb_printf(sb,"%s{\"bottom\":%g,\"top\":%g}",j?",":"",p->open[j].bottom,p->open[j].top);
-        r2d_sb_puts(sb,"]}");
+        r2d_sb_puts(sb,"]");
+        if(p->area_portal)r2d_sb_puts(sb,",\"areaPortal\":true");
+        r2d_sb_puts(sb,"}");
     }
     int emitted=w->nportal;
     // Generated stairs/slopes connect across their shared XY edge. Authored cells
     // retain explicit portal control; a solid authored wall blocks generation.
     for(int a=0;a<w->ncc;a++)for(int b=0;b<a;b++) {
         const CCell *ca=&w->cc[a],*cb=&w->cc[b];
+        if(ca->portal_authored||cb->portal_authored)continue;
         if(ca->explicit_index>=0&&cb->explicit_index>=0)continue;
         WCell ra={.x=ca->x,.y=ca->y,.w=ca->w,.h=ca->h};
         WCell rb={.x=cb->x,.y=cb->y,.w=cb->w,.h=cb->h};
@@ -1212,7 +1673,33 @@ static bool put_renderer_description(const World *w,R2dSb *sb,SdkReport *rep,con
         r2d_sb_free(&openings);
         }
     }
-    r2d_sb_putc(sb,']');if(w->lighting_json)r2d_sb_printf(sb,",\"lighting\":%s",w->lighting_json);if(w->lights_json)r2d_sb_printf(sb,",\"lights\":%s",w->lights_json);r2d_sb_putc(sb,'}');free(compiled);
+    r2d_sb_putc(sb,']');
+    // Compiler metadata extension: ignored by r2d_world_load_json, preserved in
+    // .re2dworld for tools, streaming and diagnostics.
+    if (w->brush_stats.brushes || w->region_count) {
+        r2d_sb_puts(sb,",\"compiler\":{\"brushes\":");
+        r2d_sb_printf(sb,"{\"count\":%d,\"solids\":%d,\"tools\":%d,\"cells\":%d,\"spans\":%d,\"walls\":%d,\"portals\":%d,\"mergedCells\":%d,\"areaPortals\":%d,\"badAreaPortals\":%d,\"hints\":%d,\"uselessHints\":%d,\"occluders\":%d}",
+            w->brush_stats.brushes,w->brush_stats.solids,w->brush_stats.tool_brushes,
+            w->brush_stats.cells,w->brush_stats.spans,w->brush_stats.walls,
+            w->brush_stats.portals,w->brush_stats.merged_cells,
+            w->brush_stats.areaportal_edges,
+            w->brush_stats.areaportal_brushes>0&&w->brush_stats.areaportal_edges==0?1:0,
+            w->brush_stats.hint_brushes,
+            w->brush_stats.hint_brushes>0&&w->brush_stats.hint_edges==0?1:0,
+            w->brush_stats.occluder_brushes);
+        r2d_sb_printf(sb,",\"entities\":{\"total\":%d,\"point\":%d,\"brush\":%d}",
+                      w->nentities,w->npoint_entities,w->nbrush_entities);
+        r2d_sb_printf(sb,",\"regionGrid\":{\"size\":%g,\"columns\":%d,\"rows\":%d,\"count\":%d,\"pvsEdges\":%d},\"regionCells\":[",
+                      (double)w->region_size,w->region_columns,w->region_rows,
+                      w->region_count,w->region_pvs_edges);
+        for(int i=0;i<w->region_count;i++)r2d_sb_printf(sb,"%s%d",i?",":"",w->region_cell_counts?w->region_cell_counts[i]:0);
+        r2d_sb_puts(sb,"],\"stages\":{");
+        r2d_sb_printf(sb,"\"loadMs\":%.3f,\"compileMs\":%.3f,\"regionMs\":%.3f}",
+                      w->stage_load_ms,w->stage_compile_ms,w->stage_region_ms);
+        r2d_sb_puts(sb,"}");
+    }
+    if(w->entities_json)r2d_sb_printf(sb,",\"entities\":%s",w->entities_json);
+    if(w->lighting_json)r2d_sb_printf(sb,",\"lighting\":%s",w->lighting_json);if(w->lights_json)r2d_sb_printf(sb,",\"lights\":%s",w->lights_json);r2d_sb_putc(sb,'}');free(compiled);
     R2DRe2dWorld runtime={0};char error[256];
     if(!r2d_world_load_json(&runtime,sb->data,error,sizeof error)){
         sdk_diag(rep,SDK_ERROR,"SDK_WORLD_RENDERER_BAKE",path,NULL,NULL,"%s",error);return false;}
@@ -1292,14 +1779,224 @@ static void put_pvs(const World *w, R2dSb *sb)
 }
 
 // Полный проход: загрузка + раскрытие + проверки. `compiled` — доступно при ok.
-static bool compile_world(const char *path, World *w, SdkReport *rep, StackInfo **stacks, int *nstacks, int *total_spans, bool renderer)
+// ---------------------------------------------------------------------------
+// Region partition + huge-world compiler warnings (R-04 / issue #5)
+// ---------------------------------------------------------------------------
+static void world_warn(Ctx *c, const char *code, const char *message)
+{
+    sdk_diag(c->rep, SDK_WARNING, code, c->path, NULL, NULL, "%s", message);
+}
+
+static bool build_regions(Ctx *c, World *w)
+{
+    if (w->ncell <= 0) return true;
+    R2DWorldRegionCell *cells = (R2DWorldRegionCell *)calloc((size_t)w->ncell,
+                                                             sizeof(R2DWorldRegionCell));
+    R2DWorldRegionPortal *portals = (R2DWorldRegionPortal *)calloc(
+        (size_t)(w->nportal ? w->nportal : 1), sizeof(R2DWorldRegionPortal));
+    if (!cells || !portals) {
+        free(cells); free(portals);
+        sdk_diag(c->rep, SDK_ERROR, "SDK_OOM", c->path, NULL, NULL,
+                 "region partition allocation failed");
+        return false;
+    }
+    for (int i = 0; i < w->ncell; i++) {
+        cells[i].x = w->cells[i].x;
+        cells[i].y = w->cells[i].y;
+        cells[i].w = w->cells[i].w;
+        cells[i].h = w->cells[i].h;
+    }
+    int portal_count = 0;
+    for (int i = 0; i < w->nportal; i++) {
+        const int a = find_cell(w, w->portals[i].a);
+        const int b = find_cell(w, w->portals[i].b);
+        if (a < 0 || b < 0 || a == b) continue;
+        portals[portal_count++] = (R2DWorldRegionPortal){
+            a, b, false, w->portals[i].area_portal
+        };
+    }
+    char error[256] = {0};
+    R2DWorldRegionSet set;
+    memset(&set, 0, sizeof set);
+    int region_count = r2d_world_region_build(cells, w->ncell, portals, portal_count,
+                                              w->region_size, &set, error,
+                                              sizeof error);
+    if (region_count <= 0) {
+        free(cells); free(portals);
+        sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_REGION_PARTITION", c->path, NULL, NULL,
+                 "Region partition failed: %s", error[0] ? error : "invalid cells");
+        return false;
+    }
+    const int words = set.pvs_words;
+    set.regions = (R2DWorldRegion *)calloc((size_t)region_count, sizeof(R2DWorldRegion));
+    set.region_capacity = region_count;
+    set.cell_region = (int *)calloc((size_t)w->ncell, sizeof(int));
+    set.cell_region_capacity = w->ncell;
+    set.region_cells = (int *)calloc((size_t)w->ncell, sizeof(int));
+    set.region_cells_capacity = w->ncell;
+    set.region_portal_offsets = (int *)calloc((size_t)region_count + 1, sizeof(int));
+    set.region_portal_offsets_capacity = region_count + 1;
+    set.region_portal_refs = (int *)calloc((size_t)(portal_count * 2 + 1), sizeof(int));
+    set.region_portal_refs_capacity = portal_count * 2 + 1;
+    set.region_adj_offsets = (int *)calloc((size_t)region_count + 1, sizeof(int));
+    set.region_adj_offsets_capacity = region_count + 1;
+    set.region_adj_refs = (int *)calloc((size_t)(portal_count * 2 + 1), sizeof(int));
+    set.region_adj_refs_capacity = portal_count * 2 + 1;
+    set.pvs = (uint64_t *)calloc((size_t)region_count * (size_t)words, sizeof(uint64_t));
+    set.pvs_capacity = region_count * words;
+    if (!set.regions || !set.cell_region || !set.region_cells ||
+        !set.region_portal_offsets || !set.region_portal_refs ||
+        !set.region_adj_offsets || !set.region_adj_refs || !set.pvs) {
+        free(cells); free(portals);
+        free(set.regions); free(set.cell_region); free(set.region_cells);
+        free(set.region_portal_offsets); free(set.region_portal_refs);
+        free(set.region_adj_offsets); free(set.region_adj_refs); free(set.pvs);
+        sdk_diag(c->rep, SDK_ERROR, "SDK_OOM", c->path, NULL, NULL,
+                 "region partition allocation failed");
+        return false;
+    }
+    const int built = r2d_world_region_build(cells, w->ncell, portals, portal_count,
+                                             w->region_size, &set, error,
+                                             sizeof error);
+    free(cells);
+    free(portals);
+    if (built != region_count) {
+        free(set.regions); free(set.cell_region); free(set.region_cells);
+        free(set.region_portal_offsets); free(set.region_portal_refs);
+        free(set.region_adj_offsets); free(set.region_adj_refs); free(set.pvs);
+        sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_REGION_PARTITION", c->path, NULL, NULL,
+                 "Region partition failed: %s", error[0] ? error : "capacity mismatch");
+        return false;
+    }
+    w->region_count = region_count;
+    w->region_columns = set.columns;
+    w->region_rows = set.rows;
+    w->region_pvs_edges = set.metrics.pvs_edges;
+    free(w->region_cell_counts);
+    w->region_cell_counts = (int *)calloc((size_t)region_count, sizeof(int));
+    if (w->region_cell_counts)
+        for (int r = 0; r < region_count; r++)
+            w->region_cell_counts[r] = set.regions[r].cell_count;
+
+    if (region_count == 1) {
+        float area = 0.0f;
+        for (int i = 0; i < w->ncell; i++) area += w->cells[i].w * w->cells[i].h;
+        if (area > w->region_size * w->region_size * 4.0f)
+            world_warn(c, "SDK_WORLD_GIANT_REGION",
+                       "Giant unpartitioned region: lower regionSize or split the map");
+    }
+    if (region_count > 512)
+        world_warn(c, "SDK_WORLD_TOO_MANY_REGIONS",
+                   "More than 512 regions: active/preload rings may exceed the streaming budget");
+    int reached = 0;
+    for (int r = 0; r < region_count; r++)
+        if (set.pvs[(size_t)r >> 6] & (1ull << (r & 63))) reached++;
+    if (reached < region_count)
+        world_warn(c, "SDK_WORLD_UNREACHABLE_REGION",
+                   "Some regions are not reachable through open portals");
+    if (w->brush_stats.areaportal_brushes > 0 && w->brush_stats.areaportal_edges == 0)
+        world_warn(c, "SDK_WORLD_BAD_AREAPORTAL",
+                   "Areaportal brush does not cover any generated portal edge");
+    if (w->brush_stats.hint_brushes > 0 && w->brush_stats.hint_edges == 0)
+        world_warn(c, "SDK_WORLD_USELESS_HINT",
+                   "Hint brush does not touch a generated portal edge");
+    free(set.regions); free(set.cell_region); free(set.region_cells);
+    free(set.region_portal_offsets); free(set.region_portal_refs);
+    free(set.region_adj_offsets); free(set.region_adj_refs); free(set.pvs);
+    return true;
+}
+
+static void check_unreachable_cells(Ctx *c, const World *w)
+{
+    if (w->ncell <= 1 || w->nportal <= 0) return;
+    int *degree = (int *)calloc((size_t)w->ncell, sizeof(int));
+    int *offset = (int *)calloc((size_t)w->ncell + 1, sizeof(int));
+    int *neighbors = (int *)calloc((size_t)w->nportal * 2, sizeof(int));
+    uint8_t *seen = (uint8_t *)calloc((size_t)w->ncell, 1);
+    int *queue = (int *)calloc((size_t)w->ncell, sizeof(int));
+    if (!degree || !offset || !neighbors || !seen || !queue) {
+        free(degree); free(offset); free(neighbors); free(seen); free(queue);
+        return;
+    }
+    int edges = 0;
+    for (int p = 0; p < w->nportal; p++) {
+        const int a = find_cell(w, w->portals[p].a);
+        const int b = find_cell(w, w->portals[p].b);
+        if (a < 0 || b < 0 || a == b) continue;
+        degree[a]++; degree[b]++;
+        edges++;
+    }
+    for (int i = 0; i < w->ncell; i++) offset[i + 1] = offset[i] + degree[i];
+    int *fill = (int *)calloc((size_t)w->ncell, sizeof(int));
+    if (!fill) {
+        free(degree); free(offset); free(neighbors); free(seen); free(queue);
+        return;
+    }
+    for (int p = 0; p < w->nportal; p++) {
+        const int a = find_cell(w, w->portals[p].a);
+        const int b = find_cell(w, w->portals[p].b);
+        if (a < 0 || b < 0 || a == b) continue;
+        neighbors[offset[a] + fill[a]++] = b;
+        neighbors[offset[b] + fill[b]++] = a;
+    }
+    int head = 0, tail = 0, reached = 0;
+    queue[tail++] = 0;
+    seen[0] = 1;
+    while (head < tail) {
+        const int current = queue[head++];
+        reached++;
+        for (int i = offset[current]; i < offset[current + 1]; i++) {
+            const int next = neighbors[i];
+            if (!seen[next]) { seen[next] = 1; queue[tail++] = next; }
+        }
+    }
+    if (edges > 0 && reached < w->ncell) {
+        world_warn(c, "SDK_WORLD_UNREACHABLE_CELL",
+                   "Some cells are not reachable through authored portals");
+    }
+    free(fill); free(degree); free(offset); free(neighbors); free(seen); free(queue);
+}
+
+static void compiler_warnings(Ctx *c, const World *w, int total_spans)
+{
+    if (w->ncc > 4096 || total_spans > 20000)
+        world_warn(c, "SDK_WORLD_TOO_MANY_SURFACES",
+                   "Too many compiled cells/spans; consider merging equivalent sectors");
+    if (w->authored_lights > 64)
+        world_warn(c, "SDK_WORLD_TOO_MANY_LIGHTS",
+                   "More than 64 authored dynamic lights; light cost may dominate");
+    int repeats = 0;
+    for (int i = 0; i < w->ncw; i++) {
+        int count = 1;
+        for (int j = 0; j < i; j++)
+            if (!strcmp(w->cw[j].color, w->cw[i].color)) { count = 0; break; }
+        if (!count) continue;
+        for (int j = i + 1; j < w->ncw; j++)
+            if (!strcmp(w->cw[j].color, w->cw[i].color)) count++;
+        if (count > repeats) repeats = count;
+    }
+    if (repeats > 16)
+        world_warn(c, "SDK_WORLD_MATERIAL_REPETITION",
+                   "One wall color repeats more than 16 times; texture/material variation is at risk");
+    if (w->brush_stats.brushes > 0 && w->brush_stats.tool_brushes == 0)
+        sdk_diag(c->rep, SDK_INFO, "SDK_WORLD_BRUSH_PLAIN", c->path, NULL, NULL,
+                 "Brush map has no tool materials; sky/clip boundary is the default envelope");
+    check_unreachable_cells(c, w);
+}
+
+static bool compile_world(const char *path, World *w, SdkReport *rep, StackInfo **stacks, int *nstacks, int *total_spans, bool renderer, float region_override)
+
 {
     *stacks = NULL;
     *nstacks = 0;
     *total_spans = 0;
     Ctx c = { rep, path };
+    clock_t load_started = clock();
     bool ok = load_world(path, w, rep, renderer);
+    w->stage_load_ms = (double)(clock() - load_started) * 1000.0 / (double)CLOCKS_PER_SEC;
     if (!ok) return false;
+    if (region_override > 0.0f) w->region_size = region_override;
+    clock_t compile_started = clock();
     build_compiled(w);
     if(renderer)for(int i=0;i<w->ncc;i++)for(int j=i+1;j<w->ncc;){
         CCell *a=&w->cc[i],*b=&w->cc[j];
@@ -1312,6 +2009,11 @@ static bool compile_world(const char *path, World *w, SdkReport *rep, StackInfo 
     }
     check_compiled(&c, w, &ok, stacks, nstacks, total_spans);
     check_portals(&c, w, &ok);
+    clock_t region_started = clock();
+    if (ok) ok = build_regions(&c, w);
+    w->stage_region_ms += (double)(clock() - region_started) * 1000.0 / (double)CLOCKS_PER_SEC;
+    if (ok) compiler_warnings(&c, w, *total_spans);
+    w->stage_compile_ms = (double)(clock() - compile_started) * 1000.0 / (double)CLOCKS_PER_SEC;
     if (ok) check_leaks(&c, w);
     if (w->nportal > 0 && !renderer) {
         sdk_diag(rep, SDK_INFO, "SDK_WORLD_PORTALS_NOT_IN_RUNTIME", path, NULL, NULL,
@@ -1346,7 +2048,7 @@ void sdk_validate_re2dmap(const char *path, SdkReport *rep)
     World w;
     StackInfo *stacks;
     int n, spans;
-    compile_world(path, &w, rep, &stacks, &n, &spans, false);
+    compile_world(path, &w, rep, &stacks, &n, &spans, false, 0.0f);
     free(stacks);
     world_free(&w);
 }
@@ -1360,11 +2062,11 @@ static void put_stack(R2dSb *sb, const StackInfo *s)
 }
 
 // `world-compile <карта.re2dmap> [--output файл]`; `world-info` — то же без записи.
-static int world_cmd(const SdkArgs *a, bool write)
+static int world_cmd_at(const SdkArgs *a, bool write, int positional)
 {
     SdkReport rep;
     sdk_report_init(&rep);
-    const char *src = sdk_arg_positional(a, 0);
+    const char *src = sdk_arg_positional(a, positional);
     if (!src) {
         const int rc = sdk_fail(&rep, "SDK_USAGE", write ? "Использование: r2d-sdk world-compile <карта.re2dmap> [--output описание.json]" : "Использование: r2d-sdk world-info <карта.re2dmap>");
         sdk_report_free(&rep);
@@ -1380,7 +2082,19 @@ static int world_cmd(const SdkArgs *a, bool write)
     int nstacks, spans;
     const bool renderer = sdk_arg_flag(a,"--renderer");
     const bool want_pvs = sdk_arg_flag(a,"--pvs");
-    bool ok = compile_world(src, &w, &rep, &stacks, &nstacks, &spans, renderer);
+    float region_override = 0.0f;
+    const char *region_arg = sdk_arg_value(a, "--region-size");
+    if (region_arg) {
+        char *end = NULL;
+        region_override = strtof(region_arg, &end);
+        if (!end || *end || !isfinite(region_override) || region_override < 16.0f) {
+            sdk_diag(&rep, SDK_ERROR, "SDK_USAGE", "--region-size", NULL, NULL,
+                     "--region-size requires a number >= 16");
+            sdk_report_free(&rep);
+            return 1;
+        }
+    }
+    bool ok = compile_world(src, &w, &rep, &stacks, &nstacks, &spans, renderer, region_override);
     R2dSb renderer_data;r2d_sb_init(&renderer_data);
     if(ok&&renderer)ok=put_renderer_description(&w,&renderer_data,&rep,src);
     R2dSb out;
@@ -1413,8 +2127,16 @@ static int world_cmd(const SdkArgs *a, bool write)
     r2d_sb_printf(&out, ",\"ok\":%s,\"output\":", ok && rep.errors == 0 ? "true" : "false");
     if (outpath[0]) r2d_sb_put_json_string(&out, outpath); else r2d_sb_puts(&out, "null");
     r2d_sb_printf(&out, ",\"outputFormat\":\"%s\",\"runtimePortals\":%s", renderer?"re2dworld-v1":"legacy-compiled-json",renderer?"true":"false");
-    r2d_sb_printf(&out, ",\"stats\":{\"cells\":%d,\"walls\":%d,\"portals\":%d,\"stairs\":%d,\"slopes\":%d,\"compiledCells\":%d,\"compiledWalls\":%d,\"spans\":%d,\"stairSteps\":%d,\"slopeSegments\":%d,\"stacks\":%d}",
-                  w.ncell, w.nwall, w.nportal, w.nstairs, w.nslopes, w.ncc, w.ncw, spans, w.stair_steps, w.slope_segments, nstacks);
+    r2d_sb_printf(&out, ",\"stats\":{\"cells\":%d,\"walls\":%d,\"portals\":%d,\"stairs\":%d,\"slopes\":%d,\"compiledCells\":%d,\"compiledWalls\":%d,\"spans\":%d,\"stairSteps\":%d,\"slopeSegments\":%d,\"stacks\":%d,\"brushes\":%d,\"toolBrushes\":%d,\"brushCells\":%d,\"brushWalls\":%d,\"brushPortals\":%d,\"mergedCells\":%d,\"areaPortals\":%d,\"regions\":%d,\"regionColumns\":%d,\"regionRows\":%d,\"pvsEdges\":%d,\"entities\":%d,\"pointEntities\":%d,\"brushEntities\":%d,\"loadMs\":%.3f,\"compileMs\":%.3f,\"regionMs\":%.3f}",
+                  w.ncell, w.nwall, w.nportal, w.nstairs, w.nslopes, w.ncc, w.ncw, spans, w.stair_steps, w.slope_segments, nstacks,
+                  w.brush_stats.brushes, w.brush_stats.tool_brushes, w.brush_stats.cells,
+                  w.brush_stats.walls, w.brush_stats.portals, w.brush_stats.merged_cells,
+                  w.brush_stats.areaportal_edges, w.region_count, w.region_columns,
+                  w.region_rows, w.region_pvs_edges, w.nentities, w.npoint_entities,
+                  w.nbrush_entities, w.stage_load_ms, w.stage_compile_ms,
+                  w.stage_region_ms);
+    r2d_sb_printf(&out, ",\"stageReport\":[{\"stage\":\"load\",\"ms\":%.3f},{\"stage\":\"compile\",\"ms\":%.3f},{\"stage\":\"regions\",\"ms\":%.3f}]",
+                  w.stage_load_ms, w.stage_compile_ms, w.stage_region_ms);
     r2d_sb_puts(&out, ",\"stacks\":[");
     for (int i = 0; i < nstacks && i < 64; ++i) { if (i) r2d_sb_putc(&out, ','); put_stack(&out, &stacks[i]); }
     r2d_sb_puts(&out, "]");
@@ -1451,5 +2173,18 @@ static int world_cmd(const SdkArgs *a, bool write)
     return rc;
 }
 
-int sdk_cmd_world_compile(const SdkArgs *a) { return world_cmd(a, true); }
-int sdk_cmd_world_info(const SdkArgs *a) { return world_cmd(a, false); }
+int sdk_cmd_world_compile(const SdkArgs *a) { return world_cmd_at(a, true, 0); }
+int sdk_cmd_world_info(const SdkArgs *a) { return world_cmd_at(a, false, 0); }
+int sdk_cmd_world(const SdkArgs *a)
+{
+    const char *sub = sdk_arg_positional(a, 0);
+    if (sub && !strcmp(sub, "compile")) return world_cmd_at(a, true, 1);
+    if (sub && !strcmp(sub, "info")) return world_cmd_at(a, false, 1);
+    if (sub && !strcmp(sub, "validate")) return world_cmd_at(a, false, 1);
+    SdkReport rep;
+    sdk_report_init(&rep);
+    const int rc = sdk_fail(&rep, "SDK_USAGE",
+        "Использование: r2d-sdk world compile|info|validate <карта.re2dmap> [--renderer] [--pvs] [--region-size N] [--output file]");
+    sdk_report_free(&rep);
+    return rc;
+}

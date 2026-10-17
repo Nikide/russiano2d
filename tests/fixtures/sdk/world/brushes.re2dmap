@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "name": "Brush authoring fixture",
+  "regionSize": 128,
+  "world": {
+    "x": 0,
+    "y": 0,
+    "w": 512,
+    "h": 512,
+    "bottom": 0,
+    "top": 256,
+    "floorColor": "#9a9a9a",
+    "ceilingColor": "#6a7078",
+    "sideColor": "#8f7a58",
+    "boundary": "sky"
+  },
+  "brushes": [
+    {
+      "id": "wall.north",
+      "rect": [240, 0, 32, 200],
+      "bottom": 0,
+      "top": 256,
+      "sideColor": "#7a6a50"
+    },
+    {
+      "id": "wall.south",
+      "rect": [240, 320, 32, 192],
+      "bottom": 0,
+      "top": 256,
+      "sideColor": "#7a6a50"
+    },
+    {
+      "id": "altar.nodraw",
+      "rect": [48, 48, 96, 96],
+      "bottom": 0,
+      "top": 64,
+      "tool": "nodraw",
+      "floorColor": "#c0b090",
+      "sideColor": "#5f5040"
+    },
+    {
+      "id": "crate.clip",
+      "rect": [48, 384, 96, 96],
+      "bottom": 0,
+      "top": 128,
+      "tool": "clip"
+    },
+    {
+      "id": "sky.column",
+      "rect": [400, 192, 64, 128],
+      "bottom": 0,
+      "top": 256,
+      "tool": "sky"
+    },
+    {
+      "id": "hint.gap",
+      "rect": [240, 200, 32, 120],
+      "bottom": 0,
+      "top": 256,
+      "tool": "hint"
+    },
+    {
+      "id": "areaportal.gap",
+      "rect": [240, 200, 32, 120],
+      "bottom": 0,
+      "top": 256,
+      "tool": "areaportal"
+    },
+    {
+      "id": "door.block",
+      "rect": [128, 224, 48, 64],
+      "bottom": 0,
+      "top": 192,
+      "sideColor": "#6b5a40"
+    },
+    {
+      "id": "trigger.gap",
+      "rect": [200, 200, 40, 120],
+      "bottom": 0,
+      "top": 256,
+      "tool": "trigger"
+    },
+    {
+      "id": "occluder.gap",
+      "rect": [300, 200, 8, 120],
+      "bottom": 0,
+      "top": 256,
+      "tool": "occluder"
+    }
+  ],
+  "entities": [
+    { "id": "player.start", "kind": "player_spawn", "x": 96, "y": 96, "h": 0 },
+    { "id": "enemy.guard", "kind": "enemy_spawn", "x": 320, "y": 96, "h": 0 },
+    { "id": "light.courtyard", "kind": "light", "x": 256, "y": 256, "h": 128 },
+    { "id": "door.gate", "kind": "door", "brush": "door.block" }
+  ]
+}

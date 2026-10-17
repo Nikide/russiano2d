@@ -17,17 +17,24 @@ bool r2d_world_put_baked(R2DRe2dWorld *w,R2dSb *out)
     bool semantic=r2d_world_semantic_any(w);
     if(semantic&&!r2d_world_semantic_validate(w))return false;
     R2dSb s;r2d_sb_init(&s);bool lit=w->span_lights!=NULL||w->authored_lighting||w->light_count>0;
+    // RDW5 adds wall tool-policy flags and portal areaportal/sky/mirror state.
+    // Older RDW1..RDW4 payloads stay readable; RDW5 is emitted only when a map
+    // actually uses tool materials or tool portals.
+    bool tools=false;
+    for(int i=0;i<w->wall_count;i++)if(w->walls[i].flags){tools=true;break;}
+    if(!tools)for(int i=0;i<w->portal_count;i++)if(w->portals[i].sky||w->portals[i].mirror||w->portals[i].area_portal){tools=true;break;}
     // Wire markers keep older RDW1/RDW2 payloads readable; semantic tables add
-    // RDW3 (lit) / RDW4 (unlit) and never rewrite the legacy layout.
-    const int version=semantic?(lit?3:4):(lit?2:1);
-    static const uint32_t markers[]={0x31574452u,0x32574452u,0x33574452u,0x34574452u};
+    // RDW3 (lit) / RDW4 (unlit), RDW5 adds tool policy.
+    const int version=tools?5:(semantic?(lit?3:4):(lit?2:1));
+    static const uint32_t markers[]={0x31574452u,0x32574452u,0x33574452u,0x34574452u,0x35574452u};
+    const bool write_lit=lit||tools, write_semantic=semantic||tools;
     put_u(&s,markers[version-1]);
     int nr=w->span_wall_offsets[w->span_count];const int counts[]={w->wall_count,w->span_count,w->cell_count,w->portal_count,w->opening_count,w->surface_count,w->cell_node_count,w->cell_root,nr};
     for(int i=0;i<9;i++)put_u(&s,(uint32_t)counts[i]);
-    for(int i=0;i<w->wall_count;i++){const R2DWorldWall *p=&w->walls[i];put_f(&s,p->x1);put_f(&s,p->y1);put_f(&s,p->x2);put_f(&s,p->y2);put_f(&s,p->bottom);put_f(&s,p->top);put_u(&s,p->color);}
+    for(int i=0;i<w->wall_count;i++){const R2DWorldWall *p=&w->walls[i];put_f(&s,p->x1);put_f(&s,p->y1);put_f(&s,p->x2);put_f(&s,p->y2);put_f(&s,p->bottom);put_f(&s,p->top);put_u(&s,p->color);if(tools)put_u(&s,p->flags);}
     for(int i=0;i<w->span_count;i++){const R2DWorldSpan *p=&w->spans[i];put_f(&s,p->x);put_f(&s,p->y);put_f(&s,p->w);put_f(&s,p->h);put_f(&s,p->bottom);put_f(&s,p->top);put_u(&s,p->floor_color);put_u(&s,p->ceiling_color);put_f(&s,p->floor_a);put_f(&s,p->floor_b);put_f(&s,p->ceiling_a);put_f(&s,p->ceiling_b);}
     for(int i=0;i<w->cell_count;i++){const R2DWorldCell *p=&w->cells[i];put_f(&s,p->x);put_f(&s,p->y);put_f(&s,p->w);put_f(&s,p->h);put_u(&s,p->first_span);put_u(&s,p->span_count);}
-    for(int i=0;i<w->portal_count;i++){const R2DWorldPortal *p=&w->portals[i];put_u(&s,p->cell_a);put_u(&s,p->cell_b);put_u(&s,p->first_opening);put_u(&s,p->opening_count);put_f(&s,p->ax);put_f(&s,p->ay);put_f(&s,p->bx);put_f(&s,p->by);put_u(&s,p->closed?1:0);}
+    for(int i=0;i<w->portal_count;i++){const R2DWorldPortal *p=&w->portals[i];put_u(&s,p->cell_a);put_u(&s,p->cell_b);put_u(&s,p->first_opening);put_u(&s,p->opening_count);put_f(&s,p->ax);put_f(&s,p->ay);put_f(&s,p->bx);put_f(&s,p->by);put_u(&s,p->closed?1:0);if(tools){uint32_t f=(p->sky?1u:0u)|(p->mirror?2u:0u)|(p->area_portal?4u:0u);put_u(&s,f);}}
     for(int i=0;i<w->opening_count;i++){put_f(&s,w->openings[i].bottom);put_f(&s,w->openings[i].top);}
     for(int i=0;i<w->surface_count;i++){const R2DWorldSurface *p=&w->surfaces[i];put_u(&s,p->kind);put_u(&s,p->primitive);put_u(&s,p->cell);put_u(&s,p->span);}
     for(int i=0;i<w->cell_node_count;i++){const R2DWorldCellNode *p=&w->cell_nodes[i];put_f(&s,p->split);put_u(&s,p->axis);put_u(&s,p->front);put_u(&s,p->back);put_u(&s,p->first_ref);put_u(&s,p->ref_count);}
@@ -36,13 +43,13 @@ bool r2d_world_put_baked(R2DRe2dWorld *w,R2dSb *out)
     ARRAY(opening_spans_a,w->opening_count);ARRAY(opening_spans_b,w->opening_count);
     ARRAY(span_wall_offsets,w->span_count+1);ARRAY(span_wall_refs,nr);ARRAY(cell_portal_offsets,w->cell_count+1);ARRAY(cell_portal_refs,w->portal_count*2);
 #undef ARRAY
-    if(lit){
+    if(write_lit){
         const R2DWorldLighting *l=&w->lighting;put_u(&s,l->enabled);put_u(&s,l->dynamic);put_u(&s,l->shadows);put_u(&s,l->orientation);put_u(&s,w->authored_lighting);put_f(&s,l->distance_scale);put_f(&s,l->orientation_strength);
         for(int i=0;i<128;i++){const R2DWorldLight *p=&w->lights[i];put_u(&s,(p->active?1u:0u)|(p->is_static?2u:0u));put_u(&s,p->generation);put_f(&s,p->x);put_f(&s,p->y);put_f(&s,p->h);put_f(&s,p->radius);put_f(&s,p->intensity);put_f(&s,p->r);put_f(&s,p->g);put_f(&s,p->b);put_u(&s,p->shadow);put_f(&s,p->remaining);put_f(&s,p->age);put_f(&s,p->flicker_min);put_f(&s,p->flicker_max);put_f(&s,p->flicker_rate);put_u(&s,p->flicker_seed);}
         for(int i=0;i<w->span_count;i++){const R2DWorldSpanLight *p=&w->span_lights[i];put_f(&s,p->level);put_f(&s,p->r);put_f(&s,p->g);put_f(&s,p->b);put_f(&s,p->fog_density);put_f(&s,p->fog_start);put_f(&s,p->fog_r);put_f(&s,p->fog_g);put_f(&s,p->fog_b);for(int j=0;j<4;j++)put_u(&s,w->span_light_masks[i*4+j]);}
         for(int i=0;i<128;i++){const R2DWorldLightLinks *p=&w->light_links[i];put_u(&s,p->count);for(int j=0;j<p->count;j++)put_u(&s,p->spans[j]);}
     }
-    if(semantic) {
+    if(write_semantic) {
         const int expected[R2D_WORLD_IDS_KINDS]={w->cell_count,w->wall_count,w->span_count,w->portal_count};
         for(int kind=0;kind<R2D_WORLD_IDS_KINDS;kind++)put_u(&s,(uint32_t)expected[kind]);
         for(int kind=0;kind<R2D_WORLD_IDS_KINDS;kind++) {
@@ -114,8 +121,9 @@ bool r2d_world_load_baked(R2DRe2dWorld *world,const R2dJson *obj,char *err,size_
     for(size_t i=0;i<length/2;i++){int a=hex(data[i*2]),b=hex(data[i*2+1]);if(a<0||b<0)goto done;bytes[i]=(uint8_t)(a*16+b);}
     char actual[17];snprintf(actual,sizeof actual,"%016llx",(unsigned long long)checksum(bytes,length/2));if(strcmp(sum,actual))goto done;
     Reader r={bytes,length/2,0,true};uint32_t marker=get_u(&r);
-    int version=marker==0x31574452u?1:marker==0x32574452u?2:marker==0x33574452u?3:marker==0x34574452u?4:0;
-    bool lit=version==2||version==3,semantic=version>=3;
+    int version=marker==0x31574452u?1:marker==0x32574452u?2:marker==0x33574452u?3:marker==0x34574452u?4:marker==0x35574452u?5:0;
+    bool tools=version>=5;
+    bool lit=version==2||version==3||version==5,semantic=version>=3;
     if(!version||wire_version!=(double)version)goto done;
     int *counts[]={&w.wall_count,&w.span_count,&w.cell_count,&w.portal_count,&w.opening_count,&w.surface_count,&w.cell_node_count,&w.cell_root};
     for(int i=0;i<8;i++)*counts[i]=(int32_t)get_u(&r);int refs=(int32_t)get_u(&r);
@@ -126,10 +134,10 @@ bool r2d_world_load_baked(R2DRe2dWorld *world,const R2dJson *obj,char *err,size_
     A(cell_refs,w.cell_count);A(span_cells,w.span_count);A(wall_portals,w.wall_count);A(wall_openings,w.wall_count);A(opening_spans_a,w.opening_count);A(opening_spans_b,w.opening_count);
     A(span_wall_offsets,w.span_count+1);A(span_wall_refs,refs);A(cell_portal_offsets,w.cell_count+1);A(cell_portal_refs,w.portal_count*2);
 #undef A
-    for(int i=0;i<w.wall_count;i++){R2DWorldWall *p=&w.walls[i];p->x1=get_f(&r);p->y1=get_f(&r);p->x2=get_f(&r);p->y2=get_f(&r);p->bottom=get_f(&r);p->top=get_f(&r);p->color=get_u(&r);}
+    for(int i=0;i<w.wall_count;i++){R2DWorldWall *p=&w.walls[i];p->x1=get_f(&r);p->y1=get_f(&r);p->x2=get_f(&r);p->y2=get_f(&r);p->bottom=get_f(&r);p->top=get_f(&r);p->color=get_u(&r);if(tools){uint32_t flags=get_u(&r);if(flags>65535)r.ok=false;p->flags=(uint16_t)flags;}}
     for(int i=0;i<w.span_count;i++){R2DWorldSpan *p=&w.spans[i];p->x=get_f(&r);p->y=get_f(&r);p->w=get_f(&r);p->h=get_f(&r);p->bottom=get_f(&r);p->top=get_f(&r);p->floor_color=get_u(&r);p->ceiling_color=get_u(&r);p->floor_a=get_f(&r);p->floor_b=get_f(&r);p->ceiling_a=get_f(&r);p->ceiling_b=get_f(&r);}
     for(int i=0;i<w.cell_count;i++){R2DWorldCell *p=&w.cells[i];p->x=get_f(&r);p->y=get_f(&r);p->w=get_f(&r);p->h=get_f(&r);p->first_span=(int32_t)get_u(&r);p->span_count=(int32_t)get_u(&r);}
-    for(int i=0;i<w.portal_count;i++){R2DWorldPortal *p=&w.portals[i];p->cell_a=(int32_t)get_u(&r);p->cell_b=(int32_t)get_u(&r);p->first_opening=(int32_t)get_u(&r);p->opening_count=(int32_t)get_u(&r);p->ax=get_f(&r);p->ay=get_f(&r);p->bx=get_f(&r);p->by=get_f(&r);uint32_t closed=get_u(&r);if(closed>1)r.ok=false;p->closed=closed!=0;}
+    for(int i=0;i<w.portal_count;i++){R2DWorldPortal *p=&w.portals[i];p->cell_a=(int32_t)get_u(&r);p->cell_b=(int32_t)get_u(&r);p->first_opening=(int32_t)get_u(&r);p->opening_count=(int32_t)get_u(&r);p->ax=get_f(&r);p->ay=get_f(&r);p->bx=get_f(&r);p->by=get_f(&r);uint32_t closed=get_u(&r);if(closed>1)r.ok=false;p->closed=closed!=0;if(tools){uint32_t f=get_u(&r);if(f>7)r.ok=false;p->sky=(f&1)!=0;p->mirror=(f&2)!=0;p->area_portal=(f&4)!=0;}}
     for(int i=0;i<w.opening_count;i++){w.openings[i].bottom=get_f(&r);w.openings[i].top=get_f(&r);}
     for(int i=0;i<w.surface_count;i++){R2DWorldSurface *p=&w.surfaces[i];p->kind=(int32_t)get_u(&r);p->primitive=(int32_t)get_u(&r);p->cell=(int32_t)get_u(&r);p->span=(int32_t)get_u(&r);}
     for(int i=0;i<w.cell_node_count;i++){R2DWorldCellNode *p=&w.cell_nodes[i];p->split=get_f(&r);p->axis=(int32_t)get_u(&r);p->front=(int32_t)get_u(&r);p->back=(int32_t)get_u(&r);p->first_ref=(int32_t)get_u(&r);p->ref_count=(int32_t)get_u(&r);}
