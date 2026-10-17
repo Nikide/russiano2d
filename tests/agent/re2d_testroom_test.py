@@ -177,6 +177,18 @@ def main():
         check(state(a)["weapon"]["state"] == "idle"
               and state(a)["weapon"]["frame"] == 0, "после выстрела — покой, кадр 0")
 
+        # АК: удержание гашетки — очередь, а не одиночный, как у пистолета.
+        a.cmd("key", key="3", action="tap"); a.step(3)
+        st = state(a)["weapon"]
+        check(st["name"] == "ak" and st["auto"] is True and st["rpm"] == 600,
+              f"у АК автоматический режим 600 в/м: {st}")
+        before = st["shots"]
+        a.mouse(button=1, action="down"); a.step(45); a.mouse(button=1, action="up")
+        a.step(3)
+        auto_shots = state(a)["weapon"]["shots"] - before
+        check(auto_shots >= 3,
+              f"удержание ЛКМ даёт очередь из АК: {auto_shots} выстрелов за 45 кадров")
+
         a.cmd("key", key="r", action="tap"); a.step(8)
         reloading = state(a)["weapon"]
         check(reloading["state"] == "reload" and reloading["reloads"] == 1

@@ -48,6 +48,8 @@ const ENEMY_WALK_FPS = 7.5;
 const ENEMY_SEE_H = 85;         // высота центра, по которой проверяется видимость
 const ENEMY_HP = 100;           // 3 выстрела из пистолета / 5 из АК / 1 дробовик
 const WEAPON_DAMAGE = { pistol: 34, shotgun: 100, ak: 20 };
+// Автоматический огонь: выстрелов в минуту (у АК 600 = каждые 100 мс).
+const WEAPON_AUTO = { ak: 600 };
 const DEATH_FALL_MS = 350;      // строка 6 (падение) → строка 7 (труп)
 
 // Оружие от первого лица (maid_fps_weapons).
@@ -376,7 +378,13 @@ export default function install($) {
     function weaponStart(kind) {
         if (!weapons || gun.seq) return false;
         const w = weapons[gun.name];
-        const seq = w && w.def.animations ? w.def.animations[kind] : null;
+        let seq = w && w.def.animations ? w.def.animations[kind] : null;
+        // Автомат стреляет очередью: один цикл укладывается в 100 мс (600 в/м),
+        // поэтому длинную «пистолетную» анимацию 0→1→2→3→0 для него сжимаем.
+        if (kind === 'fire' && WEAPON_AUTO[gun.name]) {
+            seq = [{ frame: 1, ms: 25 }, { frame: 2, ms: 30 },
+                   { frame: 3, ms: 25 }, { frame: 0, ms: 20 }];
+        }
         if (!Array.isArray(seq) || seq.length === 0) return false;
         gun.kind = kind;
         gun.state = kind;
@@ -470,6 +478,7 @@ export default function install($) {
                 name: gun.name, state: gun.state, frame: gun.frame,
                 shots: gun.shots, reloads: gun.reloads, sound_ok: gun.sound_ok,
                 kills: gun.kills,
+                auto: !!WEAPON_AUTO[gun.name], rpm: WEAPON_AUTO[gun.name] || 0,
                 seq_left: gun.seq ? gun.seq.length - gun.i : 0,
             },
             frames: ENEMY_FRAMES,
@@ -596,9 +605,18 @@ export default function install($) {
                     if ($.input.pressed(WEAPON_KEYS[k])) weaponSet(WEAPON_ORDER[k]);
                 }
                 if ($.input.pressed('c')) weaponCycle();
-                if ($.input.mousePressed('left') || $.input.pressed('f')) weaponStart('fire');
+                const trigger = $.input.mouseDown('left') || $.input.down('f');
+                const auto = !!WEAPON_AUTO[gun.name];
+                if (auto) {
+                    // Очередь: пока гашетка нажата, каждый законченный цикл
+                    // сразу начинает следующий.
+                    if (trigger && !gun.seq && gun.state !== 'reload') weaponStart('fire');
+                } else if ($.input.mousePressed('left') || $.input.pressed('f')) {
+                    weaponStart('fire');
+                }
                 if ($.input.pressed('r')) weaponStart('reload');
                 weaponTick(step_ms);
+                if (auto && trigger && !gun.seq && gun.state !== 'reload') weaponStart('fire');
             }
 
             if (labels) {
@@ -606,6 +624,7 @@ export default function install($) {
                 const w = weapons
                     ? ` · ${gun.name.toUpperCase()} ${gun.state}`
                       + `${gun.shots ? ` · выстрелов ${gun.shots}` : ''}`
+                      + `${WEAPON_AUTO[gun.name] ? ' · АВТО' : ''}`
                       + `${gun.kills ? ` · убито ${gun.kills}` : ''}`
                     : ' · оружия нет';
                 labels.status.text((close
