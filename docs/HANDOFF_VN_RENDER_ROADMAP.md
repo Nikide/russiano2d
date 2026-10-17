@@ -19,7 +19,7 @@
 | VN-03 | Narrative IR/story/save/backlog/linter (task-1) | trace-core | in_progress |
 | R-01 | grounding/edges/material (task-2) | particle-core | in_progress |
 | R-02 | haze/grime/AO/bloom/sky layers (task-2) | particle-core | in_progress |
-| R-03 | VFX pack/cards/trails/distortion (task-4) | viewmodel-core | in_progress |
+| R-03 | VFX pack/cards/trails/distortion (task-4) | viewmodel-core | done: 11 native, 53 bundles, 143 CTest; renderer pass for cards/trails pending |
 | R-04 | regions/PVS/streaming/LOD (task-3) | nav-core | in_progress |
 | R-05 | brushes/tool materials/compiler #5 (task-3) | nav-core | in_progress |
 | R-06 | distant scene/sky boundary #6 (task-3) | nav-core | in_progress |
@@ -48,3 +48,11 @@
 
 ## Current status log
 - 2026-10-17: tasks assigned (VN→trace-core, render→particle-core, world/compiler→nav-core, VFX→viewmodel-core). Handoff created.
+
+## Completed
+### R-03 VFX (task-4)
+- `src/re2d_world_vfx.h/.c`: 32 trails, cards, distortion, temp-light budget, FX bundle parser.
+- `particle` collision modes none/floor/wall/bounce/despawn; `world.vfx*` API + info counters.
+- 53 procedural effects under `assets/vfx/`, demo `demos/re2d_vfx_lab`.
+- Tests: 11 native, agent 53/53 bundles; r2d_check 143; ci_verify green.
+- Limits: cards/trails/distortion simulated+budgeted but exotic renderer pass not wired (renderer task owns GPU); decals need used material; point/probe collisions.
