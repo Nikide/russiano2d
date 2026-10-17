@@ -1,6 +1,6 @@
 // ===========================================================================
-// Тест 2D BSP-дерева: порядок обхода обязан содержать КАЖДЫЙ отрезок дерева
-// ровно один раз.
+// Тест 2D BSP-дерева (Unity): порядок обхода обязан содержать КАЖДЫЙ отрезок
+// дерева ровно один раз.
 //
 // Зачем отдельный тест. В дереве есть скрытый случай: на предельной глубине
 // (R2D_BSP_MAX_DEPTH) остаток геометрии «сваливался» в лист и дублировался в
@@ -8,28 +8,22 @@
 // count()/segment() эти отрезки видели, а order() — нет: часть стен молча
 // исчезала из кадра. Тест ловит именно это расхождение — и на обычной
 // геометрии, и на вырожденной (коллинеарные отрезки, дубликаты, веер).
+//
+// Пилот Unity (ThrowTheSwitch/Unity, v2.6.0): фреймворк лежит в
+// third_party/unity, цель CMake — r2d_bsp_test; tools/ci_verify.py гоняет её
+// так же, как прежний ручной тест, но с TEST_ASSERT_* и автоотчётом Unity.
 // ===========================================================================
 
 #include "bsp.h"
+#include "unity.h"
 
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static int g_failed = 0;
-static int g_checks = 0;
-
-static void check(bool ok, const char *what)
-{
-    g_checks++;
-    if (!ok) {
-        g_failed++;
-        printf("  FAIL %s\n", what);
-    } else {
-        printf("  ok   %s\n", what);
-    }
-}
+void setUp(void) {}
+void tearDown(void) {}
 
 // Каждый индекс 0..count-1 должен встретиться в порядке ровно один раз.
 static void check_order_is_complete(R2DBsp *b, float px, float py, const char *what)
@@ -40,12 +34,13 @@ static void check_order_is_complete(R2DBsp *b, float px, float py, const char *w
 
     if (!order) {
         char msg[256];
-        snprintf(msg, sizeof msg, "%s: обход вернул NULL", what);
-        check(false, msg);
+        snprintf(msg, sizeof msg, "%s: traverse returned NULL", what);
+        TEST_FAIL_MESSAGE(msg);
         return;
     }
 
     int *seen = (int *)calloc((size_t)(total > 0 ? total : 1), sizeof(int));
+    TEST_ASSERT_NOT_NULL_MESSAGE(seen, "calloc for traversal marks");
     int duplicates = 0;
     int out_of_range = 0;
     for (int i = 0; i < n; ++i) {
@@ -61,9 +56,9 @@ static void check_order_is_complete(R2DBsp *b, float px, float py, const char *w
     free(seen);
 
     char msg[256];
-    snprintf(msg, sizeof msg, "%s: порядок покрывает все %d отрезков (n=%d, дырок %d, повторов %d, вне диапазона %d)",
+    snprintf(msg, sizeof msg, "%s: order covers all %d segments (n=%d, missing %d, duplicates %d, out_of_range %d)",
              what, total, n, missing, duplicates, out_of_range);
-    check(missing == 0 && duplicates == 0 && out_of_range == 0, msg);
+    TEST_ASSERT_TRUE_MESSAGE(missing == 0 && duplicates == 0 && out_of_range == 0, msg);
 }
 
 // Квадрат из четырёх отрезков — простейшая замкнутая геометрия.
@@ -77,10 +72,11 @@ static void test_square(void)
     };
     R2DBsp b;
     memset(&b, 0, sizeof b);
-    check(r2d_bsp_build(&b, segs, 4), "квадрат: дерево построено");
-    check(r2d_bsp_segment_count(&b) >= 4, "квадрат: отрезков не меньше четырёх");
-    check_order_is_complete(&b, 200, 200, "квадрат, точка внутри");
-    check_order_is_complete(&b, -50, 200, "квадрат, точка снаружи");
+    TEST_ASSERT_TRUE_MESSAGE(r2d_bsp_build(&b, segs, 4), "square: tree built");
+    TEST_ASSERT_GREATER_OR_EQUAL_INT32_MESSAGE(4, r2d_bsp_segment_count(&b),
+                                               "square: at least four segments");
+    check_order_is_complete(&b, 200, 200, "square, point inside");
+    check_order_is_complete(&b, -50, 200, "square, point outside");
     r2d_bsp_free(&b);
 }
 
@@ -100,9 +96,9 @@ static void test_fan(void)
     }
     R2DBsp b;
     memset(&b, 0, sizeof b);
-    check(r2d_bsp_build(&b, segs, N), "веер: дерево построено");
-    check_order_is_complete(&b, 400, 400, "веер, наблюдатель в центре");
-    check_order_is_complete(&b, 0, 0, "веер, наблюдатель снаружи");
+    TEST_ASSERT_TRUE_MESSAGE(r2d_bsp_build(&b, segs, N), "fan: tree built");
+    check_order_is_complete(&b, 400, 400, "fan, viewer at center");
+    check_order_is_complete(&b, 0, 0, "fan, viewer outside");
     r2d_bsp_free(&b);
 }
 
@@ -111,6 +107,7 @@ static void test_degenerate(void)
 {
     enum { N = 512 };
     float *segs = (float *)malloc((size_t)N * 5 * sizeof(float));
+    TEST_ASSERT_NOT_NULL_MESSAGE(segs, "degenerate geometry array");
     for (int i = 0; i < N; ++i) {
         // Все отрезки лежат на одной горизонтали, часть — точные дубликаты.
         const float x = 100.0f + (float)(i % 8) * 50.0f;
@@ -122,7 +119,8 @@ static void test_degenerate(void)
     }
     R2DBsp b;
     memset(&b, 0, sizeof b);
-    check(r2d_bsp_build(&b, segs, N), "вырожденная геометрия: дерево построено");
+    TEST_ASSERT_TRUE_MESSAGE(r2d_bsp_build(&b, segs, N),
+                             "degenerate geometry: tree built");
 
     check_order_is_complete(&b, 0, 200, "depth limit: splitter and every segment");
     const int depth = r2d_bsp_depth(&b);
@@ -136,6 +134,7 @@ static void test_degenerate(void)
     int duplicates = 0;
     if (order) {
         int *seen = (int *)calloc((size_t)n + 1, sizeof(int));
+        TEST_ASSERT_NOT_NULL_MESSAGE(seen, "calloc for duplicates");
         for (int i = 0; i < n; ++i) {
             if (order[i] < 0 || order[i] > n) { continue; }
             if (seen[order[i]]) duplicates++;
@@ -145,9 +144,9 @@ static void test_degenerate(void)
     }
     char msg[256];
     snprintf(msg, sizeof msg,
-             "вырожденная: обход отдал %d отрезков при %d узлах, повторов %d",
+             "degenerate: traverse returned %d segments at %d nodes, duplicates %d",
              n, nodes, duplicates);
-    check(order != NULL && n >= nodes && duplicates == 0, msg);
+    TEST_ASSERT_TRUE_MESSAGE(order != NULL && n >= nodes && duplicates == 0, msg);
 
     r2d_bsp_free(&b);
     free(segs);
@@ -159,6 +158,7 @@ static void test_order_length_matches_count(void)
 {
     enum { N = 256 };
     float *segs = (float *)malloc((size_t)N * 5 * sizeof(float));
+    TEST_ASSERT_NOT_NULL_MESSAGE(segs, "star geometry array");
     for (int i = 0; i < N; ++i) {
         const float a = (float)i / (float)N * 6.2831853f;
         segs[i * 5 + 0] = 0.0f;
@@ -169,14 +169,14 @@ static void test_order_length_matches_count(void)
     }
     R2DBsp b;
     memset(&b, 0, sizeof b);
-    check(r2d_bsp_build(&b, segs, N), "звезда: дерево построено");
+    TEST_ASSERT_TRUE_MESSAGE(r2d_bsp_build(&b, segs, N), "star: tree built");
 
     int n = 0;
     const int *order = r2d_bsp_traverse(&b, 1000, 1000, true, &n);
     char msg[256];
-    snprintf(msg, sizeof msg, "длина порядка (%d) равна числу отрезков (%d)",
+    snprintf(msg, sizeof msg, "order length (%d) equals segment count (%d)",
              n, r2d_bsp_segment_count(&b));
-    check(order != NULL && n == r2d_bsp_segment_count(&b), msg);
+    TEST_ASSERT_TRUE_MESSAGE(order != NULL && n == r2d_bsp_segment_count(&b), msg);
 
     r2d_bsp_free(&b);
     free(segs);
@@ -188,10 +188,11 @@ static void test_crossing_directions(void)
     for (int reverse = 0; reverse < 2; reverse++) {
         const float segments[] = { -10,0,10,0,0, 0,reverse ? -10:10,0,reverse ? 10:-10,1 };
         R2DBsp b = {0};
-        check(r2d_bsp_build(&b, segments, 2), "crossing: build");
+        TEST_ASSERT_TRUE_MESSAGE(r2d_bsp_build(&b, segments, 2), "crossing: build");
         int n = 0;
         const int *order = r2d_bsp_traverse(&b, 5, 5, true, &n);
-        check(order && n == 3, "crossing: two halves plus splitter in both directions");
+        TEST_ASSERT_TRUE_MESSAGE(order && n == 3,
+                                 "crossing: two halves plus splitter in both directions");
         check_order_is_complete(&b, 5, 5, "crossing: active count");
         r2d_bsp_free(&b);
     }
@@ -199,13 +200,13 @@ static void test_crossing_directions(void)
 
 int main(void)
 {
-    printf("2D BSP: инвариант полноты порядка обхода\n");
-    test_crossing_directions();
-    test_square();
-    test_fan();
-    test_degenerate();
-    test_order_length_matches_count();
-
-    printf("\nпроверок %d, провалов %d\n", g_checks, g_failed);
-    return g_failed == 0 ? 0 : 1;
+    UNITY_BEGIN();
+    printf("2D BSP: traversal completeness invariant (Unity %d.%d.%d)\n",
+           UNITY_VERSION_MAJOR, UNITY_VERSION_MINOR, UNITY_VERSION_BUILD);
+    RUN_TEST(test_crossing_directions);
+    RUN_TEST(test_square);
+    RUN_TEST(test_fan);
+    RUN_TEST(test_degenerate);
+    RUN_TEST(test_order_length_matches_count);
+    return UNITY_END();
 }

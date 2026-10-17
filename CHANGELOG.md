@@ -157,6 +157,15 @@
   Исполнение примеров осталось прототипом (423 запускаются, 53 падения —
   фрагменты/контекст), но нашло SIGSEGV `$.world.bsp.order` до `build()`
   (`bsp_guard_test`) и эти расхождения.
+- **Тесты: пилот Unity для C-слоя.** `third_party/unity` — Unity v2.6.0
+  (header + `unity.c` + MIT license, без сети/FetchContent). BSP-тест переписан
+  на `TEST_ASSERT_*`/`UNITY_BEGIN`/`RUN_TEST`: цель `r2d_bsp_test` даёт
+  **5 Tests 0 Failures 0 Ignored, OK** (exit 0), нарочно неверный
+  `TEST_ASSERT_EQUAL_INT(2, 3)` печатает `FAIL: Expected 2 Was 3` и возвращает
+  1 — CI видит провал без Python. `tools/ci_verify.py` с Unity-целью —
+  **5.4 с** (12 C-целей + 105 JS-наборов + sdk batch). План перевода остальных
+  C-целей по одной — `docs/TESTING.md` §1.2; сообщения в Unity-тестах ASCII,
+  потому что Unity печатает не-ASCII как `\xNN`.
 - **Re2D: тестовая комната врагов на билбордах (`demos/re2d_testroom`).**
   Враги — **пиксельный атлас** 5 направлений × 8 состояний (40 кадров,
   198×198): `<enemy>` + `.frames({src,cols:5,rows:8,cw:198,ch:198})` +

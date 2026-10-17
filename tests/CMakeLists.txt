@@ -106,9 +106,14 @@ endif()
 # Инвариант полноты: обход обязан вернуть каждый отрезок дерева ровно один раз.
 # Ловит случай предельной глубины, когда остаток геометрии «сваливался» в лист
 # и пропадал из порядка отрисовки.
+# Пилот Unity (ThrowTheSwitch/Unity v2.6.0 лежит в third_party/unity):
+# один header + unity.c, TEST_ASSERT_* и автоотчёт. Пока переведён только BSP;
+# остальные C-цели остаются ручными и переводятся по одной.
 add_executable(r2d_bsp_test "${CMAKE_SOURCE_DIR}/tests/bsp/bsp_test.c"
-                            "${CMAKE_SOURCE_DIR}/src/bsp.c")
-target_include_directories(r2d_bsp_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+                            "${CMAKE_SOURCE_DIR}/src/bsp.c"
+                            "${CMAKE_SOURCE_DIR}/third_party/unity/unity.c")
+target_include_directories(r2d_bsp_test PRIVATE "${CMAKE_SOURCE_DIR}/src"
+                                                "${CMAKE_SOURCE_DIR}/third_party/unity")
 target_link_libraries(r2d_bsp_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_bsp_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)

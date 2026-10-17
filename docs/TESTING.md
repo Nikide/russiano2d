@@ -14,7 +14,7 @@
 
 | Уровень | Что проверяет | Где | Как запускать |
 |---|---|---|---|
-| C-юниты | чистая логика ядра: json/crypto/payload/bsp/re2d/rotsprite/audio | `tests/<ядро>/*_test.c`, цели CMake | `tools/ci_verify.py` (6 с на всё) |
+| C-юниты | чистая логика ядра: json/crypto/payload/bsp/re2d/rotsprite/audio; BSP уже на Unity | `tests/<ядро>/*_test.c`, цели CMake | `tools/ci_verify.py` (5.4 с на всё) |
 | Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (105 наборов, сверка 2026-10-17) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
 | Интеграционные в движке | поведение игры и API через агентский протокол (реальный SDL_GPU, ввод, скриншоты) | `tests/agent/*_test.py` (265 наборов, сверка 2026-10-17) | `python3 tools/run_tests.py` (≈12 мин) |
 | Стражи документации | «в доке написано, что чего-то нет, а в коде есть»; у каждого модуля есть страница и тест; у каждого публичного имени есть документация | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py`, `tests/api_docs_sync_test.py` | `python3 tests/doc_...py`, `python3 tests/api_docs_sync_test.py` |
@@ -33,12 +33,26 @@
 рисует кадры, шлёт ввод и снимает скриншоты, поэтому он дорогой. Чистая логика
 должна жить в C/JS-юнитах: их прогон — секунды, и они ловят регрессию раньше.
 
-C-юниты сейчас написаны вручную (assert-стиль). Переход на Unity
-(ThrowTheSwitch/Unity) — разумный следующий шаг для C-слоя: один header,
-`TEST_ASSERT_*`, `UNITY_BEGIN/END`, без Python и движка. Делается пилотом на
-одном ядре (например, `tests/bsp`) в `tests/CMakeLists.txt`, остальные цели
-переводятся по одной; агентские тесты при этом остаются только там, где нужен
-настоящий кадр/ввод.
+### 1.2. Unity (пилот сделан)
+
+Unity **v2.6.0** лежит в `third_party/unity` (header + `unity.c` + MIT
+license, без сети и FetchContent). Пилот — BSP:
+`tests/bsp/bsp_test.c` переписан на `TEST_ASSERT_*`/`UNITY_BEGIN`/`RUN_TEST`;
+цель CMake `r2d_bsp_test` собирает `src/bsp.c` + `unity.c`.
+
+```
+build/tests/r2d_bsp_test → 5 Tests 0 Failures 0 Ignored, OK (exit 0)
+```
+
+Падение красное по-настоящему: нарочно неверный `TEST_ASSERT_EQUAL_INT(2, 3)`
+печатает `FAIL: Expected 2 Was 3` и возвращает 1 (`UNITY_END()`), то есть
+CI видит провал без Python. `tools/ci_verify.py` по-прежнему проходит за
+**5.4 с** (BSP-тест входит в CORE_TESTS как `r2d_bsp_test`).
+
+Дальше: переводить по одной цели (`json`, `crypto`, `payload`, `re2d`,
+`rotsprite`, `re2d_world`, `sdk_core`...), сообщения держать ASCII (Unity
+печатает не-ASCII как `\xNN`). Агентские тесты остаются только там, где нужен
+настоящий кадр/ввод/скриншот.
 
 Раннер агентских тестов различает три исхода: `ok` (код 0 **и** есть хотя бы
 одна проверка), `fail`, `skip` (код 0, но проверок не было — нет ассета,
