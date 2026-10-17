@@ -1,0 +1,37 @@
+# Методы обёрток, которые $ отдаёт вызовом (гейт api_wrapper_methods_test.py).
+# Обновление: python3 tests/api_wrapper_methods_test.py --write
+$.ui.doc().attr
+$.ui.doc().click
+$.ui.doc().cls
+$.ui.doc().content
+$.ui.doc().hide
+$.ui.doc().html
+$.ui.doc().layoutRect
+$.ui.doc().listeners
+$.ui.doc().off
+$.ui.doc().on
+$.ui.doc().rect
+$.ui.doc().setValue
+$.ui.doc().show
+$.ui.doc().style
+$.ui.doc().text
+$.ui.doc().tr
+$.ui.doc().unload
+$.ui.doc().value
+$.ui.doc().visible
+$.scene.scope().active
+$.scene.scope().after
+$.scene.scope().close
+$.scene.scope().closed
+$.scene.scope().closing
+$.scene.scope().counts
+$.scene.scope().dispose
+$.scene.scope().every
+$.scene.scope().keep
+$.scene.scope().node
+$.scene.scope().nodes
+$.scene.scope().onClose
+$.scene.scope().onClosed
+$.scene.scope().own
+$.scene.scope().sound
+$.scene.scope().state

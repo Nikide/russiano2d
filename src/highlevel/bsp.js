@@ -124,6 +124,14 @@ export function installBsp($) {
          */
         order(from, opts) {
             if (!engine.bsp) return [];
+            // Без построенного дерева обход не имеет смысла, а нативный вызов
+            // падал SIGSEGV (нашлось прогоном примеров из доки: bsp.md вызывает
+            // order до build). Пустой ответ — честный: дерева нет.
+            if (!bsp.ready()) {
+                ctx.log('$.world.bsp.order: дерево не построено — пустой порядок '
+                        + '(сначала build(segments))');
+                return [];
+            }
             const p = resolvePoint(from, 'world.bsp.order');
             const far = !(opts && opts.near);
             const idx = engine.bsp.order(p.x, p.y, far);
@@ -136,6 +144,10 @@ export function installBsp($) {
         /** Индексы без разбора в объекты (когда нужен только порядок). */
         indices(from, opts) {
             if (!engine.bsp) return [];
+            if (!bsp.ready()) {
+                ctx.log('$.world.bsp.indices: дерево не построено — пустой список');
+                return [];
+            }
             const p = resolvePoint(from, 'world.bsp.indices');
             return engine.bsp.order(p.x, p.y, !(opts && opts.near)) || [];
         },

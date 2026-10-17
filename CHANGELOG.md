@@ -1,5 +1,122 @@
 # История изменений
 
+## Не выпущено — task-65/66/67/68/69, task-56, долги Д1/Д3 (2026-10-17)
+
+### Добавлено
+
+- **task-65 (A0): одна точка входа смены сцены — `$.scene.change(name, opts)`.**
+  `load()` стал тонкой обёрткой (те же опции → тот же результат). Рапидные
+  запросы склеиваются: `['b','c','b','c','b']` в одном кадре → ровно один
+  переход, `enter` ровно `['b']`, `exit` ровно `['a']`, одно
+  `scene:before-change` (проверено живым прогоном, `scene_change_test`, 70
+  проверок). Наблюдаемость: `$.scene.state()` → `{from,to,phase,t,ratio,pending,
+  prepared}` (300 мс: `phase:'out', t:0` → через 5 кадров `ratio 0.278` →
+  кадр 19 `phase:'in'` → после 36 кадров `phase:null`, `busy()===false`).
+  События `scene:before-change/progress/after-change/error`; ошибка лоадера не
+  оставляет пустой мир (прежняя сцена и её узлы целы, затемнение снято, код
+  `R2D_LOAD_RESOURCE`/`R2D_SCENE_LOAD` в `$.debug.errors()`).
+- **task-65 (A0.6/A4): `$.scene.prepare`/`promote` и `$.scene.cancel`.**
+  `prepare()` собирает сцену во временной области, `promote()` публикует её
+  без кадра, без экрана загрузки и без повторного `enter` (счётчик enter = 1).
+  `cancel()` во время затемнения снимает его за остаток времени (alpha
+  непрерывна: 0.278 → 0), лоадер останавливается, мир прежний.
+- **task-65 (A1): встроенный экран загрузки с прогрессом и своим RML.**
+  `$.scene.loading({rml, theme, min_ms, timeout_ms, style})`; полоса идёт по
+  РЕАЛЬНЫМ шагам (единицы работы шагов + байты ресурсов, 50/50, монотонно;
+  50 шагов — 50 единиц в `scene:progress`); `min_loading_ms:200` = 11 кадров
+  экрана при 60 fps; мир на паузе (11 кадров), звук заглушён (11 кадров);
+  `timeout_ms:100` даёт `R2D_SCENE_LOAD_TIMEOUT` и возврат к прежней сцене.
+  Свой `.rml` реально показывается (`loading_progress` 460×24 px) и получает
+  `loading_bar`/`loading_progress`/`loading_label`; без элементов — одно
+  предупреждение в журнал, не тишина.
+- **task-65 (A2): переходы `wipe`, `checker`, `shader`.**
+  Шторка (`{dir, soft}`) и шахматка (`{cols, rows}`) рисуются тем же
+  спрайтовым батчем (один submit, ≤256 квадов), эталон по скриншоту: при
+  `alpha=0.33` левая треть кадра чёрная, правая светлая (0/232); цена перехода
+  `0.06` мс против `0.04` мс без перехода на кадр. `shader` идёт нашим
+  пост-проходом (wave/distort/chromatic), настройки игры сохраняются и
+  возвращаются. Неизвестный тип — `R2D_SCENE_TRANSITION_UNKNOWN` + fallback
+  в `fade`.
+- **task-65 (A3, дефект I14): смена сцены сбрасывает глобальный свет и
+  темноту** (`ambient.off()`, `map({on:false})`, слой источников
+  `0xFFFFFFFF`) и VFX-состояние; `{keep_light:true}` сохраняет их. Замер:
+  после сцены `lit` (`ambient level 0.85`, lightmap on) → `ambient()===null`,
+  `map().on===false`; с `keep_light` — оба остались.
+- **task-66 (I11): бюджет/LOD света `$.gfx.light.budget({max,priority,
+  radiusScale})`.** 45 источников при `max:32` → `full=32, lod=13,
+  degraded=13` (совпадает с числом узлов), треугольники кадра `6480→5544`
+  (−14.4 %), кадр `1.57–1.59 → 1.45–1.46` мс. Числа в
+  `qualityReport().budget` и `stats().budget*`.
+- **task-66 (I12): мерцание эмиттера `.emissive({flicker:{hz,depth,curve}})`.**
+  sine/triangle/random от игрового времени, детерминировано при `--fixed-dt`
+  (max|Δ| = 0); цена 1000 эмиттеров с общей кривой — медиана −0.006…0.018 мс
+  (≤0.02), 1000 разных частот — 0.058 мс; прежний `.flicker(amount,speed)` у
+  `<light>` работает (регрессия).
+- **task-68: контракт API мира вместо «дока обещает, код не делает».**
+  `$.world.remove(target)` — цель обязательна (`R2D_WORLD_REMOVE_NO_TARGET`,
+  промах `_MISS`), возвращает число узлов с детьми; `$.world.clear({ui})`
+  удаляет игровые узлы, оставляя persistent/HUD/стены `bounds()`
+  (15 узлов → 7, тел 12 → 6); `$.world.destroy()` — всё + границы/фон/
+  гравитация `0/2000`/`timeScale 1`/pause off → `{nodes:6, bodies:0, …}`.
+  `$.collision.of('#hero')` → `'player'` (было `null`); канонический геттер
+  сетки — `$.grid.at`, `$.grid.get` не заводится (второй синоним — долг).
+- **task-69 (M0): `$.fx` разделён на `$.vfx` (24 метода, r2dvfx) и `$.sfx`
+  (5 методов).** `$.fx` остаётся работающим алиасом один минор: одно
+  дедуплицированное предупреждение `R2D_FX_DEPRECATED` на СЫРОЕ имя;
+  mapping-тест 23 проверки доказывает одинаковый кадр/звук.
+- **task-67 (r2dvfx M1–M3, M5): декларативные эффекты.**
+  `$.vfx.define/extend/get/list/remove/play/spawn/stats/budget/load/loadAll`
+  + хендл `{stop,seek,setRate,query}`; спека `{duration,seed,budget,layers}`;
+  16 примитивов `use:`, 22 встроенных эффекта §D3; M5 `clip.<имя>` (кадры с
+  двух листов). Валидация: `R2D_VFX_UNKNOWN_PRIMITIVE` со списком допустимых,
+  `R2D_VFX_BAD_SPEC`, `R2D_VFX_NOT_DATA` (функции в спеке), `R2D_VFX_UNKNOWN_CLIP`.
+  Детерминизм: один `seed` → одинаковые time/progress/hash и кадр. Бюджет
+  512 частиц / 16 света: 100 одновременных эффектов при потолке 200 →
+  `particles=200`, `degraded>=90`. M4 (предпросмотр в DevTools + экспорт JSON)
+  не сделан — записано в `docs/highlevel/vfx.md` §7.
+- **task-56 (задача 7): `off` и учёт слотов слушателей UI.**
+  `engine.ui.on`/`doc.on` возвращают id слота; `engine.ui.off(doc, el, event
+  [, fn])`/`doc.off(...)` снимают и JS-обработчик, и слушателя RmlUi,
+  возвращают число снятых; ключ идемпотентности — пара+обработчик (второй
+  РАЗНЫЙ обработчик работает: было `[1,0]`, стало `[1,1]`); слоты пула 256
+  возвращаются (300 циклов подписка→снятие — 0 ошибок; до правки после 256
+  за рантайм всё падало); переполнение — `R2D_UI_LISTENER_LIMIT` с числами;
+  `ui_callbacks` показывает живые, `unload` освобождает слот через OnDetach.
+- **task-56 (задача 6): смешивание клипов `$.anim.crossfade(target, from, to,
+  ms, opts)` + `$.anim.blendInfo(target?)`.** t=0 — 100 % `from`, t=ms —
+  100 % `to`; доли монотонны по 29 покадровым замерам, alpha 0.973→0.227,
+  x 3.333→96.667; при `--fixed-dt 50 мс` ровно 10 кадров; кадр спрайта
+  дискретен (ограничение задокументировано: один draw на узел).
+- **Д1: отдельный гейт `tests/api_wrapper_methods_test.py`** — 35 методов
+  обёрток, которые `$` отдаёт вызовом (`$.ui.doc()`, `$.scene.scope()`), в
+  снимке `tests/api_wrapper_methods_baseline.txt`. Та самая дыра
+  (`$.ui.doc().layoutRect` прошёл мимо заморозки) закрыта проверкой; список
+  проб явный.
+- **Д3: мусор не уезжает в релиз.** `tools/release.py --check-junk` проверяет
+  дерево `dist/`, `SHA256SUMS.txt` и архивы (`.DS_Store`, `__pycache__`,
+  `Thumbs.db`); `build_and_push.sh` чистит dist ДО `git add` (раньше чистка
+  стояла после) и падает локально при мусоре. На текущем dist проверка нашла
+  реальные `dist/.DS_Store` и `dist/macos-arm64/.DS_Store` (2 файла) — удалены,
+  повторный прогон: «чисто».
+- **Исправлено попутно (task-65): `dispatchGlobal` падал на `any(null)`** —
+  при глобальном событии без подписки на это имя и без wildcard
+  (`node === null`) `list.length` у `null` бросал TypeError, и падение съедало
+  всё, что шло после dispatch в том же кадре (например, `scene:after-change`).
+- **Заморозка API: 3071 → 3125 имён** (+54: `$.vfx` 24, `$.sfx` 5,
+  `$.scene.change/state/cancel/loading/promote` 5, `$.anim.crossfade/blendInfo`
+  2, `$.fx.pushRibbon`, `$.ctx.vfx/sfx`, `$.world.remove/clear/destroy` и
+  русские алиасы `$.мир.*`). `api_docs_sync`: 3125 имён задокументированы
+  (2126 буквально + 565 русских алиасов + 376 методов обёрток + 58 приватных).
+- **Новые тесты (13 файлов, 419 проверок, все зелёные):**
+  `scene_change` 70, `world_api` 63, `grid_read` 14, `collision_of` 16,
+  `layers_parallax_optout` 10, `light_budget` 45, `emissive_flicker` 20,
+  `anim_blend` 35, `ui_off` 37, `fx_split_mapping` 23, `vfx_registry` 30,
+  `vfx_validation` 35, `vfx_determinism` 21; плюс гейт обёрток 5 проверок.
+  Красные ДО правки: world_api 45, collision_of 5, layers_parallax 2,
+  light_budget 34, emissive_flicker 12, anim_blend 24, ui_off 26,
+  fx/vfx 88.
+
+
 ## 1.2.2 — 2026-10-17
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->

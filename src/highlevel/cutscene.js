@@ -188,17 +188,28 @@ export function installCutscene($, placeBody) {
             if ($ && $.camera && typeof $.camera.shake === 'function') $.camera.shake(amount, ms / 1000);
         }
 
+        // Шаг fade — полноэкранное затемнение. Раньше звали `$.fx.fade`, которого
+        // не было НИКОГДА (ни в старом fx.js, ни в $.vfx): шаг молча ничего не
+        // делал. Единственный владелец затемнения — `$.layers.fadeTo`.
         if (step.fade !== undefined) {
-            const fx = $ && $.fx;
-            if (fx && typeof fx.fade === 'function') {
-                try { fx.fade(step.fade, step.ms || 300); } catch (e) { /* нет fx */ }
+            const layers = $ && $.layers;
+            if (layers && typeof layers.fadeTo === 'function') {
+                try { layers.fadeTo('#000000', step.fade, step.ms || 300); }
+                catch (e) { ctx.log(`$: шаг fade катсцены не выполнен: ${e}`); }
+            } else {
+                ctx.log('$: шаг fade катсцены — нет $.layers.fadeTo');
             }
         }
 
+        // Вспышка экрана — визуальная подсистема `$.vfx` (task-69). `$.fx`
+        // остаётся алиасом, но новый код обязан звать целевое имя.
         if (step.flash !== undefined) {
-            const fx = $ && $.fx;
+            const fx = $ && ($.vfx || $.fx);
             if (fx && typeof fx.flash === 'function') {
-                try { fx.flash(step.flash, step.ms || 200); } catch (e) { /* нет fx */ }
+                try { fx.flash(step.flash, step.ms || 200); }
+                catch (e) { ctx.log(`$: шаг flash катсцены не выполнен: ${e}`); }
+            } else {
+                ctx.log('$: шаг flash катсцены — нет $.vfx.flash');
             }
         }
 

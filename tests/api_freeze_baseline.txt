@@ -59,6 +59,7 @@ $.anim.actions
 $.anim.bind
 $.anim.bindings
 $.anim.blend
+$.anim.blendInfo
 $.anim.clear
 $.anim.clearClips
 $.anim.clearPlayers
@@ -68,6 +69,7 @@ $.anim.clipJSON
 $.anim.clipName
 $.anim.clips
 $.anim.clock
+$.anim.crossfade
 $.anim.debug
 $.anim.defaultPlayer
 $.anim.define
@@ -361,6 +363,7 @@ $.ctx.scopeGet
 $.ctx.scopeTrack
 $.ctx.screen
 $.ctx.script
+$.ctx.sfx
 $.ctx.sound
 $.ctx.soundBank
 $.ctx.steps
@@ -374,6 +377,7 @@ $.ctx.time
 $.ctx.translateAttrsHook
 $.ctx.tweens_active
 $.ctx.ui
+$.ctx.vfx
 $.ctx.watch
 $.ctx.weapons
 $.ctx.world
@@ -986,6 +990,7 @@ $.fx.hitStop
 $.fx.impact
 $.fx.lightning
 $.fx.pulse
+$.fx.pushRibbon
 $.fx.ribbon
 $.fx.shockwave
 $.fx.stats
@@ -1775,7 +1780,9 @@ $.scene._transitionInfo
 $.scene.add
 $.scene.adopt
 $.scene.busy
+$.scene.cancel
 $.scene.cancelPending
+$.scene.change
 $.scene.clearCurrent
 $.scene.closeScope
 $.scene.commit
@@ -1786,11 +1793,13 @@ $.scene.has
 $.scene.inScope
 $.scene.load
 $.scene.loadAsync
+$.scene.loading
 $.scene.names
 $.scene.pending
 $.scene.pop
 $.scene.preload
 $.scene.prepare
+$.scene.promote
 $.scene.push
 $.scene.remove
 $.scene.restart
@@ -1798,6 +1807,7 @@ $.scene.scope
 $.scene.scopeOf
 $.scene.scopes
 $.scene.stack
+$.scene.state
 $.scene.transition
 $.screen
 $.screen.activate
@@ -1838,6 +1848,12 @@ $.sdk.tool
 $.selectors
 $.selectors.register
 $.sequence
+$.sfx
+$.sfx.bank
+$.sfx.play
+$.sfx.playBank
+$.sfx.preset
+$.sfx.presets
 $.signal
 $.signal.bus
 $.signal.clear
@@ -2174,6 +2190,31 @@ $.ui.unbind
 $.update
 $.vec
 $.version
+$.vfx
+$.vfx.attractor
+$.vfx.budget
+$.vfx.clear
+$.vfx.define
+$.vfx.extend
+$.vfx.flash
+$.vfx.flashLeft
+$.vfx.get
+$.vfx.hitStop
+$.vfx.impact
+$.vfx.lightning
+$.vfx.list
+$.vfx.load
+$.vfx.loadAll
+$.vfx.play
+$.vfx.primitives
+$.vfx.pulse
+$.vfx.pushRibbon
+$.vfx.remove
+$.vfx.ribbon
+$.vfx.shockwave
+$.vfx.spawn
+$.vfx.stats
+$.vfx.trail
 $.viewport
 $.viewport.bind
 $.viewport.bound
@@ -2248,6 +2289,7 @@ $.world.bounds
 $.world.bsp
 $.world.bullet
 $.world.castShape
+$.world.clear
 $.world.clearBackground
 $.world.clearBounds
 $.world.color
@@ -2256,6 +2298,7 @@ $.world.contactImpulse
 $.world.contacts
 $.world.contactsOf
 $.world.count
+$.world.destroy
 $.world.destroyJoint
 $.world.freeze
 $.world.getBackground
@@ -2273,6 +2316,7 @@ $.world.pause
 $.world.query
 $.world.raycast
 $.world.raycastAll
+$.world.remove
 $.world.resume
 $.world.sort
 $.world.sortWith
@@ -2293,6 +2337,7 @@ $.анимация.actions
 $.анимация.bind
 $.анимация.bindings
 $.анимация.blend
+$.анимация.blendInfo
 $.анимация.clear
 $.анимация.clearClips
 $.анимация.clearPlayers
@@ -2302,6 +2347,7 @@ $.анимация.clipJSON
 $.анимация.clipName
 $.анимация.clips
 $.анимация.clock
+$.анимация.crossfade
 $.анимация.debug
 $.анимация.defaultPlayer
 $.анимация.define
@@ -2674,6 +2720,7 @@ $.мир.bounds
 $.мир.bsp
 $.мир.bullet
 $.мир.castShape
+$.мир.clear
 $.мир.clearBackground
 $.мир.clearBounds
 $.мир.color
@@ -2682,6 +2729,7 @@ $.мир.contactImpulse
 $.мир.contacts
 $.мир.contactsOf
 $.мир.count
+$.мир.destroy
 $.мир.destroyJoint
 $.мир.freeze
 $.мир.getBackground
@@ -2699,6 +2747,7 @@ $.мир.pause
 $.мир.query
 $.мир.raycast
 $.мир.raycastAll
+$.мир.remove
 $.мир.resume
 $.мир.sort
 $.мир.sortWith
@@ -2851,7 +2900,9 @@ $.сцена._transitionInfo
 $.сцена.add
 $.сцена.adopt
 $.сцена.busy
+$.сцена.cancel
 $.сцена.cancelPending
+$.сцена.change
 $.сцена.clearCurrent
 $.сцена.closeScope
 $.сцена.commit
@@ -2862,11 +2913,13 @@ $.сцена.has
 $.сцена.inScope
 $.сцена.load
 $.сцена.loadAsync
+$.сцена.loading
 $.сцена.names
 $.сцена.pending
 $.сцена.pop
 $.сцена.preload
 $.сцена.prepare
+$.сцена.promote
 $.сцена.push
 $.сцена.remove
 $.сцена.restart
@@ -2874,6 +2927,7 @@ $.сцена.scope
 $.сцена.scopeOf
 $.сцена.scopes
 $.сцена.stack
+$.сцена.state
 $.сцена.transition
 $.твин
 $.триггеры

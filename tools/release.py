@@ -990,6 +990,99 @@ class Options:
         self.with_demos = False
         self.force = False
         self.bump = False
+        self.check_junk = False
+
+
+# ---------------------------------------------------------------------------
+# Д3: мусор в пакетах — проверка, которая падает ЛОКАЛЬНО
+# ---------------------------------------------------------------------------
+
+#: Имена, которых не должно быть ни в дереве пакета, ни в манифесте, ни в архиве.
+JUNK_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini"}
+JUNK_DIRS = {"__pycache__", ".git", ".idea", ".vscode"}
+
+
+def _is_junk_path(relative: str) -> bool:
+    """Путь (относительный, с /) содержит мусор? Проверяются все сегменты."""
+    parts = [p for p in str(relative).replace("\\", "/").split("/") if p]
+    for part in parts:
+        if part in JUNK_NAMES or part in JUNK_DIRS or part.endswith(".pyc"):
+            return True
+    return False
+
+
+def _archive_junk(path: str) -> List[str]:
+    """Мусорные записи внутри архива (.zip/.tar.gz/.tar.xz/.tar)."""
+    found: List[str] = []
+    try:
+        if path.endswith(".zip"):
+            import zipfile
+            with zipfile.ZipFile(path) as archive:
+                for name in archive.namelist():
+                    if _is_junk_path(name):
+                        found.append(name)
+        elif path.endswith((".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar")):
+            import tarfile
+            with tarfile.open(path) as archive:
+                for member in archive.getnames():
+                    if _is_junk_path(member):
+                        found.append(member)
+    except (OSError, ValueError, Exception):
+        # Битый архив — не наша ошибка Д3; его поймают гейты сборки.
+        pass
+    return found
+
+
+def run_check_junk(out_dir: str) -> int:
+    """Проверить dist/ на мусор. Возвращает код выхода (0 — чисто).
+
+    Причина: `.DS_Store` трижды попадал в манифесты/архивы, и ловил это CI
+    (repository_hygiene) уже после пуша. Здесь проверка стоит на локальном
+    пути релиза: build_and_push.sh зовёт её ПЕРЕД git add и падает.
+    """
+    root = out_dir if os.path.isdir(out_dir) else DEFAULT_OUT_DIR
+    tree: List[str] = []
+    manifests: List[str] = []
+    archives: List[str] = []
+    for dirpath, dirs, names in os.walk(root if os.path.isdir(root) else "."):
+        for name in names:
+            full = os.path.join(dirpath, name)
+            rel = os.path.relpath(full, root)
+            if _is_junk_path(rel):
+                tree.append(rel)
+            if name == "SHA256SUMS.txt":
+                manifests.append(full)
+            if name.endswith((".zip", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar")):
+                archives.append(full)
+
+    bad_manifest: List[str] = []
+    for manifest in manifests:
+        try:
+            with open(manifest, encoding="utf-8", errors="replace") as handle:
+                for line in handle:
+                    if _is_junk_path(line.strip()):
+                        bad_manifest.append(os.path.relpath(manifest, root) + ": " + line.strip())
+        except OSError:
+            continue
+
+    bad_archive: List[str] = []
+    for archive in archives:
+        for name in _archive_junk(archive):
+            bad_archive.append(os.path.relpath(archive, root) + ": " + name)
+
+    problems = tree + bad_manifest + bad_archive
+    log("check-junk: %s" % (os.path.abspath(root)))
+    log("    файлов мусора в дереве: %d" % len(tree))
+    log("    манифестов (SHA256SUMS.txt): %d, строк с мусором: %d" % (len(manifests), len(bad_manifest)))
+    log("    архивов: %d, записей с мусором: %d" % (len(archives), len(bad_archive)))
+    if not problems:
+        log("    чисто")
+        return 0
+    log("    ПРОВАЛ: мусор не должен уезжать в релиз:")
+    for item in problems[:40]:
+        log("      - " + item)
+    log("    уберите: find %s -name '.DS_Store' -delete, __pycache__ -rm -rf" % root)
+    return 1
 
 
 def usage() -> str:
@@ -1002,6 +1095,9 @@ def usage() -> str:
         "                       проверка перед настоящим выпуском)\n"
         "  --package-only       только упаковать готовый бинарник (режим CI):\n"
         "                       без версии, сборки, тестов и тега\n"
+        "  --check-junk         проверить dist/ на мусор (.DS_Store, __pycache__,\n"
+        "                       Thumbs.db) в дереве, SHA256SUMS.txt и архивах;\n"
+        "                       выход 1 — релиз должен падать ЛОКАЛЬНО, а не в CI\n"
         "  --bump               поднять патч-версию в CMakeLists.txt на 1\n"
         "                       (0.1.0 → 0.1.1) и напечатать её; больше ничего\n"
         "                       не делает — этим пользуется build_and_push.sh\n"
@@ -1040,6 +1136,8 @@ def parse_args(argv: List[str]) -> Options:
             options.yes = True
         elif arg == "--package-only":
             options.package_only = True
+        elif arg == "--check-junk":
+            options.check_junk = True
         elif arg == "--bump":
             options.bump = True
         elif arg.startswith("--bump="):
@@ -1111,6 +1209,9 @@ def main(argv: List[str]) -> int:
     # --bump ничего не собирает и не проверяет: только версия в CMakeLists.txt.
     if options.bump:
         return run_bump(options)
+
+    if options.check_junk:
+        return run_check_junk(options.out_dir)
 
     current = read_version()
     version = options.version or current
