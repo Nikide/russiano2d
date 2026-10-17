@@ -98,6 +98,7 @@ DEPS=$SRC/build/_deps        # нативные исходники зависи�
 emcmake cmake -S "$SRC" -B /tmp/r2d-web/build -G Ninja \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DCMAKE_PREFIX_PATH=/tmp/r2d-web/sdl-install \
+  -DFETCHCONTENT_SOURCE_DIR_RMLUI="$DEPS/rmlui-src" \
   -DFETCHCONTENT_SOURCE_DIR_SDL3_IMAGE="$DEPS/sdl3_image-src" \
   -DFETCHCONTENT_SOURCE_DIR_QUICKJS="$DEPS/quickjs-src" \
   -DFETCHCONTENT_SOURCE_DIR_BOX2D="$DEPS/box2d-src" \
@@ -109,6 +110,11 @@ emcmake cmake -S "$SRC" -B /tmp/r2d-web/build -G Ninja \
 
 cmake --build /tmp/r2d-web/build -j8
 ```
+
+`-DFETCHCONTENT_SOURCE_DIR_RMLUI` обязателен: RmlUi добавляет свой
+Emscripten-модуль `FindFreetype` в `CMAKE_MODULE_PATH` только когда
+собирается корневым проектом. Если не указать каталог локального RmlUi,
+конфигурация падает на «Freetype could not be found» (проверено 2026-10-17).
 
 На выходе в `/tmp/r2d-web/build`:
 

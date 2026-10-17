@@ -29,7 +29,7 @@ $.devtools.hitch();                   // те же факты, что видно
 
 ## 1. Вкладки панели F1
 
-14 вкладок; переключение — `$.devtools.tab(name) → bool`, текущая —
+15 вкладок; переключение — `$.devtools.tab(name) → bool`, текущая —
 `$.devtools.tabName()`. Кнопки в панели (`rt-tab-<имя>`) дёргают то же
 переключение, поэтому клик и API не расходятся.
 
@@ -49,13 +49,35 @@ $.devtools.hitch();                   // те же факты, что видно
 | `console` | КОНСОЛЬ | ввод строки и история команд (§31) | `devtools_console_test.py` |
 | `step` | ШАГ | кадр/пауза/масштаб времени, шаг физики (§33) | `devtools_console_test.py` |
 | `watch` | НАБЛЮД | `$.debug.watches()` с previous/delta/min/max/порогом | `devtools_perf_test.py` |
+| `vfx` | VFX | реестр `$.vfx.list()`: выбор эффекта, плей в центре камеры, прогресс/время, перемотка ±0.1 с, экспорт спеки в JSON | `devtools_vfx_test.py` |
 
 Экспорт отчёта (§39) — **внутри вкладки ДИАГ** (отдельной вкладки REPORT нет):
 кнопки «Копировать текст отчёта» / «Копировать JSON», текст — `rt-report-text`.
 
+### 1.1. Вкладка VFX (§30, M4)
+
+Список — это **тот же реестр**, что `$.vfx.list()` (22 встроенных эффекта в
+`tests/fixtures/within`), поэтому панель не может показать эффект, которого
+нет, и наоборот. Выбранный эффект играет в центре камеры
+(`{at:[camera.x, camera.y]}`), а «Стоп» снимает **все** эффекты сцены, чтобы
+предпросмотр не копился. Прогресс/время/seed/hash/degraded берутся из
+`handle.query()` — панель не считает их заново.
+
+Экспорт пишет JSON в формате, который сразу читает `$.vfx.load`:
+
+```json
+{ "effects": { "hit.spark": { "duration": 0.35, "seed": "hit.spark", "budget": {...}, "layers": [...] } } }
+```
+
+Поэтому проверка M4 — «экспорт→импорт даёт идентичный эффект» — а не только
+«файл создан»: `devtools_vfx_test.py` снимает эффект из реестра, грузит файл
+и сравнивает спеку с исходной. Путь экспорта задаётся полем `rt-vfx-path`
+(по умолчанию `vfx-export/<имя>.json`); при отказе записи в статусе видно
+`экспорт не удался` и `$.debug.errors()`, молчания нет.
+
 ## 2. Машиночитаемый доступ к вкладкам
 
-Факты сняты с живого движка (`Object.keys($.devtools)` — 75 публичных имён плюс
+Факты сняты с живого движка (`Object.keys($.devtools)` — 81 публичное имя плюс
 сам `$.devtools`; вызовы проверены на фикстуре `tests/fixtures/hello`). Полные
 имена нужны гейту `tests/api_docs_sync_test.py`.
 
@@ -110,6 +132,12 @@ $.devtools.hitch();                   // те же факты, что видно
 | `$.devtools.tickOverlay()` | кадровый шаг оверлея форм физики (§25) |
 | `$.devtools.tickStep()` | кадровый шаг «шага кадра»: после N кадров возвращает паузу (§33) |
 | `$.devtools.tickPick()` | кадровый шаг picking: подсветка bounds и выбор кликом по миру |
+| `$.devtools.vfx()` | `{ tab, names[], index, selected, uses[], playing, note, path, text }` — состояние вкладки VFX |
+| `$.devtools.vfxSelect(index)` | выбрать эффект по индексу списка; возвращает имя или `null` |
+| `$.devtools.vfxPlay()` | запустить выбранный эффект в центре камеры; `bool` |
+| `$.devtools.vfxStop()` | снять все эффекты сцены (`true`) |
+| `$.devtools.vfxSeek(delta)` | перемотка живого эффекта на ±delta секунд; `bool` |
+| `$.devtools.vfxExport()` | `{ ok, path, error }` — записать спеку в JSON через `$.fs.write` |
 
 Чего нельзя измерить — панель не выдумывает: неизвестное значение выводится
 как `N/A` или `—`, пустой hitch-список — «захватов нет», причины захвата нет —
@@ -195,6 +223,7 @@ python3 tests/agent/devtools_events_test.py     # EVENTS
 python3 tests/agent/devtools_audio_test.py      # AUDIO / INPUT
 python3 tests/agent/devtools_memory_test.py     # MEM
 python3 tests/agent/devtools_console_test.py    # КОНСОЛЬ / ШАГ
+python3 tests/agent/devtools_vfx_test.py        # VFX: список, плей, перемотка, экспорт→импорт
 python3 tests/agent/devtools_report_test.py     # ДИАГ + экспорт отчёта
 python3 tests/agent/devtools_pick_test.py       # picking
 python3 tests/agent/devtools_backend_test.py    # данные бэкенда (формы, свет, renderInfo)

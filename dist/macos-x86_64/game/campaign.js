@@ -151,11 +151,11 @@ function addLevelScene($, spec, index, progress, sceneName) {
                 const next = LEVELS[index + 1];
                 showOverlay($, isLast ? 'Кампания пройдена!' : 'Уровень пройден',
                             isLast ? 'Enter — в меню' : 'Enter — дальше, Esc — в меню');
-                $.fx.flash('#ffffff', { ms: 220, alpha: 0.5 });
+                $.vfx.flash('#ffffff', { ms: 220, alpha: 0.5 });
             } else if (hero.length && hero.hp() <= 0 && !this.result) {
                 this.result = 'dead';
                 showOverlay($, 'Вы проиграли', 'Enter — заново, Esc — в меню');
-                $.fx.flash('#ff3b30', { ms: 260, alpha: 0.4 });
+                $.vfx.flash('#ff3b30', { ms: 260, alpha: 0.4 });
             }
 
             if (this.result === 'win' && $.input.pressed('enter')) {

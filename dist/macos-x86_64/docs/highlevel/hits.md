@@ -16,6 +16,12 @@ $.hits.on('.enemy', { hitStop: 90, knockback: 300, screen: null });
 [particles.md](particles.md) (откуда искры), [fx.md](fx.md) (чем рисуется),
 [time.md](time.md) (чем держится hit-stop), [camera.md](camera.md) (тряска).
 
+> **Миграция task-69:** удар больше не одна чёрная коробка. Пресет остаётся
+> один — `$.hits` (его читает `$.sfx.presets()`), но звать части принято из
+> своих пространств: картинка — [`$.vfx.play('crit')`](vfx.md) / `$.vfx.impact`,
+> звук — [`$.sfx.play(name)`](sfx.md). Старый `$.hits.play(info, { sound })`
+> работает как раньше; `$.hits.*` не удаляется. Таблица — [migration.md](migration.md).
+
 ---
 
 ## 1. Обзор

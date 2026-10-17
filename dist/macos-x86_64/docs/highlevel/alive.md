@@ -12,9 +12,10 @@ mind.tick(dt, { leaderNear: true, underFire: true });
 mind.aimErrorMult();             // множители для боя
 mind.isBroken();                 // срыв?
 
-const dir = $.alive.director({ seed: 1, lootValue: () => $.inv.value() });
+const bag = $.inv.create({ cols: 8, rows: 6 });
+const dir = $.alive.director({ seed: 1, lootValue: () => bag.value() });
 dir.tick(dt, { playerHp: 0.8, enemies: [{ id: 'a', alive: true, kit: {} }] });
-dir.phase();                     // 'spare' | 'even' | 'press'
+dir.phase;                       // 'spare' | 'even' | 'press' (свойство-геттер)
 ```
 
 ---

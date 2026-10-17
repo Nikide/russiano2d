@@ -36,12 +36,24 @@ $.ready(() => {
 | `$.collision.has(name)` | есть ли имя (`bool`) |
 | `$.collision.bits(name)` | бит по имени: принимает имя, число, hex-строку или выражение с `|`. Проверено: `bits('solid2')` → 4, `bits('solid2\|solid2')` → 4, `bits(4)` → 4, неизвестное имя → 0 |
 | `$.collision.apply(target, name, opts?)` | поставить слой узлу: пишет `attrs.layer` (имя) и `layerBits` (бит), маску — из `opts` или из слоя |
-| `$.collision.of(target)` | имя слоя узла или `null`. **Принимает узел или обёртку** — селектор-строка не разворачивается и даёт `null` (проверено: `of($('#hero'))` → `'player'`, `of('#hero')` → `null`) |
+| `$.collision.of(target)` | имя слоя узла или `null`. Принимает **селектор, обёртку и сырой узел**: `of('#hero')`, `of($('#hero'))`, `of($('#hero').get(0))` → `'player'` |
 | `$.collision.names()` | имена по алфавиту |
 | `$.collision.list()` | `[{ name, bit, mask }]` |
 | `$.collision.freeBit()` | бит, ещё не занятый ни одним именем |
 | `$.collision.allExcept(...names)` | маска «все биты, кроме перечисленных слоёв» |
 | `$.collision.reload()` | перечитать реестр из `$.store` |
+
+`of()` отвечает на вопрос «**какой слой у сущности**», а не «с чем она
+сталкивается». Для второго вопроса есть два точных вызова, и второго имени для
+них не заводится:
+
+| Вопрос | Вызов |
+|---|---|
+| с чем этот узел контактирует сейчас | `$.world.contactsOf(what, cap?)` → `[{ other, impulse, points }]` |
+| касаются ли два узла прямо сейчас | `$.world.touching(a, b)` → `bool` |
+
+Проверка: `tests/agent/collision_of_test.py` (`of('#hero')` = `'player'`,
+слой без имени — `null`).
 
 Реестр живёт в `$.store` под ключом `collision.layers`, поэтому переживает
 смену сцены и hot reload. `define` тем же именем перезаписывает бит.

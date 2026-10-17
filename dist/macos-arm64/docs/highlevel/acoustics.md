@@ -4,26 +4,38 @@
 считает, в какой зоне слушатель и источник, и подбирает параметры реверба.
 
 ```js
-$.audio.room.define('bunker', { size: 12, material: 'concrete', wet: 0.7 });
-$.audio.room.zone({ x: 0, y: 0, w: 400, h: 300, room: 'bunker' });
-const p = $.audio.room.at(hero.x, hero.y);      // параметры для точки
+$.audio.zone('bunker', { rect: [0, 0, 400, 300], height: 3, material: 'concrete' });
+$.audio.room({ wet: 0.7, room: 0.5, damp: 0.5, width: 1 });   // вручную
+$.audio.acoustics(true);            // авто: комната по зоне слушателя
+$.audio.room();                     // { wet, room, damp, width } — что применено
 ```
 
 ---
 
 ## 1. Методы и помощники
 
+`$.audio.room` — **функция**, а не namespace (проверено живым прогоном:
+`typeof $.audio.room === 'function'`; прежняя версия этой страницы обещала
+`$.audio.room.define/zone/at`, чего в коде нет — исправлено).
+
 | Вызов | Смысл |
 |---|---|
-| `$.audio.room.define(name, spec)` | описать помещение (`size`, `material`, `wet`, …) |
-| `$.audio.room.zone(rect)` | назначить помещение области мира |
-| `$.audio.room.at(x, y)` | параметры реверба в точке |
-| `$.audio.room.reset()` | сбросить зоны и описания |
+| `$.audio.room()` | текущие параметры комнаты `{ wet, room, damp, width }` |
+| `$.audio.room({ wet, room, damp, width })` | задать вручную и выключить авто-режим |
+| `$.audio.zone(name, { rect: [x, y, w, h], height, material, wet, smooth })` | завести/переопределить зону |
+| `$.audio.zone(name)` / `$.audio.zone()` | одна зона / список имён |
+| `$.audio.removeZone(name)` | удалить зону |
+| `$.audio.acoustics(flag)` | авто-режим: комната считается по зоне слушателя |
+| `$.audio.obstacles(list, opts)` / `$.audio.damping(opts)` / `$.audio.densityAt(x, y, r)` | препятствия и глушение |
 
-Чистые функции (их проверяет юнит-тест): `roomVolume(spec)`, `rt60(spec)`,
-`reverbForZone(...)`, `zoneAt(zones, x, y)`, `obstacleMuffle(...)`.
+Полная таблица и снимок состояния — [audiobus.md](audiobus.md) §8
+(`$.audio.acousticsState()`).
 
-`MATERIALS` — таблица материалов с поглощением; `PX_PER_METER` — масштаб мира.
+Чистые функции (их проверяет юнит-тест `tests/js/acoustics_test.mjs`):
+`roomVolume(width_px, depth_px, ceiling_m)`, `rt60(volume, surface, absorption)`,
+`reverbForZone(zone)`, `zoneAt(zones, x, y)`, `obstacleMuffle(a, b)`.
+
+`MATERIALS` — таблица материалов с поглощением; `PX_PER_METER = 32` — масштаб мира.
 
 ## 2. Как считается
 

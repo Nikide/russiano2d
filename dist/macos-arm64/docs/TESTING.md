@@ -14,10 +14,57 @@
 
 | Уровень | Что проверяет | Где | Как запускать |
 |---|---|---|---|
-| Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (94 набора, сверка 2026-10-11) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
-| Интеграционные в движке | поведение игры и API через агентский протокол | `tests/agent/*_test.py` (125 наборов, сверка 2026-10-11) | `python3 tools/run_tests.py` |
+| C-юниты | чистая логика ядра: json/crypto/payload/bsp/re2d/rotsprite/audio — все на Unity (41 кейс) | `tests/<ядро>/*_test.c`, цели CMake | `tools/ci_verify.py` (≈6 с на всё) |
+| Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (105 наборов, сверка 2026-10-17) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
+| Интеграционные в движке | поведение игры и API через агентский протокол (реальный SDL_GPU, ввод, скриншоты) | `tests/agent/*_test.py` (265 наборов, сверка 2026-10-17) | `python3 tools/run_tests.py` (≈12 мин) |
 | Стражи документации | «в доке написано, что чего-то нет, а в коде есть»; у каждого модуля есть страница и тест; у каждого публичного имени есть документация | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py`, `tests/api_docs_sync_test.py` | `python3 tests/doc_...py`, `python3 tests/api_docs_sync_test.py` |
 | C | физика/BSP и прочие ядра | `tests/bsp`, цели CMake | `cmake --build build` |
+
+### 1.1. Что гонять и когда (быстрый цикл)
+
+| Шаг | Время | Когда |
+|---|---|---|
+| `python3 tools/ci_verify.py --build-dir build` | **≈6 с** (12 C-целей + 105 `*.mjs` + sdk batch) | на каждую правку; это же гоняет CI (`.github/workflows/build.yml`) |
+| `python3 tools/run_tests.py --fast` | ≈1 мин (`agent_protocol`, `highlevel_api`, `game`) | перед коммитом, который трогает движок |
+| `python3 tools/run_tests.py` | ≈12 мин (265 агентских) | перед релизом/крупным слиянием, не на каждый чих |
+| `python3 tests/agent/<имя>_test.py` | 1–30 с | затронутый тест — обязательно |
+
+Полный агентский набор — **интеграционный**: поднимает настоящий движок,
+рисует кадры, шлёт ввод и снимает скриншоты, поэтому он дорогой. Чистая логика
+должна жить в C/JS-юнитах: их прогон — секунды, и они ловят регрессию раньше.
+
+### 1.2. Unity: ВСЕ C-тесты (правило 11)
+
+Unity **v2.6.0** лежит в `third_party/unity` (header + `unity.c` + MIT
+license, без сети/FetchContent). Общая библиотека `r2d_unity` линкуется во
+все C-цели; `tools/ci_verify.py` запускает их без Python.
+
+| Цель | Unity-кейсов | Проверяет |
+|---|---:|---|
+| `r2d_json_test` | 1 | разбор/сборка JSON, 200k случайных строк |
+| `r2d_crypto_test` | 1 | ChaCha20-Poly1305, RFC 8439, круговой прогон 0..300 |
+| `r2d_payload_test` | 4 | контейнер груза: битые/обрезанные записи |
+| `r2d_reverb_test` | 1 | Freeverb: wet=0, хвост комнаты/зала |
+| `r2d_audio_fx_test` | 1 | фильтры, тремоло, bitcrush, реверб-шина |
+| `r2d_profile_test` | 1 | строки профайлера, GPU-фолбэк |
+| `r2d_bsp_test` | 5 | полнота обхода BSP (квадрат/веер/глубина/звёзды) |
+| `r2d_re2d_test` | 14 | проекция, отсечение, туман, меш, детерминизм |
+| `r2d_rotsprite_test` | 1 | v2-геометрия и растеризация |
+| `r2d_re2d_world_test` | 1 | support/blocked/ray/stamp Re2D World |
+| `r2d_world_exr_test` | 1 | EXR-декодер неба |
+| `r2d_sdk_core_test` | 9 | SDK: glob/iso/registry/assets/validate/atlas/args |
+| `r2d_audio_spatial_test` | 1 | Steam Audio HRTF/occlusion |
+
+Итого **41 Unity-кейс**, все цели дают `N Tests 0 Failures 0 Ignored`
+(exit 0). Падение красное по-настоящему: неверный `TEST_ASSERT_EQUAL_INT(2,3)`
+печатает `FAIL: Expected 2 Was 3` и возвращает 1.
+
+Правило (**AGENT_IMPLEMENTATION_RULES.md** §11): новый C-тест — только
+`test_*`/`TEST_ASSERT_*`/`UNITY_BEGIN`+`RUN_TEST`, без ручных `check()`;
+монолитный legacy-`main`, обёрнутый в один `test_suite`, разбивается на
+отдельные `test_*` при следующей правке файла. Сообщения — ASCII (Unity
+печатает не-ASCII как `\xNN`). Python-тесты остаются только интеграционными:
+настоящий кадр/ввод/скриншот, без дублирования юнит-логики.
 
 Раннер агентских тестов различает три исхода: `ok` (код 0 **и** есть хотя бы
 одна проверка), `fail`, `skip` (код 0, но проверок не было — нет ассета,

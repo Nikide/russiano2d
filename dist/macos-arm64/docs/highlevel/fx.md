@@ -1,4 +1,11 @@
-# VFX своими руками — `$.fx`
+# VFX своими руками — `$.fx` (алиас `$.vfx`, один минор)
+
+> **`$.fx` — устаревший алиас.** В task-69 визуальная подсистема переехала в
+> [`$.vfx`](vfx.md), звуковая — в [`$.sfx`](sfx.md). Все имена ниже продолжают
+> работать до следующего минора и дают те же числа/кадр; при первом вызове
+> конкретного сырого имени (`$.fx.flash`, `$.fx.shockwave`, …) пишется **одно**
+> предупреждение `R2D_FX_DEPRECATED` с заменой. Таблица миграции —
+> [`migration.md`](migration.md). Для нового кода используйте `$.vfx`.
 
 Модуль `src/highlevel/fx.js`: ленты, молнии, ударные волны, вспышки и поля сил.
 Никаких сторонних библиотек — всё рисуется тем же батчем, что и спрайты
@@ -8,6 +15,35 @@
 Пост-обработка и пользовательские шейдеры — в [render.md](render.md).
 
 ---
+
+## 0. Алиас: как проверить и чем заменить
+
+| Старое имя | Новое имя |
+|---|---|
+| `$.fx.trail` | `$.vfx.trail` |
+| `$.fx.ribbon` | `$.vfx.ribbon` |
+| `$.fx.pushRibbon` | `$.vfx.pushRibbon` |
+| `$.fx.lightning` | `$.vfx.lightning` |
+| `$.fx.shockwave` | `$.vfx.shockwave` |
+| `$.fx.pulse` | `$.vfx.pulse` |
+| `$.fx.flash`, `$.fx.flashLeft` | `$.vfx.flash`, `$.vfx.flashLeft` |
+| `$.fx.attractor` | `$.vfx.attractor` |
+| `$.fx.impact` | `$.vfx.impact` |
+| `$.fx.hitStop` | `$.vfx.hitStop` |
+| `$.fx.stats`, `$.fx.clear` | `$.vfx.stats`, `$.vfx.clear` |
+
+`$.fx` — **единственный** алиас (третьего пространства нет). Дедупликация — по
+сырому имени: два вызова `$.fx.flash` дают одну запись `R2D_FX_DEPRECATED` в
+`$.debug.errors()`; проверяется `tests/agent/fx_split_mapping_test.py`.
+
+Переход движка завершён: `cutscene.js` больше не зовёт `$.fx.*` — шаг `flash`
+идёт через `$.vfx.flash`, шаг `fade` — через `$.layers.fadeTo` (до этого
+`cutscene.js` звал несуществующий `$.fx.fade`, и шаг молча ничего не делал;
+нашлось прогоном примеров из доки, долг Д2). Предупреждения при
+`$.cutscene.play` больше нет.
+
+---
+
 
 ## Координаты
 
@@ -125,7 +161,9 @@ hit-stop + отдача + squash) — [hits.md](hits.md).
   фиксированном шаге картинка воспроизводима.
 
 Смена сцены чистит эффекты: `resetFx()` вызывается из `scene.js` вместе с
-очисткой мира.
+очисткой мира. С task-69 он же через хук `onFxReset` сбрасывает активные
+эффекты `$.vfx` — scene.js по-прежнему импортирует только `resetFx`, второй
+точки сброса у него нет.
 
 Вспышки экрана — последними в `drawFx`: они заливают кадр поверх остальных VFX.
 Квадрат со стороной в диагональ вида покрывает экран при любом зуме и повороте
@@ -133,7 +171,8 @@ hit-stop + отдача + squash) — [hits.md](hits.md).
 
 `tickFx(dt)` также зовёт `tickHits(dt)` — кадровый шаг хит-фидбека
 ([hits.md](hits.md)); модуль ударов ставится из `installFx`, без правок
-`api.js`.
+`api.js`. Через хук `onFxTick` он зовёт и `tickVfx` (эффекты `$.vfx` идут
+игровым временем, [vfx.md](vfx.md)).
 
 ---
 
@@ -198,3 +237,6 @@ $.gfx.postPreset('glitch');                // шум и расхождение �
 в `$.time` и сброс. Демо-проверка — `tests/agent/demos_test.py shooter_witch`,
 живой хит-фидбек — `tests/agent/highlevel_feel_test.py`, экранное искажение —
 `tests/agent/screenfx_test.py` (14 проверок, фикстура `tests/fixtures/screenfx`).
+Алиас и разделение — `tests/agent/fx_split_mapping_test.py`; новые эффекты —
+[`vfx.md`](vfx.md) (`vfx_registry_test.py`, `vfx_validation_test.py`,
+`vfx_determinism_test.py`).
