@@ -239,6 +239,8 @@ function setParallaxFactor(node, value) {
         // core.js уже отличает null от undefined при сборе признаков, поэтому
         // узел выпадает из parallax-прохода, пока коэффициент не зададут снова.
         node.parallax_factor = null;
+        node.draw_off_x = 0;
+        node.draw_off_y = 0;
         parallax_state.delete(node);
         touchRegistry();   // состав параллакс-узлов изменился — сводка устарела
         return;
@@ -251,10 +253,16 @@ function setParallaxFactor(node, value) {
     node.parallax_factor = factor;
     const cam = cameraTransform();
     const st = parallax_state.get(node) || {};
-    st.ax = node.x - cam.x * (1 - factor);
-    st.ay = node.y - cam.y * (1 - factor);
+    // Д13/I1: якорь — КАМЕРА, а не позиция узла. node.x/y остаются позицией
+    // игры; смещение отрисовки = (cam − ref) × (1 − f) копится в draw_off.
+    st.ref_x = cam.x;
+    st.ref_y = cam.y;
     st.last_x = node.x;
     st.last_y = node.y;
+    st.off_x = 0;
+    st.off_y = 0;
+    node.draw_off_x = 0;
+    node.draw_off_y = 0;
     parallax_state.set(node, st);
     touchRegistry();
 }
@@ -271,27 +279,38 @@ function stepParallax(node, cam) {
     }
     const f = node.parallax_factor;
     const st = parallax_state.get(node) || {};
-    // Экранная позиция ДО сдвига: игровой код сдвигает якорь (телепорт,
-    // .moveTo), и по вычисленному node.x параллакс-узел «промахивался» бы при
-    // клике. Кладём сюда то, где узел нарисован в этом кадре.
-    st.screen_x = node.x;
-    st.screen_y = node.y;
+    if (!Number.isFinite(st.last_x)) {
+        st.ref_x = cam.x;
+        st.ref_y = cam.y;
+        st.last_x = node.x;
+        st.last_y = node.y;
+    }
+
+    // Игра сдвинула узел сама (телепорт, .moveTo, твин) — якорь камеры
+    // переезжает, иначе параллакс «съедал» бы игровое перемещение.
+    if (Math.abs(node.x - st.last_x) > PARALLAX_EPS) { st.ref_x = cam.x; st.last_x = node.x; }
+    if (Math.abs(node.y - st.last_y) > PARALLAX_EPS) { st.ref_y = cam.y; st.last_y = node.y; }
+
+    // node.x/y НЕ ТРОГАЕМ: это позиция игры (I1/Д13). Параллакс живёт в
+    // draw_off_*, его прибавляют нативный проход (src/nodes.c) и render.js.
+    const off_x = parallaxOffset(0, cam.x - st.ref_x, f);
+    const off_y = parallaxOffset(0, cam.y - st.ref_y, f);
+    st.off_x = off_x;
+    st.off_y = off_y;
+    node.draw_off_x = off_x;
+    node.draw_off_y = off_y;
+
+    // Нарисованная позиция в МИРОВЫХ координатах кадра: по ней работает
+    // наведение (нативный проход читает _scr_*), агент и picking. Это
+    // node + смещение, а не наоборот: .pos() остаётся позицией игры.
+    const drawn_x = node.x + off_x;
+    const drawn_y = node.y + off_y;
+    st.screen_x = drawn_x;
+    st.screen_y = drawn_y;
     st.screen_frame = ctx.time && typeof ctx.time.frame === 'function' ? ctx.time.frame() : -1;
-    // То же на самом узле: нативный проход наведения (src/nodes.c) не видит
-    // parallax_state и читает экранную позицию отсюда.
-    node._scr_x = st.screen_x;
-    node._scr_y = st.screen_y;
+    node._scr_x = drawn_x;
+    node._scr_y = drawn_y;
     node._scr_frame = st.screen_frame;
-    if (!Number.isFinite(st.last_x)) { st.ax = node.x - cam.x * (1 - f); st.last_x = node.x; }
-    if (!Number.isFinite(st.last_y)) { st.ay = node.y - cam.y * (1 - f); st.last_y = node.y; }
-
-    // Игра сдвинула узел сама (телепорт, .moveTo) — фиксируем якорь заново,
-    // иначе параллакс «съедал» бы игровое перемещение.
-    if (Math.abs(node.x - st.last_x) > PARALLAX_EPS) st.ax = node.x - cam.x * (1 - f);
-    if (Math.abs(node.y - st.last_y) > PARALLAX_EPS) st.ay = node.y - cam.y * (1 - f);
-
-    node.x = parallaxOffset(st.ax, cam.x, f);
-    node.y = parallaxOffset(st.ay, cam.y, f);
     st.last_x = node.x;
     st.last_y = node.y;
     parallax_state.set(node, st);
@@ -308,8 +327,10 @@ function stepParallax(node, cam) {
 export function nodeScreenPos(node) {
     if (!node) return { x: 0, y: 0 };
     const st = parallax_state.get(node);
-    let scene_x = node.x;
-    let scene_y = node.y;
+    // Д13: даже если stepParallax ещё не записал кадр, нарисованная позиция =
+    // позиция игры + смещение отрисовки; x/y остаются позицией игры.
+    let scene_x = node.x + (node.draw_off_x || 0);
+    let scene_y = node.y + (node.draw_off_y || 0);
     // frame() есть только у настоящего $.time: мок в тестах отдаёт заглушку,
     // и вызов без проверки ронял отрисовку слоёв.
     const frame = ctx.time && typeof ctx.time.frame === 'function' ? ctx.time.frame() : -1;
@@ -407,8 +428,10 @@ function renderRepeatLayer(node, cam) {
     const cw = cam ? cam.x : 0;
     const ch = cam ? cam.y : 0;
     const step = group.period * zoom;
-    const base_x = (template.x - cw) * zoom + view_w / 2 + (cam ? cam.shake_x || 0 : 0);
-    const base_y = (template.y - ch) * zoom + view_h / 2 + (cam ? cam.shake_y || 0 : 0);
+    const base_x = (template.x + (template.draw_off_x || 0) - cw) * zoom + view_w / 2
+        + (cam ? cam.shake_x || 0 : 0);
+    const base_y = (template.y + (template.draw_off_y || 0) - ch) * zoom + view_h / 2
+        + (cam ? cam.shake_y || 0 : 0);
     const layout = repeatLayout(step, base_x, view_w);
     const color = template.alpha < 1 ? withAlpha(template.color, template.alpha) : template.color;
     const w = group.period * zoom;
@@ -912,6 +935,22 @@ export function installLayers($) {
 
         /** Переход «в чёрное»: fadeOut(ms). */
         fadeOut(ms) { return layers.fadeTo('#000000', 1, ms === undefined ? 400 : ms); },
+
+        /**
+         * I1/Д13: смещение ОТРИСОВКИ параллакс-узла (`{x, y}`). Позиция узла
+         * (`pos().x`) — позиция игры; нарисованное место = позиция + смещение.
+         * У узла без параллакса — нули.
+         */
+        offset(nodeOrSelector) {
+            const node = resolveNode(nodeOrSelector);
+            if (!node) return { x: 0, y: 0 };
+            return {
+                x: typeof node.draw_off_x === 'number' && node.draw_off_x === node.draw_off_x
+                    ? node.draw_off_x : 0,
+                y: typeof node.draw_off_y === 'number' && node.draw_off_y === node.draw_off_y
+                    ? node.draw_off_y : 0,
+            };
+        },
     };
 
     $.layers = layers;

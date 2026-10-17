@@ -1563,6 +1563,11 @@ export class Node {
 
         this.x = 0;
         this.y = 0;
+        // I1/Д13: смещение ТОЛЬКО для отрисовки (параллакс). Позиция x/y — это
+        // позиция игры: её читают физика, геймплей и .pos(); нативный проход и
+        // render.js прибавляют draw_off при рисовании.
+        this.draw_off_x = 0;
+        this.draw_off_y = 0;
         this.w = defaults.w !== undefined ? defaults.w : 32;
         this.h = defaults.h !== undefined ? defaults.h : 32;
         // H10: «размер задан явно» — флаг вместо прежней эвристики `w === 32`.

@@ -46,9 +46,9 @@ QuickJS-ng v0.10.1, RmlUi 6.3, FreeType, Steam Audio), публичное API �
 |---|---|
 | HEAD | коммит, в котором лежит **этот документ** — сверь `git log --oneline -1`; ветка `main` одинаковая на `github`, `origin` (hub.mos.ru) и `gitverse` |
 | Версия | `1.2.2` (тег `v1.2.2` = `a9220e39…`, поставлен после перепаковки пакетов) |
-| Полный набор | `python3 tools/run_tests.py` → **264 теста**, 258 ok, 6 skip (`re2d_*` — 3D вырезан из SDK), 0 fail (прогон 2026-10-17) |
+| Полный набор | `python3 tools/run_tests.py` → **265 тестов**, 259 ok, 6 skip (`re2d_*` — 3D вырезан из SDK), 0 fail (прогон 2026-10-17) |
 | Заморозка API | **3125** имён (`tests/api_freeze_baseline.txt`) + **35** методов обёрток (`tests/api_wrapper_methods_baseline.txt`) |
-| Гейты | `api_freeze` (3131), `api_docs_sync` (3131), `api_wrapper_methods` (105), `doc_examples` (687 путей), `doc_coverage`, `doc_claims`, `repository_hygiene`, `release_notes`, `format_extensions`, `checklist`, `acceptance` — зелёные |
+| Гейты | `api_freeze` (3133), `api_docs_sync` (3133), `api_wrapper_methods` (105), `doc_examples` (687 путей), `doc_coverage`, `doc_claims`, `repository_hygiene`, `release_notes`, `format_extensions`, `checklist`, `acceptance` — зелёные |
 | Бинарник | `build/russiano2d` (пересобирать после правок JS! JS вшивается при сборке) |
 | Внешний тестировщик | `/Volumes/SSD NVME/p2game/bashnya/issues.md` — **только читать**, никогда не править и не ставить галки |
 
@@ -233,7 +233,7 @@ $.vfx.play('hit.spark', { at: [x, y], parent: node });
 | Д5 | **CI: `linux-aarch64` красный по тегу `v1.2.2`** | ⏳ шаг найден и перепроверен перезапуском: `Linux SDK GUI regressions` → `sdk_studios_test`. Симптомы разные между запусками: (1) SIGSEGV **до** `ready` при `SDL_GPU_DRIVER=vulkan` (lavapipe, прогретый кэш шейдеров); (2) движок стартует, но DevTools-этап видит 0 сущностей: `profile/screenshot/frame` = False. x86_64 тот же тест проходит; sdk_cli/sdk_package/build/ui_virtual_mouse — зелёные. `static gates`, сборка RE2D on/off, native/JS тесты, web export — зелёные. `windows-msvc-diagnostic` — известный ICE. Нужен прогон на aarch64-Linux (локально его нет) и, вероятно, отключение GPU-пути DevTools-снимка на lavapipe |
 | Д6 | **Веб-сборка не перепроверялась** | ✅ **перепроверено 2026-10-17**: поставлен emsdk 6.0.11, собран SDL3 с WebGPU (`GPU drivers: openxr webgpu`), собрана веб-сборка ТЕКУЩЕГО дерева (`russiano2d.wasm` 57.8 МБ, `.data` 276.8 МБ). Headed-дым: `first-frame` → `--frames 30` → `shutdown: gpu-idle/script-exit/audio/app/done`, вердикт по журналу движка **ok** (2.8 с). Пиксельная проверка canvas (`drawImage`) на WebGPU пустая — это ограничение чтения canvas, кадр снят скриншотом (цветные квадраты сцены видны). Headless-дым вердикта не даёт (`--dump-dom` снимается до остановки) — записано как ограничение харнесса. Док-баг исправлен: без `-DFETCHCONTENT_SOURCE_DIR_RMLUI` конфигурация падала на «Freetype could not be found» |
 | Д7 | **Сеть не проверялась** | ✅ **проверено существующими тестами** (полный прогон 2026-10-17): `net_loopback_test` 20 проверок — два движка, сервер слушает порт, клиент подключается, сервер получает input клиента, клиент получает подтверждённый снапшот; `net_delay_test` 13 (потери/задержка), `net_smooth_test` 14 (сглаживание). Интерполяция — `tests/js/net_test.mjs` (`polated`: своё = подтверждённое, чужое = между снапшотами). Инвариант «клиент не объявляет репликацию»: `replicate` на не-сервере → 0 и одно сообщение (`target_miss_combat_net_prefab_test`). Ограничение: отдельного e2e «сервер отвергает запись клиента» на двух движках нет — держится ролью (`role !== server`) и юнит-тестом |
-| Д8 | **BASHNYA: 4 пункта раздела I** (I1 параллакс забирает позицию, I8 события сенсоров, I12/I14 — задачи 2/1) | ✅ **I8 закрыт** (`sensor_events_test` 11); **I12/I14** закрыты задачами 2/1; **I1** — частично (`.parallax(null)` держится, полный перенос смещения в `render.js` остался) |
+| Д8 | **BASHNYA: 4 пункта раздела I** (I1 параллакс забирает позицию, I8 события сенсоров, I12/I14 — задачи 2/1) | ✅ **закрыт полностью**: I8 — `sensor_events_test` (11); I12/I14 — задачи 2/1; I1 — смещение отрисовки в `draw_off_x/y` (нативный проход + `render.js`), `node.x/y` и `.pos()` — позиция игры, пикинг/Y-sort/свет учитывают смещение, `$.layers.offset(node)` — `layers_parallax_i1_test` (11) |
 | Д9 | **Сайт: macOS-ассеты релиза не приложены** | ⏳ ждёт зелёный `release` в CI (перезапуск джобов идёт); после — `python3 tools/attach_macos_release.py` |
 
 ### 6.1. Новые долги, найденные в смене 2026-10-17
@@ -243,7 +243,7 @@ $.vfx.play('hit.spark', { at: [x, y], parent: node });
 | Д10 | **`api_freeze` не видит методы вложенных namespace** (`$.gfx.light.budget` появился мимо снимка) | ✅ **закрыто**: гейт `tests/api_wrapper_methods_test.py` теперь снимает и вложенные namespace (`$.gfx.light/draw/push`, `$.world.bsp`, `$.sound.bank`, `$.debug.draw/profiler`) — 105 методов в снимке против 35. `api_freeze` не расширяли, чтобы не раздувать `api_docs_sync`; whitelist явный, внутренние `$.ctx.*`/`*._state` исключены |
 | Д11 | **r2dvfx M4** — предпросмотр эффектов в DevTools и экспорт спеки в JSON | ✅ **закрыто**: 15-я вкладка `vfx` в F1 — список = `$.vfx.list()` (22 эффекта), плей в центре камеры, прогресс/время/seed/hash/degraded из `handle.query()`, перемотка ±0.1 с, «Стоп» снимает всё; экспорт пишет `{effects:{имя:спека}}`, который сразу читает `$.vfx.load` — `devtools_vfx_test.py` (24 проверки): эффект снят из реестра, загружен из файла, спеки равны. Публичные `$.devtools.vfx/vfxSelect/vfxPlay/vfxStop/vfxSeek/vfxExport` (81 имя, freeze 3131) |
 | Д12 | **`cutscene.js` зовёт `$.fx.flash`** — первая катсцена с вспышкой даст одно предупреждение `R2D_FX_DEPRECATED` | Перевести `cutscene.js` на `$.vfx.flash` (файл был вне зоны агента) |
-| Д13 | **Полный I1**: при активном параллаксе `node.x/y` пишет `layers.js`, читает нативный рендер и `render.js` | План на отдельную смену: (1) поле узла `draw_off_x/draw_off_y` (по умолчанию 0), которое читают нативные проходы отрисовки (`src/nodes.c`) и JS-`render.js` — `layers.js` пишет туда смещение вместо `node.x`; (2) `node.x/y` остаются позицией игры, `.pos()` — тоже; (3) попадание/`nodeScreenPos`, culling и свет считают нарисованную позицию = `node + draw_off`; (4) тесты `highlevel_layers_test`, `layers_parallax_optout_test`, `highlevel_render_parallax_test` переписать с «pos() уезжает» на «pos() стоит, кадр уезжает»; (5) проверить RE2D/билборды и волны/ленты, которые тоже читают `node.x`. Это правка нативного контракта узла, а не только JS — поэтому отдельная смена, не хвост M4 |
+| Д13 | **Полный I1**: при активном параллаксе `node.x/y` писал `layers.js`, читали нативный рендер и `render.js` | ✅ **закрыто**: `draw_off_x/y` (нативный `src/nodes.c`: быстрый проход, hit-test, Y-sort; `render.js`: `nodeTransform`, свет/тени, бюджет, `_nodeClip`, repeat), `layers.js` пишет смещение `(cam−cam_ref)×(1−f)`, `node.x/y` не трогает; `$.layers.offset()`; тесты переписаны на «pos стоит, offset/кадр уезжает» + новый `layers_parallax_i1_test` (пикинг в нарисованную точку) |
 
 ## 7. Как проверять (ритуал)
 
@@ -264,7 +264,7 @@ done
 python3 tools/run_tests.py
 ```
 
-Ожидаемые числа при здоровом дереве: **264 теста, 258 ok, 6 skip, 0 fail**; заморозка **3125** имён; `api_docs_sync` — **3125** имён;
+Ожидаемые числа при здоровом дереве: **265 тестов, 259 ok, 6 skip, 0 fail**; заморозка **3125** имён; `api_docs_sync` — **3125** имён;
 гейт обёрток — **35** методов.
 
 ## 8. Как устроен агентский режим тестов (короткая шпаргалка)

@@ -50,7 +50,8 @@
     X(offsetLeft) X(offsetTop) X(offsetRight) X(offsetBottom) X(themeName)         \
     X(_style) X(_styleStates) X(material)                                          \
     X(local_mode) X(local_x) X(local_y) X(local_angle) X(local_scale_x)             \
-    X(local_scale_y) X(_t_gen) X(_t_busy) X(_t_wx) X(_t_wy) X(_t_wa) X(_t_wsx) X(_t_wsy)
+    X(local_scale_y) X(_t_gen) X(_t_busy) X(_t_wx) X(_t_wy) X(_t_wa) X(_t_wsx) X(_t_wsy) \
+    X(draw_off_x) X(draw_off_y)
 
 typedef struct {
 #define R2D_DECL_ATOM(name) JSAtom name;
@@ -532,8 +533,10 @@ static JSValue js_hover(JSContext *ctx, JSValueConst this_val, int argc, JSValue
             const double w = num_prop(ctx, node, A.w), h = num_prop(ctx, node, A.h);
             if (w <= 0 || h <= 0) goto next;
 
-            // nodeScreenPos(): у параллакс-узла — позиция до сдвига этого кадра.
-            double sx = num_prop(ctx, node, A.x), sy = num_prop(ctx, node, A.y);
+            // nodeScreenPos(): нарисованная позиция = позиция игры + draw_off
+            // (параллакс; I1/Д13). node.x/y остаются позицией игры.
+            double sx = num_prop(ctx, node, A.x) + num_prop(ctx, node, A.draw_off_x);
+            double sy = num_prop(ctx, node, A.y) + num_prop(ctx, node, A.draw_off_y);
             const double scr_frame = num_prop(ctx, node, A._scr_frame);
             if (scr_frame == scr_frame && scr_frame == P[9]) {
                 sx = num_prop(ctx, node, A._scr_x);
@@ -639,7 +642,8 @@ static bool read_keys(JSContext *ctx, JSValueConst list, uint32_t n, bool by_y)
         k->index = i;
         if (JS_IsObject(node)) {
             k->layer = num_prop(ctx, node, A.layer);
-            k->key = by_y ? num_prop(ctx, node, A.y) : effective_depth(ctx, node);
+            k->key = by_y ? num_prop(ctx, node, A.y) + num_prop(ctx, node, A.draw_off_y)
+                          : effective_depth(ctx, node);
             k->uid = num_prop(ctx, node, A.uid);
         } else {
             k->layer = k->key = k->uid = 0;
@@ -923,7 +927,10 @@ static JSValue js_draw_world(JSContext *ctx, JSValueConst this_val, int argc, JS
         }
 
         // nodeTransform(): та же математика кадра, что frameViewPoint().
-        const double x = num_prop(ctx, node, A.x), y = num_prop(ctx, node, A.y);
+        // Параллакс: рисуем в позиции игры + смещение (I1/Д13); node.x/y не
+        // трогаем, поэтому геймплей и .pos() видят позицию игры.
+        const double x = num_prop(ctx, node, A.x) + num_prop(ctx, node, A.draw_off_x);
+        const double y = num_prop(ctx, node, A.y) + num_prop(ctx, node, A.draw_off_y);
         const double dx = (x - cam_x) * zpos, dy = (y - cam_y) * zpos;
         double tx, ty;
         if (rot == 0) { tx = dx + cx; ty = dy + cy; }

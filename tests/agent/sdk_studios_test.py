@@ -357,12 +357,22 @@ def main():
         a.eval(f"{L}.addSprite(0, {{src:'assets/mountains.png', x:300, y:300, w:512, h:288}}, 3); {L}.addSprite(1, {{src:'assets/tiles.png', x:300, y:420, w:256, h:144}}, 3); 1")
         a.step(6)
         check(st(a, "parallax-tools")["runtimeLayers"] == 2, "Parallax: настоящие слои $.layers созданы")
-        far0 = a.eval("$.layers.get('sdkpv:far').children().first().pos().x")
-        near0 = a.eval("$.layers.get('sdkpv:near').children().first().pos().x")
+        # I1/Д13: pos() — позиция игры (не меняется), смещение смотрит
+        # $.layers.offset(); нарисованное место = pos + offset.
+        far_node = "$.layers.get('sdkpv:far').children().first()"
+        near_node = "$.layers.get('sdkpv:near').children().first()"
+        far_pos0 = a.eval(f"{far_node}.pos().x")
+        near_pos0 = a.eval(f"{near_node}.pos().x")
+        far0 = a.eval(f"$.layers.offset({far_node}).x")
+        near0 = a.eval(f"$.layers.offset({near_node}).x")
         a.eval(f"{L}.pan(300, 0); 1")
         a.step(8)
-        far1 = a.eval("$.layers.get('sdkpv:far').children().first().pos().x")
-        near1 = a.eval("$.layers.get('sdkpv:near').children().first().pos().x")
+        far_pos1 = a.eval(f"{far_node}.pos().x")
+        near_pos1 = a.eval(f"{near_node}.pos().x")
+        far1 = a.eval(f"$.layers.offset({far_node}).x")
+        near1 = a.eval(f"$.layers.offset({near_node}).x")
+        check(abs(far_pos1 - far_pos0) < 1 and abs(near_pos1 - near_pos0) < 1,
+              "I1: сдвиг камеры не двигает позицию игры слоёв (pos стабилен)")
         check(abs((far1 - far0) - 300 * 0.8) < 2 and abs((near1 - near0) - 300 * 0.4) < 2,
               "камера сдвинулась на 300: далёкий слой (0.2) ушёл на %.0f, ближний (0.6) на %.0f — как у $.layers" % (far1 - far0, near1 - near0))
         a.eval(f"{L}.setModulate('#0a1430', '0.35'); 1")

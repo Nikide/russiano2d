@@ -1247,6 +1247,7 @@ $.layers.hide
 $.layers.list
 $.layers.modulate
 $.layers.of
+$.layers.offset
 $.layers.order
 $.layers.parallax
 $.layers.remove
@@ -2875,6 +2876,7 @@ $.слои.hide
 $.слои.list
 $.слои.modulate
 $.слои.of
+$.слои.offset
 $.слои.order
 $.слои.parallax
 $.слои.remove

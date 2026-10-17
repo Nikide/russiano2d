@@ -1719,8 +1719,8 @@ function collectDynamicOccluders() {
         for (let k = count; k < light_dynamic.length; k += 4) {
             for (let p = 0; p < 4; p += 2) {
                 const lx = light_dynamic[k + p], ly = light_dynamic[k + p + 1];
-                const wx = node.x + lx * c - ly * sn;
-                const wy = node.y + lx * sn + ly * c;
+                const wx = node.x + drawOffX(node) + lx * c - ly * sn;
+                const wy = node.y + drawOffY(node) + lx * sn + ly * c;
                 light_dynamic[k + p] = wx;
                 light_dynamic[k + p + 1] = wy;
                 if (wx < minx) minx = wx;
@@ -1984,14 +1984,14 @@ function planLightBudget(cam) {
         // То же отсечение, что у отрисовки обычного узла: источник за кадром
         // не считается «источником в кадре».
         if (state.culling) {
-            const sx = (node.x - cam_x) * zoom + half_w;
-            const sy = (node.y - cam_y) * zoom + half_h;
+            const sx = (node.x + drawOffX(node) - cam_x) * zoom + half_w;
+            const sy = (node.y + drawOffY(node) - cam_y) * zoom + half_h;
             if (sx < -64 || sx > half_w * 2 + 64 || sy < -64 || sy > half_h * 2 + 64) continue;
         }
         let power = lightBudgetPower(node, is_light);
         if (!(power > 0.001)) continue;
         power *= alpha;
-        const dx = node.x - cam_x, dy = node.y - cam_y;
+        const dx = node.x + drawOffX(node) - cam_x, dy = node.y + drawOffY(node) - cam_y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         let score;
         if (typeof mode === 'function') {
@@ -2375,8 +2375,10 @@ function emitSpriteLight(node, t, cam) {
         const angles = lightAnglesFor(node, false, node.angle, 0, 0, segments);
         const dist = lightDistScratch(angles.length);
         lightSegmentsFor(node);
-        const near = lightCollectNear(node.x, node.y, radius_world, node._light_mask, node._light_own);
-        const world_dist = lightShadowSlot(node, 0, node.x, node.y, radius_world,
+        const near = lightCollectNear(node.x + drawOffX(node), node.y + drawOffY(node),
+                                      radius_world, node._light_mask, node._light_own);
+        const world_dist = lightShadowSlot(node, 0, node.x + drawOffX(node), node.y + drawOffY(node),
+                                          radius_world,
                                            angles, node._light_own, light_cull, near, 1, 0);
         for (let i = 0; i < angles.length; i++) {
             dist[i] = Math.min(world_dist[i], radius_world) * cam.zoom;
@@ -2481,8 +2483,10 @@ function drawLightNode(node, t, cam) {
 
     if (shadows) {
         lightSegmentsFor(node);
-        const near = lightCollectNear(node.x, node.y, radius_world, node._light_mask, node._light_own);
-        const world_dist = lightShadowSlot(node, 0, node.x, node.y, radius_world,
+        const near = lightCollectNear(node.x + drawOffX(node), node.y + drawOffY(node),
+                                      radius_world, node._light_mask, node._light_own);
+        const world_dist = lightShadowSlot(node, 0, node.x + drawOffX(node), node.y + drawOffY(node),
+                                          radius_world,
                                            angles, node._light_own, light_cull, near, soft, soft_half);
         for (let i = 0; i < angles.length; i++) {
             dist[i] = Math.min(world_dist[i], radius_world) * zoom;
@@ -2541,7 +2545,8 @@ function drawLightAreaNode(node, t, cam) {
     // §37. Публикация источника для инспектора света — как у <light>: в C
     // уходит только геометрия, параметров источника там нет. shadow — итоговый.
     if (engine.devtools && typeof engine.devtools.light === 'function') {
-        engine.devtools.light(node.x, node.y, radius_world, node.intensity, shadows, lightLayerOf(node));
+        engine.devtools.light(node.x + drawOffX(node), node.y + drawOffY(node),
+                              radius_world, node.intensity, shadows, lightLayerOf(node));
     }
     const src = shadows ? lightSegmentsFor(node) : null;
     const w = Math.abs(node.w), h = Math.abs(node.h);
@@ -2563,7 +2568,8 @@ function drawLightAreaNode(node, t, cam) {
     // Все точки площадки лежат в её габарите, поэтому препятствия отсекаются
     // один раз на весь источник, а не на каждую точку.
     const near = shadows
-        ? lightCollectNear(node.x, node.y, radius_world + span * 0.5, node._light_mask, node._light_own)
+        ? lightCollectNear(node.x + drawOffX(node), node.y + drawOffY(node),
+                           radius_world + span * 0.5, node._light_mask, node._light_own)
         : 0;
 
     const prev_blend = tri_blend_cur;
@@ -2574,7 +2580,8 @@ function drawLightAreaNode(node, t, cam) {
         const ox = horizontal ? (u - 0.5) * span : 0;
         const oy = horizontal ? 0 : (u - 0.5) * span;
         const world_dist = src
-            ? lightShadowSlot(node, i, node.x + ox, node.y + oy, radius_world,
+            ? lightShadowSlot(node, i, node.x + drawOffX(node) + ox, node.y + drawOffY(node) + oy,
+                              radius_world,
                               angles, node._light_own, light_cull, near, soft, 0)
             : null;
         for (let k = 0; k < angles.length; k++) {
@@ -3424,6 +3431,20 @@ function overlayMaterialsActive() {
 // сохранить его себе.
 const scratch_t = { x: 0, y: 0, w: 0, h: 0 };
 
+/**
+ * Нарисованная позиция узла: позиция игры (node.x/y) плюс смещение отрисовки
+ * (параллакс, I1/Д13). node.x/y сами не меняются — их читают физика,
+ * геймплей и .pos().
+ */
+function drawOffX(node) {
+    const v = node.draw_off_x;
+    return typeof v === 'number' && v === v ? v : 0;
+}
+function drawOffY(node) {
+    const v = node.draw_off_y;
+    return typeof v === 'number' && v === v ? v : 0;
+}
+
 function nodeTransform(node, cam, out) {
     // ВАЖНО: позиция узла считается ТОЙ ЖЕ математикой кадра, что и
     // $.camera.worldToScreen (frameViewPoint). Раньше здесь была своя формула
@@ -3431,7 +3452,7 @@ function nodeTransform(node, cam, out) {
     // (свет, VFX), а сами узлы оставались на месте — картинка не менялась.
     let sx = 0, sy = 0;
     {
-        const v = frameViewPoint(cam, node.x, node.y);
+        const v = frameViewPoint(cam, node.x + drawOffX(node), node.y + drawOffY(node));
         sx = v.x + cam.shake_x;
         sy = v.y + cam.shake_y;
     }
@@ -4211,8 +4232,8 @@ export function installGfx($) {
             const cam = ctx.camera;
             const z = cam && cam.zoom ? (cam.zoom() || 1) : 1;
             const p = cam && cam.worldToScreen
-                ? cam.worldToScreen({ x: node.x, y: node.y })
-                : { x: node.x, y: node.y };
+                ? cam.worldToScreen({ x: node.x + drawOffX(node), y: node.y + drawOffY(node) })
+                : { x: node.x + drawOffX(node), y: node.y + drawOffY(node) };
             const w = Math.abs(node.w * (node.scale_x === undefined ? 1 : node.scale_x)) * z;
             const h = Math.abs(node.h * (node.scale_y === undefined ? 1 : node.scale_y)) * z;
             if (!(w > 0) || !(h > 0)) return null;
