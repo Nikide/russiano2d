@@ -118,38 +118,58 @@ def main():
         check(modes <= {"patrol", "notice", "idle"},
               f"режимы врагов только patrol/notice/idle (атак нет): {modes}")
 
-        # Игрок ставится рядом с cat-nw: враг замечает и подходит, но не бьёт.
+        # Луч видимости: за внутренней стеной враг НЕ «видит» игрока и не идёт
+        # напролом сквозь стену (кинематика не умеет обходить).
+        a.eval("(() => { const h=$('#hero').get(0);"
+               " h.x = 900; h.y = 660; h.syncBody && h.syncBody(); return 1; })()")
+        a.step(3)
+        blocked = next(e for e in state(a)["enemies"] if e["id"] == "cat-nw")
+        check(blocked["seen"] is False,
+              f"за стеной враг не видит игрока (seen={blocked['seen']}, "
+              f"distance={blocked['distance']})")
+        a.step(80)
+        blocked2 = next(e for e in state(a)["enemies"] if e["id"] == "cat-nw")
+        check(blocked2["mode"] != "notice",
+              f"за стеной враг не идёт к игроку (режим {blocked2['mode']})")
+
+        # Игрок на той же стороне: враг замечает и подходит, но не бьёт.
+        # Запад, а не восток: восточнее стоит cat-ne, и его тело перекрывает
+        # луч (враги — тоже тела), «в открытую» превращалось в ложный отказ.
         a.eval("(() => { const n=$('#cat-nw').get(0);"
-               " $('#hero').get(0).x = n.x + 300; $('#hero').get(0).y = n.y;"
-               " $('#hero').get(0).syncBody && $('#hero').get(0).syncBody(); return 1; })()")
+               " const h=$('#hero').get(0); h.x = n.x - 300; h.y = n.y;"
+               " h.syncBody && h.syncBody(); return 1; })()")
         a.step(2)
-        d0 = next(e["distance"] for e in state(a)["enemies"] if e["id"] == "cat-nw")
+        e0 = next(e for e in state(a)["enemies"] if e["id"] == "cat-nw")
+        d0 = e0["distance"]
         a.step(90)
         st_near = state(a)
         d1 = next(e["distance"] for e in st_near["enemies"] if e["id"] == "cat-nw")
         mode_near = next(e["mode"] for e in st_near["enemies"] if e["id"] == "cat-nw")
-        check(d1 <= d0 and mode_near in ("notice", "idle"),
-              f"враг замечает и подходит: distance {d0} → {d1}, режим {mode_near}")
+        check(e0["seen"] is True and d1 <= d0 and mode_near in ("notice", "idle"),
+              f"в открытую враг замечает и подходит: seen={e0['seen']}, "
+              f"distance {d0} → {d1}, режим {mode_near}")
         check(st_near["weapons"] == 0, "у врага и игрока по-прежнему нет оружия")
 
-        # --- Билборд виден по арту: фронт и разворот ------------------------
+        # --- Билборд виден по арту: изолируем один враг ---------------------
         os.makedirs(SHOTS, exist_ok=True)
+        others = "['cat-ne','cat-mid','cat-w','cat-e','cat-se']"
+        a.eval(f"{others}.forEach((id) => $('#' + id).hide()); 'ok'")
         a.eval("(() => { const h=$('#hero').get(0), n=$('#cat-nw').get(0);"
+               " h.x = n.x - 240; h.y = n.y; h.syncBody && h.syncBody();"
                " $.camera.yaw(Math.atan2(n.y-h.y, n.x-h.x) * 180 / Math.PI); return 1; })()")
         a.step(3)
         front = a.screenshot(os.path.join(SHOTS, "re2d_testroom_front.png"))
         g_front = green_pixels(front)
-        # Изоляция одного билборда: спрятать cat-nw и сравнить тот же кадр.
-        # (Смотреть «в противоположную сторону» нельзя: рядом стоят другие
-        # враги, и зелёные пиксели остаются — проверка была бы ложной.)
+        # Остальные враги скрыты, поэтому спрятанный cat-nw должен убрать
+        # практически весь зелёный арт из кадра.
         a.eval("$('#cat-nw').hide(); 'ok'")
         a.step(3)
         hidden = a.screenshot(os.path.join(SHOTS, "re2d_testroom_hidden.png"))
         g_hidden = green_pixels(hidden)
-        a.eval("$('#cat-nw').show(); 'ok'")
+        a.eval("$('#cat-nw').show(); %s.forEach((id) => $('#' + id).show()); 'ok'" % others)
         check(g_front > 400,
               f"билборд врага виден с фронта (зелёных пикселей {g_front})")
-        check(g_hidden < g_front * 0.7,
+        check(g_hidden < g_front * 0.2,
               f"спрятанный cat-nw убирает свой арт с кадра ({g_hidden} против {g_front})")
 
         errors = a.eval("JSON.stringify($.debug.errors())")

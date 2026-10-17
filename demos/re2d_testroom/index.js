@@ -37,7 +37,9 @@ const ENEMY_BODY = 44;
 // Патрульные маршруты. Точки выбраны в открытых местах, чтобы кинематический
 // враг не проходил сквозь внутренние стены (у kinematic нет solver-а).
 const ENEMIES = [
-    { id: 'cat-nw', path: [[260, 300], [620, 300], [620, 560], [260, 560]], speed: 64 },
+    // cat-nw ходит вдоль внутренней стены с СЕВЕРА: если игрок стоит за
+    // стеной (юг), враг его не видит и не идёт напролом — см. canSee().
+    { id: 'cat-nw', path: [[900, 520], [1040, 520], [1040, 570], [900, 570]], speed: 64 },
     { id: 'cat-ne', path: [[980, 300], [1340, 300], [1340, 560], [980, 560]], speed: 72 },
     { id: 'cat-mid', path: [[380, 700], [560, 700], [560, 940], [380, 940]], speed: 56 },
     { id: 'cat-w', path: [[180, 640], [180, 980], [320, 980], [320, 640]], speed: 48 },
@@ -51,16 +53,32 @@ const NOTICE = 380;      // ближе — «заметил» и идёт к и�
 const STOP_AT = 130;     // не подходит вплотную (но и не атакует — оружия нет)
 
 export default function install($) {
-    let hud = null;
     let labels = null;
+    let hud_nodes = [];   // всё, что создали в UI: снести в exit, а не половину
     const enemies = [];   // { cfg, node, at, dwell, mode }
 
     function leave() {
         $.camera.mouseLook(false).kind(null).unfollow().fog(0).pitch(0).yaw(0).zoom(1);
         $.window.mouseLock(false);
-        if (hud) hud.remove();
-        hud = null;
+        for (const node of hud_nodes) node.remove();
+        hud_nodes = [];
         labels = null;
+    }
+
+    /**
+     * Видит ли враг игрока: 2D-луч по телам комнаты. Кинематический билборд
+     * не умеет «обойти» стену, поэтому без проверки он шёл бы к игроку сквозь
+     * внутреннюю стену. Луч 2D (XY): стены комнаты — обычные тела.
+     */
+    function canSee(hero, n) {
+        if (typeof $.world.raycast !== 'function') return true;
+        try {
+            const hit = $.world.raycast({ x: n.x, y: n.y }, { x: hero.x, y: hero.y },
+                                        { ignore: [hero, n] });
+            return !hit;
+        } catch (e) {
+            return true;
+        }
     }
 
     /** Ближайший враг и его дистанция — для HUD и тестов. */
@@ -87,6 +105,7 @@ export default function install($) {
                 const n = e.node.get(0);
                 return n ? {
                     id: e.cfg.id, mode: e.mode,
+                    seen: hero ? canSee(hero, n) : false,
                     x: Math.round(n.x * 10) / 10, y: Math.round(n.y * 10) / 10,
                     distance: hero ? Math.round(Math.hypot(hero.x - n.x, hero.y - n.y)) : null,
                 } : { id: e.cfg.id, x: null, y: null };
@@ -132,11 +151,12 @@ export default function install($) {
                 enemies.push({ cfg, node, at: 0, dwell: 0, mode: 'patrol' });
             }
 
-            hud = $('<ui.panel>', { id: 'testroom-panel', color: '#05070cd0' })
-                .at(640, 40).size(1240, 80).appendTo($.ui);
+            hud_nodes = [];
+            hud_nodes.push($('<ui.panel>', { id: 'testroom-panel', color: '#05070cd0' })
+                .at(640, 40).size(1240, 80).appendTo($.ui));
             // Прицел: в FPS нужно, куда смотреть. Это обычный ui-узел над 3D.
-            $('<ui.panel>', { id: 'testroom-cross', color: '#e8f0ffcc' })
-                .at(640, 360).size(6, 6).appendTo($.ui);
+            hud_nodes.push($('<ui.panel>', { id: 'testroom-cross', color: '#e8f0ffcc' })
+                .at(640, 360).size(6, 6).appendTo($.ui));
             labels = {
                 title: $('<ui.label>', { id: 'testroom-title', size: 24, color: '#9fe8b0',
                                           align: 'center',
@@ -150,6 +170,7 @@ export default function install($) {
                                            align: 'center', text: '' })
                     .at(640, 690).appendTo($.ui),
             };
+            hud_nodes.push(labels.title, labels.hint, labels.status);
         },
 
         exit() { leave(); },
@@ -164,7 +185,7 @@ export default function install($) {
                 if (!n) continue;
                 const distance = Math.hypot(hero.x - n.x, hero.y - n.y);
 
-                if (distance < NOTICE && distance > STOP_AT) {
+                if (distance < NOTICE && distance > STOP_AT && canSee(hero, n)) {
                     e.mode = 'notice';
                     // Враг идёт к игроку, но не атакует: оружия в комнате нет.
                     const k = Math.min(1, (e.cfg.speed / distance) * (step_ms / 1000) * 1.15);
