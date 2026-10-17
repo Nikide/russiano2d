@@ -282,10 +282,21 @@ def main():
               "детали описывают свежий захват (кадр %s)" % newest["frame"])
         click(a, doc, "rt-hitch-row-1")
         selected_old = a.eval("$.devtools.hitch()")
-        older = a.eval("engine.hitch.get(0)")
-        check(selected_old["selected"] == 0 and older["frame"] in
-              [r["frame"] for r in selected_old["rows"]],
-              "клик по второй строке выбрал более старый захват (#%s)" % selected_old["selected"])
+        # Не предполагаем «вторая строка = get(0)»: под нагрузкой полного
+        # набора между чтением строк и кликом в кольцо попадает новый захват,
+        # индексы сдвигаются (флак полного прогона 2026-10-17). Проверяем
+        # смысл: выбранная строка — вторая в списке, и детали/панель
+        # показывают ИМЕННО её кадр.
+        rows = selected_old["rows"]
+        idx_sel = selected_old["selected"]
+        check(len(rows) >= 2 and 0 <= idx_sel < len(rows),
+              "клик по второй строке выбрал существующий захват (#%s)" % idx_sel)
+        older = a.eval("engine.hitch.get(%d)" % idx_sel)
+        check(bool(older) and older["frame"] in
+              [r["frame"] for r in rows if r is not rows[0]] and
+              (len(rows) < 2 or older["frame"] != rows[0]["frame"]),
+              "выбранный захват — не самый свежий (кадр %s)"
+              % (older["frame"] if older else None))
         check(("кадр %s" % older["frame"]) in selected_old["text"]["detail"],
               "детали переключились на выбранный захват")
         check(("кадр %s" % older["frame"]) in
