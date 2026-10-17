@@ -15,6 +15,17 @@
 > listeners continue to work.
 
 
+## 1.2.7 — 2026-10-18
+
+<!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
+
+1 коммит в релизе.
+
+### Тесты и гейты
+
+- Close roadmap acceptance wave: visual lab/refs, debug overlays, GPU batching, brush entities, sky leak, scene-W, coverage 0 red; web build fixes (`443e12c78`)
+
+<!-- release-notes:end -->
 ## 1.2.6 — 2026-10-18
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
