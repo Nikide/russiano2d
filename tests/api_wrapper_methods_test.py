@@ -29,10 +29,23 @@ GAME = os.path.join("tests", "fixtures", "uiclick")
 FAILURES = []
 
 #: Явный список проб: (выражение, подпись в снимке).
-#: Новая обёртка попадает сюда только осознанно — вместе с документом.
+#: Новая обёртка/namespace попадает сюда только осознанно — вместе с документом.
+#: Д1+Д10: методы объектов, которые `$` отдаёт вызовом, и методы вложенных
+#: namespace, которые api_freeze не обходит.
 PROBES = [
     ("$.ui.doc('tests/fixtures/uiclick/ui/p.rml')", "$.ui.doc()"),
     ("$.scene.scope('__probe__')", "$.scene.scope()"),
+    # Д10: вложенные namespace (объект внутри объекта `$`). api_freeze снимает
+    # только ПЕРВЫЙ уровень, поэтому `$.gfx.light.budget` появился мимо
+    # заморозки. Здесь они перечислены явно: внутренние (`$.ctx.*`, `*._state`)
+    # сюда не попадают — это не публичный контракт.
+    ("$.gfx.light", "$.gfx.light"),
+    ("$.gfx.draw", "$.gfx.draw"),
+    ("$.gfx.push", "$.gfx.push"),
+    ("$.world.bsp", "$.world.bsp"),
+    ("$.sound.bank", "$.sound.bank"),
+    ("$.debug.draw", "$.debug.draw"),
+    ("$.debug.profiler", "$.debug.profiler"),
 ]
 
 

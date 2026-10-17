@@ -240,7 +240,7 @@ $.vfx.play('hit.spark', { at: [x, y], parent: node });
 
 | # | Долг | Факт и как закрывать |
 |---|---|---|
-| Д10 | **`api_freeze` не видит методы вложенных namespace** (`$.gfx.light.budget` появился мимо снимка) | Снимок хранит `$.gfx.light` как имя, но не его методы. Расширять рекурсией можно только вместе с док-гейтом: ~30 имён `$.gfx.light.*`/`$.gfx.draw.*` потребуют документации/allowlist. Решение отдельной сменой |
+| Д10 | **`api_freeze` не видит методы вложенных namespace** (`$.gfx.light.budget` появился мимо снимка) | ✅ **закрыто**: гейт `tests/api_wrapper_methods_test.py` теперь снимает и вложенные namespace (`$.gfx.light/draw/push`, `$.world.bsp`, `$.sound.bank`, `$.debug.draw/profiler`) — 105 методов в снимке против 35. `api_freeze` не расширяли, чтобы не раздувать `api_docs_sync`; whitelist явный, внутренние `$.ctx.*`/`*._state` исключены |
 | Д11 | **r2dvfx M4** — предпросмотр эффектов в DevTools и экспорт спеки в JSON | API готов (`list/get/play/seek/query`, спеки — чистые данные). Нужна вкладка в DevTools; записано в `docs/highlevel/vfx.md` §7 как несделанное |
 | Д12 | **`cutscene.js` зовёт `$.fx.flash`** — первая катсцена с вспышкой даст одно предупреждение `R2D_FX_DEPRECATED` | Перевести `cutscene.js` на `$.vfx.flash` (файл был вне зоны агента) |
 | Д13 | **Полный I1**: при активном параллаксе `node.x/y` пишет `layers.js`, читает `render.js` | Вынести параллакс-смещение в `render.js` (как спрайтовое смещение), тогда `node.x` останется позицией игры |

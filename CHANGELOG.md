@@ -96,11 +96,13 @@
   `game/`, `witch_game/` переведены на `$.vfx.*` (9 файлов) — иначе
   предупреждение `R2D_FX_DEPRECATED` попадало в «ошибки игрового кода» и
   роняло `demos_test`/`game_test` (нашлось полным прогоном).
-- **Д1: отдельный гейт `tests/api_wrapper_methods_test.py`** — 35 методов
-  обёрток, которые `$` отдаёт вызовом (`$.ui.doc()`, `$.scene.scope()`), в
-  снимке `tests/api_wrapper_methods_baseline.txt`. Та самая дыра
-  (`$.ui.doc().layoutRect` прошёл мимо заморозки) закрыта проверкой; список
-  проб явный.
+- **Д1+Д10: отдельный гейт `tests/api_wrapper_methods_test.py`** — 105
+  методов: 35 методов обёрток (`$.ui.doc()`, `$.scene.scope()`) и 70 методов
+  ВЛОЖЕННЫХ namespace (`$.gfx.light` 23, `$.gfx.draw` 9, `$.gfx.push` 6,
+  `$.world.bsp` 9, `$.sound.bank` 9, `$.debug.draw` 6, `$.debug.profiler` 8).
+  Дыра Д1 (`$.ui.doc().layoutRect` прошёл мимо заморозки) и Д10
+  (`$.gfx.light.budget` появился мимо снимка) закрыты; список проб явный,
+  внутренние `$.ctx.*`/`*._state` не входят.
 - **Д3: мусор не уезжает в релиз.** `tools/release.py --check-junk` проверяет
   дерево `dist/`, `SHA256SUMS.txt` и архивы (`.DS_Store`, `__pycache__`,
   `Thumbs.db`); `build_and_push.sh` чистит dist ДО `git add` (раньше чистка
