@@ -57,6 +57,8 @@ export default function install($) {
             .hide()
             .appendTo($.world);
         node.get(0).sprite_row = def.row;
+        // Native hit proxy: vertical cylinder attached to the existing node.
+        world.hit(node, { radius: 45, height: HEIGHT, category: 'enemy' });
         const handle = world.sprite(node, {
             atlas: ART, columns: SHEET.cols, rows: SHEET.rows,
             directions: 5, mirror: true,
@@ -71,6 +73,21 @@ export default function install($) {
         world.render(view, FRAME_W, FRAME_H);
         frames++;
     }
+
+    const summarize = hit => {
+        if (!hit) return null;
+        return {
+            type: hit.type, fraction: Math.round(hit.fraction * 1000) / 1000,
+            nodeId: hit.node ? hit.node.id : null,
+            surface: hit.surface, span: hit.span,
+        };
+    };
+    const trace = (to, mask, ignore) => summarize(world.trace({
+        from: { x: view.x, y: view.y, h: view.h }, to, mask, ignore,
+    }));
+    const traceAll = (to, mask) => world.traceAll({
+        from: { x: view.x, y: view.y, h: view.h }, to, mask,
+    }).map(summarize);
 
     function moveProbe(x, y) {
         if (!probe) return false;
@@ -105,10 +122,12 @@ export default function install($) {
     });
 
     globalThis.boomerLab = {
+        trace, traceAll,
         moveProbe,
         setProbeRow(row) { if (probe) probe.node.get(0).sprite_row = Math.max(0, row | 0); },
         setProbeAngle(rad) { if (probe) { probe.def.angle = rad; probe.node.angle(rad); } },
         backend(name) { if (world) world.backend(name); },
+        probeNode() { return probe ? probe.node.get(0) : null; },
         probeScreen() { return probe ? projectPoint(probe.def.x, probe.def.y, 0) : null; },
         state() { return { probe: probe && { x: probe.def.x, y: probe.def.y } }; },
     };

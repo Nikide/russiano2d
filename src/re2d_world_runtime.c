@@ -33,10 +33,13 @@ void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
     r2d_world_gpu_free(w);
     for(int i=0;i<w->actor_count;i++)JS_FreeValueRT(w->runtime,w->actors[i]);
     for(int i=0;i<w->atlas_count;i++){JS_FreeValueRT(w->runtime,w->atlas_actors[i].node);free(w->atlas_actors[i].atlas);free(w->atlas_actors[i].frame);}
+    for(int i=0;i<w->hit_count;i++)JS_FreeValueRT(w->runtime,w->hit_entries[i].node);
     free(w->actors);free(w->frame_handles);free(w->frame_positions);free(w->frame_images);free(w->frame_sizes);
     free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_keys);free(w->atlas_actors);
+    free(w->hit_entries);free(w->trace_scratch);
     w->actors=w->frame_handles=NULL;w->frame_positions=NULL;w->frame_images=NULL;w->frame_sizes=NULL;
     w->frame_kinds=NULL;w->frame_revisions=NULL;w->frame_blends=NULL;w->frame_keys=NULL;w->atlas_actors=NULL;
+    w->hit_entries=NULL;w->trace_scratch=NULL;w->hit_count=w->hit_capacity=0;w->trace_scratch_capacity=0;
     w->actor_count=w->actor_capacity=0;w->atlas_count=w->atlas_capacity=0;
 }
 static bool field(JSContext *ctx,JSValueConst node,const char *name,float *out)
@@ -329,6 +332,73 @@ bool r2d_world_atlas_unregister(JSContext *ctx,R2DWorldRuntime *w,JSValueConst n
         w->atlas_count--;return true;
     }
     return true;
+}
+
+
+// --- P0-B: actor hit proxies + unified world+actor trace -------------------
+bool r2d_world_hit_register(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node,float radius,float bottom,float top,int category)
+{
+    if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: hit registry is busy");return false;}
+    if(!JS_IsObject(node)){JS_ThrowTypeError(ctx,"Re2D World: worldHit needs a node");return false;}
+    if(!isfinite(radius)||!isfinite(bottom)||!isfinite(top)||radius<0||top<=bottom){JS_ThrowRangeError(ctx,"Re2D World: worldHit radius>=0 and top>bottom");return false;}
+    // Category is an index: 1 = enemy, 2 = breakable. The trace core shifts it
+    // into the caller mask, so the public API does not expose raw bit values.
+    if(category!=1&&category!=2){JS_ThrowRangeError(ctx,"Re2D World: worldHit category enemy|breakable");return false;}
+    for(int i=0;i<w->hit_count;i++)if(same(node,w->hit_entries[i].node)){JS_ThrowTypeError(ctx,"Re2D World: node already has a hit proxy");return false;}
+    if(w->hit_count==R2D_WORLD_HIT_PROXY_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: hit proxy budget exhausted");return false;}
+    if(w->hit_count==w->hit_capacity){int n=w->hit_capacity?w->hit_capacity*2:16;R2DWorldHitEntry *p=realloc(w->hit_entries,(size_t)n*sizeof *p);if(!p){JS_ThrowOutOfMemory(ctx);return false;}w->hit_entries=p;w->hit_capacity=n;}
+    R2DWorldHitEntry *e=&w->hit_entries[w->hit_count++];
+    e->node=JS_DupValue(ctx,node);e->radius=radius;e->bottom_offset=bottom;e->top_offset=top;e->category=category;
+    return true;
+}
+bool r2d_world_hit_unregister(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node)
+{
+    if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: hit registry is busy");return false;}
+    for(int i=0;i<w->hit_count;i++)if(same(node,w->hit_entries[i].node)){
+        JS_FreeValue(ctx,w->hit_entries[i].node);
+        memmove(w->hit_entries+i,w->hit_entries+i+1,(size_t)(w->hit_count-i-1)*sizeof(R2DWorldHitEntry));
+        w->hit_count--;return true;
+    }
+    return true;
+}
+static bool trace_proxies(JSContext *ctx,R2DWorldRuntime *w,const float from[3],const float to[3],int mask,int ignore_node,R2DWorldHitProxy **out,int *out_count)
+{
+    (void)from;(void)to;
+    if(w->hit_count>w->trace_scratch_capacity) {
+        R2DWorldHitProxy *p=realloc(w->trace_scratch,(size_t)w->hit_count*sizeof *p);
+        if(!p){JS_ThrowOutOfMemory(ctx);return false;}
+        w->trace_scratch=p;w->trace_scratch_capacity=w->hit_count;
+    }
+    int count=0;
+    for(int i=0;i<w->hit_count;i++) {
+        R2DWorldHitEntry *e=&w->hit_entries[i];
+        if(!(mask&(1<<e->category)))continue;
+        if(i==ignore_node)continue;
+        float x,y,depth;
+        if(!field(ctx,e->node,"x",&x)||!field(ctx,e->node,"y",&y)||!field(ctx,e->node,"depth",&depth))return false;
+        R2DWorldHitProxy *p=&w->trace_scratch[count++];
+        p->x=x;p->y=y;p->bottom=depth+e->bottom_offset;p->top=depth+e->top_offset;p->radius=e->radius;
+        p->category=e->category;p->node=i;
+    }
+    *out=w->trace_scratch;*out_count=count;return true;
+}
+// Native trace reads registered node positions at query time, so moving actors
+// need no per-frame registry update. Proxy filtering happens here; the mask
+// handed to the core only toggles static world geometry.
+int r2d_world_trace_query(JSContext *ctx,R2DWorldRuntime *w,const float from[3],const float to[3],int mask,int ignore_node,R2DWorldTraceResult *out)
+{
+    for(int i=0;i<3;i++)if(!isfinite(from[i])||!isfinite(to[i])){JS_ThrowRangeError(ctx,"Re2D World: trace needs finite from/to");return -1;}
+    R2DWorldHitProxy *proxies;int count;
+    if(!trace_proxies(ctx,w,from,to,mask,ignore_node,&proxies,&count))return -1;
+    int core_mask=(mask&R2D_WORLD_TRACE_WORLD?R2D_WORLD_TRACE_WORLD:0)|R2D_WORLD_TRACE_ENEMY|R2D_WORLD_TRACE_BREAKABLE;
+    return r2d_world_trace_ray(&w->world,proxies,count,from,to,core_mask,-1,out)?1:0;
+}
+int r2d_world_trace_query_all(JSContext *ctx,R2DWorldRuntime *w,const float from[3],const float to[3],int mask,int ignore_node,R2DWorldTraceResult *out,int capacity)
+{
+    R2DWorldHitProxy *proxies;int count;
+    if(!trace_proxies(ctx,w,from,to,mask,ignore_node,&proxies,&count))return -1;
+    int core_mask=(mask&R2D_WORLD_TRACE_WORLD?R2D_WORLD_TRACE_WORLD:0)|R2D_WORLD_TRACE_ENEMY|R2D_WORLD_TRACE_BREAKABLE;
+    return r2d_world_trace_collect(&w->world,proxies,count,from,to,core_mask,-1,out,capacity);
 }
 
 void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {

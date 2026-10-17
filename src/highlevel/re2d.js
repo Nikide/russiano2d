@@ -588,12 +588,13 @@ function rendererWorldWrapper($, native) {
         const pivotName = options.pivot ?? 'feet';
         const pivot = typeof pivotName === 'number' ? pivotName : pivots[pivotName];
         if (pivot === undefined) throw new RangeError('world.sprite: pivot center/feet/bottom-center/custom');
-        const pivotX = Number(options.pivotX ?? .5), pivotY = Number(options.pivotY ?? 1);
+        const pivotDefaultY = pivot === 0 ? .5 : 1;
+        const pivotX = Number(options.pivotX ?? .5), pivotY = Number(options.pivotY ?? pivotDefaultY);
         const blends = { masked: 0, opaque: 1, translucent: 2, additive: 3 };
         const blendName = options.blend ?? 'masked';
         const blend = typeof blendName === 'number' ? blendName : blends[blendName];
         if (blend === undefined || blend < 0 || blend > 3) throw new RangeError('world.sprite: blend masked/opaque/translucent/additive');
-        return $(target).eachNode((i, node) => {
+        $(target).eachNode((i, node) => {
             const width = Number(options.width ?? node.w), height = Number(options.height ?? node.h);
             if (!(width > 0 && height > 0)) throw new RangeError('world.sprite: world width/height must be positive');
             if (!Number.isFinite(pivotX) || !Number.isFinite(pivotY)) throw new RangeError('world.sprite: pivot must be finite');
@@ -601,8 +602,93 @@ function rendererWorldWrapper($, native) {
             native.atlasAdd(node, atlas, columns, rows, directions, options.mirror !== false && directions > 1 ? 1 : 0,
                 cellW, cellH, pivot, pivotX, pivotY, width, height, blend);
         });
+        return world;
     };
-    world.remove = target => { $(target).eachNode((i,node) => { native.atlasRemove(node); native.actorRemove(node); }); return world; };
+    // Unified world+actor trace: registered hit proxies are vertical cylinders
+    // attached to existing nodes. Not a physics body; the node owns gameplay
+    // identity and the registry only references it.
+    const hitNodes = [];
+    // Callback args are raw nodes in the engine, but accept a wrapper too so the
+    // public API is stable for both call styles.
+    const rawOf = value => {
+        const wrapped = $(value);
+        const raw = wrapped && typeof wrapped.get === 'function' ? wrapped.get(0) : undefined;
+        return raw ?? value;
+    };
+    const baseDispose = world.dispose;
+    world.dispose = () => { hitNodes.length = 0; baseDispose(); };
+    const categoryBits = { enemy: 1, breakable: 2 };
+    const maskBits = { world: 1, enemy: 2, breakable: 4 };
+    const parseMask = mask => {
+        if (mask === undefined) return maskBits.world | maskBits.enemy | maskBits.breakable;
+        if (Number.isInteger(mask) && mask >= 0) return mask;
+        if (Array.isArray(mask)) {
+            let bits = 0;
+            for (const name of mask) {
+                const bit = maskBits[name];
+                if (bit === undefined) throw new RangeError(`world.trace: unknown mask '${name}' (world|enemy|breakable)`);
+                bits |= bit;
+            }
+            return bits;
+        }
+        throw new TypeError('world.trace: mask must be an array of world/enemy/breakable or integer bits');
+    };
+    const point = (p, label) => {
+        if (!p || typeof p !== 'object') throw new TypeError(`world.trace: ${label} is required`);
+        const x = Number(p.x), y = Number(p.y), h = Number(p.h ?? p.height ?? 0);
+        if (![x, y, h].every(Number.isFinite)) throw new RangeError(`world.trace: ${label} needs finite x/y/h`);
+        return { x, y, h };
+    };
+    const traceArgs = options => {
+        const from = point(options.from, 'from'), to = point(options.to, 'to');
+        const mask = parseMask(options.mask);
+        const ignoreNode = options.ignore ? rawOf(options.ignore) : null;
+        const ignore = ignoreNode ? hitNodes.indexOf(ignoreNode) : -1;
+        return { from, to, mask, ignore };
+    };
+    const decorate = hit => {
+        if (!hit) return null;
+        return { ...hit, node: hit.type === 2 ? (hitNodes[hit.node] ?? null) : null };
+    };
+    world.hit = (target, options = {}) => {
+        $(target).eachNode((i, node) => {
+            const radius = Number(options.radius ?? 24);
+            const height = Number(options.height ?? node.h);
+            const bottom = Number(options.bottom ?? 0);
+            const top = Number(options.top ?? bottom + height);
+            const name = options.category ?? 'enemy';
+            const category = typeof name === 'number' ? name : categoryBits[name];
+            if (category === undefined) throw new RangeError('world.hit: category enemy|breakable');
+            if (![radius, bottom, top].every(Number.isFinite) || radius < 0 || top <= bottom)
+                throw new RangeError('world.hit: radius >= 0 and top > bottom');
+            const raw = rawOf(node);
+            native.hitAdd(raw, radius, bottom, top, category);
+            hitNodes.push(raw);
+            if (typeof $(raw).on === 'function') $(raw).on('remove', () => {
+                const index = hitNodes.indexOf(raw);
+                if (index >= 0) { hitNodes.splice(index, 1); try { native.hitRemove(raw); } catch (error) { /* world gone */ } }
+            });
+        });
+        return world;
+    };
+    world.hitRemove = target => {
+        $(target).eachNode((i, node) => {
+            const raw = rawOf(node);
+            native.hitRemove(raw);
+            const index = hitNodes.indexOf(raw);
+            if (index >= 0) hitNodes.splice(index, 1);
+        });
+        return world;
+    };
+    world.trace = (options = {}) => {
+        const { from, to, mask, ignore } = traceArgs(options);
+        return decorate(native.trace(from.x, from.y, from.h, to.x, to.y, to.h, mask, ignore));
+    };
+    world.traceAll = (options = {}) => {
+        const { from, to, mask, ignore } = traceArgs(options);
+        return (native.traceAll(from.x, from.y, from.h, to.x, to.y, to.h, mask, ignore) || []).map(decorate);
+    };
+    world.remove = target => { $(target).eachNode((i,node) => { const raw=rawOf(node); native.hitRemove(raw); const at = hitNodes.indexOf(raw); if (at >= 0) hitNodes.splice(at, 1); native.atlasRemove(raw); native.actorRemove(raw); }); return world; };
     world.camera = (view = {}) => {
         native.camera(view.x ?? 0,view.y ?? 0,view.h ?? view.eye ?? 48,
             (view.yaw ?? 0)*Math.PI/180,(view.pitch ?? 0)*Math.PI/180,(view.fov ?? 70)*Math.PI/180,

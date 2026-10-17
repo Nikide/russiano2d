@@ -19,6 +19,7 @@ python3 tests/agent/re2d_boomer_lab_test.py
 | pivot | `feet`: точка опоры кадра стоит в `depth` узла |
 | окклюзия | попиксельный depth test нативного композитора (стена перекрывает спрайт) |
 | свет/туман | общий нативный world pass, без отдельного спрайтового рендера |
+| trace | `world.hit(node, {radius, height, category})` + `world.trace/traceAll` (P0-B) |
 
 Проверка глубины вручную: `boomerLab.moveProbe(800,500)` переносит пробу за
 внутреннюю стену — она исчезает, хотя мир и камера не менялись.

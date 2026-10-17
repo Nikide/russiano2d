@@ -21,6 +21,8 @@ $.render(() => world.render(view,400,240));
 | `$.re2dWorld.fromJSON(text)` | принимает JSON **строку**, не объект; author topology строится в C |
 | `world.add(target)` / `.remove(target)` | регистрирует/снимает Re2DSprite roots; add повторно того же узла не дублирует его |
 | `world.sprite(target, opts)` | регистрирует обычный узел как flat directional atlas sprite; см. раздел ниже |
+| `world.hit(target, opts)` / `world.hitRemove(target)` | регистрирует/снимает actor hit proxy для trace (P0-B) |
+| `world.trace(opts)` / `world.traceAll(opts)` | ближайшее попадание / все попадания мира и actor-прокси |
 | `.camera(view={})` | заменяет конфигурацию камеры; пропущенные поля получают defaults |
 | `.render(view=null,width=320,height=180)` | синтезирует и рисует обычный sprite на всё окно; возвращает sprite ID |
 | `.renderToSprite(view=null,width=320,height=180)` | синтезирует без fullscreen draw; возвращает sprite ID для previews |
@@ -100,6 +102,47 @@ policy у этого режима нет — строку анимации ст�
 Проверки: `tests/re2d/atlas_test.c` (Unity: направление, pivot, клетка,
 кроп), `tests/agent/re2d_boomer_lab_test.py` (кадр, смена направления,
 попиксельная окклюзия стеной), `demos/re2d_boomer_lab`.
+
+## Trace: мир + actor-прокси
+
+`world.trace` — единый луч по статическому миру и зарегистрированным
+actor-прокси. Это не физика и не 3D-запрос: world-геометрия идёт через
+существующий `r2d_world_ray`, актёр — вертикальный цилиндр (XY-круг + интервал
+высот). Регистрация следует жизненному циклу узла: registry хранит ссылку, не
+владеет узлом.
+
+```js
+const enemy = $('<sprite>', { id: 'imp' }).at(800, 900).depth(0).size(48, 150);
+world.hit(enemy, { radius: 24, height: 150, category: 'enemy' });
+
+const hit = world.trace({
+  from: { x: camera.x, y: camera.y, h: camera.h },
+  to:   { x: 800, y: 900, h: 75 },
+  mask: ['world', 'enemy'],       // или целые биты: 1|2|4
+  ignore: null,                   // узел, чьи прокси игнорировать
+});
+// hit: {type, fraction, x, y, h, surface, span, node, proxy, normalX, normalY}
+// type: 1 = surface мира, 2 = actor proxy; у sprite node — сам узел `$`
+```
+
+`world.traceAll(options)` возвращает все попадания от ближнего к дальнему
+(стабильный порядок, при равной доле мир идёт раньше спрайта). Маски: `world`
+(1), `enemy` (2), `breakable` (4); массив имён либо уже собранные биты. Отсутствие
+попадания — `null` (у `traceAll` пустой массив), а не исключение.
+
+`world.hit` параметры: `radius` (по умолчанию 24), `height` (по умолчанию высота
+узла), `bottom` (по умолчанию 0), `top` (по умолчанию `bottom+height`),
+`category` — `enemy` или `breakable`. `bottom/top` — смещения от `depth` узла,
+поэтому движение актёра не требует per-frame обновления registry: координаты
+читаются в момент запроса. Предел — 2048 прокси; повторная регистрация того же
+узла, нечисловые размеры, `top <= bottom` и неизвестная категория отклоняются
+исключениями. `world.remove(node)` снимает и hit proxy, и атласный спрайт, и
+Re2DSprite-регистрацию.
+
+Проверки: `tests/re2d/trace_test.c` (Unity: nearest, masks, ignore, multi-hit,
+determinism), `tests/agent/re2d_boomer_lab_test.py` (high-level API в живом
+кадре: маски, сортировка, стена перед дальним прокси), JS-контракт —
+`tests/js/re2d_world_api_test.mjs`.
 
 ## Свет, материал, изменение мира
 

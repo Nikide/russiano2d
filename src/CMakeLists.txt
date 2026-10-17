@@ -84,7 +84,8 @@ if(R2D_ENABLE_RE2D)
         re2d.h re2d.c re2d_math.h re2d_math.c re2d_world.h re2d_world.c re2d_world_topology.c re2d_world_visibility.c re2d_world_light.c re2d_world_material.c re2d_world_runtime.c
         re2d_world_gpu.h re2d_world_gpu.c
         re2d_world_bake.h re2d_world_bake.c
-        re2d_world_atlas.h re2d_world_atlas.c)
+        re2d_world_atlas.h re2d_world_atlas.c
+        re2d_world_trace.h re2d_world_trace.c)
     list(APPEND R2D_DEFINES R2D_ENABLE_RE2D=1)
 endif()
 

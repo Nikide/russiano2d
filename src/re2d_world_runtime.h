@@ -1,5 +1,6 @@
 #pragma once
 #include "re2d_world.h"
+#include "re2d_world_trace.h"
 #include "render.h"
 #include "audio.h"
 #include <quickjs.h>
@@ -22,6 +23,16 @@ typedef struct R2DWorldAtlasActor {
 // Frame entry kinds. RotSprite entries use native synthesis; atlas entries reuse
 // an already cropped square image and do not touch the Re2DSprite runtime.
 enum { R2D_WORLD_FRAME_ROTSPRITE = 0, R2D_WORLD_FRAME_ATLAS = 1 };
+#define R2D_WORLD_HIT_PROXY_LIMIT 2048
+// World hit proxy lifecycle follows node add/remove: the registry owns a JS
+// reference, not node lifetime. bottom/top are offsets from node.depth so a
+// moving actor needs no per-move native update; coordinates are read at trace
+// time, not every frame.
+typedef struct R2DWorldHitEntry {
+    JSValue node;
+    float radius,bottom_offset,top_offset;
+    int category;
+} R2DWorldHitEntry;
 typedef struct R2DWorldAudioSource {
     bool active,hrtf,occluded;
     unsigned generation;
@@ -51,6 +62,10 @@ typedef struct R2DWorldRuntime {
     uint64_t *frame_keys;
     R2DWorldAtlasActor *atlas_actors;
     int atlas_count,atlas_capacity,visible_atlas_count;
+    R2DWorldHitEntry *hit_entries;
+    int hit_count,hit_capacity;
+    R2DWorldHitProxy *trace_scratch;
+    int trace_scratch_capacity;
     int actor_count,actor_capacity,frame_count;
     struct R2DWorldRuntime *next;
     bool registered;
@@ -77,6 +92,12 @@ bool r2d_world_atlas_register(JSContext *,R2DWorldRuntime *,JSValueConst,const c
     int columns,int rows,int directions,bool mirror,int cell_w,int cell_h,
     int pivot,float pivot_x,float pivot_y,float width,float height,int blend);
 bool r2d_world_atlas_unregister(JSContext *,R2DWorldRuntime *,JSValueConst);
+// Actor hit proxies for unified world+actor trace (P0-B). Not a physics body.
+bool r2d_world_hit_register(JSContext *,R2DWorldRuntime *,JSValueConst,float radius,float bottom,float top,int category);
+bool r2d_world_hit_unregister(JSContext *,R2DWorldRuntime *,JSValueConst);
+// 1 = hit, 0 = nothing, -1 = invalid input/exception.
+int r2d_world_trace_query(JSContext *,R2DWorldRuntime *,const float from[3],const float to[3],int mask,int ignore_node,R2DWorldTraceResult *);
+int r2d_world_trace_query_all(JSContext *,R2DWorldRuntime *,const float from[3],const float to[3],int mask,int ignore_node,R2DWorldTraceResult *out,int capacity);
 void r2d_world_runtime_actors_free(R2DWorldRuntime *);
 // Returns ordinary 2D sprite id; errors set QuickJS exception, no script renderer loops.
 int r2d_world_runtime_frame(JSContext *,R2DWorldRuntime *,const R2DRe2dView *,int,int,float);

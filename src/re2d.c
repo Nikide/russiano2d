@@ -348,6 +348,7 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"lightsAfterCull",w->visible_lights);set_num(ctx,o,"shadowedLights",w->shadowed_lights);
     set_num(ctx,o,"actors",w->actor_count);set_num(ctx,o,"actorCandidates",w->frame_count);set_num(ctx,o,"composedActors",w->visible_actor_count);
     set_num(ctx,o,"atlasSprites",w->atlas_count);set_num(ctx,o,"visibleAtlasSprites",w->visible_atlas_count);
+    set_num(ctx,o,"hitProxies",w->hit_count);
     set_num(ctx,o,"materials",w->world.material_count);
     set_num(ctx,o,"lights",w->world.light_count);set_num(ctx,o,"lightSpanPairs",w->world.light_pairs);set_num(ctx,o,"lightOverflow",w->world.light_overflow);
     set_num(ctx,o,"visibleCells",w->visibility.cells_visible);set_num(ctx,o,"visibleSpans",w->visibility.span_count);set_num(ctx,o,"visibleSurfaces",w->visibility.surface_count);set_num(ctx,o,"portalsTested",w->visibility.portals_tested);set_num(ctx,o,"bspNodesVisited",w->visibility.bsp_nodes_visited);
@@ -551,6 +552,8 @@ static void world_mark(JSRuntime *rt,JSValueConst value,JS_MarkFunc *mark_func)
 {
     WorldHandle *w=JS_GetOpaque(value,world_class);if(!w)return;
     for(int i=0;i<w->actor_count;i++)JS_MarkValue(rt,w->actors[i],mark_func);
+    for(int i=0;i<w->atlas_count;i++)JS_MarkValue(rt,w->atlas_actors[i].node,mark_func);
+    for(int i=0;i<w->hit_count;i++)JS_MarkValue(rt,w->hit_entries[i].node,mark_func);
     for(int i=0;i<w->frame_count&&w->rendering;i++)JS_MarkValue(rt,w->frame_handles[i],mark_func);
 }
 static JSValue world_actor_add(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
@@ -564,6 +567,54 @@ static JSValue world_actor_remove(JSContext *ctx,JSValueConst self,int argc,JSVa
     WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
     if(argc<1)return JS_ThrowTypeError(ctx,"Re2D World: actorRemove(node)");
     return r2d_world_actor_unregister(ctx,w,argv[0])?JS_UNDEFINED:JS_EXCEPTION;
+}
+static JSValue trace_result_object(JSContext *ctx,const R2DWorldTraceResult *h)
+{
+    JSValue o=JS_NewObject(ctx);
+    set_num(ctx,o,"type",h->type);set_num(ctx,o,"fraction",h->fraction);
+    set_num(ctx,o,"x",h->x);set_num(ctx,o,"y",h->y);set_num(ctx,o,"h",h->h);
+    set_num(ctx,o,"surface",h->surface);set_num(ctx,o,"span",h->span);
+    set_num(ctx,o,"proxy",h->proxy);set_num(ctx,o,"node",h->node);
+    set_num(ctx,o,"normalX",h->nx);set_num(ctx,o,"normalY",h->ny);
+    return o;
+}
+static JSValue world_hit_add(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<5)return JS_ThrowTypeError(ctx,"Re2D World: hitAdd(node,radius,bottom,top,category)");
+    float p[4];if(!world_numbers(ctx,argc-1,argv+1,4,p))return JS_EXCEPTION;
+    return r2d_world_hit_register(ctx,w,argv[0],p[0],p[1],p[2],(int)p[3])?JS_UNDEFINED:JS_EXCEPTION;
+}
+static JSValue world_hit_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1)return JS_ThrowTypeError(ctx,"Re2D World: hitRemove(node)");
+    return r2d_world_hit_unregister(ctx,w,argv[0])?JS_UNDEFINED:JS_EXCEPTION;
+}
+static JSValue world_trace(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[8];if(!w||!world_numbers(ctx,argc,argv,8,p))return JS_EXCEPTION;
+    float from[3]={p[0],p[1],p[2]},to[3]={p[3],p[4],p[5]};
+    R2DWorldTraceResult hit;
+    int found=r2d_world_trace_query(ctx,w,from,to,(int)p[6],(int)p[7],&hit);
+    if(found<0)return JS_EXCEPTION;
+    if(!found)return JS_NULL;
+    return trace_result_object(ctx,&hit);
+}
+static JSValue world_trace_all(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[8];if(!w||!world_numbers(ctx,argc,argv,8,p))return JS_EXCEPTION;
+    float from[3]={p[0],p[1],p[2]},to[3]={p[3],p[4],p[5]};
+    int count=r2d_world_trace_query_all(ctx,w,from,to,(int)p[6],(int)p[7],NULL,0);
+    if(count<0)return JS_EXCEPTION;
+    JSValue array=JS_NewArray(ctx);if(JS_IsException(array))return array;
+    if(count==0)return array;
+    R2DWorldTraceResult *hits=malloc((size_t)count*sizeof *hits);
+    if(!hits)return JS_ThrowOutOfMemory(ctx);
+    int written=r2d_world_trace_query_all(ctx,w,from,to,(int)p[6],(int)p[7],hits,count);
+    if(written<0){free(hits);return JS_EXCEPTION;}
+    for(int i=0;i<written;i++)JS_SetPropertyUint32(ctx,array,(uint32_t)i,trace_result_object(ctx,&hits[i]));
+    free(hits);return array;
 }
 static JSValue world_atlas_add(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -734,6 +785,10 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"audioInfo",JS_NewCFunction(ctx,world_audio_info,"audioInfo",1));
     JS_SetPropertyStr(ctx,handle,"audioRemove",JS_NewCFunction(ctx,world_audio_remove,"audioRemove",1));
     JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",14));
+    JS_SetPropertyStr(ctx,handle,"hitAdd",JS_NewCFunction(ctx,world_hit_add,"hitAdd",5));
+    JS_SetPropertyStr(ctx,handle,"hitRemove",JS_NewCFunction(ctx,world_hit_remove,"hitRemove",1));
+    JS_SetPropertyStr(ctx,handle,"trace",JS_NewCFunction(ctx,world_trace,"trace",8));
+    JS_SetPropertyStr(ctx,handle,"traceAll",JS_NewCFunction(ctx,world_trace_all,"traceAll",8));
     JS_SetPropertyStr(ctx,handle,"atlasRemove",JS_NewCFunction(ctx,world_atlas_remove,"atlasRemove",1));
     JS_SetPropertyStr(ctx,handle,"actorAdd",JS_NewCFunction(ctx,world_actor_add,"actorAdd",1));
     JS_SetPropertyStr(ctx,handle,"actorRemove",JS_NewCFunction(ctx,world_actor_remove,"actorRemove",1));

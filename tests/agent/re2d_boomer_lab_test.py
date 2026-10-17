@@ -114,6 +114,30 @@ def main():
               f"бэкенд переключился: {state(a).get('backend')}")
         a.eval("boomerLab.backend('gpu')"); a.step(4)
 
+        # --- Unified world+actor trace (P0-B) через $ high-level API ---------
+        check(a.eval("typeof $.re2dWorld.load") == "function"
+              and a.eval("typeof $.re2dWorld.fromJSON") == "function"
+              and a.eval("$.re2dEnabled") is True,
+              "$.re2dWorld и $.re2dEnabled — публичный вход")
+        enemy_hit = a.eval("JSON.stringify(boomerLab.trace({x:800,y:900,h:75},['enemy']))")
+        check(enemy_hit and "lab-probe" in enemy_hit and '"type":2' in enemy_hit,
+              f"world.trace находит actor proxy: {enemy_hit}")
+        check(a.eval("boomerLab.trace({x:800,y:900,h:75},['world'])") is None,
+              "маска world не задевает actor proxy")
+        both = a.eval("JSON.stringify(boomerLab.traceAll({x:800,y:0,h:75}))")
+        check(both is not None and both.index('"type":2') < both.index('"type":1'),
+              f"traceAll сортирует actor перед стеной: {both}")
+        wall_only = a.eval("JSON.stringify(boomerLab.trace({x:800,y:0,h:75},['world']))")
+        check(wall_only and '"type":1' in wall_only and '"surface":6' in wall_only,
+              f"world.trace возвращает surface/span стены: {wall_only}")
+        check(a.eval("boomerLab.trace({x:800,y:900,h:75},['enemy'],boomerLab.probeNode())") is None,
+              "ignore узла исключает его прокси")
+        a.eval("boomerLab.moveProbe(800,500)"); a.step(3)
+        behind = a.eval("JSON.stringify(boomerLab.trace({x:800,y:500,h:75},['world','enemy']))")
+        check(behind and '"type":1' in behind,
+              f"за стеной trace возвращает стену, а не дальний proxy: {behind}")
+        a.eval("boomerLab.moveProbe(800,900)"); a.step(3)
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 
