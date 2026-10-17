@@ -88,10 +88,28 @@ exposes `streamUploads`, `streamUploadBytes`, `streamEvictions`,
 and cumulative `streamTotalUploads / streamTotalUploadBytes /
 streamTotalEvictions`.
 
-Honest limitation: this is deterministic incremental residency, not async disk
-I/O. The GPU owner must consume the contract: upload a texture/atlas when its
-state becomes RESIDENT and `dirty` clears, and skip EVICTABLE/UNLOADED payloads.
-No GPU/shader/sdk files were touched by this pass.
+### GPU upload/evict wiring (task-12)
+
+The SDL_GPU world pass now consumes the cache instead of eagerly uploading every
+material texture at init:
+
+* stream ids `material*4+slot` (kind TEXTURE, slot 0=albedo/1=normal/2=emissive)
+  map to `WorldGPU.textures[material][slot]`;
+* RESIDENT/EVICTABLE -> create the real SDL_GPU texture once and count
+  `gpuStreamUploads/Bytes`; UNLOADED -> `r2d_texture_free` and count
+  `gpuStreamEvictions`;
+* a visible material is demand-loaded so a visible surface never samples white
+  while its region is still PRELOAD; hidden materials still follow the cache;
+* atlas residency gates `ActorGPU` uploads (`id=1000000+actor`, kind ATLAS);
+  non-resident atlases release the GPU frame texture and are skipped;
+* `r2d_world_stream_set_hook()` is installed by the GPU owner and counts every
+  residency transition (`gpuStreamTransitions`), so loaders/uploaders do not
+  need to poll the cache.
+
+Remaining honest limitation: this is deterministic incremental residency, not
+async disk I/O; placement/eviction is real on SDL_GPU, disk loading still uses
+the existing loader. EVICTABLE copies stay GPU-resident for visual continuity
+until the cache actually evicts them (UNLOADED).
 
 ## LOD wiring
 
@@ -118,8 +136,20 @@ Runtime wiring:
 * audio: sources whose region is not in the hierarchical visible set are
   virtualized/silenced without HRTF/occlusion ray cost.
 
+GPU consumption (task-12):
+
+* light masks are rebuilt per draw by `r2d_world_region_lod_select_lights()`;
+  lights outside the configured band are dropped from the shader light arrays,
+  shadow slots are capped by `max_shadow_lights` (`gpuLightsCulled`);
+* decals are skipped when their owning cell is outside `cell_allowed` and by the
+  distance decal percentage (`gpuDecalsCulled`);
+* atlas direction selection re-quantizes to the LOD direction count
+  (`gpuSpriteDirReduced`), while animation FPS caps already defer pose/crop work;
+* impostors and particles use the same LOD policy as the CPU budgets.
+
 Counters: `lodHiddenActors`, `lodThrottledActors`, `lodHiddenAtlas`,
-`lodCulledLights`, `lodCulledParticles`, `lodCulledDecals`, `audioRegionCulled`.
+`lodCulledLights`, `lodCulledParticles`, `lodCulledDecals`, `audioRegionCulled`,
+plus GPU-side `gpuLightsCulled`, `gpuDecalsCulled`, `gpuSpriteDirReduced`.
 
 Config: `r2d_world_region_lod_config()` (native) with validated monotonic bands.
 
@@ -138,20 +168,29 @@ Renderer-facing API:
 * JS: `world.impostors()` returns the cards with `region,x,y,localX,localY,
   width,height,bottom,top,color,distance,cells,spans`.
 
-GPU owner hook: draw each card as one depth-tested vertical quad (textured with
-a baked region silhouette atlas, or flat-tinted average colour), before local
-actors, using `localX/localY` relative to the region render origin. This pass
-only exposes data; no GPU code was touched.
+GPU implementation: `region_impostors_draw()` draws each card as one
+depth-tested, alpha-blended vertical quad before local actors; `gpuImpostorsDrawn`
+counts them. Cards use the region-local centres/colours from the native bake.
 
 ## Large coordinates / region-local rendering
 
 `r2d_world_region_render_origin()` returns the current region centre, and
 `r2d_world_region_local()` converts world XY to region-local XY. The runtime
 exposes `renderOriginX/Y/Region` in `world.info().regions` and
-`world.regionLocal(x,y)`. Renderer hook: for far regions subtract the render
-origin (or use `localX/localY`) before building float vertex data. Gameplay,
-trace/blocked/support and save IDs stay in world coordinates. No double
-accumulation is performed in the region module.
+`world.regionLocal(x,y)`.
+
+The SDL_GPU pass subtracts that origin from every world-space uniform: camera
+eye, wall/span shape, span bounds, light positions and the baked ambient-field
+rectangle; the shadow geometry buffer is shifted on upload and the shadow cache
+key includes the origin. CPU/visibility/trace/save stay in world coordinates.
+`gpuOriginX/Y` and `gpuRenderOriginActive` expose the active shift.
+
+Boundary test: moving the camera 12 units across a region edge in the compiled
+openworld lab changes the origin but keeps the frame continuous (mean channel
+difference 0.06/255, 921600 lit pixels, no black frame).
+`world.regionLod(near,mid,far,impostor,hidden)` exists for deterministic
+culling tests. Gameplay, trace/blocked/support and save IDs stay in world
+coordinates. No double accumulation is performed in the region module.
 
 ## Runtime integration
 
@@ -181,18 +220,44 @@ frame time 0.035..0.065 ms per sampled crossing frame (openworld lab,
 GPU-reference backend, this machine; not a cross-machine threshold)
 ```
 
-Native test counts: region 12, stream 5, impostor 3, hierarchical visibility 3.
-Agent test: `tests/agent/re2d_huge_world_test.py`.
+Native test counts: region 13 (includes pure LOD light-selection), stream 5,
+impostor 3, hierarchical visibility 3. Agent test:
+`tests/agent/re2d_huge_world_test.py` (GPU stream upload/evict/re-upload, origin
+boundary screenshots, tightened LOD light/decal culling, impostor draw count).
+GPU metrics from the current lab run: `gpuStreamUploads` 1 (16 KiB texture
+uploaded on the stream RESIDENT transition), `gpuTexturesResident` stays 1
+across region crossings even with a 1-byte residency budget (visible materials
+are demand-loaded; no per-frame upload thrash), `gpuStreamTransitions` > 0 via
+the hook, `gpuLightsCulled` 1 and `gpuDecalsCulled` 1 under tight LOD bands,
+`gpuImpostorsDrawn` 7/24 visible cards, render-origin boundary mean diff
+0.06/255. `gpuStreamEvictions` is 0 on this fixture because the only material is
+shared by visible geometry; the free-on-UNLOADED path is implemented in
+`gpu_stream_sync()` and exercised by the stream state-machine tests when no
+visible surface demands the payload.
 
 ## Honest limits / required hooks
 
-* No asynchronous disk I/O: residency/promotion/upload happens incrementally with
-  budgets, but scene payloads are still loaded by the existing loader.
-* GPU upload is accounting data only; the GPU owner must map RESIDENT+dirty items
-  to real texture/atlas uploads and honour EVICTABLE eviction.
-* Light LOD computes policy and counters; the existing GPU light masks still
-  submit the authored visible set. The renderer must consume
-  `lodCulledLights` / per-band light budgets to actually drop far lights.
+* No asynchronous disk I/O: placement/promotion/upload happens incrementally
+  with budgets, but scene payloads are still loaded by the existing loader.
+* Texture/atlas upload is a real SDL_GPU operation on RESIDENT transitions and
+  release is real on UNLOADED; EVICTABLE copies are kept for visual continuity
+  until the cache actually evicts them. Shared material textures used by visible
+  surfaces are demand-loaded, so their GPU eviction needs a frame where no
+  visible surface uses them; BSP/surface/material/nav payloads remain runtime
+  memory state (not streamed from disk).
+* Known pre-existing gate: `tests/agent/re2d_dust2_test.py` CPU/GPU reference
+  parity fails at wave-2 (orange hand/haze diverge before task-12): disabling
+  every task-12 visual path leaves the same 32.6429518% >3 diff. Task-12 did not
+  introduce this; it needs the renderer owner's GPU-visual features and the CPU
+  reference to agree again.
+* Light LOD now drops lights from the actual shader masks; shadow slots are
+  capped. Far-band lights keep a reduced budget (8) so existing CPU/GPU
+  reference parity on medium maps is not changed. Sprite direction LOD only
+  applies to atlas actors (RotSprite poses use FPS/pose budgets).
+* Hint/skip walls are rendered/not-rendered by authored policy bits, but actual
+  BSP split planes remain compiler-owned; runtime counts `hintWalls/skipWalls`.
+  Implementing split planes requires the SDK brush/compiler pass (out of this
+  file scope) and is documented as a compiler hook, not faked.
 * Occluder culling is a conservative 5-sample region test, not per-pixel/GPU
   occlusion; hint planes are still compiler-only visibility splits.
 * Decal residency is counted per region but the actual decal draw call remains the

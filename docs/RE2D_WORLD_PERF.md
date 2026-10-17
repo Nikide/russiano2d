@@ -168,3 +168,11 @@ Native budgets are explicit and deterministic:
 
 The CPU post references are O(w*h) plus a separable box blur and are used only
 by the native regression harness, not in the frame loop.
+
+## Final composite (task-11)
+
+Adds one fullscreen post draw per FINAL frame (`postPasses`) plus a separate
+post colour/owner/depth target (about 8 bytes/px extra GPU texture memory, now
+included in `gpuTexturePayloadBytes`). Bloom-lite is 8 texture taps; heat uses
+two extra depth taps only when enabled; reflection uses one mirrored colour tap
+only on floor pixels. Debug views and the CPU backend do not run the composite.

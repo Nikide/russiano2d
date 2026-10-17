@@ -100,6 +100,7 @@ export default function install($) {
                 regionCount: info.regionCount, regionCurrent: info.regionCurrent,
                 regionActive: info.regionActive, regionPreload: info.regionPreload,
                 regionCulled: info.regionCulled, regionPvsEdges: info.regionPvsEdges,
+                regionPvsCulled: info.regionPvsCulled,
                 regionSizeHint: info.regionSizeHint,
                 clusterEdges: info.regionClusterEdges,
                 occluderCulled: info.regionOccluderCulled,
@@ -125,6 +126,22 @@ export default function install($) {
                 audioRegionCulled: info.audioRegionCulled,
                 frameMs: info.frameMs,
                 frameMsStable: Number.isFinite(info.frameMs),
+                gpuStreamUploads: info.gpuStreamUploads,
+                gpuStreamUploadBytes: info.gpuStreamUploadBytes,
+                gpuStreamEvictions: info.gpuStreamEvictions,
+                gpuStreamTransitions: info.gpuStreamTransitions,
+                gpuTexturesResident: info.gpuTexturesResident,
+                gpuAtlasesResident: info.gpuAtlasesResident,
+                gpuLightsCulled: info.gpuLightsCulled,
+                gpuDecalsCulled: info.gpuDecalsCulled,
+                gpuSpriteDirReduced: info.gpuSpriteDirReduced,
+                gpuImpostorsDrawn: info.gpuImpostorsDrawn,
+                gpuRenderOriginActive: info.gpuRenderOriginActive,
+                gpuOriginX: info.gpuOriginX,
+                gpuOriginY: info.gpuOriginY,
+                hintWalls: info.hintWalls,
+                skipWalls: info.skipWalls,
+                occluderWalls: info.occluderWalls,
             } : null,
             impostors: world && typeof world.impostors === 'function' ? world.impostors() : [],
             note: 'region indices are the compiler row-major partition; native streaming states come from world.info()',
@@ -151,6 +168,8 @@ export default function install($) {
         regionAt,
         teleport,
         regionConfig: (...args) => world && world.regionConfig(...args),
+        regionBudget: (bytes, items) => world && world.regionBudget(bytes, items),
+        regionLod: (...args) => world && world.regionLod(...args),
         setPortalsClosed,
         regionLocal: (x, y) => world && world.regionLocal(x, y),
         impostors: () => world && typeof world.impostors === 'function' ? world.impostors() : [],
@@ -165,6 +184,27 @@ export default function install($) {
             world.camera(view);
             world.sky({ color: '#2b3a55' });
             world.lighting({ mode: 'classic', dynamic: true, shadows: false, distanceScale: 0.001 });
+            // One streamed material texture + a broad far light + one decal:
+            // these exercise residency upload/evict, GPU light LOD and decal
+            // region culling on the real compiled huge world.
+            world.material('demo.floor', { albedo: 'demos/re2d_world_renderer_lab/floor.png',
+                                           filter: 'linear', uScale: 1 / 64, vScale: 1 / 64 });
+            const surfaceCount = world.info().surfaces;
+            for (let i = 0; i < surfaceCount; i++) world.surface(i).material('demo.floor');
+            world.light({ x: 1700, y: 1700, h: 96, radius: 5000, intensity: 1.5,
+                          color: '#cfd8ff', shadow: false });
+            world.light({ x: 650, y: 320, h: 96, radius: 5000, intensity: 1.0,
+                          color: '#ffd8b0', shadow: false });
+            // Region-pool decals on every compiled floor so a visible one always
+            // exercises the cell_allowed + distance LOD skip in the GPU pass.
+            for (let i = 0; i < surfaceCount; i++) {
+                const surface = world.surface(i);
+                if (!surface || surface.kind !== 1) continue;
+                try {
+                    world.decal({ surface: i, material: 'demo.floor', u: 0, v: 0,
+                                  width: 24, height: 24, life: 0 });
+                } catch (e) { /* not every floor accepts the material */ }
+            }
             hud = $.ui.doc('demos/re2d_openworld_lab/lab.rml').show();
             frames = 0;
         },

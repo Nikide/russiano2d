@@ -264,6 +264,23 @@ bool r2d_world_region_occluded(const R2DWorldRegionSet *set, int region,
                                const R2DWorldOccluder *occluders, int occluder_count,
                                float camera_x, float camera_y);
 
+// Pure LOD light selection used by the GPU light-mask builder. `lights` are
+// world-space positions (x,y,h,radius). Writes up to `capacity` surviving
+// indices in input order, returns the total surviving count (may exceed
+// capacity), and accumulates the dropped count in *culled. Lights beyond the
+// configured `light_updates == 0` band are dropped; `max_shadow_lights` is
+// reported back so the caller can cap shadow slots consistently.
+typedef struct {
+    float x, y, h, radius;
+} R2DWorldLodLight;
+
+int r2d_world_region_lod_select_lights(const R2DWorldLodLight *lights, int count,
+                                       float camera_x, float camera_y, float camera_eye,
+                                       const R2DWorldRegionLodConfig *config,
+                                       int max_shadow_lights,
+                                       int *indices, int capacity,
+                                       int *kept_shadow, int *culled);
+
 // Region-local render origin: region centre in world XY. Subtract it from world
 // coordinates to keep renderer floats small far from the world origin.
 bool r2d_world_region_render_origin(const R2DWorldRegionSet *set, int region,

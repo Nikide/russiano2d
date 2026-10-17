@@ -183,6 +183,15 @@ typedef struct R2DWorldRuntime {
     int audio_region_culled;
     float render_origin_x,render_origin_y;
     int render_origin_region;
+    // Task-12 renderer integration: real GPU texture/atlas residency accounting,
+    // shader-space render origin, LOD mask culling and hint/tool wall counts.
+    uint64_t gpu_stream_uploads,gpu_stream_upload_bytes,gpu_stream_evictions,gpu_stream_transitions;
+    int gpu_textures_resident,gpu_atlases_resident;
+    int gpu_lod_culled_lights,gpu_lod_culled_decals,gpu_sprite_dir_reduced;
+    int gpu_impostors_drawn;
+    bool gpu_render_origin_active;
+    float gpu_render_origin_x,gpu_render_origin_y;
+    int hint_wall_count,skip_wall_count,occluder_wall_count;
     // Per-frame draw attribution for profiler/benchmarks.
     int gpu_draw_base,gpu_draw_span,gpu_draw_actor,gpu_draw_other,gpu_draw_ground,gpu_draw_vfx;
     // Borrowed R-03 VFX binding owned by the JS handle layer. NULL when the
@@ -374,6 +383,13 @@ bool r2d_world_region_config(R2DWorldRuntime *,float region_size,int active_ring
                              int preload_ring,uint64_t upload_budget_bytes,
                              int upload_items);
 bool r2d_world_region_lod_config(R2DWorldRuntime *,const R2DWorldRegionLodConfig *);
+// Residency raw budget (0 resident bytes = unlimited, max_items 0 = unlimited).
+// Used by tests/benchmarks to force deterministic evictions.
+bool r2d_world_region_budget(R2DWorldRuntime *,uint64_t resident_bytes,int max_resident_items);
+// Override only the five LOD distance bands (budgets stay at defaults). Used by
+// benchmarks/tests to force deterministic light/decal/sprite culling.
+bool r2d_world_region_lod_bands(R2DWorldRuntime *,float near_distance,float mid_distance,
+                                float far_distance,float impostor_distance,float hidden_distance);
 // Region/vis-cluster/PVS/occluder pass for the current camera. Called once per
 // frame by r2d_world_runtime_frame(); exposed for native tests/benchmarks.
 void r2d_world_regions_frame(R2DWorldRuntime *,const R2DRe2dView *);

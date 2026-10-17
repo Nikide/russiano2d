@@ -796,3 +796,11 @@ screen-pass не подключён к world forward pass (нужен scene-colo
 ambient/AO field и detail layers пока не загружаются в shader uniforms;
 decals 2.0 model ещё не связан с 128-слотовым пулом. Подробности и метрики —
 [RE2D_RENDER_FEATURES.md](../RE2D_RENDER_FEATURES.md).
+
+Финальный composite (task-11): `world.post` bloom теперь влияет на кадр через
+offscreen post-проход; `world.qualityPreset('high'|'ultra')` включает bloom +
+reflection-lite + depth-aware heat distortion. `world.decal({...})` принимает
+необязательные `rotation`, `scale`, `fadeIn`, `fadeOut` (старые 7 аргументов
+совместимы). Метрики — `info.visual.postPasses/postBloom/postReflection/
+postHeat/decals2`. Ограничения (batching без SSBO, независимые sky-текстуры)
+описаны в [RE2D_RENDER_FEATURES.md](../RE2D_RENDER_FEATURES.md).

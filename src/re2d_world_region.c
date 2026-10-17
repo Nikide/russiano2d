@@ -750,8 +750,8 @@ void r2d_world_region_lod_defaults(R2DWorldRegionLodConfig *config)
         .near_decals = 100, .mid_decals = 100,
         .far_decals = 50, .impostor_decals = 20,
         .near_lights = 16, .mid_lights = 16,
-        .far_lights = 0, .impostor_lights = 0,
-        .max_shadow_lights = 4,
+        .far_lights = 8, .impostor_lights = 0,
+        .max_shadow_lights = 16,
     };
 }
 
@@ -868,4 +868,36 @@ bool r2d_world_region_occluded(const R2DWorldRegionSet *set, int region,
                           occluders, occluder_count))
             return false;
     return true;
+}
+
+
+int r2d_world_region_lod_select_lights(const R2DWorldLodLight *lights, int count,
+                                       float camera_x, float camera_y, float camera_eye,
+                                       const R2DWorldRegionLodConfig *config,
+                                       int max_shadow_lights,
+                                       int *indices, int capacity,
+                                       int *kept_shadow, int *culled)
+{
+    if (!lights || count < 0 || capacity < 0 || (capacity > 0 && !indices) ||
+        !isfinite(camera_x) || !isfinite(camera_y) || !isfinite(camera_eye))
+        return -1;
+    R2DWorldRegionLodConfig fallback;
+    if (!config) { r2d_world_region_lod_defaults(&fallback); config = &fallback; }
+    if (!r2d_world_region_lod_valid(config)) return -1;
+    if (max_shadow_lights < 0) max_shadow_lights = 0;
+    int kept = 0, dropped = 0, shadowed = 0;
+    for (int i = 0; i < count; i++) {
+        const float dx = lights[i].x - camera_x;
+        const float dy = lights[i].y - camera_y;
+        const float dz = lights[i].h - camera_eye;
+        R2DWorldRegionLod lod;
+        r2d_world_region_lod_eval(sqrtf(dx * dx + dy * dy + dz * dz), config, &lod);
+        if (!lod.light_updates || lod.max_lights <= 0) { dropped++; continue; }
+        if (indices && kept < capacity) indices[kept] = i;
+        if (shadowed < max_shadow_lights) shadowed++;
+        kept++;
+    }
+    if (kept_shadow) *kept_shadow = shadowed;
+    if (culled) *culled += dropped;
+    return kept;
 }

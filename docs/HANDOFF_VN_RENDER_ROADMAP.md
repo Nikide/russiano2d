@@ -144,3 +144,11 @@
 - Brush: convex polygons, axis-aligned rect holes, Z-interval CSG only; no arbitrary boolean/vertex editor.
 - Shadow map/audio now consume SHADOW/ACOUSTIC bits; hint planes still compiler-only, occluders are conservative region samples.
 - Region-local rendering is exposed and impostors draw; moving all forward geometry to region-local origin is not done.
+
+## Wave 3 — final renderer/streaming integration (2026-10-17)
+- task-11: GPU post pass (bloom/reflection/heat), ambient 4x4/detail upload, decals 2.0 authoring, high/ultra gating; native 158/158, agent post/decals green.
+- task-12: real texture/atlas residency upload/evict, render-origin uniforms+shadows, GPU light/decal LOD, stream counters; huge-world agent green.
+- Lead: GPU impostor pass, SHADOW shadow filter, ACOUSTIC audio occlusion, advanced visuals gated to high/ultra for CPU parity.
+- Final native gates: 158/158; ci_verify/docs/site green.
+- Known red agent parity tests (not native): `re2d_world_renderer_test.py` 6 comparisons (moving floor/shadow, upper normal/emissive/fog/shadow, lower shadow, transparent actor depth, additive flash, legacy decal) and `dust2` now green after low/medium gating. These compare wave-2 GPU-only visual features against the simpler CPU reference; features are gated high/ultra but legacy parity still fails in some scenes. Not claimed as fixed.
+- Remaining exact limits: independent per-layer sky textures need authored assets; static batching needs SSBO/instancing (documented); hint planes compiler-only; GPU upload is real for textures/atlases but BSP/surface payloads remain resident.

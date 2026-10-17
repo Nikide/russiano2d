@@ -92,6 +92,12 @@ void r2d_world_regions_free(R2DWorldRuntime *w)
     w->visible_impostor_count=w->visible_impostor_capacity=0;
     w->region_active_count=w->region_preload_count=0;w->region_current=-1;
     w->render_origin_region=-1;w->render_origin_x=w->render_origin_y=0;
+    w->gpu_stream_uploads=w->gpu_stream_upload_bytes=w->gpu_stream_evictions=w->gpu_stream_transitions=0;
+    w->gpu_textures_resident=w->gpu_atlases_resident=0;
+    w->gpu_lod_culled_lights=w->gpu_lod_culled_decals=w->gpu_sprite_dir_reduced=0;
+    w->gpu_impostors_drawn=0;w->gpu_render_origin_active=false;
+    w->gpu_render_origin_x=w->gpu_render_origin_y=0;
+    w->hint_wall_count=w->skip_wall_count=w->occluder_wall_count=0;
     w->region_ready=false;
 }
 
@@ -172,7 +178,13 @@ bool r2d_world_regions_ensure(R2DWorldRuntime *w)
 
     // Compiler occluder wall chains, kept as 2D segments for the coarse pass.
     int occluder_count=0;
-    for(int i=0;i<w->world.wall_count;i++)if(r2d_world_wall_bits(&w->world.walls[i])&R2D_WALL_OCCLUDER)occluder_count++;
+    w->hint_wall_count=w->skip_wall_count=w->occluder_wall_count=0;
+    for(int i=0;i<w->world.wall_count;i++){
+        const uint16_t bits=r2d_world_wall_bits(&w->world.walls[i]);
+        if(bits&R2D_WALL_OCCLUDER){occluder_count++;w->occluder_wall_count++;}
+        if(bits&R2D_WALL_TOOL_HINT)w->hint_wall_count++;
+        if(bits&R2D_WALL_TOOL_SKIP)w->skip_wall_count++;
+    }
     w->occluders=(R2DWorldOccluder *)calloc((size_t)(occluder_count?occluder_count:1),sizeof *w->occluders);
     if(!w->occluders){free(cells);free(portals);r2d_world_regions_free(w);return false;}
     w->occluder_capacity=occluder_count?occluder_count:1;
@@ -214,8 +226,10 @@ bool r2d_world_regions_ensure(R2DWorldRuntime *w)
     if(w->stream_ready){
         if(w->stream_budget.resident_budget_bytes==0)w->stream_budget.resident_budget_bytes=8u*1024u*1024u;
         if(w->stream_budget.upload_budget_bytes==0)w->stream_budget.upload_budget_bytes=512u*1024u;
-        if(w->stream_budget.promote_budget_items<=0)w->stream_budget.promote_budget_items=2;
-        if(w->stream_budget.upload_budget_items<=0)w->stream_budget.upload_budget_items=4;
+        // Enough per-frame headroom to bring a region's payload set resident
+        // without starving the first visible frame; deeper maps still bounded.
+        if(w->stream_budget.promote_budget_items<=0)w->stream_budget.promote_budget_items=16;
+        if(w->stream_budget.upload_budget_items<=0)w->stream_budget.upload_budget_items=16;
         if(w->stream_budget.max_resident_items<=0)w->stream_budget.max_resident_items=4096;
         for(int ri=0;ri<regions;ri++){
             const R2DWorldRegion *region=&r->regions[ri];
@@ -291,6 +305,30 @@ bool r2d_world_region_lod_config(R2DWorldRuntime *w,const R2DWorldRegionLodConfi
 {
     if(!w||!config||!r2d_world_region_lod_valid(config))return false;
     w->lod_config=*config;
+    return true;
+}
+
+bool r2d_world_region_budget(R2DWorldRuntime *w,uint64_t resident_bytes,int max_resident_items)
+{
+    if(!w||w->rendering||max_resident_items<0)return false;
+    w->stream_budget.resident_budget_bytes=resident_bytes;
+    w->stream_budget.max_resident_items=max_resident_items;
+    return true;
+}
+
+bool r2d_world_region_lod_bands(R2DWorldRuntime *w,float near_distance,float mid_distance,
+                                float far_distance,float impostor_distance,float hidden_distance)
+{
+    if(!w||w->rendering)return false;
+    R2DWorldRegionLodConfig config;
+    r2d_world_region_lod_defaults(&config);
+    config.near_distance=near_distance;
+    config.mid_distance=mid_distance;
+    config.far_distance=far_distance;
+    config.impostor_distance=impostor_distance;
+    config.hidden_distance=hidden_distance;
+    if(!r2d_world_region_lod_valid(&config))return false;
+    w->lod_config=config;
     return true;
 }
 
@@ -370,6 +408,8 @@ static void runtime_stream_sync_assets(JSContext *ctx,R2DWorldRuntime *w)
         const R2DWorldMaterial *material=&w->world.materials[m];
         if(!material->used)continue;
         int region=-1;
+        // Prefer a span-owned surface for the owner region; wall-only materials
+        // stay global so a wall texture is never tied to an arbitrary cell.
         for(int s=0;s<w->world.surface_count&&region<0;s++){
             if(!w->world.surface_materials||w->world.surface_materials[s]!=m)continue;
             const R2DWorldSurface *surface=r2d_world_surface(&w->world,s);
@@ -378,13 +418,17 @@ static void runtime_stream_sync_assets(JSContext *ctx,R2DWorldRuntime *w)
             if(cell>=0&&cell<w->regions.cell_count)region=w->regions.cell_region[cell];
         }
         uint64_t bytes=64;
-        if(material->albedo.pixels)bytes+=(uint64_t)material->albedo.width*material->albedo.height*4u;
-        if(material->normal.pixels)bytes+=(uint64_t)material->normal.width*material->normal.height*4u;
-        if(material->emissive.pixels)bytes+=(uint64_t)material->emissive.width*material->emissive.height*4u;
-        r2d_world_stream_register(&w->stream,m,R2D_STREAM_MATERIAL,region,bytes,6);
-        if(material->albedo.pixels)
-            r2d_world_stream_register(&w->stream,m,R2D_STREAM_TEXTURE,region,
-                (uint64_t)material->albedo.width*material->albedo.height*4u,7);
+        const R2DWorldTexture *slots[3]={&material->albedo,&material->normal,&material->emissive};
+        for(int j=0;j<3;j++){
+            const R2DWorldTexture *texture=slots[j];
+            if(!texture->pixels)continue;
+            const uint64_t slot_bytes=(uint64_t)texture->width*texture->height*4u;
+            bytes+=slot_bytes;
+            // One TEXTURE item per material slot: the GPU uploader maps
+            // id=m*4+j back to g->textures[m][j].
+            r2d_world_stream_register(&w->stream,m*4+j,R2D_STREAM_TEXTURE,region,slot_bytes,30);
+        }
+        r2d_world_stream_register(&w->stream,m,R2D_STREAM_MATERIAL,region,bytes,20);
     }
     for(int a=0;a<w->atlas_count;a++){
         const R2DWorldAtlasActor *actor=&w->atlas_actors[a];
@@ -393,7 +437,7 @@ static void runtime_stream_sync_assets(JSContext *ctx,R2DWorldRuntime *w)
         if(region_asset_xy(ctx,actor->node,&x,&y))
             region=r2d_world_region_at(&w->regions,x,y);
         const uint64_t bytes=(uint64_t)actor->atlas_w*actor->atlas_h*4u;
-        r2d_world_stream_register(&w->stream,1000000+a,R2D_STREAM_ATLAS,region,bytes,7);
+        r2d_world_stream_register(&w->stream,1000000+a,R2D_STREAM_ATLAS,region,bytes,30);
     }
 }
 
@@ -586,7 +630,11 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
             animate=(w->lod_tick%frames_per_pose)==0;
         }
         bool flip=false;
-        const int column=r2d_world_atlas_direction(r2d_world_atlas_relative_yaw(facing,dx/dist,dy/dist),actor->directions,actor->mirror,&flip);
+        int column=r2d_world_atlas_direction(r2d_world_atlas_relative_yaw(facing,dx/dist,dy/dist),actor->directions,actor->mirror,&flip);
+        if(lod.sprite_directions>0&&lod.sprite_directions<actor->directions&&actor->directions>0){
+            column=(column*lod.sprite_directions)/actor->directions;
+            w->gpu_sprite_dir_reduced++;
+        }
         float px,py;r2d_world_atlas_pivot(actor->pivot_mode,actor->pivot_x,actor->pivot_y,&px,&py);
         int side,cell_x,cell_y,cell_w,cell_h,dest_x,dest_y;float pivot_sx,pivot_sy;
         if(!r2d_world_atlas_placement(actor->cell_w,actor->cell_h,px,py,&side,&dest_x,&dest_y,&pivot_sx,&pivot_sy))continue;
@@ -763,11 +811,12 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
         w->frame_kinds=kinds;w->frame_revisions=revisions;w->frame_blends=blends;w->frame_keys=keys;w->frame_tints=tints;
     }
     if(w->frame_tints)for(int i=0;i<ACTOR_LIMIT;i++){w->frame_tints[i*4]=w->frame_tints[i*4+1]=w->frame_tints[i*4+2]=w->frame_tints[i*4+3]=1.0f;}
-    r2d_world_regions_frame(w,view);
+    r2d_world_regions_ensure(w);
     runtime_stream_sync_assets(ctx,w);
+    r2d_world_regions_frame(w,view);
     r2d_world_audio_step(w,view);
     Uint64 frame_start=SDL_GetPerformanceCounter(),phase=frame_start;double ms=1000.0/SDL_GetPerformanceFrequency();
-    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->visible_atlas_count=0;w->particles_drawn=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;w->lod_hidden_actors=w->lod_throttled_actors=w->lod_hidden_atlas=0;w->lod_culled_lights=w->lod_culled_particles=w->lod_culled_decals=0;w->audio_region_culled=0;r2d_world_render_counters_reset(&w->render_counters);int result=-1;
+    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->visible_atlas_count=0;w->particles_drawn=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;w->lod_hidden_actors=w->lod_throttled_actors=w->lod_hidden_atlas=0;w->lod_culled_lights=w->lod_culled_particles=w->lod_culled_decals=0;w->audio_region_culled=0;w->gpu_lod_culled_lights=w->gpu_lod_culled_decals=w->gpu_sprite_dir_reduced=0;r2d_world_render_counters_reset(&w->render_counters);int result=-1;
     for(int i=0;i<w->actor_count;i++)if(!collect(ctx,w,view,w->actors[i],0,false,0,0))goto done;
     if(w->disposed){JS_ThrowTypeError(ctx,"Re2D World: world disposed during actor query");goto done;}
     if(width!=w->width||height!=w->height||!w->owners) {
@@ -788,7 +837,7 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     for(int i=0;i<w->visibility.span_count;i++){int span=w->visibility.spans[i];for(int j=0;j<w->world.span_light_counts[span];j++)lights[w->world.span_light_refs[span*R2D_WORLD_LIGHTS_PER_SPAN+j]]=true;}
     // Light LOD: distance policy drops far lights and shadowed lights beyond
     // the per-ring shadow budget. Typical near lights keep the full pool.
-    {
+    if(w->render_features.quality>=R2D_RENDER_QUALITY_HIGH){
         int kept[ R2D_WORLD_MAX_LIGHTS ], kept_count=0, shadowed=0;
         for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(lights[i]){
             const R2DWorldLight *light=&w->world.lights[i];
@@ -818,6 +867,13 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
         for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(lights[i]){
             w->visible_lights++;
             if(w->world.shadow_mask[i]&&shadowed<w->lod_config.max_shadow_lights){shadowed++;w->shadowed_lights++;}
+        }
+    }else{
+        // CPU/GPU reference parity at low/medium: no distance light culling.
+        w->visible_lights=0;w->shadowed_lights=0;
+        for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(lights[i]){
+            w->visible_lights++;
+            if(w->world.shadow_mask[i])w->shadowed_lights++;
         }
     }
     // Decal region pool stats: a decal is culled when its owning cell is

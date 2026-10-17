@@ -95,7 +95,9 @@ typedef struct {
 } R2DWorldMaterial;
 #define R2D_WORLD_MAX_LIGHTS 128
 #define R2D_WORLD_MAX_DECALS 128
-typedef struct {int surface,material;float u,v,w,h,remaining;unsigned generation;bool active;} R2DWorldDecal;
+// Decals 2.0: lifetime/fade/rotation/scale. max_life<=0 keeps legacy decals
+// (no fade, deterministic variation) byte-compatible.
+typedef struct {int surface,material;float u,v,w,h,remaining;float max_life,rotation,scale,fade_in,fade_out;unsigned generation;bool active;} R2DWorldDecal;
 #define R2D_WORLD_LIGHTS_PER_SPAN 16
 #define R2D_WORLD_MAX_SHADOWS 16
 typedef struct { float level,r,g,b,fog_density,fog_start,fog_r,fog_g,fog_b; } R2DWorldSpanLight;
@@ -283,6 +285,8 @@ void r2d_world_material_probe(const R2DRe2dWorld *,int,float,float,const float[3
 int r2d_world_decal_create(R2DRe2dWorld *,const R2DWorldDecal *);
 bool r2d_world_decal_remove(R2DRe2dWorld *,int);
 void r2d_world_decal_step(R2DRe2dWorld *,float);
+// Decals 2.0 fade factor in 0..1 (1 for legacy decals without max_life).
+float r2d_world_decal_alpha(const R2DWorldDecal *);
 bool r2d_world_decal_color(const R2DRe2dWorld *,const R2DWorldDecal *,int,float,float,float,float,float,const float[3],const float[3],float,uint32_t *);
 void r2d_world_frame_decals(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,float,const R2DWorldVisibility *,R2DWorldPixelOwner *);
 void r2d_world_span_height_bounds(const R2DWorldSpan *,float *,float *);

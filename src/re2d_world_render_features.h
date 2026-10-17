@@ -119,6 +119,8 @@ typedef struct {
     int decal2_active, batch_draws, batch_batches, batch_saved;
     int resident_textures;
     size_t upload_bytes;
+    // Final screen composite passes (GPU only).
+    int post_passes, post_bloom, post_reflection, post_heat;
 } R2DWorldRenderCounters;
 
 void r2d_world_render_defaults(R2DWorldRenderFeatures *out);

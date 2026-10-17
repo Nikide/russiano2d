@@ -96,11 +96,26 @@ bool r2d_world_material_color(const R2DRe2dWorld *w,int surface,int span,uint32_
 int r2d_world_decal_create(R2DRe2dWorld *w,const R2DWorldDecal *d)
 {
     if(!w||!d||d->surface<0||d->surface>=w->surface_count||(w->surface_sky&&w->surface_sky[d->surface])||r2d_world_surface_blend(w,d->surface)>=R2D_WORLD_TRANSLUCENT||d->material<0||d->material>=R2D_WORLD_MAX_MATERIALS||!w->materials[d->material].used||
-       !isfinite(d->u)||!isfinite(d->v)||!isfinite(d->w)||!isfinite(d->h)||!isfinite(d->remaining)||fabsf(d->u)>1000000||fabsf(d->v)>1000000||d->w<=0||d->h<=0||d->w>1000000||d->h>1000000||d->remaining<0||d->remaining>1000000)return -1;
-    for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)if(!w->decals[i].active&&w->decals[i].generation<16777215){unsigned gen=w->decals[i].generation+1;w->decals[i]=*d;w->decals[i].generation=gen;w->decals[i].active=true;w->decal_count++;return (int)(gen*128u+(unsigned)i);}return -1;
+       !isfinite(d->u)||!isfinite(d->v)||!isfinite(d->w)||!isfinite(d->h)||!isfinite(d->remaining)||fabsf(d->u)>1000000||fabsf(d->v)>1000000||d->w<=0||d->h<=0||d->w>1000000||d->h>1000000||d->remaining<0||d->remaining>1000000||
+       !isfinite(d->max_life)||!isfinite(d->rotation)||!isfinite(d->scale)||!isfinite(d->fade_in)||!isfinite(d->fade_out)||
+       d->max_life<0||d->max_life>1000000||d->scale<0||d->scale>8||d->fade_in<0||d->fade_out<0)return -1;
+    for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)if(!w->decals[i].active&&w->decals[i].generation<16777215){unsigned gen=w->decals[i].generation+1;w->decals[i]=*d;
+        if(w->decals[i].max_life>0.0f&&w->decals[i].scale<=0.0f)w->decals[i].scale=1.0f;
+        w->decals[i].generation=gen;w->decals[i].active=true;w->decal_count++;return (int)(gen*128u+(unsigned)i);}return -1;
 }
 bool r2d_world_decal_remove(R2DRe2dWorld *w,int token)
 {if(!w||token<128)return false;int i=token%128;R2DWorldDecal *d=&w->decals[i];if(!d->active||d->generation!=(unsigned)token/128)return false;d->active=false;w->decal_count--;return true;}
+float r2d_world_decal_alpha(const R2DWorldDecal *d)
+{
+    if(!d)return 0.0f;
+    if(d->max_life<=0.0f)return 1.0f;
+    if(!d->active)return 0.0f;
+    float age=d->max_life-d->remaining;if(age<0.0f)age=0.0f;
+    float alpha=1.0f;
+    if(d->fade_in>0.0f)alpha=fminf(alpha,age/d->fade_in);
+    if(d->fade_out>0.0f)alpha=fminf(alpha,d->remaining/d->fade_out);
+    return alpha<0.0f?0.0f:(alpha>1.0f?1.0f:alpha);
+}
 void r2d_world_decal_step(R2DRe2dWorld *w,float dt)
 {if(!w||!isfinite(dt)||dt<0)return;for(int i=0;i<R2D_WORLD_MAX_DECALS;i++){R2DWorldDecal *d=&w->decals[i];if(d->active&&d->remaining>0){d->remaining-=dt;if(d->remaining<=0){d->active=false;w->decal_count--;}}}}
 bool r2d_world_decal_color(const R2DRe2dWorld *w,const R2DWorldDecal *decal,int span,float u,float v,float x,float y,float h,const float normal[3],const float tangent[3],float depth,uint32_t *out)

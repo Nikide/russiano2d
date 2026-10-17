@@ -236,3 +236,66 @@ frame-time regression is measurable on this lab. Reference-frame FNV baseline:
   lifetime/fade authoring and JSON parsing are follow-up work.
 * Batching/residency are native accounting + hooks; GPU submission order and
   texture streaming are not rerouted by them yet.
+
+## Final GPU composite and remaining P4 gaps (task-11)
+
+### Offscreen post pass (actually in the frame)
+
+`re2d_world_gpu` now renders the world into the existing colour/owner/depth
+targets, then runs a fullscreen composite into a **separate** post colour/owner
+target using the same world shaders with `plane.w = 6`. It samples:
+
+* scene colour for bloom-lite (8-tap ring, luminance threshold, strength from
+  `world.post` bloom or the quality preset);
+* owner target surface id to apply reflection-lite only to floor pixels
+  (vertical screen mirror, roughness-weighted, no planar reflection engine);
+* scene depth for depth-aware heat distortion (UV sine offset attenuated past
+  `heat_depth_start`; a distorted sample closer than the source depth is
+  rejected so foreground pixels do not smear).
+
+The composite runs only for `R2D_WORLD_DEBUG_FINAL`; every debug view and the
+CPU backend keep reading the raw colour/owner/depth targets. The final copy and
+download paths are unchanged, and the post target is separate from every input,
+so there is no read/write hazard. New counters: `postPasses`, `postBloom`,
+`postReflection`, `postHeat`.
+
+The composite is gated to the high/ultra (GPU-reference) tiers plus an explicit
+`world.post` bloom request, so low/medium keep the byte-identical CPU/GPU parity
+the old regression suite asserts. `postPasses` is 0 at medium and 1 at high.
+
+Measured on `demos/re2d_world_renderer_lab` (agent screenshots): authored
+`world.post.set("bloom",{strength:1})` changes 1.73% of pixels; high tier uses
+92 draws / 8 material batches / 11.79 ms; medium 30 draws / 12.04 ms (post off).
+Native test totals: sky 5, post 5, p4 8, regression 2, decals 2.
+
+### Ambient/AO field and detail layers uploaded
+
+The baked 4x4 ambient/AO grid is uploaded to the forward `SurfaceUniform`
+(`ambientGrid[16]`, `ambientRect`) and sampled at the hit XY in the fragment
+shader for non-decal surfaces. A detail layer samples the albedo texture at a
+scaled/rotated UV and blends by `SurfaceUniform.detail` when `surface_detail`
+is enabled. No extra sampler or pipeline was required.
+
+### Decals 2.0 authoring and rendering
+
+`R2DWorldDecal` gained `max_life, rotation, scale, fade_in, fade_out` while the
+legacy 7-argument decal path stays compatible (`max_life` defaults to `remaining`,
+scale to 1, no fade). `r2d_world_decal_alpha()` is the shared fade function.
+GPU decal draws pass rotation/scale/fade in `SurfaceUniform.decal2`; the shader
+uses them when enabled, otherwise the old deterministic hash rotation/scale.
+`world.decal()` accepts optional `rotation, scale, fadeIn, fadeOut`.
+Agent check: an authored paint decal changes 7.07% of pixels and reports
+`visual.decals2 > 0`.
+
+### Static batching and sky textures: measured status
+
+* **Batching**: surfaces are fullscreen raytraced draws (no vertex buffers), so
+  one draw per material/blend/light/atlas group would need per-instance surface
+  parameters (SSBO or instanced attributes) plus a shader rewrite. This pass
+  keeps the existing material/texture binding cache and the native
+  batch/residency accounting; measured high-tier lab: 91 draws, material batch
+  rebinds are already coalesced. Report reason: no SSBO/instancing rewrite.
+* **Independent per-layer sky textures**: the model supports per-layer texture
+  slots, but the runtime has no authored storage/API for four sky textures and
+  the repo ships no `assets/sky` set; GPU still uses the panorama plus four
+  tinted parallax layers (procedural fallback). Deferred with this exact reason.

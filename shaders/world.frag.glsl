@@ -41,6 +41,10 @@ layout(std140,set=3,binding=0) uniform Surface {
     vec4 skyParams;  // layer count, sun azimuth, sun elevation, time
     vec4 celestial;  // disc size, glow, disc rgb
     vec4 celestial2; // disc b, unused, unused, enabled
+    vec4 ambientGrid[16]; // baked 4x4 ambient rgb + AO (row major)
+    vec4 ambientRect;     // x0,y0,invW,invH; w>0 => field enabled
+    vec4 detail;          // uv scale, albedo detail weight, unused, enabled
+    vec4 decal2;          // rotation, scale, fade alpha, enabled
 } u;
 layout(location=0) out vec4 color;
 layout(location=1) out vec4 owner; // exact forward depth, surface, span, actor
@@ -53,6 +57,12 @@ float r2d_noise2(vec2 p) {
     vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
     return mix(mix(r2d_hash21(i),r2d_hash21(i+vec2(1,0)),f.x),
                mix(r2d_hash21(i+vec2(0,1)),r2d_hash21(i+vec2(1,1)),f.x),f.y);
+}
+vec4 r2d_ambient_at(vec2 p){
+    if(u.ambientRect.w<=0.0)return vec4(1.0,1.0,1.0,0.0);
+    vec2 g=(p-u.ambientRect.xy)*u.ambientRect.zw*4.0;
+    ivec2 i=ivec2(clamp(g,vec2(0.0),vec2(3.999)));
+    return u.ambientGrid[i.y*4+i.x];
 }
 float r2d_ao_lite(float ea,float eb,float width,float corner,float bevel) {
     if(width<=0.0)return 1.0;
@@ -85,6 +95,55 @@ bool occluded(vec3 origin,vec3 direction,int slot) {
 }
 void main() {
     vec2 pixel=gl_FragCoord.xy;
+    if(u.plane.w>5.5){
+        // P4 final screen composite: samples the colour scene (albedoMap),
+        // owner target (normalMap) and scene depth (emissiveMap). Renders to a
+        // separate post target, so there is no read/write hazard.
+        vec2 suv=clamp(gl_FragCoord.xy/vec2(u.screen.xy),vec2(0.001),vec2(0.999));
+        vec3 sceneCol=texture(albedoMap,suv).rgb;
+        vec4 own=texture(normalMap,suv);
+        float sceneDepth=texture(emissiveMap,suv).r;
+        vec2 uv=suv;
+        float heatStrength=u.options.x;
+        if(heatStrength>0.0&&sceneDepth<1.0e30){
+            float att=sceneDepth<=u.material.z?1.0:clamp(1.0-(sceneDepth-u.material.z)/max(u.options.w,1.0),0.0,1.0);
+            float phase=u.plane.y*u.material.y;
+            vec2 off=vec2(sin(uv.y*u.material.x+phase),cos(uv.x*u.material.x*0.8+phase*1.3))*heatStrength*att*0.012;
+            vec2 dist=clamp(uv+off,vec2(0.001),vec2(0.999));
+            float distDepth=texture(emissiveMap,dist).r;
+            if(distDepth>=sceneDepth-0.5)uv=dist;
+        }
+        vec3 sampled=texture(albedoMap,uv).rgb;
+        float reflectStrength=u.options.y;
+        if(reflectStrength>0.0){
+            float wallCount=u.options.z;
+            float surfaceId=own.y;
+            bool floorPixel=surfaceId>=wallCount&&mod(surfaceId-wallCount,2.0)<0.5;
+            if(floorPixel){
+                float rough=r2d_hash21(uv*u.screen.xy*0.37);
+                vec2 ruv=vec2(uv.x,clamp(1.0-uv.y,0.001,0.999));
+                vec3 refl=texture(albedoMap,ruv).rgb;
+                sampled=mix(sampled,refl,reflectStrength*(0.18+0.12*rough));
+            }
+        }
+        float bloomStrength=u.plane.z;
+        if(bloomStrength>0.0){
+            vec3 bloom=vec3(0.0);
+            float radius=max(2.0,u.screen.y/100.0);
+            for(int i=0;i<8;i++){
+                float a=(float(i)+0.5)*0.7853982;
+                vec2 d=vec2(cos(a),sin(a))*radius/vec2(u.screen.xy);
+                vec3 c=texture(albedoMap,clamp(suv+d,vec2(0.001),vec2(0.999))).rgb;
+                float l=dot(c,vec3(0.2126,0.7152,0.0722));
+                bloom+=c*max(l-0.50,0.0);
+            }
+            sampled+=bloom*bloomStrength*0.45;
+        }
+        color=vec4(clamp(sampled,0.0,1.0),1.0);
+        owner=vec4(0.0);
+        gl_FragDepth=1.0;
+        return;
+    }
     vec2 ru=vec2(pixel.x-u.screen.x*.5,u.screen.y*.5-pixel.y);
     vec3 right=vec3(-u.basis.y,u.basis.x,0);
     vec3 up=vec3(-u.basis.x*u.basis.w,-u.basis.y*u.basis.w,u.basis.z);
@@ -211,7 +270,14 @@ void main() {
         // Decals 2.0: deterministic per-decal rotation/scale variation. Gated by
         // the surface variation tier so legacy low quality stays byte-identical
         // to the CPU reference.
-        if(u.surfacefx.x>0.0){
+        if(u.decal2.w>0.5){
+            vec2 dc=uv-0.5;
+            float dca=cos(u.decal2.x),dsa=sin(u.decal2.x);
+            dc=mat2(dca,-dsa,dsa,dca)*dc;
+            dc/=max(u.decal2.y,0.05);
+            uv=dc+0.5;
+            if(any(lessThan(uv,vec2(0.0)))||any(greaterThanEqual(uv,vec2(1.0))))discard;
+        } else if(u.surfacefx.x>0.0){
             float dh=r2d_hash21(vec2(u.identity.x*0.37+u.lightOptions[14].x*0.11,
                                     u.lightOptions[14].y*0.23+u.lightOptions[14].z*0.19));
             vec2 dc=uv-0.5;
@@ -231,6 +297,11 @@ void main() {
             uv+=vec2(sin(hit.x*0.15+u.liquid.y),cos(hit.y*0.13+u.liquid.y*1.3))*u.liquid.z;
         if(u.plane.w<1.5&&!decal)uv=fract(uv*u.material.xy+u.anim.xy);
         albedo=texture(albedoMap,uv);
+        if(u.detail.w>0.0&&!decal){
+            vec2 duv=fract(uv*u.detail.x+vec2(0.371,0.613));
+            vec3 detailCol=texture(albedoMap,duv).rgb;
+            albedo.rgb=mix(albedo.rgb,albedo.rgb*0.55+detailCol.rgb*0.65,clamp(u.detail.y,0.0,1.0));
+        }
         float blend=u.lightOptions[15].w;
         float edge_cov=1.0;
         if(u.spritefx.w>0.0&&blend<0.5)
@@ -316,6 +387,12 @@ void main() {
         }
     }
     vec3 rgb=albedo.rgb*u.tint.rgb*lighting+emissive;
+    if(decal&&u.decal2.w>0.5)rgb*=clamp(u.decal2.z,0.0,1.0);
+    // Baked ambient/AO field (4x4 coarse grid) modulates lit surfaces.
+    if(u.ambientRect.w>0.0&&!decal){
+        vec4 af=r2d_ambient_at(hit.xy);
+        rgb*=mix(vec3(1.0),af.rgb,0.55)*(1.0-af.a*0.25);
+    }
     vec3 scene=rgb;
     float alpha_out=u.lightOptions[15].w>1.5?albedo.a*u.tint.a:1.0;
     if(u.haze.w>0.0||u.fog2.x>0.0){

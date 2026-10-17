@@ -143,6 +143,8 @@ static void set_num(JSContext *ctx, JSValue obj, const char *key, double v);
 static JSValue world_region_config(JSContext *,JSValueConst,int,JSValueConst *);
 static JSValue world_impostors(JSContext *,JSValueConst,int,JSValueConst *);
 static JSValue world_region_local(JSContext *,JSValueConst,int,JSValueConst *);
+static JSValue world_region_budget(JSContext *,JSValueConst,int,JSValueConst *);
+static JSValue world_region_lod(JSContext *,JSValueConst,int,JSValueConst *);
 
 // engine.re2d.sprite(id) → { texture, u0, v0, u1, v1, w, h } | null.
 // Откуда брать текстуру и её прямоугольник для меша: так граням и стенам
@@ -485,6 +487,8 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,v,"batchDraws",c->batch_draws);set_num(ctx,v,"batchBatches",c->batch_batches);
     set_num(ctx,v,"batchSaved",c->batch_saved);set_num(ctx,v,"residentTextures",c->resident_textures);
     set_num(ctx,v,"uploadBytes",(double)c->upload_bytes);
+    set_num(ctx,v,"postPasses",c->post_passes);set_num(ctx,v,"postBloom",c->post_bloom);
+    set_num(ctx,v,"postReflection",c->post_reflection);set_num(ctx,v,"postHeat",c->post_heat);
     set_num(ctx,v,"renderTime",w->render_time);
     JS_SetPropertyStr(ctx,o,"visual",v);
     JS_SetPropertyStr(ctx,o,"gpuWait",JS_NewBool(ctx,w->gpu_wait));
@@ -526,6 +530,7 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"regionUnloaded",regions?regions->metrics.unloaded_count:0);
     set_num(ctx,o,"regionCulled",regions?regions->metrics.culled_regions:0);
     set_num(ctx,o,"regionPvsEdges",regions?regions->metrics.pvs_edges:0);
+    set_num(ctx,o,"regionPvsCulled",w->region_pvs_culled);
     set_num(ctx,o,"regionSizeHint",w->region_size_hint);
     set_num(ctx,o,"regionClusterEdges",w->cluster_ready?w->clusters.pvs_edges:0);
     set_num(ctx,o,"regionOccluderCulled",w->region_occluder_culled);
@@ -555,6 +560,22 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"renderOriginX",w->render_origin_x);
     set_num(ctx,o,"renderOriginY",w->render_origin_y);
     set_num(ctx,o,"renderOriginRegion",w->render_origin_region);
+    set_num(ctx,o,"gpuStreamUploads",(double)w->gpu_stream_uploads);
+    set_num(ctx,o,"gpuStreamUploadBytes",(double)w->gpu_stream_upload_bytes);
+    set_num(ctx,o,"gpuStreamEvictions",(double)w->gpu_stream_evictions);
+    set_num(ctx,o,"gpuStreamTransitions",(double)w->gpu_stream_transitions);
+    set_num(ctx,o,"gpuTexturesResident",w->gpu_textures_resident);
+    set_num(ctx,o,"gpuAtlasesResident",w->gpu_atlases_resident);
+    set_num(ctx,o,"gpuLightsCulled",w->gpu_lod_culled_lights);
+    set_num(ctx,o,"gpuDecalsCulled",w->gpu_lod_culled_decals);
+    set_num(ctx,o,"gpuSpriteDirReduced",w->gpu_sprite_dir_reduced);
+    set_num(ctx,o,"gpuImpostorsDrawn",w->gpu_impostors_drawn);
+    set_num(ctx,o,"gpuRenderOriginActive",w->gpu_render_origin_active?1:0);
+    set_num(ctx,o,"gpuOriginX",w->gpu_render_origin_x);
+    set_num(ctx,o,"gpuOriginY",w->gpu_render_origin_y);
+    set_num(ctx,o,"hintWalls",w->hint_wall_count);
+    set_num(ctx,o,"skipWalls",w->skip_wall_count);
+    set_num(ctx,o,"occluderWalls",w->occluder_wall_count);
     if(regions){
         JSValue ro=JS_NewObject(ctx);
         set_num(ctx,ro,"count",regions->region_count);set_num(ctx,ro,"columns",regions->columns);set_num(ctx,ro,"rows",regions->rows);
@@ -1829,11 +1850,20 @@ static JSValue world_debug_visibility(JSContext *ctx,JSValueConst self,int argc,
 }
 static JSValue world_decal_new(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
-    WorldHandle *w=world_get(ctx,self);float p[6];if(!w||argc<7||!JS_IsString(argv[1]))return JS_ThrowTypeError(ctx,"Re2D World: decal(surface,material,u,v,width,height,life)");
+    WorldHandle *w=world_get(ctx,self);float p[6];if(!w||argc<7||!JS_IsString(argv[1]))return JS_ThrowTypeError(ctx,"Re2D World: decal(surface,material,u,v,width,height,life[,rotation,scale,fadeIn,fadeOut])");
     if(!world_numbers(ctx,1,argv,1,p)||!world_numbers(ctx,argc-2,argv+2,5,p+1))return JS_EXCEPTION;
     if(p[0]!=floorf(p[0]))return JS_ThrowRangeError(ctx,"Re2D World: decal surface must be an integer");
     const char *name=JS_ToCString(ctx,argv[1]);if(!name)return JS_EXCEPTION;int material=r2d_world_material_find(&w->world,name);JS_FreeCString(ctx,name);
-    R2DWorldDecal decal={.surface=(int)p[0],.material=material,.u=p[1],.v=p[2],.w=p[3],.h=p[4],.remaining=p[5]};int token=r2d_world_decal_create(&w->world,&decal);
+    R2DWorldDecal decal={.surface=(int)p[0],.material=material,.u=p[1],.v=p[2],.w=p[3],.h=p[4],.remaining=p[5],
+        .max_life=0.0f,.scale=1.0f};
+    // P4 decals 2.0: optional authored rotation/scale/fade. Only an explicitly
+    // extended call opts into decals 2.0; the legacy 7-argument form keeps the
+    // deterministic hash variation and CPU/GPU parity.
+    if(argc>7){float v2[1];if(!world_numbers(ctx,1,argv+7,1,v2))return JS_EXCEPTION;decal.rotation=v2[0];decal.max_life=p[5];}
+    if(argc>8){float v2[1];if(!world_numbers(ctx,1,argv+8,1,v2))return JS_EXCEPTION;decal.scale=v2[0];decal.max_life=p[5];}
+    if(argc>9){float v2[1];if(!world_numbers(ctx,1,argv+9,1,v2))return JS_EXCEPTION;decal.fade_in=v2[0];decal.max_life=p[5];}
+    if(argc>10){float v2[1];if(!world_numbers(ctx,1,argv+10,1,v2))return JS_EXCEPTION;decal.fade_out=v2[0];decal.max_life=p[5];}
+    int token=r2d_world_decal_create(&w->world,&decal);
     if(token<0)return JS_ThrowRangeError(ctx,"Re2D World: invalid decal or 128-decal budget exhausted");return JS_NewInt32(ctx,token);
 }
 static JSValue world_decal_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
@@ -2055,6 +2085,8 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"regionConfig",JS_NewCFunction(ctx,world_region_config,"regionConfig",5));
     JS_SetPropertyStr(ctx,handle,"impostors",JS_NewCFunction(ctx,world_impostors,"impostors",0));
     JS_SetPropertyStr(ctx,handle,"regionLocal",JS_NewCFunction(ctx,world_region_local,"regionLocal",2));
+    JS_SetPropertyStr(ctx,handle,"regionBudget",JS_NewCFunction(ctx,world_region_budget,"regionBudget",2));
+    JS_SetPropertyStr(ctx,handle,"regionLod",JS_NewCFunction(ctx,world_region_lod,"regionLod",5));
     JS_SetPropertyStr(ctx,handle,"material",JS_NewCFunction(ctx,world_material_set,"material",7));
     JS_SetPropertyStr(ctx,handle,"watch",JS_NewCFunction(ctx,world_watch,"watch",1));
     JS_SetPropertyStr(ctx,handle,"reloadJSON",JS_NewCFunction(ctx,world_reload,"reloadJSON",1));
@@ -2183,6 +2215,33 @@ static JSValue world_region_local(JSContext *ctx,JSValueConst self,int argc,JSVa
     set_num(ctx,out,"region",region);set_num(ctx,out,"localX",lx);set_num(ctx,out,"localY",ly);
     set_num(ctx,out,"originX",ox);set_num(ctx,out,"originY",oy);
     return out;
+}
+
+static JSValue world_region_budget(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1)return JS_ThrowTypeError(ctx,"Re2D World: regionBudget(residentBytes,maxItems=0)");
+    double bytes=0;int32_t items=0;
+    if(!world_number_arg(ctx,argv[0],&bytes)||bytes<0)
+        return JS_ThrowRangeError(ctx,"Re2D World: resident byte budget must be >= 0");
+    if(argc>1&&JS_ToInt32(ctx,&items,argv[1])<0)return JS_EXCEPTION;
+    if(items<0)return JS_ThrowRangeError(ctx,"Re2D World: max resident items must be >= 0");
+    if(!r2d_world_region_budget(w,(uint64_t)bytes,items))
+        return JS_ThrowRangeError(ctx,"Re2D World: invalid region budget");
+    return JS_UNDEFINED;
+}
+
+static JSValue world_region_lod(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<5)return JS_ThrowTypeError(ctx,"Re2D World: regionLod(near,mid,far,impostor,hidden)");
+    double bands[5];
+    for(int i=0;i<5;i++)if(!world_number_arg(ctx,argv[i],&bands[i]))
+        return JS_ThrowTypeError(ctx,"Re2D World: regionLod expects 5 finite distances");
+    if(!r2d_world_region_lod_bands(w,(float)bands[0],(float)bands[1],(float)bands[2],
+                                   (float)bands[3],(float)bands[4]))
+        return JS_ThrowRangeError(ctx,"Re2D World: LOD bands must be finite and monotonic");
+    return JS_UNDEFINED;
 }
 
 static JSValue world_load(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)

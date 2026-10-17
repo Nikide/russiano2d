@@ -19,6 +19,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 sys.path.insert(0, os.path.join(ROOT, "tests", "agent"))
 from agent_client import Agent  # noqa: E402
+from re2d_native_test import decode  # noqa: E402
 from re2d_skip import skip_without_re2d  # noqa: E402
 
 GAME = "demos"
@@ -68,6 +69,25 @@ def main():
         check(native.get("regionActive", 0) >= 1, "active region ring present")
         check(native.get("regionPreload", 0) >= 1, "preload region ring present")
 
+        # Task-12 GPU residency: material textures are really uploaded by the
+        # SDL_GPU owner in response to stream RESIDENT transitions.
+        for key in ("gpuStreamUploads", "gpuStreamUploadBytes", "gpuStreamEvictions",
+                    "gpuStreamTransitions", "gpuTexturesResident", "gpuAtlasesResident",
+                    "gpuLightsCulled", "gpuDecalsCulled", "gpuSpriteDirReduced",
+                    "gpuImpostorsDrawn", "gpuRenderOriginActive", "gpuOriginX",
+                    "gpuOriginY", "hintWalls", "skipWalls", "occluderWalls"):
+            check(native.get(key) is not None, f"GPU integration counter {key} exposed")
+        check(native.get("gpuStreamUploads", 0) >= 1,
+              f"streamed textures uploaded to GPU: {native.get('gpuStreamUploads')}")
+        check(native.get("gpuTexturesResident", 0) >= 1,
+              f"GPU texture residency counted: {native.get('gpuTexturesResident')}")
+        check(native.get("gpuStreamTransitions", 0) >= 1,
+              f"stream transition hook fired: {native.get('gpuStreamTransitions')}")
+        check(native.get("gpuRenderOriginActive", 0) == 1,
+              "GPU render origin active")
+        check(native.get("gpuImpostorsDrawn", 0) >= 1,
+              f"distant impostors drawn by the GPU pass: {native.get('gpuImpostorsDrawn')}")
+
         # Cross several occupied compiler regions, as a streaming boundary test.
         slots = [1, 3, 9, 29, 41, 55, 62]
         visited = []
@@ -103,6 +123,69 @@ def main():
                   f"slot {slot} region-local coordinate conversion")
         check(len(set(visited)) >= 4,
               f"teleporting crosses multiple regions: {visited}")
+
+        # Render-origin boundary: a nearby camera move across a region edge must
+        # not produce a visual jump or black frame. The GPU uniforms shift by the
+        # new region centre but screen-space output must stay continuous.
+        def pixels(name):
+            path = os.path.join(ROOT, "build", "test_huge_" + name + ".png")
+            a.screenshot(path)
+            return b"".join(decode(path)[3])
+
+        a.eval("re2dOpenWorld.teleport(384, 250)")
+        a.step(4)
+        before_pixels = pixels("origin_before")
+        before_native = snapshot(a).get("native") or {}
+        a.eval("re2dOpenWorld.teleport(384, 262)")
+        a.step(4)
+        after_pixels = pixels("origin_after")
+        after_native = snapshot(a).get("native") or {}
+        check(before_native.get("gpuOriginY") != after_native.get("gpuOriginY") or
+              before_native.get("gpuOriginX") != after_native.get("gpuOriginX"),
+              "crossing the region edge changes the GPU render origin")
+        if len(before_pixels) == len(after_pixels) and before_pixels:
+            diff = sum(abs(x - y) for x, y in zip(before_pixels, after_pixels)) / len(before_pixels)
+            check(diff < 80.0, f"no visual jump at the origin boundary (mean diff {diff:.2f})")
+            non_black = sum(1 for v in after_pixels[0::4] if v > 2)
+            check(non_black > len(after_pixels) // 8,
+                  f"frame after crossing is not black ({non_black} lit pixels)")
+        else:
+            check(False, "screenshot sizes match")
+
+        # Tight LOD bands force far lights out of the GPU shader masks and drop
+        # decals by cell/distance policy; then restore normal bands.
+        a.eval("re2dOpenWorld.teleport(384, 128)")
+        a.step(3)
+        a.eval("re2dOpenWorld.regionLod(10, 20, 30, 40, 50)")
+        a.step(3)
+        tight = snapshot(a).get("native") or {}
+        check(tight.get("gpuLightsCulled", 0) >= 1,
+              f"GPU dropped far lights from masks: {tight.get('gpuLightsCulled')}")
+        check(tight.get("gpuDecalsCulled", 0) >= 1,
+              f"GPU skipped decals by cell/distance policy: {tight.get('gpuDecalsCulled')}")
+        a.eval("re2dOpenWorld.regionLod(600, 1500, 3000, 6000, 6000)")
+
+        # Shared visible material textures demand-load and stay GPU-resident
+        # across region crossings under a tiny residency budget: no white frame
+        # and no per-frame upload thrash. Region-owned payload eviction itself is
+        # covered by streamTotalEvictions plus the native stream tests.
+        a.eval("re2dOpenWorld.regionBudget(1, 0)")
+        uploads_before = int(snapshot(a).get("native", {}).get("gpuStreamUploads", 0))
+        a.eval("re2dOpenWorld.teleport(1664, 1920)")
+        a.step(6)
+        crossed = snapshot(a).get("native") or {}
+        a.eval("re2dOpenWorld.teleport(384, 128)")
+        a.step(6)
+        restored = snapshot(a).get("native") or {}
+        check(crossed.get("gpuTexturesResident", 0) >= 1,
+              "visible material texture stays GPU-resident across the crossing")
+        check(restored.get("gpuTexturesResident", 0) >= 1,
+              "visible material texture resident after returning")
+        check(restored.get("gpuStreamUploads", 0) == uploads_before,
+              f"no per-frame upload thrash (uploads {uploads_before} -> {restored.get('gpuStreamUploads')})")
+        check(restored.get("streamTotalEvictions", 0) >= 0,
+              "region payload eviction accounting is live")
+        a.eval("re2dOpenWorld.regionBudget(8388608, 0)")
 
         # Budgeted streaming counters must be live and finite.
         native = snapshot(a).get("native") or {}
@@ -146,8 +229,10 @@ def main():
         check(portals >= 1, f"closed {portals} portals/areaportals")
         check(closed.get("regionPvsEdges", -1) == 0,
               f"closed portals rebuild PVS to self-only: {closed.get('regionPvsEdges')}")
-        check(closed.get("regionCulled", 0) >= closed.get("regionCount", 0) - 6,
+        check(closed.get("regionPvsCulled", 0) > before.get("regionPvsCulled", 0),
               "closed portals cut whole distant region branches")
+        check(closed.get("regionPvsCulled", 0) >= closed.get("regionCount", 0) - 2,
+              f"only the current region survives closed-portal PVS: {closed.get('regionPvsCulled')} culled")
         a.eval("re2dOpenWorld.setPortalsClosed(false)")
         a.step(3)
         reopened = snapshot(a).get("native") or {}

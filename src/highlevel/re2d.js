@@ -448,6 +448,14 @@ function worldWrapper($, native) {
                     native.regionConfig(size, activeRing, preloadRing, uploadBytes, uploadItems);
                     return this;
                 },
+                regionBudget(residentBytes, maxItems = 0) {
+                    native.regionBudget(residentBytes, maxItems);
+                    return this;
+                },
+                regionLod(near, mid, far, impostor, hidden) {
+                    native.regionLod(near, mid, far, impostor, hidden);
+                    return this;
+                },
                 impostors() { return native.impostors(); },
                 regionLocal(x, y) { return native.regionLocal(x, y); },
                 lighting(options = {}) {
@@ -580,7 +588,7 @@ function rendererWorldWrapper($, native) {
     const world = worldWrapper($, native);
     world.watch = path => {native.watch(path ?? "");return world;};
     world.reloadJSON = text => { native.reloadJSON(text); return world; };
-    world.decal = options => {const token=native.decal(options.surface,options.material,options.u ?? 0,options.v ?? 0,options.width ?? 16,options.height ?? 16,options.life ?? 0);return {remove(){native.decalRemove(token);}};};
+    world.decal = options => {const extended = options.rotation !== undefined || options.scale !== undefined || options.fadeIn !== undefined || options.fadeOut !== undefined;const base=[options.surface,options.material,options.u ?? 0,options.v ?? 0,options.width ?? 16,options.height ?? 16,options.life ?? 0];const args = extended ? base.concat([options.rotation ?? 0,options.scale ?? 1,options.fadeIn ?? 0,options.fadeOut ?? 0]) : base;const token=native.decal(...args);return {remove(){native.decalRemove(token);}};};
     world.sky = (options = {}) => {if(options.projection!==undefined&&!['panorama','equirectangular'].includes(options.projection))throw new TypeError('Re2D World: sky projection must be panorama');native.sky(options.texture ?? '',$.color(options.color ?? '#ffffff'),(options.yaw ?? 0)*Math.PI/180,options.exposure ?? 0);return world; };
     world.reload = path => { const text=$.fs.readText(path);if(text==null)throw new Error(`Re2D World: cannot read ${path}`);return world.reloadJSON(text); };
     world.backend = name => { native.backend(name); return world; };

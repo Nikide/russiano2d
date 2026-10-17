@@ -362,6 +362,39 @@ static void test_occluder_region_culling(void)
     TEST_ASSERT_EQUAL_INT(-1, r2d_world_region_visible_set(&b.set, 9, NULL, 0, 0, 0, visible, 8));
 }
 
+static void test_lod_light_selection(void)
+{
+    R2DWorldLodLight lights[3] = {
+        {100.0f, 50.0f, 40.0f, 200.0f}, // near -> kept
+        {3000.0f, 50.0f, 40.0f, 200.0f}, // far band -> light_updates 0
+        {20.0f, 20.0f, 70.0f, 200.0f},  // near -> kept
+    };
+    R2DWorldRegionLodConfig config;
+    r2d_world_region_lod_defaults(&config);
+    int indices[8] = {-1, -1, -1, -1};
+    int shadowed = 0, culled = 0;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, r2d_world_region_lod_select_lights(
+                                      lights, 3, 0, 0, 60, &config, 1,
+                                      indices, 8, &shadowed, &culled),
+                                  "far light is dropped by LOD");
+    TEST_ASSERT_EQUAL_INT(0, indices[0]);
+    TEST_ASSERT_EQUAL_INT(2, indices[1]);
+    TEST_ASSERT_EQUAL_INT(1, shadowed);
+    TEST_ASSERT_EQUAL_INT(1, culled);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, r2d_world_region_lod_select_lights(
+                                      lights, 3, 0, 0, 60, &config, 1,
+                                      indices, 1, &shadowed, &culled),
+                                  "capacity limits writes but not the total");
+    TEST_ASSERT_EQUAL_INT(0, indices[0]);
+    TEST_ASSERT_EQUAL_INT(2, culled);
+    TEST_ASSERT_EQUAL_INT(-1, r2d_world_region_lod_select_lights(NULL, 3, 0, 0, 0,
+                                                                 &config, 1, indices, 8,
+                                                                 &shadowed, &culled));
+    TEST_ASSERT_EQUAL_INT(-1, r2d_world_region_lod_select_lights(lights, 3, NAN, 0, 0,
+                                                                 &config, 1, indices, 8,
+                                                                 &shadowed, &culled));
+}
+
 static void test_lod_config_bands(void)
 {
     R2DWorldRegionLodConfig config;
@@ -380,7 +413,7 @@ static void test_lod_config_bands(void)
     r2d_world_region_lod_eval(2000.0f, &config, &lod);
     TEST_ASSERT_EQUAL_INT(4, lod.sprite_directions);
     TEST_ASSERT_TRUE(lod.impostor);
-    TEST_ASSERT_EQUAL_INT(0, lod.max_lights);
+    TEST_ASSERT_EQUAL_INT(8, lod.max_lights);
     r2d_world_region_lod_eval(5000.0f, &config, &lod);
     TEST_ASSERT_EQUAL_INT(1, lod.sprite_directions);
     TEST_ASSERT_TRUE(lod.audio_culled);
@@ -421,5 +454,6 @@ int main(void)
     RUN_TEST(test_clusters_partition_and_pvs);
     RUN_TEST(test_occluder_region_culling);
     RUN_TEST(test_lod_config_bands);
+    RUN_TEST(test_lod_light_selection);
     return UNITY_END();
 }

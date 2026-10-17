@@ -65,9 +65,34 @@ def main():
               "high draws distant sky cards: %s" % high_visual.get("distantCards"))
         check(high_visual.get("shafts", 0) > 0,
               "high draws light shaft cards: %s" % high_visual.get("shafts"))
+        check(high_visual.get("postPasses", 0) > 0, "final screen composite runs")
+        check(high_visual.get("postBloom", 0) > 0, "post bloom-lite active")
+        check(high_visual.get("postReflection", 0) > 0, "post reflection-lite active")
+        check(high_visual.get("postHeat", 0) > 0, "post heat distortion active")
         check(changed(medium, high) > 0.004,
               "high weather/distant cards change pixels: %.2f%%" % (100.0 * changed(medium, high)))
 
+        a.eval('world.post.enable("bloom", true);world.post.set("bloom", {strength: 1.0})')
+        a.step(2)
+        bloom_on = pixels(a, "bloom_on")
+        check(changed(high, bloom_on) > 0.002,
+              "authored bloom strength changes the final frame: %.2f%%" % (100.0 * changed(high, bloom_on)))
+        a.eval('world.post.reset()')
+        a.step(1)
+        decal_base = pixels(a, "decal_base")
+        a.eval('world.material("paint",{albedo:"demos/re2d_world_renderer_lab/panel.png",'
+               'emissive:"demos/re2d_world_renderer_lab/panel_e.png"});'
+               'world.surface(2).material("paint");'
+               'world.decal({surface:2,material:"paint",u:100,v:30,width:40,height:40,life:2,'
+               'rotation:0.6,scale:1.6,fadeIn:0.5,fadeOut:0.5})')
+        a.step(1)
+        decal_on = pixels(a, "decal2")
+        decal_visual = (info(a).get("visual") or {})
+        check(decal_visual.get("decals2", 0) > 0,
+              "decals 2.0 authored decal is drawn: %s" % decal_visual.get("decals2"))
+        check(changed(decal_base, decal_on) > 0.0005,
+              "decals 2.0 rotation/scale/fade changes pixels: %.2f%%" % (100.0 * changed(decal_base, decal_on)))
+        a.step(3)
         a.eval('world.qualityPreset("low")')
         a.step(3)
         low = pixels(a, "low")

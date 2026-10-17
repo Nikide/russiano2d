@@ -177,6 +177,7 @@ bool r2d_world_render_preset(int quality, R2DWorldRenderFeatures *out)
         out->sun_glow = 0.18f;
         out->shaft_budget = 6;
         out->shaft_opacity = 0.22f;
+        out->reflection_lite = true;
         out->weather_layers = true;
         out->sky_profile = 1; // R2D_SKY_PROFILE_DUSK
         out->weather_type = 4; // R2D_SKY_WEATHER_CLOUDS
@@ -194,6 +195,7 @@ bool r2d_world_render_preset(int quality, R2DWorldRenderFeatures *out)
         out->sun_glow = 0.24f;
         out->shaft_budget = 8;
         out->shaft_opacity = 0.26f;
+        out->reflection_lite = true;
         out->weather_layers = true;
         out->sky_profile = 3; // R2D_SKY_PROFILE_STORM
         out->weather_type = 1; // R2D_SKY_WEATHER_RAIN
