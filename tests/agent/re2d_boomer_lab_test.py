@@ -209,6 +209,14 @@ def main():
               f"частицы видны и на GPU-кадре (красных пикселей {red_pixels(gshot)})")
         a.eval("boomerLab.particlesClear()")
 
+        fx = a.eval("JSON.stringify(boomerLab.fxProbe())")
+        check(fx is not None and '"particles":90' in fx and '"alive":90' in fx,
+              f"world.fxSpawn собрал particles+light bundle: {fx}")
+        a.step(3)
+        fxshot = a.screenshot(os.path.join(SHOTS, "re2d_boomer_lab_fx.png"))
+        check(red_pixels(fxshot) > 150, f"VFX bundle виден на кадре (красных {red_pixels(fxshot)})")
+        a.eval("boomerLab.particlesClear()")
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 

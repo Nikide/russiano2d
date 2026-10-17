@@ -740,6 +740,63 @@ function rendererWorldWrapper($, native) {
         clear() { native.particlesClear(); return world; },
     };
 
+    // P1 VFX bundles: asset-driven bundles over particles/light/decal/sound/
+    // screen juice. Engine helper only; gameplay decides when to spawn one.
+    const fxBundles = new Map();
+    world.fxDefine = (name, bundle) => {
+        if (typeof name !== 'string' || !name) throw new TypeError('world.fxDefine: bundle name required');
+        if (!bundle || typeof bundle !== 'object') throw new TypeError('world.fxDefine: bundle object required');
+        fxBundles.set(name, bundle);
+        return world;
+    };
+    world.fxSpawn = (name, at = {}) => {
+        const bundle = fxBundles.get(name);
+        if (!bundle) throw new RangeError(`world.fxSpawn: unknown bundle '${name}'`);
+        const x = Number(at.x ?? 0), y = Number(at.y ?? 0), h = Number(at.h ?? 0);
+        const dirX = Number(at.dx ?? 0), dirY = Number(at.dy ?? 0), dirH = Number(at.dz ?? 0);
+        const spawned = { particles: 0, light: false, decal: false, sound: false, shake: 0 };
+        for (const preset of bundle.particles || []) {
+            const count = Math.max(0, Math.trunc(Number(preset.count ?? 1)));
+            if (!count) continue;
+            spawned.particles += world.particles.burst({
+                ...preset, x, y, h, count,
+                dirX: preset.dirX ?? dirX, dirY: preset.dirY ?? dirY, dirH: preset.dirH ?? dirH,
+                seed: preset.seed ?? at.seed ?? 0,
+            }) || 0;
+        }
+        if (bundle.light) {
+            const l = bundle.light;
+            const light = world.light({ x, y, h, radius: l.radius ?? 200, intensity: l.intensity ?? 2,
+                color: l.color ?? '#ffffff', shadow: !!l.shadow });
+            if (l.life) light.life(Number(l.life));
+            spawned.light = true;
+        }
+        if (bundle.decal) {
+            const hit = world.trace({ from: { x, y, h }, to: { x: x + dirX, y: y + dirY, h: h + dirH },
+                mask: ['world'] });
+            if (hit && hit.type === 1) {
+                const d = bundle.decal;
+                world.decal({ surface: hit.surface, material: d.material ?? 0,
+                    u: d.u ?? 0, v: d.v ?? 0, width: d.width ?? 16, height: d.height ?? 16,
+                    life: d.life ?? 0 });
+                spawned.decal = true;
+            }
+        }
+        if (bundle.sound && $.sound && typeof $.sound.play === 'function') {
+            try { $.sound.play(bundle.sound, { volume: at.volume ?? 1 }); spawned.sound = true; } catch (error) { /* optional */ }
+        }
+        if (bundle.shake) {
+            spawned.shake = Number(bundle.shake);
+            const fx = $.vfx || $.fx;
+            if (fx && typeof fx.shake === 'function') fx.shake(spawned.shake);
+        }
+        if (bundle.flash) {
+            const fx = $.vfx || $.fx;
+            if (fx && typeof fx.flash === 'function') fx.flash(bundle.flash.color ?? '#ffffff', bundle.flash.ms ?? 80);
+        }
+        return spawned;
+    };
+
     // P1 automap: native XY lines + 2D transform; drawing stays with the game.
     world.automapLines = states => native.automapLines(states);
     world.automapProject = (view, x, y) => native.automapProject(

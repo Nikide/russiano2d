@@ -29,6 +29,7 @@ $.render(() => world.render(view,400,240));
 | `world.automapLines(states?)` / `automapProject(view,x,y)` | 2D automap-линии и view-трансформ |
 | `world.metadata()` / `spawns()` / `spawn(id)` | authored map metadata и типизированные spawn points |
 | `world.particles.burst/continuous/info/clear` | нативный fixed-pool частиц |
+| `world.fxDefine(name,bundle)` / `fxSpawn(name,at)` | asset-driven VFX bundle (particles/light/decal/sound/shake) |
 | `world.findSurface(name)` | имя стены/span → handle поверхности |
 | `world.controller(opts)` | нативный helper движения (sweep/slide/step/slope/jump) |
 | `world.mover(opts)` | нативный fixed-tick timeline двери/лифта/крашера/платформы |
@@ -302,6 +303,27 @@ world.particles.clear();
 Рисование: CPU reference — quads с world depth/light/fog; SDL_GPU — тот же
 actor-billboard pipeline с 1×1 white texture и tint'ом (бюджет 512 частиц на
 GPU). Нет коллизий, trails и VFX bundles в этом проходе.
+
+## VFX bundles (P1)
+
+```js
+world.fxDefine('ks23.fire', {
+  particles: [{ count: 60, life: .4, size: 18, color: '#ffd080',
+                blend: 'additive', speed: 220, spread: 90, dirH: .2 }],
+  light: { radius: 240, intensity: 3, color: '#ffb060', life: .08, shadow: false },
+  decal: { material: 0, width: 10, height: 10, life: 12 },
+  sound: 'sfx/ks23_fire.ogg', shake: .35, flash: { color: '#ffd0a0', ms: 60 },
+});
+world.fxSpawn('ks23.fire', { x, y, h, dx, dy, dz });
+// → {particles, light, decal, sound, shake}
+```
+
+Bundle — данные, а не gameplay: частицы идут в нативный пул, свет — в
+`world.light` с `life`, decal ставится по первому world-попаданию луча из
+точки удара, звук — опционально через `$.sound`, shake/flash — через `$.vfx`
+(если подсистема установлена; значения возвращаются в результате в любом
+случае). Неизвестный bundle — `RangeError`. Никакой JS-покадровой работы:
+bundle исполняется один раз в момент спавна.
 
 ## Свет, материал, изменение мира
 

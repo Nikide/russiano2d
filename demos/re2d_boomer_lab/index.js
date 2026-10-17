@@ -174,6 +174,20 @@ export default function install($) {
             player: world.spawn('player.start'), missing: world.spawn('nope'),
         }),
         particlesClear: () => world.particles.clear(),
+        fxProbe: () => {
+            world.particles.clear();
+            if (!world._fxDefined) {
+                world.fxDefine('lab.impact', {
+                    particles: [{ count: 90, life: 2.5, size: 46, color: '#ff2040', alpha: 0.8,
+                        blend: 'translucent', mode: 'billboard', speed: 0, spread: 0 }],
+                    light: { radius: 260, intensity: 2, color: '#ff7040', life: 0.5, shadow: false },
+                });
+                world._fxDefined = true;
+            }
+            const before = world.info().lights;
+            const spawned = world.fxSpawn('lab.impact', { x: 800, y: 900, h: 80, dx: 0, dy: -1 });
+            return { spawned, particles: world.particles.info(), lightsBefore: before, lightsAfter: world.info().lights };
+        },
         particleProbe: () => {
             world.particles.clear();
             const spawned = world.particles.burst({ x: 800, y: 900, h: 80, count: 80,

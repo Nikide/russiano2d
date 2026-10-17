@@ -68,6 +68,10 @@ const native = {
     moverBlock: (token, flag) => calls.moverBlock.push([token, flag]),
     automapLines: (states) => { calls.automap.push(['lines', states]); return [{ x1: 0, y1: 0, x2: 10, y2: 0, state: 1, kind: 0, index: 0 }]; },
     automapProject: (...args) => { calls.automap.push(['project', args]); return { x: 5, y: 6 }; },
+    lightCreate: (...args) => { calls.particles.push(['light', args]); return 3; },
+    lightInfo: () => ({ x: 0, y: 0, h: 0, radius: 200, intensity: 1, r: 1, g: 1, b: 1, shadow: false,
+                        remaining: 0, flickerMin: 0, flickerMax: 1, flickerRate: 1, flickerSeed: 0 }),
+    lightUpdate: () => {}, lightVisual: () => {}, lightRemove: () => {},
     particlesBurst: (proto, count, seed) => { calls.particles.push(['burst', Array.from(proto), count, seed]); return count; },
     particlesContinuous: (proto, rate, dt, seed) => { calls.particles.push(['continuous', rate, dt, seed]); return 3; },
     particlesInfo: () => ({ alive: 4, capacity: 2048, overflow: 0, drawn: 4 }),
@@ -319,6 +323,27 @@ test('world.particles описывает прототип и зовёт нати
     eq(world.particles.info().alive, 4);
     world.particles.clear();
     eq(JSON.stringify(calls.particles[calls.particles.length - 1]), '["clear"]');
+    world.dispose();
+});
+
+test('world.fxSpawn собирает bundle: particles + light + optional decal/sound', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    world.fxDefine('test.fire', {
+        particles: [{ count: 3, life: 1, size: 4, color: '#ff0000', blend: 'additive' },
+                    { count: 2, life: 2, size: 2, color: '#00ff00' }],
+        light: { radius: 120, intensity: 3, color: '#ff8040', life: 0.1, shadow: true },
+        decal: { width: 8, height: 8 },
+        shake: 0.4,
+    });
+    const spawned = world.fxSpawn('test.fire', { x: 10, y: 20, h: 30, dx: 1, dy: 0, dz: 0 });
+    eq(spawned.particles, 5);
+    eq(spawned.light, true);
+    eq(spawned.shake, 0.4);
+    eq(spawned.decal, false); // trace mock returns null
+    const records = calls.particles.filter(r => r[0] === 'burst');
+    eq(records[records.length - 2][2], 3);
+    eq(records[records.length - 1][2], 2);
+    throws(RangeError, () => world.fxSpawn('missing.bundle'), 'неизвестный bundle');
     world.dispose();
 });
 
