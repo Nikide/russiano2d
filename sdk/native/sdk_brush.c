@@ -602,13 +602,25 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
     }
     for (int i = 0; i < brush_count; i++) {
         const SdkBrushSpec *b = &brushes[i];
-        if (b->ring_count < 3 || b->ring_count > SDK_BRUSH_MAX_POINTS ||
-            !ring_convex(b->ring, b->ring_count) ||
-            !(b->top > b->bottom)) {
+        if (b->ring_count < 3 || b->ring_count > SDK_BRUSH_MAX_POINTS) {
             char message[192];
             snprintf(message, sizeof message,
-                     "brush «%s»: need a convex ring of 3..64 points and top > bottom",
-                     b->id);
+                     "brush «%s»: ring must have 3..64 points", b->id);
+            set_error(error, error_size, message);
+            return false;
+        }
+        if (!ring_convex(b->ring, b->ring_count)) {
+            char message[224];
+            snprintf(message, sizeof message,
+                     "brush «%s»: concave footprint rejected (convex rings only; "
+                     "split it into convex brushes)", b->id);
+            set_error(error, error_size, message);
+            return false;
+        }
+        if (!(b->top > b->bottom)) {
+            char message[192];
+            snprintf(message, sizeof message,
+                     "brush «%s»: need top > bottom", b->id);
             set_error(error, error_size, message);
             return false;
         }
@@ -1041,6 +1053,7 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
                 barrier.x2 = portal.bx; barrier.y2 = portal.by;
                 barrier.bottom = openings[0].bottom;
                 barrier.top = openings[opening_count - 1].top;
+                copy_text(barrier.color, sizeof barrier.color, bounds->side_color);
                 barrier.flags = (uint16_t)R2D_WALL_TOOL_HINT;
                 if (!push_wall(out, &caps, &barrier)) goto oom;
                 hint_barrier_count++;
@@ -1230,4 +1243,139 @@ int sdk_brush_map_entities(const SdkBrushSpec *brushes, int brush_count,
         }
     }
     return entity_count;
+}
+
+// ---- Editor-level vertex move / split ------------------------------------
+
+static bool brush_ring_is_valid(const SdkBrushSpec *brush, char *error, size_t error_size)
+{
+    if (brush->ring_count < 3 || brush->ring_count > SDK_BRUSH_MAX_POINTS) {
+        set_error(error, error_size, "brush ring must have 3..64 vertices");
+        return false;
+    }
+    if (!ring_convex(brush->ring, brush->ring_count)) {
+        set_error(error, error_size,
+                  "concave footprint rejected: split it into convex brushes");
+        return false;
+    }
+    R2DWorldPoint ring[SDK_BRUSH_MAX_POINTS];
+    for (int i = 0; i < brush->ring_count; i++) {
+        ring[i].x = brush->ring[i].x;
+        ring[i].y = brush->ring[i].y;
+    }
+    char poly_error[128] = {0};
+    if (!r2d_world_polygon_valid(ring, brush->ring_count, poly_error,
+                                 sizeof poly_error)) {
+        set_error(error, error_size, poly_error);
+        return false;
+    }
+    if (!(brush->top > brush->bottom)) {
+        set_error(error, error_size, "top must be greater than bottom");
+        return false;
+    }
+    return true;
+}
+
+bool sdk_brush_move_vertex(SdkBrushSpec *brush, int vertex, float x, float y,
+                           char *error, size_t error_size)
+{
+    if (error && error_size) error[0] = 0;
+    if (!brush || vertex < 0 || vertex >= brush->ring_count ||
+        !isfinite(x) || !isfinite(y)) {
+        set_error(error, error_size, "move vertex: invalid brush/vertex/coordinate");
+        return false;
+    }
+    SdkBrushSpec candidate = *brush;
+    candidate.ring[vertex] = (SdkBrushPoint){x, y};
+    if (!brush_ring_is_valid(&candidate, error, error_size)) return false;
+    for (int h = 0; h < candidate.hole_count; h++) {
+        if (!hole_valid(&candidate.holes[h], candidate.ring, candidate.ring_count)) {
+            char message[160];
+            snprintf(message, sizeof message,
+                     "move vertex: hole %d would leave the footprint", h);
+            set_error(error, error_size, message);
+            return false;
+        }
+    }
+    *brush = candidate;
+    return true;
+}
+
+static int clip_half_plane(const SdkBrushPoint *ring, int count, int axis,
+                           float coord, bool keep_low, SdkBrushPoint *out)
+{
+    int written = 0;
+    for (int i = 0; i < count; i++) {
+        const SdkBrushPoint *a = &ring[i];
+        const SdkBrushPoint *b = &ring[(i + 1) % count];
+        const float da = (axis ? a->y : a->x) - coord;
+        const float db = (axis ? b->y : b->x) - coord;
+        const bool a_in = keep_low ? da <= BRUSH_EPS : da >= -BRUSH_EPS;
+        const bool b_in = keep_low ? db <= BRUSH_EPS : db >= -BRUSH_EPS;
+        if (written >= SDK_BRUSH_MAX_POINTS) return -1;
+        if (a_in) out[written++] = *a;
+        if (a_in != b_in) {
+            const float denom = da - db;
+            const float t = fabsf(denom) > BRUSH_EPS ? da / denom : 0.0f;
+            if (written >= SDK_BRUSH_MAX_POINTS) return -1;
+            out[written++] = (SdkBrushPoint){
+                a->x + t * (b->x - a->x),
+                a->y + t * (b->y - a->y)
+            };
+        }
+    }
+    return written;
+}
+
+int sdk_brush_split_axis(const SdkBrushSpec *brush, int axis, float coord,
+                         SdkBrushSpec out[2], char *error, size_t error_size)
+{
+    if (error && error_size) error[0] = 0;
+    if (!brush || !out || (axis != 0 && axis != 1) || !isfinite(coord)) {
+        set_error(error, error_size, "split: invalid brush/axis/coordinate");
+        return 0;
+    }
+    if (brush->hole_count > 0) {
+        set_error(error, error_size, "split: holes are not supported on split input");
+        return 0;
+    }
+    if (!brush_ring_is_valid(brush, error, error_size)) return 0;
+    float lo = INFINITY, hi = -INFINITY;
+    for (int i = 0; i < brush->ring_count; i++) {
+        const float value = axis ? brush->ring[i].y : brush->ring[i].x;
+        lo = fminf(lo, value);
+        hi = fmaxf(hi, value);
+    }
+    if (coord <= lo + BRUSH_EPS || coord >= hi - BRUSH_EPS) {
+        set_error(error, error_size, "split: plane is outside the footprint");
+        return 0;
+    }
+
+    SdkBrushPoint low[SDK_BRUSH_MAX_POINTS], high[SDK_BRUSH_MAX_POINTS];
+    const int low_count = clip_half_plane(brush->ring, brush->ring_count, axis,
+                                          coord, true, low);
+    const int high_count = clip_half_plane(brush->ring, brush->ring_count, axis,
+                                           coord, false, high);
+    if (low_count < 3 || high_count < 3) {
+        set_error(error, error_size, "split: one side is degenerate");
+        return 0;
+    }
+
+    SdkBrushSpec parts[2] = {*brush, *brush};
+    parts[0].ring_count = low_count;
+    parts[1].ring_count = high_count;
+    parts[0].hole_count = parts[1].hole_count = 0;
+    memset(parts[0].ring, 0, sizeof parts[0].ring);
+    memset(parts[1].ring, 0, sizeof parts[1].ring);
+    memcpy(parts[0].ring, low, (size_t)low_count * sizeof low[0]);
+    memcpy(parts[1].ring, high, (size_t)high_count * sizeof high[0]);
+    snprintf(parts[0].id, sizeof parts[0].id, "%s#a", brush->id);
+    snprintf(parts[1].id, sizeof parts[1].id, "%s#b", brush->id);
+    if (!brush_ring_is_valid(&parts[0], error, error_size) ||
+        !brush_ring_is_valid(&parts[1], error, error_size)) {
+        return 0;
+    }
+    out[0] = parts[0];
+    out[1] = parts[1];
+    return 2;
 }

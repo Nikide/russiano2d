@@ -155,3 +155,49 @@
 
 ## Wave 4 — CPU/GPU parity fixed
 - task-13 particle-core: 6 failures fixed without weakening tests: (1) shadow cache now stays in world coordinates and the fragment shader adds renderOrigin (3 shadow failures); (2) translucent/additive pipelines reset depth compare to LESS_OR_EQUAL after mirror/overdraw (3 transparency/decal failures). `re2d_world_renderer_test` 55/55; renderer/dust2/P4/visual/VFX agent suites green; native 158/158; ci/docs green.
+
+## task-17 — roadmap coverage audit + acceptance checker (trigger-core, no commit)
+
+Tools:
+- `tools/roadmap_coverage.py --check|--json|--write`: 0..153 matrix, evidence
+  groups, mandatory red count, TODO/stub source audit, docs generator.
+- `docs/ROADMAP_COVERAGE.md`: full 154-section matrix + VN/R/P0..P5 map +
+  DoD 146–148 evidence + prioritized red gaps + acceptance snapshot.
+- `tests/agent/roadmap_acceptance_test.py`: asserts 154 ids, no done-without-
+  evidence, known open areas not marked done, docs matrix complete.
+
+Final audit snapshot (after task-15/18/19/20 integrated):
+- build PASS; r2d_check **163/163**, 13.35 s; ci_verify PASS; site build PASS;
+  doc_claims/doc_coverage/api_docs_sync/api_freeze/site_prune PASS.
+- coverage: 154/154 mapped; done 121, partial 16, deferred 1, policy 11, meta 5;
+  **16 mandatory red gaps**; **0 literal TODO/stub/simulated markers** in the
+  audited modules.
+- agent acceptance subset (`tools/run_tests.py` with 15 named acceptance tests):
+  **15/15 ok, 0 fail, 0 skip, 65.4 s** — renderer, dust2, huge-world,
+  render P4/post/visual, VFX pack/pass, budget, batching, BASHNYA theme, VN
+  validation, DevTools pick/render, roadmap acceptance. Full `tools/run_tests.py`
+  was stopped after it wedged on `audio_hrtf_test`; that is recorded as an
+  environmental timeout, not claimed green.
+- render regression references were refreshed after visual review of the final
+  frame; re-run is 0.0000% on both labs.
+- BASHNYA packaged runtime `repro_engine_limits.py`: exit 0 but `large_save`
+  returns `InternalError: state serialization failed`; the same script pointed
+  at `build/russiano2d` succeeds with 4097 spans. `play_slice.py`: `FINAL
+  complete` (key/MAP2/seal/checkpoint/boss victory).
+- Stale test fixed during audit: `tests/agent/devtools_pick_test.py` expected
+  five inspector sections; task-9 added Narrative, so it now asserts six and
+  checks the Narrative tab.
+
+DoD 146–148:
+- **146 VN — done**: custom RML/font/layout (`ui/dialog/bashnya.*`), choices,
+  keyboard/gamepad, skip/auto/backlog/save, timeline/cutscene share `$.dialog`,
+  no story-owned UI; pixel agent test green.
+- **147 Render P0 — partial**: feature/counter/regression evidence exists, but
+  `demos/re2d_visual_lab` is still absent, no stored BASHNYA BEFORE/AFTER
+  comparison, and the render-lab fallback reference is stale after wave 3/4.
+- **148 Huge world — partial**: regions/PVS/payload stream/LOD/impostors and
+  region-origin rendering pass the huge-world agent; renderer cost vs total map
+  size and AI/gameplay at a streaming boundary are not measured in-repo.
+
+Prioritized red list (16): 90, 93, 96, 103, 104, 117, 126, 127, 128, 131,
+136, 137, 141, 144, 147, 148.

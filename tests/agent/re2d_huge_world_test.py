@@ -68,7 +68,46 @@ def main():
               f"vis cluster PVS edges: {native.get('clusterEdges')}")
         check(native.get("regionActive", 0) >= 1, "active region ring present")
         check(native.get("regionPreload", 0) >= 1, "preload region ring present")
+        # Task-15 true payload residency: per-region index packets (cells/walls/
+        # spans/surfaces/materials/nav) are really loaded and unloaded with a
+        # per-tick byte budget, while master arrays stay the query fallback.
+        check(native.get("streamIoPayloads", 0) == native.get("regionCount", 0) * 6,
+              f"one payload per region/kind registered: {native.get('streamIoPayloads')}")
+        check(native.get("streamIoResidentPayloads", 0) >= 6,
+              f"active region payloads resident: {native.get('streamIoResidentPayloads')}")
+        check(native.get("streamIoResidentBytes", 0) > 0,
+              f"real payload bytes resident: {native.get('streamIoResidentBytes')}")
+        check(native.get("streamIoLoads", 0) >= 6,
+              f"payload loads completed: {native.get('streamIoLoads')}")
+        budget_bytes = native.get("streamIoLoadBudgetBytes", 0)
+        check(budget_bytes > 0 and native.get("streamIoMaxTickBytes", 0) <= budget_bytes,
+              f"no IO tick exceeded the load budget ({native.get('streamIoMaxTickBytes')} <= {budget_bytes})")
+        before_io = snapshot(a).get("native") or {}
+        a.eval("re2dOpenWorld.teleport(1664, 1920)")
+        a.step(8)
+        after_io = snapshot(a).get("native") or {}
+        check(after_io.get("streamIoUnloads", 0) > before_io.get("streamIoUnloads", 0),
+              f"region payloads were unloaded on crossing: {after_io.get('streamIoUnloads')}")
+        check(after_io.get("streamIoResidentPayloads", 0) < before_io.get("streamIoResidentPayloads", 0),
+              "resident payload count dropped after leaving the old ring")
+        check(after_io.get("streamIoResidentPayloads", 0) >= 6,
+              "destination region payloads are resident")
+        a.eval("re2dOpenWorld.teleport(384, 128)")
+        a.step(8)
+        restored_io = snapshot(a).get("native") or {}
+        check(restored_io.get("streamIoLoads", 0) > after_io.get("streamIoLoads", 0),
+              "returning to the region reloads payloads")
+        check(restored_io.get("streamIoMaxTickBytes", 0) <= budget_bytes,
+              "reload stays under the per-tick byte budget")
+        check(native.get("streamTotalUploads", 0) >= 1,
+              f"budgeted uploads were actually performed: {native.get('streamTotalUploads')}")
 
+
+        # GPU feature passes (impostors/post/LOD masks) are high-tier features
+        # after the parity fixes; switch to high before asserting their counters.
+        a.eval("re2dOpenWorld.quality(4)")
+        a.step(3)
+        native = snapshot(a).get("native") or {}
         # Task-12 GPU residency: material textures are really uploaded by the
         # SDL_GPU owner in response to stream RESIDENT transitions.
         for key in ("gpuStreamUploads", "gpuStreamUploadBytes", "gpuStreamEvictions",
@@ -195,8 +234,6 @@ def main():
                     "texturesResident", "atlasesResident"):
             check(finite(native.get(key)), f"stream counter {key} is finite: {native.get(key)}")
         check(native.get("streamResidentBytes", 0) >= 0, "resident payload bytes tracked")
-        check(native.get("streamTotalUploads", 0) >= 1,
-              f"budgeted uploads were actually performed: {native.get('streamTotalUploads')}")
 
         # LOD wiring counters: sprite/light/particle/decal/audio are computed.
         for key in ("lodHiddenActors", "lodThrottledActors", "lodHiddenAtlas",

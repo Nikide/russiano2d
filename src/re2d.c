@@ -442,6 +442,7 @@ static JSValue world_ray(JSContext *ctx,JSValueConst self,int argc,JSValueConst 
     JS_SetPropertyStr(ctx,o,"ceiling",JS_NewBool(ctx,h.ceiling));return o;
 }
 static JSValue vfx_info_object(JSContext *ctx,const R2DWorldVfxInfo *info);
+static JSValue sky_layers_array(JSContext *ctx,R2DWorldRuntime *w);
 static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w) return JS_EXCEPTION;
@@ -489,8 +490,34 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,v,"uploadBytes",(double)c->upload_bytes);
     set_num(ctx,v,"postPasses",c->post_passes);set_num(ctx,v,"postBloom",c->post_bloom);
     set_num(ctx,v,"postReflection",c->post_reflection);set_num(ctx,v,"postHeat",c->post_heat);
+    // P4 static-batch data path. Additive counters; legacy draw attribution
+    // (gpuDraws*/batchDraws*) above is untouched.
+    const R2DWorldBatchStats *batch=r2d_world_batch_stats(w);
+    set_num(ctx,v,"staticBatchGroups",batch?batch->groups:0);
+    set_num(ctx,v,"staticBatchInstances",batch?batch->instances:0);
+    set_num(ctx,v,"staticBatchSavedBinds",batch?batch->saved_binds:0);
+    set_num(ctx,v,"staticBatchSurfaces",batch?batch->surfaces:0);
+    set_num(ctx,v,"staticBatchActors",batch?batch->actors:0);
+    set_num(ctx,v,"staticBatchSkies",batch?batch->skies:0);
+    set_num(ctx,v,"staticBatchOverflow",batch?batch->overflow:0);
     set_num(ctx,v,"renderTime",w->render_time);
     JS_SetPropertyStr(ctx,o,"visual",v);
+    {
+        JSValue sky=JS_NewObject(ctx);
+        const R2DWorldSky *cfg=r2d_world_runtime_sky_config(w);
+        set_num(ctx,sky,"count",r2d_world_runtime_sky_layer_count(w));
+        JS_SetPropertyStr(ctx,sky,"error",JS_NewString(ctx,r2d_world_runtime_sky_layer_error(w)));
+        JS_SetPropertyStr(ctx,sky,"layers",sky_layers_array(ctx,w));
+        JS_SetPropertyStr(ctx,sky,"sun",JS_NewString(ctx,cfg?cfg->sun_texture:""));
+        JS_SetPropertyStr(ctx,sky,"moon",JS_NewString(ctx,cfg?cfg->moon_texture:""));
+        JSValue weather=JS_NewObject(ctx);
+        if(cfg){
+            const char *names[5]={"none","rain","snow","ash","clouds"};
+            for(int i=1;i<5;i++)JS_SetPropertyStr(ctx,weather,names[i],JS_NewString(ctx,cfg->weather_texture[i]));
+        }
+        JS_SetPropertyStr(ctx,sky,"weather",weather);
+        JS_SetPropertyStr(ctx,o,"sky",sky);
+    }
     JS_SetPropertyStr(ctx,o,"gpuWait",JS_NewBool(ctx,w->gpu_wait));
     JS_SetPropertyStr(ctx,o,"bakedLighting",JS_NewBool(ctx,w->world.baked_lighting));
     JS_SetPropertyStr(ctx,o,"bakedTopology",JS_NewBool(ctx,w->world.baked_topology));
@@ -576,6 +603,22 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"hintWalls",w->hint_wall_count);
     set_num(ctx,o,"skipWalls",w->skip_wall_count);
     set_num(ctx,o,"occluderWalls",w->occluder_wall_count);
+    // Task-15: true region payload residency. Master world arrays stay as the
+    // query fallback; these counters describe the heap payload packets.
+    set_num(ctx,o,"streamIoPayloads",w->stream_io_ready?w->stream_io.count:0);
+    set_num(ctx,o,"streamIoResidentPayloads",w->stream_io_ready?w->stream_io_stats.resident:0);
+    set_num(ctx,o,"streamIoLoadingPayloads",w->stream_io_ready?w->stream_io_stats.loading:0);
+    set_num(ctx,o,"streamIoQueuedLoad",w->stream_io_ready?w->stream_io_stats.queued_load:0);
+    set_num(ctx,o,"streamIoQueuedUnload",w->stream_io_ready?w->stream_io_stats.queued_unload:0);
+    set_num(ctx,o,"streamIoResidentBytes",w->stream_io_ready?(double)w->stream_io_stats.resident_bytes:0);
+    set_num(ctx,o,"streamIoMaxTickBytes",w->stream_io_ready?(double)w->stream_io_peak_tick_bytes:0);
+    set_num(ctx,o,"streamIoLoadBytes",w->stream_io_ready?(double)w->stream_io_stats.bytes_loaded:0);
+    set_num(ctx,o,"streamIoUnloadBytes",w->stream_io_ready?(double)w->stream_io_stats.bytes_unloaded:0);
+    set_num(ctx,o,"streamIoLoads",(double)w->stream_io_loads_total);
+    set_num(ctx,o,"streamIoUnloads",(double)w->stream_io_unloads_total);
+    set_num(ctx,o,"streamIoTotalBytes",(double)w->stream_io_bytes_total);
+    set_num(ctx,o,"streamIoLoadBudgetBytes",w->stream_io_ready?(double)w->stream_io_budget.load_budget_bytes:0);
+    set_num(ctx,o,"streamIoUnloadBudgetBytes",w->stream_io_ready?(double)w->stream_io_budget.unload_budget_bytes:0);
     if(regions){
         JSValue ro=JS_NewObject(ctx);
         set_num(ctx,ro,"count",regions->region_count);set_num(ctx,ro,"columns",regions->columns);set_num(ctx,ro,"rows",regions->rows);
@@ -589,6 +632,11 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
         set_num(ctx,ro,"impostors",w->visible_impostor_count);
         set_num(ctx,ro,"streamUploads",w->stream_stats.uploads);
         set_num(ctx,ro,"streamEvictions",w->stream_stats.evicted);
+        set_num(ctx,ro,"payloads",w->stream_io_ready?w->stream_io.count:0);
+        set_num(ctx,ro,"payloadResident",w->stream_io_ready?w->stream_io_stats.resident:0);
+        set_num(ctx,ro,"payloadResidentBytes",w->stream_io_ready?(double)w->stream_io_stats.resident_bytes:0);
+        set_num(ctx,ro,"payloadLoads",(double)w->stream_io_loads_total);
+        set_num(ctx,ro,"payloadUnloads",(double)w->stream_io_unloads_total);
         JSValue origin=JS_NewObject(ctx);
         set_num(ctx,origin,"x",w->render_origin_x);set_num(ctx,origin,"y",w->render_origin_y);
         set_num(ctx,origin,"region",w->render_origin_region);
@@ -610,6 +658,35 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"segments",w->world.bsp.segment_count);set_num(ctx,o,"width",w->width);set_num(ctx,o,"height",w->height);
     return o;
 }
+// P4 static batching data contract for the renderer/DevTools. Returns the
+// current deterministic group/instance counters plus the packed layout the GPU
+// owner must consume; no submission happens here.
+static JSValue world_batch_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w) return JS_EXCEPTION;
+    const R2DWorldBatchStats *batch=r2d_world_batch_stats(w);
+    JSValue o=JS_NewObject(ctx);
+    set_num(ctx,o,"groups",batch?batch->groups:0);
+    set_num(ctx,o,"instances",batch?batch->instances:0);
+    set_num(ctx,o,"savedBinds",batch?batch->saved_binds:0);
+    set_num(ctx,o,"surfaces",batch?batch->surfaces:0);
+    set_num(ctx,o,"actors",batch?batch->actors:0);
+    set_num(ctx,o,"skies",batch?batch->skies:0);
+    set_num(ctx,o,"overflow",batch?batch->overflow:0);
+    set_num(ctx,o,"instanceBytes",R2D_WORLD_BATCH_INSTANCE_BYTES);
+    set_num(ctx,o,"groupBytes",(double)sizeof(R2DWorldBatchGroup));
+    set_num(ctx,o,"instanceCapacity",w->batch_instance_capacity);
+    set_num(ctx,o,"groupCapacity",w->batch_group_capacity);
+    JS_SetPropertyStr(ctx,o,"layout",JS_NewString(ctx,
+        "std430: instance=8*u32(surface,span,material,flags,tint,aux,light,atlas), 32B; group=6*u32(material,blend,lightPolicy,atlas,first,count); "
+        "instances sorted by group key; group.first/count index instances"));
+    JS_SetPropertyStr(ctx,o,"contract",JS_NewString(ctx,
+        "GPU owner: upload instances as one SSBO, groups as a second SSBO; "
+        "draw groups in ascending group index, instance index = group.first + i. "
+        "No draw submission or buffer allocation is performed by this data path."));
+    return o;
+}
+
 static JSValue world_frame(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float dims[2];if(!w||!world_numbers(ctx,argc,argv,2,dims)) return JS_EXCEPTION;
@@ -1886,6 +1963,58 @@ static JSValue world_sky_set(JSContext *ctx,JSValueConst self,int argc,JSValueCo
     float p[2]={0,0};if(argc>=4&&!world_numbers(ctx,2,argv+2,2,p)){JS_FreeCString(ctx,path);return JS_EXCEPTION;}if(p[1]<-16||p[1]>16){JS_FreeCString(ctx,path);return JS_ThrowRangeError(ctx,"Re2D World: sky exposure -16..16 EV");}
     bool ok=r2d_world_runtime_sky(ctx,w,path,color,p[0],p[1]);JS_FreeCString(ctx,path);return ok?JS_UNDEFINED:JS_EXCEPTION;
 }
+static JSValue sky_layers_array(JSContext *ctx,R2DWorldRuntime *w)
+{
+    JSValue arr=JS_NewArray(ctx);
+    const R2DWorldSky *cfg=r2d_world_runtime_sky_config(w);
+    int count=cfg?cfg->layer_count:0;
+    for(int i=0;i<count;i++){
+        JSValue o=JS_NewObject(ctx);
+        set_num(ctx,o,"index",i);
+        JS_SetPropertyStr(ctx,o,"id",JS_NewString(ctx,cfg->layers[i].id));
+        JS_SetPropertyStr(ctx,o,"texture",JS_NewString(ctx,cfg->layers[i].texture_path));
+        set_num(ctx,o,"tint",(double)cfg->layers[i].tint);
+        set_num(ctx,o,"parallax",cfg->layers[i].parallax);
+        set_num(ctx,o,"scale",cfg->layers[i].scale);
+        set_num(ctx,o,"offset",cfg->layers[i].offset);
+        set_num(ctx,o,"alpha",cfg->layers[i].alpha);
+        set_num(ctx,o,"scroll",cfg->layers[i].scroll);
+        int width=0,height=0;
+        const uint8_t *pixels=r2d_world_runtime_sky_layer_pixels(w,i,&width,&height);
+        JS_SetPropertyStr(ctx,o,"loaded",JS_NewBool(ctx,pixels!=NULL));
+        set_num(ctx,o,"width",width);set_num(ctx,o,"height",height);
+        JS_SetPropertyUint32(ctx,arr,(uint32_t)i,o);
+    }
+    return arr;
+}
+static JSValue world_sky_layer_set(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<9)return JS_ThrowTypeError(ctx,"Re2D World: skyLayer(index,id,texture,tint,parallax,scroll,alpha,offset,scale)");
+    int32_t index=0;if(JS_ToInt32(ctx,&index,argv[0])||index<0||index>=R2D_SKY_MAX_LAYERS)return JS_ThrowRangeError(ctx,"Re2D World: sky layer index 0..3");
+    const char *strings[2]={0};for(int i=0;i<2;i++){if(!JS_IsString(argv[1+i])){JS_ThrowTypeError(ctx,"Re2D World: sky layer id/texture must be strings");return JS_EXCEPTION;}strings[i]=JS_ToCString(ctx,argv[1+i]);if(!strings[i])return JS_EXCEPTION;}
+    uint32_t tint=0xffffffffu;float numbers[5]={0};int ok=!JS_ToUint32(ctx,&tint,argv[3]);
+    for(int i=0;i<5&&ok;i++){double v;if(JS_ToFloat64(ctx,&v,argv[4+i])||!isfinite(v))ok=0;else numbers[i]=(float)v;}
+    bool result=false;
+    if(ok)result=r2d_world_runtime_sky_layer_set(ctx,w,index,strings[0],strings[1],tint,
+        numbers[0],numbers[1],numbers[2],numbers[3],numbers[4]); // parallax,scroll,alpha,offset,scale
+    JS_FreeCString(ctx,strings[0]);JS_FreeCString(ctx,strings[1]);
+    if(!ok)return JS_ThrowRangeError(ctx,"Re2D World: sky layer parameters invalid");
+    return JS_NewBool(ctx,result);
+}
+static JSValue world_sky_layers_get(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    return sky_layers_array(ctx,w);
+}
+static JSValue world_sky_manifest(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1||!JS_IsString(argv[0]))return JS_ThrowTypeError(ctx,"Re2D World: skyManifest(path)");
+    const char *path=JS_ToCString(ctx,argv[0]);if(!path)return JS_EXCEPTION;
+    bool ok=r2d_world_runtime_sky_manifest(ctx,w,path);JS_FreeCString(ctx,path);
+    return JS_NewBool(ctx,ok);
+}
 static JSValue world_material_set(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
@@ -1959,6 +2088,7 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"ray",JS_NewCFunction(ctx,world_ray,"ray",6));
     JS_SetPropertyStr(ctx,handle,"frame",JS_NewCFunction(ctx,world_frame,"frame",4));
     JS_SetPropertyStr(ctx,handle,"info",JS_NewCFunction(ctx,world_info,"info",0));
+    JS_SetPropertyStr(ctx,handle,"batchInfo",JS_NewCFunction(ctx,world_batch_info,"batchInfo",0));
     JS_SetPropertyStr(ctx,handle,"dispose",JS_NewCFunction(ctx,world_release,"dispose",0));
     JS_SetPropertyStr(ctx,handle,"cellAt",JS_NewCFunction(ctx,world_cell_query,"cellAt",2));
     JS_SetPropertyStr(ctx,handle,"spanAt",JS_NewCFunction(ctx,world_span_query,"spanAt",3));
@@ -2094,6 +2224,9 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"decalRemove",JS_NewCFunction(ctx,world_decal_remove,"decalRemove",1));
     JS_SetPropertyStr(ctx,handle,"surfaceSky",JS_NewCFunction(ctx,world_surface_sky,"surfaceSky",2));
     JS_SetPropertyStr(ctx,handle,"sky",JS_NewCFunction(ctx,world_sky_set,"sky",4));
+    JS_SetPropertyStr(ctx,handle,"skyLayer",JS_NewCFunction(ctx,world_sky_layer_set,"skyLayer",9));
+    JS_SetPropertyStr(ctx,handle,"skyLayers",JS_NewCFunction(ctx,world_sky_layers_get,"skyLayers",0));
+    JS_SetPropertyStr(ctx,handle,"skyManifest",JS_NewCFunction(ctx,world_sky_manifest,"skyManifest",1));
     JS_SetPropertyStr(ctx,handle,"surfaceMaterial",JS_NewCFunction(ctx,world_surface_material_set,"surfaceMaterial",2));
     JS_SetPropertyStr(ctx,handle,"lightVisual",JS_NewCFunction(ctx,world_light_visual_config,"lightVisual",6));
     JS_SetPropertyStr(ctx,handle,"lightAt",JS_NewCFunction(ctx,world_light_at,"lightAt",3));

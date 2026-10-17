@@ -438,6 +438,127 @@ static void test_tool_policy_stats(void)
     sdk_brush_output_free(&out);
 }
 
+
+static void test_csg_polygon_and_multiple_subtracts(void)
+{
+    SdkBrushSpec brushes[4];
+    brushes[0] = make_rect("base", 64, 32, 128, 64, 0, 64, SDK_BRUSH_TOOL_NONE);
+    // Polygon subtract (diamond) and two overlapping rect subtracts.
+    brushes[1] = make_rect("cut.diamond", 80, 40, 32, 32, 16, 48, SDK_BRUSH_TOOL_NONE);
+    brushes[1].subtract = true;
+    brushes[1].ring_count = 4;
+    brushes[1].ring[0] = (SdkBrushPoint){96, 40};
+    brushes[1].ring[1] = (SdkBrushPoint){112, 56};
+    brushes[1].ring[2] = (SdkBrushPoint){96, 72};
+    brushes[1].ring[3] = (SdkBrushPoint){80, 56};
+    brushes[2] = make_rect("cut.a", 120, 40, 32, 32, 16, 48, SDK_BRUSH_TOOL_NONE);
+    brushes[2].subtract = true;
+    brushes[3] = make_rect("cut.b", 136, 40, 32, 32, 16, 48, SDK_BRUSH_TOOL_NONE);
+    brushes[3].subtract = true;
+    SdkBrushBounds bounds = make_bounds();
+    SdkBrushOutput out;
+    SdkBrushStats stats;
+    char error[256] = {0};
+
+    TEST_ASSERT_TRUE_MESSAGE(sdk_brush_compile(brushes, 4, &bounds, &out, &stats,
+                                               error, sizeof error), error);
+    TEST_ASSERT_EQUAL_INT(3, stats.subtract_brushes);
+    TEST_ASSERT_EQUAL_INT(1, stats.polygon_brushes);
+    bool diamond_cut = false, overlap_cut = false;
+    for (int i = 0; i < out.cell_count; i++) {
+        const SdkBrushCell *cell = &out.cells[i];
+        const float cx = cell->x + cell->w * 0.5f;
+        const float cy = cell->y + cell->h * 0.5f;
+        if (cx > 84.0f && cx < 108.0f && cy > 48.0f && cy < 64.0f) {
+            diamond_cut = true;
+            TEST_ASSERT_GREATER_OR_EQUAL_INT(1, cell->span_count);
+            TEST_ASSERT_FLOAT_WITHIN(1e-3f, 16.0f,
+                out.spans[cell->first_span].bottom);
+        }
+        if (cx > 136.0f && cx < 160.0f && cy > 48.0f && cy < 64.0f) {
+            overlap_cut = true;
+            TEST_ASSERT_GREATER_OR_EQUAL_INT(1, cell->span_count);
+            TEST_ASSERT_FLOAT_WITHIN(1e-3f, 16.0f,
+                out.spans[cell->first_span].bottom);
+        }
+    }
+    TEST_ASSERT_TRUE(diamond_cut);
+    TEST_ASSERT_TRUE(overlap_cut);
+    sdk_brush_output_free(&out);
+}
+
+static void test_vertex_move_and_split(void)
+{
+    SdkBrushSpec brush = make_rect("quad", 0, 0, 64, 32, 0, 64, SDK_BRUSH_TOOL_NONE);
+    char error[256] = {0};
+
+    // Move one rectangle vertex: valid convex trapezoid.
+    TEST_ASSERT_TRUE(sdk_brush_move_vertex(&brush, 1, 48, 0, error, sizeof error));
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 48.0f, brush.ring[1].x);
+    TEST_ASSERT_TRUE(brush.ring_count == 4);
+
+    // Moving a vertex so the ring becomes concave is rejected with a reason.
+    SdkBrushSpec concave = make_rect("bad", 0, 0, 64, 32, 0, 64, SDK_BRUSH_TOOL_NONE);
+    TEST_ASSERT_FALSE(sdk_brush_move_vertex(&concave, 1, 24, 16, error, sizeof error));
+    TEST_ASSERT_NOT_NULL(strstr(error, "concave"));
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 64.0f, concave.ring[1].x);
+
+    // Hole must stay inside after a vertex move.
+    SdkBrushSpec hole = make_rect("hole", 0, 0, 64, 64, 0, 64, SDK_BRUSH_TOOL_NONE);
+    hole.hole_count = 1;
+    hole.holes[0] = (SdkBrushHole){8, 8, 16, 16};
+    TEST_ASSERT_FALSE(sdk_brush_move_vertex(&hole, 0, 32, 32, error, sizeof error));
+    TEST_ASSERT_NOT_NULL(strstr(error, "hole"));
+
+    // Axis split -> two convex brushes with deterministic ids and geometry.
+    SdkBrushSpec parts[2];
+    TEST_ASSERT_EQUAL_INT(2, sdk_brush_split_axis(&brush, 0, 24, parts, error, sizeof error));
+    TEST_ASSERT_EQUAL_STRING("quad#a", parts[0].id);
+    TEST_ASSERT_EQUAL_STRING("quad#b", parts[1].id);
+    TEST_ASSERT_TRUE(parts[0].ring_count >= 3 && parts[1].ring_count >= 3);
+    float lo = INFINITY, hi = -INFINITY;
+    for (int i = 0; i < parts[0].ring_count; i++) lo = fminf(lo, parts[0].ring[i].x);
+    for (int i = 0; i < parts[1].ring_count; i++) hi = fmaxf(hi, parts[1].ring[i].x);
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 0.0f, lo);
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 64.0f, hi);
+    TEST_ASSERT_FALSE(sdk_brush_split_axis(&brush, 0, 0, parts, error, sizeof error));
+    TEST_ASSERT_NOT_NULL(strstr(error, "outside"));
+    SdkBrushSpec holed = make_rect("holed", 0, 0, 64, 64, 0, 64, SDK_BRUSH_TOOL_NONE);
+    holed.hole_count = 1;
+    holed.holes[0] = (SdkBrushHole){8, 8, 16, 16};
+    TEST_ASSERT_EQUAL_INT(0, sdk_brush_split_axis(&holed, 0, 32, parts, error, sizeof error));
+    TEST_ASSERT_NOT_NULL(strstr(error, "holes"));
+}
+
+static void test_hint_barrier_marker_emitted(void)
+{
+    SdkBrushSpec brushes[3];
+    brushes[0] = make_rect("north", 100, 0, 16, 48, 0, 128, SDK_BRUSH_TOOL_NONE);
+    brushes[1] = make_rect("south", 100, 80, 16, 48, 0, 128, SDK_BRUSH_TOOL_NONE);
+    brushes[2] = make_rect("hint.gap", 100, 48, 16, 32, 0, 128,
+                           SDK_BRUSH_TOOL_HINT);
+    SdkBrushBounds bounds = make_bounds();
+    SdkBrushOutput out;
+    SdkBrushStats stats;
+    char error[256] = {0};
+    TEST_ASSERT_TRUE_MESSAGE(sdk_brush_compile(brushes, 3, &bounds, &out, &stats,
+                                               error, sizeof error), error);
+    TEST_ASSERT_GREATER_THAN(0, stats.hint_barriers);
+    TEST_ASSERT_GREATER_THAN(0, stats.hint_edges);
+    int markers = 0;
+    for (int i = 0; i < out.wall_count; i++) {
+        if (out.walls[i].flags == R2D_WALL_TOOL_HINT) {
+            markers++;
+            const float mx = (out.walls[i].x1 + out.walls[i].x2) * 0.5f;
+            const float my = (out.walls[i].y1 + out.walls[i].y2) * 0.5f;
+            TEST_ASSERT_TRUE(mx >= 100.0f - 1e-3f && mx <= 116.0f + 1e-3f);
+            TEST_ASSERT_TRUE(my >= 48.0f - 1e-3f && my <= 80.0f + 1e-3f);
+        }
+    }
+    TEST_ASSERT_EQUAL_INT(stats.hint_barriers, markers);
+    sdk_brush_output_free(&out);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -452,5 +573,8 @@ int main(void)
     RUN_TEST(test_csg_subtract_splits_solid);
     RUN_TEST(test_brush_entity_mapping);
     RUN_TEST(test_tool_policy_stats);
+    RUN_TEST(test_csg_polygon_and_multiple_subtracts);
+    RUN_TEST(test_vertex_move_and_split);
+    RUN_TEST(test_hint_barrier_marker_emitted);
     return UNITY_END();
 }

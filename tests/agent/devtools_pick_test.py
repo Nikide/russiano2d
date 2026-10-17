@@ -5,7 +5,7 @@
 # Проверяется на реальном движке:
 #   * поиск по selector/ID/tag/class/state/prefab и фильтры visible/physics/
 #     active/room — по списку $.devtools.list(), который показывает панель;
-#   * пять секций инспектора (Identity/Transform/Gameplay/Physics/Presentation)
+#   * шесть секций инспектора (Identity/Transform/Gameplay/Physics/Presentation/Narrative)
 #     — их разметка сравнивается с тем, что реально лежит в документе RmlUi;
 #   * выбор кликом по миру: подсветка bounds через $.debug.draw.rect (счётчик
 #     навешивается на сам вызов), выбор узла в F2, показ selector/source и три
@@ -139,8 +139,9 @@ def main():
         check(a.eval("$.devtools.selectBy('#hero')") == "#hero", "выбран герой")
         info = a.eval("$.devtools.inspect()")
         check(info["found"] is True and info["selector"] == "#hero", "инспектор нашёл узел")
-        check(set(info["sections"]) == {"identity", "transform", "gameplay", "physics", "presentation"},
-              "есть все пять секций §20")
+        check(set(info["sections"]) == {"identity", "transform", "gameplay", "physics",
+                                          "presentation", "narrative"},
+              "есть все шесть секций §20 + Narrative (task-9)")
         ident = section_rows(info, "identity")
         check(ident["selector"] == "#hero" and ident["nid"] and ident["uid"] == str(hero_uid),
               "Identity: selector/nid/uid")
@@ -162,9 +163,9 @@ def main():
         check(text(a, doc, "tab-identity") == info["sections"]["identity"]["html"],
               "секция Identity в панели = данные inspect()")
         check("#hero" in text(a, doc, "tab-identity"), "селектор виден в панели")
-        # В панели отрисованы все пять секций: проверяем, что каждая строка
+        # В панели отрисованы все шесть секций: проверяем, что каждая строка
         # каждой секции действительно попала в документ RmlUi.
-        for name in ["identity", "transform", "gameplay", "physics", "presentation"]:
+        for name in ["identity", "transform", "gameplay", "physics", "presentation", "narrative"]:
             body = text(a, doc, "tab-" + name)
             missing = [k for k, _ in info["sections"][name]["rows"] if (k + ": ") not in body]
             check(not missing, "секция %s отрисована полностью (нет: %s)" % (name, missing or "—"))

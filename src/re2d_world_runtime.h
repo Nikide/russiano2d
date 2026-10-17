@@ -12,8 +12,11 @@
 #include "re2d_world_save.h"
 #include "re2d_world_material_anim.h"
 #include "re2d_world_render_features.h"
+#include "re2d_world_batch.h"
+#include "re2d_world_sky.h"
 #include "re2d_world_region.h"
 #include "re2d_world_stream.h"
+#include "re2d_world_stream_io.h"
 #include "re2d_world_impostor.h"
 #include "re2d_postprocess.h"
 #include "re2d_audio_zone.h"
@@ -171,6 +174,18 @@ typedef struct R2DWorldRuntime {
     uint64_t stream_total_uploads,stream_total_upload_bytes,stream_total_evictions;
     bool stream_ready;
     int stream_asset_revision;
+    // Task-15: true per-region payload residency (index packets moved by
+    // R2DWorldStreamIO). Master world arrays remain the correctness fallback for
+    // queries/visibility/render/nav, so an unloaded region never dangles.
+    R2DWorldStreamIO stream_io;
+    bool stream_io_ready;
+    uint8_t *stream_io_required;
+    int stream_io_required_capacity;
+    R2DWorldStreamIOBudget stream_io_budget;
+    R2DWorldStreamIOStats stream_io_stats;
+    uint64_t stream_io_loads_total, stream_io_unloads_total;
+    uint64_t stream_io_bytes_total;
+    uint64_t stream_io_peak_tick_bytes;
     // Distant region impostors consumed by the renderer/JS. GPU owner draws.
     R2DWorldImpostorSet impostors;
     bool impostor_ready;
@@ -202,6 +217,16 @@ typedef struct R2DWorldRuntime {
     // uniform setup and the CPU reference grounding pass.
     R2DWorldRenderFeatures render_features;
     R2DWorldRenderCounters render_counters;
+    // P4 static batching data path (CPU grouping only; GPU consumes the packed
+    // contract from re2d_world_batch.h). Arrays are runtime-owned and grow on
+    // demand; no GPU submission lives here.
+    R2DWorldBatchItem *batch_items;
+    int batch_item_capacity;
+    R2DWorldBatchInstance *batch_instances;
+    int batch_instance_capacity;
+    R2DWorldBatchGroup *batch_groups;
+    int batch_group_capacity;
+    R2DWorldBatchStats batch_stats;
     bool render_features_ready;
     float render_time;
     // P2 final-frame postprocess stack (descriptors; JS maps to the render pass).
@@ -211,6 +236,12 @@ typedef struct R2DWorldRuntime {
     float sky_yaw_speed,sky_pulse_hz,sky_pulse_amount,sky_phase;
     uint32_t sky_tint;
     bool sky_anim_active;
+    // Per-layer sky texture data. The runtime owns decoded RGBA8 pixels; the
+    // renderer binds them through r2d_world_runtime_sky_layer_pixels().
+    R2DWorldSky sky_config;
+    struct { uint8_t *pixels; int width,height; bool loaded; } sky_layer_tex[R2D_SKY_MAX_LAYERS];
+    bool sky_layers_ready;
+    char sky_layer_error[192];
     // P1 secrets/breakables: authored semantic state, no entity system.
     R2DWorldSecret *secrets;
     int *secret_tokens;
@@ -397,6 +428,10 @@ void r2d_world_regions_frame(R2DWorldRuntime *,const R2DRe2dView *);
 bool r2d_world_render_origin(R2DWorldRuntime *,float *,float *,int *);
 // Renderer hook: nearest-first distant impostor cards collected this frame.
 const R2DWorldImpostor *r2d_world_visible_impostors(R2DWorldRuntime *,int *count);
+// P4 static batching: rebuild deterministic groups from the current visibility
+// once per frame. Pure data path; the GPU renderer may upload the arrays later.
+void r2d_world_batch_frame(R2DWorldRuntime *);
+const R2DWorldBatchStats *r2d_world_batch_stats(const R2DWorldRuntime *);
 bool r2d_world_runtime_material(JSContext *,R2DWorldRuntime *,const char *,const char *,const char *,const char *,float,float,float,int,float,bool,bool);
 bool r2d_world_runtime_sky(JSContext *,R2DWorldRuntime *,const char *,uint32_t,float,float);
 
@@ -420,3 +455,22 @@ typedef struct {
 } R2DWorldGroundCard;
 bool r2d_world_render_ground_card(R2DWorldRuntime *,const R2DRe2dView *,int width,int height,
                                   float ortho,int actor,R2DWorldGroundCard *out);
+
+// Per-layer sky textures (GPU-independent data half). The owner is the world
+// runtime; these functions never touch GPU objects. The renderer hook is:
+//   const R2DWorldSky *cfg = r2d_world_runtime_sky_config(w);
+//   for i in 0..cfg->sky_layer_count-1:
+//       const uint8_t *rgba = r2d_world_runtime_sky_layer_pixels(w,i,&px_w,&px_h);
+//       if (rgba) bind/upload as a texture; layer metadata is cfg->layers[i].
+bool r2d_world_runtime_sky_layer_set(JSContext *, R2DWorldRuntime *, int index,
+                                     const char *id, const char *texture,
+                                     uint32_t tint, float parallax, float scroll,
+                                     float alpha, float offset, float scale);
+bool r2d_world_runtime_sky_manifest(JSContext *, R2DWorldRuntime *, const char *path);
+int r2d_world_runtime_sky_layer_count(const R2DWorldRuntime *);
+const R2DWorldSky *r2d_world_runtime_sky_config(const R2DWorldRuntime *);
+const uint8_t *r2d_world_runtime_sky_layer_pixels(const R2DWorldRuntime *, int,
+                                                  int *width, int *height);
+const char *r2d_world_runtime_sky_layer_path(const R2DWorldRuntime *, int);
+const char *r2d_world_runtime_sky_layer_error(const R2DWorldRuntime *);
+void r2d_world_runtime_sky_layers_free(R2DWorldRuntime *);

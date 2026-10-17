@@ -23,7 +23,8 @@
 //   playerclip   solid; collision only (same runtime policy as clip)
 //   sky          solid; no wall surface, sky boundary flags, no shadow/acoustic
 //   occluder     non-solid visibility blocker marker (ray on, collision off)
-//   hint/skip    compiler-only, never emitted as geometry
+//   hint         emits a view-only barrier wall on every touched portal
+//   skip         compiler-only metadata, never emitted as geometry
 //   trigger      brush entity volume, never emitted as world geometry
 //   areaportal   marks generated portals on its footprint as areaportals
 //
@@ -199,6 +200,21 @@ typedef struct {
     float x, y, w, h, bottom, top;  // resolved brush volume (outer bbox)
     uint16_t flags;                 // brush wall policy bits
 } SdkBrushEntityMap;
+
+// ---- Editor-level vertex semantics ---------------------------------------
+// Moves one authored vertex, keeping the brush transactional. The result must
+// still be a valid convex ring; existing holes must remain fully inside it.
+// Returns false with a specific ASCII message for concave/degenerate results.
+bool sdk_brush_move_vertex(SdkBrushSpec *brush, int vertex, float x, float y,
+                           char *error, size_t error_size);
+
+// Splits a convex brush by an axis-aligned plane (axis 0 = X, 1 = Y) into two
+// convex brushes. `coord` must be strictly inside the brush bbox. Holes are not
+// supported on split input (returns 0). Output ids get "#a"/"#b" suffixes and
+// all colors/policy/Z fields are preserved. Returns 2 on success, 0 on invalid
+// input (error gets an ASCII reason). Splitting is deterministic.
+int sdk_brush_split_axis(const SdkBrushSpec *brush, int axis, float coord,
+                         SdkBrushSpec out[2], char *error, size_t error_size);
 
 // Resolves brush entity references against authored brushes. Returns the total
 // required map count (may exceed capacity), or -1 on invalid input/duplicate

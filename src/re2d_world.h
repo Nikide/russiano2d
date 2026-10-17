@@ -76,10 +76,18 @@ typedef struct {
     int capacity_nodes,capacity_cells,bsp_nodes_visited;
     const R2DWorldCellNode *indexed_nodes;
     uint64_t indexed_revision;
+    // Compiler hint/occluder consumer: per-cell occluder reject bitmap used by
+    // the BSP/portal traversal when an authored occluder chain exists.
+    uint8_t *cell_filter;
+    int capacity_filter_cells;
     // Hierarchical visibility counters filled by the filtered entry point:
     // cells rejected before local portal/BSP work, plus region rejections the
     // runtime already knows (0 when called directly).
     int culled_regions, culled_cells, cell_rejections;
+    // Authored hint/occluder visibility counters (0 on legacy maps).
+    int hint_markers, skip_markers, occluder_segments;
+    int hint_portals_tested, hint_portals_cut;
+    int occluder_cells_tested, occluder_cells_cut;
 } R2DWorldVisibility;
 #define R2D_WORLD_MAX_MATERIALS 64
 enum { R2D_WORLD_MASKED,R2D_WORLD_OPAQUE,R2D_WORLD_TRANSLUCENT,R2D_WORLD_ADDITIVE };
@@ -235,8 +243,16 @@ bool r2d_world_visibility(const R2DRe2dWorld *,const R2DRe2dView *,float ortho,R
 // Hierarchical variant: `cell_allowed` (one byte per cell, NULL = all) is the
 // region/vis-cluster PVS reject set. Rejected cells never enter local portal
 // traversal or BSP submission; counters land in R2DWorldVisibility.
+struct R2DWorldHintCache;
 bool r2d_world_visibility_filtered(const R2DRe2dWorld *,const R2DRe2dView *,float ortho,
                                    R2DWorldVisibility *,const uint8_t *cell_allowed);
+// Same, with an optional caller-built compiler hint/occluder cache. Passing
+// NULL is exactly the legacy path; authored hint markers cut portal view
+// traversal and authored occluder segments conservatively reject whole cells
+// before BSP/portal work. Cache must be built for the same topology revision.
+bool r2d_world_visibility_filtered_ex(const R2DRe2dWorld *,const R2DRe2dView *,float ortho,
+                                      R2DWorldVisibility *,const uint8_t *cell_allowed,
+                                      const struct R2DWorldHintCache *hints);
 
 void r2d_world_frame_visible(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,float,const R2DWorldVisibility *);
 

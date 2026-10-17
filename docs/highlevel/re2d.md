@@ -804,3 +804,10 @@ reflection-lite + depth-aware heat distortion. `world.decal({...})` приним
 совместимы). Метрики — `info.visual.postPasses/postBloom/postReflection/
 postHeat/decals2`. Ограничения (batching без SSBO, независимые sky-текстуры)
 описаны в [RE2D_RENDER_FEATURES.md](../RE2D_RENDER_FEATURES.md).
+
+Per-layer sky textures: `world.skyLayer(i,{id,texture,tint,parallax,scroll,alpha,offset,scale})`
+(0..3), `world.skyLayers()` и `world.skyManifest('assets/sky/layers.json')`.
+`world.info().sky` отдаёт `{count,error,layers[],sun,moon,weather}`; загрузка
+транзакционная — missing asset сохраняет прежний слой и пишет `error`.
+GPU-биндинг делает отдельный проход (task-13): `r2d_world_runtime_sky_config()`
++ `r2d_world_runtime_sky_layer_pixels()`.

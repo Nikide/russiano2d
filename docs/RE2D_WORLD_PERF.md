@@ -207,3 +207,23 @@ Evidence after the fixes (same build):
 - `r2d_check`: **158/158**; `ci_verify` and docs/API guards: green.
 
 Files touched: `src/re2d_world_gpu.c`, `shaders/world.frag.glsl`.
+
+## Static batching data path (P4)
+
+`src/re2d_world_batch.c/.h` builds the deterministic batch plan used by the
+renderer owner. It never submits draws; the existing `gpuDraws*` attribution is
+unchanged.
+
+Per frame the runtime rebuilds the plan from `R2DWorldVisibility`:
+
+* groups key = `(material, blend, light_policy, atlas)`;
+* group order = ascending key; ties broken deterministically by kind, surface,
+  span, aux and tint;
+* instances are packed as eight `uint32` fields (32 bytes, std430), groups as
+  six `uint32` fields;
+* counters: `groups`, `instances`, `saved_binds = instances - groups`,
+  `surfaces/actors/skies`, `overflow`.
+
+`world.batchInfo()` returns the current counters plus the GPU contract; the
+same counters are exposed in `world.info().visual.staticBatch*`. Measurement:
+`tests/agent/re2d_batch_info_test.py` on `demos/re2d_world_renderer_lab`.

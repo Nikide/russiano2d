@@ -1817,7 +1817,7 @@ static bool put_renderer_description(const World *w,R2dSb *sb,SdkReport *rep,con
     // .re2dworld for tools, streaming and diagnostics.
     if (w->brush_stats.brushes || w->region_count) {
         r2d_sb_puts(sb,",\"compiler\":{\"brushes\":");
-        r2d_sb_printf(sb,"{\"count\":%d,\"solids\":%d,\"tools\":%d,\"polygons\":%d,\"subtracts\":%d,\"holes\":%d,\"cells\":%d,\"spans\":%d,\"walls\":%d,\"portals\":%d,\"mergedCells\":%d,\"areaPortals\":%d,\"badAreaPortals\":%d,\"hints\":%d,\"uselessHints\":%d,\"occluders\":%d,\"shadowWalls\":%d,\"acousticWalls\":%d,\"occluderWalls\":%d}",
+        r2d_sb_printf(sb,"{\"count\":%d,\"solids\":%d,\"tools\":%d,\"polygons\":%d,\"subtracts\":%d,\"holes\":%d,\"cells\":%d,\"spans\":%d,\"walls\":%d,\"portals\":%d,\"mergedCells\":%d,\"areaPortals\":%d,\"badAreaPortals\":%d,\"hints\":%d,\"hintBarriers\":%d,\"uselessHints\":%d,\"occluders\":%d,\"shadowWalls\":%d,\"acousticWalls\":%d,\"occluderWalls\":%d}",
              w->brush_stats.brushes,w->brush_stats.solids,w->brush_stats.tool_brushes,
              w->brush_stats.polygon_brushes,w->brush_stats.subtract_brushes,
              w->brush_stats.hole_brushes,
@@ -1825,7 +1825,7 @@ static bool put_renderer_description(const World *w,R2dSb *sb,SdkReport *rep,con
              w->brush_stats.portals,w->brush_stats.merged_cells,
              w->brush_stats.areaportal_edges,
              w->brush_stats.areaportal_brushes>0&&w->brush_stats.areaportal_edges==0?1:0,
-             w->brush_stats.hint_brushes,
+             w->brush_stats.hint_brushes,w->brush_stats.hint_barriers,
              w->brush_stats.hint_brushes>0&&w->brush_stats.hint_edges==0?1:0,
              w->brush_stats.occluder_brushes,
              w->brush_stats.shadow_walls,w->brush_stats.acoustic_walls,
@@ -2315,13 +2315,14 @@ static int world_cmd_at(const SdkArgs *a, bool write, int positional)
     r2d_sb_printf(&out, ",\"ok\":%s,\"output\":", ok && rep.errors == 0 ? "true" : "false");
     if (outpath[0]) r2d_sb_put_json_string(&out, outpath); else r2d_sb_puts(&out, "null");
     r2d_sb_printf(&out, ",\"outputFormat\":\"%s\",\"runtimePortals\":%s", renderer?"re2dworld-v1":"legacy-compiled-json",renderer?"true":"false");
-    r2d_sb_printf(&out, ",\"stats\":{\"cells\":%d,\"walls\":%d,\"portals\":%d,\"stairs\":%d,\"slopes\":%d,\"compiledCells\":%d,\"compiledWalls\":%d,\"spans\":%d,\"stairSteps\":%d,\"slopeSegments\":%d,\"stacks\":%d,\"brushes\":%d,\"toolBrushes\":%d,\"polygonBrushes\":%d,\"subtractBrushes\":%d,\"holeBrushes\":%d,\"brushCells\":%d,\"brushWalls\":%d,\"brushPortals\":%d,\"mergedCells\":%d,\"areaPortals\":%d,\"regions\":%d,\"regionColumns\":%d,\"regionRows\":%d,\"pvsEdges\":%d,\"entities\":%d,\"pointEntities\":%d,\"brushEntities\":%d,\"brushEntityMap\":%d,\"loadMs\":%.3f,\"compileMs\":%.3f,\"regionMs\":%.3f}",
+    r2d_sb_printf(&out, ",\"stats\":{\"cells\":%d,\"walls\":%d,\"portals\":%d,\"stairs\":%d,\"slopes\":%d,\"compiledCells\":%d,\"compiledWalls\":%d,\"spans\":%d,\"stairSteps\":%d,\"slopeSegments\":%d,\"stacks\":%d,\"brushes\":%d,\"toolBrushes\":%d,\"polygonBrushes\":%d,\"subtractBrushes\":%d,\"holeBrushes\":%d,\"brushCells\":%d,\"brushWalls\":%d,\"brushPortals\":%d,\"mergedCells\":%d,\"areaPortals\":%d,\"hintBarriers\":%d,\"regions\":%d,\"regionColumns\":%d,\"regionRows\":%d,\"pvsEdges\":%d,\"entities\":%d,\"pointEntities\":%d,\"brushEntities\":%d,\"brushEntityMap\":%d,\"loadMs\":%.3f,\"compileMs\":%.3f,\"regionMs\":%.3f}",
                   w.ncell, w.nwall, w.nportal, w.nstairs, w.nslopes, w.ncc, w.ncw, spans, w.stair_steps, w.slope_segments, nstacks,
                   w.brush_stats.brushes, w.brush_stats.tool_brushes,
                   w.brush_stats.polygon_brushes, w.brush_stats.subtract_brushes,
                   w.brush_stats.hole_brushes, w.brush_stats.cells,
                   w.brush_stats.walls, w.brush_stats.portals, w.brush_stats.merged_cells,
-                  w.brush_stats.areaportal_edges, w.region_count, w.region_columns,
+                  w.brush_stats.areaportal_edges, w.brush_stats.hint_barriers,
+                  w.region_count, w.region_columns,
                   w.region_rows, w.region_pvs_edges, w.nentities, w.npoint_entities,
                   w.nbrush_entities, w.nentity_map, w.stage_load_ms, w.stage_compile_ms,
                   w.stage_region_ms);

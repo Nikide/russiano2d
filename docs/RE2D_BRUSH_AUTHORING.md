@@ -151,11 +151,33 @@ r2d-sdk world info map.re2dmap
 
 `world compile` prints a JSON report with a `stageReport`
 (`load`, `compile`, `regions` in ms), `stats` (brushes, solids, tool brushes,
-polygon/subtract/hole brushes, cells, spans, walls, portals, merged cells, area
-portals, shadow/acoustic/occluder wall counts, regions, PVS edges, entities and
-resolved brush-entity mappings) and `diagnostics`. `.re2dworld` carries an
-ignored-by-runtime `"compiler"` block with the same stats, region grid,
-`brushEntities[]` and entities.
+polygon/subtract/hole brushes, `hintBarriers`, cells, spans, walls, portals,
+merged cells, area portals, shadow/acoustic/occluder wall counts, regions, PVS
+edges, entities and resolved brush-entity mappings) and `diagnostics`.
+`.re2dworld` carries an ignored-by-runtime `"compiler"` block with the same
+stats, region grid, `brushEntities[]` and entities.
+
+## Hint / skip semantics (concrete barrier)
+
+A `hint` brush touching a generated portal emits a real barrier marker into the
+compiled/baked world: a `R2D_WALL_TOOL_HINT`-only wall exactly on the portal
+segment, with `bottom/top` equal to the touched opening span. Because no other
+policy bit is set, the marker is invisible, non-colliding and ray/light/audio
+transparent; runtime visibility cuts VIEW traversal through that portal and
+reports `hintMarkers/hintPortalsTested/hintPortalsCut` counters. Deterministic
+order follows the deterministic portal order. `hintBarriers` in the compile
+stats equals the emitted marker count; `SDK_WORLD_USELESS_HINT` fires when a
+hint brush touches no generated portal.
+
+This is a concrete portal/region barrier with measurable reduction (two cells
+through one portal: 2 visible spans/cells → 1), not a general BSP split-plane
+insertion. The all-spans/orthographic visibility fallback bypasses portal
+traversal, so hint barriers do not cull that mode. `skip` remains compiler-only metadata and never affects runtime
+visibility. Editor helper APIs provide deterministic vertex semantics:
+`sdk_brush_move_vertex()` (transactional, exact concave/hole diagnostics) and
+`sdk_brush_split_axis()` (axis-aligned split into two convex brushes). JSON v1
+does not yet encode an operation list; tools call these C helpers before writing
+the map.
 
 ## Compiler warnings
 
@@ -183,8 +205,14 @@ ignored-by-runtime `"compiler"` block with the same stats, region grid,
   Authoring tools may decompose concave rings before writing the map.
 * Holes are axis-aligned rectangles inside a positive solid. Arbitrary polygons
   with holes and hole-in-subtract are unsupported.
-* CSG is limited to axis-aligned Z subtraction of solid volumes (`subtract`).
-  There is no arbitrary 3D boolean, bevel, vertex editor or Studio GUI yet.
+* CSG supports Z subtraction from convex polygon/rect solid volumes (`subtract`),
+  including multiple/overlapping subtract brushes (2D sampling boolean). It is
+  not an arbitrary 3D boolean/bevel system; CSG cut faces use the surrounding
+  solid policy.
+* Vertex move/split is exposed as deterministic SDK C editors
+  (`sdk_brush_move_vertex`, `sdk_brush_split_axis`). Split input with holes is
+  rejected (`split: holes are not supported`) because holes cannot be clipped
+  safely by the current axis splitter; split the holes separately.
 * Polygon footprints are rasterised into the constrained runtime grid using
   refined edge/grid intersections + cell-centre sampling; a staircase boundary is
   expected, identical to how the runtime represents all cells.
@@ -194,8 +222,9 @@ ignored-by-runtime `"compiler"` block with the same stats, region grid,
   the hooks listed above before they affect gameplay.
 * `sky` does not draw a new sky system; it marks the external boundary so the
   existing panorama/portal sky can be used (see `RE2D_SKY_BOUNDARY.md`).
-* Hint brushes currently act as merge/portal barriers and are validated/reported;
-  they do not add new BSP split planes in this pass.
+* `hint` is a portal-level visibility barrier, not a true BSP split-plane
+  insertion. It reduces portal traversal for view visibility; it does not add
+  new BSP nodes/planes or alter collision/light/audio. `skip` stays metadata.
 * Sky-leak detection is an open-edge heuristic on the sky envelope, not a full
   exterior flood fill; giant-transparent classification uses render-only policy
   because the compiler has no per-pixel opacity. Warnings state only what the

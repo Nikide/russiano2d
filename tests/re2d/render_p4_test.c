@@ -181,7 +181,7 @@ static void test_batching(void)
 {
     R2DWorldBatchKey a, b, c, previous;
     bool has = false;
-    R2DWorldBatchStats stats;
+    R2DWorldRenderBatchStats stats;
     memset(&stats, 0, sizeof(stats));
     r2d_world_render_batch_key(&a, 4, R2D_WORLD_BATCH_OPAQUE, 1, 2);
     r2d_world_render_batch_key(&b, 4, R2D_WORLD_BATCH_OPAQUE, 1, 2);

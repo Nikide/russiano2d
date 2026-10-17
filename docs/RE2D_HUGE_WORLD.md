@@ -55,9 +55,13 @@ Counters: `visibility.culled_cells`, `visibility.cell_rejections`,
 `world.info().regionCulled / regionOccluderCulled / regionClusterCulled /
 regionCellsAllowed / regionCellsCulled / regionClusterEdges`.
 
-Hint/skip are compiler tool materials: hint/skip walls do not render because the
-wall policy bits say so; full BSP hint-plane splitting remains compiler work
-(see docs/RE2D_BRUSH_AUTHORING.md).
+Hint/skip are compiler tool materials. A hint brush touching a generated portal
+now emits a concrete `R2D_WALL_TOOL_HINT`-only barrier marker exactly on that
+portal; runtime visibility cuts VIEW traversal through it and exposes
+`visibility.hintMarkers / hintPortalsTested / hintPortalsCut` counters. The
+barrier is view-only (no render/collision/ray/acoustic bits), so it reduces
+portal/region work without changing gameplay. This is not full BSP hint-plane
+insertion; `skip` remains metadata (see docs/RE2D_BRUSH_AUTHORING.md).
 
 ## Streaming, residency and GPU upload budget
 
@@ -110,6 +114,64 @@ Remaining honest limitation: this is deterministic incremental residency, not
 async disk I/O; placement/eviction is real on SDL_GPU, disk loading still uses
 the existing loader. EVICTABLE copies stay GPU-resident for visual continuity
 until the cache actually evicts them (UNLOADED).
+
+### True payload streaming/residency (task-15)
+
+`src/re2d_world_stream_io.c/.h` moves real per-region payload bytes, not just
+bookkeeping. One descriptor per (region, kind):
+
+```text
+cells / walls / spans / surfaces / materials / nav
+UNLOADED <-> QUEUED_LOAD -> LOADING -> RESIDENT <-> EVICTABLE -> QUEUED_UNLOAD -> UNLOADED
+```
+
+* `r2d_world_stream_io_add()` registers caller-owned source/destination buffers;
+* `acquire/release` are refcount pins; `set_required()` is the active/preload ring
+  contract: required payloads load and stay resident, dropping the requirement
+  queues an unload;
+* every `tick()` copies at most `load_budget_bytes`/`load_budget_items` and frees
+  at most `unload_budget_items`/`unload_budget_bytes`, so a region crossing is
+  sliced over frames instead of copying a whole region in one frame;
+* `read` callback (file/mapped memory), `evict` callback (free caller copy) and
+  optional `alloc` callback (fresh destination for a reload) are exposed; the
+  module never starts a thread itself. Deterministic incremental execution is
+  the async contract; a worker backend can share the same descriptors/queues.
+* tokens change on every UNLOADED transition so a stale pointer can be rejected
+  without dereferencing freed memory.
+
+Runtime integration (`R2DWorldRuntime.stream_io`): after regions are built the
+runtime allocates index packets per region/kind (cells, unique incident walls,
+spans, surface ids, material ids, nav placeholder) and registers them. Each
+frame after `update_active()` it derives the required mask from
+ACTIVE/PRELOADING/RESIDENT states, calls `set_required()` and ticks with a
+64 KiB / 8-item load and unload budget. Unloaded packets are actually freed and
+reloaded on return. Master `R2DRe2dWorld` arrays remain the correctness fallback
+for collision, trace, visibility, render, nav and audio, so an unloaded region
+can never leave a dangling pointer in those systems; queries outside the
+resident ring still work exactly as before.
+
+`world.info()` exposes: `streamIoPayloads`, `streamIoResidentPayloads`,
+`streamIoLoadingPayloads`, `streamIoQueuedLoad/Unload`,
+`streamIoResidentBytes`, `streamIoLoadBytes/UnloadBytes`,
+`streamIoLoads/Unloads`, `streamIoTotalBytes`, `streamIoMaxTickBytes` (peak
+bytes in one tick) and the configured budgets `streamIoLoadBudgetBytes /
+streamIoUnloadBudgetBytes`. `regions` also carries `payloads`,
+`payloadResident`, `payloadResidentBytes`, `payloadLoads`, `payloadUnloads`.
+
+Measured on the shipped openworld lab (25 regions): 150 payload packets
+(25*6), 48 resident in the active/preload ring (8 regions), 1080 resident bytes;
+crossing to region 24 unloads 48 packets and keeps the destination 24 resident
+(4 regions); returning reloads them; peak tick movement 540 bytes against a
+65536-byte budget. Native `tests/re2d/stream_io_test.c` (8 tests) additionally
+covers slices, priority order, refcount pinning, unload budgets, stale tokens,
+read failure, determinism and required-toggle unload/reload.
+
+Task-15 limits: no worker thread or real filesystem read is started (the
+callbacks are the integration point); BSP/surface/material/nav master arrays
+still exist for correctness fallback, so the memory saved is the per-region
+packets, not the whole world; nav fragments are a registered placeholder until
+the nav split lands; GPU texture/atlas upload/evict remains owned by the renderer
+stream cache/hook from task-12.
 
 ## LOD wiring
 
@@ -205,6 +267,63 @@ updates streaming budgets, syncs material/atlas assets and collects impostors.
 Existing save/load is unaffected: region indices are runtime snapshots, semantic
 IDs and `r2d_world_save_map_hash()` remain the identity guard.
 
+### Runtime hint/skip/occluder consumer (task-20)
+
+`src/re2d_world_hint.c/.h` is the runtime-side counterpart of the compiler
+markers. It reads only authored wall metadata, never the compiler internals:
+
+| source marker | runtime meaning |
+|---|---|
+| `R2D_WALL_TOOL_HINT` zero-policy wall on a portal edge | cuts view traversal through that portal; collision/rays/render unchanged |
+| `R2D_WALL_TOOL_SKIP` | compiler-only; counted and ignored at runtime |
+| `R2D_WALL_OCCLUDER` wall segment | conservative coarse cell/region occlusion |
+
+Contract: the compiler emits one hint marker exactly on the portal plane/range
+and one occluder segment per authored occluder wall; both are ordinary
+`R2DWorldWall` entries, so existing JSON/RDW5 bake carries them without a new
+format. If compiler markers are absent (legacy maps), caches are empty and
+behaviour/counters are unchanged.
+
+Caller-owned cache (no allocation at query time):
+
+```c
+int hints, skips, occluders;
+r2d_world_hint_counts(&world, &hints, &skips, &occluders);
+R2DWorldHintBarrier barriers[hints];
+R2DWorldOccluder segments[occluders];
+R2DWorldHintCache cache = { .barriers=barriers, .barrier_capacity=hints,
+                            .occluders=segments, .occluder_capacity=occluders };
+r2d_world_hint_cache_build(&world, &cache, err, sizeof err);
+r2d_world_visibility_filtered_ex(&world, &view, ortho, &vis,
+                                 cell_allowed, &cache);
+```
+
+`r2d_world_visibility_filtered()` is unchanged and uses the legacy NULL-cache
+path. The `_ex` variant adds:
+
+* per-portal hint barrier cut before traversal, counted in
+  `vis.hint_portals_tested` / `vis.hint_portals_cut`;
+* pre-traversal occluder cell reject (`vis.occluder_cells_tested/_cut`,
+  `vis.culled_cells`), applied before BSP/portal submission;
+* `vis.hint_markers`, `vis.skip_markers`, `vis.occluder_segments` for agent
+  debug snapshots.
+
+Region layer: pass `cache.occluders` / `cache.occluder_count` to the existing
+`r2d_world_region_occluded()` / `r2d_world_region_visible_set()` coarse pass.
+Tests: `tests/re2d/hint_cache_test.c` (6 Unity tests: hint cut, skip ignored,
+legacy identical, occluder cell culling with counters, coarse region culling,
+determinism/invalid args).
+
+Compiler contract status at this integration point: the SDK brush compiler emits
+`R2D_WALL_TOOL_HINT` barrier walls (18 markers on the open-world lab map after
+recompiling) and `R2D_WALL_TOOL_SKIP` if authored. It does **not** yet emit
+`R2D_WALL_OCCLUDER` wall segments: occluder brushes are counted in compiler
+stats but no marker wall reaches the runtime, so real maps currently build an
+empty occluder cache. The runtime consumer is complete and tested with synthetic
+marker walls; task-14 only needs to emit one zero-policy occluder wall per
+authored occluder segment. No runtime change is required then, and legacy maps
+stay unchanged until markers exist.
+
 ## Measured metrics (openworld lab, shipped `.re2dworld`)
 
 ```
@@ -221,7 +340,7 @@ GPU-reference backend, this machine; not a cross-machine threshold)
 ```
 
 Native test counts: region 13 (includes pure LOD light-selection), stream 5,
-impostor 3, hierarchical visibility 3. Agent test:
+impostor 3, hierarchical visibility 3, hint/occluder consumer 6. Agent test:
 `tests/agent/re2d_huge_world_test.py` (GPU stream upload/evict/re-upload, origin
 boundary screenshots, tightened LOD light/decal culling, impostor draw count).
 GPU metrics from the current lab run: `gpuStreamUploads` 1 (16 KiB texture
@@ -254,12 +373,12 @@ visible surface demands the payload.
   capped. Far-band lights keep a reduced budget (8) so existing CPU/GPU
   reference parity on medium maps is not changed. Sprite direction LOD only
   applies to atlas actors (RotSprite poses use FPS/pose budgets).
-* Hint/skip walls are rendered/not-rendered by authored policy bits, but actual
-  BSP split planes remain compiler-owned; runtime counts `hintWalls/skipWalls`.
-  Implementing split planes requires the SDK brush/compiler pass (out of this
-  file scope) and is documented as a compiler hook, not faked.
+* Hint/skip walls are rendered/not-rendered by authored policy bits. The brush
+  compiler now emits real per-portal hint barrier markers and runtime visibility
+  cuts traversal through them (`hintPortalsCut`); true BSP split-plane insertion
+  is still not implemented and is documented as a limitation, not faked.
 * Occluder culling is a conservative 5-sample region test, not per-pixel/GPU
-  occlusion; hint planes are still compiler-only visibility splits.
+  occlusion; hint barriers cut only their covered portals, not the whole BSP.
 * Decal residency is counted per region but the actual decal draw call remains the
   existing global span path; the renderer should consume `lodCulledDecals` and
   `cell_allowed` to skip work.

@@ -15,9 +15,12 @@
 // for identical arguments (weather uses a caller seed).
 // ===========================================================================
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define R2D_SKY_MAX_LAYERS 4
+#define R2D_SKY_PATH_MAX 128
+#define R2D_SKY_ID_MAX 32
 #define R2D_SKY_MAX_WEATHER 8
 #define R2D_SKY_MAX_DISTANT 4
 
@@ -46,6 +49,8 @@ enum {
 };
 
 typedef struct {
+    char id[R2D_SKY_ID_MAX];             // stable layer id for scripts/tests
+    char texture_path[R2D_SKY_PATH_MAX]; // authored path ("" = procedural)
     float parallax;   // 0..10 horizontal factor
     float scale;      // 0.05..10 UV scale
     float offset;     // -10..10 vertical offset
@@ -57,6 +62,7 @@ typedef struct {
 
 typedef struct {
     int type;         // R2D_SKY_WEATHER_*
+    char texture[R2D_SKY_PATH_MAX]; // weather card texture ("" = procedural)
     float density;    // 0..1 amount within the layer
     float speed;      // world/screen units per second
     float slant;      // -1..1 horizontal drift
@@ -90,7 +96,29 @@ typedef struct {
     int portal_profile;          // R2D_SKY_PROFILE_* for POLICY_PROFILE
     float exposure;              // 0.25..4
     float cloud_fog;             // 0..1 horizon fog wash
+    char sun_texture[R2D_SKY_PATH_MAX];  // "" = procedural disc
+    char moon_texture[R2D_SKY_PATH_MAX];
+    char weather_texture[R2D_SKY_WEATHER_COUNT][R2D_SKY_PATH_MAX];
 } R2DWorldSky;
+
+// Manifest under assets/sky/layers.json. Pure data: the runtime resolves the
+// paths to decoded RGBA pixels and keeps the GPU binding contract separate.
+typedef struct {
+    char id[R2D_SKY_ID_MAX];
+    char texture[R2D_SKY_PATH_MAX];
+    uint32_t tint;
+    float parallax, scale, offset, alpha, scroll;
+} R2DWorldSkyLayerDesc;
+
+typedef struct {
+    int version;
+    int layer_count;                 // 1..4
+    R2DWorldSkyLayerDesc layers[R2D_SKY_MAX_LAYERS];
+    int weather_count;               // number of non-empty weather textures
+    char weather_texture[R2D_SKY_WEATHER_COUNT][R2D_SKY_PATH_MAX];
+    char sun_texture[R2D_SKY_PATH_MAX];
+    char moon_texture[R2D_SKY_PATH_MAX];
+} R2DWorldSkyManifest;
 
 typedef struct {
     int layers, weather_cards, distant_cards, celestial_discs, portal_surfaces;
@@ -99,6 +127,34 @@ typedef struct {
 void r2d_world_sky_defaults(R2DWorldSky *sky);
 bool r2d_world_sky_profile(int profile, R2DWorldSky *sky);
 bool r2d_world_sky_validate(R2DWorldSky *sky);
+
+// Per-layer authoring. Copied paths/ids are bounded; NULL or empty strings are
+// allowed (procedural fallback). Returns false on NULL sky/out-of-range index/
+// oversized strings/non-finite numbers, leaving the previous layer intact.
+bool r2d_world_sky_set_layer(R2DWorldSky *sky, int index,
+                             const char *id, const char *texture,
+                             uint32_t tint, float parallax, float scale,
+                             float offset, float alpha, float scroll);
+bool r2d_world_sky_set_weather_texture(R2DWorldSky *sky, int weather,
+                                       const char *texture);
+bool r2d_world_sky_set_celestial_texture(R2DWorldSky *sky, bool moon,
+                                         const char *texture);
+
+// JSON manifest parser/validator and config application. Parsing is
+// transactional: on failure `out` is zeroed and err (ASCII) explains why.
+// Supported schema:
+//   {"version":1,
+//    "layers":[{"id":"far","texture":"assets/sky/far.png","tint":"#8fa0b8",
+//               "parallax":0.08,"scroll":0.0015,"alpha":0.55,
+//               "offset":0.05,"scale":1.35}, ... 1..4],
+//    "weather":{"rain":"...","snow":"...","ash":"...","clouds":"..."},
+//    "sun":"assets/sky/sun.png","moon":"assets/sky/moon.png"}
+bool r2d_world_sky_manifest_parse(const char *json, R2DWorldSkyManifest *out,
+                                  char *err, size_t size);
+// Applies a parsed manifest to a sky config: layer count/paths/params,
+// weather/sun/moon texture paths. Returns false for invalid manifest/sky.
+bool r2d_world_sky_apply_manifest(R2DWorldSky *sky,
+                                  const R2DWorldSkyManifest *manifest);
 
 // Sample one parallax layer at camera yaw and elapsed time. Writes UV and
 // tint/alpha; invalid layer/index leaves outputs neutral (uv 0, alpha 0).

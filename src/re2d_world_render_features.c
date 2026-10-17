@@ -716,7 +716,7 @@ uint32_t r2d_world_render_batch_hash(const R2DWorldBatchKey *key)
     return h;
 }
 
-void r2d_world_render_batch_draw(R2DWorldBatchStats *stats,
+void r2d_world_render_batch_draw(R2DWorldRenderBatchStats *stats,
                                  const R2DWorldBatchKey *key,
                                  R2DWorldBatchKey *previous, bool *has_previous)
 {

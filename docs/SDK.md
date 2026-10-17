@@ -546,10 +546,19 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 и `--renderer`-контракт не меняются.
 
 Brushes: `rect` или выпуклый `polygon` (3..64 вершины), axis-aligned `holes`
-(до 8 прямоугольников), `subtract: true` для Z-CSG вычитания, несколько solid
-Z-интервалов на одном XY. Компилятор детерминированно очищает/merge'ит cells,
-стены и порталы; статистика включает `polygonBrushes`, `subtractBrushes`,
-`holeBrushes`, `brushEntityMap`.
+(до 8 прямоугольников), `subtract: true` для Z-CSG вычитания, несколько
+solid Z-интервалов и несколько/перекрывающихся subtract-объёмов на одном XY.
+Компилятор детерминированно очищает/merge'ит cells, стены и порталы. Editor
+helpers: `sdk_brush_move_vertex()` (transactional vertex move с точной
+диагностикой concave/hole) и `sdk_brush_split_axis()` (axis split на два
+выпуклых brush'а; holes на split отклоняются). Статистика включает
+`polygonBrushes`, `subtractBrushes`, `holeBrushes`, `hintBarriers`,
+`brushEntityMap`.
+
+`hint` brush, касающийся сгенерированного портала, эмитит concrete
+`R2D_WALL_TOOL_HINT` barrier ровно на портале; runtime visibility режет
+VIEW-проход через него (`hintPortalsCut`), не меняя collision/ray/render.
+`skip` остаётся metadata; настоящие BSP split planes не вставляются.
 
 Brush entities (`door`, `lift`, `crusher`, `moving_wall`, `trigger_volume`,
 `fog_volume`, `water_volume`, `areaportal`) маппятся на существующие native

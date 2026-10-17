@@ -440,6 +440,9 @@ function worldWrapper($, native) {
                 blocked(x, y, radius, bottom, top) { return native.blocked(x, y, radius, bottom, top); },
                 ray(from, to) { return native.ray(from.x, from.y, from.height, to.x, to.y, to.height); },
                 info() { return native.info(); },
+                // P4 static batching: deterministic group plan + packed SSBO
+                // contract for the GPU owner (no submission side effects).
+                batchInfo() { return native.batchInfo(); },
                 // R-04 huge world: budgeted region/streaming config, distant
                 // impostor cards and region-local render coordinates. The native
                 // side owns the state; the wrapper only exposes it.
@@ -589,6 +592,20 @@ function rendererWorldWrapper($, native) {
     world.watch = path => {native.watch(path ?? "");return world;};
     world.reloadJSON = text => { native.reloadJSON(text); return world; };
     world.decal = options => {const extended = options.rotation !== undefined || options.scale !== undefined || options.fadeIn !== undefined || options.fadeOut !== undefined;const base=[options.surface,options.material,options.u ?? 0,options.v ?? 0,options.width ?? 16,options.height ?? 16,options.life ?? 0];const args = extended ? base.concat([options.rotation ?? 0,options.scale ?? 1,options.fadeIn ?? 0,options.fadeOut ?? 0]) : base;const token=native.decal(...args);return {remove(){native.decalRemove(token);}};};
+    world.skyLayer = (index, options = {}) => {
+        const current = (native.skyLayers() || [])[index] || {};
+        const tint = options.tint ?? current.tint ?? '#ffffff';
+        return native.skyLayer(index, options.id ?? current.id ?? '',
+            options.texture ?? current.texture ?? '',
+            typeof tint === 'number' ? tint : $.color(tint),
+            options.parallax ?? current.parallax ?? 0.1,
+            options.scroll ?? current.scroll ?? 0.002,
+            options.alpha ?? current.alpha ?? 0.5,
+            options.offset ?? current.offset ?? 0,
+            options.scale ?? current.scale ?? 1.0);
+    };
+    world.skyLayers = () => native.skyLayers();
+    world.skyManifest = path => native.skyManifest(path);
     world.sky = (options = {}) => {if(options.projection!==undefined&&!['panorama','equirectangular'].includes(options.projection))throw new TypeError('Re2D World: sky projection must be panorama');native.sky(options.texture ?? '',$.color(options.color ?? '#ffffff'),(options.yaw ?? 0)*Math.PI/180,options.exposure ?? 0);return world; };
     world.reload = path => { const text=$.fs.readText(path);if(text==null)throw new Error(`Re2D World: cannot read ${path}`);return world.reloadJSON(text); };
     world.backend = name => { native.backend(name); return world; };

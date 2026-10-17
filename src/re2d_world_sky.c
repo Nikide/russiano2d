@@ -1,7 +1,9 @@
 #include "re2d_world_sky.h"
+#include "json.h"
 
 #include <math.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
 // Deterministic sky model. No allocation/globals/clock.
@@ -370,4 +372,258 @@ int r2d_world_sky_portal_profile(const R2DWorldSky *sky, int portal_profile_hint
         sky->portal_profile >= 0 && sky->portal_profile < R2D_SKY_PROFILE_COUNT)
         return sky->portal_profile;
     return R2D_SKY_PROFILE_CLEAR;
+}
+
+// ---------------------------------------------------------------------------
+// Per-layer sky textures, manifest parsing and authoring validation.
+
+static bool copy_bounded(char *out, size_t cap, const char *value)
+{
+    if (!out || cap == 0) return false;
+    out[0] = '\0';
+    if (!value || !value[0]) return true;
+    size_t len = 0;
+    while (len < cap - 1u && value[len] != '\0') len += 1u;
+    if (value[len] != '\0') return false; // reject oversized, never truncate
+    memcpy(out, value, len + 1u);
+    return true;
+}
+
+static bool manifest_error(char *err, size_t size, const char *message)
+{
+    if (err && size) snprintf(err, size, "Re2D Sky: %s", message);
+    return false;
+}
+
+static bool parse_tint(const R2dJson *v, uint32_t *out)
+{
+    if (!v) return true; // keep the caller default
+    if (v->type != R2D_JSON_STR) return false;
+    const char *s = v->string;
+    size_t len = strlen(s);
+    if (len != 7 && len != 9) return false;
+    if (s[0] != '#') return false;
+    uint32_t bytes[4] = {0xffu, 0xffu, 0xffu, 0xffu}; // R,G,B,A defaults
+    for (size_t i = 0; i < 4; ++i) {
+        size_t pos = 1u + i * 2u;
+        if (pos + 1u >= len) break;
+        char h = s[pos], l = s[pos + 1u];
+        int hi = h >= '0' && h <= '9' ? h - '0'
+               : h >= 'a' && h <= 'f' ? h - 'a' + 10
+               : h >= 'A' && h <= 'F' ? h - 'A' + 10 : -1;
+        int lo = l >= '0' && l <= '9' ? l - '0'
+               : l >= 'a' && l <= 'f' ? l - 'a' + 10
+               : l >= 'A' && l <= 'F' ? l - 'A' + 10 : -1;
+        if (hi < 0 || lo < 0) return false;
+        bytes[i] = (uint32_t)(hi * 16 + lo);
+        if (i == 2 && len == 7) break; // 6-digit form keeps A=0xff
+    }
+    *out = bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24);
+    return true;
+}
+
+static float json_number_or(const R2dJson *obj, const char *key, float fallback,
+                            bool *ok)
+{
+    const R2dJson *v = r2d_json_get(obj, key);
+    if (!v) return fallback;
+    if (v->type != R2D_JSON_NUM || !isfinite(v->number)) {
+        *ok = false;
+        return fallback;
+    }
+    return (float)v->number;
+}
+
+bool r2d_world_sky_set_layer(R2DWorldSky *sky, int index,
+                             const char *id, const char *texture,
+                             uint32_t tint, float parallax, float scale,
+                             float offset, float alpha, float scroll)
+{
+    if (!sky || index < 0 || index >= R2D_SKY_MAX_LAYERS) return false;
+    if (!isfinite(parallax) || !isfinite(scale) || !isfinite(offset) ||
+        !isfinite(alpha) || !isfinite(scroll)) return false;
+    if (parallax < 0.0f || parallax > 10.0f || scale < 0.05f || scale > 10.0f ||
+        offset < -10.0f || offset > 10.0f || alpha < 0.0f || alpha > 1.0f ||
+        scroll < -10.0f || scroll > 10.0f) return false;
+    R2DWorldSkyLayer next = sky->layers[index];
+    if (!copy_bounded(next.id, sizeof(next.id), id)) return false;
+    if (!copy_bounded(next.texture_path, sizeof(next.texture_path), texture)) return false;
+    next.tint = tint;
+    next.parallax = parallax;
+    next.scale = scale;
+    next.offset = offset;
+    next.alpha = alpha;
+    next.scroll = scroll;
+    if (index + 1 > sky->layer_count) sky->layer_count = index + 1;
+    sky->layers[index] = next;
+    return true;
+}
+
+bool r2d_world_sky_set_weather_texture(R2DWorldSky *sky, int weather,
+                                       const char *texture)
+{
+    if (!sky || weather < 0 || weather >= R2D_SKY_WEATHER_COUNT) return false;
+    return copy_bounded(sky->weather_texture[weather],
+                        sizeof(sky->weather_texture[weather]), texture);
+}
+
+bool r2d_world_sky_set_celestial_texture(R2DWorldSky *sky, bool moon,
+                                         const char *texture)
+{
+    if (!sky) return false;
+    return copy_bounded(moon ? sky->moon_texture : sky->sun_texture,
+                        sizeof(sky->moon_texture), texture);
+}
+
+bool r2d_world_sky_manifest_parse(const char *json, R2DWorldSkyManifest *out,
+                                  char *err, size_t size)
+{
+    if (err && size) err[0] = 0;
+    if (!json || !out) return manifest_error(err, size, "missing manifest text");
+    memset(out, 0, sizeof(*out));
+    R2dJson *root = r2d_json_parse(json, err, size);
+    if (!root) return false;
+    bool ok = false;
+    char message[192] = {0};
+    double version = r2d_json_num(r2d_json_get(root, "version"), 0);
+    const R2dJson *layers = r2d_json_get(root, "layers");
+    if (root->type != R2D_JSON_OBJ) {
+        snprintf(message, sizeof message, "manifest root must be an object");
+        goto done;
+    }
+    if (version != 1.0) {
+        snprintf(message, sizeof message, "manifest version must be 1");
+        goto done;
+    }
+    if (!layers || layers->type != R2D_JSON_ARR || layers->count < 1 ||
+        layers->count > R2D_SKY_MAX_LAYERS) {
+        snprintf(message, sizeof message, "layers must contain 1..4 entries");
+        goto done;
+    }
+    R2DWorldSky defaults;
+    r2d_world_sky_defaults(&defaults);
+    out->version = 1;
+    out->layer_count = layers->count;
+    for (int i = 0; i < layers->count; ++i) {
+        const R2dJson *o = layers->items[i];
+        R2DWorldSkyLayerDesc *d = &out->layers[i];
+        if (!o || o->type != R2D_JSON_OBJ) {
+            snprintf(message, sizeof message, "layer %d must be an object", i);
+            goto done;
+        }
+        const R2dJson *id = r2d_json_get(o, "id");
+        const R2dJson *texture = r2d_json_get(o, "texture");
+        if (!id || id->type != R2D_JSON_STR || !id->string[0] ||
+            strlen(id->string) >= R2D_SKY_ID_MAX) {
+            snprintf(message, sizeof message, "layer %d needs an id of 1..%d bytes", i, R2D_SKY_ID_MAX - 1);
+            goto done;
+        }
+        if (!texture || texture->type != R2D_JSON_STR || !texture->string[0] ||
+            strlen(texture->string) >= R2D_SKY_PATH_MAX) {
+            snprintf(message, sizeof message, "layer %d needs a texture path of 1..%d bytes", i, R2D_SKY_PATH_MAX - 1);
+            goto done;
+        }
+        for (int j = 0; j < i; ++j) if (!strcmp(out->layers[j].id, id->string)) {
+            snprintf(message, sizeof message, "duplicate layer id %s", id->string);
+            goto done;
+        }
+        bool numbers_ok = true;
+        d->tint = defaults.layers[i].tint;
+        if (!parse_tint(r2d_json_get(o, "tint"), &d->tint)) {
+            snprintf(message, sizeof message, "layer %d tint must be #rrggbb", i);
+            goto done;
+        }
+        d->parallax = json_number_or(o, "parallax", defaults.layers[i].parallax, &numbers_ok);
+        d->scale = json_number_or(o, "scale", defaults.layers[i].scale, &numbers_ok);
+        d->offset = json_number_or(o, "offset", defaults.layers[i].offset, &numbers_ok);
+        d->alpha = json_number_or(o, "alpha", defaults.layers[i].alpha, &numbers_ok);
+        d->scroll = json_number_or(o, "scroll", defaults.layers[i].scroll, &numbers_ok);
+        if (!numbers_ok || d->parallax < 0.0f || d->parallax > 10.0f ||
+            d->scale < 0.05f || d->scale > 10.0f || d->offset < -10.0f ||
+            d->offset > 10.0f || d->alpha < 0.0f || d->alpha > 1.0f ||
+            d->scroll < -10.0f || d->scroll > 10.0f) {
+            snprintf(message, sizeof message, "layer %d parameter out of range", i);
+            goto done;
+        }
+        memcpy(d->id, id->string, strlen(id->string) + 1u);
+        memcpy(d->texture, texture->string, strlen(texture->string) + 1u);
+    }
+    const R2dJson *weather = r2d_json_get(root, "weather");
+    if (weather) {
+        if (weather->type != R2D_JSON_OBJ) {
+            snprintf(message, sizeof message, "weather must be an object");
+            goto done;
+        }
+        static const char *const names[R2D_SKY_WEATHER_COUNT] =
+            {"none", "rain", "snow", "ash", "clouds"};
+        for (int type = R2D_SKY_WEATHER_RAIN; type < R2D_SKY_WEATHER_COUNT; ++type) {
+            const R2dJson *v = r2d_json_get(weather, names[type]);
+            if (!v) continue;
+            if (v->type != R2D_JSON_STR || strlen(v->string) >= R2D_SKY_PATH_MAX) {
+                snprintf(message, sizeof message, "weather %s texture path invalid", names[type]);
+                goto done;
+            }
+            memcpy(out->weather_texture[type], v->string, strlen(v->string) + 1u);
+            if (v->string[0]) out->weather_count += 1;
+        }
+    }
+    const R2dJson *sun = r2d_json_get(root, "sun");
+    const R2dJson *moon = r2d_json_get(root, "moon");
+    if (sun) {
+        if (sun->type != R2D_JSON_STR || strlen(sun->string) >= R2D_SKY_PATH_MAX) {
+            snprintf(message, sizeof message, "sun texture path invalid");
+            goto done;
+        }
+        memcpy(out->sun_texture, sun->string, strlen(sun->string) + 1u);
+    }
+    if (moon) {
+        if (moon->type != R2D_JSON_STR || strlen(moon->string) >= R2D_SKY_PATH_MAX) {
+            snprintf(message, sizeof message, "moon texture path invalid");
+            goto done;
+        }
+        memcpy(out->moon_texture, moon->string, strlen(moon->string) + 1u);
+    }
+    ok = true;
+done:
+    r2d_json_free(root);
+    if (!ok) {
+        memset(out, 0, sizeof(*out));
+        if (err && size) {
+            if (message[0]) snprintf(err, size, "Re2D Sky: %s", message);
+            else if (!err[0]) snprintf(err, size, "Re2D Sky: invalid manifest");
+        }
+    }
+    return ok;
+}
+
+bool r2d_world_sky_apply_manifest(R2DWorldSky *sky,
+                                  const R2DWorldSkyManifest *manifest)
+{
+    if (!sky || !manifest || manifest->version != 1 ||
+        manifest->layer_count < 1 || manifest->layer_count > R2D_SKY_MAX_LAYERS) return false;
+    R2DWorldSky next = *sky;
+    next.layer_count = manifest->layer_count;
+    for (int i = 0; i < manifest->layer_count; ++i) {
+        const R2DWorldSkyLayerDesc *d = &manifest->layers[i];
+        R2DWorldSkyLayer *l = &next.layers[i];
+        memset(l, 0, sizeof(*l));
+        memcpy(l->id, d->id, sizeof(l->id));
+        memcpy(l->texture_path, d->texture, sizeof(l->texture_path));
+        l->tint = d->tint;
+        l->parallax = d->parallax;
+        l->scale = d->scale;
+        l->offset = d->offset;
+        l->alpha = d->alpha;
+        l->scroll = d->scroll;
+        l->texture = -1;
+    }
+    memset(next.weather_texture, 0, sizeof(next.weather_texture));
+    for (int type = 0; type < R2D_SKY_WEATHER_COUNT; ++type)
+        memcpy(next.weather_texture[type], manifest->weather_texture[type],
+               sizeof(next.weather_texture[type]));
+    memcpy(next.sun_texture, manifest->sun_texture, sizeof(next.sun_texture));
+    memcpy(next.moon_texture, manifest->moon_texture, sizeof(next.moon_texture));
+    r2d_world_sky_validate(&next);
+    *sky = next;
+    return true;
 }

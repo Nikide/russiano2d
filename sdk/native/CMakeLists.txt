@@ -25,7 +25,7 @@ set(R2D_SDK_SOURCES
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_region.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c"
-    "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_hint.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c"
@@ -112,3 +112,20 @@ if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
     target_link_options(r2d_sdk_brush_advanced_fixture_test PRIVATE -fsanitize=address,undefined)
 endif()
 add_test(NAME r2d_sdk_brush_advanced_fixture_test COMMAND r2d_sdk_brush_advanced_fixture_test)
+
+# Compiler hint barrier: runtime visibility consumer + view-only policy.
+add_executable(r2d_hint_visibility_test
+    "${CMAKE_SOURCE_DIR}/tests/re2d/hint_visibility_test.c"
+    "${CMAKE_SOURCE_DIR}/sdk/native/sdk_brush.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_polygon.c")
+target_include_directories(r2d_hint_visibility_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/sdk/native")
+target_link_libraries(r2d_hint_visibility_test PRIVATE r2d_sdk_core r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_hint_visibility_test PRIVATE m)
+endif()
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_hint_visibility_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_hint_visibility_test PRIVATE -fsanitize=address,undefined)
+endif()
+add_test(NAME r2d_hint_visibility_test COMMAND r2d_hint_visibility_test)

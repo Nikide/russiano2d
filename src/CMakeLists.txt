@@ -81,7 +81,7 @@ if(R2D_ENABLE_RE2D)
     list(APPEND R2D_SOURCES
         rotsprite.h rotsprite.c rotsprite_math.h rotsprite_math.c rotsprite3.h rotsprite3.c
         real2d4.h  real2d4.c
-        api_metadata.h api_metadata.c re2d.h re2d.c re2d_math.h re2d_math.c re2d_world.h re2d_world.c re2d_world_topology.c re2d_world_visibility.c re2d_world_light.c re2d_world_material.c re2d_world_runtime.c
+        api_metadata.h api_metadata.c re2d.h re2d.c re2d_math.h re2d_math.c re2d_world.h re2d_world.c re2d_world_topology.c re2d_world_visibility.c re2d_world_hint.c re2d_world_light.c re2d_world_material.c re2d_world_runtime.c
         re2d_world_gpu.h re2d_world_gpu.c
         re2d_world_bake.h re2d_world_bake.c
         re2d_world_atlas.h re2d_world_atlas.c
@@ -101,6 +101,7 @@ if(R2D_ENABLE_RE2D)
         re2d_world_sky.h re2d_world_sky.c
         re2d_world_post.h re2d_world_post.c
         re2d_world_stream.h re2d_world_stream.c
+        re2d_world_stream_io.h re2d_world_stream_io.c
         re2d_world_impostor.h re2d_world_impostor.c
         re2d_world_portal_visual.h re2d_world_portal_visual.c
         re2d_world_volume.h re2d_world_volume.c
@@ -108,9 +109,8 @@ if(R2D_ENABLE_RE2D)
         re2d_world_polywall.h re2d_world_polywall.c
         re2d_world_polygon.h re2d_world_polygon.c
         re2d_world_render_features.h re2d_world_render_features.c
+        re2d_world_batch.h re2d_world_batch.c
         re2d_world_region.h re2d_world_region.c
-        re2d_world_stream.h re2d_world_stream.c
-        re2d_world_impostor.h re2d_world_impostor.c
         re2d_postprocess.h re2d_postprocess.c
         re2d_audio_zone.h re2d_audio_zone.c
         re2d_audio_voices.h re2d_audio_voices.c)

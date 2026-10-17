@@ -72,9 +72,12 @@ treats render-without-collision as the translucent-boundary shape that should be
 replaced by a sky/clip brush.
 
 Tool policy bits are emitted into compiled/baked walls and brush-entity maps:
-`SHADOW`, `ACOUSTIC`, `OCCLUDER`, `HINT`/areaportal markers. The compiler does
-not edit runtime visibility, GPU shadow maps or audio; the hooks still required
-by consumers are reported in `RE2D_BRUSH_AUTHORING.md` (`brushEntities[].hook`).
+`SHADOW`, `ACOUSTIC`, `OCCLUDER`, `HINT`/areaportal markers. A hint brush that
+touches a generated portal becomes a view-only barrier marker; runtime visibility
+consumes it, while sky/clip/occluder policies stay independent of hint barriers.
+The compiler does not edit runtime visibility, GPU shadow maps or audio; the
+hooks still required by consumers are reported in `RE2D_BRUSH_AUTHORING.md`
+(`brushEntities[].hook`).
 
 ## What is not supported
 

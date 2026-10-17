@@ -252,7 +252,7 @@ typedef struct {
 typedef struct {
     int draws, batches, saved;
     int runs;   // consecutive matching keys
-} R2DWorldBatchStats;
+} R2DWorldRenderBatchStats;
 
 // Build a stable key. Negative ids are normalised to -1.
 void r2d_world_render_batch_key(R2DWorldBatchKey *key, int material, int blend,
@@ -260,7 +260,7 @@ void r2d_world_render_batch_key(R2DWorldBatchKey *key, int material, int blend,
 uint32_t r2d_world_render_batch_hash(const R2DWorldBatchKey *key);
 // Feed one draw in submission order. Consecutive equal keys coalesce into one
 // batch; every draw beyond the first inside a batch counts as saved.
-void r2d_world_render_batch_draw(R2DWorldBatchStats *stats,
+void r2d_world_render_batch_draw(R2DWorldRenderBatchStats *stats,
                                  const R2DWorldBatchKey *key,
                                  R2DWorldBatchKey *previous, bool *has_previous);
 
