@@ -102,6 +102,13 @@ SITE_DOCS = (
     "docs/SDK_AGENT_TOOLING.md",
     "docs/api",
     "docs/recipes",
+    # Roadmap VN/Re2D docs (2026-10-17): published with the engine docs.
+    "docs/VN_NARRATIVE.md",
+    "docs/RE2D_RENDER_FEATURES.md",
+    "docs/RE2D_BRUSH_AUTHORING.md",
+    "docs/RE2D_HUGE_WORLD.md",
+    "docs/RE2D_SKY_BOUNDARY.md",
+    "docs/RE2D_VFX.md",
 )
 
 
