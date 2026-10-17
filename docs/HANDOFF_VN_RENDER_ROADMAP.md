@@ -107,3 +107,14 @@
 - GPU shadow map does not yet consume `R2D_WALL_SHADOW`; audio occlusion does not yet consume `R2D_WALL_ACOUSTIC`; hints/occluders are compiler markers, not full BSP split/occluder PVS.
 - VFX cards/trails/distortion render in the new pass, but screen-space refraction remains postprocess; decals require a used material.
 - VN default RML ships 6 choice slots; RmlUi pixel output is validated by the engine agent path, qjs tests use a recording backend.
+
+## Wave 2 — закрыть остаток roadmap (2026-10-17)
+| id | scope | owner |
+|---|---|---|
+| task-6 | R-04 full: streaming/residency/LOD/occluders/impostors | controller-core |
+| task-7 | renderer P4/P5: shafts/ambient/reflection/bloom/decals2/distortion/sky profiles/weather/ultra sprites | semantic-core |
+| task-8 | R-05 full: polygon/holes/CSG brushes, entities, tool policy metadata | mover-core |
+| task-9 | VN DoD gaps + debug views/render regression/budgets | trigger-core |
+| task-10 | integration/gates/handoff | lead |
+
+Правило: новые файлы и скоупы не пересекаются; конфликты решает Lead.
