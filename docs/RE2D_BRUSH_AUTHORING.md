@@ -89,7 +89,7 @@ compiler derives a bbox + 64-unit margin and emits
 | `enemyclip` | yes | no | yes | no | no | same runtime policy as clip |
 | `playerclip` | yes | no | yes | no | no | same runtime policy as clip |
 | `sky` | yes | no | yes | ray yes, shadow no | no | sky/clip boundary |
-| `occluder` | no | no | no | yes | no | visibility blocker marker |
+| `occluder` | no | no | no | yes | no | visibility blocker chain: one marker per footprint edge |
 | `hint` | no | - | - | - | - | compiler visibility split |
 | `skip` | no | - | - | - | - | compiler-only no-op |
 | `trigger` | no | - | - | - | - | brush entity volume |
@@ -112,22 +112,36 @@ The compiler resolves each brush entity to its existing runtime contract and
 writes a `compiler.brushEntities[]` array (also counted as
 `stats.brushEntityMap`):
 
-| entity kind | runtime field | runtime API | params |
+| entity kind | runtime field | runtime API | resolved params |
 |---|---|---|---|
 | `door` | `mover` | `world.mover` | `moverType: 0` |
 | `lift` | `mover` | `world.mover` | `moverType: 1` |
 | `crusher` | `mover` | `world.mover` | `moverType: 2` |
 | `moving_wall` | `mover` | `world.mover` | `moverType: 3` (platform) |
 | `trigger`, `trigger_volume` | `trigger` | `world.trigger` | `triggerType: 0` (enter) |
-| `fog_volume` | `fog` | `world.fogZone` | hook: span resolution + volume field |
-| `water_volume` | `water` | `world.liquid` | hook: liquid/volume runtime API missing |
-| `areaportal` | `portal` | `portal.areaPortal` | hook: nearest generated portal |
+| `fog_volume` | `fog` | `r2d_world_apply_fog_volume` | `spanCount`, preset `fog{}` |
+| `water_volume` | `water` | `r2d_world_apply_water_volume` | `spanCount`, `terrainKind: water`, preset `fog{}` |
+| `areaportal` | `portal` | `r2d_world_portal_set_area` | concrete `portal` index (or -1 + hook) |
 
-Each map entry carries the resolved brush volume (`volume: [x,y,w,h,bottom,top]`),
-the brush's policy `flags`, and the authored `target`. Door/lift/crusher/moving
-brush motion still uses the existing native mover timeline; trigger volumes use
-the native semantic trigger cylinder. Fog/water/areaportal entries are explicit
-metadata hooks, not silently wired gameplay.
+The compiler resolves concrete data after geometry exists:
+`fog_volume`/`water_volume` entries carry the number of runtime spans their
+volume covers; `areaportal` entries carry the index of the nearest generated
+portal whose midpoint lies in the brush footprint. Each entry also carries the
+resolved brush volume (`volume: [x,y,w,h,bottom,top]`), policy `flags`, authored
+`target`, and `hook` for any remaining wiring.
+
+Runtime consumption is native and tested:
+- fog: `r2d_world_apply_fog_volume()` writes the covered spans' span-light fog
+  (the renderer already consumes span fog). `volume_spans(NULL)` is a count query.
+- water: `r2d_world_apply_water_volume()` applies the liquid tint/density to
+  covered span fog; gameplay terrain uses `r2d_world_volume_spans()` +
+  `r2d_world_span_surface(R2D_WORLD_FLOOR)` + the runtime
+  `surfaceTerrain`/conveyor API (`R2D_TERRAIN_WATER`). No second fluid system.
+- areaportal: `r2d_world_portal_set_area()` marks the resolved portal; region PVS
+  treats closed areaportals as branch cuts. The compiler `portal` index matches
+  the runtime portal order.
+- door/lift/crusher/moving-wall still use the existing native mover timeline;
+  trigger volumes use the native semantic trigger cylinder.
 
 ## Compile pipeline
 
@@ -179,6 +193,23 @@ visibility. Editor helper APIs provide deterministic vertex semantics:
 does not yet encode an operation list; tools call these C helpers before writing
 the map.
 
+## Occluder semantics (concrete wall chain)
+
+An `occluder` brush is non-solid and emits one zero-policy
+`R2D_WALL_OCCLUDER` marker per footprint edge (`brush.occluder<index>_e<edge>`).
+No render/collision/ray/acoustic bit is set, so gameplay and lights are
+untouched. The runtime hint/occluder consumer reads these wall segments as a
+conservative 2D occluder chain: a cell is rejected only when all five sample
+points (corners + centre) are hidden, and a region when all five region sample
+points are hidden. `occluderWalls` in compile stats is the emitted marker count;
+legacy maps without markers build an empty cache and behave exactly as before.
+Markers travel through existing JSON and RDW5 bake; no side table is added.
+
+The open-world lab includes a large divider occluder so runtime culling is
+measurable: 8 occluder walls (2 authored brushes x 4 edges), and on the shipped
+map `world.info()` reports `occluderWalls=8` with
+`regionOccluderCulled=16` at the west spawn (39 cells allowed -> 11).
+
 ## Compiler warnings
 
 | code | meaning |
@@ -194,7 +225,7 @@ the map.
 | `SDK_WORLD_TOO_MANY_LIGHTS` | more than 64 authored dynamic lights |
 | `SDK_WORLD_GIANT_SURFACE` | a rendered wall surface exceeds 250000 square units |
 | `SDK_WORLD_GIANT_TRANSPARENT` | a giant render-only surface looks like a translucent boundary |
-| `SDK_WORLD_SKY_LEAK` | sky-envelope map still has open cell edges (leak) |
+| `SDK_WORLD_SKY_LEAK` | exterior flood fill reached authored cells; details list them |
 | `SDK_WORLD_BRUSH_ENTITY` | brush entity references/kind/mapping failed |
 | `SDK_WORLD_BRUSH_BOUNDS_DERIVED` | no explicit world envelope |
 
@@ -225,7 +256,10 @@ the map.
 * `hint` is a portal-level visibility barrier, not a true BSP split-plane
   insertion. It reduces portal traversal for view visibility; it does not add
   new BSP nodes/planes or alter collision/light/audio. `skip` stays metadata.
-* Sky-leak detection is an open-edge heuristic on the sky envelope, not a full
-  exterior flood fill; giant-transparent classification uses render-only policy
-  because the compiler has no per-pixel opacity. Warnings state only what the
-  data can prove.
+* Sky-leak detection is an exterior flood fill over cells: a void seed is any
+  cell side with no neighbour and no full wall coverage; the fill crosses shared
+  sides not fully covered by walls. The warning includes the reached cell ids.
+  Walls are treated as sealing the full edge height (SDK sealing walls are
+  full-height); `SDK_WORLD_OPEN_EDGE` still reports partial coverage exactly.
+* Giant-transparent classification uses render-only policy because the compiler
+  has no per-pixel opacity. Warnings state only what the authored data proves.

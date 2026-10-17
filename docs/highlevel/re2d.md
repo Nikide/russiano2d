@@ -811,3 +811,11 @@ Per-layer sky textures: `world.skyLayer(i,{id,texture,tint,parallax,scroll,alpha
 транзакционная — missing asset сохраняет прежний слой и пишет `error`.
 GPU-биндинг делает отдельный проход (task-13): `r2d_world_runtime_sky_config()`
 + `r2d_world_runtime_sky_layer_pixels()`.
+
+Debug/profiler (task-22): `world.debug.view('region'|'active-region'|'pvs'|
+'vis-cluster'|'areaportal'|'occluder'|'distant-lod'|'sprite-lod'|
+'material-variation'|'ao-lite'|'vfx-budget')` включает native 2D overlay;
+`world.debug.material(name|index)` / `world.debug.materials()` дают material
+inspector, `world.info().regionStreamMs/regionStreamIoMs/regionLoadMs/
+regionVisibilityMs` — реальные CPU timings. `info.materials` остаётся числом
+(совместимость), список — `info.materialList`.

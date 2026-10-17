@@ -3,7 +3,7 @@ layout(set=2,binding=0) uniform sampler2D albedoMap;
 layout(set=2,binding=1) uniform sampler2D normalMap;
 layout(set=2,binding=2) uniform sampler2D emissiveMap;
 layout(std430,set=2,binding=3) readonly buffer ShadowGeometry { vec4 data[]; } shadow;
-layout(std140,set=3,binding=0) uniform Surface {
+struct SurfaceData {
     vec4 eye; // xyz, near
     vec4 basis; // cos/sin yaw, cos/sin pitch
     vec4 screen; // width,height,focal in output pixels,ortho height
@@ -46,7 +46,16 @@ layout(std140,set=3,binding=0) uniform Surface {
     vec4 detail;          // uv scale, albedo detail weight, unused, enabled
     vec4 decal2;          // rotation, scale, fade alpha, enabled
     vec4 renderOrigin;    // render-space -> world XY offset for shadow lookups
-} u;
+    vec4 scissor;         // batched path: per-instance pixel scissor
+    vec4 ordinal;         // batched path: submission ordinal for depth tie-break
+};
+#ifdef R2D_BATCH_SSBO
+layout(std430,set=3,binding=1) readonly buffer BatchSurface { SurfaceData data[]; } batch;
+layout(location=0) flat in int vBatchInstance;
+#define u batch.data[vBatchInstance]
+#else
+layout(std140,set=3,binding=0) uniform Surface { SurfaceData u; };
+#endif
 layout(location=0) out vec4 color;
 layout(location=1) out vec4 owner; // exact forward depth, surface, span, actor
 float cross2(vec2 a,vec2 b) { return a.x*b.y-a.y*b.x; }
@@ -96,6 +105,9 @@ bool occluded(vec3 origin,vec3 direction,int slot) {
 }
 void main() {
     vec2 pixel=gl_FragCoord.xy;
+#ifdef R2D_BATCH_SSBO
+    if(pixel.x<u.scissor.x||pixel.y<u.scissor.y||pixel.x>u.scissor.z||pixel.y>u.scissor.w)discard;
+#endif
     if(u.plane.w>5.5){
         // P4 final screen composite: samples the colour scene (albedoMap),
         // owner target (normalMap) and scene depth (emissiveMap). Renders to a
@@ -415,5 +427,12 @@ void main() {
         color=vec4(clamp(mix(rgb,u.fog.rgb,fog),0,1),alpha_out);
     }
     owner=vec4(depth,u.identity.xy,u.actor.w>0?u.opening.w:-1);
+#ifdef R2D_BATCH_SSBO
+    // Sequential draws used LEQUAL, so later submissions win equal-depth ties.
+    // Instance order inside one draw is undefined on the GPU; a tiny per-instance
+    // depth bias restores the sequential outcome deterministically.
+    gl_FragDepth=max(0,1-u.eye.w/depth-(decal?.000001:0)-u.ordinal.y*u.ordinal.x*0.0000005);
+#else
     gl_FragDepth=max(0,1-u.eye.w/depth-(decal?.000001:0));
+#endif
 }

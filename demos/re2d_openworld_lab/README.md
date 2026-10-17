@@ -18,14 +18,15 @@ Compiler output (this fixture):
 
 | metric | value |
 |---|---|
-| brushes | 16 (11 solids, 8 tool brushes) |
-| cells / spans | 38 / 38 |
-| walls | 100 |
-| portals | 64 (20 areaportal-marked edges) |
+| brushes | 17 (11 solids, 9 tool brushes) |
+| cells / spans | 39 / 39 |
+| walls | 124 (8 occluder markers, 18 hint barriers) |
+| portals | 65 (21 areaportal-marked edges) |
 | entities | 7 (6 point, 1 brush) |
 | region grid | 8 x 8 @ 256, 25 occupied regions |
 | coarse PVS edges | 600 |
-| compile stages | load 0.57 ms, compile 0.14 ms, regions 0.29 ms |
+| runtime occluder cull | regionOccluderCulled=16 at west spawn (39 cells -> 11 allowed) |
+| compile stages | load 0.83 ms, compile 0.13 ms, regions 0.05 ms |
 
 ## Run
 
@@ -39,8 +40,9 @@ camera region, compiled cells/portals, brush/tool counts and coarse PVS edges.
 ## What is real / what is demo-side
 
 * Real: native brush compiler, cell/span/wall/portal output, tool-material
-  policy bits, areaportal-marked portals, region grid partition and coarse PVS
-  built by `src/re2d_world_region.c`.
+  policy bits, occluder wall-chain markers, hint barriers, areaportal-marked
+  portals, region grid partition and coarse PVS built by
+  `src/re2d_world_region.c`.
 * Demo-side: the compact region index shown in the HUD is derived from the
   compiler's occupied grid slots shipped in `index.js`; runtime streaming state
   lives in the native region module and is not yet exposed through

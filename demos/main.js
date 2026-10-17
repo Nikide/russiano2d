@@ -46,6 +46,8 @@ const MODULES = [
     './re2d_debug_lab/index.js',
     // P3 rotating polywall lab: rigid вращение authored wall в рантайме.
     './re2d_polywall_lab/index.js',
+    // R-03/acceptance: dense visual lab (50 enemies, 150 props, VFX/sky/decal).
+    './re2d_visual_lab/index.js',
     // Эталонное меню настроек: четыре вкладки, всё на лету, сохранение в
     // settings.json (docs/tutorial-settings.md).
     './settings/index.js',

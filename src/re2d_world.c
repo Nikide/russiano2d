@@ -615,3 +615,77 @@ void r2d_world_debug_pixels(const R2DRe2dWorld *w,const R2DRe2dView *view,const 
         for(int c=0;c<4;c++)rgba[i*4+c]=(uint8_t)(color>>(c*8));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Compiler volumetric entities (fog/water brush entities). Constrained volumes
+// only: axis-aligned XY rect + height interval, no mesh, no fluid simulation.
+// ---------------------------------------------------------------------------
+#define R2D_VOLUME_EPS 1e-4f
+
+static bool volume_span_overlap(const R2DWorldSpan *span,
+                                float x,float y,float vw,float vh,
+                                float bottom,float top)
+{
+    return span->x < x + vw - R2D_VOLUME_EPS &&
+           x < span->x + span->w - R2D_VOLUME_EPS &&
+           span->y < y + vh - R2D_VOLUME_EPS &&
+           y < span->y + span->h - R2D_VOLUME_EPS &&
+           span->bottom < top - R2D_VOLUME_EPS &&
+           bottom < span->top - R2D_VOLUME_EPS;
+}
+
+int r2d_world_volume_spans(const R2DRe2dWorld *w,float x,float y,float vw,float vh,
+                           float bottom,float top,int *out,int capacity)
+{
+    if(!w || !isfinite(x) || !isfinite(y) || !isfinite(vw) || !isfinite(vh) ||
+       !isfinite(bottom) || !isfinite(top) || !(vw > 0) || !(vh > 0) ||
+       !(top > bottom) || capacity < 0 || (capacity > 0 && !out)) return -1;
+    int total = 0;
+    for (int i = 0; i < w->span_count; i++) {
+        if (!volume_span_overlap(&w->spans[i], x, y, vw, vh, bottom, top))
+            continue;
+        if (out && total < capacity) out[total] = i;
+        total++;
+    }
+    return total;
+}
+
+static int apply_volume_fog(R2DRe2dWorld *w,float x,float y,float vw,float vh,
+                            float bottom,float top,float density,float start,
+                            float r,float g,float b)
+{
+    if(!w || !isfinite(x) || !isfinite(y) || !isfinite(vw) || !isfinite(vh) ||
+       !isfinite(bottom) || !isfinite(top) || !(vw > 0) || !(vh > 0) ||
+       !(top > bottom) || !isfinite(density) || density < 0.0f || density > 1.0f ||
+       !isfinite(start) || start < 0.0f || !isfinite(r) || !isfinite(g) ||
+       !isfinite(b) || r < 0.0f || r > 1.0f || g < 0.0f || g > 1.0f ||
+       b < 0.0f || b > 1.0f) return -1;
+    int updated = 0;
+    for (int i = 0; i < w->span_count; i++) {
+        if (!volume_span_overlap(&w->spans[i], x, y, vw, vh, bottom, top))
+            continue;
+        R2DWorldSpanLight light;
+        memset(&light, 0, sizeof light);
+        if (w->span_lights && i < w->span_count) light = w->span_lights[i];
+        light.fog_density = density;
+        light.fog_start = start;
+        light.fog_r = r; light.fog_g = g; light.fog_b = b;
+        if (!r2d_world_set_span_light(w, i, &light)) return -1;
+        updated++;
+    }
+    return updated;
+}
+
+int r2d_world_apply_fog_volume(R2DRe2dWorld *w,float x,float y,float vw,float vh,
+                               float bottom,float top,float density,float start,
+                               float r,float g,float b)
+{
+    return apply_volume_fog(w, x, y, vw, vh, bottom, top, density, start, r, g, b);
+}
+
+int r2d_world_apply_water_volume(R2DRe2dWorld *w,float x,float y,float vw,float vh,
+                                 float bottom,float top,float density,
+                                 float r,float g,float b)
+{
+    return apply_volume_fog(w, x, y, vw, vh, bottom, top, density, 0.0f, r, g, b);
+}

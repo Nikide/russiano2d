@@ -227,3 +227,36 @@ Per frame the runtime rebuilds the plan from `R2DWorldVisibility`:
 `world.batchInfo()` returns the current counters plus the GPU contract; the
 same counters are exposed in `world.info().visual.staticBatch*`. Measurement:
 `tests/agent/re2d_batch_info_test.py` on `demos/re2d_world_renderer_lab`.
+
+## Region profiler split (task-22)
+
+`world.info()` now exposes real CPU-clock region phases, measured with
+`SDL_GetPerformanceCounter` in `r2d_world_regions_frame`:
+
+* `regionLoadMs` — region grid ensure/build (normally 0 after the first frame);
+* `regionVisibilityMs` — PVS, occluder/cluster culling and active/preload ring;
+* `regionStreamMs` — residency state update (`r2d_world_stream_update`);
+* `regionStreamIoMs` — budgeted payload load/unload tick (`R2DWorldStreamIO`).
+
+Measured on `demos/re2d_world_renderer_lab` (GPU, 640 px): visibility
+~0.0007 ms, stream ~0.001 ms, stream IO ~0.0004 ms per frame; values are
+sub-microsecond at this map size. Debug overlays add one CPU pass over the
+RGBA frame only while a debug view is active; FINAL frames are untouched.
+
+### GPU batching measurement
+
+`demos/re2d_world_renderer_lab`, medium quality, 2 visible cells: logical
+surface draws 23 (11 base + 12 span variants) → 4 GPU group draws, 19 saved
+draws, 23 SSBO instances. The image matches the per-surface path (parity suite
+green); the only deliberate delta is a ≤5e-7 span-rank depth bias needed to keep
+equal-depth wall span variants deterministic inside one instanced draw.
+
+Commands:
+
+```bash
+python3 tests/agent/re2d_batch_gpu_test.py        # reduction + fallback
+python3 tests/agent/re2d_world_renderer_test.py   # CPU/GPU parity
+```
+
+Fallback: `world.batchGpu(false)`; overdraw and non-final debug views always use
+the per-surface path so debug attribution stays inspectable.

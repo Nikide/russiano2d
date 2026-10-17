@@ -1061,6 +1061,31 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
         }
     }
 
+    // Authored occluder brushes are a 2D wall chain: every footprint edge is a
+    // zero-policy R2D_WALL_OCCLUDER marker. The runtime consumes these segments
+    // as a conservative coarse occluder chain. One marker per authored segment
+    // keeps stable IDs (`brush.occluder<index>_e<edge>`) and travels through
+    // existing JSON and RDW5 bake without a side table.
+    for (int i = 0; i < brush_count; i++) {
+        if (brushes[i].tool != SDK_BRUSH_TOOL_OCCLUDER) continue;
+        for (int e = 0; e < brushes[i].ring_count; e++) {
+            const SdkBrushPoint *a = &brushes[i].ring[e];
+            const SdkBrushPoint *b = &brushes[i].ring[(e + 1) % brushes[i].ring_count];
+            const float dx = b->x - a->x, dy = b->y - a->y;
+            if (dx * dx + dy * dy <= BRUSH_EPS * BRUSH_EPS) continue;
+            SdkBrushWall marker;
+            memset(&marker, 0, sizeof marker);
+            snprintf(marker.id, sizeof marker.id, "brush.occluder%d_e%d", i, e);
+            marker.x1 = a->x; marker.y1 = a->y;
+            marker.x2 = b->x; marker.y2 = b->y;
+            marker.bottom = brushes[i].bottom;
+            marker.top = brushes[i].top;
+            copy_text(marker.color, sizeof marker.color, brushes[i].side_color);
+            marker.flags = (uint16_t)R2D_WALL_OCCLUDER;
+            if (!push_wall(out, &caps, &marker)) goto oom;
+        }
+    }
+
     if (stats) {
         stats->brushes = brush_count;
         for (int i = 0; i < brush_count; i++) {
@@ -1207,6 +1232,9 @@ int sdk_brush_map_entities(const SdkBrushSpec *brushes, int brush_count,
         m->w = maxx - minx; m->h = maxy - miny;
         m->mover_type = -1;
         m->trigger_type = -1;
+        m->portal = -1;
+        m->span_count = -1;
+        m->terrain_kind = -1;
         if (!strcmp(e->kind, "door")) {
             snprintf(m->runtime, sizeof m->runtime, "mover");
             snprintf(m->api, sizeof m->api, "world.mover");
@@ -1230,15 +1258,22 @@ int sdk_brush_map_entities(const SdkBrushSpec *brushes, int brush_count,
             m->trigger_type = 0;   // enter
         } else if (!strcmp(e->kind, "fog_volume")) {
             snprintf(m->runtime, sizeof m->runtime, "fog");
-            snprintf(m->api, sizeof m->api, "world.fogZone");
-            snprintf(m->hook, sizeof m->hook, "span resolution + volume field");
+            snprintf(m->api, sizeof m->api, "r2d_world_apply_fog_volume");
+            m->fog_density = 0.45f;
+            m->fog_start = 0.0f;
+            m->fog_r = 0.55f; m->fog_g = 0.62f; m->fog_b = 0.70f;
         } else if (!strcmp(e->kind, "water_volume")) {
             snprintf(m->runtime, sizeof m->runtime, "water");
-            snprintf(m->api, sizeof m->api, "world.liquid");
-            snprintf(m->hook, sizeof m->hook, "liquid/volume runtime API missing");
+            snprintf(m->api, sizeof m->api, "r2d_world_apply_water_volume");
+            m->terrain_kind = R2D_TERRAIN_WATER;
+            m->fog_density = 0.60f;
+            m->fog_start = 0.0f;
+            m->fog_r = 0.12f; m->fog_g = 0.32f; m->fog_b = 0.62f;
+            snprintf(m->hook, sizeof m->hook,
+                     "terrain gameplay: volume_spans + surfaceTerrain");
         } else { // areaportal
             snprintf(m->runtime, sizeof m->runtime, "portal");
-            snprintf(m->api, sizeof m->api, "portal.areaPortal");
+            snprintf(m->api, sizeof m->api, "r2d_world_portal_set_area");
             snprintf(m->hook, sizeof m->hook, "nearest generated portal");
         }
     }

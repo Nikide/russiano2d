@@ -441,8 +441,46 @@ static JSValue world_ray(JSContext *ctx,JSValueConst self,int argc,JSValueConst 
     set_num(ctx,o,"height",h.height);set_num(ctx,o,"wall",h.wall);set_num(ctx,o,"span",h.span);
     JS_SetPropertyStr(ctx,o,"ceiling",JS_NewBool(ctx,h.ceiling));return o;
 }
+static JSValue material_info_object(JSContext *ctx,R2DWorldRuntime *w,int index)
+{
+    if(!w||index<0||index>=R2D_WORLD_MAX_MATERIALS)return JS_NULL;
+    const R2DWorldMaterial *m=&w->world.materials[index];
+    if(!m->used)return JS_NULL;
+    JSValue o=JS_NewObject(ctx);
+    set_num(ctx,o,"index",index);
+    JS_SetPropertyStr(ctx,o,"name",JS_NewString(ctx,m->name));
+    set_num(ctx,o,"blend",m->blend);set_num(ctx,o,"opacity",m->opacity);
+    set_num(ctx,o,"uScale",m->u_scale);set_num(ctx,o,"vScale",m->v_scale);
+    set_num(ctx,o,"emissiveStrength",m->emissive_strength);
+    JS_SetPropertyStr(ctx,o,"worldUV",JS_NewBool(ctx,m->world_uv));
+    JS_SetPropertyStr(ctx,o,"linear",JS_NewBool(ctx,m->linear));
+    JSValue albedo=JS_NewObject(ctx);set_num(ctx,albedo,"width",m->albedo.width);set_num(ctx,albedo,"height",m->albedo.height);
+    JSValue normal=JS_NewObject(ctx);set_num(ctx,normal,"width",m->normal.width);set_num(ctx,normal,"height",m->normal.height);
+    JSValue emissive=JS_NewObject(ctx);set_num(ctx,emissive,"width",m->emissive.width);set_num(ctx,emissive,"height",m->emissive.height);
+    JS_SetPropertyStr(ctx,o,"albedo",albedo);JS_SetPropertyStr(ctx,o,"normal",normal);JS_SetPropertyStr(ctx,o,"emissive",emissive);
+    int surfaces=0;
+    if(w->world.surface_materials)for(int i=0;i<w->world.surface_count;i++)if(w->world.surface_materials[i]==index)surfaces++;
+    set_num(ctx,o,"surfaceCount",surfaces);
+    float tint[3],uv[2];
+    r2d_world_render_variation((uint32_t)index,0,w->render_features.seed,w->render_features.variation_strength,tint,uv);
+    JSValue variation=JS_NewObject(ctx);
+    set_num(ctx,variation,"tintR",tint[0]);set_num(ctx,variation,"tintG",tint[1]);set_num(ctx,variation,"tintB",tint[2]);
+    set_num(ctx,variation,"uvU",uv[0]);set_num(ctx,variation,"uvV",uv[1]);
+    JS_SetPropertyStr(ctx,o,"variation",variation);
+    return o;
+}
 static JSValue vfx_info_object(JSContext *ctx,const R2DWorldVfxInfo *info);
 static JSValue sky_layers_array(JSContext *ctx,R2DWorldRuntime *w);
+// P4 static batching switch: on by default; false restores the per-surface GPU
+// path (fallback used for overdraw/non-final debug views and old devices).
+static JSValue world_batch_gpu(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1)return JS_NewBool(ctx,w->batch_gpu);
+    w->batch_gpu=JS_ToBool(ctx,argv[0])>0;
+    return JS_NewBool(ctx,w->batch_gpu);
+}
+
 static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w) return JS_EXCEPTION;
@@ -456,6 +494,17 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     for(int i=0;i<64;i++){const R2DWorldMaterial *m=&w->world.materials[i];material_bytes+=(size_t)m->albedo.width*m->albedo.height*4+(size_t)m->normal.width*m->normal.height*4+(size_t)m->emissive.width*m->emissive.height*4;}
     set_num(ctx,o,"cpuMaterialPayloadBytes",material_bytes);set_num(ctx,o,"gpuTexturePayloadBytes",w->gpu_texture_bytes);set_num(ctx,o,"gpuBufferPayloadBytes",w->gpu_transfer_bytes);set_num(ctx,o,"gpuShadowUpdates",w->gpu_shadow_updates);
     set_num(ctx,o,"decals",w->world.decal_count);set_num(ctx,o,"lightUpdates",w->world.light_updates);
+    {
+        JSValue materials=JS_NewArray(ctx);uint32_t materialCount=0;
+        for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++)if(w->world.materials[i].used){
+            JSValue entry=material_info_object(ctx,w,i);
+            if(!JS_IsNull(entry))JS_SetPropertyUint32(ctx,materials,materialCount++,entry);else JS_FreeValue(ctx,entry);
+        }
+        set_num(ctx,o,"materialCount",materialCount);
+        // `materials` already means the material count for legacy consumers;
+        // the inspector array is additive under materialList.
+        JS_SetPropertyStr(ctx,o,"materialList",materials);
+    }
     set_num(ctx,o,"reloadCount",w->reload_count);JS_SetPropertyStr(ctx,o,"reloadError",JS_NewString(ctx,w->reload_error));
     JS_SetPropertyStr(ctx,o,"backend",JS_NewString(ctx,w->gpu_enabled?"gpu-reference":"cpu-reference"));set_num(ctx,o,"gpuDraws",w->gpu_draws);
     set_num(ctx,o,"gpuDrawsBase",w->gpu_draw_base);set_num(ctx,o,"gpuDrawsSpan",w->gpu_draw_span);
@@ -500,6 +549,10 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,v,"staticBatchActors",batch?batch->actors:0);
     set_num(ctx,v,"staticBatchSkies",batch?batch->skies:0);
     set_num(ctx,v,"staticBatchOverflow",batch?batch->overflow:0);
+    set_num(ctx,v,"gpuBatchDraws",w->gpu_batch_draws);
+    set_num(ctx,v,"gpuBatchInstances",w->gpu_batch_instances);
+    set_num(ctx,v,"gpuBatchSavedDraws",w->gpu_batch_saved);
+    set_num(ctx,v,"gpuBatchLogicalDraws",w->gpu_batch_logical);
     set_num(ctx,v,"renderTime",w->render_time);
     JS_SetPropertyStr(ctx,o,"visual",v);
     {
@@ -575,6 +628,10 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"streamPreload",w->stream_stats.preload);
     set_num(ctx,o,"texturesResident",w->stream_stats.textures_resident);
     set_num(ctx,o,"atlasesResident",w->stream_stats.atlases_resident);
+    set_num(ctx,o,"regionStreamMs",w->region_stream_ms);
+    set_num(ctx,o,"regionStreamIoMs",w->region_stream_io_ms);
+    set_num(ctx,o,"regionLoadMs",w->region_load_ms);
+    set_num(ctx,o,"regionVisibilityMs",w->region_visibility_ms);
     set_num(ctx,o,"impostorCount",w->impostor_ready?w->impostors.count:0);
     set_num(ctx,o,"visibleImpostors",w->visible_impostor_count);
     set_num(ctx,o,"lodHiddenActors",w->lod_hidden_actors);
@@ -677,6 +734,12 @@ static JSValue world_batch_info(JSContext *ctx,JSValueConst self,int argc,JSValu
     set_num(ctx,o,"groupBytes",(double)sizeof(R2DWorldBatchGroup));
     set_num(ctx,o,"instanceCapacity",w->batch_instance_capacity);
     set_num(ctx,o,"groupCapacity",w->batch_group_capacity);
+    set_num(ctx,o,"gpuBatched",w->gpu_batch_draws>0?1:0);
+    set_num(ctx,o,"gpuDraws",w->gpu_batch_draws);
+    set_num(ctx,o,"gpuInstances",w->gpu_batch_instances);
+    set_num(ctx,o,"gpuLogicalDraws",w->gpu_batch_logical);
+    set_num(ctx,o,"gpuSavedDraws",w->gpu_batch_saved);
+    set_num(ctx,o,"gpuEnabled",w->batch_gpu?1:0);
     JS_SetPropertyStr(ctx,o,"layout",JS_NewString(ctx,
         "std430: instance=8*u32(surface,span,material,flags,tint,aux,light,atlas), 32B; group=6*u32(material,blend,lightPolicy,atlas,first,count); "
         "instances sorted by group key; group.first/count index instances"));
@@ -1915,7 +1978,7 @@ static JSValue world_quality(JSContext *ctx,JSValueConst self,int argc,JSValueCo
 static JSValue world_debug_view(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float mode;if(!w||!world_numbers(ctx,argc,argv,1,&mode))return JS_EXCEPTION;
-    if(mode<0||mode>R2D_WORLD_DEBUG_OVERDRAW||mode!=floorf(mode))return JS_ThrowRangeError(ctx,"Re2D World: unsupported debug view");w->debug_view=(int)mode;return JS_UNDEFINED;
+    if(mode<0||mode>=R2D_WORLD_DEBUG_COUNT||mode!=floorf(mode))return JS_ThrowRangeError(ctx,"Re2D World: unsupported debug view");w->debug_view=(int)mode;return JS_UNDEFINED;
 }
 static JSValue world_debug_visibility(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -2015,6 +2078,30 @@ static JSValue world_sky_manifest(JSContext *ctx,JSValueConst self,int argc,JSVa
     bool ok=r2d_world_runtime_sky_manifest(ctx,w,path);JS_FreeCString(ctx,path);
     return JS_NewBool(ctx,ok);
 }
+static JSValue world_material_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1)return JS_ThrowTypeError(ctx,"Re2D World: materialInfo(index|name)");
+    int index=-1;
+    if(JS_IsString(argv[0])){
+        const char *name=JS_ToCString(ctx,argv[0]);if(!name)return JS_EXCEPTION;
+        index=r2d_world_material_find(&w->world,name);JS_FreeCString(ctx,name);
+    }else{
+        int32_t value=0;if(JS_ToInt32(ctx,&value,argv[0]))return JS_ThrowTypeError(ctx,"Re2D World: materialInfo(index|name)");
+        index=value;
+    }
+    return material_info_object(ctx,w,index);
+}
+static JSValue world_materials_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    JSValue arr=JS_NewArray(ctx);uint32_t count=0;
+    for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++)if(w->world.materials[i].used){
+        JSValue o=material_info_object(ctx,w,i);if(JS_IsNull(o)){JS_FreeValue(ctx,o);continue;}
+        JS_SetPropertyUint32(ctx,arr,count++,o);
+    }
+    return arr;
+}
 static JSValue world_material_set(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
@@ -2089,6 +2176,7 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"frame",JS_NewCFunction(ctx,world_frame,"frame",4));
     JS_SetPropertyStr(ctx,handle,"info",JS_NewCFunction(ctx,world_info,"info",0));
     JS_SetPropertyStr(ctx,handle,"batchInfo",JS_NewCFunction(ctx,world_batch_info,"batchInfo",0));
+    JS_SetPropertyStr(ctx,handle,"batchGpu",JS_NewCFunction(ctx,world_batch_gpu,"batchGpu",1));
     JS_SetPropertyStr(ctx,handle,"dispose",JS_NewCFunction(ctx,world_release,"dispose",0));
     JS_SetPropertyStr(ctx,handle,"cellAt",JS_NewCFunction(ctx,world_cell_query,"cellAt",2));
     JS_SetPropertyStr(ctx,handle,"spanAt",JS_NewCFunction(ctx,world_span_query,"spanAt",3));
@@ -2218,6 +2306,8 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"regionBudget",JS_NewCFunction(ctx,world_region_budget,"regionBudget",2));
     JS_SetPropertyStr(ctx,handle,"regionLod",JS_NewCFunction(ctx,world_region_lod,"regionLod",5));
     JS_SetPropertyStr(ctx,handle,"material",JS_NewCFunction(ctx,world_material_set,"material",7));
+    JS_SetPropertyStr(ctx,handle,"materialInfo",JS_NewCFunction(ctx,world_material_info,"materialInfo",1));
+    JS_SetPropertyStr(ctx,handle,"materials",JS_NewCFunction(ctx,world_materials_info,"materials",0));
     JS_SetPropertyStr(ctx,handle,"watch",JS_NewCFunction(ctx,world_watch,"watch",1));
     JS_SetPropertyStr(ctx,handle,"reloadJSON",JS_NewCFunction(ctx,world_reload,"reloadJSON",1));
     JS_SetPropertyStr(ctx,handle,"decal",JS_NewCFunction(ctx,world_decal_new,"decal",7));
@@ -2383,7 +2473,7 @@ static JSValue world_load(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     if(!script||!script->renderer||argc<1||!JS_IsString(argv[0]))return JS_ThrowTypeError(ctx,"Re2D World: load expects JSON text");
     const char *text=JS_ToCString(ctx,argv[0]);if(!text)return JS_EXCEPTION;
     WorldHandle *w=calloc(1,sizeof *w);if(!w){JS_FreeCString(ctx,text);return JS_ThrowOutOfMemory(ctx);}
-    w->renderer=script->renderer;w->runtime=JS_GetRuntime(ctx);w->texture=w->sprite=-1;
+    w->renderer=script->renderer;w->runtime=JS_GetRuntime(ctx);w->texture=w->sprite=-1;w->batch_gpu=true;
     r2d_re2d_view_set(&w->view,0,0,48,0,0,1.2f,320,180);char error[256];
     bool ok=r2d_world_load_json(&w->world,text,error,sizeof error);
     // Honor compiler --region-size metadata from the same JSON document.
@@ -2405,7 +2495,7 @@ static JSValue world_create(JSContext *ctx,JSValueConst self,int argc,JSValueCon
     R2DWorldWall *ww=calloc(nw/9+1,sizeof *ww);R2DWorldSpan *ss=calloc(ns/12+1,sizeof *ss);
     WorldHandle *w=calloc(1,sizeof *w);
     if(!ww||!ss||!w) {free(ww);free(ss);free(w);JS_FreeValue(ctx,a);JS_FreeValue(ctx,b);return JS_ThrowOutOfMemory(ctx);}
-    w->renderer=script->renderer;w->runtime=JS_GetRuntime(ctx);w->texture=w->sprite=-1;
+    w->renderer=script->renderer;w->runtime=JS_GetRuntime(ctx);w->texture=w->sprite=-1;w->batch_gpu=true;
     r2d_re2d_view_set(&w->view,0,0,48,0,0,1.2f,320,180);
     for(size_t i=0;i<nw/9;i++) {float *p=walls+i*9;ww[i]=(R2DWorldWall){p[0],p[1],p[2],p[3],p[4],p[5],world_rgb(p+6),0};}
     for(size_t i=0;i<ns/12;i++) {float *p=spans+i*12;ss[i]=(R2DWorldSpan){p[0],p[1],p[2],p[3],p[4],p[5],world_rgb(p+6),world_rgb(p+9),0,0,0,0};}

@@ -443,6 +443,11 @@ function worldWrapper($, native) {
                 // P4 static batching: deterministic group plan + packed SSBO
                 // contract for the GPU owner (no submission side effects).
                 batchInfo() { return native.batchInfo(); },
+                // P4 GPU static batching switch (false = per-surface fallback).
+                batchGpu(on) {
+                    if (on === undefined) return native.batchGpu();
+                    return native.batchGpu(!!on);
+                },
                 // R-04 huge world: budgeted region/streaming config, distant
                 // impostor cards and region-local render coordinates. The native
                 // side owns the state; the wrapper only exposes it.
@@ -612,21 +617,22 @@ function rendererWorldWrapper($, native) {
     world.profile = (options = {}) => { native.gpuWait(!!options.gpuWait); return world; };
     world.quality = (options = {}) => { const current=native.info();native.quality(options.poseBudget ?? current.poseBudget,options.poseStep ?? current.poseStep); return world; };
     world.quality({poseBudget:1,poseStep:3});
-    const views = ['final','cell-id','span-id','depth','owner','light-level','dynamic-light-count','normal','emissive','bsp','portals','shadow-mask','overdraw'];
+    const views = ['final','cell-id','span-id','depth','owner','light-level','dynamic-light-count','normal','emissive','bsp','portals','shadow-mask','overdraw',
+        'region','active-region','pvs','vis-cluster','areaportal','occluder','distant-lod','sprite-lod','material-variation','ao-lite','vfx-budget'];
     // Renderer enum is authored in native code (owned by the renderer task).
     // These features are exposed through counters/debug data today; the JS
     // catalogue tells tools honestly which ones need a new native enum value.
     const debugFeatures = [
-        { name: 'regions', status: 'counter' },
-        { name: 'active-regions', status: 'counter' },
-        { name: 'pvs', status: 'counter' },
-        { name: 'vis-clusters', status: 'counter' },
-        { name: 'areaportal', status: 'counter' },
-        { name: 'occluder', status: 'counter' },
-        { name: 'distant-lod', status: 'counter' },
-        { name: 'sprite-lod', status: 'counter' },
-        { name: 'material-variation', status: 'counter' },
-        { name: 'ao-lite', status: 'counter' },
+        { name: 'regions', status: 'ready' },
+        { name: 'active-regions', status: 'ready' },
+        { name: 'pvs', status: 'ready' },
+        { name: 'vis-clusters', status: 'ready' },
+        { name: 'areaportal', status: 'ready' },
+        { name: 'occluder', status: 'ready' },
+        { name: 'distant-lod', status: 'ready' },
+        { name: 'sprite-lod', status: 'ready' },
+        { name: 'material-variation', status: 'ready' },
+        { name: 'ao-lite', status: 'ready' },
         { name: 'fog', status: 'ready' },
         { name: 'sky-layers', status: 'counter' },
         { name: 'vfx-overdraw', status: 'ready' },
@@ -673,6 +679,8 @@ function rendererWorldWrapper($, native) {
         features() { return debugFeatures.map((f) => ({ ...f })); },
         supported(name) { return views.includes(String(name)); },
         renderStats() { return native.info(); },
+        material(indexOrName) { return native.materialInfo(indexOrName); },
+        materials() { return native.materials(); },
         visibility() { return native.visibility(); },
         budgets() { return Object.fromEntries(Object.entries(budgets).map(([k, v]) => [k, { ...v }])); },
         budget(info) { return budgetReport(info); },

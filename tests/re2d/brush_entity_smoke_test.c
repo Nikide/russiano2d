@@ -129,11 +129,38 @@ static void test_brush_entity_validation(void)
                                                      map, 2, error, sizeof error));
 }
 
+
+static void test_fog_water_areaportal_mapping_defaults(void)
+{
+    SdkBrushSpec brushed[3];
+    brushed[0] = make_rect("fog.brush", 8, 8, 32, 32, 0, 64, SDK_BRUSH_TOOL_TRIGGER);
+    brushed[1] = make_rect("water.brush", 48, 8, 32, 32, 0, 24, SDK_BRUSH_TOOL_TRIGGER);
+    brushed[2] = make_rect("area.brush", 96, 0, 8, 64, 0, 64, SDK_BRUSH_TOOL_AREAPORTAL);
+    const SdkBrushEntityRef refs[3] = {
+        {"fog.pool", "fog_volume", "fog.brush", ""},
+        {"water.pool", "water_volume", "water.brush", ""},
+        {"area.gate", "areaportal", "area.brush", ""}
+    };
+    SdkBrushEntityMap map[3];
+    char error[256] = {0};
+    TEST_ASSERT_EQUAL_INT(3, sdk_brush_map_entities(brushed, 3, refs, 3, map, 3,
+                                                    error, sizeof error));
+    TEST_ASSERT_EQUAL_STRING("r2d_world_apply_fog_volume", map[0].api);
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 0.45f, map[0].fog_density);
+    TEST_ASSERT_EQUAL_INT(-1, map[0].portal);
+    TEST_ASSERT_EQUAL_STRING("r2d_world_apply_water_volume", map[1].api);
+    TEST_ASSERT_EQUAL_INT(R2D_TERRAIN_WATER, map[1].terrain_kind);
+    TEST_ASSERT_TRUE(map[1].hook[0] != 0);
+    TEST_ASSERT_EQUAL_STRING("r2d_world_portal_set_area", map[2].api);
+    TEST_ASSERT_EQUAL_INT(-1, map[2].portal); // resolved by sdk_world after compile
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_door_brush_maps_to_native_mover);
     RUN_TEST(test_trigger_brush_maps_to_native_trigger);
     RUN_TEST(test_brush_entity_validation);
+    RUN_TEST(test_fog_water_areaportal_mapping_defaults);
     return UNITY_END();
 }

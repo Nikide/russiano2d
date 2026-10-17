@@ -314,15 +314,17 @@ Tests: `tests/re2d/hint_cache_test.c` (6 Unity tests: hint cut, skip ignored,
 legacy identical, occluder cell culling with counters, coarse region culling,
 determinism/invalid args).
 
-Compiler contract status at this integration point: the SDK brush compiler emits
-`R2D_WALL_TOOL_HINT` barrier walls (18 markers on the open-world lab map after
-recompiling) and `R2D_WALL_TOOL_SKIP` if authored. It does **not** yet emit
-`R2D_WALL_OCCLUDER` wall segments: occluder brushes are counted in compiler
-stats but no marker wall reaches the runtime, so real maps currently build an
-empty occluder cache. The runtime consumer is complete and tested with synthetic
-marker walls; task-14 only needs to emit one zero-policy occluder wall per
-authored occluder segment. No runtime change is required then, and legacy maps
-stay unchanged until markers exist.
+Compiler contract status: the SDK brush compiler emits both kinds of markers.
+`R2D_WALL_TOOL_HINT` barrier walls are emitted per hint-covered portal (18 on the
+open-world lab map) and `R2D_WALL_SKIP` is compiler-only. `R2D_WALL_OCCLUDER`
+walls are emitted one per authored occluder footprint edge with stable
+`brush.occluder<index>_e<edge>` ids and zero other policy bits. On the shipped
+open-world lab this gives `occluderWalls=8` (2 occluder brushes x 4 edges),
+`hintWalls=18`, and the runtime reports `regionOccluderCulled=16` at the west
+spawn (39 cells allowed -> 11); the native cache/visibility test additionally
+checks `occluderCellsCut >= 1`. Legacy maps contain no markers, build an empty
+cache and keep identical visibility/counters. Markers use the existing wall
+array and RDW5 bake; no side table or runtime format change.
 
 ## Measured metrics (openworld lab, shipped `.re2dworld`)
 
@@ -330,7 +332,9 @@ stay unchanged until markers exist.
 regions 25, 8x8 compiler grid @ 256 (metadata honored at runtime)
 coarse region PVS edges 600
 vis cluster edges 702 (4 cells/cluster)
-occupied cells 38, portals 64, areaportals 20
+occupied cells 39, portals 65, areaportals 21
+occluderWalls 8 (2 authored occluder brushes x 4 edges)
+hintWalls 18; runtime regionOccluderCulled 16 at west spawn
 agent region walk: regions 0,1,4,17,19,23,24; active 1..5; culled 13..21
 impostor cards visible (all distant visible regions) 24 (budget <= 64)
 stream simulated resident bytes 9280 (region BSP/surface payloads)
@@ -387,3 +391,49 @@ visible surface demands the payload.
 * Largest maps are capped by the existing cell/portal limits (65536) and the
   region grid cap (4096x4096 cells of grid); larger worlds need a coarser
   `region_size` (metadata is honored).
+
+
+## Scaling benchmark and gameplay-boundary acceptance (task-26)
+
+Reproducible command:
+
+```bash
+python3 tests/agent/re2d_huge_scaling_test.py
+```
+
+It tiles the authored open-world fixture into 1x/2x/4x map-size variants
+(deterministic grid copies at fixed offsets, generated under
+`tests/agent/results/scaling/`), loads them through the normal
+`$.re2dWorld.load()` path with a **fixed** `regionConfig(256,1,2,65536,4)`
+active/preload ring, teleports to the same world anchor, and samples 24 frames.
+It writes `tests/agent/results/re2d_huge_scaling_report.json` and
+`tests/agent/results/huge_scaling.csv`.
+
+| map | cells | regions | active | preload | visible surfaces | GPU draws | frameMs | visibilityMs | surfaceMs |
+|---|---|---|---|---|---|---|---|---|---|
+| 1x | 39 | 13 | 4 | 4 | 7 | 3 | 0.092 | 0.0046 | 0.0847 |
+| 2x | 78 | 26 | 4 | 4 | 7 | 3 | 0.104 | 0.0057 | 0.0922 |
+| 4x | 156 | 52 | 4 | 4 | 7 | 3 | 0.106 | 0.0051 | 0.0955 |
+
+Tolerances asserted by the test: visible surfaces and GPU draws within 25%
+(or 4 units), frameMs <= 1.5x base + 0.5 ms, visibilityMs <= 1.5x + 0.25 ms,
+surfaceMs <= 1.5x + 0.5 ms, active/preload ring within +2 regions. Result: cost
+stays flat while the total map grows 4x (renderer cost depends on the visible
+region set, not total map size, per roadmap 123).
+
+Gameplay boundary (dust2, `regionConfig(512,1,1,...)`): navigation graph 316
+nodes and a 12-span path before crossing; the controller walks/jumps with finite
+state; crossing to another room unloads old payloads (`streamIoUnloads 0 -> 24`)
+while master-world fallback keeps `support`/`blocked` true and the same 12-span
+nav path available for the now-unloaded area; 6 actors remain registered; the
+crossing frame stays at ~0.34 ms. Save/load: `re2dOpenWorld.saveState()` taken
+while payloads are unloaded, then a full `loadMap()` reload, keeps the same map
+hash (`b95815af707fc882`) and semantic cell `brush.cell0 -> 0`, and
+`loadState()` applies successfully; region runtime remains alive after reload.
+
+Limits: the scaling fixture is a deterministic tiling of the authored map (not a
+new giant unique map), so it proves renderer/streaming scaling rather than
+authoring scale; measurements are on one machine/GPU-reference backend and are
+reported as medians, not cross-machine thresholds; the gameplay boundary uses
+the existing dust2 demo controller/nav/actor registries, and master arrays remain
+the correctness fallback for unloaded regions (see task-15 limits).

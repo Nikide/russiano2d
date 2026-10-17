@@ -718,6 +718,21 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_world_decal2_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# Native constrained debug overlays for the appended R2D_WORLD_DEBUG_* views.
+add_executable(r2d_world_debug_views_test re2d/debug_views_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_debug_overlay.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_render_features.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_math.c")
+target_include_directories(r2d_world_debug_views_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_debug_views_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_debug_views_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_debug_views_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_debug_views_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # EXR-декодер панорамного неба Re2D World (cmake/WorldEXR.cmake).
 add_executable(r2d_world_exr_test re2d/exr_test.c)
 target_include_directories(r2d_world_exr_test PRIVATE "${CMAKE_SOURCE_DIR}/src")

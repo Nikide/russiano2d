@@ -26,8 +26,9 @@ const REGIONS = {
     // the compiler's region indices.
     slots: [1,3,6,8,9,10,11,13,15,17,19,20,22,24,25,26,27,29,31,41,43,46,53,55,62],
     cellCounts: [1,1,1,1,1,1,2,2, 1,1,1,9,1,1,1,2, 2,2,1,1,1,1,1,1, 1],
-    brushes: 16, solids: 11, toolBrushes: 8, brushCells: 38, brushWalls: 100,
-    brushPortals: 64, areaPortals: 20, uselessHints: 0, entities: 7,
+    brushes: 17, solids: 11, toolBrushes: 9, brushCells: 39, brushWalls: 124,
+    brushPortals: 65, areaPortals: 21, uselessHints: 0, entities: 7,
+    occluderWalls: 8, hintWalls: 18,
 };
 
 export default function install($) {
@@ -91,9 +92,13 @@ export default function install($) {
                         walls: REGIONS.brushWalls, portals: REGIONS.brushPortals,
                         areaPortals: REGIONS.areaPortals,
                         uselessHints: REGIONS.uselessHints,
+                        occluderWalls: REGIONS.occluderWalls,
+                        hintWalls: REGIONS.hintWalls,
                         entities: REGIONS.entities },
             world: info ? { cells: info.cells, portals: info.portals,
-                            surfaces: info.visibleSurfaces, frame: frames } : null,
+                            surfaces: info.visibleSurfaces, frame: frames,
+                            gpuDraws: info.gpuDraws, mapPath: MAP } : null,
+            view: { x: view.x, y: view.y, h: view.h, yaw: view.yaw },
             // Native runtime huge-world state (regions/PVS/clusters/streaming/
             // LOD/impostors). Numbers come straight from src/re2d.c info.
             native: info ? {
@@ -156,6 +161,8 @@ export default function install($) {
                 hintWalls: info.hintWalls,
                 skipWalls: info.skipWalls,
                 occluderWalls: info.occluderWalls,
+                regionOccluderCulled: info.regionOccluderCulled,
+                regionPvsCulled: info.regionPvsCulled,
             } : null,
             impostors: world && typeof world.impostors === 'function' ? world.impostors() : [],
             note: 'region indices are the compiler row-major partition; native streaming states come from world.info()',
@@ -188,39 +195,63 @@ export default function install($) {
         regionLocal: (x, y) => world && world.regionLocal(x, y),
         quality: (poseBudget) => world && world.quality({ poseBudget, poseStep: 0 }),
         info: () => world && world.info(),
+        loadMap,
+        mapPath: () => MAP,
+        saveState: () => world && world.saveState(),
+        loadState: (save) => world && world.loadState(save),
+        saveMapHash: () => world && world.saveMapHash(),
+        findCell: (id) => world && world.findCell(id),
+        findSpan: (id) => world && world.findSpan(id),
+        findPortal: (id) => world && world.findPortal(id),
         impostors: () => world && typeof world.impostors === 'function' ? world.impostors() : [],
         toggleHud: () => { visible = !visible; if (hud) visible ? hud.show() : hud.hide(); },
     };
     $.agent.expose('re2dOpenWorld', snapshot);
 
+    // Shared visual/gameplay configuration for the original and scaled maps.
+    function configureWorld() {
+        if (!world) return;
+        world.camera(view);
+        world.sky({ color: '#2b3a55' });
+        world.lighting({ mode: 'classic', dynamic: true, shadows: false, distanceScale: 0.001 });
+        // One streamed material texture + broad lights + region-pool decals:
+        // exercise residency upload/evict, GPU light LOD and decal culling.
+        world.material('demo.floor', { albedo: 'demos/re2d_world_renderer_lab/floor.png',
+                                       filter: 'linear', uScale: 1 / 64, vScale: 1 / 64 });
+        const surfaceCount = world.info().surfaces;
+        for (let i = 0; i < surfaceCount; i++) world.surface(i).material('demo.floor');
+        world.light({ x: 650, y: 320, h: 96, radius: 5000, intensity: 1.0,
+                      color: '#ffd8b0', shadow: false });
+        world.light({ x: 1700, y: 1700, h: 96, radius: 5000, intensity: 1.5,
+                      color: '#cfd8ff', shadow: false });
+        let floors = 0;
+        for (let i = 0; i < surfaceCount && floors < 96; i++) {
+            const surface = world.surface(i);
+            if (!surface || surface.kind !== 1) continue;
+            try {
+                world.decal({ surface: i, material: 'demo.floor', u: 0, v: 0,
+                              width: 24, height: 24, life: 0 });
+                floors++;
+            } catch (e) { /* decal budget/material edge */ }
+        }
+    }
+
+    // Benchmark hook: load any .re2dworld (base or generated scaled fixture)
+    // into the same scene, keeping the fixed active/preload ring contract.
+    function loadMap(path) {
+        if (world) { world.dispose(); world = null; }
+        world = $.re2dWorld.load(path).backend('gpu');
+        configureWorld();
+        lastRegion = regionAt(view.x, view.y);
+        frames = 0;
+        return world.info().cells;
+    }
+
     $.scene.add('re2d_openworld_lab', {
         enter($) {
             $.world.gravity(0, 0).color('#101722');
             world = $.re2dWorld.load(MAP).backend('gpu');
-            world.camera(view);
-            world.sky({ color: '#2b3a55' });
-            world.lighting({ mode: 'classic', dynamic: true, shadows: false, distanceScale: 0.001 });
-            // One streamed material texture + a broad far light + one decal:
-            // these exercise residency upload/evict, GPU light LOD and decal
-            // region culling on the real compiled huge world.
-            world.material('demo.floor', { albedo: 'demos/re2d_world_renderer_lab/floor.png',
-                                           filter: 'linear', uScale: 1 / 64, vScale: 1 / 64 });
-            const surfaceCount = world.info().surfaces;
-            for (let i = 0; i < surfaceCount; i++) world.surface(i).material('demo.floor');
-            world.light({ x: 1700, y: 1700, h: 96, radius: 5000, intensity: 1.5,
-                          color: '#cfd8ff', shadow: false });
-            world.light({ x: 650, y: 320, h: 96, radius: 5000, intensity: 1.0,
-                          color: '#ffd8b0', shadow: false });
-            // Region-pool decals on every compiled floor so a visible one always
-            // exercises the cell_allowed + distance LOD skip in the GPU pass.
-            for (let i = 0; i < surfaceCount; i++) {
-                const surface = world.surface(i);
-                if (!surface || surface.kind !== 1) continue;
-                try {
-                    world.decal({ surface: i, material: 'demo.floor', u: 0, v: 0,
-                                  width: 24, height: 24, life: 0 });
-                } catch (e) { /* not every floor accepts the material */ }
-            }
+            configureWorld();
             hud = $.ui.doc('demos/re2d_openworld_lab/lab.rml').show();
             frames = 0;
         },
@@ -245,7 +276,7 @@ export default function install($) {
             const s = snapshot();
             hud.text('status', `region ${s.region < 0 ? '—' : s.region}/${REGIONS.count}` +
                 ` · cells ${s.world ? s.world.cells : '?'} · portals ${s.world ? s.world.portals : '?'}` +
-                ` · areaportals ${REGIONS.areaPortals}`);
+                ` · areaportals ${REGIONS.areaPortals} · occluders ${REGIONS.occluderWalls} · hints ${REGIONS.hintWalls}`);
             hud.text('stats', `brushes ${REGIONS.brushes} · solids ${REGIONS.solids}` +
                 ` · tools ${REGIONS.toolBrushes} · pvs edges ${REGIONS.pvsEdges}` +
                 ` · grid ${REGIONS.columns}×${REGIONS.rows} @ ${REGIONS.size}`);

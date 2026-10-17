@@ -63,7 +63,13 @@ typedef struct { float split; int axis,front,back,first_ref,ref_count; } R2DWorl
 typedef struct { int surface,span,actor; } R2DWorldPixelOwner;
 enum { R2D_WORLD_DEBUG_FINAL,R2D_WORLD_DEBUG_CELL,R2D_WORLD_DEBUG_SPAN,R2D_WORLD_DEBUG_DEPTH,
        R2D_WORLD_DEBUG_OWNER,R2D_WORLD_DEBUG_LIGHT_LEVEL,R2D_WORLD_DEBUG_LIGHT_COUNT,R2D_WORLD_DEBUG_NORMAL,R2D_WORLD_DEBUG_EMISSIVE,
-       R2D_WORLD_DEBUG_BSP,R2D_WORLD_DEBUG_PORTALS,R2D_WORLD_DEBUG_SHADOW,R2D_WORLD_DEBUG_OVERDRAW };
+       R2D_WORLD_DEBUG_BSP,R2D_WORLD_DEBUG_PORTALS,R2D_WORLD_DEBUG_SHADOW,R2D_WORLD_DEBUG_OVERDRAW,
+       // R-04/P4 native debug overlays (append-only; legacy values unchanged).
+       R2D_WORLD_DEBUG_REGION,R2D_WORLD_DEBUG_ACTIVE_REGION,R2D_WORLD_DEBUG_PVS,
+       R2D_WORLD_DEBUG_VISCLUSTER,R2D_WORLD_DEBUG_AREAPORTAL,R2D_WORLD_DEBUG_OCCLUDER,
+       R2D_WORLD_DEBUG_DISTANT_LOD,R2D_WORLD_DEBUG_SPRITE_LOD,
+       R2D_WORLD_DEBUG_MATERIAL_VARIATION,R2D_WORLD_DEBUG_AO,R2D_WORLD_DEBUG_VFX_BUDGET,
+       R2D_WORLD_DEBUG_COUNT };
 typedef struct { float left,top,right,bottom; } R2DWorldWindow;
 typedef struct {
     int *spans,*surfaces,*queue;
@@ -236,6 +242,28 @@ typedef struct { bool render, collision, hitscan, shadow, acoustic, sky, occlude
 R2DWorldWallPolicy r2d_world_wall_policy(const R2DRe2dWorld *,int);
 bool r2d_world_portal_area(const R2DRe2dWorld *,int);
 bool r2d_world_portal_set_area(R2DRe2dWorld *,int,bool);
+
+// Compiler-authored volumetric entity helpers (fog/water brush entities).
+// A volume is an XY rect + height interval in world space. These functions are
+// the CONCRETE native consumer for the SDK entity mapping: fog/water alter the
+// covered spans' span-light fog (consumed by the renderer), while gameplay
+// terrain for water is resolved via r2d_world_volume_spans +
+// r2d_world_span_surface(R2D_WORLD_FLOOR) and the runtime terrain API.
+// r2d_world_volume_spans returns the total required count (may exceed capacity)
+// or -1 on invalid arguments; out==NULL is a count-only query.
+int r2d_world_volume_spans(const R2DRe2dWorld *,float x,float y,float w,float h,
+                           float bottom,float top,int *out,int capacity);
+// Returns the number of spans whose fog was updated, or -1 on invalid input.
+// Existing span lighting is preserved; only fog fields are overwritten.
+int r2d_world_apply_fog_volume(R2DRe2dWorld *,float x,float y,float w,float h,
+                               float bottom,float top,float density,float start,
+                               float r,float g,float b);
+// Water presets the liquid tint/density into covered span fog and returns the
+// updated span count (or -1). Terrain gameplay remains the runtime terrain API
+// (see above); this is not a second fluid system.
+int r2d_world_apply_water_volume(R2DRe2dWorld *,float x,float y,float w,float h,
+                                 float bottom,float top,float density,
+                                 float r,float g,float b);
 
 void r2d_world_visibility_free(R2DWorldVisibility *);
 // Conservative native portal windows. Outside-world cameras use all surfaces.

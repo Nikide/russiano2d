@@ -2,6 +2,7 @@
 #include "re2d_world_atlas.h"
 #include "re2d_world_exr.h"
 #include "re2d_world_gpu.h"
+#include "re2d_world_debug_overlay.h"
 #include "rotsprite.h"
 #include "script.h"
 #include "payload.h"
@@ -632,7 +633,10 @@ static void runtime_build_cell_allowed(R2DWorldRuntime *w,float camera_x,float c
 void r2d_world_regions_frame(R2DWorldRuntime *w,const R2DRe2dView *view)
 {
     if(!w||!view)return;
+    const double ms=1000.0/(double)SDL_GetPerformanceFrequency();
+    Uint64 phase=SDL_GetPerformanceCounter();
     if(!r2d_world_regions_ensure(w)){w->region_ready=false;return;}
+    w->region_load_ms=(float)((SDL_GetPerformanceCounter()-phase)*ms);
     R2DWorldRegionSet *set=&w->regions;
     const uint64_t revision=w->world.geometry_revision;
     if(revision!=w->region_pvs_revision){
@@ -669,8 +673,12 @@ void r2d_world_regions_frame(R2DWorldRuntime *w,const R2DRe2dView *view)
         w->region_states,set->region_count,w->region_active,set->region_count,
         w->region_preload,set->region_count);
     w->region_preload_count=set->metrics.preload_count;
+    w->region_visibility_ms=(float)((SDL_GetPerformanceCounter()-phase)*ms);
+    phase=SDL_GetPerformanceCounter();
     r2d_world_stream_update(&w->stream,w->region_states,set->region_count,
         &w->stream_budget,(uint64_t)w->frame_count,&w->stream_stats);
+    w->region_stream_ms=(float)((SDL_GetPerformanceCounter()-phase)*ms);
+    phase=SDL_GetPerformanceCounter();
     w->stream_total_uploads+=(uint64_t)w->stream_stats.uploads;
     w->stream_total_upload_bytes+=w->stream_stats.upload_bytes;
     w->stream_total_evictions+=(uint64_t)w->stream_stats.evicted;
@@ -700,6 +708,7 @@ void r2d_world_regions_frame(R2DWorldRuntime *w,const R2DRe2dView *view)
                 w->stream_io_peak_tick_bytes=w->stream_io_stats.max_tick_bytes;
         }
     }
+    w->region_stream_io_ms=(float)((SDL_GetPerformanceCounter()-phase)*ms);
 
     float max_distance=w->lod_config.hidden_distance>0.0f?w->lod_config.hidden_distance:6000.0f;
     w->visible_impostor_count=r2d_world_impostors_collect(&w->impostors,set,at,
@@ -1023,6 +1032,31 @@ static void render_ground_cpu(R2DWorldRuntime *w,const R2DRe2dView *v,int width,
     }
 }
 
+// Native debug overlay wrapper: fills the pure context from runtime state.
+void r2d_world_debug_overlay(R2DWorldRuntime *w,const R2DRe2dView *view,float ortho,
+                             int width,int height,uint8_t *rgba)
+{
+    (void)ortho;
+    if(!w||!view||!rgba||w->debug_view<R2D_WORLD_DEBUG_REGION||w->debug_view>=R2D_WORLD_DEBUG_COUNT)return;
+    R2DWorldDebugOverlayContext c={0};
+    c.view=w->debug_view;
+    c.world=&w->world;
+    c.regions=&w->regions;
+    c.region_states=w->region_states;
+    c.region_current=w->region_current;
+    c.clusters=w->cluster_ready?&w->clusters:NULL;
+    c.occluders=w->occluders;c.occluder_count=w->occluder_count;
+    c.impostors=w->visible_impostors;c.impostor_count=w->visible_impostor_count;
+    c.frame_positions=w->frame_positions;c.frame_images=(const uint8_t *const *)w->frame_images;
+    c.frame_count=w->frame_count;c.owners=w->owners;
+    c.features=&w->render_features;
+    c.particles_count=w->particles.count;c.particles_capacity=w->particles.capacity;
+    c.decal_count=w->world.decal_count;c.light_count=w->world.light_count;
+    c.actors=w->visible_actor_count;c.active_regions=w->region_active_count;
+    c.stream_uploads=w->stream_stats.uploads;
+    c.stream_budget=w->stream_budget.upload_budget_items;
+    r2d_world_debug_overlay_draw(&c,view,width,height,rgba);
+}
 int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,int width,int height,float ortho)
 {
     if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: reentrant rendering");return -1;}
@@ -1154,6 +1188,7 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     if(!w->gpu_enabled&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)particles_draw_cpu(w,view,width,height,w->rgba,w->depth,ortho);
     if(!w->gpu_enabled&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&!r2d_world_frame_transparent(&w->world,view,width,height,w->rgba,w->depth,ortho,&w->visibility)){JS_ThrowOutOfMemory(ctx);goto done;}
     r2d_world_debug_pixels(&w->world,view,&w->visibility,ortho,w->debug_view,width,height,w->rgba,w->depth,w->owners);
+    r2d_world_debug_overlay(w,view,ortho,width,height,w->rgba);
     w->composition_ms=(SDL_GetPerformanceCounter()-phase)*ms;phase=SDL_GetPerformanceCounter();
     if((!w->gpu_enabled||w->debug_view!=R2D_WORLD_DEBUG_FINAL)&&!r2d_texture_upload_region(w->renderer,w->texture,0,0,width,height,w->rgba,width*4)){JS_ThrowInternalError(ctx,"Re2D World: target upload failed");goto done;}
     w->upload_ms=(SDL_GetPerformanceCounter()-phase)*ms;result=w->sprite;

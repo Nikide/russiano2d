@@ -24,6 +24,7 @@
     { "id": "altar.nodraw", "rect": [1408, 256, 192, 128], "bottom": 0, "top": 96, "tool": "nodraw" },
     { "id": "crate.clip", "rect": [1408, 768, 128, 128], "bottom": 0, "top": 160, "tool": "clip" },
     { "id": "occluder.gate", "rect": [1216, 560, 8, 96], "bottom": 0, "top": 384, "tool": "occluder" },
+    { "id": "occluder.divider", "rect": [512, 0, 8, 2048], "bottom": 0, "top": 384, "tool": "occluder" },
     { "id": "hint.door", "rect": [1200, 512, 32, 192], "bottom": 0, "top": 384, "tool": "hint" },
     { "id": "sky.well", "rect": [1664, 1664, 192, 192], "bottom": 0, "top": 384, "tool": "sky" },
     { "id": "trigger.bridge", "rect": [512, 896, 688, 204], "bottom": 0, "top": 384, "tool": "trigger" }

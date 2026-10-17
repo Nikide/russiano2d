@@ -63,10 +63,14 @@ well, tower opening or outdoor contour.
 
 ## Compiler diagnostics for boundaries
 
-`r2d-sdk world compile` emits `SDK_WORLD_SKY_LEAK` when a sky-envelope map still
-has open cell edges. This is an open-edge heuristic, not a full exterior flood
-fill: it reports provable gaps in authored geometry, not interior/exterior
-zoning. Giant render-only surfaces are reported as
+`r2d-sdk world compile` emits `SDK_WORLD_SKY_LEAK` from an exterior flood fill:
+void/exterior is seeded at cell sides with no neighbour and no full wall
+coverage, then flooded through shared cell sides not sealed by walls. The
+diagnostic lists the reached cell ids, so a single missing outer wall is
+distinguished from an open internal edge between two sealed cells.
+`SDK_WORLD_OPEN_EDGE` remains the exact partial-coverage diagnostic. Flood fill
+treats a wall as sealing the whole edge height (the SDK emits full-height walls);
+it is not a per-pixel/3D flood. Giant render-only surfaces are reported as
 `SDK_WORLD_GIANT_TRANSPARENT` because the compiler has no per-pixel opacity and
 treats render-without-collision as the translucent-boundary shape that should be
 replaced by a sky/clip brush.
@@ -77,7 +81,10 @@ touches a generated portal becomes a view-only barrier marker; runtime visibilit
 consumes it, while sky/clip/occluder policies stay independent of hint barriers.
 The compiler does not edit runtime visibility, GPU shadow maps or audio; the
 hooks still required by consumers are reported in `RE2D_BRUSH_AUTHORING.md`
-(`brushEntities[].hook`).
+(`brushEntities[].hook`). An `occluder` brush now emits one zero-policy
+`R2D_WALL_OCCLUDER` marker per footprint edge (stable
+`brush.occluder<index>_e<edge>`), so the runtime occluder chain is real on
+authored maps while sky/clip policy remains a separate, explicit contract.
 
 ## What is not supported
 

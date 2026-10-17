@@ -3,16 +3,42 @@
 #include "re2d_world_render_features.h"
 #include "re2d_world_post.h"
 #include "re2d_world_vfx.h"
+#include "re2d_world_batch.h"
+#include "r2d_shaders.h"
 #include "rotsprite.h"
 #include <SDL3/SDL_timer.h>
 #include <math.h>
 #include <float.h>
 #include <stdlib.h>
 #include <string.h>
+typedef struct SurfaceUniform SurfaceUniform;
+typedef struct {
+    SDL_GPUBuffer *buffer;
+    SDL_GPUTransferBuffer *upload;
+    int buffer_capacity,upload_capacity;
+} BatchGPUSlot;
 typedef struct { SDL_GPUTexture *color,*depth;uint64_t key;int revision,size;Uint32 offsets[2];bool dirty,stream_blocked; } ActorGPU;
 typedef struct { uint64_t key;float (*data)[4];int count,walls,spans; } ShadowChunk;
 typedef struct {
     SDL_GPUGraphicsPipeline *pipeline,*overdraw,*translucent,*additive,*mirror,*ground,*fx_translucent,*fx_additive;
+    // P4 static batching: one fullscreen draw per material/blend/light/atlas
+    // group, per-instance SurfaceUniform indexed from a std430 SSBO.
+    SDL_GPUGraphicsPipeline *batch_pipeline;
+    BatchGPUSlot *batch_slots;
+    int batch_slot_capacity;
+    SurfaceUniform *batch_uniforms;
+    int batch_uniform_capacity;
+    SurfaceUniform *batch_packed;
+    int batch_packed_capacity;
+    int batch_uniform_count,batch_base_count,batch_span_count,batch_last_variant_count;
+    R2DWorldBatchItem *batch_items;
+    int batch_item_capacity;
+    R2DWorldBatchInstance *batch_instances;
+    int batch_instance_capacity;
+    R2DWorldBatchGroup *batch_groups;
+    int batch_group_capacity;
+    int batch_instance_count,batch_group_count,batch_logical_count;
+    bool batch_available;
     R2DWorldVisibility mirror_visibility;
     SDL_Rect clip;bool clip_active;
     // Cached inverse of span_wall_refs: wall -> incident spans. Rebuilt only on
@@ -40,7 +66,7 @@ typedef struct {
     // Task-12: stream residency -> real SDL_GPU textures.
     bool stream_hook_installed;
 } WorldGPU;
-typedef struct {
+struct SurfaceUniform {
     float eye[4],basis[4],screen[4],shape[4],plane[4],normal[4],tangent[4],tint[4],material[4],ambient[4],fog[4],options[4];
     float bounds[4],floor_plane[4],ceiling_plane[4],identity[4],light_position[16][4],light_color[16][4],light_options[16][4];
     float opening[4];
@@ -66,8 +92,10 @@ typedef struct {
     float detail[4];          // uv scale, detail weight, unused, enabled
     float decal2[4];          // rotation, scale, fade alpha, enabled
     float render_origin[4];   // shifted render space -> world space XY
-} SurfaceUniform;
-_Static_assert(sizeof(SurfaceUniform)==105*16,"shader std140 layout");
+    float scissor[4];         // batched path: per-instance pixel scissor (x0,y0,x1,y1)
+    float ordinal[4];         // batched path: submission ordinal for stable depth order
+};
+_Static_assert(sizeof(SurfaceUniform)==107*16,"shader std140/SSBO layout");
 static void targets_free(SDL_GPUDevice *d,WorldGPU *g)
 {
     if(g->color)SDL_ReleaseGPUTexture(d,g->color);if(g->owner)SDL_ReleaseGPUTexture(d,g->owner);if(g->depth)SDL_ReleaseGPUTexture(d,g->depth);
@@ -89,6 +117,13 @@ void r2d_world_gpu_free(R2DWorldRuntime *w)
     if(g->shadows)SDL_ReleaseGPUBuffer(d,g->shadows);free(g->shadow_data);for(int i=0;i<128;i++)free(g->shadow_chunks[i].data);
     for(int i=0;i<g->actor_capacity;i++){if(g->actors[i].color)SDL_ReleaseGPUTexture(d,g->actors[i].color);if(g->actors[i].depth)SDL_ReleaseGPUTexture(d,g->actors[i].depth);}free(g->actors);
     r2d_world_visibility_free(&g->mirror_visibility);
+    for(int i=0;i<g->batch_slot_capacity;i++){
+        if(g->batch_slots[i].buffer)SDL_ReleaseGPUBuffer(d,g->batch_slots[i].buffer);
+        if(g->batch_slots[i].upload)SDL_ReleaseGPUTransferBuffer(d,g->batch_slots[i].upload);
+    }
+    free(g->batch_slots);
+    if(g->batch_pipeline)SDL_ReleaseGPUGraphicsPipeline(d,g->batch_pipeline);
+    free(g->batch_uniforms);free(g->batch_items);free(g->batch_instances);free(g->batch_groups);
     free(g->wall_span_offsets);free(g->wall_span_refs);free(g);w->gpu=NULL;w->gpu_texture_bytes=w->gpu_transfer_bytes=0;w->gpu_shadow_updates=w->gpu_material_batches=w->gpu_draws=0;w->gpu_draw_base=w->gpu_draw_span=w->gpu_draw_actor=w->gpu_draw_other=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;
 }
 static void material_bind(R2DWorldRuntime *w,WorldGPU *g,SDL_GPURenderPass *pass,const SDL_GPUTextureSamplerBinding textures[3])
@@ -209,6 +244,22 @@ static SDL_GPUTexture *target(SDL_GPUDevice *d,int width,int height,SDL_GPUTextu
     t.sample_count=SDL_GPU_SAMPLECOUNT_1;t.usage=depth?(SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET|SDL_GPU_TEXTUREUSAGE_SAMPLER):SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
     return SDL_CreateGPUTexture(d,&t);
 }
+static SDL_GPUShader *batch_shader(SDL_GPUDevice *d,const R2DShaderBlob *blob,bool fragment)
+{
+#ifdef __EMSCRIPTEN__
+    (void)d;(void)blob;(void)fragment;return NULL;
+#else
+    const SDL_GPUShaderFormat formats=SDL_GetGPUShaderFormats(d);
+    SDL_GPUShaderCreateInfo info;SDL_zero(info);
+    info.stage=fragment?SDL_GPU_SHADERSTAGE_FRAGMENT:SDL_GPU_SHADERSTAGE_VERTEX;
+    info.num_samplers=fragment?3:0;info.num_storage_buffers=fragment?2:0;info.num_uniform_buffers=0;
+    if(formats&SDL_GPU_SHADERFORMAT_SPIRV){info.format=SDL_GPU_SHADERFORMAT_SPIRV;info.code=blob->spirv;info.code_size=blob->spirv_size;info.entrypoint="main";}
+    else if(formats&SDL_GPU_SHADERFORMAT_MSL){info.format=SDL_GPU_SHADERFORMAT_MSL;info.code=(const Uint8 *)blob->msl;info.code_size=blob->msl_size;info.entrypoint="main0";}
+    else return NULL;
+    return SDL_CreateGPUShader(d,&info);
+#endif
+}
+
 static bool init(R2DWorldRuntime *w)
 {
     SDL_GPUDevice *d=w->renderer->device;WorldGPU *g=w->gpu;
@@ -222,6 +273,13 @@ static bool init(R2DWorldRuntime *w)
         p.depth_stencil_state.enable_depth_test=true;p.depth_stencil_state.enable_depth_write=true;p.depth_stencil_state.compare_op=SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
         p.rasterizer_state.fill_mode=SDL_GPU_FILLMODE_FILL;p.rasterizer_state.cull_mode=SDL_GPU_CULLMODE_NONE;p.multisample_state.sample_count=SDL_GPU_SAMPLECOUNT_1;
         g->pipeline=SDL_CreateGPUGraphicsPipeline(d,&p);
+        {
+            SDL_GPUShader *bvs=batch_shader(d,&r2d_shader_world_batch_vert,false);
+            SDL_GPUShader *bfs=batch_shader(d,&r2d_shader_world_batch_frag,true);
+            if(bvs&&bfs){SDL_GPUGraphicsPipelineCreateInfo bp=p;bp.vertex_shader=bvs;bp.fragment_shader=bfs;g->batch_pipeline=SDL_CreateGPUGraphicsPipeline(d,&bp);}
+            if(bvs)SDL_ReleaseGPUShader(d,bvs);if(bfs)SDL_ReleaseGPUShader(d,bfs);
+            g->batch_available=g->batch_pipeline!=NULL;
+        }
         // Mirror pass: depth disabled, no blending; drawn scissored into the portal.
         p.depth_stencil_state.enable_depth_test=false;p.depth_stencil_state.enable_depth_write=false;p.depth_stencil_state.compare_op=SDL_GPU_COMPAREOP_ALWAYS;
         g->mirror=SDL_CreateGPUGraphicsPipeline(d,&p);
@@ -545,37 +603,48 @@ static void visual_sky(R2DWorldRuntime *w,SurfaceUniform *u)
     }
     if(layers>0)w->render_counters.sky_layers+=(int)layers;
 }
-static void draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho,int id,int span,bool filter,const R2DWorldDecal *decal,float ox,float oy)
+static int draw_uniform(R2DWorldRuntime *w,const R2DRe2dView *v,float ortho,int id,int span,bool filter,const R2DWorldDecal *decal,float ox,float oy,SurfaceUniform *u)
 {
-    const R2DRe2dWorld *world=&w->world;const R2DWorldSurface *surface=&world->surfaces[id];SurfaceUniform u={0};
-    u.eye[0]=v->x-ox;u.eye[1]=v->y-oy;u.eye[2]=v->eye;u.eye[3]=v->near_plane;
-    u.basis[0]=v->cos_yaw;u.basis[1]=v->sin_yaw;u.basis[2]=v->cos_pitch;u.basis[3]=v->sin_pitch;
-    u.screen[0]=w->width;u.screen[1]=w->height;u.screen[2]=v->focal*w->height/v->height;u.screen[3]=ortho;
+    const R2DRe2dWorld *world=&w->world;const R2DWorldSurface *surface=&world->surfaces[id];
+    memset(u,0,sizeof *u);
+    u->eye[0]=v->x-ox;u->eye[1]=v->y-oy;u->eye[2]=v->eye;u->eye[3]=v->near_plane;
+    u->basis[0]=v->cos_yaw;u->basis[1]=v->sin_yaw;u->basis[2]=v->cos_pitch;u->basis[3]=v->sin_pitch;
+    u->screen[0]=w->width;u->screen[1]=w->height;u->screen[2]=v->focal*w->height/v->height;u->screen[3]=ortho;
     uint32_t tint;
     if(surface->kind==R2D_WORLD_WALL){const R2DWorldWall *wall=&world->walls[surface->primitive];float dx=wall->x2-wall->x1,dy=wall->y2-wall->y1,len=hypotf(dx,dy);
-        R2DWorldOpening opening;if(r2d_world_wall_opening(world,surface->primitive,&opening)){u.opening[0]=opening.bottom;u.opening[1]=opening.top;u.opening[2]=1;}
-        u.shape[0]=wall->x1-ox;u.shape[1]=wall->y1-oy;u.shape[2]=wall->x2-ox;u.shape[3]=wall->y2-oy;u.plane[0]=wall->bottom;u.plane[1]=wall->top;
-        u.normal[0]=-dy/len;u.normal[1]=dx/len;if((v->x-wall->x1)*u.normal[0]+(v->y-wall->y1)*u.normal[1]<0){u.normal[0]*=-1;u.normal[1]*=-1;}
-        u.tangent[0]=dx/len;u.tangent[1]=dy/len;tint=wall->color;
+        R2DWorldOpening opening;if(r2d_world_wall_opening(world,surface->primitive,&opening)){u->opening[0]=opening.bottom;u->opening[1]=opening.top;u->opening[2]=1;}
+        u->shape[0]=wall->x1-ox;u->shape[1]=wall->y1-oy;u->shape[2]=wall->x2-ox;u->shape[3]=wall->y2-oy;u->plane[0]=wall->bottom;u->plane[1]=wall->top;
+        u->normal[0]=-dy/len;u->normal[1]=dx/len;if((v->x-wall->x1)*u->normal[0]+(v->y-wall->y1)*u->normal[1]<0){u->normal[0]*=-1;u->normal[1]*=-1;}
+        u->tangent[0]=dx/len;u->tangent[1]=dy/len;tint=wall->color;
     }else{const R2DWorldSpan *s=&world->spans[surface->primitive];bool ceiling=surface->kind==R2D_WORLD_CEILING;float a=ceiling?s->ceiling_a:s->floor_a,b=ceiling?s->ceiling_b:s->floor_b;
-        u.shape[0]=s->x-ox;u.shape[1]=s->y-oy;u.shape[2]=s->w;u.shape[3]=s->h;u.plane[0]=ceiling?s->top:s->bottom;u.plane[1]=a;u.plane[2]=b;u.plane[3]=1;
-        float k=(ceiling?-1:1)/sqrtf(1+a*a+b*b);u.normal[0]=-a*k;u.normal[1]=-b*k;u.normal[2]=k;k=1/sqrtf(1+a*a);u.tangent[0]=k;u.tangent[2]=a*k;tint=ceiling?s->ceiling_color:s->floor_color;
+        u->shape[0]=s->x-ox;u->shape[1]=s->y-oy;u->shape[2]=s->w;u->shape[3]=s->h;u->plane[0]=ceiling?s->top:s->bottom;u->plane[1]=a;u->plane[2]=b;u->plane[3]=1;
+        float k=(ceiling?-1:1)/sqrtf(1+a*a+b*b);u->normal[0]=-a*k;u->normal[1]=-b*k;u->normal[2]=k;k=1/sqrtf(1+a*a);u->tangent[0]=k;u->tangent[2]=a*k;tint=ceiling?s->ceiling_color:s->floor_color;
     }
-    for(int i=0;i<4;i++)u.tint[i]=((tint>>(i*8))&255)/255.0f;
-    int material=decal?decal->material:(world->surface_materials?world->surface_materials[id]:-1);SDL_GPUTextureSamplerBinding samplers[3];SDL_GPUSampler *sampler=material>=0&&world->materials[material].linear?g->linear:g->sampler;
-    for(int i=0;i<3;i++){int texture=material>=0?g->textures[material][i]:-1;if(texture<0)texture=i==2?g->black:g->white;samplers[i]=(SDL_GPUTextureSamplerBinding){r2d_texture_handle(w->renderer,texture),sampler};}
-    if(material>=0){const R2DWorldMaterial *m=&world->materials[material];u.anim[0]=m->anim_u;u.anim[1]=m->anim_v;u.anim[2]=m->anim_emissive>0?m->anim_emissive:1.0f;u.material[0]=m->u_scale;u.material[1]=m->v_scale;u.material[2]=m->normal.pixels?1:0;u.material[3]=m->emissive.pixels?m->emissive_strength:0;u.identity[3]=1;u.light_options[13][3]=m->world_uv?1:0;if(m->world_uv&&surface->kind==R2D_WORLD_WALL&&(u.tangent[0]<0||(u.tangent[0]==0&&u.tangent[1]<0))){u.tangent[0]*=-1;u.tangent[1]*=-1;}u.light_options[15][3]=m->blend;u.tint[3]=m->blend>=R2D_WORLD_TRANSLUCENT?m->opacity:1;}
-    if(decal){u.tint[0]=u.tint[1]=u.tint[2]=1;u.light_options[14][1]=decal->u;u.light_options[14][2]=decal->v;u.light_options[14][3]=decal->w;u.light_options[15][1]=decal->h;u.light_options[15][2]=1;
+    for(int i=0;i<4;i++)u->tint[i]=((tint>>(i*8))&255)/255.0f;
+    int material=decal?decal->material:(world->surface_materials?world->surface_materials[id]:-1);
+    if(material>=0){const R2DWorldMaterial *m=&world->materials[material];u->anim[0]=m->anim_u;u->anim[1]=m->anim_v;u->anim[2]=m->anim_emissive>0?m->anim_emissive:1.0f;u->material[0]=m->u_scale;u->material[1]=m->v_scale;u->material[2]=m->normal.pixels?1:0;u->material[3]=m->emissive.pixels?m->emissive_strength:0;u->identity[3]=1;u->light_options[13][3]=m->world_uv?1:0;if(m->world_uv&&surface->kind==R2D_WORLD_WALL&&(u->tangent[0]<0||(u->tangent[0]==0&&u->tangent[1]<0))){u->tangent[0]*=-1;u->tangent[1]*=-1;}u->light_options[15][3]=m->blend;u->tint[3]=m->blend>=R2D_WORLD_TRANSLUCENT?m->opacity:1;}
+    if(decal){u->tint[0]=u->tint[1]=u->tint[2]=1;u->light_options[14][1]=decal->u;u->light_options[14][2]=decal->v;u->light_options[14][3]=decal->w;u->light_options[15][1]=decal->h;u->light_options[15][2]=1;
         if(decal->max_life>0.0f){
-            u.decal2[0]=decal->rotation;u.decal2[1]=decal->scale>0.0f?decal->scale:1.0f;
-            u.decal2[2]=r2d_world_decal_alpha(decal);u.decal2[3]=1.0f;
+            u->decal2[0]=decal->rotation;u->decal2[1]=decal->scale>0.0f?decal->scale:1.0f;
+            u->decal2[2]=r2d_world_decal_alpha(decal);u->decal2[3]=1.0f;
             if(decal->active)w->render_counters.decal2_active+=1;
         }}
-    u.identity[0]=id;u.identity[1]=span;
-    lighting(w,span,filter,&u,ox,oy);if(w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)u.identity[2]=-1;
-    visual_common(w,&u,ox,oy);visual_surface(w,&u,surface,id,decal!=NULL);
+    u->identity[0]=id;u->identity[1]=span;
+    lighting(w,span,filter,u,ox,oy);if(w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)u->identity[2]=-1;
+    visual_common(w,u,ox,oy);visual_surface(w,u,surface,id,decal!=NULL);
+    return material;
+}
+
+static void draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho,int id,int span,bool filter,const R2DWorldDecal *decal,float ox,float oy)
+{
+    SurfaceUniform u;
+    int material=draw_uniform(w,v,ortho,id,span,filter,decal,ox,oy,&u);
+    const R2DRe2dWorld *world=&w->world;
+    SDL_GPUTextureSamplerBinding samplers[3];SDL_GPUSampler *sampler=material>=0&&world->materials[material].linear?g->linear:g->sampler;
+    for(int i=0;i<3;i++){int texture=material>=0?g->textures[material][i]:-1;if(texture<0)texture=i==2?g->black:g->white;samplers[i]=(SDL_GPUTextureSamplerBinding){r2d_texture_handle(w->renderer,texture),sampler};}
     material_bind(w,g,pass,samplers);SDL_PushGPUFragmentUniformData(cmd,0,&u,sizeof u);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;
 }
+
 static SDL_GPUTexture *actor_texture(SDL_GPUDevice *d,int size,bool depth)
 {
     SDL_GPUTextureCreateInfo t={0};t.type=SDL_GPU_TEXTURETYPE_2D;t.format=depth?SDL_GPU_TEXTUREFORMAT_R32_FLOAT:SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -667,6 +736,183 @@ static void actor_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,
     SDL_GPUTextureSamplerBinding textures[3]={{a->color,g->sampler},{a->depth?a->depth:r2d_texture_handle(w->renderer,g->black),g->sampler},{r2d_texture_handle(w->renderer,g->black),g->sampler}};
     material_bind(w,g,pass,textures);SDL_PushGPUFragmentUniformData(cmd,0,&u,sizeof u);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;
 }
+static bool batch_cpu_reserve(WorldGPU *g,int count)
+{
+    if(count<=g->batch_uniform_capacity)return true;
+    int cap=count<16?16:count;
+    SurfaceUniform *uniforms=realloc(g->batch_uniforms,(size_t)cap*sizeof *uniforms);
+    if(!uniforms)return false;
+    g->batch_uniforms=uniforms;g->batch_uniform_capacity=cap;
+    SurfaceUniform *packed=realloc(g->batch_packed,(size_t)cap*sizeof *packed);
+    if(!packed)return false;
+    g->batch_packed=packed;g->batch_packed_capacity=cap;
+    R2DWorldBatchItem *items=realloc(g->batch_items,(size_t)cap*sizeof *items);
+    if(!items)return false;
+    g->batch_items=items;g->batch_item_capacity=cap;
+    R2DWorldBatchInstance *instances=realloc(g->batch_instances,(size_t)cap*sizeof *instances);
+    if(!instances)return false;
+    g->batch_instances=instances;g->batch_instance_capacity=cap;
+    R2DWorldBatchGroup *groups=realloc(g->batch_groups,(size_t)cap*sizeof *groups);
+    if(!groups)return false;
+    g->batch_groups=groups;g->batch_group_capacity=cap;
+    return true;
+}
+
+static void batch_begin(WorldGPU *g)
+{
+    g->batch_uniform_count=0;g->batch_base_count=0;g->batch_span_count=0;g->batch_last_variant_count=0;
+    g->batch_instance_count=0;g->batch_group_count=0;
+}
+
+static bool batch_append(R2DWorldRuntime *w,WorldGPU *g,const R2DRe2dView *v,float ortho,
+                         int id,int span,bool filter,float ox,float oy,
+                         int left,int top,int right,int bottom,int depth_rank)
+{
+    if(!batch_cpu_reserve(g,g->batch_uniform_count+1))return false;
+    int index=g->batch_uniform_count;
+    int material=draw_uniform(w,v,ortho,id,span,filter,NULL,ox,oy,&g->batch_uniforms[index]);
+    g->batch_uniforms[index].scissor[0]=(float)left;g->batch_uniforms[index].scissor[1]=(float)top;
+    g->batch_uniforms[index].scissor[2]=(float)right;g->batch_uniforms[index].scissor[3]=(float)bottom;
+    g->batch_uniforms[index].ordinal[0]=(float)depth_rank;
+    g->batch_uniforms[index].ordinal[1]=filter?1.0f:0.0f;
+    r2d_world_batch_item(&g->batch_items[index],R2D_WORLD_BATCH_KIND_SURFACE,id,span,material,
+                         r2d_world_surface_blend(&w->world,id),R2D_WORLD_BATCH_LIGHT_STATIC,-1,0,
+                         (uint32_t)index);
+    g->batch_uniform_count=index+1;
+    return true;
+}
+
+// Collect exactly the draws the per-surface opaque path would issue, preserving
+// submission order inside a group (batch_items stores the uniform index in aux).
+static void batch_surface(R2DWorldRuntime *w,WorldGPU *g,const R2DRe2dView *v,float ortho,
+                          int id,float ox,float oy)
+{
+    if(w->world.surface_sky&&w->world.surface_sky[id]){w->render_counters.sky_surfaces++;return;}
+    const R2DWorldSurface *s=&w->world.surfaces[id];const R2DWorldWindow *window=&w->visibility.surface_windows[id];
+    SDL_Rect projected;if(!surface_bounds(w,v,ortho,id,&projected))return;
+    int left=(int)fmaxf(0,floorf(window->left*w->width/v->width)),top=(int)fmaxf(0,floorf(window->top*w->height/v->height));
+    int right=(int)fminf(w->width,ceilf(window->right*w->width/v->width)),bottom=(int)fminf(w->height,ceilf(window->bottom*w->height/v->height));
+    left=left>projected.x?left:projected.x;top=top>projected.y?top:projected.y;
+    right=right<projected.x+projected.w?right:projected.x+projected.w;bottom=bottom<projected.y+projected.h?bottom:projected.y+projected.h;
+    if(right<=left||bottom<=top)return;
+    if(s->kind!=R2D_WORLD_WALL){
+        if(batch_append(w,g,v,ortho,id,s->span,false,ox,oy,left,top,right,bottom,0))g->batch_base_count++;
+        return;
+    }
+    if(r2d_world_surface_blend(&w->world,id)<R2D_WORLD_TRANSLUCENT||w->debug_view==R2D_WORLD_DEBUG_OVERDRAW){
+        if(batch_append(w,g,v,ortho,id,-1,false,ox,oy,left,top,right,bottom,0))g->batch_base_count++;
+    }
+    const int wall=s->primitive;int span_rank=0;
+    if(g->wall_span_offsets&&wall>=0&&wall<w->world.wall_count){
+        for(int r=g->wall_span_offsets[wall];r<g->wall_span_offsets[wall+1];r++){
+            const int span=g->wall_span_refs[r];
+            if(span<0||span>=w->world.span_count||!w->visibility.span_seen[span])continue;
+            if(!r2d_world_wall_solid(&w->world,wall,w->world.spans[span].bottom,w->world.spans[span].top))continue;
+            if(batch_append(w,g,v,ortho,id,span,true,ox,oy,left,top,right,bottom,++span_rank))g->batch_span_count++;
+        }
+    }else{
+        for(int k=0;k<w->visibility.span_count;k++){int span=w->visibility.spans[k];bool incident=false;
+            for(int rr=w->world.span_wall_offsets[span];rr<w->world.span_wall_offsets[span+1];rr++)if(w->world.span_wall_refs[rr]==s->primitive){incident=true;break;}
+            if(incident&&r2d_world_wall_solid(&w->world,s->primitive,w->world.spans[span].bottom,w->world.spans[span].top)){
+                if(batch_append(w,g,v,ortho,id,span,true,ox,oy,left,top,right,bottom,++span_rank))g->batch_span_count++;
+            }
+        }
+    }
+}
+
+static bool batch_slot_reserve(WorldGPU *g,int count)
+{
+    if(count<=g->batch_slot_capacity)return true;
+    int cap=count<8?8:count;
+    BatchGPUSlot *slots=realloc(g->batch_slots,(size_t)cap*sizeof *slots);
+    if(!slots)return false;
+    memset(slots+g->batch_slot_capacity,0,(size_t)(cap-g->batch_slot_capacity)*sizeof *slots);
+    g->batch_slots=slots;g->batch_slot_capacity=cap;
+    return true;
+}
+
+static bool batch_upload(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd)
+{
+    int count=g->batch_uniform_count;if(count<=0)return true;
+    R2DWorldBatchBuffers buffers={g->batch_groups,g->batch_group_capacity,
+                                  g->batch_instances,g->batch_instance_capacity};
+    R2DWorldBatchStats stats;
+    int total=r2d_world_batch_build(g->batch_items,count,&buffers,&stats);
+    if(total!=count||stats.overflow)return false;
+    g->batch_instance_count=count;g->batch_group_count=stats.groups;
+    for(int i=0;i<count;i++){
+        uint32_t index=g->batch_instances[i].aux;
+        if(index>=(uint32_t)count)return false;
+        g->batch_packed[i]=g->batch_uniforms[index];
+    }
+    if(!batch_slot_reserve(g,stats.groups))return false;
+    SDL_GPUDevice *d=w->renderer->device;
+    SDL_GPUCopyPass *copy=NULL;
+    for(int i=0;i<stats.groups;i++){
+        const R2DWorldBatchGroup *group=&g->batch_groups[i];
+        Uint32 bytes=(Uint32)((size_t)group->count*sizeof(SurfaceUniform));
+        BatchGPUSlot *slot=&g->batch_slots[i];
+        if(bytes>(Uint32)slot->buffer_capacity){
+            if(slot->buffer)SDL_ReleaseGPUBuffer(d,slot->buffer);
+            SDL_GPUBufferCreateInfo b={0};b.usage=SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;b.size=bytes;
+            slot->buffer=SDL_CreateGPUBuffer(d,&b);
+            if(!slot->buffer){slot->buffer_capacity=0;return false;}
+            slot->buffer_capacity=(int)bytes;
+        }
+        if(bytes>(Uint32)slot->upload_capacity){
+            if(slot->upload)SDL_ReleaseGPUTransferBuffer(d,slot->upload);
+            SDL_GPUTransferBufferCreateInfo t={0};t.usage=SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;t.size=bytes;
+            slot->upload=SDL_CreateGPUTransferBuffer(d,&t);
+            if(!slot->upload){slot->upload_capacity=0;return false;}
+            slot->upload_capacity=(int)bytes;
+        }
+        void *mapped=SDL_MapGPUTransferBuffer(d,slot->upload,false);
+        if(!mapped)return false;
+        memcpy(mapped,g->batch_packed+group->first,bytes);
+        SDL_UnmapGPUTransferBuffer(d,slot->upload);
+        if(!copy)copy=SDL_BeginGPUCopyPass(cmd);
+        SDL_GPUTransferBufferLocation src={slot->upload,0};
+        SDL_GPUBufferRegion dst={slot->buffer,0,bytes};
+        SDL_UploadToGPUBuffer(copy,&src,&dst,true);
+    }
+    if(copy)SDL_EndGPUCopyPass(copy);
+    return true;
+}
+
+static void batch_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPURenderPass *pass)
+{
+    if(!g->batch_group_count)return;
+    // The batch pass inherits the scissor of the preceding pass (sky/cards);
+    // reset it to the full target and clip per instance in the shader instead.
+    SDL_Rect full={0,0,w->width,w->height};
+    SDL_SetGPUScissor(pass,&full);
+    SDL_BindGPUGraphicsPipeline(pass,g->batch_pipeline);
+    for(int i=0;i<g->batch_group_count;i++){
+        const R2DWorldBatchGroup *group=&g->batch_groups[i];
+        int material=group->material>=0x80000000u?-1:(int)group->material;
+        const R2DRe2dWorld *world=&w->world;
+        SDL_GPUTextureSamplerBinding samplers[3];
+        SDL_GPUSampler *sampler=material>=0&&world->materials[material].linear?g->linear:g->sampler;
+        for(int t=0;t<3;t++){int texture=material>=0?g->textures[material][t]:-1;if(texture<0)texture=t==2?g->black:g->white;
+            samplers[t]=(SDL_GPUTextureSamplerBinding){r2d_texture_handle(w->renderer,texture),sampler};}
+        material_bind(w,g,pass,samplers);
+        SDL_GPUBuffer *buffers[2]={g->batch_slots[i].buffer,g->shadows};
+        SDL_BindGPUFragmentStorageBuffers(pass,0,buffers,2);
+        SDL_DrawGPUPrimitives(pass,3,group->count,0,0);
+        g->draws++;
+    }
+    SDL_BindGPUFragmentStorageBuffers(pass,0,&g->shadows,1);
+    w->gpu_draw_base=g->batch_base_count;
+    w->gpu_draw_span=g->batch_span_count;
+    w->gpu_batch_draws=g->batch_group_count;
+    w->gpu_batch_instances=g->batch_instance_count;
+    w->gpu_batch_logical=g->batch_base_count+g->batch_span_count;
+    w->gpu_batch_saved=w->gpu_batch_logical>g->batch_group_count?w->gpu_batch_logical-g->batch_group_count:0;
+    // Preserve the historical gpuDraws attribution: the profiler counter counts
+    // logical submissions, while gpu_batch_draws reports actual group draws.
+    g->draws+=w->gpu_batch_saved;
+}
+
 static bool ensure_wall_spans(R2DWorldRuntime *w,WorldGPU *g)
 {
     const int nw=w->world.wall_count;
@@ -1136,14 +1382,33 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
     if(!shadows_upload(w,g,cmd,ox,oy)){SDL_CancelGPUCommandBuffer(cmd);return false;}
     w->shadow_ms=(SDL_GetTicksNS()-shadow_start)/1e6;
     if(!actors_upload(ctx,w,g,cmd)){SDL_CancelGPUCommandBuffer(cmd);return false;}
+    // P4 static batching: collect the opaque/base draw list before the render
+    // pass so the instance SSBO can be uploaded, then draw one fullscreen
+    // triangle per (material, blend, light policy, atlas) group. Overdraw and
+    // non-final debug views keep the per-surface fallback unchanged.
+    bool batch_frame=w->batch_gpu&&g->batch_available&&w->debug_view==R2D_WORLD_DEBUG_FINAL;
+    if(batch_frame){
+        batch_begin(g);
+        for(int j=0;j<w->visibility.surface_count;j++){
+            int id=w->visibility.surfaces[j];
+            if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT)continue;
+            batch_surface(w,g,v,ortho,id,ox,oy);
+        }
+        if(!batch_upload(w,g,cmd))batch_frame=false;
+    }
     SDL_GPUColorTargetInfo colors[2]={{0}};colors[0].texture=g->color;colors[0].load_op=SDL_GPU_LOADOP_CLEAR;colors[0].store_op=SDL_GPU_STOREOP_STORE;
     colors[0].clear_color=w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?(SDL_FColor){0,0,0,1}:(SDL_FColor){16/255.0f,24/255.0f,32/255.0f,1};colors[1].texture=g->owner;colors[1].load_op=SDL_GPU_LOADOP_CLEAR;colors[1].store_op=SDL_GPU_STOREOP_STORE;colors[1].clear_color=(SDL_FColor){FLT_MAX,-1,-1,-1};
     SDL_GPUDepthStencilTargetInfo depth={0};depth.texture=g->depth;depth.load_op=SDL_GPU_LOADOP_CLEAR;depth.store_op=SDL_GPU_STOREOP_DONT_CARE;depth.clear_depth=1;
     SDL_GPURenderPass *pass=SDL_BeginGPURenderPass(cmd,colors,2,&depth);if(!pass){SDL_CancelGPUCommandBuffer(cmd);return false;}
-    SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:g->pipeline);SDL_BindGPUFragmentStorageBuffers(pass,0,&g->shadows,1);g->draws=0;w->gpu_draw_base=w->gpu_draw_span=w->gpu_draw_actor=w->gpu_draw_other=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;w->gpu_material_batches=0;memset(g->bound_textures,0,sizeof g->bound_textures);
+    SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:g->pipeline);SDL_BindGPUFragmentStorageBuffers(pass,0,&g->shadows,1);g->draws=0;w->gpu_draw_base=w->gpu_draw_span=w->gpu_draw_actor=w->gpu_draw_other=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;w->gpu_material_batches=0;w->gpu_batch_draws=w->gpu_batch_instances=w->gpu_batch_saved=w->gpu_batch_logical=0;memset(g->bound_textures,0,sizeof g->bound_textures);
     if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&(w->world.sky.pixels||w->world.sky_color))sky_draw(w,g,cmd,pass,v,ortho);
     if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)sky_p4_distant(w,g,cmd,pass,v);
-    for(int j=0;j<w->visibility.surface_count;j++){int id=w->visibility.surfaces[j];if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)continue;surface_draw(w,g,cmd,pass,v,ortho,id,ox,oy);}
+    if(batch_frame){
+        batch_draw(w,g,pass);
+        SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:g->pipeline);
+    }else{
+        for(int j=0;j<w->visibility.surface_count;j++){int id=w->visibility.surfaces[j];if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)continue;surface_draw(w,g,cmd,pass,v,ortho,id,ox,oy);}
+    }
     if(w->render_features.grounding&&w->render_features.contact_shadow&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW){
         int budget=w->render_features.quality<=R2D_RENDER_QUALITY_LOW?128:512,drawn=0;
         for(int i=0;i<w->frame_count&&drawn<budget;i++)if(w->frame_images[i]&&ground_draw(w,g,cmd,pass,v,ortho,i))drawn++;

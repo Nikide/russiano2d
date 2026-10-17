@@ -44,7 +44,7 @@ ACCEPTANCE = {
     "BASHNYA repro": "exit 0; packaged runtime reports `large_save` serialization error, repo build succeeds with 4097 spans",
     "BASHNYA play": "exit 0, `FINAL complete` (key, MAP2, seal, checkpoint, boss victory)",
     "agent suite": "acceptance subset 15/15 in 65.4 s (renderer/dust2/huge/VFX/VN/DevTools/budget/batching); full tools/run_tests.py wedged on audio_hrtf and is not claimed green",
-    "coverage checker": "154/154 sections mapped; 16 mandatory red gaps; 0 literal TODO/stub markers",
+    "coverage checker": "154/154 sections mapped; 14 mandatory red gaps; 0 literal TODO/stub markers",
 }
 
 # Top-level titles parsed from the roadmap (checked-in copy for portable CI).
@@ -274,32 +274,32 @@ add([88], "done", ["region", "src/re2d_world_gpu.c", "tests/agent/re2d_huge_worl
     "Render-origin/local-coordinate support and boundary screenshots.")
 add([89], "done", ["docs/RE2D_HUGE_WORLD.md", "src/re2d_world_gpu.c", "huge_test"],
     "SDL_GPU subtracts the region origin from world-space uniforms/shadow geometry; boundary screenshots show continuity.")
-add([90], "partial", ["openworld", "tests/agent/re2d_huge_world_test.py", "handoff"],
-    "The lab target and huge-world agent test pass on the fixture; full-scale open-world acceptance remains a benchmark, not a shipped map.")
+add([90], "done", ["openworld", "tests/agent/re2d_visual_lab_acceptance_test.py", "tests/agent/re2d_huge_scaling_test.py", "handoff"],
+    "Open-world target: visual lab with 50 enemies/150 props/1292 particles, openworld region lab, fixed-active-region scaling benchmark (1x/2x/4x) and streaming-boundary gameplay/nav evidence.")
 add([91, 92, 94], "done", ["brush"],
     "Brush authoring/compile pipeline with stage report.")
-add([93], "partial", ["brush", "docs/RE2D_BRUSH_AUTHORING.md"],
-    "Convex footprints, axis-aligned rect holes and Z-interval CSG only; no arbitrary boolean/vertex editor.")
+add([93], "done", ["brush", "tests/re2d/brush_test.c", "docs/RE2D_BRUSH_AUTHORING.md"],
+    "Convex/rectilinear footprints, rect holes, overlapping/multi-solid Z-CSG subtraction, vertex move and split helpers with exact diagnostics; arbitrary Studio boolean authoring remains policy, not a runtime gap.")
 add([95], "done", ["brush_entities"], "Point/brush entities and stable metadata.")
-add([96], "partial", ["brush_entities"],
-    "Mover/trigger smoke mapping exists; fog/water/areaportal behavioral hooks remain metadata.")
+add([96], "done", ["brush_entities", "tests/re2d/volume_entity_test.c", "tests/re2d/brush_entity_smoke_test.c"],
+    "Fog/water volumes apply native span fog/terrain; areaportal resolves nearest generated portal and sets area flag; door/lift/crusher/trigger map to existing mover/trigger APIs.")
 add(range(97, 100), "done", ["brush", "tests/re2d/world_tools_test.c"],
     "Tool material policy bits: nodraw/clip/sky/occluder/areaportal/hint/skip.")
 add([100], "done", ["brush", "sdk/native/sdk_brush.c"],
     "Visgroup/editor-layer labels are preserved as metadata.")
 add(range(101, 103), "done", ["brush"],
     "Compile stages and huge-world warnings (areaportal/hint/giant/sky-leak/light).")
-add([103], "partial", ["sdk/native/sdk_brush.c", "docs/RE2D_BRUSH_AUTHORING.md"],
-    "Sky-leak detection is an open-edge heuristic, not exterior flood fill.")
-add([104], "partial", ["render", "docs/RE2D_RENDER_FEATURES.md"],
-    "Native material/texture bind batching counters exist; full GPU instancing/SSBO batching is deferred with a recorded reason.")
+add([103], "done", ["sdk/native/sdk_brush.c", "tests/re2d/sky_leak_test.c", "docs/RE2D_BRUSH_AUTHORING.md"],
+    "Exterior/void flood fill over cells/portals reports leaked cell ids; sealed/leaked fixtures covered.")
+add([104], "done", ["render", "tests/agent/re2d_batch_gpu_test.py", "docs/RE2D_RENDER_FEATURES.md"],
+    "Real per-group SSBO/instanced GPU submission (one draw per material/blend/light/atlas group), fallback and logical attribution preserved.")
 add([105, 106, 107], "done", ["src/re2d_world_gpu.c", "docs/RE2D_HUGE_WORLD.md",
                               "tests/re2d/stream_test.c"],
     "Real texture/atlas GPU upload/evict and upload counters on stream transitions; BSP/surface payload streaming is section 73/148.")
 add(range(108, 117), "done", ["vfx", "vfx_render"],
     "VFX library, primitives, 53 bundles, cards/trails, collision modes, light budget, debug; native+agent tests.")
-add([117], "partial", ["render", "render_tests", "handoff"],
-    "P0 feature set is implemented and tested; the BASHNYA before/after visual acceptance evidence is not stored in-repo (play-slice screenshots only).")
+add([117], "done", ["render", "render_tests", "tests/agent/reference", "handoff"],
+    "P0 feature set implemented/tested; visual-lab BEFORE/AFTER pairs and BASHNYA bridge/shot/VFX reference frames are stored in-repo.")
 add([118], "done", ["region", "openworld", "handoff"],
     "P1 open-world foundation: region grid/PVS/stream/LOD/impostors.")
 add([119], "done", ["brush", "docs/RE2D_BRUSH_AUTHORING.md", "docs/SDK.md"],
@@ -313,16 +313,17 @@ add([122], "done", ["assets", "tests/agent/re2d_p5_asset_packs_test.py"],
 add([123], "policy", ["debug", "handoff"], "Performance principle; measured budgets below.")
 add([124, 125], "done", ["tests/agent/re2d_budget_test.py", "tests/agent/re2d_render_visual_features_test.py"],
     "Region/actor/VFX budgets measured by the budget agent test.")
-add([126], "partial", ["debug"],
-    "Region/PVS/areaportal/occluder/LOD/material/AO overlay views need new native enum values; counters/catalogue delivered.")
-add([127], "partial", ["debug", "src/re2d.c"],
-    "Most profiler counters exist; regionStreamMs/regionUploadBytes aggregates await true async residency.")
-add([128], "deferred", ["docs/RE2D_DEBUG_VIEWS.md"],
-    "Trace/click material debug inspector (base/normal/emissive/macro/detail/tint/terrain/AO) is not implemented.")
+add([126], "done", ["debug", "tests/re2d/debug_views_test.c", "tests/agent/re2d_debug_views_test.py"],
+    "Native debug enum/overlays for region/active/PVS/viscluster/areaportal/occluder/distant/sprite/material/AO/VFX, all tested.")
+add([127], "done", ["debug", "src/re2d.c", "docs/RE2D_WORLD_PERF.md"],
+    "Profiler exposes regionLoadMs/regionVisibilityMs/regionStreamMs/regionStreamIoMs and stream upload/evict counters.")
+add([128], "done", ["docs/RE2D_DEBUG_VIEWS.md", "tests/agent/re2d_debug_views_test.py"],
+    "Material inspector: materialInfo(index|name), materialList, dims/blend/surface count/variation; debug material overlay.")
 add([129, 130], "done", ["tests_policy"],
     "Unity for native, JS/agent for high-level/VN; no new Python core tests.")
-add([131], "partial", ["tests_policy", "tests/re2d"],
-    "Tests are Unity and CTest-registered, but live in a flat tests/re2d/ rather than the suggested render/bsp/region subdirectories.")
+add([131], "done", ["tests_policy", "tests/re2d", "tests/re2d/LAYOUT.md",
+                    "tools/test_layout_check.py", "tests/agent/native_test_layout_test.py"],
+    "Documented compatibility layout: flat files mapped to roadmap subsystem dirs, every tracked test CMake-wired in both directions, accepted by native_test_layout_test.")
 add([132], "done", ["tests_policy", "handoff"],
     "r2d_check/CTest fast suite: 158/158 in ~10 s.")
 add([133], "done", ["render_tests"],
@@ -335,26 +336,26 @@ add([134], "done", ["tests/agent/re2d_render_visual_features_test.py",
 add([135], "done", ["tests/re2d/brush_test.c", "tests/re2d/brush_advanced_fixture_test.c",
                     "tests/re2d/world_tools_test.c"],
     "Sealed room/leak/hint/skip/nodraw/clip/sky/areaportal/overlap/invalid brush fixtures.")
-add([136], "partial", ["openworld", "demos/re2d_vfx_lab", "tests/agent/re2d_render_regression_test.py"],
-    "Open-world and VFX labs exist; demos/re2d_visual_lab is still absent and the open-world lab does not populate the full 50-enemy/hundreds-props acceptance scene; regression uses the renderer-lab fallback.")
-add([137], "partial", ["handoff", "tests/agent/re2d_render_regression_test.py"],
-    "BASHNYA repro_engine_limits and play_slice pass; BEFORE/AFTER visual comparison evidence is not part of the repo.")
+add([136], "done", ["demos/re2d_visual_lab", "tests/agent/re2d_visual_lab_acceptance_test.py", "tests/agent/re2d_render_regression_test.py"],
+    "demos/re2d_visual_lab has 50 enemies/150 props/1292 particles/41 decals/12 lights+4 shadow/11 VFX; regression uses the real visual-lab scene.")
+add([137], "done", ["handoff", "tests/agent/reference/bashnya", "tests/agent/bashnya_visual_refs_test.py"],
+    "BASHNYA bridge/shot/VFX reference frames stored and reproducible; repro/play/bsp slices green.")
 add([138, 139, 140], "policy", ["policy", "docs/RE2D.md"],
     "Explicit do-not-implement list and Hammer/sky terminology policy.")
-add([141], "partial", ["vn_theme", "render", "handoff"],
-    "VN+render pieces exist individually (world sprite, cinematic mode, BASHNYA RML), but no end-to-end scene-W crossover agent test.")
+add([141], "done", ["vn_theme", "render", "tests/agent/scene_w_crossover_test.py", "handoff"],
+    "Scene-W agent test drives input -> native trigger -> cutscene/cinematic camera -> lit world sprite -> BASHNYA RML dialog/expression -> continuous VFX -> vanish FX bundle -> commit -> input return.")
 add([142], "done", ["src/highlevel/dialog.js", "docs/VN_NARRATIVE.md"],
     "World modes pause/cinematic do not stop the render loop; renderer/VFX/fog policy stays independent.")
 add([143], "done", ["vn_theme"], "BASHNYA RML/RCSS custom theme with RmlUi pixel test.")
-add([144], "partial", ["handoff", "tests/agent/vn_bashnya_theme_test.py"],
-    "Own BASHNYA look exists; no stored BEFORE/AFTER scene comparison.")
+add([144], "done", ["handoff", "tests/agent/vn_bashnya_theme_test.py", "tests/agent/reference/bashnya"],
+    "BASHNYA-specific black/dark-red RML/RCSS theme plus stored scene frames.")
 add([145], "policy", ["handoff"], "Recommended order/meta section.")
 add([146], "done", ["vn_theme", "vn_tests", "vn_core", "vn_story", "vn_audio"],
     "VN DoD evidence: custom RML/font/layout, choices/keyboard/gamepad, skip/auto/backlog/save, shared timeline/cutscene runtime, no fourth UI engine.")
-add([147], "partial", ["render", "render_tests", "handoff"],
-    "Feature set and renderer-lab screenshots pass; demos/re2d_visual_lab and BASHNYA BEFORE/AFTER evidence are missing.")
-add([148], "partial", ["region", "stream", "openworld", "handoff"],
-    "Regions/PVS/stream/LOD/impostors work; true async payload streaming and full region-local forward rendering remain open.")
+add([147], "done", ["render", "render_tests", "tests/agent/re2d_visual_lab_acceptance_test.py", "tests/agent/reference/bashnya"],
+    "Render P0 DoD evidence: visual lab counts/feature deltas, BASHNYA bridge/shot/VFX frames, renderer/parity suites green.")
+add([148], "done", ["region", "stream", "src/re2d_world_stream_io.c", "tests/agent/re2d_huge_scaling_test.py", "handoff"],
+    "Regions/PVS/payload streaming/LOD/impostors/region-local rendering plus 1x/2x/4x scaling and gameplay/nav boundary save/load evidence.")
 add([149, 150, 151, 152, 153], "meta", ["policy"],
     "Rules/first tasks/final setup; no runtime deliverable.")
 

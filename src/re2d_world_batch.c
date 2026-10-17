@@ -70,10 +70,12 @@ static int compare_instances(const void *lhs, const void *rhs)
     if (ablend > bblend) return 1;
     CMP(light);
     CMP(atlas);
+    // aux is the caller's stable submission index: it is the first tie-break so
+    // a GPU draw list keeps its original order inside one group.
+    CMP(aux);
     CMP(flags);
     CMP(surface);
     CMP(span);
-    CMP(aux);
     CMP(tint);
 #undef CMP
     return 0;

@@ -124,12 +124,14 @@ def vfx_setup():
 def main():
     update = "--update" in sys.argv[1:]
     print("== visual lab")
-    visual_game = "demos/re2d_visual_lab"
-    if not os.path.isdir(os.path.join(ROOT, visual_game)):
-        visual_game = "demos/re2d_world_renderer_lab"
+    if os.path.isdir(os.path.join(ROOT, "demos", "re2d_visual_lab")):
+        shot, _ = capture("re2d_visual_lab", "demos", "re2d_visual_lab",
+                          'visualLab.world.backend("gpu");'
+                          'visualLab.world.qualityPreset("high");true', 3)
+    else:
         print("  note: demos/re2d_visual_lab missing; using renderer lab fallback")
-    shot, _ = capture("re2d_visual_lab", visual_game, None,
-                      'world.backend("gpu");world.qualityPreset("high");true', 3)
+        shot, _ = capture("re2d_visual_lab", "demos/re2d_world_renderer_lab", None,
+                          'world.backend("gpu");world.qualityPreset("high");true', 3)
     compare("re2d_visual_lab", shot, update)
 
     print("== vfx lab")

@@ -80,8 +80,6 @@ typedef struct World {
     SdkBrushStats brush_stats;
     SdkBrushEntityRef *entity_refs; int nentity_refs;
     SdkBrushEntityMap *entity_map; int nentity_map;
-    bool boundary_sky;
-    int open_edges;
     int nentities, npoint_entities, nbrush_entities;
     int authored_lights;
     float region_size;
@@ -721,7 +719,6 @@ static bool load_brush_bounds(Ctx *c, const R2dJson *root, World *w)
                  "Карта без блока «world»: границы выведены из brushes с полями %g; авторский sky/clip-контур не задан",
                  (double)64.0f);
     }
-    w->boundary_sky = (bounds.boundary_flags & R2D_WALL_SKY) != 0;
     // Compile and append.
     SdkBrushOutput output;
     SdkBrushStats stats;
@@ -960,6 +957,59 @@ static bool build_entity_map(Ctx *c, World *w)
         return false;
     }
     w->nentity_map = total;
+
+    // Resolve concrete wiring after the brush world exists:
+    //  * areaportal -> nearest generated portal whose midpoint lies in the brush
+    //    footprint; runtime consumes it through r2d_world_portal_set_area().
+    //  * fog/water -> number of runtime spans covered by the authored volume;
+    //    runtime consumes the volume through r2d_world_apply_*_volume().
+    for (int i = 0; i < w->nentity_map; i++) {
+        SdkBrushEntityMap *m = &w->entity_map[i];
+        const SdkBrushSpec *brush = NULL;
+        for (int b = 0; b < w->nbrush; b++)
+            if (!strcmp(w->brushes[b].id, m->brush)) { brush = &w->brushes[b]; break; }
+        if (!brush) continue;
+        if (!strcmp(m->kind, "areaportal")) {
+            for (int p = 0; p < w->nportal; p++) {
+                const WPortal *portal = &w->portals[p];
+                const float mx = (portal->x1 + portal->x2) * 0.5f;
+                const float my = (portal->y1 + portal->y2) * 0.5f;
+                float minx = INFINITY, miny = INFINITY, maxx = -INFINITY, maxy = -INFINITY;
+                for (int v = 0; v < brush->ring_count; v++) {
+                    minx = fminf(minx, brush->ring[v].x);
+                    miny = fminf(miny, brush->ring[v].y);
+                    maxx = fmaxf(maxx, brush->ring[v].x);
+                    maxy = fmaxf(maxy, brush->ring[v].y);
+                }
+                if (mx >= minx - 1e-4f && mx <= maxx + 1e-4f &&
+                    my >= miny - 1e-4f && my <= maxy + 1e-4f) {
+                    m->portal = p;
+                    snprintf(m->hook, sizeof m->hook, "%s", "");
+                    if (!m->target[0])
+                        snprintf(m->target, sizeof m->target, "%s", portal->id);
+                    break;
+                }
+            }
+            if (m->portal < 0)
+                snprintf(m->hook, sizeof m->hook, "no generated portal under brush");
+        } else if (!strcmp(m->kind, "fog_volume") ||
+                   !strcmp(m->kind, "water_volume")) {
+            int count = 0;
+            for (int ci = 0; ci < w->ncell; ci++) {
+                for (int si = 0; si < w->cells[ci].nspan; si++) {
+                    const WSpan *span = &w->cells[ci].spans[si];
+                    const float sx = w->cells[ci].x, sy = w->cells[ci].y;
+                    const float sw = w->cells[ci].w, sh = w->cells[ci].h;
+                    if (sx < m->x + m->w - 1e-4f && m->x < sx + sw - 1e-4f &&
+                        sy < m->y + m->h - 1e-4f && m->y < sy + sh - 1e-4f &&
+                        span->bottom < m->top - 1e-4f &&
+                        m->bottom < span->top - 1e-4f)
+                        count++;
+                }
+            }
+            m->span_count = count;
+        }
+    }
     return true;
 }
 
@@ -1541,15 +1591,10 @@ static void check_leaks(Ctx *c, World *w)
                     sdk_diag(c->rep, SDK_WARNING, "SDK_WORLD_OPEN_EDGE", c->path, loc, d,
                              "cell «%s», span %d [%g..%g]: кромка %s открыта на %g ед. (первый разрыв %g…%g) — нет стены, соседнего cell или портала",
                              cell->id, si, sp->bottom, sp->top, names[e], gap_total, gap_lo, gap_hi);
-                    w->open_edges++;
                 }
             }
         }
     }
-    if (w->open_edges > 0 && w->boundary_sky)
-        sdk_diag(c->rep, SDK_WARNING, "SDK_WORLD_SKY_LEAK", c->path, NULL, NULL,
-                 "Sky boundary leaks: %d open edge(s) in cells sealed only by the sky envelope; seal with walls or clip brushes",
-                 w->open_edges);
     free(iv);
 }
 
@@ -1849,8 +1894,14 @@ static bool put_renderer_description(const World *w,R2dSb *sb,SdkReport *rep,con
             r2d_sb_put_json_string(sb, m->target);
             r2d_sb_puts(sb, ",\"hook\":");
             r2d_sb_put_json_string(sb, m->hook);
-            r2d_sb_printf(sb, ",\"moverType\":%d,\"triggerType\":%d,\"volume\":[%g,%g,%g,%g,%g,%g],\"flags\":%u}",
-                          m->mover_type, m->trigger_type, (double)m->x, (double)m->y,
+            r2d_sb_printf(sb, ",\"moverType\":%d,\"triggerType\":%d,\"portal\":%d,\"spanCount\":%d,\"terrainKind\":%d,"
+                          "\"fog\":{\"density\":%g,\"start\":%g,\"rgb\":[%g,%g,%g]},"
+                          "\"volume\":[%g,%g,%g,%g,%g,%g],\"flags\":%u}",
+                          m->mover_type, m->trigger_type, m->portal, m->span_count,
+                          m->terrain_kind, (double)m->fog_density,
+                          (double)m->fog_start, (double)m->fog_r,
+                          (double)m->fog_g, (double)m->fog_b,
+                          (double)m->x, (double)m->y,
                           (double)m->w, (double)m->h, (double)m->bottom,
                           (double)m->top, (unsigned)m->flags);
         }
@@ -2122,6 +2173,165 @@ static void check_unreachable_cells(Ctx *c, const World *w)
     free(fill); free(degree); free(offset); free(neighbors); free(seen); free(queue);
 }
 
+// ---------------------------------------------------------------------------
+// Sky-leak flood fill (issue #103): exterior/void is seeded from cell sides with
+// no neighbour, then flooded through cell sides that are not fully covered by a
+// wall. Reached authoring cells are reported. This replaces the old "any open
+// edge = sky leak" heuristic. Walls are treated as sealing for the full edge
+// height (the SDK compiler only emits full-height sealing walls in practice);
+// the open-edge diagnostic still reports partial coverage.
+// ---------------------------------------------------------------------------
+static bool wall_covers_side(const World *w, bool vertical, float coord,
+                             float lo, float hi)
+{
+    const float eps = 1e-4f;
+    int count = 0;
+    float (*iv)[2] = (float (*)[2])malloc((size_t)(w->nwall ? w->nwall : 1) * sizeof *iv);
+    if (!iv) return false;
+    for (int i = 0; i < w->nwall; i++) {
+        const WWall *wall = &w->walls[i];
+        float a, b;
+        if (vertical) {
+            if (fabsf(wall->x1 - wall->x2) > eps || fabsf(wall->x1 - coord) > eps)
+                continue;
+            a = fminf(wall->y1, wall->y2); b = fmaxf(wall->y1, wall->y2);
+        } else {
+            if (fabsf(wall->y1 - wall->y2) > eps || fabsf(wall->y1 - coord) > eps)
+                continue;
+            a = fminf(wall->x1, wall->x2); b = fmaxf(wall->x1, wall->x2);
+        }
+        a = fmaxf(a, lo); b = fminf(b, hi);
+        if (b > a + eps) { iv[count][0] = a; iv[count][1] = b; count++; }
+    }
+    // insertion sort by start; deterministic and n is small
+    for (int i = 1; i < count; i++) {
+        float key0 = iv[i][0], key1 = iv[i][1];
+        int j = i - 1;
+        while (j >= 0 && iv[j][0] > key0) { iv[j + 1][0] = iv[j][0]; iv[j + 1][1] = iv[j][1]; j--; }
+        iv[j + 1][0] = key0; iv[j + 1][1] = key1;
+    }
+    float covered = lo;
+    for (int i = 0; i < count; i++) {
+        if (iv[i][0] > covered + eps) break;
+        if (iv[i][1] > covered) covered = iv[i][1];
+        if (covered >= hi - eps) break;
+    }
+    const bool sealed = covered >= hi - eps;
+    free(iv);
+    return sealed;
+}
+
+static bool cells_share_side(const WCell *a, const WCell *b, bool *vertical,
+                             float *coord, float *lo, float *hi)
+{
+    const float eps = 1e-4f;
+    if (fabsf(a->x + a->w - b->x) <= eps || fabsf(b->x + b->w - a->x) <= eps) {
+        const float y0 = fmaxf(a->y, b->y);
+        const float y1 = fminf(a->y + a->h, b->y + b->h);
+        if (y1 > y0 + eps) {
+            *vertical = true;
+            *coord = fabsf(a->x + a->w - b->x) <= eps ? b->x : a->x;
+            *lo = y0; *hi = y1;
+            return true;
+        }
+    }
+    if (fabsf(a->y + a->h - b->y) <= eps || fabsf(b->y + b->h - a->y) <= eps) {
+        const float x0 = fmaxf(a->x, b->x);
+        const float x1 = fminf(a->x + a->w, b->x + b->w);
+        if (x1 > x0 + eps) {
+            *vertical = false;
+            *coord = fabsf(a->y + a->h - b->y) <= eps ? b->y : a->y;
+            *lo = x0; *hi = x1;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void check_sky_leak_flood(Ctx *c, const World *w)
+{
+    if (!c || !w || w->ncell <= 0) return;
+    const int n = w->ncell;
+    int *neighbors = (int *)malloc((size_t)n * (size_t)n * sizeof(int));
+    int *degree = (int *)calloc((size_t)n, sizeof(int));
+    int *queue = (int *)malloc((size_t)n * sizeof(int));
+    uint8_t *reached = (uint8_t *)calloc((size_t)n, 1);
+    if (!neighbors || !degree || !queue || !reached) {
+        free(neighbors); free(degree); free(queue); free(reached);
+        return;
+    }
+    // Adjacency: any shared side not fully sealed by walls is passable.
+    for (int a = 0; a < n; a++) {
+        for (int b = a + 1; b < n; b++) {
+            bool vertical; float coord, lo, hi;
+            if (!cells_share_side(&w->cells[a], &w->cells[b], &vertical,
+                                  &coord, &lo, &hi))
+                continue;
+            if (wall_covers_side(w, vertical, coord, lo, hi)) continue;
+            neighbors[a * n + degree[a]++] = b;
+            neighbors[b * n + degree[b]++] = a;
+        }
+    }
+    int head = 0, tail = 0;
+    for (int i = 0; i < n; i++) {
+        const WCell *cell = &w->cells[i];
+        const float sides[4][4] = {
+            {cell->x, cell->y, cell->x, cell->y + cell->h},
+            {cell->x + cell->w, cell->y, cell->x + cell->w, cell->y + cell->h},
+            {cell->x, cell->y, cell->x + cell->w, cell->y},
+            {cell->x, cell->y + cell->h, cell->x + cell->w, cell->y + cell->h}
+        };
+        for (int side = 0; side < 4 && !reached[i]; side++) {
+            const bool vertical = side < 2;
+            const float coord = vertical ? sides[side][0] : sides[side][1];
+            const float lo = vertical ? cell->y : cell->x;
+            const float hi = vertical ? cell->y + cell->h : cell->x + cell->w;
+            bool has_neighbor = false;
+            for (int j = 0; j < degree[i] && !has_neighbor; j++) {
+                const int other = neighbors[i * n + j];
+                bool ov; float oc, olo, ohi;
+                if (cells_share_side(cell, &w->cells[other], &ov, &oc, &olo, &ohi) &&
+                    ov == vertical && fabsf(oc - coord) <= 1e-4f)
+                    has_neighbor = true;
+            }
+            if (has_neighbor) continue;
+            if (!wall_covers_side(w, vertical, coord, lo, hi)) {
+                reached[i] = 1;
+                queue[tail++] = i;
+                break;
+            }
+        }
+    }
+    // Flood through passable shared sides.
+    while (head < tail) {
+        const int cell = queue[head++];
+        for (int k = 0; k < degree[cell]; k++) {
+            const int next = neighbors[cell * n + k];
+            if (reached[next]) continue;
+            reached[next] = 1;
+            queue[tail++] = next;
+        }
+    }
+    int leaked = 0;
+    for (int i = 0; i < n; i++) leaked += reached[i] != 0;
+    if (leaked > 0) {
+        char loc[2048] = {0};
+        int off = snprintf(loc, sizeof loc, "{\"kind\":\"sky-leak\",\"cells\":[");
+        int listed = 0;
+        for (int i = 0; i < n && listed < 12; i++) {
+            if (!reached[i]) continue;
+            off += snprintf(loc + off, sizeof loc - (size_t)off, "%s\"%s\"",
+                            listed ? "," : "", w->cells[i].id);
+            listed++;
+        }
+        snprintf(loc + off, sizeof loc - (size_t)off, "]}");
+        sdk_diag(c->rep, SDK_WARNING, "SDK_WORLD_SKY_LEAK", c->path, loc, NULL,
+                 "Sky leak: exterior flood fill reached %d cell(s) starting from void boundary; seal walls/brush boundary",
+                 leaked);
+    }
+    free(neighbors); free(degree); free(queue); free(reached);
+}
+
 static void compiler_warnings(Ctx *c, const World *w, int total_spans)
 {
     if (w->ncc > 4096 || total_spans > 20000)
@@ -2170,6 +2380,7 @@ static void compiler_warnings(Ctx *c, const World *w, int total_spans)
         sdk_diag(c->rep, SDK_INFO, "SDK_WORLD_BRUSH_PLAIN", c->path, NULL, NULL,
                  "Brush map has no tool materials; sky/clip boundary is the default envelope");
     check_unreachable_cells(c, w);
+    check_sky_leak_flood(c, w);
 }
 
 static bool compile_world(const char *path, World *w, SdkReport *rep, StackInfo **stacks, int *nstacks, int *total_spans, bool renderer, float region_override)

@@ -37,6 +37,8 @@
 // The caller owns all output arrays; sdk_brush_output_free() releases them.
 // Compilation allocates scratch arrays internally and is deterministic.
 // ===========================================================================
+#include "re2d_world_terrain.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -192,11 +194,16 @@ typedef struct {
     char kind[32];
     char brush[SDK_BRUSH_MAX_ID];
     char runtime[24];               // mover|trigger|fog|water|portal
-    char api[24];                   // world.mover|world.trigger|...
+    char api[64];                   // world.mover|world.trigger|...
     char target[SDK_BRUSH_MAX_ID];  // authored semantic target (portal/span id)
     char hook[80];                  // required runtime hook, empty when direct
     int mover_type;                 // -1 n/a, else R2DWorldMoverType value
     int trigger_type;               // -1 n/a, else enter=0
+    int portal;                     // areaportal: resolved generated portal, -1
+    int span_count;                 // fog/water: resolved covered spans, -1 n/a
+    int terrain_kind;               // water: R2D_TERRAIN_WATER, else -1
+    float fog_density, fog_start;   // fog/water preset
+    float fog_r, fog_g, fog_b;
     float x, y, w, h, bottom, top;  // resolved brush volume (outer bbox)
     uint16_t flags;                 // brush wall policy bits
 } SdkBrushEntityMap;

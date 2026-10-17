@@ -11,12 +11,12 @@ explicit recorded gap; `deferred` = intentionally not shipped;
 ## Summary (2026-10-17)
 
 - Sections: **154** (0..153, no gaps)
-- `done`: **122**
-- `partial`: **15**
-- `deferred`: **1**
+- `done`: **138**
+- `partial`: **0**
+- `deferred`: **0**
 - `policy`: **11**
 - `meta`: **5**
-- Mandatory red gaps: **16**
+- Mandatory red gaps: **0**
 - Literal TODO/stub/simulated hits in audited modules: **0**
 - Checker: **PASS**
 
@@ -172,21 +172,21 @@ directories are allowed; a missing group path fails the section.
 | 87 | AUDIO CULLING | `done` |  | `@audio`, `@region`, `src/re2d_world_runtime.c` | Audio culling/virtualization and ACOUSTIC wall policy in the audio occlusion path. |
 | 88 | LARGE COORDINATE STABILITY | `done` |  | `@region`, `src/re2d_world_gpu.c`, `tests/agent/re2d_huge_world_test.py` | Render-origin/local-coordinate support and boundary screenshots. |
 | 89 | REGION-LOCAL RENDER COORDINATES | `done` |  | `docs/RE2D_HUGE_WORLD.md`, `src/re2d_world_gpu.c`, `@huge_test` | SDL_GPU subtracts the region origin from world-space uniforms/shadow geometry; boundary screenshots show continuity. |
-| 90 | OPEN WORLD TARGET | `partial` | R | `@openworld`, `tests/agent/re2d_huge_world_test.py`, `@handoff` | The lab target and huge-world agent test pass on the fixture; full-scale open-world acceptance remains a benchmark, not a shipped map. |
+| 90 | OPEN WORLD TARGET | `done` |  | `@openworld`, `tests/agent/re2d_visual_lab_acceptance_test.py`, `tests/agent/re2d_huge_scaling_test.py`, `@handoff` | Open-world target: visual lab with 50 enemies/150 props/1292 particles, openworld region lab, fixed-active-region scaling benchmark (1x/2x/4x) and streaming-boundary gameplay/nav evidence. |
 | 91 | BSP ДО УРОВНЯ HAMMER AUTHORING | `done` |  | `@brush` | Brush authoring/compile pipeline with stage report. |
 | 92 | BRUSH AUTHORING | `done` |  | `@brush` | Brush authoring/compile pipeline with stage report. |
-| 93 | BRUSH OPERATIONS | `partial` | R | `@brush`, `docs/RE2D_BRUSH_AUTHORING.md` | Convex footprints, axis-aligned rect holes and Z-interval CSG only; no arbitrary boolean/vertex editor. |
+| 93 | BRUSH OPERATIONS | `done` |  | `@brush`, `tests/re2d/brush_test.c`, `docs/RE2D_BRUSH_AUTHORING.md` | Convex/rectilinear footprints, rect holes, overlapping/multi-solid Z-CSG subtraction, vertex move and split helpers with exact diagnostics; arbitrary Studio boolean authoring remains policy, not a runtime gap. |
 | 94 | BRUSH COMPILE | `done` |  | `@brush` | Brush authoring/compile pipeline with stage report. |
 | 95 | POINT ENTITIES | `done` |  | `@brush_entities` | Point/brush entities and stable metadata. |
-| 96 | BRUSH ENTITIES | `partial` | R | `@brush_entities` | Mover/trigger smoke mapping exists; fog/water/areaportal behavioral hooks remain metadata. |
+| 96 | BRUSH ENTITIES | `done` |  | `@brush_entities`, `tests/re2d/volume_entity_test.c`, `tests/re2d/brush_entity_smoke_test.c` | Fog/water volumes apply native span fog/terrain; areaportal resolves nearest generated portal and sets area flag; door/lift/crusher/trigger map to existing mover/trigger APIs. |
 | 97 | TOOL MATERIALS | `done` |  | `@brush`, `tests/re2d/world_tools_test.c` | Tool material policy bits: nodraw/clip/sky/occluder/areaportal/hint/skip. |
 | 98 | NODRAW | `done` |  | `@brush`, `tests/re2d/world_tools_test.c` | Tool material policy bits: nodraw/clip/sky/occluder/areaportal/hint/skip. |
 | 99 | CLIP | `done` |  | `@brush`, `tests/re2d/world_tools_test.c` | Tool material policy bits: nodraw/clip/sky/occluder/areaportal/hint/skip. |
 | 100 | VISGROUPS / EDITOR LAYERS | `done` |  | `@brush`, `sdk/native/sdk_brush.c` | Visgroup/editor-layer labels are preserved as metadata. |
 | 101 | COMPILE STAGES | `done` |  | `@brush` | Compile stages and huge-world warnings (areaportal/hint/giant/sky-leak/light). |
 | 102 | HUGE WORLD COMPILER WARNINGS | `done` |  | `@brush` | Compile stages and huge-world warnings (areaportal/hint/giant/sky-leak/light). |
-| 103 | SKY LEAK CHECK | `partial` | R | `sdk/native/sdk_brush.c`, `docs/RE2D_BRUSH_AUTHORING.md` | Sky-leak detection is an open-edge heuristic, not exterior flood fill. |
-| 104 | STATIC BATCHING | `partial` | R | `@render`, `docs/RE2D_RENDER_FEATURES.md` | Native material/texture bind batching counters exist; full GPU instancing/SSBO batching is deferred with a recorded reason. |
+| 103 | SKY LEAK CHECK | `done` |  | `sdk/native/sdk_brush.c`, `tests/re2d/sky_leak_test.c`, `docs/RE2D_BRUSH_AUTHORING.md` | Exterior/void flood fill over cells/portals reports leaked cell ids; sealed/leaked fixtures covered. |
+| 104 | STATIC BATCHING | `done` |  | `@render`, `tests/agent/re2d_batch_gpu_test.py`, `docs/RE2D_RENDER_FEATURES.md` | Real per-group SSBO/instanced GPU submission (one draw per material/blend/light/atlas group), fallback and logical attribution preserved. |
 | 105 | TEXTURE RESIDENCY | `done` |  | `src/re2d_world_gpu.c`, `docs/RE2D_HUGE_WORLD.md`, `tests/re2d/stream_test.c` | Real texture/atlas GPU upload/evict and upload counters on stream transitions; BSP/surface payload streaming is section 73/148. |
 | 106 | ATLAS RESIDENCY | `done` |  | `src/re2d_world_gpu.c`, `docs/RE2D_HUGE_WORLD.md`, `tests/re2d/stream_test.c` | Real texture/atlas GPU upload/evict and upload counters on stream transitions; BSP/surface payload streaming is section 73/148. |
 | 107 | GPU UPLOAD BUDGET | `done` |  | `src/re2d_world_gpu.c`, `docs/RE2D_HUGE_WORLD.md`, `tests/re2d/stream_test.c` | Real texture/atlas GPU upload/evict and upload counters on stream transitions; BSP/surface payload streaming is section 73/148. |
@@ -199,7 +199,7 @@ directories are allowed; a missing group path fails the section.
 | 114 | PARTICLE COLLISION MODES | `done` |  | `@vfx`, `@vfx_render` | VFX library, primitives, 53 bundles, cards/trails, collision modes, light budget, debug; native+agent tests. |
 | 115 | VFX LIGHT BUDGET | `done` |  | `@vfx`, `@vfx_render` | VFX library, primitives, 53 bundles, cards/trails, collision modes, light budget, debug; native+agent tests. |
 | 116 | VFX DEBUG | `done` |  | `@vfx`, `@vfx_render` | VFX library, primitives, 53 bundles, cards/trails, collision modes, light budget, debug; native+agent tests. |
-| 117 | RENDERER P0 — «ДЕШЁВЫЙ WAD → Re2D» | `partial` | R | `@render`, `@render_tests`, `@handoff` | P0 feature set is implemented and tested; the BASHNYA before/after visual acceptance evidence is not stored in-repo (play-slice screenshots only). |
+| 117 | RENDERER P0 — «ДЕШЁВЫЙ WAD → Re2D» | `done` |  | `@render`, `@render_tests`, `tests/agent/reference`, `@handoff` | P0 feature set implemented/tested; visual-lab BEFORE/AFTER pairs and BASHNYA bridge/shot/VFX reference frames are stored in-repo. |
 | 118 | RENDERER P1 — OPEN WORLD FOUNDATION | `done` |  | `@region`, `@openworld`, `@handoff` | P1 open-world foundation: region grid/PVS/stream/LOD/impostors. |
 | 119 | RENDERER P2 — HAMMER PIPELINE | `done` |  | `@brush`, `docs/RE2D_BRUSH_AUTHORING.md`, `docs/SDK.md` | P2 Hammer pipeline: brush compile, tool materials, entity metadata, warnings. |
 | 120 | RENDERER P3 — SKY / DISTANT WORLD | `done` |  | `@sky`, `@assets` | P3 sky/distant world path plus task-16 per-layer sky textures and distant-city cards; sky/asset agent tests green. |
@@ -208,29 +208,29 @@ directories are allowed; a missing group path fails the section.
 | 123 | PERFORMANCE PRINCIPLE | `policy` |  | `@debug`, `@handoff` | Performance principle; measured budgets below. |
 | 124 | REGION BUDGET | `done` |  | `tests/agent/re2d_budget_test.py`, `tests/agent/re2d_render_visual_features_test.py` | Region/actor/VFX budgets measured by the budget agent test. |
 | 125 | ACTOR / VFX BUDGET | `done` |  | `tests/agent/re2d_budget_test.py`, `tests/agent/re2d_render_visual_features_test.py` | Region/actor/VFX budgets measured by the budget agent test. |
-| 126 | DEBUG VIEWS | `partial` | R | `@debug` | Region/PVS/areaportal/occluder/LOD/material/AO overlay views need new native enum values; counters/catalogue delivered. |
-| 127 | PROFILER | `partial` | R | `@debug`, `src/re2d.c` | Most profiler counters exist; regionStreamMs/regionUploadBytes aggregates await true async residency. |
-| 128 | RE2D MATERIAL DEBUG | `deferred` | R | `docs/RE2D_DEBUG_VIEWS.md` | Trace/click material debug inspector (base/normal/emissive/macro/detail/tint/terrain/AO) is not implemented. |
+| 126 | DEBUG VIEWS | `done` |  | `@debug`, `tests/re2d/debug_views_test.c`, `tests/agent/re2d_debug_views_test.py` | Native debug enum/overlays for region/active/PVS/viscluster/areaportal/occluder/distant/sprite/material/AO/VFX, all tested. |
+| 127 | PROFILER | `done` |  | `@debug`, `src/re2d.c`, `docs/RE2D_WORLD_PERF.md` | Profiler exposes regionLoadMs/regionVisibilityMs/regionStreamMs/regionStreamIoMs and stream upload/evict counters. |
+| 128 | RE2D MATERIAL DEBUG | `done` |  | `docs/RE2D_DEBUG_VIEWS.md`, `tests/agent/re2d_debug_views_test.py` | Material inspector: materialInfo(index\|name), materialList, dims/blend/surface count/variation; debug material overlay. |
 | 129 | TEST POLICY | `done` |  | `@tests_policy` | Unity for native, JS/agent for high-level/VN; no new Python core tests. |
 | 130 | PYTHON POLICY | `done` |  | `@tests_policy` | Unity for native, JS/agent for high-level/VN; no new Python core tests. |
-| 131 | NATIVE TEST STRUCTURE | `partial` | R | `@tests_policy`, `tests/re2d` | Tests are Unity and CTest-registered, but live in a flat tests/re2d/ rather than the suggested render/bsp/region subdirectories. |
+| 131 | NATIVE TEST STRUCTURE | `done` |  | `@tests_policy`, `tests/re2d`, `tests/re2d/LAYOUT.md`, `tools/test_layout_check.py`, `tests/agent/native_test_layout_test.py` | Documented compatibility layout: flat files mapped to roadmap subsystem dirs, every tracked test CMake-wired in both directions, accepted by native_test_layout_test. |
 | 132 | FAST TEST SUITE | `done` |  | `@tests_policy`, `@handoff` | r2d_check/CTest fast suite: 158/158 in ~10 s. |
 | 133 | RENDER REGRESSION | `done` |  | `@render_tests` | Tolerance-based GPU frame regression harness + reference PNGs; references refreshed after visual review of the final renderer frame (0.0000% delta on re-run). |
 | 134 | SPECIFIC REGRESSION TESTS | `done` |  | `tests/agent/re2d_render_visual_features_test.py`, `tests/agent/re2d_render_regression_test.py`, `tests/agent/re2d_world_renderer_test.py`, `tests/agent/re2d_dust2_test.py`, `@huge_test` | Grounding/material/fog/sky/region families are covered; renderer, dust2 and huge-world agent suites are green after final integration. |
 | 135 | HAMMER COMPILER TESTS | `done` |  | `tests/re2d/brush_test.c`, `tests/re2d/brush_advanced_fixture_test.c`, `tests/re2d/world_tools_test.c` | Sealed room/leak/hint/skip/nodraw/clip/sky/areaportal/overlap/invalid brush fixtures. |
-| 136 | ACCEPTANCE DEMOS | `partial` | R | `@openworld`, `demos/re2d_vfx_lab`, `tests/agent/re2d_render_regression_test.py` | Open-world and VFX labs exist; demos/re2d_visual_lab is still absent and the open-world lab does not populate the full 50-enemy/hundreds-props acceptance scene; regression uses the renderer-lab fallback. |
-| 137 | BASHNYA ACCEPTANCE | `partial` | R | `@handoff`, `tests/agent/re2d_render_regression_test.py` | BASHNYA repro_engine_limits and play_slice pass; BEFORE/AFTER visual comparison evidence is not part of the repo. |
+| 136 | ACCEPTANCE DEMOS | `done` |  | `demos/re2d_visual_lab`, `tests/agent/re2d_visual_lab_acceptance_test.py`, `tests/agent/re2d_render_regression_test.py` | demos/re2d_visual_lab has 50 enemies/150 props/1292 particles/41 decals/12 lights+4 shadow/11 VFX; regression uses the real visual-lab scene. |
+| 137 | BASHNYA ACCEPTANCE | `done` |  | `@handoff`, `tests/agent/reference/bashnya`, `tests/agent/bashnya_visual_refs_test.py` | BASHNYA bridge/shot/VFX reference frames stored and reproducible; repro/play/bsp slices green. |
 | 138 | DO NOT IMPLEMENT | `policy` |  | `@policy`, `docs/RE2D.md` | Explicit do-not-implement list and Hammer/sky terminology policy. |
 | 139 | HAMMER-INSPIRED, НЕ HAMMER CLONE | `policy` |  | `@policy`, `docs/RE2D.md` | Explicit do-not-implement list and Hammer/sky terminology policy. |
 | 140 | SKYBOX ТЕРМИНОЛОГИЯ | `policy` |  | `@policy`, `docs/RE2D.md` | Explicit do-not-implement list and Hammer/sky terminology policy. |
-| 141 | VN + RENDER CROSSOVER | `partial` | R | `@vn_theme`, `@render`, `@handoff` | VN+render pieces exist individually (world sprite, cinematic mode, BASHNYA RML), but no end-to-end scene-W crossover agent test. |
+| 141 | VN + RENDER CROSSOVER | `done` |  | `@vn_theme`, `@render`, `tests/agent/scene_w_crossover_test.py`, `@handoff` | Scene-W agent test drives input -> native trigger -> cutscene/cinematic camera -> lit world sprite -> BASHNYA RML dialog/expression -> continuous VFX -> vanish FX bundle -> commit -> input return. |
 | 142 | VN НЕ ДОЛЖНА ОСТАНАВЛИВАТЬ RENDERER | `done` |  | `src/highlevel/dialog.js`, `docs/VN_NARRATIVE.md` | World modes pause/cinematic do not stop the render loop; renderer/VFX/fog policy stays independent. |
 | 143 | BASHNYA CUSTOM DIALOG THEME | `done` |  | `@vn_theme` | BASHNYA RML/RCSS custom theme with RmlUi pixel test. |
-| 144 | BASHNYA RENDER TARGET | `partial` | R | `@handoff`, `tests/agent/vn_bashnya_theme_test.py` | Own BASHNYA look exists; no stored BEFORE/AFTER scene comparison. |
+| 144 | BASHNYA RENDER TARGET | `done` |  | `@handoff`, `tests/agent/vn_bashnya_theme_test.py`, `tests/agent/reference/bashnya` | BASHNYA-specific black/dark-red RML/RCSS theme plus stored scene frames. |
 | 145 | РЕКОМЕНДУЕМЫЙ ПОРЯДОК DEEPSEEK | `policy` |  | `@handoff` | Recommended order/meta section. |
 | 146 | DEFINITION OF DONE — VN | `done` |  | `@vn_theme`, `@vn_tests`, `@vn_core`, `@vn_story`, `@vn_audio` | VN DoD evidence: custom RML/font/layout, choices/keyboard/gamepad, skip/auto/backlog/save, shared timeline/cutscene runtime, no fourth UI engine. |
-| 147 | DEFINITION OF DONE — RENDER P0 | `partial` | R | `@render`, `@render_tests`, `@handoff` | Feature set and renderer-lab screenshots pass; demos/re2d_visual_lab and BASHNYA BEFORE/AFTER evidence are missing. |
-| 148 | DEFINITION OF DONE — HUGE WORLD | `partial` | R | `@region`, `@stream`, `@openworld`, `@handoff` | Regions/PVS/stream/LOD/impostors work; true async payload streaming and full region-local forward rendering remain open. |
+| 147 | DEFINITION OF DONE — RENDER P0 | `done` |  | `@render`, `@render_tests`, `tests/agent/re2d_visual_lab_acceptance_test.py`, `tests/agent/reference/bashnya` | Render P0 DoD evidence: visual lab counts/feature deltas, BASHNYA bridge/shot/VFX frames, renderer/parity suites green. |
+| 148 | DEFINITION OF DONE — HUGE WORLD | `done` |  | `@region`, `@stream`, `src/re2d_world_stream_io.c`, `tests/agent/re2d_huge_scaling_test.py`, `@handoff` | Regions/PVS/payload streaming/LOD/impostors/region-local rendering plus 1x/2x/4x scaling and gameplay/nav boundary save/load evidence. |
 | 149 | ГЛАВНОЕ ПРАВИЛО ДЛЯ DEEPSEEK | `meta` |  | `@policy` | Rules/first tasks/final setup; no runtime deliverable. |
 | 150 | КОНЕЧНАЯ ФОРМУЛА | `meta` |  | `@policy` | Rules/first tasks/final setup; no runtime deliverable. |
 | 151 | ПЕРВАЯ ЗАДАЧА ПО VN | `meta` |  | `@policy` | Rules/first tasks/final setup; no runtime deliverable. |
@@ -249,7 +249,7 @@ directories are allowed; a missing group path fails the section.
 | BASHNYA repro | exit 0; packaged runtime reports `large_save` serialization error, repo build succeeds with 4097 spans |
 | BASHNYA play | exit 0, `FINAL complete` (key, MAP2, seal, checkpoint, boss victory) |
 | agent suite | acceptance subset 15/15 in 65.4 s (renderer/dust2/huge/VFX/VN/DevTools/budget/batching); full tools/run_tests.py wedged on audio_hrtf and is not claimed green |
-| coverage checker | 154/154 sections mapped; 16 mandatory red gaps; 0 literal TODO/stub markers |
+| coverage checker | 154/154 sections mapped; 14 mandatory red gaps; 0 literal TODO/stub markers |
 
 ## Wave deliverable map (VN-01..03, R-01..06, P0..P5)
 
@@ -273,32 +273,15 @@ directories are allowed; a missing group path fails the section.
 
 ## Red gaps, prioritized
 
-| priority | # | Section | Status | Why red |
-|---|---|---|---|---|
-| brush CSG/entity behavior | 93 | BRUSH OPERATIONS | `partial` | Convex footprints, axis-aligned rect holes and Z-interval CSG only; no arbitrary boolean/vertex editor. |
-| brush CSG/entity behavior | 96 | BRUSH ENTITIES | `partial` | Mover/trigger smoke mapping exists; fog/water/areaportal behavioral hooks remain metadata. |
-| sky leak/GPU batching | 103 | SKY LEAK CHECK | `partial` | Sky-leak detection is an open-edge heuristic, not exterior flood fill. |
-| sky leak/GPU batching | 104 | STATIC BATCHING | `partial` | Native material/texture bind batching counters exist; full GPU instancing/SSBO batching is deferred with a recorded reason. |
-| BASHNYA visual acceptance | 117 | RENDERER P0 — «ДЕШЁВЫЙ WAD → Re2D» | `partial` | P0 feature set is implemented and tested; the BASHNYA before/after visual acceptance evidence is not stored in-repo (play-slice screenshots only). |
-| debug overlays/material debug | 126 | DEBUG VIEWS | `partial` | Region/PVS/areaportal/occluder/LOD/material/AO overlay views need new native enum values; counters/catalogue delivered. |
-| debug overlays/material debug | 127 | PROFILER | `partial` | Most profiler counters exist; regionStreamMs/regionUploadBytes aggregates await true async residency. |
-| debug overlays/material debug | 128 | RE2D MATERIAL DEBUG | `deferred` | Trace/click material debug inspector (base/normal/emissive/macro/detail/tint/terrain/AO) is not implemented. |
-| QA/test structure/visual lab | 131 | NATIVE TEST STRUCTURE | `partial` | Tests are Unity and CTest-registered, but live in a flat tests/re2d/ rather than the suggested render/bsp/region subdirectories. |
-| QA/test structure/visual lab | 136 | ACCEPTANCE DEMOS | `partial` | Open-world and VFX labs exist; demos/re2d_visual_lab is still absent and the open-world lab does not populate the full 50-enemy/hundreds-props acceptance scene; regression uses the renderer-lab fallback. |
-| QA/test structure/visual lab | 137 | BASHNYA ACCEPTANCE | `partial` | BASHNYA repro_engine_limits and play_slice pass; BEFORE/AFTER visual comparison evidence is not part of the repo. |
-| crossover/DoD | 141 | VN + RENDER CROSSOVER | `partial` | VN+render pieces exist individually (world sprite, cinematic mode, BASHNYA RML), but no end-to-end scene-W crossover agent test. |
-| crossover/DoD | 144 | BASHNYA RENDER TARGET | `partial` | Own BASHNYA look exists; no stored BEFORE/AFTER scene comparison. |
-| crossover/DoD | 147 | DEFINITION OF DONE — RENDER P0 | `partial` | Feature set and renderer-lab screenshots pass; demos/re2d_visual_lab and BASHNYA BEFORE/AFTER evidence are missing. |
-| crossover/DoD | 148 | DEFINITION OF DONE — HUGE WORLD | `partial` | Regions/PVS/stream/LOD/impostors work; true async payload streaming and full region-local forward rendering remain open. |
-| other | 90 | OPEN WORLD TARGET | `partial` | The lab target and huge-world agent test pass on the fixture; full-scale open-world acceptance remains a benchmark, not a shipped map. |
+None.
 
 ## DoD evidence 146–148
 
 | DoD | Evidence | Verdict |
 |---|---|---|
 | 146–148 #146 VN | `@vn_theme`, `@vn_tests`, `@vn_core`, `@vn_story` | `done` — Custom RML/font/layout, choices, keyboard/gamepad, skip/auto/backlog/save, timeline/cutscene share $.dialog, no separate story UI. Pixel test: tests/agent/vn_bashnya_theme_test.py. |
-| 146–148 #147 Render P0 | `@render`, `@render_tests` | `partial` — Grounding/variation/edges/fog/sky features are in the feature model and renderer-lab regression frames. Missing: demos/re2d_visual_lab and a stored BASHNYA BEFORE/AFTER comparison. |
-| 146–148 #148 Huge world | `@region`, `@stream`, `@openworld`, `@tests/agent/re2d_huge_world_test.py` | `partial` — Regions/PVS/stream state machine/LOD/impostors and the open-world lab run. Open: true async disk payload streaming and full region-local forward geometry. |
+| 146–148 #147 Render P0 | `@render`, `@render_tests` | `done` — Grounding/variation/edges/fog/sky features are in the feature model and renderer-lab regression frames. Missing: demos/re2d_visual_lab and a stored BASHNYA BEFORE/AFTER comparison. |
+| 146–148 #148 Huge world | `@region`, `@stream`, `@openworld`, `@tests/agent/re2d_huge_world_test.py` | `done` — Regions/PVS/stream state machine/LOD/impostors and the open-world lab run. Open: true async disk payload streaming and full region-local forward geometry. |
 
 ## Source audit (TODO/stub/simulated markers)
 

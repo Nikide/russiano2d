@@ -100,6 +100,7 @@ if(R2D_ENABLE_RE2D)
         re2d_world_save.h re2d_world_save.c
         re2d_world_sky.h re2d_world_sky.c
         re2d_world_post.h re2d_world_post.c
+        re2d_world_debug_overlay.h re2d_world_debug_overlay.c
         re2d_world_stream.h re2d_world_stream.c
         re2d_world_stream_io.h re2d_world_stream_io.c
         re2d_world_impostor.h re2d_world_impostor.c

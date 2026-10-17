@@ -129,3 +129,30 @@ if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
     target_link_options(r2d_hint_visibility_test PRIVATE -fsanitize=address,undefined)
 endif()
 add_test(NAME r2d_hint_visibility_test COMMAND r2d_hint_visibility_test)
+
+# Sky-leak exterior flood fill (issue #103): sealed/leaked fixtures.
+add_executable(r2d_sky_leak_test
+    "${CMAKE_SOURCE_DIR}/tests/re2d/sky_leak_test.c")
+target_compile_definitions(r2d_sky_leak_test PRIVATE
+    R2D_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(r2d_sky_leak_test PRIVATE r2d_sdk_core r2d_unity)
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_sky_leak_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_sky_leak_test PRIVATE -fsanitize=address,undefined)
+endif()
+add_test(NAME r2d_sky_leak_test COMMAND r2d_sky_leak_test)
+
+# Brush entity runtime mappings: fog/water volume + areaportal wiring.
+add_executable(r2d_volume_entity_test
+    "${CMAKE_SOURCE_DIR}/tests/re2d/volume_entity_test.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_terrain.c")
+target_include_directories(r2d_volume_entity_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_volume_entity_test PRIVATE r2d_sdk_core r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_volume_entity_test PRIVATE m)
+endif()
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_volume_entity_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_volume_entity_test PRIVATE -fsanitize=address,undefined)
+endif()
+add_test(NAME r2d_volume_entity_test COMMAND r2d_volume_entity_test)

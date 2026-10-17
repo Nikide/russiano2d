@@ -152,6 +152,11 @@ typedef struct R2DWorldRuntime {
     int *region_active,*region_preload;
     int region_active_count,region_preload_count,region_current;
     bool region_ready;
+    // Profiler split (real CPU clocks, no fabricated GPU timestamps):
+    // load = region grid build/ensure, visibility = PVS/occluder/cluster/
+    // active-ring selection, stream = residency state update, stream_io =
+    // budgeted payload load/unload tick.
+    float region_load_ms,region_visibility_ms,region_stream_ms,region_stream_io_ms;
     // Hierarchical visibility: region PVS -> vis clusters -> local BSP/portal.
     R2DWorldClusterSet clusters;
     bool cluster_ready;
@@ -227,6 +232,9 @@ typedef struct R2DWorldRuntime {
     R2DWorldBatchGroup *batch_groups;
     int batch_group_capacity;
     R2DWorldBatchStats batch_stats;
+    // P4 GPU static batching: opt-out fallback and last-frame submission stats.
+    bool batch_gpu;
+    int gpu_batch_draws,gpu_batch_instances,gpu_batch_saved,gpu_batch_logical;
     bool render_features_ready;
     float render_time;
     // P2 final-frame postprocess stack (descriptors; JS maps to the render pass).
@@ -424,6 +432,11 @@ bool r2d_world_region_lod_bands(R2DWorldRuntime *,float near_distance,float mid_
 // Region/vis-cluster/PVS/occluder pass for the current camera. Called once per
 // frame by r2d_world_runtime_frame(); exposed for native tests/benchmarks.
 void r2d_world_regions_frame(R2DWorldRuntime *,const R2DRe2dView *);
+// Native debug overlay for the appended R2D_WORLD_DEBUG_* views. Blends
+// constrained 2D lines/tints and per-owner material/AO colors into an existing
+// RGBA frame; FINAL and legacy views are never touched.
+void r2d_world_debug_overlay(R2DWorldRuntime *,const R2DRe2dView *,float ortho,
+                             int width,int height,uint8_t *rgba);
 // Renderer hook: region-local render origin of the current camera region.
 bool r2d_world_render_origin(R2DWorldRuntime *,float *,float *,int *);
 // Renderer hook: nearest-first distant impostor cards collected this frame.

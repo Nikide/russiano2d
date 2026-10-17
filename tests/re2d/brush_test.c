@@ -233,6 +233,18 @@ static void test_tool_flags_are_carried_to_walls(void)
     TEST_ASSERT_TRUE(sky_found);
     TEST_ASSERT_TRUE(boundary_found);
     TEST_ASSERT_EQUAL_INT(1, stats.occluder_brushes);
+    int occluder_edges = 0;
+    for (int i = 0; i < out.wall_count; i++) {
+        const uint16_t f = out.walls[i].flags;
+        if (!(f & R2D_WALL_OCCLUDER)) continue;
+        TEST_ASSERT_EQUAL_INT_MESSAGE(R2D_WALL_OCCLUDER, f,
+                                      "occluder marker has zero other policy bits");
+        TEST_ASSERT_TRUE(strncmp(out.walls[i].id, "brush.occluder", 14) == 0);
+        occluder_edges++;
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, occluder_edges,
+                                  "one occluder marker per authored footprint edge");
+    TEST_ASSERT_EQUAL_INT(4, stats.occluder_walls);
     sdk_brush_output_free(&out);
 }
 
@@ -404,7 +416,8 @@ static void test_brush_entity_mapping(void)
     TEST_ASSERT_EQUAL_STRING("world.trigger", map[4].api);
     TEST_ASSERT_EQUAL_INT(0, map[4].trigger_type);
     TEST_ASSERT_EQUAL_STRING("fog", map[5].runtime);
-    TEST_ASSERT_TRUE(map[5].hook[0] != 0);
+    TEST_ASSERT_EQUAL_STRING("r2d_world_apply_fog_volume", map[5].api);
+    TEST_ASSERT_TRUE(map[5].fog_density > 0.0f);
 
     SdkBrushEntityMap narrow[2];
     TEST_ASSERT_EQUAL_INT(6, sdk_brush_map_entities(brushes, 2, refs, 6, narrow, 2,

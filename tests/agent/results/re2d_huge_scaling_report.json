@@ -1,0 +1,96 @@
+{
+ "boundary": {
+  "controllerAfterWalk": {
+   "finite": true,
+   "grounded": false,
+   "h": 86.75,
+   "x": 1040,
+   "y": 1698.8491177665785
+  },
+  "crossingFrameMs": 0.18387499999999998,
+  "fallback": {
+   "blocked": true,
+   "npc": 6,
+   "path": 12,
+   "support": true
+  },
+  "navBefore": {
+   "a": 122,
+   "b": 37,
+   "path": 12
+  },
+  "navNodes": 316,
+  "regionCurrent": 13,
+  "unloadAfter": 24,
+  "unloadBefore": 0
+ },
+ "failed": [],
+ "maps": [
+  {
+   "cells": 39,
+   "frameMs": 0.1408125,
+   "frameMsMax": 0.28054166666666663,
+   "frameMsP95": 0.232875,
+   "gpuDraws": 3,
+   "map": "1x",
+   "path": "tests/agent/results/scaling/openworld_1x.re2dworld",
+   "portals": 65,
+   "regionActive": 4,
+   "regionCount": 13,
+   "regionPreload": 4,
+   "region_multiplier": 1,
+   "sampleFrames": 24,
+   "surfaceMs": 0.13404166666666667,
+   "visibilityMs": 0.0034374999999999996,
+   "visibleSurfaces": 7,
+   "walls": 124
+  },
+  {
+   "cells": 78,
+   "frameMs": 0.2150625,
+   "frameMsMax": 0.28049999999999997,
+   "frameMsP95": 0.26966666666666667,
+   "gpuDraws": 3,
+   "map": "2x",
+   "path": "tests/agent/results/scaling/openworld_2x.re2dworld",
+   "portals": 130,
+   "regionActive": 4,
+   "regionCount": 26,
+   "regionPreload": 4,
+   "region_multiplier": 2,
+   "sampleFrames": 24,
+   "surfaceMs": 0.2036875,
+   "visibilityMs": 0.005729166666666666,
+   "visibleSurfaces": 7,
+   "walls": 248
+  },
+  {
+   "cells": 156,
+   "frameMs": 0.2503125,
+   "frameMsMax": 0.379,
+   "frameMsP95": 0.33558333333333334,
+   "gpuDraws": 3,
+   "map": "4x",
+   "path": "tests/agent/results/scaling/openworld_4x.re2dworld",
+   "portals": 260,
+   "regionActive": 4,
+   "regionCount": 52,
+   "regionPreload": 4,
+   "region_multiplier": 4,
+   "sampleFrames": 24,
+   "surfaceMs": 0.22895833333333332,
+   "visibilityMs": 0.007625,
+   "visibleSurfaces": 7,
+   "walls": 496
+  }
+ ],
+ "ok": true,
+ "save": {
+  "applied": true,
+  "cellAfter": 0,
+  "cellBefore": 0,
+  "hashAfter": "b95815af707fc882",
+  "hashBefore": "b95815af707fc882",
+  "regionCount": 25
+ }
+}

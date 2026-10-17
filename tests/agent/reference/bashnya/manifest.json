@@ -1,0 +1,22 @@
+{
+ "game": "/Volumes/SSD NVME/BASHNYA",
+ "scene": "level1",
+ "seed": 7,
+ "fixedDt": 0.016666666666666666,
+ "camera": "level1 start bridge (unchanged BASHNYA runtime)",
+ "frames": {
+  "start_bridge": {
+   "step": 20,
+   "camera": "start bridge"
+  },
+  "shot": {
+   "step": 21,
+   "camera": "hip fire",
+   "weapon": "KS-23"
+  },
+  "vfx": {
+   "step": 29,
+   "camera": "fire/pump VFX"
+  }
+ }
+}
