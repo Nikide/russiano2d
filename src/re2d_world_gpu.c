@@ -65,8 +65,9 @@ typedef struct {
     float ambientRect[4];     // x0,y0,invW,invH; w>0 => field enabled
     float detail[4];          // uv scale, detail weight, unused, enabled
     float decal2[4];          // rotation, scale, fade alpha, enabled
+    float render_origin[4];   // shifted render space -> world space XY
 } SurfaceUniform;
-_Static_assert(sizeof(SurfaceUniform)==104*16,"shader std140 layout");
+_Static_assert(sizeof(SurfaceUniform)==105*16,"shader std140 layout");
 static void targets_free(SDL_GPUDevice *d,WorldGPU *g)
 {
     if(g->color)SDL_ReleaseGPUTexture(d,g->color);if(g->owner)SDL_ReleaseGPUTexture(d,g->owner);if(g->depth)SDL_ReleaseGPUTexture(d,g->depth);
@@ -232,6 +233,10 @@ static bool init(R2DWorldRuntime *w)
         colors[0].blend_state.alpha_blend_op=SDL_GPU_BLENDOP_ADD;
         g->overdraw=SDL_CreateGPUGraphicsPipeline(d,&p);
         p.depth_stencil_state.enable_depth_test=true;
+        // Reset the compare op after the mirror/overdraw pipelines forced
+        // ALWAYS; translucent/additive surfaces must still respect actor and
+        // world depth or they paint over nearer sprites.
+        p.depth_stencil_state.compare_op=SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
         colors[1].blend_state.enable_color_write_mask=true;
         colors[1].blend_state.color_write_mask=0;
         colors[0].blend_state.src_color_blendfactor=SDL_GPU_BLENDFACTOR_SRC_ALPHA;
@@ -358,12 +363,10 @@ static bool shadows_upload(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *
     if(bytes>g->shadow_buffer_capacity){if(g->shadows)SDL_ReleaseGPUBuffer(d,g->shadows);SDL_GPUBufferCreateInfo b={0};b.usage=SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;b.size=bytes;g->shadows=SDL_CreateGPUBuffer(d,&b);if(!g->shadows){g->shadow_buffer_capacity=0;return false;}g->shadow_buffer_capacity=bytes;}
     SDL_GPUTransferBufferCreateInfo t={0};t.usage=SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;t.size=bytes;SDL_GPUTransferBuffer *upload=SDL_CreateGPUTransferBuffer(d,&t);if(!upload)return false;
     void *mapped=SDL_MapGPUTransferBuffer(d,upload,false);if(!mapped){SDL_ReleaseGPUTransferBuffer(d,upload);return false;}memcpy(mapped,g->shadow_data,bytes);
-    // Shift shadow world XY into the same render-origin space as the uniforms.
-    if(ox!=0.0f||oy!=0.0f){float (*data)[4]=(float (*)[4])mapped;
-        for(int slot=0;slot<128;slot++){const int header=(int)g->shadow_data[slot][0];
-            const int walls=(int)g->shadow_data[slot][1],planes=(int)g->shadow_data[slot][2],spans=(int)g->shadow_data[slot][3];
-            for(int i=0;i<walls;i++){data[header+1+i*2][0]-=ox;data[header+1+i*2][1]-=oy;}
-            for(int i=0;i<spans;i++){data[planes+i*3][0]-=ox;data[planes+i*3][1]-=oy;}}}
+    // Shadow geometry stays in world coordinates: the fragment shader adds
+    // render_origin.xy when it traces against the cache, so cache chunks stay
+    // valid across render-origin changes and no per-upload rewrite is needed.
+    (void)ox;(void)oy;
     SDL_UnmapGPUTransferBuffer(d,upload);
     SDL_GPUCopyPass *copy=SDL_BeginGPUCopyPass(cmd);SDL_GPUTransferBufferLocation src={upload,0};SDL_GPUBufferRegion dst={g->shadows,0,bytes};SDL_UploadToGPUBuffer(copy,&src,&dst,true);SDL_EndGPUCopyPass(copy);SDL_ReleaseGPUTransferBuffer(d,upload);g->shadow_key=key;return true;
 }
@@ -461,6 +464,7 @@ static void visual_common(R2DWorldRuntime *w,SurfaceUniform *u,float ox,float oy
 {
     const R2DWorldRenderFeatures *rf=&w->render_features;
     WorldGPU *g=w->gpu;
+    u->render_origin[0]=ox;u->render_origin[1]=oy;
     if(g&&g->ambient_rect[3]>0.0f&&rf->quality>=R2D_RENDER_QUALITY_HIGH){
         memcpy(u->ambientGrid,g->ambient_grid,sizeof u->ambientGrid);
         memcpy(u->ambientRect,g->ambient_rect,sizeof u->ambientRect);

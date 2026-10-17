@@ -45,6 +45,7 @@ layout(std140,set=3,binding=0) uniform Surface {
     vec4 ambientRect;     // x0,y0,invW,invH; w>0 => field enabled
     vec4 detail;          // uv scale, albedo detail weight, unused, enabled
     vec4 decal2;          // rotation, scale, fade alpha, enabled
+    vec4 renderOrigin;    // render-space -> world XY offset for shadow lookups
 } u;
 layout(location=0) out vec4 color;
 layout(location=1) out vec4 owner; // exact forward depth, surface, span, actor
@@ -381,7 +382,7 @@ void main() {
             if(distance>=radius)continue;
             float response=distance>1e-5?max(0,dot(n,delta/distance)):1;
             if(response<=0)continue;
-            if(u.lightOptions[i].x>=0&&occluded(u.lightPosition[i].xyz,-delta,int(u.lightOptions[i].x)))continue;
+            if(u.lightOptions[i].x>=0&&occluded(u.lightPosition[i].xyz+vec3(u.renderOrigin.xy,0.0),-delta,int(u.lightOptions[i].x)))continue;
             float falloff=1-distance/radius;
             lighting+=u.lightColor[i].rgb*u.lightColor[i].a*falloff*falloff*response;
         }

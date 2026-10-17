@@ -153,5 +153,5 @@
 - Known red agent parity tests (not native): `re2d_world_renderer_test.py` 6 comparisons (moving floor/shadow, upper normal/emissive/fog/shadow, lower shadow, transparent actor depth, additive flash, legacy decal) and `dust2` now green after low/medium gating. These compare wave-2 GPU-only visual features against the simpler CPU reference; features are gated high/ultra but legacy parity still fails in some scenes. Not claimed as fixed.
 - Remaining exact limits: independent per-layer sky textures need authored assets; static batching needs SSBO/instancing (documented); hint planes compiler-only; GPU upload is real for textures/atlases but BSP/surface payloads remain resident.
 
-## Wave 4 (in progress): CPU/GPU parity
-- task-13 owned by particle-core: fix 6 red comparisons in `tests/agent/re2d_world_renderer_test.py` (shadow/upper/lower, transparent actor, additive flash, legacy decal). Reproduced with low quality + high-tier features disabled; actual pipeline divergence.
+## Wave 4 — CPU/GPU parity fixed
+- task-13 particle-core: 6 failures fixed without weakening tests: (1) shadow cache now stays in world coordinates and the fragment shader adds renderOrigin (3 shadow failures); (2) translucent/additive pipelines reset depth compare to LESS_OR_EQUAL after mirror/overdraw (3 transparency/decal failures). `re2d_world_renderer_test` 55/55; renderer/dust2/P4/visual/VFX agent suites green; native 158/158; ci/docs green.

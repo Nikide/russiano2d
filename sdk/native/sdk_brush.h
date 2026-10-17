@@ -145,7 +145,7 @@ typedef struct {
     int cells, spans, walls, portals, openings;
     int merged_cells;
     int areaportal_brushes, areaportal_edges;
-    int hint_brushes, hint_edges;
+    int hint_brushes, hint_edges, hint_barriers;
     int occluder_brushes;
     int polygon_brushes, subtract_brushes, hole_brushes;
     int shadow_walls, acoustic_walls, occluder_walls;

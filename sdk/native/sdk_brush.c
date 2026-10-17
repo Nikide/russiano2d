@@ -922,6 +922,7 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
     merge_walls(out);
 
     // Portals between merged cells sharing an edge.
+    int hint_barrier_count = 0;
     for (int a = 0; a < out->cell_count; a++) {
         for (int b = a + 1; b < out->cell_count; b++) {
             const SdkBrushCell *ca = &out->cells[a];
@@ -1002,6 +1003,19 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
                 if (ring_contains_inclusive(brushes[i].ring, brushes[i].ring_count, mx, my))
                     area = true;
             }
+            // Concrete hint barrier: a hint brush touching a generated portal
+            // emits a zero-policy marker exactly on the portal edge. Runtime
+            // visibility treats the portal as non-traversable for view only;
+            // collision/rays/render remain untouched (R2D_WALL_TOOL_HINT has no
+            // other bits). This is measurable portal-level PVS, not a new BSP.
+            bool hint = false;
+            for (int i = 0; i < brush_count; i++) {
+                if (brushes[i].tool != SDK_BRUSH_TOOL_HINT) continue;
+                if (ring_contains_inclusive(brushes[i].ring, brushes[i].ring_count, mx, my)) {
+                    hint = true;
+                    break;
+                }
+            }
             SdkBrushPortal portal;
             memset(&portal, 0, sizeof portal);
             snprintf(portal.id, sizeof portal.id, "brush.portal%d_%d", a, b);
@@ -1019,6 +1033,18 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
             if (!push_portal(out, &caps, &portal)) goto oom;
             for (int i = 0; i < opening_count; i++)
                 if (!push_opening(out, &caps, &openings[i])) goto oom;
+            if (hint) {
+                SdkBrushWall barrier;
+                memset(&barrier, 0, sizeof barrier);
+                snprintf(barrier.id, sizeof barrier.id, "brush.hint%d_%d", a, b);
+                barrier.x1 = portal.ax; barrier.y1 = portal.ay;
+                barrier.x2 = portal.bx; barrier.y2 = portal.by;
+                barrier.bottom = openings[0].bottom;
+                barrier.top = openings[opening_count - 1].top;
+                barrier.flags = (uint16_t)R2D_WALL_TOOL_HINT;
+                if (!push_wall(out, &caps, &barrier)) goto oom;
+                hint_barrier_count++;
+            }
         }
     }
 
@@ -1047,6 +1073,7 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
         }
         for (int i = 0; i < out->portal_count; i++)
             if (out->portals[i].area_portal) stats->areaportal_edges++;
+        stats->hint_barriers = hint_barrier_count;
         for (int i = 0; i < brush_count; i++) {
             if (brushes[i].tool != SDK_BRUSH_TOOL_HINT) continue;
             for (int p = 0; p < out->portal_count; p++) {

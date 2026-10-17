@@ -176,3 +176,34 @@ post colour/owner/depth target (about 8 bytes/px extra GPU texture memory, now
 included in `gpuTexturePayloadBytes`). Bloom-lite is 8 texture taps; heat uses
 two extra depth taps only when enabled; reflection uses one mirrored colour tap
 only on floor pixels. Debug views and the CPU backend do not run the composite.
+
+## CPU/GPU parity fixes (2026-10-17, task-13)
+
+Two root causes explained the six remaining
+`tests/agent/re2d_world_renderer_test.py` failures. Both were implementation
+divergences, not test tolerance:
+
+1. **Shadow lookup in render-origin space.** After wave-3 added region-local
+   render origin, the shadow cache upload rewrote wall XY starting at
+   `header + 1 + i*2` (off by one; the first wall stayed unshifted and wall
+   heights were shifted), while the shader compared shifted light/origin
+   positions against the partially shifted cache. Three failures followed:
+   moving floor/riser, upper height-aware shadows, lower wall/floor occlusion.
+   Fix: shadow geometry now stays in **world coordinates**; the fragment shader
+   adds `u.renderOrigin.xy` before `occluded()`. The upload rewrite and its
+   per-origin chunk inconsistency are gone.
+2. **Translucent/additive depth compare was ALWAYS.** The mirror/overdraw
+   pipelines set `COMPAREOP_ALWAYS`, and translucent/additive pipelines were
+   created afterwards without resetting it. Translucent glass and additive
+   flashes therefore painted over nearer actors/decals regardless of depth:
+   actor-between-glass, additive flash and bounded-decal parity failed. Fix:
+   set `COMPAREOP_LESS_OR_EQUAL` before creating the translucent/additive
+   pipelines (their depth test/write flags were already correct).
+
+Evidence after the fixes (same build):
+- `re2d_world_renderer_test.py`: **55 checks, exit 0** (6 failures before).
+- `re2d_dust2_test.py`, `re2d_render_p4_test.py`,
+  `re2d_render_visual_features_test.py`, `re2d_render_vfx_pass_test.py`: green.
+- `r2d_check`: **158/158**; `ci_verify` and docs/API guards: green.
+
+Files touched: `src/re2d_world_gpu.c`, `shaders/world.frag.glsl`.
