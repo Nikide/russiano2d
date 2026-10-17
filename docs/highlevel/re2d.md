@@ -45,6 +45,7 @@ $.render(() => world.render(view,400,240));
 | `world.skyAnim` / `fogZone` / `fogAt` | анимация панорамы и semantic fog zones |
 | `world.portalSky(index,on)` | проём портала как окно в панорамное небо (P2 sky portal) |
 | `world.debug.overlay(view,opts)` | screen-space данные automap/trigger/secret для debug-оверлея |
+| `world.debug.draw(view,opts)` | рисует overlay через `$.gfx.draw` (линии/точки/hit-zones) |
 | `world.particles.burst/continuous/info/clear` | нативный fixed-pool частиц |
 | `world.fxDefine(name,bundle)` / `fxSpawn(name,at)` | asset-driven VFX bundle (particles/light/decal/sound/shake) |
 | `world.findSurface(name)` | имя стены/span → handle поверхности |
@@ -581,6 +582,19 @@ Sky portal — это тег на authored portal: visibility **не уходи�
 `saveState/loadState`; baked-формат его пока не переносит (авор задаёт
 `world.portalSky` после загрузки). `$.capabilities.re2d.skyPortal === true`;
 полноценный mirror-портал (отражённый проход) остаётся `false`.
+
+## Debug overlay (P4)
+
+```js
+world.debug.overlay(view, { width: 1280, height: 720 }); // чистые данные
+world.debug.draw(view, { width: 1280, height: 720, hitZones: true }); // поверх кадра
+```
+
+`overlay` проецирует automap-линии и semantic точки (trigger/secret) в экран;
+`draw` дополнительно рисует их через движковый `$.gfx.draw` (без 3D-gizmo API)
+и маркирует boss hit-зоны. Демо `demos/re2d_debug_lab` показывает это на
+testroom; F1 переключает слой. Данные детерминированы; `draw.clear()`
+вызывается самим helper'ом, так что слой не накапливается между кадрами.
 
 ## Свет, материал, изменение мира
 

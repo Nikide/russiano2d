@@ -1,0 +1,1 @@
+<rml><head><title>Re2D debug overlay</title><link type="text/rcss" href="debug.rcss" /></head><body><div id="panel"><div id="status"></div><div id="keys">F1: toggle overlay · Esc: exit</div></div></body></rml>

@@ -693,6 +693,7 @@ function rendererWorldWrapper($, native) {
     // attached to existing nodes. Not a physics body; the node owns gameplay
     // identity and the registry only references it.
     const hitNodes = [];
+    const hitMeta = new Map();
     // Callback args are raw nodes in the engine, but accept a wrapper too so the
     // public API is stable for both call styles.
     const rawOf = value => {
@@ -748,6 +749,7 @@ function rendererWorldWrapper($, native) {
                 throw new RangeError('world.hit: radius >= 0 and top > bottom');
             const raw = rawOf(node);
             native.hitAdd(raw, radius, bottom, top, category);
+            hitMeta.set(raw, { radius, bottom, top, category, zones: options.zones || [] });
             if (Array.isArray(options.zones) && options.zones.length) {
                 const zones = new Float32Array(options.zones.length * 3);
                 options.zones.forEach((zone, index) => {
@@ -1027,12 +1029,43 @@ function rendererWorldWrapper($, native) {
         }
         return { lines, points };
     };
+    world.debug.draw = (view, options = {}) => {
+        if (!view) throw new TypeError('world.debug.draw: view required');
+        const overlay = world.debug.overlay(view, options);
+        if (!$.gfx || !$.gfx.draw) return overlay;
+        const d = $.gfx.draw;
+        d.clear();
+        const alpha = options.alpha ?? 0.9;
+        for (const line of overlay.lines) {
+            const color = line.kind === 'portal' ? `rgba(90,200,255,${alpha})`
+                : line.state === 'seen' ? `rgba(255,220,120,${alpha})` : `rgba(120,140,160,${alpha})`;
+            d.line(line.x1, line.y1, line.x2, line.y2, color, line.kind === 'portal' ? 2 : 1);
+        }
+        for (const p of overlay.points) d.circle(p.x, p.y, p.kind === 'secret' ? 5 : 3,
+            p.kind === 'secret' ? `rgba(255,210,90,${alpha})` : `rgba(120,255,150,${alpha})`);
+        // Boss hit zones: project the cylinder's height bands.
+        for (const proxy of world.debug.entities().hitProxies) {
+            if (!options.hitZones) break;
+            const bands = proxy.zones && proxy.zones.length ? proxy.zones
+                : [{ from: 0, to: 1, multiplier: 1 }];
+            for (const band of bands) {
+                for (const h of [proxy.bottom + band.from * (proxy.top - proxy.bottom),
+                                 proxy.bottom + band.to * (proxy.top - proxy.bottom)]) {
+                    const q = projectPoint(view, proxy.x, proxy.y, h, Number(options.width ?? 320), Number(options.height ?? 180));
+                    if (q) d.circle(q.x, q.y, 2, `rgba(255,120,120,${alpha})`);
+                }
+            }
+        }
+        return overlay;
+    };
     world.debug.entities = () => ({
         triggers: [...triggerMeta.entries()].map(([token, info]) => ({ token, ...info })),
         movers: [...moverMeta.entries()].map(([token, info]) => ({ token, ...info })),
         secrets: [...secretMeta.entries()].map(([token, info]) => ({ token, ...info })),
         breakables: [...breakableMeta.entries()].map(([token, info]) => ({ token, ...info })),
-        hitProxies: [...hitNodes].map(node => ({ id: node.id ?? null, x: node.x, y: node.y, depth: node.depth })),
+        hitProxies: [...hitNodes].map(node => ({ id: node.id ?? null, x: node.x, y: node.y, depth: node.depth,
+            radius: hitMeta.get(node)?.radius ?? 16, bottom: hitMeta.get(node)?.bottom ?? 0,
+            top: hitMeta.get(node)?.top ?? 64, category: hitMeta.get(node)?.category ?? 1 })),
     });
 
     // P1 save/load: native snapshot + map identity guard. The game owns the

@@ -528,6 +528,13 @@ python3 tools/bench_api.py --baseline docs/benchmarks/api-performance.json \
 приговор. Быстрые unit checks runner без performance run:
 `python3 tests/bench_api_runner_test.py`.
 
+## Re2D debug overlay (P4)
+
+`tests/agent/re2d_debug_overlay_test.py` открывает `demos/re2d_debug_lab`:
+overlay from `world.debug.draw` даёт 9 automap-линий и 2 semantic точки, реально
+меняет кадр (сотни пикселей), выключается и детерминированно возвращается
+(0 отличий при повторном включении).
+
 ## Re2D sky portal (P2)
 
 `tests/agent/re2d_sky_portal_test.py` открывает `demos/re2d_sky_lab`: authored

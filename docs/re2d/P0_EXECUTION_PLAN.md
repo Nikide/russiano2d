@@ -104,7 +104,7 @@
 | capabilities + profiler | done |
 | aim assist / controller feels / quality presets | done |
 | benchmark lab + baseline numbers | done (`docs/RE2D_WORLD_PERF.md`) |
-| debug overlay data | done (`world.debug.overlay`) |
+| debug overlay data + draw layer | done: `world.debug.draw`, demo, agent test |
 | determinism audit | done (`re2d_determinism_test.py`) |
 | sky portal | done: visibility window + `world.portalSky`, agent pixel test |
 | mirror portal render pass | pending (math core готов) |
