@@ -126,6 +126,12 @@
   новый контракт: `pos()` стабилен, сдвиг слоёв 300 px проверяется по
   `$.layers.offset` (0.2 → 240, 0.6 → 120). Документация:
   `docs/highlevel/layers.md`, `render.md`, `ENGINE_GAPS.md`.
+- **Починен `ReferenceError: ui is not defined` при Escape/back в UI.**
+  `tickWidgets` звал `ui.closeTop()`, но `ui` — локальная ссылка `installUiApi`,
+  в области видимости `tickWidgets` её нет: при Escape/возврате в меню кадр
+  падал. Теперь вызов идёт через module-level `api.ui` с проверкой типа;
+  регрессия закреплена в `tests/js/widgets_anchor_test.mjs` (24 проверки),
+  `ci_verify` зелёный.
 - **АК в Re2D testroom стреляет очередью, а не одиночными.** Раньше все три
   ствола использовали пистолетный одиночный цикл (0→1→2→3→0, 465 мс). Теперь у
   АК режим **AUTO 600 выстр/мин**: цикл сжат до 100 мс, пока ЛКМ/F удерживается,

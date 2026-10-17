@@ -2253,7 +2253,12 @@ export function tickWidgets(dt) {
     // сначала захват ввода (перенастройка управления), потом фокус.
     if (!modal) {
         const back = input.pressed('escape') || input.pressed('gamepad.b');
-        if (back && ui.closeTop()) input.consume('escape');
+        // `ui` — локальная ссылка installUiApi, в области tickWidgets её нет:
+        // берём $ через module-level api (иначе ReferenceError при Escape).
+        if (back && api.ui && typeof api.ui.closeTop === 'function'
+            && api.ui.closeTop()) {
+            input.consume('escape');
+        }
     }
     tickKeyboard(input, modal);
     tickMouse(input, modal);

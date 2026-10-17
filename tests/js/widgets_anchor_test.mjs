@@ -257,6 +257,32 @@ test('частичные offsets у full-rect делают внутренние 
     eq(node('#inset').y, 300);
 });
 
+test('Escape в tickWidgets закрывает верхний контекст через $.ui.closeTop', () => {
+    // Регрессия: tickWidgets звал локальную `ui` из installUiApi, её в этой
+    // области нет — ReferenceError: ui is not defined при Escape/back.
+    const node = $('<ui.button>', { id: 'esc-btn', text: 'ok' });
+    const oldPressed = $.input.pressed;
+    const oldConsume = $.input.consume;
+    const oldCloseTop = $.ui.closeTop;
+    let closed = false, consumed = null;
+    $.input.pressed = (name) => name === 'escape';
+    $.input.consume = (name) => { consumed = name; };
+    $.ui.closeTop = () => { closed = true; return true; };
+    try {
+        tickWidgets(1 / 60);
+    } catch (e) {
+        print('ESCAPE DEBUG: ' + (e && e.stack ? e.stack : e));
+        throw e;
+    } finally {
+        $.input.pressed = oldPressed;
+        $.input.consume = oldConsume;
+        $.ui.closeTop = oldCloseTop;
+        if (node && typeof node.remove === 'function') node.remove();
+    }
+    eq(closed, true, 'closeTop вызван');
+    eq(consumed, 'escape', 'Escape consume-нут');
+});
+
 test('resize окна пересчитывает якоря в tickWidgets', () => {
     reset();
     const p = $('<ui.panel>', { id: 'rs-full' });
