@@ -353,6 +353,7 @@ export function installAgent($) {
                 fps: Math.round(engineOf().fps * 10) / 10,
                 paused: ctx.time ? ctx.time.isPaused() : false,
                 scene: ctx.scene ? ctx.scene.current() : null,
+                scene_status: ctx.scene && typeof ctx.scene.status === 'function' ? ctx.scene.status() : null,
                 window: windowSnapshot(),
                 camera: ctx.camera ? {
                     x: round2(ctx.camera.pos().x),

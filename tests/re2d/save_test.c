@@ -378,6 +378,31 @@ static void test_deterministic_bytes(void)
     r2d_world_save_free(&restored);
 }
 
+static void test_large_topology_matches_save_limit(void)
+{
+    // BASHNYA repro: runtime accepted one cell with 4097 spans, but the save
+    // writer used to reject it (MAX_SPANS was 4096). The limit must cover the
+    // runtime topology limit and the snapshot must still write/validate.
+    R2DWorldSaveState state={0};
+    state.span_count=4097;
+    state.spans=calloc((size_t)state.span_count,sizeof *state.spans);
+    TEST_ASSERT_NOT_NULL_MESSAGE(state.spans,"4097 spans allocated");
+    for(int i=0;i<state.span_count;i++){state.spans[i].span=i;state.spans[i].bottom=(float)i*4;state.spans[i].top=(float)i*4+3;}
+    char error[256];
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_save_validate(&state,error,sizeof error),"4097-span state validates");
+    const int needed=r2d_world_save_write(&state,NULL,0);
+    TEST_ASSERT_GREATER_THAN_MESSAGE(0,needed,"4097-span state has a serialized size");
+    char *text=malloc((size_t)needed+1);
+    TEST_ASSERT_NOT_NULL(text);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(needed,r2d_world_save_write(&state,text,(size_t)needed+1),"4097-span state writes");
+    R2DWorldSaveState restored={0};
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_save_read(text,&restored,error,sizeof error),"4097-span snapshot reads back");
+    TEST_ASSERT_EQUAL_INT(4097,restored.span_count);
+    r2d_world_save_free(&restored);
+    free(text);
+    free(state.spans);
+}
+
 static void test_map_hash_identity(void)
 {
     uint64_t base=r2d_world_save_map_hash("map01","1.2.3",0x123456789abcdef0ULL);
@@ -463,6 +488,7 @@ int main(void)
     RUN_TEST(test_nan_and_infinity_rejected);
     RUN_TEST(test_oversized_counts_and_ids_rejected);
     RUN_TEST(test_deterministic_bytes);
+    RUN_TEST(test_large_topology_matches_save_limit);
     RUN_TEST(test_map_hash_identity);
     RUN_TEST(test_read_transactional_on_failure);
     RUN_TEST(test_missing_fields_and_wrong_types_rejected);

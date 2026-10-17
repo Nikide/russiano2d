@@ -260,4 +260,22 @@ test('generation: новый load отменяет область старого
     eq(scene._state.loader_scope, null, 'ссылка на старый loader снята');
 });
 
+test('ошибка enter видна в status и диагностике', () => {
+    settle();
+    const reports = [];
+    ctx.$.debug = { reportError: (where, error, details) => reports.push({ where, error, details }) };
+    scene.add('broken', { enter() { throw new Error('REPRO_ENTER'); } });
+    scene.load('broken', { transition: 'none' });
+    settle();
+    const st = scene.status();
+    eq(st.name, 'broken');
+    eq(st.ok, false, 'вход помечен неуспешным');
+    eq(st.error.code, 'R2D_SCENE_ENTER');
+    eq(st.error.message, 'REPRO_ENTER');
+    eq(st.error.operation, 'enter');
+    truthy(reports.length > 0, 'reportError вызван');
+    eq(reports[reports.length - 1].details.code, 'R2D_SCENE_ENTER');
+    delete ctx.$.debug;
+});
+
 finish();

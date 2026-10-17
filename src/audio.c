@@ -906,8 +906,15 @@ int r2d_audio_load(R2DAudio *a, const char *path)
     // раньше журнал делил их на 1000 и показывал 9040 с вместо 188. Переводим
     // тем же помощником, что и r2d_audio_duration/engine.audio.duration().
     const Sint64 frames = MIX_GetAudioDuration(audio);
-    R2D_LOG("звук #%d: %s (%.1f с)", id, path,
-            frames >= 0 ? r2d__frames_to_sec(a, frames) : -1.0);
+    double seconds = -1.0;
+    if (frames >= 0) {
+        // Convert with the AUDIO's own sample rate, not the mixer's fx_freq.
+        // MIX_GetAudioDuration returns sample frames; using mixer freq made a
+        // 1.0 s 48 kHz file log as 1.1 s when the mixer opened at 44.1 kHz.
+        const Sint64 ms = MIX_AudioFramesToMS(audio, frames);
+        if (ms >= 0) seconds = (double)ms / 1000.0;
+    }
+    R2D_LOG("звук #%d: %s (%.1f с)", id, path, seconds);
     return id;
 }
 

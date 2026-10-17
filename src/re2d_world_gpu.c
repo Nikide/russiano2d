@@ -339,7 +339,10 @@ static void surface_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cm
         if(r2d_world_surface_blend(&w->world,id)<R2D_WORLD_TRANSLUCENT||w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)draw(w,g,cmd,pass,v,ortho,id,-1,false,NULL);
         for(int k=0;k<w->visibility.span_count;k++){int span=w->visibility.spans[k];bool incident=false;
             for(int r=w->world.span_wall_offsets[span];r<w->world.span_wall_offsets[span+1];r++)if(w->world.span_wall_refs[r]==s->primitive){incident=true;break;}
-            if(incident)draw(w,g,cmd,pass,v,ortho,id,span,true,NULL);}
+            // A fully open portal/opening over this span is shader-discarded;
+            // do not submit the draw at all.
+            if(incident&&r2d_world_wall_solid(&w->world,s->primitive,w->world.spans[span].bottom,w->world.spans[span].top))
+                draw(w,g,cmd,pass,v,ortho,id,span,true,NULL);}
 }
 
 static void sky_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho)

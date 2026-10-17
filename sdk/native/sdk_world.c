@@ -1227,37 +1227,67 @@ static bool put_renderer_description(const World *w,R2dSb *sb,SdkReport *rep,con
 static void put_pvs(const World *w, R2dSb *sb)
 {
     r2d_sb_puts(sb, "{\"kind\":\"portal-reachability\",\"conservative\":true,\"runtimeUsed\":false,\"cells\":{");
-    int *seen = (int *)calloc((size_t)(w->ncell ? w->ncell : 1), sizeof(int));
-    int *queue = (int *)calloc((size_t)(w->ncell ? w->ncell : 1), sizeof(int));
-    for (int s = 0; s < w->ncell; ++s) {
-        memset(seen, 0, (size_t)w->ncell * sizeof(int));
+    const int n = w->ncell;
+    // Resolve authored portal endpoints once, then work on an adjacency list.
+    // The old loop called find_cell for every portal of every BFS node and was
+    // O(cells * portals * cells) on large maps (BASHNYA: >11 min after output).
+    int *degree = (int *)calloc((size_t)(n ? n : 1), sizeof(int));
+    int *offset = (int *)calloc((size_t)(n + 1), sizeof(int));
+    int *neighbors = (int *)calloc((size_t)(w->nportal ? w->nportal * 2 : 1), sizeof(int));
+    int *seen = (int *)calloc((size_t)(n ? n : 1), sizeof(int));
+    int *queue = (int *)calloc((size_t)(n ? n : 1), sizeof(int));
+    if (!degree || !offset || !neighbors || !seen || !queue) {
+        free(degree); free(offset); free(neighbors); free(seen); free(queue);
+        r2d_sb_puts(sb, "}}");
+        return;
+    }
+    for (int p = 0; p < w->nportal; ++p) {
+        const int a = find_cell(w, w->portals[p].a), b = find_cell(w, w->portals[p].b);
+        if (a < 0 || b < 0 || a == b) continue;
+        degree[a]++; degree[b]++;
+    }
+    for (int i = 0; i < n; ++i) offset[i + 1] = offset[i] + degree[i];
+    int *fill = (int *)calloc((size_t)(n ? n : 1), sizeof(int));
+    if (!fill) {
+        free(degree); free(offset); free(neighbors); free(seen); free(queue);
+        r2d_sb_puts(sb, "}}");
+        return;
+    }
+    for (int p = 0; p < w->nportal; ++p) {
+        const int a = find_cell(w, w->portals[p].a), b = find_cell(w, w->portals[p].b);
+        if (a < 0 || b < 0 || a == b) continue;
+        neighbors[offset[a] + fill[a]++] = b;
+        neighbors[offset[b] + fill[b]++] = a;
+    }
+    free(fill); free(degree);
+    for (int s0 = 0; s0 < n; ++s0) {
+        int stamp = s0 + 1;
         int head = 0, tail = 0;
-        queue[tail++] = s;
-        seen[s] = 1;
+        queue[tail++] = s0;
+        seen[s0] = stamp;
         while (head < tail) {
             const int cur = queue[head++];
-            for (int p = 0; p < w->nportal; ++p) {
-                const int a = find_cell(w, w->portals[p].a), b = find_cell(w, w->portals[p].b);
-                if (a < 0 || b < 0) continue;
-                const int nxt = a == cur ? b : b == cur ? a : -1;
-                if (nxt >= 0 && !seen[nxt]) { seen[nxt] = 1; queue[tail++] = nxt; }
+            for (int k = offset[cur]; k < offset[cur + 1]; ++k) {
+                const int nxt = neighbors[k];
+                if (seen[nxt] == stamp) continue;
+                seen[nxt] = stamp;
+                queue[tail++] = nxt;
             }
         }
-        r2d_sb_printf(sb, "%s", s ? "," : "");
-        r2d_sb_put_json_string(sb, w->cells[s].id);
+        r2d_sb_printf(sb, "%s", s0 ? "," : "");
+        r2d_sb_put_json_string(sb, w->cells[s0].id);
         r2d_sb_putc(sb, ':');
         r2d_sb_putc(sb, '[');
         int first = 1;
-        for (int i = 0; i < w->ncell; ++i) {
-            if (i == s || !seen[i]) continue;
+        for (int i = 0; i < n; ++i) {
+            if (i == s0 || seen[i] != stamp) continue;
             r2d_sb_printf(sb, "%s", first ? "" : ",");
             r2d_sb_put_json_string(sb, w->cells[i].id);
             first = 0;
         }
         r2d_sb_putc(sb, ']');
     }
-    free(seen);
-    free(queue);
+    free(offset); free(neighbors); free(seen); free(queue);
     r2d_sb_puts(sb, "}}");
 }
 
@@ -1349,6 +1379,7 @@ static int world_cmd(const SdkArgs *a, bool write)
     StackInfo *stacks;
     int nstacks, spans;
     const bool renderer = sdk_arg_flag(a,"--renderer");
+    const bool want_pvs = sdk_arg_flag(a,"--pvs");
     bool ok = compile_world(src, &w, &rep, &stacks, &nstacks, &spans, renderer);
     R2dSb renderer_data;r2d_sb_init(&renderer_data);
     if(ok&&renderer)ok=put_renderer_description(&w,&renderer_data,&rep,src);
@@ -1402,7 +1433,8 @@ static int world_cmd(const SdkArgs *a, bool write)
             r2d_sb_puts(&out, "]}");
         }
         r2d_sb_puts(&out, "],\"pvs\":");
-        put_pvs(&w, &out);
+        if(want_pvs)put_pvs(&w, &out);
+        else r2d_sb_puts(&out,"{\"kind\":\"skipped\",\"reason\":\"legacy portal-reachability is opt-in; pass --pvs\"}");
     }
     r2d_sb_puts(&out, ",");
     sdk_report_put_counts(&rep, &out);

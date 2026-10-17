@@ -357,11 +357,18 @@ world.loadState(save);          // true или исключение
 world.saveMapHash();            // hex-строка authored identity + topology
 ```
 
+Ошибка сериализации теперь структурированная: `RangeError` с фактическим
+полем/лимитом (`state not serializable: save: spans[i]...`), а не общий
+`state serialization failed`. Сцена, где `enter` бросил исключение, получает
+`$.debug.errors()` запись `R2D_SCENE_ENTER` и `$.scene.status()` →
+`{ok:false,error:{scene,operation:'enter',stage,stack}}`; агентский snapshot
+содержит `scene_status`. Это позволяет отличить успешный вход от частичного.
+
 Native snapshot (версия 1) хранит spans (`id,bottom,top`), portals
 (`id,open_fraction,closed`), movers (timeline state) и triggers
 (`id,type,fire_count,enabled,once,armed,timer`). `loadState` проверяет map hash
 и точное число spans/portals/mover'ов/триггеров; несовпадение — `RangeError`,
-состояние не меняется. Bounds: 4096 spans/portals, 256 movers, 512 triggers;
+состояние не меняется. Bounds: 65536 spans/portals (тот же предел, что у runtime topology), 256 movers, 512 triggers;
 строки ≤63 байт; NaN/malformed отклоняются. Ограничения: movers/triggers
 восстанавливаются позиционно (по id для триггеров), secrets/breakables и
 частицы пока в snapshot не входят — следующий шаг.

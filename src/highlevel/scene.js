@@ -47,6 +47,9 @@ const state = {
     transition_type: 'fade',
     transition_ms: 300,
     history: [],
+    // Последний вход в сцену: ошибка `enter` не должна теряться в логе.
+    enter_ok: true,
+    enter_error: null,
     // §5: генерация переходов. Любой новый load/prepare увеличивает счётчик —
     // завершившийся старый loader видит чужой токен и не публикует мир.
     generation: 0,
@@ -817,6 +820,11 @@ export function installScene($) {
         names() { return [...scenes.keys()]; },
         /** Имя текущей сцены или null, если сцена ещё не выбрана. */
         current() { return state.current_name || null; },
+        /** Статус последнего входа: {name, ok, error}. */
+        status() {
+            return { name: state.current_name || null, ok: state.enter_ok,
+                     error: state.enter_error ? { ...state.enter_error } : null };
+        },
 
         // --- §5: области владения ------------------------------------------
 
@@ -1825,9 +1833,21 @@ function doSwitch() {
         // Подготовленная сцена уже построена (prepare/promote): второй прогон
         // `enter` собрал бы второй мир.
         if (typeof state.current.enter === 'function' && scope._scene_built !== true) {
+            state.enter_ok = true;
+            state.enter_error = null;
             withScope(scope, () => {
                 try { state.current.enter(ctx.$, scope); }
-                catch (e) { ctx.log(`$: ошибка в enter сцены "${name}": ${e}`); }
+                catch (e) {
+                    state.enter_ok = false;
+                    state.enter_error = {
+                        code: 'R2D_SCENE_ENTER', message: e && e.message ? e.message : String(e),
+                        scene: name, operation: 'enter', stage: 'enter',
+                        stack: e && e.stack ? String(e.stack) : null,
+                    };
+                    reportSceneError('$.scene.enter', e, {
+                        code: 'R2D_SCENE_ENTER', operation: name, stage: 'enter',
+                    });
+                }
             });
         }
         ctx.$._dispatchGlobal(null, 'scene:enter', { name, scope: scope.name });
@@ -1851,9 +1871,21 @@ function doSwitch() {
     const definition = scenes.get(name);
     state.current = typeof definition === 'object' ? definition : { enter: definition };
 
+    state.enter_ok = true;
+    state.enter_error = null;
     if (typeof state.current.enter === 'function') {
         try { state.current.enter(ctx.$); }
-        catch (e) { ctx.log(`$: ошибка в enter сцены "${name}": ${e}`); }
+        catch (e) {
+            state.enter_ok = false;
+            state.enter_error = {
+                code: 'R2D_SCENE_ENTER', message: e && e.message ? e.message : String(e),
+                scene: name, operation: 'enter', stage: 'enter',
+                stack: e && e.stack ? String(e.stack) : null,
+            };
+            reportSceneError('$.scene.enter', e, {
+                code: 'R2D_SCENE_ENTER', operation: name, stage: 'enter',
+            });
+        }
     }
     ctx.$._dispatchGlobal(null, 'scene:enter', { name });
     finishSwitch(from, name, opts);

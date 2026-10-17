@@ -970,6 +970,13 @@ static JSValue world_save_state(JSContext *ctx,JSValueConst self,int argc,JSValu
     (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
     R2DWorldSaveState state={0};
     if(!r2d_world_state_capture(w,&state))return JS_ThrowInternalError(ctx,"Re2D World: state capture failed");
+    char save_error[256]={0};
+    if(!r2d_world_save_validate(&state,save_error,sizeof save_error)){
+        char message[320];
+        SDL_snprintf(message,sizeof message,"Re2D World: state not serializable: %s",save_error[0]?save_error:"invalid state");
+        r2d_world_save_free(&state);
+        return JS_ThrowRangeError(ctx,"%s",message);
+    }
     int needed=r2d_world_save_write(&state,NULL,0);
     if(needed<0){r2d_world_save_free(&state);return JS_ThrowInternalError(ctx,"Re2D World: state serialization failed");}
     char *text=malloc((size_t)needed+1);

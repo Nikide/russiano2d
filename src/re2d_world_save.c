@@ -212,6 +212,11 @@ static void writer_begin_field(SaveWriter *w,bool *first,const char *name)
     writer_text(w,"\":");
 }
 
+bool r2d_world_save_validate(const R2DWorldSaveState *state,char *error,size_t error_size)
+{
+    return validate_state(state,error,error_size);
+}
+
 static void write_span(SaveWriter *w,const R2DWorldSavedSpan *s)
 {
     bool first=true;

@@ -24,7 +24,8 @@
 //      "triggers":[{"id":"gate.use","type":1,"fire_count":0,
 //                   "enabled":true,"once":true,"armed":false,"timer":0}]}
 //
-// Counts are bounded (spans/portals 4096, movers 256, triggers 512), ids are
+// Counts are bounded by the runtime topology limit (spans/portals 65536;
+// movers 256, triggers 512), ids are
 // bounded to 63 bytes plus NUL, duplicate trigger ids are rejected, all numbers
 // must be finite and |v| <= 1e8. Errors are ASCII.
 //
@@ -38,8 +39,8 @@
 #define R2D_WORLD_SAVE_FORMAT "re2d-save"
 #define R2D_WORLD_SAVE_VERSION 1
 
-#define R2D_WORLD_SAVE_MAX_SPANS 4096
-#define R2D_WORLD_SAVE_MAX_PORTALS 4096
+#define R2D_WORLD_SAVE_MAX_SPANS 65536
+#define R2D_WORLD_SAVE_MAX_PORTALS 65536
 #define R2D_WORLD_SAVE_MAX_MOVERS 256
 #define R2D_WORLD_SAVE_MAX_TRIGGERS 512
 #define R2D_WORLD_SAVE_ID_CAP 64   // 63 usable bytes plus NUL
@@ -96,6 +97,10 @@ int r2d_world_save_write(const R2DWorldSaveState *state,char *out,size_t cap);
 // failure (bad/missing version, corrupt JSON, invalid field, duplicate trigger
 // id, oversized count/string) it writes an ASCII error, frees the output and
 // zeroes it. Query-only; no globals.
+// Validate an in-memory state before writing. Same checks as the writer; on
+// failure `error` describes the exact count/field (ASCII, NUL-terminated).
+bool r2d_world_save_validate(const R2DWorldSaveState *state,char *error,size_t error_size);
+
 bool r2d_world_save_read(const char *text,R2DWorldSaveState *out,char *error,size_t error_size);
 
 // Frees owned arrays and zeroes the struct. Safe on NULL/partially filled state.
