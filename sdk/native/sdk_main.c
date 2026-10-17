@@ -25,6 +25,7 @@ static int cmd_commands(const SdkArgs *a);
 static const Command k_commands[] = {
     { "version",  cmd_version,      "версия SDK и список команд" },
     { "commands", cmd_commands,     "список команд" },
+    { "help",     cmd_commands,     "псевдоним commands" },
     { "tools",    sdk_cmd_tools,    "реестр инструментов sdk_tools.json с проверкой" },
     { "assets",   sdk_cmd_assets,   "ассеты проекта по реальной файловой структуре" },
     { "project",  sdk_cmd_project,  "сведения о проекте (project.json, main.js)" },

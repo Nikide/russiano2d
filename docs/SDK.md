@@ -89,6 +89,7 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `lint [путь] [--schema f]` | API-aware линтер JS: `R2D001/002/004/014`, `--json` |
 | `docs generate` | generated `docs/api/API_REFERENCE.md` из runtime metadata |
 | `doctor [--project dir]` | health check: runtime/metadata/schema/typings/docs/project/lint |
+| `help` | псевдоним `commands` |
 | `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
 | `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
 | `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |
@@ -521,3 +522,10 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 
 Ручная правка `api.schema.json`/`russiano2d.d.ts` запрещена: меняется registry
 (живой `$` API), затем запускается `api generate`.
+
+## SDK GUI: Code Check / API Browser
+
+`sdk_tools.json` содержит `code-check` и `api-browser`; оба открывают
+`sdk/ui/code_check.rml`. Панель вызывает **native** `r2d-sdk doctor/lint/validate`
+через `app.backend` и показывает generated `api.schema.json` — второго линтера
+или валидатора в JS нет.

@@ -200,8 +200,18 @@ qjs = executable('qjs')
 for test in sorted(Path('tests/js').glob('*_test.mjs')):
     subprocess.run([str(qjs), str(test)], check=True)
 
-subprocess.run([str(executable('r2d-sdk')), 'batch', 'tests/fixtures/sdk/ci.batch.json',
+sdk_bin = str(executable('r2d-sdk'))
+engine_bin = str(executable('russiano2d'))
+subprocess.run([sdk_bin, 'batch', 'tests/fixtures/sdk/ci.batch.json',
                 '--output', str(build / 'sdk-ci-report.json')], check=True)
+
+# Unified SDK backend gates: metadata/schema/typings/docs freshness, API-aware
+# lint, project validation and the doctor health check. No GPU required.
+subprocess.run([sdk_bin, 'api', 'check', '--engine', engine_bin, '--game', 'game'], check=True)
+subprocess.run([sdk_bin, 'lint', 'game', '--schema', 'api.schema.json'], check=True)
+subprocess.run([sdk_bin, 'validate', 'game'], check=True)
+subprocess.run([sdk_bin, 'doctor', '--engine', engine_bin, '--project', 'game'], check=True)
+subprocess.run([sys.executable, 'tools/sdk_recipes_check.py'], check=True)
 
 if failures:
     for line in failures:
