@@ -46,7 +46,7 @@ QuickJS-ng v0.10.1, RmlUi 6.3, FreeType, Steam Audio), публичное API �
 |---|---|
 | HEAD | коммит, в котором лежит **этот документ** — сверь `git log --oneline -1`; ветка `main` одинаковая на `github`, `origin` (hub.mos.ru) и `gitverse` |
 | Версия | `1.2.2` (тег `v1.2.2` = `a9220e39…`, поставлен после перепаковки пакетов) |
-| Полный набор | `python3 tools/run_tests.py` → **265 тестов**, 259 ok, 6 skip (`re2d_*` — 3D вырезан из SDK), 0 fail (прогон 2026-10-17) |
+| Полный набор | `python3 tools/run_tests.py`: 265 тестов. Последний ПОЛНЫЙ прогон до правки I1: 258 ok, 1 fail (`sdk_studios`, ждал старую семантику параллакса — исправлен), 6 skip. После I1 гонялись затронутые: `layers_parallax_i1_test` 11, `highlevel_layers_test` 49, `layers_parallax_optout_test` 13, `highlevel_render_parallax_test` 10 (пиксели), `highlevel_presentation_test` 42, `sdk_studios_test` — зелёные. Полный прогон целиком после I1 намеренно не повторялся (12+ минут ради одного проверенного изменения) |
 | Заморозка API | **3125** имён (`tests/api_freeze_baseline.txt`) + **35** методов обёрток (`tests/api_wrapper_methods_baseline.txt`) |
 | Гейты | `api_freeze` (3133), `api_docs_sync` (3133), `api_wrapper_methods` (105), `doc_examples` (687 путей), `doc_coverage`, `doc_claims`, `repository_hygiene`, `release_notes`, `format_extensions`, `checklist`, `acceptance` — зелёные |
 | Бинарник | `build/russiano2d` (пересобирать после правок JS! JS вшивается при сборке) |
@@ -264,7 +264,7 @@ done
 python3 tools/run_tests.py
 ```
 
-Ожидаемые числа при здоровом дереве: **265 тестов, 259 ok, 6 skip, 0 fail**; заморозка **3125** имён; `api_docs_sync` — **3125** имён;
+Ожидаемые числа при здоровом дереве: **265 тестов, 6 skip, 0 fail** (после правки I1 полный прогон не перегонялся — см. выше); заморозка **3125** имён; `api_docs_sync` — **3125** имён;
 гейт обёрток — **35** методов.
 
 ## 8. Как устроен агентский режим тестов (короткая шпаргалка)
