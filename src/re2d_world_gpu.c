@@ -1,4 +1,5 @@
 #include "re2d_world_gpu.h"
+#include "re2d_world_vfx.h"
 #include "rotsprite.h"
 #include <SDL3/SDL_timer.h>
 #include <math.h>
@@ -8,7 +9,7 @@
 typedef struct { SDL_GPUTexture *color,*depth;uint64_t key;int revision,size;Uint32 offsets[2];bool dirty; } ActorGPU;
 typedef struct { uint64_t key;float (*data)[4];int count,walls,spans; } ShadowChunk;
 typedef struct {
-    SDL_GPUGraphicsPipeline *pipeline,*overdraw,*translucent,*additive,*mirror;
+    SDL_GPUGraphicsPipeline *pipeline,*overdraw,*translucent,*additive,*mirror,*ground,*fx_translucent,*fx_additive;
     R2DWorldVisibility mirror_visibility;
     SDL_Rect clip;bool clip_active;
     // Cached inverse of span_wall_refs: wall -> incident spans. Rebuilt only on
@@ -35,8 +36,23 @@ typedef struct {
     float opening[4];
     float billboard[4],actor[4];
     float anim[4];
+    // P0/P1 visual feature inputs (keep std140 order in world.frag.glsl).
+    float surfacefx[4];  // variation, macro, bevel, corner AO
+    float surfacefx2[4]; // edge width, edge grime, deterministic seed, unused
+    float spritefx[4];   // outline, grime, contact shading, alpha threshold
+    float fog2[4];       // height density, base height, falloff, haze strength
+    float haze[4];       // haze/sky tint rgb, blend
+    float ground[4];     // contact card center x/y, radius x/y (output pixels)
+    float ground2[4];    // opacity, softness, foot AO ratio, foot AO strength
+    float ground3[4];    // contact tint rgb, enabled
+    float liquid[4];     // enabled, time, distortion, highlight
+    float liquid2[4];    // liquid tint rgb, foam
+    float skyLayer[4][4];// parallax, scale, vertical offset, alpha
+    float skyParams[4];  // layer count, sun azimuth, sun elevation, time
+    float celestial[4];  // disc size, glow, disc rgb
+    float celestial2[4]; // disc b, unused, unused, enabled
 } SurfaceUniform;
-_Static_assert(sizeof(SurfaceUniform)==68*16,"shader std140 layout");
+_Static_assert(sizeof(SurfaceUniform)==85*16,"shader std140 layout");
 static void targets_free(SDL_GPUDevice *d,WorldGPU *g)
 {
     if(g->color)SDL_ReleaseGPUTexture(d,g->color);if(g->owner)SDL_ReleaseGPUTexture(d,g->owner);if(g->depth)SDL_ReleaseGPUTexture(d,g->depth);
@@ -52,12 +68,12 @@ void r2d_world_gpu_material_dirty(R2DWorldRuntime *w)
 void r2d_world_gpu_free(R2DWorldRuntime *w)
 {
     WorldGPU *g=w->gpu;if(!g)return;r2d_world_gpu_material_dirty(w);SDL_GPUDevice *d=w->renderer->device;
-    targets_free(d,g);if(g->pipeline)SDL_ReleaseGPUGraphicsPipeline(d,g->pipeline);if(g->overdraw)SDL_ReleaseGPUGraphicsPipeline(d,g->overdraw);if(g->mirror)SDL_ReleaseGPUGraphicsPipeline(d,g->mirror);if(g->translucent)SDL_ReleaseGPUGraphicsPipeline(d,g->translucent);if(g->additive)SDL_ReleaseGPUGraphicsPipeline(d,g->additive);if(g->sampler)SDL_ReleaseGPUSampler(d,g->sampler);if(g->linear)SDL_ReleaseGPUSampler(d,g->linear);if(g->sky_sampler)SDL_ReleaseGPUSampler(d,g->sky_sampler);
+    targets_free(d,g);if(g->pipeline)SDL_ReleaseGPUGraphicsPipeline(d,g->pipeline);if(g->overdraw)SDL_ReleaseGPUGraphicsPipeline(d,g->overdraw);if(g->mirror)SDL_ReleaseGPUGraphicsPipeline(d,g->mirror);if(g->translucent)SDL_ReleaseGPUGraphicsPipeline(d,g->translucent);if(g->additive)SDL_ReleaseGPUGraphicsPipeline(d,g->additive);if(g->ground)SDL_ReleaseGPUGraphicsPipeline(d,g->ground);if(g->fx_translucent)SDL_ReleaseGPUGraphicsPipeline(d,g->fx_translucent);if(g->fx_additive)SDL_ReleaseGPUGraphicsPipeline(d,g->fx_additive);if(g->sampler)SDL_ReleaseGPUSampler(d,g->sampler);if(g->linear)SDL_ReleaseGPUSampler(d,g->linear);if(g->sky_sampler)SDL_ReleaseGPUSampler(d,g->sky_sampler);
     if(g->white>=0)r2d_texture_free(w->renderer,g->white);if(g->black>=0)r2d_texture_free(w->renderer,g->black);
     if(g->shadows)SDL_ReleaseGPUBuffer(d,g->shadows);free(g->shadow_data);for(int i=0;i<128;i++)free(g->shadow_chunks[i].data);
     for(int i=0;i<g->actor_capacity;i++){if(g->actors[i].color)SDL_ReleaseGPUTexture(d,g->actors[i].color);if(g->actors[i].depth)SDL_ReleaseGPUTexture(d,g->actors[i].depth);}free(g->actors);
     r2d_world_visibility_free(&g->mirror_visibility);
-    free(g->wall_span_offsets);free(g->wall_span_refs);free(g);w->gpu=NULL;w->gpu_texture_bytes=w->gpu_transfer_bytes=0;w->gpu_shadow_updates=w->gpu_material_batches=w->gpu_draws=0;w->gpu_draw_base=w->gpu_draw_span=w->gpu_draw_actor=w->gpu_draw_other=0;
+    free(g->wall_span_offsets);free(g->wall_span_refs);free(g);w->gpu=NULL;w->gpu_texture_bytes=w->gpu_transfer_bytes=0;w->gpu_shadow_updates=w->gpu_material_batches=w->gpu_draws=0;w->gpu_draw_base=w->gpu_draw_span=w->gpu_draw_actor=w->gpu_draw_other=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;
 }
 static void material_bind(R2DWorldRuntime *w,WorldGPU *g,SDL_GPURenderPass *pass,const SDL_GPUTextureSamplerBinding textures[3])
 {
@@ -112,7 +128,30 @@ static bool init(R2DWorldRuntime *w)
         colors[0].blend_state.src_alpha_blendfactor=SDL_GPU_BLENDFACTOR_ZERO;
         colors[0].blend_state.dst_alpha_blendfactor=SDL_GPU_BLENDFACTOR_ONE;
         g->additive=SDL_CreateGPUGraphicsPipeline(d,&p);
-        SDL_ReleaseGPUShader(d,vs);SDL_ReleaseGPUShader(d,fs);if(!g->pipeline||!g->mirror||!g->overdraw||!g->translucent||!g->additive)goto fail;
+        // P0 grounding pass: screen-space contact card. No depth test/write and
+        // no owner-target write; it is drawn after opaque surfaces and before
+        // actors, exactly where the CPU reference draws it.
+        p.depth_stencil_state.enable_depth_test=false;
+        p.depth_stencil_state.enable_depth_write=false;
+        colors[0].blend_state.src_color_blendfactor=SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+        colors[0].blend_state.dst_color_blendfactor=SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        colors[0].blend_state.src_alpha_blendfactor=SDL_GPU_BLENDFACTOR_ONE;
+        colors[0].blend_state.dst_alpha_blendfactor=SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        g->ground=SDL_CreateGPUGraphicsPipeline(d,&p);
+        // R-03 VFX cards/trails: depth-tested, no depth write, two blend modes.
+        p.depth_stencil_state.enable_depth_test=true;
+        p.depth_stencil_state.enable_depth_write=false;
+        colors[0].blend_state.enable_blend=true;
+        colors[0].blend_state.src_color_blendfactor=SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+        colors[0].blend_state.dst_color_blendfactor=SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        colors[0].blend_state.src_alpha_blendfactor=SDL_GPU_BLENDFACTOR_ONE;
+        colors[0].blend_state.dst_alpha_blendfactor=SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        g->fx_translucent=SDL_CreateGPUGraphicsPipeline(d,&p);
+        colors[0].blend_state.dst_color_blendfactor=SDL_GPU_BLENDFACTOR_ONE;
+        colors[0].blend_state.src_alpha_blendfactor=SDL_GPU_BLENDFACTOR_ZERO;
+        colors[0].blend_state.dst_alpha_blendfactor=SDL_GPU_BLENDFACTOR_ONE;
+        g->fx_additive=SDL_CreateGPUGraphicsPipeline(d,&p);
+        SDL_ReleaseGPUShader(d,vs);SDL_ReleaseGPUShader(d,fs);if(!g->pipeline||!g->mirror||!g->overdraw||!g->translucent||!g->additive||!g->ground||!g->fx_translucent||!g->fx_additive)goto fail;
         SDL_GPUSamplerCreateInfo s={0};s.min_filter=s.mag_filter=SDL_GPU_FILTER_NEAREST;s.mipmap_mode=SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
         s.address_mode_u=s.address_mode_v=s.address_mode_w=SDL_GPU_SAMPLERADDRESSMODE_REPEAT;g->sampler=SDL_CreateGPUSampler(d,&s);if(!g->sampler)goto fail;s.min_filter=s.mag_filter=SDL_GPU_FILTER_LINEAR;g->linear=SDL_CreateGPUSampler(d,&s);s.address_mode_v=SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;g->sky_sampler=SDL_CreateGPUSampler(d,&s);if(!g->linear||!g->sky_sampler)goto fail;
         const uint8_t white[4]={255,255,255,255},black[4]={0,0,0,255};g->white=r2d_texture_create_rgba(w->renderer,white,1,1);g->black=r2d_texture_create_rgba(w->renderer,black,1,1);if(g->white<0||g->black<0)goto fail;
@@ -225,6 +264,82 @@ static bool surface_bounds(R2DWorldRuntime *w,const R2DRe2dView *v,float ortho,i
         for(int i=0;i<4;i++){points[i][0]=p[i][0];points[i][1]=p[i][1];points[i][2]=s->kind==R2D_WORLD_FLOOR?r2d_world_floor_height(a,p[i][0],p[i][1]):r2d_world_ceiling_height(a,p[i][0],p[i][1]);}}
     return bounds(v,ortho,w->width,w->height,points,out);
 }
+static void visual_common(R2DWorldRuntime *w,SurfaceUniform *u)
+{
+    const R2DWorldRenderFeatures *rf=&w->render_features;
+    if(rf->height_fog)u->fog2[0]=rf->fog_height_density;
+    u->fog2[1]=rf->fog_base_height;u->fog2[2]=rf->fog_height_falloff;
+    if(rf->atmospheric_haze){
+        uint32_t tint=w->world.sky_color?w->world.sky_color:0xff88aacc;
+        u->haze[0]=((tint>>0)&255)/255.0f;u->haze[1]=((tint>>8)&255)/255.0f;u->haze[2]=((tint>>16)&255)/255.0f;
+        u->haze[3]=rf->haze_strength;u->fog2[3]=rf->haze_strength;
+    }
+}
+static void visual_surface(R2DWorldRuntime *w,SurfaceUniform *u,const R2DWorldSurface *surface,int id,bool decal)
+{
+    const R2DWorldRenderFeatures *rf=&w->render_features;
+    if(decal)return;
+    if(rf->material_variation)u->surfacefx[0]=rf->variation_strength;
+    if(rf->macro_variation)u->surfacefx[1]=rf->macro_strength;
+    if(rf->bevel)u->surfacefx[2]=rf->bevel_strength;
+    if(rf->corner_ao)u->surfacefx[3]=rf->corner_ao_strength;
+    u->surfacefx2[0]=rf->surface_edge_width;
+    if(rf->edge_grime)u->surfacefx2[1]=rf->edge_grime_strength;
+    u->surfacefx2[2]=(float)((rf->seed>>8)&0xffffu)/65535.0f;
+    if(rf->material_variation)w->render_counters.varied_surfaces++;
+    if(rf->macro_variation)w->render_counters.macro_surfaces++;
+    if(rf->bevel)w->render_counters.bevel_surfaces++;
+    if(rf->corner_ao)w->render_counters.corner_ao_surfaces++;
+    if(rf->height_fog)w->render_counters.fog_surfaces++;
+    if(rf->atmospheric_haze)w->render_counters.haze_surfaces++;
+    if(rf->material_animation&&w->world.surface_materials&&id>=0){
+        int material=w->world.surface_materials[id];
+        if(material>=0&&material<R2D_WORLD_MAX_MATERIALS&&w->material_anim_active[material])w->render_counters.animated_materials++;
+    }
+    if(rf->liquid&&surface&&surface->kind==R2D_WORLD_FLOOR&&w->surface_terrain&&id>=0&&id<w->terrain_capacity){
+        int kind=w->surface_terrain[id];
+        if(kind>=R2D_TERRAIN_WATER&&kind<=R2D_TERRAIN_MIST){
+            const R2DWorldTerrain *t=r2d_world_terrain_preset(kind);
+            if(t){
+                u->liquid[0]=1.0f;u->liquid[1]=w->render_time;u->liquid[2]=rf->liquid_distortion;u->liquid[3]=rf->liquid_highlight;
+                u->liquid2[0]=t->tint_r;u->liquid2[1]=t->tint_g;u->liquid2[2]=t->tint_b;u->liquid2[3]=rf->liquid_foam;
+                w->render_counters.liquid_surfaces++;
+            }
+        }
+    }
+}
+static void visual_actor(R2DWorldRuntime *w,SurfaceUniform *u)
+{
+    const R2DWorldRenderFeatures *rf=&w->render_features;
+    if(rf->edge_quality){
+        if(rf->edge_outline)u->spritefx[0]=rf->edge_outline_strength;
+        if(rf->edge_grime)u->spritefx[1]=rf->edge_grime_strength;
+        if(rf->alpha_feather)u->spritefx[3]=rf->edge_alpha_threshold;
+        w->render_counters.edge_actors++;
+        if(rf->edge_outline)w->render_counters.outline_actors++;
+        if(rf->edge_grime)w->render_counters.grime_actors++;
+    }
+    if(rf->contact_lighting)u->spritefx[2]=rf->contact_light_strength;
+    if(rf->contact_lighting)w->render_counters.contact_lit++;
+}
+static void visual_sky(R2DWorldRuntime *w,SurfaceUniform *u)
+{
+    const R2DWorldRenderFeatures *rf=&w->render_features;
+    int layers=rf->sky_layers?rf->sky_layer_count:0;
+    if(layers<0)layers=0;if(layers>4)layers=4;
+    u->skyParams[0]=(float)layers;
+    u->skyParams[1]=rf->sun_azimuth;u->skyParams[2]=rf->sun_elevation;u->skyParams[3]=w->render_time;
+    for(int i=0;i<4;i++){
+        u->skyLayer[i][0]=rf->sky_parallax[i];u->skyLayer[i][1]=rf->sky_scale[i];
+        u->skyLayer[i][2]=rf->sky_offset[i];u->skyLayer[i][3]=i<layers?rf->sky_alpha[i]:0.0f;
+    }
+    if(rf->sun_disc){
+        u->celestial[0]=rf->sun_size;u->celestial[1]=rf->sun_glow;
+        u->celestial[2]=1.0f;u->celestial[3]=0.88f;u->celestial2[0]=0.62f;u->celestial2[3]=1.0f;
+        w->render_counters.celestial_discs++;
+    }
+    if(layers>0)w->render_counters.sky_layers+=(int)layers;
+}
 static void draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho,int id,int span,bool filter,const R2DWorldDecal *decal)
 {
     const R2DRe2dWorld *world=&w->world;const R2DWorldSurface *surface=&world->surfaces[id];SurfaceUniform u={0};
@@ -248,6 +363,7 @@ static void draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GP
     if(decal){u.tint[0]=u.tint[1]=u.tint[2]=1;u.light_options[14][1]=decal->u;u.light_options[14][2]=decal->v;u.light_options[14][3]=decal->w;u.light_options[15][1]=decal->h;u.light_options[15][2]=1;}
     u.identity[0]=id;u.identity[1]=span;
     lighting(world,span,filter,&u);if(w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)u.identity[2]=-1;
+    visual_common(w,&u);visual_surface(w,&u,surface,id,decal!=NULL);
     material_bind(w,g,pass,samplers);SDL_PushGPUFragmentUniformData(cmd,0,&u,sizeof u);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;
 }
 static SDL_GPUTexture *actor_texture(SDL_GPUDevice *d,int size,bool depth)
@@ -329,6 +445,7 @@ static void actor_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,
         if(w->frame_kinds[i]==R2D_WORLD_FRAME_PARTICLE)u.light_options[15][3]=w->frame_blends[i]>=R2D_WORLD_TRANSLUCENT?2.0f:0.0f;
     }
     lighting(&w->world,span,filter,&u);if(w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)u.identity[2]=-1;
+    visual_common(w,&u);visual_actor(w,&u);
     SDL_GPUTextureSamplerBinding textures[3]={{a->color,g->sampler},{a->depth?a->depth:r2d_texture_handle(w->renderer,g->black),g->sampler},{r2d_texture_handle(w->renderer,g->black),g->sampler}};
     material_bind(w,g,pass,textures);SDL_PushGPUFragmentUniformData(cmd,0,&u,sizeof u);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;
 }
@@ -362,7 +479,7 @@ static bool ensure_wall_spans(R2DWorldRuntime *w,WorldGPU *g)
 
 static void surface_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho,int id)
 {
-    if(w->world.surface_sky&&w->world.surface_sky[id])return;
+    if(w->world.surface_sky&&w->world.surface_sky[id]){w->render_counters.sky_surfaces++;return;}
     const R2DWorldSurface *s=&w->world.surfaces[id];const R2DWorldWindow *window=&w->visibility.surface_windows[id];
         SDL_Rect projected;if(!surface_bounds(w,v,ortho,id,&projected))return;
         int left=(int)fmaxf(0,floorf(window->left*w->width/v->width)),top=(int)fmaxf(0,floorf(window->top*w->height/v->height));
@@ -400,9 +517,142 @@ static void sky_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SD
     sky.screen[0]=w->width;sky.screen[1]=w->height;sky.screen[2]=v->focal*w->height/v->height;sky.screen[3]=ortho;sky.plane[3]=3;
     sky.material[0]=w->world.sky_yaw;sky.identity[3]=w->world.sky.pixels?1:0;uint32_t tint=w->world.sky_color?w->world.sky_color:0xffffffff;
     for(int c=0;c<4;c++)sky.tint[c]=((tint>>(c*8))&255)/255.0f;
+    visual_sky(w,&sky);w->render_counters.sky_draws++;
     SDL_GPUTexture *texture=r2d_texture_handle(w->renderer,g->sky_texture>=0?g->sky_texture:g->white);
     SDL_GPUTextureSamplerBinding samplers[3]={{texture,g->sky_sampler},{texture,g->sampler},{texture,g->sampler}};
     material_bind(w,g,pass,samplers);SDL_PushGPUFragmentUniformData(cmd,0,&sky,sizeof sky);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;w->gpu_draw_other++;
+}
+// R-03 VFX cards/trails: one procedural quad shader branch (plane.w=5), no
+// texture and no mesh. Depth-tested against the world, no depth write.
+static bool vfx_project(const R2DRe2dView *v,float x,float y,float h,float ortho,float out[4],float *dist)
+{
+    float dx=x-v->x,dy=y-v->y,forward=dx*v->cos_yaw+dy*v->sin_yaw;
+    if(ortho>0){
+        float depth=forward*v->cos_pitch+(h-v->eye)*v->sin_pitch;
+        if(depth<v->near_plane)return false;
+        float scale=v->height/ortho;
+        out[0]=v->width*.5f+(-dx*v->sin_yaw+dy*v->cos_yaw)*scale;
+        out[1]=v->height*.5f-((h-v->eye)*v->cos_pitch-forward*v->sin_pitch)*scale;
+        out[2]=1-v->near_plane/depth;out[3]=scale;*dist=depth;return true;
+    }
+    if(!r2d_re2d_project(v,x,y,h,out))return false;
+    *dist=v->focal/out[3];return true;
+}
+static void vfx_quad_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,
+                          float cx,float cy,float side,float rotation,int kind,
+                          float r,float gg,float b,float alpha,float width_ratio,
+                          int distortion,float dist,int blend,float near_plane)
+{
+    if(!(side>0.5f)||!(alpha>0.002f))return;
+    float half=side*0.62f;
+    int left=(int)fmaxf(0,floorf(cx-half)),top=(int)fmaxf(0,floorf(cy-half));
+    int right=(int)fminf(w->width,ceilf(cx+half)),bottom=(int)fminf(w->height,ceilf(cy+half));
+    if(right<=left||bottom<=top)return;
+    SDL_Rect scissor={left,top,right-left,bottom-top};
+    if(!set_scissor(g,pass,scissor))return;
+    SDL_GPUGraphicsPipeline *pipeline=blend==R2D_WORLD_ADDITIVE?g->fx_additive:g->fx_translucent;
+    SDL_BindGPUGraphicsPipeline(pass,pipeline);
+    SurfaceUniform u={0};
+    u.eye[3]=near_plane;u.plane[3]=5.0f;u.plane[0]=dist;
+    u.billboard[0]=cx-side*.5f;u.billboard[1]=cy-side*.5f;u.billboard[2]=side;u.billboard[3]=side;
+    u.material[0]=(float)kind;u.material[1]=rotation;u.material[2]=width_ratio;u.material[3]=(float)distortion;
+    u.tint[0]=r;u.tint[1]=gg;u.tint[2]=b;u.tint[3]=alpha;
+    u.anim[0]=w->render_time;
+    SDL_PushGPUFragmentUniformData(cmd,0,&u,sizeof u);
+    SDL_DrawGPUPrimitives(pass,3,1,0,0);
+    g->draws++;w->gpu_draw_vfx++;w->render_counters.vfx_draws++;
+}
+static void vfx_draw_all(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho)
+{
+    R2DWorldVfx *vfx=w->vfx;
+    if(!vfx)return;
+    float sx=(float)w->width/v->width,sy=(float)w->height/v->height;
+    // Cards (sprite/streak/ring/flash/decal/light pulse) are procedural quads.
+    for(int i=0;i<R2D_WORLD_VFX_MAX_CARDS;i++){
+        const R2DWorldVfxCard *card=&vfx->cards[i];
+        if(!card->active||!(card->alpha>0.002f)||!(card->size>0.0f))continue;
+        float p[4],dist=0;
+        if(!vfx_project(v,card->x,card->y,card->h,ortho,p,&dist))continue;
+        float side=card->size*p[3]*fmaxf(sx,sy)*1.15f;
+        float ratio=card->size>1e-4f?fmaxf(0.02f,card->width/card->size):1.0f;
+        int blend=card->blend==R2D_PARTICLE_ADDITIVE?R2D_WORLD_ADDITIVE:R2D_WORLD_TRANSLUCENT;
+        float cx=p[0]*sx,cy=p[1]*sy;
+        // Depth is written into the uniform by vfx_quad_draw; pass near via eye.w.
+        vfx_quad_draw(w,g,cmd,pass,cx,cy,side,card->rotation,card->kind,
+                      card->r,card->g,card->b,card->alpha,ratio,card->distortion,dist,blend,v->near_plane);
+        w->render_counters.vfx_cards++;w->render_counters.vfx_card_draws++;
+        if(card->distortion!=R2D_VFX_DISTORTION_NONE)w->render_counters.vfx_distortion++;
+    }
+    // Trails: one streak quad per live segment; square card, rotated by segment.
+    for(int i=0;i<R2D_WORLD_VFX_MAX_TRAILS;i++){
+        const R2DWorldVfxTrail *trail=&vfx->trails[i];
+        if(!trail->active||trail->count<=0)continue;
+        float fraction=trail->max_life>0.0f?trail->life/trail->max_life:1.0f;
+        if(fraction<0.0f)fraction=0.0f;if(fraction>1.0f)fraction=1.0f;
+        float alpha=fminf(1.0f,fraction*1.25f);
+        int segments=trail->count-1;
+        if(segments<=0){
+            float p[4],dist=0;
+            if(vfx_project(v,trail->head_x,trail->head_y,trail->head_h,ortho,p,&dist)){
+                float side=fmaxf(2.0f,trail->width*p[3]*fmaxf(sx,sy));
+                vfx_quad_draw(w,g,cmd,pass,p[0]*sx,p[1]*sy,side*1.6f,0.0f,R2D_VFX_CARD_SPRITE,
+                              trail->r,trail->g,trail->b,alpha,1.0f,trail->distortion,dist,
+                              trail->blend==R2D_PARTICLE_ADDITIVE?R2D_WORLD_ADDITIVE:R2D_WORLD_TRANSLUCENT,v->near_plane);
+                w->render_counters.vfx_trail_draws++;
+            }
+        }
+        for(int k=0;k<trail->count;k++){
+            float p0[4],p1[4],d0=0,d1=0;
+            float ax=(k==0)?trail->head_x:trail->x[k-1];
+            float ay=(k==0)?trail->head_y:trail->y[k-1];
+            float ah=(k==0)?trail->head_h:trail->h[k-1];
+            float bx=trail->x[k],by=trail->y[k],bh=trail->h[k];
+            if(!vfx_project(v,ax,ay,ah,ortho,p0,&d0))continue;
+            if(!vfx_project(v,bx,by,bh,ortho,p1,&d1))continue;
+            float x0=p0[0]*sx,y0=p0[1]*sy,x1=p1[0]*sx,y1=p1[1]*sy;
+            float dx=x1-x0,dy=y1-y0,length=sqrtf(dx*dx+dy*dy);
+            float thickness=fmaxf(1.2f,trail->width*p0[3]*fmaxf(sx,sy));
+            float side=fmaxf(length,thickness)*1.15f;
+            float ratio=side>1e-4f?fminf(1.0f,thickness/side):1.0f;
+            float rot=atan2f(dy,dx);
+            vfx_quad_draw(w,g,cmd,pass,(x0+x1)*.5f,(y0+y1)*.5f,side,rot,R2D_VFX_CARD_STREAK,
+                          trail->r,trail->g,trail->b,alpha,ratio,trail->distortion,(d0+d1)*.5f,
+                          trail->blend==R2D_PARTICLE_ADDITIVE?R2D_WORLD_ADDITIVE:R2D_WORLD_TRANSLUCENT,v->near_plane);
+            w->render_counters.vfx_trail_draws++;
+        }
+        w->render_counters.vfx_trails++;
+        if(trail->distortion!=R2D_VFX_DISTORTION_NONE)w->render_counters.vfx_distortion++;
+    }
+}
+// P0 sprite grounding: screen-space contact/foot-AO card on the floor. Uses the
+// same R2DWorldGroundCard as the CPU reference, so CPU/GPU parity holds.
+static bool ground_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho,int actor)
+{
+    R2DWorldGroundCard card;
+    if(!r2d_world_render_ground_card(w,v,w->width,w->height,ortho,actor,&card))return false;
+    int left=(int)fmaxf(0,floorf(card.center_x-card.radius_x-1));
+    int top=(int)fmaxf(0,floorf(card.center_y-card.radius_y-1));
+    int right=(int)fminf(w->width,ceilf(card.center_x+card.radius_x+1));
+    int bottom=(int)fminf(w->height,ceilf(card.center_y+card.radius_y+1));
+    if(right<=left||bottom<=top)return false;
+    SDL_Rect scissor={left,top,right-left,bottom-top};
+    if(!set_scissor(g,pass,scissor))return false;
+    SurfaceUniform u={0};
+    u.plane[3]=4.0f;
+    u.ground[0]=card.center_x;u.ground[1]=card.center_y;
+    u.ground[2]=card.radius_x;u.ground[3]=card.radius_y;
+    u.ground2[0]=card.opacity;u.ground2[1]=card.softness;
+    u.ground2[2]=card.foot_ratio;u.ground2[3]=card.foot_strength;
+    u.ground3[0]=card.tint_r;u.ground3[1]=card.tint_g;u.ground3[2]=card.tint_b;u.ground3[3]=1.0f;
+    SDL_BindGPUGraphicsPipeline(pass,g->ground);
+    SDL_PushGPUFragmentUniformData(cmd,0,&u,sizeof u);
+    SDL_DrawGPUPrimitives(pass,3,1,0,0);
+    g->draws++;w->gpu_draw_ground++;
+    w->render_counters.grounded_actors++;w->render_counters.contact_shadows++;w->render_counters.ground_draws++;
+    if(card.foot_ratio>0.0f)w->render_counters.foot_ao++;
+    if(w->render_features.local_floor_tint)w->render_counters.floor_tint++;
+    if(w->render_features.contact_lighting)w->render_counters.contact_lit++;
+    return true;
 }
 // P2 mirror portal: reflect the camera across the portal plane, render the world
 // with disabled depth into a scissored portal window. No offscreen RT is needed.
@@ -457,6 +707,7 @@ static bool mirror_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd
             if(pos[0]+pos[3]<sp->x||pos[0]-pos[3]>sp->x+sp->w||pos[1]+pos[3]<sp->y||pos[1]-pos[3]>sp->y+sp->h)continue;actor_draw(w,g,cmd,pass,&rv,ortho,i,span,true);}
     }
     w->visibility=saved;g->clip=saved_clip;g->clip_active=saved_active;
+    w->render_counters.reflection_passes++;
     return true;
 }
 
@@ -474,9 +725,13 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
     colors[0].clear_color=w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?(SDL_FColor){0,0,0,1}:(SDL_FColor){16/255.0f,24/255.0f,32/255.0f,1};colors[1].texture=g->owner;colors[1].load_op=SDL_GPU_LOADOP_CLEAR;colors[1].store_op=SDL_GPU_STOREOP_STORE;colors[1].clear_color=(SDL_FColor){FLT_MAX,-1,-1,-1};
     SDL_GPUDepthStencilTargetInfo depth={0};depth.texture=g->depth;depth.load_op=SDL_GPU_LOADOP_CLEAR;depth.store_op=SDL_GPU_STOREOP_DONT_CARE;depth.clear_depth=1;
     SDL_GPURenderPass *pass=SDL_BeginGPURenderPass(cmd,colors,2,&depth);if(!pass){SDL_CancelGPUCommandBuffer(cmd);return false;}
-    SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:g->pipeline);SDL_BindGPUFragmentStorageBuffers(pass,0,&g->shadows,1);g->draws=0;w->gpu_draw_base=w->gpu_draw_span=w->gpu_draw_actor=w->gpu_draw_other=0;w->gpu_material_batches=0;memset(g->bound_textures,0,sizeof g->bound_textures);
+    SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:g->pipeline);SDL_BindGPUFragmentStorageBuffers(pass,0,&g->shadows,1);g->draws=0;w->gpu_draw_base=w->gpu_draw_span=w->gpu_draw_actor=w->gpu_draw_other=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;w->gpu_material_batches=0;memset(g->bound_textures,0,sizeof g->bound_textures);
     if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&(w->world.sky.pixels||w->world.sky_color))sky_draw(w,g,cmd,pass,v,ortho);
     for(int j=0;j<w->visibility.surface_count;j++){int id=w->visibility.surfaces[j];if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)continue;surface_draw(w,g,cmd,pass,v,ortho,id);}
+    if(w->render_features.grounding&&w->render_features.contact_shadow&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW){
+        int budget=w->render_features.quality<=R2D_RENDER_QUALITY_LOW?128:512,drawn=0;
+        for(int i=0;i<w->frame_count&&drawn<budget;i++)if(w->frame_images[i]&&ground_draw(w,g,cmd,pass,v,ortho,i))drawn++;
+    }
     if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)mirror_draw(w,g,cmd,pass,v,ortho);
     SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:g->pipeline);
     SDL_Rect full={0,0,w->width,w->height};SDL_SetGPUScissor(pass,&full);
@@ -489,7 +744,7 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
             if(p[0]+p[3]<s->x||p[0]-p[3]>s->x+s->w||p[1]+p[3]<s->y||p[1]-p[3]>s->y+s->h)continue;actor_draw(w,g,cmd,pass,v,ortho,i,span,true);}
         if(actor_pipeline!=g->pipeline&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)SDL_BindGPUGraphicsPipeline(pass,g->pipeline);}
     for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)if(w->world.decals[i].active){
-        const R2DWorldDecal *decal=&w->world.decals[i];int id=decal->surface;if(!w->visibility.surface_seen[id]||(w->world.surface_sky&&w->world.surface_sky[id]))continue;
+        const R2DWorldDecal *decal=&w->world.decals[i];w->render_counters.decals++;int id=decal->surface;if(!w->visibility.surface_seen[id]||(w->world.surface_sky&&w->world.surface_sky[id]))continue;
         SDL_Rect scissor;if(!surface_bounds(w,v,ortho,id,&scissor))continue;if(!set_scissor(g,pass,scissor))continue;
         w->gpu_draw_other++;
         SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:w->world.materials[decal->material].blend==R2D_WORLD_ADDITIVE?g->additive:g->translucent);
@@ -502,6 +757,8 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
         if(count<0){SDL_EndGPURenderPass(pass);SDL_CancelGPUCommandBuffer(cmd);return false;}
         for(int i=0;i<count;i++){SDL_BindGPUGraphicsPipeline(pass,r2d_world_surface_blend(&w->world,ids[i])==R2D_WORLD_ADDITIVE?g->additive:g->translucent);surface_draw(w,g,cmd,pass,v,ortho,ids[i]);}
     }
+    // R-03 VFX pass: procedural world cards, card trails and distortion cards.
+    if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&w->vfx)vfx_draw_all(w,g,cmd,pass,v,ortho);
     size_t pixel_count=(size_t)w->width*w->height;
     w->gpu_texture_bytes=pixel_count*28+8; // MRT/depth + public RGBA output + two fallback texels.
     w->gpu_transfer_bytes=((pixel_count*4+511)&~(size_t)511)+pixel_count*16+g->shadow_buffer_capacity;

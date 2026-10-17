@@ -13,6 +13,7 @@
 #include "re2d_world_automap.h"
 #include "re2d_world_nav.h"
 #include "re2d_world_gpu.h"
+#include "re2d_world_vfx.h"
 #include "rotsprite.h"
 #include "script.h"
 #include "app.h"
@@ -253,10 +254,117 @@ static JSValue js_info(JSContext *ctx, JSValueConst self, int argc, JSValueConst
 typedef R2DWorldRuntime WorldHandle;
 static JSClassID world_class;
 static WorldHandle *world_registry;
+
+// P1 R-03 VFX binding: the VFX manager is host-owned state keyed to the world
+// handle. It is kept out of R2DWorldRuntime so renderer/other feature modules
+// stay independent; hooks adapt world lights/decals/queries to the pure module.
+typedef struct VfxBinding {
+    WorldHandle *world;
+    R2DWorldVfx vfx;
+    struct VfxBinding *next;
+} VfxBinding;
+static VfxBinding *vfx_bindings;
+
+static VfxBinding *vfx_binding(WorldHandle *w)
+{
+    for(VfxBinding *b=vfx_bindings;b;b=b->next)if(b->world==w)return b;
+    return NULL;
+}
+static int vfx_hook_light_create(void *user,float x,float y,float h,float radius,
+                                 float intensity,float r,float g,float b,bool shadow,float life)
+{
+    VfxBinding *binding=(VfxBinding *)user;
+    R2DWorldLight light;
+    memset(&light,0,sizeof light);
+    light.x=x;light.y=y;light.h=h;light.radius=radius;light.intensity=intensity;
+    light.r=r;light.g=g;light.b=b;light.shadow=shadow;light.remaining=life;
+    return r2d_world_light_create(&binding->world->world,&light);
+}
+static bool vfx_hook_light_remove(void *user,int token)
+{
+    VfxBinding *binding=(VfxBinding *)user;
+    return r2d_world_light_remove(&binding->world->world,token);
+}
+static int vfx_hook_decal_spawn(void *user,float x,float y,float h,
+                                float dx,float dy,float dh,int material,
+                                float width,float height,float life)
+{
+    VfxBinding *binding=(VfxBinding *)user;
+    R2DRe2dWorld *world=&binding->world->world;
+    const float length=sqrtf(dx*dx+dy*dy+dh*dh);
+    if(!(length>0.0f))return -1;
+    const float origin[3]={x,y,h};
+    const float direction[3]={dx/length,dy/length,dh/length};
+    R2DWorldHit hit;
+    if(!r2d_world_ray(world,origin,direction,0.0f,1000000.0f,&hit))return -1;
+    int surface=-1;
+    if(hit.wall>=0)surface=r2d_world_wall_surface(world,hit.wall);
+    else if(hit.span>=0)surface=r2d_world_span_surface(world,hit.span,
+        hit.ceiling?R2D_WORLD_CEILING:R2D_WORLD_FLOOR);
+    if(surface<0)return -1;
+    R2DWorldDecal decal;
+    memset(&decal,0,sizeof decal);
+    decal.surface=surface;decal.material=material;
+    decal.w=width;decal.h=height;decal.remaining=life;
+    return r2d_world_decal_create(world,&decal);
+}
+static bool vfx_hook_decal_remove(void *user,int token)
+{
+    VfxBinding *binding=(VfxBinding *)user;
+    return r2d_world_decal_remove(&binding->world->world,token);
+}
+static bool vfx_hook_support(void *user,float x,float y,float h,float *floor,float *ceiling)
+{
+    VfxBinding *binding=(VfxBinding *)user;
+    R2DRe2dWorld *world=&binding->world->world;
+    const int span=r2d_world_support(world,x,y,h+0.25f,1.0f,1000000.0f);
+    if(span<0||span>=world->span_count)return false;
+    *floor=r2d_world_floor_height(&world->spans[span],x,y);
+    *ceiling=r2d_world_ceiling_height(&world->spans[span],x,y);
+    return true;
+}
+static bool vfx_hook_blocked(void *user,float x,float y,float radius,float bottom,float top)
+{
+    VfxBinding *binding=(VfxBinding *)user;
+    return r2d_world_blocked(&binding->world->world,x,y,radius,bottom,top);
+}
+static bool vfx_attach(WorldHandle *w)
+{
+    VfxBinding *binding=(VfxBinding *)calloc(1,sizeof *binding);
+    if(!binding)return false;
+    binding->world=w;
+    r2d_world_vfx_init(&binding->vfx,NULL,16);
+    R2DWorldVfxHooks hooks;
+    memset(&hooks,0,sizeof hooks);
+    hooks.user=binding;
+    hooks.light_create=vfx_hook_light_create;
+    hooks.light_remove=vfx_hook_light_remove;
+    hooks.decal_spawn=vfx_hook_decal_spawn;
+    hooks.decal_remove=vfx_hook_decal_remove;
+    hooks.support=vfx_hook_support;
+    hooks.blocked=vfx_hook_blocked;
+    r2d_world_vfx_hooks(&binding->vfx,&hooks);
+    w->vfx=&binding->vfx;
+    binding->next=vfx_bindings;
+    vfx_bindings=binding;
+    return true;
+}
+static void vfx_detach(WorldHandle *w)
+{
+    VfxBinding **entry=&vfx_bindings;
+    while(*entry&&(*entry)->world!=w)entry=&(*entry)->next;
+    if(!*entry)return;
+    VfxBinding *binding=*entry;
+    *entry=binding->next;
+    if(binding->world)binding->world->vfx=NULL;
+    r2d_world_vfx_clear(&binding->vfx);
+    free(binding);
+}
 static void world_dispose(WorldHandle *w)
 {
     if(!w || w->disposed)return;
     if(w->registered){WorldHandle **entry=&world_registry;while(*entry&&*entry!=w)entry=&(*entry)->next;if(*entry==w)*entry=w->next;w->registered=false;}
+    vfx_detach(w);
     r2d_world_audio_free(w);r2d_world_free(&w->world);r2d_world_visibility_free(&w->visibility);r2d_world_runtime_actors_free(w);
     if(w->texture>=0) r2d_texture_free(w->renderer,w->texture);
     SDL_free(w->watch_path);w->watch_path=NULL;free(w->rgba);free(w->depth);free(w->owners);w->owners=NULL;w->rgba=NULL;w->depth=NULL;
@@ -327,6 +435,7 @@ static JSValue world_ray(JSContext *ctx,JSValueConst self,int argc,JSValueConst 
     set_num(ctx,o,"height",h.height);set_num(ctx,o,"wall",h.wall);set_num(ctx,o,"span",h.span);
     JS_SetPropertyStr(ctx,o,"ceiling",JS_NewBool(ctx,h.ceiling));return o;
 }
+static JSValue vfx_info_object(JSContext *ctx,const R2DWorldVfxInfo *info);
 static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w) return JS_EXCEPTION;
@@ -344,6 +453,29 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     JS_SetPropertyStr(ctx,o,"backend",JS_NewString(ctx,w->gpu_enabled?"gpu-reference":"cpu-reference"));set_num(ctx,o,"gpuDraws",w->gpu_draws);
     set_num(ctx,o,"gpuDrawsBase",w->gpu_draw_base);set_num(ctx,o,"gpuDrawsSpan",w->gpu_draw_span);
     set_num(ctx,o,"gpuDrawsActor",w->gpu_draw_actor);set_num(ctx,o,"gpuDrawsOther",w->gpu_draw_other);
+    set_num(ctx,o,"gpuDrawsGround",w->gpu_draw_ground);
+    set_num(ctx,o,"gpuDrawsVfx",w->gpu_draw_vfx);
+    // P0/P1 visual feature counters. Additive fields: the legacy draw
+    // attribution above is preserved exactly (ground draws are their own
+    // bucket, while sky/decals stay in gpuDrawsOther).
+    R2DWorldRenderCounters *c=&w->render_counters;
+    JSValue v=JS_NewObject(ctx);
+    set_num(ctx,v,"quality",w->render_features.quality);
+    set_num(ctx,v,"groundedActors",c->grounded_actors);set_num(ctx,v,"contactShadows",c->contact_shadows);
+    set_num(ctx,v,"footAo",c->foot_ao);set_num(ctx,v,"floorTint",c->floor_tint);set_num(ctx,v,"contactLit",c->contact_lit);
+    set_num(ctx,v,"edgeActors",c->edge_actors);set_num(ctx,v,"outlineActors",c->outline_actors);set_num(ctx,v,"grimeActors",c->grime_actors);
+    set_num(ctx,v,"variedSurfaces",c->varied_surfaces);set_num(ctx,v,"macroSurfaces",c->macro_surfaces);
+    set_num(ctx,v,"bevelSurfaces",c->bevel_surfaces);set_num(ctx,v,"cornerAoSurfaces",c->corner_ao_surfaces);
+    set_num(ctx,v,"fogSurfaces",c->fog_surfaces);set_num(ctx,v,"hazeSurfaces",c->haze_surfaces);
+    set_num(ctx,v,"liquidSurfaces",c->liquid_surfaces);set_num(ctx,v,"animatedMaterials",c->animated_materials);
+    set_num(ctx,v,"skyLayers",c->sky_layers);set_num(ctx,v,"celestialDiscs",c->celestial_discs);
+    set_num(ctx,v,"skySurfaces",c->sky_surfaces);set_num(ctx,v,"reflectionPasses",c->reflection_passes);
+    set_num(ctx,v,"groundDraws",c->ground_draws);set_num(ctx,v,"skyDraws",c->sky_draws);set_num(ctx,v,"decals",c->decals);
+    set_num(ctx,v,"vfxCards",c->vfx_cards);set_num(ctx,v,"vfxTrails",c->vfx_trails);
+    set_num(ctx,v,"vfxDistortion",c->vfx_distortion);set_num(ctx,v,"vfxCardDraws",c->vfx_card_draws);
+    set_num(ctx,v,"vfxTrailDraws",c->vfx_trail_draws);set_num(ctx,v,"vfxDraws",c->vfx_draws);
+    set_num(ctx,v,"renderTime",w->render_time);
+    JS_SetPropertyStr(ctx,o,"visual",v);
     JS_SetPropertyStr(ctx,o,"gpuWait",JS_NewBool(ctx,w->gpu_wait));
     JS_SetPropertyStr(ctx,o,"bakedLighting",JS_NewBool(ctx,w->world.baked_lighting));
     JS_SetPropertyStr(ctx,o,"bakedTopology",JS_NewBool(ctx,w->world.baked_topology));
@@ -355,6 +487,45 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"hitProxies",w->hit_count);
     set_num(ctx,o,"movers",w->mover_count);set_num(ctx,o,"triggers",w->trigger_count);
     set_num(ctx,o,"particles",w->particle_ready?w->particles.count:0);set_num(ctx,o,"particlesDrawn",w->particles_drawn);
+    R2DWorldVfxInfo vfx_info;memset(&vfx_info,0,sizeof vfx_info);
+    VfxBinding *vfx_state=vfx_binding(w);
+    if(vfx_state)r2d_world_vfx_info(&vfx_state->vfx,&vfx_info);
+    set_num(ctx,o,"particlesAlive",vfx_info.particles_alive);
+    set_num(ctx,o,"particleCapacity",vfx_info.particle_capacity);
+    set_num(ctx,o,"particleOverflow",vfx_info.particle_overflow);
+    set_num(ctx,o,"particlesSpawned",vfx_info.particles_spawned);
+    set_num(ctx,o,"emitters",vfx_info.emitters);
+    set_num(ctx,o,"fxBundles",vfx_info.bundles);
+    set_num(ctx,o,"tempLights",vfx_info.temp_lights);
+    set_num(ctx,o,"vfxLightBudget",vfx_info.light_budget);
+    set_num(ctx,o,"vfxLightOverflow",vfx_info.light_overflow);
+    set_num(ctx,o,"vfxDecals",vfx_info.decals);
+    set_num(ctx,o,"distortionCards",vfx_info.distortion_cards);
+    set_num(ctx,o,"vfxCards",vfx_info.cards);
+    set_num(ctx,o,"vfxTrails",vfx_info.trails);
+    JS_SetPropertyStr(ctx,o,"vfx",vfx_state?vfx_info_object(ctx,&vfx_info):JS_NULL);
+    // R-04: runtime region partition (built lazily, refreshed every frame).
+    bool region_ok=r2d_world_regions_ensure(w);
+    const R2DWorldRegionSet *regions=region_ok?r2d_world_regions(w):NULL;
+    set_num(ctx,o,"regionCount",regions?regions->region_count:0);
+    set_num(ctx,o,"regionCurrent",regions?w->region_current:-1);
+    set_num(ctx,o,"regionActive",regions?w->region_active_count:0);
+    set_num(ctx,o,"regionPreload",regions?w->region_preload_count:0);
+    set_num(ctx,o,"regionResident",regions?regions->metrics.resident_count:0);
+    set_num(ctx,o,"regionUnloaded",regions?regions->metrics.unloaded_count:0);
+    set_num(ctx,o,"regionCulled",regions?regions->metrics.culled_regions:0);
+    set_num(ctx,o,"regionPvsEdges",regions?regions->metrics.pvs_edges:0);
+    if(regions){
+        JSValue ro=JS_NewObject(ctx);
+        set_num(ctx,ro,"count",regions->region_count);set_num(ctx,ro,"columns",regions->columns);set_num(ctx,ro,"rows",regions->rows);
+        set_num(ctx,ro,"size",regions->region_size);set_num(ctx,ro,"current",w->region_current);
+        set_num(ctx,ro,"active",w->region_active_count);set_num(ctx,ro,"preload",w->region_preload_count);
+        set_num(ctx,ro,"resident",regions->metrics.resident_count);set_num(ctx,ro,"culled",regions->metrics.culled_regions);
+        JSValue list=JS_NewArray(ctx);
+        for(int i=0;i<w->region_active_count;i++)JS_SetPropertyUint32(ctx,list,(uint32_t)i,JS_NewInt32(ctx,w->region_active[i]));
+        JS_SetPropertyStr(ctx,ro,"activeList",list);
+        JS_SetPropertyStr(ctx,o,"regions",ro);
+    }else JS_SetPropertyStr(ctx,o,"regions",JS_NULL);
     set_num(ctx,o,"traceMs",w->trace_ms);set_num(ctx,o,"traceCalls",w->trace_calls);
     set_num(ctx,o,"controllerMs",w->controller_ms);set_num(ctx,o,"controllerCalls",w->controller_calls);
     set_num(ctx,o,"navMs",w->nav_ms);set_num(ctx,o,"navQueries",w->nav_queries);
@@ -1124,6 +1295,121 @@ static JSValue world_particles_clear(JSContext *ctx,JSValueConst self,int argc,J
     w->particle_accumulator=0;w->particles_drawn=0;
     return JS_UNDEFINED;
 }
+
+static VfxBinding *vfx_require(JSContext *ctx,WorldHandle *w)
+{
+    VfxBinding *binding=w?vfx_binding(w):NULL;
+    if(!binding)JS_ThrowTypeError(ctx,"Re2D World: VFX manager unavailable");
+    return binding;
+}
+static JSValue world_vfx_define(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);VfxBinding *binding=vfx_require(ctx,w);
+    if(!binding)return JS_EXCEPTION;
+    if(argc<2||!JS_IsString(argv[0])||!JS_IsString(argv[1]))
+        return JS_ThrowTypeError(ctx,"Re2D World: vfxDefine(name,jsonText)");
+    const char *name=JS_ToCString(ctx,argv[0]);if(!name)return JS_EXCEPTION;
+    const char *text=JS_ToCString(ctx,argv[1]);if(!text){JS_FreeCString(ctx,name);return JS_EXCEPTION;}
+    char error[256]={0};
+    const bool ok=r2d_world_vfx_define(&binding->vfx,name,text,error,sizeof error);
+    JS_FreeCString(ctx,text);JS_FreeCString(ctx,name);
+    if(!ok)return JS_ThrowTypeError(ctx,"%s",error[0]?error:"invalid VFX bundle");
+    return JS_TRUE;
+}
+static JSValue world_vfx_defined(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);VfxBinding *binding=vfx_require(ctx,w);
+    if(!binding)return JS_EXCEPTION;
+    if(argc<1||!JS_IsString(argv[0]))return JS_ThrowTypeError(ctx,"Re2D World: vfxDefined(name)");
+    const char *name=JS_ToCString(ctx,argv[0]);if(!name)return JS_EXCEPTION;
+    const bool defined=r2d_world_vfx_defined(&binding->vfx,name);
+    JS_FreeCString(ctx,name);
+    return JS_NewBool(ctx,defined);
+}
+static JSValue world_vfx_spawn(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);VfxBinding *binding=vfx_require(ctx,w);
+    if(!binding)return JS_EXCEPTION;
+    if(argc<1||!JS_IsString(argv[0]))return JS_ThrowTypeError(ctx,"Re2D World: vfxSpawn(name,x,y,h,dx,dy,dz,seed?)");
+    const char *name=JS_ToCString(ctx,argv[0]);if(!name)return JS_EXCEPTION;
+    float p[6]={0,0,0,0,0,0};
+    int count=argc-1;if(count>6)count=6;
+    bool numbers=true;
+    if(count>0)numbers=world_numbers(ctx,count,argv+1,count,p);
+    int32_t seed=0;
+    if(numbers&&argc>7&&JS_ToInt32(ctx,&seed,argv[7])<0)numbers=false;
+    if(!numbers){JS_FreeCString(ctx,name);return JS_EXCEPTION;}
+    if(!r2d_world_particles_ready(w)){JS_FreeCString(ctx,name);return JS_ThrowOutOfMemory(ctx);}
+    r2d_world_vfx_bind(&binding->vfx,&w->particles);
+    R2DWorldVfxSpawn spawned;
+    const int total=r2d_world_vfx_spawn(&binding->vfx,name,p[0],p[1],p[2],p[3],p[4],p[5],(uint32_t)seed,&spawned);
+    JS_FreeCString(ctx,name);
+    if(total<0)return JS_ThrowRangeError(ctx,"Re2D World: unknown VFX bundle or invalid spawn args");
+    JSValue o=JS_NewObject(ctx);
+    set_num(ctx,o,"particles",spawned.particles);set_num(ctx,o,"cards",spawned.cards);
+    set_num(ctx,o,"trails",spawned.trails);set_num(ctx,o,"lights",spawned.lights);
+    set_num(ctx,o,"decals",spawned.decals);set_num(ctx,o,"distortion",spawned.distortion);
+    set_num(ctx,o,"shake",spawned.shake);set_num(ctx,o,"flashMs",spawned.flash_ms);
+    set_num(ctx,o,"flashColor",(double)spawned.flash_color);
+    JS_SetPropertyStr(ctx,o,"sound",JS_NewString(ctx,spawned.sound));
+    return o;
+}
+static JSValue vfx_info_object(JSContext *ctx,const R2DWorldVfxInfo *info)
+{
+    JSValue o=JS_NewObject(ctx);
+    set_num(ctx,o,"particlesAlive",info->particles_alive);
+    set_num(ctx,o,"particleCapacity",info->particle_capacity);
+    set_num(ctx,o,"particleOverflow",info->particle_overflow);
+    set_num(ctx,o,"particlesSpawned",info->particles_spawned);
+    set_num(ctx,o,"cards",info->cards);set_num(ctx,o,"cardsSpawned",info->cards_spawned);
+    set_num(ctx,o,"trails",info->trails);set_num(ctx,o,"trailsSpawned",info->trails_spawned);
+    set_num(ctx,o,"tempLights",info->temp_lights);set_num(ctx,o,"lightBudget",info->light_budget);
+    set_num(ctx,o,"lightOverflow",info->light_overflow);
+    set_num(ctx,o,"decals",info->decals);set_num(ctx,o,"decalsSpawned",info->decals_spawned);
+    set_num(ctx,o,"distortionCards",info->distortion_cards);
+    set_num(ctx,o,"fxBundles",info->bundles);set_num(ctx,o,"fxSpawns",info->fx_spawns);
+    set_num(ctx,o,"emitters",info->emitters);
+    return o;
+}
+static JSValue world_vfx_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);VfxBinding *binding=vfx_require(ctx,w);
+    if(!binding)return JS_EXCEPTION;
+    if(r2d_world_particles_ready(w))r2d_world_vfx_bind(&binding->vfx,&w->particles);
+    R2DWorldVfxInfo info;r2d_world_vfx_info(&binding->vfx,&info);
+    return vfx_info_object(ctx,&info);
+}
+static JSValue world_vfx_debug(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);VfxBinding *binding=vfx_require(ctx,w);
+    if(!binding)return JS_EXCEPTION;
+    if(r2d_world_particles_ready(w))r2d_world_vfx_bind(&binding->vfx,&w->particles);
+    R2DWorldVfxInfo info;r2d_world_vfx_info(&binding->vfx,&info);
+    JSValue o=vfx_info_object(ctx,&info);
+    set_num(ctx,o,"particleBudget",w->particle_budget);
+    JSValue names=JS_NewArray(ctx);
+    int written=0;
+    for(int i=0;i<R2D_WORLD_VFX_MAX_BUNDLES;i++)
+        if(binding->vfx.bundles[i].used)
+            JS_SetPropertyUint32(ctx,names,(uint32_t)written++,JS_NewString(ctx,binding->vfx.bundles[i].name));
+    JS_SetPropertyStr(ctx,o,"bundles",names);
+    return o;
+}
+static JSValue world_vfx_clear(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);VfxBinding *binding=vfx_require(ctx,w);
+    if(!binding)return JS_EXCEPTION;
+    r2d_world_vfx_clear(&binding->vfx);
+    return JS_UNDEFINED;
+}
+static JSValue world_vfx_light_budget(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);VfxBinding *binding=vfx_require(ctx,w);
+    if(!binding)return JS_EXCEPTION;
+    if(argc>=1){float p[1];if(!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+        r2d_world_vfx_light_budget(&binding->vfx,(int)p[0]);}
+    return JS_NewInt32(ctx,r2d_world_vfx_get_light_budget(&binding->vfx));
+}
 static JSValue world_nav_build(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
@@ -1469,7 +1755,13 @@ static JSValue world_gpu_wait(JSContext *ctx,JSValueConst self,int argc,JSValueC
 static JSValue world_quality(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[2];if(!w||!world_numbers(ctx,argc,argv,2,p))return JS_EXCEPTION;
-    if(p[0]<0||p[0]>4096||floorf(p[0])!=p[0]||p[1]<0||p[1]>45)return JS_ThrowRangeError(ctx,"Re2D World: poseBudget 0..4096, poseStep 0..45");w->pose_budget=(int)p[0];w->pose_step=p[1];return JS_UNDEFINED;
+    if(p[0]<0||p[0]>4096||floorf(p[0])!=p[0]||p[1]<0||p[1]>45)return JS_ThrowRangeError(ctx,"Re2D World: poseBudget 0..4096, poseStep 0..45");w->pose_budget=(int)p[0];w->pose_step=p[1];
+    // Existing quality presets also drive the visual tier: low keeps the legacy
+    // look plus P0 grounding, medium adds P1 atmosphere/variation, high/ultra add
+    // edge quality, corner AO, four sky layers and liquid. This keeps the old
+    // high-level world.qualityPreset('high') path usable without a JS change.
+    r2d_world_render_quality(w,p[0]>=4?R2D_RENDER_QUALITY_HIGH:p[0]>=2?R2D_RENDER_QUALITY_MEDIUM:R2D_RENDER_QUALITY_LOW);
+    return JS_UNDEFINED;
 }
 static JSValue world_debug_view(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -1554,7 +1846,7 @@ static void world_watch_poll(JSContext *,WorldHandle *,float);
 static JSValue world_step_all(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)self;float dt;if(!world_numbers(ctx,argc,argv,1,&dt))return JS_EXCEPTION;if(dt<0||dt>60)return JS_ThrowRangeError(ctx,"Re2D World: invalid step dt");
-    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);r2d_world_particles_step(w,dt);r2d_world_material_anim_advance(w,dt);r2d_world_polywall_advance(w,dt);r2d_world_post_step_all(w,dt);r2d_world_sky_anim_advance(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
+    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);VfxBinding *vfx=vfx_binding(w);if(vfx){r2d_world_vfx_step(&vfx->vfx,dt);if(w->particle_ready){r2d_world_vfx_bind(&vfx->vfx,&w->particles);r2d_world_vfx_step_particles(&vfx->vfx,dt);}}else r2d_world_particles_step(w,dt);r2d_world_material_anim_advance(w,dt);r2d_world_polywall_advance(w,dt);r2d_world_post_step_all(w,dt);r2d_world_sky_anim_advance(w,dt);r2d_world_render_advance(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
 }
 static JSValue world_light_at(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -1660,6 +1952,13 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"particlesContinuous",JS_NewCFunction(ctx,world_particles_continuous,"particlesContinuous",4));
     JS_SetPropertyStr(ctx,handle,"particlesInfo",JS_NewCFunction(ctx,world_particles_info,"particlesInfo",0));
     JS_SetPropertyStr(ctx,handle,"particlesClear",JS_NewCFunction(ctx,world_particles_clear,"particlesClear",0));
+    JS_SetPropertyStr(ctx,handle,"vfxDefine",JS_NewCFunction(ctx,world_vfx_define,"vfxDefine",2));
+    JS_SetPropertyStr(ctx,handle,"vfxDefined",JS_NewCFunction(ctx,world_vfx_defined,"vfxDefined",1));
+    JS_SetPropertyStr(ctx,handle,"vfxSpawn",JS_NewCFunction(ctx,world_vfx_spawn,"vfxSpawn",8));
+    JS_SetPropertyStr(ctx,handle,"vfxInfo",JS_NewCFunction(ctx,world_vfx_info,"vfxInfo",0));
+    JS_SetPropertyStr(ctx,handle,"vfxDebug",JS_NewCFunction(ctx,world_vfx_debug,"vfxDebug",0));
+    JS_SetPropertyStr(ctx,handle,"vfxClear",JS_NewCFunction(ctx,world_vfx_clear,"vfxClear",0));
+    JS_SetPropertyStr(ctx,handle,"vfxLightBudget",JS_NewCFunction(ctx,world_vfx_light_budget,"vfxLightBudget",1));
     JS_SetPropertyStr(ctx,handle,"navBuild",JS_NewCFunction(ctx,world_nav_build,"navBuild",3));
     JS_SetPropertyStr(ctx,handle,"navNodes",JS_NewCFunction(ctx,world_nav_nodes,"navNodes",0));
     JS_SetPropertyStr(ctx,handle,"navNearest",JS_NewCFunction(ctx,world_nav_nearest,"navNearest",2));
@@ -1747,6 +2046,8 @@ static JSValue world_reload_apply(JSContext *ctx,WorldHandle *w,const char *text
     memcpy(next.decals,old.decals,sizeof next.decals);next.decal_count=old.decal_count;
     if(next.wall_count!=old.wall_count||next.span_count!=old.span_count||next.cell_count!=old.cell_count){for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)next.decals[i].active=false;next.decal_count=0;}
     next.geometry_revision=old.geometry_revision+1;
+    VfxBinding *vfx=vfx_binding(w);
+    if(vfx)r2d_world_vfx_clear(&vfx->vfx);
     r2d_world_gpu_free(w);r2d_world_visibility_free(&w->visibility);w->world=next;r2d_world_free(&old);
     w->reload_count++;w->reload_error[0]=0;return JS_UNDEFINED;
 }
@@ -1778,6 +2079,7 @@ static JSValue world_load(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     r2d_re2d_view_set(&w->view,0,0,48,0,0,1.2f,320,180);char error[256];
     bool ok=r2d_world_load_json(&w->world,text,error,sizeof error);JS_FreeCString(ctx,text);
     if(!ok){world_dispose(w);free(w);return JS_ThrowTypeError(ctx,"%s",error);}
+    if(!vfx_attach(w)){world_dispose(w);free(w);return JS_ThrowOutOfMemory(ctx);}
     return world_wrap(ctx,w);
 }
 static JSValue world_create(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
@@ -1794,11 +2096,12 @@ static JSValue world_create(JSContext *ctx,JSValueConst self,int argc,JSValueCon
     if(!ww||!ss||!w) {free(ww);free(ss);free(w);JS_FreeValue(ctx,a);JS_FreeValue(ctx,b);return JS_ThrowOutOfMemory(ctx);}
     w->renderer=script->renderer;w->runtime=JS_GetRuntime(ctx);w->texture=w->sprite=-1;
     r2d_re2d_view_set(&w->view,0,0,48,0,0,1.2f,320,180);
-    for(size_t i=0;i<nw/9;i++) {float *p=walls+i*9;ww[i]=(R2DWorldWall){p[0],p[1],p[2],p[3],p[4],p[5],world_rgb(p+6)};}
+    for(size_t i=0;i<nw/9;i++) {float *p=walls+i*9;ww[i]=(R2DWorldWall){p[0],p[1],p[2],p[3],p[4],p[5],world_rgb(p+6),0};}
     for(size_t i=0;i<ns/12;i++) {float *p=spans+i*12;ss[i]=(R2DWorldSpan){p[0],p[1],p[2],p[3],p[4],p[5],world_rgb(p+6),world_rgb(p+9),0,0,0,0};}
     bool built=r2d_world_build(&w->world,ww,(int)(nw/9),ss,(int)(ns/12));
     free(ww);free(ss);JS_FreeValue(ctx,a);JS_FreeValue(ctx,b);
     if(!built) {world_dispose(w);free(w);return JS_ThrowRangeError(ctx,"World.create: неверная геометрия, пересечение spans или нехватка памяти");}
+    if(!vfx_attach(w)){world_dispose(w);free(w);return JS_ThrowOutOfMemory(ctx);}
     return world_wrap(ctx,w);
 }
 

@@ -1,0 +1,232 @@
+{
+ "format": "r2d-vfx-pack",
+ "version": 1,
+ "categories": {
+  "combat": [
+   {
+    "name": "muzzle_flash",
+    "path": "assets/vfx/combat/muzzle_flash.json"
+   },
+   {
+    "name": "shotgun_smoke",
+    "path": "assets/vfx/combat/shotgun_smoke.json"
+   },
+   {
+    "name": "pellet_impact_stone",
+    "path": "assets/vfx/combat/pellet_impact_stone.json"
+   },
+   {
+    "name": "pellet_impact_metal",
+    "path": "assets/vfx/combat/pellet_impact_metal.json"
+   },
+   {
+    "name": "pellet_impact_flesh",
+    "path": "assets/vfx/combat/pellet_impact_flesh.json"
+   },
+   {
+    "name": "blood_spray",
+    "path": "assets/vfx/combat/blood_spray.json"
+   },
+   {
+    "name": "blood_mist",
+    "path": "assets/vfx/combat/blood_mist.json"
+   },
+   {
+    "name": "blood_decal",
+    "path": "assets/vfx/combat/blood_decal.json"
+   },
+   {
+    "name": "scorch",
+    "path": "assets/vfx/combat/scorch.json"
+   },
+   {
+    "name": "shell_eject",
+    "path": "assets/vfx/combat/shell_eject.json"
+   },
+   {
+    "name": "hit_spark",
+    "path": "assets/vfx/combat/hit_spark.json"
+   },
+   {
+    "name": "hit_dust",
+    "path": "assets/vfx/combat/hit_dust.json"
+   }
+  ],
+  "fire": [
+   {
+    "name": "fire_small",
+    "path": "assets/vfx/fire/fire_small.json"
+   },
+   {
+    "name": "fire_large",
+    "path": "assets/vfx/fire/fire_large.json"
+   },
+   {
+    "name": "ember",
+    "path": "assets/vfx/fire/ember.json"
+   },
+   {
+    "name": "fire_smoke",
+    "path": "assets/vfx/fire/fire_smoke.json"
+   },
+   {
+    "name": "burning_actor",
+    "path": "assets/vfx/fire/burning_actor.json"
+   },
+   {
+    "name": "heat_distortion",
+    "path": "assets/vfx/fire/heat_distortion.json"
+   },
+   {
+    "name": "fire_light",
+    "path": "assets/vfx/fire/fire_light.json"
+   }
+  ],
+  "frost": [
+   {
+    "name": "frost_burst",
+    "path": "assets/vfx/frost/frost_burst.json"
+   },
+   {
+    "name": "ice_shards",
+    "path": "assets/vfx/frost/ice_shards.json"
+   },
+   {
+    "name": "frost_mist",
+    "path": "assets/vfx/frost/frost_mist.json"
+   },
+   {
+    "name": "frost_decal",
+    "path": "assets/vfx/frost/frost_decal.json"
+   },
+   {
+    "name": "freeze_overlay",
+    "path": "assets/vfx/frost/freeze_overlay.json"
+   }
+  ],
+  "electric": [
+   {
+    "name": "spark",
+    "path": "assets/vfx/electric/spark.json"
+   },
+   {
+    "name": "arc_card",
+    "path": "assets/vfx/electric/arc_card.json"
+   },
+   {
+    "name": "electric_hit",
+    "path": "assets/vfx/electric/electric_hit.json"
+   },
+   {
+    "name": "pulse_light",
+    "path": "assets/vfx/electric/pulse_light.json"
+   },
+   {
+    "name": "screen_flash",
+    "path": "assets/vfx/electric/screen_flash.json"
+   }
+  ],
+  "acid": [
+   {
+    "name": "acid_splash",
+    "path": "assets/vfx/acid/acid_splash.json"
+   },
+   {
+    "name": "acid_drip",
+    "path": "assets/vfx/acid/acid_drip.json"
+   },
+   {
+    "name": "acid_pool",
+    "path": "assets/vfx/acid/acid_pool.json"
+   },
+   {
+    "name": "acid_smoke",
+    "path": "assets/vfx/acid/acid_smoke.json"
+   },
+   {
+    "name": "acid_decal",
+    "path": "assets/vfx/acid/acid_decal.json"
+   }
+  ],
+  "magic": [
+   {
+    "name": "portal",
+    "path": "assets/vfx/magic/portal.json"
+   },
+   {
+    "name": "glyph",
+    "path": "assets/vfx/magic/glyph.json"
+   },
+   {
+    "name": "soul",
+    "path": "assets/vfx/magic/soul.json"
+   },
+   {
+    "name": "red_eye_glow",
+    "path": "assets/vfx/magic/red_eye_glow.json"
+   },
+   {
+    "name": "magic_mist",
+    "path": "assets/vfx/magic/magic_mist.json"
+   },
+   {
+    "name": "teleport",
+    "path": "assets/vfx/magic/teleport.json"
+   },
+   {
+    "name": "vanish",
+    "path": "assets/vfx/magic/vanish.json"
+   },
+   {
+    "name": "boss_aura",
+    "path": "assets/vfx/magic/boss_aura.json"
+   }
+  ],
+  "environment": [
+   {
+    "name": "dust",
+    "path": "assets/vfx/environment/dust.json"
+   },
+   {
+    "name": "floating_ash",
+    "path": "assets/vfx/environment/floating_ash.json"
+   },
+   {
+    "name": "fog_strip",
+    "path": "assets/vfx/environment/fog_strip.json"
+   },
+   {
+    "name": "smoke_column",
+    "path": "assets/vfx/environment/smoke_column.json"
+   },
+   {
+    "name": "falling_debris",
+    "path": "assets/vfx/environment/falling_debris.json"
+   },
+   {
+    "name": "dripping_water",
+    "path": "assets/vfx/environment/dripping_water.json"
+   },
+   {
+    "name": "rain",
+    "path": "assets/vfx/environment/rain.json"
+   },
+   {
+    "name": "snow",
+    "path": "assets/vfx/environment/snow.json"
+   },
+   {
+    "name": "wind_dust",
+    "path": "assets/vfx/environment/wind_dust.json"
+   },
+   {
+    "name": "light_shaft_dust",
+    "path": "assets/vfx/environment/light_shaft_dust.json"
+   },
+   {
+    "name": "ambient_embers",
+    "path": "assets/vfx/environment/ambient_embers.json"
+   }
+  ]
+ }
+}

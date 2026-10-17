@@ -11,12 +11,15 @@
 #include "re2d_world_terrain.h"
 #include "re2d_world_save.h"
 #include "re2d_world_material_anim.h"
+#include "re2d_world_render_features.h"
+#include "re2d_world_region.h"
 #include "re2d_postprocess.h"
 #include "re2d_audio_zone.h"
 #include "re2d_audio_voices.h"
 #include "render.h"
 #include "audio.h"
 #include <quickjs.h>
+struct R2DWorldVfx;
 // Runtime owns native actor registration and final-frame resources. Bindings only configure/call.
 #define R2D_WORLD_ATLAS_ACTOR_LIMIT 1024
 // One flat directional atlas sprite registered from an existing `$` node. The
@@ -136,8 +139,26 @@ typedef struct R2DWorldRuntime {
     float particle_accumulator;
     int particles_drawn;
     int particle_budget;
+    // R-04 huge-world region partition: lazily built from runtime cells/portals,
+    // active/preload ring refreshed around the camera. Compiler metadata uses
+    // the same deterministic grid rule.
+    R2DWorldRegionSet regions;
+    uint8_t *region_states;
+    int *region_active,*region_preload;
+    int region_active_count,region_preload_count,region_current;
+    bool region_ready;
     // Per-frame draw attribution for profiler/benchmarks.
-    int gpu_draw_base,gpu_draw_span,gpu_draw_actor,gpu_draw_other;
+    int gpu_draw_base,gpu_draw_span,gpu_draw_actor,gpu_draw_other,gpu_draw_ground,gpu_draw_vfx;
+    // Borrowed R-03 VFX binding owned by the JS handle layer. NULL when the
+    // world has no VFX manager; the GPU pass skips cards/trails in that case.
+    struct R2DWorldVfx *vfx;
+    // P0/P1 renderer visual model: grounding, edge quality, surface variation,
+    // height fog/haze, sky layers and liquid. Pure data consumed by the GPU
+    // uniform setup and the CPU reference grounding pass.
+    R2DWorldRenderFeatures render_features;
+    R2DWorldRenderCounters render_counters;
+    bool render_features_ready;
+    float render_time;
     // P2 final-frame postprocess stack (descriptors; JS maps to the render pass).
     R2DPostStack post;
     bool post_ready;
@@ -305,8 +326,29 @@ void r2d_world_material_anim_advance(R2DWorldRuntime *,float dt);
 void r2d_world_runtime_actors_free(R2DWorldRuntime *);
 // Returns ordinary 2D sprite id; errors set QuickJS exception, no script renderer loops.
 int r2d_world_runtime_frame(JSContext *,R2DWorldRuntime *,const R2DRe2dView *,int,int,float);
+bool r2d_world_regions_ensure(R2DWorldRuntime *);
+void r2d_world_regions_free(R2DWorldRuntime *);
+const R2DWorldRegionSet *r2d_world_regions(const R2DWorldRuntime *);
 bool r2d_world_runtime_material(JSContext *,R2DWorldRuntime *,const char *,const char *,const char *,const char *,float,float,float,int,float,bool,bool);
 bool r2d_world_runtime_sky(JSContext *,R2DWorldRuntime *,const char *,uint32_t,float,float);
 
 void r2d_world_audio_step(R2DWorldRuntime *,const R2DRe2dView *);
 void r2d_world_audio_free(R2DWorldRuntime *);
+// Renderer visual feature configuration and deterministic time advance.
+void r2d_world_render_init(R2DWorldRuntime *);
+bool r2d_world_render_set_features(R2DWorldRuntime *,const R2DWorldRenderFeatures *);
+bool r2d_world_render_quality(R2DWorldRuntime *,int quality);
+const R2DWorldRenderFeatures *r2d_world_render_features(const R2DWorldRuntime *);
+void r2d_world_render_advance(R2DWorldRuntime *,float dt);
+// Grounding card shared by the CPU reference and the GPU ground pass. Values
+// are output-pixel coordinates/radii plus the exact blend parameters, so both
+// backends draw the same footprint. Returns false when the actor has no floor
+// span or the card is off-screen/too small.
+typedef struct {
+    float center_x,center_y,radius_x,radius_y;
+    float opacity,softness,foot_ratio,foot_strength;
+    float tint_r,tint_g,tint_b;
+    int span;
+} R2DWorldGroundCard;
+bool r2d_world_render_ground_card(R2DWorldRuntime *,const R2DRe2dView *,int width,int height,
+                                  float ortho,int actor,R2DWorldGroundCard *out);

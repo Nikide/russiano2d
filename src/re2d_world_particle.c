@@ -29,6 +29,9 @@ static bool prototype_valid(const R2DWorldParticle *p)
     if (p->frames < 0) return false;
     if (p->mode < R2D_PARTICLE_SCREEN || p->mode > R2D_PARTICLE_FLOOR) return false;
     if (p->blend < R2D_PARTICLE_MASKED || p->blend > R2D_PARTICLE_ADDITIVE) return false;
+    if (p->collision < R2D_PARTICLE_COLLIDE_NONE || p->collision > R2D_PARTICLE_COLLIDE_DESPAWN) return false;
+    if (!isfinite(p->bounce) || p->bounce < 0.0f || p->bounce > 1.0f) return false;
+    if (!isfinite(p->radius) || p->radius < 0.0f) return false;
     return true;
 }
 
@@ -43,6 +46,9 @@ static bool particle_sane(const R2DWorldParticle *p)
            finite3(p->drag, p->start_size, p->start_alpha) &&
            finite3(p->end_size, p->end_alpha, p->r) &&
            finite3(p->g, p->b, p->alpha) &&
+           isfinite(p->bounce) && isfinite(p->radius) &&
+           p->collision >= R2D_PARTICLE_COLLIDE_NONE &&
+           p->collision <= R2D_PARTICLE_COLLIDE_DESPAWN &&
            p->max_life > 0.0f;
 }
 
@@ -118,6 +124,9 @@ static void spawn_slot(R2DWorldParticlePool *pool, int slot,
     p->b = prototype->b;
     p->active = true;
     p->world_space = prototype->world_space;
+    p->collision = prototype->collision;
+    p->bounce = prototype->bounce;
+    p->radius = prototype->radius;
 }
 
 // Insert one particle. When full, the oldest slot is overwritten and the age
@@ -235,7 +244,86 @@ int r2d_world_particle_emit_continuous(R2DWorldParticlePool *pool,
     return to_spawn;
 }
 
-void r2d_world_particle_step(R2DWorldParticlePool *pool, float dt)
+static float particle_span(const R2DWorldParticle *p)
+{
+    float extent = p->size;
+    if (!(extent > 0.0f)) extent = 0.01f;
+    return extent;
+}
+
+// Resolve one particle's collision after integration. Returns false when the
+// particle must despawn on contact. `old_*` is the pre-integration position.
+static bool particle_collide(const R2DWorldParticleCollision *collision,
+                             R2DWorldParticle *p,
+                             float old_x,float old_y,float old_h)
+{
+    if (!collision || !collision->support || !collision->blocked) return true;
+    if (p->collision == R2D_PARTICLE_COLLIDE_NONE) return true;
+
+    const bool wall_mode = p->collision == R2D_PARTICLE_COLLIDE_WALL ||
+                           p->collision == R2D_PARTICLE_COLLIDE_BOUNCE ||
+                           p->collision == R2D_PARTICLE_COLLIDE_DESPAWN;
+    const bool floor_mode = p->collision == R2D_PARTICLE_COLLIDE_FLOOR ||
+                            p->collision == R2D_PARTICLE_COLLIDE_BOUNCE ||
+                            p->collision == R2D_PARTICLE_COLLIDE_DESPAWN;
+
+    if (wall_mode) {
+        float bottom = old_h < p->h ? old_h : p->h;
+        float top = (old_h > p->h ? old_h : p->h) + particle_span(p);
+        if (!(top > bottom)) top = bottom + 0.01f;
+        const float radius = p->radius;
+        if (collision->blocked(collision->user,p->x,p->y,radius,bottom,top)) {
+            if (p->collision == R2D_PARTICLE_COLLIDE_DESPAWN) return false;
+            const bool block_x = collision->blocked(collision->user,p->x,old_y,radius,bottom,top);
+            const bool block_y = collision->blocked(collision->user,old_x,p->y,radius,bottom,top);
+            if (block_x && block_y) {
+                p->x = old_x; p->y = old_y;
+                if (p->collision == R2D_PARTICLE_COLLIDE_BOUNCE) {
+                    p->vx = -p->vx * p->bounce;
+                    p->vy = -p->vy * p->bounce;
+                } else {
+                    p->vx = 0.0f; p->vy = 0.0f;
+                }
+            } else if (block_x) {
+                p->x = old_x;
+                if (p->collision == R2D_PARTICLE_COLLIDE_BOUNCE) p->vx = -p->vx * p->bounce;
+                else p->vx = 0.0f;
+            } else if (block_y) {
+                p->y = old_y;
+                if (p->collision == R2D_PARTICLE_COLLIDE_BOUNCE) p->vy = -p->vy * p->bounce;
+                else p->vy = 0.0f;
+            } else {
+                // Diagonal corner: neither single-axis step is blocked, but the
+                // combined step is. Reject the step instead of tunnelling.
+                p->x = old_x; p->y = old_y;
+                if (p->collision != R2D_PARTICLE_COLLIDE_BOUNCE) {
+                    p->vx = 0.0f; p->vy = 0.0f;
+                }
+            }
+        }
+    }
+
+    if (floor_mode) {
+        float floor = 0.0f, ceiling = 0.0f;
+        if (collision->support(collision->user,p->x,p->y,p->h,&floor,&ceiling) &&
+            isfinite(floor) && isfinite(ceiling) && p->h < floor) {
+            if (p->collision == R2D_PARTICLE_COLLIDE_DESPAWN) return false;
+            p->h = floor;
+            if (p->vh < 0.0f) {
+                if (p->collision == R2D_PARTICLE_COLLIDE_BOUNCE) {
+                    p->vh = -p->vh * p->bounce;
+                    if (p->vh < 1e-4f) p->vh = 0.0f;
+                } else {
+                    p->vh = 0.0f;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+void r2d_world_particle_step_collide(R2DWorldParticlePool *pool, float dt,
+                                     const R2DWorldParticleCollision *collision)
 {
     if (!pool || !pool->items || pool->capacity < 1) return;
     if (!isfinite(dt) || dt <= 0.0f) return;
@@ -267,10 +355,16 @@ void r2d_world_particle_step(R2DWorldParticlePool *pool, float dt)
         }
         if (p->mode != R2D_PARTICLE_SCREEN) p->vh += p->gravity * use;
 
+        const float old_x = p->x, old_y = p->y, old_h = p->h;
         p->x += p->vx * use;
         p->y += p->vy * use;
         p->h += p->vh * use;
         p->rotation += p->spin * use;
+
+        if (!particle_collide(collision,p,old_x,old_y,old_h)) {
+            p->active = false;
+            continue;
+        }
 
         p->life -= use;
         float fraction;
@@ -310,6 +404,11 @@ void r2d_world_particle_step(R2DWorldParticlePool *pool, float dt)
         }
     }
     pool->count = write;
+}
+
+void r2d_world_particle_step(R2DWorldParticlePool *pool, float dt)
+{
+    r2d_world_particle_step_collide(pool,dt,NULL);
 }
 
 int r2d_world_particle_alive(const R2DWorldParticlePool *pool)

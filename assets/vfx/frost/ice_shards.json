@@ -1,0 +1,16 @@
+{
+ "particles": [
+  {
+   "count": 5,
+   "life": 0.8,
+   "size": 3,
+   "color": "#c8f4ff",
+   "blend": "additive",
+   "mode": "billboard",
+   "speed": 180,
+   "spread": 30,
+   "gravity": 500,
+   "collision": "floor"
+  }
+ ]
+}

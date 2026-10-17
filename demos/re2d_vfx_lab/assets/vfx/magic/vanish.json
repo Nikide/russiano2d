@@ -1,0 +1,28 @@
+{
+ "particles": [
+  {
+   "count": 10,
+   "life": 0.8,
+   "size": 6,
+   "endSize": 0,
+   "color": "#8060c0",
+   "blend": "additive",
+   "mode": "billboard",
+   "speed": 60,
+   "spread": 40
+  }
+ ],
+ "cards": [
+  {
+   "kind": "ring",
+   "life": 0.4,
+   "size": 10,
+   "endSize": 60,
+   "alpha": 0.6,
+   "endAlpha": 0,
+   "color": "#b080ff",
+   "blend": "additive",
+   "distortion": "magic"
+  }
+ ]
+}

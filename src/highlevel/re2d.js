@@ -841,6 +841,31 @@ function rendererWorldWrapper($, native) {
         clear() { native.particlesClear(); return world; },
     };
 
+    // R-03 native VFX library: FX bundles are parsed by C (fixed pools, native
+    // step). This is only the thin `$` bridge; no JS node is created per spark.
+    world.vfx = {
+        define(name, json) {
+            if (typeof name !== 'string' || !name) throw new TypeError('world.vfx.define: name required');
+            if (typeof json !== 'string' || !json) throw new TypeError('world.vfx.define: JSON text required');
+            native.vfxDefine(name, json);
+            return world;
+        },
+        defined(name) { return !!native.vfxDefined(String(name)); },
+        spawn(name, at = {}) {
+            return native.vfxSpawn(String(name),
+                Number(at.x ?? 0), Number(at.y ?? 0), Number(at.h ?? 0),
+                Number(at.dx ?? 0), Number(at.dy ?? 0), Number(at.dz ?? at.dh ?? 0),
+                Math.trunc(Number(at.seed ?? 0)));
+        },
+        info() { return native.vfxInfo(); },
+        debug() { return native.vfxDebug(); },
+        clear() { native.vfxClear(); return world; },
+        lightBudget(value) {
+            if (value === undefined) return native.vfxLightBudget();
+            return native.vfxLightBudget(Math.trunc(Number(value)));
+        },
+    };
+
     // P5 mist bands: long-lived, slow, wide translucent particles; a cheap
     // 2.5D atmosphere layer on top of the authored fog zones.
     world.mist = (options = {}) => {

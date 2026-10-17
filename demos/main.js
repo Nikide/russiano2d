@@ -40,6 +40,8 @@ const MODULES = [
     './re2d_bench_lab/index.js',
     // P2 sky-portal lab: окно в панораму через authored portal.
     './re2d_sky_lab/index.js',
+    // R-04/R-05/R-06 open-world lab: brushes -> regions -> streaming foundation.
+    './re2d_openworld_lab/index.js',
     // P4 debug-overlay lab: automap/entities/boss-zones поверх кадра.
     './re2d_debug_lab/index.js',
     // P3 rotating polywall lab: rigid вращение authored wall в рантайме.

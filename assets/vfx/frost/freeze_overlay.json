@@ -1,0 +1,17 @@
+{
+ "cards": [
+  {
+   "kind": "flash",
+   "life": 0.4,
+   "size": 120,
+   "endSize": 260,
+   "alpha": 0.22,
+   "endAlpha": 0,
+   "color": "#c8f4ff",
+   "blend": "additive",
+   "mode": "screen",
+   "distortion": "magic"
+  }
+ ],
+ "shake": 0.15
+}

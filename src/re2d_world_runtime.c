@@ -11,6 +11,42 @@
 #include <stdlib.h>
 #include <string.h>
 #define ACTOR_LIMIT 4096
+// P0/P1 visual features are native configuration, not per-frame JS work. A
+// runtime starts with the medium preset; the pure feature module owns the
+// validation/preset table, so the C tests and the renderer share one contract.
+void r2d_world_render_init(R2DWorldRuntime *w)
+{
+    if(!w)return;
+    r2d_world_render_defaults(&w->render_features);
+    r2d_world_render_counters_reset(&w->render_counters);
+    w->render_features_ready=true;
+    w->render_time=0;
+}
+bool r2d_world_render_set_features(R2DWorldRuntime *w,const R2DWorldRenderFeatures *features)
+{
+    if(!w||!features||w->rendering)return false;
+    R2DWorldRenderFeatures next=*features;
+    if(!r2d_world_render_validate(&next))return false;
+    w->render_features=next;w->render_features_ready=true;return true;
+}
+bool r2d_world_render_quality(R2DWorldRuntime *w,int quality)
+{
+    if(!w||w->rendering)return false;
+    R2DWorldRenderFeatures next;
+    if(!r2d_world_render_preset(quality,&next))return false;
+    w->render_features=next;w->render_features_ready=true;return true;
+}
+const R2DWorldRenderFeatures *r2d_world_render_features(const R2DWorldRuntime *w)
+{
+    return w&&w->render_features_ready?&w->render_features:NULL;
+}
+void r2d_world_render_advance(R2DWorldRuntime *w,float dt)
+{
+    if(!w||!isfinite(dt)||dt<=0)return;
+    if(dt>0.25f)dt=0.25f;
+    w->render_time+=dt;
+    if(!(w->render_time<1e6f))w->render_time=0; // bounded phase, no precision cliff
+}
 static bool same(JSValueConst a,JSValueConst b)
 { return JS_VALUE_GET_TAG(a)==JS_VALUE_GET_TAG(b)&&JS_VALUE_GET_PTR(a)==JS_VALUE_GET_PTR(b); }
 bool r2d_world_actor_register(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node)
@@ -28,6 +64,79 @@ bool r2d_world_actor_unregister(JSContext *ctx,R2DWorldRuntime *w,JSValueConst n
     for(int i=0;i<w->actor_count;i++)if(same(node,w->actors[i])){JS_FreeValue(ctx,w->actors[i]);memmove(w->actors+i,w->actors+i+1,(size_t)(w->actor_count-i-1)*sizeof(JSValue));w->actor_count--;return true;}
     return true;
 }
+
+void r2d_world_regions_free(R2DWorldRuntime *w)
+{
+    if(!w)return;
+    R2DWorldRegionSet *r=&w->regions;
+    free(r->regions);free(r->cell_region);free(r->region_cells);
+    free(r->region_portal_offsets);free(r->region_portal_refs);
+    free(r->region_adj_offsets);free(r->region_adj_refs);free(r->pvs);
+    memset(r,0,sizeof *r);
+    free(w->region_states);free(w->region_active);free(w->region_preload);
+    w->region_states=NULL;w->region_active=w->region_preload=NULL;
+    w->region_active_count=w->region_preload_count=0;w->region_current=-1;
+    w->region_ready=false;
+}
+
+bool r2d_world_regions_ensure(R2DWorldRuntime *w)
+{
+    if(!w)return false;
+    if(w->region_ready&&w->regions.cell_count==w->world.cell_count&&w->regions.portal_count==w->world.portal_count)return true;
+    r2d_world_regions_free(w);
+    const int nc=w->world.cell_count,np=w->world.portal_count;
+    if(nc<=0)return false;
+    R2DWorldRegionCell *cells=(R2DWorldRegionCell *)calloc((size_t)nc,sizeof *cells);
+    R2DWorldRegionPortal *portals=(R2DWorldRegionPortal *)calloc((size_t)(np?np:1),sizeof *portals);
+    if(!cells||!portals){free(cells);free(portals);return false;}
+    float minx=INFINITY,miny=INFINITY,maxx=-INFINITY,maxy=-INFINITY;
+    for(int i=0;i<nc;i++){
+        const R2DWorldCell *c=&w->world.cells[i];
+        cells[i]=(R2DWorldRegionCell){(float)c->x,(float)c->y,(float)c->w,(float)c->h};
+        if(c->x<minx)minx=(float)c->x;if(c->y<miny)miny=(float)c->y;
+        if(c->x+c->w>maxx)maxx=(float)(c->x+c->w);if(c->y+c->h>maxy)maxy=(float)(c->y+c->h);
+    }
+    for(int i=0;i<np;i++){
+        const R2DWorldPortal *p=&w->world.portals[i];
+        portals[i]=(R2DWorldRegionPortal){p->cell_a,p->cell_b,p->closed,p->area_portal};
+    }
+    float size=512.0f;
+    // Keep the deterministic grid below the module's hard cap even for huge maps.
+    while(((int)ceilf((maxx-minx)/size)+2)*((int)ceilf((maxy-miny)/size)+2)>R2D_WORLD_REGION_MAX_GRID&&size<1048576.0f)size*=2.0f;
+    R2DWorldRegionSet sizing;memset(&sizing,0,sizeof sizing);
+    char error[128]={0};
+    int regions=r2d_world_region_build(cells,nc,portals,np,size,&sizing,error,sizeof error);
+    if(regions<=0){free(cells);free(portals);return false;}
+    R2DWorldRegionSet *r=&w->regions;
+    r->regions=(R2DWorldRegion *)calloc((size_t)regions,sizeof *r->regions);
+    r->cell_region=(int *)calloc((size_t)nc,sizeof *r->cell_region);
+    r->region_cells=(int *)calloc((size_t)nc,sizeof *r->region_cells);
+    r->region_portal_offsets=(int *)calloc((size_t)(regions+1),sizeof *r->region_portal_offsets);
+    r->region_portal_refs=(int *)calloc((size_t)(np?np*2:1),sizeof *r->region_portal_refs);
+    r->region_adj_offsets=(int *)calloc((size_t)(regions+1),sizeof *r->region_adj_offsets);
+    r->region_adj_refs=(int *)calloc((size_t)(np?np*2:1),sizeof *r->region_adj_refs);
+    r->pvs=(uint64_t *)calloc((size_t)regions*sizing.pvs_words,sizeof *r->pvs);
+    r->region_capacity=regions;r->cell_region_capacity=nc;r->region_cells_capacity=nc;
+    r->region_portal_offsets_capacity=regions+1;r->region_portal_refs_capacity=np*2;
+    r->region_adj_offsets_capacity=regions+1;r->region_adj_refs_capacity=np*2;
+    r->pvs_capacity=regions*sizing.pvs_words;r->pvs_words=sizing.pvs_words;
+    bool ok=r->regions&&r->cell_region&&r->region_cells&&r->region_portal_offsets&&r->region_portal_refs&&r->region_adj_offsets&&r->region_adj_refs&&r->pvs;
+    if(ok)ok=r2d_world_region_build(cells,nc,portals,np,size,r,error,sizeof error)==regions;
+    free(cells);free(portals);
+    if(!ok){r2d_world_regions_free(w);return false;}
+    w->region_states=(uint8_t *)calloc((size_t)regions,1);
+    w->region_active=(int *)calloc((size_t)regions,sizeof *w->region_active);
+    w->region_preload=(int *)calloc((size_t)regions,sizeof *w->region_preload);
+    if(!w->region_states||!w->region_active||!w->region_preload){r2d_world_regions_free(w);return false;}
+    w->region_ready=true;w->region_current=-1;
+    return true;
+}
+
+const R2DWorldRegionSet *r2d_world_regions(const R2DWorldRuntime *w)
+{
+    return w&&w->region_ready?&w->regions:NULL;
+}
+
 void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
 {
     r2d_world_gpu_free(w);
@@ -38,7 +147,7 @@ void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
     free(w->actors);free(w->frame_handles);free(w->frame_positions);free(w->frame_images);free(w->frame_sizes);
     free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_tints);free(w->frame_keys);free(w->atlas_actors);
     free(w->hit_entries);free(w->trace_scratch);free(w->movers);free(w->triggers);
-    r2d_world_nav_free(w);r2d_world_particles_free(w);r2d_world_secret_free(w);r2d_world_terrain_free(w);r2d_world_audio_zone_free(w);r2d_world_polywall_free(w);
+    r2d_world_nav_free(w);r2d_world_particles_free(w);r2d_world_secret_free(w);r2d_world_terrain_free(w);r2d_world_audio_zone_free(w);r2d_world_polywall_free(w);r2d_world_regions_free(w);
     w->actors=w->frame_handles=NULL;w->frame_positions=NULL;w->frame_images=NULL;w->frame_sizes=NULL;
     w->frame_kinds=NULL;w->frame_revisions=NULL;w->frame_blends=NULL;w->frame_tints=NULL;w->frame_keys=NULL;w->atlas_actors=NULL;
     w->hit_entries=NULL;w->trace_scratch=NULL;w->hit_count=w->hit_capacity=0;w->trace_scratch_capacity=0;
@@ -168,9 +277,133 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
     }
     return true;
 }
+// Shared grounding card (R-01): CPU reference and GPU pass both consume the
+// same output-pixel ellipse and blend parameters. The footprint is a floor
+// contact blob with a smaller foot-AO core and a local floor tint; height fade
+// hides it for airborne actors. It is a 2D card, not a shadow map.
+static float cr_clamp01(float v){return v<0?0:v>1?1:v;}
+static bool render_project_ground(const R2DRe2dView *v,float x,float y,float z,float ortho,float out[4],float *out_depth)
+{
+    if(ortho>0){
+        float dx=x-v->x,dy=y-v->y,up=z-v->eye,forward=dx*v->cos_yaw+dy*v->sin_yaw;
+        float depth=forward*v->cos_pitch+up*v->sin_pitch;
+        if(depth<v->near_plane)return false;
+        float scale=v->height/ortho;
+        out[0]=v->width*.5f+(-dx*v->sin_yaw+dy*v->cos_yaw)*scale;
+        out[1]=v->height*.5f-(up*v->cos_pitch-forward*v->sin_pitch)*scale;
+        out[2]=1-v->near_plane/depth;out[3]=scale;
+        *out_depth=depth;return true;
+    }
+    if(!r2d_re2d_project(v,x,y,z,out))return false;
+    *out_depth=v->focal/out[3];return true;
+}
+bool r2d_world_render_ground_card(R2DWorldRuntime *w,const R2DRe2dView *v,int width,int height,
+                                  float ortho,int actor,R2DWorldGroundCard *out)
+{
+    if(!w||!v||!out||!w->frame_images||!w->frame_positions)return false;
+    if(actor<0||actor>=w->frame_count||!w->frame_images[actor])return false;
+    const R2DWorldRenderFeatures *f=&w->render_features;
+    if(!f->grounding||!f->contact_shadow)return false;
+    const float *p=w->frame_positions+actor*5;
+    if(!(p[3]>0)||!(p[4]>0)||!isfinite(p[0])||!isfinite(p[1])||!isfinite(p[2]))return false;
+    int span=r2d_world_span_at(&w->world,p[0],p[1],p[2]+fminf(1.0f,p[4]*.25f));
+    if(span<0)return false;
+    if(w->visibility.span_seen&&!w->visibility.span_seen[span])return false;
+    const R2DWorldSpan *s=&w->world.spans[span];
+    float floor=r2d_world_floor_height(s,p[0],p[1]);
+    float gap=p[2]-floor;
+    if(gap>f->shadow_height_fade*2.0f)return false;
+    float proj[4],floor_depth=0;
+    if(!render_project_ground(v,p[0],p[1],floor+0.5f,ortho,proj,&floor_depth))return false;
+    (void)floor_depth;
+    float radius_world=fmaxf(p[3],p[4])*0.5f*f->shadow_radius;
+    if(!(radius_world>0.0f))return false;
+    float sx=(float)width/v->width,sy=(float)height/v->height;
+    out->center_x=proj[0]*sx;
+    out->center_y=proj[1]*sy;
+    out->radius_x=radius_world*proj[3]*sx;
+    out->radius_y=out->radius_x*fmaxf(0.35f,fabsf(v->sin_pitch)+0.30f);
+    if(out->radius_x<0.75f)return false;
+    float height_fade=1.0f;
+    if(gap>0.0f&&f->shadow_height_fade>0.0f){
+        float t=gap/f->shadow_height_fade;if(t>=1.0f)return false;
+        height_fade=1.0f-t*t*(3.0f-2.0f*t);
+    }
+    out->opacity=f->shadow_opacity*height_fade;
+    out->softness=f->shadow_softness;
+    out->foot_ratio=f->foot_ao?f->foot_ao_radius:0.0f;
+    out->foot_strength=f->foot_ao?f->foot_ao_strength:0.0f;
+    out->span=span;
+    float fr=0.02f,fg=0.02f,fb=0.025f;
+    if(f->local_floor_tint){
+        float cr=(s->floor_color&255)/255.0f,cg=((s->floor_color>>8)&255)/255.0f,cb=((s->floor_color>>16)&255)/255.0f;
+        float level=1.0f,ar=1.0f,ag=1.0f,ab=1.0f;
+        if(w->world.lighting.enabled&&w->world.span_lights){const R2DWorldSpanLight *l=&w->world.span_lights[span];level=l->level;ar=l->r;ag=l->g;ab=l->b;}
+        cr*=level*ar;cg*=level*ag;cb*=level*ab;
+        float mix=f->floor_tint_mix;
+        fr=fr+(cr-fr)*mix;fg=fg+(cg-fg)*mix;fb=fb+(cb-fb)*mix;
+    }
+    out->tint_r=cr_clamp01(fr);out->tint_g=cr_clamp01(fg);out->tint_b=cr_clamp01(fb);
+    return out->opacity>0.0f;
+}
+static void render_ground_cpu(R2DWorldRuntime *w,const R2DRe2dView *v,int width,int height,float ortho)
+{
+    const R2DWorldRenderFeatures *f=&w->render_features;
+    if(!f->grounding||!f->contact_shadow||!w->rgba)return;
+    int budget=f->quality<=R2D_RENDER_QUALITY_LOW?128:512;
+    int drawn=0;
+    for(int i=0;i<w->frame_count&&drawn<budget;i++){
+        R2DWorldGroundCard card;
+        if(!r2d_world_render_ground_card(w,v,width,height,ortho,i,&card))continue;
+        int x0=(int)fmaxf(0,floorf(card.center_x-card.radius_x-1)),x1=(int)fminf(width,ceilf(card.center_x+card.radius_x+1));
+        int y0=(int)fmaxf(0,floorf(card.center_y-card.radius_y-1)),y1=(int)fminf(height,ceilf(card.center_y+card.radius_y+1));
+        if(x1<=x0||y1<=y0)continue;
+        int wrote=0;
+        float dark_r=0.02f,dark_g=0.02f,dark_b=0.025f;
+        float src_r=dark_r+(card.tint_r-dark_r)*0.25f;
+        float src_g=dark_g+(card.tint_g-dark_g)*0.25f;
+        float src_b=dark_b+(card.tint_b-dark_b)*0.25f;
+        for(int py=y0;py<y1;py++)for(int px=x0;px<x1;px++){
+            float dx=(px+.5f-card.center_x)/card.radius_x,dy=(py+.5f-card.center_y)/card.radius_y;
+            float d=sqrtf(dx*dx+dy*dy);
+            if(d>=1.0f)continue;
+            float radial=1.0f;
+            if(d>1.0f-card.softness){
+                float t=(1.0f-d)/card.softness;t=t>1?1:t<0?0:t;
+                radial=t*t*(3.0f-2.0f*t);
+            }
+            float alpha=card.opacity*radial;
+            float core=0.0f;
+            if(card.foot_ratio>0.0f){
+                float q=d/card.foot_ratio;
+                core=(1.0f-(q>=1.0f?1.0f:q*q*(3.0f-2.0f*q)))*card.foot_strength;
+                alpha=fminf(1.0f,alpha+core*0.25f);
+            }
+            if(alpha<=0.001f)continue;
+            uint8_t *dst=w->rgba+((size_t)py*width+px)*4;
+            float inv=1.0f-alpha;
+            dst[0]=(uint8_t)lrintf(dst[0]*inv+src_r*255.0f*alpha);
+            dst[1]=(uint8_t)lrintf(dst[1]*inv+src_g*255.0f*alpha);
+            dst[2]=(uint8_t)lrintf(dst[2]*inv+src_b*255.0f*alpha);
+            dst[3]=255;
+            wrote=1;
+        }
+        if(wrote){
+            drawn++;
+            w->render_counters.grounded_actors++;
+            w->render_counters.contact_shadows++;
+            w->render_counters.ground_draws++;
+            if(f->foot_ao)w->render_counters.foot_ao++;
+            if(f->local_floor_tint)w->render_counters.floor_tint++;
+            if(f->contact_lighting)w->render_counters.contact_lit++;
+        }
+    }
+}
+
 int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,int width,int height,float ortho)
 {
     if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: reentrant rendering");return -1;}
+    if(!w->render_features_ready)r2d_world_render_init(w);
     if(!w->frame_handles) {
         JSValue *handles=calloc(ACTOR_LIMIT,sizeof *handles);float *positions=malloc(ACTOR_LIMIT*5*sizeof(float));
         const uint8_t **images=calloc(ACTOR_LIMIT,sizeof *images);int *sizes=calloc(ACTOR_LIMIT,sizeof *sizes);
@@ -182,8 +415,18 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     }
     if(w->frame_tints)for(int i=0;i<ACTOR_LIMIT;i++){w->frame_tints[i*4]=w->frame_tints[i*4+1]=w->frame_tints[i*4+2]=w->frame_tints[i*4+3]=1.0f;}
     r2d_world_audio_step(w,view);
+    if(r2d_world_regions_ensure(w)){
+        int at=r2d_world_region_at(&w->regions,view->x,view->y);
+        if(at<0)at=0;
+        w->region_current=at;
+        w->region_active_count=r2d_world_region_update_active(&w->regions,at,1,2,
+            w->region_states,w->regions.region_count,w->region_active,w->regions.region_count,
+            w->region_preload,w->regions.region_count);
+        w->region_preload_count=w->regions.metrics.preload_count;
+        r2d_world_region_stream(&w->regions,w->region_states,w->regions.region_count,2);
+    }
     Uint64 frame_start=SDL_GetPerformanceCounter(),phase=frame_start;double ms=1000.0/SDL_GetPerformanceFrequency();
-    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->visible_atlas_count=0;w->particles_drawn=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;int result=-1;
+    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->visible_atlas_count=0;w->particles_drawn=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;r2d_world_render_counters_reset(&w->render_counters);int result=-1;
     for(int i=0;i<w->actor_count;i++)if(!collect(ctx,w,view,w->actors[i],0,false,0,0))goto done;
     if(w->disposed){JS_ThrowTypeError(ctx,"Re2D World: world disposed during actor query");goto done;}
     if(width!=w->width||height!=w->height||!w->owners) {
@@ -220,7 +463,7 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     w->pose_cursor=next_cursor;
     w->actor_ms=(SDL_GetPerformanceCounter()-phase)*ms;phase=SDL_GetPerformanceCounter();
     if(w->gpu_enabled||w->debug_view==R2D_WORLD_DEBUG_OVERDRAW){if(!r2d_world_gpu_frame(ctx,w,view,ortho)){r2d_world_gpu_free(w);JS_ThrowInternalError(ctx,"Re2D World GPU: %s",SDL_GetError());goto done;}}
-    else r2d_world_frame_targets(&w->world,view,width,height,w->rgba,w->depth,ortho,&w->visibility,w->owners);
+    else {r2d_world_frame_targets(&w->world,view,width,height,w->rgba,w->depth,ortho,&w->visibility,w->owners);render_ground_cpu(w,view,width,height,ortho);}
     w->surface_ms=(SDL_GetPerformanceCounter()-phase)*ms;phase=SDL_GetPerformanceCounter();
     if(!w->gpu_enabled&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)for(int i=0;i<w->frame_count;i++){const float *p=w->frame_positions+i*5;
         if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS){r2d_world_stamp_samples_ex(&w->world,view,width,height,w->rgba,w->depth,w->frame_images[i],NULL,w->frame_sizes[i],p[0],p[1],p[2],p[3],p[4],ortho,w->owners,i,w->frame_blends[i]);continue;}

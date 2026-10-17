@@ -1,0 +1,15 @@
+{
+ "cards": [
+  {
+   "kind": "flash",
+   "life": 0.25,
+   "size": 40,
+   "endSize": 120,
+   "alpha": 0.18,
+   "endAlpha": 0,
+   "color": "#ffb080",
+   "blend": "additive",
+   "distortion": "heat"
+  }
+ ]
+}

@@ -1,0 +1,16 @@
+{
+ "particles": [
+  {
+   "count": 2,
+   "life": 2.0,
+   "size": 2,
+   "color": "#80c0e0",
+   "alpha": 0.6,
+   "blend": "translucent",
+   "mode": "billboard",
+   "vh": -10,
+   "gravity": 300,
+   "collision": "despawn"
+  }
+ ]
+}

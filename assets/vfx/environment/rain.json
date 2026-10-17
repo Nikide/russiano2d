@@ -1,0 +1,17 @@
+{
+ "particles": [
+  {
+   "count": 10,
+   "life": 1.2,
+   "size": 1,
+   "color": "#a0c0e0",
+   "alpha": 0.35,
+   "blend": "additive",
+   "mode": "floor",
+   "vx": 10,
+   "vy": -20,
+   "vh": -260,
+   "collision": "despawn"
+  }
+ ]
+}

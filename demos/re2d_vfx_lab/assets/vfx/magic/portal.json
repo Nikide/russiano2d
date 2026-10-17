@@ -1,0 +1,36 @@
+{
+ "cards": [
+  {
+   "kind": "ring",
+   "life": 1.4,
+   "size": 20,
+   "endSize": 90,
+   "alpha": 0.9,
+   "endAlpha": 0,
+   "color": "#b080ff",
+   "blend": "additive",
+   "mode": "billboard",
+   "distortion": "magic"
+  }
+ ],
+ "particles": [
+  {
+   "count": 10,
+   "life": 1.0,
+   "size": 3,
+   "endSize": 0,
+   "color": "#d0b0ff",
+   "blend": "additive",
+   "mode": "billboard",
+   "speed": 50,
+   "spread": 40
+  }
+ ],
+ "light": {
+  "radius": 180,
+  "intensity": 2,
+  "color": "#b080ff",
+  "life": 0.4,
+  "priority": 4
+ }
+}

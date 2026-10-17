@@ -89,6 +89,29 @@ enum {
     R2D_PARTICLE_ADDITIVE   = 2
 };
 
+// P1 VFX collision modes. NONE keeps the original free-flight step; FLOOR
+// clamps h to the support; WALL rejects a blocked XY step; BOUNCE reflects the
+// blocked axis with `bounce` restitution and bounces on the floor; DESPAWN
+// deactivates the particle on the first contact. All modes are point-based
+// (particles are constrained 2.5D points, not rigid bodies).
+enum {
+    R2D_PARTICLE_COLLIDE_NONE = 0,
+    R2D_PARTICLE_COLLIDE_FLOOR = 1,
+    R2D_PARTICLE_COLLIDE_WALL = 2,
+    R2D_PARTICLE_COLLIDE_BOUNCE = 3,
+    R2D_PARTICLE_COLLIDE_DESPAWN = 4
+};
+
+// Caller-provided world queries. Both callbacks return false when the query is
+// unavailable at that point. `support` fills the floor/ceiling heights at XY;
+// `blocked` answers a vertical cylinder overlap. This keeps the particle pool
+// free of world/runtime dependencies (offline tests pass their own functions).
+typedef struct R2DWorldParticleCollision {
+    bool (*support)(void *user,float x,float y,float h,float *floor,float *ceiling);
+    bool (*blocked)(void *user,float x,float y,float radius,float bottom,float top);
+    void *user;
+} R2DWorldParticleCollision;
+
 typedef struct {
     // Position: x,y in the map plane, h is the separate height axis.
     float x, y, h;
@@ -108,6 +131,10 @@ typedef struct {
     float r, g, b, alpha;
     bool active;      // pool-owned: false once expired/cleared
     bool world_space; // renderer hint only
+    // P1 VFX collision (prototype fields copied by the emitter; 0 = NONE).
+    int collision;    // R2D_PARTICLE_COLLIDE_*
+    float bounce;     // restitution 0..1, BOUNCE mode
+    float radius;     // wall probe radius, WALL/BOUNCE/DESPAWN modes
 } R2DWorldParticle;
 
 typedef struct {
@@ -145,8 +172,14 @@ int r2d_world_particle_emit_continuous(R2DWorldParticlePool *pool,
                                        float *accumulator);
 
 // Integrate and compact the pool. dt is clamped to 0..0.25; non-finite dt is
-// ignored. NULL is a no-op.
+// ignored. NULL is a no-op. This is the NONE-collision entry point.
 void r2d_world_particle_step(R2DWorldParticlePool *pool, float dt);
+
+// Same as r2d_world_particle_step, plus optional world collision queries for
+// particles whose prototype has a collision mode. NULL collision = NONE for
+// every particle. No allocation, no globals; deterministic for fixed input.
+void r2d_world_particle_step_collide(R2DWorldParticlePool *pool, float dt,
+                                     const R2DWorldParticleCollision *collision);
 
 // Number of active particles; NULL returns 0.
 int r2d_world_particle_alive(const R2DWorldParticlePool *pool);

@@ -101,3 +101,47 @@ spans (`O(walls × spans)`), и это был единственный супе�
 clip rect: surface/actor/decal draws с нулевым scissor больше не отправляются
 (важно для mirror-прохода). Причина высокого `frameMs` в отчёте BASHNYA
 подтверждена как CPU incidence scan, а не число draw call'ов.
+
+## R-01/R-02 visual pass (2026-10-17)
+
+Workload: `demos/re2d_world_renderer_lab`, GPU reference, 1280×720 output
+(400×240 world frame), 30 warm frames, `world.profile({gpuWait:true})`.
+Current working tree, macOS arm64 / Metal, RelWithDebInfo. Numbers are a single
+run and vary with machine load; they prove the pass does not add geometry.
+
+| Tier | draws | frameMs median | frameMs p95 | changed pixels vs low |
+|---|---:|---:|---:|---:|
+| low (legacy + grounding) | 26 | 12.33 | 12.63 | — |
+| high (all R-01/R-02) | 26 | 12.33 | 12.59 | 32.33% |
+
+Visual features are shader uniforms/instructions only: no extra draw calls, and
+the frame is dominated by the existing actor readback/composition on this lab.
+Per-feature counters are in `world.info().visual` (contactShadows, footAo,
+edgeActors, variedSurfaces, bevelSurfaces, fogSurfaces, hazeSurfaces,
+liquidSurfaces, skyLayers, celestialDiscs, ...).
+
+VFX pass (`tests/agent/re2d_render_vfx_pass_test.py`, same lab): one live card
+adds `gpuDrawsVfx=1`; a live boss aura trail adds 3 trail segment draws
+(`vfxTrailDraws=3`). Attribution stayed exact:
+`Base+Span+Actor+Other+Ground+Vfx == gpuDraws` (50 == 50 in the trail run).
+VFX draw submission is therefore bounded by live cards/trail segments, not by
+registered bundle count.
+
+`demos/re2d_bench_lab` current run (same build, GPU wait):
+
+| Scenario | draws | frameMs |
+|---|---:|---:|
+| base | 24 | 0.88 |
+| actors_100 | 263 | 1.64 |
+| lights_32 | 24 | 1.31 |
+| particles_2000 | 1048 | 3.57 |
+| portals (dust2) | 88 | 0.62 |
+| movers (dust2) | 143 | 0.77 |
+| worstcase | 1287 | 4.91 |
+
+BASHNYA level1 before/after could not be measured in this working tree: the
+current in-flight world/region task makes the native map loader reject the
+BASHNYA `.re2dworld` with `invalid wall/span geometry (-1)`, and the scripted
+intro chain does not reach `level1` through the agent. Re-run the numbers above
+plus the BASHNYA script after that integration lands; do not read the lab table
+as a BASHNYA budget.

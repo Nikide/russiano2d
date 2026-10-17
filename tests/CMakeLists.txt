@@ -312,6 +312,34 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_world_particle_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# Native VFX library (R-03): FX bundles, cards, trails, light budget, collision.
+add_executable(r2d_world_vfx_test re2d/vfx_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_vfx.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_particle.c"
+    "${CMAKE_SOURCE_DIR}/src/json.c")
+target_include_directories(r2d_world_vfx_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_vfx_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_vfx_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_vfx_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_vfx_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Renderer visual feature model (R-01/R-02): grounding/fog/edges/sky math.
+add_executable(r2d_world_render_features_test re2d/render_features_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_render_features.c")
+target_include_directories(r2d_world_render_features_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_render_features_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_render_features_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_render_features_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_render_features_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # 2D cell/portal navigation (P1): graph build + deterministic A*.
 add_executable(r2d_world_nav_test re2d/nav_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_nav.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
@@ -424,6 +452,51 @@ endif()
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_world_polygon_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_world_polygon_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Region grid / streaming / coarse PVS (R-04): pure data module.
+add_executable(r2d_world_region_test re2d/region_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_region.c")
+target_include_directories(r2d_world_region_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_region_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_region_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_region_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_region_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Hammer-like brush authoring (#5): tool materials, solid subtraction, portals.
+add_executable(r2d_sdk_brush_test re2d/brush_test.c
+    "${CMAKE_SOURCE_DIR}/sdk/native/sdk_brush.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_polygon.c")
+target_include_directories(r2d_sdk_brush_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/sdk/native")
+target_link_libraries(r2d_sdk_brush_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_sdk_brush_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_sdk_brush_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_sdk_brush_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Wall tool/sky policy + baked RDW5 roundtrip (#6).
+add_executable(r2d_world_tools_test re2d/world_tools_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c" "${CMAKE_SOURCE_DIR}/src/json.c"
+    "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_world_tools_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_tools_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_tools_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_tools_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_tools_test PRIVATE -fsanitize=address,undefined)
 endif()
 
 # Final-frame postprocess descriptors (P2): profiles, decay, uniform eval.

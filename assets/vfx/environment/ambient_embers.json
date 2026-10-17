@@ -1,0 +1,23 @@
+{
+ "particles": [
+  {
+   "count": 3,
+   "life": 3.0,
+   "size": 2,
+   "color": "#ff9040",
+   "blend": "additive",
+   "mode": "billboard",
+   "vx": 3,
+   "vy": -2,
+   "vh": 8,
+   "drag": 0.2
+  }
+ ],
+ "light": {
+  "radius": 60,
+  "intensity": 0.3,
+  "color": "#ff9040",
+  "life": 3.0,
+  "priority": 0
+ }
+}
