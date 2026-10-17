@@ -207,7 +207,7 @@ export function makeLevel(spec) {
             $.hits.play(hero, { preset: 'hit', shake: 0 });
         } else if ($.time && typeof $.time.hitStop === 'function') {
             $.time.hitStop(70);
-            $.fx.flash('#ff3b30', { ms: 90, alpha: 0.22 });
+            $.vfx.flash('#ff3b30', { ms: 90, alpha: 0.22 });
         }
     }
 
@@ -315,7 +315,7 @@ export function makeLevel(spec) {
             state.checkpoint = { x: p.x, y: p.y };
             state.checkpointTaken = true;
             $.sound.play('assets/audio/sfx/pickup_01.ogg', { volume: 0.7 });
-            $.fx.pulse(p.x, p.y, { radius: 40, ms: 260, color: '#63d6a0' });
+            $.vfx.pulse(p.x, p.y, { radius: 40, ms: 260, color: '#63d6a0' });
         });
 
         // Проверка падения в яму: уровень строится так, что провал = смерть.

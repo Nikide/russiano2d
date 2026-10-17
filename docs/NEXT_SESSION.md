@@ -62,8 +62,9 @@ QuickJS-ng v0.10.1, RmlUi 6.3, FreeType, Steam Audio), публичное API �
 
 - **task-65 (смена сцены)**: `$.scene.change/state/cancel/loading/prepare+promote`,
   склейка рапидных запросов, события `scene:*`, экран загрузки с реальным
-  прогрессом и своим RML, переходы `wipe`/`checker`/`shader`, сброс света
-  (A3, дефект I14), отмена. `tests/agent/scene_change_test.py` — 70 проверок;
+  прогрессом и своим RML (theme — честный отказ `R2D_SCENE_LOADING_THEME`),
+  переходы `wipe`/`checker`/`shader`, сброс света (A3, дефект I14), отмена.
+  `tests/agent/scene_change_test.py` — 71 проверка;
   попутно исправлен `dispatchGlobal` (`any(null)` рвал кадр и съедал
   `scene:after-change`).
 - **task-66 (свет)**: `$.gfx.light.budget` (45 → 32 полных + 13 LOD,
@@ -77,7 +78,9 @@ QuickJS-ng v0.10.1, RmlUi 6.3, FreeType, Steam Audio), публичное API �
   (5), 22 эффекта, 16 примитивов, M5 `clip.<имя>`; M4 (DevTools-предпросмотр)
   не сделан. mapping 23 + registry 30 + validation 35 + determinism 21.
 - **task-56 (UI/анимация)**: `engine.ui.off`/`doc.off`, возврат слотов,
-  ключ «пара+обработчик», `R2D_UI_LISTENER_LIMIT` — `ui_off_test` 37;
+  ключ «пара+обработчик», `R2D_UI_LISTENER_LIMIT`; `engine.ui.on` отдаёт id,
+  `doc.on` остаётся цепочкой (возврат числа ломал демо) — `ui_off_test` 37;
+  демо и игры переведены с `$.fx.*` на `$.vfx.*` (54 вызова, 9 файлов);
   `$.anim.crossfade`/`blendInfo` — `anim_blend_test` 35.
 - **Д1**: гейт `tests/api_wrapper_methods_test.py` (35 методов обёрток).
 - **Д3**: `tools/release.py --check-junk` + чистка в `build_and_push.sh` ДО

@@ -117,7 +117,8 @@ doc.on('assets', 'click', (id, ev, key) => select(key));   // key === 'a.png'
 
 ```js
 const menu = $.ui.doc('ui/menu.rml');
-const id = menu.on('btn-play', 'click', onPlay);   // id слота, а не обёртка
+menu.on('btn-play', 'click', onPlay);               // возвращает сам документ (цепочка)
+const id = engine.ui.on(docId, 'btn-play', 'click', onPlay);   // id слота — у engine.ui.on
 menu.on('btn-play', 'click', onHover);             // второй обработчик ТОЙ ЖЕ пары — работает
 menu.on('btn-play', 'click', onPlay);              // тот же обработчик — без дубликата, одно сообщение
 
@@ -125,11 +126,14 @@ menu.off('btn-play', 'click', onPlay);   // 1 — снят один, onHover о�
 menu.off('btn-play', 'click');           // 1 — сняты все обработчики пары
 ```
 
-* `doc.on(element, event, fn)` возвращает **id слота** пула (`engine.ui.on` —
-  то же число). Раньше возвращалась обёртка документа; это изменение
-  поведения, в CHANGELOG.
+* `doc.on(element, event, fn)` возвращает **сам документ**: цепочка
+  `doc.on(...).on(...)` работает (так пишут демо и игры). Id слота отдаёт
+  `engine.ui.on(doc, element, event, fn)` — носитель id объявлен там, а не в
+  обёртке. Это сохранено осознанно: смена возврата `doc.on` на число ломала
+  существующий код (нашлось полным прогоном: `demos_test`,
+  `highlevel_rotsprite_test`, `game_test`).
 * Ключ идемпотентности — **пара+обработчик**: `document+element+event+fn`.
-  Повторный `on` с той же функцией возвращает прежний id и пишет ОДНО
+  Повторный `on` с той же функцией не заводит второй слушатель и пишет ОДНО
   предупреждение (дедупликация — на пару), второй РАЗНЫЙ обработчик той же
   пары получает свой слот и вызывается вместе с первым.
 * `doc.off(element, event[, fn])` и `engine.ui.off(doc, element, event[, fn])`

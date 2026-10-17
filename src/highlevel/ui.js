@@ -826,6 +826,15 @@ function makeDoc(id, path) {
          * предупреждение), а ВТОРОЙ РАЗНЫЙ обработчик той же пары получает
          * свой слот и работает. Ключ — документ+элемент+событие+функция.
          */
+        /**
+         * Подписка на событие элемента документа.
+         *
+         * Возвращает САМ документ — цепочка `doc.on(...).on(...)` работает (так
+         * пишут демо и игры). Id слота, если он нужен, отдаёт
+         * `engine.ui.on(doc, element, event, fn)` — именно он, а не обёртка,
+         * объявлен носителем id (task-56). Снятие — `doc.off(element, event
+         * [, fn])` или `engine.ui.off(...)`.
+         */
         on(element, event, fn) {
             if (typeof fn !== 'function') {
                 throw new TypeError(`$: doc.on("${element}", "${event}") в "${path}" `
@@ -845,15 +854,15 @@ function makeDoc(id, path) {
                     ctx.log(`$: "${element}" уже слушает "${event}" в "${path}" — `
                         + 'повторная подписка тем же обработчиком пропущена');
                 }
-                return live ? slot : previous.id;
+                return this;
             }
             if (live || mocked) {
                 entries.push({ element, event, fn, id: live ? slot : -1 });
-                return live ? slot : -1;
+                return this;
             }
             ctx.log(`$: не удалось подписать "${element}" на "${event}" в "${path}" — `
                 + 'элемента нет или все слоты обработчиков заняты');
-            return -1;
+            return this;
         },
 
         /**

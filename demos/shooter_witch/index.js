@@ -634,7 +634,7 @@ export default function installWitchShooter($) {
         const rgb = hexRgb(def.color);
         // Лента поверх сцены: спрайт уходит под героя, а лента светится
         // аддитивно и видна в любом случае.
-        $.fx.ribbon([muzzle, stop], { ms: def.arc ? 150 : 110, width: def.tracer,
+        $.vfx.ribbon([muzzle, stop], { ms: def.arc ? 150 : 110, width: def.tracer,
                                       color: def.color, blend: 'add' });
         s.tracers.push({
             x: muzzle.x, y: muzzle.y, angle,
@@ -644,10 +644,10 @@ export default function installWitchShooter($) {
         });
         if (s.tracers.length > 40) s.tracers.shift();
         if (def.arc) {
-            $.fx.lightning([from.x, from.y], [stop.x, stop.y],
+            $.vfx.lightning([from.x, from.y], [stop.x, stop.y],
                            { life: 130, jitter: 12, color: def.color, branches: 2 });
         }
-        $.fx.pulse(muzzle.x, muzzle.y, { radius: def.id === 'shotgun' ? 38 : 26, ms: 90, color: '#ffd9a0' });
+        $.vfx.pulse(muzzle.x, muzzle.y, { radius: def.id === 'shotgun' ? 38 : 26, ms: 90, color: '#ffd9a0' });
 
         const hits = [];
         for (const z of s.zombies) {
@@ -667,7 +667,7 @@ export default function installWitchShooter($) {
         }
         if (hits.length) {
             const hp = hits[0].z.node.pos();
-            $.fx.shockwave(hp.x, hp.y, { radius: 34, ms: 160, color: def.color, width: 4 });
+            $.vfx.shockwave(hp.x, hp.y, { radius: 34, ms: 160, color: def.color, width: 4 });
         }
 
         $.sound.playAt(def.sfx, [from.x, from.y], { volume: 0.5, pitch: def.pitch, max: 900 });
@@ -739,7 +739,7 @@ export default function installWitchShooter($) {
                     damageFrame(s);
                     $.sound.playAt(SFX + 'hurt_01.ogg', p, { volume: 0.55, pitch: 1.0, max: 600 });
                     $.camera.shake(5, 140);
-                    $.fx.shockwave(hero.x, hero.y, { radius: 60, ms: 200, color: '#ff4d6a', width: 4 });
+                    $.vfx.shockwave(hero.x, hero.y, { radius: 60, ms: 200, color: '#ff4d6a', width: 4 });
                     if (s.hero.hp() <= 0) { gameOver(s); return; }
                 }
             }
@@ -776,8 +776,8 @@ export default function installWitchShooter($) {
             addDecal(s, p.x + (Math.random() - 0.5) * 60, p.y + (Math.random() - 0.5) * 60,
                      10 + Math.random() * 16, '#4a0a16');
         }
-        $.fx.shockwave(p.x, p.y, { radius: 70, ms: 260, color: '#ff6a7a', width: 5 });
-        $.fx.hitStop(0.05);
+        $.vfx.shockwave(p.x, p.y, { radius: 70, ms: 260, color: '#ff6a7a', width: 5 });
+        $.vfx.hitStop(0.05);
         $.camera.shake(3.5, 120);
         $.sound.playAt(SFX + 'enemy_die.ogg', p, { volume: 0.5, pitch: 0.95, max: 800 });
         dropGem(s, p.x, p.y, 1 + Math.floor(s.run / 45));
@@ -891,7 +891,7 @@ export default function installWitchShooter($) {
                 m.node.remove();
                 s.medkits.splice(i, 1);
                 $.sound.play(SFX + 'pickup_01.ogg', { volume: 0.5, pitch: 0.9 });
-                $.fx.pulse(p.x, p.y, { radius: 40, ms: 200, color: '#ff8fa3' });
+                $.vfx.pulse(p.x, p.y, { radius: 40, ms: 200, color: '#ff8fa3' });
             }
         }
     }
@@ -1057,7 +1057,7 @@ export default function installWitchShooter($) {
         $.world.thaw();
         $.sound.play(SFX + 'ui_click.ogg', { volume: 0.6, pitch: 1.1 });
         const p = s.hero.pos();
-        $.fx.pulse(p.x, p.y, { radius: 90, ms: 320, color: '#8fd8ff' });
+        $.vfx.pulse(p.x, p.y, { radius: 90, ms: 320, color: '#8fd8ff' });
     }
 
     function gameOver(s) {

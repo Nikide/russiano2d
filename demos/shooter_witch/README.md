@@ -27,7 +27,7 @@
 | деревья | спрайты с коллизиями и подсказками для акустики | `buildForest()` |
 | свет | `<light>` (мягкое свечение) + `engine.light.visibility` для теней от стволов | `buildLights()`, `drawVisibility()` |
 | звук | `$.audio.zone/obstacles/damping`, реверберация поляны, панорама выстрелов | `installAudio()` |
-| VFX | кровь, лужи, трассеры (`$.fx.ribbon`), молнии, ударные волны, hit-stop, тряска | `tickGore()`, `$.fx.*` |
+| VFX | кровь, лужи, трассеры (`$.vfx.ribbon`), молнии, ударные волны, hit-stop, тряска | `tickGore()`, `$.vfx.*` |
 | камера | пресеты кадра: «ночной лес», «кровавая луна» | `tickPresets()`, `$.gfx.postPreset` |
 | апгрейды | пауза + три карты, выбранное меняет оружие и статы | `openUpgrade()`, `tickWeapons()` |
 | меню и смерть | отдельные сцены `witch_menu` и экран проигрыша | `createMenuScene()` |

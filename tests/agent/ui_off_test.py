@@ -7,10 +7,12 @@
 #   * слоты пула 256 не возвращались: после 256 подписок за рантайм — отказ;
 #   * второй РАЗНЫЙ обработчик на ту же пару элемент+событие молча
 #     выбрасывался (dedup по паре, а не по паре+обработчик);
-#   * doc.on возвращал обёртку, а не id слота.
+#   * doc.on возвращал обёртку, а не id слота; слоты не возвращались.
 #
 # Проверяется на живом движке (клики — engine.ui.click/doc.click, как мышь):
-#   * engine.ui.on/doc.on возвращают id; второй обработчик той же пары живёт;
+#   * engine.ui.on возвращает id; doc.on остаётся ЦЕПОЧКОЙ (возвращает документ —
+#     так пишут демо и игры; смена возврата на число ломала демо, см. ниже);
+#     второй обработчик той же пары живёт;
 #   * повторная подписка тем же обработчиком не дублируется (одно сообщение);
 #   * off по обработчику и off по паре возвращают число снятых;
 #   * снятие убирает и слушателя RmlUi: освобождённый слот достаётся новому
@@ -62,28 +64,33 @@ def main():
         check(a.eval("typeof engine.ui.off") == "function",
               "engine.ui.off объявлен (до правки — undefined)")
 
-        first = js(a, "globalThis.__nA=0; globalThis.__hA=()=>{__nA++;};"
-                      "globalThis.__idA=%s.on('btn-a','click',__hA); __idA" % DOC)
+        chain = js(a, "globalThis.__nA=0; globalThis.__hA=()=>{__nA++;};"
+                      "(%s.on('btn-a','click',__hA) === %s)" % (DOC, DOC))
+        check(chain is True,
+              "doc.on возвращает документ — цепочка doc.on(...).on(...) работает (%r)"
+              % (chain,))
+
+        first = js(a, "engine.ui.on(%d,'btn-a','click',__hA)" % doc)
         check(isinstance(first, int) and first >= 0,
-              "doc.on возвращает id слота (%r)" % (first,))
+              "engine.ui.on возвращает id слота (%r)" % (first,))
 
         # --- 2. Второй РАЗНЫЙ обработчик той же пары работает ----------------
-        second = js(a, "globalThis.__nB=0; globalThis.__hB=()=>{__nB++;};"
-                       "globalThis.__idB=%s.on('btn-a','click',__hB); __idB" % DOC)
-        check(isinstance(second, int) and second >= 0 and second != first,
-              "второй разный обработчик получил свой id (%r)" % (second,))
+        # (doc.on цепочкой — оба обработчика одной пары)
+        js(a, "globalThis.__nB=0; globalThis.__hB=()=>{__nB++;};"
+              "%s.on('btn-a','click',__hB)" % DOC)
         hits = js(a, "%s.click('btn-a'); [__nA, __nB]" % DOC)
         check(hits == [1, 1],
               "клик вызывает ОБА обработчика одной пары (до правки — только первый): %r"
               % (hits,))
 
         # --- 3. Повторная подписка тем же обработчиком не дублируется --------
-        again = js(a, "globalThis.__idA2=%s.on('btn-a','click',__hA);"
-                      "[__idA2, %s.listeners().length]" % (DOC, DOC))
-        check(isinstance(again, list) and again[0] == first,
-              "повторная подписка вернула тот же id (%r)" % (again,))
-        check(isinstance(again, list) and again[1] == 2,
-              "дубликата в реестре нет: на паре два РАЗНЫХ слушателя")
+        again = js(a, "%s.on('btn-a','click',__hA); %s.listeners().length"
+                      % (DOC, DOC))
+        check(again == 2,
+              "повторная подписка не добавила запись: на паре два РАЗНЫХ (%r)" % (again,))
+        dup_id = js(a, "engine.ui.on(%d,'btn-a','click',__hA)" % doc)
+        check(dup_id == first,
+              "engine.ui.on с тем же обработчиком вернул прежний id (%r)" % (dup_id,))
         hits = js(a, "%s.click('btn-a'); [__nA, __nB]" % DOC)
         check(hits == [2, 2], "повторный клик не вызвал обработчик дважды: %r" % (hits,))
 
@@ -100,11 +107,11 @@ def main():
 
         # --- 5. Клик не доходит до удалённой функции (RmlUi-слушатель снят) ---
         js(a, "globalThis.__nOld=0; globalThis.__hOld=()=>{__nOld++;};"
-              "globalThis.__idOld=%s.on('btn-a','click',__hOld);"
-              "%s.off('btn-a','click',__hOld)" % (DOC, DOC))
+              "globalThis.__idOld=engine.ui.on(%d,'btn-a','click',__hOld);"
+              "engine.ui.off(%d,'btn-a','click',__hOld)" % (doc, doc))
         swap = js(a, "globalThis.__nGhost=0; globalThis.__hGhost=()=>{__nGhost++;};"
-                     "globalThis.__idGhost=%s.on('btn-b','click',__hGhost);"
-                     "[__idOld, __idGhost]" % DOC)
+                     "globalThis.__idGhost=engine.ui.on(%d,'btn-b','click',__hGhost);"
+                     "[__idOld, __idGhost]" % doc)
         check(isinstance(swap, list) and swap[0] == swap[1],
               "освобождённый слот переиспользован (%r)" % (swap,))
         hits = js(a, "%s.click('btn-a'); [__nOld, __nGhost]" % DOC)
@@ -140,10 +147,10 @@ def main():
         baseline = js(a, "$.debug.limits().ui_callbacks")
         cycles = js(a, "(function(){let bad=0, offbad=0, thrown=null;"
                       "try{for(let i=0;i<300;i++){const fn=()=>{};"
-                      "const id=%s.on('btn-a','click',fn); if(!(id>=0))bad++;"
-                      "const n=%s.off('btn-a','click',fn); if(n!==1)offbad++;}"
+                      "const id=engine.ui.on(%d,'btn-a','click',fn); if(!(id>=0))bad++;"
+                      "const n=engine.ui.off(%d,'btn-a','click',fn); if(n!==1)offbad++;}"
                       "}catch(e){thrown=String(e&&e.message?e.message:e);}"
-                      "return {bad, offbad, thrown};})()" % (DOC, DOC))
+                      "return {bad, offbad, thrown};})()" % (doc, doc))
         check(isinstance(cycles, dict) and cycles.get("thrown") is None,
               "300 циклов подписка→снятие без исключений (до правки off нет) %r"
               % (cycles,))
@@ -160,10 +167,10 @@ def main():
         live = js(a, "(function(){globalThis.__live=[]; globalThis.__liveIds=[];"
                      "globalThis.__liveHits=0; let thrown=null;"
                      "try{for(let i=0;i<256;i++){const fn=()=>{__liveHits++;};"
-                     "__live.push(fn); const id=%s.on('btn-a','click',fn);"
+                     "__live.push(fn); const id=engine.ui.on(%d,'btn-a','click',fn);"
                      "if(!(id>=0))break; __liveIds.push(id);}}"
                      "catch(e){thrown=String(e&&e.message?e.message:e);}"
-                     "return {ids: __liveIds.length, thrown};})()" % DOC)
+                     "return {ids: __liveIds.length, thrown};})()" % doc)
         check(isinstance(live, dict) and live.get("ids") == 256,
               "256 одновременных подписок влезают (%r)" % (live,))
         limits = js(a, "$.debug.limits()")
@@ -181,15 +188,16 @@ def main():
         check(isinstance(overflow, str) and "256" in overflow and "из" in overflow,
               "в ошибке переполнения есть числа (256 из 256)")
         dropped = js(a, "(function(){let n=0; for(const fn of __live){"
-                        "n += %s.off('btn-a','click',fn);} __live=[]; return n;})()" % DOC)
+                        "n += engine.ui.off(%d,'btn-a','click',fn);} __live=[]; return n;})()" % doc)
         check(dropped == 256, "256 снятий вернули 256 (%r)" % (dropped,))
         limits = js(a, "$.debug.limits()")
         check(isinstance(limits, dict) and limits.get("ui_callbacks") == 0,
               "после снятия всех пул снова пуст (%r)"
               % (limits.get("ui_callbacks") if isinstance(limits, dict) else limits,))
         refill = js(a, "globalThis.__again=()=>{};"
-                       "globalThis.__againId=%s.on('btn-a','click',__again);"
-                       "[__againId, %s.listeners().length]" % (DOC, DOC))
+                       "globalThis.__againId=engine.ui.on(%d,'btn-a','click',__again);"
+                       "%s.on('btn-a','click',__again);"
+                       "[__againId, %s.listeners().length]" % (doc, DOC, DOC))
         check(isinstance(refill, list) and isinstance(refill[0], int) and refill[0] >= 0,
               "после 256 снятий подписка снова влезает (%r)" % (refill,))
         js(a, "%s.off('btn-a','click',__again)" % DOC)
