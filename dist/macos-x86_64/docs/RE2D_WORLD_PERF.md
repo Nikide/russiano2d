@@ -52,3 +52,25 @@ GPU timing fields — CPU wall/cache construction/submission/fence wait, не ha
 ## Что пока не подтверждено
 
 Hosted Linux/Vulkan run, fresh Web/WASM build, arbitrary animated50 actor60FPS и другие hardware/resolutions не подтверждены этим benchmark. CPU/GPU parity и local correctness checks не заменяют platform performance measurements. Диагностика и полный profiler snapshot — в [runtime reference](re2d/RE2D_WORLD_RUNTIME.md#диагностика-и-полный-profiler-snapshot). Отчёты о реализации и аудите приёмки — внутренние документы движка, в поставку SDK не входят.
+
+## P4 benchmark lab: native numbers (2026-10-17)
+
+Сцена: `demos/re2d_bench_lab`, сценарий `re2dBench.apply(...)`,
+`world.profile({gpuWait:true})` (frameMs включает ожидание GPU fence),
+RelWithDebInfo, macOS arm64, Metal, window 1280×720, world frame 640×360.
+Числа — один прогон `tests/agent/re2d_bench_lab_test.py`; это baseline, не
+обещание: перед изменением renderer'а гоняйте тот же сценарий.
+
+| Сценарий | actors | lights | particles | draws | frameMs | visibilityMs | surfaceMs |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| base | 0 | 4 | 0 | 24 | 0.88 | 0.0005 | 0.88 |
+| actors_100 | 100 | 4 | 0 | 186 | 1.32 | 0.001 | 1.30 |
+| lights_32 | 0 | 36 | 0 | 24 | 0.84 | 0.0009 | 0.84 |
+| particles_2000 | 0 | 4 | 2000 | 1048 | 2.97 | 0.001 | 2.96 |
+| portals (dust2) | 0 | 35 | 0 | 88 | 0.59 | 0.0075 | 0.58 |
+| movers (dust2) | 0 | 35 | 0 | 171 | 0.92 | 0.019 | 0.90 |
+| worstcase | 100 | 36 | 2048 | 1210 | 3.86 | 0.001 | 3.83 |
+
+Читать так: particle/actor draw submission доминирует в worstcase; visibility
+и actor synthesis — доли миллисекунды. GPU-числа здесь — время ожидания
+fence на этой машине, а не гарантированный бюджет BASHNYA (§76 roadmap).

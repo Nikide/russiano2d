@@ -1,5 +1,99 @@
 # История изменений
 
+## 1.2.4 — 2026-10-17
+
+<!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
+
+30 коммитов в релизе.
+
+### Исправления
+
+- Re2D P1-C…F: particles, nav graph, automap, map metadata/spawns (`e29549c5a`)
+  - Particles: native fixed pool (2048/world) с детерминированным LCG, шаг в
+  worldStep, curves size/alpha, режимы screen/billboard/axis/floor и blends;
+  CPU reference — lit quads с depth/fog; SDL_GPU — actor-billboard pipeline с
+  1x1 white + tint (бюджет 512). world.particles.burst/continuous/info/clear.
+  15 Unity-кейсов + JS-контракт + agent-пиксели CPU/GPU.
+  - Nav: world.navBuild/navNearest/navPath — span/portal граф и детерминированный
+  A*; runtime кэширует CSR/scratch, без аллокаций на запрос; 13 Unity-кейсов,
+  dust2 path 25 spans. Попутно исправлена инициализация open_fraction для
+  загруженных baked-карт (иначе все порталы считались закрытыми).
+  - Automap: world.automapLines/automapProject — XY-линии стен и порталов +
+  2D-трансформ; 8 Unity-кейсов, lab probe.
+  - Metadata/spawns: meta/metadata + typed spawns из .re2dmap переживают
+  …
+
+### Добавлено
+
+- Re2D P1: audio voice virtualization в runtime (`b4fa6842b`)
+  - Runtime строит R2DAudioVoices pool из активных источников (priority, range);
+  budget (default 24) ограничивает реальные каналы, остальные virtual с gain 0;
+  promotion/demotion каждый кадр; profiler audioVoicesActive/Virtual.
+  - world.audio.budget(n)/state(), source priority/low-level audioPriority;
+  ленивое подключение audio engine к world при создании первого source.
+  - Agent: 3 источника, budget 1 -> priority 30 реален, два virtual, стабильно
+  после шагов. JS-контракт 30 проверок; docs раздел; CTest 140/140.
+- Re2D P2: animated materials (scroll/emissive) в runtime и $ API (`e4b7350b9`)
+  - R2DWorldMaterial.anim_u/anim_v/anim_emissive; CPU material sampling
+  добавляет UV offset и множит emissive; SDL_GPU — новые uniform-поля anim
+  (std140 68*16) и та же формула в world.frag.
+  - Runtime: material_anims[R2D_WORLD_MAX_MATERIALS], шаг в worldStep.
+  - $ API: world.materialIndex / world.materialAnim(name,opts).info/remove.
+  - JS-контракт (20 проверок) и agent-проверка: scrolling/emissive материал
+  меняет кадр; docs — раздел Animated materials.
+  - Остальные P2-ядра (portal visuals/volume) уже в дереве с тестами, интеграция
+  рендера — следующий проход.
+- Re2D P0-A: нативные atlas world sprites вместо ui.image оверлея (`fbcc5cdee`)
+  - world.sprite(node, opts): flat directional atlas (1/4/5+mirror/8/16),
+  feet/center/custom pivot, masked/opaque/translucent/additive, sprite_row.
+  - Нативный C: выбор колонки и зеркала по facing+камере, кроп клетки,
+  depth/fog/light в общем композиторе мира (CPU reference и SDL_GPU).
+  - Профайлер: info().atlasSprites/visibleAtlasSprites, actorMs.
+  - Демо demos/re2d_boomer_lab: приёмочный стенд P0-A с пиксельной
+  окклюзией стеной и проверкой CPU/GPU parity.
+  - re2d_testroom: враги переведены с ui.image+world.ray на world.sprite;
+  JS-проекционный цикл для отрисовки убран.
+  - P0-B core: src/re2d_world_trace.{h,c} — nearest hit мира и прокси,
+  category masks, ignore, multi-hit, детерминизм (Unity).
+  - Unity: r2d_re2d_atlas_test (16), r2d_world_trace_test (8),
+  …
+
+### Удалено и изменено
+
+- Re2D P2: mirror pass clipping fix (per-subdraw clip rect) (`581f7e639`)
+
+### Тесты и гейты
+
+- demos: sky-lab переключает mirror/sky горячими клавишами (`2f77c0e7c`)
+- Re2D P4: nav nodes в debug overlay + capabilities mirror=true (`f352d14ea`)
+- Re2D P4/P5: live profiler HUD + mist bands (`a043789e0`)
+- Re2D P3: rotating polywall runtime groups (`d854e9a50`)
+- Re2D P4: debug overlay draw layer + demo (`5a6217a17`)
+- Re2D P1/P3: conveyor gameplay tick (world.conveyorMotion) (`4d39e68b8`)
+- Re2D P1: polygon cells compiler tiling + audio zones per span (`4363222da`)
+- Re2D P2/P4: postprocess stack, aim assist, quality/feel presets, debug entities + audio cores (`d6ca907f1`)
+- Re2D P2: volumetric sprites + P1/P3 polygon & polywall cores (`ac70b73fe`)
+- Re2D P1-H…J + P2 cores: save/load, secrets, terrain, portal math, volumes, material anim (`544baeeac`)
+- Re2D P1-B: passenger carry на лифте и crusher-контакт для mover (`e7502d953`)
+- Re2D P0-C…P0-H: controller, semantic IDs, movers, triggers, viewmodel, native gate (`511997a97`)
+- Re2D P0-B: world.trace/hit в $ API + JS-контракт (`8bbf25d48`)
+
+### Прочее
+
+- Re2D P2: mirror portal (scissored reflected-world pass) (`824ad2f0d`)
+- docs Re2D: dynamic nav masks и P3 progress (`ab222b391`)
+- Re2D P3: dynamic nav masks (blocked spans/portals без rebuild) (`fda16a8ac`)
+- Re2D P2: sky portal (visibility window) + save persistence (`769f3340a`)
+- Re2D P2: impactInfo/ricochet + surfaceMaterialName (`fd1eba505`)
+- Re2D P4: debug overlay data + determinism audit (`846a43649`)
+- Re2D P3: multi-zone boss hit proxies (`31d5f8e44`)
+- Re2D P1/P2: save secrets/breakables, sky animation, fog zones (`e230096d6`)
+- Re2D P4: benchmark lab со сценариями и честными native-числами (`0943122e3`)
+- Re2D P4: capabilities API + profiler fields для trace/controller/nav/audio (`ad7e5f2c3`)
+- Re2D P1-G: VFX bundles поверх particles/light/decal/sound (`1101516b7`)
+- Re2D P1-A: Portals 2.0 — плавная open fraction вместо бинарного closed (`52faa99b1`)
+
+<!-- release-notes:end -->
 ## 1.2.3 — 2026-10-17
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->

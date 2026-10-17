@@ -14,7 +14,7 @@
 
 | Уровень | Что проверяет | Где | Как запускать |
 |---|---|---|---|
-| C-юниты | чистая логика ядра: json/crypto/payload/bsp/re2d/rotsprite/audio — все на Unity (41 кейс) | `tests/<ядро>/*_test.c`, цели CMake | `tools/ci_verify.py` (≈6 с на всё) |
+| C-юниты | чистая логика ядра: json/crypto/payload/bsp/re2d/rotsprite/audio/atlas/trace/controller/mover/trigger/semantic/portal/metadata/automap/particle/nav/save/secret/terrain/portal-visual/volume/material-anim/polywall/polygon/postprocess/audio-zone/audio-voices — все на Unity (286 кейсов) | `tests/<ядро>/*_test.c`, цели CMake | `tools/ci_verify.py` (≈6 с на всё) |
 | Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (105 наборов, сверка 2026-10-17) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
 | Интеграционные в движке | поведение игры и API через агентский протокол (реальный SDL_GPU, ввод, скриншоты) | `tests/agent/*_test.py` (265 наборов, сверка 2026-10-17) | `python3 tools/run_tests.py` (≈12 мин) |
 | Стражи документации | «в доке написано, что чего-то нет, а в коде есть»; у каждого модуля есть страница и тест; у каждого публичного имени есть документация | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py`, `tests/api_docs_sync_test.py` | `python3 tests/doc_...py`, `python3 tests/api_docs_sync_test.py` |
@@ -22,9 +22,17 @@
 
 ### 1.1. Что гонять и когда (быстрый цикл)
 
+CTest — источник истины для C-целей и JS-наборов: каждый `r2d_*_test` и каждый
+`tests/js/*_test.mjs` зарегистрирован в CTest, SDK batch — тоже. Цель
+`r2d_check` собирает тестовые бинарники и запускает `ctest --output-on-failure`;
+её же вызывает CI. Python-обёртка `tools/ci_verify.py` остаётся
+compatibility-путём и проверяет конфигурацию RE2D.
+
+
 | Шаг | Время | Когда |
 |---|---|---|
-| `python3 tools/ci_verify.py --build-dir build` | **≈6 с** (12 C-целей + 105 `*.mjs` + sdk batch) | на каждую правку; это же гоняет CI (`.github/workflows/build.yml`) |
+| `cmake --build build --target r2d_check` | **≈5 с** (CTest: Unity C + все `*.mjs` + SDK batch) | на каждую правку (P0-H) |
+| `python3 tools/ci_verify.py --build-dir build` | **≈6 с** (34 C-цели + 105 `*.mjs` + sdk batch) | на каждую правку; это же гоняет CI (`.github/workflows/build.yml`) |
 | `python3 tools/run_tests.py --fast` | ≈1 мин (`agent_protocol`, `highlevel_api`, `game`) | перед коммитом, который трогает движок |
 | `python3 tools/run_tests.py` | ≈12 мин (265 агентских) | перед релизом/крупным слиянием, не на каждый чих |
 | `python3 tests/agent/<имя>_test.py` | 1–30 с | затронутый тест — обязательно |
@@ -51,11 +59,33 @@ license, без сети/FetchContent). Общая библиотека `r2d_uni
 | `r2d_re2d_test` | 14 | проекция, отсечение, туман, меш, детерминизм |
 | `r2d_rotsprite_test` | 1 | v2-геометрия и растеризация |
 | `r2d_re2d_world_test` | 1 | support/blocked/ray/stamp Re2D World |
+| `r2d_re2d_atlas_test` | 16 | atlas sprite: направление, pivot, клетка, кроп |
+| `r2d_world_trace_test` | 8 | world+actor trace: nearest, masks, ignore, multi-hit |
+| `r2d_world_controller_test` | 14 | controller: sweep/slide/step/slope/jump/portal/determinism |
+| `r2d_world_mover_test` | 11 | mover timeline: door/lift/crusher, events, blocked |
+| `r2d_world_trigger_test` | 9 | triggers: enter-edge/use/shoot, once/cooldown |
+| `r2d_re2d_semantic_test` | 1 | semantic IDs: bake→load→find_*, duplicate rejection |
+| `r2d_re2d_portal_test` | 7 | Portal 2.0: open fraction clips openings/collision |
+| `r2d_world_metadata_test` | 9 | map metadata/spawns parse + validation |
+| `r2d_world_automap_test` | 8 | automap line extraction + 2D projection |
+| `r2d_world_particle_test` | 15 | particle pool, emitters, curves, determinism |
+| `r2d_world_nav_test` | 13 | span/portal nav graph + deterministic A* |
+| `r2d_world_save_test` | 13 | versioned state snapshot + map hash |
+| `r2d_world_secret_test` | 12 | secret volumes + authored breakables |
+| `r2d_world_terrain_test` | 13 | terrain presets + conveyor math |
+| `r2d_world_portal_visual_test` | 11 | mirror/link/sky portal math + recursion |
+| `r2d_world_volume_test` | 10 | box/cross/slice-stack volume part selection |
+| `r2d_world_material_anim_test` | 10 | flipbook/scroll/emissive timeline |
+| `r2d_world_polywall_test` | 15 | PolyWall rigid transform/bounds/sweep/lerp |
+| `r2d_world_polygon_test` | 15 | polygon validation/decomposition/shared edges |
+| `r2d_postprocess_test` | 11 | postprocess profiles/decay/uniform eval |
+| `r2d_audio_zone_test` | 11 | reverb zones + portal attenuation |
+| `r2d_audio_voices_test` | 11 | voice virtualization/priority/stealing |
 | `r2d_world_exr_test` | 1 | EXR-декодер неба |
 | `r2d_sdk_core_test` | 9 | SDK: glob/iso/registry/assets/validate/atlas/args |
 | `r2d_audio_spatial_test` | 1 | Steam Audio HRTF/occlusion |
 
-Итого **41 Unity-кейс**, все цели дают `N Tests 0 Failures 0 Ignored`
+Итого **286 Unity-кейсов**, все цели дают `N Tests 0 Failures 0 Ignored`
 (exit 0). Падение красное по-настоящему: неверный `TEST_ASSERT_EQUAL_INT(2,3)`
 печатает `FAIL: Expected 2 Was 3` и возвращает 1.
 
@@ -497,3 +527,45 @@ python3 tools/bench_api.py --baseline docs/benchmarks/api-performance.json \
 повторить замер без фоновой нагрузки. Это сигнал к расследованию, не автоматический
 приговор. Быстрые unit checks runner без performance run:
 `python3 tests/bench_api_runner_test.py`.
+
+## Re2D profiler UI + mist (P4/P5)
+
+`demos/re2d_bench_lab` теперь показывает живую profiler-строку
+(frame/vis/actor/surface/draws/counts) в HUD, а `snapshot().hud` отдаёт её
+агенту. `world.mist(...)` проверяется в boomer-lab (эмиссия атмосферных
+частиц на общем пуле).
+
+## Re2D debug overlay (P4)
+
+`tests/agent/re2d_debug_overlay_test.py` открывает `demos/re2d_debug_lab`:
+overlay from `world.debug.draw` даёт 9 automap-линий и 2 semantic точки, реально
+меняет кадр (сотни пикселей), выключается и детерминированно возвращается
+(0 отличий при повторном включении).
+
+## Re2D mirror portal (P2)
+
+`tests/agent/re2d_mirror_portal_test.py` включает `re2dSky.mirror(true)` на
+authored portal: native flag + отдельный reflected pass меняют кадр (~92k px),
+выключение возвращает исходный вид (0 px). Это проверка реального render-прохода,
+а не только API.
+
+## Re2D sky portal (P2)
+
+`tests/agent/re2d_sky_portal_test.py` открывает `demos/re2d_sky_lab`: authored
+portal-окно между двумя комнатами, `re2dSky.set(true)` включает sky-режим.
+Тест проверяет флаг в native state и **кадр**: проём даёт десятки тысяч magenta
+пикселей (панорама), выключение возвращает обычный вид (0).
+
+## Re2D polygon cells (P1)
+
+`tests/agent/re2d_polygon_cells_test.py` компилирует rectilinear L-полигон
+(`tests/fixtures/sdk/world/polygon_l.re2dmap`) через `r2d-sdk world-compile
+--renderer`, проверяет 3 runtime-тайла / 8 граничных стен / 2 портала, загружает
+мир в runtime (support внутри, void в вырезе) и требует `SDK_WORLD_POLYGON` для
+наклонного полигона (без AABB fallback).
+
+## Re2D determinism audit (P4)
+
+`tests/agent/re2d_determinism_test.py` запускает один и тот же seed/ввод дважды
+и сравнивает controller/particles/registry и кадр побайтово. Detrminism — не
+пожелание: тест падает на скрытом `Math.random()`/времени в нативных путях.
