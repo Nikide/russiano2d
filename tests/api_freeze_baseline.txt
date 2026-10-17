@@ -231,6 +231,8 @@ $.camera.yaw
 $.camera.zone
 $.camera.zoom
 $.camera.zoomTo
+$.capabilities
+$.capabilities.re2d
 $.cels
 $.cels.attach
 $.cels.clear

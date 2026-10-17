@@ -34,6 +34,7 @@ $.render(() => world.render(view,400,240));
 | `surface.terrain(name)` / `conveyor(opts)`, `world.terrainAt/conveyorAt` | terrain/liquid metadata и 2D conveyors |
 | `world.materialAnim(name,opts)` / `materialIndex(name)` | flipbook/scroll/emissive анимация материала |
 | `world.volume(node,opts)` | constrained box/cross/slice-stack из нескольких billboard-частей (не mesh) |
+| `$.capabilities.re2d` | честная матрица возможностей сборки/рантайма |
 | `world.particles.burst/continuous/info/clear` | нативный fixed-pool частиц |
 | `world.fxDefine(name,bundle)` / `fxSpawn(name,at)` | asset-driven VFX bundle (particles/light/decal/sound/shake) |
 | `world.findSurface(name)` | имя стены/span → handle поверхности |
@@ -419,6 +420,24 @@ generic vertices/indices API. Ограничение: части камера-о
 (billboard), поэтому box/cross — визуально ограниченный impostor, а не
 настоящая геометрия; `r2d_world_volume` core (10 тестов) остаётся источником
 канонической граневой логики для будущего ужесточения.
+
+## Capabilities и profiler (P4)
+
+```js
+$.capabilities.re2d;
+// {worldGpu, worldCpu, hrtf, mirrorPortal, skyPortal, volumetricSprite,
+//  particles, nav, automap, saveState, maxLights, maxDecals,
+//  maxWorldSprites, maxPortalRecursion, maxParticles}
+world.info();   // + traceMs/traceCalls, controllerMs/controllerCalls,
+                //   navMs/navQueries, audioVoicesActive/audioVoicesVirtual,
+                //   particles/particlesDrawn, movers, triggers, hitProxies
+```
+
+Capabilities — это факты текущей сборки, а не обещание: `mirrorPortal`/
+`skyPortal` пока `false` (математическое ядро готово, рендер-проход следующий),
+`hrtf` отражает реальный backend `$.audio.hrtf()`. Профайлерные поля
+накапливают наносекунды по последним вызовам (trace/controller/nav) и
+counters голосов/частиц; overflow частиц виден в `world.particles.info()`.
 
 ## Свет, материал, изменение мира
 

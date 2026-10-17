@@ -65,7 +65,7 @@ typedef struct R2DWorldTriggerEntry {
 #define R2D_WORLD_CONTROLLER_LIMIT 64
 typedef struct { R2DWorldControllerConfig config; int token; bool active; } R2DWorldControllerEntry;
 typedef struct R2DWorldAudioSource {
-    bool active,hrtf,occluded;
+    bool active,hrtf,occluded,virtualized;
     unsigned generation;
     float x,y,h,range,reference,volume,distance,gain,current_gain,cutoff;
 } R2DWorldAudioSource;
@@ -83,6 +83,9 @@ typedef struct R2DWorldRuntime {
     R2DWorldPixelOwner *owners;
     int debug_view,visible_lights,shadowed_lights,visible_actor_count;
     double frame_ms,visibility_ms,light_cull_ms,surface_ms,actor_ms,composition_ms,upload_ms;
+    double trace_ms,controller_ms,nav_ms;
+    int trace_calls,controller_calls,nav_queries;
+    int audio_active,audio_virtual;
     int width,height,texture,sprite;
     bool disposed,rendering;
     JSValue *actors,*frame_handles;

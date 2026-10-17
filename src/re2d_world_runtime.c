@@ -405,11 +405,16 @@ static bool trace_proxies(JSContext *ctx,R2DWorldRuntime *w,const float from[3],
 // handed to the core only toggles static world geometry.
 int r2d_world_trace_query(JSContext *ctx,R2DWorldRuntime *w,const float from[3],const float to[3],int mask,int ignore_node,R2DWorldTraceResult *out)
 {
+    Uint64 start=SDL_GetPerformanceCounter();
+    int result=0;
     for(int i=0;i<3;i++)if(!isfinite(from[i])||!isfinite(to[i])){JS_ThrowRangeError(ctx,"Re2D World: trace needs finite from/to");return -1;}
     R2DWorldHitProxy *proxies;int count;
     if(!trace_proxies(ctx,w,from,to,mask,ignore_node,&proxies,&count))return -1;
     int core_mask=(mask&R2D_WORLD_TRACE_WORLD?R2D_WORLD_TRACE_WORLD:0)|R2D_WORLD_TRACE_ENEMY|R2D_WORLD_TRACE_BREAKABLE;
-    return r2d_world_trace_ray(&w->world,proxies,count,from,to,core_mask,-1,out)?1:0;
+    result=r2d_world_trace_ray(&w->world,proxies,count,from,to,core_mask,-1,out)?1:0;
+    w->trace_calls++;
+    w->trace_ms+=(double)(SDL_GetPerformanceCounter()-start)*1000.0/(double)SDL_GetPerformanceFrequency();
+    return result;
 }
 int r2d_world_trace_query_all(JSContext *ctx,R2DWorldRuntime *w,const float from[3],const float to[3],int mask,int ignore_node,R2DWorldTraceResult *out,int capacity)
 {
@@ -581,7 +586,10 @@ bool r2d_world_controller_place(R2DWorldRuntime *w,int token,float x,float y,flo
 bool r2d_world_controller_step_state(R2DWorldRuntime *w,int token,R2DWorldControllerState *state,float wish_x,float wish_y,bool jump,float dt)
 {
     R2DWorldControllerEntry *e=controller_entry(w,token);if(!e||!state)return false;
+    Uint64 start=SDL_GetPerformanceCounter();
     r2d_world_controller_move(&w->world,&e->config,state,wish_x,wish_y,jump,dt);
+    w->controller_calls++;
+    w->controller_ms+=(double)(SDL_GetPerformanceCounter()-start)*1000.0/(double)SDL_GetPerformanceFrequency();
     return true;
 }
 
@@ -631,7 +639,11 @@ int r2d_world_nav_path_runtime(R2DWorldRuntime *w,int from,int to,int *path,int 
 {
     if(!w->nav_ready||!path||capacity<=0)return -1;
     if(max_visits<=0)max_visits=w->nav_graph.node_count*8;
-    return r2d_world_nav_path(&w->nav_graph,from,to,path,capacity,max_visits,&w->nav_scratch,NULL,NULL);
+    Uint64 start=SDL_GetPerformanceCounter();
+    int result=r2d_world_nav_path(&w->nav_graph,from,to,path,capacity,max_visits,&w->nav_scratch,NULL,NULL);
+    w->nav_queries++;
+    w->nav_ms+=(double)(SDL_GetPerformanceCounter()-start)*1000.0/(double)SDL_GetPerformanceFrequency();
+    return result;
 }
 
 
@@ -1052,10 +1064,13 @@ void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {
         s->occluded=d>.01f&&r2d_world_ray(&w->world,origin,direction,.001f,.999f,&hit);
         s->gain=s->volume*fminf(1,s->reference/fmaxf(s->reference,d))*taper*taper*(s->occluded?.18f:1);
         s->cutoff=s->occluded?700:22000; s->current_gain+=(s->gain-s->current_gain)*.2f;
+        s->virtualized=s->gain<0.0005f;
         float forward=dx*v->cos_yaw+dy*v->sin_yaw,right=-dx*v->sin_yaw+dy*v->cos_yaw;
         float up=dh*v->cos_pitch-forward*v->sin_pitch,back=-(forward*v->cos_pitch+dh*v->sin_pitch);
         r2d_audio_world_channel(w->audio,i,true,s->hrtf,right/norm,up/norm,d>.0001f?back/norm:-1,s->current_gain,s->cutoff);
     }
+    w->audio_active=0;w->audio_virtual=0;
+    for(int i=0;i<R2D_AUDIO_CHANNELS;i++)if(w->sources[i].active){w->audio_active++;if(w->sources[i].virtualized)w->audio_virtual++;}
 }
 void r2d_world_audio_free(R2DWorldRuntime *w) {
     if(!w->audio)return;

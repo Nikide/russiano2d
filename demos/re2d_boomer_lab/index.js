@@ -199,6 +199,7 @@ export default function install($) {
             return { index: world._matAnim.index, info: world._matAnim.info() };
         },
         materialAnimInfo: () => (world._matAnim ? world._matAnim.info() : null),
+        info: () => world.info(),
         saveProbe: () => {
             world.particles.clear();
             if (!mover) mover = world.mover({ type: 'lift', span: 0, from: 0, to: 96,

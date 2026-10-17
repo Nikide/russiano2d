@@ -444,4 +444,14 @@ test('world.volume box: четыре constrained parts без mesh API', () => {
     world.dispose();
 });
 
+test('$.capabilities.re2d — честная матрица возможностей', () => {
+    const caps = $.capabilities.re2d;
+    truthy(caps && caps.worldGpu === true && caps.worldCpu === true);
+    eq(caps.mirrorPortal, false);
+    eq(caps.skyPortal, false);
+    eq(caps.maxLights, 128);
+    eq(caps.maxWorldSprites, 4096);
+    truthy(caps.particles === true && caps.nav === true && caps.saveState === true);
+});
+
 finish();

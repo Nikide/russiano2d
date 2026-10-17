@@ -1086,6 +1086,18 @@ function rendererWorldWrapper($, native) {
 
 export function installRe2d($) {
     $.update(dt => { if (typeof engine.re2d.worldStep === 'function') engine.re2d.worldStep(dt); });
+    // P4 capabilities: honest feature matrix, not a silent fallback.
+    const hrtf = $.audio && typeof $.audio.hrtf === 'function' ? $.audio.hrtf() : null;
+    $.capabilities = $.capabilities || {};
+    $.capabilities.re2d = Object.freeze({
+        worldGpu: true, worldCpu: true,
+        hrtf: !!(hrtf && hrtf.on),
+        mirrorPortal: false, skyPortal: false, volumetricSprite: true,
+        particles: true, nav: true, automap: true, saveState: true,
+        maxLights: 128, maxDecals: 128, maxWorldSprites: 4096,
+        maxPortalRecursion: 4, maxParticles: 2048,
+    });
+
     $.re2dWorld = {
         load(path) {
             const text = $.fs.readText(path);

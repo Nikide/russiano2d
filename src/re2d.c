@@ -353,6 +353,10 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"hitProxies",w->hit_count);
     set_num(ctx,o,"movers",w->mover_count);set_num(ctx,o,"triggers",w->trigger_count);
     set_num(ctx,o,"particles",w->particle_ready?w->particles.count:0);set_num(ctx,o,"particlesDrawn",w->particles_drawn);
+    set_num(ctx,o,"traceMs",w->trace_ms);set_num(ctx,o,"traceCalls",w->trace_calls);
+    set_num(ctx,o,"controllerMs",w->controller_ms);set_num(ctx,o,"controllerCalls",w->controller_calls);
+    set_num(ctx,o,"navMs",w->nav_ms);set_num(ctx,o,"navQueries",w->nav_queries);
+    set_num(ctx,o,"audioVoicesActive",w->audio_active);set_num(ctx,o,"audioVoicesVirtual",w->audio_virtual);
     set_num(ctx,o,"materials",w->world.material_count);
     set_num(ctx,o,"lights",w->world.light_count);set_num(ctx,o,"lightSpanPairs",w->world.light_pairs);set_num(ctx,o,"lightOverflow",w->world.light_overflow);
     set_num(ctx,o,"visibleCells",w->visibility.cells_visible);set_num(ctx,o,"visibleSpans",w->visibility.span_count);set_num(ctx,o,"visibleSurfaces",w->visibility.surface_count);set_num(ctx,o,"portalsTested",w->visibility.portals_tested);set_num(ctx,o,"bspNodesVisited",w->visibility.bsp_nodes_visited);
