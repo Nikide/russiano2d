@@ -63,7 +63,10 @@ export default function install($) {
 
     $.update(() => {
         if (!world) return;
-        if (hud) hud.text('status', `sky portal: ${world.portalSkyGet(0) ? 'ON' : 'off'} · cells ${world.info().cells} · portals ${world.info().portals}`);
+        if ($.input.pressed('f1')) globalThis.re2dSky.mirror(!world.portalMirrorGet(0));
+        if ($.input.pressed('f2')) globalThis.re2dSky.set(!world.portalSkyGet(0));
+        if ($.input.pressed('f3')) { globalThis.re2dSky.mirror(false); globalThis.re2dSky.set(false); }
+        if (hud) hud.text('status', `portal: ${world.portalMirrorGet(0) ? 'MIRROR' : world.portalSkyGet(0) ? 'SKY' : 'normal'} · cells ${world.info().cells} · portals ${world.info().portals}`);
         if ($.input.pressed('escape')) $.quit();
     });
 }
