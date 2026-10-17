@@ -402,8 +402,29 @@ void r2d_world_frame_visible(const R2DRe2dWorld *w,const R2DRe2dView *v,int widt
 void r2d_world_frame(const R2DRe2dWorld *w,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,float ortho_height)
 { r2d_world_frame_visible(w,v,width,height,rgba,depth,ortho_height,NULL); }
 
-void r2d_world_stamp_targets(const R2DRe2dWorld *world,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,
- const uint8_t *sprite,int size,float x,float y,float bottom,float ww,float hh,float ortho_height,R2DWorldPixelOwner *owners,int actor)
+// Atlas sprites may request masked/opaque/translucent/additive composition.
+// Masked stays the default for every existing caller.
+static void composit_pixel(uint8_t *dst,uint32_t color,uint32_t alpha,int blend)
+{
+    if(blend==R2D_WORLD_TRANSLUCENT||blend==R2D_WORLD_ADDITIVE) {
+        const uint32_t s0=color&0xffu,s1=(color>>8)&0xffu,s2=(color>>16)&0xffu;
+        if(blend==R2D_WORLD_ADDITIVE) {
+            dst[0]=(uint8_t)fminf(255.0f,(float)dst[0]+(float)s0*alpha/255.0f);
+            dst[1]=(uint8_t)fminf(255.0f,(float)dst[1]+(float)s1*alpha/255.0f);
+            dst[2]=(uint8_t)fminf(255.0f,(float)dst[2]+(float)s2*alpha/255.0f);
+        } else {
+            const uint32_t inv=255u-alpha;
+            dst[0]=(uint8_t)((s0*alpha+dst[0]*inv)/255u);
+            dst[1]=(uint8_t)((s1*alpha+dst[1]*inv)/255u);
+            dst[2]=(uint8_t)((s2*alpha+dst[2]*inv)/255u);
+        }
+        if(dst[3]<255u)dst[3]=255u;
+        return;
+    }
+    for(int c=0;c<4;c++)dst[c]=(uint8_t)(color>>(c*8));
+}
+static void stamp_targets_impl(const R2DRe2dWorld *world,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,
+ const uint8_t *sprite,int size,float x,float y,float bottom,float ww,float hh,float ortho_height,R2DWorldPixelOwner *owners,int actor,int blend)
 {
     float p[4];
     if(!sprite || size<=0 || ww<=0 || hh<=0) return;
@@ -430,7 +451,10 @@ void r2d_world_stamp_targets(const R2DRe2dWorld *world,const R2DRe2dView *v,int 
         if(u<0||u>=size||vv<0||vv>=size) continue;
         const uint8_t *src=sprite+(vv*size+u)*4;int i=py*width+px;
         // Binary coverage only: alpha blending would need ordered fragments.
-        if(src[3]<128||dist>depth[i]) continue;
+        uint32_t alpha=src[3];
+        if(blend==R2D_WORLD_OPAQUE) alpha=255;
+        else if(blend==R2D_WORLD_MASKED){if(alpha<128) continue; alpha=255;}
+        if(!alpha||dist>depth[i]) continue;
         uint32_t color=(uint32_t)src[0]|((uint32_t)src[1]<<8)|((uint32_t)src[2]<<16)|0xff000000;
         if(world&&world->lighting.enabled) {
             float local_h=bottom+(1-(py+.5f-top)/sh)*hh;
@@ -438,7 +462,7 @@ void r2d_world_stamp_targets(const R2DRe2dWorld *world,const R2DRe2dView *v,int 
             float dx=v->x-x,dy=v->y-y,len=sqrtf(dx*dx+dy*dy);
             color=r2d_world_lit_color(world,span,color,x,y,local_h,len>0?dx/len:0,len>0?dy/len:0,0,dist);
         }
-        for(int c=0;c<4;c++)rgba[i*4+c]=(uint8_t)(color>>(c*8));depth[i]=dist;
+        composit_pixel(rgba+i*4,color,alpha,blend);depth[i]=dist;
         if(owners){float h=bottom+(1-(py+.5f-top)/sh)*hh;int span=world?r2d_world_span_at(world,x,y,h):-1;owners[i]=(R2DWorldPixelOwner){-1,span,actor};}
     }
 }
@@ -447,10 +471,10 @@ void r2d_world_stamp_lit(const R2DRe2dWorld *world,const R2DRe2dView *v,int widt
  const uint8_t *sprite,int size,float x,float y,float bottom,float ww,float hh,float ortho)
 { r2d_world_stamp_targets(world,v,width,height,rgba,depth,sprite,size,x,y,bottom,ww,hh,ortho,NULL,-1); }
 
-void r2d_world_stamp_samples(const R2DRe2dWorld *world,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,
- const uint8_t *sprite,const float *sample_depth,int size,float x,float y,float bottom,float ww,float hh,float ortho,R2DWorldPixelOwner *owners,int actor)
+static void stamp_samples_impl(const R2DRe2dWorld *world,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,
+ const uint8_t *sprite,const float *sample_depth,int size,float x,float y,float bottom,float ww,float hh,float ortho,R2DWorldPixelOwner *owners,int actor,int blend)
 {
-    if(!sample_depth){r2d_world_stamp_targets(world,v,width,height,rgba,depth,sprite,size,x,y,bottom,ww,hh,ortho,owners,actor);return;}
+    if(!sample_depth){stamp_targets_impl(world,v,width,height,rgba,depth,sprite,size,x,y,bottom,ww,hh,ortho,owners,actor,blend);return;}
     if(!sprite||size<=0||ww<=0||hh<=0)return;float p[4],center=bottom+hh*.5f;
     float dx=x-v->x,dy=y-v->y,forward=dx*v->cos_yaw+dy*v->sin_yaw;
     float dist=forward*v->cos_pitch+(center-v->eye)*v->sin_pitch;
@@ -461,7 +485,9 @@ void r2d_world_stamp_samples(const R2DRe2dWorld *world,const R2DRe2dView *v,int 
     int x0=(int)fmaxf(0,fminf(width,floorf(left))),x1=(int)fmaxf(0,fminf(width,ceilf(left+sw))),y0=(int)fmaxf(0,fminf(height,floorf(top))),y1=(int)fmaxf(0,fminf(height,ceilf(top+sh)));
     for(int py=y0;py<y1;py++)for(int px=x0;px<x1;px++){
         float u=(px+.5f-left)/sw,vv=(py+.5f-top)/sh;int tx=(int)(u*size),ty=(int)(vv*size);if(tx<0||ty<0||tx>=size||ty>=size)continue;
-        int sample=ty*size+tx,i=py*width+px;const uint8_t *src=sprite+sample*4;if(src[3]<128)continue;
+        int sample=ty*size+tx,i=py*width+px;const uint8_t *src=sprite+sample*4;uint32_t alpha=src[3];
+        if(blend==R2D_WORLD_OPAQUE)alpha=255;else if(blend==R2D_WORLD_MASKED){if(alpha<128)continue;alpha=255;}
+        if(!alpha)continue;
         float offset=sample_depth[sample]*hh,z=dist-offset;if(z<v->near_plane||z>depth[i])continue;
         // Reconstruct the actual sample position from camera-aligned 2D synthesis.
         float right=(u-.5f)*ww,up=(.5f-vv)*hh;
@@ -471,9 +497,22 @@ void r2d_world_stamp_samples(const R2DRe2dWorld *world,const R2DRe2dView *v,int 
         int span=r2d_world_span_at(world,wx,wy,wh);uint32_t color=(uint32_t)src[0]|((uint32_t)src[1]<<8)|((uint32_t)src[2]<<16)|0xff000000;
         float nx=v->x-wx,ny=v->y-wy,length=hypotf(nx,ny);
         color=r2d_world_lit_color(world,span,color,wx,wy,wh,length>0?nx/length:0,length>0?ny/length:0,0,z);
-        for(int c=0;c<4;c++)rgba[i*4+c]=(uint8_t)(color>>(c*8));depth[i]=z;if(owners)owners[i]=(R2DWorldPixelOwner){-1,span,actor};
+        composit_pixel(rgba+i*4,color,alpha,blend);depth[i]=z;if(owners)owners[i]=(R2DWorldPixelOwner){-1,span,actor};
     }
 }
+
+void r2d_world_stamp_targets(const R2DRe2dWorld *world,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,
+ const uint8_t *sprite,int size,float x,float y,float bottom,float ww,float hh,float ortho,R2DWorldPixelOwner *owners,int actor)
+{ stamp_targets_impl(world,v,width,height,rgba,depth,sprite,size,x,y,bottom,ww,hh,ortho,owners,actor,R2D_WORLD_MASKED); }
+void r2d_world_stamp_targets_ex(const R2DRe2dWorld *world,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,
+ const uint8_t *sprite,int size,float x,float y,float bottom,float ww,float hh,float ortho,R2DWorldPixelOwner *owners,int actor,int blend)
+{ stamp_targets_impl(world,v,width,height,rgba,depth,sprite,size,x,y,bottom,ww,hh,ortho,owners,actor,blend); }
+void r2d_world_stamp_samples(const R2DRe2dWorld *world,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,
+ const uint8_t *sprite,const float *sample_depth,int size,float x,float y,float bottom,float ww,float hh,float ortho,R2DWorldPixelOwner *owners,int actor)
+{ stamp_samples_impl(world,v,width,height,rgba,depth,sprite,sample_depth,size,x,y,bottom,ww,hh,ortho,owners,actor,R2D_WORLD_MASKED); }
+void r2d_world_stamp_samples_ex(const R2DRe2dWorld *world,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,
+ const uint8_t *sprite,const float *sample_depth,int size,float x,float y,float bottom,float ww,float hh,float ortho,R2DWorldPixelOwner *owners,int actor,int blend)
+{ stamp_samples_impl(world,v,width,height,rgba,depth,sprite,sample_depth,size,x,y,bottom,ww,hh,ortho,owners,actor,blend); }
 
 void r2d_world_stamp(const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,
  const uint8_t *sprite,int size,float x,float y,float bottom,float ww,float hh,float ortho_height)

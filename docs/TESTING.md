@@ -14,7 +14,7 @@
 
 | Уровень | Что проверяет | Где | Как запускать |
 |---|---|---|---|
-| C-юниты | чистая логика ядра: json/crypto/payload/bsp/re2d/rotsprite/audio — все на Unity (41 кейс) | `tests/<ядро>/*_test.c`, цели CMake | `tools/ci_verify.py` (≈6 с на всё) |
+| C-юниты | чистая логика ядра: json/crypto/payload/bsp/re2d/rotsprite/audio/atlas/trace — все на Unity (65 кейсов) | `tests/<ядро>/*_test.c`, цели CMake | `tools/ci_verify.py` (≈6 с на всё) |
 | Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (105 наборов, сверка 2026-10-17) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
 | Интеграционные в движке | поведение игры и API через агентский протокол (реальный SDL_GPU, ввод, скриншоты) | `tests/agent/*_test.py` (265 наборов, сверка 2026-10-17) | `python3 tools/run_tests.py` (≈12 мин) |
 | Стражи документации | «в доке написано, что чего-то нет, а в коде есть»; у каждого модуля есть страница и тест; у каждого публичного имени есть документация | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py`, `tests/api_docs_sync_test.py` | `python3 tests/doc_...py`, `python3 tests/api_docs_sync_test.py` |
@@ -51,11 +51,13 @@ license, без сети/FetchContent). Общая библиотека `r2d_uni
 | `r2d_re2d_test` | 14 | проекция, отсечение, туман, меш, детерминизм |
 | `r2d_rotsprite_test` | 1 | v2-геометрия и растеризация |
 | `r2d_re2d_world_test` | 1 | support/blocked/ray/stamp Re2D World |
+| `r2d_re2d_atlas_test` | 16 | atlas sprite: направление, pivot, клетка, кроп |
+| `r2d_world_trace_test` | 8 | world+actor trace: nearest, masks, ignore, multi-hit |
 | `r2d_world_exr_test` | 1 | EXR-декодер неба |
 | `r2d_sdk_core_test` | 9 | SDK: glob/iso/registry/assets/validate/atlas/args |
 | `r2d_audio_spatial_test` | 1 | Steam Audio HRTF/occlusion |
 
-Итого **41 Unity-кейс**, все цели дают `N Tests 0 Failures 0 Ignored`
+Итого **65 Unity-кейсов**, все цели дают `N Tests 0 Failures 0 Ignored`
 (exit 0). Падение красное по-настоящему: неверный `TEST_ASSERT_EQUAL_INT(2,3)`
 печатает `FAIL: Expected 2 Was 3` и возвращает 1.
 

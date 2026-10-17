@@ -347,6 +347,7 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"frameMs",w->frame_ms);set_num(ctx,o,"visibilityMs",w->visibility_ms);set_num(ctx,o,"lightCullMs",w->light_cull_ms);set_num(ctx,o,"surfaceMs",w->surface_ms);set_num(ctx,o,"actorMs",w->actor_ms);set_num(ctx,o,"compositionMs",w->composition_ms);set_num(ctx,o,"uploadMs",w->upload_ms);
     set_num(ctx,o,"lightsAfterCull",w->visible_lights);set_num(ctx,o,"shadowedLights",w->shadowed_lights);
     set_num(ctx,o,"actors",w->actor_count);set_num(ctx,o,"actorCandidates",w->frame_count);set_num(ctx,o,"composedActors",w->visible_actor_count);
+    set_num(ctx,o,"atlasSprites",w->atlas_count);set_num(ctx,o,"visibleAtlasSprites",w->visible_atlas_count);
     set_num(ctx,o,"materials",w->world.material_count);
     set_num(ctx,o,"lights",w->world.light_count);set_num(ctx,o,"lightSpanPairs",w->world.light_pairs);set_num(ctx,o,"lightOverflow",w->world.light_overflow);
     set_num(ctx,o,"visibleCells",w->visibility.cells_visible);set_num(ctx,o,"visibleSpans",w->visibility.span_count);set_num(ctx,o,"visibleSurfaces",w->visibility.surface_count);set_num(ctx,o,"portalsTested",w->visibility.portals_tested);set_num(ctx,o,"bspNodesVisited",w->visibility.bsp_nodes_visited);
@@ -564,6 +565,22 @@ static JSValue world_actor_remove(JSContext *ctx,JSValueConst self,int argc,JSVa
     if(argc<1)return JS_ThrowTypeError(ctx,"Re2D World: actorRemove(node)");
     return r2d_world_actor_unregister(ctx,w,argv[0])?JS_UNDEFINED:JS_EXCEPTION;
 }
+static JSValue world_atlas_add(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<14)return JS_ThrowTypeError(ctx,"Re2D World: atlasAdd(node,path,columns,rows,directions,mirror,cellW,cellH,pivot,pivotX,pivotY,width,height,blend)");
+    if(!JS_IsString(argv[1]))return JS_ThrowTypeError(ctx,"Re2D World: atlas path must be a string");
+    const char *path=JS_ToCString(ctx,argv[1]);if(!path)return JS_EXCEPTION;
+    float p[12];bool ok=world_numbers(ctx,argc-2,argv+2,12,p);
+    if(ok)ok=r2d_world_atlas_register(ctx,w,argv[0],path,(int)p[0],(int)p[1],(int)p[2],p[3]!=0.0f,(int)p[4],(int)p[5],(int)p[6],p[7],p[8],p[9],p[10],(int)p[11]);
+    JS_FreeCString(ctx,path);return ok?JS_UNDEFINED:JS_EXCEPTION;
+}
+static JSValue world_atlas_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1)return JS_ThrowTypeError(ctx,"Re2D World: atlasRemove(node)");
+    return r2d_world_atlas_unregister(ctx,w,argv[0])?JS_UNDEFINED:JS_EXCEPTION;
+}
 static JSValue world_camera(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[8];if(!w||!world_numbers(ctx,argc,argv,8,p))return JS_EXCEPTION;
@@ -716,6 +733,8 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"audioUpdate",JS_NewCFunction(ctx,world_audio_update,"audioUpdate",7));
     JS_SetPropertyStr(ctx,handle,"audioInfo",JS_NewCFunction(ctx,world_audio_info,"audioInfo",1));
     JS_SetPropertyStr(ctx,handle,"audioRemove",JS_NewCFunction(ctx,world_audio_remove,"audioRemove",1));
+    JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",14));
+    JS_SetPropertyStr(ctx,handle,"atlasRemove",JS_NewCFunction(ctx,world_atlas_remove,"atlasRemove",1));
     JS_SetPropertyStr(ctx,handle,"actorAdd",JS_NewCFunction(ctx,world_actor_add,"actorAdd",1));
     JS_SetPropertyStr(ctx,handle,"actorRemove",JS_NewCFunction(ctx,world_actor_remove,"actorRemove",1));
     JS_SetPropertyStr(ctx,handle,"camera",JS_NewCFunction(ctx,world_camera,"camera",8));

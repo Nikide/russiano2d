@@ -13,11 +13,13 @@
 // maid_fps_weapons (пистолет/дробовик/АК), стрельба/перезарядка только
 // визуал и звук: урона и боя нет.
 //
-// Враги — пиксельный атлас 5 направлений × 8 состояний. Новый World рисует
-// только Re2DSprite (rigged), поэтому плоские кадры атласа проецируются в
-// экран JS-проекцией той же камеры и рисуются в батч (`$.gfx.push.sprite`)
-// ПОВЕРХ мира; стены перекрывают их через `world.ray` (целиком, без
-// попиксельного z — это честно записано в ограничениях).
+// Враги — пиксельный атлас 5 направлений × 8 состояний, нарисованный нативно:
+// `world.sprite(node, {...})` регистрирует обычный узел `$` как flat directional
+// atlas sprite. Направление (колонка) и зеркало выбирает C по facing и позиции
+// камеры; feet pivot ставит точку опоры в depth узла; глубина, туман и свет —
+// общий нативный композитор мира, поэтому стена перекрывает врага ПОПИКСЕЛЬНО.
+// JS-проекции и `ui.image`-оверлея для врагов больше нет; `world.ray` остаётся
+// только для логики видимости ИИ, не для отрисовки.
 // ===========================================================================
 'use strict';
 
@@ -78,7 +80,7 @@ export default function install($) {
     let hud_nodes = [];
     let enemy_frames = null;      // sprite ids кадров атласа
     let enemies = [];
-    let enemy_views = [];         // ui.image-узлы: оверлей поверх кадра мира
+    let enemy_views = [];         // sprite-узлы врагов: нативные atlas world sprites
     let weapons = null;
     let projected = 0;            // сколько врагов реально нарисовано
     let occluded = 0;             // сколько скрыто стеной
@@ -141,16 +143,11 @@ export default function install($) {
         });
     }
 
-    function enemyFrame(e) {
-        const rel = ((e.facing - view.yaw + 540) % 360) - 180;
-        const col = Math.max(0, Math.min(4, Math.round((180 - Math.abs(rel)) / 45)));
-        const row = e.mode === 'patrol' || e.mode === 'notice'
+    // Animation row only: the direction column and horizontal mirror are chosen
+    // by the native atlas pass from actor facing and camera position.
+    function enemyRow(e) {
+        return e.mode === 'patrol' || e.mode === 'notice'
             ? Math.floor(e.walk_t * ENEMY_WALK_FPS / 1000) % 4 : 0;
-        e.col = col;
-        e.flip = rel < 0;
-        e.row = row;
-        e.frame = row * ENEMY_SHEET.cols + col;
-        return e.frame;
     }
 
     function updateEnemies(step_ms) {
@@ -202,61 +199,53 @@ export default function install($) {
                 e.walk_t += step_ms;
             } else {
                 e.walk_t = 0;
-                e.frame = enemyFrame(e);
             }
-            if (moving) e.frame = enemyFrame(e);
+            e.row = enemyRow(e);
+            e.frame = e.row * ENEMY_SHEET.cols; // diagnostic: frame row (column is native)
         }
     }
 
     /**
-     * Разложить врагов поверх кадра мира. World рисует только Re2DSprite,
-     * поэтому плоские кадры атласа живут в `ui.image` (окно-координаты,
-     * рисуются после мира). Стену проверяем `world.ray`: враг за стеной
-     * скрывается целиком — попиксельного z-теста у оверлея нет, это
-     * осознанное ограничение демо.
+     * Синхронизировать узлы врагов с логикой. Ничего не проецируется вручную:
+     * нативный проход читает x/y/depth/w/h/angle и `sprite_row`, сам выбирает
+     * колонку и зеркало, а depth/fog/light делает композитор мира. Здесь
+     * остаются только игровые данные (позиция, facing, строка анимации) и
+     * диагностика прицела/окклюзии.
      */
-    function drawEnemies() {
+    function syncEnemies() {
         projected = 0;
         occluded = 0;
-        const ws = windowScale();
-        const cx = ws.w / 2;
-        const cy = ws.h / 2;
+        const cx = FRAME_W / 2;
+        const cy = FRAME_H / 2;
         for (let i = 0; i < enemies.length; i++) {
             const e = enemies[i];
-            const view_node = enemy_views[i];
-            if (!view_node) continue;
+            const node = enemy_views[i];
+            if (!node) continue;
+            let row = e.row;
+            if (e.dead) row = e.death_t >= DEATH_FALL_MS ? 7 : 6;
+            e.row = row;
+            e.frame = row * ENEMY_SHEET.cols; // diagnostic: row is what native reads
+            node.get(0).sprite_row = row;
+            node.at(e.x, e.y).depth(0).angle(e.facing * Math.PI / 180);
             e.aimed = false;
-            if (e.dead && e.death_t >= DEATH_FALL_MS) e.frame = 7 * ENEMY_SHEET.cols + e.death_col;
-            else if (e.dead) e.frame = 6 * ENEMY_SHEET.cols + e.death_col;
+            // Aim rectangle for the weapon stays screen-space; it is gameplay
+            // input, not sprite placement.
             const base = projectPoint(e.x, e.y, 0);
             const head = projectPoint(e.x, e.y, ENEMY_WORLD_H);
-            if (!base || !head) { view_node.get(0).visible = false; continue; }
+            if (!base || !head) continue;
             const hpx = base.y - head.y;
-            if (!(hpx > 1)) { view_node.get(0).visible = false; continue; }
+            if (!(hpx > 1)) continue;
             if (world && typeof world.ray === 'function') {
                 rays++;
                 const hit = world.ray({ x: view.x, y: view.y, height: view.h },
                                       { x: e.x, y: e.y, height: ENEMY_SEE_H });
-                if (hit) { occluded++; view_node.get(0).visible = false; continue; }
+                if (hit) occluded++;
             }
-            const sx = base.x * ws.x;
-            const sy = base.y * ws.x;
-            const w = hpx * ws.x;
-            const h = hpx * ws.x;
-            if (sx + w / 2 < 0 || sx - w / 2 > ws.w || sy < 0 || sy - h > sy + 1) {
-                if (sx < -w || sx > ws.w + w) { view_node.get(0).visible = false; continue; }
-            }
-            // Прицел — центр окна; попадание считается по тому же прямоугольнику,
-            // которым враг нарисован (что видно, в то и стреляем).
-            if (!e.dead && sx - w / 2 <= cx && cx <= sx + w / 2
-                && sy - h <= cy && cy <= sy) {
+            if (!e.dead && base.x - hpx / 2 <= cx && cx <= base.x + hpx / 2
+                && base.y - hpx <= cy && cy <= base.y) {
                 e.aimed = true;
                 e.aim_z = base.z;
             }
-            view_node.frame(e.frame);
-            view_node.at(sx, sy - h / 2).size(w, h);
-            view_node.color(e.flash_t > 0 ? '#ffd0d0' : '#ffffff');
-            view_node.get(0).visible = true;
             projected++;
         }
     }
@@ -448,7 +437,7 @@ export default function install($) {
         hud_nodes = [];
         if (weapons) for (const name of WEAPON_ORDER) if (weapons[name]) weapons[name].node.remove();
         weapons = null;
-        for (const node of enemy_views) node.remove();
+        for (const node of enemy_views) { if (world) world.remove(node); node.remove(); }
         enemy_views = [];
         if (world && typeof world.dispose === 'function') world.dispose();
         world = null;
@@ -484,6 +473,9 @@ export default function install($) {
             frames: ENEMY_FRAMES,
             drawn: projected,
             occluded: occluded,
+            enemyMode: 'native-atlas',
+            nativeSprites: info && info.atlasSprites,
+            visibleSprites: info && info.visibleAtlasSprites,
             enemies: enemies.map((e) => ({
                 id: e.cfg.id, mode: e.mode, seen: e.seen,
                 x: Math.round(e.x * 10) / 10, y: Math.round(e.y * 10) / 10,
@@ -509,26 +501,25 @@ export default function install($) {
                              distanceScale: 0.001 });
             world.camera(view);
 
-            // Кадры атласа врага нужны как sprite id для батча; сам узел
-            // не рисуется (обычный 2D-путь скрыт).
-            const sheet = $('<sprite>', { id: 'enemy-sheet' })
-                .frames({ src: ENEMY_ART, cols: ENEMY_SHEET.cols, rows: ENEMY_SHEET.rows,
-                          cw: ENEMY_SHEET.cw, ch: ENEMY_SHEET.ch })
-                .hide()
-                .appendTo($.world);
-            enemy_frames = sheet.get(0).frames;
+            // Один обычный `$`-узел на врага: world.sprite регистрирует его как
+            // нативный directional atlas sprite (5 колонок = 180°, зеркало).
             spawnEnemies();
             enemy_views = [];
-            for (let i = 0; i < enemies.length; i++) {
-                const node = $('<ui.image>', { id: 'enemy-view-' + enemies[i].cfg.id,
-                                               x: 0, y: 0, w: 8, h: 8 })
-                    .frames({ src: ENEMY_ART, cols: ENEMY_SHEET.cols, rows: ENEMY_SHEET.rows,
-                              cw: ENEMY_SHEET.cw, ch: ENEMY_SHEET.ch })
-                    .frame(0)
-                    .appendTo($.ui);
-                node.get(0).visible = false;
+            for (const e of enemies) {
+                const node = $('<sprite>', { id: 'enemy-' + e.cfg.id })
+                    .at(e.x, e.y).depth(0).size(ENEMY_WORLD_H, ENEMY_WORLD_H)
+                    .hide()
+                    .appendTo($.world);
+                node.get(0).sprite_row = 0;
+                world.sprite(node, {
+                    atlas: ENEMY_ART, columns: ENEMY_SHEET.cols, rows: ENEMY_SHEET.rows,
+                    directions: ENEMY_SHEET.cols, mirror: true,
+                    cell: { w: ENEMY_SHEET.cw, h: ENEMY_SHEET.ch }, pivot: 'feet',
+                    width: ENEMY_WORLD_H, height: ENEMY_WORLD_H, blend: 'masked',
+                });
                 enemy_views.push(node);
             }
+            enemy_frames = Array.from({ length: ENEMY_FRAMES }, (_, i) => i);
 
             $.window.mouseLock(true);
 
@@ -598,7 +589,7 @@ export default function install($) {
             }
 
             updateEnemies(step_ms);
-            drawEnemies();
+            syncEnemies();
 
             if (weapons) {
                 for (let k = 0; k < WEAPON_KEYS.length; k++) {

@@ -18,6 +18,16 @@ world.add(sprite);
 
 `world.add(sprite)` включает существующий узел со спрайтом в список отрисовки World; повторное добавление того же узла не дублирует изображение. `world.remove(sprite)` исключает его из кадра, сохраняя игровой узел. Чтобы удалить узел, сначала исключите его из кадра World, затем вызовите обычный `sprite.remove()`. `world.dispose()` освобождает ресурсы рендера и ссылки на узлы. В текущем режиме `.hide()` подавляет отдельную обычную 2D-отрисовку, но сохраняет изображение в кадре World.
 
+## Flat atlas: соседний режим, не замена Re2DSprite
+
+Для плоского directional-атласа (enemy sheet) не нужен character JSON и rig.
+Обычный узел `$` регистрируется через `world.sprite(node, {atlas, columns,
+rows, directions, mirror, cell, pivot, width, height, blend})`; колонку
+направления, зеркало, pivot и depth-тест считает нативный C. Это отдельный
+constrained режим (`info().atlasSprites`), он не меняет synth-путь Re2DSprite
+из этой страницы. Пример и ограничения — [high-level API](../highlevel/re2d.md#flat-directional-atlas-sprites),
+приёмочный демо-стенд — `demos/re2d_boomer_lab`.
+
 ## Координаты и единицы
 
 | Поле | Registered World | Обычный 2D draw |

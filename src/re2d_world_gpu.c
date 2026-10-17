@@ -253,17 +253,21 @@ static bool actors_upload(JSContext *ctx,R2DWorldRuntime *w,WorldGPU *g,SDL_GPUC
     for(int i=0;i<g->actor_capacity;i++){ActorGPU *a=&g->actors[i];
         a->dirty=false;
         if(i>=w->frame_count||!w->frame_images[i]){if(a->color)SDL_ReleaseGPUTexture(d,a->color);if(a->depth)SDL_ReleaseGPUTexture(d,a->depth);memset(a,0,sizeof *a);continue;}
-        uint64_t key=r2d_rotsprite_instance(ctx,w->frame_handles[i]);int revision=r2d_rotsprite_revision(ctx,w->frame_handles[i]),size=w->frame_sizes[i];
+        uint64_t key;int revision,size=w->frame_sizes[i];bool samples=false;
+        if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS){key=w->frame_keys[i];revision=w->frame_revisions[i];}
+        else {key=r2d_rotsprite_instance(ctx,w->frame_handles[i]);revision=r2d_rotsprite_revision(ctx,w->frame_handles[i]);samples=r2d_rotsprite_sample_depth(ctx,w->frame_handles[i])!=NULL;}
         if(a->key==key&&a->revision==revision&&a->size==size)continue;
         bytes=((bytes+511)&~(size_t)511)+(size_t)size*size*4;
-        if(r2d_rotsprite_sample_depth(ctx,w->frame_handles[i]))bytes=((bytes+511)&~(size_t)511)+(size_t)size*size*4;
+        if(samples)bytes=((bytes+511)&~(size_t)511)+(size_t)size*size*4;
     }
     if(!bytes)return true;if(bytes>128*1024*1024){SDL_SetError("Re2D GPU actor upload budget 128 MiB exceeded");return false;}
     SDL_GPUTransferBufferCreateInfo t={0};t.usage=SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;t.size=(Uint32)bytes;SDL_GPUTransferBuffer *upload=SDL_CreateGPUTransferBuffer(d,&t);if(!upload)return false;
     uint8_t *mapped=SDL_MapGPUTransferBuffer(d,upload,false);if(!mapped){SDL_ReleaseGPUTransferBuffer(d,upload);return false;}
     size_t offset=0;bool ok=true;
-    for(int i=0;i<w->frame_count;i++)if(w->frame_images[i]){ActorGPU *a=&g->actors[i];uint64_t key=r2d_rotsprite_instance(ctx,w->frame_handles[i]);int revision=r2d_rotsprite_revision(ctx,w->frame_handles[i]),size=w->frame_sizes[i];
-        if(a->key==key&&a->revision==revision&&a->size==size)continue;const float *depth=r2d_rotsprite_sample_depth(ctx,w->frame_handles[i]);
+    for(int i=0;i<w->frame_count;i++)if(w->frame_images[i]){ActorGPU *a=&g->actors[i];uint64_t key=0;int revision=0,size=w->frame_sizes[i];const float *depth=NULL;
+        if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS){key=w->frame_keys[i];revision=w->frame_revisions[i];}
+        else {key=r2d_rotsprite_instance(ctx,w->frame_handles[i]);revision=r2d_rotsprite_revision(ctx,w->frame_handles[i]);depth=r2d_rotsprite_sample_depth(ctx,w->frame_handles[i]);}
+        if(a->key==key&&a->revision==revision&&a->size==size)continue;
         if(a->size!=size||(depth!=NULL)!=(a->depth!=NULL)){if(a->color)SDL_ReleaseGPUTexture(d,a->color);if(a->depth)SDL_ReleaseGPUTexture(d,a->depth);a->color=actor_texture(d,size,false);a->depth=depth?actor_texture(d,size,true):NULL;}
         if(!a->color||(depth&&!a->depth)){ok=false;break;}
         for(int j=0;j<(depth?2:1);j++){offset=(offset+511)&~(size_t)511;size_t count=(size_t)size*size*4;memcpy(mapped+offset,j?(const void *)depth:w->frame_images[i],count);
@@ -295,7 +299,7 @@ static void actor_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,
     if(right<=left||bottom<=top)return;SDL_Rect scissor={left,top,right-left,bottom-top};SDL_SetGPUScissor(pass,&scissor);
     u.actor[0]=p[0];u.actor[1]=p[1];u.actor[2]=center;u.actor[3]=p[4];u.shape[2]=p[3];u.plane[0]=dist;u.plane[3]=2;
     u.material[2]=samples?1:0;u.identity[0]=-1;u.identity[1]=span;u.identity[3]=1;u.opening[3]=i;
-    for(int c=0;c<4;c++)u.tint[c]=1;lighting(&w->world,span,filter,&u);if(w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)u.identity[2]=-1;
+    for(int c=0;c<4;c++)u.tint[c]=1;if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS){u.light_options[15][3]=(float)w->frame_blends[i];if(w->frame_blends[i]>=R2D_WORLD_TRANSLUCENT)u.tint[3]=1;}lighting(&w->world,span,filter,&u);if(w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)u.identity[2]=-1;
     SDL_GPUTextureSamplerBinding textures[3]={{a->color,g->sampler},{a->depth?a->depth:r2d_texture_handle(w->renderer,g->black),g->sampler},{r2d_texture_handle(w->renderer,g->black),g->sampler}};
     material_bind(w,g,pass,textures);SDL_PushGPUFragmentUniformData(cmd,0,&u,sizeof u);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;
 }
@@ -339,9 +343,14 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
     }
     for(int j=0;j<w->visibility.surface_count;j++){int id=w->visibility.surfaces[j];if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)continue;surface_draw(w,g,cmd,pass,v,ortho,id);}
     SDL_Rect full={0,0,w->width,w->height};SDL_SetGPUScissor(pass,&full);
-    for(int i=0;i<w->frame_count;i++)if(w->frame_images[i]){actor_draw(w,g,cmd,pass,v,ortho,i,-1,false);
+    for(int i=0;i<w->frame_count;i++)if(w->frame_images[i]){
+        int blend=w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS?w->frame_blends[i]:0;
+        SDL_GPUGraphicsPipeline *actor_pipeline=w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:blend==R2D_WORLD_ADDITIVE?g->additive:blend>=R2D_WORLD_TRANSLUCENT?g->translucent:g->pipeline;
+        SDL_BindGPUGraphicsPipeline(pass,actor_pipeline);
+        actor_draw(w,g,cmd,pass,v,ortho,i,-1,false);
         for(int j=0;j<w->visibility.span_count;j++){int span=w->visibility.spans[j];const R2DWorldSpan *s=&w->world.spans[span];const float *p=w->frame_positions+i*5;
-            if(p[0]+p[3]<s->x||p[0]-p[3]>s->x+s->w||p[1]+p[3]<s->y||p[1]-p[3]>s->y+s->h)continue;actor_draw(w,g,cmd,pass,v,ortho,i,span,true);}}
+            if(p[0]+p[3]<s->x||p[0]-p[3]>s->x+s->w||p[1]+p[3]<s->y||p[1]-p[3]>s->y+s->h)continue;actor_draw(w,g,cmd,pass,v,ortho,i,span,true);}
+        if(actor_pipeline!=g->pipeline&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)SDL_BindGPUGraphicsPipeline(pass,g->pipeline);}
     for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)if(w->world.decals[i].active){
         const R2DWorldDecal *decal=&w->world.decals[i];int id=decal->surface;if(!w->visibility.surface_seen[id]||(w->world.surface_sky&&w->world.surface_sky[id]))continue;
         SDL_Rect scissor;if(!surface_bounds(w,v,ortho,id,&scissor))continue;SDL_SetGPUScissor(pass,&scissor);

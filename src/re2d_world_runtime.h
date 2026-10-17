@@ -4,6 +4,24 @@
 #include "audio.h"
 #include <quickjs.h>
 // Runtime owns native actor registration and final-frame resources. Bindings only configure/call.
+#define R2D_WORLD_ATLAS_ACTOR_LIMIT 1024
+// One flat directional atlas sprite registered from an existing `$` node. The
+// atlas image and the cropped square frame live here; world depth/light/fog and
+// direction selection are native, so game scripts do not project per frame.
+typedef struct R2DWorldAtlasActor {
+    JSValue node;
+    uint8_t *atlas;
+    int atlas_w,atlas_h;
+    int columns,rows,directions,cell_w,cell_h,pivot_mode,blend;
+    bool mirror;
+    float pivot_x,pivot_y,width,height;
+    uint8_t *frame;
+    int frame_side;
+    int last_column,last_row,last_flip,frame_revision;
+} R2DWorldAtlasActor;
+// Frame entry kinds. RotSprite entries use native synthesis; atlas entries reuse
+// an already cropped square image and do not touch the Re2DSprite runtime.
+enum { R2D_WORLD_FRAME_ROTSPRITE = 0, R2D_WORLD_FRAME_ATLAS = 1 };
 typedef struct R2DWorldAudioSource {
     bool active,hrtf,occluded;
     unsigned generation;
@@ -29,6 +47,10 @@ typedef struct R2DWorldRuntime {
     float *frame_positions;
     const uint8_t **frame_images;
     int *frame_sizes;
+    int *frame_kinds,*frame_revisions,*frame_blends;
+    uint64_t *frame_keys;
+    R2DWorldAtlasActor *atlas_actors;
+    int atlas_count,atlas_capacity,visible_atlas_count;
     int actor_count,actor_capacity,frame_count;
     struct R2DWorldRuntime *next;
     bool registered;
@@ -49,6 +71,12 @@ typedef struct R2DWorldRuntime {
 } R2DWorldRuntime;
 bool r2d_world_actor_register(JSContext *,R2DWorldRuntime *,JSValueConst);
 bool r2d_world_actor_unregister(JSContext *,R2DWorldRuntime *,JSValueConst);
+// Flat directional atlas sprite mode for an existing node. Not a mesh, not an
+// entity: only an atlas PNG + direction/pivot policy attached to the node.
+bool r2d_world_atlas_register(JSContext *,R2DWorldRuntime *,JSValueConst,const char *,
+    int columns,int rows,int directions,bool mirror,int cell_w,int cell_h,
+    int pivot,float pivot_x,float pivot_y,float width,float height,int blend);
+bool r2d_world_atlas_unregister(JSContext *,R2DWorldRuntime *,JSValueConst);
 void r2d_world_runtime_actors_free(R2DWorldRuntime *);
 // Returns ordinary 2D sprite id; errors set QuickJS exception, no script renderer loops.
 int r2d_world_runtime_frame(JSContext *,R2DWorldRuntime *,const R2DRe2dView *,int,int,float);

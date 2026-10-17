@@ -1,0 +1,1 @@
+<rml><head><title>Re2D boomer lab</title><link type="text/rcss" href="lab.rcss" /></head><body><div id="panel"><div id="status"></div><div id="keys">Native atlas world sprites · depth + fog + light · Esc: exit</div></div><div id="cross">+</div></body></rml>

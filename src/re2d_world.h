@@ -166,6 +166,9 @@ void r2d_world_stamp_lit(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_
 void r2d_world_frame_targets(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,float,const R2DWorldVisibility *,R2DWorldPixelOwner *);
 void r2d_world_stamp_targets(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,const uint8_t *,int,float,float,float,float,float,float,R2DWorldPixelOwner *,int);
 void r2d_world_stamp_samples(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,const uint8_t *,const float *,int,float,float,float,float,float,float,R2DWorldPixelOwner *,int);
+// Blend-aware variants used by native atlas world sprites (masked/opaque/translucent/additive).
+void r2d_world_stamp_targets_ex(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,const uint8_t *,int,float,float,float,float,float,float,R2DWorldPixelOwner *,int,int);
+void r2d_world_stamp_samples_ex(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,const uint8_t *,const float *,int,float,float,float,float,float,float,R2DWorldPixelOwner *,int,int);
 void r2d_world_debug_pixels(const R2DRe2dWorld *,const R2DRe2dView *,const R2DWorldVisibility *,float,int,int,int,uint8_t *,const float *,const R2DWorldPixelOwner *);
 bool r2d_world_portal_window(const R2DRe2dView *,float,const R2DWorldPortal *,const R2DWorldOpening *,R2DWorldWindow *);
 

@@ -1,4 +1,5 @@
 #include "re2d_world_runtime.h"
+#include "re2d_world_atlas.h"
 #include "re2d_world_exr.h"
 #include "re2d_world_gpu.h"
 #include "rotsprite.h"
@@ -31,8 +32,12 @@ void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
 {
     r2d_world_gpu_free(w);
     for(int i=0;i<w->actor_count;i++)JS_FreeValueRT(w->runtime,w->actors[i]);
+    for(int i=0;i<w->atlas_count;i++){JS_FreeValueRT(w->runtime,w->atlas_actors[i].node);free(w->atlas_actors[i].atlas);free(w->atlas_actors[i].frame);}
     free(w->actors);free(w->frame_handles);free(w->frame_positions);free(w->frame_images);free(w->frame_sizes);
-    w->actors=w->frame_handles=NULL;w->frame_positions=NULL;w->frame_images=NULL;w->frame_sizes=NULL;w->actor_count=w->actor_capacity=0;
+    free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_keys);free(w->atlas_actors);
+    w->actors=w->frame_handles=NULL;w->frame_positions=NULL;w->frame_images=NULL;w->frame_sizes=NULL;
+    w->frame_kinds=NULL;w->frame_revisions=NULL;w->frame_blends=NULL;w->frame_keys=NULL;w->atlas_actors=NULL;
+    w->actor_count=w->actor_capacity=0;w->atlas_count=w->atlas_capacity=0;
 }
 static bool field(JSContext *ctx,JSValueConst node,const char *name,float *out)
 {
@@ -72,6 +77,9 @@ static bool collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,JS
     }
     if(w->frame_count==ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: composition budget exhausted");goto done;}
     int index=w->frame_count++;w->frame_handles[index]=JS_DupValue(ctx,handle);memcpy(w->frame_positions+index*5,p,sizeof p);
+    w->frame_kinds[index]=R2D_WORLD_FRAME_ROTSPRITE;
+    w->frame_keys[index]=r2d_rotsprite_instance(ctx,handle);
+    w->frame_revisions[index]=r2d_rotsprite_revision(ctx,handle);
     for(uint32_t i=0;i<count;i++) {
         JSValue child=JS_GetPropertyUint32(ctx,children,i);float h;
         if(JS_IsException(child))goto done;
@@ -81,18 +89,83 @@ static bool collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,JS
 done:
     JS_FreeValue(ctx,handle);JS_FreeValue(ctx,children);JS_FreeValue(ctx,attachment);JS_FreeValue(ctx,rot);return ok;
 }
+
+// Native directional atlas pass. Runs after world visibility so an off-screen or
+// fully culled sprite never pays for a cell crop. Appends frame entries in the
+// same composition list as Re2DSprite actors.
+static bool atlas_png(JSContext *ctx,const char *path,uint8_t **pixels,int *width,int *height);
+static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,int width,int height,float ortho)
+{
+    for(int a=0;a<w->atlas_count;a++) {
+        R2DWorldAtlasActor *actor=&w->atlas_actors[a];
+        float x,y,depth,ww,hh,facing;
+        if(!field(ctx,actor->node,"x",&x)||!field(ctx,actor->node,"y",&y)||!field(ctx,actor->node,"depth",&depth)||
+           !field(ctx,actor->node,"w",&ww)||!field(ctx,actor->node,"h",&hh)||!field(ctx,actor->node,"angle",&facing))return false;
+        if(ww<=0||hh<=0)continue;
+        int row=0;
+        JSValue rv=JS_GetPropertyStr(ctx,actor->node,"sprite_row");
+        if(JS_IsException(rv))return false;
+        if(!JS_IsUndefined(rv)&&!JS_IsNull(rv)) {
+            double d;
+            if(JS_ToFloat64(ctx,&d,rv)<0){JS_FreeValue(ctx,rv);return false;}
+            if(!isfinite(d)||fabs(d)>1000000){JS_FreeValue(ctx,rv);JS_ThrowRangeError(ctx,"Re2D World: sprite_row must be finite");return false;}
+            row=(int)d;
+        }
+        JS_FreeValue(ctx,rv);
+        const float dx=x-view->x,dy=y-view->y,dist=fmaxf(.000001f,hypotf(dx,dy));
+        bool flip=false;
+        const int column=r2d_world_atlas_direction(r2d_world_atlas_relative_yaw(facing,dx/dist,dy/dist),actor->directions,actor->mirror,&flip);
+        float px,py;r2d_world_atlas_pivot(actor->pivot_mode,actor->pivot_x,actor->pivot_y,&px,&py);
+        int side,cell_x,cell_y,cell_w,cell_h,dest_x,dest_y;float pivot_sx,pivot_sy;
+        if(!r2d_world_atlas_placement(actor->cell_w,actor->cell_h,px,py,&side,&dest_x,&dest_y,&pivot_sx,&pivot_sy))continue;
+        r2d_world_atlas_cell(column,row,actor->columns,actor->rows,actor->cell_w,actor->cell_h,&cell_x,&cell_y,&cell_w,&cell_h);
+        const float wsq=ww*(float)side/(float)actor->cell_w,hsq=hh*(float)side/(float)actor->cell_h;
+        const float wx=x+(0.5f-pivot_sx/(float)side)*wsq;
+        const float bottom=depth-(1.0f-pivot_sy/(float)side)*hsq;
+        const int span=r2d_world_span_at(&w->world,wx,y,bottom+hsq*0.5f);
+        const bool visible=span>=0&&w->visibility.span_seen[span]&&r2d_world_sprite_visible(view,width,height,wx,y,bottom,wsq,hsq,ortho);
+        if(visible) {
+            if(!actor->frame||actor->frame_side!=side) {
+                uint8_t *frame=realloc(actor->frame,(size_t)side*(size_t)side*4u);
+                if(!frame){JS_ThrowOutOfMemory(ctx);return false;}
+                actor->frame=frame;actor->frame_side=side;actor->last_column=-1;
+            }
+            if(actor->last_column!=column||actor->last_row!=row||actor->last_flip!=(flip?1:0)) {
+                if(!r2d_world_atlas_crop(actor->atlas,actor->atlas_w,actor->atlas_h,cell_x,cell_y,cell_w,cell_h,flip,side,dest_x,dest_y,actor->frame)) {
+                    JS_ThrowInternalError(ctx,"Re2D World: atlas cell crop failed");return false;
+                }
+                actor->last_column=column;actor->last_row=row;actor->last_flip=flip?1:0;actor->frame_revision++;
+            }
+        }
+        if(w->frame_count==ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: composition budget exhausted");return false;}
+        const int index=w->frame_count++;
+        w->frame_handles[index]=JS_UNDEFINED;
+        float *p=w->frame_positions+index*5;p[0]=wx;p[1]=y;p[2]=bottom;p[3]=wsq;p[4]=hsq;
+        w->frame_kinds[index]=R2D_WORLD_FRAME_ATLAS;
+        w->frame_sizes[index]=side;
+        w->frame_keys[index]=(uint64_t)(a+1);
+        w->frame_revisions[index]=actor->frame_revision;
+        w->frame_blends[index]=actor->blend;
+        w->frame_images[index]=visible?actor->frame:NULL;
+        if(visible){w->visible_actor_count++;w->visible_atlas_count++;}
+    }
+    return true;
+}
 int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,int width,int height,float ortho)
 {
     if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: reentrant rendering");return -1;}
     if(!w->frame_handles) {
         JSValue *handles=calloc(ACTOR_LIMIT,sizeof *handles);float *positions=malloc(ACTOR_LIMIT*5*sizeof(float));
         const uint8_t **images=calloc(ACTOR_LIMIT,sizeof *images);int *sizes=calloc(ACTOR_LIMIT,sizeof *sizes);
-        if(!handles||!positions||!images||!sizes){free(handles);free(positions);free(images);free(sizes);JS_ThrowOutOfMemory(ctx);return -1;}
+        int *kinds=calloc(ACTOR_LIMIT,sizeof *kinds),*revisions=calloc(ACTOR_LIMIT,sizeof *revisions),*blends=calloc(ACTOR_LIMIT,sizeof *blends);
+        uint64_t *keys=calloc(ACTOR_LIMIT,sizeof *keys);
+        if(!handles||!positions||!images||!sizes||!kinds||!revisions||!blends||!keys){free(handles);free(positions);free(images);free(sizes);free(kinds);free(revisions);free(blends);free(keys);JS_ThrowOutOfMemory(ctx);return -1;}
         w->frame_handles=handles;w->frame_positions=positions;w->frame_images=images;w->frame_sizes=sizes;
+        w->frame_kinds=kinds;w->frame_revisions=revisions;w->frame_blends=blends;w->frame_keys=keys;
     }
     r2d_world_audio_step(w,view);
     Uint64 frame_start=SDL_GetPerformanceCounter(),phase=frame_start;double ms=1000.0/SDL_GetPerformanceFrequency();
-    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;int result=-1;
+    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->visible_atlas_count=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;int result=-1;
     for(int i=0;i<w->actor_count;i++)if(!collect(ctx,w,view,w->actors[i],0,false,0,0))goto done;
     if(w->disposed){JS_ThrowTypeError(ctx,"Re2D World: world disposed during actor query");goto done;}
     if(width!=w->width||height!=w->height||!w->owners) {
@@ -112,10 +185,12 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     for(int i=0;i<w->visibility.span_count;i++){int span=w->visibility.spans[i];for(int j=0;j<w->world.span_light_counts[span];j++)lights[w->world.span_light_refs[span*R2D_WORLD_LIGHTS_PER_SPAN+j]]=true;}
     for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(lights[i]){w->visible_lights++;if(w->world.shadow_mask[i])w->shadowed_lights++;}
     phase=SDL_GetPerformanceCounter();
+    if(!atlas_collect(ctx,w,view,width,height,ortho))goto done;
     // Resolve all script properties before borrowing synthesis memory.
     int cursor=w->frame_count?w->pose_cursor%w->frame_count:0,next_cursor=cursor;
     for(int k=0;k<w->frame_count;k++) {
         int i=(cursor+k)%w->frame_count;
+        if(w->frame_kinds[i]!=R2D_WORLD_FRAME_ROTSPRITE)continue;
         const float *p=w->frame_positions+i*5;int span=r2d_world_span_at(&w->world,p[0],p[1],p[2]+p[4]*.5f);
         bool visible=span>=0&&w->visibility.span_seen[span]&&r2d_world_sprite_visible(view,width,height,p[0],p[1],p[2],p[3],p[4],ortho);
         bool dirty=visible&&r2d_rotsprite_dirty(ctx,w->frame_handles[i]),synthesize=visible&&(w->pose_budget==0||w->poses_updated<w->pose_budget);
@@ -128,7 +203,9 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     if(w->gpu_enabled||w->debug_view==R2D_WORLD_DEBUG_OVERDRAW){if(!r2d_world_gpu_frame(ctx,w,view,ortho)){r2d_world_gpu_free(w);JS_ThrowInternalError(ctx,"Re2D World GPU: %s",SDL_GetError());goto done;}}
     else r2d_world_frame_targets(&w->world,view,width,height,w->rgba,w->depth,ortho,&w->visibility,w->owners);
     w->surface_ms=(SDL_GetPerformanceCounter()-phase)*ms;phase=SDL_GetPerformanceCounter();
-    if(!w->gpu_enabled&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)for(int i=0;i<w->frame_count;i++){const float *p=w->frame_positions+i*5;const float *samples=r2d_rotsprite_sample_depth(ctx,w->frame_handles[i]);r2d_world_stamp_samples(&w->world,view,width,height,w->rgba,w->depth,w->frame_images[i],samples,w->frame_sizes[i],p[0],p[1],p[2],p[3],p[4],ortho,w->owners,i);}
+    if(!w->gpu_enabled&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)for(int i=0;i<w->frame_count;i++){const float *p=w->frame_positions+i*5;
+        if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS){r2d_world_stamp_samples_ex(&w->world,view,width,height,w->rgba,w->depth,w->frame_images[i],NULL,w->frame_sizes[i],p[0],p[1],p[2],p[3],p[4],ortho,w->owners,i,w->frame_blends[i]);continue;}
+        const float *samples=r2d_rotsprite_sample_depth(ctx,w->frame_handles[i]);r2d_world_stamp_samples(&w->world,view,width,height,w->rgba,w->depth,w->frame_images[i],samples,w->frame_sizes[i],p[0],p[1],p[2],p[3],p[4],ortho,w->owners,i);}
     if(!w->gpu_enabled&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)r2d_world_frame_decals(&w->world,view,width,height,w->rgba,w->depth,ortho,&w->visibility,w->owners);
     if(!w->gpu_enabled&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&!r2d_world_frame_transparent(&w->world,view,width,height,w->rgba,w->depth,ortho,&w->visibility)){JS_ThrowOutOfMemory(ctx);goto done;}
     r2d_world_debug_pixels(&w->world,view,&w->visibility,ortho,w->debug_view,width,height,w->rgba,w->depth,w->owners);
@@ -136,7 +213,7 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     if((!w->gpu_enabled||w->debug_view!=R2D_WORLD_DEBUG_FINAL)&&!r2d_texture_upload_region(w->renderer,w->texture,0,0,width,height,w->rgba,width*4)){JS_ThrowInternalError(ctx,"Re2D World: target upload failed");goto done;}
     w->upload_ms=(SDL_GetPerformanceCounter()-phase)*ms;result=w->sprite;
 done:
-    for(int i=0;i<w->frame_count;i++){JS_FreeValue(ctx,w->frame_handles[i]);w->frame_handles[i]=JS_UNDEFINED;}
+    for(int i=0;i<w->frame_count;i++){if(w->frame_kinds[i]==R2D_WORLD_FRAME_ROTSPRITE)JS_FreeValue(ctx,w->frame_handles[i]);w->frame_handles[i]=JS_UNDEFINED;}
     w->frame_ms=(SDL_GetPerformanceCounter()-frame_start)*ms;w->rendering=false;return result;
 }
 
@@ -191,6 +268,67 @@ bool r2d_world_runtime_sky(JSContext *ctx,R2DWorldRuntime *w,const char *path,ui
     }
     free(w->world.sky.pixels);w->world.sky=texture;w->world.sky_color=color;w->world.sky_yaw=yaw;
     r2d_world_gpu_material_dirty(w);return true;
+}
+
+
+// Decode a flat atlas PNG once. Atlas sheets may be larger than a surface
+// material but stay bounded; the runtime owns the decoded RGBA8 pixels.
+static bool atlas_png(JSContext *ctx,const char *path,uint8_t **pixels,int *width,int *height)
+{
+    if(!path||!path[0]){JS_ThrowTypeError(ctx,"Re2D World: atlas sprite requires an atlas PNG");return false;}
+    R2DScript *script=JS_GetContextOpaque(ctx);char full[4096];r2d_app_resolve_path(script->app,full,sizeof full,path);
+    SDL_Surface *image=NULL;
+    if(r2d_vfs_has(full)) {
+        size_t size=0;uint8_t *bytes=r2d_vfs_read(full,&size);
+        if(bytes){SDL_IOStream *io=SDL_IOFromConstMem(bytes,size);if(io){image=IMG_LoadPNG_IO(io);SDL_CloseIO(io);}r2d_vfs_free(bytes);}
+    } else {SDL_IOStream *io=SDL_IOFromFile(full,"rb");if(io){image=IMG_LoadPNG_IO(io);SDL_CloseIO(io);}}
+    if(!image){JS_ThrowTypeError(ctx,"Re2D World: cannot read atlas PNG %s",path);return false;}
+    if(image->w<1||image->h<1||image->w>4096||image->h>4096){SDL_DestroySurface(image);JS_ThrowRangeError(ctx,"Re2D World: atlas PNG dimensions 1..4096");return false;}
+    SDL_Surface *rgba=SDL_ConvertSurface(image,SDL_PIXELFORMAT_RGBA32);SDL_DestroySurface(image);
+    if(!rgba){JS_ThrowOutOfMemory(ctx);return false;}
+    uint8_t *copy=malloc((size_t)rgba->w*(size_t)rgba->h*4u);
+    if(!copy){SDL_DestroySurface(rgba);JS_ThrowOutOfMemory(ctx);return false;}
+    for(int y=0;y<rgba->h;y++)memcpy(copy+(size_t)y*rgba->w*4,(uint8_t *)rgba->pixels+(size_t)y*rgba->pitch,(size_t)rgba->w*4);
+    *pixels=copy;*width=rgba->w;*height=rgba->h;
+    SDL_DestroySurface(rgba);return true;
+}
+bool r2d_world_atlas_register(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node,const char *path,
+    int columns,int rows,int directions,bool mirror,int cell_w,int cell_h,
+    int pivot,float pivot_x,float pivot_y,float width,float height,int blend)
+{
+    if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: atlas registry is busy");return false;}
+    if(!JS_IsObject(node)){JS_ThrowTypeError(ctx,"Re2D World: atlas sprite needs a node");return false;}
+    if(w->atlas_count==R2D_WORLD_ATLAS_ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: atlas sprite budget exhausted");return false;}
+    if(columns<1||columns>64||rows<1||rows>64){JS_ThrowRangeError(ctx,"Re2D World: atlas columns/rows 1..64");return false;}
+    if(directions<R2D_WORLD_ATLAS_DIRECTIONS_MIN||directions>R2D_WORLD_ATLAS_DIRECTIONS_MAX){JS_ThrowRangeError(ctx,"Re2D World: atlas directions 1..16");return false;}
+    if(cell_w<R2D_WORLD_ATLAS_CELL_MIN||cell_h<R2D_WORLD_ATLAS_CELL_MIN||cell_w>R2D_WORLD_ATLAS_CELL_MAX||cell_h>R2D_WORLD_ATLAS_CELL_MAX){JS_ThrowRangeError(ctx,"Re2D World: atlas cell size 1..1024");return false;}
+    if(pivot<R2D_WORLD_ATLAS_PIVOT_CENTER||pivot>R2D_WORLD_ATLAS_PIVOT_CUSTOM){JS_ThrowRangeError(ctx,"Re2D World: atlas pivot mode 0..3");return false;}
+    if(blend<R2D_WORLD_MASKED||blend>R2D_WORLD_ADDITIVE){JS_ThrowRangeError(ctx,"Re2D World: atlas blend mode 0..3");return false;}
+    if(!isfinite(pivot_x)||!isfinite(pivot_y)||!isfinite(width)||!isfinite(height)||width<=0||height<=0){JS_ThrowRangeError(ctx,"Re2D World: atlas pivot/size must be finite and positive width/height");return false;}
+    for(int i=0;i<w->atlas_count;i++)if(same(node,w->atlas_actors[i].node)){JS_ThrowTypeError(ctx,"Re2D World: node already has an atlas sprite");return false;}
+    R2DWorldAtlasActor actor={0};
+    if(!atlas_png(ctx,path,&actor.atlas,&actor.atlas_w,&actor.atlas_h))return false;
+    if(columns*cell_w>actor.atlas_w||rows*cell_h>actor.atlas_h){
+        free(actor.atlas);
+        JS_ThrowRangeError(ctx,"Re2D World: atlas grid %dx%d cells %dx%d does not fit %dx%d image",columns,rows,cell_w,cell_h,actor.atlas_w,actor.atlas_h);
+        return false;
+    }
+    if(w->atlas_count==w->atlas_capacity){int n=w->atlas_capacity?w->atlas_capacity*2:8;R2DWorldAtlasActor *p=realloc(w->atlas_actors,(size_t)n*sizeof *p);if(!p){free(actor.atlas);JS_ThrowOutOfMemory(ctx);return false;}w->atlas_actors=p;w->atlas_capacity=n;}
+    actor.node=JS_DupValue(ctx,node);
+    actor.columns=columns;actor.rows=rows;actor.directions=directions;actor.mirror=mirror;
+    actor.cell_w=cell_w;actor.cell_h=cell_h;actor.pivot_mode=pivot;actor.pivot_x=pivot_x;actor.pivot_y=pivot_y;
+    actor.width=width;actor.height=height;actor.blend=blend;
+    w->atlas_actors[w->atlas_count++]=actor;return true;
+}
+bool r2d_world_atlas_unregister(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node)
+{
+    if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: atlas registry is busy");return false;}
+    for(int i=0;i<w->atlas_count;i++)if(same(node,w->atlas_actors[i].node)){
+        JS_FreeValue(ctx,w->atlas_actors[i].node);free(w->atlas_actors[i].atlas);free(w->atlas_actors[i].frame);
+        memmove(w->atlas_actors+i,w->atlas_actors+i+1,(size_t)(w->atlas_count-i-1)*sizeof(R2DWorldAtlasActor));
+        w->atlas_count--;return true;
+    }
+    return true;
 }
 
 void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {

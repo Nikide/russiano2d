@@ -9,9 +9,9 @@
 #   * ходьба: W идёт вперёд, упирается во внутреннюю стену (y≈620) и южную
 #     границу; A — боком; высота глаз едет по `world.support`;
 #   * враги: 6 данных, лист 40 кадров (5×8), ходьба меняет строки 0..3,
-#     поворот = колонка по `facing − yaw` (0 лицом … 4 спиной) + зеркало;
-#     за внутренней стеной враг не «видит» игрока (`world.ray`), а на кадре
-#     он скрыт оверлеем (occluded > 0);
+#     направление/зеркало выбирает НАТИВНЫЙ atlas pass (не JS);
+#     за внутренней стеной враг не «видит» игрока (`world.ray` для ИИ), а
+#     рисуется он нативным композитором мира с попиксельным depth-тестом;
 #   * оружие: 3 вида, 1/2/3 переключают, выстрел 0→1→2→3→0 со звуком на
 #     кадре 1, R — перезарядка со звуком; урона/боя нет (combat: false);
 #   * ошибок игрового кода нет.
@@ -133,16 +133,16 @@ def main():
         check(len(seen_frames) >= 3 and seen_rows <= {0, 1, 2, 3},
               f"ходьба анимирована кадрами 0..3: кадры {sorted(seen_frames)}, строки {sorted(seen_rows)}")
 
-        # Колонка/зеркало соответствуют формуле «угол к камере».
-        yaw = state(a)["hero"]["yaw"]
-        ok_rot = True
-        for e in state(a)["enemies"]:
-            rel = ((e["facing"] - yaw + 540) % 360) - 180
-            col = max(0, min(4, round((180 - abs(rel)) / 45)))
-            if e["col"] != col or e["flip"] != (rel < 0):
-                ok_rot = False
-                break
-        check(ok_rot, f"поворот врагов = колонка по углу к камере (yaw={yaw})")
+        # Направление и глубина теперь нативные: нет JS-проекции и ui.image.
+        st = state(a)
+        check(st.get("enemyMode") == "native-atlas",
+              f"враги рисует нативный atlas pass: mode={st.get('enemyMode')}")
+        check(st.get("nativeSprites") == 6,
+              f"шесть узлов зарегистрированы как world sprites: {st.get('nativeSprites')}")
+        check(st.get("visibleSprites", 99) <= 6,
+              f"нативный проход считает видимых спрайтов: {st.get('visibleSprites')}")
+        check(a.eval("$.findNodes('#enemy-view-cat-nw').length") == 0,
+              "оверлейных ui.image-узлов врагов больше нет")
 
         # За внутренней стеной враг не видит игрока и скрыт оверлеем.
         a.hold(["W"]); a.step(330); a.release_all(); a.step(3)
@@ -153,7 +153,8 @@ def main():
               f"distance={cat_nw['distance']})")
         if cat_nw["seen"] is False:
             check(near_wall.get("occluded", 0) >= 1,
-                  f"оверлей скрыл врага за стеной: occluded={near_wall.get('occluded')}")
+                  f"за стеной враг скрыт (ray-диагностика + нативный depth): "
+                  f"occluded={near_wall.get('occluded')}")
 
         # --- Оружие от первого лица -----------------------------------------
         st = state(a)

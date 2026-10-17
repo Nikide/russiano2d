@@ -20,6 +20,7 @@ $.render(() => world.render(view,400,240));
 | `$.re2dWorld.load(path)` | читает native author/baked JSON из VFS; включает watcher при engine hot reload |
 | `$.re2dWorld.fromJSON(text)` | принимает JSON **строку**, не объект; author topology строится в C |
 | `world.add(target)` / `.remove(target)` | регистрирует/снимает Re2DSprite roots; add повторно того же узла не дублирует его |
+| `world.sprite(target, opts)` | регистрирует обычный узел как flat directional atlas sprite; см. раздел ниже |
 | `.camera(view={})` | заменяет конфигурацию камеры; пропущенные поля получают defaults |
 | `.render(view=null,width=320,height=180)` | синтезирует и рисует обычный sprite на всё окно; возвращает sprite ID |
 | `.renderToSprite(view=null,width=320,height=180)` | синтезирует без fullscreen draw; возвращает sprite ID для previews |
@@ -44,6 +45,61 @@ Frame dimensions — целые 1..1024. View: x/y=0, h=48 (eye — alias), yaw/
 | `.surface(index)` | `{kind,primitive,cell,span,material(name),sky(enabled=true)}` или null |
 
 XY — half-open. Свободный span включает пол и исключает потолок. `surface.kind`: 0 wall, 1 floor, 2 ceiling; наклон — коэффициенты соответствующей plane, не четвёртый mesh type. Не выводите surface ID из wall index попадания вслепую после перекомпиляции: IDs принадлежат текущему canonical domain.
+
+## Flat directional atlas sprites
+
+Отдельный нативный режим для плоского атласа кадров (enemy sheet 5/8/16
+направлений). Это не mesh и не entity: `world.sprite` привязывает политику
+отрисовки к существующему узлу `$`. Доступный путь для Re2DSprite-персонажей
+остаётся `world.add`; атлас не требует rig/character JSON.
+
+```js
+const enemy = $('<sprite>', { id: 'imp' })
+  .at(800, 900).depth(0).size(150, 150).angle(0).hide()
+  .appendTo($.world);
+enemy.get(0).sprite_row = 0;          // строка анимации (0..rows-1)
+
+world.sprite(enemy, {
+  atlas: 'enemies/imp_sheet.png',     // PNG, ≤4096×4096
+  columns: 5, rows: 8,                // сетка листа
+  directions: 5, mirror: true,        // 5 колонок = 180°, вторая половина зеркалится
+  cell: { w: 198, h: 198 },
+  pivot: 'feet',                      // center | feet | bottom-center | custom
+  width: 150, height: 150,             // мировой размер КЛЕТКИ
+  blend: 'masked',                    // masked | opaque | translucent | additive
+});
+```
+
+Что делает C, а не игра каждый кадр:
+
+* читает `x/y/depth/w/h/angle` и `sprite_row` узла;
+* выбирает колонку направления из `angle` (facing, радианы, 0 = +X) и позиции
+  камеры; `mirror: true` рисует вторую половину отражённой;
+* ставит нормированную точку `pivot` в `depth` узла: `feet` — точка опоры, а не
+  центр кадра; `center` держит в `depth` середину; `custom` берёт `pivotX`,
+  `pivotY`;
+* тестирует глубину, свет и туман тем же нативным композитором, что и
+  поверхности мира, поэтому стена перекрывает спрайт попиксельно;
+* обрезает нужную клетку в квадратный буфер один раз на смену
+  колонки/строки/зеркала и переиспользует его в CPU и SDL_GPU путях.
+
+`directions`: 1, 4, 5+mirror, 8, 16 (1..16). `columns`/`rows` — до 64.
+`mirror` включается только при `directions > 1`; при `directions: 1` колонка
+всегда 0. Ошибки конфигурации — исключения (`TypeError`/`RangeError`): нет
+пути, клетка вне листа, `width/height ≤ 0`, неизвестный `pivot`/`blend`.
+Повторная регистрация того же узла — ошибка; используйте `world.remove(node)`
+перед повторным `world.sprite`. `world.remove` снимает и атлас, и Re2DSprite
+регистрацию.
+
+Ограничения P0-A: направление и кадр задаёт атлас, отдельной tint/animation
+policy у этого режима нет — строку анимации ставит игра через `sprite_row`;
+сортировка прозрачных атласных спрайтов идёт общим путём. Профилирование:
+`info().atlasSprites` (зарегистрировано) и `info().visibleAtlasSprites`
+(видимых в последнем кадре), `actorMs`.
+
+Проверки: `tests/re2d/atlas_test.c` (Unity: направление, pivot, клетка,
+кроп), `tests/agent/re2d_boomer_lab_test.py` (кадр, смена направления,
+попиксельная окклюзия стеной), `demos/re2d_boomer_lab`.
 
 ## Свет, материал, изменение мира
 

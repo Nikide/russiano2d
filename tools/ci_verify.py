@@ -155,7 +155,7 @@ def check_web_export():
 #: Ядро движка: собирается в обеих конфигурациях.
 CORE_TESTS = ['json', 'crypto', 'payload', 'reverb', 'audio_fx', 'profile', 'bsp']
 #: 3D-авторинг спрайтов: только с R2D_ENABLE_RE2D=ON.
-RE2D_TESTS = ['rotsprite', 're2d', 're2d_world']
+RE2D_TESTS = ['rotsprite', 're2d', 're2d_world', 're2d_atlas', 'world_trace']
 
 check_configuration()
 check_re2d_layer()

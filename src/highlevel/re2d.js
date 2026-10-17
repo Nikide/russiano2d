@@ -571,7 +571,38 @@ function rendererWorldWrapper($, native) {
         listener(view){world.camera(view);return world.audio;},
     };
     world.add = target => { $(target).eachNode((i,node) => { registerRotWorldNode(node); native.actorAdd(node); }); return world; };
-    world.remove = target => { $(target).eachNode((i,node) => native.actorRemove(node)); return world; };
+    // Flat directional atlas sprite: an existing `$` node drawn by the native
+    // world compositor (depth, fog, light, direction, pivot). Not a mesh, not an
+    // entity: x/y/depth/w/h/angle and `sprite_row` stay ordinary node state.
+    world.sprite = (target, options = {}) => {
+        const atlas = options.atlas ?? options.texture;
+        if (typeof atlas !== 'string' || !atlas) throw new TypeError('world.sprite: atlas PNG path required');
+        const cell = options.cell || {};
+        const cellW = Math.trunc(options.cellW ?? cell.w ?? 0), cellH = Math.trunc(options.cellH ?? cell.h ?? 0);
+        const directions = Math.trunc(options.directions ?? 1);
+        const columns = Math.trunc(options.columns ?? directions), rows = Math.trunc(options.rows ?? 1);
+        if (!(cellW > 0 && cellH > 0)) throw new RangeError('world.sprite: cell width/height must be positive');
+        if (directions < 1 || directions > 16) throw new RangeError('world.sprite: directions 1..16');
+        if (columns < 1 || rows < 1) throw new RangeError('world.sprite: columns/rows must be positive');
+        const pivots = { center: 0, feet: 1, bottom: 2, 'bottom-center': 2, custom: 3 };
+        const pivotName = options.pivot ?? 'feet';
+        const pivot = typeof pivotName === 'number' ? pivotName : pivots[pivotName];
+        if (pivot === undefined) throw new RangeError('world.sprite: pivot center/feet/bottom-center/custom');
+        const pivotX = Number(options.pivotX ?? .5), pivotY = Number(options.pivotY ?? 1);
+        const blends = { masked: 0, opaque: 1, translucent: 2, additive: 3 };
+        const blendName = options.blend ?? 'masked';
+        const blend = typeof blendName === 'number' ? blendName : blends[blendName];
+        if (blend === undefined || blend < 0 || blend > 3) throw new RangeError('world.sprite: blend masked/opaque/translucent/additive');
+        return $(target).eachNode((i, node) => {
+            const width = Number(options.width ?? node.w), height = Number(options.height ?? node.h);
+            if (!(width > 0 && height > 0)) throw new RangeError('world.sprite: world width/height must be positive');
+            if (!Number.isFinite(pivotX) || !Number.isFinite(pivotY)) throw new RangeError('world.sprite: pivot must be finite');
+            node.sprite_row = Math.max(0, Math.trunc(Number(node.sprite_row) || 0));
+            native.atlasAdd(node, atlas, columns, rows, directions, options.mirror !== false && directions > 1 ? 1 : 0,
+                cellW, cellH, pivot, pivotX, pivotY, width, height, blend);
+        });
+    };
+    world.remove = target => { $(target).eachNode((i,node) => { native.atlasRemove(node); native.actorRemove(node); }); return world; };
     world.camera = (view = {}) => {
         native.camera(view.x ?? 0,view.y ?? 0,view.h ?? view.eye ?? 48,
             (view.yaw ?? 0)*Math.PI/180,(view.pitch ?? 0)*Math.PI/180,(view.fov ?? 70)*Math.PI/180,
