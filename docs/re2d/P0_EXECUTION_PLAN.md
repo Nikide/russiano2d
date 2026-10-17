@@ -75,3 +75,14 @@
 | P1-G terrain/liquids | next | — |
 | P1-H save/load state | next | — |
 | P1-I reverb zones / voice virtualization | next | — |
+
+## P2 progress
+
+| Item | Status | Proof |
+|---|---|---|
+| animated materials + scroll/emissive | runtime + `$` API | material_anim 10 tests, agent screenshot diff |
+| material animation core | done | `r2d_world_material_anim_test` |
+| volumetric sprites (box/cross/slice) | core done, render integration next | `r2d_world_volume_test` (10) |
+| mirror/sky/link portals | math core done, renderer next | `r2d_world_portal_visual_test` (11) |
+| postprocess / color grade | next | — |
+| box impostor / slice-stack rendering | next | — |

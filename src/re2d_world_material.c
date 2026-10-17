@@ -61,14 +61,15 @@ void r2d_world_material_probe(const R2DRe2dWorld *w,int surface,float u,float v,
     memcpy(n,normal,3*sizeof(float));memset(emissive,0,3*sizeof(float));
     int id=w->surface_materials&&surface>=0&&surface<w->surface_count?w->surface_materials[surface]:-1;
     if(id<0)return;
-    const R2DWorldMaterial *m=&w->materials[id];u*=m->u_scale;v*=m->v_scale;
+    const R2DWorldMaterial *m=&w->materials[id];u=u*m->u_scale+m->anim_u;v=v*m->v_scale+m->anim_v;
     mapped_normal(m,u,v,normal,tangent,n);
     if(m->emissive.pixels){uint8_t sample[4];const uint8_t *map=texel(&m->emissive,u,v,m->linear,sample);for(int i=0;i<3;i++)emissive[i]=map[i]*m->emissive_strength;}
 }
 static bool material_color_id(const R2DRe2dWorld *w,int id,int span,uint32_t tint,float u,float v,float x,float y,float h,const float normal[3],const float tangent[3],float depth,uint32_t *out)
 {
     if(id<0){*out=r2d_world_lit_color(w,span,tint,x,y,h,normal[0],normal[1],normal[2],depth);return true;}
-    const R2DWorldMaterial *m=&w->materials[id];u*=m->u_scale;v*=m->v_scale;
+    const R2DWorldMaterial *m=&w->materials[id];u=u*m->u_scale+m->anim_u;v=v*m->v_scale+m->anim_v;
+    const float anim_emissive=m->anim_emissive>0?m->anim_emissive:1.0f;
     uint8_t sampled[4],emitted[4];const uint8_t *albedo=texel(&m->albedo,u,v,m->linear,sampled);if((m->blend==R2D_WORLD_MASKED&&albedo[3]<128)||(m->blend>=R2D_WORLD_TRANSLUCENT&&(albedo[3]==0||m->opacity==0)))return false;
     float n[3]={normal[0],normal[1],normal[2]};
     mapped_normal(m,u,v,normal,tangent,n);
@@ -79,7 +80,7 @@ static bool material_color_id(const R2DRe2dWorld *w,int id,int span,uint32_t tin
     float fog_color[3]={ambient?ambient->fog_r:0,ambient?ambient->fog_g:0,ambient?ambient->fog_b:0};
     uint32_t color=0xff000000;
     for(int i=0;i<3;i++) {
-        float channel=albedo[i]*(((tint>>(i*8))&255)/255.0f)*light[i]+(emissive?emissive[i]*m->emissive_strength:0);
+        float channel=albedo[i]*(((tint>>(i*8))&255)/255.0f)*light[i]+(emissive?emissive[i]*m->emissive_strength*anim_emissive:0);
         channel=channel*(1-fog)+fog_color[i]*255*fog;
         color|=(uint32_t)fmaxf(0,fminf(255,roundf(channel)))<<(i*8);
     }

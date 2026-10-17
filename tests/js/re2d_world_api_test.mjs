@@ -17,7 +17,7 @@ const calls = { atlasAdd: [], atlasRemove: [], actorAdd: [], actorRemove: [],
                 moverCreate: [], moverIntent: [], moverRemove: [], moverInfo: [],
                 triggerCreate: [], triggerRemove: [], triggerTick: [], triggerUse: [], triggerShoot: [],
                 find: [], controllerCreate: [], controllerInit: [], controllerMove: [], controllerRemove: [],
-                portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [], save: [], secret: [], breakable: [], terrain: [] };
+                portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [], save: [], secret: [], breakable: [], terrain: [], material: [] };
 
 const native = {
     info: () => ({ poseBudget: 1, poseStep: 3 }),
@@ -76,6 +76,10 @@ const native = {
     particlesContinuous: (proto, rate, dt, seed) => { calls.particles.push(['continuous', rate, dt, seed]); return 3; },
     particlesInfo: () => ({ alive: 4, capacity: 2048, overflow: 0, drawn: 4 }),
     particlesClear: () => calls.particles.push(['clear']),
+    materialIndex: (name) => { calls.material.push(['index', name]); return name === 'brick' ? 2 : null; },
+    materialAnimSet: (...args) => { calls.material.push(['set', args]); },
+    materialAnimInfo: (index) => { calls.material.push(['info', index]); return { frame: 1, emissive: 1.1, uOffset: 0.25, vOffset: 0 }; },
+    materialAnimRemove: (index) => calls.material.push(['remove', index]),
     saveMapHash: () => '0123456789abcdef',
     saveStateJSON: () => '{"format":"re2d-save","version":1,"spans":[],"portals":[],"movers":[],"triggers":[]}',
     loadStateJSON: (text) => { calls.save.push(text); return true; },
@@ -405,6 +409,20 @@ test('surface.terrain/conveyor и terrainAt/conveyorAt доступны', () => 
     eq(surface.conveyorInfo().vx, 10);
     eq(world.terrainAt(1, 2, 3).name, 'stone');
     eq(world.conveyorAt(1, 2, 3).accel, 600);
+    world.dispose();
+});
+
+test('world.materialAnim применяет scroll/pulse к существующему материалу', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const anim = world.materialAnim('brick', { frames: 4, fps: 8, scrollU: 0.25, pulseHz: 2, pulseAmount: 0.4, seed: 3 });
+    eq(anim.index, 2);
+    eq(calls.material[0][0], 'index');
+    const set = calls.material.find(r => r[0] === 'set')[1];
+    eq(set[0], 2); eq(set[1], 4); eq(set[2], 8); eq(set[5], 0.25);
+    eq(anim.info().uOffset, 0.25);
+    anim.remove();
+    eq(calls.material[calls.material.length - 1][0], 'remove');
+    throws(RangeError, () => world.materialAnim('missing'), 'неизвестный материал');
     world.dispose();
 });
 

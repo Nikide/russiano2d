@@ -10,6 +10,7 @@
 #include "re2d_world_secret.h"
 #include "re2d_world_terrain.h"
 #include "re2d_world_save.h"
+#include "re2d_world_material_anim.h"
 #include "render.h"
 #include "audio.h"
 #include <quickjs.h>
@@ -129,6 +130,9 @@ typedef struct R2DWorldRuntime {
     int *surface_terrain;
     R2DWorldConveyor *surface_conveyors;
     int terrain_capacity;
+    // P2 material animation: per material slot, stepped with worldStep.
+    R2DWorldMaterialAnim material_anims[R2D_WORLD_MAX_MATERIALS];
+    bool material_anim_active[R2D_WORLD_MAX_MATERIALS];
     int actor_count,actor_capacity,frame_count;
     struct R2DWorldRuntime *next;
     bool registered;
@@ -218,6 +222,11 @@ void r2d_world_terrain_free(R2DWorldRuntime *);
 bool r2d_world_state_capture(R2DWorldRuntime *,R2DWorldSaveState *out);
 bool r2d_world_state_apply(R2DWorldRuntime *,const R2DWorldSaveState *in);
 uint64_t r2d_world_save_map_hash_runtime(R2DWorldRuntime *);
+// P2 material animation on an existing material slot.
+bool r2d_world_material_anim_set(R2DWorldRuntime *,int material,int frames,float fps,bool ping_pong,uint32_t seed,float scroll_u,float scroll_v,float pulse_hz,float pulse_amount);
+bool r2d_world_material_anim_info(R2DWorldRuntime *,int material,int *frame,float *emissive,float *u_offset,float *v_offset);
+bool r2d_world_material_anim_clear(R2DWorldRuntime *,int material);
+void r2d_world_material_anim_advance(R2DWorldRuntime *,float dt);
 void r2d_world_runtime_actors_free(R2DWorldRuntime *);
 // Returns ordinary 2D sprite id; errors set QuickJS exception, no script renderer loops.
 int r2d_world_runtime_frame(JSContext *,R2DWorldRuntime *,const R2DRe2dView *,int,int,float);

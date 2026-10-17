@@ -32,6 +32,7 @@ $.render(() => world.render(view,400,240));
 | `world.secret(opts)` / `secretsTick(dt,at)` / `onSecret(fn)` | secret volumes + события `secret.found` |
 | `world.breakable(opts)` / `onBreakable(fn)` | authored breakables + событие `breakable.broken` |
 | `surface.terrain(name)` / `conveyor(opts)`, `world.terrainAt/conveyorAt` | terrain/liquid metadata и 2D conveyors |
+| `world.materialAnim(name,opts)` / `materialIndex(name)` | flipbook/scroll/emissive анимация материала |
 | `world.particles.burst/continuous/info/clear` | нативный fixed-pool частиц |
 | `world.fxDefine(name,bundle)` / `fxSpawn(name,at)` | asset-driven VFX bundle (particles/light/decal/sound/shake) |
 | `world.findSurface(name)` | имя стены/span → handle поверхности |
@@ -377,6 +378,23 @@ world.conveyorAt(x, y, h);   // {vx,vy,accel,affectsProjectiles}
 с move/friction/damage/splash/tint/fog/decal hints. Conveyor — authored XY
 скорость поверхности, `accel` — скорость приближения к ней; игра применяет
 `r2d_world_conveyor_apply` к телу (никакой fluid simulation/3D rigid body).
+
+## Animated materials (P2)
+
+```js
+const anim = world.materialAnim('brick', { frames: 4, fps: 8, pingPong: true,
+  scrollU: 0.25, scrollV: 0.1, pulseHz: 2, pulseAmount: 0.4, seed: 3 });
+anim.info();    // {frame, emissive, uOffset, vOffset}
+anim.remove();
+world.materialIndex('brick');   // индекс материала или null
+```
+
+Таймлайн детерминирован (seed), шагается вместе с `engine.re2d.worldStep`.
+Scroll U/V добавляется к UV constrained surfaces, emissive pulse множит
+emissive-канал; CPU reference и SDL_GPU используют одни и те же поля материала
+(`anim_u/anim_v/anim_emissive`, GPU — uniform `anim`). Ограничения: flipbook
+кадр возвращается в `info()`, но выбор кадра из atlas-полосы — ответственность
+материала/игры; decals не анимируются; нет shader graph.
 
 ## Свет, материал, изменение мира
 

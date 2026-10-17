@@ -995,6 +995,43 @@ bool r2d_world_state_apply(R2DWorldRuntime *w,const R2DWorldSaveState *in)
     return true;
 }
 
+
+// --- P2 material animation over the existing material bank -----------------
+bool r2d_world_material_anim_set(R2DWorldRuntime *w,int material,int frames,float fps,bool ping_pong,uint32_t seed,float scroll_u,float scroll_v,float pulse_hz,float pulse_amount)
+{
+    if(!w||material<0||material>=R2D_WORLD_MAX_MATERIALS||!w->world.materials[material].used)return false;
+    if(!r2d_world_material_anim_init(&w->material_anims[material],frames,fps,ping_pong,seed,scroll_u,scroll_v,pulse_hz,pulse_amount))return false;
+    w->material_anim_active[material]=true;return true;
+}
+bool r2d_world_material_anim_info(R2DWorldRuntime *w,int material,int *frame,float *emissive,float *u_offset,float *v_offset)
+{
+    if(!w||material<0||material>=R2D_WORLD_MAX_MATERIALS||!w->material_anim_active[material])return false;
+    const R2DWorldMaterialAnim *a=&w->material_anims[material];
+    if(frame)*frame=r2d_world_material_anim_frame(a);
+    if(emissive)*emissive=r2d_world_material_anim_emissive(a);
+    if(u_offset)*u_offset=a->u_offset;if(v_offset)*v_offset=a->v_offset;
+    return true;
+}
+bool r2d_world_material_anim_clear(R2DWorldRuntime *w,int material)
+{
+    if(!w||material<0||material>=R2D_WORLD_MAX_MATERIALS)return false;
+    w->material_anim_active[material]=false;
+    w->world.materials[material].anim_u=0;w->world.materials[material].anim_v=0;w->world.materials[material].anim_emissive=1;
+    return true;
+}
+void r2d_world_material_anim_advance(R2DWorldRuntime *w,float dt)
+{
+    if(!w)return;
+    for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++){
+        if(!w->material_anim_active[i])continue;
+        R2DWorldMaterialAnim *a=&w->material_anims[i];
+        r2d_world_material_anim_step(a,dt);
+        w->world.materials[i].anim_u=a->u_offset;
+        w->world.materials[i].anim_v=a->v_offset;
+        w->world.materials[i].anim_emissive=r2d_world_material_anim_emissive(a);
+    }
+}
+
 void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {
     if(!w->audio)return;
     for(int i=0;i<R2D_AUDIO_CHANNELS;i++) {

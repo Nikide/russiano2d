@@ -26,6 +26,7 @@ layout(std140,set=3,binding=0) uniform Surface {
     vec4 opening; // effective dynamic portal opening bottom/top, enabled
     vec4 billboard; // screen left,top,width,height
     vec4 actor; // world x,y,center-height,world-height
+    vec4 anim; // surface uv offset xy, emissive multiplier z
 } u;
 layout(location=0) out vec4 color;
 layout(location=1) out vec4 owner; // exact forward depth, surface, span, actor
@@ -105,7 +106,7 @@ void main() {
     if(u.plane.w>1.5){vec2 towards=u.eye.xy-hit.xy;n=length(towards)>0?vec3(normalize(towards),0):vec3(0);}
     vec4 albedo=vec4(1);vec3 emissive=vec3(0);
     if(u.identity.w>0) {
-        if(u.plane.w<1.5&&!decal)uv=fract(uv*u.material.xy);
+        if(u.plane.w<1.5&&!decal)uv=fract(uv*u.material.xy+u.anim.xy);
         albedo=texture(albedoMap,uv);
         float blend=u.lightOptions[15].w;
         if((blend<.5&&albedo.a<.5)||(blend>1.5&&albedo.a*u.tint.a<=0))discard;
@@ -114,7 +115,7 @@ void main() {
             vec3 mapped=u.tangent.xyz*map.x+cross(n,u.tangent.xyz)*map.y+n*map.z;
             if(length(mapped)>1e-6)n=normalize(mapped);
         }
-        if(u.material.w>0)emissive=texture(emissiveMap,uv).rgb*u.material.w;
+        if(u.material.w>0)emissive=texture(emissiveMap,uv).rgb*u.material.w*max(u.anim.z,0.0);
     }
     if(u.identity.z<0){color=vec4(1.0/255.0,0,0,1);owner=vec4(depth,u.identity.xy,u.actor.w>0?u.opening.w:-1);gl_FragDepth=1-u.eye.w/depth;return;}
     vec3 lighting=vec3(1);

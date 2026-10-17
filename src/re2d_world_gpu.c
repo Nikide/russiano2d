@@ -29,8 +29,9 @@ typedef struct {
     float bounds[4],floor_plane[4],ceiling_plane[4],identity[4],light_position[16][4],light_color[16][4],light_options[16][4];
     float opening[4];
     float billboard[4],actor[4];
+    float anim[4];
 } SurfaceUniform;
-_Static_assert(sizeof(SurfaceUniform)==67*16,"shader std140 layout");
+_Static_assert(sizeof(SurfaceUniform)==68*16,"shader std140 layout");
 static void targets_free(SDL_GPUDevice *d,WorldGPU *g)
 {
     if(g->color)SDL_ReleaseGPUTexture(d,g->color);if(g->owner)SDL_ReleaseGPUTexture(d,g->owner);if(g->depth)SDL_ReleaseGPUTexture(d,g->depth);
@@ -234,7 +235,7 @@ static void draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GP
     for(int i=0;i<4;i++)u.tint[i]=((tint>>(i*8))&255)/255.0f;
     int material=decal?decal->material:(world->surface_materials?world->surface_materials[id]:-1);SDL_GPUTextureSamplerBinding samplers[3];SDL_GPUSampler *sampler=material>=0&&world->materials[material].linear?g->linear:g->sampler;
     for(int i=0;i<3;i++){int texture=material>=0?g->textures[material][i]:-1;if(texture<0)texture=i==2?g->black:g->white;samplers[i]=(SDL_GPUTextureSamplerBinding){r2d_texture_handle(w->renderer,texture),sampler};}
-    if(material>=0){const R2DWorldMaterial *m=&world->materials[material];u.material[0]=m->u_scale;u.material[1]=m->v_scale;u.material[2]=m->normal.pixels?1:0;u.material[3]=m->emissive.pixels?m->emissive_strength:0;u.identity[3]=1;u.light_options[13][3]=m->world_uv?1:0;if(m->world_uv&&surface->kind==R2D_WORLD_WALL&&(u.tangent[0]<0||(u.tangent[0]==0&&u.tangent[1]<0))){u.tangent[0]*=-1;u.tangent[1]*=-1;}u.light_options[15][3]=m->blend;u.tint[3]=m->blend>=R2D_WORLD_TRANSLUCENT?m->opacity:1;}
+    if(material>=0){const R2DWorldMaterial *m=&world->materials[material];u.anim[0]=m->anim_u;u.anim[1]=m->anim_v;u.anim[2]=m->anim_emissive>0?m->anim_emissive:1.0f;u.material[0]=m->u_scale;u.material[1]=m->v_scale;u.material[2]=m->normal.pixels?1:0;u.material[3]=m->emissive.pixels?m->emissive_strength:0;u.identity[3]=1;u.light_options[13][3]=m->world_uv?1:0;if(m->world_uv&&surface->kind==R2D_WORLD_WALL&&(u.tangent[0]<0||(u.tangent[0]==0&&u.tangent[1]<0))){u.tangent[0]*=-1;u.tangent[1]*=-1;}u.light_options[15][3]=m->blend;u.tint[3]=m->blend>=R2D_WORLD_TRANSLUCENT?m->opacity:1;}
     if(decal){u.tint[0]=u.tint[1]=u.tint[2]=1;u.light_options[14][1]=decal->u;u.light_options[14][2]=decal->v;u.light_options[14][3]=decal->w;u.light_options[15][1]=decal->h;u.light_options[15][2]=1;}
     u.identity[0]=id;u.identity[1]=span;
     lighting(world,span,filter,&u);if(w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)u.identity[2]=-1;

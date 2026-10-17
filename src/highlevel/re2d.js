@@ -811,6 +811,22 @@ function rendererWorldWrapper($, native) {
         return spawned;
     };
 
+    // P2 animated materials: flipbook/scroll/emissive on an existing material.
+    world.materialIndex = name => native.materialIndex(name);
+    world.materialAnim = (name, options = {}) => {
+        const index = native.materialIndex(name);
+        if (index == null) throw new RangeError(`world.materialAnim: unknown material '${name}'`);
+        native.materialAnimSet(index, Math.trunc(Number(options.frames ?? 1)), Number(options.fps ?? 8),
+            options.pingPong ? 1 : 0, Math.trunc(Number(options.seed ?? 0)),
+            Number(options.scrollU ?? 0), Number(options.scrollV ?? 0),
+            Number(options.pulseHz ?? 0), Number(options.pulseAmount ?? 0));
+        return {
+            name, index,
+            info() { return native.materialAnimInfo(index); },
+            remove() { native.materialAnimRemove(index); },
+        };
+    };
+
     // P1 save/load: native snapshot + map identity guard. The game owns the
     // file format wrapper; this API is deterministic and versioned.
     world.saveMapHash = () => native.saveMapHash();

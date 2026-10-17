@@ -48,6 +48,8 @@ typedef struct { uint8_t *pixels; int width,height; } R2DWorldTexture;
 typedef struct {
     R2DWorldTexture albedo,normal,emissive;
     float emissive_strength,u_scale,v_scale,opacity;
+    // P2 runtime animation state (material anim timeline writes these).
+    float anim_u,anim_v,anim_emissive;
     int blend;
     char name[64];
     bool used,world_uv,linear;

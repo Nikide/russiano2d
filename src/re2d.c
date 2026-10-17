@@ -713,6 +713,47 @@ static JSValue world_conveyor_at_js(JSContext *ctx,JSValueConst self,int argc,JS
     JSValue o=JS_NewObject(ctx);set_num(ctx,o,"vx",out[0]);set_num(ctx,o,"vy",out[1]);
     set_num(ctx,o,"accel",out[2]);set_num(ctx,o,"affectsProjectiles",affects);return o;
 }
+static int material_arg(WorldHandle *w,JSContext *ctx,JSValueConst value)
+{
+    if(JS_IsString(value)) {
+        const char *name=JS_ToCString(ctx,value);if(!name)return -1;
+        int index=r2d_world_material_find(&w->world,name);JS_FreeCString(ctx,name);return index;
+    }
+    int32_t index=-1;if(JS_ToInt32(ctx,&index,value)<0)return -1;return index;
+}
+static JSValue world_material_index(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1)return JS_ThrowTypeError(ctx,"Re2D World: materialIndex(name)");
+    int index=material_arg(w,ctx,argv[0]);
+    return index<0?JS_NULL:JS_NewInt32(ctx,index);
+}
+static JSValue world_material_anim_set(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<9)return JS_ThrowTypeError(ctx,"Re2D World: materialAnim(name,frames,fps,pingPong,seed,scrollU,scrollV,pulseHz,pulseAmount)");
+    int index=material_arg(w,ctx,argv[0]);
+    float p[8];if(!world_numbers(ctx,argc-1,argv+1,8,p))return JS_EXCEPTION;
+    if(p[0]<1||p[0]>64||floorf(p[0])!=p[0])return JS_ThrowRangeError(ctx,"Re2D World: material frames 1..64");
+    if(!r2d_world_material_anim_set(w,index,(int)p[0],p[1],p[2]!=0.0f,(uint32_t)p[3],p[4],p[5],p[6],p[7]))
+        return JS_ThrowRangeError(ctx,"Re2D World: invalid material animation");
+    return JS_UNDEFINED;
+}
+static JSValue world_material_anim_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w||argc<1)return JS_ThrowTypeError(ctx,"Re2D World: materialAnimInfo(name)");
+    int index=material_arg(w,ctx,argv[0]);
+    int frame=0;float emissive=1,u=0,v=0;
+    if(!r2d_world_material_anim_info(w,index,&frame,&emissive,&u,&v))return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"frame",frame);set_num(ctx,o,"emissive",emissive);
+    set_num(ctx,o,"uOffset",u);set_num(ctx,o,"vOffset",v);return o;
+}
+static JSValue world_material_anim_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w||argc<1)return JS_ThrowTypeError(ctx,"Re2D World: materialAnimRemove(name)");
+    int index=material_arg(w,ctx,argv[0]);
+    return r2d_world_material_anim_clear(w,index)?JS_UNDEFINED:JS_EXCEPTION;
+}
 static JSValue world_save_hash(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
@@ -1246,7 +1287,7 @@ static void world_watch_poll(JSContext *,WorldHandle *,float);
 static JSValue world_step_all(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)self;float dt;if(!world_numbers(ctx,argc,argv,1,&dt))return JS_EXCEPTION;if(dt<0||dt>60)return JS_ThrowRangeError(ctx,"Re2D World: invalid step dt");
-    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);r2d_world_particles_step(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
+    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);r2d_world_particles_step(w,dt);r2d_world_material_anim_advance(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
 }
 static JSValue world_light_at(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -1298,6 +1339,10 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"audioRemove",JS_NewCFunction(ctx,world_audio_remove,"audioRemove",1));
     JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",14));
     JS_SetPropertyStr(ctx,handle,"hitAdd",JS_NewCFunction(ctx,world_hit_add,"hitAdd",5));
+    JS_SetPropertyStr(ctx,handle,"materialIndex",JS_NewCFunction(ctx,world_material_index,"materialIndex",1));
+    JS_SetPropertyStr(ctx,handle,"materialAnimSet",JS_NewCFunction(ctx,world_material_anim_set,"materialAnimSet",9));
+    JS_SetPropertyStr(ctx,handle,"materialAnimInfo",JS_NewCFunction(ctx,world_material_anim_info,"materialAnimInfo",1));
+    JS_SetPropertyStr(ctx,handle,"materialAnimRemove",JS_NewCFunction(ctx,world_material_anim_remove,"materialAnimRemove",1));
     JS_SetPropertyStr(ctx,handle,"saveMapHash",JS_NewCFunction(ctx,world_save_hash,"saveMapHash",0));
     JS_SetPropertyStr(ctx,handle,"saveStateJSON",JS_NewCFunction(ctx,world_save_state,"saveStateJSON",0));
     JS_SetPropertyStr(ctx,handle,"loadStateJSON",JS_NewCFunction(ctx,world_load_state,"loadStateJSON",1));

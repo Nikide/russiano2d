@@ -174,6 +174,18 @@ export default function install($) {
             player: world.spawn('player.start'), missing: world.spawn('nope'),
         }),
         particlesClear: () => world.particles.clear(),
+        materialAnimProbe: () => {
+            if (!world._matAnimReady) {
+                world.material('labscroll', { albedo: 're2d_world_renderer_lab/brick.png' });
+                const surfaces = world.info().surfaces;
+                for (let i = 0; i < surfaces; i++) world.surface(i).material('labscroll');
+                world._matAnimReady = true;
+            }
+            world._matAnim = world.materialAnim('labscroll', { frames: 4, fps: 8,
+                scrollU: 0.25, scrollV: 0.1, pulseHz: 2, pulseAmount: 0.4, seed: 3 });
+            return { index: world._matAnim.index, info: world._matAnim.info() };
+        },
+        materialAnimInfo: () => (world._matAnim ? world._matAnim.info() : null),
         saveProbe: () => {
             world.particles.clear();
             if (!mover) mover = world.mover({ type: 'lift', span: 0, from: 0, to: 96,

@@ -222,6 +222,16 @@ def main():
               and '"spans":1' in save and '"portals":0' in save,
               f"world.saveState/loadState восстанавливает native state: {save}")
 
+        anim = a.eval("JSON.stringify(boomerLab.materialAnimProbe())")
+        check(anim is not None and '"index":' in anim and '"uOffset":' in anim,
+              f"world.materialAnim включает анимацию материала: {anim}")
+        a.step(3)
+        before_anim = a.screenshot(os.path.join(SHOTS, "re2d_boomer_lab_anim_a.png"))
+        a.step(20)
+        after_anim = a.screenshot(os.path.join(SHOTS, "re2d_boomer_lab_anim_b.png"))
+        changed, _ = changed_pixels(before_anim, after_anim)
+        check(changed > 1000, f"scrolling/emissive материал меняет кадр ({changed} px)")
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 
