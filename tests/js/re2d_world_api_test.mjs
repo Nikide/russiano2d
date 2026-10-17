@@ -526,4 +526,14 @@ test('world.skyAnim и fogZone/fogAt доступны', () => {
     world.dispose();
 });
 
+test('world.debug.overlay проецирует automap и semantic точки', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const node = spawn('trig-host');
+    world.trigger({ id: 'gate.use', target: 'gate', x: 100, y: 0, radius: 32, top: 64 });
+    const overlay = world.debug.overlay({ x: 0, y: 0, h: 48, yaw: 0, pitch: 0, fov: 70, near: 1 }, { width: 320, height: 180 });
+    truthy(Array.isArray(overlay.lines));
+    truthy(overlay.points.some(p => p.kind === 'trigger' && p.id === 'gate.use'));
+    world.dispose();
+});
+
 finish();

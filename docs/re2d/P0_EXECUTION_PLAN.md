@@ -97,3 +97,16 @@
 | rotating polywalls | math core (`r2d_world_polywall_test`), runtime integration next |
 | polygon cells | authoring core (`r2d_world_polygon_test`), compiler rect-tiling next |
 
+## P4 progress
+
+| Item | Status |
+|---|---|
+| capabilities + profiler | done |
+| aim assist / controller feels / quality presets | done |
+| benchmark lab + baseline numbers | done (`docs/RE2D_WORLD_PERF.md`) |
+| debug overlay data | done (`world.debug.overlay`) |
+| determinism audit | done (`re2d_determinism_test.py`) |
+| mirror/sky portal render pass | pending (math core готов) |
+| rotating polywalls runtime | pending (math core готов) |
+| polygon cells compiler tiling | pending (authoring core готов) |
+

@@ -38,6 +38,7 @@ $.render(() => world.render(view,400,240));
 | `$.capabilities.re2d` | честная матрица возможностей сборки/рантайма |
 | `world.post` | финальный 2D postprocess stack поверх `$.gfx.post` |
 | `world.skyAnim` / `fogZone` / `fogAt` | анимация панорамы и semantic fog zones |
+| `world.debug.overlay(view,opts)` | screen-space данные automap/trigger/secret для debug-оверлея |
 | `world.particles.burst/continuous/info/clear` | нативный fixed-pool частиц |
 | `world.fxDefine(name,bundle)` / `fxSpawn(name,at)` | asset-driven VFX bundle (particles/light/decal/sound/shake) |
 | `world.findSurface(name)` | имя стены/span → handle поверхности |

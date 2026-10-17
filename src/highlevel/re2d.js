@@ -976,6 +976,40 @@ function rendererWorldWrapper($, native) {
     world.controllerPreset = (name, extra = {}) => world.controller({ ...world.controllerFeel(name), ...extra });
     // P4 debug data lists for game-side overlays (not renderer hot path).
     world.debug = world.debug || {};
+    // P4 overlay data: project automap lines + semantic entities into screen
+    // space. Drawing stays with the game (UI/canvas), no renderer hot path.
+    const projectPoint = (view, x, y, h, width, height) => {
+        const yaw = (view.yaw || 0) * Math.PI / 180, pitch = (view.pitch || 0) * Math.PI / 180;
+        const dx = x - view.x, dy = y - view.y, dh = h - (view.h ?? view.eye ?? 0);
+        const cp = Math.cos(pitch), sp = Math.sin(pitch), cy = Math.cos(yaw), sy = Math.sin(yaw);
+        const z = dx * cy * cp + dy * sy * cp + dh * sp;
+        if (z < (view.near || 4)) return null;
+        const right = -dx * sy + dy * cy;
+        const up = -dx * sp * cy - dy * sp * sy + dh * cp;
+        const focal = (height / 2) / Math.tan((view.fov || 70) * Math.PI / 360);
+        return { x: width / 2 + focal * right / z, y: height / 2 - focal * up / z, z };
+    };
+    world.debug.overlay = (view, options = {}) => {
+        if (!view) throw new TypeError('world.debug.overlay: view required');
+        const width = Number(options.width ?? 320), height = Number(options.height ?? 180);
+        const states = options.states || null;
+        const lines = [];
+        for (const line of world.automapLines(states) || []) {
+            const a = projectPoint(view, line.x1, line.y1, 0, width, height);
+            const b = projectPoint(view, line.x2, line.y2, 0, width, height);
+            if (a && b) lines.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, state: line.state, kind: line.kind, index: line.index });
+        }
+        const points = [];
+        for (const entry of world.debug.entities().triggers) {
+            const p = projectPoint(view, entry.x, entry.y, entry.bottom ?? 0, width, height);
+            if (p) points.push({ kind: 'trigger', id: entry.id, x: p.x, y: p.y });
+        }
+        for (const entry of world.debug.entities().secrets) {
+            const p = projectPoint(view, entry.x, entry.y, entry.bottom ?? 0, width, height);
+            if (p) points.push({ kind: 'secret', id: entry.id, x: p.x, y: p.y });
+        }
+        return { lines, points };
+    };
     world.debug.entities = () => ({
         triggers: [...triggerMeta.entries()].map(([token, info]) => ({ token, ...info })),
         movers: [...moverMeta.entries()].map(([token, info]) => ({ token, ...info })),

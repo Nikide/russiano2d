@@ -527,3 +527,9 @@ python3 tools/bench_api.py --baseline docs/benchmarks/api-performance.json \
 повторить замер без фоновой нагрузки. Это сигнал к расследованию, не автоматический
 приговор. Быстрые unit checks runner без performance run:
 `python3 tests/bench_api_runner_test.py`.
+
+## Re2D determinism audit (P4)
+
+`tests/agent/re2d_determinism_test.py` запускает один и тот же seed/ввод дважды
+и сравнивает controller/particles/registry и кадр побайтово. Detrminism — не
+пожелание: тест падает на скрытом `Math.random()`/времени в нативных путях.
