@@ -1593,6 +1593,11 @@ $.re2d.poseStep
 $.re2d.room
 $.re2d.world
 $.re2dEnabled
+$.re2dFeel
+$.re2dFeel.decay
+$.re2dFeel.fov
+$.re2dFeel.recoil
+$.re2dFeel.shake
 $.re2dSprite
 $.re2dSprite.create
 $.re2dSprite.definition
@@ -1601,6 +1606,7 @@ $.re2dSprite.equip
 $.re2dSprite.from
 $.re2dSprite.info
 $.re2dSprite.pose
+$.re2dViewmodel
 $.re2dWorld
 $.re2dWorld.fromJSON
 $.re2dWorld.load

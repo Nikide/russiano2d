@@ -95,6 +95,7 @@ import { installKinds } from './kinds.js';
 // Проверка одна на файл — loadRe2dSupport() ниже.
 import { installCels } from './cels.js';
 import { installRe2d, re2dMove } from './re2d.js';
+import { installRe2dViewmodel } from './re2d_viewmodel.js';
 import { installRotSprite, tickRotSprite } from './rotsprite.js';
 import { installReal2d, tickReal2d } from './real2d.js';
 import { installMesh } from './mesh.js';
@@ -632,6 +633,7 @@ export function createApi() {
         installRotSprite($);         // развёртка всего персонажа: прототип головы
         installReal2d($);            // Real2D v4: вычисляемый layered warp (docs/highlevel/real2d.md)
         installRe2d($);              // Re2D: проход вида от первого лица, $.re2d (docs/RE2D.md)
+        installRe2dViewmodel($);     // экранный viewmodel оружия: $.re2dViewmodel, $.re2dFeel
         $.mesh = installMesh($);     // меш со скелетом: $.mesh
     }
     /**

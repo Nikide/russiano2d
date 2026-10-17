@@ -1,4 +1,5 @@
 #include "re2d_world_bake.h"
+#include "re2d_world_semantic.h"
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,7 +14,14 @@ static uint64_t checksum(const uint8_t *data,size_t size)
 bool r2d_world_put_baked(R2DRe2dWorld *w,R2dSb *out)
 {
     if(!r2d_world_light_rebuild(w))return false;
-    R2dSb s;r2d_sb_init(&s);bool lit=w->span_lights!=NULL||w->authored_lighting||w->light_count>0;put_u(&s,lit?0x32574452:0x31574452); // RDW1/RDW2 wire marker
+    bool semantic=r2d_world_semantic_any(w);
+    if(semantic&&!r2d_world_semantic_validate(w))return false;
+    R2dSb s;r2d_sb_init(&s);bool lit=w->span_lights!=NULL||w->authored_lighting||w->light_count>0;
+    // Wire markers keep older RDW1/RDW2 payloads readable; semantic tables add
+    // RDW3 (lit) / RDW4 (unlit) and never rewrite the legacy layout.
+    const int version=semantic?(lit?3:4):(lit?2:1);
+    static const uint32_t markers[]={0x31574452u,0x32574452u,0x33574452u,0x34574452u};
+    put_u(&s,markers[version-1]);
     int nr=w->span_wall_offsets[w->span_count];const int counts[]={w->wall_count,w->span_count,w->cell_count,w->portal_count,w->opening_count,w->surface_count,w->cell_node_count,w->cell_root,nr};
     for(int i=0;i<9;i++)put_u(&s,(uint32_t)counts[i]);
     for(int i=0;i<w->wall_count;i++){const R2DWorldWall *p=&w->walls[i];put_f(&s,p->x1);put_f(&s,p->y1);put_f(&s,p->x2);put_f(&s,p->y2);put_f(&s,p->bottom);put_f(&s,p->top);put_u(&s,p->color);}
@@ -34,7 +42,20 @@ bool r2d_world_put_baked(R2DRe2dWorld *w,R2dSb *out)
         for(int i=0;i<w->span_count;i++){const R2DWorldSpanLight *p=&w->span_lights[i];put_f(&s,p->level);put_f(&s,p->r);put_f(&s,p->g);put_f(&s,p->b);put_f(&s,p->fog_density);put_f(&s,p->fog_start);put_f(&s,p->fog_r);put_f(&s,p->fog_g);put_f(&s,p->fog_b);for(int j=0;j<4;j++)put_u(&s,w->span_light_masks[i*4+j]);}
         for(int i=0;i<128;i++){const R2DWorldLightLinks *p=&w->light_links[i];put_u(&s,p->count);for(int j=0;j<p->count;j++)put_u(&s,p->spans[j]);}
     }
-    r2d_sb_printf(out,"\"baked\":{\"version\":%d,\"checksum\":\"%016llx\",\"encoding\":\"le32-hex\",\"data\":\"",lit?2:1,(unsigned long long)checksum((const uint8_t *)s.data,s.len));
+    if(semantic) {
+        const int expected[R2D_WORLD_IDS_KINDS]={w->cell_count,w->wall_count,w->span_count,w->portal_count};
+        for(int kind=0;kind<R2D_WORLD_IDS_KINDS;kind++)put_u(&s,(uint32_t)expected[kind]);
+        for(int kind=0;kind<R2D_WORLD_IDS_KINDS;kind++) {
+            const R2DWorldIdTable *table=r2d_world_semantic_table(w,kind);
+            for(int i=0;i<expected[kind];i++) {
+                const char *name=table->names?table->names[i]:NULL;
+                uint32_t length=name?(uint32_t)strlen(name):0u;
+                put_u(&s,length);
+                for(uint32_t j=0;j<length;j++)r2d_sb_putc(&s,name[j]);
+            }
+        }
+    }
+    r2d_sb_printf(out,"\"baked\":{\"version\":%d,\"checksum\":\"%016llx\",\"encoding\":\"le32-hex\",\"data\":\"",version,(unsigned long long)checksum((const uint8_t *)s.data,s.len));
     static const char hex[]="0123456789abcdef";for(size_t i=0;i<s.len;i++){uint8_t b=(uint8_t)s.data[i];r2d_sb_putc(out,hex[b>>4]);r2d_sb_putc(out,hex[b&15]);}r2d_sb_puts(out,"\"}");r2d_sb_free(&s);return true;
 }
 typedef struct { const uint8_t *data;size_t size,offset;bool ok; } Reader;
@@ -88,12 +109,14 @@ bool r2d_world_load_baked(R2DRe2dWorld *world,const R2dJson *obj,char *err,size_
     R2DRe2dWorld w={0};w.bsp.root=w.cell_root=-1;bool ok=false;uint8_t *bytes=NULL;
     const char *data=r2d_json_str(r2d_json_get(obj,"data"),NULL),*sum=r2d_json_str(r2d_json_get(obj,"checksum"),NULL),*encoding=r2d_json_str(r2d_json_get(obj,"encoding"),"");
     double wire_version=r2d_json_num(r2d_json_get(obj,"version"),0);
-    int version=wire_version==1?1:wire_version==2?2:0;
-    if((version!=1&&version!=2)||strcmp(encoding,"le32-hex")||!data||!sum)goto done;
+    if(strcmp(encoding,"le32-hex")||!data||!sum)goto done;
     size_t length=strlen(data);if(length%2||length>128*1024*1024||length<80)goto done;bytes=malloc(length/2);if(!bytes)goto done;
     for(size_t i=0;i<length/2;i++){int a=hex(data[i*2]),b=hex(data[i*2+1]);if(a<0||b<0)goto done;bytes[i]=(uint8_t)(a*16+b);}
     char actual[17];snprintf(actual,sizeof actual,"%016llx",(unsigned long long)checksum(bytes,length/2));if(strcmp(sum,actual))goto done;
-    Reader r={bytes,length/2,0,true};if(get_u(&r)!=(version==2?0x32574452u:0x31574452u))goto done;
+    Reader r={bytes,length/2,0,true};uint32_t marker=get_u(&r);
+    int version=marker==0x31574452u?1:marker==0x32574452u?2:marker==0x33574452u?3:marker==0x34574452u?4:0;
+    bool lit=version==2||version==3,semantic=version>=3;
+    if(!version||wire_version!=(double)version)goto done;
     int *counts[]={&w.wall_count,&w.span_count,&w.cell_count,&w.portal_count,&w.opening_count,&w.surface_count,&w.cell_node_count,&w.cell_root};
     for(int i=0;i<8;i++)*counts[i]=(int32_t)get_u(&r);int refs=(int32_t)get_u(&r);
     for(int i=0;i<5;i++)if(*counts[i]<0||*counts[i]>65536)goto done;
@@ -115,7 +138,7 @@ bool r2d_world_load_baked(R2DRe2dWorld *world,const R2dJson *obj,char *err,size_
     READ(span_wall_offsets,w.span_count+1);READ(span_wall_refs,refs);READ(cell_portal_offsets,w.cell_count+1);READ(cell_portal_refs,w.portal_count*2);
 #undef READ
     if(!r.ok||!validate(&w,refs))goto done;
-    if(version==2){
+    if(lit){
         R2DWorldLighting light;uint32_t flags[4];for(int i=0;i<4;i++){flags[i]=get_u(&r);if(flags[i]>1)goto done;}
         uint32_t authored=get_u(&r);if(authored>1)goto done;w.authored_lighting=authored;
         light.enabled=flags[0];light.dynamic=flags[1];light.shadows=flags[2];light.orientation=flags[3];light.distance_scale=get_f(&r);light.orientation_strength=get_f(&r);
@@ -137,8 +160,26 @@ bool r2d_world_load_baked(R2DRe2dWorld *world,const R2dJson *obj,char *err,size_
         }
         w.baked_lighting=true;w.light_dirty=false;w.light_full_dirty=false;
     }
+    if(semantic) {
+        const int expected[R2D_WORLD_IDS_KINDS]={w.cell_count,w.wall_count,w.span_count,w.portal_count};
+        for(int kind=0;kind<R2D_WORLD_IDS_KINDS;kind++) {
+            int count=(int32_t)get_u(&r);
+            if(!r.ok||count!=expected[kind]||!r2d_world_semantic_resize(&w,kind,count))goto done;
+        }
+        for(int kind=0;kind<R2D_WORLD_IDS_KINDS;kind++)for(int i=0;i<expected[kind];i++) {
+            uint32_t length=get_u(&r);
+            if(!r.ok||length>(uint32_t)R2D_WORLD_ID_MAX)goto done;
+            if(length) {
+                char name[R2D_WORLD_ID_MAX+1];
+                for(uint32_t j=0;j<length;j++){if(r.offset>=r.size)goto done;uint8_t c=r.data[r.offset++];if(!c)goto done;name[j]=(char)c;}
+                name[length]=0;
+                if(!r2d_world_semantic_assign(&w,kind,i,name))goto done;
+            }
+        }
+        if(!r2d_world_semantic_validate(&w))goto done;
+    }
     if(!r.ok||r.offset!=r.size)goto done;
     // Imported ray queries use complete primitive fallback; no unverified cell-ray coverage claim.
-    w.baked_topology=true;if(version==1)w.light_dirty=true;w.topology_revision=world->topology_revision+1;r2d_world_free(world);*world=w;memset(&w,0,sizeof w);ok=true;
+    w.baked_topology=true;if(!lit)w.light_dirty=true;w.topology_revision=world->topology_revision+1;w.semantic_revision=world->semantic_revision+1;r2d_world_free(world);*world=w;memset(&w,0,sizeof w);ok=true;
 done:free(bytes);r2d_world_free(&w);if(!ok&&err&&size)snprintf(err,size,"Re2D World: invalid baked topology/checksum; recompile .re2dmap");return ok;
 }

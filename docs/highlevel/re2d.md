@@ -23,6 +23,11 @@ $.render(() => world.render(view,400,240));
 | `world.sprite(target, opts)` | регистрирует обычный узел как flat directional atlas sprite; см. раздел ниже |
 | `world.hit(target, opts)` / `world.hitRemove(target)` | регистрирует/снимает actor hit proxy для trace (P0-B) |
 | `world.trace(opts)` / `world.traceAll(opts)` | ближайшее попадание / все попадания мира и actor-прокси |
+| `world.findCell/findWall/findSpan/findPortal(name)` | authored semantic ID → runtime handle (или null) |
+| `world.findSurface(name)` | имя стены/span → handle поверхности |
+| `world.controller(opts)` | нативный helper движения (sweep/slide/step/slope/jump) |
+| `world.mover(opts)` | нативный fixed-tick timeline двери/лифта/крашера/платформы |
+| `world.trigger(opts)` + `world.triggerTick/Use/Shoot` | семантические триггеры; события идут в `$.on/$.emit` |
 | `.camera(view={})` | заменяет конфигурацию камеры; пропущенные поля получают defaults |
 | `.render(view=null,width=320,height=180)` | синтезирует и рисует обычный sprite на всё окно; возвращает sprite ID |
 | `.renderToSprite(view=null,width=320,height=180)` | синтезирует без fullscreen draw; возвращает sprite ID для previews |
@@ -143,6 +148,71 @@ Re2DSprite-регистрацию.
 determinism), `tests/agent/re2d_boomer_lab_test.py` (high-level API в живом
 кадре: маски, сортировка, стена перед дальним прокси), JS-контракт —
 `tests/js/re2d_world_api_test.mjs`.
+
+## Player controller (P0-C)
+
+```js
+const ctrl = world.controller({ radius: 14, height: 56, eye: 48, step: 9, slopeLimit: 50 });
+ctrl.place(800, 1080, 0);                       // x, y, feet
+const st = ctrl.move({ dx: 0, dy: -1, dt: 1 / 60, jump: false });
+// st: {x,y,feet,vx,vy,vz,span,ceiling,grounded}
+```
+
+Нативный C решает движение: accel/friction на земле, air control в воздухе,
+gravity, jump только с земли, потолок, step-up/down, ходьба по склону
+(`slopeLimit`), wall slide (полный шаг → X → Y), substeps не больше
+`radius*0.5` (до 64). Портал/мульти-span переразрешается через
+`r2d_world_support` в новой XY. Это helper, а не entity: состояние игрока
+принадлежит игре, controller владеет только математикой. `dt` вне `(0,0.5]`
+оставляет состояние без изменений. Нет mover carry/crush и нет sweep-запроса
+по произвольному радиусу (только собственный radius) — ограничения честные.
+
+## Movers (P0-E)
+
+```js
+const lift = world.mover({ type: 'lift', span: 0, from: 0, to: 96,
+                           speed: 240, wait: 0.5, autoReturn: true });
+lift.open();
+lift.info();     // {position,fraction,phase,direction,timer,events}
+```
+
+`span` или `portal` (ровно один). Timeline детерминирован и шагается вместе с
+`engine.re2d.worldStep`; `span` mover пишет `bottom=position`, сохраняя
+авторский `top`; `portal` mover открывает/закрывает существующий portal по
+событиям. Типы: `door` (toggle), `lift`/`platform` (auto-return после wait),
+`crusher` (реверс на концах). Бюджет 128 mover'ов. Ограничение: portal
+сейчас бинарный (без smooth open fraction) и нет passenger carry — это
+следующий шаг P0-E/P1.
+
+## Triggers (P0-F)
+
+```js
+world.onTrigger('gate.open', ev => door.open());
+world.trigger({ type: 'use', id: 'gate.open', target: 'gate.main',
+                x: 800, y: 600, radius: 64, bottom: 0, top: 96, once: true });
+world.triggerTick(1 / 60, { x: player.x, y: player.y, feet: player.feet });
+world.triggerUse({ x: player.x, y: player.y, h: player.h });
+```
+
+Enter — edge-triggered (outside→inside, без повтора внутри объёма), use/shoot —
+proximity-запросы. `once`/`cooldown`/`enabled` живут в C; fired-события
+возвращаются списком semantic id и реэмитятся в существующий `$.on/$.emit`
+(`world.onTrigger` отдаёт `{id,target}`, вторым аргументом — событие `$`).
+Бюджет 256 триггеров. Engine не исполняет gameplay: обработчик — игра.
+
+## Semantic IDs (P0-D)
+
+```js
+const wall = world.findWall('gate.left');       // индекс стены или null
+const floor = world.findSurface('hall.lower');  // handle поверхности
+world.findSpan('hall.upper'); world.findPortal('door.exit'); world.findCell('room');
+```
+
+`id` берётся из `.re2dmap` (стены, cells/spans, portals) и пишется в
+`.re2dworld`; загрузчик валидирует дубликаты/длину транзакционно, старые карты
+без таблицы грузятся с пустыми ID. Числовые индексы после reload не
+семантика — переразрешайте их через `find_*`. Компилятор:
+`build/r2d-sdk world-compile ... --renderer`.
 
 ## Свет, материал, изменение мира
 

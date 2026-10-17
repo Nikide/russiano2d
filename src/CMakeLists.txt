@@ -85,7 +85,11 @@ if(R2D_ENABLE_RE2D)
         re2d_world_gpu.h re2d_world_gpu.c
         re2d_world_bake.h re2d_world_bake.c
         re2d_world_atlas.h re2d_world_atlas.c
-        re2d_world_trace.h re2d_world_trace.c)
+        re2d_world_trace.h re2d_world_trace.c
+        re2d_world_mover.h re2d_world_mover.c
+        re2d_world_trigger.h re2d_world_trigger.c
+        re2d_world_controller.h re2d_world_controller.c
+        re2d_world_semantic.h re2d_world_semantic.c)
     list(APPEND R2D_DEFINES R2D_ENABLE_RE2D=1)
 endif()
 

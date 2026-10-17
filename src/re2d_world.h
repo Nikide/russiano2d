@@ -56,6 +56,9 @@ typedef struct { float x,y,h,radius,intensity,r,g,b; bool active,shadow,is_stati
     float remaining,age,flicker_min,flicker_max,flicker_rate;uint32_t flicker_seed; } R2DWorldLight;
 typedef struct {int *spans,count,capacity;} R2DWorldLightLinks;
 typedef struct {int id;float depth;} R2DWorldSortItem;
+// Authored semantic labels. The numeric indices above stay the runtime handles.
+#define R2D_WORLD_ID_MAX 63
+typedef struct { char **names; int count; } R2DWorldIdTable;
 typedef struct { bool enabled,dynamic,shadows,orientation; float distance_scale,orientation_strength; } R2DWorldLighting;
 typedef struct {
     R2DBsp bsp;
@@ -99,6 +102,10 @@ typedef struct {
     int *wall_openings,*opening_spans_a,*opening_spans_b;
     bool baked_topology;
     R2DWorldSortItem *sort_items;int *transparent_ids;int sort_capacity;
+    // Owned source name tables. Empty entries are NULL; counts parallel the
+    // geometry tables. semantic_revision advances on every successful reload.
+    R2DWorldIdTable cell_ids,wall_ids,span_ids,portal_ids;
+    uint64_t semantic_revision;
 } R2DRe2dWorld;
 typedef struct { float t,x,y,height; int wall,span; bool ceiling; uint32_t color; } R2DWorldHit;
 
@@ -128,6 +135,22 @@ bool r2d_world_build_cells(R2DRe2dWorld *,const R2DWorldWall *,int,
 bool r2d_world_load_json(R2DRe2dWorld *,const char *,char *,size_t);
 int r2d_world_cell_at(const R2DRe2dWorld *,float,float);
 int r2d_world_span_at(const R2DRe2dWorld *,float,float,float);
+// Authored semantic identity -> numeric runtime handle. Names are case-sensitive
+// exact matches; unknown/NULL/empty names resolve to -1. Lookups are linear over
+// the owning table, never over geometry.
+int r2d_world_find_cell(const R2DRe2dWorld *,const char *);
+int r2d_world_find_wall(const R2DRe2dWorld *,const char *);
+int r2d_world_find_span(const R2DRe2dWorld *,const char *);
+int r2d_world_find_portal(const R2DRe2dWorld *,const char *);
+// Debug/read-only access; invalid indices and unnamed primitives return NULL.
+const char *r2d_world_cell_id(const R2DRe2dWorld *,int);
+const char *r2d_world_wall_id(const R2DRe2dWorld *,int);
+const char *r2d_world_span_id(const R2DRe2dWorld *,int);
+const char *r2d_world_portal_id(const R2DRe2dWorld *,int);
+// Surfaces are derived, not authored: a wall owns exactly one WALL surface; a
+// span owns a FLOOR and a CEILING surface. -1 when unavailable.
+int r2d_world_wall_surface(const R2DRe2dWorld *,int wall);
+int r2d_world_span_surface(const R2DRe2dWorld *,int span,int kind);
 // Cell BSP near-first traversal. Returns required count; writes at most capacity.
 int r2d_world_cells_order(const R2DRe2dWorld *,float,float,int *,int);
 const R2DWorldSurface *r2d_world_surface(const R2DRe2dWorld *,int);

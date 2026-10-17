@@ -349,6 +349,7 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"actors",w->actor_count);set_num(ctx,o,"actorCandidates",w->frame_count);set_num(ctx,o,"composedActors",w->visible_actor_count);
     set_num(ctx,o,"atlasSprites",w->atlas_count);set_num(ctx,o,"visibleAtlasSprites",w->visible_atlas_count);
     set_num(ctx,o,"hitProxies",w->hit_count);
+    set_num(ctx,o,"movers",w->mover_count);set_num(ctx,o,"triggers",w->trigger_count);
     set_num(ctx,o,"materials",w->world.material_count);
     set_num(ctx,o,"lights",w->world.light_count);set_num(ctx,o,"lightSpanPairs",w->world.light_pairs);set_num(ctx,o,"lightOverflow",w->world.light_overflow);
     set_num(ctx,o,"visibleCells",w->visibility.cells_visible);set_num(ctx,o,"visibleSpans",w->visibility.span_count);set_num(ctx,o,"visibleSurfaces",w->visibility.surface_count);set_num(ctx,o,"portalsTested",w->visibility.portals_tested);set_num(ctx,o,"bspNodesVisited",w->visibility.bsp_nodes_visited);
@@ -616,6 +617,148 @@ static JSValue world_trace_all(JSContext *ctx,JSValueConst self,int argc,JSValue
     for(int i=0;i<written;i++)JS_SetPropertyUint32(ctx,array,(uint32_t)i,trace_result_object(ctx,&hits[i]));
     free(hits);return array;
 }
+static JSValue world_find(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv,int kind)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1||!JS_IsString(argv[0]))return JS_ThrowTypeError(ctx,"Re2D World: find(name) requires a semantic id string");
+    const char *name=JS_ToCString(ctx,argv[0]);if(!name)return JS_EXCEPTION;
+    int index=-1;
+    if(kind==0)index=r2d_world_find_cell(&w->world,name);
+    else if(kind==1)index=r2d_world_find_wall(&w->world,name);
+    else if(kind==2)index=r2d_world_find_span(&w->world,name);
+    else if(kind==3)index=r2d_world_find_portal(&w->world,name);
+    else {
+        int wall=r2d_world_find_wall(&w->world,name),span=r2d_world_find_span(&w->world,name);
+        for(int i=0;i<w->world.surface_count&&index<0;i++){
+            const R2DWorldSurface *surface=&w->world.surfaces[i];
+            if(wall>=0&&surface->kind==R2D_WORLD_WALL&&surface->primitive==wall)index=i;
+            if(span>=0&&surface->kind!=R2D_WORLD_WALL&&surface->primitive==span){if(surface->kind==R2D_WORLD_FLOOR)index=i;else if(index<0)index=i;}
+        }
+    }
+    JS_FreeCString(ctx,name);
+    return index<0?JS_NULL:JS_NewInt32(ctx,index);
+}
+static JSValue world_find_cell(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv){return world_find(ctx,self,argc,argv,0);}
+static JSValue world_find_wall(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv){return world_find(ctx,self,argc,argv,1);}
+static JSValue world_find_span(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv){return world_find(ctx,self,argc,argv,2);}
+static JSValue world_find_portal(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv){return world_find(ctx,self,argc,argv,3);}
+static JSValue world_find_surface(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv){return world_find(ctx,self,argc,argv,4);}
+static JSValue controller_state_object(JSContext *ctx,const R2DWorldControllerState *st)
+{
+    JSValue o=JS_NewObject(ctx);
+    set_num(ctx,o,"x",st->x);set_num(ctx,o,"y",st->y);set_num(ctx,o,"feet",st->feet);
+    set_num(ctx,o,"vx",st->vx);set_num(ctx,o,"vy",st->vy);set_num(ctx,o,"vz",st->vz);
+    set_num(ctx,o,"span",st->span);set_num(ctx,o,"ceiling",st->ceiling);
+    JS_SetPropertyStr(ctx,o,"grounded",JS_NewBool(ctx,st->grounded));
+    return o;
+}
+static JSValue world_controller_create(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[12];if(!w||!world_numbers(ctx,argc,argv,12,p))return JS_EXCEPTION;
+    R2DWorldControllerConfig cfg={p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],p[9],p[10],p[11]};
+    if(cfg.radius<=0||cfg.height<=0||cfg.step<0||cfg.slope_limit<0||cfg.slope_limit>89||cfg.gravity<0||cfg.jump_speed<0||cfg.max_ground<0||cfg.max_air<0||cfg.accel<0||cfg.friction<0||cfg.air_control<0)
+        return JS_ThrowRangeError(ctx,"Re2D World: invalid controller config");
+    int token=r2d_world_controller_create(w,&cfg);
+    if(token<=0)return JS_ThrowRangeError(ctx,"Re2D World: controller budget exhausted");
+    return JS_NewInt32(ctx,token);
+}
+static JSValue world_controller_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    return r2d_world_controller_remove(w,(int)p[0])?JS_UNDEFINED:JS_EXCEPTION;
+}
+static JSValue world_controller_init(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[4];if(!w||!world_numbers(ctx,argc,argv,4,p))return JS_EXCEPTION;
+    R2DWorldControllerState st;
+    if(!r2d_world_controller_place(w,(int)p[0],p[1],p[2],p[3],&st))return JS_NULL;
+    return controller_state_object(ctx,&st);
+}
+static JSValue world_controller_move(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[11];if(!w||!world_numbers(ctx,argc,argv,11,p))return JS_EXCEPTION;
+    R2DWorldControllerState st={0};
+    st.x=p[1];st.y=p[2];st.feet=p[3];st.vx=p[4];st.vy=p[5];st.vz=p[6];
+    st.span=-1;st.ceiling=0;st.grounded=false;
+    if(!r2d_world_controller_step_state(w,(int)p[0],&st,p[7],p[8],p[9]!=0.0f,p[10]))return JS_EXCEPTION;
+    return controller_state_object(ctx,&st);
+}
+static JSValue world_mover_create(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    float p[8];if(!world_numbers(ctx,argc,argv,8,p))return JS_EXCEPTION;
+    int token=r2d_world_mover_create(w,(int)p[0],(int)p[1],(int)p[2],p[3],p[4],p[5],p[6],p[7]!=0.0f);
+    if(token<=0)return JS_ThrowRangeError(ctx,"Re2D World: invalid mover (type/span/portal/from/to/speed/wait/top)");
+    return JS_NewInt32(ctx,token);
+}
+static JSValue world_mover_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    return r2d_world_mover_remove(w,(int)p[0])?JS_UNDEFINED:JS_EXCEPTION;
+}
+static JSValue world_mover_intent(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[2];if(!w||!world_numbers(ctx,argc,argv,2,p))return JS_EXCEPTION;
+    if(p[1]<0||p[1]>2)return JS_ThrowRangeError(ctx,"Re2D World: mover intent 0 open / 1 close / 2 toggle");
+    r2d_world_mover_intent(w,(int)p[0],(int)p[1]);return JS_UNDEFINED;
+}
+static JSValue world_mover_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    float out[6];unsigned events=0;if(!r2d_world_mover_info(w,(int)p[0],out,&events))return JS_NULL;
+    JSValue o=JS_NewObject(ctx);
+    set_num(ctx,o,"position",out[0]);set_num(ctx,o,"fraction",out[1]);set_num(ctx,o,"phase",out[2]);
+    set_num(ctx,o,"direction",out[3]);set_num(ctx,o,"timer",out[4]);set_num(ctx,o,"kind",out[5]);
+    set_num(ctx,o,"events",events);return o;
+}
+static JSValue world_trigger_create(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<10||!JS_IsNumber(argv[0])||!JS_IsString(argv[1]))return JS_ThrowTypeError(ctx,"Re2D World: triggerCreate(type,id,target,x,y,radius,bottom,top,once,cooldown)");
+    float type;if(!world_numbers(ctx,1,argv,1,&type))return JS_EXCEPTION;
+    const char *id=JS_ToCString(ctx,argv[1]);if(!id)return JS_EXCEPTION;
+    const char *target=NULL;if(JS_IsString(argv[2]))target=JS_ToCString(ctx,argv[2]);
+    float p[7];bool ok=world_numbers(ctx,argc-3,argv+3,7,p);
+    int token=-1;
+    if(ok)token=r2d_world_trigger_create(w,(int)type,id,target,p[0],p[1],p[2],p[3],p[4],p[5]!=0.0f,p[6]);
+    JS_FreeCString(ctx,id);if(target)JS_FreeCString(ctx,target);
+    if(!ok)return JS_EXCEPTION;
+    if(token<=0)return JS_ThrowRangeError(ctx,"Re2D World: invalid trigger");
+    return JS_NewInt32(ctx,token);
+}
+static JSValue world_trigger_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    return r2d_world_trigger_remove(w,(int)p[0])?JS_UNDEFINED:JS_EXCEPTION;
+}
+static JSValue trigger_tokens(JSContext *ctx,int count,const int *tokens)
+{
+    JSValue array=JS_NewArray(ctx);if(JS_IsException(array))return array;
+    for(int i=0;i<count;i++)JS_SetPropertyUint32(ctx,array,(uint32_t)i,JS_NewInt32(ctx,tokens[i]));
+    return array;
+}
+static JSValue world_trigger_tick(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[4];if(!w||!world_numbers(ctx,argc,argv,4,p))return JS_EXCEPTION;
+    int tokens[R2D_WORLD_TRIGGER_LIMIT];
+    int count=r2d_world_trigger_tick(w,p[1],p[2],p[3],tokens,R2D_WORLD_TRIGGER_LIMIT);
+    (void)p[0];
+    return trigger_tokens(ctx,count,tokens);
+}
+static JSValue world_trigger_use(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
+    int tokens[R2D_WORLD_TRIGGER_LIMIT];
+    int count=r2d_world_trigger_use_at(w,p[0],p[1],p[2],tokens,R2D_WORLD_TRIGGER_LIMIT);
+    return trigger_tokens(ctx,count,tokens);
+}
+static JSValue world_trigger_shoot(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[4];if(!w||!world_numbers(ctx,argc,argv,4,p))return JS_EXCEPTION;
+    int tokens[R2D_WORLD_TRIGGER_LIMIT];
+    int count=r2d_world_trigger_shoot_at(w,p[0],p[1],p[2],p[3],tokens,R2D_WORLD_TRIGGER_LIMIT);
+    return trigger_tokens(ctx,count,tokens);
+}
 static JSValue world_atlas_add(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
@@ -736,7 +879,7 @@ static void world_watch_poll(JSContext *,WorldHandle *,float);
 static JSValue world_step_all(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)self;float dt;if(!world_numbers(ctx,argc,argv,1,&dt))return JS_EXCEPTION;if(dt<0||dt>60)return JS_ThrowRangeError(ctx,"Re2D World: invalid step dt");
-    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
+    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
 }
 static JSValue world_light_at(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -786,6 +929,24 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"audioRemove",JS_NewCFunction(ctx,world_audio_remove,"audioRemove",1));
     JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",14));
     JS_SetPropertyStr(ctx,handle,"hitAdd",JS_NewCFunction(ctx,world_hit_add,"hitAdd",5));
+    JS_SetPropertyStr(ctx,handle,"findCell",JS_NewCFunction(ctx,world_find_cell,"findCell",1));
+    JS_SetPropertyStr(ctx,handle,"findWall",JS_NewCFunction(ctx,world_find_wall,"findWall",1));
+    JS_SetPropertyStr(ctx,handle,"findSpan",JS_NewCFunction(ctx,world_find_span,"findSpan",1));
+    JS_SetPropertyStr(ctx,handle,"findPortal",JS_NewCFunction(ctx,world_find_portal,"findPortal",1));
+    JS_SetPropertyStr(ctx,handle,"findSurface",JS_NewCFunction(ctx,world_find_surface,"findSurface",1));
+    JS_SetPropertyStr(ctx,handle,"controllerCreate",JS_NewCFunction(ctx,world_controller_create,"controllerCreate",12));
+    JS_SetPropertyStr(ctx,handle,"controllerRemove",JS_NewCFunction(ctx,world_controller_remove,"controllerRemove",1));
+    JS_SetPropertyStr(ctx,handle,"controllerInit",JS_NewCFunction(ctx,world_controller_init,"controllerInit",4));
+    JS_SetPropertyStr(ctx,handle,"controllerMove",JS_NewCFunction(ctx,world_controller_move,"controllerMove",11));
+    JS_SetPropertyStr(ctx,handle,"moverCreate",JS_NewCFunction(ctx,world_mover_create,"moverCreate",8));
+    JS_SetPropertyStr(ctx,handle,"moverRemove",JS_NewCFunction(ctx,world_mover_remove,"moverRemove",1));
+    JS_SetPropertyStr(ctx,handle,"moverIntent",JS_NewCFunction(ctx,world_mover_intent,"moverIntent",2));
+    JS_SetPropertyStr(ctx,handle,"moverInfo",JS_NewCFunction(ctx,world_mover_info,"moverInfo",1));
+    JS_SetPropertyStr(ctx,handle,"triggerCreate",JS_NewCFunction(ctx,world_trigger_create,"triggerCreate",10));
+    JS_SetPropertyStr(ctx,handle,"triggerRemove",JS_NewCFunction(ctx,world_trigger_remove,"triggerRemove",1));
+    JS_SetPropertyStr(ctx,handle,"triggerTick",JS_NewCFunction(ctx,world_trigger_tick,"triggerTick",4));
+    JS_SetPropertyStr(ctx,handle,"triggerUse",JS_NewCFunction(ctx,world_trigger_use,"triggerUse",3));
+    JS_SetPropertyStr(ctx,handle,"triggerShoot",JS_NewCFunction(ctx,world_trigger_shoot,"triggerShoot",4));
     JS_SetPropertyStr(ctx,handle,"hitRemove",JS_NewCFunction(ctx,world_hit_remove,"hitRemove",1));
     JS_SetPropertyStr(ctx,handle,"trace",JS_NewCFunction(ctx,world_trace,"trace",8));
     JS_SetPropertyStr(ctx,handle,"traceAll",JS_NewCFunction(ctx,world_trace_all,"traceAll",8));

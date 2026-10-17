@@ -34,9 +34,10 @@ void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
     for(int i=0;i<w->actor_count;i++)JS_FreeValueRT(w->runtime,w->actors[i]);
     for(int i=0;i<w->atlas_count;i++){JS_FreeValueRT(w->runtime,w->atlas_actors[i].node);free(w->atlas_actors[i].atlas);free(w->atlas_actors[i].frame);}
     for(int i=0;i<w->hit_count;i++)JS_FreeValueRT(w->runtime,w->hit_entries[i].node);
+    for(int i=0;i<w->trigger_count;i++){free(w->triggers[i].id);free(w->triggers[i].target);}
     free(w->actors);free(w->frame_handles);free(w->frame_positions);free(w->frame_images);free(w->frame_sizes);
     free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_keys);free(w->atlas_actors);
-    free(w->hit_entries);free(w->trace_scratch);
+    free(w->hit_entries);free(w->trace_scratch);free(w->movers);free(w->triggers);
     w->actors=w->frame_handles=NULL;w->frame_positions=NULL;w->frame_images=NULL;w->frame_sizes=NULL;
     w->frame_kinds=NULL;w->frame_revisions=NULL;w->frame_blends=NULL;w->frame_keys=NULL;w->atlas_actors=NULL;
     w->hit_entries=NULL;w->trace_scratch=NULL;w->hit_count=w->hit_capacity=0;w->trace_scratch_capacity=0;
@@ -399,6 +400,166 @@ int r2d_world_trace_query_all(JSContext *ctx,R2DWorldRuntime *w,const float from
     if(!trace_proxies(ctx,w,from,to,mask,ignore_node,&proxies,&count))return -1;
     int core_mask=(mask&R2D_WORLD_TRACE_WORLD?R2D_WORLD_TRACE_WORLD:0)|R2D_WORLD_TRACE_ENEMY|R2D_WORLD_TRACE_BREAKABLE;
     return r2d_world_trace_collect(&w->world,proxies,count,from,to,core_mask,-1,out,capacity);
+}
+
+
+// --- P0-E: movers ----------------------------------------------------------
+static R2DWorldMoverEntry *mover_entry(R2DWorldRuntime *w,int token)
+{
+    for(int i=0;i<w->mover_count;i++)if(w->movers[i].active&&w->movers[i].token==token)return &w->movers[i];
+    return NULL;
+}
+int r2d_world_mover_create(R2DWorldRuntime *w,int type,int span,int portal,float from,float to,float speed,float wait,bool auto_return)
+{
+    if(w->rendering)return -1;
+    if(type<R2D_MOVER_DOOR||type>R2D_MOVER_PLATFORM||!isfinite(from)||!isfinite(to)||!isfinite(speed)||!isfinite(wait)||speed<=0||wait<0)return -1;
+    if((span>=0)==(portal>=0))return -1;
+    if(span>=w->world.span_count)return -1;
+    if(portal>=w->world.portal_count)return -1;
+    float top=0;if(span>=0){top=w->world.spans[span].top;if(to>=top||from>=top||from==to)return -1;}
+    int slot=-1;for(int i=0;i<w->mover_count;i++)if(!w->movers[i].active){slot=i;break;}
+    if(slot<0){if(w->mover_count==R2D_WORLD_MOVER_LIMIT)return -1;slot=w->mover_count++;
+        if(slot>=w->mover_capacity){int n=w->mover_capacity?w->mover_capacity*2:8;R2DWorldMoverEntry *p=realloc(w->movers,(size_t)n*sizeof *p);if(!p){w->mover_count--;return -1;}w->movers=p;w->mover_capacity=n;}}
+    R2DWorldMoverEntry *e=&w->movers[slot];memset(e,0,sizeof *e);
+    if(!r2d_world_mover_init(&e->mover,type,span,from,to,speed,wait,auto_return))return -1;
+    e->active=true;e->token=++w->next_mover_token;e->span=span;e->portal=portal;e->kind=type;e->span_top=top;e->generation++;
+    if(span>=0)r2d_world_span_set_heights(&w->world,span,from,top);
+    if(portal>=0)r2d_world_portal_set_closed(&w->world,portal,true);
+    return e->token;
+}
+bool r2d_world_mover_remove(R2DWorldRuntime *w,int token)
+{
+    R2DWorldMoverEntry *e=mover_entry(w,token);if(!e)return true;
+    e->active=false;e->generation++;return true;
+}
+void r2d_world_mover_intent(R2DWorldRuntime *w,int token,int action)
+{
+    R2DWorldMoverEntry *e=mover_entry(w,token);if(!e)return;
+    if(action==0)r2d_world_mover_open(&e->mover);
+    else if(action==1)r2d_world_mover_close(&e->mover);
+    else r2d_world_mover_toggle(&e->mover);
+}
+bool r2d_world_mover_info(R2DWorldRuntime *w,int token,float out[6],unsigned *events)
+{
+    R2DWorldMoverEntry *e=mover_entry(w,token);if(!e)return false;
+    if(out){out[0]=e->mover.position;out[1]=e->mover.fraction;out[2]=(float)e->mover.phase;out[3]=(float)e->mover.direction;out[4]=e->mover.timer;out[5]=(float)e->kind;}
+    if(events)*events=e->events;
+    e->events=0;
+    return true;
+}
+void r2d_world_mover_advance(R2DWorldRuntime *w,float dt)
+{
+    if(w->rendering)return;
+    if(!isfinite(dt))dt=0;if(dt<0)dt=0;if(dt>0.25f)dt=0.25f;
+    for(int i=0;i<w->mover_count;i++){
+        R2DWorldMoverEntry *e=&w->movers[i];if(!e->active)continue;
+        unsigned ev=0;bool moved=r2d_world_mover_step(&e->mover,dt,&ev);
+        e->events|=ev;
+        if(!moved&&!ev)continue;
+        if(e->span>=0)r2d_world_span_set_heights(&w->world,e->span,e->mover.position,e->span_top);
+        if(e->portal>=0){
+            if(ev&R2D_MOVER_EVENT_CLOSED)r2d_world_portal_set_closed(&w->world,e->portal,true);
+            if(ev&R2D_MOVER_EVENT_REOPENED)r2d_world_portal_set_closed(&w->world,e->portal,false);
+        }
+    }
+}
+void r2d_world_mover_free(R2DWorldRuntime *w)
+{
+    free(w->movers);w->movers=NULL;w->mover_count=w->mover_capacity=0;w->next_mover_token=0;
+}
+
+// --- P0-F: semantic triggers ----------------------------------------------
+static R2DWorldTriggerEntry *trigger_entry(R2DWorldRuntime *w,int token)
+{
+    for(int i=0;i<w->trigger_count;i++)if(w->triggers[i].active&&w->triggers[i].token==token)return &w->triggers[i];
+    return NULL;
+}
+int r2d_world_trigger_create(R2DWorldRuntime *w,int type,const char *id,const char *target,float x,float y,float radius,float bottom,float top,bool once,float cooldown)
+{
+    if(w->rendering||!id||!id[0]||strlen(id)>=64)return -1;
+    if(w->trigger_count==R2D_WORLD_TRIGGER_LIMIT)return -1;
+    int slot=-1;for(int i=0;i<w->trigger_count;i++)if(!w->triggers[i].active){slot=i;break;}
+    if(slot<0){slot=w->trigger_count++;
+        if(slot>=w->trigger_capacity){int n=w->trigger_capacity?w->trigger_capacity*2:8;R2DWorldTriggerEntry *p=realloc(w->triggers,(size_t)n*sizeof *p);if(!p){w->trigger_count--;return -1;}w->triggers=p;w->trigger_capacity=n;}}
+    R2DWorldTriggerEntry *e=&w->triggers[slot];memset(e,0,sizeof *e);
+    if(!r2d_world_trigger_init(&e->trigger,type,id,target,x,y,radius,bottom,top,once,cooldown))return -1;
+    e->id=SDL_strdup(id);e->target=target?SDL_strdup(target):NULL;
+    if(!e->id){free(e->target);return -1;}
+    e->active=true;e->token=++w->next_trigger_token;
+    return e->token;
+}
+bool r2d_world_trigger_remove(R2DWorldRuntime *w,int token)
+{
+    R2DWorldTriggerEntry *e=trigger_entry(w,token);if(!e)return true;
+    e->active=false;free(e->id);e->id=NULL;free(e->target);e->target=NULL;return true;
+}
+void r2d_world_trigger_advance(R2DWorldRuntime *w,float dt)
+{
+    if(w->rendering)return;
+    for(int i=0;i<w->trigger_count;i++)if(w->triggers[i].active)r2d_world_trigger_step(&w->triggers[i].trigger,dt);
+}
+int r2d_world_trigger_tick(R2DWorldRuntime *w,float px,float py,float feet,int *tokens,int capacity)
+{
+    int count=0;
+    for(int i=0;i<w->trigger_count;i++){R2DWorldTriggerEntry *e=&w->triggers[i];if(!e->active)continue;
+        if(r2d_world_trigger_enter(&e->trigger,px,py,feet)){if(count<capacity)tokens[count]=e->token;count++;}}
+    return tokens&&capacity>0?(count<capacity?count:capacity):0;
+}
+int r2d_world_trigger_use_at(R2DWorldRuntime *w,float x,float y,float h,int *tokens,int capacity)
+{
+    int count=0;
+    for(int i=0;i<w->trigger_count;i++){R2DWorldTriggerEntry *e=&w->triggers[i];if(!e->active)continue;
+        if(r2d_world_trigger_use(&e->trigger,x,y,h)){if(count<capacity)tokens[count]=e->token;count++;}}
+    return tokens&&capacity>0?(count<capacity?count:capacity):0;
+}
+int r2d_world_trigger_shoot_at(R2DWorldRuntime *w,float x,float y,float h,float radius,int *tokens,int capacity)
+{
+    int count=0;
+    for(int i=0;i<w->trigger_count;i++){R2DWorldTriggerEntry *e=&w->triggers[i];if(!e->active)continue;
+        if(r2d_world_trigger_shoot(&e->trigger,x,y,h,radius)){if(count<capacity)tokens[count]=e->token;count++;}}
+    return tokens&&capacity>0?(count<capacity?count:capacity):0;
+}
+void r2d_world_trigger_free(R2DWorldRuntime *w)
+{
+    for(int i=0;i<w->trigger_count;i++){free(w->triggers[i].id);free(w->triggers[i].target);}
+    free(w->triggers);w->triggers=NULL;w->trigger_count=w->trigger_capacity=0;w->next_trigger_token=0;
+}
+
+
+// --- P0-C: controller config registry --------------------------------------
+static R2DWorldControllerEntry *controller_entry(R2DWorldRuntime *w,int token)
+{
+    if(token<=0)return NULL;
+    for(int i=0;i<R2D_WORLD_CONTROLLER_LIMIT;i++)
+        if(w->controllers[i].active&&w->controllers[i].token==token)return &w->controllers[i];
+    return NULL;
+}
+int r2d_world_controller_create(R2DWorldRuntime *w,const R2DWorldControllerConfig *config)
+{
+    if(w->rendering||!config)return -1;
+    for(int i=0;i<R2D_WORLD_CONTROLLER_LIMIT;i++){
+        R2DWorldControllerEntry *e=&w->controllers[i];if(e->active)continue;
+        e->config=*config;e->active=true;e->token=++w->next_controller_token;
+        return e->token;
+    }
+    return -1;
+}
+bool r2d_world_controller_remove(R2DWorldRuntime *w,int token)
+{
+    R2DWorldControllerEntry *e=controller_entry(w,token);if(!e)return true;
+    e->active=false;return true;
+}
+bool r2d_world_controller_place(R2DWorldRuntime *w,int token,float x,float y,float feet,R2DWorldControllerState *out)
+{
+    R2DWorldControllerEntry *e=controller_entry(w,token);if(!e||!out)return false;
+    R2DWorldControllerState start={0};start.x=x;start.y=y;start.feet=feet;
+    return r2d_world_controller_init(&w->world,&e->config,&start,out);
+}
+bool r2d_world_controller_step_state(R2DWorldRuntime *w,int token,R2DWorldControllerState *state,float wish_x,float wish_y,bool jump,float dt)
+{
+    R2DWorldControllerEntry *e=controller_entry(w,token);if(!e||!state)return false;
+    r2d_world_controller_move(&w->world,&e->config,state,wish_x,wish_y,jump,dt);
+    return true;
 }
 
 void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {

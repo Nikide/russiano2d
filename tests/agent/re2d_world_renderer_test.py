@@ -49,7 +49,8 @@ def main():
     static_source.write_text(json.dumps(static_data));static_output=Path('build/test_renderer_static.re2dworld')
     r=subprocess.run([os.environ.get('R2D_SDK_BINARY','build/r2d-sdk'),'world-compile',str(static_source),'--renderer','--output',str(static_output)],capture_output=True,text=True)
     static_compiled=json.loads(static_output.read_text()) if r.returncode==0 else {}
-    check(r.returncode==0 and static_compiled.get('baked',{}).get('version')==2,'SDK baker serializes static span lighting and light associations in versioned native tables')
+    static_version=static_compiled.get('baked',{}).get('version',0)
+    check(r.returncode==0 and static_version>=2,f'SDK baker serializes static span lighting and light associations in versioned native tables (baked v{static_version})')
     with Agent(game='demos/re2d_world_renderer_lab',seed=7) as a:
         a.step(2)
         check(a.eval('world.info().cells')==2 and a.eval('world.info().spans')==4,'public loader preserves two cells and four stacked spans')

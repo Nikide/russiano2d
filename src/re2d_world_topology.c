@@ -1,6 +1,7 @@
 #include "re2d_world.h"
 #include "json.h"
 #include "re2d_world_bake.h"
+#include "re2d_world_semantic.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -381,7 +382,10 @@ bool r2d_world_load_json(R2DRe2dWorld *w,const char *text,char *err,size_t size)
         const R2dJson *lighting=r2d_json_get(ss->items[j],"lighting");if(lighting){R2DWorldSpanLight light;if(!r2d_world_span_light_json(lighting,&light)||!r2d_world_set_span_light(&next,span,&light)){error(err,size,"invalid span lighting",span);ok=false;break;}}
     }}}
     if(ok)ok=r2d_world_load_lighting(&next,root,err,size);
-    if(ok){next.topology_revision=w->topology_revision+1;r2d_world_free(w);*w=next;}else r2d_world_free(&next);
+    // Semantic IDs are validated transactionally with the rest of the map: a
+    // duplicate or malformed name leaves the previously loaded world intact.
+    if(ok)ok=r2d_world_semantic_load_json(&next,root,err,size);
+    if(ok){next.topology_revision=w->topology_revision+1;next.semantic_revision=w->semantic_revision+1;r2d_world_free(w);*w=next;}else r2d_world_free(&next);
 done:
     free(walls);free(spans);free(cells);free(portals);free(opens);r2d_json_free(root);return ok;
 }

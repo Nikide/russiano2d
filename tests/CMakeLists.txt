@@ -157,7 +157,7 @@ endif()
 # RE2D World: multi-height queries and final RGBA synthesis, no GPU.
 add_executable(r2d_re2d_world_test re2d/world_test.c
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
-    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/json.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c" "${CMAKE_SOURCE_DIR}/src/json.c"
     "${CMAKE_SOURCE_DIR}/src/bsp.c")
 target_include_directories(r2d_re2d_world_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(r2d_re2d_world_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
@@ -185,7 +185,7 @@ endif()
 add_executable(r2d_world_trace_test re2d/trace_test.c
     "${CMAKE_SOURCE_DIR}/src/re2d_world_trace.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
-    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/json.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c" "${CMAKE_SOURCE_DIR}/src/json.c"
     "${CMAKE_SOURCE_DIR}/src/bsp.c")
 target_include_directories(r2d_world_trace_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(r2d_world_trace_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
@@ -195,6 +195,65 @@ endif()
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_world_trace_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_world_trace_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Mover timeline (P0-E core): pure deterministic fixed-tick state machine.
+add_executable(r2d_world_mover_test re2d/mover_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_mover.c")
+target_include_directories(r2d_world_mover_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_mover_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_mover_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_mover_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_mover_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Trigger state machine (P0-F core): enter/use/shoot, once/cooldown.
+add_executable(r2d_world_trigger_test re2d/trigger_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_trigger.c")
+target_include_directories(r2d_world_trigger_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_trigger_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_trigger_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_trigger_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_trigger_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Player controller (P0-C): sweep/slide/step/slope/jump determinism.
+add_executable(r2d_world_controller_test re2d/controller_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_controller.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
+    "${CMAKE_SOURCE_DIR}/src/json.c" "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_world_controller_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_controller_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_controller_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_controller_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_controller_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Semantic IDs (P0-D): bake -> load -> find_* lookup and validation.
+add_executable(r2d_re2d_semantic_test re2d/semantic_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/json.c" "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_re2d_semantic_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_re2d_semantic_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_re2d_semantic_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_re2d_semantic_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_re2d_semantic_test PRIVATE -fsanitize=address,undefined)
 endif()
 
 # EXR-декодер панорамного неба Re2D World (cmake/WorldEXR.cmake).
@@ -225,3 +284,29 @@ if(TARGET R2D_SteamAudio)
         target_link_options(r2d_audio_spatial_test PRIVATE -fsanitize=address,undefined)
     endif()
 endif()
+
+
+# --- P0-H: CTest для каждой Unity-цели и всех JS-наборов --------------------
+# Цели перечисляются автоматически по имени r2d_*_test; EXR-тест требует
+# аргумент-файл и зарегистрирован отдельно. `r2d_check` (корневой CMakeLists)
+# собирает эти цели и запускает `ctest`.
+get_property(_r2d_test_targets DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY BUILDSYSTEM_TARGETS)
+foreach(_r2d_target IN LISTS _r2d_test_targets)
+    if(_r2d_target MATCHES "^r2d_.*_test$" AND NOT _r2d_target STREQUAL "r2d_world_exr_test")
+        add_test(NAME ${_r2d_target} COMMAND $<TARGET_FILE:${_r2d_target}>)
+    endif()
+endforeach()
+if(TARGET r2d_world_exr_test)
+    add_test(NAME r2d_world_exr_test
+             COMMAND $<TARGET_FILE:r2d_world_exr_test> "${CMAKE_SOURCE_DIR}/demos/re2d_dust2/sky.exr"
+             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+endif()
+
+set(_r2d_qjs "${CMAKE_BINARY_DIR}/_deps/quickjs-build/qjs")
+file(GLOB _r2d_js_tests "${CMAKE_SOURCE_DIR}/tests/js/*_test.mjs")
+foreach(_r2d_js IN LISTS _r2d_js_tests)
+    get_filename_component(_r2d_js_name "${_r2d_js}" NAME_WE)
+    add_test(NAME js_${_r2d_js_name}
+             COMMAND "${_r2d_qjs}" "${_r2d_js}"
+             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+endforeach()

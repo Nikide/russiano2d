@@ -1,6 +1,9 @@
 #pragma once
 #include "re2d_world.h"
 #include "re2d_world_trace.h"
+#include "re2d_world_mover.h"
+#include "re2d_world_trigger.h"
+#include "re2d_world_controller.h"
 #include "render.h"
 #include "audio.h"
 #include <quickjs.h>
@@ -33,6 +36,24 @@ typedef struct R2DWorldHitEntry {
     float radius,bottom_offset,top_offset;
     int category;
 } R2DWorldHitEntry;
+#define R2D_WORLD_MOVER_LIMIT 128
+#define R2D_WORLD_TRIGGER_LIMIT 256
+typedef struct R2DWorldMoverEntry {
+    R2DWorldMover mover;
+    int token,span,portal,kind;
+    float span_top;
+    unsigned generation,events;
+    bool active;
+} R2DWorldMoverEntry;
+typedef struct R2DWorldTriggerEntry {
+    R2DWorldTrigger trigger;
+    char *id,*target;
+    int token;
+    unsigned generation,events;
+    bool active;
+} R2DWorldTriggerEntry;
+#define R2D_WORLD_CONTROLLER_LIMIT 64
+typedef struct { R2DWorldControllerConfig config; int token; bool active; } R2DWorldControllerEntry;
 typedef struct R2DWorldAudioSource {
     bool active,hrtf,occluded;
     unsigned generation;
@@ -66,6 +87,12 @@ typedef struct R2DWorldRuntime {
     int hit_count,hit_capacity;
     R2DWorldHitProxy *trace_scratch;
     int trace_scratch_capacity;
+    R2DWorldMoverEntry *movers;
+    int mover_count,mover_capacity,next_mover_token;
+    R2DWorldTriggerEntry *triggers;
+    int trigger_count,trigger_capacity,next_trigger_token;
+    R2DWorldControllerEntry controllers[R2D_WORLD_CONTROLLER_LIMIT];
+    int next_controller_token;
     int actor_count,actor_capacity,frame_count;
     struct R2DWorldRuntime *next;
     bool registered;
@@ -98,6 +125,26 @@ bool r2d_world_hit_unregister(JSContext *,R2DWorldRuntime *,JSValueConst);
 // 1 = hit, 0 = nothing, -1 = invalid input/exception.
 int r2d_world_trace_query(JSContext *,R2DWorldRuntime *,const float from[3],const float to[3],int mask,int ignore_node,R2DWorldTraceResult *);
 int r2d_world_trace_query_all(JSContext *,R2DWorldRuntime *,const float from[3],const float to[3],int mask,int ignore_node,R2DWorldTraceResult *out,int capacity);
+// P0-E: native mover timeline applied to span heights / portal open state.
+int r2d_world_mover_create(R2DWorldRuntime *,int type,int span,int portal,float from,float to,float speed,float wait,bool auto_return);
+bool r2d_world_mover_remove(R2DWorldRuntime *,int token);
+void r2d_world_mover_intent(R2DWorldRuntime *,int token,int action);
+bool r2d_world_mover_info(R2DWorldRuntime *,int token,float out[6],unsigned *events);
+void r2d_world_mover_advance(R2DWorldRuntime *,float dt);
+void r2d_world_mover_free(R2DWorldRuntime *);
+// P0-F: semantic trigger state machine (enter/use/shoot).
+int r2d_world_trigger_create(R2DWorldRuntime *,int type,const char *id,const char *target,float x,float y,float radius,float bottom,float top,bool once,float cooldown);
+bool r2d_world_trigger_remove(R2DWorldRuntime *,int token);
+void r2d_world_trigger_advance(R2DWorldRuntime *,float dt);
+int r2d_world_trigger_tick(R2DWorldRuntime *,float px,float py,float feet,int *tokens,int capacity);
+int r2d_world_trigger_use_at(R2DWorldRuntime *,float x,float y,float h,int *tokens,int capacity);
+int r2d_world_trigger_shoot_at(R2DWorldRuntime *,float x,float y,float h,float radius,int *tokens,int capacity);
+void r2d_world_trigger_free(R2DWorldRuntime *);
+// P0-C: native player controller config registry; state stays caller-owned.
+int r2d_world_controller_create(R2DWorldRuntime *,const R2DWorldControllerConfig *);
+bool r2d_world_controller_remove(R2DWorldRuntime *,int token);
+bool r2d_world_controller_place(R2DWorldRuntime *,int token,float x,float y,float feet,R2DWorldControllerState *out);
+bool r2d_world_controller_step_state(R2DWorldRuntime *,int token,R2DWorldControllerState *,float wish_x,float wish_y,bool jump,float dt);
 void r2d_world_runtime_actors_free(R2DWorldRuntime *);
 // Returns ordinary 2D sprite id; errors set QuickJS exception, no script renderer loops.
 int r2d_world_runtime_frame(JSContext *,R2DWorldRuntime *,const R2DRe2dView *,int,int,float);

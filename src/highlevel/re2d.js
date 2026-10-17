@@ -689,6 +689,127 @@ function rendererWorldWrapper($, native) {
         return (native.traceAll(from.x, from.y, from.h, to.x, to.y, to.h, mask, ignore) || []).map(decorate);
     };
     world.remove = target => { $(target).eachNode((i,node) => { const raw=rawOf(node); native.hitRemove(raw); const at = hitNodes.indexOf(raw); if (at >= 0) hitNodes.splice(at, 1); native.atlasRemove(raw); native.actorRemove(raw); }); return world; };
+    // P0-D: authored semantic identity -> runtime handle. Numeric indices stay
+    // an implementation detail; reload re-resolves through the baked table.
+    world.findCell = name => { const index = native.findCell(name); return index ?? null; };
+    world.findWall = name => { const index = native.findWall(name); return index ?? null; };
+    world.findSpan = name => { const index = native.findSpan(name); return index ?? null; };
+    world.findPortal = name => { const index = native.findPortal(name); return index ?? null; };
+    world.findSurface = name => { const index = native.findSurface(name); return index == null ? null : world.surface(index); };
+
+    // P0-C: native player controller. The helper owns math, the game owns the
+    // player node/state; not an entity and not a physics body.
+    world.controller = (options = {}) => {
+        const number = (value, fallback, label) => {
+            const v = Number(value ?? fallback);
+            if (!Number.isFinite(v)) throw new RangeError(`world.controller: ${label} must be finite`);
+            return v;
+        };
+        const radius = number(options.radius, 18, 'radius');
+        const height = number(options.height, 76, 'height');
+        const eye = number(options.eye, height - 8, 'eye');
+        const step = number(options.step, 18, 'step');
+        const slopeLimit = number(options.slopeLimit, 45, 'slopeLimit');
+        if (!(radius > 0 && height > 0 && step >= 0 && slopeLimit >= 0 && slopeLimit <= 89))
+            throw new RangeError('world.controller: radius/height > 0, step >= 0, slopeLimit 0..89');
+        const token = native.controllerCreate(radius, height, eye, step, slopeLimit,
+            number(options.gravity, 900, 'gravity'), number(options.jumpSpeed, 320, 'jumpSpeed'),
+            number(options.maxGround, 230, 'maxGround'), number(options.maxAir, 230, 'maxAir'),
+            number(options.accel, 1800, 'accel'), number(options.friction, 1400, 'friction'),
+            number(options.airControl, 0.25, 'airControl'));
+        let state = null;
+        const place = (x, y, feet = 0) => {
+            state = native.controllerInit(token, Number(x) || 0, Number(y) || 0, Number(feet) || 0) ?? null;
+            return state;
+        };
+        return {
+            place,
+            init: place,
+            move(move = {}) {
+                if (!state) place(move.x ?? 0, move.y ?? 0, move.feet ?? 0);
+                if (!state) return null;
+                if (move.x !== undefined) state.x = Number(move.x) || 0;
+                if (move.y !== undefined) state.y = Number(move.y) || 0;
+                if (move.feet !== undefined) state.feet = Number(move.feet) || 0;
+                const dt = Number(move.dt ?? 1 / 60);
+                const wishX = Number(move.dx ?? move.wishX ?? 0);
+                const wishY = Number(move.dy ?? move.wishY ?? 0);
+                if (![dt, wishX, wishY].every(Number.isFinite) || dt < 0 || dt > 0.5)
+                    throw new RangeError('world.controller.move: finite dx/dy, dt 0..0.5');
+                state = native.controllerMove(token, state.x, state.y, state.feet,
+                    Number(state.vx) || 0, Number(state.vy) || 0, Number(state.vz) || 0,
+                    wishX, wishY, move.jump ? 1 : 0, dt) ?? state;
+                return { ...state };
+            },
+            state() { return state ? { ...state } : null; },
+            remove() { native.controllerRemove(token); },
+        };
+    };
+
+    // P0-E: native mover timeline. Doors/lifts are authored timelines, not a
+    // generic physics body; the runtime applies span heights / portal state.
+    const moverTypes = { door: 0, lift: 1, crusher: 2, platform: 3 };
+    world.mover = (options = {}) => {
+        const name = options.type ?? 'door';
+        const type = typeof name === 'number' ? name : moverTypes[name];
+        if (type === undefined) throw new RangeError('world.mover: type door|lift|crusher|platform');
+        const span = options.span === undefined ? -1 : Math.trunc(Number(options.span));
+        const portal = options.portal === undefined ? -1 : Math.trunc(Number(options.portal));
+        if ((span >= 0) === (portal >= 0)) throw new RangeError('world.mover: exactly one of span/portal');
+        const from = Number(options.from), to = Number(options.to);
+        const speed = Number(options.speed ?? 120), wait = Number(options.wait ?? 0);
+        if (![from, to, speed, wait].every(Number.isFinite) || speed <= 0 || wait < 0)
+            throw new RangeError('world.mover: finite from/to, speed > 0, wait >= 0');
+        const token = native.moverCreate(type, span, portal, from, to, speed, wait,
+            options.autoReturn === false ? 0 : 1);
+        return {
+            open() { native.moverIntent(token, 0); return this; },
+            close() { native.moverIntent(token, 1); return this; },
+            toggle() { native.moverIntent(token, 2); return this; },
+            info() { return native.moverInfo(token); },
+            remove() { native.moverRemove(token); },
+        };
+    };
+    // P0-F: semantic triggers. Native owns once/cooldown/enter-edge state; the
+    // fired semantic ids are re-emitted into the existing $.on/$.emit model.
+    const triggerTypes = { enter: 0, use: 1, shoot: 2 };
+    const triggerMeta = new Map();
+    world.trigger = (options = {}) => {
+        const name = options.type ?? 'enter';
+        const type = typeof name === 'number' ? name : triggerTypes[name];
+        if (type === undefined) throw new RangeError('world.trigger: type enter|use|shoot');
+        const id = options.id;
+        if (typeof id !== 'string' || !id) throw new TypeError('world.trigger: semantic id required');
+        const target = typeof options.target === 'string' ? options.target : '';
+        const x = Number(options.x ?? 0), y = Number(options.y ?? 0);
+        const radius = Number(options.radius ?? 64), bottom = Number(options.bottom ?? 0);
+        const top = Number(options.top ?? bottom + 64), cooldown = Number(options.cooldown ?? 0);
+        if (![x, y, radius, bottom, top, cooldown].every(Number.isFinite) || radius <= 0 || top <= bottom || cooldown < 0)
+            throw new RangeError('world.trigger: finite volume, radius > 0, top > bottom, cooldown >= 0');
+        const token = native.triggerCreate(type, id, target, x, y, radius, bottom, top,
+            options.once ? 1 : 0, cooldown);
+        triggerMeta.set(token, { id, target });
+        return { id, target, remove() { triggerMeta.delete(token); native.triggerRemove(token); } };
+    };
+    const emitTriggers = tokens => {
+        const fired = [];
+        for (const token of tokens || []) {
+            const meta = triggerMeta.get(token);
+            if (!meta) continue;
+            fired.push(meta.id);
+            $.emit(meta.id, { world, trigger: meta.id, target: meta.target });
+        }
+        return fired;
+    };
+    world.triggerTick = (dt, at = {}) => emitTriggers(
+        native.triggerTick(Number(dt), Number(at.x ?? 0), Number(at.y ?? 0), Number(at.feet ?? at.h ?? 0)));
+    world.triggerUse = (at = {}) => emitTriggers(
+        native.triggerUse(Number(at.x ?? 0), Number(at.y ?? 0), Number(at.h ?? 0)));
+    world.triggerShoot = (at = {}) => emitTriggers(
+        native.triggerShoot(Number(at.x ?? 0), Number(at.y ?? 0), Number(at.h ?? 0), Number(at.radius ?? 0)));
+    // Handler receives the authored trigger payload ({id,target}); the raw $
+    // event stays available as the second argument.
+    world.onTrigger = (id, fn) => { $.on(id, event => fn(event.data ?? {}, event)); return world; };
     world.camera = (view = {}) => {
         native.camera(view.x ?? 0,view.y ?? 0,view.h ?? view.eye ?? 48,
             (view.yaw ?? 0)*Math.PI/180,(view.pitch ?? 0)*Math.PI/180,(view.fov ?? 70)*Math.PI/180,

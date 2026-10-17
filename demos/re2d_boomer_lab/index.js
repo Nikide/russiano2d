@@ -38,6 +38,9 @@ export default function install($) {
     let probe = null;
     let hud = null;
     let frames = 0;
+    let mover = null;
+    let trigger = null;
+    let triggerSeen = [];
 
     function projectPoint(x, y, h) {
         const yaw = view.yaw * Math.PI / 180, pitch = view.pitch * Math.PI / 180;
@@ -121,8 +124,42 @@ export default function install($) {
         };
     });
 
+    // High-level P0 probes: semantic IDs, controller, mover, trigger. They are
+    // intentionally thin: the demo only calls the public $ API.
+    const findProbe = () => ({
+        north: world.findWall('north'),
+        room: world.findCell('room'),
+        missing: world.findWall('no.such.wall'),
+        surfaceKind: world.findSurface('north')?.kind ?? null,
+    });
+    const controllerProbe = () => {
+        const ctrl = world.controller({ radius: 14, height: 56, step: 9, slopeLimit: 50 });
+        ctrl.place(800, 1080, 0);
+        let state = ctrl.state();
+        for (let i = 0; i < 60; i++) state = ctrl.move({ dx: 0, dy: -1, dt: 1 / 60 });
+        ctrl.remove();
+        return state;
+    };
+    const moverProbe = () => {
+        mover = world.mover({ type: 'lift', span: 0, from: 0, to: 96, speed: 240, wait: 0.5, autoReturn: true });
+        mover.open();
+        return mover.info();
+    };
+    const triggerProbe = () => {
+        triggerSeen = [];
+        world.onTrigger('lab.use', event => triggerSeen.push(event.target));
+        trigger = world.trigger({ type: 'use', id: 'lab.use', target: 'gate.main',
+            x: view.x, y: view.y, radius: 200, bottom: 0, top: 150 });
+        return true;
+    };
+
     globalThis.boomerLab = {
         trace, traceAll,
+        findProbe, controllerProbe, moverProbe, triggerProbe,
+        triggerUse: () => world.triggerUse({ x: view.x, y: view.y, h: view.h }),
+        triggerEvents: () => triggerSeen,
+        moverProbeInfo: () => (mover ? mover.info() : null),
+        moverClose: () => { if (mover) mover.close(); },
         moveProbe,
         setProbeRow(row) { if (probe) probe.node.get(0).sprite_row = Math.max(0, row | 0); },
         setProbeAngle(rad) { if (probe) { probe.def.angle = rad; probe.node.angle(rad); } },
@@ -154,6 +191,8 @@ export default function install($) {
             view = null;
             actors = [];
             probe = null;
+            if (mover) { mover.remove(); mover = null; }
+            if (trigger) { trigger.remove(); trigger = null; }
             globalThis.boomerLab = null;
         },
     });

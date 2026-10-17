@@ -14,17 +14,25 @@
 
 | Уровень | Что проверяет | Где | Как запускать |
 |---|---|---|---|
-| C-юниты | чистая логика ядра: json/crypto/payload/bsp/re2d/rotsprite/audio/atlas/trace — все на Unity (65 кейсов) | `tests/<ядро>/*_test.c`, цели CMake | `tools/ci_verify.py` (≈6 с на всё) |
-| Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (106 наборов, сверка 2026-10-17) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
+| C-юниты | чистая логика ядра: json/crypto/payload/bsp/re2d/rotsprite/audio/atlas/trace/controller/mover/trigger/semantic — все на Unity (100 кейсов) | `tests/<ядро>/*_test.c`, цели CMake | `tools/ci_verify.py` (≈6 с на всё) |
+| Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (105 наборов, сверка 2026-10-17) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
 | Интеграционные в движке | поведение игры и API через агентский протокол (реальный SDL_GPU, ввод, скриншоты) | `tests/agent/*_test.py` (265 наборов, сверка 2026-10-17) | `python3 tools/run_tests.py` (≈12 мин) |
 | Стражи документации | «в доке написано, что чего-то нет, а в коде есть»; у каждого модуля есть страница и тест; у каждого публичного имени есть документация | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py`, `tests/api_docs_sync_test.py` | `python3 tests/doc_...py`, `python3 tests/api_docs_sync_test.py` |
 | C | физика/BSP и прочие ядра | `tests/bsp`, цели CMake | `cmake --build build` |
 
 ### 1.1. Что гонять и когда (быстрый цикл)
 
+CTest — источник истины для C-целей и JS-наборов: каждый `r2d_*_test` и каждый
+`tests/js/*_test.mjs` зарегистрирован в CTest, SDK batch — тоже. Цель
+`r2d_check` собирает тестовые бинарники и запускает `ctest --output-on-failure`;
+её же вызывает CI. Python-обёртка `tools/ci_verify.py` остаётся
+compatibility-путём и проверяет конфигурацию RE2D.
+
+
 | Шаг | Время | Когда |
 |---|---|---|
-| `python3 tools/ci_verify.py --build-dir build` | **≈6 с** (15 C-целей + 106 `*.mjs` + sdk batch) | на каждую правку; это же гоняет CI (`.github/workflows/build.yml`) |
+| `cmake --build build --target r2d_check` | **≈5 с** (CTest: Unity C + все `*.mjs` + SDK batch) | на каждую правку (P0-H) |
+| `python3 tools/ci_verify.py --build-dir build` | **≈6 с** (18 C-целей + 105 `*.mjs` + sdk batch) | на каждую правку; это же гоняет CI (`.github/workflows/build.yml`) |
 | `python3 tools/run_tests.py --fast` | ≈1 мин (`agent_protocol`, `highlevel_api`, `game`) | перед коммитом, который трогает движок |
 | `python3 tools/run_tests.py` | ≈12 мин (265 агентских) | перед релизом/крупным слиянием, не на каждый чих |
 | `python3 tests/agent/<имя>_test.py` | 1–30 с | затронутый тест — обязательно |
@@ -53,11 +61,15 @@ license, без сети/FetchContent). Общая библиотека `r2d_uni
 | `r2d_re2d_world_test` | 1 | support/blocked/ray/stamp Re2D World |
 | `r2d_re2d_atlas_test` | 16 | atlas sprite: направление, pivot, клетка, кроп |
 | `r2d_world_trace_test` | 8 | world+actor trace: nearest, masks, ignore, multi-hit |
+| `r2d_world_controller_test` | 14 | controller: sweep/slide/step/slope/jump/portal/determinism |
+| `r2d_world_mover_test` | 11 | mover timeline: door/lift/crusher, events, blocked |
+| `r2d_world_trigger_test` | 9 | triggers: enter-edge/use/shoot, once/cooldown |
+| `r2d_re2d_semantic_test` | 1 | semantic IDs: bake→load→find_*, duplicate rejection |
 | `r2d_world_exr_test` | 1 | EXR-декодер неба |
 | `r2d_sdk_core_test` | 9 | SDK: glob/iso/registry/assets/validate/atlas/args |
 | `r2d_audio_spatial_test` | 1 | Steam Audio HRTF/occlusion |
 
-Итого **65 Unity-кейсов**, все цели дают `N Tests 0 Failures 0 Ignored`
+Итого **100 Unity-кейсов**, все цели дают `N Tests 0 Failures 0 Ignored`
 (exit 0). Падение красное по-настоящему: неверный `TEST_ASSERT_EQUAL_INT(2,3)`
 печатает `FAIL: Expected 2 Was 3` и возвращает 1.
 

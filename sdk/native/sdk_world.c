@@ -855,13 +855,15 @@ static void build_compiled(World *w)
     free(tailw);
 }
 
-static void put_description(const World *w, R2dSb *sb, bool pretty)
+static void put_description(const World *w, R2dSb *sb, bool pretty, bool ids)
 {
     const char *nl = pretty ? "\n" : "";
     r2d_sb_printf(sb, "{%s\"walls\":[", nl);
     for (int i = 0; i < w->ncw; ++i) {
         const WWall *wl = &w->cw[i];
-        r2d_sb_printf(sb, "%s%s{\"from\":[", i ? "," : "", pretty ? "\n  " : "");
+        r2d_sb_printf(sb, "%s%s{", i ? "," : "", pretty ? "\n  " : "");
+        if (ids && i < w->nwall && wl->id[0]) { r2d_sb_puts(sb, "\"id\":"); r2d_sb_put_json_string(sb, wl->id); r2d_sb_putc(sb, ','); }
+        r2d_sb_puts(sb, "\"from\":[");
         put_num(sb, wl->x1); r2d_sb_putc(sb, ','); put_num(sb, wl->y1);
         r2d_sb_puts(sb, "],\"to\":[");
         put_num(sb, wl->x2); r2d_sb_putc(sb, ','); put_num(sb, wl->y2);
@@ -873,7 +875,9 @@ static void put_description(const World *w, R2dSb *sb, bool pretty)
     r2d_sb_printf(sb, "%s],%s\"cells\":[", nl, nl);
     for (int i = 0; i < w->ncc; ++i) {
         const CCell *c = &w->cc[i];
-        r2d_sb_printf(sb, "%s%s{\"x\":", i ? "," : "", pretty ? "\n  " : "");
+        r2d_sb_printf(sb, "%s%s{", i ? "," : "", pretty ? "\n  " : "");
+        if (ids && i < w->ncell && c->owner[0]) { r2d_sb_puts(sb, "\"id\":"); r2d_sb_put_json_string(sb, c->owner); r2d_sb_putc(sb, ','); }
+        r2d_sb_puts(sb, "\"x\":");
         put_num(sb, c->x); r2d_sb_puts(sb, ",\"y\":"); put_num(sb, c->y);
         r2d_sb_puts(sb, ",\"w\":"); put_num(sb, c->w); r2d_sb_puts(sb, ",\"h\":"); put_num(sb, c->h);
         r2d_sb_puts(sb, ",\"spans\":[");
@@ -915,13 +919,15 @@ static bool put_renderer_description(const World *w,R2dSb *sb,SdkReport *rep,con
         if(ca<0||cb<0){free(compiled);sdk_diag(rep,SDK_ERROR,"SDK_WORLD_RENDERER_PORTAL",path,NULL,NULL,"Portal has no compiled cell owner");return false;}
         compiled[i*2]=ca;compiled[i*2+1]=cb;
     }
-    put_description(w,sb,false);
+    put_description(w,sb,false,true);
     // put_description ends in a closing object brace; append new format fields.
     if(sb->len&&sb->data[sb->len-1]=='}')sb->data[--sb->len]=0;
     r2d_sb_puts(sb,",\"version\":1,\"portals\":[");
     for(int i=0;i<w->nportal;i++) {
         const WPortal *p=&w->portals[i];
-        r2d_sb_printf(sb,"%s{\"cellA\":%d,\"cellB\":%d,\"from\":[",i?",":"",compiled[i*2],compiled[i*2+1]);
+        r2d_sb_printf(sb,"%s{",i?",":"");
+        r2d_sb_puts(sb,"\"id\":");r2d_sb_put_json_string(sb,p->id);
+        r2d_sb_printf(sb,",\"cellA\":%d,\"cellB\":%d,\"from\":[",compiled[i*2],compiled[i*2+1]);
         put_num(sb,p->x1);r2d_sb_putc(sb,',');put_num(sb,p->y1);r2d_sb_puts(sb,"],\"to\":[");put_num(sb,p->x2);r2d_sb_putc(sb,',');put_num(sb,p->y2);
         r2d_sb_puts(sb,"],\"openings\":[");
         for(int j=0;j<p->nopen;j++)r2d_sb_printf(sb,"%s{\"bottom\":%g,\"top\":%g}",j?",":"",p->open[j].bottom,p->open[j].top);
@@ -1122,7 +1128,7 @@ static int world_cmd(const SdkArgs *a, bool write)
         R2dSb file;
         r2d_sb_init(&file);
         bool description_ok=true;
-        if(renderer)r2d_sb_puts(&file,renderer_data.data);else put_description(&w, &file, true);
+        if(renderer)r2d_sb_puts(&file,renderer_data.data);else put_description(&w, &file, true, false);
         r2d_sb_putc(&file, '\n');
         if(!description_ok){outpath[0]=0;}
         else if (!sdk_write_file(outpath, file.data, file.len)) {
@@ -1141,7 +1147,7 @@ static int world_cmd(const SdkArgs *a, bool write)
     r2d_sb_puts(&out, "]");
     if (ok) {
         r2d_sb_puts(&out, ",\"world\":");
-        if(renderer)r2d_sb_puts(&out,renderer_data.data);else put_description(&w, &out, false);
+        if(renderer)r2d_sb_puts(&out,renderer_data.data);else put_description(&w, &out, false, false);
         r2d_sb_puts(&out, ",\"portals\":[");
         for (int i = 0; i < w.nportal; ++i) {
             const WPortal *p = &w.portals[i];

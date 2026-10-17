@@ -13,7 +13,10 @@ import { test, eq, truthy, falsy, finish } from './_harness.mjs';
 import { createApi } from '../../src/highlevel/api.js';
 
 const calls = { atlasAdd: [], atlasRemove: [], actorAdd: [], actorRemove: [],
-                hitAdd: [], hitRemove: [], trace: [], traceAll: [], dispose: 0 };
+                hitAdd: [], hitRemove: [], trace: [], traceAll: [], dispose: 0,
+                moverCreate: [], moverIntent: [], moverRemove: [], moverInfo: [],
+                triggerCreate: [], triggerRemove: [], triggerTick: [], triggerUse: [], triggerShoot: [],
+                find: [], controllerCreate: [], controllerInit: [], controllerMove: [], controllerRemove: [] };
 
 const native = {
     info: () => ({ poseBudget: 1, poseStep: 3 }),
@@ -39,6 +42,25 @@ const native = {
         ];
     },
     dispose: () => { calls.dispose++; },
+    moverCreate: (...args) => { calls.moverCreate.push(args); return 7; },
+    moverIntent: (token, action) => calls.moverIntent.push([token, action]),
+    moverRemove: (token) => calls.moverRemove.push(token),
+    moverInfo: (token) => { calls.moverInfo.push(token); return { position: 12, fraction: 0.25 }; },
+    triggerCreate: (...args) => { calls.triggerCreate.push(args); return 11; },
+    triggerRemove: (token) => calls.triggerRemove.push(token),
+    triggerTick: (...args) => { calls.triggerTick.push(args); return [11]; },
+    triggerUse: (...args) => { calls.triggerUse.push(args); return [11]; },
+    triggerShoot: (...args) => { calls.triggerShoot.push(args); return [11]; },
+    findCell: (name) => { calls.find.push(['cell', name]); return name === 'room' ? 0 : null; },
+    findWall: (name) => { calls.find.push(['wall', name]); return name === 'north' ? 2 : null; },
+    findSpan: (name) => { calls.find.push(['span', name]); return name === 'hall.lower' ? 0 : null; },
+    findPortal: (name) => { calls.find.push(['portal', name]); return name === 'gate' ? 1 : null; },
+    findSurface: (name) => { calls.find.push(['surface', name]); return name === 'north' ? 3 : null; },
+    surface: (index) => ({ kind: 0, primitive: index, cell: 0, span: 0 }),
+    controllerCreate: (...args) => { calls.controllerCreate.push(args); return 21; },
+    controllerInit: (...args) => { calls.controllerInit.push(args); return { x: args[1], y: args[2], feet: args[3], vx: 0, vy: 0, vz: 0, span: 0, ceiling: 320, grounded: true }; },
+    controllerMove: (...args) => { calls.controllerMove.push(args); return { x: args[1], y: args[2] - 1, feet: args[3], vx: 0, vy: -230, vz: 0, span: 0, ceiling: 320, grounded: true }; },
+    controllerRemove: (token) => calls.controllerRemove.push(token),
 };
 
 engine.re2d = {
@@ -166,6 +188,78 @@ test('world.trace отклоняет пустые/нечисловые точк�
     throws(RangeError, () => world.trace({ from: { x: NaN, y: 0 }, to: { x: 1, y: 1 } }), 'NaN');
     throws(RangeError, () => world.trace({ from: { x: 0, y: 0 }, to: { x: 1, y: 1 }, mask: ['players'] }), 'неизвестная маска');
     throws(TypeError, () => world.trace({ from: { x: 0, y: 0 }, to: { x: 1, y: 1 }, mask: 'enemy' }), 'mask не массив');
+    world.dispose();
+});
+
+test('world.mover уходит в нативный timeline и управляется интентами', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const lift = world.mover({ type: 'lift', span: 2, from: 0, to: 96, speed: 240, wait: 0.5, autoReturn: true });
+    const args = calls.moverCreate[0];
+    eq(args[0], 1); eq(args[1], 2); eq(args[2], -1);
+    eq(args[3], 0); eq(args[4], 96); eq(args[5], 240); eq(args[6], 0.5); eq(args[7], 1);
+    lift.open().close().toggle();
+    eq(JSON.stringify(calls.moverIntent.slice(-3)), '[[7,0],[7,1],[7,2]]');
+    eq(lift.info().position, 12);
+    lift.remove();
+    eq(calls.moverRemove[calls.moverRemove.length - 1], 7);
+    throws(RangeError, () => world.mover({ span: 1, portal: 0, from: 0, to: 1 }), 'mover: span и portal вместе');
+    throws(RangeError, () => world.mover({ from: 0, to: 1 }), 'mover: нужен span или portal');
+    throws(RangeError, () => world.mover({ span: 1, from: 0, to: 1, speed: 0 }), 'mover: speed > 0');
+    throws(RangeError, () => world.mover({ type: 'elevator', span: 1, from: 0, to: 1 }), 'mover: неизвестный тип');
+    world.dispose();
+});
+
+test('world.trigger: once/cooldown уходят в C, события возвращаются в $.on', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const seen = [];
+    world.onTrigger('gate.open', event => seen.push(event.target));
+    const gate = world.trigger({ type: 'use', id: 'gate.open', target: 'gate.main',
+        x: 10, y: 20, radius: 32, bottom: 0, top: 96, once: true, cooldown: 1.5 });
+    const args = calls.triggerCreate[0];
+    eq(args[0], 1); eq(args[1], 'gate.open'); eq(args[2], 'gate.main');
+    eq(args[3], 10); eq(args[4], 20); eq(args[5], 32); eq(args[6], 0); eq(args[7], 96);
+    eq(args[8], 1); eq(args[9], 1.5);
+    eq(JSON.stringify(world.triggerUse({ x: 10, y: 20, h: 48 })), '["gate.open"]');
+    eq(seen.length, 1); eq(seen[0], 'gate.main');
+    eq(JSON.stringify(world.triggerTick(1 / 60, { x: 10, y: 20, feet: 0 })), '["gate.open"]');
+    eq(seen.length, 2);
+    eq(JSON.stringify(world.triggerShoot({ x: 10, y: 20, h: 48, radius: 2 })), '["gate.open"]');
+    eq(calls.triggerShoot[calls.triggerShoot.length - 1][3], 2);
+    gate.remove();
+    eq(calls.triggerRemove[calls.triggerRemove.length - 1], 11);
+    throws(TypeError, () => world.trigger({ type: 'enter' }), 'trigger: нужен id');
+    throws(RangeError, () => world.trigger({ id: 'x', radius: 0 }), 'trigger: radius > 0');
+    world.dispose();
+});
+
+test('semantic find_* отдаёт authored ID -> runtime handle', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    eq(world.findCell('room'), 0);
+    eq(world.findCell('missing'), null);
+    eq(world.findWall('north'), 2);
+    eq(world.findSpan('hall.lower'), 0);
+    eq(world.findPortal('gate'), 1);
+    const surface = world.findSurface('north');
+    eq(surface.kind, 0);
+    eq(surface.primitive, 3);
+    world.dispose();
+});
+
+test('world.controller создаёт native config и двигает состояние', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const ctrl = world.controller({ radius: 14, height: 56, step: 9, slopeLimit: 50 });
+    const args = calls.controllerCreate[0];
+    eq(args.length, 12);
+    eq(args[0], 14); eq(args[1], 56); eq(args[2], 48); eq(args[3], 9); eq(args[4], 50);
+    ctrl.place(100, 200, 0);
+    eq(JSON.stringify(calls.controllerInit[0]), '[21,100,200,0]');
+    const moved = ctrl.move({ dx: 0, dy: -1, dt: 1 / 60, jump: false });
+    eq(moved.y, 199);
+    eq(ctrl.state().grid ?? ctrl.state().grounded, true);
+    ctrl.remove();
+    eq(calls.controllerRemove[calls.controllerRemove.length - 1], 21);
+    throws(RangeError, () => world.controller({ radius: 0 }), 'controller radius > 0');
+    throws(RangeError, () => world.controller({ slopeLimit: 90 }), 'controller slopeLimit 0..89');
     world.dispose();
 });
 

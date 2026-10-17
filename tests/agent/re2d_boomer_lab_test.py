@@ -138,6 +138,30 @@ def main():
               f"за стеной trace возвращает стену, а не дальний proxy: {behind}")
         a.eval("boomerLab.moveProbe(800,900)"); a.step(3)
 
+        # --- P0-C/D/E/F high-level probes ------------------------------------
+        find_raw = a.eval("JSON.stringify(boomerLab.findProbe())")
+        import json as _json
+        find = _json.loads(find_raw) if find_raw else {}
+        check(find.get("north") is not None and find.get("north") >= 0
+              and find.get("room") == 0 and find.get("missing") is None
+              and find.get("surfaceKind") == 0,
+              f"semantic find_* по authored ID: {find_raw}")
+        ctrl = a.eval("JSON.stringify(boomerLab.controllerProbe())")
+        ctrl_state = _json.loads(ctrl) if ctrl else {}
+        check(ctrl_state.get("y", 1080) < 1000 and abs(ctrl_state.get("x", 0) - 800) < 1 and ctrl_state.get("grounded") is True,
+              f"controller прошёл вперёд и стоит на полу: {ctrl}")
+        check(a.eval("JSON.stringify(boomerLab.moverProbe())") is not None, "mover создан через $ API")
+        a.step(25)
+        mover_state = a.eval("JSON.stringify(boomerLab.moverProbeInfo())")
+        check(mover_state is not None and '"position":' in mover_state, f"mover шагает: {mover_state}")
+        a.eval("boomerLab.moverClose()"); a.step(30)
+        check(a.eval("JSON.stringify(boomerLab.moverProbeInfo())") is not None, "mover закрывается")
+        check(a.eval("boomerLab.triggerProbe()") is True, "trigger создан через $ API")
+        fired = a.eval("JSON.stringify(boomerLab.triggerUse())")
+        seen = a.eval("JSON.stringify(boomerLab.triggerEvents())")
+        check(fired and 'lab.use' in fired and seen and 'gate.main' in seen,
+              f"trigger эмитит семантическое событие: fired={fired}, seen={seen}")
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 
