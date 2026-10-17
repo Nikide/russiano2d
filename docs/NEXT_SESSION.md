@@ -48,7 +48,7 @@ QuickJS-ng v0.10.1, RmlUi 6.3, FreeType, Steam Audio), публичное API �
 | Версия | `1.2.2` (тег `v1.2.2` = `a9220e39…`, поставлен после перепаковки пакетов) |
 | Полный набор | `python3 tools/run_tests.py` → **263 теста**, 257 ok, 6 skip (`re2d_*` — 3D вырезан из SDK), 0 fail (прогон 2026-10-17, 726 с) |
 | Заморозка API | **3125** имён (`tests/api_freeze_baseline.txt`) + **35** методов обёрток (`tests/api_wrapper_methods_baseline.txt`) |
-| Гейты | `api_freeze`, `api_docs_sync` (3125), `api_wrapper_methods`, `doc_coverage`, `doc_claims`, `repository_hygiene`, `release_notes`, `format_extensions`, `checklist`, `acceptance` — зелёные |
+| Гейты | `api_freeze`, `api_docs_sync` (3125), `api_wrapper_methods` (105), `doc_examples` (687 путей), `doc_coverage`, `doc_claims`, `repository_hygiene`, `release_notes`, `format_extensions`, `checklist`, `acceptance` — зелёные |
 | Бинарник | `build/russiano2d` (пересобирать после правок JS! JS вшивается при сборке) |
 | Внешний тестировщик | `/Volumes/SSD NVME/p2game/bashnya/issues.md` — **только читать**, никогда не править и не ставить галки |
 
@@ -227,7 +227,7 @@ $.vfx.play('hit.spark', { at: [x, y], parent: node });
 | # | Долг | Как закрывать |
 |---|---|---|
 | Д1 | **`api_freeze` не видит методы возвращаемых объектов** (`$.ui.doc().layoutRect` прошёл мимо) | ✅ **закрыто**: отдельный гейт `tests/api_wrapper_methods_test.py` (35 методов, whitelist проб явный). Остаток: методы ВЛОЖЕННЫХ namespace (`$.gfx.light.*`) в снимок не входят — новый долг Д10 |
-| Д2 | **Нет гейта, прогоняющего примеры из доки кодом** (`doc_examples_test.py`) | ⏳ **прототип сделан, гейт не включён**: 475 js-блоков, 423 исполняются (21 import/export, 23 псевдокод с `...`, 8 await), 54 падения после триажа-минимума. Уже закрыто: SIGSEGV `$.world.bsp.order` до `build()` (нашёлся прогоном; `bsp_guard_test`), ложное обещание `$.audio.room.define/zone/at` в `acoustics.md` (исправлено на реальную функцию `$.audio.room()`). Осталось: разметить псевдокод `<!-- no-run -->`, разобрать 54 падения, включить гейт |
+| Д2 | **Нет гейта, проверяющего примеры из доки** (`doc_examples_test.py`) | ✅ **закрыто**: `tests/doc_examples_test.py` вытаскивает все публичные пути `$.a.b.c` из js-блоков `docs/highlevel/*.md` и проверяет их существование в живом движке — **689 уникальных путей, 687 проверяются** (исключение одно: `$.story.flags.*` — данные-карта). Исполнение примеров осталось инструментом-прототипом (475 блоков, 423 запускаются, 53 падения — почти все фрагменты/контекст) — стабильным гейтом быть не может из-за перекрёстного состояния; но он нашёл и закрыл реальные расхождения: SIGSEGV `$.world.bsp.order` до `build()` (`bsp_guard_test`), `$.audio.room.define/zone/at` (не существуют), `$.inv.value()` (метод инвентаря, не namespace), `dir.phase()` (геттер), `$.fx.fade` в cutscene (звали несуществующий метод) |
 | Д3 | **`.DS_Store` в манифестах пакетов** (третий случай) | ✅ **закрыто**: `tools/release.py --check-junk` (дерево + `SHA256SUMS.txt` + архивы) и чистка в `build_and_push.sh` ДО `git add`; проверка нашла 2 реальных `.DS_Store` в `dist/` — удалены, повтор «чисто» |
 | Д4 | **Удаление страниц на сайте падает** (`FAIL удалить doc/...`) | ✅ **закрыто**: права и DELE исправны (upload→DELE: curl 250, ftplib ok); падал сам скрипт — 550 на УЖЕ удалённый файл считался провалом. `deploy-fast.sh` перепроверяет листингом, «уже удалено» = успех. `list-removed-docs.py` пуст — устаревших страниц нет |
 | Д5 | **CI: `linux-aarch64` красный по тегу `v1.2.2`** | ⏳ шаг найден и перепроверен перезапуском: `Linux SDK GUI regressions` → `sdk_studios_test`. Симптомы разные между запусками: (1) SIGSEGV **до** `ready` при `SDL_GPU_DRIVER=vulkan` (lavapipe, прогретый кэш шейдеров); (2) движок стартует, но DevTools-этап видит 0 сущностей: `profile/screenshot/frame` = False. x86_64 тот же тест проходит; sdk_cli/sdk_package/build/ui_virtual_mouse — зелёные. `static gates`, сборка RE2D on/off, native/JS тесты, web export — зелёные. `windows-msvc-diagnostic` — известный ICE. Нужен прогон на aarch64-Linux (локально его нет) и, вероятно, отключение GPU-пути DevTools-снимка на lavapipe |
@@ -244,7 +244,6 @@ $.vfx.play('hit.spark', { at: [x, y], parent: node });
 | Д11 | **r2dvfx M4** — предпросмотр эффектов в DevTools и экспорт спеки в JSON | API готов (`list/get/play/seek/query`, спеки — чистые данные). Нужна вкладка в DevTools; записано в `docs/highlevel/vfx.md` §7 как несделанное |
 | Д12 | **`cutscene.js` зовёт `$.fx.flash`** — первая катсцена с вспышкой даст одно предупреждение `R2D_FX_DEPRECATED` | Перевести `cutscene.js` на `$.vfx.flash` (файл был вне зоны агента) |
 | Д13 | **Полный I1**: при активном параллаксе `node.x/y` пишет `layers.js`, читает `render.js` | Вынести параллакс-смещение в `render.js` (как спрайтовое смещение), тогда `node.x` останется позицией игры |
-| Д14 | **Д2 остаток**: 54 падения прогона примеров | Разметить псевдокод `<!-- no-run -->` (сейчас 52 блока уже отсеяны автоматически: 21 import/export + 23 `...` + 8 await), разобрать 54 падения, включить `tests/doc_examples_test.py` в набор |
 
 ## 7. Как проверять (ритуал)
 

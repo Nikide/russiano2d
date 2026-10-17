@@ -12,7 +12,8 @@
 //   mind.isBroken();                // срыв?
 //   mind.aimErrorMult();            // множители для боя и прицела
 //
-//   const dir = $.alive.director({ lootValue: () => $.inv.value() });
+//   const bag = $.inv.create({ cols: 8, rows: 6 });
+//   const dir = $.alive.director({ lootValue: () => bag.value() });
 //   dir.tick(dt);
 //   dir.phase();                    // 'spare' | 'even' | 'press'
 //
@@ -942,7 +943,8 @@ export function installAlive($) {
         /** Психика: `$.alive.psyche('veteran', { skill: 0.7 })`. */
         psyche(raw) { return createPsyche(raw); },
 
-        /** Режиссёр рейда: `$.alive.director({ lootValue: () => $.inv.value() })`. */
+        /** Режиссёр рейда: `$.alive.director({ lootValue: () => bag.value() })` —
+         * `value()` есть у ИНВЕНТАРЯ (`$.inv.create(...)`), а не у `$.inv`. */
         director(opts) {
             const cfg = Object.assign({}, opts || {});
             // Удобная обёртка: функция ценности вместо готового числа.
