@@ -61,3 +61,17 @@
 * P0-C: нет mover carry/crusher, поддержка потолка point-based (ограничение
   world API).
 * P0-G: helper screen-space; камера/FOV остаются у игры, загрузки текстур нет.
+
+## P1 progress
+
+| Pass | Status | Proof |
+|---|---|---|
+| P1-A smooth portals | done | `r2d_re2d_portal_test` (7), agent dust2 |
+| P1-B passenger carry / crusher | done | controller 16 tests, mover blocking |
+| P1-C particles + VFX core | done | `r2d_world_particle_test` (15), CPU+GPU agent pixels |
+| P1-D nav graph | done | `r2d_world_nav_test` (13), dust2 path 25 spans |
+| P1-E automap | done | `r2d_world_automap_test` (8), lab probe |
+| P1-F map metadata/spawns | done | `r2d_world_metadata_test` (9), SDK passthrough, lab probe |
+| P1-G terrain/liquids | next | — |
+| P1-H save/load state | next | — |
+| P1-I reverb zones / voice virtualization | next | — |

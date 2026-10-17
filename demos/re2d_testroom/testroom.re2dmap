@@ -1,6 +1,27 @@
 {
   "version": 1,
   "name": "Re2D test room",
+  "meta": {
+    "id": "tower.testroom",
+    "title": "Re2D test room",
+    "author": "Russiano2D",
+    "version": "1.0",
+    "music": "ambient.tower",
+    "sky": "panorama.dusk",
+    "nextMap": "tower.hall",
+    "secretExit": "tower.secret",
+    "environment": "interior",
+    "defaultFogColor": "#142a49",
+    "defaultFogDensity": 0.002,
+    "defaultFogStart": 100
+  },
+  "spawns": [
+    { "id": "player.start", "type": "player", "x": 800, "y": 1080, "h": 0, "facing": -90 },
+    { "id": "enemy.nw", "type": "enemy", "x": 900, "y": 520, "h": 0, "facing": 180, "tag": "cat-nw" },
+    { "id": "enemy.se", "type": "enemy", "x": 1120, "y": 1060, "h": 0, "facing": -90, "tag": "cat-se" },
+    { "id": "item.health.a", "type": "item", "x": 300, "y": 300, "h": 0, "tag": "health.small" },
+    { "id": "secret.tower", "type": "effect", "x": 1420, "y": 300, "h": 0, "tag": "secret" }
+  ],
   "cells": [
     {
       "id": "room",

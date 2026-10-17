@@ -25,6 +25,10 @@ $.render(() => world.render(view,400,240));
 | `world.trace(opts)` / `world.traceAll(opts)` | ближайшее попадание / все попадания мира и actor-прокси |
 | `world.findCell/findWall/findSpan/findPortal(name)` | authored semantic ID → runtime handle (или null) |
 | `world.portalOpen(index, fraction)` / `portalFraction(index)` | плавное состояние портала 0..1 |
+| `world.navBuild/navNearest/navPath` | 2D span/portal nav graph и детерминированный A* |
+| `world.automapLines(states?)` / `automapProject(view,x,y)` | 2D automap-линии и view-трансформ |
+| `world.metadata()` / `spawns()` / `spawn(id)` | authored map metadata и типизированные spawn points |
+| `world.particles.burst/continuous/info/clear` | нативный fixed-pool частиц |
 | `world.findSurface(name)` | имя стены/span → handle поверхности |
 | `world.controller(opts)` | нативный helper движения (sweep/slide/step/slope/jump) |
 | `world.mover(opts)` | нативный fixed-tick timeline двери/лифта/крашера/платформы |
@@ -238,6 +242,66 @@ world.findSpan('hall.upper'); world.findPortal('door.exit'); world.findCell('roo
 без таблицы грузятся с пустыми ID. Числовые индексы после reload не
 семантика — переразрешайте их через `find_*`. Компилятор:
 `build/r2d-sdk world-compile ... --renderer`.
+
+## Map metadata и spawn points (P1)
+
+```js
+const meta = world.metadata();       // {id,title,author,version,music,sky,nextMap,
+                                     //  secretExit,environment,defaultFog,spawnCount}
+const spawns = world.spawns();       // [{id,type,typeName,tag,x,y,h,facing}]
+const start = world.spawn('player.start');
+```
+
+Авторские `meta`/`metadata` и `spawns` из `.re2dmap` переживают
+`world-compile --renderer` (SDK копирует их как данные, не как схему) и
+загружаются нативным парсером (`src/re2d_world_metadata.c`): bounded-строки
+≤127, дубликаты id и NaN отклоняются, отсутствующие поля — значения по
+умолчанию. Типы: player/enemy/item/boss/effect/camera (+cutscene→camera).
+Ограничения: metadata не сериализуется в `baked`-payload и не участвует в
+save/load этого прохода; spans/openings пока без authored id (см. P0-D).
+
+## Nav graph (P1)
+
+```js
+const build = world.navBuild({ radius: 14, height: 56, step: 18 }); // {nodes,edges}
+const node = world.navNearest(800, 1080);
+const path = world.navPath(node, node);  // массив span-индексов или null
+```
+
+Один узел на span, ребро — проходимый portal (open fraction > 0, headroom ≥
+height, перепад ≤ step, ширина ≥ 2*radius). A* детерминирован (tie-break по
+индексу); scratch и CSR-массивы нативные, без аллокаций на запрос. Граф
+перестраивается после topology/height изменений; `navPath` возвращает `null`
+для недостижимой цели. Нет 3D-navmesh/сглаживания waypoints.
+
+## Automap (P1)
+
+```js
+const lines = world.automapLines(states);   // [{x1,y1,x2,y2,state,kind,index}]
+world.automapProject({cx,cy,scale,rotation}, x, y);  // {x,y}
+```
+
+Линии стен и порталов в детерминированном порядке; derived door-closure walls
+не дублируются (дверь — одна PORTAL-линия). `states` — плоская таблица по
+primitive (стены, затем порталы); отрисовка остаётся за игрой. Только XY,
+никакого 3D-minimap.
+
+## Particles (P1)
+
+```js
+world.particles.burst({ x: 800, y: 900, h: 80, count: 80, life: 3, size: 50,
+  color: '#ff2040', alpha: .8, blend: 'translucent', mode: 'billboard', seed: 7 });
+world.particles.continuous({ x: 800, y: 900, h: 40, rate: 40, life: 1, size: 6 }, 1/60);
+world.particles.info();   // {alive,capacity,overflow,drawn}
+world.particles.clear();
+```
+
+Фиксированный пул 2048 на world, детерминированный LCG (`seed`), шаг в
+`engine.re2d.worldStep`, curves size/alpha, gravity только по высоте, drag.
+Режимы screen/billboard/axis/floor, blends masked/translucent/additive.
+Рисование: CPU reference — quads с world depth/light/fog; SDL_GPU — тот же
+actor-billboard pipeline с 1×1 white texture и tint'ом (бюджет 512 частиц на
+GPU). Нет коллизий, trails и VFX bundles в этом проходе.
 
 ## Свет, материал, изменение мира
 

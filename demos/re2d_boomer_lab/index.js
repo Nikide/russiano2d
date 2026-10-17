@@ -158,6 +158,30 @@ export default function install($) {
         findProbe, controllerProbe, moverProbe, triggerProbe,
         triggerUse: () => world.triggerUse({ x: view.x, y: view.y, h: view.h }),
         triggerEvents: () => triggerSeen,
+        navProbe: () => {
+            const build = world.navBuild({ radius: 14, height: 56, step: 18 });
+            const node = world.navNearest(800, 1080);
+            const path = world.navPath(node, node);
+            return { build, node, path };
+        },
+        automapProbe: () => {
+            const lines = world.automapLines(null);
+            return { lines: lines.length, first: lines[0] ?? null,
+                     proj: world.automapProject({ cx: 800, cy: 600, scale: 0.5, rotation: 0 }, 800, 600) };
+        },
+        metadataProbe: () => ({
+            meta: world.metadata(), count: world.spawns().length,
+            player: world.spawn('player.start'), missing: world.spawn('nope'),
+        }),
+        particlesClear: () => world.particles.clear(),
+        particleProbe: () => {
+            world.particles.clear();
+            const spawned = world.particles.burst({ x: 800, y: 900, h: 80, count: 80,
+                life: 3, size: 50, color: '#ff2040', alpha: 0.8, blend: 'translucent',
+                mode: 'billboard', seed: 7 });
+            return { spawned, info: world.particles.info() };
+        },
+        particleInfo: () => world.particles.info(),
         moverProbeInfo: () => (mover ? mover.info() : null),
         moverClose: () => { if (mover) mover.close(); },
         moveProbe,

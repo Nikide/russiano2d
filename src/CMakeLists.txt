@@ -89,7 +89,11 @@ if(R2D_ENABLE_RE2D)
         re2d_world_mover.h re2d_world_mover.c
         re2d_world_trigger.h re2d_world_trigger.c
         re2d_world_controller.h re2d_world_controller.c
-        re2d_world_semantic.h re2d_world_semantic.c)
+        re2d_world_semantic.h re2d_world_semantic.c
+        re2d_world_metadata.h re2d_world_metadata.c
+        re2d_world_particle.h re2d_world_particle.c
+        re2d_world_nav.h re2d_world_nav.c
+        re2d_world_automap.h re2d_world_automap.c)
     list(APPEND R2D_DEFINES R2D_ENABLE_RE2D=1)
 endif()
 

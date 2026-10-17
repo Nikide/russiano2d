@@ -17,7 +17,7 @@ const calls = { atlasAdd: [], atlasRemove: [], actorAdd: [], actorRemove: [],
                 moverCreate: [], moverIntent: [], moverRemove: [], moverInfo: [],
                 triggerCreate: [], triggerRemove: [], triggerTick: [], triggerUse: [], triggerShoot: [],
                 find: [], controllerCreate: [], controllerInit: [], controllerMove: [], controllerRemove: [],
-                portalOpen: [], portalFraction: [], moverBlock: [] };
+                portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [] };
 
 const native = {
     info: () => ({ poseBudget: 1, poseStep: 3 }),
@@ -66,6 +66,15 @@ const native = {
     portalOpen: (index, fraction) => calls.portalOpen.push([index, fraction]),
     portalFraction: (index) => { calls.portalFraction.push(index); return 0.5; },
     moverBlock: (token, flag) => calls.moverBlock.push([token, flag]),
+    automapLines: (states) => { calls.automap.push(['lines', states]); return [{ x1: 0, y1: 0, x2: 10, y2: 0, state: 1, kind: 0, index: 0 }]; },
+    automapProject: (...args) => { calls.automap.push(['project', args]); return { x: 5, y: 6 }; },
+    particlesBurst: (proto, count, seed) => { calls.particles.push(['burst', Array.from(proto), count, seed]); return count; },
+    particlesContinuous: (proto, rate, dt, seed) => { calls.particles.push(['continuous', rate, dt, seed]); return 3; },
+    particlesInfo: () => ({ alive: 4, capacity: 2048, overflow: 0, drawn: 4 }),
+    particlesClear: () => calls.particles.push(['clear']),
+    metadata: () => ({ id: 'map', title: 'Map', spawnCount: 1 }),
+    spawns: () => [{ id: 'player.start', type: 0, typeName: 'player', x: 1, y: 2, h: 0, facing: 0 }],
+    spawn: (id) => (id === 'player.start' ? { id: 'player.start', typeName: 'player' } : null),
 };
 
 engine.re2d = {
@@ -276,6 +285,40 @@ test('world.portalOpen задаёт smooth fraction, portalClosed остаётс
     eq(JSON.stringify(calls.portalOpen[calls.portalOpen.length - 1]), '[3,0.25]');
     eq(world.portalFraction(3), 0.5);
     world.portalClosed(3, true);
+    world.dispose();
+});
+
+test('world.automapLines/automapProject и metadata/spawns доступны из $', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const lines = world.automapLines([1, 0]);
+    eq(lines.length, 1);
+    eq(lines[0].kind, 0);
+    eq(JSON.stringify(calls.automap[0][1]), '[1,0]');
+    eq(world.automapProject({ cx: 10, cy: 20, scale: 2, rotation: 0 }, 3, 4).x, 5);
+    const meta = world.metadata();
+    eq(meta.id, 'map');
+    eq(world.spawns()[0].id, 'player.start');
+    eq(world.spawn('player.start').typeName, 'player');
+    eq(world.spawn('nope'), null);
+    world.dispose();
+});
+
+test('world.particles описывает прототип и зовёт нативный пул', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const spawned = world.particles.burst({ x: 1, y: 2, h: 3, count: 5, life: 2, size: 10,
+        color: '#ff0000', blend: 'additive', mode: 'billboard', seed: 7 });
+    eq(spawned, 5);
+    const call = calls.particles[calls.particles.length - 1];
+    eq(call[0], 'burst');
+    eq(call[1].length, 25);
+    eq(call[1][0], 1); eq(call[1][2], 3); eq(call[1][6], 2); eq(call[1][7], 10);
+    eq(call[1][11], 1); eq(call[1][12], 0); eq(call[1][13], 0);
+    eq(call[1][23], 2); eq(call[1][24], 1);
+    eq(call[2], 5); eq(call[3], 7);
+    eq(world.particles.continuous({ rate: 20 }, 1 / 60), 3);
+    eq(world.particles.info().alive, 4);
+    world.particles.clear();
+    eq(JSON.stringify(calls.particles[calls.particles.length - 1]), '["clear"]');
     world.dispose();
 });
 

@@ -50,6 +50,17 @@ def green_pixels(path):
     return n
 
 
+def red_pixels(path):
+    img = Image.open(path).convert("RGB")
+    n = 0
+    for y in range(0, img.size[1], 2):
+        for x in range(0, img.size[0], 2):
+            r, g, b = img.getpixel((x, y))
+            if r > 150 and g < 90 and b < 90:
+                n += 1
+    return n
+
+
 def changed_pixels(a_path, b_path, threshold=20):
     a = Image.open(a_path).convert("RGB")
     b = Image.open(b_path).convert("RGB")
@@ -168,6 +179,35 @@ def main():
                          "return JSON.stringify({n:n,f:f,g:g});})()")
         check(portal is not None and '"n":' in portal and '"f":0.4' in portal and '"g":0' in portal,
               f"portalOpen smooth fraction и бинарный portalClosed сосуществуют: {portal}")
+
+        # --- P1: nav graph, automap, metadata/spawns, particles ---------------
+        nav = a.eval("JSON.stringify(boomerLab.navProbe())")
+        check(nav is not None and '"nodes":' in nav and '"path":[' in nav,
+              f"navBuild/navNearest/navPath через $ API: {nav}")
+        automap = a.eval("JSON.stringify(boomerLab.automapProbe())")
+        check(automap is not None and '"lines":' in automap and '"proj":' in automap,
+              f"automapLines/automapProject через $ API: {automap}")
+        meta = a.eval("JSON.stringify(boomerLab.metadataProbe())")
+        check(meta is not None and 'tower.testroom' in meta and 'player.start' in meta
+              and '"missing":null' in meta,
+              f"metadata/spawns/spawn через $ API: {meta}")
+
+        a.eval("boomerLab.backend('cpu')"); a.step(2)
+        spawned = a.eval("JSON.stringify(boomerLab.particleProbe())")
+        check(spawned is not None and '"spawned":80' in spawned, f"native particle burst: {spawned}")
+        a.step(4)
+        pshot = a.screenshot(os.path.join(SHOTS, "re2d_boomer_lab_particles.png"))
+        red = red_pixels(pshot)
+        check(red > 150, f"частицы видны на CPU-кадре (красных пикселей {red})")
+        check(a.eval("boomerLab.particleInfo().alive") > 0, "пул частиц жив")
+        a.eval("boomerLab.particlesClear()")
+        check(a.eval("boomerLab.particleInfo().alive") == 0, "particlesClear очищает пул")
+        a.eval("boomerLab.backend('gpu')"); a.step(2)
+        a.eval("JSON.stringify(boomerLab.particleProbe())"); a.step(4)
+        gshot = a.screenshot(os.path.join(SHOTS, "re2d_boomer_lab_particles_gpu.png"))
+        check(red_pixels(gshot) > 150,
+              f"частицы видны и на GPU-кадре (красных пикселей {red_pixels(gshot)})")
+        a.eval("boomerLab.particlesClear()")
 
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")

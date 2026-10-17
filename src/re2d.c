@@ -10,6 +10,8 @@
 #include "re2d_math.h"
 #include "re2d_world.h"
 #include "re2d_world_runtime.h"
+#include "re2d_world_automap.h"
+#include "re2d_world_nav.h"
 #include "re2d_world_gpu.h"
 #include "rotsprite.h"
 #include "script.h"
@@ -350,6 +352,7 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"atlasSprites",w->atlas_count);set_num(ctx,o,"visibleAtlasSprites",w->visible_atlas_count);
     set_num(ctx,o,"hitProxies",w->hit_count);
     set_num(ctx,o,"movers",w->mover_count);set_num(ctx,o,"triggers",w->trigger_count);
+    set_num(ctx,o,"particles",w->particle_ready?w->particles.count:0);set_num(ctx,o,"particlesDrawn",w->particles_drawn);
     set_num(ctx,o,"materials",w->world.material_count);
     set_num(ctx,o,"lights",w->world.light_count);set_num(ctx,o,"lightSpanPairs",w->world.light_pairs);set_num(ctx,o,"lightOverflow",w->world.light_overflow);
     set_num(ctx,o,"visibleCells",w->visibility.cells_visible);set_num(ctx,o,"visibleSpans",w->visibility.span_count);set_num(ctx,o,"visibleSurfaces",w->visibility.surface_count);set_num(ctx,o,"portalsTested",w->visibility.portals_tested);set_num(ctx,o,"bspNodesVisited",w->visibility.bsp_nodes_visited);
@@ -629,6 +632,198 @@ static JSValue world_portal_fraction(JSContext *ctx,JSValueConst self,int argc,J
     float fraction=r2d_world_portal_open_fraction(&w->world,(int)p[0]);
     return fraction<0?JS_NULL:JS_NewFloat64(ctx,fraction);
 }
+// Particle prototype layout (Float32Array, 25 values): x,y,h,vx,vy,vh,life,
+// size,endSize,gravity,drag,r,g,b,alpha,endAlpha,spread,speed,dirX,dirY,dirH,
+// frame,frames,blend,mode.
+static bool particle_proto(JSContext *ctx,JSValueConst arr,R2DWorldParticle *p,float *spread,float *speed,float *dx,float *dy,float *dh)
+{
+    float *f=NULL;size_t n=0;JSValue ab=f32_view(ctx,arr,&f,&n);
+    if(JS_IsException(ab))return false;
+    if(n<25){JS_FreeValue(ctx,ab);JS_ThrowTypeError(ctx,"Re2D World: particle prototype needs 25 floats");return false;}
+    memset(p,0,sizeof *p);
+    p->x=f[0];p->y=f[1];p->h=f[2];p->vx=f[3];p->vy=f[4];p->vh=f[5];
+    p->max_life=f[6];p->life=f[6];
+    p->size=f[7];p->start_size=f[7];p->end_size=f[8];
+    p->gravity=f[9];p->drag=f[10];
+    p->r=f[11];p->g=f[12];p->b=f[13];
+    p->alpha=f[14];p->start_alpha=f[14];p->end_alpha=f[15];
+    *spread=f[16];*speed=f[17];*dx=f[18];*dy=f[19];*dh=f[20];
+    p->frame=(int)f[21];p->frames=(int)f[22];p->blend=(int)f[23];p->mode=(int)f[24];
+    p->active=true;p->world_space=p->mode!=R2D_PARTICLE_SCREEN;
+    bool ok=isfinite(p->max_life)&&p->max_life>0&&isfinite(*spread)&&*spread>=0&&isfinite(*speed)&&
+        p->blend>=0&&p->blend<=2&&p->mode>=0&&p->mode<=3;
+    JS_FreeValue(ctx,ab);
+    if(!ok)JS_ThrowRangeError(ctx,"Re2D World: invalid particle prototype");
+    return ok;
+}
+static JSValue world_particles_burst(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<3)return JS_ThrowTypeError(ctx,"Re2D World: particlesBurst(prototype,count,seed)");
+    R2DWorldParticle proto;float spread=0,speed=0,dx=0,dy=0,dh=0;
+    if(!particle_proto(ctx,argv[0],&proto,&spread,&speed,&dx,&dy,&dh))return JS_EXCEPTION;
+    int32_t count=0,seed=0;if(JS_ToInt32(ctx,&count,argv[1])<0||JS_ToInt32(ctx,&seed,argv[2])<0)return JS_EXCEPTION;
+    if(count<0)return JS_ThrowRangeError(ctx,"Re2D World: particle count >= 0");
+    if(!r2d_world_particles_ready(w)&&count>0)return JS_ThrowOutOfMemory(ctx);
+    if(count>0)w->particles.seed=(uint32_t)seed;
+    int spawned=r2d_world_particles_burst(w,&proto,count,spread,speed,dx,dy,dh);
+    if(spawned<0)return JS_ThrowRangeError(ctx,"Re2D World: invalid particle emission");
+    return JS_NewInt32(ctx,spawned);
+}
+static JSValue world_particles_continuous(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<4)return JS_ThrowTypeError(ctx,"Re2D World: particlesContinuous(prototype,rate,dt,seed)");
+    R2DWorldParticle proto;float spread=0,speed=0,dx=0,dy=0,dh=0;
+    if(!particle_proto(ctx,argv[0],&proto,&spread,&speed,&dx,&dy,&dh))return JS_EXCEPTION;
+    double rate_d=0,dt_d=0;int32_t seed=0;
+    if(JS_ToFloat64(ctx,&rate_d,argv[1])<0||JS_ToFloat64(ctx,&dt_d,argv[2])<0)return JS_EXCEPTION;
+    if(!isfinite(rate_d)||!isfinite(dt_d)||rate_d<0||dt_d<0)return JS_ThrowRangeError(ctx,"Re2D World: particle rate/dt must be finite and >= 0");
+    if(JS_ToInt32(ctx,&seed,argv[3])<0)return JS_EXCEPTION;
+    const float rate=(float)rate_d,dt=(float)dt_d;
+    if(!r2d_world_particles_ready(w))return JS_ThrowOutOfMemory(ctx);
+    w->particles.seed=(uint32_t)seed;
+    // Continuous emission uses its own accumulator and the same prototype.
+    proto.vx=proto.vx+dx*speed;proto.vy=proto.vy+dy*speed;proto.vh=proto.vh+dh*speed;
+    int spawned=r2d_world_particle_emit_continuous(&w->particles,&proto,dt,rate,spread,0,0,0,0,&w->particle_accumulator);
+    if(spawned<0)return JS_ThrowRangeError(ctx,"Re2D World: invalid particle emission");
+    return JS_NewInt32(ctx,spawned);
+}
+static JSValue world_particles_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    JSValue o=JS_NewObject(ctx);
+    set_num(ctx,o,"alive",w->particle_ready?w->particles.count:0);
+    set_num(ctx,o,"capacity",w->particle_ready?w->particles.capacity:0);
+    set_num(ctx,o,"overflow",w->particle_ready?w->particles.overflow:0);
+    set_num(ctx,o,"drawn",w->particles_drawn);
+    return o;
+}
+static JSValue world_particles_clear(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(w->particle_ready)r2d_world_particle_clear(&w->particles);
+    w->particle_accumulator=0;w->particles_drawn=0;
+    return JS_UNDEFINED;
+}
+static JSValue world_nav_build(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
+    int nodes=0,edges=0;
+    if(!r2d_world_nav_build_runtime(w,p[0],p[1],p[2],&nodes,&edges))
+        return JS_ThrowRangeError(ctx,"Re2D World: nav build failed (radius/height/step or allocation)");
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"nodes",nodes);set_num(ctx,o,"edges",edges);return o;
+}
+static JSValue world_nav_nearest(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[2];if(!w||!world_numbers(ctx,argc,argv,2,p))return JS_EXCEPTION;
+    int node=r2d_world_nav_nearest_runtime(w,p[0],p[1]);
+    return node<0?JS_NULL:JS_NewInt32(ctx,node);
+}
+static JSValue world_nav_path(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[4]={0,0,256,0};
+    int count=argc<4?argc:4;
+    if(!w||!world_numbers(ctx,count,argv,count,p))return JS_EXCEPTION;
+    int from=(int)p[0],to=(int)p[1],capacity=(int)(p[2]<=0?256:p[2]),visits=(int)p[3];
+    int *path=malloc((size_t)capacity*sizeof *path);if(!path)return JS_ThrowOutOfMemory(ctx);
+    int n=r2d_world_nav_path_runtime(w,from,to,path,capacity,visits);
+    if(n<0){free(path);return JS_NULL;}
+    JSValue array=JS_NewArray(ctx);if(JS_IsException(array)){free(path);return array;}
+    for(int i=0;i<n;i++)JS_SetPropertyUint32(ctx,array,(uint32_t)i,JS_NewInt32(ctx,path[i]));
+    free(path);return array;
+}
+static JSValue world_automap_lines(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    uint8_t *states=NULL;int state_count=0;
+    if(argc>=1&&JS_IsArray(argv[0])) {
+        JSValue length=JS_GetPropertyStr(ctx,argv[0],"length");int converted=JS_ToInt32(ctx,&state_count,length);JS_FreeValue(ctx,length);
+        if(converted<0)return JS_EXCEPTION;
+        if(state_count>0) {
+            states=malloc((size_t)state_count);
+            if(!states)return JS_ThrowOutOfMemory(ctx);
+            for(int i=0;i<state_count;i++) {
+                JSValue v=JS_GetPropertyUint32(ctx,argv[0],(uint32_t)i);int32_t s=0;
+                int valid=JS_ToInt32(ctx,&s,v);JS_FreeValue(ctx,v);
+                if(valid<0){free(states);return JS_EXCEPTION;}
+                states[i]=(uint8_t)(s<0||s>4?0:s);
+            }
+        }
+    }
+    int count=r2d_world_automap_lines(&w->world,states,NULL,0);
+    if(count<0){free(states);return JS_ThrowRangeError(ctx,"Re2D World: automap extraction failed");}
+    R2DWorldAutomapLine *lines=count?malloc((size_t)count*sizeof *lines):NULL;
+    if(count&&!lines){free(states);return JS_ThrowOutOfMemory(ctx);}
+    int written=r2d_world_automap_lines(&w->world,states,lines,count);
+    free(states);
+    if(written<0){free(lines);return JS_ThrowRangeError(ctx,"Re2D World: automap extraction failed");}
+    JSValue array=JS_NewArray(ctx);if(JS_IsException(array)){free(lines);return array;}
+    for(int i=0;i<written;i++) {
+        JSValue o=JS_NewObject(ctx);
+        set_num(ctx,o,"x1",lines[i].x1);set_num(ctx,o,"y1",lines[i].y1);
+        set_num(ctx,o,"x2",lines[i].x2);set_num(ctx,o,"y2",lines[i].y2);
+        set_num(ctx,o,"state",lines[i].state);set_num(ctx,o,"kind",lines[i].kind);set_num(ctx,o,"index",lines[i].index);
+        JS_SetPropertyUint32(ctx,array,(uint32_t)i,o);
+    }
+    free(lines);return array;
+}
+static JSValue world_automap_project(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    float p[6];if(!world_numbers(ctx,argc,argv,6,p))return JS_EXCEPTION;
+    R2DWorldAutomapView view={p[0],p[1],p[2],p[3]};
+    float x=0,y=0;r2d_world_automap_project(&view,p[4],p[5],&x,&y);
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"x",x);set_num(ctx,o,"y",y);return o;
+}
+static void set_string_or_null(JSContext *ctx,JSValue o,const char *name,const char *value)
+{
+    JS_SetPropertyStr(ctx,o,name,value?JS_NewString(ctx,value):JS_NULL);
+}
+static JSValue world_metadata(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    const R2DWorldMetadata *m=&w->world.metadata;
+    JSValue o=JS_NewObject(ctx);
+    set_string_or_null(ctx,o,"id",m->id);set_string_or_null(ctx,o,"title",m->title);
+    set_string_or_null(ctx,o,"author",m->author);set_string_or_null(ctx,o,"version",m->version);
+    set_string_or_null(ctx,o,"music",m->music);set_string_or_null(ctx,o,"sky",m->sky);
+    set_string_or_null(ctx,o,"nextMap",m->next_map);set_string_or_null(ctx,o,"secretExit",m->secret_exit);
+    set_string_or_null(ctx,o,"environment",m->environment);
+    JSValue fog=JS_NewObject(ctx);
+    set_string_or_null(ctx,fog,"color",m->default_fog_color);
+    set_num(ctx,fog,"density",m->default_fog_density);set_num(ctx,fog,"start",m->default_fog_start);
+    JS_SetPropertyStr(ctx,o,"defaultFog",fog);
+    set_num(ctx,o,"spawnCount",m->spawn_count);
+    return o;
+}
+static JSValue spawn_object(JSContext *ctx,const R2DWorldSpawn *s)
+{
+    JSValue o=JS_NewObject(ctx);
+    set_string_or_null(ctx,o,"id",s->id);
+    set_num(ctx,o,"type",s->type);
+    set_string_or_null(ctx,o,"typeName",r2d_world_spawn_type_name(s->type));
+    set_string_or_null(ctx,o,"tag",s->tag);
+    set_num(ctx,o,"x",s->x);set_num(ctx,o,"y",s->y);set_num(ctx,o,"h",s->h);set_num(ctx,o,"facing",s->facing);
+    return o;
+}
+static JSValue world_spawns(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    const R2DWorldMetadata *m=&w->world.metadata;
+    JSValue array=JS_NewArray(ctx);if(JS_IsException(array))return array;
+    for(int i=0;i<m->spawn_count;i++)JS_SetPropertyUint32(ctx,array,(uint32_t)i,spawn_object(ctx,&m->spawns[i]));
+    return array;
+}
+static JSValue world_spawn(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1||!JS_IsString(argv[0]))return JS_ThrowTypeError(ctx,"Re2D World: spawn(id) requires a spawn id string");
+    const char *id=JS_ToCString(ctx,argv[0]);if(!id)return JS_EXCEPTION;
+    const R2DWorldMetadata *m=&w->world.metadata;JSValue result=JS_NULL;
+    for(int i=0;i<m->spawn_count;i++)if(m->spawns[i].id&&!strcmp(m->spawns[i].id,id)){result=spawn_object(ctx,&m->spawns[i]);break;}
+    JS_FreeCString(ctx,id);return result;
+}
 static JSValue world_find(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv,int kind)
 {
     WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
@@ -897,7 +1092,7 @@ static void world_watch_poll(JSContext *,WorldHandle *,float);
 static JSValue world_step_all(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)self;float dt;if(!world_numbers(ctx,argc,argv,1,&dt))return JS_EXCEPTION;if(dt<0||dt>60)return JS_ThrowRangeError(ctx,"Re2D World: invalid step dt");
-    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
+    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);r2d_world_particles_step(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
 }
 static JSValue world_light_at(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -949,6 +1144,18 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"audioRemove",JS_NewCFunction(ctx,world_audio_remove,"audioRemove",1));
     JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",14));
     JS_SetPropertyStr(ctx,handle,"hitAdd",JS_NewCFunction(ctx,world_hit_add,"hitAdd",5));
+    JS_SetPropertyStr(ctx,handle,"particlesBurst",JS_NewCFunction(ctx,world_particles_burst,"particlesBurst",3));
+    JS_SetPropertyStr(ctx,handle,"particlesContinuous",JS_NewCFunction(ctx,world_particles_continuous,"particlesContinuous",4));
+    JS_SetPropertyStr(ctx,handle,"particlesInfo",JS_NewCFunction(ctx,world_particles_info,"particlesInfo",0));
+    JS_SetPropertyStr(ctx,handle,"particlesClear",JS_NewCFunction(ctx,world_particles_clear,"particlesClear",0));
+    JS_SetPropertyStr(ctx,handle,"navBuild",JS_NewCFunction(ctx,world_nav_build,"navBuild",3));
+    JS_SetPropertyStr(ctx,handle,"navNearest",JS_NewCFunction(ctx,world_nav_nearest,"navNearest",2));
+    JS_SetPropertyStr(ctx,handle,"navPath",JS_NewCFunction(ctx,world_nav_path,"navPath",4));
+    JS_SetPropertyStr(ctx,handle,"automapLines",JS_NewCFunction(ctx,world_automap_lines,"automapLines",1));
+    JS_SetPropertyStr(ctx,handle,"automapProject",JS_NewCFunction(ctx,world_automap_project,"automapProject",6));
+    JS_SetPropertyStr(ctx,handle,"metadata",JS_NewCFunction(ctx,world_metadata,"metadata",0));
+    JS_SetPropertyStr(ctx,handle,"spawns",JS_NewCFunction(ctx,world_spawns,"spawns",0));
+    JS_SetPropertyStr(ctx,handle,"spawn",JS_NewCFunction(ctx,world_spawn,"spawn",1));
     JS_SetPropertyStr(ctx,handle,"findCell",JS_NewCFunction(ctx,world_find_cell,"findCell",1));
     JS_SetPropertyStr(ctx,handle,"findWall",JS_NewCFunction(ctx,world_find_wall,"findWall",1));
     JS_SetPropertyStr(ctx,handle,"findSpan",JS_NewCFunction(ctx,world_find_span,"findSpan",1));

@@ -1,6 +1,7 @@
 #pragma once
 #include "bsp.h"
 #include "re2d_math.h"
+#include "re2d_world_metadata.h"
 #include <stdint.h>
 
 // Specialised RE2D authoring primitives, never a triangle mesh.
@@ -111,6 +112,8 @@ typedef struct {
     // geometry tables. semantic_revision advances on every successful reload.
     R2DWorldIdTable cell_ids,wall_ids,span_ids,portal_ids;
     uint64_t semantic_revision;
+    // Authored map metadata/spawns (P1). Owned strings; zeroed when absent.
+    R2DWorldMetadata metadata;
 } R2DRe2dWorld;
 typedef struct { float t,x,y,height; int wall,span; bool ceiling; uint32_t color; } R2DWorldHit;
 

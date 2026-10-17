@@ -362,7 +362,16 @@ bool r2d_world_load_json(R2DRe2dWorld *w,const char *text,char *err,size_t size)
     if(!w||!text)return error(err,size,"missing world JSON",-1);
     R2dJson *root=r2d_json_parse(text,err,size);if(!root)return false;
     const R2dJson *baked=r2d_json_get(root,"baked");
-    if(baked){int version=0;bool loaded=integer(root,"version",&version)&&version==1&&r2d_world_load_baked(w,baked,err,size);if(version!=1)error(err,size,"incompatible compiled world version",version);r2d_json_free(root);return loaded;}
+    if(baked){int version=0;bool loaded=false;R2DWorldMetadata meta={0};
+        if(integer(root,"version",&version)&&version==1&&r2d_world_metadata_parse(root,&meta,err,size)) {
+            loaded=r2d_world_load_baked(w,baked,err,size);
+            if(loaded){r2d_world_metadata_free(&w->metadata);w->metadata=meta;memset(&meta,0,sizeof meta);
+                // Baked payload carries the authored binary state; materialise the
+                // smooth fraction so Portal 2.0 consumers (collision/visibility/nav)
+                // agree on a freshly loaded world.
+                for(int i=0;i<w->portal_count;i++)w->portals[i].open_fraction=w->portals[i].closed?0.0f:1.0f;}
+        }
+        r2d_world_metadata_free(&meta);r2d_json_free(root);return loaded;}
     bool ok=false;R2DWorldWall *walls=NULL;R2DWorldSpan *spans=NULL;
     R2DWorldCell *cells=NULL;R2DWorldPortal *portals=NULL;R2DWorldOpening *opens=NULL;
     int version=0,ns=0,no=0;
@@ -404,6 +413,8 @@ bool r2d_world_load_json(R2DRe2dWorld *w,const char *text,char *err,size_t size)
         }
     }
     R2DRe2dWorld next={0};
+    R2DWorldMetadata meta={0};
+    if(!r2d_world_metadata_parse(root,&meta,err,size)){r2d_world_metadata_free(&meta);goto done;}
     ok=r2d_world_build_cells(&next,walls,ws->count,spans,ns,cells,cs->count,portals,ps->count,opens,no,err,size);
     if(ok){int span=0;for(int i=0;i<cs->count&&ok;i++){const R2dJson *ss=r2d_json_get(cs->items[i],"spans");for(int j=0;j<ss->count;j++,span++){
         const R2dJson *lighting=r2d_json_get(ss->items[j],"lighting");if(lighting){R2DWorldSpanLight light;if(!r2d_world_span_light_json(lighting,&light)||!r2d_world_set_span_light(&next,span,&light)){error(err,size,"invalid span lighting",span);ok=false;break;}}
@@ -412,7 +423,8 @@ bool r2d_world_load_json(R2DRe2dWorld *w,const char *text,char *err,size_t size)
     // Semantic IDs are validated transactionally with the rest of the map: a
     // duplicate or malformed name leaves the previously loaded world intact.
     if(ok)ok=r2d_world_semantic_load_json(&next,root,err,size);
-    if(ok){next.topology_revision=w->topology_revision+1;next.semantic_revision=w->semantic_revision+1;r2d_world_free(w);*w=next;}else r2d_world_free(&next);
+    if(ok){next.metadata=meta;memset(&meta,0,sizeof meta);next.topology_revision=w->topology_revision+1;next.semantic_revision=w->semantic_revision+1;r2d_world_free(w);*w=next;}else r2d_world_free(&next);
+    r2d_world_metadata_free(&meta);
 done:
     free(walls);free(spans);free(cells);free(portals);free(opens);r2d_json_free(root);return ok;
 }

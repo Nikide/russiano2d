@@ -4,6 +4,9 @@
 #include "re2d_world_mover.h"
 #include "re2d_world_trigger.h"
 #include "re2d_world_controller.h"
+#include "re2d_world_nav.h"
+#include "re2d_world_automap.h"
+#include "re2d_world_particle.h"
 #include "render.h"
 #include "audio.h"
 #include <quickjs.h>
@@ -25,7 +28,7 @@ typedef struct R2DWorldAtlasActor {
 } R2DWorldAtlasActor;
 // Frame entry kinds. RotSprite entries use native synthesis; atlas entries reuse
 // an already cropped square image and do not touch the Re2DSprite runtime.
-enum { R2D_WORLD_FRAME_ROTSPRITE = 0, R2D_WORLD_FRAME_ATLAS = 1 };
+enum { R2D_WORLD_FRAME_ROTSPRITE = 0, R2D_WORLD_FRAME_ATLAS = 1, R2D_WORLD_FRAME_PARTICLE = 2 };
 #define R2D_WORLD_HIT_PROXY_LIMIT 2048
 // World hit proxy lifecycle follows node add/remove: the registry owns a JS
 // reference, not node lifetime. bottom/top are offsets from node.depth so a
@@ -80,6 +83,7 @@ typedef struct R2DWorldRuntime {
     const uint8_t **frame_images;
     int *frame_sizes;
     int *frame_kinds,*frame_revisions,*frame_blends;
+    float *frame_tints;
     uint64_t *frame_keys;
     R2DWorldAtlasActor *atlas_actors;
     int atlas_count,atlas_capacity,visible_atlas_count;
@@ -93,6 +97,23 @@ typedef struct R2DWorldRuntime {
     int trigger_count,trigger_capacity,next_trigger_token;
     R2DWorldControllerEntry controllers[R2D_WORLD_CONTROLLER_LIMIT];
     int next_controller_token;
+    // P1 nav graph: built on demand, arrays owned by the runtime.
+    R2DWorldNavNode *nav_nodes;
+    R2DWorldNavEdge *nav_edges;
+    int *nav_offsets;
+    R2DWorldNavGraph nav_graph;
+    R2DWorldNavScratch nav_scratch;
+    float *nav_g;
+    int *nav_parent,*nav_heap,*nav_heap_pos;
+    uint8_t *nav_state;
+    bool nav_ready;
+    float nav_radius,nav_height,nav_step;
+    // P1 particles: fixed native pool, step and draw (no JS pool).
+    R2DWorldParticle *particle_storage;
+    R2DWorldParticlePool particles;
+    bool particle_ready;
+    float particle_accumulator;
+    int particles_drawn;
     int actor_count,actor_capacity,frame_count;
     struct R2DWorldRuntime *next;
     bool registered;
@@ -147,6 +168,18 @@ int r2d_world_controller_create(R2DWorldRuntime *,const R2DWorldControllerConfig
 bool r2d_world_controller_remove(R2DWorldRuntime *,int token);
 bool r2d_world_controller_place(R2DWorldRuntime *,int token,float x,float y,float feet,R2DWorldControllerState *out);
 bool r2d_world_controller_step_state(R2DWorldRuntime *,int token,R2DWorldControllerState *,float wish_x,float wish_y,bool jump,float dt);
+// P1 nav graph over spans/portals. Returns {nodes,edges} via out counts.
+bool r2d_world_nav_build_runtime(R2DWorldRuntime *,float radius,float height,float step,int *nodes,int *edges);
+int r2d_world_nav_nearest_runtime(R2DWorldRuntime *,float x,float y);
+int r2d_world_nav_path_runtime(R2DWorldRuntime *,int from,int to,int *path,int capacity,int max_visits);
+void r2d_world_nav_free(R2DWorldRuntime *);
+// P1 particles: pool bound lazily (capacity 2048), stepped with worldStep,
+// drawn by the native compositor. Renderer hints only; no JS pool.
+bool r2d_world_particles_ready(R2DWorldRuntime *);
+int r2d_world_particles_burst(R2DWorldRuntime *,const R2DWorldParticle *,int count,float spread,float speed,float dx,float dy,float dh);
+int r2d_world_particles_continuous(R2DWorldRuntime *,const R2DWorldParticle *,float rate,float dt);
+void r2d_world_particles_step(R2DWorldRuntime *,float dt);
+void r2d_world_particles_free(R2DWorldRuntime *);
 void r2d_world_runtime_actors_free(R2DWorldRuntime *);
 // Returns ordinary 2D sprite id; errors set QuickJS exception, no script renderer loops.
 int r2d_world_runtime_frame(JSContext *,R2DWorldRuntime *,const R2DRe2dView *,int,int,float);

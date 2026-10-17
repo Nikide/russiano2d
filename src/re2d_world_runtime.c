@@ -36,10 +36,11 @@ void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
     for(int i=0;i<w->hit_count;i++)JS_FreeValueRT(w->runtime,w->hit_entries[i].node);
     for(int i=0;i<w->trigger_count;i++){free(w->triggers[i].id);free(w->triggers[i].target);}
     free(w->actors);free(w->frame_handles);free(w->frame_positions);free(w->frame_images);free(w->frame_sizes);
-    free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_keys);free(w->atlas_actors);
+    free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_tints);free(w->frame_keys);free(w->atlas_actors);
     free(w->hit_entries);free(w->trace_scratch);free(w->movers);free(w->triggers);
+    r2d_world_nav_free(w);r2d_world_particles_free(w);
     w->actors=w->frame_handles=NULL;w->frame_positions=NULL;w->frame_images=NULL;w->frame_sizes=NULL;
-    w->frame_kinds=NULL;w->frame_revisions=NULL;w->frame_blends=NULL;w->frame_keys=NULL;w->atlas_actors=NULL;
+    w->frame_kinds=NULL;w->frame_revisions=NULL;w->frame_blends=NULL;w->frame_tints=NULL;w->frame_keys=NULL;w->atlas_actors=NULL;
     w->hit_entries=NULL;w->trace_scratch=NULL;w->hit_count=w->hit_capacity=0;w->trace_scratch_capacity=0;
     w->actor_count=w->actor_capacity=0;w->atlas_count=w->atlas_capacity=0;
 }
@@ -82,6 +83,7 @@ static bool collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,JS
     if(w->frame_count==ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: composition budget exhausted");goto done;}
     int index=w->frame_count++;w->frame_handles[index]=JS_DupValue(ctx,handle);memcpy(w->frame_positions+index*5,p,sizeof p);
     w->frame_kinds[index]=R2D_WORLD_FRAME_ROTSPRITE;
+    w->frame_tints[index*4]=w->frame_tints[index*4+1]=w->frame_tints[index*4+2]=w->frame_tints[index*4+3]=1.0f;
     w->frame_keys[index]=r2d_rotsprite_instance(ctx,handle);
     w->frame_revisions[index]=r2d_rotsprite_revision(ctx,handle);
     for(uint32_t i=0;i<count;i++) {
@@ -98,6 +100,8 @@ done:
 // fully culled sprite never pays for a cell crop. Appends frame entries in the
 // same composition list as Re2DSprite actors.
 static bool atlas_png(JSContext *ctx,const char *path,uint8_t **pixels,int *width,int *height);
+static void particles_draw_cpu(R2DWorldRuntime *,const R2DRe2dView *,int,int,uint8_t *,float *,float);
+static bool particle_collect_gpu(R2DWorldRuntime *,const R2DRe2dView *,int,int,float);
 static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,int width,int height,float ortho)
 {
     for(int a=0;a<w->atlas_count;a++) {
@@ -150,6 +154,7 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
         w->frame_keys[index]=(uint64_t)(a+1);
         w->frame_revisions[index]=actor->frame_revision;
         w->frame_blends[index]=actor->blend;
+        w->frame_tints[index*4]=w->frame_tints[index*4+1]=w->frame_tints[index*4+2]=w->frame_tints[index*4+3]=1.0f;
         w->frame_images[index]=visible?actor->frame:NULL;
         if(visible){w->visible_actor_count++;w->visible_atlas_count++;}
     }
@@ -162,14 +167,15 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
         JSValue *handles=calloc(ACTOR_LIMIT,sizeof *handles);float *positions=malloc(ACTOR_LIMIT*5*sizeof(float));
         const uint8_t **images=calloc(ACTOR_LIMIT,sizeof *images);int *sizes=calloc(ACTOR_LIMIT,sizeof *sizes);
         int *kinds=calloc(ACTOR_LIMIT,sizeof *kinds),*revisions=calloc(ACTOR_LIMIT,sizeof *revisions),*blends=calloc(ACTOR_LIMIT,sizeof *blends);
-        uint64_t *keys=calloc(ACTOR_LIMIT,sizeof *keys);
-        if(!handles||!positions||!images||!sizes||!kinds||!revisions||!blends||!keys){free(handles);free(positions);free(images);free(sizes);free(kinds);free(revisions);free(blends);free(keys);JS_ThrowOutOfMemory(ctx);return -1;}
+        uint64_t *keys=calloc(ACTOR_LIMIT,sizeof *keys);float *tints=calloc((size_t)ACTOR_LIMIT*4,sizeof *tints);
+        if(!handles||!positions||!images||!sizes||!kinds||!revisions||!blends||!keys||!tints){free(handles);free(positions);free(images);free(sizes);free(kinds);free(revisions);free(blends);free(keys);free(tints);JS_ThrowOutOfMemory(ctx);return -1;}
         w->frame_handles=handles;w->frame_positions=positions;w->frame_images=images;w->frame_sizes=sizes;
-        w->frame_kinds=kinds;w->frame_revisions=revisions;w->frame_blends=blends;w->frame_keys=keys;
+        w->frame_kinds=kinds;w->frame_revisions=revisions;w->frame_blends=blends;w->frame_keys=keys;w->frame_tints=tints;
     }
+    if(w->frame_tints)for(int i=0;i<ACTOR_LIMIT;i++){w->frame_tints[i*4]=w->frame_tints[i*4+1]=w->frame_tints[i*4+2]=w->frame_tints[i*4+3]=1.0f;}
     r2d_world_audio_step(w,view);
     Uint64 frame_start=SDL_GetPerformanceCounter(),phase=frame_start;double ms=1000.0/SDL_GetPerformanceFrequency();
-    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->visible_atlas_count=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;int result=-1;
+    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->visible_atlas_count=0;w->particles_drawn=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;int result=-1;
     for(int i=0;i<w->actor_count;i++)if(!collect(ctx,w,view,w->actors[i],0,false,0,0))goto done;
     if(w->disposed){JS_ThrowTypeError(ctx,"Re2D World: world disposed during actor query");goto done;}
     if(width!=w->width||height!=w->height||!w->owners) {
@@ -190,6 +196,7 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(lights[i]){w->visible_lights++;if(w->world.shadow_mask[i])w->shadowed_lights++;}
     phase=SDL_GetPerformanceCounter();
     if(!atlas_collect(ctx,w,view,width,height,ortho))goto done;
+    if(w->gpu_enabled&&!particle_collect_gpu(w,view,width,height,ortho))goto done;
     // Resolve all script properties before borrowing synthesis memory.
     int cursor=w->frame_count?w->pose_cursor%w->frame_count:0,next_cursor=cursor;
     for(int k=0;k<w->frame_count;k++) {
@@ -211,6 +218,7 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
         if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS){r2d_world_stamp_samples_ex(&w->world,view,width,height,w->rgba,w->depth,w->frame_images[i],NULL,w->frame_sizes[i],p[0],p[1],p[2],p[3],p[4],ortho,w->owners,i,w->frame_blends[i]);continue;}
         const float *samples=r2d_rotsprite_sample_depth(ctx,w->frame_handles[i]);r2d_world_stamp_samples(&w->world,view,width,height,w->rgba,w->depth,w->frame_images[i],samples,w->frame_sizes[i],p[0],p[1],p[2],p[3],p[4],ortho,w->owners,i);}
     if(!w->gpu_enabled&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)r2d_world_frame_decals(&w->world,view,width,height,w->rgba,w->depth,ortho,&w->visibility,w->owners);
+    if(!w->gpu_enabled&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)particles_draw_cpu(w,view,width,height,w->rgba,w->depth,ortho);
     if(!w->gpu_enabled&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&!r2d_world_frame_transparent(&w->world,view,width,height,w->rgba,w->depth,ortho,&w->visibility)){JS_ThrowOutOfMemory(ctx);goto done;}
     r2d_world_debug_pixels(&w->world,view,&w->visibility,ortho,w->debug_view,width,height,w->rgba,w->depth,w->owners);
     w->composition_ms=(SDL_GetPerformanceCounter()-phase)*ms;phase=SDL_GetPerformanceCounter();
@@ -565,6 +573,176 @@ bool r2d_world_controller_step_state(R2DWorldRuntime *w,int token,R2DWorldContro
 {
     R2DWorldControllerEntry *e=controller_entry(w,token);if(!e||!state)return false;
     r2d_world_controller_move(&w->world,&e->config,state,wish_x,wish_y,jump,dt);
+    return true;
+}
+
+
+// --- P1: navigation graph over spans/portals -------------------------------
+void r2d_world_nav_free(R2DWorldRuntime *w)
+{
+    free(w->nav_nodes);free(w->nav_edges);free(w->nav_offsets);
+    free(w->nav_g);free(w->nav_parent);free(w->nav_heap);free(w->nav_heap_pos);free(w->nav_state);
+    w->nav_nodes=NULL;w->nav_edges=NULL;w->nav_offsets=NULL;
+    w->nav_g=NULL;w->nav_parent=NULL;w->nav_heap=NULL;w->nav_heap_pos=NULL;w->nav_state=NULL;
+    memset(&w->nav_graph,0,sizeof w->nav_graph);memset(&w->nav_scratch,0,sizeof w->nav_scratch);
+    w->nav_ready=false;
+}
+bool r2d_world_nav_build_runtime(R2DWorldRuntime *w,float radius,float height,float step,int *nodes,int *edges)
+{
+    if(w->rendering||!w||w->world.span_count<1)return false;
+    if(!isfinite(radius)||!isfinite(height)||!isfinite(step)||radius<0||height<=0||step<0)return false;
+    r2d_world_nav_free(w);
+    int need=r2d_world_nav_build(&w->world,radius,height,step,NULL,0,NULL,0,NULL,0,&w->nav_graph);
+    if(need<0)return false;
+    w->nav_nodes=calloc((size_t)w->world.span_count,sizeof *w->nav_nodes);
+    w->nav_edges=need?calloc((size_t)need,sizeof *w->nav_edges):NULL;
+    w->nav_offsets=calloc((size_t)w->world.span_count+1,sizeof *w->nav_offsets);
+    w->nav_g=malloc((size_t)w->world.span_count*sizeof *w->nav_g);
+    w->nav_parent=malloc((size_t)w->world.span_count*sizeof *w->nav_parent);
+    w->nav_state=malloc((size_t)w->world.span_count*sizeof *w->nav_state);
+    w->nav_heap=malloc((size_t)w->world.span_count*sizeof *w->nav_heap);
+    w->nav_heap_pos=malloc((size_t)w->world.span_count*sizeof *w->nav_heap_pos);
+    if(!w->nav_nodes||!w->nav_offsets||!w->nav_g||!w->nav_parent||!w->nav_state||!w->nav_heap||!w->nav_heap_pos||(need&&!w->nav_edges)){r2d_world_nav_free(w);return false;}
+    int built=r2d_world_nav_build(&w->world,radius,height,step,
+        w->nav_nodes,w->world.span_count,w->nav_edges,need,w->nav_offsets,w->world.span_count+1,&w->nav_graph);
+    if(built<0){r2d_world_nav_free(w);return false;}
+    w->nav_graph.nodes=w->nav_nodes;w->nav_graph.edges=w->nav_edges;w->nav_graph.offsets=w->nav_offsets;
+    w->nav_graph.node_count=w->world.span_count;w->nav_graph.edge_count=built;
+    w->nav_scratch=(R2DWorldNavScratch){w->nav_g,w->nav_parent,w->nav_state,w->nav_heap,w->nav_heap_pos,0,w->world.span_count};
+    w->nav_ready=true;w->nav_radius=radius;w->nav_height=height;w->nav_step=step;
+    if(nodes)*nodes=w->nav_graph.node_count;if(edges)*edges=w->nav_graph.edge_count;
+    return true;
+}
+int r2d_world_nav_nearest_runtime(R2DWorldRuntime *w,float x,float y)
+{
+    if(!w->nav_ready)return -1;
+    return r2d_world_nav_nearest(&w->nav_graph,x,y);
+}
+int r2d_world_nav_path_runtime(R2DWorldRuntime *w,int from,int to,int *path,int capacity,int max_visits)
+{
+    if(!w->nav_ready||!path||capacity<=0)return -1;
+    if(max_visits<=0)max_visits=w->nav_graph.node_count*8;
+    return r2d_world_nav_path(&w->nav_graph,from,to,path,capacity,max_visits,&w->nav_scratch,NULL,NULL);
+}
+
+
+// --- P1: native particle pool + compositor pass ----------------------------
+#define R2D_WORLD_PARTICLE_CAPACITY 2048
+bool r2d_world_particles_ready(R2DWorldRuntime *w)
+{
+    if(w->particle_ready)return true;
+    R2DWorldParticle *storage=calloc(R2D_WORLD_PARTICLE_CAPACITY,sizeof *storage);
+    if(!storage)return false;
+    if(!r2d_world_particle_pool_init(&w->particles,storage,R2D_WORLD_PARTICLE_CAPACITY)){free(storage);return false;}
+    w->particle_storage=storage;w->particle_ready=true;w->particle_accumulator=0;
+    return true;
+}
+int r2d_world_particles_burst(R2DWorldRuntime *w,const R2DWorldParticle *prototype,int count,float spread,float speed,float dx,float dy,float dh)
+{
+    if(!w||!prototype||count<0)return -1;
+    if(count==0)return 0;
+    if(!r2d_world_particles_ready(w))return -1;
+    return r2d_world_particle_emit_burst(&w->particles,prototype,count,spread,speed,dx,dy,dh);
+}
+int r2d_world_particles_continuous(R2DWorldRuntime *w,const R2DWorldParticle *prototype,float rate,float dt)
+{
+    if(!w||!prototype)return -1;
+    if(!r2d_world_particles_ready(w))return -1;
+    return r2d_world_particle_emit_continuous(&w->particles,prototype,dt,rate,0,0,0,0,0,&w->particle_accumulator);
+}
+void r2d_world_particles_step(R2DWorldRuntime *w,float dt)
+{
+    if(!w||!w->particle_ready)return;
+    r2d_world_particle_step(&w->particles,dt);
+}
+void r2d_world_particles_free(R2DWorldRuntime *w)
+{
+    free(w->particle_storage);w->particle_storage=NULL;memset(&w->particles,0,sizeof w->particles);
+    w->particle_ready=false;w->particle_accumulator=0;w->particles_drawn=0;
+}
+// Screen-space quad with world depth test and shared world light/fog. This is
+// the CPU reference path; the SDL_GPU path reuses the native actor billboard
+// pipeline with a 1x1 white texture and a tint (see re2d_world_gpu.c).
+static void particles_draw_cpu(R2DWorldRuntime *w,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,float ortho)
+{
+    w->particles_drawn=0;
+    for(int i=0;i<w->particles.count;i++){
+        const R2DWorldParticle *p=&w->particles.items[i];if(!p->active)continue;
+        float pj[4],center,scale,dist;
+        if(ortho>0){
+            const float dx=p->x-v->x,dy=p->y-v->y,up=p->h-v->eye;
+            const float forward=dx*v->cos_yaw+dy*v->sin_yaw;
+            dist=forward*v->cos_pitch+up*v->sin_pitch;
+            if(dist<v->near_plane)continue;
+            scale=v->height/ortho;
+            pj[0]=v->width*.5f+(-dx*v->sin_yaw+dy*v->cos_yaw)*scale;
+            pj[1]=v->height*.5f-(up*v->cos_pitch-forward*v->sin_pitch)*scale;
+        }else{
+            if(!r2d_re2d_project(v,p->x,p->y,p->h,pj))continue;
+            dist=v->focal/pj[3];scale=pj[3];
+            if(dist<v->near_plane)continue;
+        }
+        const float cx=pj[0]*width/v->width,cy=pj[1]*height/v->height;
+        const float half=p->size*scale*.5f*width/v->width;
+        if(!(half>=0.35f)||!isfinite(half))continue;
+        int x0=(int)fmaxf(0,floorf(cx-half)),x1=(int)fminf(width,ceilf(cx+half));
+        int y0=(int)fmaxf(0,floorf(cy-half)),y1=(int)fminf(height,ceilf(cy+half));
+        if(x1<=x0||y1<=y0)continue;
+        const int span=r2d_world_span_at(&w->world,p->x,p->y,p->h);
+        uint32_t color=(uint32_t)(fminf(1,fmaxf(0,p->r))*255)|((uint32_t)(fminf(1,fmaxf(0,p->g))*255)<<8)|((uint32_t)(fminf(1,fmaxf(0,p->b))*255)<<16)|0xff000000u;
+        float nx=v->x-p->x,ny=v->y-p->y,len=hypotf(nx,ny);
+        color=r2d_world_lit_color(&w->world,span,color,p->x,p->y,p->h,len>0?nx/len:0,len>0?ny/len:0,0,dist);
+        uint32_t alpha=(uint32_t)(fminf(1,fmaxf(0,p->alpha))*255);
+        for(int y=y0;y<y1;y++)for(int x=x0;x<x1;x++){
+            int k=y*width+x;if(dist>depth[k])continue;
+            uint8_t *dst=rgba+k*4;
+            const uint32_t sr=color&0xffu,sg=(color>>8)&0xffu,sb=(color>>16)&0xffu;
+            if(p->blend==R2D_PARTICLE_ADDITIVE){
+                dst[0]=(uint8_t)fminf(255.0f,(float)dst[0]+(float)sr*alpha/255.0f);
+                dst[1]=(uint8_t)fminf(255.0f,(float)dst[1]+(float)sg*alpha/255.0f);
+                dst[2]=(uint8_t)fminf(255.0f,(float)dst[2]+(float)sb*alpha/255.0f);
+            }else if(p->blend==R2D_PARTICLE_TRANSLUCENT){
+                const uint32_t inv=255u-alpha;
+                dst[0]=(uint8_t)((sr*alpha+dst[0]*inv)/255u);
+                dst[1]=(uint8_t)((sg*alpha+dst[1]*inv)/255u);
+                dst[2]=(uint8_t)((sb*alpha+dst[2]*inv)/255u);
+            }else{
+                if(alpha<128)continue;
+                dst[0]=(uint8_t)sr;dst[1]=(uint8_t)sg;dst[2]=(uint8_t)sb;
+            }
+            dst[3]=255;depth[k]=dist;
+        }
+        w->particles_drawn++;
+    }
+}
+
+
+// GPU particles reuse the actor billboard pipeline with a shared 1x1 white
+// texture and a per-frame tint. Bounded so a huge CPU pool cannot monopolise
+// GPU texture uploads; the CPU reference still draws the full pool.
+#define R2D_WORLD_PARTICLE_GPU_BUDGET 512
+static bool particle_collect_gpu(R2DWorldRuntime *w,const R2DRe2dView *v,int width,int height,float ortho)
+{
+    static const uint8_t white[4]={255,255,255,255};
+    int drawn=0;
+    for(int i=0;i<w->particles.count&&drawn<R2D_WORLD_PARTICLE_GPU_BUDGET;i++){
+        const R2DWorldParticle *p=&w->particles.items[i];if(!p->active)continue;
+        if(w->frame_count==ACTOR_LIMIT)break;
+        const int index=w->frame_count++;
+        float *pos=w->frame_positions+index*5;
+        pos[0]=p->x;pos[1]=p->y;pos[2]=p->h-p->size*0.5f;pos[3]=p->size;pos[4]=p->size;
+        w->frame_handles[index]=JS_UNDEFINED;
+        w->frame_kinds[index]=R2D_WORLD_FRAME_PARTICLE;
+        w->frame_images[index]=white;
+        w->frame_sizes[index]=1;
+        w->frame_keys[index]=0x50415254ull;
+        w->frame_revisions[index]=0;
+        w->frame_blends[index]=p->blend==R2D_PARTICLE_ADDITIVE?R2D_WORLD_ADDITIVE:p->blend==R2D_PARTICLE_TRANSLUCENT?R2D_WORLD_TRANSLUCENT:R2D_WORLD_MASKED;
+        w->frame_tints[index*4]=p->r;w->frame_tints[index*4+1]=p->g;w->frame_tints[index*4+2]=p->b;w->frame_tints[index*4+3]=p->alpha;
+        w->particles_drawn++;
+        drawn++;
+    }
+    (void)v;(void)width;(void)height;(void)ortho;
     return true;
 }
 

@@ -692,6 +692,63 @@ function rendererWorldWrapper($, native) {
         return (native.traceAll(from.x, from.y, from.h, to.x, to.y, to.h, mask, ignore) || []).map(decorate);
     };
     world.remove = target => { $(target).eachNode((i,node) => { const raw=rawOf(node); native.hitRemove(raw); const at = hitNodes.indexOf(raw); if (at >= 0) hitNodes.splice(at, 1); native.atlasRemove(raw); native.actorRemove(raw); }); return world; };
+    // P1: authored map metadata and typed spawn points (never a 3D scene).
+    // P1 nav: 2D span/portal graph, deterministic A*. Rebuild after topology
+    // or actor-size changes; path entries are span indices.
+    world.navBuild = options => native.navBuild(
+        Number(options.radius ?? 18), Number(options.height ?? 76), Number(options.step ?? 18));
+    world.navNearest = (x, y) => native.navNearest(Number(x), Number(y));
+    world.navPath = (from, to, capacity = 256, maxVisits = 0) =>
+        native.navPath(from, to, capacity, maxVisits);
+
+    // P1 particles: fixed native pool; step runs inside engine.re2d.worldStep.
+    // The renderer owns drawing; this wrapper only describes prototypes.
+    const particleModes = { screen: 0, billboard: 1, axis: 2, floor: 3 };
+    const particleBlends = { masked: 0, translucent: 1, additive: 2 };
+    const particlePrototype = (options = {}) => {
+        const rgb = unpackRgb($.color(options.color ?? '#ffffff')).map(v => v / 255);
+        const modeName = options.mode ?? 'billboard';
+        const blendName = options.blend ?? 'translucent';
+        const mode = typeof modeName === 'number' ? modeName : particleModes[modeName];
+        const blend = typeof blendName === 'number' ? blendName : particleBlends[blendName];
+        if (mode === undefined || blend === undefined) throw new RangeError('world.particles: unknown mode/blend');
+        const p = new Float32Array(25);
+        p[0] = Number(options.x ?? 0); p[1] = Number(options.y ?? 0); p[2] = Number(options.h ?? 0);
+        p[3] = Number(options.vx ?? 0); p[4] = Number(options.vy ?? 0); p[5] = Number(options.vh ?? 0);
+        p[6] = Number(options.life ?? 1); p[7] = Number(options.size ?? 8);
+        p[8] = options.endSize === undefined ? -1 : Number(options.endSize);
+        p[9] = Number(options.gravity ?? 0); p[10] = Number(options.drag ?? 0);
+        p[11] = rgb[0]; p[12] = rgb[1]; p[13] = rgb[2];
+        p[14] = Number(options.alpha ?? 1);
+        p[15] = options.endAlpha === undefined ? -1 : Number(options.endAlpha);
+        p[16] = Number(options.spread ?? 0); p[17] = Number(options.speed ?? 0);
+        p[18] = Number(options.dirX ?? 0); p[19] = Number(options.dirY ?? 0); p[20] = Number(options.dirH ?? 0);
+        p[21] = Math.trunc(Number(options.frame ?? 0)); p[22] = Math.trunc(Number(options.frames ?? 0));
+        p[23] = blend; p[24] = mode;
+        return p;
+    };
+    world.particles = {
+        burst(options = {}) {
+            const count = Math.max(0, Math.trunc(Number(options.count ?? 16)));
+            return native.particlesBurst(particlePrototype(options), count, Math.trunc(Number(options.seed ?? 0)));
+        },
+        continuous(options = {}, dt = 1 / 60) {
+            return native.particlesContinuous(particlePrototype(options), Number(options.rate ?? 0),
+                Number(dt), Math.trunc(Number(options.seed ?? 0)));
+        },
+        info() { return native.particlesInfo(); },
+        clear() { native.particlesClear(); return world; },
+    };
+
+    // P1 automap: native XY lines + 2D transform; drawing stays with the game.
+    world.automapLines = states => native.automapLines(states);
+    world.automapProject = (view, x, y) => native.automapProject(
+        Number(view.cx ?? 0), Number(view.cy ?? 0), Number(view.scale ?? 1),
+        Number(view.rotation ?? 0), Number(x), Number(y));
+    world.metadata = () => native.metadata();
+    world.spawns = () => native.spawns();
+    world.spawn = id => native.spawn(id);
+
     // P0-D: authored semantic identity -> runtime handle. Numeric indices stay
     // an implementation detail; reload re-resolves through the baked table.
     world.findCell = name => { const index = native.findCell(name); return index ?? null; };

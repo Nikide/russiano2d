@@ -897,6 +897,50 @@ static void put_description(const World *w, R2dSb *sb, bool pretty, bool ids)
     r2d_sb_printf(sb, "%s]%s}", nl, nl);
 }
 
+
+// --- Authored metadata passthrough -----------------------------------------
+// The runtime keeps `meta`/`spawns` verbatim; the compiler is a geometry
+// compiler and must not silently drop authored presentation data. We copy the
+// balanced JSON value of a top-level key instead of re-serializing a schema the
+// SDK does not own. Bounded scanner: no recursion, strings/escapes respected.
+static char *r2d_sdk_read_text(const char *path,size_t *size)
+{
+    FILE *f=fopen(path,"rb");if(!f)return NULL;if(fseek(f,0,SEEK_END)!=0){fclose(f);return NULL;}
+    long n=ftell(f);if(n<0||n>(long)(32u*1024u*1024u)){fclose(f);return NULL;}rewind(f);
+    char *text=malloc((size_t)n+1);if(!text){fclose(f);return NULL;}
+    size_t got=fread(text,1,(size_t)n,f);fclose(f);text[got]=0;if(size)*size=got;return text;
+}
+static const char *skip_ws(const char *p){while(*p==' '||*p=='\t'||*p=='\n'||*p=='\r')p++;return p;}
+static const char *json_value_end(const char *v)
+{
+    if(*v=='"'||*v=='{'||*v=='['){char open=*v,close=open=='{'?'}':']';int depth=0;bool str=false;
+        for(;*v;v++){char c=*v;if(str){if(c=='\\'&&v[1]){v++;continue;}if(c=='"')str=false;continue;}
+            if(c=='"'){str=true;continue;}if(c=='{'||c=='['){depth++;continue;}if(c=='}'||c==']'){depth--;if(depth==0)return v+1;continue;}}
+        (void)open;(void)close;return NULL;}
+    const char *p=v;while(*p&&*p!=','&&*p!='}'&&*p!=']'&&*p!='\n'&&*p!='\r')p++;return p;
+}
+static bool r2d_sdk_copy_top_key(const char *path,const char *key,R2dSb *sb)
+{
+    size_t size=0;char *text=r2d_sdk_read_text(path,&size);if(!text)return false;
+    bool found=false;int depth=0;bool str=false;
+    for(const char *p=text;*p;p++){
+        char c=*p;
+        if(str){if(c=='\\'&&p[1]){p++;continue;}if(c=='"')str=false;continue;}
+        if(c=='"'){
+            const char *start=p+1;const char *q=start;while(*q&&*q!='"'){if(*q=='\\'&&q[1])q++;q++;}
+            if(*q=='"'){size_t len=(size_t)(q-start);
+                if(depth==1&&len==strlen(key)&&!memcmp(start,key,len)){
+                    const char *colon=skip_ws(q+1);
+                    if(*colon==':'){const char *value=skip_ws(colon+1);const char *end=json_value_end(value);
+                        if(end){r2d_sb_putc(sb,',');r2d_sb_put_json_string(sb,key);r2d_sb_putc(sb,':');for(const char *c=value;c<end;c++)r2d_sb_putc(sb,*c);found=true;}}
+                }
+            }
+            p=q;continue;
+        }
+        if(c=='{'||c=='[')depth++;else if(c=='}'||c==']')depth--;
+    }
+    free(text);return found;
+}
 // Versioned native renderer input, retaining authored portal geometry.
 static bool put_renderer_description(const World *w,R2dSb *sb,SdkReport *rep,const char *path)
 {
@@ -978,7 +1022,10 @@ static bool put_renderer_description(const World *w,R2dSb *sb,SdkReport *rep,con
     if(!r2d_world_load_json(&runtime,sb->data,error,sizeof error)){
         sdk_diag(rep,SDK_ERROR,"SDK_WORLD_RENDERER_BAKE",path,NULL,NULL,"%s",error);return false;}
     if(sb->len&&sb->data[sb->len-1]=='}')sb->data[--sb->len]=0;
-    r2d_sb_putc(sb,',');bool baked=r2d_world_put_baked(&runtime,sb);r2d_sb_putc(sb,'}');r2d_world_free(&runtime);if(!baked)sdk_diag(rep,SDK_ERROR,"SDK_WORLD_RENDERER_BAKE",path,NULL,NULL,"Native static light precompute failed");return baked;
+    r2d_sb_putc(sb,',');bool baked=r2d_world_put_baked(&runtime,sb);r2d_world_free(&runtime);
+    if(baked){r2d_sdk_copy_top_key(path,"meta",sb);r2d_sdk_copy_top_key(path,"metadata",sb);r2d_sdk_copy_top_key(path,"spawns",sb);}
+    r2d_sb_putc(sb,'}');
+    if(!baked)sdk_diag(rep,SDK_ERROR,"SDK_WORLD_RENDERER_BAKE",path,NULL,NULL,"Native static light precompute failed");return baked;
 }
 
 // Консервативная достижимость через порталы (данные компилятора; рантайм PVS не использует).

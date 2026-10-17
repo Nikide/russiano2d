@@ -254,7 +254,7 @@ static bool actors_upload(JSContext *ctx,R2DWorldRuntime *w,WorldGPU *g,SDL_GPUC
         a->dirty=false;
         if(i>=w->frame_count||!w->frame_images[i]){if(a->color)SDL_ReleaseGPUTexture(d,a->color);if(a->depth)SDL_ReleaseGPUTexture(d,a->depth);memset(a,0,sizeof *a);continue;}
         uint64_t key;int revision,size=w->frame_sizes[i];bool samples=false;
-        if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS){key=w->frame_keys[i];revision=w->frame_revisions[i];}
+        if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS||w->frame_kinds[i]==R2D_WORLD_FRAME_PARTICLE){key=w->frame_keys[i];revision=w->frame_revisions[i];}
         else {key=r2d_rotsprite_instance(ctx,w->frame_handles[i]);revision=r2d_rotsprite_revision(ctx,w->frame_handles[i]);samples=r2d_rotsprite_sample_depth(ctx,w->frame_handles[i])!=NULL;}
         if(a->key==key&&a->revision==revision&&a->size==size)continue;
         bytes=((bytes+511)&~(size_t)511)+(size_t)size*size*4;
@@ -265,7 +265,7 @@ static bool actors_upload(JSContext *ctx,R2DWorldRuntime *w,WorldGPU *g,SDL_GPUC
     uint8_t *mapped=SDL_MapGPUTransferBuffer(d,upload,false);if(!mapped){SDL_ReleaseGPUTransferBuffer(d,upload);return false;}
     size_t offset=0;bool ok=true;
     for(int i=0;i<w->frame_count;i++)if(w->frame_images[i]){ActorGPU *a=&g->actors[i];uint64_t key=0;int revision=0,size=w->frame_sizes[i];const float *depth=NULL;
-        if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS){key=w->frame_keys[i];revision=w->frame_revisions[i];}
+        if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS||w->frame_kinds[i]==R2D_WORLD_FRAME_PARTICLE){key=w->frame_keys[i];revision=w->frame_revisions[i];}
         else {key=r2d_rotsprite_instance(ctx,w->frame_handles[i]);revision=r2d_rotsprite_revision(ctx,w->frame_handles[i]);depth=r2d_rotsprite_sample_depth(ctx,w->frame_handles[i]);}
         if(a->key==key&&a->revision==revision&&a->size==size)continue;
         if(a->size!=size||(depth!=NULL)!=(a->depth!=NULL)){if(a->color)SDL_ReleaseGPUTexture(d,a->color);if(a->depth)SDL_ReleaseGPUTexture(d,a->depth);a->color=actor_texture(d,size,false);a->depth=depth?actor_texture(d,size,true):NULL;}
@@ -299,7 +299,13 @@ static void actor_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,
     if(right<=left||bottom<=top)return;SDL_Rect scissor={left,top,right-left,bottom-top};SDL_SetGPUScissor(pass,&scissor);
     u.actor[0]=p[0];u.actor[1]=p[1];u.actor[2]=center;u.actor[3]=p[4];u.shape[2]=p[3];u.plane[0]=dist;u.plane[3]=2;
     u.material[2]=samples?1:0;u.identity[0]=-1;u.identity[1]=span;u.identity[3]=1;u.opening[3]=i;
-    for(int c=0;c<4;c++)u.tint[c]=1;if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS){u.light_options[15][3]=(float)w->frame_blends[i];if(w->frame_blends[i]>=R2D_WORLD_TRANSLUCENT)u.tint[3]=1;}lighting(&w->world,span,filter,&u);if(w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)u.identity[2]=-1;
+    for(int c=0;c<4;c++)u.tint[c]=1;
+    if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS||w->frame_kinds[i]==R2D_WORLD_FRAME_PARTICLE){
+        u.light_options[15][3]=(float)w->frame_blends[i];
+        for(int c=0;c<4;c++)u.tint[c]=w->frame_tints[i*4+c];
+        if(w->frame_kinds[i]==R2D_WORLD_FRAME_PARTICLE)u.light_options[15][3]=w->frame_blends[i]>=R2D_WORLD_TRANSLUCENT?2.0f:0.0f;
+    }
+    lighting(&w->world,span,filter,&u);if(w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)u.identity[2]=-1;
     SDL_GPUTextureSamplerBinding textures[3]={{a->color,g->sampler},{a->depth?a->depth:r2d_texture_handle(w->renderer,g->black),g->sampler},{r2d_texture_handle(w->renderer,g->black),g->sampler}};
     material_bind(w,g,pass,textures);SDL_PushGPUFragmentUniformData(cmd,0,&u,sizeof u);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;
 }
@@ -344,7 +350,7 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
     for(int j=0;j<w->visibility.surface_count;j++){int id=w->visibility.surfaces[j];if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)continue;surface_draw(w,g,cmd,pass,v,ortho,id);}
     SDL_Rect full={0,0,w->width,w->height};SDL_SetGPUScissor(pass,&full);
     for(int i=0;i<w->frame_count;i++)if(w->frame_images[i]){
-        int blend=w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS?w->frame_blends[i]:0;
+        int blend=(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS||w->frame_kinds[i]==R2D_WORLD_FRAME_PARTICLE)?w->frame_blends[i]:0;
         SDL_GPUGraphicsPipeline *actor_pipeline=w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:blend==R2D_WORLD_ADDITIVE?g->additive:blend>=R2D_WORLD_TRANSLUCENT?g->translucent:g->pipeline;
         SDL_BindGPUGraphicsPipeline(pass,actor_pipeline);
         actor_draw(w,g,cmd,pass,v,ortho,i,-1,false);

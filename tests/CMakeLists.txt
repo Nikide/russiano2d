@@ -157,7 +157,7 @@ endif()
 # RE2D World: multi-height queries and final RGBA synthesis, no GPU.
 add_executable(r2d_re2d_world_test re2d/world_test.c
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
-    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c" "${CMAKE_SOURCE_DIR}/src/json.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c" "${CMAKE_SOURCE_DIR}/src/json.c"
     "${CMAKE_SOURCE_DIR}/src/bsp.c")
 target_include_directories(r2d_re2d_world_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(r2d_re2d_world_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
@@ -185,7 +185,7 @@ endif()
 add_executable(r2d_world_trace_test re2d/trace_test.c
     "${CMAKE_SOURCE_DIR}/src/re2d_world_trace.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
-    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c" "${CMAKE_SOURCE_DIR}/src/json.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c" "${CMAKE_SOURCE_DIR}/src/json.c"
     "${CMAKE_SOURCE_DIR}/src/bsp.c")
 target_include_directories(r2d_world_trace_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(r2d_world_trace_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
@@ -227,7 +227,7 @@ add_executable(r2d_world_controller_test re2d/controller_test.c
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
-    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c"
     "${CMAKE_SOURCE_DIR}/src/json.c" "${CMAKE_SOURCE_DIR}/src/bsp.c")
 target_include_directories(r2d_world_controller_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(r2d_world_controller_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
@@ -241,7 +241,7 @@ endif()
 
 # Semantic IDs (P0-D): bake -> load -> find_* lookup and validation.
 add_executable(r2d_re2d_semantic_test re2d/semantic_test.c
-    "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
@@ -261,7 +261,7 @@ add_executable(r2d_re2d_portal_test re2d/portal_fraction_test.c
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
-    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c"
     "${CMAKE_SOURCE_DIR}/src/json.c" "${CMAKE_SOURCE_DIR}/src/bsp.c")
 target_include_directories(r2d_re2d_portal_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(r2d_re2d_portal_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
@@ -271,6 +271,63 @@ endif()
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_re2d_portal_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_re2d_portal_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Map metadata/spawns (P1): authored identity + typed spawn points.
+add_executable(r2d_world_metadata_test re2d/metadata_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c" "${CMAKE_SOURCE_DIR}/src/json.c")
+target_include_directories(r2d_world_metadata_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_metadata_test PRIVATE ${R2D_WIN_LIBS} r2d_unity)
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_metadata_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_metadata_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Automap (P1): XY line extraction + 2D view transform.
+add_executable(r2d_world_automap_test re2d/automap_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_automap.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c" "${CMAKE_SOURCE_DIR}/src/json.c" "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_world_automap_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_automap_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_automap_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_automap_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_automap_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Particle pool (P1): deterministic emitters, fixed pool, no allocation.
+add_executable(r2d_world_particle_test re2d/particle_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_particle.c")
+target_include_directories(r2d_world_particle_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_particle_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_particle_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_particle_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_particle_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# 2D cell/portal navigation (P1): graph build + deterministic A*.
+add_executable(r2d_world_nav_test re2d/nav_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_nav.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c" "${CMAKE_SOURCE_DIR}/src/json.c"
+    "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_world_nav_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_nav_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_nav_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_nav_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_nav_test PRIVATE -fsanitize=address,undefined)
 endif()
 
 # EXR-декодер панорамного неба Re2D World (cmake/WorldEXR.cmake).
