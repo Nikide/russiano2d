@@ -14,15 +14,15 @@
 ## Task board
 | id | scope | owner | status |
 |---|---|---|---|
-| VN-01 | dialog/view separation, RML template, semantic roles, custom font, tests | vn-agent | pending |
-| VN-02 | speaker registry, expressions, theme stack, skip contract, input lock | vn-agent | pending |
-| VN-03 | Narrative IR, story compiler, save/backlog/voice/linter | vn-agent | pending |
-| R-01 | grounding: contact/blob/foot AO/floor tint; sprite edges; material variation | render-agent | pending |
-| R-02 | haze, grime, corner AO, bloom-lite, sky layers | render-agent | pending |
-| R-03 | VFX pack, world cards, trails, distortion, impact library | render-agent | pending |
-| R-04 | region grid, local BSP, PVS, streaming, LOD | world-agent | pending |
-| R-05 | brushes, tool materials, entities, compile pipeline (#5) | world-agent | pending |
-| R-06 | distant scene, sky profiles, region impostors (#6) | world-agent | pending |
+| VN-01..03 | dialog/view/theme/IR/linter (task-1) | trace-core | in_progress |
+| VN-02 | speaker/expression/theme stack/skip/input lock (task-1) | trace-core | in_progress |
+| VN-03 | Narrative IR/story/save/backlog/linter (task-1) | trace-core | in_progress |
+| R-01 | grounding/edges/material (task-2) | particle-core | in_progress |
+| R-02 | haze/grime/AO/bloom/sky layers (task-2) | particle-core | in_progress |
+| R-03 | VFX pack/cards/trails/distortion (task-4) | viewmodel-core | in_progress |
+| R-04 | regions/PVS/streaming/LOD (task-3) | nav-core | in_progress |
+| R-05 | brushes/tool materials/compiler #5 (task-3) | nav-core | in_progress |
+| R-06 | distant scene/sky boundary #6 (task-3) | nav-core | in_progress |
 
 ## Integration gates
 - `cmake --build build -j 8 && cmake --build build --target r2d_check -j 8`
