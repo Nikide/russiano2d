@@ -185,7 +185,9 @@ gravity, jump только с земли, потолок, step-up/down, ходь
 `radius*0.5` (до 64). Портал/мульти-span переразрешается через
 `r2d_world_support` в новой XY. Это helper, а не entity: состояние игрока
 принадлежит игре, controller владеет только математикой. `dt` вне `(0,0.5]`
-оставляет состояние без изменений. Нет mover carry/crush и нет sweep-запроса
+оставляет состояние без изменений. Стоящий на движущемся span body едет вместе
+с полом через `support` (passenger carry ≤ `step` за тик); опускающийся
+потолок не оставляет тело внутри ceiling (defensive clamp). Нет mover carry/crush и нет sweep-запроса
 по произвольному радиусу (только собственный radius) — ограничения честные.
 
 ## Movers (P0-E)
@@ -199,8 +201,10 @@ lift.info();     // {position,fraction,phase,direction,timer,events}
 
 `span` или `portal` (ровно один). Timeline детерминирован и шагается вместе с
 `engine.re2d.worldStep`; `span` mover пишет `bottom=position`, сохраняя
-авторский `top`; `portal` mover открывает/закрывает существующий portal по
-событиям. Типы: `door` (toggle), `lift`/`platform` (auto-return после wait),
+авторский `top`; `portal` mover плавно гоняет `open_fraction` (Portal 2.0),
+поэтому промежуточные состояния реально перекрывают проход/видимость.
+`.blocking(true)` ставит флаг контакта пассажира: движение замирает, crusher
+реверсит и отдаёт событие BLOCKED; снятие флага продолжает ход. Типы: `door` (toggle), `lift`/`platform` (auto-return после wait),
 `crusher` (реверс на концах). Бюджет 128 mover'ов. Ограничение: portal
 сейчас бинарный (без smooth open fraction) и нет passenger carry — это
 следующий шаг P0-E/P1.

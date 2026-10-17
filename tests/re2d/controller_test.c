@@ -417,6 +417,49 @@ static void test_invalid_input_leaves_state_unchanged(void)
     r2d_world_free(&world);
 }
 
+static void test_moving_floor_carries_grounded_body(void)
+{
+    R2DRe2dWorld world={0};
+    R2DWorldSpan span=make_span(0,0,200,200,0,120);
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_build(&world,NULL,0,&span,1),"lift fixture builds");
+    R2DWorldControllerConfig cfg=make_config();
+    R2DWorldControllerState start,s;
+    start_at(&start,50,50,0);
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_controller_init(&world,&cfg,&start,&s),"init on lift");
+    float floor=0;
+    for(int i=0;i<120;i++) {
+        floor+=0.5f; // 30 units/s lift, well within step per tick
+        TEST_ASSERT_TRUE(r2d_world_span_set_heights(&world,0,floor,120));
+        r2d_world_controller_move(&world,&cfg,&s,0,0,false,1.0f/60.0f);
+        TEST_ASSERT_TRUE_MESSAGE(s.grounded,"lift keeps the body grounded");
+        TEST_ASSERT_TRUE_MESSAGE(fabsf(s.feet-floor)<0.05f,"feet follow the moving floor (passenger carry)");
+    }
+    TEST_ASSERT_TRUE_MESSAGE(s.feet>50.0f,"body was carried upward");
+    r2d_world_free(&world);
+}
+
+static void test_lowering_ceiling_never_reports_body_inside_it(void)
+{
+    R2DRe2dWorld world={0};
+    R2DWorldSpan span=make_span(0,0,200,200,0,120);
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_build(&world,NULL,0,&span,1),"crusher fixture builds");
+    R2DWorldControllerConfig cfg=make_config();
+    R2DWorldControllerState start,s;
+    start_at(&start,50,50,0);
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_controller_init(&world,&cfg,&start,&s),"init under crusher");
+    float ceiling=120;
+    for(int i=0;i<160;i++) {
+        // Crush stops at the body height; lowering further is a gameplay kill,
+        // not a controller/state query (documented P0-C scope).
+        ceiling=fmaxf(60.0f,ceiling-0.5f);
+        TEST_ASSERT_TRUE(r2d_world_span_set_heights(&world,0,0,ceiling));
+        r2d_world_controller_move(&world,&cfg,&s,0,0,true,1.0f/60.0f);
+        TEST_ASSERT_TRUE_MESSAGE(state_finite(&s),"crusher keeps finite state");
+        TEST_ASSERT_TRUE_MESSAGE(s.feet+cfg.height<=s.ceiling+0.01f,"body never ends inside the ceiling");
+    }
+    r2d_world_free(&world);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -434,5 +477,7 @@ int main(void)
     RUN_TEST(test_large_dt_does_not_tunnel);
     RUN_TEST(test_determinism_10k_ticks);
     RUN_TEST(test_invalid_input_leaves_state_unchanged);
+    RUN_TEST(test_moving_floor_carries_grounded_body);
+    RUN_TEST(test_lowering_ceiling_never_reports_body_inside_it);
     return UNITY_END();
 }

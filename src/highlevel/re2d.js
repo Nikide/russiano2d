@@ -766,6 +766,7 @@ function rendererWorldWrapper($, native) {
         const token = native.moverCreate(type, span, portal, from, to, speed, wait,
             options.autoReturn === false ? 0 : 1);
         return {
+            blocking(flag = true) { native.moverBlock(token, flag ? 1 : 0); return this; },
             open() { native.moverIntent(token, 0); return this; },
             close() { native.moverIntent(token, 1); return this; },
             toggle() { native.moverIntent(token, 2); return this; },

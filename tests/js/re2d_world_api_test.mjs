@@ -17,7 +17,7 @@ const calls = { atlasAdd: [], atlasRemove: [], actorAdd: [], actorRemove: [],
                 moverCreate: [], moverIntent: [], moverRemove: [], moverInfo: [],
                 triggerCreate: [], triggerRemove: [], triggerTick: [], triggerUse: [], triggerShoot: [],
                 find: [], controllerCreate: [], controllerInit: [], controllerMove: [], controllerRemove: [],
-                portalOpen: [], portalFraction: [] };
+                portalOpen: [], portalFraction: [], moverBlock: [] };
 
 const native = {
     info: () => ({ poseBudget: 1, poseStep: 3 }),
@@ -65,6 +65,7 @@ const native = {
     portalClosed: () => {},
     portalOpen: (index, fraction) => calls.portalOpen.push([index, fraction]),
     portalFraction: (index) => { calls.portalFraction.push(index); return 0.5; },
+    moverBlock: (token, flag) => calls.moverBlock.push([token, flag]),
 };
 
 engine.re2d = {
@@ -202,7 +203,9 @@ test('world.mover уходит в нативный timeline и управляе�
     eq(args[0], 1); eq(args[1], 2); eq(args[2], -1);
     eq(args[3], 0); eq(args[4], 96); eq(args[5], 240); eq(args[6], 0.5); eq(args[7], 1);
     lift.open().close().toggle();
+    lift.blocking(true);
     eq(JSON.stringify(calls.moverIntent.slice(-3)), '[[7,0],[7,1],[7,2]]');
+    eq(JSON.stringify(calls.moverBlock[calls.moverBlock.length - 1]), '[7,1]');
     eq(lift.info().position, 12);
     lift.remove();
     eq(calls.moverRemove[calls.moverRemove.length - 1], 7);

@@ -703,6 +703,12 @@ static JSValue world_mover_create(JSContext *ctx,JSValueConst self,int argc,JSVa
     if(token<=0)return JS_ThrowRangeError(ctx,"Re2D World: invalid mover (type/span/portal/from/to/speed/wait/top)");
     return JS_NewInt32(ctx,token);
 }
+static JSValue world_mover_block(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[2];if(!w||!world_numbers(ctx,argc,argv,2,p))return JS_EXCEPTION;
+    if(!r2d_world_mover_block(w,(int)p[0],p[1]!=0.0f))return JS_ThrowRangeError(ctx,"Re2D World: unknown mover");
+    return JS_UNDEFINED;
+}
 static JSValue world_mover_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
@@ -953,6 +959,7 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"controllerInit",JS_NewCFunction(ctx,world_controller_init,"controllerInit",4));
     JS_SetPropertyStr(ctx,handle,"controllerMove",JS_NewCFunction(ctx,world_controller_move,"controllerMove",11));
     JS_SetPropertyStr(ctx,handle,"moverCreate",JS_NewCFunction(ctx,world_mover_create,"moverCreate",8));
+    JS_SetPropertyStr(ctx,handle,"moverBlock",JS_NewCFunction(ctx,world_mover_block,"moverBlock",2));
     JS_SetPropertyStr(ctx,handle,"moverRemove",JS_NewCFunction(ctx,world_mover_remove,"moverRemove",1));
     JS_SetPropertyStr(ctx,handle,"moverIntent",JS_NewCFunction(ctx,world_mover_intent,"moverIntent",2));
     JS_SetPropertyStr(ctx,handle,"moverInfo",JS_NewCFunction(ctx,world_mover_info,"moverInfo",1));

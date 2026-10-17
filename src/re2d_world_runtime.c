@@ -439,6 +439,11 @@ void r2d_world_mover_intent(R2DWorldRuntime *w,int token,int action)
     else if(action==1)r2d_world_mover_close(&e->mover);
     else r2d_world_mover_toggle(&e->mover);
 }
+bool r2d_world_mover_block(R2DWorldRuntime *w,int token,bool blocking)
+{
+    R2DWorldMoverEntry *e=mover_entry(w,token);if(!e)return false;
+    e->mover.blocking=blocking;return true;
+}
 bool r2d_world_mover_info(R2DWorldRuntime *w,int token,float out[6],unsigned *events)
 {
     R2DWorldMoverEntry *e=mover_entry(w,token);if(!e)return false;

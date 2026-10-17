@@ -129,6 +129,8 @@ int r2d_world_trace_query_all(JSContext *,R2DWorldRuntime *,const float from[3],
 int r2d_world_mover_create(R2DWorldRuntime *,int type,int span,int portal,float from,float to,float speed,float wait,bool auto_return);
 bool r2d_world_mover_remove(R2DWorldRuntime *,int token);
 void r2d_world_mover_intent(R2DWorldRuntime *,int token,int action);
+// Passenger/crusher contact flag: freezes travel, CRUSHER reverses, emits BLOCKED.
+bool r2d_world_mover_block(R2DWorldRuntime *,int token,bool blocking);
 bool r2d_world_mover_info(R2DWorldRuntime *,int token,float out[6],unsigned *events);
 void r2d_world_mover_advance(R2DWorldRuntime *,float dt);
 void r2d_world_mover_free(R2DWorldRuntime *);
