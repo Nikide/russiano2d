@@ -103,7 +103,9 @@ export default function install($) {
 
             $('<player>', { id: 'hero' }).at(SPAWN.x, SPAWN.y).size(36, 36).collision(30, 30)
                 .speed(240).controls('wasd').kind(Re2D).appendTo($.world);
-            $.camera.follow('#hero').yaw(SPAWN.yaw);
+            // Жёсткое следование: в FPS сглаживание камеры (по умолчанию
+            // 0.12) читается как «плывущие глаза» — глаза отстают от тела.
+            $.camera.follow('#hero', { smooth: 0 }).yaw(SPAWN.yaw);
 
             for (const cfg of NPCS) {
                 cfg.mood = 'neutral';

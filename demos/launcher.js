@@ -51,6 +51,12 @@ const DEMOS = [
         hint: 'Комната от первого лица, мышь крутит взгляд, добрые маскоты',
     },
     {
+        scene: 're2d_testroom',
+        icon: 'directions_walk',
+        title: 'Re2D · комната врагов',
+        hint: 'Билборды-враги и ходьба от первого лица: ни оружия, ни боя',
+    },
+    {
         scene: 're2dsprite',
         icon: '360',
         title: 'Re2DSprite · Руси-тян',
