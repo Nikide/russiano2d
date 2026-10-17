@@ -31,6 +31,7 @@ $.render(() => world.render(view,400,240));
 | `world.findCell/findWall/findSpan/findPortal(name)` | authored semantic ID → runtime handle (или null) |
 | `world.portalOpen(index, fraction)` / `portalFraction(index)` | плавное состояние портала 0..1 |
 | `world.navBuild/navNearest/navPath` | 2D span/portal nav graph и детерминированный A* |
+| `world.navPath(...,{blockedSpans,blockedPortals})` | dynamic nav без rebuild: маски закрытых span/portal |
 | `world.automapLines(states?)` / `automapProject(view,x,y)` | 2D automap-линии и view-трансформ |
 | `world.metadata()` / `spawns()` / `spawn(id)` | authored map metadata и типизированные spawn points |
 | `world.saveState()` / `loadState(save)` / `saveMapHash()` | versioned native snapshot + map identity guard |
@@ -595,6 +596,18 @@ world.debug.draw(view, { width: 1280, height: 720, hitZones: true }); // пов�
 и маркирует boss hit-зоны. Демо `demos/re2d_debug_lab` показывает это на
 testroom; F1 переключает слой. Данные детерминированы; `draw.clear()`
 вызывается самим helper'ом, так что слой не накапливается между кадрами.
+
+## Dynamic nav (P3)
+
+```js
+world.navPath(from, to, 256, 0, { blockedSpans: [3, 4], blockedPortals: [1] });
+```
+
+Ядро A* принимает маски заблокированных узлов и порталов, поэтому закрытая
+дверь/поднятый лифт исключаются из пути **без пересборки навграфа**. Runtime
+конвертирует списки в маски; путь — массив node id или `null`. Agent:
+`navPath(0,0)` → `[0]`, `blockedSpans:[0]` → `null`. Ограничения: маски
+передаёт игра на каждый запрос; сам граф строится из authored topology.
 
 ## Свет, материал, изменение мира
 
