@@ -1394,7 +1394,9 @@ $.color('#f00')        // упакованный цвет
 $.alpha(color, 0.5)    // сменить альфу
 $.vec(1, 0)            // { x, y }
 $.random               // ГПСЧ с зерном из --seed: .next() .range(a,b) .int(a,b) .pick(list) .chance(p)
-$.find(sel) .count(sel)
+$.find(sel)          // ОБЁРТКА со всеми узлами (как $()), итерируемая
+$.findNodes(sel)     // сырые узлы (массив) — то, что $.find возвращал до 1.2.1
+$.count(sel)
 $.log('текст')         // в журнал движка
 $.logger('текст')      // то же: ctx.log
 $.now()                // игровое время в секундах (синоним $.time.now())
@@ -1506,6 +1508,7 @@ $.update(() => {
 | Подсистема | Пространство имён | Теги | Подробно |
 |---|---|---|---|
 | Анимация клипами и машина состояний | `$.anim` | — | [anim.md](highlevel/anim.md) |
+| Клипы покадровой анимации (кадры, fps, pivot) | `$.clip` | — | [clip.md](highlevel/clip.md) |
 | Анимационный плеер: таймлайны в мс, мультицелевые дорожки, звук и маркеры | `$.anim.player`, `$.anim.clip`, `$.anim.load` | — | [animplayer.md](highlevel/animplayer.md) |
 | Свет в стиле Candle: тени, конус, площадной свет, туман | `$.gfx.light`, `$.gfx.fog` | `<light>`, `<lightarea>`, `<fog>` | [render.md](highlevel/render.md) §3.0 |
 | TileMap: слои, автотайл, террейны, коллизии-прямоугольники, Y-sort | `$.tilemap` | `<tilemap>` | [tilemap.md](highlevel/tilemap.md) |

@@ -1,2 +1,2 @@
-f94a9c079a68e5e6a582229f9c8fb362dc96b6a76aec02d77d1966c7aaad5442  russiano2d-v1.2.1-macos-arm64.tar.gz
-e36fa3a199a49433f81773b2fd213afaf11b291087fd1aff01733ed6bfede926  russiano2d-v1.2.1-macos-x86_64.tar.gz
+56ff7405fe265c28eab2177ef7c1710141c1234e367626de3b00b31d12af1365  russiano2d-v1.2.2-macos-arm64.tar.gz
+b234c00854dc06ef844f3dbd814aefeadd9e2677ecde69c714e58b4d391469e7  russiano2d-v1.2.2-macos-x86_64.tar.gz

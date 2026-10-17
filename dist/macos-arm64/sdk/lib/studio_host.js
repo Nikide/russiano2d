@@ -70,7 +70,9 @@ function createHost(app) {
 
     // --- Помощники ------------------------------------------------------------------------
     const model = () => (s.session ? s.session.doc : null);
-    const rect = () => doc.rect('ds-view') || { x: 0, y: 0, w: 0, h: 0 };
+    // layoutRect: нужна вычисленная геометрия; rect() с task-56
+    // честно отдаёт null, если элемент скрыт.
+    const rect = () => doc.layoutRect('ds-view') || { x: 0, y: 0, w: 0, h: 0 };
 
     function setStatus(text, fail) {
         s.status = text;
