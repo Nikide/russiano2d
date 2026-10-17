@@ -1152,6 +1152,18 @@ static JSValue world_nav_path_mask(JSContext *ctx,JSValueConst self,int argc,JSV
     for(int i=0;i<n;i++)JS_SetPropertyUint32(ctx,array,(uint32_t)i,JS_NewInt32(ctx,path[i]));
     free(path);return array;
 }
+static JSValue world_nav_nodes(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(!w->nav_ready)return JS_NewArray(ctx);
+    JSValue array=JS_NewArray(ctx);
+    for(int i=0;i<w->nav_graph.node_count;i++){
+        JSValue o=JS_NewObject(ctx);set_num(ctx,o,"x",w->nav_nodes[i].x);set_num(ctx,o,"y",w->nav_nodes[i].y);
+        set_num(ctx,o,"span",w->nav_nodes[i].span);set_num(ctx,o,"radius",w->nav_nodes[i].radius);
+        JS_SetPropertyUint32(ctx,array,(uint32_t)i,o);
+    }
+    return array;
+}
 static JSValue world_nav_path(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[4]={0,0,256,0};
@@ -1640,6 +1652,7 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"particlesInfo",JS_NewCFunction(ctx,world_particles_info,"particlesInfo",0));
     JS_SetPropertyStr(ctx,handle,"particlesClear",JS_NewCFunction(ctx,world_particles_clear,"particlesClear",0));
     JS_SetPropertyStr(ctx,handle,"navBuild",JS_NewCFunction(ctx,world_nav_build,"navBuild",3));
+    JS_SetPropertyStr(ctx,handle,"navNodes",JS_NewCFunction(ctx,world_nav_nodes,"navNodes",0));
     JS_SetPropertyStr(ctx,handle,"navNearest",JS_NewCFunction(ctx,world_nav_nearest,"navNearest",2));
     JS_SetPropertyStr(ctx,handle,"navPathMasked",JS_NewCFunction(ctx,world_nav_path_mask,"navPathMasked",6));
     JS_SetPropertyStr(ctx,handle,"navPath",JS_NewCFunction(ctx,world_nav_path,"navPath",4));

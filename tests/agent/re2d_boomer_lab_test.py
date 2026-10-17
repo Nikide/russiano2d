@@ -243,7 +243,7 @@ def main():
         a.eval("JSON.stringify(boomerLab.volumeProbe())")  # remove
 
         caps = a.eval("JSON.stringify($.capabilities.re2d)")
-        check(caps is not None and '"worldGpu":true' in caps and '"mirrorPortal":false' in caps,
+        check(caps is not None and '"worldGpu":true' in caps and '"mirrorPortal":true' in caps,
               f"$.capabilities.re2d доступен: {caps}")
         prof = a.eval("JSON.stringify({m:boomerLab.info().movers,t:boomerLab.info().traceCalls,n:boomerLab.info().navQueries,av:boomerLab.info().audioVoicesActive})")
         check(prof is not None and '"t":' in prof, f"profiler-поля видны: {prof}")

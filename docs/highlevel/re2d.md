@@ -613,6 +613,7 @@ world.debug.draw(view, { width: 1280, height: 720, hitZones: true }); // пов�
 ```
 
 `overlay` проецирует automap-линии и semantic точки (trigger/secret) в экран;
+`draw` дополнительно рисует nav-узлы (когда граф построен) и hit-зоны;
 `draw` дополнительно рисует их через движковый `$.gfx.draw` (без 3D-gizmo API)
 и маркирует boss hit-зоны. Демо `demos/re2d_debug_lab` показывает это на
 testroom; F1 переключает слой. Данные детерминированы; `draw.clear()`

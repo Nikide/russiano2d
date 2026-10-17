@@ -794,6 +794,7 @@ function rendererWorldWrapper($, native) {
     world.navBuild = options => native.navBuild(
         Number(options.radius ?? 18), Number(options.height ?? 76), Number(options.step ?? 18));
     world.navNearest = (x, y) => native.navNearest(Number(x), Number(y));
+    world.navNodes = () => native.navNodes();
     world.navPath = (from, to, capacity = 256, maxVisits = 0, options = {}) => {
         const spans = options.blockedSpans?.length ? new Float32Array(options.blockedSpans) : null;
         const portals = options.blockedPortals?.length ? new Float32Array(options.blockedPortals) : null;
@@ -1081,6 +1082,10 @@ function rendererWorldWrapper($, native) {
         }
         for (const p of overlay.points) d.circle(p.x, p.y, p.kind === 'secret' ? 5 : 3,
             p.kind === 'secret' ? `rgba(255,210,90,${alpha})` : `rgba(120,255,150,${alpha})`);
+        for (const node of world.navNodes()) {
+            const q = projectPoint(view, node.x, node.y, 24, Number(options.width ?? 320), Number(options.height ?? 180));
+            if (q) d.circle(q.x, q.y, 2, `rgba(120,190,255,${alpha})`);
+        }
         // Boss hit zones: project the cylinder's height bands.
         for (const proxy of world.debug.entities().hitProxies) {
             if (!options.hitZones) break;

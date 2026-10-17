@@ -90,6 +90,7 @@ const native = {
     audioZoneAt: (x, y, h) => ({ preset: 1, name: 'hall', span: 2 }),
     audioBudget: (n) => n,
     audioState: () => ({ ready: true, active: 3, virtual: 2, budget: 8 }),
+    navNodes: () => [{ x: 1, y: 2, span: 0, radius: 14 }],
     portalMirror: (i, on) => calls.material.push(['mirror', i, on]),
     portalMirrorGet: () => true,
     polywallAdd: (walls, x, y, angle, speed) => { calls.polywall.push(['add', Array.from(walls), x, y, angle, speed]); return 7; },
