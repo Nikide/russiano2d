@@ -232,6 +232,7 @@ static void write_portal(SaveWriter *w,const R2DWorldSavedPortal *p)
     writer_begin_field(w,&first,"open_fraction");writer_float(w,p->open_fraction);
     writer_begin_field(w,&first,"closed");writer_bool(w,p->closed);
     writer_begin_field(w,&first,"sky");writer_bool(w,p->sky);
+    writer_begin_field(w,&first,"mirror");writer_bool(w,p->mirror);
     writer_char(w,'}');
 }
 
@@ -485,6 +486,7 @@ bool r2d_world_save_read(const char *text,R2DWorldSaveState *out,char *error,siz
                !read_number(item,"open_fraction",&p->open_fraction,where,error,error_size)||
                !read_boolean(item,"closed",&p->closed,where,error,error_size)||
                !read_boolean(item,"sky",&p->sky,where,error,error_size)||
+               !read_boolean(item,"mirror",&p->mirror,where,error,error_size)||
                !read_id(item,"id",p->id,sizeof p->id,false,where,error,error_size))goto cleanup;
         }
 

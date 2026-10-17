@@ -8,7 +8,8 @@
 typedef struct { SDL_GPUTexture *color,*depth;uint64_t key;int revision,size;Uint32 offsets[2];bool dirty; } ActorGPU;
 typedef struct { uint64_t key;float (*data)[4];int count,walls,spans; } ShadowChunk;
 typedef struct {
-    SDL_GPUGraphicsPipeline *pipeline,*overdraw,*translucent,*additive;
+    SDL_GPUGraphicsPipeline *pipeline,*overdraw,*translucent,*additive,*mirror;
+    R2DWorldVisibility mirror_visibility;
     SDL_GPUSampler *sampler,*linear,*sky_sampler;
     SDL_GPUTexture *color,*owner,*depth;
     SDL_GPUTransferBuffer *download;
@@ -47,11 +48,11 @@ void r2d_world_gpu_material_dirty(R2DWorldRuntime *w)
 void r2d_world_gpu_free(R2DWorldRuntime *w)
 {
     WorldGPU *g=w->gpu;if(!g)return;r2d_world_gpu_material_dirty(w);SDL_GPUDevice *d=w->renderer->device;
-    targets_free(d,g);if(g->pipeline)SDL_ReleaseGPUGraphicsPipeline(d,g->pipeline);if(g->overdraw)SDL_ReleaseGPUGraphicsPipeline(d,g->overdraw);if(g->translucent)SDL_ReleaseGPUGraphicsPipeline(d,g->translucent);if(g->additive)SDL_ReleaseGPUGraphicsPipeline(d,g->additive);if(g->sampler)SDL_ReleaseGPUSampler(d,g->sampler);if(g->linear)SDL_ReleaseGPUSampler(d,g->linear);if(g->sky_sampler)SDL_ReleaseGPUSampler(d,g->sky_sampler);
+    targets_free(d,g);if(g->pipeline)SDL_ReleaseGPUGraphicsPipeline(d,g->pipeline);if(g->overdraw)SDL_ReleaseGPUGraphicsPipeline(d,g->overdraw);if(g->mirror)SDL_ReleaseGPUGraphicsPipeline(d,g->mirror);if(g->translucent)SDL_ReleaseGPUGraphicsPipeline(d,g->translucent);if(g->additive)SDL_ReleaseGPUGraphicsPipeline(d,g->additive);if(g->sampler)SDL_ReleaseGPUSampler(d,g->sampler);if(g->linear)SDL_ReleaseGPUSampler(d,g->linear);if(g->sky_sampler)SDL_ReleaseGPUSampler(d,g->sky_sampler);
     if(g->white>=0)r2d_texture_free(w->renderer,g->white);if(g->black>=0)r2d_texture_free(w->renderer,g->black);
     if(g->shadows)SDL_ReleaseGPUBuffer(d,g->shadows);free(g->shadow_data);for(int i=0;i<128;i++)free(g->shadow_chunks[i].data);
     for(int i=0;i<g->actor_capacity;i++){if(g->actors[i].color)SDL_ReleaseGPUTexture(d,g->actors[i].color);if(g->actors[i].depth)SDL_ReleaseGPUTexture(d,g->actors[i].depth);}free(g->actors);
-    free(g);w->gpu=NULL;w->gpu_texture_bytes=w->gpu_transfer_bytes=0;w->gpu_shadow_updates=w->gpu_material_batches=w->gpu_draws=0;
+    r2d_world_visibility_free(&g->mirror_visibility);free(g);w->gpu=NULL;w->gpu_texture_bytes=w->gpu_transfer_bytes=0;w->gpu_shadow_updates=w->gpu_material_batches=w->gpu_draws=0;
 }
 static void material_bind(R2DWorldRuntime *w,WorldGPU *g,SDL_GPURenderPass *pass,const SDL_GPUTextureSamplerBinding textures[3])
 {
@@ -85,6 +86,9 @@ static bool init(R2DWorldRuntime *w)
         p.depth_stencil_state.enable_depth_test=true;p.depth_stencil_state.enable_depth_write=true;p.depth_stencil_state.compare_op=SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
         p.rasterizer_state.fill_mode=SDL_GPU_FILLMODE_FILL;p.rasterizer_state.cull_mode=SDL_GPU_CULLMODE_NONE;p.multisample_state.sample_count=SDL_GPU_SAMPLECOUNT_1;
         g->pipeline=SDL_CreateGPUGraphicsPipeline(d,&p);
+        // Mirror pass: depth disabled, no blending; drawn scissored into the portal.
+        p.depth_stencil_state.enable_depth_test=false;p.depth_stencil_state.enable_depth_write=false;p.depth_stencil_state.compare_op=SDL_GPU_COMPAREOP_ALWAYS;
+        g->mirror=SDL_CreateGPUGraphicsPipeline(d,&p);
         p.depth_stencil_state.enable_depth_test=false;p.depth_stencil_state.enable_depth_write=false;
         colors[0].blend_state.enable_blend=true;
         colors[0].blend_state.src_color_blendfactor=colors[0].blend_state.dst_color_blendfactor=SDL_GPU_BLENDFACTOR_ONE;
@@ -103,7 +107,7 @@ static bool init(R2DWorldRuntime *w)
         colors[0].blend_state.src_alpha_blendfactor=SDL_GPU_BLENDFACTOR_ZERO;
         colors[0].blend_state.dst_alpha_blendfactor=SDL_GPU_BLENDFACTOR_ONE;
         g->additive=SDL_CreateGPUGraphicsPipeline(d,&p);
-        SDL_ReleaseGPUShader(d,vs);SDL_ReleaseGPUShader(d,fs);if(!g->pipeline||!g->overdraw||!g->translucent||!g->additive)goto fail;
+        SDL_ReleaseGPUShader(d,vs);SDL_ReleaseGPUShader(d,fs);if(!g->pipeline||!g->mirror||!g->overdraw||!g->translucent||!g->additive)goto fail;
         SDL_GPUSamplerCreateInfo s={0};s.min_filter=s.mag_filter=SDL_GPU_FILTER_NEAREST;s.mipmap_mode=SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
         s.address_mode_u=s.address_mode_v=s.address_mode_w=SDL_GPU_SAMPLERADDRESSMODE_REPEAT;g->sampler=SDL_CreateGPUSampler(d,&s);if(!g->sampler)goto fail;s.min_filter=s.mag_filter=SDL_GPU_FILTER_LINEAR;g->linear=SDL_CreateGPUSampler(d,&s);s.address_mode_v=SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;g->sky_sampler=SDL_CreateGPUSampler(d,&s);if(!g->linear||!g->sky_sampler)goto fail;
         const uint8_t white[4]={255,255,255,255},black[4]={0,0,0,255};g->white=r2d_texture_create_rgba(w->renderer,white,1,1);g->black=r2d_texture_create_rgba(w->renderer,black,1,1);if(g->white<0||g->black<0)goto fail;
@@ -326,6 +330,72 @@ static void surface_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cm
             for(int r=w->world.span_wall_offsets[span];r<w->world.span_wall_offsets[span+1];r++)if(w->world.span_wall_refs[r]==s->primitive){incident=true;break;}
             if(incident)draw(w,g,cmd,pass,v,ortho,id,span,true,NULL);}
 }
+
+static void sky_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho)
+{
+    SurfaceUniform sky={0};sky.basis[0]=v->cos_yaw;sky.basis[1]=v->sin_yaw;sky.basis[2]=v->cos_pitch;sky.basis[3]=v->sin_pitch;
+    sky.screen[0]=w->width;sky.screen[1]=w->height;sky.screen[2]=v->focal*w->height/v->height;sky.screen[3]=ortho;sky.plane[3]=3;
+    sky.material[0]=w->world.sky_yaw;sky.identity[3]=w->world.sky.pixels?1:0;uint32_t tint=w->world.sky_color?w->world.sky_color:0xffffffff;
+    for(int c=0;c<4;c++)sky.tint[c]=((tint>>(c*8))&255)/255.0f;
+    SDL_GPUTexture *texture=r2d_texture_handle(w->renderer,g->sky_texture>=0?g->sky_texture:g->white);
+    SDL_GPUTextureSamplerBinding samplers[3]={{texture,g->sky_sampler},{texture,g->sampler},{texture,g->sampler}};
+    material_bind(w,g,pass,samplers);SDL_PushGPUFragmentUniformData(cmd,0,&sky,sizeof sky);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;
+}
+// P2 mirror portal: reflect the camera across the portal plane, render the world
+// with disabled depth into a scissored portal window. No offscreen RT is needed.
+static bool mirror_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho)
+{
+    int portal=-1;R2DWorldWindow window={0};const R2DWorldPortal *p=NULL;R2DWorldOpening opening={0};
+    int camera_span=r2d_world_span_at(&w->world,v->x,v->y,v->eye);
+    int camera_cell=camera_span>=0?w->world.span_cells[camera_span]:-1;
+    for(int i=0;i<w->world.portal_count;i++){
+        p=&w->world.portals[i];
+        if(!p->mirror||p->closed||p->opening_count<=0)continue;
+        if(camera_cell>=0&&p->cell_a!=camera_cell&&p->cell_b!=camera_cell)continue;
+        opening=w->world.openings[p->first_opening];
+        R2DWorldWindow projected;
+        if(!r2d_world_portal_window(v,ortho,p,&opening,&projected))continue;
+        if(projected.left>v->width||projected.right<0||projected.top>v->height||projected.bottom<0)continue;
+        portal=i;window=projected;break;
+    }
+    if(portal<0)return false;
+    const float dx=p->bx-p->ax,dy=p->by-p->ay,len=sqrtf(dx*dx+dy*dy);
+    if(!(len>1e-6f))return false;
+    const float ux=dx/len,uy=dy/len;
+    const float relx=v->x-p->ax,rely=v->y-p->ay,along=relx*ux+rely*uy;
+    const float px=p->ax+ux*along,py=p->ay+uy*along;
+    const float rx=2*px-v->x,ry=2*py-v->y;
+    const float dot=v->cos_yaw*ux+v->sin_yaw*uy;
+    const float rux=2*ux*dot-v->cos_yaw,ruy=2*uy*dot-v->sin_yaw;
+    const float yaw=atan2f(ruy,rux);
+    R2DRe2dView rv;
+    r2d_re2d_view_set(&rv,rx,ry,v->eye,yaw,v->pitch,v->fov,v->width,v->height);
+    rv.near_plane=v->near_plane;rv.fog_far=v->fog_far;rv.fog_min=v->fog_min;
+    // The reflected camera may need to see through the mirror portal itself,
+    // while the main view must not: temporarily clear the flag for this pass.
+    w->world.portals[portal].mirror=false;
+    bool vis_ok=r2d_world_visibility(&w->world,&rv,ortho,&g->mirror_visibility);
+    w->world.portals[portal].mirror=true;
+    if(!vis_ok)return false;
+    int left=(int)fmaxf(0,floorf(window.left*w->width/v->width)),top=(int)fmaxf(0,floorf(window.top*w->height/v->height));
+    int right=(int)fminf(w->width,ceilf(window.right*w->width/v->width)),bottom=(int)fminf(w->height,ceilf(window.bottom*w->height/v->height));
+    if(right<=left||bottom<=top)return false;
+    SDL_Rect scissor={left,top,right-left,bottom-top};
+    R2DWorldVisibility saved=w->visibility;w->visibility=g->mirror_visibility;
+    SDL_SetGPUScissor(pass,&scissor);
+    SDL_BindGPUGraphicsPipeline(pass,g->mirror);
+    sky_draw(w,g,cmd,pass,&rv,ortho);
+    for(int j=0;j<w->visibility.surface_count;j++){int id=w->visibility.surfaces[j];if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT)continue;surface_draw(w,g,cmd,pass,&rv,ortho,id);}
+    for(int i=0;i<w->frame_count;i++)if(w->frame_images[i]){
+        SDL_BindGPUGraphicsPipeline(pass,g->mirror);
+        actor_draw(w,g,cmd,pass,&rv,ortho,i,-1,false);
+        for(int j=0;j<w->visibility.span_count;j++){int span=w->visibility.spans[j];const R2DWorldSpan *sp=&w->world.spans[span];const float *pos=w->frame_positions+i*5;
+            if(pos[0]+pos[3]<sp->x||pos[0]-pos[3]>sp->x+sp->w||pos[1]+pos[3]<sp->y||pos[1]-pos[3]>sp->y+sp->h)continue;actor_draw(w,g,cmd,pass,&rv,ortho,i,span,true);}
+    }
+    w->visibility=saved;
+    return true;
+}
+
 bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,float ortho)
 {
     if(!init(w))return false;WorldGPU *g=w->gpu;SDL_GPUDevice *d=w->renderer->device;
@@ -339,16 +409,10 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
     SDL_GPUDepthStencilTargetInfo depth={0};depth.texture=g->depth;depth.load_op=SDL_GPU_LOADOP_CLEAR;depth.store_op=SDL_GPU_STOREOP_DONT_CARE;depth.clear_depth=1;
     SDL_GPURenderPass *pass=SDL_BeginGPURenderPass(cmd,colors,2,&depth);if(!pass){SDL_CancelGPUCommandBuffer(cmd);return false;}
     SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:g->pipeline);SDL_BindGPUFragmentStorageBuffers(pass,0,&g->shadows,1);g->draws=0;w->gpu_material_batches=0;memset(g->bound_textures,0,sizeof g->bound_textures);
-    if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&(w->world.sky.pixels||w->world.sky_color)){
-        SurfaceUniform sky={0};sky.basis[0]=v->cos_yaw;sky.basis[1]=v->sin_yaw;sky.basis[2]=v->cos_pitch;sky.basis[3]=v->sin_pitch;
-        sky.screen[0]=w->width;sky.screen[1]=w->height;sky.screen[2]=v->focal*w->height/v->height;sky.screen[3]=ortho;sky.plane[3]=3;
-        sky.material[0]=w->world.sky_yaw;sky.identity[3]=w->world.sky.pixels?1:0;uint32_t tint=w->world.sky_color?w->world.sky_color:0xffffffff;
-        for(int c=0;c<4;c++)sky.tint[c]=((tint>>(c*8))&255)/255.0f;
-        SDL_GPUTexture *texture=r2d_texture_handle(w->renderer,g->sky_texture>=0?g->sky_texture:g->white);
-        SDL_GPUTextureSamplerBinding samplers[3]={{texture,g->sky_sampler},{texture,g->sampler},{texture,g->sampler}};
-        material_bind(w,g,pass,samplers);SDL_PushGPUFragmentUniformData(cmd,0,&sky,sizeof sky);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;
-    }
+    if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&(w->world.sky.pixels||w->world.sky_color))sky_draw(w,g,cmd,pass,v,ortho);
     for(int j=0;j<w->visibility.surface_count;j++){int id=w->visibility.surfaces[j];if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)continue;surface_draw(w,g,cmd,pass,v,ortho,id);}
+    if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)mirror_draw(w,g,cmd,pass,v,ortho);
+    SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:g->pipeline);
     SDL_Rect full={0,0,w->width,w->height};SDL_SetGPUScissor(pass,&full);
     for(int i=0;i<w->frame_count;i++)if(w->frame_images[i]){
         int blend=(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS||w->frame_kinds[i]==R2D_WORLD_FRAME_PARTICLE)?w->frame_blends[i]:0;

@@ -56,6 +56,7 @@ typedef struct {
     float open_fraction;      // 0..1 smooth portal state
     bool closed;              // binary collision/visibility view
     bool sky;                 // P2 sky portal flag
+    bool mirror;              // P2 mirror portal flag
     char id[R2D_WORLD_SAVE_ID_CAP]; // authored semantic id, may be empty
 } R2DWorldSavedPortal;
 

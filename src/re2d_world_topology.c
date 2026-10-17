@@ -260,6 +260,18 @@ bool r2d_world_portal_sky(const R2DRe2dWorld *w,int i)
     if(!w||i<0||i>=w->portal_count)return false;
     return w->portals[i].sky;
 }
+bool r2d_world_portal_set_mirror(R2DRe2dWorld *w,int i,bool mirror)
+{
+    if(!w||i<0||i>=w->portal_count)return false;
+    if(w->portals[i].mirror==mirror)return true;
+    w->portals[i].mirror=mirror;w->geometry_revision++;
+    return true;
+}
+bool r2d_world_portal_mirror(const R2DRe2dWorld *w,int i)
+{
+    if(!w||i<0||i>=w->portal_count)return false;
+    return w->portals[i].mirror;
+}
 bool r2d_world_portal_set_closed(R2DRe2dWorld *w,int i,bool closed)
 { if(!w||i<0||i>=w->portal_count)return false;if(w->portals[i].closed!=closed||w->portals[i].open_fraction!=(closed?0.0f:1.0f)){
     R2DWorldPortal *p=&w->portals[i];p->closed=closed;p->open_fraction=closed?0.0f:1.0f;w->geometry_revision++;

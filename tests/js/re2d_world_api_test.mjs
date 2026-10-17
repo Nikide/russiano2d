@@ -90,6 +90,8 @@ const native = {
     audioZoneAt: (x, y, h) => ({ preset: 1, name: 'hall', span: 2 }),
     audioBudget: (n) => n,
     audioState: () => ({ ready: true, active: 3, virtual: 2, budget: 8 }),
+    portalMirror: (i, on) => calls.material.push(['mirror', i, on]),
+    portalMirrorGet: () => true,
     polywallAdd: (walls, x, y, angle, speed) => { calls.polywall.push(['add', Array.from(walls), x, y, angle, speed]); return 7; },
     polywallInfo: (token) => ({ angle: 0.5, speed: 1.5 }),
     polywallSpeed: (token, speed) => calls.polywall.push(['speed', token, speed]),
@@ -501,7 +503,7 @@ test('world.volume box: четыре constrained parts без mesh API', () => {
 test('$.capabilities.re2d — честная матрица возможностей', () => {
     const caps = $.capabilities.re2d;
     truthy(caps && caps.worldGpu === true && caps.worldCpu === true);
-    eq(caps.mirrorPortal, false);
+    eq(caps.mirrorPortal, true);
     eq(caps.skyPortal, true);
     eq(caps.maxLights, 128);
     eq(caps.maxWorldSprites, 4096);

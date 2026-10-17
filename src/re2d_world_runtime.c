@@ -1014,7 +1014,7 @@ bool r2d_world_state_capture(R2DWorldRuntime *w,R2DWorldSaveState *out)
         copy_id(out->spans[i].id,r2d_world_span_id(&w->world,i));
     }
     for(int i=0;i<portals;i++){
-        out->portals[i].portal=i;out->portals[i].open_fraction=w->world.portals[i].open_fraction;out->portals[i].sky=w->world.portals[i].sky;
+        out->portals[i].portal=i;out->portals[i].open_fraction=w->world.portals[i].open_fraction;out->portals[i].sky=w->world.portals[i].sky;out->portals[i].mirror=w->world.portals[i].mirror;
         out->portals[i].closed=w->world.portals[i].closed;copy_id(out->portals[i].id,r2d_world_portal_id(&w->world,i));
     }
     int mi=0;
@@ -1058,7 +1058,7 @@ bool r2d_world_state_apply(R2DWorldRuntime *w,const R2DWorldSaveState *in)
         if(p->portal<0||p->portal>=w->world.portal_count||!isfinite(p->open_fraction))return false;
     }
     for(int i=0;i<in->span_count;i++)r2d_world_span_set_heights(&w->world,in->spans[i].span,in->spans[i].bottom,in->spans[i].top);
-    for(int i=0;i<in->portal_count;i++){r2d_world_portal_set_open(&w->world,in->portals[i].portal,in->portals[i].open_fraction);r2d_world_portal_set_sky(&w->world,in->portals[i].portal,in->portals[i].sky);}
+    for(int i=0;i<in->portal_count;i++){r2d_world_portal_set_open(&w->world,in->portals[i].portal,in->portals[i].open_fraction);r2d_world_portal_set_sky(&w->world,in->portals[i].portal,in->portals[i].sky);r2d_world_portal_set_mirror(&w->world,in->portals[i].portal,in->portals[i].mirror);}
     int mi=0;
     for(int i=0;i<w->mover_count;i++){
         R2DWorldMoverEntry *e=&w->movers[i];if(!e->active)continue;

@@ -16,8 +16,16 @@ export default function install($) {
     let hud = null;
     let view = { ...VIEW };
 
+    function setMirror(on) {
+        if (!world) return null;
+        if (on) world.portalSky(0, false);
+        world.portalMirror(0, on);
+        return { on: !!on, mirror: world.portalMirrorGet(0) };
+    }
+
     function setSky(on) {
         if (!world) return null;
+        if (on) world.portalMirror(0, false);
         world.portalSky(0, on);
         world.sky({ color: '#ff00cc' });
         return { on: !!on, sky: world.portalSkyGet(0) };
@@ -26,10 +34,10 @@ export default function install($) {
     $.agent.expose('re2dSkyLab', () => {
         if (!world) return {};
         const info = world.info();
-        return { sky: world.portalSkyGet(0), cells: info.cells, portals: info.portals,
+        return { sky: world.portalSkyGet(0), mirror: world.portalMirrorGet(0), cells: info.cells, portals: info.portals,
                  surfaces: info.visibleSurfaces, backend: info.backend };
     });
-    globalThis.re2dSky = { set: setSky };
+    globalThis.re2dSky = { set: setSky, mirror: setMirror };
 
     $.render(() => {
         if (!world) return;

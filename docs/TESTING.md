@@ -542,6 +542,13 @@ overlay from `world.debug.draw` даёт 9 automap-линий и 2 semantic то
 меняет кадр (сотни пикселей), выключается и детерминированно возвращается
 (0 отличий при повторном включении).
 
+## Re2D mirror portal (P2)
+
+`tests/agent/re2d_mirror_portal_test.py` включает `re2dSky.mirror(true)` на
+authored portal: native flag + отдельный reflected pass меняют кадр (~92k px),
+выключение возвращает исходный вид (0 px). Это проверка реального render-прохода,
+а не только API.
+
 ## Re2D sky portal (P2)
 
 `tests/agent/re2d_sky_portal_test.py` открывает `demos/re2d_sky_lab`: authored

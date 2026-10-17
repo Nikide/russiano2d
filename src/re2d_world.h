@@ -22,6 +22,9 @@ typedef struct {
     // P2 sky portal: visibility treats it as a window to the panorama sky; no
     // traversal into the far cell, so the opening shows the sky background.
     bool sky;
+    // P2 mirror portal: no traversal into the far cell; a scissored reflected
+    // world pass fills the portal window.
+    bool mirror;
 } R2DWorldPortal;
 enum { R2D_WORLD_WALL, R2D_WORLD_FLOOR, R2D_WORLD_CEILING };
 typedef struct { int kind,primitive,cell,span; } R2DWorldSurface;
@@ -175,6 +178,8 @@ bool r2d_world_portal_set_closed(R2DRe2dWorld *,int,bool);
 bool r2d_world_portal_set_open(R2DRe2dWorld *,int,float);
 bool r2d_world_portal_set_sky(R2DRe2dWorld *,int,bool);
 bool r2d_world_portal_sky(const R2DRe2dWorld *,int);
+bool r2d_world_portal_set_mirror(R2DRe2dWorld *,int,bool);
+bool r2d_world_portal_mirror(const R2DRe2dWorld *,int);
 float r2d_world_portal_open_fraction(const R2DRe2dWorld *,int);
 bool r2d_world_opening_between(const R2DWorldSpan *,const R2DWorldSpan *,const R2DWorldPortal *,const R2DWorldOpening *,R2DWorldOpening *);
 bool r2d_world_span_set_heights(R2DRe2dWorld *,int,float,float);

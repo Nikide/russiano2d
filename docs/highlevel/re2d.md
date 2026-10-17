@@ -47,6 +47,7 @@ $.render(() => world.render(view,400,240));
 | `world.post` | финальный 2D postprocess stack поверх `$.gfx.post` |
 | `world.skyAnim` / `fogZone` / `fogAt` | анимация панорамы и semantic fog zones |
 | `world.portalSky(index,on)` | проём портала как окно в панорамное небо (P2 sky portal) |
+| `world.portalMirror(index,on)` | scissored reflected-world pass в проёме (P2 mirror portal) |
 | `world.debug.overlay(view,opts)` | screen-space данные automap/trigger/secret для debug-оверлея |
 | `world.debug.draw(view,opts)` | рисует overlay через `$.gfx.draw` (линии/точки/hit-zones) |
 | `world.particles.burst/continuous/info/clear` | нативный fixed-pool частиц |
@@ -570,6 +571,24 @@ damping), сбрасывая хвост при выходе из зоны. Бе�
 та же эвристика, что в core-тестах. Portal-aware attenuation core готов
 (`r2d_audio_zone_attenuation`), но в канал пока не подключён: это следующий шаг
 вместе с voice virtualization runtime.
+
+## Mirror portal (P2)
+
+```js
+world.portalMirror(0, true);    // проём = зеркало
+world.portalMirrorGet(0);       // true
+```
+
+Mirror — это scissored проход отражённого мира: камера отражается across
+плоскость портала (позиция и yaw), для отражённого вида считается отдельная
+visibility, и сцена рисуется в экранный прямоугольник портала с выключенным
+depth; затем обычные actor/decal проходы продолжают кадр. Для прохода флаг
+mirror временно снимается, чтобы отражённая камера видела комнату за
+плоскостью. Отдельный offscreen RT не нужен; цвет/освещение считаются тем же
+шейдером. Ограничения: окно — AABB прямоугольник (не трапеция), отражение не
+включает decals/translucent-слой и не рекурсивно для mirror-в-mirror; это
+задокументированная аппроксимация 2.5D, а не G-buffer.
+`$.capabilities.re2d.mirrorPortal === true`; флаг входит в save/load.
 
 ## Sky portal (P2)
 

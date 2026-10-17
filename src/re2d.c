@@ -474,6 +474,17 @@ static JSValue world_portal_sky(JSContext *ctx,JSValueConst self,int argc,JSValu
     if(!r2d_world_portal_set_sky(&w->world,(int)p[0],p[1]!=0.0f))return JS_ThrowRangeError(ctx,"Re2D World: invalid portal");
     return JS_UNDEFINED;
 }
+static JSValue world_portal_mirror(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[2];if(!w||!world_numbers(ctx,argc,argv,2,p))return JS_EXCEPTION;
+    if(!r2d_world_portal_set_mirror(&w->world,(int)p[0],p[1]!=0.0f))return JS_ThrowRangeError(ctx,"Re2D World: invalid portal");
+    return JS_UNDEFINED;
+}
+static JSValue world_portal_mirror_get(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    return JS_NewBool(ctx,r2d_world_portal_mirror(&w->world,(int)p[0]));
+}
 static JSValue world_portal_sky_get(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
@@ -1558,6 +1569,8 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"spanAt",JS_NewCFunction(ctx,world_span_query,"spanAt",3));
     JS_SetPropertyStr(ctx,handle,"surface",JS_NewCFunction(ctx,world_surface_query,"surface",1));
     JS_SetPropertyStr(ctx,handle,"portalClosed",JS_NewCFunction(ctx,world_portal_closed,"portalClosed",2));
+    JS_SetPropertyStr(ctx,handle,"portalMirror",JS_NewCFunction(ctx,world_portal_mirror,"portalMirror",2));
+    JS_SetPropertyStr(ctx,handle,"portalMirrorGet",JS_NewCFunction(ctx,world_portal_mirror_get,"portalMirrorGet",1));
     JS_SetPropertyStr(ctx,handle,"portalSky",JS_NewCFunction(ctx,world_portal_sky,"portalSky",2));
     JS_SetPropertyStr(ctx,handle,"portalSkyGet",JS_NewCFunction(ctx,world_portal_sky_get,"portalSkyGet",1));
     JS_SetPropertyStr(ctx,handle,"portalOpen",JS_NewCFunction(ctx,world_portal_open,"portalOpen",2));
