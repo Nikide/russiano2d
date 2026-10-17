@@ -30,9 +30,15 @@ const ROOM = {
 };
 // yaw камеры — ГРАДУСЫ (как в re2d_world: -90 = смотреть на север, -y).
 const SPAWN = { x: 800, y: 1080, yaw: -90 };
-const ENEMY_ART = 'demos/re2d_testroom/assets/enemy_catgirl.png';
-const ENEMY_SIZE = { w: 120, h: 237 };       // 892×1763, сохранён пропорция
+// Лист врага: 5 направлений × 8 состояний, ячейка 198×198.
+// 0..3 — ходьба (4 кадра), 4 — прицел/присед, 5 — выстрел, 6 — падение,
+// 7 — труп. В тестовой комнате боя нет: играем только ходьбу 0..3, остальные
+// состояния — задел под будущий бой (это видно по листу, но не включается).
+const ENEMY_ART = 'demos/re2d_testroom/assets/enemy_sheet.png';
+const ENEMY_SHEET = { cols: 5, rows: 8, cw: 198, ch: 198 };
+const ENEMY_SIZE = { w: 180, h: 180 };       // персонаж ≈170 мировых единиц
 const ENEMY_BODY = 44;
+const ENEMY_WALK_FPS = 7.5;
 
 // Патрульные маршруты. Точки выбраны в открытых местах, чтобы кинематический
 // враг не проходил сквозь внутренние стены (у kinematic нет solver-а).
@@ -106,6 +112,8 @@ export default function install($) {
                 return n ? {
                     id: e.cfg.id, mode: e.mode,
                     seen: hero ? canSee(hero, n) : false,
+                    facing: Math.round(e.facing),
+                    frame: e.frame, row: e.row, col: e.col, flip: e.flip,
                     x: Math.round(n.x * 10) / 10, y: Math.round(n.y * 10) / 10,
                     distance: hero ? Math.round(Math.hypot(hero.x - n.x, hero.y - n.y)) : null,
                 } : { id: e.cfg.id, x: null, y: null };
@@ -141,14 +149,20 @@ export default function install($) {
             enemies.length = 0;
             for (const cfg of ENEMIES) {
                 const node = $('<enemy>', { id: cfg.id })
-                    .sprite(ENEMY_ART)
+                    .frames({ src: ENEMY_ART, cols: ENEMY_SHEET.cols,
+                              rows: ENEMY_SHEET.rows, cw: ENEMY_SHEET.cw,
+                              ch: ENEMY_SHEET.ch })
                     .at(cfg.path[0][0], cfg.path[0][1])
                     .size(ENEMY_SIZE.w, ENEMY_SIZE.h)
                     .collision(ENEMY_BODY, ENEMY_BODY)
                     .body('kinematic')
                     .kind(Re2D)
                     .appendTo($.world);
-                enemies.push({ cfg, node, at: 0, dwell: 0, mode: 'patrol' });
+                const facing = Math.atan2(cfg.path[1][1] - cfg.path[0][1],
+                                          cfg.path[1][0] - cfg.path[0][0]) * 180 / Math.PI;
+                enemies.push({ cfg, node, at: 0, dwell: 0, mode: 'patrol',
+                               facing, walk_t: 0, row: 0, col: 0,
+                               flip: false, frame: -1 });
             }
 
             hud_nodes = [];
@@ -184,29 +198,62 @@ export default function install($) {
                 const n = e.node.get(0);
                 if (!n) continue;
                 const distance = Math.hypot(hero.x - n.x, hero.y - n.y);
+                let moving = false;
+                let dir_x = 0;
+                let dir_y = 0;
 
                 if (distance < NOTICE && distance > STOP_AT && canSee(hero, n)) {
                     e.mode = 'notice';
                     // Враг идёт к игроку, но не атакует: оружия в комнате нет.
+                    dir_x = hero.x - n.x;
+                    dir_y = hero.y - n.y;
                     const k = Math.min(1, (e.cfg.speed / distance) * (step_ms / 1000) * 1.15);
-                    e.node.at(n.x + (hero.x - n.x) * k, n.y + (hero.y - n.y) * k);
-                    continue;
+                    e.node.at(n.x + dir_x * k, n.y + dir_y * k);
+                    moving = true;
+                } else if (distance <= STOP_AT) {
+                    e.mode = 'idle';
+                } else {
+                    e.mode = 'patrol';
+                    if (e.dwell > 0) e.dwell -= step_ms;
+                    else {
+                        const target = e.cfg.path[e.at];
+                        const dx = target[0] - n.x;
+                        const dy = target[1] - n.y;
+                        const len = Math.hypot(dx, dy);
+                        if (len < 4) {
+                            e.at = (e.at + 1) % e.cfg.path.length;
+                            e.dwell = 500;
+                        } else {
+                            const v = (e.cfg.speed / 1000) * step_ms;
+                            dir_x = dx;
+                            dir_y = dy;
+                            e.node.at(n.x + dx / len * v, n.y + dy / len * v);
+                            moving = true;
+                        }
+                    }
                 }
-                if (distance <= STOP_AT) { e.mode = 'idle'; continue; }
 
-                e.mode = 'patrol';
-                if (e.dwell > 0) { e.dwell -= step_ms; continue; }
-                const target = e.cfg.path[e.at];
-                const dx = target[0] - n.x;
-                const dy = target[1] - n.y;
-                const len = Math.hypot(dx, dy);
-                if (len < 4) {
-                    e.at = (e.at + 1) % e.cfg.path.length;
-                    e.dwell = 500;
-                    continue;
+                // Ходьба: 4 кадра-строки листа (0..3), 7.5 кадров/с. В покое — row 0.
+                if (moving) {
+                    e.facing = Math.atan2(dir_y, dir_x) * 180 / Math.PI;
+                    e.walk_t += step_ms;
+                } else {
+                    e.walk_t = 0;
                 }
-                const v = (e.cfg.speed / 1000) * step_ms;
-                e.node.at(n.x + dx / len * v, n.y + dy / len * v);
+                // Поворот к камере: 5 направлений листа (0 — лицом, 4 — спиной)
+                // + зеркало для второй стороны. Билборд всегда смотрит в камеру,
+                // поэтому «поворот» — это выбор колонки листа, как в Doom.
+                const cam = $.camera.info();
+                const rel = ((e.facing - cam.yaw + 540) % 360) - 180;
+                const col = Math.max(0, Math.min(4, Math.round((180 - Math.abs(rel)) / 45)));
+                const flip = rel < 0;
+                const row = moving
+                    ? Math.floor(e.walk_t * ENEMY_WALK_FPS / 1000) % 4 : 0;
+                const frame = row * ENEMY_SHEET.cols + col;
+                if (e.frame !== frame) { e.node.frame(frame); e.frame = frame; }
+                if (e.flip !== flip) { e.node.flip(flip); e.flip = flip; }
+                e.row = row;
+                e.col = col;
             }
 
             if (labels) {

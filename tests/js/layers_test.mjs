@@ -185,7 +185,7 @@ test('вложенный слой сохраняет свой порядок, е
 
 // --- Параллакс на узле -------------------------------------------------------
 
-test('parallaxOffset применяется через $.layers.parallax и tickLayers', () => {
+test('параллакс — смещение отрисовки, позиция игры не меняется (I1)', () => {
     $.camera.at(0, 0);
     const node = makeNode('rect', { x: 0, y: 0 });
     $.layers.parallax(node, 0.5);
@@ -193,13 +193,17 @@ test('parallaxOffset применяется через $.layers.parallax и tick
 
     tickLayers(1 / 60);
     near(node.x, 0, 1e-6);
+    near(node.draw_off_x, 0, 1e-6);
 
     $.camera.at(100, 0);
     tickLayers(1 / 60);
-    near(node.x, 50, 1e-6);            // 0 + 100 * (1 - 0.5)
+    near(node.x, 0, 1e-6);             // позиция игры — не трогаем
+    near(node.draw_off_x, 50, 1e-6);   // 100 * (1 - 0.5) — в отрисовку
     $.camera.at(200, 0);
     tickLayers(1 / 60);
-    near(node.x, 100, 1e-6);
+    near(node.x, 0, 1e-6);
+    near(node.draw_off_x, 100, 1e-6);
+    near($.layers.offset(node).x, 100, 1e-6);
 });
 
 test('метод узла .parallax(f) ставит и читает коэффициент', () => {
@@ -212,7 +216,7 @@ test('метод узла .parallax(f) ставит и читает коэффи
     eq(w.parallax(), null);
 });
 
-test('якорь перезакрепляется после ручного сдвига узла', () => {
+test('якорь камеры перезакрепляется после ручного сдвига узла', () => {
     $.camera.at(0, 0);
     const node = makeNode('rect', { x: 0, y: 0 });
     wrapOne(node).parallax(0.5);
@@ -220,19 +224,21 @@ test('якорь перезакрепляется после ручного сд
 
     $.camera.at(100, 0);
     tickLayers(1 / 60);
-    near(node.x, 50, 1e-6);
+    near(node.draw_off_x, 50, 1e-6);
 
-    // Игра сама двигает узел: якорь должен перезакрепиться за позицией 10.
+    // Игра сама двигает узел: cam_ref переезжает, смещение начинается с нуля.
     node.x = 10;
     tickLayers(1 / 60);
     near(node.x, 10, 1e-6);
+    near(node.draw_off_x, 0, 1e-6);
 
     $.camera.at(200, 0);
     tickLayers(1 / 60);
-    near(node.x, 60, 1e-6);            // -40 + 200 * 0.5
+    near(node.x, 10, 1e-6);            // позицию игры никто не двигал
+    near(node.draw_off_x, 50, 1e-6);   // (200 − 100) * 0.5
 });
 
-test('f=1 не двигает узел, f=0 ведёт его за камерой один в один', () => {
+test('f=1 не двигает отрисовку, f=0 ведёт её за камерой один в один', () => {
     $.camera.at(0, 0);
     const world = makeNode('rect', { x: 30, y: 0 });
     const pinned = makeNode('rect', { x: 0, y: 0 });
@@ -242,8 +248,10 @@ test('f=1 не двигает узел, f=0 ведёт его за камеро�
     $.camera.at(120, 50);
     tickLayers(1 / 60);
     near(world.x, 30, 1e-6);
-    near(pinned.x, 120, 1e-6);         // 0 + cam.x
-    near(pinned.y, 50, 1e-6);
+    near(world.draw_off_x, 0, 1e-6);
+    near(pinned.x, 0, 1e-6);           // позиция игры стоит
+    near(pinned.draw_off_x, 120, 1e-6); // 0 + cam.x — в отрисовку
+    near(pinned.draw_off_y, 50, 1e-6);
 });
 
 test('параллакс слоя раздаётся потомкам, у которых своего нет', () => {
@@ -260,8 +268,10 @@ test('параллакс слоя раздаётся потомкам, у кот
 
     $.camera.at(100, 0);
     tickLayers(1 / 60);
-    near(child.x, 50, 1e-6);           // унаследовал 0.5
-    near(own.x, 0, 1e-6);              // свой f=1 — стоит на месте
+    near(child.draw_off_x, 50, 1e-6);  // унаследовал 0.5 (смещение отрисовки)
+    near(child.x, 0, 1e-6);
+    near(own.draw_off_x, 0, 1e-6);     // свой f=1 — стоит на месте
+    near(own.x, 0, 1e-6);
     $.layers.clear();
 });
 

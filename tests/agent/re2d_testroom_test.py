@@ -150,6 +150,46 @@ def main():
               f"distance {d0} → {d1}, режим {mode_near}")
         check(st_near["weapons"] == 0, "у врага и игрока по-прежнему нет оружия")
 
+        # --- Лист врага: 5 направлений × 8 состояний, ходьба и поворот ------
+        frames = a.eval("$('#cat-nw').get(0).frames.length")
+        check(frames == 40,
+              f"у врага лист 5×8 = 40 кадров (не маскот): {frames}")
+        seen_frames = set()
+        seen_rows = set()
+        for _ in range(12):
+            a.step(4)
+            for e in state(a)["enemies"]:
+                seen_frames.add(e.get("frame"))
+                seen_rows.add(e.get("row"))
+        check(len(seen_frames) >= 3 and seen_rows <= {0, 1, 2, 3},
+              f"ходьба анимирована кадрами 0..3: кадры {sorted(seen_frames)}, строки {sorted(seen_rows)}")
+
+        def enemy(eid):
+            return next(e for e in state(a)["enemies"] if e["id"] == eid)
+
+        # Поворот: колонка выбирается по углу врага к камере (как в Doom),
+        # а вторая сторона — зеркалом. Берём cat-nw и крутим камеру вокруг него.
+        facing = enemy("cat-nw")["facing"]
+        def set_yaw(deg):
+            a.eval("$.camera.yaw(%s)" % (deg % 360))
+            a.step(2)
+        set_yaw(facing + 90)                # смотрим сбоку: rel=-90
+        side = enemy("cat-nw")
+        check(side["flip"] is True and side["col"] == 2,
+              f"кадр сбоку + зеркало: col={side['col']}, flip={side['flip']}")
+        set_yaw(facing - 90)                # другой бок: rel=+90
+        side2 = enemy("cat-nw")
+        check(side2["flip"] is False and side2["col"] == 2,
+              f"другой бок без зеркала: col={side2['col']}, flip={side2['flip']}")
+        set_yaw(facing + 180)               # лицом к камере: col 0
+        front = enemy("cat-nw")
+        check(front["col"] == 0,
+              f"лицом к камере — колонка 0: col={front['col']}")
+        set_yaw(facing)                     # спиной: col 4
+        back = enemy("cat-nw")
+        check(back["col"] == 4,
+              f"спиной — колонка 4: col={back['col']}")
+
         # --- Билборд виден по арту: изолируем один враг ---------------------
         os.makedirs(SHOTS, exist_ok=True)
         others = "['cat-ne','cat-mid','cat-w','cat-e','cat-se']"
