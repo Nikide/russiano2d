@@ -38,6 +38,8 @@ const MODULES = [
     './re2d_boomer_lab/index.js',
     // P4 benchmark lab: switchable scenarios и честные native-числа.
     './re2d_bench_lab/index.js',
+    // P2 sky-portal lab: окно в панораму через authored portal.
+    './re2d_sky_lab/index.js',
     // Эталонное меню настроек: четыре вкладки, всё на лету, сохранение в
     // settings.json (docs/tutorial-settings.md).
     './settings/index.js',

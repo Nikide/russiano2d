@@ -106,7 +106,8 @@
 | benchmark lab + baseline numbers | done (`docs/RE2D_WORLD_PERF.md`) |
 | debug overlay data | done (`world.debug.overlay`) |
 | determinism audit | done (`re2d_determinism_test.py`) |
-| mirror/sky portal render pass | pending (math core готов) |
+| sky portal | done: visibility window + `world.portalSky`, agent pixel test |
+| mirror portal render pass | pending (math core готов) |
 | rotating polywalls runtime | pending (math core готов) |
 | polygon cells compiler tiling | pending (authoring core готов) |
 

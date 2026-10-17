@@ -55,6 +55,7 @@ typedef struct {
     int portal;               // runtime portal handle inside this snapshot
     float open_fraction;      // 0..1 smooth portal state
     bool closed;              // binary collision/visibility view
+    bool sky;                 // P2 sky portal flag
     char id[R2D_WORLD_SAVE_ID_CAP]; // authored semantic id, may be empty
 } R2DWorldSavedPortal;
 

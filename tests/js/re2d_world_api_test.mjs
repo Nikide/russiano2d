@@ -495,7 +495,7 @@ test('$.capabilities.re2d — честная матрица возможност
     const caps = $.capabilities.re2d;
     truthy(caps && caps.worldGpu === true && caps.worldCpu === true);
     eq(caps.mirrorPortal, false);
-    eq(caps.skyPortal, false);
+    eq(caps.skyPortal, true);
     eq(caps.maxLights, 128);
     eq(caps.maxWorldSprites, 4096);
     truthy(caps.particles === true && caps.nav === true && caps.saveState === true && caps.polygonCells === true);

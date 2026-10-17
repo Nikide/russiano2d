@@ -104,7 +104,7 @@ bool r2d_world_visibility(const R2DRe2dWorld *w,const R2DRe2dView *v,float ortho
             int span=f->queue[head++];head%=w->span_count;pending--;f->queued[span]=0;
             int cell=w->span_cells[span];const R2DWorldSpan *from=&w->spans[span];
             for(int pi=w->cell_portal_offsets[cell];pi<w->cell_portal_offsets[cell+1];pi++) {
-                int i=w->cell_portal_refs[pi];const R2DWorldPortal *p=&w->portals[i];if(p->closed||(p->cell_a!=cell&&p->cell_b!=cell))continue;
+                int i=w->cell_portal_refs[pi];const R2DWorldPortal *p=&w->portals[i];if(p->closed||p->sky||(p->cell_a!=cell&&p->cell_b!=cell))continue;
                 f->portals_tested++;int other=p->cell_a==cell?p->cell_b:p->cell_a;const R2DWorldCell *to=&w->cells[other];
                 for(int j=0;j<p->opening_count;j++) {
                     const R2DWorldOpening *o=&w->openings[p->first_opening+j];

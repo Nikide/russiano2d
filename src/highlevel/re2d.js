@@ -519,6 +519,9 @@ function worldWrapper($, native) {
                     return this;
                 },
                 portalClosed(index, closed) { native.portalClosed(index, closed); return this; },
+                // P2 sky portal: opening becomes a window to the panorama sky.
+                portalSky(index, on = true) { native.portalSky(index, on ? 1 : 0); return this; },
+                portalSkyGet(index) { return native.portalSkyGet(index); },
                 // Portal 2.0: smooth 0..1 state; `portalClosed` remains the binary view.
                 portalOpen(index, fraction) { native.portalOpen(index, fraction); return this; },
                 portalFraction(index) { return native.portalFraction(index); },
@@ -1316,7 +1319,7 @@ export function installRe2d($) {
     $.capabilities.re2d = Object.freeze({
         worldGpu: true, worldCpu: true,
         hrtf: !!(hrtf && hrtf.on),
-        mirrorPortal: false, skyPortal: false, volumetricSprite: true,
+        mirrorPortal: false, skyPortal: true, volumetricSprite: true,
         particles: true, nav: true, automap: true, saveState: true, polygonCells: true, audioZones: true,
         maxLights: 128, maxDecals: 128, maxWorldSprites: 4096,
         maxPortalRecursion: 4, maxParticles: 2048,

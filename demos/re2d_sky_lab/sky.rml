@@ -1,0 +1,1 @@
+<rml><head><title>Re2D sky portal</title><link type="text/rcss" href="sky.rcss" /></head><body><div id="panel"><div id="status"></div><div id="keys">re2dSky.set(true|false) · Esc: exit</div></div></body></rml>

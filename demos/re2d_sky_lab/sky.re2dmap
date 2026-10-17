@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "name": "Sky portal lab",
+  "cells": [
+    { "id": "roomA", "rect": [0, 0, 300, 300],
+      "spans": [{ "bottom": 0, "top": 200, "floorColor": "#3a4f8f", "ceilingColor": "#7a7f8a",
+                  "lighting": { "level": 0.9, "color": "#ffffff" } }] },
+    { "id": "roomB", "rect": [300, 0, 300, 300],
+      "spans": [{ "bottom": 0, "top": 200, "floorColor": "#2fbf4f", "ceilingColor": "#8a8f7a",
+                  "lighting": { "level": 0.9, "color": "#ffffff" } }] }
+  ],
+  "walls": [
+    { "id": "a_left",   "from": [0, 0],   "to": [0, 300],   "bottom": 0, "top": 200, "color": "#b8a27a" },
+    { "id": "a_bottom", "from": [0, 0],   "to": [300, 0],   "bottom": 0, "top": 200, "color": "#b8a27a" },
+    { "id": "a_top",    "from": [0, 300], "to": [300, 300], "bottom": 0, "top": 200, "color": "#b8a27a" },
+    { "id": "b_right",  "from": [600, 0], "to": [600, 300], "bottom": 0, "top": 200, "color": "#b8a27a" },
+    { "id": "b_bottom", "from": [300, 0], "to": [600, 0],   "bottom": 0, "top": 200, "color": "#b8a27a" },
+    { "id": "b_top",    "from": [300, 300], "to": [600, 300], "bottom": 0, "top": 200, "color": "#b8a27a" }
+  ],
+  "portals": [
+    { "id": "window", "cellA": "roomA", "cellB": "roomB",
+      "from": [300, 0], "to": [300, 300],
+      "openings": [{ "bottom": 0, "top": 200 }], "door": false }
+  ],
+  "lighting": { "mode": "classic", "dynamic": true, "shadows": false, "distanceScale": 0.001 },
+  "lights": [
+    { "x": 150, "y": 150, "h": 160, "radius": 400, "intensity": 1.6, "color": "#ffffff" },
+    { "x": 450, "y": 150, "h": 160, "radius": 400, "intensity": 1.6, "color": "#ffffff" }
+  ]
+}

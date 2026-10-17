@@ -19,6 +19,9 @@ typedef struct {
     // bottom + fraction*(top-bottom), so doors/lifts can animate continuously
     // while collision, visibility and light use the same clipped interval.
     float open_fraction;
+    // P2 sky portal: visibility treats it as a window to the panorama sky; no
+    // traversal into the far cell, so the opening shows the sky background.
+    bool sky;
 } R2DWorldPortal;
 enum { R2D_WORLD_WALL, R2D_WORLD_FLOOR, R2D_WORLD_CEILING };
 typedef struct { int kind,primitive,cell,span; } R2DWorldSurface;
@@ -170,6 +173,8 @@ bool r2d_world_portal_set_closed(R2DRe2dWorld *,int,bool);
 // Smooth portal state: fraction 0 = closed, 1 = fully open. Non-finite input is
 // rejected; values outside 0..1 are clamped. Returns false on invalid handle.
 bool r2d_world_portal_set_open(R2DRe2dWorld *,int,float);
+bool r2d_world_portal_set_sky(R2DRe2dWorld *,int,bool);
+bool r2d_world_portal_sky(const R2DRe2dWorld *,int);
 float r2d_world_portal_open_fraction(const R2DRe2dWorld *,int);
 bool r2d_world_opening_between(const R2DWorldSpan *,const R2DWorldSpan *,const R2DWorldPortal *,const R2DWorldOpening *,R2DWorldOpening *);
 bool r2d_world_span_set_heights(R2DRe2dWorld *,int,float,float);

@@ -41,6 +41,7 @@ $.render(() => world.render(view,400,240));
 | `$.capabilities.re2d` | честная матрица возможностей сборки/рантайма |
 | `world.post` | финальный 2D postprocess stack поверх `$.gfx.post` |
 | `world.skyAnim` / `fogZone` / `fogAt` | анимация панорамы и semantic fog zones |
+| `world.portalSky(index,on)` | проём портала как окно в панорамное небо (P2 sky portal) |
 | `world.debug.overlay(view,opts)` | screen-space данные automap/trigger/secret для debug-оверлея |
 | `world.particles.burst/continuous/info/clear` | нативный fixed-pool частиц |
 | `world.fxDefine(name,bundle)` / `fxSpawn(name,at)` | asset-driven VFX bundle (particles/light/decal/sound/shake) |
@@ -547,6 +548,21 @@ damping), сбрасывая хвост при выходе из зоны. Бе�
 та же эвристика, что в core-тестах. Portal-aware attenuation core готов
 (`r2d_audio_zone_attenuation`), но в канал пока не подключён: это следующий шаг
 вместе с voice virtualization runtime.
+
+## Sky portal (P2)
+
+```js
+world.portalSky(0, true);      // проём = окно в панораму
+world.portalSkyGet(0);         // true
+```
+
+Sky portal — это тег на authored portal: visibility **не уходит** в дальнюю cell,
+поэтому открытый проём показывает sky background (`world.sky`/`skyAnim`) вместо
+соседней комнаты; закрытый портал по-прежнему перекрыт створкой. Работает на
+той же 2D topology, без mesh и без отдельного G-buffer. Флаг входит в
+`saveState/loadState`; baked-формат его пока не переносит (авор задаёт
+`world.portalSky` после загрузки). `$.capabilities.re2d.skyPortal === true`;
+полноценный mirror-портал (отражённый проход) остаётся `false`.
 
 ## Свет, материал, изменение мира
 

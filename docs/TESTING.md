@@ -528,6 +528,13 @@ python3 tools/bench_api.py --baseline docs/benchmarks/api-performance.json \
 приговор. Быстрые unit checks runner без performance run:
 `python3 tests/bench_api_runner_test.py`.
 
+## Re2D sky portal (P2)
+
+`tests/agent/re2d_sky_portal_test.py` открывает `demos/re2d_sky_lab`: authored
+portal-окно между двумя комнатами, `re2dSky.set(true)` включает sky-режим.
+Тест проверяет флаг в native state и **кадр**: проём даёт десятки тысяч magenta
+пикселей (панорама), выключение возвращает обычный вид (0).
+
 ## Re2D polygon cells (P1)
 
 `tests/agent/re2d_polygon_cells_test.py` компилирует rectilinear L-полигон
