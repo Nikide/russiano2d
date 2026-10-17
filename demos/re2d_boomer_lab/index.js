@@ -174,6 +174,23 @@ export default function install($) {
             player: world.spawn('player.start'), missing: world.spawn('nope'),
         }),
         particlesClear: () => world.particles.clear(),
+        saveProbe: () => {
+            world.particles.clear();
+            if (!mover) mover = world.mover({ type: 'lift', span: 0, from: 0, to: 96,
+                speed: 240, wait: 1, autoReturn: true });
+            mover.open();
+            const save = world.saveState();
+            mover.close();
+            const before = { movers: world.info().movers, triggers: world.info().triggers,
+                spans: save.state.spans.length, portals: save.state.portals.length,
+                sm: save.state.movers.length, st: save.state.triggers.length };
+            let restored = false, error = null;
+            try { restored = world.loadState(save); } catch (e) { error = String(e); }
+            const info = mover.info();
+            return { restored, error, before, hash: save.map.hash, fraction: info.fraction,
+                     phase: info.phase, spans: save.state.spans.length,
+                     portals: save.state.portals.length, movers: save.state.movers.length };
+        },
         fxProbe: () => {
             world.particles.clear();
             if (!world._fxDefined) {

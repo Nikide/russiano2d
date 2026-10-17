@@ -157,7 +157,9 @@ CORE_TESTS = ['json', 'crypto', 'payload', 'reverb', 'audio_fx', 'profile', 'bsp
 #: 3D-авторинг спрайтов: только с R2D_ENABLE_RE2D=ON.
 RE2D_TESTS = ['rotsprite', 're2d', 're2d_world', 're2d_atlas', 'world_trace',
               'world_mover', 'world_trigger', 'world_controller', 're2d_semantic',
-              're2d_portal', 'world_metadata', 'world_automap', 'world_particle', 'world_nav']
+              're2d_portal', 'world_metadata', 'world_automap', 'world_particle', 'world_nav',
+              'world_save', 'world_secret', 'world_terrain', 'world_portal_visual',
+              'world_volume', 'world_material_anim']
 
 check_configuration()
 check_re2d_layer()

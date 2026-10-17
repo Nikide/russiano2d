@@ -492,8 +492,22 @@ function worldWrapper($, native) {
                 lightAt(x,y,h) { return native.lightAt(x,y,h); },
                 surface(index) {
                     const info = native.surface(index);
-                    return info ? { ...info, material(name) { native.surfaceMaterial(index,name); return this; },sky(enabled=true) { native.surfaceSky(index,!!enabled);return this; } } : null;
+                    return info ? { ...info,
+                        material(name) { native.surfaceMaterial(index,name); return this; },
+                        sky(enabled=true) { native.surfaceSky(index,!!enabled);return this; },
+                        // P1 terrain/conveyor gameplay metadata on the surface.
+                        terrain(name) { native.surfaceTerrain(index,name); return this; },
+                        conveyor(options = {}) {
+                            native.surfaceConveyor(index, Number(options.vx ?? 0), Number(options.vy ?? 0),
+                                Number(options.accel ?? 600), options.affectsProjectiles ? 1 : 0);
+                            return this;
+                        },
+                        terrainInfo() { return native.surfaceTerrainInfo(index); },
+                        conveyorInfo() { return native.surfaceConveyorInfo(index); },
+                    } : null;
                 },
+                terrainAt(x, y, h) { return native.terrainAt(x, y, h); },
+                conveyorAt(x, y, h) { return native.conveyorAt(x, y, h); },
                 material(name, options) {
                     native.material(name,options.albedo,options.normal ?? '',options.emissive ?? '',
                         options.emissiveStrength ?? 1,options.uScale ?? (1/64),options.vScale ?? (1/64),({masked:0,opaque:1,translucent:2,additive:3})[options.blend ?? "masked"] ?? -1,options.opacity ?? 1,options.mapping === "world",options.filter === "linear");
@@ -796,6 +810,66 @@ function rendererWorldWrapper($, native) {
         }
         return spawned;
     };
+
+    // P1 save/load: native snapshot + map identity guard. The game owns the
+    // file format wrapper; this API is deterministic and versioned.
+    world.saveMapHash = () => native.saveMapHash();
+    world.saveState = () => {
+        const meta = native.metadata();
+        return { format: 're2d-world-save', version: 1,
+                 map: { id: meta.id ?? null, version: meta.version ?? null, hash: native.saveMapHash() },
+                 state: JSON.parse(native.saveStateJSON()) };
+    };
+    world.loadState = save => {
+        if (!save || save.format !== 're2d-world-save') throw new TypeError('world.loadState: not a re2d-world-save');
+        const hash = native.saveMapHash();
+        if (save.map && save.map.hash && save.map.hash !== hash)
+            throw new RangeError('world.loadState: map hash mismatch (reload rebuilt topology or ids)');
+        return native.loadStateJSON(JSON.stringify(save.state));
+    };
+
+    // P1 secrets/breakables: authored semantic state + \$.emit events.
+    const secretMeta = new Map();
+    const breakableMeta = new Map();
+    world.secret = (options = {}) => {
+        if (typeof options.id !== 'string' || !options.id) throw new TypeError('world.secret: id required');
+        const token = native.secretCreate(options.id, Number(options.x ?? 0), Number(options.y ?? 0),
+            Number(options.radius ?? 32), Number(options.bottom ?? 0), Number(options.top ?? 64),
+            options.once ? 1 : 0);
+        secretMeta.set(token, options.id);
+        return { id: options.id, info() { return native.secretInfo(token); }, remove() { secretMeta.delete(token); native.secretRemove(token); } };
+    };
+    world.secretsTick = (dt, at = {}) => {
+        const fired = [];
+        for (const token of native.secretTick(Number(dt), Number(at.x ?? 0), Number(at.y ?? 0), Number(at.feet ?? at.h ?? 0)) || []) {
+            const id = secretMeta.get(token);
+            if (!id) continue;
+            fired.push(id);
+            $.emit('secret.found', { secret: id });
+        }
+        return fired;
+    };
+    world.onSecret = fn => { $.on('secret.found', event => fn(event.data ?? {}, event)); return world; };
+    world.breakable = (options = {}) => {
+        if (typeof options.id !== 'string' || !options.id) throw new TypeError('world.breakable: id required');
+        const token = native.breakableCreate(options.id, Math.trunc(Number(options.hp ?? 100)),
+            Math.trunc(Number(options.variant ?? 0)), Math.trunc(Number(options.portal ?? -1)),
+            Number(options.x ?? 0), Number(options.y ?? 0), Number(options.radius ?? 24),
+            Number(options.bottom ?? 0), Number(options.top ?? 64));
+        const meta = { id: options.id, portal: Math.trunc(Number(options.portal ?? -1)) };
+        breakableMeta.set(token, meta);
+        return {
+            id: options.id,
+            hit(damage) {
+                const broke = native.breakableDamage(token, Math.trunc(Number(damage)));
+                if (broke === 1) $.emit('breakable.broken', { breakable: meta.id, portal: meta.portal });
+                return broke === 1;
+            },
+            info() { return native.breakableInfo(token); },
+            remove() { breakableMeta.delete(token); native.breakableRemove(token); },
+        };
+    };
+    world.onBreakable = fn => { $.on('breakable.broken', event => fn(event.data ?? {}, event)); return world; };
 
     // P1 automap: native XY lines + 2D transform; drawing stays with the game.
     world.automapLines = states => native.automapLines(states);

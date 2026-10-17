@@ -656,6 +656,160 @@ static bool particle_proto(JSContext *ctx,JSValueConst arr,R2DWorldParticle *p,f
     if(!ok)JS_ThrowRangeError(ctx,"Re2D World: invalid particle prototype");
     return ok;
 }
+static JSValue trigger_tokens(JSContext *ctx,int count,const int *tokens);
+static JSValue world_surface_terrain(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<2||!JS_IsString(argv[1]))return JS_ThrowTypeError(ctx,"Re2D World: surfaceTerrain(index,name)");
+    float index;if(!world_numbers(ctx,1,argv,1,&index))return JS_EXCEPTION;
+    const char *name=JS_ToCString(ctx,argv[1]);if(!name)return JS_EXCEPTION;
+    int kind=-1;bool ok=r2d_world_terrain_from_name(name,&kind);
+    JS_FreeCString(ctx,name);
+    if(!ok)return JS_ThrowRangeError(ctx,"Re2D World: unknown terrain name");
+    if(!r2d_world_set_surface_terrain(w,(int)index,kind))return JS_ThrowRangeError(ctx,"Re2D World: invalid surface");
+    return JS_NewInt32(ctx,kind);
+}
+static JSValue world_surface_terrain_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    int kind=r2d_world_surface_terrain_kind(w,(int)p[0]);
+    if(kind<0)return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"kind",kind);
+    JS_SetPropertyStr(ctx,o,"name",JS_NewString(ctx,r2d_world_terrain_name(kind)));
+    return o;
+}
+static JSValue world_surface_conveyor(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[5];if(!w||!world_numbers(ctx,argc,argv,5,p))return JS_EXCEPTION;
+    if(!r2d_world_set_surface_conveyor(w,(int)p[0],p[1],p[2],p[3],p[4]!=0.0f))
+        return JS_ThrowRangeError(ctx,"Re2D World: invalid conveyor");
+    return JS_UNDEFINED;
+}
+static JSValue world_surface_conveyor_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    float out[3]={0,0,0};int affects=0;
+    if(!r2d_world_surface_conveyor_info(w,(int)p[0],out,&affects))return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"vx",out[0]);set_num(ctx,o,"vy",out[1]);
+    set_num(ctx,o,"accel",out[2]);set_num(ctx,o,"affectsProjectiles",affects);return o;
+}
+static JSValue world_terrain_at(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
+    int kind=-1,surface=-1;
+    if(!r2d_world_terrain_at(w,p[0],p[1],p[2],&kind,&surface))return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"kind",kind);set_num(ctx,o,"surface",surface);
+    JS_SetPropertyStr(ctx,o,"name",JS_NewString(ctx,r2d_world_terrain_name(kind)));
+    const R2DWorldTerrain *t=r2d_world_terrain_preset(kind);
+    if(t){set_num(ctx,o,"moveScale",t->move_scale);set_num(ctx,o,"frictionScale",t->friction_scale);
+        set_num(ctx,o,"damagePerSecond",t->damage_per_second);}
+    return o;
+}
+static JSValue world_conveyor_at_js(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
+    float out[3]={0,0,0};int affects=0;
+    if(!r2d_world_conveyor_at(w,p[0],p[1],p[2],out,&affects))return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"vx",out[0]);set_num(ctx,o,"vy",out[1]);
+    set_num(ctx,o,"accel",out[2]);set_num(ctx,o,"affectsProjectiles",affects);return o;
+}
+static JSValue world_save_hash(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    uint64_t hash=r2d_world_save_map_hash_runtime(w);
+    char hex[32];snprintf(hex,sizeof hex,"%016llx",(unsigned long long)hash);
+    return JS_NewString(ctx,hex);
+}
+static JSValue world_save_state(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    R2DWorldSaveState state={0};
+    if(!r2d_world_state_capture(w,&state))return JS_ThrowInternalError(ctx,"Re2D World: state capture failed");
+    int needed=r2d_world_save_write(&state,NULL,0);
+    if(needed<0){r2d_world_save_free(&state);return JS_ThrowInternalError(ctx,"Re2D World: state serialization failed");}
+    char *text=malloc((size_t)needed+1);
+    if(!text){r2d_world_save_free(&state);return JS_ThrowOutOfMemory(ctx);}
+    int written=r2d_world_save_write(&state,text,(size_t)needed+1);
+    r2d_world_save_free(&state);
+    if(written<0){free(text);return JS_ThrowInternalError(ctx,"Re2D World: state serialization failed");}
+    JSValue result=JS_NewString(ctx,text);free(text);return result;
+}
+static JSValue world_load_state(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1||!JS_IsString(argv[0]))return JS_ThrowTypeError(ctx,"Re2D World: loadStateJSON(text)");
+    const char *text=JS_ToCString(ctx,argv[0]);if(!text)return JS_EXCEPTION;
+    R2DWorldSaveState state={0};char error[256]={0};
+    bool ok=r2d_world_save_read(text,&state,error,sizeof error);
+    JS_FreeCString(ctx,text);
+    if(!ok){JS_ThrowTypeError(ctx,"Re2D World: invalid save: %s",error[0]?error:"parse error");r2d_world_save_free(&state);return JS_EXCEPTION;}
+    bool applied=r2d_world_state_apply(w,&state);
+    r2d_world_save_free(&state);
+    if(!applied)return JS_ThrowRangeError(ctx,"Re2D World: save state does not match current world/movers/triggers");
+    return JS_TRUE;
+}
+static JSValue world_secret_create(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<7||!JS_IsString(argv[0]))return JS_ThrowTypeError(ctx,"Re2D World: secret(id,x,y,radius,bottom,top,once)");
+    const char *id=JS_ToCString(ctx,argv[0]);if(!id)return JS_EXCEPTION;
+    float p[5];bool ok=world_numbers(ctx,argc-1,argv+1,5,p);
+    int token=-1;if(ok)token=r2d_world_secret_create(w,id,p[0],p[1],p[2],p[3],p[4],argc>6&&JS_ToBool(ctx,argv[6]));
+    JS_FreeCString(ctx,id);
+    if(!ok)return JS_EXCEPTION;
+    if(token<=0)return JS_ThrowRangeError(ctx,"Re2D World: invalid secret");
+    return JS_NewInt32(ctx,token);
+}
+static JSValue world_secret_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    return r2d_world_secret_remove(w,(int)p[0])?JS_UNDEFINED:JS_EXCEPTION;
+}
+static JSValue world_secret_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    int found=0,count=0;if(!r2d_world_secret_info(w,(int)p[0],&found,&count))return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"found",found);set_num(ctx,o,"foundCount",count);return o;
+}
+static JSValue world_secret_tick(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[4];if(!w||!world_numbers(ctx,argc,argv,4,p))return JS_EXCEPTION;
+    int tokens[R2D_WORLD_SECRET_LIMIT];
+    int count=r2d_world_secret_tick(w,p[0],p[1],p[2],p[3],tokens,R2D_WORLD_SECRET_LIMIT);
+    return trigger_tokens(ctx,count,tokens);
+}
+static JSValue world_breakable_create(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w||argc<9||!JS_IsString(argv[0]))return JS_ThrowTypeError(ctx,"Re2D World: breakable(id,hp,variant,portal,x,y,radius,bottom,top)");
+    const char *id=JS_ToCString(ctx,argv[0]);if(!id)return JS_EXCEPTION;
+    float p[8];bool ok=world_numbers(ctx,argc-1,argv+1,8,p);
+    int token=-1;
+    if(ok)token=r2d_world_breakable_create(w,id,(int)p[0],(int)p[1],(int)p[2],p[3],p[4],p[5],p[6],p[7]);
+    JS_FreeCString(ctx,id);
+    if(!ok)return JS_EXCEPTION;
+    if(token<=0)return JS_ThrowRangeError(ctx,"Re2D World: invalid breakable");
+    return JS_NewInt32(ctx,token);
+}
+static JSValue world_breakable_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    return r2d_world_breakable_remove(w,(int)p[0])?JS_UNDEFINED:JS_EXCEPTION;
+}
+static JSValue world_breakable_damage(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[2];if(!w||!world_numbers(ctx,argc,argv,2,p))return JS_EXCEPTION;
+    int broke=r2d_world_breakable_damage(w,(int)p[0],(int)p[1]);
+    if(broke<0)return JS_ThrowRangeError(ctx,"Re2D World: invalid breakable damage");
+    return JS_NewInt32(ctx,broke);
+}
+static JSValue world_breakable_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    int hp=0,variant=0,portal=0,broken=0;
+    if(!r2d_world_breakable_info(w,(int)p[0],&hp,&variant,&portal,&broken))return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"hp",hp);set_num(ctx,o,"variant",variant);
+    set_num(ctx,o,"portal",portal);set_num(ctx,o,"broken",broken);return o;
+}
 static JSValue world_particles_burst(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
@@ -1144,6 +1298,23 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"audioRemove",JS_NewCFunction(ctx,world_audio_remove,"audioRemove",1));
     JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",14));
     JS_SetPropertyStr(ctx,handle,"hitAdd",JS_NewCFunction(ctx,world_hit_add,"hitAdd",5));
+    JS_SetPropertyStr(ctx,handle,"saveMapHash",JS_NewCFunction(ctx,world_save_hash,"saveMapHash",0));
+    JS_SetPropertyStr(ctx,handle,"saveStateJSON",JS_NewCFunction(ctx,world_save_state,"saveStateJSON",0));
+    JS_SetPropertyStr(ctx,handle,"loadStateJSON",JS_NewCFunction(ctx,world_load_state,"loadStateJSON",1));
+    JS_SetPropertyStr(ctx,handle,"surfaceTerrain",JS_NewCFunction(ctx,world_surface_terrain,"surfaceTerrain",2));
+    JS_SetPropertyStr(ctx,handle,"surfaceTerrainInfo",JS_NewCFunction(ctx,world_surface_terrain_info,"surfaceTerrainInfo",1));
+    JS_SetPropertyStr(ctx,handle,"surfaceConveyor",JS_NewCFunction(ctx,world_surface_conveyor,"surfaceConveyor",5));
+    JS_SetPropertyStr(ctx,handle,"surfaceConveyorInfo",JS_NewCFunction(ctx,world_surface_conveyor_info,"surfaceConveyorInfo",1));
+    JS_SetPropertyStr(ctx,handle,"terrainAt",JS_NewCFunction(ctx,world_terrain_at,"terrainAt",3));
+    JS_SetPropertyStr(ctx,handle,"conveyorAt",JS_NewCFunction(ctx,world_conveyor_at_js,"conveyorAt",3));
+    JS_SetPropertyStr(ctx,handle,"secretCreate",JS_NewCFunction(ctx,world_secret_create,"secretCreate",7));
+    JS_SetPropertyStr(ctx,handle,"secretRemove",JS_NewCFunction(ctx,world_secret_remove,"secretRemove",1));
+    JS_SetPropertyStr(ctx,handle,"secretInfo",JS_NewCFunction(ctx,world_secret_info,"secretInfo",1));
+    JS_SetPropertyStr(ctx,handle,"secretTick",JS_NewCFunction(ctx,world_secret_tick,"secretTick",4));
+    JS_SetPropertyStr(ctx,handle,"breakableCreate",JS_NewCFunction(ctx,world_breakable_create,"breakableCreate",9));
+    JS_SetPropertyStr(ctx,handle,"breakableRemove",JS_NewCFunction(ctx,world_breakable_remove,"breakableRemove",1));
+    JS_SetPropertyStr(ctx,handle,"breakableDamage",JS_NewCFunction(ctx,world_breakable_damage,"breakableDamage",2));
+    JS_SetPropertyStr(ctx,handle,"breakableInfo",JS_NewCFunction(ctx,world_breakable_info,"breakableInfo",1));
     JS_SetPropertyStr(ctx,handle,"particlesBurst",JS_NewCFunction(ctx,world_particles_burst,"particlesBurst",3));
     JS_SetPropertyStr(ctx,handle,"particlesContinuous",JS_NewCFunction(ctx,world_particles_continuous,"particlesContinuous",4));
     JS_SetPropertyStr(ctx,handle,"particlesInfo",JS_NewCFunction(ctx,world_particles_info,"particlesInfo",0));

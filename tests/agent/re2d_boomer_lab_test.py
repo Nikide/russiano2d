@@ -217,6 +217,11 @@ def main():
         check(red_pixels(fxshot) > 150, f"VFX bundle виден на кадре (красных {red_pixels(fxshot)})")
         a.eval("boomerLab.particlesClear()")
 
+        save = a.eval("JSON.stringify(boomerLab.saveProbe())")
+        check(save is not None and '"restored":true' in save and '"movers":1' in save
+              and '"spans":1' in save and '"portals":0' in save,
+              f"world.saveState/loadState восстанавливает native state: {save}")
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 

@@ -17,7 +17,7 @@ const calls = { atlasAdd: [], atlasRemove: [], actorAdd: [], actorRemove: [],
                 moverCreate: [], moverIntent: [], moverRemove: [], moverInfo: [],
                 triggerCreate: [], triggerRemove: [], triggerTick: [], triggerUse: [], triggerShoot: [],
                 find: [], controllerCreate: [], controllerInit: [], controllerMove: [], controllerRemove: [],
-                portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [] };
+                portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [], save: [], secret: [], breakable: [], terrain: [] };
 
 const native = {
     info: () => ({ poseBudget: 1, poseStep: 3 }),
@@ -76,6 +76,23 @@ const native = {
     particlesContinuous: (proto, rate, dt, seed) => { calls.particles.push(['continuous', rate, dt, seed]); return 3; },
     particlesInfo: () => ({ alive: 4, capacity: 2048, overflow: 0, drawn: 4 }),
     particlesClear: () => calls.particles.push(['clear']),
+    saveMapHash: () => '0123456789abcdef',
+    saveStateJSON: () => '{"format":"re2d-save","version":1,"spans":[],"portals":[],"movers":[],"triggers":[]}',
+    loadStateJSON: (text) => { calls.save.push(text); return true; },
+    secretCreate: (...args) => { calls.secret.push(['create', args]); return 5; },
+    secretRemove: (token) => calls.secret.push(['remove', token]),
+    secretInfo: (token) => ({ found: 1, foundCount: 1 }),
+    secretTick: (dt, x, y, feet) => { calls.secret.push(['tick', dt, x, y, feet]); return [5]; },
+    breakableCreate: (...args) => { calls.breakable.push(['create', args]); return 6; },
+    breakableRemove: (token) => calls.breakable.push(['remove', token]),
+    breakableDamage: (token, damage) => { calls.breakable.push(['damage', token, damage]); return damage >= 100 ? 1 : 0; },
+    breakableInfo: () => ({ hp: 0, variant: 0, portal: 2, broken: 1 }),
+    surfaceTerrain: (index, name) => { calls.terrain.push(['set', index, name]); return 0; },
+    surfaceTerrainInfo: (index) => ({ kind: 0, name: 'stone' }),
+    surfaceConveyor: (index, vx, vy, accel, affects) => calls.terrain.push(['conv', index, vx, vy, accel, affects]),
+    surfaceConveyorInfo: (index) => ({ vx: 10, vy: 0, accel: 600, affectsProjectiles: 0 }),
+    terrainAt: (x, y, h) => ({ kind: 0, name: 'stone', surface: 3, moveScale: 1, frictionScale: 1, damagePerSecond: 0 }),
+    conveyorAt: (x, y, h) => ({ vx: 10, vy: 0, accel: 600, affectsProjectiles: 0 }),
     metadata: () => ({ id: 'map', title: 'Map', spawnCount: 1 }),
     spawns: () => [{ id: 'player.start', type: 0, typeName: 'player', x: 1, y: 2, h: 0, facing: 0 }],
     spawn: (id) => (id === 'player.start' ? { id: 'player.start', typeName: 'player' } : null),
@@ -344,6 +361,50 @@ test('world.fxSpawn собирает bundle: particles + light + optional decal/
     eq(records[records.length - 2][2], 3);
     eq(records[records.length - 1][2], 2);
     throws(RangeError, () => world.fxSpawn('missing.bundle'), 'неизвестный bundle');
+    world.dispose();
+});
+
+test('world.saveState/loadState: версия, map hash и native snapshot', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const save = world.saveState();
+    eq(save.format, 're2d-world-save');
+    eq(save.map.hash, '0123456789abcdef');
+    eq(save.state.format, 're2d-save');
+    eq(world.loadState(save), true);
+    eq(calls.save.length, 1);
+    throws(TypeError, () => world.loadState({ format: 'other' }), 'чужой формат');
+    throws(RangeError, () => world.loadState({ ...save, map: { hash: 'deadbeef' } }), 'hash mismatch');
+    world.dispose();
+});
+
+test('world.secret/breakable: события в $.on', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const found = [], broken = [];
+    world.onSecret(event => found.push(event.secret));
+    world.onBreakable(event => broken.push([event.breakable, event.portal]));
+    const secret = world.secret({ id: 'secret.tower', x: 1, y: 2, radius: 8, top: 64, once: true });
+    eq(JSON.stringify(world.secretsTick(1 / 60, { x: 1, y: 2, feet: 0 })), '["secret.tower"]');
+    eq(found.length, 1);
+    eq(secret.info().found, 1);
+    secret.remove();
+    const crate = world.breakable({ id: 'crate.a', hp: 100, variant: 2, portal: 3, x: 1, y: 1, top: 40 });
+    eq(crate.hit(100), true);
+    eq(broken.length, 1); eq(broken[0][0], 'crate.a'); eq(broken[0][1], 3);
+    eq(crate.info().broken, 1);
+    crate.remove();
+    world.dispose();
+});
+
+test('surface.terrain/conveyor и terrainAt/conveyorAt доступны', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const surface = world.surface(0);
+    surface.terrain('water').conveyor({ vx: 10, vy: 0, accel: 600, affectsProjectiles: true });
+    eq(JSON.stringify(calls.terrain[0]), '["set",0,"water"]');
+    eq(JSON.stringify(calls.terrain[1]), '["conv",0,10,0,600,1]');
+    eq(surface.terrainInfo().name, 'stone');
+    eq(surface.conveyorInfo().vx, 10);
+    eq(world.terrainAt(1, 2, 3).name, 'stone');
+    eq(world.conveyorAt(1, 2, 3).accel, 600);
     world.dispose();
 });
 

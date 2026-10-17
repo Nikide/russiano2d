@@ -28,6 +28,10 @@ $.render(() => world.render(view,400,240));
 | `world.navBuild/navNearest/navPath` | 2D span/portal nav graph и детерминированный A* |
 | `world.automapLines(states?)` / `automapProject(view,x,y)` | 2D automap-линии и view-трансформ |
 | `world.metadata()` / `spawns()` / `spawn(id)` | authored map metadata и типизированные spawn points |
+| `world.saveState()` / `loadState(save)` / `saveMapHash()` | versioned native snapshot + map identity guard |
+| `world.secret(opts)` / `secretsTick(dt,at)` / `onSecret(fn)` | secret volumes + события `secret.found` |
+| `world.breakable(opts)` / `onBreakable(fn)` | authored breakables + событие `breakable.broken` |
+| `surface.terrain(name)` / `conveyor(opts)`, `world.terrainAt/conveyorAt` | terrain/liquid metadata и 2D conveyors |
 | `world.particles.burst/continuous/info/clear` | нативный fixed-pool частиц |
 | `world.fxDefine(name,bundle)` / `fxSpawn(name,at)` | asset-driven VFX bundle (particles/light/decal/sound/shake) |
 | `world.findSurface(name)` | имя стены/span → handle поверхности |
@@ -324,6 +328,55 @@ Bundle — данные, а не gameplay: частицы идут в натив
 (если подсистема установлена; значения возвращаются в результате в любом
 случае). Неизвестный bundle — `RangeError`. Никакой JS-покадровой работы:
 bundle исполняется один раз в момент спавна.
+
+## Save / load state (P1)
+
+```js
+const save = world.saveState();
+// {format:'re2d-world-save', version:1,
+//  map:{id,version,hash}, state:{format:'re2d-save',...}}
+world.loadState(save);          // true или исключение
+world.saveMapHash();            // hex-строка authored identity + topology
+```
+
+Native snapshot (версия 1) хранит spans (`id,bottom,top`), portals
+(`id,open_fraction,closed`), movers (timeline state) и triggers
+(`id,type,fire_count,enabled,once,armed,timer`). `loadState` проверяет map hash
+и точное число spans/portals/mover'ов/триггеров; несовпадение — `RangeError`,
+состояние не меняется. Bounds: 4096 spans/portals, 256 movers, 512 triggers;
+строки ≤63 байт; NaN/malformed отклоняются. Ограничения: movers/triggers
+восстанавливаются позиционно (по id для триггеров), secrets/breakables и
+частицы пока в snapshot не входят — следующий шаг.
+
+## Secrets и breakables (P1)
+
+```js
+const secret = world.secret({ id: 'secret.tower', x, y, radius: 64, bottom: 0, top: 96, once: true });
+world.onSecret(ev => hud.secretFound(ev.secret));
+world.secretsTick(1 / 60, { x: player.x, y: player.y, feet: player.feet });
+
+const crate = world.breakable({ id: 'crate.a', hp: 100, variant: 1, portal: 3, x, y, radius: 24, top: 64 });
+world.onBreakable(ev => world.portalOpen(ev.portal, 1));
+crate.hit(100);   // true один раз; событие breakable.broken
+```
+
+Secret — edge-triggered цилиндр (outside→inside), `once`/`found_count`;
+событие `secret.found` идёт через `$.on/$.emit`. Breakable — authored hp/
+variant/portal; `broken` переключается ровно один раз. Никаких entity/ECS:
+события и варианты — данные игры. Лимит 256+256; pointer-based.
+
+## Terrain, liquids и conveyors (P1)
+
+```js
+world.surface(floorSurface).terrain('water').conveyor({ vx: 40, vy: 0, accel: 600 });
+world.terrainAt(x, y, h);    // {kind,name,moveScale,frictionScale,damagePerSecond}
+world.conveyorAt(x, y, h);   // {vx,vy,accel,affectsProjectiles}
+```
+
+Пресеты: none/stone/metal/flesh/wood/crystal/magic/water/blood/acid/lava/mist
+с move/friction/damage/splash/tint/fog/decal hints. Conveyor — authored XY
+скорость поверхности, `accel` — скорость приближения к ней; игра применяет
+`r2d_world_conveyor_apply` к телу (никакой fluid simulation/3D rigid body).
 
 ## Свет, материал, изменение мира
 

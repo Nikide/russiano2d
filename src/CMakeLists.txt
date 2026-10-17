@@ -93,7 +93,13 @@ if(R2D_ENABLE_RE2D)
         re2d_world_metadata.h re2d_world_metadata.c
         re2d_world_particle.h re2d_world_particle.c
         re2d_world_nav.h re2d_world_nav.c
-        re2d_world_automap.h re2d_world_automap.c)
+        re2d_world_automap.h re2d_world_automap.c
+        re2d_world_secret.h re2d_world_secret.c
+        re2d_world_terrain.h re2d_world_terrain.c
+        re2d_world_save.h re2d_world_save.c
+        re2d_world_portal_visual.h re2d_world_portal_visual.c
+        re2d_world_volume.h re2d_world_volume.c
+        re2d_world_material_anim.h re2d_world_material_anim.c)
     list(APPEND R2D_DEFINES R2D_ENABLE_RE2D=1)
 endif()
 

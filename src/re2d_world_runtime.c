@@ -38,7 +38,7 @@ void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
     free(w->actors);free(w->frame_handles);free(w->frame_positions);free(w->frame_images);free(w->frame_sizes);
     free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_tints);free(w->frame_keys);free(w->atlas_actors);
     free(w->hit_entries);free(w->trace_scratch);free(w->movers);free(w->triggers);
-    r2d_world_nav_free(w);r2d_world_particles_free(w);
+    r2d_world_nav_free(w);r2d_world_particles_free(w);r2d_world_secret_free(w);r2d_world_terrain_free(w);
     w->actors=w->frame_handles=NULL;w->frame_positions=NULL;w->frame_images=NULL;w->frame_sizes=NULL;
     w->frame_kinds=NULL;w->frame_revisions=NULL;w->frame_blends=NULL;w->frame_tints=NULL;w->frame_keys=NULL;w->atlas_actors=NULL;
     w->hit_entries=NULL;w->trace_scratch=NULL;w->hit_count=w->hit_capacity=0;w->trace_scratch_capacity=0;
@@ -743,6 +743,255 @@ static bool particle_collect_gpu(R2DWorldRuntime *w,const R2DRe2dView *v,int wid
         drawn++;
     }
     (void)v;(void)width;(void)height;(void)ortho;
+    return true;
+}
+
+
+// --- P1 secret volumes / authored breakables ------------------------------
+static int *secret_token_slot(R2DWorldRuntime *w,int token)
+{
+    for(int i=0;i<w->secret_count;i++)if(w->secret_tokens[i]==token)return &w->secret_tokens[i];
+    return NULL;
+}
+static int *breakable_token_slot(R2DWorldRuntime *w,int token)
+{
+    for(int i=0;i<w->breakable_count;i++)if(w->breakable_tokens[i]==token)return &w->breakable_tokens[i];
+    return NULL;
+}
+int r2d_world_secret_create(R2DWorldRuntime *w,const char *id,float x,float y,float radius,float bottom,float top,bool once)
+{
+    if(w->rendering||!id)return -1;
+    int slot=-1;for(int i=0;i<w->secret_count;i++)if(w->secret_tokens[i]==0){slot=i;break;}
+    if(slot<0){if(w->secret_count==R2D_WORLD_SECRET_LIMIT)return -1;slot=w->secret_count++;
+        if(slot>=w->secret_capacity){int n=w->secret_capacity?w->secret_capacity*2:8;
+            R2DWorldSecret *s=realloc(w->secrets,(size_t)n*sizeof *s);int *t=realloc(w->secret_tokens,(size_t)n*sizeof *t);
+            if(!s||!t){if(s)w->secrets=s;if(t)w->secret_tokens=t;return -1;}
+            w->secrets=s;w->secret_tokens=t;w->secret_capacity=n;}}
+    if(!r2d_world_secret_init(&w->secrets[slot],id,x,y,radius,bottom,top,once))return -1;
+    w->secret_tokens[slot]=++w->next_secret_token;
+    return w->secret_tokens[slot];
+}
+bool r2d_world_secret_remove(R2DWorldRuntime *w,int token)
+{
+    int *slot=secret_token_slot(w,token);if(!slot)return false;
+    memset(&w->secrets[slot-w->secret_tokens],0,sizeof w->secrets[0]);*slot=0;return true;
+}
+bool r2d_world_secret_info(R2DWorldRuntime *w,int token,int *found,int *count)
+{
+    int *slot=secret_token_slot(w,token);if(!slot)return false;
+    const R2DWorldSecret *s=&w->secrets[slot-w->secret_tokens];
+    if(found)*found=s->found?1:0;if(count)*count=s->found_count;return true;
+}
+int r2d_world_secret_tick(R2DWorldRuntime *w,float dt,float x,float y,float feet,int *tokens,int capacity)
+{
+    int fired=0;
+    for(int i=0;i<w->secret_count;i++){
+        R2DWorldSecret *s=&w->secrets[i];if(!w->secret_tokens[i])continue;
+        r2d_world_secret_step(s,dt);
+        if(r2d_world_secret_touch(s,x,y,feet)){if(tokens&&fired<capacity)tokens[fired]=w->secret_tokens[i];fired++;}
+    }
+    return fired;
+}
+int r2d_world_breakable_create(R2DWorldRuntime *w,const char *id,int hp,int variant,int portal,float x,float y,float radius,float bottom,float top)
+{
+    if(w->rendering||!id)return -1;
+    int slot=-1;for(int i=0;i<w->breakable_count;i++)if(w->breakable_tokens[i]==0){slot=i;break;}
+    if(slot<0){if(w->breakable_count==R2D_WORLD_SECRET_LIMIT)return -1;slot=w->breakable_count++;
+        if(slot>=w->breakable_capacity){int n=w->breakable_capacity?w->breakable_capacity*2:8;
+            R2DWorldBreakable *b=realloc(w->breakables,(size_t)n*sizeof *b);int *t=realloc(w->breakable_tokens,(size_t)n*sizeof *t);
+            if(!b||!t){if(b)w->breakables=b;if(t)w->breakable_tokens=t;return -1;}
+            w->breakables=b;w->breakable_tokens=t;w->breakable_capacity=n;}}
+    if(!r2d_world_breakable_init(&w->breakables[slot],id,hp,variant,portal,x,y,radius,bottom,top))return -1;
+    w->breakable_tokens[slot]=++w->next_breakable_token;
+    return w->breakable_tokens[slot];
+}
+bool r2d_world_breakable_remove(R2DWorldRuntime *w,int token)
+{
+    int *slot=breakable_token_slot(w,token);if(!slot)return false;
+    memset(&w->breakables[slot-w->breakable_tokens],0,sizeof w->breakables[0]);*slot=0;return true;
+}
+int r2d_world_breakable_damage(R2DWorldRuntime *w,int token,int damage)
+{
+    int *slot=breakable_token_slot(w,token);if(!slot)return -1;
+    return r2d_world_breakable_hit(&w->breakables[slot-w->breakable_tokens],damage);
+}
+bool r2d_world_breakable_info(R2DWorldRuntime *w,int token,int *hp,int *variant,int *portal,int *broken)
+{
+    int *slot=breakable_token_slot(w,token);if(!slot)return false;
+    const R2DWorldBreakable *b=&w->breakables[slot-w->breakable_tokens];
+    if(hp)*hp=b->hp;if(variant)*variant=b->variant;if(portal)*portal=b->portal;if(broken)*broken=b->broken?1:0;
+    return true;
+}
+void r2d_world_secret_free(R2DWorldRuntime *w)
+{
+    free(w->secrets);free(w->secret_tokens);free(w->breakables);free(w->breakable_tokens);
+    w->secrets=NULL;w->secret_tokens=NULL;w->breakables=NULL;w->breakable_tokens=NULL;
+    w->secret_count=w->secret_capacity=0;w->breakable_count=w->breakable_capacity=0;
+}
+
+
+// --- P1 terrain/conveyors per surface -------------------------------------
+static bool terrain_ensure(R2DWorldRuntime *w)
+{
+    if(w->terrain_capacity==w->world.surface_count&&w->surface_terrain)return true;
+    int n=w->world.surface_count;
+    int *terrain=calloc((size_t)(n?n:1),sizeof *terrain);
+    R2DWorldConveyor *conveyors=calloc((size_t)(n?n:1),sizeof *conveyors);
+    if(!terrain||!conveyors){free(terrain);free(conveyors);return false;}
+    free(w->surface_terrain);free(w->surface_conveyors);
+    w->surface_terrain=terrain;w->surface_conveyors=conveyors;w->terrain_capacity=n;
+    return true;
+}
+bool r2d_world_set_surface_terrain(R2DWorldRuntime *w,int surface,int kind)
+{
+    if(!w||!terrain_ensure(w))return false;
+    if(surface<0||surface>=w->world.surface_count||kind<0||kind>=R2D_TERRAIN_COUNT)return false;
+    w->surface_terrain[surface]=kind;return true;
+}
+int r2d_world_surface_terrain_kind(R2DWorldRuntime *w,int surface)
+{
+    if(!w||!w->surface_terrain||surface<0||surface>=w->terrain_capacity)return -1;
+    return w->surface_terrain[surface];
+}
+bool r2d_world_set_surface_conveyor(R2DWorldRuntime *w,int surface,float vx,float vy,float accel,bool affects_projectiles)
+{
+    if(!w||!terrain_ensure(w))return false;
+    if(surface<0||surface>=w->world.surface_count||!isfinite(vx)||!isfinite(vy)||!isfinite(accel)||accel<0)return false;
+    w->surface_conveyors[surface]=(R2DWorldConveyor){vx,vy,accel,affects_projectiles};return true;
+}
+bool r2d_world_surface_conveyor_info(R2DWorldRuntime *w,int surface,float out[3],int *affects)
+{
+    if(!w||!w->surface_conveyors||surface<0||surface>=w->terrain_capacity)return false;
+    const R2DWorldConveyor *c=&w->surface_conveyors[surface];
+    if(out){out[0]=c->vx;out[1]=c->vy;out[2]=c->accel;}
+    if(affects)*affects=c->affects_projectiles?1:0;
+    return true;
+}
+static int floor_surface_for_span(R2DWorldRuntime *w,int span)
+{
+    for(int i=0;i<w->world.surface_count;i++){
+        const R2DWorldSurface *s=&w->world.surfaces[i];
+        if(s->kind==R2D_WORLD_FLOOR&&s->span==span)return i;
+    }
+    return -1;
+}
+bool r2d_world_terrain_at(R2DWorldRuntime *w,float x,float y,float h,int *kind,int *surface)
+{
+    if(!w||!w->surface_terrain)return false;
+    int span=r2d_world_span_at(&w->world,x,y,h);if(span<0)return false;
+    int floor=floor_surface_for_span(w,span);if(floor<0)return false;
+    if(kind)*kind=w->surface_terrain[floor];if(surface)*surface=floor;
+    return true;
+}
+bool r2d_world_conveyor_at(R2DWorldRuntime *w,float x,float y,float h,float out[3],int *affects)
+{
+    if(!w||!w->surface_conveyors)return false;
+    int span=r2d_world_span_at(&w->world,x,y,h);if(span<0)return false;
+    int floor=floor_surface_for_span(w,span);if(floor<0)return false;
+    const R2DWorldConveyor *c=&w->surface_conveyors[floor];
+    if(out){out[0]=c->vx;out[1]=c->vy;out[2]=c->accel;}
+    if(affects)*affects=c->affects_projectiles?1:0;
+    return true;
+}
+void r2d_world_terrain_free(R2DWorldRuntime *w)
+{
+    free(w->surface_terrain);free(w->surface_conveyors);
+    w->surface_terrain=NULL;w->surface_conveyors=NULL;w->terrain_capacity=0;
+}
+
+
+// --- P1 save/load snapshot of native state --------------------------------
+static void copy_id(char dst[R2D_WORLD_SAVE_ID_CAP],const char *src)
+{
+    dst[0]=0;if(src)snprintf(dst,R2D_WORLD_SAVE_ID_CAP,"%s",src);
+}
+uint64_t r2d_world_save_map_hash_runtime(R2DWorldRuntime *w)
+{
+    if(!w)return 0;
+    return r2d_world_save_map_hash(w->world.metadata.id,w->world.metadata.version,(uint64_t)w->world.topology_revision);
+}
+bool r2d_world_state_capture(R2DWorldRuntime *w,R2DWorldSaveState *out)
+{
+    if(!w||!out)return false;
+    memset(out,0,sizeof *out);
+    int spans=w->world.span_count,portals=w->world.portal_count,movers=0,triggers=0;
+    for(int i=0;i<w->mover_count;i++)if(w->movers[i].active)movers++;
+    for(int i=0;i<w->trigger_count;i++)if(w->triggers[i].active)triggers++;
+    out->spans=spans?calloc((size_t)spans,sizeof *out->spans):NULL;
+    out->portals=portals?calloc((size_t)portals,sizeof *out->portals):NULL;
+    out->movers=movers?calloc((size_t)movers,sizeof *out->movers):NULL;
+    out->triggers=triggers?calloc((size_t)triggers,sizeof *out->triggers):NULL;
+    if((spans&&!out->spans)||(portals&&!out->portals)||(movers&&!out->movers)||(triggers&&!out->triggers))goto fail;
+    for(int i=0;i<spans;i++){
+        out->spans[i].span=i;out->spans[i].bottom=w->world.spans[i].bottom;out->spans[i].top=w->world.spans[i].top;
+        copy_id(out->spans[i].id,r2d_world_span_id(&w->world,i));
+    }
+    for(int i=0;i<portals;i++){
+        out->portals[i].portal=i;out->portals[i].open_fraction=w->world.portals[i].open_fraction;
+        out->portals[i].closed=w->world.portals[i].closed;copy_id(out->portals[i].id,r2d_world_portal_id(&w->world,i));
+    }
+    int mi=0;
+    for(int i=0;i<w->mover_count;i++){
+        R2DWorldMoverEntry *e=&w->movers[i];if(!e->active)continue;
+        R2DWorldSavedMover *m=&out->movers[mi++];
+        m->type=e->kind;m->span=e->span;m->portal=e->portal;
+        m->from=e->mover.from;m->to=e->mover.to;m->position=e->mover.position;m->fraction=e->mover.fraction;
+        m->speed=e->mover.speed;m->wait=e->mover.wait;m->timer=e->mover.timer;
+        m->phase=(int)e->mover.phase;m->direction=e->mover.direction;
+        m->auto_return=e->mover.auto_return;m->blocking=e->mover.blocking;
+    }
+    out->span_count=spans;out->portal_count=portals;out->mover_count=mi;
+    int ti=0;
+    for(int i=0;i<w->trigger_count;i++){
+        R2DWorldTriggerEntry *e=&w->triggers[i];if(!e->active)continue;
+        R2DWorldSavedTrigger *t=&out->triggers[ti++];
+        copy_id(t->id,e->id);t->type=e->trigger.type;t->fire_count=e->trigger.fire_count;
+        t->enabled=e->trigger.enabled;t->once=e->trigger.once;t->armed=e->trigger.armed;t->timer=e->trigger.timer;
+    }
+    out->trigger_count=ti;
+    return true;
+fail:
+    r2d_world_save_free(out);return false;
+}
+bool r2d_world_state_apply(R2DWorldRuntime *w,const R2DWorldSaveState *in)
+{
+    if(!w||!in)return false;
+    if(in->span_count!=w->world.span_count||in->portal_count!=w->world.portal_count)return false;
+    int active_movers=0,active_triggers=0;
+    for(int i=0;i<w->mover_count;i++)if(w->movers[i].active)active_movers++;
+    for(int i=0;i<w->trigger_count;i++)if(w->triggers[i].active)active_triggers++;
+    if(in->mover_count!=active_movers||in->trigger_count!=active_triggers)return false;
+    // Validate before mutating anything.
+    for(int i=0;i<in->span_count;i++){
+        const R2DWorldSavedSpan *s=&in->spans[i];
+        if(s->span<0||s->span>=w->world.span_count||!isfinite(s->bottom)||!isfinite(s->top)||s->top<=s->bottom)return false;
+    }
+    for(int i=0;i<in->portal_count;i++){
+        const R2DWorldSavedPortal *p=&in->portals[i];
+        if(p->portal<0||p->portal>=w->world.portal_count||!isfinite(p->open_fraction))return false;
+    }
+    for(int i=0;i<in->span_count;i++)r2d_world_span_set_heights(&w->world,in->spans[i].span,in->spans[i].bottom,in->spans[i].top);
+    for(int i=0;i<in->portal_count;i++)r2d_world_portal_set_open(&w->world,in->portals[i].portal,in->portals[i].open_fraction);
+    int mi=0;
+    for(int i=0;i<w->mover_count;i++){
+        R2DWorldMoverEntry *e=&w->movers[i];if(!e->active)continue;
+        const R2DWorldSavedMover *m=&in->movers[mi++];
+        e->mover.from=m->from;e->mover.to=m->to;e->mover.position=m->position;e->mover.fraction=m->fraction;
+        e->mover.speed=m->speed;e->mover.wait=m->wait;e->mover.timer=m->timer;
+        e->mover.phase=(R2DWorldMoverPhase)m->phase;e->mover.direction=m->direction;
+        e->mover.auto_return=m->auto_return;e->mover.blocking=m->blocking;
+        if(e->span>=0)r2d_world_span_set_heights(&w->world,e->span,e->mover.position,e->span_top);
+    }
+    // Match triggers by authored id first; fall back to registry order.
+    for(int i=0;i<in->trigger_count;i++){
+        const R2DWorldSavedTrigger *t=&in->triggers[i];
+        R2DWorldTriggerEntry *target=NULL;
+        for(int j=0;j<w->trigger_count;j++)if(w->triggers[j].active&&w->triggers[j].id&&!strcmp(w->triggers[j].id,t->id)){target=&w->triggers[j];break;}
+        if(!target){int seen=0;for(int j=0;j<w->trigger_count;j++){if(!w->triggers[j].active)continue;if(seen++==i){target=&w->triggers[j];break;}}}
+        if(!target)return false;
+        target->trigger.fire_count=t->fire_count;target->trigger.enabled=t->enabled;
+        target->trigger.once=t->once;target->trigger.armed=t->armed;target->trigger.timer=t->timer;
+    }
     return true;
 }
 

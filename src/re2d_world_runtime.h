@@ -7,6 +7,9 @@
 #include "re2d_world_nav.h"
 #include "re2d_world_automap.h"
 #include "re2d_world_particle.h"
+#include "re2d_world_secret.h"
+#include "re2d_world_terrain.h"
+#include "re2d_world_save.h"
 #include "render.h"
 #include "audio.h"
 #include <quickjs.h>
@@ -41,6 +44,7 @@ typedef struct R2DWorldHitEntry {
 } R2DWorldHitEntry;
 #define R2D_WORLD_MOVER_LIMIT 128
 #define R2D_WORLD_TRIGGER_LIMIT 256
+#define R2D_WORLD_SECRET_LIMIT 256
 typedef struct R2DWorldMoverEntry {
     R2DWorldMover mover;
     int token,span,portal,kind;
@@ -114,6 +118,17 @@ typedef struct R2DWorldRuntime {
     bool particle_ready;
     float particle_accumulator;
     int particles_drawn;
+    // P1 secrets/breakables: authored semantic state, no entity system.
+    R2DWorldSecret *secrets;
+    int *secret_tokens;
+    int secret_count,secret_capacity,next_secret_token;
+    R2DWorldBreakable *breakables;
+    int *breakable_tokens;
+    int breakable_count,breakable_capacity,next_breakable_token;
+    // P1 terrain/conveyors: per-surface authored gameplay metadata.
+    int *surface_terrain;
+    R2DWorldConveyor *surface_conveyors;
+    int terrain_capacity;
     int actor_count,actor_capacity,frame_count;
     struct R2DWorldRuntime *next;
     bool registered;
@@ -180,6 +195,29 @@ int r2d_world_particles_burst(R2DWorldRuntime *,const R2DWorldParticle *,int cou
 int r2d_world_particles_continuous(R2DWorldRuntime *,const R2DWorldParticle *,float rate,float dt);
 void r2d_world_particles_step(R2DWorldRuntime *,float dt);
 void r2d_world_particles_free(R2DWorldRuntime *);
+// P1 secrets/breakables.
+int r2d_world_secret_create(R2DWorldRuntime *,const char *id,float x,float y,float radius,float bottom,float top,bool once);
+bool r2d_world_secret_remove(R2DWorldRuntime *,int token);
+bool r2d_world_secret_info(R2DWorldRuntime *,int token,int *found,int *count);
+int r2d_world_secret_tick(R2DWorldRuntime *,float dt,float x,float y,float feet,int *tokens,int capacity);
+int r2d_world_breakable_create(R2DWorldRuntime *,const char *id,int hp,int variant,int portal,float x,float y,float radius,float bottom,float top);
+bool r2d_world_breakable_remove(R2DWorldRuntime *,int token);
+int r2d_world_breakable_damage(R2DWorldRuntime *,int token,int damage);
+bool r2d_world_breakable_info(R2DWorldRuntime *,int token,int *hp,int *variant,int *portal,int *broken);
+void r2d_world_secret_free(R2DWorldRuntime *);
+// P1 terrain/conveyors per surface.
+bool r2d_world_set_surface_terrain(R2DWorldRuntime *,int surface,int kind);
+int r2d_world_surface_terrain_kind(R2DWorldRuntime *,int surface);
+bool r2d_world_set_surface_conveyor(R2DWorldRuntime *,int surface,float vx,float vy,float accel,bool affects_projectiles);
+bool r2d_world_surface_conveyor_info(R2DWorldRuntime *,int surface,float out[3],int *affects);
+// Resolve the floor surface owning (x,y,h) and read its metadata.
+bool r2d_world_terrain_at(R2DWorldRuntime *,float x,float y,float h,int *kind,int *surface);
+bool r2d_world_conveyor_at(R2DWorldRuntime *,float x,float y,float h,float out[3],int *affects);
+void r2d_world_terrain_free(R2DWorldRuntime *);
+// P1 save/load snapshot of native gameplay state (spans/portals/movers/triggers).
+bool r2d_world_state_capture(R2DWorldRuntime *,R2DWorldSaveState *out);
+bool r2d_world_state_apply(R2DWorldRuntime *,const R2DWorldSaveState *in);
+uint64_t r2d_world_save_map_hash_runtime(R2DWorldRuntime *);
 void r2d_world_runtime_actors_free(R2DWorldRuntime *);
 // Returns ordinary 2D sprite id; errors set QuickJS exception, no script renderer loops.
 int r2d_world_runtime_frame(JSContext *,R2DWorldRuntime *,const R2DRe2dView *,int,int,float);
