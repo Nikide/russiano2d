@@ -1400,7 +1400,7 @@ export function installRe2d($) {
         worldGpu: true, worldCpu: true,
         hrtf: !!(hrtf && hrtf.on),
         mirrorPortal: true, skyPortal: true, volumetricSprite: true,
-        particles: true, nav: true, automap: true, saveState: true, polygonCells: true, audioZones: true, audioVoices: true, rotatingPolywalls: true,
+        particles: true, nav: true, automap: true, saveState: true, polygonCells: true, audioZones: true, audioVoices: true, rotatingPolywalls: true, 
         maxLights: 128, maxDecals: 128, maxWorldSprites: 4096,
         maxPortalRecursion: 4, maxParticles: 2048,
     });

@@ -10,6 +10,7 @@ typedef struct { uint64_t key;float (*data)[4];int count,walls,spans; } ShadowCh
 typedef struct {
     SDL_GPUGraphicsPipeline *pipeline,*overdraw,*translucent,*additive,*mirror;
     R2DWorldVisibility mirror_visibility;
+    SDL_Rect clip;bool clip_active;
     SDL_GPUSampler *sampler,*linear,*sky_sampler;
     SDL_GPUTexture *color,*owner,*depth;
     SDL_GPUTransferBuffer *download;
@@ -286,6 +287,16 @@ static bool actors_upload(JSContext *ctx,R2DWorldRuntime *w,WorldGPU *g,SDL_GPUC
         SDL_EndGPUCopyPass(copy);}
     SDL_ReleaseGPUTransferBuffer(d,upload);return ok;
 }
+static void set_scissor(WorldGPU *g,SDL_GPURenderPass *pass,SDL_Rect r)
+{
+    if(g->clip_active){
+        int left=r.x>g->clip.x?r.x:g->clip.x,top=r.y>g->clip.y?r.y:g->clip.y;
+        int right=(r.x+r.w)<(g->clip.x+g->clip.w)?(r.x+r.w):(g->clip.x+g->clip.w);
+        int bottom=(r.y+r.h)<(g->clip.y+g->clip.h)?(r.y+r.h):(g->clip.y+g->clip.h);
+        r=(SDL_Rect){left,top,right>left?right-left:0,bottom>top?bottom-top:0};
+    }
+    SDL_SetGPUScissor(pass,&r);
+}
 static void actor_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho,int i,int span,bool filter)
 {
     const float *p=w->frame_positions+i*5;ActorGPU *a=&g->actors[i];SurfaceUniform u={0};bool samples=a->depth!=NULL;
@@ -301,7 +312,7 @@ static void actor_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,
     u.billboard[0]=projected[0]*w->width/v->width-u.billboard[2]*.5f;u.billboard[1]=projected[1]*w->height/v->height-u.billboard[3]*(samples?.5f:1);
     int left=(int)fmaxf(0,fminf(w->width,floorf(u.billboard[0]))),top=(int)fmaxf(0,fminf(w->height,floorf(u.billboard[1])));
     int right=(int)fmaxf(0,fminf(w->width,ceilf(u.billboard[0]+u.billboard[2]))),bottom=(int)fmaxf(0,fminf(w->height,ceilf(u.billboard[1]+u.billboard[3])));
-    if(right<=left||bottom<=top)return;SDL_Rect scissor={left,top,right-left,bottom-top};SDL_SetGPUScissor(pass,&scissor);
+    if(right<=left||bottom<=top)return;SDL_Rect scissor={left,top,right-left,bottom-top};set_scissor(g,pass,scissor);
     u.actor[0]=p[0];u.actor[1]=p[1];u.actor[2]=center;u.actor[3]=p[4];u.shape[2]=p[3];u.plane[0]=dist;u.plane[3]=2;
     u.material[2]=samples?1:0;u.identity[0]=-1;u.identity[1]=span;u.identity[3]=1;u.opening[3]=i;
     for(int c=0;c<4;c++)u.tint[c]=1;
@@ -323,7 +334,7 @@ static void surface_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cm
         int right=(int)fminf(w->width,ceilf(window->right*w->width/v->width)),bottom=(int)fminf(w->height,ceilf(window->bottom*w->height/v->height));
         left=left>projected.x?left:projected.x;top=top>projected.y?top:projected.y;
         right=right<projected.x+projected.w?right:projected.x+projected.w;bottom=bottom<projected.y+projected.h?bottom:projected.y+projected.h;
-        if(right<=left||bottom<=top)return;SDL_Rect scissor={left,top,right-left,bottom-top};SDL_SetGPUScissor(pass,&scissor);
+        if(right<=left||bottom<=top)return;SDL_Rect scissor={left,top,right-left,bottom-top};set_scissor(g,pass,scissor);
         if(s->kind!=R2D_WORLD_WALL){draw(w,g,cmd,pass,v,ortho,id,s->span,false,NULL);return;}
         if(r2d_world_surface_blend(&w->world,id)<R2D_WORLD_TRANSLUCENT||w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)draw(w,g,cmd,pass,v,ortho,id,-1,false,NULL);
         for(int k=0;k<w->visibility.span_count;k++){int span=w->visibility.spans[k];bool incident=false;
@@ -382,7 +393,8 @@ static bool mirror_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd
     if(right<=left||bottom<=top)return false;
     SDL_Rect scissor={left,top,right-left,bottom-top};
     R2DWorldVisibility saved=w->visibility;w->visibility=g->mirror_visibility;
-    SDL_SetGPUScissor(pass,&scissor);
+    SDL_Rect saved_clip=g->clip;bool saved_active=g->clip_active;g->clip=scissor;g->clip_active=true;
+    set_scissor(g,pass,scissor);
     SDL_BindGPUGraphicsPipeline(pass,g->mirror);
     sky_draw(w,g,cmd,pass,&rv,ortho);
     for(int j=0;j<w->visibility.surface_count;j++){int id=w->visibility.surfaces[j];if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT)continue;surface_draw(w,g,cmd,pass,&rv,ortho,id);}
@@ -392,9 +404,10 @@ static bool mirror_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd
         for(int j=0;j<w->visibility.span_count;j++){int span=w->visibility.spans[j];const R2DWorldSpan *sp=&w->world.spans[span];const float *pos=w->frame_positions+i*5;
             if(pos[0]+pos[3]<sp->x||pos[0]-pos[3]>sp->x+sp->w||pos[1]+pos[3]<sp->y||pos[1]-pos[3]>sp->y+sp->h)continue;actor_draw(w,g,cmd,pass,&rv,ortho,i,span,true);}
     }
-    w->visibility=saved;
+    w->visibility=saved;g->clip=saved_clip;g->clip_active=saved_active;
     return true;
 }
+
 
 bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,float ortho)
 {
@@ -424,7 +437,7 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
         if(actor_pipeline!=g->pipeline&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)SDL_BindGPUGraphicsPipeline(pass,g->pipeline);}
     for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)if(w->world.decals[i].active){
         const R2DWorldDecal *decal=&w->world.decals[i];int id=decal->surface;if(!w->visibility.surface_seen[id]||(w->world.surface_sky&&w->world.surface_sky[id]))continue;
-        SDL_Rect scissor;if(!surface_bounds(w,v,ortho,id,&scissor))continue;SDL_SetGPUScissor(pass,&scissor);
+        SDL_Rect scissor;if(!surface_bounds(w,v,ortho,id,&scissor))continue;set_scissor(g,pass,scissor);
         SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:w->world.materials[decal->material].blend==R2D_WORLD_ADDITIVE?g->additive:g->translucent);
         const R2DWorldSurface *surface=&w->world.surfaces[id];
         if(surface->kind!=R2D_WORLD_WALL)draw(w,g,cmd,pass,v,ortho,id,surface->span,false,decal);
