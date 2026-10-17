@@ -878,6 +878,93 @@ function rendererWorldWrapper($, native) {
         };
     };
 
+    // P2 postprocess: native descriptor stack + mapping onto the existing final
+    // 2D post pass ($.gfx.post). No 3D G-buffer, no shader graph.
+    const postEffects = { grade: 0, vignette: 1, flash: 2, tint: 3, pixelate: 4, chroma: 5, bloom: 6 };
+    const avg = list => list.reduce((a, b) => a + b, 0) / list.length;
+    world.post = {
+        set(effect, options = {}) {
+            const id = typeof effect === 'number' ? effect : postEffects[effect];
+            if (id === undefined) throw new RangeError('world.post.set: grade|vignette|flash|tint|pixelate|chroma|bloom');
+            native.postSet(id, Number(options.strength ?? 0), Number(options.r ?? 0), Number(options.g ?? 0),
+                Number(options.b ?? 0), Number(options.a ?? 1), Number(options.extra0 ?? 0), Number(options.extra1 ?? 0));
+            return this;
+        },
+        enable(effect, on = true) {
+            const id = typeof effect === 'number' ? effect : postEffects[effect];
+            if (id === undefined) throw new RangeError('world.post.enable: unknown effect');
+            native.postEnable(id, on ? 1 : 0); return this;
+        },
+        profile(name) { native.postProfile(name); return this; },
+        eval() { return native.postEval(); },
+        update(dt = 1 / 60) {
+            native.postStep(Number(dt));
+            const u = native.postEval();
+            const scale = u.colorScale || [1, 1, 1], add = u.colorAdd || [0, 0, 0];
+            const tint = u.tint || [1, 1, 1, 0];
+            const active = u.vignette > 0 || u.chroma > 0 || u.bloom > 0 || u.flash > 0 || Math.abs(avg(scale) - 1) > 1e-4 || u.tint[3] > 0;
+            if ($.gfx && typeof $.gfx.post === 'function') $.gfx.post({
+                on: active, glow: u.bloom, vignette: u.vignette, chromatic: u.chroma,
+                tint_r: tint[0], tint_g: tint[1], tint_b: tint[2], tint_amount: tint[3],
+                saturation: avg(scale), brightness: avg(add), blood: u.flash,
+            });
+            return u;
+        },
+        reset() { native.postReset(); if ($.gfx && typeof $.gfx.post === 'function') $.gfx.post({ on: false }); return this; },
+    };
+
+    // P4 aim assist: nearest registered enemy proxy inside a cone.
+    world.aimAssist = (options = {}) => {
+        const from = options.from || {};
+        const dir = options.dir || {};
+        const hit = native.aimAssist(Number(from.x ?? 0), Number(from.y ?? 0), Number(from.h ?? 0),
+            Number(dir.x ?? 0), Number(dir.y ?? 0), Number(dir.h ?? 0),
+            Number(options.cone ?? 0.2), Number(options.range ?? 1024),
+            options.mask === undefined ? 2 : Number(options.mask));
+        return hit ? { ...hit, node: hitNodes[hit.node] ?? null } : null;
+    };
+    // P4 quality presets: gameplay collision/trace never changes, only visual/pose
+    // budgets. Values are benchmark-tunable defaults.
+    const qualityPresets = {
+        low: { poseBudget: 1, poseStep: 6, particles: 300, decals: 64, portalRecursion: 1 },
+        medium: { poseBudget: 2, poseStep: 3, particles: 800, decals: 128, portalRecursion: 2 },
+        high: { poseBudget: 4, poseStep: 3, particles: 1500, decals: 256, portalRecursion: 3 },
+    };
+    world.qualityPreset = name => {
+        const preset = qualityPresets[name];
+        if (!preset) throw new RangeError('world.qualityPreset: low|medium|high');
+        native.quality(preset.poseBudget, preset.poseStep);
+        native.particlesBudget(preset.particles);
+        return { ...preset };
+    };
+    // P4 controller feel profiles (data only; world.controller consumes them).
+    const feelProfiles = {
+        classic: { radius: 18, height: 76, eye: 68, step: 18, slopeLimit: 45,
+                   gravity: 900, jumpSpeed: 320, maxGround: 230, maxAir: 230,
+                   accel: 1800, friction: 1400, airControl: 0.25 },
+        fast: { radius: 16, height: 76, eye: 68, step: 20, slopeLimit: 50,
+                gravity: 1000, jumpSpeed: 360, maxGround: 320, maxAir: 340,
+                accel: 2600, friction: 900, airControl: 0.5 },
+        heavy: { radius: 22, height: 84, eye: 76, step: 24, slopeLimit: 40,
+                 gravity: 800, jumpSpeed: 280, maxGround: 180, maxAir: 200,
+                 accel: 1200, friction: 1800, airControl: 0.1 },
+    };
+    world.controllerFeel = name => {
+        const feel = feelProfiles[name];
+        if (!feel) throw new RangeError('world.controllerFeel: classic|fast|heavy');
+        return { ...feel };
+    };
+    world.controllerPreset = (name, extra = {}) => world.controller({ ...world.controllerFeel(name), ...extra });
+    // P4 debug data lists for game-side overlays (not renderer hot path).
+    world.debug = world.debug || {};
+    world.debug.entities = () => ({
+        triggers: [...triggerMeta.entries()].map(([token, info]) => ({ token, ...info })),
+        movers: [...moverMeta.entries()].map(([token, info]) => ({ token, ...info })),
+        secrets: [...secretMeta.entries()].map(([token, info]) => ({ token, ...info })),
+        breakables: [...breakableMeta.entries()].map(([token, info]) => ({ token, ...info })),
+        hitProxies: [...hitNodes].map(node => ({ id: node.id ?? null, x: node.x, y: node.y, depth: node.depth })),
+    });
+
     // P1 save/load: native snapshot + map identity guard. The game owns the
     // file format wrapper; this API is deterministic and versioned.
     world.saveMapHash = () => native.saveMapHash();
@@ -903,13 +990,14 @@ function rendererWorldWrapper($, native) {
         const token = native.secretCreate(options.id, Number(options.x ?? 0), Number(options.y ?? 0),
             Number(options.radius ?? 32), Number(options.bottom ?? 0), Number(options.top ?? 64),
             options.once ? 1 : 0);
-        secretMeta.set(token, options.id);
+        secretMeta.set(token, { id: options.id, x: Number(options.x ?? 0), y: Number(options.y ?? 0), radius: Number(options.radius ?? 32), bottom: Number(options.bottom ?? 0), top: Number(options.top ?? 64) });
         return { id: options.id, info() { return native.secretInfo(token); }, remove() { secretMeta.delete(token); native.secretRemove(token); } };
     };
     world.secretsTick = (dt, at = {}) => {
         const fired = [];
         for (const token of native.secretTick(Number(dt), Number(at.x ?? 0), Number(at.y ?? 0), Number(at.feet ?? at.h ?? 0)) || []) {
-            const id = secretMeta.get(token);
+            const entry = secretMeta.get(token);
+            const id = entry && (entry.id ?? entry);
             if (!id) continue;
             fired.push(id);
             $.emit('secret.found', { secret: id });
@@ -923,7 +1011,7 @@ function rendererWorldWrapper($, native) {
             Math.trunc(Number(options.variant ?? 0)), Math.trunc(Number(options.portal ?? -1)),
             Number(options.x ?? 0), Number(options.y ?? 0), Number(options.radius ?? 24),
             Number(options.bottom ?? 0), Number(options.top ?? 64));
-        const meta = { id: options.id, portal: Math.trunc(Number(options.portal ?? -1)) };
+        const meta = { id: options.id, portal: Math.trunc(Number(options.portal ?? -1)), x: Number(options.x ?? 0), y: Number(options.y ?? 0), radius: Number(options.radius ?? 24), bottom: Number(options.bottom ?? 0), top: Number(options.top ?? 64), hp: Math.trunc(Number(options.hp ?? 100)) };
         breakableMeta.set(token, meta);
         return {
             id: options.id,
@@ -1007,6 +1095,7 @@ function rendererWorldWrapper($, native) {
     // P0-E: native mover timeline. Doors/lifts are authored timelines, not a
     // generic physics body; the runtime applies span heights / portal state.
     const moverTypes = { door: 0, lift: 1, crusher: 2, platform: 3 };
+    const moverMeta = new Map();
     world.mover = (options = {}) => {
         const name = options.type ?? 'door';
         const type = typeof name === 'number' ? name : moverTypes[name];
@@ -1020,13 +1109,14 @@ function rendererWorldWrapper($, native) {
             throw new RangeError('world.mover: finite from/to, speed > 0, wait >= 0');
         const token = native.moverCreate(type, span, portal, from, to, speed, wait,
             options.autoReturn === false ? 0 : 1);
+        moverMeta.set(token, { type: name, span, portal, from, to, speed, wait });
         return {
             blocking(flag = true) { native.moverBlock(token, flag ? 1 : 0); return this; },
             open() { native.moverIntent(token, 0); return this; },
             close() { native.moverIntent(token, 1); return this; },
             toggle() { native.moverIntent(token, 2); return this; },
             info() { return native.moverInfo(token); },
-            remove() { native.moverRemove(token); },
+            remove() { moverMeta.delete(token); native.moverRemove(token); },
         };
     };
     // P0-F: semantic triggers. Native owns once/cooldown/enter-edge state; the
@@ -1047,8 +1137,9 @@ function rendererWorldWrapper($, native) {
             throw new RangeError('world.trigger: finite volume, radius > 0, top > bottom, cooldown >= 0');
         const token = native.triggerCreate(type, id, target, x, y, radius, bottom, top,
             options.once ? 1 : 0, cooldown);
-        triggerMeta.set(token, { id, target });
-        return { id, target, remove() { triggerMeta.delete(token); native.triggerRemove(token); } };
+        const info = { id, target, type, x, y, radius, bottom, top, once: !!options.once, cooldown };
+        triggerMeta.set(token, info);
+        return { id, target, info() { return info; }, remove() { triggerMeta.delete(token); native.triggerRemove(token); } };
     };
     const emitTriggers = tokens => {
         const fired = [];

@@ -199,6 +199,12 @@ export default function install($) {
             return { index: world._matAnim.index, info: world._matAnim.info() };
         },
         materialAnimInfo: () => (world._matAnim ? world._matAnim.info() : null),
+        postProbe: () => {
+            world.post.profile('damage');
+            const u = world.post.update(1 / 60);
+            return { vignette: u.vignette, flash: u.flash, tint: u.tint, scale: u.colorScale };
+        },
+        postReset: () => world.post.reset(),
         info: () => world.info(),
         saveProbe: () => {
             world.particles.clear();

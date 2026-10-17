@@ -11,6 +11,8 @@
 #include "re2d_world_terrain.h"
 #include "re2d_world_save.h"
 #include "re2d_world_material_anim.h"
+#include "re2d_postprocess.h"
+#include "re2d_audio_zone.h"
 #include "render.h"
 #include "audio.h"
 #include <quickjs.h>
@@ -124,6 +126,10 @@ typedef struct R2DWorldRuntime {
     bool particle_ready;
     float particle_accumulator;
     int particles_drawn;
+    int particle_budget;
+    // P2 final-frame postprocess stack (descriptors; JS maps to the render pass).
+    R2DPostStack post;
+    bool post_ready;
     // P1 secrets/breakables: authored semantic state, no entity system.
     R2DWorldSecret *secrets;
     int *secret_tokens;
@@ -201,6 +207,10 @@ void r2d_world_nav_free(R2DWorldRuntime *);
 // P1 particles: pool bound lazily (capacity 2048), stepped with worldStep,
 // drawn by the native compositor. Renderer hints only; no JS pool.
 bool r2d_world_particles_ready(R2DWorldRuntime *);
+void r2d_world_particles_budget(R2DWorldRuntime *,int budget);
+// P4 aim assist: nearest registered hit proxy inside a cone/range.
+typedef struct { float x,y,z; int node; float angle; } R2DWorldAimAssist;
+bool r2d_world_aim_assist(JSContext *,R2DWorldRuntime *,const float from[3],const float dir[3],float cone_rad,float range,int mask,R2DWorldAimAssist *out);
 int r2d_world_particles_burst(R2DWorldRuntime *,const R2DWorldParticle *,int count,float spread,float speed,float dx,float dy,float dh);
 int r2d_world_particles_continuous(R2DWorldRuntime *,const R2DWorldParticle *,float rate,float dt);
 void r2d_world_particles_step(R2DWorldRuntime *,float dt);
@@ -232,6 +242,13 @@ uint64_t r2d_world_save_map_hash_runtime(R2DWorldRuntime *);
 bool r2d_world_material_anim_set(R2DWorldRuntime *,int material,int frames,float fps,bool ping_pong,uint32_t seed,float scroll_u,float scroll_v,float pulse_hz,float pulse_amount);
 bool r2d_world_material_anim_info(R2DWorldRuntime *,int material,int *frame,float *emissive,float *u_offset,float *v_offset);
 bool r2d_world_material_anim_clear(R2DWorldRuntime *,int material);
+// P2 postprocess stack.
+bool r2d_world_post_set(R2DWorldRuntime *,int effect,float strength,float r,float g,float b,float a,float extra0,float extra1);
+bool r2d_world_post_enable(R2DWorldRuntime *,int effect,bool enabled);
+bool r2d_world_post_profile(R2DWorldRuntime *,const char *name);
+bool r2d_world_post_eval(R2DWorldRuntime *,R2DPostUniforms *out);
+void r2d_world_post_reset(R2DWorldRuntime *);
+void r2d_world_post_step_all(R2DWorldRuntime *,float dt);
 void r2d_world_material_anim_advance(R2DWorldRuntime *,float dt);
 void r2d_world_runtime_actors_free(R2DWorldRuntime *);
 // Returns ordinary 2D sprite id; errors set QuickJS exception, no script renderer loops.

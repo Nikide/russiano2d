@@ -101,7 +101,10 @@ if(R2D_ENABLE_RE2D)
         re2d_world_volume.h re2d_world_volume.c
         re2d_world_material_anim.h re2d_world_material_anim.c
         re2d_world_polywall.h re2d_world_polywall.c
-        re2d_world_polygon.h re2d_world_polygon.c)
+        re2d_world_polygon.h re2d_world_polygon.c
+        re2d_postprocess.h re2d_postprocess.c
+        re2d_audio_zone.h re2d_audio_zone.c
+        re2d_audio_voices.h re2d_audio_voices.c)
     list(APPEND R2D_DEFINES R2D_ENABLE_RE2D=1)
 endif()
 

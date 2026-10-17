@@ -439,6 +439,23 @@ Capabilities — это факты текущей сборки, а не обещ
 накапливают наносекунды по последним вызовам (trace/controller/nav) и
 counters голосов/частиц; overflow частиц виден в `world.particles.info()`.
 
+## Postprocess (P2)
+
+```js
+world.post.profile('damage');       // neutral/underwater/poison/frost/boss/damage
+world.post.set('vignette', { strength: .5 }).enable('flash', true);
+const u = world.post.update(1 / 60); // native step + mapping в $.gfx.post
+world.post.reset();
+```
+
+Стек — финальный 2D frame: grade/vignette/flash/tint/pixelate/chroma/bloom.
+Нативные дескрипторы детерминированно шагаются (`postStep` в worldStep), а
+`update()` переводит `R2DPostUniforms` в существующий проход `$.gfx.post`
+(vignette/chromatic/glow/tint/saturation/brightness/blood), поэтому 3D G-buffer
+не нужен. Ограничения: grade — 3-канальный gain (не LUT-матрица), pixelate —
+hint, реальные пиксельные операции остаются в post-шейдере; bloom/chroma —
+скалярные подсказки.
+
 ## Свет, материал, изменение мира
 
 ```js

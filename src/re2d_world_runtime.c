@@ -656,6 +656,7 @@ bool r2d_world_particles_ready(R2DWorldRuntime *w)
     if(!storage)return false;
     if(!r2d_world_particle_pool_init(&w->particles,storage,R2D_WORLD_PARTICLE_CAPACITY)){free(storage);return false;}
     w->particle_storage=storage;w->particle_ready=true;w->particle_accumulator=0;
+    if(w->particle_budget<=0)w->particle_budget=R2D_WORLD_PARTICLE_CAPACITY;
     return true;
 }
 int r2d_world_particles_burst(R2DWorldRuntime *w,const R2DWorldParticle *prototype,int count,float spread,float speed,float dx,float dy,float dh)
@@ -663,7 +664,10 @@ int r2d_world_particles_burst(R2DWorldRuntime *w,const R2DWorldParticle *prototy
     if(!w||!prototype||count<0)return -1;
     if(count==0)return 0;
     if(!r2d_world_particles_ready(w))return -1;
-    return r2d_world_particle_emit_burst(&w->particles,prototype,count,spread,speed,dx,dy,dh);
+    int budget=w->particle_budget;if(budget>0&&w->particles.count>=budget)return 0;
+    int allowed=count;if(budget>0&&w->particles.count+allowed>budget)allowed=budget-w->particles.count;
+    if(allowed<=0)return 0;
+    return r2d_world_particle_emit_burst(&w->particles,prototype,allowed,spread,speed,dx,dy,dh);
 }
 int r2d_world_particles_continuous(R2DWorldRuntime *w,const R2DWorldParticle *prototype,float rate,float dt)
 {
@@ -1051,6 +1055,80 @@ void r2d_world_material_anim_advance(R2DWorldRuntime *w,float dt)
         w->world.materials[i].anim_v=a->v_offset;
         w->world.materials[i].anim_emissive=r2d_world_material_anim_emissive(a);
     }
+}
+
+
+// --- P4 particle budget + aim assist --------------------------------------
+void r2d_world_particles_budget(R2DWorldRuntime *w,int budget)
+{
+    if(!w)return;
+    if(budget<0)budget=0;
+    if(budget>R2D_WORLD_PARTICLE_CAPACITY)budget=R2D_WORLD_PARTICLE_CAPACITY;
+    w->particle_budget=budget;
+}
+bool r2d_world_aim_assist(JSContext *ctx,R2DWorldRuntime *w,const float from[3],const float dir[3],float cone_rad,float range,int mask,R2DWorldAimAssist *out)
+{
+    if(!w||!from||!dir||!out)return false;
+    if(!isfinite(cone_rad)||!isfinite(range)||cone_rad<0||range<=0)return false;
+    const float len=sqrtf(dir[0]*dir[0]+dir[1]*dir[1]+dir[2]*dir[2]);
+    if(!(len>1e-6f))return false;
+    const float dx=dir[0]/len,dy=dir[1]/len,dz=dir[2]/len;
+    const float cos_limit=cosf(cone_rad);
+    bool found=false;float best_angle=0,best_distance=0;
+    for(int i=0;i<w->hit_count;i++){
+        R2DWorldHitEntry *e=&w->hit_entries[i];
+        if(!(mask&(1<<e->category)))continue;
+        float x,y,depth;
+        if(!field(ctx,e->node,"x",&x)||!field(ctx,e->node,"y",&y)||!field(ctx,e->node,"depth",&depth))return false;
+        const float z=depth+(e->bottom_offset+e->top_offset)*0.5f;
+        const float tx=x-from[0],ty=y-from[1],tz=z-from[2];
+        const float distance=sqrtf(tx*tx+ty*ty+tz*tz);
+        if(!(distance>1e-4f)||distance>range)continue;
+        const float cos_angle=(tx*dx+ty*dy+tz*dz)/distance;
+        if(cos_angle<cos_limit)continue;
+        const float angle=acosf(cos_angle>1?1:(cos_angle<-1?-1:cos_angle));
+        if(!found||angle<best_angle||(angle==best_angle&&distance<best_distance)){
+            found=true;best_angle=angle;best_distance=distance;
+            out->x=x;out->y=y;out->z=z;out->node=i;out->angle=angle;
+        }
+    }
+    return found;
+}
+
+
+// --- P2 final-frame postprocess stack --------------------------------------
+static bool post_ensure(R2DWorldRuntime *w)
+{
+    if(w->post_ready)return true;
+    r2d_postprocess_init(&w->post);w->post_ready=true;return true;
+}
+bool r2d_world_post_set(R2DWorldRuntime *w,int effect,float strength,float r,float g,float b,float a,float extra0,float extra1)
+{
+    if(!w||!post_ensure(w))return false;
+    return r2d_postprocess_set(&w->post,effect,strength,r,g,b,a,extra0,extra1);
+}
+bool r2d_world_post_enable(R2DWorldRuntime *w,int effect,bool enabled)
+{
+    if(!w||!post_ensure(w))return false;
+    return r2d_postprocess_enable(&w->post,effect,enabled);
+}
+bool r2d_world_post_profile(R2DWorldRuntime *w,const char *name)
+{
+    if(!w||!post_ensure(w)||!name)return false;
+    return r2d_postprocess_apply_profile(&w->post,name);
+}
+bool r2d_world_post_eval(R2DWorldRuntime *w,R2DPostUniforms *out)
+{
+    if(!w||!post_ensure(w)||!out)return false;
+    r2d_postprocess_eval(&w->post,out);return true;
+}
+void r2d_world_post_reset(R2DWorldRuntime *w)
+{
+    if(!w)return;r2d_postprocess_init(&w->post);w->post_ready=true;
+}
+void r2d_world_post_step_all(R2DWorldRuntime *w,float dt)
+{
+    if(w&&w->post_ready)r2d_postprocess_step(&w->post,dt);
 }
 
 void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {

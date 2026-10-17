@@ -426,6 +426,42 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_world_polygon_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# Final-frame postprocess descriptors (P2): profiles, decay, uniform eval.
+add_executable(r2d_postprocess_test re2d/postprocess_test.c "${CMAKE_SOURCE_DIR}/src/re2d_postprocess.c")
+target_include_directories(r2d_postprocess_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_postprocess_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_postprocess_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_postprocess_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_postprocess_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Audio zones (P1): reverb presets + portal-aware attenuation.
+add_executable(r2d_audio_zone_test re2d/audio_zone_test.c "${CMAKE_SOURCE_DIR}/src/re2d_audio_zone.c")
+target_include_directories(r2d_audio_zone_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_audio_zone_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_audio_zone_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_audio_zone_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_audio_zone_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Audio voice virtualization (P1): priority/stealing/virtual promotion.
+add_executable(r2d_audio_voices_test audio/voices_test.c "${CMAKE_SOURCE_DIR}/src/re2d_audio_voices.c")
+target_include_directories(r2d_audio_voices_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_audio_voices_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_audio_voices_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_audio_voices_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_audio_voices_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # EXR-декодер панорамного неба Re2D World (cmake/WorldEXR.cmake).
 add_executable(r2d_world_exr_test re2d/exr_test.c)
 target_include_directories(r2d_world_exr_test PRIVATE "${CMAKE_SOURCE_DIR}/src")

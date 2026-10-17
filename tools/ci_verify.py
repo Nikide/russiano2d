@@ -159,7 +159,8 @@ RE2D_TESTS = ['rotsprite', 're2d', 're2d_world', 're2d_atlas', 'world_trace',
               'world_mover', 'world_trigger', 'world_controller', 're2d_semantic',
               're2d_portal', 'world_metadata', 'world_automap', 'world_particle', 'world_nav',
               'world_save', 'world_secret', 'world_terrain', 'world_portal_visual',
-              'world_volume', 'world_material_anim', 'world_polywall', 'world_polygon']
+              'world_volume', 'world_material_anim', 'world_polywall', 'world_polygon',
+              'postprocess', 'audio_zone', 'audio_voices']
 
 check_configuration()
 check_re2d_layer()

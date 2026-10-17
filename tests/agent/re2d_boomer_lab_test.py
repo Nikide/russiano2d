@@ -246,6 +246,17 @@ def main():
         prof = a.eval("JSON.stringify({m:boomerLab.info().movers,t:boomerLab.info().traceCalls,n:boomerLab.info().navQueries,av:boomerLab.info().audioVoicesActive})")
         check(prof is not None and '"t":' in prof, f"profiler-поля видны: {prof}")
 
+        a.step(2)
+        post_before = a.screenshot(os.path.join(SHOTS, "re2d_boomer_lab_post_before.png"))
+        post = a.eval("JSON.stringify(boomerLab.postProbe())")
+        check(post is not None and '"flash":' in post and '"vignette":' in post,
+              f"world.post.profile/update даёт uniform-ы: {post}")
+        a.step(2)
+        post_after = a.screenshot(os.path.join(SHOTS, "re2d_boomer_lab_post_after.png"))
+        changed_post, _ = changed_pixels(post_before, post_after)
+        check(changed_post > 1000, f"postprocess меняет итоговый 2D-кадр ({changed_post} px)")
+        a.eval("boomerLab.postReset()")
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 

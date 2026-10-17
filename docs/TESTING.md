@@ -14,7 +14,7 @@
 
 | Уровень | Что проверяет | Где | Как запускать |
 |---|---|---|---|
-| C-юниты | чистая логика ядра: json/crypto/payload/bsp/re2d/rotsprite/audio/atlas/trace/controller/mover/trigger/semantic/portal/metadata/automap/particle/nav/save/secret/terrain/portal-visual/volume/material-anim/polywall/polygon — все на Unity (253 кейса) | `tests/<ядро>/*_test.c`, цели CMake | `tools/ci_verify.py` (≈6 с на всё) |
+| C-юниты | чистая логика ядра: json/crypto/payload/bsp/re2d/rotsprite/audio/atlas/trace/controller/mover/trigger/semantic/portal/metadata/automap/particle/nav/save/secret/terrain/portal-visual/volume/material-anim/polywall/polygon/postprocess/audio-zone/audio-voices — все на Unity (286 кейсов) | `tests/<ядро>/*_test.c`, цели CMake | `tools/ci_verify.py` (≈6 с на всё) |
 | Модульные без движка | чистая логика подсистем `$.…` под QuickJS | `tests/js/*_test.mjs` (105 наборов, сверка 2026-10-17) | `build/_deps/quickjs-build/qjs tests/js/<имя>_test.mjs` |
 | Интеграционные в движке | поведение игры и API через агентский протокол (реальный SDL_GPU, ввод, скриншоты) | `tests/agent/*_test.py` (265 наборов, сверка 2026-10-17) | `python3 tools/run_tests.py` (≈12 мин) |
 | Стражи документации | «в доке написано, что чего-то нет, а в коде есть»; у каждого модуля есть страница и тест; у каждого публичного имени есть документация | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py`, `tests/api_docs_sync_test.py` | `python3 tests/doc_...py`, `python3 tests/api_docs_sync_test.py` |
@@ -32,7 +32,7 @@ compatibility-путём и проверяет конфигурацию RE2D.
 | Шаг | Время | Когда |
 |---|---|---|
 | `cmake --build build --target r2d_check` | **≈5 с** (CTest: Unity C + все `*.mjs` + SDK batch) | на каждую правку (P0-H) |
-| `python3 tools/ci_verify.py --build-dir build` | **≈6 с** (31 C-цель + 105 `*.mjs` + sdk batch) | на каждую правку; это же гоняет CI (`.github/workflows/build.yml`) |
+| `python3 tools/ci_verify.py --build-dir build` | **≈6 с** (34 C-цели + 105 `*.mjs` + sdk batch) | на каждую правку; это же гоняет CI (`.github/workflows/build.yml`) |
 | `python3 tools/run_tests.py --fast` | ≈1 мин (`agent_protocol`, `highlevel_api`, `game`) | перед коммитом, который трогает движок |
 | `python3 tools/run_tests.py` | ≈12 мин (265 агентских) | перед релизом/крупным слиянием, не на каждый чих |
 | `python3 tests/agent/<имя>_test.py` | 1–30 с | затронутый тест — обязательно |
@@ -78,11 +78,14 @@ license, без сети/FetchContent). Общая библиотека `r2d_uni
 | `r2d_world_material_anim_test` | 10 | flipbook/scroll/emissive timeline |
 | `r2d_world_polywall_test` | 15 | PolyWall rigid transform/bounds/sweep/lerp |
 | `r2d_world_polygon_test` | 15 | polygon validation/decomposition/shared edges |
+| `r2d_postprocess_test` | 11 | postprocess profiles/decay/uniform eval |
+| `r2d_audio_zone_test` | 11 | reverb zones + portal attenuation |
+| `r2d_audio_voices_test` | 11 | voice virtualization/priority/stealing |
 | `r2d_world_exr_test` | 1 | EXR-декодер неба |
 | `r2d_sdk_core_test` | 9 | SDK: glob/iso/registry/assets/validate/atlas/args |
 | `r2d_audio_spatial_test` | 1 | Steam Audio HRTF/occlusion |
 
-Итого **253 Unity-кейса**, все цели дают `N Tests 0 Failures 0 Ignored`
+Итого **286 Unity-кейсов**, все цели дают `N Tests 0 Failures 0 Ignored`
 (exit 0). Падение красное по-настоящему: неверный `TEST_ASSERT_EQUAL_INT(2,3)`
 печатает `FAIL: Expected 2 Was 3` и возвращает 1.
 

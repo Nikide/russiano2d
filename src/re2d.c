@@ -725,6 +725,69 @@ static int material_arg(WorldHandle *w,JSContext *ctx,JSValueConst value)
     }
     int32_t index=-1;if(JS_ToInt32(ctx,&index,value)<0)return -1;return index;
 }
+static JSValue world_post_set(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[8];if(!w||!world_numbers(ctx,argc,argv,8,p))return JS_EXCEPTION;
+    if(!r2d_world_post_set(w,(int)p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7]))return JS_ThrowRangeError(ctx,"Re2D World: invalid post effect");
+    return JS_UNDEFINED;
+}
+static JSValue world_post_enable(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[2];if(!w||!world_numbers(ctx,argc,argv,2,p))return JS_EXCEPTION;
+    if(!r2d_world_post_enable(w,(int)p[0],p[1]!=0.0f))return JS_ThrowRangeError(ctx,"Re2D World: invalid post effect");
+    return JS_UNDEFINED;
+}
+static JSValue world_post_profile(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w||argc<1||!JS_IsString(argv[0]))return JS_ThrowTypeError(ctx,"Re2D World: postProfile(name)");
+    const char *name=JS_ToCString(ctx,argv[0]);if(!name)return JS_EXCEPTION;
+    bool ok=r2d_world_post_profile(w,name);JS_FreeCString(ctx,name);
+    return ok?JS_UNDEFINED:JS_ThrowRangeError(ctx,"Re2D World: unknown post profile");
+}
+static JSValue world_post_eval(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    R2DPostUniforms u;
+    if(!r2d_world_post_eval(w,&u))return JS_NULL;
+    JSValue o=JS_NewObject(ctx);
+    JSValue scale=JS_NewArray(ctx),add=JS_NewArray(ctx),tint=JS_NewArray(ctx);
+    for(int i=0;i<3;i++){JS_SetPropertyUint32(ctx,scale,(uint32_t)i,JS_NewFloat64(ctx,u.color_scale[i]));
+        JS_SetPropertyUint32(ctx,add,(uint32_t)i,JS_NewFloat64(ctx,u.color_add[i]));}
+    for(int i=0;i<4;i++)JS_SetPropertyUint32(ctx,tint,(uint32_t)i,JS_NewFloat64(ctx,u.tint[i]));
+    JS_SetPropertyStr(ctx,o,"colorScale",scale);JS_SetPropertyStr(ctx,o,"colorAdd",add);JS_SetPropertyStr(ctx,o,"tint",tint);
+    set_num(ctx,o,"vignette",u.vignette);set_num(ctx,o,"flash",u.flash);set_num(ctx,o,"pixelSize",u.pixel_size);
+    set_num(ctx,o,"chroma",u.chroma);set_num(ctx,o,"bloom",u.bloom);
+    return o;
+}
+static JSValue world_post_reset(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    r2d_world_post_reset(w);return JS_UNDEFINED;
+}
+static JSValue world_post_step(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    if(w->post_ready)r2d_world_post_step_all(w,p[0]);
+    return JS_UNDEFINED;
+}
+static JSValue world_aim_assist(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[11];if(!w||!world_numbers(ctx,argc,argv,11,p))return JS_EXCEPTION;
+    float from[3]={p[0],p[1],p[2]},dir[3]={p[3],p[4],p[5]};
+    R2DWorldAimAssist assist;
+    if(!r2d_world_aim_assist(ctx,w,from,dir,p[6],p[7],(int)p[8],&assist)) {
+        JSValue exc=JS_GetException(ctx);
+        if(!JS_IsNull(exc)&&!JS_IsUndefined(exc)){JS_Throw(ctx,exc);return JS_EXCEPTION;}
+        return JS_NULL;
+    }
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"x",assist.x);set_num(ctx,o,"y",assist.y);set_num(ctx,o,"z",assist.z);
+    set_num(ctx,o,"node",assist.node);set_num(ctx,o,"angle",assist.angle);return o;
+}
+static JSValue world_particles_budget(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    r2d_world_particles_budget(w,(int)p[0]);return JS_UNDEFINED;
+}
 static JSValue world_material_index(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
@@ -1291,7 +1354,7 @@ static void world_watch_poll(JSContext *,WorldHandle *,float);
 static JSValue world_step_all(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)self;float dt;if(!world_numbers(ctx,argc,argv,1,&dt))return JS_EXCEPTION;if(dt<0||dt>60)return JS_ThrowRangeError(ctx,"Re2D World: invalid step dt");
-    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);r2d_world_particles_step(w,dt);r2d_world_material_anim_advance(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
+    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);r2d_world_particles_step(w,dt);r2d_world_material_anim_advance(w,dt);r2d_world_post_step_all(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
 }
 static JSValue world_light_at(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -1343,6 +1406,14 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"audioRemove",JS_NewCFunction(ctx,world_audio_remove,"audioRemove",1));
     JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",17));
     JS_SetPropertyStr(ctx,handle,"hitAdd",JS_NewCFunction(ctx,world_hit_add,"hitAdd",5));
+    JS_SetPropertyStr(ctx,handle,"postSet",JS_NewCFunction(ctx,world_post_set,"postSet",8));
+    JS_SetPropertyStr(ctx,handle,"postEnable",JS_NewCFunction(ctx,world_post_enable,"postEnable",2));
+    JS_SetPropertyStr(ctx,handle,"postProfile",JS_NewCFunction(ctx,world_post_profile,"postProfile",1));
+    JS_SetPropertyStr(ctx,handle,"postEval",JS_NewCFunction(ctx,world_post_eval,"postEval",0));
+    JS_SetPropertyStr(ctx,handle,"postReset",JS_NewCFunction(ctx,world_post_reset,"postReset",0));
+    JS_SetPropertyStr(ctx,handle,"postStep",JS_NewCFunction(ctx,world_post_step,"postStep",1));
+    JS_SetPropertyStr(ctx,handle,"aimAssist",JS_NewCFunction(ctx,world_aim_assist,"aimAssist",11));
+    JS_SetPropertyStr(ctx,handle,"particlesBudget",JS_NewCFunction(ctx,world_particles_budget,"particlesBudget",1));
     JS_SetPropertyStr(ctx,handle,"materialIndex",JS_NewCFunction(ctx,world_material_index,"materialIndex",1));
     JS_SetPropertyStr(ctx,handle,"materialAnimSet",JS_NewCFunction(ctx,world_material_anim_set,"materialAnimSet",9));
     JS_SetPropertyStr(ctx,handle,"materialAnimInfo",JS_NewCFunction(ctx,world_material_anim_info,"materialAnimInfo",1));

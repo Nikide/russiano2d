@@ -17,7 +17,7 @@ const calls = { atlasAdd: [], atlasRemove: [], actorAdd: [], actorRemove: [],
                 moverCreate: [], moverIntent: [], moverRemove: [], moverInfo: [],
                 triggerCreate: [], triggerRemove: [], triggerTick: [], triggerUse: [], triggerShoot: [],
                 find: [], controllerCreate: [], controllerInit: [], controllerMove: [], controllerRemove: [],
-                portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [], save: [], secret: [], breakable: [], terrain: [], material: [] };
+                portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [], save: [], secret: [], breakable: [], terrain: [], material: [], post: [] };
 
 const native = {
     info: () => ({ poseBudget: 1, poseStep: 3 }),
@@ -76,6 +76,13 @@ const native = {
     particlesContinuous: (proto, rate, dt, seed) => { calls.particles.push(['continuous', rate, dt, seed]); return 3; },
     particlesInfo: () => ({ alive: 4, capacity: 2048, overflow: 0, drawn: 4 }),
     particlesClear: () => calls.particles.push(['clear']),
+    postSet: (...args) => calls.post.push(['set', args]),
+    postEnable: (id, on) => calls.post.push(['enable', id, on]),
+    postProfile: (name) => calls.post.push(['profile', name]),
+    postStep: (dt) => calls.post.push(['step', dt]),
+    postReset: () => calls.post.push(['reset']),
+    postEval: () => ({ colorScale: [1.1, 0.9, 1], colorAdd: [0, 0, 0], tint: [1, 0.9, 0.8, 0.2],
+                       vignette: 0.4, flash: 0.5, pixelSize: 1, chroma: 0.001, bloom: 0.3 }),
     materialIndex: (name) => { calls.material.push(['index', name]); return name === 'brick' ? 2 : null; },
     materialAnimSet: (...args) => { calls.material.push(['set', args]); },
     materialAnimInfo: (index) => { calls.material.push(['info', index]); return { frame: 1, emissive: 1.1, uOffset: 0.25, vOffset: 0 }; },
@@ -452,6 +459,21 @@ test('$.capabilities.re2d — честная матрица возможност
     eq(caps.maxLights, 128);
     eq(caps.maxWorldSprites, 4096);
     truthy(caps.particles === true && caps.nav === true && caps.saveState === true);
+});
+
+test('world.post: профиль, set/enable и mapping в $.gfx.post', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    world.post.profile('damage').set('vignette', { strength: 0.5 }).enable('flash', true);
+    eq(calls.post[0][0], 'profile'); eq(calls.post[0][1], 'damage');
+    eq(calls.post[1][0], 'set'); eq(calls.post[1][1][0], 1); eq(calls.post[1][1][1], 0.5);
+    eq(calls.post[2][0], 'enable'); eq(calls.post[2][1], 2);
+    const u = world.post.update(1 / 60);
+    eq(calls.post[calls.post.length - 1][0], 'step');
+    eq(u.vignette, 0.4); eq(u.flash, 0.5); eq(u.bloom, 0.3);
+    world.post.reset();
+    eq(calls.post[calls.post.length - 1][0], 'reset');
+    throws(RangeError, () => world.post.set('unknown'), 'неизвестный эффект');
+    world.dispose();
 });
 
 finish();
