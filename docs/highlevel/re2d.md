@@ -452,7 +452,7 @@ $.capabilities.re2d;
 //  maxWorldSprites, maxPortalRecursion, maxParticles}
 world.info();   // + traceMs/traceCalls, controllerMs/controllerCalls,
                 //   navMs/navQueries, audioVoicesActive/audioVoicesVirtual,
-                //   particles/particlesDrawn, movers, triggers, hitProxies
+                //   gpuDrawsBase/gpuDrawsSpan/gpuDrawsActor/gpuDrawsOther, particles/…, movers/…
 ```
 
 Capabilities — это факты текущей сборки, а не обещание: `mirrorPortal`/

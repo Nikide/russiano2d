@@ -74,3 +74,30 @@ RelWithDebInfo, macOS arm64, Metal, window 1280×720, world frame 640×360.
 Читать так: particle/actor draw submission доминирует в worstcase; visibility
 и actor synthesis — доли миллисекунды. GPU-числа здесь — время ожидания
 fence на этой машине, а не гарантированный бюджет BASHNYA (§76 roadmap).
+
+## BASHNYA issue #2: wall->span incidence cache (2026-10-17)
+
+`surface_draw` раньше для каждой видимой стены перебирала **все** видимые
+spans (`O(walls × spans)`), и это был единственный суперлинейный этап кадра.
+Теперь `WorldGPU` один раз на `topology_revision` строит обратный индекс
+`wall -> incident spans` (из `span_wall_refs`) и проверяет `span_seen`.
+
+Замер на `BASHNYA level1` (960×540, headless, 120 кадров, `bashnya.benchmark`):
+
+| | до | после |
+|---|---:|---:|
+| gpuDraws | 10 531 | 10 531 |
+| frameMs p50 | 12.37 | **2.53** |
+| frameMs p95 | 13.04 | **3.02** |
+| surfaceMs | 11.15 | **1.94** |
+| visibleSurfaces / spans | 2192 / 653 | 2192 / 653 |
+
+Кадр до/после побайтово совпал (0 отличий), т.е. это CPU-оптимизация, не
+изменение видимой геометрии. `world.info()` теперь отдаёт разбивку
+`gpuDrawsBase/gpuDrawsSpan/gpuDrawsActor/gpuDrawsOther` (на старте BASHNYA:
+1527 base / 8471 span / 532 actor / 1 other = 10531).
+
+Дополнительно `set_scissor` возвращает false при пустом пересечении с active
+clip rect: surface/actor/decal draws с нулевым scissor больше не отправляются
+(важно для mirror-прохода). Причина высокого `frameMs` в отчёте BASHNYA
+подтверждена как CPU incidence scan, а не число draw call'ов.

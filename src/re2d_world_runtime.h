@@ -136,6 +136,8 @@ typedef struct R2DWorldRuntime {
     float particle_accumulator;
     int particles_drawn;
     int particle_budget;
+    // Per-frame draw attribution for profiler/benchmarks.
+    int gpu_draw_base,gpu_draw_span,gpu_draw_actor,gpu_draw_other;
     // P2 final-frame postprocess stack (descriptors; JS maps to the render pass).
     R2DPostStack post;
     bool post_ready;

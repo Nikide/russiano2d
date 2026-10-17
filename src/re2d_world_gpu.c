@@ -11,6 +11,9 @@ typedef struct {
     SDL_GPUGraphicsPipeline *pipeline,*overdraw,*translucent,*additive,*mirror;
     R2DWorldVisibility mirror_visibility;
     SDL_Rect clip;bool clip_active;
+    // Cached inverse of span_wall_refs: wall -> incident spans. Rebuilt only on
+    // topology_revision; removes the O(visibleWalls*visibleSpans) scan.
+    int *wall_span_offsets,*wall_span_refs;int wall_span_count;uint64_t wall_span_revision;
     SDL_GPUSampler *sampler,*linear,*sky_sampler;
     SDL_GPUTexture *color,*owner,*depth;
     SDL_GPUTransferBuffer *download;
@@ -53,7 +56,8 @@ void r2d_world_gpu_free(R2DWorldRuntime *w)
     if(g->white>=0)r2d_texture_free(w->renderer,g->white);if(g->black>=0)r2d_texture_free(w->renderer,g->black);
     if(g->shadows)SDL_ReleaseGPUBuffer(d,g->shadows);free(g->shadow_data);for(int i=0;i<128;i++)free(g->shadow_chunks[i].data);
     for(int i=0;i<g->actor_capacity;i++){if(g->actors[i].color)SDL_ReleaseGPUTexture(d,g->actors[i].color);if(g->actors[i].depth)SDL_ReleaseGPUTexture(d,g->actors[i].depth);}free(g->actors);
-    r2d_world_visibility_free(&g->mirror_visibility);free(g);w->gpu=NULL;w->gpu_texture_bytes=w->gpu_transfer_bytes=0;w->gpu_shadow_updates=w->gpu_material_batches=w->gpu_draws=0;
+    r2d_world_visibility_free(&g->mirror_visibility);
+    free(g->wall_span_offsets);free(g->wall_span_refs);free(g);w->gpu=NULL;w->gpu_texture_bytes=w->gpu_transfer_bytes=0;w->gpu_shadow_updates=w->gpu_material_batches=w->gpu_draws=0;w->gpu_draw_base=w->gpu_draw_span=w->gpu_draw_actor=w->gpu_draw_other=0;
 }
 static void material_bind(R2DWorldRuntime *w,WorldGPU *g,SDL_GPURenderPass *pass,const SDL_GPUTextureSamplerBinding textures[3])
 {
@@ -287,7 +291,7 @@ static bool actors_upload(JSContext *ctx,R2DWorldRuntime *w,WorldGPU *g,SDL_GPUC
         SDL_EndGPUCopyPass(copy);}
     SDL_ReleaseGPUTransferBuffer(d,upload);return ok;
 }
-static void set_scissor(WorldGPU *g,SDL_GPURenderPass *pass,SDL_Rect r)
+static bool set_scissor(WorldGPU *g,SDL_GPURenderPass *pass,SDL_Rect r)
 {
     if(g->clip_active){
         int left=r.x>g->clip.x?r.x:g->clip.x,top=r.y>g->clip.y?r.y:g->clip.y;
@@ -295,7 +299,9 @@ static void set_scissor(WorldGPU *g,SDL_GPURenderPass *pass,SDL_Rect r)
         int bottom=(r.y+r.h)<(g->clip.y+g->clip.h)?(r.y+r.h):(g->clip.y+g->clip.h);
         r=(SDL_Rect){left,top,right>left?right-left:0,bottom>top?bottom-top:0};
     }
+    if(r.w<=0||r.h<=0)return false;
     SDL_SetGPUScissor(pass,&r);
+    return true;
 }
 static void actor_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho,int i,int span,bool filter)
 {
@@ -312,7 +318,8 @@ static void actor_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,
     u.billboard[0]=projected[0]*w->width/v->width-u.billboard[2]*.5f;u.billboard[1]=projected[1]*w->height/v->height-u.billboard[3]*(samples?.5f:1);
     int left=(int)fmaxf(0,fminf(w->width,floorf(u.billboard[0]))),top=(int)fmaxf(0,fminf(w->height,floorf(u.billboard[1])));
     int right=(int)fmaxf(0,fminf(w->width,ceilf(u.billboard[0]+u.billboard[2]))),bottom=(int)fmaxf(0,fminf(w->height,ceilf(u.billboard[1]+u.billboard[3])));
-    if(right<=left||bottom<=top)return;SDL_Rect scissor={left,top,right-left,bottom-top};set_scissor(g,pass,scissor);
+    if(right<=left||bottom<=top)return;SDL_Rect scissor={left,top,right-left,bottom-top};if(!set_scissor(g,pass,scissor))return;
+    w->gpu_draw_actor++;
     u.actor[0]=p[0];u.actor[1]=p[1];u.actor[2]=center;u.actor[3]=p[4];u.shape[2]=p[3];u.plane[0]=dist;u.plane[3]=2;
     u.material[2]=samples?1:0;u.identity[0]=-1;u.identity[1]=span;u.identity[3]=1;u.opening[3]=i;
     for(int c=0;c<4;c++)u.tint[c]=1;
@@ -325,6 +332,34 @@ static void actor_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,
     SDL_GPUTextureSamplerBinding textures[3]={{a->color,g->sampler},{a->depth?a->depth:r2d_texture_handle(w->renderer,g->black),g->sampler},{r2d_texture_handle(w->renderer,g->black),g->sampler}};
     material_bind(w,g,pass,textures);SDL_PushGPUFragmentUniformData(cmd,0,&u,sizeof u);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;
 }
+static bool ensure_wall_spans(R2DWorldRuntime *w,WorldGPU *g)
+{
+    const int nw=w->world.wall_count;
+    const int refs=w->world.span_wall_offsets?w->world.span_wall_offsets[w->world.span_count]:0;
+    if(g->wall_span_offsets&&g->wall_span_revision==w->world.topology_revision&&g->wall_span_count==refs)return true;
+    free(g->wall_span_offsets);free(g->wall_span_refs);g->wall_span_offsets=NULL;g->wall_span_refs=NULL;g->wall_span_count=0;
+    int *offsets=(int *)calloc((size_t)(nw+1),sizeof *offsets);
+    int *counts=(int *)calloc((size_t)(nw?nw:1),sizeof *counts);
+    int *refs_out=(int *)malloc((size_t)(refs?refs:1)*sizeof *refs_out);
+    if(!offsets||!counts||!refs_out){free(offsets);free(counts);free(refs_out);return false;}
+    for(int span=0;span<w->world.span_count;span++)
+        for(int r=w->world.span_wall_offsets[span];r<w->world.span_wall_offsets[span+1];r++){
+            const int wall=w->world.span_wall_refs[r];
+            if(wall>=0&&wall<nw)counts[wall]++;
+        }
+    for(int i=0;i<nw;i++)offsets[i+1]=offsets[i]+counts[i];
+    int *fill=(int *)calloc((size_t)(nw?nw:1),sizeof *fill);
+    if(!fill){free(offsets);free(counts);free(refs_out);return false;}
+    for(int span=0;span<w->world.span_count;span++)
+        for(int r=w->world.span_wall_offsets[span];r<w->world.span_wall_offsets[span+1];r++){
+            const int wall=w->world.span_wall_refs[r];
+            if(wall>=0&&wall<nw)refs_out[offsets[wall]+fill[wall]++]=span;
+        }
+    free(fill);free(counts);
+    g->wall_span_offsets=offsets;g->wall_span_refs=refs_out;g->wall_span_count=refs;g->wall_span_revision=w->world.topology_revision;
+    return true;
+}
+
 static void surface_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho,int id)
 {
     if(w->world.surface_sky&&w->world.surface_sky[id])return;
@@ -334,15 +369,29 @@ static void surface_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cm
         int right=(int)fminf(w->width,ceilf(window->right*w->width/v->width)),bottom=(int)fminf(w->height,ceilf(window->bottom*w->height/v->height));
         left=left>projected.x?left:projected.x;top=top>projected.y?top:projected.y;
         right=right<projected.x+projected.w?right:projected.x+projected.w;bottom=bottom<projected.y+projected.h?bottom:projected.y+projected.h;
-        if(right<=left||bottom<=top)return;SDL_Rect scissor={left,top,right-left,bottom-top};set_scissor(g,pass,scissor);
-        if(s->kind!=R2D_WORLD_WALL){draw(w,g,cmd,pass,v,ortho,id,s->span,false,NULL);return;}
-        if(r2d_world_surface_blend(&w->world,id)<R2D_WORLD_TRANSLUCENT||w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)draw(w,g,cmd,pass,v,ortho,id,-1,false,NULL);
-        for(int k=0;k<w->visibility.span_count;k++){int span=w->visibility.spans[k];bool incident=false;
-            for(int r=w->world.span_wall_offsets[span];r<w->world.span_wall_offsets[span+1];r++)if(w->world.span_wall_refs[r]==s->primitive){incident=true;break;}
-            // A fully open portal/opening over this span is shader-discarded;
-            // do not submit the draw at all.
-            if(incident&&r2d_world_wall_solid(&w->world,s->primitive,w->world.spans[span].bottom,w->world.spans[span].top))
-                draw(w,g,cmd,pass,v,ortho,id,span,true,NULL);}
+        if(right<=left||bottom<=top)return;SDL_Rect scissor={left,top,right-left,bottom-top};if(!set_scissor(g,pass,scissor))return;
+        if(s->kind!=R2D_WORLD_WALL){draw(w,g,cmd,pass,v,ortho,id,s->span,false,NULL);w->gpu_draw_base++;return;}
+        if(r2d_world_surface_blend(&w->world,id)<R2D_WORLD_TRANSLUCENT||w->debug_view==R2D_WORLD_DEBUG_OVERDRAW){
+            draw(w,g,cmd,pass,v,ortho,id,-1,false,NULL);w->gpu_draw_base++;
+        }
+        // Use the cached inverse incidence list instead of scanning every
+        // visible span for every wall (the only superlinear term in a frame).
+        const int wall=s->primitive;
+        if(g->wall_span_offsets&&wall>=0&&wall<w->world.wall_count){
+            for(int r=g->wall_span_offsets[wall];r<g->wall_span_offsets[wall+1];r++){
+                const int span=g->wall_span_refs[r];
+                if(span<0||span>=w->world.span_count||!w->visibility.span_seen[span])continue;
+                if(!r2d_world_wall_solid(&w->world,wall,w->world.spans[span].bottom,w->world.spans[span].top))continue;
+                draw(w,g,cmd,pass,v,ortho,id,span,true,NULL);w->gpu_draw_span++;
+            }
+        }else{
+            for(int k=0;k<w->visibility.span_count;k++){int span=w->visibility.spans[k];bool incident=false;
+                for(int rr=w->world.span_wall_offsets[span];rr<w->world.span_wall_offsets[span+1];rr++)if(w->world.span_wall_refs[rr]==s->primitive){incident=true;break;}
+                if(incident&&r2d_world_wall_solid(&w->world,s->primitive,w->world.spans[span].bottom,w->world.spans[span].top)){
+                    draw(w,g,cmd,pass,v,ortho,id,span,true,NULL);w->gpu_draw_span++;
+                }
+            }
+        }
 }
 
 static void sky_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho)
@@ -353,7 +402,7 @@ static void sky_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SD
     for(int c=0;c<4;c++)sky.tint[c]=((tint>>(c*8))&255)/255.0f;
     SDL_GPUTexture *texture=r2d_texture_handle(w->renderer,g->sky_texture>=0?g->sky_texture:g->white);
     SDL_GPUTextureSamplerBinding samplers[3]={{texture,g->sky_sampler},{texture,g->sampler},{texture,g->sampler}};
-    material_bind(w,g,pass,samplers);SDL_PushGPUFragmentUniformData(cmd,0,&sky,sizeof sky);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;
+    material_bind(w,g,pass,samplers);SDL_PushGPUFragmentUniformData(cmd,0,&sky,sizeof sky);SDL_DrawGPUPrimitives(pass,3,1,0,0);g->draws++;w->gpu_draw_other++;
 }
 // P2 mirror portal: reflect the camera across the portal plane, render the world
 // with disabled depth into a scissored portal window. No offscreen RT is needed.
@@ -415,6 +464,7 @@ static bool mirror_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd
 bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,float ortho)
 {
     if(!init(w))return false;WorldGPU *g=w->gpu;SDL_GPUDevice *d=w->renderer->device;
+    ensure_wall_spans(w,g);
     SDL_GPUCommandBuffer *cmd=SDL_AcquireGPUCommandBuffer(d);if(!cmd)return false;
     Uint64 shadow_start=SDL_GetTicksNS();
     if(!shadows_upload(w,g,cmd)){SDL_CancelGPUCommandBuffer(cmd);return false;}
@@ -424,7 +474,7 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
     colors[0].clear_color=w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?(SDL_FColor){0,0,0,1}:(SDL_FColor){16/255.0f,24/255.0f,32/255.0f,1};colors[1].texture=g->owner;colors[1].load_op=SDL_GPU_LOADOP_CLEAR;colors[1].store_op=SDL_GPU_STOREOP_STORE;colors[1].clear_color=(SDL_FColor){FLT_MAX,-1,-1,-1};
     SDL_GPUDepthStencilTargetInfo depth={0};depth.texture=g->depth;depth.load_op=SDL_GPU_LOADOP_CLEAR;depth.store_op=SDL_GPU_STOREOP_DONT_CARE;depth.clear_depth=1;
     SDL_GPURenderPass *pass=SDL_BeginGPURenderPass(cmd,colors,2,&depth);if(!pass){SDL_CancelGPUCommandBuffer(cmd);return false;}
-    SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:g->pipeline);SDL_BindGPUFragmentStorageBuffers(pass,0,&g->shadows,1);g->draws=0;w->gpu_material_batches=0;memset(g->bound_textures,0,sizeof g->bound_textures);
+    SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:g->pipeline);SDL_BindGPUFragmentStorageBuffers(pass,0,&g->shadows,1);g->draws=0;w->gpu_draw_base=w->gpu_draw_span=w->gpu_draw_actor=w->gpu_draw_other=0;w->gpu_material_batches=0;memset(g->bound_textures,0,sizeof g->bound_textures);
     if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&(w->world.sky.pixels||w->world.sky_color))sky_draw(w,g,cmd,pass,v,ortho);
     for(int j=0;j<w->visibility.surface_count;j++){int id=w->visibility.surfaces[j];if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)continue;surface_draw(w,g,cmd,pass,v,ortho,id);}
     if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)mirror_draw(w,g,cmd,pass,v,ortho);
@@ -440,7 +490,8 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
         if(actor_pipeline!=g->pipeline&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)SDL_BindGPUGraphicsPipeline(pass,g->pipeline);}
     for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)if(w->world.decals[i].active){
         const R2DWorldDecal *decal=&w->world.decals[i];int id=decal->surface;if(!w->visibility.surface_seen[id]||(w->world.surface_sky&&w->world.surface_sky[id]))continue;
-        SDL_Rect scissor;if(!surface_bounds(w,v,ortho,id,&scissor))continue;set_scissor(g,pass,scissor);
+        SDL_Rect scissor;if(!surface_bounds(w,v,ortho,id,&scissor))continue;if(!set_scissor(g,pass,scissor))continue;
+        w->gpu_draw_other++;
         SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:w->world.materials[decal->material].blend==R2D_WORLD_ADDITIVE?g->additive:g->translucent);
         const R2DWorldSurface *surface=&w->world.surfaces[id];
         if(surface->kind!=R2D_WORLD_WALL)draw(w,g,cmd,pass,v,ortho,id,surface->span,false,decal);

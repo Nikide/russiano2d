@@ -342,6 +342,8 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"decals",w->world.decal_count);set_num(ctx,o,"lightUpdates",w->world.light_updates);
     set_num(ctx,o,"reloadCount",w->reload_count);JS_SetPropertyStr(ctx,o,"reloadError",JS_NewString(ctx,w->reload_error));
     JS_SetPropertyStr(ctx,o,"backend",JS_NewString(ctx,w->gpu_enabled?"gpu-reference":"cpu-reference"));set_num(ctx,o,"gpuDraws",w->gpu_draws);
+    set_num(ctx,o,"gpuDrawsBase",w->gpu_draw_base);set_num(ctx,o,"gpuDrawsSpan",w->gpu_draw_span);
+    set_num(ctx,o,"gpuDrawsActor",w->gpu_draw_actor);set_num(ctx,o,"gpuDrawsOther",w->gpu_draw_other);
     JS_SetPropertyStr(ctx,o,"gpuWait",JS_NewBool(ctx,w->gpu_wait));
     JS_SetPropertyStr(ctx,o,"bakedLighting",JS_NewBool(ctx,w->world.baked_lighting));
     JS_SetPropertyStr(ctx,o,"bakedTopology",JS_NewBool(ctx,w->world.baked_topology));
