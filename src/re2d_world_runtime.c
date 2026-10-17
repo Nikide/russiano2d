@@ -1259,8 +1259,39 @@ void r2d_world_audio_zone_free(R2DWorldRuntime *w)
     w->span_audio_zone=NULL;w->span_audio_zone_set=NULL;w->audio_zone_capacity=0;
 }
 
+int r2d_world_audio_budget(R2DWorldRuntime *w,int budget)
+{
+    if(!w)return 0;
+    if(budget<1)budget=1;
+    if(budget>R2D_AUDIO_VOICES_MAX)budget=R2D_AUDIO_VOICES_MAX;
+    w->audio_voice_budget=budget;
+    return budget;
+}
+static void audio_voice_policy_step(R2DWorldRuntime *w,const R2DRe2dView *v)
+{
+    if(!w||!w->audio)return;
+    int budget=w->audio_voice_budget;
+    if(budget<=0)budget=24;
+    if(budget>R2D_AUDIO_VOICES_MAX)budget=R2D_AUDIO_VOICES_MAX;
+    R2DAudioVoices *policy=&w->voice_policy;
+    r2d_audio_voices_init(policy,budget);
+    r2d_audio_voices_listener(policy,v->x,v->y,v->eye);
+    for(int i=0;i<R2D_AUDIO_CHANNELS;i++)if(w->sources[i].active){
+        R2DAudioVoiceRequest req={0};
+        req.id=i;req.priority=w->sources[i].priority;req.x=w->sources[i].x;req.y=w->sources[i].y;req.h=w->sources[i].h;
+        req.volume=w->sources[i].volume;req.range=w->sources[i].range;req.loop=true;req.bus=R2D_AUDIO_BUS_SFX;req.channel=-1;
+        r2d_audio_voices_submit(policy,&req);
+    }
+    for(int i=0;i<R2D_AUDIO_CHANNELS;i++)if(w->sources[i].active){
+        bool virtualized=true;
+        for(int sl=0;sl<policy->slot_count;sl++)if(policy->slots[sl].voice_id==i){virtualized=policy->slots[sl].virtual;break;}
+        w->sources[i].virtualized=virtualized;
+    }
+}
+
 void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {
     if(!w->audio)return;
+    audio_voice_policy_step(w,v);
     for(int i=0;i<R2D_AUDIO_CHANNELS;i++) {
         R2DWorldAudioSource *s=&w->sources[i];if(!s->active)continue;
         if(s->generation!=w->audio->channel_generation[i]||!r2d_audio_channel_playing(w->audio,i)){s->active=false;continue;}
@@ -1270,7 +1301,7 @@ void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {
         s->occluded=d>.01f&&r2d_world_ray(&w->world,origin,direction,.001f,.999f,&hit);
         s->gain=s->volume*fminf(1,s->reference/fmaxf(s->reference,d))*taper*taper*(s->occluded?.18f:1);
         s->cutoff=s->occluded?700:22000; s->current_gain+=(s->gain-s->current_gain)*.2f;
-        s->virtualized=s->gain<0.0005f;
+        if(s->virtualized){s->current_gain=0;s->gain=0;r2d_audio_world_channel(w->audio,i,true,s->hrtf,0,0,-1,0,22000);continue;}
         float forward=dx*v->cos_yaw+dy*v->sin_yaw,right=-dx*v->sin_yaw+dy*v->cos_yaw;
         float up=dh*v->cos_pitch-forward*v->sin_pitch,back=-(forward*v->cos_pitch+dh*v->sin_pitch);
         int zone=-1;const char *zone_name=NULL;int zone_span=-1;

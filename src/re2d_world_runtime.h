@@ -13,6 +13,7 @@
 #include "re2d_world_material_anim.h"
 #include "re2d_postprocess.h"
 #include "re2d_audio_zone.h"
+#include "re2d_audio_voices.h"
 #include "render.h"
 #include "audio.h"
 #include <quickjs.h>
@@ -75,6 +76,7 @@ typedef struct R2DWorldAudioSource {
     bool active,hrtf,occluded,virtualized;
     unsigned generation;
     float x,y,h,range,reference,volume,distance,gain,current_gain,cutoff;
+    int priority;
 } R2DWorldAudioSource;
 typedef struct R2DWorldRuntime {
     R2DAudio *audio;
@@ -155,6 +157,8 @@ typedef struct R2DWorldRuntime {
     bool *span_audio_zone_set;
     int audio_zone_capacity;
     int channel_zone[R2D_AUDIO_CHANNELS];
+    int audio_voice_budget;
+    R2DAudioVoices voice_policy;
     // P2 material animation: per material slot, stepped with worldStep.
     R2DWorldMaterialAnim material_anims[R2D_WORLD_MAX_MATERIALS];
     bool material_anim_active[R2D_WORLD_MAX_MATERIALS];
@@ -257,6 +261,9 @@ bool r2d_world_set_span_audio_zone(R2DWorldRuntime *,int span,const char *name);
 bool r2d_world_span_audio_zone(R2DWorldRuntime *,int span,int *preset,const char **name);
 bool r2d_world_audio_zone_at(R2DWorldRuntime *,float x,float y,float h,int *preset,const char **name,int *span);
 void r2d_world_audio_zone_free(R2DWorldRuntime *);
+// P1 audio voice virtualization runtime: cap real voices, keep virtual ones for
+// promotion. Returns effective budget (1..R2D_AUDIO_VOICES_MAX).
+int r2d_world_audio_budget(R2DWorldRuntime *,int budget);
 // P1 save/load snapshot of native gameplay state (spans/portals/movers/triggers).
 bool r2d_world_state_capture(R2DWorldRuntime *,R2DWorldSaveState *out);
 bool r2d_world_state_apply(R2DWorldRuntime *,const R2DWorldSaveState *in);

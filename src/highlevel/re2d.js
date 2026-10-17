@@ -583,17 +583,21 @@ function rendererWorldWrapper($, native) {
             const channel=$.sound.play(path,{loop:options.loop??true,volume:0,priority:options.priority??20});
             if(channel<0)throw new Error('Re2D World audio: cannot play source');
             let token;
-            try{token=native.audioAdd(channel,state.x,state.y,state.h,state.range,state.reference,state.volume,options.hrtf??true);}catch(error){$.sound.stop(channel);throw error;}
+            const priority=Number(options.priority ?? 20);
+            try{token=native.audioAdd(channel,state.x,state.y,state.h,state.range,state.reference,state.volume,options.hrtf??true);native.audioPriority(token,priority);}catch(error){$.sound.stop(channel);throw error;}
             const update=patch=>{const next={...state,...patch};validate(next);native.audioUpdate(token,next.x,next.y,next.h,next.range,next.reference,next.volume);Object.assign(state,next);};
             const source={
                 at(x,y,h=state.h){update({x,y,h});return source;},
                 volume(v){update({volume:v});return source;},
                 range(v){update({range:v});return source;},
+                priority(p){native.audioPriority(token,Number(p));return source;},
                 info(){return native.audioInfo(token);},
                 stop(){native.audioRemove(token);},
             };return source;
         },
         listener(view){world.camera(view);return world.audio;},
+        state(){return native.audioState();},
+        budget(n){return native.audioBudget(Math.trunc(Number(n)));},
     };
     world.add = target => { $(target).eachNode((i,node) => { registerRotWorldNode(node); native.actorAdd(node); }); return world; };
     // Flat directional atlas sprite: an existing `$` node drawn by the native
@@ -1320,7 +1324,7 @@ export function installRe2d($) {
         worldGpu: true, worldCpu: true,
         hrtf: !!(hrtf && hrtf.on),
         mirrorPortal: false, skyPortal: true, volumetricSprite: true,
-        particles: true, nav: true, automap: true, saveState: true, polygonCells: true, audioZones: true,
+        particles: true, nav: true, automap: true, saveState: true, polygonCells: true, audioZones: true, audioVoices: true,
         maxLights: 128, maxDecals: 128, maxWorldSprites: 4096,
         maxPortalRecursion: 4, maxParticles: 2048,
     });

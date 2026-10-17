@@ -269,6 +269,16 @@ def main():
               f"audio zone span -> $$.audio.hrtf не ломается: {audio_zone}")
         a.step(5)
 
+        a.eval("JSON.stringify(boomerLab.audioVoicesProbe())")
+        a.step(3)
+        voices = a.eval("JSON.stringify(boomerLab.audioVoicesProbe())")
+        check(voices is not None and '"active":3' in voices and '"virtual":2' in voices,
+              f"voice virtualization: budget 1 -> 1 real + 2 virtual: {voices}")
+        a.step(3)
+        voices_after = a.eval("JSON.stringify(boomerLab.audioVoicesProbe())")
+        check(voices_after is not None and '"virtual":2' in voices_after,
+              f"виртуальные голоса стабильны после шага: {voices_after}")
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 

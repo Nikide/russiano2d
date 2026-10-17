@@ -174,6 +174,20 @@ export default function install($) {
             player: world.spawn('player.start'), missing: world.spawn('nope'),
         }),
         particlesClear: () => world.particles.clear(),
+        audioStateProbe: () => world.audio.state(),
+        audioVoicesProbe: () => {
+            if (!world._voices) {
+                world._voices = [];
+                for (let i = 0; i < 3; i++) {
+                    world._voices.push(world.audio.source('re2d_testroom/assets/weapons/audio/shotgun/fire_01.wav', {
+                        x: 700 + i * 120, y: 900, h: 48, range: 3000, reference: 120,
+                        volume: 0.4, priority: 10 + i * 10, loop: true, hrtf: false }));
+                }
+            }
+            world.audio.budget(1);
+            return { active: world.info().audioVoicesActive, virtual: world.info().audioVoicesVirtual,
+                     budget: 1, sources: (world._voices || []).map(v => v.info()) };
+        },
         audioZoneProbe: () => {
             world.span(0).audioZone('hall');
             const at = world.audioZoneAt(800, 900, 40);

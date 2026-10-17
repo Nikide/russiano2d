@@ -26,6 +26,7 @@ $.render(() => world.render(view,400,240));
 | `world.impactInfo(opts)` / `ricochet(dir,normal)` | material/terrain tag и отражение для damage-response |
 | compiler `cells[].polygon` | rectilinear polygon → runtime XY tiles (P1 authoring) |
 | `span.audioZone(name)` / `audioZoneAt` | reverb preset зоны, наследуется source-каналами |
+| `world.audio.budget(n)` | voice virtualization: реальные/virtual голоса по приоритету |
 | `world.trace(opts)` / `world.traceAll(opts)` | ближайшее попадание / все попадания мира и actor-прокси |
 | `world.findCell/findWall/findSpan/findPortal(name)` | authored semantic ID → runtime handle (или null) |
 | `world.portalOpen(index, fraction)` / `portalFraction(index)` | плавное состояние портала 0..1 |
@@ -532,6 +533,22 @@ world.ricochet(dir, hitNormal);     // отражённый вектор по н
 поддерживаются; вырез полигона — void без floor/support. Авторские порталы к
 исходному `id` полигона не адресуются (используйте сгенерированные/стены).
 Capability: `$.capabilities.re2d.polygonCells === true`.
+
+## Audio voice virtualization (P1)
+
+```js
+world.audio.budget(24);                 // реальных голосов не больше 24
+world.audio.state();                    // {ready,active,virtual,budget}
+const src = world.audio.source(path, { priority: 30, x, y, h });
+```
+
+Каждый кадр рантайм строит `R2DAudioVoices` pool из активных источников: выше
+`priority` — важнее, дальние/тихие уходят в virtual (gain 0, канал
+останавливается), при освобождении слота virtual повышается автоматически.
+Профайлер: `world.info().audioVoicesActive/audioVoicesVirtual`. Ядро политики —
+`r2d_audio_voices` (11 Unity-тестов); его лимит 1..32, runtime default 24.
+Ограничения: шина/ducking из core пока не прокинуты в микшер; HRTF-ветка
+остаётся у существующего `$.audio`.
 
 ## Audio zones (P1)
 

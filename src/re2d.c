@@ -545,6 +545,7 @@ static R2DWorldAudioSource *world_audio_source(JSContext *ctx,WorldHandle *w,int
 }
 static JSValue world_audio_add(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv) {
     WorldHandle *w=world_get(ctx,self);float p[8];if(!w||!world_numbers(ctx,argc,argv,8,p))return JS_EXCEPTION;
+    if(!w->audio){R2DScript *script=JS_GetContextOpaque(ctx);if(script)w->audio=script->audio;}
     int c=(int)p[0];if(c<0||c>=R2D_AUDIO_CHANNELS||p[0]!=c||p[4]<=0||p[5]<=0||p[6]<0||p[6]>1||!w->audio||!r2d_audio_channel_playing(w->audio,c))return JS_ThrowRangeError(ctx,"Re2D World audio: invalid channel/position/range/reference/volume");
     if(!r2d_audio_world_channel(w->audio,c,true,p[7]!=0,0,0,-1,0,22000))return JS_ThrowTypeError(ctx,"Re2D World audio: requested HRTF/audio backend unavailable");
     w->sources[c]=(R2DWorldAudioSource){.active=true,.hrtf=p[7]!=0,.generation=w->audio->channel_generation[c],.x=p[1],.y=p[2],.h=p[3],.range=p[4],.reference=p[5],.volume=p[6],.cutoff=22000};
@@ -556,10 +557,25 @@ static JSValue world_audio_update(JSContext *ctx,JSValueConst self,int argc,JSVa
     if(p[3]<=0||p[4]<=0||p[5]<0||p[5]>1)return JS_ThrowRangeError(ctx,"Re2D World audio: invalid source parameters");
     s->x=p[0];s->y=p[1];s->h=p[2];s->range=p[3];s->reference=p[4];s->volume=p[5];return JS_UNDEFINED;
 }
+static JSValue world_audio_priority(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv) {
+    WorldHandle *w=world_get(ctx,self);int token,c;float p[1];if(!w||!world_token(ctx,argc,argv,&token)||!world_numbers(ctx,argc-1,argv+1,1,p))return JS_EXCEPTION;
+    R2DWorldAudioSource *s=world_audio_source(ctx,w,token,&c);if(!s)return JS_EXCEPTION;
+    s->priority=(int)p[0];return JS_UNDEFINED;
+}
+static JSValue world_audio_state(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv) {
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    JSValue o=JS_NewObject(ctx);JS_SetPropertyStr(ctx,o,"ready",JS_NewBool(ctx,w->audio!=NULL));
+    set_num(ctx,o,"active",w->audio_active);set_num(ctx,o,"virtual",w->audio_virtual);set_num(ctx,o,"budget",w->audio_voice_budget);
+    return o;
+}
+static JSValue world_audio_budget(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv) {
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    return JS_NewInt32(ctx,r2d_world_audio_budget(w,(int)p[0]));
+}
 static JSValue world_audio_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv) {
     WorldHandle *w=world_get(ctx,self);int token,c;if(!w||!world_token(ctx,argc,argv,&token))return JS_EXCEPTION;
     R2DWorldAudioSource *s=world_audio_source(ctx,w,token,&c);if(!s)return JS_EXCEPTION;
-    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"channel",c);set_num(ctx,o,"x",s->x);set_num(ctx,o,"y",s->y);set_num(ctx,o,"h",s->h);set_num(ctx,o,"distance",s->distance);set_num(ctx,o,"gain",s->gain);set_num(ctx,o,"currentGain",s->current_gain);set_num(ctx,o,"cutoff",s->cutoff);
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"channel",c);set_num(ctx,o,"x",s->x);set_num(ctx,o,"y",s->y);set_num(ctx,o,"h",s->h);set_num(ctx,o,"distance",s->distance);set_num(ctx,o,"gain",s->gain);set_num(ctx,o,"currentGain",s->current_gain);set_num(ctx,o,"cutoff",s->cutoff);set_num(ctx,o,"priority",s->priority);set_num(ctx,o,"virtualized",s->virtualized?1:0);
     JS_SetPropertyStr(ctx,o,"occluded",JS_NewBool(ctx,s->occluded));JS_SetPropertyStr(ctx,o,"hrtf",JS_NewBool(ctx,s->hrtf));JS_SetPropertyStr(ctx,o,"playing",JS_NewBool(ctx,r2d_audio_channel_playing(w->audio,c)));return o;
 }
 static JSValue world_audio_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv) {
@@ -1491,6 +1507,9 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"lightUpdate",JS_NewCFunction(ctx,world_light_set,"lightUpdate",10));
     JS_SetPropertyStr(ctx,handle,"lightRemove",JS_NewCFunction(ctx,world_light_delete,"lightRemove",1));
     JS_SetPropertyStr(ctx,handle,"lightInfo",JS_NewCFunction(ctx,world_light_info,"lightInfo",1));
+    JS_SetPropertyStr(ctx,handle,"audioPriority",JS_NewCFunction(ctx,world_audio_priority,"audioPriority",2));
+    JS_SetPropertyStr(ctx,handle,"audioState",JS_NewCFunction(ctx,world_audio_state,"audioState",0));
+    JS_SetPropertyStr(ctx,handle,"audioBudget",JS_NewCFunction(ctx,world_audio_budget,"audioBudget",1));
     JS_SetPropertyStr(ctx,handle,"audioAdd",JS_NewCFunction(ctx,world_audio_add,"audioAdd",8));
     JS_SetPropertyStr(ctx,handle,"audioUpdate",JS_NewCFunction(ctx,world_audio_update,"audioUpdate",7));
     JS_SetPropertyStr(ctx,handle,"audioInfo",JS_NewCFunction(ctx,world_audio_info,"audioInfo",1));

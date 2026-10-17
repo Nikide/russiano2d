@@ -87,6 +87,8 @@ const native = {
     surfaceMaterialName: (index) => 'brick',
     spanAudioZone: () => {}, spanAudioZoneInfo: () => ({ preset: 1, name: 'hall' }),
     audioZoneAt: (x, y, h) => ({ preset: 1, name: 'hall', span: 2 }),
+    audioBudget: (n) => n,
+    audioState: () => ({ ready: true, active: 3, virtual: 2, budget: 8 }),
     spanLight: () => ({ level: 1, r: 1, g: 1, b: 1, fogDensity: 0.002, fogStart: 100, fogR: 0.1, fogG: 0.2, fogB: 0.3 }),
     spanHeight: () => {}, spanSky: () => {},
     spanAt: () => 2,
@@ -556,6 +558,14 @@ test('span.audioZone и audioZoneAt доступны', () => {
     eq(span.audioZoneInfo().name, 'hall');
     eq(world.audioZoneAt(1, 2, 3).span, 2);
     eq($.capabilities.re2d.audioZones, true);
+    world.dispose();
+});
+
+test('world.audio.budget/state отражают voice virtualization', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    eq(world.audio.budget(8), 8);
+    const st = world.audio.state();
+    eq(st.active, 3); eq(st.virtual, 2); eq(st.ready, true);
     world.dispose();
 });
 
