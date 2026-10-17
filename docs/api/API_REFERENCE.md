@@ -175,17 +175,17 @@ Entries: 3979
 
 | Name | Kind | Signature / value |
 |---|---|---|
-| `active` | boolean | `false` |
+| `active` | boolean | — |
 | `capabilities` | function | `(arg0: any) -> any` |
 | `describe` | function | `() -> any` |
 | `expose` | function | `(arg0: any, arg1: any) -> any` |
 | `frame` | function | `() -> any` |
 | `has` | function | `(arg0: any) -> any` |
-| `headless` | boolean | `true` |
+| `headless` | boolean | — |
 | `install` | function | `() -> any` |
 | `node` | function | `(arg0: any) -> any` |
 | `nodes` | function | `(arg0: any, arg1: any) -> any` |
-| `seed` | number | `12345` |
+| `seed` | number | — |
 | `snapshot` | function | `(arg0: any) -> any` |
 | `time` | function | `() -> any` |
 
@@ -620,9 +620,9 @@ Entries: 3979
 | `$` | function | `(arg0: any, arg1: any) -> any` |
 | `agent` | object | — |
 | `alive` | object | — |
-| `animations` | array | — |
+| `animations` | object | — |
 | `audio` | object | — |
-| `audio_spatial` | string | `js` |
+| `audio_spatial` | string | — |
 | `barks` | object | — |
 | `byBody` | object | — |
 | `byId` | object | — |
@@ -643,7 +643,7 @@ Entries: 3979
 | `frame` | object | — |
 | `fs` | object | — |
 | `fx` | object | — |
-| `fx_fields` | array | — |
+| `fx_fields` | object | — |
 | `gfx` | object | — |
 | `grid` | object | — |
 | `hits` | object | — |
@@ -657,7 +657,7 @@ Entries: 3979
 | `math` | object | — |
 | `nav` | object | — |
 | `net` | object | — |
-| `nodes` | array | — |
+| `nodes` | object | — |
 | `normalizeKind` | function | `(arg0: any) -> any` |
 | `pool` | object | — |
 | `proc` | object | — |
@@ -688,7 +688,7 @@ Entries: 3979
 | `test` | object | — |
 | `tilemap` | object | — |
 | `time` | object | — |
-| `timers` | array | — |
+| `timers` | object | — |
 | `translateAttrsHook` | function | `(arg0: any) -> any` |
 | `tweens_active` | function | `() -> any` |
 | `ui` | object | — |
@@ -756,7 +756,7 @@ Entries: 3979
 | `nativePasses` | function | `(arg0: any) -> any` |
 | `off` | function | `() -> any` |
 | `on` | function | `() -> any` |
-| `overlay` | boolean | `false` |
+| `overlay` | boolean | — |
 | `profile` | function | `() -> any` |
 | `profileReset` | function | `() -> any` |
 | `profiler` | object | — |
@@ -787,7 +787,7 @@ Entries: 3979
 
 | Name | Kind | Signature / value |
 |---|---|---|
-| `enabled` | boolean | `false` |
+| `enabled` | boolean | — |
 | `end` | function | `(arg0: any) -> any` |
 | `isOn` | function | `() -> any` |
 | `now` | function | `() -> any` |
@@ -4178,16 +4178,16 @@ Entries: 3979
 
 | Name | Kind | Signature / value |
 |---|---|---|
-| `DYNAMIC` | number | `2` |
-| `KINEMATIC` | number | `1` |
-| `STATIC` | number | `0` |
-| `WHITE` | number | `-1` |
+| `DYNAMIC` | number | — |
+| `KINEMATIC` | number | — |
+| `STATIC` | number | — |
+| `WHITE` | number | — |
 | `addShape` | function | `(arg0: any, arg1: any) -> any` |
-| `agent` | boolean | `false` |
+| `agent` | boolean | — |
 | `applyImpulse` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `async` | object | — |
 | `audio` | object | — |
-| `basePath` | string | `/Volumes/SSD NVME/nikiniki2d/` |
+| `basePath` | string | — |
 | `bodyAlive` | function | `(arg0: any) -> any` |
 | `bodyCount` | function | `() -> any` |
 | `bodyEnabled` | function | `(arg0: any) -> any` |
@@ -4218,13 +4218,13 @@ Entries: 3979
 | `drawRect` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
 | `drawSprite` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any, arg5: any, arg6: any) -> any` |
 | `drawText` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any, arg5: any, arg6: any, arg7: any, arg8: any) -> any` |
-| `dt` | number | `0.179685` |
-| `fixedDt` | number | `0` |
+| `dt` | number | — |
+| `fixedDt` | number | — |
 | `fontDefault` | function | `() -> any` |
 | `fontList` | function | `() -> any` |
 | `fontStats` | function | `() -> any` |
-| `fps` | number | `5.56528` |
-| `frame` | number | `1` |
+| `fps` | number | — |
+| `frame` | number | — |
 | `freeTexture` | function | `(arg0: any) -> any` |
 | `fs` | object | — |
 | `getAngularVelocity` | function | `(arg0: any) -> any` |
@@ -4234,8 +4234,8 @@ Entries: 3979
 | `getPost` | function | `() -> any` |
 | `getTransforms` | function | `() -> any` |
 | `getVelocity` | function | `(arg0: any) -> any` |
-| `headless` | boolean | `true` |
-| `height` | number | `720` |
+| `headless` | boolean | — |
+| `height` | number | — |
 | `hitch` | object | — |
 | `hotReload` | function | `() -> any` |
 | `http` | object | — |
@@ -4261,14 +4261,14 @@ Entries: 3979
 | `markUI` | function | `() -> any` |
 | `markUnlit` | function | `() -> any` |
 | `measureText` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
-| `mouseDX` | number | `0` |
-| `mouseDY` | number | `0` |
+| `mouseDX` | number | — |
+| `mouseDY` | number | — |
 | `mouseDelta` | function | `() -> any` |
 | `mouseDown` | function | `(arg0: any) -> any` |
 | `mouseLock` | function | `(arg0: any) -> any` |
 | `mousePressed` | function | `(arg0: any) -> any` |
-| `mouseX` | number | `0` |
-| `mouseY` | number | `0` |
+| `mouseX` | number | — |
+| `mouseY` | number | — |
 | `netClose` | function | `() -> any` |
 | `netDelayed` | function | `() -> any` |
 | `netHost` | function | `(arg0: any) -> any` |
@@ -4295,8 +4295,8 @@ Entries: 3979
 | `padRumbleTriggers` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `padSlots` | function | `() -> any` |
 | `physicsErrors` | function | `() -> any` |
-| `pixel_height` | number | `720` |
-| `pixel_width` | number | `1280` |
+| `pixel_height` | number | — |
+| `pixel_width` | number | — |
 | `postSupported` | function | `() -> any` |
 | `profile` | function | `() -> any` |
 | `profileEnabled` | function | `(arg0: any) -> any` |
@@ -4312,7 +4312,7 @@ Entries: 3979
 | `real2d` | object | — |
 | `reloadPending` | function | `() -> any` |
 | `reloadTexture` | function | `(arg0: any, arg1: any) -> any` |
-| `reloads` | number | `0` |
+| `reloads` | number | — |
 | `renderInfo` | function | `() -> any` |
 | `requestReload` | function | `(arg0: any) -> any` |
 | `rgba` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
@@ -4331,7 +4331,7 @@ Entries: 3979
 | `scancode` | function | `(arg0: any) -> any` |
 | `scriptError` | function | `() -> any` |
 | `sdk` | object | — |
-| `seed` | number | `12345` |
+| `seed` | number | — |
 | `setAgentQuery` | function | `(arg0: any) -> any` |
 | `setAngularVelocity` | function | `(arg0: any, arg1: any) -> any` |
 | `setAwake` | function | `(arg0: any, arg1: any) -> any` |
@@ -4379,7 +4379,7 @@ Entries: 3979
 | `textureSize` | function | `(arg0: any) -> any` |
 | `textureSprites` | function | `(arg0: any) -> any` |
 | `textureUsers` | function | `(arg0: any) -> any` |
-| `time` | number | `0.179685` |
+| `time` | number | — |
 | `timeScale` | function | `() -> any` |
 | `touch` | function | `(arg0: any) -> any` |
 | `touchCount` | function | `() -> any` |
@@ -4392,10 +4392,10 @@ Entries: 3979
 | `userShaderError` | function | `() -> any` |
 | `userShaderPreamble` | function | `() -> any` |
 | `userShadersSupported` | function | `() -> any` |
-| `version` | string | `1.2.4` |
+| `version` | string | — |
 | `viewport` | object | — |
-| `wheel` | number | `0` |
-| `whiteSprite` | number | `0` |
-| `width` | number | `1280` |
+| `wheel` | number | — |
+| `whiteSprite` | number | — |
+| `width` | number | — |
 | `window` | object | — |
 

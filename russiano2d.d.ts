@@ -678,7 +678,7 @@ interface R2D_ctx {
     _stopSceneSound(arg0: any): any;
     agent: Record<string, any>;
     alive: Record<string, any>;
-    animations: any[];
+    animations: Record<string, any>;
     audio: Record<string, any>;
     audio_spatial: string;
     barks: Record<string, any>;
@@ -701,7 +701,7 @@ interface R2D_ctx {
     frame: Record<string, any>;
     fs: Record<string, any>;
     fx: Record<string, any>;
-    fx_fields: any[];
+    fx_fields: Record<string, any>;
     gfx: Record<string, any>;
     grid: Record<string, any>;
     hits: Record<string, any>;
@@ -715,7 +715,7 @@ interface R2D_ctx {
     math: Record<string, any>;
     nav: Record<string, any>;
     net: Record<string, any>;
-    nodes: any[];
+    nodes: Record<string, any>;
     normalizeKind(arg0: any): any;
     pool: Record<string, any>;
     proc: Record<string, any>;
@@ -746,7 +746,7 @@ interface R2D_ctx {
     test: Record<string, any>;
     tilemap: Record<string, any>;
     time: Record<string, any>;
-    timers: any[];
+    timers: Record<string, any>;
     translateAttrsHook(arg0: any): any;
     tweens_active(): any;
     ui: Record<string, any>;

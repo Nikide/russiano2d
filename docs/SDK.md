@@ -87,6 +87,8 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `api check [--schema f]` | структурная проверка снимка + свежесть `api.schema.json` |
 | `api generate [--out-dir dir]` | записать `api.schema.json` и `russiano2d.d.ts` из runtime metadata |
 | `lint [путь] [--schema f]` | API-aware линтер JS: `R2D001/002/004/014`, `--json` |
+| `docs generate` | generated `docs/api/API_REFERENCE.md` из runtime metadata |
+| `doctor [--project dir]` | health check: runtime/metadata/schema/typings/docs/project/lint |
 | `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
 | `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
 | `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |

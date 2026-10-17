@@ -23,6 +23,8 @@ static const char *const snapshot =
 "    if (value === null) { out.push({ path, kind: 'null' }); return; }\n"
 "    if (isNs(value)) { out.push({ path, kind: 'object' }); return; }\n"
 "    const v = valueOf(value);\n"
+"    const volatile = path === '$.startScene' || path.startsWith('engine.') || path.startsWith('$.agent.') || path.startsWith('$.ctx.') || path.startsWith('$.debug.') || path.startsWith('$.time.') || path.startsWith('$.время.');\n"
+"    if (volatile) { out.push({ path, kind: value === null ? 'null' : typeof value }); return; }\n"
 "    if (v) out.push(Object.assign({ path }, v));\n"
 "  };\n"
 "  for (const key of Object.keys($).sort()) {\n"
