@@ -20,7 +20,12 @@ if '-Q' in args:
  with open('calls','a') as f:f.write(command+'\\n')
  sys.exit(int(os.environ.get('FAIL_DELETE','0')))
 for a in args:
- if a.startswith('ftp://') and not a.endswith('/'):
+ if a.startswith('ftp://') and a.endswith('/'):
+  # Листинг каталога: при неудачном DELE файл на сервере ещё есть —
+  # иначе движок справедливо сочтёт 550 «уже удалено» (идемпотентность Д4).
+  if os.environ.get('FAIL_DELETE','0')=='1':
+   print('old.md')
+ elif a.startswith('ftp://'):
   print('RESULT 0 '+a)
 ''');curl.chmod(0o755)
     env={**os.environ,'PATH':str(root/'mock')+os.pathsep+os.environ['PATH'],'FAIL_DELETE':'1','DEPLOY_INVENTORY':'0'}

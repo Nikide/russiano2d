@@ -55,6 +55,9 @@ class ComparisonTests(unittest.TestCase):
         cases=json.loads(bench.CASES.read_text());self.assertEqual(len({c['id'] for c in cases}),len(cases))
         modules={p.stem for p in (ROOT/'src/highlevel').glob('*.js')}
         covered=set(bench.INFRA)|{m for c in cases for m in c['modules']}
+        # real2d/rotsprite требуют ассетов и меряются tools/bench.py
+        # (sprite:1000 / Real2D v4), micro-набору bench_api они недоступны.
+        covered |= set(bench.ASSET_BENCH_MODULES)
         self.assertEqual(modules-covered,set())
 
     def test_interpolated_p95(self):

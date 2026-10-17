@@ -740,5 +740,65 @@
     "setup": "",
     "operation": "return JSON.stringify($.sdk.paths()).length",
     "size": 1
+  },
+  {
+    "id": "clip-registry",
+    "modules": [
+      "clip"
+    ],
+    "description": "Define sprite clip and list registry",
+    "setup": "$.clip.define('bench.clip',{frames:[$.gfx.white],fps:12});",
+    "operation": "return $.clip.list().length",
+    "size": 1
+  },
+  {
+    "id": "diag-errors",
+    "modules": [
+      "diag"
+    ],
+    "description": "Read diagnostics journal (errors list)",
+    "setup": "$.debug.clearErrors();",
+    "operation": "return $.debug.errors().length",
+    "size": 1
+  },
+  {
+    "id": "hits-presets",
+    "modules": [
+      "hits"
+    ],
+    "description": "Define hit preset and read preset registry",
+    "setup": "$.hits.preset('bench.hit',{hitStop:1});",
+    "operation": "return $.hits.presets().length",
+    "size": 1
+  },
+  {
+    "id": "reload-list",
+    "modules": [
+      "reload"
+    ],
+    "description": "List hot-reload watchers",
+    "operation": "return $.reload.list().length",
+    "size": 1,
+    "setup": "0"
+  },
+  {
+    "id": "sfx-presets",
+    "modules": [
+      "sfx"
+    ],
+    "description": "Define SFX preset over hits and list presets",
+    "setup": "$.hits.preset('bench.sfx',{sound:'bench.wav'});",
+    "operation": "return $.sfx.presets().length",
+    "size": 1
+  },
+  {
+    "id": "vfx-registry",
+    "modules": [
+      "vfx"
+    ],
+    "description": "Define VFX spec and list effect registry",
+    "setup": "$.vfx.define('bench.effect',{duration:1,layers:[{at:0,use:'fx.flash',params:{color:'#ffffff'}}]});",
+    "operation": "return $.vfx.list().length",
+    "size": 1
   }
 ]

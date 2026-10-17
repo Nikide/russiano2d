@@ -126,6 +126,21 @@
   новый контракт: `pos()` стабилен, сдвиг слоёв 300 px проверяется по
   `$.layers.offset` (0.2 → 240, 0.6 → 120). Документация:
   `docs/highlevel/layers.md`, `render.md`, `ENGINE_GAPS.md`.
+- **Все проверки зелёные: полный агентский набор 265/263/0/2 + repo-тесты.**
+  Полный прогон: **265 тестов, 263 ok, 0 fail, 2 skip** (840.3 с;
+  `re2d_testroom_test` 34, `sdk_studios_test` 118). Отдельно 27 файлов
+  `tests/*_test.py` — 27/27 после трёх настоящих починок:
+  * `soundbank.js`: fallback-генератор разброса был `Math.random` — в модулях
+    API он запрещён (duplicate_keys); заменён детерминированным LCG, движковый
+    `ctx.random` по-прежнему в приоритете;
+  * bench coverage: 6 micro-кейсов добавлены (`clip`, `diag`, `hits`,
+    `reload`, `sfx`, `vfx`), `real2d`/`rotsprite` явно отнесены к замерам
+    `tools/bench.py` (`sprite:1000`, Real2D v4) — `uncovered` пуст, новые
+    кейсы реально прогнаны;
+  * `site_prune_test`: мок FTP теперь при неудачном DELE отдаёт файл в
+    листинге (как настоящий сервер) — тест снова проверяет повтор удаления,
+    а не «уже удалено».
+  `tools/ci_verify.py` — exit 0 (13 C-Unity-целей/41 кейс + 105 JS + sdk).
 - **Все C-тесты переведены на Unity (правило 11).** `r2d_unity`
   (`third_party/unity` v2.6.0) линкуется во все 13 C-целей; ручные
   `check()`/printf-раннеры убраны. Итог: **41 Unity-кейс**, каждая цель —

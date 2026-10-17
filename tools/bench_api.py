@@ -29,6 +29,10 @@ from bench_highlevel import measure as measure_frame
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / 'tools/bench_api_cases.json'
 SCHEMA = 1
+#: Модули, чей замер требует игровых ассетов (Re2DSprite/Real2D): их строки
+#: меряет tools/bench.py (`sprite:1000` и Real2D v4), а не micro-набор
+#: bench_api с пустой фикстурой. Поэтому они не входят в coverage micro-кейсов.
+ASSET_BENCH_MODULES = {'real2d', 'rotsprite'}
 INFRA = {'bootstrap': 'process startup (wall clock, includes IPC)',
          'index': 'process startup (module installation)',
          'native': 'shared native bridge; included in native/frame workloads',
@@ -262,7 +266,7 @@ def main():
     if not binary.is_file():parser.error('binary missing; build engine first')
     cases=json.loads(CASES.read_text());modules=sorted(p.stem for p in (ROOT/'src/highlevel').glob('*.js'))
     covered=set(INFRA)|{m for c in cases for m in c['modules']}
-    uncovered=sorted(set(modules)-covered)
+    uncovered=sorted(set(modules)-covered-ASSET_BENCH_MODULES)
     selected=set(args.only.split(',')) if args.only else None
     valid={c['id'] for c in cases}|{kind for kind,n in FRAME_JOBS}
     if selected and selected-valid:parser.error('unknown scenarios: '+str(sorted(selected-valid)))

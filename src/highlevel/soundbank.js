@@ -102,7 +102,14 @@ function defaultRandom() {
         if (typeof r.value === 'function') return () => r.value();
         if (typeof r.next === 'function') return () => r.next();
     }
-    return () => Math.random();
+    // Без движка (юнит-харнесс) — свой детерминированный LCG: Math.random в
+    // модулях API запрещён (тест duplicate_keys), иначе разброс высоты/громкости
+    // нельзя воспроизвести в тесте.
+    let seed = 0x9e3779b9;
+    return () => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return seed / 4294967296;
+    };
 }
 
 /**
