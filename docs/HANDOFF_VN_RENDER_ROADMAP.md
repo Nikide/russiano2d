@@ -14,7 +14,7 @@
 ## Task board
 | id | scope | owner | status |
 |---|---|---|---|
-| VN-01..03 | dialog/view/theme/IR/linter (task-1) | trace-core | in_progress |
+| VN-01..03 | dialog/view/theme/IR/linter (task-1) | trace-core | done: 13 qjs, 15 native |
 | VN-02 | speaker/expression/theme stack/skip/input lock (task-1) | trace-core | in_progress |
 | VN-03 | Narrative IR/story/save/backlog/linter (task-1) | trace-core | in_progress |
 | R-01 | grounding/edges/material (task-2) | particle-core | in_progress |
@@ -56,3 +56,12 @@
 - 53 procedural effects under `assets/vfx/`, demo `demos/re2d_vfx_lab`.
 - Tests: 11 native, agent 53/53 bundles; r2d_check 143; ci_verify green.
 - Limits: cards/trails/distortion simulated+budgeted but exotic renderer pass not wired (renderer task owns GPU); decals need used material; point/probe collisions.
+
+## Completed
+### VN-01..03 (task-1)
+- `dialog_view.js` semantic roles/data-dialog-role, slots, state classes, hot reload last-valid fallback; `dialog_theme.js` builtin/custom RML+RCSS, CSS vars, themes/stack.
+- `dialog.js`: speaker registry/expressions, auto/skip/backlog/read/voice/prefetch/save-restore, input lock, world mode, inspect; old API preserved.
+- `story.js`: Narrative IR compiler, all speech through `$.dialog`; timeline/cutscene share it.
+- native `r2d-sdk story validate` and `dialog validate`.
+- Tests: 13 qjs, 15 native SDK; r2d_check 143, ci_verify/docs guards green.
+- Limits: RmlUi pixels not screenshot-verified in qjs (recording backend); default RML has 6 choice slots; input.lock advisory; RCSS syntax checked by RmlUi at load.
