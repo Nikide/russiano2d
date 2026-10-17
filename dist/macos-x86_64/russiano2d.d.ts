@@ -862,6 +862,7 @@ interface R2D_devtools {
     list(): any;
     memory(): any;
     memoryBaseline(): any;
+    narrative(): any;
     open(): any;
     openRuntime(): any;
     panel(): any;
@@ -911,6 +912,12 @@ interface R2D_devtools {
 }
 
 interface R2D_dialog {
+    action(arg0: any): any;
+    auto(arg0: any): any;
+    autoDelay(arg0: any): any;
+    backlog(): any;
+    backlogClear(): any;
+    backlogOpen(arg0: any): any;
     choiceFocus(): any;
     choices(): any;
     choose(arg0: any): any;
@@ -918,15 +925,24 @@ interface R2D_dialog {
     close(): any;
     define(arg0: any, arg1: any): any;
     definition(): any;
+    expression(): any;
     flag(arg0: any, arg1: any): any;
     focusChoice(arg0: any): any;
     fullText(): any;
+    hardLock(arg0: any): any;
     has(arg0: any): any;
+    hotReload(): any;
+    i18nStats(): any;
+    inspect(): any;
     isOpen(): any;
+    isRead(arg0: any): any;
     isTyping(): any;
     langBound(): any;
     list(): any;
     listenerCount(arg0: any): any;
+    localize(arg0: any, arg1: any): any;
+    lockHeld(): any;
+    markRead(arg0: any): any;
     next(): any;
     node(): any;
     off(arg0: any, arg1: any): any;
@@ -936,14 +952,38 @@ interface R2D_dialog {
     panel(): any;
     play(arg0: any, arg1: any): any;
     portrait(): any;
+    portraitSlot(): any;
+    prefetch(arg0: any): any;
+    prefetchInfo(): any;
+    releaseLock(arg0: any): any;
     remove(arg0: any): any;
+    restore(arg0: any): any;
     retranslate(): any;
+    saveState(): any;
+    show(arg0: any, arg1: any): any;
     skip(): any;
-    speaker(): any;
+    speaker(arg0: any, arg1: any): any;
+    speakerId(): any;
+    speakerIds(): any;
+    speakerName(): any;
     speed(arg0: any): any;
+    stopVoice(arg0: any): any;
+    template(arg0: any, arg1: any): any;
     text(): any;
+    theme(arg0: any): any;
+    themeDefine(arg0: any, arg1: any): any;
+    themePush(arg0: any): any;
+    themes(): any;
+    unreadCount(): any;
+    validateTheme(arg0: any): any;
     vars(arg0: any): any;
+    view(): any;
+    viewLoaded(): any;
     visibleChoices(): any;
+    voice(arg0: any): any;
+    voiceInfo(): any;
+    voiceVolume(arg0: any): any;
+    worldMode(arg0: any): any;
 }
 
 interface R2D_flow {
@@ -1465,12 +1505,14 @@ interface R2D_i18n {
     langs(): any;
     listenerCount(): any;
     load(arg0: any, arg1: any): any;
+    lookup(arg0: any): any;
     mark(arg0: any): any;
     missing(): any;
     missingKeys(): any;
     number(arg0: any, arg1: any): any;
     onChange(arg0: any): any;
     plural(arg0: any, arg1: any, arg2: any): any;
+    resolveLang(arg0: any): any;
     separators(): any;
     tr(arg0: any, arg1: any, arg2: any): any;
 }
@@ -1502,7 +1544,13 @@ interface R2D_input {
     down(arg0: any): any;
     gamepad(arg0: any): any;
     glyphs(arg0: any): any;
+    hardLocked(): any;
+    hardLocks(): any;
     loadBindings(): any;
+    lock(arg0: any, arg1: any, arg2: any): any;
+    lockCount(): any;
+    locked(arg0: any): any;
+    locks(): any;
     markDefaults(): any;
     mouse(): any;
     mouseDelta(): any;
@@ -1517,7 +1565,13 @@ interface R2D_input {
     padSlots(): any;
     padState(arg0: any): any;
     pressed(arg0: any): any;
+    rawDown(arg0: any): any;
+    rawMouseDown(arg0: any): any;
+    rawMousePressed(arg0: any): any;
+    rawPressed(arg0: any): any;
+    rawReleased(arg0: any): any;
     rebind(arg0: any, arg1: any): any;
+    releaseLocks(arg0: any): any;
     released(arg0: any): any;
     resetDefaults(): any;
     resetHeld(arg0: any): any;
@@ -2217,6 +2271,7 @@ interface R2D_scene {
     scopes(): any;
     stack(): any;
     state(): any;
+    status(): any;
     transition(arg0: any, arg1: any): any;
 }
 
@@ -2383,6 +2438,7 @@ interface R2D_story {
     auto(arg0: any): any;
     check(arg0: any): any;
     choose(arg0: any): any;
+    compile(arg0: any): any;
     flags: Record<string, any>;
     last_line: any;
     locked(): any;
@@ -2866,7 +2922,13 @@ interface R2D_________ {
     down(arg0: any): any;
     gamepad(arg0: any): any;
     glyphs(arg0: any): any;
+    hardLocked(): any;
+    hardLocks(): any;
     loadBindings(): any;
+    lock(arg0: any, arg1: any, arg2: any): any;
+    lockCount(): any;
+    locked(arg0: any): any;
+    locks(): any;
     markDefaults(): any;
     mouse(): any;
     mouseDelta(): any;
@@ -2881,7 +2943,13 @@ interface R2D_________ {
     padSlots(): any;
     padState(arg0: any): any;
     pressed(arg0: any): any;
+    rawDown(arg0: any): any;
+    rawMouseDown(arg0: any): any;
+    rawMousePressed(arg0: any): any;
+    rawPressed(arg0: any): any;
+    rawReleased(arg0: any): any;
     rebind(arg0: any, arg1: any): any;
+    releaseLocks(arg0: any): any;
     released(arg0: any): any;
     resetDefaults(): any;
     resetHeld(arg0: any): any;
@@ -3408,6 +3476,7 @@ interface R2D___________ {
     scopes(): any;
     stack(): any;
     state(): any;
+    status(): any;
     transition(arg0: any, arg1: any): any;
 }
 

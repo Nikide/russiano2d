@@ -4,9 +4,9 @@
      Source: Russiano2D $ API Registry
      Generator: r2d-sdk -->
 
-Engine version: "1.2.5"
+Engine version: "1.2.6"
 
-Entries: 3979
+Entries: 4052
 
 ## $
 
@@ -836,6 +836,7 @@ Entries: 3979
 | `list` | function | `() -> any` |
 | `memory` | function | `() -> any` |
 | `memoryBaseline` | function | `() -> any` |
+| `narrative` | function | `() -> any` |
 | `open` | function | `() -> any` |
 | `openRuntime` | function | `() -> any` |
 | `panel` | function | `() -> any` |
@@ -887,6 +888,12 @@ Entries: 3979
 
 | Name | Kind | Signature / value |
 |---|---|---|
+| `action` | function | `(arg0: any) -> any` |
+| `auto` | function | `(arg0: any) -> any` |
+| `autoDelay` | function | `(arg0: any) -> any` |
+| `backlog` | function | `() -> any` |
+| `backlogClear` | function | `() -> any` |
+| `backlogOpen` | function | `(arg0: any) -> any` |
 | `choiceFocus` | function | `() -> any` |
 | `choices` | function | `() -> any` |
 | `choose` | function | `(arg0: any) -> any` |
@@ -894,15 +901,24 @@ Entries: 3979
 | `close` | function | `() -> any` |
 | `define` | function | `(arg0: any, arg1: any) -> any` |
 | `definition` | function | `() -> any` |
+| `expression` | function | `() -> any` |
 | `flag` | function | `(arg0: any, arg1: any) -> any` |
 | `focusChoice` | function | `(arg0: any) -> any` |
 | `fullText` | function | `() -> any` |
+| `hardLock` | function | `(arg0: any) -> any` |
 | `has` | function | `(arg0: any) -> any` |
+| `hotReload` | function | `() -> any` |
+| `i18nStats` | function | `() -> any` |
+| `inspect` | function | `() -> any` |
 | `isOpen` | function | `() -> any` |
+| `isRead` | function | `(arg0: any) -> any` |
 | `isTyping` | function | `() -> any` |
 | `langBound` | function | `() -> any` |
 | `list` | function | `() -> any` |
 | `listenerCount` | function | `(arg0: any) -> any` |
+| `localize` | function | `(arg0: any, arg1: any) -> any` |
+| `lockHeld` | function | `() -> any` |
+| `markRead` | function | `(arg0: any) -> any` |
 | `next` | function | `() -> any` |
 | `node` | function | `() -> any` |
 | `off` | function | `(arg0: any, arg1: any) -> any` |
@@ -912,14 +928,38 @@ Entries: 3979
 | `panel` | function | `() -> any` |
 | `play` | function | `(arg0: any, arg1: any) -> any` |
 | `portrait` | function | `() -> any` |
+| `portraitSlot` | function | `() -> any` |
+| `prefetch` | function | `(arg0: any) -> any` |
+| `prefetchInfo` | function | `() -> any` |
+| `releaseLock` | function | `(arg0: any) -> any` |
 | `remove` | function | `(arg0: any) -> any` |
+| `restore` | function | `(arg0: any) -> any` |
 | `retranslate` | function | `() -> any` |
+| `saveState` | function | `() -> any` |
+| `show` | function | `(arg0: any, arg1: any) -> any` |
 | `skip` | function | `() -> any` |
-| `speaker` | function | `() -> any` |
+| `speaker` | function | `(arg0: any, arg1: any) -> any` |
+| `speakerId` | function | `() -> any` |
+| `speakerIds` | function | `() -> any` |
+| `speakerName` | function | `() -> any` |
 | `speed` | function | `(arg0: any) -> any` |
+| `stopVoice` | function | `(arg0: any) -> any` |
+| `template` | function | `(arg0: any, arg1: any) -> any` |
 | `text` | function | `() -> any` |
+| `theme` | function | `(arg0: any) -> any` |
+| `themeDefine` | function | `(arg0: any, arg1: any) -> any` |
+| `themePush` | function | `(arg0: any) -> any` |
+| `themes` | function | `() -> any` |
+| `unreadCount` | function | `() -> any` |
+| `validateTheme` | function | `(arg0: any) -> any` |
 | `vars` | function | `(arg0: any) -> any` |
+| `view` | function | `() -> any` |
+| `viewLoaded` | function | `() -> any` |
 | `visibleChoices` | function | `() -> any` |
+| `voice` | function | `(arg0: any) -> any` |
+| `voiceInfo` | function | `() -> any` |
+| `voiceVolume` | function | `(arg0: any) -> any` |
+| `worldMode` | function | `(arg0: any) -> any` |
 
 ## $.flow
 
@@ -1554,12 +1594,14 @@ Entries: 3979
 | `langs` | function | `() -> any` |
 | `listenerCount` | function | `() -> any` |
 | `load` | function | `(arg0: any, arg1: any) -> any` |
+| `lookup` | function | `(arg0: any) -> any` |
 | `mark` | function | `(arg0: any) -> any` |
 | `missing` | function | `() -> any` |
 | `missingKeys` | function | `() -> any` |
 | `number` | function | `(arg0: any, arg1: any) -> any` |
 | `onChange` | function | `(arg0: any) -> any` |
 | `plural` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `resolveLang` | function | `(arg0: any) -> any` |
 | `separators` | function | `() -> any` |
 | `tr` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 
@@ -1590,7 +1632,13 @@ Entries: 3979
 | `down` | function | `(arg0: any) -> any` |
 | `gamepad` | function | `(arg0: any) -> any` |
 | `glyphs` | function | `(arg0: any) -> any` |
+| `hardLocked` | function | `() -> any` |
+| `hardLocks` | function | `() -> any` |
 | `loadBindings` | function | `() -> any` |
+| `lock` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `lockCount` | function | `() -> any` |
+| `locked` | function | `(arg0: any) -> any` |
+| `locks` | function | `() -> any` |
 | `markDefaults` | function | `() -> any` |
 | `mouse` | function | `() -> any` |
 | `mouseDelta` | function | `() -> any` |
@@ -1605,7 +1653,13 @@ Entries: 3979
 | `padSlots` | function | `() -> any` |
 | `padState` | function | `(arg0: any) -> any` |
 | `pressed` | function | `(arg0: any) -> any` |
+| `rawDown` | function | `(arg0: any) -> any` |
+| `rawMouseDown` | function | `(arg0: any) -> any` |
+| `rawMousePressed` | function | `(arg0: any) -> any` |
+| `rawPressed` | function | `(arg0: any) -> any` |
+| `rawReleased` | function | `(arg0: any) -> any` |
 | `rebind` | function | `(arg0: any, arg1: any) -> any` |
+| `releaseLocks` | function | `(arg0: any) -> any` |
 | `released` | function | `(arg0: any) -> any` |
 | `resetDefaults` | function | `() -> any` |
 | `resetHeld` | function | `(arg0: any) -> any` |
@@ -2378,6 +2432,7 @@ Entries: 3979
 | `scopes` | function | `() -> any` |
 | `stack` | function | `() -> any` |
 | `state` | function | `() -> any` |
+| `status` | function | `() -> any` |
 | `transition` | function | `(arg0: any, arg1: any) -> any` |
 
 ## $.screen
@@ -2980,6 +3035,7 @@ Entries: 3979
 | `auto` | function | `(arg0: any) -> any` |
 | `check` | function | `(arg0: any) -> any` |
 | `choose` | function | `(arg0: any) -> any` |
+| `compile` | function | `(arg0: any) -> any` |
 | `flags` | object | — |
 | `last_line` | null | — |
 | `locked` | function | `() -> any` |
@@ -3497,7 +3553,13 @@ Entries: 3979
 | `down` | function | `(arg0: any) -> any` |
 | `gamepad` | function | `(arg0: any) -> any` |
 | `glyphs` | function | `(arg0: any) -> any` |
+| `hardLocked` | function | `() -> any` |
+| `hardLocks` | function | `() -> any` |
 | `loadBindings` | function | `() -> any` |
+| `lock` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `lockCount` | function | `() -> any` |
+| `locked` | function | `(arg0: any) -> any` |
+| `locks` | function | `() -> any` |
 | `markDefaults` | function | `() -> any` |
 | `mouse` | function | `() -> any` |
 | `mouseDelta` | function | `() -> any` |
@@ -3512,7 +3574,13 @@ Entries: 3979
 | `padSlots` | function | `() -> any` |
 | `padState` | function | `(arg0: any) -> any` |
 | `pressed` | function | `(arg0: any) -> any` |
+| `rawDown` | function | `(arg0: any) -> any` |
+| `rawMouseDown` | function | `(arg0: any) -> any` |
+| `rawMousePressed` | function | `(arg0: any) -> any` |
+| `rawPressed` | function | `(arg0: any) -> any` |
+| `rawReleased` | function | `(arg0: any) -> any` |
 | `rebind` | function | `(arg0: any, arg1: any) -> any` |
+| `releaseLocks` | function | `(arg0: any) -> any` |
 | `released` | function | `(arg0: any) -> any` |
 | `resetDefaults` | function | `() -> any` |
 | `resetHeld` | function | `(arg0: any) -> any` |
@@ -4149,6 +4217,7 @@ Entries: 3979
 | `scopes` | function | `() -> any` |
 | `stack` | function | `() -> any` |
 | `state` | function | `() -> any` |
+| `status` | function | `() -> any` |
 | `transition` | function | `(arg0: any, arg1: any) -> any` |
 
 ## $.триггеры

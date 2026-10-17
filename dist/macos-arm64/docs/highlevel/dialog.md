@@ -200,7 +200,7 @@ $.dialog.play('greet');       // «Привет, Игрок!»
   `$.dialog.choices()[i].index`;
 * диалог один на процесс: `play()` при открытом диалоге закрывает прежний
   (`end` с reason `'restart'`);
-* ввод мира диалог не блокирует — это забота игры (`$.time.pause()`);
+* по умолчанию ввод мира диалог не блокирует глобально — он берёт advisory-токен `$.input.lock('dialog')`, а gameplay-код сам решает, спрашивать ли `$.input.locked()`. `$.dialog.hardLock(true)` включает hard-token: `$.input.down/pressed/released` возвращают `false`, пока диалог открыт (UI читает raw-методы). World mode `cinematic` выставляется автоматически;
 * печатную машинку двигает `tickDialog(dt)`: если его не подключить в
   `api.js`, текст просто не будет печататься по кадрам (всё остальное
   работает).
@@ -217,3 +217,63 @@ python3 tests/agent/highlevel_dialog_test.py    # интеграция, посл
 `choose`/`chooseByText`, события `start/line/typed/choice/end/close`, перевод
 ключей, портрет и имя, пропуск реплики с ложным условием, клавиатура и
 раскладка панели.
+
+## 11. VN: RML-вид, темы и narrative state
+
+`$.dialog` остаётся единственной машиной реплик. Presentation вынесена в
+`dialog_view.js` (RmlUi) и `dialog_theme.js` (default/custom RML+RCSS, стек тем,
+hot reload); подробный контракт — `docs/VN_NARRATIVE.md`.
+
+Новые публичные методы:
+
+| Метод | Назначение |
+|---|---|
+| `$.dialog.speaker(id, spec)` / `speaker()` / `speakerId()` / `speakerName()` | реестр speaker'ов: внутренний id → отображаемое имя, портреты, voice, textBlip |
+| `$.dialog.expression()` / `portrait()` / `portraitSlot()` | expression и слот портрета (`left/center/right/far-left/far-right`) |
+| `$.dialog.themeDefine(name, {rml,rcss})` / `theme(name)` / `themePush(name)` / `template(path)` / `hotReload()` / `validateTheme(markup)` | темы и горячая перезагрузка; невалидный reload оставляет прошлый вид |
+| `$.dialog.auto(on)` / `action(name)` / `inspect()` | auto-режим, `data-dialog-action` (next/skip/auto/backlog/save/load), снимок для DevTools |
+| `$.dialog.backlog()` / `backlogOpen(on)` / `isRead(id)` / `markRead(id)` / `unreadCount()` | backlog и stable line id (`definition:node:page`) |
+| `$.dialog.saveState()` / `restore(snapshot)` | сохранение/возврат narrative state |
+| `$.dialog.show(text, {speaker,expression,portrait})` | совместимость для cutscene: одна реплика без `define` |
+
+Реплика забирает `$.input.lock('dialog')`; токен освобождается на close/skip
+stop/исключении и на смене сцены. `$.dialog.worldMode()` — `live|pause|cinematic`.
+
+Проверка: `tests/js/vn_narrative_test.mjs` (13 проверок, RML-backend без окна).
+
+Дополнительные имена VN-состояния (документированы здесь буквально для
+api_docs_sync): `$.dialog.speakerId()`, `$.dialog.speakerName()`,
+`$.dialog.speakerIds()`, `$.dialog.portraitSlot()`, `$.dialog.themes()` —
+доступ к реестру speaker'ов и списку тем.
+
+`$.dialog.action(name)` выполняет `data-dialog-action`
+(`next/skip/auto/backlog/save/load`). `$.dialog.autoDelay(seconds)` — пауза
+автолистания. `$.dialog.backlogOpen(on)` открывает/закрывает backlog,
+`$.dialog.backlogClear()` очищает историю, `$.dialog.markRead(id)` отмечает
+stable line id прочитанным.
+
+`$.dialog.lockHeld()` и `$.dialog.releaseLock(reason)` — диагностика и
+аварийное освобождение input-токена (обычно это делает `close()`).
+`$.dialog.prefetch(assets)` не только объявляет ассеты сцены, но и реально
+греет кэши: `$.sound.preload()` для voice/audio и
+`$.resource.preloadTexture()` для портретов; итог — `$.dialog.prefetchInfo()`
+(`requested/textures/sounds/failed`). `$.dialog.voice(on|undefined)`,
+`voiceVolume(v)`, `voiceInfo()`, `$.dialog.stopVoice(reason)` управляют настоящим
+проигрыванием `voice` через `$.sound` (предыдущая реплика глушится, close
+останавливает канал). `$.dialog.localize(key, params)` и
+`$.dialog.i18nStats()` используют dictionary lookup `$.i18n.lookup()`
+(текущий язык → fallback → остальные), а не только проверку `has()`.
+
+`$.dialog.inspect()` дополнен `inputHardLocked`, `choiceSlots`, `voice`,
+`prefetch`, `i18n`; DevTools F2 получил вкладку **Narrative**, доступную без
+выбранной сущности через `$.devtools.narrative()`. Число кнопок выбора задаёт
+тема: `themeDefine(name, {rml, rcss, choiceSlots, choiceTemplate})`, где
+`{index}`/`{n}` подставляются в шаблон (1..64 слотов).
+
+`$.dialog.view()` возвращает RML-view, `$.dialog.viewLoaded()` —
+загружен ли документ (для DevTools/агента). `$.dialog.view().choiceSlots`
+показывает фактическое число слотов.
+
+Проверка новых gap'ов: `tests/js/vn_gaps_test.mjs` (13 проверок),
+`tests/agent/vn_bashnya_theme_test.py` (RmlUi-пиксели темы BASHNYA, voice,
+prefetch, narrative inspector).

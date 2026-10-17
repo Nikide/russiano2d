@@ -326,6 +326,27 @@ world.particles.clear();
 actor-billboard pipeline с 1×1 white texture и tint'ом (бюджет 512 частиц на
 GPU). Нет коллизий, trails и VFX bundles в этом проходе.
 
+## Renderer visual features (R-01/R-02)
+
+```js
+world.qualityPreset('high'); // visual tier: low | medium | high
+// low = legacy + P0 contact grounding; medium = grounding + variation,
+//       height fog/haze, sky layers, liquid; high = + edge/bevel/corner AO.
+const v = world.info().visual;
+// {quality, contactShadows, footAo, floorTint, edgeActors,
+//  variedSurfaces, bevelSurfaces, cornerAoSurfaces, fogSurfaces,
+//  hazeSurfaces, liquidSurfaces, skyLayers, celestialDiscs, ...}
+```
+
+Native GPU pass: contact shadow/foot AO/local floor tint under Re2D actors,
+sprite alpha feather/outline/grime, deterministic surface variation, fake bevel
+and corner AO-lite, height fog + atmospheric haze, panorama + up to four
+parallax sky cards + sun/moon disc, liquid floor shading. The CPU reference
+draws the same contact card; the other effects are GPU-reference. See
+[RE2D_RENDER_FEATURES.md](../RE2D_RENDER_FEATURES.md) for formulas, counters and
+limits. Existing `gpuDrawsBase/Span/Actor/Other` stay exact; grounding adds
+`gpuDrawsGround`, VFX adds `gpuDrawsVfx`.
+
 ## VFX bundles (P1)
 
 ```js
@@ -347,6 +368,31 @@ Bundle — данные, а не gameplay: частицы идут в натив
 случае). Неизвестный bundle — `RangeError`. Никакой JS-покадровой работы:
 bundle исполняется один раз в момент спавна.
 
+## Native VFX library (R-03)
+
+```js
+const text = $.fs.readText('assets/vfx/combat/muzzle_flash.json');
+world.vfx.define('muzzle_flash', text);
+world.vfx.spawn('muzzle_flash', { x, y, h, dx: 0, dy: 1, dz: -0.2, seed: 7 });
+// -> {particles, cards, trails, lights, decals, distortion, shake, flashMs, flashColor, sound}
+world.vfx.info();
+world.vfx.debug();          // + particle budget and registered bundle names
+world.vfx.lightBudget(8);   // temp-light budget 0..16
+world.vfx.clear();
+```
+
+`world.vfx` is the native R-03 path: FX bundles are parsed into fixed C pools
+(particles go into the existing native pool; cards/trails/lights/decals are
+bounded native data), no JS node is created per spark. Same JSON shape as
+`fxDefine` plus `cards`, `trail`, collision fields and distortion hints. See
+[RE2D_VFX.md](../RE2D_VFX.md) for the complete bundle format, all 53 authored
+pack effects in `assets/vfx/`, particle collision modes
+(`none/floor/wall/bounce/despawn`) and budget counters. `world.fxDefine/fxSpawn`
+stay as the older JS-defined bundle helper; use `world.vfx` for the native pack.
+The native renderer now draws live cards, card trails and distortion cards in a
+dedicated GPU pass (`gpuDrawsVfx`, `info.visual.vfx*`); distortion cards are
+wavy world cards and screen refraction remains in `$.gfx.post`.
+
 ## Save / load state (P1)
 
 ```js
@@ -357,11 +403,18 @@ world.loadState(save);          // true или исключение
 world.saveMapHash();            // hex-строка authored identity + topology
 ```
 
+Ошибка сериализации теперь структурированная: `RangeError` с фактическим
+полем/лимитом (`state not serializable: save: spans[i]...`), а не общий
+`state serialization failed`. Сцена, где `enter` бросил исключение, получает
+`$.debug.errors()` запись `R2D_SCENE_ENTER` и `$.scene.status()` →
+`{ok:false,error:{scene,operation:'enter',stage,stack}}`; агентский snapshot
+содержит `scene_status`. Это позволяет отличить успешный вход от частичного.
+
 Native snapshot (версия 1) хранит spans (`id,bottom,top`), portals
 (`id,open_fraction,closed`), movers (timeline state) и triggers
 (`id,type,fire_count,enabled,once,armed,timer`). `loadState` проверяет map hash
 и точное число spans/portals/mover'ов/триггеров; несовпадение — `RangeError`,
-состояние не меняется. Bounds: 4096 spans/portals, 256 movers, 512 triggers;
+состояние не меняется. Bounds: 65536 spans/portals (тот же предел, что у runtime topology), 256 movers, 512 triggers;
 строки ≤63 байт; NaN/malformed отклоняются. Ограничения: movers/triggers
 восстанавливаются позиционно (по id для триггеров), secrets/breakables и
 частицы пока в snapshot не входят — следующий шаг.
@@ -445,7 +498,8 @@ $.capabilities.re2d;
 //  maxWorldSprites, maxPortalRecursion, maxParticles}
 world.info();   // + traceMs/traceCalls, controllerMs/controllerCalls,
                 //   navMs/navQueries, audioVoicesActive/audioVoicesVirtual,
-                //   particles/particlesDrawn, movers, triggers, hitProxies
+                //   gpuDrawsBase/gpuDrawsSpan/gpuDrawsActor/gpuDrawsOther/gpuDrawsGround/
+//   gpuDrawsVfx, visual/…, particles/…, movers/…
 ```
 
 Capabilities — это факты текущей сборки, а не обещание: `mirrorPortal`/
@@ -483,8 +537,11 @@ world.fogAt(x, y, h);   // {span, density, start, color:[r,g,b]}
 tint (lightning/exposure-lite) в worldStep; `skyAnimInfo` отдаёт yaw/phase.
 `fogZone` — semantic helper над существующим per-span fog: цвет/плотность/
 start; переходы между зонами (камера в разных span) дают authored blend без
-нового renderer-прохода. Ограничения: multi-layer sky и sky portal как
-отдельный render pass — следующий шаг; fog не volumetric raymarching.
+нового renderer-прохода. На high quality GPU-проход рисует panorama + до
+четырёх parallax cards и sun/moon disc (общий panorama texture, не отдельные
+слои-ассеты); sky portal/sky surface работают как раньше. Ограничения:
+отдельные текстуры/профили слоёв, weather layers и volumetric fog не
+поддержаны; fog — не raymarching.
 
 ## Multi-zone boss hit proxies (P3)
 
@@ -700,3 +757,65 @@ Views: final, cell-id, span-id, bsp, portals, depth, owner, light-level, dynamic
 Public runtime checks: `tests/agent/re2d_world_renderer_test.py`, `re2d_world_acceptance_test.py`, `re2d_dust2_test.py`. Native correctness: `tests/re2d/world_test.c` и `tests/rotsprite/rotsprite_test.c`. Limits и measurement provenance находятся в [performance](../RE2D_WORLD_PERF.md); наличие тестов не заменяет фактический отчёт прогона.
 
 World positional audio: [`world.audio` / `$.re2dWorldAudio(world)`](../re2d/WORLD_AUDIO.md). Sources share the native Re2D geometry and existing mixer; Steam Audio supplies HRTF PCM only.
+
+## Brush compiler, regions and sky boundary
+
+`.re2dworld` остаётся обычным runtime-миром: `$.re2dWorld.load(path)` не меняется.
+Новые authored-источники (`brushes`, `world`-конверт, `entities`, `regionSize`)
+обрабатываются **SDK-компилятором** `r2d-sdk world compile`; публичного polygon
+mesh API в runtime нет. В `.re2dworld` добавляется необязательный блок
+`compiler` (brush stats, `regionGrid`, `regionCells`, entities, stage timings),
+который runtime игнорирует.
+
+* Tool materials -> `R2DWorldWall.flags`: query through native
+  `r2d_world_wall_policy()`; `$`-метод для policy пока не добавлен (binding
+  `src/re2d.c` принадлежит другому проходу).
+* `sky` boundary: no wall surface, collision/ray stay, shadow/acoustic off.
+  Translucent `opacity:0` не является заменой.
+* Region partition/streaming/LOD: native `src/re2d_world_region.c`; high-level
+  `world.info()` region metrics ещё не подключены.
+
+Docs: [brush authoring](../RE2D_BRUSH_AUTHORING.md),
+[huge world](../RE2D_HUGE_WORLD.md), [sky boundary](../RE2D_SKY_BOUNDARY.md).
+
+Demo: `demos/re2d_openworld_lab` (`r2d-sdk world compile` -> `.re2dworld`).
+
+## P4/P5 слой (sky/weather/shafts/post)
+
+`world.qualityPreset('high'|'ultra')` включает P4-карточки без нового API:
+distant sky cards, weather layers (rain/snow/ash/clouds) и light shaft cards
+рисуются существующим card-конвейером; sky-профили `clear/dusk/night/storm`
+и policy порталов/tool_sky описаны в `src/re2d_world_sky.h`.
+`world.info().visual` дополнен счётчиками `shafts, weatherCards,
+distantCards, ambientSamples, detailSamples, decals2, batchDraws,
+batchBatches, batchSaved, residentTextures, uploadBytes`.
+
+Честные ограничения: bloom-lite/reflection-lite/depth-aware heat distortion
+имеют проверенную native-математику и CPU-reference, но их финальный
+screen-pass не подключён к world forward pass (нужен scene-colour target);
+ambient/AO field и detail layers пока не загружаются в shader uniforms;
+decals 2.0 model ещё не связан с 128-слотовым пулом. Подробности и метрики —
+[RE2D_RENDER_FEATURES.md](../RE2D_RENDER_FEATURES.md).
+
+Финальный composite (task-11): `world.post` bloom теперь влияет на кадр через
+offscreen post-проход; `world.qualityPreset('high'|'ultra')` включает bloom +
+reflection-lite + depth-aware heat distortion. `world.decal({...})` принимает
+необязательные `rotation`, `scale`, `fadeIn`, `fadeOut` (старые 7 аргументов
+совместимы). Метрики — `info.visual.postPasses/postBloom/postReflection/
+postHeat/decals2`. Ограничения (batching без SSBO, независимые sky-текстуры)
+описаны в [RE2D_RENDER_FEATURES.md](../RE2D_RENDER_FEATURES.md).
+
+Per-layer sky textures: `world.skyLayer(i,{id,texture,tint,parallax,scroll,alpha,offset,scale})`
+(0..3), `world.skyLayers()` и `world.skyManifest('assets/sky/layers.json')`.
+`world.info().sky` отдаёт `{count,error,layers[],sun,moon,weather}`; загрузка
+транзакционная — missing asset сохраняет прежний слой и пишет `error`.
+GPU-биндинг делает отдельный проход (task-13): `r2d_world_runtime_sky_config()`
++ `r2d_world_runtime_sky_layer_pixels()`.
+
+Debug/profiler (task-22): `world.debug.view('region'|'active-region'|'pvs'|
+'vis-cluster'|'areaportal'|'occluder'|'distant-lod'|'sprite-lod'|
+'material-variation'|'ao-lite'|'vfx-budget')` включает native 2D overlay;
+`world.debug.material(name|index)` / `world.debug.materials()` дают material
+inspector, `world.info().regionStreamMs/regionStreamIoMs/regionLoadMs/
+regionVisibilityMs` — реальные CPU timings. `info.materials` остаётся числом
+(совместимость), список — `info.materialList`.

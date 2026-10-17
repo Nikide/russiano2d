@@ -1,0 +1,25 @@
+{
+ "particles": [
+  {
+   "count": 8,
+   "life": 0.35,
+   "size": 3,
+   "endSize": 0,
+   "color": "#c8b8a0",
+   "blend": "additive",
+   "mode": "billboard",
+   "speed": 140,
+   "spread": 5,
+   "gravity": 300,
+   "collision": "bounce",
+   "bounce": 0.2,
+   "radius": 0.5
+  }
+ ],
+ "decal": {
+  "material": 0,
+  "width": 12,
+  "height": 12,
+  "life": 10
+ }
+}

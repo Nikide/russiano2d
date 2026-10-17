@@ -74,3 +74,189 @@ RelWithDebInfo, macOS arm64, Metal, window 1280×720, world frame 640×360.
 Читать так: particle/actor draw submission доминирует в worstcase; visibility
 и actor synthesis — доли миллисекунды. GPU-числа здесь — время ожидания
 fence на этой машине, а не гарантированный бюджет BASHNYA (§76 roadmap).
+
+## BASHNYA issue #2: wall->span incidence cache (2026-10-17)
+
+`surface_draw` раньше для каждой видимой стены перебирала **все** видимые
+spans (`O(walls × spans)`), и это был единственный суперлинейный этап кадра.
+Теперь `WorldGPU` один раз на `topology_revision` строит обратный индекс
+`wall -> incident spans` (из `span_wall_refs`) и проверяет `span_seen`.
+
+Замер на `BASHNYA level1` (960×540, headless, 120 кадров, `bashnya.benchmark`):
+
+| | до | после |
+|---|---:|---:|
+| gpuDraws | 10 531 | 10 531 |
+| frameMs p50 | 12.37 | **2.53** |
+| frameMs p95 | 13.04 | **3.02** |
+| surfaceMs | 11.15 | **1.94** |
+| visibleSurfaces / spans | 2192 / 653 | 2192 / 653 |
+
+Кадр до/после побайтово совпал (0 отличий), т.е. это CPU-оптимизация, не
+изменение видимой геометрии. `world.info()` теперь отдаёт разбивку
+`gpuDrawsBase/gpuDrawsSpan/gpuDrawsActor/gpuDrawsOther` (на старте BASHNYA:
+1527 base / 8471 span / 532 actor / 1 other = 10531).
+
+Дополнительно `set_scissor` возвращает false при пустом пересечении с active
+clip rect: surface/actor/decal draws с нулевым scissor больше не отправляются
+(важно для mirror-прохода). Причина высокого `frameMs` в отчёте BASHNYA
+подтверждена как CPU incidence scan, а не число draw call'ов.
+
+## R-01/R-02 visual pass (2026-10-17)
+
+Workload: `demos/re2d_world_renderer_lab`, GPU reference, 1280×720 output
+(400×240 world frame), 30 warm frames, `world.profile({gpuWait:true})`.
+Current working tree, macOS arm64 / Metal, RelWithDebInfo. Numbers are a single
+run and vary with machine load; they prove the pass does not add geometry.
+
+| Tier | draws | frameMs median | frameMs p95 | changed pixels vs low |
+|---|---:|---:|---:|---:|
+| low (legacy + grounding) | 26 | 12.33 | 12.63 | — |
+| high (all R-01/R-02) | 26 | 12.33 | 12.59 | 32.33% |
+
+Visual features are shader uniforms/instructions only: no extra draw calls, and
+the frame is dominated by the existing actor readback/composition on this lab.
+Per-feature counters are in `world.info().visual` (contactShadows, footAo,
+edgeActors, variedSurfaces, bevelSurfaces, fogSurfaces, hazeSurfaces,
+liquidSurfaces, skyLayers, celestialDiscs, ...).
+
+VFX pass (`tests/agent/re2d_render_vfx_pass_test.py`, same lab): one live card
+adds `gpuDrawsVfx=1`; a live boss aura trail adds 3 trail segment draws
+(`vfxTrailDraws=3`). Attribution stayed exact:
+`Base+Span+Actor+Other+Ground+Vfx == gpuDraws` (50 == 50 in the trail run).
+VFX draw submission is therefore bounded by live cards/trail segments, not by
+registered bundle count.
+
+`demos/re2d_bench_lab` current run (same build, GPU wait):
+
+| Scenario | draws | frameMs |
+|---|---:|---:|
+| base | 24 | 0.88 |
+| actors_100 | 263 | 1.64 |
+| lights_32 | 24 | 1.31 |
+| particles_2000 | 1048 | 3.57 |
+| portals (dust2) | 88 | 0.62 |
+| movers (dust2) | 143 | 0.77 |
+| worstcase | 1287 | 4.91 |
+
+BASHNYA level1 before/after could not be measured in this working tree: the
+current in-flight world/region task makes the native map loader reject the
+BASHNYA `.re2dworld` with `invalid wall/span geometry (-1)`, and the scripted
+intro chain does not reach `level1` through the agent. Re-run the numbers above
+plus the BASHNYA script after that integration lands; do not read the lab table
+as a BASHNYA budget.
+
+## P4/P5 renderer counters (task-7)
+
+`info.visual` adds: `shafts` (additive light-shaft cards drawn), `weatherCards`,
+`distantCards`, `ambientSamples`, `detailSamples`, `decals2`, `batchDraws`,
+`batchBatches`, `batchSaved`, `residentTextures`, `uploadBytes`.
+
+Native budgets are explicit and deterministic:
+
+* light shafts: 0-8 cards/frame (`shaft_budget`, quality low 0 / medium 4 /
+  high 6 / ultra 8);
+* weather: <=96 cards per weather layer, <=8 stacked layers (hard cap), so the
+  worst case is bounded at 768 procedural quads; high density defaults to 0.30
+  and ultra to 0.55, which yields 28/52 cards for the shipped profiles;
+* distant cards: 0-4 per frame;
+* decals 2.0: constant 256-slot model (existing world decal pool stays 128);
+* batching: consecutive material/blend/light/atlas keys coalesce, `batchSaved`
+  counts avoided draw calls;
+* residency: byte budget + per-frame upload byte budget; admission is
+  deterministic (fits or queued as pending).
+
+The CPU post references are O(w*h) plus a separable box blur and are used only
+by the native regression harness, not in the frame loop.
+
+## Final composite (task-11)
+
+Adds one fullscreen post draw per FINAL frame (`postPasses`) plus a separate
+post colour/owner/depth target (about 8 bytes/px extra GPU texture memory, now
+included in `gpuTexturePayloadBytes`). Bloom-lite is 8 texture taps; heat uses
+two extra depth taps only when enabled; reflection uses one mirrored colour tap
+only on floor pixels. Debug views and the CPU backend do not run the composite.
+
+## CPU/GPU parity fixes (2026-10-17, task-13)
+
+Two root causes explained the six remaining
+`tests/agent/re2d_world_renderer_test.py` failures. Both were implementation
+divergences, not test tolerance:
+
+1. **Shadow lookup in render-origin space.** After wave-3 added region-local
+   render origin, the shadow cache upload rewrote wall XY starting at
+   `header + 1 + i*2` (off by one; the first wall stayed unshifted and wall
+   heights were shifted), while the shader compared shifted light/origin
+   positions against the partially shifted cache. Three failures followed:
+   moving floor/riser, upper height-aware shadows, lower wall/floor occlusion.
+   Fix: shadow geometry now stays in **world coordinates**; the fragment shader
+   adds `u.renderOrigin.xy` before `occluded()`. The upload rewrite and its
+   per-origin chunk inconsistency are gone.
+2. **Translucent/additive depth compare was ALWAYS.** The mirror/overdraw
+   pipelines set `COMPAREOP_ALWAYS`, and translucent/additive pipelines were
+   created afterwards without resetting it. Translucent glass and additive
+   flashes therefore painted over nearer actors/decals regardless of depth:
+   actor-between-glass, additive flash and bounded-decal parity failed. Fix:
+   set `COMPAREOP_LESS_OR_EQUAL` before creating the translucent/additive
+   pipelines (their depth test/write flags were already correct).
+
+Evidence after the fixes (same build):
+- `re2d_world_renderer_test.py`: **55 checks, exit 0** (6 failures before).
+- `re2d_dust2_test.py`, `re2d_render_p4_test.py`,
+  `re2d_render_visual_features_test.py`, `re2d_render_vfx_pass_test.py`: green.
+- `r2d_check`: **158/158**; `ci_verify` and docs/API guards: green.
+
+Files touched: `src/re2d_world_gpu.c`, `shaders/world.frag.glsl`.
+
+## Static batching data path (P4)
+
+`src/re2d_world_batch.c/.h` builds the deterministic batch plan used by the
+renderer owner. It never submits draws; the existing `gpuDraws*` attribution is
+unchanged.
+
+Per frame the runtime rebuilds the plan from `R2DWorldVisibility`:
+
+* groups key = `(material, blend, light_policy, atlas)`;
+* group order = ascending key; ties broken deterministically by kind, surface,
+  span, aux and tint;
+* instances are packed as eight `uint32` fields (32 bytes, std430), groups as
+  six `uint32` fields;
+* counters: `groups`, `instances`, `saved_binds = instances - groups`,
+  `surfaces/actors/skies`, `overflow`.
+
+`world.batchInfo()` returns the current counters plus the GPU contract; the
+same counters are exposed in `world.info().visual.staticBatch*`. Measurement:
+`tests/agent/re2d_batch_info_test.py` on `demos/re2d_world_renderer_lab`.
+
+## Region profiler split (task-22)
+
+`world.info()` now exposes real CPU-clock region phases, measured with
+`SDL_GetPerformanceCounter` in `r2d_world_regions_frame`:
+
+* `regionLoadMs` — region grid ensure/build (normally 0 after the first frame);
+* `regionVisibilityMs` — PVS, occluder/cluster culling and active/preload ring;
+* `regionStreamMs` — residency state update (`r2d_world_stream_update`);
+* `regionStreamIoMs` — budgeted payload load/unload tick (`R2DWorldStreamIO`).
+
+Measured on `demos/re2d_world_renderer_lab` (GPU, 640 px): visibility
+~0.0007 ms, stream ~0.001 ms, stream IO ~0.0004 ms per frame; values are
+sub-microsecond at this map size. Debug overlays add one CPU pass over the
+RGBA frame only while a debug view is active; FINAL frames are untouched.
+
+### GPU batching measurement
+
+`demos/re2d_world_renderer_lab`, medium quality, 2 visible cells: logical
+surface draws 23 (11 base + 12 span variants) → 4 GPU group draws, 19 saved
+draws, 23 SSBO instances. The image matches the per-surface path (parity suite
+green); the only deliberate delta is a ≤5e-7 span-rank depth bias needed to keep
+equal-depth wall span variants deterministic inside one instanced draw.
+
+Commands:
+
+```bash
+python3 tests/agent/re2d_batch_gpu_test.py        # reduction + fallback
+python3 tests/agent/re2d_world_renderer_test.py   # CPU/GPU parity
+```
+
+Fallback: `world.batchGpu(false)`; overdraw and non-final debug views always use
+the per-surface path so debug attribution stays inspectable.

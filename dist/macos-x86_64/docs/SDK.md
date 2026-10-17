@@ -97,8 +97,13 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
 | `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
 | `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |
-| `world-compile <f.re2dmap> [--renderer] [--output f.re2dworld]` | Re2D World: SDK-исходник → baked мир для `$.re2dWorld` (`--renderer` обязателен для нового runtime) |
-| `world-info <f.re2dmap>` | то же без записи: статистика/порталы/проверка карты |
+| `world compile <f.re2dmap> [--renderer] [--pvs] [--region-size N] [--output f.re2dworld]` | Re2D World: brush/cell authoring → baked мир; stage report, region grid, coarse PVS; `--pvs` добавляет legacy portal-reachability report |
+| `world info <f.re2dmap>` | то же без записи: статистика/порталы/регионы/проверка карты |
+| `world validate <f.re2dmap>` | компиляция в память + диагностика без записи |
+| `world-compile <f.re2dmap> [--renderer] [--pvs] [--region-size N] [--output f.re2dworld]` | legacy alias `world compile` |
+| `world-info <f.re2dmap>` | legacy alias `world info` |
+| `story validate <каталог|файл> [--assets-root dir]` | VN: `*.scene` → duplicate labels, unknown goto, unreachable branches, goto cycles, speakers/expressions (`speakers.json`), assets, theme, i18n keys |
+| `dialog validate <file.rml>` | VN: `<rml>` root, semantic `data-dialog-role` (root/text/choices), balanced tags, linked RCSS, `@font-face` files |
 | `batch <manifest.batch.json> [--output report.json]` | пакетная проверка (`validate`), ошибки отдельных jobs не прерывают пакет |
 | `agent <session.agent.json> [--engine путь] [--output report.json]` | нативный клиент исходного агентского протокола движка |
 | `templates [--root sdk/templates]` | шаблоны проектов (`sdk/templates/<id>/template.json`): имя, описание, число файлов |
@@ -533,3 +538,46 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 `sdk/ui/code_check.rml`. Панель вызывает **native** `r2d-sdk doctor/lint/validate`
 через `app.backend` и показывает generated `api.schema.json` — второго линтера
 или валидатора в JS нет.
+
+## Re2D brush authoring / huge world
+
+`world compile` принимает `.re2dmap` с additive-секциями `brushes`, `world`
+(конверт), `entities` и `regionSize`; старые `cells/walls/portals/stairs/slopes`
+и `--renderer`-контракт не меняются.
+
+Brushes: `rect` или выпуклый `polygon` (3..64 вершины), axis-aligned `holes`
+(до 8 прямоугольников), `subtract: true` для Z-CSG вычитания, несколько
+solid Z-интервалов и несколько/перекрывающихся subtract-объёмов на одном XY.
+Компилятор детерминированно очищает/merge'ит cells, стены и порталы. Editor
+helpers: `sdk_brush_move_vertex()` (transactional vertex move с точной
+диагностикой concave/hole) и `sdk_brush_split_axis()` (axis split на два
+выпуклых brush'а; holes на split отклоняются). Статистика включает
+`polygonBrushes`, `subtractBrushes`, `holeBrushes`, `hintBarriers`,
+`brushEntityMap`.
+
+`hint` brush, касающийся сгенерированного портала, эмитит concrete
+`R2D_WALL_TOOL_HINT` barrier ровно на портале; runtime visibility режет
+VIEW-проход через него (`hintPortalsCut`), не меняя collision/ray/render.
+`skip` остаётся metadata; настоящие BSP split planes не вставляются.
+
+Brush entities (`door`, `lift`, `crusher`, `moving_wall`, `trigger_volume`,
+`fog_volume`, `water_volume`, `areaportal`) маппятся на существующие native
+mover/trigger/volume-контракты; в отчёте и `.re2dworld` появляется
+`compiler.brushEntities[]` с `runtime`, `api`, `moverType`/`triggerType`,
+`target`, `volume` и `hook` (пустой hook = прямой runtime API; непустой =
+требуемый хук рантайма). Door/lift/crusher/moving-wall и trigger volume
+проверены runtime smoke-тестом.
+
+Tool materials (`nodraw`, `clip`, `sky`, `hint`, `skip`, `trigger`, `areaportal`,
+`occluder`, clip variants) компилируются в policy-биты стен, а не в
+прозрачность. Новые diagnostics: `SDK_WORLD_SKY_LEAK`,
+`SDK_WORLD_GIANT_SURFACE`, `SDK_WORLD_GIANT_TRANSPARENT`,
+`SDK_WORLD_BRUSH_ENTITY`. Полный формат, стадии и коды warning'ов:
+[`RE2D_BRUSH_AUTHORING.md`](RE2D_BRUSH_AUTHORING.md). Регионы, streaming/PVS и
+LOD: [`RE2D_HUGE_WORLD.md`](RE2D_HUGE_WORLD.md). Sky/clip boundary:
+[`RE2D_SKY_BOUNDARY.md`](RE2D_SKY_BOUNDARY.md).
+
+```bash
+r2d-sdk world compile demos/re2d_openworld_lab/openworld.re2dmap \
+  --renderer --region-size 256 --output /tmp/openworld.re2dworld
+```

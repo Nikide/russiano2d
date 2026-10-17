@@ -171,3 +171,26 @@ build/_deps/quickjs-build/qjs tests/js/story_test.mjs
 # в движке: реплики, выборы, флаги, катсцена и возврат управления
 python3 tests/agent/highlevel_story_test.py
 ```
+
+## 9. VN: Narrative IR и общий dialog runtime
+
+`$.story` больше не владеет текстом: `say`/`choices` уходят в `$.dialog`
+(тот же runtime, что у timeline/cutscene), а у story остаются актёры, камера,
+кадры, полосы и затемнение.
+
+`$.story.compile(textOrScript)` и экспортируемая `compileStory(script)` дают
+Narrative IR:
+
+```js
+[{ op:'say', speaker:'w', expression:'smirk', text:'Привет.' },
+ { op:'choice', choices:[{ text:'Друг', goto:'friend', commits:[] }] },
+ { op:'commit', key:'trust', mode:'+=', value:1 },
+ { op:'label', name:'friend' }, { op:'goto', goto:'friend' }, { op:'end' }]
+```
+
+IR — обычные данные: его можно валидировать, сохранять и проигрывать разными
+presentation-слоями. Story state (`$.story.flags`, `set`/`if`) не становится
+частью UI; `.scene` остаётся authoring-форматом.
+
+Новые команды нативного линтера: `r2d-sdk story validate <dir>`.
+Подробности — `docs/VN_NARRATIVE.md`.

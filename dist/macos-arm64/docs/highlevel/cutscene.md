@@ -121,3 +121,11 @@ build/_deps/quickjs-build/qjs tests/js/cutscene_test.mjs
 # в движке: ввод забран, NPC идёт, камера едет и возвращается
 python3 tests/agent/highlevel_cutscene_test.py
 ```
+
+## 7. VN: общий dialog runtime
+
+Cutscene не держит собственной панели реплик: `say`-шаги вызывают
+`$.dialog.show(...)`, который использует тот же logic/view/theme runtime, что
+`$.dialog.play`, `$.timeline` и `$.story`. Input lock (`$.input.lock`) и
+world mode (`$.dialog.worldMode('cinematic')`) освобождаются на stop/skip/
+исключении/смене сцены. Подробнее — `docs/VN_NARRATIVE.md`.
