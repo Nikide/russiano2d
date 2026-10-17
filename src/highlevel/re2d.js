@@ -802,6 +802,7 @@ function rendererWorldWrapper($, native) {
                 Number(dt), Math.trunc(Number(options.seed ?? 0)));
         },
         info() { return native.particlesInfo(); },
+        budget(count) { native.particlesBudget(Math.trunc(Number(count))); return world; },
         clear() { native.particlesClear(); return world; },
     };
 

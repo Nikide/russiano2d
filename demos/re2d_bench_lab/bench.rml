@@ -1,0 +1,1 @@
+<rml><head><title>Re2D bench lab</title><link type="text/rcss" href="bench.rcss" /></head><body><div id="panel"><div id="status"></div><div id="keys">re2dBench.apply('base'|'actors_100'|'lights_32'|'particles_2000'|'portals'|'movers'|'worstcase') · Esc: exit</div></div></body></rml>

@@ -36,6 +36,8 @@ const MODULES = [
     './re2d_testroom/index.js',
     // Boomer lab P0-A: нативные atlas world sprites вместо ui.image-оверлея.
     './re2d_boomer_lab/index.js',
+    // P4 benchmark lab: switchable scenarios и честные native-числа.
+    './re2d_bench_lab/index.js',
     // Эталонное меню настроек: четыре вкладки, всё на лету, сохранение в
     // settings.json (docs/tutorial-settings.md).
     './settings/index.js',
