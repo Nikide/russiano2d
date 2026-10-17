@@ -879,6 +879,15 @@ function rendererWorldWrapper($, native) {
         };
     };
 
+    // P2 sky 2.0: panorama yaw + deterministic tint/lightning pulse.
+    world.skyAnim = (options = {}) => {
+        const color = unpackRgb($.color(options.color ?? '#ffffff'));
+        native.skyAnim(Number(options.yawSpeed ?? 0), Number(options.pulseHz ?? 0),
+            Number(options.pulseAmount ?? 0), color[0] | (color[1] << 8) | (color[2] << 16));
+        return world;
+    };
+    world.skyAnimInfo = () => native.skyAnimInfo();
+
     // P2 postprocess: native descriptor stack + mapping onto the existing final
     // 2D post pass ($.gfx.post). No 3D G-buffer, no shader graph.
     const postEffects = { grade: 0, vignette: 1, flash: 2, tint: 3, pixelate: 4, chroma: 5, bloom: 6 };
@@ -971,16 +980,35 @@ function rendererWorldWrapper($, native) {
     world.saveMapHash = () => native.saveMapHash();
     world.saveState = () => {
         const meta = native.metadata();
+        const secrets = [...secretMeta.entries()].map(([token, info]) => {
+            const st = native.secretInfo(token) || {};
+            return { id: info.id, found: st.found ? 1 : 0, foundCount: st.foundCount || 0 };
+        });
+        const breakables = [...breakableMeta.entries()].map(([token, info]) => {
+            const st = native.breakableInfo(token) || {};
+            return { id: info.id, hp: st.hp ?? info.hp, broken: st.broken ? 1 : 0 };
+        });
         return { format: 're2d-world-save', version: 1,
                  map: { id: meta.id ?? null, version: meta.version ?? null, hash: native.saveMapHash() },
-                 state: JSON.parse(native.saveStateJSON()) };
+                 state: JSON.parse(native.saveStateJSON()), secrets, breakables };
     };
     world.loadState = save => {
         if (!save || save.format !== 're2d-world-save') throw new TypeError('world.loadState: not a re2d-world-save');
         const hash = native.saveMapHash();
         if (save.map && save.map.hash && save.map.hash !== hash)
             throw new RangeError('world.loadState: map hash mismatch (reload rebuilt topology or ids)');
-        return native.loadStateJSON(JSON.stringify(save.state));
+        const applied = native.loadStateJSON(JSON.stringify(save.state));
+        if (applied) {
+            // Secrets/breakables are wrapper-level extras (native snapshot
+            // carries geometry/movers/triggers); match by authored id.
+            for (const entry of save.secrets || []) {
+                for (const [token, info] of secretMeta) if (info.id === entry.id) native.secretRestore(token, entry.found, entry.foundCount);
+            }
+            for (const entry of save.breakables || []) {
+                for (const [token, info] of breakableMeta) if (info.id === entry.id) native.breakableRestore(token, entry.hp, entry.broken);
+            }
+        }
+        return applied;
     };
 
     // P1 secrets/breakables: authored semantic state + \$.emit events.
@@ -1026,6 +1054,30 @@ function rendererWorldWrapper($, native) {
         };
     };
     world.onBreakable = fn => { $.on('breakable.broken', event => fn(event.data ?? {}, event)); return world; };
+
+    // P2 fog zones: authored semantic helper over per-span fog; blending is
+    // driven by the span the camera/player occupies.
+    world.fogZone = (options = {}) => {
+        if (options.span === undefined) throw new TypeError('world.fogZone: span required');
+        const zone = world.span(Math.trunc(Number(options.span)));
+        const fog = {};
+        if (options.density !== undefined) fog.density = Number(options.density);
+        if (options.start !== undefined) fog.start = Number(options.start);
+        if (options.color !== undefined) fog.color = options.color;
+        zone.fog(fog);
+        return world;
+    };
+    world.fogZones = list => {
+        for (const zone of list || []) world.fogZone(zone);
+        return world;
+    };
+    world.fogAt = (x, y, h) => {
+        const span = world.spanAt(x, y, h);
+        if (span === null || span === undefined) return null;
+        const info = world.span(span).info();
+        return { span, density: info.fogDensity, start: info.fogStart,
+                 color: [info.fogR, info.fogG, info.fogB] };
+    };
 
     // P1 automap: native XY lines + 2D transform; drawing stays with the game.
     world.automapLines = states => native.automapLines(states);

@@ -83,6 +83,11 @@ const native = {
     postReset: () => calls.post.push(['reset']),
     postEval: () => ({ colorScale: [1.1, 0.9, 1], colorAdd: [0, 0, 0], tint: [1, 0.9, 0.8, 0.2],
                        vignette: 0.4, flash: 0.5, pixelSize: 1, chroma: 0.001, bloom: 0.3 }),
+    spanLight: () => ({ level: 1, r: 1, g: 1, b: 1, fogDensity: 0.002, fogStart: 100, fogR: 0.1, fogG: 0.2, fogB: 0.3 }),
+    spanHeight: () => {}, spanSky: () => {},
+    spanAt: () => 2,
+    skyAnim: (...args) => calls.material.push(['skyAnim', args]),
+    skyAnimInfo: () => ({ active: 1, yaw: 0.5, phase: 1, tinted: 1 }),
     materialIndex: (name) => { calls.material.push(['index', name]); return name === 'brick' ? 2 : null; },
     materialAnimSet: (...args) => { calls.material.push(['set', args]); },
     materialAnimInfo: (index) => { calls.material.push(['info', index]); return { frame: 1, emissive: 1.1, uOffset: 0.25, vOffset: 0 }; },
@@ -93,11 +98,13 @@ const native = {
     secretCreate: (...args) => { calls.secret.push(['create', args]); return 5; },
     secretRemove: (token) => calls.secret.push(['remove', token]),
     secretInfo: (token) => ({ found: 1, foundCount: 1 }),
+    secretRestore: (token, found, count) => calls.secret.push(['restore', token, found, count]),
     secretTick: (dt, x, y, feet) => { calls.secret.push(['tick', dt, x, y, feet]); return [5]; },
     breakableCreate: (...args) => { calls.breakable.push(['create', args]); return 6; },
     breakableRemove: (token) => calls.breakable.push(['remove', token]),
     breakableDamage: (token, damage) => { calls.breakable.push(['damage', token, damage]); return damage >= 100 ? 1 : 0; },
     breakableInfo: () => ({ hp: 0, variant: 0, portal: 2, broken: 1 }),
+    breakableRestore: (token, hp, broken) => calls.breakable.push(['restore', token, hp, broken]),
     surfaceTerrain: (index, name) => { calls.terrain.push(['set', index, name]); return 0; },
     surfaceTerrainInfo: (index) => ({ kind: 0, name: 'stone' }),
     surfaceConveyor: (index, vx, vy, accel, affects) => calls.terrain.push(['conv', index, vx, vy, accel, affects]),
@@ -384,6 +391,8 @@ test('world.saveState/loadState: версия, map hash и native snapshot', () 
     eq(save.state.format, 're2d-save');
     eq(world.loadState(save), true);
     eq(calls.save.length, 1);
+    eq(save.secrets.length, 0);
+    eq(save.breakables.length, 0);
     throws(TypeError, () => world.loadState({ format: 'other' }), 'чужой формат');
     throws(RangeError, () => world.loadState({ ...save, map: { hash: 'deadbeef' } }), 'hash mismatch');
     world.dispose();
@@ -404,6 +413,20 @@ test('world.secret/breakable: события в $.on', () => {
     eq(broken.length, 1); eq(broken[0][0], 'crate.a'); eq(broken[0][1], 3);
     eq(crate.info().broken, 1);
     crate.remove();
+    world.dispose();
+});
+
+test('saveState переносит secrets/breakables и loadState их восстанавливает', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const secret = world.secret({ id: 'secret.a', x: 1, y: 1, top: 32, once: true });
+    const crate = world.breakable({ id: 'crate.a', hp: 100, x: 1, y: 1, top: 32 });
+    const save = world.saveState();
+    eq(save.secrets.length, 1); eq(save.secrets[0].id, 'secret.a');
+    eq(save.breakables.length, 1); eq(save.breakables[0].id, 'crate.a');
+    eq(world.loadState(save), true);
+    eq(calls.secret.filter(r => r[0] === 'restore').length, 1);
+    eq(calls.breakable.filter(r => r[0] === 'restore').length, 1);
+    secret.remove(); crate.remove();
     world.dispose();
 });
 
@@ -473,6 +496,19 @@ test('world.post: профиль, set/enable и mapping в $.gfx.post', () => {
     world.post.reset();
     eq(calls.post[calls.post.length - 1][0], 'reset');
     throws(RangeError, () => world.post.set('unknown'), 'неизвестный эффект');
+    world.dispose();
+});
+
+test('world.skyAnim и fogZone/fogAt доступны', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    world.skyAnim({ yawSpeed: 0.2, pulseHz: 1.5, pulseAmount: 0.3, color: '#ff8040' });
+    const call = calls.material[calls.material.length - 1];
+    eq(call[0], 'skyAnim');
+    eq(call[1][0], 0.2); eq(call[1][1], 1.5); eq(call[1][2], 0.3);
+    eq(world.skyAnimInfo().active, 1);
+    world.fogZone({ span: 2, density: 0.01, start: 40, color: '#204060' });
+    const fog = world.fogAt(1, 2, 3);
+    eq(fog.span, 2); eq(fog.density, 0.002); eq(fog.start, 100);
     world.dispose();
 });
 

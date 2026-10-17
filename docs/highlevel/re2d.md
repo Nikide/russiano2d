@@ -35,6 +35,8 @@ $.render(() => world.render(view,400,240));
 | `world.materialAnim(name,opts)` / `materialIndex(name)` | flipbook/scroll/emissive анимация материала |
 | `world.volume(node,opts)` | constrained box/cross/slice-stack из нескольких billboard-частей (не mesh) |
 | `$.capabilities.re2d` | честная матрица возможностей сборки/рантайма |
+| `world.post` | финальный 2D postprocess stack поверх `$.gfx.post` |
+| `world.skyAnim` / `fogZone` / `fogAt` | анимация панорамы и semantic fog zones |
 | `world.particles.burst/continuous/info/clear` | нативный fixed-pool частиц |
 | `world.fxDefine(name,bundle)` / `fxSpawn(name,at)` | asset-driven VFX bundle (particles/light/decal/sound/shake) |
 | `world.findSurface(name)` | имя стены/span → handle поверхности |
@@ -455,6 +457,21 @@ world.post.reset();
 не нужен. Ограничения: grade — 3-канальный gain (не LUT-матрица), pixelate —
 hint, реальные пиксельные операции остаются в post-шейдере; bloom/chroma —
 скалярные подсказки.
+
+## Sky 2.0 и fog zones (P2)
+
+```js
+world.skyAnim({ yawSpeed: 0.2, pulseHz: 1.5, pulseAmount: 0.3, color: '#ff8040' });
+world.fogZone({ span: 2, density: 0.01, start: 40, color: '#204060' });
+world.fogAt(x, y, h);   // {span, density, start, color:[r,g,b]}
+```
+
+Скай — та же 2D-панорама: `skyAnim` крутит yaw и детерминированно пульсирует
+tint (lightning/exposure-lite) в worldStep; `skyAnimInfo` отдаёт yaw/phase.
+`fogZone` — semantic helper над существующим per-span fog: цвет/плотность/
+start; переходы между зонами (камера в разных span) дают authored blend без
+нового renderer-прохода. Ограничения: multi-layer sky и sky portal как
+отдельный render pass — следующий шаг; fog не volumetric raymarching.
 
 ## Свет, материал, изменение мира
 

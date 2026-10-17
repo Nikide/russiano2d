@@ -725,6 +725,21 @@ static int material_arg(WorldHandle *w,JSContext *ctx,JSValueConst value)
     }
     int32_t index=-1;if(JS_ToInt32(ctx,&index,value)<0)return -1;return index;
 }
+static JSValue world_sky_anim(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
+    uint32_t tint=0xffffffu;
+    if(argc>=4){uint32_t parsed=0;if(JS_ToUint32(ctx,&parsed,argv[3])<0)return JS_EXCEPTION;tint=parsed&0xffffffu;}
+    if(!r2d_world_sky_anim(w,p[0],p[1],p[2],tint))return JS_ThrowRangeError(ctx,"Re2D World: invalid sky animation");
+    return JS_UNDEFINED;
+}
+static JSValue world_sky_anim_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    float out[4];r2d_world_sky_anim_info(w,out);
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"active",out[0]);set_num(ctx,o,"yaw",out[1]);
+    set_num(ctx,o,"phase",out[2]);set_num(ctx,o,"tinted",out[3]);return o;
+}
 static JSValue world_post_set(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[8];if(!w||!world_numbers(ctx,argc,argv,8,p))return JS_EXCEPTION;
@@ -867,6 +882,16 @@ static JSValue world_secret_create(JSContext *ctx,JSValueConst self,int argc,JSV
     if(!ok)return JS_EXCEPTION;
     if(token<=0)return JS_ThrowRangeError(ctx,"Re2D World: invalid secret");
     return JS_NewInt32(ctx,token);
+}
+static JSValue world_secret_restore(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
+    return r2d_world_secret_restore(w,(int)p[0],(int)p[1],(int)p[2])?JS_UNDEFINED:JS_ThrowRangeError(ctx,"Re2D World: unknown secret");
+}
+static JSValue world_breakable_restore(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
+    return r2d_world_breakable_restore(w,(int)p[0],(int)p[1],(int)p[2])?JS_UNDEFINED:JS_ThrowRangeError(ctx,"Re2D World: unknown breakable");
 }
 static JSValue world_secret_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -1354,7 +1379,7 @@ static void world_watch_poll(JSContext *,WorldHandle *,float);
 static JSValue world_step_all(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)self;float dt;if(!world_numbers(ctx,argc,argv,1,&dt))return JS_EXCEPTION;if(dt<0||dt>60)return JS_ThrowRangeError(ctx,"Re2D World: invalid step dt");
-    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);r2d_world_particles_step(w,dt);r2d_world_material_anim_advance(w,dt);r2d_world_post_step_all(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
+    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);r2d_world_particles_step(w,dt);r2d_world_material_anim_advance(w,dt);r2d_world_post_step_all(w,dt);r2d_world_sky_anim_advance(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
 }
 static JSValue world_light_at(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -1406,6 +1431,8 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"audioRemove",JS_NewCFunction(ctx,world_audio_remove,"audioRemove",1));
     JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",17));
     JS_SetPropertyStr(ctx,handle,"hitAdd",JS_NewCFunction(ctx,world_hit_add,"hitAdd",5));
+    JS_SetPropertyStr(ctx,handle,"skyAnim",JS_NewCFunction(ctx,world_sky_anim,"skyAnim",4));
+    JS_SetPropertyStr(ctx,handle,"skyAnimInfo",JS_NewCFunction(ctx,world_sky_anim_info,"skyAnimInfo",0));
     JS_SetPropertyStr(ctx,handle,"postSet",JS_NewCFunction(ctx,world_post_set,"postSet",8));
     JS_SetPropertyStr(ctx,handle,"postEnable",JS_NewCFunction(ctx,world_post_enable,"postEnable",2));
     JS_SetPropertyStr(ctx,handle,"postProfile",JS_NewCFunction(ctx,world_post_profile,"postProfile",1));
@@ -1428,6 +1455,8 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"terrainAt",JS_NewCFunction(ctx,world_terrain_at,"terrainAt",3));
     JS_SetPropertyStr(ctx,handle,"conveyorAt",JS_NewCFunction(ctx,world_conveyor_at_js,"conveyorAt",3));
     JS_SetPropertyStr(ctx,handle,"secretCreate",JS_NewCFunction(ctx,world_secret_create,"secretCreate",7));
+    JS_SetPropertyStr(ctx,handle,"secretRestore",JS_NewCFunction(ctx,world_secret_restore,"secretRestore",3));
+    JS_SetPropertyStr(ctx,handle,"breakableRestore",JS_NewCFunction(ctx,world_breakable_restore,"breakableRestore",3));
     JS_SetPropertyStr(ctx,handle,"secretRemove",JS_NewCFunction(ctx,world_secret_remove,"secretRemove",1));
     JS_SetPropertyStr(ctx,handle,"secretInfo",JS_NewCFunction(ctx,world_secret_info,"secretInfo",1));
     JS_SetPropertyStr(ctx,handle,"secretTick",JS_NewCFunction(ctx,world_secret_tick,"secretTick",4));

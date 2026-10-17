@@ -221,6 +221,8 @@ def main():
         check(save is not None and '"restored":true' in save and '"movers":1' in save
               and '"spans":1' in save and '"portals":0' in save,
               f"world.saveState/loadState восстанавливает native state: {save}")
+        check('"found":0' in save and '"hp":100' in save and '"broken":0' in save,
+              f"save/load возвращает secret/breakable state: {save}")
 
         anim = a.eval("JSON.stringify(boomerLab.materialAnimProbe())")
         check(anim is not None and '"index":' in anim and '"uOffset":' in anim,

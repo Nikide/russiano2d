@@ -130,6 +130,10 @@ typedef struct R2DWorldRuntime {
     // P2 final-frame postprocess stack (descriptors; JS maps to the render pass).
     R2DPostStack post;
     bool post_ready;
+    // P2 sky 2.0 animation: panorama yaw + tint/lightning pulse.
+    float sky_yaw_speed,sky_pulse_hz,sky_pulse_amount,sky_phase;
+    uint32_t sky_tint;
+    bool sky_anim_active;
     // P1 secrets/breakables: authored semantic state, no entity system.
     R2DWorldSecret *secrets;
     int *secret_tokens;
@@ -224,6 +228,8 @@ int r2d_world_breakable_create(R2DWorldRuntime *,const char *id,int hp,int varia
 bool r2d_world_breakable_remove(R2DWorldRuntime *,int token);
 int r2d_world_breakable_damage(R2DWorldRuntime *,int token,int damage);
 bool r2d_world_breakable_info(R2DWorldRuntime *,int token,int *hp,int *variant,int *portal,int *broken);
+bool r2d_world_secret_restore(R2DWorldRuntime *,int token,int found,int found_count);
+bool r2d_world_breakable_restore(R2DWorldRuntime *,int token,int hp,int broken);
 void r2d_world_secret_free(R2DWorldRuntime *);
 // P1 terrain/conveyors per surface.
 bool r2d_world_set_surface_terrain(R2DWorldRuntime *,int surface,int kind);
@@ -249,6 +255,10 @@ bool r2d_world_post_profile(R2DWorldRuntime *,const char *name);
 bool r2d_world_post_eval(R2DWorldRuntime *,R2DPostUniforms *out);
 void r2d_world_post_reset(R2DWorldRuntime *);
 void r2d_world_post_step_all(R2DWorldRuntime *,float dt);
+// P2 sky animation (panorama yaw + deterministic pulse).
+bool r2d_world_sky_anim(R2DWorldRuntime *,float yaw_speed,float pulse_hz,float pulse_amount,uint32_t tint);
+void r2d_world_sky_anim_info(R2DWorldRuntime *,float out[4]);
+void r2d_world_sky_anim_advance(R2DWorldRuntime *,float dt);
 void r2d_world_material_anim_advance(R2DWorldRuntime *,float dt);
 void r2d_world_runtime_actors_free(R2DWorldRuntime *);
 // Returns ordinary 2D sprite id; errors set QuickJS exception, no script renderer loops.

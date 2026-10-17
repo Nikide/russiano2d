@@ -211,7 +211,11 @@ export default function install($) {
             if (!mover) mover = world.mover({ type: 'lift', span: 0, from: 0, to: 96,
                 speed: 240, wait: 1, autoReturn: true });
             mover.open();
+            if (!world._saveSecret) world._saveSecret = world.secret({ id: 'lab.save.secret', x: 800, y: 1080, radius: 40, bottom: 0, top: 200, once: true });
+            if (!world._saveCrate) world._saveCrate = world.breakable({ id: 'lab.save.crate', hp: 100, variant: 2, portal: -1, x: 800, y: 900, radius: 32, bottom: 0, top: 64 });
             const save = world.saveState();
+            world.secretsTick(1 / 60, { x: 800, y: 1080, feet: 0 });
+            world._saveCrate.hit(100);
             mover.close();
             const before = { movers: world.info().movers, triggers: world.info().triggers,
                 spans: save.state.spans.length, portals: save.state.portals.length,
@@ -225,7 +229,8 @@ export default function install($) {
             world.span(0).heights(0, 320);
             return { restored, error, before, hash: save.map.hash, fraction: info.fraction,
                      phase: info.phase, spans: save.state.spans.length,
-                     portals: save.state.portals.length, movers: save.state.movers.length };
+                     portals: save.state.portals.length, movers: save.state.movers.length,
+                     secret: world._saveSecret.info(), crate: world._saveCrate.info() };
         },
         fxProbe: () => {
             world.particles.clear();

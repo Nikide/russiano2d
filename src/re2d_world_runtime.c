@@ -847,6 +847,22 @@ bool r2d_world_breakable_info(R2DWorldRuntime *w,int token,int *hp,int *variant,
     if(hp)*hp=b->hp;if(variant)*variant=b->variant;if(portal)*portal=b->portal;if(broken)*broken=b->broken?1:0;
     return true;
 }
+bool r2d_world_secret_restore(R2DWorldRuntime *w,int token,int found,int found_count)
+{
+    int *slot=secret_token_slot(w,token);if(!slot)return false;
+    R2DWorldSecret *s=&w->secrets[slot-w->secret_tokens];
+    s->found=found!=0;s->found_count=found_count<0?0:found_count;
+    if(s->found)s->entered=true;
+    return true;
+}
+bool r2d_world_breakable_restore(R2DWorldRuntime *w,int token,int hp,int broken)
+{
+    int *slot=breakable_token_slot(w,token);if(!slot)return false;
+    R2DWorldBreakable *b=&w->breakables[slot-w->breakable_tokens];
+    if(hp<0)hp=0;if(hp>b->max_hp)hp=b->max_hp;
+    b->hp=hp;b->broken=broken!=0;
+    return true;
+}
 void r2d_world_secret_free(R2DWorldRuntime *w)
 {
     free(w->secrets);free(w->secret_tokens);free(w->breakables);free(w->breakable_tokens);
@@ -1130,6 +1146,31 @@ void r2d_world_post_step_all(R2DWorldRuntime *w,float dt)
 {
     if(w&&w->post_ready)r2d_postprocess_step(&w->post,dt);
 }
+
+static void sky_anim_step(R2DWorldRuntime *w,float dt)
+{
+    if(!w||!w->sky_anim_active)return;
+    w->sky_phase+=dt;
+    w->world.sky_yaw+=w->sky_yaw_speed*dt;
+    float factor=1.0f;
+    if(w->sky_pulse_hz>0)factor=1.0f+w->sky_pulse_amount*sinf(6.283185307179586f*w->sky_phase*w->sky_pulse_hz);
+    const uint32_t t=w->sky_tint;
+    float r=((t&0xff)/255.0f)*factor,g=(((t>>8)&0xff)/255.0f)*factor,b=(((t>>16)&0xff)/255.0f)*factor;
+    r=fmaxf(0,fminf(1,r));g=fmaxf(0,fminf(1,g));b=fmaxf(0,fminf(1,b));
+    w->world.sky_color=0xff000000u|(uint32_t)(r*255)|((uint32_t)(g*255)<<8)|((uint32_t)(b*255)<<16);
+}
+bool r2d_world_sky_anim(R2DWorldRuntime *w,float yaw_speed,float pulse_hz,float pulse_amount,uint32_t tint)
+{
+    if(!w||!isfinite(yaw_speed)||!isfinite(pulse_hz)||!isfinite(pulse_amount)||pulse_hz<0||pulse_amount<0)return false;
+    w->sky_yaw_speed=yaw_speed;w->sky_pulse_hz=pulse_hz;w->sky_pulse_amount=pulse_amount;
+    w->sky_tint=tint|0xff000000u;w->sky_phase=0;w->sky_anim_active=true;return true;
+}
+void r2d_world_sky_anim_info(R2DWorldRuntime *w,float out[4])
+{
+    if(!w||!out)return;
+    out[0]=w->sky_anim_active?1.0f:0.0f;out[1]=w->world.sky_yaw;out[2]=w->sky_phase;out[3]=w->world.sky_color?1.0f:0.0f;
+}
+void r2d_world_sky_anim_advance(R2DWorldRuntime *w,float dt) { sky_anim_step(w,dt); }
 
 void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {
     if(!w->audio)return;
