@@ -376,6 +376,21 @@ def build_game(platform_name: str, engine: Path) -> Optional[Path]:
     return out if out.exists() else None
 
 
+def generate_sdk_artifacts(binary: Path) -> bool:
+    """Сгенерировать api.schema.json/d.ts/docs новым runtime перед упаковкой.
+
+    Версия в metadata берётся из собранного runtime, поэтому генерация обязана
+    идти после build и до release.py: иначе пакет уедет со schema/docs старой
+    версии (bump уже случился, а бинарник ещё нет).
+    """
+    sdk = binary.parent / "r2d-sdk"
+    if not sdk.is_file():
+        log("    r2d-sdk рядом с runtime не найден — API artifacts не генерирую")
+        return False
+    log("    генерация API artifacts новым runtime")
+    run([str(sdk), "api", "generate", "--out-dir", str(ROOT)], cwd=ROOT)
+    return True
+
 def package(platform_name: str, binary: Path, out_dir: Path,
             extras: Sequence[Path] = ()) -> None:
     """Упаковать собранный бинарник штатным релизным кодом."""
@@ -514,6 +529,7 @@ def main(argv: List[str]) -> int:
                 game = build_game(platform_name, binary)
                 if game:
                     extras.append(game)
+                generate_sdk_artifacts(binary)
             package(platform_name, binary, out_dir, extras)
             built.append(platform_name)
             log("   готово: %s" % binary.relative_to(ROOT))

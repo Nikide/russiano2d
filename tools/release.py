@@ -88,7 +88,10 @@ from public_docs import (  # noqa: E402  (импорт после правки s
 
 #: Корневые элементы пакета (кладутся рядом с бинарником).
 PACKAGE_ROOT_ENTRIES = ("sdk", "sdk_tools.json", "SDK_HANDOFF.md",
-                        "Следующая цель SDK AGENT.md", "docs")
+                        "Следующая цель SDK AGENT.md", "docs",
+                        # Generated $ API artifacts: SDK consumers get the same
+                        # schema/typings the CLI/lint/doctor use.
+                        "api.schema.json", "russiano2d.d.ts")
 
 
 def package_root_entries() -> List[str]:

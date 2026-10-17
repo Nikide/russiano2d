@@ -74,6 +74,17 @@
 сайт, `BUMP=0`/`TAG=0` — bump и тег, `KEEP_DIST=0` — binaries в коммит,
 `NOTES=0` — сборку заметок из коммитов (см. ниже).
 
+### SDK artifacts в релизе
+
+`build_and_push.sh` перед упаковкой прогоняет SDK-гейты (`api generate`,
+`api check`, `lint game`, `validate game`, `doctor`, recipes), а
+`tools/autobuild.py` после сборки macOS-движка перегенерирует
+`api.schema.json`, `russiano2d.d.ts`, `docs/api/API_REFERENCE.md` **новым**
+runtime — иначе schema/docs уехали бы с версией предыдущего бинарника.
+Generated artifacts входят в корень пакета, `docs/api` и `docs/recipes` —
+в каталог `docs/`. Сайт (`site/build-doc.py` + `tools/public_docs.py`)
+публикует SDK-гайды, API reference и recipes отдельной группой `SDK`.
+
 ## Заметки релиза из коммитов
 
 Релизную секцию CHANGELOG больше не пишут руками: её собирает
