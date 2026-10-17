@@ -679,6 +679,32 @@ static bool particle_proto(JSContext *ctx,JSValueConst arr,R2DWorldParticle *p,f
     return ok;
 }
 static JSValue trigger_tokens(JSContext *ctx,int count,const int *tokens);
+static JSValue world_span_audio_zone(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<2)return JS_ThrowTypeError(ctx,"Re2D World: spanAudioZone(index,name)");
+    float index;if(!world_numbers(ctx,1,argv,1,&index))return JS_EXCEPTION;
+    const char *name=JS_ToCString(ctx,argv[1]);if(!name)return JS_EXCEPTION;
+    bool ok=r2d_world_set_span_audio_zone(w,(int)index,name);
+    JS_FreeCString(ctx,name);
+    return ok?JS_UNDEFINED:JS_ThrowRangeError(ctx,"Re2D World: unknown audio zone (room|hall|cave|outside|metal|magic) or span");
+}
+static JSValue world_span_audio_zone_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    int preset=-1;const char *name=NULL;
+    if(!r2d_world_span_audio_zone(w,(int)p[0],&preset,&name))return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"preset",preset);
+    JS_SetPropertyStr(ctx,o,"name",JS_NewString(ctx,name?name:"room"));return o;
+}
+static JSValue world_audio_zone_at(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
+    int preset=-1,span=-1;const char *name=NULL;
+    if(!r2d_world_audio_zone_at(w,p[0],p[1],p[2],&preset,&name,&span))return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"preset",preset);set_num(ctx,o,"span",span);
+    JS_SetPropertyStr(ctx,o,"name",JS_NewString(ctx,name?name:"room"));return o;
+}
 static JSValue world_surface_terrain(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
@@ -1476,6 +1502,9 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"saveMapHash",JS_NewCFunction(ctx,world_save_hash,"saveMapHash",0));
     JS_SetPropertyStr(ctx,handle,"saveStateJSON",JS_NewCFunction(ctx,world_save_state,"saveStateJSON",0));
     JS_SetPropertyStr(ctx,handle,"loadStateJSON",JS_NewCFunction(ctx,world_load_state,"loadStateJSON",1));
+    JS_SetPropertyStr(ctx,handle,"spanAudioZone",JS_NewCFunction(ctx,world_span_audio_zone,"spanAudioZone",2));
+    JS_SetPropertyStr(ctx,handle,"spanAudioZoneInfo",JS_NewCFunction(ctx,world_span_audio_zone_info,"spanAudioZoneInfo",1));
+    JS_SetPropertyStr(ctx,handle,"audioZoneAt",JS_NewCFunction(ctx,world_audio_zone_at,"audioZoneAt",3));
     JS_SetPropertyStr(ctx,handle,"surfaceMaterialName",JS_NewCFunction(ctx,world_surface_material_name,"surfaceMaterialName",1));
     JS_SetPropertyStr(ctx,handle,"surfaceTerrain",JS_NewCFunction(ctx,world_surface_terrain,"surfaceTerrain",2));
     JS_SetPropertyStr(ctx,handle,"surfaceTerrainInfo",JS_NewCFunction(ctx,world_surface_terrain_info,"surfaceTerrainInfo",1));

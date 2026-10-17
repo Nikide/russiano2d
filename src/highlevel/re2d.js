@@ -464,6 +464,9 @@ function worldWrapper($, native) {
                             if (options.color !== undefined) [l.fogR,l.fogG,l.fogB] = unpackRgb($.color(options.color)).map(x => x / 255);
                             set(l); return this;
                         },
+                        // P1 audio zone: reverb preset inherited by sources in this span.
+                        audioZone(name) { native.spanAudioZone(index, name); return this; },
+                        audioZoneInfo() { return native.spanAudioZoneInfo(index); },
                     };
                 },
                 light(options = {}) {
@@ -503,10 +506,12 @@ function worldWrapper($, native) {
                             return this;
                         },
                         terrainInfo() { return native.surfaceTerrainInfo(index); },
+
                         conveyorInfo() { return native.surfaceConveyorInfo(index); },
                     } : null;
                 },
                 terrainAt(x, y, h) { return native.terrainAt(x, y, h); },
+                audioZoneAt(x, y, h) { return native.audioZoneAt(x, y, h); },
                 conveyorAt(x, y, h) { return native.conveyorAt(x, y, h); },
                 material(name, options) {
                     native.material(name,options.albedo,options.normal ?? '',options.emissive ?? '',
@@ -1312,7 +1317,7 @@ export function installRe2d($) {
         worldGpu: true, worldCpu: true,
         hrtf: !!(hrtf && hrtf.on),
         mirrorPortal: false, skyPortal: false, volumetricSprite: true,
-        particles: true, nav: true, automap: true, saveState: true,
+        particles: true, nav: true, automap: true, saveState: true, polygonCells: true, audioZones: true,
         maxLights: 128, maxDecals: 128, maxWorldSprites: 4096,
         maxPortalRecursion: 4, maxParticles: 2048,
     });

@@ -85,6 +85,8 @@ const native = {
     postEval: () => ({ colorScale: [1.1, 0.9, 1], colorAdd: [0, 0, 0], tint: [1, 0.9, 0.8, 0.2],
                        vignette: 0.4, flash: 0.5, pixelSize: 1, chroma: 0.001, bloom: 0.3 }),
     surfaceMaterialName: (index) => 'brick',
+    spanAudioZone: () => {}, spanAudioZoneInfo: () => ({ preset: 1, name: 'hall' }),
+    audioZoneAt: (x, y, h) => ({ preset: 1, name: 'hall', span: 2 }),
     spanLight: () => ({ level: 1, r: 1, g: 1, b: 1, fogDensity: 0.002, fogStart: 100, fogR: 0.1, fogG: 0.2, fogB: 0.3 }),
     spanHeight: () => {}, spanSky: () => {},
     spanAt: () => 2,
@@ -496,7 +498,7 @@ test('$.capabilities.re2d — честная матрица возможност
     eq(caps.skyPortal, false);
     eq(caps.maxLights, 128);
     eq(caps.maxWorldSprites, 4096);
-    truthy(caps.particles === true && caps.nav === true && caps.saveState === true);
+    truthy(caps.particles === true && caps.nav === true && caps.saveState === true && caps.polygonCells === true);
 });
 
 test('world.post: профиль, set/enable и mapping в $.gfx.post', () => {
@@ -544,6 +546,16 @@ test('world.impactInfo/ricochet отдают material/terrain/thickness', () => 
     eq(impact.terrain, null);
     const reflected = world.ricochet({ x: 1, y: -1, h: 0 }, { x: 0, y: 1, h: 0 });
     eq(reflected.x, 1); eq(reflected.y, 1); eq(reflected.h, 0);
+    world.dispose();
+});
+
+test('span.audioZone и audioZoneAt доступны', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const span = world.span(0);
+    span.audioZone('hall');
+    eq(span.audioZoneInfo().name, 'hall');
+    eq(world.audioZoneAt(1, 2, 3).span, 2);
+    eq($.capabilities.re2d.audioZones, true);
     world.dispose();
 });
 

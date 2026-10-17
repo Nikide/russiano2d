@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "name": "Slanted polygon (rejected)",
+  "cells": [
+    { "id": "slant", "polygon": [[0,0],[100,0],[60,90],[0,100]],
+      "spans": [{ "bottom": 0, "top": 100 }] }
+  ],
+  "walls": [],
+  "portals": []
+}

@@ -264,6 +264,11 @@ def main():
               and '"zone":0' in boss and '"mult":1' in boss,
               f"multi-zone boss hit proxy: {boss}")
 
+        audio_zone = a.eval("JSON.stringify(boomerLab.audioZoneProbe())")
+        check(audio_zone is not None and '"name":"hall"' in audio_zone and '"preset":1' in audio_zone,
+              f"audio zone span -> $$.audio.hrtf не ломается: {audio_zone}")
+        a.step(5)
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 

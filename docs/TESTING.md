@@ -528,6 +528,14 @@ python3 tools/bench_api.py --baseline docs/benchmarks/api-performance.json \
 приговор. Быстрые unit checks runner без performance run:
 `python3 tests/bench_api_runner_test.py`.
 
+## Re2D polygon cells (P1)
+
+`tests/agent/re2d_polygon_cells_test.py` компилирует rectilinear L-полигон
+(`tests/fixtures/sdk/world/polygon_l.re2dmap`) через `r2d-sdk world-compile
+--renderer`, проверяет 3 runtime-тайла / 8 граничных стен / 2 портала, загружает
+мир в runtime (support внутри, void в вырезе) и требует `SDK_WORLD_POLYGON` для
+наклонного полигона (без AABB fallback).
+
 ## Re2D determinism audit (P4)
 
 `tests/agent/re2d_determinism_test.py` запускает один и тот же seed/ввод дважды

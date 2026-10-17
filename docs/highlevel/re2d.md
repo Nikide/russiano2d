@@ -24,6 +24,8 @@ $.render(() => world.render(view,400,240));
 | `world.hit(target, opts)` / `world.hitRemove(target)` | регистрирует/снимает actor hit proxy для trace (P0-B) |
 | `world.hit(target, {zones})` | multi-zone boss hit proxy: head/body bands и damage multiplier |
 | `world.impactInfo(opts)` / `ricochet(dir,normal)` | material/terrain tag и отражение для damage-response |
+| compiler `cells[].polygon` | rectilinear polygon → runtime XY tiles (P1 authoring) |
+| `span.audioZone(name)` / `audioZoneAt` | reverb preset зоны, наследуется source-каналами |
 | `world.trace(opts)` / `world.traceAll(opts)` | ближайшее попадание / все попадания мира и actor-прокси |
 | `world.findCell/findWall/findSpan/findPortal(name)` | authored semantic ID → runtime handle (или null) |
 | `world.portalOpen(index, fraction)` / `portalFraction(index)` | плавное состояние портала 0..1 |
@@ -509,6 +511,42 @@ world.ricochet(dir, hitNormal);     // отражённый вектор по н
 опционально продолжение луча за стену для приблизительной толщины. Игра
 выбирает звук/decal/частицы/пробитие. Ограничения: толщина — эвристика по
 следующему world-хиту, не CSG-толщина; material tag только у surface material.
+
+## Polygon cells (P1 authoring)
+
+`.re2dmap` принимает `cells[].polygon: [[x,y],...]` вместо `rect`. Компилятор
+(`r2d-sdk world-compile --renderer`) валидирует простой полигон, тайлит его в
+**axis-aligned runtime cells** (runtime-модель остаётся rect XY) и генерирует:
+внутренние порталы по общим рёбрам тайлов и граничные стены по внешнему
+контуру. Идентификаторы тайлов — `id#N`.
+
+```json
+{ "id": "lroom",
+  "polygon": [[0,0],[200,0],[200,100],[100,100],[100,200],[0,200]],
+  "spans": [{ "bottom": 0, "top": 120 }] }
+```
+
+Ограничения P1: только **rectilinear** полигоны; наклонное ребро — ошибка
+`SDK_WORLD_POLYGON` с диагностикой (никакого AABB fallback); отверстия не
+поддерживаются; вырез полигона — void без floor/support. Авторские порталы к
+исходному `id` полигона не адресуются (используйте сгенерированные/стены).
+Capability: `$.capabilities.re2d.polygonCells === true`.
+
+## Audio zones (P1)
+
+```js
+world.span(0).audioZone('hall');    // room|hall|cave|outside|metal|magic
+world.span(0).audioZoneInfo();      // {preset,name} или null
+world.audioZoneAt(x, y, h);         // {preset,name,span} — authored или room-size heuristic
+```
+
+Preset хранится per-span; `r2d_world_audio_step` на каждом source-канале берёт
+зону по позиции источника и применяет `r2d_audio_set_channel_reverb` (wet/decay/
+damping), сбрасывая хвост при выходе из зоны. Без authored зоны пресет
+выбирается детерминированно из размеров комнаты (`r2d_audio_zone_from_room`) —
+та же эвристика, что в core-тестах. Portal-aware attenuation core готов
+(`r2d_audio_zone_attenuation`), но в канал пока не подключён: это следующий шаг
+вместе с voice virtualization runtime.
 
 ## Свет, материал, изменение мира
 

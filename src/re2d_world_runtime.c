@@ -38,7 +38,7 @@ void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
     free(w->actors);free(w->frame_handles);free(w->frame_positions);free(w->frame_images);free(w->frame_sizes);
     free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_tints);free(w->frame_keys);free(w->atlas_actors);
     free(w->hit_entries);free(w->trace_scratch);free(w->movers);free(w->triggers);
-    r2d_world_nav_free(w);r2d_world_particles_free(w);r2d_world_secret_free(w);r2d_world_terrain_free(w);
+    r2d_world_nav_free(w);r2d_world_particles_free(w);r2d_world_secret_free(w);r2d_world_terrain_free(w);r2d_world_audio_zone_free(w);
     w->actors=w->frame_handles=NULL;w->frame_positions=NULL;w->frame_images=NULL;w->frame_sizes=NULL;
     w->frame_kinds=NULL;w->frame_revisions=NULL;w->frame_blends=NULL;w->frame_tints=NULL;w->frame_keys=NULL;w->atlas_actors=NULL;
     w->hit_entries=NULL;w->trace_scratch=NULL;w->hit_count=w->hit_capacity=0;w->trace_scratch_capacity=0;
@@ -1197,6 +1197,68 @@ void r2d_world_sky_anim_info(R2DWorldRuntime *w,float out[4])
 }
 void r2d_world_sky_anim_advance(R2DWorldRuntime *w,float dt) { sky_anim_step(w,dt); }
 
+
+// --- P1 audio zones per span ----------------------------------------------
+static bool audio_zone_ensure(R2DWorldRuntime *w)
+{
+    if(w->audio_zone_capacity==w->world.span_count&&w->span_audio_zone)return true;
+    int n=w->world.span_count;
+    int *zones=calloc((size_t)(n?n:1),sizeof *zones);
+    bool *set=calloc((size_t)(n?n:1),sizeof *set);
+    if(!zones||!set){free(zones);free(set);return false;}
+    free(w->span_audio_zone);free(w->span_audio_zone_set);
+    w->span_audio_zone=zones;w->span_audio_zone_set=set;w->audio_zone_capacity=n;
+    for(int i=0;i<R2D_AUDIO_CHANNELS;i++)w->channel_zone[i]=-1;
+    return true;
+}
+bool r2d_world_set_span_audio_zone(R2DWorldRuntime *w,int span,const char *name)
+{
+    if(!w||!name||!audio_zone_ensure(w)||span<0||span>=w->world.span_count)return false;
+    int preset=-1;
+    for(int i=0;i<R2D_AUDIO_ZONE_COUNT;i++){
+        const R2DAudioReverbZone *zone=r2d_audio_zone_preset(i);
+        if(!zone)continue;
+        const char *names[]={"room","hall","cave","outside","metal","magic"};
+        if(i<6&&!strcmp(name,names[i])){preset=i;break;}
+    }
+    if(preset<0)return false;
+    w->span_audio_zone[span]=preset;w->span_audio_zone_set[span]=true;
+    return true;
+}
+bool r2d_world_span_audio_zone(R2DWorldRuntime *w,int span,int *preset,const char **name)
+{
+    static const char *names[]={"room","hall","cave","outside","metal","magic"};
+    if(!w||!w->span_audio_zone||span<0||span>=w->audio_zone_capacity)return false;
+    int p=w->span_audio_zone_set[span]?w->span_audio_zone[span]:-1;
+    if(p<0)return false;
+    if(preset)*preset=p;if(name)*name=names[p];
+    return true;
+}
+bool r2d_world_audio_zone_at(R2DWorldRuntime *w,float x,float y,float h,int *preset,const char **name,int *span)
+{
+    static const char *names[]={"room","hall","cave","outside","metal","magic"};
+    if(!w)return false;
+    int index=r2d_world_span_at(&w->world,x,y,h);
+    if(index<0)return false;
+    if(span)*span=index;
+    if(w->span_audio_zone&&w->span_audio_zone_set&&index<w->audio_zone_capacity&&w->span_audio_zone_set[index]){
+        int p=w->span_audio_zone[index];
+        if(preset)*preset=p;if(name)*name=names[p];return true;
+    }
+    // No authored zone: derive from the room size (deterministic heuristic).
+    const R2DWorldSpan *s=&w->world.spans[index];
+    R2DAudioReverbZone zone;
+    r2d_audio_zone_from_room(s->w,s->h,s->top-s->bottom,&zone);
+    if(preset)*preset=zone.preset;
+    if(name)*name=(zone.preset>=0&&zone.preset<6)?names[zone.preset]:NULL;
+    return zone.preset>=0;
+}
+void r2d_world_audio_zone_free(R2DWorldRuntime *w)
+{
+    free(w->span_audio_zone);free(w->span_audio_zone_set);
+    w->span_audio_zone=NULL;w->span_audio_zone_set=NULL;w->audio_zone_capacity=0;
+}
+
 void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {
     if(!w->audio)return;
     for(int i=0;i<R2D_AUDIO_CHANNELS;i++) {
@@ -1211,6 +1273,16 @@ void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {
         s->virtualized=s->gain<0.0005f;
         float forward=dx*v->cos_yaw+dy*v->sin_yaw,right=-dx*v->sin_yaw+dy*v->cos_yaw;
         float up=dh*v->cos_pitch-forward*v->sin_pitch,back=-(forward*v->cos_pitch+dh*v->sin_pitch);
+        int zone=-1;const char *zone_name=NULL;int zone_span=-1;
+        if(r2d_world_audio_zone_at(w,s->x,s->y,s->h,&zone,&zone_name,&zone_span)&&zone>=0&&zone<R2D_AUDIO_ZONE_COUNT){
+            if(w->channel_zone[i]!=zone){
+                const R2DAudioReverbZone *preset=r2d_audio_zone_preset(zone);
+                if(preset)r2d_audio_set_channel_reverb(w->audio,i,preset->wet,preset->decay,preset->damping,1.0f);
+                w->channel_zone[i]=zone;
+            }
+        }else if(w->channel_zone[i]!=-1){
+            r2d_audio_set_channel_reverb(w->audio,i,0,0,0,1);w->channel_zone[i]=-1;
+        }
         r2d_audio_world_channel(w->audio,i,true,s->hrtf,right/norm,up/norm,d>.0001f?back/norm:-1,s->current_gain,s->cutoff);
     }
     w->audio_active=0;w->audio_virtual=0;

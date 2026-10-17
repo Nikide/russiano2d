@@ -150,6 +150,11 @@ typedef struct R2DWorldRuntime {
     int *surface_terrain;
     R2DWorldConveyor *surface_conveyors;
     int terrain_capacity;
+    // P1 audio zones: authored reverb preset per span; sources pick it up.
+    int *span_audio_zone;
+    bool *span_audio_zone_set;
+    int audio_zone_capacity;
+    int channel_zone[R2D_AUDIO_CHANNELS];
     // P2 material animation: per material slot, stepped with worldStep.
     R2DWorldMaterialAnim material_anims[R2D_WORLD_MAX_MATERIALS];
     bool material_anim_active[R2D_WORLD_MAX_MATERIALS];
@@ -247,6 +252,11 @@ bool r2d_world_surface_conveyor_info(R2DWorldRuntime *,int surface,float out[3],
 bool r2d_world_terrain_at(R2DWorldRuntime *,float x,float y,float h,int *kind,int *surface);
 bool r2d_world_conveyor_at(R2DWorldRuntime *,float x,float y,float h,float out[3],int *affects);
 void r2d_world_terrain_free(R2DWorldRuntime *);
+// P1 audio zones per span (reverb presets; source channels inherit the span zone).
+bool r2d_world_set_span_audio_zone(R2DWorldRuntime *,int span,const char *name);
+bool r2d_world_span_audio_zone(R2DWorldRuntime *,int span,int *preset,const char **name);
+bool r2d_world_audio_zone_at(R2DWorldRuntime *,float x,float y,float h,int *preset,const char **name,int *span);
+void r2d_world_audio_zone_free(R2DWorldRuntime *);
 // P1 save/load snapshot of native gameplay state (spans/portals/movers/triggers).
 bool r2d_world_state_capture(R2DWorldRuntime *,R2DWorldSaveState *out);
 bool r2d_world_state_apply(R2DWorldRuntime *,const R2DWorldSaveState *in);

@@ -23,6 +23,7 @@ set(R2D_SDK_SOURCES
     "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_polygon.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_math.c"

@@ -95,7 +95,7 @@
 | breakables + event | done (P1 core + runtime) |
 | conveyors | data + `conveyorAt`; controller applies game-side |
 | rotating polywalls | math core (`r2d_world_polywall_test`), runtime integration next |
-| polygon cells | authoring core (`r2d_world_polygon_test`), compiler rect-tiling next |
+| polygon cells | done: compiler rect-tiling + boundary walls, agent test |
 
 ## P4 progress
 

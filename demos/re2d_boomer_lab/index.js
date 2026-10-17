@@ -174,6 +174,12 @@ export default function install($) {
             player: world.spawn('player.start'), missing: world.spawn('nope'),
         }),
         particlesClear: () => world.particles.clear(),
+        audioZoneProbe: () => {
+            world.span(0).audioZone('hall');
+            const at = world.audioZoneAt(800, 900, 40);
+            const info = world.span(0).audioZoneInfo();
+            return { at, info };
+        },
         bossProbe: () => {
             if (world._bossNode) { world.remove(world._bossNode); world._bossNode.remove(); world._bossNode = null; }
             const node = $('<sprite>', { id: 'lab-boss' }).at(800, 900).depth(0).size(150, 150).angle(-Math.PI / 2).hide().appendTo($.world);

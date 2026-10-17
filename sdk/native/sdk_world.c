@@ -12,6 +12,7 @@
 // ===========================================================================
 #include "sdk.h"
 #include "re2d_world_bake.h"
+#include "re2d_world_polygon.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -33,6 +34,7 @@ typedef struct WCell {
     float  x, y, w, h;
     WSpan *spans;
     int    nspan;
+    bool   generated;   // polygon compiler tile: runtime portals are auto-generated
 } WCell;
 
 typedef struct WWall {
@@ -306,6 +308,110 @@ static bool dup_check(Ctx *c, const char *section, char (*ids)[64], int n, int i
     return true;
 }
 
+
+// --- Polygon cells (P1 authoring) -----------------------------------------
+// Compiler-side only: rectilinear authored polygons are tiled into axis-aligned
+// runtime cells (the runtime cell model stays XY-rect based). Slanted edges are
+// an explicit SDK_ERROR, never a silent AABB fallback.
+typedef struct { float x,y,w,h; } PolyRect;
+typedef struct { WWall wall; } GenWall;
+
+static WSpan *clone_spans(const WSpan *src, int n)
+{
+    if (n <= 0) return NULL;
+    WSpan *copy = (WSpan *)malloc((size_t)n * sizeof *copy);
+    if (copy) memcpy(copy, src, (size_t)n * sizeof *copy);
+    return copy;
+}
+static int cmp_float(const void *a, const void *b)
+{
+    float x = *(const float *)a, y = *(const float *)b;
+    return x < y ? -1 : x > y ? 1 : 0;
+}
+static int dedupe_floats(float *v, int n)
+{
+    int out = 0;
+    for (int i = 0; i < n; ++i) if (!out || fabsf(v[i] - v[out - 1]) > W_EPS) v[out++] = v[i];
+    return out;
+}
+static bool point_in_ring(const R2DWorldPoint *ring, int n, float x, float y)
+{
+    bool inside = false;
+    for (int i = 0, j = n - 1; i < n; j = i++) {
+        const R2DWorldPoint *a = &ring[i], *b = &ring[j];
+        if (((a->y > y) != (b->y > y)) &&
+            (x < (b->x - a->x) * (y - a->y) / (b->y - a->y) + a->x)) inside = !inside;
+    }
+    return inside;
+}
+static int polygon_rect_tiles(const R2DWorldPoint *ring, int n, PolyRect *tiles, int cap, char *err, size_t errsz)
+{
+    if (!ring || n < 3 || !tiles || cap <= 0) return -1;
+    for (int i = 0; i < n; ++i) {
+        const R2DWorldPoint *a = &ring[i], *b = &ring[(i + 1) % n];
+        if (fabsf(a->x - b->x) > W_EPS && fabsf(a->y - b->y) > W_EPS) {
+            snprintf(err, errsz, "polygon edge %d→%d is slanted; P1 runtime supports rectilinear polygons only", i, (i + 1) % n);
+            return -1;
+        }
+    }
+    if (!r2d_world_polygon_valid(ring, n, err, errsz)) return -1;
+    float *xs = (float *)malloc((size_t)n * 2 * sizeof *xs);
+    float *ys = (float *)malloc((size_t)n * 2 * sizeof *ys);
+    if (!xs || !ys) { free(xs); free(ys); snprintf(err, errsz, "polygon tiling out of memory"); return -1; }
+    for (int i = 0; i < n; ++i) { xs[i] = ring[i].x; ys[i] = ring[i].y; }
+    qsort(xs, (size_t)n, sizeof *xs, cmp_float);
+    qsort(ys, (size_t)n, sizeof *ys, cmp_float);
+    const int nx = dedupe_floats(xs, n), ny = dedupe_floats(ys, n);
+    int count = 0;
+    for (int ix = 0; ix + 1 < nx; ++ix) for (int iy = 0; iy + 1 < ny; ++iy) {
+        const float x0 = xs[ix], x1 = xs[ix + 1], y0 = ys[iy], y1 = ys[iy + 1];
+        if (x1 - x0 <= W_EPS || y1 - y0 <= W_EPS) continue;
+        if (!point_in_ring(ring, n, (x0 + x1) * 0.5f, (y0 + y1) * 0.5f)) continue;
+        if (count == cap) { free(xs); free(ys); snprintf(err, errsz, "polygon needs more than %d tiles", cap); return -1; }
+        tiles[count++] = (PolyRect){x0, y0, x1 - x0, y1 - y0};
+    }
+    free(xs); free(ys);
+    if (!count) { snprintf(err, errsz, "polygon tiled to zero cells"); return -1; }
+    return count;
+}
+static bool polygon_boundary_side(const PolyRect *tiles, int n, int i, int side)
+{
+    const PolyRect *a = &tiles[i];
+    for (int j = 0; j < n; ++j) {
+        if (j == i) continue;
+        const PolyRect *b = &tiles[j];
+        if (side == 0 && fabsf(a->x - (b->x + b->w)) < W_EPS && fabsf(a->y - b->y) < W_EPS && fabsf(a->h - b->h) < W_EPS) return true;
+        if (side == 1 && fabsf((a->x + a->w) - b->x) < W_EPS && fabsf(a->y - b->y) < W_EPS && fabsf(a->h - b->h) < W_EPS) return true;
+        if (side == 2 && fabsf(a->y - (b->y + b->h)) < W_EPS && fabsf(a->x - b->x) < W_EPS && fabsf(a->w - b->w) < W_EPS) return true;
+        if (side == 3 && fabsf((a->y + a->h) - b->y) < W_EPS && fabsf(a->x - b->x) < W_EPS && fabsf(a->w - b->w) < W_EPS) return true;
+    }
+    return false;
+}
+static bool parse_polygon(Ctx *c, const R2dJson *o, int index, const char *id, R2DWorldPoint *ring, int *count)
+{
+    const R2dJson *poly = r2d_json_get(o, "polygon");
+    if (!poly || poly->type != R2D_JSON_ARR || poly->count < 3 || poly->count > 1024) {
+        field_diag(c, "cells", index, id, "polygon", "нужен массив вершин [(x,y),...] (3..1024)");
+        return false;
+    }
+    for (int i = 0; i < poly->count; ++i) {
+        const R2dJson *pt = poly->items[i];
+        if (pt->type != R2D_JSON_ARR || pt->count != 2 ||
+            pt->items[0]->type != R2D_JSON_NUM || pt->items[1]->type != R2D_JSON_NUM) {
+            field_diag(c, "cells", index, id, "polygon", "вершина должна быть [x, y]");
+            return false;
+        }
+        ring[i].x = (float)pt->items[0]->number;
+        ring[i].y = (float)pt->items[1]->number;
+        if (!isfinite(ring[i].x) || !isfinite(ring[i].y) || fabsf(ring[i].x) > W_LIMIT || fabsf(ring[i].y) > W_LIMIT) {
+            field_diag(c, "cells", index, id, "polygon", "координаты вершин должны быть конечными");
+            return false;
+        }
+    }
+    *count = poly->count;
+    return true;
+}
+
 static bool load_world(const char *path, World *w, SdkReport *rep, bool renderer)
 {
     memset(w, 0, sizeof *w);
@@ -341,28 +447,106 @@ static bool load_world(const char *path, World *w, SdkReport *rep, bool renderer
         }
     }
     if (!ok) { r2d_json_free(root); return false; }
-    // --- cells ---
+    // --- cells: rect, or rectilinear polygon tiled into runtime XY rects ---
     const R2dJson *cells = r2d_json_get(root, "cells");
-    w->ncell = r2d_json_size(cells);
-    w->cells = (WCell *)calloc((size_t)(w->ncell ? w->ncell : 1), sizeof(WCell));
-    char (*cids)[64] = (char (*)[64])calloc((size_t)(w->ncell ? w->ncell : 1), 64);
-    for (int i = 0; i < w->ncell; ++i) {
+    const int authored_cells = r2d_json_size(cells);
+    int cell_cap = authored_cells > 0 ? authored_cells : 1;
+    w->cells = (WCell *)calloc((size_t)cell_cap, sizeof(WCell));
+    w->ncell = 0;
+    char (*cids)[64] = (char (*)[64])calloc((size_t)(authored_cells ? authored_cells : 1), 64);
+    GenWall *gen_walls = NULL;
+    int ngen_walls = 0, cap_gen_walls = 0;
+    if (!w->cells || !cids) { sdk_diag(rep, SDK_ERROR, "SDK_OOM", path, NULL, NULL, "cells allocation failed"); ok = false; }
+    for (int i = 0; ok && i < authored_cells; ++i) {
         const R2dJson *o = cells->items[i];
-        WCell *cell = &w->cells[i];
-        if (o->type != R2D_JSON_OBJ) { field_diag(&c, "cells", i, NULL, "cell", "cell должен быть объектом"); ok = false; continue; }
-        if (!get_id(&c, o, "cells", i, cell->id, sizeof cell->id)) { ok = false; continue; }
-        memcpy(cids[i], cell->id, 64);
-        float r[4];
-        if (!get_rect(&c, o, "cells", i, cell->id, "rect", r)) { ok = false; continue; }
-        cell->x = r[0]; cell->y = r[1]; cell->w = r[2]; cell->h = r[3];
-        if (!load_spans(&c, o, "cells", i, cell->id, &cell->spans, &cell->nspan)) ok = false;
-        if (cell->nspan == 0) {
+        char src_id[64] = {0};
+        if (o->type != R2D_JSON_OBJ) { field_diag(&c, "cells", i, NULL, "cell", "cell должен быть объектом"); ok = false; break; }
+        if (!get_id(&c, o, "cells", i, src_id, sizeof src_id)) { ok = false; break; }
+        memcpy(cids[i], src_id, 64);
+        WSpan *spans = NULL;
+        int nspan = 0;
+        if (!load_spans(&c, o, "cells", i, src_id, &spans, &nspan)) { ok = false; break; }
+        if (nspan == 0) {
             char loc[2048];
-            snprintf(loc, sizeof loc, "{\"section\":\"cells\",\"index\":%d,\"id\":\"%s\"}", i, json_fragment(cell->id));
-            sdk_diag(rep, SDK_WARNING, "SDK_WORLD_CELL_NO_SPANS", path, loc, NULL, "cell «%s» без spans: в мир ничего не попадёт", cell->id);
+            snprintf(loc, sizeof loc, "{\"section\":\"cells\",\"index\":%d,\"id\":\"%s\"}", i, json_fragment(src_id));
+            sdk_diag(rep, SDK_WARNING, "SDK_WORLD_CELL_NO_SPANS", path, loc, NULL, "cell «%s» без spans: в мир ничего не попадёт", src_id);
         }
+        const R2dJson *poly = r2d_json_get(o, "polygon");
+        if (poly) {
+            R2DWorldPoint ring[1024];
+            int ring_n = 0;
+            char err[256] = {0};
+            if (!parse_polygon(&c, o, i, src_id, ring, &ring_n)) { free(spans); ok = false; break; }
+            PolyRect tiles[4096];
+            const int tiles_n = polygon_rect_tiles(ring, ring_n, tiles, 4096, err, sizeof err);
+            if (tiles_n < 0) {
+                char loc[2048];
+                snprintf(loc, sizeof loc, "{\"section\":\"cells\",\"index\":%d,\"id\":\"%s\"}", i, json_fragment(src_id));
+                sdk_diag(rep, SDK_ERROR, "SDK_WORLD_POLYGON", path, loc, NULL, "polygon cell «%s»: %s", src_id, err);
+                free(spans); ok = false; break;
+            }
+            for (int t = 0; t < tiles_n; ++t) {
+                if (w->ncell >= W_MAX) { sdk_diag(rep, SDK_ERROR, "SDK_WORLD_LIMIT", path, NULL, NULL, "polygon tiling exceeded %d cells", W_MAX); ok = false; break; }
+                if (w->ncell == cell_cap) {
+                    int next = cell_cap * 2 > W_MAX ? W_MAX : cell_cap * 2;
+                    WCell *grown = (WCell *)realloc(w->cells, (size_t)next * sizeof *grown);
+                    if (!grown) { sdk_diag(rep, SDK_ERROR, "SDK_OOM", path, NULL, NULL, "cells growth failed"); ok = false; break; }
+                    w->cells = grown; cell_cap = next;
+                }
+                WCell *cell = &w->cells[w->ncell];
+                memset(cell, 0, sizeof *cell);
+                if (tiles_n == 1) snprintf(cell->id, sizeof cell->id, "%s", src_id);
+                else snprintf(cell->id, sizeof cell->id, "%s#%d", src_id, t);
+                cell->x = tiles[t].x; cell->y = tiles[t].y; cell->w = tiles[t].w; cell->h = tiles[t].h;
+                cell->spans = clone_spans(spans, nspan);
+                if (nspan && !cell->spans) { sdk_diag(rep, SDK_ERROR, "SDK_OOM", path, NULL, NULL, "cell spans copy failed"); ok = false; break; }
+                cell->nspan = nspan;
+                cell->generated = true;
+                w->ncell++;
+                float bottom = nspan ? spans[0].bottom : 0, top = nspan ? spans[0].top : 0;
+                for (int sp = 1; sp < nspan; ++sp) { if (spans[sp].bottom < bottom) bottom = spans[sp].bottom; if (spans[sp].top > top) top = spans[sp].top; }
+                for (int side = 0; side < 4; ++side) {
+                    if (polygon_boundary_side(tiles, tiles_n, t, side)) continue;
+                    if (ngen_walls == cap_gen_walls) {
+                        int next = cap_gen_walls ? cap_gen_walls * 2 : 16;
+                        GenWall *grown = (GenWall *)realloc(gen_walls, (size_t)next * sizeof *grown);
+                        if (!grown) { sdk_diag(rep, SDK_ERROR, "SDK_OOM", path, NULL, NULL, "boundary wall growth failed"); ok = false; break; }
+                        gen_walls = grown; cap_gen_walls = next;
+                    }
+                    WWall wall; memset(&wall, 0, sizeof wall);
+                    snprintf(wall.id, sizeof wall.id, "%s#b%d_%d", src_id, t, side);
+                    const float x0 = tiles[t].x, y0 = tiles[t].y, x1 = x0 + tiles[t].w, y1 = y0 + tiles[t].h;
+                    if (side == 0) { wall.x1 = x0; wall.y1 = y0; wall.x2 = x0; wall.y2 = y1; }
+                    else if (side == 1) { wall.x1 = x1; wall.y1 = y0; wall.x2 = x1; wall.y2 = y1; }
+                    else if (side == 2) { wall.x1 = x0; wall.y1 = y0; wall.x2 = x1; wall.y2 = y0; }
+                    else { wall.x1 = x0; wall.y1 = y1; wall.x2 = x1; wall.y2 = y1; }
+                    wall.bottom = bottom; wall.top = top;
+                    snprintf(wall.color, sizeof wall.color, "%s", "#8f7a58");
+                    gen_walls[ngen_walls++].wall = wall;
+                }
+                if (!ok) break;
+            }
+        } else {
+            float r[4];
+            if (!get_rect(&c, o, "cells", i, src_id, "rect", r)) { free(spans); ok = false; break; }
+            if (w->ncell >= W_MAX) { sdk_diag(rep, SDK_ERROR, "SDK_WORLD_LIMIT", path, NULL, NULL, "too many cells"); free(spans); ok = false; break; }
+            if (w->ncell == cell_cap) {
+                int next = cell_cap * 2 > W_MAX ? W_MAX : cell_cap * 2;
+                WCell *grown = (WCell *)realloc(w->cells, (size_t)next * sizeof *grown);
+                if (!grown) { sdk_diag(rep, SDK_ERROR, "SDK_OOM", path, NULL, NULL, "cells growth failed"); free(spans); ok = false; break; }
+                w->cells = grown; cell_cap = next;
+            }
+            WCell *cell = &w->cells[w->ncell++];
+            memset(cell, 0, sizeof *cell);
+            memcpy(cell->id, src_id, sizeof cell->id);
+            cell->x = r[0]; cell->y = r[1]; cell->w = r[2]; cell->h = r[3];
+            cell->spans = clone_spans(spans, nspan);
+            if (nspan && !cell->spans) { sdk_diag(rep, SDK_ERROR, "SDK_OOM", path, NULL, NULL, "cell spans copy failed"); free(spans); ok = false; break; }
+            cell->nspan = nspan;
+        }
+        free(spans);
     }
-    for (int i = 0; i < w->ncell; ++i) if (cids[i][0] && !dup_check(&c, "cells", cids, w->ncell, i)) ok = false;
+    for (int i = 0; i < authored_cells; ++i) if (cids[i][0] && !dup_check(&c, "cells", cids, authored_cells, i)) ok = false;
     free(cids);
 
     // --- walls ---
@@ -398,6 +582,17 @@ static bool load_world(const char *path, World *w, SdkReport *rep, bool renderer
     }
     for (int i = 0; i < w->nwall; ++i) if (wids[i][0] && !dup_check(&c, "walls", wids, w->nwall, i)) ok = false;
     free(wids);
+    if (ok && ngen_walls > 0) {
+        const int total = w->nwall + ngen_walls;
+        WWall *grown = (WWall *)realloc(w->walls, (size_t)total * sizeof *grown);
+        if (!grown) { sdk_diag(rep, SDK_ERROR, "SDK_OOM", path, NULL, NULL, "boundary walls realloc failed"); ok = false; }
+        else {
+            w->walls = grown;
+            for (int i = 0; i < ngen_walls; ++i) w->walls[w->nwall + i] = gen_walls[i].wall;
+            w->nwall = total;
+        }
+    }
+    free(gen_walls);
 
     // --- portals ---
     const R2dJson *portals = r2d_json_get(root, "portals");
@@ -837,7 +1032,7 @@ static void build_compiled(World *w)
         c->spans = (WSpan *)calloc((size_t)(c->nspan ? c->nspan : 1), sizeof(WSpan));
         memcpy(c->spans, w->cells[i].spans, (size_t)c->nspan * sizeof(WSpan));
         snprintf(c->owner, sizeof c->owner, "%s", w->cells[i].id);
-        c->explicit_index = i;
+        c->explicit_index = w->cells[i].generated ? -1 : i;
     }
     for (int i = 0; i < ntail; ++i) {
         CCell *c = add_cc(w);
