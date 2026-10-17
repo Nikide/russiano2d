@@ -6,7 +6,7 @@
 // списка методов; он только нормализует/проверяет снимок и (позже) генерирует
 // schema/typings/docs.
 // ===========================================================================
-#include "sdk.h"
+#include "sdk_api.h"
 
 #include <SDL3/SDL.h>
 #include <stdlib.h>
@@ -32,7 +32,7 @@ static const char *find_json_object(const char *text)
 }
 
 // Запускает runtime --dump-api и возвращает распарсенный снимок либо NULL.
-static R2dJson *api_load(const SdkArgs *a, SdkReport *rep, char **raw_out)
+R2dJson *sdk_api_snapshot(const SdkArgs *a, SdkReport *rep, char **raw_out)
 {
     const char *engine_arg = sdk_arg_value(a, "--engine");
     char engine[1536];
@@ -89,7 +89,7 @@ static int cmd_api_dump(const SdkArgs *a)
     SdkReport rep;
     sdk_report_init(&rep);
     char *raw = NULL;
-    R2dJson *root = api_load(a, &rep, &raw);
+    R2dJson *root = sdk_api_snapshot(a, &rep, &raw);
     R2dSb out;
     r2d_sb_init(&out);
     if (!root) {
@@ -121,7 +121,7 @@ static int cmd_api_check(const SdkArgs *a)
 {
     SdkReport rep;
     sdk_report_init(&rep);
-    R2dJson *root = api_load(a, &rep, NULL);
+    R2dJson *root = sdk_api_snapshot(a, &rep, NULL);
     if (!root) {
         R2dSb out; r2d_sb_init(&out);
         r2d_sb_puts(&out, "{\"ok\":false,\"diagnostics\":[");
@@ -235,7 +235,7 @@ static const char *type_of(const R2dJson *item)
 // api.schema.json: deterministic normalized snapshot with the settings the
 // generator/linter need. The runtime dump is still the source; this is a cached
 // artifact, and `api check` fails when it is stale.
-static void write_schema(const R2dJson *root, R2dSb *out)
+void sdk_api_schema_text(const R2dJson *root, R2dSb *out)
 {
     r2d_sb_puts(out, "{\n  \"schema_version\": 1,\n  \"generated_by\": \"r2d-sdk\",\n  \"engine_version\": ");
     r2d_sb_put_json_string(out, r2d_json_str(r2d_json_get(root, "engine_version"), ""));
@@ -311,7 +311,7 @@ static void dts_namespace(const R2dJson *names, const char *prefix, const char *
     r2d_sb_puts(out, "}\n");
 }
 
-static void write_dts(const R2dJson *root, R2dSb *out)
+void sdk_api_dts_text(const R2dJson *root, R2dSb *out)
 {
     const R2dJson *names = r2d_json_get(root, "names");
     r2d_sb_puts(out,
@@ -385,10 +385,113 @@ static void write_dts(const R2dJson *root, R2dSb *out)
         "declare const __R2D_API_VERSION: string;\n");
 }
 
+
+// Generated API reference: structural (names/types/arity). Descriptions/since/
+// examples live in the registry/hand docs and are not invented here.
+void sdk_api_docs_text(const R2dJson *root, R2dSb *out)
+{
+    const R2dJson *names = r2d_json_get(root, "names");
+    r2d_sb_puts(out,
+        "# Russiano2D $ API reference\n\n"
+        "<!-- GENERATED FILE - DO NOT EDIT MANUALLY\n"
+        "     Source: Russiano2D $ API Registry\n"
+        "     Generator: r2d-sdk -->\n\n"
+        "Engine version: ");
+    r2d_sb_put_json_string(out, r2d_json_str(r2d_json_get(root, "engine_version"), ""));
+    r2d_sb_printf(out, "\n\nEntries: %d\n\n", r2d_json_size(names));
+    // Collect unique parent paths and emit one section per parent.
+    char **parents = (char **)calloc((size_t)r2d_json_size(names), sizeof *parents);
+    int np = 0;
+    for (int i = 0; i < r2d_json_size(names); ++i) {
+        const char *path = r2d_json_str(r2d_json_get(r2d_json_at(names, i), "path"), "");
+        const char *dot = strrchr(path, '.');
+        if (!dot) continue;
+        if (strstr(path, "._")) continue;
+        char parent[512];
+        const size_t len = (size_t)(dot - path);
+        if (len >= sizeof parent) continue;
+        memcpy(parent, path, len); parent[len] = 0;
+        bool seen = false;
+        for (int j = 0; j < np; ++j) if (!strcmp(parents[j], parent)) { seen = true; break; }
+        if (seen) continue;
+        parents[np] = (char *)malloc(len + 1);
+        if (!parents[np]) continue;
+        memcpy(parents[np], parent, len + 1); np++;
+    }
+    for (int i = 0; i < np; ++i) for (int j = i + 1; j < np; ++j)
+        if (strcmp(parents[i], parents[j]) > 0) { char *t = parents[i]; parents[i] = parents[j]; parents[j] = t; }
+    for (int s = 0; s < np; ++s) {
+        r2d_sb_printf(out, "## %s\n\n| Name | Kind | Signature / value |\n|---|---|---|\n", parents[s]);
+        const size_t plen = strlen(parents[s]);
+        for (int i = 0; i < r2d_json_size(names); ++i) {
+            const R2dJson *item = r2d_json_at(names, i);
+            const char *path = r2d_json_str(r2d_json_get(item, "path"), "");
+            if (strncmp(path, parents[s], plen) != 0 || path[plen] != '.') continue;
+            const char *leaf = path + plen + 1;
+            if (strchr(leaf, '.') || leaf[0] == '_') continue;
+            const char *kind = r2d_json_str(r2d_json_get(item, "kind"), "any");
+            r2d_sb_printf(out, "| `%s` | %s | ", leaf, kind);
+            if (!strcmp(kind, "function")) {
+                const R2dJson *arity = r2d_json_get(item, "arity");
+                const int n = arity ? (int)arity->number : 0;
+                r2d_sb_puts(out, "`(");
+                for (int a = 0; a < n; ++a) r2d_sb_printf(out, "%sarg%d: any", a ? ", " : "", a);
+                r2d_sb_puts(out, ") -> any`");
+            } else {
+                const R2dJson *value = r2d_json_get(item, "value");
+                if (value) {
+                    if (value->type == R2D_JSON_STR) { r2d_sb_putc(out, '`'); r2d_sb_puts(out, value->string); r2d_sb_putc(out, '`'); }
+                    else if (value->type == R2D_JSON_BOOL) r2d_sb_puts(out, value->boolean ? "`true`" : "`false`");
+                    else if (value->type == R2D_JSON_NUM) r2d_sb_printf(out, "`%g`", value->number);
+                    else r2d_sb_puts(out, "—");
+                } else r2d_sb_puts(out, "—");
+            }
+            r2d_sb_puts(out, " |\n");
+        }
+        r2d_sb_putc(out, '\n');
+    }
+    for (int i = 0; i < np; ++i) free(parents[i]);
+    free(parents);
+}
+
+int cmd_docs_generate(const SdkArgs *a)
+{
+    SdkReport rep; sdk_report_init(&rep);
+    R2dJson *root = sdk_api_snapshot(a, &rep, NULL);
+    if (!root) { sdk_report_free(&rep); return 2; }
+    const char *dir = sdk_arg_value(a, "--out-dir");
+    if (!dir || !dir[0]) dir = ".";
+    char api_dir[2048], path[2048];
+    snprintf(api_dir, sizeof api_dir, "%s/docs/api", dir);
+    SDL_CreateDirectory(api_dir);
+    snprintf(path, sizeof path, "%s/API_REFERENCE.md", api_dir);
+    R2dSb sb; r2d_sb_init(&sb);
+    sdk_api_docs_text(root, &sb);
+    const bool ok = sdk_write_file(path, sb.data, sb.len);
+    char docs_dir[2048], docs_path[2048];
+    snprintf(docs_dir, sizeof docs_dir, "%s/docs/api", dir);
+    SDL_CreateDirectory(docs_dir);
+    snprintf(docs_path, sizeof docs_path, "%s/API_REFERENCE.md", docs_dir);
+    r2d_sb_free(&sb); r2d_sb_init(&sb);
+    sdk_api_docs_text(root, &sb);
+    const bool docs_ok = sdk_write_file(docs_path, sb.data, sb.len);
+    const int count = r2d_json_size(r2d_json_get(root, "names"));
+    r2d_sb_free(&sb);
+    R2dSb out; r2d_sb_init(&out);
+    r2d_sb_printf(&out, "{\"ok\":%s,\"docs\":", ok ? "true" : "false");
+    r2d_sb_put_json_string(&out, path);
+    r2d_sb_printf(&out, ",\"names\":%d,\"engine_version\":", count);
+    r2d_sb_put_json_string(&out, r2d_json_str(r2d_json_get(root, "engine_version"), ""));
+    r2d_sb_putc(&out, '}');
+    printf("%s\n", out.data ? out.data : "{}");
+    r2d_sb_free(&out); r2d_json_free(root); sdk_report_free(&rep);
+    return ok ? 0 : 2;
+}
+
 static int cmd_api_generate(const SdkArgs *a)
 {
     SdkReport rep; sdk_report_init(&rep);
-    R2dJson *root = api_load(a, &rep, NULL);
+    R2dJson *root = sdk_api_snapshot(a, &rep, NULL);
     if (!root) {
         SdkReport *rp = &rep;
         R2dSb out; r2d_sb_init(&out);
@@ -405,23 +508,32 @@ static int cmd_api_generate(const SdkArgs *a)
     snprintf(dts_path, sizeof dts_path, "%s/russiano2d.d.ts", dir);
     if (!sdk_is_dir(dir)) SDL_CreateDirectory(dir);
     R2dSb sb; r2d_sb_init(&sb);
-    write_schema(root, &sb);
+    sdk_api_schema_text(root, &sb);
     const bool schema_ok = sdk_write_file(schema_path, sb.data, sb.len);
     r2d_sb_free(&sb); r2d_sb_init(&sb);
-    write_dts(root, &sb);
+    sdk_api_dts_text(root, &sb);
     const bool dts_ok = sdk_write_file(dts_path, sb.data, sb.len);
+    char docs_dir[2048], docs_path[2048];
+    snprintf(docs_dir, sizeof docs_dir, "%s/docs/api", dir);
+    SDL_CreateDirectory(docs_dir);
+    snprintf(docs_path, sizeof docs_path, "%s/API_REFERENCE.md", docs_dir);
+    r2d_sb_free(&sb); r2d_sb_init(&sb);
+    sdk_api_docs_text(root, &sb);
+    const bool docs_ok = sdk_write_file(docs_path, sb.data, sb.len);
     const int count = r2d_json_size(r2d_json_get(root, "names"));
     r2d_sb_free(&sb);
     R2dSb out; r2d_sb_init(&out);
-    r2d_sb_printf(&out, "{\"ok\":%s,\"engine_version\":", (schema_ok && dts_ok) ? "true" : "false");
+    r2d_sb_printf(&out, "{\"ok\":%s,\"engine_version\":", (schema_ok && dts_ok && docs_ok) ? "true" : "false");
     r2d_sb_put_json_string(&out, r2d_json_str(r2d_json_get(root, "engine_version"), ""));
     r2d_sb_printf(&out, ",\"names\":%d,\"schema\":", count);
     r2d_sb_put_json_string(&out, schema_path);
     r2d_sb_puts(&out, ",\"typings\":");
     r2d_sb_put_json_string(&out, dts_path);
+    r2d_sb_puts(&out, ",\"docs\":");
+    r2d_sb_put_json_string(&out, docs_path);
     r2d_sb_puts(&out, "}");
     printf("%s\n", out.data ? out.data : "{}");
-    const int rc = (schema_ok && dts_ok) ? 0 : 2;
+    const int rc = (schema_ok && dts_ok && docs_ok) ? 0 : 2;
     r2d_sb_free(&out); r2d_json_free(root); sdk_report_free(&rep);
     return rc;
 }

@@ -32,6 +32,7 @@ static const Command k_commands[] = {
     { "validate", sdk_cmd_validate, "проверить ассет, структурная диагностика" },
     { "api",      sdk_cmd_api,      "machine-readable $ API: dump/check/generate" },
     { "lint",     sdk_cmd_lint,     "API-aware линтер JS: $ API, коды R2D001…" },
+    { "docs",     cmd_docs_generate, "generated $ API reference (docs generate)" },
     { "atlas-grid",   sdk_cmd_atlas_grid,   "создать атлас спрайтов сеткой из картинки" },
     { "atlas-format", sdk_cmd_atlas_format, "привести атлас к каноническому виду" },
     { "atlas-info",   sdk_cmd_atlas_info,   "кадры, теги, слайсы и проверка атласа" },
