@@ -42,6 +42,7 @@
 // clamps all parameters; it always returns true for a non-NULL config.
 // ===========================================================================
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 enum {
@@ -84,6 +85,24 @@ typedef struct {
     // Liquid / reflection / post hooks (rendered by existing pass machinery).
     bool liquid, reflection_lite, bloom_lite, surface_detail, material_animation;
     float liquid_distortion, liquid_scroll_speed, liquid_highlight, liquid_foam;
+
+    // P4 light shaft cards (no volumetric raymarch).
+    bool light_shafts;
+    int shaft_budget;      // 0..8 cards per frame
+    float shaft_length;    // world units below the light
+    float shaft_width;     // world units
+    float shaft_opacity;   // 0..1
+    float shaft_fade;      // 0.01..1 height falloff
+
+    // P4 post feature toggles in the shared model (see re2d_world_post.h for
+    // the pass math and reference images).
+    bool heat_distortion;
+    bool weather_layers;
+    int sky_profile;       // R2D_SKY_PROFILE_*
+    int weather_type;      // R2D_SKY_WEATHER_* dominant layer
+    float weather_density; // 0..1
+    int distant_cards;     // 0..4 distant sky silhouette cards
+    bool moon_disc;
 } R2DWorldRenderFeatures;
 
 typedef struct {
@@ -95,6 +114,11 @@ typedef struct {
     int ground_draws, sky_draws, decals;
     // R-03 VFX render pass (cards/trails/distortion cards).
     int vfx_cards, vfx_trails, vfx_distortion, vfx_card_draws, vfx_trail_draws, vfx_draws;
+    // P4/P5 counters.
+    int shafts, weather_cards, distant_cards, distant_impostors, ambient_samples, detail_samples;
+    int decal2_active, batch_draws, batch_batches, batch_saved;
+    int resident_textures;
+    size_t upload_bytes;
 } R2DWorldRenderCounters;
 
 void r2d_world_render_defaults(R2DWorldRenderFeatures *out);
@@ -122,3 +146,129 @@ void r2d_world_render_sun_direction(float azimuth, float elevation, float out[3]
 void r2d_world_render_liquid_uv(float u, float v, float time,
                                 const R2DWorldRenderFeatures *config,
                                 float out_uv[2], float *out_foam);
+
+// ---------------------------------------------------------------------------
+// P4: light shaft cards.
+// Alpha of a shaft card at normalised distance 0..1 along the card; fades by
+// height and authored opacity. Invalid input -> 0.
+float r2d_world_render_shaft_alpha(float along, float height_fraction,
+                                   const R2DWorldRenderFeatures *config);
+// Card width in world units at `height_fraction` (slight cone widening).
+float r2d_world_render_shaft_width(float height_fraction,
+                                   const R2DWorldRenderFeatures *config);
+
+// ---------------------------------------------------------------------------
+// P4: contact lighting 2.0: dominant local light direction/colour plus ambient
+// floor colour for a sprite. dx/dy point from the actor toward the light in XY;
+// out_dir is a unit vector (0,0 when the light is at the actor), out_rgb mixes
+// ambient toward the light colour by the distance falloff.
+void r2d_world_render_contact_light(float dx, float dy, const float light_rgb[3],
+                                    float intensity, const float ambient_rgb[3],
+                                    float out_dir[2], float out_rgb[3]);
+
+// ---------------------------------------------------------------------------
+// P4: baked ambient light / AO-lite field (coarse per-span XY grid).
+#define R2D_WORLD_AMBIENT_MAX 32
+typedef struct {
+    int width, height;             // 1..R2D_WORLD_AMBIENT_MAX
+    float x0, y0, cell_w, cell_h;
+    float ambient[3 * R2D_WORLD_AMBIENT_MAX * R2D_WORLD_AMBIENT_MAX];
+    float occlusion[R2D_WORLD_AMBIENT_MAX * R2D_WORLD_AMBIENT_MAX];
+    bool valid;
+} R2DWorldAmbientField;
+
+// Bake a deterministic field from a coarse height pair per cell (floor and
+// ceiling heights). Low ceilings increase occlusion; sky_bias 0..1 adds sky
+// ambient. Returns false for NULL/invalid counts. Inputs are row-major.
+bool r2d_world_ambient_bake(R2DWorldAmbientField *field,
+                            float x0, float y0, float w, float h,
+                            int cells_x, int cells_y,
+                            const float *floor_h, const float *ceiling_h,
+                            const float sky_rgb[3], float sky_bias);
+// Bilinear sample. Outside the field or invalid field -> neutral
+// (ambient 1,1,1, occlusion 0).
+void r2d_world_ambient_sample(const R2DWorldAmbientField *field,
+                              float x, float y,
+                              float out_rgb[3], float *out_occlusion);
+
+// ---------------------------------------------------------------------------
+// P4: surface detail layers (base/detail/macro/emissive/normal).
+enum {
+    R2D_WORLD_DETAIL_BASE = 0,
+    R2D_WORLD_DETAIL_DETAIL = 1,
+    R2D_WORLD_DETAIL_MACRO = 2,
+    R2D_WORLD_DETAIL_EMISSIVE = 3,
+    R2D_WORLD_DETAIL_NORMAL = 4,
+    R2D_WORLD_DETAIL_LAYERS = 5
+};
+// Deterministic layer UV/tint/weight. macro uses a larger scale than detail.
+void r2d_world_render_detail_layer(uint32_t surface, int layer, uint32_t seed,
+                                   float base_u, float base_v,
+                                   float out_uv[2], float *out_weight);
+// P4/P5: 16-direction ultra sprite direction bucket (0..15) from a yaw angle.
+int r2d_world_render_sprite_direction(float yaw, int directions);
+
+// ---------------------------------------------------------------------------
+// P4: decals 2.0 (lifetime, fade, rotation, scale, deterministic variation).
+#define R2D_WORLD_DECAL2_MAX 256
+typedef struct {
+    int material;
+    float u, v, w, h;        // local surface rect
+    float rotation;          // radians
+    float scale;             // 0.25..4
+    float life, max_life;    // seconds
+    float fade_in, fade_out; // seconds
+    float seed;
+    bool active;
+} R2DWorldDecal2;
+
+// Configure one decal slot. Returns false for invalid material/lifetime.
+bool r2d_world_decal2_init(R2DWorldDecal2 *decal, int material,
+                           float u, float v, float w, float h,
+                           float rotation, float scale,
+                           float life, float fade_in, float fade_out,
+                           float seed);
+// Advance age; returns true while active (life > 0). NULL is a no-op false.
+bool r2d_world_decal2_step(R2DWorldDecal2 *decal, float dt);
+// Alpha in 0..1 from fade-in/fade-out; rotation/scale variation output from the
+// deterministic seed. Invalid decal -> alpha 0 and neutral outputs.
+float r2d_world_decal2_eval(const R2DWorldDecal2 *decal,
+                            float *out_rotation, float *out_scale);
+
+// ---------------------------------------------------------------------------
+// P4: static batching by material/blend/light-policy/atlas and residency hooks.
+enum {
+    R2D_WORLD_BATCH_NONE = 0,
+    R2D_WORLD_BATCH_OPAQUE = 1,
+    R2D_WORLD_BATCH_MASKED = 2,
+    R2D_WORLD_BATCH_TRANSLUCENT = 3,
+    R2D_WORLD_BATCH_ADDITIVE = 4
+};
+typedef struct {
+    int material, blend, light_policy, atlas;
+} R2DWorldBatchKey;
+typedef struct {
+    int draws, batches, saved;
+    int runs;   // consecutive matching keys
+} R2DWorldBatchStats;
+
+// Build a stable key. Negative ids are normalised to -1.
+void r2d_world_render_batch_key(R2DWorldBatchKey *key, int material, int blend,
+                                int light_policy, int atlas);
+uint32_t r2d_world_render_batch_hash(const R2DWorldBatchKey *key);
+// Feed one draw in submission order. Consecutive equal keys coalesce into one
+// batch; every draw beyond the first inside a batch counts as saved.
+void r2d_world_render_batch_draw(R2DWorldBatchStats *stats,
+                                 const R2DWorldBatchKey *key,
+                                 R2DWorldBatchKey *previous, bool *has_previous);
+
+typedef struct {
+    int resident, pending, evicted;
+    size_t resident_bytes, budget_bytes, uploaded_bytes, upload_bytes_budget;
+} R2DWorldResidency;
+void r2d_world_residency_init(R2DWorldResidency *residency, size_t budget_bytes,
+                              size_t upload_bytes_budget);
+// Admission is deterministic: resident if it fits, otherwise queued as pending.
+bool r2d_world_residency_admit(R2DWorldResidency *residency, size_t bytes);
+// Per-frame upload budget; returns the admitted byte count (<= budget).
+size_t r2d_world_residency_upload(R2DWorldResidency *residency, size_t bytes);

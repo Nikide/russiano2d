@@ -194,9 +194,11 @@ export function installInput($) {
         return true;
     }
 
-    function lockCreate(name, owner) {
+    function lockCreate(name, owner, options) {
         const key = String(name === undefined || name === null || name === '' ? 'input' : name);
-        const token = { id: ++lock_seq, name: key, owner: owner === undefined ? null : String(owner) };
+        const opts = options || {};
+        const token = { id: ++lock_seq, name: key, owner: owner === undefined ? null : String(owner),
+                        hard: !!opts.hard };
         let bucket = locks.get(key);
         if (!bucket) { bucket = { name: key, count: 0, tokens: new Set() }; locks.set(key, bucket); }
         bucket.count += 1;
@@ -208,6 +210,14 @@ export function installInput($) {
         };
         token.active = () => bucket.tokens.has(token);
         return token;
+    }
+
+    /** Есть ли жесткий лок: пока он жив, gameplay-запросы ввода = false. */
+    function hardLocked() {
+        for (const bucket of locks.values()) {
+            for (const token of bucket.tokens) if (token.hard) return true;
+        }
+        return false;
     }
 
     function releaseLocks(reason) {
@@ -225,22 +235,40 @@ export function installInput($) {
 
     const input = {
         // --- Клавиши --------------------------------------------------------
-        down(name) { return input._any(name, 'down'); },
-        pressed(name) { return input._any(name, 'pressed'); },
-        released(name) { return input._any(name, 'released'); },
+        // Gameplay-запросы. Пока жив хотя бы один hard-lock, они возвращают
+        // false; UI/диалог, который сам держит такой лок, читает raw-варианты.
+        down(name) { return input.hardLocked() ? false : input._any(name, 'down'); },
+        pressed(name) { return input.hardLocked() ? false : input._any(name, 'pressed'); },
+        released(name) { return input.hardLocked() ? false : input._any(name, 'released'); },
+        rawDown(name) { return input._any(name, 'down'); },
+        rawPressed(name) { return input._any(name, 'pressed'); },
+        rawReleased(name) { return input._any(name, 'released'); },
 
-        /** Hold gameplay input for a named owner; returns a release token. */
-        lock(name, owner) { return lockCreate(name, owner); },
-        /** Advisory: game code that must ignore player input asks this. */
+        /**
+         * Hold gameplay input for a named owner; returns a release token.
+         * `lock(name, owner, {hard:true})` makes down/pressed/released return
+         * false until every hard token is released. Advisory tokens stay.
+         */
+        lock(name, owner, options) { return lockCreate(name, owner, options); },
+        /** Advisory ownership query; does not itself gate input. */
         locked(name) {
             if (name === undefined) return locks.size > 0;
             const bucket = locks.get(String(name));
             return !!(bucket && bucket.count > 0);
         },
+        /** True while any hard lock is alive; down/pressed/released are gated. */
+        hardLocked() { return hardLocked(); },
+        hardLocks() {
+            const out = [];
+            for (const bucket of locks.values()) for (const token of bucket.tokens) if (token.hard) out.push(token.name);
+            return out.sort();
+        },
         locks() { return [...locks.keys()].sort(); },
         lockCount() { let n = 0; for (const bucket of locks.values()) n += bucket.count; return n; },
         releaseLocks(reason) { return releaseLocks(reason); },
 
+        // Внутренний raw-путь: hard-lock НЕ проверяется здесь, иначе UI не смог
+        // бы прочитать собственные клавиши. Гейт стоит в public down/pressed.
         _any(name, kind, seen) {
             if (Array.isArray(name)) return name.some((n) => input._any(n, kind, seen));
             // Кнопки геймпада: у объекта слота есть down(), но не down/released —
@@ -516,8 +544,10 @@ export function installInput($) {
             const d = engine.mouseDelta();
             return { x: d[0], y: d[1] };
         },
-        mouseDown(button) { return engine.mouseDown(MOUSE_BUTTONS[button] || button || 1); },
-        mousePressed(button) { return engine.mousePressed(MOUSE_BUTTONS[button] || button || 1); },
+        mouseDown(button) { return input.hardLocked() ? false : engine.mouseDown(MOUSE_BUTTONS[button] || button || 1); },
+        mousePressed(button) { return input.hardLocked() ? false : engine.mousePressed(MOUSE_BUTTONS[button] || button || 1); },
+        rawMouseDown(button) { return engine.mouseDown(MOUSE_BUTTONS[button] || button || 1); },
+        rawMousePressed(button) { return engine.mousePressed(MOUSE_BUTTONS[button] || button || 1); },
         wheel() { return { x: 0, y: engine.wheel }; },
 
         // --- Текст -----------------------------------------------------------

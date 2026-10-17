@@ -94,11 +94,68 @@ export default function install($) {
                         entities: REGIONS.entities },
             world: info ? { cells: info.cells, portals: info.portals,
                             surfaces: info.visibleSurfaces, frame: frames } : null,
-            note: 'region indices are the compiler row-major partition; runtime streaming states are native',
+            // Native runtime huge-world state (regions/PVS/clusters/streaming/
+            // LOD/impostors). Numbers come straight from src/re2d.c info.
+            native: info ? {
+                regionCount: info.regionCount, regionCurrent: info.regionCurrent,
+                regionActive: info.regionActive, regionPreload: info.regionPreload,
+                regionCulled: info.regionCulled, regionPvsEdges: info.regionPvsEdges,
+                regionSizeHint: info.regionSizeHint,
+                clusterEdges: info.regionClusterEdges,
+                occluderCulled: info.regionOccluderCulled,
+                cellsAllowed: info.regionCellsAllowed, cellsCulled: info.regionCellsCulled,
+                streamUploads: info.streamUploads,
+                streamUploadBytes: info.streamUploadBytes,
+                streamEvictions: info.streamEvictions,
+                streamTotalUploads: info.streamTotalUploads,
+                streamTotalUploadBytes: info.streamTotalUploadBytes,
+                streamTotalEvictions: info.streamTotalEvictions,
+                streamResidentBytes: info.streamResidentBytes,
+                texturesResident: info.texturesResident,
+                atlasesResident: info.atlasesResident,
+                impostorCount: info.impostorCount,
+                visibleImpostors: info.visibleImpostors,
+                renderOrigin: info.regions ? info.regions.renderOrigin : null,
+                lodHiddenActors: info.lodHiddenActors,
+                lodThrottledActors: info.lodThrottledActors,
+                lodHiddenAtlas: info.lodHiddenAtlas,
+                lodCulledLights: info.lodCulledLights,
+                lodCulledParticles: info.lodCulledParticles,
+                lodCulledDecals: info.lodCulledDecals,
+                audioRegionCulled: info.audioRegionCulled,
+                frameMs: info.frameMs,
+                frameMsStable: Number.isFinite(info.frameMs),
+            } : null,
+            impostors: world && typeof world.impostors === 'function' ? world.impostors() : [],
+            note: 'region indices are the compiler row-major partition; native streaming states come from world.info()',
         };
     }
 
-    globalThis.re2dOpenWorld = { snapshot, regionAt, toggleHud: () => { visible = !visible; if (hud) visible ? hud.show() : hud.hide(); } };
+    function setPortalsClosed(closed) {
+        if (!world) return 0;
+        const count = world.info().portals;
+        for (let i = 0; i < count; i++) world.portalClosed(i, !!closed);
+        return count;
+    }
+
+    function teleport(x, y, h) {
+        view.x = x;
+        view.y = y;
+        if (typeof h === 'number') view.h = h;
+        lastRegion = regionAt(view.x, view.y);
+        if (world) world.camera(view);
+    }
+
+    globalThis.re2dOpenWorld = {
+        snapshot,
+        regionAt,
+        teleport,
+        regionConfig: (...args) => world && world.regionConfig(...args),
+        setPortalsClosed,
+        regionLocal: (x, y) => world && world.regionLocal(x, y),
+        impostors: () => world && typeof world.impostors === 'function' ? world.impostors() : [],
+        toggleHud: () => { visible = !visible; if (hud) visible ? hud.show() : hud.hide(); },
+    };
     $.agent.expose('re2dOpenWorld', snapshot);
 
     $.scene.add('re2d_openworld_lab', {

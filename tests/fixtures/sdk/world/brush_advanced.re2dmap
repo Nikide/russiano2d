@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "name": "Advanced brush authoring fixture",
+  "regionSize": 256,
+  "world": {
+    "x": 0,
+    "y": 0,
+    "w": 512,
+    "h": 256,
+    "bottom": 0,
+    "top": 256,
+    "floorColor": "#9a9a9a",
+    "ceilingColor": "#6a7078",
+    "sideColor": "#8f7a58",
+    "boundary": "sky"
+  },
+  "brushes": [
+    {
+      "id": "diamond",
+      "polygon": [[128, 64], [192, 128], [128, 192], [64, 128]],
+      "bottom": 0,
+      "top": 64,
+      "sideColor": "#7a6a50"
+    },
+    {
+      "id": "frame",
+      "rect": [224, 64, 96, 96],
+      "holes": [[248, 88, 48, 48]],
+      "bottom": 0,
+      "top": 64,
+      "sideColor": "#6b5a40"
+    },
+    {
+      "id": "base",
+      "rect": [352, 64, 96, 96],
+      "bottom": 0,
+      "top": 96,
+      "sideColor": "#7a6a50"
+    },
+    {
+      "id": "cut",
+      "rect": [368, 80, 64, 64],
+      "bottom": 24,
+      "top": 72,
+      "subtract": true
+    },
+    {
+      "id": "trigger.volume",
+      "rect": [16, 16, 32, 32],
+      "bottom": 0,
+      "top": 64,
+      "tool": "trigger"
+    },
+    {
+      "id": "wall.moving",
+      "rect": [224, 192, 32, 48],
+      "bottom": 0,
+      "top": 96,
+      "tool": "nodraw"
+    },
+    {
+      "id": "fog.volume",
+      "rect": [272, 16, 32, 32],
+      "bottom": 0,
+      "top": 64,
+      "tool": "trigger"
+    },
+    {
+      "id": "water.volume",
+      "rect": [320, 16, 32, 32],
+      "bottom": 0,
+      "top": 64,
+      "tool": "trigger"
+    },
+    {
+      "id": "areaportal.gap",
+      "rect": [400, 192, 32, 32],
+      "bottom": 0,
+      "top": 96,
+      "tool": "areaportal"
+    },
+    {
+      "id": "ceiling.hint",
+      "rect": [400, 16, 16, 16],
+      "bottom": 0,
+      "top": 64,
+      "tool": "hint"
+    },
+    {
+      "id": "occluder.marker",
+      "rect": [448, 16, 8, 32],
+      "bottom": 0,
+      "top": 64,
+      "tool": "occluder"
+    }
+  ],
+  "entities": [
+    { "id": "player.start", "kind": "player_spawn", "x": 96, "y": 64, "h": 0 },
+    { "id": "door.cell", "kind": "door", "brush": "base", "target": "portal.cell" },
+    { "id": "lift.cell", "kind": "lift", "brush": "base", "target": "portal.lift" },
+    { "id": "crusher.cell", "kind": "crusher", "brush": "base" },
+    { "id": "wall.slide", "kind": "moving_wall", "brush": "wall.moving" },
+    { "id": "trigger.entry", "kind": "trigger_volume", "brush": "trigger.volume", "target": "door.cell" },
+    { "id": "fog.pool", "kind": "fog_volume", "brush": "fog.volume" },
+    { "id": "water.pool", "kind": "water_volume", "brush": "water.volume" },
+    { "id": "area.gate", "kind": "areaportal", "brush": "areaportal.gap" }
+  ]
+}

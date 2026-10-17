@@ -61,6 +61,21 @@ well, tower opening or outdoor contour.
   (`--region-size`), coarse PVS and distant region LOD; see
   `RE2D_HUGE_WORLD.md`.
 
+## Compiler diagnostics for boundaries
+
+`r2d-sdk world compile` emits `SDK_WORLD_SKY_LEAK` when a sky-envelope map still
+has open cell edges. This is an open-edge heuristic, not a full exterior flood
+fill: it reports provable gaps in authored geometry, not interior/exterior
+zoning. Giant render-only surfaces are reported as
+`SDK_WORLD_GIANT_TRANSPARENT` because the compiler has no per-pixel opacity and
+treats render-without-collision as the translucent-boundary shape that should be
+replaced by a sky/clip brush.
+
+Tool policy bits are emitted into compiled/baked walls and brush-entity maps:
+`SHADOW`, `ACOUSTIC`, `OCCLUDER`, `HINT`/areaportal markers. The compiler does
+not edit runtime visibility, GPU shadow maps or audio; the hooks still required
+by consumers are reported in `RE2D_BRUSH_AUTHORING.md` (`brushEntities[].hook`).
+
 ## What is not supported
 
 * No general 3D sky renderer, no mesh skybox and no portal recursion.
@@ -71,6 +86,8 @@ well, tower opening or outdoor contour.
   respects `R2D_WALL_RAY`. This is documented rather than silently assumed.
 * Full acoustic occlusion filtering of `R2D_WALL_ACOUSTIC` is exposed for the
   audio pass; the native ray path follows `R2D_WALL_RAY`.
+* Sky-leak detection does not classify enclosed indoor volumes; it cannot prove
+  a leak when open edges are absent and does not fabricate one.
 
 ## Tests
 

@@ -200,7 +200,7 @@ $.dialog.play('greet');       // «Привет, Игрок!»
   `$.dialog.choices()[i].index`;
 * диалог один на процесс: `play()` при открытом диалоге закрывает прежний
   (`end` с reason `'restart'`);
-* ввод мира диалог не блокирует глобально — он берёт advisory-токен `$.input.lock('dialog')`, а gameplay-код сам решает, спрашивать ли `$.input.locked()`. World mode `cinematic` выставляется автоматически;
+* по умолчанию ввод мира диалог не блокирует глобально — он берёт advisory-токен `$.input.lock('dialog')`, а gameplay-код сам решает, спрашивать ли `$.input.locked()`. `$.dialog.hardLock(true)` включает hard-token: `$.input.down/pressed/released` возвращают `false`, пока диалог открыт (UI читает raw-методы). World mode `cinematic` выставляется автоматически;
 * печатную машинку двигает `tickDialog(dt)`: если его не подключить в
   `api.js`, текст просто не будет печататься по кадрам (всё остальное
   работает).
@@ -254,6 +254,26 @@ stable line id прочитанным.
 
 `$.dialog.lockHeld()` и `$.dialog.releaseLock(reason)` — диагностика и
 аварийное освобождение input-токена (обычно это делает `close()`).
-`$.dialog.prefetch(assets)` объявляет ассеты сцены (портреты/voice/CG) до
-показа. `$.dialog.view()` возвращает RML-view, `$.dialog.viewLoaded()` —
-загружен ли документ (для DevTools/агента).
+`$.dialog.prefetch(assets)` не только объявляет ассеты сцены, но и реально
+греет кэши: `$.sound.preload()` для voice/audio и
+`$.resource.preloadTexture()` для портретов; итог — `$.dialog.prefetchInfo()`
+(`requested/textures/sounds/failed`). `$.dialog.voice(on|undefined)`,
+`voiceVolume(v)`, `voiceInfo()`, `$.dialog.stopVoice(reason)` управляют настоящим
+проигрыванием `voice` через `$.sound` (предыдущая реплика глушится, close
+останавливает канал). `$.dialog.localize(key, params)` и
+`$.dialog.i18nStats()` используют dictionary lookup `$.i18n.lookup()`
+(текущий язык → fallback → остальные), а не только проверку `has()`.
+
+`$.dialog.inspect()` дополнен `inputHardLocked`, `choiceSlots`, `voice`,
+`prefetch`, `i18n`; DevTools F2 получил вкладку **Narrative**, доступную без
+выбранной сущности через `$.devtools.narrative()`. Число кнопок выбора задаёт
+тема: `themeDefine(name, {rml, rcss, choiceSlots, choiceTemplate})`, где
+`{index}`/`{n}` подставляются в шаблон (1..64 слотов).
+
+`$.dialog.view()` возвращает RML-view, `$.dialog.viewLoaded()` —
+загружен ли документ (для DevTools/агента). `$.dialog.view().choiceSlots`
+показывает фактическое число слотов.
+
+Проверка новых gap'ов: `tests/js/vn_gaps_test.mjs` (13 проверок),
+`tests/agent/vn_bashnya_theme_test.py` (RmlUi-пиксели темы BASHNYA, voice,
+prefetch, narrative inspector).

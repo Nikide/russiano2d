@@ -145,3 +145,26 @@ BASHNYA `.re2dworld` with `invalid wall/span geometry (-1)`, and the scripted
 intro chain does not reach `level1` through the agent. Re-run the numbers above
 plus the BASHNYA script after that integration lands; do not read the lab table
 as a BASHNYA budget.
+
+## P4/P5 renderer counters (task-7)
+
+`info.visual` adds: `shafts` (additive light-shaft cards drawn), `weatherCards`,
+`distantCards`, `ambientSamples`, `detailSamples`, `decals2`, `batchDraws`,
+`batchBatches`, `batchSaved`, `residentTextures`, `uploadBytes`.
+
+Native budgets are explicit and deterministic:
+
+* light shafts: 0-8 cards/frame (`shaft_budget`, quality low 0 / medium 4 /
+  high 6 / ultra 8);
+* weather: <=96 cards per weather layer, <=8 stacked layers (hard cap), so the
+  worst case is bounded at 768 procedural quads; high density defaults to 0.30
+  and ultra to 0.55, which yields 28/52 cards for the shipped profiles;
+* distant cards: 0-4 per frame;
+* decals 2.0: constant 256-slot model (existing world decal pool stays 128);
+* batching: consecutive material/blend/light/atlas keys coalesce, `batchSaved`
+  counts avoided draw calls;
+* residency: byte budget + per-frame upload byte budget; admission is
+  deterministic (fits or queued as pending).
+
+The CPU post references are O(w*h) plus a separable box blur and are used only
+by the native regression harness, not in the frame loop.

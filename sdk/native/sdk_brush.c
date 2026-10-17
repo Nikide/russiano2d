@@ -11,6 +11,7 @@
 #define BRUSH_EPS 1e-4f
 #define BRUSH_MAX_INTERVALS 16
 #define BRUSH_MAX_TILES 16384
+#define BRUSH_MAX_COORDS 65536
 
 typedef struct {
     float lo, hi;
@@ -150,15 +151,65 @@ static bool ring_contains_inclusive(const SdkBrushPoint *ring, int count,
            point_on_ring_edge(ring, count, x, y);
 }
 
-static bool ring_rectilinear(const SdkBrushPoint *ring, int count)
+// Convexity only needs consistent turn signs; collinear vertices are allowed.
+static bool ring_convex(const SdkBrushPoint *ring, int count)
 {
+    int sign = 0;
     for (int i = 0; i < count; i++) {
         const SdkBrushPoint *a = &ring[i];
         const SdkBrushPoint *b = &ring[(i + 1) % count];
+        const SdkBrushPoint *c = &ring[(i + 2) % count];
+        const float cross = (b->x - a->x) * (c->y - b->y) -
+                            (b->y - a->y) * (c->x - b->x);
+        if (fabsf(cross) <= BRUSH_EPS) continue;
+        const int current = cross > 0.0f ? 1 : -1;
+        if (sign && current != sign) return false;
+        sign = current;
+    }
+    return sign != 0;
+}
+
+static bool brush_ring_rectilinear(const SdkBrushSpec *brush)
+{
+    for (int i = 0; i < brush->ring_count; i++) {
+        const SdkBrushPoint *a = &brush->ring[i];
+        const SdkBrushPoint *b = &brush->ring[(i + 1) % brush->ring_count];
         if (fabsf(a->x - b->x) > BRUSH_EPS && fabsf(a->y - b->y) > BRUSH_EPS)
             return false;
     }
     return true;
+}
+
+static bool hole_valid(const SdkBrushHole *hole, const SdkBrushPoint *ring, int count)
+{
+    if (!hole || !isfinite(hole->x) || !isfinite(hole->y) ||
+        !isfinite(hole->w) || !isfinite(hole->h) ||
+        hole->w <= BRUSH_EPS || hole->h <= BRUSH_EPS) return false;
+    const float corners[4][2] = {
+        {hole->x, hole->y}, {hole->x + hole->w, hole->y},
+        {hole->x + hole->w, hole->y + hole->h}, {hole->x, hole->y + hole->h}
+    };
+    for (int i = 0; i < 4; i++) {
+        if (!point_in_ring(ring, count, corners[i][0], corners[i][1])) return false;
+    }
+    return true;
+}
+
+static bool point_in_hole(const SdkBrushSpec *brush, float x, float y)
+{
+    for (int i = 0; i < brush->hole_count; i++) {
+        const SdkBrushHole *h = &brush->holes[i];
+        if (x > h->x + BRUSH_EPS && x < h->x + h->w - BRUSH_EPS &&
+            y > h->y + BRUSH_EPS && y < h->y + h->h - BRUSH_EPS)
+            return true;
+    }
+    return false;
+}
+
+static bool brush_covers_xy(const SdkBrushSpec *brush, float x, float y)
+{
+    if (!point_in_ring(brush->ring, brush->ring_count, x, y)) return false;
+    return !point_in_hole(brush, x, y);
 }
 
 static int float_compare(const void *a, const void *b)
@@ -167,12 +218,69 @@ static int float_compare(const void *a, const void *b)
     return x < y ? -1 : x > y ? 1 : 0;
 }
 
+static bool add_coord(float *coords, int *count, float value,
+                      char *error, size_t error_size)
+{
+    if (!isfinite(value)) return true;   // defensive; validation rejects earlier
+    if (*count >= BRUSH_MAX_COORDS) {
+        set_error(error, error_size,
+                  "brush compiler: too many polygon edge grid intersections; simplify brushes");
+        return false;
+    }
+    coords[(*count)++] = value;
+    return true;
+}
+
 static int interval_compare(const void *a, const void *b)
 {
     const BrushInterval *x = (const BrushInterval *)a;
     const BrushInterval *y = (const BrushInterval *)b;
     if (x->lo != y->lo) return x->lo < y->lo ? -1 : 1;
     return x->hi < y->hi ? -1 : x->hi > y->hi ? 1 : 0;
+}
+
+// Deterministic union of overlapping height intervals. The later brush in
+// authoring order keeps face ownership, matching the rectilinear compiler.
+static int merge_intervals(BrushInterval *list, int count)
+{
+    if (count <= 0) return 0;
+    qsort(list, (size_t)count, sizeof *list, interval_compare);
+    int write = 0;
+    for (int i = 0; i < count; i++) {
+        if (write && list[i].lo <= list[write - 1].hi + BRUSH_EPS) {
+            if (list[i].hi > list[write - 1].hi) list[write - 1].hi = list[i].hi;
+            list[write - 1].owner = list[i].owner;
+        } else {
+            list[write++] = list[i];
+        }
+    }
+    return write;
+}
+
+// Removes one negative CSG interval from a merged positive interval list.
+static int subtract_interval(BrushInterval *list, int count,
+                             const BrushInterval *cut)
+{
+    BrushInterval out[BRUSH_MAX_INTERVALS];
+    int written = 0;
+    for (int i = 0; i < count; i++) {
+        const BrushInterval *p = &list[i];
+        if (cut->hi <= p->lo + BRUSH_EPS || cut->lo >= p->hi - BRUSH_EPS) {
+            if (written == BRUSH_MAX_INTERVALS) return -1;
+            out[written++] = *p;
+            continue;
+        }
+        if (cut->lo > p->lo + BRUSH_EPS) {
+            if (written == BRUSH_MAX_INTERVALS) return -1;
+            out[written++] = (BrushInterval){p->lo, cut->lo, p->owner};
+        }
+        if (cut->hi < p->hi - BRUSH_EPS) {
+            if (written == BRUSH_MAX_INTERVALS) return -1;
+            out[written++] = (BrushInterval){cut->hi, p->hi, p->owner};
+        }
+    }
+    memcpy(list, out, (size_t)written * sizeof *out);
+    return written;
 }
 
 static bool spans_equal(const BrushFreeSpan *a, const BrushFreeSpan *b)
@@ -241,37 +349,44 @@ static bool build_tiles(const SdkBrushSpec *brushes, int brush_count,
             tile->y0 = iy; tile->y1 = iy + 1;
             const float cx = (xs[ix] + xs[ix + 1]) * 0.5f;
             const float cy = (ys[iy] + ys[iy + 1]) * 0.5f;
-            BrushInterval raw[BRUSH_MAX_INTERVALS];
-            int raw_count = 0;
+            BrushInterval positive[BRUSH_MAX_INTERVALS];
+            BrushInterval negative[BRUSH_MAX_INTERVALS];
+            int positive_count = 0, negative_count = 0;
             for (int b = 0; b < brush_count; b++) {
                 const SdkBrushSpec *brush = &brushes[b];
-                if (!brush->solid || !point_in_ring(brush->ring, brush->ring_count, cx, cy))
-                    continue;
+                if (!brush->solid || !brush_covers_xy(brush, cx, cy)) continue;
                 float lo = fmaxf(brush->bottom, bounds->bottom);
                 float hi = fminf(brush->top, bounds->top);
                 if (hi <= lo + BRUSH_EPS) continue;
-                if (raw_count == BRUSH_MAX_INTERVALS) {
-                    set_error(error, error_size, "brush grid: too many overlapping solids in one tile");
-                    return false;
-                }
-                raw[raw_count++] = (BrushInterval){lo, hi, b};
-            }
-            qsort(raw, (size_t)raw_count, sizeof(BrushInterval), interval_compare);
-            for (int i = 0; i < raw_count; i++) {
-                if (tile->solid_count &&
-                    raw[i].lo <= tile->solids[tile->solid_count - 1].hi + BRUSH_EPS) {
-                    if (raw[i].hi > tile->solids[tile->solid_count - 1].hi)
-                        tile->solids[tile->solid_count - 1].hi = raw[i].hi;
-                    // Keep the later brush as the face writer; deterministic.
-                    tile->solids[tile->solid_count - 1].owner = raw[i].owner;
-                } else {
-                    if (tile->solid_count == BRUSH_MAX_INTERVALS) {
-                        set_error(error, error_size, "brush grid: too many solid intervals in one tile");
+                if (brush->subtract) {
+                    if (negative_count == BRUSH_MAX_INTERVALS) {
+                        set_error(error, error_size, "brush grid: too many CSG subtract brushes in one tile");
                         return false;
                     }
-                    tile->solids[tile->solid_count++] = raw[i];
+                    negative[negative_count++] = (BrushInterval){lo, hi, b};
+                } else {
+                    if (positive_count == BRUSH_MAX_INTERVALS) {
+                        set_error(error, error_size, "brush grid: too many overlapping solids in one tile");
+                        return false;
+                    }
+                    positive[positive_count++] = (BrushInterval){lo, hi, b};
                 }
             }
+            positive_count = merge_intervals(positive, positive_count);
+            negative_count = merge_intervals(negative, negative_count);
+            for (int i = 0; i < negative_count; i++) {
+                positive_count = subtract_interval(positive, positive_count, &negative[i]);
+                if (positive_count < 0) {
+                    set_error(error, error_size, "brush grid: CSG subtraction split too many intervals");
+                    return false;
+                }
+            }
+            if (positive_count > BRUSH_MAX_INTERVALS) {
+                set_error(error, error_size, "brush grid: too many solid intervals in one tile");
+                return false;
+            }
+            tile->solid_count = positive_count;
+            for (int i = 0; i < positive_count; i++) tile->solids[i] = positive[i];
 
             float cursor = bounds->bottom;
             for (int i = 0; i < tile->solid_count; i++) {
@@ -488,14 +603,58 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
     for (int i = 0; i < brush_count; i++) {
         const SdkBrushSpec *b = &brushes[i];
         if (b->ring_count < 3 || b->ring_count > SDK_BRUSH_MAX_POINTS ||
-            !ring_rectilinear(b->ring, b->ring_count) ||
+            !ring_convex(b->ring, b->ring_count) ||
             !(b->top > b->bottom)) {
-            char message[160];
+            char message[192];
             snprintf(message, sizeof message,
-                     "brush «%s»: need a rectilinear ring of 3..64 points and top > bottom",
+                     "brush «%s»: need a convex ring of 3..64 points and top > bottom",
                      b->id);
             set_error(error, error_size, message);
             return false;
+        }
+        if (b->hole_count < 0 || b->hole_count > SDK_BRUSH_MAX_HOLES) {
+            char message[192];
+            snprintf(message, sizeof message, "brush «%s»: hole count 0..%d",
+                     b->id, SDK_BRUSH_MAX_HOLES);
+            set_error(error, error_size, message);
+            return false;
+        }
+        if (b->subtract && (b->tool != SDK_BRUSH_TOOL_NONE || !b->solid ||
+                            b->hole_count != 0)) {
+            char message[192];
+            snprintf(message, sizeof message,
+                     "brush «%s»: subtract must be a plain solid brush without holes",
+                     b->id);
+            set_error(error, error_size, message);
+            return false;
+        }
+        if (b->hole_count && !b->solid) {
+            char message[192];
+            snprintf(message, sizeof message,
+                     "brush «%s»: holes are only valid on solid brushes", b->id);
+            set_error(error, error_size, message);
+            return false;
+        }
+        for (int h = 0; h < b->hole_count; h++) {
+            if (!hole_valid(&b->holes[h], b->ring, b->ring_count)) {
+                char message[224];
+                snprintf(message, sizeof message,
+                         "brush «%s»: hole %d must be a finite rect inside the footprint",
+                         b->id, h);
+                set_error(error, error_size, message);
+                return false;
+            }
+            for (int k = 0; k < h; k++) {
+                const SdkBrushHole *a = &b->holes[k], *c = &b->holes[h];
+                if (a->x < c->x + c->w - BRUSH_EPS && c->x < a->x + a->w - BRUSH_EPS &&
+                    a->y < c->y + c->h - BRUSH_EPS && c->y < a->y + a->h - BRUSH_EPS) {
+                    char message[224];
+                    snprintf(message, sizeof message,
+                             "brush «%s»: holes %d and %d overlap", b->id, k, h);
+                    set_error(error, error_size, message);
+                    return false;
+                }
+            }
         }
         R2DWorldPoint ring[SDK_BRUSH_MAX_POINTS];
         for (int p = 0; p < b->ring_count; p++) {
@@ -512,25 +671,71 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
         }
     }
 
-    // Unique coordinate sets from the envelope and every brush vertex.
-    const int max_coords = brush_count * SDK_BRUSH_MAX_POINTS * 2 + 4;
-    float *coords_x = (float *)malloc((size_t)max_coords * sizeof(float));
-    float *coords_y = (float *)malloc((size_t)max_coords * sizeof(float));
+    // Unique coordinate sets from the envelope, brush vertices, hole corners,
+    // and every polygon-edge intersection with the current grid lines. The
+    // refinement makes diagonal edges land on cell corners, so centre sampling
+    // is exact for convex footprints instead of approximate.
+    float *coords_x = (float *)malloc((size_t)BRUSH_MAX_COORDS * sizeof(float));
+    float *coords_y = (float *)malloc((size_t)BRUSH_MAX_COORDS * sizeof(float));
     if (!coords_x || !coords_y) {
         free(coords_x); free(coords_y);
         set_error(error, error_size, "brush compiler: out of memory");
         return false;
     }
     int nx = 0, ny = 0;
-    coords_x[nx++] = bounds->x;
-    coords_x[nx++] = bounds->x + bounds->w;
-    coords_y[ny++] = bounds->y;
-    coords_y[ny++] = bounds->y + bounds->h;
-    for (int i = 0; i < brush_count; i++) {
-        for (int p = 0; p < brushes[i].ring_count; p++) {
-            coords_x[nx++] = brushes[i].ring[p].x;
-            coords_y[ny++] = brushes[i].ring[p].y;
+    bool coords_ok = add_coord(coords_x, &nx, bounds->x, error, error_size) &&
+                     add_coord(coords_x, &nx, bounds->x + bounds->w, error, error_size) &&
+                     add_coord(coords_y, &ny, bounds->y, error, error_size) &&
+                     add_coord(coords_y, &ny, bounds->y + bounds->h, error, error_size);
+    for (int i = 0; coords_ok && i < brush_count; i++) {
+        const SdkBrushSpec *b = &brushes[i];
+        for (int p = 0; p < b->ring_count; p++) {
+            coords_ok = add_coord(coords_x, &nx, b->ring[p].x, error, error_size) &&
+                        add_coord(coords_y, &ny, b->ring[p].y, error, error_size);
+            if (!coords_ok) break;
         }
+        for (int h = 0; coords_ok && h < b->hole_count; h++) {
+            const SdkBrushHole *hole = &b->holes[h];
+            for (int c = 0; c < 4; c++) {
+                const float x = hole->x + ((c & 1) ? hole->w : 0.0f);
+                const float y = hole->y + ((c & 2) ? hole->h : 0.0f);
+                coords_ok = add_coord(coords_x, &nx, x, error, error_size) &&
+                            add_coord(coords_y, &ny, y, error, error_size);
+                if (!coords_ok) break;
+            }
+        }
+    }
+    for (int pass = 0; coords_ok && pass < 2; pass++) {
+        const int nx_snapshot = nx, ny_snapshot = ny;
+        for (int i = 0; coords_ok && i < brush_count; i++) {
+            const SdkBrushSpec *b = &brushes[i];
+            for (int p = 0; coords_ok && p < b->ring_count; p++) {
+                const SdkBrushPoint *a = &b->ring[p];
+                const SdkBrushPoint *c = &b->ring[(p + 1) % b->ring_count];
+                if (fabsf(a->x - c->x) <= BRUSH_EPS ||
+                    fabsf(a->y - c->y) <= BRUSH_EPS) continue;   // axis-aligned
+                const float minx = fminf(a->x, c->x), maxx = fmaxf(a->x, c->x);
+                const float miny = fminf(a->y, c->y), maxy = fmaxf(a->y, c->y);
+                for (int k = 0; coords_ok && k < nx_snapshot; k++) {
+                    const float x = coords_x[k];
+                    if (x < minx - BRUSH_EPS || x > maxx + BRUSH_EPS) continue;
+                    const float t = (x - a->x) / (c->x - a->x);
+                    coords_ok = add_coord(coords_y, &ny, a->y + t * (c->y - a->y),
+                                          error, error_size);
+                }
+                for (int k = 0; coords_ok && k < ny_snapshot; k++) {
+                    const float y = coords_y[k];
+                    if (y < miny - BRUSH_EPS || y > maxy + BRUSH_EPS) continue;
+                    const float t = (y - a->y) / (c->y - a->y);
+                    coords_ok = add_coord(coords_x, &nx, a->x + t * (c->x - a->x),
+                                          error, error_size);
+                }
+            }
+        }
+    }
+    if (!coords_ok) {
+        free(coords_x); free(coords_y);
+        return false;
     }
     qsort(coords_x, (size_t)nx, sizeof(float), float_compare);
     qsort(coords_y, (size_t)ny, sizeof(float), float_compare);
@@ -825,6 +1030,9 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
             if (brushes[i].tool == SDK_BRUSH_TOOL_AREAPORTAL) stats->areaportal_brushes++;
             if (brushes[i].tool == SDK_BRUSH_TOOL_HINT) stats->hint_brushes++;
             if (brushes[i].tool == SDK_BRUSH_TOOL_OCCLUDER) stats->occluder_brushes++;
+            if (!brush_ring_rectilinear(&brushes[i])) stats->polygon_brushes++;
+            if (brushes[i].subtract) stats->subtract_brushes++;
+            if (brushes[i].hole_count > 0) stats->hole_brushes++;
         }
         stats->cells = out->cell_count;
         stats->spans = out->span_count;
@@ -832,6 +1040,11 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
         stats->portals = out->portal_count;
         stats->openings = out->opening_count;
         stats->merged_cells = cell_count - emitted_cells;
+        for (int i = 0; i < out->wall_count; i++) {
+            if (out->walls[i].flags & R2D_WALL_SHADOW) stats->shadow_walls++;
+            if (out->walls[i].flags & R2D_WALL_ACOUSTIC) stats->acoustic_walls++;
+            if (out->walls[i].flags & R2D_WALL_OCCLUDER) stats->occluder_walls++;
+        }
         for (int i = 0; i < out->portal_count; i++)
             if (out->portals[i].area_portal) stats->areaportal_edges++;
         for (int i = 0; i < brush_count; i++) {
@@ -861,4 +1074,133 @@ oom:
     sdk_brush_output_free(out);
     set_error(error, error_size, "brush compiler: out of memory");
     return false;
+}
+
+// ---- Brush entity behavior mapping ---------------------------------------
+// Resolves authored brush references to the existing runtime contracts. This is
+// metadata only: the SDK compiler does not create runtime objects here.
+
+static bool brush_entity_kind_valid(const char *kind)
+{
+    return !strcmp(kind, "door") || !strcmp(kind, "lift") ||
+           !strcmp(kind, "crusher") || !strcmp(kind, "moving_wall") ||
+           !strcmp(kind, "trigger") || !strcmp(kind, "trigger_volume") ||
+           !strcmp(kind, "fog_volume") || !strcmp(kind, "water_volume") ||
+           !strcmp(kind, "areaportal");
+}
+
+static const SdkBrushSpec *find_brush(const SdkBrushSpec *brushes, int count,
+                                      const char *id)
+{
+    for (int i = 0; i < count; i++)
+        if (!strcmp(brushes[i].id, id)) return &brushes[i];
+    return NULL;
+}
+
+int sdk_brush_map_entities(const SdkBrushSpec *brushes, int brush_count,
+                           const SdkBrushEntityRef *entities, int entity_count,
+                           SdkBrushEntityMap *out, int capacity,
+                           char *error, size_t error_size)
+{
+    if (error && error_size) error[0] = 0;
+    if (brush_count < 0 || (brush_count && !brushes) ||
+        entity_count < 0 || (entity_count && !entities) ||
+        (out && capacity < 0)) {
+        set_error(error, error_size, "brush entities: invalid arguments");
+        return -1;
+    }
+    // Validation pass keeps the operation transactional.
+    for (int i = 0; i < entity_count; i++) {
+        const SdkBrushEntityRef *e = &entities[i];
+        if (!e->id[0]) {
+            set_error(error, error_size, "brush entities: empty entity id");
+            return -1;
+        }
+        for (int j = 0; j < i; j++) {
+            if (!strcmp(entities[j].id, e->id)) {
+                char message[160];
+                snprintf(message, sizeof message,
+                         "brush entities: duplicate entity id «%s»", e->id);
+                set_error(error, error_size, message);
+                return -1;
+            }
+        }
+        if (!brush_entity_kind_valid(e->kind)) {
+            char message[160];
+            snprintf(message, sizeof message,
+                     "brush entity «%s»: unsupported brush-entity kind «%s»",
+                     e->id, e->kind);
+            set_error(error, error_size, message);
+            return -1;
+        }
+        if (!e->brush[0] || !find_brush(brushes, brush_count, e->brush)) {
+            char message[192];
+            snprintf(message, sizeof message,
+                     "brush entity «%s» references missing brush «%s»",
+                     e->id, e->brush);
+            set_error(error, error_size, message);
+            return -1;
+        }
+    }
+
+    for (int i = 0; i < entity_count; i++) {
+        if (!out || i >= capacity) continue;
+        const SdkBrushEntityRef *e = &entities[i];
+        const SdkBrushSpec *b = find_brush(brushes, brush_count, e->brush);
+        SdkBrushEntityMap *m = &out[i];
+        memset(m, 0, sizeof *m);
+        snprintf(m->id, sizeof m->id, "%s", e->id);
+        snprintf(m->kind, sizeof m->kind, "%s", e->kind);
+        snprintf(m->brush, sizeof m->brush, "%s", e->brush);
+        snprintf(m->target, sizeof m->target, "%s", e->target);
+        m->bottom = b->bottom;
+        m->top = b->top;
+        m->flags = b->wall_flags;
+        float minx = INFINITY, miny = INFINITY, maxx = -INFINITY, maxy = -INFINITY;
+        for (int p = 0; p < b->ring_count; p++) {
+            minx = fminf(minx, b->ring[p].x);
+            miny = fminf(miny, b->ring[p].y);
+            maxx = fmaxf(maxx, b->ring[p].x);
+            maxy = fmaxf(maxy, b->ring[p].y);
+        }
+        m->x = minx; m->y = miny;
+        m->w = maxx - minx; m->h = maxy - miny;
+        m->mover_type = -1;
+        m->trigger_type = -1;
+        if (!strcmp(e->kind, "door")) {
+            snprintf(m->runtime, sizeof m->runtime, "mover");
+            snprintf(m->api, sizeof m->api, "world.mover");
+            m->mover_type = 0;
+        } else if (!strcmp(e->kind, "lift")) {
+            snprintf(m->runtime, sizeof m->runtime, "mover");
+            snprintf(m->api, sizeof m->api, "world.mover");
+            m->mover_type = 1;
+        } else if (!strcmp(e->kind, "crusher")) {
+            snprintf(m->runtime, sizeof m->runtime, "mover");
+            snprintf(m->api, sizeof m->api, "world.mover");
+            m->mover_type = 2;
+        } else if (!strcmp(e->kind, "moving_wall")) {
+            snprintf(m->runtime, sizeof m->runtime, "mover");
+            snprintf(m->api, sizeof m->api, "world.mover");
+            m->mover_type = 3;
+        } else if (!strcmp(e->kind, "trigger") ||
+                   !strcmp(e->kind, "trigger_volume")) {
+            snprintf(m->runtime, sizeof m->runtime, "trigger");
+            snprintf(m->api, sizeof m->api, "world.trigger");
+            m->trigger_type = 0;   // enter
+        } else if (!strcmp(e->kind, "fog_volume")) {
+            snprintf(m->runtime, sizeof m->runtime, "fog");
+            snprintf(m->api, sizeof m->api, "world.fogZone");
+            snprintf(m->hook, sizeof m->hook, "span resolution + volume field");
+        } else if (!strcmp(e->kind, "water_volume")) {
+            snprintf(m->runtime, sizeof m->runtime, "water");
+            snprintf(m->api, sizeof m->api, "world.liquid");
+            snprintf(m->hook, sizeof m->hook, "liquid/volume runtime API missing");
+        } else { // areaportal
+            snprintf(m->runtime, sizeof m->runtime, "portal");
+            snprintf(m->api, sizeof m->api, "portal.areaPortal");
+            snprintf(m->hook, sizeof m->hook, "nearest generated portal");
+        }
+    }
+    return entity_count;
 }

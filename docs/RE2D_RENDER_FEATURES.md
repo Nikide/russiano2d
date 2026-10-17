@@ -134,3 +134,105 @@ python3 tests/agent/re2d_world_renderer_test.py          # existing regression
   simulation, reflection engine or planar 3D reflection.
 * CPU/GPU parity for medium/high tiers is not claimed; default low is
   parity-safe and is what existing regression comparisons use.
+
+## P4/P5 renderer remainder (task-7)
+
+Files: `src/re2d_world_sky.*` (sky profiles, layers, weather, celestial,
+distant cards, portal/surface policy), `src/re2d_world_post.*` (bloom-lite,
+reflection-lite, depth-aware heat distortion, CPU reference passes),
+`src/re2d_world_render_features.*` (shaft cards, ambient/AO field, detail
+layers, decals 2.0, batching/residency hooks, 16-direction helper).
+All are pure native C: no mesh/3D/ECS, no allocation in evaluation paths.
+
+### Sky, weather and distant cards
+
+* Four profiles (`clear`, `dusk`, `night`, `storm`) and 1-4 labelled layers with
+  independent texture slot, tint, parallax, scale, offset, alpha and scroll.
+* Weather layers stack with normalised weights: rain, snow, ash and clouds.
+  Cards are deterministic, caller-seeded and time-driven (no particle state).
+* Sun/moon discs return a unit direction, visibility, size, glow and colour.
+* Two to four distant sky cards provide independent parallax silhouettes.
+* Portal policy: `none`, `inherit` (room sky) and `profile` override; `tool_sky`
+  surfaces draw the stack unless the wall is nodraw/clip.
+* GPU: profile layers feed the existing sky shader; distant cards, weather
+  cards and light-shaft cards use the existing procedural card branch
+  (`plane.w=5`) so no new pipeline or mesh is introduced. Counters:
+  `shafts`, `weatherCards`, `distantCards`.
+
+### Ambient/AO field and surface detail
+
+* `r2d_world_ambient_bake()` builds a coarse 32x32 max grid with ambient RGB
+  and occlusion from floor/ceiling pairs and a sky bias; bilinear sampling.
+  Deterministic across runs/branches (tested byte-identical).
+* `r2d_world_render_detail_layer()` supplies deterministic base/detail/macro/
+  emissive/normal UVs and weights from the surface hash.
+* `r2d_world_render_sprite_direction()` maps yaw to 8/16/32... direction buckets
+  for ultra sprites.
+
+### Shafts, decals 2.0 and batching
+
+* Light-shaft cards derive from active point lights: budget 0-8, cone width,
+  height fade and alpha are deterministic; drawn additively with depth test.
+  No raymarch/volume texture.
+* Decals 2.0 model: material, rect, rotation, scale, lifetime, fade-in/out and
+  seeded variation; 256-slot constant. `eval()` returns alpha/rotation/scale.
+* Static batching key covers material/blend/light-policy/atlas; stats count
+  draws, batches and saved draws. Residency hooks expose resident/pending,
+  byte budget and a per-frame upload budget.
+
+### Post passes
+
+`re2d_world_post` provides the pass math plus deterministic CPU reference
+images for regression: soft-knee bloom threshold + 8-tap ring, reflection-lite
+UV/weight, elliptical heat mask and depth-attenuated screen offset. The CPU
+reference bloom/heat functions are used by the regression harness.
+
+### Debug/profiler and regression
+
+`info.visual` now also reports `shafts, weatherCards, distantCards,
+ambientSamples, detailSamples, decals2, batchDraws, batchBatches, batchSaved,
+residentTextures, uploadBytes`.
+
+Native harness: `tests/re2d/render_regression_test.c` composes a deterministic
+64x64 reference frame from the P4 sky/ambient/post math, compares its FNV hash
+to a stored baseline and an 8x8 average grid within +/-1.5. Toggles prove that
+bloom, heat and sky-layer count change the frame while re-running is exact.
+
+### Measured native test results (this pass)
+
+| target | tests |
+|---|---|
+| `r2d_world_sky_test` | 5 |
+| `r2d_world_post_test` | 5 |
+| `r2d_world_render_p4_test` | 8 |
+| `r2d_world_render_regression_test` | 2 |
+
+GPU reference lab (`demos/re2d_world_renderer_lab`, agent screenshots):
+
+| tier | gpuDraws | frameMs | shafts | weather | distant |
+|---|---|---|---|---|---|
+| medium | 30 | 12.04 | 2 | 0 | 2 |
+| high | 91 | 12.11 | 2 | 61 | 2 |
+
+`re2d_render_p4_test.py`: high changes 61.85% of pixels vs medium and 65.03%
+vs low; `re2d_render_visual_features_test.py` still passes with 67.27% low/high
+difference. Weather cards are bounded per layer (<=96) and by density; no
+frame-time regression is measurable on this lab. Reference-frame FNV baseline:
+`643744434` (regenerate only with an intentional visual change).
+
+### P4/P5 limitations (honest)
+
+* Distant/weather/shaft cards are GPU-reference procedural cards; per-layer
+  independent sky textures still need authored texture slots (the model and
+  policy support them, the demo assets do not ship four panoramas).
+* Bloom-lite/reflection-lite/heat-distortion have validated native math and CPU
+  references, but the world forward pass has no scene-colour target, so the
+  final screen composite is not wired into `re2d_world_gpu.c`. That needs the
+  engine post/bloom path to sample the world colour texture; documented for the
+  integration owner. `world.post` remains the screen distortion path today.
+* Ambient field and detail layers are not yet uploaded to shader uniforms;
+  existing macro variation/bevel shading stays the runtime path.
+* Decals 2.0 model is not yet fed by the 128-slot world decal pool; authored
+  lifetime/fade authoring and JSON parsing are follow-up work.
+* Batching/residency are native accounting + hooks; GPU submission order and
+  texture streaming are not rerouted by them yet.

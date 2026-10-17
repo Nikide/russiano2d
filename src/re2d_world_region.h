@@ -77,6 +77,10 @@ typedef struct {
     int unloaded_count, metadata_count, preloading_count;
     int visible_regions, culled_regions;
     int pvs_edges;
+    // Hierarchical visibility counters (region -> vis cluster -> local BSP).
+    int cluster_pvs_edges;
+    int occluder_culled_regions;
+    int cluster_culled_regions;
 } R2DWorldRegionMetrics;
 
 // Render LOD decision derived from camera distance. Kept as a plain value so
@@ -88,7 +92,26 @@ typedef struct {
     int particle_percent;   // 100/50/20/0
     bool impostor;          // distant region may use a baked silhouette card
     bool hidden;
+    // P1-R04 per-feature wiring: consumers read these instead of re-deriving
+    // distance, so sprite/light/particle/decal/audio stay one policy value.
+    int decal_percent;      // 100/50/20/0
+    int max_lights;         // dynamic light budget for this ring
+    int max_shadow_lights;  // shadowed light budget for this ring
+    bool audio_culled;      // far source virtualization/occlusion culling
 } R2DWorldRegionLod;
+
+// Tunable LOD policy. Defaults match r2d_world_region_lod(); runtime may expose
+// tighter/looser budgets without changing the distance bands of old callers.
+typedef struct {
+    float near_distance, mid_distance, far_distance;
+    float impostor_distance, hidden_distance;
+    int near_directions, mid_directions, far_directions, impostor_directions;
+    int near_fps, mid_fps, far_fps, impostor_fps;
+    int near_particles, mid_particles, far_particles, impostor_particles;
+    int near_decals, mid_decals, far_decals, impostor_decals;
+    int near_lights, mid_lights, far_lights, impostor_lights;
+    int max_shadow_lights;
+} R2DWorldRegionLodConfig;
 
 typedef struct {
     R2DWorldRegion *regions;
@@ -166,3 +189,82 @@ bool r2d_world_region_local(const R2DWorldRegionSet *set, int region,
 
 // Distance LOD. `distance` is in world units from the camera region centre.
 void r2d_world_region_lod(float distance, R2DWorldRegionLod *out);
+// Same, with an explicit policy (defaults = r2d_world_region_lod defaults).
+void r2d_world_region_lod_defaults(R2DWorldRegionLodConfig *config);
+bool r2d_world_region_lod_valid(const R2DWorldRegionLodConfig *config);
+void r2d_world_region_lod_eval(float distance, const R2DWorldRegionLodConfig *config,
+                               R2DWorldRegionLod *out);
+
+// ---------------------------------------------------------------------------
+// Vis clusters: hierarchical visibility level between regions and local cells.
+// Cells of one region are grouped row-major into bounded clusters; cluster PVS
+// is portal reachability over the same open/closed portal flags. The runtime
+// rejects cells by region PVS, then by cluster PVS, then runs local BSP/portal
+// visibility -- so a closed areaportal cuts both levels consistently.
+// ---------------------------------------------------------------------------
+#define R2D_WORLD_REGION_MAX_CLUSTER_CELLS 16
+
+typedef struct {
+    int region;                   // owning region index
+    int first_cell, cell_count;   // CSR into cluster_cells
+} R2DWorldCluster;
+
+typedef struct {
+    R2DWorldCluster *clusters;
+    int cluster_capacity, cluster_count;
+    int *cell_cluster;
+    int cell_cluster_capacity;
+    int *cluster_cells;
+    int cluster_cells_capacity;
+    int *cluster_portal_offsets;
+    int cluster_portal_offsets_capacity;
+    int *cluster_portal_refs;
+    int cluster_portal_refs_capacity;
+    uint64_t *pvs;
+    int pvs_capacity, pvs_words;
+    int cells_per_cluster;
+    int pvs_edges;
+} R2DWorldClusterSet;
+
+// Sizing call: arrays NULL/capacities 0 returns cluster_count and fills
+// pvs_words. Required capacities: clusters >= cluster_count, cell_cluster >=
+// cell_count, cluster_cells >= cell_count, cluster_portal_offsets >=
+// cluster_count+1, cluster_portal_refs >= portal_count*2, pvs >=
+// cluster_count*pvs_words. Returns cluster_count or -1.
+int r2d_world_region_clusters_build(const R2DWorldRegionSet *set, int cells_per_cluster,
+                                    const R2DWorldRegionPortal *portals, int portal_count,
+                                    R2DWorldClusterSet *out, char *error, size_t error_size);
+bool r2d_world_region_clusters_rebuild_pvs(R2DWorldClusterSet *set,
+                                           const R2DWorldRegionPortal *portals, int portal_count);
+bool r2d_world_region_cluster_visible(const R2DWorldClusterSet *set,
+                                      int from_cluster, int to_cluster);
+int r2d_world_region_cluster_at(const R2DWorldClusterSet *set, int cell);
+void r2d_world_region_clusters_free(R2DWorldClusterSet *set);
+
+// ---------------------------------------------------------------------------
+// Occluder pass: compiler-marked occluder wall chains are 2D segments. A region
+// is rejected before local BSP when every one of its five sample points
+// (corners + centre) is hidden from the camera by the segment chain. This is a
+// conservative coarse test, not per-pixel occlusion.
+// ---------------------------------------------------------------------------
+typedef struct {
+    float x1, y1, x2, y2;
+} R2DWorldOccluder;
+
+// Writes one byte per region (1 = visible). Returns visible count or -1.
+int r2d_world_region_visible_set(const R2DWorldRegionSet *set, int from_region,
+                                 const R2DWorldOccluder *occluders, int occluder_count,
+                                 float camera_x, float camera_y,
+                                 uint8_t *visible, int capacity);
+
+// True when every region sample point is hidden from the camera by the
+// occluder segment chain (conservative coarse occlusion). Invalid handles,
+// non-finite camera or a region containing the camera return false.
+bool r2d_world_region_occluded(const R2DWorldRegionSet *set, int region,
+                               const R2DWorldOccluder *occluders, int occluder_count,
+                               float camera_x, float camera_y);
+
+// Region-local render origin: region centre in world XY. Subtract it from world
+// coordinates to keep renderer floats small far from the world origin.
+bool r2d_world_region_render_origin(const R2DWorldRegionSet *set, int region,
+                                    float *origin_x, float *origin_y);

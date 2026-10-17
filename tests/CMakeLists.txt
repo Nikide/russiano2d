@@ -466,6 +466,59 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_world_region_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# Budgeted payload residency/upload accounting (R-04 P1): BSP/surfaces/
+# materials/textures/atlases, deterministic LRU eviction, per-frame budget.
+add_executable(r2d_world_stream_test re2d/stream_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_stream.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_region.c")
+target_include_directories(r2d_world_stream_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_stream_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_stream_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_stream_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_stream_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Distant region impostors (R-04 P1): baked cards, PVS/occluder collect,
+# nearest-first order, region-local coordinates.
+add_executable(r2d_world_impostor_test re2d/impostor_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_impostor.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_region.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c" "${CMAKE_SOURCE_DIR}/src/json.c"
+    "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_world_impostor_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_impostor_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_impostor_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_impostor_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_impostor_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Hierarchical visibility: region/vis-cluster reject before local BSP, closed
+# areaportal cuts both the coarse PVS and the local portal walk.
+add_executable(r2d_world_hierarchical_test re2d/hierarchical_visibility_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_region.c" "${CMAKE_SOURCE_DIR}/src/re2d_world.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_math.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c"
+    "${CMAKE_SOURCE_DIR}/src/json.c" "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_world_hierarchical_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_hierarchical_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_hierarchical_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_hierarchical_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_hierarchical_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # Hammer-like brush authoring (#5): tool materials, solid subtraction, portals.
 add_executable(r2d_sdk_brush_test re2d/brush_test.c
     "${CMAKE_SOURCE_DIR}/sdk/native/sdk_brush.c"
@@ -533,6 +586,57 @@ endif()
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_audio_voices_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_audio_voices_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Sky profiles/layers/weather/distant cards (P4/P5): pure native model.
+add_executable(r2d_world_sky_test re2d/sky_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_sky.c")
+target_include_directories(r2d_world_sky_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_sky_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_sky_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_sky_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_sky_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Bloom-lite / reflection-lite / depth-aware heat distortion reference passes.
+add_executable(r2d_world_post_test re2d/render_post_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_post.c")
+target_include_directories(r2d_world_post_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_post_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_post_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_post_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_post_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Light shafts, ambient/AO field, surface detail, decals 2.0, batching, residency.
+add_executable(r2d_world_render_p4_test re2d/render_p4_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_render_features.c")
+target_include_directories(r2d_world_render_p4_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_render_p4_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_render_p4_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_render_p4_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_render_p4_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Native render regression: 64x64 reference frame hash + 8x8 tolerance grid.
+add_executable(r2d_world_render_regression_test re2d/render_regression_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_sky.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_post.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_render_features.c")
+target_include_directories(r2d_world_render_regression_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_render_regression_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_render_regression_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_render_regression_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_render_regression_test PRIVATE -fsanitize=address,undefined)
 endif()
 
 # EXR-декодер панорамного неба Re2D World (cmake/WorldEXR.cmake).

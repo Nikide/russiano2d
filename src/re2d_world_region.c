@@ -404,7 +404,10 @@ int r2d_world_region_update_active(R2DWorldRegionSet *set, int center_region,
         preload_radius = R2D_WORLD_REGION_MAX_RING;
 
     int active_count = 0, preload_count = 0;
+    // PVS edge count is a build property, not a per-frame active-ring metric.
+    const int pvs_edges = set->metrics.pvs_edges;
     memset(&set->metrics, 0, sizeof set->metrics);
+    set->metrics.pvs_edges = pvs_edges;
     for (int r = 0; r < set->region_count; r++) {
         const int ring = ring_distance(set, r, center_region);
         uint8_t next;
@@ -468,19 +471,401 @@ bool r2d_world_region_local(const R2DWorldRegionSet *set, int region,
     return true;
 }
 
-void r2d_world_region_lod(float distance, R2DWorldRegionLod *out)
+// ---------------------------------------------------------------------------
+// Vis clusters
+// ---------------------------------------------------------------------------
+static bool cluster_pvs_build(R2DWorldClusterSet *set,
+                              const R2DWorldRegionPortal *portals, int portal_count)
+{
+    const int n = set->cluster_count;
+    const int words = set->pvs_words;
+    if (n <= 0 || words <= 0 || !set->pvs || set->pvs_capacity < n * words ||
+        (portal_count > 0 && (!portals || !set->cluster_portal_offsets ||
+                              !set->cluster_portal_refs)))
+        return false;
+    memset(set->pvs, 0, (size_t)n * (size_t)words * sizeof(uint64_t));
+    int *queue = (int *)malloc((size_t)n * sizeof(int));
+    if (!queue) return false;
+    int edges = 0;
+    for (int start = 0; start < n; start++) {
+        int head = 0, tail = 0;
+        set->pvs[(size_t)start * words + (start >> 6)] |= 1ull << (start & 63);
+        queue[tail++] = start;
+        while (head < tail) {
+            const int current = queue[head++];
+            const int first = set->cluster_portal_offsets[current];
+            const int end = set->cluster_portal_offsets[current + 1];
+            for (int i = first; i < end; i++) {
+                const int pi = set->cluster_portal_refs[i];
+                if (pi < 0 || pi >= portal_count || !is_open(&portals[pi])) continue;
+                const int next = set->cell_cluster[portals[pi].cell_a] == current
+                               ? set->cell_cluster[portals[pi].cell_b]
+                               : set->cell_cluster[portals[pi].cell_a];
+                if (next < 0 || next >= n) continue;
+                const uint64_t bit = 1ull << (next & 63);
+                if (set->pvs[(size_t)start * words + (next >> 6)] & bit) continue;
+                set->pvs[(size_t)start * words + (next >> 6)] |= bit;
+                if (tail < n) queue[tail++] = next;
+                edges++;
+            }
+        }
+    }
+    free(queue);
+    set->pvs_edges = edges;
+    return true;
+}
+
+int r2d_world_region_clusters_build(const R2DWorldRegionSet *set, int cells_per_cluster,
+                                    const R2DWorldRegionPortal *portals, int portal_count,
+                                    R2DWorldClusterSet *out, char *error, size_t error_size)
+{
+    if (error && error_size) error[0] = 0;
+    if (!out) return -1;
+    if (!set || set->region_count <= 0 || !set->regions || !set->region_cells)
+        return fail(error, error_size, "regions: clusters need a built region set") ? -1 : -1;
+    if (portal_count < 0 || portal_count != set->portal_count ||
+        (portal_count > 0 && !portals))
+        return fail(error, error_size, "regions: cluster portal count mismatch") ? -1 : -1;
+    if (cells_per_cluster < 1) cells_per_cluster = 1;
+    if (cells_per_cluster > R2D_WORLD_REGION_MAX_CLUSTER_CELLS)
+        cells_per_cluster = R2D_WORLD_REGION_MAX_CLUSTER_CELLS;
+
+    int cluster_count = 0;
+    for (int r = 0; r < set->region_count; r++) {
+        const int cells = set->regions[r].cell_count;
+        cluster_count += (cells + cells_per_cluster - 1) / cells_per_cluster;
+    }
+    if (cluster_count < 1) cluster_count = 1;
+    const int pvs_words = R2D_WORLD_REGION_PVS_WORDS(cluster_count);
+    out->cluster_count = cluster_count;
+    out->pvs_words = pvs_words;
+    out->cells_per_cluster = cells_per_cluster;
+
+    const bool fits =
+        out->clusters && out->cluster_capacity >= cluster_count &&
+        out->cell_cluster && out->cell_cluster_capacity >= set->cell_count &&
+        out->cluster_cells && out->cluster_cells_capacity >= set->cell_count &&
+        out->cluster_portal_offsets &&
+        out->cluster_portal_offsets_capacity >= cluster_count + 1 &&
+        (portal_count == 0 ||
+         (out->cluster_portal_refs &&
+          out->cluster_portal_refs_capacity >= portal_count * 2)) &&
+        out->pvs && out->pvs_capacity >= cluster_count * pvs_words;
+    if (!fits) return cluster_count;
+
+    // Cluster headers, cell -> cluster mapping and cluster cell CSR in one pass.
+    int cell_pos = 0, cluster_index = -1;
+    for (int r = 0; r < set->region_count; r++) {
+        const R2DWorldRegion *region = &set->regions[r];
+        for (int k = 0; k < region->cell_count; k++) {
+            if (k % cells_per_cluster == 0) {
+                cluster_index++;
+                out->clusters[cluster_index] = (R2DWorldCluster){r, cell_pos, 0};
+            }
+            const int cell = set->region_cells[region->first_cell + k];
+            out->cell_cluster[cell] = cluster_index;
+            out->cluster_cells[cell_pos++] = cell;
+            out->clusters[cluster_index].cell_count++;
+        }
+    }
+
+    // Cluster portal incidence (one entry per touched cluster).
+    int *counts = (int *)calloc((size_t)cluster_count, sizeof(int));
+    if (!counts) return fail(error, error_size, "regions: out of memory") ? -1 : -1;
+    PortalIncidence *incidence = (PortalIncidence *)malloc(
+        (size_t)(portal_count > 0 ? portal_count * 2 : 1) * sizeof(PortalIncidence));
+    if (!incidence) { free(counts); return fail(error, error_size, "regions: out of memory") ? -1 : -1; }
+    int incidence_count = 0;
+    for (int p = 0; p < portal_count; p++) {
+        const int ca = out->cell_cluster[portals[p].cell_a];
+        const int cb = out->cell_cluster[portals[p].cell_b];
+        if (ca == cb) continue;
+        incidence[incidence_count++] = (PortalIncidence){ca, p};
+        incidence[incidence_count++] = (PortalIncidence){cb, p};
+    }
+    qsort(incidence, (size_t)incidence_count, sizeof(PortalIncidence), compare_incidence);
+    for (int i = 0; i < incidence_count; i++) counts[incidence[i].region]++;
+    int offset = 0;
+    for (int c = 0; c < cluster_count; c++) {
+        out->cluster_portal_offsets[c] = offset;
+        offset += counts[c];
+    }
+    out->cluster_portal_offsets[cluster_count] = offset;
+    {
+        int *fill = (int *)calloc((size_t)cluster_count, sizeof(int));
+        if (!fill) { free(counts); free(incidence); return fail(error, error_size, "regions: out of memory") ? -1 : -1; }
+        for (int i = 0; i < incidence_count; i++)
+            out->cluster_portal_refs[out->cluster_portal_offsets[incidence[i].region] +
+                                     fill[incidence[i].region]++] = incidence[i].portal;
+        free(fill);
+    }
+    free(counts);
+    free(incidence);
+    if (!cluster_pvs_build(out, portals, portal_count))
+        return fail(error, error_size, "regions: cluster PVS build failed") ? -1 : -1;
+    return cluster_count;
+}
+
+bool r2d_world_region_clusters_rebuild_pvs(R2DWorldClusterSet *set,
+                                           const R2DWorldRegionPortal *portals, int portal_count)
+{
+    if (!set || portal_count < 0 || (portal_count > 0 && !portals)) return false;
+    return cluster_pvs_build(set, portals, portal_count);
+}
+
+bool r2d_world_region_cluster_visible(const R2DWorldClusterSet *set,
+                                      int from_cluster, int to_cluster)
+{
+    if (!set || !set->pvs || set->cluster_count <= 0 || set->pvs_words <= 0) return false;
+    if (from_cluster < 0 || from_cluster >= set->cluster_count ||
+        to_cluster < 0 || to_cluster >= set->cluster_count)
+        return false;
+    return (set->pvs[(size_t)from_cluster * set->pvs_words + (to_cluster >> 6)] &
+            (1ull << (to_cluster & 63))) != 0;
+}
+
+int r2d_world_region_cluster_at(const R2DWorldClusterSet *set, int cell)
+{
+    if (!set || !set->cell_cluster || cell < 0 || cell >= set->cell_cluster_capacity) return -1;
+    const int cluster = set->cell_cluster[cell];
+    if (cluster < 0 || cluster >= set->cluster_count) return -1;
+    return cluster;
+}
+
+void r2d_world_region_clusters_free(R2DWorldClusterSet *set)
+{
+    if (!set) return;
+    free(set->clusters);
+    free(set->cell_cluster);
+    free(set->cluster_cells);
+    free(set->cluster_portal_offsets);
+    free(set->cluster_portal_refs);
+    free(set->pvs);
+    memset(set, 0, sizeof *set);
+}
+
+// ---------------------------------------------------------------------------
+// Occluder culling
+// ---------------------------------------------------------------------------
+static float orient(float ax, float ay, float bx, float by, float cx, float cy)
+{
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+}
+
+static bool segments_cross(float ax, float ay, float bx, float by,
+                           float cx, float cy, float dx, float dy)
+{
+    const float o1 = orient(ax, ay, bx, by, cx, cy);
+    const float o2 = orient(ax, ay, bx, by, dx, dy);
+    const float o3 = orient(cx, cy, dx, dy, ax, ay);
+    const float o4 = orient(cx, cy, dx, dy, bx, by);
+    return ((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) &&
+           ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0));
+}
+
+static bool point_hidden(float camera_x, float camera_y, float px, float py,
+                         const R2DWorldOccluder *occluders, int count)
+{
+    for (int i = 0; i < count; i++) {
+        const R2DWorldOccluder *o = &occluders[i];
+        if (segments_cross(camera_x, camera_y, px, py,
+                           o->x1, o->y1, o->x2, o->y2))
+            return true;
+    }
+    return false;
+}
+
+int r2d_world_region_visible_set(const R2DWorldRegionSet *set, int from_region,
+                                 const R2DWorldOccluder *occluders, int occluder_count,
+                                 float camera_x, float camera_y,
+                                 uint8_t *visible, int capacity)
+{
+    if (!set || !set->regions || set->region_count <= 0 || !visible ||
+        capacity < set->region_count || from_region < 0 ||
+        from_region >= set->region_count || occluder_count < 0 ||
+        (occluder_count > 0 && !occluders) ||
+        !isfinite(camera_x) || !isfinite(camera_y))
+        return -1;
+    int count = 0;
+    for (int r = 0; r < set->region_count; r++) {
+        visible[r] = 0;
+        if (!r2d_world_region_visible(set, from_region, r)) continue;
+        if (r == from_region || occluder_count == 0) {
+            visible[r] = 1;
+            count++;
+            continue;
+        }
+        const R2DWorldRegion *region = &set->regions[r];
+        const float centre_x = region->x + region->w * 0.5f;
+        const float centre_y = region->y + region->h * 0.5f;
+        const float points[5][2] = {
+            {region->x, region->y},
+            {region->x + region->w, region->y},
+            {region->x, region->y + region->h},
+            {region->x + region->w, region->y + region->h},
+            {centre_x, centre_y},
+        };
+        // Visible if at least one representative point is not fully occluded.
+        for (int p = 0; p < 5; p++) {
+            if (!point_hidden(camera_x, camera_y, points[p][0], points[p][1],
+                              occluders, occluder_count)) {
+                visible[r] = 1;
+                count++;
+                break;
+            }
+        }
+    }
+    return count;
+}
+
+bool r2d_world_region_render_origin(const R2DWorldRegionSet *set, int region,
+                                    float *origin_x, float *origin_y)
+{
+    if (!set || !set->regions || region < 0 || region >= set->region_count ||
+        !origin_x || !origin_y)
+        return false;
+    const R2DWorldRegion *r = &set->regions[region];
+    *origin_x = r->x + r->w * 0.5f;
+    *origin_y = r->y + r->h * 0.5f;
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Configurable LOD policy
+// ---------------------------------------------------------------------------
+void r2d_world_region_lod_defaults(R2DWorldRegionLodConfig *config)
+{
+    if (!config) return;
+    *config = (R2DWorldRegionLodConfig){
+        .near_distance = 600.0f,
+        .mid_distance = 1500.0f,
+        .far_distance = 3000.0f,
+        .impostor_distance = 6000.0f,
+        .hidden_distance = 6000.0f,
+        .near_directions = 16, .mid_directions = 8,
+        .far_directions = 4, .impostor_directions = 1,
+        .near_fps = 60, .mid_fps = 15, .far_fps = 8, .impostor_fps = 5,
+        .near_particles = 100, .mid_particles = 100,
+        .far_particles = 50, .impostor_particles = 20,
+        .near_decals = 100, .mid_decals = 100,
+        .far_decals = 50, .impostor_decals = 20,
+        .near_lights = 16, .mid_lights = 16,
+        .far_lights = 0, .impostor_lights = 0,
+        .max_shadow_lights = 4,
+    };
+}
+
+bool r2d_world_region_lod_valid(const R2DWorldRegionLodConfig *config)
+{
+    if (!config) return false;
+    const float d[5] = {config->near_distance, config->mid_distance,
+                        config->far_distance, config->impostor_distance,
+                        config->hidden_distance};
+    for (int i = 0; i < 5; i++)
+        if (!isfinite(d[i]) || d[i] < 0.0f) return false;
+    if (!(d[0] <= d[1] && d[1] <= d[2] && d[2] <= d[3] && d[3] <= d[4]))
+        return false;
+    const int nonnegative[20] = {
+        config->near_directions, config->mid_directions,
+        config->far_directions, config->impostor_directions,
+        config->near_fps, config->mid_fps, config->far_fps, config->impostor_fps,
+        config->near_particles, config->mid_particles,
+        config->far_particles, config->impostor_particles,
+        config->near_decals, config->mid_decals,
+        config->far_decals, config->impostor_decals,
+        config->near_lights, config->mid_lights,
+        config->far_lights, config->impostor_lights,
+    };
+    for (int i = 0; i < 20; i++) if (nonnegative[i] < 0) return false;
+    if (config->max_shadow_lights < 0) return false;
+    return true;
+}
+
+void r2d_world_region_lod_eval(float distance, const R2DWorldRegionLodConfig *config,
+                               R2DWorldRegionLod *out)
 {
     if (!out) return;
+    R2DWorldRegionLodConfig fallback;
+    if (!config) { r2d_world_region_lod_defaults(&fallback); config = &fallback; }
     if (!isfinite(distance) || distance < 0.0f) distance = 0.0f;
-    if (distance <= 600.0f) {
-        *out = (R2DWorldRegionLod){16, 60, 1, 100, false, false};
-    } else if (distance <= 1500.0f) {
-        *out = (R2DWorldRegionLod){8, 15, 1, 100, false, false};
-    } else if (distance <= 3000.0f) {
-        *out = (R2DWorldRegionLod){4, 8, 0, 50, true, false};
-    } else if (distance <= 6000.0f) {
-        *out = (R2DWorldRegionLod){1, 5, 0, 20, true, false};
+    R2DWorldRegionLod lod = {0};
+    lod.max_shadow_lights = config->max_shadow_lights;
+    if (distance <= config->near_distance) {
+        lod.sprite_directions = config->near_directions;
+        lod.animation_fps = config->near_fps;
+        lod.light_updates = config->near_lights > 0 ? 1 : 0;
+        lod.particle_percent = config->near_particles;
+        lod.decal_percent = config->near_decals;
+        lod.max_lights = config->near_lights;
+    } else if (distance <= config->mid_distance) {
+        lod.sprite_directions = config->mid_directions;
+        lod.animation_fps = config->mid_fps;
+        lod.light_updates = config->mid_lights > 0 ? 1 : 0;
+        lod.particle_percent = config->mid_particles;
+        lod.decal_percent = config->mid_decals;
+        lod.max_lights = config->mid_lights;
+    } else if (distance <= config->far_distance) {
+        lod.sprite_directions = config->far_directions;
+        lod.animation_fps = config->far_fps;
+        lod.light_updates = config->far_lights > 0 ? 1 : 0;
+        lod.particle_percent = config->far_particles;
+        lod.decal_percent = config->far_decals;
+        lod.max_lights = config->far_lights;
+        lod.impostor = true;
+    } else if (distance <= config->impostor_distance) {
+        lod.sprite_directions = config->impostor_directions;
+        lod.animation_fps = config->impostor_fps;
+        lod.light_updates = config->impostor_lights > 0 ? 1 : 0;
+        lod.particle_percent = config->impostor_particles;
+        lod.decal_percent = config->impostor_decals;
+        lod.max_lights = config->impostor_lights;
+        lod.impostor = true;
+        lod.audio_culled = true;
     } else {
-        *out = (R2DWorldRegionLod){0, 0, 0, 0, true, true};
+        lod.sprite_directions = 0;
+        lod.animation_fps = 0;
+        lod.light_updates = 0;
+        lod.particle_percent = 0;
+        lod.decal_percent = 0;
+        lod.max_lights = 0;
+        lod.max_shadow_lights = 0;
+        lod.impostor = true;
+        lod.hidden = true;
+        lod.audio_culled = true;
     }
+    *out = lod;
+}
+
+void r2d_world_region_lod(float distance, R2DWorldRegionLod *out)
+{
+    R2DWorldRegionLodConfig config;
+    r2d_world_region_lod_defaults(&config);
+    r2d_world_region_lod_eval(distance, &config, out);
+}
+
+bool r2d_world_region_occluded(const R2DWorldRegionSet *set, int region,
+                               const R2DWorldOccluder *occluders, int occluder_count,
+                               float camera_x, float camera_y)
+{
+    if (!set || !set->regions || region < 0 || region >= set->region_count ||
+        occluder_count < 0 || (occluder_count > 0 && !occluders) ||
+        !isfinite(camera_x) || !isfinite(camera_y))
+        return false;
+    if (occluder_count == 0) return false;
+    const R2DWorldRegion *r = &set->regions[region];
+    if (camera_x >= r->x && camera_x <= r->x + r->w &&
+        camera_y >= r->y && camera_y <= r->y + r->h)
+        return false;
+    const float points[5][2] = {
+        {r->x, r->y},
+        {r->x + r->w, r->y},
+        {r->x, r->y + r->h},
+        {r->x + r->w, r->y + r->h},
+        {r->x + r->w * 0.5f, r->y + r->h * 0.5f},
+    };
+    for (int p = 0; p < 5; p++)
+        if (!point_hidden(camera_x, camera_y, points[p][0], points[p][1],
+                          occluders, occluder_count))
+            return false;
+    return true;
 }

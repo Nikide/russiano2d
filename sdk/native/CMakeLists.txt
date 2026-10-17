@@ -81,3 +81,34 @@ if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
     target_link_options(r2d_sdk_world_compile_test PRIVATE -fsanitize=address,undefined)
 endif()
 add_test(NAME r2d_sdk_world_compile_test COMMAND r2d_sdk_world_compile_test)
+
+# Brush entity metadata -> existing native mover/trigger smoke test (task-8).
+add_executable(r2d_sdk_brush_entity_smoke_test
+    "${CMAKE_SOURCE_DIR}/tests/re2d/brush_entity_smoke_test.c"
+    "${CMAKE_SOURCE_DIR}/sdk/native/sdk_brush.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_polygon.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_mover.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_trigger.c")
+target_include_directories(r2d_sdk_brush_entity_smoke_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/sdk/native")
+target_link_libraries(r2d_sdk_brush_entity_smoke_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_sdk_brush_entity_smoke_test PRIVATE m)
+endif()
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_sdk_brush_entity_smoke_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_sdk_brush_entity_smoke_test PRIVATE -fsanitize=address,undefined)
+endif()
+add_test(NAME r2d_sdk_brush_entity_smoke_test COMMAND r2d_sdk_brush_entity_smoke_test)
+
+# Advanced brush fixture: polygon + holes + CSG + entity mapping through the SDK.
+add_executable(r2d_sdk_brush_advanced_fixture_test
+    "${CMAKE_SOURCE_DIR}/tests/re2d/brush_advanced_fixture_test.c")
+target_compile_definitions(r2d_sdk_brush_advanced_fixture_test PRIVATE
+    R2D_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(r2d_sdk_brush_advanced_fixture_test PRIVATE r2d_sdk_core r2d_unity)
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_sdk_brush_advanced_fixture_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_sdk_brush_advanced_fixture_test PRIVATE -fsanitize=address,undefined)
+endif()
+add_test(NAME r2d_sdk_brush_advanced_fixture_test COMMAND r2d_sdk_brush_advanced_fixture_test)

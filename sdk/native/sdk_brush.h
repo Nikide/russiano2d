@@ -7,9 +7,14 @@
 // Re2D runtime already understands. It never emits a polygon mesh and does not
 // add a second geometry format to the runtime.
 //
-// A brush is a rectilinear footprint (rectangle or axis-aligned polygon) with a
-// floor and ceiling height. Tool materials change only the policy and compiler
-// role of the brush:
+// A brush is a convex footprint (rectangle or convex polygon), optionally with
+// axis-aligned holes, plus a floor and ceiling height. `subtract` brushes are
+// negative CSG volumes: their XY footprint (minus holes is not allowed on
+// subtract) removes the brush's Z interval from every positive solid it
+// overlaps. Compile is deterministic: unique coordinate refinement, row/column
+// merge, wall merge, stable portal ordering.
+//
+// Tool materials change only the policy and compiler role of the brush:
 //
 //   solid/none   default solid prism, visible collision surface
 //   nodraw       solid; render=off, collision/ray on
@@ -36,6 +41,7 @@
 #include <stdint.h>
 
 #define SDK_BRUSH_MAX_POINTS 64
+#define SDK_BRUSH_MAX_HOLES 8
 #define SDK_BRUSH_MAX_ID 64
 #define SDK_BRUSH_MAX_COLOR 40
 
@@ -57,13 +63,21 @@ typedef struct {
     float x, y;
 } SdkBrushPoint;
 
+// Rectilinear (axis-aligned) hole inside a positive solid brush footprint.
+typedef struct {
+    float x, y, w, h;
+} SdkBrushHole;
+
 typedef struct {
     char id[SDK_BRUSH_MAX_ID];
     SdkBrushTool tool;
     bool solid;                       // participates in solid subtraction
     bool carve;                       // same as solid today; kept explicit
+    bool subtract;                    // CSG: this solid removes volume from solids
     SdkBrushPoint ring[SDK_BRUSH_MAX_POINTS];
     int ring_count;
+    int hole_count;                   // rectilinear holes cut out of this solid
+    SdkBrushHole holes[SDK_BRUSH_MAX_HOLES];
     float bottom, top;
     char side_color[SDK_BRUSH_MAX_COLOR];
     char floor_color[SDK_BRUSH_MAX_COLOR];
@@ -133,6 +147,8 @@ typedef struct {
     int areaportal_brushes, areaportal_edges;
     int hint_brushes, hint_edges;
     int occluder_brushes;
+    int polygon_brushes, subtract_brushes, hole_brushes;
+    int shadow_walls, acoustic_walls, occluder_walls;
     int entities, point_entities, brush_entities;
 } SdkBrushStats;
 
@@ -152,3 +168,42 @@ const char *sdk_brush_tool_name(SdkBrushTool tool);
 
 // Policy bits for a tool material. `flags == 0` = legacy all-on default.
 uint16_t sdk_brush_tool_flags(SdkBrushTool tool);
+
+// ---- Brush entities -------------------------------------------------------
+// Authoring-side brush entity reference (entity -> brush volume). Compiler maps
+// it onto the EXISTING runtime contracts instead of inventing geometry:
+//   door/lift/crusher/moving_wall -> world.mover (moving_wall = platform)
+//   trigger/trigger_volume        -> world.trigger (enter)
+//   fog_volume                    -> world.fogZone (needs span resolution)
+//   water_volume                  -> liquid/volume hook (runtime API missing)
+//   areaportal                    -> generated portal areaPortal metadata
+// `hook` is non-empty when the runtime still needs wiring; the map itself is
+// metadata only and does not mutate runtime state.
+typedef struct {
+    char id[SDK_BRUSH_MAX_ID];
+    char kind[32];
+    char brush[SDK_BRUSH_MAX_ID];
+    char target[SDK_BRUSH_MAX_ID];
+} SdkBrushEntityRef;
+
+typedef struct {
+    char id[SDK_BRUSH_MAX_ID];
+    char kind[32];
+    char brush[SDK_BRUSH_MAX_ID];
+    char runtime[24];               // mover|trigger|fog|water|portal
+    char api[24];                   // world.mover|world.trigger|...
+    char target[SDK_BRUSH_MAX_ID];  // authored semantic target (portal/span id)
+    char hook[80];                  // required runtime hook, empty when direct
+    int mover_type;                 // -1 n/a, else R2DWorldMoverType value
+    int trigger_type;               // -1 n/a, else enter=0
+    float x, y, w, h, bottom, top;  // resolved brush volume (outer bbox)
+    uint16_t flags;                 // brush wall policy bits
+} SdkBrushEntityMap;
+
+// Resolves brush entity references against authored brushes. Returns the total
+// required map count (may exceed capacity), or -1 on invalid input/duplicate
+// ids/references/unknown brush-entity kind. out==NULL is a count-only query.
+int sdk_brush_map_entities(const SdkBrushSpec *brushes, int brush_count,
+                           const SdkBrushEntityRef *entities, int entity_count,
+                           SdkBrushEntityMap *out, int capacity,
+                           char *error, size_t error_size);

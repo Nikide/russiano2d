@@ -89,6 +89,98 @@ export const DEFAULT_RML = `<rml><head><title>Re2D dialog</title></head><body>
 </body></rml>`;
 
 const ROLE_NAME = /^[a-z][a-z0-9-]*$/;
+export const DEFAULT_CHOICE_SLOTS = 6;
+
+const TAG_RE = /<([A-Za-z][A-Za-z0-9-]*)\b([^>]*?)(\/?)>/g;
+
+function roleOf(attrs) {
+    const match = new RegExp(DIALOG_ROLE_ATTR + '\\s*=\\s*"([^"]*)"').exec(attrs);
+    return match ? match[1] : null;
+}
+
+function countRole(text, role) {
+    let count = 0;
+    TAG_RE.lastIndex = 0;
+    let match;
+    while ((match = TAG_RE.exec(text)) !== null) {
+        if (roleOf(match[2]) === role) count++;
+    }
+    return count;
+}
+
+/** First element with data-dialog-role=role: { tag, start, openEnd, selfClosing }. */
+function findRoleElement(source, role, from) {
+    TAG_RE.lastIndex = from === undefined ? 0 : from;
+    let match;
+    while ((match = TAG_RE.exec(source)) !== null) {
+        if (roleOf(match[2]) !== role) continue;
+        return { tag: match[1], start: match.index, openEnd: TAG_RE.lastIndex, selfClosing: match[3] === '/' };
+    }
+    return null;
+}
+
+/** Matching closing tag for an open element (same tag name, nesting-aware). */
+function findClose(source, tag, openEnd) {
+    const re = new RegExp('<(\\/?)' + tag + '\\b[^>]*>', 'gi');
+    re.lastIndex = openEnd;
+    let depth = 1;
+    let match;
+    while ((match = re.exec(source)) !== null) {
+        const closing = match[1] === '/';
+        const selfClosing = /\/>\s*$/.test(match[0]);
+        if (closing) depth--;
+        else if (!selfClosing) depth++;
+        if (depth === 0) return { closeStart: match.index, end: re.lastIndex };
+    }
+    return null;
+}
+
+function outerOfRole(source, role) {
+    const open = findRoleElement(source, role);
+    if (!open) return null;
+    if (open.selfClosing) return source.slice(open.start, open.openEnd);
+    const close = findClose(source, open.tag, open.openEnd);
+    return close ? source.slice(open.start, close.end) : null;
+}
+
+/**
+ * Dynamic choice slots. Rebuilds the content of the element carrying
+ * data-dialog-role="choices" with `slots` copies of a per-choice template:
+ *   { slots: 10, template: '<button data-dialog-role="choice"><span
+ *     data-dialog-role="choice-text"/></button>' }
+ * `{index}` (0-based) and `{n}` (1-based) are substituted; authored ids are
+ * stripped from generated copies so prepareMarkup can assign unique ids.
+ * Without a template, the first authored choice element is cloned. Existing
+ * choices are preserved when `slots` is not larger than their count.
+ */
+export function expandChoiceSlots(markup, options) {
+    const source = String(markup === undefined || markup === null ? '' : markup);
+    const opts = options || {};
+    if (opts.slots === undefined || opts.slots === null || opts.slots === '') return source;
+    const slots = Math.trunc(Number(opts.slots));
+    if (!(slots >= 1 && slots <= 64)) return source;
+    const template = opts.template === undefined || opts.template === null ? null : String(opts.template);
+    const container = findRoleElement(source, 'choices');
+    if (!container) return source;
+    if (container.selfClosing) return source;
+    const close = findClose(source, container.tag, container.openEnd);
+    if (!close) return source;
+    const content = source.slice(container.openEnd, close.closeStart);
+    const existing = countRole(content, 'choice');
+    if (!template && slots <= existing) return source;
+
+    let unit = template || outerOfRole(content, 'choice') || '<button data-dialog-role="choice"></button>';
+    if (countRole(unit, 'choice') === 0) unit = unit.replace(/>/, ' ' + DIALOG_ROLE_ATTR + '="choice">');
+    const copies = [];
+    for (let i = 0; i < slots; i++) {
+        const item = unit
+            .replace(/\{index\}/g, String(i))
+            .replace(/\{n\}/g, String(i + 1))
+            .replace(/\s+id\s*=\s*("[^"]*"|'[^']*')/gi, '');
+        copies.push(item);
+    }
+    return source.slice(0, container.openEnd) + copies.join('\n') + source.slice(close.closeStart);
+}
 
 /** All roles present in markup, in document order (duplicates preserved). */
 export function collectRoles(markup) {
@@ -201,11 +293,20 @@ export class DialogThemes {
         if (!id) return false;
         const source = typeof spec === 'string' ? { rml: spec } : (spec || {});
         const rml = source.rml !== undefined ? source.rml : source.template;
+        const slots = source.choiceSlots;
+        if (slots !== undefined && slots !== null) {
+            const n = Math.trunc(Number(slots));
+            if (!(n >= 1 && n <= 64) || Number(slots) !== n) return false;
+        }
+        if (source.choiceTemplate !== undefined && source.choiceTemplate !== null &&
+            typeof source.choiceTemplate !== 'string') return false;
         const entry = {
             name: id,
             rml: rml === undefined ? null : rml,
             rcss: source.rcss === undefined ? null : source.rcss,
             font: source.font,
+            choiceSlots: slots === undefined || slots === null ? null : Math.trunc(Number(slots)),
+            choiceTemplate: source.choiceTemplate === undefined ? null : source.choiceTemplate,
         };
         this._themes.set(id, entry);
         return true;
@@ -226,6 +327,8 @@ export class DialogThemes {
             rml: entry.rml !== null ? entry.rml : base.rml,
             rcss: entry.rcss !== null ? entry.rcss : base.rcss,
             font: entry.font !== undefined ? entry.font : base.font,
+            choiceSlots: entry.choiceSlots !== null ? entry.choiceSlots : base.choiceSlots,
+            choiceTemplate: entry.choiceTemplate !== null ? entry.choiceTemplate : base.choiceTemplate,
         };
     }
 

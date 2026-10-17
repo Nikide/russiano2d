@@ -139,6 +139,10 @@ static JSValue js_unproject(JSContext *ctx, JSValueConst self, int argc, JSValue
 }
 
 static void set_num(JSContext *ctx, JSValue obj, const char *key, double v);
+// R-04 region/streaming JS bindings (definitions live with the world loaders).
+static JSValue world_region_config(JSContext *,JSValueConst,int,JSValueConst *);
+static JSValue world_impostors(JSContext *,JSValueConst,int,JSValueConst *);
+static JSValue world_region_local(JSContext *,JSValueConst,int,JSValueConst *);
 
 // engine.re2d.sprite(id) → { texture, u0, v0, u1, v1, w, h } | null.
 // Откуда брать текстуру и её прямоугольник для меша: так граням и стенам
@@ -474,6 +478,13 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,v,"vfxCards",c->vfx_cards);set_num(ctx,v,"vfxTrails",c->vfx_trails);
     set_num(ctx,v,"vfxDistortion",c->vfx_distortion);set_num(ctx,v,"vfxCardDraws",c->vfx_card_draws);
     set_num(ctx,v,"vfxTrailDraws",c->vfx_trail_draws);set_num(ctx,v,"vfxDraws",c->vfx_draws);
+    // P4/P5 renderer counters (sky cards, shafts, batching, residency model).
+    set_num(ctx,v,"shafts",c->shafts);set_num(ctx,v,"weatherCards",c->weather_cards);
+    set_num(ctx,v,"distantCards",c->distant_cards);set_num(ctx,v,"distantImpostors",c->distant_impostors);set_num(ctx,v,"ambientSamples",c->ambient_samples);
+    set_num(ctx,v,"detailSamples",c->detail_samples);set_num(ctx,v,"decals2",c->decal2_active);
+    set_num(ctx,v,"batchDraws",c->batch_draws);set_num(ctx,v,"batchBatches",c->batch_batches);
+    set_num(ctx,v,"batchSaved",c->batch_saved);set_num(ctx,v,"residentTextures",c->resident_textures);
+    set_num(ctx,v,"uploadBytes",(double)c->upload_bytes);
     set_num(ctx,v,"renderTime",w->render_time);
     JS_SetPropertyStr(ctx,o,"visual",v);
     JS_SetPropertyStr(ctx,o,"gpuWait",JS_NewBool(ctx,w->gpu_wait));
@@ -515,12 +526,52 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"regionUnloaded",regions?regions->metrics.unloaded_count:0);
     set_num(ctx,o,"regionCulled",regions?regions->metrics.culled_regions:0);
     set_num(ctx,o,"regionPvsEdges",regions?regions->metrics.pvs_edges:0);
+    set_num(ctx,o,"regionSizeHint",w->region_size_hint);
+    set_num(ctx,o,"regionClusterEdges",w->cluster_ready?w->clusters.pvs_edges:0);
+    set_num(ctx,o,"regionOccluderCulled",w->region_occluder_culled);
+    set_num(ctx,o,"regionClusterCulled",w->region_cells_culled);
+    set_num(ctx,o,"regionCellsAllowed",w->region_cells_allowed);
+    set_num(ctx,o,"regionCellsCulled",w->region_cells_culled);
+    set_num(ctx,o,"streamUploads",w->stream_stats.uploads);
+    set_num(ctx,o,"streamTotalUploads",(double)w->stream_total_uploads);
+    set_num(ctx,o,"streamTotalUploadBytes",(double)w->stream_total_upload_bytes);
+    set_num(ctx,o,"streamTotalEvictions",(double)w->stream_total_evictions);
+    set_num(ctx,o,"streamUploadBytes",(double)w->stream_stats.upload_bytes);
+    set_num(ctx,o,"streamEvictions",w->stream_stats.evicted);
+    set_num(ctx,o,"streamResidentBytes",(double)w->stream_stats.resident_bytes);
+    set_num(ctx,o,"streamResident",w->stream_stats.resident);
+    set_num(ctx,o,"streamPreload",w->stream_stats.preload);
+    set_num(ctx,o,"texturesResident",w->stream_stats.textures_resident);
+    set_num(ctx,o,"atlasesResident",w->stream_stats.atlases_resident);
+    set_num(ctx,o,"impostorCount",w->impostor_ready?w->impostors.count:0);
+    set_num(ctx,o,"visibleImpostors",w->visible_impostor_count);
+    set_num(ctx,o,"lodHiddenActors",w->lod_hidden_actors);
+    set_num(ctx,o,"lodThrottledActors",w->lod_throttled_actors);
+    set_num(ctx,o,"lodHiddenAtlas",w->lod_hidden_atlas);
+    set_num(ctx,o,"lodCulledLights",w->lod_culled_lights);
+    set_num(ctx,o,"lodCulledParticles",w->lod_culled_particles);
+    set_num(ctx,o,"lodCulledDecals",w->lod_culled_decals);
+    set_num(ctx,o,"audioRegionCulled",w->audio_region_culled);
+    set_num(ctx,o,"renderOriginX",w->render_origin_x);
+    set_num(ctx,o,"renderOriginY",w->render_origin_y);
+    set_num(ctx,o,"renderOriginRegion",w->render_origin_region);
     if(regions){
         JSValue ro=JS_NewObject(ctx);
         set_num(ctx,ro,"count",regions->region_count);set_num(ctx,ro,"columns",regions->columns);set_num(ctx,ro,"rows",regions->rows);
         set_num(ctx,ro,"size",regions->region_size);set_num(ctx,ro,"current",w->region_current);
         set_num(ctx,ro,"active",w->region_active_count);set_num(ctx,ro,"preload",w->region_preload_count);
         set_num(ctx,ro,"resident",regions->metrics.resident_count);set_num(ctx,ro,"culled",regions->metrics.culled_regions);
+        set_num(ctx,ro,"clusterEdges",w->cluster_ready?w->clusters.pvs_edges:0);
+        set_num(ctx,ro,"occluderCulled",w->region_occluder_culled);
+        set_num(ctx,ro,"cellsAllowed",w->region_cells_allowed);
+        set_num(ctx,ro,"cellsCulled",w->region_cells_culled);
+        set_num(ctx,ro,"impostors",w->visible_impostor_count);
+        set_num(ctx,ro,"streamUploads",w->stream_stats.uploads);
+        set_num(ctx,ro,"streamEvictions",w->stream_stats.evicted);
+        JSValue origin=JS_NewObject(ctx);
+        set_num(ctx,origin,"x",w->render_origin_x);set_num(ctx,origin,"y",w->render_origin_y);
+        set_num(ctx,origin,"region",w->render_origin_region);
+        JS_SetPropertyStr(ctx,ro,"renderOrigin",origin);
         JSValue list=JS_NewArray(ctx);
         for(int i=0;i<w->region_active_count;i++)JS_SetPropertyUint32(ctx,list,(uint32_t)i,JS_NewInt32(ctx,w->region_active[i]));
         JS_SetPropertyStr(ctx,ro,"activeList",list);
@@ -2001,6 +2052,9 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"gpuWait",JS_NewCFunction(ctx,world_gpu_wait,"gpuWait",1));
     JS_SetPropertyStr(ctx,handle,"quality",JS_NewCFunction(ctx,world_quality,"quality",2));
     JS_SetPropertyStr(ctx,handle,"visibility",JS_NewCFunction(ctx,world_debug_visibility,"visibility",0));
+    JS_SetPropertyStr(ctx,handle,"regionConfig",JS_NewCFunction(ctx,world_region_config,"regionConfig",5));
+    JS_SetPropertyStr(ctx,handle,"impostors",JS_NewCFunction(ctx,world_impostors,"impostors",0));
+    JS_SetPropertyStr(ctx,handle,"regionLocal",JS_NewCFunction(ctx,world_region_local,"regionLocal",2));
     JS_SetPropertyStr(ctx,handle,"material",JS_NewCFunction(ctx,world_material_set,"material",7));
     JS_SetPropertyStr(ctx,handle,"watch",JS_NewCFunction(ctx,world_watch,"watch",1));
     JS_SetPropertyStr(ctx,handle,"reloadJSON",JS_NewCFunction(ctx,world_reload,"reloadJSON",1));
@@ -2017,6 +2071,7 @@ static JSValue world_reload_apply(JSContext *ctx,WorldHandle *w,const char *text
 {
     R2DRe2dWorld next={0};char error[256];bool ok=r2d_world_load_json(&next,text,error,sizeof error);
     if(!ok)return JS_ThrowTypeError(ctx,"%s",error);
+    const float region_hint=r2d_world_region_size_from_json(text);
     R2DRe2dWorld old=w->world;
     R2DWorldLight authored[R2D_WORLD_MAX_LIGHTS];memcpy(authored,next.lights,sizeof authored);
     bool retain=!next.authored_lighting;
@@ -2048,7 +2103,8 @@ static JSValue world_reload_apply(JSContext *ctx,WorldHandle *w,const char *text
     next.geometry_revision=old.geometry_revision+1;
     VfxBinding *vfx=vfx_binding(w);
     if(vfx)r2d_world_vfx_clear(&vfx->vfx);
-    r2d_world_gpu_free(w);r2d_world_visibility_free(&w->visibility);w->world=next;r2d_world_free(&old);
+    r2d_world_gpu_free(w);r2d_world_visibility_free(&w->visibility);r2d_world_regions_free(w);
+    w->world=next;w->region_size_hint=region_hint;r2d_world_free(&old);
     w->reload_count++;w->reload_error[0]=0;return JS_UNDEFINED;
 }
 static JSValue world_reload(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
@@ -2069,6 +2125,66 @@ static void world_watch_poll(JSContext *ctx,WorldHandle *w,float dt)
     JSValue result=world_reload_apply(ctx,w,text);SDL_free(text);
     if(JS_IsException(result)){JSValue error=JS_GetException(ctx);const char *message=JS_ToCString(ctx,error);SDL_strlcpy(w->reload_error,message?message:"invalid watched world",sizeof w->reload_error);if(message)JS_FreeCString(ctx,message);JS_FreeValue(ctx,error);}
 }
+static bool world_number_arg(JSContext *ctx,JSValueConst value,double *out)
+{
+    if(JS_ToFloat64(ctx,out,value)<0)return false;
+    return isfinite(*out);
+}
+
+static JSValue world_region_config(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<5)return JS_ThrowTypeError(ctx,"Re2D World: regionConfig(size,activeRing,preloadRing,uploadBytes,uploadItems)");
+    double size=0,bytes=0;int32_t active=0,preload=0,items=0;
+    if(!world_number_arg(ctx,argv[0],&size)||!world_number_arg(ctx,argv[3],&bytes)||
+       JS_ToInt32(ctx,&active,argv[1])<0||JS_ToInt32(ctx,&preload,argv[2])<0||
+       JS_ToInt32(ctx,&items,argv[4])<0)return JS_EXCEPTION;
+    if(bytes<0)return JS_ThrowRangeError(ctx,"Re2D World: upload budget must be >= 0");
+    if(!r2d_world_region_config(w,(float)size,active,preload,(uint64_t)bytes,items))
+        return JS_ThrowRangeError(ctx,"Re2D World: invalid region configuration");
+    return JS_UNDEFINED;
+}
+
+static JSValue world_impostors(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    int count=0;const R2DWorldImpostor *cards=r2d_world_visible_impostors(w,&count);
+    JSValue list=JS_NewArray(ctx);
+    if(!cards)return list;
+    for(int i=0;i<count;i++){
+        const R2DWorldImpostor *card=&cards[i];
+        JSValue item=JS_NewObject(ctx);
+        set_num(ctx,item,"region",card->region);
+        set_num(ctx,item,"x",card->cx);set_num(ctx,item,"y",card->cy);
+        set_num(ctx,item,"localX",card->local_x);set_num(ctx,item,"localY",card->local_y);
+        set_num(ctx,item,"width",card->width);set_num(ctx,item,"height",card->height);
+        set_num(ctx,item,"bottom",card->bottom);set_num(ctx,item,"top",card->top);
+        set_num(ctx,item,"color",card->color);set_num(ctx,item,"distance",card->distance);
+        set_num(ctx,item,"cells",card->cells);set_num(ctx,item,"spans",card->spans);
+        JS_SetPropertyUint32(ctx,list,(uint32_t)i,item);
+    }
+    return list;
+}
+
+static JSValue world_region_local(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    double x,y;if(argc<2||!world_number_arg(ctx,argv[0],&x)||!world_number_arg(ctx,argv[1],&y))
+        return JS_ThrowTypeError(ctx,"Re2D World: regionLocal(x,y)");
+    if(!r2d_world_regions_ensure(w))return JS_NULL;
+    const R2DWorldRegionSet *set=r2d_world_regions(w);
+    const int region=r2d_world_region_at(set,(float)x,(float)y);
+    if(region<0)return JS_NULL;
+    float lx=0,ly=0,ox=0,oy=0;
+    r2d_world_region_local(set,region,(float)x,(float)y,&lx,&ly);
+    r2d_world_region_render_origin(set,region,&ox,&oy);
+    JSValue out=JS_NewObject(ctx);
+    set_num(ctx,out,"region",region);set_num(ctx,out,"localX",lx);set_num(ctx,out,"localY",ly);
+    set_num(ctx,out,"originX",ox);set_num(ctx,out,"originY",oy);
+    return out;
+}
+
 static JSValue world_load(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)self;R2DScript *script=JS_GetContextOpaque(ctx);
@@ -2077,7 +2193,10 @@ static JSValue world_load(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     WorldHandle *w=calloc(1,sizeof *w);if(!w){JS_FreeCString(ctx,text);return JS_ThrowOutOfMemory(ctx);}
     w->renderer=script->renderer;w->runtime=JS_GetRuntime(ctx);w->texture=w->sprite=-1;
     r2d_re2d_view_set(&w->view,0,0,48,0,0,1.2f,320,180);char error[256];
-    bool ok=r2d_world_load_json(&w->world,text,error,sizeof error);JS_FreeCString(ctx,text);
+    bool ok=r2d_world_load_json(&w->world,text,error,sizeof error);
+    // Honor compiler --region-size metadata from the same JSON document.
+    if(ok)w->region_size_hint=r2d_world_region_size_from_json(text);
+    JS_FreeCString(ctx,text);
     if(!ok){world_dispose(w);free(w);return JS_ThrowTypeError(ctx,"%s",error);}
     if(!vfx_attach(w)){world_dispose(w);free(w);return JS_ThrowOutOfMemory(ctx);}
     return world_wrap(ctx,w);

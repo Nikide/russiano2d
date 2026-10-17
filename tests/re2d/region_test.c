@@ -2,6 +2,7 @@
 #include "unity.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 void setUp(void) {}
@@ -274,6 +275,137 @@ static void test_invalid_arguments(void)
     TEST_ASSERT_FALSE(r2d_world_region_rebuild_pvs(NULL, PORTAL_LINKS, 4));
 }
 
+
+static void test_clusters_partition_and_pvs(void)
+{
+    RegionBuffers b;
+    init_buffers(&b);
+    char error[128] = {0};
+    TEST_ASSERT_EQUAL_INT(4, build(&b, CELL_RECTS, CELLS, PORTAL_LINKS, PORTALS, 100.0f, error));
+
+    R2DWorldClusterSet sizing;
+    memset(&sizing, 0, sizeof sizing);
+    int required = r2d_world_region_clusters_build(&b.set, 1, PORTAL_LINKS, PORTALS,
+                                                   &sizing, error, sizeof error);
+    TEST_ASSERT_EQUAL_INT(4, required);
+    TEST_ASSERT_EQUAL_INT(4, sizing.cluster_count);
+    TEST_ASSERT_EQUAL_INT(1, sizing.pvs_words);
+
+    R2DWorldClusterSet clusters;
+    memset(&clusters, 0, sizeof clusters);
+    clusters.clusters = calloc((size_t)required, sizeof *clusters.clusters);
+    clusters.cell_cluster = calloc(8, sizeof *clusters.cell_cluster);
+    clusters.cluster_cells = calloc(8, sizeof *clusters.cluster_cells);
+    clusters.cluster_portal_offsets = calloc((size_t)required + 1, sizeof *clusters.cluster_portal_offsets);
+    clusters.cluster_portal_refs = calloc(16, sizeof *clusters.cluster_portal_refs);
+    clusters.pvs = calloc((size_t)required, sizeof *clusters.pvs);
+    clusters.cluster_capacity = required;
+    clusters.cell_cluster_capacity = 8;
+    clusters.cluster_cells_capacity = 8;
+    clusters.cluster_portal_offsets_capacity = required + 1;
+    clusters.cluster_portal_refs_capacity = 16;
+    clusters.pvs_capacity = required;
+    TEST_ASSERT_EQUAL_INT(4, r2d_world_region_clusters_build(&b.set, 1, PORTAL_LINKS,
+                                                             PORTALS, &clusters,
+                                                             error, sizeof error));
+    TEST_ASSERT_EQUAL_INT(0, r2d_world_region_cluster_at(&clusters, 0));
+    TEST_ASSERT_EQUAL_INT(3, r2d_world_region_cluster_at(&clusters, 3));
+    for (int a = 0; a < 4; a++)
+        for (int c = 0; c < 4; c++)
+            TEST_ASSERT_TRUE(r2d_world_region_cluster_visible(&clusters, a, c));
+    TEST_ASSERT_TRUE(clusters.pvs_edges > 0);
+    TEST_ASSERT_FALSE(r2d_world_region_cluster_visible(&clusters, -1, 0));
+
+    R2DWorldRegionPortal closed[PORTALS];
+    memcpy(closed, PORTAL_LINKS, sizeof closed);
+    closed[0].closed = true;
+    closed[2].closed = true;
+    TEST_ASSERT_TRUE(r2d_world_region_clusters_rebuild_pvs(&clusters, closed, PORTALS));
+    TEST_ASSERT_FALSE_MESSAGE(r2d_world_region_cluster_visible(&clusters, 0, 1),
+                              "closed areaportal cuts the cluster PVS edge");
+    TEST_ASSERT_FALSE(r2d_world_region_cluster_visible(&clusters, 0, 2));
+    TEST_ASSERT_TRUE(r2d_world_region_cluster_visible(&clusters, 1, 3));
+    r2d_world_region_clusters_free(&clusters);
+    TEST_ASSERT_NULL(clusters.clusters);
+}
+
+static void test_occluder_region_culling(void)
+{
+    const R2DWorldRegionCell cells[2] = {{0, 0, 100, 100}, {200, 0, 100, 100}};
+    const R2DWorldRegionPortal link[1] = {{0, 1, false, false}};
+    RegionBuffers b;
+    init_buffers(&b);
+    char error[128] = {0};
+    TEST_ASSERT_EQUAL_INT(2, build(&b, cells, 2, link, 1, 100.0f, error));
+    TEST_ASSERT_EQUAL_INT(1, r2d_world_region_at(&b.set, 250.0f, 50.0f));
+
+    uint8_t visible[8] = {0};
+    const R2DWorldOccluder wall = {150.0f, -1000.0f, 150.0f, 1000.0f};
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, r2d_world_region_visible_set(&b.set, 0, &wall, 1,
+                                                                  50.0f, 50.0f,
+                                                                  visible, 8),
+                                  "the vertical occluder hides the far region");
+    TEST_ASSERT_EQUAL_INT(1, visible[0]);
+    TEST_ASSERT_EQUAL_INT(0, visible[1]);
+    TEST_ASSERT_TRUE(r2d_world_region_occluded(&b.set, 1, &wall, 1, 50.0f, 50.0f));
+    TEST_ASSERT_FALSE_MESSAGE(r2d_world_region_occluded(&b.set, 0, &wall, 1, 50.0f, 50.0f),
+                              "the camera region is never occluded");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, r2d_world_region_visible_set(&b.set, 0, NULL, 0,
+                                                                  50.0f, 50.0f,
+                                                                  visible, 8),
+                                  "without occluders both PVS regions stay visible");
+    TEST_ASSERT_EQUAL_INT(1, visible[1]);
+    float ox = 0, oy = 0;
+    TEST_ASSERT_TRUE(r2d_world_region_render_origin(&b.set, 1, &ox, &oy));
+    TEST_ASSERT_FLOAT_WITHIN(1e-4f, 250.0f, ox);
+    TEST_ASSERT_FLOAT_WITHIN(1e-4f, 50.0f, oy);
+    TEST_ASSERT_EQUAL_INT(-1, r2d_world_region_visible_set(&b.set, 9, NULL, 0, 0, 0, visible, 8));
+}
+
+static void test_lod_config_bands(void)
+{
+    R2DWorldRegionLodConfig config;
+    r2d_world_region_lod_defaults(&config);
+    TEST_ASSERT_TRUE(r2d_world_region_lod_valid(&config));
+    R2DWorldRegionLod lod;
+    r2d_world_region_lod_eval(100.0f, &config, &lod);
+    TEST_ASSERT_EQUAL_INT(16, lod.sprite_directions);
+    TEST_ASSERT_EQUAL_INT(100, lod.particle_percent);
+    TEST_ASSERT_EQUAL_INT(100, lod.decal_percent);
+    TEST_ASSERT_EQUAL_INT(16, lod.max_lights);
+    TEST_ASSERT_FALSE(lod.impostor);
+    r2d_world_region_lod_eval(1000.0f, &config, &lod);
+    TEST_ASSERT_EQUAL_INT(8, lod.sprite_directions);
+    TEST_ASSERT_EQUAL_INT(15, lod.animation_fps);
+    r2d_world_region_lod_eval(2000.0f, &config, &lod);
+    TEST_ASSERT_EQUAL_INT(4, lod.sprite_directions);
+    TEST_ASSERT_TRUE(lod.impostor);
+    TEST_ASSERT_EQUAL_INT(0, lod.max_lights);
+    r2d_world_region_lod_eval(5000.0f, &config, &lod);
+    TEST_ASSERT_EQUAL_INT(1, lod.sprite_directions);
+    TEST_ASSERT_TRUE(lod.audio_culled);
+    r2d_world_region_lod_eval(9000.0f, &config, &lod);
+    TEST_ASSERT_TRUE(lod.hidden);
+    TEST_ASSERT_EQUAL_INT(0, lod.particle_percent);
+    TEST_ASSERT_EQUAL_INT(0, lod.decal_percent);
+    TEST_ASSERT_EQUAL_INT(0, lod.max_lights);
+    r2d_world_region_lod(NAN, &lod);
+    TEST_ASSERT_FALSE(lod.hidden);
+
+    config.near_distance = 2000.0f;
+    config.mid_distance = 4000.0f;
+    config.far_distance = 6000.0f;
+    config.impostor_distance = 8000.0f;
+    config.hidden_distance = 9000.0f;
+    TEST_ASSERT_TRUE(r2d_world_region_lod_valid(&config));
+    r2d_world_region_lod_eval(1500.0f, &config, &lod);
+    TEST_ASSERT_EQUAL_INT(16, lod.sprite_directions);
+    config.mid_distance = 100.0f;
+    TEST_ASSERT_FALSE_MESSAGE(r2d_world_region_lod_valid(&config),
+                              "non-monotonic bands are rejected");
+    TEST_ASSERT_FALSE(r2d_world_region_lod_valid(NULL));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -286,5 +418,8 @@ int main(void)
     RUN_TEST(test_lod_thresholds);
     RUN_TEST(test_deterministic_rebuild);
     RUN_TEST(test_invalid_arguments);
+    RUN_TEST(test_clusters_partition_and_pvs);
+    RUN_TEST(test_occluder_region_culling);
+    RUN_TEST(test_lod_config_bands);
     return UNITY_END();
 }

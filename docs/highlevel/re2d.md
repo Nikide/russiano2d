@@ -779,3 +779,20 @@ Docs: [brush authoring](../RE2D_BRUSH_AUTHORING.md),
 [huge world](../RE2D_HUGE_WORLD.md), [sky boundary](../RE2D_SKY_BOUNDARY.md).
 
 Demo: `demos/re2d_openworld_lab` (`r2d-sdk world compile` -> `.re2dworld`).
+
+## P4/P5 слой (sky/weather/shafts/post)
+
+`world.qualityPreset('high'|'ultra')` включает P4-карточки без нового API:
+distant sky cards, weather layers (rain/snow/ash/clouds) и light shaft cards
+рисуются существующим card-конвейером; sky-профили `clear/dusk/night/storm`
+и policy порталов/tool_sky описаны в `src/re2d_world_sky.h`.
+`world.info().visual` дополнен счётчиками `shafts, weatherCards,
+distantCards, ambientSamples, detailSamples, decals2, batchDraws,
+batchBatches, batchSaved, residentTextures, uploadBytes`.
+
+Честные ограничения: bloom-lite/reflection-lite/depth-aware heat distortion
+имеют проверенную native-математику и CPU-reference, но их финальный
+screen-pass не подключён к world forward pass (нужен scene-colour target);
+ambient/AO field и detail layers пока не загружаются в shader uniforms;
+decals 2.0 model ещё не связан с 128-слотовым пулом. Подробности и метрики —
+[RE2D_RENDER_FEATURES.md](../RE2D_RENDER_FEATURES.md).

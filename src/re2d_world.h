@@ -76,6 +76,10 @@ typedef struct {
     int capacity_nodes,capacity_cells,bsp_nodes_visited;
     const R2DWorldCellNode *indexed_nodes;
     uint64_t indexed_revision;
+    // Hierarchical visibility counters filled by the filtered entry point:
+    // cells rejected before local portal/BSP work, plus region rejections the
+    // runtime already knows (0 when called directly).
+    int culled_regions, culled_cells, cell_rejections;
 } R2DWorldVisibility;
 #define R2D_WORLD_MAX_MATERIALS 64
 enum { R2D_WORLD_MASKED,R2D_WORLD_OPAQUE,R2D_WORLD_TRANSLUCENT,R2D_WORLD_ADDITIVE };
@@ -226,6 +230,11 @@ bool r2d_world_portal_set_area(R2DRe2dWorld *,int,bool);
 void r2d_world_visibility_free(R2DWorldVisibility *);
 // Conservative native portal windows. Outside-world cameras use all surfaces.
 bool r2d_world_visibility(const R2DRe2dWorld *,const R2DRe2dView *,float ortho,R2DWorldVisibility *);
+// Hierarchical variant: `cell_allowed` (one byte per cell, NULL = all) is the
+// region/vis-cluster PVS reject set. Rejected cells never enter local portal
+// traversal or BSP submission; counters land in R2DWorldVisibility.
+bool r2d_world_visibility_filtered(const R2DRe2dWorld *,const R2DRe2dView *,float ortho,
+                                   R2DWorldVisibility *,const uint8_t *cell_allowed);
 
 void r2d_world_frame_visible(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,float,const R2DWorldVisibility *);
 

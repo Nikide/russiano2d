@@ -66,6 +66,50 @@ $.dialog.play('talk');
 `.active-speaker` / `.inactive-speaker` на портрет и root-классы
 `.typing/.ready/.has-speaker/.has-portrait/.has-choices/.auto/.skip/.backlog-open`.
 
+## Dynamic choice slots / custom choice templates
+
+Число кнопок выбора задаёт тема, а не жёсткий лимит 6:
+
+```js
+$.dialog.themeDefine('many', {
+  rml: 'ui/dialog/bashnya.rml',
+  rcss: 'ui/dialog/bashnya.rcss',
+  choiceSlots: 10,
+  choiceTemplate: '<button data-dialog-role="choice">' +
+    '<span data-dialog-role="choice-text">{n}. </span></button>',
+});
+```
+
+`{index}` (с нуля) и `{n}` (с единицы) подставляются в каждую копию шаблона;
+авторские `id` из копий вырезаются, `prepareMarkup` назначает уникальные
+`r2d-dlg-choice-N`. Без `choiceTemplate` клонируется первый авторский
+`data-dialog-role="choice"`. `expandChoiceSlots()` — чистая функция для тестов.
+Слоты 1..64; невалидное число отклоняется `themeDefine`.
+
+## Voice, prefetch и i18n — реальные вызовы
+
+Хуки не только эмитятся, но и исполняются:
+
+```js
+$.dialog.voice(true);          // по умолчанию true; false останавливает реплику
+$.dialog.voiceVolume(0.8);
+$.dialog.voiceInfo();          // { enabled, src, handle, playing, volume }
+$.dialog.on('voice'|'voicePlay'|'voiceStop'|'prefetch'|'prefetched', fn);
+```
+
+`voice` из реплики (или speaker) реально играет через `$.sound.play()`,
+предыдущая реплика останавливается, закрытие диалога глушит канал. `prefetch`
+реально вызывает `$.sound.preload()` для аудио и `$.resource.preloadTexture()`
+для портретов; результат виден в `$.dialog.prefetchInfo()`
+(`requested/textures/sounds/failed`). Тексты и имена спикеров ищутся в словаре
+через `$.i18n.lookup()` (текущий язык → fallback → остальные), а
+`$.dialog.i18nStats()` показывает переведённые и отсутствующие dotted-ключи.
+`$.dialog.localize(key, params)` — прямой lookup для UI.
+
+Стандартная тема BASHNYA лежит в `ui/dialog/bashnya.rml` и
+`ui/dialog/bashnya.rcss`: чёрная панель, тёмно-красная линия, крупный портрет,
+8 слотов выбора, тонкая типографика без «RPG-прямоугольника».
+
 ## Темы, RCSS и кастомный шрифт
 
 ```js
@@ -94,10 +138,18 @@ narrative state, заново биндит роли и восстанавлив�
 ## Input lock, world mode, skip
 
 ```js
-const lock = $.input.lock('cutscene');
-lock.release();
-$.input.locked('cutscene');   // advisory для gameplay-кода
+const lock = $.input.lock('cutscene');                 // advisory
+const hard = $.input.lock('dialog', 'dialog', { hard: true });
+hard.release();
+$.input.hardLocked();          // true, пока жив хотя бы один hard-token
+$.input.rawPressed('escape');  // UI/диалог читает свои клавиши в обход гейта
 ```
+
+Пока жив `{hard:true}` токен, `$.input.down/pressed/released` и
+`mouseDown/mousePressed` возвращают `false` для gameplay; `rawDown/rawPressed/
+rawReleased/rawMouse*` доступны UI-слою, который держит лок. `$.dialog.hardLock(true)`
+заставляет диалог брать hard-token; по умолчанию лок остаётся advisory ради
+обратной совместимости. `$.dialog.inspect().inputHardLocked` показывает режим.
 
 Токен освобождается автоматически на смене сцены; `stop/skip/exception` в
 story/dialog освобождают свой токен. `$.dialog.worldMode()` возвращает
@@ -118,7 +170,7 @@ $.dialog.isRead(stableLineId);
 ```
 
 Stable line id = `definition:node:page`. Voice/textBlip/prefetch hooks:
-`$.dialog.on('voice'|'textBlip'|'prefetch', fn)`.
+`$.dialog.on('voice'|'voicePlay'|'voiceStop'|'textBlip'|'prefetch'|'prefetched', fn)`.
 
 ## Story IR
 
@@ -142,13 +194,26 @@ CLI/GUI/agent.
 
 `$.dialog.inspect()` возвращает open/definition/step/page/speaker/displayName/
 expression/portrait/slot/theme/typing/text/choices/auto/backlogOpen/worldMode/
-inputLocked/flags/unread/view — данные для DevTools и агента.
+inputLocked/inputHardLocked/flags/unread/view/choiceSlots/voice/prefetch/i18n —
+данные для DevTools и агента. DevTools F2 получил вкладку **Narrative**
+(секции `identity|transform|gameplay|physics|presentation|narrative`);
+`$.devtools.narrative()` отдаёт те же факты без выбранной сущности:
+Scene/Step/Speaker/DisplayName/Expression/Theme/Typing/Choices/World mode/
+Input lock/Flags/Voice/Prefetch/i18n.
 
 ## Ограничения
 
-* Полноценный RmlUi-рендер проверяется сборкой движка; qjs-тест использует
-  записывающий backend и проверяет разметку/роли/классы.
+* RmlUi-пиксели темы BASHNYA проверяет agent-тест
+  `tests/agent/vn_bashnya_theme_test.py` (скриншот, чёрная панель, красная
+  линия, светлый текст); qjs-тест использует записывающий backend и проверяет
+  разметку/роли/классы.
 * `$.dialog.themeDefine` принимает inline markup или пути к файлам; для путей
-  нужен `$.fs.readText` (в игре он есть).
+  нужен `$.fs.readText` (в игре он есть). Agent-тест передаёт содержимое файлов
+  строкой, чтобы проверять именно `ui/dialog/bashnya.*`, а не копию.
 * Timeline-специфичные `dialogTheme` (цвета панели builtin-вида) сохранены для
   обратной совместимости; RML-темы их не используют.
+* «Настоящий» voice/prefetch — вызовы `$.sound`/`$.resource`; если эти модули
+  не установлены (чистый qjs), остаются события, а `prefetchInfo()` честно
+  показывает `failed`.
+* Hard-lock не перехватывает ввод на уровне SDL: это гейт `$.input`, поэтому
+  код, читающий `engine.keyDown` напрямую, его обходит.

@@ -440,6 +440,16 @@ function worldWrapper($, native) {
                 blocked(x, y, radius, bottom, top) { return native.blocked(x, y, radius, bottom, top); },
                 ray(from, to) { return native.ray(from.x, from.y, from.height, to.x, to.y, to.height); },
                 info() { return native.info(); },
+                // R-04 huge world: budgeted region/streaming config, distant
+                // impostor cards and region-local render coordinates. The native
+                // side owns the state; the wrapper only exposes it.
+                regionConfig(size, activeRing = 1, preloadRing = 2,
+                             uploadBytes = 512 * 1024, uploadItems = 4) {
+                    native.regionConfig(size, activeRing, preloadRing, uploadBytes, uploadItems);
+                    return this;
+                },
+                impostors() { return native.impostors(); },
+                regionLocal(x, y) { return native.regionLocal(x, y); },
                 lighting(options = {}) {
                     if (options.mode && options.mode !== 'classic') throw new TypeError('Re2D World: supported lighting mode is classic');
                     native.lighting(+!!options.dynamic, +!!options.shadows, +(options.orientationContrast !== false),
@@ -578,10 +588,69 @@ function rendererWorldWrapper($, native) {
     world.quality = (options = {}) => { const current=native.info();native.quality(options.poseBudget ?? current.poseBudget,options.poseStep ?? current.poseStep); return world; };
     world.quality({poseBudget:1,poseStep:3});
     const views = ['final','cell-id','span-id','depth','owner','light-level','dynamic-light-count','normal','emissive','bsp','portals','shadow-mask','overdraw'];
+    // Renderer enum is authored in native code (owned by the renderer task).
+    // These features are exposed through counters/debug data today; the JS
+    // catalogue tells tools honestly which ones need a new native enum value.
+    const debugFeatures = [
+        { name: 'regions', status: 'counter' },
+        { name: 'active-regions', status: 'counter' },
+        { name: 'pvs', status: 'counter' },
+        { name: 'vis-clusters', status: 'counter' },
+        { name: 'areaportal', status: 'counter' },
+        { name: 'occluder', status: 'counter' },
+        { name: 'distant-lod', status: 'counter' },
+        { name: 'sprite-lod', status: 'counter' },
+        { name: 'material-variation', status: 'counter' },
+        { name: 'ao-lite', status: 'counter' },
+        { name: 'fog', status: 'ready' },
+        { name: 'sky-layers', status: 'counter' },
+        { name: 'vfx-overdraw', status: 'ready' },
+        { name: 'texture-residency', status: 'counter' },
+    ];
+    const budgets = {
+        regionsActive: { min: 0, max: 9, unit: 'regions' },
+        regionsPreload: { min: 16, max: 25, unit: 'regions' },
+        spritesVisible: { min: 100, max: 300, unit: 'sprites' },
+        particlesAlive: { min: 1000, max: 3000, unit: 'particles' },
+        decals: { min: 64, max: 256, unit: 'decals' },
+        lightsRelevant: { min: 8, max: 16, unit: 'lights' },
+        shadowedLights: { min: 2, max: 6, unit: 'lights' },
+    };
+    function budgetReport(info) {
+        const i = info || native.info();
+        const rows = [];
+        const add = (metric, measured, range) => {
+            const value = measured === undefined || measured === null || !Number.isFinite(Number(measured))
+                ? null : Number(measured);
+            let status = 'unavailable';
+            if (value !== null) {
+                if (value > range.max) status = 'over';
+                else if (value < range.min) status = 'under';
+                else status = 'ok';
+            }
+            rows.push({ metric, measured: value, min: range.min, max: range.max,
+                        unit: range.unit, status, pass: value !== null && value <= range.max });
+        };
+        add('regionsActive', i.regionActive, budgets.regionsActive);
+        add('regionsPreload', i.regionPreload, budgets.regionsPreload);
+        add('spritesVisible', i.visibleAtlasSprites, budgets.spritesVisible);
+        add('particlesAlive', i.particlesAlive !== undefined ? i.particlesAlive : i.particles,
+            budgets.particlesAlive);
+        add('decals', i.decals, budgets.decals);
+        add('lightsRelevant', i.lightsAfterCull !== undefined ? i.lightsAfterCull : i.lights,
+            budgets.lightsRelevant);
+        add('shadowedLights', i.shadowedLights, budgets.shadowedLights);
+        return { ok: rows.every((r) => r.pass), rows };
+    }
     world.debug = {
         view(name) { const mode = views.indexOf(name); if (mode < 0) throw new TypeError(`Re2D World: unsupported debug view ${name}`); native.debugView(mode); return world; },
+        views() { return views.slice(); },
+        features() { return debugFeatures.map((f) => ({ ...f })); },
+        supported(name) { return views.includes(String(name)); },
         renderStats() { return native.info(); },
         visibility() { return native.visibility(); },
+        budgets() { return Object.fromEntries(Object.entries(budgets).map(([k, v]) => [k, { ...v }])); },
+        budget(info) { return budgetReport(info); },
     };
     world.audio = {
         source(path,options={}) {

@@ -543,9 +543,27 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 
 `world compile` принимает `.re2dmap` с additive-секциями `brushes`, `world`
 (конверт), `entities` и `regionSize`; старые `cells/walls/portals/stairs/slopes`
-и `--renderer`-контракт не меняются. Tool materials (`nodraw`, `clip`, `sky`,
-`hint`, `skip`, `trigger`, `areaportal`, `occluder`, clip variants) компилируются
-в policy-биты стен, а не в прозрачность. Полный формат, стадии и коды warning'ов:
+и `--renderer`-контракт не меняются.
+
+Brushes: `rect` или выпуклый `polygon` (3..64 вершины), axis-aligned `holes`
+(до 8 прямоугольников), `subtract: true` для Z-CSG вычитания, несколько solid
+Z-интервалов на одном XY. Компилятор детерминированно очищает/merge'ит cells,
+стены и порталы; статистика включает `polygonBrushes`, `subtractBrushes`,
+`holeBrushes`, `brushEntityMap`.
+
+Brush entities (`door`, `lift`, `crusher`, `moving_wall`, `trigger_volume`,
+`fog_volume`, `water_volume`, `areaportal`) маппятся на существующие native
+mover/trigger/volume-контракты; в отчёте и `.re2dworld` появляется
+`compiler.brushEntities[]` с `runtime`, `api`, `moverType`/`triggerType`,
+`target`, `volume` и `hook` (пустой hook = прямой runtime API; непустой =
+требуемый хук рантайма). Door/lift/crusher/moving-wall и trigger volume
+проверены runtime smoke-тестом.
+
+Tool materials (`nodraw`, `clip`, `sky`, `hint`, `skip`, `trigger`, `areaportal`,
+`occluder`, clip variants) компилируются в policy-биты стен, а не в
+прозрачность. Новые diagnostics: `SDK_WORLD_SKY_LEAK`,
+`SDK_WORLD_GIANT_SURFACE`, `SDK_WORLD_GIANT_TRANSPARENT`,
+`SDK_WORLD_BRUSH_ENTITY`. Полный формат, стадии и коды warning'ов:
 [`RE2D_BRUSH_AUTHORING.md`](RE2D_BRUSH_AUTHORING.md). Регионы, streaming/PVS и
 LOD: [`RE2D_HUGE_WORLD.md`](RE2D_HUGE_WORLD.md). Sky/clip boundary:
 [`RE2D_SKY_BOUNDARY.md`](RE2D_SKY_BOUNDARY.md).

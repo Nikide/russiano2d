@@ -118,3 +118,29 @@
 | task-10 | integration/gates/handoff | lead |
 
 Правило: новые файлы и скоупы не пересекаются; конфликты решает Lead.
+
+### task-9 — VN DoD gaps + render QA (trigger-core, no commit)
+- VN: real `$.sound` voice playback, actual `$.resource`/`$.sound` prefetch, dictionary `$.i18n.lookup()`, `choiceSlots`/`choiceTemplate` (1..64), hard input lock (`{hard:true}`), narrative DevTools tab.
+- Theme: `ui/dialog/bashnya.rml` + `.rcss` (black/dark-red, 8 choice slots, custom font), pixel test `tests/agent/vn_bashnya_theme_test.py`.
+- QA: `docs/RE2D_DEBUG_VIEWS.md`, `world.debug.views/features/budget`, test `tests/agent/re2d_budget_test.py`; render regression `tests/agent/re2d_render_regression_test.py` + `tests/agent/reference/*.png`.
+- Tests: `tests/js/vn_gaps_test.mjs` (13) + agent BASHNYA/budget/render tests; `r2d-sdk dialog validate ui/dialog/bashnya.rml` OK (8 choices, 0 errors).
+- Limits: region/PVS/areaportal/occluder/LOD debug *views* need new native enum values (counter-only today); `demos/re2d_visual_lab` absent during capture so the regression harness explicitly falls back to `re2d_world_renderer_lab`; hard lock gates only `$.input`, not direct `engine.keyDown` readers.
+
+## Wave 2 complete (2026-10-17)
+- task-6 R-04 full: stream cache/residency budgets, cluster+occluder PVS, region-local/render origin, LOD wiring, impostors; native 23 tests + huge-world agent test.
+- task-7 renderer P4/P5: sky profiles/weather/layers, shafts, ambient/AO field bake, detail layers, decals 2.0 model, bloom/reflection/heat math+CPU refs, 16-dir helper, batching/residency counters, regression tests.
+- task-8 brush: convex polygon, rect holes, Z-CSG subtract, brush entities, entity map, warnings; 11 brush + 3 entity + 3 compile tests.
+- task-9 VN gaps/QA: real voice/prefetch/i18n lookup, dynamic choices, hard lock, BASHNYA RML/RCSS theme, narrative DevTools, render regression references, budgets/debug catalogue.
+- Lead hooks: GPU impostor draw pass, SHADOW policy in shadow chunks, ACOUSTIC policy in audio occlusion, runtime region info, site docs.
+- Final gates: r2d_check 157/157; ci_verify green; docs guards/site green; BASHNYA repro+play green.
+
+### Remaining honest limits after wave 2
+- Bloom/reflection/heat have math+CPU references but final screen composite needs a scene-colour target in the forward pass; `world.post` remains the screen path.
+- Ambient/AO field and detail layers are baked/validated but not uploaded to forward shader uniforms.
+- Decals 2.0 model is not yet fed by the 128-slot world decal JSON authoring pool.
+- Static batching/residency are accounting/hooks; GPU submission still per-surface.
+- Per-layer sky textures/distant city art need authored assets (procedural fallbacks exist).
+- Stream texture/atlas residency is deterministic budget bookkeeping; real GPU uploads/evictions and LOD light/decal GPU consumers still need renderer wiring.
+- Brush: convex polygons, axis-aligned rect holes, Z-interval CSG only; no arbitrary boolean/vertex editor.
+- Shadow map/audio now consume SHADOW/ACOUSTIC bits; hint planes still compiler-only, occluders are conservative region samples.
+- Region-local rendering is exposed and impostors draw; moving all forward geometry to region-local origin is not done.

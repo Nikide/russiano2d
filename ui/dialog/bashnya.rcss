@@ -1,0 +1,115 @@
+/* BASHNYA dialog theme: black, dark blood-red, one thin red rule,
+   oversized portrait, minimal type. No RPG rounded rectangle. */
+
+@font-face { font-family: "Bashnya Sans"; src: url("assets/fonts/OpenSans-Regular.ttf"); }
+
+body { font-family: "Bashnya Sans"; color: #e8e3dc; }
+
+[data-dialog-role="root"].bashnya-dialog {
+  position: absolute;
+  left: 4vw;
+  top: 300px;
+  width: 92vw;
+  height: 300px;
+  background: #050506f2;
+  border: 1px solid #8f1119;
+  padding: 0;
+}
+
+[data-dialog-role="box"].bashnya-box {
+  display: block;
+  width: 100%;
+  min-height: 236px;
+}
+
+.bashnya-portrait-frame {
+  position: absolute;
+  left: 26px;
+  top: -186px;
+  width: 286px;
+  height: 356px;
+  background: #050506;
+  border-left: 2px solid #d5232f;
+}
+
+[data-dialog-role="portrait-image"].bashnya-portrait {
+  width: 286px;
+  height: 356px;
+}
+
+.bashnya-copy {
+  display: block;
+  margin-left: 340px;
+  padding: 26px 34px 18px 8px;
+}
+
+.bashnya-rule {
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: #8f1119;
+  margin-bottom: 14px;
+}
+
+[data-dialog-role="speaker"].bashnya-speaker {
+  display: block;
+  color: #d5232f;
+  font-size: 19px;
+  letter-spacing: 2px;
+  margin-bottom: 9px;
+}
+
+[data-dialog-role="text"].bashnya-text {
+  display: block;
+  font-size: 27px;
+  line-height: 1.36;
+}
+
+
+[data-dialog-role="continue-indicator"].bashnya-more {
+  display: block;
+  width: 26px;
+  height: 26px;
+  margin: 8px 0 0 auto;
+  color: #d5232f;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+[data-dialog-role="continue-indicator"].hidden { visibility: hidden; }
+
+[data-dialog-role="choices"].bashnya-choices {
+  display: block;
+  margin: 0;
+  padding: 0 34px 22px 340px;
+}
+
+[data-dialog-role="choice"].bashnya-choice {
+  display: block;
+  width: 100%;
+  margin: 0 0 3px 0;
+  padding: 7px 10px 7px 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #2b080b;
+  color: #e8e3dc;
+  font-size: 21px;
+  text-align: left;
+}
+[data-dialog-role="choice"].bashnya-choice:hover,
+[data-dialog-role="choice"].bashnya-choice.focused {
+  background: #16070a;
+  color: #ffffff;
+  border-top: 1px solid #d5232f;
+}
+
+.bashnya-index {
+  display: inline-block;
+  width: 46px;
+  color: #d5232f;
+}
+
+.bashnya-choice-text { display: inline-block; }
+
+[data-dialog-role="root"].bashnya-dialog.typing .bashnya-more { visibility: hidden; }
+[data-dialog-role="root"].bashnya-dialog.has-choices .bashnya-more { visibility: hidden; }

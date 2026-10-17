@@ -1,0 +1,30 @@
+<rml>
+<head>
+  <title>BASHNYA dialog</title>
+</head>
+<body>
+  <div data-dialog-role="root" class="bashnya-dialog">
+    <div data-dialog-role="box" class="bashnya-box">
+      <div data-dialog-role="portrait" class="bashnya-portrait-frame">
+        <img data-dialog-role="portrait-image" class="bashnya-portrait" />
+      </div>
+      <div class="bashnya-copy">
+        <div class="bashnya-rule"></div>
+        <div data-dialog-role="speaker" class="bashnya-speaker"></div>
+        <div data-dialog-role="text" class="bashnya-text"></div>
+        <button data-dialog-role="continue-indicator" data-dialog-action="next" class="bashnya-more">&#9670;</button>
+      </div>
+    </div>
+    <div data-dialog-role="choices" class="bashnya-choices">
+      <button data-dialog-role="choice" class="bashnya-choice"><span class="bashnya-index">01</span><span data-dialog-role="choice-text" class="bashnya-choice-text"></span></button>
+      <button data-dialog-role="choice" class="bashnya-choice"><span class="bashnya-index">02</span><span data-dialog-role="choice-text" class="bashnya-choice-text"></span></button>
+      <button data-dialog-role="choice" class="bashnya-choice"><span class="bashnya-index">03</span><span data-dialog-role="choice-text" class="bashnya-choice-text"></span></button>
+      <button data-dialog-role="choice" class="bashnya-choice"><span class="bashnya-index">04</span><span data-dialog-role="choice-text" class="bashnya-choice-text"></span></button>
+      <button data-dialog-role="choice" class="bashnya-choice"><span class="bashnya-index">05</span><span data-dialog-role="choice-text" class="bashnya-choice-text"></span></button>
+      <button data-dialog-role="choice" class="bashnya-choice"><span class="bashnya-index">06</span><span data-dialog-role="choice-text" class="bashnya-choice-text"></span></button>
+      <button data-dialog-role="choice" class="bashnya-choice"><span class="bashnya-index">07</span><span data-dialog-role="choice-text" class="bashnya-choice-text"></span></button>
+      <button data-dialog-role="choice" class="bashnya-choice"><span class="bashnya-index">08</span><span data-dialog-role="choice-text" class="bashnya-choice-text"></span></button>
+    </div>
+  </div>
+</body>
+</rml>

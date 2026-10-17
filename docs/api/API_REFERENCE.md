@@ -6,7 +6,7 @@
 
 Engine version: "1.2.5"
 
-Entries: 4027
+Entries: 4052
 
 ## $
 
@@ -836,6 +836,7 @@ Entries: 4027
 | `list` | function | `() -> any` |
 | `memory` | function | `() -> any` |
 | `memoryBaseline` | function | `() -> any` |
+| `narrative` | function | `() -> any` |
 | `open` | function | `() -> any` |
 | `openRuntime` | function | `() -> any` |
 | `panel` | function | `() -> any` |
@@ -904,8 +905,10 @@ Entries: 4027
 | `flag` | function | `(arg0: any, arg1: any) -> any` |
 | `focusChoice` | function | `(arg0: any) -> any` |
 | `fullText` | function | `() -> any` |
+| `hardLock` | function | `(arg0: any) -> any` |
 | `has` | function | `(arg0: any) -> any` |
 | `hotReload` | function | `() -> any` |
+| `i18nStats` | function | `() -> any` |
 | `inspect` | function | `() -> any` |
 | `isOpen` | function | `() -> any` |
 | `isRead` | function | `(arg0: any) -> any` |
@@ -913,6 +916,7 @@ Entries: 4027
 | `langBound` | function | `() -> any` |
 | `list` | function | `() -> any` |
 | `listenerCount` | function | `(arg0: any) -> any` |
+| `localize` | function | `(arg0: any, arg1: any) -> any` |
 | `lockHeld` | function | `() -> any` |
 | `markRead` | function | `(arg0: any) -> any` |
 | `next` | function | `() -> any` |
@@ -926,6 +930,7 @@ Entries: 4027
 | `portrait` | function | `() -> any` |
 | `portraitSlot` | function | `() -> any` |
 | `prefetch` | function | `(arg0: any) -> any` |
+| `prefetchInfo` | function | `() -> any` |
 | `releaseLock` | function | `(arg0: any) -> any` |
 | `remove` | function | `(arg0: any) -> any` |
 | `restore` | function | `(arg0: any) -> any` |
@@ -938,6 +943,7 @@ Entries: 4027
 | `speakerIds` | function | `() -> any` |
 | `speakerName` | function | `() -> any` |
 | `speed` | function | `(arg0: any) -> any` |
+| `stopVoice` | function | `(arg0: any) -> any` |
 | `template` | function | `(arg0: any, arg1: any) -> any` |
 | `text` | function | `() -> any` |
 | `theme` | function | `(arg0: any) -> any` |
@@ -950,6 +956,9 @@ Entries: 4027
 | `view` | function | `() -> any` |
 | `viewLoaded` | function | `() -> any` |
 | `visibleChoices` | function | `() -> any` |
+| `voice` | function | `(arg0: any) -> any` |
+| `voiceInfo` | function | `() -> any` |
+| `voiceVolume` | function | `(arg0: any) -> any` |
 | `worldMode` | function | `(arg0: any) -> any` |
 
 ## $.flow
@@ -1585,12 +1594,14 @@ Entries: 4027
 | `langs` | function | `() -> any` |
 | `listenerCount` | function | `() -> any` |
 | `load` | function | `(arg0: any, arg1: any) -> any` |
+| `lookup` | function | `(arg0: any) -> any` |
 | `mark` | function | `(arg0: any) -> any` |
 | `missing` | function | `() -> any` |
 | `missingKeys` | function | `() -> any` |
 | `number` | function | `(arg0: any, arg1: any) -> any` |
 | `onChange` | function | `(arg0: any) -> any` |
 | `plural` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `resolveLang` | function | `(arg0: any) -> any` |
 | `separators` | function | `() -> any` |
 | `tr` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 
@@ -1621,8 +1632,10 @@ Entries: 4027
 | `down` | function | `(arg0: any) -> any` |
 | `gamepad` | function | `(arg0: any) -> any` |
 | `glyphs` | function | `(arg0: any) -> any` |
+| `hardLocked` | function | `() -> any` |
+| `hardLocks` | function | `() -> any` |
 | `loadBindings` | function | `() -> any` |
-| `lock` | function | `(arg0: any, arg1: any) -> any` |
+| `lock` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `lockCount` | function | `() -> any` |
 | `locked` | function | `(arg0: any) -> any` |
 | `locks` | function | `() -> any` |
@@ -1640,6 +1653,11 @@ Entries: 4027
 | `padSlots` | function | `() -> any` |
 | `padState` | function | `(arg0: any) -> any` |
 | `pressed` | function | `(arg0: any) -> any` |
+| `rawDown` | function | `(arg0: any) -> any` |
+| `rawMouseDown` | function | `(arg0: any) -> any` |
+| `rawMousePressed` | function | `(arg0: any) -> any` |
+| `rawPressed` | function | `(arg0: any) -> any` |
+| `rawReleased` | function | `(arg0: any) -> any` |
 | `rebind` | function | `(arg0: any, arg1: any) -> any` |
 | `releaseLocks` | function | `(arg0: any) -> any` |
 | `released` | function | `(arg0: any) -> any` |
@@ -3535,8 +3553,10 @@ Entries: 4027
 | `down` | function | `(arg0: any) -> any` |
 | `gamepad` | function | `(arg0: any) -> any` |
 | `glyphs` | function | `(arg0: any) -> any` |
+| `hardLocked` | function | `() -> any` |
+| `hardLocks` | function | `() -> any` |
 | `loadBindings` | function | `() -> any` |
-| `lock` | function | `(arg0: any, arg1: any) -> any` |
+| `lock` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `lockCount` | function | `() -> any` |
 | `locked` | function | `(arg0: any) -> any` |
 | `locks` | function | `() -> any` |
@@ -3554,6 +3574,11 @@ Entries: 4027
 | `padSlots` | function | `() -> any` |
 | `padState` | function | `(arg0: any) -> any` |
 | `pressed` | function | `(arg0: any) -> any` |
+| `rawDown` | function | `(arg0: any) -> any` |
+| `rawMouseDown` | function | `(arg0: any) -> any` |
+| `rawMousePressed` | function | `(arg0: any) -> any` |
+| `rawPressed` | function | `(arg0: any) -> any` |
+| `rawReleased` | function | `(arg0: any) -> any` |
 | `rebind` | function | `(arg0: any, arg1: any) -> any` |
 | `releaseLocks` | function | `(arg0: any) -> any` |
 | `released` | function | `(arg0: any) -> any` |

@@ -400,6 +400,23 @@ const i18n = {
     /** Есть ли перевод ключа в текущем языке (или в запасе). */
     has(key) { return resolve(key) !== undefined; },
 
+    /**
+     * Сырое значение из словаря (строка/массив форм) с fallback-цепочкой,
+     * без подстановки и без побочного warning. Это и есть dictionary lookup
+     * за пределами проверки has(): UI/линтеры видят реальный текст ключа.
+     */
+    lookup(key) { return resolve(key); },
+
+    /** Текущий язык и фактический язык найденного ключа (или null). */
+    resolveLang(key) {
+        const name = String(key);
+        for (const lang of [state.lang, state.fallback, ...state.dicts.keys()]) {
+            const dict = state.dicts.get(lang);
+            if (dict && Object.prototype.hasOwnProperty.call(dict, name)) return lang;
+        }
+        return null;
+    },
+
     /** Перевод (обычный или плюральный): $.i18n.tr('item', 3, { n: 3 }). */
     tr(key, count, params) {
         return count === undefined ? translate(key, params)

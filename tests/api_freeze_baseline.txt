@@ -482,6 +482,7 @@ $.devtools.lastCopied
 $.devtools.list
 $.devtools.memory
 $.devtools.memoryBaseline
+$.devtools.narrative
 $.devtools.open
 $.devtools.openRuntime
 $.devtools.panel
@@ -546,8 +547,10 @@ $.dialog.expression
 $.dialog.flag
 $.dialog.focusChoice
 $.dialog.fullText
+$.dialog.hardLock
 $.dialog.has
 $.dialog.hotReload
+$.dialog.i18nStats
 $.dialog.inspect
 $.dialog.isOpen
 $.dialog.isRead
@@ -555,6 +558,7 @@ $.dialog.isTyping
 $.dialog.langBound
 $.dialog.list
 $.dialog.listenerCount
+$.dialog.localize
 $.dialog.lockHeld
 $.dialog.markRead
 $.dialog.next
@@ -568,6 +572,7 @@ $.dialog.play
 $.dialog.portrait
 $.dialog.portraitSlot
 $.dialog.prefetch
+$.dialog.prefetchInfo
 $.dialog.releaseLock
 $.dialog.remove
 $.dialog.restore
@@ -580,6 +585,7 @@ $.dialog.speakerId
 $.dialog.speakerIds
 $.dialog.speakerName
 $.dialog.speed
+$.dialog.stopVoice
 $.dialog.template
 $.dialog.text
 $.dialog.theme
@@ -592,6 +598,9 @@ $.dialog.vars
 $.dialog.view
 $.dialog.viewLoaded
 $.dialog.visibleChoices
+$.dialog.voice
+$.dialog.voiceInfo
+$.dialog.voiceVolume
 $.dialog.worldMode
 $.easing
 $.emit
@@ -1152,12 +1161,14 @@ $.i18n.lang
 $.i18n.langs
 $.i18n.listenerCount
 $.i18n.load
+$.i18n.lookup
 $.i18n.mark
 $.i18n.missing
 $.i18n.missingKeys
 $.i18n.number
 $.i18n.onChange
 $.i18n.plural
+$.i18n.resolveLang
 $.i18n.separators
 $.i18n.tr
 $.input
@@ -1187,6 +1198,8 @@ $.input.devices
 $.input.down
 $.input.gamepad
 $.input.glyphs
+$.input.hardLocked
+$.input.hardLocks
 $.input.loadBindings
 $.input.lock
 $.input.lockCount
@@ -1206,6 +1219,11 @@ $.input.padDown
 $.input.padSlots
 $.input.padState
 $.input.pressed
+$.input.rawDown
+$.input.rawMouseDown
+$.input.rawMousePressed
+$.input.rawPressed
+$.input.rawReleased
 $.input.rebind
 $.input.releaseLocks
 $.input.released
@@ -2467,6 +2485,8 @@ $.ввод.devices
 $.ввод.down
 $.ввод.gamepad
 $.ввод.glyphs
+$.ввод.hardLocked
+$.ввод.hardLocks
 $.ввод.loadBindings
 $.ввод.lock
 $.ввод.lockCount
@@ -2486,6 +2506,11 @@ $.ввод.padDown
 $.ввод.padSlots
 $.ввод.padState
 $.ввод.pressed
+$.ввод.rawDown
+$.ввод.rawMouseDown
+$.ввод.rawMousePressed
+$.ввод.rawPressed
+$.ввод.rawReleased
 $.ввод.rebind
 $.ввод.releaseLocks
 $.ввод.released

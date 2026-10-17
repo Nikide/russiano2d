@@ -109,7 +109,9 @@ SITE_DOCS = (
     "docs/RE2D_HUGE_WORLD.md",
     "docs/RE2D_SKY_BOUNDARY.md",
     "docs/RE2D_VFX.md",
+    "docs/RE2D_DEBUG_VIEWS.md",
 )
+
 
 
 def is_site_doc(relpath: str) -> bool:

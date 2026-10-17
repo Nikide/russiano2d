@@ -11,7 +11,7 @@
 // when the new RML/RCSS fails to load.
 // ===========================================================================
 
-import { prepareMarkup, inlineRcss, validateMarkup } from './dialog_theme.js';
+import { prepareMarkup, inlineRcss, validateMarkup, expandChoiceSlots } from './dialog_theme.js';
 
 const ACTION_ATTR = 'data-dialog-action';
 
@@ -77,6 +77,7 @@ export function createDialogView(options) {
     let visible = false;
     let lastValid = null;         // { name, markup }
     let errors = [];
+    let choiceSlots = 0;          // authored/generated choice elements
 
     function rootId() { return roles.root && roles.root[0] || null; }
     function idsOf(role) { return roles[role] || []; }
@@ -147,8 +148,13 @@ export function createDialogView(options) {
             errors = [{ code: 'DIALOG_RML_MISSING', message: 'dialog RML source was not found' }];
             return false;
         }
-        const prepared = prepareMarkup(rmlSource);
+        const expanded = expandChoiceSlots(rmlSource, {
+            slots: theme.choiceSlots,
+            template: theme.choiceTemplate,
+        });
+        const prepared = prepareMarkup(expanded);
         if (!prepared.ok) { errors = prepared.errors; return false; }
+        choiceSlots = prepared.roles.choice ? prepared.roles.choice.length : 0;
         let full = inlineRcss(prepared.markup, rcssSource === null ? '' : rcssSource);
         if (theme.font && theme.font.family && theme.font.url) {
             const rule = `@font-face { font-family:"${theme.font.family}"; src:url("${theme.font.url}"); }`;
@@ -199,6 +205,7 @@ export function createDialogView(options) {
         get roles() { return roles; },
         get errors() { return errors.slice(); },
         get actions() { return actionIds.slice(); },
+        get choiceSlots() { return choiceSlots; },
 
         load,
         reload,

@@ -78,6 +78,10 @@ typedef struct World {
     // Brush authoring (#5) and region partition (R-04).
     SdkBrushSpec *brushes; int nbrush;
     SdkBrushStats brush_stats;
+    SdkBrushEntityRef *entity_refs; int nentity_refs;
+    SdkBrushEntityMap *entity_map; int nentity_map;
+    bool boundary_sky;
+    int open_edges;
     int nentities, npoint_entities, nbrush_entities;
     int authored_lights;
     float region_size;
@@ -102,6 +106,8 @@ static void world_free(World *w)
     free(w->cw);free(w->lighting_json);free(w->lights_json);
     free(w->entities_json);
     free(w->brushes);
+    free(w->entity_refs);
+    free(w->entity_map);
     free(w->region_cell_counts);
     memset(w, 0, sizeof *w);
 }
@@ -514,6 +520,19 @@ static bool parse_brush(Ctx *c, const R2dJson *o, int index, SdkBrushSpec *brush
     if (carve_json) solid = carve_json->boolean;
     brush->solid = solid;
     brush->carve = solid;
+    const R2dJson *subtract_json = r2d_json_get(o, "subtract");
+    if (subtract_json) {
+        if (subtract_json->type != R2D_JSON_BOOL) {
+            field_diag(c, "brushes", index, brush->id, "subtract", "subtract — bool");
+            return false;
+        }
+        brush->subtract = subtract_json->boolean;
+    }
+    if (brush->subtract && (!solid || brush->tool != SDK_BRUSH_TOOL_NONE)) {
+        field_diag(c, "brushes", index, brush->id, "subtract",
+                   "subtract brush must be a plain solid brush (no tool)");
+        return false;
+    }
 
     if (!get_float(c, o, "brushes", index, brush->id, "bottom", &brush->bottom, true, 0) ||
         !get_float(c, o, "brushes", index, brush->id, "top", &brush->top, true, 0))
@@ -559,6 +578,53 @@ static bool parse_brush(Ctx *c, const R2dJson *o, int index, SdkBrushSpec *brush
         brush->ring[1] = (SdkBrushPoint){r[0] + r[2], r[1]};
         brush->ring[2] = (SdkBrushPoint){r[0] + r[2], r[1] + r[3]};
         brush->ring[3] = (SdkBrushPoint){r[0], r[1] + r[3]};
+    }
+
+    // Rectilinear holes: [[x,y,w,h], ...] or [{x,y,w,h}, ...].
+    const R2dJson *holes = r2d_json_get(o, "holes");
+    if (holes) {
+        if (holes->type != R2D_JSON_ARR || holes->count > SDK_BRUSH_MAX_HOLES) {
+            field_diag(c, "brushes", index, brush->id, "holes",
+                       "holes: массив до 8 прямоугольников [x,y,w,h]");
+            return false;
+        }
+        brush->hole_count = holes->count;
+        for (int h = 0; h < holes->count; h++) {
+            SdkBrushHole *hole = &brush->holes[h];
+            const R2dJson *item = holes->items[h];
+            if (item->type == R2D_JSON_ARR && item->count == 4) {
+                for (int k = 0; k < 4; k++) {
+                    const R2dJson *v = item->items[k];
+                    if (v->type != R2D_JSON_NUM || !isfinite(v->number) ||
+                        fabs(v->number) > W_LIMIT) {
+                        field_diag(c, "brushes", index, brush->id, "holes",
+                                   "hole: [x,y,w,h] из конечных чисел");
+                        return false;
+                    }
+                }
+                hole->x = (float)item->items[0]->number;
+                hole->y = (float)item->items[1]->number;
+                hole->w = (float)item->items[2]->number;
+                hole->h = (float)item->items[3]->number;
+            } else if (item->type == R2D_JSON_OBJ) {
+                float v[4];
+                if (!get_float(c, item, "brushes", index, brush->id, "x", &v[0], true, 0) ||
+                    !get_float(c, item, "brushes", index, brush->id, "y", &v[1], true, 0) ||
+                    !get_float(c, item, "brushes", index, brush->id, "w", &v[2], true, 0) ||
+                    !get_float(c, item, "brushes", index, brush->id, "h", &v[3], true, 0))
+                    return false;
+                hole->x = v[0]; hole->y = v[1]; hole->w = v[2]; hole->h = v[3];
+            } else {
+                field_diag(c, "brushes", index, brush->id, "holes",
+                           "hole: [x,y,w,h] или {x,y,w,h}");
+                return false;
+            }
+            if (!(hole->w > 0) || !(hole->h > 0)) {
+                field_diag(c, "brushes", index, brush->id, "holes",
+                           "hole: w/h должны быть > 0");
+                return false;
+            }
+        }
     }
     return parse_brush_policy(c, o, index, brush->id, brush->tool, &brush->wall_flags);
 }
@@ -655,6 +721,7 @@ static bool load_brush_bounds(Ctx *c, const R2dJson *root, World *w)
                  "Карта без блока «world»: границы выведены из brushes с полями %g; авторский sky/clip-контур не задан",
                  (double)64.0f);
     }
+    w->boundary_sky = (bounds.boundary_flags & R2D_WALL_SKY) != 0;
     // Compile and append.
     SdkBrushOutput output;
     SdkBrushStats stats;
@@ -764,6 +831,18 @@ static bool entity_kind_known(const char *kind)
     return false;
 }
 
+// Kinds that own a brush volume and map onto an existing runtime contract.
+static bool brush_entity_kind_known(const char *kind)
+{
+    static const char *const kinds[] = {
+        "door", "lift", "crusher", "moving_wall", "trigger", "trigger_volume",
+        "fog_volume", "water_volume", "areaportal"
+    };
+    for (size_t i = 0; i < sizeof kinds / sizeof kinds[0]; i++)
+        if (!strcmp(kind, kinds[i])) return true;
+    return false;
+}
+
 static bool load_entities(Ctx *c, const R2dJson *root, World *w)
 {
     const R2dJson *entities = r2d_json_get(root, "entities");
@@ -773,7 +852,9 @@ static bool load_entities(Ctx *c, const R2dJson *root, World *w)
         return false;
     }
     char (*ids)[64] = (char (*)[64])calloc((size_t)(entities->count ? entities->count : 1), 64);
-    if (!ids) return false;
+    w->entity_refs = (SdkBrushEntityRef *)calloc(
+        (size_t)(entities->count ? entities->count : 1), sizeof(SdkBrushEntityRef));
+    if (!ids || !w->entity_refs) { free(ids); return false; }
     bool ok = true;
     for (int i = 0; i < entities->count && ok; i++) {
         const R2dJson *o = entities->items[i];
@@ -804,8 +885,33 @@ static bool load_entities(Ctx *c, const R2dJson *root, World *w)
                 ok = false;
                 break;
             }
+            if (!brush_entity_kind_known(kind)) {
+                field_diag(c, "entities", i, ids[i], "kind",
+                           "brush entity kind: door|lift|crusher|moving_wall|trigger|trigger_volume|fog_volume|water_volume|areaportal");
+                ok = false;
+                break;
+            }
+            SdkBrushEntityRef *ref = &w->entity_refs[w->nentity_refs++];
+            snprintf(ref->id, sizeof ref->id, "%s", ids[i]);
+            snprintf(ref->kind, sizeof ref->kind, "%s", kind);
+            snprintf(ref->brush, sizeof ref->brush, "%s", brush->string);
+            snprintf(ref->target, sizeof ref->target, "%s",
+                     r2d_json_str(r2d_json_get(o, "target"), ""));
             w->nbrush_entities++;
         } else {
+            static const char *const brush_only[] = {
+                "door", "lift", "crusher", "moving_wall", "trigger_volume",
+                "fog_volume", "water_volume", "areaportal"
+            };
+            for (size_t k = 0; k < sizeof brush_only / sizeof brush_only[0]; k++) {
+                if (!strcmp(kind, brush_only[k])) {
+                    field_diag(c, "entities", i, ids[i], "brush",
+                               "этот brush entity требует ссылку на brush");
+                    ok = false;
+                    break;
+                }
+            }
+            if (!ok) break;
             w->npoint_entities++;
             const char *xy[] = {"x", "y", "h"};
             for (int a = 0; a < 3; a++) {
@@ -828,6 +934,33 @@ static bool load_entities(Ctx *c, const R2dJson *root, World *w)
         w->entities_json = compact.data;
     }
     return ok;
+}
+
+// Resolves brush entities to existing runtime contracts (metadata only). Failures
+// are authoring errors: a brush entity must resolve to a real authored brush.
+static bool build_entity_map(Ctx *c, World *w)
+{
+    if (w->nentity_refs <= 0) return true;
+    char error[256] = {0};
+    w->entity_map = (SdkBrushEntityMap *)calloc((size_t)w->nentity_refs,
+                                                sizeof(SdkBrushEntityMap));
+    if (!w->entity_map) {
+        sdk_diag(c->rep, SDK_ERROR, "SDK_OOM", c->path, NULL, NULL,
+                 "brush entity map allocation failed");
+        return false;
+    }
+    const int total = sdk_brush_map_entities(w->brushes, w->nbrush,
+                                             w->entity_refs, w->nentity_refs,
+                                             w->entity_map, w->nentity_refs,
+                                             error, sizeof error);
+    if (total < 0 || total != w->nentity_refs) {
+        sdk_diag(c->rep, SDK_ERROR, "SDK_WORLD_BRUSH_ENTITY", c->path, NULL, NULL,
+                 "Brush entity mapping failed: %s",
+                 error[0] ? error : "count mismatch");
+        return false;
+    }
+    w->nentity_map = total;
+    return true;
 }
 
 
@@ -1213,6 +1346,7 @@ static bool load_world(const char *path, World *w, SdkReport *rep, bool renderer
     }
     if (ok) ok = load_brush_bounds(&c, root, w);
     if (ok) ok = load_entities(&c, root, w);
+    if (ok) ok = build_entity_map(&c, w);
     r2d_json_free(root);
     return ok;
 }
@@ -1330,7 +1464,7 @@ static int interval_compare(const void *a, const void *b)
 {
     float x=((const float*)a)[0], y=((const float*)b)[0]; return x<y ? -1 : x>y ? 1 : 0;
 }
-static void check_leaks(Ctx *c, const World *w)
+static void check_leaks(Ctx *c, World *w)
 {
     size_t capacity=(size_t)w->ncw+w->nwall+w->ncc+w->nportal+1;
     float (*iv)[2]=malloc(capacity*sizeof *iv);
@@ -1407,10 +1541,15 @@ static void check_leaks(Ctx *c, const World *w)
                     sdk_diag(c->rep, SDK_WARNING, "SDK_WORLD_OPEN_EDGE", c->path, loc, d,
                              "cell «%s», span %d [%g..%g]: кромка %s открыта на %g ед. (первый разрыв %g…%g) — нет стены, соседнего cell или портала",
                              cell->id, si, sp->bottom, sp->top, names[e], gap_total, gap_lo, gap_hi);
+                    w->open_edges++;
                 }
             }
         }
     }
+    if (w->open_edges > 0 && w->boundary_sky)
+        sdk_diag(c->rep, SDK_WARNING, "SDK_WORLD_SKY_LEAK", c->path, NULL, NULL,
+                 "Sky boundary leaks: %d open edge(s) in cells sealed only by the sky envelope; seal with walls or clip brushes",
+                 w->open_edges);
     free(iv);
 }
 
@@ -1678,18 +1817,44 @@ static bool put_renderer_description(const World *w,R2dSb *sb,SdkReport *rep,con
     // .re2dworld for tools, streaming and diagnostics.
     if (w->brush_stats.brushes || w->region_count) {
         r2d_sb_puts(sb,",\"compiler\":{\"brushes\":");
-        r2d_sb_printf(sb,"{\"count\":%d,\"solids\":%d,\"tools\":%d,\"cells\":%d,\"spans\":%d,\"walls\":%d,\"portals\":%d,\"mergedCells\":%d,\"areaPortals\":%d,\"badAreaPortals\":%d,\"hints\":%d,\"uselessHints\":%d,\"occluders\":%d}",
-            w->brush_stats.brushes,w->brush_stats.solids,w->brush_stats.tool_brushes,
-            w->brush_stats.cells,w->brush_stats.spans,w->brush_stats.walls,
-            w->brush_stats.portals,w->brush_stats.merged_cells,
-            w->brush_stats.areaportal_edges,
-            w->brush_stats.areaportal_brushes>0&&w->brush_stats.areaportal_edges==0?1:0,
-            w->brush_stats.hint_brushes,
-            w->brush_stats.hint_brushes>0&&w->brush_stats.hint_edges==0?1:0,
-            w->brush_stats.occluder_brushes);
-        r2d_sb_printf(sb,",\"entities\":{\"total\":%d,\"point\":%d,\"brush\":%d}",
+        r2d_sb_printf(sb,"{\"count\":%d,\"solids\":%d,\"tools\":%d,\"polygons\":%d,\"subtracts\":%d,\"holes\":%d,\"cells\":%d,\"spans\":%d,\"walls\":%d,\"portals\":%d,\"mergedCells\":%d,\"areaPortals\":%d,\"badAreaPortals\":%d,\"hints\":%d,\"uselessHints\":%d,\"occluders\":%d,\"shadowWalls\":%d,\"acousticWalls\":%d,\"occluderWalls\":%d}",
+             w->brush_stats.brushes,w->brush_stats.solids,w->brush_stats.tool_brushes,
+             w->brush_stats.polygon_brushes,w->brush_stats.subtract_brushes,
+             w->brush_stats.hole_brushes,
+             w->brush_stats.cells,w->brush_stats.spans,w->brush_stats.walls,
+             w->brush_stats.portals,w->brush_stats.merged_cells,
+             w->brush_stats.areaportal_edges,
+             w->brush_stats.areaportal_brushes>0&&w->brush_stats.areaportal_edges==0?1:0,
+             w->brush_stats.hint_brushes,
+             w->brush_stats.hint_brushes>0&&w->brush_stats.hint_edges==0?1:0,
+             w->brush_stats.occluder_brushes,
+             w->brush_stats.shadow_walls,w->brush_stats.acoustic_walls,
+             w->brush_stats.occluder_walls);
+        r2d_sb_printf(sb,",\"entities\":{\"total\":%d,\"point\":%d,\"brush\":%d},\"brushEntities\":[",
                       w->nentities,w->npoint_entities,w->nbrush_entities);
-        r2d_sb_printf(sb,",\"regionGrid\":{\"size\":%g,\"columns\":%d,\"rows\":%d,\"count\":%d,\"pvsEdges\":%d},\"regionCells\":[",
+        for (int i = 0; i < w->nentity_map; i++) {
+            const SdkBrushEntityMap *m = &w->entity_map[i];
+            r2d_sb_puts(sb, i ? "," : "");
+            r2d_sb_puts(sb, "{\"id\":");
+            r2d_sb_put_json_string(sb, m->id);
+            r2d_sb_puts(sb, ",\"kind\":");
+            r2d_sb_put_json_string(sb, m->kind);
+            r2d_sb_puts(sb, ",\"brush\":");
+            r2d_sb_put_json_string(sb, m->brush);
+            r2d_sb_puts(sb, ",\"runtime\":");
+            r2d_sb_put_json_string(sb, m->runtime);
+            r2d_sb_puts(sb, ",\"api\":");
+            r2d_sb_put_json_string(sb, m->api);
+            r2d_sb_puts(sb, ",\"target\":");
+            r2d_sb_put_json_string(sb, m->target);
+            r2d_sb_puts(sb, ",\"hook\":");
+            r2d_sb_put_json_string(sb, m->hook);
+            r2d_sb_printf(sb, ",\"moverType\":%d,\"triggerType\":%d,\"volume\":[%g,%g,%g,%g,%g,%g],\"flags\":%u}",
+                          m->mover_type, m->trigger_type, (double)m->x, (double)m->y,
+                          (double)m->w, (double)m->h, (double)m->bottom,
+                          (double)m->top, (unsigned)m->flags);
+        }
+        r2d_sb_printf(sb, "],\"regionGrid\":{\"size\":%g,\"columns\":%d,\"rows\":%d,\"count\":%d,\"pvsEdges\":%d},\"regionCells\":[",
                       (double)w->region_size,w->region_columns,w->region_rows,
                       w->region_count,w->region_pvs_edges);
         for(int i=0;i<w->region_count;i++)r2d_sb_printf(sb,"%s%d",i?",":"",w->region_cell_counts?w->region_cell_counts[i]:0);
@@ -1965,6 +2130,29 @@ static void compiler_warnings(Ctx *c, const World *w, int total_spans)
     if (w->authored_lights > 64)
         world_warn(c, "SDK_WORLD_TOO_MANY_LIGHTS",
                    "More than 64 authored dynamic lights; light cost may dominate");
+    {
+        // Giant visible surface heuristic: area in world units. Render-only
+        // walls (no collision) stand in for translucent boundaries because the
+        // runtime has no per-pixel opacity contract in the compiler.
+        bool giant = false, giant_transparent = false;
+        for (int i = 0; i < w->ncw; i++) {
+            const WWall *wall = &w->cw[i];
+            const bool render = wall->flags == 0 ||
+                                (wall->flags & R2D_WALL_RENDER) != 0;
+            if (!render) continue;
+            const float length = hypotf(wall->x2 - wall->x1, wall->y2 - wall->y1);
+            const float area = length * (wall->top - wall->bottom);
+            if (area > 250000.0f) giant = true;
+            if (area > 100000.0f && (wall->flags & R2D_WALL_COLLIDE) == 0)
+                giant_transparent = true;
+        }
+        if (giant)
+            world_warn(c, "SDK_WORLD_GIANT_SURFACE",
+                       "A rendered wall surface exceeds 250000 square units; split it for visibility/batching");
+        if (giant_transparent)
+            world_warn(c, "SDK_WORLD_GIANT_TRANSPARENT",
+                       "A giant render-only surface looks like a translucent boundary; use a sky/clip brush boundary instead");
+    }
     int repeats = 0;
     for (int i = 0; i < w->ncw; i++) {
         int count = 1;
@@ -2127,13 +2315,15 @@ static int world_cmd_at(const SdkArgs *a, bool write, int positional)
     r2d_sb_printf(&out, ",\"ok\":%s,\"output\":", ok && rep.errors == 0 ? "true" : "false");
     if (outpath[0]) r2d_sb_put_json_string(&out, outpath); else r2d_sb_puts(&out, "null");
     r2d_sb_printf(&out, ",\"outputFormat\":\"%s\",\"runtimePortals\":%s", renderer?"re2dworld-v1":"legacy-compiled-json",renderer?"true":"false");
-    r2d_sb_printf(&out, ",\"stats\":{\"cells\":%d,\"walls\":%d,\"portals\":%d,\"stairs\":%d,\"slopes\":%d,\"compiledCells\":%d,\"compiledWalls\":%d,\"spans\":%d,\"stairSteps\":%d,\"slopeSegments\":%d,\"stacks\":%d,\"brushes\":%d,\"toolBrushes\":%d,\"brushCells\":%d,\"brushWalls\":%d,\"brushPortals\":%d,\"mergedCells\":%d,\"areaPortals\":%d,\"regions\":%d,\"regionColumns\":%d,\"regionRows\":%d,\"pvsEdges\":%d,\"entities\":%d,\"pointEntities\":%d,\"brushEntities\":%d,\"loadMs\":%.3f,\"compileMs\":%.3f,\"regionMs\":%.3f}",
+    r2d_sb_printf(&out, ",\"stats\":{\"cells\":%d,\"walls\":%d,\"portals\":%d,\"stairs\":%d,\"slopes\":%d,\"compiledCells\":%d,\"compiledWalls\":%d,\"spans\":%d,\"stairSteps\":%d,\"slopeSegments\":%d,\"stacks\":%d,\"brushes\":%d,\"toolBrushes\":%d,\"polygonBrushes\":%d,\"subtractBrushes\":%d,\"holeBrushes\":%d,\"brushCells\":%d,\"brushWalls\":%d,\"brushPortals\":%d,\"mergedCells\":%d,\"areaPortals\":%d,\"regions\":%d,\"regionColumns\":%d,\"regionRows\":%d,\"pvsEdges\":%d,\"entities\":%d,\"pointEntities\":%d,\"brushEntities\":%d,\"brushEntityMap\":%d,\"loadMs\":%.3f,\"compileMs\":%.3f,\"regionMs\":%.3f}",
                   w.ncell, w.nwall, w.nportal, w.nstairs, w.nslopes, w.ncc, w.ncw, spans, w.stair_steps, w.slope_segments, nstacks,
-                  w.brush_stats.brushes, w.brush_stats.tool_brushes, w.brush_stats.cells,
+                  w.brush_stats.brushes, w.brush_stats.tool_brushes,
+                  w.brush_stats.polygon_brushes, w.brush_stats.subtract_brushes,
+                  w.brush_stats.hole_brushes, w.brush_stats.cells,
                   w.brush_stats.walls, w.brush_stats.portals, w.brush_stats.merged_cells,
                   w.brush_stats.areaportal_edges, w.region_count, w.region_columns,
                   w.region_rows, w.region_pvs_edges, w.nentities, w.npoint_entities,
-                  w.nbrush_entities, w.stage_load_ms, w.stage_compile_ms,
+                  w.nbrush_entities, w.nentity_map, w.stage_load_ms, w.stage_compile_ms,
                   w.stage_region_ms);
     r2d_sb_printf(&out, ",\"stageReport\":[{\"stage\":\"load\",\"ms\":%.3f},{\"stage\":\"compile\",\"ms\":%.3f},{\"stage\":\"regions\",\"ms\":%.3f}]",
                   w.stage_load_ms, w.stage_compile_ms, w.stage_region_ms);

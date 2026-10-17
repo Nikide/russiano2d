@@ -5,6 +5,7 @@
 #include "rotsprite.h"
 #include "script.h"
 #include "payload.h"
+#include "json.h"
 #include <SDL3_image/SDL_image.h>
 #include <SDL3/SDL_timer.h>
 #include <math.h>
@@ -75,7 +76,22 @@ void r2d_world_regions_free(R2DWorldRuntime *w)
     memset(r,0,sizeof *r);
     free(w->region_states);free(w->region_active);free(w->region_preload);
     w->region_states=NULL;w->region_active=w->region_preload=NULL;
+    r2d_world_region_clusters_free(&w->clusters);
+    w->cluster_ready=false;w->cluster_camera=-1;
+    free(w->region_portals);w->region_portals=NULL;w->region_portal_capacity=0;
+    free(w->occluders);w->occluders=NULL;w->occluder_count=w->occluder_capacity=0;
+    free(w->region_visible);w->region_visible=NULL;w->region_visible_capacity=0;
+    free(w->cell_allowed);w->cell_allowed=NULL;w->cell_allowed_capacity=0;
+    w->region_visible_count=w->region_pvs_culled=w->region_occluder_culled=0;
+    w->region_cluster_culled=w->region_cells_allowed=w->region_cells_culled=0;
+    w->region_pvs_revision=w->occluder_revision=0;
+    r2d_world_stream_free(&w->stream);w->stream_ready=false;w->stream_asset_revision=0;
+    w->stream_total_uploads=w->stream_total_upload_bytes=w->stream_total_evictions=0;
+    r2d_world_impostors_free(&w->impostors);w->impostor_ready=false;
+    free(w->visible_impostors);w->visible_impostors=NULL;
+    w->visible_impostor_count=w->visible_impostor_capacity=0;
     w->region_active_count=w->region_preload_count=0;w->region_current=-1;
+    w->render_origin_region=-1;w->render_origin_x=w->render_origin_y=0;
     w->region_ready=false;
 }
 
@@ -84,7 +100,7 @@ bool r2d_world_regions_ensure(R2DWorldRuntime *w)
     if(!w)return false;
     if(w->region_ready&&w->regions.cell_count==w->world.cell_count&&w->regions.portal_count==w->world.portal_count)return true;
     r2d_world_regions_free(w);
-    const int nc=w->world.cell_count,np=w->world.portal_count;
+    const int nc=w->world.cell_count,np=w->world.portal_count,ns=w->world.span_count;
     if(nc<=0)return false;
     R2DWorldRegionCell *cells=(R2DWorldRegionCell *)calloc((size_t)nc,sizeof *cells);
     R2DWorldRegionPortal *portals=(R2DWorldRegionPortal *)calloc((size_t)(np?np:1),sizeof *portals);
@@ -100,11 +116,12 @@ bool r2d_world_regions_ensure(R2DWorldRuntime *w)
         const R2DWorldPortal *p=&w->world.portals[i];
         portals[i]=(R2DWorldRegionPortal){p->cell_a,p->cell_b,p->closed,p->area_portal};
     }
-    float size=512.0f;
-    // Keep the deterministic grid below the module's hard cap even for huge maps.
+    // Compiler --region-size metadata wins; 512 is the deterministic fallback.
+    float size=(isfinite(w->region_size_hint)&&w->region_size_hint>=16.0f&&w->region_size_hint<=1048576.0f)
+               ?w->region_size_hint:512.0f;
     while(((int)ceilf((maxx-minx)/size)+2)*((int)ceilf((maxy-miny)/size)+2)>R2D_WORLD_REGION_MAX_GRID&&size<1048576.0f)size*=2.0f;
     R2DWorldRegionSet sizing;memset(&sizing,0,sizeof sizing);
-    char error[128]={0};
+    char error[160]={0};
     int regions=r2d_world_region_build(cells,nc,portals,np,size,&sizing,error,sizeof error);
     if(regions<=0){free(cells);free(portals);return false;}
     R2DWorldRegionSet *r=&w->regions;
@@ -122,12 +139,102 @@ bool r2d_world_regions_ensure(R2DWorldRuntime *w)
     r->pvs_capacity=regions*sizing.pvs_words;r->pvs_words=sizing.pvs_words;
     bool ok=r->regions&&r->cell_region&&r->region_cells&&r->region_portal_offsets&&r->region_portal_refs&&r->region_adj_offsets&&r->region_adj_refs&&r->pvs;
     if(ok)ok=r2d_world_region_build(cells,nc,portals,np,size,r,error,sizeof error)==regions;
-    free(cells);free(portals);
-    if(!ok){r2d_world_regions_free(w);return false;}
+    if(!ok){free(cells);free(portals);r2d_world_regions_free(w);return false;}
+
+    // Keep a portal snapshot for PVS rebuilds after door/areaportal changes.
+    w->region_portals=(R2DWorldRegionPortal *)calloc((size_t)(np?np:1),sizeof *w->region_portals);
+    if(!w->region_portals){free(cells);free(portals);r2d_world_regions_free(w);return false;}
+    if(np)memcpy(w->region_portals,portals,(size_t)np*sizeof *portals);
+    w->region_portal_capacity=np;
+
+    // Vis clusters: bounded grouping of cells inside each region.
+    int cells_per_cluster=w->region_cluster_cells>0?w->region_cluster_cells:4;
+    if(cells_per_cluster>R2D_WORLD_REGION_MAX_CLUSTER_CELLS)cells_per_cluster=R2D_WORLD_REGION_MAX_CLUSTER_CELLS;
+    R2DWorldClusterSet cluster_sizing;memset(&cluster_sizing,0,sizeof cluster_sizing);
+    int cluster_count=r2d_world_region_clusters_build(r,cells_per_cluster,portals,np,&cluster_sizing,error,sizeof error);
+    if(cluster_count>0){
+        R2DWorldClusterSet *c=&w->clusters;
+        c->clusters=(R2DWorldCluster *)calloc((size_t)cluster_count,sizeof *c->clusters);
+        c->cell_cluster=(int *)calloc((size_t)nc,sizeof *c->cell_cluster);
+        c->cluster_cells=(int *)calloc((size_t)nc,sizeof *c->cluster_cells);
+        c->cluster_portal_offsets=(int *)calloc((size_t)(cluster_count+1),sizeof *c->cluster_portal_offsets);
+        c->cluster_portal_refs=(int *)calloc((size_t)(np?np*2:1),sizeof *c->cluster_portal_refs);
+        c->pvs=(uint64_t *)calloc((size_t)cluster_count*cluster_sizing.pvs_words,sizeof *c->pvs);
+        c->cluster_capacity=cluster_count;c->cell_cluster_capacity=nc;c->cluster_cells_capacity=nc;
+        c->cluster_portal_offsets_capacity=cluster_count+1;c->cluster_portal_refs_capacity=np*2;
+        c->pvs_capacity=cluster_count*cluster_sizing.pvs_words;c->pvs_words=cluster_sizing.pvs_words;
+        c->cells_per_cluster=cells_per_cluster;
+        bool cok=c->clusters&&c->cell_cluster&&c->cluster_cells&&c->cluster_portal_offsets&&c->cluster_portal_refs&&c->pvs;
+        if(cok)cok=r2d_world_region_clusters_build(r,cells_per_cluster,portals,np,c,error,sizeof error)==cluster_count;
+        w->cluster_ready=cok;
+        if(!cok){free(cells);free(portals);r2d_world_regions_free(w);return false;}
+    }
+
+    // Compiler occluder wall chains, kept as 2D segments for the coarse pass.
+    int occluder_count=0;
+    for(int i=0;i<w->world.wall_count;i++)if(r2d_world_wall_bits(&w->world.walls[i])&R2D_WALL_OCCLUDER)occluder_count++;
+    w->occluders=(R2DWorldOccluder *)calloc((size_t)(occluder_count?occluder_count:1),sizeof *w->occluders);
+    if(!w->occluders){free(cells);free(portals);r2d_world_regions_free(w);return false;}
+    w->occluder_capacity=occluder_count?occluder_count:1;
+    w->occluder_count=0;
+    for(int i=0;i<w->world.wall_count;i++){
+        const R2DWorldWall *wall=&w->world.walls[i];
+        if(!(r2d_world_wall_bits(wall)&R2D_WALL_OCCLUDER))continue;
+        if(!isfinite(wall->x1)||!isfinite(wall->y1)||!isfinite(wall->x2)||!isfinite(wall->y2))continue;
+        w->occluders[w->occluder_count++]=(R2DWorldOccluder){wall->x1,wall->y1,wall->x2,wall->y2};
+    }
+
+    // Distant region impostor descriptors (renderer consumes; no GPU here).
+    R2DWorldImpostorSet impostor_sizing;memset(&impostor_sizing,0,sizeof impostor_sizing);
+    int impostor_count=r2d_world_impostors_build(r,w->world.cells,nc,w->world.spans,ns,&impostor_sizing,error,sizeof error);
+    if(impostor_count>0){
+        w->impostors.items=(R2DWorldImpostor *)calloc((size_t)impostor_count,sizeof *w->impostors.items);
+        w->impostors.count=impostor_count;w->impostors.capacity=impostor_count;
+        bool iok=w->impostors.items!=NULL;
+        if(iok)iok=r2d_world_impostors_build(r,w->world.cells,nc,w->world.spans,ns,&w->impostors,error,sizeof error)==impostor_count;
+        w->impostor_ready=iok;
+        if(!iok){free(cells);free(portals);r2d_world_regions_free(w);return false;}
+    }
+
+    w->region_visible=(uint8_t *)calloc((size_t)regions,1);
+    w->cell_allowed=(uint8_t *)calloc((size_t)nc,1);
+    int visible_capacity=impostor_count<64?impostor_count:64;
+    if(visible_capacity<1)visible_capacity=1;
+    w->visible_impostors=(R2DWorldImpostor *)calloc((size_t)visible_capacity,sizeof *w->visible_impostors);
+    w->region_visible_capacity=regions;w->cell_allowed_capacity=nc;
+    w->visible_impostor_capacity=visible_capacity;w->visible_impostor_count=0;
+    if(!w->region_visible||!w->cell_allowed||!w->visible_impostors){free(cells);free(portals);r2d_world_regions_free(w);return false;}
+
+    // Budgeted residency cache. Per-region BSP/surface payloads are registered;
+    // material textures/atlases are merged by stream_sync_assets().
+    int stream_capacity=regions*2+512+w->world.material_count;
+    if(stream_capacity<1024)stream_capacity=1024;
+    if(stream_capacity>R2D_WORLD_STREAM_MAX_ITEMS)stream_capacity=R2D_WORLD_STREAM_MAX_ITEMS;
+    w->stream_ready=r2d_world_stream_init(&w->stream,stream_capacity);
+    if(w->stream_ready){
+        if(w->stream_budget.resident_budget_bytes==0)w->stream_budget.resident_budget_bytes=8u*1024u*1024u;
+        if(w->stream_budget.upload_budget_bytes==0)w->stream_budget.upload_budget_bytes=512u*1024u;
+        if(w->stream_budget.promote_budget_items<=0)w->stream_budget.promote_budget_items=2;
+        if(w->stream_budget.upload_budget_items<=0)w->stream_budget.upload_budget_items=4;
+        if(w->stream_budget.max_resident_items<=0)w->stream_budget.max_resident_items=4096;
+        for(int ri=0;ri<regions;ri++){
+            const R2DWorldRegion *region=&r->regions[ri];
+            uint64_t payload=64u+(uint64_t)region->cell_count*96u;
+            r2d_world_stream_register(&w->stream,ri,R2D_STREAM_BSP,ri,payload,10);
+            r2d_world_stream_register(&w->stream,ri,R2D_STREAM_SURFACES,ri,payload,8);
+        }
+    }
+    if(w->region_active_radius<=0)w->region_active_radius=1;
+    if(w->region_preload_radius<w->region_active_radius)w->region_preload_radius=2;
+    if(w->lod_config.near_distance<=0&&w->lod_config.hidden_distance<=0)
+        r2d_world_region_lod_defaults(&w->lod_config);
+
     w->region_states=(uint8_t *)calloc((size_t)regions,1);
     w->region_active=(int *)calloc((size_t)regions,sizeof *w->region_active);
     w->region_preload=(int *)calloc((size_t)regions,sizeof *w->region_preload);
-    if(!w->region_states||!w->region_active||!w->region_preload){r2d_world_regions_free(w);return false;}
+    if(!w->region_states||!w->region_active||!w->region_preload){free(cells);free(portals);r2d_world_regions_free(w);return false;}
+    free(cells);free(portals);
+    w->region_pvs_revision=0;w->occluder_revision=0;
     w->region_ready=true;w->region_current=-1;
     return true;
 }
@@ -135,6 +242,240 @@ bool r2d_world_regions_ensure(R2DWorldRuntime *w)
 const R2DWorldRegionSet *r2d_world_regions(const R2DWorldRuntime *w)
 {
     return w&&w->region_ready?&w->regions:NULL;
+}
+
+float r2d_world_region_size_from_json(const char *text)
+{
+    if(!text)return 0;
+    char error[128];
+    R2dJson *root=r2d_json_parse(text,error,sizeof error);
+    if(!root)return 0;
+    float size=0;
+    const R2dJson *compiler=r2d_json_get(root,"compiler");
+    const R2dJson *grid=r2d_json_get(compiler?compiler:root,"regionGrid");
+    if(grid&&grid->type==R2D_JSON_OBJ){
+        const R2dJson *value=r2d_json_get(grid,"size");
+        if(value&&value->type==R2D_JSON_NUM){
+            double number=value->number;
+            if(isfinite(number)&&number>=16.0&&number<=1048576.0)size=(float)number;
+        }
+    }
+    r2d_json_free(root);
+    return size;
+}
+
+bool r2d_world_region_config(R2DWorldRuntime *w,float region_size,int active_ring,
+                             int preload_ring,uint64_t upload_budget_bytes,
+                             int upload_items)
+{
+    if(!w||w->rendering)return false;
+    if(!(region_size>=0.0f)||!isfinite(region_size)||
+       (region_size>0.0f&&(region_size<16.0f||region_size>1048576.0f)))
+        return false;
+    if(active_ring<0||active_ring>R2D_WORLD_REGION_MAX_RING||
+       preload_ring<active_ring||preload_ring>R2D_WORLD_REGION_MAX_RING)
+        return false;
+    if(upload_items<0)return false;
+    const bool rebuild=region_size>0.0f&&
+        (!(w->region_size_hint==region_size));
+    w->region_size_hint=region_size>0.0f?region_size:0.0f;
+    w->region_active_radius=active_ring;
+    w->region_preload_radius=preload_ring;
+    if(upload_budget_bytes>0)w->stream_budget.upload_budget_bytes=upload_budget_bytes;
+    if(upload_items>0)w->stream_budget.upload_budget_items=upload_items;
+    if(rebuild)r2d_world_regions_free(w);
+    return true;
+}
+
+bool r2d_world_region_lod_config(R2DWorldRuntime *w,const R2DWorldRegionLodConfig *config)
+{
+    if(!w||!config||!r2d_world_region_lod_valid(config))return false;
+    w->lod_config=*config;
+    return true;
+}
+
+bool r2d_world_render_origin(R2DWorldRuntime *w,float *origin_x,float *origin_y,int *region)
+{
+    if(!w||!w->region_ready||!origin_x||!origin_y)return false;
+    if(origin_x)*origin_x=w->render_origin_x;
+    if(origin_y)*origin_y=w->render_origin_y;
+    if(region)*region=w->render_origin_region;
+    return w->render_origin_region>=0;
+}
+
+const R2DWorldImpostor *r2d_world_visible_impostors(R2DWorldRuntime *w,int *count)
+{
+    if(count)*count=w?w->visible_impostor_count:0;
+    if(!w||!w->impostor_ready||w->visible_impostor_count<=0)return NULL;
+    return w->visible_impostors;
+}
+
+static void runtime_refresh_portals(R2DWorldRuntime *w)
+{
+    const int np=w->world.portal_count;
+    if(np>w->region_portal_capacity){
+        R2DWorldRegionPortal *next=(R2DWorldRegionPortal *)realloc(
+            w->region_portals,(size_t)np*sizeof *next);
+        if(!next)return;
+        w->region_portals=next;w->region_portal_capacity=np;
+    }
+    for(int i=0;i<np;i++){
+        const R2DWorldPortal *p=&w->world.portals[i];
+        w->region_portals[i]=(R2DWorldRegionPortal){p->cell_a,p->cell_b,p->closed,p->area_portal};
+    }
+}
+
+static void runtime_refresh_occluders(R2DWorldRuntime *w)
+{
+    int count=0;
+    for(int i=0;i<w->world.wall_count;i++)
+        if(r2d_world_wall_bits(&w->world.walls[i])&R2D_WALL_OCCLUDER)count++;
+    if(count>w->occluder_capacity){
+        R2DWorldOccluder *next=(R2DWorldOccluder *)realloc(w->occluders,(size_t)count*sizeof *next);
+        if(!next)return;
+        w->occluders=next;w->occluder_capacity=count;
+    }
+    w->occluder_count=0;
+    for(int i=0;i<w->world.wall_count;i++){
+        const R2DWorldWall *wall=&w->world.walls[i];
+        if(!(r2d_world_wall_bits(wall)&R2D_WALL_OCCLUDER))continue;
+        if(!isfinite(wall->x1)||!isfinite(wall->y1)||!isfinite(wall->x2)||!isfinite(wall->y2))continue;
+        w->occluders[w->occluder_count++]=(R2DWorldOccluder){wall->x1,wall->y1,wall->x2,wall->y2};
+    }
+}
+
+static bool region_asset_xy(JSContext *ctx,JSValueConst node,float *x,float *y)
+{
+    JSValue vx=JS_GetPropertyStr(ctx,node,"x");double dx=0,dy=0;
+    JSValue vy=JS_GetPropertyStr(ctx,node,"y");
+    int ok=!JS_IsException(vx)&&!JS_IsException(vy)&&
+        JS_ToFloat64(ctx,&dx,vx)==0&&JS_ToFloat64(ctx,&dy,vy)==0;
+    JS_FreeValue(ctx,vx);JS_FreeValue(ctx,vy);
+    if(!ok||!isfinite(dx)||!isfinite(dy))return false;
+    *x=(float)dx;*y=(float)dy;
+    return true;
+}
+
+// Texture/atlas residency: merge authored material textures and live atlas
+// buffers into the same budgeted cache as region payloads. This is the data the
+// GPU owner uploads when an item becomes RESIDENT; no GPU call is made here.
+static void runtime_stream_sync_assets(JSContext *ctx,R2DWorldRuntime *w)
+{
+    if(!w->stream_ready||!w->region_ready)return;
+    const int revision=w->world.material_count*131+w->atlas_count*17+
+        (int)(w->world.geometry_revision&0x7fffffff);
+    if(revision==w->stream_asset_revision)return;
+    w->stream_asset_revision=revision;
+    for(int m=0;m<w->world.material_count;m++){
+        const R2DWorldMaterial *material=&w->world.materials[m];
+        if(!material->used)continue;
+        int region=-1;
+        for(int s=0;s<w->world.surface_count&&region<0;s++){
+            if(!w->world.surface_materials||w->world.surface_materials[s]!=m)continue;
+            const R2DWorldSurface *surface=r2d_world_surface(&w->world,s);
+            if(!surface||surface->span<0||!w->world.span_cells)continue;
+            const int cell=w->world.span_cells[surface->span];
+            if(cell>=0&&cell<w->regions.cell_count)region=w->regions.cell_region[cell];
+        }
+        uint64_t bytes=64;
+        if(material->albedo.pixels)bytes+=(uint64_t)material->albedo.width*material->albedo.height*4u;
+        if(material->normal.pixels)bytes+=(uint64_t)material->normal.width*material->normal.height*4u;
+        if(material->emissive.pixels)bytes+=(uint64_t)material->emissive.width*material->emissive.height*4u;
+        r2d_world_stream_register(&w->stream,m,R2D_STREAM_MATERIAL,region,bytes,6);
+        if(material->albedo.pixels)
+            r2d_world_stream_register(&w->stream,m,R2D_STREAM_TEXTURE,region,
+                (uint64_t)material->albedo.width*material->albedo.height*4u,7);
+    }
+    for(int a=0;a<w->atlas_count;a++){
+        const R2DWorldAtlasActor *actor=&w->atlas_actors[a];
+        if(!actor->atlas)continue;
+        float x=0,y=0;int region=-1;
+        if(region_asset_xy(ctx,actor->node,&x,&y))
+            region=r2d_world_region_at(&w->regions,x,y);
+        const uint64_t bytes=(uint64_t)actor->atlas_w*actor->atlas_h*4u;
+        r2d_world_stream_register(&w->stream,1000000+a,R2D_STREAM_ATLAS,region,bytes,7);
+    }
+}
+
+static void runtime_build_cell_allowed(R2DWorldRuntime *w,float camera_x,float camera_y)
+{
+    if(!w->region_ready||!w->cell_allowed||!w->region_visible)return;
+    memset(w->cell_allowed,0,(size_t)w->world.cell_count);
+    w->region_cells_allowed=0;w->region_cells_culled=0;
+    if(w->region_current<0)return;
+    const int camera_cell=r2d_world_cell_at(&w->world,camera_x,camera_y);
+    const int camera_cluster=(camera_cell>=0&&w->cluster_ready)
+        ?r2d_world_region_cluster_at(&w->clusters,camera_cell):-1;
+    w->cluster_camera=camera_cluster;
+    for(int r=0;r<w->regions.region_count;r++){
+        if(!w->region_visible[r])continue;
+        const R2DWorldRegion *region=&w->regions.regions[r];
+        for(int k=0;k<region->cell_count;k++){
+            const int cell=w->regions.region_cells[region->first_cell+k];
+            if(cell<0||cell>=w->world.cell_count)continue;
+            bool allow=(r==w->region_current)||camera_cluster<0||!w->cluster_ready;
+            if(!allow)allow=r2d_world_region_cluster_visible(&w->clusters,camera_cluster,
+                r2d_world_region_cluster_at(&w->clusters,cell));
+            if(allow){w->cell_allowed[cell]=1;w->region_cells_allowed++;}
+            else w->region_cells_culled++;
+        }
+    }
+}
+
+void r2d_world_regions_frame(R2DWorldRuntime *w,const R2DRe2dView *view)
+{
+    if(!w||!view)return;
+    if(!r2d_world_regions_ensure(w)){w->region_ready=false;return;}
+    R2DWorldRegionSet *set=&w->regions;
+    const uint64_t revision=w->world.geometry_revision;
+    if(revision!=w->region_pvs_revision){
+        runtime_refresh_portals(w);
+        if(set->portal_count)
+            r2d_world_region_rebuild_pvs(set,w->region_portals,set->portal_count);
+        if(w->cluster_ready)
+            r2d_world_region_clusters_rebuild_pvs(&w->clusters,w->region_portals,set->portal_count);
+        w->region_pvs_revision=revision;
+    }
+    if(revision!=w->occluder_revision){
+        runtime_refresh_occluders(w);
+        w->occluder_revision=revision;
+    }
+    int at=r2d_world_region_at(set,view->x,view->y);
+    if(at<0)at=0;
+    w->region_current=at;
+
+    int pvs_visible=0;
+    for(int r=0;r<set->region_count;r++)
+        if(r2d_world_region_visible(set,at,r))pvs_visible++;
+    int visible=r2d_world_region_visible_set(set,at,w->occluders,w->occluder_count,
+        view->x,view->y,w->region_visible,w->region_visible_capacity);
+    if(visible<0)visible=0;
+    w->region_visible_count=visible;
+    w->region_pvs_culled=set->region_count-pvs_visible;
+    w->region_occluder_culled=pvs_visible-visible;
+    if(w->region_occluder_culled<0)w->region_occluder_culled=0;
+    runtime_build_cell_allowed(w,view->x,view->y);
+
+    w->region_active_count=r2d_world_region_update_active(set,at,
+        w->region_active_radius>0?w->region_active_radius:1,
+        w->region_preload_radius>0?w->region_preload_radius:2,
+        w->region_states,set->region_count,w->region_active,set->region_count,
+        w->region_preload,set->region_count);
+    w->region_preload_count=set->metrics.preload_count;
+    r2d_world_stream_update(&w->stream,w->region_states,set->region_count,
+        &w->stream_budget,(uint64_t)w->frame_count,&w->stream_stats);
+    w->stream_total_uploads+=(uint64_t)w->stream_stats.uploads;
+    w->stream_total_upload_bytes+=w->stream_stats.upload_bytes;
+    w->stream_total_evictions+=(uint64_t)w->stream_stats.evicted;
+
+    float max_distance=w->lod_config.hidden_distance>0.0f?w->lod_config.hidden_distance:6000.0f;
+    w->visible_impostor_count=r2d_world_impostors_collect(&w->impostors,set,at,
+        w->occluders,w->occluder_count,view->x,view->y,0.0f,max_distance,
+        w->visible_impostors,w->visible_impostor_capacity);
+    if(w->visible_impostor_count<0)w->visible_impostor_count=0;
+    w->render_origin_region=at;
+    if(!r2d_world_region_render_origin(set,at,&w->render_origin_x,&w->render_origin_y))
+        w->render_origin_x=w->render_origin_y=0.0f;
 }
 
 void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
@@ -238,6 +579,12 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
             pdepth+=actor->offset_h;
         }
         const float dx=px_-view->x,dy=py_-view->y,dist=fmaxf(.000001f,hypotf(dx,dy));
+        R2DWorldRegionLod lod;r2d_world_region_lod_eval(dist,&w->lod_config,&lod);
+        bool animate=true;
+        if(lod.animation_fps>0&&lod.animation_fps<60){
+            const int frames_per_pose=(60+lod.animation_fps-1)/lod.animation_fps;
+            animate=(w->lod_tick%frames_per_pose)==0;
+        }
         bool flip=false;
         const int column=r2d_world_atlas_direction(r2d_world_atlas_relative_yaw(facing,dx/dist,dy/dist),actor->directions,actor->mirror,&flip);
         float px,py;r2d_world_atlas_pivot(actor->pivot_mode,actor->pivot_x,actor->pivot_y,&px,&py);
@@ -248,19 +595,21 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
         const float wx=px_+(0.5f-pivot_sx/(float)side)*wsq;
         const float bottom=pdepth-(1.0f-pivot_sy/(float)side)*hsq;
         const int span=r2d_world_span_at(&w->world,wx,py_,bottom+hsq*0.5f);
-        const bool visible=span>=0&&w->visibility.span_seen[span]&&r2d_world_sprite_visible(view,width,height,wx,py_,bottom,wsq,hsq,ortho);
+        bool visible=span>=0&&w->visibility.span_seen[span]&&r2d_world_sprite_visible(view,width,height,wx,py_,bottom,wsq,hsq,ortho);
+        if(visible&&lod.hidden){visible=false;w->lod_hidden_atlas++;}
         if(visible) {
             if(!actor->frame||actor->frame_side!=side) {
                 uint8_t *frame=realloc(actor->frame,(size_t)side*(size_t)side*4u);
                 if(!frame){JS_ThrowOutOfMemory(ctx);return false;}
                 actor->frame=frame;actor->frame_side=side;actor->last_column=-1;
             }
-            if(actor->last_column!=column||actor->last_row!=row||actor->last_flip!=(flip?1:0)) {
+            const bool changed=actor->last_column!=column||actor->last_row!=row||actor->last_flip!=(flip?1:0);
+            if((animate||actor->last_column<0)&&changed) {
                 if(!r2d_world_atlas_crop(actor->atlas,actor->atlas_w,actor->atlas_h,cell_x,cell_y,cell_w,cell_h,flip,side,dest_x,dest_y,actor->frame)) {
                     JS_ThrowInternalError(ctx,"Re2D World: atlas cell crop failed");return false;
                 }
                 actor->last_column=column;actor->last_row=row;actor->last_flip=flip?1:0;actor->frame_revision++;
-            }
+            } else if(changed) w->lod_throttled_actors++;
         }
         if(w->frame_count==ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: composition budget exhausted");return false;}
         const int index=w->frame_count++;
@@ -414,19 +763,11 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
         w->frame_kinds=kinds;w->frame_revisions=revisions;w->frame_blends=blends;w->frame_keys=keys;w->frame_tints=tints;
     }
     if(w->frame_tints)for(int i=0;i<ACTOR_LIMIT;i++){w->frame_tints[i*4]=w->frame_tints[i*4+1]=w->frame_tints[i*4+2]=w->frame_tints[i*4+3]=1.0f;}
+    r2d_world_regions_frame(w,view);
+    runtime_stream_sync_assets(ctx,w);
     r2d_world_audio_step(w,view);
-    if(r2d_world_regions_ensure(w)){
-        int at=r2d_world_region_at(&w->regions,view->x,view->y);
-        if(at<0)at=0;
-        w->region_current=at;
-        w->region_active_count=r2d_world_region_update_active(&w->regions,at,1,2,
-            w->region_states,w->regions.region_count,w->region_active,w->regions.region_count,
-            w->region_preload,w->regions.region_count);
-        w->region_preload_count=w->regions.metrics.preload_count;
-        r2d_world_region_stream(&w->regions,w->region_states,w->regions.region_count,2);
-    }
     Uint64 frame_start=SDL_GetPerformanceCounter(),phase=frame_start;double ms=1000.0/SDL_GetPerformanceFrequency();
-    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->visible_atlas_count=0;w->particles_drawn=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;r2d_world_render_counters_reset(&w->render_counters);int result=-1;
+    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->visible_atlas_count=0;w->particles_drawn=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;w->lod_hidden_actors=w->lod_throttled_actors=w->lod_hidden_atlas=0;w->lod_culled_lights=w->lod_culled_particles=w->lod_culled_decals=0;w->audio_region_culled=0;r2d_world_render_counters_reset(&w->render_counters);int result=-1;
     for(int i=0;i<w->actor_count;i++)if(!collect(ctx,w,view,w->actors[i],0,false,0,0))goto done;
     if(w->disposed){JS_ThrowTypeError(ctx,"Re2D World: world disposed during actor query");goto done;}
     if(width!=w->width||height!=w->height||!w->owners) {
@@ -438,13 +779,61 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
         w->rgba=rgba;w->depth=z;w->owners=owners;w->texture=texture;w->sprite=sprite;w->width=width;w->height=height;
     }
     phase=SDL_GetPerformanceCounter();
-    if(!r2d_world_visibility(&w->world,view,ortho,&w->visibility)){JS_ThrowOutOfMemory(ctx);goto done;}
+    if(!r2d_world_visibility_filtered(&w->world,view,ortho,&w->visibility,
+            w->region_ready?w->cell_allowed:NULL)){JS_ThrowOutOfMemory(ctx);goto done;}
     w->visibility_ms=(SDL_GetPerformanceCounter()-phase)*ms;phase=SDL_GetPerformanceCounter();
     if(!r2d_world_light_rebuild(&w->world)){JS_ThrowOutOfMemory(ctx);goto done;}
     w->light_cull_ms=(SDL_GetPerformanceCounter()-phase)*ms;
     bool lights[R2D_WORLD_MAX_LIGHTS]={0};w->visible_lights=w->shadowed_lights=0;
     for(int i=0;i<w->visibility.span_count;i++){int span=w->visibility.spans[i];for(int j=0;j<w->world.span_light_counts[span];j++)lights[w->world.span_light_refs[span*R2D_WORLD_LIGHTS_PER_SPAN+j]]=true;}
-    for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(lights[i]){w->visible_lights++;if(w->world.shadow_mask[i])w->shadowed_lights++;}
+    // Light LOD: distance policy drops far lights and shadowed lights beyond
+    // the per-ring shadow budget. Typical near lights keep the full pool.
+    {
+        int kept[ R2D_WORLD_MAX_LIGHTS ], kept_count=0, shadowed=0;
+        for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(lights[i]){
+            const R2DWorldLight *light=&w->world.lights[i];
+            const float dx=light->x-view->x,dy=light->y-view->y,dz=light->h-view->eye;
+            const float distance=sqrtf(dx*dx+dy*dy+dz*dz);
+            R2DWorldRegionLod lod;r2d_world_region_lod_eval(distance,&w->lod_config,&lod);
+            if(!lod.light_updates||lod.max_lights<=0){w->lod_culled_lights++;continue;}
+            if(kept_count<R2D_WORLD_MAX_LIGHTS)kept[kept_count++]=i;
+        }
+        int budget=w->lod_config.near_lights>0?w->lod_config.near_lights:R2D_WORLD_MAX_LIGHTS;
+        if(kept_count>budget){
+            // Keep the nearest `budget` lights deterministically.
+            for(int a=budget;a<kept_count;a++){
+                int worst=0;float worst_distance=-1;
+                const R2DWorldLight *la=&w->world.lights[kept[a]];
+                const float da=hypotf(la->x-view->x,la->y-view->y);
+                for(int b=0;b<budget;b++){
+                    const R2DWorldLight *lb=&w->world.lights[kept[b]];
+                    const float db=hypotf(lb->x-view->x,lb->y-view->y);
+                    if(db>worst_distance){worst_distance=db;worst=b;}
+                }
+                if(da<worst_distance){lights[kept[worst]]=false;w->lod_culled_lights++;kept[worst]=kept[a];}
+                else{w->lod_culled_lights++;lights[kept[a]]=false;}
+            }
+        }
+        w->visible_lights=0;w->shadowed_lights=0;
+        for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(lights[i]){
+            w->visible_lights++;
+            if(w->world.shadow_mask[i]&&shadowed<w->lod_config.max_shadow_lights){shadowed++;w->shadowed_lights++;}
+        }
+    }
+    // Decal region pool stats: a decal is culled when its owning cell is
+    // outside the hierarchical PVS or distance LOD drops it this frame.
+    for(int i=0;i<w->world.decal_count;i++){
+        const R2DWorldDecal *decal=&w->world.decals[i];if(!decal->active)continue;
+        const R2DWorldSurface *surface=r2d_world_surface(&w->world,decal->surface);
+        if(!surface||surface->span<0||!w->world.span_cells){w->lod_culled_decals++;continue;}
+        const int cell=w->world.span_cells[surface->span];
+        const bool allowed=!w->region_ready||!w->cell_allowed||
+            (cell>=0&&cell<w->world.cell_count&&w->cell_allowed[cell]);
+        if(!allowed){w->lod_culled_decals++;continue;}
+        const R2DWorldSpan *span=&w->world.spans[surface->span];
+        R2DWorldRegionLod lod;r2d_world_region_lod_eval(hypotf(span->x-view->x,span->y-view->y),&w->lod_config,&lod);
+        if(lod.decal_percent<100&&(i%100)>=lod.decal_percent)w->lod_culled_decals++;
+    }
     phase=SDL_GetPerformanceCounter();
     if(!atlas_collect(ctx,w,view,width,height,ortho))goto done;
     if(w->gpu_enabled&&!particle_collect_gpu(w,view,width,height,ortho))goto done;
@@ -455,9 +844,18 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
         if(w->frame_kinds[i]!=R2D_WORLD_FRAME_ROTSPRITE)continue;
         const float *p=w->frame_positions+i*5;int span=r2d_world_span_at(&w->world,p[0],p[1],p[2]+p[4]*.5f);
         bool visible=span>=0&&w->visibility.span_seen[span]&&r2d_world_sprite_visible(view,width,height,p[0],p[1],p[2],p[3],p[4],ortho);
-        bool dirty=visible&&r2d_rotsprite_dirty(ctx,w->frame_handles[i]),synthesize=visible&&(w->pose_budget==0||w->poses_updated<w->pose_budget);
+        R2DWorldRegionLod lod;r2d_world_region_lod_eval(hypotf(p[0]-view->x,p[1]-view->y),&w->lod_config,&lod);
+        if(visible&&lod.hidden){visible=false;w->lod_hidden_actors++;}
+        bool animate=true;
+        if(lod.animation_fps>0&&lod.animation_fps<60){
+            const int frames_per_pose=(60+lod.animation_fps-1)/lod.animation_fps;
+            animate=(w->lod_tick%frames_per_pose)==0;
+        }
+        bool dirty=visible&&r2d_rotsprite_dirty(ctx,w->frame_handles[i]);
+        bool synthesize=visible&&animate&&(w->pose_budget==0||w->poses_updated<w->pose_budget);
         const uint8_t *image=r2d_rotsprite_pixels(ctx,w->frame_handles[i],&w->frame_sizes[i],synthesize);if(!image)goto done;
-        if(dirty){if(synthesize){w->poses_updated++;next_cursor=(i+1)%w->frame_count;}else w->poses_deferred++;}
+        if(dirty){if(synthesize){w->poses_updated++;next_cursor=(i+1)%w->frame_count;}
+            else{w->poses_deferred++;if(!animate)w->lod_throttled_actors++;}}
         w->frame_images[i]=visible?image:NULL;if(visible)w->visible_actor_count++;
     }
     w->pose_cursor=next_cursor;
@@ -477,6 +875,7 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     w->upload_ms=(SDL_GetPerformanceCounter()-phase)*ms;result=w->sprite;
 done:
     for(int i=0;i<w->frame_count;i++){if(w->frame_kinds[i]==R2D_WORLD_FRAME_ROTSPRITE)JS_FreeValue(ctx,w->frame_handles[i]);w->frame_handles[i]=JS_UNDEFINED;}
+    w->lod_tick++;
     w->frame_ms=(SDL_GetPerformanceCounter()-frame_start)*ms;w->rendering=false;return result;
 }
 
@@ -992,6 +1391,10 @@ static void particles_draw_cpu(R2DWorldRuntime *w,const R2DRe2dView *v,int width
     w->particles_drawn=0;
     for(int i=0;i<w->particles.count;i++){
         const R2DWorldParticle *p=&w->particles.items[i];if(!p->active)continue;
+        R2DWorldRegionLod lod;r2d_world_region_lod_eval(hypotf(p->x-v->x,p->y-v->y),&w->lod_config,&lod);
+        if(lod.particle_percent<=0||(lod.particle_percent<100&&(i%100)>=lod.particle_percent)){
+            w->lod_culled_particles++;continue;
+        }
         float pj[4],center,scale,dist;
         if(ortho>0){
             const float dx=p->x-v->x,dy=p->y-v->y,up=p->h-v->eye;
@@ -1051,6 +1454,10 @@ static bool particle_collect_gpu(R2DWorldRuntime *w,const R2DRe2dView *v,int wid
     int drawn=0;
     for(int i=0;i<w->particles.count&&drawn<R2D_WORLD_PARTICLE_GPU_BUDGET;i++){
         const R2DWorldParticle *p=&w->particles.items[i];if(!p->active)continue;
+        R2DWorldRegionLod lod;r2d_world_region_lod_eval(hypotf(p->x-v->x,p->y-v->y),&w->lod_config,&lod);
+        if(lod.particle_percent<=0||(lod.particle_percent<100&&(i%100)>=lod.particle_percent)){
+            w->lod_culled_particles++;continue;
+        }
         if(w->frame_count==ACTOR_LIMIT)break;
         const int index=w->frame_count++;
         float *pos=w->frame_positions+index*5;
@@ -1670,8 +2077,38 @@ void r2d_world_audio_step(R2DWorldRuntime *w,const R2DRe2dView *v) {
         if(s->generation!=w->audio->channel_generation[i]||!r2d_audio_channel_playing(w->audio,i)){s->active=false;continue;}
         float dx=s->x-v->x,dy=s->y-v->y,dh=s->h-v->eye,d=sqrtf(dx*dx+dy*dy+dh*dh),norm=fmaxf(.0001f,d);
         s->distance=d;float taper=fmaxf(0,1-(d/s->range)*(d/s->range));
+        // Region/PVS audio culling: a source outside the camera's hierarchical
+        // visible set is virtualized (no HRTF/occlusion ray cost, silent mix).
+        bool region_culled=false;
+        const R2DWorldRegionSet *region_set=r2d_world_regions(w);
+        if(region_set&&w->region_ready&&w->region_visible&&w->region_current>=0){
+            const int source_region=r2d_world_region_at(region_set,s->x,s->y);
+            if(source_region>=0&&source_region<region_set->region_count&&
+               source_region<w->region_visible_capacity&&!w->region_visible[source_region])
+                region_culled=true;
+        }
+        if(region_culled){
+            s->virtualized=true;s->occluded=true;s->gain=0;s->current_gain=0;
+            w->audio_region_culled++;
+            r2d_audio_world_channel(w->audio,i,true,s->hrtf,0,0,-1,0,22000);
+            continue;
+        }
         float origin[3]={v->x,v->y,v->eye},direction[3]={dx,dy,dh};R2DWorldHit hit;
-        s->occluded=d>.01f&&r2d_world_ray(&w->world,origin,direction,.001f,.999f,&hit);
+        s->occluded=false;
+        if(d>.01f){
+            // R2D_WALL_ACOUSTIC is the audio-occlusion policy bit; a wall with
+            // the bit clear is visually solid but acoustically transparent, so
+            // continue the ray past it instead of silencing the source.
+            float o[3]={origin[0],origin[1],origin[2]};
+            for(int pass=0;pass<8;pass++){
+                if(!r2d_world_ray(&w->world,o,direction,.001f,.999f,&hit)){s->occluded=false;break;}
+                if(hit.wall<0){s->occluded=true;break;}
+                R2DWorldWallPolicy policy=r2d_world_wall_policy(&w->world,hit.wall);
+                if(policy.acoustic){s->occluded=true;break;}
+                o[0]=hit.x+direction[0]*.001f;o[1]=hit.y+direction[1]*.001f;o[2]=hit.height+direction[2]*.001f;
+                s->occluded=true; // conservative if the loop budget is exhausted
+            }
+        }
         s->gain=s->volume*fminf(1,s->reference/fmaxf(s->reference,d))*taper*taper*(s->occluded?.18f:1);
         s->cutoff=s->occluded?700:22000; s->current_gain+=(s->gain-s->current_gain)*.2f;
         if(s->virtualized){s->current_gain=0;s->gain=0;r2d_audio_world_channel(w->audio,i,true,s->hrtf,0,0,-1,0,22000);continue;}

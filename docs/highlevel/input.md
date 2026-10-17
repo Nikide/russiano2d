@@ -287,3 +287,14 @@ if ($.input.pressed('confirm')) {
 токенов всего, `$.input.releaseLocks(reason)` — аварийно снять все (вызывается
 и автоматически при смене сцены). Русские алиасы `$.ввод.locks`,
 `$.ввод.lockCount`, `$.ввод.releaseLocks` ведут в те же методы.
+
+Hard gating: `$.input.lock(name, owner, {hard:true})` создаёт жёсткий токен.
+Пока жив хотя бы один такой токен, `$.input.hardLocked()` возвращает `true`,
+`$.input.hardLocks()` — список имён, а `$.input.down`, `$.input.pressed`,
+`$.input.released`, `$.input.mouseDown`, `$.input.mousePressed` возвращают
+`false` для gameplay. UI/диалог, который сам держит лок, читает
+`$.input.rawDown`, `$.input.rawPressed`, `$.input.rawReleased`,
+`$.input.rawMouseDown`, `$.input.rawMousePressed` — они обходят гейт. Русские
+алиасы `$.ввод.hardLocked`, `$.ввод.hardLocks`, `$.ввод.rawDown`,
+`$.ввод.rawPressed`, `$.ввод.rawReleased`, `$.ввод.rawMouseDown`,
+`$.ввод.rawMousePressed` ведут в те же методы.

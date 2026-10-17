@@ -1,4 +1,6 @@
 #include "re2d_world_gpu.h"
+#include "re2d_world_sky.h"
+#include "re2d_world_render_features.h"
 #include "re2d_world_vfx.h"
 #include "rotsprite.h"
 #include <SDL3/SDL_timer.h>
@@ -198,7 +200,10 @@ static bool shadows_upload(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *
             for(int i=0;i<chunk->count;i++)if(!shadow_append(g,chunk->data[i]))return false;
             g->shadow_data[slot][0]=start;g->shadow_data[slot][1]=chunk->walls;g->shadow_data[slot][2]=start+chunk->walls*2;g->shadow_data[slot][3]=chunk->spans;continue;
         }
-        for(int i=0;i<world->wall_count;i++){const R2DWorldWall *wall=&world->walls[i];if(!r2d_world_wall_solid(world,i,wall->bottom,wall->top))continue;
+        for(int i=0;i<world->wall_count;i++){const R2DWorldWall *wall=&world->walls[i];
+            // Tool-material policy: tool_shadowless/clip walls do not cast.
+            if(!(r2d_world_wall_bits(wall)&R2D_WALL_SHADOW))continue;
+            if(!r2d_world_wall_solid(world,i,wall->bottom,wall->top))continue;
             float dx=wall->x2-wall->x1,dy=wall->y2-wall->y1,t=fmaxf(0,fminf(1,((l->x-wall->x1)*dx+(l->y-wall->y1)*dy)/(dx*dx+dy*dy)));
             float x=wall->x1+t*dx-l->x,y=wall->y1+t*dy-l->y,h=fmaxf(wall->bottom-l->h,fmaxf(0,l->h-wall->top));
             if(x*x+y*y+h*h>l->radius*l->radius)continue;
@@ -624,6 +629,125 @@ static void vfx_draw_all(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cm
         if(trail->distortion!=R2D_VFX_DISTORTION_NONE)w->render_counters.vfx_distortion++;
     }
 }
+// P4 sky/weather/shaft cards: one procedural quad through the same card shader
+// branch as VFX (plane.w=5), but with its own counters so VFX attribution stays
+// clean. Screen-space callers pass pixel coordinates; world-space callers project
+// first (shaft cards do that below).
+static void p4_quad_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,
+                         float cx,float cy,float side,float rotation,int kind,
+                         float r,float gg,float b,float alpha,float width_ratio,
+                         int distortion,float dist,int blend,float near_plane,int *counter)
+{
+    if(!(side>0.5f)||!(alpha>0.002f))return;
+    float half=side*0.62f;
+    int left=(int)fmaxf(0,floorf(cx-half)),top=(int)fmaxf(0,floorf(cy-half));
+    int right=(int)fminf(w->width,ceilf(cx+half)),bottom=(int)fminf(w->height,ceilf(cy+half));
+    if(right<=left||bottom<=top)return;
+    SDL_Rect scissor={left,top,right-left,bottom-top};
+    if(!set_scissor(g,pass,scissor))return;
+    SDL_GPUGraphicsPipeline *pipeline=blend==R2D_WORLD_ADDITIVE?g->fx_additive:g->fx_translucent;
+    SDL_BindGPUGraphicsPipeline(pass,pipeline);
+    SurfaceUniform u={0};
+    u.eye[3]=near_plane;u.plane[3]=5.0f;u.plane[0]=dist;
+    u.billboard[0]=cx-side*.5f;u.billboard[1]=cy-side*.5f;u.billboard[2]=side;u.billboard[3]=side;
+    u.material[0]=(float)kind;u.material[1]=rotation;u.material[2]=width_ratio;u.material[3]=(float)distortion;
+    u.tint[0]=r;u.tint[1]=gg;u.tint[2]=b;u.tint[3]=alpha;
+    u.anim[0]=w->render_time;
+    SDL_PushGPUFragmentUniformData(cmd,0,&u,sizeof u);
+    SDL_DrawGPUPrimitives(pass,3,1,0,0);
+    g->draws++;w->gpu_draw_other++;if(counter)*counter+=1;
+}
+// Distant sky cards sit behind world geometry: drawn right after the panorama,
+// before opaque surfaces, with a depth of 1 so closer world pixels win.
+static void sky_p4_distant(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v)
+{
+    const R2DWorldRenderFeatures *rf=&w->render_features;
+    if(!rf->sky_layers||rf->distant_cards<=0)return;
+    R2DWorldSky sky;
+    r2d_world_sky_defaults(&sky);
+    int cards=(int)rf->distant_cards;
+    if(cards>sky.distant_count)cards=sky.distant_count;
+    for(int i=0;i<cards;i++){
+        float x=0;uint32_t tint=0;float alpha=0;
+        float yaw=atan2f(v->sin_yaw,v->cos_yaw);
+        r2d_world_sky_distant_sample(&sky,i,yaw,w->render_time,&x,&tint,&alpha);
+        if(!(alpha>0.001f))continue;
+        float px=(0.5f+(x-0.5f)*0.5f)*w->width;
+        float py=w->height*(0.44f+0.055f*(float)i+sky.distant[i].offset*0.12f);
+        float side=w->height*(0.55f+0.12f*(float)i);
+        float cr=((tint>>0)&255)/255.0f,cg=((tint>>8)&255)/255.0f,cb=((tint>>16)&255)/255.0f;
+        p4_quad_draw(w,g,cmd,pass,px,py,side,0.0f,1,cr,cg,cb,alpha*fminf(1.0f,0.35f+0.1f*(float)i),0.16f,0,100000.0f,R2D_WORLD_TRANSLUCENT,v->near_plane,&w->render_counters.distant_cards);
+    }
+}
+// Weather cards are drawn last, in front of the world. Deterministic sampling
+// from the sky model; count is density-bounded so ultra stays cheap.
+static void sky_p4_weather(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v)
+{
+    const R2DWorldRenderFeatures *rf=&w->render_features;
+    if(!rf->weather_layers)return;
+    R2DWorldSky sky;
+    if(rf->sky_profile>=0&&rf->sky_profile<R2D_SKY_PROFILE_COUNT)r2d_world_sky_profile(rf->sky_profile,&sky);
+    else r2d_world_sky_defaults(&sky);
+    if(rf->weather_type>R2D_SKY_WEATHER_NONE&&rf->weather_type<R2D_SKY_WEATHER_COUNT&&sky.weather_count<R2D_SKY_MAX_WEATHER){
+        sky.weather[sky.weather_count].type=rf->weather_type;
+        sky.weather[sky.weather_count].density=rf->weather_density;
+        sky.weather[sky.weather_count].speed=rf->weather_type==R2D_SKY_WEATHER_CLOUDS?0.03f:0.55f;
+        sky.weather[sky.weather_count].slant=0.3f;
+        sky.weather[sky.weather_count].size=1.0f;
+        sky.weather[sky.weather_count].opacity=0.55f;
+        sky.weather_count+=1;
+    }
+    for(int layer=0;layer<sky.weather_count;layer++){
+        int budget=(int)(sky.weather[layer].density*96.0f);
+        if(budget<=0)continue;if(budget>96)budget=96;
+        for(int i=0;i<budget;i++){
+            float out[6];int type=0;
+            if(!r2d_world_sky_weather_sample(&sky,layer,i,w->render_time,rf->seed,out,&type))continue;
+            float px=out[0]*(float)w->width,py=out[1]*(float)w->height;
+            float side=(type==R2D_SKY_WEATHER_CLOUDS?w->height*out[2]:w->height*out[2]);
+            float ratio=type==R2D_SKY_WEATHER_CLOUDS?0.35f:out[3]/fmaxf(out[2],1e-4f);
+            int kind=type==R2D_SKY_WEATHER_CLOUDS?3:(type==R2D_SKY_WEATHER_SNOW?0:1);
+            float rot=type==R2D_SKY_WEATHER_CLOUDS?0.0f:atan2f(out[4],1.0f);
+            float alpha=out[5]*0.75f;
+            float cr=0.72f,cg=0.80f,cb=0.92f;
+            if(type==R2D_SKY_WEATHER_SNOW){cr=cg=cb=0.96f;}
+            else if(type==R2D_SKY_WEATHER_ASH){cr=cg=cb=0.55f;}
+            else if(type==R2D_SKY_WEATHER_RAIN){cr=0.55f;cg=0.68f;cb=0.85f;}
+            int blend=type==R2D_SKY_WEATHER_CLOUDS?R2D_WORLD_TRANSLUCENT:R2D_WORLD_ADDITIVE;
+            // dist = near plane keeps weather in front of world geometry.
+            p4_quad_draw(w,g,cmd,pass,px,py,side,rot,kind,cr,cg,cb,alpha,ratio,type==R2D_SKY_WEATHER_RAIN?1:0,
+                         v->near_plane*1.01f,blend,v->near_plane,&w->render_counters.weather_cards);
+        }
+    }
+}
+// Light shafts: authored point lights become translucent additive cards from
+// the light down to a floor-ish end. No raymarch, no volume texture.
+static void sky_p4_shafts(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho)
+{
+    const R2DWorldRenderFeatures *rf=&w->render_features;
+    if(!rf->light_shafts||rf->shaft_budget<=0)return;
+    int drawn=0;
+    for(int i=0;i<R2D_WORLD_MAX_LIGHTS&&drawn<rf->shaft_budget;i++){
+        const R2DWorldLight *l=&w->world.lights[i];
+        if(!l->active||!(l->intensity>0.0f))continue;
+        float top[4],bottom[4],d0=0,d1=0;
+        if(!vfx_project(v,l->x,l->y,l->h,ortho,top,&d0))continue;
+        if(!vfx_project(v,l->x,l->y,l->h-rf->shaft_length,ortho,bottom,&d1))continue;
+        float sx=(float)w->width/v->width,sy=(float)w->height/v->height;
+        float x0=top[0]*sx,y0=top[1]*sy,x1=bottom[0]*sx,y1=bottom[1]*sy;
+        float dx=x1-x0,dy=y1-y0,length=sqrtf(dx*dx+dy*dy);
+        if(length<4.0f)continue;
+        float width_px=fmaxf(2.0f,rf->shaft_width*fminf(top[3],bottom[3])*fmaxf(sx,sy)*0.35f);
+        float alpha=r2d_world_render_shaft_alpha(0.5f,1.0f,rf)*(l->intensity>1.0f?1.0f:l->intensity);
+        if(alpha<=0.002f)continue;
+        float rot=atan2f(dy,dx);
+        float side=length*1.12f;
+        float ratio=fminf(1.0f,width_px/side);
+        p4_quad_draw(w,g,cmd,pass,(x0+x1)*0.5f,(y0+y1)*0.5f,side,rot+1.5707963f,1,
+                     l->r,l->g,l->b,alpha,ratio,0,(d0+d1)*0.5f,R2D_WORLD_ADDITIVE,v->near_plane,&w->render_counters.shafts);
+        drawn++;
+    }
+}
 // P0 sprite grounding: screen-space contact/foot-AO card on the floor. Uses the
 // same R2DWorldGroundCard as the CPU reference, so CPU/GPU parity holds.
 static bool ground_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho,int actor)
@@ -698,7 +822,7 @@ static bool mirror_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd
     SDL_Rect saved_clip=g->clip;bool saved_active=g->clip_active;g->clip=scissor;g->clip_active=true;
     set_scissor(g,pass,scissor);
     SDL_BindGPUGraphicsPipeline(pass,g->mirror);
-    sky_draw(w,g,cmd,pass,&rv,ortho);
+    sky_draw(w,g,cmd,pass,&rv,ortho);sky_p4_distant(w,g,cmd,pass,&rv);
     for(int j=0;j<w->visibility.surface_count;j++){int id=w->visibility.surfaces[j];if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT)continue;surface_draw(w,g,cmd,pass,&rv,ortho,id);}
     for(int i=0;i<w->frame_count;i++)if(w->frame_images[i]){
         SDL_BindGPUGraphicsPipeline(pass,g->mirror);
@@ -709,6 +833,29 @@ static bool mirror_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd
     w->visibility=saved;g->clip=saved_clip;g->clip_active=saved_active;
     w->render_counters.reflection_passes++;
     return true;
+}
+
+
+// R-04 distant region impostors: one depth-tested vertical silhouette card per
+// visible far region. Data is baked/collected natively; no mesh or per-region JS.
+static void region_impostors_draw(R2DWorldRuntime *w,WorldGPU *g,SDL_GPUCommandBuffer *cmd,SDL_GPURenderPass *pass,const R2DRe2dView *v,float ortho)
+{
+    int count=0;const R2DWorldImpostor *cards=r2d_world_visible_impostors(w,&count);
+    if(!cards||count<=0)return;
+    if(count>64)count=64;
+    for(int i=0;i<count;i++){
+        const R2DWorldImpostor *c=&cards[i];if(!c->valid||!(c->width>0)||c->top<=c->bottom)continue;
+        float pb[4],pt[4],db=0,dt=0;
+        if(!vfx_project(v,c->cx,c->cy,c->bottom,ortho,pb,&db))continue;
+        if(!vfx_project(v,c->cx,c->cy,c->top,ortho,pt,&dt))continue;
+        float side=fabsf(pb[1]-pt[1]);
+        if(side<1.5f)side=fmaxf(1.5f,c->width*fminf(pb[3],pt[3]));
+        if(side<1.5f)continue;
+        float ratio=c->height>1e-3f?fmaxf(0.02f,c->width/c->height):1.0f;
+        float r=((c->color>>16)&255)/255.0f,gg=((c->color>>8)&255)/255.0f,b=(c->color&255)/255.0f;
+        p4_quad_draw(w,g,cmd,pass,(pb[0]+pt[0])*.5f,(pb[1]+pt[1])*.5f,side,0.0f,3,
+                     r,gg,b,0.82f,ratio,0,(db+dt)*.5f,R2D_WORLD_TRANSLUCENT,v->near_plane,&w->render_counters.distant_impostors);
+    }
 }
 
 
@@ -727,6 +874,7 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
     SDL_GPURenderPass *pass=SDL_BeginGPURenderPass(cmd,colors,2,&depth);if(!pass){SDL_CancelGPUCommandBuffer(cmd);return false;}
     SDL_BindGPUGraphicsPipeline(pass,w->debug_view==R2D_WORLD_DEBUG_OVERDRAW?g->overdraw:g->pipeline);SDL_BindGPUFragmentStorageBuffers(pass,0,&g->shadows,1);g->draws=0;w->gpu_draw_base=w->gpu_draw_span=w->gpu_draw_actor=w->gpu_draw_other=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;w->gpu_material_batches=0;memset(g->bound_textures,0,sizeof g->bound_textures);
     if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&(w->world.sky.pixels||w->world.sky_color))sky_draw(w,g,cmd,pass,v,ortho);
+    if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)sky_p4_distant(w,g,cmd,pass,v);
     for(int j=0;j<w->visibility.surface_count;j++){int id=w->visibility.surfaces[j];if(r2d_world_surface_blend(&w->world,id)>=R2D_WORLD_TRANSLUCENT&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)continue;surface_draw(w,g,cmd,pass,v,ortho,id);}
     if(w->render_features.grounding&&w->render_features.contact_shadow&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW){
         int budget=w->render_features.quality<=R2D_RENDER_QUALITY_LOW?128:512,drawn=0;
@@ -757,8 +905,10 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
         if(count<0){SDL_EndGPURenderPass(pass);SDL_CancelGPUCommandBuffer(cmd);return false;}
         for(int i=0;i<count;i++){SDL_BindGPUGraphicsPipeline(pass,r2d_world_surface_blend(&w->world,ids[i])==R2D_WORLD_ADDITIVE?g->additive:g->translucent);surface_draw(w,g,cmd,pass,v,ortho,ids[i]);}
     }
+    if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)region_impostors_draw(w,g,cmd,pass,v,ortho);
     // R-03 VFX pass: procedural world cards, card trails and distortion cards.
     if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&w->vfx)vfx_draw_all(w,g,cmd,pass,v,ortho);
+    if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW){sky_p4_shafts(w,g,cmd,pass,v,ortho);sky_p4_weather(w,g,cmd,pass,v);}
     size_t pixel_count=(size_t)w->width*w->height;
     w->gpu_texture_bytes=pixel_count*28+8; // MRT/depth + public RGBA output + two fallback texels.
     w->gpu_transfer_bytes=((pixel_count*4+511)&~(size_t)511)+pixel_count*16+g->shadow_buffer_capacity;

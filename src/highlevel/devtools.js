@@ -53,7 +53,7 @@ const TABS = ['perf', 'hitch', 'physics', 'render', 'events', 'tree', 'diag',
               'audio', 'input', 'assets', 'memory', 'console', 'step', 'watch',
               'vfx'];
 const VFX_ROWS = 24;           // строк списка эффектов r2dvfx (§M4)
-const SECTIONS = ['identity', 'transform', 'gameplay', 'physics', 'presentation'];
+const SECTIONS = ['identity', 'transform', 'gameplay', 'physics', 'presentation', 'narrative'];
 
 // ---------------------------------------------------------------------------
 // Разметка панелей. Строки вкладок объявлены здесь же — элементы существуют
@@ -105,6 +105,7 @@ input { width: 85px; height: 24px; background-color: #203448; vertical-align: mi
     <button id="dt-secbtn-gameplay">Gameplay</button>
     <button id="dt-secbtn-physics">Physics</button>
     <button id="dt-secbtn-presentation">Presentation</button>
+    <button id="dt-secbtn-narrative">Narrative</button>
   </div>
   <div id="dt-inspect">
     <div id="tab-identity" class="dt-sec"></div>
@@ -112,6 +113,7 @@ input { width: 85px; height: 24px; background-color: #203448; vertical-align: mi
     <div id="tab-gameplay" class="dt-sec hidden"></div>
     <div id="tab-physics" class="dt-sec hidden"></div>
     <div id="tab-presentation" class="dt-sec hidden"></div>
+    <div id="tab-narrative" class="dt-sec hidden"></div>
   </div>
   <div id="dt-foot">
     <button id="dt-copy">Скопировать селектор</button>
@@ -868,6 +870,42 @@ export function installDevTools($) {
         ]);
     }
 
+    function narrativeSection() {
+        const d = $.dialog;
+        const n = d && typeof d.inspect === 'function' ? call(() => d.inspect(), null) : null;
+        if (!n) {
+            return sectionRows([['dialog', COPY_NONE], ['hint', '$.dialog не установлен']]);
+        }
+        const choices = Array.isArray(n.choices) ? n.choices : [];
+        const chosen = choices.map((c) => `${c.index}:${c.text}`).join(' | ');
+        const flags = n.flags && typeof n.flags === 'object'
+            ? Object.entries(n.flags).map(([k, v]) => `${k}=${v}`).join(', ') : '';
+        const voice = n.voice || {};
+        const prefetch = n.prefetch || null;
+        const i18n = n.i18n || {};
+        return sectionRows([
+            ['open', n.open ? 'да' : 'нет'],
+            ['scene / definition', n.definition || COPY_NONE],
+            ['step', n.step || COPY_NONE],
+            ['page', `${n.page + 1}/${n.pages || 0}`],
+            ['speaker', n.displayName || COPY_NONE],
+            ['speaker id', n.speaker || COPY_NONE],
+            ['expression', n.expression || COPY_NONE],
+            ['portrait slot', n.slot || COPY_NONE],
+            ['theme', n.theme || COPY_NONE],
+            ['view / choice slots', `${n.view || 'builtin'} / ${n.choiceSlots || 0}`],
+            ['typing', n.typing ? 'да' : 'нет'],
+            ['choices', choices.length ? chosen : COPY_NONE],
+            ['world mode', n.worldMode || COPY_NONE],
+            ['input lock', n.inputLocked ? (n.inputHardLocked ? 'hard' : 'advisory') : 'нет'],
+            ['flags', flags || COPY_NONE],
+            ['voice', voice.playing ? `играет: ${voice.src}` : (voice.enabled ? 'готов' : 'выключен')],
+            ['prefetch', prefetch ? `assets ${prefetch.requested}, tex ${prefetch.textures}, snd ${prefetch.sounds}, fail ${prefetch.failed.length}` : COPY_NONE],
+            ['i18n keys', `translated ${(i18n.translated || []).length}, missing ${(i18n.missing || []).length}`],
+            ['unread', n.unread === undefined ? COPY_NONE : n.unread],
+        ]);
+    }
+
     function round2(v) {
         return isNum(v) ? Math.round(v * 100) / 100 : v;
     }
@@ -881,12 +919,13 @@ export function installDevTools($) {
         return null;
     }
 
-    /** Данные всех пяти секций выбранного узла (то же, что видно в панели). */
+    /** Данные секций выбранного узла + всегда доступная Narrative. */
     function inspect() {
         const node = selectedNode();
         if (!node) {
             return { found: false, uid: state.selected_uid, nid: state.selected_nid,
-                     selector: state.selector, sections: {} };
+                     selector: state.selector,
+                     sections: { narrative: narrativeSection() } };
         }
         const sections = {
             identity: identitySection(node),
@@ -894,6 +933,7 @@ export function installDevTools($) {
             gameplay: gameplaySection(node),
             physics: physicsSection(node),
             presentation: presentationSection(node),
+            narrative: narrativeSection(),
         };
         return { found: true, uid: node.uid, nid: node.nid, selector: selectorOf(node), sections };
     }
@@ -1053,7 +1093,14 @@ export function installDevTools($) {
         if (!info.found) {
             uiSetHtml(state.doc, 'tab-identity',
                 `<span>${state.selected_uid === null ? 'Выберите сущность слева или включите Pick entity.' : 'Выбранная сущность исчезла из мира.'}</span>`);
-            for (const s of SECTIONS) if (s !== 'identity') uiSetHtml(state.doc, 'tab-' + s, '');
+            for (const s of SECTIONS) {
+                if (s === 'identity') continue;
+                if (s === 'narrative' && info.sections.narrative) {
+                    uiSetHtml(state.doc, 'tab-narrative', info.sections.narrative.html);
+                    continue;
+                }
+                uiSetHtml(state.doc, 'tab-' + s, '');
+            }
             return state;
         }
         state.selector = info.selector;
@@ -3244,6 +3291,16 @@ export function installDevTools($) {
 
         /** §20: данные всех секций выбранного узла (те же, что в панели). */
         inspect,
+
+        /**
+         * Narrative inspector: facts shown in the Narrative tab, independent of
+         * node selection. Same source as $.dialog.inspect().
+         */
+        narrative() {
+            const section = narrativeSection();
+            return { dialog: $.dialog && typeof $.dialog.inspect === 'function' ? $.dialog.inspect() : null,
+                     section };
+        },
 
         /**
          * §20: текущая выборка списка с учётом поиска и фильтров — те же

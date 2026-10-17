@@ -5,6 +5,14 @@
 > input lock tokens, narrative IR/story adapter, backend/save/backlog/voice,
 > native `r2d-sdk story validate` / `dialog validate`. Public `$` API additions
 > are additive; existing `$.dialog` calls keep working.
+>
+> Unreleased / task-9 DoD gaps: real `$.sound` voice playback, real
+> `$.resource`/`$.sound` prefetch, `$.i18n.lookup()` dictionary lookup,
+> dynamic `choiceSlots`/`choiceTemplate` (1..64), optional hard input lock
+> (`$.input.lock(..., {hard:true})`), narrative DevTools tab, `world.debug`
+> views/features/budget helpers, BASHNYA RML/RCSS theme. Purely additive;
+> advisory input locks, the 6-slot default RML and event-only voice/prefetch
+> listeners continue to work.
 
 
 ## 1.2.5 — 2026-10-17

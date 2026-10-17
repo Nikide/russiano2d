@@ -116,6 +116,20 @@ void r2d_world_render_defaults(R2DWorldRenderFeatures *out)
     out->liquid_scroll_speed = 0.55f;
     out->liquid_highlight = 0.30f;
     out->liquid_foam = 0.22f;
+
+    out->light_shafts = true;
+    out->shaft_budget = 4;
+    out->shaft_length = 180.0f;
+    out->shaft_width = 26.0f;
+    out->shaft_opacity = 0.18f;
+    out->shaft_fade = 0.65f;
+    out->heat_distortion = true;
+    out->weather_layers = false;
+    out->sky_profile = 0; // R2D_SKY_PROFILE_CLEAR
+    out->weather_type = 0;
+    out->weather_density = 0.0f;
+    out->distant_cards = 2;
+    out->moon_disc = false;
 }
 
 bool r2d_world_render_preset(int quality, R2DWorldRenderFeatures *out)
@@ -146,6 +160,10 @@ bool r2d_world_render_preset(int quality, R2DWorldRenderFeatures *out)
         out->bloom_lite = false;
         out->surface_detail = false;
         out->material_animation = false;
+        out->light_shafts = false;
+        out->heat_distortion = false;
+        out->weather_layers = false;
+        out->distant_cards = 1;
         out->shadow_softness = 0.45f;
         out->foot_ao_strength = 0.0f;
     } else if (quality == R2D_RENDER_QUALITY_HIGH) {
@@ -157,6 +175,13 @@ bool r2d_world_render_preset(int quality, R2DWorldRenderFeatures *out)
         out->liquid_distortion = 0.024f;
         out->liquid_foam = 0.30f;
         out->sun_glow = 0.18f;
+        out->shaft_budget = 6;
+        out->shaft_opacity = 0.22f;
+        out->weather_layers = true;
+        out->sky_profile = 1; // R2D_SKY_PROFILE_DUSK
+        out->weather_type = 4; // R2D_SKY_WEATHER_CLOUDS
+        out->weather_density = 0.30f;
+        out->distant_cards = 3;
     } else if (quality == R2D_RENDER_QUALITY_ULTRA) {
         out->sky_layer_count = 4;
         out->variation_strength = 0.75f;
@@ -167,6 +192,14 @@ bool r2d_world_render_preset(int quality, R2DWorldRenderFeatures *out)
         out->liquid_distortion = 0.032f;
         out->liquid_foam = 0.38f;
         out->sun_glow = 0.24f;
+        out->shaft_budget = 8;
+        out->shaft_opacity = 0.26f;
+        out->weather_layers = true;
+        out->sky_profile = 3; // R2D_SKY_PROFILE_STORM
+        out->weather_type = 1; // R2D_SKY_WEATHER_RAIN
+        out->weather_density = 0.55f;
+        out->distant_cards = 4;
+        out->moon_disc = true;
     }
     return true;
 }
@@ -224,6 +257,17 @@ bool r2d_world_render_validate(R2DWorldRenderFeatures *config)
     config->sun_glow = sanitize_float(config->sun_glow, def.sun_glow, 0.0f, 2.0f);
     config->sky_scroll_speed = sanitize_float(config->sky_scroll_speed, def.sky_scroll_speed, 0.0f, 10.0f);
 
+    if (config->shaft_budget < 0) config->shaft_budget = 0;
+    if (config->shaft_budget > 8) config->shaft_budget = 8;
+    config->shaft_length = sanitize_float(config->shaft_length, def.shaft_length, 1.0f, 100000.0f);
+    config->shaft_width = sanitize_float(config->shaft_width, def.shaft_width, 0.5f, 10000.0f);
+    config->shaft_opacity = sanitize_float(config->shaft_opacity, def.shaft_opacity, 0.0f, 1.0f);
+    config->shaft_fade = sanitize_float(config->shaft_fade, def.shaft_fade, 0.01f, 1.0f);
+    if (config->sky_profile < 0 || config->sky_profile > 3) config->sky_profile = def.sky_profile;
+    if (config->weather_type < 0 || config->weather_type > 4) config->weather_type = def.weather_type;
+    config->weather_density = sanitize_float(config->weather_density, def.weather_density, 0.0f, 1.0f);
+    if (config->distant_cards < 0) config->distant_cards = 0;
+    if (config->distant_cards > 4) config->distant_cards = 4;
     config->liquid_distortion = sanitize_float(config->liquid_distortion, def.liquid_distortion, 0.0f, 1.0f);
     config->liquid_scroll_speed = sanitize_float(config->liquid_scroll_speed, def.liquid_scroll_speed, 0.0f, 10.0f);
     config->liquid_highlight = sanitize_float(config->liquid_highlight, def.liquid_highlight, 0.0f, 1.0f);
@@ -399,4 +443,322 @@ void r2d_world_render_liquid_uv(float u, float v, float time,
         float wave = 0.5f + 0.5f * sinf((u + v) * 1.7f + time * 2.1f);
         *out_foam = clamp01(smoothstep01(0.55f, 0.95f, wave) * config->liquid_foam);
     }
+}
+
+// ---------------------------------------------------------------------------
+// P4: light shaft cards.
+
+static float smooth01(float x)
+{
+    return smoothstep01(0.0f, 1.0f, x);
+}
+
+float r2d_world_render_shaft_alpha(float along, float height_fraction,
+                                   const R2DWorldRenderFeatures *config)
+{
+    R2DWorldRenderFeatures def;
+    if (!config) { r2d_world_render_defaults(&def); config = &def; }
+    if (!isfinite(along) || !isfinite(height_fraction)) return 0.0f;
+    along = clamp01(along);
+    height_fraction = clamp01(height_fraction);
+    float fade = clampf(config->shaft_fade, 0.01f, 1.0f);
+    // Bright at the light end, feathered before the floor end.
+    float vertical = powf(height_fraction, fade);
+    float ends = smooth01(along / 0.12f) * smooth01((1.0f - along) / 0.22f);
+    return clamp01(config->shaft_opacity * vertical * ends);
+}
+
+float r2d_world_render_shaft_width(float height_fraction,
+                                   const R2DWorldRenderFeatures *config)
+{
+    R2DWorldRenderFeatures def;
+    if (!config) { r2d_world_render_defaults(&def); config = &def; }
+    if (!isfinite(height_fraction)) height_fraction = 0.0f;
+    height_fraction = clamp01(height_fraction);
+    return config->shaft_width * (1.0f + 0.45f * height_fraction);
+}
+
+// ---------------------------------------------------------------------------
+// P4: contact lighting 2.0.
+
+void r2d_world_render_contact_light(float dx, float dy, const float light_rgb[3],
+                                    float intensity, const float ambient_rgb[3],
+                                    float out_dir[2], float out_rgb[3])
+{
+    if (out_dir) { out_dir[0] = out_dir[1] = 0.0f; }
+    if (out_rgb) for (int c = 0; c < 3; ++c) out_rgb[c] = 1.0f;
+    if (!out_dir || !out_rgb) return;
+    if (!isfinite(dx) || !isfinite(dy) || !isfinite(intensity)) return;
+    intensity = clampf(intensity, 0.0f, 8.0f);
+    float dist = sqrtf(dx * dx + dy * dy);
+    if (dist > 1e-6f) {
+        out_dir[0] = dx / dist;
+        out_dir[1] = dy / dist;
+    }
+    float falloff = 1.0f / (1.0f + dist * dist * 0.0025f);
+    float mix = clamp01(intensity * falloff);
+    for (int c = 0; c < 3; ++c) {
+        float a = ambient_rgb && isfinite(ambient_rgb[c]) ? clamp01(ambient_rgb[c]) : 0.5f;
+        float l = light_rgb && isfinite(light_rgb[c]) ? clamp01(light_rgb[c]) : 1.0f;
+        out_rgb[c] = clamp01(a * (1.0f - mix) + l * mix);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// P4: baked ambient / AO-lite field.
+
+bool r2d_world_ambient_bake(R2DWorldAmbientField *field,
+                            float x0, float y0, float w, float h,
+                            int cells_x, int cells_y,
+                            const float *floor_h, const float *ceiling_h,
+                            const float sky_rgb[3], float sky_bias)
+{
+    if (!field) return false;
+    memset(field, 0, sizeof(*field));
+    if (cells_x < 1 || cells_y < 1 || cells_x > R2D_WORLD_AMBIENT_MAX ||
+        cells_y > R2D_WORLD_AMBIENT_MAX || !isfinite(w) || !isfinite(h) ||
+        !(w > 0.0f) || !(h > 0.0f) || !isfinite(x0) || !isfinite(y0)) return false;
+    float sky[3] = {0.75f, 0.83f, 0.92f};
+    if (sky_rgb) for (int c = 0; c < 3; ++c) if (isfinite(sky_rgb[c])) sky[c] = clamp01(sky_rgb[c]);
+    sky_bias = clamp01(isfinite(sky_bias) ? sky_bias : 0.5f);
+    field->width = cells_x;
+    field->height = cells_y;
+    field->x0 = x0;
+    field->y0 = y0;
+    field->cell_w = w / (float)cells_x;
+    field->cell_h = h / (float)cells_y;
+    int count = cells_x * cells_y;
+    for (int i = 0; i < count; ++i) {
+        float floor = floor_h && isfinite(floor_h[i]) ? floor_h[i] : 0.0f;
+        float ceiling = ceiling_h && isfinite(ceiling_h[i]) ? ceiling_h[i] : 256.0f;
+        float gap = ceiling - floor;
+        if (!isfinite(gap) || gap < 0.0f) gap = 0.0f;
+        // A 512-unit open interval reads as fully sky-lit; low ceilings darken.
+        float openness = clamp01(gap / 512.0f);
+        float bounce = 0.12f * (1.0f - openness);
+        float ao = clamp01(1.0f - openness * (0.55f + 0.45f * sky_bias));
+        field->occlusion[i] = ao;
+        for (int c = 0; c < 3; ++c)
+            field->ambient[i * 3 + c] = clamp01(sky[c] * (0.35f + 0.65f * openness) *
+                                                (0.85f + 0.30f * sky_bias) + bounce);
+    }
+    field->valid = true;
+    return true;
+}
+
+void r2d_world_ambient_sample(const R2DWorldAmbientField *field,
+                              float x, float y,
+                              float out_rgb[3], float *out_occlusion)
+{
+    if (out_rgb) { out_rgb[0] = out_rgb[1] = out_rgb[2] = 1.0f; }
+    if (out_occlusion) *out_occlusion = 0.0f;
+    if (!field || !field->valid || !isfinite(x) || !isfinite(y)) return;
+    float fx = (x - field->x0) / field->cell_w - 0.5f;
+    float fy = (y - field->y0) / field->cell_h - 0.5f;
+    if (fx < -0.5f || fy < -0.5f || fx > (float)field->width - 0.5f ||
+        fy > (float)field->height - 0.5f) return;
+    if (fx < 0.0f) fx = 0.0f;
+    if (fy < 0.0f) fy = 0.0f;
+    if (fx > (float)(field->width - 1)) fx = (float)(field->width - 1);
+    if (fy > (float)(field->height - 1)) fy = (float)(field->height - 1);
+    int x0 = (int)fx, y0 = (int)fy;
+    int x1 = x0 + 1 < field->width ? x0 + 1 : x0;
+    int y1 = y0 + 1 < field->height ? y0 + 1 : y0;
+    float tx = fx - (float)x0, ty = fy - (float)y0;
+    int i00 = y0 * field->width + x0, i10 = y0 * field->width + x1;
+    int i01 = y1 * field->width + x0, i11 = y1 * field->width + x1;
+    if (out_rgb) for (int c = 0; c < 3; ++c) {
+        float a = field->ambient[i00 * 3 + c] * (1.0f - tx) + field->ambient[i10 * 3 + c] * tx;
+        float b = field->ambient[i01 * 3 + c] * (1.0f - tx) + field->ambient[i11 * 3 + c] * tx;
+        out_rgb[c] = clamp01(a * (1.0f - ty) + b * ty);
+    }
+    if (out_occlusion) {
+        float a = field->occlusion[i00] * (1.0f - tx) + field->occlusion[i10] * tx;
+        float b = field->occlusion[i01] * (1.0f - tx) + field->occlusion[i11] * tx;
+        *out_occlusion = clamp01(a * (1.0f - ty) + b * ty);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// P4: surface detail layers.
+
+void r2d_world_render_detail_layer(uint32_t surface, int layer, uint32_t seed,
+                                   float base_u, float base_v,
+                                   float out_uv[2], float *out_weight)
+{
+    if (out_uv) { out_uv[0] = isfinite(base_u) ? base_u : 0.0f; out_uv[1] = isfinite(base_v) ? base_v : 0.0f; }
+    if (out_weight) *out_weight = 0.0f;
+    if (!out_uv || layer < 0 || layer >= R2D_WORLD_DETAIL_LAYERS) return;
+    uint32_t h0 = r2d_world_render_hash(seed, surface * 5u + (uint32_t)layer);
+    uint32_t h1 = r2d_world_render_hash(seed ^ 0x27d4eb2fu, surface * 13u + (uint32_t)layer + 7u);
+    float n0 = (float)(h0 & 0x00ffffffu) / 16777216.0f;
+    float n1 = (float)(h1 & 0x00ffffffu) / 16777216.0f;
+    float u = isfinite(base_u) ? base_u : 0.0f;
+    float v = isfinite(base_v) ? base_v : 0.0f;
+    switch (layer) {
+    case R2D_WORLD_DETAIL_BASE:
+        if (out_weight) *out_weight = 1.0f;
+        break;
+    case R2D_WORLD_DETAIL_DETAIL:
+        out_uv[0] = u * 4.0f + n0; out_uv[1] = v * 4.0f + n1;
+        if (out_weight) *out_weight = 0.35f;
+        break;
+    case R2D_WORLD_DETAIL_MACRO:
+        out_uv[0] = u * 0.35f + n1 * 0.5f; out_uv[1] = v * 0.35f + n0 * 0.5f;
+        if (out_weight) *out_weight = 0.25f;
+        break;
+    case R2D_WORLD_DETAIL_EMISSIVE:
+        out_uv[0] = u * 2.0f + n0 * 0.25f; out_uv[1] = v * 2.0f + n1 * 0.25f;
+        if (out_weight) *out_weight = 0.5f;
+        break;
+    case R2D_WORLD_DETAIL_NORMAL:
+        out_uv[0] = u * 3.0f + n1 * 0.75f; out_uv[1] = v * 3.0f + n0 * 0.75f;
+        if (out_weight) *out_weight = 0.5f;
+        break;
+    default:
+        break;
+    }
+}
+
+int r2d_world_render_sprite_direction(float yaw, int directions)
+{
+    if (!isfinite(yaw) || directions < 1) directions = 16;
+    if (directions > 64) directions = 64;
+    float turns = yaw / 6.283185307179586f;
+    turns -= floorf(turns);
+    int dir = (int)floorf(turns * (float)directions + 0.5f);
+    if (dir >= directions) dir = 0;
+    if (dir < 0) dir += directions;
+    return dir;
+}
+
+// ---------------------------------------------------------------------------
+// P4: decals 2.0.
+
+bool r2d_world_decal2_init(R2DWorldDecal2 *decal, int material,
+                           float u, float v, float w, float h,
+                           float rotation, float scale,
+                           float life, float fade_in, float fade_out,
+                           float seed)
+{
+    if (!decal) return false;
+    memset(decal, 0, sizeof(*decal));
+    if (material < 0 || !(w > 0.0f) || !(h > 0.0f) || !isfinite(u) || !isfinite(v) ||
+        !isfinite(rotation) || !isfinite(scale) || !isfinite(life) || !(life > 0.0f) ||
+        !isfinite(fade_in) || !isfinite(fade_out) || !isfinite(seed) ||
+        fade_in < 0.0f || fade_out < 0.0f) return false;
+    decal->material = material;
+    decal->u = u; decal->v = v; decal->w = w; decal->h = h;
+    decal->rotation = rotation;
+    decal->scale = clampf(scale, 0.25f, 4.0f);
+    decal->life = life;
+    decal->max_life = life;
+    decal->fade_in = fade_in;
+    decal->fade_out = fade_out;
+    decal->seed = seed;
+    decal->active = true;
+    return true;
+}
+
+bool r2d_world_decal2_step(R2DWorldDecal2 *decal, float dt)
+{
+    if (!decal || !decal->active) return false;
+    if (!isfinite(dt) || dt < 0.0f) dt = 0.0f;
+    if (dt > 1.0f) dt = 1.0f;
+    decal->life -= dt;
+    if (decal->life <= 0.0f) {
+        decal->life = 0.0f;
+        decal->active = false;
+    }
+    return decal->active;
+}
+
+float r2d_world_decal2_eval(const R2DWorldDecal2 *decal,
+                            float *out_rotation, float *out_scale)
+{
+    if (out_rotation) *out_rotation = 0.0f;
+    if (out_scale) *out_scale = 1.0f;
+    if (!decal || !decal->active || !(decal->max_life > 0.0f)) return 0.0f;
+    float age = decal->max_life - decal->life;
+    float alpha = 1.0f;
+    if (decal->fade_in > 0.0f) alpha = fminf(alpha, clamp01(age / decal->fade_in));
+    if (decal->fade_out > 0.0f) alpha = fminf(alpha, clamp01(decal->life / decal->fade_out));
+    uint32_t h = r2d_world_render_hash((uint32_t)(decal->seed * 1000.0f), decal->material + 17u);
+    float n = (float)(h & 0x00ffffffu) / 16777216.0f;
+    if (out_rotation) *out_rotation = decal->rotation + (n - 0.5f) * 0.35f;
+    if (out_scale) *out_scale = decal->scale * (0.85f + 0.30f * n);
+    return clamp01(alpha);
+}
+
+// ---------------------------------------------------------------------------
+// P4: static batching and residency hooks.
+
+void r2d_world_render_batch_key(R2DWorldBatchKey *key, int material, int blend,
+                                int light_policy, int atlas)
+{
+    if (!key) return;
+    key->material = material >= 0 ? material : -1;
+    key->blend = blend;
+    key->light_policy = light_policy >= 0 ? light_policy : -1;
+    key->atlas = atlas >= 0 ? atlas : -1;
+}
+
+uint32_t r2d_world_render_batch_hash(const R2DWorldBatchKey *key)
+{
+    if (!key) return 0;
+    uint32_t h = 0x9e3779b9u;
+    h = mix32(h ^ (uint32_t)(key->material + 1));
+    h = mix32(h ^ ((uint32_t)key->blend * 0x85ebca6bu + 0x27d4eb2fu));
+    h = mix32(h ^ (uint32_t)(key->light_policy + 1) * 0x165667b1u);
+    h = mix32(h ^ (uint32_t)(key->atlas + 1) * 0xc2b2ae35u);
+    return h;
+}
+
+void r2d_world_render_batch_draw(R2DWorldBatchStats *stats,
+                                 const R2DWorldBatchKey *key,
+                                 R2DWorldBatchKey *previous, bool *has_previous)
+{
+    if (!stats || !key) return;
+    stats->draws += 1;
+    bool same = previous && has_previous && *has_previous &&
+                previous->material == key->material && previous->blend == key->blend &&
+                previous->light_policy == key->light_policy && previous->atlas == key->atlas;
+    if (!same) {
+        stats->batches += 1;
+        stats->runs += 1;
+    } else {
+        stats->saved += 1;
+    }
+    if (previous) *previous = *key;
+    if (has_previous) *has_previous = true;
+}
+
+void r2d_world_residency_init(R2DWorldResidency *residency, size_t budget_bytes,
+                              size_t upload_bytes_budget)
+{
+    if (!residency) return;
+    memset(residency, 0, sizeof(*residency));
+    residency->budget_bytes = budget_bytes;
+    residency->upload_bytes_budget = upload_bytes_budget;
+}
+
+bool r2d_world_residency_admit(R2DWorldResidency *residency, size_t bytes)
+{
+    if (!residency) return false;
+    if (bytes > residency->budget_bytes || residency->resident_bytes + bytes > residency->budget_bytes) {
+        residency->pending += 1;
+        return false;
+    }
+    residency->resident += 1;
+    residency->resident_bytes += bytes;
+    return true;
+}
+
+size_t r2d_world_residency_upload(R2DWorldResidency *residency, size_t bytes)
+{
+    if (!residency) return 0;
+    size_t allowed = residency->upload_bytes_budget;
+    if (bytes > allowed) bytes = allowed;
+    residency->uploaded_bytes += bytes;
+    return bytes;
 }

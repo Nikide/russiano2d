@@ -13,6 +13,8 @@
 #include "re2d_world_material_anim.h"
 #include "re2d_world_render_features.h"
 #include "re2d_world_region.h"
+#include "re2d_world_stream.h"
+#include "re2d_world_impostor.h"
 #include "re2d_postprocess.h"
 #include "re2d_audio_zone.h"
 #include "re2d_audio_voices.h"
@@ -147,6 +149,40 @@ typedef struct R2DWorldRuntime {
     int *region_active,*region_preload;
     int region_active_count,region_preload_count,region_current;
     bool region_ready;
+    // Hierarchical visibility: region PVS -> vis clusters -> local BSP/portal.
+    R2DWorldClusterSet clusters;
+    bool cluster_ready;
+    R2DWorldRegionPortal *region_portals;
+    int region_portal_capacity;
+    R2DWorldOccluder *occluders;
+    int occluder_count,occluder_capacity;
+    uint64_t region_pvs_revision,occluder_revision;
+    uint8_t *region_visible,*cell_allowed;
+    int region_visible_capacity,cell_allowed_capacity;
+    int region_visible_count,region_pvs_culled,region_occluder_culled,region_cluster_culled;
+    int region_cells_allowed,region_cells_culled;
+    int cluster_camera;
+    float region_size_hint;
+    int region_active_radius,region_preload_radius,region_cluster_cells;
+    // Budgeted payload residency (BSP/surfaces/materials/textures/atlases/...).
+    R2DStreamCache stream;
+    R2DStreamBudget stream_budget;
+    R2DStreamStats stream_stats;
+    uint64_t stream_total_uploads,stream_total_upload_bytes,stream_total_evictions;
+    bool stream_ready;
+    int stream_asset_revision;
+    // Distant region impostors consumed by the renderer/JS. GPU owner draws.
+    R2DWorldImpostorSet impostors;
+    bool impostor_ready;
+    R2DWorldImpostor *visible_impostors;
+    int visible_impostor_count,visible_impostor_capacity;
+    // Per-feature LOD policy + this-frame counters.
+    R2DWorldRegionLodConfig lod_config;
+    int lod_tick,lod_hidden_actors,lod_throttled_actors,lod_hidden_atlas;
+    int lod_culled_lights,lod_culled_particles,lod_culled_decals;
+    int audio_region_culled;
+    float render_origin_x,render_origin_y;
+    int render_origin_region;
     // Per-frame draw attribution for profiler/benchmarks.
     int gpu_draw_base,gpu_draw_span,gpu_draw_actor,gpu_draw_other,gpu_draw_ground,gpu_draw_vfx;
     // Borrowed R-03 VFX binding owned by the JS handle layer. NULL when the
@@ -329,6 +365,22 @@ int r2d_world_runtime_frame(JSContext *,R2DWorldRuntime *,const R2DRe2dView *,in
 bool r2d_world_regions_ensure(R2DWorldRuntime *);
 void r2d_world_regions_free(R2DWorldRuntime *);
 const R2DWorldRegionSet *r2d_world_regions(const R2DWorldRuntime *);
+// Compiler --region-size metadata ("compiler.regionGrid.size" or root
+// "regionGrid.size") parsed from the same JSON the runtime loads. 0 when absent.
+float r2d_world_region_size_from_json(const char *text);
+// Streaming/LOD runtime configuration. region_size<=0 keeps the compiler hint
+// or the deterministic 512 default. Returns false on invalid values.
+bool r2d_world_region_config(R2DWorldRuntime *,float region_size,int active_ring,
+                             int preload_ring,uint64_t upload_budget_bytes,
+                             int upload_items);
+bool r2d_world_region_lod_config(R2DWorldRuntime *,const R2DWorldRegionLodConfig *);
+// Region/vis-cluster/PVS/occluder pass for the current camera. Called once per
+// frame by r2d_world_runtime_frame(); exposed for native tests/benchmarks.
+void r2d_world_regions_frame(R2DWorldRuntime *,const R2DRe2dView *);
+// Renderer hook: region-local render origin of the current camera region.
+bool r2d_world_render_origin(R2DWorldRuntime *,float *,float *,int *);
+// Renderer hook: nearest-first distant impostor cards collected this frame.
+const R2DWorldImpostor *r2d_world_visible_impostors(R2DWorldRuntime *,int *count);
 bool r2d_world_runtime_material(JSContext *,R2DWorldRuntime *,const char *,const char *,const char *,const char *,float,float,float,int,float,bool,bool);
 bool r2d_world_runtime_sky(JSContext *,R2DWorldRuntime *,const char *,uint32_t,float,float);
 

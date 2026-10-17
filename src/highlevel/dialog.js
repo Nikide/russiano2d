@@ -183,6 +183,14 @@ export function installDialog($, options) {
     let lock_token = null;
     let auto_delay = 1.2;
     let world_mode = 'live';
+    let voice_enabled = opts.voice !== false;      // real playback when $.sound exists
+    let voice_volume = num(opts.voiceVolume, 1);
+    let voice_handle = -1;
+    let voice_src = null;
+    let prefetch_last = null;
+    let hard_lock = !!opts.hardLock;               // advisory by default
+    const translated_keys = new Set();
+    const missing_keys = new Set();
     const slots = ['left', 'center', 'right', 'far-left', 'far-right'];
 
     const backend = opts.backend
@@ -310,7 +318,7 @@ export function installDialog($, options) {
         if (lock_token) return lock_token;
         const input = api.input;
         if (!input || typeof input.lock !== 'function') return null;
-        lock_token = input.lock('dialog');
+        lock_token = hard_lock ? input.lock('dialog', 'dialog', { hard: true }) : input.lock('dialog');
         return lock_token;
     }
 
@@ -319,6 +327,68 @@ export function installDialog($, options) {
         try { lock_token.release(reason); } catch (e) { /* token already gone */ }
         lock_token = null;
         return true;
+    }
+
+    // --- VN: real voice playback through $.sound -----------------------------
+    function soundApi() { return api.sound || ctx.sound || null; }
+
+    function stopVoice(reason) {
+        if (voice_handle < 0) { voice_src = null; return false; }
+        const sound = soundApi();
+        if (sound && typeof sound.stop === 'function') {
+            try { sound.stop(voice_handle, 0); } catch (e) { /* channel already gone */ }
+        }
+        voice_handle = -1;
+        voice_src = null;
+        emit('voiceStop', { reason: reason === undefined ? 'stop' : String(reason) });
+        return true;
+    }
+
+    function playVoice(src) {
+        stopVoice('next line');
+        if (!voice_enabled || src === undefined || src === null || src === '') return false;
+        const sound = soundApi();
+        if (!sound || typeof sound.play !== 'function') return false;
+        try {
+            const handle = sound.play(String(src), { volume: voice_volume });
+            if (typeof handle === 'number' && handle >= 0) {
+                voice_handle = handle;
+                voice_src = String(src);
+                emit('voicePlay', { src: voice_src, handle });
+                return true;
+            }
+        } catch (e) {
+            ctx.log(`$.dialog: voice "${src}" не запустился — ${e}`);
+        }
+        return false;
+    }
+
+    // --- VN: real prefetch (texture/sound caches) ----------------------------
+    function preloadAssets(assets) {
+        const list = Array.isArray(assets) ? assets.map(String) : [];
+        const result = { requested: list.length, textures: 0, sounds: 0, failed: [] };
+        const sound = soundApi();
+        const resource = api.resource || ctx.resource || null;
+        for (const path of list) {
+            const ext = (path.split('.').pop() || '').toLowerCase();
+            try {
+                if (['ogg', 'wav', 'mp3', 'flac'].includes(ext)) {
+                    if (sound && typeof sound.preload === 'function') { sound.preload([path]); result.sounds++; }
+                } else if (['png', 'jpg', 'jpeg', 'webp', 'tga', 'bmp'].includes(ext)) {
+                    if (resource && typeof resource.preloadTexture === 'function') {
+                        const r = resource.preloadTexture(path);
+                        if (r && r.loaded > 0) result.textures++;
+                        else result.failed.push(path);
+                    }
+                }
+            } catch (e) {
+                result.failed.push(path);
+                ctx.log(`$.dialog: prefetch "${path}" не удался — ${e}`);
+            }
+        }
+        prefetch_last = result;
+        emit('prefetched', result);
+        return result;
     }
 
     function setWorldMode(mode) {
@@ -399,10 +469,21 @@ export function installDialog($, options) {
     function translate(value, vars) {
         const i18n = api.i18n;
         const source = value === undefined || value === null ? '' : String(value);
-        if (source === '' || !i18n || typeof i18n.has !== 'function' || !i18n.has(source)) return source;
+        if (source === '' || !i18n) return source;
+        // Dictionary lookup, not a bare has() scan: lookup() returns the actual
+        // value from the current/fallback language chain. Keys that look like
+        // narrative ids (contain a dot) are tracked for inspector diagnostics.
+        let known = false;
+        if (typeof i18n.lookup === 'function') known = i18n.lookup(source) !== undefined;
+        else if (typeof i18n.has === 'function') known = i18n.has(source);
+        if (!known) {
+            if (source.includes('.')) missing_keys.add(source);
+            return source;
+        }
+        translated_keys.add(source);
         if (typeof i18n.tr === 'function') return String(i18n.tr(source, vars));
         if (typeof i18n.t === 'function') return String(i18n.t(source, vars));
-        return source;
+        return typeof i18n.lookup === 'function' ? String(i18n.lookup(source)) : source;
     }
 
     /** text реплики → массив страниц (строк). Строка, массив или функция. */
@@ -731,7 +812,7 @@ export function installDialog($, options) {
         emit('read', { id, unread: false });
     }
 
-    /** Voice/textBlip/prefetch hooks — pure events, no asset loading here. */
+    /** Voice/textBlip events + actual prefetch/playback through $.sound/$.resource. */
     function prefetchLine(line) {
         if (!state) return;
         const resolved = currentSpeaker();
@@ -744,8 +825,15 @@ export function installDialog($, options) {
             assets.push(String(entry.portraits.neutral));
         const voice = line.voice !== undefined ? line.voice : (entry && entry.voice);
         if (voice) assets.push(String(voice));
-        if (assets.length) emit('prefetch', { assets, line: state.nodeId });
-        if (voice) emit('voice', { src: String(voice), id: stableLineId(), node: state.nodeId });
+        if (assets.length) {
+            emit('prefetch', { assets, line: state.nodeId });
+            preloadAssets(assets);
+        }
+        if (voice) {
+            const src = String(voice);
+            emit('voice', { src, id: stableLineId(), node: state.nodeId });
+            playVoice(src);
+        }
         const blip = line.textBlip !== undefined ? line.textBlip : (entry && entry.textBlip);
         if (blip) emit('textBlip', { src: String(blip), id: stableLineId() });
     }
@@ -826,6 +914,7 @@ export function installDialog($, options) {
         if (!state) return false;
         const info = { reason, definition: state.def.id, node: state.nodeId };
         unwatchLang();                 // §16: подписок после закрытия не остаётся
+        stopVoice(reason || 'dialog end');
         if (rml_view && rml_view.ready) rml_view.hide();
         releaseLock(reason || 'dialog end');
         setWorldMode('live');
@@ -1298,13 +1387,58 @@ export function installDialog($, options) {
             if (mode === undefined) return world_mode;
             return setWorldMode(mode);
         },
-        /** Prefetch hook: assets are announced, loading belongs to the game. */
+        /** Prefetch: announce assets AND warm texture/sound caches when available. */
         prefetch(assets) {
             const list = Array.isArray(assets) ? assets.map(String) : [];
-            if (list.length) emit('prefetch', { assets: list });
+            if (list.length) {
+                emit('prefetch', { assets: list });
+                preloadAssets(list);
+            }
             return dialog;
         },
+        prefetchInfo() { return prefetch_last ? Object.assign({}, prefetch_last, { failed: prefetch_last.failed.slice() }) : null; },
+        /** Real voice playback toggle. Off stops a line that is already playing. */
+        voice(on) {
+            if (on === undefined) return voice_enabled;
+            voice_enabled = !!on;
+            if (!voice_enabled) stopVoice('disabled');
+            return dialog;
+        },
+        voiceVolume(value) {
+            if (value === undefined) return voice_volume;
+            voice_volume = Math.max(0, Math.min(1, num(value, voice_volume)));
+            return dialog;
+        },
+        voiceInfo() {
+            return { enabled: voice_enabled, src: voice_src, handle: voice_handle,
+                     playing: voice_handle >= 0, volume: voice_volume };
+        },
+        stopVoice(reason) { return stopVoice(reason); },
+        /** Dictionary lookup used by the dialog (current/fallback language chain). */
+        localize(key, params) {
+            const i18n = api.i18n;
+            if (!i18n) return String(key === undefined || key === null ? '' : key);
+            if (typeof i18n.lookup === 'function' && i18n.lookup(String(key)) === undefined) {
+                return String(key === undefined || key === null ? '' : key);
+            }
+            return String(translate(key, params || {}));
+        },
+        i18nStats() {
+            return { translated: [...translated_keys].sort(),
+                     missing: [...missing_keys].sort(),
+                     language: api.i18n && typeof api.i18n.lang === 'function' ? api.i18n.lang() : null };
+        },
         lockHeld() { return !!lock_token; },
+        /** Hard gating option: while on, gameplay input is suppressed by the lock. */
+        hardLock(on) {
+            if (on === undefined) return hard_lock;
+            hard_lock = !!on;
+            if (state && lock_token) {
+                releaseLock('hard lock mode changed');
+                acquireLock();
+            }
+            return dialog;
+        },
         /** Test/exception hook: release the dialog input lock immediately. */
         releaseLock(reason) { return releaseLock(reason === undefined ? 'manual' : reason); },
 
@@ -1330,9 +1464,14 @@ export function installDialog($, options) {
                 backlogOpen: !!(state && state.backlogOpen),
                 worldMode: world_mode,
                 inputLocked: !!lock_token,
+                inputHardLocked: !!(lock_token && lock_token.hard),
                 flags: Object.fromEntries(extra_flags),
                 unread: dialog.unreadCount(),
                 view: rml_view && rml_view.ready ? 'rml' : 'builtin',
+                choiceSlots: rml_view ? rml_view.choiceSlots : 0,
+                voice: dialog.voiceInfo(),
+                prefetch: prefetch_last,
+                i18n: dialog.i18nStats(),
             };
         },
 
@@ -1376,12 +1515,14 @@ export function tickDialog(dt) {
 
     const input = rt.api.input;
     if (!input) return;
+    // The dialog may hold the hard lock itself; read UI keys through raw path.
+    const press = (name) => (typeof input.rawPressed === 'function' ? input.rawPressed(name) : input.pressed(name));
     const choices = visibleChoices(state.line, rt.flags);
     state.choices = choices;
 
-    if (input.pressed('escape')) { rt.finish('manual'); return; }
-    if (input.pressed('a')) rt.api.dialog.auto(!state.auto);
-    if (input.pressed('h') || input.pressed('tab')) rt.api.dialog.backlogOpen(!state.backlogOpen);
+    if (press('escape')) { rt.finish('manual'); return; }
+    if (press('a')) rt.api.dialog.auto(!state.auto);
+    if (press('h') || press('tab')) rt.api.dialog.backlogOpen(!state.backlogOpen);
     if (state.auto && !state.typing && !choices.length) {
         state.autoTimer = (state.autoTimer || 0) + step;
         if (state.autoTimer >= (rt.autoDelayValue ? rt.autoDelayValue() : 1.2)) {
@@ -1393,9 +1534,9 @@ export function tickDialog(dt) {
         state.autoTimer = 0;
     }
     if (choices.length) {
-        if (input.pressed('down') || input.pressed('gamepad.dpad.down')) rt.api.dialog.focusChoice(1);
-        else if (input.pressed('up') || input.pressed('gamepad.dpad.up')) rt.api.dialog.focusChoice(-1);
-        if (input.pressed('enter') || input.pressed('space') || input.pressed('gamepad.a')) {
+        if (press('down') || press('gamepad.dpad.down')) rt.api.dialog.focusChoice(1);
+        else if (press('up') || press('gamepad.dpad.up')) rt.api.dialog.focusChoice(-1);
+        if (press('enter') || press('space') || press('gamepad.a')) {
             rt.choose(state.choiceFocus); return;
         }
         // Мышь: 'click' по кнопке уже шлёт ui-слой — здесь только подсветка.
@@ -1413,7 +1554,7 @@ export function tickDialog(dt) {
                 }
             }
         }
-    } else if (input.pressed('enter') || input.pressed('space') || input.pressed('gamepad.a')) {
+    } else if (press('enter') || press('space') || press('gamepad.a')) {
         rt.next();
     }
 }

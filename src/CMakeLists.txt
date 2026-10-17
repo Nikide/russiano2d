@@ -98,6 +98,10 @@ if(R2D_ENABLE_RE2D)
         re2d_world_secret.h re2d_world_secret.c
         re2d_world_terrain.h re2d_world_terrain.c
         re2d_world_save.h re2d_world_save.c
+        re2d_world_sky.h re2d_world_sky.c
+        re2d_world_post.h re2d_world_post.c
+        re2d_world_stream.h re2d_world_stream.c
+        re2d_world_impostor.h re2d_world_impostor.c
         re2d_world_portal_visual.h re2d_world_portal_visual.c
         re2d_world_volume.h re2d_world_volume.c
         re2d_world_material_anim.h re2d_world_material_anim.c
@@ -105,6 +109,8 @@ if(R2D_ENABLE_RE2D)
         re2d_world_polygon.h re2d_world_polygon.c
         re2d_world_render_features.h re2d_world_render_features.c
         re2d_world_region.h re2d_world_region.c
+        re2d_world_stream.h re2d_world_stream.c
+        re2d_world_impostor.h re2d_world_impostor.c
         re2d_postprocess.h re2d_postprocess.c
         re2d_audio_zone.h re2d_audio_zone.c
         re2d_audio_voices.h re2d_audio_voices.c)

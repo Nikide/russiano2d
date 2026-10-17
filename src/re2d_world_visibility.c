@@ -35,22 +35,27 @@ static bool index_bsp(const R2DRe2dWorld *w,R2DWorldVisibility *f)
     }
     return true;
 }
-static void bsp_visible_order(const R2DRe2dWorld *w,const R2DRe2dView *v,R2DWorldVisibility *f,int node)
+static void bsp_visible_order(const R2DRe2dWorld *w,const R2DRe2dView *v,R2DWorldVisibility *f,
+                              const uint8_t *cell_allowed,int node)
 {
     if(node<0||!f->node_active[node])return;
     f->node_active[node]=0;
     f->bsp_nodes_visited++;
     const R2DWorldCellNode *n=&w->cell_nodes[node];
     bool front=(n->axis?v->y:v->x)>=n->split;
-    bsp_visible_order(w,v,f,front?n->front:n->back);
+    bsp_visible_order(w,v,f,cell_allowed,front?n->front:n->back);
     for(int i=0;i<n->ref_count;i++){
-        const R2DWorldCell *c=&w->cells[w->cell_refs[n->first_ref+i]];
+        const int cell_index=w->cell_refs[n->first_ref+i];
+        if(cell_allowed&&(cell_index<0||cell_index>=w->cell_count||!cell_allowed[cell_index])){
+            f->culled_cells++;f->cell_rejections++;continue;
+        }
+        const R2DWorldCell *c=&w->cells[cell_index];
         for(int j=0;j<c->span_count;j++){
             int span=c->first_span+j;
             if(f->span_seen[span])f->spans[f->span_count++]=span;
         }
     }
-    bsp_visible_order(w,v,f,front?n->back:n->front);
+    bsp_visible_order(w,v,f,cell_allowed,front?n->back:n->front);
 }
 static bool reserve(R2DWorldVisibility *f,int ns,int nf)
 {
@@ -88,16 +93,23 @@ bool r2d_world_portal_window(const R2DRe2dView *v,float ortho,const R2DWorldPort
     }
     return true;
 }
-bool r2d_world_visibility(const R2DRe2dWorld *w,const R2DRe2dView *v,float ortho,R2DWorldVisibility *f)
+bool r2d_world_visibility_filtered(const R2DRe2dWorld *w,const R2DRe2dView *v,float ortho,
+                                   R2DWorldVisibility *f,const uint8_t *cell_allowed)
 {
     if(!w||!v||!f||!isfinite(v->x)||!isfinite(v->y)||!isfinite(v->eye)||v->width<=0||v->height<=0||!reserve(f,w->span_count,w->surface_count))return false;
     memset(f->span_seen,0,(size_t)w->span_count);memset(f->surface_seen,0,(size_t)w->surface_count);memset(f->queued,0,(size_t)w->span_count);
     f->span_count=f->surface_count=f->portals_tested=f->cells_visible=f->bsp_nodes_visited=0;
+    f->culled_regions=f->culled_cells=f->cell_rejections=0;
     R2DWorldWindow full={0,0,v->width,v->height};int start=r2d_world_span_at(w,v->x,v->y,v->eye);
+    if(cell_allowed&&start>=0&&(w->span_cells[start]<0||w->span_cells[start]>=w->cell_count||!cell_allowed[w->span_cells[start]]))start=-1;
     // Orthographic rays originate across the view plane, not at the camera XY.
     // Use all spans until an orthographic seed-volume traversal exists.
     if(start<0||ortho>0) {
-        for(int i=0;i<w->span_count;i++){f->span_seen[i]=1;f->windows[i]=full;f->spans[f->span_count++]=i;}
+        for(int i=0;i<w->span_count;i++){
+            const int cell=w->span_cells?w->span_cells[i]:-1;
+            if(cell_allowed&&(cell<0||cell>=w->cell_count||!cell_allowed[cell])){f->culled_cells++;f->cell_rejections++;continue;}
+            f->span_seen[i]=1;f->windows[i]=full;f->spans[f->span_count++]=i;
+        }
     } else {
         int head=0,tail=0,pending=1;f->queue[tail++]=start;tail%=w->span_count;f->queued[start]=1;f->span_seen[start]=1;f->windows[start]=full;f->spans[f->span_count++]=start;
         while(pending) {
@@ -105,7 +117,9 @@ bool r2d_world_visibility(const R2DRe2dWorld *w,const R2DRe2dView *v,float ortho
             int cell=w->span_cells[span];const R2DWorldSpan *from=&w->spans[span];
             for(int pi=w->cell_portal_offsets[cell];pi<w->cell_portal_offsets[cell+1];pi++) {
                 int i=w->cell_portal_refs[pi];const R2DWorldPortal *p=&w->portals[i];if(p->closed||p->sky||p->mirror||(p->cell_a!=cell&&p->cell_b!=cell))continue;
-                f->portals_tested++;int other=p->cell_a==cell?p->cell_b:p->cell_a;const R2DWorldCell *to=&w->cells[other];
+                f->portals_tested++;int other=p->cell_a==cell?p->cell_b:p->cell_a;
+                if(cell_allowed&&(other<0||other>=w->cell_count||!cell_allowed[other])){f->culled_cells++;f->cell_rejections++;continue;}
+                const R2DWorldCell *to=&w->cells[other];
                 for(int j=0;j<p->opening_count;j++) {
                     const R2DWorldOpening *o=&w->openings[p->first_opening+j];
                     for(int k=0;k<to->span_count;k++) {
@@ -130,7 +144,7 @@ bool r2d_world_visibility(const R2DRe2dWorld *w,const R2DRe2dView *v,float ortho
             int node=f->cell_nodes[w->span_cells[f->spans[i]]];
             while(node>=0&&!f->node_active[node]){f->node_active[node]=1;node=f->node_parents[node];}
         }
-        f->span_count=0;bsp_visible_order(w,v,f,w->cell_root);
+        f->span_count=0;bsp_visible_order(w,v,f,cell_allowed,w->cell_root);
     }
     // Count each reached cell once, without scanning all authored cells.
     memset(f->queued,0,(size_t)w->span_count);
@@ -154,4 +168,9 @@ bool r2d_world_visibility(const R2DRe2dWorld *w,const R2DRe2dView *v,float ortho
         if(!f->surface_seen[wall]){f->surface_seen[wall]=1;f->surface_windows[wall]=full;f->surfaces[f->surface_count++]=wall;}
     }
     return true;
+}
+
+bool r2d_world_visibility(const R2DRe2dWorld *w,const R2DRe2dView *v,float ortho,R2DWorldVisibility *f)
+{
+    return r2d_world_visibility_filtered(w,v,ortho,f,NULL);
 }
