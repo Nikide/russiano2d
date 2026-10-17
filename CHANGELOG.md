@@ -1,5 +1,12 @@
 # История изменений
 
+> Unreleased / VN narrative: dialog logic/view/theme split, semantic RML roles,
+> speaker registry + expressions + portrait slots, theme stack/hot reload,
+> input lock tokens, narrative IR/story adapter, backend/save/backlog/voice,
+> native `r2d-sdk story validate` / `dialog validate`. Public `$` API additions
+> are additive; existing `$.dialog` calls keep working.
+
+
 ## 1.2.5 — 2026-10-17
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->

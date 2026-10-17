@@ -97,8 +97,13 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
 | `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
 | `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |
-| `world-compile <f.re2dmap> [--renderer] [--pvs] [--output f.re2dworld]` | Re2D World: SDK-исходник → baked мир; `--pvs` включает legacy portal-reachability report (по умолчанию пропускается) |
-| `world-info <f.re2dmap>` | то же без записи: статистика/порталы/проверка карты |
+| `world compile <f.re2dmap> [--renderer] [--pvs] [--region-size N] [--output f.re2dworld]` | Re2D World: brush/cell authoring → baked мир; stage report, region grid, coarse PVS; `--pvs` добавляет legacy portal-reachability report |
+| `world info <f.re2dmap>` | то же без записи: статистика/порталы/регионы/проверка карты |
+| `world validate <f.re2dmap>` | компиляция в память + диагностика без записи |
+| `world-compile <f.re2dmap> [--renderer] [--pvs] [--region-size N] [--output f.re2dworld]` | legacy alias `world compile` |
+| `world-info <f.re2dmap>` | legacy alias `world info` |
+| `story validate <каталог|файл> [--assets-root dir]` | VN: `*.scene` → duplicate labels, unknown goto, unreachable branches, goto cycles, speakers/expressions (`speakers.json`), assets, theme, i18n keys |
+| `dialog validate <file.rml>` | VN: `<rml>` root, semantic `data-dialog-role` (root/text/choices), balanced tags, linked RCSS, `@font-face` files |
 | `batch <manifest.batch.json> [--output report.json]` | пакетная проверка (`validate`), ошибки отдельных jobs не прерывают пакет |
 | `agent <session.agent.json> [--engine путь] [--output report.json]` | нативный клиент исходного агентского протокола движка |
 | `templates [--root sdk/templates]` | шаблоны проектов (`sdk/templates/<id>/template.json`): имя, описание, число файлов |
@@ -533,3 +538,19 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 `sdk/ui/code_check.rml`. Панель вызывает **native** `r2d-sdk doctor/lint/validate`
 через `app.backend` и показывает generated `api.schema.json` — второго линтера
 или валидатора в JS нет.
+
+## Re2D brush authoring / huge world
+
+`world compile` принимает `.re2dmap` с additive-секциями `brushes`, `world`
+(конверт), `entities` и `regionSize`; старые `cells/walls/portals/stairs/slopes`
+и `--renderer`-контракт не меняются. Tool materials (`nodraw`, `clip`, `sky`,
+`hint`, `skip`, `trigger`, `areaportal`, `occluder`, clip variants) компилируются
+в policy-биты стен, а не в прозрачность. Полный формат, стадии и коды warning'ов:
+[`RE2D_BRUSH_AUTHORING.md`](RE2D_BRUSH_AUTHORING.md). Регионы, streaming/PVS и
+LOD: [`RE2D_HUGE_WORLD.md`](RE2D_HUGE_WORLD.md). Sky/clip boundary:
+[`RE2D_SKY_BOUNDARY.md`](RE2D_SKY_BOUNDARY.md).
+
+```bash
+r2d-sdk world compile demos/re2d_openworld_lab/openworld.re2dmap \
+  --renderer --region-size 256 --output /tmp/openworld.re2dworld
+```

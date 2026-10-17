@@ -33,6 +33,74 @@ export const MOVE_ARRIVE_PX = 18.0;
 /** Доля высоты экрана под полосы катсцены. */
 export const LETTERBOX = 0.09;
 
+/**
+ * Compile a parsed .scene script into the shared Narrative IR.
+ *
+ * IR is presentation-agnostic: $.story feeds say/choice into $.dialog, timeline
+ * and cutscene reuse the same dialog runtime. It is a plain data array so it can
+ * be inspected, saved or validated without a fourth UI engine.
+ */
+export function compileStory(script) {
+    const commands = script && Array.isArray(script.commands) ? script.commands : [];
+    const labels = new Map();
+    if (script && script.labels) for (const [name, index] of Object.entries(script.labels)) labels.set(index, name);
+    const ir = [];
+    for (let i = 0; i < commands.length; ++i) {
+        const cmd = commands[i] || {};
+        if (labels.has(i)) ir.push({ op: 'label', name: labels.get(i) });
+        switch (cmd.op) {
+            case 'say': {
+                ir.push({ op: 'say', speaker: cmd.who || '', expression: cmd.emotion || '', text: cmd.text });
+                const next = commands[i + 1];
+                if (next && next.op === 'choices') {
+                    ir.push(compileChoice(next));
+                    i += 1;
+                }
+                break;
+            }
+            case 'choices':
+                ir.push(compileChoice(cmd));
+                break;
+            case 'set':
+                ir.push({ op: 'commit', key: String(cmd.flag), mode: cmd.mode || '=', value: cmd.value });
+                break;
+            case 'if':
+                ir.push({ op: 'branch', condition: cmd.cond, goto: cmd.to });
+                break;
+            case 'goto':
+                ir.push({ op: cmd.to === 'end' ? 'end' : 'goto', goto: cmd.to });
+                break;
+            case 'end':
+                ir.push({ op: 'end' });
+                break;
+            case 'wait':
+                ir.push({ op: 'wait', seconds: Number(cmd.sec) || 0 });
+                break;
+            case 'bubble':
+                ir.push({ op: 'bubble', speaker: cmd.who || '', text: cmd.text, expression: cmd.emotion || '' });
+                break;
+            default:
+                ir.push({ op: 'command', command: cmd.op, data: { ...cmd } });
+                break;
+        }
+    }
+    return ir;
+}
+
+function compileChoice(cmd) {
+    const items = Array.isArray(cmd.items) ? cmd.items : [];
+    return {
+        op: 'choice',
+        choices: items.map((item) => ({
+            text: item.text,
+            goto: item.to || null,
+            commits: (item.sets || []).map((st) => ({
+                key: String(st.flag), mode: st.mode || '=', value: st.value,
+            })),
+        })),
+    };
+}
+
 export function installStory($) {
     const actors = new Map();          // имя из сценария → узел или селектор
     const flags = {};                  // общие флаги сценок
@@ -46,6 +114,7 @@ export function installStory($) {
     // Автолистание реплик: тесты и автопилот прогоняют сценку без игрока.
     let auto_advance = false;
     let advance_queued = false;
+    let story_lock = null;
 
     // --- Мелочи --------------------------------------------------------------
 
@@ -113,25 +182,16 @@ export function installStory($) {
             bar.at(engine.width / 2, top ? bar_h / 2 : engine.height - bar_h / 2);
             bars.push(bar);
         }
-        const panel = makeNode('<ui.panel>', {
-            id: '__story_box', w: engine.width - 80, h: 120, color: '#10141ce8',
-        }).at(engine.width / 2, engine.height - 90);
-        const who = makeNode('<ui.label>', {
-            id: '__story_who', text: '', size: 20, color: '#ffd166',
-        }).at(56, engine.height - 138);
-        const line = makeNode('<ui.label>', {
-            id: '__story_line', text: '', size: 24, color: '#ffffff',
-        }).at(56, engine.height - 102);
-        const choices = makeNode('<ui.col>', { id: '__story_choices' })
-            .at(engine.width / 2, engine.height - 250);
-        // Затемнение — последним: оно обязано быть выше кадра, полос и панели.
+        // Текст реплик и выборов принадлежит $.dialog: у story своего
+        // текстового UI нет. Здесь остаются только кадр, полосы и затемнение.
+        // Затемнение — последним: оно обязано быть выше кадра и полос.
         // Стартует прозрачным (0), иначе первый же показ сценки закрывает экран.
         const fade = makeNode('<ui.panel>', {
             id: '__story_fade', w: engine.width, h: engine.height, color: '#000000',
         }).at(engine.width / 2, engine.height / 2).alpha(0);
 
-        ui = { bars, image, fade, panel, who, line, choices, visible: false };
-        attachOverlay([image].concat(bars, [panel, who, line, choices, fade]));
+        ui = { bars, image, fade, visible: false };
+        attachOverlay([image].concat(bars, [fade]));
         showUi(false);
         return ui;
     }
@@ -151,7 +211,7 @@ export function installStory($) {
     function showUi(on) {
         const u = ensureUi();
         u.visible = !!on;
-        for (const part of [u.image, u.fade, u.panel, u.who, u.line, u.choices]) {
+        for (const part of [u.image, u.fade]) {
             if (part) part.visible(!!on);
         }
         for (const bar of u.bars) bar.visible(!!on);
@@ -217,90 +277,96 @@ export function installStory($) {
         return Math.sqrt(dx * dx + dy * dy) <= MOVE_ARRIVE_PX;
     }
 
-    // --- Реплики -------------------------------------------------------------
+    // --- Реплики: только через $.dialog --------------------------------------
+    // У story нет своего текстового UI. Narrative IR/replики и выборы идут в
+    // тот же runtime, что timeline и cutscene; здесь остаются актёры, камера,
+    // кадры и ожидания.
 
-    function say(who, text, emotion) {
-        const u = ensureUi();
-        // Обёртка узла НЕ расширяется (core.js: Object.preventExtensions), поэтому
-        // `.text = ...` — это TypeError, а не «поставить текст». Ставим методом.
-        u.who.text(who || '');
-        const tail = emotion ? ` (${emotion})` : '';
-        u.line.text((who ? who + tail + ': ' : '') + text);
+    let line_seq = 0;
+    let last_choice = null;
+    let dialog_hooked = false;
+
+    function dialogApi() { return $ && $.dialog; }
+
+    // installStory() runs before installDialog() in api.js, so the choice
+    // listener is attached lazily on the first dialogue, not at install time.
+    function hookDialogChoices() {
+        if (dialog_hooked) return;
+        const d = dialogApi();
+        if (!d || typeof d.on !== 'function') return;
+        d.on('choice', (event) => { last_choice = event && event.index !== undefined ? event.index : null; });
+        dialog_hooked = true;
+    }
+
+    function openDialogNode(who, text, emotion, items) {
+        hookDialogChoices();
+        const d = dialogApi();
+        if (!d || typeof d.define !== 'function' || typeof d.play !== 'function') return false;
+        const id = '__story_' + (++line_seq);
+        const node = { text: String(text === undefined || text === null ? '' : text) };
+        if (who) node.speaker = who;
+        if (emotion) node.expression = emotion;
+        if (items && items.length) node.choices = items.map((item) => ({ text: item.text }));
+        d.define(id, { start: 'line', nodes: { line: node } });
+        last_choice = null;
+        return d.play(id, 'line');
+    }
+
+    function noteLine(who, text, emotion) {
         const info = { who: who || '', text, emotion: emotion || '' };
         story.last_line = info;
         emit('story:line', info);
     }
 
-    /** Хочет ли игрок листать реплику (пробел, Enter или клик). */
-    function advanceReady() {
-        if (auto_advance) return true;
-        // `$.story.advance()` — ответ из игры или теста: работает так же, как
-        // нажатие, и не зависит от того, есть ли у узла ввод.
-        if (advance_queued) { advance_queued = false; return true; }
-        const input = ctx.input || $.input;
-        if (input && typeof input.pressed === 'function') {
-            return !!(input.pressed('space') || input.pressed('enter')
-                || input.pressed('return') || input.pressed('mouse'));
-        }
-        if (typeof engine.keyPressed === 'function') {
-            return !!(engine.keyPressed('space') || engine.keyPressed('enter')
-                || engine.keyPressed('return'));
-        }
-        return false;
-    }
-
-    function makeChoices(items) {
-        const u = ensureUi();
-        u.choices.clear();
-        const nodes = [];
-        for (let i = 0; i < items.length; ++i) {
-            const button = makeNode('<ui.button>', {
-                id: `__story_choice${i}`,
-                text: items[i].text,
-                w: Math.min(520, engine.width - 120),
-                h: 36,
-            });
-            button.attr('_story_index', i);
-            button.appendTo(u.choices);
-            nodes.push(button);
-        }
-        return nodes;
-    }
-
-    /** Ждёт выбора и возвращает выбранный вариант. */
-    function* pickChoice(items) {
-        const nodes = makeChoices(items);
-        let focus = 0;
+    /** Wait for the shared dialog runtime; never mutates gameplay state on skip. */
+    function* waitOpenDialog() {
+        const d = dialogApi();
         for (;;) {
-            // Выбор из игры: `$.story.choose(2)` отвечает за игрока —
-            // нужно для скриптовых тестов и для автопилота.
+            if (!d || typeof d.isOpen !== 'function' || !d.isOpen()) return;
             if (chooser !== null) {
-                const picked = Math.max(0, Math.min(Number(chooser) | 0, items.length - 1));
+                const index = Math.floor(Number(chooser));
                 chooser = null;
-                return items[picked];
+                const choices = typeof d.choices === 'function' ? d.choices() : [];
+                if (choices.length) d.choose(Math.max(0, Math.min(index, choices.length - 1)));
             }
-            const input = ctx.input || $.input;
-            if (input && typeof input.pressed === 'function') {
-                if (input.pressed('down')) focus = (focus + 1) % nodes.length;
-                if (input.pressed('up')) focus = (focus - 1 + nodes.length) % nodes.length;
-                if (input.pressed('space') || input.pressed('enter')
-                    || input.pressed('return')) break;
-                let digit = -1;
-                for (let i = 0; i < nodes.length && i < 9; ++i) {
-                    if (input.pressed(String(i + 1))) { digit = i; break; }
-                }
-                if (digit >= 0) { focus = digit; break; }
+            if (advance_queued) {
+                advance_queued = false;
+                if (typeof d.isTyping === 'function' && d.isTyping() && typeof d.skip === 'function') d.skip();
+                else if (typeof d.next === 'function') d.next();
             }
-            let clicked = -1;
-            for (let i = 0; i < nodes.length; ++i) {
-                if (nodes[i].attr('_pressed')) { clicked = i; break; }
+            if (auto_advance) {
+                // Story auto mode advances immediately (no 1.2s dialog auto
+                // timer): the old story runtime had the same frame-based pace.
+                if (typeof d.isTyping === 'function' && d.isTyping() && typeof d.skip === 'function') d.skip();
+                else if (typeof d.next === 'function') d.next();
             }
-            if (clicked >= 0) { focus = clicked; break; }
             yield;
         }
-        const choice = items[Math.max(0, Math.min(focus, items.length - 1))];
+    }
+
+    /**
+     * Play one say (optionally with attached choices) and return the chosen item.
+     * `items` — DSL choices; their sets/to stay story-owned.
+     */
+    function* sayAndChoose(who, text, emotion, items) {
+        const d = dialogApi();
+        noteLine(who, text, emotion);
+        if (!openDialogNode(who, text, emotion, items)) {
+            // No dialog runtime: presentation is skipped, gameplay continues.
+            yield;
+            return items && items.length ? items[0] : null;
+        }
         yield;
-        return choice;
+        yield* waitOpenDialog();
+        if (!items || !items.length) return null;
+        const index = last_choice === null ? 0 : last_choice;
+        return items[Math.max(0, Math.min(index, items.length - 1))];
+    }
+
+    function applyChoice(chosen) {
+        if (!chosen) return { to: '', sets: [] };
+        for (const st of chosen.sets || []) applySet(st, flags);
+        return chosen;
     }
 
     /** Облачко над головой: текст на время, без ожидания. */
@@ -339,13 +405,16 @@ export function installStory($) {
             switch (cmd.op) {
                 case 'say': {
                     const actor = actorNode(cmd.who);
-                    say(displayName(cmd.who, actor), cmd.text, cmd.emotion);
                     index = next;
+                    let items = null;
                     if (index < script.commands.length && script.commands[index].op === 'choices') {
-                        const block = script.commands[index];
-                        const chosen = yield* pickChoice(block.items);
-                        for (const st of chosen.sets) applySet(st, flags);
-                        flags._last_choice = block.items.indexOf(chosen);
+                        items = script.commands[index].items;
+                        index += 1;
+                    }
+                    const chosen = yield* sayAndChoose(displayName(cmd.who, actor), cmd.text, cmd.emotion, items);
+                    if (chosen) {
+                        applyChoice(chosen);
+                        flags._last_choice = items ? items.indexOf(chosen) : -1;
                         if (chosen.to === 'end') return;
                         if (chosen.to) {
                             const at = labelIndex(script, chosen.to);
@@ -354,21 +423,15 @@ export function installStory($) {
                                 return;
                             }
                             index = at;
-                            continue;
                         }
-                        continue;
                     }
-                    // Кадр, чтобы нажатие, открывшее реплику, не закрыло её сразу.
-                    yield;
-                    while (!advanceReady()) yield;
-                    yield;
                     continue;
                 }
                 case 'choices': {
-                    const chosen = yield* pickChoice(cmd.items);
-                    for (const st of chosen.sets) applySet(st, flags);
-                    if (chosen.to === 'end') return;
-                    if (chosen.to) {
+                    const chosen = yield* sayAndChoose('', '', '', cmd.items);
+                    applyChoice(chosen);
+                    if (chosen && chosen.to === 'end') return;
+                    if (chosen && chosen.to) {
                         const at = labelIndex(script, chosen.to);
                         if (at === null) {
                             ctx.log(`$.story: нет метки «${chosen.to}» — сценка закончена`);
@@ -511,6 +574,14 @@ export function installStory($) {
     }
 
     function finish(spec, script) {
+        if ($ && $.dialog && typeof $.dialog.isOpen === 'function' && $.dialog.isOpen()
+            && typeof $.dialog.close === 'function') {
+            try { $.dialog.close(); } catch (e) { /* диалог уже закрыт */ }
+        }
+        if (story_lock && typeof story_lock.release === 'function') {
+            story_lock.release('story end');
+            story_lock = null;
+        }
         running = false;
         locked = false;
         task = null;
@@ -531,6 +602,10 @@ export function installStory($) {
         showUi(true);
         showBars(!free);
         applyLock(locked);
+        if (!free && $ && $.input && typeof $.input.lock === 'function' && !story_lock)
+            story_lock = $.input.lock('story');
+        if (!free && $.dialog && typeof $.dialog.worldMode === 'function')
+            $.dialog.worldMode('cinematic');
 
         // `done` получает признак отмены: если задача упала (исключение внутри
         // генератора), сценка не должна выглядеть как доигранная. Текст самой
@@ -591,6 +666,13 @@ export function installStory($) {
 
         /** Разобрать текст, не играя: удобно проверить сценарий. */
         parse(text) { return parseStory(text); },
+
+        /** Narrative IR: единая структура для story/timeline/cutscene. */
+        compile(source) {
+            const script = source && typeof source === 'object' && source.commands
+                ? source : parseStory(String(source === undefined ? '' : source));
+            return compileStory(script);
+        },
 
         /**
          * Играть сценку: путь к файлу, `{ text }` или разобранный сценарий.

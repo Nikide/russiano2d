@@ -911,6 +911,12 @@ interface R2D_devtools {
 }
 
 interface R2D_dialog {
+    action(arg0: any): any;
+    auto(arg0: any): any;
+    autoDelay(arg0: any): any;
+    backlog(): any;
+    backlogClear(): any;
+    backlogOpen(arg0: any): any;
     choiceFocus(): any;
     choices(): any;
     choose(arg0: any): any;
@@ -918,15 +924,21 @@ interface R2D_dialog {
     close(): any;
     define(arg0: any, arg1: any): any;
     definition(): any;
+    expression(): any;
     flag(arg0: any, arg1: any): any;
     focusChoice(arg0: any): any;
     fullText(): any;
     has(arg0: any): any;
+    hotReload(): any;
+    inspect(): any;
     isOpen(): any;
+    isRead(arg0: any): any;
     isTyping(): any;
     langBound(): any;
     list(): any;
     listenerCount(arg0: any): any;
+    lockHeld(): any;
+    markRead(arg0: any): any;
     next(): any;
     node(): any;
     off(arg0: any, arg1: any): any;
@@ -936,14 +948,33 @@ interface R2D_dialog {
     panel(): any;
     play(arg0: any, arg1: any): any;
     portrait(): any;
+    portraitSlot(): any;
+    prefetch(arg0: any): any;
+    releaseLock(arg0: any): any;
     remove(arg0: any): any;
+    restore(arg0: any): any;
     retranslate(): any;
+    saveState(): any;
+    show(arg0: any, arg1: any): any;
     skip(): any;
-    speaker(): any;
+    speaker(arg0: any, arg1: any): any;
+    speakerId(): any;
+    speakerIds(): any;
+    speakerName(): any;
     speed(arg0: any): any;
+    template(arg0: any, arg1: any): any;
     text(): any;
+    theme(arg0: any): any;
+    themeDefine(arg0: any, arg1: any): any;
+    themePush(arg0: any): any;
+    themes(): any;
+    unreadCount(): any;
+    validateTheme(arg0: any): any;
     vars(arg0: any): any;
+    view(): any;
+    viewLoaded(): any;
     visibleChoices(): any;
+    worldMode(arg0: any): any;
 }
 
 interface R2D_flow {
@@ -1503,6 +1534,10 @@ interface R2D_input {
     gamepad(arg0: any): any;
     glyphs(arg0: any): any;
     loadBindings(): any;
+    lock(arg0: any, arg1: any): any;
+    lockCount(): any;
+    locked(arg0: any): any;
+    locks(): any;
     markDefaults(): any;
     mouse(): any;
     mouseDelta(): any;
@@ -1518,6 +1553,7 @@ interface R2D_input {
     padState(arg0: any): any;
     pressed(arg0: any): any;
     rebind(arg0: any, arg1: any): any;
+    releaseLocks(arg0: any): any;
     released(arg0: any): any;
     resetDefaults(): any;
     resetHeld(arg0: any): any;
@@ -2384,6 +2420,7 @@ interface R2D_story {
     auto(arg0: any): any;
     check(arg0: any): any;
     choose(arg0: any): any;
+    compile(arg0: any): any;
     flags: Record<string, any>;
     last_line: any;
     locked(): any;
@@ -2868,6 +2905,10 @@ interface R2D_________ {
     gamepad(arg0: any): any;
     glyphs(arg0: any): any;
     loadBindings(): any;
+    lock(arg0: any, arg1: any): any;
+    lockCount(): any;
+    locked(arg0: any): any;
+    locks(): any;
     markDefaults(): any;
     mouse(): any;
     mouseDelta(): any;
@@ -2883,6 +2924,7 @@ interface R2D_________ {
     padState(arg0: any): any;
     pressed(arg0: any): any;
     rebind(arg0: any, arg1: any): any;
+    releaseLocks(arg0: any): any;
     released(arg0: any): any;
     resetDefaults(): any;
     resetHeld(arg0: any): any;

@@ -278,3 +278,12 @@ if ($.input.pressed('confirm')) {
 Синтетический ввод — это НЕ запись в состояние SDL: `synthDown`/`synthPress`/`synthRelease` видны
 тем же читателям, что и клавиатура (`pressed('up')`, `$.input.on('key')`), поэтому на них
 опирается навигация интерфейса геймпадом (§2.4).
+
+### VN input lock
+
+`$.input.lock(name)` возвращает токен с `release()`; токены складываются по
+имени. `$.input.locked(name)` — advisory-проверка для gameplay-кода,
+`$.input.locks()` — имена удерживаемых локов, `$.input.lockCount()` — сколько
+токенов всего, `$.input.releaseLocks(reason)` — аварийно снять все (вызывается
+и автоматически при смене сцены). Русские алиасы `$.ввод.locks`,
+`$.ввод.lockCount`, `$.ввод.releaseLocks` ведут в те же методы.

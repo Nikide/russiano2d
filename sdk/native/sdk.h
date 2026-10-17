@@ -212,6 +212,7 @@ int sdk_cmd_atlas_info(const SdkArgs *a);
 void sdk_validate_re2dmap(const char *path, SdkReport *rep);
 int sdk_cmd_world_compile(const SdkArgs *a);
 int sdk_cmd_world_info(const SdkArgs *a);
+int sdk_cmd_world(const SdkArgs *a);
 
 // ---------------------------------------------------------------------------
 // Студии данных: tilemap, particles, collision, layers, fonts, audio, input, rml, rcss
@@ -252,6 +253,8 @@ int sdk_cmd_new(const SdkArgs *a);
 int sdk_cmd_engines(const SdkArgs *a);
 
 int sdk_cmd_batch(const SdkArgs *a);
+int sdk_cmd_story(const SdkArgs *a);
+int sdk_cmd_dialog(const SdkArgs *a);
 int sdk_cmd_agent(const SdkArgs *a);
 
 int sdk_cmd_tools(const SdkArgs *a);

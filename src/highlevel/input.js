@@ -54,6 +54,7 @@ const listeners = new Map();      // 'key' | 'mouse' | 'wheel' | 'gamepadOn' | '
 const prev_mouse = { buttons: 0 };
 let gamepad_was_connected = false;
 let api = null;                   // $, поставленный installInput: нужен для $.trace
+let tick_scene = null;            // смена сцены освобождает input.lock-токены
 
 /**
  * Запись ввода в журнал событий (§23, вкладка EVENTS). `$.trace.note` сам
@@ -178,11 +179,67 @@ function recentlyConsumed(action) {
 
 export function installInput($) {
     api = $;
+    // VN/input lock tokens: advisory ownership slots, not a second input system.
+    // `$.input.lock('cutscene')` holds gameplay back; the token auto-releases on
+    // scene change, and the dialogue runtime releases its own token on stop.
+    const locks = new Map();
+    let lock_seq = 0;
+
+    function lockReleaseToken(name, token) {
+        const bucket = locks.get(name);
+        if (!bucket || !bucket.tokens.has(token)) return false;
+        bucket.tokens.delete(token);
+        bucket.count -= 1;
+        if (bucket.count <= 0) locks.delete(name);
+        return true;
+    }
+
+    function lockCreate(name, owner) {
+        const key = String(name === undefined || name === null || name === '' ? 'input' : name);
+        const token = { id: ++lock_seq, name: key, owner: owner === undefined ? null : String(owner) };
+        let bucket = locks.get(key);
+        if (!bucket) { bucket = { name: key, count: 0, tokens: new Set() }; locks.set(key, bucket); }
+        bucket.count += 1;
+        bucket.tokens.add(token);
+        token.release = (reason) => {
+            const released = lockReleaseToken(key, token);
+            if (released) token.reason = reason === undefined ? 'manual' : String(reason);
+            return released;
+        };
+        token.active = () => bucket.tokens.has(token);
+        return token;
+    }
+
+    function releaseLocks(reason) {
+        const released = [];
+        for (const [name, bucket] of [...locks.entries()]) {
+            for (const token of [...bucket.tokens]) {
+                if (lockReleaseToken(name, token)) {
+                    token.reason = reason === undefined ? 'releaseAll' : String(reason);
+                    released.push(name);
+                }
+            }
+        }
+        return released;
+    }
+
     const input = {
         // --- Клавиши --------------------------------------------------------
         down(name) { return input._any(name, 'down'); },
         pressed(name) { return input._any(name, 'pressed'); },
         released(name) { return input._any(name, 'released'); },
+
+        /** Hold gameplay input for a named owner; returns a release token. */
+        lock(name, owner) { return lockCreate(name, owner); },
+        /** Advisory: game code that must ignore player input asks this. */
+        locked(name) {
+            if (name === undefined) return locks.size > 0;
+            const bucket = locks.get(String(name));
+            return !!(bucket && bucket.count > 0);
+        },
+        locks() { return [...locks.keys()].sort(); },
+        lockCount() { let n = 0; for (const bucket of locks.values()) n += bucket.count; return n; },
+        releaseLocks(reason) { return releaseLocks(reason); },
 
         _any(name, kind, seen) {
             if (Array.isArray(name)) return name.some((n) => input._any(n, kind, seen));
@@ -1147,6 +1204,14 @@ function tickWaiters() {
 
 /** Вызывается из $.time каждый кадр: рассылает $.input.on('key'/'mouse'/'wheel'). */
 export function tickInput() {
+    // VN lock contract: any scene change releases held input locks.
+    if (api && api.input && typeof api.input.releaseLocks === 'function') {
+        const current = ctx.scene && typeof ctx.scene.current === 'function' ? ctx.scene.current() : null;
+        if (tick_scene !== current) {
+            if (tick_scene !== null) api.input.releaseLocks('scene change');
+            tick_scene = current;
+        }
+    }
     // §15: состояние устройств и захват ввода должны работать даже без
     // подписок на события — иначе отключённый геймпад оставлял бы «зажатую»
     // кнопку до тех пор, пока игра не подписалась на что-нибудь.

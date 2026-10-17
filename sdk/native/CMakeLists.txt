@@ -21,7 +21,9 @@ set(R2D_SDK_SOURCES
     sdk_image.c
     sdk_atlas.c
     sdk_world.c
+    sdk_brush.c
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_region.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c"
@@ -38,6 +40,8 @@ set(R2D_SDK_SOURCES
     sdk_agent.c
     sdk_cmds.c
     sdk_scaffold.c
+    sdk_story.c
+    sdk_dialog.c
     "${CMAKE_SOURCE_DIR}/src/json.c")
 
 add_library(r2d_sdk_core STATIC ${R2D_SDK_SOURCES})
@@ -66,3 +70,14 @@ if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
     target_compile_options(r2d_sdk_core_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_sdk_core_test PRIVATE -fsanitize=address,undefined)
 endif()
+
+# Full SDK world compile pipeline: brush authoring fixture + backward compatibility.
+add_executable(r2d_sdk_world_compile_test "${CMAKE_SOURCE_DIR}/tests/sdk/world_compile_test.c")
+target_compile_definitions(r2d_sdk_world_compile_test PRIVATE
+    R2D_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(r2d_sdk_world_compile_test PRIVATE r2d_sdk_core r2d_unity)
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_sdk_world_compile_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_sdk_world_compile_test PRIVATE -fsanitize=address,undefined)
+endif()
+add_test(NAME r2d_sdk_world_compile_test COMMAND r2d_sdk_world_compile_test)
