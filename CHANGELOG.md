@@ -109,6 +109,16 @@
   стояла после) и падает локально при мусоре. На текущем dist проверка нашла
   реальные `dist/.DS_Store` и `dist/macos-arm64/.DS_Store` (2 файла) — удалены,
   повторный прогон: «чисто».
+- **Д6: веб-сборка перепроверена на текущем дереве.** emsdk 6.0.11 +
+  SDL3 с WebGPU (`GPU drivers: openxr webgpu`); сборка дала `russiano2d.wasm`
+  57.8 МБ и `.data` 276.8 МБ. Headed-дым в Chrome: `first-frame` →
+  `--frames 30` → `shutdown: gpu-idle/script-exit/audio/app/done`, вердикт по
+  журналу движка **ok** (2.8 с); кадр не пустой (скриншот). Ограничения
+  записаны: пиксельная проверка canvas на WebGPU пустая (`drawImage` не
+  читает canvas), headless-дым не дожидается остановки (`--dump-dom`).
+  Док-баг: в `docs/WEB_EXPORT.md` не был указан
+  `-DFETCHCONTENT_SOURCE_DIR_RMLUI` → конфигурация падала на Freetype;
+  исправлено и проверено сборкой.
 - **Д2: гейт `tests/doc_examples_test.py` — публичные пути из js-примеров
   доки существуют в живом движке.** 689 уникальных путей `$.a.b.c` из
   `docs/highlevel/*.md`, 687 проверяются (исключение — карта данных
