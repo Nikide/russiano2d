@@ -1,11 +1,14 @@
 #include "rotsprite_math.h"
+#include "unity.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static int failures;
-#define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL line %d: %s\n",__LINE__,#c); failures++; } } while (0)
+void setUp(void) {}
+void tearDown(void) {}
+
+#define CHECK(c) TEST_ASSERT_TRUE_MESSAGE((c), #c)
 
 static void point_fixture(uint8_t *a,int x,int y,int part,int X,int Y,int Z,uint8_t color)
 {
@@ -20,7 +23,7 @@ static void point_fixture(uint8_t *a,int x,int y,int part,int X,int Y,int Z,uint
 static void v2_tests(void)
 {
     uint8_t *a=calloc(1024*1024,4),*base=malloc(128*128*4),*other=malloc(128*128*4);
-    CHECK(a && base && other);if (!a || !base || !other) exit(1);
+    CHECK(a && base && other);if (!a || !base || !other) { TEST_FAIL_MESSAGE("allocation for v2 fixture"); }
     uint8_t *header=a+960*1024*4;
     memcpy(header,"R2D",3);header[3]=255;memcpy(header+4,"ROT",3);header[7]=255;header[8]=2;header[9]=4;header[10]=4;header[11]=255;
     CHECK(r2d_rotsprite_v2_header(a,1024,1024,4096));
@@ -191,7 +194,7 @@ static void v2_tests(void)
     free(a);free(base);free(other);
 }
 
-int main(void)
+static int run_suite(void)
 {
     v2_tests();
     enum { W = 64, S = 64*64*4 };
@@ -238,6 +241,18 @@ int main(void)
     memset(other,255,sizeof other);
     CHECK(r2d_rotsprite_raster(atlas,W,W,W*4,35,45,other));
     for (int i=0;i<S;i++) CHECK(other[i]==0);
-    printf("RotSprite: %s\n",failures ? "FAIL" : "all checks passed");
-    return failures ? EXIT_FAILURE : EXIT_SUCCESS;
+    return 0;
+}
+
+// Unity: RotSprite — один кейс (v2-карты/сокеты + растеризация на углах).
+static void test_rotsprite_suite(void)
+{
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, run_suite(), "RotSprite: v2-геометрия и растеризация");
+}
+
+int main(void)
+{
+    UNITY_BEGIN();
+    RUN_TEST(test_rotsprite_suite);
+    return UNITY_END();
 }

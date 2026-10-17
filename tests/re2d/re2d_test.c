@@ -6,6 +6,7 @@
 // поэтому точка на глубине 100 с боковым смещением 50 даёт сдвиг 150 px.
 // ===========================================================================
 #include "re2d_math.h"
+#include "unity.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -15,16 +16,12 @@
 /* Вместимость массива float в вершинах меша (по 8 float). */
 #define CAP(x) ((int)(sizeof(x) / sizeof((x)[0]) / 8))
 
-static int g_failed = 0;
+void setUp(void) {}
+void tearDown(void) {}
 
 static void check(int ok, const char *what)
 {
-    if (ok) {
-        printf("  ok   %s\n", what);
-    } else {
-        ++g_failed;
-        printf("  FAIL %s\n", what);
-    }
+    TEST_ASSERT_TRUE_MESSAGE(ok != 0, what);
 }
 
 static int near_eq(float a, float b, float eps) { return fabsf(a - b) <= eps; }
@@ -336,24 +333,20 @@ static void test_determinism(void)
 
 int main(void)
 {
-    test_project_basic();
-    test_project_behind();
-    test_yaw();
-    test_pitch();
-    test_project_points();
-    test_mesh_front();
-    test_mesh_clip();
-    test_mesh_cull();
-    test_mesh_fog();
-    test_mesh_depth_order();
-    test_unproject();
-    test_split_texture();
-    test_mesh_guards();
-    test_determinism();
-    if (g_failed) {
-        printf("\nПровалов: %d\n", g_failed);
-        return 1;
-    }
-    printf("\nВсе проверки пройдены\n");
-    return 0;
+    UNITY_BEGIN();
+    RUN_TEST(test_project_basic);
+    RUN_TEST(test_project_behind);
+    RUN_TEST(test_yaw);
+    RUN_TEST(test_pitch);
+    RUN_TEST(test_project_points);
+    RUN_TEST(test_mesh_front);
+    RUN_TEST(test_mesh_clip);
+    RUN_TEST(test_mesh_cull);
+    RUN_TEST(test_mesh_fog);
+    RUN_TEST(test_mesh_depth_order);
+    RUN_TEST(test_unproject);
+    RUN_TEST(test_split_texture);
+    RUN_TEST(test_mesh_guards);
+    RUN_TEST(test_determinism);
+    return UNITY_END();
 }

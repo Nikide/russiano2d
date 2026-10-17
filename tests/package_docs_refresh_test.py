@@ -6,6 +6,7 @@
 байт-в-байт тот же архив, а не только тот же список файлов.
 """
 import hashlib
+import re
 from pathlib import Path
 import sys
 import tarfile
@@ -75,7 +76,11 @@ with tempfile.TemporaryDirectory() as tmp:
     for name in internal_files:
         assert ('<sub>источник: `%s`</sub>' % name) not in agents_text, \
             'внутренний документ %s уехал в приложение AGENTS.md' % name
-        assert ('— `%s`' % name) not in agents_text, \
+        # Строка оглавления приложения имеет вид "* <title> — `docs/...`";
+        # просто подстрока «— `путь`» ловит и обычные ссылки публичных доков
+        # (например, VFX_ROADMAP упоминает внутреннее решение по Effekseer).
+        toc_line = re.compile(r"(?m)^\* .+ — `" + re.escape(name) + r"`$")
+        assert not toc_line.search(agents_text), \
             'внутренний документ %s попал в оглавление AGENTS.md' % name
     assert 'docs/HIGH_LEVEL_API.md' in agents_text and 'docs/highlevel/' in agents_text, \
         'публичная документация из AGENTS.md пропала'

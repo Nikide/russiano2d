@@ -126,6 +126,15 @@
   новый контракт: `pos()` стабилен, сдвиг слоёв 300 px проверяется по
   `$.layers.offset` (0.2 → 240, 0.6 → 120). Документация:
   `docs/highlevel/layers.md`, `render.md`, `ENGINE_GAPS.md`.
+- **Все C-тесты переведены на Unity (правило 11).** `r2d_unity`
+  (`third_party/unity` v2.6.0) линкуется во все 13 C-целей; ручные
+  `check()`/printf-раннеры убраны. Итог: **41 Unity-кейс**, каждая цель —
+  `N Tests 0 Failures 0 Ignored` (json 1, crypto 1, payload 4, reverb 1,
+  audio_fx 1, profile 1, bsp 5, re2d 14, rotsprite 1, re2d_world 1, exr 1,
+  sdk_core 9, audio_spatial 1). `tools/ci_verify.py` с Unity — exit 0 за
+  ≈6 с. Правило «новый C-тест — только Unity; Python — только интеграция»
+  записано в `docs/AGENT_IMPLEMENTATION_RULES.md` §11 (источник AGENTS.md) и
+  [TESTING.md](docs/TESTING.md) §1.2.
 - **SDK: возвращены `world-compile`/`world-info` и валидация `.re2dmap`.**
   В коммите «производственной готовности» (2026-10-16) Re2D-слой вырезали из
   SDK, но `docs/re2d/RE2D_WORLD_FORMAT.md` продолжал обещать

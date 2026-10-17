@@ -12,6 +12,7 @@
 // Сборка через CMake: цель r2d_json_test (см. tests/CMakeLists.txt).
 // ===========================================================================
 #include "json.h"
+#include "unity.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,7 +29,10 @@ static const char *inputs[] = {
     "{\"id\":1,\"cmd\":\"step\",\"frames\":60}",
 };
 
-int main(void)
+void setUp(void) {}
+void tearDown(void) {}
+
+static int run_suite(void)
 {
     char err[256];
     for (size_t i = 0; i < sizeof inputs / sizeof inputs[0]; ++i) {
@@ -67,4 +71,18 @@ int main(void)
 
     printf("  ok   JSON: разбор и сборка без ошибок\n");
     return 0;
+}
+
+// Unity: разбор/сборка JSON — один кейс (200k случайных строк + буфер строки).
+static void test_json_suite(void)
+{
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, run_suite(),
+        "JSON: разбор, случайные строки и сборка без падений");
+}
+
+int main(void)
+{
+    UNITY_BEGIN();
+    RUN_TEST(test_json_suite);
+    return UNITY_END();
 }

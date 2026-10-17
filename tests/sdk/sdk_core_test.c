@@ -4,6 +4,7 @@
 // Собирается с ASan/UBSan (см. sdk/native/CMakeLists.txt).
 // ===========================================================================
 #include "sdk.h"
+#include "unity.h"
 
 #include <SDL3/SDL.h>
 
@@ -11,11 +12,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int g_fail = 0, g_ok = 0;
+void setUp(void) {}
+void tearDown(void) {}
 
-#define CHECK(cond, msg) do { \
-    if (cond) { ++g_ok; } else { ++g_fail; printf("  FAIL %s (%s:%d)\n", msg, __FILE__, __LINE__); } \
-} while (0)
+#define CHECK(cond, msg) TEST_ASSERT_TRUE_MESSAGE((cond), (msg))
 
 static char g_tmp[512];
 
@@ -268,12 +268,10 @@ static void atlas_codes(const char *rel, const char *text, const char *const *wa
     sdk_report_init(&rep);
     sdk_validate_atlas(p(rel), &rep);
     for (int i = 0; i < nwant; ++i) {
-        if (!has_code(&rep, want[i])) {
-            ++g_fail;
-            printf("  FAIL %s: нет кода %s в %s (%s:%d)\n", msg, want[i], rep.items.data ? rep.items.data : "", __FILE__, __LINE__);
-        } else {
-            ++g_ok;
-        }
+        char detail[512];
+        snprintf(detail, sizeof detail, "%s: нет кода %s в %s", msg, want[i],
+                 rep.items.data ? rep.items.data : "");
+        TEST_ASSERT_TRUE_MESSAGE(has_code(&rep, want[i]), detail);
     }
     CHECK(report_is_json(&rep), "диагностика атласа — JSON");
     sdk_report_free(&rep);
@@ -367,17 +365,18 @@ int main(void)
     snprintf(g_tmp, sizeof g_tmp, "%s/r2d_sdk_core_test_%d", base && base[0] ? base : "/tmp", (int)SDL_GetCurrentThreadID() % 1000);
     SDL_CreateDirectory(g_tmp);
 
-    test_glob();
-    test_iso();
-    test_types();
-    test_registry();
-    test_assets();
-    test_validate();
-    test_image();
-    test_atlas();
-    test_args();
+    UNITY_BEGIN();
+    RUN_TEST(test_glob);
+    RUN_TEST(test_iso);
+    RUN_TEST(test_types);
+    RUN_TEST(test_registry);
+    RUN_TEST(test_assets);
+    RUN_TEST(test_validate);
+    RUN_TEST(test_image);
+    RUN_TEST(test_atlas);
+    RUN_TEST(test_args);
+    const int rc = UNITY_END();
 
     SDL_RemovePath(g_tmp);
-    printf("sdk_core_test: ok %d, FAIL %d\n", g_ok, g_fail);
-    return g_fail ? 1 : 0;
+    return rc;
 }

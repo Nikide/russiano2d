@@ -11,6 +11,7 @@
 // ===========================================================================
 
 #include "profile.h"
+#include "unity.h"
 
 #include <SDL3/SDL.h>
 
@@ -19,15 +20,12 @@
 
 static int failures = 0;
 
+void setUp(void) {}
+void tearDown(void) {}
+
 static void check(int condition, const char *message)
 {
-    printf("  ok   ");
-    if (!condition) {
-        printf("FAIL %s\n", message);
-        failures++;
-        return;
-    }
-    printf("%s\n", message);
+    TEST_ASSERT_TRUE_MESSAGE(condition != 0, message);
 }
 
 // Один кадр: немного «работы» в двух зонах и закрытие кадра.
@@ -41,7 +39,7 @@ static void run_frame(float real_ms, float busy_ms)
     r2d_prof_frame_end(real_ms);
 }
 
-int main(void)
+static int run_suite(void)
 {
     R2DProfileRow rows[R2D_PROF_ROW_MAX];
 
@@ -116,4 +114,17 @@ int main(void)
     if (failures) printf("ПРОВАЛЕНО: %d\n", failures);
     else printf("Все проверки пройдены\n");
     return failures ? 1 : 0;
+}
+
+// Unity: профайлер кадра — один кейс (строки CPU+GPU, пустой старт, фолбэк).
+static void test_profile_suite(void)
+{
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, run_suite(), "профайлер: строки и тихий фолбэк без GPU");
+}
+
+int main(void)
+{
+    UNITY_BEGIN();
+    RUN_TEST(test_profile_suite);
+    return UNITY_END();
 }

@@ -1,9 +1,13 @@
 // Проверка криптоядра тест-векторами RFC 8439.
 #include "crypto.h"
+#include "unity.h"
 #include <stdio.h>
 #include <string.h>
 
-int main(void)
+void setUp(void) {}
+void tearDown(void) {}
+
+static int run_suite(void)
 {
     const int rc = r2d_crypto_selftest();
     printf("ChaCha20-Poly1305 самотест: %s (код %d)\n",
@@ -38,4 +42,19 @@ int main(void)
     }
     printf("  ok   круговой прогон: %d длин от 0 до 300 байт, все сошлись\n", checked);
     return 0;
+}
+
+// Unity: весь старый прогон — один тест-кейс (assert'ы внутри проверяют
+// код возврата; на первом провале Unity останавливает кейс).
+static void test_crypto_suite(void)
+{
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, run_suite(),
+        "ChaCha20-Poly1305: RFC 8439 и круговой прогон 0..300 байт");
+}
+
+int main(void)
+{
+    UNITY_BEGIN();
+    RUN_TEST(test_crypto_suite);
+    return UNITY_END();
 }

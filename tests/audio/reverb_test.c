@@ -9,6 +9,7 @@
 // ===========================================================================
 
 #include "audio_reverb.h"
+#include "unity.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -18,15 +19,12 @@
 
 static int failures = 0;
 
+void setUp(void) {}
+void tearDown(void) {}
+
 static void check(int condition, const char *message)
 {
-    printf(("  ok   " ));
-    if (!condition) {
-        printf("FAIL %s\n", message);
-        failures++;
-        return;
-    }
-    printf("%s\n", message);
+    TEST_ASSERT_TRUE_MESSAGE(condition != 0, message);
 }
 
 // Прогон импульса через реверб. early — RMS на 100–200 мс, tail — RMS после 750 мс.
@@ -81,7 +79,7 @@ static void run_impulse(float wet, float room, float damp, double *early, double
     r2d_reverb_shutdown(&rv);
 }
 
-int main(void)
+static int run_suite(void)
 {
     printf("Тест реверберации (Freeverb, %d Гц)\n", RATE);
 
@@ -121,4 +119,17 @@ int main(void)
 
     printf(failures ? "ПРОВАЛЕНО: %d\n" : "Все проверки пройдены\n", failures);
     return failures ? 1 : 0;
+}
+
+// Unity: реверб — один кейс (wet=0, комната/зал, хвост и пик).
+static void test_reverb_suite(void)
+{
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, run_suite(), "Freeverb: wet=0 и хвост комнаты/зала");
+}
+
+int main(void)
+{
+    UNITY_BEGIN();
+    RUN_TEST(test_reverb_suite);
+    return UNITY_END();
 }

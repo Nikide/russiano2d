@@ -1,12 +1,15 @@
 #include "re2d_world.h"
+#include "unity.h"
 #include "re2d_world_bake.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <float.h>
-static int failed;
-#define CHECK(c,m) do {bool ok=(c);printf("  %s %s\n",ok?"ok":"FAIL",m);if(!ok)failed++;}while(0)
+void setUp(void) {}
+void tearDown(void) {}
+
+#define CHECK(c,m) TEST_ASSERT_TRUE_MESSAGE((c), (m))
 static void reference_frame(const R2DRe2dWorld *w,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,float ortho_height)
 {
     const float eye[3]={v->x,v->y,v->eye};
@@ -36,7 +39,7 @@ static void reference_frame(const R2DRe2dWorld *w,const R2DRe2dView *v,int width
     }
 }
 
-int main(void)
+static int run_suite(void)
 {
     const R2DWorldSpan spans[]={
         {-100,-100,300,200,0,80,0xff004400,0xff555555},
@@ -288,5 +291,18 @@ int main(void)
     r2d_world_stamp_samples(&w,&view,64,48,fast,fd,actor_pixels,actor_depth,2,100,0,0,64,64,0,NULL,0);
     int near_samples=0,far_samples=0;for(int i=0;i<64*48;i++){if(fast[i*4]){near_samples++;if(fabsf(fd[i]-84)>1e-5f)near_samples=-10000;}if(fast[i*4+1])far_samples++;}
     CHECK(near_samples>0&&far_samples==0,"body samples straddling wall depth occlude independently rather than billboard order");
-    r2d_world_free(&w);r2d_world_free(&w);return failed?1:0;
+    r2d_world_free(&w);r2d_world_free(&w);return 0;
+}
+
+// Unity: Re2D World (multi-height, рэй, stamp) — один кейс.
+static void test_re2d_world_suite(void)
+{
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, run_suite(), "Re2D World: support/blocked/ray и stamp глубины");
+}
+
+int main(void)
+{
+    UNITY_BEGIN();
+    RUN_TEST(test_re2d_world_suite);
+    return UNITY_END();
 }

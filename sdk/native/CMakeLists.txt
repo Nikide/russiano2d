@@ -54,7 +54,7 @@ set_target_properties(r2d-sdk PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINAR
 
 # C-тесты бэкенда (без окна и GPU).
 add_executable(r2d_sdk_core_test "${CMAKE_SOURCE_DIR}/tests/sdk/sdk_core_test.c")
-target_link_libraries(r2d_sdk_core_test PRIVATE r2d_sdk_core)
+target_link_libraries(r2d_sdk_core_test PRIVATE r2d_sdk_core r2d_unity)
 if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
     target_compile_options(r2d_sdk_core_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_sdk_core_test PRIVATE -fsanitize=address,undefined)

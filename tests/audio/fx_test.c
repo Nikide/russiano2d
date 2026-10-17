@@ -11,6 +11,7 @@
 //   ./build/r2d_audio_fx_test
 // ===========================================================================
 #include <math.h>
+#include "unity.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -20,15 +21,13 @@
 static int failures = 0;
 static int checks = 0;
 
+void setUp(void) {}
+void tearDown(void) {}
+
 static void check(int condition, const char *message)
 {
     checks++;
-    if (!condition) {
-        failures++;
-        printf("  FAIL %s\n", message);
-    } else {
-        printf("  ok   %s\n", message);
-    }
+    TEST_ASSERT_TRUE_MESSAGE(condition != 0, message);
 }
 
 /** Пиковое абсолютное значение буфера (interleaved). */
@@ -79,7 +78,7 @@ static SDL_AudioSpec spec_of(int rate, int channels)
     return spec;
 }
 
-int main(void)
+static int run_suite(void)
 {
     const int rate = 48000;
     const int frames = 2048;
@@ -357,4 +356,17 @@ int main(void)
     printf("\n%s\n", failures == 0 ? "Все проверки пройдены" : "ПРОВАЛЕНО");
     printf("проверок: %d, провалов: %d\n", checks, failures);
     return failures == 0 ? 0 : 1;
+}
+
+// Unity: DSP-эффекты каналов и шин — один кейс.
+static void test_audio_fx_suite(void)
+{
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, run_suite(), "audio_fx: фильтры, тремоло, bitcrush, реверб-шина");
+}
+
+int main(void)
+{
+    UNITY_BEGIN();
+    RUN_TEST(test_audio_fx_suite);
+    return UNITY_END();
 }

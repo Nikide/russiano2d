@@ -21,9 +21,14 @@ else()
     set(R2D_SANITIZE_FLAGS_AVAILABLE TRUE)
 endif()
 
+# Unity (ThrowTheSwitch/Unity v2.6.0) — единый фреймворк для ВСЕХ C-тестов.
+# Один header + unity.c; тесты подключают r2d_unity и пишут TEST_ASSERT_*.
+add_library(r2d_unity STATIC "${CMAKE_SOURCE_DIR}/third_party/unity/unity.c")
+target_include_directories(r2d_unity PUBLIC "${CMAKE_SOURCE_DIR}/third_party/unity")
+
 add_executable(r2d_json_test json/json_test.c "${CMAKE_SOURCE_DIR}/src/json.c")
 target_include_directories(r2d_json_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(r2d_json_test PRIVATE ${R2D_WIN_LIBS})
+target_link_libraries(r2d_json_test PRIVATE ${R2D_WIN_LIBS} r2d_unity)
 
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_json_test PRIVATE -fsanitize=address -g -fno-omit-frame-pointer)
@@ -43,7 +48,7 @@ add_custom_target(r2d_json_check
 add_executable(r2d_crypto_test "${CMAKE_SOURCE_DIR}/tests/crypto/crypto_test.c"
                                "${CMAKE_SOURCE_DIR}/src/crypto.c")
 target_include_directories(r2d_crypto_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(r2d_crypto_test PRIVATE ${R2D_WIN_LIBS})
+target_link_libraries(r2d_crypto_test PRIVATE ${R2D_WIN_LIBS} r2d_unity)
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_crypto_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_crypto_test PRIVATE -fsanitize=address,undefined)
@@ -57,7 +62,7 @@ add_executable(r2d_payload_test "${CMAKE_SOURCE_DIR}/tests/payload/payload_test.
                                 "${CMAKE_SOURCE_DIR}/src/payload.c"
                                 "${CMAKE_SOURCE_DIR}/src/crypto.c")
 target_include_directories(r2d_payload_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(r2d_payload_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
+target_link_libraries(r2d_payload_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_payload_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_payload_test PRIVATE -fsanitize=address,undefined)
@@ -70,7 +75,7 @@ endif()
 add_executable(r2d_reverb_test "${CMAKE_SOURCE_DIR}/tests/audio/reverb_test.c"
                                "${CMAKE_SOURCE_DIR}/src/audio_reverb.c")
 target_include_directories(r2d_reverb_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(r2d_reverb_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
+target_link_libraries(r2d_reverb_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_reverb_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_reverb_test PRIVATE -fsanitize=address,undefined)
@@ -83,7 +88,7 @@ add_executable(r2d_audio_fx_test "${CMAKE_SOURCE_DIR}/tests/audio/fx_test.c"
                                "${CMAKE_SOURCE_DIR}/src/audio_fx.c"
                                "${CMAKE_SOURCE_DIR}/src/audio_reverb.c")
 target_include_directories(r2d_audio_fx_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(r2d_audio_fx_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
+target_link_libraries(r2d_audio_fx_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_audio_fx_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_audio_fx_test PRIVATE -fsanitize=address,undefined)
@@ -96,7 +101,7 @@ endif()
 add_executable(r2d_profile_test "${CMAKE_SOURCE_DIR}/tests/profile/profile_test.c"
                                 "${CMAKE_SOURCE_DIR}/src/profile.c")
 target_include_directories(r2d_profile_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(r2d_profile_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
+target_link_libraries(r2d_profile_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_profile_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_profile_test PRIVATE -fsanitize=address,undefined)
@@ -106,15 +111,12 @@ endif()
 # Инвариант полноты: обход обязан вернуть каждый отрезок дерева ровно один раз.
 # Ловит случай предельной глубины, когда остаток геометрии «сваливался» в лист
 # и пропадал из порядка отрисовки.
-# Пилот Unity (ThrowTheSwitch/Unity v2.6.0 лежит в third_party/unity):
-# один header + unity.c, TEST_ASSERT_* и автоотчёт. Пока переведён только BSP;
-# остальные C-цели остаются ручными и переводятся по одной.
+# Unity: BSP-тест — образец конвертации (TEST_ASSERT_*/UNITY_BEGIN, отдельные
+# test_* функции). Все C-цели ниже подключены к r2d_unity.
 add_executable(r2d_bsp_test "${CMAKE_SOURCE_DIR}/tests/bsp/bsp_test.c"
-                            "${CMAKE_SOURCE_DIR}/src/bsp.c"
-                            "${CMAKE_SOURCE_DIR}/third_party/unity/unity.c")
-target_include_directories(r2d_bsp_test PRIVATE "${CMAKE_SOURCE_DIR}/src"
-                                                "${CMAKE_SOURCE_DIR}/third_party/unity")
-target_link_libraries(r2d_bsp_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
+                            "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_bsp_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_bsp_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_bsp_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_bsp_test PRIVATE -fsanitize=address,undefined)
@@ -135,7 +137,7 @@ else()
 add_executable(r2d_re2d_test re2d/re2d_test.c "${CMAKE_SOURCE_DIR}/src/re2d_math.c")
 target_include_directories(r2d_re2d_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 if(NOT MSVC)
-    target_link_libraries(r2d_re2d_test PRIVATE m)
+    target_link_libraries(r2d_re2d_test PRIVATE m r2d_unity)
 endif()
 if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
     target_compile_options(r2d_re2d_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -146,7 +148,7 @@ endif()
 add_executable(r2d_rotsprite_test rotsprite/rotsprite_test.c "${CMAKE_SOURCE_DIR}/src/rotsprite_math.c")
 target_include_directories(r2d_rotsprite_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
 if(NOT MSVC)
-    target_link_libraries(r2d_rotsprite_test PRIVATE m)
+    target_link_libraries(r2d_rotsprite_test PRIVATE m r2d_unity)
 endif()
 if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
     target_compile_options(r2d_rotsprite_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -158,7 +160,7 @@ add_executable(r2d_re2d_world_test re2d/world_test.c
     "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/json.c"
     "${CMAKE_SOURCE_DIR}/src/bsp.c")
 target_include_directories(r2d_re2d_world_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(r2d_re2d_world_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
+target_link_libraries(r2d_re2d_world_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
 if(NOT MSVC)
     target_link_libraries(r2d_re2d_world_test PRIVATE m)
 endif()
@@ -170,7 +172,7 @@ endif()
 # EXR-декодер панорамного неба Re2D World (cmake/WorldEXR.cmake).
 add_executable(r2d_world_exr_test re2d/exr_test.c)
 target_include_directories(r2d_world_exr_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(r2d_world_exr_test PRIVATE r2d_world_exr)
+target_link_libraries(r2d_world_exr_test PRIVATE r2d_world_exr r2d_unity)
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_world_exr_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_world_exr_test PRIVATE -fsanitize=address,undefined)
@@ -185,7 +187,7 @@ if(TARGET R2D_SteamAudio)
     # компилируется БЕЗ Steam Audio, тест проверяет фолбэк-панораму и три его
     # проверки (инициализация HRTF, фронт/тыл, высота) падают «не по делу».
     target_compile_definitions(r2d_audio_spatial_test PRIVATE R2D_STEAM_AUDIO=1)
-    target_link_libraries(r2d_audio_spatial_test PRIVATE SDL3::SDL3 R2D_SteamAudio)
+    target_link_libraries(r2d_audio_spatial_test PRIVATE SDL3::SDL3 R2D_SteamAudio r2d_unity)
     if(NOT MSVC)
         target_link_libraries(r2d_audio_spatial_test PRIVATE m)
     endif()

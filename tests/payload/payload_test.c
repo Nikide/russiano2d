@@ -10,6 +10,8 @@
 // двойное освобождение видно сразу.
 // ===========================================================================
 #include "payload.h"
+#include "unity.h"
+#include "unity.h"
 
 #include <SDL3/SDL.h>
 
@@ -21,11 +23,15 @@
 bool r2d_log_stderr = false;
 
 static int failures = 0;
+static int g_checks = 0;
+
+void setUp(void) {}
+void tearDown(void) {}
 
 static void check(bool ok, const char *what)
 {
-    printf("  %s %s\n", ok ? "ok  " : "FAIL", what);
-    if (!ok) failures++;
+    g_checks++;
+    TEST_ASSERT_TRUE_MESSAGE(ok, what);
 }
 
 static void put_u32(uint8_t *p, uint32_t v)
@@ -127,16 +133,10 @@ static void test_truncated_header(void)
 
 int main(void)
 {
-    printf("Разбор груза:\n");
-    test_bad_record_keeps_ownership();
-    test_truncated_record_does_not_free();
-    test_valid_container();
-    test_truncated_header();
-
-    if (failures) {
-        printf("ПРОВАЛЕНО: %d\n", failures);
-        return 1;
-    }
-    printf("Все проверки пройдены\n");
-    return 0;
+    UNITY_BEGIN();
+    RUN_TEST(test_bad_record_keeps_ownership);
+    RUN_TEST(test_truncated_record_does_not_free);
+    RUN_TEST(test_valid_container);
+    RUN_TEST(test_truncated_header);
+    return UNITY_END();
 }
