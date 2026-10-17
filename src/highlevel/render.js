@@ -19,6 +19,7 @@ import { ctx, wrap, def, TAGS, packColor, withAlpha, fxRandom,
 import { cameraTransform } from './camera.js';
 import { viewCams } from './viewports.js';
 import { kindRenderer, kindPass } from './kinds.js';
+import { report as diagReport } from './diag.js';
 
 const MAX_SPRITES = 16384;
 const MAX_TRIS = 8192;
@@ -1099,7 +1100,41 @@ const LIGHT_QUALITY_DEFAULTS = {
 // Разрешение карты света задано сборкой (C: половинное) — сообщаем как факт.
 const LIGHTMAP_SCALE = 0.5;
 const light_quality = Object.assign({}, LIGHT_QUALITY_DEFAULTS);
-const light_warned = { shadows: false, rays: false, segments: false };
+const light_warned = { shadows: false, rays: false, segments: false, emitters: false, budget: false };
+
+// ---------------------------------------------------------------------------
+// Бюджет/LOD источников (task-66, I11)
+//
+// Игра не прореживает источники руками: предельное число ПОЛНЫХ источников
+// задаёт бюджет. Источники за лимитом не пропадают, а переходят в LOD — вдвое
+// меньше лучей и колец, радиус ×radiusScale (0 — вклад отключён). Порядок
+// выбирает priority: 'mixed' (по умолчанию) — сила, ослабленная расстоянием до
+// камеры; 'camera' — ближайшие; 'power' — самые сильные; функция — своё число.
+// Числа видны в stats()/qualityReport()/budget(), факт деградации — один раз в
+// лог (lightWarnOnce), а не тишиной.
+// ---------------------------------------------------------------------------
+const LIGHT_PRIORITY_MODES = ['mixed', 'camera', 'power'];
+const LIGHT_BUDGET_DEFAULTS = { max: 0, priority: 'mixed', radiusScale: 0.6 };
+const LIGHT_LOD_RAY_SCALE = 0.5;
+const LIGHT_LOD_RING_SCALE = 0.5;
+const light_budget = Object.assign({}, LIGHT_BUDGET_DEFAULTS);
+const light_budget_frame = {
+    sources: 0, full: 0, lod: 0, off: 0, degraded: 0,
+    lights: { sources: 0, full: 0, lod: 0, off: 0, degraded: 0 },
+    emitters: { sources: 0, full: 0, lod: 0, off: 0, degraded: 0 },
+};
+// Узлы, которым в прошлом кадре ставили уровень: снимаем его перед новым
+// планом, чтобы выключенный бюджет не оставлял LOD на источнике.
+let light_budget_planned = [];
+let light_budget_fn_warned = false;
+
+/** Структурная ошибка света: человеку — текст, машине — код (§17). */
+function lightRefuse(where, code, message) {
+    diagReport(where, new Error(message), {
+        code, subsystem: 'light', operation: where, recoverable: true,
+    });
+}
+
 const light_frame = {
     lights: 0, shadowLights: 0, culledLights: 0,
     degradedRays: 0, degradedSegments: 0, skipped: 0,
@@ -1888,6 +1923,135 @@ function lightShadowSlot(node, slot, cx, cy, radius, angles, src, segments, coun
 }
 
 // ---------------------------------------------------------------------------
+// План бюджета на кадр (task-66, I11)
+//
+// Источники в кадре — узлы <light>/<lightarea> и emission-спрайты, которые
+// реально отдали бы свет. Первые max по приоритету получают level 0 (полное
+// качество), остальные — level 1 (LOD) или level 2 (вклад отключён, если
+// radiusScale == 0). Уровень живёт на узле (`node._light_budget`) и читается
+// отрисовкой; числа собираются в light_budget_frame.
+// ---------------------------------------------------------------------------
+
+/** Сила источника для приоритета: интенсивность × радиус (мировые px). */
+function lightBudgetPower(node, is_light) {
+    if (is_light) {
+        const intensity = Math.max(0, Math.min(2, Number(node.intensity) || 0));
+        if (!(intensity > 0.001)) return 0;
+        return intensity * Math.max(0.5, Number(node.radius) || 0);
+    }
+    const spec = node.attrs && node.attrs.emitter;
+    if (!spec) return 0;
+    const intensity = Number(spec.intensity);
+    if (!(intensity > 0.001)) return 0;
+    return Math.max(0.5, Number(spec.radius) || 0) * intensity;
+}
+
+function planLightBudget(cam) {
+    // Прошлый план снимаем всегда: иначе после budget({max:0}) узел остался
+    // бы в LOD навсегда, хотя бюджет уже выключен.
+    for (let i = 0; i < light_budget_planned.length; i++) {
+        light_budget_planned[i]._light_budget = null;
+    }
+    light_budget_planned.length = 0;
+    light_budget_frame.sources = 0;
+    light_budget_frame.full = 0;
+    light_budget_frame.lod = 0;
+    light_budget_frame.off = 0;
+    light_budget_frame.degraded = 0;
+    for (const part of [light_budget_frame.lights, light_budget_frame.emitters]) {
+        part.sources = 0; part.full = 0; part.lod = 0; part.off = 0; part.degraded = 0;
+    }
+    if (!(light_budget.max > 0)) return;
+
+    const zoom = cam && cam.zoom > 0 ? cam.zoom : 1;
+    const half_w = (cam && cam.w !== undefined ? cam.w : engine.width) / 2;
+    const half_h = (cam && cam.h !== undefined ? cam.h : engine.height) / 2;
+    const cam_x = cam && cam.x !== undefined ? cam.x : engine.width / 2;
+    const cam_y = cam && cam.y !== undefined ? cam.y : engine.height / 2;
+    const mode = light_budget.priority;
+    const list = [];
+    const nodes = ctx.nodes;
+
+    for (let index = 0; index < nodes.length; index++) {
+        const node = nodes[index];
+        if (node.removed || !node.attrs) continue;
+        const is_light = node.tag === 'light' || node.tag === 'lightarea';
+        const is_emitter = !is_light && !!node.attrs.emitter;
+        if (!is_light && !is_emitter) continue;
+        if (node.visible === false || !inheritedVisible(node)) continue;
+        const alpha = inheritedAlpha(node);
+        if (!(alpha > 0.001)) continue;
+        // То же отсечение, что у отрисовки обычного узла: источник за кадром
+        // не считается «источником в кадре».
+        if (state.culling) {
+            const sx = (node.x - cam_x) * zoom + half_w;
+            const sy = (node.y - cam_y) * zoom + half_h;
+            if (sx < -64 || sx > half_w * 2 + 64 || sy < -64 || sy > half_h * 2 + 64) continue;
+        }
+        let power = lightBudgetPower(node, is_light);
+        if (!(power > 0.001)) continue;
+        power *= alpha;
+        const dx = node.x - cam_x, dy = node.y - cam_y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        let score;
+        if (typeof mode === 'function') {
+            try {
+                score = Number(mode(node, cam));
+                if (!Number.isFinite(score)) score = 0;
+            } catch (e) {
+                if (!light_budget_fn_warned) {
+                    light_budget_fn_warned = true;
+                    lightRefuse('$.gfx.light.budget', 'R2D_LIGHT_BUDGET_PRIORITY_FN',
+                                'priority-функция упала: ' + (e && e.message ? e.message : String(e)));
+                }
+                score = 0;
+            }
+        } else if (mode === 'camera') {
+            score = -dist;
+        } else if (mode === 'power') {
+            score = power;
+        } else {
+            // 'mixed': сила, ослабленная расстоянием. Один порядок для двух
+            // факторов — «ближний слабый» не побеждает «дальнего сильного»
+            // автоматически, но близость заметно повышает шанс.
+            score = power / (1 + dist);
+        }
+        list.push({ node, index, power, dist, score, is_light, is_emitter });
+    }
+
+    list.sort((a, b) => (b.score - a.score) || (a.index - b.index));
+    const max = Math.min(light_budget.max, list.length);
+    const radius_scale = light_budget.radiusScale;
+    const lod_level = radius_scale > 0.0001 ? 1 : 2;
+    for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        const node = item.node;
+        const level = i < max ? 0 : lod_level;
+        node._light_budget = level === 0
+            ? { level: 0, radiusScale: 1, rayScale: 1, ringScale: 1 }
+            : { level, radiusScale: radius_scale, rayScale: LIGHT_LOD_RAY_SCALE,
+                ringScale: LIGHT_LOD_RING_SCALE };
+        light_budget_planned.push(node);
+        light_budget_frame.sources++;
+        const part = item.is_light ? light_budget_frame.lights : light_budget_frame.emitters;
+        part.sources++;
+        if (level === 0) { light_budget_frame.full++; part.full++; }
+        else if (level === 1) { light_budget_frame.lod++; part.lod++; }
+        else { light_budget_frame.off++; part.off++; }
+    }
+    light_budget_frame.degraded = light_budget_frame.sources - light_budget_frame.full;
+    light_budget_frame.lights.degraded = light_budget_frame.lights.sources - light_budget_frame.lights.full;
+    light_budget_frame.emitters.degraded = light_budget_frame.emitters.sources - light_budget_frame.emitters.full;
+    if (light_budget_frame.degraded > 0) {
+        lightWarnOnce('budget', 'источников в кадре ' + light_budget_frame.sources
+            + ' больше бюджета max=' + light_budget.max + ' — '
+            + light_budget_frame.degraded + ' в LOD (лучи ×' + LIGHT_LOD_RAY_SCALE
+            + ', кольца ×' + LIGHT_LOD_RING_SCALE + ', радиус ×' + light_budget.radiusScale
+            + '); числа: $.gfx.light.qualityReport()');
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Emission-спрайты: спрайт не только рисуется мимо освещения, но и САМ светит.
 //
 // Путь тот же, что у <light>: с включённым lightmap свет уходит в слой света
@@ -1908,6 +2072,134 @@ const EMITTER_DEFAULTS = {
     falloff: 2,
 };
 
+// ---------------------------------------------------------------------------
+// Мерцание интенсивности эмиттера (task-66, I12)
+//
+// Интенсивность во времени: множитель k = 1 − depth + depth·o(t), где o(t) ∈
+// [0,1] — кривая от ИГРОВОГО времени (детерминирована при --fixed-dt):
+//   sine     — o = 0.5 + 0.5·sin(2π·hz·t);
+//   triangle — o = 1 − |2·frac(hz·t) − 1|;
+//   random   — детерминированный хеш(uid, floor(hz·t)): значение держится шаг
+//              1/hz и меняется на следующем (sample-and-hold, без Math.random).
+// Кривая с одинаковыми (hz, depth, curve) — ОДИН объект: тысяча эмиттеров
+// платит за синус один раз, а в кадре только читает готовый множитель. Число
+// разделяемых кривых ограничено (FLICKER_SHARED_MAX), чтобы смена параметров
+// в рантайме не росла памятью: сверх лимита кривая считается на узел.
+// ---------------------------------------------------------------------------
+const FLICKER_CURVES = { sine: 0, triangle: 1, random: 2 };
+const FLICKER_DEFAULTS = { hz: 6, depth: 0.5, curve: 'sine' };
+// Уникальные кривые (sine/triangle) — ОДИН объект на (hz, depth, curve):
+// тысяча эмиттеров с одинаковым мерцанием делит один множитель, и кадр платит
+// за синус один раз. random не разделяется: у него seed — uid узла.
+const FLICKER_SHARED_MAX = 256;
+const flicker_shared = new Map();
+const flicker_active = [];
+let flicker_render_serial = 0;
+let flicker_now = 0;
+let flicker_any = false;
+
+/** Детерминированный хеш в [0,1]: без Math.random и без зависимости от машины. */
+function flickerHash(seed, step) {
+    let h = (seed ^ Math.imul(step, 0x9e3779b1)) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+    h = (h ^ (h >>> 16)) >>> 0;
+    return (h & 0xffff) / 65535;
+}
+
+/** Значение o(t) для разделяемой кривой (sine/triangle). */
+function flickerCurveValue(f, t) {
+    const phase = t * f.hz;
+    if (f.mode === 1) {
+        const frac = phase - Math.floor(phase);
+        return 1 - Math.abs(2 * frac - 1);
+    }
+    return 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
+}
+
+/**
+ * Раз в проход отрисовки: время и множители всех разделяемых кривых. Обычно
+ * кривых 1–3, поэтому эмиттеры в кадре только читают готовое поле.
+ */
+function flickerPrepare(serial) {
+    // Мерцания в игре нет — кадр не платит даже за чтение времени.
+    if (!flicker_any) return;
+    flicker_now = engine.time || 0;
+    for (let i = 0; i < flicker_active.length; i++) {
+        const f = flicker_active[i];
+        f.factor = 1 - f.depth + f.depth * flickerCurveValue(f, flicker_now);
+        f.frame = serial;
+    }
+}
+
+/** random: своё значение на узел (seed = uid), но от того же игрового времени. */
+function randomFlicker(f, uid) {
+    const phase = flicker_now * f.hz;
+    const o = flickerHash((uid || 0) >>> 0, Math.floor(phase));
+    return 1 - f.depth + f.depth * o;
+}
+
+/** Множитель мерцания узла на текущий кадр: 1 — мерцания нет. */
+function emitterFlickerOf(node, spec) {
+    const f = spec && spec.flicker;
+    if (!f) return 1;
+    if (f.mode === 2) return randomFlicker(f, node.uid);
+    if (f.frame === flicker_render_serial) return f.factor;
+    return 1 - f.depth + f.depth * flickerCurveValue(f, flicker_now);
+}
+
+/** Нормировать описание мерцания; отказ — структурной ошибкой, не тишиной. */
+function normalizeFlicker(raw) {
+    if (raw === undefined || raw === null || raw === false) return null;
+    if (raw === true) raw = {};
+    if (typeof raw !== 'object') {
+        lightRefuse('emissive', 'R2D_EMITTER_FLICKER_TYPE',
+                    'flicker: ожидается true или { hz, depth, curve }, получено '
+                    + JSON.stringify(raw));
+        return null;
+    }
+    let hz = Number(raw.hz);
+    if (raw.hz === undefined || raw.hz === null || !Number.isFinite(hz)) {
+        if (raw.hz !== undefined && raw.hz !== null) {
+            lightRefuse('emissive', 'R2D_EMITTER_FLICKER_VALUE',
+                        'flicker.hz должен быть числом, получено ' + JSON.stringify(raw.hz));
+        }
+        hz = FLICKER_DEFAULTS.hz;
+    }
+    hz = Math.max(0.01, Math.min(120, hz));
+    let depth = Number(raw.depth);
+    if (raw.depth === undefined || raw.depth === null || !Number.isFinite(depth)) {
+        if (raw.depth !== undefined && raw.depth !== null) {
+            lightRefuse('emissive', 'R2D_EMITTER_FLICKER_VALUE',
+                        'flicker.depth должен быть числом, получено ' + JSON.stringify(raw.depth));
+        }
+        depth = FLICKER_DEFAULTS.depth;
+    }
+    depth = Math.max(0, Math.min(1, depth));
+    let curve = raw.curve === undefined ? FLICKER_DEFAULTS.curve : String(raw.curve);
+    if (FLICKER_CURVES[curve] === undefined) {
+        lightRefuse('emissive', 'R2D_EMITTER_FLICKER_CURVE',
+                    'flicker.curve: неизвестная кривая ' + JSON.stringify(raw.curve)
+                    + '; доступны sine, triangle, random — работает sine');
+        curve = 'sine';
+    }
+    const mode = FLICKER_CURVES[curve];
+    flicker_any = true;
+    if (mode === 2) {
+        // random: у каждого узла свой seed (uid), поэтому объект не разделяем.
+        return { hz, depth, curve, mode, factor: 1, frame: -1 };
+    }
+    const key = hz + '|' + depth + '|' + curve;
+    let shared = flicker_shared.get(key);
+    if (!shared && flicker_shared.size < FLICKER_SHARED_MAX) {
+        shared = { hz, depth, curve, mode, factor: 1, frame: -1 };
+        flicker_shared.set(key, shared);
+        flicker_active.push(shared);
+    }
+    // Сверх лимита — своя кривая на узел (дороже, но без роста карты).
+    return shared || { hz, depth, curve, mode, factor: 1, frame: -1 };
+}
+
 /** Нормализовать описание эмиттера (без изменения входного объекта). */
 function normalizeEmitter(opts) {
     const o = (opts && typeof opts === 'object') ? opts : {};
@@ -1921,6 +2213,7 @@ function normalizeEmitter(opts) {
         segments: Math.max(6, Math.min(96, Math.round(num(o.segments, EMITTER_DEFAULTS.segments)))),
         rings: Math.max(1, Math.min(16, Math.round(num(o.rings, EMITTER_DEFAULTS.rings)))),
         falloff: num(o.falloff, EMITTER_DEFAULTS.falloff),
+        flicker: normalizeFlicker(o.flicker),
     };
 }
 
@@ -1972,17 +2265,51 @@ function emitterAutoKnown(node, spec) {
 function emitSpriteLight(node, t, cam) {
     const spec = node.attrs && node.attrs.emitter;
     if (!spec) return;
-    const power = node.alpha * spec.intensity;
-    const radius_world = Math.max(0.5, spec.radius);
+    const budget = node._light_budget;
+    const budget_on = light_budget.max > 0;
+    // Мерцание — множитель интенсивности от игрового времени. Быстрый путь
+    // (попадание в слот кривой) встроен здесь, а не вынесен в функцию: вызов
+    // на каждый эмиттер в QuickJS стоит дороже самих сравнений. Медленный
+    // путь — один раз на уникальную (hz, depth, curve) за кадр.
+    let flicker = 1;
+    const fl = spec.flicker;
+    if (fl) {
+        // Разделяемая кривая уже посчитана flickerPrepare ДО отрисовки кадра:
+        // здесь только чтение. random считаем на узел (seed = uid); кривая
+        // сверх лимита разделяемых — тоже на узел (fallback ниже).
+        if (fl.mode === 2) flicker = randomFlicker(fl, node.uid);
+        else if (fl.frame === flicker_render_serial) flicker = fl.factor;
+        else flicker = 1 - fl.depth + fl.depth * flickerCurveValue(fl, flicker_now);
+    }
+    let power = node.alpha * spec.intensity * flicker;
+    let radius_world = Math.max(0.5, spec.radius);
+    let segments = spec.segments;
+    let rings = spec.rings;
+    let budget_state = 'full';
+    if (budget && budget.level === 1) {
+        // LOD: меньше лучей и колец, радиус по radiusScale.
+        radius_world *= budget.radiusScale;
+        segments = Math.max(6, Math.round(segments * budget.rayScale));
+        rings = Math.max(1, Math.round(rings * budget.ringScale));
+        budget_state = 'lod';
+    }
     const radius = Math.max(2, radius_world * cam.zoom);
     const color = emitterColorOf(node, spec);
     light_frame.emitters++;
 
     let gives = power > 0.001;
-    let degraded = false;
-    if (gives && light_frame.emitterLights >= light_quality.maxShadowLights) {
+    let degraded = budget_state === 'lod';
+    if (budget && budget.level >= 2) {
+        // radiusScale: 0 — вклад источников за лимитом отключён осознанно;
+        // спрайт остаётся ярким (emissive-проход), числа — в отчёте.
         gives = false;
         degraded = true;
+        budget_state = 'off';
+        light_frame.emitterDegraded++;
+    } else if (gives && !budget_on && light_frame.emitterLights >= light_quality.maxShadowLights) {
+        gives = false;
+        degraded = true;
+        budget_state = 'off';
         light_frame.emitterDegraded++;
         lightWarnOnce('emitters', 'излучателей-спрайтов больше maxShadowLights='
             + light_quality.maxShadowLights + ' — лишние светят только собой, на окружение '
@@ -1999,6 +2326,11 @@ function emitSpriteLight(node, t, cam) {
         color: [color & 255, (color >>> 8) & 255, (color >>> 16) & 255, (color >>> 24) & 255],
         radius: radius_world,
         intensity: spec.intensity,
+        // Итоговая сила в кадре (интенсивность × альфа × мерцание) и сам
+        // множитель: по ним видно, что кривая реально доехала до кадра.
+        power,
+        flicker,
+        budget: budget_state,
         shadows: spec.shadows,
         bloom: spec.bloom,
         auto_color: spec.color === 'auto',
@@ -2009,7 +2341,7 @@ function emitSpriteLight(node, t, cam) {
     emitters_frame.push(record);
     if (engine.devtools && typeof engine.devtools.light === 'function' && gives) {
         // Тот же инспектор света, что у <light>: эмиттер видно в списке источников.
-        engine.devtools.light(t.x, t.y, radius_world, spec.intensity,
+        engine.devtools.light(t.x, t.y, radius_world, spec.intensity * flicker,
                               spec.shadows && light_frame.shadowLights < light_quality.maxShadowLights,
                               lightLayerOf(node));
     }
@@ -2036,11 +2368,11 @@ function emitSpriteLight(node, t, cam) {
     const curve = glowAlphaCurve({ falloff: spec.falloff, inner: 0 });
     if (!shadows) {
         pushGlow(t.x, t.y, radius, color, {
-            segments: spec.segments, rings: spec.rings, falloff: spec.falloff,
+            segments, rings, falloff: spec.falloff,
             alphaAt: (k) => power * curve(k),
         });
     } else {
-        const angles = lightAnglesFor(node, false, node.angle, 0, 0, spec.segments);
+        const angles = lightAnglesFor(node, false, node.angle, 0, 0, segments);
         const dist = lightDistScratch(angles.length);
         lightSegmentsFor(node);
         const near = lightCollectNear(node.x, node.y, radius_world, node._light_mask, node._light_own);
@@ -2050,7 +2382,7 @@ function emitSpriteLight(node, t, cam) {
             dist[i] = Math.min(world_dist[i], radius_world) * cam.zoom;
         }
         pushLightFan(t.x, t.y, angles, dist, color, {
-            rings: spec.rings, falloff: spec.falloff, inner: 0, alpha: power, closed: true,
+            rings, falloff: spec.falloff, inner: 0, alpha: power, closed: true,
         });
     }
     tri_blend_cur = prev_blend;
@@ -2060,6 +2392,10 @@ function emitSpriteLight(node, t, cam) {
 /** Свет: мягкое пятно либо веер с тенями и конусом. */
 function drawLightNode(node, t, cam) {
     const attrs = node.attrs || {};
+    const budget = node._light_budget;
+    // Бюджет может полностью отключить вклад источника сверх лимита
+    // (radiusScale: 0). Это осознанная деградация: счётчики уже на кадре.
+    if (budget && budget.level >= 2) return;
     const power = node.alpha * Math.max(0, Math.min(2, node.intensity)) * flickerFactor(node);
     if (power <= 0.001) return;
 
@@ -2073,7 +2409,8 @@ function drawLightNode(node, t, cam) {
     if (lightmap_on) tri_layer_cur = lightLayerOf(node);
 
     const zoom = cam.zoom;
-    const radius_world = Math.max(0.5, node.radius);
+    let radius_world = Math.max(0.5, node.radius);
+    if (budget && budget.level === 1) radius_world *= budget.radiusScale;
     const radius = Math.max(2, radius_world * zoom);
     const color = packColor(node.color);
     const cone_deg = attrs.cone === undefined ? 0 : Number(attrs.cone);
@@ -2103,13 +2440,18 @@ function drawLightNode(node, t, cam) {
         engine.devtools.light(t.x, t.y, radius_world, node.intensity, shadows, lightLayerOf(node));
     }
     const want_rays = Math.round(attrs.segments === undefined ? 26 : attrs.segments);
-    const samples = Math.max(6, Math.min(96, light_quality.maxRays, want_rays));
-    if (want_rays > samples) {
+    const samples_full = Math.max(6, Math.min(96, light_quality.maxRays, want_rays));
+    if (want_rays > samples_full) {
         light_frame.degradedRays++;
         lightWarnOnce('rays', 'segments=' + want_rays + ' урезаны до maxRays='
             + light_quality.maxRays + ' (повысьте $.gfx.light.quality)');
     }
-    const rings = attrs.rings === undefined ? 7 : Math.round(attrs.rings);
+    // LOD бюджета: вдвое меньше лучей. Это не maxRays-деградация и в
+    // degradedRays не попадает — у неё свой счётчик в budget()/qualityReport().
+    const samples = budget && budget.level === 1
+        ? Math.max(6, Math.round(samples_full * budget.rayScale)) : samples_full;
+    let rings = attrs.rings === undefined ? 7 : Math.round(attrs.rings);
+    if (budget && budget.level === 1) rings = Math.max(2, Math.round(rings * budget.ringScale));
     const falloff = attrs.falloff === undefined ? 2 : attrs.falloff;
     const inner = attrs.inner === undefined ? 0 : attrs.inner;
     const curve = glowAlphaCurve({ falloff, inner });
@@ -2164,6 +2506,8 @@ function drawLightNode(node, t, cam) {
 /** Площадной свет: несколько точек вдоль площадки, у каждой свой контур тени. */
 function drawLightAreaNode(node, t, cam) {
     const attrs = node.attrs || {};
+    const budget = node._light_budget;
+    if (budget && budget.level >= 2) return;
     const power = node.alpha * Math.max(0, Math.min(2, node.intensity)) * flickerFactor(node);
     if (power <= 0.001) return;
 
@@ -2177,7 +2521,8 @@ function drawLightAreaNode(node, t, cam) {
     if (lightmap_on) tri_layer_cur = lightLayerOf(node);
 
     const zoom = cam.zoom;
-    const radius_world = Math.max(0.5, node.radius);
+    let radius_world = Math.max(0.5, node.radius);
+    if (budget && budget.level === 1) radius_world *= budget.radiusScale;
     const samples = Math.max(1, Math.min(8, Math.round(attrs.samples === undefined ? 3 : attrs.samples)));
     light_frame.lights++;
     let shadows = attrs.shadows === true;
@@ -2203,10 +2548,13 @@ function drawLightAreaNode(node, t, cam) {
     const horizontal = w >= h;
     const span = horizontal ? w : h;
     const want_angles = Math.round(attrs.segments === undefined ? 20 : attrs.segments);
-    const angle_count = Math.max(6, Math.min(96, light_quality.maxRays, want_angles));
-    if (want_angles > angle_count) light_frame.degradedRays++;
+    const angle_count_full = Math.max(6, Math.min(96, light_quality.maxRays, want_angles));
+    if (want_angles > angle_count_full) light_frame.degradedRays++;
+    const angle_count = budget && budget.level === 1
+        ? Math.max(6, Math.round(angle_count_full * budget.rayScale)) : angle_count_full;
     const angles = lightAnglesFor(node, false, 0, 0, 0, angle_count);
-    const rings = attrs.rings === undefined ? 7 : Math.round(attrs.rings);
+    let rings = attrs.rings === undefined ? 7 : Math.round(attrs.rings);
+    if (budget && budget.level === 1) rings = Math.max(2, Math.round(rings * budget.ringScale));
     const falloff = attrs.falloff === undefined ? 2 : attrs.falloff;
     const inner = attrs.inner === undefined ? 0 : attrs.inner;
     const soft = attrs.shadowSoft === undefined
@@ -2573,6 +2921,99 @@ const light_api = {
         return light_api;
     },
     /**
+     * Бюджет/LOD источников: `$.gfx.light.budget({ max, priority, radiusScale })`.
+     *
+     * `max` — сколько источников в кадре рисуются ПОЛНОСТЬЮ; 0/undefined —
+     * бюджет выключен (прежнее поведение). Остальные получают LOD: вдвое
+     * меньше лучей и колец, радиус ×radiusScale. `radiusScale: 0` отключает их
+     * вклад совсем (off), а не «тихо гасит».
+     *
+     * `priority` — 'mixed' (по умолчанию: сила / (1 + расстояние до камеры)),
+     * 'camera' (ближайшие), 'power' (самые сильные) или функция
+     * `(node, cam) => число` (больше — важнее).
+     *
+     * Без аргумента — конфигурация и статистика последнего кадра: сколько
+     * источников, сколько полных/LOD/отключённых, отдельно для <light> и
+     * emission-спрайтов. `degraded` = lod + off.
+     */
+    budget(opts) {
+        if (opts === undefined) {
+            return {
+                max: light_budget.max,
+                priority: typeof light_budget.priority === 'function'
+                    ? 'function' : light_budget.priority,
+                radiusScale: light_budget.radiusScale,
+                enabled: light_budget.max > 0,
+                sources: light_budget_frame.sources,
+                full: light_budget_frame.full,
+                lod: light_budget_frame.lod,
+                off: light_budget_frame.off,
+                degraded: light_budget_frame.degraded,
+                lights: Object.assign({}, light_budget_frame.lights),
+                emitters: Object.assign({}, light_budget_frame.emitters),
+                geometry: { rays: LIGHT_LOD_RAY_SCALE, rings: LIGHT_LOD_RING_SCALE },
+            };
+        }
+        const where = '$.gfx.light.budget';
+        if (opts === null) {
+            light_budget.max = 0;
+            light_warned.budget = false;
+            light_budget_fn_warned = false;
+            return light_api;
+        }
+        if (typeof opts !== 'object') {
+            lightRefuse(where, 'R2D_LIGHT_BUDGET_TYPE',
+                        'ожидается { max, priority, radiusScale }, получено '
+                        + JSON.stringify(opts));
+            return light_api;
+        }
+        if (opts.max !== undefined) {
+            const raw = Number(opts.max);
+            const n = Math.round(raw);
+            if (!Number.isFinite(n)) {
+                lightRefuse(where, 'R2D_LIGHT_BUDGET_VALUE',
+                            'max должен быть числом ≥ 0 (0 — выключено), получено '
+                            + JSON.stringify(opts.max));
+                light_budget.max = 0;
+            } else if (n < 0) {
+                lightRefuse(where, 'R2D_LIGHT_BUDGET_VALUE',
+                            'max не может быть отрицательным, получено ' + n
+                            + ' — бюджет выключен');
+                light_budget.max = 0;
+            } else {
+                light_budget.max = Math.min(8192, n);
+            }
+        }
+        if (opts.priority !== undefined) {
+            if (typeof opts.priority === 'function') {
+                light_budget.priority = opts.priority;
+            } else if (typeof opts.priority === 'string'
+                       && LIGHT_PRIORITY_MODES.indexOf(opts.priority) >= 0) {
+                light_budget.priority = opts.priority;
+            } else {
+                lightRefuse(where, 'R2D_LIGHT_BUDGET_PRIORITY',
+                            'priority: ожидается функция или строка из '
+                            + LIGHT_PRIORITY_MODES.join('|') + ', получено '
+                            + JSON.stringify(opts.priority));
+            }
+        }
+        if (opts.radiusScale !== undefined) {
+            const n = Number(opts.radiusScale);
+            if (Number.isFinite(n)) {
+                light_budget.radiusScale = Math.max(0, Math.min(1, n));
+            } else {
+                lightRefuse(where, 'R2D_LIGHT_BUDGET_VALUE',
+                            'radiusScale должен быть числом 0..1, получено '
+                            + JSON.stringify(opts.radiusScale));
+            }
+        }
+        // Новая конфигурация — новые предупреждения: прежний факт «уже
+        // сказали один раз» не должен скрывать деградацию после смены max.
+        light_warned.budget = false;
+        light_budget_fn_warned = false;
+        return light_api;
+    },
+    /**
      * Динамические occluder'ы: сколько отрезков дали узлы со своими
      * `.occluders([...])` в последнем кадре, и их копия (мировые координаты).
      */
@@ -2581,11 +3022,15 @@ const light_api = {
     /** Сколько областей изменений помнит движок теней (для тестов). */
     changeRegions() { return light_changes.length; },
     /**
-     * Излучатели последнего кадра: `[{ node, color, radius, intensity, shadows,
-     * bloom, gives_light, degraded, auto_color, auto_color_known }]`.
+     * Излучатели последнего кадра: `[{ node, color, radius, intensity, power,
+     * flicker, budget, shadows, bloom, gives_light, degraded, auto_color,
+     * auto_color_known }]`.
      *
      * `gives_light: false` — спрайт светит только собой: либо выключен
      * lightmap, либо кончился общий бюджет источников (`degraded: true`).
+     * `flicker` — множитель мерцания в этом кадре (1 — мерцания нет),
+     * `power` — итоговая интенсивность (intensity × alpha × flicker),
+     * `budget` — 'full' | 'lod' | 'off' по бюджету $(.gfx.light.budget).
      * Порядок — как в сцене. Список принадлежит кадру, копию можно держать.
      */
     emitters() { return emitters_frame.map((e) => Object.assign({}, e)); },
@@ -2601,8 +3046,13 @@ const light_api = {
             emitters: light_frame.emitters,
             emitterLights: light_frame.emitterLights,
             emitterDegraded: light_frame.emitterDegraded,
+            // Бюджет/LOD: короткий счётчик (все не-полные источники) и полная
+            // статистика рядом — как у остальных лимитов.
+            degraded: light_budget_frame.degraded,
+            budget: light_api.budget(),
             warned: { shadows: light_warned.shadows, rays: light_warned.rays,
-                      segments: light_warned.segments, emitters: light_warned.emitters },
+                      segments: light_warned.segments, emitters: light_warned.emitters,
+                      budget: light_warned.budget },
         };
     },
     /** Сколько отрезков сейчас в реестре. */
@@ -2755,6 +3205,14 @@ const light_api = {
             emitters: light_frame.emitters,
             emitterLights: light_frame.emitterLights,
             emitterDegraded: light_frame.emitterDegraded,
+            // Бюджет/LOD источников (task-66): сколько источников в кадре,
+            // сколько полных, в LOD и с отключённым вкладом.
+            budgetMax: light_budget.max,
+            budgetSources: light_budget_frame.sources,
+            budgetFull: light_budget_frame.full,
+            budgetLod: light_budget_frame.lod,
+            budgetOff: light_budget_frame.off,
+            budgetDegraded: light_budget_frame.degraded,
             indexAppended: light_stats.index_appended,
             indexRebuilt: light_stats.index_rebuilt,
             // Сколько отрезков реально прошло через индекс в этом кадре:
@@ -2789,6 +3247,14 @@ const light_api = {
         light_frame.emitters = 0;
         light_frame.emitterLights = 0;
         light_frame.emitterDegraded = 0;
+        light_budget_frame.sources = 0;
+        light_budget_frame.full = 0;
+        light_budget_frame.lod = 0;
+        light_budget_frame.off = 0;
+        light_budget_frame.degraded = 0;
+        for (const part of [light_budget_frame.lights, light_budget_frame.emitters]) {
+            part.sources = 0; part.full = 0; part.lod = 0; part.off = 0; part.degraded = 0;
+        }
         if (emitters_frame.length) emitters_frame = [];
         return light_api;
     },
@@ -3063,9 +3529,17 @@ function drawEmissiveNodes(cam) {
         // эмиттера на полной яркости, чтобы пиксель перешёл порог bloom
         // (post_params.bloom_threshold, по умолчанию 0.75). Если есть и то и
         // другое, побеждает материал: он задан явно.
-        const color = material_glow
-            ? withAlpha(mat.emissive, mat.emissiveStrength * inheritedAlpha(node))
-            : withAlpha(emitterColorOf(node, emitter), inheritedAlpha(node));
+        let color;
+        if (material_glow) {
+            color = withAlpha(mat.emissive, mat.emissiveStrength * inheritedAlpha(node));
+        } else {
+            // Свечение эмиттера мерцает вместе с его светом: множитель уже
+            // посчитан в мире (emitSpriteLight) и лежит на узле; вызов
+            // функции — только если узел в этом кадре не рисовался.
+            let alpha = inheritedAlpha(node);
+            if (emitter.flicker) alpha *= emitterFlickerOf(node, emitter);
+            color = withAlpha(emitterColorOf(node, emitter), alpha);
+        }
         pushSprite(sprite, t.x, t.y, t.w, t.h, node.angle, color, 'add');
     }
 }
@@ -4375,6 +4849,11 @@ export function installGfx($) {
             light_frame.emitterLights = 0;
             light_frame.emitterDegraded = 0;
             if (emitters_frame.length) emitters_frame = [];
+            // Бюджет/LOD источников — один план на кадр, до отрисовки мира.
+            planLightBudget(cam);
+            // Кеш кривых мерцания живёт один проход отрисовки.
+            flicker_render_serial++;
+            flickerPrepare(flicker_render_serial);
             // Таблица шейдеров узлов собирается заново: параметры (например,
             // фаза волны) меняются каждый кадр.
             fx_map.clear();
@@ -4629,7 +5108,8 @@ export function installGfx($) {
      * по умолчанию, см. `$.gfx.light.layer()`).
      */
     /**
-     * Emission-спрайт: `.emissive({ color, radius, intensity, shadows, bloom })`.
+     * Emission-спрайт: `.emissive({ color, radius, intensity, shadows, bloom,
+     * flicker })`.
      *
      * Спрайт не только рисуется мимо освещения (как `emissive` в материале), но
      * и САМ светит на окружение — тем же путём, что `<light>`: с включённым
@@ -4642,7 +5122,11 @@ export function installGfx($) {
      *   * `shadows` — считать ли препятствия (по умолчанию `false`: у
      *     спрайта-излучателя теневая геометрия обычно не нужна);
      *   * `bloom` — кормить ли bloom-порог: спрайт рисуется ярче (×2), чтобы
-     *     попасть в существующий bright-pass.
+     *     попасть в существующий bright-pass;
+     *   * `flicker` — мерцание интенсивности: `{ hz, depth, curve }`, кривая
+     *     `'sine' | 'triangle' | 'random'` (по умолчанию hz 6, depth 0.5,
+     *     sine). Множитель k = 1 − depth + depth·o(t) идёт от игрового времени
+     *     и виден в `$.gfx.light.emitters()[].flicker`.
      *
      * `.emissive(false)` / `.emissive(null)` — выключить излучение (кадр
      * возвращается к прежнему). Без аргумента — текущее описание или `null`.
@@ -4654,7 +5138,17 @@ export function installGfx($) {
         if (opts === undefined) {
             if (!this.nodes.length) return null;
             const spec = this.nodes[0].attrs.emitter;
-            return spec ? Object.assign({}, spec) : null;
+            if (!spec) return null;
+            // flicker — вложенный объект: отдаём копию ТОЛЬКО публичных полей,
+            // иначе геттер делил бы состояние с узлом (и показывал внутренние
+            // mode/factor/frame разделяемой кривой).
+            return Object.assign({}, spec, {
+                flicker: spec.flicker ? {
+                    hz: spec.flicker.hz,
+                    depth: spec.flicker.depth,
+                    curve: spec.flicker.curve,
+                } : null,
+            });
         }
         const value = (opts === null || opts === false) ? null
             : normalizeEmitter(opts === true ? {} : opts);
