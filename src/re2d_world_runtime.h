@@ -161,6 +161,11 @@ typedef struct R2DWorldRuntime {
     int channel_zone[R2D_AUDIO_CHANNELS];
     int audio_voice_budget;
     R2DAudioVoices voice_policy;
+    // P3 rotating polywall groups: authored walls rotated in place around an XY
+    // pivot. Coords live in world.walls, so trace/blocked/render see them; BSP
+    // cell refs stay valid while walls remain inside their span footprint.
+    struct R2DWorldPolywallGroup *polywalls;
+    int polywall_count, polywall_capacity;
     // P2 material animation: per material slot, stepped with worldStep.
     R2DWorldMaterialAnim material_anims[R2D_WORLD_MAX_MATERIALS];
     bool material_anim_active[R2D_WORLD_MAX_MATERIALS];
@@ -267,6 +272,14 @@ void r2d_world_audio_zone_free(R2DWorldRuntime *);
 // P1 audio voice virtualization runtime: cap real voices, keep virtual ones for
 // promotion. Returns effective budget (1..R2D_AUDIO_VOICES_MAX).
 int r2d_world_audio_budget(R2DWorldRuntime *,int budget);
+// P3 rotating polywall groups.
+int r2d_world_polywall_add(R2DWorldRuntime *,const int *walls,int wall_count,float pivot_x,float pivot_y,float angle,float speed);
+bool r2d_world_polywall_info(R2DWorldRuntime *,int token,float *angle,float *speed,int *walls);
+bool r2d_world_polywall_remove(R2DWorldRuntime *,int token);
+bool r2d_world_polywall_set_speed(R2DWorldRuntime *,int token,float speed);
+bool r2d_world_polywall_speed(R2DWorldRuntime *,int token,float *speed);
+void r2d_world_polywall_advance(R2DWorldRuntime *,float dt);
+void r2d_world_polywall_free(R2DWorldRuntime *);
 // P1 save/load snapshot of native gameplay state (spans/portals/movers/triggers).
 bool r2d_world_state_capture(R2DWorldRuntime *,R2DWorldSaveState *out);
 bool r2d_world_state_apply(R2DWorldRuntime *,const R2DWorldSaveState *in);

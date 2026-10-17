@@ -42,6 +42,8 @@ const MODULES = [
     './re2d_sky_lab/index.js',
     // P4 debug-overlay lab: automap/entities/boss-zones поверх кадра.
     './re2d_debug_lab/index.js',
+    // P3 rotating polywall lab: rigid вращение authored wall в рантайме.
+    './re2d_polywall_lab/index.js',
     // Эталонное меню настроек: четыре вкладки, всё на лету, сохранение в
     // settings.json (docs/tutorial-settings.md).
     './settings/index.js',

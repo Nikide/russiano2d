@@ -17,7 +17,7 @@ const calls = { atlasAdd: [], atlasRemove: [], actorAdd: [], actorRemove: [],
                 moverCreate: [], moverIntent: [], moverRemove: [], moverInfo: [],
                 triggerCreate: [], triggerRemove: [], triggerTick: [], triggerUse: [], triggerShoot: [],
                 find: [], controllerCreate: [], controllerInit: [], controllerMove: [], controllerRemove: [],
-                portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [], save: [], secret: [], breakable: [], terrain: [], material: [], post: [] };
+                portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [], save: [], secret: [], breakable: [], terrain: [], material: [], post: [], polywall: [] };
 
 const native = {
     info: () => ({ poseBudget: 1, poseStep: 3 }),
@@ -90,6 +90,10 @@ const native = {
     audioZoneAt: (x, y, h) => ({ preset: 1, name: 'hall', span: 2 }),
     audioBudget: (n) => n,
     audioState: () => ({ ready: true, active: 3, virtual: 2, budget: 8 }),
+    polywallAdd: (walls, x, y, angle, speed) => { calls.polywall.push(['add', Array.from(walls), x, y, angle, speed]); return 7; },
+    polywallInfo: (token) => ({ angle: 0.5, speed: 1.5 }),
+    polywallSpeed: (token, speed) => calls.polywall.push(['speed', token, speed]),
+    polywallRemove: (token) => calls.polywall.push(['remove', token]),
     spanLight: () => ({ level: 1, r: 1, g: 1, b: 1, fogDensity: 0.002, fogStart: 100, fogR: 0.1, fogG: 0.2, fogB: 0.3 }),
     spanHeight: () => {}, spanSky: () => {},
     spanAt: () => 2,
@@ -575,6 +579,22 @@ test('world.conveyorMotion двигает velocity к скорости конв�
     const moved = world.conveyorMotion(2, { vx: 0, vy: 0 }, 0.5);
     truthy(moved.vx > 0);
     eq(moved.vy, 0);
+    world.dispose();
+});
+
+test('world.polywall вращает authored wall и управляется speed/remove', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const group = world.polywall({ walls: [4], pivot: { x: 200, y: 200 }, angle: 0, speed: 1 });
+    eq(group.token, 7);
+    eq(calls.polywall[0][0], 'add');
+    eq(calls.polywall[0][1][0], 4);
+    eq(calls.polywall[0][2], 200); eq(calls.polywall[0][3], 200); eq(calls.polywall[0][4], 0); eq(calls.polywall[0][5], 1);
+    eq(group.info().angle, 0.5);
+    group.speed(2);
+    eq(calls.polywall[calls.polywall.length - 1][0], 'speed');
+    group.remove();
+    eq(calls.polywall[calls.polywall.length - 1][0], 'remove');
+    throws(TypeError, () => world.polywall({}), 'нужны walls');
     world.dispose();
 });
 

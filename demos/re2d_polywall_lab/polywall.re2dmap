@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "name": "Rotating polywall lab",
+  "cells": [
+    { "id": "arena", "rect": [0, 0, 400, 400],
+      "spans": [{ "bottom": 0, "top": 200, "floorColor": "#5a5f68", "ceilingColor": "#7a7f8a",
+                  "lighting": { "level": 0.95, "color": "#ffffff" } }] }
+  ],
+  "walls": [
+    { "id": "left",   "from": [0, 0],   "to": [0, 400],   "bottom": 0, "top": 200, "color": "#b8a27a" },
+    { "id": "bottom", "from": [0, 0],   "to": [400, 0],   "bottom": 0, "top": 200, "color": "#b8a27a" },
+    { "id": "top",    "from": [0, 400], "to": [400, 400], "bottom": 0, "top": 200, "color": "#b8a27a" },
+    { "id": "right",  "from": [400, 0], "to": [400, 400], "bottom": 0, "top": 200, "color": "#b8a27a" },
+    { "id": "spinner","from": [200, 120], "to": [200, 280], "bottom": 0, "top": 200, "color": "#c05050" }
+  ],
+  "portals": [],
+  "lighting": { "mode": "classic", "dynamic": true, "shadows": false, "distanceScale": 0.001 },
+  "lights": [
+    { "x": 200, "y": 200, "h": 180, "radius": 520, "intensity": 1.7, "color": "#ffffff" }
+  ]
+}

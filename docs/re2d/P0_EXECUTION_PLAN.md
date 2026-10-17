@@ -94,7 +94,7 @@
 | multi-zone boss hit proxies | done: `world.hit({zones})`, trace zone/multiplier |
 | breakables + event | done (P1 core + runtime) |
 | conveyors | data + `conveyorMotion` gameplay tick |
-| rotating polywalls | math core (`r2d_world_polywall_test`), runtime integration next |
+| rotating polywalls | done: runtime groups + demo + agent trace/pixel test |
 | polygon cells | done: compiler rect-tiling + boundary walls, agent test |
 
 ## P4 progress

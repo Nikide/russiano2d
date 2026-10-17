@@ -32,6 +32,7 @@ $.render(() => world.render(view,400,240));
 | `world.portalOpen(index, fraction)` / `portalFraction(index)` | плавное состояние портала 0..1 |
 | `world.navBuild/navNearest/navPath` | 2D span/portal nav graph и детерминированный A* |
 | `world.navPath(...,{blockedSpans,blockedPortals})` | dynamic nav без rebuild: маски закрытых span/portal |
+| `world.polywall({walls,pivot,angle,speed})` | вращение authored wall в рантайме (trace/render видят) |
 | `world.automapLines(states?)` / `automapProject(view,x,y)` | 2D automap-линии и view-трансформ |
 | `world.metadata()` / `spawns()` / `spawn(id)` | authored map metadata и типизированные spawn points |
 | `world.saveState()` / `loadState(save)` / `saveMapHash()` | versioned native snapshot + map identity guard |
@@ -608,6 +609,23 @@ world.navPath(from, to, 256, 0, { blockedSpans: [3, 4], blockedPortals: [1] });
 конвертирует списки в маски; путь — массив node id или `null`. Agent:
 `navPath(0,0)` → `[0]`, `blockedSpans:[0]` → `null`. Ограничения: маски
 передаёт игра на каждый запрос; сам граф строится из authored topology.
+
+## Rotating polywalls (P3)
+
+```js
+const group = world.polywall({ walls: [4], pivot: { x: 200, y: 200 }, angle: 0, speed: 1 });
+group.info();          // {angle, speed, walls}
+group.speed(0);        // пауза
+group.remove();        // вернуть authored endpoints
+```
+
+Группа хранит authored endpoints и каждый `worldStep` поворачивает их вокруг
+XY-пивота **в `world.walls`**, поэтому collide/trace/render идут по одному и
+тому же сегменту без mesh API и без пересборки topology. BSP cell refs не
+перестраиваются: группа рассчитана на стену, остающуюся внутри footprint своего
+span. Демо `demos/re2d_polywall_lab`; agent: угол 0.05→1.05, trace из попадания
+уходит в промах, кадр меняется (~132k px). Capability
+`$.capabilities.re2d.rotatingPolywalls === true`.
 
 ## Свет, материал, изменение мира
 

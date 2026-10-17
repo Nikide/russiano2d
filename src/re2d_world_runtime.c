@@ -38,7 +38,7 @@ void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
     free(w->actors);free(w->frame_handles);free(w->frame_positions);free(w->frame_images);free(w->frame_sizes);
     free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_tints);free(w->frame_keys);free(w->atlas_actors);
     free(w->hit_entries);free(w->trace_scratch);free(w->movers);free(w->triggers);
-    r2d_world_nav_free(w);r2d_world_particles_free(w);r2d_world_secret_free(w);r2d_world_terrain_free(w);r2d_world_audio_zone_free(w);
+    r2d_world_nav_free(w);r2d_world_particles_free(w);r2d_world_secret_free(w);r2d_world_terrain_free(w);r2d_world_audio_zone_free(w);r2d_world_polywall_free(w);
     w->actors=w->frame_handles=NULL;w->frame_positions=NULL;w->frame_images=NULL;w->frame_sizes=NULL;
     w->frame_kinds=NULL;w->frame_revisions=NULL;w->frame_blends=NULL;w->frame_tints=NULL;w->frame_keys=NULL;w->atlas_actors=NULL;
     w->hit_entries=NULL;w->trace_scratch=NULL;w->hit_count=w->hit_capacity=0;w->trace_scratch_capacity=0;
@@ -1157,6 +1157,105 @@ bool r2d_world_aim_assist(JSContext *ctx,R2DWorldRuntime *w,const float from[3],
     return found;
 }
 
+
+
+// --- P3 rotating polywall groups -------------------------------------------
+typedef struct {
+    int wall;
+    float x1,y1,x2,y2;     // authored endpoints (restored on remove)
+} R2DWorldPolywallWall;
+typedef struct R2DWorldPolywallGroup {
+    int token,count;
+    float pivot_x,pivot_y,angle,speed;
+    R2DWorldPolywallWall *walls;
+} R2DWorldPolywallGroup;
+static R2DWorldPolywallGroup *polywall_group(R2DWorldRuntime *w,int token)
+{
+    if(!w||token<0)return NULL;
+    for(int i=0;i<w->polywall_count;i++)if(w->polywalls[i].token==token)return &w->polywalls[i];
+    return NULL;
+}
+static void polywall_apply(R2DWorldRuntime *w,R2DWorldPolywallGroup *g)
+{
+    const float c=cosf(g->angle),s=sinf(g->angle);
+    for(int i=0;i<g->count;i++){
+        R2DWorldPolywallWall *p=&g->walls[i];
+        const float ax=p->x1-g->pivot_x,ay=p->y1-g->pivot_y,bx=p->x2-g->pivot_x,by=p->y2-g->pivot_y;
+        R2DWorldWall *wall=&w->world.walls[p->wall];
+        wall->x1=g->pivot_x+ax*c-ay*s;wall->y1=g->pivot_y+ax*s+ay*c;
+        wall->x2=g->pivot_x+bx*c-by*s;wall->y2=g->pivot_y+bx*s+by*c;
+    }
+    w->world.geometry_revision++;
+}
+int r2d_world_polywall_add(R2DWorldRuntime *w,const int *walls,int wall_count,float pivot_x,float pivot_y,float angle,float speed)
+{
+    if(!w||!walls||wall_count<1||wall_count>64||!isfinite(pivot_x)||!isfinite(pivot_y)||!isfinite(angle)||!isfinite(speed))return -1;
+    if(w->polywall_count==w->polywall_capacity){
+        int next=w->polywall_capacity?w->polywall_capacity*2:8;
+        R2DWorldPolywallGroup *grown=realloc(w->polywalls,(size_t)next*sizeof *grown);
+        if(!grown)return -1;
+        w->polywalls=grown;w->polywall_capacity=next;
+    }
+    for(int i=0;i<wall_count;i++)if(walls[i]<0||walls[i]>=w->world.wall_count)return -1;
+    R2DWorldPolywallGroup *g=&w->polywalls[w->polywall_count];
+    memset(g,0,sizeof *g);
+    g->walls=calloc((size_t)wall_count,sizeof *g->walls);
+    if(!g->walls)return -1;
+    for(int i=0;i<wall_count;i++){
+        R2DWorldPolywallWall *p=&g->walls[i];
+        p->wall=walls[i];const R2DWorldWall *wall=&w->world.walls[walls[i]];
+        p->x1=wall->x1;p->y1=wall->y1;p->x2=wall->x2;p->y2=wall->y2;
+        if(p->x1==p->x2&&p->y1==p->y2){free(g->walls);return -1;}
+    }
+    g->count=wall_count;g->token=(w->polywall_count+1)*128+w->polywall_count;g->pivot_x=pivot_x;g->pivot_y=pivot_y;g->angle=angle;g->speed=speed;
+    w->polywall_count++;
+    polywall_apply(w,g);
+    return g->token;
+}
+bool r2d_world_polywall_info(R2DWorldRuntime *w,int token,float *angle,float *speed,int *walls)
+{
+    R2DWorldPolywallGroup *g=polywall_group(w,token);if(!g)return false;
+    if(angle)*angle=g->angle;if(speed)*speed=g->speed;
+    if(walls)for(int i=0;i<g->count;i++)walls[i]=g->walls[i].wall;
+    return true;
+}
+bool r2d_world_polywall_set_speed(R2DWorldRuntime *w,int token,float speed)
+{
+    R2DWorldPolywallGroup *g=polywall_group(w,token);
+    if(!g||!isfinite(speed))return false;
+    g->speed=speed;return true;
+}
+bool r2d_world_polywall_speed(R2DWorldRuntime *w,int token,float *speed)
+{
+    R2DWorldPolywallGroup *g=polywall_group(w,token);
+    if(!g||!speed)return false;*speed=g->speed;return true;
+}
+bool r2d_world_polywall_remove(R2DWorldRuntime *w,int token)
+{
+    for(int i=0;i<w->polywall_count;i++)if(w->polywalls[i].token==token){
+        R2DWorldPolywallGroup *g=&w->polywalls[i];
+        for(int j=0;j<g->count;j++){R2DWorldPolywallWall *p=&g->walls[j];R2DWorldWall *wall=&w->world.walls[p->wall];wall->x1=p->x1;wall->y1=p->y1;wall->x2=p->x2;wall->y2=p->y2;}
+        free(g->walls);
+        memmove(w->polywalls+i,w->polywalls+i+1,(size_t)(w->polywall_count-i-1)*sizeof *g);
+        w->polywall_count--;w->world.geometry_revision++;
+        return true;
+    }
+    return false;
+}
+void r2d_world_polywall_advance(R2DWorldRuntime *w,float dt)
+{
+    if(!w||!isfinite(dt)||dt<=0)return;
+    for(int i=0;i<w->polywall_count;i++){
+        R2DWorldPolywallGroup *g=&w->polywalls[i];
+        g->angle+=g->speed*dt;
+        polywall_apply(w,g);
+    }
+}
+void r2d_world_polywall_free(R2DWorldRuntime *w)
+{
+    for(int i=0;i<w->polywall_count;i++)free(w->polywalls[i].walls);
+    free(w->polywalls);w->polywalls=NULL;w->polywall_count=w->polywall_capacity=0;
+}
 
 // --- P2 final-frame postprocess stack --------------------------------------
 static bool post_ensure(R2DWorldRuntime *w)

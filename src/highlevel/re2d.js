@@ -954,6 +954,22 @@ function rendererWorldWrapper($, native) {
         reset() { native.postReset(); if ($.gfx && typeof $.gfx.post === 'function') $.gfx.post({ on: false }); return this; },
     };
 
+    // P3 rotating polywall groups: authored walls rotate in place around an XY
+    // pivot; trace/blocked/render see the mutated wall, no topology rebuild.
+    world.polywall = (options = {}) => {
+        const walls = new Float32Array(options.walls || []);
+        if (!walls.length) throw new TypeError('world.polywall: walls[] required');
+        const pivot = options.pivot || {};
+        const token = native.polywallAdd(walls, Number(pivot.x ?? 0), Number(pivot.y ?? 0),
+            Number(options.angle ?? 0), Number(options.speed ?? 0));
+        return {
+            token,
+            info() { const i = native.polywallInfo(token); return i ? { ...i, walls: Array.from(walls) } : null; },
+            speed(speed) { native.polywallSpeed(token, Number(speed)); return this; },
+            remove() { native.polywallRemove(token); },
+        };
+    };
+
     // P4 aim assist: nearest registered enemy proxy inside a cone.
     world.aimAssist = (options = {}) => {
         const from = options.from || {};
@@ -1365,7 +1381,7 @@ export function installRe2d($) {
         worldGpu: true, worldCpu: true,
         hrtf: !!(hrtf && hrtf.on),
         mirrorPortal: false, skyPortal: true, volumetricSprite: true,
-        particles: true, nav: true, automap: true, saveState: true, polygonCells: true, audioZones: true, audioVoices: true,
+        particles: true, nav: true, automap: true, saveState: true, polygonCells: true, audioZones: true, audioVoices: true, rotatingPolywalls: true,
         maxLights: 128, maxDecals: 128, maxWorldSprites: 4096,
         maxPortalRecursion: 4, maxParticles: 2048,
     });

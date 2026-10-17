@@ -866,6 +866,35 @@ static JSValue world_post_step(JSContext *ctx,JSValueConst self,int argc,JSValue
     if(w->post_ready)r2d_world_post_step_all(w,p[0]);
     return JS_UNDEFINED;
 }
+static JSValue world_polywall_add(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[3];if(!w||argc<5||!world_numbers(ctx,4,argv+1,4,p)||JS_GetTypedArrayType(argv[0])!=JS_TYPED_ARRAY_FLOAT32)return JS_ThrowTypeError(ctx,"Re2D World: polywall(Float32Array walls,pivotX,pivotY,angle,speed)");
+    float *ids=NULL;size_t count=0;JSValue ab=f32_view(ctx,argv[0],&ids,&count);
+    if(JS_IsException(ab))return JS_EXCEPTION;
+    if(!count||count>64){JS_FreeValue(ctx,ab);return JS_ThrowRangeError(ctx,"Re2D World: polywall needs 1..64 walls");}
+    int walls[64];for(size_t i=0;i<count;i++)walls[i]=(int)ids[i];
+    int token=r2d_world_polywall_add(w,walls,(int)count,p[0],p[1],p[2],p[3]);
+    JS_FreeValue(ctx,ab);
+    if(token<0)return JS_ThrowRangeError(ctx,"Re2D World: invalid polywall group");
+    return JS_NewInt32(ctx,token);
+}
+static JSValue world_polywall_speed(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[2];if(!w||!world_numbers(ctx,argc,argv,2,p))return JS_EXCEPTION;
+    return r2d_world_polywall_set_speed(w,(int)p[0],p[1])?JS_UNDEFINED:JS_ThrowRangeError(ctx,"Re2D World: unknown polywall group");
+}
+static JSValue world_polywall_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    float angle=0,speed=0;int walls[64];
+    if(!r2d_world_polywall_info(w,(int)p[0],&angle,&speed,walls))return JS_NULL;
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"angle",angle);set_num(ctx,o,"speed",speed);return o;
+}
+static JSValue world_polywall_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    return r2d_world_polywall_remove(w,(int)p[0])?JS_UNDEFINED:JS_ThrowRangeError(ctx,"Re2D World: unknown polywall group");
+}
 static JSValue world_aim_assist(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[11];if(!w||!world_numbers(ctx,argc,argv,11,p))return JS_EXCEPTION;
@@ -1492,7 +1521,7 @@ static void world_watch_poll(JSContext *,WorldHandle *,float);
 static JSValue world_step_all(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     (void)self;float dt;if(!world_numbers(ctx,argc,argv,1,&dt))return JS_EXCEPTION;if(dt<0||dt>60)return JS_ThrowRangeError(ctx,"Re2D World: invalid step dt");
-    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);r2d_world_particles_step(w,dt);r2d_world_material_anim_advance(w,dt);r2d_world_post_step_all(w,dt);r2d_world_sky_anim_advance(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
+    for(WorldHandle *w=world_registry;w;w=w->next)if(w->runtime==JS_GetRuntime(ctx)){r2d_world_light_step(&w->world,dt);r2d_world_decal_step(&w->world,dt);r2d_world_mover_advance(w,dt);r2d_world_trigger_advance(w,dt);r2d_world_particles_step(w,dt);r2d_world_material_anim_advance(w,dt);r2d_world_polywall_advance(w,dt);r2d_world_post_step_all(w,dt);r2d_world_sky_anim_advance(w,dt);world_watch_poll(ctx,w,dt);}return JS_UNDEFINED;
 }
 static JSValue world_light_at(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -1558,6 +1587,10 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"postEval",JS_NewCFunction(ctx,world_post_eval,"postEval",0));
     JS_SetPropertyStr(ctx,handle,"postReset",JS_NewCFunction(ctx,world_post_reset,"postReset",0));
     JS_SetPropertyStr(ctx,handle,"postStep",JS_NewCFunction(ctx,world_post_step,"postStep",1));
+    JS_SetPropertyStr(ctx,handle,"polywallAdd",JS_NewCFunction(ctx,world_polywall_add,"polywallAdd",5));
+    JS_SetPropertyStr(ctx,handle,"polywallSpeed",JS_NewCFunction(ctx,world_polywall_speed,"polywallSpeed",2));
+    JS_SetPropertyStr(ctx,handle,"polywallInfo",JS_NewCFunction(ctx,world_polywall_info,"polywallInfo",1));
+    JS_SetPropertyStr(ctx,handle,"polywallRemove",JS_NewCFunction(ctx,world_polywall_remove,"polywallRemove",1));
     JS_SetPropertyStr(ctx,handle,"aimAssist",JS_NewCFunction(ctx,world_aim_assist,"aimAssist",11));
     JS_SetPropertyStr(ctx,handle,"particlesBudget",JS_NewCFunction(ctx,world_particles_budget,"particlesBudget",1));
     JS_SetPropertyStr(ctx,handle,"materialIndex",JS_NewCFunction(ctx,world_material_index,"materialIndex",1));
