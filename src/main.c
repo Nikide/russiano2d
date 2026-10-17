@@ -10,6 +10,7 @@
 // ===========================================================================
 
 #include "agent.h"
+#include "api_metadata.h"
 #include "app.h"
 #include "payload.h"
 #include "project.h"
@@ -99,6 +100,7 @@ static void r2d__print_usage(const char *exe)
         "  --no-hot-reload    не следить за изменениями .js\n"
         "  --gpu <имя>        GPU-бэкенд: vulkan, d3d12, metal\n"
         "  --list-gpu         показать доступные бэкенды и выйти\n"
+        "  --dump-api         вывести machine-readable metadata публичного $ API и выйти\n"
         "\n"
         "  --- Режим агента (см. docs/AGENT_API.md) ---\n"
         "  --agent            читать JSON-команды со stdin и отвечать в stdout\n"
@@ -637,6 +639,13 @@ static void r2d__web_frame(void *user)
 
 int main(int argc, char **argv)
 {
+    // --dump-api is consumed by r2d-sdk: stdout must contain only the JSON
+    // snapshot, so silence engine logs before project/window startup.
+    for (int i = 1; i < argc; ++i)
+        if (SDL_strcmp(argv[i], "--dump-api") == 0) {
+            SDL_SetLogPriorities(SDL_LOG_PRIORITY_ERROR);
+            r2d_log_stderr = true;   // stdout reserved for the JSON snapshot
+        }
     // Подкоманда сборки: `russiano2d build ...` собирает игру в один файл и
     // завершается, не создавая окна (см. src/build.c).
     if (argc > 1 && SDL_strcmp(argv[1], "build") == 0) {
@@ -665,6 +674,7 @@ int main(int argc, char **argv)
     long   opt_frame_limit = 0;
     const char *opt_record = NULL;     // --record: файл записи ввода
     const char *opt_replay = NULL;     // --replay: файл воспроизведения
+    bool opt_dump_api = false;         // --dump-api: metadata публичного $ API
 
     for (int i = 1; i < argc; ++i) {
         if (SDL_strcmp(argv[i], "--stats") == 0) {
@@ -695,6 +705,10 @@ int main(int argc, char **argv)
             opt_record = argv[++i];
         } else if (SDL_strcmp(argv[i], "--replay") == 0 && i + 1 < argc) {
             opt_replay = argv[++i];
+        } else if (SDL_strcmp(argv[i], "--dump-api") == 0) {
+            opt_dump_api = true;
+            opt_headless = true;
+            SDL_SetLogPriorities(SDL_LOG_PRIORITY_ERROR);
         } else if (SDL_strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
             opt_frame_limit = SDL_strtol(argv[++i], NULL, 10);
         } else if (SDL_strcmp(argv[i], "--seconds") == 0 && i + 1 < argc) {
@@ -866,6 +880,25 @@ int main(int argc, char **argv)
         else R2D_WARN("%s", replay_err);
     }
     fc.replay = replay;
+
+    if (opt_dump_api) {
+        // Build the runtime once so every lazily registered `$` namespace exists,
+        // then dump the public surface. This is the single source for r2d-sdk
+        // schema/typings/lint/docs; no second hand-written API list.
+        r2d__run_frame(&fc, NULL);
+        char *result = NULL, *error = NULL;
+        const bool ok = r2d_script_eval(&script, r2d_api_metadata_script(), &result, &error);
+        if (ok && result) {
+            printf("{\"schema_version\":1,\"engine_version\":\"%s\",\"names\":%s}\n",
+                   R2D_VERSION_STRING, result);
+        } else {
+            fprintf(stderr, "api metadata: %s\n", error ? error : "снимок не получен");
+        }
+        free(result);
+        free(error);
+        r2d__shutdown(&fc);
+        return ok ? 0 : 1;
+    }
 
     if (opt_overlay) {
         char *result = NULL, *error = NULL;

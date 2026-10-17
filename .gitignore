@@ -1,3 +1,10 @@
+# --- Service junk (Phase 0: SDK agent tooling spec) ---
+.DS_Store
+*.old
+*.bak
+*.tmp
+*~
+
 # --- Build output ---
 build/
 build-*/

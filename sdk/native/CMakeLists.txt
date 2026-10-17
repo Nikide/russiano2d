@@ -13,6 +13,8 @@ set(R2D_SDK_SOURCES
     sdk_registry.c
     sdk_assets.c
     sdk_validate.c
+    sdk_api.c
+    sdk_lint.c
     sdk_json.c
     sdk_image.c
     sdk_atlas.c
