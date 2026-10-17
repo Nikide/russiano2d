@@ -82,7 +82,11 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `assets <каталог> [--registry f]` | ассеты по реальной файловой структуре: путь, тип, размер, mtime, инструмент |
 | `project <каталог>` | `project.json` и `main.js`: название, версия, размер окна |
 | `projects <каталог>` | проекты (каталоги с `project.json`) под каталогом |
-| `validate <файл> [--type t]` | проверка ассета, структурная диагностика |
+| `validate [каталог] [--project dir] [--type t]` | проект (project.json/main.js/asset refs/lint) или отдельный ассет |
+| `api dump [--game dir] [--engine path]` | machine-readable снимок публичного `$` API из живого runtime |
+| `api check [--schema f]` | структурная проверка снимка + свежесть `api.schema.json` |
+| `api generate [--out-dir dir]` | записать `api.schema.json` и `russiano2d.d.ts` из runtime metadata |
+| `lint [путь] [--schema f]` | API-aware линтер JS: `R2D001/002/004/014`, `--json` |
 | `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
 | `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
 | `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |
@@ -500,3 +504,18 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 диагностик, сломанный — выявляется ДО запуска структурированным кодом
 (`tests/sdk_validation_test.py`), а разбор SDK совпадает с разбором движка
 (`tests/sdk_preview_parity_test.py`).
+
+## Generated API artifacts
+
+`api.schema.json` и `russiano2d.d.ts` в корне — generated (header внутри файла).
+Источник — живой runtime (`russiano2d --dump-api`), поэтому новый `$` метод
+попадает в schema/typings/lint без второго рукописного списка:
+
+```bash
+./r2d-sdk api generate      # перезаписать schema + typings
+./r2d-sdk api check         # CI: schema не устарела
+./r2d-sdk lint game         # API-aware проверка игровых скриптов
+```
+
+Ручная правка `api.schema.json`/`russiano2d.d.ts` запрещена: меняется registry
+(живой `$` API), затем запускается `api generate`.

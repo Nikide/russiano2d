@@ -261,6 +261,8 @@ int sdk_cmd_projects(const SdkArgs *a);
 int sdk_cmd_validate(const SdkArgs *a);
 int sdk_cmd_api(const SdkArgs *a);
 int sdk_cmd_lint(const SdkArgs *a);
+int sdk_lint_run(const char *schema_path,const char *target,SdkReport *rep,int *files);
+void sdk_project_validate(const char *dir,SdkReport *rep);
 int sdk_cmd_run(const SdkArgs *a);
 int sdk_cmd_build(const SdkArgs *a);
 

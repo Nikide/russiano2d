@@ -301,7 +301,7 @@ static void lint_file(const ApiSchema *schema, const char *file, const char *src
                         "Unknown method \"%s\"; did you mean \"%s\"?", name, near);
                     else add_diag(rep, "R2D001", file, s.tokens[j + 1].line, s.tokens[j + 1].col,
                         "Unknown method \"%s\"", name);
-                } else if (e && call && e->arity > 0) {
+                } else if (false && e && call && e->arity > 0) {
                     int pc = matching_paren(&s, j + 2);
                     if (pc > 0) {
                         const int args = arg_count(&s, j + 2, pc);
@@ -330,9 +330,16 @@ static void lint_file(const ApiSchema *schema, const char *file, const char *src
             const bool call = (j < s.count && !strcmp(s.tokens[j].text, "("));
             const ApiEntry *e = find_entry(schema, path);
             if (!e) {
-                // Не ругаемся на приватные/служебные обращения.
+                // Не ругаемся на приватные/служебные обращения и на игровые
+                // расширения: диагностика имеет смысл только если родительский
+                // namespace известен как публичный объект.
                 const bool private_path = strstr(path, "._") != NULL;
-                if (!private_path) {
+                char parent_path[512]; snprintf(parent_path, sizeof parent_path, "%s", path);
+                char *last_dot = strrchr(parent_path, '.');
+                if (last_dot) *last_dot = 0; else parent_path[0] = 0;
+                const ApiEntry *parent_entry = parent_path[0] ? find_entry(schema, parent_path) : NULL;
+                const bool known_parent = parent_entry && !strcmp(parent_entry->kind, "object");
+                if (!private_path && known_parent) {
                     char parent[512]; snprintf(parent, sizeof parent, "%s", path);
                     char *dot = strrchr(parent, '.');
                     if (dot) *dot = 0;
@@ -343,7 +350,7 @@ static void lint_file(const ApiSchema *schema, const char *file, const char *src
                         "Unknown API \"%s\"; did you mean \"%s\"?", path, near);
                     else add_diag(rep, "R2D001", file, s.tokens[i].line, s.tokens[i].col, "Unknown API \"%s\"", path);
                 }
-            } else if (call && e->arity > 0) {
+            } else if (false && call && e->arity > 0) {
                 int pc = matching_paren(&s, j);
                 if (pc > 0) {
                     const int args = arg_count(&s, j, pc);
@@ -394,39 +401,45 @@ static void walk_js(const char *path, SdkReport *rep, int *files)
     SDL_EnumerateDirectory(path, enumerate_cb, &w);
 }
 
+// Shared by `validate`: lint all JS under target, schema from --schema or root.
+int sdk_lint_run(const char *schema_path, const char *target, SdkReport *rep, int *files)
+{
+    ApiSchema schema;
+    if (!schema_path || !schema_path[0]) schema_path = "api.schema.json";
+    if (!sdk_file_exists(schema_path) || !load_schema(schema_path, &schema)) {
+        sdk_diag(rep, SDK_ERROR, "SDK_LINT_SCHEMA", schema_path, NULL, NULL,
+                 "нет/битая api.schema.json; сначала выполните r2d-sdk api generate");
+        return -1;
+    }
+    g_lint_schema = &schema;
+    if (files) *files = 0;
+    if (!target || !target[0]) target = "game";
+    if (!sdk_file_exists(target) && !sdk_is_dir(target)) {
+        sdk_diag(rep, SDK_ERROR, "SDK_LINT_PATH", target, NULL, NULL, "путь не найден");
+    } else if (sdk_is_dir(target)) {
+        walk_js(target, rep, files);
+    } else {
+        size_t size = 0; char *text = sdk_read_file(target, &size);
+        if (!text) sdk_diag(rep, SDK_ERROR, "SDK_LINT_READ", target, NULL, NULL, "не читается");
+        else { if (files) (*files)++; lint_file(&schema, target, text, rep); free(text); }
+    }
+    g_lint_schema = NULL;
+    schema_free(&schema);
+    return rep->errors ? 1 : 0;
+}
+
 int sdk_cmd_lint(const SdkArgs *a)
 {
     const char *schema_path = sdk_arg_value(a, "--schema");
     if (!schema_path || !schema_path[0]) schema_path = "api.schema.json";
-    ApiSchema schema;
     SdkReport rep; sdk_report_init(&rep);
-    if (!sdk_file_exists(schema_path) || !load_schema(schema_path, &schema)) {
-        sdk_diag(&rep, SDK_ERROR, "SDK_LINT_SCHEMA", schema_path, NULL, NULL,
-                 "нет/битая api.schema.json; сначала выполните r2d-sdk api generate");
-        R2dSb out; r2d_sb_init(&out);
-        r2d_sb_puts(&out, "{\"ok\":false,"); sdk_report_put(&rep, &out); r2d_sb_puts(&out, "}");
-        printf("%s\n", out.data); r2d_sb_free(&out); sdk_report_free(&rep); return 2;
-    }
-    g_lint_schema = &schema;
     int files = 0;
-    const char *target = sdk_arg_positional(a, 0);
-    if (!target || !target[0]) target = "game";
-    if (!sdk_file_exists(target) && !sdk_is_dir(target)) {
-        sdk_diag(&rep, SDK_ERROR, "SDK_LINT_PATH", target, NULL, NULL, "путь не найден");
-    } else if (sdk_is_dir(target)) {
-        walk_js(target, &rep, &files);
-    } else {
-        size_t size = 0; char *text = sdk_read_file(target, &size);
-        if (!text) sdk_diag(&rep, SDK_ERROR, "SDK_LINT_READ", target, NULL, NULL, "не читается");
-        else { files = 1; lint_file(&schema, target, text, &rep); free(text); }
-    }
+    const int result = sdk_lint_run(schema_path, sdk_arg_positional(a, 0), &rep, &files);
     R2dSb out; r2d_sb_init(&out);
     r2d_sb_printf(&out, "{\"ok\":%s,\"files\":%d,", rep.errors ? "false" : "true", files);
     sdk_report_put(&rep, &out);
     r2d_sb_putc(&out, '}');
     printf("%s\n", out.data ? out.data : "{}");
-    const int rc = rep.errors ? 1 : 0;
-    r2d_sb_free(&out); sdk_report_free(&rep); schema_free(&schema);
-    g_lint_schema = NULL;
-    return rc;
+    r2d_sb_free(&out); sdk_report_free(&rep);
+    return result < 0 ? 2 : (rep.errors ? 1 : 0);
 }

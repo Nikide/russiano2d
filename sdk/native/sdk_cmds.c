@@ -275,17 +275,21 @@ int sdk_cmd_validate(const SdkArgs *a)
     SdkReport rep;
     sdk_report_init(&rep);
     const char *path = sdk_arg_positional(a, 0);
-    if (!path) {
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk validate <файл> [--type <тип>]");
-        sdk_report_free(&rep);
-        return rc;
+    const char *project_arg = sdk_arg_value(a, "--project");
+    if (project_arg) path = project_arg;
+    if (!path) path = "."; // validate без аргументов = текущий проект
+    const bool project_mode = sdk_is_dir(path);
+    const char *type = "project";
+    if (project_mode) {
+        sdk_project_validate(path, &rep);
+    } else {
+        type = sdk_validate_file(path, sdk_arg_value(a, "--type"), &rep);
     }
-    const char *type = sdk_validate_file(path, sdk_arg_value(a, "--type"), &rep);
 
     R2dSb out;
     r2d_sb_init(&out);
     r2d_sb_printf(&out, "{\"ok\":%s,", rep.errors == 0 ? "true" : "false");
-    sdk_put_kv_str(&out, "asset", path);
+    sdk_put_kv_str(&out, project_mode ? "project" : "asset", path);
     r2d_sb_putc(&out, ',');
     sdk_put_kv_str(&out, "type", type);
     r2d_sb_putc(&out, ',');
