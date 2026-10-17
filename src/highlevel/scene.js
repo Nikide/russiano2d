@@ -62,7 +62,9 @@ const state = {
     prepared: new Map(),   // имя сцены → handle успешного prepare (для promote)
     loading_cfg: {         // настройки экрана загрузки ($.scene.loading)
         rml: null, theme: null, min_ms: 0, timeout_ms: 0, style: null,
+        title: null, hint: null, color: null, barColor: null,
     },
+    theme_warned: false,
     load: null,            // активная загрузка: { handle, started, screen, ready, ... }
     progress: { total: 0, done: 0, ratio: 0, label: '' },
     // Состояние, которое надо вернуть после экрана загрузки.
@@ -452,6 +454,17 @@ function makeLoadingScreen(o) {
     const rml = o.rml || cfg.rml;
     const style = Object.assign({}, cfg.style || {}, o.style || {});
     const api = ctx.$;
+    // `theme` — не «магия»: RmlUi применяет стили, подключённые САМИМ .rml
+    // (`<link type="text/rcss">`). Отдельного применения .rcss у движка нет,
+    // поэтому молча игнорировать опцию нельзя — говорим один раз и честно.
+    const theme = o.theme || cfg.theme;
+    if (theme && !state.theme_warned) {
+        state.theme_warned = true;
+        reportSceneError('$.scene.loading', new Error(
+            `тема "${theme}" не применяется автоматически: подключите .rcss внутри .rml `
+            + 'через <link type="text/rcss" href="…"/>; сам по себе theme — только имя для документации'),
+            { code: 'R2D_SCENE_LOADING_THEME', stage: 'loading' });
+    }
     let custom = null;
     let warned = false;
     let updater = 0;
@@ -1298,6 +1311,11 @@ export function installScene($) {
             if (opts.style !== undefined) {
                 state.loading_cfg.style = opts.style && typeof opts.style === 'object'
                     ? Object.assign({}, opts.style) : null;
+            }
+            for (const key of ['title', 'hint', 'color', 'barColor']) {
+                if (opts[key] !== undefined) {
+                    state.loading_cfg[key] = opts[key] === null ? null : String(opts[key]);
+                }
             }
             return scene;
         },

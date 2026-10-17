@@ -200,6 +200,20 @@ def main():
         check(a.eval("$.scene.current()") == "a", "A1 свой RML не сломал переход")
         a.eval("$.scene.loading({ rml: null })")
 
+        # --- A1: theme без .rml — честный отказ, а не тишина ---------------
+        reset(a)
+        a.eval("$.scene.loading({ theme: 'ui/loading.rcss' })")
+        a.eval("$.scene.change('b', { loading: true, ms: 0, min_loading_ms: 50,"
+               " steps: [{ label: 'тема', total: 5, budget: 1, work: () => {} }] })")
+        a.step(6)
+        codes = [str(e.get("code")) for e in a.eval("$.debug.errors()")]
+        check(any(c == "R2D_SCENE_LOADING_THEME" for c in codes[-4:]),
+              f"A1 theme без применения говорит об этом (R2D_SCENE_LOADING_THEME): {codes[-4:]}")
+        a.eval("$.scene.loading({ theme: null })")
+        a.step(6)
+        a.eval("$.scene.change('a', { transition: 'none' })")
+        a.step(3)
+
         # --- A1: timeout ----------------------------------------------------
         reset(a)
         a.eval("$.scene.change('async', { loading: true, ms: 0, timeout_ms: 100,"
