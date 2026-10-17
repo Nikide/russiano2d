@@ -1,0 +1,10 @@
+{
+  "hit.json.spark": {
+    "duration": 0.4,
+    "seed": "fixture.hit",
+    "budget": { "particles": 40, "light": 0 },
+    "layers": [
+      { "at": 0.0, "use": "fx.pulse", "params": { "radius": 36, "ms": 120, "color": "#ffd27a" } }
+    ]
+  }
+}

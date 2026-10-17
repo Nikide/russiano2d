@@ -1,0 +1,10 @@
+{
+  "second.loaded": {
+    "duration": 0.2,
+    "seed": 7,
+    "budget": { "particles": 0, "light": 0 },
+    "layers": [
+      { "at": 0.0, "use": "fx.flash", "params": { "color": "#ffffff", "ms": 60, "alpha": 0.4 } }
+    ]
+  }
+}

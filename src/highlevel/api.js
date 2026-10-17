@@ -63,6 +63,8 @@ import { installReload } from './reload.js';   // §27: хот-релоад ас
 import { installTilemap, tickTilemap } from './tilemap.js';
 import { installParticles, tickParticles } from './particles.js';
 import { installFx, tickFx } from './fx.js';
+import { installVfx } from './vfx.js';
+import { installSfx } from './sfx.js';
 import { installNav, tickNav } from './nav.js';
 import { installPrefab, tickPrefab } from './prefab.js';
 import { installAudiobus, tickAudiobus } from './audiobus.js';
@@ -588,7 +590,13 @@ export function createApi() {
     installAnimPlayer($);       // дополняет $.anim: таймлайны и микширование
     installTilemap($);
     installParticles($);
+    // task-69: что видно → $.vfx (r2dvfx), что слышно → $.sfx; $.fx — алиас
+    // поверх $.vfx. Порядок важен: installVfx ставит полное визуальное
+    // пространство, installFx делает алиас (и ставит hits.js), installSfx
+    // читает реестр пресетов удара.
+    installVfx($);
     installFx($);
+    installSfx($);
     installNav($);
     installPrefab($);
     installSceneRooms($);        // §23: комнаты поверх $.scene/$.prefab/$.tilemap

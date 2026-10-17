@@ -35,6 +35,19 @@ ctx.fx_fields = state.fields;
 let api = null;
 let hits_installed = false;
 
+// Базовый визуальный объект (без r2dvfx) и хуки подсистемы `$.vfx`.
+// Обратных импортов нет: vfx.js импортирует fx.js, а не наоборот, — иначе
+// получился бы цикл модулей. Хуки ставятся из installVfx.
+let base_api = null;
+let extra_tick = null;
+let extra_reset = null;
+
+//: Подписаться на кадр VFX-слоя (вызывается из tickFx, до частиц).
+export function onFxTick(fn) { extra_tick = typeof fn === 'function' ? fn : null; }
+//: Подписаться на сброс (смена сцены): resetFx чистит и состояние r2dvfx.
+export function onFxReset(fn) { extra_reset = typeof fn === 'function' ? fn : null; }
+
+
 function clamp01(v) {
     return v < 0 ? 0 : (v > 1 ? 1 : v);
 }
@@ -60,10 +73,14 @@ function pointOf(what) {
 // Установка
 // ---------------------------------------------------------------------------
 
-export function installFx($) {
+export function installVisualBase($) {
+    if (base_api) {
+        api = $;
+        return base_api;
+    }
     const fx = {
         /**
-         * Лента за целью: `$.fx.trail('#hero', { ms: 350, width: 10 })`.
+         * Лента за целью: `$.vfx.trail('#hero', { ms: 350, width: 10 })`.
          * Цель — селектор, узел, обёртка или функция, возвращающая точку.
          */
         trail(target, opts) {
@@ -90,6 +107,22 @@ export function installFx($) {
             const t = { target: null, o, points: pts, dead: false, once: true };
             state.trails.push(t);
             return { stop() { t.dead = true; return this; } };
+        },
+
+        /**
+         * Полоса из готовых точек прямо в батч кадра (низкий уровень лент):
+         * `$.vfx.pushRibbon([[0, 0], [40, 20]], { width: 6, color: '#8fd8ff' })`.
+         *
+         * Раньше это была внутренняя функция рисования; наружу она вынесена
+         * потому, что играм нужен «след клинка» без жизненного цикла ленты
+         * (его считает сама игра). Возвращает `$.vfx` для цепочки.
+         */
+        pushRibbon(points, opts) {
+            const o = Object.assign({ width: 8, color: '#8fd8ff', blend: 'add', alpha: 1 },
+                                    opts);
+            const pts = [].concat(points || []).map((p) => pointOf(p)).filter(Boolean);
+            pushRibbon(pts, o, 1);
+            return fx;
         },
 
         /** Молния между точками: сегменты с дрожанием, опционально ветви. */
@@ -143,10 +176,10 @@ export function installFx($) {
         },
 
         /**
-         * Вспышка ЭКРАНА: `$.fx.flash('#ffffff', { ms: 90, alpha: 0.7 })`.
+         * Вспышка ЭКРАНА: `$.vfx.flash('#ffffff', { ms: 90, alpha: 0.7 })`.
          *
          * Принимает `(color)`, `(color, ms)` и `(color, opts)` — короткая форма
-         * с числом нужна катсценам (`cutscene.js` зовёт `$.fx.flash(color, ms)`).
+         * с числом нужна катсценам (`cutscene.js` пока зовёт `$.fx.flash(color, ms)`).
          *
          * Заливка идёт поверх сцены в момент сборки кадра, камеру не сдвигает и
          * на паузе времени живёт: `$.time.freeze()` её не гасит — вспышка на
@@ -205,7 +238,7 @@ export function installFx($) {
         /**
          * Hit-stop: короткая остановка игрового мира на удар.
          *
-         * `$.fx.hitStop(ms)` — полная заморозка (`$.time.freeze`), `scale` —
+         * `$.vfx.hitStop(ms)` — полная заморозка (`$.time.freeze`), `scale` —
          * замедление до этой доли скорости (`$.time.slow`). Длительность
          * считается по времени кадра, поэтому при `--fixed-dt` она
          * детерминирована, а при масштабе 0 не «залипает» навсегда.
@@ -245,10 +278,34 @@ export function installFx($) {
     };
 
     api = $;
+    base_api = fx;
     ctx.fx = fx;
-    $.fx = fx;
     // Рисуем в момент сборки кадра: батч живёт только внутри _render().
     ctx.gfx._fxFlush = drawFx;
+    return fx;
+}
+
+/**
+ * Старое имя `$.fx` — работающий алиас на `$.vfx` на один минор.
+ *
+ * Каждый метод forward'ит в `$.vfx` и при ПЕРВОМ вызове конкретного сырого
+ * имени (`$.fx.flash`, `$.fx.shockwave`, …) пишет одно дедуплицированное
+ * предупреждение `R2D_FX_DEPRECATED` с заменой. Дедупликация — по сырому
+ * имени, а не по тексту: сто вызовов `$.fx.flash` дают одну запись.
+ *
+ * `installVfx` ставится раньше (api.js), поэтому алиас всегда смотрит на
+ * полное визуальное пространство; если vfx.js почему-то не подключён,
+ * алиас продолжает работать поверх базового объекта (юнит-тесты fx.js).
+ */
+export function installFx($) {
+    const base = installVisualBase($);
+    const full = ($ && $.vfx) || ctx.vfx || base;
+    const legacy = makeLegacyAlias(full, base);
+
+    $.fx = legacy;
+    // Внутренние подсистемы (hits.js, cutscene.js читают $.fx, но hits.js —
+    // ctx.fx) должны звать новое имя без предупреждений.
+    ctx.fx = full;
 
     // --- Хит-фидбек -------------------------------------------------------
     // hits.js ставится ЗДЕСЬ, а не в api.js: fx.js — уже подключённая
@@ -260,7 +317,52 @@ export function installFx($) {
         hits_installed = true;
         installHits($);
     }
-    return fx;
+    return legacy;
+}
+
+//: Старое имя → новое имя. Ровно таблица F1 docs/VFX_ROADMAP.md.
+const LEGACY_METHODS = [
+    'trail', 'ribbon', 'pushRibbon', 'lightning', 'shockwave', 'pulse',
+    'flash', 'flashLeft', 'attractor', 'impact', 'hitStop', 'stats', 'clear',
+];
+
+/** Сырые имена, о которых уже предупредили (ключ — `$.fx.<имя>`). */
+const legacy_warned = new Set();
+
+function makeLegacyAlias(full, base) {
+    const alias = {};
+    for (const name of LEGACY_METHODS) {
+        alias[name] = function () {
+            const raw = '$.fx.' + name;
+            const target = (full && typeof full[name] === 'function') ? full : base;
+            if (!legacy_warned.has(raw)) {
+                legacy_warned.add(raw);
+                warnLegacy(raw, '$.vfx.' + name);
+            }
+            const value = target[name].apply(target, arguments);
+            // Старый `impact`/`hitStop`/`clear` возвращали сам `$.fx` для
+            // цепочки. Сохраняем это: возвращаем алиас, а не `$.vfx`.
+            if (value === full || value === base) return alias;
+            return value;
+        };
+    }
+    // Поверхность алиаса — ровно старые методы: ни одного лишнего имени,
+    // чтобы не появилось «второго API» рядом с $.vfx.
+    return alias;
+}
+
+function warnLegacy(raw, target) {
+    const message = `${raw} устарело: используйте ${target} — старое имя работает до следующего минора`;
+    const $ = ctx.$;
+    const debug = $ && $.debug;
+    if (debug && typeof debug.reportError === 'function') {
+        debug.reportError(raw, message, {
+            code: 'R2D_FX_DEPRECATED', subsystem: 'fx', recoverable: true,
+            data: { raw, target },
+        });
+    } else {
+        ctx.log('$: ' + message);
+    }
 }
 
 /** Время для hit-stop: сначала ядро времени, потом $.time (юнит-тесты). */
@@ -328,6 +430,9 @@ export function tickFx(dt) {
     // Хит-фидбек тикает всегда — даже на нулевом dt (первый кадр) — поэтому
     // вызов стоит до раннего выхода по времени.
     tickHits(dt);
+    // r2dvfx-эффекты ($.vfx) идут ИГРОВЫМ временем (пауза их останавливает),
+    // поэтому берут dt сами; здесь только кадровый хук.
+    if (extra_tick) extra_tick(dt);
 
     const ms = Number(dt) * 1000;
     if (!Number.isFinite(ms) || ms <= 0) return;
@@ -489,7 +594,12 @@ function viewRadius(cam) {
     return Math.hypot(w, h) * 0.5;
 }
 
-/** Сброс при смене сцены: эффекты принадлежат сцене. */
+/** Сброс при смене сцены: эффекты принадлежат сцене.
+ *
+ * Чистит и базовое визуальное состояние, и r2dvfx-эффекты (хук `onFxReset`,
+ * который ставит installVfx): scene.js импортирует только `resetFx`, поэтому
+ * второй точки сброса ему знать не нужно.
+ */
 export function resetFx() {
     state.trails.length = 0;
     state.bolts.length = 0;
@@ -497,6 +607,7 @@ export function resetFx() {
     state.fields.length = 0;
     state.pulses.length = 0;
     state.flashes.length = 0;
+    if (extra_reset) extra_reset();
 }
 
 export const fxState = state;
