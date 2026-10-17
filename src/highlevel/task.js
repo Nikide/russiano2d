@@ -218,7 +218,11 @@ export function installTask($) {
         const label = spec.label || '';
         const onDone = typeof spec.done === 'function' ? spec.done : null;
         const loading = ctx.loading || ($ && $.loading) || null;
-        if (label && loading && typeof loading.show === 'function') loading.show({ title: label });
+        // `loading: false` — экран рисует вызывающий (например, сцена с
+        // прогрессом, task-65 A1): иначе каждый шаг перерисовывал бы экран.
+        if (label && loading && spec.loading !== false && typeof loading.show === 'function') {
+            loading.show({ title: label });
+        }
 
         // Отмена приходит двумя путями: игра зовёт `abort()` или планировщик
         // поймал исключение. Раньше `task.aborted` знал только про первый,

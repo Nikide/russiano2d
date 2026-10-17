@@ -1,0 +1,16 @@
+<rml>
+<head>
+    <title>Загрузка сцены</title>
+    <link type="text/rcss" href="loading.rcss"/>
+</head>
+<body>
+    <div id="loading_root">
+        <div id="loading_title">Готовим мир…</div>
+        <div id="loading_bar">
+            <div id="loading_fill"></div>
+        </div>
+        <div id="loading_progress">0%</div>
+        <div id="loading_label"></div>
+    </div>
+</body>
+</rml>

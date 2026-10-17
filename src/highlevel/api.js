@@ -693,7 +693,12 @@ function dispatchGlobal(node, name, data) {
     const wildcard = globals.get('*');
     const entity = node ? globals.get('entity:' + name) : null;
     const by_tag = node && node.tag ? globals.get('entity:' + node.tag + ':' + name) : null;
-    const any = (list) => list !== undefined && list.length !== 0;
+    // `null` — законное значение для entity/by_tag, когда событие глобальное
+    // (node === null). Без проверки на null `list.length` падал, и падение
+    // съедало всё, что шло ПОСЛЕ dispatch в том же кадре: например,
+    // scene:after-change не отправлялся, если на scene:enter никто не подписан
+    // (task-65, нашлось сценарным тестом).
+    const any = (list) => list !== undefined && list !== null && list.length !== 0;
     if (!any(direct) && !any(wildcard) && !any(entity) && !any(by_tag)) return;
 
     const event = {

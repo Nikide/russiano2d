@@ -155,6 +155,85 @@ function viewAngle(a) { return view ? a + view.rot : a; }
 const overlay_xf = new Float32Array(6);
 const overlay_col = new Uint32Array(1);
 
+// task-65 A2: шторка и шахматка — пачка спрайтов на кадр перехода.
+// Буфер фиксированный: 16×16 клеток шахматки = максимум, списывать память
+// каждый кадр перехода незачем.
+const TR_MAX_QUADS = 256;
+const tr_xf = new Float32Array(6 * TR_MAX_QUADS);
+const tr_col = new Uint32Array(TR_MAX_QUADS);
+
+function submitTransitionQuads(n) {
+    if (n > 0) engine.submitSprites(tr_xf, tr_col, n);
+}
+
+/** Шторка: закрытая область едет по оси; soft — мягкая кромка в долях пролёта. */
+function drawTransitionWipe(info, alpha) {
+    const W = engine.width, H = engine.height;
+    const dir = info && info.dir ? String(info.dir) : 'left';
+    const horizontal = dir === 'left' || dir === 'right';
+    const span = horizontal ? W : H;
+    const soft = Math.max(0, Math.min(0.5,
+        info && info.soft !== undefined ? Number(info.soft) || 0 : 0.12));
+    const covered = span * Math.max(0, Math.min(1, alpha));
+    const solid = Math.max(0, covered - span * soft);
+    let n = 0;
+    const push = (from, to, a) => {
+        if (to - from <= 0.01 || a <= 0 || n >= TR_MAX_QUADS) return;
+        let x, y, w, h;
+        switch (dir) {
+            case 'right': x = W - to; y = 0; w = to - from; h = H; break;
+            case 'up': x = 0; y = 0; w = W; h = to - from; break;
+            case 'down': x = 0; y = H - to; w = W; h = to - from; break;
+            default: x = from; y = 0; w = to - from; h = H; break;
+        }
+        const o = n * 6;
+        tr_xf[o] = engine.whiteSprite;
+        tr_xf[o + 1] = x + w / 2;
+        tr_xf[o + 2] = y + h / 2;
+        tr_xf[o + 3] = w;
+        tr_xf[o + 4] = h;
+        tr_xf[o + 5] = 0;
+        tr_col[n] = engine.rgba(0, 0, 0, Math.round(Math.min(1, a) * 255));
+        n++;
+    };
+    push(0, solid, 1);
+    const feather = covered - solid;
+    const steps = 16;
+    for (let i = 0; i < steps; i++) {
+        push(solid + feather * (i / steps), solid + feather * ((i + 1) / steps),
+             1 - (i + 0.5) / steps);
+    }
+    submitTransitionQuads(n);
+}
+
+/** Шахматка: клетки появляются по диагонали; cols/rows — сетка (2..16). */
+function drawTransitionChecker(info, alpha) {
+    const W = engine.width, H = engine.height;
+    const cols = Math.max(2, Math.min(16, Math.round((info && info.cols) || 8)));
+    const rows = Math.max(2, Math.min(16, Math.round((info && info.rows) || 8)));
+    const cw = W / cols, ch = H / rows;
+    const steps_total = Math.max(1, cols + rows - 2);
+    let n = 0;
+    for (let y = 0; y < rows && n < TR_MAX_QUADS; y++) {
+        for (let x = 0; x < cols && n < TR_MAX_QUADS; x++) {
+            const t = (x + y) / steps_total;
+            const a = Math.max(0, Math.min(1, (alpha - t) * steps_total / 2));
+            if (a <= 0) continue;
+            const o = n * 6;
+            tr_xf[o] = engine.whiteSprite;
+            tr_xf[o + 1] = x * cw + cw / 2;
+            tr_xf[o + 2] = y * ch + ch / 2;
+            tr_xf[o + 3] = cw;
+            tr_xf[o + 4] = ch;
+            tr_xf[o + 5] = 0;
+            tr_col[n] = engine.rgba(0, 0, 0, Math.round(a * 255));
+            n++;
+        }
+    }
+    submitTransitionQuads(n);
+}
+
+
 const draw_calls = [];  // $.gfx.draw.* — чистятся каждый кадр
 
 // ---------------------------------------------------------------------------
@@ -4419,17 +4498,25 @@ export function installGfx($) {
             if (tri_count > 0) submitTriangles();
 
             // Затемнение перехода между сценами — отдельным односпрайтовым
-            // пакетом, чтобы не занимать слот в общем буфере.
+            // пакетом, чтобы не занимать слот в общем буфере. task-65 A2:
+            // кроме fade есть шторка (wipe) и шахматка (checker) — они
+            // собираются теми же спрайтами, один submit на кадр.
             const alpha = ctx.scene ? ctx.scene._transitionAlpha() : 0;
             if (alpha > 0) {
-                overlay_xf[0] = engine.whiteSprite;
-                overlay_xf[1] = engine.width / 2;
-                overlay_xf[2] = engine.height / 2;
-                overlay_xf[3] = engine.width;
-                overlay_xf[4] = engine.height;
-                overlay_xf[5] = 0;
-                overlay_col[0] = engine.rgba(0, 0, 0, Math.round(alpha * 255));
-                engine.submitSprites(overlay_xf, overlay_col, 1);
+                const info = ctx.scene && ctx.scene._transitionInfo ? ctx.scene._transitionInfo() : null;
+                const type = info && info.type ? info.type : 'fade';
+                if (type === 'wipe') drawTransitionWipe(info, alpha);
+                else if (type === 'checker') drawTransitionChecker(info, alpha);
+                else {
+                    overlay_xf[0] = engine.whiteSprite;
+                    overlay_xf[1] = engine.width / 2;
+                    overlay_xf[2] = engine.height / 2;
+                    overlay_xf[3] = engine.width;
+                    overlay_xf[4] = engine.height;
+                    overlay_xf[5] = 0;
+                    overlay_col[0] = engine.rgba(0, 0, 0, Math.round(alpha * 255));
+                    engine.submitSprites(overlay_xf, overlay_col, 1);
+                }
             }
 
             state.stats.sprites = count;
