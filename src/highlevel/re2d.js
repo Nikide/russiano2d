@@ -837,6 +837,22 @@ function rendererWorldWrapper($, native) {
         clear() { native.particlesClear(); return world; },
     };
 
+    // P5 mist bands: long-lived, slow, wide translucent particles; a cheap
+    // 2.5D atmosphere layer on top of the authored fog zones.
+    world.mist = (options = {}) => {
+        const width = Number(options.width ?? 240), depth = Number(options.depth ?? 120);
+        const rate = Number(options.rate ?? 40);
+        return world.particles.continuous({
+            x: options.x ?? 0, y: options.y ?? 0, h: options.h ?? 24,
+            count: rate, rate,
+            life: options.life ?? 8, size: options.size ?? 80, endSize: options.endSize ?? 140,
+            gravity: 0, drag: 0.5,
+            spread: Math.max(width, depth) * 0.5, speed: Number(options.speed ?? 12),
+            color: options.color ?? '#dfe6f0', alpha: Number(options.alpha ?? 0.12),
+            endAlpha: 0, blend: 'translucent', mode: 'billboard', seed: options.seed ?? 7,
+        }, options.dt ?? 1 / 60);
+    };
+
     // P1 VFX bundles: asset-driven bundles over particles/light/decal/sound/
     // screen juice. Engine helper only; gameplay decides when to spawn one.
     const fxBundles = new Map();

@@ -15,5 +15,6 @@
 | `worstcase` | 100 actors + 32 lights + 3000 particles |
 
 `re2dBench.snapshot()` отдаёт `frameMs/visibilityMs/actorMs/surfaceMs/
-compositionMs/navMs`, счётчики и backend. Числа — нативные замеры на текущей
+compositionMs/navMs`, счётчики и backend; HUD дополнительно показывает живую
+строку profiler'а (`hud` в snapshot). Числа — нативные замеры на текущей
 машине; тест `tests/agent/re2d_bench_lab_test.py` печатает их для протокола.

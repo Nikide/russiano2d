@@ -288,6 +288,12 @@ def main():
         check(nav_mask is not None and '"open":[0]' in nav_mask and '"blocked":null' in nav_mask,
               f"dynamic nav masks: blocked span закрывает путь: {nav_mask}")
 
+        a.eval("JSON.stringify(boomerLab.mistProbe())")
+        a.step(2)
+        mist = a.eval("JSON.stringify(boomerLab.mistProbe())")
+        check(mist is not None and '"emitted":' in mist and '"alive":' in mist,
+              f"world.mist эмитит атмосферные частицы: {mist}")
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 

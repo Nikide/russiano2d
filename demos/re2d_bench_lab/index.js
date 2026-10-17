@@ -104,6 +104,11 @@ export default function install($) {
         }
     }
 
+    function hudText() {
+        if (!world) return '';
+        const i = world.info();
+        return `frame ${i.frameMs.toFixed(2)}ms · vis ${i.visibilityMs.toFixed(2)} · actor ${i.actorMs.toFixed(2)} · surface ${i.surfaceMs.toFixed(2)} · draws ${i.gpuDraws} · actors ${i.atlasSprites} · lights ${i.lights} · particles ${i.particles}`;
+    }
     function snapshot() {
         const info = world.info();
         return {
@@ -112,7 +117,7 @@ export default function install($) {
             surfaces: info.visibleSurfaces, draws: info.gpuDraws,
             frameMs: info.frameMs, visibilityMs: info.visibilityMs, actorMs: info.actorMs,
             surfaceMs: info.surfaceMs, compositionMs: info.compositionMs,
-            navMs: info.navMs, movers: info.movers,
+            navMs: info.navMs, movers: info.movers, hud: hudText(),
         };
     }
 
@@ -145,7 +150,7 @@ export default function install($) {
 
     $.update(() => {
         if (!world) return;
-        if (hud) hud.text('status', `${scenario}: actors ${actors.length} · lights ${world.info().lights} · particles ${world.info().particles}`);
+        if (hud) { hud.text('status', `${scenario}: actors ${actors.length} · lights ${world.info().lights} · particles ${world.info().particles}`); hud.text('profiler', hudText()); }
         if ($.input.pressed('escape')) $.quit();
     });
 }

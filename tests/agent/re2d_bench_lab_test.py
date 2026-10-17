@@ -50,7 +50,7 @@ def main():
             st = state(a)
             NUMBERS.append(st)
             print("  bench %-14s %s" % (name, json.dumps(st, ensure_ascii=False)))
-            ok = (st.get("scenario") == name
+            ok = (st.get("scenario") == name and "frame" in (st.get("hud") or "")
                   and isinstance(st.get("frameMs"), (int, float))
                   and st["frameMs"] == st["frameMs"]
                   and st.get("actors", 0) >= (100 if name in ("actors_100", "worstcase") else 0)

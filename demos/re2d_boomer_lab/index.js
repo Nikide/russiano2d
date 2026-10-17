@@ -175,6 +175,11 @@ export default function install($) {
         }),
         particlesClear: () => world.particles.clear(),
         audioStateProbe: () => world.audio.state(),
+        mistProbe: () => {
+            world.particles.clear();
+            const emitted = world.mist({ x: 800, y: 1000, rate: 60, width: 400, depth: 200, seed: 21 });
+            return { emitted, info: world.particles.info() };
+        },
         navMaskProbe: () => {
             world.navBuild({ radius: 14, height: 56, step: 18 });
             const open = world.navPath(0, 0, 8, 0);

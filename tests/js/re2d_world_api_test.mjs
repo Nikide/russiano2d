@@ -598,4 +598,13 @@ test('world.polywall вращает authored wall и управляется spee
     world.dispose();
 });
 
+test('world.mist создаёт медленные translucent particles', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    calls.particles.length = 0;
+    const emitted = world.mist({ x: 10, y: 20, rate: 12, color: '#cccccc' });
+    truthy(emitted >= 0);
+    truthy(calls.particles.length > 0);
+    world.dispose();
+});
+
 finish();

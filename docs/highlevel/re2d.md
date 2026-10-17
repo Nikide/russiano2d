@@ -40,6 +40,7 @@ $.render(() => world.render(view,400,240));
 | `world.breakable(opts)` / `onBreakable(fn)` | authored breakables + событие `breakable.broken` |
 | `surface.terrain(name)` / `conveyor(opts)`, `world.terrainAt/conveyorAt` | terrain/liquid metadata и 2D conveyors |
 | `world.conveyorMotion(surface,v,dt)` | conveyor gameplay tick (velocity к скорости конвейера) |
+| `world.mist({x,y,rate,width,depth})` | P5 атмосферная дымка на particle pool |
 | `world.materialAnim(name,opts)` / `materialIndex(name)` | flipbook/scroll/emissive анимация материала |
 | `world.volume(node,opts)` | constrained box/cross/slice-stack из нескольких billboard-частей (не mesh) |
 | `$.capabilities.re2d` | честная матрица возможностей сборки/рантайма |
@@ -626,6 +627,17 @@ XY-пивота **в `world.walls`**, поэтому collide/trace/render иду
 span. Демо `demos/re2d_polywall_lab`; agent: угол 0.05→1.05, trace из попадания
 уходит в промах, кадр меняется (~132k px). Capability
 `$.capabilities.re2d.rotatingPolywalls === true`.
+
+## P5 mist bands
+
+```js
+world.mist({ x: 800, y: 1000, width: 400, depth: 200, rate: 60, color: '#dfe6f0', alpha: 0.12 });
+```
+
+Дымка — это предопределённый particle-прототип: долгоживущие медленные
+translucent billboard'ы с большим size/endSize, нулевой гравитацией и drag.
+Это не volumetric raymarching: слой живёт в пуле частиц (бюджет общий) и
+работает вместе с fog zones. `rate` — частиц/сек, возвращает emitted count.
 
 ## Свет, материал, изменение мира
 
