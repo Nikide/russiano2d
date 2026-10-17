@@ -612,6 +612,16 @@ bool r2d_world_controller_step_state(R2DWorldRuntime *w,int token,R2DWorldContro
 {
     R2DWorldControllerEntry *e=controller_entry(w,token);if(!e||!state)return false;
     Uint64 start=SDL_GetPerformanceCounter();
+    // The public JS bridge supplies position and velocity, not support flags.
+    // Recover a resting contact before acceleration/jump; keep airborne
+    // velocity authoritative so this cannot cancel a jump or snap a fall.
+    if(!state->grounded && fabsf(state->vz)<1e-5f) {
+        R2DWorldControllerState contact=*state;
+        if(r2d_world_controller_init(&w->world,&e->config,state,&contact) && contact.grounded) {
+            state->feet=contact.feet;state->span=contact.span;
+            state->ceiling=contact.ceiling;state->grounded=true;
+        }
+    }
     r2d_world_controller_move(&w->world,&e->config,state,wish_x,wish_y,jump,dt);
     w->controller_calls++;
     w->controller_ms+=(double)(SDL_GetPerformanceCounter()-start)*1000.0/(double)SDL_GetPerformanceFrequency();
