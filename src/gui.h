@@ -81,9 +81,29 @@ bool r2d_gui_get_rect(R2DGui *g, int doc, const char *element_id, float out[4]);
 // вычисленных размеров и инструментов; видимость спрашивайте у get_rect).
 bool r2d_gui_get_layout_rect(R2DGui *g, int doc, const char *element_id, float out[4]);
 
-// Подписка на событие элемента. callback_id трактуется скриптовым слоем.
+// Подписка на событие элемента. callback_id трактуется скриптовым слоем:
+// это id слота в пуле JS-обработчиков (он же возвращается из engine.ui.on).
 bool r2d_gui_add_listener(R2DGui *g, int doc, const char *element_id,
                            const char *event_name, int callback_id);
+
+// Снять слушателя по callback_id: RemoveEventListener + удаление записи
+// реестра. Возвращает true, если живой слушатель был и снят.
+bool r2d_gui_remove_listener(R2DGui *g, int callback_id);
+
+// callback_id живых слушателей пары doc+element+event — для engine.ui.off
+// (скриптовый слой сам решает, совпадает ли обработчик, и освобождает слот).
+// Возвращает число записанных id (не больше cap).
+int  r2d_gui_listener_query(const R2DGui *g, int doc, const char *element_id,
+                             const char *event_name, int *out_ids, int cap);
+
+// Сколько живых слушателей в реестре (для диагностики и тестов).
+int  r2d_gui_listener_count(const R2DGui *g);
+
+// Уведомление «RmlUi отсоединил слушателя» (документ выгружен, элемент
+// удалён): скриптовый слой освобождает слот пула. Без этого слот оставался
+// бы занят мёртвой JS-функцией до перезапуска рантайма.
+typedef void (*R2DGuiDetachFn)(void *user, int callback_id);
+void r2d_gui_set_detach_notify(R2DGui *g, R2DGuiDetachFn fn, void *user);
 
 void r2d_gui_set_event_dispatch(R2DGui *g, R2DGuiEventFn fn, void *user);
 

@@ -1,0 +1,9 @@
+<rml>
+<head><link type="text/rcss" href="off.rcss"/><title>off</title></head>
+<body>
+<div id="panel" class="panel">
+<button id="btn-a" class="btn">A</button>
+<button id="btn-b" class="btn">B</button>
+</div>
+</body>
+</rml>

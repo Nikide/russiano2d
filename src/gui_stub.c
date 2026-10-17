@@ -10,6 +10,33 @@
 
 #include <SDL3/SDL.h>
 
+#include <string.h>
+
+// Реестр подписок без RmlUi: add/off/query должны вести себя как в сборке с
+// RmlUi (id возвращается, снятие возвращает число, слоты переиспользуются),
+// иначе SDK на сборке без RmlUi получал бы другой контракт того же API.
+// Сам r2d_gui_create здесь возвращает NULL, поэтому реестр статический.
+typedef struct R2DStubListener {
+    int   callback_id;
+    int   doc;
+    char *element_id;
+    char *event;
+} R2DStubListener;
+
+#define R2D_STUB_LISTENERS 256
+static R2DStubListener stub_listeners[R2D_STUB_LISTENERS];
+static int              stub_listener_count;
+static R2DGuiDetachFn   stub_detach_fn;
+static void            *stub_detach_user;
+
+static bool stub_event_matches(const R2DStubListener *listener, int doc,
+                               const char *element_id, const char *event)
+{
+    return listener->doc == doc
+        && listener->element_id && SDL_strcmp(listener->element_id, element_id) == 0
+        && listener->event && SDL_strcmp(listener->event, event) == 0;
+}
+
 R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *base_path, const struct R2DApp *app)
 {
     R2D_UNUSED(device);
@@ -20,7 +47,15 @@ R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *ba
     return NULL;
 }
 
-void r2d_gui_destroy(R2DGui *g) { R2D_UNUSED(g); }
+void r2d_gui_destroy(R2DGui *g)
+{
+    R2D_UNUSED(g);
+    for (int i = 0; i < stub_listener_count; ++i) {
+        SDL_free(stub_listeners[i].element_id);
+        SDL_free(stub_listeners[i].event);
+    }
+    stub_listener_count = 0;
+}
 
 void r2d_gui_process_event(R2DGui *g, const SDL_Event *ev)
 {
@@ -100,9 +135,62 @@ void r2d_gui_set_property(R2DGui *g, int doc, const char *element_id,
 bool r2d_gui_add_listener(R2DGui *g, int doc, const char *element_id,
                            const char *event_name, int callback_id)
 {
-    R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id);
-    R2D_UNUSED(event_name); R2D_UNUSED(callback_id);
+    R2D_UNUSED(g);
+    if (!element_id || !event_name || callback_id < 0) return false;
+    if (stub_listener_count >= R2D_STUB_LISTENERS) return false;
+    char *element = SDL_strdup(element_id);
+    char *event = SDL_strdup(event_name);
+    if (!element || !event) {
+        SDL_free(element);
+        SDL_free(event);
+        return false;
+    }
+    R2DStubListener *listener = &stub_listeners[stub_listener_count++];
+    listener->callback_id = callback_id;
+    listener->doc = doc;
+    listener->element_id = element;
+    listener->event = event;
+    return true;
+}
+
+bool r2d_gui_remove_listener(R2DGui *g, int callback_id)
+{
+    R2D_UNUSED(g);
+    for (int i = 0; i < stub_listener_count; ++i) {
+        if (stub_listeners[i].callback_id != callback_id) continue;
+        SDL_free(stub_listeners[i].element_id);
+        SDL_free(stub_listeners[i].event);
+        stub_listeners[i] = stub_listeners[--stub_listener_count];
+        return true;
+    }
     return false;
+}
+
+int r2d_gui_listener_query(const R2DGui *g, int doc, const char *element_id,
+                            const char *event_name, int *out_ids, int cap)
+{
+    R2D_UNUSED(g);
+    if (!element_id || !event_name || !out_ids || cap <= 0) return 0;
+    int count = 0;
+    for (int i = 0; i < stub_listener_count && count < cap; ++i) {
+        if (stub_event_matches(&stub_listeners[i], doc, element_id, event_name)) {
+            out_ids[count++] = stub_listeners[i].callback_id;
+        }
+    }
+    return count;
+}
+
+int r2d_gui_listener_count(const R2DGui *g)
+{
+    R2D_UNUSED(g);
+    return stub_listener_count;
+}
+
+void r2d_gui_set_detach_notify(R2DGui *g, R2DGuiDetachFn fn, void *user)
+{
+    R2D_UNUSED(g);
+    stub_detach_fn = fn;
+    stub_detach_user = user;
 }
 
 void r2d_gui_set_event_dispatch(R2DGui *g, R2DGuiEventFn fn, void *user)

@@ -719,8 +719,37 @@ export function installUi($) {
 }
 
 function makeDoc(id, path) {
-    // Пары «элемент + событие», уже подписанные в этом документе.
-    const bound = new Set();
+    // Реестр подписок документа: { element, event, fn, id }.
+    // Ключ идемпотентности — ПАРА+ОБРАБОТЧИК, а не просто пара: два разных
+    // обработчика на один элемент+событие должны работать оба (раньше второй
+    // молча выбрасывался). `id` — слот пула engine.ui (его же возвращает on).
+    const entries = [];
+    // Одно предупреждение на пару: повторная подписка тем же обработчиком —
+    // не ошибка, но и не повод заливать журнал при вызове каждый кадр.
+    const warned = new Set();
+
+    function findEntry(element, event, fn) {
+        for (const entry of entries) {
+            if (entry.element === element && entry.event === event && entry.fn === fn) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    /** Убрать из локального реестра; возвращает число записей. */
+    function dropEntries(element, event, fn) {
+        let dropped = 0;
+        for (let i = entries.length - 1; i >= 0; i--) {
+            const entry = entries[i];
+            if (entry.element !== element || entry.event !== event) continue;
+            if (fn !== undefined && entry.fn !== fn) continue;
+            entries.splice(i, 1);
+            dropped++;
+        }
+        return dropped;
+    }
+
     return {
         id,
         path,
@@ -745,6 +774,15 @@ function makeDoc(id, path) {
         // Снимаем документ и выкидываем его из кэша: иначе $.ui.doc(path)
         // после unload() вернул бы ту же обёртку с мёртвым id.
         unload() {
+            // Снимаем свои подписки ДО выгрузки документа: слоты пула должны
+            // вернуться (в сборке без RmlUi detach-уведомления нет, и без
+            // явного off слоты остались бы занятыми навсегда).
+            for (const entry of entries) {
+                if (typeof engine.ui.off === 'function' && entry.id >= 0) {
+                    engine.ui.off(id, entry.element, entry.event, entry.fn);
+                }
+            }
+            entries.length = 0;
             engine.ui.unload(id);
             ctx.ui._trDropDoc(this);      // мёртвые id в реестре переводов не держим
             docs.delete(path);
@@ -780,25 +818,58 @@ function makeDoc(id, path) {
         rect(element) { return engine.ui.rect(id, element); },
 
         /**
-         * Обработчик события элемента документа.
+         * Обработчик события элемента документа. Возвращает id слота пула
+         * (раньше возвращалась обёртка документа — это изменение поведения).
          *
-         * RmlUi кэширует документ вместе со слушателями, поэтому повторная
-         * подписка на ту же пару «элемент + событие» не выполняется дважды —
-         * иначе один клик вызывал бы обработчик несколько раз. Разные
-         * элементы подписываются независимо.
+         * Идемпотентность — по паре+обработчику: повторный on с ТОЙ ЖЕ
+         * функцией возвращает прежний id и не плодит слушателей (одно
+         * предупреждение), а ВТОРОЙ РАЗНЫЙ обработчик той же пары получает
+         * свой слот и работает. Ключ — документ+элемент+событие+функция.
          */
         on(element, event, fn) {
-            const key = element + '\u0000' + event;
-            if (bound.has(key)) {
-                ctx.log(`$: "${element}" уже слушает "${event}" в "${path}" — повторная подписка пропущена`);
-                return this;
+            if (typeof fn !== 'function') {
+                throw new TypeError(`$: doc.on("${element}", "${event}") в "${path}" `
+                    + '— нужна функция');
             }
-            bound.add(key);
-            engine.ui.on(id, element, event, fn);
-            return this;
+            const previous = findEntry(element, event, fn);
+            const slot = engine.ui.on(id, element, event, fn);
+            const live = typeof slot === 'number' && slot >= 0;
+            // Мок qjs-теста engine.ui.on ничего не возвращает: ведём реестр
+            // локально, чтобы listeners() и идемпотентность работали и там.
+            const mocked = slot === undefined;
+            if (previous) {
+                if (live) previous.id = slot;
+                const key = path + '\u0000' + element + '\u0000' + event;
+                if (!warned.has(key)) {
+                    warned.add(key);
+                    ctx.log(`$: "${element}" уже слушает "${event}" в "${path}" — `
+                        + 'повторная подписка тем же обработчиком пропущена');
+                }
+                return live ? slot : previous.id;
+            }
+            if (live || mocked) {
+                entries.push({ element, event, fn, id: live ? slot : -1 });
+                return live ? slot : -1;
+            }
+            ctx.log(`$: не удалось подписать "${element}" на "${event}" в "${path}" — `
+                + 'элемента нет или все слоты обработчиков заняты');
+            return -1;
         },
 
-        /** Сколько обработчиков уже повешено — для тестов. */
-        listeners() { return [...bound]; },
+        /**
+         * Снять обработчик(и): без fn — все обработчики пары.
+         * Возвращает число снятых (как engine.ui.off).
+         */
+        off(element, event, fn) {
+            let removed = 0;
+            if (typeof engine.ui.off === 'function') {
+                removed = engine.ui.off(id, element, event, fn);
+            }
+            const dropped = dropEntries(element, event, fn);
+            return typeof removed === 'number' ? removed : dropped;
+        },
+
+        /** Пары «элемент\u0000событие» подписок документа — для тестов. */
+        listeners() { return entries.map((entry) => entry.element + '\u0000' + entry.event); },
     };
 }

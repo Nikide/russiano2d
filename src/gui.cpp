@@ -183,10 +183,24 @@ private:
 // ---------------------------------------------------------------------------
 // Слушатель события RmlUi, который дёргает JS-функцию через dispatch.
 // ---------------------------------------------------------------------------
+class JsEventListener;
+
+// Запись реестра живых слушателей: по ней engine.ui.off находит слушателя
+// RmlUi по callback_id и снимает его. Хранится в R2DGui.
+struct JsListenerRecord {
+    int            callback_id = -1;
+    int            doc = -1;
+    std::string    element_id;
+    std::string    event;
+    Rml::Element  *element = nullptr;
+    JsEventListener *listener = nullptr;
+};
+
 class JsEventListener : public Rml::EventListener {
 public:
-    JsEventListener(int callback_id, std::string element_id, std::string event_name)
-        : callback_id_(callback_id), element_id_(std::move(element_id)), event_name_(std::move(event_name)) {}
+    JsEventListener(R2DGui *gui, int callback_id, std::string element_id, std::string event_name)
+        : gui_(gui), callback_id_(callback_id), element_id_(std::move(element_id)),
+          event_name_(std::move(event_name)) {}
 
     void ProcessEvent(Rml::Event &event) override
     {
@@ -207,7 +221,8 @@ public:
                   target_id.c_str(), target_key.c_str());
     }
 
-    void OnDetach(Rml::Element * /*element*/) override { delete this; }
+    // Определение — после struct R2DGui: ему нужен полный тип модуля.
+    void OnDetach(Rml::Element *element) override;
 
     static void SetDispatch(R2DGuiEventFn fn, void *user)
     {
@@ -216,9 +231,12 @@ public:
     }
 
 private:
-    int         callback_id_;
-    std::string element_id_;
-    std::string event_name_;
+    static void NotifyDetached(R2DGui *g, int callback_id, JsEventListener *listener);
+
+    R2DGui         *gui_ = nullptr;
+    int             callback_id_;
+    std::string     element_id_;
+    std::string     event_name_;
 
     static R2DGuiEventFn dispatch_;
     static void          *dispatch_user_;
@@ -249,10 +267,39 @@ struct R2DGui {
     R2DGuiEventFn dispatch = nullptr;
     void          *dispatch_user = nullptr;
 
+    // Реестр живых JS-слушателей (id пула → слушатель RmlUi). Нужен для off:
+    // у RmlUi нет обхода слушателей элемента, а снять нужно именно своего.
+    std::vector<JsListenerRecord> listeners;
+    R2DGuiDetachFn detach_fn = nullptr;
+    void          *detach_user = nullptr;
+
     int width = 0;
     int height = 0;
     bool initialised = false;
 };
+
+// RmlUi отсоединил слушателя: убираем запись реестра и сообщаем скриптовому
+// слою, что слот свободен, — и только потом объект удаляет OnDetach. Запись
+// ищется по паре (callback_id, listener), чтобы не задеть чужую с той же id.
+void JsEventListener::NotifyDetached(R2DGui *g, int callback_id, JsEventListener *listener)
+{
+    if (!g) return;
+    for (size_t i = 0; i < g->listeners.size(); ++i) {
+        if (g->listeners[i].callback_id != callback_id
+            || g->listeners[i].listener != listener) {
+            continue;
+        }
+        g->listeners.erase(g->listeners.begin() + static_cast<std::ptrdiff_t>(i));
+        if (g->detach_fn) g->detach_fn(g->detach_user, callback_id);
+        return;
+    }
+}
+
+void JsEventListener::OnDetach(Rml::Element * /*element*/)
+{
+    if (gui_) NotifyDetached(gui_, callback_id_, this);
+    delete this;
+}
 
 // ---------------------------------------------------------------------------
 
@@ -388,6 +435,12 @@ void r2d_gui_destroy(R2DGui *g)
         Rml::Shutdown();
         g->initialised = false;
     }
+
+    // К этому моменту UnloadDocument/Shutdown уже должны были отсоединить
+    // всех слушателей. Если что-то осталось (например, документ не был
+    // выгружен), освобождаем объекты сами: висячий указатель хуже утечки.
+    for (const JsListenerRecord &record : g->listeners) delete record.listener;
+    g->listeners.clear();
 
     delete g->renderer;
     delete g->system;
@@ -704,15 +757,78 @@ bool r2d_gui_get_rect(R2DGui *g, int doc, const char *element_id, float out[4])
 bool r2d_gui_add_listener(R2DGui *g, int doc, const char *element_id,
                            const char *event_name, int callback_id)
 {
+    if (!g) return false;
     Rml::Element *el = r2d__element(g, doc, element_id);
     if (!el) return false;
 
+    const std::string event = event_name ? event_name : "click";
     JsEventListener::SetDispatch(g->dispatch, g->dispatch_user);
-    // RmlUi забирает слушателя во владение и удалит его сам (OnDetach).
-    el->AddEventListener(event_name ? event_name : "click",
-                         new JsEventListener(callback_id, element_id ? element_id : "",
-                                             event_name ? event_name : "click"));
+    // RmlUi забирает слушателя во владение и удалит его сам (OnDetach);
+    // запись реестра нужна, чтобы off нашёл этого слушателя по id слота.
+    JsEventListener *listener = new JsEventListener(
+        g, callback_id, element_id ? element_id : "", event);
+    g->listeners.push_back(JsListenerRecord{
+        callback_id, doc, element_id ? element_id : "", event, el, listener});
+    el->AddEventListener(event, listener);
     return true;
+}
+
+bool r2d_gui_remove_listener(R2DGui *g, int callback_id)
+{
+    if (!g) return false;
+    for (size_t i = 0; i < g->listeners.size(); ++i) {
+        if (g->listeners[i].callback_id != callback_id) continue;
+
+        // Копия: RemoveEventListener ниже синхронно зовёт OnDetach, а тот
+        // удаляет запись из g->listeners и сам объект listener.
+        const std::string event = g->listeners[i].event;
+        Rml::Element *element = g->listeners[i].element;
+        JsEventListener *listener = g->listeners[i].listener;
+        if (element && listener) {
+            element->RemoveEventListener(event, listener);
+        }
+        // Если OnDetach по какой-то причине не сработал (слушателя уже не было
+        // в диспетчере), запись осталась — убираем вручную, без двойного delete.
+        for (size_t j = 0; j < g->listeners.size(); ++j) {
+            if (g->listeners[j].callback_id == callback_id
+                && g->listeners[j].listener == listener) {
+                g->listeners.erase(g->listeners.begin()
+                                   + static_cast<std::ptrdiff_t>(j));
+                delete listener;
+                break;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+int r2d_gui_listener_query(const R2DGui *g, int doc, const char *element_id,
+                            const char *event_name, int *out_ids, int cap)
+{
+    if (!g || !element_id || !event_name || !out_ids || cap <= 0) return 0;
+    int count = 0;
+    for (const JsListenerRecord &record : g->listeners) {
+        if (record.doc != doc || record.element_id != element_id
+            || record.event != event_name) {
+            continue;
+        }
+        if (count >= cap) break;
+        out_ids[count++] = record.callback_id;
+    }
+    return count;
+}
+
+int r2d_gui_listener_count(const R2DGui *g)
+{
+    return g ? static_cast<int>(g->listeners.size()) : 0;
+}
+
+void r2d_gui_set_detach_notify(R2DGui *g, R2DGuiDetachFn fn, void *user)
+{
+    if (!g) return;
+    g->detach_fn = fn;
+    g->detach_user = user;
 }
 
 void r2d_gui_set_event_dispatch(R2DGui *g, R2DGuiEventFn fn, void *user)

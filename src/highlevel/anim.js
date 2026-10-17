@@ -258,6 +258,10 @@ export function normalizeClip(name, spec) {
 
 const clips = new Map();
 
+// Ссылка на $ нужна только чтобы разрешить селектор в $.anim.crossfade:
+// модуль остаётся работоспособным в qjs-тесте, где installAnim не звали.
+let api_ref = null;
+
 function blankPlayer() {
     return {
         clip: null,        // нормализованный клип
@@ -269,6 +273,7 @@ function blankPlayer() {
         paused: false,
         onEnd: null,
         machine: null,     // { states, transitions, current, time, pending }
+        blend: null,       // активный кроссфейд from → to (§ кроссфейд ниже)
     };
 }
 
@@ -334,19 +339,135 @@ function applyTracks(node, clip, phase, player) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Кроссфейд клипов (§ задача 6)
+//
+// Два клипа живут на одном узле: дорожки-свойства смешиваются по весу,
+// функции (fn) зовутся у обеих сторон, кадр спрайта — дискретный и берётся у
+// клипа с большим весом (ровно как $.anim.player.blend у таймлайнов). Второй
+// узел-«призрак» для пиксельного растворения не создаётся: узел один, и кадр
+// один — это ограничение описано в docs/highlevel/anim.md.
+// ---------------------------------------------------------------------------
+
+const PROP_ALIASES = {
+    rotation: 'angle', scaleX: 'scale_x', scale: 'scale_x', scaleY: 'scale_y',
+    opacity: 'alpha', w: 'width', h: 'height',
+};
+
+/** Каноническое имя свойства — то же, что понимает writeProp. */
+function canonicalProp(prop) {
+    return PROP_ALIASES[prop] || prop;
+}
+
+/** Прочитать свойство узла (для «базовой» позы, если from его не задаёт). */
+function readProp(node, prop) {
+    switch (prop) {
+    case 'x': return node.x;
+    case 'y': return node.y;
+    case 'angle': return node.angle;
+    case 'scale_x': return node.scale_x;
+    case 'scale_y': return node.scale_y;
+    case 'alpha': return node.alpha;
+    case 'width': return node.w;
+    case 'height': return node.h;
+    case 'radius': return node.radius;
+    case 'intensity': return node.intensity;
+    default: return node.attrs ? node.attrs[prop] : node[prop];
+    }
+}
+
+/** Карта «каноническое свойство → дорожка клипа». Строится один раз на переход. */
+function propTrackMap(clip) {
+    const map = new Map();
+    for (const track of clip.tracks) {
+        if (track.kind === 'prop') map.set(canonicalProp(track.prop), track);
+    }
+    return map;
+}
+
+function animTracksOf(clip) {
+    return clip.tracks.filter((track) => track.kind === 'anim');
+}
+
+function fnTracksOf(clip) {
+    return clip.tracks.filter((track) => track.kind === 'fn');
+}
+
+/** Поза на доле k: (1-k)*from + k*to для свойств, у которых есть обе стороны. */
+function applyBlendPose(node, player, k) {
+    const blend = player.blend;
+    if (!blend) return;
+    const fromClip = player.clip;
+    const to = blend.to;
+    const fromPhase = clipPhase(player.u, player.loop);
+    const toPhase = clipPhase(to.u, to.loop);
+
+    for (const key of new Set([...blend.fromProps.keys(), ...blend.toProps.keys()])) {
+        const fromTrack = blend.fromProps.get(key);
+        const toTrack = blend.toProps.get(key);
+        // Свойство, которого нет в from, начинается с ТЕКУЩЕЙ позы узла — иначе
+        // оно прыгнуло бы к значению to уже на первом кадре перехода.
+        const fromValue = fromTrack ? sampleKeys(fromTrack.keys, fromPhase) : blend.base[key];
+        const toValue = toTrack ? sampleKeys(toTrack.keys, toPhase) : fromValue;
+        if (fromValue === undefined || toValue === undefined) continue;
+        writeProp(node, key, fromValue + (toValue - fromValue) * k);
+    }
+
+    // fn-дорожки не складываются: в середине перехода зовём обе (from, затем to),
+    // на концах — только ту сторону, чей вес не ноль.
+    if (k < 1) {
+        for (const track of blend.fromFns) {
+            track.fn(node, fromPhase, {
+                clip: fromClip, u: player.u,
+                time: fromPhase * fromClip.duration, name: player.name,
+            });
+        }
+    }
+    if (k > 0) {
+        for (const track of blend.toFns) {
+            track.fn(node, toPhase, {
+                clip: to.clip, u: to.u,
+                time: toPhase * to.clip.duration, name: to.name,
+            });
+        }
+    }
+
+    // Кадр — дискретное состояние: у клипа с большим весом (как в blendValues).
+    const fromAnim = blend.fromAnims;
+    const toAnim = blend.toAnims;
+    if (fromAnim.length && toAnim.length) {
+        const useTo = k > 0.5;
+        for (const track of (useTo ? toAnim : fromAnim)) {
+            applyAnimTrack(node, track, useTo ? toPhase : fromPhase);
+        }
+    } else if (fromAnim.length) {
+        // Кадр задан только у from: он и рисуется до конца перехода, а после
+        // фиксации остаётся последним кадром (клип to кадры не задаёт).
+        for (const track of fromAnim) applyAnimTrack(node, track, fromPhase);
+    } else if (toAnim.length && k > 0.5) {
+        // Кадр задан только у to: переключаемся в середине, как и при двух
+        // наборах, — иначе кадр прыгнул бы уже на первом кадре перехода.
+        for (const track of toAnim) applyAnimTrack(node, track, toPhase);
+    }
+}
+
 /** Событие клипа рассылается и как общий 'key', и под своим именем. */
-function fireEvents(node, player, list) {
+function fireEventsFor(node, clip, name, list) {
     for (const ev of list) {
         const payload = {
             name: ev.name,
             data: ev.data === undefined ? {} : ev.data,
             at: ev.at,
-            clip: player.clip,
-            clipName: player.name,
+            clip,
+            clipName: name,
         };
         node.emit('key', payload);
         if (ev.name) node.emit(ev.name, payload);
     }
+}
+
+function fireEvents(node, player, list) {
+    fireEventsFor(node, player.clip, player.name, list);
 }
 
 // ---------------------------------------------------------------------------
@@ -364,8 +485,15 @@ function playClipOn(node, name, opts) {
 
     // Повторный playClip того же клипа не сбрасывает время: так анимация не
     // «дёргается», когда игровой код вызывает её каждый кадр. Нужен сброс —
-    // opts.restart: true.
-    if (o.restart !== true && player.playing && player.name === clip.name) return node;
+    // opts.restart: true. Во время кроссфейда «тот же клип» — это и цель
+    // перехода: вызов не должен обрывать начатый переход.
+    if (o.restart !== true && player.playing) {
+        if (player.name === clip.name) return node;
+        if (player.blend && player.blend.to.name === clip.name) return node;
+    }
+    // Явный playClip — это смена клипа, а не смешивание: переход снимаем,
+    // иначе два источника писали бы в один узел в одном кадре.
+    player.blend = null;
 
     player.clip = clip;
     player.name = clip.name;
@@ -405,6 +533,133 @@ function advanceClip(node, player, dt) {
         const state = machine ? machine.states[machine.current] : null;
         if (state && state.next) enterState(node, player, state.next);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Кроссфейд: запуск, покадровый шаг, фиксация конца
+// ---------------------------------------------------------------------------
+
+/**
+ * Запустить переход from → to на узле. Оба клипа уже проверены вызывающим.
+ * `continuing` — from уже играет: его время и скорость продолжаются, а не
+ * сбрасываются в ноль (переход «из бега в прыжок» не должен начинать бег
+ * заново).
+ */
+function startCrossfadeOn(node, fromClip, toClip, ms, opts) {
+    const o = opts || {};
+    const player = playerOf(node);
+    const continuing = player.playing && !player.blend && player.clip === fromClip;
+    const fromU = continuing ? player.u : 0;
+    const fromLoop = continuing ? player.loop : fromClip.loop;
+    const fromSpeed = continuing ? player.speed : fromClip.speed;
+
+    let toSpeed = o.speed === undefined ? toClip.speed : Number(o.speed);
+    if (!isFinite(toSpeed)) toSpeed = toClip.speed;
+    let toLoop = o.loop === undefined ? toClip.loop : o.loop;
+    if (LOOPS.indexOf(toLoop) < 0) toLoop = toClip.loop;
+
+    player.blend = null;
+    player.clip = fromClip;
+    player.name = fromClip.name;
+    player.u = fromU;
+    player.loop = fromLoop;
+    player.speed = fromSpeed;
+    player.playing = true;
+    player.paused = false;
+    player.onEnd = null;
+
+    const fromProps = propTrackMap(fromClip);
+    const toProps = propTrackMap(toClip);
+    const base = {};
+    for (const key of toProps.keys()) {
+        if (!fromProps.has(key)) base[key] = readProp(node, key);
+    }
+
+    player.blend = {
+        to: {
+            clip: toClip, name: toClip.name, u: 0, speed: toSpeed, loop: toLoop,
+            onEnd: typeof o.onEnd === 'function' ? o.onEnd : null,
+        },
+        ms,
+        elapsed: 0,
+        toU: 0,                 // сколько времени to уже прожил (для событий)
+        fromProps,
+        toProps,
+        fromFns: fnTracksOf(fromClip),
+        toFns: fnTracksOf(toClip),
+        fromAnims: animTracksOf(fromClip),
+        toAnims: animTracksOf(toClip),
+        base,
+    };
+
+    // t=0 — ровно поза from, без «полукадра»: первый же кадр не дёргается.
+    applyBlendPose(node, player, 0);
+    // События берём у to-клипа: from прерывается, его события после начала
+    // перехода не должны приходить (иначе одно действие сработало бы дважды).
+    fireEventsFor(node, toClip, toClip.name, eventsBetween(toClip.events, -0.5, 0));
+    return player;
+}
+
+function advanceBlend(node, player, dt) {
+    const blend = player.blend;
+    const fromClip = player.clip;
+    const to = blend.to;
+
+    player.u += (dt * 1000 * player.speed) / fromClip.duration;
+    if (player.loop === 'once' && player.u > 1) player.u = 1;
+    to.u += (dt * 1000 * to.speed) / to.clip.duration;
+    if (to.loop === 'once' && to.u > 1) to.u = 1;
+    fireEventsFor(node, to.clip, to.name,
+                  eventsBetween(to.clip.events, blend.toU, to.u));
+    blend.toU = to.u;
+
+    blend.elapsed += dt * 1000;
+    const k = blend.elapsed >= blend.ms ? 1 : blend.elapsed / blend.ms;
+    applyBlendPose(node, player, k);
+    if (k >= 1) finishBlend(node, player);
+}
+
+/** Переход доигран: to становится обычным клипом узла; t=ms — ровно его поза. */
+function finishBlend(node, player) {
+    const blend = player.blend;
+    if (!blend) return;
+    player.blend = null;
+    const to = blend.to;
+    player.clip = to.clip;
+    player.name = to.name;
+    player.u = to.u;
+    player.speed = to.speed;
+    player.loop = to.loop;
+    player.onEnd = to.onEnd;
+
+    if (player.loop === 'once' && player.u >= 1) {
+        player.playing = false;
+        node.emit('clipEnd', { clip: player.clip, name: player.name, node });
+        if (player.onEnd) player.onEnd(node);
+        const machine = player.machine;
+        const state = machine ? machine.states[machine.current] : null;
+        if (state && state.next) enterState(node, player, state.next);
+    }
+}
+
+/** Публичное состояние перехода узла (или null) — без ссылок на узел, чтобы JSON. */
+function blendInfoOf(node) {
+    if (!node || !node.__clip || !node.__clip.blend) return null;
+    const player = node.__clip;
+    const blend = player.blend;
+    const t = blend.elapsed >= blend.ms ? 1 : blend.elapsed / blend.ms;
+    return {
+        id: node.id || null,
+        from: player.name,
+        to: blend.to.name,
+        ms: blend.ms,
+        elapsed: blend.elapsed,
+        t,
+        fromWeight: 1 - t,
+        toWeight: t,
+        done: t >= 1,
+        paused: !!player.paused,
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -532,7 +787,10 @@ export function tickAnim(dt) {
         const player = node.__clip;
         if (!player || node.removed) continue;
         if (player.machine) updateMachine(node, player, dt);
-        if (player.playing && !player.paused && player.clip) advanceClip(node, player, dt);
+        if (player.playing && !player.paused) {
+            if (player.blend) advanceBlend(node, player, dt);
+            else if (player.clip) advanceClip(node, player, dt);
+        }
     }
 }
 
@@ -554,6 +812,7 @@ function installNodeMethods() {
             player.clip = null;
             player.name = null;
             player.onEnd = null;
+            player.blend = null;   // остановка снимает и незавершённый переход
         });
     });
 
@@ -630,7 +889,20 @@ function installNodeMethods() {
 // Установка подсистемы
 // ---------------------------------------------------------------------------
 
+/** Узлы цели: обёртка $, селектор или сам узел. Пусто — цель не найдена. */
+function targetNodeList(target) {
+    if (target && target.nodes) return target.nodes;
+    if (typeof target === 'string') {
+        if (!api_ref) return [];
+        const wrapper = api_ref(target);
+        return wrapper && wrapper.nodes ? wrapper.nodes : [];
+    }
+    if (target && typeof target === 'object' && target.tag) return [target];
+    return [];
+}
+
 export function installAnim($) {
+    api_ref = $;
     $.anim = {
         /** Объявить клип. spec: { duration, loop, speed, tracks, events }. */
         define(name, spec) {
@@ -645,6 +917,77 @@ export function installAnim($) {
         list() { return Array.from(clips.keys()); },
         remove(name) { return clips.delete(String(name)); },
         clear() { clips.clear(); return $; },
+        /**
+         * Кроссфейд клипов за время: t=0 — 100 % from, t=ms — 100 % to.
+         *
+         *   const h = $.anim.crossfade('#hero', 'run', 'jump', 200);
+         *   h.query();   // { from, to, t, fromWeight, toWeight, done, … }
+         *
+         * Это НЕ $.anim.blend(a, b, t): тот принадлежит таймлайнам
+         * ($.anim.clip) и задаёт мгновенный вес. Здесь оба клипа объявлены
+         * через $.anim.define и живут на узле. Возвращает хендл перехода.
+         */
+        crossfade(target, from, to, ms, opts) {
+            const fromClip = clips.get(String(from));
+            if (!fromClip) {
+                throw new Error(`$.anim.crossfade: клип "${from}" не объявлен — `
+                    + `сначала $.anim.define("${from}", { duration, tracks })`);
+            }
+            const toClip = clips.get(String(to));
+            if (!toClip) {
+                throw new Error(`$.anim.crossfade: клип "${to}" не объявлен — `
+                    + `сначала $.anim.define("${to}", { duration, tracks })`);
+            }
+            if (fromClip === toClip) {
+                throw new Error(`$.anim.crossfade: from и to — один и тот же клип `
+                    + `"${fromClip.name}": смешивать нечего`);
+            }
+            const duration = Number(ms);
+            if (!isFinite(duration) || !(duration > 0)) {
+                throw new Error(`$.anim.crossfade: нужен ms > 0 (миллисекунды `
+                    + `перехода), получено ${ms}`);
+            }
+            const nodes = targetNodeList(target);
+            if (nodes.length === 0) {
+                throw new Error(`$.anim.crossfade: цель "${target}" не найдена — `
+                    + 'нужен селектор, обёртка или узел');
+            }
+            for (const node of nodes) {
+                startCrossfadeOn(node, fromClip, toClip, duration, opts);
+            }
+            return {
+                from: fromClip.name,
+                to: toClip.name,
+                ms: duration,
+                nodes,
+                node: nodes[0],
+                query() { return blendInfoOf(nodes[0]); },
+                progress() {
+                    const info = blendInfoOf(nodes[0]);
+                    return info ? info.t : 1;
+                },
+                done() {
+                    return nodes.every((node) => !node.__clip || !node.__clip.blend);
+                },
+            };
+        },
+        /**
+         * Состояние перехода: с целью — объект или null; без цели — массив по
+         * всем узлам, где сейчас идёт кроссфейд. Читается в любом кадре,
+         * в том числе между применениями поз (t = elapsed/ms).
+         */
+        blendInfo(target) {
+            if (target === undefined) {
+                const out = [];
+                for (const node of nodesWithFacet('clip')) {
+                    const info = blendInfoOf(node);
+                    if (info) out.push(info);
+                }
+                return out;
+            }
+            const nodes = targetNodeList(target);
+            return nodes.length ? blendInfoOf(nodes[0]) : null;
+        },
     };
 
     installNodeMethods();

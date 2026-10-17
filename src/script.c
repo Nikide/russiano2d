@@ -2989,14 +2989,9 @@ static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JS
 {
     R2D_UNUSED(this_val);
     R2DScript *s = r2d__script_of(ctx);
-    if (!s || !s->gui) return JS_NewInt32(ctx, -1);
+    if (!s) return JS_NewInt32(ctx, -1);
     if (argc < 4 || !JS_IsFunction(ctx, argv[3])) {
         JS_ThrowTypeError(ctx, "ui.on(doc, elementId, event, callback) — нужна функция");
-        return JS_EXCEPTION;
-    }
-    if (s->callback_count >= (int)(sizeof s->callbacks / sizeof s->callbacks[0])) {
-        JS_ThrowInternalError(ctx, "слишком много обработчиков UI (лимит %d)",
-                              (int)(sizeof s->callbacks / sizeof s->callbacks[0]));
         return JS_EXCEPTION;
     }
 
@@ -3004,16 +2999,55 @@ static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JS
     const char *element = r2d__arg_str(ctx, argc, argv, 1);
     const char *event = r2d__arg_str(ctx, argc, argv, 2);
 
-    // Слот НЕ занимаем заранее: раньше id = callback_count++ брался до проверки
-    // ok, и неудачная подписка выжигала слот вместе с JS-функцией. На 256-й
-    // такой подписке движок падал с InternalError, хотя обработчиков было
-    // меньше лимита. Теперь слот освобождается, если слушателя не поставили.
-    const int slot = s->callback_count;
+    const int cap = (int)(sizeof s->callbacks / sizeof s->callbacks[0]);
+    // Ключ идемпотентности — ПАРА+ОБРАБОТЧИК. Раньше ключом была только пара
+    // элемент+событие, и второй РАЗНЫЙ обработчик молча выбрасывался. Теперь
+    // повторная подписка тем же обработчиком возвращает прежний id (без
+    // второго слушателя), а другой обработчик получает свой слот.
+    if (element && event) {
+        int existing[256];
+        const int count = r2d_gui_listener_query(s->gui, doc, element, event,
+                                                 existing, cap);
+        for (int i = 0; i < count; ++i) {
+            const int id = existing[i];
+            if (id < 0 || id >= cap) continue;
+            if (!JS_IsUndefined(s->callbacks[id])
+                && JS_IsStrictEqual(ctx, s->callbacks[id], argv[3])) {
+                JS_FreeCString(ctx, element);
+                JS_FreeCString(ctx, event);
+                return JS_NewInt32(ctx, id);
+            }
+        }
+    }
+
+    // Свободный слот ищем по пулу: после off слот возвращается, поэтому
+    // «256 подписок за рантайм» больше не предел. Переполнение — ГРОМКОЕ:
+    // структурная ошибка с числами, а не тихий выброс.
+    int slot = -1;
+    int live = 0;
+    for (int i = 0; i < cap; ++i) {
+        if (JS_IsUndefined(s->callbacks[i])) {
+            if (slot < 0) slot = i;
+        } else {
+            live++;
+        }
+    }
+    if (slot < 0) {
+        if (element) JS_FreeCString(ctx, element);
+        if (event) JS_FreeCString(ctx, event);
+        return JS_ThrowInternalError(ctx,
+            "R2D_UI_LISTENER_LIMIT: все %d слотов обработчиков UI заняты "
+            "(активно %d из %d) — снимите лишние через engine.ui.off(...) "
+            "или doc.off(...)", cap, live, cap);
+    }
+
+    // Слот НЕ занимаем заранее: если слушателя не поставили, JS-значение
+    // освобождается, а слот остаётся свободным.
     JSValue fn = JS_DupValue(ctx, argv[3]);
     const bool ok = element && event && r2d_gui_add_listener(s->gui, doc, element, event, slot);
     if (ok) {
         s->callbacks[slot] = fn;
-        s->callback_count++;
+        if (slot >= s->callback_count) s->callback_count = slot + 1;
     } else {
         JS_FreeValue(ctx, fn);
     }
@@ -3024,6 +3058,77 @@ static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JS
     return JS_NewInt32(ctx, ok ? slot : -1);
 }
 
+// engine.ui.off(doc, elementId, event[, callback]) → сколько слушателей снято.
+// Снимаем и запись пула (JS-значение + слот), и слушателя RmlUi: иначе клик
+// продолжал бы звать удалённую функцию. Без callback снимаются все обработчики
+// пары; ключ тот же, что у on — документ+элемент+событие (+функция).
+static JSValue r2d__js_ui_off(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    if (!s) return JS_NewInt32(ctx, 0);
+    if (argc < 3) {
+        JS_ThrowTypeError(ctx,
+            "ui.off(doc, elementId, event[, callback]) — нужны документ, элемент и событие");
+        return JS_EXCEPTION;
+    }
+    const bool has_fn = argc >= 4 && JS_IsFunction(ctx, argv[3]);
+    if (argc >= 4 && !has_fn && !JS_IsUndefined(argv[3]) && !JS_IsNull(argv[3])) {
+        JS_ThrowTypeError(ctx,
+            "ui.off(doc, elementId, event[, callback]) — callback должен быть функцией");
+        return JS_EXCEPTION;
+    }
+
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    const char *event = r2d__arg_str(ctx, argc, argv, 2);
+    if (!element || !event) {
+        if (element) JS_FreeCString(ctx, element);
+        if (event) JS_FreeCString(ctx, event);
+        return JS_NewInt32(ctx, 0);
+    }
+
+    const int cap = (int)(sizeof s->callbacks / sizeof s->callbacks[0]);
+    int ids[256];
+    const int count = r2d_gui_listener_query(s->gui, doc, element, event, ids, cap);
+    int removed = 0;
+    for (int i = 0; i < count; ++i) {
+        const int id = ids[i];
+        if (id < 0 || id >= cap) continue;
+        if (has_fn) {
+            if (JS_IsUndefined(s->callbacks[id])
+                || !JS_IsStrictEqual(ctx, s->callbacks[id], argv[3])) {
+                continue;
+            }
+        }
+        // Сначала освобождаем значение: RmlUi при RemoveEventListener зовёт
+        // OnDetach, и уведомление об отсоединении не должно освобождать слот
+        // второй раз (JS_IsUndefined — защита от двойного free).
+        if (!JS_IsUndefined(s->callbacks[id])) {
+            JS_FreeValue(ctx, s->callbacks[id]);
+            s->callbacks[id] = JS_UNDEFINED;
+        }
+        if (r2d_gui_remove_listener(s->gui, id)) removed++;
+    }
+
+    JS_FreeCString(ctx, element);
+    JS_FreeCString(ctx, event);
+    return JS_NewInt32(ctx, removed);
+}
+
+// RmlUi отсоединил слушателя (документ выгружен, элемент удалён из разметки):
+// освобождаем слот пула, иначе он занят мёртвой функцией до конца рантайма.
+static void r2d__ui_callback_detached(void *user, int callback_id)
+{
+    R2DScript *s = (R2DScript *)user;
+    if (!s || !s->ctx) return;
+    const int cap = (int)(sizeof s->callbacks / sizeof s->callbacks[0]);
+    if (callback_id < 0 || callback_id >= cap) return;
+    if (JS_IsUndefined(s->callbacks[callback_id])) return;
+    JS_FreeValue(s->ctx, s->callbacks[callback_id]);
+    s->callbacks[callback_id] = JS_UNDEFINED;
+}
+
 // Мост RmlUi → JS: вызывается из gui.cpp при срабатывании слушателя.
 static void r2d__gui_dispatch(void *user, int callback_id, const char *element_id,
                                const char *event_name, const char *target_id,
@@ -3031,11 +3136,19 @@ static void r2d__gui_dispatch(void *user, int callback_id, const char *element_i
 {
     R2DScript *s = (R2DScript *)user;
     if (!s || !s->ctx) return;
-    if (callback_id < 0 || callback_id >= s->callback_count) return;
+    if (callback_id < 0
+        || callback_id >= (int)(sizeof s->callbacks / sizeof s->callbacks[0])) {
+        return;
+    }
 
     JSContext *ctx = s->ctx;
-    JSValue fn = s->callbacks[callback_id];
-    if (!JS_IsFunction(ctx, fn)) return;
+    // Дублируем ссылку на время вызова: обработчик может снять САМ СЕБЯ
+    // (engine.ui.off изнутри клика), и слот освободится прямо во время JS_Call.
+    JSValue fn = JS_DupValue(ctx, s->callbacks[callback_id]);
+    if (!JS_IsFunction(ctx, fn)) {
+        JS_FreeValue(ctx, fn);
+        return;
+    }
 
     // (elementId, eventName, targetKey, targetId): первые два аргумента — как
     // раньше, остальные нужны делегированию списков (docs/highlevel/ui.md).
@@ -3050,6 +3163,7 @@ static void r2d__gui_dispatch(void *user, int callback_id, const char *element_i
         r2d__capture_error(s);
     }
     JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, fn);
     for (int i = 0; i < 4; ++i) JS_FreeValue(ctx, args[i]);
 }
 
@@ -6200,6 +6314,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, ui, "setClass", r2d__js_ui_set_class, 4);
     r2d__set_fn(ctx, ui, "setProperty", r2d__js_ui_set_property, 4);
     r2d__set_fn(ctx, ui, "on", r2d__js_ui_on, 4);
+    r2d__set_fn(ctx, ui, "off", r2d__js_ui_off, 4);
     r2d__set_fn(ctx, ui, "getValue", r2d__js_ui_get_value, 2);
     r2d__set_fn(ctx, ui, "setValue", r2d__js_ui_set_value, 3);
     r2d__set_fn(ctx, ui, "getText", r2d__js_ui_get_text, 2);
@@ -6381,7 +6496,9 @@ static JSValue r2d__make_engine(JSContext *ctx)
 static void r2d__free_js_values(R2DScript *s)
 {
     if (!s->ctx) return;
-    for (int i = 0; i < s->callback_count; ++i) {
+    // Слоты возвращаются (free-list — поиск), поэтому значение может лежать
+    // в любом слоте: обходим ВЕСЬ массив, а не только high-water callback_count.
+    for (size_t i = 0; i < sizeof s->callbacks / sizeof s->callbacks[0]; ++i) {
         JS_FreeValue(s->ctx, s->callbacks[i]);
         s->callbacks[i] = JS_UNDEFINED;
     }
@@ -6411,6 +6528,10 @@ static void r2d__free_js_values(R2DScript *s)
 static void r2d__destroy_context(R2DScript *s)
 {
     if (s->ctx) {
+        // Пока контекст жив, gui может отсоединять слушателей и звать
+        // r2d__ui_callback_detached. После JS_FreeContext уведомление стало бы
+        // обращением к мёртвому контексту — снимаем его первым.
+        if (s->gui) r2d_gui_set_detach_notify(s->gui, NULL, NULL);
         r2d__free_js_values(s);
         // Ссылки C на узлы $ (активные твины) и атомы — до JS_FreeContext.
         r2d_nodes_shutdown(s->ctx);
@@ -6908,6 +7029,7 @@ bool r2d_script_init(R2DScript *s, R2DApp *app, R2DRenderer *renderer,
 
     if (s->gui) {
         r2d_gui_set_event_dispatch(s->gui, r2d__gui_dispatch, s);
+        r2d_gui_set_detach_notify(s->gui, r2d__ui_callback_detached, s);
     }
 
     // В собранной игре скриптов на диске нет: точкой входа становится груз,
@@ -7097,5 +7219,12 @@ const char *r2d_script_last_error(const R2DScript *s)
 
 int r2d_script_callback_count(const R2DScript *s)
 {
-    return s ? s->callback_count : 0;
+    if (!s) return 0;
+    // Живые обработчики, а не high-water: после off слот свободен, и
+    // $.debug.limits().ui_callbacks должен это показывать.
+    int live = 0;
+    for (size_t i = 0; i < sizeof s->callbacks / sizeof s->callbacks[0]; ++i) {
+        if (!JS_IsUndefined(s->callbacks[i])) live++;
+    }
+    return live;
 }
