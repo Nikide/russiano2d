@@ -79,8 +79,8 @@ def main():
               f"бэкенд мира: {st.get('backend')}")
         hero = st.get("hero") or {}
         check(abs(hero.get("x", 0) - 800) < 1 and abs(hero.get("y", 0) - 1080) < 1
-              and abs(hero.get("h", 0) - 48) < 1,
-              f"игрок на спавне, глаза на 48: {hero}")
+              and abs(hero.get("h", 0) - 76) < 1,
+              f"игрок на спавне, камера поднята на 76: {hero}")
         check(st.get("weapons") == 3 and st.get("combat") is False,
               f"три оружия и нет боя: weapons={st.get('weapons')}, combat={st.get('combat')}")
         check(st.get("frames") == 40, f"у врага лист 5×8 = 40 кадров: {st.get('frames')}")
@@ -96,7 +96,7 @@ def main():
         check(moved > 80, f"W идёт вперёд (y {start['y']} → {st['hero']['y']}, Δ={moved:.1f})")
         check(abs(st["hero"]["x"] - start["x"]) < 12,
               f"вперёд без бокового сноса (Δx={st['hero']['x'] - start['x']:.1f})")
-        check(abs(st["hero"]["h"] - 48) < 1, f"высота глаз по миру: h={st['hero']['h']}")
+        check(abs(st["hero"]["h"] - 76) < 1, f"высота глаз по миру: h={st['hero']['h']}")
 
         a.hold(["W"]); a.step(320); a.release_all(); a.step(2)
         wall = state(a)["hero"]
@@ -185,6 +185,39 @@ def main():
         a.step(90)
         check(state(a)["weapon"]["state"] == "idle"
               and state(a)["weapon"]["reloads"] == 1, "перезарядка вернула покой")
+
+        # --- Урон и смерть: прицел → попадания → труп -----------------------
+        def enemy(eid):
+            return next(e for e in state(a)["enemies"] if e["id"] == eid)
+
+        aimed = None
+        for _ in range(160):
+            a.hold(["right"]); a.step(3); a.release_all(); a.step(1)
+            hot = [e for e in state(a)["enemies"] if e["aimed"]]
+            if hot:
+                aimed = hot[0]
+                break
+        check(aimed is not None, f"прицел нашёл врага: {aimed and aimed['id']}")
+        if aimed:
+            target_id = aimed["id"]
+            check(enemy(target_id)["hp"] == 100, f"у врага 100 hp: {enemy(target_id)['hp']}")
+            for _ in range(8):
+                if enemy(target_id)["dead"]:
+                    break
+                a.mouse(button=1, action="click"); a.step(20)
+                # цель двигается — доворачиваем, пока снова не окажется под прицелом
+                for _ in range(25):
+                    if enemy(target_id)["aimed"] or enemy(target_id)["dead"]:
+                        break
+                    a.hold(["right"]); a.step(2); a.release_all(); a.step(1)
+            killed = enemy(target_id)
+            check(killed["dead"] and killed["hp"] == 0 and state(a)["weapon"]["kills"] >= 1,
+                  f"враг умер: dead={killed['dead']}, hp={killed['hp']}, "
+                  f"kills={state(a)['weapon']['kills']}")
+            a.step(30)     # > 350 мс анимации падения
+            corpse = enemy(target_id)
+            check(corpse["frame"] // 5 == 7,
+                  f"после падения — кадр трупа (строка 7): frame={corpse['frame']}")
 
         # --- Арт врага виден на кадре (смотрим на ближайшего) ----------------
         os.makedirs(SHOTS, exist_ok=True)

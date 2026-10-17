@@ -26,7 +26,8 @@ const MAP_SOURCE = 're2d_testroom/testroom.re2dmap';
 const ROOM = { x: 0, y: 0, w: 1600, h: 1200, height: 320 };
 // yaw камеры — ГРАДУСЫ (0 = +x; -90 = на север, -y).
 const SPAWN = { x: 800, y: 1080, yaw: -90 };
-const EYE = 48;                 // глаза над полом, world units
+const EYE = 76;                 // глаза над полом: на уровне груди врага,
+                                // иначе билборд 170 см «нависает» над камерой
 const PLAYER_RADIUS = 14;
 const PLAYER_HEIGHT = 56;
 const PLAYER_SPEED = 230;
@@ -41,10 +42,13 @@ const FRAME_H = 576;
 // В комнате боя нет: играем только ходьбу 0..3.
 const ENEMY_ART = 're2d_testroom/assets/enemy_sheet.png';
 const ENEMY_SHEET = { cols: 5, rows: 8, cw: 198, ch: 198 };
-const ENEMY_WORLD_H = 170;
+const ENEMY_WORLD_H = 150;      // рост врага: 170 на близкой дистанции закрывал пол-экрана
 const ENEMY_FRAMES = ENEMY_SHEET.cols * ENEMY_SHEET.rows;
 const ENEMY_WALK_FPS = 7.5;
 const ENEMY_SEE_H = 85;         // высота центра, по которой проверяется видимость
+const ENEMY_HP = 100;           // 3 выстрела из пистолета / 5 из АК / 1 дробовик
+const WEAPON_DAMAGE = { pistol: 34, shotgun: 100, ak: 20 };
+const DEATH_FALL_MS = 350;      // строка 6 (падение) → строка 7 (труп)
 
 // Оружие от первого лица (maid_fps_weapons).
 const WEAPON_BASE = 're2d_testroom/assets/weapons/';
@@ -63,7 +67,7 @@ const ENEMIES = [
 ];
 
 const NOTICE = 380;
-const STOP_AT = 130;
+const STOP_AT = 180;            // ближе не подходит — иначе билборд закрывает весь экран
 
 export default function install($) {
     let world = null;
@@ -79,7 +83,7 @@ export default function install($) {
     let rays = 0;                 // запросов видимости за кадр
     const gun = {
         name: WEAPON_ORDER[0], state: 'idle', kind: null, seq: null,
-        i: 0, t: 0, frame: -1, shots: 0, reloads: 0, sound_ok: 0,
+        i: 0, t: 0, frame: -1, shots: 0, reloads: 0, sound_ok: 0, kills: 0,
     };
 
     // --- Геометрия/проекция кадра -----------------------------------------
@@ -87,7 +91,8 @@ export default function install($) {
     function windowScale() {
         const s = $.window && typeof $.window.size === 'function' ? $.window.size() : null;
         const w = s && s.w > 0 ? s.w : 1280;
-        return { x: w / FRAME_W, w };
+        const h = s && s.h > 0 ? s.h : 720;
+        return { x: w / FRAME_W, w, h };
     }
 
     /** Мировой point → экран кадра (`FRAME_W×FRAME_H`), как в renderView(). */
@@ -128,6 +133,8 @@ export default function install($) {
                 cfg, x: cfg.path[0][0], y: cfg.path[0][1], at: 0, dwell: 0,
                 mode: 'patrol', facing, walk_t: 0, row: 0, col: 0,
                 flip: false, frame: 0, seen: false,
+                hp: ENEMY_HP, dead: false, death_t: 0, death_col: 0,
+                flash_t: 0, aimed: false, aim_z: 0,
             };
         });
     }
@@ -146,6 +153,12 @@ export default function install($) {
 
     function updateEnemies(step_ms) {
         for (const e of enemies) {
+            if (e.dead) {
+                e.death_t += step_ms;
+                e.flash_t = Math.max(0, e.flash_t - step_ms);
+                continue;
+            }
+            e.flash_t = Math.max(0, e.flash_t - step_ms);
             const distance = Math.hypot(view.x - e.x, view.y - e.y);
             e.seen = distance < 900 && worldSees(e.x, e.y, ENEMY_SEE_H);
             let moving = false;
@@ -203,11 +216,16 @@ export default function install($) {
     function drawEnemies() {
         projected = 0;
         occluded = 0;
-        const scale = windowScale().x;
+        const ws = windowScale();
+        const cx = ws.w / 2;
+        const cy = ws.h / 2;
         for (let i = 0; i < enemies.length; i++) {
             const e = enemies[i];
             const view_node = enemy_views[i];
             if (!view_node) continue;
+            e.aimed = false;
+            if (e.dead && e.death_t >= DEATH_FALL_MS) e.frame = 7 * ENEMY_SHEET.cols + e.death_col;
+            else if (e.dead) e.frame = 6 * ENEMY_SHEET.cols + e.death_col;
             const base = projectPoint(e.x, e.y, 0);
             const head = projectPoint(e.x, e.y, ENEMY_WORLD_H);
             if (!base || !head) { view_node.get(0).visible = false; continue; }
@@ -219,16 +237,23 @@ export default function install($) {
                                       { x: e.x, y: e.y, height: ENEMY_SEE_H });
                 if (hit) { occluded++; view_node.get(0).visible = false; continue; }
             }
-            const sx = base.x * scale;
-            const sy = base.y * scale;
-            const w = hpx * scale;
-            const h = hpx * scale;
-            if (sx + w / 2 < 0 || sx - w / 2 > windowScale().w || sy < 0 || sy - h > sy + 1) {
-                // быстрый отсев за экраном (верх/низ уже проверены высотой кадра)
-                if (sx < -w || sx > windowScale().w + w) { view_node.get(0).visible = false; continue; }
+            const sx = base.x * ws.x;
+            const sy = base.y * ws.x;
+            const w = hpx * ws.x;
+            const h = hpx * ws.x;
+            if (sx + w / 2 < 0 || sx - w / 2 > ws.w || sy < 0 || sy - h > sy + 1) {
+                if (sx < -w || sx > ws.w + w) { view_node.get(0).visible = false; continue; }
+            }
+            // Прицел — центр окна; попадание считается по тому же прямоугольнику,
+            // которым враг нарисован (что видно, в то и стреляем).
+            if (!e.dead && sx - w / 2 <= cx && cx <= sx + w / 2
+                && sy - h <= cy && cy <= sy) {
+                e.aimed = true;
+                e.aim_z = base.z;
             }
             view_node.frame(e.frame);
             view_node.at(sx, sy - h / 2).size(w, h);
+            view_node.color(e.flash_t > 0 ? '#ffd0d0' : '#ffffff');
             view_node.get(0).visible = true;
             projected++;
         }
@@ -286,6 +311,28 @@ export default function install($) {
         return out;
     }
 
+    /** Попадание: ближайший враг под прицелом (из уже нарисованного кадра). */
+    function shootAtCrosshair() {
+        let target = null;
+        for (const e of enemies) {
+            if (!e.aimed || e.dead) continue;
+            if (!target || e.aim_z < target.aim_z) target = e;
+        }
+        if (!target) return;
+        const damage = WEAPON_DAMAGE[gun.name] || 20;
+        target.hp -= damage;
+        target.flash_t = 90;
+        if (target.hp <= 0) {
+            target.hp = 0;
+            target.dead = true;
+            target.mode = 'dead';
+            target.death_t = 0;
+            target.death_col = target.col;
+            target.aimed = false;
+            gun.kills++;
+        }
+    }
+
     function weaponSound(path) {
         if (!path || !$.sound || typeof $.sound.play !== 'function') return;
         const handle = $.sound.play(WEAPON_BASE + path, { volume: 0.5 });
@@ -303,6 +350,7 @@ export default function install($) {
             const fire = (def.sounds && def.sounds.fire) || [];
             if (fire.length) weaponSound(fire[Math.floor(Math.random() * fire.length)]);
             gun.shots++;
+            shootAtCrosshair();
         }
         if (gun.kind === 'reload' && frame === 5 && def.sounds && def.sounds.shell_insert) {
             weaponSound(def.sounds.shell_insert);
@@ -421,6 +469,7 @@ export default function install($) {
             weapon: {
                 name: gun.name, state: gun.state, frame: gun.frame,
                 shots: gun.shots, reloads: gun.reloads, sound_ok: gun.sound_ok,
+                kills: gun.kills,
                 seq_left: gun.seq ? gun.seq.length - gun.i : 0,
             },
             frames: ENEMY_FRAMES,
@@ -431,7 +480,7 @@ export default function install($) {
                 x: Math.round(e.x * 10) / 10, y: Math.round(e.y * 10) / 10,
                 distance: view ? Math.round(Math.hypot(view.x - e.x, view.y - e.y)) : null,
                 facing: Math.round(e.facing), frame: e.frame, row: e.row, col: e.col,
-                flip: e.flip,
+                flip: e.flip, hp: e.hp, dead: e.dead, aimed: e.aimed,
             })),
             nearest: view ? nearest() : null,
         };
@@ -506,6 +555,7 @@ export default function install($) {
                 gun.shots = 0;
                 gun.reloads = 0;
                 gun.sound_ok = 0;
+                gun.kills = 0;
                 weaponSet(gun.name);
             }
         },
@@ -554,7 +604,9 @@ export default function install($) {
             if (labels) {
                 const close = nearest();
                 const w = weapons
-                    ? ` · ${gun.name.toUpperCase()} ${gun.state}${gun.shots ? ` · выстрелов ${gun.shots}` : ''}`
+                    ? ` · ${gun.name.toUpperCase()} ${gun.state}`
+                      + `${gun.shots ? ` · выстрелов ${gun.shots}` : ''}`
+                      + `${gun.kills ? ` · убито ${gun.kills}` : ''}`
                     : ' · оружия нет';
                 labels.status.text((close
                     ? `врагов ${enemies.length} · ближайший ${close.id} · ${Math.round(close.distance)} px · режим ${close.mode}`
