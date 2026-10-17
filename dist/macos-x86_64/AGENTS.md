@@ -1,4 +1,4 @@
-# Russiano2D 1.2.4 — macOS Intel: инструкция для ИИ-агента
+# Russiano2D 1.2.5 — macOS Intel: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"1.2.4","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"1.2.5","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -174,6 +174,8 @@ call(cmd="quit")
 * Сборка и публикация — `docs/RELEASING.md`
 * Roadmap расширения R2D — `docs/ROADMAP.md`
 * Russiano2D SDK — `docs/SDK.md`
+* SDK agent tooling: API metadata, lint, validate, doctor — `docs/SDK_AGENT_TOOLING.md`
+* SDK agent tooling — Phase 0 report — `docs/SDK_TOOLING_PHASE0_REPORT.md`
 * Тестирование мира в R2D — `docs/TESTING.md`
 * Как сделать такое же демо на `$` — `docs/TUTORIAL.md`
 * VFX: чего не хватает и каким будет `r2dvfx` — `docs/VFX_ROADMAP.md`
@@ -12782,6 +12784,17 @@ C-формате CLI нет: состояние сверяет игра — `$.r
 сайт, `BUMP=0`/`TAG=0` — bump и тег, `KEEP_DIST=0` — binaries в коммит,
 `NOTES=0` — сборку заметок из коммитов (см. ниже).
 
+### SDK artifacts в релизе
+
+`build_and_push.sh` перед упаковкой прогоняет SDK-гейты (`api generate`,
+`api check`, `lint game`, `validate game`, `doctor`, recipes), а
+`tools/autobuild.py` после сборки macOS-движка перегенерирует
+`api.schema.json`, `russiano2d.d.ts`, `docs/api/API_REFERENCE.md` **новым**
+runtime — иначе schema/docs уехали бы с версией предыдущего бинарника.
+Generated artifacts входят в корень пакета, `docs/api` и `docs/recipes` —
+в каталог `docs/`. Сайт (`site/build-doc.py` + `tools/public_docs.py`)
+публикует SDK-гайды, API reference и recipes отдельной группой `SDK`.
+
 ## Заметки релиза из коммитов
 
 Релизную секцию CHANGELOG больше не пишут руками: её собирает
@@ -13409,6 +13422,10 @@ Git (`git log --diff-filter=D -- "к удалению.md"`, файл удалё�
 незакрытых возможностей в поставку не входят — они живут только в репозитории
 движка.
 
+> Практический гайд по новому tooling: [SDK_AGENT_TOOLING.md](SDK_AGENT_TOOLING.md).
+> Generated API reference: [docs/api/API_REFERENCE.md](api/API_REFERENCE.md).
+> Рецепты: [docs/recipes/README.md](recipes/README.md).
+
 ```text
 GAME = CODE + DATA          SDK = R2D-приложение + инструменты для CODE + DATA
 ```
@@ -13481,7 +13498,14 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `assets <каталог> [--registry f]` | ассеты по реальной файловой структуре: путь, тип, размер, mtime, инструмент |
 | `project <каталог>` | `project.json` и `main.js`: название, версия, размер окна |
 | `projects <каталог>` | проекты (каталоги с `project.json`) под каталогом |
-| `validate <файл> [--type t]` | проверка ассета, структурная диагностика |
+| `validate [каталог] [--project dir] [--type t]` | проект (project.json/main.js/asset refs/lint) или отдельный ассет |
+| `api dump [--game dir] [--engine path]` | machine-readable снимок публичного `$` API из живого runtime |
+| `api check [--schema f]` | структурная проверка снимка + свежесть `api.schema.json` |
+| `api generate [--out-dir dir]` | записать `api.schema.json` и `russiano2d.d.ts` из runtime metadata |
+| `lint [путь] [--schema f]` | API-aware линтер JS: `R2D001/002/004/014`, `--json` |
+| `docs generate` | generated `docs/api/API_REFERENCE.md` из runtime metadata |
+| `doctor [--project dir]` | health check: runtime/metadata/schema/typings/docs/project/lint |
+| `help` | псевдоним `commands` |
 | `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
 | `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
 | `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |
@@ -13899,6 +13923,245 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 диагностик, сломанный — выявляется ДО запуска структурированным кодом
 (`tests/sdk_validation_test.py`), а разбор SDK совпадает с разбором движка
 (`tests/sdk_preview_parity_test.py`).
+
+## Generated API artifacts
+
+`api.schema.json` и `russiano2d.d.ts` в корне — generated (header внутри файла).
+Источник — живой runtime (`russiano2d --dump-api`), поэтому новый `$` метод
+попадает в schema/typings/lint без второго рукописного списка:
+
+```bash
+./r2d-sdk api generate      # перезаписать schema + typings
+./r2d-sdk api check         # CI: schema не устарела
+./r2d-sdk lint game         # API-aware проверка игровых скриптов
+```
+
+Ручная правка `api.schema.json`/`russiano2d.d.ts` запрещена: меняется registry
+(живой `$` API), затем запускается `api generate`.
+
+## SDK GUI: Code Check / API Browser
+
+`sdk_tools.json` содержит `code-check` и `api-browser`; оба открывают
+`sdk/ui/code_check.rml`. Панель вызывает **native** `r2d-sdk doctor/lint/validate`
+через `app.backend` и показывает generated `api.schema.json` — второго линтера
+или валидатора в JS нет.
+
+
+---
+
+## SDK agent tooling: API metadata, lint, validate, doctor
+
+<sub>источник: `docs/SDK_AGENT_TOOLING.md`</sub>
+
+# SDK agent tooling: API metadata, lint, validate, doctor
+
+Единый backend для разработчика, GUI SDK и ИИ-агентов — **`r2d-sdk`**. Runtime
+(`russiano2d`) остаётся источником истины для публичного `$ API`: SDK не держит
+второй рукописный список методов.
+
+```text
+$ API (runtime) → api dump → api.schema.json / russiano2d.d.ts / API reference
+                                   ↓
+                              lint / validate / doctor
+```
+
+## Быстрый старт
+
+```bash
+./r2d-sdk doctor                 # здоровье runtime/API/schema/typings/docs/project
+./r2d-sdk api dump               # machine-readable снимок $ API
+./r2d-sdk lint game              # API-aware проверка игровых скриптов
+./r2d-sdk validate game          # project.json, main.js, ссылки на ассеты
+./r2d-sdk api generate           # schema + typings + docs из runtime metadata
+./r2d-sdk docs generate          # только docs/api/API_REFERENCE.md
+```
+
+Все команды печатают один JSON-объект; `--json` принимается для
+совместимости с GUI/CI/агентами. Код выхода: `0` — ok, `1` — диагностика,
+`2` — неверное использование.
+
+## API metadata
+
+`api dump` запускает runtime в режиме `--dump-api`: тот обходит живой `$` и
+`engine.*` после загрузки скриптов. В снимок входят:
+
+* `path`, `kind` (`function/object/number/string/boolean/array/null`);
+* для функций — `arity`, `args[{name,type}]`, `returns`;
+* для констант — детерминированное `value` (плавающие значения вроде
+  `engine.time`, `$.startScene`, `$.ctx.*` намеренно не записываются);
+* методы selector-обёртки (`$.selection.*`) и node-обёртки (`$.fn.*`).
+
+Снимок детерминирован и пригоден для `git diff`/CI. `api check` проверяет
+структуру и свежесть `api.schema.json`; если runtime API изменился, CI падает
+до генерации.
+
+```bash
+./r2d-sdk api check --engine build/russiano2d --game game
+```
+
+## Generated artifacts
+
+`api generate` пишет:
+
+| Файл | Что это |
+|---|---|
+| `api.schema.json` | нормализованный снимок для lint/CI/GUI |
+| `russiano2d.d.ts` | TypeScript declarations (tooling layer, игра остаётся JS) |
+| `docs/api/API_REFERENCE.md` | generated reference по namespaces/методам/константам |
+
+Все три файла имеют заголовок `GENERATED FILE — DO NOT EDIT MANUALLY`.
+Меняется только runtime `$ API`; затем `api generate`. `doctor` и CI проверяют,
+что артефакты не устарели.
+
+## Lint
+
+`r2d-sdk lint [путь]` — детерминированный сканер JS, который понимает `$ API`,
+а не только синтаксис. Он не style police и не заменяет тесты.
+
+Стабильные коды:
+
+| Код | Значение |
+|---|---|
+| `R2D001` | неизвестный метод/API (с подсказкой ближайшего имени) |
+| `R2D004` | неверное количество аргументов |
+| `R2D014` | неверный тип свойства |
+
+```bash
+./r2d-sdk lint game/main.js
+./r2d-sdk lint game --json
+```
+
+Пример: `$("player").att(1)` → `R2D001 Unknown method "att"; did you mean "at"?`
+
+Линтер не ругается на игровые namespace'ы и приватные `_`-имена: диагностика
+появляется только если родительский namespace известен как публичный.
+
+## Validate
+
+`r2d-sdk validate [каталог]` проверяет проект перед запуском/build:
+
+* `project.json` (`R2D200`), наличие `main.js`;
+* ссылки на ассеты в JS/RML/RCSS/JSON (`R2D100`);
+* известные ассеты через те же валидаторы, что CLI (`atlas/tilemap/audio/
+  input/rmlui/re2dmap/...`);
+* линтер JS API (диагностики `R2D001/004/014`).
+
+`validate <файл>` по-прежнему проверяет один ассет; `--project dir` — проект.
+
+## Doctor
+
+`r2d-sdk doctor [--project dir]` — один health check для CI/агента/GUI:
+
+```text
+runtime, api_metadata, schema, typings, docs, project, lint
+```
+
+`ok:true` только если все checks зелёные. В CI используется вместе с
+`api check`, `lint`, `validate` и `tools/sdk_recipes_check.py`.
+
+## GUI
+
+`sdk_tools.json` содержит `code-check` и `api-browser`. Оба открывают
+`Code Check / API Browser` — тонкую RmlUi-панель, которая вызывает **native**
+`r2d-sdk doctor/lint/validate` и показывает `api.schema.json`. Второго линтера
+или валидатора в JS нет.
+
+## Recipes
+
+`docs/recipes/README.md` — 18 коротких рецептов (player, enemy, weapon,
+projectile, door, pickup, trigger, checkpoint, camera, dialogue, inventory,
+save, platformer, top-down shooter, UI, audio, tilemap, particles). Каждый
+JS-блок проверяется через `r2d-sdk lint` (`tools/sdk_recipes_check.py`).
+
+## CI
+
+`tools/ci_verify.py` после обычных тестов запускает:
+
+```text
+api check → schema freshness
+lint game
+validate game
+doctor
+recipes lint
+```
+
+CI падает, если metadata сломана, generated artifacts устарели или рецепт
+использует несуществующий API.
+
+## Ограничения
+
+* Metadata структурная: `arity/args/returns/kind`; содержательные
+  `description/since/deprecated` пока не заполняются registry.
+* Lint — сканер, не полный JS AST; проверка событий (`R2D022`) — следующий шаг.
+* GUI-панель минимальная: doctor/lint/validate/schema, без отдельного
+  визуального дерева API.
+
+
+---
+
+## SDK agent tooling — Phase 0 report
+
+<sub>источник: `docs/SDK_TOOLING_PHASE0_REPORT.md`</sub>
+
+# SDK agent tooling — Phase 0 report
+
+Источник: спецификация `R2D_SDK_AGENT_TOOLING_SPEC.md` (Phase 0: Documentation &
+Repository Cleanup). Отчёт фиксирует фактически выполненное, а не план.
+
+## Updated docs
+
+- `AGENTS.md` — корневой файл правил для агентов (до Phase 0 отсутствовал в
+  корне; в `dist/*/AGENTS.md` лежала только release-версия).
+- `docs/SDK.md` проверен против текущего CLI `r2d-sdk` (команды, JSON-выход,
+  GUI→native мост, тесты) — расхождений по перечню команд не найдено.
+- `README.md`, `docs/HIGH_LEVEL_API.md`, `docs/highlevel/*`, `docs/TESTING.md`,
+  `docs/BUILD.md`, `docs/AGENT_API.md` прогнаны существующими гейтами.
+
+## Removed obsolete docs
+
+- Устаревших/дублирующихся generated-артефактов API не найдено: до Phase 1 в
+  репозитории нет `api.schema.json`/`.d.ts`, поэтому нечего было оставлять
+  «канонический вариант».
+- Служебные release-архивы `dist/*.tar.gz` и release notes оставлены как
+  осознанная история релизов (не удалять).
+
+## Removed service files
+
+- `dist/.DS_Store` (отслеживался git).
+- `dist/macos-arm64/.DS_Store` и другие `.DS_Store` внутри `dist/` (на диске,
+  не отслеживались).
+- `.DS_Store` в `witch_game/` (локальный каталог, не часть продукта).
+
+## Updated ignore rules
+
+`.gitignore` дополнен явными правилами `.DS_Store`, `*.old`, `*.bak`, `*.tmp`,
+`*~` (раньше `.DS_Store` был только в IDE-блоке).
+
+## Verification
+
+```text
+python3 tests/doc_claims_test.py     ok
+python3 tests/doc_coverage_test.py   ok
+python3 tests/api_docs_sync_test.py  ok
+python3 tests/api_freeze_test.py     ok
+```
+
+Примеры из документации проверяются гейтами API-freeze/docs-sync; полный
+автоматический прогон всех JS-блоков из всех `.md` пока не существует (это
+Phase 7/CI, не Phase 0). Documentation claim tests — единственный текущий
+механизм проверки примеров, и он зелёный.
+
+## Remaining known documentation gaps
+
+1. `dist/macos-arm64/` не содержит каталог `sdk/`, хотя `README.md` пакета его
+   упоминает; `dist/macos-x86_64/sdk/` присутствует. Это расхождение
+   release-пакета, а не root-документации; чинится пересборкой/обновлением dist
+   релизным инструментом, не ручным копированием (иначе разъедется
+   `SHA256SUMS.txt`).
+2. `dist/` содержит релиз 1.2.4 и release notes 1.2.0–1.2.4; актуализация
+   release notes — часть релизного процесса, не Phase 0.
+3. Корневой `README.md` — витрина проекта, а не SDK reference; SDK-документация
+   живёт в `docs/SDK.md`. Это осознанное разделение.
 
 
 ---
@@ -14436,6 +14699,14 @@ python3 tools/bench_api.py --baseline docs/benchmarks/api-performance.json \
 повторить замер без фоновой нагрузки. Это сигнал к расследованию, не автоматический
 приговор. Быстрые unit checks runner без performance run:
 `python3 tests/bench_api_runner_test.py`.
+
+## SDK tooling gates
+
+`tools/ci_verify.py` после обычных тестов проверяет единый SDK backend:
+`api check` (schema freshness), `lint game`, `validate game`, `doctor` и
+`tools/sdk_recipes_check.py` (18 рецептов из `docs/recipes/README.md` проходят
+API-aware lint). Generated artifacts (`api.schema.json`, `russiano2d.d.ts`,
+`docs/api/API_REFERENCE.md`) обязаны быть свежими — иначе doctor/CI падают.
 
 ## Re2D profiler UI + mist (P4/P5)
 

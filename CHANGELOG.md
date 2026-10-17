@@ -1,5 +1,44 @@
 # История изменений
 
+## 1.2.5 — 2026-10-17
+
+<!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
+
+8 коммитов в релизе.
+
+### Добавлено
+
+- SDK tooling: Phase 0 cleanup + API metadata registry, schema/typings, lint (`1474fdd0b`)
+  - Phase 0: root AGENTS.md, .gitignore service patterns, удалён tracked
+  dist/.DS_Store, отчёт docs/SDK_TOOLING_PHASE0_REPORT.md.
+  - Runtime: --dump-api (r2d_api_metadata snapshot) — живой $ API как источник
+  истины; deterministic flat metadata (3594 entries incl. engine/selector).
+  - r2d-sdk api dump/check/generate: JSON snapshot, structural check, stale-schema
+  gate, api.schema.json + russiano2d.d.ts generation (generated headers).
+  - r2d-sdk lint: API-aware scanner с R2D001/002/004/014, suggestion, --json,
+  schema-based; реальная игра проходит чисто.
+  - docs SDK.md/AGENTS обновлены под новые команды позже; CTest 140/140.
+
+### Документация
+
+- docs: SDK agent tooling guide + публикация SDK/API reference и recipes на сайте (`c04a369e3`)
+
+### Тесты и гейты
+
+- SDK tooling: Phase 6 GUI + Phase 7 recipes/CI (`148d16c7b`)
+- SDK tooling: doctor + deterministic metadata/docs (`d941b7bbc`)
+- SDK tooling: api generate schema/typings, project validate, lint hardening (`b134f906a`)
+
+### Сборка и версии
+
+- release: package SDK schema/typings/docs and gate artifacts before packing (`3afc5e001`)
+
+### Прочее
+
+- Re2D controller: восстановление grounded-контакта из JS-моста (`e204176f0`)
+- SDK tooling: generated $ API reference (Phase 5) (`ff334d144`)
+
+<!-- release-notes:end -->
 ## 1.2.4 — 2026-10-17
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->

@@ -154,6 +154,22 @@
         "*.batch.json",
         "*.agent.json"
       ]
+    },
+    {
+      "id": "code-check",
+      "name": "Code Check",
+      "description": "Doctor/lint/validate проекта через native r2d-sdk; тот же backend, что CLI.",
+      "last_updated": "2026-10-17T16:30:00+03:00",
+      "entry": "code-check",
+      "category": "devtools"
+    },
+    {
+      "id": "api-browser",
+      "name": "API Browser",
+      "description": "Сгенерированная schema/API reference Russiano2D $ API.",
+      "last_updated": "2026-10-17T16:30:00+03:00",
+      "entry": "api-browser",
+      "category": "devtools"
     }
   ]
 }

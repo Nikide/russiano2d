@@ -528,6 +528,14 @@ python3 tools/bench_api.py --baseline docs/benchmarks/api-performance.json \
 приговор. Быстрые unit checks runner без performance run:
 `python3 tests/bench_api_runner_test.py`.
 
+## SDK tooling gates
+
+`tools/ci_verify.py` после обычных тестов проверяет единый SDK backend:
+`api check` (schema freshness), `lint game`, `validate game`, `doctor` и
+`tools/sdk_recipes_check.py` (18 рецептов из `docs/recipes/README.md` проходят
+API-aware lint). Generated artifacts (`api.schema.json`, `russiano2d.d.ts`,
+`docs/api/API_REFERENCE.md`) обязаны быть свежими — иначе doctor/CI падают.
+
 ## Re2D profiler UI + mist (P4/P5)
 
 `demos/re2d_bench_lab` теперь показывает живую profiler-строку
