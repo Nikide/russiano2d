@@ -232,7 +232,13 @@ function initLayerNode(node) {
 /** Задаёт коэффициент и тут же фиксирует якорь по текущей позиции. */
 function setParallaxFactor(node, value) {
     if (value === null || value === undefined) {
-        delete node.parallax_factor;
+        // null — это ЯВНЫЙ отказ, а не «поле не задано». Раньше поле просто
+        // удалялось, и на следующем кадре propagateLayer снова раздавал
+        // коэффициент родителя: `.parallax(null)` у ребёнка слоя не держался,
+        // узел продолжал уезжать с камерой (пункт I1 отчёта BASHNYA).
+        // core.js уже отличает null от undefined при сборе признаков, поэтому
+        // узел выпадает из parallax-прохода, пока коэффициент не зададут снова.
+        node.parallax_factor = null;
         parallax_state.delete(node);
         touchRegistry();   // состав параллакс-узлов изменился — сводка устарела
         return;

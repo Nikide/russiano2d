@@ -140,11 +140,15 @@ function asObject() {
     return out;
 }
 
-function resolveName(value) {
-    if (typeof value === 'string') return value;
-    const node = value && value.nodes ? value.nodes[0] : value;
-    const name = node && node.attrs && node.attrs.layer;
-    return typeof name === 'string' ? name : '';
+/**
+ * Узел по цели слоя: селектор, обёртка или сырой узел. Один разбор на все
+ * методы — раньше строка в `of()` не разворачивалась и молча давала null.
+ */
+function layerNodeOf(target) {
+    if (target === null || target === undefined) return null;
+    if (typeof target === 'string') return query(target)[0] || null;
+    const node = target.nodes ? target.nodes[0] : target;
+    return node && node.tag ? node : null;
 }
 
 export function installCollisionLayers($) {
@@ -240,9 +244,15 @@ export function installCollisionLayers($) {
             return collision;
         },
 
-        /** Имя слоя узла (если он поставлен через apply). */
+        /**
+         * Имя слоя узла — по селектору, обёртке или сырому узлу:
+         * `of('#hero')`, `of($('#hero'))`, `of($('#hero').get(0))` → `'player'`.
+         * `null`, если слоя нет, имя больше не зарегистрировано или цель не
+         * найдена. «С чем сталкивается» — не этот метод, а
+         * `$.world.contactsOf` / `$.world.touching`.
+         */
         of(target) {
-            const node = target && target.nodes ? target.nodes[0] : target;
+            const node = layerNodeOf(target);
             const name = node && node.attrs && node.attrs.layer;
             return typeof name === 'string' && registry.has(name) ? name : null;
         },

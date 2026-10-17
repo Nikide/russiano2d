@@ -9,8 +9,15 @@ import { engine } from './native.js';
 import { ctx, Node, Wrapper, wrap, wrapOne, query, TAGS, packColor, resolveSprite, nodeBounds,
          nodesWithFacet, engineOf, nativeNodes } from './core.js';
 
+/**
+ * Гравитация нового мира: то же значение, что у движка до первого вызова
+ * `$.world.gravity()`. `destroy()` возвращает к нему — «перезапуск уровня»
+ * не должен оставлять гравитацию предыдущего (космос, аркада сверху).
+ */
+const DEFAULT_GRAVITY = { x: 0, y: 2000 };
+
 const state = {
-    gravity: { x: 0, y: 2000 },
+    gravity: { ...DEFAULT_GRAVITY },
     bounds: null,          // { x, y, w, h }
     bounds_solid: false,
     time_scale: 1,
@@ -150,6 +157,120 @@ export function installWorld($) {
         count(sel) {
             if (sel) return query(sel).length;
             return ctx.nodes.filter((n) => !n.attrs.ui && !n.classes.has('world-bound')).length;
+        },
+
+        // --- Удаление узлов -------------------------------------------------
+        /**
+         * Удалить узлы по цели: `$.world.remove('#enemy')`.
+         *
+         * Цель обязательна: селектор, сырой узел или обёртка. Без цели — НЕ
+         * «удалить всё» (для этого есть `clear()`/`destroy()`), а структурная
+         * ошибка `R2D_WORLD_REMOVE_NO_TARGET`: случайный `remove()` в горячем
+         * пути не должен сносить HUD. Промах — `0` и одно предупреждение на
+         * сырую цель (`R2D_WORLD_REMOVE_MISS`).
+         *
+         * Возвращает число исчезнувших узлов. Ребёнок удалённого родителя
+         * входит в счёт: он тоже перестал существовать. `persistent` НЕ
+         * защищает от явного `remove()` — защита нужна массовым операциям,
+         * а не адресному «убери вот этот узел».
+         */
+        remove(target) {
+            if (target === undefined || target === null || target === '') {
+                reportWorldOnce('remove-no-target', '$.world.remove', 'R2D_WORLD_REMOVE_NO_TARGET',
+                    'нужна цель (селектор, узел или обёртка); «удалить всё» — это clear()/destroy()');
+                return 0;
+            }
+            const nodes = targetsOf(target);
+            if (nodes === null) {
+                reportWorldOnce('remove-bad-target', '$.world.remove', 'R2D_WORLD_REMOVE_TARGET',
+                    `цель должна быть селектором, узлом или обёрткой, получено ${typeof target}`);
+                return 0;
+            }
+            if (nodes.length === 0) {
+                reportWorldOnce('miss:' + String(target), '$.world.remove', 'R2D_WORLD_REMOVE_MISS',
+                    `цель "${String(target)}" не найдена — удалено 0 узлов`);
+                return 0;
+            }
+            const before = ctx.nodes.length;
+            for (const node of nodes) {
+                if (!node.removed) node.destroy();
+            }
+            return Math.max(0, before - ctx.nodes.length);
+        },
+
+        /**
+         * Очистить мир от игровых узлов: `$.world.clear()`.
+         *
+         * По умолчанию остаются:
+         *   * `persistent` — класс `scene-persistent` и `attrs.persistent`
+         *     (HUD, счётчик патронов: их владелец — игра, а не уровень);
+         *   * узлы интерфейса (`<ui.*>`); `{ ui: true }` снимает и их;
+         *   * стены `bounds()` (`world-bound`) и служебные узлы подсистем
+         *     (например, слой глобального затемнения).
+         *
+         * Возвращает число удалённых узлов. Чего НЕ делает: не трогает
+         * таймеры, твины, сцены, звук и частицы — это `$.scene`/`$.fx`;
+         * границу мира, фон, гравитацию и timeScale оставляет как были
+         * (полный перезапуск — `destroy()`).
+         */
+        clear(opts) {
+            const include_ui = !!(opts && opts.ui === true);
+            const before = ctx.nodes.length;
+            for (const node of ctx.nodes.slice()) {
+                if (node.removed || node.internal) continue;
+                if (!include_ui && node.attrs.ui) continue;
+                if (isPersistent(node)) continue;
+                if (node.classes.has('world-bound')) continue;
+                node.destroy();
+            }
+            return Math.max(0, before - ctx.nodes.length);
+        },
+
+        /**
+         * Перезапуск мира целиком: `$.world.destroy()`.
+         *
+         * Отличие от `clear()`: снимает ВСЁ, включая persistent, интерфейс и
+         * стены `bounds()` (это разгрузка уровня, а не «новая волна»), затем
+         * возвращает глобальное состояние к стартовому:
+         * границы — нет, фон — нет, гравитация `0/2000`, timeScale `1`,
+         * `pause()` снят. Таймеры/сцены/звук — по-прежнему `$.scene`.
+         *
+         * Возвращает сводку `{ nodes, bodies, ui, persistent, gravity }`:
+         * `nodes` — сколько узлов исчезло, `ui`/`persistent` — сколько из них
+         * было помечено (до удаления), `bodies` — тел в физике после,
+         * `gravity` — гравитация после.
+         */
+        destroy() {
+            const before = ctx.nodes.length;
+            let ui = 0;
+            let persistent = 0;
+            const doomed = ctx.nodes.slice();
+            for (const node of doomed) {
+                if (node.attrs.ui) ui++;
+                if (isPersistent(node)) persistent++;
+            }
+            for (const node of doomed) {
+                if (!node.removed) node.destroy();
+            }
+            const nodes = Math.max(0, before - ctx.nodes.length);
+
+            // Мир больше не обещает границ/фона: стены сняты выше, state не
+            // должен говорить обратное.
+            state.bounds = null;
+            state.bounds_solid = false;
+            state.background = null;
+            state.paused = false;
+            state.time_scale = 1;
+            state.gravity = { ...DEFAULT_GRAVITY };
+            engine.setGravity(DEFAULT_GRAVITY.x, DEFAULT_GRAVITY.y);
+
+            return {
+                nodes,
+                bodies: typeof engine.bodyCount === 'function' ? engine.bodyCount() : 0,
+                ui,
+                persistent,
+                gravity: { ...state.gravity },
+            };
         },
 
         /** Узлы, чьи границы накрывают точку; r — радиус вокруг точки. */
@@ -793,6 +914,50 @@ function worldEvents(dt) {
         }
         node._hp_seen = now_hp;
     }
+}
+
+/**
+ * Узлы по цели remove(): массив (уже удалённые выкинуты), либо null, если
+ * тип цели не подходит. Пустой массив — «цель не нашлась».
+ */
+function targetsOf(target) {
+    if (typeof target === 'string') return query(target).slice();
+    if (target instanceof Wrapper) return target.nodes.filter((n) => n && !n.removed);
+    if (Array.isArray(target)) return null;   // один путь: селектор/узел/обёртка
+    if (target && typeof target.destroy === 'function') {
+        return target.removed ? [] : [target];
+    }
+    return null;
+}
+
+/** Узел, который смена сцены/clear() обязана оставить: два способа пометки. */
+function isPersistent(node) {
+    if (node.classes && node.classes.has('scene-persistent')) return true;
+    return !!(node.attrs && node.attrs.persistent === true);
+}
+
+/**
+ * Один раз на ключ сообщить о проблеме мира: структурная запись для агента
+ * (`$.debug.errors`) плюс строка в журнал. Ключ — сырая цель или вид ошибки:
+ * `remove('#nope')` каждый кадр не должен заливать лог.
+ */
+const world_warned = new Set();
+
+function reportWorldOnce(key, where, code, message) {
+    if (world_warned.has(key)) return;
+    world_warned.add(key);
+    const debug = ctx.$ && ctx.$.debug;
+    if (debug && typeof debug.reportError === 'function') {
+        debug.reportError(where, new Error(message), {
+            code, subsystem: 'world', recoverable: true,
+        });
+        return;
+    }
+    if (typeof ctx.reportError === 'function') {
+        ctx.reportError(where, new Error(message));
+        return;
+    }
+    ctx.log(`$: ${where}: ${message}`);
 }
 
 /** Узел по обёртке, узлу или селектору (для своих методов мира). */

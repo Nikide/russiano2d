@@ -727,6 +727,9 @@ $.world.pause() .resume() .isPaused()   // «мир без гравитации�
 $.world.freeze() .thaw()                // остановить все тела, не трогая гравитацию
 $.world.timeScale(0.5)
 $.world.spawn('<enemy>', 100, 200)          // → обёртка
+$.world.remove('#enemy')                    // удалить по селектору/узлу/обёртке → число
+$.world.clear({ ui: true })                 // убрать игровые узлы, persistent остаются → число
+$.world.destroy()                           // перезапуск уровня → { nodes, bodies, ui, persistent, gravity }
 $.world.all()                               // все узлы (обёртка)
 $.world.count(sel?)                         // узлов в мире (без интерфейса и границ)
 $.world.query(x, y, r?)                     // узлы в точке или радиусе
@@ -741,6 +744,14 @@ $.world.lineOfSight(from, to, { mask })      // → bool
 $.world.sort('layer' | 'y')                 // порядок отрисовки ('layer' = 'z')
 $.world.sortWith((a, b) => a.y - b.y)       // свой порядок
 ```
+
+**Удаление и очистка.** `remove(target)` требует цель (без неё —
+`R2D_WORLD_REMOVE_NO_TARGET`, а не «удалить всё»), промах — `0` и
+`R2D_WORLD_REMOVE_MISS`. `clear()` по умолчанию оставляет persistent-узлы,
+интерфейс и стены `bounds()`, `{ ui: true }` снимает и UI; таймеры/сцены не
+трогает. `destroy()` снимает всё (включая persistent и UI), убирает границы и
+фон и возвращает гравитацию `0/2000`, `timeScale` `1`, `pause` off. Подробности
+и числа — [world.md](highlevel/world.md#12-удаление-узлов-clear-и-destroy).
 
 **Свип формы.** `$.world.castShape(from, to, opts)` везёт объём из `from` в `to`
 и возвращает первое препятствие (`{ hit, point, normal, distance, fraction,
