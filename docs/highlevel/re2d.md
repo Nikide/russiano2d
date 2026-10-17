@@ -23,6 +23,7 @@ $.render(() => world.render(view,400,240));
 | `world.sprite(target, opts)` | регистрирует обычный узел как flat directional atlas sprite; см. раздел ниже |
 | `world.hit(target, opts)` / `world.hitRemove(target)` | регистрирует/снимает actor hit proxy для trace (P0-B) |
 | `world.hit(target, {zones})` | multi-zone boss hit proxy: head/body bands и damage multiplier |
+| `world.impactInfo(opts)` / `ricochet(dir,normal)` | material/terrain tag и отражение для damage-response |
 | `world.trace(opts)` / `world.traceAll(opts)` | ближайшее попадание / все попадания мира и actor-прокси |
 | `world.findCell/findWall/findSpan/findPortal(name)` | authored semantic ID → runtime handle (или null) |
 | `world.portalOpen(index, fraction)` / `portalFraction(index)` | плавное состояние портала 0..1 |
@@ -493,6 +494,21 @@ hit.zoneMultiplier;  // 4 для головы
 Максимум 4 зоны, `from<to` в 0..1, multiplier ≥ 0; невалидные полосы
 отклоняются без изменения registry. Ограничения: зоны вертикальные
 (горизонтальные/руки-сегменты — P3+); множитель применяет игра, не engine.
+
+## Material response и ricochet (P2)
+
+```js
+const hit = world.impactInfo({ from: {x,y,h}, to: {x,y,h} });
+hit.surface; hit.material;          // authored surface material name или null
+hit.terrain;                        // {kind,name,moveScale,frictionScale,damagePerSecond}
+hit.thickness;                      // приблизительная толщина вдоль луча
+world.ricochet(dir, hitNormal);     // отражённый вектор по нормали попадания
+```
+
+`impactInfo` — gameplay-запрос: trace по миру + authored terrain/materal tag,
+опционально продолжение луча за стену для приблизительной толщины. Игра
+выбирает звук/decal/частицы/пробитие. Ограничения: толщина — эвристика по
+следующему world-хиту, не CSG-толщина; material tag только у surface material.
 
 ## Свет, материал, изменение мира
 

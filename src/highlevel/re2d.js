@@ -1098,6 +1098,38 @@ function rendererWorldWrapper($, native) {
     };
     world.onBreakable = fn => { $.on('breakable.broken', event => fn(event.data ?? {}, event)); return world; };
 
+    // P2 material response / ricochet helpers: trace + authored terrain +
+    // surface material tag. Game chooses sound/decal/particles; engine only
+    // resolves the semantics.
+    world.impactInfo = (options = {}) => {
+        const hit = world.trace({ from: options.from, to: options.to, mask: options.mask ?? ['world'] });
+        if (!hit) return null;
+        const info = { ...hit, terrain: null, material: null, thickness: null };
+        if (hit.type === 1) {
+            info.material = native.surfaceMaterialName(hit.surface);
+            const terrain = world.terrainAt(hit.x, hit.y, hit.h);
+            if (terrain) info.terrain = terrain;
+            if (options.thickness !== false && options.to) {
+                const dx = options.to.x - options.from.x, dy = options.to.y - options.from.y;
+                const dh = (options.to.h ?? 0) - (options.from.h ?? 0);
+                const len = Math.hypot(dx, dy, dh) || 1;
+                const step = Math.min(4, len * 0.005);
+                const exit = world.trace({
+                    from: { x: hit.x + dx / len * step, y: hit.y + dy / len * step, h: hit.h + dh / len * step },
+                    to: options.to, mask: ['world'],
+                });
+                if (exit && exit.type === 1) info.thickness = (exit.fraction - hit.fraction) * len;
+            }
+        }
+        return info;
+    };
+    world.ricochet = (dir, normal) => {
+        const d = [Number(dir.x ?? 0), Number(dir.y ?? 0), Number(dir.h ?? 0)];
+        const n = [Number(normal.x ?? 0), Number(normal.y ?? 0), Number(normal.h ?? 0)];
+        const dot = d[0] * n[0] + d[1] * n[1] + d[2] * n[2];
+        return { x: d[0] - 2 * dot * n[0], y: d[1] - 2 * dot * n[1], h: d[2] - 2 * dot * n[2] };
+    };
+
     // P2 fog zones: authored semantic helper over per-span fog; blending is
     // driven by the span the camera/player occupies.
     world.fogZone = (options = {}) => {

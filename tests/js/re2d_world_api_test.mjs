@@ -84,6 +84,7 @@ const native = {
     postReset: () => calls.post.push(['reset']),
     postEval: () => ({ colorScale: [1.1, 0.9, 1], colorAdd: [0, 0, 0], tint: [1, 0.9, 0.8, 0.2],
                        vignette: 0.4, flash: 0.5, pixelSize: 1, chroma: 0.001, bloom: 0.3 }),
+    surfaceMaterialName: (index) => 'brick',
     spanLight: () => ({ level: 1, r: 1, g: 1, b: 1, fogDensity: 0.002, fogStart: 100, fogR: 0.1, fogG: 0.2, fogB: 0.3 }),
     spanHeight: () => {}, spanSky: () => {},
     spanAt: () => 2,
@@ -533,6 +534,16 @@ test('world.debug.overlay проецирует automap и semantic точки', 
     const overlay = world.debug.overlay({ x: 0, y: 0, h: 48, yaw: 0, pitch: 0, fov: 70, near: 1 }, { width: 320, height: 180 });
     truthy(Array.isArray(overlay.lines));
     truthy(overlay.points.some(p => p.kind === 'trigger' && p.id === 'gate.use'));
+    world.dispose();
+});
+
+test('world.impactInfo/ricochet отдают material/terrain/thickness', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const impact = world.impactInfo({ from: { x: 0, y: 0, h: 48 }, to: { x: 100, y: 0, h: 48 } });
+    eq(impact.type, 2); // mock trace returns sprite
+    eq(impact.terrain, null);
+    const reflected = world.ricochet({ x: 1, y: -1, h: 0 }, { x: 0, y: 1, h: 0 });
+    eq(reflected.x, 1); eq(reflected.y, 1); eq(reflected.h, 0);
     world.dispose();
 });
 

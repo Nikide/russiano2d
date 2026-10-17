@@ -1379,6 +1379,15 @@ static JSValue world_material_set(JSContext *ctx,JSValueConst self,int argc,JSVa
 fail:
     for(int i=0;i<4;i++)if(strings[i])JS_FreeCString(ctx,strings[i]);return JS_EXCEPTION;
 }
+static JSValue world_surface_material_name(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    int index=(int)p[0];
+    if(index<0||index>=w->world.surface_count)return JS_NULL;
+    int material=w->world.surface_materials?w->world.surface_materials[index]:-1;
+    if(material<0||material>=R2D_WORLD_MAX_MATERIALS||!w->world.materials[material].used)return JS_NULL;
+    return JS_NewString(ctx,w->world.materials[material].name);
+}
 static JSValue world_surface_material_set(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float index;if(!w||!world_numbers(ctx,argc,argv,1,&index))return JS_EXCEPTION;
@@ -1467,6 +1476,7 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"saveMapHash",JS_NewCFunction(ctx,world_save_hash,"saveMapHash",0));
     JS_SetPropertyStr(ctx,handle,"saveStateJSON",JS_NewCFunction(ctx,world_save_state,"saveStateJSON",0));
     JS_SetPropertyStr(ctx,handle,"loadStateJSON",JS_NewCFunction(ctx,world_load_state,"loadStateJSON",1));
+    JS_SetPropertyStr(ctx,handle,"surfaceMaterialName",JS_NewCFunction(ctx,world_surface_material_name,"surfaceMaterialName",1));
     JS_SetPropertyStr(ctx,handle,"surfaceTerrain",JS_NewCFunction(ctx,world_surface_terrain,"surfaceTerrain",2));
     JS_SetPropertyStr(ctx,handle,"surfaceTerrainInfo",JS_NewCFunction(ctx,world_surface_terrain_info,"surfaceTerrainInfo",1));
     JS_SetPropertyStr(ctx,handle,"surfaceConveyor",JS_NewCFunction(ctx,world_surface_conveyor,"surfaceConveyor",5));
