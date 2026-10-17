@@ -87,6 +87,7 @@ static const Validator k_validators[] = {
     { "sdk.agent-session", sdk_validate_agent_session },
     { "json",         validate_json },
     { "sprite.atlas", sdk_validate_atlas },
+    { "re2d.world",   sdk_validate_re2dmap },
     { "tilemap",      sdk_validate_tilemap },
     { "particles",    sdk_validate_particles },
     { "collision",    sdk_validate_collision },

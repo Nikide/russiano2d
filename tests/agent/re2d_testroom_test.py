@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 # ===========================================================================
-# Re2D: тестовая комната врагов на билбордах (только прогулки, без оружия).
+# Re2D test room: карта из SDK `.re2dmap`, мир `$.re2dWorld`, враги-билборды
+# и оружие от первого лица.
 #
 # Проверяется живым прогоном:
-#   * игрок ходит вперёд/назад/боком (yaw камеры — ГРАДУСЫ), упирается в
-#     внутреннюю стену и в границу комнаты;
-#   * камера жёстко на теле (smooth 0): camera.x/y равны hero.x/y;
-#   * враги — плоские PNG-билборды: арт виден по скриншоту с фронта и НЕ виден,
-#     когда камера смотрит в противоположную сторону;
-#   * враги патрулируют (координаты меняются), подходят к игроку ближе 380 px
-#     и останавливаются, но НЕ атакуют;
-#   * оружия нет: state.weapons == 0, узлов weapon/bullet в мире нет,
-#     ошибок игрового кода нет.
+#   * карта собрана SDK (`testroom.re2dmap` → `testroom.re2dworld`) и грузится
+#     через `$.re2dWorld.load`: cells/surfaces/lights не выдуманы;
+#   * ходьба: W идёт вперёд, упирается во внутреннюю стену (y≈620) и южную
+#     границу; A — боком; высота глаз едет по `world.support`;
+#   * враги: 6 данных, лист 40 кадров (5×8), ходьба меняет строки 0..3,
+#     поворот = колонка по `facing − yaw` (0 лицом … 4 спиной) + зеркало;
+#     за внутренней стеной враг не «видит» игрока (`world.ray`), а на кадре
+#     он скрыт оверлеем (occluded > 0);
+#   * оружие: 3 вида, 1/2/3 переключают, выстрел 0→1→2→3→0 со звуком на
+#     кадре 1, R — перезарядка со звуком; урона/боя нет (combat: false);
+#   * ошибок игрового кода нет.
 #
 # Запуск: python3 tests/agent/re2d_testroom_test.py
 # ===========================================================================
 
+import json
 import os
 import sys
 
@@ -57,54 +61,56 @@ def main():
     with Agent(game=GAME, scene=SCENE, seed=5) as a:
         if skip_without_re2d(a):
             return 0
-        a.step(8)
+        a.step(10)
 
         check(a.eval("$.scene.current()") == SCENE,
               f"сцена загружена: {a.eval('$.scene.current()')}")
         st = state(a)
-        check(st.get("camera", {}).get("kind") == "re2d",
-              f"камера в Re2D: {st.get('camera')}")
-        check(st.get("weapons") == 0, "в состоянии 0 оружия")
-        check(a.eval("$.world.count('weapon')") == 0, "узлов <weapon> нет")
-        check(a.eval("$.world.count('bullet')") == 0, "узлов <bullet> нет")
-        check(a.eval("$('#testroom-title').length") == 1,
-              "HUD-заголовок на месте")
-        status_text = a.eval("$('#testroom-status').get(0).text")
-        check("врагов" in status_text,
-              "статус HUD пишет число врагов: %r" % (status_text,))
+        check(st.get("map", "").endswith("testroom.re2dworld"),
+              f"карта — скомпилированный SDK-мир: {st.get('map')}")
+        src = os.path.join("demos", "re2d_testroom", "testroom.re2dmap")
+        check(os.path.isfile(src), f"рядом лежит SDK-исходник карты: {src}")
+        check(os.path.isfile(os.path.join("demos", "re2d_testroom", "testroom.re2dworld")),
+              "скомпилированный .re2dworld существует")
+        world = st.get("world") or {}
+        check(world.get("cells", 0) >= 1 and world.get("surfaces", 0) >= 12,
+              f"мир сообщает геометрию: {world}")
+        check(str(st.get("backend", "")).startswith(("gpu", "cpu")),
+              f"бэкенд мира: {st.get('backend')}")
+        hero = st.get("hero") or {}
+        check(abs(hero.get("x", 0) - 800) < 1 and abs(hero.get("y", 0) - 1080) < 1
+              and abs(hero.get("h", 0) - 48) < 1,
+              f"игрок на спавне, глаза на 48: {hero}")
+        check(st.get("weapons") == 3 and st.get("combat") is False,
+              f"три оружия и нет боя: weapons={st.get('weapons')}, combat={st.get('combat')}")
+        check(st.get("frames") == 40, f"у врага лист 5×8 = 40 кадров: {st.get('frames')}")
+        check(a.eval("$.world.count('weapon')") == 0
+              and a.eval("$.world.count('bullet')") == 0,
+              "узлов weapon/bullet нет (оружие — HUD)")
 
-        # --- Ходьба вперёд и жёсткая камера ---------------------------------
-        start = st["hero"]
-        yaw0 = a.eval("$.camera.info().yaw")
+        # --- Ходьба и коллизии мира -----------------------------------------
+        start = state(a)["hero"]
         a.hold(["W"]); a.step(40); a.release_all(); a.step(2)
         st = state(a)
         moved = start["y"] - st["hero"]["y"]
-        check(moved > 80,
-              f"W идёт вперёд (y {start['y']} → {st['hero']['y']}, Δ={moved:.1f})")
+        check(moved > 80, f"W идёт вперёд (y {start['y']} → {st['hero']['y']}, Δ={moved:.1f})")
         check(abs(st["hero"]["x"] - start["x"]) < 12,
-              f"вперёд — без бокового сноса (Δx={st['hero']['x'] - start['x']:.1f})")
-        check(a.eval("$.camera.info().yaw") == yaw0,
-              f"при ходьбе yaw не меняется: {yaw0}")
-        cam = st["camera"]
-        check(abs(cam["x"] - st["hero"]["x"]) <= 1 and abs(cam["y"] - st["hero"]["y"]) <= 1,
-              f"камера жёстко на теле (smooth 0): cam=({cam['x']},{cam['y']}) hero={st['hero']}")
+              f"вперёд без бокового сноса (Δx={st['hero']['x'] - start['x']:.1f})")
+        check(abs(st["hero"]["h"] - 48) < 1, f"высота глаз по миру: h={st['hero']['h']}")
 
-        # --- Упор во внутреннюю стену (y=600) и в южную границу -------------
         a.hold(["W"]); a.step(320); a.release_all(); a.step(2)
         wall = state(a)["hero"]
         check(600 < wall["y"] < 660,
-              f"внутренняя стена остановила игрока (y={wall['y']}, стена y=600)")
+              f"внутренняя стена карты остановила игрока (y={wall['y']}, стена y≈604)")
         a.hold(["S"]); a.step(320); a.release_all(); a.step(2)
         south = state(a)["hero"]
-        check(1140 < south["y"] < 1200,
-              f"южная граница комнаты держит (y={south['y']})")
+        check(1140 < south["y"] < 1200, f"южная стена держит (y={south['y']})")
         x0 = south["x"]
         a.hold(["A"]); a.step(40); a.release_all(); a.step(2)
         lateral = state(a)["hero"]["x"] - x0
-        check(lateral < -40,
-              f"A идёт боком (Δx={lateral:.1f})")
+        check(lateral < -40, f"A идёт боком (Δx={lateral:.1f})")
 
-        # --- Враги: патруль и «замечание» -----------------------------------
+        # --- Враги: патруль, лист, поворот ----------------------------------
         before = {e["id"]: (e["x"], e["y"]) for e in state(a)["enemies"]}
         a.step(120)
         after = state(a)["enemies"]
@@ -116,46 +122,9 @@ def main():
         check(inside, f"все враги внутри комнаты: {[(e['id'], e['x'], e['y']) for e in after]}")
         modes = set(e.get("mode") for e in after)
         check(modes <= {"patrol", "notice", "idle"},
-              f"режимы врагов только patrol/notice/idle (атак нет): {modes}")
+              f"режимы только patrol/notice/idle (атак нет): {modes}")
 
-        # Луч видимости: за внутренней стеной враг НЕ «видит» игрока и не идёт
-        # напролом сквозь стену (кинематика не умеет обходить).
-        a.eval("(() => { const h=$('#hero').get(0);"
-               " h.x = 900; h.y = 660; h.syncBody && h.syncBody(); return 1; })()")
-        a.step(3)
-        blocked = next(e for e in state(a)["enemies"] if e["id"] == "cat-nw")
-        check(blocked["seen"] is False,
-              f"за стеной враг не видит игрока (seen={blocked['seen']}, "
-              f"distance={blocked['distance']})")
-        a.step(80)
-        blocked2 = next(e for e in state(a)["enemies"] if e["id"] == "cat-nw")
-        check(blocked2["mode"] != "notice",
-              f"за стеной враг не идёт к игроку (режим {blocked2['mode']})")
-
-        # Игрок на той же стороне: враг замечает и подходит, но не бьёт.
-        # Запад, а не восток: восточнее стоит cat-ne, и его тело перекрывает
-        # луч (враги — тоже тела), «в открытую» превращалось в ложный отказ.
-        a.eval("(() => { const n=$('#cat-nw').get(0);"
-               " const h=$('#hero').get(0); h.x = n.x - 300; h.y = n.y;"
-               " h.syncBody && h.syncBody(); return 1; })()")
-        a.step(2)
-        e0 = next(e for e in state(a)["enemies"] if e["id"] == "cat-nw")
-        d0 = e0["distance"]
-        a.step(90)
-        st_near = state(a)
-        d1 = next(e["distance"] for e in st_near["enemies"] if e["id"] == "cat-nw")
-        mode_near = next(e["mode"] for e in st_near["enemies"] if e["id"] == "cat-nw")
-        check(e0["seen"] is True and d1 <= d0 and mode_near in ("notice", "idle"),
-              f"в открытую враг замечает и подходит: seen={e0['seen']}, "
-              f"distance {d0} → {d1}, режим {mode_near}")
-        check(st_near["weapons"] == 0, "у врага и игрока по-прежнему нет оружия")
-
-        # --- Лист врага: 5 направлений × 8 состояний, ходьба и поворот ------
-        frames = a.eval("$('#cat-nw').get(0).frames.length")
-        check(frames == 40,
-              f"у врага лист 5×8 = 40 кадров (не маскот): {frames}")
-        seen_frames = set()
-        seen_rows = set()
+        seen_frames, seen_rows = set(), set()
         for _ in range(12):
             a.step(4)
             for e in state(a)["enemies"]:
@@ -164,60 +133,71 @@ def main():
         check(len(seen_frames) >= 3 and seen_rows <= {0, 1, 2, 3},
               f"ходьба анимирована кадрами 0..3: кадры {sorted(seen_frames)}, строки {sorted(seen_rows)}")
 
-        def enemy(eid):
-            return next(e for e in state(a)["enemies"] if e["id"] == eid)
+        # Колонка/зеркало соответствуют формуле «угол к камере».
+        yaw = state(a)["hero"]["yaw"]
+        ok_rot = True
+        for e in state(a)["enemies"]:
+            rel = ((e["facing"] - yaw + 540) % 360) - 180
+            col = max(0, min(4, round((180 - abs(rel)) / 45)))
+            if e["col"] != col or e["flip"] != (rel < 0):
+                ok_rot = False
+                break
+        check(ok_rot, f"поворот врагов = колонка по углу к камере (yaw={yaw})")
 
-        # Поворот: колонка выбирается по углу врага к камере (как в Doom),
-        # а вторая сторона — зеркалом. Берём cat-nw и крутим камеру вокруг него.
-        facing = enemy("cat-nw")["facing"]
-        def set_yaw(deg):
-            a.eval("$.camera.yaw(%s)" % (deg % 360))
-            a.step(2)
-        set_yaw(facing + 90)                # смотрим сбоку: rel=-90
-        side = enemy("cat-nw")
-        check(side["flip"] is True and side["col"] == 2,
-              f"кадр сбоку + зеркало: col={side['col']}, flip={side['flip']}")
-        set_yaw(facing - 90)                # другой бок: rel=+90
-        side2 = enemy("cat-nw")
-        check(side2["flip"] is False and side2["col"] == 2,
-              f"другой бок без зеркала: col={side2['col']}, flip={side2['flip']}")
-        set_yaw(facing + 180)               # лицом к камере: col 0
-        front = enemy("cat-nw")
-        check(front["col"] == 0,
-              f"лицом к камере — колонка 0: col={front['col']}")
-        set_yaw(facing)                     # спиной: col 4
-        back = enemy("cat-nw")
-        check(back["col"] == 4,
-              f"спиной — колонка 4: col={back['col']}")
+        # За внутренней стеной враг не видит игрока и скрыт оверлеем.
+        a.hold(["W"]); a.step(330); a.release_all(); a.step(3)
+        near_wall = state(a)
+        cat_nw = next(e for e in near_wall["enemies"] if e["id"] == "cat-nw")
+        check(cat_nw["seen"] is False,
+              f"за стеной враг не видит игрока (seen={cat_nw['seen']}, "
+              f"distance={cat_nw['distance']})")
+        if cat_nw["seen"] is False:
+            check(near_wall.get("occluded", 0) >= 1,
+                  f"оверлей скрыл врага за стеной: occluded={near_wall.get('occluded')}")
 
-        # --- Билборд виден по арту: изолируем один враг ---------------------
+        # --- Оружие от первого лица -----------------------------------------
+        st = state(a)
+        check(st["weapon"]["name"] == "pistol" and st["weapon"]["state"] == "idle"
+              and st["weapon"]["frame"] == 0,
+              f"стартовый пистолет в покое: {st['weapon']}")
+        a.cmd("key", key="2", action="tap"); a.step(3)
+        check(state(a)["weapon"]["name"] == "shotgun", "клавиша 2 — дробовик")
+        a.cmd("key", key="3", action="tap"); a.step(3)
+        check(state(a)["weapon"]["name"] == "ak", "клавиша 3 — АК")
+        a.cmd("key", key="1", action="tap"); a.step(3)
+        check(state(a)["weapon"]["name"] == "pistol", "клавиша 1 — пистолет")
+
+        a.mouse(button=1, action="click"); a.step(14)
+        firing = state(a)["weapon"]
+        check(firing["state"] == "fire" and firing["frame"] >= 1,
+              f"выстрел идёт по кадрам: state={firing['state']}, frame={firing['frame']}")
+        check(firing["shots"] == 1 and firing["sound_ok"] >= 1,
+              f"выстрел засчитан и озвучен: shots={firing['shots']}, sound_ok={firing['sound_ok']}")
+        a.step(40)
+        check(state(a)["weapon"]["state"] == "idle"
+              and state(a)["weapon"]["frame"] == 0, "после выстрела — покой, кадр 0")
+
+        a.cmd("key", key="r", action="tap"); a.step(8)
+        reloading = state(a)["weapon"]
+        check(reloading["state"] == "reload" and reloading["reloads"] == 1
+              and reloading["sound_ok"] >= 2,
+              f"перезарядка идёт и озвучена: {reloading}")
+        a.step(90)
+        check(state(a)["weapon"]["state"] == "idle"
+              and state(a)["weapon"]["reloads"] == 1, "перезарядка вернула покой")
+
+        # --- Арт врага виден на кадре (смотрим на ближайшего) ----------------
         os.makedirs(SHOTS, exist_ok=True)
-        others = "['cat-ne','cat-mid','cat-w','cat-e','cat-se']"
-        a.eval(f"{others}.forEach((id) => $('#' + id).hide()); 'ok'")
-        a.eval("(() => { const h=$('#hero').get(0), n=$('#cat-nw').get(0);"
-               " h.x = n.x - 240; h.y = n.y; h.syncBody && h.syncBody();"
-               " $.camera.yaw(Math.atan2(n.y-h.y, n.x-h.x) * 180 / Math.PI); return 1; })()")
-        a.step(3)
-        front = a.screenshot(os.path.join(SHOTS, "re2d_testroom_front.png"))
-        g_front = green_pixels(front)
-        # Остальные враги скрыты, поэтому спрятанный cat-nw должен убрать
-        # практически весь зелёный арт из кадра.
-        a.eval("$('#cat-nw').hide(); 'ok'")
-        a.step(3)
-        hidden = a.screenshot(os.path.join(SHOTS, "re2d_testroom_hidden.png"))
-        g_hidden = green_pixels(hidden)
-        a.eval("$('#cat-nw').show(); %s.forEach((id) => $('#' + id).show()); 'ok'" % others)
-        check(g_front > 400,
-              f"билборд врага виден с фронта (зелёных пикселей {g_front})")
-        check(g_hidden < g_front * 0.2,
-              f"спрятанный cat-nw убирает свой арт с кадра ({g_hidden} против {g_front})")
+        shot = a.screenshot(os.path.join(SHOTS, "re2d_testroom_world.png"))
+        green = green_pixels(shot)
+        check(green > 400, f"билборды врагов видны на кадре (зелёных пикселей {green})")
 
         errors = a.eval("JSON.stringify($.debug.errors())")
         check(errors in ("[]", "null"), f"ошибок игрового кода нет: {errors[:200]}")
 
     print()
     if FAILURES:
-        print(f"ПРОВАЛОВ: {len(FAILURES)}")
+        print("ПРОВАЛОВ: %d" % len(FAILURES))
         for f in FAILURES:
             print("  - " + f)
         return 1

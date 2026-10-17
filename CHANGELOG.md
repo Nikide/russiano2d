@@ -126,6 +126,27 @@
   новый контракт: `pos()` стабилен, сдвиг слоёв 300 px проверяется по
   `$.layers.offset` (0.2 → 240, 0.6 → 120). Документация:
   `docs/highlevel/layers.md`, `render.md`, `ENGINE_GAPS.md`.
+- **SDK: возвращены `world-compile`/`world-info` и валидация `.re2dmap`.**
+  В коммите «производственной готовности» (2026-10-16) Re2D-слой вырезали из
+  SDK, но `docs/re2d/RE2D_WORLD_FORMAT.md` продолжал обещать
+  `r2d-sdk world-compile`. Команды восстановлены (`sdk/native/sdk_world.c` из
+  истории + native world bake/`bsp`/`json` в SDK-сборке), `.re2dmap` получил
+  тип `re2d.world` и валидатор: `r2d-sdk validate testroom.re2dmap` →
+  `errors 0`. Проверка компилятора: `world-compile --renderer` на
+  `acceptance.re2dmap` даёт JSON, **равный** закоммиченному
+  `acceptance.re2dworld` (6 cells, 28 walls, 5 portals, 1 stairs, 1 slope).
+- **Re2D testroom переехал на `.re2dmap` + `$.re2dWorld`.** Карта
+  `demos/re2d_testroom/testroom.re2dmap` (1600×1200, 12 стен, 4 света)
+  компилируется в `testroom.re2dworld`; игра грузит её
+  `$.re2dWorld.load(...).backend('gpu')`, а не legacy `$.re2d.room`.
+  Ходьба — `world.support/blocked` (глаза +48): W y 1080 → 926.7,
+  внутренняя стена y=620, южная y=1183.5, A Δx=−153.3. Враги (атлас 5×8,
+  40 кадров) проецируются той же камерой и идут `ui.image`-оверлеем поверх
+  мира; стена скрывает целиком по `world.ray` — за внутренней стеной
+  `seen=false`, `occluded=2`. Оружие maid_fps_weapons: 3 вида (пистолет/
+  дробовик/АК), кадры/тайминги/звуки из `animations.json`, выстрел
+  ­0→1→2→3→0 со звуком на кадре 1, R — перезарядка; урона нет
+  (`combat: false`). `re2d_testroom_test` — **34 проверки**.
 - **Д11/M4: вкладка VFX в DevTools — предпросмотр, перемотка, экспорт.**
   15-я вкладка F1 (`vfx`): список = `$.vfx.list()` (22 встроенных эффекта),
   выбор строки, «Плей» в центре камеры, прогресс/время/seed/hash/degraded из

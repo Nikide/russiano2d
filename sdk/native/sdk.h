@@ -206,6 +206,14 @@ int sdk_cmd_atlas_format(const SdkArgs *a);
 int sdk_cmd_atlas_info(const SdkArgs *a);
 
 // ---------------------------------------------------------------------------
+// Re2D World: `*.re2dmap` → `.re2dworld` (тот же native bake, что читает
+// $.re2dWorld; --renderer включает continuous slopes/portals/BSP-таблицы).
+// ---------------------------------------------------------------------------
+void sdk_validate_re2dmap(const char *path, SdkReport *rep);
+int sdk_cmd_world_compile(const SdkArgs *a);
+int sdk_cmd_world_info(const SdkArgs *a);
+
+// ---------------------------------------------------------------------------
 // Студии данных: tilemap, particles, collision, layers, fonts, audio, input, rml, rcss
 // (sdk_data.c; правила совпадают с sdk/lib/kinds/*.js и sdk/lib/rml_model.js)
 // ---------------------------------------------------------------------------

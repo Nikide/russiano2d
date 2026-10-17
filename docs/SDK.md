@@ -86,6 +86,8 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
 | `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
 | `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |
+| `world-compile <f.re2dmap> [--renderer] [--output f.re2dworld]` | Re2D World: SDK-исходник → baked мир для `$.re2dWorld` (`--renderer` обязателен для нового runtime) |
+| `world-info <f.re2dmap>` | то же без записи: статистика/порталы/проверка карты |
 | `batch <manifest.batch.json> [--output report.json]` | пакетная проверка (`validate`), ошибки отдельных jobs не прерывают пакет |
 | `agent <session.agent.json> [--engine путь] [--output report.json]` | нативный клиент исходного агентского протокола движка |
 | `templates [--root sdk/templates]` | шаблоны проектов (`sdk/templates/<id>/template.json`): имя, описание, число файлов |

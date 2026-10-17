@@ -1,0 +1,244 @@
+{
+  "version": 1,
+  "name": "Re2D test room",
+  "cells": [
+    {
+      "id": "room",
+      "rect": [
+        0,
+        0,
+        1600,
+        1200
+      ],
+      "spans": [
+        {
+          "bottom": 0,
+          "top": 320,
+          "floorColor": "#9a9a9a",
+          "ceilingColor": "#6a7078",
+          "lighting": {
+            "level": 0.8,
+            "color": "#ffffff"
+          }
+        }
+      ]
+    }
+  ],
+  "walls": [
+    {
+      "id": "north",
+      "from": [
+        0,
+        0
+      ],
+      "to": [
+        1600,
+        0
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#baa078"
+    },
+    {
+      "id": "south",
+      "from": [
+        0,
+        1200
+      ],
+      "to": [
+        1600,
+        1200
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#baa078"
+    },
+    {
+      "id": "west",
+      "from": [
+        0,
+        0
+      ],
+      "to": [
+        0,
+        1200
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#baa078"
+    },
+    {
+      "id": "east",
+      "from": [
+        1600,
+        0
+      ],
+      "to": [
+        1600,
+        1200
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#baa078"
+    },
+    {
+      "id": "mid-a1",
+      "from": [
+        520,
+        596
+      ],
+      "to": [
+        1080,
+        596
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#8f7a58"
+    },
+    {
+      "id": "mid-a2",
+      "from": [
+        1080,
+        596
+      ],
+      "to": [
+        1080,
+        604
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#8f7a58"
+    },
+    {
+      "id": "mid-a3",
+      "from": [
+        1080,
+        604
+      ],
+      "to": [
+        520,
+        604
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#8f7a58"
+    },
+    {
+      "id": "mid-a4",
+      "from": [
+        520,
+        604
+      ],
+      "to": [
+        520,
+        596
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#8f7a58"
+    },
+    {
+      "id": "mid-b1",
+      "from": [
+        500,
+        320
+      ],
+      "to": [
+        500,
+        600
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#8f7a58"
+    },
+    {
+      "id": "mid-b2",
+      "from": [
+        500,
+        600
+      ],
+      "to": [
+        508,
+        600
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#8f7a58"
+    },
+    {
+      "id": "mid-b3",
+      "from": [
+        508,
+        600
+      ],
+      "to": [
+        508,
+        320
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#8f7a58"
+    },
+    {
+      "id": "mid-b4",
+      "from": [
+        508,
+        320
+      ],
+      "to": [
+        500,
+        320
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#8f7a58"
+    }
+  ],
+  "portals": [],
+  "stairs": [],
+  "slopes": [],
+  "lighting": {
+    "mode": "classic",
+    "dynamic": true,
+    "shadows": true,
+    "distanceScale": 0.001
+  },
+  "lights": [
+    {
+      "x": 800,
+      "y": 1080,
+      "h": 250,
+      "radius": 600,
+      "intensity": 1.8,
+      "color": "#ffdba8",
+      "shadow": true
+    },
+    {
+      "x": 800,
+      "y": 300,
+      "h": 250,
+      "radius": 600,
+      "intensity": 1.8,
+      "color": "#ffdba8",
+      "shadow": true
+    },
+    {
+      "x": 260,
+      "y": 760,
+      "h": 250,
+      "radius": 600,
+      "intensity": 1.8,
+      "color": "#bcd4ff",
+      "shadow": true
+    },
+    {
+      "x": 1340,
+      "y": 760,
+      "h": 250,
+      "radius": 600,
+      "intensity": 1.8,
+      "color": "#bcd4ff",
+      "shadow": true
+    }
+  ]
+}

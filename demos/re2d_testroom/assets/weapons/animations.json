@@ -1,0 +1,367 @@
+{
+  "format_version": 1,
+  "frame_size": [
+    128,
+    128
+  ],
+  "atlas_size": [
+    384,
+    256
+  ],
+  "grid": [
+    3,
+    2
+  ],
+  "anchor": [
+    64,
+    128
+  ],
+  "origin": "top-left",
+  "filter": "nearest",
+  "alpha": "straight",
+  "weapons": {
+    "pistol": {
+      "atlas": "sprites/pistol/atlas.png",
+      "frames": {
+        "idle": {
+          "index": 0,
+          "rect": [
+            0,
+            0,
+            128,
+            128
+          ]
+        },
+        "fire_small": {
+          "index": 1,
+          "rect": [
+            128,
+            0,
+            128,
+            128
+          ]
+        },
+        "fire_recoil": {
+          "index": 2,
+          "rect": [
+            256,
+            0,
+            128,
+            128
+          ]
+        },
+        "recoil_return": {
+          "index": 3,
+          "rect": [
+            0,
+            128,
+            128,
+            128
+          ]
+        },
+        "reload": {
+          "index": 4,
+          "rect": [
+            128,
+            128,
+            128,
+            128
+          ]
+        },
+        "ready": {
+          "index": 5,
+          "rect": [
+            256,
+            128,
+            128,
+            128
+          ]
+        }
+      },
+      "animations": {
+        "idle": [
+          {
+            "frame": 0,
+            "ms": 1000
+          }
+        ],
+        "fire": [
+          {
+            "frame": 0,
+            "ms": 200
+          },
+          {
+            "frame": 1,
+            "ms": 35
+          },
+          {
+            "frame": 2,
+            "ms": 45
+          },
+          {
+            "frame": 3,
+            "ms": 65
+          },
+          {
+            "frame": 0,
+            "ms": 120
+          }
+        ],
+        "reload": [
+          {
+            "frame": 0,
+            "ms": 100
+          },
+          {
+            "frame": 4,
+            "ms": 900
+          },
+          {
+            "frame": 5,
+            "ms": 150
+          }
+        ]
+      },
+      "sounds": {
+        "fire": [
+          "audio/pistol/fire_01.wav",
+          "audio/pistol/fire_02.wav",
+          "audio/pistol/fire_03.wav"
+        ],
+        "reload": "audio/pistol/reload.wav",
+        "mechanism": "audio/pistol/mechanism.wav"
+      },
+      "reload_style": "stylized_lowered_transition"
+    },
+    "shotgun": {
+      "atlas": "sprites/shotgun/atlas.png",
+      "frames": {
+        "idle": {
+          "index": 0,
+          "rect": [
+            0,
+            0,
+            128,
+            128
+          ]
+        },
+        "fire_small": {
+          "index": 1,
+          "rect": [
+            128,
+            0,
+            128,
+            128
+          ]
+        },
+        "fire_recoil": {
+          "index": 2,
+          "rect": [
+            256,
+            0,
+            128,
+            128
+          ]
+        },
+        "recoil_return": {
+          "index": 3,
+          "rect": [
+            0,
+            128,
+            128,
+            128
+          ]
+        },
+        "reload": {
+          "index": 4,
+          "rect": [
+            128,
+            128,
+            128,
+            128
+          ]
+        },
+        "ready": {
+          "index": 5,
+          "rect": [
+            256,
+            128,
+            128,
+            128
+          ]
+        }
+      },
+      "animations": {
+        "idle": [
+          {
+            "frame": 0,
+            "ms": 1000
+          }
+        ],
+        "fire": [
+          {
+            "frame": 0,
+            "ms": 200
+          },
+          {
+            "frame": 1,
+            "ms": 35
+          },
+          {
+            "frame": 2,
+            "ms": 45
+          },
+          {
+            "frame": 3,
+            "ms": 65
+          },
+          {
+            "frame": 0,
+            "ms": 120
+          }
+        ],
+        "reload": [
+          {
+            "frame": 2,
+            "ms": 70
+          },
+          {
+            "frame": 3,
+            "ms": 130
+          },
+          {
+            "frame": 4,
+            "ms": 160
+          },
+          {
+            "frame": 5,
+            "ms": 100
+          }
+        ]
+      },
+      "sounds": {
+        "fire": [
+          "audio/shotgun/fire_01.wav",
+          "audio/shotgun/fire_02.wav",
+          "audio/shotgun/fire_03.wav"
+        ],
+        "reload": "audio/shotgun/reload.wav",
+        "mechanism": "audio/shotgun/mechanism.wav"
+      },
+      "reload_style": "pump_cycle"
+    },
+    "ak": {
+      "atlas": "sprites/ak/atlas.png",
+      "frames": {
+        "idle": {
+          "index": 0,
+          "rect": [
+            0,
+            0,
+            128,
+            128
+          ]
+        },
+        "fire_small": {
+          "index": 1,
+          "rect": [
+            128,
+            0,
+            128,
+            128
+          ]
+        },
+        "fire_recoil": {
+          "index": 2,
+          "rect": [
+            256,
+            0,
+            128,
+            128
+          ]
+        },
+        "recoil_return": {
+          "index": 3,
+          "rect": [
+            0,
+            128,
+            128,
+            128
+          ]
+        },
+        "reload": {
+          "index": 4,
+          "rect": [
+            128,
+            128,
+            128,
+            128
+          ]
+        },
+        "ready": {
+          "index": 5,
+          "rect": [
+            256,
+            128,
+            128,
+            128
+          ]
+        }
+      },
+      "animations": {
+        "idle": [
+          {
+            "frame": 0,
+            "ms": 1000
+          }
+        ],
+        "fire": [
+          {
+            "frame": 0,
+            "ms": 200
+          },
+          {
+            "frame": 1,
+            "ms": 35
+          },
+          {
+            "frame": 2,
+            "ms": 45
+          },
+          {
+            "frame": 3,
+            "ms": 65
+          },
+          {
+            "frame": 0,
+            "ms": 120
+          }
+        ],
+        "reload": [
+          {
+            "frame": 0,
+            "ms": 100
+          },
+          {
+            "frame": 4,
+            "ms": 900
+          },
+          {
+            "frame": 5,
+            "ms": 150
+          }
+        ]
+      },
+      "sounds": {
+        "fire": [
+          "audio/ak/fire_01.wav",
+          "audio/ak/fire_02.wav",
+          "audio/ak/fire_03.wav"
+        ],
+        "reload": "audio/ak/reload.wav",
+        "mechanism": "audio/ak/mechanism.wav"
+      },
+      "reload_style": "stylized_lowered_transition"
+    }
+  }
+}

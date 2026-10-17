@@ -3,7 +3,7 @@
 #
 # Чистый C11 + SDL3 (файлы, каталоги, процессы) + JSON движка (src/json.c).
 # Никаких внешних runtime: ни Python, ни Node.js, ни shell-скриптов.
-# Никаких 3D-библиотек: SDK авторит 2D-данные (атласы, тайлкарты, RML, звук).
+# Re2D World (SDK authoring): world-compile/world-info + native world bake из src/.
 # Один набор исходников — статическая библиотека r2d_sdk_core: из неё собираются
 # CLI `r2d-sdk` и C-тесты, GUI SDK вызывает тот же CLI через мост `$.sdk`.
 # ---------------------------------------------------------------------------
@@ -16,6 +16,15 @@ set(R2D_SDK_SOURCES
     sdk_json.c
     sdk_image.c
     sdk_atlas.c
+    sdk_world.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
+    "${CMAKE_SOURCE_DIR}/src/bsp.c"
     sdk_data.c
     sdk_manifest.c
     sdk_batch.c
