@@ -622,9 +622,9 @@ bool r2d_world_controller_step_state(R2DWorldRuntime *w,int token,R2DWorldContro
 // --- P1: navigation graph over spans/portals -------------------------------
 void r2d_world_nav_free(R2DWorldRuntime *w)
 {
-    free(w->nav_nodes);free(w->nav_edges);free(w->nav_offsets);
+    free(w->nav_nodes);free(w->nav_edges);free(w->nav_offsets);free(w->nav_blocked_spans);free(w->nav_blocked_portals);
     free(w->nav_g);free(w->nav_parent);free(w->nav_heap);free(w->nav_heap_pos);free(w->nav_state);
-    w->nav_nodes=NULL;w->nav_edges=NULL;w->nav_offsets=NULL;
+    w->nav_nodes=NULL;w->nav_edges=NULL;w->nav_offsets=NULL;w->nav_blocked_spans=NULL;w->nav_blocked_portals=NULL;
     w->nav_g=NULL;w->nav_parent=NULL;w->nav_heap=NULL;w->nav_heap_pos=NULL;w->nav_state=NULL;
     memset(&w->nav_graph,0,sizeof w->nav_graph);memset(&w->nav_scratch,0,sizeof w->nav_scratch);
     w->nav_ready=false;
@@ -659,6 +659,27 @@ int r2d_world_nav_nearest_runtime(R2DWorldRuntime *w,float x,float y)
 {
     if(!w->nav_ready)return -1;
     return r2d_world_nav_nearest(&w->nav_graph,x,y);
+}
+int r2d_world_nav_path_mask(R2DWorldRuntime *w,int from,int to,int *path,int capacity,int max_visits,const int *blocked_spans,int span_count,const int *blocked_portals,int portal_count)
+{
+    if(!w||!w->nav_ready||!path||capacity<=0)return -1;
+    const int nodes=w->nav_graph.node_count,portals=w->world.portal_count;
+    if(!w->nav_blocked_spans||!w->nav_blocked_portals){
+        free(w->nav_blocked_spans);free(w->nav_blocked_portals);
+        w->nav_blocked_spans=calloc((size_t)(nodes?nodes:1),1);
+        w->nav_blocked_portals=calloc((size_t)(portals?portals:1),1);
+        if(!w->nav_blocked_spans||!w->nav_blocked_portals)return -1;
+    }
+    memset(w->nav_blocked_spans,0,(size_t)(nodes?nodes:1));
+    memset(w->nav_blocked_portals,0,(size_t)(portals?portals:1));
+    for(int i=0;i<span_count;i++){int id=blocked_spans[i];if(id>=0&&id<nodes)w->nav_blocked_spans[id]=1;}
+    for(int i=0;i<portal_count;i++){int id=blocked_portals[i];if(id>=0&&id<portals)w->nav_blocked_portals[id]=1;}
+    if(max_visits<=0)max_visits=nodes*8;
+    Uint64 start=SDL_GetPerformanceCounter();
+    int result=r2d_world_nav_path(&w->nav_graph,from,to,path,capacity,max_visits,&w->nav_scratch,w->nav_blocked_spans,w->nav_blocked_portals);
+    w->nav_queries++;
+    w->nav_ms+=(double)(SDL_GetPerformanceCounter()-start)*1000.0/(double)SDL_GetPerformanceFrequency();
+    return result;
 }
 int r2d_world_nav_path_runtime(R2DWorldRuntime *w,int from,int to,int *path,int capacity,int max_visits)
 {

@@ -284,6 +284,10 @@ def main():
               and '"vx":0' not in conveyor,
               f"conveyorMotion двигает velocity по authored conveyor: {conveyor}")
 
+        nav_mask = a.eval("JSON.stringify(boomerLab.navMaskProbe())")
+        check(nav_mask is not None and '"open":[0]' in nav_mask and '"blocked":null' in nav_mask,
+              f"dynamic nav masks: blocked span закрывает путь: {nav_mask}")
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 

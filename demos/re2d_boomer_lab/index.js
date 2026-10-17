@@ -175,6 +175,12 @@ export default function install($) {
         }),
         particlesClear: () => world.particles.clear(),
         audioStateProbe: () => world.audio.state(),
+        navMaskProbe: () => {
+            world.navBuild({ radius: 14, height: 56, step: 18 });
+            const open = world.navPath(0, 0, 8, 0);
+            const blocked = world.navPath(0, 0, 8, 0, { blockedSpans: [0] });
+            return { open, blocked: blocked ?? null };
+        },
         conveyorProbe: () => {
             let floor = -1;
             for (let i = 0; i < world.info().surfaces; i++) if (world.surface(i).kind === 1) { floor = i; break; }

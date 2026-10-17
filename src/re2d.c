@@ -1088,6 +1088,29 @@ static JSValue world_nav_nearest(JSContext *ctx,JSValueConst self,int argc,JSVal
     int node=r2d_world_nav_nearest_runtime(w,p[0],p[1]);
     return node<0?JS_NULL:JS_NewInt32(ctx,node);
 }
+static JSValue world_nav_path_mask(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[4]={0,0,256,0};int count=argc<4?argc:4;
+    if(!w||!world_numbers(ctx,count,argv,count,p))return JS_EXCEPTION;
+    int from=(int)p[0],to=(int)p[1],capacity=(int)(p[2]<=0?256:p[2]),visits=(int)p[3];
+    float *spans=NULL,*portals=NULL;size_t span_count=0,portal_count=0;JSValue ab1=JS_UNDEFINED,ab2=JS_UNDEFINED;
+    if(argc>4&&!JS_IsUndefined(argv[4])&&!JS_IsNull(argv[4])){
+        ab1=f32_view(ctx,argv[4],&spans,&span_count);if(JS_IsException(ab1))return JS_EXCEPTION;}
+    if(argc>5&&!JS_IsUndefined(argv[5])&&!JS_IsNull(argv[5])){
+        ab2=f32_view(ctx,argv[5],&portals,&portal_count);if(JS_IsException(ab2)){JS_FreeValue(ctx,ab1);return JS_EXCEPTION;}}
+    int *blocked_spans=span_count?malloc(span_count*sizeof(int)):NULL;
+    int *blocked_portals=portal_count?malloc(portal_count*sizeof(int)):NULL;
+    int *path=malloc((size_t)capacity*sizeof *path);
+    if(!path||(span_count&&!blocked_spans)||(portal_count&&!blocked_portals)){free(blocked_spans);free(blocked_portals);free(path);JS_FreeValue(ctx,ab1);JS_FreeValue(ctx,ab2);return JS_ThrowOutOfMemory(ctx);}
+    for(size_t i=0;i<span_count;i++)blocked_spans[i]=(int)spans[i];
+    for(size_t i=0;i<portal_count;i++)blocked_portals[i]=(int)portals[i];
+    int n=r2d_world_nav_path_mask(w,from,to,path,capacity,visits,blocked_spans,(int)span_count,blocked_portals,(int)portal_count);
+    free(blocked_spans);free(blocked_portals);JS_FreeValue(ctx,ab1);JS_FreeValue(ctx,ab2);
+    if(n<0){free(path);return JS_NULL;}
+    JSValue array=JS_NewArray(ctx);if(JS_IsException(array)){free(path);return array;}
+    for(int i=0;i<n;i++)JS_SetPropertyUint32(ctx,array,(uint32_t)i,JS_NewInt32(ctx,path[i]));
+    free(path);return array;
+}
 static JSValue world_nav_path(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[4]={0,0,256,0};
@@ -1571,6 +1594,7 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"particlesClear",JS_NewCFunction(ctx,world_particles_clear,"particlesClear",0));
     JS_SetPropertyStr(ctx,handle,"navBuild",JS_NewCFunction(ctx,world_nav_build,"navBuild",3));
     JS_SetPropertyStr(ctx,handle,"navNearest",JS_NewCFunction(ctx,world_nav_nearest,"navNearest",2));
+    JS_SetPropertyStr(ctx,handle,"navPathMasked",JS_NewCFunction(ctx,world_nav_path_mask,"navPathMasked",6));
     JS_SetPropertyStr(ctx,handle,"navPath",JS_NewCFunction(ctx,world_nav_path,"navPath",4));
     JS_SetPropertyStr(ctx,handle,"automapLines",JS_NewCFunction(ctx,world_automap_lines,"automapLines",1));
     JS_SetPropertyStr(ctx,handle,"automapProject",JS_NewCFunction(ctx,world_automap_project,"automapProject",6));

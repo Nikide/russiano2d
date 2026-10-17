@@ -121,6 +121,8 @@ typedef struct R2DWorldRuntime {
     R2DWorldNavEdge *nav_edges;
     int *nav_offsets;
     R2DWorldNavGraph nav_graph;
+    uint8_t *nav_blocked_spans;
+    uint8_t *nav_blocked_portals;
     R2DWorldNavScratch nav_scratch;
     float *nav_g;
     int *nav_parent,*nav_heap,*nav_heap_pos;
@@ -223,6 +225,7 @@ bool r2d_world_controller_step_state(R2DWorldRuntime *,int token,R2DWorldControl
 bool r2d_world_nav_build_runtime(R2DWorldRuntime *,float radius,float height,float step,int *nodes,int *edges);
 int r2d_world_nav_nearest_runtime(R2DWorldRuntime *,float x,float y);
 int r2d_world_nav_path_runtime(R2DWorldRuntime *,int from,int to,int *path,int capacity,int max_visits);
+int r2d_world_nav_path_mask(R2DWorldRuntime *,int from,int to,int *path,int capacity,int max_visits,const int *blocked_spans,int span_count,const int *blocked_portals,int portal_count);
 void r2d_world_nav_free(R2DWorldRuntime *);
 // P1 particles: pool bound lazily (capacity 2048), stepped with worldStep,
 // drawn by the native compositor. Renderer hints only; no JS pool.

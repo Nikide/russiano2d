@@ -791,8 +791,11 @@ function rendererWorldWrapper($, native) {
     world.navBuild = options => native.navBuild(
         Number(options.radius ?? 18), Number(options.height ?? 76), Number(options.step ?? 18));
     world.navNearest = (x, y) => native.navNearest(Number(x), Number(y));
-    world.navPath = (from, to, capacity = 256, maxVisits = 0) =>
-        native.navPath(from, to, capacity, maxVisits);
+    world.navPath = (from, to, capacity = 256, maxVisits = 0, options = {}) => {
+        const spans = options.blockedSpans?.length ? new Float32Array(options.blockedSpans) : null;
+        const portals = options.blockedPortals?.length ? new Float32Array(options.blockedPortals) : null;
+        return native.navPathMasked(from, to, capacity, maxVisits, spans, portals);
+    };
 
     // P1 particles: fixed native pool; step runs inside engine.re2d.worldStep.
     // The renderer owns drawing; this wrapper only describes prototypes.
