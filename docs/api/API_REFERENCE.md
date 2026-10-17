@@ -6,7 +6,7 @@
 
 Engine version: "1.2.5"
 
-Entries: 3979
+Entries: 3985
 
 ## $
 
@@ -2378,6 +2378,7 @@ Entries: 3979
 | `scopes` | function | `() -> any` |
 | `stack` | function | `() -> any` |
 | `state` | function | `() -> any` |
+| `status` | function | `() -> any` |
 | `transition` | function | `(arg0: any, arg1: any) -> any` |
 
 ## $.screen
@@ -4149,6 +4150,7 @@ Entries: 3979
 | `scopes` | function | `() -> any` |
 | `stack` | function | `() -> any` |
 | `state` | function | `() -> any` |
+| `status` | function | `() -> any` |
 | `transition` | function | `(arg0: any, arg1: any) -> any` |
 
 ## $.триггеры

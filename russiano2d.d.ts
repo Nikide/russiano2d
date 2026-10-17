@@ -2217,6 +2217,7 @@ interface R2D_scene {
     scopes(): any;
     stack(): any;
     state(): any;
+    status(): any;
     transition(arg0: any, arg1: any): any;
 }
 
@@ -3408,6 +3409,7 @@ interface R2D___________ {
     scopes(): any;
     stack(): any;
     state(): any;
+    status(): any;
     transition(arg0: any, arg1: any): any;
 }
 
