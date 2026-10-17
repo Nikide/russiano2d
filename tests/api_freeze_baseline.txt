@@ -517,6 +517,12 @@ $.devtools.timeScale
 $.devtools.timeStep
 $.devtools.toggle
 $.devtools.tree
+$.devtools.vfx
+$.devtools.vfxExport
+$.devtools.vfxPlay
+$.devtools.vfxSeek
+$.devtools.vfxSelect
+$.devtools.vfxStop
 $.devtools.watchReset
 $.devtools.watchThreshold
 $.devtools.watches

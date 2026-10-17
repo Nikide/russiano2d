@@ -50,7 +50,9 @@ const COPY_NONE = '—';
 // Вкладки панели F1 и секции инспектора F2. Имена совпадают с id элементов
 // `tab-<имя>`: по ним же переключается класс hidden.
 const TABS = ['perf', 'hitch', 'physics', 'render', 'events', 'tree', 'diag',
-              'audio', 'input', 'assets', 'memory', 'console', 'step', 'watch'];
+              'audio', 'input', 'assets', 'memory', 'console', 'step', 'watch',
+              'vfx'];
+const VFX_ROWS = 24;           // строк списка эффектов r2dvfx (§M4)
 const SECTIONS = ['identity', 'transform', 'gameplay', 'physics', 'presentation'];
 
 // ---------------------------------------------------------------------------
@@ -200,6 +202,14 @@ button.on { background-color: #3d6a8f; color: #ffffff; }
 .rt-hbar { position: absolute; bottom: 0px; width: 44px; background-color: #4a9ad4; }
 .rt-hbar.peak { background-color: #d45a4a; }
 #rt-watch-buttons { position: absolute; left: 0px; top: 270px; }
+#tab-vfx { position: absolute; left: 10px; top: 58px; width: 740px; height: 380px; }
+#rt-vfx-list { position: absolute; left: 0px; top: 24px; width: 300px; height: 220px;
+               overflow: auto; }
+.rt-vfx-row { display: block; width: 100%; padding: 1px 4px; }
+.rt-vfx-row.on { background-color: #3d6a8f; color: #ffffff; }
+#rt-vfx-buttons { position: absolute; left: 0px; top: 252px; width: 740px; }
+#rt-vfx-path { width: 250px; }
+#rt-vfx-status { position: absolute; left: 310px; top: 24px; width: 430px; height: 300px; }
 #rt-tools { position: absolute; left: 10px; top: 470px; width: 740px; }
 #rt-error { display: block; font-size: 11px; color: #ffb0a0; }
 .rt-bar { position: absolute; bottom: 0px; width: 5px; background-color: #4a9ad4; }
@@ -221,6 +231,7 @@ input { width: 85px; height: 24px; background-color: #203448; vertical-align: mi
       <button id="rt-tab-events" class="rt-tab">EVENTS</button>
       <button id="rt-tab-tree" class="rt-tab">ПРОФИЛЬ</button>
       <button id="rt-tab-diag" class="rt-tab">ДИАГ</button>
+      <button id="rt-tab-vfx" class="rt-tab">VFX</button>
     </div>
     <div class="rt-tabrow">
       <button id="rt-tab-audio" class="rt-tab">AUDIO</button>
@@ -403,6 +414,20 @@ input { width: 85px; height: 24px; background-color: #203448; vertical-align: mi
     </div>
   </div>
 
+  <div id="tab-vfx" class="rt-page hidden">
+    <div class="rt-section">VFX (§M4): список эффектов, предпросмотр с прогрессом и перемоткой, экспорт спеки в JSON</div>
+    <div id="rt-vfx-list"></div>
+    <div id="rt-vfx-buttons">
+      <button id="rt-vfx-play">Плей</button>
+      <button id="rt-vfx-stop">Стоп</button>
+      <button id="rt-vfx-back">−0.1 с</button>
+      <button id="rt-vfx-fwd">+0.1 с</button>
+      <button id="rt-vfx-export">Экспорт JSON</button>
+      <input id="rt-vfx-path" type="text"/>
+    </div>
+    <div id="rt-vfx-status" class="rt-data"></div>
+  </div>
+
   <div id="rt-tools">
     Гравитация X<input id="rt-gx" type="text"/> Y<input id="rt-gy" type="text"/>
     <button id="rt-gravity">Применить</button>
@@ -537,6 +562,11 @@ export function installDevTools($) {
         pick_hover_uid: null,
         last_pick: null,
         last_copied: null,
+        // §M4: выбранный эффект, живой handle предпросмотра и путь экспорта.
+        vfx_index: 0,
+        vfx_handle: null,
+        vfx_path: null,
+        vfx_note: null,
     };
 
     // Мостики к движку: без GUI (юнит-тест) они просто ничего не делают.
@@ -2402,6 +2432,132 @@ export function installDevTools($) {
         return true;
     }
 
+    // --- §M4: VFX — список, предпросмотр, прогресс, перемотка, экспорт ----
+
+    /** Имена реестра r2dvfx; пустой массив, если модуль недоступен. */
+    function vfxNames() {
+        return call(() => $.vfx.list(), []) || [];
+    }
+
+    function vfxSelected() {
+        const names = vfxNames();
+        if (!names.length) return null;
+        const i = Math.max(0, Math.min(names.length - 1, runtime.vfx_index | 0));
+        return names[i];
+    }
+
+    /** Данные вкладки VFX: те же факты, что видны в панели. */
+    function vfxData() {
+        const names = vfxNames();
+        const name = vfxSelected();
+        const spec = name ? call(() => $.vfx.get(name), null) : null;
+        const query = runtime.vfx_handle ? call(() => runtime.vfx_handle.query(), null) : null;
+        const layers = spec && Array.isArray(spec.layers) ? spec.layers : [];
+        const uses = [];
+        for (const layer of layers) {
+            const use = layer && layer.use;
+            if (typeof use === 'string' && uses.indexOf(use) < 0) uses.push(use);
+        }
+        const lines = [];
+        if (!name) {
+            lines.push('реестр эффектов пуст: объявите $.vfx.define(...)');
+        } else {
+            lines.push(`эффект: ${name} (${names.indexOf(name) + 1} из ${names.length})`);
+            lines.push(`длительность ${numText(spec && spec.duration, 2)} с`
+                       + ` · слоёв ${layers.length || intText(0)}`);
+            lines.push(`примитивы: ${uses.length ? uses.join(', ') : COPY_NONE}`);
+        }
+        if (query) {
+            lines.push(`плей: ${query.name} ${numText(query.time, 2)}/${numText(query.duration, 2)} с`
+                       + ` (${Math.round((query.progress || 0) * 100)}%)`
+                       + ` · rate ${numText(query.rate, 2)}`
+                       + ` · ${query.active ? 'идёт'
+                           : 'завершён' + (query.end_reason ? ' (' + query.end_reason + ')' : '')}`);
+            lines.push(`seed ${orDash(query.seed)} · hash ${intText(query.hash)}`
+                       + ` · draws ${intText(query.draws)} · fired ${intText(query.fired)}`
+                       + ` · слоёв ${intText(query.layers)}`
+                       + (query.degraded ? ' · DEGRADED (бюджет)' : ''));
+        } else {
+            lines.push('плей: не запущен');
+        }
+        if (runtime.vfx_note) lines.push(runtime.vfx_note);
+        return { names, name, spec, query, uses, text: lines.join('\n') };
+    }
+
+    /** Выбрать эффект по индексу в списке (строка панели или команда). */
+    function vfxSelect(index) {
+        const names = vfxNames();
+        const i = Math.max(0, Math.min(names.length - 1, Math.floor(Number(index) || 0)));
+        if (!names.length) return null;
+        runtime.vfx_index = i;
+        runtime.vfx_note = null;
+        if (runtime.doc >= 0) uiSetValue(runtime.doc, 'rt-vfx-path', `vfx-export/${names[i]}.json`);
+        refreshRuntime(true);
+        return names[i];
+    }
+
+    /** Плей выбранного эффекта в центре текущей камеры (предпросмотр). */
+    function vfxPlay() {
+        const name = vfxSelected();
+        if (!name) return false;
+        call(() => $.vfx.clear(), null);
+        const cam = call(() => $.camera.info(), { x: 0, y: 0 }) || { x: 0, y: 0 };
+        const handle = call(() => $.vfx.play(name, { at: [cam.x || 0, cam.y || 0] }), null);
+        runtime.vfx_handle = handle || null;
+        runtime.vfx_note = handle
+            ? `запущен ${name} в (${numText(cam.x, 1)}, ${numText(cam.y, 1)})`
+            : `не удалось запустить ${name} (см. $.debug.errors())`;
+        refreshRuntime(true);
+        return !!handle;
+    }
+
+    /** Стоп: снимает все эффекты сцены (предпросмотр не должен копиться). */
+    function vfxStop() {
+        call(() => $.vfx.clear(), null);
+        runtime.vfx_handle = null;
+        runtime.vfx_note = 'остановлено: все эффекты сняты';
+        refreshRuntime(true);
+        return true;
+    }
+
+    /** Перемотка живого эффекта: delta в секундах (вперёд/назад). */
+    function vfxSeek(delta) {
+        if (!runtime.vfx_handle) {
+            runtime.vfx_note = 'перемотка: сначала «Плей»';
+            refreshRuntime(true);
+            return false;
+        }
+        const q = call(() => runtime.vfx_handle.query(), null);
+        if (!q) return false;
+        const t = Math.max(0, Math.min(q.duration || 0, (q.time || 0) + Number(delta || 0)));
+        call(() => runtime.vfx_handle.seek(t), null);
+        runtime.vfx_note = `перемотка: ${numText(t, 2)} с`;
+        refreshRuntime(true);
+        return true;
+    }
+
+    /** Экспорт спеки выбранного эффекта в JSON через $.fs.write. */
+    function vfxExport() {
+        const name = vfxSelected();
+        if (!name) return { ok: false, error: 'нет выбранного эффекта' };
+        const spec = call(() => $.vfx.get(name), null);
+        if (!spec) return { ok: false, error: 'спека не читается' };
+        const input = runtime.doc >= 0
+            ? String(uiValue(runtime.doc, 'rt-vfx-path') || '').trim() : '';
+        const path = input || runtime.vfx_path || `vfx-export/${name}.json`;
+        runtime.vfx_path = path;
+        // Формат файла — тот же, что читает $.vfx.load: `{ effects: { имя: спека } }`.
+        // Иначе «экспорт→импорт» не был бы кругом: load не принимает голую спеку.
+        const payload = { effects: {} };
+        payload.effects[name] = spec;
+        const ok = call(() => $.fs.write(path, JSON.stringify(payload, null, 2)), false);
+        runtime.vfx_note = ok
+            ? `экспортировано: ${path}`
+            : `экспорт не удался: ${path} (см. $.debug.errors())`;
+        refreshRuntime(true);
+        return { ok: !!ok, path, error: ok ? null : 'write failed' };
+    }
+
     // --- §39: отчёт ---------------------------------------------------------
 
     function reportData() {
@@ -2614,6 +2770,17 @@ export function installDevTools($) {
                        step.scale !== null && Math.abs(step.scale - value) < 1e-6);
         }
 
+        // §M4 VFX: строки списка и статус выбранного/играющего эффекта.
+        const vfx = vfxData();
+        for (let i = 0; i < VFX_ROWS; i++) {
+            const id = `rt-vfx-row-${i}`;
+            if (i >= vfx.names.length) { uiSetClass(doc, id, 'gone', true); continue; }
+            uiSetClass(doc, id, 'gone', false);
+            uiSetText(doc, id, `${i + 1}. ${vfx.names[i]}`);
+            uiSetClass(doc, id, 'on', i === runtime.vfx_index);
+        }
+        uiSetText(doc, 'rt-vfx-status', vfx.text);
+
         // §39 REPORT: текст снимка (JSON копируется кнопкой).
         uiSetText(doc, 'rt-report-text', reportData().text);
 
@@ -2667,6 +2834,19 @@ export function installDevTools($) {
                 refreshRuntime(true);
             });
             engine.ui.on(runtime.doc, 'rt-watch-reset', 'click', () => { watchReset(); refreshRuntime(true); });
+            // §M4: строки списка эффектов создаются ОДИН раз — на них висят
+            // обработчики выбора, поэтому пересобирать разметку нельзя.
+            uiSetHtml(runtime.doc, 'rt-vfx-list', Array.from({ length: VFX_ROWS }, (_, i) =>
+                `<div class="rt-row rt-vfx-row gone" id="rt-vfx-row-${i}"></div>`).join(''));
+            for (let i = 0; i < VFX_ROWS; i++) {
+                engine.ui.on(runtime.doc, `rt-vfx-row-${i}`, 'click', () => { vfxSelect(i); });
+            }
+            engine.ui.on(runtime.doc, 'rt-vfx-play', 'click', () => { vfxPlay(); });
+            engine.ui.on(runtime.doc, 'rt-vfx-stop', 'click', () => { vfxStop(); });
+            engine.ui.on(runtime.doc, 'rt-vfx-back', 'click', () => { vfxSeek(-0.1); });
+            engine.ui.on(runtime.doc, 'rt-vfx-fwd', 'click', () => { vfxSeek(0.1); });
+            engine.ui.on(runtime.doc, 'rt-vfx-export', 'click', () => { vfxExport(); });
+            if (vfxNames().length) uiSetValue(runtime.doc, 'rt-vfx-path', `vfx-export/${vfxNames()[0]}.json`);
             // §18: строки списка захватов создаются ОДИН раз — на них висят
             // обработчики выбора, поэтому пересобирать разметку нельзя.
             uiSetHtml(runtime.doc, 'rt-hitch-list', Array.from({length: HITCH_ROWS}, (_, i) =>
@@ -2866,6 +3046,27 @@ export function installDevTools($) {
         tab: setTab,
         /** Текущая вкладка панели F1. */
         tabName() { return runtime.tab; },
+
+        /** §M4: состояние вкладки VFX — список, выбор, плей, перемотка, экспорт. */
+        vfx() {
+            const data = vfxData();
+            return {
+                tab: runtime.tab,
+                names: data.names,
+                index: runtime.vfx_index,
+                selected: data.name,
+                uses: data.uses,
+                playing: data.query,
+                note: runtime.vfx_note,
+                path: runtime.vfx_path,
+                text: data.text,
+            };
+        },
+        vfxSelect,
+        vfxPlay,
+        vfxStop,
+        vfxSeek,
+        vfxExport,
         /** Секция инспектора F2 (Identity/Transform/Gameplay/Physics/Presentation). */
         section: setSection,
         sectionName() { return state.section; },

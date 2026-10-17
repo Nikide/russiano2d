@@ -46,9 +46,9 @@ QuickJS-ng v0.10.1, RmlUi 6.3, FreeType, Steam Audio), публичное API �
 |---|---|
 | HEAD | коммит, в котором лежит **этот документ** — сверь `git log --oneline -1`; ветка `main` одинаковая на `github`, `origin` (hub.mos.ru) и `gitverse` |
 | Версия | `1.2.2` (тег `v1.2.2` = `a9220e39…`, поставлен после перепаковки пакетов) |
-| Полный набор | `python3 tools/run_tests.py` → **263 теста**, 257 ok, 6 skip (`re2d_*` — 3D вырезан из SDK), 0 fail (прогон 2026-10-17, 726 с) |
+| Полный набор | `python3 tools/run_tests.py` → **264 теста**, 258 ok, 6 skip (`re2d_*` — 3D вырезан из SDK), 0 fail (прогон 2026-10-17) |
 | Заморозка API | **3125** имён (`tests/api_freeze_baseline.txt`) + **35** методов обёрток (`tests/api_wrapper_methods_baseline.txt`) |
-| Гейты | `api_freeze`, `api_docs_sync` (3125), `api_wrapper_methods` (105), `doc_examples` (687 путей), `doc_coverage`, `doc_claims`, `repository_hygiene`, `release_notes`, `format_extensions`, `checklist`, `acceptance` — зелёные |
+| Гейты | `api_freeze` (3131), `api_docs_sync` (3131), `api_wrapper_methods` (105), `doc_examples` (687 путей), `doc_coverage`, `doc_claims`, `repository_hygiene`, `release_notes`, `format_extensions`, `checklist`, `acceptance` — зелёные |
 | Бинарник | `build/russiano2d` (пересобирать после правок JS! JS вшивается при сборке) |
 | Внешний тестировщик | `/Volumes/SSD NVME/p2game/bashnya/issues.md` — **только читать**, никогда не править и не ставить галки |
 
@@ -241,7 +241,7 @@ $.vfx.play('hit.spark', { at: [x, y], parent: node });
 | # | Долг | Факт и как закрывать |
 |---|---|---|
 | Д10 | **`api_freeze` не видит методы вложенных namespace** (`$.gfx.light.budget` появился мимо снимка) | ✅ **закрыто**: гейт `tests/api_wrapper_methods_test.py` теперь снимает и вложенные namespace (`$.gfx.light/draw/push`, `$.world.bsp`, `$.sound.bank`, `$.debug.draw/profiler`) — 105 методов в снимке против 35. `api_freeze` не расширяли, чтобы не раздувать `api_docs_sync`; whitelist явный, внутренние `$.ctx.*`/`*._state` исключены |
-| Д11 | **r2dvfx M4** — предпросмотр эффектов в DevTools и экспорт спеки в JSON | API готов (`list/get/play/seek/query`, спеки — чистые данные). Нужна вкладка в DevTools; записано в `docs/highlevel/vfx.md` §7 как несделанное |
+| Д11 | **r2dvfx M4** — предпросмотр эффектов в DevTools и экспорт спеки в JSON | ✅ **закрыто**: 15-я вкладка `vfx` в F1 — список = `$.vfx.list()` (22 эффекта), плей в центре камеры, прогресс/время/seed/hash/degraded из `handle.query()`, перемотка ±0.1 с, «Стоп» снимает всё; экспорт пишет `{effects:{имя:спека}}`, который сразу читает `$.vfx.load` — `devtools_vfx_test.py` (24 проверки): эффект снят из реестра, загружен из файла, спеки равны. Публичные `$.devtools.vfx/vfxSelect/vfxPlay/vfxStop/vfxSeek/vfxExport` (81 имя, freeze 3131) |
 | Д12 | **`cutscene.js` зовёт `$.fx.flash`** — первая катсцена с вспышкой даст одно предупреждение `R2D_FX_DEPRECATED` | Перевести `cutscene.js` на `$.vfx.flash` (файл был вне зоны агента) |
 | Д13 | **Полный I1**: при активном параллаксе `node.x/y` пишет `layers.js`, читает `render.js` | Вынести параллакс-смещение в `render.js` (как спрайтовое смещение), тогда `node.x` останется позицией игры |
 
@@ -264,8 +264,7 @@ done
 python3 tools/run_tests.py
 ```
 
-Ожидаемые числа при здоровом дереве: **263 теста, 257 ok, 6 skip, 0 fail** (полный
-прогон 2026-10-17: 726.0 с); заморозка **3125** имён; `api_docs_sync` — **3125** имён;
+Ожидаемые числа при здоровом дереве: **264 теста, 258 ok, 6 skip, 0 fail**; заморозка **3125** имён; `api_docs_sync` — **3125** имён;
 гейт обёрток — **35** методов.
 
 ## 8. Как устроен агентский режим тестов (короткая шпаргалка)
