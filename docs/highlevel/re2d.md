@@ -37,6 +37,7 @@ $.render(() => world.render(view,400,240));
 | `world.secret(opts)` / `secretsTick(dt,at)` / `onSecret(fn)` | secret volumes + события `secret.found` |
 | `world.breakable(opts)` / `onBreakable(fn)` | authored breakables + событие `breakable.broken` |
 | `surface.terrain(name)` / `conveyor(opts)`, `world.terrainAt/conveyorAt` | terrain/liquid metadata и 2D conveyors |
+| `world.conveyorMotion(surface,v,dt)` | conveyor gameplay tick (velocity к скорости конвейера) |
 | `world.materialAnim(name,opts)` / `materialIndex(name)` | flipbook/scroll/emissive анимация материала |
 | `world.volume(node,opts)` | constrained box/cross/slice-stack из нескольких billboard-частей (не mesh) |
 | `$.capabilities.re2d` | честная матрица возможностей сборки/рантайма |

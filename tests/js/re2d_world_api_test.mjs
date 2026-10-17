@@ -86,6 +86,7 @@ const native = {
                        vignette: 0.4, flash: 0.5, pixelSize: 1, chroma: 0.001, bloom: 0.3 }),
     surfaceMaterialName: (index) => 'brick',
     spanAudioZone: () => {}, spanAudioZoneInfo: () => ({ preset: 1, name: 'hall' }),
+    conveyorApply: (surface, vx, vy, dt) => ({ vx: vx + 10 * dt, vy }),
     audioZoneAt: (x, y, h) => ({ preset: 1, name: 'hall', span: 2 }),
     audioBudget: (n) => n,
     audioState: () => ({ ready: true, active: 3, virtual: 2, budget: 8 }),
@@ -566,6 +567,14 @@ test('world.audio.budget/state отражают voice virtualization', () => {
     eq(world.audio.budget(8), 8);
     const st = world.audio.state();
     eq(st.active, 3); eq(st.virtual, 2); eq(st.ready, true);
+    world.dispose();
+});
+
+test('world.conveyorMotion двигает velocity к скорости конвейера', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const moved = world.conveyorMotion(2, { vx: 0, vy: 0 }, 0.5);
+    truthy(moved.vx > 0);
+    eq(moved.vy, 0);
     world.dispose();
 });
 

@@ -780,6 +780,16 @@ static JSValue world_terrain_at(JSContext *ctx,JSValueConst self,int argc,JSValu
         set_num(ctx,o,"damagePerSecond",t->damage_per_second);}
     return o;
 }
+static JSValue world_conveyor_apply(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[4];if(!w||!world_numbers(ctx,argc,argv,4,p))return JS_EXCEPTION;
+    float info[3];int affects=0;
+    if(!r2d_world_surface_conveyor_info(w,(int)p[0],info,&affects))return JS_ThrowRangeError(ctx,"Re2D World: unknown surface conveyor");
+    R2DWorldConveyor conveyor={.vx=info[0],.vy=info[1],.accel=info[2],.affects_projectiles=affects!=0};
+    float vx=p[1],vy=p[2];if(!isfinite(p[3])||p[3]<=0)return JS_ThrowRangeError(ctx,"Re2D World: invalid conveyor tick");
+    r2d_world_conveyor_apply(&conveyor,&vx,&vy,1.0f,p[3]);
+    JSValue o=JS_NewObject(ctx);set_num(ctx,o,"vx",vx);set_num(ctx,o,"vy",vy);return o;
+}
 static JSValue world_conveyor_at_js(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
@@ -1543,6 +1553,7 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"surfaceConveyor",JS_NewCFunction(ctx,world_surface_conveyor,"surfaceConveyor",5));
     JS_SetPropertyStr(ctx,handle,"surfaceConveyorInfo",JS_NewCFunction(ctx,world_surface_conveyor_info,"surfaceConveyorInfo",1));
     JS_SetPropertyStr(ctx,handle,"terrainAt",JS_NewCFunction(ctx,world_terrain_at,"terrainAt",3));
+    JS_SetPropertyStr(ctx,handle,"conveyorApply",JS_NewCFunction(ctx,world_conveyor_apply,"conveyorApply",4));
     JS_SetPropertyStr(ctx,handle,"conveyorAt",JS_NewCFunction(ctx,world_conveyor_at_js,"conveyorAt",3));
     JS_SetPropertyStr(ctx,handle,"secretCreate",JS_NewCFunction(ctx,world_secret_create,"secretCreate",7));
     JS_SetPropertyStr(ctx,handle,"secretRestore",JS_NewCFunction(ctx,world_secret_restore,"secretRestore",3));

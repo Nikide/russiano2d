@@ -279,6 +279,11 @@ def main():
         check(voices_after is not None and '"virtual":2' in voices_after,
               f"виртуальные голоса стабильны после шага: {voices_after}")
 
+        conveyor = a.eval("JSON.stringify(boomerLab.conveyorProbe())")
+        check(conveyor is not None and '"floor":' in conveyor and '"vx":' in conveyor
+              and '"vx":0' not in conveyor,
+              f"conveyorMotion двигает velocity по authored conveyor: {conveyor}")
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 

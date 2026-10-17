@@ -175,6 +175,13 @@ export default function install($) {
         }),
         particlesClear: () => world.particles.clear(),
         audioStateProbe: () => world.audio.state(),
+        conveyorProbe: () => {
+            let floor = -1;
+            for (let i = 0; i < world.info().surfaces; i++) if (world.surface(i).kind === 1) { floor = i; break; }
+            if (floor < 0) return null;
+            world.surface(floor).conveyor({ vx: 180, vy: 0, accel: 900 });
+            return { floor, motion: world.conveyorMotion(floor, { vx: 0, vy: 0 }, 0.5) };
+        },
         audioVoicesProbe: () => {
             if (!world._voices) {
                 world._voices = [];

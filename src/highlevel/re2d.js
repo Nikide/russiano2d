@@ -513,6 +513,11 @@ function worldWrapper($, native) {
                 terrainAt(x, y, h) { return native.terrainAt(x, y, h); },
                 audioZoneAt(x, y, h) { return native.audioZoneAt(x, y, h); },
                 conveyorAt(x, y, h) { return native.conveyorAt(x, y, h); },
+                // P1 conveyor gameplay tick: move a velocity toward the surface
+                // conveyor velocity (engine core; controller applies the result).
+                conveyorMotion(surface, velocity = {}, dt = 1 / 60) {
+                    return native.conveyorApply(Math.trunc(Number(surface)), Number(velocity.vx ?? 0), Number(velocity.vy ?? 0), Number(dt));
+                },
                 material(name, options) {
                     native.material(name,options.albedo,options.normal ?? '',options.emissive ?? '',
                         options.emissiveStrength ?? 1,options.uScale ?? (1/64),options.vScale ?? (1/64),({masked:0,opaque:1,translucent:2,additive:3})[options.blend ?? "masked"] ?? -1,options.opacity ?? 1,options.mapping === "world",options.filter === "linear");
