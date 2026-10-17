@@ -174,6 +174,19 @@ export default function install($) {
             player: world.spawn('player.start'), missing: world.spawn('nope'),
         }),
         particlesClear: () => world.particles.clear(),
+        volumeProbe: () => {
+            if (world._volume) { world._volume.remove(); world._volume = null; return {closed: true}; }
+            const node = $('<sprite>', { id: 'lab-crate' })
+                .at(800, 860).depth(0).size(120, 150).angle(0).hide().appendTo($.world);
+            const before = world.info().atlasSprites;
+            world._volume = world.volume(node, { mode: 'box', width: 120, depth: 80, height: 150,
+                cell: { w: 198, h: 198 }, pivot: 'feet', blend: 'masked',
+                faces: { front: 're2d_testroom/assets/enemy_sheet.png',
+                         back: 're2d_testroom/assets/enemy_sheet.png',
+                         left: 're2d_testroom/assets/enemy_sheet.png',
+                         right: 're2d_testroom/assets/enemy_sheet.png' } });
+            return { parts: world._volume.parts.length, before, after: world.info().atlasSprites };
+        },
         materialAnimProbe: () => {
             if (!world._matAnimReady) {
                 world.material('labscroll', { albedo: 're2d_world_renderer_lab/brick.png' });
@@ -199,6 +212,10 @@ export default function install($) {
             let restored = false, error = null;
             try { restored = world.loadState(save); } catch (e) { error = String(e); }
             const info = mover.info();
+            // Stop the probe lift and restore the authored floor so later visual
+            // probes see the normal room, not a rising platform.
+            mover.remove(); mover = null;
+            world.span(0).heights(0, 320);
             return { restored, error, before, hash: save.map.hash, fraction: info.fraction,
                      phase: info.phase, spans: save.state.spans.length,
                      portals: save.state.portals.length, movers: save.state.movers.length };

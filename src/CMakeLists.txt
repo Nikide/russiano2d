@@ -99,7 +99,9 @@ if(R2D_ENABLE_RE2D)
         re2d_world_save.h re2d_world_save.c
         re2d_world_portal_visual.h re2d_world_portal_visual.c
         re2d_world_volume.h re2d_world_volume.c
-        re2d_world_material_anim.h re2d_world_material_anim.c)
+        re2d_world_material_anim.h re2d_world_material_anim.c
+        re2d_world_polywall.h re2d_world_polywall.c
+        re2d_world_polygon.h re2d_world_polygon.c)
     list(APPEND R2D_DEFINES R2D_ENABLE_RE2D=1)
 endif()
 

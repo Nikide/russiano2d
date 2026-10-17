@@ -232,6 +232,14 @@ def main():
         changed, _ = changed_pixels(before_anim, after_anim)
         check(changed > 1000, f"scrolling/emissive материал меняет кадр ({changed} px)")
 
+        volume = a.eval("JSON.stringify(boomerLab.volumeProbe())")
+        check(volume is not None and '"parts":4' in volume and '"after":8' in volume,
+              f"world.volume box регистрирует 4 native parts: {volume}")
+        a.step(3)
+        vshot = a.screenshot(os.path.join(SHOTS, "re2d_boomer_lab_volume.png"))
+        check(green_pixels(vshot) > 150, f"volumetric box виден на кадре ({green_pixels(vshot)} px)")
+        a.eval("JSON.stringify(boomerLab.volumeProbe())")  # remove
+
         check("[]" == a.eval("JSON.stringify($.debug.errors())"),
               f"ошибок игрового кода нет: {a.eval('JSON.stringify($.debug.errors())')}")
 

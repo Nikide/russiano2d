@@ -120,7 +120,15 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
             row=(int)d;
         }
         JS_FreeValue(ctx,rv);
-        const float dx=x-view->x,dy=y-view->y,dist=fmaxf(.000001f,hypotf(dx,dy));
+        float px_=x,py_=y,pdepth=depth;
+        if(actor->offset_x!=0||actor->offset_y!=0||actor->offset_h!=0){
+            const float ca=cosf(facing),sa=sinf(facing);
+            const float right_x=ca,right_y=sa,forward_x=-sa,forward_y=ca;
+            px_+=right_x*actor->offset_x+forward_x*actor->offset_y;
+            py_+=right_y*actor->offset_x+forward_y*actor->offset_y;
+            pdepth+=actor->offset_h;
+        }
+        const float dx=px_-view->x,dy=py_-view->y,dist=fmaxf(.000001f,hypotf(dx,dy));
         bool flip=false;
         const int column=r2d_world_atlas_direction(r2d_world_atlas_relative_yaw(facing,dx/dist,dy/dist),actor->directions,actor->mirror,&flip);
         float px,py;r2d_world_atlas_pivot(actor->pivot_mode,actor->pivot_x,actor->pivot_y,&px,&py);
@@ -128,10 +136,10 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
         if(!r2d_world_atlas_placement(actor->cell_w,actor->cell_h,px,py,&side,&dest_x,&dest_y,&pivot_sx,&pivot_sy))continue;
         r2d_world_atlas_cell(column,row,actor->columns,actor->rows,actor->cell_w,actor->cell_h,&cell_x,&cell_y,&cell_w,&cell_h);
         const float wsq=ww*(float)side/(float)actor->cell_w,hsq=hh*(float)side/(float)actor->cell_h;
-        const float wx=x+(0.5f-pivot_sx/(float)side)*wsq;
-        const float bottom=depth-(1.0f-pivot_sy/(float)side)*hsq;
-        const int span=r2d_world_span_at(&w->world,wx,y,bottom+hsq*0.5f);
-        const bool visible=span>=0&&w->visibility.span_seen[span]&&r2d_world_sprite_visible(view,width,height,wx,y,bottom,wsq,hsq,ortho);
+        const float wx=px_+(0.5f-pivot_sx/(float)side)*wsq;
+        const float bottom=pdepth-(1.0f-pivot_sy/(float)side)*hsq;
+        const int span=r2d_world_span_at(&w->world,wx,py_,bottom+hsq*0.5f);
+        const bool visible=span>=0&&w->visibility.span_seen[span]&&r2d_world_sprite_visible(view,width,height,wx,py_,bottom,wsq,hsq,ortho);
         if(visible) {
             if(!actor->frame||actor->frame_side!=side) {
                 uint8_t *frame=realloc(actor->frame,(size_t)side*(size_t)side*4u);
@@ -148,7 +156,7 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
         if(w->frame_count==ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: composition budget exhausted");return false;}
         const int index=w->frame_count++;
         w->frame_handles[index]=JS_UNDEFINED;
-        float *p=w->frame_positions+index*5;p[0]=wx;p[1]=y;p[2]=bottom;p[3]=wsq;p[4]=hsq;
+        float *p=w->frame_positions+index*5;p[0]=wx;p[1]=py_;p[2]=bottom;p[3]=wsq;p[4]=hsq;
         w->frame_kinds[index]=R2D_WORLD_FRAME_ATLAS;
         w->frame_sizes[index]=side;
         w->frame_keys[index]=(uint64_t)(a+1);
@@ -306,7 +314,8 @@ static bool atlas_png(JSContext *ctx,const char *path,uint8_t **pixels,int *widt
 }
 bool r2d_world_atlas_register(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node,const char *path,
     int columns,int rows,int directions,bool mirror,int cell_w,int cell_h,
-    int pivot,float pivot_x,float pivot_y,float width,float height,int blend)
+    int pivot,float pivot_x,float pivot_y,float width,float height,int blend,
+    float offset_x,float offset_y,float offset_h)
 {
     if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: atlas registry is busy");return false;}
     if(!JS_IsObject(node)){JS_ThrowTypeError(ctx,"Re2D World: atlas sprite needs a node");return false;}
@@ -317,7 +326,6 @@ bool r2d_world_atlas_register(JSContext *ctx,R2DWorldRuntime *w,JSValueConst nod
     if(pivot<R2D_WORLD_ATLAS_PIVOT_CENTER||pivot>R2D_WORLD_ATLAS_PIVOT_CUSTOM){JS_ThrowRangeError(ctx,"Re2D World: atlas pivot mode 0..3");return false;}
     if(blend<R2D_WORLD_MASKED||blend>R2D_WORLD_ADDITIVE){JS_ThrowRangeError(ctx,"Re2D World: atlas blend mode 0..3");return false;}
     if(!isfinite(pivot_x)||!isfinite(pivot_y)||!isfinite(width)||!isfinite(height)||width<=0||height<=0){JS_ThrowRangeError(ctx,"Re2D World: atlas pivot/size must be finite and positive width/height");return false;}
-    for(int i=0;i<w->atlas_count;i++)if(same(node,w->atlas_actors[i].node)){JS_ThrowTypeError(ctx,"Re2D World: node already has an atlas sprite");return false;}
     R2DWorldAtlasActor actor={0};
     if(!atlas_png(ctx,path,&actor.atlas,&actor.atlas_w,&actor.atlas_h))return false;
     if(columns*cell_w>actor.atlas_w||rows*cell_h>actor.atlas_h){
@@ -329,18 +337,19 @@ bool r2d_world_atlas_register(JSContext *ctx,R2DWorldRuntime *w,JSValueConst nod
     actor.node=JS_DupValue(ctx,node);
     actor.columns=columns;actor.rows=rows;actor.directions=directions;actor.mirror=mirror;
     actor.cell_w=cell_w;actor.cell_h=cell_h;actor.pivot_mode=pivot;actor.pivot_x=pivot_x;actor.pivot_y=pivot_y;
-    actor.width=width;actor.height=height;actor.blend=blend;
+    actor.width=width;actor.height=height;actor.blend=blend;actor.offset_x=offset_x;actor.offset_y=offset_y;actor.offset_h=offset_h;
     w->atlas_actors[w->atlas_count++]=actor;return true;
 }
 bool r2d_world_atlas_unregister(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node)
 {
     if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: atlas registry is busy");return false;}
-    for(int i=0;i<w->atlas_count;i++)if(same(node,w->atlas_actors[i].node)){
+    bool removed=false;
+    for(int i=w->atlas_count-1;i>=0;i--)if(same(node,w->atlas_actors[i].node)){
         JS_FreeValue(ctx,w->atlas_actors[i].node);free(w->atlas_actors[i].atlas);free(w->atlas_actors[i].frame);
         memmove(w->atlas_actors+i,w->atlas_actors+i+1,(size_t)(w->atlas_count-i-1)*sizeof(R2DWorldAtlasActor));
-        w->atlas_count--;return true;
+        w->atlas_count--;removed=true;
     }
-    return true;
+    return removed?true:true;
 }
 
 

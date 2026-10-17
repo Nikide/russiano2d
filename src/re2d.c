@@ -1170,11 +1170,11 @@ static JSValue world_trigger_shoot(JSContext *ctx,JSValueConst self,int argc,JSV
 static JSValue world_atlas_add(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
-    if(argc<14)return JS_ThrowTypeError(ctx,"Re2D World: atlasAdd(node,path,columns,rows,directions,mirror,cellW,cellH,pivot,pivotX,pivotY,width,height,blend)");
+    if(argc<17)return JS_ThrowTypeError(ctx,"Re2D World: atlasAdd(node,path,columns,rows,directions,mirror,cellW,cellH,pivot,pivotX,pivotY,width,height,blend,offsetX,offsetY,offsetH)");
     if(!JS_IsString(argv[1]))return JS_ThrowTypeError(ctx,"Re2D World: atlas path must be a string");
     const char *path=JS_ToCString(ctx,argv[1]);if(!path)return JS_EXCEPTION;
-    float p[12];bool ok=world_numbers(ctx,argc-2,argv+2,12,p);
-    if(ok)ok=r2d_world_atlas_register(ctx,w,argv[0],path,(int)p[0],(int)p[1],(int)p[2],p[3]!=0.0f,(int)p[4],(int)p[5],(int)p[6],p[7],p[8],p[9],p[10],(int)p[11]);
+    float p[15];bool ok=world_numbers(ctx,argc-2,argv+2,15,p);
+    if(ok)ok=r2d_world_atlas_register(ctx,w,argv[0],path,(int)p[0],(int)p[1],(int)p[2],p[3]!=0.0f,(int)p[4],(int)p[5],(int)p[6],p[7],p[8],p[9],p[10],(int)p[11],p[12],p[13],p[14]);
     JS_FreeCString(ctx,path);return ok?JS_UNDEFINED:JS_EXCEPTION;
 }
 static JSValue world_atlas_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
@@ -1337,7 +1337,7 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"audioUpdate",JS_NewCFunction(ctx,world_audio_update,"audioUpdate",7));
     JS_SetPropertyStr(ctx,handle,"audioInfo",JS_NewCFunction(ctx,world_audio_info,"audioInfo",1));
     JS_SetPropertyStr(ctx,handle,"audioRemove",JS_NewCFunction(ctx,world_audio_remove,"audioRemove",1));
-    JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",14));
+    JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",17));
     JS_SetPropertyStr(ctx,handle,"hitAdd",JS_NewCFunction(ctx,world_hit_add,"hitAdd",5));
     JS_SetPropertyStr(ctx,handle,"materialIndex",JS_NewCFunction(ctx,world_material_index,"materialIndex",1));
     JS_SetPropertyStr(ctx,handle,"materialAnimSet",JS_NewCFunction(ctx,world_material_anim_set,"materialAnimSet",9));

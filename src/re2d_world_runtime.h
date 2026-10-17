@@ -26,6 +26,8 @@ typedef struct R2DWorldAtlasActor {
     int columns,rows,directions,cell_w,cell_h,pivot_mode,blend;
     bool mirror;
     float pivot_x,pivot_y,width,height;
+    // Constrained volume part offset in the actor's local XY/height frame.
+    float offset_x,offset_y,offset_h;
     uint8_t *frame;
     int frame_side;
     int last_column,last_row,last_flip,frame_revision;
@@ -157,7 +159,8 @@ bool r2d_world_actor_unregister(JSContext *,R2DWorldRuntime *,JSValueConst);
 // entity: only an atlas PNG + direction/pivot policy attached to the node.
 bool r2d_world_atlas_register(JSContext *,R2DWorldRuntime *,JSValueConst,const char *,
     int columns,int rows,int directions,bool mirror,int cell_w,int cell_h,
-    int pivot,float pivot_x,float pivot_y,float width,float height,int blend);
+    int pivot,float pivot_x,float pivot_y,float width,float height,int blend,
+    float offset_x,float offset_y,float offset_h);
 bool r2d_world_atlas_unregister(JSContext *,R2DWorldRuntime *,JSValueConst);
 // Actor hit proxies for unified world+actor trace (P0-B). Not a physics body.
 bool r2d_world_hit_register(JSContext *,R2DWorldRuntime *,JSValueConst,float radius,float bottom,float top,int category);

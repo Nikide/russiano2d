@@ -140,6 +140,7 @@ test('world.sprite уходит в нативный atlasAdd с нормализ
     eq(a[2], 5); eq(a[3], 8); eq(a[4], 5); eq(a[5], 1);
     eq(a[6], 198); eq(a[7], 198); eq(a[8], 1); eq(a[9], 0.5); eq(a[10], 1);
     eq(a[11], 150); eq(a[12], 150); eq(a[13], 0);
+    eq(a.length, 17); eq(a[14], 0); eq(a[15], 0); eq(a[16], 0);
     world.dispose();
 });
 
@@ -423,6 +424,23 @@ test('world.materialAnim применяет scroll/pulse к существующ
     anim.remove();
     eq(calls.material[calls.material.length - 1][0], 'remove');
     throws(RangeError, () => world.materialAnim('missing'), 'неизвестный материал');
+    world.dispose();
+});
+
+test('world.volume box: четыре constrained parts без mesh API', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const node = spawn('crate');
+    const before = calls.atlasAdd.length;
+    const volume = world.volume(node, { mode: 'box', width: 100, depth: 60, height: 80,
+        cell: { w: 64, h: 64 }, faces: { front: 'f.png', back: 'b.png', left: 'l.png', right: 'r.png' } });
+    eq(volume.parts.length, 4);
+    eq(calls.atlasAdd.length - before, 4);
+    const front = calls.atlasAdd[before];
+    eq(front[1], 'f.png');
+    eq(front[15], 30);          // offsetY = depth/2
+    eq(calls.atlasAdd[before + 2][14], -50); // left offsetX = -width/2
+    volume.remove();
+    throws(TypeError, () => world.volume(node, { mode: 'cross' }), 'cross нужен atlas');
     world.dispose();
 });
 

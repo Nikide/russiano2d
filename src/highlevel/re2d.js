@@ -617,9 +617,60 @@ function rendererWorldWrapper($, native) {
             if (!Number.isFinite(pivotX) || !Number.isFinite(pivotY)) throw new RangeError('world.sprite: pivot must be finite');
             node.sprite_row = Math.max(0, Math.trunc(Number(node.sprite_row) || 0));
             native.atlasAdd(node, atlas, columns, rows, directions, options.mirror !== false && directions > 1 ? 1 : 0,
-                cellW, cellH, pivot, pivotX, pivotY, width, height, blend);
+                cellW, cellH, pivot, pivotX, pivotY, width, height, blend,
+                Number(options.offsetX ?? 0), Number(options.offsetY ?? 0), Number(options.offsetH ?? 0));
         });
         return world;
+    };
+    // P2 constrained volumetric sprites: several specialised billboard parts,
+    // never a mesh. Box = 4/6 faces at authored offsets; cross = two cards;
+    // slice-stack = N bands of the same atlas stacked in height.
+    world.volume = (target, options = {}) => {
+        const mode = options.mode ?? 'box';
+        const width = Number(options.width ?? 96), depth = Number(options.depth ?? 64);
+        const height = Number(options.height ?? 150);
+        if (!(width > 0 && depth > 0 && height > 0)) throw new RangeError('world.volume: width/depth/height > 0');
+        const common = {
+            columns: Math.trunc(Number(options.columns ?? 1)), rows: Math.trunc(Number(options.rows ?? 1)),
+            directions: Math.trunc(Number(options.directions ?? 1)), mirror: options.mirror === true,
+            cell: options.cell || { w: 1, h: 1 }, pivot: options.pivot ?? 'feet',
+            blend: options.blend ?? 'masked',
+        };
+        const parts = [];
+        const add = part => {
+            if (typeof part.atlas !== 'string' || !part.atlas) throw new TypeError('world.volume: face atlas PNG required');
+            native.atlasAdd(part.node, part.atlas, common.columns, common.rows, common.directions,
+                common.mirror ? 1 : 0, common.cell.w, common.cell.h, { feet: 1, center: 0, 'bottom-center': 2, custom: 3 }[common.pivot] ?? 1,
+                common.pivot === 'center' ? 0.5 : 0.5, common.pivot === 'center' ? 0.5 : 1,
+                part.width ?? width, part.height ?? height, { masked: 0, opaque: 1, translucent: 2, additive: 3 }[common.blend] ?? 0,
+                part.offsetX ?? 0, part.offsetY ?? 0, part.offsetH ?? 0);
+            parts.push(part);
+        };
+        $(target).eachNode((i, node) => {
+            if (mode === 'box') {
+                const faces = options.faces || {};
+                const d2 = depth / 2, w2 = width / 2, h2 = height / 2;
+                if (faces.front) add({ node, atlas: faces.front, offsetY: d2 });
+                if (faces.back) add({ node, atlas: faces.back, offsetY: -d2 });
+                if (faces.left) add({ node, atlas: faces.left, offsetX: -w2, offsetY: 0 });
+                if (faces.right) add({ node, atlas: faces.right, offsetX: w2, offsetY: 0 });
+                if (faces.top) add({ node, atlas: faces.top, offsetH: h2, height: width * 0.6 });
+                if (faces.bottom) add({ node, atlas: faces.bottom, offsetH: 0, height: width * 0.6 });
+            } else if (mode === 'cross') {
+                if (!options.atlas) throw new TypeError('world.volume: cross needs atlas');
+                add({ node, atlas: options.atlas, offsetX: -width / 6 });
+                add({ node, atlas: options.atlas, offsetX: width / 6 });
+            } else if (mode === 'slice-stack') {
+                if (!options.atlas) throw new TypeError('world.volume: slice-stack needs atlas');
+                const slices = Math.max(1, Math.min(32, Math.trunc(Number(options.slices ?? 8))));
+                const sliceH = height / slices;
+                for (let k = 0; k < slices; k++) {
+                    add({ node, atlas: options.atlas, offsetH: k * sliceH, height: sliceH,
+                          width: width * (0.7 + 0.3 * Math.sin((k + 1) / (slices + 1) * Math.PI)) });
+                }
+            } else throw new RangeError('world.volume: mode box|cross|slice-stack');
+        });
+        return { mode, parts, remove() { $(target).eachNode((i, node) => native.atlasRemove(node)); } };
     };
     // Unified world+actor trace: registered hit proxies are vertical cylinders
     // attached to existing nodes. Not a physics body; the node owns gameplay

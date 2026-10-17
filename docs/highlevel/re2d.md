@@ -33,6 +33,7 @@ $.render(() => world.render(view,400,240));
 | `world.breakable(opts)` / `onBreakable(fn)` | authored breakables + событие `breakable.broken` |
 | `surface.terrain(name)` / `conveyor(opts)`, `world.terrainAt/conveyorAt` | terrain/liquid metadata и 2D conveyors |
 | `world.materialAnim(name,opts)` / `materialIndex(name)` | flipbook/scroll/emissive анимация материала |
+| `world.volume(node,opts)` | constrained box/cross/slice-stack из нескольких billboard-частей (не mesh) |
 | `world.particles.burst/continuous/info/clear` | нативный fixed-pool частиц |
 | `world.fxDefine(name,bundle)` / `fxSpawn(name,at)` | asset-driven VFX bundle (particles/light/decal/sound/shake) |
 | `world.findSurface(name)` | имя стены/span → handle поверхности |
@@ -395,6 +396,29 @@ emissive-канал; CPU reference и SDL_GPU используют одни и �
 (`anim_u/anim_v/anim_emissive`, GPU — uniform `anim`). Ограничения: flipbook
 кадр возвращается в `info()`, но выбор кадра из atlas-полосы — ответственность
 материала/игры; decals не анимируются; нет shader graph.
+
+## Volumetric sprites (P2)
+
+```js
+const crate = world.volume(node, {
+  mode: 'box', width: 120, depth: 80, height: 150,
+  cell: { w: 198, h: 198 }, pivot: 'feet',
+  faces: { front: 'crate_f.png', back: 'crate_b.png', left: 'crate_l.png', right: 'crate_r.png' },
+});
+// mode:'cross' или mode:'slice-stack' (atlas + slices 1..32)
+crate.parts;   // [{node,atlas,offsetX,offsetY,offsetH,width,height}]
+crate.remove();
+```
+
+Объём — это несколько специализированных billboard-частей с authored
+offset'ами в локальном XY/height актёра, а не mesh: `atlasAdd` принимает
+`offsetX/offsetY/offsetH`, нативный композитор сам поворачивает offset по
+`angle` узла и сортирует по глубине. Box = 4/6 граней, cross = две карточки,
+slice-stack = N полос одного атласа. Позиции/повороты частей не выходят в
+generic vertices/indices API. Ограничение: части камера-ориентированные
+(billboard), поэтому box/cross — визуально ограниченный impostor, а не
+настоящая геометрия; `r2d_world_volume` core (10 тестов) остаётся источником
+канонической граневой логики для будущего ужесточения.
 
 ## Свет, материал, изменение мира
 

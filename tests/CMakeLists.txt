@@ -402,6 +402,30 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_world_material_anim_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# PolyWallGroup core (P1/P3): rigid XY transform, bounds, circle sweep, lerp.
+add_executable(r2d_world_polywall_test re2d/polywall_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_polywall.c")
+target_include_directories(r2d_world_polywall_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_polywall_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_polywall_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_polywall_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_polywall_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Polygon cells (P1 authoring): validation, convex decomposition, shared edges.
+add_executable(r2d_world_polygon_test re2d/polygon_test.c "${CMAKE_SOURCE_DIR}/src/re2d_world_polygon.c")
+target_include_directories(r2d_world_polygon_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_polygon_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_polygon_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_polygon_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_polygon_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # EXR-декодер панорамного неба Re2D World (cmake/WorldEXR.cmake).
 add_executable(r2d_world_exr_test re2d/exr_test.c)
 target_include_directories(r2d_world_exr_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
