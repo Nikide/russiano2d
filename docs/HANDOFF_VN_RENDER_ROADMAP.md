@@ -17,8 +17,8 @@
 | VN-01..03 | dialog/view/theme/IR/linter (task-1) | trace-core | done: 13 qjs, 15 native |
 | VN-02 | speaker/expression/theme stack/skip/input lock (task-1) | trace-core | in_progress |
 | VN-03 | Narrative IR/story/save/backlog/linter (task-1) | trace-core | in_progress |
-| R-01 | grounding/edges/material (task-2) | particle-core | in_progress |
-| R-02 | haze/grime/AO/bloom/sky layers (task-2) | particle-core | in_progress |
+| R-01 | grounding/edges/material (task-2) | particle-core | done: 13 native, 32% pixels changed |
+| R-02 | haze/grime/AO/bloom/sky layers (task-2) | particle-core | done: sky layers/sun/moon/haze/bevel/AO |
 | R-03 | VFX pack/cards/trails/distortion (task-4) | viewmodel-core | done: 11 native, 53 bundles, 143 CTest; renderer pass for cards/trails pending |
 | R-04 | regions/PVS/streaming/LOD (task-3) | nav-core | in_progress |
 | R-05 | brushes/tool materials/compiler #5 (task-3) | nav-core | in_progress |
@@ -65,3 +65,12 @@
 - native `r2d-sdk story validate` and `dialog validate`.
 - Tests: 13 qjs, 15 native SDK; r2d_check 143, ci_verify/docs guards green.
 - Limits: RmlUi pixels not screenshot-verified in qjs (recording backend); default RML has 6 choice slots; input.lock advisory; RCSS syntax checked by RmlUi at load.
+
+## Completed
+### R-01/R-02 + VFX GPU pass (task-2)
+- `re2d_world_render_features.*`: deterministic grounding/fog/variation/AO/sky/liquid model + quality presets.
+- GPU shader/pass: contact shadow/foot AO/floor tint, edge feather/outline/grime, material variation/bevel/corner AO, height fog/haze, sky panorama+4 parallax cards+sun/moon, VFX cards/trails/distortion depth-tested.
+- Counters: `gpuDrawsGround`, `gpuDrawsVfx`, `info.visual.*`; attribution exact.
+- Tests: 13 native, 2 agent; r2d_check 146; ci_verify/docs green.
+- Metrics: lab 26 draws low/high, 32.33% pixels changed; VFX card 1 draw, trail 3; bench worstcase 4.91ms/1287 draws.
+- Limits: medium/high are GPU-reference; CPU shares grounding; contact card screen-space; sky reuses one panorama; refraction remains post; BASHNYA bench blocked by concurrent world loader regression.
