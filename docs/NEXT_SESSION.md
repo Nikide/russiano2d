@@ -46,7 +46,7 @@ QuickJS-ng v0.10.1, RmlUi 6.3, FreeType, Steam Audio), публичное API �
 |---|---|
 | HEAD | коммит, в котором лежит **этот документ** — сверь `git log --oneline -1`; ветка `main` одинаковая на `github`, `origin` (hub.mos.ru) и `gitverse` |
 | Версия | `1.2.2` (тег `v1.2.2` = `a9220e39…`, поставлен после перепаковки пакетов) |
-| Полный набор | `python3 tools/run_tests.py` → **262 теста**, 256 ok, 6 skip (`re2d_*` — 3D вырезан из SDK), 0 fail (числа смены 2026-10-17) |
+| Полный набор | `python3 tools/run_tests.py` → **263 теста**, 257 ok, 6 skip (`re2d_*` — 3D вырезан из SDK), 0 fail (прогон 2026-10-17, 726 с) |
 | Заморозка API | **3125** имён (`tests/api_freeze_baseline.txt`) + **35** методов обёрток (`tests/api_wrapper_methods_baseline.txt`) |
 | Гейты | `api_freeze`, `api_docs_sync` (3125), `api_wrapper_methods`, `doc_coverage`, `doc_claims`, `repository_hygiene`, `release_notes`, `format_extensions`, `checklist`, `acceptance` — зелёные |
 | Бинарник | `build/russiano2d` (пересобирать после правок JS! JS вшивается при сборке) |
@@ -91,6 +91,11 @@ QuickJS-ng v0.10.1, RmlUi 6.3, FreeType, Steam Audio), публичное API �
   `collide` с `sensor:true`, выход — `separate`, нормали/точки честно `null`,
   тело проходит сквозь; `bsp_guard_test` 12 (найден и закрыт SIGSEGV
   `$.world.bsp.order` до `build()`).
+- **Re2D (полировка + тестовая комната)**: `demos/re2d_testroom` — 6 врагов
+  плоскими PNG-билбордами (без character.json), патруль и «замечание» через
+  2D-луч видимости, ходьба от первого лица без оружия; `re2d_testroom_test`
+  **24** проверки; жёсткая камера (smooth 0) и в `re2d_world`; yaw камеры —
+  ГРАДУСЫ (ошибка `-Math.PI/2` вела игрока на восток).
 - **Д4**: FTP-удаление проверено живым прогоном (upload→DELE: curl 250,
   ftplib ok); причина «FAIL удалить» — сервер отвечает 550 на уже удалённый
   файл, а скрипт считал это провалом. `site/deploy-fast.sh` теперь
@@ -260,8 +265,8 @@ done
 python3 tools/run_tests.py
 ```
 
-Ожидаемые числа при здоровом дереве: **262 теста, 256 ok, 6 skip, 0 fail** (полный
-прогон 2026-10-17: 718.2 с); заморозка **3125** имён; `api_docs_sync` — **3125** имён;
+Ожидаемые числа при здоровом дереве: **263 теста, 257 ok, 6 skip, 0 fail** (полный
+прогон 2026-10-17: 726.0 с); заморозка **3125** имён; `api_docs_sync` — **3125** имён;
 гейт обёрток — **35** методов.
 
 ## 8. Как устроен агентский режим тестов (короткая шпаргалка)
