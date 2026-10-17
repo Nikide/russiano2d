@@ -44,7 +44,7 @@ QuickJS-ng v0.10.1, RmlUi 6.3, FreeType, Steam Audio), публичное API �
 
 | Что | Значение |
 |---|---|
-| HEAD | `c8aa0e7` (на всех трёх хостах: `github`, `origin`=hub.mos.ru, `gitverse`) |
+| HEAD | коммит, в котором лежит **этот документ** — сверь `git log --oneline -1`; ветка `main` одинаковая на `github`, `origin` (hub.mos.ru) и `gitverse` |
 | Версия | `1.2.2` (тег `v1.2.2` = `a9220e39…`, поставлен после перепаковки пакетов) |
 | Полный набор | `python3 tools/run_tests.py` → **247 тестов**, 240 ok, 6 skip (`re2d_*` — 3D вырезан из SDK), 1 флак закрыт |
 | Заморозка API | **3071** имя (`tests/api_freeze_baseline.txt`) |
