@@ -1265,7 +1265,7 @@ static JSValue world_post_step(JSContext *ctx,JSValueConst self,int argc,JSValue
 }
 static JSValue world_polywall_add(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
-    WorldHandle *w=world_get(ctx,self);float p[3];if(!w||argc<5||!world_numbers(ctx,4,argv+1,4,p)||JS_GetTypedArrayType(argv[0])!=JS_TYPED_ARRAY_FLOAT32)return JS_ThrowTypeError(ctx,"Re2D World: polywall(Float32Array walls,pivotX,pivotY,angle,speed)");
+    WorldHandle *w=world_get(ctx,self);float p[4];if(!w||argc<5||!world_numbers(ctx,4,argv+1,4,p)||JS_GetTypedArrayType(argv[0])!=JS_TYPED_ARRAY_FLOAT32)return JS_ThrowTypeError(ctx,"Re2D World: polywall(Float32Array walls,pivotX,pivotY,angle,speed)");
     float *ids=NULL;size_t count=0;JSValue ab=f32_view(ctx,argv[0],&ids,&count);
     if(JS_IsException(ab))return JS_EXCEPTION;
     if(!count||count>64){JS_FreeValue(ctx,ab);return JS_ThrowRangeError(ctx,"Re2D World: polywall needs 1..64 walls");}

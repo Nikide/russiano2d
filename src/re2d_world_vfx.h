@@ -197,7 +197,7 @@ typedef struct {
     bool (*blocked)(void *user,float x,float y,float radius,float bottom,float top);
 } R2DWorldVfxHooks;
 
-typedef struct {
+typedef struct R2DWorldVfx {
     R2DWorldVfxBundle bundles[R2D_WORLD_VFX_MAX_BUNDLES];
     R2DWorldVfxCard cards[R2D_WORLD_VFX_MAX_CARDS];
     R2DWorldVfxTrail trails[R2D_WORLD_VFX_MAX_TRAILS];

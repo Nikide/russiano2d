@@ -1842,7 +1842,7 @@ static void particles_draw_cpu(R2DWorldRuntime *w,const R2DRe2dView *v,int width
         if(lod.particle_percent<=0||(lod.particle_percent<100&&(i%100)>=lod.particle_percent)){
             w->lod_culled_particles++;continue;
         }
-        float pj[4],center,scale,dist;
+        float pj[4],scale,dist;
         if(ortho>0){
             const float dx=p->x-v->x,dy=p->y-v->y,up=p->h-v->eye;
             const float forward=dx*v->cos_yaw+dy*v->sin_yaw;

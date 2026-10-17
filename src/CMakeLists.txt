@@ -53,6 +53,11 @@ set(R2D_SOURCES
 # Опция объявлена здесь, до списка источников: от неё зависит, какие файлы в
 # него попадут (см. выше).
 set(R2D_DEFINES "")
+if(R2D_SHADERS_WGSL_ONLY)
+    # Shader blobs are WGSL-only in the browser build; native GLSL/MSL world
+    # variants (including the SSBO batch variant) are not generated.
+    list(APPEND R2D_DEFINES R2D_SHADERS_WGSL_ONLY=1)
+endif()
 if(R2D_ENABLE_RE2D)
     list(APPEND R2D_DEFINES R2D_ENABLE_RE2D=1)
 endif()

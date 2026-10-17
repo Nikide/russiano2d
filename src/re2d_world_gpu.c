@@ -273,6 +273,7 @@ static bool init(R2DWorldRuntime *w)
         p.depth_stencil_state.enable_depth_test=true;p.depth_stencil_state.enable_depth_write=true;p.depth_stencil_state.compare_op=SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
         p.rasterizer_state.fill_mode=SDL_GPU_FILLMODE_FILL;p.rasterizer_state.cull_mode=SDL_GPU_CULLMODE_NONE;p.multisample_state.sample_count=SDL_GPU_SAMPLECOUNT_1;
         g->pipeline=SDL_CreateGPUGraphicsPipeline(d,&p);
+#ifndef R2D_SHADERS_WGSL_ONLY
         {
             SDL_GPUShader *bvs=batch_shader(d,&r2d_shader_world_batch_vert,false);
             SDL_GPUShader *bfs=batch_shader(d,&r2d_shader_world_batch_frag,true);
@@ -280,6 +281,9 @@ static bool init(R2DWorldRuntime *w)
             if(bvs)SDL_ReleaseGPUShader(d,bvs);if(bfs)SDL_ReleaseGPUShader(d,bfs);
             g->batch_available=g->batch_pipeline!=NULL;
         }
+#else
+        g->batch_available=false; // WebGPU/WGSL build uses the per-surface path.
+#endif
         // Mirror pass: depth disabled, no blending; drawn scissored into the portal.
         p.depth_stencil_state.enable_depth_test=false;p.depth_stencil_state.enable_depth_write=false;p.depth_stencil_state.compare_op=SDL_GPU_COMPAREOP_ALWAYS;
         g->mirror=SDL_CreateGPUGraphicsPipeline(d,&p);
