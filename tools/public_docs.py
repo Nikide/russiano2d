@@ -84,8 +84,8 @@ INTERNAL_DOCS = (
 #:     именно эти три, а не «все туториалы сразу»: список остаётся allow-list.
 #:
 #: Всё прочее на сайт не идёт: архитектура, философия, законы UI, задачи и
-#: роадмап, туториалы, демо, RE2D, внутренние журналы и отчёты, SDK-документы,
-#: TESTING, лицензии и кодексы. Если понадобится вернуть что-то из этого —
+#: роадмап, туториалы, демо, RE2D, внутренние журналы и отчёты,
+#: TESTING, лицензии и кодексы; SDK/API reference публикуется отдельным запросом. Если понадобится вернуть что-то из этого —
 #: это решение владельца проекта, а не правка списка по ходу.
 SITE_DOCS = (
     "CHANGELOG.md",
@@ -96,6 +96,12 @@ SITE_DOCS = (
     "docs/tutorial-settings.md",
     "docs/BUILD.md",
     "docs/demos.md",
+    # SDK tooling docs: explicit owner request to publish SDK/API reference and
+    # recipes on the documentation site (previously SDK docs were repo-only).
+    "docs/SDK.md",
+    "docs/SDK_AGENT_TOOLING.md",
+    "docs/api",
+    "docs/recipes",
 )
 
 

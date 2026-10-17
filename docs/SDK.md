@@ -10,6 +10,10 @@ Git (`git log --diff-filter=D -- "к удалению.md"`, файл удалё�
 незакрытых возможностей в поставку не входят — они живут только в репозитории
 движка.
 
+> Практический гайд по новому tooling: [SDK_AGENT_TOOLING.md](SDK_AGENT_TOOLING.md).
+> Generated API reference: [docs/api/API_REFERENCE.md](api/API_REFERENCE.md).
+> Рецепты: [docs/recipes/README.md](recipes/README.md).
+
 ```text
 GAME = CODE + DATA          SDK = R2D-приложение + инструменты для CODE + DATA
 ```
