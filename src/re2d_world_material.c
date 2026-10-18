@@ -119,12 +119,31 @@ static bool material_color_id(const R2DRe2dWorld *w,int id,int span,uint32_t tin
 }
 
 int r2d_world_surface_blend(const R2DRe2dWorld *w,int surface)
-{int id=w->surface_materials?w->surface_materials[surface]:-1;return id>=0?w->materials[id].blend:R2D_WORLD_OPAQUE;}
+{
+    int id=w->surface_materials&&surface>=0&&surface<w->surface_count?w->surface_materials[surface]:-1;
+    int blend=id>=0?w->materials[id].blend:R2D_WORLD_OPAQUE;
+    // A faded opaque/masked surface must leave the opaque pass and take part in
+    // transparent sorting. Additive materials keep their additive pipeline; the
+    // fade scales their contribution through the alpha channel.
+    if(blend<R2D_WORLD_TRANSLUCENT&&r2d_world_surface_alpha(w,surface)<1.0f)blend=R2D_WORLD_TRANSLUCENT;
+    return blend;
+}
+
+// Surface-only fade application: decals keep their own alpha (they call
+// material_color_id directly), so only the public surface entry points scale.
+static uint32_t surface_fade_color(const R2DRe2dWorld *w,int surface,uint32_t color)
+{
+    float alpha=r2d_world_surface_alpha(w,surface);
+    if(!(alpha<1.0f))return color;
+    uint32_t value=(uint32_t)lroundf((double)((color>>24)&255u)*(double)alpha);
+    if(value>255u)value=255u;
+    return (color&0x00ffffffu)|(value<<24);
+}
 
 bool r2d_world_material_color(const R2DRe2dWorld *w,int surface,int span,uint32_t tint,float u,float v,float x,float y,float h,const float normal[3],const float tangent[3],float depth,uint32_t *out)
-{int id=w->surface_materials&&surface>=0&&surface<w->surface_count?w->surface_materials[surface]:-1;return material_color_id(w,id,span,tint,u,v,x,y,h,normal,tangent,depth,NULL,out);}
+{int id=w->surface_materials&&surface>=0&&surface<w->surface_count?w->surface_materials[surface]:-1;if(!material_color_id(w,id,span,tint,u,v,x,y,h,normal,tangent,depth,NULL,out))return false;*out=surface_fade_color(w,surface,*out);return true;}
 bool r2d_world_material_color_features(const R2DRe2dWorld *w,int surface,int span,uint32_t tint,float u,float v,float x,float y,float h,const float normal[3],const float tangent[3],float depth,const R2DWorldRenderFeatures *features,uint32_t *out)
-{int id=w->surface_materials&&surface>=0&&surface<w->surface_count?w->surface_materials[surface]:-1;return material_color_id(w,id,span,tint,u,v,x,y,h,normal,tangent,depth,features,out);}
+{int id=w->surface_materials&&surface>=0&&surface<w->surface_count?w->surface_materials[surface]:-1;if(!material_color_id(w,id,span,tint,u,v,x,y,h,normal,tangent,depth,features,out))return false;*out=surface_fade_color(w,surface,*out);return true;}
 int r2d_world_decal_create(R2DRe2dWorld *w,const R2DWorldDecal *d)
 {
     if(!w||!d||d->surface<0||d->surface>=w->surface_count||(w->surface_sky&&w->surface_sky[d->surface])||r2d_world_surface_blend(w,d->surface)>=R2D_WORLD_TRANSLUCENT||d->material<0||d->material>=R2D_WORLD_MAX_MATERIALS||!w->materials[d->material].used||

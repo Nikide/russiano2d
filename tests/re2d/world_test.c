@@ -442,6 +442,81 @@ static void test_surface_tags_suite(void)
     r2d_world_free(&w);
 }
 
+// Per-surface fade: render-only alpha for one surface (roof fade).
+static void test_surface_fade_suite(void)
+{
+    const R2DWorldSpan spans[] = {
+        {0, 0, 200, 200, 0, 80, 0xff778899u, 0xff223344u},
+    };
+    R2DRe2dWorld w = {0};
+    CHECK(r2d_world_build(&w, NULL, 0, spans, 1), "fade world builds");
+    CHECK(w.surface_count == 0 && w.wall_count + w.span_count * 2 == 2,
+          "legacy build keeps no surface table; fade slots derive from walls+spans*2");
+    CHECK(w.surface_alpha == NULL, "fade storage starts lazy/absent");
+    uint64_t revision = w.geometry_revision;
+    const float normal[3] = {0, 0, 1}, tangent[3] = {1, 0, 0};
+    uint32_t color = 0;
+
+    CHECK(fabsf(r2d_world_surface_alpha(&w, 0) - 1.0f) < 1e-6f, "default surface alpha is 1");
+    CHECK(r2d_world_surface_blend(&w, 0) == R2D_WORLD_OPAQUE, "default blend is opaque");
+    CHECK(fabsf(r2d_world_surface_alpha(&w, -1) - 1.0f) < 1e-6f &&
+          fabsf(r2d_world_surface_alpha(&w, 99) - 1.0f) < 1e-6f, "invalid alpha reads return 1");
+    CHECK(!r2d_world_surface_fade_set(&w, -1, 0.5f) &&
+          !r2d_world_surface_fade_set(&w, 99, 0.5f), "invalid surface fades are rejected");
+    CHECK(!r2d_world_surface_fade_set(&w, 0, -0.01f) &&
+          !r2d_world_surface_fade_set(&w, 0, 1.01f) &&
+          !r2d_world_surface_fade_set(&w, 0, NAN) &&
+          !r2d_world_surface_fade_set(&w, 0, INFINITY), "non-finite/out-of-range fades rejected");
+    CHECK(w.surface_alpha == NULL, "rejected writes do not allocate storage");
+
+    CHECK(r2d_world_surface_fade_set(&w, 0, 0.25f), "fade 0.25 accepted");
+    CHECK(fabsf(r2d_world_surface_alpha(&w, 0) - 0.25f) < 1e-6f, "fade getter returns the set value");
+    CHECK(r2d_world_surface_blend(&w, 0) == R2D_WORLD_TRANSLUCENT,
+          "faded opaque surface becomes translucent for sorting/passes");
+    CHECK(r2d_world_material_color(&w, 0, 0, 0xffffffffu, 1, 1, 10, 10, 0,
+                                   normal, tangent, 20, &color),
+          "faded floor still shades");
+    CHECK(((color >> 24) & 255u) == 64u, "faded surface color alpha is scaled (255*0.25)");
+    CHECK(w.geometry_revision == revision && w.topology_revision == 0,
+          "fade never bumps geometry/topology revision");
+
+    CHECK(r2d_world_surface_fade_set(&w, 0, 0.0f), "fade 0 accepted");
+    CHECK(r2d_world_surface_blend(&w, 0) == R2D_WORLD_TRANSLUCENT, "alpha 0 stays translucent");
+    color = 0xdeadbeefu;
+    CHECK(r2d_world_material_color(&w, 0, 0, 0xffffffffu, 1, 1, 10, 10, 0,
+                                   normal, tangent, 20, &color),
+          "alpha-0 surface still shades");
+    CHECK(((color >> 24) & 255u) == 0u, "alpha 0 makes the surface invisible");
+    CHECK(color != 0xdeadbeefu, "color output is written");
+
+    CHECK(r2d_world_surface_fade_set(&w, 0, 1.0f), "fade 1 restores the surface");
+    CHECK(r2d_world_surface_blend(&w, 0) == R2D_WORLD_OPAQUE, "alpha 1 returns to the opaque pass");
+    CHECK(r2d_world_material_color(&w, 0, 0, 0xffffffffu, 1, 1, 10, 10, 0,
+                                   normal, tangent, 20, &color),
+          "restored surface shades");
+    CHECK(((color >> 24) & 255u) == 255u, "alpha 1 keeps the original alpha byte");
+    CHECK(r2d_world_surface_fade_set(&w, 1, 0.5f) &&
+          fabsf(r2d_world_surface_alpha(&w, 1) - 0.5f) < 1e-6f &&
+          fabsf(r2d_world_surface_alpha(&w, 0) - 1.0f) < 1e-6f,
+          "fades are per surface, not global");
+    // Additive materials keep their additive pipeline under a fade. Pure model
+    // check: one surface with an additive material slot, no geometry needed.
+    int additive_refs[1] = {0};
+    R2DRe2dWorld additive_world = {0};
+    additive_world.surface_count = 1;
+    additive_world.surface_materials = additive_refs;
+    additive_world.materials[0].blend = R2D_WORLD_ADDITIVE;
+    additive_world.materials[0].used = true;
+    CHECK(r2d_world_surface_fade_set(&additive_world, 0, 0.5f) &&
+          r2d_world_surface_blend(&additive_world, 0) == R2D_WORLD_ADDITIVE,
+          "additive surfaces stay additive under a fade");
+    CHECK(r2d_world_surface_blend(&additive_world, 0) != R2D_WORLD_TRANSLUCENT,
+          "fade never downgrades an additive material");
+    free(additive_world.surface_alpha);
+    r2d_world_free(&w);
+    r2d_world_free(&w); // double free stays safe
+}
+
 // Unity: Re2D World (multi-height, рэй, stamp) — один кейс.
 static void test_re2d_world_suite(void)
 {
@@ -452,6 +527,7 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_re2d_world_suite);
+    RUN_TEST(test_surface_fade_suite);
     RUN_TEST(test_surface_tags_suite);
     return UNITY_END();
 }

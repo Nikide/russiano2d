@@ -66,7 +66,7 @@ export function buildCity() {
                 cells.push({
                     x, y, w: CELL, h: CELL,
                     spans: [
-                        span(0, 150, TAGS.building, COLORS.interior, COLORS.interior, ['interior']),
+                        span(0, 150, TAGS.building, COLORS.interior, COLORS.interior, ['sky']),
                         span(150, 170, TAGS.roof, COLORS.roof, COLORS.roof, ['roof']),
                     ],
                 });

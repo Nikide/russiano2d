@@ -13,8 +13,8 @@
 // semantic ids first and only then fall back to snapshot indices for the exact
 // map version guarded by r2d_world_save_map_hash().
 //
-// Format: one JSON object, magic/format string "re2d-save", integer version 1.
-//     {"format":"re2d-save","version":1,
+// Format: one JSON object, magic/format string "re2d-save", integer version 2.
+//     {"format":"re2d-save","version":2,
 //      "spans":[{"span":0,"id":"hall","bottom":0,"top":10}],
 //      "portals":[{"portal":0,"id":"gate","open_fraction":1,"closed":false}],
 //      "movers":[{"type":0,"span":3,"portal":-1,"from":0,"to":4,
@@ -22,12 +22,22 @@
 //                 "timer":0,"phase":1,"direction":1,
 //                 "auto_return":true,"blocking":false}],
 //      "triggers":[{"id":"gate.use","type":1,"fire_count":0,
-//                   "enabled":true,"once":true,"armed":false,"timer":0}]}
+//                   "enabled":true,"once":true,"armed":false,"timer":0}],
+//      "surfaceTags":[{"surface":4,"tags":["road","no_spawn"]}]}
+//
+// Version 2 adds the optional `surfaceTags` section: only surfaces that carry a
+// non-empty tag list are stored, sorted by ascending runtime surface index.
+// Version 1 saves (no section) still load with no tag data; applying one leaves
+// the live tag table untouched (an old save must not erase authored labels). A
+// v2 save without the section means "no tags" and clears it. Tags use the same
+// bounds as authored surface tags (<=32 per surface, 1..32 printable bytes after
+// trim, duplicates rejected in a snapshot).
 //
 // Counts are bounded by the runtime topology limit (spans/portals 65536;
-// movers 256, triggers 512), ids are
-// bounded to 63 bytes plus NUL, duplicate trigger ids are rejected, all numbers
-// must be finite and |v| <= 1e8. Errors are ASCII.
+// movers 256, triggers 512; tagged surfaces 196608), ids are bounded to 63 bytes
+// plus NUL, tags to 1..32 printable bytes after trim (<=32 per surface), duplicate
+// trigger ids / duplicate snapshot tags / duplicate or unsorted surface entries
+// are rejected, all numbers must be finite and |v| <= 1e8. Errors are ASCII.
 //
 // Reading is transactional: on failure every owned array is freed and the
 // output struct is zeroed. Writing never allocates. Both are deterministic.
@@ -37,7 +47,8 @@
 #include <stdint.h>
 
 #define R2D_WORLD_SAVE_FORMAT "re2d-save"
-#define R2D_WORLD_SAVE_VERSION 1
+#define R2D_WORLD_SAVE_VERSION 2
+#define R2D_WORLD_SAVE_MIN_VERSION 1
 
 #define R2D_WORLD_SAVE_MAX_SPANS 65536
 #define R2D_WORLD_SAVE_MAX_PORTALS 65536
@@ -45,12 +56,23 @@
 #define R2D_WORLD_SAVE_MAX_TRIGGERS 512
 #define R2D_WORLD_SAVE_ID_CAP 64   // 63 usable bytes plus NUL
 #define R2D_WORLD_SAVE_MAX_VALUE 1.0e8f
+// Surface tag bounds: identical to native R2D_WORLD_TAG_MAX/_LENGTH (asserted
+// by re2d_world_runtime.c). Canonical surfaces never exceed walls + 2*spans.
+#define R2D_WORLD_SAVE_TAG_MAX 32
+#define R2D_WORLD_SAVE_TAG_LENGTH 32
+#define R2D_WORLD_SAVE_MAX_SURFACES 196608
 
 typedef struct {
     int span;                 // runtime span handle inside this snapshot
     float bottom,top;         // saved runtime height plane
     char id[R2D_WORLD_SAVE_ID_CAP]; // authored semantic id, may be empty
 } R2DWorldSavedSpan;
+
+typedef struct {
+    int surface;              // runtime surface handle inside this snapshot
+    int tag_count;            // 1..R2D_WORLD_SAVE_TAG_MAX, non-empty lists only
+    char tags[R2D_WORLD_SAVE_TAG_MAX][R2D_WORLD_SAVE_TAG_LENGTH+1];
+} R2DWorldSavedSurfaceTags;
 
 typedef struct {
     int portal;               // runtime portal handle inside this snapshot
@@ -77,6 +99,9 @@ typedef struct {
 } R2DWorldSavedTrigger;
 
 typedef struct {
+    int version;              // snapshot format version (reader); 0 = current on capture
+    R2DWorldSavedSurfaceTags *surface_tags; // ascending surface index, non-empty lists
+    int surface_tag_count;
     R2DWorldSavedSpan *spans;
     int span_count;
     R2DWorldSavedPortal *portals;

@@ -8,6 +8,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Brush tag storage is forwarded verbatim to the native span tag tables, so
+// the two bounds must never drift apart.
+_Static_assert(SDK_BRUSH_TAG_MAX == R2D_WORLD_TAG_MAX, "brush tag count bound matches native");
+_Static_assert(SDK_BRUSH_TAG_LENGTH == R2D_WORLD_TAG_LENGTH, "brush tag length bound matches native");
+
 #define BRUSH_EPS 1e-4f
 #define BRUSH_MAX_INTERVALS 16
 #define BRUSH_MAX_TILES 16384
@@ -49,6 +54,14 @@ static void copy_text(char *dst, size_t size, const char *src)
     if (!dst || !size) return;
     if (!src) src = "";
     snprintf(dst, size, "%s", src);
+}
+
+static void copy_tags(SdkBrushTags *dst, const SdkBrushTags *src)
+{
+    if (!dst) return;
+    dst->count = src ? src->count : 0;
+    for (int i = 0; i < (int)dst->count; i++)
+        copy_text(dst->names[i], sizeof dst->names[i], src->names[i]);
 }
 
 bool sdk_brush_tool_parse(const char *name, SdkBrushTool *out)
@@ -844,18 +857,24 @@ bool sdk_brush_compile(const SdkBrushSpec *brushes, int brush_count,
             span.cell = out->cell_count - 1;
             span.bottom = tile->spans[s].lo;
             span.top = tile->spans[s].hi;
-            if (tile->spans[s].floor_owner >= 0)
+            if (tile->spans[s].floor_owner >= 0) {
                 copy_text(span.floor_color, sizeof span.floor_color,
                           brushes[tile->spans[s].floor_owner].floor_color);
-            else
+                copy_tags(&span.tags, &brushes[tile->spans[s].floor_owner].tags);
+            } else {
                 copy_text(span.floor_color, sizeof span.floor_color,
                           bounds->floor_color);
-            if (tile->spans[s].ceiling_owner >= 0)
+                copy_tags(&span.tags, &bounds->tags);
+            }
+            if (tile->spans[s].ceiling_owner >= 0) {
                 copy_text(span.ceiling_color, sizeof span.ceiling_color,
                           brushes[tile->spans[s].ceiling_owner].ceiling_color);
-            else
+                copy_tags(&span.ceiling_tags, &brushes[tile->spans[s].ceiling_owner].ceiling_tags);
+            } else {
                 copy_text(span.ceiling_color, sizeof span.ceiling_color,
                           bounds->ceiling_color);
+                copy_tags(&span.ceiling_tags, &bounds->ceiling_tags);
+            }
             if (!push_span(out, &caps, &span)) goto oom;
         }
         emitted_cells++;

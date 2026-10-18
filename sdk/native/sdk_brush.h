@@ -47,6 +47,17 @@
 #define SDK_BRUSH_MAX_HOLES 8
 #define SDK_BRUSH_MAX_ID 64
 #define SDK_BRUSH_MAX_COLOR 40
+// User surface tag bounds. Kept byte-identical to the native runtime's
+// R2D_WORLD_TAG_MAX / R2D_WORLD_TAG_LENGTH (sdk_brush.c asserts this) so a
+// brush-authored tag table can be forwarded without a second limit.
+#define SDK_BRUSH_TAG_MAX 32
+#define SDK_BRUSH_TAG_LENGTH 32
+
+// Owned-by-value tag list used by brush authoring/output (no allocation).
+typedef struct {
+    unsigned char count;
+    char names[SDK_BRUSH_TAG_MAX][SDK_BRUSH_TAG_LENGTH+1];
+} SdkBrushTags;
 
 typedef enum {
     SDK_BRUSH_TOOL_NONE = 0,
@@ -87,6 +98,8 @@ typedef struct {
     char ceiling_color[SDK_BRUSH_MAX_COLOR];
     char visgroup[SDK_BRUSH_MAX_ID];
     uint16_t wall_flags;              // 0 = legacy default policy
+    SdkBrushTags tags;                // floor surface tags when this brush owns the floor
+    SdkBrushTags ceiling_tags;        // ceiling surface tags when this brush owns the ceiling
 } SdkBrushSpec;
 
 typedef struct {
@@ -96,6 +109,8 @@ typedef struct {
     char ceiling_color[SDK_BRUSH_MAX_COLOR];
     char side_color[SDK_BRUSH_MAX_COLOR];
     uint16_t boundary_flags;          // sky/clip policy for the outer envelope
+    SdkBrushTags tags;                // floor tags for spans bounded by the envelope
+    SdkBrushTags ceiling_tags;        // ceiling tags for spans bounded by the envelope
 } SdkBrushBounds;
 
 typedef struct {
@@ -109,6 +124,10 @@ typedef struct {
     float bottom, top;
     char floor_color[SDK_BRUSH_MAX_COLOR];
     char ceiling_color[SDK_BRUSH_MAX_COLOR];
+    // Forwarded authored surface tags: floor owner (or bounds) / ceiling owner
+    // (or bounds). Copied into native span `tags`/`ceilingTags` by sdk_world.
+    SdkBrushTags tags;
+    SdkBrushTags ceiling_tags;
 } SdkBrushSpan;
 
 typedef struct {

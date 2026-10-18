@@ -92,7 +92,7 @@ perspective/наклону). Потолки из этого ракурса ри�
 | `.blocked(x,y,radius,bottom,top)` | boolean; статический circle XY × height против стен/portal closure |
 | `.ray(from,to)` | точки `{x,y,height}`; `{fraction,x,y,height,wall,span,ceiling}` или null |
 | `.lightAt(x,y,h)` | `{r,g,b,level}` или null; native gameplay approximation, без чтения pixels |
-| `.surface(index)` | `{kind,primitive,cell,span,material(name),sky(enabled=true),tags()}`, `.hasTag(name)`, `.tag(name,on)` или null |
+| `.surface(index)` | `{kind,primitive,cell,span,material(name),sky(enabled=true),tags(),fade(value)}`, `.hasTag(name)`, `.tag(name,on)` или null; `fade()` читает per-surface alpha |
 | `.groundAt(x,y,{h})` | `{cell,span,surface,height,tags:[...]}` или null; при нескольких spans на XY без `h` — `RangeError` |
 | `.surfaceTagsAt(x,y,{h})` | tags пола под точкой или null (тонкая обёртка над `groundAt`) |
 
@@ -460,6 +460,43 @@ draws the same contact card; the other effects are GPU-reference. See
 [RE2D_RENDER_FEATURES.md](../RE2D_RENDER_FEATURES.md) for formulas, counters and
 limits. Existing `gpuDrawsBase/Span/Actor/Other` stay exact; grounding adds
 `gpuDrawsGround`, VFX adds `gpuDrawsVfx`.
+
+## Surface fade (roof fade)
+
+Any derived surface (a wall or one floor/ceiling plane) has a per-surface fade
+alpha independent from its material. It is a render-pass property: it changes
+only the colour alpha used by the transparent pass, never the material,
+geometry, lighting, collision, navigation or topology revision.
+
+```js
+const roof = world.surface(i);   // e.g. the ceiling above the player's room
+roof.sky(false);                 // only needed if the surface was a sky surface
+roof.fade(0.25);                 // 0 = invisible, 1 = fully opaque (default)
+roof.fade();                     // read the current value (number)
+```
+
+Typical top-down/roof-fade use case: a house roof is a ceiling surface above an
+interior room. While the player is inside, the game computes that test each
+frame and sets `fade` to e.g. `0.25` (or `0` to see the interior unobstructed);
+outside it sets `1`. The engine only stores the alpha; the per-frame distance /
+inside logic belongs to the game. `sky(false)` is only required when the
+surface was authored as a sky surface (`surface.sky(true)`), because sky
+surfaces bypass the regular surface draw.
+
+Contract details:
+
+* accepts `0..1` only: a non-number throws `TypeError`, a value outside `0..1`
+  (or non-finite) throws `RangeError`;
+* alpha `< 1` moves an opaque/masked surface into the transparent pass and
+  transparent sorting; an additive material stays additive and scales its
+  contribution by the alpha;
+* alpha `1` is the default and byte-identical to a world that never called
+  `fade`; alpha `0` draws nothing;
+* the value is runtime state (like user tags): it is not authored into
+  `.re2dmap`/`.re2dworld` and is lost after reload/rebuild;
+* native API: `r2d_world_surface_fade_set(world, surface, alpha)` and
+  `r2d_world_surface_alpha(world, surface)`; the JS bridge is
+  `surfaceFade(index[, value])`.
 
 ## VFX bundles (P1)
 

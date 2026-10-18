@@ -13,12 +13,14 @@ void tearDown(void) {}
 #define SAVE_TEXT_CAP 16384
 
 static void fill_state(R2DWorldSaveState *s,R2DWorldSavedSpan spans[2],R2DWorldSavedPortal portals[2],
-                       R2DWorldSavedMover movers[2],R2DWorldSavedTrigger triggers[2])
+                       R2DWorldSavedMover movers[2],R2DWorldSavedTrigger triggers[2],
+                       R2DWorldSavedSurfaceTags surface_tags[2])
 {
     memset(spans,0,2*sizeof *spans);
     memset(portals,0,2*sizeof *portals);
     memset(movers,0,2*sizeof *movers);
     memset(triggers,0,2*sizeof *triggers);
+    memset(surface_tags,0,2*sizeof *surface_tags);
 
     spans[0].span=0; spans[0].bottom=0.0f; spans[0].top=10.5f;
     strcpy(spans[0].id,"hall.lower");
@@ -49,15 +51,24 @@ static void fill_state(R2DWorldSaveState *s,R2DWorldSavedSpan spans[2],R2DWorldS
     triggers[1].enabled=false; triggers[1].once=false; triggers[1].armed=true;
     triggers[1].timer=0.0f;
 
+    surface_tags[0].surface=4; surface_tags[0].tag_count=2;
+    strcpy(surface_tags[0].tags[0],"road");
+    strcpy(surface_tags[0].tags[1],"no_spawn");
+    surface_tags[1].surface=9; surface_tags[1].tag_count=1;
+    strcpy(surface_tags[1].tags[0],"sky");
+
     s->spans=spans; s->span_count=2;
     s->portals=portals; s->portal_count=2;
     s->movers=movers; s->mover_count=2;
     s->triggers=triggers; s->trigger_count=2;
+    s->surface_tags=surface_tags; s->surface_tag_count=2;
+    s->version=R2D_WORLD_SAVE_VERSION;
 }
 
 static bool same_state(const R2DWorldSaveState *a,const R2DWorldSaveState *b)
 {
-    if(a->span_count!=b->span_count||a->portal_count!=b->portal_count||
+    if(a->version!=b->version||
+       a->span_count!=b->span_count||a->portal_count!=b->portal_count||
        a->mover_count!=b->mover_count||a->trigger_count!=b->trigger_count)return false;
     for(int i=0;i<a->span_count;i++) {
         const R2DWorldSavedSpan *x=&a->spans[i],*y=&b->spans[i];
@@ -82,6 +93,12 @@ static bool same_state(const R2DWorldSaveState *a,const R2DWorldSaveState *b)
            x->enabled!=y->enabled||x->once!=y->once||x->armed!=y->armed||
            x->timer!=y->timer)return false;
     }
+    if(a->surface_tag_count!=b->surface_tag_count)return false;
+    for(int i=0;i<a->surface_tag_count;i++) {
+        const R2DWorldSavedSurfaceTags *x=&a->surface_tags[i],*y=&b->surface_tags[i];
+        if(x->surface!=y->surface||x->tag_count!=y->tag_count)return false;
+        for(int j=0;j<x->tag_count;j++)if(strcmp(x->tags[j],y->tags[j])!=0)return false;
+    }
     return true;
 }
 
@@ -92,14 +109,15 @@ static void test_round_trip_all_sections(void)
     R2DWorldSavedPortal portals[2];
     R2DWorldSavedMover movers[2];
     R2DWorldSavedTrigger triggers[2];
-    fill_state(&state,spans,portals,movers,triggers);
+    R2DWorldSavedSurfaceTags tags[2];
+    fill_state(&state,spans,portals,movers,triggers,tags);
 
     char text[SAVE_TEXT_CAP];
     int length=r2d_world_save_write(&state,text,sizeof text);
     TEST_ASSERT_TRUE_MESSAGE(length>0,"write succeeds");
     TEST_ASSERT_EQUAL_INT_MESSAGE(length,(int)strlen(text),"returned length matches text");
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(text,"\"format\":\"re2d-save\""),"format magic is written");
-    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(text,"\"version\":1"),"version is written");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(text,"\"version\":2"),"version 2 is written");
 
     R2DWorldSaveState restored={0};
     char error[256];
@@ -138,7 +156,8 @@ static void test_capacity_query_and_truncation(void)
     R2DWorldSavedPortal portals[2];
     R2DWorldSavedMover movers[2];
     R2DWorldSavedTrigger triggers[2];
-    fill_state(&state,spans,portals,movers,triggers);
+    R2DWorldSavedSurfaceTags tags[2];
+    fill_state(&state,spans,portals,movers,triggers,tags);
     char full[SAVE_TEXT_CAP];
     int required=r2d_world_save_write(&state,full,sizeof full);
     TEST_ASSERT_TRUE_MESSAGE(required>0,"full write");
@@ -170,7 +189,8 @@ static void test_cap_zero_writes_nothing(void)
     R2DWorldSavedPortal portals[2];
     R2DWorldSavedMover movers[2];
     R2DWorldSavedTrigger triggers[2];
-    fill_state(&state,spans,portals,movers,triggers);
+    R2DWorldSavedSurfaceTags tags[2];
+    fill_state(&state,spans,portals,movers,triggers,tags);
     char guard[8];
     memset(guard,0x7f,sizeof guard);
     int required=r2d_world_save_write(&state,guard,0);
@@ -185,7 +205,7 @@ static void test_missing_version_rejected(void)
     const char *texts[]={
         "{\"format\":\"re2d-save\",\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[]}",
         "{\"format\":\"re2d-other\",\"version\":1,\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[]}",
-        "{\"format\":\"re2d-save\",\"version\":2,\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[]}",
+        "{\"format\":\"re2d-save\",\"version\":3,\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[]}",
         "{\"format\":\"re2d-save\",\"version\":\"1\",\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[]}"
     };
     for(int i=0;i<(int)(sizeof texts/sizeof *texts);i++) {
@@ -206,7 +226,8 @@ static void test_corrupt_and_truncated_rejected(void)
     R2DWorldSavedPortal portals[2];
     R2DWorldSavedMover movers[2];
     R2DWorldSavedTrigger triggers[2];
-    fill_state(&state,spans,portals,movers,triggers);
+    R2DWorldSavedSurfaceTags tags[2];
+    fill_state(&state,spans,portals,movers,triggers,tags);
     char valid[SAVE_TEXT_CAP];
     int length=r2d_world_save_write(&state,valid,sizeof valid);
     TEST_ASSERT_TRUE_MESSAGE(length>0,"fixture write");
@@ -242,13 +263,14 @@ static void test_duplicate_trigger_id_rejected(void)
     R2DWorldSavedPortal portals[2];
     R2DWorldSavedMover movers[2];
     R2DWorldSavedTrigger triggers[2];
-    fill_state(&state,spans,portals,movers,triggers);
+    R2DWorldSavedSurfaceTags tags[2];
+    fill_state(&state,spans,portals,movers,triggers,tags);
     strcpy(triggers[1].id,triggers[0].id);
     char text[SAVE_TEXT_CAP];
     TEST_ASSERT_EQUAL_INT_MESSAGE(-1,r2d_world_save_write(&state,text,sizeof text),
                                   "duplicate trigger ids are rejected on write");
 
-    fill_state(&state,spans,portals,movers,triggers);
+    fill_state(&state,spans,portals,movers,triggers,tags);
     TEST_ASSERT_TRUE_MESSAGE(r2d_world_save_write(&state,text,sizeof text)>0,"fixture writes");
     char *first=strstr(text,"\"triggers\":[");
     TEST_ASSERT_NOT_NULL_MESSAGE(first,"triggers section exists");
@@ -273,7 +295,8 @@ static void test_nan_and_infinity_rejected(void)
     R2DWorldSavedPortal portals[2];
     R2DWorldSavedMover movers[2];
     R2DWorldSavedTrigger triggers[2];
-    fill_state(&state,spans,portals,movers,triggers);
+    R2DWorldSavedSurfaceTags tags[2];
+    fill_state(&state,spans,portals,movers,triggers,tags);
 
     spans[0].bottom=NAN;
     char text[SAVE_TEXT_CAP];
@@ -289,7 +312,7 @@ static void test_nan_and_infinity_rejected(void)
     TEST_ASSERT_EQUAL_INT_MESSAGE(-1,r2d_world_save_write(&state,text,sizeof text),"infinite mover speed rejected");
     movers[0].speed=2.5f;
 
-    fill_state(&state,spans,portals,movers,triggers);
+    fill_state(&state,spans,portals,movers,triggers,tags);
     TEST_ASSERT_TRUE_MESSAGE(r2d_world_save_write(&state,text,sizeof text)>0,"valid fixture writes");
     const char *field=strstr(text,"\"top\":");
     TEST_ASSERT_NOT_NULL_MESSAGE(field,"top field exists");
@@ -320,7 +343,8 @@ static void test_oversized_counts_and_ids_rejected(void)
     R2DWorldSavedPortal portals[2];
     R2DWorldSavedMover movers[2];
     R2DWorldSavedTrigger triggers[2];
-    fill_state(&state,spans,portals,movers,triggers);
+    R2DWorldSavedSurfaceTags tags[2];
+    fill_state(&state,spans,portals,movers,triggers,tags);
     memset(spans[1].id,'a',R2D_WORLD_SAVE_ID_CAP);
     TEST_ASSERT_EQUAL_INT_MESSAGE(-1,r2d_world_save_write(&state,text,sizeof text),
                                   "unterminated bounded id rejected");
@@ -360,7 +384,8 @@ static void test_deterministic_bytes(void)
     R2DWorldSavedPortal portals[2];
     R2DWorldSavedMover movers[2];
     R2DWorldSavedTrigger triggers[2];
-    fill_state(&state,spans,portals,movers,triggers);
+    R2DWorldSavedSurfaceTags tags[2];
+    fill_state(&state,spans,portals,movers,triggers,tags);
     char first[SAVE_TEXT_CAP],second[SAVE_TEXT_CAP];
     int first_length=r2d_world_save_write(&state,first,sizeof first);
     int second_length=r2d_world_save_write(&state,second,sizeof second);
@@ -425,7 +450,8 @@ static void test_read_transactional_on_failure(void)
     R2DWorldSavedPortal portals[2];
     R2DWorldSavedMover movers[2];
     R2DWorldSavedTrigger triggers[2];
-    fill_state(&state,spans,portals,movers,triggers);
+    R2DWorldSavedSurfaceTags tags[2];
+    fill_state(&state,spans,portals,movers,triggers,tags);
     char text[SAVE_TEXT_CAP];
     TEST_ASSERT_TRUE_MESSAGE(r2d_world_save_write(&state,text,sizeof text)>0,"fixture write");
 
@@ -475,6 +501,138 @@ static void test_missing_fields_and_wrong_types_rejected(void)
     }
 }
 
+static void test_surface_tags_round_trip(void)
+{
+    R2DWorldSaveState state;
+    R2DWorldSavedSpan spans[2];
+    R2DWorldSavedPortal portals[2];
+    R2DWorldSavedMover movers[2];
+    R2DWorldSavedTrigger triggers[2];
+    R2DWorldSavedSurfaceTags tags[2];
+    fill_state(&state,spans,portals,movers,triggers,tags);
+
+    char text[SAVE_TEXT_CAP];
+    int length=r2d_world_save_write(&state,text,sizeof text);
+    TEST_ASSERT_TRUE_MESSAGE(length>0,"state with surface tags writes");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(text,"\"surfaceTags\":["),"surfaceTags section is written");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(text,"{\"surface\":4,\"tags\":[\"road\",\"no_spawn\"]}"),
+                                 "surface 4 tags are serialized in order");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(text,"{\"surface\":9,\"tags\":[\"sky\"]}"),
+                                 "surface 9 tags are serialized");
+
+    R2DWorldSaveState restored={0};
+    char error[256];
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_save_read(text,&restored,error,sizeof error),"tagged save reads");
+    TEST_ASSERT_EQUAL_INT(2,restored.surface_tag_count);
+    TEST_ASSERT_EQUAL_INT(4,restored.surface_tags[0].surface);
+    TEST_ASSERT_EQUAL_INT(2,restored.surface_tags[0].tag_count);
+    TEST_ASSERT_EQUAL_STRING("road",restored.surface_tags[0].tags[0]);
+    TEST_ASSERT_EQUAL_STRING("no_spawn",restored.surface_tags[0].tags[1]);
+    TEST_ASSERT_EQUAL_STRING("sky",restored.surface_tags[1].tags[0]);
+    TEST_ASSERT_TRUE_MESSAGE(same_state(&state,&restored),"surface tags round-trip exactly");
+    r2d_world_save_free(&restored);
+    TEST_ASSERT_NULL_MESSAGE(restored.surface_tags,"free zeroes the surface tag array");
+}
+
+static void test_v1_save_without_tags_compatible(void)
+{
+    const char *v1=
+        "{\"format\":\"re2d-save\",\"version\":1,"
+        "\"spans\":[{\"span\":0,\"id\":\"hall\",\"bottom\":0,\"top\":4}],"
+        "\"portals\":[],\"movers\":[],\"triggers\":[]}";
+    R2DWorldSaveState restored={0};
+    char error[256];
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_save_read(v1,&restored,error,sizeof error),
+                             "version 1 save without surfaceTags loads");
+    TEST_ASSERT_EQUAL_INT(1,restored.span_count);
+    TEST_ASSERT_EQUAL_INT(0,restored.surface_tag_count);
+    TEST_ASSERT_NULL_MESSAGE(restored.surface_tags,"v1 save has no tag array");
+
+    // Re-serializing a v1 state upgrades it to the canonical v2 form.
+    char text[SAVE_TEXT_CAP];
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_save_write(&restored,text,sizeof text)>0,
+                             "v1-loaded state writes as canonical v2");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(text,"\"version\":2"),"writer always emits version 2");
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(text,"\"surfaceTags\":[]"),"empty tag table is explicit");
+    r2d_world_save_free(&restored);
+
+    // A v2 save without the optional section is also "no tags".
+    const char *v2_no_tags=
+        "{\"format\":\"re2d-save\",\"version\":2,"
+        "\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[]}";
+    R2DWorldSaveState plain={0};
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_save_read(v2_no_tags,&plain,error,sizeof error),
+                             "v2 save without surfaceTags loads with no tags");
+    TEST_ASSERT_EQUAL_INT(0,plain.surface_tag_count);
+    r2d_world_save_free(&plain);
+}
+
+static void test_invalid_surface_tags_rejected(void)
+{
+    R2DWorldSaveState state;
+    R2DWorldSavedSpan spans[2];
+    R2DWorldSavedPortal portals[2];
+    R2DWorldSavedMover movers[2];
+    R2DWorldSavedTrigger triggers[2];
+    R2DWorldSavedSurfaceTags tags[2];
+    char text[SAVE_TEXT_CAP];
+
+    fill_state(&state,spans,portals,movers,triggers,tags);
+    tags[0].tag_count=0;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1,r2d_world_save_write(&state,text,sizeof text),
+                                  "empty tag list rejected on write");
+
+    fill_state(&state,spans,portals,movers,triggers,tags);
+    strcpy(tags[0].tags[1],tags[0].tags[0]);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1,r2d_world_save_write(&state,text,sizeof text),
+                                  "duplicate surface tags rejected on write");
+
+    fill_state(&state,spans,portals,movers,triggers,tags);
+    tags[0].tags[0][0]=0;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1,r2d_world_save_write(&state,text,sizeof text),
+                                  "empty tag rejected on write");
+
+    fill_state(&state,spans,portals,movers,triggers,tags);
+    memset(tags[0].tags[0],'a',sizeof tags[0].tags[0]); // no NUL inside 32-byte bound
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1,r2d_world_save_write(&state,text,sizeof text),
+                                  "unbounded tag rejected on write");
+
+    fill_state(&state,spans,portals,movers,triggers,tags);
+    strcpy(tags[0].tags[0]," road");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1,r2d_world_save_write(&state,text,sizeof text),
+                                  "untrimmed tag rejected on write");
+
+    fill_state(&state,spans,portals,movers,triggers,tags);
+    tags[0].surface=9;tags[1].surface=4;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1,r2d_world_save_write(&state,text,sizeof text),
+                                  "unsorted surface tag entries rejected on write");
+
+    fill_state(&state,spans,portals,movers,triggers,tags);
+    state.surface_tag_count=1;state.surface_tags=NULL;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1,r2d_world_save_write(&state,text,sizeof text),
+                                  "null surface tag array rejected on write");
+
+    // Reader validation: malformed sections reject transactionally.
+    const char *bad[]={
+        "{\"format\":\"re2d-save\",\"version\":2,\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[],\"surfaceTags\":{}}",
+        "{\"format\":\"re2d-save\",\"version\":2,\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[],\"surfaceTags\":[{\"surface\":4,\"tags\":\"road\"}]}",
+        "{\"format\":\"re2d-save\",\"version\":2,\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[],\"surfaceTags\":[{\"surface\":4,\"tags\":[\"road\",\"road\"]}]}",
+        "{\"format\":\"re2d-save\",\"version\":2,\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[],\"surfaceTags\":[{\"surface\":9,\"tags\":[\"a\"]},{\"surface\":4,\"tags\":[\"b\"]}]}",
+        "{\"format\":\"re2d-save\",\"version\":2,\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[],\"surfaceTags\":[{\"surface\":-1,\"tags\":[\"a\"]}]}",
+        "{\"format\":\"re2d-save\",\"version\":2,\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[],\"surfaceTags\":[{\"surface\":4,\"tags\":[\"\"]}]}",
+        "{\"format\":\"re2d-save\",\"version\":2,\"spans\":[],\"portals\":[],\"movers\":[],\"triggers\":[],\"surfaceTags\":[{\"surface\":4}]}"
+    };
+    for(int i=0;i<(int)(sizeof bad/sizeof *bad);i++) {
+        R2DWorldSaveState restored={0};
+        char error[256];
+        TEST_ASSERT_FALSE_MESSAGE(r2d_world_save_read(bad[i],&restored,error,sizeof error),
+                                  "malformed surfaceTags save is rejected");
+        TEST_ASSERT_NOT_NULL_MESSAGE(strstr(error,"surfaceTags"),"surfaceTags is named in the error");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0,restored.surface_tag_count,"failed read zeroes the tag section");
+        TEST_ASSERT_NULL_MESSAGE(restored.surface_tags,"failed read leaves no tag array");
+    }
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -492,5 +650,8 @@ int main(void)
     RUN_TEST(test_map_hash_identity);
     RUN_TEST(test_read_transactional_on_failure);
     RUN_TEST(test_missing_fields_and_wrong_types_rejected);
+    RUN_TEST(test_surface_tags_round_trip);
+    RUN_TEST(test_v1_save_without_tags_compatible);
+    RUN_TEST(test_invalid_surface_tags_rejected);
     return UNITY_END();
 }

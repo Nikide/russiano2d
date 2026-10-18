@@ -2114,9 +2114,59 @@ void r2d_world_terrain_free(R2DWorldRuntime *w)
 
 
 // --- P1 save/load snapshot of native state --------------------------------
+_Static_assert(R2D_WORLD_SAVE_TAG_MAX==R2D_WORLD_TAG_MAX,"save tag count bound matches native");
+_Static_assert(R2D_WORLD_SAVE_TAG_LENGTH==R2D_WORLD_TAG_LENGTH,"save tag length bound matches native");
 static void copy_id(char dst[R2D_WORLD_SAVE_ID_CAP],const char *src)
 {
     dst[0]=0;if(src)snprintf(dst,R2D_WORLD_SAVE_ID_CAP,"%s",src);
+}
+static void free_surface_tag_table(R2DWorldSurfaceTags *table,int surface_count)
+{
+    if(!table)return;
+    for(int i=0;i<surface_count;i++) {
+        R2DWorldSurfaceTags *slot=&table[i];
+        for(int j=0;j<slot->count;j++)free(slot->names[j]);
+        free(slot->names);
+    }
+    free(table);
+}
+// Build a fresh per-surface tag table from a validated snapshot WITHOUT
+// touching the live world. Any failure frees all allocations; the caller then
+// aborts before mutating anything else (transactional apply).
+static bool build_saved_surface_tags(const R2DRe2dWorld *world,const R2DWorldSaveState *in,R2DWorldSurfaceTags **out)
+{
+    *out=NULL;
+    if(in->surface_tag_count<0||in->surface_tag_count>R2D_WORLD_SAVE_MAX_SURFACES)return false;
+    if(in->surface_tag_count>0&&!in->surface_tags)return false;
+    if(in->surface_tag_count>world->surface_count)return false;
+    if(in->surface_tag_count==0)return true;
+    R2DWorldSurfaceTags *table=calloc((size_t)world->surface_count,sizeof *table);
+    if(!table)return false;
+    int previous=-1;
+    for(int i=0;i<in->surface_tag_count;i++) {
+        const R2DWorldSavedSurfaceTags *saved=&in->surface_tags[i];
+        if(saved->surface<0||saved->surface>=world->surface_count||saved->surface<=previous)goto fail;
+        previous=saved->surface;
+        if(saved->tag_count<1||saved->tag_count>R2D_WORLD_TAG_MAX)goto fail;
+        R2DWorldSurfaceTags *slot=&table[saved->surface];
+        slot->names=calloc((size_t)saved->tag_count,sizeof *slot->names);
+        if(!slot->names)goto fail;
+        slot->capacity=saved->tag_count;
+        for(int j=0;j<saved->tag_count;j++) {
+            char name[R2D_WORLD_TAG_LENGTH+1];
+            if(!r2d_world_tag_normalize(saved->tags[j],name,NULL))goto fail;
+            for(int k=0;k<slot->count;k++)if(!strcmp(slot->names[k],name))goto fail;
+            size_t length=strlen(name);
+            char *copy=malloc(length+1);
+            if(!copy)goto fail;
+            memcpy(copy,name,length+1);
+            slot->names[slot->count++]=copy;
+        }
+    }
+    *out=table;return true;
+fail:
+    free_surface_tag_table(table,world->surface_count);
+    return false;
 }
 uint64_t r2d_world_save_map_hash_runtime(R2DWorldRuntime *w)
 {
@@ -2127,14 +2177,19 @@ bool r2d_world_state_capture(R2DWorldRuntime *w,R2DWorldSaveState *out)
 {
     if(!w||!out)return false;
     memset(out,0,sizeof *out);
-    int spans=w->world.span_count,portals=w->world.portal_count,movers=0,triggers=0;
+    out->version=R2D_WORLD_SAVE_VERSION;
+    int spans=w->world.span_count,portals=w->world.portal_count,movers=0,triggers=0,tagged=0;
     for(int i=0;i<w->mover_count;i++)if(w->movers[i].active)movers++;
     for(int i=0;i<w->trigger_count;i++)if(w->triggers[i].active)triggers++;
+    for(int i=0;i<w->world.surface_count;i++)if(r2d_world_surface_tag_count(&w->world,i)>0)tagged++;
+    if(tagged>R2D_WORLD_SAVE_MAX_SURFACES)goto fail;
     out->spans=spans?calloc((size_t)spans,sizeof *out->spans):NULL;
     out->portals=portals?calloc((size_t)portals,sizeof *out->portals):NULL;
     out->movers=movers?calloc((size_t)movers,sizeof *out->movers):NULL;
     out->triggers=triggers?calloc((size_t)triggers,sizeof *out->triggers):NULL;
-    if((spans&&!out->spans)||(portals&&!out->portals)||(movers&&!out->movers)||(triggers&&!out->triggers))goto fail;
+    out->surface_tags=tagged?calloc((size_t)tagged,sizeof *out->surface_tags):NULL;
+    if((spans&&!out->spans)||(portals&&!out->portals)||(movers&&!out->movers)||
+       (triggers&&!out->triggers)||(tagged&&!out->surface_tags))goto fail;
     for(int i=0;i<spans;i++){
         out->spans[i].span=i;out->spans[i].bottom=w->world.spans[i].bottom;out->spans[i].top=w->world.spans[i].top;
         copy_id(out->spans[i].id,r2d_world_span_id(&w->world,i));
@@ -2162,6 +2217,18 @@ bool r2d_world_state_capture(R2DWorldRuntime *w,R2DWorldSaveState *out)
         t->enabled=e->trigger.enabled;t->once=e->trigger.once;t->armed=e->trigger.armed;t->timer=e->trigger.timer;
     }
     out->trigger_count=ti;
+    int si=0;
+    for(int i=0;i<w->world.surface_count;i++) {
+        int count=r2d_world_surface_tag_count(&w->world,i);
+        if(count<=0)continue;
+        R2DWorldSavedSurfaceTags *tags=&out->surface_tags[si++];
+        tags->surface=i;tags->tag_count=count;
+        for(int j=0;j<count;j++) {
+            const char *name=r2d_world_surface_tag(&w->world,i,j);
+            snprintf(tags->tags[j],sizeof tags->tags[j],"%s",name?name:"");
+        }
+    }
+    out->surface_tag_count=si;
     return true;
 fail:
     r2d_world_save_free(out);return false;
@@ -2183,6 +2250,12 @@ bool r2d_world_state_apply(R2DWorldRuntime *w,const R2DWorldSaveState *in)
         const R2DWorldSavedPortal *p=&in->portals[i];
         if(p->portal<0||p->portal>=w->world.portal_count||!isfinite(p->open_fraction))return false;
     }
+    // Tags are validated and fully allocated before any world mutation, so a
+    // malformed tag section can never leave a partially applied save. Version 1
+    // snapshots predate surface tags and therefore leave the live tag table
+    // untouched instead of clearing authored/runtime labels.
+    R2DWorldSurfaceTags *next_tags=NULL;
+    if(in->version>=2&&!build_saved_surface_tags(&w->world,in,&next_tags))return false;
     for(int i=0;i<in->span_count;i++)r2d_world_span_set_heights(&w->world,in->spans[i].span,in->spans[i].bottom,in->spans[i].top);
     for(int i=0;i<in->portal_count;i++){r2d_world_portal_set_open(&w->world,in->portals[i].portal,in->portals[i].open_fraction);r2d_world_portal_set_sky(&w->world,in->portals[i].portal,in->portals[i].sky);r2d_world_portal_set_mirror(&w->world,in->portals[i].portal,in->portals[i].mirror);}
     int mi=0;
@@ -2201,9 +2274,15 @@ bool r2d_world_state_apply(R2DWorldRuntime *w,const R2DWorldSaveState *in)
         R2DWorldTriggerEntry *target=NULL;
         for(int j=0;j<w->trigger_count;j++)if(w->triggers[j].active&&w->triggers[j].id&&!strcmp(w->triggers[j].id,t->id)){target=&w->triggers[j];break;}
         if(!target){int seen=0;for(int j=0;j<w->trigger_count;j++){if(!w->triggers[j].active)continue;if(seen++==i){target=&w->triggers[j];break;}}}
-        if(!target)return false;
+        if(!target){free_surface_tag_table(next_tags,w->world.surface_count);return false;}
         target->trigger.fire_count=t->fire_count;target->trigger.enabled=t->enabled;
         target->trigger.once=t->once;target->trigger.armed=t->armed;target->trigger.timer=t->timer;
+    }
+    // Install the fully built tag table last; the previous table is freed only
+    // after every check passed. A v1 snapshot keeps the previous table.
+    if(in->version>=2) {
+        free_surface_tag_table(w->world.surface_tags,w->world.surface_count);
+        w->world.surface_tags=next_tags;
     }
     return true;
 }

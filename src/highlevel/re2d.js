@@ -551,6 +551,20 @@ function worldWrapper($, native) {
                     return info ? { ...info,
                         material(name) { native.surfaceMaterial(index,name); return this; },
                         sky(enabled=true) { native.surfaceSky(index,!!enabled);return this; },
+                        // Per-surface fade alpha 0..1 (roof fade). A render-pass
+                        // alpha only: it never changes the material, geometry,
+                        // collision, lighting or topology revision. Read with
+                        // fade(), write with fade(0.25). The game computes the
+                        // value each frame (e.g. from the player's cell).
+                        fade(value) {
+                            if (value === undefined) return native.surfaceFade(index);
+                            if (typeof value !== 'number')
+                                throw new TypeError('Re2D World surface.fade: value must be a number 0..1');
+                            if (!Number.isFinite(value) || value < 0 || value > 1)
+                                throw new RangeError('Re2D World surface.fade: value must be 0..1');
+                            native.surfaceFade(index, value);
+                            return this;
+                        },
                         // P1 terrain/conveyor gameplay metadata on the surface.
                         terrain(name) { native.surfaceTerrain(index,name); return this; },
                         conveyor(options = {}) {

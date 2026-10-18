@@ -954,6 +954,23 @@ static JSValue world_surface_query(JSContext *ctx,JSValueConst self,int argc,JSV
     const R2DWorldSurface *surface=r2d_world_surface(&w->world,index);if(!surface)return JS_NULL;
     JSValue o=JS_NewObject(ctx);set_num(ctx,o,"kind",surface->kind);set_num(ctx,o,"primitive",surface->primitive);set_num(ctx,o,"cell",surface->cell);set_num(ctx,o,"span",surface->span);return o;
 }
+// Per-surface fade: surfaceFade(index) reads, surfaceFade(index, value) writes.
+// Render-pass alpha only; no topology/geometry revision change.
+static JSValue world_surface_fade(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    int index;if(argc<1||JS_ToInt32(ctx,&index,argv[0])<0)
+        return JS_ThrowTypeError(ctx,"Re2D World: surfaceFade(index[, value])");
+    if(index<0||index>=w->world.surface_count)return JS_ThrowRangeError(ctx,"Re2D World: missing surface %d",index);
+    if(argc<2)return JS_NewFloat64(ctx,(double)r2d_world_surface_alpha(&w->world,index));
+    if(!JS_IsNumber(argv[1]))return JS_ThrowTypeError(ctx,"Re2D World: surface fade must be a number 0..1");
+    double value;if(JS_ToFloat64(ctx,&value,argv[1])<0)return JS_EXCEPTION;
+    if(!isfinite(value)||value<0.0||value>1.0)
+        return JS_ThrowRangeError(ctx,"Re2D World: surface fade must be 0..1");
+    if(!r2d_world_surface_fade_set(&w->world,index,(float)value))
+        return JS_ThrowRangeError(ctx,"Re2D World: cannot set fade on surface %d",index);
+    return JS_UNDEFINED;
+}
 static JSValue world_lighting_config(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[6];if(!w||!world_numbers(ctx,argc,argv,6,p))return JS_EXCEPTION;
@@ -2341,6 +2358,7 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"surfaceHasTag",JS_NewCFunction(ctx,world_surface_has_tag,"surfaceHasTag",2));
     JS_SetPropertyStr(ctx,handle,"surfaceTag",JS_NewCFunction(ctx,world_surface_tag,"surfaceTag",3));
     JS_SetPropertyStr(ctx,handle,"surface",JS_NewCFunction(ctx,world_surface_query,"surface",1));
+    JS_SetPropertyStr(ctx,handle,"surfaceFade",JS_NewCFunction(ctx,world_surface_fade,"surfaceFade",2));
     JS_SetPropertyStr(ctx,handle,"portalClosed",JS_NewCFunction(ctx,world_portal_closed,"portalClosed",2));
     JS_SetPropertyStr(ctx,handle,"portalMirror",JS_NewCFunction(ctx,world_portal_mirror,"portalMirror",2));
     JS_SetPropertyStr(ctx,handle,"portalMirrorGet",JS_NewCFunction(ctx,world_portal_mirror_get,"portalMirrorGet",1));

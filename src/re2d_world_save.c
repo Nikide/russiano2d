@@ -22,6 +22,25 @@ static bool value_ok(float value)
     return isfinite(value)&&value<=R2D_WORLD_SAVE_MAX_VALUE&&value>=-R2D_WORLD_SAVE_MAX_VALUE;
 }
 
+// Surface tag snapshot normalization: trim ASCII whitespace, require 1..32
+// printable bytes. Snapshot tags are canonical (no surrounding whitespace).
+static bool save_tag_trim_char(unsigned char c)
+{
+    return c==' '||c=='\t'||c=='\n'||c=='\r'||c=='\f'||c=='\v';
+}
+static bool save_tag_normalize(const char *input,char out[R2D_WORLD_SAVE_TAG_LENGTH+1])
+{
+    if(!input)return false;
+    const unsigned char *start=(const unsigned char *)input;
+    while(*start&&save_tag_trim_char(*start))start++;
+    size_t length=strlen((const char *)start);
+    while(length&&save_tag_trim_char(start[length-1]))length--;
+    if(!length||length>R2D_WORLD_SAVE_TAG_LENGTH)return false;
+    for(size_t i=0;i<length;i++)if(start[i]<0x20||start[i]==0x7f)return false;
+    memcpy(out,start,length);out[length]=0;
+    return true;
+}
+
 // A struct id is valid when it is NUL-terminated inside its 64-byte buffer.
 static bool id_valid(const char *id,bool required,char *error,size_t error_size,const char *what)
 {
@@ -134,6 +153,56 @@ static bool validate_state(const R2DWorldSaveState *state,char *error,size_t err
             if(strcmp(t->id,state->triggers[j].id)==0) {
                 save_error(error,error_size,"save: duplicate trigger id \"%s\"",t->id);
                 return false;
+            }
+        }
+    }
+
+    if(state->surface_tag_count<0||state->surface_tag_count>R2D_WORLD_SAVE_MAX_SURFACES) {
+        save_error(error,error_size,"save: surface tag count out of range");
+        return false;
+    }
+    if(state->surface_tag_count>0&&!state->surface_tags) {
+        save_error(error,error_size,"save: null surface tags array");
+        return false;
+    }
+    int previous_surface=-1;
+    for(int i=0;i<state->surface_tag_count;i++) {
+        const R2DWorldSavedSurfaceTags *t=&state->surface_tags[i];
+        char where[64];
+        snprintf(where,sizeof where,"surfaceTags[%d]",i);
+        if(t->surface<0||t->surface>=R2D_WORLD_SAVE_MAX_SURFACES) {
+            save_error(error,error_size,"save: %s.surface out of range",where);
+            return false;
+        }
+        if(t->surface<=previous_surface) {
+            save_error(error,error_size,"save: %s.surface must be strictly ascending",where);
+            return false;
+        }
+        previous_surface=t->surface;
+        if(t->tag_count<1||t->tag_count>R2D_WORLD_SAVE_TAG_MAX) {
+            save_error(error,error_size,"save: %s.tag_count must be 1..%d",where,R2D_WORLD_SAVE_TAG_MAX);
+            return false;
+        }
+        for(int j=0;j<t->tag_count;j++) {
+            char canonical[R2D_WORLD_SAVE_TAG_LENGTH+1];
+            if(!memchr(t->tags[j],0,R2D_WORLD_SAVE_TAG_LENGTH+1)) {
+                save_error(error,error_size,"save: %s.tags[%d] is not NUL-terminated within %d bytes",
+                           where,j,R2D_WORLD_SAVE_TAG_LENGTH);
+                return false;
+            }
+            if(!save_tag_normalize(t->tags[j],canonical)) {
+                save_error(error,error_size,"save: %s.tags[%d] must be 1..%d printable bytes",where,j,R2D_WORLD_SAVE_TAG_LENGTH);
+                return false;
+            }
+            if(strcmp(canonical,t->tags[j])!=0) {
+                save_error(error,error_size,"save: %s.tags[%d] must be trimmed",where,j);
+                return false;
+            }
+            for(int k=0;k<j;k++) {
+                if(strcmp(t->tags[k],t->tags[j])==0) {
+                    save_error(error,error_size,"save: %s.tags[%d] duplicates \"%s\"",where,j,t->tags[j]);
+                    return false;
+                }
             }
         }
     }
@@ -308,6 +377,19 @@ int r2d_world_save_write(const R2DWorldSaveState *state,char *out,size_t cap)
         if(i)writer_char(&w,',');
         write_trigger(&w,&state->triggers[i]);
     }
+    writer_text(&w,"],\"surfaceTags\":[");
+    for(int i=0;i<state->surface_tag_count;i++) {
+        const R2DWorldSavedSurfaceTags *t=&state->surface_tags[i];
+        if(i)writer_char(&w,',');
+        writer_text(&w,"{\"surface\":");
+        writer_printf(&w,"%d",t->surface);
+        writer_text(&w,",\"tags\":[");
+        for(int j=0;j<t->tag_count;j++) {
+            if(j)writer_char(&w,',');
+            writer_json_string(&w,t->tags[j]);
+        }
+        writer_text(&w,"]}");
+    }
     writer_text(&w,"]}");
 
     if(w.failed) {
@@ -443,14 +525,15 @@ bool r2d_world_save_read(const char *text,R2DWorldSaveState *out,char *error,siz
             break;
         }
         int version=0;
-        if(!read_integer(root,"version",&version,1,INT_MAX,"root",error,error_size)) {
+        if(!read_integer(root,"version",&version,0,INT_MAX,"root",error,error_size)) {
             save_error(error,error_size,"save: missing version");
             break;
         }
-        if(version!=R2D_WORLD_SAVE_VERSION) {
+        if(version<R2D_WORLD_SAVE_MIN_VERSION||version>R2D_WORLD_SAVE_VERSION) {
             save_error(error,error_size,"save: unsupported version %d",version);
             break;
         }
+        parsed.version=version;
 
         const R2dJson *spans=NULL,*portals=NULL,*movers=NULL,*triggers=NULL;
         if(!read_array(root,"spans",&spans,R2D_WORLD_SAVE_MAX_SPANS,&parsed.span_count,error,error_size))break;
@@ -548,6 +631,64 @@ bool r2d_world_save_read(const char *text,R2DWorldSaveState *out,char *error,siz
                !read_number(item,"timer",&t->timer,where,error,error_size))goto cleanup;
         }
 
+        const R2dJson *surface_tags=r2d_json_get(root,"surfaceTags");
+        if(surface_tags) {
+            if(surface_tags->type!=R2D_JSON_ARR) {
+                save_error(error,error_size,"save: surfaceTags must be an array");
+                break;
+            }
+            int count=r2d_json_size(surface_tags);
+            if(count>R2D_WORLD_SAVE_MAX_SURFACES) {
+                save_error(error,error_size,"save: too many surfaceTags (max %d)",R2D_WORLD_SAVE_MAX_SURFACES);
+                break;
+            }
+            parsed.surface_tag_count=count;
+            if(count>0) {
+                parsed.surface_tags=calloc((size_t)count,sizeof *parsed.surface_tags);
+                if(!parsed.surface_tags){save_error(error,error_size,"save: out of memory");break;}
+            }
+            for(int i=0;i<count;i++) {
+                const R2dJson *item=r2d_json_at(surface_tags,i);
+                R2DWorldSavedSurfaceTags *t=&parsed.surface_tags[i];
+                char where[64];
+                snprintf(where,sizeof where,"surfaceTags[%d]",i);
+                if(!item||item->type!=R2D_JSON_OBJ) {
+                    save_error(error,error_size,"save: %s must be an object",where);goto cleanup;
+                }
+                if(!read_integer(item,"surface",&t->surface,0,R2D_WORLD_SAVE_MAX_SURFACES-1,
+                                 where,error,error_size))goto cleanup;
+                if(i>0&&t->surface<=parsed.surface_tags[i-1].surface) {
+                    save_error(error,error_size,"save: %s.surface must be strictly ascending",where);
+                    goto cleanup;
+                }
+                const R2dJson *tags=r2d_json_get(item,"tags");
+                if(!tags||tags->type!=R2D_JSON_ARR) {
+                    save_error(error,error_size,"save: %s.tags must be an array",where);goto cleanup;
+                }
+                int tag_count=r2d_json_size(tags);
+                if(tag_count<1||tag_count>R2D_WORLD_SAVE_TAG_MAX) {
+                    save_error(error,error_size,"save: %s.tags must have 1..%d strings",where,R2D_WORLD_SAVE_TAG_MAX);
+                    goto cleanup;
+                }
+                t->tag_count=tag_count;
+                for(int j=0;j<tag_count;j++) {
+                    const R2dJson *tag=r2d_json_at(tags,j);
+                    if(!tag||tag->type!=R2D_JSON_STR||
+                       !save_tag_normalize(tag->string,t->tags[j])) {
+                        save_error(error,error_size,"save: %s.tags[%d] must be 1..%d printable bytes",
+                                   where,j,R2D_WORLD_SAVE_TAG_LENGTH);
+                        goto cleanup;
+                    }
+                    for(int k=0;k<j;k++) {
+                        if(strcmp(t->tags[k],t->tags[j])==0) {
+                            save_error(error,error_size,"save: %s.tags[%d] duplicates \"%s\"",
+                                       where,j,t->tags[j]);
+                            goto cleanup;
+                        }
+                    }
+                }
+            }
+        }
         if(!validate_state(&parsed,error,error_size))break;
         ok=true;
     } while(0);
@@ -566,6 +707,7 @@ cleanup:
 void r2d_world_save_free(R2DWorldSaveState *state)
 {
     if(!state)return;
+    free(state->surface_tags);
     free(state->spans);
     free(state->portals);
     free(state->movers);

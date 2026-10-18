@@ -76,6 +76,10 @@ Info fields x/y/h/radius/intensity/r/g/b/shadow/remaining/flickerMin/flickerMax/
 
 `portalClosed(id,boolean)` меняет binary state, derived closure wall, collision/rays/visibility/light propagation/shadow invalidation. Один portal закрывает все свои openings. API smooth fraction door.open отсутствует. `span(id).heights(bottom,top)` transactionally changes valid interval; prevents overlap/headroom/portal ownership conflicts. Runtime slope boundary edits с portal adjacency отвергаются; гарантированный lift use — flat spans. Static slopes supported. Движение passengers, falling/jumping и столкновения игровых узлов не выполняются автоматически.
 
+## Save/load native state (P1)
+
+`saveState()`/`loadState(save)` (и native `saveStateJSON()`/`loadStateJSON()`) пишут/читают versioned `re2d-save` snapshot. Версия **2** добавляет необязательную секцию `surfaceTags`: только непустые списки тегов, строго по возрастанию runtime surface index. Version 1 snapshots загружаются без данных о тегах, и `loadState` оставляет live-таблицу тегов без изменений (старый save не стирает authored/runtime метки); v2 без секции означает «тегов нет» и очищает таблицу. Snapshot фиксирует **полное** текущее состояние тегов, поэтому сохраняет и runtime-добавленные, и runtime-удалённые относительно authored набора метки. `loadState` применяет теги транзакционно: сначала проверяются/аллоцируются все surface index/границы/дубликаты/строки, затем таблица заменяется целиком; невалидная секция не оставляет частичных изменений. Карта/topology не меняются, geometry revisions не трогаются. Bounds: ≤196608 tagged surfaces, ≤32 тегов на surface, 1..32 печатных байта после trim; дубликаты в snapshot отклоняются.
+
 ## Перезагрузка и жизненный цикл
 
 `reloadJSON(text)`/`reload(path)` transactionally replace world geometry; error оставляет previous world. `reload(path)` читает указанный файл, не меняя watch target автоматически. `watch(path)` enables native file watcher, watch('') отключает. load enables watch только при engine hot reload. Interval .35s на native update boundaries; invalid edit fills reloadError, successful replace increments reloadCount.

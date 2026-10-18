@@ -635,6 +635,18 @@ static int draw_uniform(R2DWorldRuntime *w,const R2DRe2dView *v,float ortho,int 
             u->decal2[2]=r2d_world_decal_alpha(decal);u->decal2[3]=1.0f;
             if(decal->active)w->render_counters.decal2_active+=1;
         }}
+    // Per-surface fade: folded into tint alpha so the shader's alpha_out path
+    // applies it. Faded opaque/masked surfaces are already routed to the
+    // translucent pipeline by r2d_world_surface_blend(); promote the uniform
+    // blend too so alpha_out uses tint alpha instead of 1.0 (and alpha 0
+    // discards the fragment). Decals keep their own alpha.
+    if(!decal){
+        float fade=r2d_world_surface_alpha(world,id);
+        if(fade<1.0f){
+            u->tint[3]*=fade;
+            if(u->light_options[15][3]<R2D_WORLD_TRANSLUCENT)u->light_options[15][3]=R2D_WORLD_TRANSLUCENT;
+        }
+    }
     u->identity[0]=id;u->identity[1]=span;
     lighting(w,span,filter,u,ox,oy);if(w->debug_view==R2D_WORLD_DEBUG_OVERDRAW)u->identity[2]=-1;
     visual_common(w,u,ox,oy);visual_surface(w,u,surface,id,decal!=NULL);
@@ -1451,7 +1463,7 @@ bool r2d_world_gpu_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,
         if(surface->kind!=R2D_WORLD_WALL)draw(w,g,cmd,pass,v,ortho,id,surface->span,false,decal,ox,oy);
         else for(int j=0;j<w->visibility.span_count;j++){int span=w->visibility.spans[j];bool incident=false;for(int k=w->world.span_wall_offsets[span];k<w->world.span_wall_offsets[span+1];k++)if(w->world.span_wall_refs[k]==surface->primitive){incident=true;break;}if(incident)draw(w,g,cmd,pass,v,ortho,id,span,true,decal,ox,oy);}
     }
-    if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&w->world.material_count){
+    if(w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW&&(w->world.material_count||w->world.surface_alpha)){
         int count=r2d_world_transparent_order(&w->world,v,&w->visibility,NULL);int *ids=w->world.transparent_ids;
         if(count<0){SDL_EndGPURenderPass(pass);SDL_CancelGPUCommandBuffer(cmd);return false;}
         for(int i=0;i<count;i++){SDL_BindGPUGraphicsPipeline(pass,r2d_world_surface_blend(&w->world,ids[i])==R2D_WORLD_ADDITIVE?g->additive:g->translucent);surface_draw(w,g,cmd,pass,v,ortho,ids[i],ox,oy);}

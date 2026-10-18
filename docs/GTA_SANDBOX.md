@@ -15,7 +15,9 @@
 | Linecast/raycast со structured hit, маски, shape cast | **есть** | `$.world.raycast/raycastAll/castShape/bodyAt/bodiesIn/lineOfSight` (`src/highlevel/world.js`) |
 | Re2D-геометрия в запросах: surface/span/cell/material | **есть** | `$.re2dWorld.trace/traceAll` (`src/re2d_world_trace.c`, `src/highlevel/re2d.js`) |
 | Surface material/terrain policy, именованные поверхности | **частично** | `surface.terrain/material/sky`; произвольных пользовательских тегов не было |
-| Теги поверхностей + `groundAt` с однозначным multi-floor правилом | **добавлено** | P0.1: author JSON `span.tags`, `world.groundAt`, `surface.tags/hasTag/tag`; bake/SDK round-trip |
+| Теги поверхностей + `groundAt` с однозначным multi-floor правилом | **добавлено** | P0.1: author JSON `span.tags`, `world.groundAt`, `surface.tags/hasTag/tag`; bake/SDK round-trip; brush-карты пробрасывают `tags`/`ceilingTags` через `sdk_brush` |
+| Runtime-теги переживают save/load | **добавлено** | `re2d-save` v2: секция `surfaceTags`, `world.saveState()/loadState()`; v1 saves совместимы и не стирают живые теги |
+| Roof fade / per-surface alpha | **добавлено** | `world.surface(i).fade(a)` (0..1), CPU/GPU parity; демо-city фейдит крыши под игроком |
 | Произвольный поворот 2D-спрайта (угол/pivot/scale/nearest) CPU+GPU | **есть, проверено** | `node.angle`, `pushSprite`, P0.3 тест |
 | Машина: force/torque, масса, drag, тормоз, поворот, ручник, grip | **добавлено (JS над Box2D)** | `demos/re2d_gta_sandbox/lib/vehicle.js`, P0.4 |
 | Общий урон/hitscan/projectile/AoE, события с источником/точкой | **добавлено (сэмпл над `$.world`/`$.health`)** | `lib/combat.js`, P0.5 |
@@ -27,7 +29,7 @@
 | AI/навигационные примитивы (patrol/follow/flee/driveTo) | **добавлено (сэмпл над `$.nav`)** | `lib/ai.js`, P1.5 |
 | Зоны/статусы/события анимации/миссии | **частично + сэмпл** | `$.zone`, `$.signal`, `$.flow`, `$.quest`, `$.save`; `lib/missions.js` |
 | P2: декали, VFX/audio emitters, camera follow, debug overlays | **сэмплы** | `lib/polish.js`; существующие `$.particles/$.vfx/$.sound/$.camera/devtools` |
-| Roof fade в Re2D | **не поддержано** | нет публичного per-surface fade API; в демо не фейкуем, отмечено как ограничение |
+| Roof fade в Re2D | **добавлено** | `surface.fade()` — per-surface alpha, не материал; демо-city плавно прячет крыши под игроком, alpha 1 байт-в-байт равна прежнему кадру |
 
 ## Демо
 
@@ -51,8 +53,11 @@
 
 * Нет ECS, второго scene graph, 3D rigidbody/мешей, нативного Vehicle/AI/mission
   фреймворка. Всё — данные + скрипты поверх `$` и существующих подсистем.
-* Новые нативные данные (surface tags) опциональны: карты без них грузятся
-  байт-в-байт как раньше.
+* Новые нативные данные (surface tags, brush tags, fade) опциональны: карты без
+  них грузятся байт-в-байт как раньше; alpha 1 не меняет кадр.
+* Roof fade — runtime-состояние: не пекётся в карту и не входит в save-снапшот
+  (сбрасывается в 1 после reload); игра выставляет его каждый кадр. Небо
+  (`surface.sky(true)`) не рисуется через surface pass — сначала `sky(false)`.
 * Демо — вертикальный срез, а не GTA-клон: ассеты/код Carnage3D не переносились.
 
 
@@ -88,6 +93,7 @@ python3 tests/agent/re2d_gta_missions_test.py
 python3 tests/agent/re2d_surface_tags_test.py
 ```
 
-Числа на текущем дереве: `ctest 169/169`, sandbox e2e 18 проверок,
+Числа на текущем дереве: `ctest 169/169`, sandbox e2e 22 проверки,
 libs 300 проверок суммарно (vehicle 61, combat 43, ownership 27, seats 51,
-traffic 29, roadgraph 53, missions 36), lint/validate демо — 0 диагностик.
+traffic 29, roadgraph 53, missions 36), surface tags 53, surface fade отдельный
+агент-тест, lint/validate демо — 0 диагностик.

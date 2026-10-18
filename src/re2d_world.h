@@ -147,6 +147,10 @@ typedef struct {
     float sky_yaw; // radians, panorama rotation only
     uint64_t topology_revision;
     uint8_t *surface_sky;
+    // Per-surface fade alpha (lazy allocation, NULL = every surface alpha 1.0).
+    // Render-pass-only state: setting a fade never bumps topology/geometry
+    // revision or touches BSP/visibility data.
+    float *surface_alpha;
     int cell_count,portal_count,opening_count,surface_count,cell_node_count,cell_root;
     int *span_cells,*cell_refs,*wall_portals;
     int *span_wall_offsets,*span_wall_refs,*cell_portal_offsets,*cell_portal_refs;
@@ -373,6 +377,13 @@ bool r2d_world_material_color(const R2DRe2dWorld *,int,int,uint32_t,float,float,
 // matching shaders/world.frag.glsl. NULL features == legacy fog.
 bool r2d_world_material_color_features(const R2DRe2dWorld *,int,int,uint32_t,float,float,float,float,float,const float[3],const float[3],float,const R2DWorldRenderFeatures *,uint32_t *);
 int r2d_world_surface_blend(const R2DRe2dWorld *,int);
+// Per-surface fade alpha: a render-pass alpha for one derived surface (a wall or
+// one floor/ceiling plane), 1.0 by default. `surfaceFade`/fade() in the public
+// API wraps this. Invalid reads return 1.0; invalid writes are rejected.
+// alpha<1 makes an opaque/masked surface translucent for sorting and the
+// transparent pass; additive materials stay additive. No revision bump.
+float r2d_world_surface_alpha(const R2DRe2dWorld *,int);
+bool r2d_world_surface_fade_set(R2DRe2dWorld *,int,float);
 int r2d_world_transparent_order(R2DRe2dWorld *,const R2DRe2dView *,const R2DWorldVisibility *,int *);
 bool r2d_world_frame_transparent(R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,float,const R2DWorldVisibility *);
 void r2d_world_material_probe(const R2DRe2dWorld *,int,float,float,const float[3],const float[3],float[3],float[3]);

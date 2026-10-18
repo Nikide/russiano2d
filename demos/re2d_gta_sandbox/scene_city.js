@@ -48,6 +48,18 @@ export default function installCity($) {
                 else if (surface.hasTag('grass') || surface.hasTag('park')) surface.material('grass');
             }
 
+            // Roof fade (P2): крыши зданий плавно проявляют интерьер, когда
+            // игрок/машина под ними. Это per-surface alpha из движка, не
+            // материал: alpha 1 возвращает ровно исходный кадр.
+            const roofs = [];
+            for (let i = 0; i < info.surfaces; i++) {
+                const surface = world.surface(i);
+                if (!surface || surface.kind !== 2 || !surface.hasTag('roof')) continue;
+                const cell = city.map.cells[surface.cell];
+                if (!cell) continue;
+                roofs.push({ index: i, x: cell.x + cell.w / 2, y: cell.y + cell.h / 2, applied: 1 });
+            }
+
             // Плоские статические коллайдеры из authored-стен (Box2D), Re2D
             // отвечает за геометрию/видимость и surface tags.
             const colliders = [];
@@ -225,7 +237,7 @@ export default function installCity($) {
             };
 
             runtime = {
-                world, city, graph, ownership, combat, seats, ai, population, missions, hud,
+                world, city, graph, ownership, combat, seats, ai, population, missions, hud, roofs,
                 player, hero, car, carView, colliders, pedCleanup, cleanupPed, syncCar, spawnPed,
                 update(dt) {
                     if ($.input.pressed('e')) toggleSeat();
@@ -248,6 +260,15 @@ export default function installCity($) {
                         if (node.removed || (node.cur_hp !== undefined && node.cur_hp <= 0)) cleanupPed(node, true);
                     }
                     const target = seated ? car.node : player.get(0);
+                    for (const roof of roofs) {
+                        const d = Math.hypot(target.x - roof.x, target.y - roof.y);
+                        const want = Math.max(0.12, Math.min(1, (d - 70) / 170));
+                        const next = roof.applied + (want - roof.applied) * Math.min(1, dt * 6);
+                        if (Math.abs(next - roof.applied) > 0.01) {
+                            roof.applied = next;
+                            world.surface(roof.index).fade(next);
+                        }
+                    }
                     camX += (target.x - camX) * Math.min(1, dt * 7);
                     camY += (target.y - camY) * Math.min(1, dt * 7);
                     world.camera({ mode: 'topdown', x: camX, y: camY, h: 520, orthoHeight: 1150, near: 2 });

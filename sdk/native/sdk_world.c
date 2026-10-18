@@ -587,6 +587,11 @@ static bool parse_brush(Ctx *c, const R2dJson *o, int index, SdkBrushSpec *brush
         !get_color(c, o, "brushes", index, brush->id, "ceilingColor",
                    brush->ceiling_color, sizeof brush->ceiling_color, "#6a7078"))
         return false;
+    if (!get_tags(c, o, "brushes", index, brush->id, "tags",
+                  brush->tags.names, &brush->tags.count) ||
+        !get_tags(c, o, "brushes", index, brush->id, "ceilingTags",
+                  brush->ceiling_tags.names, &brush->ceiling_tags.count))
+        return false;
     snprintf(brush->visgroup, sizeof brush->visgroup, "%s",
              r2d_json_str(r2d_json_get(o, "visgroup"), ""));
 
@@ -719,6 +724,11 @@ static bool load_brush_bounds(Ctx *c, const R2dJson *root, World *w)
             !get_color(c, world, "world", 0, NULL, "sideColor",
                        bounds.side_color, sizeof bounds.side_color, "#8f7a58"))
             return false;
+        if (!get_tags(c, world, "world", 0, NULL, "tags",
+                      bounds.tags.names, &bounds.tags.count) ||
+            !get_tags(c, world, "world", 0, NULL, "ceilingTags",
+                      bounds.ceiling_tags.names, &bounds.ceiling_tags.count))
+            return false;
         SdkBrushTool boundary = SDK_BRUSH_TOOL_SKY;
         const char *boundary_name = r2d_json_str(r2d_json_get(world, "boundary"), "sky");
         if (!sdk_brush_tool_parse(boundary_name, &boundary)) {
@@ -801,6 +811,12 @@ static bool load_brush_bounds(Ctx *c, const R2dJson *root, World *w)
                     cell->spans[s].top = bs->top;
                     snprintf(cell->spans[s].floor_c, sizeof cell->spans[s].floor_c, "%s", bs->floor_color);
                     snprintf(cell->spans[s].ceil_c, sizeof cell->spans[s].ceil_c, "%s", bs->ceiling_color);
+                    cell->spans[s].ntag = bs->tags.count;
+                    cell->spans[s].nceiling_tag = bs->ceiling_tags.count;
+                    for (int t = 0; t < (int)bs->tags.count; t++)
+                        snprintf(cell->spans[s].tags[t], R2D_WORLD_TAG_LENGTH+1, "%s", bs->tags.names[t]);
+                    for (int t = 0; t < (int)bs->ceiling_tags.count; t++)
+                        snprintf(cell->spans[s].ceiling_tags[t], R2D_WORLD_TAG_LENGTH+1, "%s", bs->ceiling_tags.names[t]);
                 }
                 cell->generated = true;
                 cell->portal_authored = true;

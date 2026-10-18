@@ -49,7 +49,23 @@ build/r2d-sdk world-compile maps/room.re2dmap --renderer --output maps/room.re2d
 
 Span может нести `tags` (теги пола) и опциональные `ceilingTags` (теги потолка). Это **пользовательские данные, не engine enum**: `road`, `sidewalk`, `crosswalk`, `grass`, `water`, `rail`, `roof`, `interior`, `parking`, `no_ped`, `no_car`, `no_spawn` — лишь примеры, значения не перечисляются движком. Валидация общая для SDK и native runtime: массив строк, не больше 32 тегов; каждый после trim — 1..32 печатных байта (control/empty отклоняются); дубликаты игнорируются; неизвестные значения безопасны. Tags не влияют на геометрию/BSP/portal traversal и не являются semantic id.
 
-Generated spans ступеней и уклонов наследуют `tags`/`ceilingTags` своего source-элемента. Brush-компилятор пока не переносит теги на generated brush cells: теги задаются на explicit cells/spans; brush-only карта их не получает (ограничение текущего SDK, не silent fallback). Tags проходят `.re2dmap` → native author JSON → baked `.re2dworld`; старые payloads без тегов читаются как раньше. Runtime API описан в [reference](../highlevel/re2d.md#surface-tags-p01).
+Generated spans ступеней и уклонов наследуют `tags`/`ceilingTags` своего source-элемента. Tags проходят `.re2dmap` → native author JSON → baked `.re2dworld`; старые payloads без тегов читаются как раньше. Runtime API описан в [reference](../highlevel/re2d.md#surface-tags-p01).
+
+Brush-карта задаёт теги на brush и/или на внешнем конверте `world` (alias `bounds`):
+
+```json
+{
+  "version":1,
+  "world":{"x":0,"y":0,"w":300,"h":200,"bottom":0,"top":288,"boundary":"sky",
+           "tags":["ground"],"ceilingTags":["world_ceiling"]},
+  "brushes":[
+    {"id":"platform","rect":[100,0,200,200],"bottom":0,"top":128,
+     "tags":["platform_top"],"ceilingTags":["platform_bottom"]}
+  ]
+}
+```
+
+Compiler переносит `tags` от brush-владельца **пола** (`floor_owner`), иначе от конверта; `ceilingTags` — от brush-владельца **потолка** (`ceiling_owner`), иначе от конверта. Ownership уже участвует в merge клеток, поэтому merged spans сохраняют единый набор тегов. Невалидные массивы тегов на brush/world отклоняются с `SDK_WORLD_FIELD` (те же границы, что у span).
 
 SDK `id` — authoring identifier, не native numeric handle. Compiler может объединять exact same-XY authored rectangles в одну cell с несколькими spans. После compilation numeric indices могут отличаться от authoring array positions. Не сохраняйте runtime surface/span indices как стабильные semantic IDs между builds.
 

@@ -50,6 +50,31 @@ def test_city():
         check(int(a.eval("SANDBOX.population.count()")) >= 1, "population spawned pedestrians")
         check(int(a.eval("SANDBOX.world.info().visibleAtlasSprites")) > 0, "atlas sprites visible")
 
+        # Roof fade (P2): per-surface alpha from the engine, driven by the demo.
+        roofs = int(a.eval("SANDBOX.roofs.length"))
+        check(roofs > 0, "city exposes %d roof surfaces for fade" % roofs)
+        a.eval("$('#player').at(SANDBOX.roofs[0].x, SANDBOX.roofs[0].y)")
+        a.step(35)
+        alpha = float(a.eval("Math.min(...SANDBOX.roofs.map(r=>SANDBOX.world.surface(r.index).fade()))"))
+        check(0.0 <= alpha < 0.5, "roof fades under the player (min alpha %.2f)" % alpha)
+        a.eval("$('#player').at(6*96+48, 5*96+48)")
+        a.step(20)
+
+        # Runtime surface tags survive a world save/load (re2d-save v2).
+        saved = a.eval("""
+        (()=>{const g=SANDBOX.world.groundAt(7.5*96,6.5*96,{h:0});
+          globalThis.TAG_SURFACE=g.surface;
+          SANDBOX.world.surface(g.surface).tag('runtime_marker',true);
+          const snap=SANDBOX.world.saveState();
+          SANDBOX.world.surface(g.surface).tag('runtime_marker',false);
+          globalThis.TAG_SNAP=snap;
+          return JSON.stringify({had:SANDBOX.world.surface(g.surface).hasTag('runtime_marker')});})()
+        """)
+        check('"had":false' in saved, "runtime tag removed before load")
+        a.eval("SANDBOX.world.loadState(TAG_SNAP); true")
+        check(a.eval("SANDBOX.world.surface(TAG_SURFACE).hasTag('runtime_marker')") is True,
+              "runtime surface tag restored by loadStateJSON")
+
         # Enter the car (it is parked next to the player start), drive, exit.
         a.eval("$('#player').at($('#city-car').get(0).x + 40, $('#city-car').get(0).y)")
         a.key("E", "tap")

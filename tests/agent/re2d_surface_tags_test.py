@@ -93,6 +93,22 @@ AUTHOR_MAP = {
     ]}],
 }
 
+BRUSH_MAP = {
+    'version': 1, 'name': 'brush surface tags',
+    'world': {'x': 0, 'y': 0, 'w': 300, 'h': 200, 'bottom': 0, 'top': 288,
+              'floorColor': '#9a9a9a', 'ceilingColor': '#6a7078',
+              'sideColor': '#8f7a58', 'boundary': 'sky',
+              'tags': ['ground'], 'ceilingTags': ['world_ceiling']},
+    'brushes': [
+        # Solid slab above: its underside owns the ceiling of the open floor.
+        {'id': 'overhang', 'rect': [0, 0, 100, 200], 'bottom': 160, 'top': 288,
+         'tags': ['overhang_floor'], 'ceilingTags': ['overhang_ceiling']},
+        # Solid platform below: its top owns the floor of the raised area.
+        {'id': 'platform', 'rect': [100, 0, 200, 200], 'bottom': 0, 'top': 128,
+         'tags': ['platform_top'], 'ceilingTags': ['platform_bottom']},
+    ],
+}
+
 PLAIN_MAP = {
     'version': 1, 'name': 'untagged',
     'cells': [{'id': 'room', 'rect': [0, 0, 100, 100], 'spans': [
@@ -173,7 +189,42 @@ def test_sdk_compile():
     plain_compiled = json.loads(plain_out.read_text()) if plain_result.returncode == 0 else {}
     check(plain_result.returncode == 0 and plain_compiled.get('baked', {}).get('version', 0) < 6,
           'untagged SDK output keeps its legacy baked wire version (no RDW6)')
-    return compiled, plain_compiled
+
+    # Brush-only authoring forwards brush/world surface tags into baked spans.
+    brush_source = write_map(Path('build/test_surface_tags_brush.re2dmap'), BRUSH_MAP)
+    brush_out = Path('build/test_surface_tags_brush.re2dworld')
+    brush_result, brush_report = compile_map(brush_source, brush_out)
+    check(brush_result.returncode == 0, 'brush-only tagged .re2dmap compiles (exit 0)')
+    brush_compiled = json.loads(brush_out.read_text()) if brush_result.returncode == 0 else {}
+    brush_spans = [span for cell in brush_compiled.get('cells', []) for span in cell['spans']]
+    brush_floor_tags = sorted(span['tags'][0] for span in brush_spans if span.get('tags'))
+    brush_ceiling_tags = sorted(span['ceilingTags'][0] for span in brush_spans
+                                if span.get('ceilingTags'))
+    check(len(brush_spans) == 2 and
+          brush_floor_tags == ['ground', 'platform_top'] and
+          brush_ceiling_tags == ['overhang_ceiling', 'world_ceiling'],
+          'brush compiler forwards owner-floor and owner-ceiling tags (bounds fallback included)')
+    check(brush_compiled.get('baked', {}).get('version') == 6,
+          'brush-tagged output also uses baked wire v6')
+
+    for label, broken in [
+            ('brush tags non-array', {**BRUSH_MAP, 'brushes': [
+                {**BRUSH_MAP['brushes'][1], 'tags': 'road'}]}),
+            ('brush tag non-string', {**BRUSH_MAP, 'brushes': [
+                {**BRUSH_MAP['brushes'][1], 'tags': ['road', 5]}]}),
+            ('brush ceiling tag empty', {**BRUSH_MAP, 'brushes': [
+                {**BRUSH_MAP['brushes'][1], 'ceilingTags': ['  ']}]}),
+            ('world tags non-array', {**BRUSH_MAP, 'world': {
+                **BRUSH_MAP['world'], 'tags': 'ground'}}),
+    ]:
+        broken_source = write_map(Path('build/test_surface_tags_brush_bad.re2dmap'), broken)
+        broken_result, broken_report = compile_map(
+            broken_source, Path('build/test_surface_tags_brush_bad.re2dworld'))
+        diagnostics = broken_report.get('diagnostics', []) if isinstance(broken_report, dict) else []
+        check(broken_result.returncode != 0 and
+              any(d.get('code') == 'SDK_WORLD_FIELD' for d in diagnostics),
+              'SDK rejects %s with SDK_WORLD_FIELD' % label)
+    return compiled, plain_compiled, brush_compiled
 
 
 def test_public_api(compiled, plain):
@@ -290,11 +341,99 @@ def test_public_api(compiled, plain):
         check(old is True, 'old untagged baked payload loads with no tags (backward compatible)')
 
 
+def test_brush_public_api(brush):
+    print('\n== Public $ API: brush-authored tags ==')
+    with Agent(game='tests/fixtures/re2d_native', seed=4) as a:
+        if skip_without_re2d(a, what='brush surface tags'):
+            return
+        brush_json = json.dumps(json.dumps(brush))
+        result = a.eval(
+            '(()=>{'
+            'const w=$.re2dWorld.fromJSON(' + brush_json + ');'
+            'const open=w.groundAt(50,50,{h:0});'
+            'const platform=w.groundAt(250,50,{h:160});'
+            'const openCeiling=open?w.surface(open.surface+1).tags():null;'
+            'const platformCeiling=platform?w.surface(platform.surface+1).tags():null;'
+            'const singleSpan=w.groundAt(50,50);'
+            'const hasTag=platform?w.surface(platform.surface).hasTag("platform_top"):false;'
+            'const baked=w.info().bakedTopology;'
+            'w.dispose();'
+            'return {open,platform,openCeiling,platformCeiling,singleSpan,hasTag,baked};'
+            '})()')
+        check(isinstance(result, dict), 'brush-tagged baked map loads through $.re2dWorld.fromJSON')
+        if not isinstance(result, dict):
+            print(result)
+            return
+        check(result['open'] and result['open']['tags'] == ['ground'] and
+              result['open']['height'] == 0,
+              'ground floor under the overhang carries the world/bounds floor tag')
+        check(result['platform'] and result['platform']['tags'] == ['platform_top'] and
+              result['platform']['height'] == 128,
+              'raised platform floor carries the owning brush floor tag')
+        check(result['openCeiling'] == ['overhang_ceiling'],
+              'ceiling under the solid overhang carries the owning brush ceiling tag')
+        check(result['platformCeiling'] == ['world_ceiling'],
+              'open ceiling above the platform falls back to world bounds ceiling tags')
+        check(result['singleSpan'] and result['singleSpan']['tags'] == ['ground'] and
+              result['hasTag'] is True,
+              'single-span brush XY may omit h; brush tags also work via surface.hasTag')
+        check(result['baked'] is True, 'brush-tagged map loads the baked native tables')
+
+
+def test_save_state_tags(compiled):
+    print('\n== Save/load: runtime surface tags survive saveStateJSON/loadStateJSON ==')
+    with Agent(game='tests/fixtures/re2d_native', seed=5) as a:
+        if skip_without_re2d(a, what='surface tags save state'):
+            return
+        tagged_json = json.dumps(json.dumps(compiled))
+        result = a.eval(
+            '(()=>{'
+            'const w=$.re2dWorld.fromJSON(' + tagged_json + ');'
+            'const floor=w.groundAt(50,50,{h:0}).surface;'
+            'const authored=w.surface(floor).tags().slice();'
+            'w.surface(floor).tag("runtime_saved",true);'
+            'w.surface(floor).tag("road",false);'
+            'const save=w.saveState();'
+            'const savedHasSection=!!(save.state&&save.state.surfaceTags&&'
+            'save.state.surfaceTags.some(e=>e.surface===floor&&e.tags.length===1&&'
+            'e.tags[0]==="runtime_saved"));'
+            'w.surface(floor).tag("runtime_saved",false);'
+            'w.surface(floor).tag("road",true);'
+            'w.surface(floor).tag("ephemeral",true);'
+            'const applied=w.loadState(save);'
+            'const restored=w.surface(floor).tags().slice();'
+            'const saveV1=w.saveState();'
+            'w.surface(floor).tag("v1_kept",true);'
+            'saveV1.state.version=1;'
+            'delete saveV1.state.surfaceTags;'
+            'const v1Applied=w.loadState(saveV1);'
+            'const v1Tags=w.surface(floor).tags().slice();'
+            'const geometry=w.spanAt(50,50,0)===0&&w.spanAt(50,50,200)===1;'
+            'w.dispose();'
+            'return {authored,savedHasSection,applied,restored,v1Applied,v1Tags,geometry};'
+            '})()')
+        check(isinstance(result, dict), 'saveState/loadState execute on a tagged world')
+        if not isinstance(result, dict):
+            print(result)
+            return
+        check(result['authored'] == ['road'], 'authored floor tags are the save base')
+        check(result['savedHasSection'] is True, 'v2 native save contains the surfaceTags section')
+        check(result['applied'] is True, 'loadState applies a tag-bearing save')
+        check('runtime_saved' in result['restored'] and 'road' not in result['restored'] and
+              'ephemeral' not in result['restored'],
+              'save restores runtime-added tags and runtime-removed authored tags exactly')
+        check(result['v1Applied'] is True and 'v1_kept' in result['v1Tags'],
+              'v1 snapshot without surfaceTags leaves the live tag table untouched')
+        check(result['geometry'] is True, 'tag restore does not mutate span geometry')
+
+
 def main():
     compiled = test_sdk_compile()
     if compiled is None:
         return 1
     test_public_api(compiled[0], compiled[1])
+    test_brush_public_api(compiled[2])
+    test_save_state_tags(compiled[0])
     print('\n%d failure(s)' % len(FAILED))
     return 1 if FAILED else 0
 

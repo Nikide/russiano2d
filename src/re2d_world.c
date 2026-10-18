@@ -23,7 +23,37 @@ void r2d_world_span_height_bounds(const R2DWorldSpan *s,float *low,float *high)
 void r2d_world_free(R2DRe2dWorld *w)
 { if (!w) return; r2d_world_semantic_free(w);r2d_world_metadata_free(&w->metadata);
   if(w->surface_tags){for(int i=0;i<w->surface_count;i++){R2DWorldSurfaceTags *slot=&w->surface_tags[i];for(int j=0;j<slot->count;j++)free(slot->names[j]);free(slot->names);}free(w->surface_tags);}
-  free(w->sort_items);free(w->transparent_ids);free(w->surface_sky);free(w->sky.pixels);r2d_bsp_free(&w->bsp); free(w->walls);free(w->spans);free(w->cells);free(w->portals);free(w->openings);free(w->surfaces);free(w->cell_nodes);free(w->span_cells);free(w->wall_portals);free(w->wall_openings);free(w->opening_spans_a);free(w->opening_spans_b);free(w->cell_refs);free(w->span_wall_offsets);free(w->span_wall_refs);free(w->cell_portal_offsets);free(w->cell_portal_refs);free(w->surface_materials);for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++)r2d_world_material_free(&w->materials[i]);r2d_world_light_free(w);memset(w,0,sizeof *w);w->bsp.root=-1; }
+  free(w->sort_items);free(w->transparent_ids);free(w->surface_sky);free(w->surface_alpha);free(w->sky.pixels);r2d_bsp_free(&w->bsp); free(w->walls);free(w->spans);free(w->cells);free(w->portals);free(w->openings);free(w->surfaces);free(w->cell_nodes);free(w->span_cells);free(w->wall_portals);free(w->wall_openings);free(w->opening_spans_a);free(w->opening_spans_b);free(w->cell_refs);free(w->span_wall_offsets);free(w->span_wall_refs);free(w->cell_portal_offsets);free(w->cell_portal_refs);free(w->surface_materials);for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++)r2d_world_material_free(&w->materials[i]);r2d_world_light_free(w);memset(w,0,sizeof *w);w->bsp.root=-1; }
+
+// --- Per-surface fade alpha -------------------------------------------------
+// Lazy allocation keeps legacy worlds allocation-free and byte-identical.
+// Legacy r2d_world_build() worlds have no surface table but the renderer still
+// derives surface ids as wall_count + span*2 + ceiling, so fade storage uses the
+// same derived slot count there.
+static int surface_fade_slots(const R2DRe2dWorld *w)
+{
+    if(w->surface_count>0)return w->surface_count;
+    return w->wall_count+w->span_count*2;
+}
+float r2d_world_surface_alpha(const R2DRe2dWorld *w,int surface)
+{
+    if(!w||!w->surface_alpha||surface<0||surface>=surface_fade_slots(w))return 1.0f;
+    float alpha=w->surface_alpha[surface];
+    return isfinite(alpha)&&alpha>=0.0f&&alpha<=1.0f?alpha:1.0f;
+}
+bool r2d_world_surface_fade_set(R2DRe2dWorld *w,int surface,float alpha)
+{
+    if(!w||!isfinite(alpha)||alpha<0.0f||alpha>1.0f)return false;
+    int slots=surface_fade_slots(w);
+    if(surface<0||surface>=slots)return false;
+    if(!w->surface_alpha){
+        w->surface_alpha=malloc((size_t)slots*sizeof(float));
+        if(!w->surface_alpha)return false;
+        for(int i=0;i<slots;i++)w->surface_alpha[i]=1.0f;
+    }
+    w->surface_alpha[surface]=alpha;
+    return true; // render-only state: no topology/geometry revision bump
+}
 
 // --- User surface tags (P0.1) ----------------------------------------------
 static bool tag_trim_char(unsigned char c)
@@ -532,7 +562,7 @@ int r2d_world_transparent_order(R2DRe2dWorld *w,const R2DRe2dView *v,const R2DWo
 }
 bool r2d_world_frame_transparent(R2DRe2dWorld *w,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,float ortho,const R2DWorldVisibility *f)
 {
-    if(!w->material_count)return true;
+    if(!w->material_count&&!w->surface_alpha)return true;
     int count=r2d_world_transparent_order(w,v,f,NULL);if(count<0)return false;int *ids=w->transparent_ids;
     WorldImage im={v,width,height,ortho,rgba,depth,f,NULL,true,NULL};
     for(int i=0;i<count;i++){const R2DWorldSurface *surface=&w->surfaces[ids[i]];

@@ -25,6 +25,11 @@
 
 HUD: скорость, здоровье, патроны, число пешеходов/машин, текущая миссия.
 
+Город использует новые возможности движка: surface tags (road/sidewalk/grass/
+park/no_spawn) в brush- и explicit-картах, `groundAt`-фильтры спавна, runtime
+теги в save (`world.saveState/loadState`) и per-surface `surface(i).fade()` —
+крыши зданий плавно проявляются, когда игрок под ними.
+
 ## Где что лежит
 
 ```

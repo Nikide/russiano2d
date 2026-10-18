@@ -1,3 +1,24 @@
+> Unreleased / GTA sandbox follow-up: закрыты три ограничения прошлого среза.
+> (1) Brush-generated cells теперь переносят `tags`/`ceilingTags`: brush и
+> world/bounds поддерживают массивы тегов, compiler берёт floor tags у
+> floor-owner brush (fallback — конверт), ceiling tags у ceiling-owner; те же
+> лимиты/диагностика SDK_WORLD_FIELD, baked .re2dworld получает теги. Тест:
+> brush-only tagged .re2dmap -> baked v6 -> groundAt/surface.tags.
+> (2) Runtime `surface(i).tag()` переживает save/load: re2d-save v2 добавил
+> секцию surfaceTags (только непустые списки, строго возрастающий surface
+> index); v1 saves читаются и не стирают живые теги, v2 применяется
+> транзакционно (никаких частичных записей) и восстанавливает runtime-
+> добавленные/удалённые метки. `world.saveState()/loadState()` без изменений
+> сигнатур.
+> (3) Roof fade: `world.surface(i).fade(0..1)` — per-surface alpha, не материал;
+> alpha<1 переводит поверхность в translucent pass, CPU и GPU применяют её к
+> финальной альфе (alpha 0 — не рисуется, alpha 1 — байт-в-байт прежний кадр,
+> без bump geometry/topology revision). Демо-city фейдит крыши зданий под
+> игроком и показывает интерьер. Ограничения: fade — runtime-состояние, не
+> пекётся и не входит в save-снапшот; sky-поверхности сначала `sky(false)`;
+> faded-поверхности не попадают в mirror-отражения и продолжают отбрасывать
+> тени.
+>
 > Unreleased / GTA-like sandbox (roadmap RUSSIANO2D_GTA_FEATURE_ROADMAP):
 > P0.1 surface tags + groundAt в Re2D World. Author JSON span получает
 > `tags`/`ceilingTags` (<=32 тегов, 1..32 printable байта, дубликаты/неизвестные
