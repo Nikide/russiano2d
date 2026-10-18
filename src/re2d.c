@@ -844,6 +844,77 @@ static JSValue world_span_query(JSContext *ctx,JSValueConst self,int argc,JSValu
     WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
     int i=r2d_world_span_at(&w->world,p[0],p[1],p[2]);return i<0?JS_NULL:JS_NewInt32(ctx,i);
 }
+static JSValue surface_tags_array(JSContext *ctx,const R2DRe2dWorld *world,int surface)
+{
+    JSValue array=JS_NewArray(ctx);if(JS_IsException(array))return array;
+    int count=r2d_world_surface_tag_count(world,surface);
+    for(int i=0;i<count;i++) {
+        const char *name=r2d_world_surface_tag(world,surface,i);
+        JS_SetPropertyUint32(ctx,array,(uint32_t)i,JS_NewString(ctx,name?name:""));
+    }
+    return array;
+}
+static JSValue world_surface_tags(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];
+    if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    int index=(int)p[0];
+    if(index<0||index>=w->world.surface_count)return JS_ThrowRangeError(ctx,"Re2D World: missing surface %d",index);
+    return surface_tags_array(ctx,&w->world,index);
+}
+static bool world_tag_argument(JSContext *ctx,JSValueConst argv,char *name)
+{
+    if(!JS_IsString(argv)){JS_ThrowTypeError(ctx,"Re2D World: surface tag name must be a string");return false;}
+    const char *text=JS_ToCString(ctx,argv);if(!text)return false;
+    bool ok=r2d_world_tag_normalize(text,name,NULL);
+    JS_FreeCString(ctx,text);
+    if(!ok)JS_ThrowRangeError(ctx,"Re2D World: surface tag must be 1..%d printable bytes after trimming",R2D_WORLD_TAG_LENGTH);
+    return ok;
+}
+static JSValue world_surface_has_tag(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];char name[R2D_WORLD_TAG_LENGTH+1];
+    if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    int index=(int)p[0];
+    if(index<0||index>=w->world.surface_count)return JS_ThrowRangeError(ctx,"Re2D World: missing surface %d",index);
+    if(argc<2||!world_tag_argument(ctx,argv[1],name))return JS_EXCEPTION;
+    return JS_NewBool(ctx,r2d_world_surface_has_tag(&w->world,index,name));
+}
+static JSValue world_surface_tag(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[1];char name[R2D_WORLD_TAG_LENGTH+1];
+    if(!w||!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    int index=(int)p[0];
+    if(index<0||index>=w->world.surface_count)return JS_ThrowRangeError(ctx,"Re2D World: missing surface %d",index);
+    if(argc<2||!world_tag_argument(ctx,argv[1],name))return JS_EXCEPTION;
+    bool on=true;
+    if(argc>=3) {
+        if(!JS_IsBool(argv[2]))return JS_ThrowTypeError(ctx,"Re2D World: surfaceTag(index,name,on) expects a boolean");
+        on=JS_ToBool(ctx,argv[2]);
+    }
+    if(!r2d_world_surface_tag_set(&w->world,index,name,on))
+        return JS_ThrowRangeError(ctx,"Re2D World: cannot %s tag '%s' (tag budget %d or out of memory)",on?"add":"remove",name,R2D_WORLD_TAG_MAX);
+    return JS_NewBool(ctx,r2d_world_surface_has_tag(&w->world,index,name));
+}
+static JSValue world_ground_at(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);float p[4];
+    if(!w||!world_numbers(ctx,argc,argv,4,p))return JS_EXCEPTION;
+    if(p[3]!=0.0f&&p[3]!=1.0f)return JS_ThrowTypeError(ctx,"Re2D World: groundAt hasHeight flag must be 0|1");
+    R2DWorldGround ground={0};
+    int status=r2d_world_ground_at(&w->world,p[0],p[1],p[3]!=0.0f,p[2],&ground);
+    if(status==R2D_WORLD_GROUND_INVALID)return JS_ThrowRangeError(ctx,"Re2D World: groundAt needs finite x/y and h");
+    if(status==R2D_WORLD_GROUND_AMBIGUOUS)
+        return JS_ThrowRangeError(ctx,"Re2D World: groundAt(%g,%g) is ambiguous: %d stacked spans; pass {h}",
+                                  p[0],p[1],ground.candidates);
+    if(status==R2D_WORLD_GROUND_NONE)return JS_NULL;
+    JSValue o=JS_NewObject(ctx);
+    if(JS_IsException(o))return o;
+    set_num(ctx,o,"cell",ground.cell);set_num(ctx,o,"span",ground.span);
+    set_num(ctx,o,"surface",ground.surface);set_num(ctx,o,"height",ground.height);
+    JS_SetPropertyStr(ctx,o,"tags",surface_tags_array(ctx,&w->world,ground.surface));
+    return o;
+}
 static JSValue world_portal_closed(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);int index;
@@ -2265,6 +2336,10 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"dispose",JS_NewCFunction(ctx,world_release,"dispose",0));
     JS_SetPropertyStr(ctx,handle,"cellAt",JS_NewCFunction(ctx,world_cell_query,"cellAt",2));
     JS_SetPropertyStr(ctx,handle,"spanAt",JS_NewCFunction(ctx,world_span_query,"spanAt",3));
+    JS_SetPropertyStr(ctx,handle,"groundAt",JS_NewCFunction(ctx,world_ground_at,"groundAt",4));
+    JS_SetPropertyStr(ctx,handle,"surfaceTags",JS_NewCFunction(ctx,world_surface_tags,"surfaceTags",1));
+    JS_SetPropertyStr(ctx,handle,"surfaceHasTag",JS_NewCFunction(ctx,world_surface_has_tag,"surfaceHasTag",2));
+    JS_SetPropertyStr(ctx,handle,"surfaceTag",JS_NewCFunction(ctx,world_surface_tag,"surfaceTag",3));
     JS_SetPropertyStr(ctx,handle,"surface",JS_NewCFunction(ctx,world_surface_query,"surface",1));
     JS_SetPropertyStr(ctx,handle,"portalClosed",JS_NewCFunction(ctx,world_portal_closed,"portalClosed",2));
     JS_SetPropertyStr(ctx,handle,"portalMirror",JS_NewCFunction(ctx,world_portal_mirror,"portalMirror",2));

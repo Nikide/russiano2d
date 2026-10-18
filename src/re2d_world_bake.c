@@ -23,18 +23,24 @@ bool r2d_world_put_baked(R2DRe2dWorld *w,R2dSb *out)
     bool tools=false;
     for(int i=0;i<w->wall_count;i++)if(w->walls[i].flags){tools=true;break;}
     if(!tools)for(int i=0;i<w->portal_count;i++)if(w->portals[i].sky||w->portals[i].mirror||w->portals[i].area_portal){tools=true;break;}
+    // RDW6 appends per-surface user tag tables. Emitted only when tags exist so
+    // untagged maps keep emitting exactly their old RDW1..RDW5 bytes.
+    const bool tags=r2d_world_has_tags(w);
     // Wire markers keep older RDW1/RDW2 payloads readable; semantic tables add
-    // RDW3 (lit) / RDW4 (unlit), RDW5 adds tool policy.
-    const int version=tools?5:(semantic?(lit?3:4):(lit?2:1));
-    static const uint32_t markers[]={0x31574452u,0x32574452u,0x33574452u,0x34574452u,0x35574452u};
-    const bool write_lit=lit||tools, write_semantic=semantic||tools;
+    // RDW3 (lit) / RDW4 (unlit), RDW5 adds tool policy, RDW6 adds surface tags.
+    const int version=tags?6:(tools?5:(semantic?(lit?3:4):(lit?2:1)));
+    static const uint32_t markers[]={0x31574452u,0x32574452u,0x33574452u,0x34574452u,0x35574452u,0x36574452u};
+    const bool write_lit=lit||tools||tags, write_semantic=semantic||tools||tags;
+    // RDW6 implies the RDW5 wire layout, so tool fields are emitted even when
+    // the map itself uses no tool materials (the loader keys them off version).
+    const bool write_tools=tools||tags;
     put_u(&s,markers[version-1]);
     int nr=w->span_wall_offsets[w->span_count];const int counts[]={w->wall_count,w->span_count,w->cell_count,w->portal_count,w->opening_count,w->surface_count,w->cell_node_count,w->cell_root,nr};
     for(int i=0;i<9;i++)put_u(&s,(uint32_t)counts[i]);
-    for(int i=0;i<w->wall_count;i++){const R2DWorldWall *p=&w->walls[i];put_f(&s,p->x1);put_f(&s,p->y1);put_f(&s,p->x2);put_f(&s,p->y2);put_f(&s,p->bottom);put_f(&s,p->top);put_u(&s,p->color);if(tools)put_u(&s,p->flags);}
+    for(int i=0;i<w->wall_count;i++){const R2DWorldWall *p=&w->walls[i];put_f(&s,p->x1);put_f(&s,p->y1);put_f(&s,p->x2);put_f(&s,p->y2);put_f(&s,p->bottom);put_f(&s,p->top);put_u(&s,p->color);if(write_tools)put_u(&s,p->flags);}
     for(int i=0;i<w->span_count;i++){const R2DWorldSpan *p=&w->spans[i];put_f(&s,p->x);put_f(&s,p->y);put_f(&s,p->w);put_f(&s,p->h);put_f(&s,p->bottom);put_f(&s,p->top);put_u(&s,p->floor_color);put_u(&s,p->ceiling_color);put_f(&s,p->floor_a);put_f(&s,p->floor_b);put_f(&s,p->ceiling_a);put_f(&s,p->ceiling_b);}
     for(int i=0;i<w->cell_count;i++){const R2DWorldCell *p=&w->cells[i];put_f(&s,p->x);put_f(&s,p->y);put_f(&s,p->w);put_f(&s,p->h);put_u(&s,p->first_span);put_u(&s,p->span_count);}
-    for(int i=0;i<w->portal_count;i++){const R2DWorldPortal *p=&w->portals[i];put_u(&s,p->cell_a);put_u(&s,p->cell_b);put_u(&s,p->first_opening);put_u(&s,p->opening_count);put_f(&s,p->ax);put_f(&s,p->ay);put_f(&s,p->bx);put_f(&s,p->by);put_u(&s,p->closed?1:0);if(tools){uint32_t f=(p->sky?1u:0u)|(p->mirror?2u:0u)|(p->area_portal?4u:0u);put_u(&s,f);}}
+    for(int i=0;i<w->portal_count;i++){const R2DWorldPortal *p=&w->portals[i];put_u(&s,p->cell_a);put_u(&s,p->cell_b);put_u(&s,p->first_opening);put_u(&s,p->opening_count);put_f(&s,p->ax);put_f(&s,p->ay);put_f(&s,p->bx);put_f(&s,p->by);put_u(&s,p->closed?1:0);if(write_tools){uint32_t f=(p->sky?1u:0u)|(p->mirror?2u:0u)|(p->area_portal?4u:0u);put_u(&s,f);}}
     for(int i=0;i<w->opening_count;i++){put_f(&s,w->openings[i].bottom);put_f(&s,w->openings[i].top);}
     for(int i=0;i<w->surface_count;i++){const R2DWorldSurface *p=&w->surfaces[i];put_u(&s,p->kind);put_u(&s,p->primitive);put_u(&s,p->cell);put_u(&s,p->span);}
     for(int i=0;i<w->cell_node_count;i++){const R2DWorldCellNode *p=&w->cell_nodes[i];put_f(&s,p->split);put_u(&s,p->axis);put_u(&s,p->front);put_u(&s,p->back);put_u(&s,p->first_ref);put_u(&s,p->ref_count);}
@@ -60,6 +66,16 @@ bool r2d_world_put_baked(R2DRe2dWorld *w,R2dSb *out)
                 put_u(&s,length);
                 for(uint32_t j=0;j<length;j++)r2d_sb_putc(&s,name[j]);
             }
+        }
+    }
+    if(tags) for(int i=0;i<w->surface_count;i++) {
+        const int count=r2d_world_surface_tag_count(w,i);
+        put_u(&s,(uint32_t)(count>0?count:0));
+        for(int j=0;j<count;j++) {
+            const char *name=r2d_world_surface_tag(w,i,j);
+            const uint32_t length=name?(uint32_t)strlen(name):0u;
+            put_u(&s,length);
+            for(uint32_t k=0;k<length;k++)r2d_sb_putc(&s,name[k]);
         }
     }
     r2d_sb_printf(out,"\"baked\":{\"version\":%d,\"checksum\":\"%016llx\",\"encoding\":\"le32-hex\",\"data\":\"",version,(unsigned long long)checksum((const uint8_t *)s.data,s.len));
@@ -121,9 +137,9 @@ bool r2d_world_load_baked(R2DRe2dWorld *world,const R2dJson *obj,char *err,size_
     for(size_t i=0;i<length/2;i++){int a=hex(data[i*2]),b=hex(data[i*2+1]);if(a<0||b<0)goto done;bytes[i]=(uint8_t)(a*16+b);}
     char actual[17];snprintf(actual,sizeof actual,"%016llx",(unsigned long long)checksum(bytes,length/2));if(strcmp(sum,actual))goto done;
     Reader r={bytes,length/2,0,true};uint32_t marker=get_u(&r);
-    int version=marker==0x31574452u?1:marker==0x32574452u?2:marker==0x33574452u?3:marker==0x34574452u?4:marker==0x35574452u?5:0;
+    int version=marker==0x31574452u?1:marker==0x32574452u?2:marker==0x33574452u?3:marker==0x34574452u?4:marker==0x35574452u?5:marker==0x36574452u?6:0;
     bool tools=version>=5;
-    bool lit=version==2||version==3||version==5,semantic=version>=3;
+    bool lit=version==2||version==3||version==5||version==6,semantic=version>=3,tags=version>=6;
     if(!version||wire_version!=(double)version)goto done;
     int *counts[]={&w.wall_count,&w.span_count,&w.cell_count,&w.portal_count,&w.opening_count,&w.surface_count,&w.cell_node_count,&w.cell_root};
     for(int i=0;i<8;i++)*counts[i]=(int32_t)get_u(&r);int refs=(int32_t)get_u(&r);
@@ -185,6 +201,25 @@ bool r2d_world_load_baked(R2DRe2dWorld *world,const R2dJson *obj,char *err,size_
             }
         }
         if(!r2d_world_semantic_validate(&w))goto done;
+    }
+    if(tags) {
+        for(int i=0;i<w.surface_count;i++) {
+            uint32_t count=get_u(&r);
+            if(!r.ok||count>R2D_WORLD_TAG_MAX)goto done;
+            for(uint32_t j=0;j<count;j++) {
+                uint32_t length=get_u(&r);
+                if(!r.ok||length==0||length>R2D_WORLD_TAG_LENGTH)goto done;
+                char name[R2D_WORLD_TAG_LENGTH+1];
+                for(uint32_t k=0;k<length;k++) {
+                    if(r.offset>=r.size)goto done;
+                    uint8_t c=r.data[r.offset++];
+                    if(!c)goto done;
+                    name[k]=(char)c;
+                }
+                name[length]=0;
+                if(!r2d_world_surface_tag_add(&w,i,name))goto done;
+            }
+        }
     }
     if(!r.ok||r.offset!=r.size)goto done;
     // Imported ray queries use complete primitive fallback; no unverified cell-ray coverage claim.

@@ -36,7 +36,7 @@ Camera defaults: x=y=0; h=view.h ?? view.eye ??48; yaw=pitch=0; fov=70°, near=4
 
 `lightAt(x,y,h)` → `{r,g,b,level}`/null. Level = mean RGB. Это native deterministic approximation с ambient/relevant dynamic contributions, zero normal/depth query convention, без framebuffer. Emissive texture/fog/postprocess perceived brightness не входит в этот gameplay query. Значения света могут превышать1; final color clamp происходит позже.
 
-`surface(id)` → snapshot `{kind,primitive,cell,span}` + material(name)/sky(enabled=true). kind wall0/floor1/ceiling2. Wall ownership fields могут быть -1. При invalid id null. Canonical IDs действуют только для данного topology/index domain, setters сохраняют id, не semantic tag. `span(id).info()` возвращает light/fog metadata, не геометрию span.
+`surface(id)` → snapshot `{kind,primitive,cell,span}` + material(name)/sky(enabled=true)/tags()/hasTag(name)/tag(name,on). kind wall0/floor1/ceiling2. Wall ownership fields могут быть -1. При invalid id null. Authored surface tags перечитываются из карты при reload; runtime `tag()` — additive-метка без geometry/topology revision; reload восстанавливает authored набор (runtime-метки в файл карты не пишутся, источник истины — authored span `tags`/`ceilingTags`). Canonical IDs действуют только для данного topology/index domain, setters сохраняют id, не semantic tag. `span(id).info()` возвращает light/fog metadata, не геометрию span.
 
 ## Lighting defaults и порядок
 

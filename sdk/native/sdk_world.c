@@ -30,6 +30,13 @@ typedef struct WSpan {
     float bottom, top, floor_a, floor_b;
     char  floor_c[40], ceil_c[40];
     R2DWorldSpanLight light;bool lit;
+    // P0.1 user surface tags: floor `tags` + optional `ceilingTags`. Fixed
+    // compiler-side storage because WSpan is copied by value between stages;
+    // bounds match the native validator (R2D_WORLD_TAG_MAX / _LENGTH).
+    char tags[R2D_WORLD_TAG_MAX][R2D_WORLD_TAG_LENGTH+1];
+    unsigned char ntag;
+    char ceiling_tags[R2D_WORLD_TAG_MAX][R2D_WORLD_TAG_LENGTH+1];
+    unsigned char nceiling_tag;
 } WSpan;
 
 typedef struct WCell {
@@ -255,6 +262,38 @@ static bool get_id(Ctx *c, const R2dJson *o, const char *section, int index, cha
     return true;
 }
 
+// Optional user surface tags (P0.1): array of <=32 strings, each trimmed to
+// 1..32 printable bytes; duplicates ignored. Tags are data, not an SDK enum.
+static bool get_tags(Ctx *c, const R2dJson *o, const char *section, int index, const char *id,
+                     const char *key, char tags[R2D_WORLD_TAG_MAX][R2D_WORLD_TAG_LENGTH+1],
+                     unsigned char *count)
+{
+    *count = 0;
+    const R2dJson *arr = r2d_json_get(o, key);
+    if (!arr) return true;
+    if (arr->type != R2D_JSON_ARR || arr->count > R2D_WORLD_TAG_MAX) {
+        field_diag(c, section, index, id, key, "нужен массив не более 32 строк-тегов");
+        return false;
+    }
+    for (int i = 0; i < arr->count; ++i) {
+        const R2dJson *v = arr->items[i];
+        if (v->type != R2D_JSON_STR) {
+            field_diag(c, section, index, id, key, "тег должен быть строкой");
+            return false;
+        }
+        char name[R2D_WORLD_TAG_LENGTH+1];
+        if (!r2d_world_tag_normalize(v->string, name, NULL)) {
+            field_diag(c, section, index, id, key, "тег: 1..32 печатных байта после trim");
+            return false;
+        }
+        bool duplicate = false;
+        for (int j = 0; j < *count; ++j) if (!strcmp(tags[j], name)) { duplicate = true; break; }
+        if (duplicate) continue;
+        snprintf(tags[*count], R2D_WORLD_TAG_LENGTH+1, "%s", name);
+        (*count)++;
+    }
+    return true;
+}
 static bool load_spans(Ctx *c, const R2dJson *o, const char *section, int index, const char *id, WSpan **out, int *n)
 {
     const R2dJson *arr = r2d_json_get(o, "spans");
@@ -275,6 +314,8 @@ static bool load_spans(Ctx *c, const R2dJson *o, const char *section, int index,
         ok &= get_float(c, s, sec, i, id, "top", &sp->top, true, 0);
         ok &= get_color(c, s, sec, i, id, "floorColor", sp->floor_c, sizeof sp->floor_c, "#ffffff");
         ok &= get_color(c, s, sec, i, id, "ceilingColor", sp->ceil_c, sizeof sp->ceil_c, "#ffffff");
+        ok &= get_tags(c, s, sec, i, id, "tags", sp->tags, &sp->ntag);
+        ok &= get_tags(c, s, sec, i, id, "ceilingTags", sp->ceiling_tags, &sp->nceiling_tag);
         const R2dJson *lighting=r2d_json_get(s,"lighting");if(lighting){sp->lit=r2d_world_span_light_json(lighting,&sp->light);if(!sp->lit){field_diag(c,sec,i,id,"lighting","invalid classic span lighting");ok=false;}}
         if (ok && !(sp->top > sp->bottom)) {
             char loc[2048];
@@ -1280,6 +1321,11 @@ static bool load_world(const char *path, World *w, SdkReport *rep, bool renderer
                 snprintf(fc[1], sizeof fc[1], "%s", fc[0]);
             }
             good &= get_color(&c, o, section, i, id, "ceilingColor", cc, sizeof cc, "#344858");
+            char stair_tags[R2D_WORLD_TAG_MAX][R2D_WORLD_TAG_LENGTH+1];
+            char stair_ctags[R2D_WORLD_TAG_MAX][R2D_WORLD_TAG_LENGTH+1];
+            unsigned char n_stair_tags = 0, n_stair_ctags = 0;
+            good &= get_tags(&c, o, section, i, id, "tags", stair_tags, &n_stair_tags);
+            good &= get_tags(&c, o, section, i, id, "ceilingTags", stair_ctags, &n_stair_ctags);
             char wall_color[40];
             good &= get_color(&c, o, section, i, id, "riserColor", wall_color, sizeof wall_color, "#4f4030");
             R2DWorldSpanLight authored_light;const R2dJson *authored_lighting=r2d_json_get(o,"lighting");
@@ -1302,6 +1348,9 @@ static bool load_world(const char *path, World *w, SdkReport *rep, bool renderer
                 else cell->spans[0].floor_b=(to-from)*(float)dir/len;
                 snprintf(cell->spans[0].floor_c,sizeof cell->spans[0].floor_c,"%s",fc[0]);
                 snprintf(cell->spans[0].ceil_c,sizeof cell->spans[0].ceil_c,"%s",cc);
+                cell->spans[0].ntag=n_stair_tags;cell->spans[0].nceiling_tag=n_stair_ctags;
+                for(int t=0;t<n_stair_tags;t++)snprintf(cell->spans[0].tags[t],R2D_WORLD_TAG_LENGTH+1,"%s",stair_tags[t]);
+                for(int t=0;t<n_stair_ctags;t++)snprintf(cell->spans[0].ceiling_tags[t],R2D_WORLD_TAG_LENGTH+1,"%s",stair_ctags[t]);
                 snprintf(cell->owner,sizeof cell->owner,"%s",id);
                 w->slope_segments++;
                 continue;
@@ -1323,6 +1372,9 @@ static bool load_world(const char *path, World *w, SdkReport *rep, bool renderer
                 cell->spans[0].top = top;
                 snprintf(cell->spans[0].floor_c, sizeof cell->spans[0].floor_c, "%s", fc[k & 1]);
                 snprintf(cell->spans[0].ceil_c, sizeof cell->spans[0].ceil_c, "%s", cc);
+                cell->spans[0].ntag=n_stair_tags;cell->spans[0].nceiling_tag=n_stair_ctags;
+                for(int t=0;t<n_stair_tags;t++)snprintf(cell->spans[0].tags[t],R2D_WORLD_TAG_LENGTH+1,"%s",stair_tags[t]);
+                for(int t=0;t<n_stair_ctags;t++)snprintf(cell->spans[0].ceiling_tags[t],R2D_WORLD_TAG_LENGTH+1,"%s",stair_ctags[t]);
                 snprintf(cell->owner, sizeof cell->owner, "%s#%d", id, k);
                 // Подступёнок на входной кромке ступени: от предыдущей высоты до этой.
                 const float lo = fminf(prev, height), hi = fmaxf(prev, height);
@@ -1724,6 +1776,18 @@ static void put_description(const World *w, R2dSb *sb, bool pretty, bool ids)
             if(c->spans[k].floor_a || c->spans[k].floor_b) r2d_sb_printf(sb,",\"floorSlope\":{\"a\":%g,\"b\":%g}",c->spans[k].floor_a,c->spans[k].floor_b);
             r2d_sb_puts(sb, ",\"floorColor\":"); r2d_sb_put_json_string(sb, c->spans[k].floor_c);
             r2d_sb_puts(sb, ",\"ceilingColor\":"); r2d_sb_put_json_string(sb, c->spans[k].ceil_c);
+            // P0.1 authored user surface tags travel into native author JSON
+            // (and therefore into the baked .re2dworld tags table).
+            if(c->spans[k].ntag){
+                r2d_sb_puts(sb,",\"tags\":[");
+                for(int t=0;t<c->spans[k].ntag;t++){if(t)r2d_sb_putc(sb,',');r2d_sb_put_json_string(sb,c->spans[k].tags[t]);}
+                r2d_sb_putc(sb,']');
+            }
+            if(c->spans[k].nceiling_tag){
+                r2d_sb_puts(sb,",\"ceilingTags\":[");
+                for(int t=0;t<c->spans[k].nceiling_tag;t++){if(t)r2d_sb_putc(sb,',');r2d_sb_put_json_string(sb,c->spans[k].ceiling_tags[t]);}
+                r2d_sb_putc(sb,']');
+            }
             if(c->spans[k].lit){const R2DWorldSpanLight *l=&c->spans[k].light;unsigned color=((unsigned)roundf(l->r*255)<<16)|((unsigned)roundf(l->g*255)<<8)|(unsigned)roundf(l->b*255),fog=((unsigned)roundf(l->fog_r*255)<<16)|((unsigned)roundf(l->fog_g*255)<<8)|(unsigned)roundf(l->fog_b*255);
                 r2d_sb_printf(sb,",\"lighting\":{\"level\":%g,\"color\":\"#%06x\",\"fog\":{\"density\":%g,\"start\":%g,\"color\":\"#%06x\"}}",l->level,color,l->fog_density,l->fog_start,fog);}
 

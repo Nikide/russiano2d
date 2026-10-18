@@ -1,6 +1,6 @@
 # Re2D World — public `$` API
 
-Редакция 2026-10-10. Для нового рендера используйте `$.re2dWorld`. Это native world handle с собственными cells/spans/portals, списком ссылок на существующие узлы со спрайтами и camera configuration. `$.re2d.room`, `.kind(Re2D)` и `$.re2d.world` сохранены в [legacy reference](re2d_legacy.md); это другие entry points, не сокращённые имена нового API.
+Редакция 2026-10-18. Для нового рендера используйте `$.re2dWorld`. Это native world handle с собственными cells/spans/portals, списком ссылок на существующие узлы со спрайтами и camera configuration. `$.re2d.room`, `.kind(Re2D)` и `$.re2d.world` сохранены в [legacy reference](re2d_legacy.md); это другие entry points, не сокращённые имена нового API.
 
 ## Создание и кадр
 
@@ -39,6 +39,8 @@ $.render(() => world.render(view,400,240));
 | `world.secret(opts)` / `secretsTick(dt,at)` / `onSecret(fn)` | secret volumes + события `secret.found` |
 | `world.breakable(opts)` / `onBreakable(fn)` | authored breakables + событие `breakable.broken` |
 | `surface.terrain(name)` / `conveyor(opts)`, `world.terrainAt/conveyorAt` | terrain/liquid metadata и 2D conveyors |
+| `world.groundAt(x,y,{h})` / `world.surfaceTagsAt(x,y,{h})` | точный пол/поверхность под точкой + user tags; `h` обязателен при нескольких spans на одних XY |
+| `surface(i).tags()/hasTag(name)/tag(name,on)` | произвольные пользовательские теги поверхности; runtime-мутация не меняет геометрию |
 | `world.conveyorMotion(surface,v,dt)` | conveyor gameplay tick (velocity к скорости конвейера) |
 | `world.mist({x,y,rate,width,depth})` | P5 атмосферная дымка на particle pool |
 | `world.materialAnim(name,opts)` / `materialIndex(name)` | flipbook/scroll/emissive анимация материала |
@@ -90,9 +92,34 @@ perspective/наклону). Потолки из этого ракурса ри�
 | `.blocked(x,y,radius,bottom,top)` | boolean; статический circle XY × height против стен/portal closure |
 | `.ray(from,to)` | точки `{x,y,height}`; `{fraction,x,y,height,wall,span,ceiling}` или null |
 | `.lightAt(x,y,h)` | `{r,g,b,level}` или null; native gameplay approximation, без чтения pixels |
-| `.surface(index)` | `{kind,primitive,cell,span,material(name),sky(enabled=true)}` или null |
+| `.surface(index)` | `{kind,primitive,cell,span,material(name),sky(enabled=true),tags()}`, `.hasTag(name)`, `.tag(name,on)` или null |
+| `.groundAt(x,y,{h})` | `{cell,span,surface,height,tags:[...]}` или null; при нескольких spans на XY без `h` — `RangeError` |
+| `.surfaceTagsAt(x,y,{h})` | tags пола под точкой или null (тонкая обёртка над `groundAt`) |
 
 XY — half-open. Свободный span включает пол и исключает потолок. `surface.kind`: 0 wall, 1 floor, 2 ceiling; наклон — коэффициенты соответствующей plane, не четвёртый mesh type. Не выводите surface ID из wall index попадания вслепую после перекомпиляции: IDs принадлежат текущему canonical domain.
+
+`groundAt` — единственный точечный запрос «что за поверхность/пол здесь». `h` выбирает самый высокий floor не выше переданной высоты (мост над дорогой на тех же XY различается по `h`). Без `h` и при одном span на XY берётся он; при нескольких spans это `RangeError` с числом вариантов — молчаливого выбора этажа нет. Вне cells/ниже всех floors — `null`. Теги — authored-данные поверхности; неизвестные/пустые безопасны.
+
+```js
+const ground = world.groundAt(player.x, player.y, { h: player.feet });
+if (ground?.tags.includes('road')) grip = 1.0;
+if (ground?.tags.includes('no_spawn')) skipSpawn = true;
+world.surfaceTagsAt(x, y, { h: 0 });   // null | ['sidewalk', 'no_ped']
+```
+
+### Surface tags (P0.1)
+
+Span authoring несёт `tags` для пола и опциональные `ceilingTags` для потолка: `"tags":["road","sidewalk","no_spawn"]`. Это произвольные пользовательские строки, не enum движка: значения ограничены только форматом (≤32 тегов на поверхность, 1..32 печатных байта после trim, дубликаты игнорируются, регистр значим). Теги проходят `.re2dmap` → native author JSON → baked `.re2dworld`; runtime API не меняет geometry/topology revision, но и не сохраняется в bake — после reload теги снова берутся из authored data. Поиск тегов — `world.surface(surfaceIndex)` из `groundAt`/`trace`/`findSurface`.
+
+```js
+const s = world.groundAt(x, y, { h: 0 }).surface;
+world.surface(s).tags();          // ['road', 'no_spawn']
+world.surface(s).hasTag('road');  // true (регистр важен)
+world.surface(s).tag('no_spawn', true);
+world.surface(s).tag('no_spawn', false);
+```
+
+Формат и SDK-правила — [RE2D world format](../re2d/RE2D_WORLD_FORMAT.md#surface-tags-p01).
 
 ## Flat directional atlas sprites
 

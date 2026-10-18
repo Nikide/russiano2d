@@ -21,7 +21,108 @@ void r2d_world_span_height_bounds(const R2DWorldSpan *s,float *low,float *high)
     *low=INFINITY;*high=-INFINITY;for(int c=0;c<4;c++){float x=s->x+(c&1?s->w:0),y=s->y+(c&2?s->h:0);*low=fminf(*low,r2d_world_floor_height(s,x,y));*high=fmaxf(*high,r2d_world_ceiling_height(s,x,y));}
 }
 void r2d_world_free(R2DRe2dWorld *w)
-{ if (!w) return; r2d_world_semantic_free(w);r2d_world_metadata_free(&w->metadata); free(w->sort_items);free(w->transparent_ids);free(w->surface_sky);free(w->sky.pixels);r2d_bsp_free(&w->bsp); free(w->walls);free(w->spans);free(w->cells);free(w->portals);free(w->openings);free(w->surfaces);free(w->cell_nodes);free(w->span_cells);free(w->wall_portals);free(w->wall_openings);free(w->opening_spans_a);free(w->opening_spans_b);free(w->cell_refs);free(w->span_wall_offsets);free(w->span_wall_refs);free(w->cell_portal_offsets);free(w->cell_portal_refs);free(w->surface_materials);for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++)r2d_world_material_free(&w->materials[i]);r2d_world_light_free(w);memset(w,0,sizeof *w);w->bsp.root=-1; }
+{ if (!w) return; r2d_world_semantic_free(w);r2d_world_metadata_free(&w->metadata);
+  if(w->surface_tags){for(int i=0;i<w->surface_count;i++){R2DWorldSurfaceTags *slot=&w->surface_tags[i];for(int j=0;j<slot->count;j++)free(slot->names[j]);free(slot->names);}free(w->surface_tags);}
+  free(w->sort_items);free(w->transparent_ids);free(w->surface_sky);free(w->sky.pixels);r2d_bsp_free(&w->bsp); free(w->walls);free(w->spans);free(w->cells);free(w->portals);free(w->openings);free(w->surfaces);free(w->cell_nodes);free(w->span_cells);free(w->wall_portals);free(w->wall_openings);free(w->opening_spans_a);free(w->opening_spans_b);free(w->cell_refs);free(w->span_wall_offsets);free(w->span_wall_refs);free(w->cell_portal_offsets);free(w->cell_portal_refs);free(w->surface_materials);for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++)r2d_world_material_free(&w->materials[i]);r2d_world_light_free(w);memset(w,0,sizeof *w);w->bsp.root=-1; }
+
+// --- User surface tags (P0.1) ----------------------------------------------
+static bool tag_trim_char(unsigned char c)
+{ return c==' '||c=='\t'||c=='\n'||c=='\r'||c=='\f'||c=='\v'; }
+static bool tag_char(unsigned char c)
+{ return c>=0x20&&c!=0x7f; }
+bool r2d_world_tag_normalize(const char *input,char *out,size_t *length)
+{
+    if(!input)return false;
+    const unsigned char *start=(const unsigned char *)input;
+    while(*start&&tag_trim_char(*start))start++;
+    size_t raw=strlen((const char *)start);
+    while(raw&&tag_trim_char(start[raw-1]))raw--;
+    if(!raw||raw>R2D_WORLD_TAG_LENGTH)return false;
+    for(size_t i=0;i<raw;i++)if(!tag_char(start[i]))return false;
+    if(out){memcpy(out,start,raw);out[raw]=0;}
+    if(length)*length=raw;
+    return true;
+}
+static R2DWorldSurfaceTags *tag_slot(R2DRe2dWorld *w,int surface,bool create)
+{
+    if(!w||surface<0||surface>=w->surface_count)return NULL;
+    if(!w->surface_tags){
+        if(!create)return NULL;
+        w->surface_tags=calloc((size_t)w->surface_count,sizeof *w->surface_tags);
+        if(!w->surface_tags)return NULL;
+    }
+    return &w->surface_tags[surface];
+}
+static const R2DWorldSurfaceTags *tag_slot_const(const R2DRe2dWorld *w,int surface)
+{
+    if(!w||!w->surface_tags||surface<0||surface>=w->surface_count)return NULL;
+    return &w->surface_tags[surface];
+}
+int r2d_world_surface_tag_count(const R2DRe2dWorld *w,int surface)
+{
+    if(!w||surface<0||surface>=w->surface_count)return -1;
+    const R2DWorldSurfaceTags *slot=tag_slot_const(w,surface);
+    return slot?slot->count:0;
+}
+const char *r2d_world_surface_tag(const R2DRe2dWorld *w,int surface,int index)
+{
+    const R2DWorldSurfaceTags *slot=tag_slot_const(w,surface);
+    return slot&&index>=0&&index<slot->count?slot->names[index]:NULL;
+}
+bool r2d_world_surface_has_tag(const R2DRe2dWorld *w,int surface,const char *tag)
+{
+    char name[R2D_WORLD_TAG_LENGTH+1];
+    if(!w||surface<0||surface>=w->surface_count||!r2d_world_tag_normalize(tag,name,NULL))return false;
+    const R2DWorldSurfaceTags *slot=tag_slot_const(w,surface);
+    for(int i=0;slot&&i<slot->count;i++)if(!strcmp(slot->names[i],name))return true;
+    return false;
+}
+bool r2d_world_surface_tag_add(R2DRe2dWorld *w,int surface,const char *tag)
+{
+    char name[R2D_WORLD_TAG_LENGTH+1];size_t length=0;
+    if(!w||surface<0||surface>=w->surface_count)return false;
+    if(!r2d_world_tag_normalize(tag,name,&length))return false;
+    R2DWorldSurfaceTags *slot=tag_slot(w,surface,true);
+    if(!slot)return false;
+    for(int i=0;i<slot->count;i++)if(!strcmp(slot->names[i],name))return true;
+    if(slot->count>=R2D_WORLD_TAG_MAX)return false;
+    if(slot->count==slot->capacity){
+        int capacity=slot->capacity?slot->capacity*2:4;
+        if(capacity>R2D_WORLD_TAG_MAX)capacity=R2D_WORLD_TAG_MAX;
+        char **grown=realloc(slot->names,(size_t)capacity*sizeof *grown);
+        if(!grown)return false;
+        slot->names=grown;slot->capacity=capacity;
+    }
+    char *copy=malloc(length+1);
+    if(!copy)return false;
+    memcpy(copy,name,length+1);
+    slot->names[slot->count++]=copy;
+    return true;
+}
+bool r2d_world_surface_tag_remove(R2DRe2dWorld *w,int surface,const char *tag)
+{
+    char name[R2D_WORLD_TAG_LENGTH+1];
+    if(!w||surface<0||surface>=w->surface_count)return false;
+    if(!r2d_world_tag_normalize(tag,name,NULL))return false;
+    R2DWorldSurfaceTags *slot=tag_slot(w,surface,false);
+    if(!slot)return true;
+    for(int i=0;i<slot->count;i++)if(!strcmp(slot->names[i],name)){
+        free(slot->names[i]);
+        memmove(&slot->names[i],&slot->names[i+1],(size_t)(slot->count-i-1)*sizeof *slot->names);
+        slot->count--;
+        return true;
+    }
+    return true;
+}
+bool r2d_world_surface_tag_set(R2DRe2dWorld *w,int surface,const char *tag,bool on)
+{ return on?r2d_world_surface_tag_add(w,surface,tag):r2d_world_surface_tag_remove(w,surface,tag); }
+bool r2d_world_has_tags(const R2DRe2dWorld *w)
+{
+    if(!w||!w->surface_tags)return false;
+    for(int i=0;i<w->surface_count;i++)if(w->surface_tags[i].count>0)return true;
+    return false;
+}
+
 bool r2d_world_build(R2DRe2dWorld *w,const R2DWorldWall *walls,int nw,const R2DWorldSpan *spans,int ns)
 {
     if (!w || nw<0 || ns<0 || nw>65536 || ns>65536 || (nw&&!walls) || (ns&&!spans)) return false;
@@ -83,6 +184,41 @@ int r2d_world_support(const R2DRe2dWorld *w,float x,float y,float feet,float hei
         if(inside(s,x,y)&&floor<=feet+step&&ceiling-floor>=height&&feet<ceiling&&floor>best_height){best=i;best_height=floor;}
     }
     return best;
+}
+
+int r2d_world_ground_at(const R2DRe2dWorld *w,float x,float y,int has_height,float height,R2DWorldGround *out)
+{
+    if(!w||!out||!isfinite(x)||!isfinite(y)||(has_height&&!isfinite(height)))return R2D_WORLD_GROUND_INVALID;
+    int cell=-1,best=-1,candidates=0;float best_floor=-INFINITY;
+    if(w->cell_count) {
+        cell=r2d_world_cell_at(w,x,y);
+        if(cell<0)return R2D_WORLD_GROUND_NONE;
+        const R2DWorldCell *c=&w->cells[cell];
+        // Several stacked spans at one XY are only ambiguous without a height;
+        // a supplied height picks the highest floor at or below it.
+        if(!has_height&&c->span_count>1){out->candidates=c->span_count;return R2D_WORLD_GROUND_AMBIGUOUS;}
+        for(int i=0;i<c->span_count;i++) {
+            int span=c->first_span+i;const R2DWorldSpan *s=&w->spans[span];
+            float floor=r2d_world_floor_height(s,x,y);
+            if(!isfinite(floor)||(has_height&&floor>height))continue;
+            candidates++;
+            if(floor>best_floor){best=span;best_floor=floor;}
+        }
+    } else {
+        for(int span=0;span<w->span_count;span++) {
+            const R2DWorldSpan *s=&w->spans[span];
+            if(!inside(s,x,y))continue;
+            float floor=r2d_world_floor_height(s,x,y);
+            if(!isfinite(floor)||(has_height&&floor>height))continue;
+            candidates++;
+            if(floor>best_floor){best=span;best_floor=floor;}
+        }
+        if(!has_height&&candidates>1){out->candidates=candidates;return R2D_WORLD_GROUND_AMBIGUOUS;}
+    }
+    if(best<0)return R2D_WORLD_GROUND_NONE;
+    out->cell=cell;out->span=best;out->surface=r2d_world_span_surface(w,best,R2D_WORLD_FLOOR);
+    out->height=best_floor;out->candidates=candidates;
+    return R2D_WORLD_GROUND_OK;
 }
 
 bool r2d_world_blocked(const R2DRe2dWorld *w,float x,float y,float radius,float bottom,float top)

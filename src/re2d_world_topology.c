@@ -508,6 +508,50 @@ static bool color(const R2dJson *obj,const char *key,uint32_t *out)
 }
 static bool slope(const R2dJson *o,const char *key,float *a,float *b)
 {const R2dJson *v=r2d_json_get(o,key);*a=*b=0;return !v||(v->type==R2D_JSON_OBJ&&number(v,"a",a)&&number(v,"b",b));}
+// Optional author span tags: array of strings, trimmed to 1..32 printable bytes,
+// at most R2D_WORLD_TAG_MAX entries, duplicates ignored. Labels are DATA, not an
+// engine enum; unknown tags are accepted and old maps without tags are unchanged.
+static bool load_surface_tags(const R2dJson *owner,const char *key,int surface,int span_index,
+    R2DRe2dWorld *w,char *err,size_t size)
+{
+    const R2dJson *arr=r2d_json_get(owner,key);
+    if(!arr)return true;
+    if(arr->type!=R2D_JSON_ARR||arr->count>R2D_WORLD_TAG_MAX){
+        snprintf(err,size,"Re2D World: invalid %s (expected array of at most %d strings) (%d)",key,R2D_WORLD_TAG_MAX,span_index);
+        return false;
+    }
+    for(int i=0;i<arr->count;i++){
+        const R2dJson *v=arr->items[i];
+        if(v->type!=R2D_JSON_STR){
+            snprintf(err,size,"Re2D World: %s[%d] is not a string (%d)",key,i,span_index);return false;
+        }
+        if(!r2d_world_tag_normalize(v->string,NULL,NULL)){
+            snprintf(err,size,"Re2D World: invalid %s[%d] (trimmed length 1..%d printable bytes) (%d)",key,i,R2D_WORLD_TAG_LENGTH,span_index);return false;
+        }
+        if(!r2d_world_surface_tag_add(w,surface,v->string)){
+            snprintf(err,size,"Re2D World: cannot store %s[%d] (limit %d or out of memory) (%d)",key,i,R2D_WORLD_TAG_MAX,span_index);return false;
+        }
+    }
+    return true;
+}
+static bool load_surface_tags_json(R2DRe2dWorld *w,const R2dJson *root,char *err,size_t size)
+{
+    const R2dJson *cells=r2d_json_get(root,"cells");
+    if(!cells||cells->type!=R2D_JSON_ARR)return true;
+    int span=0;
+    for(int i=0;i<cells->count;i++) {
+        const R2dJson *ss=r2d_json_get(cells->items[i],"spans");
+        if(!ss||ss->type!=R2D_JSON_ARR)return true;
+        for(int j=0;j<ss->count;j++,span++) {
+            int floor=r2d_world_span_surface(w,span,R2D_WORLD_FLOOR);
+            int ceiling=r2d_world_span_surface(w,span,R2D_WORLD_CEILING);
+            if(floor<0||ceiling<0)continue;
+            if(!load_surface_tags(ss->items[j],"tags",floor,span,w,err,size))return false;
+            if(!load_surface_tags(ss->items[j],"ceilingTags",ceiling,span,w,err,size))return false;
+        }
+    }
+    return true;
+}
 bool r2d_world_load_json(R2DRe2dWorld *w,const char *text,char *err,size_t size)
 {
     if(!w||!text)return error(err,size,"missing world JSON",-1);
@@ -579,6 +623,9 @@ bool r2d_world_load_json(R2DRe2dWorld *w,const char *text,char *err,size_t size)
         const R2dJson *lighting=r2d_json_get(ss->items[j],"lighting");if(lighting){R2DWorldSpanLight light;if(!r2d_world_span_light_json(lighting,&light)||!r2d_world_set_span_light(&next,span,&light)){error(err,size,"invalid span lighting",span);ok=false;break;}}
     }}}
     if(ok)ok=r2d_world_load_lighting(&next,root,err,size);
+    // Surface tags are authored data attached after the derived surface domain
+    // exists; invalid tag arrays reject the whole map transactionally.
+    if(ok)ok=load_surface_tags_json(&next,root,err,size);
     // Semantic IDs are validated transactionally with the rest of the map: a
     // duplicate or malformed name leaves the previously loaded world intact.
     if(ok)ok=r2d_world_semantic_load_json(&next,root,err,size);

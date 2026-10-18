@@ -123,6 +123,14 @@ typedef struct {int id;float depth;} R2DWorldSortItem;
 // Authored semantic labels. The numeric indices above stay the runtime handles.
 #define R2D_WORLD_ID_MAX 63
 typedef struct { char **names; int count; } R2DWorldIdTable;
+// User surface tags (P0.1). Tags are authored DATA, not an engine enum: an
+// arbitrary short ASCII/UTF-8 label such as "road", "sidewalk" or "no_spawn".
+// They attach to derived surfaces (a span's floor is `tags`, its ceiling is
+// `ceilingTags`), are per-surface owned strings and never participate in
+// geometry/BSP/visibility. Runtime add/remove is additive and does not bump
+// geometry_revision (reload re-reads authored data).
+enum { R2D_WORLD_TAG_MAX = 32, R2D_WORLD_TAG_LENGTH = 32 };
+typedef struct { char **names; int count, capacity; } R2DWorldSurfaceTags;
 typedef struct { bool enabled,dynamic,shadows,orientation; float distance_scale,orientation_strength; } R2DWorldLighting;
 typedef struct {
     R2DBsp bsp;
@@ -172,6 +180,9 @@ typedef struct {
     uint64_t semantic_revision;
     // Authored map metadata/spawns (P1). Owned strings; zeroed when absent.
     R2DWorldMetadata metadata;
+    // Per-surface user tags; NULL when the map authors none (old maps and
+    // legacy geometry-only worlds stay allocation-free/byte-identical).
+    R2DWorldSurfaceTags *surface_tags;
 } R2DRe2dWorld;
 typedef struct { float t,x,y,height; int wall,span; bool ceiling; uint32_t color; } R2DWorldHit;
 
@@ -217,6 +228,36 @@ const char *r2d_world_portal_id(const R2DRe2dWorld *,int);
 // span owns a FLOOR and a CEILING surface. -1 when unavailable.
 int r2d_world_wall_surface(const R2DRe2dWorld *,int wall);
 int r2d_world_span_surface(const R2DRe2dWorld *,int span,int kind);
+// --- User surface tags (P0.1) ----------------------------------------------
+// Tags are owned per-surface strings. `r2d_world_tag_normalize` trims ASCII
+// whitespace and rejects empty names, names longer than R2D_WORLD_TAG_LENGTH
+// bytes and control bytes. Matching is case-sensitive exact. Malformed input,
+// unknown tags, duplicates and missing tags are plain data: add() is idempotent
+// and remove() of an absent tag is a no-op success. Only invalid surface
+// handles, over-budget counts (> R2D_WORLD_TAG_MAX) or allocation failure
+// return false. Runtime mutation never changes geometry/topology revisions.
+bool r2d_world_tag_normalize(const char *,char *out,size_t *length);
+int r2d_world_surface_tag_count(const R2DRe2dWorld *,int surface);
+const char *r2d_world_surface_tag(const R2DRe2dWorld *,int surface,int index);
+bool r2d_world_surface_has_tag(const R2DRe2dWorld *,int surface,const char *tag);
+bool r2d_world_surface_tag_add(R2DRe2dWorld *,int surface,const char *tag);
+bool r2d_world_surface_tag_remove(R2DRe2dWorld *,int surface,const char *tag);
+bool r2d_world_surface_tag_set(R2DRe2dWorld *,int surface,const char *tag,bool on);
+// True when at least one surface carries a tag (drives baked wire v6 only).
+bool r2d_world_has_tags(const R2DRe2dWorld *);
+// Exact ground/surface lookup under a world point.
+// `has_height` + `height` selects the highest floor at or below that height
+// (bridge over road resolves by height). When `has_height` is false and the XY
+// cell has more than one stacked span the query is AMBIGUOUS: callers must pass
+// h instead of silently receiving an arbitrary storey. Return codes:
+//   R2D_WORLD_GROUND_OK        -> out filled, floor surface/tags available
+//   R2D_WORLD_GROUND_NONE      -> no ground at/under that point (null)
+//   R2D_WORLD_GROUND_AMBIGUOUS -> out->candidates stacked spans, h required
+//   R2D_WORLD_GROUND_INVALID   -> non-finite x/y/h or null output
+enum { R2D_WORLD_GROUND_NONE=0, R2D_WORLD_GROUND_OK=1,
+       R2D_WORLD_GROUND_AMBIGUOUS=-1, R2D_WORLD_GROUND_INVALID=-2 };
+typedef struct { int cell,span,surface; float height; int candidates; } R2DWorldGround;
+int r2d_world_ground_at(const R2DRe2dWorld *,float x,float y,int has_height,float height,R2DWorldGround *);
 // Cell BSP near-first traversal. Returns required count; writes at most capacity.
 int r2d_world_cells_order(const R2DRe2dWorld *,float,float,int *,int);
 const R2DWorldSurface *r2d_world_surface(const R2DRe2dWorld *,int);

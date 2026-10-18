@@ -1,6 +1,6 @@
 # Re2D World: руководство по новой игре
 
-Редакция 2026-10-10. Новый мир создаётся через `$.re2dWorld`, персонаж — через `$.re2dSprite`. Здесь описан текущий native renderer; прежние room/kind и `$.re2d.world` находятся в [legacy reference](highlevel/re2d_legacy.md).
+Редакция 2026-10-18. Новый мир создаётся через `$.re2dWorld`, персонаж — через `$.re2dSprite`. Здесь описан текущий native renderer; прежние room/kind и `$.re2d.world` находятся в [legacy reference](highlevel/re2d_legacy.md).
 
 ## Быстро посмотреть результат
 
@@ -88,6 +88,37 @@ const world = $.re2dWorld.load('maps/room.re2dworld').backend('gpu');
 ```
 
 Не передавайте сырой SDK `.re2dmap` loader-у: его cells имеют `rect`, а native runtime JSON — x/y/w/h. `fromJSON` нужен для native description или теста, а compiled load избегает повторного authoring build. [Форматы и compile](re2d/RE2D_WORLD_FORMAT.md) описывают различия и validation.
+
+## Surface tags и spawn-фильтр (P0.1)
+
+Тег — это authored-данные пола (или потолка через `ceilingTags`), а не enum движка. В `.re2dmap` span получает массив произвольных строк; SDK валидирует формат и переносит их в `.re2dworld`:
+
+```json
+{"id":"street","rect":[0,0,400,200],"spans":[
+  {"bottom":0,"top":128,"tags":["road"]},
+  {"bottom":160,"top":288,"tags":["bridge"],"ceilingTags":["sky"]}]}
+```
+
+```js
+const world = $.re2dWorld.load('maps/city.re2dworld');
+const ground = world.groundAt(120, 60, { h: 0 });   // {cell,span,surface,height,tags}
+ground.tags;                                        // ['road']
+world.surfaceTagsAt(120, 60, { h: 160 });           // ['bridge'] на мосту
+world.surface(ground.surface).hasTag('road');       // true
+world.surface(ground.surface).tag('no_spawn', true); // runtime-метка, геометрию не меняет
+```
+
+`h` обязателен, когда на одних XY несколько spans (например мост над дорогой): без него — `RangeError`, без молчаливого выбора этажа. Фильтр спавна по authored данным:
+
+```js
+for (const spawn of world.spawns()) {
+  const ground = world.groundAt(spawn.x, spawn.y, { h: spawn.h });
+  if (ground?.tags.includes('sidewalk') && !ground.tags.includes('no_spawn'))
+    spawnPedestrian(spawn);
+}
+```
+
+Проверено `tests/agent/re2d_surface_tags_test.py` и `tests/re2d/world_test.c`; формат — [RE2D world format](re2d/RE2D_WORLD_FORMAT.md#surface-tags-p01).
 
 ## Материалы и свет
 

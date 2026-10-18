@@ -294,6 +294,154 @@ static int run_suite(void)
     r2d_world_free(&w);r2d_world_free(&w);return 0;
 }
 
+// P0.1: user surface tags + exact ground lookup + baked tag round-trip.
+static void test_surface_tags_suite(void)
+{
+    char err[256]={0};
+    R2DRe2dWorld w={0};
+    const char *map=
+        "{\"version\":1,\"walls\":[],\"cells\":["
+        "{\"x\":0,\"y\":0,\"w\":10,\"h\":10,\"spans\":["
+        "{\"bottom\":0,\"top\":8,\"tags\":[\" road \",\"sidewalk\",\"road\",\"custom_42\"]},"
+        "{\"bottom\":10,\"top\":18,\"tags\":[\"bridge\"],\"ceilingTags\":[\"sky\"]}]},"
+        "{\"x\":10,\"y\":0,\"w\":10,\"h\":10,\"spans\":["
+        "{\"bottom\":0,\"top\":8,\"tags\":[\"sidewalk\"],\"ceilingTags\":[\"sky\",\"roof\"]}]}"
+        "],\"portals\":[]}";
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_load_json(&w,map,err,sizeof err),err);
+    TEST_ASSERT_EQUAL_INT(6,w.surface_count); // 0 walls, floor+ceiling per span
+    const int road_surface=r2d_world_span_surface(&w,0,R2D_WORLD_FLOOR);
+    const int bridge_surface=r2d_world_span_surface(&w,1,R2D_WORLD_FLOOR);
+    const int bridge_ceiling=r2d_world_span_surface(&w,1,R2D_WORLD_CEILING);
+    const int walk_surface=r2d_world_span_surface(&w,2,R2D_WORLD_FLOOR);
+    TEST_ASSERT_TRUE(road_surface>=0&&bridge_surface>=0&&bridge_ceiling>=0&&walk_surface>=0);
+    // Tags are trimmed, duplicates ignored, unknown labels accepted as data.
+    TEST_ASSERT_EQUAL_INT(3,r2d_world_surface_tag_count(&w,road_surface));
+    TEST_ASSERT_EQUAL_STRING("road",r2d_world_surface_tag(&w,road_surface,0));
+    TEST_ASSERT_EQUAL_STRING("sidewalk",r2d_world_surface_tag(&w,road_surface,1));
+    TEST_ASSERT_EQUAL_STRING("custom_42",r2d_world_surface_tag(&w,road_surface,2));
+    TEST_ASSERT_TRUE(r2d_world_surface_has_tag(&w,road_surface,"road"));
+    TEST_ASSERT_FALSE(r2d_world_surface_has_tag(&w,road_surface,"unknown"));
+    TEST_ASSERT_TRUE(r2d_world_surface_has_tag(&w,bridge_surface,"bridge"));
+    TEST_ASSERT_EQUAL_INT(1,r2d_world_surface_tag_count(&w,bridge_ceiling));
+    TEST_ASSERT_TRUE(r2d_world_surface_has_tag(&w,bridge_ceiling,"sky"));
+    TEST_ASSERT_EQUAL_INT(2,r2d_world_surface_tag_count(&w,r2d_world_span_surface(&w,2,R2D_WORLD_CEILING)));
+    // Exact ground lookup: road/bridge at the same XY, sidewalk elsewhere.
+    R2DWorldGround g={0};
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_GROUND_OK,r2d_world_ground_at(&w,5,5,1,0,&g));
+    TEST_ASSERT_EQUAL_INT(0,g.span);TEST_ASSERT_EQUAL_INT(road_surface,g.surface);TEST_ASSERT_EQUAL_FLOAT(0,g.height);
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_GROUND_OK,r2d_world_ground_at(&w,5,5,1,17,&g));
+    TEST_ASSERT_EQUAL_INT(1,g.span);TEST_ASSERT_EQUAL_INT(bridge_surface,g.surface);TEST_ASSERT_EQUAL_FLOAT(10,g.height);
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_GROUND_OK,r2d_world_ground_at(&w,5,5,1,9,&g));
+    TEST_ASSERT_EQUAL_INT(0,g.span); // above the road ceiling but below the bridge floor
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_GROUND_OK,r2d_world_ground_at(&w,15,5,1,0,&g));
+    TEST_ASSERT_EQUAL_INT(2,g.span);TEST_ASSERT_EQUAL_INT(walk_surface,g.surface);
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_GROUND_AMBIGUOUS,r2d_world_ground_at(&w,5,5,0,0,&g));
+    TEST_ASSERT_EQUAL_INT(2,g.candidates);
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_GROUND_NONE,r2d_world_ground_at(&w,999,0,1,0,&g));
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_GROUND_NONE,r2d_world_ground_at(&w,5,5,1,-5,&g));
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_GROUND_INVALID,r2d_world_ground_at(&w,NAN,5,1,0,&g));
+    TEST_ASSERT_TRUE(r2d_world_ground_at(&w,5,5,1,999,&g)==R2D_WORLD_GROUND_OK&&g.span==1); // highest floor at/below h
+    // Runtime tag mutation is additive data and never changes geometry/topology.
+    const uint64_t geometry=w.geometry_revision,topology=w.topology_revision;
+    TEST_ASSERT_TRUE(r2d_world_surface_tag_add(&w,walk_surface,"no_spawn"));
+    TEST_ASSERT_TRUE(r2d_world_surface_tag_add(&w,walk_surface,"no_spawn"));
+    TEST_ASSERT_EQUAL_INT(2,r2d_world_surface_tag_count(&w,walk_surface));
+    TEST_ASSERT_EQUAL_INT(3,r2d_world_surface_tag_count(&w,road_surface));
+    TEST_ASSERT_TRUE(r2d_world_surface_tag_remove(&w,walk_surface,"no_spawn"));
+    TEST_ASSERT_TRUE(r2d_world_surface_tag_remove(&w,walk_surface,"no_spawn"));
+    TEST_ASSERT_EQUAL_INT(1,r2d_world_surface_tag_count(&w,walk_surface));
+    TEST_ASSERT_TRUE(r2d_world_surface_tag_set(&w,walk_surface,"no_spawn",true));
+    TEST_ASSERT_TRUE(r2d_world_surface_has_tag(&w,walk_surface,"no_spawn"));
+    TEST_ASSERT_TRUE(r2d_world_surface_has_tag(&w,walk_surface,"  no_spawn  "));
+    TEST_ASSERT_FALSE(r2d_world_surface_has_tag(&w,walk_surface,"No_Spawn"));
+    TEST_ASSERT_EQUAL_UINT64(geometry,w.geometry_revision);
+    TEST_ASSERT_EQUAL_UINT64(topology,w.topology_revision);
+    char normalized[R2D_WORLD_TAG_LENGTH+1];size_t length=0;
+    TEST_ASSERT_TRUE(r2d_world_tag_normalize("  road\t",normalized,&length)&&length==4&&!strcmp(normalized,"road"));
+    TEST_ASSERT_FALSE(r2d_world_tag_normalize("   ",normalized,NULL));
+    TEST_ASSERT_FALSE(r2d_world_surface_tag_add(&w,road_surface,""));
+    TEST_ASSERT_FALSE(r2d_world_surface_tag_add(&w,road_surface,"bad\nname"));
+    TEST_ASSERT_FALSE(r2d_world_surface_tag_add(&w,999,"road"));
+    char too_long[40];memset(too_long,'a',sizeof too_long);too_long[33]=0;
+    TEST_ASSERT_FALSE(r2d_world_surface_tag_add(&w,road_surface,too_long));
+    int added=0;for(int i=0;i<40;i++){char name[16];snprintf(name,sizeof name,"t%d",i);if(r2d_world_surface_tag_add(&w,walk_surface,name))added++;else break;}
+    TEST_ASSERT_TRUE(added<40&&r2d_world_surface_tag_count(&w,walk_surface)==R2D_WORLD_TAG_MAX);
+    // Invalid author tag data rejects transactionally, keeping the live world.
+    const int cells_before=w.cell_count,tags_before=r2d_world_surface_tag_count(&w,walk_surface);
+    const char *bad_array="{\"version\":1,\"walls\":[],\"cells\":[{\"x\":0,\"y\":0,\"w\":10,\"h\":10,\"spans\":[{\"bottom\":0,\"top\":8,\"tags\":\"road\"}]}],\"portals\":[]}";
+    const char *too_many="{\"version\":1,\"walls\":[],\"cells\":[{\"x\":0,\"y\":0,\"w\":10,\"h\":10,\"spans\":[{\"bottom\":0,\"top\":8,\"tags\":[\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\",\"h\",\"i\",\"j\",\"k\",\"l\",\"m\",\"n\",\"o\",\"p\",\"q\",\"r\",\"s\",\"t\",\"u\",\"v\",\"w\",\"x\",\"y\",\"z\",\"aa\",\"ab\",\"ac\",\"ad\",\"ae\",\"af\",\"ag\"]}]}],\"portals\":[]}";
+    const char *bad_length="{\"version\":1,\"walls\":[],\"cells\":[{\"x\":0,\"y\":0,\"w\":10,\"h\":10,\"spans\":[{\"bottom\":0,\"top\":8,\"tags\":[\"12345678901234567890123456789012345\"]}]}],\"portals\":[]}";
+    TEST_ASSERT_FALSE(r2d_world_load_json(&w,bad_array,err,sizeof err));
+    TEST_ASSERT_FALSE(r2d_world_load_json(&w,too_many,err,sizeof err));
+    TEST_ASSERT_FALSE(r2d_world_load_json(&w,bad_length,err,sizeof err));
+    TEST_ASSERT_EQUAL_INT(cells_before,w.cell_count);
+    TEST_ASSERT_EQUAL_INT(tags_before,r2d_world_surface_tag_count(&w,walk_surface));
+    // Baked wire v6 carries all per-surface tag tables; loading restores them.
+    R2dSb baked;r2d_sb_init(&baked);r2d_sb_puts(&baked,"{\"version\":1,");
+    TEST_ASSERT_TRUE(r2d_world_put_baked(&w,&baked));r2d_sb_putc(&baked,'}');
+    R2dJson *parsed=r2d_json_parse(baked.data,err,sizeof err);
+    TEST_ASSERT_TRUE(parsed!=NULL);
+    R2dJson *bo=(R2dJson*)r2d_json_get(parsed,"baked");
+    TEST_ASSERT_EQUAL_INT(6,(int)r2d_json_num(r2d_json_get(bo,"version"),0));
+    R2DRe2dWorld restored={0};
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_load_json(&restored,baked.data,err,sizeof err),err);
+    TEST_ASSERT_TRUE(restored.baked_topology&&r2d_world_has_tags(&restored));
+    const int restored_road=r2d_world_span_surface(&restored,0,R2D_WORLD_FLOOR);
+    TEST_ASSERT_EQUAL_INT(3,r2d_world_surface_tag_count(&restored,restored_road));
+    TEST_ASSERT_EQUAL_STRING("road",r2d_world_surface_tag(&restored,restored_road,0));
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_TAG_MAX,r2d_world_surface_tag_count(&restored,r2d_world_span_surface(&restored,2,R2D_WORLD_FLOOR)));
+    TEST_ASSERT_TRUE(r2d_world_surface_has_tag(&restored,r2d_world_span_surface(&restored,1,R2D_WORLD_CEILING),"sky"));
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_GROUND_OK,r2d_world_ground_at(&restored,5,5,1,11,&g));
+    TEST_ASSERT_TRUE(r2d_world_surface_has_tag(&restored,g.surface,"bridge"));
+    TEST_ASSERT_TRUE(r2d_world_surface_tag_add(&restored,g.surface,"player_owned"));
+    r2d_json_free(parsed);r2d_sb_free(&baked);r2d_world_free(&restored);
+    // RDW6 also implies the RDW5 tool-field layout: a tagged map with an
+    // ordinary (flags==0) wall must still round-trip the wall table.
+    R2DRe2dWorld walled={0};
+    const R2DWorldWall walled_wall[]={{0,0,10,0,0,8,0xff112233,0}};
+    const R2DWorldSpan walled_span[]={{0,0,10,10,0,8,0,0}};
+    const R2DWorldCell walled_cell[]={{0,0,10,10,0,1}};
+    TEST_ASSERT_TRUE(r2d_world_build_cells(&walled,walled_wall,1,walled_span,1,walled_cell,1,NULL,0,NULL,0,err,sizeof err));
+    const int walled_floor=r2d_world_span_surface(&walled,0,R2D_WORLD_FLOOR);
+    TEST_ASSERT_TRUE(r2d_world_surface_tag_add(&walled,walled_floor,"road"));
+    r2d_sb_init(&baked);r2d_sb_puts(&baked,"{\"version\":1,");TEST_ASSERT_TRUE(r2d_world_put_baked(&walled,&baked));r2d_sb_putc(&baked,'}');
+    parsed=r2d_json_parse(baked.data,err,sizeof err);bo=(R2dJson*)r2d_json_get(parsed,"baked");
+    TEST_ASSERT_EQUAL_INT(6,(int)r2d_json_num(r2d_json_get(bo,"version"),0));
+    TEST_ASSERT_TRUE(r2d_world_load_json(&restored,baked.data,err,sizeof err));
+    TEST_ASSERT_EQUAL_INT(1,restored.wall_count);
+    TEST_ASSERT_TRUE(r2d_world_surface_has_tag(&restored,r2d_world_span_surface(&restored,0,R2D_WORLD_FLOOR),"road"));
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_GROUND_OK,r2d_world_ground_at(&restored,5,5,1,0,&g));
+    r2d_json_free(parsed);r2d_sb_free(&baked);r2d_world_free(&restored);r2d_world_free(&walled);
+    // Untagged maps keep emitting/accepting the legacy wire version (no tags).
+    R2DRe2dWorld plain={0};
+    const char *plain_json="{\"version\":1,\"walls\":[],\"cells\":[{\"x\":0,\"y\":0,\"w\":10,\"h\":10,\"spans\":[{\"bottom\":0,\"top\":8}]}],\"portals\":[]}";
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_load_json(&plain,plain_json,err,sizeof err),err);
+    TEST_ASSERT_FALSE(r2d_world_has_tags(&plain));
+    r2d_sb_init(&baked);r2d_sb_puts(&baked,"{\"version\":1,");TEST_ASSERT_TRUE(r2d_world_put_baked(&plain,&baked));r2d_sb_putc(&baked,'}');
+    parsed=r2d_json_parse(baked.data,err,sizeof err);bo=(R2dJson*)r2d_json_get(parsed,"baked");
+    TEST_ASSERT_TRUE((int)r2d_json_num(r2d_json_get(bo,"version"),0)<6); // untagged map never emits RDW6
+    TEST_ASSERT_TRUE(r2d_world_load_json(&restored,baked.data,err,sizeof err));
+    TEST_ASSERT_FALSE(r2d_world_has_tags(&restored));
+    TEST_ASSERT_EQUAL_INT(0,r2d_world_surface_tag_count(&restored,0));
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_GROUND_OK,r2d_world_ground_at(&restored,5,5,1,0,&g));
+    TEST_ASSERT_EQUAL_INT(0,r2d_world_surface_tag_count(&restored,g.surface));
+    r2d_json_free(parsed);r2d_sb_free(&baked);r2d_world_free(&restored);r2d_world_free(&plain);
+    // A version 5 tool-policy payload (no tags) is still readable after the bump.
+    R2DRe2dWorld tools={0};
+    const R2DWorldWall tool_wall[]={{0,0,10,0,0,8,0xff0000ff,R2D_WALL_RENDER|R2D_WALL_SKY}};
+    const R2DWorldSpan tool_span[]={{0,0,10,10,0,8,0,0}};
+    const R2DWorldCell tool_cell[]={{0,0,10,10,0,1}};
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_build_cells(&tools,tool_wall,1,tool_span,1,tool_cell,1,NULL,0,NULL,0,err,sizeof err),err);
+    r2d_sb_init(&baked);r2d_sb_puts(&baked,"{\"version\":1,");TEST_ASSERT_TRUE(r2d_world_put_baked(&tools,&baked));r2d_sb_putc(&baked,'}');
+    parsed=r2d_json_parse(baked.data,err,sizeof err);bo=(R2dJson*)r2d_json_get(parsed,"baked");
+    TEST_ASSERT_EQUAL_INT(5,(int)r2d_json_num(r2d_json_get(bo,"version"),0));
+    TEST_ASSERT_TRUE(r2d_world_load_json(&restored,baked.data,err,sizeof err));
+    TEST_ASSERT_FALSE(r2d_world_has_tags(&restored));
+    TEST_ASSERT_EQUAL_INT(1,restored.wall_count);
+    r2d_json_free(parsed);r2d_sb_free(&baked);r2d_world_free(&restored);r2d_world_free(&tools);
+    r2d_world_free(&w);
+}
+
 // Unity: Re2D World (multi-height, рэй, stamp) — один кейс.
 static void test_re2d_world_suite(void)
 {
@@ -304,5 +452,6 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_re2d_world_suite);
+    RUN_TEST(test_surface_tags_suite);
     return UNITY_END();
 }

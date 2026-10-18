@@ -435,7 +435,34 @@ export function worldPrimitives(description, colorOf) {
 }
 
 function worldWrapper($, native) {
+    // Exact ground lookup under a world point (P0.1). `h` selects the highest
+    // floor at or below it; without `h` a stacked XY is ambiguous and native
+    // throws RangeError instead of silently picking a storey. Tags are authored
+    // data on the floor surface; the returned array is [] when none exist.
+    const groundQuery = (x, y, options = {}) => {
+        const opts = options ?? {};
+        if (typeof opts !== 'object' || Array.isArray(opts))
+            throw new TypeError('Re2D World: groundAt expects an options object');
+        for (const key of Object.keys(opts))
+            if (key !== 'h') throw new TypeError(`Re2D World: groundAt unknown option "${key}"`);
+        const px = Number(x), py = Number(y);
+        if (!Number.isFinite(px) || !Number.isFinite(py))
+            throw new RangeError('Re2D World: groundAt needs finite x/y');
+        const hasHeight = opts.h !== undefined && opts.h !== null;
+        let h = 0;
+        if (hasHeight) {
+            h = Number(opts.h);
+            if (!Number.isFinite(h)) throw new RangeError('Re2D World: groundAt h must be a finite number');
+        }
+        return native.groundAt(px, py, h, hasHeight ? 1 : 0);
+    };
     return {
+                groundAt(x, y, options = {}) { return groundQuery(x, y, options); },
+                // Thin wrapper: tags of the ground surface, or null for no ground.
+                surfaceTagsAt(x, y, options = {}) {
+                    const ground = groundQuery(x, y, options);
+                    return ground ? ground.tags : null;
+                },
                 support(x, y, feet, height, step = 0) { return native.support(x, y, feet, height, step); },
                 blocked(x, y, radius, bottom, top) { return native.blocked(x, y, radius, bottom, top); },
                 ray(from, to) { return native.ray(from.x, from.y, from.height, to.x, to.y, to.height); },
@@ -534,6 +561,15 @@ function worldWrapper($, native) {
                         terrainInfo() { return native.surfaceTerrainInfo(index); },
 
                         conveyorInfo() { return native.surfaceConveyorInfo(index); },
+                        // P0.1 user tags: authored data + additive runtime labels.
+                        // Adding/removing a tag never changes geometry or topology.
+                        tags() { return native.surfaceTags(index) || []; },
+                        hasTag(name) { return native.surfaceHasTag(index, name); },
+                        tag(name, on = true) {
+                            if (typeof on !== 'boolean') throw new TypeError('Re2D World: surface.tag(name,on) expects a boolean');
+                            native.surfaceTag(index, name, on);
+                            return this;
+                        },
                     } : null;
                 },
                 terrainAt(x, y, h) { return native.terrainAt(x, y, h); },
