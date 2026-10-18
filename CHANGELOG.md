@@ -11,7 +11,12 @@
 > карте 52 клетки ~0.15 мс/кадр. Регрессии:
 > `test_aperture_crossing_near_plane_keeps_far_cells` (FAIL на старом коде) и
 > `tests/agent/re2d_portal_edge_visibility_test.py` (публичный API, 4-клеточная
-> цепочка, CPU=GPU).
+> цепочка, CPU=GPU). Наблюдаемость: `world.info().portalsConservative` считает
+> порталы, чьё окно расширено до полного кадра (edge-on/near-plane), — видно,
+> когда включён консервативный путь. Preflight для любых карт:
+> `python3 tools/visibility_sweep.py` (sweep обеих сторон всех плоскостей
+> порталов, exit 1 при падениях; на отчёте 1.2.8 даёт 208 подозрений, на
+> текущем дереве — 0).
 >
 > Unreleased / Re2D top-down camera (GTA2-стиль):
 > `world.camera({mode:'topdown', ...})` — удобный bird's-eye режим:

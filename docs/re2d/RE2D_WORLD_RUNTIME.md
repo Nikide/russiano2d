@@ -109,7 +109,7 @@ Overdraw использует GPU даже при CPU-selected world; desktop di
 | --- | --- |
 | walls/spans/cells/portals/surfaces/segments/materials/lights/decals | resident primitive/pool counts; segments = wall BSP fragments |
 | visibleCells/visibleSpans/visibleSurfaces/cellsRejected/surfacesRejected/culledSurfaces | last visibility set; rejected и culled surfaces aliases |
-| bspNodesVisited/portalsTested | traversal work |
+| bspNodesVisited/portalsTested/portalsConservative | traversal work / portals whose window was widened to the full view (edge-on or near-plane crossing aperture; expected to be rare for a normal first-person camera) |
 | lightSpanPairs/lightOverflow/lightUpdates | selected span references / excess candidates / dirty light updates |
 | lightsAfterCull/shadowedLights | relevant visible lighting / selected shadow count |
 | actors/actorCandidates/composedActors | ссылки на узлы со спрайтами / спрайты с присоединёнными изображениями в кадре / видимые изображения; имена полей сохранены для совместимости |

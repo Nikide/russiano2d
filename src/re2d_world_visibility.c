@@ -128,7 +128,7 @@ bool r2d_world_visibility_filtered_ex(const R2DRe2dWorld *w,const R2DRe2dView *v
     if(!w||!v||!f||!isfinite(v->x)||!isfinite(v->y)||!isfinite(v->eye)||v->width<=0||v->height<=0||!reserve(f,w->span_count,w->surface_count,w->cell_count))return false;
     memset(f->span_seen,0,(size_t)w->span_count);memset(f->surface_seen,0,(size_t)w->surface_count);memset(f->queued,0,(size_t)w->span_count);
     memset(f->cell_filter,0,(size_t)w->cell_count);
-    f->span_count=f->surface_count=f->portals_tested=f->cells_visible=f->bsp_nodes_visited=0;
+    f->span_count=f->surface_count=f->portals_tested=f->portals_conservative=f->cells_visible=f->bsp_nodes_visited=0;
     f->culled_regions=f->culled_cells=f->cell_rejections=0;
     f->hint_markers=f->skip_markers=f->occluder_segments=0;
     f->hint_portals_tested=f->hint_portals_cut=0;
@@ -177,6 +177,7 @@ bool r2d_world_visibility_filtered_ex(const R2DRe2dWorld *w,const R2DRe2dView *v
                         int dest=to->first_span+k;const R2DWorldSpan *s=&w->spans[dest];R2DWorldOpening clipped;
                         if(!r2d_world_opening_between(from,s,p,o,&clipped))continue;
                         R2DWorldWindow projected,window;if(!r2d_world_portal_window(v,ortho,p,&clipped,&projected)||!intersection(f->windows[span],projected,&window))continue;
+                        if(projected.left<=0.0f&&projected.top<=0.0f&&projected.right>=v->width&&projected.bottom>=v->height)f->portals_conservative++;
                         R2DWorldWindow old=f->windows[dest],merged=window;
                         if(f->span_seen[dest])merged=(R2DWorldWindow){fminf(old.left,window.left),fminf(old.top,window.top),fmaxf(old.right,window.right),fmaxf(old.bottom,window.bottom)};
                         bool changed=!f->span_seen[dest]||merged.left!=old.left||merged.top!=old.top||merged.right!=old.right||merged.bottom!=old.bottom;

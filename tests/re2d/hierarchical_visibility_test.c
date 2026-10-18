@@ -259,6 +259,8 @@ static void test_aperture_crossing_near_plane_keeps_far_cells(void)
                                   "geometry edge-on to a top-down camera keeps all reached cells");
     TEST_ASSERT_EQUAL_INT_MESSAGE(3, visibility.cells_visible,
                                   "cells behind the near portal stay visible for a frame");
+    TEST_ASSERT_TRUE_MESSAGE(visibility.portals_conservative > 0,
+                             "the straddling aperture is reported as a conservative window");
     r2d_world_visibility_free(&visibility);
 
     // A normal first-person portal window must stay bounded (no over-broad
@@ -268,6 +270,11 @@ static void test_aperture_crossing_near_plane_keeps_far_cells(void)
     TEST_ASSERT_TRUE(r2d_world_portal_window(&view, 0, &portals[0], &opening, &window));
     TEST_ASSERT_TRUE_MESSAGE(window.right - window.left < 640.0f,
                              "an ahead portal keeps a bounded screen window");
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_visibility(&world, &view, 0, &visibility),
+                             "normal first-person visibility builds");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, visibility.portals_conservative,
+                                  "an ordinary ahead portal does not widen the window");
+    r2d_world_visibility_free(&visibility);
     r2d_world_free(&world);
 }
 

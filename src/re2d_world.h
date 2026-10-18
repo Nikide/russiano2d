@@ -77,7 +77,7 @@ typedef struct {
     uint8_t *span_seen,*surface_seen,*queued;
     R2DWorldWindow *windows,*surface_windows;
     int span_count,surface_count,capacity_spans,capacity_surfaces;
-    int portals_tested,cells_visible;
+    int portals_tested,portals_conservative,cells_visible;
     int *node_parents,*cell_nodes;
     uint8_t *node_active;
     int capacity_nodes,capacity_cells,bsp_nodes_visited;

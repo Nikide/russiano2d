@@ -43,7 +43,8 @@ def sample(agent, backend, x, y):
     agent.eval("(()=>{W.backend(%r);W.camera({x:%r,y:%r,h:60,pitch:-89.99,yaw:0,"
                "fov:55,near:1});W.render(null,320,180);return true})()" % (backend, x, y))
     info = agent.eval("JSON.stringify({cells:W.info().visibleCells,"
-                      "spans:W.info().visibleSpans,surfaces:W.info().visibleSurfaces})")
+                      "spans:W.info().visibleSpans,surfaces:W.info().visibleSurfaces,"
+                      "conservative:W.info().portalsConservative})")
     return json.loads(info)
 
 
@@ -73,6 +74,8 @@ def main():
             print("    mismatch", item, flush=True)
         check(baseline["cells"] == 4,
               "open corridor keeps all four cells visible (got %s)" % baseline["cells"])
+        check(baseline.get("conservative", 0) > 0,
+              "edge-on apertures are reported as conservative windows (%s)" % baseline.get("conservative"))
         check(not agent.eval("$.debug.errors()"), "no script errors")
 
     print()
