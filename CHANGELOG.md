@@ -1,3 +1,43 @@
+> Unreleased / GTA-like sandbox (roadmap RUSSIANO2D_GTA_FEATURE_ROADMAP):
+> P0.1 surface tags + groundAt в Re2D World. Author JSON span получает
+> `tags`/`ceilingTags` (<=32 тегов, 1..32 printable байта, дубликаты/неизвестные
+> метки — данные), они едут .re2dmap -> native author JSON -> baked .re2dworld
+> (RDW6; RDW1..v5 и старые untagged-карты грузятся как раньше, untagged остаётся
+> legacy v3). Публичный `$`: `world.groundAt(x,y,{h})` -> {cell,span,surface,
+> height,tags} | null (h выбирает высший пол <= h; несколько span на XY без h —
+> RangeError, не «угадывание»), `world.surfaceTagsAt`, `surface(i).tags()/
+> hasTag()/tag()` (runtime-метки не меняют геометрию). SDK `world-compile`
+> прокидывает теги (brush-generated cells пока без тегов — ограничение
+> задокументировано). Тесты: tests/re2d/world_test.c, tests/agent/
+> re2d_surface_tags_test.py.
+>
+> P0.2-P0.6, P1.1-P1.6, P2 — вертикальный срез городского sandbox на публичном
+> `$`, без ECS/3D/нативных менеджеров: новый демо-проект
+> `demos/re2d_gta_sandbox` (сцены `re2d_gta_sandbox_city` и
+> `re2d_gta_sandbox_plain`) + переиспользуемые JS-сэмплы в его `lib/`:
+> `vehicle.js`/`vehicle_view.js` (Box2D-машина, поверхность-grip из Re2D
+> groundAt, plain 2D без Re2D; P0.3 произвольный поворот спрайта проверен
+> CPU/GPU), `combat.js` (hitscan/projectile/AoE, damage payload с source/point,
+> события damaged/death поверх $.health), `ownership.js` (persistent/temporary/
+> mission, stable handles с uid против recycled-узлов), `character.js`
+> (idle/walk/run/shoot/hit/stunned/dead композицией), `seats.js` (сиденья,
+> enter/exit, advisory input-lock, безопасный eject), `roadgraph.js`
+> (дороги/полосы/one-way/speed/intersections/parking/walk), `population.js`
+> (детерминированный streaming около игрока, фильтры тегов, ownership),
+> `ai.js` (moveTo/patrolTo/follow/flee/lookAt/driveTo, стимулы, зоны),
+> `missions.js` (доставка/чекпоинты на триггерах/сигналах/$.save),
+> `polish.js` (декали/VFX/audio/camera/debug, честный roof-fade audit:
+> не поддерживается). Демо: город с тегами road/sidewalk/grass/park/no_spawn,
+> top-down камерой, крышами зданий, машинами, пешеходами, уроном и миссией;
+> plain-сцена без Re2D. Тесты: tests/agent/re2d_gta_sandbox_test.py
+> (e2e: теги, вход/вождение/выход из машины, урон/смерть, миссия, детерминизм,
+> plain-сцена) + 8 сценарных тестов libs (vehicle 61, combat 43, ownership 27,
+> seats 51, traffic 29, roadgraph 53, missions 36 проверок). Документация:
+> docs/GTA_SANDBOX.md (аудит «есть/частично/нет») и docs/gta/*.md.
+> Ограничения: roof fade в Re2D не поддерживается (нет per-surface fade API),
+> brush-only карты пока без тегов, runtime `.tag()` не пишется назад в карту,
+> нет traffic lights/wanted/NavMesh (данные игры/$.nav).
+>
 # История изменений
 
 > Unreleased / Re2D: явная колонка направления `node.sprite_col` для flat
