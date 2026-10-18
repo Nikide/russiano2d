@@ -89,10 +89,24 @@ bool r2d_world_portal_window(const R2DRe2dView *v,float ortho,const R2DWorldPort
         }
     }
     float points[4][3]={{p->ax,p->ay,o->bottom},{p->bx,p->by,o->bottom},{p->bx,p->by,o->top},{p->ax,p->ay,o->top}},camera[4][3],clipped[8][3];int count=0;
+    bool any_front=false,any_near_or_behind=false;
     for(int i=0;i<4;i++) {
         float dx=points[i][0]-v->x,dy=points[i][1]-v->y,h=points[i][2]-v->eye,f=dx*v->cos_yaw+dy*v->sin_yaw;
         camera[i][0]=-dx*v->sin_yaw+dy*v->cos_yaw;camera[i][1]=h*v->cos_pitch-f*v->sin_pitch;camera[i][2]=f*v->cos_pitch+h*v->sin_pitch;
+        if(camera[i][2]>0.0f)any_front=true;
+        if(camera[i][2]<v->near_plane)any_near_or_behind=true;
     }
+    if(!any_front)return false;
+    // The aperture crosses the camera plane / near slab (typical for a steep
+    // top-down camera seeing a portal edge-on, and for a camera standing inside
+    // a doorway). Near-plane clipping truncates the projected polygon, but the
+    // visible cone through the aperture keeps expanding: cells behind it then
+    // project outside the clipped window and whole cell groups are dropped for
+    // a frame (BASHNYA/GTA2 1.2.8 repro: camera y=1439.8 -> visibleCells 12->7,
+    // stable at 1440.0). The conservative window is the full view; over-
+    // inclusion is occlusion-safe (the depth pass still hides what is behind
+    // walls), under-inclusion is a visible pop.
+    if(any_near_or_behind){*out=(R2DWorldWindow){0,0,v->width,v->height};return true;}
     for(int i=0;i<4;i++) {
         float *a=camera[i],*b=camera[(i+1)%4];bool ai=a[2]>=v->near_plane,bi=b[2]>=v->near_plane;
         if(ai)memcpy(clipped[count++],a,3*sizeof(float));

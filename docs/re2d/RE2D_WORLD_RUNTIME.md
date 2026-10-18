@@ -50,6 +50,8 @@ world.span(0).lighting({level:.35,color:'#ffffff'}).fog({density:.002,start:100,
 
 Собственная classic модель: base=level*(1+strength*(abs(nx)-abs(ny)))/(1+max(0,depth)*distanceScale), если orientation enabled. Dynamic contribution внутри radius: intensity*flicker*(1-distance/radius)^2*normalResponse*shadowVisibility, с RGB light. NormalResponse = max(0,dot(normal,lightDirection)), либо1 при query zero normal. Shadow ray учитывает wall segment heights и solid floor/ceiling planes.
 
+Portal windows: `r2d_world_portal_window()` проецирует апертуру портала в screen-space window. Если апертура пересекает плоскость камеры / near-plane (отвесная top-down камера видит портал «с ребра», или камера стоит вплотную к проёму), near-clipped проекция занижает конус видимости, и дальние клетки могут выпасть на кадр. В этом случае окно консервативно расширяется до полного кадра; обычные порталы впереди сохраняют ограниченное окно. Перебор видимости occlusion-safe (depth/BSP скрывают невидимое), недобор — видимый pop. Регрессия: `test_aperture_crossing_near_plane_keeps_far_cells`.
+
 Material order: albedo×classic/direct normal-aware lighting → emissive×strength → fog → transparent composition → existing postprocess. Fog visibility=exp(-density*max(0,depth-start)). Это независимые Re2D equations, не COLORMAP tables/GLSL GZDoom.
 
 ## Dynamic light handles

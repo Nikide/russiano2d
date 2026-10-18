@@ -1,5 +1,18 @@
 # История изменений
 
+> Unreleased / Re2D visibility near portals:
+> `r2d_world_portal_window()` больше не теряет дальние клетки, когда апертура
+> портала пересекает плоскость камеры/near-plane (отвесная top-down камера
+> видит портал «с ребра»): в этом случае окно консервативно расширяется до
+> полного кадра, обычные порталы впереди сохраняют ограниченное окно. Исправлен
+> pop «geometry disappears for one frame» из отчёта re2d_gta_test 1.2.8:
+> sweep по y 1437.5..1442.5 давал 12/39 → 7/21 cells/surfaces, теперь стабильно
+> 52/176 на обоих backend'ах, скриншоты у плоскости идентичны, стоимость на
+> карте 52 клетки ~0.15 мс/кадр. Регрессии:
+> `test_aperture_crossing_near_plane_keeps_far_cells` (FAIL на старом коде) и
+> `tests/agent/re2d_portal_edge_visibility_test.py` (публичный API, 4-клеточная
+> цепочка, CPU=GPU).
+>
 > Unreleased / Re2D top-down camera (GTA2-стиль):
 > `world.camera({mode:'topdown', ...})` — удобный bird's-eye режим:
 > `projection:'orthographic'`, `pitch:-89.99°`, `near:1`, `orthoHeight:1200`

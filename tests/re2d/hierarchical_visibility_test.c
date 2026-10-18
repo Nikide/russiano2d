@@ -216,6 +216,61 @@ static void test_camera_on_portal_plane_keeps_visibility(void)
     r2d_world_free(&world);
 }
 
+static void test_aperture_crossing_near_plane_keeps_far_cells(void)
+{
+    // Three cells in a row, each with a tall free span (0..120). A top-down
+    // camera 0.2 west of the first portal sees the aperture edge-on: its upper
+    // part straddles the camera plane. Near-plane clipping used to truncate the
+    // projected portal window, so the second portal's window did not intersect
+    // it and the far cell was dropped for a frame (BASHNYA/GTA2 1.2.8:
+    // visibleCells 12 -> 7 at y=1439.8, stable at y=1440.0).
+    R2DWorldSpan spans[3] = {
+        {0, 0, 100, 100, 0, 120, 0x111111u, 0x222222u, 0, 0, 0, 0},
+        {100, 0, 100, 100, 0, 120, 0x333333u, 0x444444u, 0, 0, 0, 0},
+        {200, 0, 100, 100, 0, 120, 0x555555u, 0x666666u, 0, 0, 0, 0},
+    };
+    R2DWorldCell cells[3] = {
+        {0, 0, 100, 100, 0, 1}, {100, 0, 100, 100, 1, 1}, {200, 0, 100, 100, 2, 1}
+    };
+    R2DWorldOpening opening = {0, 120};
+    R2DWorldPortal portals[2] = {{0}};
+    portals[0].cell_a = 0; portals[0].cell_b = 1; portals[0].first_opening = 0;
+    portals[0].opening_count = 1; portals[0].ax = 100; portals[0].ay = 0;
+    portals[0].bx = 100; portals[0].by = 100; portals[0].open_fraction = 1.0f;
+    portals[1].cell_a = 1; portals[1].cell_b = 2; portals[1].first_opening = 0;
+    portals[1].opening_count = 1; portals[1].ax = 200; portals[1].ay = 0;
+    portals[1].bx = 200; portals[1].by = 100; portals[1].open_fraction = 1.0f;
+    char error[256] = {0};
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_build_cells(&world, NULL, 0, spans, 3, cells, 3,
+                                                   portals, 2, &opening, 1, error,
+                                                   sizeof error),
+                             "three-cell chain builds");
+
+    R2DRe2dView view;
+    r2d_re2d_view_set(&view, 99.8f, 50, 60, 0, -1.5706f, 1.2f, 640, 360);
+    view.near_plane = 1.0f;
+    R2DWorldWindow window;
+    TEST_ASSERT_TRUE(r2d_world_portal_window(&view, 0, &portals[0], &opening, &window));
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(1e-3f, 0.0f, window.left, "straddling aperture keeps the full window");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(1e-3f, 640.0f, window.right, "straddling aperture keeps the full window");
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_visibility(&world, &view, 0, &visibility),
+                             "near-plane top-down visibility builds");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, visibility.span_count,
+                                  "geometry edge-on to a top-down camera keeps all reached cells");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, visibility.cells_visible,
+                                  "cells behind the near portal stay visible for a frame");
+    r2d_world_visibility_free(&visibility);
+
+    // A normal first-person portal window must stay bounded (no over-broad
+    // full-view fallback in the common case).
+    r2d_re2d_view_set(&view, 50, 50, 60, 0, 0, 1.2f, 640, 360);
+    view.near_plane = 1.0f;
+    TEST_ASSERT_TRUE(r2d_world_portal_window(&view, 0, &portals[0], &opening, &window));
+    TEST_ASSERT_TRUE_MESSAGE(window.right - window.left < 640.0f,
+                             "an ahead portal keeps a bounded screen window");
+    r2d_world_free(&world);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -223,5 +278,6 @@ int main(void)
     RUN_TEST(test_region_reject_cuts_before_local_bsp);
     RUN_TEST(test_closed_areaportal_and_cluster_pvs);
     RUN_TEST(test_camera_on_portal_plane_keeps_visibility);
+    RUN_TEST(test_aperture_crossing_near_plane_keeps_far_cells);
     return UNITY_END();
 }
