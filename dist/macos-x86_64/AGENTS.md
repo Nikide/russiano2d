@@ -1,4 +1,4 @@
-# Russiano2D 1.2.8 — macOS Intel: инструкция для ИИ-агента
+# Russiano2D 1.2.9 — macOS Intel: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"1.2.8","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"1.2.9","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -17412,6 +17412,37 @@ SUMMARY: AddressSanitizer: SEGV (/lib/aarch64-linux-gnu/libvulkan_lvp.so)
 64612/64613/64620 (константа в работе больше не участвует).
 
 ---
+
+## 6.2. Preflight видимости у плоскостей порталов
+
+Класс «геометрия исчезает на кадр у границы клетки» (отчёт re2d_gta_test 1.2.8)
+ловится не глазами, а sweep'ом: камера ставится по обе стороны каждой
+уникальной плоскости портала на 0.1..2.0u и сравниваются `visibleCells`/
+`visibleSurfaces` с точкой в 1–2u от плоскости. Падение на несколько клеток
+внутри ±0.5u — дефект видимости (portal window), а не «нормальная окклюзия».
+
+```bash
+python3 tools/visibility_sweep.py     --cwd dist/macos-arm64 --game ../my_game     --world-expr GAME_WORLD --map-expr GAME_MAP_DATA     --view '{"h":700,"pitch":-89.99,"yaw":0,"fov":55,"near":1}'     --json-out /tmp/visibility_sweep.json
+```
+
+* `--world-expr` — JS-выражение, дающее `$.re2dWorld` handle в игре;
+  `--map-expr` — авторская map JSON в этой же игре (`--map file.json` — вариант
+  для карты на диске).
+* `--view` — шаблон камеры; x/y подставляются для каждой точки плоскости.
+  Для top-down обычно `pitch≈-89.99, near 1`; для first-person — `pitch:0, near:4`.
+* `--offsets`/`--along` — дистанции от плоскости и доли вдоль неё.
+* Выход 1 при подозрительных падениях; JSON пригоден для CI.
+* `world.info().portalsConservative` показывает, сколько порталов в кадре
+  расширены до полного окна (edge-on/near-plane). Для обычной first-person
+  камеры должны быть единицы/ноль; большое число — сигнал, что камера смотрит
+  вдоль плоскостей и стоит проверить производительность и геометрию.
+
+Проверка на реальных картах: pre-fix 1.2.8 на карте отчёта даёт **208**
+подозрительных сэмплов на 125 плоскостях; текущее дерево — **0** на 1000
+сэмплов. Для синтетических цепочек клеток тот же инвариант закреплён в
+`tests/re2d/hierarchical_visibility_test.c` и
+`tests/agent/re2d_portal_edge_visibility_test.py`, поэтому полный прогон ловит
+регрессию без внешней карты.
 
 ## 7. Критерии приёмки
 
