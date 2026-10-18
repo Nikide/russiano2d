@@ -71,6 +71,25 @@ static bool wall_span_candidate(const R2DWorldWall *w,const R2DWorldSpan *s)
     return fmaxf(w->x1,w->x2)>=s->x&&fminf(w->x1,w->x2)<=s->x+s->w&&
         fmaxf(w->y1,w->y2)>=s->y&&fminf(w->y1,w->y2)<=s->y+s->h;
 }
+// Authored wall lying on the exact portal segment (either endpoint order).
+// Used to avoid generating a coplanar duplicate closure surface.
+static bool wall_same_plane(const R2DWorldWall *wall,const R2DWorldPortal *portal)
+{
+    const float eps=1e-3f;
+    const bool forward=fabsf(wall->x1-portal->ax)<=eps&&fabsf(wall->y1-portal->ay)<=eps&&
+                       fabsf(wall->x2-portal->bx)<=eps&&fabsf(wall->y2-portal->by)<=eps;
+    const bool reverse=fabsf(wall->x1-portal->bx)<=eps&&fabsf(wall->y1-portal->by)<=eps&&
+                       fabsf(wall->x2-portal->ax)<=eps&&fabsf(wall->y2-portal->ay)<=eps;
+    return forward||reverse;
+}
+static int compare_opening_bottom(const void *lhs,const void *rhs)
+{
+    const R2DWorldOpening *a=(const R2DWorldOpening *)lhs,*b=(const R2DWorldOpening *)rhs;
+    if(a->bottom<b->bottom)return -1;
+    if(a->bottom>b->bottom)return 1;
+    return 0;
+}
+
 static bool wall_cell_interval(const R2DWorldWall *w,const R2DWorldCell *c,float *lo,float *hi)
 {
     const float start[2]={w->x1,w->y1},delta[2]={w->x2-w->x1,w->y2-w->y1},minimum[2]={c->x,c->y},maximum[2]={c->x+c->w,c->y+c->h};*lo=0;*hi=1;
@@ -104,22 +123,108 @@ bool r2d_world_build_cells(R2DRe2dWorld *world,const R2DWorldWall *walls,int nw,
     if(!world||nc<0||nc>WORLD_LIMIT||np<0||np>WORLD_LIMIT||no<0||no>WORLD_LIMIT||
         (nc&&!cells)||(np&&!portals)||(no&&!openings))return error(err,size,"invalid topology count",-1);
     if(nw<0||nw>WORLD_LIMIT-no||(nw&&!walls))return error(err,size,"invalid wall count",-1);
-    // Door opening closures are specialised wall surfaces, derived once from topology.
-    R2DWorldWall *all=calloc((size_t)(nw+no+1),sizeof *all);
+    // Portal closure surfaces are specialised wall surfaces derived once from
+    // topology: one wall per authored opening (the renderer/rays carve the open
+    // interval out of it), plus one wall per solid band on the portal plane
+    // around/between the openings. The second kind closes the structural slab
+    // between stacked spans so the panorama cannot leak through it (BASHNYA
+    // 1.2.6 "pink sky strips"). Authored walls on the same plain are subtracted
+    // so no coplanar duplicate is generated.
+    int all_capacity=nw+no+1;
+    R2DWorldWall *all=malloc((size_t)all_capacity*sizeof *all);
     if(!all)return error(err,size,"out of memory",-1);
-    if(nw)memcpy(all,walls,(size_t)nw*sizeof *walls);
-    int authored_nw=nw,total=nw;
+    int authored_nw=nw,total=0;
+    if(nw)memcpy(all,walls,(size_t)nw*sizeof *walls);total=nw;
+    R2DWorldOpening *sorted=no?malloc((size_t)no*sizeof *sorted):NULL;
+    if(no&&!sorted){free(all);return error(err,size,"out of memory",-1);}
+#define PUSH_CLOSURE_WALL(x1_,y1_,x2_,y2_,b_,t_) do { \
+        if(total>=WORLD_LIMIT){free(sorted);free(all);return error(err,size,"portal closure wall limit exceeded",-1);} \
+        if(total>=all_capacity){int grown_capacity=all_capacity+all_capacity/2+16; \
+            R2DWorldWall *grown=realloc(all,(size_t)grown_capacity*sizeof *all); \
+            if(!grown){free(sorted);free(all);return error(err,size,"out of memory",-1);} \
+            all=grown;all_capacity=grown_capacity;} \
+        all[total++]=(R2DWorldWall){(x1_),(y1_),(x2_),(y2_),(b_),(t_),0xff605040,0}; \
+    } while(0)
+#define FREE_CLOSURE() do {free(sorted);free(all);} while(0)
     for(int i=0;i<np;i++) {
         const R2DWorldPortal *p=&portals[i];
-        if(!range(p->first_opening,p->opening_count,no)){free(all);return error(err,size,"invalid opening range",i);}
+        if(!range(p->first_opening,p->opening_count,no)){FREE_CLOSURE();return error(err,size,"invalid opening range",i);}
         for(int j=0;j<p->opening_count;j++) {
-            if(total>=nw+no){free(all);return error(err,size,"opening ranges reused",i);}
             const R2DWorldOpening *o=&openings[p->first_opening+j];
-            all[total++]=(R2DWorldWall){p->ax,p->ay,p->bx,p->by,o->bottom,o->top,0xff605040,0};
+            PUSH_CLOSURE_WALL(p->ax,p->ay,p->bx,p->by,o->bottom,o->top);
         }
     }
+    // Solid bands: complement of the union of the portal's openings inside the
+    // vertical extent of free space of the two adjacent cells. Floors/ceilings
+    // are sampled at both portal endpoints; the outer bounds are conservative
+    // (min floor / max ceiling), so closure never covers free space.
+    for(int i=0;i<np;i++) {
+        const R2DWorldPortal *p=&portals[i];
+        if(p->cell_a<0||p->cell_a>=nc||p->cell_b<0||p->cell_b>=nc)continue;
+        const R2DWorldCell *pair_cells[2]={&cells[p->cell_a],&cells[p->cell_b]};
+        if(!range(pair_cells[0]->first_span,pair_cells[0]->span_count,ns)||
+           !range(pair_cells[1]->first_span,pair_cells[1]->span_count,ns))continue;
+        float lo=INFINITY,hi=-INFINITY;
+        for(int c=0;c<2;c++)for(int k=0;k<pair_cells[c]->span_count;k++){
+            const R2DWorldSpan *s=&spans[pair_cells[c]->first_span+k];
+            const float ex[2]={p->ax,p->bx},ey[2]={p->ay,p->by};
+            for(int e=0;e<2;e++){
+                const float floor_h=r2d_world_floor_height(s,ex[e],ey[e]);
+                const float ceiling_h=r2d_world_ceiling_height(s,ex[e],ey[e]);
+                if(!isfinite(floor_h)||!isfinite(ceiling_h))continue;
+                if(floor_h<lo)lo=floor_h;
+                if(ceiling_h>hi)hi=ceiling_h;
+            }
+        }
+        if(!(hi>lo))continue;
+        const int opening_count=p->opening_count;
+        for(int j=0;j<opening_count;j++){
+            R2DWorldOpening o=openings[p->first_opening+j];
+            if(o.bottom<lo)o.bottom=lo;
+            if(o.top>hi)o.top=hi;
+            sorted[j]=o;
+        }
+        if(opening_count>1)qsort(sorted,(size_t)opening_count,sizeof *sorted,compare_opening_bottom);
+        float cursor=lo;
+        for(int j=0;j<opening_count;j++){
+            const R2DWorldOpening *o=&sorted[j];
+            if(o->top<=cursor)continue;
+            if(o->bottom>cursor){
+                // Emit the solid piece, subtracting authored walls on this plane.
+                float gap_lo=cursor,gap_hi=o->bottom;
+                for(int wi=0;wi<authored_nw;wi++){
+                    const R2DWorldWall *authored=&walls[wi];
+                    if(!wall_same_plane(authored,p)||authored->top<=gap_lo||authored->bottom>=gap_hi)continue;
+                    if(authored->bottom>gap_lo){
+                        const float piece_top=authored->bottom<gap_hi?authored->bottom:gap_hi;
+                        if(piece_top-gap_lo>1e-3f)PUSH_CLOSURE_WALL(p->ax,p->ay,p->bx,p->by,gap_lo,piece_top);
+                    }
+                    if(authored->top>gap_lo)gap_lo=authored->top;
+                    if(gap_lo>=gap_hi)break;
+                }
+                if(gap_hi-gap_lo>1e-3f)PUSH_CLOSURE_WALL(p->ax,p->ay,p->bx,p->by,gap_lo,gap_hi);
+            }
+            if(o->top>cursor)cursor=o->top;
+        }
+        if(hi-cursor>1e-3f){
+            float gap_lo=cursor,gap_hi=hi;
+            for(int wi=0;wi<authored_nw;wi++){
+                const R2DWorldWall *authored=&walls[wi];
+                if(!wall_same_plane(authored,p)||authored->top<=gap_lo||authored->bottom>=gap_hi)continue;
+                if(authored->bottom>gap_lo){
+                    const float piece_top=authored->bottom<gap_hi?authored->bottom:gap_hi;
+                    if(piece_top-gap_lo>1e-3f)PUSH_CLOSURE_WALL(p->ax,p->ay,p->bx,p->by,gap_lo,piece_top);
+                }
+                if(authored->top>gap_lo)gap_lo=authored->top;
+                if(gap_lo>=gap_hi)break;
+            }
+            if(gap_hi-gap_lo>1e-3f)PUSH_CLOSURE_WALL(p->ax,p->ay,p->bx,p->by,gap_lo,gap_hi);
+        }
+    }
+#undef PUSH_CLOSURE_WALL
+#undef FREE_CLOSURE
     R2DRe2dWorld next={0};
-    bool built=r2d_world_build(&next,all,total,spans,ns);free(all);
+    bool built=r2d_world_build(&next,all,total,spans,ns);free(sorted);free(all);
     if(!built)return error(err,size,"invalid wall/span geometry",-1);
     nw=total;walls=next.walls;
     next.cell_root=-1;

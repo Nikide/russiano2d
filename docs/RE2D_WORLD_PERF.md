@@ -311,8 +311,12 @@ remains unproven.
 ### Safe reductions investigated
 
 * fully-open portal-closure surfaces: 0 exposed as separate removable surfaces
-  through `world.surface()`; baked closure geometry goes through the normal
-  wall-solidity test, so there is no safe "skip open closure" filter to add;
+  through `world.surface()`; closure geometry goes through the normal
+  wall-solidity test, so there is no safe "skip open closure" filter to add.
+  Since the 2026-10-18 solid-band closure fix a portal plane also carries
+  generated walls for the solid bands between openings (BASHNYA level1:
+  1880 -> 2071 walls, 958 -> 1057 visible surfaces at the material-parity
+  camera); those are real solid geometry, not removable overhead;
 * redundant selected surfaces: the 2192 logical surfaces are already batched
   into 8 groups; reducing the logical count would not reduce submissions;
 * light x surface passes: only 6 lights survive culling (2 shadowed) and

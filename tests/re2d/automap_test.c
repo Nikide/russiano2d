@@ -13,7 +13,8 @@ void tearDown(void) {}
 
 // Two neighbouring 100x100 cells sharing the x=100 edge, each with two free
 // height intervals and one two-opening portal on the shared edge. Two authored
-// outer walls plus the builder's two derived portal-closure walls are present.
+// outer walls, two derived opening closures and one derived solid-band closure
+// (the slab between the two openings) are present.
 static void build_two_cell_world(R2DRe2dWorld *world)
 {
     const R2DWorldWall walls[] = {
@@ -38,8 +39,8 @@ static void build_two_cell_world(R2DRe2dWorld *world)
     TEST_ASSERT_TRUE_MESSAGE(r2d_world_build_cells(world, walls, 2, spans, 4,
                                                    cells, 2, &portal, 1,
                                                    openings, 2, err, sizeof err), err);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(4, world->wall_count,
-                                  "2 authored walls + 2 derived portal closures");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, world->wall_count,
+                                  "2 authored + 2 opening closures + 1 solid-band closure");
     TEST_ASSERT_EQUAL_INT(1, world->portal_count);
 }
 
@@ -48,9 +49,9 @@ static void test_extraction_counts_and_order_on_two_cells(void)
     R2DRe2dWorld world;
     build_two_cell_world(&world);
 
-    // Flat state slots: walls 0..3 (closures ignored), portal at wall_count+0.
-    uint8_t states[5] = {
-        R2D_AUTOMAP_SEEN, R2D_AUTOMAP_SECRET, 0xff, 0xff, R2D_AUTOMAP_LOCKED
+    // Flat state slots: walls 0..4 (closures ignored), portal at wall_count+0.
+    uint8_t states[6] = {
+        R2D_AUTOMAP_SEEN, R2D_AUTOMAP_SECRET, 0xff, 0xff, 0xff, R2D_AUTOMAP_LOCKED
     };
     R2DWorldAutomapLine lines[3];
 
@@ -86,7 +87,7 @@ static void test_portal_closed_open_kind_and_index(void)
     R2DRe2dWorld world;
     build_two_cell_world(&world);
     R2DWorldAutomapLine lines[3];
-    uint8_t states[5] = {0, 0, 0, 0, R2D_AUTOMAP_SPECIAL};
+    uint8_t states[6] = {0, 0, 0, 0, 0, R2D_AUTOMAP_SPECIAL};
 
     TEST_ASSERT_TRUE(r2d_world_portal_set_closed(&world, 0, true));
     TEST_ASSERT_EQUAL_INT(3, r2d_world_automap_lines(&world, states, lines, 3));
@@ -257,8 +258,8 @@ static void test_determinism(void)
 {
     R2DRe2dWorld world;
     build_two_cell_world(&world);
-    const uint8_t states[5] = {
-        R2D_AUTOMAP_SEEN, R2D_AUTOMAP_LOCKED, 0xff, 0xff, R2D_AUTOMAP_SPECIAL
+    const uint8_t states[6] = {
+        R2D_AUTOMAP_SEEN, R2D_AUTOMAP_LOCKED, 0xff, 0xff, 0xff, R2D_AUTOMAP_SPECIAL
     };
     R2DWorldAutomapLine a[3], b[3], wide[5];
 
@@ -277,7 +278,7 @@ static void test_determinism(void)
     TEST_ASSERT_EQUAL_INT(3, r2d_world_automap_lines(&world, states, b, 3));
     TEST_ASSERT_EQUAL_INT(0, memcmp(a, b, sizeof a));
     TEST_ASSERT_EQUAL_INT(1, world.portal_count);
-    TEST_ASSERT_EQUAL_INT(4, world.wall_count);
+    TEST_ASSERT_EQUAL_INT(5, world.wall_count);
 }
 
 int main(void)

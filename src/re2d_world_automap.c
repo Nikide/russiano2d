@@ -10,6 +10,16 @@ static bool automap_wall_is_closure(const R2DRe2dWorld *world, int wall)
     // tags it in both incidence tables. Legacy r2d_world_build() worlds have
     // neither table, so every stored wall is authored.
     if (world->wall_openings && world->wall_openings[wall] != 0) return true;
+    const R2DWorldWall *w = &world->walls[wall];
+    const float eps = 1e-3f;
+    for (int i = 0; i < world->portal_count; ++i) {
+        const R2DWorldPortal *p = &world->portals[i];
+        const bool forward = fabsf(w->x1 - p->ax) <= eps && fabsf(w->y1 - p->ay) <= eps &&
+                             fabsf(w->x2 - p->bx) <= eps && fabsf(w->y2 - p->by) <= eps;
+        const bool reverse = fabsf(w->x1 - p->bx) <= eps && fabsf(w->y1 - p->by) <= eps &&
+                             fabsf(w->x2 - p->ax) <= eps && fabsf(w->y2 - p->ay) <= eps;
+        if (forward || reverse) return true;
+    }
     if (world->wall_portals && world->wall_portals[wall] != 0) return true;
     return false;
 }

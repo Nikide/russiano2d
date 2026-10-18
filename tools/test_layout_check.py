@@ -74,6 +74,7 @@ EXPLICIT = {
     "impostor_test.c": "streaming",
     "impostor_lod_policy_test.c": "streaming",
     "r2d_profile_fence_test.c": "core",
+    "portal_closure_test.c": "render",
     "render_features_test.c": "render",
     "render_p4_test.c": "render",
     "render_post_test.c": "render",

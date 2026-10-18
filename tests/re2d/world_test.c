@@ -127,7 +127,7 @@ static int run_suite(void)
     CHECK(r2d_world_span_at(&w,50,50,3)==-1,"span top is exclusive");
     int order[2]={-1,-1};
     CHECK(r2d_world_cells_order(&w,150,50,order,2)==2&&order[0]==1&&order[1]==0,"native XY cell BSP traversal near-first");
-    CHECK(w.surface_count==10&&r2d_world_surface(&w,6)->cell==1&&!r2d_world_surface(&w,10),"surface enumeration retains cell/span ownership");
+    CHECK(w.surface_count==11&&r2d_world_surface(&w,7)->cell==1&&!r2d_world_surface(&w,11),"surface enumeration retains cell/span ownership");
     CHECK(r2d_world_portal_passes(&w,0,1,2)&&r2d_world_portal_passes(&w,0,7,8)&&!r2d_world_portal_passes(&w,0,2,7),"multiple portal openings reject solid intervening height");
     CHECK(r2d_world_portal_set_closed(&w,0,true)&&!r2d_world_portal_passes(&w,0,1,2)&&r2d_world_portal_set_closed(&w,0,false),"native closed portal rejects propagation and reopens");
     uint64_t revision=w.geometry_revision;

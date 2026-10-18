@@ -306,8 +306,9 @@ const lines = world.automapLines(states);   // [{x1,y1,x2,y2,state,kind,index}]
 world.automapProject({cx,cy,scale,rotation}, x, y);  // {x,y}
 ```
 
-Линии стен и порталов в детерминированном порядке; derived door-closure walls
-не дублируются (дверь — одна PORTAL-линия). `states` — плоская таблица по
+Линии стен и порталов в детерминированном порядке; сгенерированные portal closure
+walls (opening closures и solid-band closures) не дублируются (грань портала —
+одна PORTAL-линия). `states` — плоская таблица по
 primitive (стены, затем порталы); отрисовка остаётся за игрой. Только XY,
 никакого 3D-minimap.
 

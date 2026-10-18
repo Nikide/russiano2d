@@ -38,6 +38,7 @@ both directions (file->CMake and CMake->file).
 | `particle_test.c` | `vfx` | yes |
 | `polygon_test.c` | `world` | yes |
 | `polywall_test.c` | `world` | yes |
+| `portal_closure_test.c` | `render` | yes |
 | `portal_fraction_test.c` | `render` | yes |
 | `portal_visual_test.c` | `render` | yes |
 | `postprocess_test.c` | `render` | yes |
@@ -71,14 +72,14 @@ both directions (file->CMake and CMake->file).
 - `world/`: **9**
 - `region/`: **2**
 - `pvs/`: **2**
-- `render/`: **10**
+- `render/`: **11**
 - `material/`: **1**
 - `sprite/`: **1**
 - `sky/`: **4**
 - `vfx/`: **2**
 - `streaming/`: **4**
 
-Tracked tests: **49**; CMake-wired: **49**; CMake source references: **49**.
+Tracked tests: **50**; CMake-wired: **50**; CMake source references: **50**.
 
 Untracked files (new work not yet wired) are reported as warnings, not
 as part of the compatibility contract: none.
