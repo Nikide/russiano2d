@@ -1570,10 +1570,24 @@ function rendererWorldWrapper($, native) {
     // Handler receives the authored trigger payload ({id,target}); the raw $
     // event stays available as the second argument.
     world.onTrigger = (id, fn) => { $.on(id, event => fn(event.data ?? {}, event)); return world; };
+    // Camera modes: 'perspective' (first person, legacy default) and 'topdown'
+    // (GTA2-style bird's-eye). Top-down defaults to an orthographic projection,
+    // a practically straight-down pitch and near=1; every field stays
+    // overridable. Point the eye above the roofs and mark outdoor ceilings as
+    // sky surfaces to see streets instead of roofs.
     world.camera = (view = {}) => {
+        const mode = view.mode ?? (view.topdown === true ? 'topdown' : 'perspective');
+        if (mode !== 'perspective' && mode !== 'topdown')
+            throw new RangeError("Re2D World: camera mode must be perspective|topdown");
+        const topdown = mode === 'topdown';
+        const projection = view.projection ?? (topdown ? 'orthographic' : 'perspective');
+        if (projection !== 'perspective' && projection !== 'orthographic')
+            throw new RangeError("Re2D World: camera projection must be perspective|orthographic");
+        const pitch = view.pitch ?? (topdown ? -89.99 : 0);
         native.camera(view.x ?? 0,view.y ?? 0,view.h ?? view.eye ?? 48,
-            (view.yaw ?? 0)*Math.PI/180,(view.pitch ?? 0)*Math.PI/180,(view.fov ?? 70)*Math.PI/180,
-            view.near ?? 4,view.projection === 'orthographic' ? (view.orthoHeight ?? 400) : 0);
+            (view.yaw ?? 0)*Math.PI/180,pitch*Math.PI/180,(view.fov ?? 70)*Math.PI/180,
+            view.near ?? (topdown ? 1 : 4),
+            projection === 'orthographic' ? (view.orthoHeight ?? (topdown ? 1200 : 400)) : 0);
         return world;
     };
     world.renderToSprite = (view = null,width = 320,height = 180) => {if(view)world.camera(view);return native.frameRegistered(width,height);};

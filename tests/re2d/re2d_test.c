@@ -93,6 +93,16 @@ static void test_pitch(void)
     R2DRe2dView w;
     r2d_re2d_view_set(&w, 0, 0, 0, 0, 10.0f, HALF_PI, 800, 600);
     check(w.pitch < HALF_PI && w.pitch > 1.5f, "наклон зажат строго внутри ±90°");
+    // Top-down camera (GTA2-style): a straight-down request is representable as
+    // ±89.99° and the projection of the floor stays finite.
+    R2DRe2dView t;
+    r2d_re2d_view_set(&t, 0, 0, 300, 0, -HALF_PI, HALF_PI, 800, 600);
+    check(t.pitch < -1.55f && t.pitch > -HALF_PI, "отвесный top-down наклон не вырожден");
+    float ptd[4];
+    check(r2d_re2d_project(&t, 0, 0, 0, ptd) && isfinite(ptd[0]) && isfinite(ptd[1]) && ptd[2] > 0,
+          "top-down: точка под камерой проецируется в кадр без NaN");
+    check(r2d_re2d_project(&t, 100, 0, 0, ptd) && isfinite(ptd[0]) && isfinite(ptd[1]),
+          "top-down: соседняя точка на полу проецируется без NaN");
 }
 
 static void test_project_points(void)

@@ -18,7 +18,7 @@ const calls = { atlasAdd: [], atlasRemove: [], actorAdd: [], actorRemove: [],
                 triggerCreate: [], triggerRemove: [], triggerTick: [], triggerUse: [], triggerShoot: [],
                 find: [], controllerCreate: [], controllerInit: [], controllerMove: [], controllerRemove: [],
                 portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [], save: [], secret: [], breakable: [], terrain: [], material: [], post: [], polywall: [],
-                renderQuality: [], atmosphere: [] };
+                renderQuality: [], atmosphere: [], camera: [] };
 
 const native = {
     info: () => ({ poseBudget: 1, poseStep: 3, visual: { quality: 0 } }),
@@ -26,6 +26,7 @@ const native = {
     // Visual tier / atmosphere since 1.2.7: world.quality() no longer sets the
     // tier, the wrapper calls these explicit native controls instead.
     renderQuality: (...args) => { calls.renderQuality.push(args); return args.length ? args[0] : 0; },
+    camera: (...args) => { calls.camera.push(args); },
     atmosphere: (...args) => {
         calls.atmosphere.push(args);
         return { heightDensity: 0.02, baseHeight: 100, falloff: 2, hazeStrength: 0.1,
@@ -661,6 +662,36 @@ test('world.atmosphere: только переданные поля, значен
     throws(TypeError, () => world.atmosphere({ unknownField: 1 }), 'неизвестное поле');
     throws(TypeError, () => world.atmosphere(null), 'опции обязательны');
     eq(calls.atmosphere.length, 0, 'ошибки отклонены до C');
+    world.dispose();
+});
+
+test('world.camera: topdown mode -> orthographic, straight-down, near=1', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    calls.camera.length = 0;
+    world.camera({ mode: 'topdown', x: 10, y: 20, h: 500, yaw: 0, orthoHeight: 1500 });
+    eq(calls.camera.length, 1);
+    const a = calls.camera[0];
+    near(a[0], 10); near(a[1], 20); near(a[2], 500); near(a[3], 0);
+    near(a[4], (-89.99 * Math.PI) / 180, 1e-5, 'topdown pitch ~ -90°');
+    near(a[5], (70 * Math.PI) / 180, 1e-6);
+    eq(a[6], 1, 'topdown near plane is 1');
+    eq(a[7], 1500, 'orthographic height');
+    // Legacy default stays perspective with pitch 0 and near 4.
+    world.camera({ x: 1, y: 2, h: 3, pitch: -10 });
+    const b = calls.camera[1];
+    near(b[4], (-10 * Math.PI) / 180, 1e-6);
+    eq(b[6], 4); eq(b[7], 0, 'perspective keeps ortho off');
+    // Every field stays overridable; topdown can be used with perspective.
+    world.camera({ mode: 'topdown', pitch: -60, projection: 'perspective', near: 3, orthoHeight: 800 });
+    const c = calls.camera[2];
+    near(c[4], (-60 * Math.PI) / 180, 1e-6);
+    eq(c[6], 3); eq(c[7], 0, 'explicit perspective ignores orthoHeight');
+    world.camera({ topdown: true });
+    eq(calls.camera[3][7], 1200, 'topdown default ortho height');
+    const before = calls.camera.length;
+    throws(RangeError, () => world.camera({ mode: 'iso' }), 'неизвестный camera mode');
+    throws(RangeError, () => world.camera({ projection: 'fisheye' }), 'неизвестная projection');
+    eq(calls.camera.length, before, 'RangeError отклонён до C');
     world.dispose();
 });
 

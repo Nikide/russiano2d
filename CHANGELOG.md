@@ -1,5 +1,18 @@
 # История изменений
 
+> Unreleased / Re2D top-down camera (GTA2-стиль):
+> `world.camera({mode:'topdown', ...})` — удобный bird's-eye режим:
+> `projection:'orthographic'`, `pitch:-89.99°`, `near:1`, `orthoHeight:1200`
+> по умолчанию; любое поле переопределяется, `mode:'perspective'` сохраняет
+> legacy defaults. Отвесный `pitch:-90` теперь clamp'ится в ±89.99° (было ±89°),
+> поэтому камера может быть практически строго сверху без вырождения
+> проекции. Потолки из этого ракурса — крыши; открытые улицы — sky-поверхности
+> (`world.surface(i).sky(true)`); атмосферу для обзора обычно выключают.
+> Тесты: `tests/agent/re2d_topdown_camera_test.py` (topdown ≠ perspective,
+> стабильный кадр, RangeError на неверный mode/projection, возврат в
+> perspective), JS-обёртки `re2d_world_api_test.mjs` (36 проверок), native
+> `re2d_test` (проекция под отвесной камерой без NaN и pitch < 90°).
+>
 > Unreleased / portal closure surfaces: движок сам выводит закрывающую геометрию
 > плоскости портала — opening closures (как раньше) плюс solid-band closures для
 > полос между/вокруг openings, если автор их не задал. Это закрывает утечку

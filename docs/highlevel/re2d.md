@@ -56,7 +56,7 @@ $.render(() => world.render(view,400,240));
 | `world.controller(opts)` | нативный helper движения (sweep/slide/step/slope/jump) |
 | `world.mover(opts)` | нативный fixed-tick timeline двери/лифта/крашера/платформы |
 | `world.trigger(opts)` + `world.triggerTick/Use/Shoot` | семантические триггеры; события идут в `$.on/$.emit` |
-| `.camera(view={})` | заменяет конфигурацию камеры; пропущенные поля получают defaults |
+| `.camera(view={})` | заменяет конфигурацию камеры; пропущенные поля получают defaults; `mode:'perspective'` (default) или `mode:'topdown'` |
 | `.render(view=null,width=320,height=180)` | синтезирует и рисует обычный sprite на всё окно; возвращает sprite ID |
 | `.renderToSprite(view=null,width=320,height=180)` | синтезирует без fullscreen draw; возвращает sprite ID для previews |
 | `.backend('cpu'\|'gpu')` | выбор native reference или SDL_GPU; wrapper default CPU |
@@ -68,6 +68,17 @@ $.render(() => world.render(view,400,240));
 | `.dispose()` | освобождает мир/его registry/frame/GPU resources; повторный вызов безопасен; не удаляет игровые узлы |
 
 Frame dimensions — целые 1..1024. View: x/y=0, h=48 (eye — alias), yaw/pitch=0, fov=70°, near=4; projection perspective. Для orthographic: `projection:'orthographic',orthoHeight:400`. `render(null)` использует сохранённую camera. Здесь второй аргумент render — width, **не массив спрайтов**.
+
+Top-down (GTA2-стиль): `world.camera({mode:'topdown', x, y, h, yaw, orthoHeight})`.
+Режим сам выставляет `projection:'orthographic'`, `pitch:-89.99°`, `near:1`
+(любое поле можно переопределить, а `pitch`/`projection` — вернуть к
+perspective/наклону). Потолки из этого ракурса рисуются как крыши; если нужны
+улицы, пометьте потолки открытых span'ов sky-поверхностями
+(`world.surface(i).sky(true)`) — они перестанут закрывать вид. Для обзора сверху
+обычно отключают атмосферу: `world.atmosphere({heightDensity:0,hazeStrength:0})`.
+Спрайты остаются камера-ориентированными billboard'ами: top-down арт персонажей —
+сторона игры, движок не подменяет их проекцию. Отвесный взгляд (±90°) clamp'ится
+в ±89.99°, чтобы математика оставалась невырожденной.
 
 ## Игровые запросы
 

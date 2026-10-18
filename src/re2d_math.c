@@ -24,8 +24,10 @@ void r2d_re2d_view_set(R2DRe2dView *v, float x, float y, float eye,
     v->eye = eye;
     v->yaw = yaw;
     // Взгляд строго вверх/вниз вырожден (depth не зависит от горизонтали),
-    // поэтому наклон держим в открытом интервале.
-    v->pitch = clampf(pitch, -1.5533f, 1.5533f);   // ±89°
+    // поэтому наклон держим в открытом интервале. ±89.99° representable, чтобы
+    // top-down камера (GTA2-стиль) была практически отвесной, но математика
+    // оставалась невырожденной.
+    v->pitch = clampf(pitch, -1.5706f, 1.5706f);   // ±89.99°
     v->fov = clampf(fov, 0.05f, 3.0f);
     v->width = width > 1.0f ? width : 1.0f;
     v->height = height > 1.0f ? height : 1.0f;
