@@ -45,6 +45,20 @@ float r2d_world_atlas_relative_yaw(float facing, float camera_to_actor_x, float 
 // non-finite input falls back to column 0 / no flip instead of trapping.
 int r2d_world_atlas_direction(float relative_yaw, int directions, bool mirror, bool *flip);
 
+// Choose the atlas column with an optional explicit override.
+//
+// Packed layered characters (legs/tail/torso/head flattened offline into one
+// directional atlas) need a deterministic column driven by the game, not by the
+// camera-relative facing: `node.sprite_col = dir` is cheap, updates every frame
+// and is independent of the animation row. When `explicit` is true the authored
+// column wins (clamped into [0, columns-1]) and no mirroring is applied; the
+// relative-yaw direction selection is used otherwise. Out-of-range explicit
+// columns are clamped, never trapped, so an animation cursor cannot read outside
+// the atlas.
+int r2d_world_atlas_column(bool explicit, int column, int columns,
+                           float relative_yaw, int directions, bool mirror,
+                           bool *flip);
+
 // Source rectangle of one atlas cell. `column` and `row` are clamped into the
 // atlas grid, so a bad animation row cannot read outside the image.
 void r2d_world_atlas_cell(int column, int row, int columns, int rows,

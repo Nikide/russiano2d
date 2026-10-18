@@ -54,6 +54,16 @@ int r2d_world_atlas_direction(float relative_yaw, int directions, bool mirror, b
     return index;
 }
 
+int r2d_world_atlas_column(bool explicit, int column, int columns,
+                           float relative_yaw, int directions, bool mirror,
+                           bool *flip)
+{
+    if (flip) *flip = false;
+    if (!explicit) return r2d_world_atlas_direction(relative_yaw, directions, mirror, flip);
+    if (columns < 1) columns = 1;
+    return clampi(column, 0, columns - 1);
+}
+
 void r2d_world_atlas_cell(int column, int row, int columns, int rows,
                           int cell_w, int cell_h,
                           int *x, int *y, int *w, int *h)

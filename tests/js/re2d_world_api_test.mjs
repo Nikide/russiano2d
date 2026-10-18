@@ -193,6 +193,24 @@ test('world.sprite: defaults берутся из узла и pivot center', () =
     world.dispose();
 });
 
+test('world.sprite: sprite_col — явное свойство узла, row по умолчанию 0', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    const node = spawn('layered');
+    const raw = node.get ? node.get(0) : node;
+    raw.sprite_col = 7;
+    raw.sprite_row = 3;
+    world.sprite(node, { atlas: 'layered/neko.png', columns: 16, rows: 9, directions: 16,
+                         cell: { w: 192, h: 192 }, pivot: 'center', width: 112, height: 112 });
+    eq(raw.sprite_col, 7, 'регистрация не затирает явную колонку');
+    eq(raw.sprite_row, 3, 'существующий row сохраняется');
+    const fresh = spawn('fresh-layered');
+    const freshRaw = fresh.get ? fresh.get(0) : fresh;
+    world.sprite(fresh, { atlas: 'layered/neko.png', cell: { w: 64, h: 64 } });
+    eq(freshRaw.sprite_row, 0, 'row по умолчанию 0');
+    eq(freshRaw.sprite_col, undefined, 'колонка остаётся не заданной (angle-режим)');
+    world.dispose();
+});
+
 test('world.sprite отклоняет недопустимую конфигурацию до нативного вызова', () => {
     const world = $.re2dWorld.fromJSON('{}');
     const node = spawn('bad');

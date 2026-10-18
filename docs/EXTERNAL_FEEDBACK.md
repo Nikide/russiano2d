@@ -414,3 +414,26 @@ save, load, autoSave, stopAutoSave` — **`list()`, `count()`, `exists()` отс
 | Тесты | `tests/re2d/hierarchical_visibility_test.c::test_aperture_crossing_near_plane_keeps_far_cells` — цепочка из 3 клеток, камера 0.2 от портала: **FAIL на старом коде** («straddling aperture keeps the full window: Expected 0 Was -12836»), PASS сейчас; плюс контроль «обычный портал впереди остаётся ограниченным окном». Публичный API: `tests/agent/re2d_portal_edge_visibility_test.py` — 4-клеточная цепочка через `$.re2dWorld.fromJSON`, sweep ±1.5u по обе стороны плоскости, CPU=GPU, без drop'ов (на старом коде baseline 2 клетки вместо 4) |
 | Не затронуто | region streaming/impostors (1 регион, active=1, culled=0), VSync, z-fighting, материалы — отчёт это уже исключил, наши counters это подтверждают. Точный `y=1440.0` стабилен и раньше (отдельный on-plane случай) |
 | Профилактика | `tools/visibility_sweep.py` — preflight по всем плоскостям порталов карты (обе стороны, 0.1..2u, CPU/GPU): на бинаре 1.2.8 находит **208** подозрительных сэмплов из 1000, на текущем дереве — **0**. `world.info().portalsConservative` показывает, когда включён консервативный путь окна. Инвариант закреплён native+agent тестами (см. TESTING.md §6.2) |
+
+
+---
+
+# Feature request re2d_gta_test: layered/packed character sprite (1.2.9)
+
+Отчёт: `LAYERED_SPRITE_FEATURE_REQUEST.md` (+ `layered_character_feature.zip`).
+**Фича одобрена владельцем.** Решение — минимальный `sprite_col`, без
+`packedSprite`-API и без runtime-слоёв.
+
+| Пункт | Решение |
+|---|---|
+| Направление игнорируется (`angle 0` vs `π` дают одинаковый кадр) | Angle-режим выбирает колонку из facing **и позиции камеры**; в их repro камера стоит ровно над спрайтом (`x/y` совпадают), относительный yaw вырожден и равен 0 — поэтому 0 и π совпали. Это ограничение angle-выбора, а не потеря направления. Для упакованных персонажей добавлен явный `node.sprite_col` |
+| Нужен `sprite_col` как `sprite_row` | **сделано**: C читает `sprite_col` каждый кадр; при наличии — колонка берётся из него (клэмп `0..columns-1`), без mirror/flip и без LOD-прореживания направлений; `sprite_row` и `sprite_col` независимы; перерегистрация не нужна; пересобирается только клетка crop-буфера, полной перезагрузки атласа нет |
+| `sprite_row` работает | Не менялось; регрессия не задета |
+| Acceptance (col 0≠8, row 0≠4, live 10 кадров, wall occlusion) | `tests/agent/re2d_sprite_col_test.py`: изолированная нативная сцена (свой временный game/atlas), `sprite_col 0` vs `2` — разные пиксели (на старом коде **0.000%**, тест красный), в bbox красная/синяя клетка, `row 0≠1`, 10 live-смен колонки без исключений при стабильном `visibleAtlasSprites`, out-of-range колонка клэмпится. Wall-occlusion атласов уже покрыта `tests/agent/re2d_boomer_lab_test.py` (попиксельная окклюзия стеной) |
+| `packedSprite(layers)` | Не нужен: слои запекаются офлайн (их `gen_neko_atlas.py`), движок получает один атлас + `col/row`. Второй API не заводим |
+
+Ограничения: `sprite_col` — обычное свойство узла (число), не метод; выход за
+`columns` клэмпится, не бросает. `sprite_col` не участвует в LOD-прореживании
+направлений (`regionLod.sprite_directions`) — детерминизм важнее экономии на
+упакованных персонажах. Документация: `docs/highlevel/re2d.md` (раздел
+«Packed layered character»), CHANGELOG.

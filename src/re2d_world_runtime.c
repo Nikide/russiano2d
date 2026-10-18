@@ -854,6 +854,19 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
             row=(int)d;
         }
         JS_FreeValue(ctx,rv);
+        // Packed layered character: an explicit direction column overrides the
+        // camera-relative facing selection. Independent from sprite_row; lives
+        // on the node so it updates every frame without re-registration.
+        int explicit_column=0;bool has_explicit_column=false;
+        JSValue cv=JS_GetPropertyStr(ctx,actor->node,"sprite_col");
+        if(JS_IsException(cv))return false;
+        if(!JS_IsUndefined(cv)&&!JS_IsNull(cv)) {
+            double d;
+            if(JS_ToFloat64(ctx,&d,cv)<0){JS_FreeValue(ctx,cv);return false;}
+            if(!isfinite(d)||fabs(d)>1000000){JS_FreeValue(ctx,cv);JS_ThrowRangeError(ctx,"Re2D World: sprite_col must be finite");return false;}
+            explicit_column=(int)d;has_explicit_column=true;
+        }
+        JS_FreeValue(ctx,cv);
         float px_=x,py_=y,pdepth=depth;
         if(actor->offset_x!=0||actor->offset_y!=0||actor->offset_h!=0){
             const float ca=cosf(facing),sa=sinf(facing);
@@ -870,8 +883,9 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
             animate=(w->lod_tick%frames_per_pose)==0;
         }
         bool flip=false;
-        int column=r2d_world_atlas_direction(r2d_world_atlas_relative_yaw(facing,dx/dist,dy/dist),actor->directions,actor->mirror,&flip);
-        if(lod.sprite_directions>0&&lod.sprite_directions<actor->directions&&actor->directions>0){
+        int column=r2d_world_atlas_column(has_explicit_column,explicit_column,actor->columns,
+            r2d_world_atlas_relative_yaw(facing,dx/dist,dy/dist),actor->directions,actor->mirror,&flip);
+        if(!has_explicit_column&&lod.sprite_directions>0&&lod.sprite_directions<actor->directions&&actor->directions>0){
             column=(column*lod.sprite_directions)/actor->directions;
             w->gpu_sprite_dir_reduced++;
         }

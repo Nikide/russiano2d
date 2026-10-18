@@ -45,6 +45,22 @@ static void test_direction_single_and_eight(void)
     TEST_ASSERT_EQUAL_INT(1, r2d_world_atlas_direction(PI_F * 0.25f, 8, false, &flip));
 }
 
+static void test_explicit_column_overrides_facing(void)
+{
+    bool flip = true;
+    // Packed layered character: the game owns the direction column.
+    TEST_ASSERT_EQUAL_INT(7, r2d_world_atlas_column(true, 7, 16, 0.0f, 16, true, &flip));
+    TEST_ASSERT_FALSE(flip);
+    TEST_ASSERT_EQUAL_INT(7, r2d_world_atlas_column(true, 7, 16, PI_F, 16, true, &flip));
+    // Out-of-range columns clamp instead of reading outside the atlas.
+    TEST_ASSERT_EQUAL_INT(0, r2d_world_atlas_column(true, -3, 16, 0.0f, 16, false, &flip));
+    TEST_ASSERT_EQUAL_INT(15, r2d_world_atlas_column(true, 99, 16, 0.0f, 16, false, &flip));
+    TEST_ASSERT_EQUAL_INT(0, r2d_world_atlas_column(true, 9, 0, 0.0f, 16, false, &flip));
+    // Without the explicit flag the relative-yaw selection is unchanged.
+    TEST_ASSERT_EQUAL_INT(r2d_world_atlas_direction(PI_F * 0.5f, 8, false, &flip),
+                          r2d_world_atlas_column(false, 7, 16, PI_F * 0.5f, 8, false, &flip));
+}
+
 static void test_direction_mirrored_five(void)
 {
     bool flip = false;
@@ -211,6 +227,7 @@ int main(void)
     RUN_TEST(test_relative_yaw_degenerate_inputs_are_safe);
     RUN_TEST(test_direction_single_and_eight);
     RUN_TEST(test_direction_mirrored_five);
+    RUN_TEST(test_explicit_column_overrides_facing);
     RUN_TEST(test_direction_clamps_and_normalizes);
     RUN_TEST(test_cell_rect_and_clamping);
     RUN_TEST(test_pivot_modes);
