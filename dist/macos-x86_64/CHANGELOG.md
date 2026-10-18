@@ -1,5 +1,75 @@
 # История изменений
 
+> Unreleased / Re2D top-down camera (GTA2-стиль):
+> `world.camera({mode:'topdown', ...})` — удобный bird's-eye режим:
+> `projection:'orthographic'`, `pitch:-89.99°`, `near:1`, `orthoHeight:1200`
+> по умолчанию; любое поле переопределяется, `mode:'perspective'` сохраняет
+> legacy defaults. Отвесный `pitch:-90` теперь clamp'ится в ±89.99° (было ±89°),
+> поэтому камера может быть практически строго сверху без вырождения
+> проекции. Потолки из этого ракурса — крыши; открытые улицы — sky-поверхности
+> (`world.surface(i).sky(true)`); атмосферу для обзора обычно выключают.
+> Тесты: `tests/agent/re2d_topdown_camera_test.py` (topdown ≠ perspective,
+> стабильный кадр, RangeError на неверный mode/projection, возврат в
+> perspective), JS-обёртки `re2d_world_api_test.mjs` (36 проверок), native
+> `re2d_test` (проекция под отвесной камерой без NaN и pitch < 90°).
+>
+> Unreleased / portal closure surfaces: движок сам выводит закрывающую геометрию
+> плоскости портала — opening closures (как раньше) плюс solid-band closures для
+> полос между/вокруг openings, если автор их не задал. Это закрывает утечку
+> панорамы через solid-перекрытие между этажами (BASHNYA: розовые полосы неба,
+> strip-пиксели 2615 → 0 на позе отчёта). Границы полос — по floor/ceiling
+> соседних spans (min floor/max ceiling), author walls на той же плоскости
+> вычитаются; automap не дублирует портальные линии. Тест
+> `tests/re2d/portal_closure_test.c` (5 кейсов). Старые baked-карты грузятся без
+> изменений; новые полосы появляются после перекомпиляции исходника.
+>
+> Unreleased / отчёт BASHNYA 1.2.5/1.2.6 (движок 1.2.7+):
+> **MEDIUM-регрессия рендера исправлена.** Причина — неограниченный height fog
+> R-02 (`optical += density·max(0,z−base)`) насыщался почти в 1 на высокой
+> вертикальной карте, haze подтягивал насыщенный туман к серому; CPU-путь R-02
+> отсутствовал. Формула заменена ограниченной интегральной
+> `density·scale·(1−exp(−above/scale))·(1−exp(−depth·0.002))` в шейдере и в C-
+> эталоне; `fog_height_falloff` — масштабная высота в мировых единицах (0
+> отключает высотный член). Калибровка асимптот MEDIUM/HIGH/ULTRA 24/42/55 %.
+> Repro BASHNYA: доля плоско-серых пикселей GPU **31,6 % → 0,06 %**, MAD
+> CPU/GPU **24,2 → 3,8**, счётчики видимости идентичны, LOW байт-в-байт.
+> Референсы visual lab перегенерированы осознанно; bloom-пара принимает
+> локальный пик >8 при малой площади (гало — локальный эффект).
+> **`world.quality({poseBudget,poseStep})` больше не меняет визуальный tier**
+> (было `>=4 HIGH / >=2 MEDIUM / иначе LOW`). Явные контролы:
+> `world.renderQuality('low'|'medium'|'high'|'ultra')` и
+> `world.atmosphere({heightDensity,baseHeight,falloff,hazeStrength,hazeColor,skyLayers,sunDisc})`
+> — только переданные поля, возвращает применённые значения, `hazeColor:null` =
+> авто от авторского sky tint. `world.qualityPreset` остаётся полным пресетом;
+> дефолтный мир создаётся с LOW-кадром. **Миграция:** MEDIUM теперь через
+> `renderQuality('medium')`/`qualityPreset('medium')`, не через `quality({poseBudget:2})`.
+> Тесты: `tests/agent/re2d_quality_decoupling_test.py` (46 проверок), JS-обёртки
+> (35), `re2d_visual_lab_acceptance_test` зелёный.
+> **GPU-профайлер: устранён класс падения exit 139.** Удалён поток
+> `r2d_gpu_prof`; все вызовы SDL_GPU (Query/Release fence) — только на главном
+> потоке, неблокирующий опрос в submit/frame_end, shutdown отпускает оставшиеся
+> fence. GPU ms — по-прежнему CPU-наблюдение сигнала, не аппаратный timestamp.
+> Тест `tests/re2d/r2d_profile_fence_test.c` (7 кейсов); 2400 кадров BASHNYA
+> level1 с профайлером — exit 0, `gpu_ms >= 0`; 60 с окна — exit 0.
+> **Impostor LOD:** карточки дальней геометрии больше не выдаются внутри
+> near-band (`r2d_world_region_impostor_min_distance`; 0 — только явным
+> `regionLod(0,...)`). level1: default near=600 → 33 карточки, ближайшая 743;
+> старый режим — 36, из них 3 внутри полосы. Тест
+> `tests/re2d/impostor_lod_policy_test.c`.
+> **Видимость ровно на плоскости портала:** камера в пределах 1e-4 от линии
+> портала получает полное окно вместо вырожденной апертуры
+> (`visibleCells` 1 → 319/402/1401 на позе отчёта); регрессионный тест
+> `test_camera_on_portal_plane_keeps_visibility` (на старом коде FAIL).
+> Issue #2 отчёта (draw calls) измерен и задокументирован без спекулятивных
+> оптимизаций: `gpuDraws` 10 315 — логическая атрибуция, реальных батч-групп 8,
+> CPU p50 9,7 мс; `docs/RE2D_WORLD_PERF.md`. Guardian pop-in объяснён как
+> прогрев residency на старте сцены, не дефект рендера. Пункты 1/3/4/7 отчёта
+> (save 4097 spans, `R2D_SCENE_ENTER`, SDK PVS 0,2 с, WAV 1,0 с) перепроверены
+> на 1.2.7. Розовые полосы неба — проверенный авторский пропуск (solid-щель
+> между проёмами порталов, стен ноль), не ошибка видимости; рекомендация
+> будущей задаче — portal-closure поверхности. Решения по всем пунктам:
+> `docs/EXTERNAL_FEEDBACK.md`.
+>
 > Unreleased / VN narrative: dialog logic/view/theme split, semantic RML roles,
 > speaker registry + expressions + portrait slots, theme stack/hot reload,
 > input lock tokens, narrative IR/story adapter, backend/save/backlog/voice,
@@ -15,6 +85,38 @@
 > listeners continue to work.
 
 
+## 1.2.8 — 2026-10-18
+
+<!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
+
+3 коммита в релизе.
+
+### Исправления
+
+- Re2D: закрыты P1/P2 отчёта BASHNYA (MEDIUM, профайлер, качество, LOD, граница портала) (`b827300b7`)
+  MEDIUM: неограниченный height fog R-02 насыщался на высокой карте и заливал
+  материалы серым. Формула заменена ограниченной интегральной в шейдере и C-
+  эталоне (falloff = масштабная высота), калибровка MEDIUM/HIGH/ULTRA 24/42/55%.
+  Repro BASHNYA: плоско-серые пиксели GPU 31,6% -> 0,06%, MAD CPU/GPU 24,2 -> 3,8,
+  видимость идентична, LOW без изменений. Референсы visual lab перегенерированы;
+  bloom-пара принимает локальный пик >8 (гало локально), остальные фичи >=0,1%.
+  world.quality() теперь только бюджет поз; явные world.renderQuality() и
+  world.atmosphere(); qualityPreset - полный пресет; дефолт LOW. Тесты 46+35.
+  Профайлер: удалён поток r2d_gpu_prof, все SDL_GPU fence-вызовы на главном
+  потоке (класс падения exit 139); 7 native-кейсов, 2400 кадров BASHNYA и 60 с
+  окна с профайлером без падения.
+  LOD: impostor-карточки не выдаются внутри near-band (level1: 33 карточки,
+  …
+
+### Документация
+
+- Re2D: top-down камера (GTA2-стиль) — явный mode:'topdown' (`174a36e3c`)
+
+### Тесты и гейты
+
+- Re2D: portal closure для solid-полос между openings (розовые полосы неба) (`99cde262c`)
+
+<!-- release-notes:end -->
 ## 1.2.7 — 2026-10-18
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->

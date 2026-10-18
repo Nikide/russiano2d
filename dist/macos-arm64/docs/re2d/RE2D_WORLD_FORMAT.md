@@ -104,7 +104,7 @@ Root lighting: mode classic, enabled/dynamic/shadows/orientationContrast bool, d
 
 ## Canonical surfaces
 
-Native canonical sequence: сначала wall surfaces (включая derived portal closure walls), затем по две surfaces каждого global span — floor и ceiling. `surface.kind` 0/1/2; slope не меняет type. Wall surfaces могут иметь cell/span=-1, plane surfaces имеют owner. API surface(index) — snapshot metadata плюс material/sky setters.
+Native canonical sequence: сначала wall surfaces (включая derived portal closure walls: opening closures и solid-band closures плоскостей порталов), затем по две surfaces каждого global span — floor и ceiling. `surface.kind` 0/1/2; slope не меняет type. Wall surfaces могут иметь cell/span=-1, plane surfaces имеют owner. API surface(index) — snapshot metadata плюс material/sky setters.
 
 `info().walls + 2*spanId` — floor ID текущего build, следующий — ceiling. Это полезно для setup после load; не считается стабильным ID между compiler outputs. Materials/sky/decal assignments задаются через public world API. Строковый material bank не дублирует геометрию. World Studio previewMaterial — authoring preview configuration, не universal baked material serialization.
 

@@ -56,16 +56,29 @@ $.render(() => world.render(view,400,240));
 | `world.controller(opts)` | нативный helper движения (sweep/slide/step/slope/jump) |
 | `world.mover(opts)` | нативный fixed-tick timeline двери/лифта/крашера/платформы |
 | `world.trigger(opts)` + `world.triggerTick/Use/Shoot` | семантические триггеры; события идут в `$.on/$.emit` |
-| `.camera(view={})` | заменяет конфигурацию камеры; пропущенные поля получают defaults |
+| `.camera(view={})` | заменяет конфигурацию камеры; пропущенные поля получают defaults; `mode:'perspective'` (default) или `mode:'topdown'` |
 | `.render(view=null,width=320,height=180)` | синтезирует и рисует обычный sprite на всё окно; возвращает sprite ID |
 | `.renderToSprite(view=null,width=320,height=180)` | синтезирует без fullscreen draw; возвращает sprite ID для previews |
 | `.backend('cpu'\|'gpu')` | выбор native reference или SDL_GPU; wrapper default CPU |
-| `.quality({poseBudget,poseStep})` | частично обновляет policy; defaults 1 pose/frame, 3°; 0 budget = unlimited |
+| `.quality({poseBudget,poseStep})` | меняет только политику поз; defaults 1 pose/frame, 3°; 0 budget = unlimited; **визуальный tier не трогает** |
+| `.renderQuality('low'\|'medium'\|'high'\|'ultra')` | явно выбирает визуальный tier (preset рендер-фич); без аргумента возвращает текущий (`'low'`…) |
+| `.atmosphere({...})` | атмосфера поверх tier: меняет только переданные поля, возвращает применённые значения; без аргумента — текущие |
 | `.profile({gpuWait:false})` | completion wait для измерения; true включает ожидание fence |
 | `.info()` | native snapshot counts/timings; точные поля в [runtime](../re2d/RE2D_WORLD_RUNTIME.md) |
 | `.dispose()` | освобождает мир/его registry/frame/GPU resources; повторный вызов безопасен; не удаляет игровые узлы |
 
 Frame dimensions — целые 1..1024. View: x/y=0, h=48 (eye — alias), yaw/pitch=0, fov=70°, near=4; projection perspective. Для orthographic: `projection:'orthographic',orthoHeight:400`. `render(null)` использует сохранённую camera. Здесь второй аргумент render — width, **не массив спрайтов**.
+
+Top-down (GTA2-стиль): `world.camera({mode:'topdown', x, y, h, yaw, orthoHeight})`.
+Режим сам выставляет `projection:'orthographic'`, `pitch:-89.99°`, `near:1`
+(любое поле можно переопределить, а `pitch`/`projection` — вернуть к
+perspective/наклону). Потолки из этого ракурса рисуются как крыши; если нужны
+улицы, пометьте потолки открытых span'ов sky-поверхностями
+(`world.surface(i).sky(true)`) — они перестанут закрывать вид. Для обзора сверху
+обычно отключают атмосферу: `world.atmosphere({heightDensity:0,hazeStrength:0})`.
+Спрайты остаются камера-ориентированными billboard'ами: top-down арт персонажей —
+сторона игры, движок не подменяет их проекцию. Отвесный взгляд (±90°) clamp'ится
+в ±89.99°, чтобы математика оставалась невырожденной.
 
 ## Игровые запросы
 
@@ -304,8 +317,9 @@ const lines = world.automapLines(states);   // [{x1,y1,x2,y2,state,kind,index}]
 world.automapProject({cx,cy,scale,rotation}, x, y);  // {x,y}
 ```
 
-Линии стен и порталов в детерминированном порядке; derived door-closure walls
-не дублируются (дверь — одна PORTAL-линия). `states` — плоская таблица по
+Линии стен и порталов в детерминированном порядке; сгенерированные portal closure
+walls (opening closures и solid-band closures) не дублируются (грань портала —
+одна PORTAL-линия). `states` — плоская таблица по
 primitive (стены, затем порталы); отрисовка остаётся за игрой. Только XY,
 никакого 3D-minimap.
 
@@ -329,14 +343,49 @@ GPU). Нет коллизий, trails и VFX bundles в этом проходе.
 ## Renderer visual features (R-01/R-02)
 
 ```js
-world.qualityPreset('high'); // visual tier: low | medium | high
+world.renderQuality('high'); // visual tier: low | medium | high | ultra
 // low = legacy + P0 contact grounding; medium = grounding + variation,
 //       height fog/haze, sky layers, liquid; high = + edge/bevel/corner AO.
+
+// Pose policy is independent from the visual tier (BASHNYA 1.2.6): a bigger
+// pose budget used to force HIGH and change the whole frame.
+world.quality({ poseBudget: 4, poseStep: 3 }); // pose only, tier stays as-is
+
+// Atmosphere is additive: only the provided fields change, applied values are
+// returned. hazeColor:null restores the automatic tint from the authored sky.
+world.atmosphere({ heightDensity: 0.02, baseHeight: 100, falloff: 2,
+                   hazeStrength: 0.12, hazeColor: '#102030',
+                   skyLayers: false, sunDisc: false });
+
+// qualityPreset stays the full preset path: pose budget + visual tier + particles.
+world.qualityPreset('high');
+
 const v = world.info().visual;
 // {quality, contactShadows, footAo, floorTint, edgeActors,
 //  variedSurfaces, bevelSurfaces, cornerAoSurfaces, fogSurfaces,
 //  hazeSurfaces, liquidSurfaces, skyLayers, celestialDiscs, ...}
 ```
+
+`world.renderQuality` runs `r2d_world_render_quality(world,
+R2D_RENDER_QUALITY_*)`, so it is a preset: it resets atmosphere overrides to
+the tier defaults — apply `world.atmosphere` after choosing a tier. Default
+worlds are created with the LOW tier, so the legacy low frame is unchanged.
+
+**Migration note (1.2.7).** `world.quality({poseBudget, poseStep})` no longer
+changes the visual tier (it used to be `poseBudget>=4` → HIGH, `2..3` → MEDIUM,
+otherwise LOW). Use `world.renderQuality(name)` for the tier and
+`world.qualityPreset(name)` for the full preset. Defaults still create the LOW
+frame. A game that used to get MEDIUM from `quality({poseBudget:2})` must now
+call `renderQuality('medium')` (or `qualityPreset('medium')`), otherwise this
+is a silent visual change.
+
+
+`world.atmosphere` applies only the provided fields through
+`r2d_world_render_set_features` and never changes the tier. Fields:
+`heightDensity` 0..1, `baseHeight` -100000..100000, `falloff` 0..100,
+`hazeStrength` 0..1, `hazeColor` (`'#rrggbb'` or packed RGBA number, `null` =
+auto), `skyLayers`/`sunDisc` booleans. Wrong type throws `TypeError`,
+out-of-range throws `RangeError`; unknown options are rejected, not ignored.
 
 Native GPU pass: contact shadow/foot AO/local floor tint under Re2D actors,
 sprite alpha feather/outline/grime, deterministic surface variation, fake bevel

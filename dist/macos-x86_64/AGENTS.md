@@ -1,4 +1,4 @@
-# Russiano2D 1.2.7 — macOS Intel: инструкция для ИИ-агента
+# Russiano2D 1.2.8 — macOS Intel: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"1.2.7","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"1.2.8","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -13197,6 +13197,29 @@ bottom/top, average floor tint, cell/span counts. Collection is
 nearest-first and skips the current region, PVS-invisible regions, occluded
 regions and cards beyond `max_distance`.
 
+### Near-band gate (BASHNYA 1.2.6 fix)
+
+A card must never be emitted inside the region-LOD near band: that region is
+still drawn by the local renderer, and a coarse card on top of it produces the
+duplicate/torn silhouette the reporter saw on a small map with default 512-unit
+regions. The runtime derives the collector's `min_distance` from the policy with
+`r2d_world_region_impostor_min_distance(config)`:
+
+* `near_distance > 0` -> cards are rejected closer than the near band
+  (default 600; BASHNYA `regionLod(8000, ...)` rejects everything within 8000);
+* `near_distance == 0` -> no near gate, only reachable by an explicit
+  `world.regionLod(0, ...)` or a native config with `near_distance = 0`;
+* `max_distance` still follows `hidden_distance` (default 6000), so the card
+  range is `[near, hidden]`.
+
+The gate keeps cards out of the band where the local renderer draws the region
+at full detail; beyond the band they remain the intended additive distant
+stand-ins. `world.regionConfig(8192,1,2)` collapses a
+small map to one region, so the existing current-region skip alone already
+yields zero cards; that is a configuration outcome, not the fix. Native coverage:
+`tests/re2d/impostor_lod_policy_test.c` (gate follows the near band; cards inside
+the band suppressed, cards beyond it kept, ungated collect = old 1.2.6 output).
+
 Renderer-facing API:
 
 * native: `r2d_world_visible_impostors(runtime, &count)` and the
@@ -13466,30 +13489,53 @@ References live in `tests/agent/reference/`:
 
 ## Quality tiers
 
-
-The existing high-level quality call drives the visual tier; no new JS wrapper
-is required:
+The visual tier, the pose budget and the atmosphere are independent controls:
 
 ```js
-world.qualityPreset('low');    // legacy look + P0 contact grounding
-world.qualityPreset('medium'); // + foot AO, floor tint, contact light,
-                               //   material variation/macro, height fog/haze,
-                               //   sky layers, liquid shading
-world.qualityPreset('high');   // + edge outline/grime/feather, bevel,
-                               //   corner AO-lite, 4 sky layers, full VFX look
+world.renderQuality('low');                // visual tier: low | medium | high | ultra
+world.quality({poseBudget:2, poseStep:5}); // pose policy only, never the tier
+world.atmosphere({heightDensity:0.004, baseHeight:64, falloff:60,
+                  hazeStrength:0.12, hazeColor:'#102030',
+                  skyLayers:false, sunDisc:false}); // only provided fields change
+world.qualityPreset('high');               // full preset: pose + tier + particles
 ```
 
-`world.quality({poseBudget, poseStep})` also updates the tier:
-`poseBudget<=1` → low, `2..3` → medium, `>=4` → high. The C API
-`r2d_world_render_quality(world, R2D_RENDER_QUALITY_*)` and
+`world.renderQuality(name)` runs `r2d_world_render_quality(world, R2D_RENDER_QUALITY_*)`;
+no argument returns the current tier. Being a preset it resets atmosphere
+overrides to the tier defaults, so call `world.atmosphere` after picking a tier.
+
+`world.quality({poseBudget, poseStep})` changes only the pose policy (BASHNYA
+1.2.6: `poseBudget:4` used to force HIGH and change the whole frame).
+`world.qualityPreset` keeps the full-preset behavior (pose budget + visual tier
++ particle budget). Default worlds create with LOW, preserving the legacy low
+frame.
+
+`world.atmosphere({...})` applies only the provided fields through
+`r2d_world_render_set_features`, returns the applied values and never changes
+the tier. Height fog/haze: `heightDensity` 0..1 (asymptote is
+`heightDensity*falloff`), `baseHeight` -100000..100000, `falloff` 0..100 — the
+height-fog **scale height in world units** (`0` disables the height term; this
+replaced the old dimensionless multiplier in 1.2.7, so old
+`atmosphere({falloff:...})` values must be re-read as world units),
+`hazeStrength` 0..1. `hazeColor` is an explicit linear RGB override
+(`'#rrggbb'` or packed RGBA number); `hazeColor:null` restores the automatic
+tint derived from the authored sky colour (legacy frames unchanged).
+`skyLayers`/`sunDisc` booleans toggle the sky features. Wrong type throws
+TypeError, out-of-range throws RangeError; unknown options are rejected.
+
+The C API `r2d_world_render_quality(world, R2D_RENDER_QUALITY_*)` and
 `r2d_world_render_set_features(world, &features)` are available to native hosts;
 `r2d_world_render_features(world)` returns the current immutable view.
 `r2d_world_render_defaults/preset/validate` are the single contract used by
 tests.
 
 Low quality is the parity-safe default: every R-01/R-02 visual uniform is zero
-except grounding, so the legacy frame is unchanged. Medium/high are GPU
-reference features; mixed CPU/GPU parity for them is not claimed (see Limits).
+except grounding, so the legacy frame is unchanged. The R-02 atmosphere term
+(bounded height fog + haze) is implemented in both the GPU shader and the CPU
+composer (`r2d_world_frame_targets_features`), so MEDIUM/HIGH CPU frames carry
+the same fog/haze as the GPU tier. The remaining R-01/R-02 surface features
+(material/macro variation, bevel/corner AO, detail, liquid, sky layers) are
+GPU-reference; mixed CPU/GPU parity for them is not claimed (see Limits).
 
 ## R-01 sprite grounding
 
@@ -13499,8 +13545,14 @@ reference features; mixed CPU/GPU parity for them is not claimed (see Limits).
 * Foot AO — a smaller radial core inside the contact card.
 * Local floor tint — the card colour is mixed from the support span's floor
   colour and ambient/light tint.
-* Height fog — per-fragment optical depth uses the span fog plus a height term
-  above `fog_base_height`, so high rooms/far floors lose contrast.
+* Height fog — per-fragment optical depth adds a bounded, distance-gated height
+  integral above `fog_base_height`:
+  `heightDensity*falloff*(1-exp(-max(0,height-base)/falloff))*(1-exp(-depth*0.002))`.
+  The contribution approaches the finite asymptote `heightDensity*falloff`
+  (MEDIUM 24%, HIGH 42%, ULTRA 55%), so tall vertical maps keep authored
+  material contrast while extreme height/distance still lose it (`falloff` is
+  the scale height in world units; 0 disables the height term). Shared by the
+  GPU shader and the CPU composer.
 * Contact lighting — the sprite shader darkens the lower part of the actor by
   `contactLightStrength`, tying the feet to the floor.
 
@@ -13524,8 +13576,11 @@ and does not generate a shadow map.
 
 ## R-02 atmosphere and sky
 
-* Height fog + atmospheric haze: distance fog is mixed with sky tint, contrast
-  and saturation fall with depth. Legacy branch is byte-identical when off.
+* Height fog + atmospheric haze: the authored span distance fog is mixed with
+  the bounded, distance-gated height term (see R-01 grounding), the fog colour
+  is blended toward the haze tint, and contrast/saturation fall with depth.
+  Implemented identically in `shaders/world.frag.glsl` and the CPU composer;
+  the legacy branch is byte-identical when both are off.
 * Sky layers: panorama (existing) + up to four parallax cards sampled from the
   panorama with per-layer parallax/scale/vertical offset/alpha, plus a
   procedural sun/moon disc with glow. Layer data is configured in
@@ -13577,8 +13632,11 @@ python3 tests/agent/re2d_world_renderer_test.py          # existing regression
 
 ## Limitations (honest)
 
-* Advanced R-01/R-02 effects are GPU-reference. The CPU composer keeps the
-  legacy material/lighting/fog path; only grounding is shared by both backends.
+* Advanced R-01/R-02 effects are GPU-reference, except the R-02 atmosphere term
+  (bounded height fog + haze), which the CPU composer also applies through
+  `r2d_world_frame_targets_features` so MEDIUM/HIGH CPU frames carry the same
+  fog/haze. Material/macro variation, bevel/corner AO, detail, liquid shading
+  and sky layers stay GPU-only; the CPU composer is not a second renderer.
 * No per-pixel floor occlusion for the contact card (screen-space grounding).
 * Sky parallax cards reuse the single panorama texture; separate layer textures,
   weather layers and per-room sky profiles are not authored yet.
@@ -13589,8 +13647,11 @@ python3 tests/agent/re2d_world_renderer_test.py          # existing regression
   material bank; no new decal rotation/size authoring was added in this pass.
 * Liquid shading uses terrain metadata on existing floor surfaces; no fluid
   simulation, reflection engine or planar 3D reflection.
-* CPU/GPU parity for medium/high tiers is not claimed; default low is
-  parity-safe and is what existing regression comparisons use.
+* CPU/GPU parity for medium/high tiers is not pixel-exact: the atmosphere term
+  matches, but the GPU-only R-01/R-02 surface effects above legitimately differ.
+  Default low is parity-safe and is what existing regression comparisons use;
+  the BASHNYA MEDIUM parity repro (walls/floors at the same visibility) reports
+  MAD ~4/255 with the atmosphere term matched.
 
 ## P4/P5 renderer remainder (task-7)
 
@@ -14400,6 +14461,59 @@ function moveWalker(world, walker, dx, dy) {
 
 `reloadJSON(text)`/`reload(path)` и `watch(path)` сохраняют прежний world при invalid edit. После успеха проверьте новые index domains и перенастройте индексные surfaces/spans, если topology изменилась. Ссылки на узлы со спрайтами, handles динамического света и material bank сохраняются согласно [runtime lifecycle](re2d/RE2D_WORLD_RUNTIME.md#перезагрузка-и-жизненный-цикл).
 
+## Portal closure surfaces (генерируются движком)
+
+Автор задаёт только проёмы (`openings`) и стены; недостающую закрывающую
+геометрию плоскостей порталов движок выводит сам при сборке топологии:
+
+* **Opening closure** — по specialized wall на каждый author opening. Её
+  открытая часть вырезается в рендере и в трассировке (`r2d_world_wall_solid`),
+  поэтому дверь и дробное `open_fraction` работают как раньше.
+* **Solid-band closure** — обычная wall на каждую solid-полосу плоскости
+  портала между/вокруг openings. Пример: два free span в одном cell
+  (`-896..-48` и `0..2560`) соединены с соседом двумя openings; slab
+  `-48..0` теперь закрыт, панорама через него не просвечивает (BASHNYA 1.2.6
+  «розовые полосы неба»). Полоса непроходима и блокирует лучи.
+* Границы solid-полосы берутся по floor/ceiling обоих соседних spans
+  консервативно (`min floor`/`max ceiling`), сэмплируя оба конца портала; на
+  существующие author walls на той же плоскости вычитаются, поэтому coplanar
+  дублей не появляется.
+* `world.info().walls`/`surfaces` включают сгенерированные стены; `world.surface(i)`
+  отдаёт их как обычные. Automap их не рисует отдельными линиями: грань портала
+  уже представлена PORTAL-линией.
+* Baked/compiled карты несут эти стены в своей таблице walls, поэтому
+  `world.load` и `r2d-sdk world-compile --renderer` дают одну и ту же геометрию.
+  Старые baked-карты загружаются как есть (без новых полос) — перекомпилируйте
+  исходник, если нужна закрытая slab-полоса.
+
+## Вид сверху (GTA2-стиль)
+
+Re2D — 2.5D-рендерер, но камера не обязана быть от первого лица. Для обзора
+сверху:
+
+```js
+world.camera({
+    mode: 'topdown',        // orthographic + pitch -89.99° + near 1
+    x: player.x, y: player.y,
+    h: 900,                  // выше крыш (поверх ceiling своего span)
+    yaw: 0,                  // поворот карты на экране
+    orthoHeight: 1400,       // сколько мира по вертикали в кадре
+});
+// Обычно для читаемости сверху:
+world.atmosphere({ heightDensity: 0, hazeStrength: 0 });
+```
+
+* Потолки span'ов из этого ракурса рисуются как **крыши**. Если нужен вид на
+  улицу внутри открытого span, пометьте его ceiling-поверхность как sky:
+  `world.surface(i).sky(true)` — такая поверхность не отправляется в draw.
+* Геометрия, видимость, portal traversal, свет и коллизии не меняются:
+  камера по-прежнему задаётся XY + eye, а visibility идёт от XY-клетки камеры.
+* Спрайты — billboard'ы, всегда лицом к камере; для GTA2-стиля рисуйте
+  top-down кадры (или используйте обычный арт, если стилизация устраивает).
+* Отвесный запрос `pitch:-90` зажимается в -89.99° — экран не вырождается.
+* Игровой контроллер/следование камеры — на стороне игры: движок не двигает
+  камеру за игроком, `world.camera()` просто принимает view.
+
 ## Отладка и типичные ошибки
 
 | Симптом | Проверить |
@@ -14693,6 +14807,121 @@ python3 tests/agent/re2d_world_renderer_test.py   # CPU/GPU parity
 
 Fallback: `world.batchGpu(false)`; overdraw and non-final debug views always use
 the per-surface path so debug attribution stays inspectable.
+
+## BASHNYA issue #2 re-measure (1.2.7, 2026-10-18, task-3)
+
+Workload: external BASHNYA `level1` through the read-only mirror
+(`/tmp/bashnya-engine`, no game/engine source edits), agent-driven, world frame
+960x540, GPU-reference backend, fixed start camera unless stated. Numbers from
+the shared working tree, one machine (Apple arm64/Metal), medians unless noted;
+they are directional, not a tag baseline and not a cross-machine threshold.
+The world tier was set explicitly (`world.renderQuality('high')`); since 1.2.7
+`world.quality({poseBudget})` no longer selects the visual tier.
+
+### Draw attribution and CPU stages
+
+| metric | value |
+|---|---:|
+| visible cells / spans / surfaces | 314 / 653 / 2192 |
+| regions / cells allowed | 37 / 463 |
+| `gpuDraws` (logical) | 10315 = 1527 base + 8471 span + 177 actor + 103 other + 37 ground |
+| actual batched GPU groups | 8 |
+| `staticBatchInstances` / `staticBatchSavedBinds` | 2192 / 2184 |
+| CPU `frameMs` p50 (60 frames, no gpuWait) | 9.7 ms |
+| `visibilityMs` p50 | 6.3 ms |
+| `surfaceMs` p50 (submit/record wall) | 3.3 ms |
+| `lightCullMs` / `actorMs` p50 | 0.17 / 0.03 ms |
+| lights after cull / shadowed | 6 / 2 |
+| reporter 1.2.6 comparison | 10987 draws / 12.4 ms frameMs p50 |
+
+`gpuDraws*` is a **logical attribution** counter, not the number of GPU
+submissions: 2192 logical surface draws are coalesced into 8 instanced groups by
+the static batch plan (`batchGpu(false)` raises material binds 29 -> 992 with no
+frameMs gain). Camera motion confirms the cost tracks visible surfaces, not map
+size: open view `yaw -60` = 16.3 ms / 10312 logical draws; closed view `yaw 120`
+= 0.44 ms / 58.
+
+### Real GPU fence wait is separate
+
+With `world.profile({gpuWait:true})` the same frame reports
+`gpuCompletionWaitMs` ~109-115 ms at **low, medium and high** tier (CPU
+`frameMs` stays ~9-10 ms). The reporter's 12.4 ms `frameMs` is CPU wall time and
+must not be read as GPU time or FPS. The cause is **not proven**; a real GPU
+timestamp method is required before calling it a GPU cost or an engine defect.
+Control: the same `world.profile({gpuWait:true})` method on the small renderer
+lab (`tools/bench_re2d_world_renderer.py --backend gpu --frames 20`, 400x240)
+gives frame medians A 2.12 / B 5.37 / C 3.23 ms (166 / 486 / 167 visible
+surfaces). The fence wait is therefore workload-specific (2192 surfaces at
+960x540), not a constant harness/headless overhead, but its exact cost split
+remains unproven.
+
+### Safe reductions investigated
+
+* fully-open portal-closure surfaces: 0 exposed as separate removable surfaces
+  through `world.surface()`; closure geometry goes through the normal
+  wall-solidity test, so there is no safe "skip open closure" filter to add.
+  Since the 2026-10-18 solid-band closure fix a portal plane also carries
+  generated walls for the solid bands between openings (BASHNYA level1:
+  1880 -> 2071 walls, 958 -> 1057 visible surfaces at the material-parity
+  camera); those are real solid geometry, not removable overhead;
+* redundant selected surfaces: the 2192 logical surfaces are already batched
+  into 8 groups; reducing the logical count would not reduce submissions;
+* light x surface passes: only 6 lights survive culling (2 shadowed) and
+  `lightCullMs` is 0.17 ms;
+* batching: already active; turning it off does not improve frame time.
+
+No draw-call reduction was shipped: none was measured to be both safe and
+beneficial. The remaining CPU cost is the local portal-walk/visibility stage, and
+the GPU fence wait needs a timestamp-based profile before any change is claimed
+as a GPU speedup.
+
+## Impostor near-band gate (BASHNYA 1.2.6, 2026-10-18, task-3)
+
+The runtime used to pass `min_distance = 0` to `r2d_world_impostors_collect()`
+regardless of the region-LOD near band, so a region already drawn by the local
+renderer also emitted a coarse silhouette card. The runtime now derives the
+collector gate from the policy
+(`r2d_world_region_impostor_min_distance()`): the configured near distance when
+positive, `0` only for an explicit `near_distance = 0` request.
+
+Measured on BASHNYA `level1` (37 regions, 960x540, HIGH tier):
+
+| LOD request | regions | visible impostor cards | nearest card |
+|---|---:|---:|---:|
+| default (`near = 600`) | 37 | 33 | d = 743 |
+| explicit `regionLod(0, ...)` (old 1.2.6 behaviour) | 37 | 36 (3 inside the band) | d = 345 |
+| `regionLod(8000, ...)` | 37 | 0 | - |
+| `near = 8000` + `regionConfig(8192,1,2)` | 1 | 0 (no distant region) | - |
+
+Acceptance: no card is emitted inside the near band, cards beyond it stay
+visible, and an explicit near band of 0 reproduces the old ungated list. Native
+coverage: `tests/re2d/impostor_lod_policy_test.c` (2 Unity tests, ctest target
+`r2d_world_impostor_lod_policy_test`).
+
+## Guardian atlas pop-in (BASHNYA correction, 1.2.7, task-3)
+
+The reporter's corrected repro (early GPU frame after a test teleport omits the
+Guardian, 45 warm frames show it) was re-run and explained without a renderer
+defect:
+
+* BASHNYA `level2` calls `regionConfig(8192,1,2)`, so the whole level is **one**
+  region (`regionCount = 1`, `regionCellsAllowed = 343`); region streaming cannot
+  be the cause.
+* the runtime registers **157 atlas stream items**; promotion is budgeted to 16
+  items/frame. At the repro's early frame (~frame 6 of scene lifetime) only
+  **84/157** atlases are resident; `atlasesResident` reaches 157 by ~frame 15.
+* warmed start (30 frames) then the same teleport: `gpuDrawsActor = 29` on
+  **frame 1** (Guardian present).
+* gradual approach 672 -> 1472 over 160 frames: `atlasesResident = 157` from
+  step 0 and `gpuDrawsActor = 29` throughout; at spawn the steady 55 visible
+  sprites settle from 153 to 277 actor draws while the item promotion ramp runs.
+
+Conclusion: the early-frame pop-in is the scene-start residency ramp (bounded by
+the 16-items/frame promotion budget), not a teleport-only or GPU-only failure.
+A normal walk-in cannot reach the Guardian arena before its atlas is resident.
+No engine fix was shipped and no player-facing blocker is claimed; if the
+startup ramp ever needs to be shorter, the safe direction is demand-prioritising
+visible atlases, which needs its own evidence and budget design.
 
 
 ---
@@ -30512,16 +30741,29 @@ $.render(() => world.render(view,400,240));
 | `world.controller(opts)` | нативный helper движения (sweep/slide/step/slope/jump) |
 | `world.mover(opts)` | нативный fixed-tick timeline двери/лифта/крашера/платформы |
 | `world.trigger(opts)` + `world.triggerTick/Use/Shoot` | семантические триггеры; события идут в `$.on/$.emit` |
-| `.camera(view={})` | заменяет конфигурацию камеры; пропущенные поля получают defaults |
+| `.camera(view={})` | заменяет конфигурацию камеры; пропущенные поля получают defaults; `mode:'perspective'` (default) или `mode:'topdown'` |
 | `.render(view=null,width=320,height=180)` | синтезирует и рисует обычный sprite на всё окно; возвращает sprite ID |
 | `.renderToSprite(view=null,width=320,height=180)` | синтезирует без fullscreen draw; возвращает sprite ID для previews |
 | `.backend('cpu'\|'gpu')` | выбор native reference или SDL_GPU; wrapper default CPU |
-| `.quality({poseBudget,poseStep})` | частично обновляет policy; defaults 1 pose/frame, 3°; 0 budget = unlimited |
+| `.quality({poseBudget,poseStep})` | меняет только политику поз; defaults 1 pose/frame, 3°; 0 budget = unlimited; **визуальный tier не трогает** |
+| `.renderQuality('low'\|'medium'\|'high'\|'ultra')` | явно выбирает визуальный tier (preset рендер-фич); без аргумента возвращает текущий (`'low'`…) |
+| `.atmosphere({...})` | атмосфера поверх tier: меняет только переданные поля, возвращает применённые значения; без аргумента — текущие |
 | `.profile({gpuWait:false})` | completion wait для измерения; true включает ожидание fence |
 | `.info()` | native snapshot counts/timings; точные поля в [runtime](../re2d/RE2D_WORLD_RUNTIME.md) |
 | `.dispose()` | освобождает мир/его registry/frame/GPU resources; повторный вызов безопасен; не удаляет игровые узлы |
 
 Frame dimensions — целые 1..1024. View: x/y=0, h=48 (eye — alias), yaw/pitch=0, fov=70°, near=4; projection perspective. Для orthographic: `projection:'orthographic',orthoHeight:400`. `render(null)` использует сохранённую camera. Здесь второй аргумент render — width, **не массив спрайтов**.
+
+Top-down (GTA2-стиль): `world.camera({mode:'topdown', x, y, h, yaw, orthoHeight})`.
+Режим сам выставляет `projection:'orthographic'`, `pitch:-89.99°`, `near:1`
+(любое поле можно переопределить, а `pitch`/`projection` — вернуть к
+perspective/наклону). Потолки из этого ракурса рисуются как крыши; если нужны
+улицы, пометьте потолки открытых span'ов sky-поверхностями
+(`world.surface(i).sky(true)`) — они перестанут закрывать вид. Для обзора сверху
+обычно отключают атмосферу: `world.atmosphere({heightDensity:0,hazeStrength:0})`.
+Спрайты остаются камера-ориентированными billboard'ами: top-down арт персонажей —
+сторона игры, движок не подменяет их проекцию. Отвесный взгляд (±90°) clamp'ится
+в ±89.99°, чтобы математика оставалась невырожденной.
 
 ## Игровые запросы
 
@@ -30760,8 +31002,9 @@ const lines = world.automapLines(states);   // [{x1,y1,x2,y2,state,kind,index}]
 world.automapProject({cx,cy,scale,rotation}, x, y);  // {x,y}
 ```
 
-Линии стен и порталов в детерминированном порядке; derived door-closure walls
-не дублируются (дверь — одна PORTAL-линия). `states` — плоская таблица по
+Линии стен и порталов в детерминированном порядке; сгенерированные portal closure
+walls (opening closures и solid-band closures) не дублируются (грань портала —
+одна PORTAL-линия). `states` — плоская таблица по
 primitive (стены, затем порталы); отрисовка остаётся за игрой. Только XY,
 никакого 3D-minimap.
 
@@ -30785,14 +31028,49 @@ GPU). Нет коллизий, trails и VFX bundles в этом проходе.
 ## Renderer visual features (R-01/R-02)
 
 ```js
-world.qualityPreset('high'); // visual tier: low | medium | high
+world.renderQuality('high'); // visual tier: low | medium | high | ultra
 // low = legacy + P0 contact grounding; medium = grounding + variation,
 //       height fog/haze, sky layers, liquid; high = + edge/bevel/corner AO.
+
+// Pose policy is independent from the visual tier (BASHNYA 1.2.6): a bigger
+// pose budget used to force HIGH and change the whole frame.
+world.quality({ poseBudget: 4, poseStep: 3 }); // pose only, tier stays as-is
+
+// Atmosphere is additive: only the provided fields change, applied values are
+// returned. hazeColor:null restores the automatic tint from the authored sky.
+world.atmosphere({ heightDensity: 0.02, baseHeight: 100, falloff: 2,
+                   hazeStrength: 0.12, hazeColor: '#102030',
+                   skyLayers: false, sunDisc: false });
+
+// qualityPreset stays the full preset path: pose budget + visual tier + particles.
+world.qualityPreset('high');
+
 const v = world.info().visual;
 // {quality, contactShadows, footAo, floorTint, edgeActors,
 //  variedSurfaces, bevelSurfaces, cornerAoSurfaces, fogSurfaces,
 //  hazeSurfaces, liquidSurfaces, skyLayers, celestialDiscs, ...}
 ```
+
+`world.renderQuality` runs `r2d_world_render_quality(world,
+R2D_RENDER_QUALITY_*)`, so it is a preset: it resets atmosphere overrides to
+the tier defaults — apply `world.atmosphere` after choosing a tier. Default
+worlds are created with the LOW tier, so the legacy low frame is unchanged.
+
+**Migration note (1.2.7).** `world.quality({poseBudget, poseStep})` no longer
+changes the visual tier (it used to be `poseBudget>=4` → HIGH, `2..3` → MEDIUM,
+otherwise LOW). Use `world.renderQuality(name)` for the tier and
+`world.qualityPreset(name)` for the full preset. Defaults still create the LOW
+frame. A game that used to get MEDIUM from `quality({poseBudget:2})` must now
+call `renderQuality('medium')` (or `qualityPreset('medium')`), otherwise this
+is a silent visual change.
+
+
+`world.atmosphere` applies only the provided fields through
+`r2d_world_render_set_features` and never changes the tier. Fields:
+`heightDensity` 0..1, `baseHeight` -100000..100000, `falloff` 0..100,
+`hazeStrength` 0..1, `hazeColor` (`'#rrggbb'` or packed RGBA number, `null` =
+auto), `skyLayers`/`sunDisc` booleans. Wrong type throws `TypeError`,
+out-of-range throws `RangeError`; unknown options are rejected, not ignored.
 
 Native GPU pass: contact shadow/foot AO/local floor tint under Re2D actors,
 sprite alpha feather/outline/grime, deterministic surface variation, fake bevel

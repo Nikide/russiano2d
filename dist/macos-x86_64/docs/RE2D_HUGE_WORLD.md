@@ -223,6 +223,29 @@ bottom/top, average floor tint, cell/span counts. Collection is
 nearest-first and skips the current region, PVS-invisible regions, occluded
 regions and cards beyond `max_distance`.
 
+### Near-band gate (BASHNYA 1.2.6 fix)
+
+A card must never be emitted inside the region-LOD near band: that region is
+still drawn by the local renderer, and a coarse card on top of it produces the
+duplicate/torn silhouette the reporter saw on a small map with default 512-unit
+regions. The runtime derives the collector's `min_distance` from the policy with
+`r2d_world_region_impostor_min_distance(config)`:
+
+* `near_distance > 0` -> cards are rejected closer than the near band
+  (default 600; BASHNYA `regionLod(8000, ...)` rejects everything within 8000);
+* `near_distance == 0` -> no near gate, only reachable by an explicit
+  `world.regionLod(0, ...)` or a native config with `near_distance = 0`;
+* `max_distance` still follows `hidden_distance` (default 6000), so the card
+  range is `[near, hidden]`.
+
+The gate keeps cards out of the band where the local renderer draws the region
+at full detail; beyond the band they remain the intended additive distant
+stand-ins. `world.regionConfig(8192,1,2)` collapses a
+small map to one region, so the existing current-region skip alone already
+yields zero cards; that is a configuration outcome, not the fix. Native coverage:
+`tests/re2d/impostor_lod_policy_test.c` (gate follows the near band; cards inside
+the band suppressed, cards beyond it kept, ungated collect = old 1.2.6 output).
+
 Renderer-facing API:
 
 * native: `r2d_world_visible_impostors(runtime, &count)` and the
