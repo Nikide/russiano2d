@@ -1,3 +1,64 @@
+> Unreleased / GTA sandbox follow-up: закрыты три ограничения прошлого среза.
+> (1) Brush-generated cells теперь переносят `tags`/`ceilingTags`: brush и
+> world/bounds поддерживают массивы тегов, compiler берёт floor tags у
+> floor-owner brush (fallback — конверт), ceiling tags у ceiling-owner; те же
+> лимиты/диагностика SDK_WORLD_FIELD, baked .re2dworld получает теги. Тест:
+> brush-only tagged .re2dmap -> baked v6 -> groundAt/surface.tags.
+> (2) Runtime `surface(i).tag()` переживает save/load: re2d-save v2 добавил
+> секцию surfaceTags (только непустые списки, строго возрастающий surface
+> index); v1 saves читаются и не стирают живые теги, v2 применяется
+> транзакционно (никаких частичных записей) и восстанавливает runtime-
+> добавленные/удалённые метки. `world.saveState()/loadState()` без изменений
+> сигнатур.
+> (3) Roof fade: `world.surface(i).fade(0..1)` — per-surface alpha, не материал;
+> alpha<1 переводит поверхность в translucent pass, CPU и GPU применяют её к
+> финальной альфе (alpha 0 — не рисуется, alpha 1 — байт-в-байт прежний кадр,
+> без bump geometry/topology revision). Демо-city фейдит крыши зданий под
+> игроком и показывает интерьер. Ограничения: fade — runtime-состояние, не
+> пекётся и не входит в save-снапшот; sky-поверхности сначала `sky(false)`;
+> faded-поверхности не попадают в mirror-отражения и продолжают отбрасывать
+> тени.
+>
+> Unreleased / GTA-like sandbox (roadmap RUSSIANO2D_GTA_FEATURE_ROADMAP):
+> P0.1 surface tags + groundAt в Re2D World. Author JSON span получает
+> `tags`/`ceilingTags` (<=32 тегов, 1..32 printable байта, дубликаты/неизвестные
+> метки — данные), они едут .re2dmap -> native author JSON -> baked .re2dworld
+> (RDW6; RDW1..v5 и старые untagged-карты грузятся как раньше, untagged остаётся
+> legacy v3). Публичный `$`: `world.groundAt(x,y,{h})` -> {cell,span,surface,
+> height,tags} | null (h выбирает высший пол <= h; несколько span на XY без h —
+> RangeError, не «угадывание»), `world.surfaceTagsAt`, `surface(i).tags()/
+> hasTag()/tag()` (runtime-метки не меняют геометрию). SDK `world-compile`
+> прокидывает теги (brush-generated cells пока без тегов — ограничение
+> задокументировано). Тесты: tests/re2d/world_test.c, tests/agent/
+> re2d_surface_tags_test.py.
+>
+> P0.2-P0.6, P1.1-P1.6, P2 — вертикальный срез городского sandbox на публичном
+> `$`, без ECS/3D/нативных менеджеров: новый демо-проект
+> `demos/re2d_gta_sandbox` (сцены `re2d_gta_sandbox_city` и
+> `re2d_gta_sandbox_plain`) + переиспользуемые JS-сэмплы в его `lib/`:
+> `vehicle.js`/`vehicle_view.js` (Box2D-машина, поверхность-grip из Re2D
+> groundAt, plain 2D без Re2D; P0.3 произвольный поворот спрайта проверен
+> CPU/GPU), `combat.js` (hitscan/projectile/AoE, damage payload с source/point,
+> события damaged/death поверх $.health), `ownership.js` (persistent/temporary/
+> mission, stable handles с uid против recycled-узлов), `character.js`
+> (idle/walk/run/shoot/hit/stunned/dead композицией), `seats.js` (сиденья,
+> enter/exit, advisory input-lock, безопасный eject), `roadgraph.js`
+> (дороги/полосы/one-way/speed/intersections/parking/walk), `population.js`
+> (детерминированный streaming около игрока, фильтры тегов, ownership),
+> `ai.js` (moveTo/patrolTo/follow/flee/lookAt/driveTo, стимулы, зоны),
+> `missions.js` (доставка/чекпоинты на триггерах/сигналах/$.save),
+> `polish.js` (декали/VFX/audio/camera/debug, честный roof-fade audit:
+> не поддерживается). Демо: город с тегами road/sidewalk/grass/park/no_spawn,
+> top-down камерой, крышами зданий, машинами, пешеходами, уроном и миссией;
+> plain-сцена без Re2D. Тесты: tests/agent/re2d_gta_sandbox_test.py
+> (e2e: теги, вход/вождение/выход из машины, урон/смерть, миссия, детерминизм,
+> plain-сцена) + 8 сценарных тестов libs (vehicle 61, combat 43, ownership 27,
+> seats 51, traffic 29, roadgraph 53, missions 36 проверок). Документация:
+> docs/GTA_SANDBOX.md (аудит «есть/частично/нет») и docs/gta/*.md.
+> Ограничения: roof fade в Re2D не поддерживается (нет per-surface fade API),
+> brush-only карты пока без тегов, runtime `.tag()` не пишется назад в карту,
+> нет traffic lights/wanted/NavMesh (данные игры/$.nav).
+>
 # История изменений
 
 > Unreleased / Re2D: явная колонка направления `node.sprite_col` для flat
@@ -116,6 +177,38 @@
 > listeners continue to work.
 
 
+## 1.2.11 — 2026-10-18
+
+<!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
+
+3 коммита в релизе.
+
+### Добавлено
+
+- Re2D: brush tags, runtime tags в save/load, surface fade (roof fade) (`2375bdfd2`)
+  Закрыты три ограничения GTA-sandbox среза:
+  1) Brush-generated cells переносят surface tags.
+  SdkBrushSpec/SdkBrushBounds получили tags/ceilingTags (32x33, byte-equal
+  native), SdkBrushSpan несёт оба списка; compiler берёт floor tags у
+  floor_owner brush (fallback — конверт), ceiling tags у ceiling_owner.
+  sdk_world парсит brush/world tags через общий get_tags (те же лимиты и
+  SDK_WORLD_FIELD), переносит в WSpan и emitted JSON, поэтому baked
+  .re2dworld получает теги. Brush-ограничение из RE2D_WORLD_FORMAT убрано.
+  2) Runtime surface(i).tag() переживает save/load.
+  re2d-save v2: секция surfaceTags (только непустые списки, строго
+  возрастающий surface index); v1 saves читаются, применяются без стирания
+  живых тегов, v2 применяется транзакционно (валидация/построение таблицы
+  …
+
+### Документация
+
+- Re2D: surface tags + groundAt (P0.1 GTA-like roadmap) (`e0478caf4`)
+
+### Тесты и гейты
+
+- GTA-like sandbox: полный вертикальный срез P0.2-P2 (city + plain 2D) (`a5bc2eb87`)
+
+<!-- release-notes:end -->
 ## 1.2.10 — 2026-10-18
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->

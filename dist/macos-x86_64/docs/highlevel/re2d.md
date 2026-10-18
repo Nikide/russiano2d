@@ -1,6 +1,6 @@
 # Re2D World — public `$` API
 
-Редакция 2026-10-10. Для нового рендера используйте `$.re2dWorld`. Это native world handle с собственными cells/spans/portals, списком ссылок на существующие узлы со спрайтами и camera configuration. `$.re2d.room`, `.kind(Re2D)` и `$.re2d.world` сохранены в [legacy reference](re2d_legacy.md); это другие entry points, не сокращённые имена нового API.
+Редакция 2026-10-18. Для нового рендера используйте `$.re2dWorld`. Это native world handle с собственными cells/spans/portals, списком ссылок на существующие узлы со спрайтами и camera configuration. `$.re2d.room`, `.kind(Re2D)` и `$.re2d.world` сохранены в [legacy reference](re2d_legacy.md); это другие entry points, не сокращённые имена нового API.
 
 ## Создание и кадр
 
@@ -39,6 +39,8 @@ $.render(() => world.render(view,400,240));
 | `world.secret(opts)` / `secretsTick(dt,at)` / `onSecret(fn)` | secret volumes + события `secret.found` |
 | `world.breakable(opts)` / `onBreakable(fn)` | authored breakables + событие `breakable.broken` |
 | `surface.terrain(name)` / `conveyor(opts)`, `world.terrainAt/conveyorAt` | terrain/liquid metadata и 2D conveyors |
+| `world.groundAt(x,y,{h})` / `world.surfaceTagsAt(x,y,{h})` | точный пол/поверхность под точкой + user tags; `h` обязателен при нескольких spans на одних XY |
+| `surface(i).tags()/hasTag(name)/tag(name,on)` | произвольные пользовательские теги поверхности; runtime-мутация не меняет геометрию |
 | `world.conveyorMotion(surface,v,dt)` | conveyor gameplay tick (velocity к скорости конвейера) |
 | `world.mist({x,y,rate,width,depth})` | P5 атмосферная дымка на particle pool |
 | `world.materialAnim(name,opts)` / `materialIndex(name)` | flipbook/scroll/emissive анимация материала |
@@ -90,9 +92,34 @@ perspective/наклону). Потолки из этого ракурса ри�
 | `.blocked(x,y,radius,bottom,top)` | boolean; статический circle XY × height против стен/portal closure |
 | `.ray(from,to)` | точки `{x,y,height}`; `{fraction,x,y,height,wall,span,ceiling}` или null |
 | `.lightAt(x,y,h)` | `{r,g,b,level}` или null; native gameplay approximation, без чтения pixels |
-| `.surface(index)` | `{kind,primitive,cell,span,material(name),sky(enabled=true)}` или null |
+| `.surface(index)` | `{kind,primitive,cell,span,material(name),sky(enabled=true),tags(),fade(value)}`, `.hasTag(name)`, `.tag(name,on)` или null; `fade()` читает per-surface alpha |
+| `.groundAt(x,y,{h})` | `{cell,span,surface,height,tags:[...]}` или null; при нескольких spans на XY без `h` — `RangeError` |
+| `.surfaceTagsAt(x,y,{h})` | tags пола под точкой или null (тонкая обёртка над `groundAt`) |
 
 XY — half-open. Свободный span включает пол и исключает потолок. `surface.kind`: 0 wall, 1 floor, 2 ceiling; наклон — коэффициенты соответствующей plane, не четвёртый mesh type. Не выводите surface ID из wall index попадания вслепую после перекомпиляции: IDs принадлежат текущему canonical domain.
+
+`groundAt` — единственный точечный запрос «что за поверхность/пол здесь». `h` выбирает самый высокий floor не выше переданной высоты (мост над дорогой на тех же XY различается по `h`). Без `h` и при одном span на XY берётся он; при нескольких spans это `RangeError` с числом вариантов — молчаливого выбора этажа нет. Вне cells/ниже всех floors — `null`. Теги — authored-данные поверхности; неизвестные/пустые безопасны.
+
+```js
+const ground = world.groundAt(player.x, player.y, { h: player.feet });
+if (ground?.tags.includes('road')) grip = 1.0;
+if (ground?.tags.includes('no_spawn')) skipSpawn = true;
+world.surfaceTagsAt(x, y, { h: 0 });   // null | ['sidewalk', 'no_ped']
+```
+
+### Surface tags (P0.1)
+
+Span authoring несёт `tags` для пола и опциональные `ceilingTags` для потолка: `"tags":["road","sidewalk","no_spawn"]`. Это произвольные пользовательские строки, не enum движка: значения ограничены только форматом (≤32 тегов на поверхность, 1..32 печатных байта после trim, дубликаты игнорируются, регистр значим). Теги проходят `.re2dmap` → native author JSON → baked `.re2dworld`; runtime API не меняет geometry/topology revision, но и не сохраняется в bake — после reload теги снова берутся из authored data. Поиск тегов — `world.surface(surfaceIndex)` из `groundAt`/`trace`/`findSurface`.
+
+```js
+const s = world.groundAt(x, y, { h: 0 }).surface;
+world.surface(s).tags();          // ['road', 'no_spawn']
+world.surface(s).hasTag('road');  // true (регистр важен)
+world.surface(s).tag('no_spawn', true);
+world.surface(s).tag('no_spawn', false);
+```
+
+Формат и SDK-правила — [RE2D world format](../re2d/RE2D_WORLD_FORMAT.md#surface-tags-p01).
 
 ## Flat directional atlas sprites
 
@@ -433,6 +460,43 @@ draws the same contact card; the other effects are GPU-reference. See
 [RE2D_RENDER_FEATURES.md](../RE2D_RENDER_FEATURES.md) for formulas, counters and
 limits. Existing `gpuDrawsBase/Span/Actor/Other` stay exact; grounding adds
 `gpuDrawsGround`, VFX adds `gpuDrawsVfx`.
+
+## Surface fade (roof fade)
+
+Any derived surface (a wall or one floor/ceiling plane) has a per-surface fade
+alpha independent from its material. It is a render-pass property: it changes
+only the colour alpha used by the transparent pass, never the material,
+geometry, lighting, collision, navigation or topology revision.
+
+```js
+const roof = world.surface(i);   // e.g. the ceiling above the player's room
+roof.sky(false);                 // only needed if the surface was a sky surface
+roof.fade(0.25);                 // 0 = invisible, 1 = fully opaque (default)
+roof.fade();                     // read the current value (number)
+```
+
+Typical top-down/roof-fade use case: a house roof is a ceiling surface above an
+interior room. While the player is inside, the game computes that test each
+frame and sets `fade` to e.g. `0.25` (or `0` to see the interior unobstructed);
+outside it sets `1`. The engine only stores the alpha; the per-frame distance /
+inside logic belongs to the game. `sky(false)` is only required when the
+surface was authored as a sky surface (`surface.sky(true)`), because sky
+surfaces bypass the regular surface draw.
+
+Contract details:
+
+* accepts `0..1` only: a non-number throws `TypeError`, a value outside `0..1`
+  (or non-finite) throws `RangeError`;
+* alpha `< 1` moves an opaque/masked surface into the transparent pass and
+  transparent sorting; an additive material stays additive and scales its
+  contribution by the alpha;
+* alpha `1` is the default and byte-identical to a world that never called
+  `fade`; alpha `0` draws nothing;
+* the value is runtime state (like user tags): it is not authored into
+  `.re2dmap`/`.re2dworld` and is lost after reload/rebuild;
+* native API: `r2d_world_surface_fade_set(world, surface, alpha)` and
+  `r2d_world_surface_alpha(world, surface)`; the JS bridge is
+  `surfaceFade(index[, value])`.
 
 ## VFX bundles (P1)
 

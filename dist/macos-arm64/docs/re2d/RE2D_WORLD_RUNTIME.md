@@ -36,7 +36,7 @@ Camera defaults: x=y=0; h=view.h ?? view.eye ??48; yaw=pitch=0; fov=70°, near=4
 
 `lightAt(x,y,h)` → `{r,g,b,level}`/null. Level = mean RGB. Это native deterministic approximation с ambient/relevant dynamic contributions, zero normal/depth query convention, без framebuffer. Emissive texture/fog/postprocess perceived brightness не входит в этот gameplay query. Значения света могут превышать1; final color clamp происходит позже.
 
-`surface(id)` → snapshot `{kind,primitive,cell,span}` + material(name)/sky(enabled=true). kind wall0/floor1/ceiling2. Wall ownership fields могут быть -1. При invalid id null. Canonical IDs действуют только для данного topology/index domain, setters сохраняют id, не semantic tag. `span(id).info()` возвращает light/fog metadata, не геометрию span.
+`surface(id)` → snapshot `{kind,primitive,cell,span}` + material(name)/sky(enabled=true)/tags()/hasTag(name)/tag(name,on). kind wall0/floor1/ceiling2. Wall ownership fields могут быть -1. При invalid id null. Authored surface tags перечитываются из карты при reload; runtime `tag()` — additive-метка без geometry/topology revision; reload восстанавливает authored набор (runtime-метки в файл карты не пишутся, источник истины — authored span `tags`/`ceilingTags`). Canonical IDs действуют только для данного topology/index domain, setters сохраняют id, не semantic tag. `span(id).info()` возвращает light/fog metadata, не геометрию span.
 
 ## Lighting defaults и порядок
 
@@ -75,6 +75,10 @@ Info fields x/y/h/radius/intensity/r/g/b/shadow/remaining/flickerMin/flickerMax/
 ## Изменение геометрии
 
 `portalClosed(id,boolean)` меняет binary state, derived closure wall, collision/rays/visibility/light propagation/shadow invalidation. Один portal закрывает все свои openings. API smooth fraction door.open отсутствует. `span(id).heights(bottom,top)` transactionally changes valid interval; prevents overlap/headroom/portal ownership conflicts. Runtime slope boundary edits с portal adjacency отвергаются; гарантированный lift use — flat spans. Static slopes supported. Движение passengers, falling/jumping и столкновения игровых узлов не выполняются автоматически.
+
+## Save/load native state (P1)
+
+`saveState()`/`loadState(save)` (и native `saveStateJSON()`/`loadStateJSON()`) пишут/читают versioned `re2d-save` snapshot. Версия **2** добавляет необязательную секцию `surfaceTags`: только непустые списки тегов, строго по возрастанию runtime surface index. Version 1 snapshots загружаются без данных о тегах, и `loadState` оставляет live-таблицу тегов без изменений (старый save не стирает authored/runtime метки); v2 без секции означает «тегов нет» и очищает таблицу. Snapshot фиксирует **полное** текущее состояние тегов, поэтому сохраняет и runtime-добавленные, и runtime-удалённые относительно authored набора метки. `loadState` применяет теги транзакционно: сначала проверяются/аллоцируются все surface index/границы/дубликаты/строки, затем таблица заменяется целиком; невалидная секция не оставляет частичных изменений. Карта/topology не меняются, geometry revisions не трогаются. Bounds: ≤196608 tagged surfaces, ≤32 тегов на surface, 1..32 печатных байта после trim; дубликаты в snapshot отклоняются.
 
 ## Перезагрузка и жизненный цикл
 

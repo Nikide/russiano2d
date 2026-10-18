@@ -129,6 +129,13 @@ and does not generate a shadow map.
   `world.surface(i).terrain('water'|'blood'|'acid'|'lava'|'mist')`.
 * Material animation 2.0 (scroll/flipbook/emissive pulse) continues through the
   existing `materialAnimSet` path; the visual pass only consumes its uniforms.
+* Per-surface fade alpha (`world.surface(i).fade(0..1)`, roof fade): a
+  render-only alpha for one surface. Alpha below 1 routes an opaque/masked
+  surface into the transparent pass and sorting; additive materials stay
+  additive. It is applied in both the GPU transparent pass (folded into the
+  surface tint alpha) and the CPU composer (final colour alpha), never changes
+  the material/geometry and is not part of the bake. Default 1 is
+  byte-identical; 0 draws nothing.
 
 ## R-02 atmosphere and sky
 

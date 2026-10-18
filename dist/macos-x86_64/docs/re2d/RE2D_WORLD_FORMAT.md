@@ -1,6 +1,6 @@
 # Re2D World: authoring, native JSON и baked output
 
-Редакция 2026-10-10. Формат исходника SDK и формат входа native runtime различаются. Public API — [reference](../highlevel/re2d.md); рабочий игровой пример — [guide](../RE2D_WORLD_GUIDE.md).
+Редакция 2026-10-18. Формат исходника SDK и формат входа native runtime различаются. Public API — [reference](../highlevel/re2d.md); рабочий игровой пример — [guide](../RE2D_WORLD_GUIDE.md).
 
 ## Три представления
 
@@ -22,8 +22,10 @@
   "name":"Two storeys",
   "cells":[{"id":"room","rect":[0,0,240,240],"spans":[
     {"bottom":0,"top":128,"floorColor":"#888888","ceilingColor":"#777777",
+      "tags":["road","sidewalk"],
       "lighting":{"level":0.25,"color":"#ffffff","fog":{"density":0,"start":0,"color":"#142a49"}}},
-    {"bottom":160,"top":288,"floorColor":"#aa8877","ceilingColor":"#777777"}
+    {"bottom":160,"top":288,"floorColor":"#aa8877","ceilingColor":"#777777",
+      "tags":["roof"],"ceilingTags":["sky"]}
   ]}],
   "walls":[
     {"id":"north","from":[0,0],"to":[240,0],"bottom":0,"top":288,"color":"#bba078"},
@@ -42,6 +44,28 @@ build/r2d-sdk world-compile maps/room.re2dmap --renderer --output maps/room.re2d
 ```
 
 Без `--renderer` сохраняется legacy output для `$.re2d.world` и stepped slopes. Для нового мира флаг обязателен. Compiler report содержит outputFormat/runtimePortals/diagnostics/stats. Atomic writer публикует compiled output заменой временного файла; не передавайте watcher-у частично записанный asset.
+
+### Surface tags (P0.1)
+
+Span может нести `tags` (теги пола) и опциональные `ceilingTags` (теги потолка). Это **пользовательские данные, не engine enum**: `road`, `sidewalk`, `crosswalk`, `grass`, `water`, `rail`, `roof`, `interior`, `parking`, `no_ped`, `no_car`, `no_spawn` — лишь примеры, значения не перечисляются движком. Валидация общая для SDK и native runtime: массив строк, не больше 32 тегов; каждый после trim — 1..32 печатных байта (control/empty отклоняются); дубликаты игнорируются; неизвестные значения безопасны. Tags не влияют на геометрию/BSP/portal traversal и не являются semantic id.
+
+Generated spans ступеней и уклонов наследуют `tags`/`ceilingTags` своего source-элемента. Tags проходят `.re2dmap` → native author JSON → baked `.re2dworld`; старые payloads без тегов читаются как раньше. Runtime API описан в [reference](../highlevel/re2d.md#surface-tags-p01).
+
+Brush-карта задаёт теги на brush и/или на внешнем конверте `world` (alias `bounds`):
+
+```json
+{
+  "version":1,
+  "world":{"x":0,"y":0,"w":300,"h":200,"bottom":0,"top":288,"boundary":"sky",
+           "tags":["ground"],"ceilingTags":["world_ceiling"]},
+  "brushes":[
+    {"id":"platform","rect":[100,0,200,200],"bottom":0,"top":128,
+     "tags":["platform_top"],"ceilingTags":["platform_bottom"]}
+  ]
+}
+```
+
+Compiler переносит `tags` от brush-владельца **пола** (`floor_owner`), иначе от конверта; `ceilingTags` — от brush-владельца **потолка** (`ceiling_owner`), иначе от конверта. Ownership уже участвует в merge клеток, поэтому merged spans сохраняют единый набор тегов. Невалидные массивы тегов на brush/world отклоняются с `SDK_WORLD_FIELD` (те же границы, что у span).
 
 SDK `id` — authoring identifier, не native numeric handle. Compiler может объединять exact same-XY authored rectangles в одну cell с несколькими spans. После compilation numeric indices могут отличаться от authoring array positions. Не сохраняйте runtime surface/span indices как стабильные semantic IDs между builds.
 
@@ -78,8 +102,9 @@ Generated stairs/slopes соединяются через общую грань,
 {
   "version":1,
   "cells":[{"x":0,"y":0,"w":240,"h":240,"spans":[
-    {"bottom":0,"top":128},
-    {"bottom":160,"top":288,"floorSlope":{"a":0.05,"b":0}}
+    {"bottom":0,"top":128,"tags":["road","no_ped"]},
+    {"bottom":160,"top":288,"floorSlope":{"a":0.05,"b":0},
+     "tags":["bridge"],"ceilingTags":["sky"]}
   ]}],
   "walls":[],"portals":[]
 }
@@ -97,6 +122,8 @@ Generated stairs/slopes соединяются через общую грань,
 | portals | обязательный массив; numeric cellA/cellB, from/to on exact shared edge, nonempty openings, closed? bool |
 | openings | bottom/top fit adjacent free spans, disjoint height interiors |
 | colors | optional `#rrggbb`; native author color parser не принимает произвольную CSS запись |
+| tags | optional массив строк на span (floor surface): ≤32 тегов, каждый после trim 1..32 печатных байта, дубликаты игнорируются; неизвестные значения — просто данные |
+| ceilingTags | optional массив строк того же формата на span (ceiling surface) |
 
 Пол/потолок: `height = base + a*(x-cell.x) + b*(y-cell.y)`. Base = bottom для floor, top для ceiling. Все четыре угла проверяются на positive headroom и inter-span overlap. Cell/span boundaries half-open; touching spans/XY edges не создают overlapping interiors. Несколько openings одного portal допускают room-over-room; solid промежутки остаются закрытыми.
 
@@ -110,9 +137,9 @@ Native canonical sequence: сначала wall surfaces (включая derived 
 
 ## Baked output и совместимость
 
-Compiled JSON содержит readable geometry и `baked` field с little-endian hex payload/checksum. Wire v1 содержит geometry/BSP/CSR/canonical surfaces; v2 дополняет global/span/static lighting, generations, full candidate masks и per-light reached-span links. Ordinary JSON version остаётся 1.
+Compiled JSON содержит readable geometry и `baked` field с little-endian hex payload/checksum. Wire v1 содержит geometry/BSP/CSR/canonical surfaces; v2 дополняет global/span/static lighting, generations, full candidate masks и per-light reached-span links; v3/v4 — semantic id tables (lit/unlit), v5 — wall tool policy и portal tool state; v6 добавляет per-surface tag tables (count + length-prefixed строки для каждой canonical surface). Ordinary JSON version остаётся 1. RDW6 пишется только если в мире реально есть теги, поэтому untagged карты сохраняют прежний wire version и байты.
 
-Loader проверяет counts/offsets/references, topology/geometry, BSP cycles, checksum, light generations/masks/link ownership. Старый валидный geometry wire v1 читается; fractional/unknown versions и corrupt payload отклоняются. Checksum обнаруживает повреждение, не является authentication.
+Loader проверяет counts/offsets/references, topology/geometry, BSP cycles, checksum, light generations/masks/link ownership, tag counts/lengths. Старые валидные payloads v1..v5 читаются (карта получает пустые tags); fractional/unknown versions и corrupt payload отклоняются. Checksum обнаруживает повреждение, не является authentication.
 
 При наличии baked runtime читает его tables. Правка readable cells/lights рядом с baked не является authoring edit: заново compile source. Startup не пересобирает BSP и не делает static portal BFS; bakedLighting/lightUpdates позволяют это проверить. Imported baked ray queries используют complete primitive fallback, а не недоказанную accelerated cell-ray coverage.
 

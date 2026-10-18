@@ -4,7 +4,7 @@
      Source: Russiano2D $ API Registry
      Generator: r2d-sdk -->
 
-Engine version: "1.2.10"
+Engine version: "1.2.11"
 
 Entries: 4052
 

@@ -1,4 +1,4 @@
-# Russiano2D 1.2.10 — macOS Apple Silicon: инструкция для ИИ-агента
+# Russiano2D 1.2.11 — macOS Apple Silicon: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"1.2.10","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"1.2.11","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -158,6 +158,7 @@ call(cmd="quit")
 * Чего движку не хватает (рабочий вишлист) — `docs/ENGINE_GAPS.md`
 * Форматы данных: состав полей и честные границы — `docs/FORMATS.md`
 * Фазы кадра — `docs/FRAME_PHASES.md`
+* GTA-подобный top-down sandbox: что уже есть и что добавлено — `docs/GTA_SANDBOX.md`
 * HANDOFF — VN + Re2D Render Roadmap — `docs/HANDOFF_VN_RENDER_ROADMAP.md`
 * Передача смены: остатки, долги и как их делать — `docs/NEXT_SESSION.md`
 * Russiano2D: инженерная спецификация производственной готовности — `docs/PRODUCTION_READINESS.md`
@@ -8974,6 +8975,113 @@ RmlUi диагностику DevTools, F2 — инспектор узлов.
 
 ---
 
+## GTA-подобный top-down sandbox: что уже есть и что добавлено
+
+<sub>источник: `docs/GTA_SANDBOX.md`</sub>
+
+# GTA-подобный top-down sandbox: что уже есть и что добавлено
+
+Документ описывает работу по плану
+`RUSSIANO2D_GTA_FEATURE_ROADMAP_FOR_DEEPSEEK.md`: городской top-down sandbox
+(пешеходы, транспорт, оружие, трафик, миссии) на существующем Russiano2D, **без**
+переноса Carnage3D, без ECS/3D и без второго scene graph. Игровая логика — только
+через публичный `$` API; нативные добавления сделаны лишь там, где был реальный
+пробел (теги поверхностей), остальное — переиспользуемые JS-сэмплы в демо.
+
+## Аудит: есть / частично / отсутствует
+
+| Возможность | Статус | Где |
+|---|---|---|
+| Публичный `$` API, узлы, жизненный цикл | **есть** | `src/highlevel/api.js`, `docs/HIGH_LEVEL_API.md` |
+| Linecast/raycast со structured hit, маски, shape cast | **есть** | `$.world.raycast/raycastAll/castShape/bodyAt/bodiesIn/lineOfSight` (`src/highlevel/world.js`) |
+| Re2D-геометрия в запросах: surface/span/cell/material | **есть** | `$.re2dWorld.trace/traceAll` (`src/re2d_world_trace.c`, `src/highlevel/re2d.js`) |
+| Surface material/terrain policy, именованные поверхности | **частично** | `surface.terrain/material/sky`; произвольных пользовательских тегов не было |
+| Теги поверхностей + `groundAt` с однозначным multi-floor правилом | **добавлено** | P0.1: author JSON `span.tags`, `world.groundAt`, `surface.tags/hasTag/tag`; bake/SDK round-trip; brush-карты пробрасывают `tags`/`ceilingTags` через `sdk_brush` |
+| Runtime-теги переживают save/load | **добавлено** | `re2d-save` v2: секция `surfaceTags`, `world.saveState()/loadState()`; v1 saves совместимы и не стирают живые теги |
+| Roof fade / per-surface alpha | **добавлено** | `world.surface(i).fade(a)` (0..1), CPU/GPU parity; демо-city фейдит крыши под игроком |
+| Произвольный поворот 2D-спрайта (угол/pivot/scale/nearest) CPU+GPU | **есть, проверено** | `node.angle`, `pushSprite`, P0.3 тест |
+| Машина: force/torque, масса, drag, тормоз, поворот, ручник, grip | **добавлено (JS над Box2D)** | `demos/re2d_gta_sandbox/lib/vehicle.js`, P0.4 |
+| Общий урон/hitscan/projectile/AoE, события с источником/точкой | **добавлено (сэмпл над `$.world`/`$.health`)** | `lib/combat.js`, P0.5 |
+| Stable handles/ownership/lifetime для streamed-объектов | **добавлено (сэмпл)** | `lib/ownership.js`, P0.6 |
+| Сиденья, enter/exit, input lock | **добавлено (сэмпл)** | `lib/seats.js`, P1.1 |
+| Композиция персонажа (idle/walk/run/shoot/hit/stun/dead) | **добавлено (сэмпл)** | `lib/character.js`, P1.2 |
+| Population/traffic генерация около игрока, фильтры | **добавлено (сэмпл)** | `lib/population.js`, P1.3 |
+| Road/walk graph (полосы, one-way, speed, intersections, parking) | **добавлено (сэмпл)** | `lib/roadgraph.js`, P1.4 |
+| AI/навигационные примитивы (patrol/follow/flee/driveTo) | **добавлено (сэмпл над `$.nav`)** | `lib/ai.js`, P1.5 |
+| Зоны/статусы/события анимации/миссии | **частично + сэмпл** | `$.zone`, `$.signal`, `$.flow`, `$.quest`, `$.save`; `lib/missions.js` |
+| P2: декали, VFX/audio emitters, camera follow, debug overlays | **сэмплы** | `lib/polish.js`; существующие `$.particles/$.vfx/$.sound/$.camera/devtools` |
+| Roof fade в Re2D | **добавлено** | `surface.fade()` — per-surface alpha, не материал; демо-city плавно прячет крыши под игроком, alpha 1 байт-в-байт равна прежнему кадру |
+
+## Демо
+
+`demos/re2d_gta_sandbox` — два сценария:
+
+* `city` — Re2D World: улицы/тротуары/трава/здания с тегами поверхностей,
+  top-down камера, машины и пешеходы, столкновения, урон, миссия, HUD.
+* `plain2d` — тот же транспорт/персонаж/оружие **без Re2D**, на обычных узлах и
+  Box2D; доказывает, что базовые подсистемы не зависят от Re2D.
+
+Запуск:
+
+```bash
+./build/russiano2d --game demos --scene re2d_gta_sandbox_city
+./build/russiano2d --game demos --scene re2d_gta_sandbox_plain
+```
+
+(точные имена сцен и управление — в `demos/re2d_gta_sandbox/README.md`).
+
+## Границы
+
+* Нет ECS, второго scene graph, 3D rigidbody/мешей, нативного Vehicle/AI/mission
+  фреймворка. Всё — данные + скрипты поверх `$` и существующих подсистем.
+* Новые нативные данные (surface tags, brush tags, fade) опциональны: карты без
+  них грузятся байт-в-байт как раньше; alpha 1 не меняет кадр.
+* Roof fade — runtime-состояние: не пекётся в карту и не входит в save-снапшот
+  (сбрасывается в 1 после reload); игра выставляет его каждый кадр. Небо
+  (`surface.sky(true)`) не рисуется через surface pass — сначала `sky(false)`.
+* Демо — вертикальный срез, а не GTA-клон: ассеты/код Carnage3D не переносились.
+
+
+## Подробности по фичам
+
+| Документ | Тема |
+|---|---|
+| [gta/vehicle.md](gta/vehicle.md) | машина, surface grip, P0.3 поворот спрайта |
+| [gta/combat.md](gta/combat.md) | hitscan/projectile/AoE, damage payload, события |
+| [gta/ownership.md](gta/ownership.md) | владение, stable handles, sweep |
+| [gta/character.md](gta/character.md) | композиция состояний персонажа |
+| [gta/seats.md](gta/seats.md) | сиденья, enter/exit, input lock, eject |
+| [gta/traffic.md](gta/traffic.md) | population/streaming, теги и фильтры |
+| [gta/roadgraph.md](gta/roadgraph.md) | дороги/полосы/one-way/парковки |
+| [gta/ai.md](gta/ai.md) | AI-примитивы, стимулы, зоны |
+| [gta/missions.md](gta/missions.md) | миссии на данных и сигналах |
+| [gta/polish.md](gta/polish.md) | декали/VFX/audio/camera/debug, roof-fade audit |
+| [highlevel/re2d.md](highlevel/re2d.md) | surface tags, `groundAt`, `sprite_col`, top-down камера |
+
+Приёмочные команды:
+
+```bash
+./build/r2d-sdk lint demos/re2d_gta_sandbox
+./build/r2d-sdk validate demos/re2d_gta_sandbox
+python3 tests/agent/re2d_gta_sandbox_test.py
+python3 tests/agent/re2d_gta_vehicle_test.py
+python3 tests/agent/re2d_gta_combat_test.py
+python3 tests/agent/re2d_gta_ownership_test.py
+python3 tests/agent/re2d_gta_seats_test.py
+python3 tests/agent/re2d_gta_traffic_test.py
+python3 tests/agent/re2d_gta_roadgraph_test.py
+python3 tests/agent/re2d_gta_missions_test.py
+python3 tests/agent/re2d_surface_tags_test.py
+```
+
+Числа на текущем дереве: `ctest 169/169`, sandbox e2e 22 проверки,
+libs 300 проверок суммарно (vehicle 61, combat 43, ownership 27, seats 51,
+traffic 29, roadgraph 53, missions 36), surface tags 53, surface fade отдельный
+агент-тест, lint/validate демо — 0 диагностик.
+
+
+---
+
 ## HANDOFF — VN + Re2D Render Roadmap
 
 <sub>источник: `docs/HANDOFF_VN_RENDER_ROADMAP.md`</sub>
@@ -13573,6 +13681,13 @@ and does not generate a shadow map.
   `world.surface(i).terrain('water'|'blood'|'acid'|'lava'|'mist')`.
 * Material animation 2.0 (scroll/flipbook/emissive pulse) continues through the
   existing `materialAnimSet` path; the visual pass only consumes its uniforms.
+* Per-surface fade alpha (`world.surface(i).fade(0..1)`, roof fade): a
+  render-only alpha for one surface. Alpha below 1 routes an opaque/masked
+  surface into the transparent pass and sorting; additive materials stay
+  additive. It is applied in both the GPU transparent pass (folded into the
+  surface tint alpha) and the CPU composer (final colour alpha), never changes
+  the material/geometry and is not part of the bake. Default 1 is
+  byte-identical; 0 draws nothing.
 
 ## R-02 atmosphere and sky
 
@@ -14320,7 +14435,7 @@ Limits:
 
 # Re2D World: руководство по новой игре
 
-Редакция 2026-10-10. Новый мир создаётся через `$.re2dWorld`, персонаж — через `$.re2dSprite`. Здесь описан текущий native renderer; прежние room/kind и `$.re2d.world` находятся в [legacy reference](highlevel/re2d_legacy.md).
+Редакция 2026-10-18. Новый мир создаётся через `$.re2dWorld`, персонаж — через `$.re2dSprite`. Здесь описан текущий native renderer; прежние room/kind и `$.re2d.world` находятся в [legacy reference](highlevel/re2d_legacy.md).
 
 ## Быстро посмотреть результат
 
@@ -14408,6 +14523,37 @@ const world = $.re2dWorld.load('maps/room.re2dworld').backend('gpu');
 ```
 
 Не передавайте сырой SDK `.re2dmap` loader-у: его cells имеют `rect`, а native runtime JSON — x/y/w/h. `fromJSON` нужен для native description или теста, а compiled load избегает повторного authoring build. [Форматы и compile](re2d/RE2D_WORLD_FORMAT.md) описывают различия и validation.
+
+## Surface tags и spawn-фильтр (P0.1)
+
+Тег — это authored-данные пола (или потолка через `ceilingTags`), а не enum движка. В `.re2dmap` span получает массив произвольных строк; SDK валидирует формат и переносит их в `.re2dworld`:
+
+```json
+{"id":"street","rect":[0,0,400,200],"spans":[
+  {"bottom":0,"top":128,"tags":["road"]},
+  {"bottom":160,"top":288,"tags":["bridge"],"ceilingTags":["sky"]}]}
+```
+
+```js
+const world = $.re2dWorld.load('maps/city.re2dworld');
+const ground = world.groundAt(120, 60, { h: 0 });   // {cell,span,surface,height,tags}
+ground.tags;                                        // ['road']
+world.surfaceTagsAt(120, 60, { h: 160 });           // ['bridge'] на мосту
+world.surface(ground.surface).hasTag('road');       // true
+world.surface(ground.surface).tag('no_spawn', true); // runtime-метка, геометрию не меняет
+```
+
+`h` обязателен, когда на одних XY несколько spans (например мост над дорогой): без него — `RangeError`, без молчаливого выбора этажа. Фильтр спавна по authored данным:
+
+```js
+for (const spawn of world.spawns()) {
+  const ground = world.groundAt(spawn.x, spawn.y, { h: spawn.h });
+  if (ground?.tags.includes('sidewalk') && !ground.tags.includes('no_spawn'))
+    spawnPedestrian(spawn);
+}
+```
+
+Проверено `tests/agent/re2d_surface_tags_test.py` и `tests/re2d/world_test.c`; формат — [RE2D world format](re2d/RE2D_WORLD_FORMAT.md#surface-tags-p01).
 
 ## Материалы и свет
 
@@ -30716,7 +30862,7 @@ python3 tools/run_tests.py highlevel_random_test
 
 # Re2D World — public `$` API
 
-Редакция 2026-10-10. Для нового рендера используйте `$.re2dWorld`. Это native world handle с собственными cells/spans/portals, списком ссылок на существующие узлы со спрайтами и camera configuration. `$.re2d.room`, `.kind(Re2D)` и `$.re2d.world` сохранены в [legacy reference](re2d_legacy.md); это другие entry points, не сокращённые имена нового API.
+Редакция 2026-10-18. Для нового рендера используйте `$.re2dWorld`. Это native world handle с собственными cells/spans/portals, списком ссылок на существующие узлы со спрайтами и camera configuration. `$.re2d.room`, `.kind(Re2D)` и `$.re2d.world` сохранены в [legacy reference](re2d_legacy.md); это другие entry points, не сокращённые имена нового API.
 
 ## Создание и кадр
 
@@ -30755,6 +30901,8 @@ $.render(() => world.render(view,400,240));
 | `world.secret(opts)` / `secretsTick(dt,at)` / `onSecret(fn)` | secret volumes + события `secret.found` |
 | `world.breakable(opts)` / `onBreakable(fn)` | authored breakables + событие `breakable.broken` |
 | `surface.terrain(name)` / `conveyor(opts)`, `world.terrainAt/conveyorAt` | terrain/liquid metadata и 2D conveyors |
+| `world.groundAt(x,y,{h})` / `world.surfaceTagsAt(x,y,{h})` | точный пол/поверхность под точкой + user tags; `h` обязателен при нескольких spans на одних XY |
+| `surface(i).tags()/hasTag(name)/tag(name,on)` | произвольные пользовательские теги поверхности; runtime-мутация не меняет геометрию |
 | `world.conveyorMotion(surface,v,dt)` | conveyor gameplay tick (velocity к скорости конвейера) |
 | `world.mist({x,y,rate,width,depth})` | P5 атмосферная дымка на particle pool |
 | `world.materialAnim(name,opts)` / `materialIndex(name)` | flipbook/scroll/emissive анимация материала |
@@ -30806,9 +30954,34 @@ perspective/наклону). Потолки из этого ракурса ри�
 | `.blocked(x,y,radius,bottom,top)` | boolean; статический circle XY × height против стен/portal closure |
 | `.ray(from,to)` | точки `{x,y,height}`; `{fraction,x,y,height,wall,span,ceiling}` или null |
 | `.lightAt(x,y,h)` | `{r,g,b,level}` или null; native gameplay approximation, без чтения pixels |
-| `.surface(index)` | `{kind,primitive,cell,span,material(name),sky(enabled=true)}` или null |
+| `.surface(index)` | `{kind,primitive,cell,span,material(name),sky(enabled=true),tags(),fade(value)}`, `.hasTag(name)`, `.tag(name,on)` или null; `fade()` читает per-surface alpha |
+| `.groundAt(x,y,{h})` | `{cell,span,surface,height,tags:[...]}` или null; при нескольких spans на XY без `h` — `RangeError` |
+| `.surfaceTagsAt(x,y,{h})` | tags пола под точкой или null (тонкая обёртка над `groundAt`) |
 
 XY — half-open. Свободный span включает пол и исключает потолок. `surface.kind`: 0 wall, 1 floor, 2 ceiling; наклон — коэффициенты соответствующей plane, не четвёртый mesh type. Не выводите surface ID из wall index попадания вслепую после перекомпиляции: IDs принадлежат текущему canonical domain.
+
+`groundAt` — единственный точечный запрос «что за поверхность/пол здесь». `h` выбирает самый высокий floor не выше переданной высоты (мост над дорогой на тех же XY различается по `h`). Без `h` и при одном span на XY берётся он; при нескольких spans это `RangeError` с числом вариантов — молчаливого выбора этажа нет. Вне cells/ниже всех floors — `null`. Теги — authored-данные поверхности; неизвестные/пустые безопасны.
+
+```js
+const ground = world.groundAt(player.x, player.y, { h: player.feet });
+if (ground?.tags.includes('road')) grip = 1.0;
+if (ground?.tags.includes('no_spawn')) skipSpawn = true;
+world.surfaceTagsAt(x, y, { h: 0 });   // null | ['sidewalk', 'no_ped']
+```
+
+### Surface tags (P0.1)
+
+Span authoring несёт `tags` для пола и опциональные `ceilingTags` для потолка: `"tags":["road","sidewalk","no_spawn"]`. Это произвольные пользовательские строки, не enum движка: значения ограничены только форматом (≤32 тегов на поверхность, 1..32 печатных байта после trim, дубликаты игнорируются, регистр значим). Теги проходят `.re2dmap` → native author JSON → baked `.re2dworld`; runtime API не меняет geometry/topology revision, но и не сохраняется в bake — после reload теги снова берутся из authored data. Поиск тегов — `world.surface(surfaceIndex)` из `groundAt`/`trace`/`findSurface`.
+
+```js
+const s = world.groundAt(x, y, { h: 0 }).surface;
+world.surface(s).tags();          // ['road', 'no_spawn']
+world.surface(s).hasTag('road');  // true (регистр важен)
+world.surface(s).tag('no_spawn', true);
+world.surface(s).tag('no_spawn', false);
+```
+
+Формат и SDK-правила — [RE2D world format](../re2d/RE2D_WORLD_FORMAT.md#surface-tags-p01).
 
 ## Flat directional atlas sprites
 
@@ -31149,6 +31322,43 @@ draws the same contact card; the other effects are GPU-reference. See
 [RE2D_RENDER_FEATURES.md](../RE2D_RENDER_FEATURES.md) for formulas, counters and
 limits. Existing `gpuDrawsBase/Span/Actor/Other` stay exact; grounding adds
 `gpuDrawsGround`, VFX adds `gpuDrawsVfx`.
+
+## Surface fade (roof fade)
+
+Any derived surface (a wall or one floor/ceiling plane) has a per-surface fade
+alpha independent from its material. It is a render-pass property: it changes
+only the colour alpha used by the transparent pass, never the material,
+geometry, lighting, collision, navigation or topology revision.
+
+```js
+const roof = world.surface(i);   // e.g. the ceiling above the player's room
+roof.sky(false);                 // only needed if the surface was a sky surface
+roof.fade(0.25);                 // 0 = invisible, 1 = fully opaque (default)
+roof.fade();                     // read the current value (number)
+```
+
+Typical top-down/roof-fade use case: a house roof is a ceiling surface above an
+interior room. While the player is inside, the game computes that test each
+frame and sets `fade` to e.g. `0.25` (or `0` to see the interior unobstructed);
+outside it sets `1`. The engine only stores the alpha; the per-frame distance /
+inside logic belongs to the game. `sky(false)` is only required when the
+surface was authored as a sky surface (`surface.sky(true)`), because sky
+surfaces bypass the regular surface draw.
+
+Contract details:
+
+* accepts `0..1` only: a non-number throws `TypeError`, a value outside `0..1`
+  (or non-finite) throws `RangeError`;
+* alpha `< 1` moves an opaque/masked surface into the transparent pass and
+  transparent sorting; an additive material stays additive and scales its
+  contribution by the alpha;
+* alpha `1` is the default and byte-identical to a world that never called
+  `fade`; alpha `0` draws nothing;
+* the value is runtime state (like user tags): it is not authored into
+  `.re2dmap`/`.re2dworld` and is lost after reload/rebuild;
+* native API: `r2d_world_surface_fade_set(world, surface, alpha)` and
+  `r2d_world_surface_alpha(world, surface)`; the JS bridge is
+  `surfaceFade(index[, value])`.
 
 ## VFX bundles (P1)
 

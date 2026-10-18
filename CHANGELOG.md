@@ -177,6 +177,38 @@
 > listeners continue to work.
 
 
+## 1.2.11 — 2026-10-18
+
+<!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
+
+3 коммита в релизе.
+
+### Добавлено
+
+- Re2D: brush tags, runtime tags в save/load, surface fade (roof fade) (`2375bdfd2`)
+  Закрыты три ограничения GTA-sandbox среза:
+  1) Brush-generated cells переносят surface tags.
+  SdkBrushSpec/SdkBrushBounds получили tags/ceilingTags (32x33, byte-equal
+  native), SdkBrushSpan несёт оба списка; compiler берёт floor tags у
+  floor_owner brush (fallback — конверт), ceiling tags у ceiling_owner.
+  sdk_world парсит brush/world tags через общий get_tags (те же лимиты и
+  SDK_WORLD_FIELD), переносит в WSpan и emitted JSON, поэтому baked
+  .re2dworld получает теги. Brush-ограничение из RE2D_WORLD_FORMAT убрано.
+  2) Runtime surface(i).tag() переживает save/load.
+  re2d-save v2: секция surfaceTags (только непустые списки, строго
+  возрастающий surface index); v1 saves читаются, применяются без стирания
+  живых тегов, v2 применяется транзакционно (валидация/построение таблицы
+  …
+
+### Документация
+
+- Re2D: surface tags + groundAt (P0.1 GTA-like roadmap) (`e0478caf4`)
+
+### Тесты и гейты
+
+- GTA-like sandbox: полный вертикальный срез P0.2-P2 (city + plain 2D) (`a5bc2eb87`)
+
+<!-- release-notes:end -->
 ## 1.2.10 — 2026-10-18
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
