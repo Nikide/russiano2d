@@ -32,6 +32,7 @@ set(R2D_SDK_SOURCES
     "${CMAKE_SOURCE_DIR}/src/re2d_world_polygon.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_render_features.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
     "${CMAKE_SOURCE_DIR}/src/bsp.c"
     sdk_data.c

@@ -1968,12 +1968,97 @@ static JSValue world_quality(JSContext *ctx,JSValueConst self,int argc,JSValueCo
 {
     WorldHandle *w=world_get(ctx,self);float p[2];if(!w||!world_numbers(ctx,argc,argv,2,p))return JS_EXCEPTION;
     if(p[0]<0||p[0]>4096||floorf(p[0])!=p[0]||p[1]<0||p[1]>45)return JS_ThrowRangeError(ctx,"Re2D World: poseBudget 0..4096, poseStep 0..45");w->pose_budget=(int)p[0];w->pose_step=p[1];
-    // Existing quality presets also drive the visual tier: low keeps the legacy
-    // look plus P0 grounding, medium adds P1 atmosphere/variation, high/ultra add
-    // edge quality, corner AO, four sky layers and liquid. This keeps the old
-    // high-level world.qualityPreset('high') path usable without a JS change.
-    r2d_world_render_quality(w,p[0]>=4?R2D_RENDER_QUALITY_HIGH:p[0]>=2?R2D_RENDER_QUALITY_MEDIUM:R2D_RENDER_QUALITY_LOW);
+    // world.quality is pose policy ONLY (BASHNYA 1.2.6 request: pose budget,
+    // geometry quality and atmosphere strength must be independent). It must
+    // not touch the visual tier: poseBudget 4 used to force HIGH and changed
+    // the whole frame. The visual tier has its own binding: renderQuality.
     return JS_UNDEFINED;
+}
+// Visual tier: 0 low, 1 medium, 2 high, 3 ultra. Fully replaces the render
+// feature preset (the same contract as qualityPreset), which also resets the
+// atmosphere overrides to the tier defaults. No argument -> current tier.
+static JSValue world_render_quality(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1)return JS_NewInt32(ctx,w->render_features.quality);
+    float p[1];if(!world_numbers(ctx,argc,argv,1,p))return JS_EXCEPTION;
+    if(p[0]<0.0f||p[0]>(float)R2D_RENDER_QUALITY_ULTRA||floorf(p[0])!=p[0])
+        return JS_ThrowRangeError(ctx,"Re2D World: render quality 0..3 (low|medium|high|ultra)");
+    if(!r2d_world_render_quality(w,(int)p[0]))
+        return JS_ThrowTypeError(ctx,"Re2D World: renderer is busy");
+    return JS_NewInt32(ctx,w->render_features.quality);
+}
+// Additive atmosphere controls: only the fields explicitly provided change.
+// Positional protocol (JS wrapper is the only caller): heightDensity, baseHeight,
+// falloff, hazeStrength, skyLayers (-1 leave, 0 off, 1 on), sunDisc (same),
+// hazeColor mode (0 leave, 1 auto/clear override, 2 set), haze R, G, B 0..1.
+// NaN means "leave unchanged" for numeric fields. Returns the applied values so
+// callers never have to guess.
+static bool atmosphere_number(JSContext *ctx,double value,double lo,double hi,const char *what)
+{
+    if(isnan(value))return true;
+    if(value<lo||value>hi){JS_ThrowRangeError(ctx,"Re2D World: atmosphere %s must be %g..%g",what,lo,hi);return false;}
+    return true;
+}
+static JSValue world_atmosphere(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    double a[10];
+    for(int i=0;i<10;i++){
+        if(i>=argc||JS_IsUndefined(argv[i])){a[i]=NAN;continue;}
+        if(JS_ToFloat64(ctx,&a[i],argv[i])<0)return JS_EXCEPTION;
+        if(!isnan(a[i])&&!isfinite(a[i]))return JS_ThrowRangeError(ctx,"Re2D World: atmosphere values must be finite");
+    }
+    if(!atmosphere_number(ctx,a[0],0.0,1.0,"heightDensity"))return JS_EXCEPTION;
+    if(!atmosphere_number(ctx,a[1],-100000.0,100000.0,"baseHeight"))return JS_EXCEPTION;
+    if(!atmosphere_number(ctx,a[2],0.0,100.0,"falloff"))return JS_EXCEPTION;
+    if(!atmosphere_number(ctx,a[3],0.0,1.0,"hazeStrength"))return JS_EXCEPTION;
+    if(!isnan(a[4])&&a[4]!=-1.0&&a[4]!=0.0&&a[4]!=1.0)
+        return JS_ThrowRangeError(ctx,"Re2D World: atmosphere skyLayers must be boolean");
+    if(!isnan(a[5])&&a[5]!=-1.0&&a[5]!=0.0&&a[5]!=1.0)
+        return JS_ThrowRangeError(ctx,"Re2D World: atmosphere sunDisc must be boolean");
+    if(!isnan(a[6])&&(a[6]<0.0||a[6]>2.0||a[6]!=floor(a[6])))
+        return JS_ThrowRangeError(ctx,"Re2D World: atmosphere hazeColor mode 0..2");
+    if(a[6]==2.0){
+        if(!atmosphere_number(ctx,a[7],0.0,1.0,"hazeColor red"))return JS_EXCEPTION;
+        if(!atmosphere_number(ctx,a[8],0.0,1.0,"hazeColor green"))return JS_EXCEPTION;
+        if(!atmosphere_number(ctx,a[9],0.0,1.0,"hazeColor blue"))return JS_EXCEPTION;
+        if(isnan(a[7])||isnan(a[8])||isnan(a[9]))
+            return JS_ThrowRangeError(ctx,"Re2D World: atmosphere hazeColor needs r, g, b");
+    }
+    if(w->rendering)return JS_ThrowTypeError(ctx,"Re2D World: renderer is busy");
+
+    R2DWorldRenderFeatures next=w->render_features;
+    if(!isnan(a[0]))next.fog_height_density=(float)a[0];
+    if(!isnan(a[1]))next.fog_base_height=(float)a[1];
+    if(!isnan(a[2]))next.fog_height_falloff=(float)a[2];
+    if(!isnan(a[3]))next.haze_strength=(float)a[3];
+    if(!isnan(a[4])&&a[4]>=0.0)next.sky_layers=a[4]!=0.0;
+    if(!isnan(a[5])&&a[5]>=0.0)next.sun_disc=a[5]!=0.0;
+    if(!isnan(a[6])){
+        if(a[6]==2.0){next.haze_color_set=true;next.haze_color[0]=(float)a[7];next.haze_color[1]=(float)a[8];next.haze_color[2]=(float)a[9];}
+        else if(a[6]==1.0){next.haze_color_set=false;next.haze_color[0]=next.haze_color[1]=next.haze_color[2]=0.0f;}
+        // mode 0: leave the override as it is
+    }
+    if(!r2d_world_render_validate(&next))
+        return JS_ThrowTypeError(ctx,"Re2D World: atmosphere configuration rejected");
+    if(!r2d_world_render_set_features(w,&next))
+        return JS_ThrowTypeError(ctx,"Re2D World: renderer is busy");
+
+    JSValue o=JS_NewObject(ctx);
+    set_num(ctx,o,"heightDensity",next.fog_height_density);
+    set_num(ctx,o,"baseHeight",next.fog_base_height);
+    set_num(ctx,o,"falloff",next.fog_height_falloff);
+    set_num(ctx,o,"hazeStrength",next.haze_strength);
+    if(next.haze_color_set){
+        const int r=(int)(next.haze_color[0]*255.0f+0.5f);
+        const int g=(int)(next.haze_color[1]*255.0f+0.5f);
+        const int b=(int)(next.haze_color[2]*255.0f+0.5f);
+        set_num(ctx,o,"hazeColor",(double)(r|(g<<8)|(b<<16)));
+    }else set_num(ctx,o,"hazeColor",-1);
+    JS_SetPropertyStr(ctx,o,"skyLayers",JS_NewBool(ctx,next.sky_layers));
+    JS_SetPropertyStr(ctx,o,"sunDisc",JS_NewBool(ctx,next.sun_disc));
+    return o;
 }
 static JSValue world_debug_view(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -2299,6 +2384,8 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"backend",JS_NewCFunction(ctx,world_backend,"backend",1));
     JS_SetPropertyStr(ctx,handle,"gpuWait",JS_NewCFunction(ctx,world_gpu_wait,"gpuWait",1));
     JS_SetPropertyStr(ctx,handle,"quality",JS_NewCFunction(ctx,world_quality,"quality",2));
+    JS_SetPropertyStr(ctx,handle,"renderQuality",JS_NewCFunction(ctx,world_render_quality,"renderQuality",1));
+    JS_SetPropertyStr(ctx,handle,"atmosphere",JS_NewCFunction(ctx,world_atmosphere,"atmosphere",10));
     JS_SetPropertyStr(ctx,handle,"visibility",JS_NewCFunction(ctx,world_debug_visibility,"visibility",0));
     JS_SetPropertyStr(ctx,handle,"regionConfig",JS_NewCFunction(ctx,world_region_config,"regionConfig",5));
     JS_SetPropertyStr(ctx,handle,"impostors",JS_NewCFunction(ctx,world_impostors,"impostors",0));

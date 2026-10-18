@@ -76,6 +76,18 @@ static bool intersection(R2DWorldWindow a,R2DWorldWindow b,R2DWorldWindow *out)
 // Project and near-clip a vertical portal quad in the existing camera convention.
 bool r2d_world_portal_window(const R2DRe2dView *v,float ortho,const R2DWorldPortal *p,const R2DWorldOpening *o,R2DWorldWindow *out)
 {
+    // Camera on the portal plane: the aperture projects to a line, so the
+    // near-plane clip below can drop the whole portal (all corners end up at or
+    // behind the near plane). The camera is physically standing in the
+    // aperture, so the conservative window is the full view. This keeps spawns
+    // exactly on a cell/portal boundary from collapsing visibility to one cell.
+    {
+        float px=p->bx-p->ax,py=p->by-p->ay,length=sqrtf(px*px+py*py);
+        if(length>1e-6f){
+            float distance=fabsf((v->x-p->ax)*py-(v->y-p->ay)*px)/length;
+            if(distance<=1e-4f){*out=(R2DWorldWindow){0,0,v->width,v->height};return true;}
+        }
+    }
     float points[4][3]={{p->ax,p->ay,o->bottom},{p->bx,p->by,o->bottom},{p->bx,p->by,o->top},{p->ax,p->ay,o->top}},camera[4][3],clipped[8][3];int count=0;
     for(int i=0;i<4;i++) {
         float dx=points[i][0]-v->x,dy=points[i][1]-v->y,h=points[i][2]-v->eye,f=dx*v->cos_yaw+dy*v->sin_yaw;

@@ -60,7 +60,9 @@ $.render(() => world.render(view,400,240));
 | `.render(view=null,width=320,height=180)` | синтезирует и рисует обычный sprite на всё окно; возвращает sprite ID |
 | `.renderToSprite(view=null,width=320,height=180)` | синтезирует без fullscreen draw; возвращает sprite ID для previews |
 | `.backend('cpu'\|'gpu')` | выбор native reference или SDL_GPU; wrapper default CPU |
-| `.quality({poseBudget,poseStep})` | частично обновляет policy; defaults 1 pose/frame, 3°; 0 budget = unlimited |
+| `.quality({poseBudget,poseStep})` | меняет только политику поз; defaults 1 pose/frame, 3°; 0 budget = unlimited; **визуальный tier не трогает** |
+| `.renderQuality('low'\|'medium'\|'high'\|'ultra')` | явно выбирает визуальный tier (preset рендер-фич); без аргумента возвращает текущий (`'low'`…) |
+| `.atmosphere({...})` | атмосфера поверх tier: меняет только переданные поля, возвращает применённые значения; без аргумента — текущие |
 | `.profile({gpuWait:false})` | completion wait для измерения; true включает ожидание fence |
 | `.info()` | native snapshot counts/timings; точные поля в [runtime](../re2d/RE2D_WORLD_RUNTIME.md) |
 | `.dispose()` | освобождает мир/его registry/frame/GPU resources; повторный вызов безопасен; не удаляет игровые узлы |
@@ -329,14 +331,49 @@ GPU). Нет коллизий, trails и VFX bundles в этом проходе.
 ## Renderer visual features (R-01/R-02)
 
 ```js
-world.qualityPreset('high'); // visual tier: low | medium | high
+world.renderQuality('high'); // visual tier: low | medium | high | ultra
 // low = legacy + P0 contact grounding; medium = grounding + variation,
 //       height fog/haze, sky layers, liquid; high = + edge/bevel/corner AO.
+
+// Pose policy is independent from the visual tier (BASHNYA 1.2.6): a bigger
+// pose budget used to force HIGH and change the whole frame.
+world.quality({ poseBudget: 4, poseStep: 3 }); // pose only, tier stays as-is
+
+// Atmosphere is additive: only the provided fields change, applied values are
+// returned. hazeColor:null restores the automatic tint from the authored sky.
+world.atmosphere({ heightDensity: 0.02, baseHeight: 100, falloff: 2,
+                   hazeStrength: 0.12, hazeColor: '#102030',
+                   skyLayers: false, sunDisc: false });
+
+// qualityPreset stays the full preset path: pose budget + visual tier + particles.
+world.qualityPreset('high');
+
 const v = world.info().visual;
 // {quality, contactShadows, footAo, floorTint, edgeActors,
 //  variedSurfaces, bevelSurfaces, cornerAoSurfaces, fogSurfaces,
 //  hazeSurfaces, liquidSurfaces, skyLayers, celestialDiscs, ...}
 ```
+
+`world.renderQuality` runs `r2d_world_render_quality(world,
+R2D_RENDER_QUALITY_*)`, so it is a preset: it resets atmosphere overrides to
+the tier defaults — apply `world.atmosphere` after choosing a tier. Default
+worlds are created with the LOW tier, so the legacy low frame is unchanged.
+
+**Migration note (1.2.7).** `world.quality({poseBudget, poseStep})` no longer
+changes the visual tier (it used to be `poseBudget>=4` → HIGH, `2..3` → MEDIUM,
+otherwise LOW). Use `world.renderQuality(name)` for the tier and
+`world.qualityPreset(name)` for the full preset. Defaults still create the LOW
+frame. A game that used to get MEDIUM from `quality({poseBudget:2})` must now
+call `renderQuality('medium')` (or `qualityPreset('medium')`), otherwise this
+is a silent visual change.
+
+
+`world.atmosphere` applies only the provided fields through
+`r2d_world_render_set_features` and never changes the tier. Fields:
+`heightDensity` 0..1, `baseHeight` -100000..100000, `falloff` 0..100,
+`hazeStrength` 0..1, `hazeColor` (`'#rrggbb'` or packed RGBA number, `null` =
+auto), `skyLayers`/`sunDisc` booleans. Wrong type throws `TypeError`,
+out-of-range throws `RangeError`; unknown options are rejected, not ignored.
 
 Native GPU pass: contact shadow/foot AO/local floor tint under Re2D actors,
 sprite alpha feather/outline/grime, deterministic surface variation, fake bevel

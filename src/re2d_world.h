@@ -2,6 +2,7 @@
 #include "bsp.h"
 #include "re2d_math.h"
 #include "re2d_world_metadata.h"
+#include "re2d_world_render_features.h"
 #include <stdint.h>
 
 // Specialised RE2D authoring primitives, never a triangle mesh.
@@ -303,6 +304,11 @@ uint32_t r2d_world_lit_color(const R2DRe2dWorld *,int,uint32_t,float,float,float
 void r2d_world_stamp_lit(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,const uint8_t *,int,float,float,float,float,float,float);
 
 void r2d_world_frame_targets(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,float,const R2DWorldVisibility *,R2DWorldPixelOwner *);
+// CPU reference frame with the R-02 atmosphere model. The runtime CPU backend
+// passes its render features so MEDIUM/HIGH CPU frames use the same bounded
+// height fog and haze tint as the GPU tier; LOW features leave the legacy path
+// byte-identical.
+void r2d_world_frame_targets_features(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,float,const R2DWorldVisibility *,R2DWorldPixelOwner *,const R2DWorldRenderFeatures *);
 void r2d_world_stamp_targets(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,const uint8_t *,int,float,float,float,float,float,float,R2DWorldPixelOwner *,int);
 void r2d_world_stamp_samples(const R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,const uint8_t *,const float *,int,float,float,float,float,float,float,R2DWorldPixelOwner *,int);
 // Blend-aware variants used by native atlas world sprites (masked/opaque/translucent/additive).
@@ -322,6 +328,9 @@ int r2d_world_material_set(R2DRe2dWorld *,const R2DWorldMaterial *);
 int r2d_world_material_find(const R2DRe2dWorld *,const char *);
 bool r2d_world_surface_material(R2DRe2dWorld *,int,int);
 bool r2d_world_material_color(const R2DRe2dWorld *,int,int,uint32_t,float,float,float,float,float,const float[3],const float[3],float,uint32_t *);
+// Same shading with the R-02 atmosphere model (bounded height fog + haze),
+// matching shaders/world.frag.glsl. NULL features == legacy fog.
+bool r2d_world_material_color_features(const R2DRe2dWorld *,int,int,uint32_t,float,float,float,float,float,const float[3],const float[3],float,const R2DWorldRenderFeatures *,uint32_t *);
 int r2d_world_surface_blend(const R2DRe2dWorld *,int);
 int r2d_world_transparent_order(R2DRe2dWorld *,const R2DRe2dView *,const R2DWorldVisibility *,int *);
 bool r2d_world_frame_transparent(R2DRe2dWorld *,const R2DRe2dView *,int,int,uint8_t *,float *,float,const R2DWorldVisibility *);

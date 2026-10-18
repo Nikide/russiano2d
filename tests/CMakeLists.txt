@@ -107,6 +107,22 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_profile_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# --- Профайлер кадра: кольцо GPU-fence ---------------------------------------
+# State machine слотов проверяется с подменённым fence-слоем: profile.c
+# собирается с -DR2D_PROFILE_TEST, тест подставляет «сигнален?»/«отпустить».
+# Настоящего GPU-устройства не нужно, поэтому тест идёт в общем наборе. Именно
+# этот тест закрывает регрессию «опрос fence из чужого потока»: все переходы
+# слотов обязаны быть безопасны на одном главном потоке.
+add_executable(r2d_profile_fence_test "${CMAKE_SOURCE_DIR}/tests/re2d/r2d_profile_fence_test.c"
+                                      "${CMAKE_SOURCE_DIR}/src/profile.c")
+target_include_directories(r2d_profile_fence_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_compile_definitions(r2d_profile_fence_test PRIVATE R2D_PROFILE_TEST=1)
+target_link_libraries(r2d_profile_fence_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_profile_fence_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_profile_fence_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # --- 2D BSP-дерево -----------------------------------------------------------
 # Инвариант полноты: обход обязан вернуть каждый отрезок дерева ровно один раз.
 # Ловит случай предельной глубины, когда остаток геометрии «сваливался» в лист
@@ -529,6 +545,27 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_world_impostor_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# Impostor LOD policy: a card is only emitted beyond the region-LOD near band, so
+# a region the local renderer already draws never gets a duplicate silhouette.
+# Covers the BASHNYA 1.2.6 report (min_distance=0 regardless of the near band).
+add_executable(r2d_world_impostor_lod_policy_test re2d/impostor_lod_policy_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_impostor.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_region.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_hint.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c" "${CMAKE_SOURCE_DIR}/src/json.c"
+    "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_world_impostor_lod_policy_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_impostor_lod_policy_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_impostor_lod_policy_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_impostor_lod_policy_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_impostor_lod_policy_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # Hierarchical visibility: region/vis-cluster reject before local BSP, closed
 # areaportal cuts both the coarse PVS and the local portal walk.
 add_executable(r2d_world_hierarchical_test re2d/hierarchical_visibility_test.c
@@ -762,6 +799,23 @@ if(TARGET R2D_SteamAudio)
     endif()
 endif()
 
+
+# The CPU material path uses the R-02 render feature math (bounded height fog +
+# haze), so every world test that links re2d_world_material.c also needs
+# re2d_world_render_features.c. Kept in one place instead of 14 duplicated
+# source lists.
+set(_r2d_render_features_targets
+    r2d_re2d_world_test r2d_world_batch_test r2d_world_trace_test
+    r2d_world_controller_test r2d_re2d_semantic_test r2d_re2d_portal_test
+    r2d_world_automap_test r2d_world_nav_test r2d_world_impostor_test
+    r2d_world_impostor_lod_policy_test r2d_world_hierarchical_test
+    r2d_world_tools_test r2d_world_hint_test r2d_world_decal2_test)
+foreach(_r2d_tgt IN LISTS _r2d_render_features_targets)
+    if(TARGET ${_r2d_tgt})
+        target_sources(${_r2d_tgt} PRIVATE
+            "${CMAKE_SOURCE_DIR}/src/re2d_world_render_features.c")
+    endif()
+endforeach()
 
 # --- P0-H: CTest для каждой Unity-цели и всех JS-наборов --------------------
 # Цели перечисляются автоматически по имени r2d_*_test; EXR-тест требует

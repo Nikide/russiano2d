@@ -45,30 +45,53 @@ References live in `tests/agent/reference/`:
 
 ## Quality tiers
 
-
-The existing high-level quality call drives the visual tier; no new JS wrapper
-is required:
+The visual tier, the pose budget and the atmosphere are independent controls:
 
 ```js
-world.qualityPreset('low');    // legacy look + P0 contact grounding
-world.qualityPreset('medium'); // + foot AO, floor tint, contact light,
-                               //   material variation/macro, height fog/haze,
-                               //   sky layers, liquid shading
-world.qualityPreset('high');   // + edge outline/grime/feather, bevel,
-                               //   corner AO-lite, 4 sky layers, full VFX look
+world.renderQuality('low');                // visual tier: low | medium | high | ultra
+world.quality({poseBudget:2, poseStep:5}); // pose policy only, never the tier
+world.atmosphere({heightDensity:0.004, baseHeight:64, falloff:60,
+                  hazeStrength:0.12, hazeColor:'#102030',
+                  skyLayers:false, sunDisc:false}); // only provided fields change
+world.qualityPreset('high');               // full preset: pose + tier + particles
 ```
 
-`world.quality({poseBudget, poseStep})` also updates the tier:
-`poseBudget<=1` → low, `2..3` → medium, `>=4` → high. The C API
-`r2d_world_render_quality(world, R2D_RENDER_QUALITY_*)` and
+`world.renderQuality(name)` runs `r2d_world_render_quality(world, R2D_RENDER_QUALITY_*)`;
+no argument returns the current tier. Being a preset it resets atmosphere
+overrides to the tier defaults, so call `world.atmosphere` after picking a tier.
+
+`world.quality({poseBudget, poseStep})` changes only the pose policy (BASHNYA
+1.2.6: `poseBudget:4` used to force HIGH and change the whole frame).
+`world.qualityPreset` keeps the full-preset behavior (pose budget + visual tier
++ particle budget). Default worlds create with LOW, preserving the legacy low
+frame.
+
+`world.atmosphere({...})` applies only the provided fields through
+`r2d_world_render_set_features`, returns the applied values and never changes
+the tier. Height fog/haze: `heightDensity` 0..1 (asymptote is
+`heightDensity*falloff`), `baseHeight` -100000..100000, `falloff` 0..100 — the
+height-fog **scale height in world units** (`0` disables the height term; this
+replaced the old dimensionless multiplier in 1.2.7, so old
+`atmosphere({falloff:...})` values must be re-read as world units),
+`hazeStrength` 0..1. `hazeColor` is an explicit linear RGB override
+(`'#rrggbb'` or packed RGBA number); `hazeColor:null` restores the automatic
+tint derived from the authored sky colour (legacy frames unchanged).
+`skyLayers`/`sunDisc` booleans toggle the sky features. Wrong type throws
+TypeError, out-of-range throws RangeError; unknown options are rejected.
+
+The C API `r2d_world_render_quality(world, R2D_RENDER_QUALITY_*)` and
 `r2d_world_render_set_features(world, &features)` are available to native hosts;
 `r2d_world_render_features(world)` returns the current immutable view.
 `r2d_world_render_defaults/preset/validate` are the single contract used by
 tests.
 
 Low quality is the parity-safe default: every R-01/R-02 visual uniform is zero
-except grounding, so the legacy frame is unchanged. Medium/high are GPU
-reference features; mixed CPU/GPU parity for them is not claimed (see Limits).
+except grounding, so the legacy frame is unchanged. The R-02 atmosphere term
+(bounded height fog + haze) is implemented in both the GPU shader and the CPU
+composer (`r2d_world_frame_targets_features`), so MEDIUM/HIGH CPU frames carry
+the same fog/haze as the GPU tier. The remaining R-01/R-02 surface features
+(material/macro variation, bevel/corner AO, detail, liquid, sky layers) are
+GPU-reference; mixed CPU/GPU parity for them is not claimed (see Limits).
 
 ## R-01 sprite grounding
 
@@ -78,8 +101,14 @@ reference features; mixed CPU/GPU parity for them is not claimed (see Limits).
 * Foot AO — a smaller radial core inside the contact card.
 * Local floor tint — the card colour is mixed from the support span's floor
   colour and ambient/light tint.
-* Height fog — per-fragment optical depth uses the span fog plus a height term
-  above `fog_base_height`, so high rooms/far floors lose contrast.
+* Height fog — per-fragment optical depth adds a bounded, distance-gated height
+  integral above `fog_base_height`:
+  `heightDensity*falloff*(1-exp(-max(0,height-base)/falloff))*(1-exp(-depth*0.002))`.
+  The contribution approaches the finite asymptote `heightDensity*falloff`
+  (MEDIUM 24%, HIGH 42%, ULTRA 55%), so tall vertical maps keep authored
+  material contrast while extreme height/distance still lose it (`falloff` is
+  the scale height in world units; 0 disables the height term). Shared by the
+  GPU shader and the CPU composer.
 * Contact lighting — the sprite shader darkens the lower part of the actor by
   `contactLightStrength`, tying the feet to the floor.
 
@@ -103,8 +132,11 @@ and does not generate a shadow map.
 
 ## R-02 atmosphere and sky
 
-* Height fog + atmospheric haze: distance fog is mixed with sky tint, contrast
-  and saturation fall with depth. Legacy branch is byte-identical when off.
+* Height fog + atmospheric haze: the authored span distance fog is mixed with
+  the bounded, distance-gated height term (see R-01 grounding), the fog colour
+  is blended toward the haze tint, and contrast/saturation fall with depth.
+  Implemented identically in `shaders/world.frag.glsl` and the CPU composer;
+  the legacy branch is byte-identical when both are off.
 * Sky layers: panorama (existing) + up to four parallax cards sampled from the
   panorama with per-layer parallax/scale/vertical offset/alpha, plus a
   procedural sun/moon disc with glow. Layer data is configured in
@@ -156,8 +188,11 @@ python3 tests/agent/re2d_world_renderer_test.py          # existing regression
 
 ## Limitations (honest)
 
-* Advanced R-01/R-02 effects are GPU-reference. The CPU composer keeps the
-  legacy material/lighting/fog path; only grounding is shared by both backends.
+* Advanced R-01/R-02 effects are GPU-reference, except the R-02 atmosphere term
+  (bounded height fog + haze), which the CPU composer also applies through
+  `r2d_world_frame_targets_features` so MEDIUM/HIGH CPU frames carry the same
+  fog/haze. Material/macro variation, bevel/corner AO, detail, liquid shading
+  and sky layers stay GPU-only; the CPU composer is not a second renderer.
 * No per-pixel floor occlusion for the contact card (screen-space grounding).
 * Sky parallax cards reuse the single panorama texture; separate layer textures,
   weather layers and per-room sky profiles are not authored yet.
@@ -168,8 +203,11 @@ python3 tests/agent/re2d_world_renderer_test.py          # existing regression
   material bank; no new decal rotation/size authoring was added in this pass.
 * Liquid shading uses terrain metadata on existing floor surfaces; no fluid
   simulation, reflection engine or planar 3D reflection.
-* CPU/GPU parity for medium/high tiers is not claimed; default low is
-  parity-safe and is what existing regression comparisons use.
+* CPU/GPU parity for medium/high tiers is not pixel-exact: the atmosphere term
+  matches, but the GPU-only R-01/R-02 surface effects above legitimately differ.
+  Default low is parity-safe and is what existing regression comparisons use;
+  the BASHNYA MEDIUM parity repro (walls/floors at the same visibility) reports
+  MAD ~4/255 with the atmosphere term matched.
 
 ## P4/P5 renderer remainder (task-7)
 

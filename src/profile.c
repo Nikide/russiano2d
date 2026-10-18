@@ -6,10 +6,9 @@
 // микросекунд на кадр.
 //
 // GPU-замер — по fence командного буфера (timestamp-запросов в SDL3 нет,
-// подробности в profile.h). Поток-поллер опрашивает SDL_QueryGPUFence и
-// складывает готовое время в слот; главный поток забирает его в
-// r2d_prof_frame_end, не блокируясь. Когда профайлер выключен, ни один fence
-// не передаётся профайлеру и ни один запрос не делается.
+// подробности в profile.h). Опрос fence — неблокирующий и только на главном
+// потоке: в submit и в frame_end. Отдельного потока нет; когда профайлер
+// выключен, ни один fence не передаётся профайлеру и ни один запрос не делается.
 //
 // Кроме средних по окну профайлер отдаёт историю кадра с перцентилями (§17.2)
 // и ловит долгие кадры — hitch-детектор (§18). И то и другое читает то же
@@ -39,9 +38,6 @@ _Static_assert(R2D_PROF_WINDOW <= R2D_PROF_WINDOW_MAX,
 // профайлер отпустит fence. Четырёх хватает с запасом: замер готовится за
 // 1–2 кадра, а если GPU отстал сильнее — кадр просто не измеряется.
 #define R2D_PROF_GPU_SLOTS 4
-// Пауза между опросами fence. 0,2 мс — точность замера при почти нулевой
-// нагрузке на CPU (поток живёт только пока кадр GPU не завершён).
-#define R2D_PROF_GPU_POLL_NS 200000
 
 static const char *ZONE_NAMES[R2D_PROF_COUNT] = {
     "JS: логика",
@@ -74,11 +70,6 @@ static struct ___tracy_source_location_data g_tracy_zone[R2D_PROF_COUNT];
 static TracyCZoneCtx g_tracy_ctx[R2D_PROF_COUNT];
 static bool          g_tracy_zones_ready = false;
 
-// Мьютекс слотов GPU-замера — единственный лок профайлера. В Tracy он виден
-// как объект синхронизации: по таймлайну понятно, ждёт ли кадр поток опроса
-// fence или наоборот.
-static TracyCLockCtx g_tracy_lock = NULL;
-
 // Источник локации зоны заполняется один раз и живёт до конца процесса: клиент
 // Tracy отдаёт серверу указатель на него, поэтому структура обязана быть
 // статической. Вызывается только из r2d_prof_begin (главный поток).
@@ -106,25 +97,6 @@ static void r2d__tracy_frame_plots(double real, double zones)
 }
 
 #endif  // R2D_TRACY
-
-// Мьютексы профайлера: с Tracy отмечаем вход/выход из лока, без Tracy — это
-// ровно прежние SDL_LockMutex/SDL_UnlockMutex.
-#ifdef R2D_TRACY
-static void r2d__lock(SDL_Mutex *m)
-{
-    if (g_tracy_lock) TracyCLockBeforeLock(g_tracy_lock);
-    SDL_LockMutex(m);
-    if (g_tracy_lock) TracyCLockAfterLock(g_tracy_lock);
-}
-static void r2d__unlock(SDL_Mutex *m)
-{
-    SDL_UnlockMutex(m);
-    if (g_tracy_lock) TracyCLockAfterUnlock(g_tracy_lock);
-}
-#else
-#  define r2d__lock(m)   SDL_LockMutex(m)
-#  define r2d__unlock(m) SDL_UnlockMutex(m)
-#endif
 
 static bool   g_enabled = true;
 static Uint64 g_freq = 0;
@@ -157,19 +129,25 @@ static bool   g_work_open  = false;
 static void r2d__hitch_frame(double measured, double real, double work);
 
 // --- GPU-замер: состояние ---------------------------------------------------
+//
+// Кольцо слотов: fence живёт в слоте от отправки до того, как главный поток
+// увидит его сигнал и отпустит. Главный поток опрашивает слоты неблокирующе
+// (в submit следующего кадра и в frame_end), поэтому ни одного вызова SDL_GPU
+// из другого потока нет — именно эта схема снимает класс падений
+// r2d_gpu_prof/METAL_QueryFence (BASHNYA 2026-10-18, exit 139).
+//
+// «GPU ms» — это интервал от отправки командного буфера до момента, когда CPU
+// увидел сигнал fence. Это не аппаратный timestamp: в замер входит ожидание в
+// очереди GPU, а не только выполнение. Слоты конечны: если GPU отстал больше
+// чем на R2D_PROF_GPU_SLOTS кадров, кадр не измеряется, но его fence всё равно
+// отпускается — утечки нет.
 
 typedef struct R2DProfGpuSlot {
     SDL_GPUFence *fence;      // ждёт опроса; NULL — слот свободен
     double        submit_ms;  // момент отправки командного буфера
-    double        elapsed_ms; // готовый замер: submit → сигнал fence
-    bool          ready;      // замер готов и ждёт главного потока
 } R2DProfGpuSlot;
 
 static SDL_GPUDevice *g_gpu_device = NULL;
-static SDL_Mutex     *g_gpu_lock   = NULL;   // защищает слоты
-static SDL_Semaphore *g_gpu_wake   = NULL;   // «появился fence» для поллера
-static SDL_Thread    *g_gpu_thread = NULL;
-static SDL_AtomicInt  g_gpu_stop;
 static R2DProfGpuSlot g_gpu_slots[R2D_PROF_GPU_SLOTS];
 static bool           g_gpu_ok  = false;     // замер доступен
 static float          g_gpu_ms  = -1.0f;     // последний забранный замер, < 0 — нет
@@ -180,80 +158,38 @@ static double r2d__now_ms(void)
     return (double)SDL_GetPerformanceCounter() * 1000.0 / (double)g_freq;
 }
 
-// Забирает готовые замеры из слотов и отпускает их fence. Вызывается только из
-// главного потока (r2d_prof_frame_end): все вызовы SDL_GPU — в одном потоке.
-static void r2d__gpu_harvest(void)
+// Слой fence. В тестовой сборке (R2D_PROFILE_TEST) SDL_GPU не нужен: тест
+// подменяет ответ «сигнален?» и учёт освобождений. В обычной сборке это ровно
+// вызовы SDL_GPU, и делает их только главный поток.
+#ifdef R2D_PROFILE_TEST
+bool r2d__prof_test_signaled(SDL_GPUFence *fence);
+void r2d__prof_test_release(SDL_GPUFence *fence);
+static bool r2d__gpu_signaled(SDL_GPUFence *fence) { return r2d__prof_test_signaled(fence); }
+static void r2d__gpu_release(SDL_GPUFence *fence) { if (fence) r2d__prof_test_release(fence); }
+#else
+static bool r2d__gpu_signaled(SDL_GPUFence *fence)
 {
-    if (!g_gpu_lock) return;
-
-    SDL_GPUFence *done[R2D_PROF_GPU_SLOTS];
-    int n = 0;
-
-    r2d__lock(g_gpu_lock);
-    for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
-        if (!g_gpu_slots[i].ready) continue;
-        g_gpu_ms = (float)g_gpu_slots[i].elapsed_ms;
-        done[n++] = g_gpu_slots[i].fence;
-        g_gpu_slots[i].fence = NULL;
-        g_gpu_slots[i].ready = false;
-    }
-    r2d__unlock(g_gpu_lock);
-
-    for (int i = 0; i < n; i++) {
-        if (done[i]) SDL_ReleaseGPUFence(g_gpu_device, done[i]);
-    }
+    return SDL_QueryGPUFence(g_gpu_device, fence);
 }
-
-// Поток-поллер: ждёт сигнала fence и запоминает время. Кадр не блокирует —
-// главный поток только передаёт fence и забирает готовое.
-static int SDLCALL r2d__gpu_poll_thread(void *user)
+static void r2d__gpu_release(SDL_GPUFence *fence)
 {
-    SDL_GPUDevice *device = (SDL_GPUDevice *)user;
-
-#ifdef R2D_TRACY
-    // Имя потока в таймлайне: видно, что ожидание fence — это отдельный поток,
-    // а не «залипший» кадр.
-    TracyCSetThreadName("профайлер: опрос fence");
+    if (fence && g_gpu_device) SDL_ReleaseGPUFence(g_gpu_device, fence);
+}
 #endif
 
-    for (;;) {
-        SDL_WaitSemaphore(g_gpu_wake);
-        if (SDL_GetAtomicInt(&g_gpu_stop)) break;
-
-        for (;;) {
-            SDL_GPUFence *fence = NULL;
-            double submit_ms = 0.0;
-
-            r2d__lock(g_gpu_lock);
-            for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
-                if (g_gpu_slots[i].fence && !g_gpu_slots[i].ready) {
-                    fence = g_gpu_slots[i].fence;
-                    submit_ms = g_gpu_slots[i].submit_ms;
-                    break;
-                }
-            }
-            r2d__unlock(g_gpu_lock);
-
-            if (!fence) break;   // всё опрошено — спим до следующего кадра
-
-            while (!SDL_QueryGPUFence(device, fence)) {
-                if (SDL_GetAtomicInt(&g_gpu_stop)) return 0;
-                SDL_DelayPrecise(R2D_PROF_GPU_POLL_NS);
-            }
-            const double elapsed = r2d__now_ms() - submit_ms;
-
-            r2d__lock(g_gpu_lock);
-            for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
-                if (g_gpu_slots[i].fence == fence) {
-                    g_gpu_slots[i].elapsed_ms = elapsed;
-                    g_gpu_slots[i].ready = true;
-                    break;
-                }
-            }
-            r2d__unlock(g_gpu_lock);
-        }
+// Неблокирующий опрос слотов. Сигнальные fence'ы дают замер и отпускаются;
+// несигнальные остаются в кольце до следующего опроса. Без ожиданий и пауз.
+static void r2d__gpu_harvest(void)
+{
+    if (!g_gpu_ok || !g_gpu_device) return;
+    for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
+        SDL_GPUFence *fence = g_gpu_slots[i].fence;
+        if (!fence) continue;
+        if (!r2d__gpu_signaled(fence)) continue;
+        g_gpu_ms = (float)(r2d__now_ms() - g_gpu_slots[i].submit_ms);
+        g_gpu_slots[i].fence = NULL;
+        r2d__gpu_release(fence);
     }
-    return 0;
 }
 
 void r2d_prof_gpu_init(SDL_GPUDevice *device)
@@ -261,67 +197,20 @@ void r2d_prof_gpu_init(SDL_GPUDevice *device)
     r2d_prof_gpu_shutdown();
     g_gpu_ms = -1.0f;
     g_gpu_device = device;
-    if (!device) return;   // без устройства замер недоступен: строки «н/д»
-
-    g_gpu_lock = SDL_CreateMutex();
-    g_gpu_wake = SDL_CreateSemaphore(0);
-    if (!g_gpu_lock || !g_gpu_wake) {
-        R2D_WARN("профайлер: GPU-замер недоступен (%s)", SDL_GetError());
-        r2d_prof_gpu_shutdown();
-        return;
-    }
-#ifdef R2D_TRACY
-    // Лок объявляем Tracy ровно тогда, когда он реально существует.
-    TracyCLockAnnounce(g_tracy_lock);
-    TracyCLockCustomName(g_tracy_lock, "профайлер: слоты GPU-замера",
-                         sizeof("профайлер: слоты GPU-замера") - 1);
-#endif
-
-    SDL_SetAtomicInt(&g_gpu_stop, 0);
-    g_gpu_thread = SDL_CreateThread(r2d__gpu_poll_thread, "r2d_gpu_prof", device);
-    if (!g_gpu_thread) {
-        R2D_WARN("профайлер: не удалось запустить поток опроса fence (%s)", SDL_GetError());
-        r2d_prof_gpu_shutdown();
-        return;
-    }
-    g_gpu_ok = true;
+    // Без устройства замер недоступен: строки «н/д». Ни потока, ни лока, ни
+    // аллокаций здесь не появляется.
+    g_gpu_ok = device != NULL;
 }
 
 void r2d_prof_gpu_shutdown(void)
 {
-    if (g_gpu_thread) {
-        SDL_SetAtomicInt(&g_gpu_stop, 1);
-        SDL_SignalSemaphore(g_gpu_wake);
-        SDL_WaitThread(g_gpu_thread, NULL);
-        g_gpu_thread = NULL;
+    // main.c зовёт это после SDL_WaitForGPUIdle, но отпускаем безусловно:
+    // корректность не должна зависеть от порядка вызова. Владелец fence — слот.
+    for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
+        if (g_gpu_slots[i].fence) r2d__gpu_release(g_gpu_slots[i].fence);
+        g_gpu_slots[i].fence = NULL;
+        g_gpu_slots[i].submit_ms = 0.0;
     }
-
-    if (g_gpu_lock) {
-        r2d__lock(g_gpu_lock);
-        for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
-            if (g_gpu_slots[i].fence && g_gpu_device) {
-                SDL_ReleaseGPUFence(g_gpu_device, g_gpu_slots[i].fence);
-            }
-            g_gpu_slots[i].fence = NULL;
-            g_gpu_slots[i].ready = false;
-            g_gpu_slots[i].elapsed_ms = 0.0;
-        }
-        r2d__unlock(g_gpu_lock);
-        SDL_DestroyMutex(g_gpu_lock);
-        g_gpu_lock = NULL;
-#ifdef R2D_TRACY
-        // Лок исчез — снимаем и его объект в Tracy (порядок: после Destroy).
-        if (g_tracy_lock) {
-            TracyCLockTerminate(g_tracy_lock);
-            g_tracy_lock = NULL;
-        }
-#endif
-    }
-    if (g_gpu_wake) {
-        SDL_DestroySemaphore(g_gpu_wake);
-        g_gpu_wake = NULL;
-    }
-
     g_gpu_device = NULL;
     g_gpu_ok = false;
     g_gpu_ms = -1.0f;
@@ -332,32 +221,35 @@ void r2d_prof_gpu_submit(SDL_GPUFence *fence)
     if (!fence) return;
     // Замер выключен или недоступен — просто отпускаем fence, как раньше.
     if (!g_enabled || !g_gpu_ok) {
-        if (g_gpu_device) SDL_ReleaseGPUFence(g_gpu_device, fence);
+        r2d__gpu_release(fence);
         return;
     }
 
-    // Сначала освобождаем готовые слоты: если GPU отстал, кольцо не забьётся.
+    // Сначала забираем готовое: если GPU отстал, кольцо не забьётся.
     r2d__gpu_harvest();
 
-    bool placed = false;
-    r2d__lock(g_gpu_lock);
     for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) {
         if (g_gpu_slots[i].fence) continue;
         g_gpu_slots[i].fence = fence;
         g_gpu_slots[i].submit_ms = r2d__now_ms();
-        g_gpu_slots[i].elapsed_ms = 0.0;
-        g_gpu_slots[i].ready = false;
-        placed = true;
-        break;
-    }
-    r2d__unlock(g_gpu_lock);
-
-    if (!placed) {   // GPU отстал больше чем на R2D_PROF_GPU_SLOTS кадров
-        SDL_ReleaseGPUFence(g_gpu_device, fence);
         return;
     }
-    SDL_SignalSemaphore(g_gpu_wake);
+    // GPU отстал больше чем на R2D_PROF_GPU_SLOTS кадров: кадр не измеряем,
+    // но fence отпускаем — утечки нет.
+    r2d__gpu_release(fence);
 }
+
+#ifdef R2D_PROFILE_TEST
+// Тестовый доступ к состоянию кольца: сколько слотов занято и сколько их
+// всего. Ровно эти два числа проверяет tests/re2d/r2d_profile_fence_test.c.
+int r2d__prof_test_slots_in_use(void)
+{
+    int n = 0;
+    for (int i = 0; i < R2D_PROF_GPU_SLOTS; i++) if (g_gpu_slots[i].fence) n++;
+    return n;
+}
+int r2d__prof_test_slot_capacity(void) { return R2D_PROF_GPU_SLOTS; }
+#endif
 
 bool r2d_prof_gpu_available(void) { return g_gpu_ok; }
 
@@ -441,7 +333,7 @@ void r2d_prof_frame_end(float real_ms)
 
     const double now = r2d__now_ms();
 
-    // GPU-замер готовится в фоне: забираем то, что успело дозреть (1–2 кадра
+    // GPU-замер: неблокирующе забираем то, что успело дозреть (1–2 кадра
     // назад). Если ничего не готово — колонка остаётся «нет данных».
     r2d__gpu_harvest();
 

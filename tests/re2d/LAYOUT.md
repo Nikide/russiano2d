@@ -23,11 +23,13 @@ both directions (file->CMake and CMake->file).
 | `brush_entity_smoke_test.c` | `world` | yes |
 | `brush_test.c` | `world` | yes |
 | `controller_test.c` | `core` | yes |
+| `debug_views_test.c` | `render` | yes |
 | `decal2_test.c` | `render` | yes |
 | `exr_test.c` | `sky` | yes |
 | `hierarchical_visibility_test.c` | `pvs` | yes |
 | `hint_cache_test.c` | `region` | yes |
 | `hint_visibility_test.c` | `pvs` | yes |
+| `impostor_lod_policy_test.c` | `streaming` | yes |
 | `impostor_test.c` | `streaming` | yes |
 | `material_anim_test.c` | `material` | yes |
 | `metadata_test.c` | `core` | yes |
@@ -39,6 +41,7 @@ both directions (file->CMake and CMake->file).
 | `portal_fraction_test.c` | `render` | yes |
 | `portal_visual_test.c` | `render` | yes |
 | `postprocess_test.c` | `render` | yes |
+| `r2d_profile_fence_test.c` | `core` | yes |
 | `re2d_test.c` | `core` | yes |
 | `region_test.c` | `region` | yes |
 | `render_features_test.c` | `render` | yes |
@@ -49,6 +52,7 @@ both directions (file->CMake and CMake->file).
 | `secret_test.c` | `core` | yes |
 | `semantic_test.c` | `core` | yes |
 | `sky_layers_test.c` | `sky` | yes |
+| `sky_leak_test.c` | `sky` | yes |
 | `sky_test.c` | `sky` | yes |
 | `stream_io_test.c` | `streaming` | yes |
 | `stream_test.c` | `streaming` | yes |
@@ -56,27 +60,28 @@ both directions (file->CMake and CMake->file).
 | `trace_test.c` | `core` | yes |
 | `trigger_test.c` | `core` | yes |
 | `vfx_test.c` | `vfx` | yes |
+| `volume_entity_test.c` | `world` | yes |
 | `volume_test.c` | `world` | yes |
 | `world_test.c` | `core` | yes |
 | `world_tools_test.c` | `world` | yes |
 
 ## Counts
 
-- `core/`: **13**
-- `world/`: **8**
+- `core/`: **14**
+- `world/`: **9**
 - `region/`: **2**
 - `pvs/`: **2**
-- `render/`: **9**
+- `render/`: **10**
 - `material/`: **1**
 - `sprite/`: **1**
-- `sky/`: **3**
+- `sky/`: **4**
 - `vfx/`: **2**
-- `streaming/`: **3**
+- `streaming/`: **4**
 
-Tracked tests: **44**; CMake-wired: **44**; CMake source references: **47**.
+Tracked tests: **49**; CMake-wired: **49**; CMake source references: **49**.
 
 Untracked files (new work not yet wired) are reported as warnings, not
-as part of the compatibility contract: `debug_views_test.c`, `sky_leak_test.c`, `volume_entity_test.c`.
+as part of the compatibility contract: none.
 
 ## Moving later
 

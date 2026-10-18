@@ -410,10 +410,17 @@ void main() {
     float alpha_out=u.lightOptions[15].w>1.5?albedo.a*u.tint.a:1.0;
     if(u.haze.w>0.0||u.fog2.x>0.0){
         // R-02 height fog + atmospheric haze: authored span fog stays the
-        // distance term, the new term adds height and sky-coloured contrast
-        // loss. The legacy branch below is byte-identical when both are off.
-        float optical=u.fog.a*max(0.0,depth-u.options.z)+
-            u.fog2.x*max(0.0,hit.z-u.fog2.y)*u.fog2.z;
+        // distance term. The height term is a bounded, distance-gated integral
+        // (scale height in fog2.z world units) so tall maps approach the finite
+        // asymptote fog2.x*fog2.z instead of saturating to a flat fog colour.
+        // The legacy branch below is byte-identical when both are off.
+        float optical=u.fog.a*max(0.0,depth-u.options.z);
+        if(u.identity.z>0.0&&u.fog2.x>0.0&&u.fog2.z>0.0){
+            float above=max(0.0,hit.z-u.fog2.y);
+            float height_attenuation=1.0-exp(-above/u.fog2.z);
+            float distance_gate=1.0-exp(-depth*0.002);
+            optical+=u.fog2.x*u.fog2.z*height_attenuation*distance_gate;
+        }
         float fog=u.identity.z>0?clamp(1.0-exp(-optical),0.0,1.0):0.0;
         vec3 fogcol=mix(u.fog.rgb,u.haze.rgb,u.haze.w*0.65);
         scene=mix(rgb,fogcol,fog);

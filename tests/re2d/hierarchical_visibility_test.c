@@ -183,11 +183,45 @@ static void test_closed_areaportal_and_cluster_pvs(void)
     r2d_world_free(&world);
 }
 
+static void test_camera_on_portal_plane_keeps_visibility(void)
+{
+    // Regression (BASHNYA spawn on a cell border): a camera exactly on a portal
+    // plane used to lose the portal because the projected aperture degenerates
+    // to a line and near-plane clipping drops it, collapsing visibility to the
+    // seed cell. The camera stands in the aperture, so the portal must stay
+    // reachable (conservative full-view window).
+    build_world();
+    R2DRe2dView view;
+    // Camera at the portal endpoint (100,0), on the portal plane, looking -X.
+    r2d_re2d_view_set(&view, 100, 0, 60, -1.5707964f, 0, 1.2f, 640, 360);
+    view.near_plane = 3.0f;
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_visibility(&world, &view, 0, &visibility),
+                             "on-plane visibility builds");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, visibility.span_count,
+                                  "camera on the portal plane reaches both cells");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, visibility.cells_visible,
+                                  "camera on the portal plane counts both cells");
+    r2d_world_visibility_free(&visibility);
+
+    // Just off the plane in either direction must keep both cells too.
+    for (int side = -1; side <= 1; side += 2) {
+        r2d_re2d_view_set(&view, 100, 0.25f * (float)side, 60, -1.5707964f, 0,
+                          1.2f, 640, 360);
+        view.near_plane = 3.0f;
+        TEST_ASSERT_TRUE(r2d_world_visibility(&world, &view, 0, &visibility));
+        TEST_ASSERT_EQUAL_INT_MESSAGE(2, visibility.span_count,
+                                      "near-plane camera still sees both cells");
+        r2d_world_visibility_free(&visibility);
+    }
+    r2d_world_free(&world);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_filter_matches_full_pvs);
     RUN_TEST(test_region_reject_cuts_before_local_bsp);
     RUN_TEST(test_closed_areaportal_and_cluster_pvs);
+    RUN_TEST(test_camera_on_portal_plane_keeps_visibility);
     return UNITY_END();
 }

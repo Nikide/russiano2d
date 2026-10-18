@@ -65,7 +65,7 @@ void r2d_world_material_probe(const R2DRe2dWorld *w,int surface,float u,float v,
     mapped_normal(m,u,v,normal,tangent,n);
     if(m->emissive.pixels){uint8_t sample[4];const uint8_t *map=texel(&m->emissive,u,v,m->linear,sample);for(int i=0;i<3;i++)emissive[i]=map[i]*m->emissive_strength;}
 }
-static bool material_color_id(const R2DRe2dWorld *w,int id,int span,uint32_t tint,float u,float v,float x,float y,float h,const float normal[3],const float tangent[3],float depth,uint32_t *out)
+static bool material_color_id(const R2DRe2dWorld *w,int id,int span,uint32_t tint,float u,float v,float x,float y,float h,const float normal[3],const float tangent[3],float depth,const R2DWorldRenderFeatures *features,uint32_t *out)
 {
     if(id<0){*out=r2d_world_lit_color(w,span,tint,x,y,h,normal[0],normal[1],normal[2],depth);return true;}
     const R2DWorldMaterial *m=&w->materials[id];u=u*m->u_scale+m->anim_u;v=v*m->v_scale+m->anim_v;
@@ -76,13 +76,43 @@ static bool material_color_id(const R2DRe2dWorld *w,int id,int span,uint32_t tin
     float light[3];r2d_world_light_sample(w,span,x,y,h,n[0],n[1],n[2],depth,light);
     const uint8_t *emissive=m->emissive.pixels?texel(&m->emissive,u,v,m->linear,emitted):NULL;
     const R2DWorldSpanLight *ambient=w->lighting.enabled&&w->span_lights&&span>=0&&span<w->span_count?&w->span_lights[span]:NULL;
-    float fog=ambient?1-expf(-ambient->fog_density*fmaxf(0,depth-ambient->fog_start)):0;
-    float fog_color[3]={ambient?ambient->fog_r:0,ambient?ambient->fog_g:0,ambient?ambient->fog_b:0};
     uint32_t color=0xff000000;
-    for(int i=0;i<3;i++) {
-        float channel=albedo[i]*(((tint>>(i*8))&255)/255.0f)*light[i]+(emissive?emissive[i]*m->emissive_strength*anim_emissive:0);
-        channel=channel*(1-fog)+fog_color[i]*255*fog;
-        color|=(uint32_t)fmaxf(0,fminf(255,roundf(channel)))<<(i*8);
+    // R-02 CPU reference for the atmosphere branch: same bounded height fog and
+    // haze composition as shaders/world.frag.glsl. With NULL features (legacy
+    // callers) this is the historical authored-distance fog only, unchanged.
+    if(features&&(features->height_fog||features->atmospheric_haze)){
+        float base_optical=ambient?ambient->fog_density*fmaxf(0.0f,depth-ambient->fog_start):0.0f;
+        float height_factor=ambient?r2d_world_render_fog_height_factor(depth,h,features):0.0f;
+        double height_field=height_factor>=1.0f?1.0e30:-(double)log(1.0-(double)height_factor);
+        float fog=(float)(1.0-exp(-((double)base_optical+height_field)));
+        if(!(fog>0.0f))fog=0.0f;else if(fog>1.0f)fog=1.0f;
+        float fog_rgb[3]={ambient?ambient->fog_r:0.0f,ambient?ambient->fog_g:0.0f,ambient?ambient->fog_b:0.0f};
+        float haze_rgb[3];r2d_world_render_haze_color(features,w->sky_color,haze_rgb);
+        float fogcol[3];
+        for(int c=0;c<3;c++)fogcol[c]=fog_rgb[c]+(haze_rgb[c]-fog_rgb[c])*features->haze_strength*0.65f;
+        float scene[3];
+        for(int c=0;c<3;c++){
+            // Albedo/emissive come as 0..255 texels; normalize before the 0..1
+            // fog/haze composition the GPU shader performs.
+            float lit=albedo[c]*(((tint>>(c*8))&255)/255.0f)*light[c]+(emissive?emissive[c]*m->emissive_strength*anim_emissive:0.0f);
+            scene[c]=(lit/255.0f)*(1.0f-fog)+fogcol[c]*fog;
+        }
+        float hz=features->haze_strength*(1.0f-(float)exp(-(double)depth*0.0015));
+        float lum=scene[0]*0.2126f+scene[1]*0.7152f+scene[2]*0.0722f;
+        for(int c=0;c<3;c++){
+            scene[c]=scene[c]+(lum-scene[c])*hz*0.25f;
+            scene[c]=scene[c]+(haze_rgb[c]-scene[c])*hz*0.10f;
+            float channel=fmaxf(0.0f,fminf(1.0f,scene[c]))*255.0f;
+            color|=(uint32_t)roundf(channel)<<(c*8);
+        }
+    }else{
+        float fog=ambient?1-expf(-ambient->fog_density*fmaxf(0,depth-ambient->fog_start)):0;
+        float fog_color[3]={ambient?ambient->fog_r:0,ambient?ambient->fog_g:0,ambient?ambient->fog_b:0};
+        for(int i=0;i<3;i++) {
+            float channel=albedo[i]*(((tint>>(i*8))&255)/255.0f)*light[i]+(emissive?emissive[i]*m->emissive_strength*anim_emissive:0);
+            channel=channel*(1-fog)+fog_color[i]*255*fog;
+            color|=(uint32_t)fmaxf(0,fminf(255,roundf(channel)))<<(i*8);
+        }
     }
     if(m->blend>=R2D_WORLD_TRANSLUCENT)color=(color&0x00ffffff)|((uint32_t)roundf(albedo[3]*m->opacity)<<24);
     *out=color;return true;
@@ -92,7 +122,9 @@ int r2d_world_surface_blend(const R2DRe2dWorld *w,int surface)
 {int id=w->surface_materials?w->surface_materials[surface]:-1;return id>=0?w->materials[id].blend:R2D_WORLD_OPAQUE;}
 
 bool r2d_world_material_color(const R2DRe2dWorld *w,int surface,int span,uint32_t tint,float u,float v,float x,float y,float h,const float normal[3],const float tangent[3],float depth,uint32_t *out)
-{int id=w->surface_materials&&surface>=0&&surface<w->surface_count?w->surface_materials[surface]:-1;return material_color_id(w,id,span,tint,u,v,x,y,h,normal,tangent,depth,out);}
+{int id=w->surface_materials&&surface>=0&&surface<w->surface_count?w->surface_materials[surface]:-1;return material_color_id(w,id,span,tint,u,v,x,y,h,normal,tangent,depth,NULL,out);}
+bool r2d_world_material_color_features(const R2DRe2dWorld *w,int surface,int span,uint32_t tint,float u,float v,float x,float y,float h,const float normal[3],const float tangent[3],float depth,const R2DWorldRenderFeatures *features,uint32_t *out)
+{int id=w->surface_materials&&surface>=0&&surface<w->surface_count?w->surface_materials[surface]:-1;return material_color_id(w,id,span,tint,u,v,x,y,h,normal,tangent,depth,features,out);}
 int r2d_world_decal_create(R2DRe2dWorld *w,const R2DWorldDecal *d)
 {
     if(!w||!d||d->surface<0||d->surface>=w->surface_count||(w->surface_sky&&w->surface_sky[d->surface])||r2d_world_surface_blend(w,d->surface)>=R2D_WORLD_TRANSLUCENT||d->material<0||d->material>=R2D_WORLD_MAX_MATERIALS||!w->materials[d->material].used||
@@ -121,7 +153,7 @@ void r2d_world_decal_step(R2DRe2dWorld *w,float dt)
 bool r2d_world_decal_color(const R2DRe2dWorld *w,const R2DWorldDecal *decal,int span,float u,float v,float x,float y,float h,const float normal[3],const float tangent[3],float depth,uint32_t *out)
 {
     u=(u-decal->u)/decal->w;v=(v-decal->v)/decal->h;if(u<0||v<0||u>=1||v>=1)return false;
-    const R2DWorldMaterial *m=&w->materials[decal->material];return material_color_id(w,decal->material,span,0xffffffff,u/m->u_scale,v/m->v_scale,x,y,h,normal,tangent,depth,out);
+    const R2DWorldMaterial *m=&w->materials[decal->material];return material_color_id(w,decal->material,span,0xffffffff,u/m->u_scale,v/m->v_scale,x,y,h,normal,tangent,depth,NULL,out);
 }
 
 void r2d_world_material_uv(const R2DRe2dWorld *w,int surface,float x,float y,float h,const float normal[3],float tangent[3],float *u,float *v) {

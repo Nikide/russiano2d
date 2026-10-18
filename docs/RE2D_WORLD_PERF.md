@@ -260,3 +260,114 @@ python3 tests/agent/re2d_world_renderer_test.py   # CPU/GPU parity
 
 Fallback: `world.batchGpu(false)`; overdraw and non-final debug views always use
 the per-surface path so debug attribution stays inspectable.
+
+## BASHNYA issue #2 re-measure (1.2.7, 2026-10-18, task-3)
+
+Workload: external BASHNYA `level1` through the read-only mirror
+(`/tmp/bashnya-engine`, no game/engine source edits), agent-driven, world frame
+960x540, GPU-reference backend, fixed start camera unless stated. Numbers from
+the shared working tree, one machine (Apple arm64/Metal), medians unless noted;
+they are directional, not a tag baseline and not a cross-machine threshold.
+The world tier was set explicitly (`world.renderQuality('high')`); since 1.2.7
+`world.quality({poseBudget})` no longer selects the visual tier.
+
+### Draw attribution and CPU stages
+
+| metric | value |
+|---|---:|
+| visible cells / spans / surfaces | 314 / 653 / 2192 |
+| regions / cells allowed | 37 / 463 |
+| `gpuDraws` (logical) | 10315 = 1527 base + 8471 span + 177 actor + 103 other + 37 ground |
+| actual batched GPU groups | 8 |
+| `staticBatchInstances` / `staticBatchSavedBinds` | 2192 / 2184 |
+| CPU `frameMs` p50 (60 frames, no gpuWait) | 9.7 ms |
+| `visibilityMs` p50 | 6.3 ms |
+| `surfaceMs` p50 (submit/record wall) | 3.3 ms |
+| `lightCullMs` / `actorMs` p50 | 0.17 / 0.03 ms |
+| lights after cull / shadowed | 6 / 2 |
+| reporter 1.2.6 comparison | 10987 draws / 12.4 ms frameMs p50 |
+
+`gpuDraws*` is a **logical attribution** counter, not the number of GPU
+submissions: 2192 logical surface draws are coalesced into 8 instanced groups by
+the static batch plan (`batchGpu(false)` raises material binds 29 -> 992 with no
+frameMs gain). Camera motion confirms the cost tracks visible surfaces, not map
+size: open view `yaw -60` = 16.3 ms / 10312 logical draws; closed view `yaw 120`
+= 0.44 ms / 58.
+
+### Real GPU fence wait is separate
+
+With `world.profile({gpuWait:true})` the same frame reports
+`gpuCompletionWaitMs` ~109-115 ms at **low, medium and high** tier (CPU
+`frameMs` stays ~9-10 ms). The reporter's 12.4 ms `frameMs` is CPU wall time and
+must not be read as GPU time or FPS. The cause is **not proven**; a real GPU
+timestamp method is required before calling it a GPU cost or an engine defect.
+Control: the same `world.profile({gpuWait:true})` method on the small renderer
+lab (`tools/bench_re2d_world_renderer.py --backend gpu --frames 20`, 400x240)
+gives frame medians A 2.12 / B 5.37 / C 3.23 ms (166 / 486 / 167 visible
+surfaces). The fence wait is therefore workload-specific (2192 surfaces at
+960x540), not a constant harness/headless overhead, but its exact cost split
+remains unproven.
+
+### Safe reductions investigated
+
+* fully-open portal-closure surfaces: 0 exposed as separate removable surfaces
+  through `world.surface()`; baked closure geometry goes through the normal
+  wall-solidity test, so there is no safe "skip open closure" filter to add;
+* redundant selected surfaces: the 2192 logical surfaces are already batched
+  into 8 groups; reducing the logical count would not reduce submissions;
+* light x surface passes: only 6 lights survive culling (2 shadowed) and
+  `lightCullMs` is 0.17 ms;
+* batching: already active; turning it off does not improve frame time.
+
+No draw-call reduction was shipped: none was measured to be both safe and
+beneficial. The remaining CPU cost is the local portal-walk/visibility stage, and
+the GPU fence wait needs a timestamp-based profile before any change is claimed
+as a GPU speedup.
+
+## Impostor near-band gate (BASHNYA 1.2.6, 2026-10-18, task-3)
+
+The runtime used to pass `min_distance = 0` to `r2d_world_impostors_collect()`
+regardless of the region-LOD near band, so a region already drawn by the local
+renderer also emitted a coarse silhouette card. The runtime now derives the
+collector gate from the policy
+(`r2d_world_region_impostor_min_distance()`): the configured near distance when
+positive, `0` only for an explicit `near_distance = 0` request.
+
+Measured on BASHNYA `level1` (37 regions, 960x540, HIGH tier):
+
+| LOD request | regions | visible impostor cards | nearest card |
+|---|---:|---:|---:|
+| default (`near = 600`) | 37 | 33 | d = 743 |
+| explicit `regionLod(0, ...)` (old 1.2.6 behaviour) | 37 | 36 (3 inside the band) | d = 345 |
+| `regionLod(8000, ...)` | 37 | 0 | - |
+| `near = 8000` + `regionConfig(8192,1,2)` | 1 | 0 (no distant region) | - |
+
+Acceptance: no card is emitted inside the near band, cards beyond it stay
+visible, and an explicit near band of 0 reproduces the old ungated list. Native
+coverage: `tests/re2d/impostor_lod_policy_test.c` (2 Unity tests, ctest target
+`r2d_world_impostor_lod_policy_test`).
+
+## Guardian atlas pop-in (BASHNYA correction, 1.2.7, task-3)
+
+The reporter's corrected repro (early GPU frame after a test teleport omits the
+Guardian, 45 warm frames show it) was re-run and explained without a renderer
+defect:
+
+* BASHNYA `level2` calls `regionConfig(8192,1,2)`, so the whole level is **one**
+  region (`regionCount = 1`, `regionCellsAllowed = 343`); region streaming cannot
+  be the cause.
+* the runtime registers **157 atlas stream items**; promotion is budgeted to 16
+  items/frame. At the repro's early frame (~frame 6 of scene lifetime) only
+  **84/157** atlases are resident; `atlasesResident` reaches 157 by ~frame 15.
+* warmed start (30 frames) then the same teleport: `gpuDrawsActor = 29` on
+  **frame 1** (Guardian present).
+* gradual approach 672 -> 1472 over 160 frames: `atlasesResident = 157` from
+  step 0 and `gpuDrawsActor = 29` throughout; at spawn the steady 55 visible
+  sprites settle from 153 to 277 actor draws while the item promotion ramp runs.
+
+Conclusion: the early-frame pop-in is the scene-start residency ramp (bounded by
+the 16-items/frame promotion budget), not a teleport-only or GPU-only failure.
+A normal walk-in cannot reach the Guardian arena before its atlas is resident.
+No engine fix was shipped and no player-facing blocker is claimed; if the
+startup ramp ever needs to be shorter, the safe direction is demand-prioritising
+visible atlases, which needs its own evidence and budget design.

@@ -6,7 +6,10 @@
 //
 // The renderer consumes this model in three places:
 //   * GPU uniforms are prepared from these fields every surface/actor draw;
-//   * the CPU reference path uses the same contact/fog/variation formulas;
+//   * the CPU composer shares the grounding formulas only: every R-01/R-02
+//     surface feature (variation/macro/bevel/corner AO, height fog/haze, sky
+//     layers, liquid) is GPU-reference, so medium/high frames are NOT expected
+//     to be pixel-identical to the CPU composer (see docs Limits);
 //   * world.info() exposes the per-frame counters below without changing the
 //     existing gpuDraws attribution.
 //
@@ -18,9 +21,17 @@
 //   which the shadow disappears. Center is 1, outside radius is 0.
 // * foot AO: a smaller, stronger core near the point of support; same radial
 //   rule with `radius` and `strength` 0..1.
-// * fog factor: 1-exp(-0.002*distance - height_density*max(0,height-base)*falloff)
-//   clamped to 0..1. The renderer may substitute the authored span fog density
-//   for the 0.002 distance term; this reference pins the height term.
+// * fog factor: 1-exp(-optical) clamped to 0..1, where
+//     optical = 0.002*distance
+//             + height_density*falloff
+//               * (1-exp(-max(0,height-base)/falloff))
+//               * (1-exp(-distance*0.002))
+//   `falloff` is the height-fog scale height in world units (0 disables the
+//   height term); the height contribution therefore approaches the finite
+//   asymptote height_density*falloff instead of saturating on tall maps, and
+//   the distance gate keeps surfaces near the camera crisp. The renderer may
+//   substitute the authored span fog density for the 0.002 distance term; this
+//   reference pins the height term.
 // * haze mix: fog_rgb + (sky_rgb - fog_rgb)*amount, clamped to 0..1.
 // * material variation: deterministic splitmix hash of (seed, surface, kind).
 //   UV offsets are in [0,1); tint is a per-channel brightness factor in
@@ -74,6 +85,13 @@ typedef struct {
     // Atmosphere / lighting 2.0.
     bool height_fog, atmospheric_haze;
     float fog_height_density, fog_base_height, fog_height_falloff, haze_strength;
+    // Explicit atmospheric haze colour override, linear RGB in 0..1. When
+    // haze_color_set is false (the default) the GPU path derives the tint from
+    // the authored world sky colour exactly as before (0xff88aacc fallback),
+    // so every existing world stays byte-identical. world.atmosphere() sets
+    // this; a null/reset clears the flag.
+    bool haze_color_set;
+    float haze_color[3];
 
     // Sky system.
     bool sky_layers, sun_disc, sky_portal_surface;
@@ -134,8 +152,19 @@ float r2d_world_render_contact_alpha(float distance, float radius, float softnes
 float r2d_world_render_foot_ao(float distance, float radius, float strength);
 float r2d_world_render_fog_factor(float distance, float height,
                                   const R2DWorldRenderFeatures *config);
+// Height-fog contribution alone (0..1), bounded by the finite asymptote
+// density*falloff. 0 when height_fog is off or falloff is 0. The GPU shader
+// combines it with the authored span distance fog exactly as
+// r2d_world_render_fog_factor does with the 0.002 reference distance term.
+float r2d_world_render_fog_height_factor(float distance, float height,
+                                         const R2DWorldRenderFeatures *config);
 void r2d_world_render_haze_mix(const float fog_rgb[3], const float sky_rgb[3],
                                float amount, float out_rgb[3]);
+// Haze RGB used by both render paths: the explicit features->haze_color override
+// when set, else the authored sky tint (0xff88aacc fallback) decoded exactly as
+// the historical GPU path did. Keeps CPU/GPU R-02 haze identical.
+void r2d_world_render_haze_color(const R2DWorldRenderFeatures *config,
+                                 uint32_t sky_color, float out_rgb[3]);
 void r2d_world_render_variation(uint32_t surface, int kind, uint32_t seed,
                                 float strength, float out_tint[3], float out_uv[2]);
 float r2d_world_render_edge_alpha(float alpha, float threshold, float feather);

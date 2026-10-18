@@ -81,7 +81,7 @@ static void test_validate_clamps_and_nan(void)
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.05f, f.shadow_softness, "softness clamped low");
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.45f, f.edge_alpha_threshold,
                                      "NaN threshold falls back to default");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.006f, f.fog_height_density,
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.004f, f.fog_height_density,
                                      "infinite fog density falls back to default");
     TEST_ASSERT_EQUAL_INT_MESSAGE(4, f.sky_layer_count, "sky layer count clamped to 4");
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.00f, f.sky_scale[0],
@@ -156,6 +156,48 @@ static void test_fog_and_haze(void)
     float factor = r2d_world_render_fog_factor(INFINITY, 0.0f, &f);
     TEST_ASSERT_TRUE_MESSAGE(isfinite(factor), "infinite distance stays finite");
 
+    // Regression (BASHNYA 1.2.6): the old height term was
+    // density*max(0,height-base)*falloff, which reached optical ~3+ on a
+    // vertical map and turned every tall surface into a flat fog colour.
+    // The bounded integral must stay below density*falloff and monotonic.
+    R2DWorldRenderFeatures low;
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_render_preset(R2D_RENDER_QUALITY_LOW, &low),
+                             "low preset available");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.0f,
+                                     r2d_world_render_fog_height_factor(2000.0f, 100000.0f, &low),
+                                     "low has no height fog term");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(
+        EPS, (float)(1.0 - exp(-0.002 * 500.0)),
+        r2d_world_render_fog_factor(500.0f, 100000.0f, &low),
+        "low fog factor is the legacy distance-only term");
+
+    float asymptote = f.fog_height_density * f.fog_height_falloff;
+    float value = -1.0f;
+    const float heights[] = {0.0f, 64.0f, 128.0f, 256.0f, 512.0f, 1024.0f, 4096.0f};
+    for (size_t i = 0; i < sizeof heights / sizeof heights[0]; ++i) {
+        float next = r2d_world_render_fog_height_factor(2000.0f, heights[i], &f);
+        TEST_ASSERT_TRUE_MESSAGE(next >= value - EPS, "height fog is monotonic in height");
+        TEST_ASSERT_TRUE_MESSAGE(next <= asymptote + EPS,
+                                 "height fog stays under the density*falloff cap");
+        value = next;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(asymptote < 0.30f,
+                             "medium height-fog asymptote keeps material contrast");
+    float high = r2d_world_render_fog_height_factor(2000.0f, 512.0f, &f);
+    TEST_ASSERT_TRUE_MESSAGE(high > 0.02f, "height fog is visible at 512u above base");
+    float at_extreme = r2d_world_render_fog_height_factor(2000.0f, 1.0e6f, &f);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, high, at_extreme,
+                                     "height fog saturates at the finite asymptote");
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_render_fog_height_factor(20.0f, 4096.0f, &f) <
+                             r2d_world_render_fog_height_factor(2000.0f, 4096.0f, &f) * 0.1f,
+                             "distance gate keeps near-camera surfaces crisp");
+    float combined = r2d_world_render_fog_factor(700.0f, 300.0f, &f);
+    float distance_factor = 1.0f - expf(-0.002f * 700.0f);
+    float height_factor = r2d_world_render_fog_height_factor(700.0f, 300.0f, &f);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(
+        EPS, 1.0f - (1.0f - distance_factor) * (1.0f - height_factor), combined,
+        "combined fog shares the shader's distance+height composition");
+
     float fog_rgb[3] = {0.1f, 0.2f, 0.3f};
     float sky_rgb[3] = {0.6f, 0.5f, 0.9f};
     float out[3];
@@ -170,8 +212,13 @@ static void test_fog_and_haze(void)
     R2DWorldRenderFeatures still = f;
     still.fog_height_density = 0.0f;
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.0f,
-                                     r2d_world_render_fog_factor(0.0f, 1000.0f, &still),
+                                     r2d_world_render_fog_height_factor(2000.0f, 1000.0f, &still),
                                      "zero height density disables the height term");
+    R2DWorldRenderFeatures no_scale = f;
+    no_scale.fog_height_falloff = 0.0f;
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.0f,
+                                     r2d_world_render_fog_height_factor(2000.0f, 1000.0f, &no_scale),
+                                     "zero scale height disables the height term");
 }
 
 static void test_material_variation(void)

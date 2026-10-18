@@ -195,7 +195,10 @@ bool r2d_world_ray(const R2DRe2dWorld *w,const float o[3],const float d[3],float
 // bounds only limit work; coverage/depth still comes from exact world equations.
 typedef struct { float right,up,forward; } WorldImagePoint;
 typedef struct { const R2DRe2dView *view; int width,height; float ortho;
-    uint8_t *rgba;float *depth;const R2DWorldVisibility *visibility;R2DWorldPixelOwner *owners;bool translucent;const R2DWorldDecal *decal; } WorldImage;
+    uint8_t *rgba;float *depth;const R2DWorldVisibility *visibility;R2DWorldPixelOwner *owners;bool translucent;const R2DWorldDecal *decal;
+    // Optional R-02 atmosphere (height fog/haze) for the CPU reference; NULL
+    // keeps the historical authored-distance fog used by legacy callers.
+    const R2DWorldRenderFeatures *features; } WorldImage;
 static void image_color(WorldImage *im,int i,uint32_t color)
 { for(int c=0;c<4;c++)im->rgba[i*4+c]=(uint8_t)(color>>(c*8)); }
 static void image_blend(WorldImage *im,int i,uint32_t color,int blend)
@@ -293,7 +296,7 @@ static void image_wall_segment(WorldImage *im,const R2DRe2dWorld *w,const R2DSeg
                 if(!r2d_world_decal_color(w,im->decal,span,world_u,world_v,px,py,z,normal,tangent,t,&shaded))continue;
                 image_blend(im,i,shaded,w->materials[im->decal->material].blend);continue;
             }
-            if(!r2d_world_material_color(w,seg->user,span,wall->color,world_u,world_v,px,py,z,normal,tangent,t,&shaded))continue;
+            if(!r2d_world_material_color_features(w,seg->user,span,wall->color,world_u,world_v,px,py,z,normal,tangent,t,im->features,&shaded))continue;
             if(im->translucent){image_blend(im,i,shaded,blend);continue;}
             im->depth[i]=t;image_color(im,i,shaded);if(im->owners)im->owners[i]=(R2DWorldPixelOwner){seg->user,span,-1};
         }
@@ -336,16 +339,16 @@ static void image_plane(WorldImage *im,const R2DRe2dWorld *w,int span,bool ceili
                 image_blend(im,i,color,w->materials[im->decal->material].blend);continue;
             }
             float world_u=px-s->x,world_v=py-s->y;r2d_world_material_uv(w,surface,px,py,height,normal,tangent,&world_u,&world_v);
-            if(!r2d_world_material_color(w,surface,span,ceiling?s->ceiling_color:s->floor_color,world_u,world_v,px,py,height,normal,tangent,t,&color))continue;
+            if(!r2d_world_material_color_features(w,surface,span,ceiling?s->ceiling_color:s->floor_color,world_u,world_v,px,py,height,normal,tangent,t,im->features,&color))continue;
             if(im->translucent){image_blend(im,i,color,blend);continue;}
             im->depth[i]=t;image_color(im,i,color);if(im->owners)im->owners[i]=(R2DWorldPixelOwner){surface,span,-1};
         }
     }
 }
 
-void r2d_world_frame_targets(const R2DRe2dWorld *w,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,float ortho_height,const R2DWorldVisibility *visibility,R2DWorldPixelOwner *owners)
+void r2d_world_frame_targets_features(const R2DRe2dWorld *w,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,float ortho_height,const R2DWorldVisibility *visibility,R2DWorldPixelOwner *owners,const R2DWorldRenderFeatures *features)
 {
-    WorldImage im={v,width,height,ortho_height,rgba,depth,visibility,owners,false,NULL};
+    WorldImage im={v,width,height,ortho_height,rgba,depth,visibility,owners,false,NULL,features};
     for(int i=0;i<width*height;i++){depth[i]=FLT_MAX;image_color(&im,i,0xff201810);if(owners)owners[i]=(R2DWorldPixelOwner){-1,-1,-1};}
     if(w->sky.pixels||w->sky_color)for(int y=0;y<height;y++)for(int x=0;x<width;x++){
         uint32_t color=w->sky_color?w->sky_color:0xffffffff;
@@ -368,6 +371,10 @@ void r2d_world_frame_targets(const R2DRe2dWorld *w,const R2DRe2dView *v,int widt
     if(visibility)for(int j=0;j<visibility->span_count;j++){int i=visibility->spans[j];image_plane(&im,w,i,false);image_plane(&im,w,i,true);}
     else for(int i=0;i<w->span_count;i++){image_plane(&im,w,i,false);image_plane(&im,w,i,true);}
 }
+// Legacy entry point: no R-02 atmosphere uniforms on the CPU reference, so the
+// authored distance fog stays exactly as before.
+void r2d_world_frame_targets(const R2DRe2dWorld *w,const R2DRe2dView *v,int width,int height,uint8_t *rgba,float *depth,float ortho_height,const R2DWorldVisibility *visibility,R2DWorldPixelOwner *owners)
+{ r2d_world_frame_targets_features(w,v,width,height,rgba,depth,ortho_height,visibility,owners,NULL); }
 typedef R2DWorldSortItem TransparentItem;
 static int transparent_compare(const void *a,const void *b)
 {const TransparentItem *x=a,*y=b;return x->depth>y->depth?-1:x->depth<y->depth?1:(x->id>y->id)-(x->id<y->id);}

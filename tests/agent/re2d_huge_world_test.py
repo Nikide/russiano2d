@@ -105,7 +105,14 @@ def main():
 
         # GPU feature passes (impostors/post/LOD masks) are high-tier features
         # after the parity fixes; switch to high before asserting their counters.
-        a.eval("re2dOpenWorld.quality(4)")
+        # Since 1.2.7 world.quality() only changes the pose policy, so the visual
+        # tier is selected explicitly (BASHNYA 1.2.6 decoupling).
+        # The LOD policy suppresses impostor cards inside the near band (default
+        # 600 units, the old path used min_distance=0), so the gate is disabled
+        # explicitly here to exercise the GPU impostor pass; normal bands are
+        # restored right after the counter checks.
+        a.eval("re2dOpenWorld.quality(4); re2dOpenWorld.renderQuality('high')")
+        a.eval("re2dOpenWorld.regionLod(0, 1024, 2048, 6000, 6000)")
         a.step(3)
         native = snapshot(a).get("native") or {}
         # Task-12 GPU residency: material textures are really uploaded by the
@@ -126,6 +133,8 @@ def main():
               "GPU render origin active")
         check(native.get("gpuImpostorsDrawn", 0) >= 1,
               f"distant impostors drawn by the GPU pass: {native.get('gpuImpostorsDrawn')}")
+        # Back to the default policy for the streaming/origin checks below.
+        a.eval("re2dOpenWorld.regionLod(600, 1500, 3000, 6000, 6000)")
 
         # Cross several occupied compiler regions, as a streaming boundary test.
         slots = [1, 3, 9, 29, 41, 55, 62]

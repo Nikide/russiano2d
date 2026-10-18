@@ -193,7 +193,10 @@ export default function install($) {
         regionLod: (...args) => world && world.regionLod(...args),
         setPortalsClosed,
         regionLocal: (x, y) => world && world.regionLocal(x, y),
+        // Pose budget only (since 1.2.7 world.quality never changes the visual
+        // tier); tier is a separate explicit control.
         quality: (poseBudget) => world && world.quality({ poseBudget, poseStep: 0 }),
+        renderQuality: (name) => world && world.renderQuality(name),
         info: () => world && world.info(),
         loadMap,
         mapPath: () => MAP,

@@ -616,7 +616,66 @@ function rendererWorldWrapper($, native) {
     world.backend = name => { native.backend(name); return world; };
     world.profile = (options = {}) => { native.gpuWait(!!options.gpuWait); return world; };
     world.quality = (options = {}) => { const current=native.info();native.quality(options.poseBudget ?? current.poseBudget,options.poseStep ?? current.poseStep); return world; };
+    // Visual tier is a separate control from the pose budget (BASHNYA 1.2.6):
+    // world.quality({poseBudget:4}) used to force HIGH and changed the whole
+    // frame. Now the tier changes only through this explicit call.
+    const renderQualityNames = ['low', 'medium', 'high', 'ultra'];
+    world.renderQuality = level => {
+        if (level === undefined) return renderQualityNames[native.renderQuality()] ?? 'low';
+        const index = renderQualityNames.indexOf(String(level).toLowerCase());
+        if (index < 0) throw new RangeError("Re2D World: renderQuality must be low|medium|high|ultra");
+        return renderQualityNames[native.renderQuality(index)];
+    };
+    // Additive atmosphere controls: only provided fields change, applied values
+    // are returned. hazeColor:null restores "auto" (the authored sky colour).
+    const atmosphereBounds = { heightDensity: [0, 1], baseHeight: [-100000, 100000], falloff: [0, 100], hazeStrength: [0, 1] };
+    const atmosphereNumber = (value, name, min, max) => {
+        if (typeof value !== 'number' || !Number.isFinite(value))
+            throw new TypeError(`Re2D World: atmosphere ${name} must be a number`);
+        if (value < min || value > max)
+            throw new RangeError(`Re2D World: atmosphere ${name} must be ${min}..${max}`);
+        return value;
+    };
+    world.atmosphere = (options = {}) => {
+        if (options === null || typeof options !== 'object' || Array.isArray(options))
+            throw new TypeError('Re2D World: atmosphere expects an options object');
+        const known = ['heightDensity', 'baseHeight', 'falloff', 'hazeStrength', 'hazeColor', 'skyLayers', 'sunDisc'];
+        for (const key of Object.keys(options))
+            if (!known.includes(key)) throw new TypeError(`Re2D World: atmosphere unknown option "${key}"`);
+        const num = (key) => options[key] === undefined ? NaN : atmosphereNumber(options[key], key, ...atmosphereBounds[key]);
+        let hazeMode = 0, hazeR = 0, hazeG = 0, hazeB = 0;
+        if (options.hazeColor !== undefined) {
+            if (options.hazeColor === null) hazeMode = 1;
+            else {
+                if (typeof options.hazeColor === 'number') {
+                    const packed = options.hazeColor >>> 0;
+                    hazeR = (packed & 255) / 255; hazeG = ((packed >>> 8) & 255) / 255; hazeB = ((packed >>> 16) & 255) / 255;
+                } else if (typeof options.hazeColor === 'string') {
+                    const packed = $.color(options.hazeColor) >>> 0;
+                    hazeR = (packed & 255) / 255; hazeG = ((packed >>> 8) & 255) / 255; hazeB = ((packed >>> 16) & 255) / 255;
+                } else throw new TypeError('Re2D World: atmosphere hazeColor must be a colour or null');
+                hazeMode = 2;
+            }
+        }
+        const bool = (key) => options[key] === undefined ? -1 : options[key] === true ? 1 : options[key] === false ? 0
+            : (() => { throw new TypeError(`Re2D World: atmosphere ${key} must be boolean`); })();
+        const applied = native.atmosphere(num('heightDensity'), num('baseHeight'), num('falloff'),
+            num('hazeStrength'), bool('skyLayers'), bool('sunDisc'), hazeMode, hazeR, hazeG, hazeB);
+        // Applied haze colour comes back as engine-packed RGBA (like $.color):
+        // red in the low byte. Render the public form as '#rrggbb'.
+        const packed = applied.hazeColor;
+        const hex = packed < 0 ? null
+            : '#' + [packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255]
+                .map(v => v.toString(16).padStart(2, '0')).join('');
+        return { heightDensity: applied.heightDensity, baseHeight: applied.baseHeight,
+                 falloff: applied.falloff, hazeStrength: applied.hazeStrength,
+                 hazeColor: hex, skyLayers: !!applied.skyLayers, sunDisc: !!applied.sunDisc };
+    };
+    // Legacy defaults: pose budget 1/3° and the LOW visual tier. LOW is set
+    // explicitly now because world.quality no longer touches the tier; the
+    // default frame must stay byte-identical to the legacy low preset.
     world.quality({poseBudget:1,poseStep:3});
+    world.renderQuality('low');
     const views = ['final','cell-id','span-id','depth','owner','light-level','dynamic-light-count','normal','emissive','bsp','portals','shadow-mask','overdraw',
         'region','active-region','pvs','vis-cluster','areaportal','occluder','distant-lod','sprite-lod','material-variation','ao-lite','vfx-budget'];
     // Renderer enum is authored in native code (owned by the renderer task).
@@ -1138,6 +1197,9 @@ function rendererWorldWrapper($, native) {
         const preset = qualityPresets[name];
         if (!preset) throw new RangeError('world.qualityPreset: low|medium|high');
         native.quality(preset.poseBudget, preset.poseStep);
+        // The preset is still the full preset path: it sets the visual tier as
+        // well as the pose budget. world.quality({poseBudget}) alone does not.
+        native.renderQuality({ low: 0, medium: 1, high: 2 }[name]);
         native.particlesBudget(preset.particles);
         return { ...preset };
     };

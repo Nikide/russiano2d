@@ -34,6 +34,7 @@ export default function install($) {
             world._map = map;
         }
         world.quality({ poseBudget: 4, poseStep: 3 });
+        world.renderQuality('high'); // tier is explicit since 1.2.7 (quality = pose only)
         world.camera(view);
         world.lighting({ mode: 'classic', dynamic: true, shadows: true, distanceScale: 0.001 });
         // Synchronous frame timing: frameMs then includes the GPU fence wait.
@@ -135,6 +136,7 @@ export default function install($) {
             world.camera(view);
             world.lighting({ mode: 'classic', dynamic: true, shadows: true, distanceScale: 0.001 });
             world.quality({ poseBudget: 4, poseStep: 3 });
+            world.renderQuality('high'); // tier is explicit since 1.2.7
             world.profile({ gpuWait: true });
             apply('base');
             hud = $.ui.doc('demos/re2d_bench_lab/bench.rml').show();

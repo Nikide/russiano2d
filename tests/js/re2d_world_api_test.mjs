@@ -17,11 +17,20 @@ const calls = { atlasAdd: [], atlasRemove: [], actorAdd: [], actorRemove: [],
                 moverCreate: [], moverIntent: [], moverRemove: [], moverInfo: [],
                 triggerCreate: [], triggerRemove: [], triggerTick: [], triggerUse: [], triggerShoot: [],
                 find: [], controllerCreate: [], controllerInit: [], controllerMove: [], controllerRemove: [],
-                portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [], save: [], secret: [], breakable: [], terrain: [], material: [], post: [], polywall: [] };
+                portalOpen: [], portalFraction: [], moverBlock: [], automap: [], particles: [], save: [], secret: [], breakable: [], terrain: [], material: [], post: [], polywall: [],
+                renderQuality: [], atmosphere: [] };
 
 const native = {
-    info: () => ({ poseBudget: 1, poseStep: 3 }),
+    info: () => ({ poseBudget: 1, poseStep: 3, visual: { quality: 0 } }),
     quality: () => {},
+    // Visual tier / atmosphere since 1.2.7: world.quality() no longer sets the
+    // tier, the wrapper calls these explicit native controls instead.
+    renderQuality: (...args) => { calls.renderQuality.push(args); return args.length ? args[0] : 0; },
+    atmosphere: (...args) => {
+        calls.atmosphere.push(args);
+        return { heightDensity: 0.02, baseHeight: 100, falloff: 2, hazeStrength: 0.1,
+                 hazeColor: 0x302010, skyLayers: false, sunDisc: false };
+    },
     atlasAdd: (...args) => calls.atlasAdd.push(args),
     atlasRemove: (node) => calls.atlasRemove.push(node),
     actorAdd: (node) => calls.actorAdd.push(node),
@@ -607,6 +616,51 @@ test('world.mist создаёт медленные translucent particles', () =>
     const emitted = world.mist({ x: 10, y: 20, rate: 12, color: '#cccccc' });
     truthy(emitted >= 0);
     truthy(calls.particles.length > 0);
+    world.dispose();
+});
+
+test('world.renderQuality: имя -> код tier, геттер и RangeError до нативного вызова', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    calls.renderQuality.length = 0;
+    eq(world.renderQuality('high'), 'high');
+    eq(calls.renderQuality.length, 1);
+    eq(calls.renderQuality[0][0], 2);
+    eq(world.renderQuality(), 'low'); // мок-геттер возвращает 0
+    const before = calls.renderQuality.length;
+    throws(RangeError, () => world.renderQuality('bogus'), 'неизвестный tier');
+    eq(calls.renderQuality.length, before, 'RangeError отклонён до C');
+    world.dispose();
+});
+
+test('world.atmosphere: только переданные поля, значения и типы', () => {
+    const world = $.re2dWorld.fromJSON('{}');
+    calls.atmosphere.length = 0;
+    const applied = world.atmosphere({ heightDensity: 0.02, baseHeight: 100, falloff: 2,
+                                       hazeStrength: 0.1, hazeColor: '#102030',
+                                       skyLayers: false, sunDisc: false });
+    eq(calls.atmosphere.length, 1);
+    const args = calls.atmosphere[0];
+    near(args[0], 0.02); near(args[1], 100); near(args[2], 2); near(args[3], 0.1);
+    eq(args[4], 0); // skyLayers:false
+    eq(args[5], 0); // sunDisc:false
+    eq(args[6], 2); // hazeColor задан явно
+    near(args[7], 0x10 / 255); near(args[8], 0x20 / 255); near(args[9], 0x30 / 255);
+    eq(applied.hazeColor, '#102030');
+    eq(applied.skyLayers, false);
+    // Частичный вызов: непереданные числовые поля уходят как NaN ("не менять"),
+    // а hazeColor:null сбрасывает override в auto (mode 1).
+    calls.atmosphere.length = 0;
+    world.atmosphere({ hazeColor: null });
+    const partial = calls.atmosphere[0];
+    truthy(Number.isNaN(partial[0]) && Number.isNaN(partial[1]) && Number.isNaN(partial[2]) && Number.isNaN(partial[3]));
+    eq(partial[4], -1); eq(partial[5], -1); eq(partial[6], 1);
+    // Ошибки типов/диапазона не доходят до C.
+    calls.atmosphere.length = 0;
+    throws(RangeError, () => world.atmosphere({ heightDensity: 2 }), 'heightDensity вне 0..1');
+    throws(TypeError, () => world.atmosphere({ skyLayers: 1 }), 'skyLayers не boolean');
+    throws(TypeError, () => world.atmosphere({ unknownField: 1 }), 'неизвестное поле');
+    throws(TypeError, () => world.atmosphere(null), 'опции обязательны');
+    eq(calls.atmosphere.length, 0, 'ошибки отклонены до C');
     world.dispose();
 });
 

@@ -843,6 +843,14 @@ void r2d_world_region_lod(float distance, R2DWorldRegionLod *out)
     r2d_world_region_lod_eval(distance, &config, out);
 }
 
+float r2d_world_region_impostor_min_distance(const R2DWorldRegionLodConfig *config)
+{
+    if (!config || !isfinite(config->near_distance) ||
+        config->near_distance <= 0.0f)
+        return 0.0f;
+    return config->near_distance;
+}
+
 bool r2d_world_region_occluded(const R2DWorldRegionSet *set, int region,
                                const R2DWorldOccluder *occluders, int occluder_count,
                                float camera_x, float camera_y)

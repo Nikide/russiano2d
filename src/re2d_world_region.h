@@ -195,6 +195,14 @@ bool r2d_world_region_lod_valid(const R2DWorldRegionLodConfig *config);
 void r2d_world_region_lod_eval(float distance, const R2DWorldRegionLodConfig *config,
                                R2DWorldRegionLod *out);
 
+// Impostor cards must not be emitted inside the near band: the local renderer
+// still draws the region there, so a card would add a duplicate silhouette
+// (BASHNYA 1.2.6 report). Returns the minimum card distance derived from the
+// policy's near band. A non-positive near band returns 0 (no gate), reachable
+// only by an explicit request (world.regionLod(0, ...) or a native config with
+// near_distance = 0); the defaults keep the gate at 600.
+float r2d_world_region_impostor_min_distance(const R2DWorldRegionLodConfig *config);
+
 // ---------------------------------------------------------------------------
 // Vis clusters: hierarchical visibility level between regions and local cells.
 // Cells of one region are grouped row-major into bounded clusters; cluster PVS

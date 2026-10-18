@@ -710,9 +710,14 @@ void r2d_world_regions_frame(R2DWorldRuntime *w,const R2DRe2dView *view)
     }
     w->region_stream_io_ms=(float)((SDL_GetPerformanceCounter()-phase)*ms);
 
+    // Distant impostors only replace geometry outside the near band: inside it
+    // the local renderer already draws the region, so a card would duplicate the
+    // silhouette. An explicit regionLod(0, ...) near band disables the gate.
+    const float impostor_min_distance=
+        r2d_world_region_impostor_min_distance(&w->lod_config);
     float max_distance=w->lod_config.hidden_distance>0.0f?w->lod_config.hidden_distance:6000.0f;
     w->visible_impostor_count=r2d_world_impostors_collect(&w->impostors,set,at,
-        w->occluders,w->occluder_count,view->x,view->y,0.0f,max_distance,
+        w->occluders,w->occluder_count,view->x,view->y,impostor_min_distance,max_distance,
         w->visible_impostors,w->visible_impostor_capacity);
     if(w->visible_impostor_count<0)w->visible_impostor_count=0;
     w->render_origin_region=at;
@@ -1179,7 +1184,7 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     w->pose_cursor=next_cursor;
     w->actor_ms=(SDL_GetPerformanceCounter()-phase)*ms;phase=SDL_GetPerformanceCounter();
     if(w->gpu_enabled||w->debug_view==R2D_WORLD_DEBUG_OVERDRAW){if(!r2d_world_gpu_frame(ctx,w,view,ortho)){r2d_world_gpu_free(w);JS_ThrowInternalError(ctx,"Re2D World GPU: %s",SDL_GetError());goto done;}}
-    else {r2d_world_frame_targets(&w->world,view,width,height,w->rgba,w->depth,ortho,&w->visibility,w->owners);render_ground_cpu(w,view,width,height,ortho);}
+    else {r2d_world_frame_targets_features(&w->world,view,width,height,w->rgba,w->depth,ortho,&w->visibility,w->owners,&w->render_features);render_ground_cpu(w,view,width,height,ortho);}
     w->surface_ms=(SDL_GetPerformanceCounter()-phase)*ms;phase=SDL_GetPerformanceCounter();
     if(!w->gpu_enabled&&w->debug_view!=R2D_WORLD_DEBUG_OVERDRAW)for(int i=0;i<w->frame_count;i++){const float *p=w->frame_positions+i*5;
         if(w->frame_kinds[i]==R2D_WORLD_FRAME_ATLAS){r2d_world_stamp_samples_ex(&w->world,view,width,height,w->rgba,w->depth,w->frame_images[i],NULL,w->frame_sizes[i],p[0],p[1],p[2],p[3],p[4],ortho,w->owners,i,w->frame_blends[i]);continue;}

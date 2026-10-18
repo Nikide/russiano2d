@@ -537,8 +537,10 @@ static void visual_common(R2DWorldRuntime *w,SurfaceUniform *u,float ox,float oy
     if(rf->height_fog)u->fog2[0]=rf->fog_height_density;
     u->fog2[1]=rf->fog_base_height;u->fog2[2]=rf->fog_height_falloff;
     if(rf->atmospheric_haze){
-        uint32_t tint=w->world.sky_color?w->world.sky_color:0xff88aacc;
-        u->haze[0]=((tint>>0)&255)/255.0f;u->haze[1]=((tint>>8)&255)/255.0f;u->haze[2]=((tint>>16)&255)/255.0f;
+        // Shared with the CPU composer so both backends use the same haze tint:
+        // explicit features->haze_color override, else the authored sky colour
+        // with the historical 0xff88aacc fallback.
+        r2d_world_render_haze_color(rf,w->world.sky_color,u->haze);
         u->haze[3]=rf->haze_strength;u->fog2[3]=rf->haze_strength;
     }
 }

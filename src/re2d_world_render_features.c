@@ -82,10 +82,17 @@ void r2d_world_render_defaults(R2DWorldRenderFeatures *out)
 
     out->height_fog = true;
     out->atmospheric_haze = true;
-    out->fog_height_density = 0.006f;
+    // Medium calibration: height fog approaches a finite asymptote of
+    // density*falloff (~24% fog) with a 60-unit scale height, so tall vertical
+    // maps keep authored material contrast while extreme heights still lose it.
+    out->fog_height_density = 0.004f;
     out->fog_base_height = 64.0f;
-    out->fog_height_falloff = 1.0f;
+    out->fog_height_falloff = 60.0f;
     out->haze_strength = 0.35f;
+    // No override by default: the GPU path keeps deriving haze from the
+    // authored sky colour (historical 0xff88aacc fallback) for parity.
+    out->haze_color_set = false;
+    out->haze_color[0] = out->haze_color[1] = out->haze_color[2] = 0.0f;
 
     out->sky_layers = true;
     out->sun_disc = true;
@@ -172,6 +179,10 @@ bool r2d_world_render_preset(int quality, R2DWorldRenderFeatures *out)
         out->macro_strength = 0.55f;
         out->corner_ao_strength = 0.62f;
         out->haze_strength = 0.45f;
+        // High keeps a stronger atmosphere but stays bounded: asymptote
+        // density*falloff = 0.0065*85 ~= 42% fog at extreme height.
+        out->fog_height_density = 0.0065f;
+        out->fog_height_falloff = 85.0f;
         out->liquid_distortion = 0.024f;
         out->liquid_foam = 0.30f;
         out->sun_glow = 0.18f;
@@ -189,6 +200,9 @@ bool r2d_world_render_preset(int quality, R2DWorldRenderFeatures *out)
         out->macro_strength = 0.65f;
         out->corner_ao_strength = 0.70f;
         out->haze_strength = 0.55f;
+        // Ultra asymptote density*falloff = 0.008*100 = 0.8 (max 55% fog).
+        out->fog_height_density = 0.008f;
+        out->fog_height_falloff = 100.0f;
         out->shadow_softness = 0.78f;
         out->liquid_distortion = 0.032f;
         out->liquid_foam = 0.38f;
@@ -244,6 +258,13 @@ bool r2d_world_render_validate(R2DWorldRenderFeatures *config)
     config->fog_base_height = sanitize_float(config->fog_base_height, def.fog_base_height, -100000.0f, 100000.0f);
     config->fog_height_falloff = sanitize_float(config->fog_height_falloff, def.fog_height_falloff, 0.0f, 100.0f);
     config->haze_strength = sanitize_float(config->haze_strength, def.haze_strength, 0.0f, 1.0f);
+    if (config->haze_color_set) {
+        // Non-finite channels become 0 so an explicit override stays explicit.
+        for (int i = 0; i < 3; ++i)
+            config->haze_color[i] = sanitize_float(config->haze_color[i], 0.0f, 0.0f, 1.0f);
+    } else {
+        config->haze_color[0] = config->haze_color[1] = config->haze_color[2] = 0.0f;
+    }
 
     if (config->sky_layer_count < 0) config->sky_layer_count = 0;
     if (config->sky_layer_count > 4) config->sky_layer_count = 4;
@@ -319,6 +340,32 @@ float r2d_world_render_foot_ao(float distance, float radius, float strength)
     return clamp01(core * strength);
 }
 
+float r2d_world_render_fog_height_factor(float distance, float height,
+                                         const R2DWorldRenderFeatures *config)
+{
+    R2DWorldRenderFeatures def;
+    if (!config) {
+        r2d_world_render_defaults(&def);
+        config = &def;
+    }
+    if (!isfinite(distance) || distance < 0.0f) distance = 0.0f;
+    if (!isfinite(height)) height = config->fog_base_height;
+    double scale = (double)config->fog_height_falloff; // scale height, world units
+    double density = (double)config->fog_height_density;
+    if (!config->height_fog || !(scale > 0.0) || !(density > 0.0)) return 0.0f;
+    // Bounded height integral: fog approaches density*scale instead of growing
+    // without limit on tall maps. The distance gate keeps surfaces next to the
+    // camera crisp; fog is a path effect, not an altitude tint.
+    double above = (double)height - (double)config->fog_base_height;
+    if (above < 0.0) above = 0.0;
+    double asymptote = density * scale;
+    double height_attenuation = 1.0 - exp(-above / scale);
+    double distance_gate = 1.0 - exp(-(double)distance * 0.002);
+    double optical = asymptote * height_attenuation * distance_gate;
+    if (optical < 0.0) optical = 0.0;
+    return clamp01((float)(1.0 - exp(-optical)));
+}
+
 float r2d_world_render_fog_factor(float distance, float height,
                                   const R2DWorldRenderFeatures *config)
 {
@@ -329,11 +376,10 @@ float r2d_world_render_fog_factor(float distance, float height,
     }
     if (!isfinite(distance) || distance < 0.0f) distance = 0.0f;
     if (!isfinite(height)) height = config->fog_base_height;
-    float above = height - config->fog_base_height;
-    if (above < 0.0f) above = 0.0f;
-    double optical = 0.002 * (double)distance +
-                     (double)config->fog_height_density * (double)above *
-                     (double)config->fog_height_falloff;
+    double distance_optical = 0.002 * (double)distance; // documented distance term
+    double height_factor = (double)r2d_world_render_fog_height_factor(distance, height, config);
+    double height_optical = height_factor >= 1.0 ? 1.0e30 : -log(1.0 - height_factor);
+    double optical = distance_optical + height_optical;
     if (optical < 0.0) optical = 0.0;
     return clamp01((float)(1.0 - exp(-optical)));
 }
@@ -348,6 +394,22 @@ void r2d_world_render_haze_mix(const float fog_rgb[3], const float sky_rgb[3],
         float s = sky_rgb && isfinite(sky_rgb[c]) ? sky_rgb[c] : f;
         out_rgb[c] = clamp01(f + (s - f) * amount);
     }
+}
+
+void r2d_world_render_haze_color(const R2DWorldRenderFeatures *config,
+                                 uint32_t sky_color, float out_rgb[3])
+{
+    if (!out_rgb) return;
+    if (config && config->haze_color_set) {
+        for (int c = 0; c < 3; ++c)
+            out_rgb[c] = clamp01(isfinite(config->haze_color[c]) ? config->haze_color[c] : 0.0f);
+        return;
+    }
+    // Historical automatic tint: the authored sky colour, 0xff88aacc fallback.
+    uint32_t tint = sky_color ? sky_color : 0xff88aaccu;
+    out_rgb[0] = (float)((tint >> 0) & 255u) / 255.0f;
+    out_rgb[1] = (float)((tint >> 8) & 255u) / 255.0f;
+    out_rgb[2] = (float)((tint >> 16) & 255u) / 255.0f;
 }
 
 void r2d_world_render_variation(uint32_t surface, int kind, uint32_t seed,
