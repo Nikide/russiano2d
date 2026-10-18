@@ -106,6 +106,7 @@ const enemy = $('<sprite>', { id: 'imp' })
   .at(800, 900).depth(0).size(150, 150).angle(0).hide()
   .appendTo($.world);
 enemy.get(0).sprite_row = 0;          // строка анимации (0..rows-1)
+enemy.get(0).sprite_col = 2;          // явная колонка направления (0..columns-1)
 
 world.sprite(enemy, {
   atlas: 'enemies/imp_sheet.png',     // PNG, ≤4096×4096
@@ -120,9 +121,13 @@ world.sprite(enemy, {
 
 Что делает C, а не игра каждый кадр:
 
-* читает `x/y/depth/w/h/angle` и `sprite_row` узла;
+* читает `x/y/depth/w/h/angle`, `sprite_row` и (опционально) `sprite_col` узла;
 * выбирает колонку направления из `angle` (facing, радианы, 0 = +X) и позиции
-  камеры; `mirror: true` рисует вторую половину отражённой;
+  камеры; `mirror: true` рисует вторую половину отражённой. Если на узле задан
+  **`sprite_col`**, C использует его вместо angle-выбора: колонка зажимается
+  в `0..columns-1`, зеркалирование и LOD-прореживание направлений к ней не
+  применяются. `sprite_col` и `sprite_row` независимы; оба читаются каждый
+  кадр, перерегистрация не нужна;
 * ставит нормированную точку `pivot` в `depth` узла: `feet` — точка опоры, а не
   центр кадра; `center` держит в `depth` середину; `custom` берёт `pivotX`,
   `pivotY`;
@@ -132,6 +137,37 @@ world.sprite(enemy, {
   колонки/строки/зеркала и переиспользует его в CPU и SDL_GPU путях.
 
 `directions`: 1, 4, 5+mirror, 8, 16 (1..16). `columns`/`rows` — до 64.
+
+### Packed layered character (`sprite_col`)
+
+Слои (ноги → хвост → торс → голова) можно «запечь» офлайн в один
+направленный атлас и управлять им из игры одной колонкой и строкой:
+
+```js
+// atlas: 16 columns (directions) x 9 rows (idle + 8 walk), cell 192x192
+const hero = $('<sprite>', { id: 'neko' }).at(x, y).depth(0).size(112, 112)
+  .hide().appendTo($.world);
+world.sprite(hero, {
+  atlas: 'chars/neko_sheet.png',
+  columns: 16, rows: 9, directions: 16, mirror: false,
+  cell: { w: 192, h: 192 }, pivot: 'feet', width: 112, height: 112,
+});
+const node = hero.get(0);
+// каждый кадр, без re-registration и без пересборки атласа:
+node.sprite_col = dir;    // 0..15, от мыши/геймпада
+node.sprite_row = frame;  // 0 = idle, 1..8 = walk
+```
+
+* `sprite_col` приоритетнее `angle`: deterministic-колонка не зависит от
+  ракурса камеры и от вырожденного случая «камера ровно над спрайтом» (в
+  angle-режиме относительный yaw там равен 0, поэтому 0 и π дают одинаковый
+  кадр — это ограничение angle-выбора, не `sprite_col`).
+* Смена колонки/строки пересобирает только одну клетку в crop-буфере; полной
+  перезагрузки атласа нет, flicker нет.
+* Глубина/окклюзия, свет, туман и выбор `blend` — те же, что у обычного
+  атласного спрайта.
+* `sprite_col` можно не задавать — тогда работает прежний angle-режим
+  (`delete node.sprite_col` возвращает его на лету).
 `mirror` включается только при `directions > 1`; при `directions: 1` колонка
 всегда 0. Ошибки конфигурации — исключения (`TypeError`/`RangeError`): нет
 пути, клетка вне листа, `width/height ≤ 0`, неизвестный `pivot`/`blend`.
@@ -145,9 +181,11 @@ policy у этого режима нет — строку анимации ст�
 `info().atlasSprites` (зарегистрировано) и `info().visibleAtlasSprites`
 (видимых в последнем кадре), `actorMs`.
 
-Проверки: `tests/re2d/atlas_test.c` (Unity: направление, pivot, клетка,
-кроп), `tests/agent/re2d_boomer_lab_test.py` (кадр, смена направления,
-попиксельная окклюзия стеной), `demos/re2d_boomer_lab`.
+Проверки: `tests/re2d/atlas_test.c` (Unity: направление, явная колонка, pivot,
+клетка, кроп), `tests/agent/re2d_boomer_lab_test.py` (кадр, смена направления,
+попиксельная окклюзия стеной), `tests/agent/re2d_sprite_col_test.py` (упакованный
+слоистый персонаж: col 0≠2, row 0≠1, live-смена 10 кадров без re-registration,
+клэмп колонки), `demos/re2d_boomer_lab`.
 
 ## Trace: мир + actor-прокси
 
