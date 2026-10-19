@@ -37,6 +37,12 @@ static JSValue r2d__sdk_available(JSContext *ctx, JSValueConst t, int c, JSValue
     (void)t; (void)c; (void)v;
     return JS_NewBool(ctx, false);
 }
+// В вебе внешних JS-модулей расширений нет: moduleRoot всегда false.
+static JSValue r2d__sdk_module_root(JSContext *ctx, JSValueConst t, int c, JSValueConst *v)
+{
+    (void)t; (void)c; (void)v;
+    return JS_NewBool(ctx, false);
+}
 void r2d_sdk_host_register_js(JSContext *ctx, JSValue engine)
 {
     JSValue sdk = JS_NewObject(ctx);
