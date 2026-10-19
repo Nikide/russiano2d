@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "name": "Collision alignment fixture",
+  "meta": {
+    "id": "test.collision_align",
+    "title": "Collision alignment",
+    "environment": "interior"
+  },
+  "spawns": [
+    {
+      "id": "player.start",
+      "type": "player",
+      "x": 600,
+      "y": 450,
+      "h": 0,
+      "facing": 0
+    }
+  ],
+  "cells": [
+    {
+      "id": "room",
+      "rect": [
+        0,
+        0,
+        1200,
+        900
+      ],
+      "spans": [
+        {
+          "bottom": 0,
+          "top": 2000,
+          "floorColor": "#9a9a9a",
+          "ceilingColor": "#6a7078",
+          "lighting": {
+            "level": 0.8,
+            "color": "#ffffff"
+          }
+        }
+      ]
+    }
+  ],
+  "walls": [
+    {
+      "id": "north",
+      "from": [
+        0,
+        0
+      ],
+      "to": [
+        1200,
+        0
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#baa078"
+    },
+    {
+      "id": "south",
+      "from": [
+        0,
+        900
+      ],
+      "to": [
+        1200,
+        900
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#baa078"
+    },
+    {
+      "id": "west",
+      "from": [
+        0,
+        0
+      ],
+      "to": [
+        0,
+        900
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#baa078"
+    },
+    {
+      "id": "east",
+      "from": [
+        1200,
+        0
+      ],
+      "to": [
+        1200,
+        900
+      ],
+      "bottom": 0,
+      "top": 320,
+      "color": "#baa078"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "id": "fixture.world-tools",
+  "name": "Fixture World Tools",
+  "description": "Fixture extension: все contribution-точки без правки SDK core",
+  "version": "1.0.0",
+  "sdk_api": 1,
+  "entry": "main.js",
+  "permissions": [
+    "project.read",
+    "world.edit"
+  ],
+  "contributes": {
+    "tools": [
+      {
+        "id": "fixture.world-tools.panel",
+        "name": "Fixture Panel",
+        "description": "Страница расширения",
+        "entry": "main.js",
+        "category": "fixture",
+        "assets": [
+          "*.fixture.json"
+        ]
+      }
+    ],
+    "menus": [
+      {
+        "id": "fixture.menu.generate",
+        "label": "Сгенерировать"
+      }
+    ],
+    "toolbar": [
+      {
+        "id": "fixture.toolbar.generate",
+        "label": "Сгенерировать"
+      }
+    ],
+    "panels": [
+      {
+        "id": "fixture.panel.main",
+        "title": "Fixture"
+      }
+    ],
+    "inspectors": [
+      {
+        "id": "fixture.inspector.meta",
+        "title": "Fixture meta"
+      }
+    ],
+    "entityDefinitions": [
+      {
+        "class": "fixture.spawn",
+        "base": "point",
+        "category": "Fixture",
+        "label": "Fixture Spawn"
+      }
+    ],
+    "worldTools": [
+      {
+        "id": "fixture.world.bevel",
+        "title": "Bevel"
+      }
+    ],
+    "validators": [
+      {
+        "id": "fixture.validator.grid",
+        "title": "Grid"
+      }
+    ],
+    "buildSteps": [
+      {
+        "id": "fixture.build.stamp",
+        "title": "Stamp"
+      }
+    ],
+    "agentCommands": [
+      {
+        "id": "fixture.agent.generate",
+        "title": "Generate"
+      }
+    ]
+  }
+}

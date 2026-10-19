@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(russiano2d
-    VERSION 1.2.12
+    VERSION 1.2.13
     DESCRIPTION "Легковесный кроссплатформенный 2D-движок: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi, экспорт в веб (WebGPU)"
     LANGUAGES C CXX)
 # Бинарник ищет библиотеки рядом с собой: если что-то осталось динамическим,
@@ -120,6 +120,7 @@ include(Dependencies)
 include(Light)      # полигоны видимости (trylock/visibility)
 include(Shaders)
 include(Icons)
+include(Splash)    # сплэш SDK внутри бинарника (картинка/RML/RCSS)
 include(EmbedJs)   # высокоуровневое API ($) внутри бинарника
 
 enable_testing()

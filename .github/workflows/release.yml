@@ -1,0 +1,223 @@
+name: Release - Linux/Windows build, package, GitHub Release
+# RELEASE (docs/RELEASING.md). Запускается ТОЛЬКО тегом vX.Y.Z, который создаёт
+# локальный build_and_push.sh. macOS здесь не собирается: он прикладывается
+# локальным tools/attach_macos_release.py после успешного CI.
+#
+# Зависимости публикации — только release-critical:
+#   linux-release + windows-release + release-metadata -> publish-release
+# quality.yml в этой цепочке НЕ участвует.
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  SDL_VIDEODRIVER: dummy
+  SDL_AUDIODRIVER: dummy
+jobs:
+  release-metadata:
+    name: Release metadata - tag matches project version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag == project version
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(python3 -c "import sys; sys.path.insert(0,'tools'); import release; print(release.read_version())")"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::тег $GITHUB_REF_NAME не совпадает с версией проекта v$version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "  ok   тег $GITHUB_REF_NAME == версия проекта"
+          notes="dist/RELEASE_NOTES_$version.md"
+          if [ -f "$notes" ]; then
+            echo "  ok   заметки релиза: $notes"
+          else
+            echo "::warning::нет $notes — тело релиза будет без заметок"
+          fi
+
+  linux-release:
+    name: Linux ${{ matrix.platform }} - build, Unity tests, package
+    needs: release-metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: linux-x86_64, runner: ubuntu-24.04}
+          - {platform: linux-aarch64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config libfreetype-dev patchelf \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev \
+            libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev \
+            libgl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
+            libcurl4-openssl-dev mesa-vulkan-drivers
+      - name: Configure (RE2D on)
+        run: cmake -S . -B build-ci -G Ninja -DCMAKE_BUILD_TYPE=Release -DR2D_ENABLE_RE2D=ON
+      - name: Build (RE2D on)
+        run: cmake --build build-ci --parallel "$(nproc)"
+      - name: Unity tests (RE2D on) - release gate
+        run: ctest --test-dir build-ci --output-on-failure --parallel "$(nproc)"
+      - name: Configure (RE2D off)
+        run: cmake -S . -B build-2d-ci -G Ninja -DCMAKE_BUILD_TYPE=Release -DR2D_ENABLE_RE2D=OFF
+      - name: Build (RE2D off)
+        run: cmake --build build-2d-ci --parallel "$(nproc)"
+      - name: Unity tests (RE2D off) - release gate
+        run: ctest --test-dir build-2d-ci --output-on-failure --parallel "$(nproc)"
+      - name: Package
+        run: |
+          set -euo pipefail
+          rm -rf dist-ci
+          python3 tools/ci_package.py --build-dir build-ci --platform '${{ matrix.platform }}'
+      - name: Validate the produced package - release gate
+        run: |
+          set -euo pipefail
+          archive="dist-ci/$(python3 -c "import sys; sys.path.insert(0,'tools'); import release; print(release.archive_name('${{ matrix.platform }}', '${{ needs.release-metadata.outputs.version }}'))")"
+          python3 tools/ci_package_check.py --archive "$archive" --platform '${{ matrix.platform }}' --version '${{ needs.release-metadata.outputs.version }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist-ci/*.tar.gz
+          if-no-files-found: error
+
+  windows-release:
+    name: Windows x86_64 - MinGW cross-build, package
+    needs: release-metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies (MinGW + host shader tools + FreeType)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake pkg-config mingw-w64 xz-utils zip \
+            glslang-tools spirv-cross
+          curl -fL --connect-timeout 10 --max-time 300 --retry 5 --retry-delay 3 \
+            -o /tmp/freetype.tar.xz \
+            "https://archive.ubuntu.com/ubuntu/pool/main/f/freetype/freetype_2.13.2+dfsg.orig.tar.xz"
+          echo "48c78a4194adfcd15a4d089f3206dab8454c311f5577f3ef7eaef95f777f86e6  /tmp/freetype.tar.xz" | sha256sum -c -
+          mkdir -p /tmp/freetype && tar -xJf /tmp/freetype.tar.xz -C /tmp/freetype --strip-components=1
+          ( cd /tmp/freetype
+            ./configure --host=x86_64-w64-mingw32 --prefix=/usr/x86_64-w64-mingw32 \
+              --without-harfbuzz --without-bzip2 --without-brotli --without-png --without-zlib \
+              --enable-static --disable-shared >/tmp/freetype.log 2>&1
+            make -j"$(nproc)" >>/tmp/freetype.log 2>&1 && sudo make install >>/tmp/freetype.log 2>&1 )
+      - name: Configure (Windows cross, MinGW)
+        run: |
+          cmake -S . -B build-ci -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DR2D_BUNDLED_FREETYPE=ON \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+            -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+            -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
+            -DCMAKE_FIND_ROOT_PATH=/usr/x86_64-w64-mingw32 \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY
+      - name: Build (Windows cross)
+        run: |
+          # Тесты Windows-бинарника на Linux-раннере не запускаются (Wine нет):
+          # это осознанное ограничение. Код движка проверяется Linux-джобами,
+          # пакет проверяется контрактом содержимого ниже.
+          cmake --build build-ci --parallel "$(nproc)"
+      - name: Package
+        run: |
+          set -euo pipefail
+          rm -rf dist-ci
+          python3 tools/ci_package.py --build-dir build-ci --platform windows-x86_64
+      - name: Validate the produced package - release gate
+        run: |
+          set -euo pipefail
+          archive="dist-ci/$(python3 -c "import sys; sys.path.insert(0,'tools'); import release; print(release.archive_name('windows-x86_64', '${{ needs.release-metadata.outputs.version }}'))")"
+          python3 tools/ci_package_check.py --archive "$archive" --platform windows-x86_64 --version '${{ needs.release-metadata.outputs.version }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-x86_64
+          path: dist-ci/*.zip
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release (CI-owned artifacts)
+    # Только release-critical зависимости. quality.yml сюда не входит.
+    needs: [linux-release, windows-release, release-metadata]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: artifacts
+      - name: Validate downloaded packages (exactly what CI built)
+        run: |
+          set -euo pipefail
+          version='${{ needs.release-metadata.outputs.version }}'
+          python3 - <<PY
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, 'tools')
+          import release
+          version = "$version"
+          platforms = ('linux-x86_64', 'linux-aarch64', 'windows-x86_64')
+          expected = sorted(release.archive_name(p, version) for p in platforms)
+          actual = sorted(f.name for f in Path('artifacts').iterdir() if f.is_file())
+          assert actual == expected, 'архивы не совпали с контрактом: ждали %s, нашли %s' % (expected, actual)
+          print('  ok   архивы по контракту: %s' % ', '.join(actual))
+          PY
+          for platform in linux-x86_64 linux-aarch64 windows-x86_64; do
+            archive="artifacts/$(python3 -c "import sys; sys.path.insert(0,'tools'); import release; print(release.archive_name('$platform', '$version'))")"
+            python3 tools/ci_package_check.py --archive "$archive" --platform "$platform" --version "$version"
+          done
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          cd artifacts
+          rm -f SHA256SUMS.txt
+          sha256sum ./*.tar.gz ./*.zip > SHA256SUMS.txt
+          test "$(wc -l < SHA256SUMS.txt)" -eq 3
+          sha256sum -c SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Create or refresh the release for this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version='${{ needs.release-metadata.outputs.version }}'
+          notes_file="dist/RELEASE_NOTES_${version}.md"
+          platform_text="Windows и Linux собраны GitHub Actions. macOS (arm64, x86_64) собирается локально на рабочем Mac и прикладывается к этому релизу шагом \`python3 tools/attach_macos_release.py\`; после него в SHA256SUMS.txt пять архивов. До этого момента релиз неполный."
+          if [ -f "$notes_file" ]; then
+            { cat "$notes_file"; printf '\n---\n\n%s\n' "$platform_text"; } > release-body.md
+            echo "тело релиза собрано из $notes_file"
+          else
+            printf 'Заметок %s в репозитории нет — релиз без них.\n\n%s\n' "$notes_file" "$platform_text" > release-body.md
+            echo "::warning::нет $notes_file — тело релиза только из приписки"
+          fi
+          cd artifacts
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # Повторный прогон не трогает вручную приложенные macOS-архивы и
+            # не перезаписывает SHA256SUMS.txt (к этому моменту там уже 5 строк).
+            echo "релиз $GITHUB_REF_NAME существует — обновляю только CI-архивы"
+            gh release upload "$GITHUB_REF_NAME" ./*.tar.gz ./*.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag \
+              --title "Russiano2D $GITHUB_REF_NAME" --notes-file ../release-body.md
+            gh release upload "$GITHUB_REF_NAME" ./* --clobber
+          fi
+          gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' | sort

@@ -2313,6 +2313,7 @@ interface R2D_sdk {
     active(): any;
     available(): any;
     launch(arg0: any, arg1: any): any;
+    moduleRoot(arg0: any, arg1: any): any;
     paths(): any;
     tool(arg0: any, arg1: any): any;
 }

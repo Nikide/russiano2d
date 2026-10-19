@@ -48,6 +48,12 @@ from typing import Iterable, List, Sequence, Set
 #:     часть `docs/re2d/` (форматы, миграция, поведение рендера) публикуется;
 #:   * `docs/ci-archive/` — архив отчётов CI: наш процесс. Сейчас каталога нет,
 #:     но правило стоит заранее: если он появится, публиковать его не нужно;
+#:   * журналы и планы работ — `docs/NEXT_SESSION.md`,
+#:     `docs/HANDOFF_VN_RENDER_ROADMAP.md`, `docs/ROADMAP_COVERAGE.md`,
+#:     `docs/TASKS.md`, `docs/TESTING.md`, `docs/ENGINE_GAPS.md`,
+#:     `docs/PRODUCTION_READINESS.md`, `docs/SDK_TOOLING_PHASE0_REPORT.md`,
+#:     `docs/re2d/P0_EXECUTION_PLAN.md`,
+#:     `docs/re2d/RE2D_WORLD_GZDOOM_RENDERER_PLAN.md` — наш рабочий процесс;
 #:   * `SDK_HANDOFF.md` (корень) — журнал работы над SDK: что делали, чем
 #:     проверяли, что осталось; едет в пакет отдельно от `docs/`.
 INTERNAL_DOCS = (
@@ -55,12 +61,22 @@ INTERNAL_DOCS = (
     "docs/EXTERNAL_FEEDBACK.md",
     "docs/PRODUCTION_POLISH.md",
     "docs/PRODUCTION_PLAN.md",
+    "docs/PRODUCTION_READINESS.md",
+    "docs/ROADMAP_COVERAGE.md",
     "docs/SDK_IMPLEMENTATION_GAPS.md",
+    "docs/SDK_TOOLING_PHASE0_REPORT.md",
     "docs/SDK_VERIFICATION.md",
+    "docs/TASKS.md",
+    "docs/TESTING.md",
+    "docs/ENGINE_GAPS.md",
+    "docs/NEXT_SESSION.md",
+    "docs/HANDOFF_VN_RENDER_ROADMAP.md",
     "docs/ci-archive",
+    "docs/re2d/P0_EXECUTION_PLAN.md",
     "docs/re2d/RE2D_DOCUMENT_ACCEPTANCE_AUDIT.md",
     "docs/re2d/RE2D_RENDERER_IMPLEMENTATION_PLAN.md",
     "docs/re2d/RE2D_WORLD_CPU_HISTORY.md",
+    "docs/re2d/RE2D_WORLD_GZDOOM_RENDERER_PLAN.md",
     "docs/re2d/GZDOOM_REFERENCE_RULES.md",
     "docs/re2d/GZDOOM_VISUAL_OBSERVATIONS.md",
     "SDK_HANDOFF.md",

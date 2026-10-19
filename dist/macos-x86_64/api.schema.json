@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated_by": "r2d-sdk",
-  "engine_version": "1.2.12",
+  "engine_version": "1.2.13",
   "names": [
     {"path": "$.Re2D", "kind": "string", "value": "re2d"},
     {"path": "$._dispatchGlobal", "kind": "function", "arity": 3, "args": [{"name": "arg0", "type": "any"}, {"name": "arg1", "type": "any"}, {"name": "arg2", "type": "any"}], "returns": "any"},
@@ -2128,6 +2128,7 @@
     {"path": "$.sdk.active", "kind": "function", "arity": 0, "args": [], "returns": "any"},
     {"path": "$.sdk.available", "kind": "function", "arity": 0, "args": [], "returns": "any"},
     {"path": "$.sdk.launch", "kind": "function", "arity": 2, "args": [{"name": "arg0", "type": "any"}, {"name": "arg1", "type": "any"}], "returns": "any"},
+    {"path": "$.sdk.moduleRoot", "kind": "function", "arity": 2, "args": [{"name": "arg0", "type": "any"}, {"name": "arg1", "type": "any"}], "returns": "any"},
     {"path": "$.sdk.paths", "kind": "function", "arity": 0, "args": [], "returns": "any"},
     {"path": "$.sdk.tool", "kind": "function", "arity": 2, "args": [{"name": "arg0", "type": "any"}, {"name": "arg1", "type": "any"}], "returns": "any"},
     {"path": "$.selection.active", "kind": "function", "arity": 1, "args": [{"name": "arg0", "type": "any"}], "returns": "any"},

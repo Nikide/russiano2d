@@ -395,6 +395,9 @@ add_dependencies(russiano2d r2d_shaders)
 # видимости — по той же причине связываем таргеты, а не файл.
 add_dependencies(russiano2d r2d_icons)
 
+# Сплэш SDK: сгенерированный заголовок с байтами картинки/разметки.
+add_dependencies(russiano2d r2d_splash)
+
 # Таблица встроенных JS-модулей ($) генерируется в корневой области видимости —
 # как и заголовки шейдеров с иконками, связываем таргеты зависимостью.
 add_dependencies(russiano2d r2d_js)

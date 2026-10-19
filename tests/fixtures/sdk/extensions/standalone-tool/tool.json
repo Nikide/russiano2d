@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "fixture.standalone",
+  "name": "Standalone Fixture",
+  "description": "Standalone SDK tool вне исходников SDK",
+  "version": "1.0.0",
+  "sdk_api": 1,
+  "entry": "main.js",
+  "window": {
+    "width": 800,
+    "height": 600
+  }
+}

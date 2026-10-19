@@ -1,0 +1,39 @@
+name: Quality - docs, policy and hygiene (does not block release)
+# QUALITY (docs/RELEASING.md): документация, policy, чеклисты и гигиена.
+# Это отдельный workflow: его красный статус виден, но GitHub Release не
+# зависит от него. Релизные гейты - только build/test/package в release.yml.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  quality:
+    name: Docs, API docs, policy, hygiene
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Documentation
+        run: |
+          python3 tests/doc_coverage_test.py
+          python3 tests/doc_claims_test.py
+          python3 tests/api_docs_sync_test.py
+          python3 tests/release_notes_test.py
+          python3 tests/format_extensions_test.py
+      - name: Architecture, policy and release ownership
+        run: |
+          python3 tests/portability_test.py
+          python3 tests/package_docs_refresh_test.py
+          python3 tests/release_ownership_test.py
+      - name: Checklists and repository hygiene
+        run: |
+          python3 tests/checklist_test.py
+          python3 tests/acceptance_test.py
+          python3 tests/repository_hygiene_test.py
+          python3 tests/production_polish_checklist_test.py

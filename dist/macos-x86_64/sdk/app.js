@@ -1,4 +1,6 @@
 import { createRecovery } from './lib/recovery.js';
+import { createExtensionHost } from './lib/extensions.js';
+import { createSplash } from './lib/splash.js';
 // ===========================================================================
 // SDK как приложение R2D: состояние, операции и связка с интерфейсом RmlUi.
 //
@@ -40,7 +42,8 @@ const DOCS = [
 // Экраны, которые живут внутри оболочки и не требуют отдельного модуля.
 const INTERNAL_ENTRIES = { launcher: 'projects', 'asset-browser': 'assets', diagnostics: 'diag' };
 
-export function createApp($) {
+export function createApp($, options) {
+    let splash = options && options.splash ? options.splash : null;
     const state = {
         view: 'projects',
         project: null,            // { dir, abs, title, version, width, height, hasMain, hasManifest }
@@ -125,27 +128,45 @@ export function createApp($) {
     // Одна на проект: спрашиваем у нативного бэкенда (`r2d-sdk version`), а не
     // держим вторую строку версии в JS. Не ответил — остаётся запасное значение.
     async function loadVersion() {
+        if (splash) splash.progress(86, 'версия backend…');
         const r = await backend(['version'], 'версия SDK');
         const value = r.json && r.json.version;
         if (!value) return null;
         sdkVersion = String(value);
         doc.text('sdk-version', sdkVersion);
+        if (splash) {
+            splash.version('r2d-sdk ' + sdkVersion);
+            splash.progress(92, 'версия: ' + sdkVersion);
+        }
         return sdkVersion;
     }
 
     // --- Реестр инструментов ----------------------------------------------------
-    async function loadRegistry(pathOverride) {        const path = pathOverride ? absolutePath(base(), pathOverride) : registryPath();
-        const r = await backend(['tools', '--registry', path], 'чтение sdk_tools.json');
+    async function loadRegistry(pathOverride) {
+        const path = pathOverride ? absolutePath(base(), pathOverride) : registryPath();
+        const args = ['tools', '--registry', path];
+        // Project-scope расширения обнаруживаются только с контекстом проекта.
+        if (state.project) args.push('--project', state.project.abs);
+        if (splash) splash.progress(55, 'реестр инструментов…');
+        const r = await backend(args, 'чтение sdk_tools.json');
         const json = r.json;
         if (json) {
             state.registry = {
                 loaded: true, path, ok: !!json.ok,
                 tools: (json.tools || []).map((t, i) => Object.assign({ index: i }, t)),
+                extensions: json.extensions || [],
                 diagnostics: json.diagnostics || [],
             };
             setDiagnostics('sdk_tools.json', json.diagnostics || []);
+            // Effective registry: расширения применяются к тому же снимку, что
+            // показывает GUI и агент (GUI/CLI/agent parity).
+            if (app.extensions) await app.extensions.apply(state.registry.extensions);
+            if (splash) splash.progress(80, 'расширения: ' + state.registry.extensions.length);
         }
-        finishStatus(!!(json && json.ok), 'реестр: ' + (state.registry.tools.length) + ' инструментов', 'ошибки в реестре инструментов');
+        finishStatus(!!(json && json.ok),
+            'реестр: ' + (state.registry.tools.length) + ' инструментов, расширений: ' +
+            (state.registry.extensions ? state.registry.extensions.length : 0),
+            'ошибки в реестре инструментов');
         renderTools();
         return state.registry;
     }
@@ -188,6 +209,8 @@ export function createApp($) {
         state.selected = null;
         renderProject();
         await refreshAssets();
+        // Project-scope расширения живут с проектом: перечитываем effective registry.
+        await loadRegistry();
         finishStatus(true, 'проект открыт: ' + (json.title || dir), '');
         return state.project;
     }
@@ -289,10 +312,13 @@ export function createApp($) {
         }
         // Экран инструмента — модуль sdk/tools/<entry>.js с экспортом open(app, args).
         try {
-            let mod = toolModules.get(tool.entry);
+            // Инструмент расширения: native отдаёт module "sdk-ext/<id>/<entry>",
+            // корень уже зарегистрирован хостом расширений ($.sdk.moduleRoot).
+            const spec = tool.module ? tool.module : './tools/' + tool.entry + '.js';
+            let mod = toolModules.get(tool.id);
             if (!mod) {
-                mod = await import('./tools/' + tool.entry + '.js');
-                toolModules.set(tool.entry, mod);
+                mod = await import(spec);
+                toolModules.set(tool.id, mod);
             }
             // Студия, которой нужен файл, без файла не открывается «в никуда»: ведём в Asset Browser
             // с фильтром по её файлам. Студии с `export const standalone = true` создают файл сами.
@@ -625,7 +651,8 @@ export function createApp($) {
             project: state.project ? { dir: state.project.dir, title: state.project.title, hasMain: state.project.hasMain } : null,
             registry: {
                 loaded: state.registry.loaded, ok: state.registry.ok,
-                tools: state.registry.tools.map((t) => ({ id: t.id, entry: t.entry, valid: t.valid })),
+                tools: state.registry.tools.map((t) => ({ id: t.id, entry: t.entry, module: t.module || null, source: t.source || 'builtin', valid: t.valid })),
+                extensions: (state.registry.extensions || []).map((e) => ({ id: e.id, scope: e.scope, enabled: !!e.enabled, valid: !!e.valid })),
             },
             assets: { loaded: state.assets.loaded, count: state.assets.count, visible: visibleAssets().length, selected: state.selected },
             diagnostics: { errors: sum.errors, warnings: sum.warnings, infos: sum.infos, source: state.diagnosticsSource,
@@ -634,6 +661,8 @@ export function createApp($) {
             tool: state.tool,
             templates: { loaded: state.templates.loaded, count: state.templates.list.length, selected: state.templateSelected },
             engines: { loaded: state.engines.loaded, count: state.engines.list.length, selected: state.engines.selected },
+            // Расширения: capability discovery для агента (без чтения SDK-исходников).
+            extensions: app.extensions ? app.extensions.snapshot() : null,
             // Снимок каждой открытой студии: список заполняют сами студии (app.studios[id]).
             studios: studioSnapshots(),
         };
@@ -666,16 +695,21 @@ export function createApp($) {
     };
 
     app.recovery = createRecovery(app);
+    app.extensions = createExtensionHost(app);
     $.update(dt => app.recovery.tick(dt));
     $.exit(() => app.recovery.flush());
 
     loadState();
     doc = $.ui.doc(DOC);
     doc.show();
+    // Splash создаётся ПОСЛЕ shell-документа: у RmlUi порядок показа = порядок
+    // создания, иначе оболочка перекрывала бы сплэш.
+    if (!splash && options && options.splashPath) splash = createSplash($, options.splashPath);
     wire();
     doc.text('sdk-version', sdkVersion);
     showView('projects');
     renderAll();
+    if (splash) splash.progress(45, 'интерфейс готов');
     $.sdkApp = app;
     if ($.agent && $.agent.expose) $.agent.expose('sdk', snapshot);
 
@@ -690,7 +724,28 @@ export function createApp($) {
         }
     });
 
-    loadRegistry();
-    loadVersion();
+    // r2d-sdk tool run <id> оставляет запрос на открытие: SDK подхватывает его
+    // один раз и удаляет (GUI/CLI/agent — одна операция openTool).
+    async function consumeLaunchRequest() {
+        const text = $.fs.readText('sdk/.open-tool.json');
+        if (!text) return null;
+        $.fs.remove('sdk/.open-tool.json');
+        let req = null;
+        try { req = JSON.parse(text); } catch (e) { return null; }
+        if (!req || !req.id) return null;
+        if (req.project && (!state.project || state.project.dir !== req.project)) {
+            await openProject(req.project);
+        }
+        return openTool(req.id, {});
+    }
+
+    // Прогресс сплэша ведут реальные этапы загрузки, а не таймер.
+    Promise.all([loadRegistry(), loadVersion()])
+        .then(() => consumeLaunchRequest())
+        .catch(() => null)
+        .then(() => {
+            if (splash) splash.finish('готово');
+        });
+    app.splash = splash;
     return app;
 }

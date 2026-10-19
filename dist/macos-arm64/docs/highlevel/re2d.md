@@ -475,6 +475,18 @@ gravity, jump только с земли, потолок, step-up/down, ходь
 потолок не оставляет тело внутри ceiling (defensive clamp). Нет mover carry/crush и нет sweep-запроса
 по произвольному радиусу (только собственный radius) — ограничения честные.
 
+`ctrl.shape()` возвращает авторскую форму без состояния тика:
+`{radius,height,eye,step,slopeLimit}`. Она нужна диагностике — F6-маркер,
+нарисованный приблизительным спрайтом, не является коллайдером.
+
+**Контракт визуализации.** Flat-atlas billboard рисуется screen-bottom-anchored:
+C проецирует точку `(x,y,bottom)` и блитит `top = p[1] - sh`, `left = p[0] - sw/2`
+(`src/re2d_world.c`, `stamp_targets_impl`). Поэтому pivot-centre спрайт размера
+`W` визуально центрируется в `node.x + W/2`. Чтобы тело стояло на контроллере,
+игра ставит `node.at(ctrl.x - W/2, ctrl.y).depth(ctrl.feet + W/2 + 3)`; это не
+«устаревший сдвиг», а компенсация нижней привязки билборда. Точный коллайдер
+рисует `world.debug.draw(view, {controllers:[ctrl]})` (см. Debug overlay).
+
 ## Movers (P0-E)
 
 ```js
@@ -998,6 +1010,8 @@ Sky portal — это тег на authored portal: visibility **не уходи�
 ```js
 world.debug.overlay(view, { width: 1280, height: 720 }); // чистые данные
 world.debug.draw(view, { width: 1280, height: 720, hitZones: true }); // поверх кадра
+// Точный футпринт нативного контроллера (игрок), без приблизительных спрайтов:
+world.debug.draw(view, { width: 1280, height: 720, controllers: [ctrl] });
 ```
 
 `overlay` проецирует automap-линии и semantic точки (trigger/secret) в экран;
@@ -1006,6 +1020,18 @@ world.debug.draw(view, { width: 1280, height: 720, hitZones: true }); // пов�
 и маркирует boss hit-зоны. Демо `demos/re2d_debug_lab` показывает это на
 testroom; F1 переключает слой. Данные детерминированы; `draw.clear()`
 вызывается самим helper'ом, так что слой не накапливается между кадрами.
+
+`options.controllers` — массив handle'ов `world.controller(...)` или обычных
+`{x,y,feet,radius,height}`. Для каждого контроллера `overlay` возвращает
+`controllers[i] = {center, top, ground[32], cross[2], radius, height, feet,
+grounded, x, y}`: `ground` — точная окружность радиуса на высоте `feet`
+(каждая вершина через тот же `projectPoint`, что automap), `top` — верх
+цилиндра `feet+height`, `cross` — крест центра. `draw` рисует зелёную окружность,
+белый крест, жёлтую вертикаль высоты и точку центра. Это ровно та же
+проекция/математика, что у кадра, поэтому оверлей совпадает с коллайдером до
+субпикселя и не зависит от `depth`/pivot спрайтов. Geo: тест
+`tests/agent/collision_align_test.py` (фикстура
+`tests/fixtures/collision_align`).
 
 ## Dynamic nav (P3)
 

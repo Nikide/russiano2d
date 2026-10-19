@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "id": "fixture.invalid-api",
+  "name": "Invalid API",
+  "version": "1.0.0",
+  "sdk_api": 99,
+  "entry": "main.js"
+}

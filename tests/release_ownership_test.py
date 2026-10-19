@@ -12,7 +12,7 @@
 #   * имя артефакта релиза собирается в одном месте (release.archive_name) и
 #     содержит версию.
 #
-# Проверка читает сами скрипты: если кто-то снова добавит в build_and_push.sh
+# Проверка читает сами скрипты: если кто-то снова добавит в build_and_push.command
 # сборку Linux «на всякий случай» или `gh release create` в shell-скрипт,
 # прогон станет красным.
 #
@@ -26,8 +26,9 @@ import subprocess
 import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-WORKFLOW = ".github/workflows/build.yml"
-LOCAL_SCRIPTS = ("build_and_push.sh", "push_and_deploy.sh")
+WORKFLOW = ".github/workflows/release.yml"
+CI_WORKFLOW = ".github/workflows/ci.yml"
+LOCAL_SCRIPTS = ("build_and_push.command", "build_and_push.sh", "push_and_deploy.sh")
 
 #: Платформы, сборка которых — ответственность CI, а не локальной машины.
 CI_ONLY_PLATFORMS = ("linux-x86_64", "linux-aarch64", "windows-x86_64")
@@ -56,13 +57,27 @@ def exists(rel):
 
 def tracked(*suffixes):
     out = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines()
-    return [n for n in out if n.endswith(suffixes)]
+    # Файл мог быть удалён в рабочем дереве (workflow разделён на три): в CI его
+    # в индексе уже нет, локально индекс ещё помнит — читать нечего.
+    return [n for n in out if n.endswith(suffixes)
+            and os.path.isfile(os.path.join(ROOT, n))]
+
+
+def tracked_or_untracked(*suffixes):
+    """Отслеживаемые + новые (ещё не в индексе) файлы: локальный прогон до
+    коммита должен проверять ровно то, что уедет в репозиторий."""
+    names = set(tracked(*suffixes))
+    out = subprocess.check_output(["git", "ls-files", "--others", "--exclude-standard"],
+                                  cwd=ROOT, text=True).splitlines()
+    names.update(n for n in out if n.endswith(suffixes)
+                 and os.path.isfile(os.path.join(ROOT, n)))
+    return sorted(names)
 
 
 def test_single_release_owner():
     print("\n== §4.8: единственный владелец GitHub Release ==")
     offenders = []
-    for name in tracked(".sh", ".py", ".yml", ".yaml", ".js", ".mjs"):
+    for name in tracked_or_untracked(".sh", ".py", ".yml", ".yaml", ".js", ".mjs"):
         if name.startswith("dist/") or name == SELF:
             continue
         text = read(name)
@@ -90,13 +105,14 @@ def test_workflow_ownership():
     # в комментарии у матрицы и в docs/RELEASING.md). Родная MSVC-сборка
     # остаётся в workflow необязательной задачей-наблюдением, иначе про ошибку
     # тулчейна никто не вспомнит.
-    check("windows-x86_64" in platforms and bool(runners),
+    check("windows-x86_64" in workflow and bool(runners),
           "Windows x86_64 собирается hosted-раннером (платформы %s, раннеры %s)"
           % (platforms, runners))
     check("x86_64-w64-mingw32-gcc" in workflow,
           "Windows собирается кросс-сборкой MinGW (тулчейн назван в workflow)")
-    check("windows-msvc-diagnostic" in workflow and "continue-on-error: true" in workflow,
-          "наблюдение за MSVC осталось, но не блокирует релиз")
+    ci = read(CI_WORKFLOW)
+    check("windows-msvc-diagnostic" in ci and "continue-on-error: true" in ci,
+          "наблюдение за MSVC осталось в ci.yml, но не блокирует релиз")
     check(not any("windows-" in r for r in runners),
           "Windows не занимает hosted Windows-раннер в обязательных задачах (%s)" % runners)
     check("linux-x86_64" in platforms and "linux-aarch64" in platforms,
@@ -107,8 +123,9 @@ def test_workflow_ownership():
     # Тег обязан совпадать с версией проекта — гейт стоит один раз, в static.
     check("read_version()" in workflow and "GITHUB_REF_NAME" in workflow,
           "workflow сверяет тег с версией проекта")
-    check(re.search(r"release:[\s\S]{0,400}?needs:\s*\[[^\]]*build", workflow) is not None,
-          "релиз зависит от успешной сборки (провал gate не публикует релиз)")
+    check(re.search(r"publish-release:[\s\S]{0,800}?needs:\s*\[[^\]]*"
+                    r"(linux-release|windows-release)", workflow) is not None,
+          "публикация зависит только от release-critical сборок")
 
     # Суммы считаются по явному списку: `sha256sum *` захватил бы сам файл сумм.
     check(re.search(r"sha256sum\s+\.?/?\*?\.?/?\*\.tar\.gz", workflow) is not None
@@ -149,13 +166,15 @@ def test_local_scripts_do_not_duplicate_ci():
                   "%s:%d собирает локально только macOS (в строке: %s)"
                   % (name, num, ", ".join(bad) or "macOS"))
 
-    if not exists("build_and_push.sh"):
+    script = next((name for name in ("build_and_push.command", "build_and_push.sh")
+                   if exists(name)), None)
+    if not script:
         return
-    build = read("build_and_push.sh")
+    build = read(script)
     check("macos-arm64,macos-x86_64" in build or "macos-arm64,macos-x86_64" in build,
-          "build_and_push.sh по умолчанию собирает macOS-профили")
+          "%s по умолчанию собирает macOS-профили" % script)
     check("PLATFORMS" in build and "exit 1" in build,
-          "build_and_push.sh отвергает не-macOS платформу, а не собирает её")
+          "%s отвергает не-macOS платформу, а не собирает её" % script)
 
 
 def test_artifact_name_contract():
@@ -239,6 +258,25 @@ def test_macos_attachment_is_documented():
           "перенос артефактов CI в dist/ тоже описан")
 
 
+
+def test_publication_boundary():
+    print("\n== Публикация: внутренние доки не на сайт и не промпты в git ==")
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import public_docs as pd
+
+    for entry in pd.INTERNAL_DOCS:
+        check(not pd.is_site_doc(entry),
+              "внутренний документ не в SITE_DOCS: %s" % entry)
+    missing = [entry for entry in pd.SITE_DOCS if not exists(entry)]
+    check(not missing, "все SITE_DOCS существуют (нет: %s)" % ", ".join(missing))
+
+    tracked = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines()
+    prompts = [n for n in tracked if re.search(r"prompt[^/]*\.md$", n, re.I)]
+    check(not prompts, "промпты не отслеживаются git (%s)" % (", ".join(prompts) or "чисто"))
+    local_dirs = ("site/", ".claude/", ".zwork/", ".web/", ".dsh/", "graphify-out/")
+    leaked = [n for n in tracked if n.startswith(local_dirs)]
+    check(not leaked, "локальные служебные каталоги не в git (%s)" % (", ".join(leaked[:5]) or "чисто"))
+
 def main():
     test_single_release_owner()
     test_workflow_ownership()
@@ -246,6 +284,7 @@ def main():
     test_artifact_name_contract()
     test_other_host_pipelines()
     test_macos_attachment_is_documented()
+    test_publication_boundary()
     print("\nВсе проверки пройдены" if not FAILURES else "\nПРОВАЛЕНО: %d" % len(FAILURES))
     for line in FAILURES:
         print("  - " + line)

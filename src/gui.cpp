@@ -15,6 +15,10 @@
 
 #include "icons.h"
 
+// Сплэш SDK, вшитый в бинарник (cmake/Splash.cmake): RmlUi читает картинку и
+// разметку из памяти, внешние sdk/assets и sdk/ui для сплэша не нужны.
+#include "r2d_splash_data.h"
+
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Elements/ElementFormControl.h>
 
@@ -62,6 +66,20 @@ public:
 
     Rml::FileHandle Open(const Rml::String &path) override
     {
+        // Сплэш SDK вшит в бинарник: отдаём байты из памяти до обращения к
+        // диску, поэтому сплэш работает и без каталога sdk/ рядом с бинарником.
+        for (int i = 0; i < r2d_embedded_asset_count; ++i) {
+            const R2dEmbeddedAsset &asset = r2d_embedded_assets[i];
+            const size_t alen = std::strlen(asset.path);
+            const bool exact = path.size() == alen && path.compare(0, alen, asset.path) == 0;
+            const bool suffix = path.size() > alen &&
+                path.compare(path.size() - alen, alen, asset.path) == 0;
+            if (exact || suffix) {
+                auto *mem = new MemoryFile(asset.data, asset.size);
+                memory_files_.insert(mem);
+                return to_handle(mem);
+            }
+        }
         // Груз собранной игры: файл уже в памяти, диск не нужен.
         if (r2d_vfs_has(path.c_str())) {
             size_t size = 0;

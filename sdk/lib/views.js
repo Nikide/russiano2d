@@ -12,10 +12,11 @@ const CATEGORY_LABELS = {
     shell: 'ОБОЛОЧКА',
     backend: 'НАТИВНЫЙ БЭКЕНД',
     'classic-2d': 'КЛАССИЧЕСКИЙ 2D',
+    re2d: 'RE2D WORLD',
     automation: 'АВТОМАТИЗАЦИЯ',
     devtools: 'ОТЛАДКА',
 };
-const CATEGORY_ORDER = ['shell', 'classic-2d', 'automation', 'devtools', 'backend'];
+const CATEGORY_ORDER = ['shell', 'classic-2d', 're2d', 'automation', 'devtools', 'backend'];
 
 export function categoryLabel(category) {
     return CATEGORY_LABELS[category] || String(category || 'ПРОЧЕЕ').toUpperCase();

@@ -31,7 +31,7 @@ DS = "$.ui.doc('sdk/ui/data_studio.rml')"
 RMS = "$.ui.doc('sdk/ui/rmlui_studio.rml')"
 DTD = "$.ui.doc('sdk/ui/devtools.rml')"
 
-REQUIRED_TOOLS = ["launcher", "asset-browser", "r2d-sdk", "sprite-studio", "animation-studio", "tilemap-studio", "particle-studio",
+REQUIRED_TOOLS = ["launcher", "asset-browser", "r2d-sdk", "world-editor", "re2d-world-studio", "sprite-studio", "animation-studio", "tilemap-studio", "particle-studio",
                   "collision-tools", "parallax-tools", "font-tools", "audio-tools", "input-tools", "rmlui-studio", "devtools",
                   "automation", "code-check", "api-browser", "vn-narrative"]
 
@@ -43,9 +43,13 @@ def check(condition, message):
 
 
 def wait_idle(a, limit=600):
+    # Сплэш SDK перекрывает окно до готовности: реальные клики мышью должны
+    # ждать его скрытия, иначе первый клик уходит в сплэш (это не баг SDK).
+    idle_js = ("$.sdkApp.state.busy===0 && "
+               "(!$.sdkApp.splash || $.sdkApp.splash.snapshot().hidden===true)")
     a.step(2)
     for _ in range(limit):
-        if a.eval("$.sdkApp.state.busy") == 0:
+        if a.eval(idle_js):
             a.step(2)
             return True
         a.step(2)

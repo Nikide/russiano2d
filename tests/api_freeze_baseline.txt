@@ -1913,6 +1913,7 @@ $.sdk._setBackend
 $.sdk.active
 $.sdk.available
 $.sdk.launch
+$.sdk.moduleRoot
 $.sdk.paths
 $.sdk.tool
 $.selectors

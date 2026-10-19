@@ -113,6 +113,10 @@ typedef struct SdkTool {
     char *assets[16];           // glob-шаблоны имён файлов
     int   asset_count;
     bool  valid;
+    // Инструмент, пришедший из расширения (docs/SDK_EXTENSIONS.md): JS-модуль
+    // лежит вне sdk/tools, поэтому вместо entry-имени хранится абсолютный путь.
+    char  module[1200];         // абсолютный путь к JS-модулю, "" для built-in
+    char  source[16];           // "builtin" | "user" | "project"
 } SdkTool;
 
 typedef struct SdkRegistry {
@@ -128,6 +132,79 @@ typedef struct SdkRegistry {
 bool sdk_registry_load(const char *path, SdkRegistry *reg, SdkReport *rep);
 void sdk_registry_free(SdkRegistry *reg);
 void sdk_registry_put_json(const SdkRegistry *reg, R2dSb *out);
+
+// ---------------------------------------------------------------------------
+// Расширения SDK и standalone-инструменты (docs/SDK_EXTENSIONS.md)
+// ---------------------------------------------------------------------------
+// Контракт расширения имеет собственную целочисленную версию. Это НЕ версия
+// движка: расширение с другой версией отключается с диагностикой, остальные
+// инструменты SDK продолжают работать.
+#define SDK_EXT_API_VERSION 1
+
+typedef struct SdkExtTool {
+    char id[128];
+    char name[160];
+    char description[512];
+    char entry[256];            // относительно каталога расширения
+    char category[64];
+    char assets[8][128];
+    int  asset_count;
+} SdkExtTool;
+
+typedef struct SdkExtension {
+    char id[128];
+    char name[160];
+    char description[512];
+    char version[40];
+    char category[64];
+    char scope[16];             // builtin | user | project
+    char root[1200];            // абсолютный каталог расширения
+    char manifest_path[1400];
+    char entry[512];            // относительный JS-модуль входа
+    int  sdk_api;
+    bool valid;                 // манифест корректен и sdk_api совпал
+    bool enabled;               // включено в effective registry
+    bool standalone;            // tool.json: отдельный инструмент без contributes
+    int  contributes_count;     // сколько contribution-точек объявлено
+    int  c_tools, c_menus, c_toolbar, c_panels, c_inspectors,
+         c_entity_defs, c_world_tools, c_validators, c_build_steps,
+         c_agent_commands;
+    SdkExtTool tools[16];
+    int  tool_count;
+    char permissions[8][64];
+    int  permission_count;
+    char *contributes_json;     // malloc: компактный JSON объявленных contributions
+} SdkExtension;
+
+typedef struct SdkExtensions {
+    SdkExtension *items;
+    int count, cap;
+    char builtin_root[1200];
+    char user_root[1200];
+    char project_root[1200];
+} SdkExtensions;
+
+typedef struct SdkExtOptions {
+    const char *sdk_root;       // каталог с sdk_tools.json (абсолютный)
+    const char *project_dir;    // проект для project-scope расширений, или NULL
+    const char *builtin_dir;    // переопределение built-in каталога
+    const char *user_dir;       // переопределение user каталога (тесты/CI)
+} SdkExtOptions;
+
+// Детерминированный discovery: built-in -> user -> project, каталоги по имени.
+// Ошибки одного расширения — структурные диагностики и enabled=false; скан
+// остальных продолжается.
+bool sdk_extensions_scan(const SdkExtOptions *opt, SdkExtensions *out, SdkReport *rep);
+void sdk_extensions_free(SdkExtensions *ext);
+// Добавляет contributed/standalone инструменты в effective registry. Дубликат
+// id — SDK_EXTENSION_DUPLICATE_ID, запись пропускается (silent override нет).
+void sdk_extensions_append_tools(const SdkExtensions *ext, SdkRegistry *reg, SdkReport *rep);
+// Снимок для GUI/агента (id, scope, enabled, counts): "extensions":[...].
+void sdk_extensions_put_json(const SdkExtensions *ext, R2dSb *out);
+// Проверка одного каталога расширения (для команды extension validate PATH).
+bool sdk_extension_validate_dir(const char *dir, const char *scope,
+                                SdkExtension *out, SdkReport *rep);
+// Реализация команд CLI объявлена ниже, после typedef SdkArgs.
 
 // ---------------------------------------------------------------------------
 // Ассеты
@@ -213,6 +290,13 @@ void sdk_validate_re2dmap(const char *path, SdkReport *rep);
 int sdk_cmd_world_compile(const SdkArgs *a);
 int sdk_cmd_world_info(const SdkArgs *a);
 int sdk_cmd_world(const SdkArgs *a);
+// Правки карты как операции backend (docs/WORLD_EDITOR.md): те же native
+// правила геометрии, что у компилятора. GUI и агент вызывают одну команду.
+int sdk_cmd_world_edit(const SdkArgs *a);
+
+// Расширения SDK: discovery, манифесты, объединённый реестр (docs/SDK_EXTENSIONS.md).
+int sdk_cmd_extension(const SdkArgs *a);
+int sdk_cmd_tool(const SdkArgs *a);
 
 // ---------------------------------------------------------------------------
 // Студии данных: tilemap, particles, collision, layers, fonts, audio, input, rml, rcss

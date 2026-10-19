@@ -69,6 +69,7 @@ const TYPE_LABELS = {
     'animation': 'анимация',
     'tilemap': 'тайлкарта',
     'particles': 'частицы',
+    're2d.world': 'Re2D карта',
     'rmlui.document': 'RML',
     'rmlui.style': 'RCSS',
     'image': 'картинка',

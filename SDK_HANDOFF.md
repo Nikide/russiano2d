@@ -12,6 +12,51 @@ Last updated: 2026-10-15 (Europe/Moscow).
 Текущие доказательства —
 [docs/SDK_VERIFICATION.md](docs/SDK_VERIFICATION.md).
 
+## 2026-10-19: SDK Extensions + Universal World Editor
+
+Сделано и проверено:
+
+* **Расширения SDK (P0).** `sdk/native/sdk_extension.c`: discovery built-in
+  (`sdk/extensions/`), user (платформенный конфиг-путь), project
+  (`<project>/sdk_extensions/`); манифест `extension.json`/`tool.json`/
+  `manifest.json`; namespaced id, `sdk_api=1`, permissions, deterministic
+  merged registry в `r2d-sdk tools`; структурные `SDK_EXTENSION_*`/`SDK_TOOL_*`.
+  CLI: `extension list|info|validate`, `tool list|info|validate|run|install|uninstall`.
+  JS-хост `sdk/lib/extensions.js` (декларативные contribution-точки +
+  `activate(ctx)`), импорт `sdk-ext/<id>/…` через `$.sdk.moduleRoot`.
+* **World Editor (P1–P5).** `world-editor` в `sdk_tools.json`: 4 вьюпорта,
+  сетка/snap, brush/face/vertex/clip/entity/path, visgroups, inspector,
+  undo/redo, save, validate/compile/Build & Run, настоящий `$.re2dWorld`
+  preview. Правки — native `r2d-sdk world-edit` (единый backend GUI/CLI/агент);
+  фасад `$.sdkApp.studios.world.ops` + компактный snapshot.
+* **Документация:** `docs/SDK_EXTENSIONS.md`, `docs/WORLD_EDITOR.md`,
+  обновлён `docs/SDK.md`; generated `api.schema.json`/`russiano2d.d.ts`/
+  `docs/api/API_REFERENCE.md` перегенерированы (`$.sdk.moduleRoot`),
+  `tests/api_freeze_baseline.txt` обновлён осознанно, запись в CHANGELOG.
+* **Сплэш SDK (вшит в бинарник).** `sdk/ui/splash.rml`/`.rcss` +
+  `sdk/assets/splash.jpg`: название «КОМПЛЕКТ ДЛЯ РАЗРАБОТКИ (SDK)», этап
+  загрузки и прогрессбар; прогресс ведут реальные этапы (`sdk/lib/splash.js`,
+  хук в `sdk/app.js`), минимум 0.9 с. `cmake/Splash.cmake` +
+  `tools/r2d_embed_assets.c` вшивают jpg/rml/rcss в `russiano2d`;
+  `src/gui.cpp` отдаёт их RmlUi из памяти, поэтому сплэш работает без
+  `sdk/` рядом (проверено `tests/agent/sdk_splash_test.py`).
+* **Тесты:** `tests/sdk/world_edit_test.c` (12/12, ASan/UBSan),
+  `tests/agent/world_edit_cli_test.py` (CLI-контракт 68 проверок),
+  `tests/agent/sdk_extensions_test.py` (CLI + живой GUI),
+  `tests/agent/world_editor_test.py` (живой движок, 4 вьюпорта, ops,
+  mouse/keyboard, compile/preview), `tests/agent/sdk_studios_test.py`
+  (реестр 20 инструментов).
+
+Ограничения/следующие шаги:
+
+* RmlUi-редактор не клипает absolute-потомков (оверлеи обрезаются вручную в
+  `world-editor.js`); это обход, а не изменение RmlUi.
+* `face.set` хранит tags только у floor/ceiling (контракт компилятора);
+  material для side работает.
+* Tool run открывает инструмент через `sdk/.open-tool.json`; при старте без
+  GUI (`--headless`) запрос тоже потребляется, окно не нужно.
+* Дизайн-заметка для следующего шага: полноценная песочница permissions
+  (сейчас только декларация) и установка расширений из архива.
 ## Сессия 2026-10-15: курс — 2D-платформер; 3D-авторинг за опцией сборки
 
 Решение владельца: движок готовится к первой продакшн-игре — 2D-платформеру.

@@ -51,9 +51,30 @@ int sdk_cmd_tools(const SdkArgs *a)
     SdkRegistry reg;
     const bool loaded = sdk_registry_load(path, &reg, &rep);
 
+    // Effective registry (docs/SDK_EXTENSIONS.md §32): built-in tools из
+    // sdk_tools.json + contributed/standalone инструменты расширений. Ошибки
+    // расширений не отключают SDK: они попадают в diagnostics, а сами
+    // расширения — в снимок "extensions" с enabled=false.
+    SdkExtensions exts;
+    memset(&exts, 0, sizeof exts);
+    SdkExtOptions ext_opt;
+    memset(&ext_opt, 0, sizeof ext_opt);
+    char sdk_root[1536];
+    sdk_dirname(path, sdk_root, sizeof sdk_root);
+    ext_opt.sdk_root = sdk_root;
+    ext_opt.project_dir = sdk_arg_value(a, "--project");
+    ext_opt.user_dir = sdk_arg_value(a, "--user-extensions");
+    ext_opt.builtin_dir = sdk_arg_value(a, "--builtin-extensions");
+    const int registry_errors = rep.errors;
+    const bool have_ext = sdk_extensions_scan(&ext_opt, &exts, &rep);
+    if (loaded && have_ext) sdk_extensions_append_tools(&exts, &reg, &rep);
+    // ok отражает только сам реестр: сломанное расширение не делает SDK
+    // неработоспособным (failure isolation §29).
+    const bool registry_ok = loaded && registry_errors == 0;
+
     R2dSb out;
     r2d_sb_init(&out);
-    r2d_sb_printf(&out, "{\"ok\":%s,", loaded && rep.errors == 0 ? "true" : "false");
+    r2d_sb_printf(&out, "{\"ok\":%s,", registry_ok ? "true" : "false");
     sdk_put_kv_str(&out, "registry", path);
     r2d_sb_putc(&out, ',');
     if (loaded) {
@@ -62,15 +83,22 @@ int sdk_cmd_tools(const SdkArgs *a)
     } else {
         r2d_sb_puts(&out, "\"schema_version\":null,\"tools\":[],");
     }
+    if (have_ext) {
+        sdk_extensions_put_json(&exts, &out);
+    } else {
+        r2d_sb_puts(&out, "\"extensions\":[]");
+    }
+    r2d_sb_putc(&out, ',');
     sdk_report_put_counts(&rep, &out);
     r2d_sb_putc(&out, ',');
     sdk_report_put(&rep, &out);
     r2d_sb_putc(&out, '}');
     emit(&out);
 
-    const int rc = loaded && rep.errors == 0 ? 0 : 1;
+    const int rc = registry_ok ? 0 : 1;
     r2d_sb_free(&out);
     if (loaded) sdk_registry_free(&reg);
+    sdk_extensions_free(&exts);
     sdk_report_free(&rep);
     return rc;
 }

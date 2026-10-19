@@ -12,7 +12,7 @@
 ВНИМАНИЕ, область ответственности (RUSSIANO2D_PRODUCTION_POLISH.md §4.6–4.7):
 релизные Windows и Linux собирает GitHub Actions, а не эта машина. Здесь
 чужие платформы собираются только для локальной проверки и паритета с CI;
-deployment-скрипты (``build_and_push.sh``, ``push_and_deploy.sh``) вызывают
+deployment-скрипты (``build_and_push.command``, ``push_and_deploy.sh``) вызывают
 ``autobuild.py`` исключительно с macOS-платформами и отвергают остальные,
 чтобы локальная машина не превратилась во второй CI-сервер. Готовые артефакты
 CI попадают в витрину ``dist/`` через ``tools/fetch_release_assets.py``.

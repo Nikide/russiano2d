@@ -189,6 +189,7 @@ bool sdk_registry_load(const char *path, SdkRegistry *reg, SdkReport *rep)
         }
 
         t->valid = rep->errors == errors_before;
+        if (!t->source[0]) snprintf(t->source, sizeof t->source, "%s", "builtin");
     }
 
     r2d_json_free(root);
@@ -229,7 +230,12 @@ void sdk_registry_put_json(const SdkRegistry *reg, R2dSb *out)
             if (k) r2d_sb_putc(out, ',');
             r2d_sb_put_json_string(out, t->assets[k]);
         }
-        r2d_sb_printf(out, "],\"valid\":%s}", t->valid ? "true" : "false");
+        r2d_sb_printf(out, "],\"valid\":%s", t->valid ? "true" : "false");
+        r2d_sb_putc(out, ',');
+        sdk_put_kv_str(out, "source", t->source[0] ? t->source : "builtin");
+        r2d_sb_putc(out, ',');
+        sdk_put_kv_str(out, "module", t->module[0] ? t->module : NULL);
+        r2d_sb_putc(out, '}');
     }
     r2d_sb_putc(out, ']');
 }

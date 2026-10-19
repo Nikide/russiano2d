@@ -51,7 +51,7 @@
 | Агентский протокол | да | [AGENT_API.md](AGENT_API.md), `src/agent.c` |
 | RmlUi | да | `src/gui.cpp`, низкоуровневый GUI (`engine.gui*`) |
 | Замеры | частично | `$.debug.profile()`, `tools/bench_highlevel.py`, `--stats` |
-| **CI прогоняет сборку/тесты** | **настроен** | [.github/workflows/build.yml](../.github/workflows/build.yml): сборка, native/JS/SDK и агентские проверки; удалённый запуск отдельно не подтверждён |
+| **CI прогоняет сборку/тесты** | **настроен** | [.github/workflows/ci.yml](../.github/workflows/ci.yml) — сборка + Unity-тесты (`ctest`); [release.yml](../.github/workflows/release.yml) — тег, Linux/Windows, упаковка, GitHub Release |
 
 ---
 

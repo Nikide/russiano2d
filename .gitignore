@@ -65,7 +65,7 @@ __pycache__/
 *.py[cod]
 *.cleanup.tmp
 
-# Локальный лог. Сам build_and_push.sh остаётся ЛОКАЛЬНЫМ скриптом (см. ниже):
+# Локальный лог. Сам build_and_push.command остаётся ЛОКАЛЬНЫМ скриптом (см. ниже):
 # по решению владельца проекта он не в репозитории, а весь переносимый смысл
 # релиза живёт в отслеживаемых tools/ (release.py, release_notes.py,
 # publish_refs.py) — см. docs/RELEASING.md.
@@ -81,7 +81,10 @@ site/
 # собирает Linux и Windows, а macOS прикладывается к релизу отдельным шагом
 # (см. docs/RELEASING.md). Файлы остаются на диске, просто не в git.
 push_and_deploy.sh
+# .command — версия для двойного клика в Finder (macOS); .sh оставлен для
+# старых копий на других машинах, чтобы они тоже не попали в git.
 build_and_push.sh
+build_and_push.command
 
 # «к удалению/» и «отклонено/» — личные каталоги разбора: что-то вынесено из
 # проекта, что-то отложено. Историю хранит git, таскать это в каждом клоне
@@ -118,6 +121,9 @@ id_rsa*
 
 # Local Claude configuration
 .claude/
+# Рабочие артефакты агентских сессий (промпты, транскрипты, doc-home) — не git.
+.zwork/
+.dsh/
 sdk/state.local.json
 
 # Сайт (site/) не хранится в git вообще: он публикуется отдельно и содержит
@@ -127,3 +133,8 @@ build/test_game_save_*.json
 
 # Graphify generated graph/cache (local tooling)
 graphify-out/
+
+# Промпты генерации демо-ассетов — рабочие заметки, не документация SDK.
+# Файлы остаются на диске локально, но не попадают в репозиторий.
+demos/**/*PROMPT*.md
+demos/**/*_PROMPTS.md

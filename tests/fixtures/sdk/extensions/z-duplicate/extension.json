@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "fixture.builtin",
+  "name": "Duplicate Fixture",
+  "description": "Дубликат id built-in расширения: silent override запрещён",
+  "version": "1.0.0",
+  "sdk_api": 1,
+  "entry": "main.js"
+}

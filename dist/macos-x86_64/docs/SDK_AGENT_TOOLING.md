@@ -133,6 +133,28 @@ recipes lint
 CI падает, если metadata сломана, generated artifacts устарели или рецепт
 использует несуществующий API.
 
+## Расширения и World Editor
+
+Агент видит расширения и авторские операции без чтения исходников SDK:
+
+```bash
+./r2d-sdk extension list --project game      # built-in + user + project, enabled/valid
+./r2d-sdk tool list                          # merged effective registry (source/module)
+./r2d-sdk world-edit map.re2dmap --op noop   # тот же backend, что у GUI
+```
+
+```js
+$.sdkApp.snapshot().extensions;              // loaded, contributions, diagnostics
+$.sdkApp.studios.world.capabilities();       // operations+args, entityDefinitions, build
+$.sdkApp.studios.world.snapshot();           // file/dirty/tool/grid/selection/map
+$.sdkApp.studios.world.ops.createBrush(/* ... */);
+```
+
+Каждая GUI-кнопка World Editor вызывает операцию фасада, а каждая операция
+расширения — зарегистрированную программную функцию (agent parity). Ошибки —
+структурные `SDK_EXTENSION_*` / `SDK_TOOL_*` / `SDK_WORLD_EDIT_*`;
+сломанное расширение не отключает остальные команды.
+
 ## Ограничения
 
 * Metadata структурная: `arity/args/returns/kind`; содержательные

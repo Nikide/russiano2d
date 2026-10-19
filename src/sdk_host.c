@@ -30,6 +30,8 @@ enum {
 void r2d_sdk_host_enable(bool enabled) { (void)enabled; }
 bool r2d_sdk_host_enabled(void) { return false; }
 void r2d_sdk_host_shutdown(void) {}
+bool r2d_sdk_host_add_module_root(const char *id, const char *root) { (void)id; (void)root; return false; }
+const char *r2d_sdk_host_module_root(const char *id) { (void)id; return NULL; }
 static JSValue r2d__sdk_available(JSContext *ctx, JSValueConst t, int c, JSValueConst *v)
 {
     (void)t; (void)c; (void)v;
@@ -39,6 +41,7 @@ void r2d_sdk_host_register_js(JSContext *ctx, JSValue engine)
 {
     JSValue sdk = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, sdk, "available", JS_NewCFunction(ctx, r2d__sdk_available, "available", 0));
+    JS_SetPropertyStr(ctx, sdk, "moduleRoot", JS_NewCFunction(ctx, r2d__sdk_module_root, "moduleRoot", 2));
     JS_SetPropertyStr(ctx, engine, "sdk", sdk);
 }
 #else
@@ -59,6 +62,41 @@ typedef struct SdkJob {
 static bool       g_enabled = false;
 static SdkJob     g_jobs[SDK_MAX_JOBS];
 static bool       g_atexit = false;
+
+// Корни модулей расширений: id → абсолютный каталог. Мало и статично —
+// расширения регистрируются при старте SDK и живут до выхода.
+#define SDK_MAX_MODULE_ROOTS 32
+typedef struct SdkModuleRoot {
+    char id[128];
+    char root[2048];
+} SdkModuleRoot;
+static SdkModuleRoot g_module_roots[SDK_MAX_MODULE_ROOTS];
+static int g_module_root_count = 0;
+
+bool r2d_sdk_host_add_module_root(const char *id, const char *root)
+{
+    if (!id || !id[0] || !root || !root[0]) return false;
+    for (int i = 0; i < g_module_root_count; ++i) {
+        if (SDL_strcmp(g_module_roots[i].id, id) == 0) {
+            SDL_snprintf(g_module_roots[i].root, sizeof g_module_roots[i].root, "%s", root);
+            return true;
+        }
+    }
+    if (g_module_root_count >= SDK_MAX_MODULE_ROOTS) return false;
+    SdkModuleRoot *slot = &g_module_roots[g_module_root_count++];
+    SDL_snprintf(slot->id, sizeof slot->id, "%s", id);
+    SDL_snprintf(slot->root, sizeof slot->root, "%s", root);
+    return true;
+}
+
+const char *r2d_sdk_host_module_root(const char *id)
+{
+    if (!id) return NULL;
+    for (int i = 0; i < g_module_root_count; ++i) {
+        if (SDL_strcmp(g_module_roots[i].id, id) == 0) return g_module_roots[i].root;
+    }
+    return NULL;
+}
 
 void r2d_sdk_host_enable(bool enabled) { g_enabled = enabled; }
 bool r2d_sdk_host_enabled(void) { return g_enabled; }
@@ -289,6 +327,23 @@ static JSValue r2d__sdk_paths(JSContext *ctx, JSValueConst this_val, int argc, J
     return obj;
 }
 
+// engine.sdk.moduleRoot(id, root) -> bool. Регистрирует каталог расширения для
+// импорта "sdk-ext/<id>/..."; других способов прочитать JS вне каталога игры нет.
+static JSValue r2d__sdk_module_root(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    if (argc < 2 || !JS_IsString(argv[0]) || !JS_IsString(argv[1])) {
+        JS_ThrowTypeError(ctx, "engine.sdk.moduleRoot(id, root) — нужны две строки");
+        return JS_EXCEPTION;
+    }
+    const char *id = JS_ToCString(ctx, argv[0]);
+    const char *root = JS_ToCString(ctx, argv[1]);
+    const bool ok = id && root && r2d_sdk_host_add_module_root(id, root);
+    if (id) JS_FreeCString(ctx, id);
+    if (root) JS_FreeCString(ctx, root);
+    return JS_NewBool(ctx, ok);
+}
+
 void r2d_sdk_host_register_js(JSContext *ctx, JSValue engine)
 {
     JSValue sdk = JS_NewObject(ctx);
@@ -298,6 +353,7 @@ void r2d_sdk_host_register_js(JSContext *ctx, JSValue engine)
     JS_SetPropertyStr(ctx, sdk, "kill", JS_NewCFunction(ctx, r2d__sdk_kill, "kill", 1));
     JS_SetPropertyStr(ctx, sdk, "release", JS_NewCFunction(ctx, r2d__sdk_release, "release", 1));
     JS_SetPropertyStr(ctx, sdk, "paths", JS_NewCFunction(ctx, r2d__sdk_paths, "paths", 0));
+    JS_SetPropertyStr(ctx, sdk, "moduleRoot", JS_NewCFunction(ctx, r2d__sdk_module_root, "moduleRoot", 2));
     JS_SetPropertyStr(ctx, engine, "sdk", sdk);
 }
 

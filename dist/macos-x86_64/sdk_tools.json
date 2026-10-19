@@ -27,6 +27,18 @@
       "category": "backend"
     },
     {
+      "id": "re2d-world-studio",
+      "name": "Re2D World Studio",
+      "description": "Re2D World: план XY и высотный разрез .re2dmap, cell/wall/portal/stair/slope/light, свойства JSON, split/join, undo/redo. Проверка и компиляция — native r2d-sdk world compile|info, предпросмотр — настоящий $.re2dWorld (CPU/GPU, debug views, PNG-материалы).",
+      "last_updated": "2026-10-19T17:40:00+03:00",
+      "entry": "re2d-world-studio",
+      "category": "re2d",
+      "assets": [
+        "*.re2dmap",
+        "*.re2dmap.json"
+      ]
+    },
+    {
       "id": "sprite-studio",
       "name": "Sprite Studio",
       "description": "Кадры, пивоты, длительности и метаданные атласа спрайтов (*.atlas.json, формат читает $.atlas). Нарезка картинки сеткой.",
@@ -183,6 +195,18 @@
         "*.story",
         "*.rml",
         "*.rcss"
+      ]
+    },
+    {
+      "id": "world-editor",
+      "name": "World Editor",
+      "description": "Универсальный Hammer-like Re2D World Editor: 4 вьюпорта (Top/Front/Side/3D), brush/face/vertex/entity/path/visgroup, clip, инспектор по схемам, undo/redo, native world-edit, проверка/компиляция world info|compile, настоящий runtime preview и Build and Run.",
+      "last_updated": "2026-10-19T19:00:00+03:00",
+      "entry": "world-editor",
+      "category": "re2d",
+      "assets": [
+        "*.re2dmap",
+        "*.re2dmap.json"
       ]
     }
   ]

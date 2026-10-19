@@ -1355,6 +1355,20 @@ function rendererWorldWrapper($, native) {
         const focal = (height / 2) / Math.tan((view.fov || 70) * Math.PI / 360);
         return { x: width / 2 + focal * right / z, y: height / 2 - focal * up / z, z };
     };
+    // Exact controller footprint: the circle lies on the floor plane at the
+    // controller's feet height, so every vertex goes through the same
+    // projectPoint as the rest of the overlay. No sprite/billboard proxy, no
+    // second projection.
+    const projectGroundCircle = (view, x, y, feet, radius, width, height, samples = 32) => {
+        const ground = [];
+        for (let i = 0; i < samples; ++i) {
+            const a = (i * Math.PI * 2) / samples;
+            const p = projectPoint(view, x + Math.cos(a) * radius, y + Math.sin(a) * radius,
+                feet, width, height);
+            if (p) ground.push({ x: p.x, y: p.y });
+        }
+        return ground;
+    };
     world.debug.overlay = (view, options = {}) => {
         if (!view) throw new TypeError('world.debug.overlay: view required');
         const width = Number(options.width ?? 320), height = Number(options.height ?? 180);
@@ -1374,7 +1388,37 @@ function rendererWorldWrapper($, native) {
             const p = projectPoint(view, entry.x, entry.y, entry.bottom ?? 0, width, height);
             if (p) points.push({ kind: 'secret', id: entry.id, x: p.x, y: p.y });
         }
-        return { lines, points };
+        // Native player controllers: the exact authored cylinder at its current
+        // state. Accepts controller handles (state()/shape()) or plain
+        // { x, y, feet, radius, height } objects.
+        const controllers = [];
+        for (const entry of options.controllers || []) {
+            if (!entry) continue;
+            const cfg = typeof entry.shape === 'function' ? entry.shape() : entry;
+            const st = typeof entry.state === 'function' ? entry.state() : entry;
+            if (!cfg || !st) continue;
+            const x = Number(st.x), y = Number(st.y), feet = Number(st.feet ?? 0);
+            const radius = Number(cfg.radius), cylinderHeight = Number(cfg.height);
+            if (![x, y, feet].every(Number.isFinite) || !(radius > 0) || !(cylinderHeight > 0)) continue;
+            const center = projectPoint(view, x, y, feet, width, height);
+            if (!center) continue;
+            const top = projectPoint(view, x, y, feet + cylinderHeight, width, height);
+            const ground = projectGroundCircle(view, x, y, feet, radius, width, height);
+            const tick = Math.max(2, radius * 0.5);
+            const cross = [
+                [projectPoint(view, x - tick, y, feet, width, height),
+                 projectPoint(view, x + tick, y, feet, width, height)],
+                [projectPoint(view, x, y - tick, feet, width, height),
+                 projectPoint(view, x, y + tick, feet, width, height)],
+            ].filter(([a, b]) => a && b).map(([a, b]) => ({ x1: a.x, y1: a.y, x2: b.x, y2: b.y }));
+            controllers.push({
+                x, y, feet, radius, height: cylinderHeight, grounded: st.grounded !== false,
+                center: { x: center.x, y: center.y },
+                top: top ? { x: top.x, y: top.y } : null,
+                ground, cross,
+            });
+        }
+        return { lines, points, controllers };
     };
     world.debug.draw = (view, options = {}) => {
         if (!view) throw new TypeError('world.debug.draw: view required');
@@ -1390,6 +1434,19 @@ function rendererWorldWrapper($, native) {
         }
         for (const p of overlay.points) d.circle(p.x, p.y, p.kind === 'secret' ? 5 : 3,
             p.kind === 'secret' ? `rgba(255,210,90,${alpha})` : `rgba(120,255,150,${alpha})`);
+        // Exact controller footprint: ground circle + height tick + center cross.
+        for (const c of overlay.controllers) {
+            for (let i = 0; i < c.ground.length; ++i) {
+                const a = c.ground[i], b = c.ground[(i + 1) % c.ground.length];
+                d.line(a.x, a.y, b.x, b.y, `rgba(120,255,150,${alpha})`, 2);
+            }
+            for (const line of c.cross) d.line(line.x1, line.y1, line.x2, line.y2, `rgba(255,255,255,${alpha})`, 1);
+            if (c.top) {
+                d.line(c.center.x, c.center.y, c.top.x, c.top.y, `rgba(255,220,120,${alpha})`, 2);
+                d.line(c.top.x - 5, c.top.y, c.top.x + 5, c.top.y, `rgba(255,220,120,${alpha})`, 2);
+            }
+            d.circle(c.center.x, c.center.y, 2, `rgba(255,255,255,${alpha})`);
+        }
         for (const node of world.navNodes()) {
             const q = projectPoint(view, node.x, node.y, 24, Number(options.width ?? 320), Number(options.height ?? 180));
             if (q) d.circle(q.x, q.y, 2, `rgba(120,190,255,${alpha})`);
@@ -1593,6 +1650,9 @@ function rendererWorldWrapper($, native) {
             number(options.accel, 1800, 'accel'), number(options.friction, 1400, 'friction'),
             number(options.airControl, 0.25, 'airControl'));
         let state = null;
+        // Authored shape, independent of the per-tick state. Debug overlays read
+        // it to draw the exact footprint instead of an approximate marker.
+        const shape = Object.freeze({ radius, height, eye, step, slopeLimit });
         const place = (x, y, feet = 0) => {
             state = native.controllerInit(token, Number(x) || 0, Number(y) || 0, Number(feet) || 0) ?? null;
             return state;
@@ -1617,6 +1677,7 @@ function rendererWorldWrapper($, native) {
                 return { ...state };
             },
             state() { return state ? { ...state } : null; },
+            shape() { return { ...shape }; },
             remove() { native.controllerRemove(token); },
         };
     };

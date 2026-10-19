@@ -1,3 +1,22 @@
+> Чанк: SDK Extensions + Universal World Editor (2026-10-19).
+> (1) **Расширения SDK**: native discovery built-in/user/project, manifest schema,
+> namespaced ids, sdk_api=1, merged effective registry, CLI `extension`/`tool`
+> (list/info/validate/run/install/uninstall), JS contribution host; контракт —
+> docs/SDK_EXTENSIONS.md. Ошибка расширения изолирована (SDK_EXTENSION_*).
+> (2) **World Editor**: `world-editor` в sdk_tools.json (4 вьюпорта, brush/face/
+> vertex/clip/entity/path, visgroups, inspector, undo/redo, validate/compile/
+> Build & Run); правки — native `r2d-sdk world-edit`, GUI и агент используют
+> один фасад `$.sdkApp.studios.world.ops`. docs/WORLD_EDITOR.md.
+> (3) **API**: добавлен `$.sdk.moduleRoot(id, root)` — разрешает импорт
+> `sdk-ext/<id>/...` для JS расширений вне каталога игры (R2D_MODULE_EXTENSION
+> при незарегистрированном корне). Снимок api_freeze обновлён осознанно;
+> существующие игры/API не меняются (только новое имя).
+> (4) **Тесты**: tests/agent/sdk_extensions_test.py, world_editor_test.py,
+> world_edit_cli_test.py, tests/sdk/world_edit_test.c (12/12).
+> (5) **Сплэш SDK**: картинка/название «КОМПЛЕКТ ДЛЯ РАЗРАБОТКИ (SDK)»/прогресс
+> по реальным этапам загрузки; ассеты (jpg/rml/rcss) вшиты в бинарник через
+> cmake/Splash.cmake + tools/r2d_embed_assets.c, поэтому сплэш работает без
+> каталога sdk/ рядом. Тест: tests/agent/sdk_splash_test.py.
 > Unreleased / Re2D atlas tranche 2 (re2d_gta_test 1.2.11 follow-up): закрыты
 > ограничения прошлого фикса residency.
 > (1) **Decoded-pixel path dedup**: один refcounted RGBA-буфер на канонический
@@ -249,6 +268,13 @@
 > listeners continue to work.
 
 
+## 1.2.13 — 2026-10-19
+
+<!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
+
+0 коммитов в релизе.
+
+<!-- release-notes:end -->
 ## 1.2.12 — 2026-10-19
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->

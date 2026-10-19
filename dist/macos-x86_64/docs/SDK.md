@@ -29,8 +29,35 @@ SDK не владеет игрой: проекты и ассеты остают�
 | Реестр компонентов | [`sdk_tools.json`](../sdk_tools.json) | единственный список инструментов; launcher строит каталог по нему |
 | Нативный бэкенд | [`sdk/native/`](../sdk/native) | C-бинарник `r2d-sdk` (`build/r2d-sdk`) без Python/Node.js/shell |
 | Мост GUI → бэкенд | `$.sdk` ([highlevel/sdk.md](highlevel/sdk.md)) | включается `"toolHost": true` в `project.json` |
+| Расширения | [`sdk/native/sdk_extension.c`](../sdk/native/sdk_extension.c), [`sdk/lib/extensions.js`](../sdk/lib/extensions.js) | discovery манифестов, merged effective registry, JS contribution host; контракт — [SDK_EXTENSIONS.md](SDK_EXTENSIONS.md) |
 | Тесты | `tests/sdk/`, `tests/js/sdk*_test.mjs`, `tests/agent/sdk_*_test.py` | C, qjs и агентские |
 
+## 1.1 Сплэш SDK (вшит в бинарник)
+
+Пока SDK загружает реестр инструментов, расширения и версию backend, окно
+показывает сплэш: картинку, название «КОМПЛЕКТ ДЛЯ РАЗРАБОТКИ (SDK)»,
+текущий этап и прогрессбар. Это обычный RmlUi-документ, но его ассеты вшиты в
+`russiano2d` на этапе сборки:
+
+```text
+sdk/assets/splash.jpg   \
+sdk/ui/splash.rml        +--> tools/r2d_embed_assets.c --> generated/r2d_splash_data.h
+sdk/ui/splash.rcss      /                                   (байты в бинарнике)
+```
+
+`cmake/Splash.cmake` генерирует заголовок, `src/gui.cpp` отдаёт эти пути из
+памяти до обращения к диску. Поэтому сплэш работает и в поставке без каталога
+`sdk/` рядом с бинарником; внешних файлов для него не нужно. Правка картинки/
+разметки — это правка файлов-исходников и пересборка движка (как у иконок).
+
+Прогресс не таймер: `sdk/lib/splash.js` получает этапы от `sdk/app.js`
+(shell → реестр инструментов → расширения → версия backend). Минимальное время
+показа 0.9 с — при быстром старте сплэш не мигает; после `ready` документ
+скрывается и не мешает оболочке.
+
+```bash
+python3 tests/agent/sdk_splash_test.py   # живой движок + проверка без файлов на диске
+```
 ## 2. Принципы (кратко)
 
 * **UI только RmlUi.** Оболочка SDK — `sdk/ui/shell.rml` + `shell.rcss`.
@@ -60,11 +87,12 @@ SDK не владеет игрой: проекты и ассеты остают�
   Browser выбирает инструмент для файла;
 * `binary` — необязательный относительный путь к нативному бинарнику.
 
-Состав реестра (15 компонентов, каждый ровно один раз; тест `sdk_studios_test.py` сверяет его с
+Состав реестра (20 компонентов, каждый ровно один раз; тест `sdk_studios_test.py` сверяет его с
 наличием экранов): оболочка — `launcher`, `asset-browser`; бэкенд — `r2d-sdk`;
 Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-studio`,
 `collision-tools`, `parallax-tools`, `font-tools`, `audio-tools`, `input-tools`, `rmlui-studio`;
-отладка — `devtools`; автоматизация — `automation`. Экран, которому нужен файл (`assets` в
+Re2D — `re2d-world-studio`, `world-editor`; отладка — `devtools`, `code-check`, `api-browser`;
+автоматизация — `automation`; нарратив — `vn-narrative`. Экран, которому нужен файл (`assets` в
 записи), без файла ведёт в Asset Browser с
 фильтром и подсказкой `SDK_PICK_ASSET`; студии с `export const standalone = true` открываются сразу.
 
@@ -100,6 +128,9 @@ Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-
 | `world compile <f.re2dmap> [--renderer] [--pvs] [--region-size N] [--output f.re2dworld]` | Re2D World: brush/cell authoring → baked мир; stage report, region grid, coarse PVS; `--pvs` добавляет legacy portal-reachability report |
 | `world info <f.re2dmap>` | то же без записи: статистика/порталы/регионы/проверка карты |
 | `world validate <f.re2dmap>` | компиляция в память + диагностика без записи |
+| `world-edit <f.re2dmap> --op op [--args json] [--out f]` | правка карты как операция backend (brush/face/world/entity/path/visgroup); те же native-правила геометрии, что у компилятора — один backend для GUI World Editor и агента ([WORLD_EDITOR.md](WORLD_EDITOR.md)) |
+| `extension list\|info <id>\|validate [path]` | расширения SDK: discovery built-in/user/project, манифесты, `sdk_api`, дубликаты ([SDK_EXTENSIONS.md](SDK_EXTENSIONS.md)) |
+| `tool list\|info <id>\|validate <path>\|run <id>\|install <path>\|uninstall <id>` | standalone SDK-инструменты и contributed tools; тот же loader/registry, что у расширений |
 | `world-compile <f.re2dmap> [--renderer] [--pvs] [--region-size N] [--output f.re2dworld]` | legacy alias `world compile` |
 | `world-info <f.re2dmap>` | legacy alias `world info` |
 | `story validate <каталог|файл> [--assets-root dir]` | VN: `*.scene` → duplicate labels, unknown goto, unreachable branches, goto cycles, speakers/expressions (`speakers.json`), assets, theme, i18n keys |
@@ -218,10 +249,10 @@ Timeout — целое число 1..600000 мс,
 максимум 4096 requests/jobs. Экран `automation` сохраняет JSON и запускает
 batch/agent через тот же мост, отображая машинный отчёт. Он доступен из реестра,
 а API — в `$.sdkApp.studios.automation`, снимок — `state.sdk.studios.automation`.
-CI вызывает SDK native tests, CLI, batch manifest,
-паритет всех 19 команд агента, а также паритет JS ↔ C студий данных,
-мышь агента и сами студии (шаг в `.github/workflows/build.yml`, удалённо не запускался);
-сохраняет машинные отчёты артефактами.
+SDK native tests, CLI, batch manifest, паритет команд агента и JS ↔ C студий
+данных, мышь агента и сами студии проверяются локальными тестами
+(`tests/agent/sdk_studios_test.py` и др.); в CI/CD входят Unity-тесты через
+`ctest`, а не Python-набор. Машинные отчёты сохраняются артефактами локально.
 
 ## 8. Состояние фаз
 
@@ -234,12 +265,80 @@ CI вызывает SDK native tests, CLI, batch manifest,
 | 4 Automation / Batch | IMPLEMENTED | sdk_automation_test, CI manifest и workflow |
 
 Это закрытие перечисленных вертикальных срезов. Все компоненты реестра
-открываются (Tilemap, Particle, Collision/Physics, Parallax,
-Font/Text, Audio, Input, RmlUi Studio, DevTools — §10–§13). Не реализованы:
+открываются (Re2D World Studio — §9; Tilemap, Particle, Collision/Physics,
+Parallax, Font/Text, Audio, Input, RmlUi Studio, DevTools — §11–§14). Не реализованы:
 graph editor кривых, выбор элемента кликом в предпросмотре RmlUi Studio, drag-ресайз
 фигур коллизии и drag зон акустики (числовые поля есть). ImGui удалён; весь UI и runtime диагностика — RmlUi.
 
-## 9. Запуск и поставка
+## 9. Re2D World Studio
+
+`sdk/tools/re2d-world-studio.js` + `sdk/ui/world_studio.rml` (+ `world_studio.rcss`,
+`standalone: true`) — RmlUi-редактор исходника `.re2dmap` / `.re2dmap.json` из
+реестра (`id: re2d-world-studio`, `category: re2d`, assets `*.re2dmap`,
+`*.re2dmap.json`). Открывается из Launcher и из Asset Browser на выбранной карте;
+без файла создаёт новую в памяти (сохранение — по кнопке). Модель правок —
+`sdk/lib/world_model.js`: секции `cells`, `walls`, `portals`, `stairs`,
+`slopes`, `lights` и существующая история SDK (`sdk/lib/history.js`).
+
+Раскладка: слева дерево объектов и кнопки создания (cell/spans, стена, портал,
+лестница, уклон, свет) с полем шага сетки; в центре **план XY** (прямоугольники
+cell/stair/slope, отрезки стен и порталов, точки света) и **высотный разрез X**
+(spans по `bottom`/`top`); под ними окно runtime preview и переключатели
+`Вид: <debug>`, `CPU/GPU`, `Свет`; справа JSON-свойства выбранного объекта,
+split/join стен, камера preview, список цветов поверхностей и PNG-материалы.
+
+Операции (одна и та же операция у кнопки, агента и теста):
+
+* выбор объекта в дереве/плане (`state.selection`), перенос мышью по сетке
+  (`move(key, i, dx, dy)`, шаг из поля «Сетка перемещения»);
+* `addCell/addWall/addPortal/addStair/addSlope/addLight` (кнопки `ws-add-*`),
+  `delete` выбранного, правка JSON через «Применить свойства»
+  (`replace(key, i, value)`; невалидный JSON — диагностика, модель не меняется);
+* `splitWall` (пополам, новый id) и `joinWalls` (только коллинеарные стены с
+  одинаковыми `bottom`/`top`/`color`; иначе ошибка без молчаливой правки);
+* undo/redo каждой команды (`ws-undo`/`ws-redo`, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z),
+  Ctrl/Cmd+S — сохранение; dirty-метка и recovery (`sdk/lib/recovery.js`);
+* `compile(write=true)` пишет рядом с картой черновик
+  `.r2d-sdk-world-draft.re2dmap` и вызывает **нативный** backend
+  `r2d-sdk world compile <draft> --renderer --output <карта>.re2dworld`, затем
+  удаляет черновик. `compile(false)`/кнопка «Обновить preview» вызывает
+  `r2d-sdk world info <draft> --renderer` (то же без записи). Второго
+  валидатора/компилятора в JS нет: диагностики и `stats` — из JSON backend,
+  `ws-diag` кликабелен и выбирает объект по `location.section/index`;
+* успешный JSON становится **настоящим** runtime-миром:
+  `$.re2dWorld.fromJSON(JSON.stringify(json.world))`, отрисовка
+  `renderToSprite` в окне preview. Переключатели вызывают
+  `world.backend('gpu'|'cpu')`, `world.debug.view(<view>)` (final, cell/span-id,
+  depth, owner, light-level, normal, emissive, bsp, portals, shadow-mask,
+  overdraw, region/active-region/pvs, occluder, LOD, material-variation, ao-lite,
+  vfx-budget) и `world.lighting(...)`;
+* PNG-материал: `previewMaterial({name, surfaces:[id...], albedo, normal,
+  emissive})` вызывает `world.material(name, options)` и
+  `world.surface(id).material(name)` — альбедо/normal/emissive грузятся
+  нативными ресурсами preview, это authoring-настройка, не сериализация в
+  `.re2dworld`.
+
+Ошибки — структурные диагностики со стабильными кодами: `SDK_WORLD_EDIT`,
+`SDK_WORLD_PARSE`, `SDK_WORLD_READ`, `SDK_WORLD_PREVIEW`, `SDK_WORLD_MATERIAL`,
+`SDK_WRITE_FAILED` плюс нативные `SDK_WORLD_*` (например `SDK_WORLD_SPAN_HEIGHT`).
+Никаких молчаливых fallback'ов: при отказе компиляции старый preview освобождается,
+а не выдаётся за новый.
+
+Агент и тесты: `$.sdkApp.openTool('re2d-world-studio', {assetAbs})`, снимок —
+`state.sdk.studios.world` (`active`, `path`, `dirty`, `selection`, `busy`,
+`preview`, `stats`, `codes`, `data`), методы `select`, `add`, `save`,
+`compile`, `previewMaterial`, `operation`, `close`. Проверки:
+`tests/agent/sdk_world_studio_test.py` (экран → native compile → runtime
+preview → split/join/undo/redo/свойства → свет/backend/материалы → закрытие) и
+`tests/agent/sdk_studios_test.py` (запись в реестре и наличие экрана).
+
+Ограничения: редактор правит клеточные секции; `brushes`, `world`-конверт и
+`entities` сохраняются в файле без изменений, но не показываются в дереве и не
+редактируются (для них — `r2d-sdk world compile` и
+[RE2D_BRUSH_AUTHORING.md](RE2D_BRUSH_AUTHORING.md)); высотный разрез рисует
+spans скомпилированной карты после compile, до этого — исходные `rect`/`spans`.
+
+## 10. Запуск и поставка
 
 Текущий SDK запускается из исходного checkout: `cmake --build build`, затем
 `./build/russiano2d --game sdk`. Нативный CLI — `build/r2d-sdk`. Хостовый
@@ -262,7 +361,7 @@ CMake собирает его автоматически; в Emscripten этот
 JOBS=4 ./run_sdk.sh --build         # пересобрать и открыть
 ```
 
-## 10. Студии данных Classic 2D
+## 11. Студии данных Classic 2D
 
 Семь студий работают на одном хосте (`sdk/lib/studio_host.js`, страница
 `sdk/ui/data_studio.rml`): файл, undo/redo, сохранение, нативная проверка, горячие
@@ -333,7 +432,7 @@ API для агента: `$.sdkApp.studios['tilemap-studio'].ops` (`paint`, `fil
 (методы самой студии, не её `ops`), снимок —
 `state.sdk.studios.<id>`.
 
-## 10.1. Панели проверки §29: тот же backend, что CLI
+## 11.1. Панели проверки §29: тот же backend, что CLI
 
 Все девять инструментов §29 (Sprite, Animation, Tilemap, Particle, Collision,
 Parallax, Font, Audio, Input, RmlUi, DevTools, Automation) имеют в панели две
@@ -388,10 +487,10 @@ Undo/redo остаётся у документа: проверка и preview н
 
 Чего в панелях нет (честно): запуск игры прямо из каждой студии (preview — это
 ссылка на тот же файл; запуск делает кнопка оболочки/DevTools), редактирование
-зон Audio мышью и drag-ресайз Collision (не изменилось с §10), а у DevTools и
+зон Audio мышью и drag-ресайз Collision (не изменилось с §11), а у DevTools и
 Automation нет документа с undo/redo — там история не ведётся by design.
 
-## 11. RmlUi Studio
+## 12. RmlUi Studio
 
 `sdk/tools/rmlui-studio.js` + `sdk/ui/rmlui_studio.rml`: открывается на `*.rml` (стили берёт из
 `<link type="text/rcss">`) и на `*.rcss` (ищет документ, который его подключает; нет — пример
@@ -408,7 +507,7 @@ Automation нет документа с undo/redo — там история не
 `rmlui.style`). Не реализовано: выбор элемента кликом в предпросмотре (в RmlUi-интеграции нет
 hit-test API), проверка свойств RCSS (разбор — дело RmlUi; движок пишет предупреждения в журнал).
 
-## 12. DevTools
+## 13. DevTools
 
 `sdk/tools/devtools.js` + `sdk/ui/devtools.rml` — инспектор **запущенной игры**, только чтение
 (спецификация §18). Студия собирает сессию исходного агентского протокола и запускает её нативным
@@ -418,7 +517,7 @@ hit-test API), проверка свойств RCSS (разбор — дело R
 Automation. Описание сущностей даёт игровой `$.agent` — те же понятия `$`, что у человека и агента;
 второй реализации поиска нет. Это не scene editor: ничего не пишется в данные игры.
 
-## 13. Шаблоны, сборки движка, запуск, отладка, пакет
+## 14. Шаблоны, сборки движка, запуск, отладка, пакет
 
 Экраны оболочки по §9 спецификации: **Шаблоны** (`r2d-sdk templates` / `new`; поставляются `blank`,
 `platformer`, `tilemap-room`, `ui-menu` в `sdk/templates/`; созданный проект открывается сразу и в
@@ -427,7 +526,7 @@ SDK не нуждается), **Сборки движка** (`r2d-sdk engines`; 
 **Package** (тот же файл без шифрования). Операции: `$.sdkApp.createFromTemplate`,
 `loadEngines`, `debugProject`, `packageProject`.
 
-## 14. Оформление и поведение интерфейса
+## 15. Оформление и поведение интерфейса
 
 Тема SDK — `sdk/ui/theme.rcss` в палитре сайта (`site/style.css`: фон `#0b0e14`, акцент
 `#ff5a3c → #ffb03a`, скругления 14/10/6), общая для оболочки (`shell.rcss`) и студий
@@ -448,9 +547,10 @@ SDK не нуждается), **Сборки движка** (`r2d-sdk engines`; 
 
 Тесты: `tests/js/sdk_kinds_test.mjs`, `tests/js/sdk_rml_test.mjs` (чистая логика),
 `tests/agent/sdk_data_parity_test.py` (JS ↔ C), `tests/agent/sdk_studios_test.py` (все студии, оболочка,
-шаблоны, движки, запуск/пакет — настоящей мышью), `tests/agent/ui_virtual_mouse_test.py` (движок).
+шаблоны, движки, запуск/пакет — настоящей мышью), `tests/agent/sdk_world_studio_test.py`
+(Re2D World Studio → native compile → runtime preview), `tests/agent/ui_virtual_mouse_test.py` (движок).
 
-## 15. Проверка созданием игры (2026-10-09)
+## 16. Проверка созданием игры (2026-10-09)
 
 `games/neon-courier` — законченная небольшая аркада: шесть посылок, два движущихся
 дрона, щит, таймер, пауза, победа/поражение и новый рейс. Проект создан шаблоном
@@ -470,7 +570,7 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 (в поставку не входит); публичная сторона — `docs/PHILOSOPHY.md` и гейты
 `tests/doc_claims_test.py`, `tests/doc_coverage_test.py`.
 
-## 16. Завершение рабочего процесса (2026-10-09)
+## 17. Завершение рабочего процесса (2026-10-09)
 
 - F1 / `--overlay` / `$.debug.on()` — общая RmlUi диагностика DevTools;
   ImGui удалён из source/dependencies/build/input/render. F2 — инспектор узлов.
@@ -499,85 +599,26 @@ Particle Studio с undo/redo/save. Gameplay остаётся обычным `mai
 | `project` | `project.json` | ширину/высоту, строки title/version, наличие `main.js` рядом |
 | `sdk.registry` | `sdk_tools.json` | реестр инструментов |
 | `sdk.manifest` | `.batch.json` | `version: 1`, `jobs[]`, `op: validate` и непустой `source` |
-| `sdk.agent-session` | `.agent.json` | `version: 1`, непустой `game`, `requests[]`, `timeoutMs` 1..600000, `seed` uint32, `quit` только последним |
-| `sprite.atlas` | `.atlas.json` | кадры, пивоты, теги, слайсы, картинка |
-| `tilemap` | `.tilemap.json` | клетки, слои, тайлсет |
-| `particles` | `.particles.json` | параметры эмиттера и их диапазоны |
-| `collision` | `.collision.json` | фигуры, теги, геометрия |
-| `layers` | `.layers.json` | слои, parallax, спрайты |
-| `fonts` | `.fonts.json` | шрифты и стили |
-| `audio` | `.audio.json` | шины, звуки, зоны; путь звука обязан существовать рядом с JSON (`SDK_AUDIO_FILE_MISSING`) |
-| `input` | `.input.json` | действия и привязки |
-| `rmlui.document` | `.rml` | сбалансированность тегов |
-| `rmlui.style` | `.rcss` | скобки и свойства |
-| `json` | `.json` | что это разбираемый JSON |
 
-Каждый тип обязан иметь работающую проверку: корректный файл проходит без
-диагностик, сломанный — выявляется ДО запуска структурированным кодом
-(`tests/sdk_validation_test.py`), а разбор SDK совпадает с разбором движка
-(`tests/sdk_preview_parity_test.py`).
+## 18. Расширения SDK и standalone-инструменты
 
-## Generated API artifacts
+SDK расширяется без правки `sdk/`, `sdk/tools/` и `sdk_tools.json`: манифест
+(`extension.json` / `tool.json`) объявляет namespaced id, `sdk_api`,
+permissions и contribution-точки, а код расширения регистрирует поведение через
+`ctx.sdk.register*`. Effective registry = built-in + user + project; дубликаты
+и несовместимый `sdk_api` отключают только виновника, SDK продолжает работать.
 
-`api.schema.json` и `russiano2d.d.ts` в корне — generated (header внутри файла).
-Источник — живой runtime (`russiano2d --dump-api`), поэтому новый `$` метод
-попадает в schema/typings/lint без второго рукописного списка:
+Полный контракт, каталоги, CLI, коды диагностики и пример:
+[SDK_EXTENSIONS.md](SDK_EXTENSIONS.md). Проверка:
+`python3 tests/agent/sdk_extensions_test.py`.
 
-```bash
-./r2d-sdk api generate      # перезаписать schema + typings
-./r2d-sdk api check         # CI: schema не устарела
-./r2d-sdk lint game         # API-aware проверка игровых скриптов
-```
+## 19. Universal World Editor
 
-Ручная правка `api.schema.json`/`russiano2d.d.ts` запрещена: меняется registry
-(живой `$` API), затем запускается `api generate`.
+`world-editor` — Hammer-like авторский инструмент поверх `.re2dmap`: четыре
+вьюпорта (Top/Front/Side/3D), сетка и snap, brush/face/vertex/clip/entity/path,
+visgroups, inspector, undo/redo, validate/compile/Build & Run. Геометрия и
+компиляция остаются нативными (`world-edit`, `world compile`), GUI и агент
+вызывают одни операции `$.sdkApp.studios.world.ops`.
 
-## SDK GUI: Code Check / API Browser
+Подробности: [WORLD_EDITOR.md](WORLD_EDITOR.md).
 
-`sdk_tools.json` содержит `code-check` и `api-browser`; оба открывают
-`sdk/ui/code_check.rml`. Панель вызывает **native** `r2d-sdk doctor/lint/validate`
-через `app.backend` и показывает generated `api.schema.json` — второго линтера
-или валидатора в JS нет.
-
-## Re2D brush authoring / huge world
-
-`world compile` принимает `.re2dmap` с additive-секциями `brushes`, `world`
-(конверт), `entities` и `regionSize`; старые `cells/walls/portals/stairs/slopes`
-и `--renderer`-контракт не меняются.
-
-Brushes: `rect` или выпуклый `polygon` (3..64 вершины), axis-aligned `holes`
-(до 8 прямоугольников), `subtract: true` для Z-CSG вычитания, несколько
-solid Z-интервалов и несколько/перекрывающихся subtract-объёмов на одном XY.
-Компилятор детерминированно очищает/merge'ит cells, стены и порталы. Editor
-helpers: `sdk_brush_move_vertex()` (transactional vertex move с точной
-диагностикой concave/hole) и `sdk_brush_split_axis()` (axis split на два
-выпуклых brush'а; holes на split отклоняются). Статистика включает
-`polygonBrushes`, `subtractBrushes`, `holeBrushes`, `hintBarriers`,
-`brushEntityMap`.
-
-`hint` brush, касающийся сгенерированного портала, эмитит concrete
-`R2D_WALL_TOOL_HINT` barrier ровно на портале; runtime visibility режет
-VIEW-проход через него (`hintPortalsCut`), не меняя collision/ray/render.
-`skip` остаётся metadata; настоящие BSP split planes не вставляются.
-
-Brush entities (`door`, `lift`, `crusher`, `moving_wall`, `trigger_volume`,
-`fog_volume`, `water_volume`, `areaportal`) маппятся на существующие native
-mover/trigger/volume-контракты; в отчёте и `.re2dworld` появляется
-`compiler.brushEntities[]` с `runtime`, `api`, `moverType`/`triggerType`,
-`target`, `volume` и `hook` (пустой hook = прямой runtime API; непустой =
-требуемый хук рантайма). Door/lift/crusher/moving-wall и trigger volume
-проверены runtime smoke-тестом.
-
-Tool materials (`nodraw`, `clip`, `sky`, `hint`, `skip`, `trigger`, `areaportal`,
-`occluder`, clip variants) компилируются в policy-биты стен, а не в
-прозрачность. Новые diagnostics: `SDK_WORLD_SKY_LEAK`,
-`SDK_WORLD_GIANT_SURFACE`, `SDK_WORLD_GIANT_TRANSPARENT`,
-`SDK_WORLD_BRUSH_ENTITY`. Полный формат, стадии и коды warning'ов:
-[`RE2D_BRUSH_AUTHORING.md`](RE2D_BRUSH_AUTHORING.md). Регионы, streaming/PVS и
-LOD: [`RE2D_HUGE_WORLD.md`](RE2D_HUGE_WORLD.md). Sky/clip boundary:
-[`RE2D_SKY_BOUNDARY.md`](RE2D_SKY_BOUNDARY.md).
-
-```bash
-r2d-sdk world compile demos/re2d_openworld_lab/openworld.re2dmap \
-  --renderer --region-size 256 --output /tmp/openworld.re2dworld
-```

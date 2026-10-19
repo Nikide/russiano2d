@@ -7,18 +7,21 @@
 
 Ответственность разделена жёстко, и это не пожелание, а то, как устроены скрипты.
 
-**GitHub Actions** (`.github/workflows/build.yml`):
+**GitHub Actions** — три независимых workflow:
 
-* Linux x86_64 и Linux aarch64 — сборка, тесты, пакеты, суммы;
-* Windows x86_64 — кросс-сборка MinGW на ubuntu-раннере (та же, что на Mos.Hub
-  и GitVerse): MSVC 14.44.35207 падает внутренней ошибкой `CL.exe` в
-  кодогенерации нашего проекта, проверены `/Zf`, `/Z7`, снятие `/MP` и `/O1` —
-  не помогают. Windows-пакет приходит из раннера и проходит контракт упаковки;
-  прогон тестов на Windows-бинарнике в CI невозможен (раннер Linux), поэтому
-  шаги тестов для этой платформы отключены явно. Родная MSVC-сборка осталась
-  необязательной задачей `windows-msvc-diagnostic`: она падает, пока тулчейн не
-  починят, и это видно в CI. Когда MSVC заработает, платформу можно вернуть на
-  `windows-2022` — артефакт при этом не меняется;
+* `.github/workflows/ci.yml` — **build/test** на push и pull request: Linux
+  x86_64 в обеих конфигурациях (`R2D_ENABLE_RE2D=ON/OFF`), сборка и **Unity-тесты**
+  через `ctest`, плюс Windows x86_64 кросс-сборкой MinGW (build-only: Windows-
+  бинарник на Linux-раннере не запустить). MSVC остаётся необязательной
+  диагностикой (`windows-msvc-diagnostic`, `continue-on-error`): CL.exe падает
+  внутренней ошибкой, пока тулчейн не починят;
+* `.github/workflows/release.yml` — **только по тегу `vX.Y.Z`**: проверка
+  «тег == версия проекта», сборка Linux x86_64/aarch64 и Windows, Unity-тесты,
+  упаковка, проверка готового архива, затем публикация. Публикуются ровно те
+  архивы, которые собрал и проверил CI;
+* `.github/workflows/quality.yml` — документация, API-docs, policy, чеклисты и
+  гигиена. Это отдельный workflow: его красный статус виден, но **GitHub Release
+  от него не зависит**;
 * один GitHub Release на тег `vX.Y.Z` — и только CI его создаёт;
 * `SHA256SUMS.txt` по архивам, которые собрал CI.
 
@@ -45,12 +48,12 @@
 * прикладывание macOS-архивов к уже созданному CI релизу.
 
 Локальная машина **не** собирает Linux и Windows: это не второй CI-сервер.
-`build_and_push.sh` отвергает не-macOS платформу в `PLATFORMS` и завершается
+`build_and_push.command` отвергает не-macOS платформу в `PLATFORMS` и завершается
 ошибкой, а не собирает её «на всякий случай» через Docker. `tools/autobuild.py`
 по-прежнему умеет собирать чужие платформы в контейнере, но это инструмент
 локальной проверки и паритета с CI, а не путь релиза.
 
-Скрипты локального выпуска (`build_and_push.sh`, `push_and_deploy.sh`) и сайт
+Скрипты локального выпуска (`build_and_push.command`, `push_and_deploy.sh`) и сайт
 (`site/`) в git **не хранятся**: они лежат на рабочей машине и перечислены в
 `.gitignore`. Публичные репозитории получают только движок, тесты, документацию
 и витрину `dist/` — политику проверяет `tests/release_ownership_test.py`.
@@ -59,16 +62,26 @@
 
 ```sh
 ./push_and_deploy.sh "Описание изменений"     # доки → тесты → релиз → сайт
-./build_and_push.sh "Описание изменений"      # если доки и тесты уже прогнаны
+./build_and_push.command "Описание изменений"      # если доки и тесты уже прогнаны
 ```
 
-`build_and_push.sh` проверяет, что нового тега ещё нет ни локально, ни на
+`build_and_push.command` можно запустить двойным кликом в Finder — это обычный
+macOS-скрипт для Terminal. В интерактивном режиме он спрашивает **текст коммита**
+и **тег релиза**: тег по умолчанию — автоматический `+1` к patch от текущей
+версии (Enter — согласиться), можно ввести свой `vX.Y.Z` или `0`, чтобы не
+ставить тег. `INTERACTIVE=0` отключает вопросы (автоматизация/тесты),
+аргумент `"текст"` задаёт сообщение без вопроса.
+
+`build_and_push.command` проверяет, что нового тега ещё нет ни локально, ни на
 хостах, поднимает patch version **до** сборки, собирает macOS через
-`tools/autobuild.py`, обновляет документы пакетов из `docs/`, пересобирает
-документацию и главную сайта, коммитит дерево, ставит `vX.Y.Z` и отправляет
-ветку/тег в три хоста: GitHub (`github`), hub.mos.ru (`origin`), GitVerse
-(`gitverse`). Повторяющиеся push URL отправляются один раз; ошибка одного хоста
-не блокирует остальные. История не переписывается.
+`tools/autobuild.py`, прогоняет **Unity-тесты** хостовой сборки
+(`ctest --test-dir build-autobuild/macos-<arch>`; `LOCAL_TESTS=0` — только для
+отладки), обновляет документы пакетов из `docs/`, пересобирает документацию и
+главную сайта, коммитит дерево, ставит `vX.Y.Z` и отправляет ветку/тег в три
+хоста: GitHub (`github`), hub.mos.ru (`origin`), GitVerse (`gitverse`).
+Повторяющиеся push URL отправляются один раз; ошибка одного хоста не блокирует
+остальные. История не переписывается. Тег открывает `release.yml`; CI не
+повторяет локальные bump/commit/tag/macOS.
 
 `ALLOW_PARTIAL=1` разрешает частичный набор macOS-архивов. `SITE=0` отключает
 сайт, `BUMP=0`/`TAG=0` — bump и тег, `KEEP_DIST=0` — binaries в коммит,
@@ -76,7 +89,7 @@
 
 ### SDK artifacts в релизе
 
-`build_and_push.sh` перед упаковкой прогоняет SDK-гейты (`api generate`,
+`build_and_push.command` перед упаковкой прогоняет SDK-гейты (`api generate`,
 `api check`, `lint game`, `validate game`, `doctor`, recipes), а
 `tools/autobuild.py` после сборки macOS-движка перегенерирует
 `api.schema.json`, `russiano2d.d.ts`, `docs/api/API_REFERENCE.md` **новым**
@@ -98,7 +111,7 @@ python3 tools/release_notes.py --full --dry-run   # тела у всех гру�
 python3 tools/release_notes.py --from v0.1.35 --version 1.2.0 --date 2026-10-16
 ```
 
-`build_and_push.sh` вызывает генератор сам — **после bump и до коммита** (шаг
+`build_and_push.command` вызывает генератор сам — **после bump и до коммита** (шаг
 «Релизные заметки»), поэтому релизный коммит уже содержит и секцию в
 `CHANGELOG.md`, и файл `dist/RELEASE_NOTES_<версия>.md`. Путь печатается в логе;
 `NOTES=0` отключает шаг, падение генератора останавливает выпуск.
@@ -153,7 +166,7 @@ git-репозиторий): диапазон, группировка, «чис�
 `dist/RELEASE_NOTES_<версия>.md` лежит в релизном коммите и уезжает в тег, поэтому
 доступен всем трём хостингам без артефактов:
 
-* **GitHub** — `.github/workflows/build.yml`, job `release`: тело релиза
+* **GitHub** — `.github/workflows/release.yml`, job `publish-release`: тело релиза
   собирается из этого файла (`gh release create --notes-file`) плюс приписка про
   macOS, который прикладывается отдельным шагом;
 * **GitLab/Mos.Hub** — `.gitlab-ci.yml`, job `release`: декларативный
@@ -163,7 +176,7 @@ git-репозиторий): диапазон, группировка, «чис�
   `release-body.md` из файла заметок, релиз создаётся с `body_path`.
 
 Если файла заметок в теге нет (например, выпуск делали в обход
-`build_and_push.sh`), все три пайплайна не падают, а создают релиз с одной
+`build_and_push.command`), все три пайплайна не падают, а создают релиз с одной
 припиской и пишут об этом в лог.
 
 ## Что попадает в поставку, а что остаётся в репозитории
@@ -203,10 +216,12 @@ git-репозиторий): диапазон, группировка, «чис�
 
 ## Полный порядок выпуска
 
-1. локально: macOS build + тесты + пакеты + `tests/macos_package_smoke_test.py`;
+1. локально: `build_and_push.command` — bump версии, release notes, macOS build,
+   локальный прогон Unity-тестов (`ctest`), пакеты, `tests/macos_package_smoke_test.py`;
 2. локально: коммит, push ветки и тега `vX.Y.Z`;
-3. CI: static-гейты, затем сборка и тесты Windows/Linux в обеих конфигурациях
-   (`R2D_ENABLE_RE2D=ON` и `=OFF`), SDK GUI regressions под Xvfb, упаковка;
+3. CI: `release.yml` (только release-critical) — проверка тега, сборка и
+   Unity-тесты Windows/Linux в обеих конфигурациях, упаковка и проверка архива;
+   `quality.yml` идёт отдельно и релиз не блокирует;
 4. CI: создаёт **ровно один** Release по тегу и выкладывает архивы Windows/Linux
    и `SHA256SUMS.txt`;
 5. локально: `python3 tools/fetch_release_assets.py --yes` — скачивает
@@ -223,12 +238,12 @@ git-репозиторий): диапазон, группировка, «чис�
 Версия живёт **только** в `CMakeLists.txt` (`project(... VERSION x.y.z)`).
 Оттуда её читает `tools/release.py` (`read_version`) — для имени архива, `VERSION`
 внутри пакета, README/AGENTS и git-тега `vX.Y.Z`; оттуда же `tools/autobuild.py`
-и `tools/ci_package.py` (оба вызывают `release.py`), и `build_and_push.sh`
+и `tools/ci_package.py` (оба вызывают `release.py`), и `build_and_push.command`
 (`--bump`). Нативный бэкенд печатает её же: `r2d-sdk version` берёт
 `PROJECT_VERSION` определением из `sdk/native/CMakeLists.txt` (не строкой в
 `sdk.h`), а JS-оболочка SDK показывает ответ бэкенда, а не свою константу.
-Проверки: CI-шаг «Version tag matches project version» (`GITHUB_REF_NAME ==
-'v' + read_version()`, выполняется один раз в static-джобе),
+Проверки: CI-шаг «Verify tag == project version» (`GITHUB_REF_NAME ==
+'v' + read_version()`, выполняется один раз в `release-metadata` job),
 `r2d-sdk version` в `build_test.py`, `VERSION` в `sdk_package_test.py`.
 
 ## Имена артефактов
@@ -259,21 +274,40 @@ git-репозиторий): диапазон, группировка, «чис�
 
 ## GitHub CI и Releases
 
-`.github/workflows/build.yml` запускается по тегу `vX.Y.Z` или вручную.
+Ответственность разделена на три workflow, и это видно по именам файлов.
 
-* `static` — доки, переносимость, контракт упаковки и проверка `tag == version`.
-  Дешёвый гейт идёт первым: ревизия, где разошлась документация или имя
-  артефакта, не тратит полтора часа на сборку.
-* `build` — матрица `linux-x86_64`, `linux-aarch64`, `windows-x86_64`:
-  обе конфигурации (`ci_verify.py --re2d on` для `build-ci` и `--re2d off` для
-  `build-2d-ci`), web-экспорт отдельным шагом (без emsdk шаг печатает причину
-  пропуска), на Linux — SDK GUI regressions под Xvfb и упаковка архива.
-* `release` — только по тегу: проверяет, что имена архивов совпадают с
-  контрактом, считает `SHA256SUMS.txt` по трём архивам (явным списком: раньше
-  `sha256sum *` захватывал сам файл сумм) и создаёт **один** Release.
-  Если релиз уже существует (повторный прогон), архивы перезаписываются, а
-  манифест не затирается — иначе пропали бы строки macOS-архивов.
-  Провал любого обязательного build/test job не даёт создать релиз.
+**`.github/workflows/ci.yml`** — build/test, push и pull request:
+
+* Linux x86_64, обе конфигурации (`R2D_ENABLE_RE2D=ON` и `OFF`), сборка и
+  **Unity-тесты** через `ctest` (в CTest зарегистрированы C-тесты Unity и
+  существующие JS-тесты `tests/js/*_test.mjs`);
+* Windows x86_64 кросс-сборкой MinGW (build-only — Windows-бинарник на Linux-
+  раннере не запускается; релизный пакет проверяется по содержимому);
+* `windows-msvc-diagnostic` — необязательное наблюдение за MSVC.
+
+**`.github/workflows/quality.yml`** — docs, API-docs, policy, чеклисты,
+гигиена репозитория. Отдельный workflow; его падение означает «quality failed»,
+но **не блокирует** GitHub Release. Это осознанное правило: устаревшая проза или
+чеклист не должны останавливать рабочий бинарник.
+
+**`.github/workflows/release.yml`** — только по тегу `vX.Y.Z`:
+
+* `release-metadata` — release-critical: `GITHUB_REF_NAME == 'v' + read_version()`;
+* `linux-release` (матрица x86_64/aarch64) и `windows-release` — configure,
+  build, Unity-тесты (Linux), `tools/ci_package.py`, затем
+  `tools/ci_package_check.py`: архив открывается, `VERSION` совпадает с тегом,
+  на месте исполняемые файлы, `sdk/main.js`, `api.schema.json`, лицензии,
+  нет `.DS_Store`/`__pycache__`/`.pyc`;
+* `publish-release` — зависит только от этих трёх job'ов (quality сюда не
+  входит), скачивает **уже проверенные** артефакты, повторно валидирует их
+  имена и содержимое, считает `SHA256SUMS.txt` (явным списком архивов и
+  `sha256sum -c`), создаёт **один** Release или обновляет CI-архивы при
+  повторном прогоне. Вручную приложенные macOS-архивы и их строки в
+  `SHA256SUMS.txt` при этом не затираются.
+
+Провал любого release-critical job (тег/версия, Linux/Windows build, Unity-тесты,
+упаковка или проверка архива) не даёт опубликовать релиз. Провал quality —
+даёт: статус quality виден отдельно.
 
 macOS в матрице нет намеренно: сборка и тесты macOS выполняются локально на
 целевой машине, а архив прикладывается к релизу шагом 6 из «Полного порядка».
@@ -320,6 +354,7 @@ signing и поддержка других платформ проверяютс
 
 ```sh
 R2D_BINARY=build/russiano2d python3 tests/agent/sdk_package_test.py   # пакет, SHA256SUMS, VERSION, повторная упаковка
+python3 tools/ci_package_check.py --archive dist-ci/<архив> --platform linux-x86_64  # тот же release-critical gate, что в CI
 python3 tools/ci_verify.py --build-dir build --re2d on                # обе конфигурации
 python3 tools/ci_verify.py --build-dir build-2d --re2d off
 python3 tools/ci_verify.py --build-dir build --web                    # web-экспорт или честный skip без emsdk

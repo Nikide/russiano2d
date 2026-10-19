@@ -366,6 +366,30 @@ static JSModuleDef *r2d__module_loader(JSContext *ctx, const char *module_name, 
 
 #else  // !R2D_EMBED_SCRIPTS
 
+// Модули расширений SDK (docs/SDK_EXTENSIONS.md): "sdk-ext/<id>/<путь>"
+// разрешается от каталога расширения, зарегистрированного через
+// engine.sdk.moduleRoot (src/sdk_host.c). Так project/user расширения не
+// обязаны лежать внутри каталога игры — требование расширяемости SDK.
+static bool r2d__extension_module_file(const char *module_name, char *out, size_t cap, bool *known_prefix)
+{
+    static const char *const prefix = "sdk-ext/";
+    *known_prefix = false;
+    if (!module_name || SDL_strncmp(module_name, prefix, SDL_strlen(prefix)) != 0) return false;
+    *known_prefix = true;
+    const char *id = module_name + SDL_strlen(prefix);
+    const char *slash = SDL_strchr(id, '/');
+    if (!slash || slash == id) return false;
+    char ext_id[128];
+    const size_t len = (size_t)(slash - id);
+    if (len >= sizeof ext_id) return false;
+    SDL_memcpy(ext_id, id, len);
+    ext_id[len] = '\0';
+    const char *root = r2d_sdk_host_module_root(ext_id);
+    if (!root) return false;
+    SDL_snprintf(out, cap, "%s/%s", root, slash + 1);
+    return true;
+}
+
 // Обычный режим: читаем .js с диска.
 static JSModuleDef *r2d__module_loader(JSContext *ctx, const char *module_name, void *opaque)
 {
@@ -395,7 +419,21 @@ static JSModuleDef *r2d__module_loader(JSContext *ctx, const char *module_name, 
     }
 
     char full_path[4096];
-    SDL_snprintf(full_path, sizeof full_path, "%s/%s", s->game_dir, module_name);
+    bool ext_prefix = false;
+    const bool ext_file = r2d__extension_module_file(module_name, full_path, sizeof full_path, &ext_prefix);
+    if (ext_prefix && !ext_file) {
+        char msg[1024];
+        SDL_snprintf(msg, sizeof msg,
+                     "модуль расширения '%s' не разрешён: расширение не зарегистрировало "
+                     "каталог (engine.sdk.moduleRoot) или путь пуст (код R2D_MODULE_EXTENSION)",
+                     module_name);
+        JS_ThrowReferenceError(ctx, "%s", msg);
+        r2d__note_error(s, msg);
+        return NULL;
+    }
+    if (!ext_file) {
+        SDL_snprintf(full_path, sizeof full_path, "%s/%s", s->game_dir, module_name);
+    }
 
     // Импорт вверх по дереву РАЗРЕШЁН, пока файл существует: относительный
     // спецификатор резолвится от файла-источника (как в Node/браузере), `..`
@@ -407,7 +445,7 @@ static JSModuleDef *r2d__module_loader(JSContext *ctx, const char *module_name, 
     // Собственные модули движка (r2d/*: слой $, bootstrap) сюда не доходят —
     // они отдаются таблицей встроенных исходников выше по функции, поэтому
     // проверка не может отрезать загрузчик.
-    if (SDL_strncmp(module_name, "../", 3) == 0) {
+    if (!ext_file && SDL_strncmp(module_name, "../", 3) == 0) {
         SDL_PathInfo info;
         if (!(SDL_GetPathInfo(full_path, &info) && info.type == SDL_PATHTYPE_FILE)) {
             char msg[1200];

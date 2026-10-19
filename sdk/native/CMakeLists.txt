@@ -21,7 +21,9 @@ set(R2D_SDK_SOURCES
     sdk_image.c
     sdk_atlas.c
     sdk_world.c
+    sdk_world_edit.c
     sdk_brush.c
+    sdk_extension.c
     "${CMAKE_SOURCE_DIR}/src/re2d_world.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_region.c"
     "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c"
@@ -157,3 +159,13 @@ if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
     target_link_options(r2d_volume_entity_test PRIVATE -fsanitize=address,undefined)
 endif()
 add_test(NAME r2d_volume_entity_test COMMAND r2d_volume_entity_test)
+
+# Native world-edit operations (brush/face/world/entity/path/visgroup) и
+# каноническая запись *.re2dmap: тот же backend, что у GUI и агента.
+add_executable(r2d_sdk_world_edit_test "${CMAKE_SOURCE_DIR}/tests/sdk/world_edit_test.c")
+target_link_libraries(r2d_sdk_world_edit_test PRIVATE r2d_sdk_core r2d_unity)
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_sdk_world_edit_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_sdk_world_edit_test PRIVATE -fsanitize=address,undefined)
+endif()
+add_test(NAME r2d_sdk_world_edit_test COMMAND r2d_sdk_world_edit_test)

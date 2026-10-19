@@ -207,6 +207,17 @@ export function installSdk($) {
             };
         },
 
+        /**
+         * Зарегистрировать каталог расширения для import('sdk-ext/<id>/…').
+         * Без этого JS расширения вне каталога игры не загрузить: пространство
+         * имён модулей движка начинается от каталога игры (R2D_MODULE_EXTENSION).
+         */
+        moduleRoot(id, root) {
+            const backend = host();
+            if (!backend || typeof backend.moduleRoot !== 'function') return false;
+            return !!backend.moduleRoot(String(id), String(root));
+        },
+
         /** Сколько процессов сейчас отслеживается. */
         active() { return state.jobs.size; },
 

@@ -33,6 +33,13 @@ void r2d_sdk_host_shutdown(void);
 // Ставит engine.sdk в объект engine (script.c, рядом с http/render).
 void r2d_sdk_host_register_js(JSContext *ctx, JSValue engine);
 
+// Корни JS-модулей расширений SDK (docs/SDK_EXTENSIONS.md). Имя модуля
+// "sdk-ext/<id>/<путь>" разрешается от каталога расширения <id>, поэтому
+// project/user расширения не обязаны лежать внутри каталога игры.
+// Возвращают false/NULL, если id не зарегистрирован.
+bool r2d_sdk_host_add_module_root(const char *id, const char *root);
+const char *r2d_sdk_host_module_root(const char *id);
+
 #ifdef __cplusplus
 }
 #endif

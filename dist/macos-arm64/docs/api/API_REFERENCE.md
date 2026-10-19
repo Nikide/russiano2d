@@ -4,9 +4,9 @@
      Source: Russiano2D $ API Registry
      Generator: r2d-sdk -->
 
-Engine version: "1.2.12"
+Engine version: "1.2.13"
 
-Entries: 4052
+Entries: 4053
 
 ## $
 
@@ -2479,6 +2479,7 @@ Entries: 4052
 | `active` | function | `() -> any` |
 | `available` | function | `() -> any` |
 | `launch` | function | `(arg0: any, arg1: any) -> any` |
+| `moduleRoot` | function | `(arg0: any, arg1: any) -> any` |
 | `paths` | function | `() -> any` |
 | `tool` | function | `(arg0: any, arg1: any) -> any` |
 

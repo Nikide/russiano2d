@@ -223,7 +223,7 @@ def bump_version(current: str, kind: str = "patch") -> str:
 def run_bump(options: "Options") -> int:
     """Режим ``--bump``: поднять патч-версию в CMakeLists.txt.
 
-    В stdout уходит ТОЛЬКО новая версия — её подхватывает build_and_push.sh:
+    В stdout уходит ТОЛЬКО новая версия — её подхватывает build_and_push.command:
     ``NEW=$(python3 tools/release.py --bump)``. Человеческое сообщение идёт в
     stderr, чтобы не попасть в подстановку.
     """
@@ -1041,7 +1041,7 @@ def run_check_junk(out_dir: str) -> int:
 
     Причина: `.DS_Store` трижды попадал в манифесты/архивы, и ловил это CI
     (repository_hygiene) уже после пуша. Здесь проверка стоит на локальном
-    пути релиза: build_and_push.sh зовёт её ПЕРЕД git add и падает.
+    пути релиза: build_and_push.command зовёт её ПЕРЕД git add и падает.
     """
     root = out_dir if os.path.isdir(out_dir) else DEFAULT_OUT_DIR
     tree: List[str] = []
@@ -1103,7 +1103,7 @@ def usage() -> str:
         "                       выход 1 — релиз должен падать ЛОКАЛЬНО, а не в CI\n"
         "  --bump               поднять патч-версию в CMakeLists.txt на 1\n"
         "                       (0.1.0 → 0.1.1) и напечатать её; больше ничего\n"
-        "                       не делает — этим пользуется build_and_push.sh\n"
+        "                       не делает — этим пользуется build_and_push.command\n"
         "  --yes                не спрашивать подтверждение (для скриптов)\n"
         "\n"
         "Ключи:\n"

@@ -32,7 +32,7 @@ compatibility-путём и проверяет конфигурацию RE2D.
 | Шаг | Время | Когда |
 |---|---|---|
 | `cmake --build build --target r2d_check` | **≈5 с** (CTest: Unity C + все `*.mjs` + SDK batch) | на каждую правку (P0-H) |
-| `python3 tools/ci_verify.py --build-dir build` | **≈6 с** (34 C-цели + 105 `*.mjs` + sdk batch) | на каждую правку; это же гоняет CI (`.github/workflows/build.yml`) |
+| `python3 tools/ci_verify.py --build-dir build` | **≈6 с** (34 C-цели + 105 `*.mjs` + sdk batch) | локальный быстрый прогон; CI гоняет те же Unity/JS-тесты через `ctest` (`.github/workflows/ci.yml`) |
 | `python3 tools/run_tests.py --fast` | ≈1 мин (`agent_protocol`, `highlevel_api`, `game`) | перед коммитом, который трогает движок |
 | `python3 tools/run_tests.py` | ≈12 мин (265 агентских) | перед релизом/крупным слиянием, не на каждый чих |
 | `python3 tests/agent/<имя>_test.py` | 1–30 с | затронутый тест — обязательно |
@@ -456,8 +456,9 @@ python3 tools/visibility_sweep.py     --cwd dist/macos-arm64 --game ../my_game  
 
 * CI/headless-окружение способно прогнать игровой тест **без видимого окна**
   (`--agent --headless`). GitHub Actions
-  ([build.yml](../.github/workflows/build.yml)) настроен на нативную сборку и
-  C-тесты по новому тегу; запуск GPU/агентских тестов на раннере ещё не настроен.
+  ([ci.yml](../.github/workflows/ci.yml), [release.yml](../.github/workflows/release.yml))
+  собирает Linux/Windows и гоняет Unity-тесты через `ctest`; GPU/агентские
+  Python-тесты в CI не входят.
 * При падении тест-раннер отдаёт достаточно структурированного контекста,
   чтобы диагноз был возможен без перезапуска.
 
