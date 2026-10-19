@@ -25,7 +25,8 @@ enum {
     R2D_WORLD_ATLAS_DIRECTIONS_MIN = 1,
     R2D_WORLD_ATLAS_DIRECTIONS_MAX = 16,
     R2D_WORLD_ATLAS_CELL_MIN = 1,
-    R2D_WORLD_ATLAS_CELL_MAX = 1024
+    R2D_WORLD_ATLAS_CELL_MAX = 1024,
+    R2D_WORLD_ATLAS_TILE_LIMIT = 256
 };
 
 // Signed angle from the actor->camera vector to the actor facing direction.
@@ -87,6 +88,65 @@ bool r2d_world_atlas_placement(int cell_w, int cell_h, float pivot_x, float pivo
 bool r2d_world_atlas_crop(const uint8_t *atlas, int atlas_w, int atlas_h,
                           int cell_x, int cell_y, int cell_w, int cell_h, bool flip,
                           int side, int dest_x, int dest_y, uint8_t *buffer);
+
+
+// ---------------------------------------------------------------------------
+// Shared decoded-image cache (path dedup) and tiled atlas sets.
+// ---------------------------------------------------------------------------
+
+// One decoded RGBA8 image, shared by every registration that resolved to the
+// same canonical PNG path (and cache generation). Owned by the image cache.
+typedef struct R2DWorldAtlasImage {
+    char *canonical;      // app/VFS-resolved path, cache key
+    char *authored;       // authored path (first registration), diagnostics
+    uint8_t *pixels;      // width*height*4, owned by this entry
+    int width, height;
+    int refs;             // atlas registrations referencing it
+    uint64_t generation;  // cache generation (hot reload/scene reload)
+    int owner_stream_id;  // stream item that accounts the bytes (0 = none)
+} R2DWorldAtlasImage;
+
+typedef struct {
+    R2DWorldAtlasImage **items;
+    int count, capacity;
+    uint64_t hits;        // dedup hits (acquire found a live image)
+} R2DWorldAtlasImageCache;
+
+// Finds a live image for canonical path in the current generation.
+R2DWorldAtlasImage *r2d_world_atlas_image_find(const R2DWorldAtlasImageCache *cache,
+                                               const char *canonical, uint64_t generation);
+// Adds a newly decoded image (takes ownership of pixels/canonical/authored).
+// Returns NULL on invalid input/OOM; on failure the caller still owns pixels.
+R2DWorldAtlasImage *r2d_world_atlas_image_add(R2DWorldAtlasImageCache *cache,
+                                              const char *canonical, const char *authored,
+                                              uint8_t *pixels, int width, int height,
+                                              uint64_t generation);
+// Drops one reference; frees pixels and removes the entry at refs == 0.
+void r2d_world_atlas_image_release(R2DWorldAtlasImageCache *cache,
+                                   R2DWorldAtlasImage *image);
+void r2d_world_atlas_image_cache_free(R2DWorldAtlasImageCache *cache);
+// Sum of live decoded bytes / bytes saved by sharing (refs-1 per image).
+uint64_t r2d_world_atlas_image_cache_bytes(const R2DWorldAtlasImageCache *cache);
+uint64_t r2d_world_atlas_image_cache_saved(const R2DWorldAtlasImageCache *cache);
+
+// One row-major tile of a tiled atlas set (borrowed pixels).
+typedef struct {
+    const uint8_t *pixels;
+    int width, height;
+} R2DWorldAtlasTile;
+
+// Crop one logical cell from a row-major tiled set into a transparent square
+// RGBA8 buffer, exactly like r2d_world_atlas_crop. A cell may straddle tile
+// boundaries and flip/placement behave identically. `tile_columns`/`tile_rows`
+// describe the tile grid; tile_count must be tile_columns*tile_rows and every
+// tile must be tile_width x tile_height. Returns false on invalid input.
+bool r2d_world_atlas_crop_tiled(const R2DWorldAtlasTile *tiles, int tile_count,
+                                int tile_columns, int tile_rows,
+                                int tile_width, int tile_height,
+                                int logical_w, int logical_h,
+                                int cell_x, int cell_y, int cell_w, int cell_h,
+                                bool flip, int side, int dest_x, int dest_y,
+                                uint8_t *buffer);
 
 // Alpha modes for compositing an atlas sprite. Values match R2D_WORLD_* blend
 // modes used by world surfaces.

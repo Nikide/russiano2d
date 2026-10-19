@@ -56,6 +56,7 @@ both directions (file->CMake and CMake->file).
 | `sky_leak_test.c` | `sky` | yes |
 | `sky_test.c` | `sky` | yes |
 | `stream_io_test.c` | `streaming` | yes |
+| `stream_residency_test.c` | `streaming` | yes |
 | `stream_test.c` | `streaming` | yes |
 | `terrain_test.c` | `world` | yes |
 | `trace_test.c` | `core` | yes |
@@ -77,12 +78,12 @@ both directions (file->CMake and CMake->file).
 - `sprite/`: **1**
 - `sky/`: **4**
 - `vfx/`: **2**
-- `streaming/`: **4**
+- `streaming/`: **5**
 
-Tracked tests: **50**; CMake-wired: **50**; CMake source references: **51**.
+Tracked tests: **51**; CMake-wired: **51**; CMake source references: **52**.
 
 Untracked files (new work not yet wired) are reported as warnings, not
-as part of the compatibility contract: `stream_residency_test.c`.
+as part of the compatibility contract: `atlas_tiled_test.c`.
 
 ## Moving later
 

@@ -17,6 +17,7 @@
 #include "rotsprite.h"
 #include "script.h"
 #include "app.h"
+#include "payload.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -2036,6 +2037,22 @@ static JSValue world_atlas_add(JSContext *ctx,JSValueConst self,int argc,JSValue
     if(ok)ok=r2d_world_atlas_register(ctx,w,argv[0],path,(int)p[0],(int)p[1],(int)p[2],p[3]!=0.0f,(int)p[4],(int)p[5],(int)p[6],p[7],p[8],p[9],p[10],(int)p[11],p[12],p[13],p[14]);
     JS_FreeCString(ctx,path);return ok?JS_UNDEFINED:JS_EXCEPTION;
 }
+static JSValue world_atlas_add_tiled(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    // atlasAddTiled(node, files, tileColumns,tileRows,tileWidth,tileHeight,
+    //   columns,rows,directions,mirror,cellW,cellH,pivot,pivotX,pivotY,
+    //   width,height,blend,offsetX,offsetY,offsetH)
+    if(argc<21)return JS_ThrowTypeError(ctx,"Re2D World: atlasAddTiled(node,files,tileColumns,tileRows,tileWidth,tileHeight,columns,rows,directions,mirror,cellW,cellH,pivot,pivotX,pivotY,width,height,blend,offsetX,offsetY,offsetH)");
+    if(!JS_IsArray(argv[1]))return JS_ThrowTypeError(ctx,"Re2D World: atlasAddTiled files array required");
+    float p[19];
+    if(!world_numbers(ctx,argc-2,argv+2,19,p))return JS_EXCEPTION;
+    bool ok=r2d_world_atlas_register_tiled(ctx,w,argv[0],argv[1],
+        (int)p[0],(int)p[1],(int)p[2],(int)p[3],
+        (int)p[4],(int)p[5],(int)p[6],p[7]!=0.0f,(int)p[8],(int)p[9],
+        (int)p[10],p[11],p[12],p[13],p[14],(int)p[15],p[16],p[17],p[18]);
+    return ok?JS_UNDEFINED:JS_EXCEPTION;
+}
 static JSValue world_atlas_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
@@ -2473,7 +2490,17 @@ static JSValue world_stream_info(JSContext *ctx,JSValueConst self,int argc,JSVal
         set_num(ctx,entry,"streamId",actor->stream_id);
         JS_SetPropertyStr(ctx,entry,"path",JS_NewString(ctx,actor->path?actor->path:""));
         JS_SetPropertyStr(ctx,entry,"nodeId",JS_NewString(ctx,actor->node_id?actor->node_id:""));
-        set_num(ctx,entry,"bytes",(double)actor->atlas_w*(double)actor->atlas_h*4.0);
+        set_num(ctx,entry,"bytes",(double)actor->pixel_bytes);
+        set_num(ctx,entry,"streamBytes",(double)actor->stream_bytes);
+        int shared_refs=0;
+        if(actor->tiles){for(int t=0;t<actor->tile_count;t++)shared_refs+=actor->tiles[t]?actor->tiles[t]->refs:0;}
+        else if(actor->image)shared_refs=actor->image->refs;
+        set_num(ctx,entry,"sharedRefs",shared_refs);
+        set_num(ctx,entry,"tileCount",actor->tile_count);
+        set_num(ctx,entry,"tileColumns",actor->tile_columns);
+        set_num(ctx,entry,"tileRows",actor->tile_rows);
+        set_num(ctx,entry,"tileWidth",actor->tile_width);
+        set_num(ctx,entry,"tileHeight",actor->tile_height);
         set_num(ctx,entry,"state",state);
         JS_SetPropertyStr(ctx,entry,"stateName",
             JS_NewString(ctx,stream_state_name((int)state)));
@@ -2489,7 +2516,14 @@ static JSValue world_stream_info(JSContext *ctx,JSValueConst self,int argc,JSVal
             item?item->evict_reason:R2D_STREAM_EVICT_NONE);
         set_num(ctx,entry,"cellW",actor->cell_w);set_num(ctx,entry,"cellH",actor->cell_h);
         set_num(ctx,entry,"columns",actor->columns);set_num(ctx,entry,"rows",actor->rows);
-        set_num(ctx,entry,"imageW",actor->atlas_w);set_num(ctx,entry,"imageH",actor->atlas_h);
+        set_num(ctx,entry,"imageW",actor->logical_w);set_num(ctx,entry,"imageH",actor->logical_h);
+        {
+            JSValue tile_list=JS_NewArray(ctx);
+            for(int t=0;t<actor->tile_count;t++)
+                JS_SetPropertyUint32(ctx,tile_list,(uint32_t)t,
+                    JS_NewString(ctx,actor->tile_paths[t]?actor->tile_paths[t]:""));
+            JS_SetPropertyStr(ctx,entry,"tiles",tile_list);
+        }
         set_num(ctx,entry,"visible",actor->last_visible?1:0);
         set_num(ctx,entry,"blocked",
             (actor->last_visible&&(state==R2D_STREAM_UNLOADED||state==R2D_STREAM_PRELOAD))?1:0);
@@ -2499,6 +2533,11 @@ static JSValue world_stream_info(JSContext *ctx,JSValueConst self,int argc,JSVal
     set_num(ctx,o,"atlasesPinned",atlases_pinned);
     set_num(ctx,o,"atlasesDemand",atlases_demand);
     set_num(ctx,o,"pinsPending",r2d_world_stream_pin_path_count(&w->path_pins));
+    set_num(ctx,o,"pinLimit",w->path_pins.configured?w->path_pins.limit:
+                                 R2D_WORLD_STREAM_PIN_PATH_DEFAULT);
+    set_num(ctx,o,"decodedUniqueBytes",(double)r2d_world_atlas_image_cache_bytes(&w->atlas_images));
+    set_num(ctx,o,"decodedSavedBytes",(double)r2d_world_atlas_image_cache_saved(&w->atlas_images));
+    set_num(ctx,o,"dedupHits",(double)w->atlas_dedup_hits);
     JSValue pin_paths=JS_NewArray(ctx);
     for(int i=0;i<w->path_pins.count;i++)
         JS_SetPropertyUint32(ctx,pin_paths,(uint32_t)i,
@@ -2521,9 +2560,10 @@ static JSValue world_stream_config(JSContext *ctx,JSValueConst self,int argc,JSV
         (double)current->upload_budget_bytes;
     int32_t upload_items=current->upload_budget_items==INT32_MAX?0:current->upload_budget_items;
     int32_t promote_items=current->promote_budget_items==INT32_MAX?0:current->promote_budget_items;
+    int pin_limit=-2; // -2 = unchanged, -1 invalid sentinel
     struct {const char *name;} keys[]={{"residentBytes"},{"residentItems"},
-        {"uploadBytes"},{"uploadItems"},{"promoteItems"}};
-    for(int i=0;i<5;i++){
+        {"uploadBytes"},{"uploadItems"},{"promoteItems"},{"pinLimit"}};
+    for(int i=0;i<6;i++){
         JSValue value=JS_GetPropertyStr(ctx,argv[0],keys[i].name);
         if(JS_IsException(value))return JS_EXCEPTION;
         if(JS_IsUndefined(value)){JS_FreeValue(ctx,value);continue;}
@@ -2536,11 +2576,16 @@ static JSValue world_stream_config(JSContext *ctx,JSValueConst self,int argc,JSV
         else if(i==1){if(number!=floor(number)||number>INT32_MAX)return JS_ThrowRangeError(ctx,"Re2D World: streamConfig residentItems integer 0..INT32_MAX");resident_items=(int32_t)number;}
         else if(i==2)upload_bytes=number;
         else if(i==3){if(number!=floor(number)||number>INT32_MAX)return JS_ThrowRangeError(ctx,"Re2D World: streamConfig uploadItems integer 0..INT32_MAX");upload_items=(int32_t)number;}
-        else{if(number!=floor(number)||number>INT32_MAX)return JS_ThrowRangeError(ctx,"Re2D World: streamConfig promoteItems integer 0..INT32_MAX");promote_items=(int32_t)number;}
+        else if(i==4){if(number!=floor(number)||number>INT32_MAX)return JS_ThrowRangeError(ctx,"Re2D World: streamConfig promoteItems integer 0..INT32_MAX");promote_items=(int32_t)number;}
+        else{if(number!=floor(number)||number>R2D_WORLD_STREAM_PIN_PATH_MAX_LIMIT)return JS_ThrowRangeError(ctx,"Re2D World: streamConfig pinLimit integer 0..%d",R2D_WORLD_STREAM_PIN_PATH_MAX_LIMIT);pin_limit=(int)number;}
     }
     if(!r2d_world_stream_config(w,(uint64_t)resident_bytes,resident_items,
                                 (uint64_t)upload_bytes,upload_items,promote_items))
         return JS_ThrowRangeError(ctx,"Re2D World: invalid stream configuration");
+    if(pin_limit!=-2&&!r2d_world_stream_set_pin_limit(w,pin_limit))
+        return JS_ThrowRangeError(ctx,
+            "Re2D World: pinLimit %d is invalid or lower than %d pending path pins",
+            pin_limit,r2d_world_stream_pin_path_count(&w->path_pins));
     return JS_UNDEFINED;
 }
 
@@ -2565,8 +2610,105 @@ static JSValue world_atlas_pin(JSContext *ctx,JSValueConst self,int argc,JSValue
     if(!JS_IsUndefined(string))JS_FreeValue(ctx,string);
     if(matched<0)return JS_ThrowRangeError(ctx,
         "Re2D World: atlasPin path limit %d exceeded or invalid path",
-        R2D_WORLD_STREAM_PIN_PATH_LIMIT);
+        R2D_WORLD_STREAM_PIN_PATH_MAX_LIMIT);
     return JS_NewInt32(ctx,matched);
+}
+
+// --- Deterministic async atlas prefetch ------------------------------------
+static const char *atlas_prefetch_state_name(int state)
+{
+    switch(state){
+    case R2D_ATLAS_PREFETCH_PENDING:return "pending";
+    case R2D_ATLAS_PREFETCH_READY:return "ready";
+    case R2D_ATLAS_PREFETCH_FAILED:return "failed";
+    case R2D_ATLAS_PREFETCH_CONSUMED:return "consumed";
+    default:return "failed";
+    }
+}
+static JSValue world_atlas_async(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1)return JS_NewBool(ctx,r2d_atlas_prefetch_enabled(&w->atlas_prefetch));
+    if(!JS_IsBool(argv[0]))
+        return JS_ThrowTypeError(ctx,"Re2D World: atlasAsync(boolean)");
+    return JS_NewBool(ctx,r2d_atlas_prefetch_set_enabled(&w->atlas_prefetch,
+                                                         JS_ToBool(ctx,argv[0])>0));
+}
+static JSValue world_atlas_prefetch(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    if(argc<1||!JS_IsString(argv[0]))
+        return JS_ThrowTypeError(ctx,"Re2D World: atlasPrefetch(path)");
+    const char *path=JS_ToCString(ctx,argv[0]);if(!path)return JS_EXCEPTION;
+    if(!path[0]){JS_FreeCString(ctx,path);
+        return JS_ThrowTypeError(ctx,"Re2D World: atlasPrefetch path must not be empty");}
+    if(!r2d_atlas_prefetch_enabled(&w->atlas_prefetch)){
+        JS_FreeCString(ctx,path);return JS_NewInt32(ctx,0);
+    }
+    R2DScript *script=JS_GetContextOpaque(ctx);char full[4096]={0};
+    if(script&&script->app)r2d_app_resolve_path(script->app,full,sizeof full,path);
+    else SDL_strlcpy(full,path,sizeof full);
+    int token=0;
+    if(r2d_vfs_has(full)){
+        size_t size=0;uint8_t *bytes=r2d_vfs_read(full,&size);
+        if(bytes){
+            token=r2d_atlas_prefetch_provide(&w->atlas_prefetch,path,full,bytes,size);
+            r2d_vfs_free(bytes);
+        }else{
+            token=r2d_atlas_prefetch_request(&w->atlas_prefetch,path,full,-1,-1);
+        }
+    }else{
+        SDL_PathInfo info;int64_t mtime=-1;int64_t size=-1;
+        if(SDL_GetPathInfo(full,&info)&&info.type==SDL_PATHTYPE_FILE){
+            size=(int64_t)info.size;mtime=(int64_t)info.modify_time;
+        }
+        token=r2d_atlas_prefetch_request(&w->atlas_prefetch,path,full,size,mtime);
+    }
+    JS_FreeCString(ctx,path);
+    return JS_NewInt32(ctx,token);
+}
+static JSValue world_atlas_prefetch_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    r2d_atlas_prefetch_poll(&w->atlas_prefetch);
+    R2DAtlasPrefetchInfo info;r2d_atlas_prefetch_info(&w->atlas_prefetch,&info);
+    JSValue o=JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx,o,"enabled",JS_NewBool(ctx,info.enabled));
+    set_num(ctx,o,"workers",info.worker?1:0);
+    set_num(ctx,o,"pending",info.pending);set_num(ctx,o,"ready",info.ready);
+    set_num(ctx,o,"consumed",info.consumed);set_num(ctx,o,"failed",info.failed);
+    set_num(ctx,o,"entries",info.entries);
+    set_num(ctx,o,"bytesPending",(double)info.bytes_pending);
+    set_num(ctx,o,"bytesReady",(double)info.bytes_ready);
+    set_num(ctx,o,"limitBytes",(double)info.limit_bytes);
+    set_num(ctx,o,"requested",(double)info.requested);
+    set_num(ctx,o,"consumedTotal",(double)info.consumed_total);
+    set_num(ctx,o,"failedTotal",(double)info.failed_total);
+    set_num(ctx,o,"bytesRead",(double)info.bytes_read);
+    set_num(ctx,o,"readMs",info.read_ms);
+    JS_SetPropertyStr(ctx,o,"error",JS_NewString(ctx,info.error?info.error:""));
+    JSValue paths=JS_NewArray(ctx);
+    const int count=r2d_atlas_prefetch_entry_count(&w->atlas_prefetch);
+    for(int i=0;i<count;i++){
+        R2DAtlasPrefetchEntryInfo entry;
+        if(!r2d_atlas_prefetch_entry_at(&w->atlas_prefetch,i,&entry))continue;
+        JSValue e=JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx,e,"path",JS_NewString(ctx,entry.path?entry.path:""));
+        set_num(ctx,e,"token",entry.token);
+        JS_SetPropertyStr(ctx,e,"state",
+            JS_NewString(ctx,atlas_prefetch_state_name(entry.state)));
+        set_num(ctx,e,"bytes",(double)entry.bytes);
+        JS_SetPropertyStr(ctx,e,"error",JS_NewString(ctx,entry.error?entry.error:""));
+        JS_SetPropertyUint32(ctx,paths,(uint32_t)i,e);
+    }
+    JS_SetPropertyStr(ctx,o,"paths",paths);
+    return o;
+}
+static JSValue world_atlas_prefetch_clear(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
+{
+    (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
+    r2d_atlas_prefetch_clear(&w->atlas_prefetch);
+    return JS_UNDEFINED;
 }
 
 static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
@@ -2612,6 +2754,7 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"audioInfo",JS_NewCFunction(ctx,world_audio_info,"audioInfo",1));
     JS_SetPropertyStr(ctx,handle,"audioRemove",JS_NewCFunction(ctx,world_audio_remove,"audioRemove",1));
     JS_SetPropertyStr(ctx,handle,"atlasAdd",JS_NewCFunction(ctx,world_atlas_add,"atlasAdd",17));
+    JS_SetPropertyStr(ctx,handle,"atlasAddTiled",JS_NewCFunction(ctx,world_atlas_add_tiled,"atlasAddTiled",21));
     JS_SetPropertyStr(ctx,handle,"hitZones",JS_NewCFunction(ctx,world_hit_zones,"hitZones",2));
     JS_SetPropertyStr(ctx,handle,"hitAdd",JS_NewCFunction(ctx,world_hit_add,"hitAdd",5));
     JS_SetPropertyStr(ctx,handle,"skyAnim",JS_NewCFunction(ctx,world_sky_anim,"skyAnim",4));
@@ -2718,6 +2861,10 @@ static JSValue world_wrap(JSContext *ctx,WorldHandle *w)
     JS_SetPropertyStr(ctx,handle,"streamInfo",JS_NewCFunction(ctx,world_stream_info,"streamInfo",0));
     JS_SetPropertyStr(ctx,handle,"streamConfig",JS_NewCFunction(ctx,world_stream_config,"streamConfig",1));
     JS_SetPropertyStr(ctx,handle,"atlasPin",JS_NewCFunction(ctx,world_atlas_pin,"atlasPin",2));
+    JS_SetPropertyStr(ctx,handle,"atlasAsync",JS_NewCFunction(ctx,world_atlas_async,"atlasAsync",1));
+    JS_SetPropertyStr(ctx,handle,"atlasPrefetch",JS_NewCFunction(ctx,world_atlas_prefetch,"atlasPrefetch",1));
+    JS_SetPropertyStr(ctx,handle,"atlasPrefetchInfo",JS_NewCFunction(ctx,world_atlas_prefetch_info,"atlasPrefetchInfo",0));
+    JS_SetPropertyStr(ctx,handle,"atlasPrefetchClear",JS_NewCFunction(ctx,world_atlas_prefetch_clear,"atlasPrefetchClear",0));
     JS_SetPropertyStr(ctx,handle,"streamWarnings",JS_NewCFunction(ctx,world_stream_warnings,"streamWarnings",0));
     JS_SetPropertyStr(ctx,handle,"takeStreamWarnings",JS_NewCFunction(ctx,world_take_stream_warnings,"takeStreamWarnings",0));
     JS_SetPropertyStr(ctx,handle,"regionLod",JS_NewCFunction(ctx,world_region_lod,"regionLod",5));
@@ -2775,6 +2922,9 @@ static JSValue world_reload_apply(JSContext *ctx,WorldHandle *w,const char *text
     VfxBinding *vfx=vfx_binding(w);
     if(vfx)r2d_world_vfx_clear(&vfx->vfx);
     r2d_world_gpu_free(w);r2d_world_visibility_free(&w->visibility);r2d_world_regions_free(w);
+    // Hot reload/scene reload: new atlas registrations decode into a new cache
+    // generation; images still referenced by live actors stay valid.
+    r2d_world_atlas_cache_invalidate(w);
     w->world=next;w->region_size_hint=region_hint;r2d_world_free(&old);
     w->reload_count++;w->reload_error[0]=0;return JS_UNDEFINED;
 }

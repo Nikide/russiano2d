@@ -496,7 +496,7 @@ function worldWrapper($, native) {
                     if (typeof options !== 'object' || options === null || Array.isArray(options))
                         throw new TypeError('Re2D World: streamConfig expects an options object');
                     for (const key of Object.keys(options))
-                        if (!['residentBytes','residentItems','uploadBytes','uploadItems','promoteItems'].includes(key))
+                        if (!['residentBytes','residentItems','uploadBytes','uploadItems','promoteItems','pinLimit'].includes(key))
                             throw new TypeError(`Re2D World: streamConfig unknown option "${key}"`);
                     native.streamConfig(options);
                     return this;
@@ -506,6 +506,24 @@ function worldWrapper($, native) {
                         throw new TypeError('Re2D World: atlasPin expects an atlas path or atlas id');
                     return native.atlasPin(pathOrId, +!!on);
                 },
+                // Deterministic async atlas PNG prefetch (default OFF). The
+                // worker reads FILE BYTES only; PNG decode stays synchronous on
+                // the main thread, so prefetch can never change the frame. If
+                // the bytes are not READY at registration, the normal
+                // synchronous read is used (same output, same warnings).
+                atlasAsync(on) {
+                    if (on === undefined) return native.atlasAsync();
+                    if (typeof on !== 'boolean')
+                        throw new TypeError('Re2D World: atlasAsync expects boolean');
+                    return native.atlasAsync(on);
+                },
+                atlasPrefetch(path) {
+                    if (typeof path !== 'string' || !path)
+                        throw new TypeError('Re2D World: atlasPrefetch expects a PNG path');
+                    return native.atlasPrefetch(path);
+                },
+                atlasPrefetchInfo() { return native.atlasPrefetchInfo(); },
+                atlasPrefetchClear() { native.atlasPrefetchClear(); return this; },
                 streamWarnings() { return native.streamWarnings(); },
                 takeStreamWarnings() { return native.takeStreamWarnings(); },
                 regionLod(near, mid, far, impostor, hidden) {
@@ -845,7 +863,28 @@ function rendererWorldWrapper($, native) {
     // entity: x/y/depth/w/h/angle and `sprite_row` stay ordinary node state.
     world.sprite = (target, options = {}) => {
         const atlas = options.atlas ?? options.texture;
-        if (typeof atlas !== 'string' || !atlas) throw new TypeError('world.sprite: atlas PNG path required');
+        const tiled = atlas !== null && typeof atlas === 'object' && !Array.isArray(atlas);
+        if (!tiled && (typeof atlas !== 'string' || !atlas))
+            throw new TypeError('world.sprite: atlas PNG path required');
+        let tileSet = null;
+        if (tiled) {
+            const tile = atlas.tile;
+            const files = atlas.files;
+            if (typeof tile !== 'object' || tile === null || Array.isArray(tile))
+                throw new TypeError('world.sprite: atlas.tile {width,height,columns,rows} required');
+            if (!Array.isArray(files) || files.length < 1 ||
+                files.some(file => typeof file !== 'string' || !file))
+                throw new TypeError('world.sprite: atlas.files must be a non-empty PNG path array');
+            const tw = Math.trunc(Number(tile.width)), th = Math.trunc(Number(tile.height));
+            const tc = Math.trunc(Number(tile.columns)), tr = Math.trunc(Number(tile.rows));
+            if (!(tw > 0 && th > 0 && tc > 0 && tr > 0))
+                throw new RangeError('world.sprite: atlas.tile width/height/columns/rows must be positive');
+            if (tw > 4096 || th > 4096)
+                throw new RangeError('world.sprite: atlas tile PNG side is limited to 4096');
+            if (files.length !== tc * tr)
+                throw new RangeError('world.sprite: atlas.files count must equal tile.columns*tile.rows');
+            tileSet = { files, width: tw, height: th, columns: tc, rows: tr };
+        }
         const cell = options.cell || {};
         const cellW = Math.trunc(options.cellW ?? cell.w ?? 0), cellH = Math.trunc(options.cellH ?? cell.h ?? 0);
         const directions = Math.trunc(options.directions ?? 1);
@@ -868,9 +907,18 @@ function rendererWorldWrapper($, native) {
             if (!(width > 0 && height > 0)) throw new RangeError('world.sprite: world width/height must be positive');
             if (!Number.isFinite(pivotX) || !Number.isFinite(pivotY)) throw new RangeError('world.sprite: pivot must be finite');
             node.sprite_row = Math.max(0, Math.trunc(Number(node.sprite_row) || 0));
-            native.atlasAdd(node, atlas, columns, rows, directions, options.mirror !== false && directions > 1 ? 1 : 0,
-                cellW, cellH, pivot, pivotX, pivotY, width, height, blend,
-                Number(options.offsetX ?? 0), Number(options.offsetY ?? 0), Number(options.offsetH ?? 0));
+            const mirror = options.mirror !== false && directions > 1 ? 1 : 0;
+            const offsetX = Number(options.offsetX ?? 0), offsetY = Number(options.offsetY ?? 0), offsetH = Number(options.offsetH ?? 0);
+            if (tileSet) {
+                native.atlasAddTiled(node, tileSet.files, tileSet.columns, tileSet.rows,
+                    tileSet.width, tileSet.height, columns, rows, directions, mirror,
+                    cellW, cellH, pivot, pivotX, pivotY, width, height, blend,
+                    offsetX, offsetY, offsetH);
+            } else {
+                native.atlasAdd(node, atlas, columns, rows, directions, mirror,
+                    cellW, cellH, pivot, pivotX, pivotY, width, height, blend,
+                    offsetX, offsetY, offsetH);
+            }
         });
         return world;
     };

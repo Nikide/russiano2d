@@ -97,6 +97,15 @@ bool r2d_world_stream_touch(R2DStreamCache *cache, int id, int kind, uint64_t fr
     return true;
 }
 
+bool r2d_world_stream_pin_set_limit(R2DStreamPinSet *set, int limit)
+{
+    if (!set || limit < 0 || limit > R2D_WORLD_STREAM_PIN_PATH_MAX_LIMIT) return false;
+    if (limit > 0 && set->count > limit) return false;  // never silently drop pins
+    set->limit = limit;
+    set->configured = true;
+    return true;
+}
+
 bool r2d_world_stream_pin_path(R2DStreamPinSet *set, const char *path, bool pinned)
 {
     if (!set) return false;
@@ -117,7 +126,22 @@ bool r2d_world_stream_pin_path(R2DStreamPinSet *set, const char *path, bool pinn
         return true;
     }
     if (existing >= 0) return true;  // idempotent
-    if (set->count >= R2D_WORLD_STREAM_PIN_PATH_LIMIT) return false;
+    const int effective_limit = set->configured ? set->limit
+                                                : R2D_WORLD_STREAM_PIN_PATH_DEFAULT;
+    if (effective_limit > 0 && set->count >= effective_limit) return false;
+    if (set->count >= R2D_WORLD_STREAM_PIN_PATH_MAX_LIMIT) return false;
+    if (set->count >= set->capacity) {
+        int capacity = set->capacity ? set->capacity * 2 : 8;
+        if (effective_limit > 0 && capacity > effective_limit) capacity = effective_limit;
+        if (capacity > R2D_WORLD_STREAM_PIN_PATH_MAX_LIMIT)
+            capacity = R2D_WORLD_STREAM_PIN_PATH_MAX_LIMIT;
+        if (capacity <= set->count) capacity = set->count + 1;
+        char **paths = (char **)realloc(set->paths,
+                                        (size_t)capacity * sizeof *paths);
+        if (!paths) return false;
+        set->paths = paths;
+        set->capacity = capacity;
+    }
     char *copy = (char *)malloc(length + 1);
     if (!copy) return false;
     memcpy(copy, path, length + 1);
@@ -142,6 +166,7 @@ void r2d_world_stream_pin_set_free(R2DStreamPinSet *set)
 {
     if (!set) return;
     for (int i = 0; i < set->count; i++) free(set->paths[i]);
+    free(set->paths);
     memset(set, 0, sizeof *set);
 }
 
@@ -185,6 +210,15 @@ bool r2d_world_stream_unregister(R2DStreamCache *cache, int id, int kind)
                 (size_t)(cache->count - slot - 1) * sizeof *cache->items);
     cache->count--;
     memset(cache->items + cache->count, 0, sizeof *cache->items);
+    return true;
+}
+
+bool r2d_world_stream_set_bytes(R2DStreamCache *cache, int id, int kind, uint64_t bytes)
+{
+    if (!cache || !valid_kind(kind)) return false;
+    const int slot = r2d_world_stream_find(cache, id, kind);
+    if (slot < 0) return false;
+    cache->items[slot].bytes = bytes;
     return true;
 }
 

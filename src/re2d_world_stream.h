@@ -81,16 +81,24 @@ typedef struct {
 // registered). Registration consults it, so a pin requested ahead of a
 // stream-in atlas still makes the first visible frame resident. Numeric-id pins
 // are runtime-local and not stored here.
-#define R2D_WORLD_STREAM_PIN_PATH_LIMIT 64
+#define R2D_WORLD_STREAM_PIN_PATH_DEFAULT 64
+#define R2D_WORLD_STREAM_PIN_PATH_MAX_LIMIT 4096
 #define R2D_WORLD_STREAM_PIN_PATH_MAX 512
 typedef struct {
-    char *paths[R2D_WORLD_STREAM_PIN_PATH_LIMIT];
-    int count;
+    char **paths;       // owned copies, insertion order
+    int count, capacity;
+    int limit;          // 0 = unlimited (bounded by MAX_LIMIT); default 64
+    bool configured;    // false = default 64 applies
 } R2DStreamPinSet;
+
+// Configures the pin cap (0 = unlimited up to R2D_WORLD_STREAM_PIN_PATH_MAX_LIMIT).
+// Lowering below the current pending count is rejected (returns false) instead
+// of silently dropping pins; the caller surfaces a typed error.
+bool r2d_world_stream_pin_set_limit(R2DStreamPinSet *set, int limit);
 
 // Adds (pinned=true, idempotent) or removes (pinned=false) a path. Returns false
 // on invalid input, a path longer than R2D_WORLD_STREAM_PIN_PATH_MAX-1, the
-// 64-path cap, or OOM. A missing path on removal is not an error.
+// configured cap, or OOM. A missing path on removal is not an error.
 bool r2d_world_stream_pin_path(R2DStreamPinSet *set, const char *path, bool pinned);
 bool r2d_world_stream_path_pinned(const R2DStreamPinSet *set, const char *path);
 int r2d_world_stream_pin_path_count(const R2DStreamPinSet *set);
@@ -159,6 +167,9 @@ bool r2d_world_stream_refs(R2DStreamCache *cache, int id, int kind,
 // Removes a slot (unregistered actors/assets). Releases no GPU resource itself;
 // the owner must do that before calling. Later slots shift down deterministically.
 bool r2d_world_stream_unregister(R2DStreamCache *cache, int id, int kind);
+// Updates an existing item's byte accounting (shared atlas pixels move their
+// unique-byte owner on unregister without changing state/region/priority).
+bool r2d_world_stream_set_bytes(R2DStreamCache *cache, int id, int kind, uint64_t bytes);
 const char *r2d_world_stream_evict_reason_name(int reason);
 // Installs/clears the transition hook. Pass NULL to clear.
 void r2d_world_stream_set_hook(R2DStreamCache *cache, R2DStreamHook hook, void *user);

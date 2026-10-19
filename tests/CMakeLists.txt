@@ -123,6 +123,24 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_profile_fence_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# --- Префетч атласов: очередь/границы/отмена/жизненный цикл ------------------
+# Модуль префетча не зависит от движка и GPU: он делает только файловый ввод-
+# вывод в рабочем потоке, а PNG-декодирование остаётся на главном потоке.
+# Тест проверяет детерминированную очередь и границы на маленьких временных
+# файлах; лимиты уменьшены, чтобы границы проверялись быстро.
+add_executable(r2d_atlas_prefetch_test "${CMAKE_SOURCE_DIR}/tests/re2d/atlas_prefetch_test.c"
+                                       "${CMAKE_SOURCE_DIR}/src/re2d_world_atlas_prefetch.c")
+target_include_directories(r2d_atlas_prefetch_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_compile_definitions(r2d_atlas_prefetch_test PRIVATE
+    R2D_ATLAS_PREFETCH_MAX_ENTRIES=8
+    R2D_ATLAS_PREFETCH_MAX_PENDING_BYTES=4096
+    R2D_ATLAS_PREFETCH_MAX_FILE_BYTES=1024)
+target_link_libraries(r2d_atlas_prefetch_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_atlas_prefetch_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_atlas_prefetch_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # --- 2D BSP-дерево -----------------------------------------------------------
 # Инвариант полноты: обход обязан вернуть каждый отрезок дерева ровно один раз.
 # Ловит случай предельной глубины, когда остаток геометрии «сваливался» в лист
@@ -553,6 +571,20 @@ endif()
 if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_compile_options(r2d_world_stream_residency_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_world_stream_residency_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Atlas tranche: shared decoded-image cache (path dedup claims/refcounts) and
+# tiled atlas-set crops across tile boundaries (logical sheet > 4096).
+add_executable(r2d_world_atlas_tiled_test re2d/atlas_tiled_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_atlas.c")
+target_include_directories(r2d_world_atlas_tiled_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_atlas_tiled_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_atlas_tiled_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_atlas_tiled_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_atlas_tiled_test PRIVATE -fsanitize=address,undefined)
 endif()
 
 # Distant region impostors (R-04 P1): baked cards, PVS/occluder collect,

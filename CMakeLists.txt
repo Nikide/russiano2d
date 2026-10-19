@@ -141,6 +141,7 @@ if(NOT EMSCRIPTEN)
                 r2d_re2d_test r2d_rotsprite_test r2d_re2d_world_test
                 r2d_re2d_atlas_test r2d_world_trace_test r2d_world_mover_test r2d_world_trigger_test r2d_world_controller_test r2d_world_render_features_test r2d_re2d_semantic_test r2d_re2d_portal_test r2d_world_metadata_test r2d_world_automap_test r2d_world_particle_test r2d_world_nav_test r2d_world_secret_test r2d_world_terrain_test r2d_world_save_test r2d_world_portal_visual_test r2d_world_volume_test r2d_world_material_anim_test r2d_world_polywall_test r2d_world_polygon_test r2d_world_vfx_test r2d_world_region_test r2d_sdk_brush_test r2d_world_tools_test r2d_world_hint_test r2d_postprocess_test r2d_audio_zone_test r2d_audio_voices_test r2d_world_exr_test
                 r2d_sdk_core_test r2d_sdk_world_compile_test
+                r2d_world_stream_residency_test r2d_world_atlas_tiled_test r2d_atlas_prefetch_test
                 r2d-sdk
         COMMENT "r2d_check: Unity C tests + QuickJS tests + SDK batch (CTest)"
         VERBATIM)

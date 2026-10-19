@@ -167,15 +167,25 @@ static void test_pending_path_pin_before_registration(void)
     TEST_ASSERT_EQUAL_INT(0, r2d_world_stream_pin_path_count(&pins));
     TEST_ASSERT_TRUE(r2d_world_stream_pin_path(&pins, "assets/gone.png", false));
 
-    // Bounded set: 64 paths max, the 65th is rejected instead of growing.
-    for (int i = 0; i < R2D_WORLD_STREAM_PIN_PATH_LIMIT; i++) {
+    // Configurable cap: default 64, limit 2, lowering below the pending count is
+    // rejected (never silently drops pins), 0 = unlimited.
+    TEST_ASSERT_TRUE(r2d_world_stream_pin_path(&pins, "assets/a.png", true));
+    TEST_ASSERT_TRUE(r2d_world_stream_pin_path(&pins, "assets/b.png", true));
+    TEST_ASSERT_FALSE(r2d_world_stream_pin_set_limit(&pins, 1));
+    TEST_ASSERT_EQUAL_INT(2, r2d_world_stream_pin_path_count(&pins));
+    TEST_ASSERT_TRUE(r2d_world_stream_pin_set_limit(&pins, 2));
+    TEST_ASSERT_FALSE(r2d_world_stream_pin_path(&pins, "assets/c.png", true));
+    TEST_ASSERT_TRUE(r2d_world_stream_pin_path(&pins, "assets/b.png", false));
+    TEST_ASSERT_TRUE(r2d_world_stream_pin_path(&pins, "assets/c.png", true));
+    TEST_ASSERT_TRUE(r2d_world_stream_pin_set_limit(&pins, 0));  // unlimited
+    for (int i = 0; i < 100; i++) {
         char path[64];
-        snprintf(path, sizeof path, "assets/pin_%d.png", i);
+        snprintf(path, sizeof path, "assets/many_%d.png", i);
         TEST_ASSERT_TRUE(r2d_world_stream_pin_path(&pins, path, true));
     }
-    TEST_ASSERT_EQUAL_INT(R2D_WORLD_STREAM_PIN_PATH_LIMIT,
-                          r2d_world_stream_pin_path_count(&pins));
-    TEST_ASSERT_FALSE(r2d_world_stream_pin_path(&pins, "assets/overflow.png", true));
+    TEST_ASSERT_EQUAL_INT(102, r2d_world_stream_pin_path_count(&pins));
+    TEST_ASSERT_TRUE(r2d_world_stream_pin_set_limit(&pins, 4096));
+    TEST_ASSERT_FALSE(r2d_world_stream_pin_set_limit(&pins, 5000));
     TEST_ASSERT_FALSE(r2d_world_stream_pin_path(&pins, "", true));
     TEST_ASSERT_FALSE(r2d_world_stream_pin_path(NULL, "assets/ped_sheet.png", true));
     r2d_world_stream_pin_set_free(&pins);

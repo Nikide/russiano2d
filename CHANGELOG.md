@@ -1,3 +1,46 @@
+> Unreleased / Re2D atlas tranche 2 (re2d_gta_test 1.2.11 follow-up): закрыты
+> ограничения прошлого фикса residency.
+> (1) **Decoded-pixel path dedup**: один refcounted RGBA-буфер на канонический
+> PNG-путь (per world + generation); регистрации делят пиксели, хранят только
+> grid/cell/pivot/stream-metadata; освобождение при последней ссылке; hot reload
+> бампает generation. `streamInfo()`: decodedUniqueBytes/decodedSavedBytes/
+> dedupHits, per-atlas sharedRefs/pixelBytes/streamBytes; `residentBytes` больше
+> не double-count'ит общие пиксели. 100 спрайтов на одном 2048² PNG = ~16.8 MB
+> вместо ~1.6 GB (99 hits, saved 1.55 GB).
+> (2) **Настраиваемый лимит sticky path-пинов**: `streamConfig({pinLimit})`,
+> default 64, 0 = unlimited (hard max 4096); понижение ниже текущих пинов
+> отклоняется RangeError, пины не теряются; `streamInfo().pinLimit/pinsPending/
+> pinPaths`. Стики-пины до регистрации сохранены.
+> (3) **Atlas sets >4096**: `world.sprite(node,{atlas:{files,tile:{width,height,
+> columns,rows}}})`; row-major, каждый тайл <=4096 и ровно tile.width x
+> tile.height, логический лист бывает >4096 (до 65536/side); клетка, пересекающая
+> границу тайлов, кроется CPU-путём с тем же flip/pivot/blend, GPU получает
+> готовый кадр (шейдеры не менялись); невалидные/ragged наборы — TypeError/
+> RangeError; `atlasPin(path)` матчит любой тайл; streamInfo path = joined tiles
+> + tiles[]. CPU/GPU pixel-identical на клетке через границу.
+> (4) **Async PNG prefetch с детерминированным контрактом** (default OFF):
+> `world.atlasAsync(on)`, `atlasPrefetch(path)`, `atlasPrefetchInfo()`,
+> `atlasPrefetchClear()`; один lazy worker читает ТОЛЬКО байты файла stdio
+> (без SDL/QuickJS/GPU off-thread), PNG декодируется на главном потоке; готовые
+> байты используются `world.sprite`/atlas-set вместо синхронного чтения, иначе
+> путь регистрации не меняется — байт-идентичный вывод независимо от тайминга.
+> Stale size/mtime отвергается, missing/corrupt дают те же типизированные
+> ошибки; лимиты 64 записи/256 MiB/64 MiB файл; worker джойнится на
+> disable/dispose. Тесты: байт-идентичные статичные/120 движущихся кадров/
+> reload, fallback, tiled, ошибки; worker прочитал 33.36 MB за ~4 ms (честная
+> цена избегнутого sync-read, decode не менялся).
+> Тесты: native stream_residency/atlas_tiled/atlas_prefetch + ctest 172/172,
+> agent atlas residency/tiling/prefetch, все GTA sandbox, huge-world/renderer
+> parity, lint/validate демо, doc/API/ci_verify — зелёные. r2d_check DEPENDS
+> дополнен новыми test targets.
+> Ограничения: dedup кэш world-local; hot reload: живые актёры держат старые
+> буферы, новые регистрации ре-декодят; tiled sets — полный прямоугольник
+> (<=256 тайлов, logical <=65536/side); pinLimit hard max 4096; у alias
+> streamBytes=0 by design; на каждую регистрацию остаётся свой crop-буфер;
+> prefetch на Windows non-ASCII путях может промахнуться (только sync fallback),
+> Emscripten без pthreads — prefetch недоступен (default OFF); проверено на
+> macOS arm64/Metal.
+>
 > Unreleased / Re2D atlas residency (re2d_gta_test 1.2.11): видимые flat-atlas
 > спрайты могли молча исчезать, оставляя контактные тени. Причины и фиксы:
 > (1) LRU не учитывал видимый спрос и вытеснял атласы видимых актёров при

@@ -15,6 +15,8 @@
 #include "re2d_world_batch.h"
 #include "re2d_world_sky.h"
 #include "re2d_world_region.h"
+#include "re2d_world_atlas.h"
+#include "re2d_world_atlas_prefetch.h"
 #include "re2d_world_stream.h"
 #include "re2d_world_stream_io.h"
 #include "re2d_world_impostor.h"
@@ -52,8 +54,15 @@ typedef struct {
 // direction selection are native, so game scripts do not project per frame.
 typedef struct R2DWorldAtlasActor {
     JSValue node;
-    uint8_t *atlas;
-    int atlas_w,atlas_h;
+    // Decoded pixels are shared through R2DWorldAtlasImage (path dedup): one
+    // buffer per unique canonical PNG path. Tiled sets keep one image per tile.
+    R2DWorldAtlasImage *image;     // single-image source (tiles == NULL)
+    R2DWorldAtlasImage **tiles;    // row-major tile references (tiled set)
+    char **tile_paths;             // authored path per tile (row-major)
+    int tile_count, tile_columns, tile_rows, tile_width, tile_height;
+    int logical_w, logical_h;      // logical sheet size (single = image size)
+    uint64_t pixel_bytes;          // sum of referenced image bytes (per-registration)
+    uint64_t stream_bytes;         // unique bytes this registration accounts in the stream cache
     int columns,rows,directions,cell_w,cell_h,pivot_mode,blend;
     bool mirror;
     float pivot_x,pivot_y,width,height;
@@ -213,6 +222,14 @@ typedef struct R2DWorldRuntime {
     // Sticky path pins: world.atlasPin(path,true) may run before the atlas is
     // registered (streamed populations); registration consults this set.
     R2DStreamPinSet path_pins;
+    // Shared decoded-image cache (canonical path -> RGBA, refcounted). Generation
+    // bumps on world reload/hot reload; live images stay until their last ref.
+    R2DWorldAtlasImageCache atlas_images;
+    uint64_t atlas_cache_generation;
+    uint64_t atlas_dedup_hits;
+    // Optional deterministic async PNG prefetch (file reads only; decode stays
+    // on the main thread). Default OFF; zero-initialised state is valid.
+    R2DAtlasPrefetch atlas_prefetch;
     // Bounded diagnostics ring for visible-not-resident atlases.
     R2DWorldStreamWarning stream_warnings[R2D_WORLD_STREAM_WARNING_LIMIT];
     int stream_warning_count;      // valid entries, oldest..newest logical order
@@ -341,6 +358,13 @@ bool r2d_world_actor_unregister(JSContext *,R2DWorldRuntime *,JSValueConst);
 // Flat directional atlas sprite mode for an existing node. Not a mesh, not an
 // entity: only an atlas PNG + direction/pivot policy attached to the node.
 bool r2d_world_atlas_register(JSContext *,R2DWorldRuntime *,JSValueConst,const char *,
+    int columns,int rows,int directions,bool mirror,int cell_w,int cell_h,
+    int pivot,float pivot_x,float pivot_y,float width,float height,int blend,
+    float offset_x,float offset_y,float offset_h);
+// Tiled atlas-set source (world.sprite atlas:{files,tile}): row-major tiles,
+// logical sheet may exceed 4096; each tile PNG stays <=4096 per side.
+bool r2d_world_atlas_register_tiled(JSContext *,R2DWorldRuntime *,JSValueConst,JSValueConst files,
+    int tile_columns,int tile_rows,int tile_width,int tile_height,
     int columns,int rows,int directions,bool mirror,int cell_w,int cell_h,
     int pivot,float pivot_x,float pivot_y,float width,float height,int blend,
     float offset_x,float offset_y,float offset_h);
@@ -474,6 +498,12 @@ bool r2d_world_region_budget(R2DWorldRuntime *,uint64_t resident_bytes,int max_r
 // r2d_world_region_config()/r2d_world_region_budget().
 bool r2d_world_stream_config(R2DWorldRuntime *,uint64_t resident_bytes,int resident_items,
                              uint64_t upload_bytes,int upload_items,int promote_items);
+// Sticky path-pin cap: 0 = unlimited (hard cap 4096), default 64. Lowering below
+// the current pending count is rejected and surfaced as a typed error.
+bool r2d_world_stream_set_pin_limit(R2DWorldRuntime *,int limit);
+// Hot-reload/scene-reload cache generation: new registrations re-decode; images
+// still referenced by live actors stay valid until their last release.
+void r2d_world_atlas_cache_invalidate(R2DWorldRuntime *);
 // Explicit atlas pin by authored path (all registered actors with that path) or
 // by atlas actor id (0..atlas_count-1). Returns the number of matched atlases.
 int r2d_world_atlas_pin(R2DWorldRuntime *,const char *path_or_null,int atlas_id,bool pinned);
